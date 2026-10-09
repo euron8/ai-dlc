@@ -49,6 +49,8 @@ TREE="$(cd "$SRCDIR/../.." && pwd)"
 case "$SRCDIR" in */scripts/ai-dlc) ;; */core/scripts) ;; *) echo "FIXTURE ERROR: $SRCDIR is neither layout" >&2; exit 2 ;; esac
 [ -f "$SRCDIR/partition-document.sh" ] || { echo "FIXTURE ERROR: partition-document.sh is not beside $PS" >&2; exit 2; }
 echo "subject-partition: resolved subject = $PS"
+echo "HERMETIC-CONSUMED $(cd "$SRCDIR" && pwd -P)/partition-subject.sh"
+echo "HERMETIC-CONSUMED $(cd "$SRCDIR" && pwd -P)/partition-document.sh"
 
 _tmp="${TMPDIR:-/tmp}"; _tmp="${_tmp%/}"
 WORK="$(mktemp -d "$_tmp/subject-partition.XXXXXX")" || exit 2

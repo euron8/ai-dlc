@@ -217,7 +217,8 @@ branch may force it; that is the operator's ruling. Read each changed fixture by
 CONSUMER's hook `core/git-hooks/pre-push` prints a green banner here having run almost
 nothing; the content-key skip prints one too, correctly — neither is evidence your change ran.
 A changed fixture that is ABSENT from the run's output was skipped, which is a read-set gap to
-chase and never a pass.
+chase and never a pass. A fixture named on the `verdict store: N fixture(s) skipped` line was skipped on
+a recorded pass; that is not a read-set gap.
 The TALLY is not the verdict either: 159 ok / 0 FAIL while the gate exited 1 on a phase outside
 the suite. Read the gate's exit, never a backgrounded wrapper's.
 

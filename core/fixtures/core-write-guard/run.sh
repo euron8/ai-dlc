@@ -20,6 +20,8 @@ trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
 
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$HOOK")" && pwd -P)/${HOOK##*/}"
+
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }

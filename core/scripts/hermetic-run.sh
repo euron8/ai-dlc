@@ -60,6 +60,10 @@
 # only when `inputs.decl` exists, so a missing declaration here is a caller defect, not a skip.
 set -u
 
+# HR_SANDBOX_BEGIN
+# EVERYTHING BETWEEN THESE MARKERS DECIDES WHAT A FIXTURE RUNS WITH (arguments, declaration, population, key rows, copy, env -i
+# invocation, sentinels) and is what the verdict store digests as `#runner`. Store read/write, logging and the summary line
+# are OUTSIDE it, so an edit to those does not invalidate a recorded pass.
 HR_ROOT_OPT=""
 HR_FXDIR=""
 HR_KEY_ONLY=0
@@ -432,9 +436,38 @@ while IFS="$(printf '\t')" read -r r rdecl; do
     hr_missing=1
   fi
 done < "$HR_WORK/required"
+# HR_SANDBOX_END
 
 printf 'hermetic-run: %s: rc=%s sandbox_files=%s required_missing=%s\n' \
   "$HR_FX" "$hr_rc" "$(/usr/bin/find "$HR_SB" -type f | wc -l | tr -d ' ')" "$hr_missing"
-[ "$hr_rc" -eq 0 ] && [ "$hr_missing" -eq 0 ] && exit 0
+
+# THE SHARED VERDICT STORE. This runner is its ONLY writer; the pre-push hooks only read it. A CLEAN PASS ONLY: rc 0 and no REQUIRED
+# input missing. The entry is named for the sha256 of its body: the fixture name, this runner's sha, the sha of the
+# hook spans this runner sources, and the --key-only rows of the same tree. Written atomically (temp + mv); two
+# concurrent writers of one name write identical bytes. A failure to write drops the record and never changes
+# this run's exit.
+# The store path, the ident and the digest input are the hook's READSET_VS span, sourced here at top level (the
+# READSET_TOOLS pattern), so the reader and this writer are one implementation. No span: the store is OFF.
+sed -n '/^# READSET_VS_BEGIN$/,/^# READSET_VS_END$/p' "$HR_HOOK" > "$HR_WORK/vs.sh"
+grep -q '^readset_vs_store() ' "$HR_WORK/vs.sh" && . "$HR_WORK/vs.sh" || : > "$HR_WORK/vs.sh"
+hr_store_put() {
+  local store ident dig
+  [ -s "$HR_WORK/vs.sh" ] || return 0
+  store="$(readset_vs_store "$HR_ROOT")"
+  [ -n "$store" ] || { printf 'hermetic-run: %s: verdict store OFF: no store base, or the project root commit cannot be resolved\n' "$HR_FX"; return 0; }
+  mkdir -p "$store" 2>/dev/null || return 0
+  hr_population key || return 0
+  hr_key_rows > "$HR_WORK/vs.rows" || return 0
+  [ -s "$HR_WORK/vs.rows" ] || return 0
+  ident="$(readset_vs_ident "$HR_HOOK" "${BASH_SOURCE[0]}")" || return 0
+  readset_vs_input "$HR_FX" "$ident" "$HR_WORK/vs.rows" > "$HR_WORK/vs.d" || return 0
+  dig="$(shasum -a 256 < "$HR_WORK/vs.d" | cut -d' ' -f1)"
+  [ "${#dig}" -eq 64 ] || return 0
+  { printf '#format k1\n#state ok\n'; cat "$HR_WORK/vs.d"; } > "$store/.tmp.$$.$HR_FX" 2>/dev/null \
+    && mv "$store/.tmp.$$.$HR_FX" "$store/$dig" 2>/dev/null \
+    && printf 'hermetic-run: %s: verdict recorded in the shared store\n' "$HR_FX" || rm -f "$store/.tmp.$$.$HR_FX" 2>/dev/null
+  return 0
+}
+if [ "$hr_rc" -eq 0 ] && [ "$hr_missing" -eq 0 ]; then ( hr_store_put ) 2>/dev/null; exit 0; fi
 [ "$hr_rc" -eq 2 ] && exit 2
 exit 1

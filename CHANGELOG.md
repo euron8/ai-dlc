@@ -19,8 +19,230 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
-## [0.762.0] - 2026-10-09
 
+## [0.763.0] - 2026-10-09
+Batch 217 (hermetic-pole), release 3. The operator's goal for this batch is that every push is short. A push
+runs every fixture it selects, so its wall clock tracks how MANY run, not the longest one, and most of a push's
+selection runs whatever the push changed. This release cuts that forced set four ways:
+- **A shared verdict store** lets a declared fixture's pass, recorded in any clone, skip any push with the same key.
+- **A pre-push fix** stops forcing declared fixtures whose key record reads stale.
+- **Forty-two more fixtures are declared.**
+- **A passing unmapped fixture is now traced even on a red push.**
+
+It also scopes the quoted-path guard that turned keying off on every graph push, carries the first half of
+`BL-481`, and shards four suite-pole units. Both pre-push hooks change identically (`I66`). It was gated twice as
+0.761.0 and failed both times on `BL-481`; batch 216's release landed first under 0.761.0. It was then gated as
+0.762.0 and STOPPED by the operator mid-suite, because the store's key was computed twice and the two copies
+disagreed (next section). Batch 216's self-update fix landed under 0.762.0, and this release rebased onto it.
+
+### The store key is computed once
+
+The 0.762.0 gate's store skipped 46 of about 104 declared fixtures it should have. The hook's key for a declared
+fixture was not the runner's: on `apply-drift-after-write` the hook held 161 rows and `hermetic-run.sh --key-only`
+67. Measured on the main checkout's real key records: the hook's decision awk carried an existing `ok` record's
+keys into the record it published, so a declared fixture's key accumulated every row it ever had, `.gitattributes`
+and 88 tool rows among them, from before it was declared. Of 225 declared records, 71 carried more tool rows than
+their `tools.decl`. A second, smaller disagreement held even on fresh records: a declared directory under an
+EXCLUDED top (`layer-contract-conformance` declares `docs/`) was keyed `docs\t-` by the hook and dropped by the
+runner, 1606 rows against 1605. The control, `adversarial-citation`, was identical both ways.
+
+The cause was duplication: the store path, the digest input and a declared fixture's key rows were each written
+twice, once in the hook and once in the runner, and nothing compared the hook's LOOKUP to the runner's WRITE.
+
+- **One span.** `# READSET_VS_BEGIN`/`END`, in both hooks after `READSET_TOOLS`, holds `readset_vs_store <root>`,
+  `readset_vs_ident <hook> <runner>` and `readset_vs_input`. The hook calls them; `hermetic-run.sh` extracts the
+  span from the hook beside it and sources it at top level, the way it sources `READSET_TOOLS`. The runner's own
+  copies are gone. `#universe` now hashes the VS span too, so no entry written before this release is reused.
+- **One writer.** The runner writes the store on a clean pass; `readset_vs_put` and its call are deleted from both
+  hooks. Every declared fixture a push runs goes through the runner at the `inputs.decl` dispatch.
+- **One key.** For a declared fixture the hook's published record is exactly its declared key: no carry-over from
+  an older record, and the run/skip comparison ignores a recorded row the declaration no longer produces, so a
+  polluted record skips instead of rerunning on every push until republished. A declared directory gets a listing
+  row only where a universe file sits under it, the runner's rule. The row composition is still two
+  implementations held equal, not one function; lifting the hook's awk into a sourced span is a follow-up.
+- **The census arm**, unit `vs` in `readset-skip`, builds a scratch world holding every shape that has diverged:
+  a declared file, a nested directory, a directory under the excluded `docs` top, a tool, and one shape that
+  agrees. It drives each hook's decision twice, fresh and then with every record republished `ok` carrying one
+  foreign row, and byte-compares both passes with `--key-only`. On 7502966d it failed both hooks on both passes;
+  on this tree it passes. Two one-side mutants are killed: the runner's tool rows dropped, the hook's tool keys
+  dropped. About ten seconds, no declaration or read-set change. A real-tree census of every declared fixture
+  was measured at 6.6 minutes and would key its host on the whole tree, so it is not a gate arm; it was run once
+  on this tree, both passes, and its line is recorded in `docs/plans/hermetic-pole.md`.
+
+### The forced set, measured
+
+This release's first gate printed `read-set keys: 122 of 277 fixture(s) run (57 changed, 8 unrecorded, 57 stale)`.
+Its `stale, N fixture(s):` lines and `read-set map: ... UNMAPPED` line together name 61 directories that ran
+whatever the push touched. Fifteen of them carried `inputs.decl` and ran anyway. The other forty-six were
+undeclared.
+
+### A shared verdict store
+
+A declared fixture's pass is recorded in a store outside any clone, one store per PROJECT:
+`${AI_DLC_VERDICT_STORE:-$HOME/.cache/ai-dlc/verdicts}/<root-commit sha>`. One entry per pass, named by the
+sha256 of its content.
+
+- **Project identity** is the repository's root commit (`git rev-list --max-parents=0 HEAD`, sorted, first). It
+  is the same in every full clone at any path, a `file://` rehearsal clone included, and it differs between this
+  repository and a consumer. A shallow clone, or one whose root commit cannot be resolved, turns the store OFF for
+  the run, and prints a line saying so.
+- **The key content** is the fixture name, then `#runner`, the sha256 of the span of `hermetic-run.sh` between
+  `# HR_SANDBOX_BEGIN` and `# HR_SANDBOX_END` (argument parsing, declaration reading, the copy loop, the REQUIRED
+  checks, the `env -i` run). Then `#universe`, the sha256 of the hook's `READSET_UNIVERSE`, `READSET_TOOLS` and
+  `READSET_VS` spans. Then the `--key-only` rows. A pass recorded under a looser sandbox is never reused. An edit to the store,
+  logging or summary code, outside the span, invalidates nothing.
+
+- **Writer.** `hermetic-run.sh` alone, on rc 0 with no REQUIRED input missing. A rehearsal clone's push and a
+  hand's solo run both go through it, so both contribute.
+- **Reader.** `readset_verdicts`, at the end of `readset_keys`, skips a declared fixture whose recomputed entry
+  is in the store. It republishes the fixture `ok` and prints
+  `verdict store: N fixture(s) skipped on a pass recorded elsewhere: <names>`.
+- **Fails closed.** Each of these means the fixture runs: no store, an unreadable, truncated, edited or
+  malformed entry, an undeclared fixture, a quoted path, or an unresolved declaration. A failed write never
+  fails the fixture.
+- **Arms**, unit `vs` in `readset-skip`, shard `-d`. A pass in clone A skips the same fixture in clone B, a
+  `file://` clone at another path. A repository with the same tree but a different root commit runs, and a
+  shallow clone runs and writes nothing. An edit inside the sandbox span runs, an edit outside it skips, and an
+  arm holds the span non-empty, holding the `env -i` line and the copy loop and no store code. `hermetic-runner`
+  writes into its own mktemp store, proved by a run with `HOME` on an empty directory that leaves it empty. A changed input, an edited runner or an edited universe span runs it. A failed, sentinel-less or
+  undeclared run writes nothing. A planted entry for an undeclared fixture is ignored. A damaged entry runs.
+  Each arm asserts that its mktemp store filled and that the real store was byte-unchanged.
+- **Mutants.** Five are killed: the digest ignored, a write on failure, undeclared fixtures served, the project
+  subdirectory dropped, and the whole runner file hashed again. Arm (h) now asserts the hook publishes its key
+  record and writes NO store entry while the runner writes one.
+
+### Declared fixtures with a stale record are decided on their declared keys
+
+`.githooks/pre-push:1443` forced any fixture whose local key record read `#state stale` unless it had a valid
+local row. It never exempted a declared fixture. `:1455` then wrote `stale` back, so a declared fixture could
+never leave stale. `core/git-hooks/pre-push` had the same lines.
+
+A declared stale record with stored key rows is now decided on its declared keys:
+- unchanged keys skip, and the record is republished `ok`;
+- a moved key runs;
+- a record with no stored rows runs, because missing rows count as changed.
+
+Arms cover each case, with an undeclared stale control that still runs. A mutant reverting both lines is killed.
+
+### A passing unmapped fixture is traced on a red push
+
+The live trace ran only when the whole push was green (`if [ "$rc" -eq 0 ]`). A consumer that stays red never
+mapped anything. It now traces every unmapped fixture whose own verdict is `ok`, whatever the push's rc. The
+whole-tree verified record and the durations record stay green-only. Arms cover a red push with one failing and
+one passing unmapped fixture, and a mutant restoring the rc gate is killed.
+
+### A quoted read-set row no longer turns keying off
+
+The `grep -q '^"'` guard on `$out/.paths` was written for `git ls-files` output. But `.paths` also carries every
+committed-map and local-map path. One C-quoted local row therefore emptied the hash list, and every graph push
+since Oct 8 printed `could not hash the working tree -- running all 210`. Batch 216 found it, and its 0.761.0
+stops the deriver writing such rows.
+
+Here the guard reads only the two `ls-files` streams. A fixture whose map rows hold a quoted path runs, and every
+other fixture keys normally. The fallback line now names its cause: a shasum failure, an ignore-filter failure,
+the quoted `ls-files` path, or a count mismatch.
+
+Arms cover a quoted row in the committed map and in the local map, including the graph shape, where the quoted
+local row is the fixture's only row. A file with a tab in its name still empties keying, with the cause named.
+A mutant restoring the unscoped guard is killed.
+
+### Forty-two more fixtures declared
+
+Six hands declared the undeclared members of the forced set, and the shard batteries declared their new
+directories. Every declaration ran under `hermetic-run.sh` with exit 0 and `required_missing=0`. A declaration
+adds no directory, so none edits a ship list.
+
+Isolation and teeth probes ran on the new declarations of the forced set; the teeth probe edits each `run.sh` in
+place. In every fixture probed, a REQUIRED input refuses when its consumption sentinel is removed. Where a
+declaration lists a whole directory, dropping the REQUIRED line leaves the file present, which is over-declaration
+and not a gap. Every declaration in the tree carries at least one REQUIRED line (225 of 225), so none can record a
+SKIP as a pass in the store. `update-preflight-push` shows why that matters: with its single REQUIRED line deleted,
+it SKIPs with rc 0.
+
+Eight fixtures cannot be declared, because they need a git repository and the sandbox is not one:
+`validator-fork-budget`, `ledger-status-vocabulary`, `prepush-pool-depth`, `retired-layer-contract`,
+`self-update-join-gate` and `fixture-git-env-seam`, plus the two `procsub-staged-refusal` parents, which are also
+undeclared by ruling. Another release seeds a repository inside the sandbox for four of them.
+
+### No solo timings
+
+Earlier entries timed every shard solo at load under 5. No done-when, gate or decision reads those rows, and the
+load-5 threshold had no measurement behind it on this box. So this release records only the gate's own figures.
+
+### BL-481, first half: the tracer subscribed to every debug message on the box
+
+The first gate of this release (12-way, start load 12.4, end load 56) ran 122 of 277 fixtures and failed one:
+`readset-sandbox-root-clause` exited 2 with `FIXTURE BROKEN: the stream dropped reports (24 notice(s))`. A solo
+re-run from the main checkout at load 38 failed the same way with 5. That gate's tree touched neither the fixture
+nor the deriver; the defect is `BL-481` and fails whenever the box is loaded. The changes below are its fix.
+
+The deriver ran `log stream --level debug` on all three of its streams. Sandbox reports arrive at Default level
+(0 non-Default report lines against 4,231,066 Default ones across the 50 raw streams of the batch-214
+reconcile), so debug added nothing the deriver reads and subscribed the stream to every debug message on the
+box. In a controlled burst of 1500 sandboxed reads at load 55-61, debug level delivered 964-1378 with 40-155
+drop notices, and default level delivered 1500 of 1500 with 0, in all four runs.
+
+- **The deriver** drops `--level debug` from its three stream lines.
+- **`readset-sandbox-root-clause`** drops it at `run.sh:135` and judges the first of up to ten attempts that
+  carries no drop notice, sleeping between attempts. A fixture whose ten windows all drop still exits 2 BROKEN,
+  so a lossy window is never scored. At load 32-36, seven of seven runs passed with every mutant killed, two
+  through `hermetic-run.sh`, judged on attempts 1, 1, 1, 7, 6, 5 and 2. A copy injecting a notice into every
+  attempt exits 2 after all ten; injecting into attempt 1 only, it is judged on attempt 2. It is also declared
+  (`inputs.decl`, `tools.decl`).
+- **`readset-skip`**'s forced-loss burst is heavier, and the change is necessary. At default level the old burst
+  (one reader over 400 files plus `ls -lR /usr/share`, unscoped profile) forced 0 drop notices in 3 of 3 runs
+  at load 61-69, against 130-197 per run at `--level debug`, so the arm would SKIP. The new burst (8 readers over
+  1500 files) forced 41 and 42 at default level, load 44-47. Both were measured with a standalone stream
+  harness, not through the fixture.
+- **The `--local-map` liveness window** grows from 1s (5 tries of 0.2s) to about 10s (50 of 0.2s), and ends
+  early when the stream process exits. The second gate of this release failed `readset-skip-c` on three
+  `--local-map` arms at load 23-47, and a solo re-run at load 26-18 passed. Forcing a 2s delay into the arms'
+  stub stream failed 16 arms against both the shipped deriver and the level change, so the 1s window was
+  fragile before this release and the first gate passing it was load. With the fix, the same forced delay
+  passes all 96 at load 54. A stream that exits at once is still refused in 0s, and a nested `sandbox-exec` is
+  refused at the profile apply, before the window. The cost: a stub stream that never exits now waits the
+  full 10s before refusing.
+
+`BL-481` stays OPEN. Default-level drops still occur under load: `prepush-pool-depth` was omitted with 180
+notices at load 36 and mapped with 0 at load 26. `DERIVER_SHA` changes, so every deriver-keyed local row and
+every `#discards` hold resets, and the first push after this lands re-traces the held fixtures once.
+
+### The rank, from the last green gate
+
+`.git/ai-dlc-fixture-durations.last` of the 0.760.0 gate (12-way, 117 of 269 dispatched, start load 2.7),
+every figure loaded: `self-update-gate` 606s, `fold-architect-ledger-join-mutants-b` 452s,
+`readset-skip-digest-mutants` 439s, `review-shard-merge-mutants` 437s and `-c` 432s, `readset-skip-digest-mutants-c`
+422s, `apply-drift-refile` 402s, `readset-skip-digest-mutants-b` 380s.
+
+### Four hands, one unit each
+
+Every partition carries the J0 coverage join, which derives the dealt set from the file's own unit or mutant
+lines, refuses a duplicate, an omission and a shard with no driver directory, and self-probes before
+trusting its zero. Every shard exited 0 when run once, sequentially, from a clone root.
+
+- **`self-update-gate`** (ships, declared): four shards `{,-b,-c,-d}`, seventeen `sg` units. The hook-world
+  section is split into `hu1` (b) and `hu2` (c) over one set of worlds built under `sg hu1 || sg hu2`.
+  `!core/git-hooks/pre-push` is REQUIRED only in b and c, which consume it.
+  Assertions a 143, b 99, c 47, d 65: 354, equal to the unsharded run's `PASS: all 354 assertions correct.`
+  at `d03d5bd9`. The first run of b failed 2 of 99: `vr` called the machinery lister only `su` (shard a)
+  built, so `$SU` was unbound there. The lister is now built in shared setup as `$MACHD`.
+- **`fold-architect-ledger-join-mutants`** (`.dist-only`): a fourth shard `-d`; the 28 mutants dealt seven per
+  shard with the two `byp=0` mutants in each. J0 reads 28 in all four.
+- **`readset-skip-digest-mutants`** (`.dist-only`, declared): shards `-d` and `-e`; 24 mutants dealt 4/4/4/4/8,
+  the seven `tk_` mutants (four worlds each, against thirteen for a `dg_` mutant) kept together in e. J0 reads
+  24 in all five.
+- **`apply-drift-refile`** (ships, declared): three shards `{,-b,-c}`, fourteen units (a: base fh r s x, 30
+  assertions; b: y t, 12; c: q v u w, 20; 62 total, the parent's 62 call sites). The first run of all three
+  exited 2: the sandbox copies only declared files, the parent declared its own `run.sh` and so dropped
+  `seed.sh`, and the drivers declared neither. Each driver now declares the parent `run.sh` and `seed.sh`.
+
+### What the five shipping directories cost
+
+`fork-profile.sh --section by-arm --stable`, one clone, every file committed: base `d03d5bd9` 3317-3318,
+the assembled tree 3320 (STABLE 2). `FORK_BUDGET` stays 3324. The two hands that append to
+`scripts/uninstall.sh`'s one-line fixture list conflicted on assembly; the resolution is the set-union of both
+sides, checked equal by sorted comparison, `bash -n` clean and the file kept 100755.
+## [0.762.0] - 2026-10-09
 Batch 216 (graph-ledger-full-drain), release 2. One graph filing, shipped ALONE: every file is in the
 `ai-dlc-update` skill, a bootstrapping subject. No pre-push hook, no `hermetic-run.sh`, no deriver change.
 

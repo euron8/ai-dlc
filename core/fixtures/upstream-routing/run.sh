@@ -86,6 +86,10 @@ SITES_F="$(pick "$ROOT/.claude/skills/ai-dlc-update/reconcile/setup-sites.md" \
                 "$ROOT/core/skills/ai-dlc-update/reconcile/setup-sites.md")"
 [ -n "$SITES_F" ] || { echo "FIXTURE ERROR: no reconcile/setup-sites.md under $ROOT in either layout" >&2; exit 2; }
 
+for _hc in "$SUBJ" "$GUARD_F" "$MANIFEST_F" "$SITES_F"; do
+  echo "HERMETIC-CONSUMED $(cd "$(dirname "$_hc")" && pwd -P)/$(basename "$_hc")"
+done
+
 command -v python3 >/dev/null 2>&1 || { echo "FIXTURE ERROR: python3 absent" >&2; exit 2; }
 # `jq` is the GUARD's own dependency, not this fixture's convenience. Without it the guard reads an
 # empty tool_name, falls through its `case` to `exit 0`, and ALLOWS every path — a fail-open that

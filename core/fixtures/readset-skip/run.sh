@@ -45,7 +45,7 @@ broken() { printf '  FAIL  %s\n' "$1" >&2; echo "${NAME:-readset-skip}: FIXTURE 
 #   a  arms ign man merge ckm1   pool selection worlds, the manifest, the deriver's merge and control, checksum-key mutants a-g
 #   b  loc hr tk dg ckm2         local map and trace report, hash rows, tool keys, committed digests, checksum-key mutants h-i
 #   c  tracer rc                 trace tree, lossy window, --tracer both and its stub worlds, --reconcile
-#   d  ckw ckm3                  checksum-key worlds (fifteen, against each hook) and checksum-key mutants j-o
+#   d  ckw ckm3 vs               shared verdict store (vs), checksum-key worlds (fifteen, against each hook) and checksum-key mutants j-o
 # The per-fixture checksum-key section (contract k1) is four units: ckw its worlds, ckm1..ckm3 its fifteen mutants dealt in
 # three runs. Each mutant re-drives all fifteen worlds, so the mutants carry the cost and are what is dealt.
 # `rc` rides with `tracer` because it drives the stub `sandbox-exec` and deriver copy that `tracer` builds.
@@ -53,7 +53,7 @@ SHARDS="a b c d"
 UNITS_a="arms ign man merge ckm1"
 UNITS_b="loc hr tk dg ckm2"
 UNITS_c="tracer rc"
-UNITS_d="ckw ckm3"
+UNITS_d="ckw ckm3 vs"
 GROUP=a
 if [ "${1:-}" = "--group" ]; then
   GROUP="${2:-}"
@@ -936,7 +936,7 @@ fi
 # Without the quoted-path test a tab-named file is listed in its quoted spelling, never reaches
 # `.files`, and the line counts still agree, so the manifest is NOT emptied.
 NEW_ARMS=$((NEW_ARMS+1))
-if lit_mut noquote 1 " || grep -q '^\"' \"\$out/.paths\"" ""; then M="$LM"
+if lit_mut noquote 1 "elif grep -q '^\"' \"\$out/.lsf\"; then" "elif false; then"; then M="$LM"
   killed noquote "the tab-name arm" "$(drive "$M" m.noquote 'printf "v2\n" > src/a.sh' stale "printf t > 'src/tab	name'")" "$ALL5" 0 "$UNHASH"
 fi
 # Without `--`, a top-level -x.sh is an unknown option to shasum and the manifest is emptied.
@@ -1215,10 +1215,20 @@ else
     "0|"*"|invoked|verified|"*) ok "(f) a deriver that FAILS leaves the gate green and the verified record written — the trace never decides the push" ;;
     *) bad "(f) a failing trace changed the gate: '$RF'" ;;
   esac
+  # A RED PUSH TRACES THE FIXTURE WHOSE OWN VERDICT IS ok (operator ruling: a good fixture run is a good fixture
+  # run). alpha fails, gamma (unmapped) passes: the trace is invoked for gamma ALONE, gamma's log is stashed and
+  # its row lands, alpha (failed, mapped) is never named, and NO whole-tree verified record is written.
+  # The second world fails the UNMAPPED fixture itself: nothing is traced, because a failed fixture is never traced.
   RR="$(rf_drive "$POOL" r "printf 'exit 1\n' > $FXROOT/alpha/run.sh")"; lt_arm
   case "$RR" in
-    "1|no|not|none|"*) ok "(f) a RED run starts no trace, even for the unmapped fixture that passed in it" ;;
-    *) bad "(f) a red run started a trace or wrote a verified record: '$RR'" ;;
+    "1|no|invoked|none|stashed|1|--list gamma --tracer sandbox --local-map .git/ai-dlc-fixture-readsets.local")
+      ok "(f) a RED push still traces the unmapped fixture whose own verdict is ok (gamma), never the failing alpha, and writes no whole-tree verified record" ;;
+    *) bad "(f) a red push did not trace exactly gamma without a verified record: '$RR'" ;;
+  esac
+  RRG="$(rf_drive "$POOL" rg "printf 'exit 1\n' > $FXROOT/gamma/run.sh")"; lt_arm
+  case "$RRG" in
+    "1|no|not|none|none||") ok "(f) a FAILED unmapped fixture is never traced, even on a red push" ;;
+    *) bad "(f) a failed unmapped fixture was traced or stashed: '$RRG'" ;;
   esac
   # (k) THE LOCK ROUND TRIP (BL-463). The real readset_live_trace takes the lock while STUB_GO holds
   # the stub deriver, so the trace subshell is alive when the pid file is read. A verdict alone cannot
@@ -1509,7 +1519,7 @@ if [ "$LT_CAN" = 1 ]; then
       *) ok "BL-452 MUTANT $1 is KILLED by $2: '$r'" ;;
     esac
   }
-  pm_copy nocall 1 '  if [ "$rc" -eq 0 ]; then readset_live_trace "$out"; fi' '  :' \
+  pm_copy nocall 1 '  readset_live_trace "$out"' '  :' \
     && pm_rf nocall a "export STUB_GO=\"$WORK/rf.go.nocall\"" '"0|yes|invoked|"*'
   # sync and fold drop the `&`, so `$!` is replaced by a literal pid in the copy too: with no
   # background job `$!` is unset, and bash 3.2 under `set -u` rejects even `${!:-0}`, so the drive
@@ -1530,7 +1540,7 @@ if [ "$LT_CAN" = 1 ]; then
                    'AI_DLC_READSET_TRACE_ROOT="$tr" bash "$dv" --list "$names" --tracer sandbox --local-map "$READSET_LOCAL" || { rm -f "$lk/pid"; rmdir "$lk"; exit 1; }' \
                 1 '  ) </dev/null >"$logf" 2>&1 &' '  ) </dev/null >"$logf" 2>&1 || return 1' \
                 1 '  tp="$!"' '  tp=0' \
-                1 '  if [ "$rc" -eq 0 ]; then readset_live_trace "$out"; fi' '  if [ "$rc" -eq 0 ]; then readset_live_trace "$out" || rc=1; fi' \
+                1 '  readset_live_trace "$out"' '  readset_live_trace "$out" || rc=1' \
     && pm_rf fold f 'export STUB_RC=1' '"0|"*"|invoked|verified|"*'
   # The lock WRITER's mutants (BL-463), each scored on the round trip (k), the one arm that reads
   # the pid file's content: the parent's pid in place of the trace subshell's, and no start line.
@@ -1552,8 +1562,8 @@ if [ "$LT_CAN" = 1 ]; then
     # correctly, so the file agrees with itself; only the join to the stub's recorded pid (ppid) sees it.
     pm_copy ppidwriter 1 '  tp="$!"' '  tp="$PPID"' && pm_rt ppidwriter
   fi
-  pm_copy redrun 1 '  if [ "$rc" -eq 0 ]; then readset_live_trace "$out"; fi' '  readset_live_trace "$out"' \
-    && pm_rf redrun f "printf 'exit 1\n' > $FXROOT/alpha/run.sh" '"1|no|not|"*'
+  pm_copy redrun 1 '  readset_live_trace "$out"' '  if [ "$rc" -eq 0 ]; then readset_live_trace "$out"; fi' \
+    && pm_rf redrun f "printf 'exit 1\n' > $FXROOT/alpha/run.sh" '"1|no|invoked|none|stashed|"*'
 fi
 # UNMUTATED CONTROL, driven the same way as the local-world mutants: a baseline selection must APPEAR.
 R="$(lw_run "$POOL" ctl3 "$LM_C1")"; lt_arm
@@ -2603,10 +2613,14 @@ MUT
   else
     PR="$WORK/lossprobe"
     mkdir -p "$PR/core/fixtures/burst" "$PR/core/scripts" "$PR/.githooks" "$PR/d" || broken "mkdir failed"
-    _i=0; while [ "$_i" -lt 400 ]; do _i=$((_i+1)); echo "$_i" > "$PR/d/f$_i"; done
+    # THE BURST IS 8 CONCURRENT READERS OVER 1500 FILES. The deriver's stream runs at the default
+    # level (BL-481), and there the old single-reader burst over 400 files plus `ls -lR /usr/share`
+    # never dropped: 0 notices in 3 of 3, against 130-197 at `--level debug`. 8 readers over 1500
+    # files dropped 41 and 42 notices at the default level, load 44-47.
+    _i=0; while [ "$_i" -lt 1500 ]; do _i=$((_i+1)); echo "$_i" > "$PR/d/f$_i"; done
     printf '#!/bin/bash\nFXROOT="core/fixtures/"\nfor d in "$FXROOT"*/; do :; done\n' > "$PR/.githooks/pre-push"
     # The probe fixture also ECHOES the width knob, which the width arm below reads from its log.
-    printf '#!/bin/bash\necho "width=${VAS_INNER_POOL_WIDTH:-unset}"\necho "ems=${EMS_POOL_WIDTH:-unset}"\ncat d/f* >/dev/null\nls -lR /usr/share >/dev/null 2>&1\ncat d/f* >/dev/null\necho burst ok\n' > "$PR/core/fixtures/burst/run.sh"
+    printf '#!/bin/bash\necho "width=${VAS_INNER_POOL_WIDTH:-unset}"\necho "ems=${EMS_POOL_WIDTH:-unset}"\nfor _r in 1 2 3 4 5 6 7 8; do cat d/f* >/dev/null & done\nwait\necho burst ok\n' > "$PR/core/fixtures/burst/run.sh"
     # The width mutant's repo is the same seed with the deriver's env injection removed from both
     # launch lines. It is seeded BEFORE the original's `git init`, so it copies no `.git`.
     PRM="$WORK/widthmut"
@@ -4171,7 +4185,7 @@ fi
 if sg ckm2; then
   [ "$CK_N" -ge 1 ] || bad "no pre-push hook was found for the checksum-key mutants"
   if [ "$CK_N" -ge 1 ]; then
-    ck_mut h staleclears 1 '        else if (st == "stale") ns = ((f in LOC) ? "ok" : "stale")' '        else if (st == "stale") ns = "ok"'
+    ck_mut h staleclears 1 '        else if (st == "stale" && !(f in DECL)) ns = ((f in LOC) ? "ok" : "stale")' '        else if (st == "stale") ns = "ok"'
     ck_mut i nov2 1 '      if (seed) rd(ENVIRON["KV2"], VV)' '      if (0) rd(ENVIRON["KV2"], VV)'
   fi
 fi
@@ -4185,6 +4199,173 @@ if sg ckm3; then
     ck_mut n globaltools 1 '(!(f in DECL)) for (k in K) if (k in FT) {' '(!(f in DECL)) for (k in FT) {'
     ck_mut o nosibs 1 'if (k == root && sibs_only(k)) { SB = 1; continue }' 'if (0) { SB = 1; continue }'
   fi
+fi
+
+# ------------------------------------ a DECLARED fixture's stale record is decided on its keys ----
+# A fixture carrying `inputs.decl` has its declaration as its read set, so a record reading `#state stale`
+# must not force a run: stale means "re-trace", and a declared fixture has no trace. Before this, the
+# decision forced every stale declared fixture to run and wrote the record back stale, so it never left.
+# Driven through the REAL decision (apply_readset_skip) in a process of its own, reading `.kdec` -- no
+# fixture runs, so the hermetic runner is not involved. Cells, one world, one vector:
+#   dsame  declared `decl`, record stale, no declared input moved       -> skip, c `v`, republished ok
+#   unrel  the same, but an input NOBODY declared moved                 -> skip
+#   dchg   the same, but the declared src/a.sh moved                    -> run, changed src/a.sh
+#   dempty the declared fixture's stale record holds NO key rows        -> run (a missing stored key is changed)
+#   ctl    UNDECLARED alpha, record stale, nothing moved                -> run, reason stale (the near-miss)
+#   beta   undeclared and ok in the same invocation                     -> skip (proves the driver decided)
+# The mutant reverts BOTH decision lines to their pre-fix text and must lose the dsame cell, and ONLY it
+# and the cells that read the same line.
+if sg ckw && true; then
+CKD_DRV="$WORK/ckd.drive.sh"
+printf '%s\n' 'cd "$2" || exit 1' '. "$1" 2>/dev/null' \
+  'for d in "$FXROOT"*/; do [ -f "$d/run.sh" ] && printf "%s\n" "$d"; done > "$3/list"' \
+  'apply_readset_skip "$3/list" "$3" > "$3/ann" 2>&1' > "$CKD_DRV" || broken "could not write the stale-declared decision driver"
+ckd_dec() { # <pool> <t> <tag> -> the decision dir $t.dd.<tag>
+  mkdir -p "$2.dd.$3" && env AI_DLC_READSET_LIVE_TRACE=0 PATH="$2.bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin" bash "$CKD_DRV" "$1" "$2" "$2.dd.$3"
+}
+ckd_cell() { awk -F'\t' -v f="$2" '$1 == f && ($2 == "run" || $2 == "skip") { printf "%s:%s:%s", $2, $4, $5 }' "$1/.kdec" 2>/dev/null; }
+ckd_world() { local p="$1" x="$2" t="$3" k kd
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  mkdir -p "$t/$x/decl" && printf 'exit 0\n' > "$t/$x/decl/run.sh" && printf 'src/a.sh\n' > "$t/$x/decl/inputs.decl" \
+    && ( cd "$t" && git add -A && git -c user.email=f@f -c user.name=f commit -qm decl ) >/dev/null 2>&1 || { printf SEED; return; }
+  kd="$t/.git/ai-dlc-fixture-keys"; mkdir -p "$kd" || { printf SEED; return; }
+  ckd_dec "$p" "$t" rec
+  for k in decl alpha beta; do
+    [ -f "$t.dd.rec/.k/$k" ] || { printf NOREC; return; }
+    sed '2s/.*/#state ok/' "$t.dd.rec/.k/$k" > "$kd/$k.key"
+  done
+  # alpha and decl go stale; beta stays ok. The rows are kept: a stale record is a valid record.
+  for k in decl alpha; do sed '2s/.*/#state stale/' "$kd/$k.key" > "$kd/$k.key.t" && mv "$kd/$k.key.t" "$kd/$k.key"; done
+  ckd_dec "$p" "$t" same
+  printf 'x\n' > "$t/src/c.sh"; ckd_dec "$p" "$t" unrel; printf 'v1\n' > "$t/src/c.sh"
+  printf 'v2\n' > "$t/src/a.sh"; ckd_dec "$p" "$t" chg; printf 'v1\n' > "$t/src/a.sh"
+  sed -n 1,3p "$kd/decl.key" > "$kd/decl.key.t" && mv "$kd/decl.key.t" "$kd/decl.key"; ckd_dec "$p" "$t" empty
+  printf 'dsame=%s unrel=%s dchg=%s dempty=%s ctl=%s beta=%s' "$(ckd_cell "$t.dd.same" decl)" "$(ckd_cell "$t.dd.unrel" decl)" \
+    "$(ckd_cell "$t.dd.chg" decl)" "$(ckd_cell "$t.dd.empty" decl)" "$(ckd_cell "$t.dd.same" alpha)" "$(ckd_cell "$t.dd.same" beta)"
+}
+CKD_WANT='dsame=skip:v:ok unrel=skip:v:ok dchg=run:k:ok dempty=run:s:ok ctl=run:s:stale beta=skip::ok'
+CKD_N=0
+for _h in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
+  [ -f "$_h" ] || continue
+  CKD_N=$((CKD_N+1)); CKD_P="$CK_W/ckdpool.$CKD_N.sh"
+  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$_h" > "$CKD_P"
+  CKD_X="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$CKD_P" | sort -u)"
+  CK_ARMS=$((CK_ARMS+1)); _g="$(ckd_world "$CKD_P" "$CKD_X" "$CK_W/ckd.h$CKD_N" 2>/dev/null)"
+  if [ "$_g" = "$CKD_WANT" ]; then ok "(stale-declared) ${_h#"$ROOT"/}: $_g"
+  else bad "(stale-declared) ${_h#"$ROOT"/}: want '$CKD_WANT' got '$_g'"; fi
+  [ "$CKD_N" -eq 1 ] && { CKD_P1="$CKD_P"; CKD_X1="$CKD_X"; }
+done
+CK_ARMS=$((CK_ARMS+1))
+[ "$CKD_N" -ge 1 ] && ok "the stale-declared world ran against $CKD_N hook(s)" || bad "no pre-push hook was found for the stale-declared world"
+# THE MUTANT: both decision lines back to their pre-fix text. dsame must flip to a forced run, with the
+# record written back stale; the undeclared control and every other cell stay put. Count-checked, cmp-guarded.
+if [ "$CKD_N" -ge 1 ]; then
+  CK_ARMS=$((CK_ARMS+1))
+  CKD_M="$CK_W/ckd.mut.sh"; cp "$CKD_P1" "$CKD_M"
+  MF1='else if (st == "stale" && !(f in LOC) && !((f in DECL) && RK[f] != "")) { why = "stale"; c = "s" }'
+  MT1='else if (st == "stale" && !(f in LOC)) { why = "stale"; c = "s" }'
+  MF2='else if (st == "stale" && !(f in DECL)) ns = ((f in LOC) ? "ok" : "stale")'
+  MT2='else if (st == "stale") ns = ((f in LOC) ? "ok" : "stale")'
+  _n1="$(grep -cF -- "$MF1" "$CKD_M")"; _n2="$(grep -cF -- "$MF2" "$CKD_M")"
+  if [ "$_n1" != 1 ] || [ "$_n2" != 1 ]; then bad "STALE-DECLARED MUTANT did not apply: anchors matched $_n1 and $_n2 time(s), not 1 and 1"
+  else
+    MF1="$MF1" MT1="$MT1" MF2="$MF2" MT2="$MT2" awk '{ if (index($0, ENVIRON["MF1"])) { i = index($0, ENVIRON["MF1"]); $0 = substr($0, 1, i - 1) ENVIRON["MT1"] substr($0, i + length(ENVIRON["MF1"])) }
+      if (index($0, ENVIRON["MF2"])) { i = index($0, ENVIRON["MF2"]); $0 = substr($0, 1, i - 1) ENVIRON["MT2"] substr($0, i + length(ENVIRON["MF2"])) }
+      print }' "$CKD_M" > "$CKD_M.t" && mv "$CKD_M.t" "$CKD_M"
+    if cmp -s "$CKD_P1" "$CKD_M"; then bad "STALE-DECLARED MUTANT: the copy is unchanged"
+    else
+      _g="$(ckd_world "$CKD_M" "$CKD_X1" "$CK_W/ckd.mut" 2>/dev/null)"
+      _w='dsame=run:s:stale unrel=run:s:stale dchg=run:s:stale dempty=run:s:stale ctl=run:s:stale beta=skip::ok'
+      if [ "$_g" = "$_w" ] && [ "$_g" != "$CKD_WANT" ]; then ok "STALE-DECLARED MUTANT (pre-fix lines) is KILLED: dsame becomes a forced run written back stale: $_g"
+      else bad "STALE-DECLARED MUTANT: expected '$_w', got '$_g'"; fi
+    fi
+  fi
+fi
+
+# A QUOTED MAP ROW MUST NOT TURN KEYING OFF FOR THE PUSH. The quoted-path guard in readset_manifest used to read
+# `.paths`, which carries every committed-map and local-map path, so one C-quoted row emptied `.now` and the push
+# printed `could not hash the working tree -- running all N`. It now reads the two ls-files streams only; a quoted
+# map row is dropped from the universe and ITS fixture runs, every other fixture is still decided on its keys.
+#   qrow   a quoted row on alpha in the committed map         -> alpha runs, beta and delta skip
+#   qpath  a file git must quote (a tab in its name)          -> the guard still fires: all three run, and
+#                                                                the announcement names the path (the near-miss)
+#   qctl   neither                                            -> all three skip (proves the driver decides)
+ckq_world() { local p="$1" x="$2" t="$3" k kd
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  kd="$t/.git/ai-dlc-fixture-keys"; mkdir -p "$kd" || { printf SEED; return; }
+  ckd_dec "$p" "$t" qrec
+  for k in alpha beta delta; do
+    [ -f "$t.dd.qrec/.k/$k" ] || { printf NOREC; return; }
+    cp "$t.dd.qrec/.k/$k" "$kd/$k.key"
+  done
+  ckd_dec "$p" "$t" qctl
+  printf 'alpha\t"src/q\\tx.sh"\n' >> "$t/.ai-dlc-fixture-readsets.tsv"
+  ckd_dec "$p" "$t" qrow
+  git -C "$t" checkout -q -- .ai-dlc-fixture-readsets.tsv 2>/dev/null
+  printf 'q\n' > "$t/src/tab	name.txt"
+  ckd_dec "$p" "$t" qpath
+  rm -f "$t/src/tab	name.txt"
+  # THE LOCAL MAP, where graph's bad row lives: a deriver-written C-quoted row with a real tab in the quoted name.
+  printf 'alpha\t"src/q\tx.sh"\t-\n' > "$t/.git/ai-dlc-fixture-readsets.local"
+  ckd_dec "$p" "$t" qloc
+  rm -f "$t/.git/ai-dlc-fixture-readsets.local"
+  printf 'qctl=%s,%s,%s qrow=%s,%s,%s qpath=%s,%s,%s why=%s qloc=%s' \
+    "$(ckd_cell "$t.dd.qctl" alpha)" "$(ckd_cell "$t.dd.qctl" beta)" "$(ckd_cell "$t.dd.qctl" delta)" \
+    "$(ckd_cell "$t.dd.qrow" alpha)" "$(ckd_cell "$t.dd.qrow" beta)" "$(ckd_cell "$t.dd.qrow" delta)" \
+    "$(ckd_cell "$t.dd.qpath" alpha)" "$(ckd_cell "$t.dd.qpath" beta)" "$(ckd_cell "$t.dd.qpath" delta)" \
+    "$(grep -c 'cause: git quotes the path .*tab' "$t.dd.qpath/ann" 2>/dev/null)" \
+    "$(ckd_cell "$t.dd.qloc" alpha),$(ckd_cell "$t.dd.qloc" beta),$(ckd_cell "$t.dd.qloc" delta)"
+}
+# graph's real shape: a quoted row in the LOCAL map on a fixture with NO committed rows. gamma is mapped by a valid
+# local row (src/c.sh) and recorded; the local map then gains a deriver-written C-quoted tab-bearing row for gamma.
+# gamma must RUN (its own read set names a quoted path), alpha/beta/delta must still SKIP on their keys.
+ckq_local_world() { local p="$1" x="$2" t="$3" k kd ds lm
+  ck_seed "$t" "$x" gamma || { printf SEED; return; }
+  mkdir -p "$t/core/scripts" && printf '#!/bin/bash\nexit 0\n' > "$t/core/scripts/derive-fixture-readsets.sh" \
+    && ( cd "$t" && git add -A && git -c user.email=f@f -c user.name=f commit -qm deriver ) >/dev/null 2>&1 || { printf SEED; return; }
+  ds="$(ck_sha "$t/core/scripts/derive-fixture-readsets.sh")"; lm="$t/.git/ai-dlc-fixture-readsets.local"
+  { printf 'gamma\tsrc/c.sh\t%s\n' "$(ck_sha "$t/src/c.sh")"; printf 'gamma\t#deriver\t%s\n' "$ds"; } > "$lm"
+  kd="$t/.git/ai-dlc-fixture-keys"; mkdir -p "$kd" || { printf SEED; return; }
+  ckd_dec "$p" "$t" lrec
+  for k in alpha beta delta gamma; do
+    [ -f "$t.dd.lrec/.k/$k" ] || { printf NOREC; return; }
+    cp "$t.dd.lrec/.k/$k" "$kd/$k.key"
+  done
+  ckd_dec "$p" "$t" lctl
+  printf 'gamma\t"src/q\\tx.sh"\t-\n' >> "$lm"
+  ckd_dec "$p" "$t" lq
+  printf 'ctl=%s,%s,%s,%s lq=%s,%s,%s,%s' \
+    "$(ckd_cell "$t.dd.lctl" gamma)" "$(ckd_cell "$t.dd.lctl" alpha)" "$(ckd_cell "$t.dd.lctl" beta)" "$(ckd_cell "$t.dd.lctl" delta)" \
+    "$(ckd_cell "$t.dd.lq" gamma)" "$(ckd_cell "$t.dd.lq" alpha)" "$(ckd_cell "$t.dd.lq" beta)" "$(ckd_cell "$t.dd.lq" delta)"
+}
+CKQL_WANT='ctl=skip::ok,skip::ok,skip::ok,skip::ok lq=run:k:ok,skip::ok,skip::ok,skip::ok'
+# A run cell prints `run:<class>:<state>`; with no .kdec row (a run-all announcement writes none) it prints empty.
+CKQ_WANT='qctl=skip::ok,skip::ok,skip::ok qrow=run:k:ok,skip::ok,skip::ok qpath=,, why=1 qloc=skip::ok,skip::ok,skip::ok'
+if [ "$CKD_N" -ge 1 ]; then
+  CK_ARMS=$((CK_ARMS+1)); _g="$(ckq_world "$CKD_P1" "$CKD_X1" "$CK_W/ckq.h1" 2>/dev/null)"
+  if [ "$_g" = "$CKQ_WANT" ]; then ok "(quoted-row) a quoted map row runs its own fixture only, a quoted ls-files path still empties keying and is NAMED: $_g"
+  else bad "(quoted-row) want '$CKQ_WANT' got '$_g'"; fi
+  CK_ARMS=$((CK_ARMS+1)); _g="$(ckq_local_world "$CKD_P1" "$CKD_X1" "$CK_W/ckq.loc" 2>/dev/null)"
+  if [ "$_g" = "$CKQL_WANT" ]; then ok "(quoted-local) a quoted LOCAL row on a fixture with no committed rows runs that fixture only; keying stays on for the rest: $_g"
+  else bad "(quoted-local) want '$CKQL_WANT' got '$_g'"; fi
+  CK_ARMS=$((CK_ARMS+1))
+  CKQ_M="$CK_W/ckq.mut.sh"; cp "$CKD_P1" "$CKQ_M"
+  _a1="$(grep -cF -- "    readset_rows \"\$out\" paths | grep -v '^\"'" "$CKQ_M")"; _a2="$(grep -cF -- "grep -q '^\"' \"\$out/.lsf\"" "$CKQ_M")"
+  if [ "$_a1" != 1 ] || [ "$_a2" != 1 ]; then bad "QUOTED-ROW MUTANT did not apply: anchors matched $_a1 and $_a2 time(s), not 1 and 1"
+  else
+    sed -e "s#^    readset_rows \"\$out\" paths | grep -v '^\"'\$#    readset_rows \"\$out\" paths#" \
+        -e "s#grep -q '^\"' \"\$out/.lsf\"#grep -q '^\"' \"\$out/.paths\"#" "$CKQ_M" > "$CKQ_M.t" && mv "$CKQ_M.t" "$CKQ_M"
+    if cmp -s "$CKD_P1" "$CKQ_M"; then bad "QUOTED-ROW MUTANT: the copy is unchanged"
+    else
+      _g="$(ckq_world "$CKQ_M" "$CKD_X1" "$CK_W/ckq.mut" 2>/dev/null)"
+      if [ "$_g" != "$CKQ_WANT" ] && case "$_g" in *"qrow=,,"*) true ;; *) false ;; esac; then ok "QUOTED-ROW MUTANT (unscoped guard) is KILLED by the qrow arm: the quoted map row empties keying for every fixture: $_g"
+      else bad "QUOTED-ROW MUTANT: expected qrow=,, in '$_g'"; fi
+      CK_ARMS=$((CK_ARMS+1)); _g="$(ckq_local_world "$CKQ_M" "$CKD_X1" "$CK_W/ckq.locmut" 2>/dev/null)"
+      if [ "$_g" != "$CKQL_WANT" ] && case "$_g" in *"lq=,,,"*) true ;; *) false ;; esac; then ok "QUOTED-ROW MUTANT (unscoped guard) is KILLED by the quoted-local cell: keying goes off for every fixture: $_g"
+      else bad "QUOTED-ROW MUTANT: quoted-local cell expected lq=,,, in '$_g'"; fi
+    fi
+  fi
+fi
 fi
 
 # ------------------------------------ tool keys do not depend on the invoker ----
@@ -4793,12 +4974,324 @@ fi
 
 fi
 
+# -------------------------------------------------- the shared verdict store (unit vs) ----
+# A DECLARED fixture's pass is keyed on content alone, so a pass recorded in one clone is valid in any other clone at
+# any path. hermetic-run.sh writes `$AI_DLC_VERDICT_STORE/<sha256 of body>` on a clean pass (rc 0, no REQUIRED input
+# missing) and is the store's ONLY writer; the hook's decision turns a
+# declared `run` into a `skip` (c `v`) when the store holds that entry. The body is the fixture name, the sha of the
+# runner, the sha of the hook spans the runner sources, and the --key-only rows, so a pass under an older runner or
+# universe is not reused. The reader fails closed. Undeclared fixtures never read the store.
+# THE OVERRIDE IS PASSED ON EACH COMMAND, never exported: this file scrubs AI_DLC_* at its top, so an export made
+# before the scrub would silently fall back to the default path and pass against whatever is there. Arm (a) asserts the
+# override directory holds entries, and the real default store is snapshotted before and after the unit.
+#   p  per project: the store is <base>/<root commit>; a file:// clone shares, another root commit does not, an unresolvable one is OFF
+#   a  A's hermetic pass -> B (clone, other path, identical tree) SKIPS; announced by name; the store holds entries
+#   b  one declared input byte changed in B -> RUN (the pass was recorded on a different tree)
+#   t  A's own declared input changed after its pass -> RUN; B's fixture-own file added -> RUN
+#   g  one byte added to the tree's hermetic-run.sh -> RUN; a line added inside the READSET_UNIVERSE span -> RUN
+#   c  failed run, REQUIRED-sentinel-missing run, undeclared run: nothing written; their fixtures RUN in B
+#   d  an entry planted for an UNDECLARED fixture is ignored; the same plant for a declared one skips (the control)
+#   e  truncated, emptied, edited entry -> RUN; the restored entry skips (the control)
+#   f  an unwritable store, and no store and no HOME, drop the record and never fail the run
+#   h  the hook writes NO store entry (readset_keys_write publishes ok records only); the runner writes one (the control)
+VS_ARMS=0
+if sg vs; then
+VS_RUN=""
+for _c in "$ROOT/core/scripts/hermetic-run.sh" "$ROOT/scripts/ai-dlc/hermetic-run.sh"; do [ -f "$_c" ] && { VS_RUN="$_c"; break; }; done
+if [ -z "$VS_RUN" ]; then
+  printf '  SKIP  verdict-store arms: no hermetic-run.sh in either layout\n'
+else
+echo "HERMETIC-CONSUMED ${VS_RUN#"$ROOT"/}"
+VS_REAL_HOME="$(eval "printf '%s' ~$(id -un)")"
+# Scored on the entries THIS unit could write (its own fixture names), because a peer session running real fixtures writes real entries into the default store concurrently.
+vs_snap() { find "$1/.cache/ai-dlc/verdicts" -type f 2>/dev/null | LC_ALL=C sort | while IFS= read -r _f; do grep -lxE '#fixture (decl|bad|nosent|undecl)' "$_f" 2>/dev/null; done | while IFS= read -r _f; do printf '%s ' "$_f"; md5 -q "$_f"; done | md5 -q; }
+VS_SNAP0="$(vs_snap "$VS_REAL_HOME")"; VS_SNAPH0="$(vs_snap "$HOME")"
+VS_DRV="$WORK/vs.drive.sh"
+printf '%s\n' 'cd "$2" || exit 1' '. "$1" 2>/dev/null' \
+  'for d in "$FXROOT"*/; do [ -f "$d/run.sh" ] && printf "%s\n" "$d"; done > "$3/list"' \
+  'apply_readset_skip "$3/list" "$3" > "$3/ann" 2>&1' > "$VS_DRV" || broken "could not write the verdict-store decision driver"
+vs_dec() { # <pool> <t> <store> <tag> -> decision dir $t.vd.<tag>
+  mkdir -p "$2.vd.$4" && env AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_VERDICT_STORE="$3" PATH="/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin" bash "$VS_DRV" "$1" "$2" "$2.vd.$4"
+}
+vs_cell() { awk -F'\t' -v f="$2" '$1 == f && ($2 == "run" || $2 == "skip") { printf "%s", $2 }' "$1/.kdec" 2>/dev/null; }
+vs_hr() { # <runner> <root> <fx> <store>: runs the declared fixture; prints its exit code
+  env AI_DLC_VERDICT_STORE="$4" bash "$1" --root "$2" "$3" >/dev/null 2>&1; printf '%s' "$?"
+}
+vs_n() { find "$1" -maxdepth 1 -type f ! -name '.tmp*' 2>/dev/null | grep -c . || :; }
+vs_mk() { # <t> <fixture root> <runner file>: a git repo holding the hook, the runner and four fixtures
+  local t="$1" x="$2" f rd
+  mkdir -p "$t/.githooks" "$t/src" || return 1
+  cp "${VS_HOOK:-$HOOK}" "$t/.githooks/pre-push" || return 1
+  case "$x" in core/fixtures) rd=core/scripts ;; *) rd=scripts/ai-dlc ;; esac
+  mkdir -p "$t/$rd" && cp "$3" "$t/$rd/hermetic-run.sh" || return 1
+  printf 'v1\n' > "$t/src/a.sh"
+  for f in decl bad nosent undecl; do mkdir -p "$t/$x/$f" || return 1; done
+  printf '%s\n' 'if [ -f src/a.sh ]; then echo "HERMETIC-CONSUMED src/a.sh"; fi' 'exit 0' > "$t/$x/decl/run.sh"
+  printf '%s\n' 'echo "HERMETIC-CONSUMED src/a.sh"' 'exit 1' > "$t/$x/bad/run.sh"
+  printf '%s\n' 'exit 0' > "$t/$x/nosent/run.sh"; printf '%s\n' 'exit 0' > "$t/$x/undecl/run.sh"
+  for f in decl bad nosent; do printf '!src/a.sh\n' > "$t/$x/$f/inputs.decl"; done
+  ( cd "$t" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm seed ) >/dev/null 2>&1
+}
+vs_plant() { # <pool> <t> <decision dir> <store> <fx>: the entry the digest names, built from the hook's own functions
+  ( cd "$2" || exit 1
+    # shellcheck disable=SC1090
+    . "$1" 2>/dev/null
+    id="$(readset_vs_ident_here)" || exit 1
+    tail -n +4 "$3/.k/$5" > "$3/.pl.rows" && [ -s "$3/.pl.rows" ] || exit 1
+    readset_vs_input "$5" "$id" "$3/.pl.rows" > "$3/.pl.d" || exit 1
+    mkdir -p "$4" && { printf '#format k1\n#state ok\n'; cat "$3/.pl.d"; } > "$4/$(shasum -a 256 < "$3/.pl.d" | cut -d' ' -f1)" )
+}
+vs_world() { # <pool> <fixture root> <runner file> <t>: one vector
+  local p="$1" x="$2" rn="$3" t="$4" SB="$4.S" S A="$4/A" B="$4/B" rd e v n1 rcs ra
+  case "$x" in core/fixtures) rd=core/scripts ;; *) rd=scripts/ai-dlc ;; esac
+  mkdir -p "$t" "$SB" || { printf SEED; return; }
+  vs_mk "$A" "$x" "$rn" || { printf SEED; return; }
+  ra="$(cd "$A" && git rev-list --max-parents=0 HEAD | sed -n 1p)"; S="$SB/$ra"
+  v="rcd=$(vs_hr "$A/$rd/hermetic-run.sh" "$A" decl "$SB") rcb=$(vs_hr "$A/$rd/hermetic-run.sh" "$A" bad "$SB") rcn=$(vs_hr "$A/$rd/hermetic-run.sh" "$A" nosent "$SB") rcu=$(vs_hr "$A/$rd/hermetic-run.sh" "$A" undecl "$SB")"
+  n1="$(vs_n "$S")"
+  git clone -q "file://$A" "$B" >/dev/null 2>&1 || { printf CLONE; return; }
+  vs_dec "$p" "$B" "$SB" a
+  v="$v a=$(vs_cell "$B.vd.a" decl)/$(vs_cell "$B.vd.a" bad)/$(vs_cell "$B.vd.a" nosent)/$(vs_cell "$B.vd.a" undecl) n=$n1"
+  v="$v ann=$(grep -cxF '   ..    verdict store: 1 fixture(s) skipped on a pass recorded elsewhere: decl' "$B.vd.a/ann" 2>/dev/null)"
+  printf 'v2\n' > "$B/src/a.sh"; vs_dec "$p" "$B" "$SB" b; printf 'v1\n' > "$B/src/a.sh"
+  v="$v b=$(vs_cell "$B.vd.b" decl)"
+  printf 'v2\n' > "$A/src/a.sh"; vs_dec "$p" "$A" "$SB" t1; printf 'v1\n' > "$A/src/a.sh"
+  printf 'x\n' > "$B/$x/decl/extra.txt"; vs_dec "$p" "$B" "$SB" t2; rm -f "$B/$x/decl/extra.txt"
+  v="$v t=$(vs_cell "$A.vd.t1" decl)/$(vs_cell "$B.vd.t2" decl)"
+  cp "$B/$rd/hermetic-run.sh" "$t/rn.save"
+  sed 's/^HR_ROOT_OPT=""$/HR_ROOT_OPT=""; : x/' "$t/rn.save" > "$B/$rd/hermetic-run.sh"; vs_dec "$p" "$B" "$SB" g1
+  sed 's/^  hr_population key || return 0$/  : x; hr_population key || return 0/' "$t/rn.save" > "$B/$rd/hermetic-run.sh"; vs_dec "$p" "$B" "$SB" g3
+  printf '# trailing\n' >> "$B/$rd/hermetic-run.sh"; vs_dec "$p" "$B" "$SB" g4
+  cp "$t/rn.save" "$B/$rd/hermetic-run.sh"
+  cp "$B/.githooks/pre-push" "$t/hk.save"
+  sed 's/^# READSET_UNIVERSE_BEGIN$/&\n# one more line/' "$t/hk.save" > "$B/.githooks/pre-push"; vs_dec "$p" "$B" "$SB" g2; cp "$t/hk.save" "$B/.githooks/pre-push"
+  v="$v g=$(vs_cell "$B.vd.g1" decl)/$(vs_cell "$B.vd.g2" decl)/$(vs_cell "$B.vd.g3" decl)/$(vs_cell "$B.vd.g4" decl)"
+  e="$(find "$S" -maxdepth 1 -type f ! -name '.tmp*' | LC_ALL=C sort | while IFS= read -r _f; do grep -qxF '#fixture decl' "$_f" && { printf '%s' "$_f"; break; }; done)"
+  if [ -f "$e" ]; then
+    cp "$e" "$t/e.save"
+    head -c 120 "$t/e.save" > "$e"; vs_dec "$p" "$B" "$SB" e1
+    : > "$e"; vs_dec "$p" "$B" "$SB" e2
+    sed '3s/decl/dec1/' "$t/e.save" > "$e"; vs_dec "$p" "$B" "$SB" e3
+    cp "$t/e.save" "$e"; vs_dec "$p" "$B" "$SB" e4
+    v="$v e=$(vs_cell "$B.vd.e1" decl)/$(vs_cell "$B.vd.e2" decl)/$(vs_cell "$B.vd.e3" decl)/$(vs_cell "$B.vd.e4" decl)"
+  else v="$v e=NOENTRY"; fi
+  rm -rf "$t.S2"; vs_plant "$p" "$B" "$B.vd.a" "$t.S2/$ra" undecl || v="$v PLANTFAIL"
+  vs_dec "$p" "$B" "$t.S2" d1
+  vs_plant "$p" "$B" "$B.vd.a" "$t.S2/$ra" decl || v="$v PLANTFAIL"
+  vs_dec "$p" "$B" "$t.S2" d2
+  v="$v d=$(vs_cell "$B.vd.d1" undecl)/$(vs_cell "$B.vd.d2" undecl)/$(vs_cell "$B.vd.d2" decl)"
+  : > "$t.notadir"
+  rcs="$(vs_hr "$A/$rd/hermetic-run.sh" "$A" decl "$t.notadir")"
+  v="$v f=$rcs/$(env -u HOME -u AI_DLC_VERDICT_STORE bash "$A/$rd/hermetic-run.sh" --root "$A" decl >/dev/null 2>&1; printf '%s' "$?")/$([ -f "$t.notadir" ] && [ ! -s "$t.notadir" ] && echo intact)"
+  mkdir -p "$t/C2" && cp -R "$A/." "$t/C2/" && rm -rf "$t/C2/.git" \
+    && ( cd "$t/C2" && git init -q . && git add -A && git -c user.email=f@f -c user.name=g commit -qm other ) >/dev/null 2>&1
+  vs_dec "$p" "$t/C2" "$SB" p1
+  git clone -q --depth 1 "file://$A" "$t/Sh" >/dev/null 2>&1; vs_dec "$p" "$t/Sh" "$SB" p2
+  vs_hr "$A/$rd/hermetic-run.sh" "$t/Sh" decl "$t.S3" >/dev/null 2>&1
+  v="$v p=$(vs_cell "$t/C2.vd.p1" decl)/$(vs_cell "$t/Sh.vd.p2" decl)/$(grep -c 'verdict store OFF' "$t/Sh.vd.p2/ann" 2>/dev/null)/$(ls -A "$t.S3" 2>/dev/null | grep -c .)"
+  printf '%s' "$v"
+}
+VS_WANT='rcd=0 rcb=1 rcn=1 rcu=2 a=skip/run/run/run n=1 ann=1 b=run t=run/run g=run/run/skip/skip e=run/run/run/skip d=run/run/skip f=0/0/intact p=run/run/1/0'
+# (v) THE SPAN CANNOT GO VACUOUS: the digested runner span is non-empty and still holds the env -i line and the copy loop.
+VS_ARMS=$((VS_ARMS+1)); sed -n '/^# HR_SANDBOX_BEGIN$/,/^# HR_SANDBOX_END$/p' "$VS_RUN" > "$WORK/vs.span"
+if [ "$(grep -c . "$WORK/vs.span")" -gt 50 ] && grep -qF 'env -i PATH=' "$WORK/vs.span" && grep -qF 'cp -Rp "$HR_FXDIR"' "$WORK/vs.span" \
+   && grep -qF 'REQUIRED input' "$WORK/vs.span" && ! grep -qF 'hr_store_put' "$WORK/vs.span"; then ok "(verdict store, v) the HR_SANDBOX span is non-empty, holds the env -i invocation, the copy loop and the REQUIRED check, and no store code"
+else bad "(verdict store, v) the HR_SANDBOX span is empty, lost the env -i line, the copy or the REQUIRED check, or holds store code"; fi
+VS_N=0
+for _h in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
+  [ -f "$_h" ] || continue
+  VS_N=$((VS_N+1)); VS_P="$WORK/vspool.$VS_N.sh"
+  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$_h" > "$VS_P"
+  VS_X="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$VS_P" | sort -u)"
+  [ "$VS_N" -eq 1 ] && { VS_P1="$VS_P"; VS_X1="$VS_X"; }
+  VS_ARMS=$((VS_ARMS+1)); _g="$(vs_world "$VS_P" "$VS_X" "$VS_RUN" "$WORK/vs.h$VS_N" 2>/dev/null)"
+  if [ "$_g" = "$VS_WANT" ]; then ok "(verdict store) ${_h#"$ROOT"/}: $_g"
+  else bad "(verdict store) ${_h#"$ROOT"/}: want '$VS_WANT' got '$_g'"; fi
+done
+# (h) the hook writes NO store entry: the runner is the store's only writer. Control: the runner writes one for the same tree.
+vs_h() { # <pool> <fixture root> <t>
+  local p="$1" x="$2" t="$3" S="$3.S" C="$3/C" rd o
+  case "$x" in core/fixtures) rd=core/scripts ;; *) rd=scripts/ai-dlc ;; esac
+  local rc
+  mkdir -p "$t" "$S" && vs_mk "$C" "$x" "$VS_RUN" || { printf SEED; return; }
+  rc="$(cd "$C" && git rev-list --max-parents=0 HEAD | sed -n 1p)"
+  vs_hr "$C/$rd/hermetic-run.sh" "$C" decl "$S" >/dev/null
+  o="$(vs_n "$S/$rc")"
+  rm -rf "$S"; mkdir -p "$S"
+  vs_dec "$p" "$C" "$S" h
+  ( cd "$C" && AI_DLC_VERDICT_STORE="$S" && export AI_DLC_VERDICT_STORE && . "$p" 2>/dev/null && printf 'ok' > "$C.vd.h/decl" && readset_keys_write "$C.vd.h" ) >/dev/null 2>&1
+  printf 'runner=%s hook=%s rec=%s' "$o" "$(vs_n "$S/$rc")" "$([ -f "$C.vd.h/.k/decl" ] && echo 1 || echo 0)"
+}
+if [ "$VS_N" -ge 1 ]; then
+  VS_ARMS=$((VS_ARMS+1)); _g="$(vs_h "$VS_P1" "$VS_X1" "$WORK/vs.hw" 2>/dev/null)"
+  [ "$_g" = "runner=1 hook=0 rec=1" ] && ok "(verdict store, h) the hook writes no store entry for a declared fixture it records ok, where the runner writes one: $_g" \
+    || bad "(verdict store, h) want 'runner=1 hook=0 rec=1' got '$_g'"
+fi
+# (k) THE KEY CENSUS: the rows the hook digests for a declared fixture's store entry (`.k/<fx>` after readset_keys)
+# must equal the rows `hermetic-run.sh --key-only` prints, because the runner writes the entry the hook looks up and
+# one differing row makes every recorded pass unfindable. A SYNTHETIC world holding the shapes that have diverged, so
+# the unit stays keyed on the two hooks and the runner alone (a census over the real tree hashes the whole universe
+# and would key this fixture on every file). Each world is driven TWICE through the hook's own functions, the way a
+# push decides: fresh, then with every record republished `ok` and one foreign row injected, so the record-carry
+# path (an `ok` record's keys carried into X while it holds a listing key) runs.
+#   cen  a declared file, a declared dir with a nested subdir (listing keys), a declared dir under an excluded top, a tool
+#   ctl  a declared file and a tool, no listing key: the shape on which the two sides agree (the inverse control)
+vs_cmk() { # <t> <fixture root> <runner file> <hook file>
+  local t="$1" x="$2" rd f
+  case "$x" in core/fixtures) rd=core/scripts ;; *) rd=scripts/ai-dlc ;; esac
+  mkdir -p "$t/.githooks" "$t/scripts" "$t/$rd" "$t/src" "$t/lib/sub" "$t/docs" || return 1
+  cp "$4" "$t/.githooks/pre-push" && cp "$3" "$t/$rd/hermetic-run.sh" || return 1
+  printf '# EXCLUDE_BEGIN\ndocs\n# EXCLUDE_END\n' > "$t/scripts/suite-content-key.sh"
+  printf 'v1\n' > "$t/src/a.sh"; printf 'l\n' > "$t/lib/l.txt"; printf 's\n' > "$t/lib/sub/s.txt"; printf 'n\n' > "$t/docs/n.md"
+  for f in cen ctl; do mkdir -p "$t/$x/$f" && printf 'exit 0\n' > "$t/$x/$f/run.sh" && printf 'awk\n' > "$t/$x/$f/tools.decl" || return 1; done
+  printf 'src/a.sh\nlib/\ndocs/\n' > "$t/$x/cen/inputs.decl"; printf 'src/a.sh\n' > "$t/$x/ctl/inputs.decl"
+  ( cd "$t" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm seed ) >/dev/null 2>&1
+}
+vs_cdrive() { # <pool> <world> <runner file>: decisions in <world>.cd/d1 (fresh) and <world>.cd/d2 (republished records, one foreign row each)
+  ( cd "$2" || exit 1
+    AI_DLC_READSET_LIVE_TRACE=0; AI_DLC_VERDICT_STORE="$2.cd/store"; export AI_DLC_READSET_LIVE_TRACE AI_DLC_VERDICT_STORE
+    # shellcheck disable=SC1090
+    . "$1" 2>/dev/null
+    o="$2.cd"; mkdir -p "$o/d1" "$o/d2" || exit 1
+    KEYS_DIR="$o/keys"; VERIFIED_RECORD="$o/none"; READSET_LOCAL="$o/none.l"
+    for d in "$FXROOT"*/; do [ -f "$d/run.sh" ] && printf '%s\n' "$d"; done > "$o/list"
+    readset_manifest "$o/d1" && readset_local_validate "$o/list" "$o/d1" && readset_keys "$o/list" "$o/d1" || exit 1
+    # The runner's rows for THIS tree, taken per pass, because the tree changes between them (below).
+    for f in ctl cen; do env -u AI_DLC_VERDICT_STORE bash "$3" --root "$2" --key-only "$f" > "$o/d1/ko.$f" 2>/dev/null; done
+    mkdir -p "$KEYS_DIR" || exit 1
+    for f in "$o/d1/.k"/*; do [ -f "$f" ] || continue; b="${f##*/}"
+      { sed -n 1p "$f"; printf '#state ok\n'; sed -n 3p "$f"; tail -n +4 "$f"; printf 'zz-foreign/%s\t0000\n' "$b"; } > "$KEYS_DIR/$b.key"; done
+    cp "$o/d1/.now" "$KEYS_DIR/.prev"
+    # A declared input changes between the passes, so each shape decides `run` and PUBLISHES its record: a
+    # record whose only difference from the tree is the foreign row is a `skip` under the single-sourced key,
+    # which publishes nothing and leaves no rows to compare. Both shapes declare src/a.sh.
+    printf 'v2\n' > src/a.sh
+    readset_manifest "$o/d2" && readset_local_validate "$o/list" "$o/d2" && readset_keys "$o/list" "$o/d2" || exit 1
+    for f in ctl cen; do env -u AI_DLC_VERDICT_STORE bash "$3" --root "$2" --key-only "$f" > "$o/d2/ko.$f" 2>/dev/null; done ) >/dev/null 2>&1
+}
+vs_census() { # <pool> <fixture root> <runner file> <t> <hook file>: "inj=<n> ctl=<fresh>/<carry> cen=<fresh>/<carry>"
+  local p="$1" x="$2" t="$4" W="$4/W" rd f ps v n c
+  case "$x" in core/fixtures) rd=core/scripts ;; *) rd=scripts/ai-dlc ;; esac
+  mkdir -p "$t" && vs_cmk "$W" "$x" "$3" "$5" || { printf SEED; return; }
+  vs_cdrive "$p" "$W" "$W/$rd/hermetic-run.sh" || { printf DRIVE; return; }
+  v="inj=$(grep -l '^zz-foreign/' "$W.cd/keys"/*.key 2>/dev/null | grep -c .)"
+  for f in ctl cen; do
+    c=""
+    for ps in d1 d2; do
+      [ -s "$W.cd/$ps/ko.$f" ] || { c="$c/KO"; continue; }
+      tail -n +4 "$W.cd/$ps/.k/$f" > "$t/hk.$f.$ps" 2>/dev/null && [ -s "$t/hk.$f.$ps" ] || { c="$c/NOK"; continue; }
+      if cmp -s "$W.cd/$ps/ko.$f" "$t/hk.$f.$ps"; then c="$c/same"
+      else n="$(diff "$W.cd/$ps/ko.$f" "$t/hk.$f.$ps" | grep -c '^[<>]')"
+        c="$c/differ:$n:$(diff "$W.cd/$ps/ko.$f" "$t/hk.$f.$ps" | grep '^[<>]' | head -1 | tr ' \t' '__')"; fi
+    done
+    v="$v $f=${c#/}"
+  done
+  printf '%s' "$v"
+}
+VS_CWANT='inj=2 ctl=same/same cen=same/same'
+VS_CN=0
+for _h in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
+  [ -f "$_h" ] || continue
+  VS_CN=$((VS_CN+1)); VS_CP="$WORK/vscpool.$VS_CN.sh"
+  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$_h" > "$VS_CP"
+  VS_CX="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$VS_CP" | sort -u)"
+  [ "$VS_CN" -eq 1 ] && { VS_CP1="$VS_CP"; VS_CX1="$VS_CX"; VS_CH1="$_h"; }
+  _g="$(vs_census "$VS_CP" "$VS_CX" "$VS_RUN" "$WORK/vs.c$VS_CN" "$_h" 2>/dev/null)"
+  VS_ARMS=$((VS_ARMS+1))
+  case "$_g" in *" ctl=same/same "*) ok "(verdict store, k) ${_h#"$ROOT"/}: the agreeing shape (ctl) is identical fresh and after the carry -- the census can pass" ;;
+    *) bad "(verdict store, k) ${_h#"$ROOT"/}: the control shape ctl does not agree: $_g" ;; esac
+  VS_ARMS=$((VS_ARMS+1))
+  if [ "$_g" = "$VS_CWANT" ]; then ok "(verdict store, k) ${_h#"$ROOT"/}: hook key rows equal --key-only for every declared shape, fresh and carried: $_g"
+  else bad "(verdict store, k) ${_h#"$ROOT"/}: hook key rows differ from --key-only (fixture=fresh/carry, differ:<rows>:<first row>): want '$VS_CWANT' got '$_g'"; fi
+done
+# (k) MUTANTS, each editing ONE side: the agreeing shape ctl must stop agreeing.
+vs_cmut() { # <name> <pool|runner> <from> <to>
+  local name="$1" kind="$2" dst _g n
+  VS_ARMS=$((VS_ARMS+1))
+  if [ "$kind" = pool ]; then cp "$VS_CP1" "$WORK/vs.cm.$name"; else cp "$VS_RUN" "$WORK/vs.cm.$name"; fi
+  dst="$WORK/vs.cm.$name"
+  n="$(grep -cF -- "$3" "$dst")" || n=0
+  [ "$n" = 1 ] || { bad "VS CENSUS MUTANT $name: anchor matched $n time(s), not 1 -- DID NOT APPLY"; return; }
+  MF="$3" MT="$4" awk '{ i = index($0, ENVIRON["MF"]); if (i > 0) $0 = substr($0, 1, i - 1) ENVIRON["MT"] substr($0, i + length(ENVIRON["MF"])); print }' "$dst" > "$dst.t" && mv "$dst.t" "$dst"
+  if [ "$kind" = pool ]; then cmp -s "$VS_CP1" "$dst" && { bad "VS CENSUS MUTANT $name: the copy is unchanged"; return; }
+    _g="$(vs_census "$dst" "$VS_CX1" "$VS_RUN" "$WORK/vs.cm.$name.w" "$VS_CH1" 2>/dev/null)"
+  else cmp -s "$VS_RUN" "$dst" && { bad "VS CENSUS MUTANT $name: the copy is unchanged"; return; }
+    _g="$(vs_census "$VS_CP1" "$VS_CX1" "$dst" "$WORK/vs.cm.$name.w" "$VS_CH1" 2>/dev/null)"; fi
+  case "$_g" in *" ${5:-ctl}=differ"*|*" ${5:-ctl}=same/differ"*) ok "VS CENSUS MUTANT $name is KILLED: $_g" ;; *) bad "VS CENSUS MUTANT $name SURVIVED: $_g" ;; esac
+}
+if [ "$VS_CN" -ge 1 ]; then
+  vs_cmut runner-drops-tools runner '[ -s "$HR_WORK/tools" ] && tr' 'false && tr'
+  vs_cmut hook-drops-tools pool 'n = split(DT[f], a, "\n"); for (j = 2; j <= n; j++) TK[a[j]] = 1' 'n = 0'
+  # The carry re-enabled for declared fixtures: an `ok` record's rows flow back into the published key, so the
+  # carried pass of the listing-keyed shape (cen) gains the foreign row. Fresh stays same; only the carry differs.
+  vs_cmut hook-carries-declared pool 'if (rl && !(f in DECL)) for (k in R)' 'if (rl) for (k in R)' cen
+fi
+# MUTANTS. Each is a count-checked literal edit; the world is re-driven and the cells it must move are named.
+vs_mut() { # <name> <pool|runner> <must-move cell> then pairs <from> <to>
+  local name="$1" kind="$2" cell="$3" dst="$WORK/vs.mut.$1.sh" n _g; shift 3
+  VS_ARMS=$((VS_ARMS+1))
+  if [ "$kind" = pool ]; then cp "$VS_P1" "$dst"; else cp "$VS_RUN" "$dst"; fi
+  while [ $# -ge 2 ]; do
+    MF="$1" MT="$2" MC="$WORK/vs.mut.$name.n" awk '
+      BEGIN { f = ENVIRON["MF"]; t = ENVIRON["MT"]; n = 0 }
+      { line = $0; o = ""
+        while ((p = index(line, f)) > 0) { o = o substr(line, 1, p - 1) t; line = substr(line, p + length(f)); n++ }
+        print o line }
+      END { print n > ENVIRON["MC"] }' "$dst" > "$dst.t" && mv "$dst.t" "$dst"
+    n="$(cat "$WORK/vs.mut.$name.n" 2>/dev/null)"
+    [ "$n" = 1 ] || { bad "VS MUTANT $name: anchor matched ${n:-nothing} time(s), not 1 -- DID NOT APPLY"; return; }
+    shift 2
+  done
+  if [ "$kind" = pool ]; then cmp -s "$VS_P1" "$dst" && { bad "VS MUTANT $name: the copy is unchanged"; return; }
+    _g="$(vs_world "$dst" "$VS_X1" "$VS_RUN" "$WORK/vs.m.$name" 2>/dev/null)"
+  else cmp -s "$VS_RUN" "$dst" && { bad "VS MUTANT $name: the copy is unchanged"; return; }
+    _g="$(vs_world "$VS_P1" "$VS_X1" "$dst" "$WORK/vs.m.$name" 2>/dev/null)"; fi
+  [ "$_g" != "$VS_WANT" ] || { bad "VS MUTANT $name SURVIVED: the world still reads the want vector"; return; }
+  if [ "$(printf '%s\n' "$_g" | tr ' ' '\n' | grep "^$cell=")" != "$(printf '%s\n' "$VS_WANT" | tr ' ' '\n' | grep "^$cell=")" ]; then
+    ok "VS MUTANT $name is KILLED by cell $cell: $(printf '%s\n' "$_g" | tr ' ' '\n' | grep "^$cell=")"
+  else bad "VS MUTANT $name moved other cells but not $cell: $_g"; fi
+}
+if [ "$VS_N" -ge 1 ]; then
+  # (b) the reader ignores the digest: serves any entry in the store and skips the body comparison.
+  vs_mut nodigest pool b '    e="$store/$dig"' '    e="$(find "$store" -maxdepth 1 -type f ! -name ".tmp*" | head -1)"' \
+    '    cmp -s "$out/.vs.e" "$out/.vs.d" || continue' '    :'
+  # (c) the writer writes on failure (and on a missing sentinel): the store gains entries for the red runs.
+  vs_mut writefail runner n 'if [ "$hr_rc" -eq 0 ] && [ "$hr_missing" -eq 0 ]; then ( hr_store_put ) 2>/dev/null; exit 0; fi' '( hr_store_put ) 2>/dev/null; if [ "$hr_rc" -eq 0 ] && [ "$hr_missing" -eq 0 ]; then exit 0; fi'
+  # (p) the project subdirectory dropped from the reader AND the runner's writer: C2, another project, then reads A's pass and skips.
+  VS_ARMS=$((VS_ARMS+1)); cp "$HOOK" "$WORK/vs.np.hook.sh"
+  _a="$(grep -cF '  printf '"'"'%s/%s'"'"' "$base" "$root"' "$WORK/vs.np.hook.sh")"
+  if [ "$_a" != 1 ]; then bad "VS MUTANT noproject: anchor matched '$_a', not 1 -- DID NOT APPLY"
+  else
+    sed 's|^  printf .%s/%s. "\$base" "\$root"$|  printf "%s" "$base"|' "$WORK/vs.np.hook.sh" > "$WORK/vs.np.hook.t" && mv "$WORK/vs.np.hook.t" "$WORK/vs.np.hook.sh"
+    sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$WORK/vs.np.hook.sh" > "$WORK/vs.np.pool.sh"
+    if cmp -s "$HOOK" "$WORK/vs.np.hook.sh" || cmp -s "$VS_P1" "$WORK/vs.np.pool.sh"; then bad "VS MUTANT noproject: a copy is unchanged"
+    else
+      _g="$(VS_HOOK="$WORK/vs.np.hook.sh" vs_world "$WORK/vs.np.pool.sh" "$VS_X1" "$VS_RUN" "$WORK/vs.m.noproject" 2>/dev/null)"
+      _c="$(printf '%s\n' "$_g" | tr ' ' '\n' | grep '^p=')"
+      if [ "$_c" = "p=skip/run/1/0" ] || { [ -n "$_c" ] && [ "${_c%%/*}" = "p=skip" ]; }; then ok "VS MUTANT noproject is KILLED by the no-share cell: $_c"
+      else bad "VS MUTANT noproject was not killed by the no-share cell (got '$_c')"; fi
+    fi
+  fi
+  # (g) the hash covers the WHOLE runner file again: an edit outside the sandbox span now invalidates the entry.
+  vs_mut wholefile pool g "sed -n '/^# HR_SANDBOX_BEGIN\$/,/^# HR_SANDBOX_END\$/p' \"\$rn\"" 'cat "$rn"'
+  # (d) the reader serves undeclared fixtures.
+  vs_mut undeclared pool d '    grep -qxF -- "$fx" "$out/.dfx" || continue' '    :'
+fi
+fi
+# THE REAL DEFAULT STORE IS UNCHANGED BY THE UNIT, in the home this run sees and in the account's own.
+if [ -n "$VS_RUN" ]; then
+  VS_ARMS=$((VS_ARMS+1))
+  if [ "$(vs_snap "$VS_REAL_HOME")" = "$VS_SNAP0" ] && [ "$(vs_snap "$HOME")" = "$VS_SNAPH0" ]; then ok "the real default store ($VS_REAL_HOME/.cache/ai-dlc/verdicts and \$HOME's) is byte-unchanged by the unit"
+  else bad "the unit changed a default verdict store"; fi
+fi
+fi
+
 # THE SUMMARY IS ALSO A COMPLETENESS CHECK. This fixture once ended mid-file after an editing
 # mistake: it printed two thirds of its arms, never reached a verdict line, and exited 0 --
 # which the suite's worker records as `ok`. A fixture that dies silently reads exactly like one
 # that passed, so the arm count is asserted against the number this file actually carries.
 BASE_ARMS=0; sg arms && BASE_ARMS=18
-EXPECTED=$(( BASE_ARMS + ${IGN_ARMS:-0} + ${NEW_ARMS:-0} + ${MERGE_ARMS:-0} + ${CONTROL_ARMS:-0} + ${TRACE_ARMS:-0} + ${BOTH_ARMS:-0} + ${LT_ARMS:-0} + ${CK_ARMS:-0} + ${TK_ARMS:-0} + ${DG_ARMS:-0} + ${RC_ARMS:-0} ))
+EXPECTED=$(( BASE_ARMS + ${IGN_ARMS:-0} + ${NEW_ARMS:-0} + ${MERGE_ARMS:-0} + ${CONTROL_ARMS:-0} + ${TRACE_ARMS:-0} + ${BOTH_ARMS:-0} + ${LT_ARMS:-0} + ${CK_ARMS:-0} + ${TK_ARMS:-0} + ${DG_ARMS:-0} + ${RC_ARMS:-0} + ${VS_ARMS:-0} ))
 if [ "$asserts" -lt "$EXPECTED" ]; then
   printf '  FAIL  only %s assertions ran; this fixture carries %s — it exited early and a short green run reads exactly like a passing one\n' "$asserts" "$EXPECTED"
   fails=$((fails+1))

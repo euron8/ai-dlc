@@ -1,0 +1,7 @@
+# consumer-machinery-inventory drives the layer-entries validator over synthetic consumers built from the real contract and
+# manifest, and sources the shared preamble. artifact-path-config.sh is the sibling the validator resolves beside itself.
+!core/scripts/validate-layer-entries.sh
+core/scripts/artifact-path-config.sh
+core/skills/ai-dlc/layer-contract.yaml
+core/skills/ai-dlc/core-manifest.md
+core/fixtures/lib/

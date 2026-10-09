@@ -1,0 +1,5 @@
+# settings-merge-documented-form reads the doc under test (SKILL.md), the merge script it runs, and the settings template it merges.
+# The two files the assertions are about are REQUIRED and printed where they are located; the template is optional (assertions 3 and 5 report STALE without it).
+!core/skills/ai-dlc-update/SKILL.md
+!core/skills/ai-dlc-update/reconcile/settings-merge.sh
+templates/settings.json.template

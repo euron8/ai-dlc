@@ -1,0 +1,19 @@
+# self-update-gate and its three shard drivers (b, c, d, which exec the parent's run.sh --group) share ONE declaration shape;
+# the only line that differs is the pre-push hook, REQUIRED (!) only in the shards whose units print its HERMETIC-CONSUMED sentinel.
+# self-update-gate reads two things outside its own directory. The gate under test, with the
+# whole reconcile directory because the gate sources preclassify.sh and setup-sites.md beside
+# itself and the arms read unregistered-drift.sh and preclassify.sh by name. And the shipped
+# pre-push hook, which three arms scan (gate_argv_scan over the real hook, the FIXTURE_POOL
+# block for the pu-readset world, and the depth probe); on a consumer it maps to .githooks/pre-push.
+# Every other tree the fixture drives is seeded by seed.sh or built per arm under mktemp.
+!core/skills/ai-dlc-update/reconcile/
+!core/git-hooks/pre-push
+# Sourced by the parent run.sh's first line.
+core/fixtures/lib/
+# The shard drivers: the parent's coverage join reads every one. A fixture's OWN run.sh is not declared: the runner copies the fixture's own directory itself.
+core/fixtures/self-update-gate-b/run.sh
+core/fixtures/self-update-gate-c/run.sh
+core/fixtures/self-update-gate-d/run.sh
+# The shards exec the parent run.sh and the parent seeds from its own seed.sh; a sibling directory is not copied unless declared.
+core/fixtures/self-update-gate/run.sh
+core/fixtures/self-update-gate/seed.sh

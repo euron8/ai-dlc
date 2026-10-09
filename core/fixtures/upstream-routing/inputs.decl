@@ -1,0 +1,11 @@
+# upstream-routing drives audit-upstream-routing.sh (and copies of it with core-paths.sh beside them), the core guard hook,
+# and reads the manifest and setup-sites data the guard and the glob set come from. Every other file is built under mktemp.
+# core/scripts/ is declared whole: the subject reads core-paths.sh from its own directory and the mutants copy both.
+# core/hooks/ is declared whole: the guard sources ai-dlc-context-provenance.sh as a same-directory sibling.
+# The four resolved inputs are REQUIRED and printed where the fixture resolves them.
+!core/scripts/audit-upstream-routing.sh
+!core/hooks/ai-dlc-core-guard.sh
+!core/skills/ai-dlc/core-manifest.md
+!core/skills/ai-dlc-update/reconcile/setup-sites.md
+core/scripts/
+core/hooks/

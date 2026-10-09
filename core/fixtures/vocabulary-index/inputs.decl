@@ -1,0 +1,10 @@
+# The renderer under test, REQUIRED: the sentinel prints where run.sh locates it. REPO is found by a VERSION marker.
+# controlA runs the renderer over the real tree, whose vocabulary markers and owners sit across these subtrees.
+!scripts/render-vocabulary-index.sh
+scripts/
+.githooks/
+templates/
+core/
+docs/invariant-index.md
+docs/vocabulary-index.md
+VERSION
