@@ -41,6 +41,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 if [ -n "$ROOT" ] && [ -f "$ROOT/core/skills/ai-dlc-update/SKILL.md" ]; then
   SUBJ="$ROOT/core/skills/ai-dlc-update/SKILL.md"
+  echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/SKILL.md"
 elif [ -n "$ROOT" ] && [ -f "$ROOT/.claude/skills/ai-dlc-update/SKILL.md" ]; then
   SUBJ="$ROOT/.claude/skills/ai-dlc-update/SKILL.md"
 else
