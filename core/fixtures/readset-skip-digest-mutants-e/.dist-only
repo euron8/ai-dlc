@@ -1,0 +1,5 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+It is shard 'e' of readset-skip-digest-mutants and inherits that fixture's reason without change: a
+MUTATION BATTERY behind the shipped `readset-skip` fixture, editing copies of `.githooks/pre-push`,
+which does not exist on a consumer.

@@ -6,6 +6,6 @@
 !core/fixtures/readset-skip/run.sh
 core/fixtures/lib/
 core/fixtures/readset-skip-digest-mutants/run.sh
+core/fixtures/readset-skip-digest-mutants-b/run.sh
 core/fixtures/readset-skip-digest-mutants-c/run.sh
-core/fixtures/readset-skip-digest-mutants-d/run.sh
 core/fixtures/readset-skip-digest-mutants-e/run.sh
