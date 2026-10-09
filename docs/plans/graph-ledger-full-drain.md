@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 406..467. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 390..472. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,73 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 211 SHIPPED ONE RELEASE, `v0.758.0` (`423258c7`, #1076), AND DISCHARGED ONE CONSUMER CANDIDATE.** It was
+handed the plan by peer session ai-dlc-22 at `origin/main` `26f77e78` (`VERSION` 0.756.0) and ran beside the
+hermetic-pole program's `v0.757.0` (`7988a0d7`, ai-dlc-71, batch 212), the queued `v0.759.0` (ai-dlc-0e, batch 213) and
+`v0.760.0` (ai-dlc-a1, batch 214), one gated push on the box at a time by GATE START / LANDED messages. **The
+release-number protocol worked**: every peer was told the number before any hand built, and it caught ai-dlc-a1 about
+to take 0e's 0.759.0; the box queue (b9, 0e, a1) was agreed in the same exchange. The opening sweep (at `26f77e78`) read
+live 1, unfiled 1, worklist 0, DISCHARGED 0, TERMINAL 223, archive 346, 28 qualifying refs, every control passing.
+- `v0.758.0`: `PC-S317-SELF-UPDATE-GATE-UNDECIDED-ON-MACHINERY-A-PRIOR-SELF-UPDATE-LANDED` as `BL-489`, shipped alone
+  (the update skill is a bootstrapping file). The gate's pre-written arm now sits after the hook-scan terminals, so a
+  script the hook only mentions reads `SELF-UPDATE-OK … not gating` (graph's filed case: its hook reaches
+  `hermetic-run.sh` only through a `for c in …` list); inside the arm a script a PRIOR self-update landed is acquitted on
+  six conjuncts (stamp `skill_commit` peels; is not theirs; its blob equals the copy; base ≤ `skill_commit` ≤ theirs by
+  ancestry; no `.ai-dlc-applying`; copy committed at the consumer's HEAD) and the differential is SKIPPED, with
+  `self-update-push.sh`'s HOOK-REFUSED catching a failure under theirs' new argv or a changed sibling. Rejected remedy:
+  subtracting preclassify's ALREADY-AT-THEIRS set would acquit the post-write re-run the arm exists for. Contract
+  adversary 1 BLOCKER (the write-before-commit hole, now the committed-copy conjunct) / 4 DEFECT; tip adversary 0
+  BLOCKER / 3 DEFECT (the base-ancestry half had no world, now `pl-w9-behindbase` and `pl-mut-a4-base`; the runner's
+  PRE-WRITTEN arm refuses a mention-only record whose stamp does not carry the bytes, DRIVEN: the real-stamp case is
+  accepted, so documented at both sites and no runner code changed; "no differential is owed" reworded). The fixture's
+  PL miniature: nine worlds, eight mutants, 354/354. Rehearsed on a `git archive` copy of graph at `1a0ad1fd` with the
+  filing's argv: base UNDECIDED + DEFER, tip `not gating` and no DEFER, and with the hook edited to RUN the script the
+  stamp acquittal fires at `f4686761`. Gate from a linked worktree: 107 of 260 run on read-set keys (47 changed, 0
+  unrecorded, 60 stale), 24 phases PASS, 0 FAIL, exit 0, transport clean, `self-update-gate` and
+  `self-update-fixture-log` `ok` by name. Trace SKIPPED (linked worktree); 67 fixtures stay unmapped, three held at 3
+  discards; suite-pole SKIP for a peer's live trace, so `BL-465` again recorded no row.
+
+Live backlog **4 -> 4** (BL-489 filed and rotated in-release), archive **483 -> 484**. Net for the release: closed 1,
+filed 0.
+
+**WHOLE-BACKLOG ADJUDICATION (hand, against 26f77e78):** BL-465 PARTIAL; a width-4 replay of the latest `.last` through
+the shipping validator printed `SKIP -- coverage 36.93%` and the history still holds only its three width-12 rows;
+needs the operator's ruling on a comparable measurement under read-set skipping, and any fix is a hook change. BL-474
+LIVE, 0 `handovers:` on HEAD, main or any of 109 graph refs (control 64/43). BL-481 LIVE and batch 210's figure is
+stale: six unmapped (`check-24-adversarial-convergence`, `hermetic-runner`, `procsub-staged-refusal-boot`,
+`readset-skip-digest-mutants`, `self-update-gate`, `subject-partition`), five at `#discards 2`; the pole branch
+`origin/pole/readset-skip-digest-mutants` already declares one. BL-487 PARTIAL, its fixture half built on
+`origin/b210-class-b` (`f062da54`) and shipping as 0.759.0 (ai-dlc-0e). None closed this batch: 465 waits on the
+operator, 474 on graph, 481 and 487 are the hermetic program's in-flight branches.
+
+**PROCESS DEFECT, THIS BATCH, MINE:** the lead told the docs hand to run `backlog-rotate.sh --check` and `--apply`
+without knowing the rotator EXECUTES the closing entry's receipt, and BL-489's receipt runs `self-update-gate` (~5 min
+solo); with the hand's own scoring runs that put roughly five solo fixture runs plus ten seeded receipts inside
+ai-dlc-71's solo-timing window. 71 re-took rows by load-before. The rule now lives in action 5.
+
+**OPERATOR CHOICE THAT PROCEEDED ON THE MARKED RECOMMENDATION WITHOUT A REPLY** (the session was invoked by a peer):
+the runner-side DEFECT was DRIVEN and then documented rather than built, because the drive showed the runner accepts
+the real-stamp record and refuses only hand-copied bytes or a post-write re-run (a DEFER after the branch is cut
+rather than before).
+
+**OPEN FINDINGS, NOT FILED (net already negative, each needs a measurement):**
+- A read-set trace for `self-update-gate` (and the 67 unmapped) is owed; the hook traces only the main checkout and
+  the fixture is one of BL-481's untraceable set, so a session on the main checkout with no peer trace live owes it.
+- The BL-489 receipt counts distinct `ok` labels and requires the fixture's exit 0; an `echo` into `run.sh` could
+  still satisfy the label count, and the fixture's own mutants are the guard.
+- Batch 210's open findings (the trace-from-worktree gap, BL-488's two receipt forms, the release-version trailing
+  boundary, the `claude-rules-joins` ghost row, D6's timing) are unchanged.
+
+**THE DELIVERY GAP IS FOUR RELEASES.** graph's `.claude/.ai-dlc-version` reads 0.754.0 (`commit` = `skill_commit` =
+`0a123701`) against `VERSION` 0.758.0. The range changes a bootstrapping file (the update skill's `SKILL.md`,
+`self-update-gate.sh`, `self-update-fixtures.sh`, `setup-sites.md`). MEASURED: at graph's next pull base is `0a123701`,
+the changed `core/scripts/` set intersected with graph's hook is one script (`validate-artifact-paths.sh`) whose copy
+equals BASE not theirs, so 0 pre-written paths and the INSTALLED (unfixed) gate cannot fire on the pull that delivers
+this fix; it would DEFER again only if a self-update lands, another release changes a script it wrote, and graph pulls
+before the gated apply. The banked ruling stands: report the gap and write no runbook.
+
+Batch 210's block below is history: batch 211's block replaces its open items and its delivery gap.
 
 **BATCH 210 SHIPPED ONE RELEASE, `v0.756.0` (`f9f4fe70`, #1072), AND DISCHARGED NO CONSUMER CANDIDATE.** It was
 handed the plan by peer session ai-dlc-28 at `origin/main` `0a123701` (`VERSION` 0.754.0) and ran beside the hermetic
@@ -319,89 +386,6 @@ from a finished one) and it flakes six fixture arms (`wait-beat-liveness` :328,:
 and 0.747.0 both change the pre-push hooks. The banked ruling stands: report the gap and write no runbook.
 
 Batch 204's block below is history: batch 206's block replaces its open items and its delivery gap.
-
-**BATCH 204 SHIPPED THREE RELEASES, `v0.743.0` (`f0488e31`, #1049), `v0.744.0` (`60b467dc`, #1050) AND `v0.745.0`
-(`f4849399`, #1052), AND DISCHARGED FOUR CONSUMER CANDIDATES.** It was handed the plan by peer session ai-dlc-1c at
-`origin/main` `7b0300e0` (`VERSION` 0.742.0).
-- `v0.743.0`: `PC-S317-HANDOFF-STEP-1-ENDS-THE-TURN-ON-A-BEAT-WHILE-CHECK-0-BLOCKS-THE-STOP-ON-IN-FLIGHT-ROWS` as
-  `BL-473`. Check 0 of the continue hook defers while a live `.beat-inflight` lease exists.
-- `v0.744.0`: `PC-S317-CROSS-SEAT-IS-THE-SERIAL-TAIL-OF-A-SECTIONS-PARTY-ROUND-AND-WRITES-NOTHING-UNTIL-DONE` as
-  `BL-464`. The cross seat fans out by group, writes early, and is joined on its own completion marker
-  (`wait-for-deliverable.sh --complete`, settle window `AI_DLC_WAIT_SETTLE_SECS` 180s, from a measured 146.6s gap).
-- `v0.745.0`, shipped alone (both pre-push hooks change): `PC-S317-READSET-TOOL-KEYS-DEPEND-ON-WHO-INVOKED-THE-PRE-PUSH-HOOK`
-  as `BL-475` and `PC-S317-READSET-LIVE-TRACE-FAILURES-NEVER-REACH-THE-OPERATOR` as `BL-476`, with `BL-466`, `BL-470`,
-  `BL-471` (committed `# digest` lines clear stale records; a directory row's digest value is its LISTING, the tip
-  adversary's BLOCKER) and `BL-472` (`--reconcile`). `BL-465`'s per-width pole history also shipped here.
-  `readset-skip`'s tool-key mutants moved into `readset-skip-digest-mutants`.
-
-Live backlog **5 -> 6** (BL-464, 466, 470-473, 475, 476 rotated; BL-474 and BL-480 to BL-483 filed), archive
-**465 -> 473**. `BL-477` to `BL-479` belong to the hermetic-fixtures program's `0.746.0`, not to this batch.
-
-**OPEN:**
-- `BL-465` stays open: its receipt is manual and closes only when a push at an uncalibrated width records a row and the
-  next push at that width compares. `0.745.0`'s gate read `CALIBRATING (1/3)` at width 12, so the suite pole was never
-  compared this batch.
-- `BL-474` (operator ruling: MEASURE FIRST): the first cross shard's serial tail, measured on graph's first sharded review.
-- `BL-480` local-map directory blindness; `BL-481` the 10 fixtures that run on every push, two of them untraceable on an
-  idle box (`readset-skip-digest-mutants` 1491 drops, `self-update-gate` 958); `BL-482` a new fixture directory reruns
-  nearly every fixture, and `node` is unkeyed; `BL-483` `pre-push-wall-clock.md` 11 bytes under `P8` and unrotatable.
-- `b202-r2` (`da88c226`) is held: it depends on `BL-464`'s receipt sha `0b772208`.
-
-**OPERATOR RULINGS, BATCH 204:**
-- The two read-set candidates were "quite serious" and went first.
-- `BL-474`: measure the first cross shard's tail first, then rule. Until then the residue is not serial by design.
-- The hermetic-fixtures proof of concept ran mid-batch with `0.745.0` held so it had the machine to itself
-  (`docs/poc/hermetic-decision.md`, GO-WITH-CONDITIONS). The operator ruled GO, and that program
-  (`docs/plans/hermetic-fixtures-poc.md`) runs in its own session. Two sessions sharing this machine agree a GATE window:
-  neither runs fixtures, traces or timings while the other's gated push runs.
-
-**THE DELIVERY GAP IS TWO RELEASES.** graph's `.claude/.ai-dlc-version` reads 0.743.0 against `VERSION` 0.745.0.
-`0.745.0` changes both pre-push hooks, and its first push on any clone runs nearly every fixture once, because every key
-record migrates to `#tools canonical`. The banked ruling stands: report the gap and write no runbook.
-
-Batch 203's block below is history: batch 204's block replaces its open items and its delivery gap.
-
-**BATCH 203 SHIPPED TWO RELEASES, `v0.741.1` (`6f73066d`, #1046) AND `v0.742.0` (`6e9897bd`, #1047), AND DISCHARGED
-BOTH CONSUMER CANDIDATES BATCH 202 LEFT UNSHIPPED.** It was handed the plan by peer session ai-dlc-63 at `origin/main`
-`9d7dee9b` (`VERSION` 0.741.0). The opening sweep read live 3, unfiled 3, worklist 0, every control passing.
-- `v0.741.1`, shipped alone: `PC-S317-READSET-SKIP-M5-SEEDS-CORE-FIXTURES-UNDER-A-TESTS-FIXTURES-HOOK` as `BL-467`.
-  readset-skip's M5 arm seeds and keys gamma under the resolved hook's `FXROOT`.
-- `v0.742.0`, shipped alone (it changes the update skill): `PC-S317-SELF-UPDATE-GATE-PUSH-PROBE-DUPLICATES-THE-PUSH-HOOK`
-  as `BL-468`. The gate runs no pre-push hook; step 2 pushes through `reconcile/self-update-push.sh`, which runs the hook
-  once and pins the push to the one sha and ref the hook judged. Also `BL-469` (readset-skip finishes under the sandbox),
-  `FORK_BUDGET` 3263 -> 3272, and the operator's sandbox read-set trace with the changed fixtures re-traced on top.
-
-Live backlog **2 -> 5** (BL-467 to BL-469 rotated; BL-470 to BL-472 filed), archive **462 -> 465**.
-
-**OPEN, BY OPERATOR DIRECTION AT THE CLOSE: "let's consider this batch complete once 0.742.0 ships".** The next session's
-sweep and adjudication scope these, with no order implied here:
-- `PC-S317-CROSS-SEAT-IS-THE-SERIAL-TAIL-OF-A-SECTIONS-PARTY-ROUND-AND-WRITES-NOTHING-UNTIL-DONE`, the third live unfiled
-  candidate. **It is NOT on `main`**: neither `--cross-groups` nor `seat-complete:` is in `origin/main`'s `core/`, and no
-  release message names the id. The operator believed it shipped. Its build is held on `b202-cs` at `67d9ff10` (with
-  `b202-cs-docs`, `-f1`, `-f2`, `-f3`), never adversaried; `b202-r2` at `da88c226` depends on its receipt.
-- `BL-465` (suite-pole baseline per pool width), `BL-466` (`pkill -x fs_usage` kills other tracers).
-- `BL-470`: the sandbox tracer reports every `bash` check on the trace tree's root, the log stream drops, and four
-  fixtures trace OMITTED and run on every push: `readset-skip`, `self-update-fixture-log-mutants`, `self-update-gate`,
-  `procsub-staged-refusal-boot`.
-- `BL-471` (operator ruling: a defect): a committed trace cannot clear a stale key record; only a valid LOCAL-map row
-  can, and the hook's post-green trace that writes one is skipped on a push from a linked worktree. 45 records went stale
-  at the 0.741.1 push and stayed stale through 0.742.0.
-- `BL-472` (operator request): `derive-fixture-readsets.sh --reconcile` derives the unmapped, stale and changed-input set
-  itself and traces only that. Build it with `BL-471`.
-
-**OPERATOR RULINGS, BATCH 203:**
-- The two newest consumer candidates ship before anything else builds.
-- The read-set map in the main checkout belongs to the operator's trace while it runs; a release snapshots it at push
-  time, never earlier.
-- A fixture fix found mid-batch (`BL-469`) folds into the release in flight when the operator says so.
-- `BL-470`: ship the release, file the drops; do not hold a consumer fix for a tracer fix.
-
-**THE DELIVERY GAP IS ONE RELEASE.** graph's `.claude/.ai-dlc-version` reads 0.741.1 against `VERSION` 0.742.0.
-0.742.0 changes the update skill, so the pull that delivers it still runs graph's old gate and SKILL.md and pays two
-hook runs; the saving starts on the pull after. The banked ruling stands: report the gap and write no runbook.
-
-Batch 202's block below is history: batch 203's block replaces its branches, its two unshipped candidates, its open
-items and its delivery gap.
 
 ### Derive the state; do not trust the numbers below
 
@@ -1563,6 +1547,10 @@ given at batch 90.
    `scripts/backlog-rotate.sh --check`, then `--apply`. **Confirm the archive count MOVED.** A
    release has shipped with this step silently skipped and was reported complete; it was caught
    only because the operator asked.
+
+   **`backlog-rotate.sh --check` and `--apply` each EXECUTE the closing entry's receipt**, so a receipt keyed on
+   a fixture is a fixture run, taken twice; run them inside your own gate window and never inside a peer's
+   timing or gate window. Batch 211 put five solo runs into a peer's solo-timing window this way.
 
    **Delete merged branches by EXACT NAME, and a remote delete as `git push --no-verify origin
    --delete <names>`.** Operator ruling, batch 200: a bare delete push ran the whole pre-push suite
