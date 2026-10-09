@@ -12,18 +12,27 @@ instruction at batch 209's close: start on the pole, nothing else until it moves
 excluded from the trace queue at `core/scripts/derive-fixture-readsets.sh:305` and run by the sandbox the
 runner builds at `core/scripts/hermetic-run.sh:127`.
 
-**State at 0.757.0 (batch 212).** The rank was re-derived from the 0.755.0 gate's own per-run durations file
-(12-way, 103 dispatched, load 84-100): `readset-skip-digest-mutants` 2025s, `readset-skip` 1860s,
-`gate-adjudication-mutants` 1665s, `reconcile-emit-report` 1484s, `check-24-adversarial-convergence` 1359s,
-`review-shard-merge-mutants` 1171s (`BL-485`, batch 208's), `fold-architect-ledger-join-mutants-b` 1102s
-(tenth; the plan's original fourth, deferred as not the pole). The top four are SHARDED into thirteen declared
-directories; solo, the longest shard is `readset-skip-d` at 206s against parents of 250-393s solo. The
-CHANGELOG entry for 0.757.0 carries the full before/after table with load beside each figure. The 0.757.0
-gate's own fixture-suite wall clock is the after figure for done-when 3 and is recorded by action 1 below.
+**State after 0.757.0 landed (batch 212, `7988a0d7`).** The rank was re-derived from the 0.755.0 gate's own
+per-run durations file (12-way, 103 dispatched, load 84-100): `readset-skip-digest-mutants` 2025s,
+`readset-skip` 1860s, `gate-adjudication-mutants` 1665s, `reconcile-emit-report` 1484s,
+`check-24-adversarial-convergence` 1359s, `review-shard-merge-mutants` 1171s (`BL-485`, batch 208's),
+`fold-architect-ledger-join-mutants-b` 1102s (tenth; the plan's original fourth, deferred as not the pole).
+The top four are SHARDED into thirteen declared directories at 0.757.0; the CHANGELOG entry carries the solo
+before/after table with load beside each figure.
+
+**The 0.757.0 gate's own figures (done-when 3, partial).** 12-way, start load 3.3, 68 of 260 fixtures run
+(9 changed, 0 unrecorded, 59 stale), suite phase 01:59:30 to 02:18:13 = 1123s wall, every shard ok by name; one peer solo fixture run (about 5 min) overlapped it.
+Its per-run durations file tops at `check-24-adversarial-convergence` 743s then `readset-skip-d` 732s, both
+loaded. It is NOT a same-selection comparison with the 2025s baseline: that run dispatched 103 units at load
+84-100 and this one 68 at load 3 rising to 83. The first gate of this release (red on `validator-fork-budget`,
+111 dispatched) is no comparison either: red runs publish no durations. Done-when 3 therefore stays open until a
+gate dispatches the sharded units alongside a comparable selection; `readset-skip-d` at 732s loaded is the
+next shard to re-deal, and `check-24-adversarial-convergence` (UNMAPPED, ships, undeclared, 743s) is now the
+measured pole.
 
 **Second cause, independent of the pole.** Stale key records make every stale fixture run on every push.
-The 0.755.0 gate selected 49 stale of 251; its detached live trace (started 22:30 on 2026-10-08) was still
-running at this release and may have cleared part of the set. Action 3 measures what remains.
+The 0.757.0 gate selected 59 stale of 260, and the operator checkout's key records read 60 stale against 197
+ok after it. The 0.755.0 gate's detached trace exited without lowering that count. Action 3 clears it.
 
 Your instructions are four sections: `## Start here`, `### NEXT ACTIONS`, `### Ping the operator`,
 `### Done when`.
@@ -71,16 +80,15 @@ uptime
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **READ THE 0.757.0 GATE'S OWN FIGURES** from the operator checkout, `cat` only:
-   `/Users/n8/git/ai-dlc/.git/ai-dlc-fixture-durations.last` (top rows) and its `.jobs`, and the suite
-   phase's `read-set keys:` line from the gate output. Write that run's fixture-suite pole, at its width and
-   load, beside the 0.755.0 baseline (2025s, 12-way, load 84-100) in this block. If that run selected fewer
-   than the four sharded units it is not a comparison; say so and wait for a gate that does.
-2. **RE-TAKE THE RANK FROM THAT FILE.** Whatever now tops it is the pole. Likely candidates from the 0.755.0
-   rank: `check-24-adversarial-convergence` (1359s, UNMAPPED, ships, no declaration),
-   `adversarial-shard-merge-mutants` (1132s), `fold-architect-ledger-join-mutants-{b,c}` (1102/1074s,
-   declaration-only), `review-shard-merge-mutants` (`BL-485`, leave to batch 208 unless its lead says done),
-   `readset-skip-d` if a re-deal is owed. One fixture per hand, all at once, briefs as batch 212 used
+1. **MAKE THE CLONE AND PIN IT** at `github/main`; ask every live `ai-dlc-*` session (`ListAgents`) what
+   release number and batch number it holds and whether it holds the main checkout; take the next free ones.
+2. **ATTACK THE MEASURED POLE, ONE FIXTURE PER HAND, ALL AT ONCE.** From the 0.757.0 gate's durations file:
+   `check-24-adversarial-convergence` (743s loaded, UNMAPPED, ships, undeclared: declare or shard),
+   `readset-skip-d` (732s loaded, 206s solo: re-deal the `ck` unit across the other three readset-skip
+   shards or add a fifth), `procsub-staged-refusal` and `procsub-staged-refusal-boot` (656/619s),
+   `apply-restamp-worklist` (599s). `review-shard-merge-mutants{,-b,-c}` is `BL-485`; leave it to batch 208
+   unless its lead says done. Five new SHIPPING fixture directories moved `FORK_BUDGET` by four forks at
+   0.757.0 (arm I8), so expect the same and measure it base/tip before the gate. One fixture per hand, all at once, briefs as batch 212 used
    (`isolation: "remote"`, own clone, `--no-verify` pushes, no timing by hands, exit codes only; the lead
    times every shipped unit solo and sequentially on a quiet box, load under 5 beside each figure).
 3. **CLEAR THE STALE RECORDS.** `bash core/scripts/derive-fixture-readsets.sh --reconcile` from the clone
