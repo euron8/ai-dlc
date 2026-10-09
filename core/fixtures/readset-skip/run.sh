@@ -961,7 +961,7 @@ fi
 # Without the quoted-path test a tab-named file is listed in its quoted spelling, never reaches
 # `.files`, and the line counts still agree, so the manifest is NOT emptied.
 NEW_ARMS=$((NEW_ARMS+1))
-if lit_mut noquote 1 " || grep -q '^\"' \"\$out/.paths\"" ""; then M="$LM"
+if lit_mut noquote 1 "elif grep -q '^\"' \"\$out/.lsf\"; then" "elif false; then"; then M="$LM"
   killed noquote "the tab-name arm" "$(drive "$M" m.noquote 'printf "v2\n" > src/a.sh' stale "printf t > 'src/tab	name'")" "$ALL5" 0 "$UNHASH"
 fi
 # Without `--`, a top-level -x.sh is an unknown option to shasum and the manifest is emptied.
@@ -4297,14 +4297,19 @@ ckq_world() { local p="$1" x="$2" t="$3" k kd
   printf 'q\n' > "$t/src/tab	name.txt"
   ckd_dec "$p" "$t" qpath
   rm -f "$t/src/tab	name.txt"
-  printf 'qctl=%s,%s,%s qrow=%s,%s,%s qpath=%s,%s,%s why=%s' \
+  # THE LOCAL MAP, where graph's bad row lives: a deriver-written C-quoted row with a real tab in the quoted name.
+  printf 'alpha\t"src/q\tx.sh"\t-\n' > "$t/.git/ai-dlc-fixture-readsets.local"
+  ckd_dec "$p" "$t" qloc
+  rm -f "$t/.git/ai-dlc-fixture-readsets.local"
+  printf 'qctl=%s,%s,%s qrow=%s,%s,%s qpath=%s,%s,%s why=%s qloc=%s' \
     "$(ckd_cell "$t.dd.qctl" alpha)" "$(ckd_cell "$t.dd.qctl" beta)" "$(ckd_cell "$t.dd.qctl" delta)" \
     "$(ckd_cell "$t.dd.qrow" alpha)" "$(ckd_cell "$t.dd.qrow" beta)" "$(ckd_cell "$t.dd.qrow" delta)" \
     "$(ckd_cell "$t.dd.qpath" alpha)" "$(ckd_cell "$t.dd.qpath" beta)" "$(ckd_cell "$t.dd.qpath" delta)" \
-    "$(grep -c 'cause: git quotes the path .*tab' "$t.dd.qpath/ann" 2>/dev/null)"
+    "$(grep -c 'cause: git quotes the path .*tab' "$t.dd.qpath/ann" 2>/dev/null)" \
+    "$(ckd_cell "$t.dd.qloc" alpha),$(ckd_cell "$t.dd.qloc" beta),$(ckd_cell "$t.dd.qloc" delta)"
 }
 # A run cell prints `run:<class>:<state>`; with no .kdec row (a run-all announcement writes none) it prints empty.
-CKQ_WANT='qctl=skip::ok,skip::ok,skip::ok qrow=run:k:ok,skip::ok,skip::ok qpath=,, why=1'
+CKQ_WANT='qctl=skip::ok,skip::ok,skip::ok qrow=run:k:ok,skip::ok,skip::ok qpath=,, why=1 qloc=skip::ok,skip::ok,skip::ok'
 if [ "$CKD_N" -ge 1 ]; then
   CK_ARMS=$((CK_ARMS+1)); _g="$(ckq_world "$CKD_P1" "$CKD_X1" "$CK_W/ckq.h1" 2>/dev/null)"
   if [ "$_g" = "$CKQ_WANT" ]; then ok "(quoted-row) a quoted map row runs its own fixture only, a quoted ls-files path still empties keying and is NAMED: $_g"
