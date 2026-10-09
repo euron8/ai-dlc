@@ -334,7 +334,7 @@ prose is itself generated rather than composed.
    `ai-dlc-update` can depend on machinery elsewhere, and two of them do: `check-15-bypass`
    resolves `scripts/ai-dlc/core-paths.sh` and `core-manifest.md`, `core-write-guard`
    resolves the core guard hook. Pulling only `skills/ai-dlc-update/**` left both asserting
-   against machinery this cycle did not carry, and a red derived fixture HARD-STOPS the
+   against machinery this cycle did not carry, and a red derived fixture DEFERS the
    cycle — so the self-update wedged on a pull that broke nothing. The machinery set is the
    smallest slice that closes that ~~, because a fixture's subject is always machinery~~.
 
@@ -691,9 +691,11 @@ prose is itself generated rather than composed.
      its own remedy. **The tree is UNCOMMITTED here** (the order is write, runner, commit), so
      the restore is not the HOOK-REFUSED one. In this order: report the fixture names, the
      `# disposition:` line and the log path in one line;
-     run `git checkout -- <every tracked path this cycle wrote, and the stamp>`, each named by
-     explicit pathspec;
-     remove every NEW untracked path this cycle wrote, each named by explicit pathspec, never
+     run `git restore --source=HEAD --staged --worktree -- <every tracked path this cycle wrote, and the stamp>`,
+     each named by explicit pathspec — `--source=HEAD --staged` because a slice that was
+     STAGED survives a plain `git checkout --`, which restores from the index;
+     for every NEW path this cycle wrote, run `git rm -q --cached --ignore-unmatch -- <new paths>`
+     and then remove the file, each named by explicit pathspec, never
      by a glob, and never the gate record or the fixture log;
      run `git checkout <original-branch>` and `git branch -D <self-update-branch>`, which
      carries no commit of this cycle.

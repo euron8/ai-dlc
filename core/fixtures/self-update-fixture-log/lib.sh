@@ -732,6 +732,40 @@ H_HOOK_SRC="$(pick "$SUFL_DIR/../../../core/git-hooks/pre-push" "$SUFL_DIR/../..
 H_HR_SRC="$(pick "$SUFL_DIR/../../../core/scripts/hermetic-run.sh" "$SUFL_DIR/../../../scripts/ai-dlc/hermetic-run.sh")"
 H_CP_SRC="$(pick "$SUFL_DIR/../../../core/scripts/core-paths.sh" "$SUFL_DIR/../../../scripts/ai-dlc/core-paths.sh")"
 H_DISPATCH_LINE='    if [ -f "$d/inputs.decl" ]; then'
+SUFL_NL='
+'
+# aw_replace_once <src> <dst> <old> <new> -> <dst> is <src> with the ONE occurrence of <old> replaced;
+# exit 3, and no <dst> worth reading, unless <old> occurs exactly once. awk rather than a `sed`
+# (an `&` in the replacement is the whole match) and rather than python3 (a tool this shipping
+# fixture would otherwise carry onto every consumer). index()/substr() are literal, not regex;
+# the strings come in through ENVIRON, which `-v` would strip a level of backslashes from; the
+# file is joined into one string so a multi-line <old> can match; LC_ALL=C so a multibyte byte in
+# the subject cannot abort a BSD awk mid-file.
+aw_replace_once() {
+  AW_OLD="$3" AW_NEW="$4" LC_ALL=C awk '
+    { s = s $0 "\n" }
+    END {
+      o = ENVIRON["AW_OLD"]; n = ENVIRON["AW_NEW"]
+      if (o == "") exit 3
+      c = 0; t = s
+      while ((i = index(t, o)) > 0) { c++; t = substr(t, i + length(o)) }
+      if (c != 1) exit 3
+      i = index(s, o)
+      printf "%s%s%s", substr(s, 1, i - 1), n, substr(s, i + length(o))
+    }' "$1" > "$2"
+}
+# h_skip_why <hook> -> empty when the hook carries the hermetic dispatch, else the reason the H arms
+# cannot be built against it. A consumer whose INSTALLED hook predates the dispatch resolves that hook
+# here (consumer layout), and its HC3 near-miss has no dispatch line to remove: building the world
+# would report FIXTURE BROKEN and block that consumer's push on a state the pull itself creates.
+h_skip_why() {
+  local n_t n_d
+  [ -n "${1:-}" ] && [ -f "$1" ] || { printf 'no pre-push hook resolves from this fixture in either layout'; return 0; }
+  n_t="$(grep -cx '# READSET_TOOLS_BEGIN' "$1")" || n_t=0
+  n_d="$(grep -cxF "$H_DISPATCH_LINE" "$1")" || n_d=0
+  [ "$n_t" -gt 0 ] && [ "$n_d" -eq 1 ] && return 0
+  printf 'the resolved hook %s predates the hermetic dispatch (READSET_TOOLS_BEGIN lines: %s, dispatch lines: %s)' "$1" "$n_t" "$n_d"
+}
 HDG() { git -C "$HD" -c user.name=ai-dlc-fixture -c user.email=fixture@invalid -c commit.gpgsign=false "$@"; }
 H_FXS="h-clean h-absent h-unconsumed h-undecl"
 h_consumer() { # <dir> <hook: dispatch|predates> <runner: yes|no>
@@ -740,11 +774,9 @@ h_consumer() { # <dir> <hook: dispatch|predates> <runner: yes|no>
   if [ "$2" = dispatch ]; then
     cp "$H_HOOK_SRC" "$c/.githooks/pre-push" || return 1
   else
-    # The near-miss hook: the dispatch line replaced, nothing else touched.
-    H_OLD="$H_DISPATCH_LINE" H_NEW='    if false; then' python3 -c 'import os,sys
-s = open(sys.argv[1]).read(); o = os.environ["H_OLD"]
-if s.count(o + "\n") != 1: sys.exit(3)
-open(sys.argv[2], "w").write(s.replace(o + "\n", os.environ["H_NEW"] + "\n", 1))' "$H_HOOK_SRC" "$c/.githooks/pre-push" || return 1
+    # The near-miss hook: the dispatch line replaced, nothing else touched. Whole-line: the
+    # anchor carries the newline on both sides.
+    aw_replace_once "$H_HOOK_SRC" "$c/.githooks/pre-push" "$SUFL_NL$H_DISPATCH_LINE$SUFL_NL" "$SUFL_NL    if false; then$SUFL_NL" || return 1
   fi
   if [ "$3" = yes ]; then cp "$H_HR_SRC" "$c/scripts/ai-dlc/hermetic-run.sh" || return 1; fi
   cp "$H_CP_SRC" "$c/scripts/ai-dlc/core-paths.sh" || return 1
@@ -793,6 +825,15 @@ build_h_world() {
   HC2="$(mktemp -d)"; sufl_tmp "$HC2"; h_consumer "$HC2" dispatch no || return 1
   HC3="$(mktemp -d)"; sufl_tmp "$HC3"; h_consumer "$HC3" predates yes || return 1
   H_OK=1
+}
+# h_enter <hook> -> sets H_ENTER to `SKIP <why>`, `BROKEN` or `BUILT`. MAIN SHELL: on BUILT the world's
+# variables (HC1, HC2, HC3, HD, ...) must survive, so this is never called inside `$( )` except by the
+# probe that only wants the verdict.
+h_enter() {
+  H_SKIP="$(h_skip_why "$1")"
+  if [ -n "$H_SKIP" ]; then H_ENTER="SKIP $H_SKIP"; return 0; fi
+  H_HOOK_SRC="$1"
+  if build_h_world && [ "$H_OK" = 1 ]; then H_ENTER=BUILT; else H_ENTER=BROKEN; fi
 }
 # h_run <runner> <consumer> <fixture...> -> sets H_RC, H_LOG (newest log), H_OUT (stdout file).
 # PREPUSH_POOL_DEPTH=7 is the sentinel the depth arm reads back as 8.
