@@ -1,0 +1,4 @@
+# retired-layer-contract drives reconcile/retired-layer-contract.sh from copies of the reconcile directory, and
+# stages its pre-fix copy from the optional pin in git.decl (absent on a consumer, where its SKIP branch decides).
+core/fixtures/lib/
+core/skills/ai-dlc-update/reconcile/

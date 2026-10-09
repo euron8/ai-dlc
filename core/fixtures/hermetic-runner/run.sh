@@ -35,6 +35,9 @@
 #   T  the key did not move: with a deleted tracked file, runner rows equal the hook's
 #   U  a non-git root is exit 2; --key-only on an unhashable tree is non-zero; a name git quotes
 #      under a declared dir is exit 2 (near-miss: the same name outside every declared dir, exit 0)
+#   X  git.decl: `seed` makes the sandbox a work tree with a HEAD; `pin` imports a commit whose blob
+#      differs from the tree's (control: no git.decl -> no repository); a required pin the project
+#      lacks is exit 2; `pin?` absent prints and continues; an abbreviated pin and an unknown line are exit 2
 #   M  mutants of the runner, each built on a COPY and guarded by `cmp -s`, each of which
 #      must fail exactly its own arms
 #   cwd  the verdict is the same from two different working directories
@@ -905,6 +908,75 @@ arm_U() {
   eq "quoted name under a declared dir: exit 2" "$RC" 2
   yes "quoted name under a declared dir: message" "$OUT" "is a name git quotes"
 }
+# --- X: git.decl -- a seeded repository and pinned commits inside the sandbox ---------------------
+# The stub reads the pinned commit's blob, which DIFFERS from the working tree's, so a pin answered
+# from the tree (or from a repository the sandbox should not see) cannot pass.
+stub_git()       { cat <<'EOF'
+cat data/a.txt >/dev/null || exit 1
+printf 'TREE=%s\n' "$(cat data/a.txt)"
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then echo "INSIDE=yes"; else echo "INSIDE=no"; fi
+if git cat-file -e "@@PIN@@^{commit}" 2>/dev/null; then printf 'PINNED=%s\n' "$(git show "@@PIN@@:data/a.txt")"; else echo "PIN-ABSENT"; fi
+if git rev-parse -q --verify HEAD >/dev/null 2>&1; then echo "HEAD-OK"; else echo "HEAD-NONE"; fi
+EOF
+}
+# mk_git_probe <dir> <git.decl text, @@PIN@@ substituted>: a probe whose FIRST commit holds data/a.txt
+# `alpha` (the pin) and whose working tree and HEAD hold `beta`. Sets PIN.
+mk_git_probe() {
+  local p="$1"
+  mk_probe "$p" stub_named 'data/a.txt'
+  PIN="$(cd "$p" && git rev-parse HEAD)"
+  printf 'beta\n' > "$p/data/a.txt"
+  { printf '#!/usr/bin/env bash\nset -u\n'; stub_git | sed "s/@@PIN@@/$PIN/g"; } > "$p/$FXR/probe/run.sh"
+  [ -z "$2" ] || printf '%s\n' "$2" | sed "s/@@PIN@@/$PIN/g" > "$p/$FXR/probe/git.decl"
+  commit_all "$p" beta
+}
+arm_X() {
+  CUR=X
+  local absent="0123456789abcdef0123456789abcdef01234567"
+  mk_git_probe "$WK/X1" $'seed\npin @@PIN@@'
+  [ -n "$(cd "$WK/X1" && git cat-file -t "$absent" 2>/dev/null)" ] && bad "$CUR: control: the absent sha exists in the probe" || ok "$CUR: control: the absent sha is in no probe"
+  run_hr "$WK/X1"
+  eq "seed + pin: exit 0" "$RC" 0
+  yes "control: the stub read the working tree" "$OUT" "TREE=beta"
+  yes "seed: the sandbox root is a work tree" "$OUT" "INSIDE=yes"
+  yes "seed: the sandbox has a HEAD" "$OUT" "HEAD-OK"
+  yes "pin: the PINNED blob is the commit's, not the tree's" "$OUT" "PINNED=alpha"
+  mk_git_probe "$WK/X2" ''
+  run_hr "$WK/X2"
+  eq "no git.decl: exit 0" "$RC" 0
+  no "no git.decl: no repository in the sandbox" "$OUT" "INSIDE=yes" "TREE=beta"
+  yes "no git.decl: the pin is not reachable" "$OUT" "PIN-ABSENT"
+  mk_git_probe "$WK/X3" 'seed'
+  run_hr "$WK/X3"
+  eq "seed only: exit 0" "$RC" 0
+  yes "seed only: HEAD exists" "$OUT" "HEAD-OK"
+  no "seed only: no pin was imported" "$OUT" "PINNED=" "HEAD-OK"
+  mk_git_probe "$WK/X4" "pin $absent"
+  run_hr "$WK/X4"
+  eq "required pin absent from the project: exit 2" "$RC" 2
+  yes "required pin absent: message names it" "$OUT" "declared pin $absent is not a commit"
+  mk_git_probe "$WK/X5" $'seed\npin? '"$absent"
+  mkdir -p "$WK/X5.store"
+  OUT="$(AI_DLC_VERDICT_STORE="$WK/X5.store" bash "$RUN" --root "$WK/X5" probe 2>&1)"; RC=$?
+  eq "optional pin absent: exit 0" "$RC" 0
+  yes "optional pin absent: says it was not imported" "$OUT" "optional pin $absent is not in this project"
+  yes "optional pin absent: the fixture's own absent branch ran" "$OUT" "PIN-ABSENT"
+  eq "optional pin absent: the pass is NOT recorded in the verdict store" "$(ls "$WK/X5.store" | wc -l | tr -d ' ')" 0
+  mk_git_probe "$WK/X6" $'pin? @@PIN@@'
+  mkdir -p "$WK/X6.store"
+  OUT="$(AI_DLC_VERDICT_STORE="$WK/X6.store" bash "$RUN" --root "$WK/X6" probe 2>&1)"; RC=$?
+  eq "optional pin present: exit 0" "$RC" 0
+  yes "optional pin present: imported" "$OUT" "PINNED=alpha"
+  eq "control: optional pin present: the pass IS recorded" "$(ls "$WK/X6.store" | wc -l | tr -d ' ')" 1
+  mk_git_probe "$WK/X7" 'pin abc123'
+  run_hr "$WK/X7"
+  eq "abbreviated pin: exit 2" "$RC" 2
+  yes "abbreviated pin: message" "$OUT" "must be a full 40-hex sha"
+  mk_git_probe "$WK/X8" 'clone everything'
+  run_hr "$WK/X8"
+  eq "unknown git.decl line: exit 2" "$RC" 2
+  yes "unknown git.decl line: message" "$OUT" "neither seed, pin <sha> nor pin? <sha>"
+}
 run_arms() { arm_A; arm_B; arm_C; arm_D; arm_E; arm_F; arm_H; arm_I; arm_K; arm_L; arm_N; }
 
 # --- main run -----------------------------------------------------------------------------------
@@ -913,11 +985,11 @@ if [ -z "$HOOK_SRC" ]; then echo "FIXTURE ERROR: no pre-push hook with a READSET
 # The main pass runs its arms in parallel subshells, each with its own output and FAILED file, then
 # replays the output in arm order so the transcript reads as before.
 mkdir -p "$WORK/par"
-for _a in A B C D E F H I K L N G J P Q R S T U W; do
+for _a in A B C D E F H I K L N G J P Q R S T U W X; do
   ( "arm_$_a" > "$WORK/par/$_a.out" 2>&1; printf '%s' "$FAILED" > "$WORK/par/$_a.failed" ) &
 done
 wait
-for _a in A B C D E F H I K L N G J P Q R S T U W; do
+for _a in A B C D E F H I K L N G J P Q R S T U W X; do
   cat "$WORK/par/$_a.out"
   [ -f "$WORK/par/$_a.failed" ] || { echo "FIXTURE ERROR: arm $_a produced no verdict" >&2; exit 2; }
   FAILED="$FAILED$(cat "$WORK/par/$_a.failed")"
@@ -961,12 +1033,22 @@ if [ "$NESTED" != 1 ]; then
   run_mutant M10 "T G" 'cut -f1 "$HR_WORK/m/.now" > "$HR_WORK/kall"' 'cat "$HR_WORK/p/.paths" > "$HR_WORK/kall"' &
   # M11: the key subshell's exit lost again: an unhashable tree prints nothing at exit 0.
   run_mutant M11 "U G" ') > "$HR_WORK/krows"; hr_kr=$?' ') > "$HR_WORK/krows"; hr_kr=0' &
+  # M12: the pin pack never reaches the sandbox: a pinned blob is unreadable there.
+  run_mutant M12 "X" 'pack-objects -q "$HR_SB/.git/objects/pack/pack"' 'pack-objects -q "$HR_WORK/pack"' &
+  # M13: a required pin absent from the project is treated as optional: no exit 2.
+  run_mutant M13 "X" 'elif [ "${line%% *}" = pin ]; then' 'elif false; then' &
+  # M14: the seed commit skipped: the sandbox repository has no HEAD.
+  run_mutant M14 "X" '  if [ "$hr_seed" = 1 ]; then' '  if false; then' &
+  # M15: an abbreviated pin accepted: the full-sha guard removed.
+  run_mutant M15 "X" '[ "${#hr_ps}" -eq 40 ] ||' 'true ||' &
+  # M16: a pass with an optional pin skipped is recorded anyway, so a shallow clone's pass is reused by a full one.
+  run_mutant M16 "X" '[ "${hr_pin_skipped:-0}" = 0 ] || return 0' ':' &
   # cwd-invariance: two nested runs of this fixture from different working directories.
   ( cd "$ROOT" && HERMETIC_FX_NESTED=1 bash "$HERE/run.sh" > "$WORK/cwd1.out" 2>&1; echo $? > "$WORK/cwd1.rc" ) &
   ( cd "$(dirname "$RUN")" && HERMETIC_FX_NESTED=1 bash "$HERE/run.sh" > "$WORK/cwd2.out" 2>&1; echo $? > "$WORK/cwd2.rc" ) &
   wait
   CUR=M
-  for pair in "M1:B" "M2:A C D L" "M3:F" "M4:L" "M5:K" "M6:F" "M7:P" "M8:Q W" "M9:R W" "M10:T" "M11:U"; do
+  for pair in "M1:B" "M2:A C D L" "M3:F" "M4:L" "M5:K" "M6:F" "M7:P" "M8:Q W" "M9:R W" "M10:T" "M11:U" "M12:X" "M13:X" "M14:X" "M15:X" "M16:X"; do
     mname="${pair%%:*}"; want="$(failed_set "${pair#*:}")"
     got="$(cat "$WORK/mut-$mname.res" 2>/dev/null)"
     if [ "$got" = "BROKEN" ] || [ -z "$got" ] && [ "$want" != "" ] && [ "$got" = "BROKEN" ]; then

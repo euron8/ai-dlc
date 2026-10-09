@@ -1,0 +1,19 @@
+# Tools run.sh and the extracted pool block invoke.
+awk
+bash
+cat
+cp
+env
+git
+grep
+mkdir
+mktemp
+rm
+sed
+seq
+sleep
+sort
+tail
+tr
+wc
+xargs

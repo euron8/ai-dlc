@@ -1,0 +1,11 @@
+# procsub-staged-refusal and its two shard drivers (b, c, which exec this run.sh --group) share ONE declaration shape.
+# The spelling arm diffs every core/*.sh outside core/fixtures/ against a pin in the SEEDED repository, so every
+# directory holding one is declared whole: an undeclared script would read as a deletion in that diff.
+core/fixtures/lib/
+core/hooks/
+core/scripts/
+core/session-driver/
+core/skills/
+core/schemas/
+core/fixtures/procsub-staged-refusal-b/run.sh
+core/fixtures/procsub-staged-refusal-c/run.sh

@@ -1,0 +1,3 @@
+# The pre-fix retired-layer-contract.sh is staged with `git -C "$FX_OWN" show d1c72fa9:...`. This fixture SHIPS, and a
+# consumer has no such commit, so the pin is optional: absent, it is not imported and the fixture's own SKIP branch runs.
+pin? d1c72fa904e5c8aecaaa67fa15340094d73780ab
