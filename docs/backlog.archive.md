@@ -31747,3 +31747,80 @@ scored under `set -uo pipefail`: tip 0, base 1, definition moved after only one 
 blocks deleted 1, gitignore lines restored 1.
 
 
+## BL-489 — the self-update gate refused a gating script a prior self-update had already landed
+
+**DEFECT, filed by the reference consumer as `PC-S317-SELF-UPDATE-GATE-UNDECIDED-ON-MACHINERY-A-PRIOR-SELF-UPDATE-LANDED`
+and closed in the same release.** `core/skills/ai-dlc-update/reconcile/self-update-gate.sh`'s pre-written arm emitted
+`SELF-UPDATE-UNDECIDED` for any script whose consumer copy hashed equal to `theirs:core/scripts/<name>` while
+`base:core/scripts/<name>` differed. It exists to refuse a gate re-run after step 2 wrote the slice, and its remedy text
+tells the operator to re-run with the range the stamp names. graph had already passed that range. Its stamp at the
+filing was `commit: 74e8ea88` (0.751.0) with `skill_commit: f4686761` (0.753.0), split by self-update #1195, which
+wrote `scripts/ai-dlc/hermetic-run.sh`. The next invocation gated `74e8ea88 → 0a123701`, because step 2 passes the
+stamp's `commit` and `commit` advances only at the gated apply.
+
+Derived against this tree and graph's working copy (read-only):
+- `blob(f4686761:core/scripts/hermetic-run.sh)` = `5985d4d5`, equal to `theirs` (`0a123701`) and to `git hash-object`
+  of graph's `scripts/ai-dlc/hermetic-run.sh`. `blob(74e8ea88:…)` = `7565cf77`, which differs.
+- `74e8ea88` is an ancestor of `f4686761`, and `f4686761` is an ancestor of `0a123701`.
+- `git diff --name-only f4686761..0a123701 -- core/scripts/` lists only `derive-fixture-readsets.sh`. This cycle's
+  slice therefore did not contain `hermetic-run.sh` after step 2's own ALREADY-AT-THEIRS subtraction, and the
+  refusal turned the whole run into `SELF-UPDATE-DEFER` for a file nobody was writing.
+- graph's `.githooks/pre-push` names `hermetic-run.sh` in comments (`:1123`, `:1594`), in a printf message (`:1605`),
+  and as a literal in a `for c in …` list (`:1601`) that it then runs as `bash "$hr"` (`:1607`). The hook never runs the
+  script by its literal path, so the gate's scan reads it as a mention. Once the arm is reordered (see below), that
+  alone answers the filed case `not gating`. The prior-self-update acquittal covers a script the hook does RUN.
+- Rehearsed on a scratch copy of graph's `scripts/ai-dlc`, `.githooks` and a stamp at the filing's split, committed in
+  a fresh repo, with argv `<dist> 74e8ea88 0a123701 <copy>` and `cmp -s` confirming that the two gate copies differ.
+  Tip printed `SELF-UPDATE-OK hermetic-run.sh not gating: … (occurrences: line 1594 comment mention, line 1601 list
+  mention)` and no DEFER. Base printed `SELF-UPDATE-UNDECIDED hermetic-run.sh … ALREADY at theirs …`, then
+  `SELF-UPDATE-DEFER`. graph's tree has since been applied to `0a123701`, so in this copy base also refused
+  `derive-fixture-readsets.sh`. graph's committed record for the filed run
+  (`_bmad-output/ai-dlc-update/self-update-gate-20261009T002733Z.md`, lines 11-14) shows that file as `not gating` and
+  `hermetic-run.sh` as the only UNDECIDED row.
+
+It recurs on every pull that follows a self-update and precedes the gated apply, whenever the range still spans a gating
+script that self-update wrote.
+
+**The fix as shipped.** First, the whole pre-written arm moves below the hook-scan terminals, after the
+`SELF-UPDATE-OK … not gating` row. A script whose exit status the hook never reads has no differential to refuse. The X
+and U terminals refuse on their own grounds, so the move changes which UNDECIDED row a pre-written script gets there,
+never whether it gets one. Second, inside the arm and before the refusal, the gate acquits with `SELF-UPDATE-OK <name>
+landed by the prior self-update at <SK8>: …` and SKIPS the differential (a failure under theirs' new argv or a
+changed sibling helper is caught by `self-update-push.sh` as HOOK-REFUSED) when ALL of these hold:
+- **A1**: the stamp's `skill_commit` peels to a commit SK, read through `gate_rec_skill_commit`. This is the same value
+  as the record's `# skill-commit:` header. An abbreviated value peels and counts (graph's is abbreviated).
+- **A2**: SK != theirs, both peeled.
+- **A3**: `blob(SK:core/scripts/<name>)` equals the consumer's copy.
+- **A4**: base is an ancestor of SK, and SK is an ancestor of theirs.
+- **A5**: `.claude/.ai-dlc-applying` is absent.
+- **A6**: `HEAD:scripts/ai-dlc/<name>` in the consumer is the same blob, so the copy is committed.
+
+The marker phrase "landed by the prior self-update" keeps the fixture's `ALREADY at theirs` scan counting only genuine
+refusals. A stamp rewritten with the write LOST leaves the copy at base, so the arm's own `cur == theirs` is false and
+the ordinary differential runs.
+
+**Rejected remedy.** The filing's other proposal was to subtract preclassify's ALREADY-AT-THEIRS set. After step 2
+writes the slice, every slice path is ALREADY-AT-THEIRS, so a post-write re-run would skip them all and read OK. That
+re-run is the hazard the arm exists for. On the fixture's own seed it scored 2 DEFER pre-write and 4 OK post-write.
+
+**The runner's mirror site** is `self-update-fixtures.sh`'s PRE-WRITTEN arm (`:649-657`). It acquits on the RECORDED
+`# skill-commit:` with `skill_commit != theirs`, and the two sites share no helper on purpose. The runner refuses an
+ancestry key, because a refusal there is permanent for that record and a side-branch commit can hold identical bytes.
+The gate keeps A4, because its refusal costs one deferred cycle, which is the fail-closed direction. The runner carries
+no A6, because it reads after step 2's commit, while the gate reads the live tree and stamp before the write or between
+the write and the commit.
+
+**The contract adversary's BLOCKER is A6.** Between step 2's write and its commit, the stamp is still at the prior split.
+For a script that held BASE content before this write, A2, A3 and A4 then all hold. Without A6, a re-run of the gate on
+that half-written tree was acquitted. Only `HEAD` sees that the copy on disk was never committed.
+
+The receipt runs the real fixture and counts its named `ok` lines for W1 (prior-landed OK), W2 (stamp at theirs,
+UNDECIDED), W7 (uncommitted copy, UNDECIDED), W8 (mention-only pre-written, `not gating`), and the M-A2, M-A6 and
+M-ORDER kills. It asserts the exact count after a presence control on the labels. An `echo` of those lines into
+`run.sh` would satisfy it. The guard against that is the fixture's own `cmp -s`-checked mutants, each of which fails
+exactly one cell.
+
+**LANDED (v0.758.0, verified 2c9ba602).**
+
+verify: sh f=core/fixtures/self-update-gate/run.sh; [ -f "$f" ] || exit 9; for l in pl-w1-landed pl-w2-poststamp pl-w7-dirty pl-w8-notgating pl-w9-behindbase pl-mut-a2 pl-mut-a4-base pl-mut-a6 pl-mut-order; do grep -qF "$l" "$f" || exit 1; done; o="$(bash "$f" 2>&1 </dev/null)" || exit 1; k="$(printf '%s\n' "$o" | grep -oE '^  ok    (pl-w1-landed|pl-w2-poststamp|pl-w7-dirty|pl-w8-notgating|pl-w9-behindbase|pl-mut-a2|pl-mut-a4-base|pl-mut-a6|pl-mut-order) ' | sort -u | grep -c .)" || k=0; [ "$k" -eq 9 ]
+

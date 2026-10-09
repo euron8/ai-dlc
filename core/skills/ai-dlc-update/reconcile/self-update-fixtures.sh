@@ -635,6 +635,20 @@ $gr_p"
             # question about what the consumer's tree CONTAINED when the gate read it. Content is
             # the honest key for that question, and the threat model is a misleading gate run
             # rather than a forger: a hand that can edit this record can edit the tree it attests.
+            #
+            # THE GATE'S MIRROR is its acquittal in `self-update-gate.sh` (search "landed by the
+            # prior self-update"). That site adds base <= SK <= theirs ancestry, the absent
+            # `.ai-dlc-applying` marker and a committed-copy conjunct because it reads the LIVE
+            # tree and stamp before or between step 2's write and commit, where a refusal costs
+            # one deferred cycle. This one cannot: it reads a RECORD after that commit, so the
+            # marker and HEAD no longer describe the tree the gate read, and an ancestry key here
+            # is the permanent false refusal argued above.
+            #
+            # A MENTION-ONLY PRE-WRITTEN SCRIPT IS REFUSED HERE AND OK AT THE GATE. With a
+            # recorded `skill_commit` that does not carry its bytes (or none), the gate rows it OK
+            # "not gating" and this arm scores the same record PRE-WRITTEN. That population is
+            # hand-copied bytes or a post-write re-run, and the cost is a DEFER after the branch
+            # is cut rather than before.
             # AND THE RECORDED `skill_commit` MUST NOT BE `theirs` ITSELF, WHICH IS THE CONJUNCT
             # THE FIRST CUT OF THIS FIX LACKED AND AN ADVERSARIAL DRIVE FOUND. The genuine
             # self-comparison is reached by running the gate a SECOND time after the slice is

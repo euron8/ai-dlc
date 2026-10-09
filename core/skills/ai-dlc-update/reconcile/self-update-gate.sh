@@ -1455,6 +1455,43 @@ while IFS= read -r name; do
     emit SELF-UPDATE-OK "$name" "carried: the consumer has no copy of scripts/ai-dlc/$name and arm C removed it from the slice, so this cycle does not write it and the push runs none, as today's push does."
     continue
   fi
+
+  # ---- HOW THE HOOK RUNS IT, derived from the hook line (`gate_argv_scan` states the grammar) ----
+  # Only an R row is RUN, and only with its own argv: a D row (the renderer's write-mode line,
+  # taken only when `.claude/agents/` is absent) never decides the step's verdict, and running it
+  # here would write into the consumer's tree. Every distinct R argv is run, and the worst verdict
+  # across them is the script's.
+  if ! gate_argv_scan "$HOOK" "$name" > "$TMP/scan" 2>/dev/null; then
+    emit SELF-UPDATE-UNDECIDED "$name" "the hook line that runs scripts/ai-dlc/$name could not be scanned (awk failed), so the argv the hook passes is unknown. A probe with the wrong argv asks a question the hook never asks; treat as defer."
+    deferred=1
+    continue
+  fi
+  sc_n_x="$(awk -F'\t' '$1 == "X"' "$TMP/scan" | grep -c .)" || sc_n_x=0
+  sc_n_u="$(awk -F'\t' '$1 == "U"' "$TMP/scan" | grep -c .)" || sc_n_u=0
+  sc_n_r="$(awk -F'\t' '$1 == "R"' "$TMP/scan" | grep -c .)" || sc_n_r=0
+  sc_n_all="$(grep -c . "$TMP/scan")" || sc_n_all=0
+  if [ "$sc_n_x" -gt 0 ]; then
+    sc_x="$(awk -F'\t' '$1 == "X" {printf "%sline %s: %s", (n++ ? "; " : ""), $2, $3}' "$TMP/scan")"
+    emit SELF-UPDATE-UNDECIDED "$name" "the hook runs scripts/ai-dlc/$name and reads its exit status, but its argument span holds an expansion or quoting, or the path is reached through a variable, which this gate cannot resolve without executing the hook (${sc_x}). The argv is unknown, so neither run can ask the hook's question; treat as defer."
+    deferred=1
+    continue
+  fi
+  if [ "$sc_n_u" -gt 0 ] || [ "$sc_n_all" -eq 0 ]; then
+    emit SELF-UPDATE-UNDECIDED "$name" "the hook names scripts/ai-dlc/$name in a shape this gate cannot classify as a run or a mention ($(awk -F'\t' '$1 == "U" {printf "%sline %s", (n++ ? ", " : ""), $2} END {if (!NR) printf "no occurrence found by the line scan"}' "$TMP/scan")), so whether its exit status gates the push is unknown; treat as defer."
+    deferred=1
+    continue
+  fi
+  if [ "$sc_n_r" -eq 0 ]; then
+    emit SELF-UPDATE-OK "$name" "not gating: the hook names scripts/ai-dlc/$name but never reads its exit status (occurrences: $(awk -F'\t' '{printf "%sline %s %s", (n++ ? ", " : ""), $2, ($1 == "D" ? "run with its status discarded" : $3 " mention")}' "$TMP/scan")), so no version of it can refuse the push."
+    continue
+  fi
+  # THE PRE-WRITTEN ARM BELOW SITS AFTER THE "NOT GATING" TERMINAL ON PURPOSE. Its subject is a
+  # differential that would compare a file with itself, and a script whose exit status the hook
+  # never reads has no differential to run at all -- its verdict is OK whatever bytes it holds, so
+  # refusing it for being at theirs refused a question nobody asked. Placed before the hook scan,
+  # the arm turned a mention-only script that a prior cycle had written into a DEFER for the whole
+  # run. The X and U terminals above refuse on their own grounds, so moving the arm past them
+  # changes which UNDECIDED row a pre-written script gets there, never whether it gets one.
   cur_absent=0
   [ -f "$cur" ] || cur_absent=1
   # ---- A VERDICT TAKEN ON AN ALREADY-WRITTEN TREE ANSWERS A DIFFERENT QUESTION ----------
@@ -1499,40 +1536,78 @@ while IFS= read -r name; do
   gi_th_h="$(git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/scripts/$name" 2>/dev/null)" || gi_th_h=""
   gi_ba_h="$(git -C "$DIST" rev-parse -q --verify "${BASE}:core/scripts/$name" 2>/dev/null)" || gi_ba_h=""
   if [ -n "$gi_cur_h" ] && [ -n "$gi_th_h" ] && [ "$gi_cur_h" = "$gi_th_h" ] && [ "$gi_ba_h" != "$gi_th_h" ]; then
+    # ---- LANDED BY A PRIOR SELF-UPDATE IS NOT PRE-WRITTEN BY THIS ONE ------------------------
+    # The refusal below names one remedy: re-run with the range the stamp actually names. A
+    # consumer whose PREVIOUS self-update wrote this script already did that -- step 2 passes the
+    # stamp's `commit`, which advances only at the gated apply, so base..theirs still spans the
+    # release that self-update took. Its copy is at theirs because that cycle wrote it and nothing
+    # since has changed it, so this cycle's slice subtracts it as ALREADY-AT-THEIRS and writes
+    # nothing to it. Refusing there turned every pull between a self-update and the gated apply
+    # into a DEFER the remedy text could not clear.
+    #
+    # THE DIFFERENTIAL IS SKIPPED HERE, NOT DISCHARGED. cur and new are the same bytes, so a run
+    # would be the self-vs-self comparison this arm refuses; what that leaves unasked -- a failure
+    # under theirs' NEW argv (`HOOK_ASKS_NEW`) or under a sibling helper changed in base..theirs --
+    # is caught by `self-update-push.sh`'s own hook run as HOOK-REFUSED, and the cycle is discarded.
+    #
+    # A MENTION-ONLY PRE-WRITTEN SCRIPT NEVER REACHES THIS ARM, and the runner disagrees with the
+    # gate about it on purpose. With a stamp whose `skill_commit` does not carry its bytes (or no
+    # stamp), the gate reports it OK "not gating" above and `self-update-fixtures.sh` ARM 3 refuses
+    # the same record as PRE-WRITTEN. That population is hand-copied bytes or a post-write re-run,
+    # and the cost is a DEFER after the branch is cut rather than before. The acquittal holds only
+    # when ALL of:
+    #
+    #   A1  the stamp's `skill_commit` peels to a commit SK, read through `gate_rec_skill_commit`
+    #       -- the same value the record's `# skill-commit:` header carries, never a second parse.
+    #       An abbreviated value peels and counts; `-` (no stamp, no field, no peel) acquits nothing.
+    #   A2  SK != theirs, both peeled: the self-update that wrote the copy was a PRIOR cycle.
+    #   A3  blob(SK:core/scripts/<name>) == the consumer's copy: it IS what that self-update wrote.
+    #   A4  base is an ancestor of SK and SK of theirs: that self-update lies inside this range. A
+    #       `skill_commit` on a side branch carrying the same blob acquits nothing.
+    #   A5  `.claude/.ai-dlc-applying` is absent -- the same withholding the SAFE-STOP arm applies:
+    #       a stamp field that is ahead is not evidence the tree matching it is complete.
+    #   A6  the copy is COMMITTED: HEAD:scripts/ai-dlc/<name> in the consumer is the same blob. A
+    #       non-repository, an unborn HEAD or a dirty copy fails it.
+    #
+    # A2 AND A6 ARE BOTH NEEDED BECAUSE STEP 2'S WRITE HAS TWO POST-WRITE ORDERINGS a re-run can
+    # land in, and each closes one. Stamp rewritten after the write: SK is now theirs and A2 fails.
+    # Written but not yet committed, stamp still at the prior split: SK, A3 and A4 all still hold
+    # for a script that held BASE content before this write, and only A6 sees that HEAD does not
+    # carry the copy on disk. (A script that SK..theirs changes fails A3 in that ordering too, but
+    # one whose base..SK change this very write delivered does not -- which is the A6 case.) A
+    # stamp rewritten with the write LOST leaves the copy at base, so the arm's own `cur == theirs`
+    # is false and the ordinary differential runs; nothing here is reached.
+    #
+    # THE MIRROR SITE IS `self-update-fixtures.sh`'s pre-written arm, which acquits on the RECORDED
+    # `# skill-commit:` this gate wrote, with no shared helper on purpose -- the two sites answer
+    # different questions and their conjunct sets differ. The runner refuses an ancestry key
+    # because a refusal THERE is permanent for that record and a side-branch commit can hold
+    # identical bytes; A4 is kept HERE because a gate refusal costs one deferred cycle, the
+    # fail-closed direction this file takes everywhere. The runner carries no A6 because it reads
+    # after step 2's commit; the gate reads the live tree and the live stamp, before or between.
+    pl_sk="$(gate_rec_skill_commit)" || pl_sk="-"
+    [ -n "$pl_sk" ] || pl_sk="-"
+    pl_th="$(git -C "$DIST" rev-parse -q --verify "${THEIRS}^{commit}" 2>/dev/null)" || pl_th=""
+    pl_skb=""
+    if [ "$pl_sk" != "-" ]; then
+      pl_skb="$(git -C "$DIST" rev-parse -q --verify "${pl_sk}:core/scripts/$name" 2>/dev/null)" || pl_skb=""
+    fi
+    pl_hd="$(git -C "$CONSUMER" rev-parse -q --verify "HEAD:scripts/ai-dlc/$name" 2>/dev/null)" || pl_hd=""
+    if [ "$pl_sk" != "-" ] && [ -n "$pl_th" ] && [ "$pl_sk" != "$pl_th" ] \
+       && [ -n "$pl_skb" ] && [ "$pl_skb" = "$gi_cur_h" ] \
+       && git -C "$DIST" merge-base --is-ancestor "$BASE" "$pl_sk" 2>/dev/null \
+       && git -C "$DIST" merge-base --is-ancestor "$pl_sk" "$pl_th" 2>/dev/null \
+       && [ ! -e "$CONSUMER/.claude/.ai-dlc-applying" ] \
+       && [ -n "$pl_hd" ] && [ "$pl_hd" = "$gi_cur_h" ]; then
+      pl_s8="${pl_sk:0:8}"
+      emit SELF-UPDATE-OK "$name" "landed by the prior self-update at ${pl_s8}: the consumer's committed copy of scripts/ai-dlc/$name is the blob that self-update wrote and ${pl_s8}..theirs does not change it, so this cycle's slice does not contain it. The differential is SKIPPED: a failure under theirs' new argv or under a sibling helper changed in base..theirs is caught by self-update-push.sh's own hook run as HOOK-REFUSED and the cycle is discarded"
+      continue
+    fi
     emit SELF-UPDATE-UNDECIDED "$name" "the consumer's copy of scripts/ai-dlc/$name is ALREADY at theirs while base..theirs changes it, so the differential would run this file against itself: cur and new are the same bytes, they agree by construction, and their agreement says nothing about whether the incoming version fails where the current one passes. This is what a gate re-run AFTER step 2 wrote the slice looks like. Take the verdict BEFORE the write, once, and do not re-run this gate to refresh a record. Treat as defer — a verdict that could not ask its own question must not read as OK."
     deferred=1
     continue
   fi
 
-  # ---- HOW THE HOOK RUNS IT, derived from the hook line (`gate_argv_scan` states the grammar) ----
-  # Only an R row is RUN, and only with its own argv: a D row (the renderer's write-mode line,
-  # taken only when `.claude/agents/` is absent) never decides the step's verdict, and running it
-  # here would write into the consumer's tree. Every distinct R argv is run, and the worst verdict
-  # across them is the script's.
-  if ! gate_argv_scan "$HOOK" "$name" > "$TMP/scan" 2>/dev/null; then
-    emit SELF-UPDATE-UNDECIDED "$name" "the hook line that runs scripts/ai-dlc/$name could not be scanned (awk failed), so the argv the hook passes is unknown. A probe with the wrong argv asks a question the hook never asks; treat as defer."
-    deferred=1
-    continue
-  fi
-  sc_n_x="$(awk -F'\t' '$1 == "X"' "$TMP/scan" | grep -c .)" || sc_n_x=0
-  sc_n_u="$(awk -F'\t' '$1 == "U"' "$TMP/scan" | grep -c .)" || sc_n_u=0
-  sc_n_r="$(awk -F'\t' '$1 == "R"' "$TMP/scan" | grep -c .)" || sc_n_r=0
-  sc_n_all="$(grep -c . "$TMP/scan")" || sc_n_all=0
-  if [ "$sc_n_x" -gt 0 ]; then
-    sc_x="$(awk -F'\t' '$1 == "X" {printf "%sline %s: %s", (n++ ? "; " : ""), $2, $3}' "$TMP/scan")"
-    emit SELF-UPDATE-UNDECIDED "$name" "the hook runs scripts/ai-dlc/$name and reads its exit status, but its argument span holds an expansion or quoting, or the path is reached through a variable, which this gate cannot resolve without executing the hook (${sc_x}). The argv is unknown, so neither run can ask the hook's question; treat as defer."
-    deferred=1
-    continue
-  fi
-  if [ "$sc_n_u" -gt 0 ] || [ "$sc_n_all" -eq 0 ]; then
-    emit SELF-UPDATE-UNDECIDED "$name" "the hook names scripts/ai-dlc/$name in a shape this gate cannot classify as a run or a mention ($(awk -F'\t' '$1 == "U" {printf "%sline %s", (n++ ? ", " : ""), $2} END {if (!NR) printf "no occurrence found by the line scan"}' "$TMP/scan")), so whether its exit status gates the push is unknown; treat as defer."
-    deferred=1
-    continue
-  fi
-  if [ "$sc_n_r" -eq 0 ]; then
-    emit SELF-UPDATE-OK "$name" "not gating: the hook names scripts/ai-dlc/$name but never reads its exit status (occurrences: $(awk -F'\t' '{printf "%sline %s %s", (n++ ? ", " : ""), $2, ($1 == "D" ? "run with its status discarded" : $3 " mention")}' "$TMP/scan")), so no version of it can refuse the push."
-    continue
-  fi
   awk -F'\t' '$1 == "R" && !seen[$3]++ {print $3}' "$TMP/scan" > "$TMP/argvs" 2>/dev/null
 
   # AGREEMENT IS NOT A DIFFERENTIAL SIGNAL. This gate asks one question -- does the INCOMING
