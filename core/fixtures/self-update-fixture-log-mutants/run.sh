@@ -1611,6 +1611,83 @@ else
 fi
 }
 
+# --- MUTANTS HM1 to HM9: the RESTATED HOOK DISPATCH, scored as a VECTOR ----------------------
+# `hsig` (lib.sh) drives the ten observables Parts H1-H7/HD1 assert. Each mutant breaks ONE clause
+# of the restated rule, and asserts the EXACT vector it predicts; where one predicate feeds several
+# arms the vector moves several cells, and that is a measurement rather than entanglement.
+# Cells: H1 H2 H3 H4 H5 H6 H7 H7t H7r HD1.
+h_score() { # $1=label $2=mutant path $3=expected vector $4=what the mutant does
+  local got
+  got="$(hsig "$2")"
+  if [ "$got" = "$3" ]; then
+    ok "MUTATION $1 — $4: vector $got against the correct $HSIG_OK"
+  else
+    bad "MUTATION $1 — $4, and the vector did not move as predicted (got '$got', expected '$3', correct is '$HSIG_OK')"
+  fi
+}
+sec_HCTL() {
+  local got
+  got="$(hsig "$CTL")"
+  if [ "$got" = "$HSIG_OK" ]; then
+    ok "HCTL: the unmutated copy in this scratch scores $got through the H worlds — every HM kill below is its mutation, not a copy that could not run"
+  else
+    bad "FIXTURE ERROR: the unmutated copy scored '$got' through the H worlds, want $HSIG_OK; every HM verdict would be the harness"
+  fi
+}
+sec_HM1() {
+  if mkmutant "$MUTDIR/hm1.sh" '  if [ -f "$dir/inputs.decl" ]; then
+    if [ "$SU_HOOK_DISPATCHES" = 1 ]; then' '  if false; then
+    if [ "$SU_HOOK_DISPATCHES" = 1 ]; then'; then
+    h_score HM1 "$MUTDIR/hm1.sh" "0-0-0-0-1-1-0-1-1-0" "the inputs.decl branch removed, every fixture run plain (the defect)"
+  else bad "FIXTURE ERROR: HM1's anchor no longer occurs exactly once in the runner — DID NOT APPLY"; fi
+}
+sec_HM2() {
+  if mkmutant "$MUTDIR/hm2.sh" '  if [ "$rc" -eq 0 ]; then' '  if [ "$rc" -ne 1 ]; then'; then
+    h_score HM2 "$MUTDIR/hm2.sh" "0-1-1-1-1-1-1-1-1-1" "only rc 1 read as red, so the runner's exit 2 (declared file absent) reads green"
+  else bad "FIXTURE ERROR: HM2's anchor no longer occurs exactly once in the runner — DID NOT APPLY"; fi
+}
+sec_HM3() {
+  if mkmutant "$MUTDIR/hm3.sh" '  if [ "$su_mode" = hermetic ] && [ ! -f "$CONSUMER/$SU_HR_REL" ]; then' '  if [ "$su_mode" = hermetic ] && [ ! -f "$CONSUMER/$SU_HR_REL" ]; then su_mode=plain; su_why=fallback; fi
+  if false; then'; then
+    h_score HM3 "$MUTDIR/hm3.sh" "1-1-1-0-1-1-1-1-1-1" "an absent runner falls back to a plain run, which the hook never does"
+  else bad "FIXTURE ERROR: HM3's anchor no longer occurs exactly once in the runner — DID NOT APPLY"; fi
+}
+sec_HM4() {
+  if mkmutant "$MUTDIR/hm4.sh" '    su_mode=plain; su_why="undeclared: no inputs.decl, so the push runs it plain"' '    su_mode=hermetic'; then
+    h_score HM4 "$MUTDIR/hm4.sh" "1-1-1-1-0-0-1-1-1-1" "every fixture sent through the hermetic runner, undeclared ones included"
+  else bad "FIXTURE ERROR: HM4's anchor no longer occurs exactly once in the runner — DID NOT APPLY"; fi
+}
+sec_HM5() {
+  if mkmutant "$MUTDIR/hm5.sh" 'export PREPUSH_POOL_DEPTH="$(( 10#$_su_pd + 1 ))"' ':'; then
+    h_score HM5 "$MUTDIR/hm5.sh" "1-1-1-1-1-0-1-1-1-1" "PREPUSH_POOL_DEPTH not exported one deeper"
+  else bad "FIXTURE ERROR: HM5's anchor no longer occurs exactly once in the runner — DID NOT APPLY"; fi
+}
+sec_HM6() {
+  if mkmutant "$MUTDIR/hm6.sh" '  echo "$SU_TOKEN"; echo "$SU_TOKEN" >> "$LOG"' '  echo "$SU_TOKEN" >> "$LOG"'; then
+    h_score HM6 "$MUTDIR/hm6.sh" "1-1-1-1-1-1-0-1-1-1" "the disposition token written to the log only, never to stdout"
+  else bad "FIXTURE ERROR: HM6's anchor no longer occurs exactly once in the runner — DID NOT APPLY"; fi
+}
+sec_HM7() {
+  if mkmutant "$MUTDIR/hm7.sh" '  if [ "$_hd_t" -gt 0 ] && [ "$_hd_d" -gt 0 ]; then' '  if true; then'; then
+    h_score HM7 "$MUTDIR/hm7.sh" "1-1-1-1-1-1-1-0-1-0" "the on-disk hook check dropped, so a hook predating the dispatch is treated as dispatching"
+  else bad "FIXTURE ERROR: HM7's anchor no longer occurs exactly once in the runner — DID NOT APPLY"; fi
+}
+sec_HM8() {
+  if mkmutant "$MUTDIR/hm8.sh" '  _hd_d="$(grep -cxE' '  _hd_d="$(grep -cE inputs.decl "$CONSUMER/$SU_HOOK_REL")" || _hd_d=0; : "$(grep -cxE'; then
+    h_score HM8 "$MUTDIR/hm8.sh" "1-1-1-1-1-1-1-0-1-0" "the dispatch keyed on the bare word inputs.decl, which the pre-dispatch hook's comments carry"
+  else bad "FIXTURE ERROR: HM8's anchor no longer occurs exactly once in the runner — DID NOT APPLY"; fi
+}
+sec_HM9() {
+  if mkmutant "$MUTDIR/hm9.sh" '  echo "  newline-joined list arrives as ONE argument; word-split it explicitly." >&2
+  echo "  log: $LOG" >&2
+  exit 2' '  echo "  newline-joined list arrives as ONE argument; word-split it explicitly." >&2
+  echo "  log: $LOG" >&2
+  echo "# disposition: SELF-UPDATE-DEFER — carry slice + gate record + this log to step 7"
+  exit 2'; then
+    h_score HM9 "$MUTDIR/hm9.sh" "1-1-1-1-1-1-1-1-0-1" "the disposition token printed on an exit-2 refusal, which keeps its own remedy"
+  else bad "FIXTURE ERROR: HM9's anchor no longer occurs exactly once in the runner — DID NOT APPLY"; fi
+}
+
 # ------------------------------------------------------------------------- the shared read-only worlds
 # Built ONCE, before any scorer copies anything: the filtered clone seeds its 030 record into the
 # shared `$LOGDIR2`, and Part 21's world seeds its record into its consumer, so every private copy
@@ -1619,6 +1696,7 @@ build_filt_world
 build_i_world
 build_p21_world
 build_q_world
+build_h_world
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/$NAME.XXXXXX")" || { echo "FIXTURE ERROR: cannot create a scratch directory" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd -P)"; sufl_tmp "$WORK"
 
@@ -1629,6 +1707,7 @@ N_REC="$(set -- "$RECONCILE"/*.sh; [ -e "$1" ] && echo "$#" || echo 0)"
 if [ -n "$D_BASE" ] && [ -n "$D_THEIRS" ] && [ -n "$D_QUIET" ] && [ -n "$D_SHIP" ] && [ -n "$D_TREE" ] \
    && [ -n "$W_BASE" ] && [ -n "$W_THEIRS" ] && [ -n "$I_B" ] && [ -n "$I_M" ] && [ -n "$I_T" ] \
    && [ -n "$QD_B" ] && [ -n "$QD_T" ] && [ -f "$RECONCILE/lib.sh" ] && [ -f "$RECONCILE/preclassify.sh" ] \
+   && [ "${H_OK:-0}" = 1 ] && [ -n "$HD_B" ] && [ -n "$HD_T" ] \
    && [ "$N_REC" -ge 3 ]; then
   ok "MX-pre: every shared repository resolved its refs, and the runner's reconcile directory holds $N_REC sibling scripts to copy beside each mutant"
 else
@@ -1644,6 +1723,11 @@ scorer_world() { # <dir>
   cp -Rp "$GCONS" "$sw/gcons" && GCONS="$sw/gcons" && GLOG="$GCONS/_bmad-output/ai-dlc-update" || return 1
   cp -Rp "$P21C" "$sw/p21c" && P21C="$sw/p21c" && P21LOG="$P21C/_bmad-output/ai-dlc-update" || return 1
   p22_stub "$sw/stub" || return 1
+  # The H consumers are WRITTEN by every hsig run (logs, the stdout file dir), so each scorer owns copies.
+  cp -Rp "$HC1" "$sw/hc1" && HC1="$sw/hc1" || return 1
+  cp -Rp "$HC2" "$sw/hc2" && HC2="$sw/hc2" || return 1
+  cp -Rp "$HC3" "$sw/hc3" && HC3="$sw/hc3" || return 1
+  HOUTD="$sw/hout"; mkdir -p "$HOUTD" || return 1
   MUTDIR="$sw/mut"; mkdir -p "$MUTDIR" || return 1
   cp "$RECONCILE"/*.sh "$MUTDIR"/ 2>/dev/null
   CTL="$MUTDIR/control-unmutated.sh"; cp "$RUNNER" "$CTL" || return 1
@@ -1654,7 +1738,8 @@ scorer_world() { # <dir>
   # every G-part seeds into it; here nothing has yet, so it is made, then asserted with the rest.
   mkdir -p "$GLOG" || return 1
   for n in "$P22S/mktemp" "$LOGDIR2" "$GLOG" "$P21LOG" "$CONS2/tests/fixtures/green-one/run.sh" \
-           "$GCONS/.githooks/pre-push"; do
+           "$GCONS/.githooks/pre-push" "$HC1/scripts/ai-dlc/hermetic-run.sh" "$HC2/.githooks/pre-push" \
+           "$HC3/.githooks/pre-push"; do
     [ -e "$n" ] || { echo "a private world is incomplete: $n is absent"; return 1; }
   done
 }
@@ -1724,7 +1809,7 @@ judge() { # <verdict-stem> <section> <declared line count>
 
 # ------------------------------------------------------------------------------ the dispatch
 # The unsplit fixture's own serial order. CONTROL declares two lines, every other section one.
-for _s in CONTROL M0 M15 M1 M2 M3 M4 M5 M6 M7 M8 M9 M10 M11 M12 M13 M13b NCTL N1 N2 N3 N4 N5 N6 N7 N8 M14 MG1 MG2 MG3 MG4 MG5 MG6 MG7 MG8 MG8b MG8c MG9 MG10 MG11 MG13 MG12 P21CTL M21a M21b M22 QM QM2; do
+for _s in CONTROL M0 M15 M1 M2 M3 M4 M5 M6 M7 M8 M9 M10 M11 M12 M13 M13b NCTL N1 N2 N3 N4 N5 N6 N7 N8 M14 MG1 MG2 MG3 MG4 MG5 MG6 MG7 MG8 MG8b MG8c MG9 MG10 MG11 MG13 MG12 P21CTL M21a M21b M22 QM QM2 HCTL HM1 HM2 HM3 HM4 HM5 HM6 HM7 HM8 HM9; do
   case "$_s" in CONTROL) dispatch "$_s" 2 ;; *) dispatch "$_s" 1 ;; esac
 done
 
