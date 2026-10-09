@@ -62,7 +62,6 @@ if [ -z "$VALIDATOR" ]; then
   exit 2
 fi
 printf 'HERMETIC-CONSUMED %s\n' "$(cd "$(dirname "$VALIDATOR")" && pwd)/$(basename "$VALIDATOR")"
-GITIGNORE="$(dirname "$(dirname "$DIR")")/.gitignore"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -74,7 +73,6 @@ seed() {
   mkdir -p "$d/.claude/rules" "$d/scripts" "$d/core/fixtures/demo" "$d/docs/plans"
   echo "0.0.0" > "$d/VERSION"
   cp "$VALIDATOR" "$d/scripts/validate-claude-rules.sh"
-  [ -f "$GITIGNORE" ] && cp "$GITIGNORE" "$d/.gitignore"
   printf 'run\n' > "$d/core/fixtures/demo/run.sh"
   printf 'plan\n' > "$d/docs/plans/p.md"
   cat > "$d/.claude/rules/scoped.md" <<'EOF'

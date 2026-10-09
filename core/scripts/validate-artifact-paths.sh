@@ -359,7 +359,7 @@ if [ "$N_AMBIG" -gt 0 ] || [ "$N_NOAREA" -gt 0 ] || [ "$N_STORY" -gt 0 ]; then
   }
   [ "$N_NOAREA" -gt 0 ] && {
     echo "  NO-AREA           $N_NOAREA  a sprint directory sits directly under a scan root that is not"
-    echo "                        an area. Declare the area in $(bash "$CONFIG" --consumer-file 2>/dev/null || echo 'your artifact-paths file'), or move it under one."
+    echo "                        an area. Declare the area in $(bash "$CONFIG" --consumer-file --root "$ROOT_ABS" 2>/dev/null || echo 'your artifact-paths file'), or move it under one."
   }
   [ "$N_STORY" -gt 0 ] && {
     echo "  STORY-NO-SPRINT   $N_STORY  of $N_STORY_CORPUS file(s) under a stories/ directory sit outside the"
