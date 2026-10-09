@@ -1,0 +1,5 @@
+# adversarial-shard-merge drives the merge plus its sibling validators and partitioners (whole scripts dir, incl. lib/meta-gate.sh), the provenance schema, and sources the shared preamble.
+!core/scripts/merge-adversarial-shards.sh
+core/scripts/
+core/schemas/provenance-block.json
+core/fixtures/lib/

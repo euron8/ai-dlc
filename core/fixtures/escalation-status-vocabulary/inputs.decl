@@ -1,0 +1,4 @@
+!core/scripts/validate-escalation-status-vocabulary.sh
+core/skills/ai-dlc/escalations.md
+core/skills/ai-dlc/steps/gate-validation.md
+core/skills/ai-dlc/enforcement-map.yaml

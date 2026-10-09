@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 # remediator-shard-join/run.sh -- join-remediator-shards.sh and the write ledger it reads. The
 # behavioural arms only: the JX mutation battery that proves each of them can fail is
 # `remediator-shard-join-mutants`, distribution-only, which sources the SAME predicates from
@@ -35,6 +36,8 @@ NAME="remediator-shard-join"
 
 # ---------------------------------------------------------------------------------- the arms
 echo "$NAME:"
+echo "HERMETIC-CONSUMED core/scripts/join-remediator-shards.sh"
+echo "HERMETIC-CONSUMED core/hooks/ai-dlc-gate-remediation-guard.sh"
 
 # L1-L3: the ledger, as the REAL hook writes it.
 w="$(new_world)"; three_writers "$w"
@@ -182,6 +185,7 @@ else
   fi
 fi
 
+echo "HERMETIC-CONSUMED core/hooks/ai-dlc-derivation-capture.sh"
 p_derivdoc "$DHOOK" && ok "D5: a part whose derivation names the DOCUMENT -> the capture hook accepts it (a stale control in the same world refused), the join assembles, the derivations re-run over the sprint dir -> rc 0, 2 reproduce" \
   || bad "D5: a document-naming part derivation did not survive capture, join and the gate re-run (hook rc=${CAP_RC:-?}, join rc=$RC, derivations rc=${DV_RC:-?}): $(cat "$CAP_ERR" "$JO" "$DV_OUT" 2>/dev/null)"
 p_derivsec "$DHOOK" && ok "D6: a part whose derivation names the SECTION FILE -> the capture hook refuses it 'reads the section copy'; written past the hook, the gate re-run after the join -> rc 1, 2 stale" \

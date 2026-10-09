@@ -1,0 +1,5 @@
+# apply-drift-after-write sources the shared preamble, seeds a repo from the register schema, and drives apply.sh and its sibling scripts from the reconcile directory and copies of it.
+core/fixtures/lib/
+core/schemas/layer-adjudication-register.json
+core/skills/ai-dlc-update/reconcile/
+!core/skills/ai-dlc-update/reconcile/apply.sh

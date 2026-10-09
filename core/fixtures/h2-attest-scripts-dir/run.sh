@@ -72,6 +72,7 @@ done
 
 SUT="$SRC/validate-h2-attestation.sh"
 [ -f "$SUT" ] || { echo "FIXTURE ERROR: $SUT not found" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/scripts/validate-h2-attestation.sh"
 
 # validate-provenance-block.sh loads schemas/provenance-block.json and refuses to guess
 # without it, so the synthetic consumer needs a real .claude/schemas/. Omit it and the

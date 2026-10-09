@@ -62,6 +62,7 @@ fi
 # PRINT THE RESOLVED PATH. A mutant applied to the copy the run never loads leaves every arm
 # green, which reads exactly like an arm that cannot fire.
 echo "  subject: ${SUBJECT#"$ROOT"/}"
+echo "HERMETIC-CONSUMED ${SUBJECT#"$ROOT"/}"
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
@@ -732,6 +733,7 @@ else
   # THE HOOK RAN AT ALL, in a scratch consumer: an unmutated drive over a current world must
   # exit 0 and print the renderer's own OK line. A hook that died before this arm would
   # otherwise make every mutant below read as killed.
+  echo "HERMETIC-CONSUMED ${HOOK#"$ROOT"/}"
   HP="$(hook_world "$HOOK")" || { echo "FIXTURE BROKEN: could not build a scratch consumer for the hook" >&2; exit 2; }
   render "$SUBJECT" "$HP" >/dev/null
   HOUT="$(drive_hook "$HP")"; HRC=$?

@@ -1,0 +1,5 @@
+# apply-drift-refile drives apply.sh and its reconcile siblings, and copies the whole directory to
+# build mutants. seed.sh and run.sh find it by a $0-rooted walk and read nothing else under the
+# repo root. The preamble is sourced by run.sh.
+!core/skills/ai-dlc-update/reconcile/
+core/fixtures/lib/

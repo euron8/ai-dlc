@@ -1,0 +1,6 @@
+# retired-fixture-orphan reads the detector under test (copied into a scratch dist), the
+# preclassify.sh mapper (map_consumer() is extracted with awk) and lib.sh (copied beside the
+# detector in the memo cell and sourced by it). The reconcile directory is not globbed.
+!core/skills/ai-dlc-update/reconcile/retired-fixtures.sh
+core/skills/ai-dlc-update/reconcile/preclassify.sh
+core/skills/ai-dlc-update/reconcile/lib.sh

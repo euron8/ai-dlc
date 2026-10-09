@@ -1,0 +1,7 @@
+# The subject and its sourced library, in the reconcile directory the fixture walks up to find.
+# preclassify.sh sources lib.sh with `|| true`, so lib.sh fails open on absence; the sentinel for it is guarded.
+# The rest of the reconcile directory (setup-sites.md, template-sites.md, ...) is declared whole, unkeyed.
+!core/skills/ai-dlc-update/reconcile/preclassify.sh
+!core/skills/ai-dlc-update/reconcile/lib.sh
+core/skills/ai-dlc-update/reconcile/
+core/fixtures/lib/

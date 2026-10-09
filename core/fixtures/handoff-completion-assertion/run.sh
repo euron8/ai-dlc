@@ -90,6 +90,11 @@ done
 # unreachable both callers stand down and every assertion below passes for the wrong reason.
 [ -n "$SCHEMA" ] || broken "schemas/pause-routing.json not found in either layout; the handoff vocabulary is read from there and both hooks would skip, so every assertion below would pass without the predicate running"
 
+echo "HERMETIC-CONSUMED core/hooks/ai-dlc-continue.sh"
+echo "HERMETIC-CONSUMED core/hooks/ai-dlc-recover.sh"
+echo "HERMETIC-CONSUMED core/hooks/ai-dlc-handoff-pending.sh"
+echo "HERMETIC-CONSUMED core/schemas/pause-routing.json"
+
 ROOT="$(bash "$HERE/seed.sh")"
 { [ -n "$ROOT" ] && [ -d "$ROOT" ]; } || broken "seed.sh produced no sandbox root"
 

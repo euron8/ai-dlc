@@ -88,6 +88,7 @@ side_of() { printf '%s\n' "$ORIENT" | awk -v pat="$1" '
   /ONLY IN THEIRS/{s="THEIRS"} /ONLY IN OURS/{s="OURS"} $0 ~ pat {print s; exit}'; }
 
 echo "reconcile-emit-report:"
+echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/emit-report.sh"
 
 # EVERY ASSERTION FROM HERE TO THE WORLD-GUARD SECTION READS THE SEEDED WORLD, and probe-only
 # mode never builds one. The guards under test construct their own throwaway repository, so

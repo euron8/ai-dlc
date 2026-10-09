@@ -1,0 +1,12 @@
+# snapshot-archive-rotate reads the rotator under test and the two control hooks its absorb arms drive.
+# The hooks source their siblings (handoff-pending, context-provenance) and resolve the routing and
+# harness-origin schemas beside core/hooks; the preamble is sourced by run.sh. Its own directory is
+# copied by the runner without being named.
+!core/scripts/rotate-snapshot-archive.sh
+!core/hooks/ai-dlc-continue.sh
+!core/hooks/ai-dlc-pause.sh
+!core/hooks/ai-dlc-handoff-pending.sh
+!core/hooks/ai-dlc-context-provenance.sh
+!core/schemas/pause-routing.json
+!core/schemas/harness-origin.json
+core/fixtures/lib/

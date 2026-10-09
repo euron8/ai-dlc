@@ -47,6 +47,7 @@ SIB="$HERE/../apply-setup-sited-merge"
 . "$SIB/lib.sh"
 grep -qF 'say RESOLVED setup-site-merge' "$REC/apply.sh" \
   || broken "$REC/apply.sh carries no \`say RESOLVED setup-site-merge\` line; every mutant below edits a subject that is not there"
+echo "HERMETIC-CONSUMED $REC/apply.sh"
 lib_init
 
 # --- the control: the unmutated program, copied the way every mutant is -------------------------

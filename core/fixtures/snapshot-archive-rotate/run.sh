@@ -79,6 +79,16 @@ HOOK_C="$HOOKDIR/ai-dlc-continue.sh"
 HOOK_P="$HOOKDIR/ai-dlc-pause.sh"
 [ -f "$HOOK_C" ] && [ -f "$HOOK_P" ] \
   || { echo "FIXTURE ERROR: ai-dlc-continue.sh / ai-dlc-pause.sh not found beside the rotator (${HOOKDIR})" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/scripts/rotate-snapshot-archive.sh"
+echo "HERMETIC-CONSUMED core/hooks/ai-dlc-continue.sh"
+echo "HERMETIC-CONSUMED core/hooks/ai-dlc-pause.sh"
+# The hooks load these siblings only when present and fail open on absence, so the sentinel is guarded.
+[ -f "$HOOKDIR/ai-dlc-handoff-pending.sh" ] && echo "HERMETIC-CONSUMED core/hooks/ai-dlc-handoff-pending.sh"
+[ -f "$HOOKDIR/ai-dlc-context-provenance.sh" ] && echo "HERMETIC-CONSUMED core/hooks/ai-dlc-context-provenance.sh"
+_PRS=""; for _c in "$HERE/../../schemas/pause-routing.json" "$HERE/../../../.claude/schemas/pause-routing.json"; do [ -f "$_c" ] && { _PRS="$_c"; break; }; done
+[ -n "$_PRS" ] && echo "HERMETIC-CONSUMED core/schemas/pause-routing.json"
+_HOS=""; for _c in "$HERE/../../schemas/harness-origin.json" "$HERE/../../../.claude/schemas/harness-origin.json"; do [ -f "$_c" ] && { _HOS="$_c"; break; }; done
+[ -n "$_HOS" ] && echo "HERMETIC-CONSUMED core/schemas/harness-origin.json"
 command -v jq >/dev/null 2>&1 || { echo "FIXTURE ERROR: jq is required to drive the hooks" >&2; exit 2; }
 
 fails=0

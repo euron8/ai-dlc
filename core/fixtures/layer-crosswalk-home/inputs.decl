@@ -1,0 +1,9 @@
+# layer-crosswalk-home reads: the linter under test, the shipped layer contract and extensions
+# README (core/skills/ai-dlc/), and apply.sh with the whole reconcile directory beside it.
+# scripts/install.sh is NOT declared: it does not exist on a consumer, so a declaration naming it
+# is exit 2 there, and the fixture's installer arms are distribution-only and assert their own skip.
+!core/scripts/validate-layer-entries.sh
+!core/skills/ai-dlc-update/reconcile/apply.sh
+core/skills/ai-dlc-update/reconcile/
+core/skills/ai-dlc/
+core/fixtures/lib/

@@ -54,6 +54,9 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 
 echo "preclassify-rename-row"
 echo "  subject: ${RECON#$ROOT/}/preclassify.sh"
+# The REQUIRED inputs of inputs.decl: the subject and the library it sources, both driven below.
+echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/preclassify.sh"
+echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/lib.sh"
 
 # --- a synthetic distribution, two commits ------------------------------------
 # base ships a fixture directory with a transcript and a runner. theirs renames the

@@ -1,0 +1,8 @@
+# apply-restamp-worklist sources the shared preamble, drives apply.sh and its reconcile siblings from copies of that directory, reads the real pre-push for the C6 premise, copies the transient-ignore renderer and its schema into seeded consumers, and runs the real hook-registration validator.
+core/fixtures/lib/
+core/skills/ai-dlc-update/reconcile/
+!core/skills/ai-dlc-update/reconcile/apply.sh
+!core/git-hooks/pre-push
+!core/scripts/sync-transient-ignore.sh
+!core/schemas/pipeline-state-paths.json
+core/scripts/validate-hook-registration.sh

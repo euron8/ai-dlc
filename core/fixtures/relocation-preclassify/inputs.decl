@@ -1,0 +1,6 @@
+# relocation-preclassify reads the reconcile directory: preclassify.sh and the sibling files it sources
+# (lib.sh) or setup-sites.md / template-sites.md, plus emit-report.sh and its siblings in arm G. The
+# fixture copies the whole directory into mutants. Everything else it builds itself under mktemp.
+!core/skills/ai-dlc-update/reconcile/
+# run.sh sources the shared preamble before any git call.
+core/fixtures/lib/

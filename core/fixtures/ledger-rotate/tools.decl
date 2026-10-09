@@ -1,0 +1,22 @@
+# Tools run.sh, seed.sh, the preamble and the reconcile scripts invoke.
+bash
+cat
+cp
+sed
+grep
+awk
+mktemp
+dirname
+rm
+mkdir
+sort
+wc
+head
+tail
+tr
+cut
+diff
+basename
+cmp
+mv
+git

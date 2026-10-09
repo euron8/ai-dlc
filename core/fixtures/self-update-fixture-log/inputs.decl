@@ -1,0 +1,7 @@
+# self-update-fixture-log drives the reconcile runner under test against throwaway distribution and
+# consumer trees it builds under mktemp. The runner sources its siblings in the reconcile directory
+# (preclassify.sh, self-update-gate.sh and others), so that directory is declared whole. The
+# preamble is sourced first by run.sh. lib.sh and seed.sh sit in the fixture's own directory.
+core/skills/ai-dlc-update/reconcile/
+!core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh
+core/fixtures/lib/

@@ -1,0 +1,14 @@
+bash
+awk
+sed
+grep
+cmp
+cp
+cut
+head
+mktemp
+rm
+tr
+wc
+dirname
+git

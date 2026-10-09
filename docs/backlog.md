@@ -180,11 +180,15 @@ the seeded copy fails under the runner and passes in the plain pool. Measured: `
 without `--root`, and that helper's line 92 takes the override; 2 of 69 fail), and `push-drain-refusals`
 (`pdr_root` at `run.sh:40-50` ignores the override and walks up from its own location, which inside the
 sandbox ESCAPES to the `mktemp` parent, a directory that carries `.claude/logs` on this box, and reads
-PENDING exit 0). 113 fixtures already scrub `AI_DLC_*` before driving a subject; these three do not.
-The remedy is in each fixture: unset the override in the tool invocation, or pass `--root`, or (for the
-walker) honour the override. Not a runner change: the other 93 declared fixtures depend on the export.
+PENDING exit 0). A fourth, `taught-schema`, is the same shape through
+`validate-provenance-block.sh:167-169` (root candidates before script-relative). The escape class has a
+second instance that was resolved by declaration: `h2-attest-scripts-dir`'s validator walk stopped at
+the `mktemp` parent until `core/skills/ai-dlc/` was declared, so the marker it walks for exists inside
+the sandbox. 113 fixtures already scrub `AI_DLC_*` before driving a subject; these four do not. The
+remedy is in each fixture: unset the override in the tool invocation, or pass `--root`, or (for the
+walker) honour the override. Not a runner change: the other declared fixtures depend on the export.
 
-verify: sh for f in story-corpus-sprint-slot artifact-path-migration push-drain-refusals; do [ -f core/fixtures/$f/inputs.decl ] || exit 1; done
+verify: sh for f in story-corpus-sprint-slot artifact-path-migration push-drain-refusals taught-schema; do [ -f core/fixtures/$f/inputs.decl ] || exit 1; done
 
 ## BL-488 — two pre-existing fixture defects the hermetic census read past
 
@@ -196,6 +200,6 @@ nonexistent `core/.gitignore` with `[ -f ]` and silently skips it, a latent no-o
 are declared and PASS; neither declaration touched the defect. Fix each arm so it can fire, with the
 probe-both-ways discipline the repo requires of a new check.
 
-verify: sh n="$(bash core/fixtures/spec-join-integrity/run.sh 2>&1 </dev/null | grep -c 'says: command not found')" || n=0; [ "$n" -eq 0 ]
+verify: sh c="$(grep -n '^says() ' core/fixtures/spec-join-integrity/run.sh | head -1 | cut -d: -f1)"; u="$(grep -nE '^[^#]*\bsays ' core/fixtures/spec-join-integrity/run.sh | head -1 | cut -d: -f1)"; [ -n "$c" ] && [ -n "$u" ] && [ "$u" -gt "$c" ]
 
 

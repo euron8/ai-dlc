@@ -1,0 +1,3 @@
+# suppression-lifetime reads ONE file outside its own directory: the validator under test. The catalog,
+# metrics and escalations are all seeded under a mktemp dir and passed by flag.
+!core/scripts/validate-suppression-lifetime.sh

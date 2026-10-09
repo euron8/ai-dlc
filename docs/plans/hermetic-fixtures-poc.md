@@ -75,12 +75,21 @@ in the pool, a reversed bracket range in a mutant, and is fixed; `BL-488` files 
 fixture defects the hands read past. Peer batches still arriving after the cut (`ai-dlc-99` batch 6
 onward, `ai-dlc-d9` batch 6 onward) go to the next release by the same collection.
 
-**What the next batch owes.** Finish action 4: collect the remaining peer branches by content
-(`git ls-remote --heads github 'b209-a4-*'`; verify base c2bb2b6b, fixture dirs only, a sentinel in
-every declared `run.sh`), cherry-pick them onto a branch cut from `github/main`, re-run every declared
-fixture through the runner 4-wide on a throwaway clone, and land it gated. Then action 5 for the class-b
-rows, starting with the three in `BL-487`. Batch 208 (`ai-dlc-cd`) rewrites `BL-485`'s receipt when it
-builds the shards; do not touch that entry.
+**Batch 209's third release, 0.755.0, closes action 4: `DECLARED` at 157.** Both peer sets are
+finished (73 and 76 of 79), every batch verified from branch content and held to
+`scripts/validate-enforcement-map.sh` exit 0 before the cut. Two fixture fixes shipped under
+declaration (`apply-restamp-worklist`'s T1-T4 had silently skipped on every consumer;
+`escalation-status-vocabulary`'s no-root arm never scrubbed the runner's export). Not declared, with
+cause: the no-repo-input and lib-only fixtures (stay on the map), the `BL-487` class, `self-update-gate`
+(live `show-toplevel`, action 5), and `review-shard-merge-mutants` (deferred to `BL-485`'s shards).
+
+**What the next batch owes.** Action 5: re-root the class-b rows, starting with the four in `BL-487`
+and `self-update-gate`; each is a fixture edit (scrub the override before driving the subject, or pass
+`--root`, or reuse the fixture's own candidate loop), then a declaration by the action-3 method. Before
+any gate: `bash scripts/validate-enforcement-map.sh` on the stacked branch must exit 0, and every
+sentinel obeys the two rules the 0.753.0 gate taught (no `$(dirname "$X")/../<subtree>` walk; a
+`run.sh` naming `core/hooks/` or `$HOOK` carries the `AI_DLC_*` scrub loop). Batch 208 (`ai-dlc-cd`)
+rewrites `BL-485`'s receipt when it builds the shards; do not touch that entry.
 
 Your instructions are four sections. Read all four before acting: `## Start here` (the trees and
 the read/write boundary), `### NEXT ACTIONS — numbered, in order`, `### Ping the operator`, and
@@ -137,7 +146,7 @@ find core/fixtures -mindepth 1 -maxdepth 1 -type d | wc -l          # fixture di
 ls core/fixtures/*/run.sh | wc -l                                   # drivable fixtures (246)
 ls core/fixtures/*/.dist-only | wc -l                               # dist-only         (67)
 # declared fixtures. CONTROL: core/fixtures/hermetic-runner/run.sh exists (the runner's self-probe, undeclared by design).
-n=0; for d in core/fixtures/*/; do [ -f "$d/inputs.decl" ] && n=$((n+1)); done; echo "DECLARED $n"; ls core/fixtures/hermetic-runner/run.sh   # 103 at 0.753.0
+n=0; for d in core/fixtures/*/; do [ -f "$d/inputs.decl" ] && n=$((n+1)); done; echo "DECLARED $n"; ls core/fixtures/hermetic-runner/run.sh   # 157 at 0.755.0
 grep -v '^#' "$MAP" | cut -f1 | sort -u | wc -l                     # mapped fixtures   (236)
 grep -v '^#' "$MAP" | wc -l                                         # map rows          (29955)
 # drivable fixtures with NO map rows. CONTROL: absorbed-specifics-survive has 9 rows.
@@ -195,9 +204,9 @@ actions 3 and 4 are COMPLETED (0.750.0); they are kept numbered so citations res
    reports PASS. Name both in the release message. Push
    through the gate; the declared fixture is excluded from the trace queue, so no trace is owed.
    A 5a probe that does not FAIL stops the batch and goes to the operator.
-4. **DECLARE THE DECLARATION-ONLY SET** — 95 of the class-a rows COMPLETED at 0.753.0; the rest of
-   class a arrives on the peers' later `b209-a4-*` branches and is collected as the resume block says.
-   Exclude up front: census `copies=none` rows and lib-only readers (stay on the map), and any row
+4. **DECLARE THE DECLARATION-ONLY SET** — COMPLETED at 0.753.0 and 0.755.0 (149 of the 158 class-a
+   rows; the nine not declared are named in the resume block with cause). The method stays for any
+   fixture action 5 re-roots. Exclude up front: census `copies=none` rows and lib-only readers (stay on the map), and any row
    whose subject honours `AI_DLC_PROJECT_ROOT` ahead of its own walk (class b, `BL-487`). Then every
    class-b row whose `roots` column is a `$0` walk and whose `git_dep` is not `live`. Per fixture the
    two 5a probes of action 3, and for a `VERSION` walker the drop-VERSION probe (refuse inside the
@@ -265,9 +274,12 @@ control present.
 For batch 209's second release (satisfied at 0.753.0): 95 action-4 fixtures declared, every one
 re-run through the runner on the release branch, `DECLARED` reading 103 with the control present.
 
-For the next batch: the remaining action-4 peer branches collected and landed, each fixture with its
+For batch 209's third release (satisfied at 0.755.0): the remaining action-4 peer branches collected
+and landed, `DECLARED` reading 157 with the control present.
+
+For the next batch: at least the four `BL-487` fixtures re-rooted and declared, each with its
 `hermetic-run.sh` PASS and 5a probes named in the release message, and `DECLARED` in the derive block
-reading more than 103 with the control present.
+reading more than 157 with the control present.
 
 ## Hazards
 

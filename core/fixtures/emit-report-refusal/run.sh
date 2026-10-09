@@ -55,6 +55,7 @@ trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
 RDIR="$(dirname "$EMIT")"
+echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/emit-report.sh"
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
@@ -640,6 +641,7 @@ else
   else
     H="$WORK/hook"; mkdir -p "$H/d/core/scripts" "$H/d/templates" "$H/c/.claude/hooks" "$H/c/.claude/skills/ai-dlc-update/reconcile"
     cp "$HV" "$H/d/core/scripts/validate-hook-registration.sh"
+    echo "HERMETIC-CONSUMED core/scripts/validate-hook-registration.sh"
     printf '{\n  "hooks": {}\n}\n' > "$H/d/templates/settings.json.template"
     hg() { git -C "$H/d" -c user.name=f -c user.email=f@f -c commit.gpgsign=false "$@"; }
     git init -q "$H/d"; hg add -A; hg commit -qm base; HB="$(hg rev-parse HEAD)"

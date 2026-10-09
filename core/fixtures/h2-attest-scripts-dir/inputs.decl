@@ -1,0 +1,9 @@
+# h2-attest-scripts-dir copies every core script into a synthetic consumer and drives --attest, which runs check-17-bypass against sibling fixture dirs.
+!core/scripts/validate-h2-attestation.sh
+core/scripts/
+core/schemas/
+core/fixtures/lib/
+core/fixtures/check-17-bypass/
+core/fixtures/check-h1-recursion/
+core/fixtures/check-manifest-bypass/
+core/skills/ai-dlc/

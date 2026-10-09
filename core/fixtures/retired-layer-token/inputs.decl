@@ -1,0 +1,4 @@
+# retired-layer-token sources the shared preamble and drives the detector plus its reconcile siblings (emit-report.sh, lib.sh, setup-sites.md); the detector under test is required.
+!core/skills/ai-dlc-update/reconcile/retired-layer-token.sh
+core/skills/ai-dlc-update/reconcile/
+core/fixtures/lib/

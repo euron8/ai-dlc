@@ -47,6 +47,7 @@ while [ "$d" != "/" ]; do
   d="$(dirname "$d")"
 done
 [ -n "$ROT" ] || { echo "FIXTURE ERROR: ledger-rotate.sh not found in either layout" >&2; exit 2; }
+printf 'HERMETIC-CONSUMED %s\n' "$ROT"
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }

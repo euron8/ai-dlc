@@ -1,0 +1,28 @@
+# The tools run.sh, seed.sh and the three hooks (plus the sibling libraries they source) invoke,
+# keyed on their binaries. No node: this fixture runs none.
+awk
+basename
+bash
+cat
+cp
+cut
+date
+dirname
+env
+git
+grep
+head
+jq
+ls
+mkdir
+mktemp
+mv
+od
+rm
+sed
+sleep
+sort
+tail
+touch
+tr
+wc

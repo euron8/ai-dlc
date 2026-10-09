@@ -43,6 +43,9 @@ GRAMMAR="$(pick "$HERE/../../skills/ai-dlc/artifact-path-grammar.md" \
 [ -n "$VAL" ] && [ -n "$MIG" ] && [ -n "$CONFIG" ] && [ -n "$GRAMMAR" ] \
   || { echo "FIXTURE ERROR: cannot locate validate-artifact-paths.sh, migrate-artifact-paths.sh, artifact-path-config.sh and/or artifact-path-grammar.md" >&2; exit 2; }
 
+# The REQUIRED input of inputs.decl: every assertion below drives the validator picked above.
+echo "HERMETIC-CONSUMED core/scripts/validate-artifact-paths.sh"
+
 # The two roles that produce gate evidence, for section 7. install.sh maps
 # core/team-roles/ -> .claude/team-roles/, so both layouts are candidates.
 #

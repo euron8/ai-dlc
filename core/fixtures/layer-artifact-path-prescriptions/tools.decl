@@ -1,0 +1,22 @@
+# Tools run.sh, seed.sh, the validator and artifact-path-config.sh invoke. No node.
+awk
+basename
+bash
+cat
+cmp
+comm
+cp
+cut
+dirname
+find
+git
+grep
+head
+mkdir
+mktemp
+mv
+paste
+rm
+sed
+sort
+tr

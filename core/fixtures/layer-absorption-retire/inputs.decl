@@ -1,0 +1,5 @@
+# layer-absorption-retire sources the shared preamble, runs layer-drift.sh (which sources lib.sh and reads ledger-reverify.sh from beside it as text), and copies the reconcile directory and the adjudication schema into its seeded trees.
+!core/skills/ai-dlc-update/reconcile/layer-drift.sh
+core/skills/ai-dlc-update/reconcile/
+core/schemas/layer-adjudication-register.json
+core/fixtures/lib/

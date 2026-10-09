@@ -80,6 +80,9 @@ else
   cp "$STEPS" "$SUBJ" || { echo "FAIL: could not materialise $STEPS"; exit 1; }
 fi
 STEPS="$SUBJ"
+# The REQUIRED inputs of inputs.decl: lib.sh was sourced above and retro.md was materialised into $SUBJ.
+echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/lib.sh"
+echo "HERMETIC-CONSUMED core/skills/ai-dlc/steps/retro.md"
 
 STEP_HEADING='4a. Close-Out Sweep'
 ARTIFACT_RE='^#{3,6}[[:space:]]+`## Machine Audits`'

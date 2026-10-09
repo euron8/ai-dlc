@@ -75,6 +75,7 @@ NAME="apply-self-overwrite"
 
 echo "$NAME:"
 
+echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/"
 worlds "$W/s" "$REC"
 
 # A predicate answering 2 could not stand up its world. For the two sanity predicates every arm

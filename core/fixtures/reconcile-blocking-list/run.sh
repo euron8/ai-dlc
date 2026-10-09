@@ -26,6 +26,7 @@ MW_ERR_A="$WORK/at-theirs-check.err"
 MW_ERR_B="$WORK/at-theirs-check-control.err"
 
 echo "reconcile-blocking-list:"
+echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/"
 
 # --- Assertion 0: SANITY — print mode renders the blocker ---------------------
 out="$(bash "$HB" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"

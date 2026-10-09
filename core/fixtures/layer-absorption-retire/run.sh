@@ -34,6 +34,7 @@ DRIFT="$(pick "${1:-}" "$HERE/../../skills/ai-dlc-update/reconcile/layer-drift.s
 # A MISSING SUBJECT IS NOT A PASS. Every assertion here is "did this row appear", so a run that
 # cannot invoke the classifier produces no rows and would score green on the negative arms.
 [ -n "$DRIFT" ] || { echo "FIXTURE ERROR: cannot locate layer-drift.sh" >&2; exit 2; }
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$DRIFT")" && pwd)/$(basename "$DRIFT")"
 
 ROOT="$(mktemp -d "${TMPDIR:-/tmp}/layer-absorption-retire.XXXXXX")"
 trap 'rm -rf "$ROOT"' EXIT

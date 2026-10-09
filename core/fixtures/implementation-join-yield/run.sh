@@ -61,6 +61,8 @@ STOP_HOOK="$(pick "$HERE/../../hooks/ai-dlc-continue.sh" \
                   "$HERE/../../../.claude/hooks/ai-dlc-continue.sh" \
                   "$HERE/../../../core/hooks/ai-dlc-continue.sh")"
 [ -n "$STOP_HOOK" ] || { echo "FIXTURE ERROR: cannot locate ai-dlc-continue.sh" >&2; exit 2; }
+_HD="$(cd "$(dirname "$STOP_HOOK")" && pwd)"; echo "HERMETIC-CONSUMED $_HD/ai-dlc-continue.sh"
+[ -f "$_HD/ai-dlc-handoff-pending.sh" ] && echo "HERMETIC-CONSUMED $_HD/ai-dlc-handoff-pending.sh"
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }

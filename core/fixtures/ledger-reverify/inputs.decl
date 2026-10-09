@@ -1,0 +1,7 @@
+# ledger-reverify reads the reconcile engine whole (ledger-reverify.sh sources lib.sh and lifts map_consumer from preclassify.sh; the mutants copy the directory) and the shared preamble.
+!core/skills/ai-dlc-update/reconcile/ledger-reverify.sh
+core/skills/ai-dlc-update/reconcile/
+core/fixtures/lib/
+core/fixtures/ledger-reverify-b/run.sh
+core/fixtures/ledger-reverify-c/run.sh
+core/fixtures/ledger-reverify-d/run.sh

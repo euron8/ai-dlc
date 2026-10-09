@@ -1,0 +1,4 @@
+# The reconcile engine under test: run.sh copies the whole directory (apply.sh and every sibling it calls).
+!core/skills/ai-dlc-update/reconcile/
+# preamble sourced by run.sh line 2.
+core/fixtures/lib/

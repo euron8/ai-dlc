@@ -1,0 +1,17 @@
+# The tools run.sh, the sibling seed.sh and the validator's shell section invoke.
+basename
+bash
+cat
+chmod
+cmp
+cp
+cut
+dirname
+env
+grep
+head
+mkdir
+mktemp
+python3
+rm
+sed

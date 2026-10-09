@@ -35,6 +35,8 @@ else
   exit 2
 fi
 
+echo "HERMETIC-CONSUMED $DETECT"
+
 WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT

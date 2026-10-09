@@ -1,0 +1,27 @@
+# Tools run.sh, seed.sh and layer-drift.sh/lib.sh invoke (measured with PATH shims over a plain run).
+awk
+bash
+cat
+chmod
+cmp
+comm
+cp
+cut
+dirname
+find
+git
+grep
+head
+jq
+ls
+mkdir
+mktemp
+mv
+python3
+rm
+sed
+sort
+tail
+tr
+uniq
+wc

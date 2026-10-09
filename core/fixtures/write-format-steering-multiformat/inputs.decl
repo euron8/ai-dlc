@@ -1,0 +1,6 @@
+# write-format-steering-multiformat drives the validator, a steering schema set and the declared
+# lib.sh. seed.sh copies all three into seven mktemp worlds; the preamble is sourced by run.sh.
+!core/scripts/validate-write-format-steering.sh
+core/schemas/
+core/skills/ai-dlc-update/reconcile/lib.sh
+core/fixtures/lib/

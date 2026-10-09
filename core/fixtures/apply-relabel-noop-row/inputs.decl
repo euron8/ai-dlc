@@ -1,0 +1,4 @@
+# apply-relabel-noop-row sources the shared preamble and drives the reconcile directory's apply.sh (the subject) plus the sibling scripts it invokes.
+core/fixtures/lib/
+core/skills/ai-dlc-update/reconcile/
+!core/skills/ai-dlc-update/reconcile/apply.sh

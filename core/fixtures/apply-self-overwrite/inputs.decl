@@ -1,0 +1,5 @@
+# apply-self-overwrite copies the reconcile/ directory whole into synthetic dist and consumer worlds
+# (lib.sh mk_dist, mk_cons) and drives the consumer's copy of apply.sh. The directory is the subject.
+!core/skills/ai-dlc-update/reconcile/
+# preamble.sh is sourced first by run.sh; non-discriminating, declared never required.
+core/fixtures/lib/

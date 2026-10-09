@@ -1,0 +1,20 @@
+# Tools run.sh and the reconcile scripts (preclassify.sh, lib.sh, emit-report.sh and the siblings
+# emit-report.sh runs in arm G) invoke, keyed on their binaries. No node.
+awk
+bash
+cat
+cp
+dirname
+find
+git
+grep
+head
+mkdir
+mktemp
+mv
+perl
+rm
+sed
+sort
+tr
+wc

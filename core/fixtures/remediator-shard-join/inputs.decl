@@ -1,0 +1,12 @@
+# remediator-shard-join drives the join and the two hooks it records and captures through, and
+# the sibling scripts the join assembles with. lib.sh walks up from its own directory to find
+# each of them; the runner copies this fixture's own directory without it being named here.
+!core/scripts/join-remediator-shards.sh
+!core/hooks/ai-dlc-gate-remediation-guard.sh
+!core/hooks/ai-dlc-derivation-capture.sh
+core/scripts/validate-adversarial-convergence.sh
+core/scripts/partition-document.sh
+core/scripts/partition-subject.sh
+core/scripts/validate-artifact-derivations.sh
+core/team-roles/remediator.md
+core/fixtures/lib/

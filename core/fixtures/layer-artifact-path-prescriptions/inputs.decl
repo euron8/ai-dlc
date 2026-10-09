@@ -1,0 +1,11 @@
+# layer-artifact-path-prescriptions reads the validator under test and the resolver it loads
+# beside itself (fail-open: W11 when absent, so it is REQUIRED and sentinel-guarded in run.sh),
+# plus what seed.sh copies into the seeded consumer: the layer contract, the artifact-path
+# grammar and the sprint-status schema. lib/ is the sourced preamble. Its own directory is
+# copied by the runner without being named.
+!core/scripts/validate-layer-entries.sh
+!core/scripts/artifact-path-config.sh
+core/skills/ai-dlc/layer-contract.yaml
+core/skills/ai-dlc/artifact-path-grammar.md
+core/schemas/sprint-status.json
+core/fixtures/lib/
