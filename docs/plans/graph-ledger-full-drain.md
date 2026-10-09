@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 384..436. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 365..430. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,48 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 216 SHIPPED `v0.761.0` (`0e30bfeb`, #1084) AND HANDED OFF WITH `v0.762.0` MID-GATE.** Handed the plan by
+ai-dlc-a4 at `origin/main` `d1bce2c3`; the session ended at the operator's word on context depth, so actions 5, 6, 6b
+and 9 below are OWED by the receiver, not done. It ran beside ai-dlc-77 (hermetic-pole, batch 217), ai-dlc-a3 (BL-481)
+and ai-dlc-e2 (`b218-git-decl`), one gated push on the box at a time by GATE START / LANDED.
+- **Opening sweep** (at `d1bce2c3`): live 1, unfiled 0, worklist 0, DISCHARGED 1, TERMINAL 223, archive 346. graph then
+  pulled 0.754.0 -> 0.760.0 (#1197) mid-batch and filed three; re-sweep at `d03d5bd9`: live 3, unfiled 3, archive 347,
+  TERMINAL 224, every control passing.
+- **`v0.761.0`**: `PC-S317-READSET-SKIP-DECLARES-DIST-ROOT-SCRIPTS-NO-CONSUMER-HOLDS` (BL-490) and
+  `PC-S317-HERMETIC-RUN-REFUSES-CONSUMER-SKILL-SYMLINKS` (BL-491), the deriver half of graph's never-written key
+  records, and BL-465 on the operator's option (a). Gate: 24 phases PASS, 153 of 269 run, every changed fixture `ok`
+  by name, ref confirmed on origin. BL-490 and BL-491 are LIVE in `docs/backlog.md`, NOT yet annotated LANDED or
+  rotated (action 5 is owed: annotate both `**LANDED (v0.761.0, verified e4e9ec23).**`, `--check`, `--apply`).
+- **`v0.762.0` WAS MID-GATE AT HANDOFF**: `PC-S317-SELF-UPDATE-FIXTURE-RUNNER-IS-NOT-THE-HERMETIC-RUN-PRE-PUSH-PERFORMS`
+  (BL-492), shipped alone (bootstrapping). Release commit `2f3bc05a` on `origin/b216-su-release` (durable copy);
+  gated push to `release/0.762.0` from linked worktree `scratchpad/su762` of session 893f7f6a; exit file
+  `scratchpad/gate762.rc`. **RECEIVER: if `git ls-remote --heads origin release/0.762.0` names `2f3bc05a`, open the PR
+  and squash-merge with `--subject` from that commit; if the ref is absent or the gate went red, re-gate `2f3bc05a`
+  from a fresh linked worktree** (delete `release/0.762.0` first if it exists). Send ai-dlc-77 LANDED; it renumbers
+  its own release (`b217-0762`, verdict store, stopped on an operator order) to the next free version after this.
+- **BL-465**: four designs built; three refuted by tip adversaries (load band, count band with width admission,
+  pole-only per-unit history), the fourth (operator option (a): every dispatched unit recorded, per-unit admission,
+  regime ceiling `REGIME_BAND=100` uncalibrated) shipped in 0.761.0. PARTIAL: its close needs a later push that
+  COMPARES against its own rows. The entry carries the rates and the refutations.
+- **graph's run-all-every-push, root-caused**: one quoted row in graph's `.git/ai-dlc-fixture-readsets.local` emptied
+  the hook's manifest (`could not hash the working tree -- running all 210`) since Oct 8. The operator deleted the row
+  by hand on graph (983 rows, 0 quote-led, verified); 0.761.0 stops the deriver writing such rows; the hook-side guard
+  (`pre-push` ~:605 scoped to the ls-files streams) and the operator ruling "a good fixture run is a good fixture run"
+  (trace an `ok` unmapped fixture whatever the push rc) are in ai-dlc-77's hook release, NOT on main yet. Measured on a
+  graph copy with the row removed: push 1 `210 of 210 run`, push 2 `99 of 210 run ... skipping 111`.
+- **graph delivery gap**: graph's stamp reads 0.760.0 against `VERSION` 0.761.0 (0.762.0 once it lands). graph needs
+  0.761.0 for its five refusals; the pull is the operator's.
+- **OPEN, not filed**: `apply.sh` also splits a fixture directory at the gated apply (`apply.sh:1142`), recorded in
+  BL-492. A peer hand's `pkill -f hermetic-run.sh` SIGTERMed a graph push at 14:13 (133 of 180 "red", workers died);
+  ai-dlc-77 owns that and re-briefed its hands. Eight agent worktrees sit under `.claude/worktrees/` from this batch;
+  snapshot uncommitted files, then `git worktree remove` each (locks naming pid 18599 are session 893f7f6a's own).
+- **OPERATOR RULINGS THIS BATCH**: BL-465 option (a); quiet-box holds and hand timings are banned unless a named decision
+  reads the figure; a map or record update follows a fixture's own successful run, never a green push.
+
+Net for the batch: closed 2 candidates in 0.761.0 (3 with 0.762.0), BL-465 shipped PARTIAL, filed 0.
+
+Batch 215's block below is history: batch 216's block replaces its open items and its delivery gap.
 
 **BATCH 215 SHIPPED NO RELEASE AND DISCHARGED NO CONSUMER CANDIDATE.** It was handed the plan by peer session
 ai-dlc-b9 at `origin/main` `5730ba11` (`VERSION` 0.758.0) and ran beside the hermetic-pole program's queued
@@ -319,72 +361,6 @@ the deriver's sha, so graph's first push after pulling it retraces every locally
 stands: report the gap and write no runbook.
 
 Batch 208's block below is history: batch 209's block replaces its open items, its BL-480 facts and its delivery gap.
-
-**BATCH 208 SHIPPED ONE RELEASE, `v0.751.0` (`74e8ea88`, #1062), AND DISCHARGED ONE CONSUMER CANDIDATE.** It was
-handed the plan by peer session ai-dlc-7f at `origin/main` `41ac5d25` (`VERSION` 0.748.0) and ran beside the hermetic
-program's `v0.750.0` (ai-dlc-1e) and the queued `v0.752.0` (ai-dlc-e2), one gated push on the box at a time by GATE START
-/ LANDED messages, released on `v0.750.0`'s landed sha. The opening sweep read live 2 (one discharged, one untouched),
-unfiled 1, worklist 0, TERMINAL 222, every control passing except one: the `PC-S316-UPDATE-STEP8-…` archive control read
-0 in the sweep hand's run and 1 on the lead's direct rerun of the same line over the same `/tmp/arch.txt`, unexplained.
-- `v0.751.0`: `PC-S317-ADVISOR-GATE-DENIES-A-PUSH-AFTER-A-RECORDED-ADVISOR-CALL-AND-HANDOFF-STEP-3-TIMEOUT-CONFLICTS-WITH-THE-STEERING-BUDGET`,
-  with `BL-486` (the operator-home twin) and `BL-485` (the pole battery split 22/22/22). Defect 1 had two causes, both
-  reproduced against graph's own transcript with the shipped hook: at PreToolUse the current assistant message's lines,
-  the gated call's own included, are absent from the transcript (12 of 13 `claude -p` runs, both shapes) and present
-  after one 1s re-read (13 of 13), so the gate re-reads on the deny path; and a push another PreToolUse hook denied
-  stayed as the last gated action, so a failed gated call (error result, no ref-update line for a push, no merged-text
-  for a merge) no longer consumes a consult. That REVERSES the batch-201 clause; BL-486's later ruling governs. Defect 2
-  as filed was false: the literal step-3 push is exempt from the budget hook; the lead's `; echo "push_rc=$?"` chain was
-  denied, invited by the step sentence about the exit code. `ADVISOR_GATE_REREADS` is a stricter-only fixture knob.
-  Gate at width 4: 88 of 251 run (39 changed, 47 stale, 2 unrecorded), all green, every changed fixture `ok` by name.
-  The 47 stale records' cause is not established: 0.750.0 changed both hooks (a hook release migrates every key record
-  on its first push), and a peer hand also ran the full suite from a worktree under `.claude/worktrees/` sharing this
-  GITDIR during the batch.
-
-Live backlog **9 -> 4** (BL-485, BL-486 rotated; BL-477 to BL-479, landed by 0.750.0 and annotated there, rotated here),
-archive **476 -> 481**. Net for the release: closed 3, filed 0.
-
-**OPERATOR CHOICES THAT PROCEEDED ON THE MARKED RECOMMENDATION WITHOUT A REPLY** (the session was invoked by a peer):
-BL-486's escape hatch is home-hook only; the batch-201 "re-push owes a new call" clause is reversed in favour of
-BL-486's "a failed action does not consume a consult"; the batch-200 "any attempt clears" ruling stands, with the deny
-text now saying "in a message of its own, read its answer, then retry". The operator set `AI_DLC_FIXTURE_JOBS=4` for
-that session only.
-
-**WHOLE-BACKLOG ADJUDICATION (hand, against 41ac5d25):** BL-465 LIVE, no code remedy, needs one gated push at a new
-width with the trace lock absent. This batch's gate ran at width 4, a new width, and `.git/ai-dlc-suite-pole.history`
-still holds only its 3 width-12 rows afterwards (`.last.jobs` reads 4); the gate printed `ok suite-pole-guard` and no
-CALIBRATING or SKIP line the lead could find, so why no width-4 row was recorded is not established and is the first
-thing the next BL-465 reader checks. BL-474 LIVE, waits on graph's first sharded review (none since its 0.745.0
-install). BL-480 LIVE, buildable, see below. BL-481 LIVE, waits on the hermetic declarations (BL-477 shipped in 0.750.0).
-
-**BL-480 IS CONTRACTED AND NOT BUILT.** Its contract adversary (report in the batch 208 session only, not committed)
-returned one BLOCKER with a fix: the local-row producer at `derive-fixture-readsets.sh:1556` is main-body code outside
-the READSET_LOCALMAP span, so no `readset-skip` world can drive it; the fix is a function inside that span calling
-`readset_hash_rows` then `readset_dir_values` over the trace tree's universe. Also: compute `readset_listings` once
-before `readset_local_validate` (the hook builds the same listing twice today, at `.githooks/pre-push:1333` and inside
-`readset_committed_digests`); do NOT treat a `-` directory row as stale (the unchanged twin would move too and the
-mutant rule refuses it); the hook rule is "a `-` row is valid iff its path is in neither `now` nor the listings"; the
-validator awk is byte-identical in both hooks but OUTSIDE the I66 shared span, so two edits; the `dirlocal` mutant's
-anchor disappears with the fix and must be re-anchored in the same commit. Both hooks change, so it ships ALONE from
-the main checkout detached at its release commit.
-
-**READ-SET FACTS:** the operator's `fs_usage` trace of this release's six fixtures returned `foreground-budget-deny`
-OMITTED (a BL-481 fact: even fs_usage drops it), and traced `review-shard-merge-mutants` and `-b` to 15 rows each with
-identical digests while `-c` traced 65 rows including paths the base must also read, so two of three were partial and
-those two rows will skip wrongly on a later push until retraced. The gate's post-green trace started detached for 60
-unmapped fixtures at the close.
-
-**OPEN FINDINGS, NOT FILED (net already negative, each needs a measurement):** the tip-fix hand left
-`core/fixtures/advisor-gate-deny-mutants/run.sh:92` with an unanchored `--group` grep (the base battery's J0 was
-anchored); gh's `Rebased and merged` wording is not among the three phrases the gate's merged-text guard matches; the
-REREAD cell's margin is about 4x under pool slowdown (first scan 0.06 to 0.22s against a 1.0s append), so mutant (r)
-can survive on a loaded box and the mutant shard, not the shipped fixture, goes red. A peer builder hand ran the full
-suite from a worktree under `.claude/worktrees/`, sharing this GITDIR, and marked 47 key records stale.
-
-**THE DELIVERY GAP IS TWO RELEASES.** graph's `.claude/.ai-dlc-version` reads 0.749.0 (it pulled 0.745.0 -> 0.749.0
-during this batch, reconcile #1192; its `self-update 0.749.0 -> 0.750.0` commit #1193 is on its branch but the stamp has
-not moved) against `VERSION` 0.751.0. The banked ruling stands: report the gap and write no runbook.
-
-Batch 206's block below is history: batch 208's block replaces its open items and its delivery gap.
 
 ### Derive the state; do not trust the numbers below
 
