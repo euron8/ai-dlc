@@ -20,6 +20,74 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.764.0] - 2026-10-09
+
+One release. `hermetic-run.sh` builds a git repository inside the sandbox when a fixture declares one
+in `git.decl`, and eight fixture directories that ran on every push because they need a real repository are
+declared: the three `procsub-staged-refusal` units, the three `procsub-staged-refusal-boot` units,
+`retired-layer-contract` and `prepush-pool-depth`. No pre-push hook and no bootstrapping file change.
+
+### `git.decl`
+
+`<fixture dir>/git.decl` is optional and read only by `hermetic-run.sh`. `seed` makes the sandbox root a work tree
+holding one commit of the copied tree (fixed date, no hooks, no signing). `pin <40-hex sha>` imports that commit and
+its tree, never its parents, from the project's own object store, and a pin the project lacks is exit 2. `pin? <sha>`
+imports when present; when absent it prints `not imported` and the fixture's own absent-pin branch decides, which is
+the form a SHIPPING fixture uses because a consumer has no such commit. An abbreviated sha or any other line is exit 2.
+
+The objects travel as a pack built at run time into the sandbox's own `.git`. Nothing is written under `core/`, and
+no alternates file points at the project's store, which would be a read outside the declaration. The hook's key is
+unchanged: `git.decl` is a file of the fixture's own directory and is keyed as one, and a sha names immutable content.
+
+**A pass with an optional pin not imported is not recorded in the shared verdict store.** The store key carries no
+trace of the pin, so a shallow clone's pass, whose pinned differential SKIPPED, would otherwise be reused by a full
+clone where that differential runs. Measured on a depth-1 clone: `retired-layer-contract` rc 0, its own `SKIP the
+pre-fix differential` line, 0 store entries; on the full clone rc 0, the four pre-fix lines, 1 entry.
+
+### The procsub units are declared, and the 0.760.0 ruling's reason no longer holds
+
+0.760.0 left `procsub-staged-refusal` and `procsub-staged-refusal-boot` undeclared by ruling: a build that committed
+their 118 pinned blobs under `core/fixtures/.../pins/` passed `hermetic-run.sh` and then failed arms I104, I113 and
+I65, which scan `core/` by content and found a fourth copy of the snapshot readers in the pinned hooks. `git.decl`
+removes that reason by construction: the pinned commits reach the sandbox as git objects at run time, so no pinned
+blob is ever in the tree those arms scan. `validate-enforcement-map.sh` on this tree: rc 0.
+
+- **`procsub-staged-refusal{,-b,-c}`**: `seed` plus five required pins (`e4934e65`, `d1c72fa9`, `b0c310a3`,
+  `322ef42c`, `1749b545`). The spelling arm diffs every `core/*.sh` outside `core/fixtures/` against `e4934e65` in the
+  SEEDED repository, so every directory holding one is declared whole.
+- **`procsub-staged-refusal-boot{,-b,-c}`**: two required pins (`a0a9c556`, `1749b545`), and the sibling
+  `reconcile-emit-report/` whose `seed.sh` it stages. Control: with `git.decl` removed the parent exits 2, `could not
+  stage layer-drift.sh and hard-blockers.sh at a0a9c556`, so the pins are what its failing controls consume.
+- **`retired-layer-contract`** (ships): `pin? d1c72fa9`. On a scratch consumer built by `scripts/install.sh` it runs
+  rc 0 with `optional pin ... not imported` and its own SKIP line, 65 ok, 0 store entries.
+- **`prepush-pool-depth`**: `seed`, for its `git rev-parse --show-toplevel`.
+
+Left forced, read from their code: `self-update-join-gate` walks a history range (`log -S`, `rev-list`) neither shape
+supplies; `validator-fork-budget`, `ledger-status-vocabulary` and `fixture-git-env-seam` read the whole tracked tree,
+so a declaration would key them on everything and save nothing.
+
+**The abbreviated-index question, settled by a run, not a reading.** The sandbox repository holds far fewer objects
+than this one, so git abbreviates its `index` lines to 7 hex digits where this repository uses 8. The spelling arm
+reads `17144 line(s) added since the pin` in the sandbox and the same count run unsandboxed on the identical tree.
+
+### Measured
+
+Every fixture below run through `hermetic-run.sh` on this tree, each with its own verdict store, all rc 0, 0 FAIL:
+`procsub-staged-refusal` a/b/c 170, 106, 111 ok; `procsub-staged-refusal-boot` a/b/c 62, 52, 52; `retired-layer-contract`
+70 with all four pre-fix lines; `prepush-pool-depth` 48. Each wrote one store entry. Wall clock at load around 45:
+52s to 225s per unit. Building the pin pack costs roughly 1 to 11 seconds per run on this box and is
+load-dominated: 2.46, 1.38 and 3.22s for `procsub-staged-refusal-boot`'s two pins, interleaved with the six-pin form
+at 2.27, 1.26 and 3.41s.
+
+`hermetic-runner` gains arm X (seed, pin, a pin whose blob differs from the tree's, no `git.decl` as control, a
+required pin absent, `pin?` absent and present with the store write checked both ways, an abbreviated sha, an unknown
+line) and mutants M12 to M16, each failing exactly arm X: 262 ok, 0 FAIL, every mutant failing exactly its own arms.
+
+The runner change re-keys every declared fixture's verdict-store entry once, because the digest hashes the runner's
+HR_SANDBOX span and the git.decl block sits inside it.
+
+The read-set map is not edited: a fixture with `inputs.decl` is keyed on its declaration and skipped by the deriver.
+
 ## [0.763.0] - 2026-10-09
 Batch 217 (hermetic-pole), release 3. The operator's goal for this batch is that every push is short. A push
 runs every fixture it selects, so its wall clock tracks how MANY run, not the longest one, and most of a push's

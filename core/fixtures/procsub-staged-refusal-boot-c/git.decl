@@ -1,0 +1,4 @@
+# The pre-fix engines this fixture stages with `git -C "${TREE_TOP}" show "${sha}:<path>"`: layer-drift.sh and
+# hard-blockers.sh at a0a9c556, preclassify.sh and emit-report.sh at 1749b545. Distribution-only, so required.
+pin a0a9c556b926527a6f92285df31739b10e83fc38
+pin 1749b545b2e05010adb5b197a5bfd67891c1bf3b

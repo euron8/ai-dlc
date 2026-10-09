@@ -1,0 +1,2 @@
+# `git rev-parse --show-toplevel` locates the hooks, so the sandbox root must be a work tree.
+seed

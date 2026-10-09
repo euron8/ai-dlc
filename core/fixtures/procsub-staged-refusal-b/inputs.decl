@@ -1,0 +1,9 @@
+# Shard driver: execs procsub-staged-refusal/run.sh --group b, so it declares that fixture's inputs plus its directory.
+core/fixtures/lib/
+core/hooks/
+core/scripts/
+core/session-driver/
+core/skills/
+core/schemas/
+core/fixtures/procsub-staged-refusal-c/run.sh
+core/fixtures/procsub-staged-refusal/

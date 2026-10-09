@@ -1,0 +1,8 @@
+# `seed`: the spelling arm runs `git -C "${OWN}" rev-parse --git-dir` and `git diff -U0 <pin>` against the tree.
+# The pins are the bases this fixture stages with `git -C "${OWN}" show "${sha}:<path>"`. Distribution-only, so required.
+seed
+pin e4934e6571b6819c4762d7b9eae56d0d16ca5c55
+pin d1c72fa904e5c8aecaaa67fa15340094d73780ab
+pin b0c310a361b6cebf69c8d33ca21a05f028dbac45
+pin 322ef42c43be0c11db74e937930e8810cf6b5492
+pin 1749b545b2e05010adb5b197a5bfd67891c1bf3b

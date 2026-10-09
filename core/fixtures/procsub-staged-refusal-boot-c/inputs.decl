@@ -1,0 +1,6 @@
+# Shard driver: execs procsub-staged-refusal-boot/run.sh --group c, so it declares that fixture's inputs plus its directory.
+core/fixtures/lib/
+core/skills/ai-dlc-update/reconcile/
+core/fixtures/reconcile-emit-report/
+core/fixtures/procsub-staged-refusal-boot-b/run.sh
+core/fixtures/procsub-staged-refusal-boot/

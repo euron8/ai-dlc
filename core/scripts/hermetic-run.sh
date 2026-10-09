@@ -56,6 +56,11 @@
 # its git population (tracked plus untracked-unignored, the key's own), never whole; the fixture's OWN
 # directory is the one stated exception, copied whole with links refused, and the reason is at the copy.
 #
+# A SEEDED REPOSITORY. `<fixture dir>/git.decl` (optional) makes the sandbox root a git repository:
+# `seed` commits the copied tree, `pin <sha>` imports one commit and its tree from the project's own
+# object store (exit 2 when absent), `pin? <sha>` imports it when present and otherwise leaves the
+# fixture's own absent-pin branch to decide. The grammar and the reason it is a pack are at the build.
+#
 # A FIXTURE WITHOUT A DECLARATION IS NOT THIS RUNNER'S: exit 2. The hook dispatches to this runner
 # only when `inputs.decl` exists, so a missing declaration here is a caller defect, not a skip.
 set -u
@@ -392,6 +397,59 @@ mkdir -p "$HR_SB/$HR_FXROOT" || exit 2
 hr_no_symlinks "$HR_FXROOT/$HR_FX"
 [ "$HR_FXDIR" = "$HR_ROOT/$HR_FXROOT/$HR_FX" ] || hr_no_symlinks "$HR_FXDIR"
 cp -Rp "$HR_FXDIR" "$HR_SB/$HR_FXROOT/$HR_FX" || exit 2
+# A SEEDED REPOSITORY, WHEN THE FIXTURE DECLARES ONE IN `<fixture dir>/git.decl`. `seed` makes the
+# sandbox root a git work tree holding one commit of everything copied in. `pin <40-hex sha>` imports
+# that commit and its tree -- never its parents, so `log` past it fails loudly -- from the project's
+# own object store; a pin the project lacks is exit 2. `pin? <sha>` is the same, except that a pin the
+# project lacks (a consumer, a shallow clone) is not imported and the fixture's own absent-pin branch
+# decides, so a shipping fixture can declare one. Any other line is exit 2.
+# THE OBJECTS TRAVEL AS A PACK BUILT AT RUN TIME INTO THE SANDBOX'S OWN .git. Nothing is written under
+# core/: pinned blobs committed under core/fixtures/ were a second corpus to arms I104, I113 and I65,
+# which scan core/ by content, and that is what kept the procsub fixtures undeclared. No alternates
+# file points at the project's store either -- that would be a read outside the declaration.
+# NO KEY ROWS: a sha names immutable content, and git.decl is keyed as a file of the fixture's own dir.
+# Every sandbox-side git call drops the GIT_* variables a hook exports, `--template=` keeps the
+# invoker's init templates out, and the seed commit runs no hook and signs nothing.
+if [ -f "$HR_FXDIR/git.decl" ]; then
+  hr_seed=0; hr_pin_skipped=0; : > "$HR_WORK/pins"
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in ''|'#'*) continue ;; esac
+    case "$line" in
+      seed) hr_seed=1 ;;
+      'pin '*|'pin? '*)
+        hr_ps="${line#* }"
+        case "$hr_ps" in *[!0-9a-f]*|'') printf 'hermetic-run: %s: git.decl pin is not a lowercase hex sha: %s\n' "$HR_FX" "$line" >&2; exit 2 ;; esac
+        [ "${#hr_ps}" -eq 40 ] || { printf 'hermetic-run: %s: git.decl pin must be a full 40-hex sha: %s\n' "$HR_FX" "$line" >&2; exit 2; }
+        if git -C "$HR_ROOT" cat-file -e "${hr_ps}^{commit}" 2>/dev/null; then
+          printf '%s\n' "$hr_ps" >> "$HR_WORK/pins"
+        elif [ "${line%% *}" = pin ]; then
+          printf 'hermetic-run: %s: declared pin %s is not a commit in %s\n' "$HR_FX" "$hr_ps" "$HR_ROOT" >&2; exit 2
+        else
+          printf 'hermetic-run: %s: optional pin %s is not in this project'"'"'s history -- not imported\n' "$HR_FX" "$hr_ps"
+          hr_pin_skipped=1
+        fi ;;
+      *) printf 'hermetic-run: %s: git.decl line is neither seed, pin <sha> nor pin? <sha>: %s\n' "$HR_FX" "$line" >&2; exit 2 ;;
+    esac
+  done < "$HR_FXDIR/git.decl"
+  hr_sbgit() { ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
+                 git -C "$HR_SB" -c core.hooksPath=/dev/null -c commit.gpgsign=false "$@" ); }
+  hr_sbgit init -q --template= . || { printf 'hermetic-run: %s: git init in the sandbox failed\n' "$HR_FX" >&2; exit 2; }
+  if [ -s "$HR_WORK/pins" ]; then
+    git -C "$HR_ROOT" rev-list --objects --no-walk --stdin < "$HR_WORK/pins" > "$HR_WORK/pin.objs" \
+      && git -C "$HR_ROOT" pack-objects -q "$HR_SB/.git/objects/pack/pack" < "$HR_WORK/pin.objs" > /dev/null \
+      || { printf 'hermetic-run: %s: could not pack the declared pins out of %s\n' "$HR_FX" "$HR_ROOT" >&2; exit 2; }
+    while IFS= read -r hr_ps; do
+      hr_sbgit cat-file -e "${hr_ps}^{commit}" 2>/dev/null \
+        || { printf 'hermetic-run: %s: pin %s did not arrive in the sandbox repository\n' "$HR_FX" "$hr_ps" >&2; exit 2; }
+    done < "$HR_WORK/pins"
+  fi
+  if [ "$hr_seed" = 1 ]; then
+    hr_sbgit add -A \
+      && GIT_AUTHOR_DATE='1970-01-01T00:00:00Z' GIT_COMMITTER_DATE='1970-01-01T00:00:00Z' \
+         hr_sbgit -c user.name=hermetic -c user.email=hermetic@localhost commit -q --no-verify -m seed \
+      || { printf 'hermetic-run: %s: the seed commit failed\n' "$HR_FX" >&2; exit 2; }
+  fi
+fi
 # UNKEYED TOOLS (`?name`) are resolved HERE, after the --key-only exit above, so the key is byte-identical
 # with and without the line. `command -v` on the invoker's PATH must answer an absolute executable path:
 # a function, an alias or a bare word is not one.
@@ -451,6 +509,9 @@ printf 'hermetic-run: %s: rc=%s sandbox_files=%s required_missing=%s\n' \
 sed -n '/^# READSET_VS_BEGIN$/,/^# READSET_VS_END$/p' "$HR_HOOK" > "$HR_WORK/vs.sh"
 grep -q '^readset_vs_store() ' "$HR_WORK/vs.sh" && . "$HR_WORK/vs.sh" || : > "$HR_WORK/vs.sh"
 hr_store_put() {
+  # A PASS WITH AN OPTIONAL PIN NOT IMPORTED IS NOT RECORDED. The key carries no trace of the pin, so a pass whose
+  # pinned differential SKIPPED (a shallow clone) would be reused by a clone where that differential runs.
+  [ "${hr_pin_skipped:-0}" = 0 ] || return 0
   local store ident dig
   [ -s "$HR_WORK/vs.sh" ] || return 0
   store="$(readset_vs_store "$HR_ROOT")"
