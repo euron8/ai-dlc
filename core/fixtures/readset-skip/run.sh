@@ -2603,10 +2603,14 @@ MUT
   else
     PR="$WORK/lossprobe"
     mkdir -p "$PR/core/fixtures/burst" "$PR/core/scripts" "$PR/.githooks" "$PR/d" || broken "mkdir failed"
-    _i=0; while [ "$_i" -lt 400 ]; do _i=$((_i+1)); echo "$_i" > "$PR/d/f$_i"; done
+    # THE BURST IS 8 CONCURRENT READERS OVER 1500 FILES. The deriver's stream runs at the default
+    # level (BL-481), and there the old single-reader burst over 400 files plus `ls -lR /usr/share`
+    # never dropped: 0 notices in 3 of 3, against 130-197 at `--level debug`. 8 readers over 1500
+    # files dropped 41 and 42 notices at the default level, load 44-47.
+    _i=0; while [ "$_i" -lt 1500 ]; do _i=$((_i+1)); echo "$_i" > "$PR/d/f$_i"; done
     printf '#!/bin/bash\nFXROOT="core/fixtures/"\nfor d in "$FXROOT"*/; do :; done\n' > "$PR/.githooks/pre-push"
     # The probe fixture also ECHOES the width knob, which the width arm below reads from its log.
-    printf '#!/bin/bash\necho "width=${VAS_INNER_POOL_WIDTH:-unset}"\necho "ems=${EMS_POOL_WIDTH:-unset}"\ncat d/f* >/dev/null\nls -lR /usr/share >/dev/null 2>&1\ncat d/f* >/dev/null\necho burst ok\n' > "$PR/core/fixtures/burst/run.sh"
+    printf '#!/bin/bash\necho "width=${VAS_INNER_POOL_WIDTH:-unset}"\necho "ems=${EMS_POOL_WIDTH:-unset}"\nfor _r in 1 2 3 4 5 6 7 8; do cat d/f* >/dev/null & done\nwait\necho burst ok\n' > "$PR/core/fixtures/burst/run.sh"
     # The width mutant's repo is the same seed with the deriver's env injection removed from both
     # launch lines. It is seeded BEFORE the original's `git init`, so it copies no `.git`.
     PRM="$WORK/widthmut"
