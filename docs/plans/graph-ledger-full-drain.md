@@ -98,9 +98,10 @@ coverage is redefined over the DISPATCHED set, `COV_MIN` not lowered, so a keyed
 buildable entry. BL-481's set excludes `hermetic-runner` as undeclared by design, and its receipt closes on the first
 push whose read-set line names only that fixture. Measured at `31617801` after both 0.759.0 and 0.760.0 landed:
 `self-update-gate`, the class-b four and the four `check-24-adversarial-convergence` directories are declared, but
-`procsub-staged-refusal-boot` was sharded into three directories and none is declared (a1's hand reported declaring
-it; the tree says otherwise), so BL-481 is not yet closable and the three `-boot` shards are the next session's
-declaration work.
+`procsub-staged-refusal-boot` was sharded into three directories and none is declared, BY RULING (0.760.0's
+CHANGELOG: both procsub fixtures read this repo's own history, and pinned blobs failed I104, I113 and I65 as a second
+corpus), so their close path is a committed TRACE. The 0.760.0 gate's line read 7 of 269 UNMAPPED: `hermetic-runner`,
+the six procsub directories, `subject-partition`; a1's post-green trace over them was running at this writing.
 
 **MEASUREMENTS OWED AND NOT TAKEN, with the reason:** the `self-update-gate` and unmapped-set read-set trace, and D6's
 base-vs-tip timing of `readset-skip`, both because a peer's trace (pid live on the main checkout) and gate ran

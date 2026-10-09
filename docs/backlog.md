@@ -181,8 +181,11 @@ is undeclared by design. Measured at `31617801` (0.760.0): `self-update-gate` an
 `inputs.decl` (0.759.0), and `check-24-adversarial-convergence` plus its `-b`, `-c`, `-d` shards do (0.760.0);
 `procsub-staged-refusal-boot` was sharded into `-boot`, `-boot-b`, `-boot-c` and NONE of the three is declared, nor
 are `procsub-staged-refusal`, `-b`, `-c` (control: `implementation-join-yield` declared, an impossible name absent).
-So the undeclared set still holds the three `-boot` shards and they are either traced or declared next. The entry
-closes on the first push whose read-set line reports `hermetic-runner` as the ONLY fixture UNMAPPED.
+The six procsub directories are undeclared BY RULING (0.760.0's CHANGELOG: they read this repo's own history, and
+pinned blobs failed I104, I113 and I65 as a second corpus), so their close path is a committed trace, not a
+declaration. The 0.760.0 gate's line read 7 of 269 UNMAPPED: `hermetic-runner`, the six procsub directories and
+`subject-partition`. The entry closes on the first push whose read-set line reports `hermetic-runner` as the ONLY
+fixture UNMAPPED.
 
 verify: manual -- close when a push's read-set line reports no fixture other than `hermetic-runner` UNMAPPED, by a trace or by a declaration.
 
