@@ -34,6 +34,12 @@
 
 set -uo pipefail
 
+# HERMETIC -- scrub the operator's tuning before invoking anything (I10). The validator takes
+# AI_DLC_PROJECT_ROOT ahead of its script-relative walk when choosing the schema, so an inherited
+# override points the COPY under test at a schema outside its package, and the arms that mutate
+# the package's schema (V4b's and V4c's mutation controls) then prove nothing.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+
 FIXTURE_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Two layouts:
@@ -65,6 +71,8 @@ SYNC="$SCRIPTS/sync-taught-schema.sh"
 for f in "$VALIDATOR" "$SYNC" "$SCHEMA" "$ROLE"; do
     [ -e "$f" ] || { echo "FIXTURE BROKEN: missing $f" >&2; exit 2; }
 done
+# Reached only once both subjects were found under it; the directory is what gets copied below.
+echo "HERMETIC-CONSUMED $(cd "$SCRIPTS" && pwd -P)/"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT

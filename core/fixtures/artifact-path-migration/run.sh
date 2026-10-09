@@ -25,6 +25,12 @@
 # that printed "2670 verified" while moving nothing would pass a report-reading fixture.
 set -uo pipefail
 
+# HERMETIC -- scrub the operator's tuning before invoking anything (I10). The migration calls
+# artifact-path-config.sh --consumer-file without --root, and that helper takes
+# AI_DLC_PROJECT_ROOT ahead of its own walk; an inherited override makes it read a tree other
+# than the seeded one every arm below is judging.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+
 HERE="$(cd "$(dirname "$0")" && pwd)"
 pick() { for c in "$@"; do [ -n "$c" ] && [ -f "$c" ] && { printf '%s' "$c"; return; }; done; }
 
@@ -44,6 +50,8 @@ CONFIG="$(pick "$HERE/../../scripts/artifact-path-config.sh" \
                "$HERE/../../core/scripts/artifact-path-config.sh")"
 [ -n "$MIG" ] && [ -n "$GRAMMAR" ] && [ -n "$CONFIG" ] \
   || { echo "FIXTURE ERROR: cannot locate migrate-artifact-paths.sh, artifact-path-config.sh and/or artifact-path-grammar.md" >&2; exit 2; }
+# Reached only once the subject resolved; printed as the resolved physical path, never one with `..`.
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$MIG")" && pwd -P)/$(basename "$MIG")"
 
 # Lay down a runnable PAIR: the migration and the resolver it calls, side by side the way
 # install.sh puts them. Mutants sed one of the two in place afterwards.

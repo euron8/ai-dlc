@@ -1,0 +1,8 @@
+# self-update-gate reads two things outside its own directory. The gate under test, with the
+# whole reconcile directory because the gate sources preclassify.sh and setup-sites.md beside
+# itself and the arms read unregistered-drift.sh and preclassify.sh by name. And the shipped
+# pre-push hook, which three arms scan (gate_argv_scan over the real hook, the FIXTURE_POOL
+# block for the pu-readset world, and the depth probe); on a consumer it maps to .githooks/pre-push.
+# Every other tree the fixture drives is seeded by seed.sh or built per arm under mktemp.
+!core/skills/ai-dlc-update/reconcile/
+!core/git-hooks/pre-push

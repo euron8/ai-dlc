@@ -23,6 +23,12 @@
 # blind spot had the same shape as the defect it was fixing.
 set -uo pipefail
 
+# HERMETIC -- scrub the operator's tuning before invoking anything (I10). The tools under test
+# take AI_DLC_PROJECT_ROOT ahead of their own walk (sprint-status.sh), and every arm below drives
+# a copy INSTALLED INTO a seeded tree; an inherited override points them at some other tree and
+# A10, which moves the declaration inside the seed, then fails on the control and every mutant.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+
 # No distribution-root walk here: this file needs none. It had one — assigned, never read — and a
 # dead `../../..` beside a seed that really did depend on one is how the next reader concludes the
 # resolution is fine because two files agree. The seed names its sources in both layouts; this
@@ -34,6 +40,9 @@ ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 
 PRISTINE="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
+# The seed exits 2 above unless it found and copied the subject, so this line is reached only
+# by a run whose verdict depends on it.
+echo "HERMETIC-CONSUMED core/scripts/sprint-status.sh"
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$PRISTINE" "$WORK"' EXIT
 

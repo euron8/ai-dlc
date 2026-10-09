@@ -1,0 +1,6 @@
+!core/scripts/migrate-artifact-paths.sh
+core/scripts/validate-artifact-paths.sh
+core/scripts/artifact-path-config.sh
+core/skills/ai-dlc/artifact-path-grammar.md
+core/skills/ai-dlc/layer-contract.yaml
+core/fixtures/lib/preamble.sh
