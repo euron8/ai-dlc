@@ -68,8 +68,8 @@ exact and P8-P13 green. **A record is moved whole, including any standing rule w
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
 
 **BATCH 216 SHIPPED `v0.761.0` (`0e30bfeb`, #1084) AND HANDED OFF WITH `v0.762.0` MID-GATE.** Handed the plan by
-ai-dlc-a4 at `origin/main` `d1bce2c3`; the session ended at the operator's word on context depth, so actions 5, 6, 6b
-and 9 below are OWED by the receiver, not done. It ran beside ai-dlc-77 (hermetic-pole, batch 217), ai-dlc-a3 (BL-481)
+ai-dlc-a4 at `origin/main` `d1bce2c3`; the session ended at the operator's word on context depth, so actions 5, 6 and
+6b below are OWED by the receiver; this session ran action 9 to hand you this. It ran beside ai-dlc-77 (hermetic-pole, batch 217), ai-dlc-a3 (BL-481)
 and ai-dlc-e2 (`b218-git-decl`), one gated push on the box at a time by GATE START / LANDED.
 - **Opening sweep** (at `d1bce2c3`): live 1, unfiled 0, worklist 0, DISCHARGED 1, TERMINAL 223, archive 346. graph then
   pulled 0.754.0 -> 0.760.0 (#1197) mid-batch and filed three; re-sweep at `d03d5bd9`: live 3, unfiled 3, archive 347,
@@ -81,11 +81,16 @@ and ai-dlc-e2 (`b218-git-decl`), one gated push on the box at a time by GATE STA
   rotated (action 5 is owed: annotate both `**LANDED (v0.761.0, verified e4e9ec23).**`, `--check`, `--apply`).
 - **`v0.762.0` WAS MID-GATE AT HANDOFF**: `PC-S317-SELF-UPDATE-FIXTURE-RUNNER-IS-NOT-THE-HERMETIC-RUN-PRE-PUSH-PERFORMS`
   (BL-492), shipped alone (bootstrapping). Release commit `2f3bc05a` on `origin/b216-su-release` (durable copy);
-  gated push to `release/0.762.0` from linked worktree `scratchpad/su762` of session 893f7f6a; exit file
-  `scratchpad/gate762.rc`. **RECEIVER: if `git ls-remote --heads origin release/0.762.0` names `2f3bc05a`, open the PR
-  and squash-merge with `--subject` from that commit; if the ref is absent or the gate went red, re-gate `2f3bc05a`
-  from a fresh linked worktree** (delete `release/0.762.0` first if it exists). Send ai-dlc-77 LANDED; it renumbers
-  its own release (`b217-0762`, verdict store, stopped on an operator order) to the next free version after this.
+  gated push to `release/0.762.0` running as a background process of the HANDING-OFF session (893f7f6a) from its linked
+  worktree `/private/tmp/claude-501/-Users-n8-git-ai-dlc/893f7f6a-ddb0-4006-ad8f-cd301a30b827/scratchpad/su762`; rc and
+  log at `/private/tmp/claude-501/-Users-n8-git-ai-dlc/893f7f6a-ddb0-4006-ad8f-cd301a30b827/scratchpad/gate762.rc` and
+  `.../gate762.log`. **RECEIVER, decide in this order and do not wait on a gate you cannot see:** (a) `git show
+  origin/main:VERSION` reads 0.762.0 -> landed, go to action 5; (b) else `git ls-remote --heads origin release/0.762.0`
+  names `2f3bc05a` and `gate762.rc` reads 0 -> open the PR and squash-merge with `--subject` from `2f3bc05a`; (c) else
+  re-gate `2f3bc05a` from `origin/b216-su-release` in a fresh linked worktree (delete `release/0.762.0` first if it
+  exists, hookless). `su762` hosts that live gate: remove it only after (a) or (b) holds or the gate is confirmed dead.
+  Send ai-dlc-77 LANDED; it renumbers its own release (`b217-0762`, verdict store, stopped on an operator order) to
+  the next free version after this.
 - **BL-465**: four designs built; three refuted by tip adversaries (load band, count band with width admission,
   pole-only per-unit history), the fourth (operator option (a): every dispatched unit recorded, per-unit admission,
   regime ceiling `REGIME_BAND=100` uncalibrated) shipped in 0.761.0. PARTIAL: its close needs a later push that
