@@ -70,13 +70,8 @@ like one that passed.
 verify: manual -- close when a gated push at a width with no prior row records one, and the next push at that width compares against it instead of printing SKIP.
 
 **The manual close above is the operative receipt** (`scripts/backlog-reverify.sh` reads only an entry's first `verify:`
-line), and it stays so: only a real gated push exercises the hook's width sidecar. Beside it, the BEHAVIOURAL receipt for
-the validator half, run from the repo root under `set -uo pipefail`. It drives `scripts/validate-suite-pole.sh` with the
-hook's own argv (`--durations <gitdir>/ai-dlc-fixture-durations.last --record <gitdir>/ai-dlc-fixture-durations --jobs 4`,
-cwd the root) in a fresh `mktemp` git repo whose baseline carries only a width-12 row: a near-solo coverage SKIP first;
-three green runs at 500/520/510 that must each exit 0 with `CALIBRATING (n/3)`; three quiet runs at 300, admitted, for six
-history rows; an ordinary 450 that must exit 0 against B=520 (a 3-row window would have collapsed B to 300 and failed it);
-600, inside the band, exit 0; and 700, over the 692 ceiling, which must exit 1 with `GROWN`.
+line), and it stays so: only a real gated push exercises the hook's width sidecar. The BEHAVIOURAL receipt for the
+validator half is the fenced block at the end of this entry, described in the batch 216 paragraph above it.
 
 **Two rulings landed with the fix, batch 204, by the coordinator after the tip adversary measured B2 wrong.** B(W) is the
 max of EVERY usable row at the width since its rows were last dropped -- not of the 3 most recent, which with admission at
@@ -118,25 +113,33 @@ the history of the fixtures it actually ran, and records a row keyed on width an
 lowered. Buildable: `scripts/validate-suite-pole.sh:181` and the coverage check at `:744-748`, with the hook's
 `.last` as the dispatched set. Ships from the main checkout detached at its release commit if the hook changes.
 
-**BUILT, batch 216: the LOAD-BAND design.** A dispatched-set comparison was measured first and dropped. Over the
-last 21 measuring commits, a run with at least 3 comparable earlier rows was found for 0/21 by the exact dispatched
-set, 2-5/21 by a 90% cost-weighted Jaccard overlap of sets, and 10-17/21 by load within +-25% (17 if the 29 formerly
-unmapped fixtures always dispatch, 10 if not). A literal "share of the dispatched set's record cost" is x/x = 100%,
-because the hook folds the run into the record before the guard runs. So each history row now records two more
-columns: the run's LOAD (its timed cost over on-disk fixtures, less its own pole by name) and its dispatched count.
-A 7-column row is usable when its pole directory exists, this run timed its pole, and its load is within
-+-`LOAD_BAND`=25% of this run's load. A legacy 5-column row is usable only when this run clears the old
-`COV_MIN=90` share test. Rows that fail are counted by reason on the output, never refused. The coverage SKIP is
-gone as an exit, and the share is printed. A seed whose pole was not timed now records. The validator's header,
-under COMPARABILITY, is the description; arms (a)-(g) of `core/fixtures/suite-pole-guard` are its probes. The
-fenced receipt below drives the validator with the hook's argv in a fresh git repo, under `set -uo pipefail`.
-First, a 67.85%-share keyed run must record a row, which base cannot do: it SKIPs on coverage. Then three
-calibrating runs. Then a unit that is cheap in history grows to 1000s; it must FAIL `GROWN`, because the grown
-unit does not count toward its own comparability. Last, a run at roughly 3x the load must CALIBRATE with all four
-rows out of band, and record. Scored batch 216: tip 0, base 1, drop-load-band 1, include-pole-in-load 1.
+**BUILT, batch 216: comparability by DISPATCHED COUNT, with admission.** A dispatched-set comparison was measured first
+and dropped. Over the last 21 measuring commits, a run with at least 3 comparable earlier rows was found for:
+0/21 by the exact dispatched set; 2-5/21 by a 90% cost-weighted Jaccard overlap of sets; 10-17/21 by load within
++-25%; and 10-15/21 by dispatched count within +-25%. Count was chosen over load because a count does not move when
+the code gets slower. Keyed on load, a uniform slowdown moved the run out of band, and the regression calibrated
+and recorded (adversary, batch 216). Each history row now carries two more columns: the run's load (printed only)
+and its dispatched count. A 7-column row is usable when three things hold: its pole directory exists, this run
+timed its pole, and its count is within +-`COUNT_BAND`=25% of this run's count. Legacy 5-column rows are never
+usable. So are malformed rows (6 columns, or a non-integer load or count). Both kinds are counted by reason,
+never refused. ADMISSION covers the calibrating and seed paths: once a width holds 3 well-formed 7-column rows,
+a run with no usable row records only at or below their max pole. Without that, a regression that made itself
+incomparable laundered its figure into B. The adversary measured three ways to do that: a uniform slowdown, a
+novel dispatch, and a keyed run skipping B's pole. The coverage SKIP is gone as an exit, and the share is
+printed. The validator's header, under COMPARABILITY, is the description, and the `suite-pole-guard` fixture's
+arms are its probes. The fenced receipt below runs under `set -uo pipefail`. It drives the validator with the
+hook's argv in a fresh git repo, in four steps:
+- A 67.85%-share keyed run must record a row. Base cannot: it SKIPs on coverage.
+- Three calibrating runs (11 units dispatched) record three rows.
+- Every unit grows 40% slower. With the same count, the run must FAIL `GROWN`.
+- A regression at a novel count (fx1 600, 17 units) must pass and NOT be recorded. Then fx1 700 at 14 units, in
+  band of both, must FAIL `GROWN` against 150.
+
+Scored batch 216: tip 0, base 1, the no-admission mutant 1. Also 1 for a stub that records every run and fails
+only on a ceiling over in-band rows.
 
 ```
-V="$PWD/scripts/validate-suite-pole.sh"; [ -f "$V" ] || exit 9; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; R="$(mktemp -d)" && git init -q "$R" && G="$(git -C "$R" rev-parse --path-format=absolute --git-common-dir)" && mkdir -p "$R/core/fixtures/fx1" "$R/core/fixtures/fx2" "$R/core/fixtures/fx3" "$R/docs" && echo 0 > "$R/VERSION" && for f in fx1 fx2 fx3; do echo 'exit 0' > "$R/core/fixtures/$f/run.sh"; done && printf '# history-band: 33\n# band: 15\n# jobs: 12\n# fixtures: 3\nfx1 100\n' > "$R/docs/suite-pole-baseline.tsv" || exit 9; L="$G/ai-dlc-fixture-durations.last"; D="$G/ai-dlc-fixture-durations"; H="$G/ai-dlc-suite-pole.history"; hook() { o="$(cd "$R" && bash "$V" --durations "$L" --record "$D" --jobs 4 2>&1)"; c=$?; }; run() { printf 'fx1 %s\nfx2 %s\nfx3 %s\n' "$1" "$2" "$3" > "$L"; cp "$L" "$D"; echo 4 > "$L.jobs"; hook; }; rows() { awk 'END { print NR }' "$H" 2>/dev/null || echo 0; }; printf 'fx1 60\nfx2 35\n' > "$L"; printf 'fx1 60\nfx2 35\nfx3 45\n' > "$D"; echo 4 > "$L.jobs"; hook; [ "$c" -eq 0 ] && [ "$(rows)" -eq 1 ] || exit 1; for n in 1 2 3; do run 100 100 100; [ "$c" -eq 0 ] && grep -qF "CALIBRATING ($n/3)" <<<"$o" || exit 1; done; [ "$(rows)" -eq 4 ] || exit 1; run 100 1000 100; [ "$c" -eq 1 ] && grep -qF 'GROWN: fx2 at 1000s against baseline fx1 at 100s' <<<"$o" || exit 1; run 400 1000 999; [ "$c" -eq 0 ] && grep -qF '4 load outside +-25%' <<<"$o" && grep -qF 'CALIBRATING (1/3)' <<<"$o" || exit 1; [ "$(rows)" -eq 5 ] || exit 1; exit 0
+V="$PWD/scripts/validate-suite-pole.sh"; [ -f "$V" ] || exit 9; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; R="$(mktemp -d)" && git init -q "$R" && G="$(git -C "$R" rev-parse --path-format=absolute --git-common-dir)" && mkdir -p "$R/docs" && echo 0 > "$R/VERSION" && for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18; do mkdir -p "$R/core/fixtures/fx$i" && echo 'exit 0' > "$R/core/fixtures/fx$i/run.sh"; done && printf '# history-band: 33\n# band: 15\n# jobs: 12\n# fixtures: 18\nfx1 100\n' > "$R/docs/suite-pole-baseline.tsv" || exit 9; L="$G/ai-dlc-fixture-durations.last"; D="$G/ai-dlc-fixture-durations"; H="$G/ai-dlc-suite-pole.history"; hook() { o="$(cd "$R" && bash "$V" --durations "$L" --record "$D" --jobs 4 2>&1)"; c=$?; }; run() { rp="$1"; rn="$2"; rs="$3"; printf 'fx1 %s\n' "$rp" > "$L"; i=2; while [ "$i" -le "$rn" ]; do printf 'fx%s %s\n' "$i" "$rs" >> "$L"; i=$((i + 1)); done; cp "$L" "$D"; echo 4 > "$L.jobs"; hook; }; rows() { if [ -f "$H" ]; then awk 'END { print NR }' "$H"; else echo 0; fi; }; printf 'fx1 60\nfx2 35\n' > "$L"; printf 'fx1 60\nfx2 35\nfx3 45\n' > "$D"; echo 4 > "$L.jobs"; hook; [ "$c" -eq 0 ] && [ "$(rows)" -eq 1 ] || exit 1; : > "$H"; for n in 1 2 3; do run 150 11 100; [ "$c" -eq 0 ] && grep -qF "CALIBRATING ($n/3)" <<<"$o" || exit 1; done; [ "$(rows)" -eq 3 ] || exit 1; run 210 11 140; [ "$c" -eq 1 ] && grep -qF 'GROWN: fx1 at 210s against baseline fx1 at 150s' <<<"$o" || exit 1; run 600 17 100; [ "$c" -eq 0 ] && [ "$(rows)" -eq 3 ] && grep -qF "not recorded: 600s is above the width's max 150s" <<<"$o" || exit 1; run 700 14 100; [ "$c" -eq 1 ] && grep -qF 'GROWN: fx1 at 700s against baseline fx1 at 150s' <<<"$o" || exit 1; exit 0
 ```
 
 ## BL-474 — measure the first cross shard's serial tail before ruling on it
