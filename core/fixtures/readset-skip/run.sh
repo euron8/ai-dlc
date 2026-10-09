@@ -4316,12 +4316,38 @@ ckq_world() { local p="$1" x="$2" t="$3" k kd
     "$(grep -c 'cause: git quotes the path .*tab' "$t.dd.qpath/ann" 2>/dev/null)" \
     "$(ckd_cell "$t.dd.qloc" alpha),$(ckd_cell "$t.dd.qloc" beta),$(ckd_cell "$t.dd.qloc" delta)"
 }
+# graph's real shape: a quoted row in the LOCAL map on a fixture with NO committed rows. gamma is mapped by a valid
+# local row (src/c.sh) and recorded; the local map then gains a deriver-written C-quoted tab-bearing row for gamma.
+# gamma must RUN (its own read set names a quoted path), alpha/beta/delta must still SKIP on their keys.
+ckq_local_world() { local p="$1" x="$2" t="$3" k kd ds lm
+  ck_seed "$t" "$x" gamma || { printf SEED; return; }
+  mkdir -p "$t/core/scripts" && printf '#!/bin/bash\nexit 0\n' > "$t/core/scripts/derive-fixture-readsets.sh" \
+    && ( cd "$t" && git add -A && git -c user.email=f@f -c user.name=f commit -qm deriver ) >/dev/null 2>&1 || { printf SEED; return; }
+  ds="$(ck_sha "$t/core/scripts/derive-fixture-readsets.sh")"; lm="$t/.git/ai-dlc-fixture-readsets.local"
+  { printf 'gamma\tsrc/c.sh\t%s\n' "$(ck_sha "$t/src/c.sh")"; printf 'gamma\t#deriver\t%s\n' "$ds"; } > "$lm"
+  kd="$t/.git/ai-dlc-fixture-keys"; mkdir -p "$kd" || { printf SEED; return; }
+  ckd_dec "$p" "$t" lrec
+  for k in alpha beta delta gamma; do
+    [ -f "$t.dd.lrec/.k/$k" ] || { printf NOREC; return; }
+    cp "$t.dd.lrec/.k/$k" "$kd/$k.key"
+  done
+  ckd_dec "$p" "$t" lctl
+  printf 'gamma\t"src/q\\tx.sh"\t-\n' >> "$lm"
+  ckd_dec "$p" "$t" lq
+  printf 'ctl=%s,%s,%s,%s lq=%s,%s,%s,%s' \
+    "$(ckd_cell "$t.dd.lctl" gamma)" "$(ckd_cell "$t.dd.lctl" alpha)" "$(ckd_cell "$t.dd.lctl" beta)" "$(ckd_cell "$t.dd.lctl" delta)" \
+    "$(ckd_cell "$t.dd.lq" gamma)" "$(ckd_cell "$t.dd.lq" alpha)" "$(ckd_cell "$t.dd.lq" beta)" "$(ckd_cell "$t.dd.lq" delta)"
+}
+CKQL_WANT='ctl=skip::ok,skip::ok,skip::ok,skip::ok lq=run:k:ok,skip::ok,skip::ok,skip::ok'
 # A run cell prints `run:<class>:<state>`; with no .kdec row (a run-all announcement writes none) it prints empty.
 CKQ_WANT='qctl=skip::ok,skip::ok,skip::ok qrow=run:k:ok,skip::ok,skip::ok qpath=,, why=1 qloc=skip::ok,skip::ok,skip::ok'
 if [ "$CKD_N" -ge 1 ]; then
   CK_ARMS=$((CK_ARMS+1)); _g="$(ckq_world "$CKD_P1" "$CKD_X1" "$CK_W/ckq.h1" 2>/dev/null)"
   if [ "$_g" = "$CKQ_WANT" ]; then ok "(quoted-row) a quoted map row runs its own fixture only, a quoted ls-files path still empties keying and is NAMED: $_g"
   else bad "(quoted-row) want '$CKQ_WANT' got '$_g'"; fi
+  CK_ARMS=$((CK_ARMS+1)); _g="$(ckq_local_world "$CKD_P1" "$CKD_X1" "$CK_W/ckq.loc" 2>/dev/null)"
+  if [ "$_g" = "$CKQL_WANT" ]; then ok "(quoted-local) a quoted LOCAL row on a fixture with no committed rows runs that fixture only; keying stays on for the rest: $_g"
+  else bad "(quoted-local) want '$CKQL_WANT' got '$_g'"; fi
   CK_ARMS=$((CK_ARMS+1))
   CKQ_M="$CK_W/ckq.mut.sh"; cp "$CKD_P1" "$CKQ_M"
   _a1="$(grep -cF -- "    readset_rows \"\$out\" paths | grep -v '^\"'" "$CKQ_M")"; _a2="$(grep -cF -- "grep -q '^\"' \"\$out/.lsf\"" "$CKQ_M")"
@@ -4334,6 +4360,9 @@ if [ "$CKD_N" -ge 1 ]; then
       _g="$(ckq_world "$CKQ_M" "$CKD_X1" "$CK_W/ckq.mut" 2>/dev/null)"
       if [ "$_g" != "$CKQ_WANT" ] && case "$_g" in *"qrow=,,"*) true ;; *) false ;; esac; then ok "QUOTED-ROW MUTANT (unscoped guard) is KILLED by the qrow arm: the quoted map row empties keying for every fixture: $_g"
       else bad "QUOTED-ROW MUTANT: expected qrow=,, in '$_g'"; fi
+      CK_ARMS=$((CK_ARMS+1)); _g="$(ckq_local_world "$CKQ_M" "$CKD_X1" "$CK_W/ckq.locmut" 2>/dev/null)"
+      if [ "$_g" != "$CKQL_WANT" ] && case "$_g" in *"lq=,,,"*) true ;; *) false ;; esac; then ok "QUOTED-ROW MUTANT (unscoped guard) is KILLED by the quoted-local cell: keying goes off for every fixture: $_g"
+      else bad "QUOTED-ROW MUTANT: quoted-local cell expected lq=,,, in '$_g'"; fi
     fi
   fi
 fi
