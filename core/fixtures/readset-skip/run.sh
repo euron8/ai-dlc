@@ -1215,10 +1215,20 @@ else
     "0|"*"|invoked|verified|"*) ok "(f) a deriver that FAILS leaves the gate green and the verified record written — the trace never decides the push" ;;
     *) bad "(f) a failing trace changed the gate: '$RF'" ;;
   esac
+  # A RED PUSH TRACES THE FIXTURE WHOSE OWN VERDICT IS ok (operator ruling: a good fixture run is a good fixture
+  # run). alpha fails, gamma (unmapped) passes: the trace is invoked for gamma ALONE, gamma's log is stashed and
+  # its row lands, alpha (failed, mapped) is never named, and NO whole-tree verified record is written.
+  # The second world fails the UNMAPPED fixture itself: nothing is traced, because a failed fixture is never traced.
   RR="$(rf_drive "$POOL" r "printf 'exit 1\n' > $FXROOT/alpha/run.sh")"; lt_arm
   case "$RR" in
-    "1|no|not|none|"*) ok "(f) a RED run starts no trace, even for the unmapped fixture that passed in it" ;;
-    *) bad "(f) a red run started a trace or wrote a verified record: '$RR'" ;;
+    "1|no|invoked|none|stashed|1|--list gamma --tracer sandbox --local-map .git/ai-dlc-fixture-readsets.local")
+      ok "(f) a RED push still traces the unmapped fixture whose own verdict is ok (gamma), never the failing alpha, and writes no whole-tree verified record" ;;
+    *) bad "(f) a red push did not trace exactly gamma without a verified record: '$RR'" ;;
+  esac
+  RRG="$(rf_drive "$POOL" rg "printf 'exit 1\n' > $FXROOT/gamma/run.sh")"; lt_arm
+  case "$RRG" in
+    "1|no|not|none|none||") ok "(f) a FAILED unmapped fixture is never traced, even on a red push" ;;
+    *) bad "(f) a failed unmapped fixture was traced or stashed: '$RRG'" ;;
   esac
   # (k) THE LOCK ROUND TRIP (BL-463). The real readset_live_trace takes the lock while STUB_GO holds
   # the stub deriver, so the trace subshell is alive when the pid file is read. A verdict alone cannot
@@ -1509,7 +1519,7 @@ if [ "$LT_CAN" = 1 ]; then
       *) ok "BL-452 MUTANT $1 is KILLED by $2: '$r'" ;;
     esac
   }
-  pm_copy nocall 1 '  if [ "$rc" -eq 0 ]; then readset_live_trace "$out"; fi' '  :' \
+  pm_copy nocall 1 '  readset_live_trace "$out"' '  :' \
     && pm_rf nocall a "export STUB_GO=\"$WORK/rf.go.nocall\"" '"0|yes|invoked|"*'
   # sync and fold drop the `&`, so `$!` is replaced by a literal pid in the copy too: with no
   # background job `$!` is unset, and bash 3.2 under `set -u` rejects even `${!:-0}`, so the drive
@@ -1530,7 +1540,7 @@ if [ "$LT_CAN" = 1 ]; then
                    'AI_DLC_READSET_TRACE_ROOT="$tr" bash "$dv" --list "$names" --tracer sandbox --local-map "$READSET_LOCAL" || { rm -f "$lk/pid"; rmdir "$lk"; exit 1; }' \
                 1 '  ) </dev/null >"$logf" 2>&1 &' '  ) </dev/null >"$logf" 2>&1 || return 1' \
                 1 '  tp="$!"' '  tp=0' \
-                1 '  if [ "$rc" -eq 0 ]; then readset_live_trace "$out"; fi' '  if [ "$rc" -eq 0 ]; then readset_live_trace "$out" || rc=1; fi' \
+                1 '  readset_live_trace "$out"' '  readset_live_trace "$out" || rc=1' \
     && pm_rf fold f 'export STUB_RC=1' '"0|"*"|invoked|verified|"*'
   # The lock WRITER's mutants (BL-463), each scored on the round trip (k), the one arm that reads
   # the pid file's content: the parent's pid in place of the trace subshell's, and no start line.
@@ -1552,8 +1562,8 @@ if [ "$LT_CAN" = 1 ]; then
     # correctly, so the file agrees with itself; only the join to the stub's recorded pid (ppid) sees it.
     pm_copy ppidwriter 1 '  tp="$!"' '  tp="$PPID"' && pm_rt ppidwriter
   fi
-  pm_copy redrun 1 '  if [ "$rc" -eq 0 ]; then readset_live_trace "$out"; fi' '  readset_live_trace "$out"' \
-    && pm_rf redrun f "printf 'exit 1\n' > $FXROOT/alpha/run.sh" '"1|no|not|"*'
+  pm_copy redrun 1 '  readset_live_trace "$out"' '  if [ "$rc" -eq 0 ]; then readset_live_trace "$out"; fi' \
+    && pm_rf redrun f "printf 'exit 1\n' > $FXROOT/alpha/run.sh" '"1|no|invoked|none|stashed|"*'
 fi
 # UNMUTATED CONTROL, driven the same way as the local-world mutants: a baseline selection must APPEAR.
 R="$(lw_run "$POOL" ctl3 "$LM_C1")"; lt_arm
@@ -4175,7 +4185,7 @@ fi
 if sg ckm2; then
   [ "$CK_N" -ge 1 ] || bad "no pre-push hook was found for the checksum-key mutants"
   if [ "$CK_N" -ge 1 ]; then
-    ck_mut h staleclears 1 '        else if (st == "stale") ns = ((f in LOC) ? "ok" : "stale")' '        else if (st == "stale") ns = "ok"'
+    ck_mut h staleclears 1 '        else if (st == "stale" && !(f in DECL)) ns = ((f in LOC) ? "ok" : "stale")' '        else if (st == "stale") ns = "ok"'
     ck_mut i nov2 1 '      if (seed) rd(ENVIRON["KV2"], VV)' '      if (0) rd(ENVIRON["KV2"], VV)'
   fi
 fi
@@ -4189,6 +4199,139 @@ if sg ckm3; then
     ck_mut n globaltools 1 '(!(f in DECL)) for (k in K) if (k in FT) {' '(!(f in DECL)) for (k in FT) {'
     ck_mut o nosibs 1 'if (k == root && sibs_only(k)) { SB = 1; continue }' 'if (0) { SB = 1; continue }'
   fi
+fi
+
+# ------------------------------------ a DECLARED fixture's stale record is decided on its keys ----
+# A fixture carrying `inputs.decl` has its declaration as its read set, so a record reading `#state stale`
+# must not force a run: stale means "re-trace", and a declared fixture has no trace. Before this, the
+# decision forced every stale declared fixture to run and wrote the record back stale, so it never left.
+# Driven through the REAL decision (apply_readset_skip) in a process of its own, reading `.kdec` -- no
+# fixture runs, so the hermetic runner is not involved. Cells, one world, one vector:
+#   dsame  declared `decl`, record stale, no declared input moved       -> skip, c `v`, republished ok
+#   unrel  the same, but an input NOBODY declared moved                 -> skip
+#   dchg   the same, but the declared src/a.sh moved                    -> run, changed src/a.sh
+#   dempty the declared fixture's stale record holds NO key rows        -> run (a missing stored key is changed)
+#   ctl    UNDECLARED alpha, record stale, nothing moved                -> run, reason stale (the near-miss)
+#   beta   undeclared and ok in the same invocation                     -> skip (proves the driver decided)
+# The mutant reverts BOTH decision lines to their pre-fix text and must lose the dsame cell, and ONLY it
+# and the cells that read the same line.
+if sg ckw && true; then
+CKD_DRV="$WORK/ckd.drive.sh"
+printf '%s\n' 'cd "$2" || exit 1' '. "$1" 2>/dev/null' \
+  'for d in "$FXROOT"*/; do [ -f "$d/run.sh" ] && printf "%s\n" "$d"; done > "$3/list"' \
+  'apply_readset_skip "$3/list" "$3" > "$3/ann" 2>&1' > "$CKD_DRV" || broken "could not write the stale-declared decision driver"
+ckd_dec() { # <pool> <t> <tag> -> the decision dir $t.dd.<tag>
+  mkdir -p "$2.dd.$3" && env AI_DLC_READSET_LIVE_TRACE=0 PATH="$2.bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin" bash "$CKD_DRV" "$1" "$2" "$2.dd.$3"
+}
+ckd_cell() { awk -F'\t' -v f="$2" '$1 == f && ($2 == "run" || $2 == "skip") { printf "%s:%s:%s", $2, $4, $5 }' "$1/.kdec" 2>/dev/null; }
+ckd_world() { local p="$1" x="$2" t="$3" k kd
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  mkdir -p "$t/$x/decl" && printf 'exit 0\n' > "$t/$x/decl/run.sh" && printf 'src/a.sh\n' > "$t/$x/decl/inputs.decl" \
+    && ( cd "$t" && git add -A && git -c user.email=f@f -c user.name=f commit -qm decl ) >/dev/null 2>&1 || { printf SEED; return; }
+  kd="$t/.git/ai-dlc-fixture-keys"; mkdir -p "$kd" || { printf SEED; return; }
+  ckd_dec "$p" "$t" rec
+  for k in decl alpha beta; do
+    [ -f "$t.dd.rec/.k/$k" ] || { printf NOREC; return; }
+    sed '2s/.*/#state ok/' "$t.dd.rec/.k/$k" > "$kd/$k.key"
+  done
+  # alpha and decl go stale; beta stays ok. The rows are kept: a stale record is a valid record.
+  for k in decl alpha; do sed '2s/.*/#state stale/' "$kd/$k.key" > "$kd/$k.key.t" && mv "$kd/$k.key.t" "$kd/$k.key"; done
+  ckd_dec "$p" "$t" same
+  printf 'x\n' > "$t/src/c.sh"; ckd_dec "$p" "$t" unrel; printf 'v1\n' > "$t/src/c.sh"
+  printf 'v2\n' > "$t/src/a.sh"; ckd_dec "$p" "$t" chg; printf 'v1\n' > "$t/src/a.sh"
+  sed -n 1,3p "$kd/decl.key" > "$kd/decl.key.t" && mv "$kd/decl.key.t" "$kd/decl.key"; ckd_dec "$p" "$t" empty
+  printf 'dsame=%s unrel=%s dchg=%s dempty=%s ctl=%s beta=%s' "$(ckd_cell "$t.dd.same" decl)" "$(ckd_cell "$t.dd.unrel" decl)" \
+    "$(ckd_cell "$t.dd.chg" decl)" "$(ckd_cell "$t.dd.empty" decl)" "$(ckd_cell "$t.dd.same" alpha)" "$(ckd_cell "$t.dd.same" beta)"
+}
+CKD_WANT='dsame=skip:v:ok unrel=skip:v:ok dchg=run:k:ok dempty=run:s:ok ctl=run:s:stale beta=skip::ok'
+CKD_N=0
+for _h in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
+  [ -f "$_h" ] || continue
+  CKD_N=$((CKD_N+1)); CKD_P="$CK_W/ckdpool.$CKD_N.sh"
+  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$_h" > "$CKD_P"
+  CKD_X="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$CKD_P" | sort -u)"
+  CK_ARMS=$((CK_ARMS+1)); _g="$(ckd_world "$CKD_P" "$CKD_X" "$CK_W/ckd.h$CKD_N" 2>/dev/null)"
+  if [ "$_g" = "$CKD_WANT" ]; then ok "(stale-declared) ${_h#"$ROOT"/}: $_g"
+  else bad "(stale-declared) ${_h#"$ROOT"/}: want '$CKD_WANT' got '$_g'"; fi
+  [ "$CKD_N" -eq 1 ] && { CKD_P1="$CKD_P"; CKD_X1="$CKD_X"; }
+done
+CK_ARMS=$((CK_ARMS+1))
+[ "$CKD_N" -ge 1 ] && ok "the stale-declared world ran against $CKD_N hook(s)" || bad "no pre-push hook was found for the stale-declared world"
+# THE MUTANT: both decision lines back to their pre-fix text. dsame must flip to a forced run, with the
+# record written back stale; the undeclared control and every other cell stay put. Count-checked, cmp-guarded.
+if [ "$CKD_N" -ge 1 ]; then
+  CK_ARMS=$((CK_ARMS+1))
+  CKD_M="$CK_W/ckd.mut.sh"; cp "$CKD_P1" "$CKD_M"
+  MF1='else if (st == "stale" && !(f in LOC) && !((f in DECL) && RK[f] != "")) { why = "stale"; c = "s" }'
+  MT1='else if (st == "stale" && !(f in LOC)) { why = "stale"; c = "s" }'
+  MF2='else if (st == "stale" && !(f in DECL)) ns = ((f in LOC) ? "ok" : "stale")'
+  MT2='else if (st == "stale") ns = ((f in LOC) ? "ok" : "stale")'
+  _n1="$(grep -cF -- "$MF1" "$CKD_M")"; _n2="$(grep -cF -- "$MF2" "$CKD_M")"
+  if [ "$_n1" != 1 ] || [ "$_n2" != 1 ]; then bad "STALE-DECLARED MUTANT did not apply: anchors matched $_n1 and $_n2 time(s), not 1 and 1"
+  else
+    MF1="$MF1" MT1="$MT1" MF2="$MF2" MT2="$MT2" awk '{ if (index($0, ENVIRON["MF1"])) { i = index($0, ENVIRON["MF1"]); $0 = substr($0, 1, i - 1) ENVIRON["MT1"] substr($0, i + length(ENVIRON["MF1"])) }
+      if (index($0, ENVIRON["MF2"])) { i = index($0, ENVIRON["MF2"]); $0 = substr($0, 1, i - 1) ENVIRON["MT2"] substr($0, i + length(ENVIRON["MF2"])) }
+      print }' "$CKD_M" > "$CKD_M.t" && mv "$CKD_M.t" "$CKD_M"
+    if cmp -s "$CKD_P1" "$CKD_M"; then bad "STALE-DECLARED MUTANT: the copy is unchanged"
+    else
+      _g="$(ckd_world "$CKD_M" "$CKD_X1" "$CK_W/ckd.mut" 2>/dev/null)"
+      _w='dsame=run:s:stale unrel=run:s:stale dchg=run:s:stale dempty=run:s:stale ctl=run:s:stale beta=skip::ok'
+      if [ "$_g" = "$_w" ] && [ "$_g" != "$CKD_WANT" ]; then ok "STALE-DECLARED MUTANT (pre-fix lines) is KILLED: dsame becomes a forced run written back stale: $_g"
+      else bad "STALE-DECLARED MUTANT: expected '$_w', got '$_g'"; fi
+    fi
+  fi
+fi
+
+# A QUOTED MAP ROW MUST NOT TURN KEYING OFF FOR THE PUSH. The quoted-path guard in readset_manifest used to read
+# `.paths`, which carries every committed-map and local-map path, so one C-quoted row emptied `.now` and the push
+# printed `could not hash the working tree -- running all N`. It now reads the two ls-files streams only; a quoted
+# map row is dropped from the universe and ITS fixture runs, every other fixture is still decided on its keys.
+#   qrow   a quoted row on alpha in the committed map         -> alpha runs, beta and delta skip
+#   qpath  a file git must quote (a tab in its name)          -> the guard still fires: all three run, and
+#                                                                the announcement names the path (the near-miss)
+#   qctl   neither                                            -> all three skip (proves the driver decides)
+ckq_world() { local p="$1" x="$2" t="$3" k kd
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  kd="$t/.git/ai-dlc-fixture-keys"; mkdir -p "$kd" || { printf SEED; return; }
+  ckd_dec "$p" "$t" qrec
+  for k in alpha beta delta; do
+    [ -f "$t.dd.qrec/.k/$k" ] || { printf NOREC; return; }
+    cp "$t.dd.qrec/.k/$k" "$kd/$k.key"
+  done
+  ckd_dec "$p" "$t" qctl
+  printf 'alpha\t"src/q\\tx.sh"\n' >> "$t/.ai-dlc-fixture-readsets.tsv"
+  ckd_dec "$p" "$t" qrow
+  git -C "$t" checkout -q -- .ai-dlc-fixture-readsets.tsv 2>/dev/null
+  printf 'q\n' > "$t/src/tab	name.txt"
+  ckd_dec "$p" "$t" qpath
+  rm -f "$t/src/tab	name.txt"
+  printf 'qctl=%s,%s,%s qrow=%s,%s,%s qpath=%s,%s,%s why=%s' \
+    "$(ckd_cell "$t.dd.qctl" alpha)" "$(ckd_cell "$t.dd.qctl" beta)" "$(ckd_cell "$t.dd.qctl" delta)" \
+    "$(ckd_cell "$t.dd.qrow" alpha)" "$(ckd_cell "$t.dd.qrow" beta)" "$(ckd_cell "$t.dd.qrow" delta)" \
+    "$(ckd_cell "$t.dd.qpath" alpha)" "$(ckd_cell "$t.dd.qpath" beta)" "$(ckd_cell "$t.dd.qpath" delta)" \
+    "$(grep -c 'cause: git quotes the path .*tab' "$t.dd.qpath/ann" 2>/dev/null)"
+}
+# A run cell prints `run:<class>:<state>`; with no .kdec row (a run-all announcement writes none) it prints empty.
+CKQ_WANT='qctl=skip::ok,skip::ok,skip::ok qrow=run:k:ok,skip::ok,skip::ok qpath=,, why=1'
+if [ "$CKD_N" -ge 1 ]; then
+  CK_ARMS=$((CK_ARMS+1)); _g="$(ckq_world "$CKD_P1" "$CKD_X1" "$CK_W/ckq.h1" 2>/dev/null)"
+  if [ "$_g" = "$CKQ_WANT" ]; then ok "(quoted-row) a quoted map row runs its own fixture only, a quoted ls-files path still empties keying and is NAMED: $_g"
+  else bad "(quoted-row) want '$CKQ_WANT' got '$_g'"; fi
+  CK_ARMS=$((CK_ARMS+1))
+  CKQ_M="$CK_W/ckq.mut.sh"; cp "$CKD_P1" "$CKQ_M"
+  _a1="$(grep -cF -- "    readset_rows \"\$out\" paths | grep -v '^\"'" "$CKQ_M")"; _a2="$(grep -cF -- "grep -q '^\"' \"\$out/.lsf\"" "$CKQ_M")"
+  if [ "$_a1" != 1 ] || [ "$_a2" != 1 ]; then bad "QUOTED-ROW MUTANT did not apply: anchors matched $_a1 and $_a2 time(s), not 1 and 1"
+  else
+    sed -e "s#^    readset_rows \"\$out\" paths | grep -v '^\"'\$#    readset_rows \"\$out\" paths#" \
+        -e "s#grep -q '^\"' \"\$out/.lsf\"#grep -q '^\"' \"\$out/.paths\"#" "$CKQ_M" > "$CKQ_M.t" && mv "$CKQ_M.t" "$CKQ_M"
+    if cmp -s "$CKD_P1" "$CKQ_M"; then bad "QUOTED-ROW MUTANT: the copy is unchanged"
+    else
+      _g="$(ckq_world "$CKQ_M" "$CKD_X1" "$CK_W/ckq.mut" 2>/dev/null)"
+      if [ "$_g" != "$CKQ_WANT" ] && case "$_g" in *"qrow=,,"*) true ;; *) false ;; esac; then ok "QUOTED-ROW MUTANT (unscoped guard) is KILLED by the qrow arm: the quoted map row empties keying for every fixture: $_g"
+      else bad "QUOTED-ROW MUTANT: expected qrow=,, in '$_g'"; fi
+    fi
+  fi
+fi
 fi
 
 # ------------------------------------ tool keys do not depend on the invoker ----
