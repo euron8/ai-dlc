@@ -587,6 +587,84 @@ else
 fi
 rm -rf "$wi" "$MUTI"
 
+# =============================================================================
+# THE REMEDY NAMES THE --root TREE's FILE, NOT THE RESOLVER's OWN TREE's.
+#
+# THE DEFECT. Every `cfg()` call passed `--root "$ROOT_ABS"`; the one line resolving REMEDY_FILE
+# did not, so artifact-path-config.sh fell back to AI_DLC_PROJECT_ROOT, then to a walk up from its
+# OWN install path. Driven from the distribution at a consumer, or with the override naming another
+# tree, the report told the operator to write a file the contract of a DIFFERENT tree declares.
+#
+# WHY THE ARMS ABOVE COULD NOT SEE IT: the seeded contract declares the same value core's does, so
+# the wrong tree and the right one gave byte-identical answers. Each tree here declares a value no
+# other tree carries, and the near-miss arm proves the values differ before anything is read off them.
+# =============================================================================
+VAL="$(pick "$HERE/../../scripts/validate-artifact-paths.sh" \
+            "$HERE/../../../scripts/ai-dlc/validate-artifact-paths.sh" \
+            "$HERE/../../core/scripts/validate-artifact-paths.sh")"
+ra="$(bash "$HERE/seed.sh" "$GRAMMAR")"
+rb="$(bash "$HERE/seed.sh" "$GRAMMAR")"
+sed 's@^consumer_artifact_paths_file:.*@consumer_artifact_paths_file: TREE-A-FILE.md@' \
+  "$ra/.claude/skills/ai-dlc/layer-contract.yaml" > "$ra/lc.tmp" && mv "$ra/lc.tmp" "$ra/.claude/skills/ai-dlc/layer-contract.yaml"
+sed 's@^consumer_artifact_paths_file:.*@consumer_artifact_paths_file: TREE-B-FILE.md@' \
+  "$rb/.claude/skills/ai-dlc/layer-contract.yaml" > "$rb/lc.tmp" && mv "$rb/lc.tmp" "$rb/.claude/skills/ai-dlc/layer-contract.yaml"
+asserts=$((asserts+1))
+if grep -qx 'consumer_artifact_paths_file: TREE-A-FILE.md' "$ra/.claude/skills/ai-dlc/layer-contract.yaml" \
+   && grep -qx 'consumer_artifact_paths_file: TREE-B-FILE.md' "$rb/.claude/skills/ai-dlc/layer-contract.yaml"; then
+  printf '  ok    %-26s %s\n' "remedy-root-seeded" "tree A declares TREE-A-FILE.md and tree B TREE-B-FILE.md, so a wrong-tree read is visible"
+else
+  fails=$((fails+1)); printf '  FAIL  %-26s %s\n' "remedy-root-seeded" "the contract edit did not land; the remedy-root arms below cannot discriminate"
+fi
+# $1 label  $2 output  $3 why
+remedy_names_a() {
+  asserts=$((asserts+1))
+  if grep -q 'TREE-A-FILE\.md' <<<"$2" && ! grep -q 'TREE-B-FILE\.md' <<<"$2" \
+     && ! grep -q '\.claude/skills/ai-dlc/artifact-paths\.md' <<<"$2"; then
+    printf '  ok    %-26s %s\n' "$1" "$3"
+  else
+    fails=$((fails+1)); printf '  FAIL  %-26s %s\n           A: %s / B: %s / default: %s\n' "$1" "$3" \
+      "$(grep -q 'TREE-A-FILE\.md' <<<"$2" && echo named || echo ABSENT)" \
+      "$(grep -q 'TREE-B-FILE\.md' <<<"$2" && echo NAMED || echo absent)" \
+      "$(grep -q '\.claude/skills/ai-dlc/artifact-paths\.md' <<<"$2" && echo NAMED || echo absent)"
+  fi
+}
+remedy_names_a "migrate-remedy-override" \
+  "$(cd "$ra" && AI_DLC_PROJECT_ROOT="$rb" bash "$MIG" --root "$ra" 2>&1)" \
+  "AI_DLC_PROJECT_ROOT at tree B: the migration's remedy still names tree A's declared file"
+remedy_names_a "migrate-remedy-unset" \
+  "$(cd "$ra" && env -u AI_DLC_PROJECT_ROOT bash "$MIG" --root "$ra" 2>&1)" \
+  "override unset: the same tree-A file, not the resolver's own install tree's"
+if [ -n "$VAL" ]; then
+  remedy_names_a "validate-noarea-override" \
+    "$(sed -n '/NO-AREA/,/move it under one/p' <<<"$(cd "$ra" && AI_DLC_PROJECT_ROOT="$rb" bash "$VAL" --root "$ra" 2>&1)")" \
+    "the conformance validator's NO-AREA remedy names tree A's file under the override too"
+  remedy_names_a "validate-noarea-unset" \
+    "$(sed -n '/NO-AREA/,/move it under one/p' <<<"$(cd "$ra" && env -u AI_DLC_PROJECT_ROOT bash "$VAL" --root "$ra" 2>&1)")" \
+    "...and with it unset"
+else
+  bad "FIXTURE ERROR: cannot locate validate-artifact-paths.sh, so its NO-AREA remedy is unchecked"
+fi
+# MUTANTS — drop `--root` from each remedy lookup, in a copy carrying its resolver sibling. Each
+# must then name TREE B, a PRESENCE the mutant has to produce: a copy that never ran emits nothing
+# and fails this rather than scoring a kill.
+MUTR="$ra-mut"; rm -rf "$MUTR"; lay_pair "$MUTR"
+[ -n "$VAL" ] && cp "$VAL" "$MUTR/v.sh"
+# $1 tag  $2 subject  $3 copy  $4 runner producing the remedy text
+remedy_mutant() {
+  asserts=$((asserts+1))
+  sed 's@--consumer-file --root "\$ROOT_ABS"@--consumer-file@' "$2" > "$3.tmp" && mv "$3.tmp" "$3"
+  if cmp -s "$2" "$3"; then
+    fails=$((fails+1)); printf '  FAIL  MUTANT %-18s sed matched NOTHING — the mutant IS the original\n' "$1"; return
+  fi
+  if grep -q 'TREE-B-FILE\.md' <<<"$($4)"; then printf '  ok    MUTANT %-18s %s\n' "$1" "without --root the remedy names tree B's file: the argument is load-bearing"
+  else fails=$((fails+1)); printf '  FAIL  MUTANT %-18s did NOT flip: the remedy-root arm cannot see a dropped --root\n' "$1"; fi
+}
+run_mig_mut() { (cd "$ra" && AI_DLC_PROJECT_ROOT="$rb" bash "$MUTR/m.sh" --root "$ra" 2>&1); }
+run_val_mut() { sed -n '/NO-AREA/,/move it under one/p' <<<"$(cd "$ra" && AI_DLC_PROJECT_ROOT="$rb" bash "$MUTR/v.sh" --root "$ra" 2>&1)"; }
+remedy_mutant 'remedy-root-mig' "$MIG" "$MUTR/m.sh" run_mig_mut
+[ -n "$VAL" ] && remedy_mutant 'remedy-root-val' "$VAL" "$MUTR/v.sh" run_val_mut
+rm -rf "$ra" "$rb" "$MUTR"
+
 echo
 if [ "$fails" -eq 0 ]; then echo "artifact-path-migration: PASS ($asserts assertions)"; exit 0; fi
 echo "artifact-path-migration: $fails of $asserts assertion(s) FAILED" >&2
