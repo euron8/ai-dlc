@@ -7,7 +7,7 @@
 # block for the pu-readset world, and the depth probe); on a consumer it maps to .githooks/pre-push.
 # Every other tree the fixture drives is seeded by seed.sh or built per arm under mktemp.
 !core/skills/ai-dlc-update/reconcile/
-core/git-hooks/pre-push
+!core/git-hooks/pre-push
 # Sourced by the parent run.sh's first line.
 core/fixtures/lib/
 # The shard drivers: the parent's coverage join reads every one. A fixture's OWN run.sh is not declared: the runner copies the fixture's own directory itself.

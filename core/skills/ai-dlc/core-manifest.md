@@ -313,6 +313,9 @@ core_manifest:
   - fixtures/retro-branch-behind-main/**
   - fixtures/route-defect-classification/**
   - fixtures/self-update-gate/**
+  - fixtures/self-update-gate-b/**
+  - fixtures/self-update-gate-c/**
+  - fixtures/self-update-gate-d/**
   - fixtures/setup-config-drift/**
   - fixtures/shadowed-local-validators/**
   - fixtures/snapshot-evidence-cell/**
