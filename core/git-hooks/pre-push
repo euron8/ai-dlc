@@ -1252,16 +1252,27 @@ RD_EOF
 # reused. hermetic-run.sh writes the same entry on a clean pass; this hook writes one for every declared fixture it
 # records `ok`. A reader fails closed: no store, no entry, a malformed or truncated body, or a body that is not the
 # digest input just computed means the fixture runs. Only DECLARED fixtures are ever looked up.
+# PER PROJECT: `<base>/<root commit sha>`, the base being the env var or the default. The project is the repository's
+# root commit (`git rev-list --max-parents=0 HEAD`, C-sorted, first line), the same in every full clone at any path
+# and over any remote URL. A shallow clone, a failed git, or anything that is not a 40-hex sha prints NOTHING: the
+# store is OFF for that run, no read and no write.
 readset_vs_store() {
-  if [ -n "${AI_DLC_VERDICT_STORE:-}" ]; then printf '%s' "$AI_DLC_VERDICT_STORE"
-  elif [ -n "${HOME:-}" ]; then printf '%s' "$HOME/.cache/ai-dlc/verdicts"; fi
+  local base root
+  if [ -n "${AI_DLC_VERDICT_STORE:-}" ]; then base="$AI_DLC_VERDICT_STORE"
+  elif [ -n "${HOME:-}" ]; then base="$HOME/.cache/ai-dlc/verdicts"; fi
+  [ -n "$base" ] || return 0
+  [ "$(git rev-parse --is-shallow-repository 2>/dev/null)" = false ] || return 0
+  root="$(git rev-list --max-parents=0 HEAD 2>/dev/null | LC_ALL=C sort | sed -n 1p)"
+  case "$root" in *[!0-9a-f]*|'') return 0 ;; esac
+  [ "${#root}" -eq 40 ] || return 0
+  printf '%s/%s' "$base" "$root"
 }
 readset_vs_ident() { # prints "<runner sha> <spans sha>"; fails when either file is absent
   local hk="" rn="" c
   for c in .githooks/pre-push core/git-hooks/pre-push; do [ -f "$c" ] && { hk="$c"; break; }; done
   for c in scripts/ai-dlc/hermetic-run.sh core/scripts/hermetic-run.sh; do [ -f "$c" ] && { rn="$c"; break; }; done
   [ -n "$hk" ] && [ -n "$rn" ] || return 1
-  printf '%s %s' "$(shasum -a 256 -- "$rn" | cut -d' ' -f1)" \
+  printf '%s %s' "$(sed -n '/^# HR_SANDBOX_BEGIN$/,/^# HR_SANDBOX_END$/p' "$rn" | shasum -a 256 | cut -d' ' -f1)" \
     "$( { sed -n '/^# READSET_UNIVERSE_BEGIN$/,/^# READSET_UNIVERSE_END$/p' "$hk"; sed -n '/^# READSET_TOOLS_BEGIN$/,/^# READSET_TOOLS_END$/p' "$hk"; } | shasum -a 256 | cut -d' ' -f1)"
 }
 readset_vs_input() { # <fx> <ident> <rows file>: the digest input
@@ -1273,7 +1284,8 @@ readset_verdicts() { # <out>: a DECLARED fixture decided `run` whose current key
   : > "$out/.vs"
   [ -s "$out/.dfx" ] || return 0
   store="$(readset_vs_store)"
-  [ -n "$store" ] && [ -d "$store" ] || return 0
+  if [ -z "$store" ]; then printf '   ..    verdict store OFF: no store base, or the project root commit cannot be resolved (shallow clone or git failure)\n'; return 0; fi
+  [ -d "$store" ] || return 0
   ident="$(readset_vs_ident)" || return 0
   [ -n "$ident" ] || return 0
   : > "$out/.vs.hit"

@@ -74,6 +74,10 @@ RUN_ORIG="$RUN"
 WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
+# EVERY RUN OF THE PROBE FIXTURE THROUGH hermetic-run.sh WRITES A VERDICT ENTRY on a clean pass, so an inherited or
+# default store collects one per runner sha per run. The base is pinned inside WORK for the whole fixture; the
+# mutant runners and every probe run inherit it.
+AI_DLC_VERDICT_STORE="$WORK/verdict-store"; export AI_DLC_VERDICT_STORE
 
 T="$(printf '\t')"
 VERBOSE=1

@@ -4984,6 +4984,7 @@ fi
 # THE OVERRIDE IS PASSED ON EACH COMMAND, never exported: this file scrubs AI_DLC_* at its top, so an export made
 # before the scrub would silently fall back to the default path and pass against whatever is there. Arm (a) asserts the
 # override directory holds entries, and the real default store is snapshotted before and after the unit.
+#   p  per project: the store is <base>/<root commit>; a file:// clone shares, another root commit does not, an unresolvable one is OFF
 #   a  A's hermetic pass -> B (clone, other path, identical tree) SKIPS; announced by name; the store holds entries
 #   b  one declared input byte changed in B -> RUN (the pass was recorded on a different tree)
 #   t  A's own declared input changed after its pass -> RUN; B's fixture-own file added -> RUN
@@ -5002,7 +5003,8 @@ if [ -z "$VS_RUN" ]; then
 else
 echo "HERMETIC-CONSUMED ${VS_RUN#"$ROOT"/}"
 VS_REAL_HOME="$(eval "printf '%s' ~$(id -un)")"
-vs_snap() { { ls -laR "$1/.cache/ai-dlc/verdicts" 2>&1; find "$1/.cache/ai-dlc/verdicts" -type f 2>/dev/null | LC_ALL=C sort | while IFS= read -r _f; do md5 -q "$_f"; done; } | md5 -q; }
+# Scored on the entries THIS unit could write (its own fixture names), because a peer session running real fixtures writes real entries into the default store concurrently.
+vs_snap() { find "$1/.cache/ai-dlc/verdicts" -type f 2>/dev/null | LC_ALL=C sort | while IFS= read -r _f; do grep -lxE '#fixture (decl|bad|nosent|undecl)' "$_f" 2>/dev/null; done | while IFS= read -r _f; do printf '%s ' "$_f"; md5 -q "$_f"; done | md5 -q; }
 VS_SNAP0="$(vs_snap "$VS_REAL_HOME")"; VS_SNAPH0="$(vs_snap "$HOME")"
 VS_DRV="$WORK/vs.drive.sh"
 printf '%s\n' 'cd "$2" || exit 1' '. "$1" 2>/dev/null' \
@@ -5040,45 +5042,61 @@ vs_plant() { # <pool> <t> <decision dir> <store> <fx>: the entry the digest name
     mkdir -p "$4" && { printf '#format k1\n#state ok\n'; cat "$3/.pl.d"; } > "$4/$(shasum -a 256 < "$3/.pl.d" | cut -d' ' -f1)" )
 }
 vs_world() { # <pool> <fixture root> <runner file> <t>: one vector
-  local p="$1" x="$2" rn="$3" t="$4" S="$4.S" A="$4/A" B="$4/B" rd e v n1 rcs
+  local p="$1" x="$2" rn="$3" t="$4" SB="$4.S" S A="$4/A" B="$4/B" rd e v n1 rcs ra
   case "$x" in core/fixtures) rd=core/scripts ;; *) rd=scripts/ai-dlc ;; esac
-  mkdir -p "$t" "$S" || { printf SEED; return; }
+  mkdir -p "$t" "$SB" || { printf SEED; return; }
   vs_mk "$A" "$x" "$rn" || { printf SEED; return; }
-  v="rcd=$(vs_hr "$A/$rd/hermetic-run.sh" "$A" decl "$S") rcb=$(vs_hr "$A/$rd/hermetic-run.sh" "$A" bad "$S") rcn=$(vs_hr "$A/$rd/hermetic-run.sh" "$A" nosent "$S") rcu=$(vs_hr "$A/$rd/hermetic-run.sh" "$A" undecl "$S")"
+  ra="$(cd "$A" && git rev-list --max-parents=0 HEAD | sed -n 1p)"; S="$SB/$ra"
+  v="rcd=$(vs_hr "$A/$rd/hermetic-run.sh" "$A" decl "$SB") rcb=$(vs_hr "$A/$rd/hermetic-run.sh" "$A" bad "$SB") rcn=$(vs_hr "$A/$rd/hermetic-run.sh" "$A" nosent "$SB") rcu=$(vs_hr "$A/$rd/hermetic-run.sh" "$A" undecl "$SB")"
   n1="$(vs_n "$S")"
-  git clone -q "$A" "$B" >/dev/null 2>&1 || { printf CLONE; return; }
-  vs_dec "$p" "$B" "$S" a
+  git clone -q "file://$A" "$B" >/dev/null 2>&1 || { printf CLONE; return; }
+  vs_dec "$p" "$B" "$SB" a
   v="$v a=$(vs_cell "$B.vd.a" decl)/$(vs_cell "$B.vd.a" bad)/$(vs_cell "$B.vd.a" nosent)/$(vs_cell "$B.vd.a" undecl) n=$n1"
   v="$v ann=$(grep -cxF '   ..    verdict store: 1 fixture(s) skipped on a pass recorded elsewhere: decl' "$B.vd.a/ann" 2>/dev/null)"
-  printf 'v2\n' > "$B/src/a.sh"; vs_dec "$p" "$B" "$S" b; printf 'v1\n' > "$B/src/a.sh"
+  printf 'v2\n' > "$B/src/a.sh"; vs_dec "$p" "$B" "$SB" b; printf 'v1\n' > "$B/src/a.sh"
   v="$v b=$(vs_cell "$B.vd.b" decl)"
-  printf 'v2\n' > "$A/src/a.sh"; vs_dec "$p" "$A" "$S" t1; printf 'v1\n' > "$A/src/a.sh"
-  printf 'x\n' > "$B/$x/decl/extra.txt"; vs_dec "$p" "$B" "$S" t2; rm -f "$B/$x/decl/extra.txt"
+  printf 'v2\n' > "$A/src/a.sh"; vs_dec "$p" "$A" "$SB" t1; printf 'v1\n' > "$A/src/a.sh"
+  printf 'x\n' > "$B/$x/decl/extra.txt"; vs_dec "$p" "$B" "$SB" t2; rm -f "$B/$x/decl/extra.txt"
   v="$v t=$(vs_cell "$A.vd.t1" decl)/$(vs_cell "$B.vd.t2" decl)"
-  cp "$B/$rd/hermetic-run.sh" "$t/rn.save"; printf '# x\n' >> "$B/$rd/hermetic-run.sh"; vs_dec "$p" "$B" "$S" g1; cp "$t/rn.save" "$B/$rd/hermetic-run.sh"
+  cp "$B/$rd/hermetic-run.sh" "$t/rn.save"
+  sed 's/^HR_ROOT_OPT=""$/HR_ROOT_OPT=""; : x/' "$t/rn.save" > "$B/$rd/hermetic-run.sh"; vs_dec "$p" "$B" "$SB" g1
+  sed 's/^  rsha=/  : x; rsha=/' "$t/rn.save" > "$B/$rd/hermetic-run.sh"; vs_dec "$p" "$B" "$SB" g3
+  printf '# trailing\n' >> "$B/$rd/hermetic-run.sh"; vs_dec "$p" "$B" "$SB" g4
+  cp "$t/rn.save" "$B/$rd/hermetic-run.sh"
   cp "$B/.githooks/pre-push" "$t/hk.save"
-  sed 's/^# READSET_UNIVERSE_BEGIN$/&\n# one more line/' "$t/hk.save" > "$B/.githooks/pre-push"; vs_dec "$p" "$B" "$S" g2; cp "$t/hk.save" "$B/.githooks/pre-push"
-  v="$v g=$(vs_cell "$B.vd.g1" decl)/$(vs_cell "$B.vd.g2" decl)"
+  sed 's/^# READSET_UNIVERSE_BEGIN$/&\n# one more line/' "$t/hk.save" > "$B/.githooks/pre-push"; vs_dec "$p" "$B" "$SB" g2; cp "$t/hk.save" "$B/.githooks/pre-push"
+  v="$v g=$(vs_cell "$B.vd.g1" decl)/$(vs_cell "$B.vd.g2" decl)/$(vs_cell "$B.vd.g3" decl)/$(vs_cell "$B.vd.g4" decl)"
   e="$(find "$S" -maxdepth 1 -type f ! -name '.tmp*' | LC_ALL=C sort | while IFS= read -r _f; do grep -qxF '#fixture decl' "$_f" && { printf '%s' "$_f"; break; }; done)"
   if [ -f "$e" ]; then
     cp "$e" "$t/e.save"
-    head -c 120 "$t/e.save" > "$e"; vs_dec "$p" "$B" "$S" e1
-    : > "$e"; vs_dec "$p" "$B" "$S" e2
-    sed '3s/decl/dec1/' "$t/e.save" > "$e"; vs_dec "$p" "$B" "$S" e3
-    cp "$t/e.save" "$e"; vs_dec "$p" "$B" "$S" e4
+    head -c 120 "$t/e.save" > "$e"; vs_dec "$p" "$B" "$SB" e1
+    : > "$e"; vs_dec "$p" "$B" "$SB" e2
+    sed '3s/decl/dec1/' "$t/e.save" > "$e"; vs_dec "$p" "$B" "$SB" e3
+    cp "$t/e.save" "$e"; vs_dec "$p" "$B" "$SB" e4
     v="$v e=$(vs_cell "$B.vd.e1" decl)/$(vs_cell "$B.vd.e2" decl)/$(vs_cell "$B.vd.e3" decl)/$(vs_cell "$B.vd.e4" decl)"
   else v="$v e=NOENTRY"; fi
-  rm -rf "$t.S2"; vs_plant "$p" "$B" "$B.vd.a" "$t.S2" undecl || v="$v PLANTFAIL"
+  rm -rf "$t.S2"; vs_plant "$p" "$B" "$B.vd.a" "$t.S2/$ra" undecl || v="$v PLANTFAIL"
   vs_dec "$p" "$B" "$t.S2" d1
-  vs_plant "$p" "$B" "$B.vd.a" "$t.S2" decl || v="$v PLANTFAIL"
+  vs_plant "$p" "$B" "$B.vd.a" "$t.S2/$ra" decl || v="$v PLANTFAIL"
   vs_dec "$p" "$B" "$t.S2" d2
   v="$v d=$(vs_cell "$B.vd.d1" undecl)/$(vs_cell "$B.vd.d2" undecl)/$(vs_cell "$B.vd.d2" decl)"
   : > "$t.notadir"
   rcs="$(vs_hr "$A/$rd/hermetic-run.sh" "$A" decl "$t.notadir")"
   v="$v f=$rcs/$(env -u HOME -u AI_DLC_VERDICT_STORE bash "$A/$rd/hermetic-run.sh" --root "$A" decl >/dev/null 2>&1; printf '%s' "$?")/$([ -f "$t.notadir" ] && [ ! -s "$t.notadir" ] && echo intact)"
+  mkdir -p "$t/C2" && cp -R "$A/." "$t/C2/" && rm -rf "$t/C2/.git" \
+    && ( cd "$t/C2" && git init -q . && git add -A && git -c user.email=f@f -c user.name=g commit -qm other ) >/dev/null 2>&1
+  vs_dec "$p" "$t/C2" "$SB" p1
+  git clone -q --depth 1 "file://$A" "$t/Sh" >/dev/null 2>&1; vs_dec "$p" "$t/Sh" "$SB" p2
+  vs_hr "$A/$rd/hermetic-run.sh" "$t/Sh" decl "$t.S3" >/dev/null 2>&1
+  v="$v p=$(vs_cell "$t/C2.vd.p1" decl)/$(vs_cell "$t/Sh.vd.p2" decl)/$(grep -c 'verdict store OFF' "$t/Sh.vd.p2/ann" 2>/dev/null)/$(ls -A "$t.S3" 2>/dev/null | grep -c .)"
   printf '%s' "$v"
 }
-VS_WANT='rcd=0 rcb=1 rcn=1 rcu=2 a=skip/run/run/run n=1 ann=1 b=run t=run/run g=run/run e=run/run/run/skip d=run/run/skip f=0/0/intact'
+VS_WANT='rcd=0 rcb=1 rcn=1 rcu=2 a=skip/run/run/run n=1 ann=1 b=run t=run/run g=run/run/skip/skip e=run/run/run/skip d=run/run/skip f=0/0/intact p=run/run/1/0'
+# (v) THE SPAN CANNOT GO VACUOUS: the digested runner span is non-empty and still holds the env -i line and the copy loop.
+VS_ARMS=$((VS_ARMS+1)); sed -n '/^# HR_SANDBOX_BEGIN$/,/^# HR_SANDBOX_END$/p' "$VS_RUN" > "$WORK/vs.span"
+if [ "$(grep -c . "$WORK/vs.span")" -gt 50 ] && grep -qF 'env -i PATH=' "$WORK/vs.span" && grep -qF 'cp -Rp "$HR_FXDIR"' "$WORK/vs.span" \
+   && grep -qF 'REQUIRED input' "$WORK/vs.span" && ! grep -qF 'hr_store_put' "$WORK/vs.span"; then ok "(verdict store, v) the HR_SANDBOX span is non-empty, holds the env -i invocation, the copy loop and the REQUIRED check, and no store code"
+else bad "(verdict store, v) the HR_SANDBOX span is empty, lost the env -i line, the copy or the REQUIRED check, or holds store code"; fi
 VS_N=0
 for _h in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
   [ -f "$_h" ] || continue
@@ -5094,13 +5112,15 @@ done
 vs_h() { # <pool> <fixture root> <t>
   local p="$1" x="$2" t="$3" S="$3.S" C="$3/C" rd o
   case "$x" in core/fixtures) rd=core/scripts ;; *) rd=scripts/ai-dlc ;; esac
+  local rc
   mkdir -p "$t" "$S" && vs_mk "$C" "$x" "$VS_RUN" || { printf SEED; return; }
+  rc="$(cd "$C" && git rev-list --max-parents=0 HEAD | sed -n 1p)"
   vs_hr "$C/$rd/hermetic-run.sh" "$C" decl "$S" >/dev/null
-  o="$(vs_n "$S")"
+  o="$(vs_n "$S/$rc")"
   rm -rf "$S"; mkdir -p "$S"
   vs_dec "$p" "$C" "$S" h
   ( cd "$C" && AI_DLC_VERDICT_STORE="$S" && export AI_DLC_VERDICT_STORE && . "$p" 2>/dev/null && printf 'ok' > "$C.vd.h/decl" && readset_keys_write "$C.vd.h" ) >/dev/null 2>&1
-  printf 'runner=%s hook=%s' "$o" "$(vs_n "$S")"
+  printf 'runner=%s hook=%s' "$o" "$(vs_n "$S/$rc")"
 }
 if [ "$VS_N" -ge 1 ]; then
   VS_ARMS=$((VS_ARMS+1)); _g="$(vs_h "$VS_P1" "$VS_X1" "$WORK/vs.hw" 2>/dev/null)"
@@ -5138,6 +5158,23 @@ if [ "$VS_N" -ge 1 ]; then
     '    cmp -s "$out/.vs.e" "$out/.vs.d" || continue' '    :'
   # (c) the writer writes on failure (and on a missing sentinel): the store gains entries for the red runs.
   vs_mut writefail runner n 'if [ "$hr_rc" -eq 0 ] && [ "$hr_missing" -eq 0 ]; then ( hr_store_put ) 2>/dev/null; exit 0; fi' '( hr_store_put ) 2>/dev/null; if [ "$hr_rc" -eq 0 ] && [ "$hr_missing" -eq 0 ]; then exit 0; fi'
+  # (p) the project subdirectory dropped from the reader AND the runner's writer: C2, another project, then reads A's pass and skips.
+  VS_ARMS=$((VS_ARMS+1)); cp "$VS_P1" "$WORK/vs.np.pool.sh"; cp "$VS_RUN" "$WORK/vs.np.run.sh"
+  _a="$(grep -cF '  printf '"'"'%s/%s'"'"' "$base" "$root"' "$WORK/vs.np.pool.sh")$(grep -cF '  store="$store/$root"' "$WORK/vs.np.run.sh")"
+  if [ "$_a" != 11 ]; then bad "VS MUTANT noproject: anchors matched '$_a', not 1 and 1 -- DID NOT APPLY"
+  else
+    sed 's|^  printf .%s/%s. "\$base" "\$root"$|  printf "%s" "$base"|' "$WORK/vs.np.pool.sh" > "$WORK/vs.np.pool.t" && mv "$WORK/vs.np.pool.t" "$WORK/vs.np.pool.sh"
+    sed 's|^  store="\$store/\$root"$|  :|' "$WORK/vs.np.run.sh" > "$WORK/vs.np.run.t" && mv "$WORK/vs.np.run.t" "$WORK/vs.np.run.sh"
+    if cmp -s "$VS_P1" "$WORK/vs.np.pool.sh" || cmp -s "$VS_RUN" "$WORK/vs.np.run.sh"; then bad "VS MUTANT noproject: a copy is unchanged"
+    else
+      _g="$(vs_world "$WORK/vs.np.pool.sh" "$VS_X1" "$WORK/vs.np.run.sh" "$WORK/vs.m.noproject" 2>/dev/null)"
+      _c="$(printf '%s\n' "$_g" | tr ' ' '\n' | grep '^p=')"
+      if [ "$_c" = "p=skip/run/1/0" ] || { [ -n "$_c" ] && [ "${_c%%/*}" = "p=skip" ]; }; then ok "VS MUTANT noproject is KILLED by the no-share cell: $_c"
+      else bad "VS MUTANT noproject was not killed by the no-share cell (got '$_c')"; fi
+    fi
+  fi
+  # (g) the hash covers the WHOLE runner file again: an edit outside the sandbox span now invalidates the entry.
+  vs_mut wholefile pool g "sed -n '/^# HR_SANDBOX_BEGIN\$/,/^# HR_SANDBOX_END\$/p' \"\$rn\"" 'cat "$rn"'
   # (d) the reader serves undeclared fixtures.
   vs_mut undeclared pool d '    grep -qxF -- "$fx" "$out/.dfx" || continue' '    :'
 fi

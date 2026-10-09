@@ -60,6 +60,10 @@
 # only when `inputs.decl` exists, so a missing declaration here is a caller defect, not a skip.
 set -u
 
+# HR_SANDBOX_BEGIN
+# EVERYTHING BETWEEN THESE MARKERS DECIDES WHAT A FIXTURE RUNS WITH (arguments, declaration, population, key rows, copy, env -i
+# invocation, sentinels) and is what the verdict store digests as `#runner`. Store read/write, logging and the summary line
+# are OUTSIDE it, so an edit to those does not invalidate a recorded pass.
 HR_ROOT_OPT=""
 HR_FXDIR=""
 HR_KEY_ONLY=0
@@ -432,6 +436,7 @@ while IFS="$(printf '\t')" read -r r rdecl; do
     hr_missing=1
   fi
 done < "$HR_WORK/required"
+# HR_SANDBOX_END
 
 printf 'hermetic-run: %s: rc=%s sandbox_files=%s required_missing=%s\n' \
   "$HR_FX" "$hr_rc" "$(/usr/bin/find "$HR_SB" -type f | wc -l | tr -d ' ')" "$hr_missing"
@@ -442,15 +447,20 @@ printf 'hermetic-run: %s: rc=%s sandbox_files=%s required_missing=%s\n' \
 # concurrent writers of one name write identical bytes. A failure to write drops the record and never changes
 # this run's exit.
 hr_store_put() {
-  local store rsha usha rows dig
+  local store rsha usha rows dig root
   store="${AI_DLC_VERDICT_STORE:-}"
   if [ -z "$store" ] && [ -n "${HOME:-}" ]; then store="$HOME/.cache/ai-dlc/verdicts"; fi
   [ -n "$store" ] || return 0
+  # PER PROJECT, the same resolver as readset_vs_store in the hooks (I66): the root commit, else the store is OFF.
+  root="$(cd "$HR_ROOT" && [ "$(git rev-parse --is-shallow-repository 2>/dev/null)" = false ] && git rev-list --max-parents=0 HEAD 2>/dev/null | LC_ALL=C sort | sed -n 1p)"
+  case "$root" in *[!0-9a-f]*|'') printf 'hermetic-run: %s: verdict store OFF: the project root commit cannot be resolved\n' "$HR_FX"; return 0 ;; esac
+  [ "${#root}" -eq 40 ] || { printf 'hermetic-run: %s: verdict store OFF: the project root commit cannot be resolved\n' "$HR_FX"; return 0; }
+  store="$store/$root"
   mkdir -p "$store" 2>/dev/null || return 0
   hr_population key || return 0
   rows="$(hr_key_rows)" || return 0
   [ -n "$rows" ] || return 0
-  rsha="$(shasum -a 256 -- "${BASH_SOURCE[0]}" | cut -d' ' -f1)"
+  rsha="$(sed -n '/^# HR_SANDBOX_BEGIN$/,/^# HR_SANDBOX_END$/p' "${BASH_SOURCE[0]}" | shasum -a 256 | cut -d' ' -f1)"
   usha="$( { sed -n '/^# READSET_UNIVERSE_BEGIN$/,/^# READSET_UNIVERSE_END$/p' "$HR_HOOK"; sed -n '/^# READSET_TOOLS_BEGIN$/,/^# READSET_TOOLS_END$/p' "$HR_HOOK"; } | shasum -a 256 | cut -d' ' -f1)"
   { printf '#fixture %s\n#runner %s\n#universe %s\n' "$HR_FX" "$rsha" "$usha"; printf '%s\n' "$rows"; } > "$HR_WORK/vs.d" || return 0
   dig="$(shasum -a 256 < "$HR_WORK/vs.d" | cut -d' ' -f1)"
