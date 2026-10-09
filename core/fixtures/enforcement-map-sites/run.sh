@@ -49,6 +49,8 @@ if [ ! -f "$HERE/../../../scripts/validate-enforcement-map.sh" ]; then
   echo "enforcement-map-sites: SKIP — distribution-only (validate-enforcement-map.sh is not shipped to consumers)"
   exit 0
 fi
+# The validator is present and about to be driven; inputs.decl marks it REQUIRED.
+echo "HERMETIC-CONSUMED scripts/validate-enforcement-map.sh" >&2
 
 # ONE TREE PER ASSERTION, IN ONE PROCESS PER ASSERTION, AND THE REASON IS WALL CLOCK.
 # Every assertion here mutates a pristine copy of the distribution and runs

@@ -60,6 +60,8 @@ if [ ! -f "$D_ROOT/scripts/validate-enforcement-map.sh" ]; then
   echo "enforcement-map-derivations: SKIP — distribution-only (validate-enforcement-map.sh is not shipped to consumers)"
   exit 0
 fi
+# The validator is present and about to be driven; inputs.decl marks it REQUIRED.
+echo "HERMETIC-CONSUMED scripts/validate-enforcement-map.sh"
 
 fails=0
 broken=0
