@@ -19,6 +19,62 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.756.0] - 2026-10-08
+
+Batch 210, release 1. It closes `BL-488` and fixes the subject half of `BL-487`. The consumer's live push-candidate
+ledger read 0 at this batch's sweep, the first empty reading in the program, so the batch's work came from the
+whole-backlog adjudication. No pre-push hook and no bootstrapping file changes.
+
+### Two dead arms in `spec-join-integrity` and a vacuous arm in `claude-rules-joins` can fire (BL-488)
+
+- `core/fixtures/spec-join-integrity/run.sh` defined `says()` after two of its six calls, so those two printed
+  `says: command not found` and asserted nothing while the fixture reported PASS. The filing named one; the second,
+  the OVER-FIRE control for a spine-wide close, was found by the adjudication. The definition now sits beside `want()`.
+  Base 388 ok, tip 390; with the subject replaced by `exit 0` both revived arms FAIL naming the missing message.
+- `core/fixtures/claude-rules-joins/run.sh` copied a `core/.gitignore` that does not exist, behind an `[ -f ]` guard.
+  Both lines are deleted rather than repointed: against the real root `.gitignore` the only seed path it would ignore is
+  one the seed never writes and the mutants add with `git add -f`. The fixture stays green with 13/13 mutants killed.
+- The entry's receipt requires both revived labels to print `ok` and zero gitignore mentions, so deleting the calls
+  cannot satisfy it. Scored: tip 0; base, definition moved past only one call (either order), both call blocks
+  deleted, gitignore lines restored, all 1.
+
+### The artifact-path remedy names the `--root` tree, not the resolver's own (BL-487, subject half)
+
+- `core/scripts/migrate-artifact-paths.sh` and `core/scripts/validate-artifact-paths.sh` each called the resolver's
+  `--consumer-file` once without `--root "$ROOT_ABS"` while every other call site passed it. The remedy path the
+  operator is told to write therefore came from whichever tree the resolver found for itself: the distribution's own
+  contract when driven from the distribution, or `AI_DLC_PROJECT_ROOT`'s tree when set. Measured with three contracts
+  carrying distinct consumer-file values: base named the distribution's file with the override unset and the
+  override's tree with it set; tip names the `--root` tree's file in every cell. Both sites now pass `--root`.
+- `core/fixtures/artifact-path-migration/run.sh` gains four arms (migrator and validator NO-AREA remedy, override set
+  and unset) and two `cmp -s`-guarded mutants that strip `--root` from a copy of each script. 69 assertions became 76;
+  on base the four arms and both mutants fail. The fixture also passes from an installed layout. Cost 32s to 38s.
+- The entry was filed as fixture-side cases; this one was a subject defect and the entry now says so. The three
+  fixture-side cases (0.755.0 added `taught-schema`) and all four declarations remain open and belong to the
+  hermetic program. The entry's receipt now runs `artifact-path-migration` (about 40s solo), so a comment carrying
+  the `--root` literal cannot satisfy it; that cost lands in the hook's backlog-receipts step.
+
+### The release-version validator's predicate A binds this repo's release subjects
+
+- `scripts/validate-release-version.sh` read a version claim only as `vX.Y.Z`, and every release subject since the
+  squash-merge era reads `X.Y.Z — …`, so predicate A bound none of them: a check on the release gate that could not
+  fire. A bare leading `X.Y.Z` now counts as the claim when the `v` form is absent. Measured over all 1865 non-merge
+  commits on `origin/main`: 657 bound became 898, mismatches unchanged at 7 (all pre-existing docs commits naming a
+  planned version); over all refs 664 became 1045, mismatches 10 both ways. A mid-subject bare version is a mention
+  and is not bound; the anchor is what makes that so.
+- `core/fixtures/release-version-triple/run.sh` adds four assertions: bare agreeing passes, bare ahead fails naming
+  both values, mid-subject near-miss passes, and a mutant with the anchor removed must fail the near-miss. Against the
+  base validator the bare-ahead arm fails with exit 0 from the validator, which is the defect.
+
+### Backlog corrections
+
+- `BL-465`: the "roughly 57 percent of cost" prediction is replaced by a measurement. 0.754.0's gate replayed through
+  the shipping pole validator read `coverage 83.24%` (54129s of 65021s over 70 timed rows), so the floor has not been
+  reached rather than cannot be. Stays PARTIAL.
+- `BL-481`: re-derived from the local map, six of the seven unmapped fixtures sit at `#discards 1` under the current
+  deriver key, not 3, and `subject-partition` holds 45 local trace rows with no committed row. 0.755.0 declared
+  `implementation-join-yield`, so six remain. Stays LIVE.
+
 ## [0.755.0] - 2026-10-08
 
 Batch 209's third release and the close of plan action 4: **54 more fixtures declared hermetic, taking

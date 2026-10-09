@@ -207,18 +207,3 @@ declarations remain open and are the hermetic program's (`docs/plans/hermetic-fi
 
 verify: sh for f in story-corpus-sprint-slot artifact-path-migration push-drain-refusals taught-schema; do [ -f core/fixtures/$f/inputs.decl ] || exit 1; done; k="$(bash core/fixtures/artifact-path-migration/run.sh 2>&1 </dev/null | grep -cE '^  ok    (migrate-remedy-(override|unset)|validate-noarea-(override|unset)|MUTANT remedy-root-(mig|val)) ')" || k=0; [ "$k" -eq 6 ]
 
-## BL-488 — two pre-existing fixture defects the hermetic census read past
-
-**DEFECT, filed at batch 209, found by hands reading `run.sh` to write a declaration.**
-`core/fixtures/spec-join-integrity/run.sh:99` calls `says` before its definition at line 174, so every
-run prints `says: command not found`, exit stays 0, and the "low-severity findings are RECORDED" arm
-never executes; confirmed on the base tree. `core/fixtures/claude-rules-joins/run.sh` guards a
-nonexistent `core/.gitignore` with `[ -f ]` and silently skips it, a latent no-op arm. Both fixtures
-are declared and PASS; neither declaration touched the defect. Fix each arm so it can fire, with the
-probe-both-ways discipline the repo requires of a new check. The filing missed a second dead arm in
-the same file: the `says` call at line 160 ("OVER-FIRE CONTROL: and the spine-wide close is
-ANNOUNCED") also precedes the definition, so moving only line 99's call would leave it dead.
-
-verify: sh f=core/fixtures/claude-rules-joins/run.sh; [ -f "$f" ] || exit 1; out="$(bash core/fixtures/spec-join-integrity/run.sh 2>&1 </dev/null)"; n="$(printf '%s\n' "$out" | grep -c 'says: command not found')" || n=0; k="$(printf '%s\n' "$out" | grep -cE '^  ok    (low-severity findings are RECORDED|OVER-FIRE CONTROL: and the spine-wide close is ANNOUNCED)')" || k=0; g="$(grep -c -i gitignore "$f")" || g=0; [ "$n" -eq 0 ] && [ "$k" -eq 2 ] && [ "$g" -eq 0 ]
-
-
