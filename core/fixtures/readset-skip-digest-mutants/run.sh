@@ -10,7 +10,7 @@
 # EVERY MUTANT DECLARES THE EXACT SET OF WORLDS IT MOVES. A mutant that moves one more world than it
 # declares is entanglement, one fewer is a world that cannot see its subject -- both fail.
 # --- THE SHARD SPLIT. Unsharded this battery was the suite's single longest directory, so it is dealt
-# across three drivers: this directory is shard 'a', and `-b` and `-c` are one-line drivers that exec this
+# across five drivers: this directory is shard 'a', and `-b` to `-e` are one-line drivers that exec this
 # file with `--group <x>`. A mutant's id is DERIVED from its own call line (dg_<name> for dg_mut,
 # dd_<name> for dg_mut_deriver, tk_<name> for tk_mut), the partition is declared HERE, and the coverage
 # join J0 compares it with the ids derived from this file's own lines, so no mutant can fall out of every
@@ -18,10 +18,12 @@
 # impossible-anchor control, because a shard that skipped them could report a kill against a harness that
 # never ran. The tool-key block (its own span, control and count) runs only in a shard dealt a tk_ id.
 # The shard arrives as an ARGUMENT, never the environment: the scrub below unsets AI_DLC_*.
-SHARDS="a b c"
-MUTANTS_a="dg_bypass dg_nodigest_valid dg_nodigest_unmapped dg_needs_deriver dg_needs_localmap dg_b1_hashleak"
-MUTANTS_b="dg_selfread dg_stale_runs dg_nopublish dg_deriver_ignored dg_noexplain dg_dirvalue"
-MUTANTS_c="dg_dirlocal dg_dirdash dg_listload dg_listvalue dd_dirplain tk_inherited tk_xpenv tk_devdir tk_noamnesty tk_nopublish tk_filetoo tk_carrytools"
+SHARDS="a b c d e"
+MUTANTS_a="dg_bypass dg_nodigest_valid dg_nodigest_unmapped dg_needs_deriver"
+MUTANTS_b="dg_needs_localmap dg_b1_hashleak dg_selfread dg_stale_runs"
+MUTANTS_c="dg_nopublish dg_deriver_ignored dg_noexplain dg_dirvalue"
+MUTANTS_d="dg_dirlocal dg_dirdash dg_listload dg_listvalue"
+MUTANTS_e="dd_dirplain tk_inherited tk_xpenv tk_devdir tk_noamnesty tk_nopublish tk_filetoo tk_carrytools"
 set -u
 # THE ROOT IS READ BEFORE THE SCRUB: the hermetic runner exports AI_DLC_PROJECT_ROOT (its sandbox is not a
 # git repository) and the scrub below would discard it. Outside the runner it is unset and git answers.
