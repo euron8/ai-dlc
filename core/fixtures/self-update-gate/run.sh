@@ -27,6 +27,9 @@ for cand in \
   [ -f "$cand" ] && GATE="$cand" && break
 done
 [ -n "$GATE" ] || { printf 'FAIL: cannot locate self-update-gate.sh from %s. Looked in:\n%s' "$DIR" "$LOOKED"; exit 1; }
+# Reached only once the gate resolved; its whole directory is the input, because the gate sources
+# preclassify.sh and setup-sites.md beside itself and the arms below read two more siblings.
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$GATE")" && pwd -P)/"
 
 read -r DIST BASE THEIRS CONS < <(bash "$DIR/seed.sh")
 trap 'rm -rf "$(dirname "$DIST")"' EXIT
@@ -3371,10 +3374,14 @@ ss_assert "pu-a1-restore-control" "bytes=$(wc -c < "$PU_A/W/$PU_A_UNC.ctl" | tr 
 # skipped and its `git` row present. CONTROL, one property apart: the same drive with the block's
 # tool dirs replaced by the inherited PATH must DIFFER, so the equality is one that can fail. The
 # hook exits 0 so the wrapper writes no record into the tree it is judging.
-PU_TK_HOOK=""; PU_TK_TOP="$(git -C "$DIR" rev-parse --show-toplevel 2>/dev/null)"
-for _c in "$PU_TK_TOP/.githooks/pre-push" "$PU_TK_TOP/core/git-hooks/pre-push"; do
-  [ -n "$PU_TK_TOP" ] && [ -f "$_c" ] && { PU_TK_HOOK="$_c"; break; }
+# The hook is located the way the two later arms locate it (both layouts from this file's own
+# directory), never through the enclosing repository: `git rev-parse --show-toplevel` answers
+# about whatever repository ENCLOSES the fixture, which in a sandbox is none, or a stranger's.
+PU_TK_HOOK=""
+for _c in "$DIR/../../git-hooks/pre-push" "$DIR/../../../.githooks/pre-push"; do
+  [ -f "$_c" ] && { PU_TK_HOOK="$(cd "$(dirname "$_c")" && pwd -P)/pre-push"; break; }
 done
+[ -n "$PU_TK_HOOK" ] && echo "HERMETIC-CONSUMED $PU_TK_HOOK"
 if [ -z "$PU_TK_HOOK" ] || ! grep -q '^readset_tools() ' "$PU_TK_HOOK"; then
   printf '  SKIP  pu-readset-*   no pre-push hook with readset_tools in either layout yet\n'
 else

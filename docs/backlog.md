@@ -173,37 +173,3 @@ untraceable set is wider than the two filed.
 
 verify: manual -- close when a push's read-set line reports none of these fixtures UNMAPPED, by a trace or by a declaration.
 
-## BL-487 — a fixture whose installed subject honours `AI_DLC_PROJECT_ROOT` reads the sandbox, not its seeded tree
-
-**DEFECT, filed at batch 209.** The hermetic runner exports `AI_DLC_PROJECT_ROOT=<sandbox root>` so a
-fixture's own root walk lands inside the sandbox. Three fixtures install a subject INTO a seeded
-consumer tree under `mktemp` and then drive it there; the subject takes the exported override ahead of
-its own walk and reads the sandbox's pristine copy instead of the seeded tree's, so an arm that mutates
-the seeded copy fails under the runner and passes in the plain pool. Measured: `story-corpus-sprint-slot`
-(`core/scripts/sprint-status.sh:128` takes the override; arm A10 fails on all 7 mutants and the control),
-`artifact-path-migration` (`migrate-artifact-paths.sh:128` calls `artifact-path-config.sh --consumer-file`
-without `--root`, and that helper's line 92 takes the override; 2 of 69 fail), and `push-drain-refusals`
-(`pdr_root` at `run.sh:40-50` ignores the override and walks up from its own location, which inside the
-sandbox ESCAPES to the `mktemp` parent, a directory that carries `.claude/logs` on this box, and reads
-PENDING exit 0). A fourth, `taught-schema`, is the same shape through
-`validate-provenance-block.sh:167-169` (root candidates before script-relative). The escape class has a
-second instance that was resolved by declaration: `h2-attest-scripts-dir`'s validator walk stopped at
-the `mktemp` parent until `core/skills/ai-dlc/` was declared, so the marker it walks for exists inside
-the sandbox. 113 fixtures already scrub `AI_DLC_*` before driving a subject; these four do not. The
-remedy is in each fixture: unset the override in the tool invocation, or pass `--root`, or (for the
-walker) honour the override. Not a runner change: the other declared fixtures depend on the export.
-
-**PARTIAL: the `artifact-path-migration` case was a SUBJECT defect, not a fixture one, and it is fixed.**
-`migrate-artifact-paths.sh:128` and `validate-artifact-paths.sh:362` both called the resolver's
-`--consumer-file` without `--root "$ROOT_ABS"` while every other call site passed it, so the remedy path the
-operator is sent to named whichever tree the resolver found for itself (the distribution's own contract when
-run from the distribution, or `AI_DLC_PROJECT_ROOT`'s tree when set), not the tree under migration. Measured
-with three contracts carrying distinct consumer-file values: base named the distribution's file with the
-override unset and the override's tree with it set; fixed names the `--root` tree's file in every cell. Both
-sites now pass `--root`, and `artifact-path-migration` carries four arms and two mutants that discriminate; the
-entry's receipt runs that fixture (about 40s solo) so a comment carrying the literal cannot satisfy it. The
-three fixture-side cases (`story-corpus-sprint-slot`, `push-drain-refusals`, `taught-schema`) and all four
-declarations remain open and are the hermetic program's (`docs/plans/hermetic-fixtures-poc.md`, action 5).
-
-verify: sh for f in story-corpus-sprint-slot artifact-path-migration push-drain-refusals taught-schema; do [ -f core/fixtures/$f/inputs.decl ] || exit 1; done; k="$(bash core/fixtures/artifact-path-migration/run.sh 2>&1 </dev/null | grep -cE '^  ok    (migrate-remedy-(override|unset)|validate-noarea-(override|unset)|MUTANT remedy-root-(mig|val)) ')" || k=0; [ "$k" -eq 6 ]
-

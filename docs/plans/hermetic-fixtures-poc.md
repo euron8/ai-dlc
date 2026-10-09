@@ -89,16 +89,21 @@ longest selected fixture. The operator ruled at batch 209's close that the pole 
 `docs/plans/hermetic-pole.md` carries that work, is running on its own session, and holds the main
 checkout for its gate. This plan's remaining action is small and must not contend with it.
 
-**What the next batch owes.** Action 5: re-root the five class-b rows (`BL-487`'s four and
-`self-update-gate`), none of which is a pole fixture, so none moves the push. Each is a fixture edit
-(scrub the override before driving the subject, or pass `--root`, or reuse the fixture's own candidate
-loop), then a declaration by the action-3 method, measured in the clone. Hold the result on a branch:
-**its gate runs only after `hermetic-pole.md`'s first release has LANDED**, read as a CHANGELOG heading
-on `origin/main` whose entry cites that plan, or with that session's explicit window. Before any gate:
-`bash scripts/validate-enforcement-map.sh` on the stacked branch must exit 0, and every sentinel obeys
-the two rules the 0.753.0 gate taught (no `$(dirname "$X")/../<subtree>` walk; a `run.sh` naming
-`core/hooks/` or `$HOOK` carries the `AI_DLC_*` scrub loop). Batch 208 (`ai-dlc-cd`) rewrites `BL-485`'s
-receipt when it builds the shards; do not touch that entry.
+**Batch 213's hermetic release, 0.759.0, closes action 5: the five class-b rows re-rooted and declared,
+`DECLARED` at 174, `BL-487` closed on its fixture half.** Each failure was reproduced under the runner at
+4ff66b6d before its edit; one filed figure (`artifact-path-migration`'s "2 of 69") did not reproduce because
+0.756.0 had fixed that subject, and the scrub shipped anyway on the helper's surviving override. The
+remedies were the three the entry named: a scrub ahead of the subject (three fixtures), the override read
+BEFORE the scrub (`push-drain-refusals`, whose walk escaped a sandbox), and the fixture's own two-layout
+candidate loop in place of a live `show-toplevel` (`self-update-gate`, one arm). Runner and plain PASS in
+both layouts, isolation and teeth probes failed as required on every one, `validate-enforcement-map.sh`
+exit 0 on the stacked branch. `self-update-gate` was measured solo in the clone inside a window
+`ai-dlc-22` granted; the figures in the CHANGELOG are loaded. The gate waited for `hermetic-pole.md`'s
+first release to LAND, as this block required.
+
+**What remains for this plan is nothing numbered.** Action 6 holds: class c stays on the map. The pole
+is `hermetic-pole.md`'s; `BL-485`'s shards are batch 208's. A later batch that wants more declarations
+takes the no-repo-input and lib-only rows off the exclusion list only on an operator ruling.
 
 Your instructions are four sections. Read all four before acting: `## Start here` (the trees and
 the read/write boundary), `### NEXT ACTIONS — numbered, in order`, `### Ping the operator`, and
@@ -157,7 +162,7 @@ find core/fixtures -mindepth 1 -maxdepth 1 -type d | wc -l          # fixture di
 ls core/fixtures/*/run.sh | wc -l                                   # drivable fixtures (246)
 ls core/fixtures/*/.dist-only | wc -l                               # dist-only         (67)
 # declared fixtures. CONTROL: core/fixtures/hermetic-runner/run.sh exists (the runner's self-probe, undeclared by design).
-n=0; for d in core/fixtures/*/; do [ -f "$d/inputs.decl" ] && n=$((n+1)); done; echo "DECLARED $n"; ls core/fixtures/hermetic-runner/run.sh   # 157 at 0.755.0
+n=0; for d in core/fixtures/*/; do [ -f "$d/inputs.decl" ] && n=$((n+1)); done; echo "DECLARED $n"; ls core/fixtures/hermetic-runner/run.sh   # 174 at 0.759.0
 grep -v '^#' "$MAP" | cut -f1 | sort -u | wc -l                     # mapped fixtures   (236)
 grep -v '^#' "$MAP" | wc -l                                         # map rows          (29955)
 # drivable fixtures with NO map rows. CONTROL: absorbed-specifics-survive has 9 rows.
@@ -222,9 +227,11 @@ actions 3 and 4 are COMPLETED (0.750.0); they are kept numbered so citations res
    class-b row whose `roots` column is a `$0` walk and whose `git_dep` is not `live`. Per fixture the
    two 5a probes of action 3, and for a `VERSION` walker the drop-VERSION probe (refuse inside the
    sandbox, never PASS via the `mktemp` parent).
-5. **RE-ROOT THE REST OF CLASS B**: the rows with `show-toplevel`, a `VERSION`/`install.sh` walk, or
-   `git_dep=live`. Read the root BEFORE the fixture's `AI_DLC_*` scrub (113 fixtures carry one); the
-   six history-readers need a seeded repository, which this plan has not priced.
+5. **RE-ROOT THE REST OF CLASS B** — COMPLETED at 0.759.0: `BL-487`'s four and `self-update-gate`,
+   each reproduced under the runner before its edit, declared by the action-3 method, probed both
+   ways in both layouts. The root is read BEFORE the fixture's `AI_DLC_*` scrub where the fixture
+   walks (`push-drain-refusals`); a live `show-toplevel` is replaced by the fixture's own candidate
+   loop (`self-update-gate`). Nothing to do.
 6. **LEAVE CLASS C ON THE MAP** unless the operator asks otherwise.
 7. **RE-DERIVE THIS BLOCK** at the batch close, run `bash scripts/validate-plan-shape.sh` on this
    file, commit, and push once from the clone.
@@ -288,9 +295,12 @@ re-run through the runner on the release branch, `DECLARED` reading 103 with the
 For batch 209's third release (satisfied at 0.755.0): the remaining action-4 peer branches collected
 and landed, `DECLARED` reading 157 with the control present.
 
-For the next batch: at least the four `BL-487` fixtures re-rooted and declared, each with its
-`hermetic-run.sh` PASS and 5a probes named in the release message, and `DECLARED` in the derive block
-reading more than 157 with the control present.
+For batch 213's hermetic release (satisfied at 0.759.0): the four `BL-487` fixtures and `self-update-gate`
+re-rooted and declared, each with its `hermetic-run.sh` PASS and 5a probes named in the release message,
+`DECLARED` reading 174 with the control present, `BL-487` carrying its LANDED line.
+
+For any later batch: the numbered list names nothing to do. A session resuming here re-runs the derive
+block, confirms `DECLARED` is 174 or more with the control present, and stops.
 
 ## Hazards
 

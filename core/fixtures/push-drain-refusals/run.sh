@@ -26,6 +26,12 @@
 # words that nothing was checked, because exit 0 alone reads exactly like a pass.
 set -uo pipefail
 
+# THE ROOT IS READ BEFORE THE SCRUB. Under the hermetic runner the project root is the sandbox,
+# handed over as AI_DLC_PROJECT_ROOT; the walk below, started from this file's own location,
+# climbs past a sandbox that carries no .git and lands on the mktemp parent, which on an operator
+# box can carry a `.claude/` of its own -- and the reader is then "absent" there, PENDING exit 0,
+# nothing checked. Honour the override, then scrub it like every other tunable.
+PDR_ROOT_OVERRIDE="${AI_DLC_PROJECT_ROOT:-}"
 # HERMETIC -- scrub the operator's tuning before invoking anything (I10).
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 # The seam above already does this; restated so a fixture-local edit cannot lose it before the
@@ -47,7 +53,11 @@ pdr_root() {
   done
   return 1
 }
-ROOT="$(pdr_root "$(dirname "$HERE")")" || broken "no repo root above $HERE"
+if [ -n "$PDR_ROOT_OVERRIDE" ] && [ -d "$PDR_ROOT_OVERRIDE" ]; then
+  ROOT="$(cd "$PDR_ROOT_OVERRIDE" && pwd -P)" || broken "cannot enter AI_DLC_PROJECT_ROOT=$PDR_ROOT_OVERRIDE"
+else
+  ROOT="$(pdr_root "$(dirname "$HERE")")" || broken "no repo root above $HERE"
+fi
 
 RD=""
 for _c in "$ROOT/core/skills/ai-dlc-update/reconcile/push-drain.sh" \
@@ -58,6 +68,7 @@ if [ -z "$RD" ]; then
   echo "PENDING  push-drain-refusals -- reconcile/push-drain.sh is absent from both layouts under $ROOT (core/skills/ai-dlc-update/ and .claude/skills/ai-dlc-update/). NOTHING WAS CHECKED; this is not a pass. It clears on the pull that delivers the reader."
   exit 0
 fi
+echo "HERMETIC-CONSUMED $RD"
 command -v git >/dev/null 2>&1    || broken "no git on PATH"
 command -v shasum >/dev/null 2>&1 || broken "no shasum on PATH"
 

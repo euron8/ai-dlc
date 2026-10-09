@@ -1,0 +1,3 @@
+!core/scripts/sprint-status.sh
+core/scripts/validate-mandatory-rules.sh
+core/schemas/sprint-status.json

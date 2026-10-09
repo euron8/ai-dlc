@@ -19,6 +19,69 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.759.0] - 2026-10-09
+
+Batch 213's hermetic-fixtures-poc release and the close of that plan's action 5: **the five class-b
+fixtures re-rooted and declared hermetic, taking `DECLARED` from 169, where 0.757.0 left it, to 174**, and `BL-487` closed on
+its fixture half. No hook, validator or runner change; no bootstrapping file changes. Every fixture
+was reproduced under the runner before its edit, then run through the runner and plain in the
+distribution and on an `install.sh`-built consumer tree, with both 5a probes on `--fixture-dir`
+copies. Released from `docs/plans/hermetic-fixtures-poc.md`.
+
+### The four BL-487 fixtures no longer read a tree other than their seed (BL-487, fixture half)
+
+- `story-corpus-sprint-slot`, `artifact-path-migration` and `taught-schema` scrub `AI_DLC_*` before
+  driving their subject. Each installs its subject INTO a seeded tree and the subject takes
+  `AI_DLC_PROJECT_ROOT` ahead of its own walk, so the runner's export pointed the installed copy at
+  the sandbox's pristine files. Reproduced at 4ff66b6d, under the runner, before the edit:
+  `story-corpus-sprint-slot` A10 failed on the control and all 7 mutants; `taught-schema`'s V4b and
+  V4c mutation controls failed. `artifact-path-migration`'s filed "2 of 69" did not reproduce at that
+  base, because 0.756.0's subject fix (`--root` on both `--consumer-file` sites) had landed; its scrub
+  ships anyway, since `artifact-path-config.sh:92` still takes the override on any call that omits
+  `--root`.
+- `push-drain-refusals` is the inverse shape: it already scrubbed, and its `pdr_root` walk from its
+  own location climbed out of a sandbox that carries no `.git` to the `mktemp` parent, which on this
+  box carries a `.claude/`, and reported `PENDING` exit 0 with nothing checked. It now reads
+  `AI_DLC_PROJECT_ROOT` BEFORE the scrub and roots there when set; the walk is the fallback.
+- Declarations: each carries one REQUIRED input, the subject, with the sentinel printed at the
+  point the subject resolved (`seed.sh` exit 2 guards it in `story-corpus-sprint-slot`; the `pick`
+  guard in `artifact-path-migration`; the reader loop in `push-drain-refusals`; the four-file
+  existence loop in `taught-schema`, whose REQUIRED input is the `core/scripts/` directory it
+  copies). `artifact-path-migration` also declares `validate-artifact-paths.sh`, the second subject
+  0.756.0's arms added; without it the runner fails one arm in both layouts, which is the isolation
+  probe for that line.
+- Probes, every one on a `--fixture-dir` copy. Isolation: drop `sprint-status.json` is seed exit 2;
+  drop the grammar is exit 2 `cannot locate`; drop `core/schemas/` is exit 2 `FIXTURE BROKEN`;
+  `push-drain-refusals` has no droppable non-REQUIRED input besides `lib/`, which is
+  non-discriminating by the 0.753.0 ruling, so its REQUIRED input was SWAPPED for
+  `reconcile/apply.sh` and the run is exit 1 with `PENDING` naming the absent reader. Teeth: with the
+  sentinel line deleted each is exit 1 naming the REQUIRED input while the fixture itself prints
+  PASS.
+- The entry's receipt, which runs `artifact-path-migration`, exits 0 on the branch.
+
+### `self-update-gate` locates the hook from its own directory and is declared (plan action 5, fifth row)
+
+- One arm, the `pu-readset-*` world at `run.sh:3127`, found the shipped hook through
+  `git -C "$DIR" rev-parse --show-toplevel`, which answers about whatever repository ENCLOSES the
+  fixture: in a sandbox none, in a stranger's checkout theirs. The two later arms already walked
+  both layouts from `$DIR`; this one now does the same. No other live-repository read exists in
+  the fixture or its seed; every world it drives is built under `mktemp`.
+- Declared with two REQUIRED inputs: `core/skills/ai-dlc-update/reconcile/` (the gate sources
+  `preclassify.sh` and `setup-sites.md` beside itself and the arms read two more siblings) and
+  `core/git-hooks/pre-push`, which maps to `.githooks/pre-push` on a consumer. 37 sandbox files.
+- Measured solo in the clone, during a window `ai-dlc-22` granted under its 0.756.0 gate: plain
+  PASS, 335 assertions, 398s at load 36.6 falling to 19.0; runner PASS, 335 assertions, 321s at
+  load 17.4 falling to 6.7. Loaded figures, not comparable with a pool row. Re-run under the runner
+  on the final base after 0.758.0 added nineteen assertions: PASS, 354 assertions, 37 sandbox files.
+- Probes: swapping the reconcile directory for `core/skills/ai-dlc-setup/` is exit 1 `cannot locate
+  self-update-gate.sh`; deleting both sentinels is exit 1 with two `REQUIRED input` lines over a
+  335-assertion PASS. Consumer layout: runner PASS with both sentinels spelled in consumer paths.
+
+### Not declared, with cause
+
+- `review-shard-merge-mutants` stays `BL-485`'s. The no-repo-input and lib-only fixtures stay on
+  the map. `DECLARED` reads 174 with the `hermetic-runner` control present (169 after 0.757.0 sharded the pole into declared directories).
+
 ## [0.758.0] - 2026-10-09
 
 Batch 211, release 1. It closes `BL-489`, a consumer filing against the self-update gate. It ships alone because its
