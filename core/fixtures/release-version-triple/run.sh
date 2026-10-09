@@ -55,7 +55,7 @@ bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
 # PASS. Every assertion below reaches the validator through `$( )`, so the same
 # shape is available here. A failed assertion is loud; one that never executed is
 # not, and this is what tells them apart.
-EXPECTED_ASSERTIONS=23
+EXPECTED_ASSERTIONS=27
 
 cd "$WORK" || exit 2
 git init -q . 2>/dev/null || { echo "FIXTURE ERROR: git init failed" >&2; exit 2; }
@@ -175,6 +175,62 @@ if [ "$mutant_status" = "0" ]; then
 else
   bad "MUTATION: assertion 2's input still fails (exit $mutant_status) without predicate A"
   sed 's/^/        /' "$WORK/mut.txt"
+fi
+
+# --- 7a-7d. THE BARE LEADING FORM IS A CLAIM ------------------------------------
+# Release subjects in this repo read `0.754.0 — ...`, with no `v`. Under a v-only
+# grammar predicate A bound none of them, so it could not fire on a current release.
+# Every input above is `feat(vX.Y.Z)`, which is why nothing here noticed.
+commit 0.8.0 0.8.0 '0.8.0 — agreeing'
+status="$(run --commit HEAD)"
+if [ "$status" = "0" ]; then
+  ok "a bare leading version agreeing with VERSION passes"
+else
+  bad "a bare agreeing subject failed -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
+fi
+
+commit 0.9.0 0.9.0 '0.9.1 — ahead'
+status="$(run --commit HEAD)"
+if [ "$status" = "1" ] && grep -q 'subject says v0.9.1, VERSION says 0.9.0' "$WORK/out.txt"; then
+  ok "a bare leading version ahead of VERSION fails, and both values are named"
+else
+  bad "a bare leading version ahead of VERSION was not caught -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
+fi
+
+# NEAR-MISS: the same token, mid-subject. A bare version there is a MENTION, not the
+# commit's claim about itself, and the fallback is anchored at the start for that reason.
+commit 0.9.0 0.9.0 'chore: 0.9.1 mentioned mid-subject'
+mid_sha="$(git rev-parse HEAD)"
+status="$(run --commit "$mid_sha")"
+if [ "$status" = "0" ]; then
+  ok "a bare version MID-subject is a mention, not a claim, and passes"
+else
+  bad "a mid-subject bare version was read as a claim -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
+fi
+
+# MUTATION: drop the fallback's `^` and demand the near-miss go red. Without this the
+# near-miss could pass because the fallback never ran at all.
+ANCHOR="grep -oE '^[0-9]+"
+n_anchor="$(grep -cF -- "$ANCHOR" "$VALIDATOR")" || n_anchor=0
+n_never="$(grep -cF -- "grep -oE '^ZZQ-never-armA" "$VALIDATOR")" || n_never=0
+if [ "$n_anchor" != 1 ] || [ "$n_never" != 0 ]; then
+  echo "FIXTURE ERROR: the bare-fallback anchor matched $n_anchor time(s) (want 1; impossible control $n_never, want 0)" >&2
+  echo "  update the anchor in assertion 7d to match the real fallback" >&2
+  exit 2
+fi
+MUT_A="$WORK/mutant-unanchored.sh"
+sed "s/grep -oE '^\\[0-9\\]+/grep -oE '[0-9]+/" "$VALIDATOR" > "$MUT_A" || exit 2
+if cmp -s "$VALIDATOR" "$MUT_A"; then
+  echo "FIXTURE ERROR: the unanchoring mutation matched nothing" >&2
+  exit 2
+fi
+bash "$MUT_A" --commit "$mid_sha" >"$WORK/mut-a.txt" 2>&1
+mut_a_status=$?
+if [ "$mut_a_status" = "1" ] && grep -q 'subject says v0.9.1, VERSION says 0.9.0' "$WORK/mut-a.txt"; then
+  ok "MUTATION: an unanchored fallback reads the mid-subject mention as a claim (the ^ is load-bearing)"
+else
+  bad "MUTATION: the near-miss still passes (exit $mut_a_status) with the fallback unanchored"
+  sed 's/^/        /' "$WORK/mut-a.txt"
 fi
 
 # --- THE RANGE ARMS ------------------------------------------------------------
