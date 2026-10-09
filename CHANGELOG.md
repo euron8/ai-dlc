@@ -19,6 +19,85 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.761.0] - 2026-10-09
+
+Batch 217 (hermetic-pole), release 3. The four units at the top of the 0.760.0 gate's per-run durations
+file, `review-shard-merge-mutants` excepted (`BL-485`, batch 208's), are sharded or re-dealt into sixteen
+directories, eight of them new. It also carries the first half of `BL-481`, which blocked this release's
+first gate. No pre-push hook and no bootstrapping file change. The edits are under `core/fixtures/` and in
+the read-set deriver, plus the ship lists for the five new shipping shard directories. 0.761.0 was claimed
+by batch 216, which shipped no release and released the number.
+
+### BL-481, first half: the tracer subscribed to every debug message on the box
+
+The first gate of this release (12-way, start load 12.4, end load 56) ran 122 of 277 fixtures and failed one:
+`readset-sandbox-root-clause` exited 2 with `FIXTURE BROKEN: the stream dropped reports (24 notice(s))`. A solo
+re-run from the main checkout at load 38 failed the same way with 5. This release touches neither the fixture
+nor the deriver; the defect is `BL-481` and fails whenever the box is loaded.
+
+The deriver ran `log stream --level debug` on all three of its streams. Sandbox reports arrive at Default level
+(0 non-Default report lines against 4,231,066 Default ones across the 50 raw streams of the batch-214
+reconcile), so debug added nothing the deriver reads and subscribed the stream to every debug message on the
+box. In a controlled burst of 1500 sandboxed reads at load 55-61, debug level delivered 964-1378 with 40-155
+drop notices, and default level delivered 1500 of 1500 with 0, in all four runs.
+
+- **The deriver** drops `--level debug` from its three stream lines.
+- **`readset-sandbox-root-clause`** drops it at `run.sh:135` and judges the first of up to ten attempts that
+  carries no drop notice, sleeping between attempts. A fixture whose ten windows all drop still exits 2 BROKEN,
+  so a lossy window is never scored. At load 32-36, seven of seven runs passed with every mutant killed, two
+  through `hermetic-run.sh`, judged on attempts 1, 1, 1, 7, 6, 5 and 2. A copy injecting a notice into every
+  attempt exits 2 after all ten; injecting into attempt 1 only, it is judged on attempt 2. It is also declared
+  (`inputs.decl`, `tools.decl`).
+- **`readset-skip`**'s forced-loss burst is heavier, because at default level the old burst no longer forces a
+  drop on an idle box and the arm would SKIP. At load 35-40 the shipped burst still forced one, so this is
+  insurance for an idle box rather than a measured necessity.
+
+`BL-481` stays OPEN. Default-level drops still occur under load: `prepush-pool-depth` was omitted with 180
+notices at load 36 and mapped with 0 at load 26. `DERIVER_SHA` changes, so every deriver-keyed local row and
+every `#discards` hold resets, and the first push after this lands re-traces the held fixtures once.
+
+### The rank, from the last green gate
+
+`.git/ai-dlc-fixture-durations.last` of the 0.760.0 gate (12-way, 117 of 269 dispatched, start load 2.7),
+every figure loaded: `self-update-gate` 606s, `fold-architect-ledger-join-mutants-b` 452s,
+`readset-skip-digest-mutants` 439s, `review-shard-merge-mutants` 437s and `-c` 432s, `readset-skip-digest-mutants-c`
+422s, `apply-drift-refile` 402s, `readset-skip-digest-mutants-b` 380s.
+
+### Four hands, one unit each
+
+Every partition carries the J0 coverage join, which derives the dealt set from the file's own unit or mutant
+lines, refuses a duplicate, an omission and a shard with no driver directory, and self-probes before
+trusting its zero. Every shard exited 0 when run once, sequentially, from a clone root.
+
+- **`self-update-gate`** (ships, declared): four shards `{,-b,-c,-d}`, seventeen `sg` units. The hook-world
+  section is split into `hu1` (b) and `hu2` (c) over one set of worlds built under `sg hu1 || sg hu2`.
+  `!core/git-hooks/pre-push` is REQUIRED only in b and c, which consume it.
+  Assertions a 143, b 99, c 47, d 65: 354, equal to the unsharded run's `PASS: all 354 assertions correct.`
+  at `d03d5bd9`. The first run of b failed 2 of 99: `vr` called the machinery lister only `su` (shard a)
+  built, so `$SU` was unbound there. The lister is now built in shared setup as `$MACHD`.
+- **`fold-architect-ledger-join-mutants`** (`.dist-only`): a fourth shard `-d`; the 28 mutants dealt seven per
+  shard with the two `byp=0` mutants in each. J0 reads 28 in all four.
+- **`readset-skip-digest-mutants`** (`.dist-only`, declared): shards `-d` and `-e`; 24 mutants dealt 4/4/4/4/8,
+  the seven `tk_` mutants (four worlds each, against thirteen for a `dg_` mutant) kept together in e. J0 reads
+  24 in all five.
+- **`apply-drift-refile`** (ships, declared): three shards `{,-b,-c}`, fourteen units (a: base fh r s x, 30
+  assertions; b: y t, 12; c: q v u w, 20; 62 total, the parent's 62 call sites). The first run of all three
+  exited 2: the sandbox copies only declared files, the parent declared its own `run.sh` and so dropped
+  `seed.sh`, and the drivers declared neither. Each driver now declares the parent `run.sh` and `seed.sh`.
+
+### What the five shipping directories cost
+
+`fork-profile.sh --section by-arm --stable`, one clone, every file committed: base `d03d5bd9` 3317-3318,
+the assembled tree 3320 (STABLE 2). `FORK_BUDGET` stays 3324. The two hands that append to
+`scripts/uninstall.sh`'s one-line fixture list conflicted on assembly; the resolution is the set-union of both
+sides, checked equal by sorted comparison, `bash -n` clean and the file kept 100755.
+
+### No solo timings
+
+Earlier entries timed every shard solo at load under 5. No done-when, gate or decision reads those rows, and
+the load-5 threshold had no measurement behind it on this box, so this release records only the gate's own
+figures, in the docs commit that follows it.
+
 ## [0.760.0] - 2026-10-09
 
 Batch 214 (hermetic-pole), release 2. The five units at the top of the 0.757.0 gate's own per-run

@@ -1,0 +1,4 @@
+# readset-sandbox-root-clause extracts the three sandbox-profile emitters from the deriver's own text and renders edited COPIES of it.
+# It reads nothing else under the project; a fixture's own directory is copied by the runner, never declared.
+!core/scripts/derive-fixture-readsets.sh
+core/fixtures/lib/

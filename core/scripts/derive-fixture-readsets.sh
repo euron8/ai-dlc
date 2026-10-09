@@ -953,7 +953,7 @@ fi
 if [ -n "$LOCAL_MAP" ]; then
   CUR_FX="__liveness__"
   echo "liveness" > "$SENTINEL"
-  "$LOG_BIN" stream --level debug --style compact \
+  "$LOG_BIN" stream --style compact \
     --predicate "eventMessage CONTAINS \"FXTAG=$CUR_FX;\"" > "$WORK/liveness.raw" 2>&1 &
   lv_pid=$!
   lv_ok=0; i=0
@@ -1350,7 +1350,7 @@ for fx in $LIST; do
     # the sentinel both tracers settle on is the SAME read, in the same window.
     fs_usage -w -f filesys 2>/dev/null | grep --line-buffered -F -e "$TREE/" -e "$MARKDIR/" > "$raw.fsu" &
     fsu_pid=$!
-    "$LOG_BIN" stream --level debug --style compact \
+    "$LOG_BIN" stream --style compact \
       --predicate "sender == \"Sandbox\" AND eventMessage CONTAINS \"$TRACE_ROOT/\"" > "$raw" 2>&1 &
     fs_pid=$!
   elif [ "$TRACER" = fs_usage ]; then
@@ -1360,7 +1360,12 @@ for fx in $LIST; do
     # STARTED BEFORE THE FIXTURE, per window. `log show` afterwards returns nothing for these
     # reports, so a stream that was not live when an event fired has lost it for good -- which is
     # why the settle loop below and the end sentinel after the fixture are both required.
-    "$LOG_BIN" stream --level debug --style compact \
+    # NO `--level debug` ON ANY STREAM HERE (BL-481). Sandbox reports arrive at Default level -- 0 of
+    # 4,231,066 report lines in one reconcile's 50 windows were anything else -- so debug added no
+    # report, and subscribed the stream to every debug message on the box. Measured, interleaved,
+    # 1500 sandboxed reads at load 55-61: debug delivered 964-1378 with 40-155 drop notices, the
+    # default level 1500 of 1500 with 0, in all four runs.
+    "$LOG_BIN" stream --style compact \
       --predicate "$STREAM_PRED" > "$raw" 2>&1 &
     fs_pid=$!
   fi
