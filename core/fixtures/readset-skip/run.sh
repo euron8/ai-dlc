@@ -19,19 +19,104 @@ set -u
 # A consumer that tunes AI_DLC_FIXTURE_JOBS or AI_DLC_FIXTURE_NO_SKIP in settings.json would
 # otherwise have that value decide these arms, and the fixture would be testing the CONFIG
 # rather than the CODE. Arms needing a value set it on their own command.
+HR_ROOT_IN="${AI_DLC_PROJECT_ROOT:-}"   # read BEFORE the scrub below: the hermetic runner exports it as the sandbox root
+
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 asserts=0; fails=0
 ok()     { printf '  ok    %s\n' "$1"; asserts=$((asserts+1)); }
 bad()    { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserts=$((asserts+1)); }
-broken() { printf '  FAIL  %s\n' "$1" >&2; echo "readset-skip: FIXTURE BROKEN" >&2; exit 2; }
+broken() { printf '  FAIL  %s\n' "$1" >&2; echo "${NAME:-readset-skip}: FIXTURE BROKEN" >&2; exit 2; }
+# ---------------------------------------------------------------------------- shards ----
+# THIS FILE IS FOUR SHARDS OF ONE FIXTURE, AND THE SPLIT IS A SCHEDULING BOUNDARY, NOT A SUBJECT
+# BOUNDARY. Every section below is a UNIT guarded by `if sg <unit>; then ... fi`; `--group <x>` runs
+# the units dealt to shard <x>. The three siblings `readset-skip-{b,c,d}/run.sh` are one-line drivers
+# that `exec bash` this file with their group (the fold-architect-ledger-join-mutants shape), so the
+# pre-push pool can start each on its own and the suite's makespan stops tracking one 4600-line
+# directory. No `--group` runs shard 'a', so `bash core/fixtures/readset-skip/run.sh` is shard a.
+#
+# THE SEED, THE HOOK AND THE SANDBOX PROBE ARE NOT UNITS: every shard pays them, because a shard that
+# skipped them would score its worlds against a harness that never ran.
+#
+# THE COVERAGE JOIN runs in EVERY shard before anything else: the declared units are DERIVED from this
+# file's own `if sg <unit>; then` lines, the dealt lists must be disjoint and their union must equal
+# the declared set exactly, so no unit can fall out of every shard, and every declared shard must have
+# a driver directory. The join proves it can fire first, on a seeded duplicate and a seeded omission.
+#   a  arms ign man merge        pool selection worlds, the manifest, the deriver's merge and control
+#   b  loc hr tk dg              local map and trace report, hash rows, tool keys, committed digests
+#   c  tracer rc                 trace tree, lossy window, --tracer both and its stub worlds, --reconcile
+#   d  ck                        per-fixture checksum keys: fifteen worlds and fifteen mutants
+# `rc` rides with `tracer` because it drives the stub `sandbox-exec` and deriver copy that `tracer` builds.
+SHARDS="a b c d"
+UNITS_a="arms ign man merge"
+UNITS_b="loc hr tk dg"
+UNITS_c="tracer rc"
+UNITS_d="ck"
+GROUP=a
+if [ "${1:-}" = "--group" ]; then
+  GROUP="${2:-}"
+  [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }
+fi
+case " $SHARDS " in
+  *" $GROUP "*) ;;
+  *) echo "FIXTURE ERROR: unknown shard '$GROUP' (known: $SHARDS)" >&2; exit 2 ;;
+esac
+eval "MINE=\"\${UNITS_$GROUP:-}\""
+NAME="readset-skip"; [ "$GROUP" = a ] || NAME="readset-skip-$GROUP"
+[ -n "$MINE" ] || broken "shard '$GROUP' has no UNITS_$GROUP list; a shard dealt nothing passes everything it never checked"
+sg() { case " $MINE " in *" $1 "*) return 0 ;; esac; return 1; }
+SELF="$0"
+[ -f "$SELF" ] || broken "cannot read $SELF for the coverage join"
+HERE="$(cd "$(dirname "$SELF")" && pwd)"
+partition_ok() { # <declared ids file> <dealt ids file> -> 0 when dealt is disjoint and covers declared exactly
+  local dup miss extra
+  dup="$(sort "$2" | uniq -d | tr '\n' ' ')"
+  miss="$(sort -u "$2" | comm -23 <(sort -u "$1") - | tr '\n' ' ')"
+  extra="$(sort -u "$2" | comm -13 <(sort -u "$1") - | tr '\n' ' ')"
+  [ -z "$dup$miss$extra" ] && return 0
+  echo "dealt twice: {${dup% }} dealt to no shard: {${miss% }} dealt but not declared: {${extra% }}"
+  return 1
+}
+JW="$(mktemp -d "${TMPDIR:-/tmp}/readset-skip-join.XXXXXX")" || broken "mktemp failed"
+printf '%s\n' u1 u2 u3 > "$JW/pd"; printf '%s\n' u1 u2 u2 u3 > "$JW/pdup"; printf '%s\n' u1 u3 > "$JW/pmiss"; printf '%s\n' u3 u1 u2 > "$JW/pok"
+if partition_ok "$JW/pd" "$JW/pdup" >/dev/null || partition_ok "$JW/pd" "$JW/pmiss" >/dev/null \
+   || ! partition_ok "$JW/pd" "$JW/pok" >/dev/null; then
+  rm -rf "$JW"; broken "the coverage join's self-probe did not discriminate (duplicate, omission, exact)"
+fi
+sed -n 's/^[[:space:]]*if sg \([a-z0-9_][a-z0-9_]*\); then$/\1/p' "$SELF" > "$JW/declared"
+for _s in $SHARDS; do eval "printf '%s\n' \${UNITS_$_s}" | tr ' ' '\n'; done | grep . > "$JW/dealt"
+ndecl="$(grep -c . "$JW/declared")" || ndecl=0
+ndupdecl="$(sort "$JW/declared" | uniq -d | grep -c .)" || ndupdecl=0
+if [ "$ndecl" -eq 0 ] || [ "$ndupdecl" -ne 0 ]; then
+  rm -rf "$JW"; broken "$ndecl unit guards derived from $SELF ($ndupdecl declared twice)"
+fi
+if ! _why="$(partition_ok "$JW/declared" "$JW/dealt")"; then
+  rm -rf "$JW"; broken "the shard partition does not cover the guarded units exactly -- $_why"
+fi
+for _s in $SHARDS; do
+  [ "$_s" = a ] && continue
+  _drv="$HERE/../readset-skip-$_s/run.sh"
+  if [ ! -f "$_drv" ] || ! grep -qF -- "--group $_s" "$_drv"; then
+    rm -rf "$JW"; broken "shard '$_s' is declared but $_drv does not drive it"
+  fi
+done
+rm -rf "$JW"
+echo "  [J0] coverage join: $ndecl units derived from the sg guards, dealt disjointly across {$SHARDS}, union exact; this shard runs {$MINE}"
 
-echo "readset-skip:"
+echo "$NAME:"
 
 # BOTH LAYOUTS, NAMED RATHER THAN DERIVED FROM ONE ANOTHER (I33). install.sh splits what
 # shares a parent here, so walking up from one file to find the other is the thing that
 # invariant fails the build on.
-ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || broken "not in a git repo"
+# THE ROOT COMES FROM AI_DLC_PROJECT_ROOT FIRST (read before the scrub above): the hermetic runner
+# runs this file in a sandbox that is NOT a git repository, so `git rev-parse --show-toplevel` is
+# the fallback for a plain pool run. An override is accepted only when this script lives under it.
+ROOT=""
+if [ -n "$HR_ROOT_IN" ] && [ -d "$HR_ROOT_IN" ]; then
+  _hr="$(cd "$HR_ROOT_IN" && pwd -P)"; _hs="$(cd "$(dirname "$0")" && pwd -P)"
+  case "$_hs" in "$_hr"/*) ROOT="$_hr" ;; esac
+fi
+[ -n "$ROOT" ] || ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || broken "not in a git repo and no AI_DLC_PROJECT_ROOT above this script"
 HOOK=""
 for c in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
   [ -f "$c" ] && { HOOK="$c"; break; }
@@ -89,6 +174,21 @@ grep -q 'apply_readset_skip' "$POOL" || broken "the extracted block carries no a
 # fixture's own run.sh keys it where this hook will look it up.
 FXROOT="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$POOL" | sort -u)"
 [ "$(printf '%s\n' "$FXROOT" | grep -c .)" -eq 1 ] || broken "read '$FXROOT' as the pool block's fixture root; need exactly one"
+# BOTH HOOKS ARE CONSUMED, AND IN THE DISTRIBUTION BOTH MUST BE PRESENT. HOOK above is whichever came
+# first, so a run with the other copy dropped would pass on one hook alone; the sentinel is printed for
+# each hook whose pool block is read and carries apply_readset_skip, which is what the hermetic runner's
+# REQUIRED declaration for core/git-hooks/pre-push checks. A consumer holds one installed copy.
+HK_N=0
+for _hk in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
+  [ -f "$_hk" ] || continue
+  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$_hk" > "$WORK/hk.pool"
+  grep -q 'apply_readset_skip' "$WORK/hk.pool" || broken "${_hk#"$ROOT"/} carries no FIXTURE_POOL block with apply_readset_skip"
+  HK_N=$((HK_N+1))
+  echo "HERMETIC-CONSUMED ${_hk#"$ROOT"/}"
+done
+if [ -d "$ROOT/core/scripts" ] && [ "$HK_N" -ne 2 ]; then
+  broken "the distribution layout holds $HK_N of its two pre-push hooks; every world below is run against both"
+fi
 
 # ---------------------------------------------------------------------------- seed ----
 # alpha reads a.sh and shared.sh; beta reads b.sh and shared.sh; gamma is DELIBERATELY absent
@@ -143,6 +243,7 @@ sel_of()  { printf '%s' "$1" | sed -n '1p' | tr -s ' ' | sed 's/ $//'; }
 msg_of()  { printf '%s' "$1" | sed -n '/---MSG---/,/---FLAG---/p' | tail -n +2 | sed '$d'; }
 flag_of() { printf '%s' "$1" | sed -n '/---FLAG---/,$p' | tail -n +2 | tr -d '[:space:]'; }
 
+if sg arms; then
 # ------------------------------------------------------------------------- arm 1-6 ----
 T="$WORK/t1"; seed "$T" || broken "seed failed"
 R="$(select_in "$T" 'printf v2 > src/a.sh')"
@@ -412,6 +513,8 @@ else
   bad "CONTROL: the unmutated copy did not reproduce the baseline ('$(sel_of "$R")') — every mutant above is unattributable"
 fi
 
+fi
+
 # ------------------------------------------------------- git-ignored paths, from every source ----
 # THE DEFECT: the map arm of the manifest bypassed `--exclude-standard`, so a map row naming an
 # IGNORED file was hashed whenever the file existed. A trace in the main checkout recorded three
@@ -424,6 +527,7 @@ fi
 # `ign` creates x.bin untracked; `forced` force-adds it, so it is TRACKED and still matches
 # the ignore pattern. Every arm edits src/a.sh too, so a correct run selects 'alpha gamma' and
 # an over-selection and an orphan fallback both read as 'alpha beta gamma'.
+if sg ign; then
 IGN_ARMS=0
 REAL_GIT="$(command -v git)" || broken "no git on PATH"
 SHIM="$WORK/shim"; mkdir -p "$SHIM" || broken "could not make the check-ignore shim dir"
@@ -543,6 +647,8 @@ ign_mutant no_gitlink_guard \
   's|^  cut -f1 "$in" \| awk -v gl="$res.gl" |  cut -f1 "$in" \| awk -v gl=/dev/null |' \
   sub 'printf v2 > src/a.sh' "alpha gamma"
 
+fi
+
 # ------------------------------------- the manifest's population and the bookkeeping exemption ----
 # TWO DEFECTS, ONE SEED. The manifest fed its path list to `xargs` without `-0`, and `xargs`
 # aborts at the first apostrophe in a name: every file sorted after it went unhashed, so an
@@ -558,6 +664,7 @@ ign_mutant no_gitlink_guard \
 #
 # Fixtures: alpha reads src/a.sh, apos reads the apostrophe file, beta reads zzz/b.sh (sorts
 # after it), stamp reads the version stamp, delta is unmapped (always selected).
+if sg man; then
 APOS="src/x's.snap"
 CAFE="src/caf$(printf '\303\251').md"
 BK='printf "version: 2\n" > .claude/.ai-dlc-version; printf "l2\n" >> _bmad-output/ai-dlc-update/ledger.md; printf "r\n" > _bmad-output/ai-dlc-update/reconcile-log-1.md'
@@ -828,6 +935,10 @@ fi
 # is distribution-only, so on a consumer this is a SKIP, not a pass.
 VEM="$ROOT/scripts/validate-enforcement-map.sh"
 if [ ! -f "$VEM" ] || [ ! -f "$ROOT/.githooks/pre-push" ] || [ ! -f "$ROOT/core/git-hooks/pre-push" ]; then
+  # A DISTRIBUTION TREE (core/scripts present) THAT LOST ONE OF THESE IS BROKEN, NEVER A SKIP: under the
+  # hermetic runner a dropped declaration reads exactly like a consumer tree, and a silent SKIP there
+  # would let the declaration shrink while the verdict stays PASS.
+  [ -d "$ROOT/core/scripts" ] && broken "the distribution layout is missing scripts/validate-enforcement-map.sh or one of its two pre-push hooks, so the I66 arm cannot run"
   printf '  SKIP  one-hook-widened I66 arm: validate-enforcement-map.sh or one of the two hooks is absent (a consumer tree)\n'
 else
   I66T="$WORK/i66"
@@ -867,6 +978,8 @@ else
   bad "CONTROL: the unmutated block did not reproduce 'beta delta' through drive() — every manifest mutant is unattributable"
 fi
 
+fi
+
 # ------------------------------------------- the local map and the post-green trace ----
 # An unmapped fixture ran on every push until someone hand-ran the deriver. Now a GREEN suite starts
 # one detached, unprivileged `--tracer sandbox --local-map` run for the fixtures with no committed
@@ -884,6 +997,7 @@ fi
 #   (g) the orphan universe and the manifest read local rows, so a local-only path is not an orphan
 LT_ARMS=0
 lt_arm() { LT_ARMS=$((LT_ARMS+1)); }
+if sg loc; then
 LT_CAN=1
 { command -v sandbox-exec >/dev/null 2>&1 && [ -x /usr/bin/log ] && command -v python3 >/dev/null 2>&1; } || LT_CAN=0
 sha_of() { shasum -a 256 -- "$1" | cut -d' ' -f1; }
@@ -1607,6 +1721,8 @@ if pm_copy noreport 1 '  readset_trace_report "$out"' '  :'; then
   else bad "MUTANT noreport: the copy never ran the suite -- NO VERDICT"; fi
 fi
 
+fi
+
 # ------------------------------------------------------- the deriver's map merge ----
 # `--list` exists so refreshing ONE fixture costs its own runtime instead of a full
 # re-derivation. Its first version rewrote the map from only the fixtures it had just traced,
@@ -1623,6 +1739,18 @@ fi
 # ships ahead of its subject: this fixture reaches a consumer in one pull and the deriver in
 # the next, so an installed tree between those two pulls has the fixture and not the file. A
 # SKIP says so; passing silently would make a vanished arm and a satisfied arm identical.
+  # mut_line <src> <dst> <exact old line> <new text> -- an exact-line replacement, never `sed`: the
+  # deriver lines mutated below carry `&&`, `$(` and quotes a sed replacement would re-expand. The
+  # caller derives <old> from the file by an anchored grep and guards with cmp -s, so a vanished
+  # anchor reads as DID NOT APPLY rather than as a kill.
+  mut_line() {
+    local l
+    : > "$2"
+    while IFS= read -r l || [ -n "$l" ]; do
+      if [ -n "$3" ] && [ "$l" = "$3" ]; then printf '%s\n' "$4"; else printf '%s\n' "$l"; fi
+    done < "$1" >> "$2"
+  }
+
 MERGE_ARMS=0
 CONTROL_ARMS=0
 TRACE_ARMS=0
@@ -1631,9 +1759,15 @@ DERIVER=""
 for _d in "$ROOT/scripts/ai-dlc/derive-fixture-readsets.sh" "$ROOT/core/scripts/derive-fixture-readsets.sh"; do
   [ -f "$_d" ] && DERIVER="$_d" && break
 done
+# THE DERIVER IS CONSUMED in every shard: its LOCALMAP span is read by the digest worlds and by hr, and
+# the sentinel is printed only when the span is really there, so a deriver declared but not read fails.
+if [ -n "$DERIVER" ] && grep -q '^# READSET_LOCALMAP_BEGIN$' "$DERIVER"; then
+  echo "HERMETIC-CONSUMED ${DERIVER#"$ROOT"/}"
+fi
 if [ -z "$DERIVER" ]; then
   printf '  SKIP  map-merge arms: derive-fixture-readsets.sh is in neither layout yet (core fixtures ship ahead of their subject)\n'
 else
+  if sg merge; then
   M="$WORK/merge.sh"
   sed -n '/# READSET_MERGE_BEGIN/,/# READSET_MERGE_END/p' "$DERIVER" > "$M"
   grep -q 'readset_merge_map()' "$M" || broken "extracted no readset_merge_map from $DERIVER"
@@ -1710,18 +1844,6 @@ else
   else
     bad "MERGE MUTANT keepstale: the stale entry did not survive — arm 2 does not depend on the traced filter"
   fi
-
-  # mut_line <src> <dst> <exact old line> <new text> -- an exact-line replacement, never `sed`: the
-  # deriver lines mutated below carry `&&`, `$(` and quotes a sed replacement would re-expand. The
-  # caller derives <old> from the file by an anchored grep and guards with cmp -s, so a vanished
-  # anchor reads as DID NOT APPLY rather than as a kill.
-  mut_line() {
-    local l
-    : > "$2"
-    while IFS= read -r l || [ -n "$l" ]; do
-      if [ -n "$3" ] && [ "$l" = "$3" ]; then printf '%s\n' "$4"; else printf '%s\n' "$l"; fi
-    done < "$1" >> "$2"
-  }
 
   # ------------------------- the --all subject list and the untraced-loss guard ----
   # THE `--all` LIST WAS BUILT NEWLINE-SEPARATED, AND TWO GUARDS SILENTLY NEVER MATCHED A NAME. Every
@@ -2293,6 +2415,8 @@ EOF
     esac
   done
 
+  fi
+  if sg tracer; then
   # ------------------------------------------------------- the trace tree's POPULATION ----
   # WHAT THE TRACE TREE HOLDS DECIDES WHAT A FIXTURE CAN READ WHILE IT IS TRACED. It was `cp -a`
   # of the whole working tree; it is now `.git/` plus `git ls-files --cached --others
@@ -3707,6 +3831,7 @@ STUB
       esac
     fi
   fi
+  fi
 fi
 
 # ------------------------------------------- per-fixture checksum keys (contract k1) ----
@@ -3776,6 +3901,7 @@ ck_st()  { sed -n 2p "$(ck_k "$1" "$2")" 2>/dev/null; }
 ck_has() { local f s=""; for f in alpha beta delta; do [ -f "$(ck_k "$1" "$f")" ] && s="$s $f"; done; printf '%s' "${s# }"; }
 ck_ln()  { grep -cxF -- "$3" "$1.o.$2/out" 2>/dev/null; }
 # CK_HELPERS_END
+if sg ck; then
 CK_A0='   ..    read-set keys: 0 of 3 fixture(s) run (0 changed, 0 unrecorded, 0 stale); skipping 3'
 
 # (a) record on pass, then skip on an unchanged rerun. Pins the record format and the announce.
@@ -4033,6 +4159,8 @@ if [ "$CK_N" -ge 1 ]; then
   ck_mut o nosibs 1 'if (k == root && sibs_only(k)) { SB = 1; continue }' 'if (0) { SB = 1; continue }'
 fi
 
+fi
+
 # ------------------------------------ tool keys do not depend on the invoker ----
 # THE DEFECT: tools were resolved on the inherited $PATH. `git push` prepends git's exec-path to a hook's
 # PATH and `self-update-push.sh`, a shell or a harness do not, so `git` keyed a different binary per
@@ -4051,6 +4179,7 @@ fi
 #           tool dir holds) skip on their tree keys, are republished `#tools canonical` with honest tool
 #           rows and no old one, the next push migrates nothing, and a later binary change reruns alpha.
 #   migrun  the amnesty never covers a tree key: an old-format record whose FILE moved runs, for that file.
+if sg tk; then
 # TK_WORLDS_BEGIN -- readset-skip-digest-mutants sources this span after CK_HELPERS, to score the tool-key mutants.
 TK_ARMS=0
 TK_FX="$WORK/tk.xp"; mkdir -p "$TK_FX" || broken "could not create the fake exec-path dir"
@@ -4180,6 +4309,8 @@ done
 TK_ARMS=$((TK_ARMS+1))
 [ "$TK_N" -ge 1 ] && ok "the tool-key worlds ran against $TK_N hook(s)" || bad "no pre-push hook was found for the tool-key worlds"
 
+fi
+
 # ------------------------------------- readset_hash_rows on a set's LAST path ----
 # A TRACE THAT SUCCEEDED AND THEN LOST ITS RESULT. Spelled `[ -f "$p" ] && printf` as its loop's last
 # command, the hash failed under `pipefail` whenever the set's LAST path was not a regular file, and
@@ -4188,6 +4319,7 @@ TK_ARMS=$((TK_ARMS+1))
 #   (h2) a set holding an UNREADABLE regular file still refuses, under pipefail AND without it -- the
 #        second is the count assertion's own world: there the pipeline's status is awk's
 # Each arm is driven on the deriver's own READSET_LOCALMAP span; the mutants edit a copy of it.
+if sg hr; then
 HR_SPAN="$WORK/hr.span.sh"
 hr_drive() { # <span> <pipefail|nopipefail> <last|unread>: prints "<rc>|<rows>"
   local d; d="$(mktemp -d "$WORK/hr.XXXXXX")" || return 1
@@ -4231,6 +4363,8 @@ else
     hr_mut lastpath "if [ -f \"\$p\" ]; then printf '%s\\0' \"\$p\"; n=\$((n + 1)); fi" "[ -f \"\$p\" ] && printf '%s\\0' \"\$p\" && n=\$((n + 1))" 'h1=1|0 ok ok'
     hr_mut nocount '  [ "$(cat "$set.nreg" 2>/dev/null)" = "$nsha" ] || return 1' '  :' 'ok ok h2n=0|2'
   fi
+fi
+
 fi
 
 # ------------------------------------- committed digests clear a stale record (BL-471) ----
@@ -4488,6 +4622,7 @@ dg_all() { # <pool> <fixture root> <tag>
 dg_want() { eval "printf '%s' \"\$DG_WANT_$1\""; }
 # DG_WORLDS_END
 
+if sg dg; then
 DG_N=0
 [ -n "$DERIVER" ] || printf '  SKIP  committed-digest worlds: derive-fixture-readsets.sh is in neither layout yet, so no digest can be seeded the way it writes one\n'
 for _h in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
@@ -4508,6 +4643,8 @@ if [ -n "$DERIVER" ]; then
   [ "$DG_N" -ge 1 ] && ok "the committed-digest worlds ran against $DG_N hook(s)" || bad "no pre-push hook was found for the committed-digest worlds"
 fi
 
+fi
+
 # ------------------------------------------------- `--reconcile` derives what to trace (BL-472) ----
 # Five fixtures in a seeded repo whose runner carries the resolved hook's READSET_UNIVERSE span:
 #   un  a run.sh and no committed row                         -> unmapped
@@ -4521,6 +4658,7 @@ fi
 # The list is driven from the deriver's READSET_RECONCILE span; the whole deriver is then driven through
 # the stub stream, and must name exactly those three and trace exactly those three. A clean repo prints
 # `nothing to reconcile`, exits 0 and never creates its trace root. Mutants drop reasons (c) and (b).
+if sg rc; then
 RC_ARMS=0
 if [ -z "$DERIVER" ] || [ -z "${SX:-}" ]; then
   printf '  SKIP  --reconcile arms: no deriver, or the stub-stream world did not run (root)\n'
@@ -4627,11 +4765,14 @@ else
   done
 fi
 
+fi
+
 # THE SUMMARY IS ALSO A COMPLETENESS CHECK. This fixture once ended mid-file after an editing
 # mistake: it printed two thirds of its arms, never reached a verdict line, and exited 0 --
 # which the suite's worker records as `ok`. A fixture that dies silently reads exactly like one
 # that passed, so the arm count is asserted against the number this file actually carries.
-EXPECTED=$(( 18 + IGN_ARMS + NEW_ARMS + MERGE_ARMS + CONTROL_ARMS + TRACE_ARMS + BOTH_ARMS + LT_ARMS + CK_ARMS + TK_ARMS + DG_ARMS + RC_ARMS ))
+BASE_ARMS=0; sg arms && BASE_ARMS=18
+EXPECTED=$(( BASE_ARMS + ${IGN_ARMS:-0} + ${NEW_ARMS:-0} + ${MERGE_ARMS:-0} + ${CONTROL_ARMS:-0} + ${TRACE_ARMS:-0} + ${BOTH_ARMS:-0} + ${LT_ARMS:-0} + ${CK_ARMS:-0} + ${TK_ARMS:-0} + ${DG_ARMS:-0} + ${RC_ARMS:-0} ))
 if [ "$asserts" -lt "$EXPECTED" ]; then
   printf '  FAIL  only %s assertions ran; this fixture carries %s — it exited early and a short green run reads exactly like a passing one\n' "$asserts" "$EXPECTED"
   fails=$((fails+1))
@@ -4639,6 +4780,6 @@ fi
 
 echo
 if [ "$fails" -eq 0 ]; then
-  echo "readset-skip: PASS ($asserts assertions)"; exit 0
+  echo "$NAME: PASS ($asserts assertions)"; exit 0
 fi
-echo "readset-skip: $fails of $asserts assertion(s) FAILED"; exit 1
+echo "$NAME: $fails of $asserts assertion(s) FAILED"; exit 1

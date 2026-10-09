@@ -15,12 +15,11 @@ find
 git
 grep
 head
-jq
-ln
 ls
 mkdir
 mktemp
 mv
+python3
 rm
 sed
 sort
@@ -28,3 +27,4 @@ tail
 tr
 uniq
 wc
+?node

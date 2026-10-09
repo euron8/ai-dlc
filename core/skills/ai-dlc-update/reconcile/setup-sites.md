@@ -127,6 +127,9 @@ core_manifest:
   - core/fixtures/ci-gates-resolution/**
   - core/fixtures/consumer-suite-pool/**
   - core/fixtures/readset-skip/**
+  - core/fixtures/readset-skip-b/**
+  - core/fixtures/readset-skip-c/**
+  - core/fixtures/readset-skip-d/**
   - core/fixtures/layer-qualifier-grain/**
   - core/fixtures/layer-conforms-to/**
   - core/fixtures/lib/**
@@ -213,6 +216,8 @@ core_manifest:
   - core/fixtures/provenance-not-accessible/**
   - core/fixtures/reconcile-blocking-list/**
   - core/fixtures/reconcile-emit-report/**
+  - core/fixtures/reconcile-emit-report-b/**
+  - core/fixtures/reconcile-emit-report-c/**
   - core/fixtures/emit-report-refusal/**
   - core/fixtures/relabel-theirs-collision/**
   - core/fixtures/relocation-preclassify/**

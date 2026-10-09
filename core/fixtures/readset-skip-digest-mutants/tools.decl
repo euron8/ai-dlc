@@ -1,3 +1,4 @@
+# Tools run.sh, readset-skip's worlds, the hook's pool block and the deriver span invoke.
 awk
 basename
 bash
@@ -15,14 +16,13 @@ find
 git
 grep
 head
-jq
-ln
 ls
 mkdir
 mktemp
 mv
 rm
 sed
+shasum
 sort
 tail
 tr

@@ -6,35 +6,29 @@
 is the ONLY CURRENT STATUS RECORD in this file.**
 
 **Why this plan exists.** `docs/plans/hermetic-fixtures-poc.md` declared 157 fixtures hermetic across
-three releases (0.752.0, 0.753.0, 0.755.0) in smallest-map-rows-first order, and the push got no
-shorter: the pool at `.githooks/pre-push:1701` dispatches every selected fixture and waits for the
-longest, so a push costs its single longest selected fixture, and the four longest were never touched.
-A declared fixture is excluded from the trace queue at `core/scripts/derive-fixture-readsets.sh:305`
-and run by the sandbox the runner builds at `core/scripts/hermetic-run.sh:127`.
-The operator's instruction at batch 209's close: start on the pole, nothing else until it moves. This
-plan is that instruction. It is executed by a session that is not the hermetic-fixtures-poc lead, in
-parallel with that plan's close, and it takes the next free release number after asking every live
-session which it holds.
+three releases and the push got no shorter: the pool at `.githooks/pre-push:1701` dispatches every selected
+fixture and waits for the longest, so a push costs its single longest selected fixture. The operator's
+instruction at batch 209's close: start on the pole, nothing else until it moves. A declared fixture is
+excluded from the trace queue at `core/scripts/derive-fixture-readsets.sh:305` and run by the sandbox the
+runner builds at `core/scripts/hermetic-run.sh:127`.
 
-**The pole, from `.git/ai-dlc-fixture-durations` in the main checkout at batch 209's close. THAT
-RECORD IS POLLUTED AND THE RANK BELOW IS A HYPOTHESIS:** it was rewritten at 20:12 on a day when
-orphaned fixture pools and a bare suite run from a shared worktree overlapped three gates, its top
-figure (11883s) exceeds any single gate's suite wall clock this week, and `review-shard-merge-mutants`
-reads 768s in it where `BL-485` filed it as the pole at 1481s. Action 2 re-derives the rank from a
-clean source before action 3 spawns anything.
+**State at 0.757.0 (batch 212).** The rank was re-derived from the 0.755.0 gate's own per-run durations file
+(12-way, 103 dispatched, load 84-100): `readset-skip-digest-mutants` 2025s, `readset-skip` 1860s,
+`gate-adjudication-mutants` 1665s, `reconcile-emit-report` 1484s, `check-24-adversarial-convergence` 1359s,
+`review-shard-merge-mutants` 1171s (`BL-485`, batch 208's), `fold-architect-ledger-join-mutants-b` 1102s
+(tenth; the plan's original fourth, deferred as not the pole). The top four are SHARDED into thirteen declared
+directories; solo, the longest shard is `readset-skip-d` at 206s against parents of 250-393s solo. The
+CHANGELOG entry for 0.757.0 carries the full before/after table with load beside each figure. The 0.757.0
+gate's own fixture-suite wall clock is the after figure for done-when 3 and is recorded by action 1 below.
 
-1. `readset-skip` (4644 lines, 22 map rows, ships)
-2. `readset-skip-digest-mutants` (226 lines, ZERO map rows so it runs on every push, `.dist-only`)
-3. `fold-architect-ledger-join-mutants-b` (30-line shard driver of a shared battery, `.dist-only`)
-4. `gate-adjudication-mutants` (600 lines, `.dist-only`)
-
-`review-shard-merge-mutants` is `BL-485` and batch 208 (`ai-dlc-cd`) is sharding it; do not touch it.
-
-**Second cause, independent of the pole.** 51 to 62 of 251 key records read `#state stale` because
-the committed map rows predate digests and no committed trace has cleared them; every stale fixture
-runs on every push regardless of the change. One committed trace over the stale set clears it.
+**Second cause, independent of the pole.** Stale key records make every stale fixture run on every push.
+The 0.755.0 gate selected 49 stale of 251; its detached live trace (started 22:30 on 2026-10-08) was still
+running at this release and may have cleared part of the set. Action 3 measures what remains.
 
 Your instructions are four sections: `## Start here`, `### NEXT ACTIONS`, `### Ping the operator`,
+`### Done when`.
+
+## Start here`, `### NEXT ACTIONS`, `### Ping the operator`,
 `### Done when`.
 
 ## Start here
@@ -65,49 +59,44 @@ that figure is not progress here.
 
 ```bash
 git rev-parse --short HEAD; git status --porcelain | wc -l
-n=0; for d in core/fixtures/*/; do [ -f "$d/inputs.decl" ] && n=$((n+1)); done; echo "DECLARED $n"   # 103 at 0.754.0; 157 once 0.755.0 (gating at authoring) lands
+n=0; for d in core/fixtures/*/; do [ -f "$d/inputs.decl" ] && n=$((n+1)); done; echo "DECLARED $n"   # 169 at 0.757.0
 # the pole, from the main checkout, READ ONLY
 sort -k2 -nr /Users/n8/git/ai-dlc/.git/ai-dlc-fixture-durations | head -6
 # stale records, READ ONLY. CONTROL: the ok count is non-zero.
 grep -l '#state stale' /Users/n8/git/ai-dlc/.git/ai-dlc-fixture-keys/*.key | wc -l; grep -l '#state ok' /Users/n8/git/ai-dlc/.git/ai-dlc-fixture-keys/*.key | wc -l
-# which of the four carry a declaration (expect 0 at start)
-for f in readset-skip readset-skip-digest-mutants fold-architect-ledger-join-mutants-b gate-adjudication-mutants; do [ -f core/fixtures/$f/inputs.decl ] && echo "DECL $f"; done
+# the thirteen shard directories of 0.757.0 all carry a declaration (expect 13)
+for f in readset-skip{,-b,-c,-d} readset-skip-digest-mutants{,-b,-c} gate-adjudication-mutants{,-b,-c} reconcile-emit-report{,-b,-c}; do [ -f core/fixtures/$f/inputs.decl ] && echo "DECL $f"; done | wc -l
 uptime
 ```
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **MAKE THE CLONE AND PIN IT**, as above. Ask every live `ai-dlc-*` session (`ListAgents`) what
-   release number it holds and whether it holds the main checkout; take the next free number.
-2. **MEASURE THE BASELINE AND RE-DERIVE THE RANK FROM A CLEAN SOURCE.** The durations record is
-   polluted (resume block). Derive the pole from a gate the record cannot have been written under:
-   the per-fixture `.dur` files of a quiet gate, or one run of the four candidates plus
-   `review-shard-merge-mutants` each ALONE on a quiet box (`uptime` 1-minute load under 5 beside each
-   figure), from the clone root, never under the pool. If the top figures of the record exceed any
-   single gate's suite wall clock this week, the record is wrong and the solo run is the rank. Action
-   3 spawns nothing until this rank is written down with its source.
-3. **ATTACK THE POLE IN RANK ORDER, ONE FIXTURE PER HAND, ALL FOUR HANDS AT ONCE.** For each: read
-   `run.sh` and decide whether it SHARDS (a mutant battery the pool can split across sibling
-   directories, the `fold-architect-ledger-join-mutants-{,b,c}` shape, each shard declared) or
-   DECLARES (a single long run whose inputs can be named). `readset-skip` and
-   `readset-skip-digest-mutants` test the trace machinery itself and read the hook's own key records;
-   their sandbox needs the hook, the deriver and a seeded repository, which the hermetic runner can hold
-   if declared. A hand that finds a fixture cannot be sandboxed says why with the exact escape, and
-   proposes the shard instead. Every hand's deliverable: a branch on GitHub, the six measurements of
-   action 3, the enforcement-map validator at exit 0, findings as text.
-4. **CLEAR THE STALE RECORDS.** `bash core/scripts/derive-fixture-readsets.sh --reconcile` from the
-   clone root names the stale, changed and unmapped set; trace it with `--list "<names>" --tracer
-   sandbox` on the main checkout detached at the landed sha (the standing ruling: the session runs
-   it, no sudo), commit the map, and confirm on the next push's `read-set keys:` line that the stale
-   count fell. The trace runs on the box; coordinate the window with every live session first.
-5. **ONE RELEASE, GATED, THEN MEASURE AGAIN.** Push from the main checkout detached at the squashed
-   commit, `AI_DLC_FIXTURE_JOBS` at the width the operator names, read the suite wall clock and the
-   `read-set keys:` line, and put before and after in the CHANGELOG with load beside each.
-6. **RE-DERIVE THIS BLOCK**, `bash scripts/validate-plan-shape.sh`, commit, push once from the clone.
-7. **FRESH-RESUME CHECK**: merge the docs commit, fresh clone of `origin/main` through the `github`
+1. **READ THE 0.757.0 GATE'S OWN FIGURES** from the operator checkout, `cat` only:
+   `/Users/n8/git/ai-dlc/.git/ai-dlc-fixture-durations.last` (top rows) and its `.jobs`, and the suite
+   phase's `read-set keys:` line from the gate output. Write that run's fixture-suite pole, at its width and
+   load, beside the 0.755.0 baseline (2025s, 12-way, load 84-100) in this block. If that run selected fewer
+   than the four sharded units it is not a comparison; say so and wait for a gate that does.
+2. **RE-TAKE THE RANK FROM THAT FILE.** Whatever now tops it is the pole. Likely candidates from the 0.755.0
+   rank: `check-24-adversarial-convergence` (1359s, UNMAPPED, ships, no declaration),
+   `adversarial-shard-merge-mutants` (1132s), `fold-architect-ledger-join-mutants-{b,c}` (1102/1074s,
+   declaration-only), `review-shard-merge-mutants` (`BL-485`, leave to batch 208 unless its lead says done),
+   `readset-skip-d` if a re-deal is owed. One fixture per hand, all at once, briefs as batch 212 used
+   (`isolation: "remote"`, own clone, `--no-verify` pushes, no timing by hands, exit codes only; the lead
+   times every shipped unit solo and sequentially on a quiet box, load under 5 beside each figure).
+3. **CLEAR THE STALE RECORDS.** `bash core/scripts/derive-fixture-readsets.sh --reconcile` from the clone
+   root names the stale, changed and unmapped set; trace it with `--list "<names>" --tracer sandbox` on the
+   main checkout detached at the landed sha (the session runs it, no sudo), commit the map, and confirm on
+   the next push's `read-set keys:` line that the stale count fell. Check first whether the detached trace
+   from the 0.755.0 gate already committed rows (`git log -3 -- .ai-dlc-fixture-readsets.tsv`).
+4. **ONE RELEASE, GATED, THEN MEASURE AGAIN.** Push from the main checkout detached at the squashed commit,
+   `AI_DLC_FIXTURE_JOBS` at the width the operator names, read the suite wall clock and the
+   `read-set keys:` line, and put before and after in the CHANGELOG with load beside each. Every live
+   `ai-dlc-*` session gets GATE START and LANDED; take the next free release number by asking them first.
+5. **RE-DERIVE THIS BLOCK**, `bash scripts/validate-plan-shape.sh`, commit, push once from the clone.
+6. **FRESH-RESUME CHECK**: merge the docs commit, fresh clone of `origin/main` through the `github`
    remote's URL, read this plan there, re-run the derive block, assert the numbered actions name
    nothing already shipped, run the plan validator there as the floor.
-8. **HAND THE PLAN TO A LOCAL AI-DLC SESSION, THEN STOP.** `ListAgents`; if a local `ai-dlc-*`
+7. **HAND THE PLAN TO A LOCAL AI-DLC SESSION, THEN STOP.** `ListAgents`; if a local `ai-dlc-*`
    session is found (never a `graph-*` one), `SendMessage` it exactly
    `READ and FOLLOW docs/plans/hermetic-pole.md` and nothing else. A `REFUSED:` reply advances to the
    next untried session, idle ones first; silence does not. Once a session accepts, this session has
@@ -123,8 +112,11 @@ Present a stall as choices with a marked recommendation. Never narrow the scope 
 
 ### Done when
 
-1. Each of the four pole fixtures is declared, sharded with each shard declared, or reported
-   unsandboxable with the exact escape and a shard proposal.
+1. Each of the four units at the top of the DERIVED rank (at 0.755.0: `readset-skip-digest-mutants`,
+   `readset-skip`, `gate-adjudication-mutants`, `reconcile-emit-report`) is declared, sharded with each shard
+   declared, or reported unsandboxable with the exact escape and a shard proposal. MET at 0.757.0. The
+   plan's original fourth name, `fold-architect-ledger-join-mutants-b`, ranked tenth and is deferred as
+   declaration-only follow-up under action 2; its absence does not reopen this criterion.
 2. A committed trace has cleared the stale set, read on a push's `read-set keys:` line as a lower
    stale count than the batch-209 baseline.
 3. One gated push after the release shows a shorter fixture-suite wall clock than the baseline at the

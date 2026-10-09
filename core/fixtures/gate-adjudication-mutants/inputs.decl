@@ -1,0 +1,16 @@
+# Shard of the gate-adjudication mutation battery. build_sandbox copies the caller, its sibling validator, the convergence and steering scripts, the schema, the skill map, two step files and the shipped gate-adjudication fixture into a throwaway tree and mutates one line there.
+!core/scripts/validate-gate-adjudication.sh
+core/scripts/validate-suppression-lifetime.sh
+core/scripts/validate-adversarial-convergence.sh
+core/scripts/validate-steering-budget.sh
+core/schemas/gate-adjudication-verdict.json
+core/skills/ai-dlc/enforcement-map.yaml
+core/skills/ai-dlc/steps/gate-validation.md
+core/skills/ai-dlc/steps/_gate-procedures.md
+core/fixtures/gate-adjudication/run.sh
+core/fixtures/gate-adjudication/seed.sh
+core/fixtures/gate-adjudication/seed.consumer-evidence.tsv
+VERSION
+core/fixtures/gate-adjudication-mutants/run.sh
+core/fixtures/gate-adjudication-mutants-b/run.sh
+core/fixtures/gate-adjudication-mutants-c/run.sh

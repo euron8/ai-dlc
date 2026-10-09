@@ -769,7 +769,17 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   and I124 15 -> 16 with the environment inherited -- so a budget set from an `env -i` reading
 #   (3298 + 6 = 3304) sits at ZERO headroom under the gate, which read exactly 3304 on its first solo
 #   run. The budget is set from the gate's own method. HIGH reading 3304 plus the usual 6.
-FORK_BUDGET=3310
+#
+#   RAISED TO 3320 FOR FIVE NEW SHIPPING FIXTURE DIRECTORIES, NOT FOR A NEW ARM. `fork-profile.sh
+#   --section by-arm --stable`, base `github/main` f9f4fe70 and the 0.757.0 release tree, one
+#   detached worktree at the same path, every file committed, caller environment inherited: base
+#   3309 (STABLE 2, spread 3309-3309), tip 3313 (STABLE 2, spread 3312-3314), so +4. The arm that
+#   moved is I8, fixture packaging, 85 -> 89: it walks `core/fixtures/*/` against the install and
+#   uninstall loops, and 0.757.0 adds `readset-skip-{b,c,d}` and `reconcile-emit-report-{b,c}` as
+#   shipping directories (the six `.dist-only` shards cost it nothing). I82 14 -> 15 and I93
+#   32 -> 31 are the instrument's usual one-fork jitter. The gate itself read 3314 against 3310.
+#   HIGH reading 3314 plus the usual 6.
+FORK_BUDGET=3320
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "readset-skip-digest-mutants: FIXTURE BROKEN: core/fixtures/lib/preamble.sh is absent" >&2; exit 2; }
 # Mutation battery for BL-471's committed-digest clearing, scored by the SHIPPED worlds of
 # `readset-skip`: this file sources that fixture's CK_HELPERS and DG_WORLDS spans, so a mutant is
 # judged by exactly the worlds the shipped fixture asserts, never by a restatement of them.
@@ -9,21 +9,80 @@
 #
 # EVERY MUTANT DECLARES THE EXACT SET OF WORLDS IT MOVES. A mutant that moves one more world than it
 # declares is entanglement, one fewer is a world that cannot see its subject -- both fail.
+# --- THE SHARD SPLIT. Unsharded this battery was the suite's single longest directory, so it is dealt
+# across three drivers: this directory is shard 'a', and `-b` and `-c` are one-line drivers that exec this
+# file with `--group <x>`. A mutant's id is DERIVED from its own call line (dg_<name> for dg_mut,
+# dd_<name> for dg_mut_deriver, tk_<name> for tk_mut), the partition is declared HERE, and the coverage
+# join J0 compares it with the ids derived from this file's own lines, so no mutant can fall out of every
+# shard and no shard is declared without a driver. EVERY shard pays the unmutated control and the
+# impossible-anchor control, because a shard that skipped them could report a kill against a harness that
+# never ran. The tool-key block (its own span, control and count) runs only in a shard dealt a tk_ id.
+# The shard arrives as an ARGUMENT, never the environment: the scrub below unsets AI_DLC_*.
+SHARDS="a b c"
+MUTANTS_a="dg_bypass dg_nodigest_valid dg_nodigest_unmapped dg_needs_deriver dg_needs_localmap dg_b1_hashleak"
+MUTANTS_b="dg_selfread dg_stale_runs dg_nopublish dg_deriver_ignored dg_noexplain dg_dirvalue"
+MUTANTS_c="dg_dirlocal dg_dirdash dg_listload dg_listvalue dd_dirplain tk_inherited tk_xpenv tk_devdir tk_noamnesty tk_nopublish tk_filetoo tk_carrytools"
 set -u
+# THE ROOT IS READ BEFORE THE SCRUB: the hermetic runner exports AI_DLC_PROJECT_ROOT (its sandbox is not a
+# git repository) and the scrub below would discard it. Outside the runner it is unset and git answers.
+ROOT="${AI_DLC_PROJECT_ROOT:-}"
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+GROUP=a
+if [ "${1:-}" = "--group" ]; then GROUP="${2:-}"; [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }; fi
+case " $SHARDS " in *" $GROUP "*) ;; *) echo "FIXTURE ERROR: unknown shard '$GROUP' (known: $SHARDS)" >&2; exit 2 ;; esac
+eval "MINE=\"\${MUTANTS_$GROUP:-}\""
+[ -n "$MINE" ] || { echo "FIXTURE ERROR: shard '$GROUP' has no MUTANTS_$GROUP list; a shard dealt nothing passes everything it never checked" >&2; exit 2; }
+NAME="readset-skip-digest-mutants"; [ "$GROUP" = a ] || NAME="$NAME-$GROUP"
+mine() { case " $MINE " in *" $1 "*) return 0 ;; esac; return 1; }
 
 asserts=0; fails=0
 ok()     { printf '  ok    %s\n' "$1"; asserts=$((asserts+1)); }
 bad()    { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserts=$((asserts+1)); }
-broken() { printf '  FAIL  %s\n' "$1" >&2; echo "readset-skip-digest-mutants: FIXTURE BROKEN" >&2; exit 2; }
-echo "readset-skip-digest-mutants:"
+broken() { printf '  FAIL  %s\n' "$1" >&2; echo "$NAME: FIXTURE BROKEN" >&2; exit 2; }
+echo "$NAME:"
 
-ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || broken "not in a git repo"
+[ -n "$ROOT" ] || ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || broken "no AI_DLC_PROJECT_ROOT and not in a git repo"
+HERE="$ROOT/core/fixtures/readset-skip-digest-mutants"
 HOOK="$ROOT/.githooks/pre-push"
 DERIVER="$ROOT/core/scripts/derive-fixture-readsets.sh"
 VICTIM="$ROOT/core/fixtures/readset-skip/run.sh"
 for p in "$HOOK" "$DERIVER" "$VICTIM"; do [ -f "$p" ] || broken "cannot locate $p"; done
 echo "  hook:   ${HOOK#"$ROOT"/}"
+
+# J0, THE COVERAGE JOIN, in every shard before any world runs.
+partition_ok() { # <declared ids file> <dealt ids file>
+  local dup miss extra
+  dup="$(sort "$2" | uniq -d | tr '\n' ' ')"
+  miss="$(sort -u "$2" | comm -23 <(sort -u "$1") - | tr '\n' ' ')"
+  extra="$(sort -u "$2" | comm -13 <(sort -u "$1") - | tr '\n' ' ')"
+  [ -z "$dup$miss$extra" ] && return 0
+  echo "dealt twice: {${dup% }} dealt to no shard: {${miss% }} dealt but not declared: {${extra% }}"
+  return 1
+}
+JW="$(mktemp -d 2>/dev/null)" || broken "mktemp failed"
+printf '%s\n' m1 m2 m3 > "$JW/pd"; printf '%s\n' m1 m2 m2 m3 > "$JW/pdup"
+printf '%s\n' m1 m3 > "$JW/pmiss"; printf '%s\n' m3 m1 m2 > "$JW/pok"
+if partition_ok "$JW/pd" "$JW/pdup" >/dev/null || partition_ok "$JW/pd" "$JW/pmiss" >/dev/null || ! partition_ok "$JW/pd" "$JW/pok" >/dev/null; then
+  rm -rf "$JW"; broken "the coverage join's self-probe did not discriminate (duplicate, omission, exact)"
+fi
+SELF="$HERE/run.sh"; [ -f "$SELF" ] || { rm -rf "$JW"; broken "cannot read $SELF for the coverage join"; }
+{ sed -n 's/^dg_mut \([a-z0-9_]*\) .*/dg_\1/p; s/^dg_mut_deriver \([a-z0-9_]*\) .*/dd_\1/p' "$SELF"
+  sed -n 's/^ *tk_mut "[^"]*" \([a-z0-9_]*\) .*/tk_\1/p' "$SELF"; } > "$JW/declared"
+for s in $SHARDS; do eval "printf '%s\n' \${MUTANTS_$s}"; done | grep . > "$JW/dealt"
+ndecl="$(grep -c . "$JW/declared")" || ndecl=0
+ndupdecl="$(sort "$JW/declared" | uniq -d | grep -c .)" || ndupdecl=0
+{ [ "$ndecl" -gt 0 ] && [ "$ndupdecl" -eq 0 ]; } || { rm -rf "$JW"; broken "$ndecl mutant ids derived from $SELF ($ndupdecl declared twice)"; }
+if ! why="$(partition_ok "$JW/declared" "$JW/dealt")"; then rm -rf "$JW"; broken "the shard partition does not cover the declared mutants exactly -- $why"; fi
+for s in $SHARDS; do
+  if [ "$s" = a ]; then drv="$SELF"; dp="core/fixtures/readset-skip-digest-mutants/run.sh"
+  else
+    drv="$ROOT/core/fixtures/readset-skip-digest-mutants-$s/run.sh"; dp="core/fixtures/readset-skip-digest-mutants-$s/run.sh"
+    if [ ! -f "$drv" ] || ! grep -qF -- "--group $s" "$drv"; then rm -rf "$JW"; broken "shard '$s' is declared but $drv does not drive it"; fi
+  fi
+  [ "$s" = "$GROUP" ] || echo "HERMETIC-CONSUMED $dp"
+done
+rm -rf "$JW"
+echo "  [J0] coverage join: $ndecl mutants derived from their call lines, dealt disjointly across {$SHARDS}, union exact; this shard runs {$MINE}"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/readset-dgmut.XXXXXX")" || broken "mktemp failed"
 trap 'rm -rf "$WORK"' EXIT
@@ -36,11 +95,15 @@ grep -q '^ck_push() ' "$SPAN" && grep -q '^dg_all() ' "$SPAN" && grep -q '^DG_WA
   || broken "readset-skip's CK_HELPERS or DG_WORLDS span is missing a function this battery drives"
 # shellcheck disable=SC1090
 . "$SPAN"
+echo "HERMETIC-CONSUMED core/fixtures/readset-skip/run.sh"
+grep -q '^readset_hash_rows() {' "$DG_HASH" && grep -q '^readset_local_rows() {' "$DG_HASH" \
+  && echo "HERMETIC-CONSUMED core/scripts/derive-fixture-readsets.sh"
 
 POOL="$WORK/pool.sh"
 sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$HOOK" > "$POOL"
 FX="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$POOL" | sort -u)"
 [ -n "$FX" ] || broken "no FXROOT in the extracted pool block"
+echo "HERMETIC-CONSUMED .githooks/pre-push"
 
 # UNMUTATED CONTROL, PRESENCE-SHAPED: every world must reach its want on the shipped block, or every
 # kill below is a harness that never ran.
@@ -61,6 +124,7 @@ else bad "CONTROL: the anchor counter read $DG_Z for an impossible anchor and $D
 
 dg_mut() { # <name> "<declared worlds>" then triples <count> <from> <to>
   local name="$1" want="$2" dst="$CK_W/dgmut.$1.sh" n o moved=""; shift 2
+  mine "dg_$name" || return 0
   echo "  mutating: ${HOOK#"$ROOT"/} (pool extracted to ${POOL#"$WORK"/}) for $name"
   cp "$POOL" "$dst" || { bad "MUTANT $name: copy failed"; return; }
   while [ $# -ge 3 ]; do
@@ -137,6 +201,7 @@ dg_mut listvalue "w11" 1 'else if (!(($2 in now) && now[$2] == $3)) bad[f] = 1' 
 # too but calls only readset_hash_rows, so a mutant of readset_local_rows reaches the local-map worlds alone.
 dg_mut_deriver() { # <name> "<declared worlds>" <count> <from> <to>
   local name="$1" want="$2" dst="$CK_W/dgmutd.$1.sh" n o moved="" keep="$DG_HASH"
+  mine "dd_$name" || return 0
   echo "  mutating: ${DERIVER#"$ROOT"/} READSET_LOCALMAP span (extracted to ${DG_HASH#"$WORK"/}) for $name"
   cp "$DG_HASH" "$dst" || { bad "DERIVER MUTANT $name: copy failed"; return; }
   MF="$4" MT="$5" MC="$CK_W/dgmutd.$name.n" awk '
@@ -165,6 +230,9 @@ dg_mut_deriver dirplain "w10" 1 'if [ "$(type -t readset_dir_values 2>/dev/null)
 # those four worlds are a unit of this battery rather than weight on the suite's pole. This block is
 # self-contained: its own span, control and count. The worlds are the SHIPPED ones, sourced from
 # readset-skip's TK_WORLDS span on top of the CK_HELPERS already sourced above.
+TK_MINE=""; for _m in $MINE; do case "$_m" in tk_*) TK_MINE="$TK_MINE $_m" ;; esac; done
+tkm_before=$asserts; tkm_want=0
+if [ -n "$TK_MINE" ]; then
 TKSPAN="$WORK/tkspan.sh"
 sed -n '/^# TK_WORLDS_BEGIN/,/^# TK_WORLDS_END$/p' "$VICTIM" > "$TKSPAN"
 grep -q '^tk_all() ' "$TKSPAN" && grep -q '^TK_WANT_migrun=' "$TKSPAN" \
@@ -172,7 +240,6 @@ grep -q '^tk_all() ' "$TKSPAN" && grep -q '^TK_WANT_migrun=' "$TKSPAN" \
 # shellcheck disable=SC1090
 . "$TKSPAN"
 TK_P1="$POOL"; TK_X1="$FX"
-tkm_before=$asserts
 # UNMUTATED CONTROL, PRESENCE-SHAPED: all four tool-key worlds reach their want on the shipped block.
 tk_all "$POOL" "$FX" ctl
 tk_ok=0
@@ -182,6 +249,7 @@ else broken "CONTROL: only $tk_ok of 4 tool-key worlds reach their want on the u
 
 tk_mut() { # <declared worlds> <name> <count> <from> <to>
   local want="$1" name="$2" dst="$CK_W/tkmut.$2.sh" n o moved=""
+  mine "tk_$name" || return 0
   cp "$TK_P1" "$dst" || { bad "TK MUTANT $name: copy failed"; return; }
   MF="$4" MT="$5" MC="$CK_W/tkmut.$name.n" awk '
     BEGIN { f = ENVIRON["MF"]; t = ENVIRON["MT"]; n = 0 }
@@ -212,15 +280,19 @@ if true; then
   tk_mut "migrun" filetoo 1 '            if (cur(k) == R[k]) continue' '            if (cur(k) == R[k] || mig) continue'
   tk_mut "mig" carrytools 1 'for (k in R) if (substr(k, 1, 1) != "/") X[k] = 1 }' 'for (k in R) X[k] = 1 }'
 fi
-tkm_want=$(( 1 + 6 + TK_DEV_ALT ))
+tkn=0; for _m in $TK_MINE; do tkn=$((tkn+1)); done
+tkm_want=$(( 1 + tkn ))
+case " $TK_MINE " in *" tk_devdir "*) [ "$TK_DEV_ALT" = 1 ] || tkm_want=$((tkm_want-1)) ;; esac
 if [ $((asserts - tkm_before)) -ne "$tkm_want" ]; then
   printf '  FAIL  the tool-key block ran %s assertions; it carries %s\n' "$((asserts - tkm_before))" "$tkm_want"; fails=$((fails+1))
 fi
+fi
 
-EXPECTED=$(( 19 + tkm_want ))
+dgn=0; for _m in $MINE; do case "$_m" in dg_*|dd_*) dgn=$((dgn+1)) ;; esac; done
+EXPECTED=$(( 2 + dgn + tkm_want ))
 if [ "$asserts" -lt "$EXPECTED" ]; then
   printf '  FAIL  only %s assertions ran; this battery carries %s\n' "$asserts" "$EXPECTED"; fails=$((fails+1))
 fi
 echo
-if [ "$fails" -eq 0 ]; then echo "readset-skip-digest-mutants: PASS ($asserts assertions)"; exit 0; fi
-echo "readset-skip-digest-mutants: $fails of $asserts assertion(s) FAILED"; exit 1
+if [ "$fails" -eq 0 ]; then echo "$NAME: PASS ($asserts assertions)"; exit 0; fi
+echo "$NAME: $fails of $asserts assertion(s) FAILED"; exit 1
