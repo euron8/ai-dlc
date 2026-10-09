@@ -844,7 +844,13 @@ h_run() {
   H_OUT="$HOUTD/$(basename "$c").stdout"
   rm -f "$c/_bmad-output/ai-dlc-update"/self-update-fixtures-*.md "$H_OUT"
   H_RC=0
-  PREPUSH_POOL_DEPTH=7 bash "$r" "$HD" "$HD_B" "$HD_T" "$c" "$@" > "$H_OUT" 2>/dev/null || H_RC=$?
+  # A FRESH VERDICT STORE PER RUN. hermetic-run.sh may record each pass in a shared store at
+  # `${AI_DLC_VERDICT_STORE:-$HOME/.cache/ai-dlc/verdicts}`; the runner under test inherits whatever
+  # this sets, by design. Left unset, these runs would write the operator's real store, and a pass one
+  # run recorded could answer the next run's dispatch, so a cell would read a cached verdict rather
+  # than the behaviour it asserts. Harmless where the runner keeps no store.
+  H_VS="$(mktemp -d "$HOUTD/vstore.XXXXXX")" || { H_RC=99; return 0; }
+  AI_DLC_VERDICT_STORE="$H_VS" PREPUSH_POOL_DEPTH=7 bash "$r" "$HD" "$HD_B" "$HD_T" "$c" "$@" > "$H_OUT" 2>/dev/null || H_RC=$?
   H_LOG="$(ls -t "$c/_bmad-output/ai-dlc-update"/self-update-fixtures-*.md 2>/dev/null | head -1)"
 }
 # h_section <log> <fixture> -> the lines of that fixture's section, joined on one line
