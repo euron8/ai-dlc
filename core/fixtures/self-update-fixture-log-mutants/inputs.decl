@@ -6,3 +6,7 @@ core/skills/ai-dlc-update/reconcile/
 !core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh
 core/fixtures/self-update-fixture-log/
 core/fixtures/lib/
+core/git-hooks/pre-push
+core/scripts/hermetic-run.sh
+core/scripts/core-paths.sh
+core/skills/ai-dlc-update/SKILL.md

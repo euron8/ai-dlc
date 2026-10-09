@@ -24,3 +24,10 @@ cmp
 git
 diff
 basename
+python3
+ln
+readlink
+paste
+shasum
+find
+xargs
