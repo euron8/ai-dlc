@@ -132,20 +132,33 @@ mkdir -p "$R/end/t" && echo s > "$R/end/t/s" && echo e > "$R/end/t/e" || broken 
 printf '(version 3)\n(allow default)\n(allow file-read* (subpath "%s") (with report))\n' "$R/end/t" > "$R/end.sb"
 
 # ------------------------------------------------------------------ one stream ----
-/usr/bin/log stream --level debug --style compact --predicate "eventMessage CONTAINS \"$R/\"" > "$WORK/raw" 2>&1 &
-LSP=$!
+# ONLY A WINDOW WITH ZERO DROP NOTICES IS JUDGED, AND A LOSSY ONE IS RETRIED, NOT SCORED. A dropped
+# report makes every count below a floor, so a lossy window can neither pass nor fail an arm. One
+# attempt refused as BROKEN on any notice, and on a loaded box that is most attempts: measured at
+# load 41-42, 2 of 3 single attempts dropped 1-2 notices. Ten attempts, a pause between them so a
+# load spike can pass; all ten lossy is still BROKEN. The attempt count is printed on every run.
 sentinel() { local i=0; while [ "$i" -lt 50 ]; do sandbox-exec -f "$R/end.sb" /bin/cat "$R/end/t/$1" >/dev/null 2>&1 </dev/null; grep -qF "file-read-data $R/end/t/$1" "$WORK/raw" && return 0; sleep 0.2; i=$((i + 1)); done; return 1; }
-sentinel s || broken "the sandbox stream never delivered the start sentinel"
-for sb in "$R"/*/*.sb; do
-  case "$sb" in "$R/end/"*|*/unscoped.sb) continue ;; esac
-  t="${sb%.sb}/t"
-  sandbox-exec -D FXTAG=r -f "$sb" /bin/bash -c 'cd "$1" && [ -d "$1" ] && [ -e "$1" ] && ls "$1" >/dev/null && cat "$1/g" "$1/d/f" >/dev/null && [ -f "$1/d/f" ]' _ "$t" </dev/null \
-    || broken "the rendering $sb refused the probe workload"
+ATT=0; NDS=""
+while [ "$ATT" -lt 10 ]; do
+  ATT=$((ATT + 1))
+  [ "$ATT" -eq 1 ] || sleep 2
+  /usr/bin/log stream --style compact --predicate "eventMessage CONTAINS \"$R/\"" > "$WORK/raw" 2>&1 &
+  LSP=$!
+  sentinel s || broken "the sandbox stream never delivered the start sentinel (attempt $ATT)"
+  for sb in "$R"/*/*.sb; do
+    case "$sb" in "$R/end/"*|*/unscoped.sb) continue ;; esac
+    t="${sb%.sb}/t"
+    sandbox-exec -D FXTAG=r -f "$sb" /bin/bash -c 'cd "$1" && [ -d "$1" ] && [ -e "$1" ] && ls "$1" >/dev/null && cat "$1/g" "$1/d/f" >/dev/null && [ -f "$1/d/f" ]' _ "$t" </dev/null \
+      || broken "the rendering $sb refused the probe workload"
+  done
+  sentinel e || broken "the sandbox stream never delivered the end sentinel (attempt $ATT)"
+  sleep 1; kill "$LSP" 2>/dev/null; wait "$LSP" 2>/dev/null; LSP=""
+  nd="$(grep -c 'dropped during' "$WORK/raw")" || nd=0
+  [ "$nd" = 0 ] && break
+  NDS="$NDS $nd"
 done
-sentinel e || broken "the sandbox stream never delivered the end sentinel"
-sleep 1; kill "$LSP" 2>/dev/null; wait "$LSP" 2>/dev/null; LSP=""
-nd="$(grep -c 'dropped during' "$WORK/raw")" || nd=0
-[ "$nd" = 0 ] || broken "the stream dropped reports ($nd notice(s)); the counts below would be floors"
+[ "$nd" = 0 ] || broken "the stream dropped reports in all $ATT attempts (notices per attempt:$NDS); the counts below would be floors"
+printf '  note  stream window judged on attempt %s of 10 (drop notices in the lossy attempts before it:%s)\n' "$ATT" "${NDS:- none}"
 
 # cnt <variant> <emitter> <op ERE> <suffix ERE>
 cnt() { local n; n="$(grep -cE "($3) $R/$1/$2/t$4( |\$)" "$WORK/raw")" || n=0; printf '%s' "$n"; }
