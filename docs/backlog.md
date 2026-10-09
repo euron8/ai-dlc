@@ -257,3 +257,32 @@ fixture data was built for the sibling `procsub-staged-refusal` and failed enfor
 second corpus. It leaves this list only by a committed trace; its three shards are three such traces. `hermetic-runner`,
 `self-update-gate` and `subject-partition` are untouched here.
 
+
+## BL-493 — a declared fixture's key rows are still composed twice, held equal by a census rather than by one function
+
+**DEFECT, open, batch 219.** `0.763.0` single-sourced the verdict store's path, ident and digest input into the
+`READSET_VS` span and made the runner its only writer, but a declared fixture's KEY ROWS are still written twice: the
+hook composes them in `readset_declared` plus the decision awk of `readset_keys` (`.githooks/pre-push`,
+`core/git-hooks/pre-push`), and the runner composes them in `hr_key_rows` (`core/scripts/hermetic-run.sh`). The two
+were made to agree by editing the hook to the runner's rules (no carry-over from an older record for a declared
+fixture; a declared directory listed only where a universe file sits under it). What holds them equal now is the
+census arm, unit `vs` arm (k) in `core/fixtures/readset-skip/run.sh`, which byte-compares the two on every shape that
+has diverged and kills three one-side mutants. That is a detector, not a partition: a new shape neither side has
+seen can diverge, and the arm cannot see it until someone adds the shape.
+
+The fix is one function in a span both sides source, taking the fixture's declaration and a `.now` manifest and
+emitting the rows; the hook feeds it the manifest it already built, the runner feeds its own, and `hr_key_rows` and
+the hook's declared-row branch are deleted. The hook decides ~277 fixtures in one awk pass and the runner's
+`--key-only` costs ~2s per fixture, so the shared function must not re-hash per fixture.
+
+verify: sh ! grep -q '^hr_key_rows()' core/scripts/hermetic-run.sh && grep -q 'readset_declared' .githooks/pre-push && bash scripts/validate-enforcement-map.sh >/dev/null 2>&1
+
+**Re-derived batch 219 (0.763.0).** The first half shipped: the deriver drops `--level debug`, the liveness window is
+~10s, `readset-sandbox-root-clause` retries up to ten windows. A second defect in the same tracer, measured on this
+box: a consumer's pre-push hook (`/Users/n8/git/graph/.githooks/pre-push`, pid 47147) survived its `git push` by 42
+minutes with parent init, no client and no session, because the post-green trace step blocks on nothing that dies
+with the push. It spawned one `log stream --level debug` subscription per fixture the whole time and held
+`diagnosticd` at 30-50% CPU and `fseventsd` at 100% until the operator stopped it by its process group. The trace
+step must hold its parent's pid and exit when that pid is gone; until it does, an orphaned hook is a load generator
+nobody started on purpose. This stays open on the UNMAPPED receipt above; the orphan is a second subject and needs
+its own receipt when the fix is built.

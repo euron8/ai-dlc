@@ -6,76 +6,45 @@
 is the ONLY CURRENT STATUS RECORD in this file.**
 
 **THE GOAL, OPERATOR ORDER AT BATCH 217: EVERY PUSH IS SHORT. NOTHING ELSE IN AI-DLC OUTRANKS IT.** A push runs every
-fixture it selects, so its wall clock tracks HOW MANY run, not the longest one. Measured at batch 217 on a gate's own log:
-`read-set keys: 122 of 277 fixture(s) run (57 changed, 8 unrecorded, 57 stale)`. The pole premise this plan carried
-through 0.760.0 was wrong. **No more pole sharding**: every new directory edits `setup-sites.md` and `core-manifest.md`
-and re-runs about fifty fixtures on its own push.
+fixture it selects, so its wall clock tracks HOW MANY run, not the longest one. The batch-217 baseline, from a gate's
+own log: `read-set keys: 122 of 277 fixture(s) run (57 changed, 8 unrecorded, 57 stale)`. **No more pole sharding**:
+every new directory edits `setup-sites.md` and `core-manifest.md` and re-runs about fifty fixtures on its own push.
 
-**State: batch 217 built release work that is NOT on main.** main is whatever `origin/main` reads. Batch 216's 0.761.0
-(`0e30bfeb`) is the last landed release this block knows of. ai-dlc-cc was gating a self-update fix as 0.762.0 when this
-block was written, so take the next free number at push time.
+**State at batch 219: 0.763.0 LANDED as `6f9da269` on `origin/main`.** It is the batch-217 release (the shared
+per-project verdict store, both hooks, 42 declarations, BL-481's first half, four shards) rebased onto 0.762.0, plus
+the fix for the defect that stopped its first gate: the store's key was computed twice and the two copies disagreed.
+What landed for that:
 
-The assembled batch-217 release is `release-0.762.0-durable` at `7502966d` on GitHub, squashed on `0e30bfeb`. Its gate
-was STOPPED by the operator mid-suite, because its verdict store has a defect (below). It carries:
+1. **One `READSET_VS` span** in both hooks, after `READSET_TOOLS`, holding `readset_vs_store <root>`
+   (`.githooks/pre-push:1203`), `readset_vs_ident <hook> <runner>` and `readset_vs_input`. `hermetic-run.sh` extracts
+   and sources it at top level; its `hr_store_put` (`core/scripts/hermetic-run.sh:453`) is the one writer.
+   `#universe` hashes it too, so no entry written before 0.763.0 is reused.
+2. **The runner is the store's only writer.** `readset_vs_put` is gone from both hooks; derive block below holds it at 0.
+3. **A declared fixture's published key is exactly its declared key.** No carry-over from an older record; the run/skip
+   comparison ignores a recorded row the declaration no longer produces; a declared directory under an excluded top
+   gets no row (the runner's rule). The row composition is still two implementations held equal, which is **BL-493**.
+4. **The census arm**, unit `vs` arm (k), `vs_census` at `core/fixtures/readset-skip/run.sh:5172`, a synthetic world holding every
+   shape that diverged, driven fresh and after a record carry, byte-compared with `--key-only`, three one-side mutants
+   killed. The operator chose it over a real-tree arm, which was measured at 6.6 minutes and would key its host on
+   the whole tree. **Real-tree census, run once on the release tree: `225 declared, 225 identical, 0 differ`.** The
+   carried pass of that census cannot be read as a census, because under the fix a record whose only difference is
+   the foreign row decides `skip` and publishes nothing; the synthetic arm edits a declared input between its passes
+   so both shapes publish.
 
-1. **A shared, per-project verdict store.** It lives at `${AI_DLC_VERDICT_STORE:-$HOME/.cache/ai-dlc/verdicts}/<root-commit>`,
-   and is OFF in a shallow clone. `hermetic-run.sh` and the hook record a declared fixture's pass, and the hook skips a
-   declared fixture whose entry matches. The key hashes the runner's `# HR_SANDBOX_BEGIN`/`END` span plus the hook's
-   universe spans.
-2. **Both pre-push hooks (I66).** A declared fixture with a stale record is decided on its declared keys. A passing
-   unmapped fixture is traced on a red push. The `^"` guard reads only the `ls-files` streams, so one quoted map row no
-   longer turns keying off. That last fix ends graph's every-push full run.
-3. **42 more fixtures declared.** Isolation and teeth probes ran on all of them, and no gap was found.
-4. **BL-481, first half.** The deriver drops `--level debug`; the `--local-map` liveness window is ~10s;
-   `readset-sandbox-root-clause` retries up to ten windows.
-5. **Four pole units sharded.**
+**The 0.763.0 gate, from its own log:** `read-set keys: 32 of 277 fixture(s) run (25 changed, 0 unrecorded, 7 stale)`
+and `verdict store: 89 fixture(s) skipped on a pass recorded elsewhere`, `apply-drift-after-write` among them. 32 ok,
+0 FAIL, every phase PASS, exit 141 from the transport, re-pushed hookless and merged as PR #1090. Wall clock 18:22 to
+18:35 at load 50 to 65, bound by three unseeded ~700s `review-shard-merge-mutants` shards. The store was cleared by
+exact listing before the gate (228 entries, then 46 a peer's gate had added), seeded from a clean clone at the release
+commit, 184 of 225 before the operator stopped the seed to gate, 202 after the gate. **Order a re-seed longest-first
+from `.git/ai-dlc-fixture-durations`**; glob order put the four ~700s units last and cost about five minutes.
 
-**THE STORE DEFECT, measured on that gate.** The store skipped only 46 of about 104 declared fixtures it should have.
-The cause is that the HOOK's key for a declared fixture is not the RUNNER's key. On `apply-drift-after-write` the hook
-held 161 rows and `hermetic-run.sh --key-only` 67. The hook's extras were 88 tool rows, `.gitattributes` and 5
-`#listing` rows. 52 of the 58 misses still carry rows in the committed `.ai-dlc-fixture-readsets.tsv`. Control: a store
-hit, `adversarial-citation`, was byte-identical on both sides.
-
-The root cause is DUPLICATION, not a bad line. These are written twice:
-- the store path: `readset_vs_store` in the hook, `hr_store_put` in the runner;
-- the digest input: `readset_vs_input`, and the runner around `:465`;
-- a declared fixture's key rows: `readset_declared` + `readset_keys` in the hook, `hr_key_rows` in the runner.
-
-The hook's comment above `readset_declared` claims `--key-only` "prints the same rows", and nothing enforces it.
-The batch-217 lead's pre-gate "parity check" compared the runner to itself in two directories and never compared the
-hook's lookup to the runner's write. That is why the defect reached a gate.
-
-**IN FLIGHT AT HANDOFF.** `b217-vs-keyfix` at `f2237d9d`, on `7502966d`, holds NO code change. It holds only a
-census script, `census-wip.sh.txt`, which compares the hook's computed `.k` rows with `hermetic-run.sh --key-only` for
-every declared fixture.
-
-Its one run used FRESH records, with no prior key record, and found 223 of 225 identical. The two that differ are
-`layer-contract-conformance{,-b}`, where the hook has 1606 rows and the runner 1605; the extra row was not diffed.
-
-So the traced-map-rows hypothesis is REFUTED for fresh records. The gate's 161-versus-67 gap needs a PRIOR record. The
-suspect is the decision awk carrying an existing record's keys forward: `RK[f]` and the `ok`-record carry-over around
-`.githooks/pre-push:1421` on `7502966d`.
-
-Run the census with a seeded `stale` record and a seeded `ok` record first; that is where the gap should reproduce.
-The single-sourcing of NEXT ACTIONS 2 is still required: two implementations are why the gap was invisible. On `main`,
-the runner sources the hook's span at `core/scripts/hermetic-run.sh:244`, and the hook's declaration logic starts at
-`.githooks/pre-push:1219`.
-
-**Peers at handoff.**
-- **ai-dlc-e2** holds `b218-git-decl` at `febd4027`, rebased on `7502966d`. It seeds a git repository inside the sandbox
-  (`git.decl`: `seed`, `pin <sha>`, `pin? <sha>`) for `prepush-pool-depth`, both `procsub` parents and
-  `retired-layer-contract`. Its rule: a pass that skipped an optional pin is never recorded, `hr_pin_skipped` in
-  `hr_store_put`. It gates after the store fix lands, taking the next free number at push time.
-- **ai-dlc-a3** holds `b218-inpool-trace`, WIP. It traces an undeclared fixture during the suite's own run, in a
-  `clonefile` list-clone, so its rows come from the run that produced the verdict and the detached second run
-  disappears. The loss canary stays. It builds on e2's tip.
-- **ai-dlc-cc** shipped 0.761.0 and was gating its self-update fix as 0.762.0.
-
-Ask each for its current state; do not trust this paragraph.
+**Peers at the batch-219 close.** `ai-dlc-59` holds `b218-git-decl`, rebased onto the release and claiming 0.764.0;
+`ai-dlc-7b` holds `b218-inpool-trace` and rebases onto 59's tip; `ai-dlc-ad` holds `b218-advgate` and queues behind
+both. Ask each for its current state; do not trust this paragraph.
 
 Your instructions are four sections: `## Start here`, `### NEXT ACTIONS`, `### Ping the operator`,
 `### Done when`.
-
 ## Start here
 
 **Three trees, and only one of them is yours to write.** `<scratch>/ai-dlc-pole`, a full clone under
@@ -103,85 +72,56 @@ fixture(s) skipped` line, with the fixture-suite wall clock and load beside them
 
 ```bash
 git rev-parse --short HEAD; git status --porcelain | wc -l
-git ls-remote github refs/heads/main refs/heads/release-0.762.0-durable refs/heads/b217-vs-keyfix refs/heads/b218-git-decl refs/heads/b218-inpool-trace
-n=0; for d in core/fixtures/*/; do [ -f "$d/inputs.decl" ] && n=$((n+1)); done; echo "DECLARED $n"   # 225 on 7502966d
-# store duplication: these must print 0 once single-sourced (the runner's own copies are gone)
-git show github/b217-vs-keyfix:core/scripts/hermetic-run.sh 2>/dev/null | grep -c '^hr_key_rows()\|^hr_store_put()'
+git ls-remote github refs/heads/main refs/heads/b218-git-decl refs/heads/b218-inpool-trace refs/heads/b218-advgate
+git show github/main:VERSION                                                                 # 0.763.0 or later
+n=0; for d in core/fixtures/*/; do [ -f "$d/inputs.decl" ] && n=$((n+1)); done; echo "DECLARED $n"   # 225 at 6f9da269
+# single-sourced: the hook has no store writer (0) and the runner sources the shared span (1); control: the span exists in the hook (1)
+grep -c 'readset_vs_put' .githooks/pre-push core/git-hooks/pre-push
+grep -c 'READSET_VS_BEGIN' core/scripts/hermetic-run.sh; grep -c '^# READSET_VS_BEGIN$' .githooks/pre-push
 # the real verdict store, READ ONLY; control: the base directory exists
-ls ~/.cache/ai-dlc/verdicts/ 2>/dev/null | head; ls -d ~/.cache/ai-dlc/verdicts 2>/dev/null | wc -l
+/usr/bin/find ~/.cache/ai-dlc/verdicts -mindepth 2 -type f | wc -l; ls -d ~/.cache/ai-dlc/verdicts | wc -l
 uptime
 ```
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **MAKE THE CLONE AND PIN IT** at `github/main`; ask every live `ai-dlc-*` session (`ListAgents`) what
-   release number and batch number it holds and whether it holds the main checkout; WAIT for every answer;
-   state the number you take to every one of them before building.
-2. **SINGLE-SOURCE THE STORE**, on `b217-vs-keyfix` (or from `7502966d`), in BOTH hooks identically (I66).
-   - ONE function each for the store path, the digest input, and a declared fixture's key rows, in a span both the hook
-     and `hermetic-run.sh` source. The runner already sources the hook's `READSET_UNIVERSE` span; extend it or add one.
-   - DELETE the runner's own copies.
-   - Make the RUNNER the store's only writer: delete `readset_vs_put` and its call in `readset_keys_write` from both
-     hooks. Every declared fixture the hook runs goes through the runner at the `if [ -f "$d/inputs.decl" ]; then`
-     dispatch, so confirm that in both layouts first. e2's `hr_pin_skipped` rule then covers every write.
-   - Traced map rows must never enter a declared fixture's key.
-   - If the hook's key composition cannot be lifted into a sourced span, report why before building anything else.
-   - Keep these five texts byte-for-byte, because ai-dlc-cc's self-update fix matches on them: `# READSET_TOOLS_BEGIN`,
-     the dispatch line, `declared file absent:`, and the `rc=`/`sandbox_files=`/`required_missing=` summary line.
-3. **THE CENSUS IS A GATE ARM, NOT A CLAIM.** Add a fixture arm that runs on the REAL tree and, for every declared
-   fixture, byte-compares the hook's computed key rows with `hermetic-run.sh --key-only`. It must name the fixture and
-   the first differing row on any mismatch. Key it on both hooks, `hermetic-run.sh` and the shared span, so it re-runs
-   at every gate that touches key code. Add a mutant that edits one side only, which must fail it. Report the census
-   line and its count from a real run. **No one asserts the key is final; this arm passing at the gate is the only
-   evidence.**
-4. **RE-SQUASH, RE-SEED, GATE.**
-   - Squash onto the then-current `origin/main` as the next free version. Rewrite the 0.762.0 CHANGELOG entry of
-     `7502966d` under the new number, and add the single-sourcing.
-   - DELETE every entry under `~/.cache/ai-dlc/verdicts/`: every existing entry was recorded under the defective key.
-     Delete by exact listing, never a glob on a variable.
-   - Seed: run every declared fixture once through the release tree's `hermetic-run.sh` from a clean clone at the
-     release commit. Check the clone's `--key-only` rows against the main checkout's for a few fixtures first.
-   - GATE START to every `ai-dlc-*` session. Gate from the main checkout detached at the release commit, creating
-     `release/<version>`, `AI_DLC_FIXTURE_JOBS=12`.
-   - Read: the exit file; the census arm by name; `verdict store: N skipped`, which must be near the count of declared
-     fixtures the push would otherwise run; the `read-set keys:` line; `ls-remote` for the ref.
-   - `readset-sandbox-root-clause` fails above about load 60, the open half of BL-481. Run it alone first if load is
-     high.
-5. **MEASURE AN ORDINARY PUSH.** After the release lands, the next docs-only or single-fixture push's `read-set keys:` run
-   count and `verdict store:` line are the figures this plan is judged on. Record them with load beside them.
-6. **CARRIERS OWED** in the docs commit after the release:
-   - in `.claude/rules/tool-hazards.md`: "never kill by pattern; stop only your own recorded pid", and "a test that runs
-     `hermetic-run.sh` sets `AI_DLC_VERDICT_STORE`";
-   - in `.claude/rules/operator-rulings.md`: "never message a `graph-*` session without an explicit grant";
-   - in `verification-discipline.md`: one sentence saying a fixture named on the `verdict store:` line was skipped on a
-     recorded pass, which is not a read-set gap.
-7. **RE-DERIVE THIS BLOCK**, `bash scripts/validate-plan-shape.sh`, commit, push once from the clone.
-8. **FRESH-RESUME CHECK**: merge the docs commit, fresh clone of `origin/main` through the `github`
-   remote's URL, read this plan there, re-run the derive block, assert the numbered actions name
-   nothing already shipped, run the plan validator there as the floor.
-9. **HAND THE PLAN TO A LOCAL AI-DLC SESSION, THEN STOP.** `ListAgents`; if a local `ai-dlc-*`
+1. **MEASURE AN ORDINARY PUSH.** DONE at batch 219; the figure is in `### Done when` 4. A push from a clone with no
+   `.git/ai-dlc-fixture-keys` keys every fixture unrecorded and runs the full suite, which is the wrong measurement.
+2. **RE-DERIVE THIS BLOCK**, `bash scripts/validate-plan-shape.sh`, commit, push from the main checkout, merge. DONE at
+   batch 219 as PR #1091.
+3. **FRESH-RESUME CHECK**: fresh clone of `origin/main` through the `github` remote's URL, read this plan there,
+   re-run the derive block, assert the numbered actions name nothing already shipped, run the plan validator there as
+   the floor.
+4. **HAND THE PLAN TO A LOCAL AI-DLC SESSION, THEN STOP.** `ListAgents`; if a local `ai-dlc-*`
    session is found (never a `graph-*` one), `SendMessage` it exactly
    `READ and FOLLOW docs/plans/hermetic-pole.md` and nothing else. A `REFUSED:` reply advances to the
    next untried session, idle ones first; silence does not. Once a session accepts, this session has
    no further work and communicates no further with it. If none is found, there is nothing further to
-   do.
+   do. The receiving session reads `### Done when`; where every item is met, it rotates this plan with
+   `scripts/plan-rotate.sh` and files nothing new here. **BL-493** (one function for the key rows) and the orphaned
+   consumer hook recorded under **BL-481** are backlog work, not this plan's.
 
 ### Ping the operator
 
-Report on every question, every decision, and on completion including an early stop. Specifically:
-when the single-sourcing cannot lift the hook's key composition into a sourced span; when the census
-reports a mismatch; when the store's skip count at a gate is far below the declared fixtures the push would
-otherwise run; and when the release lands, with the ordinary push's run count and wall clock. Present a stall
-as choices with a marked recommendation. Never narrow the scope on your own authority.
+Report on every question, every decision, and on completion including an early stop. Specifically: when the ordinary
+push's `read-set keys:` count is not below the batch-217 baseline of 122; when a gate's `verdict store:` skip count is
+far below the declared fixtures the push would otherwise run; and when the plan is handed on. Present a stall as
+choices with a marked recommendation. Never narrow the scope on your own authority.
 
 ### Done when
 
-1. The pole work of 0.757.0 and 0.760.0 is MET and closed; the pole is no longer this plan's measure.
-2. The verdict store's key is single-sourced: the census arm reports every declared fixture's hook key equal to its
-   runner key, on the real tree, at the gate that ships it, and its one-side mutant is killed.
+1. The pole work of 0.757.0 and 0.760.0 is MET and closed; the pole is no longer this plan's measure. **MET.**
+2. The verdict store's key is single-sourced: the census arm (unit `vs` arm (k) of `readset-skip`) reports every
+   diverged shape's hook key equal to its runner key at the gate that ships it, three one-side mutants killed, and a
+   real-tree census over every declared fixture run once on the release tree reads `225 declared, 225 identical,
+   0 differ`. **MET at 0.763.0**; the operator chose the synthetic arm over a real-tree arm that would key its host on
+   the whole tree.
 3. That release has landed, and its gate printed a `verdict store: N skipped` line covering the declared fixtures the
-   push would otherwise have run.
+   push would otherwise have run. **MET: `6f9da269`, `verdict store: 89 fixture(s) skipped`, `32 of 277 run`.**
 4. An ordinary push after it (no hook, runner or deriver change) shows its `read-set keys:` run count and fixture-suite
-   wall clock, with load beside them, recorded here against the batch-217 baseline of 122 run.
-5. The six carriers of action 6 are committed, this block re-derived, the plan validator green, the fresh-resume check
-   passed, the plan handed on.
+   wall clock, with load beside them, recorded here against the batch-217 baseline of 122 run. **MET: the batch-219
+   docs-only push (`3fb33968`, from the main checkout at load 14) printed `FIXTURE SUITE SKIPPED on an unchanged
+   content key`, 0 run, exit 0 in about 90 seconds; `docs/` is an excluded top, so nothing was keyed.**
+5. The carriers are committed (**MET at 0.763.0**, four sentences across `tool-hazards.md`, `operator-rulings.md` and
+   `verification-discipline.md`), this block re-derived, the plan validator green, the fresh-resume check passed, the
+   plan handed on.
