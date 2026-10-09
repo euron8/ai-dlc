@@ -165,10 +165,87 @@ EW=""
 PSB_DONE=0
 trap 'rm -rf "$WORK"; [ -n "$EW" ] && rm -rf "$EW"; [ "$PSB_DONE" = 1 ] || { echo "FIXTURE BROKEN: procsub-staged-refusal-boot stopped before its verdict" >&2; exit 2; }' EXIT
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
-echo "procsub-staged-refusal-boot:"
+fails=0; asserts=0
+ok()  { printf '  ok    %s\n' "$1"; asserts=$((asserts+1)); }
+bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserts=$((asserts+1)); }
+# ---------------------------------------------------------------------------- shards ----
+# THIS FILE IS THREE SHARDS OF ONE FIXTURE, AND THE SPLIT IS A SCHEDULING BOUNDARY, NOT A SUBJECT
+# BOUNDARY. Every assertion-bearing section below is a UNIT guarded by `if sg <unit>; then ... fi`, or, for
+# the control/forced loop, by the key-to-unit map; `--group <x>` runs the units dealt to shard <x>. The two
+# siblings `procsub-staged-refusal-boot-{b,c}/run.sh` are one-line drivers that `exec bash` this file with
+# their group (the readset-skip shape), so the pre-push pool starts each on its own. No `--group` runs
+# shard 'a', so `bash core/fixtures/procsub-staged-refusal-boot/run.sh` is shard a.
+#
+# THE WORLDS, THE SHARED HELPERS AND THE STAGED PRE-FIX ENGINES ARE NOT UNITS: every shard builds them,
+# because the units read each other's worlds (hb reads the ld ext world's rows, b360 the ld block size).
+#   a  lrpe ud      ledger-reverify, preclassify, emit-report --verify, self-update-gate; unregistered-drift
+#   b  ld b360      layer-drift L cells and mutants; the BL-360 emit-report cells and mutants
+#   c  lc ap spell  the BL-359 C cells and mutants, hard-blockers; apply.sh; the two preclassify/layer-drift spell probes
+# A unit may carry several guards (ld has three); the declared set is the DISTINCT names.
+SHARDS="a b c"
+UNITS_a="lrpe ud"
+UNITS_b="ld b360"
+UNITS_c="lc ap spell"
+GROUP=a
+if [ "${1:-}" = "--group" ]; then
+  GROUP="${2:-}"
+  [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }
+fi
+case " $SHARDS " in
+  *" $GROUP "*) ;;
+  *) echo "FIXTURE ERROR: unknown shard '$GROUP' (known: $SHARDS)" >&2; exit 2 ;;
+esac
+eval "MINE=\"\${UNITS_$GROUP:-}\""
+NAME="procsub-staged-refusal-boot"; [ "$GROUP" = a ] || NAME="procsub-staged-refusal-boot-$GROUP"
+[ -n "$MINE" ] || { echo "FIXTURE ERROR: shard '$GROUP' has no UNITS_$GROUP list; a shard dealt nothing passes everything it never checked" >&2; exit 2; }
+sg() { case " $MINE " in *" $1 "*) return 0 ;; esac; return 1; }
+# unit_of_key <EXPECT key> -> the unit that owns the control and forced arms of that key
+unit_of_key() {
+  case "$1" in
+    lr|pc|pm|er|sg) echo lrpe ;;
+    ud) echo ud ;;
+    ap) echo ap ;;
+    ld) echo ld ;;
+    lc|lo|hb) echo lc ;;
+    *) echo "unit-of-$1-unknown" ;;
+  esac
+}
+SELF="$0"
+[ -f "$SELF" ] || { echo "FIXTURE ERROR: cannot read $SELF for the coverage join" >&2; exit 2; }
+partition_ok() { # <declared ids file> <dealt ids file> -> 0 when dealt is disjoint and covers declared exactly
+  local dup miss extra
+  dup="$(sort "$2" | uniq -d | tr '\n' ' ')"
+  miss="$(sort -u "$2" | comm -23 <(sort -u "$1") - | tr '\n' ' ')"
+  extra="$(sort -u "$2" | comm -13 <(sort -u "$1") - | tr '\n' ' ')"
+  [ -z "$dup$miss$extra" ] && return 0
+  echo "dealt twice: {${dup% }} dealt to no shard: {${miss% }} dealt but not declared: {${extra% }}"
+  return 1
+}
+JW="$WORK/join"; mkdir -p "$JW" || { echo "FIXTURE ERROR: mkdir join" >&2; exit 2; }
+printf '%s\n' u1 u2 u3 > "$JW/pd"; printf '%s\n' u1 u2 u2 u3 > "$JW/pdup"; printf '%s\n' u1 u3 > "$JW/pmiss"; printf '%s\n' u3 u1 u2 > "$JW/pok"
+if partition_ok "$JW/pd" "$JW/pdup" >/dev/null || partition_ok "$JW/pd" "$JW/pmiss" >/dev/null \
+   || ! partition_ok "$JW/pd" "$JW/pok" >/dev/null; then
+  echo "FIXTURE ERROR: the coverage join's self-probe did not discriminate (duplicate, omission, exact)" >&2; exit 2
+fi
+sed -n 's/^[[:space:]]*if sg \([a-z0-9_][a-z0-9_]*\); then$/\1/p' "$SELF" | sort -u > "$JW/declared"
+for _s in $SHARDS; do eval "printf '%s\n' \${UNITS_$_s}" | tr ' ' '\n'; done | grep . > "$JW/dealt"
+ndecl="$(grep -c . "$JW/declared")" || ndecl=0
+if [ "$ndecl" -eq 0 ]; then
+  echo "FIXTURE ERROR: 0 unit guards derived from $SELF" >&2; exit 2
+fi
+# THE KEY MAP MUST NAME A DECLARED UNIT FOR EVERY EXPECT KEY, or a key's control arms run in no shard.
+if ! _why="$(partition_ok "$JW/declared" "$JW/dealt")"; then
+  echo "FIXTURE ERROR: the shard partition does not cover the guarded units exactly -- $_why" >&2; exit 2
+fi
+for _s in $SHARDS; do
+  [ "$_s" = a ] && continue
+  _drv="$HERE/../procsub-staged-refusal-boot-$_s/run.sh"
+  if [ ! -f "$_drv" ] || ! grep -qF -- "--group $_s" "$_drv"; then
+    echo "FIXTURE ERROR: shard '$_s' is declared but $_drv does not drive it" >&2; exit 2
+  fi
+done
+echo "  [J0] coverage join: $ndecl units derived from the sg guards, dealt disjointly across {$SHARDS}, union exact; this shard runs {$MINE}"
+echo "$NAME:"
 
 # --- STUBS ---------------------------------------------------------------------------------------
 # stub <dir> <tool> <real-binary> <case-pattern over "$*"> <action>
@@ -1239,6 +1316,7 @@ forced() {
 
 # --- CONTROLS AND FORCED ARMS ON THE SHIPPED SCRIPTS ----------------------------------------------
 for A in $(awk '{print $1}' <<<"$EXPECT"); do
+  sg "$(unit_of_key "$(col "$A" 2)")" || continue
   c="$(arm_shape "$A" "$RECON" -)"
   if [ "$c" = "$(col "$A" 3)" ]; then
     ok "$A control (no stub): $c -- the world expresses the healthy verdict"
@@ -1358,6 +1436,7 @@ report_score() { # <m> <own> <k> <got_own> <others_ok> <detail> <base-shape>
 }
 
 LR=ledger-reverify.sh
+if sg lrpe; then
   d="$(DROP1='  receipt_path_tokens "$_norev" > "$LR_STAGE/absent-tokens" || return 3' DROP2='ZZ-PSB-NONE' \
        OLD='  done < "$LR_STAGE/absent-tokens"' NEW='  done < <(receipt_path_tokens "$_norev")' \
        mut M-L1 "$LR" "$SWAP" '  done < <(receipt_path_tokens "$_norev")' 'absent-tokens' \
@@ -1444,9 +1523,11 @@ $S_B3b" \
          elif [ -n "$_a" ] && [ "$_a" = "$_b" ]; then ok "S3 healthy: the staged diff prints byte-identical rows to the base pipeline ($(cut -f1 <<<"$_a" | sort | uniq -c | tr -s ' ' | tr '\n' ';'))"
          else bad "S3 healthy: the staged diff and the base pipeline disagree on a readable range"; fi; } \
     || mutreport M-S3
+fi
 
 UD=unregistered-drift.sh
 N0='ZZ-PSB-NONE'
+if sg ud; then
 # M-U-base: THE WHOLE BASE LISTING PIPELINE RESTORED, which makes the copy byte-identical to
 # unregistered-drift.sh at the parent release apart from its comments. It is the in-fixture form of
 # "the parent's copy exits 1 on an empty scan set": every U arm must read its base shape at once.
@@ -1577,9 +1658,11 @@ LIB=lib.sh
          '      [ "$ud_rc" -le 1 ] || ud_scan_why="the scan-set prefix filter over the cached tree listing exited ${ud_rc}"')" \
     && score_as M-U-pfx ud "$d" U4=EMPTY \
     || mutreport M-U-pfx
+fi
 
 # apply.sh: each site's exit read turned off, one copy per site. The other four A arms must stay
 # REFUSED, so a mutant cannot be killed by an arm that watches a different detector.
+if sg ap; then
 AP=apply.sh
 ap_off() { # <mutant> <own-arm> <indent> <line-literal> <staged-token>
   local d
@@ -1604,10 +1687,12 @@ ap_off M-Ana  Ana  '  '     'if [ -n "$UD_NA" ]; then'            'if [ -n "$UD_
          if [ "$_h" -eq 1 ]; then score_as M-Art-merge ap "$d" Art=REFUSED-NOMERGE
          else bad "MUTANT DID NOT APPLY [M-Art-merge]: the plain merge row is present $_h time(s) in the copy, want 1 (the refusal branch's removed, the plain branch's kept)"; fi; } \
     || mutreport M-Art-merge
+fi
 
 # === layer-drift: THE PRE-FIX ENGINE, EVERY L CELL ================================================
 # Each L cell must read its BASE shape on the a0a9c556 engine in this same run: the cell is shown
 # able to fail, on the input it discriminates, before its tip reading above is believed.
+if sg ld; then
 for A in $(arms_of ld); do
   set -- $(forced "$A" "$LD_BASE" base)
   if [ "${2:-0}" -gt 0 ] && [ "$1" = "$(col "$A" 5)" ]; then
@@ -1618,9 +1703,11 @@ for A in $(arms_of ld); do
     bad "$A on the ${LD_BASE_SHA} engine: $1, expected $(col "$A" 5) -- the cell cannot tell the pre-fix engine from the fix"
   fi
 done
+fi
 # The C cells on the same pre-fix copy (whose hard-blockers.sh is a0a9c556's too). A here-string cell
 # whose base run did NOT print bash's here-string message reads INCONCLUSIVE, never ok and never FAIL:
 # that bash lost nothing, so the cell discriminates nothing on it.
+if sg lc; then
 for A in $(arms_of lc) $(arms_of lo) $(arms_of hb); do
   set -- $(forced "$A" "$LD_BASE" base)
   case "$LC_HEREDOC_ARMS" in
@@ -1637,12 +1724,14 @@ for A in $(arms_of lc) $(arms_of lo) $(arms_of hb); do
     bad "$A on the ${LD_BASE_SHA} engine: $1, expected $(col "$A" 5) -- the cell cannot tell the pre-fix engine from the fix"
   fi
 done
+fi
 
 # === SPELL: layer-drift.sh carries no here-string =================================================
 # A non-comment `<<<` count, probed on a mktemp copy BEFORE the corpus in both directions: a seeded
 # offender must count, and a seeded near-miss -- the operator inside a comment, indented as the
 # engine's own comments are -- must not. The a0a9c556 engine is the positive control on the real text.
 spell_count() { awk '/^[[:space:]]*#/ { next } /<<</ { n++ } END { print n + 0 }' "$1"; }
+if sg spell; then
 _sp="$(mktemp -d "$WORK/spell.XXXXXX")" || { echo "FIXTURE ERROR: mktemp spell" >&2; exit 2; }
 cp "$RECON/layer-drift.sh" "$_sp/offender.sh" && cp "$RECON/layer-drift.sh" "$_sp/nearmiss.sh" \
   || { echo "FIXTURE ERROR: spell probe copies" >&2; exit 2; }
@@ -1686,6 +1775,8 @@ elif [ "$_pt" -eq 0 ]; then
 else
   bad "SPELL: preclassify.sh carries $_pt non-comment here-string/heredoc/\`< <(\` site(s) -- an input bash 3.2 stages to a temp file reads EMPTY when that write fails (BL-360)"
 fi
+fi
+if sg ld; then
 # THE HEALTHY PATH IS BYTE-IDENTICAL TO THE PRE-FIX ENGINE, in both modes, on every L world. The two
 # engine files are asserted to DIFFER first, or the comparison reads one program twice.
 if cmp -s "$RECON/layer-drift.sh" "$LD_BASE/layer-drift.sh"; then
@@ -1708,10 +1799,12 @@ else
     done
   done
 fi
+fi
 
 # === layer-drift MUTANTS ==========================================================================
 # Each applied by anchor to a copy of the TIP engine in a copy of the whole reconcile/ directory.
 LDS=layer-drift.sh
+if sg ld; then
 LD_BRK_O='  [ "$ld_emit_failed" -eq 0 ] || break'
 LD_BRK_E='  [ "$ld_emit_failed" -eq 0 ] || break   # as in the overrides loop'
 LD_EXT_WALK='layer_files "$EXT_DIR" > "$LD_T/extensions" || _lw_rc=$?'
@@ -1784,7 +1877,9 @@ LD_RAWB="  printf '%s\\t%s\\t%s\\t%s\\n' \"\$1\" \"\$2\" \"\$3\" \"\$4\""
        mut M-LD-raw-uncounted "$LDS" "$SWAP" "$LD_RAWB" - "$LD_RAW")" \
     && score_as M-LD-raw-uncounted ld "$d" L5b-hard=XFSZ-RC0-LOST \
     || mutreport M-LD-raw-uncounted
+fi
 
+if sg lc; then
 # === BL-359 MUTANTS: each restores ONE silent-read site, anchored on the line that decides it ======
 # TWO SCORING KEYS, lc (the contract cells, big world) and lo (the override cells, huge world), and
 # the split is a COST decision: one key made every mutant re-run all seven cells, and the unit rose
@@ -1855,7 +1950,9 @@ HB_UD_B='    [ -z "$REFUSALS" ] && echo "0 HARD blockers."'
        mut M6-hb-ud "$HB" "$SWAP" "$HB_UD_B" - "$HB_UD_T")" \
     && score M6-hb-ud C5-ud "$d" \
     || mutreport M6-hb-ud
+fi
 
+if sg b360; then
 # === BL-360: emit-report.sh reads no here-string ==================================================
 # Each cell FORCES its site under `trap '' XFSZ; ulimit -f N` (SIGXFSZ ignored: the full-disk model,
 # ENOSPC and no signal) with an input calibrated past the limit, and reads the render's SHAPE:
@@ -2185,13 +2282,14 @@ elif [ "$_st" -eq 0 ]; then
 else
   bad "SPELL: emit-report.sh carries $_st non-comment here-string(s) (BL-360)"
 fi
+fi
 ld_heredoc_gate
 
 echo
 PSB_DONE=1
 if [ "$fails" -eq 0 ]; then
-  echo "procsub-staged-refusal-boot: PASS"
+  echo "$NAME: PASS ($asserts assertions)"
   exit 0
 fi
-echo "procsub-staged-refusal-boot: FAIL ($fails assertion(s))" >&2
+echo "$NAME: FAIL ($fails of $asserts assertion(s))" >&2
 exit 1

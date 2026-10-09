@@ -1,0 +1,5 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+It is shard 'c' of procsub-staged-refusal-boot and inherits that fixture's reason without restating
+it: the sibling is a MUTATION BATTERY over core's own reconcile/ scripts, which a consumer cannot edit
+in place, so a shard packages exactly as its sibling does.

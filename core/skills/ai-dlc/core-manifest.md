@@ -165,6 +165,8 @@ core_manifest:
   - fixtures/apply-legacy-script-path/**
   - fixtures/apply-restamp-theirs/**
   - fixtures/apply-restamp-worklist/**
+  - fixtures/apply-restamp-worklist-b/**
+  - fixtures/apply-restamp-worklist-c/**
   - fixtures/apply-setup-sited-merge/**
   - fixtures/apply-relabel-noop-row/**
   - fixtures/absorbed-specifics-survive/**
@@ -189,6 +191,9 @@ core_manifest:
   - fixtures/check-1c-bypass/**
   - fixtures/check-23-draft-stamps/**
   - fixtures/check-24-adversarial-convergence/**
+  - fixtures/check-24-adversarial-convergence-b/**
+  - fixtures/check-24-adversarial-convergence-c/**
+  - fixtures/check-24-adversarial-convergence-d/**
   - fixtures/check-25-steering-conduct/**
   - fixtures/check-31-ac-falsifiability/**
   - fixtures/check-3b-locked-anchor/**

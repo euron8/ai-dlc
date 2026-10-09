@@ -173,3 +173,10 @@ untraceable set is wider than the two filed.
 
 verify: manual -- close when a push's read-set line reports none of these fixtures UNMAPPED, by a trace or by a declaration.
 
+**Re-derived batch 214 (0.760.0).** `check-24-adversarial-convergence` is declared (four shards). `procsub-staged-refusal-boot`
+is sharded into three `.dist-only` directories and reported UNSANDBOXABLE: it stages pre-fix engines by
+`git -C "$TREE_TOP" show <sha>:core/skills/ai-dlc-update/reconcile/<file>`, and committing the blobs under `core/` as
+fixture data was built for the sibling `procsub-staged-refusal` and failed enforcement-map arms I104, I113 and I65 as a
+second corpus. It leaves this list only by a committed trace; its three shards are three such traces. `hermetic-runner`,
+`self-update-gate` and `subject-partition` are untouched here.
+

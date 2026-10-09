@@ -81,6 +81,8 @@ core_manifest:
   - core/fixtures/apply-legacy-script-path/**
   - core/fixtures/apply-restamp-theirs/**
   - core/fixtures/apply-restamp-worklist/**
+  - core/fixtures/apply-restamp-worklist-b/**
+  - core/fixtures/apply-restamp-worklist-c/**
   - core/fixtures/apply-setup-sited-merge/**
   - core/fixtures/apply-relabel-noop-row/**
   - core/fixtures/absorbed-specifics-survive/**
@@ -117,6 +119,9 @@ core_manifest:
   - core/fixtures/check-1c-bypass/**
   - core/fixtures/check-23-draft-stamps/**
   - core/fixtures/check-24-adversarial-convergence/**
+  - core/fixtures/check-24-adversarial-convergence-b/**
+  - core/fixtures/check-24-adversarial-convergence-c/**
+  - core/fixtures/check-24-adversarial-convergence-d/**
   - core/fixtures/check-25-steering-conduct/**
   - core/fixtures/check-31-ac-falsifiability/**
   - core/fixtures/check-3b-locked-anchor/**

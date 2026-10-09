@@ -1,0 +1,20 @@
+# check-24-adversarial-convergence and its three shard drivers (b, c, d, which exec the parent's run.sh --group) share ONE declaration shape.
+# The validator under test: every case drives it. REQUIRED, printed where the validator is resolved.
+!core/scripts/validate-adversarial-convergence.sh
+# Its siblings, copied into the mutant and world trees, and driven by the K2 and K3 arms.
+core/scripts/validate-steering-budget.sh
+core/scripts/partition-document.sh
+core/scripts/partition-subject.sh
+core/scripts/merge-adversarial-shards.sh
+# Read by the live-series, H-BIND and bind arms (extracted and compared, not run).
+core/hooks/ai-dlc-acknowledge.sh
+core/team-roles/remediator.md
+core/skills/ai-dlc/steps/gate-validation.md
+core/fixtures/lib/
+# The shard drivers: the parent's coverage join reads every one. A fixture's OWN run.sh is not declared: the runner copies the fixture's own directory itself.
+core/fixtures/check-24-adversarial-convergence-b/run.sh
+core/fixtures/check-24-adversarial-convergence-c/run.sh
+core/fixtures/check-24-adversarial-convergence-d/run.sh
+# The shards exec the parent run.sh and the parent seeds from its own seed.sh; a sibling directory is not copied unless declared.
+core/fixtures/check-24-adversarial-convergence/run.sh
+core/fixtures/check-24-adversarial-convergence/seed.sh
