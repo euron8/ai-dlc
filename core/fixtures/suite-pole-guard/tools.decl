@@ -1,0 +1,27 @@
+# Tools run.sh, the subject it drives and the hook functions it extracts invoke.
+awk
+basename
+bash
+cat
+chmod
+cmp
+cp
+cut
+date
+dirname
+env
+find
+git
+grep
+head
+kill
+mkdir
+mktemp
+mv
+ps
+rm
+sed
+sh
+sort
+tr
+wc
