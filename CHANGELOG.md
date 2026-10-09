@@ -19,6 +19,48 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.761.0] - 2026-10-09
+
+Batch 216 (graph-ledger-full-drain), one release for the two graph filings that refuse units on every graph push,
+the deriver half of graph's never-written key records, and `BL-465` on the operator's option (a). No pre-push hook
+change and no bootstrapping file. The hook half of the key-record fault (the quoted-row guard) ships in ai-dlc-77's
+hook release.
+
+### PC-S317-READSET-SKIP-DECLARES-DIST-ROOT-SCRIPTS-NO-CONSUMER-HOLDS (BL-490)
+
+The four `readset-skip` declarations named `scripts/validate-enforcement-map.sh` and `scripts/render-invariant-index.sh`,
+which no consumer holds, so the hermetic runner refused all four units with `declared file absent`. Both were read only
+by the I66 one-hook-widened arm, which moves into the `.dist-only` `validator-arm-selection` as phase `i66-onehook`,
+with the mutant it never had. Seven arm-only lines leave all four declarations. On a git copy of graph:
+base rc 2, tip `readset-skip: PASS`.
+
+### PC-S317-HERMETIC-RUN-REFUSES-CONSUMER-SKILL-SYMLINKS (BL-491)
+
+`hermetic-run.sh` copied each declared directory whole and refused any link in it, while its key covered only tracked
+and untracked-unignored files. A declared directory is now copied by its git population: ignored files and links are
+neither copied nor refused; a tracked or untracked-unignored link (file, directory or dangling) and a gitlink are
+refused. `--key-only` output is byte-identical base vs tip over all 180 declared fixtures. A non-git root exits 2, and
+`--key-only` no longer exits 0 when hashing failed. On a git copy of graph with its ignored skill link: base rc 2,
+tip rc 0.
+
+### The deriver never records a traced name git must quote
+
+graph's every push since Oct 8 ran all 210 fixtures (`could not hash the working tree -- running all 210`): one local
+read-set row held a C-quoted, tab-bearing name (a manifest line a fixture stat'd), and the manifest guard empties on any
+quote-led path. `drop_ignored` now drops such names and asks `check-ignore` with `core.quotePath=false`. This stops new
+rows; the existing row on graph needs the hook-side guard (ai-dlc-77's release) or removal by hand. Measured on a copy
+of graph with the row removed: push 1 `210 of 210 run`, push 2 `99 of 210 run ... skipping 111`.
+
+### BL-465 — the suite-pole guard records every dispatched unit and judges each against its own past
+
+Operator ruling, option (a). Each recorded run appends one row per dispatched unit; a run's pole is compared only
+against that unit's own rows at the same width and a dispatched count within +-25%. Per-unit admission: a unit above its
+own baseline is not recorded until a reviewed drop. A unit with three rows and none comparable fails `GROWN (regime)`
+above its own max plus `REGIME_BAND`=100%, an uncalibrated constant. Legacy and malformed rows are never usable; the
+coverage SKIP is gone as an exit. Three designs were built and refuted first (load band, count band with width
+admission, pole-only per-unit history); the entry records each. `suite-pole-guard`, `validator-arm-selection` and
+`validator-arm-selection-b` now carry `inputs.decl`. The entry stays PARTIAL until a push compares against its own rows.
+
 ## [0.760.0] - 2026-10-09
 
 Batch 214 (hermetic-pole), release 2. The five units at the top of the 0.757.0 gate's own per-run
