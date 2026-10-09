@@ -3630,6 +3630,82 @@ STUB
         *) bad "DIGEST MUTANT nocarry: expected '0|0|1|0|0|3', got '$DWM'" ;;
       esac
     fi
+
+    # `--local-map` WITH THE RUNNER'S READSET_UNIVERSE SPAN (BL-480), DRIVEN WHOLE. The local-map world above
+    # runs before the BR runner gained the span (:3608), so it sees only the fallback. Here the runner carries
+    # it, fxl's stream reports a read of the DIRECTORY src, and the local map must record that row by its
+    # listing -- `fxl<TAB>src<TAB>#listing:<sha256>` -- which only a caller that hands readset_local_rows a
+    # manifest of the trace copy can write. The mutant hands it empty manifests, and the same run must then
+    # record `fxl<TAB>src<TAB>-`, so the arm is shown to read the caller and not the span.
+    #
+    # THE SHAPE ALONE CANNOT SEE A WRONG CALLER, so the arm also recomputes the value. A call site that
+    # swaps `.now` and `.paths`, manifests another tree, or manifests after the loop still yields SOME
+    # 64-hex listing. The oracle takes a manifest of $BR the way the deriver takes one of its trace copy
+    # (the copy is gone by then -- --local-map traps its removal -- and $BR is the tree it was copied
+    # from), lists `cut -f1 .now` through the same span, and the row must equal its `src/` value byte for
+    # byte. THE GHOST ROW is the discriminating input for the swap: a committed map row naming a file
+    # that is absent on disk enters `.paths` and never `.now`, so a listing taken off `.paths` gains
+    # `ghost.sh`. Without it every BR path is a regular file, the two lists are identical, and the
+    # lmtswap mutant below survives for the corpus's sake rather than the arm's.
+    printf 'other\tsrc/ghost.sh\n' >> "$BR/.ai-dlc-fixture-readsets.tsv"
+    ( cd "$BR" && git add -A && git -c user.email=f@f -c user.name=f commit -qm ghost ) >/dev/null 2>&1 || broken "could not commit the ghost map row"
+    [ ! -e "$BR/src/ghost.sh" ] || broken "src/ghost.sh exists on disk, so the ghost row cannot separate .paths from .now"
+    printf '%s\n' core/fixtures/fxl/run.sh src/a.sh src > "$SL/dir.list"
+    lmd_raw() { awk -F'\t' '$1 == "fxl" && $2 == "src" { print $3 }' "$LMF" 2>/dev/null; }
+    lmd_row() { lmd_raw | sed 's/^\(#listing:\)[0-9a-f]\{64\}$/\1SHA/'; }
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    lm_seed; LD="$(lm_run "$SL/deriver.sh" "$SL/dir.list" same)"; LD_ROW="$(lmd_row)"; LD_RAW="$(lmd_raw)"
+    LD_WANT="$( cd "$BR" && s="$(mktemp -d "$WORK/ldm.XXXXXX")" \
+      && READSET_MAP=.ai-dlc-fixture-readsets.tsv && READSET_LOCAL=/dev/null && . "$WORK/br.span" \
+      && readset_manifest "$s" && cut -f1 "$s/.now" > "$s/.p" && readset_listings "$s/.p" "$s/ls" \
+      && awk -F'\t' '$1 == "src/" { print $2 }' "$s/ls" )"
+    case "$LD_WANT" in
+      '#listing:'[0-9a-f][0-9a-f][0-9a-f][0-9a-f]*) [ "${#LD_WANT}" -eq 73 ] || broken "the LOCAL oracle's src/ listing is not '#listing:' plus 64 hex: '$LD_WANT'" ;;
+      *) broken "the LOCAL oracle produced no src/ listing: '$LD_WANT'" ;;
+    esac
+    case "$LD|$LD_ROW" in
+      "0|3|yes|"*"|#listing:SHA")
+        if [ "$LD_RAW" = "$LD_WANT" ]; then
+          ok "LOCAL: with the runner's UNIVERSE span a --local-map trace records the directory src as 'fxl	src	#listing:<sha256>', byte-identical to the listing of the tree's own manifest"
+        else
+          bad "LOCAL: the src row has the listing SHAPE but not the tree's listing: row '$LD_RAW', oracle '$LD_WANT'"
+        fi ;;
+      *) bad "LOCAL: expected a '#listing:<sha256>' row for src from a 3-row clean trace, got '$LD' row '$LD_ROW' — $(tail -2 "$WORK/lm.out" | tr '\n' ' ')" ;;
+    esac
+    LD_ANCH='readset_local_rows "$TREE" "$fx" "$WORK/$fx.set" "$WORK/lmt/.now" "$WORK/lmt/.paths"'
+    LD_N="$(grep -cF -- "$LD_ANCH" "$SL/deriver.sh")" || LD_N=0
+    LD_Z="$(grep -cF -- 'readset_local_rows "$TREE" "$fx" NEVER-IN-THE-DERIVER' "$SL/deriver.sh")" || LD_Z=0
+    MF="$LD_ANCH" MT='readset_local_rows "$TREE" "$fx" "$WORK/$fx.set" /dev/null /dev/null' awk 'BEGIN { f = ENVIRON["MF"]; t = ENVIRON["MT"] }
+      { l = $0; o = ""; while ((p = index(l, f)) > 0) { o = o substr(l, 1, p - 1) t; l = substr(l, p + length(f)) } print o l }' "$SL/deriver.sh" > "$SL/d.nolmt.sh"
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    if [ "$LD_N" != 1 ] || [ "$LD_Z" != 0 ] || cmp -s "$SL/deriver.sh" "$SL/d.nolmt.sh"; then
+      bad "LOCAL MUTANT nolmt: anchor matched $LD_N time(s) (impossible-anchor control $LD_Z), not 1 and 0 -- DID NOT APPLY"
+    else
+      lm_seed; LDM="$(lm_run "$SL/d.nolmt.sh" "$SL/dir.list" same)"; LDM_ROW="$(lmd_row)"
+      case "$LDM|$LDM_ROW" in
+        "0|3|yes|"*"|-") ok "LOCAL MUTANT nolmt is KILLED: with the trace copy's manifest withheld from the call site, the same trace records src as '-'" ;;
+        *) bad "LOCAL MUTANT nolmt SURVIVED or did not run: '$LDM' row '$LDM_ROW'" ;;
+      esac
+    fi
+    # Mutant lmtswap hands the call site `.paths` where it wants `.now` and the reverse. Both are
+    # non-empty, so the row keeps its listing SHAPE; only the byte conjunct above can kill it.
+    MF="$LD_ANCH" MT='readset_local_rows "$TREE" "$fx" "$WORK/$fx.set" "$WORK/lmt/.paths" "$WORK/lmt/.now"' awk 'BEGIN { f = ENVIRON["MF"]; t = ENVIRON["MT"] }
+      { l = $0; o = ""; while ((p = index(l, f)) > 0) { o = o substr(l, 1, p - 1) t; l = substr(l, p + length(f)) } print o l }' "$SL/deriver.sh" > "$SL/d.lmtswap.sh"
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    if [ "$LD_N" != 1 ] || [ "$LD_Z" != 0 ] || cmp -s "$SL/deriver.sh" "$SL/d.lmtswap.sh"; then
+      bad "LOCAL MUTANT lmtswap: anchor matched $LD_N time(s) (impossible-anchor control $LD_Z), not 1 and 0 -- DID NOT APPLY"
+    else
+      lm_seed; LDS="$(lm_run "$SL/d.lmtswap.sh" "$SL/dir.list" same)"; LDS_ROW="$(lmd_row)"; LDS_RAW="$(lmd_raw)"
+      case "$LDS|$LDS_ROW" in
+        "0|3|yes|"*"|#listing:SHA")
+          if [ "$LDS_RAW" != "$LD_WANT" ]; then
+            ok "LOCAL MUTANT lmtswap is KILLED: with .now and .paths swapped the row keeps its listing shape but reads '$LDS_RAW', not the tree's '$LD_WANT'"
+          else
+            bad "LOCAL MUTANT lmtswap SURVIVED: the swapped call wrote the tree's own listing '$LDS_RAW'"
+          fi ;;
+        *) bad "LOCAL MUTANT lmtswap did not keep the listing shape (row '$LDS_ROW', run '$LDS'), so it tests the shape and not the byte conjunct" ;;
+      esac
+    fi
   fi
 fi
 
@@ -4174,6 +4250,7 @@ DG_HASH="$WORK/dg.hashrows.sh"
 if [ -n "$DERIVER" ]; then
   sed -n '/^# READSET_LOCALMAP_BEGIN$/,/^# READSET_LOCALMAP_END$/p' "$DERIVER" > "$DG_HASH"
   grep -q '^readset_hash_rows() {' "$DG_HASH" || broken "no readset_hash_rows in the deriver's READSET_LOCALMAP span, so no digest can be seeded the way the deriver writes one"
+  grep -q '^readset_local_rows() {' "$DG_HASH" || broken "no readset_local_rows in the deriver's READSET_LOCALMAP span, so no local row can be seeded the way --local-map writes one"
 fi
 dg_digest() { # <pool> <t> <fixture>...: append the deriver's `# digest` line for each, as a trace would
   local p="$1" t="$2" s; shift 2
@@ -4195,6 +4272,23 @@ dg_digest() { # <pool> <t> <fixture>...: append the deriver's `# digest` line fo
 dg_deriver() { # <t>: a tracked deriver for readset_deriver_path to resolve and hash
   mkdir -p "$1/core/scripts" && printf '#!/bin/bash\nexit 0\n' > "$1/core/scripts/derive-fixture-readsets.sh" \
     && ( cd "$1" && git add -A && git -c user.email=f@f -c user.name=f commit -qm deriver ) >/dev/null 2>&1
+}
+# dg_local_rows <pool> <t> <fixture>: print <fixture>'s local rows the way the deriver's --local-map writes
+# them -- its readset_local_rows over a manifest of <t> taken with no local map, as the deriver takes one of
+# the trace copy. The UNIVERSE span comes from the POOL UNDER TEST (as dg_digest sources it), so a mutant
+# of that pool's readset_dir_values reaches the seed too. Fails closed on an empty row set.
+dg_local_rows() {
+  local p="$1" t="$2" fx="$3" s
+  s="$(mktemp -d "$WORK/dgl.XXXXXX")" || return 1
+  ( cd "$t" || exit 1
+    # shellcheck disable=SC1090
+    . "$p" 2>/dev/null; . "$DG_HASH"
+    READSET_MAP=.ai-dlc-fixture-readsets.tsv; READSET_LOCAL=/dev/null
+    readset_manifest "$s"; [ -s "$s/.paths" ] || exit 1
+    awk -F'\t' -v f="$fx" '!/^#/ && $1 == f { print $2 }' .ai-dlc-fixture-readsets.tsv > "$s/$fx.set"
+    readset_local_rows . "$fx" "$s/$fx.set" "$s/.now" "$s/.paths" ) > "$s/rows" || return 1
+  [ -s "$s/rows" ] || return 1
+  cat "$s/rows"
 }
 dg_local() { # <t> <deriver sha>: alpha's valid local rows, as the deriver's --local-map writes them
   { printf 'alpha\tsrc/a.sh\t%s\n' "$(ck_sha "$1/src/a.sh")"
@@ -4317,10 +4411,44 @@ dg_w_w9() { local p="$1" x="$2" t="$3"
 }
 DG_WANT_w9='p4=beta|0 s4=#state stale p5=beta|0'
 
-# (w10) LOCAL CLEARING SURVIVES A DIRECTORY ROW. beta reads the directory src/d; its valid local rows carry
-# the deriver's `-` for it. beta goes stale on an edit to src/b.sh and the local map clears it, as w4 does
-# for alpha (which has no directory row, so w4 cannot see this).
-dg_w_w10() { local p="$1" x="$2" t="$3"
+# (w10) LOCAL CLEARING SURVIVES A DIRECTORY ROW. beta reads the directory src/d; its local rows are seeded
+# by the deriver's own readset_local_rows (dg_local_rows), which records src/d by its `#listing:<sha>`.
+# beta goes stale on an edit to src/b.sh and the local map clears it, as w4 does for alpha (which has no
+# directory row, so w4 cannot see this). The listing still matches, so the row set is valid.
+dg_w_w10() { local p="$1" x="$2" t="$3" r
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  dg_deriver "$t" || { printf SEED; return; }
+  ck_push "$p" "$t" 1; printf 'v2\n' > "$t/src/b.sh"; ck_push "$p" "$t" 2
+  r="$(dg_local_rows "$p" "$t" beta)" || { printf LOCALROWS; return; }
+  { printf '%s\n' "$r"; printf 'beta\t#deriver\t%s\n' "$(ck_sha "$t/core/scripts/derive-fixture-readsets.sh")"; } > "$t/.git/ai-dlc-fixture-readsets.local"
+  ck_push "$p" "$t" 3; local s3; s3="$(ck_st "$t" beta)"; ck_push "$p" "$t" 4
+  printf 'p3=%s s3=%s p4=%s' "$(ck_r "$t" 3)" "$s3" "$(ck_r "$t" 4)"
+}
+DG_WANT_w10='p3=|0 s3=#state ok p4=|0'
+
+# (w11) THE LOCAL MAP'S TWIN OF w9: A LOCAL DIRECTORY ROW IS ITS LISTING. beta's local rows are seeded at seed
+# time through dg_local_rows. Push 2 grows src/d with a new file, push 3 edits it (stale), and push 4 must
+# NOT clear the record on the seed-time local rows: a local row that gives src/d the value `-` would match
+# while no FILE named src/d exists, clear the record `ok` without the new file's key, and push 5 would
+# SKIP beta over an edit to that file.
+dg_w_w11() { local p="$1" x="$2" t="$3" r
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  dg_deriver "$t" || { printf SEED; return; }
+  r="$(dg_local_rows "$p" "$t" beta)" || { printf LOCALROWS; return; }
+  { printf '%s\n' "$r"; printf 'beta\t#deriver\t%s\n' "$(ck_sha "$t/core/scripts/derive-fixture-readsets.sh")"; } > "$t/.git/ai-dlc-fixture-readsets.local"
+  ck_push "$p" "$t" 1
+  printf 'new v1\n' > "$t/src/d/new.sh"; ck_push "$p" "$t" 2
+  printf 'new v2\n' > "$t/src/d/new.sh"; ck_push "$p" "$t" 3
+  ck_push "$p" "$t" 4; local s4; s4="$(ck_st "$t" beta)"
+  printf 'new v3\n' > "$t/src/d/new.sh"; ck_push "$p" "$t" 5
+  printf 'p4=%s s4=%s p5=%s' "$(ck_r "$t" 4)" "$s4" "$(ck_r "$t" 5)"
+}
+DG_WANT_w11='p4=beta|0 s4=#state stale p5=beta|0'
+
+# (w12) A HAND-WRITTEN `-` ROW FOR A DIRECTORY IS REFUSED. w10's world with the rows the deriver wrote before
+# directory rows carried a listing: src/d is `-`, and src/d IS a directory, so the trace never saw its
+# listing and the row set is stale. beta stays stale and runs.
+dg_w_w12() { local p="$1" x="$2" t="$3"
   ck_seed "$t" "$x" || { printf SEED; return; }
   dg_deriver "$t" || { printf SEED; return; }
   ck_push "$p" "$t" 1; printf 'v2\n' > "$t/src/b.sh"; ck_push "$p" "$t" 2
@@ -4328,12 +4456,31 @@ dg_w_w10() { local p="$1" x="$2" t="$3"
     printf 'beta\tsrc/d\t-\n'
     printf 'beta\tsrc/all.sh\t%s\n' "$(ck_sha "$t/src/all.sh")"
     printf 'beta\t#deriver\t%s\n' "$(ck_sha "$t/core/scripts/derive-fixture-readsets.sh")"; } > "$t/.git/ai-dlc-fixture-readsets.local"
-  ck_push "$p" "$t" 3; local s3; s3="$(ck_st "$t" beta)"; ck_push "$p" "$t" 4
-  printf 'p3=%s s3=%s p4=%s' "$(ck_r "$t" 3)" "$s3" "$(ck_r "$t" 4)"
+  ck_push "$p" "$t" 3
+  printf 'p3=%s s3=%s' "$(ck_r "$t" 3)" "$(ck_st "$t" beta)"
 }
-DG_WANT_w10='p3=|0 s3=#state ok p4=|0'
+DG_WANT_w12='p3=beta|0 s3=#state stale'
 
-DG_WORLDS="w1 w2 w3 w4 w5 w6 w7 w8 w9 w10"
+# (w13) A `-` ROW IS AN ABSENT NAME: VALID WHILE NOTHING OF THAT NAME EXISTS, REFUSED ONCE A FILE DOES. alpha
+# (no directory row, so no listing can move this world) also reads src/ghost.sh, which does not exist; its
+# local rows, seeded through dg_local_rows, record it `-`. Push 3 clears alpha's stale record on them. Push 4
+# creates the file (alpha runs on the changed input either way); push 5 changes nothing, so alpha running
+# there is the refusal: an accepted `-` row would have cleared the record at push 4 and push 5 would skip.
+dg_w_w13() { local p="$1" x="$2" t="$3" r
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  printf 'alpha\tsrc/ghost.sh\n' >> "$t/.ai-dlc-fixture-readsets.tsv"
+  ( cd "$t" && git add -A && git -c user.email=f@f -c user.name=f commit -qm ghost ) >/dev/null 2>&1 || { printf SEED; return; }
+  dg_deriver "$t" || { printf SEED; return; }
+  ck_push "$p" "$t" 1; printf 'v2\n' > "$t/src/a.sh"; ck_push "$p" "$t" 2
+  r="$(dg_local_rows "$p" "$t" alpha)" || { printf LOCALROWS; return; }
+  { printf '%s\n' "$r"; printf 'alpha\t#deriver\t%s\n' "$(ck_sha "$t/core/scripts/derive-fixture-readsets.sh")"; } > "$t/.git/ai-dlc-fixture-readsets.local"
+  ck_push "$p" "$t" 3; local s3; s3="$(ck_st "$t" alpha)"
+  printf 'boo\n' > "$t/src/ghost.sh"; ck_push "$p" "$t" 4; ck_push "$p" "$t" 5
+  printf 'p3=%s s3=%s p4=%s p5=%s s5=%s' "$(ck_r "$t" 3)" "$s3" "$(ck_r "$t" 4)" "$(ck_r "$t" 5)" "$(ck_st "$t" alpha)"
+}
+DG_WANT_w13='p3=|0 s3=#state ok p4=alpha|0 p5=alpha|0 s5=#state stale'
+
+DG_WORLDS="w1 w2 w3 w4 w5 w6 w7 w8 w9 w10 w11 w12 w13"
 dg_all() { # <pool> <fixture root> <tag>
   local w
   for w in $DG_WORLDS; do "dg_w_$w" "$1" "$2" "$CK_W/dg.$3.$w" > "$CK_W/dg.$3.$w.got" 2>/dev/null; done

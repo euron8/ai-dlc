@@ -31705,3 +31705,24 @@ The receipt runs the shipped runner with `--key-only` on a fixture declaring `gi
 
 verify: sh H=.githooks/pre-push; S=core/scripts/hermetic-run.sh; [ -f "$H" ] && [ -f "$S" ] || exit 9; W="$(mktemp -d)" && W="$(cd "$W" && pwd -P)" || exit 9; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; git init -q "$W" || exit 9; mkdir -p "$W/.githooks" "$W/core/fixtures/fx" "$W/scripts/ai-dlc" || exit 9; cp "$H" "$W/.githooks/pre-push" && printf 'exit 0\n' > "$W/core/fixtures/fx/run.sh" || exit 9; XP="$(/usr/bin/env -u DEVELOPER_DIR -u GIT_EXEC_PATH /usr/bin/git --exec-path)" && [ -x "$XP/git" ] || exit 9; echo x > "$W/x.txt"; printf 'x.txt\n' > "$W/core/fixtures/fx/inputs.decl"; printf 'git\n' > "$W/core/fixtures/fx/tools.decl"; git -C "$W" add -A >/dev/null 2>&1; O="$(bash "$S" --root "$W" --key-only fx 2>/dev/null)" || exit 1; printf '%s\n' "$O" | cut -f1 | grep -qxF "$XP/git"
 
+## BL-480 — the local read-set map cannot see a directory's listing grow
+
+**LANDED (v0.754.0, verified c3239a16).** Local-map directory rows now carry `#listing:<sha>` and `readset_local_validate` refuses a `-` row while that name exists. The close condition below is met with one correction: the mutant restoring `-` on the local path (`dirplain`) is killed by the UNCHANGED-directory world `w10`, not by the grow world `w11` -- a `-` directory row is refused, which is exactly w11's expected outcome, so w11 cannot see that mutant. Known, not fixed: a gitlink's interior never matches its listing, so such a fixture is retraced every green push (fails safe).
+
+**DEFECT, filed at batch 204's close.** `0.745.0` gives a directory row its `#listing:<sha>` value on the COMMITTED
+digest path only. The local map (`ai-dlc-fixture-readsets.local`, written by `derive-fixture-readsets.sh --local-map`
+through `readset_hash_rows`) still writes `-` for a directory, and `readset_local_validate` accepts a `-` row as a match
+whenever the path is present. So a local row clears a stale record for a fixture whose directory gained a file the
+trace never saw: the same false skip the tip adversary reproduced against the committed digest (`probe-grow.sh`,
+`p5=|0`), on the older route. It predates `0.745.0`; the release left it alone by ruling, because changing the local
+format without changing its validator in the same commit stops local clearing for every fixture with a directory row
+(229 of 236 mapped fixtures at `60b467dc`).
+
+Fix in one commit: the deriver's local path writes the listing, `readset_local_validate` compares it against `.now`,
+and a world shaped like `readset-skip`'s `w9` but seeded through the local map proves the clear is refused, with `w10`
+still clearing an unchanged directory. Build `w10`'s rows by calling the deriver's own `readset_hash_rows`, not by hand:
+the tip adversary noted that today's `dirlocal` mutant disables the validator's `-` test and so cannot catch a deriver
+that starts emitting listings on this path.
+
+verify: manual -- close when a local-map world in which a traced directory gains a file runs its fixture, and a mutant restoring `-` on the local path is killed by that world alone.
+

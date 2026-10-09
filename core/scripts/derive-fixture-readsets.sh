@@ -198,8 +198,10 @@ case "$TRACER" in fs_usage|sandbox|both) ;; *) die "unknown --tracer '$TRACER'. 
 # start it DETACHED after a green suite, for the fixtures that have no valid read set and the ones
 # whose key record went stale, so neither keeps running on every push without anyone hand-running this.
 # Each fixture whose trace is clean has its rows in <file> replaced, atomically (temp + mv), as
-# `<fx>\t<path>\t<sha256 or ->` plus `<fx>\t#deriver\t<sha256 of this script>`; the hook honours a
-# row set only while every recorded path still hashes the same and this script is unchanged. A
+# `<fx>\t<path>\t<sha256, #listing:<sha256> or ->` plus `<fx>\t#deriver\t<sha256 of this script>`: a
+# directory carries its listing (readset_local_rows) and `-` is an absent name. The hook honours a row
+# set only while every recorded path still hashes -- or lists -- the same, every `-` name is still
+# absent, and this script is unchanged. A
 # discarded trace writes `<fx>\t#discards\t<n>\t<run.sh sha>:<deriver sha>` instead, and the hook
 # stops re-tracing a fixture after three in a row on one key. A valid local row set REPLACES the
 # committed rows of its fixture in the hook. Unprivileged by construction -- the
@@ -719,8 +721,9 @@ readset_loss_canary() {
 # READSET_CANARY_END
 
 # READSET_LOCALMAP_BEGIN
-# `--local-map` mode's three helpers. Kept between sentinels so core/fixtures/readset-skip drives
-# the shipped logic on seeded files; none of them reads a global.
+# `--local-map` mode's four helpers. Kept between sentinels so core/fixtures/readset-skip drives
+# the shipped logic on seeded files; none of them reads a global (readset_local_rows calls the
+# runner's readset_dir_values only when the caller has sourced it).
 #
 # readset_verdict_sig <log> <root>... -- the MULTISET of a fixture's verdict lines, normalised.
 # A verdict line is one whose first word is `ok`, `FAIL` or `PASS`, or which carries `: PASS` or
@@ -763,6 +766,26 @@ readset_hash_rows() {
   awk -F'\t' -v fx="$fx" -v sha="$set.sha" '
     BEGIN { while ((getline l < sha) > 0) { i = index(l, "\t"); h[substr(l, 1, i - 1)] = substr(l, i + 1) } }
     $0 != "" { print fx "\t" $0 "\t" (($0 in h) ? h[$0] : "-") }' "$set"
+}
+#
+# readset_local_rows <tree> <fx> <set file> <now> <paths> -- the LOCAL MAP's rows for one fixture:
+# readset_hash_rows, then every `-` row naming a directory <now> implies takes that directory's
+# `#listing:<sha>` through the runner's own readset_dir_values -- the committed digest's substitution,
+# so the hook's validator compares a directory a fixture read by its listing and a file added under it
+# stales the row. A `-` it does not substitute (an absent name, a path outside the universe) stays `-`.
+# <now> and <paths> are a manifest of the trace copy. When readset_dir_values is not a defined function
+# (the runner has no READSET_UNIVERSE span), <now> or <paths> is empty, or the substitution fails, the
+# plain rows are printed and every directory stays `-`, which the hook refuses while it is a directory.
+# Returns non-zero only when readset_hash_rows does.
+readset_local_rows() {
+  local tree="$1" fx="$2" set="$3" now="$4" paths="$5"
+  readset_hash_rows "$tree" "$fx" "$set" > "$set.lrows" || return 1
+  if [ "$(type -t readset_dir_values 2>/dev/null)" = function ] && [ -s "$now" ] && [ -s "$paths" ] \
+     && readset_dir_values "$set.lrows" "$now" "$paths" "$set.lrows2" 2>/dev/null && [ -f "$set.lrows2" ]; then
+    cat "$set.lrows2"
+  else
+    cat "$set.lrows"
+  fi
 }
 #
 # readset_local_write <local map> <committed map> <ok rows> <discards> <traced fixtures> <deriver sha>
@@ -976,6 +999,23 @@ printf '.readset-sentinel\n.readset-end\n' >> "$TREE/.git/info/exclude"
 DIRTY_BASE="$( ( cd "$TREE" && git status --porcelain 2>/dev/null | wc -l ) | tr -d ' ')"
 case "$DIRTY_BASE" in ''|*[!0-9]*) DIRTY_BASE=0 ;; esac
 [ "$DIRTY_BASE" -eq 0 ] || say "note: deriving from a tree with $DIRTY_BASE uncommitted path(s); the guard measures growth beyond that"
+
+# `--local-map`: A DIRECTORY ROW IS RECORDED BY ITS LISTING, taken from ONE manifest of the trace copy made
+# HERE, before any fixture runs -- taken after one, it would hold whatever a discarded fixture left in the
+# copy and stale every later directory row. It reads the committed map by its absolute path ($MAP), and no
+# local map, so its universe is the committed paths plus the tree. No runner span, or a manifest that hashed
+# nothing, records plain `-` rows, which the hook refuses while that path is a directory.
+if [ -n "$LOCAL_MAP" ]; then
+  mkdir -p "$WORK/lmt" || die "cannot create $WORK/lmt"
+  : > "$WORK/lmt/.now"; : > "$WORK/lmt/.paths"
+  if [ "$HAVE_UNIVERSE" = 1 ]; then
+    ( cd "$TREE" && READSET_MAP="$MAP" READSET_LOCAL=/dev/null readset_manifest "$WORK/lmt" )
+    [ -s "$WORK/lmt/.now" ] && [ -s "$WORK/lmt/.paths" ] \
+      || say "note: could not hash the trace copy, so directory rows are recorded as \`-\` and stay unmapped while they are directories"
+  else
+    say "note: $RUNNER has no READSET_UNIVERSE span, so directory rows are recorded as \`-\` and stay unmapped while they are directories"
+  fi
+fi
 
 case "$MODE" in
   --all)  LIST="$(readset_all_list "$TREE/$FIXTURE_ROOT")" ;;
@@ -1553,7 +1593,7 @@ for fx in $LIST; do
     MAPPED=$(( MAPPED + 1 )); TOTAL_PATHS=$(( TOTAL_PATHS + n ))
     [ "$TRACER" = both ] || printf '  %-32s %5s paths\n' "$fx" "$n"
     if [ -n "$LOCAL_MAP" ]; then
-      readset_hash_rows "$TREE" "$fx" "$WORK/$fx.set" >> "$WORK/local.ok" \
+      readset_local_rows "$TREE" "$fx" "$WORK/$fx.set" "$WORK/lmt/.now" "$WORK/lmt/.paths" >> "$WORK/local.ok" \
         || { echo "  could not hash $fx's set in the trace copy -- not recorded" >&2; }
     elif [ "$TRACER" != both ]; then
       # The digest's input, hashed in the trace copy now; the final write turns it into a `# digest` line.
