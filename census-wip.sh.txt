@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# census: for every declared fixture, hook .k rows (fresh record state, or a given keys dir seeded) vs --key-only
+# usage: census.sh <repo> <hookfile> [seedmode: none|stale|ok]
+R="$1"; HK="$2"; MODE="${3:-none}"
+SP=/private/tmp/claude-501/-Users-n8-git-ai-dlc/270c9d20-4ae3-44da-8b14-9f1be7ebd746/scratchpad
+cd "$R" || exit 2
+O="$(mktemp -d "$SP/census.XXXX")"
+sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$HK" > "$O/pool.sh"
+FXR="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$O/pool.sh" | sort -u)"
+for d in "$FXR"/*/; do [ -f "$d/run.sh" ] && printf '%s\n' "$d"; done > "$O/list"
+export AI_DLC_READSET_LIVE_TRACE=0
+. "$O/pool.sh" 2>/dev/null
+D="$O/out"; mkdir -p "$D"
+readset_manifest "$D"; readset_local_validate "$O/list" "$D"
+if [ "$MODE" != none ]; then
+  # first decision writes prospective records; republish them with the requested state, then decide again
+  readset_keys "$O/list" "$D" || exit 3
+  mkdir -p "$KEYS_DIR"; for f in "$D/.k"/*; do b="${f##*/}"; sed "2s/.*/#state $MODE/" "$f" > "$KEYS_DIR/$b.key"; done
+  D2="$O/out2"; mkdir -p "$D2"; readset_manifest "$D2"; readset_local_validate "$O/list" "$D2"; D="$D2"
+fi
+readset_keys "$O/list" "$D" || exit 3
+same=0; diff_n=0; : > "$O/diffs"
+for d in "$FXR"/*/; do
+  b="${d%/}"; b="${b##*/}"
+  [ -f "$d/inputs.decl" ] || continue
+  bash core/scripts/hermetic-run.sh --root "$R" --key-only "$b" > "$O/ko" 2>/dev/null
+  tail -n +4 "$D/.k/$b" > "$O/hk" 2>/dev/null
+  if cmp -s "$O/ko" "$O/hk"; then same=$((same+1)); else diff_n=$((diff_n+1)); printf '%s hook=%s runner=%s\n' "$b" "$(grep -c . "$O/hk")" "$(grep -c . "$O/ko")" >> "$O/diffs"; fi
+done
+echo "census mode=$MODE hook=$HK: identical=$same different=$diff_n"
+head -8 "$O/diffs"
+echo "$O"
