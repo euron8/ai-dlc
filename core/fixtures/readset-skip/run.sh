@@ -2544,6 +2544,35 @@ MUT
         *) bad "DROP MUTANT nogitlink: the ignored row was still dropped, so the arm above does not depend on the gitlink collapse: $(printf '%s' "$DM" | tr '\n' ' ')" ;;
       esac
     fi
+    # A TRACED NAME GIT MUST QUOTE NEVER BECOMES A ROW. check-ignore hands a tab-bearing name back
+    # C-quoted, and the runner's manifest empties `.now` on any `"`-led path -- one such map row ran
+    # the whole suite on every push. Seeded from the producer's own text (apply.sh's RESOLVED
+    # manifest row, the name a consumer fixture stat'd), beside a plain row and a non-ASCII row that
+    # must survive UNQUOTED.
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    printf 'RESOLVED\trelocate\tscripts/x.sh\tplaced\ntracked.txt\ncaf\303\251.md\n' > "$CSEED/qbatch"
+    QR="$( cd "$CSEED/src" && git check-ignore --stdin --non-matching --verbose < "$CSEED/qbatch" 2>/dev/null | sed -n 's/^::[[:space:]]*//p' )"
+    case "$QR" in *'"RESOLVED\t'*) ;; *) broken "raw check-ignore no longer quotes a tab-bearing name — the seed does not reproduce the defect" ;; esac
+    DQ="$( TREE="$CSEED/src"; . "$DR"; drop_ignored < "$CSEED/qbatch" )"
+    if printf '%s\n' "$DQ" | grep -q '^"' || printf '%s\n' "$DQ" | grep -q 'RESOLVED'; then
+      bad "a tab-bearing traced name reached the read-set (a quoted row empties the runner's manifest): $(printf '%s' "$DQ" | tr '\n' ' ')"
+    elif [ "$(printf '%s\n' "$DQ" | LC_ALL=C sort)" != "$(printf 'caf\303\251.md\ntracked.txt\n' | LC_ALL=C sort)" ]; then
+      bad "the quote-name batch did not filter to exactly the plain and the unquoted non-ASCII row: $(printf '%s' "$DQ" | tr '\n' ' ')"
+    else
+      ok "a tab-bearing traced name is dropped and a non-ASCII one survives unquoted: no row the runner's manifest refuses can reach a map"
+    fi
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    grep -vxF '    /[\t"\\]/ { next }' "$DR" | sed 's|git -c core.quotePath=false check-ignore|git check-ignore|' > "$CSEED/drop.qmut.sh"
+    if [ "$(grep -cxF '    /[\t"\\]/ { next }' "$DR")" != 1 ] || [ "$(( $(wc -l < "$DR") - $(wc -l < "$CSEED/drop.qmut.sh") ))" != 1 ] \
+       || ! grep -q 'core.quotePath=false check-ignore' "$DR" || grep -q 'core.quotePath=false check-ignore' "$CSEED/drop.qmut.sh"; then
+      bad "DROP MUTANT quotename: the edit did not remove both layers (name filter and quotePath)"
+    else
+      DQM="$( TREE="$CSEED/src"; . "$CSEED/drop.qmut.sh"; drop_ignored < "$CSEED/qbatch" )"
+      case "$DQM" in
+        *'"RESOLVED\t'*) ok "DROP MUTANT quotename: without the filter the C-quoted row is emitted — the arm above depends on it" ;;
+        *) bad "DROP MUTANT quotename: no quoted row without the filter, so the arm above does not depend on it: $(printf '%s' "$DQM" | tr '\n' ' ')" ;;
+      esac
+    fi
   fi
 
   # ------------------------------------------ the sandbox tracer refuses a LOSSY window ----
