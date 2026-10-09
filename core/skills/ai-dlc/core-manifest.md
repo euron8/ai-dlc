@@ -162,6 +162,8 @@ core_manifest:
   - fixtures/adversarial-citation/**
   - fixtures/apply-drift-after-write/**
   - fixtures/apply-drift-refile/**
+  - fixtures/apply-drift-refile-b/**
+  - fixtures/apply-drift-refile-c/**
   - fixtures/apply-legacy-script-path/**
   - fixtures/apply-restamp-theirs/**
   - fixtures/apply-restamp-worklist/**
