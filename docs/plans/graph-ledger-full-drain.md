@@ -93,10 +93,14 @@ the shipping validator reads `SKIP -- coverage 54.54%` (9397s of 17228s), histor
 `.last.jobs` 4. BL-474 LIVE; 0 files carrying `handovers:` across graph's refs (control 30 citing `merge-review-shards`
 in the working tree, 1241 across refs), the sprint-317 branches at 0.754.0 have produced no sharded review yet.
 
-**OPERATOR DECISIONS OWED, each with a marked recommendation, proceeded on without a reply (invoked by a peer):**
-BL-465's coverage floor under read-set skipping: redefine coverage over the DISPATCHED set rather than lower
-`COV_MIN` (recommended). BL-481 and `hermetic-runner`: rule it out of the entry's set as undeclared by design
-(recommended), or build a declaration the self-probe can carry.
+**OPERATOR RULINGS, BATCH 215, both taken on the marked recommendation and written into the entries:** BL-465's
+coverage is redefined over the DISPATCHED set, `COV_MIN` not lowered, so a keyed push can record a row; that is now a
+buildable entry. BL-481's set excludes `hermetic-runner` as undeclared by design, and its receipt closes on the first
+push whose read-set line names only that fixture. Measured at `31617801` after both 0.759.0 and 0.760.0 landed:
+`self-update-gate`, the class-b four and the four `check-24-adversarial-convergence` directories are declared, but
+`procsub-staged-refusal-boot` was sharded into three directories and none is declared (a1's hand reported declaring
+it; the tree says otherwise), so BL-481 is not yet closable and the three `-boot` shards are the next session's
+declaration work.
 
 **MEASUREMENTS OWED AND NOT TAKEN, with the reason:** the `self-update-gate` and unmapped-set read-set trace, and D6's
 base-vs-tip timing of `readset-skip`, both because a peer's trace (pid live on the main checkout) and gate ran
