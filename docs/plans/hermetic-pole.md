@@ -5,7 +5,19 @@
 **You were started with one sentence: `READ and FOLLOW docs/plans/hermetic-pole.md`. This section
 is the ONLY CURRENT STATUS RECORD in this file.**
 
-**Why this plan exists.** `docs/plans/hermetic-fixtures-poc.md` declared 157 fixtures hermetic across
+**THE GOAL, OPERATOR ORDER AT BATCH 217: EVERY PUSH IS SHORT. NOTHING ELSE IN AI-DLC OUTRANKS IT.** The pole
+premise below was WRONG and four releases were spent on it. Measured on the 0.761.0 gate's own log: `read-set
+keys: 122 of 277 fixture(s) run (57 changed, 8 unrecorded, 57 stale)`. Most of those run on a push regardless of
+what it changed. The wall clock is bound by HOW MANY fixtures run, not by the longest one. The derived
+forced-run set is 61 directories (stale plus UNMAPPED, from the gate log's `stale, N fixture(s):` and `read-set
+map:` lines). 15 of them carry `inputs.decl` and still run: `.githooks/pre-push:1443` forces a fixture whose
+local key record reads `#state stale` unless it has a valid LOCAL row, it never exempts a declared fixture, and
+`:1455` writes `stale` back, so a declared fixture can never leave stale. The other 46 are undeclared. The
+figure this plan is judged on is the `read-set keys:` run count of an ordinary push, and the wall clock beside
+it. **No more pole sharding.** Sharding adds directories, and every new directory edits `setup-sites.md` (read by
+48 mapped fixtures) and `core-manifest.md` (12), which re-runs them all on that push.
+
+**Why this plan existed before batch 217.** `docs/plans/hermetic-fixtures-poc.md` declared 157 fixtures hermetic across
 three releases and the push got no shorter: the pool at `.githooks/pre-push:1701` dispatches every selected
 fixture and waits for the longest, so a push costs its single longest selected fixture. The operator's
 instruction at batch 209's close: start on the pole, nothing else until it moves. A declared fixture is
@@ -94,7 +106,15 @@ uptime
 1. **MAKE THE CLONE AND PIN IT** at `github/main`; ask every live `ai-dlc-*` session (`ListAgents`) what
    release number and batch number it holds and whether it holds the main checkout; WAIT for every answer;
    state the number you take to every one of them before building.
-2. **ATTACK THE MEASURED POLE, ONE FIXTURE PER HAND, ALL AT ONCE.** Derive the rank from
+2. **CUT THE FORCED-RUN SET, ALL AT ONCE.** Derive it from the last gate log: every name on its `stale, N
+   fixture(s):` lines and its `read-set map: ... UNMAPPED` line. (a) The hook fix: a declared fixture with a
+   stale record is decided on its declared keys, and a match writes `ok` (`.githooks/pre-push:1443`, `:1455`,
+   and the same lines in `core/git-hooks/pre-push` under I66). It ships from the main checkout detached at the
+   commit. (b) Declare every undeclared member, about eight per hand, all hands at once. The procsub
+   directories are undeclared by ruling and stay so. A declaration adds no directory, so it edits no ship list.
+   (c) Trace what cannot be declared. Never message a `graph-*` session; read the process table and block on a
+   pid. No solo timings: no gate or decision reads them. **The superseded pole instruction follows, kept only as
+   history; do not act on it.** Derive the rank from
    `.git/ai-dlc-fixture-durations.last` in the main checkout (the per-run file of the last GREEN gate; the merged
    record is polluted). At 0.760.0 it reads `self-update-gate` 606s (ships, DECLARED at 0.759.0, so it is keyed on its
    declaration and is a shard job), `fold-architect-ledger-join-mutants-b` 452s, `readset-skip-digest-mutants{,-c}` 439/422s,
