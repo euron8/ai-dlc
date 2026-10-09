@@ -42,16 +42,18 @@ broken() { printf '  FAIL  %s\n' "$1" >&2; echo "${NAME:-readset-skip}: FIXTURE 
 # file's own `if sg <unit>; then` lines, the dealt lists must be disjoint and their union must equal
 # the declared set exactly, so no unit can fall out of every shard, and every declared shard must have
 # a driver directory. The join proves it can fire first, on a seeded duplicate and a seeded omission.
-#   a  arms ign man merge        pool selection worlds, the manifest, the deriver's merge and control
-#   b  loc hr tk dg              local map and trace report, hash rows, tool keys, committed digests
+#   a  arms ign man merge ckm1   pool selection worlds, the manifest, the deriver's merge and control, checksum-key mutants a-g
+#   b  loc hr tk dg ckm2         local map and trace report, hash rows, tool keys, committed digests, checksum-key mutants h-i
 #   c  tracer rc                 trace tree, lossy window, --tracer both and its stub worlds, --reconcile
-#   d  ck                        per-fixture checksum keys: fifteen worlds and fifteen mutants
+#   d  ckw ckm3                  checksum-key worlds (fifteen, against each hook) and checksum-key mutants j-o
+# The per-fixture checksum-key section (contract k1) is four units: ckw its worlds, ckm1..ckm3 its fifteen mutants dealt in
+# three runs. Each mutant re-drives all fifteen worlds, so the mutants carry the cost and are what is dealt.
 # `rc` rides with `tracer` because it drives the stub `sandbox-exec` and deriver copy that `tracer` builds.
 SHARDS="a b c d"
-UNITS_a="arms ign man merge"
-UNITS_b="loc hr tk dg"
+UNITS_a="arms ign man merge ckm1"
+UNITS_b="loc hr tk dg ckm2"
 UNITS_c="tracer rc"
-UNITS_d="ck"
+UNITS_d="ckw ckm3"
 GROUP=a
 if [ "${1:-}" = "--group" ]; then
   GROUP="${2:-}"
@@ -3901,7 +3903,8 @@ ck_st()  { sed -n 2p "$(ck_k "$1" "$2")" 2>/dev/null; }
 ck_has() { local f s=""; for f in alpha beta delta; do [ -f "$(ck_k "$1" "$f")" ] && s="$s $f"; done; printf '%s' "${s# }"; }
 ck_ln()  { grep -cxF -- "$3" "$1.o.$2/out" 2>/dev/null; }
 # CK_HELPERS_END
-if sg ck; then
+# THE WORLD DEFINITIONS BELOW ARE UNGUARDED: they are function and variable definitions that run nothing until a
+# ck unit (ckw, ckm1, ckm2, ckm3) calls them, so every unit finds the same helpers, worlds and hook blocks.
 CK_A0='   ..    read-set keys: 0 of 3 fixture(s) run (0 changed, 0 unrecorded, 0 stale); skipping 3'
 
 # (a) record on pass, then skip on an unchanged rerun. Pins the record format and the announce.
@@ -4105,16 +4108,24 @@ for _h in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
   sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$_h" > "$CK_P"
   CK_X="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$CK_P" | sort -u)"
   [ "$(printf '%s\n' "$CK_X" | grep -c .)" -eq 1 ] || broken "read '$CK_X' as ${_h#"$ROOT"/}'s fixture root; need exactly one"
-  ck_all "$CK_P" "$CK_X" "h$CK_N"
-  for _w in $CK_WORLDS; do
-    CK_ARMS=$((CK_ARMS+1)); _g="$(cat "$CK_W/h$CK_N.$_w.got")"
-    if [ "$_g" = "$(ck_want "$_w")" ]; then ok "($_w) ${_h#"$ROOT"/}: $_g"
-    else bad "($_w) ${_h#"$ROOT"/}: want '$(ck_want "$_w")' got '$_g'"; fi
-  done
+  eval "CK_H$CK_N=\"\$_h\"; CK_PP$CK_N=\"\$CK_P\"; CK_XX$CK_N=\"\$CK_X\""
   [ "$CK_N" -eq 1 ] && { CK_P1="$CK_P"; CK_X1="$CK_X"; }
 done
-CK_ARMS=$((CK_ARMS+1))
-[ "$CK_N" -ge 1 ] && ok "the checksum-key worlds ran against $CK_N hook(s)" || bad "no pre-push hook was found for the checksum-key worlds"
+# ckw: every world, against each resolved hook.
+if sg ckw; then
+  _n=0
+  while [ "$_n" -lt "$CK_N" ]; do
+    _n=$((_n+1)); eval "_h=\"\$CK_H$_n\"; CK_P=\"\$CK_PP$_n\"; CK_X=\"\$CK_XX$_n\""
+    ck_all "$CK_P" "$CK_X" "h$_n"
+    for _w in $CK_WORLDS; do
+      CK_ARMS=$((CK_ARMS+1)); _g="$(cat "$CK_W/h$_n.$_w.got")"
+      if [ "$_g" = "$(ck_want "$_w")" ]; then ok "($_w) ${_h#"$ROOT"/}: $_g"
+      else bad "($_w) ${_h#"$ROOT"/}: want '$(ck_want "$_w")' got '$_g'"; fi
+    done
+  done
+  CK_ARMS=$((CK_ARMS+1))
+  [ "$CK_N" -ge 1 ] && ok "the checksum-key worlds ran against $CK_N hook(s)" || bad "no pre-push hook was found for the checksum-key worlds"
+fi
 
 # MUTANTS on the FIRST resolved hook's block, one per world, each a count-checked literal edit
 # (pm_copy's grammar). Each must move its own world's vector and leave all eleven others at want.
@@ -4141,24 +4152,35 @@ ck_mut() { # <world> <name> then triples <count> <from> <to>
   else bad "CK MUTANT $name moved worlds '${moved# }', not ($w) alone"; fi
 }
 # One mutant per world. Each anchor must be unique in the block; ck_mut refuses any other count.
-if [ "$CK_N" -ge 1 ]; then
-  ck_mut a rowsort 1 '-k1,1 -k2 "$out/.kout"' '-k1,1 -k2r "$out/.kout"'
-  ck_mut b reason 1 'why = um ? "unmapped: closure changed" : "changed " first;' 'why = um ? "unmapped: closure changed" : "changed";'
-  ck_mut c fileentries 1 "  awk '{ p = \$0; while ((i = match(p," "  awk '{ p = \$0; sub(/\\/[^\\/]*\$/, \"\", p); while ((i = match(p,"
-  ck_mut d owndir 1 '               n = split(OWN[f], a, "\n"); for (j = 2; j <= n; j++) K[a[j]] = 1 }' '               }'
-  ck_mut e closure 1 '        if (um) { for (p in NV) K[p] = 1 }' '        if (um) { }'
-  ck_mut f redblocks 1 '    if [ "$(cat "$out/$b" 2>/dev/null)" = ok ] ||' '    if [ "${rc:-1}" = 0 ] && [ "$(cat "$out/$b" 2>/dev/null)" = ok ] ||'
-  ck_mut g notools 1 'else if (tch) { why = "tools changed"; c = "k" }' 'else if (0) { why = "tools changed"; c = "k" }'
-  ck_mut h staleclears 1 '        else if (st == "stale") ns = ((f in LOC) ? "ok" : "stale")' '        else if (st == "stale") ns = "ok"'
-  ck_mut i nov2 1 '      if (seed) rd(ENVIRON["KV2"], VV)' '      if (0) rd(ENVIRON["KV2"], VV)'
-  ck_mut j hashrunall 1 "  [ -s \"\$out/.now\" ] || { printf '   ..    could not hash" "  : || { printf '   ..    could not hash"
-  ck_mut k anyformat 1 'FNR == 1 { ok = ($0 == "#format k1");' 'FNR == 1 { ok = 1;'
-  ck_mut l notfail 1 '    if [ "$(cat "$out/$b" 2>/dev/null)" = ok ] ||' '    if [ "$(cat "$out/$b" 2>/dev/null)" != FAIL ] ||'
-  ck_mut m nosubtree 1 '        subtree(d "/" a[j]) }' '        }'
-  ck_mut n globaltools 1 '(!(f in DECL)) for (k in K) if (k in FT) {' '(!(f in DECL)) for (k in FT) {'
-  ck_mut o nosibs 1 'if (k == root && sibs_only(k)) { SB = 1; continue }' 'if (0) { SB = 1; continue }'
+if sg ckm1; then
+  [ "$CK_N" -ge 1 ] || bad "no pre-push hook was found for the checksum-key mutants"
+  if [ "$CK_N" -ge 1 ]; then
+    ck_mut a rowsort 1 '-k1,1 -k2 "$out/.kout"' '-k1,1 -k2r "$out/.kout"'
+    ck_mut b reason 1 'why = um ? "unmapped: closure changed" : "changed " first;' 'why = um ? "unmapped: closure changed" : "changed";'
+    ck_mut c fileentries 1 "  awk '{ p = \$0; while ((i = match(p," "  awk '{ p = \$0; sub(/\\/[^\\/]*\$/, \"\", p); while ((i = match(p,"
+    ck_mut d owndir 1 '               n = split(OWN[f], a, "\n"); for (j = 2; j <= n; j++) K[a[j]] = 1 }' '               }'
+    ck_mut e closure 1 '        if (um) { for (p in NV) K[p] = 1 }' '        if (um) { }'
+    ck_mut f redblocks 1 '    if [ "$(cat "$out/$b" 2>/dev/null)" = ok ] ||' '    if [ "${rc:-1}" = 0 ] && [ "$(cat "$out/$b" 2>/dev/null)" = ok ] ||'
+    ck_mut g notools 1 'else if (tch) { why = "tools changed"; c = "k" }' 'else if (0) { why = "tools changed"; c = "k" }'
+  fi
 fi
-
+if sg ckm2; then
+  [ "$CK_N" -ge 1 ] || bad "no pre-push hook was found for the checksum-key mutants"
+  if [ "$CK_N" -ge 1 ]; then
+    ck_mut h staleclears 1 '        else if (st == "stale") ns = ((f in LOC) ? "ok" : "stale")' '        else if (st == "stale") ns = "ok"'
+    ck_mut i nov2 1 '      if (seed) rd(ENVIRON["KV2"], VV)' '      if (0) rd(ENVIRON["KV2"], VV)'
+  fi
+fi
+if sg ckm3; then
+  [ "$CK_N" -ge 1 ] || bad "no pre-push hook was found for the checksum-key mutants"
+  if [ "$CK_N" -ge 1 ]; then
+    ck_mut j hashrunall 1 "  [ -s \"\$out/.now\" ] || { printf '   ..    could not hash" "  : || { printf '   ..    could not hash"
+    ck_mut k anyformat 1 'FNR == 1 { ok = ($0 == "#format k1");' 'FNR == 1 { ok = 1;'
+    ck_mut l notfail 1 '    if [ "$(cat "$out/$b" 2>/dev/null)" = ok ] ||' '    if [ "$(cat "$out/$b" 2>/dev/null)" != FAIL ] ||'
+    ck_mut m nosubtree 1 '        subtree(d "/" a[j]) }' '        }'
+    ck_mut n globaltools 1 '(!(f in DECL)) for (k in K) if (k in FT) {' '(!(f in DECL)) for (k in FT) {'
+    ck_mut o nosibs 1 'if (k == root && sibs_only(k)) { SB = 1; continue }' 'if (0) { SB = 1; continue }'
+  fi
 fi
 
 # ------------------------------------ tool keys do not depend on the invoker ----

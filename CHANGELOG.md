@@ -19,6 +19,103 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.760.0] - 2026-10-09
+
+Batch 214 (hermetic-pole), release 2. The five units at the top of the 0.757.0 gate's own per-run
+durations file are sharded into seventeen directories, nine of them new; two of the five,
+`procsub-staged-refusal` and `procsub-staged-refusal-boot`, are reported UNSANDBOXABLE with their escapes
+named and stay undeclared. No pre-push hook, no bootstrapping
+file and no engine change: every edit is under `core/fixtures/`, plus the ship lists for the five new
+shipping shard directories and the fork budget they cost.
+
+### The rank, from the gate that ran last
+
+The 0.757.0 gate's per-run durations file (12-way, 68 of 260 dispatched, load 3 rising to 83) is the
+only clean source since the last entry: a red run publishes nothing, and the merged durations record
+was shown at 0.757.0 to carry pollution. Its top five, every one loaded: `check-24-adversarial-convergence`
+743s, `readset-skip-d` 732s, `procsub-staged-refusal` 656s, `procsub-staged-refusal-boot` 619s,
+`apply-restamp-worklist` 599s. `review-shard-merge-mutants{,-b,-c}` at 595s is `BL-485`, batch 208's,
+and is left alone. The merged record's own top row (`adversarial-shard-merge-mutants` 1132) is a figure
+from a run with no surviving per-run file and is not acted on.
+
+### Five hands, one unit each, in the `readset-skip --group` shape
+
+Every parent carries a `SHARDS`/`UNITS_<x>` partition and the J0 coverage join, which derives the
+dealt set from the file's own `if sg <unit>; then` guards, refuses a duplicate, an omission and a shard
+with no driver directory, and self-probes both before trusting its zero. Every shard runs the shared
+seed and prints a per-shard assertion line. Both validators exit 0 on the assembled tree; every
+driver is committed 100755.
+
+- **`check-24-adversarial-convergence`** (ships; was UNMAPPED and ran on every push): four shards
+  `{,-b,-c,-d}` (a: core corp pair, 87 assertions; b: hook k2, 58; c: arms_ij pass1 j2h, 97; d: k3,
+  54; 296 total). All four declared; the parent `run.sh` and `seed.sh` are listed in every
+  `inputs.decl` so the driver directories can exec them. `k3` cannot be split without cutting its
+  shared worlds, so shard d is the floor for this unit.
+- **`readset-skip-d`** (ships; already sharded at 0.757.0 with `d` holding only `ck`, 206s solo):
+  the `ck` section is re-dealt as four sg units, `ckw` (fifteen worlds) and `ckm1..3` (mutants
+  a-g, h-i, j-o), dealt to a, b and d. No new directory; the fourteen-unit J0 line is printed by every
+  shard. Per-shard assertions: a 93, b 103, c 94, d 37.
+- **`apply-restamp-worklist`** (ships; already declared): three shards (a: mut hu, 44 assertions;
+  b: bl t, 39; c: cf u hr vf, 69). Each shard's `inputs.decl` carries only the REQUIRED `!` inputs its
+  own units consume, so the three declarations differ and the isolation probe names a different
+  absence in each. The `.git/HEAD` map row comes from `git init` in temp repos; nothing reads the
+  live repository.
+- **`procsub-staged-refusal-boot`** (`.dist-only`; was UNMAPPED): three shards (a: lrpe ud, 62;
+  b: ld b360, 52; c: lc ap spell, 52; 166 total, equal to the unsharded run). NOT declared: it
+  stages pre-fix engines by `git -C "$TREE_TOP" show <sha>:core/skills/ai-dlc-update/reconcile/<file>`
+  at `a0a9c556`, `1749b545` and the emit-report base sha, and the hermetic sandbox is not a
+  repository.
+- **`procsub-staged-refusal`** (`.dist-only`): three shards (a: arms spell pf r5 lh, 170 lines;
+  b: bl b3 rh ctl, 106; c: mut, 80 mutants, 111; 387 against 345 unsharded, the 42 being the
+  nineteen calibration lines and the heredoc-lib line repeated in each shard). NOT declared, and
+  the reason is a ruling, not a gap: its subject is this repository's own history. It reads five
+  pinned shas by `git -C "$OWN" show <sha>:<path>` and `git diff -U0 <sha>` (`e4934e65`,
+  `d1c72fa9`, `b0c310a3`, `322ef42c`, `1749b545`), 118 blobs. A build that committed those blobs
+  under `core/fixtures/.../pins/` passed `hermetic-run.sh` on all three shards and then failed
+  arms I104, I113 and I65 of the enforcement-map validator, which scan `core/` by CONTENT and
+  found a fourth reader of the snapshot `sprint_id` and `position` fields in the pinned copies of
+  the live hooks. Declaring the pin paths in `i104_declared` would edit an arm to acquit a
+  duplicate corpus, so the pins were removed and the twelve git reads restored byte-for-byte.
+  The proposal on file: a seeded repository inside the sandbox, which the hermetic runner does
+  not build today.
+
+### What the five shipping directories cost
+
+`fork-profile.sh --section by-arm --stable`, one clone at one path, every file committed, base
+`github/main` 42d7ae1a (0.759.0) against this tree: base 3312-3314 (STABLE 2), tip 3318 (STABLE 2,
+spread 3318-3318). `FORK_BUDGET` 3320 -> 3324 with the measurement beside it;
+`validator-fork-budget` reads 3318 of 3324 across 272 fixture directories, 13/13 mutants killed.
+The four `.dist-only` procsub shards cost arm I8 nothing. The cherry-pick of two hands that both
+append to `scripts/uninstall.sh`'s one-line fixture list kept only the last writer's copy, as the
+0.757.0 entry warned; the list is the set-union and `bash -n` passes.
+
+### Solo wall clock, sequential, load beside each
+
+Every shard at this tree, run alone and sequentially from the clone root between 04:21 and 05:00 on
+2026-10-09, declared units through `hermetic-run.sh` and the undeclared procsub shards by `run.sh` directly.
+Six procsub rows and two apply-restamp rows first ran at load 5.9-13.2 while a peer's detached post-green
+trace was on the box; they were re-taken after it exited at load 2.2-4.1, and the re-take figures are the
+ones below. Load is the one-minute average at the row's start. "Before" is the unit's loaded figure from the
+0.757.0 gate, a different measurement, kept here because it is the figure the plan ranked on; the solo
+before/after for the four 0.757.0 shards is in that entry.
+
+| unit | before (s) | after: shards, solo s (load) | longest shard |
+|---|---|---|---|
+| `check-24-adversarial-convergence` | 743 loaded, 68-fixture 12-way gate | a 55 (4.9), b 22 (4.5), c 53 (4.0), d 98 (3.8) | 98 |
+| `readset-skip` | d 206 solo at 0.757.0 (732 loaded) | a 106 (3.7), b 99 (4.8), c 94 (4.3), d 97 (3.4) | 106 |
+| `apply-restamp-worklist` | 599 loaded | a 65 (4.2), b 23 (2.3), c 108 (2.2) | 108 |
+| `procsub-staged-refusal` | 656 loaded | a 52 (3.0), b 75 (2.3), c 90 (2.5) | 90 |
+| `procsub-staged-refusal-boot` | 619 loaded | a 69 (4.0), b 131 (2.5), c 77 (2.4) | 131 |
+
+### The push
+
+The gate that ships this entry cannot write its own wall clock into it. Its figures (12-way, start load,
+fixtures dispatched, suite phase wall clock, the `read-set keys:` and `read-set map:` lines) are recorded
+in the batch-214 docs commit that follows this release and in `docs/plans/hermetic-pole.md`, beside the
+0.757.0 gate's 1123s over 68 dispatched at start load 3.3. The five new undeclared directories
+(`procsub-staged-refusal-{b,c}`, `procsub-staged-refusal-boot-{b,c}` and the re-dealt parent) have no map
+row and run on every push until traced; the shipping shards are declared and keyed on their declaration.
+
 ## [0.759.0] - 2026-10-09
 
 Batch 213's hermetic-fixtures-poc release and the close of that plan's action 5: **the five class-b

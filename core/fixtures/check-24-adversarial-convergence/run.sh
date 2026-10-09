@@ -41,6 +41,80 @@ if [ -z "$VALIDATOR" ]; then
   exit 1
 fi
 
+# ---------------------------------------------------------------------------- shards ----
+# THIS FILE IS FOUR SHARDS OF ONE FIXTURE, AND THE SPLIT IS A SCHEDULING BOUNDARY, NOT A SUBJECT
+# BOUNDARY. Every section below is a UNIT guarded by `if sg <unit>; then ... fi`; `--group <x>` runs
+# the units dealt to shard <x>. The three siblings `check-24-adversarial-convergence-{b,c,d}/run.sh` are
+# one-line drivers that `exec bash` this file with their group (the readset-skip shape), so the pre-push
+# pool can start each on its own and the suite's makespan stops tracking one 2600-line directory. No
+# `--group` runs shard 'a', so `bash core/fixtures/check-24-adversarial-convergence/run.sh` is shard a.
+#
+# THE SEED, THE VALIDATOR LOOKUP AND THE SHARED HELPERS ARE NOT UNITS: every shard pays them, because a
+# shard that skipped them would score its cases against a harness that never ran.
+#
+# THE COVERAGE JOIN runs in EVERY shard before anything else: the declared units are DERIVED from this
+# file's own `if sg <unit>; then` lines, the dealt lists must be disjoint and their union must equal the
+# declared set exactly, so no unit can fall out of every shard, and every declared shard must have a
+# driver directory. The join proves it can fire first, on a seeded duplicate and a seeded omission.
+#   a  core corp pair   the v0.52-v0.103 cases, --cycle-state and the stall exit, the corpus third state, pairing
+#   b  hook k2          the live-series derivation, H-BIND, exit ceiling, arm K, arm K2 and its mutants
+#   c  arms_ij pass1 j2h  arm J and I, the pass-1 guard, arm J2 and J's door, arm H by series
+#   d  k3               arm K3, K3 widened, J2 per stem, K3 cross groups (every world a git repository)
+SHARDS="a b c d"
+UNITS_a="core corp pair"
+UNITS_b="hook k2"
+UNITS_c="arms_ij pass1 j2h"
+UNITS_d="k3"
+GROUP=a
+if [ "${1:-}" = "--group" ]; then
+  GROUP="${2:-}"
+  [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }
+fi
+case " $SHARDS " in
+  *" $GROUP "*) ;;
+  *) echo "FIXTURE ERROR: unknown shard '$GROUP' (known: $SHARDS)" >&2; exit 2 ;;
+esac
+eval "MINE=\"\${UNITS_$GROUP:-}\""
+NAME="check-24-adversarial-convergence"; [ "$GROUP" = a ] || NAME="check-24-adversarial-convergence-$GROUP"
+broken() { printf '  FAIL  %s\n' "$1" >&2; echo "$NAME: FIXTURE BROKEN" >&2; exit 2; }
+[ -n "$MINE" ] || broken "shard '$GROUP' has no UNITS_$GROUP list; a shard dealt nothing passes everything it never checked"
+sg() { case " $MINE " in *" $1 "*) return 0 ;; esac; return 1; }
+SELF="$0"
+[ -f "$SELF" ] || broken "cannot read $SELF for the coverage join"
+partition_ok() { # <declared ids file> <dealt ids file> -> 0 when dealt is disjoint and covers declared exactly
+  local dup miss extra
+  dup="$(sort "$2" | uniq -d | tr '\n' ' ')"
+  miss="$(sort -u "$2" | comm -23 <(sort -u "$1") - | tr '\n' ' ')"
+  extra="$(sort -u "$2" | comm -13 <(sort -u "$1") - | tr '\n' ' ')"
+  [ -z "$dup$miss$extra" ] && return 0
+  echo "dealt twice: {${dup% }} dealt to no shard: {${miss% }} dealt but not declared: {${extra% }}"
+  return 1
+}
+JW="$(mktemp -d "${TMPDIR:-/tmp}/check24-join.XXXXXX")" || broken "mktemp failed"
+printf '%s\n' u1 u2 u3 > "$JW/pd"; printf '%s\n' u1 u2 u2 u3 > "$JW/pdup"; printf '%s\n' u1 u3 > "$JW/pmiss"; printf '%s\n' u3 u1 u2 > "$JW/pok"
+if partition_ok "$JW/pd" "$JW/pdup" >/dev/null || partition_ok "$JW/pd" "$JW/pmiss" >/dev/null \
+   || ! partition_ok "$JW/pd" "$JW/pok" >/dev/null; then
+  rm -rf "$JW"; broken "the coverage join's self-probe did not discriminate (duplicate, omission, exact)"
+fi
+sed -n 's/^[[:space:]]*if sg \([a-z0-9_][a-z0-9_]*\); then$/\1/p' "$SELF" > "$JW/declared"
+for _s in $SHARDS; do eval "printf '%s\n' \${UNITS_$_s}" | tr ' ' '\n'; done | grep . > "$JW/dealt"
+ndecl="$(grep -c . "$JW/declared")" || ndecl=0
+ndupdecl="$(sort "$JW/declared" | uniq -d | grep -c .)" || ndupdecl=0
+if [ "$ndecl" -eq 0 ] || [ "$ndupdecl" -ne 0 ]; then
+  rm -rf "$JW"; broken "$ndecl unit guards derived from $SELF ($ndupdecl declared twice)"
+fi
+if ! _why="$(partition_ok "$JW/declared" "$JW/dealt")"; then
+  rm -rf "$JW"; broken "the shard partition does not cover the guarded units exactly -- $_why"
+fi
+for _s in $SHARDS; do
+  [ "$_s" = a ] && continue
+  _drv="$DIR/../check-24-adversarial-convergence-$_s/run.sh"
+  if [ ! -f "$_drv" ] || ! grep -qF -- "--group $_s" "$_drv"; then
+    rm -rf "$JW"; broken "shard '$_s' is declared but $_drv does not drive it"
+  fi
+done
+rm -rf "$JW"
+echo "  [J0] coverage join: $ndecl units derived from the sg guards, dealt disjointly across {$SHARDS}, union exact; this shard runs {$MINE}"
 ROOT="$(bash "$DIR/seed.sh" | tail -1)"
 trap 'rm -rf "$ROOT"' EXIT
 
@@ -102,8 +176,48 @@ expect_state() {
   fi
 }
 
-echo "check-24 adversarial-convergence fixture"
+# The validator as a resolved path, so the sentinel below is spelled without any `..`.
+VALIDATOR="$(cd "$(dirname "$VALIDATOR")" && pwd -P)/$(basename "$VALIDATOR")"
+# The REQUIRED input of inputs.decl: every assertion drives this file. Printed in whichever layout holds it.
+case "$VALIDATOR" in
+  */core/scripts/validate-adversarial-convergence.sh)       echo "HERMETIC-CONSUMED core/scripts/validate-adversarial-convergence.sh" ;;
+  */scripts/ai-dlc/validate-adversarial-convergence.sh)     echo "HERMETIC-CONSUMED scripts/ai-dlc/validate-adversarial-convergence.sh" ;;
+esac
+
+# SHARED BY MORE THAN ONE UNIT, so they live here and not inside a unit that may be dealt elsewhere.
+D_GENERIC="Do not pass the gate by overriding the field in prose."
+
+# AN ABSENCE ASSERTION CARRIES ITS CONTROL IN THE SAME INVOCATION -- the token must be
+# missing from the subject AND present in a case that must emit it, or a validator that
+# stopped emitting the token at all passes every negative arm below.
+expect_silent() {  # $1 case-dir  $2 token  $3 control-dir  $4 why-it-must-be-silent
+  local out ctl
+  out="$(bash "$VALIDATOR" --series "$ROOT/$1/s1-adversarial-p" \
+          --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"
+  ctl="$(bash "$VALIDATOR" --series "$ROOT/$3/s1-adversarial-p" \
+          --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if grep -qF -- "$2" <<<"$out"; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s %s fired where it must be SILENT -- %s\n' "$1" "$2" "$4"
+  elif ! grep -qF -- "$2" <<<"$ctl"; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s CONTROL: %s absent from %s too -- the negative assertion is vacuous\n' "$1" "$2" "$3"
+  else
+    printf '  ok    %-28s %s silent here, present in %s (control)\n' "$1" "$2" "$3"
+  fi
+}
+
+# K2 asks partition-document.sh, a SIBLING of the validator, whether the document partitions. Read by
+# the k2 and k3 units (different shards), so it is resolved here. Its absence is refused loudly.
+K2_PD="$(cd "$(dirname "$VALIDATOR")" && pwd)/partition-document.sh"
+if [ ! -f "$K2_PD" ]; then
+  echo "FIXTURE BROKEN: partition-document.sh is not beside $VALIDATOR -- arm K2 cannot be scored"
+  exit 1
+fi
+echo "check-24 adversarial-convergence fixture (shard $GROUP)"
 echo
+if sg core; then
 
 # --- backward compatibility (pre-v0.52.0 artifacts: no prior_scope field) -----
 expect converged           0 "clean terminal pass -- the cycle the machinery should produce"
@@ -138,7 +252,7 @@ expect_says stalled s1-adversarial-p "E-remedy" \
 # below. Both pre-empt arms were keyed that way, and both were dead.
 # The POSITIVE control for this token is `D-generic-at-pass1` further down, which requires
 # it to APPEAR: without it, an arm D that stopped emitting the remedy passes both arms here.
-D_GENERIC="Do not pass the gate by overriding the field in prose."
+# D_GENERIC is defined once in the shared prelude above: units in different shards read it.
 ASSERTIONS=$((ASSERTIONS + 1))
 if bash "$VALIDATOR" --series "$ROOT/stalled/s1-adversarial-p" 2>&1 \
    | grep -qF -- "$D_GENERIC"; then
@@ -420,6 +534,8 @@ else
   echo "  FAIL  cross-session (with dir): expected RESOLVED, got '$got_dir'" >&2; FAILURES=$((FAILURES + 1))
 fi
 
+fi
+if sg corp; then
 # --- A CORPUS THAT HELD NO RECORD IS THE ABSENT CORPUS, ONE STEP LATER ----------
 # `steer_dir_has_transcript` asks whether a `*.jsonl` is READABLE, never whether it holds a
 # record. So a directory of empty or sidechain-only transcripts set STEER_FLAG, skipped the
@@ -682,6 +798,8 @@ ts_mutate since-acquitted pred \
   "without files.length a forged future --since acquits itself over a corpus holding the operator's real message"
 
 echo
+fi
+if sg arms_ij; then
 # --- arm J: RE-OPEN ------------------------------------------------------------
 expect reopen-unrecorded 1 "a pass ran after EXIT_CONDITION_MET reporting 1C/2M -- RE-OPEN, FAIL (J)" s1-adversarial-p
 expect reopen-same-bytes 0 "THE DECOY: p1 MET -> p2 MET at the SAME artifact_sha -- same bytes, same residue, not a re-open" s1-adversarial-p
@@ -841,6 +959,8 @@ mutate_ceiling counter \
 # ai-dlc-acknowledge.sh -- the hook that owns the DENY -- and eval'd. A fixture carrying its
 # own copy of the expression would pass while the hook shipped something else, which is the
 # defect this whole release is about.
+fi
+if sg hook; then
 HOOK=""
 for cand in \
   "$DIR/../../hooks/ai-dlc-acknowledge.sh" \
@@ -1113,26 +1233,7 @@ expect_says ceiling-plateau-below s1-adversarial-p "D-owns-plateau-series" \
 expect_state ceiling-plateau-below s1-adversarial-p DIVERGENT 3 \
   "the hooks must deny on the divergence that ended the plateau"
 
-# AN ABSENCE ASSERTION CARRIES ITS CONTROL IN THE SAME INVOCATION -- the token must be
-# missing from the subject AND present in a case that must emit it, or a validator that
-# stopped emitting the token at all passes every negative arm below.
-expect_silent() {  # $1 case-dir  $2 token  $3 control-dir  $4 why-it-must-be-silent
-  local out ctl
-  out="$(bash "$VALIDATOR" --series "$ROOT/$1/s1-adversarial-p" \
-          --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"
-  ctl="$(bash "$VALIDATOR" --series "$ROOT/$3/s1-adversarial-p" \
-          --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"
-  ASSERTIONS=$((ASSERTIONS + 1))
-  if grep -qF -- "$2" <<<"$out"; then
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-28s %s fired where it must be SILENT -- %s\n' "$1" "$2" "$4"
-  elif ! grep -qF -- "$2" <<<"$ctl"; then
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-28s CONTROL: %s absent from %s too -- the negative assertion is vacuous\n' "$1" "$2" "$3"
-  else
-    printf '  ok    %-28s %s silent here, present in %s (control)\n' "$1" "$2" "$3"
-  fi
-}
+# expect_silent is defined once in the shared prelude above (units in more than one shard call it).
 
 expect_silent ceiling-plateau-below "E -- STALL" stalled \
   "E and B's MET half are reading two different ceilings"
@@ -1158,6 +1259,8 @@ expect shard-legacy 0 \
 expect_says shard-legacy stories-adversarial-p "K-legacy-pending" \
   "PENDING (K -- SHARD): the terminal pass stories-adversarial-p2.md" "Legacy series."
 
+fi
+if sg k2; then
 echo
 # --- ARM K2: one shardable DOCUMENT, reviewed whole -----------------------------------------
 # K2 asks partition-document.sh, a SIBLING of the validator, whether the document partitions.
@@ -1165,11 +1268,7 @@ echo
 # a K2 cell scored against a validator with no partitioner reads PENDING everywhere and the
 # FAIL cell alone would say so -- but the SERIAL and sharded cells would pass for the wrong
 # reason. So its absence is refused HERE, loudly, before any K2 cell is read.
-K2_PD="$(cd "$(dirname "$VALIDATOR")" && pwd)/partition-document.sh"
-if [ ! -f "$K2_PD" ]; then
-  echo "FIXTURE BROKEN: partition-document.sh is not beside $VALIDATOR -- arm K2 cannot be scored"
-  exit 1
-fi
+# K2_PD and its presence check are in the shared prelude above (the k2 and k3 units both read it).
 K2_POST_MSG="FAIL (K2 -- SECTIONS): prd-adversarial-p1.md reviews"
 expect k2-shardable-post 1 \
   "a whole-document pass over a 4-part document, series opened after the 0.665.0 stamp -- FAIL (K2)" prd-adversarial-p
@@ -1561,6 +1660,8 @@ k2h_mutate k2-added-commit-dropped \
   '  :' \
   "SILENT FAIL FAIL FAIL/FB SILENT SILENT"
 
+fi
+if sg pass1; then
 echo
 # --- PASS 1 HAS NO PREVIOUS PASS -----------------------------------------------
 # THE SEED GAP THESE CLOSE. Every case above declares pass 1 with prior == crit, and that
@@ -1729,6 +1830,8 @@ sg_mutate scope-grew-pass-number \
   '  if [ -n "$crit" ] && [ -n "$prior" ] && [ "$(printf "%s" "$f" | sed -E "s/.*[^0-9]([0-9]+)\.md$/\1/")" != "1" ] && [ "$crit" -gt "$prior" ]; then' \
   "GENERIC MOVING MOVING MOVING"
 
+fi
+if sg j2h; then
 echo
 # --- ARM J's DOOR: a re-open is sanctioned by a VALID record, not by naming one ------------
 expect reopen-record-missing 1 "resolves_divergence names a record that was never written -- FAIL (J)" s1-adversarial-p
@@ -2042,6 +2145,8 @@ h_mutate h-stem-unstripped "FOREIGN/1 FOREIGN/1 PENDING/0 PENDING/0 MISSING/1" \
   '  H_STEM="${b%-adversarial}"' '  H_STEM="$b"' \
   '  if [ "$hp1" != prd ] || [ "$hp2" != s289-rr ] || [ "$hp3" != x-p1 ] \' '  if false \'
 
+fi
+if sg k3; then
 echo
 # --- ARM K3: the requirements series reviews the SUBJECT ------------------------------------
 # Every K3 world is its own git repository (trunk main, sprint 9 on a branch) carrying the
@@ -2604,6 +2709,8 @@ PY
     'then k3_rel="$K3C_RELEASE"; k3_stamp_probe; fi' 'then :; fi'
 fi
 
+fi
+if sg pair; then
 # --- PAIRING: a case that DENIES must assert the state the hooks read -------------
 # THE MECHANISM FOR A DEFECT CLASS THIS FIXTURE HAS NOW HIT TWICE. Gate mode and
 # --cycle-state are different code paths with different branch ordering, and the second one
@@ -2648,6 +2755,7 @@ if [ -n "$PAIR_MISSING" ]; then
     "state-mode-pairing" "$PAIR_MISSING"
 else
   printf '  ok    %-28s every denying case asserts the state the hooks read\n' "state-mode-pairing"
+fi
 fi
 
 echo

@@ -111,14 +111,89 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/apply-restamp-worklist.XXXXXX")" || {
   echo "apply-restamp-worklist: FIXTURE BROKEN — mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+fails=0; asserts=0
+ok()  { printf '  ok    %s\n' "$1"; asserts=$((asserts+1)); }
+bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserts=$((asserts+1)); }
+
+# ---------------------------------------------------------------------------- shards ----
+# THIS FILE IS THREE SHARDS OF ONE FIXTURE, AND THE SPLIT IS A SCHEDULING BOUNDARY, NOT A SUBJECT
+# BOUNDARY (the readset-skip shape). Every section below is a UNIT guarded by `if sg <unit>; then ... fi`;
+# `--group <x>` runs the units dealt to shard <x>. `apply-restamp-worklist-{b,c}/run.sh` are one-line
+# drivers that `exec bash` this file with their group, so the pre-push pool starts each on its own. No
+# `--group` runs shard 'a'.
+#
+# THE SEED AND THE SUBJECT PROBE ARE NOT UNITS: every shard builds the synthetic pull, the three runs and
+# the S0-S3 sanity arms, and runs the subject probe, because a shard that skipped them would score its
+# units against a harness that never ran. The mutant helpers (mk_report, u5_*, build_rec, mut_apply) and
+# the hook-registration validator lookup are hoisted above the units for the same reason: units use
+# each other's helpers, and a helper living inside a unit another shard owns would be undefined there.
+#
+# THE COVERAGE JOIN runs in EVERY shard before anything else: the declared units are DERIVED from this
+# file's own `if sg <unit>; then` lines, the dealt lists must be disjoint and their union must equal the
+# declared set exactly, and every declared shard must have a driver directory. The join proves it can
+# fire first, on a seeded duplicate and a seeded omission.
+#   a  mut hu     the mutants of the restamp guard, --finish and the union gate; the BL-103 unshipped-hook row
+#   b  bl t       BL-276 routing rows and their mutants; T1-T4 transient-ignore row
+#   c  cf u hr vf C1-C8 / F1-F3 / CWD, U1-U5, BL-292 hook-registration row, VF finish-verifies-tree
+SHARDS="a b c"
+UNITS_a="mut hu"
+UNITS_b="bl t"
+UNITS_c="cf u hr vf"
+GROUP=a
+if [ "${1:-}" = "--group" ]; then
+  GROUP="${2:-}"
+  [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }
+fi
+case " $SHARDS " in
+  *" $GROUP "*) ;;
+  *) echo "FIXTURE ERROR: unknown shard '$GROUP' (known: $SHARDS)" >&2; exit 2 ;;
+esac
+eval "MINE=\"\${UNITS_$GROUP:-}\""
+NAME="apply-restamp-worklist"; [ "$GROUP" = a ] || NAME="apply-restamp-worklist-$GROUP"
+shard_broken() { echo "$NAME: FIXTURE BROKEN — $1" >&2; exit 2; }
+[ -n "$MINE" ] || shard_broken "shard '$GROUP' has no UNITS_$GROUP list; a shard dealt nothing passes everything it never checked"
+sg() { case " $MINE " in *" $1 "*) return 0 ;; esac; return 1; }
+SELF="$0"
+[ -f "$SELF" ] || shard_broken "cannot read $SELF for the coverage join"
+partition_ok() { # <declared ids file> <dealt ids file> -> 0 when dealt is disjoint and covers declared exactly
+  local dup miss extra
+  dup="$(sort "$2" | uniq -d | tr '\n' ' ')"
+  miss="$(sort -u "$2" | comm -23 <(sort -u "$1") - | tr '\n' ' ')"
+  extra="$(sort -u "$2" | comm -13 <(sort -u "$1") - | tr '\n' ' ')"
+  [ -z "$dup$miss$extra" ] && return 0
+  echo "dealt twice: {${dup% }} dealt to no shard: {${miss% }} dealt but not declared: {${extra% }}"
+  return 1
+}
+JW="$(mktemp -d "${TMPDIR:-/tmp}/apply-restamp-join.XXXXXX")" || shard_broken "mktemp failed"
+printf '%s\n' u1 u2 u3 > "$JW/pd"; printf '%s\n' u1 u2 u2 u3 > "$JW/pdup"; printf '%s\n' u1 u3 > "$JW/pmiss"; printf '%s\n' u3 u1 u2 > "$JW/pok"
+if partition_ok "$JW/pd" "$JW/pdup" >/dev/null || partition_ok "$JW/pd" "$JW/pmiss" >/dev/null \
+   || ! partition_ok "$JW/pd" "$JW/pok" >/dev/null; then
+  rm -rf "$JW"; shard_broken "the coverage join's self-probe did not discriminate (duplicate, omission, exact)"
+fi
+sed -n 's/^[[:space:]]*if sg \([a-z0-9_][a-z0-9_]*\); then$/\1/p' "$SELF" > "$JW/declared"
+for _s in $SHARDS; do eval "printf '%s\n' \${UNITS_$_s}" | tr ' ' '\n'; done | grep . > "$JW/dealt"
+ndecl="$(grep -c . "$JW/declared")" || ndecl=0
+ndupdecl="$(sort "$JW/declared" | uniq -d | grep -c .)" || ndupdecl=0
+if [ "$ndecl" -eq 0 ] || [ "$ndupdecl" -ne 0 ]; then
+  rm -rf "$JW"; shard_broken "$ndecl unit guards derived from $SELF ($ndupdecl declared twice)"
+fi
+if ! _why="$(partition_ok "$JW/declared" "$JW/dealt")"; then
+  rm -rf "$JW"; shard_broken "the shard partition does not cover the guarded units exactly -- $_why"
+fi
+for _s in $SHARDS; do
+  [ "$_s" = a ] && continue
+  _drv="$HERE/../apply-restamp-worklist-$_s/run.sh"
+  if [ ! -f "$_drv" ] || ! grep -qF -- "--group $_s" "$_drv"; then
+    rm -rf "$JW"; shard_broken "shard '$_s' is declared but $_drv does not drive it"
+  fi
+done
+rm -rf "$JW"
+echo "  [J0] coverage join: $ndecl units derived from the sg guards, dealt disjointly across {$SHARDS}, union exact; this shard runs {$MINE}"
 
 # THE RESOLVED PATH IS PRINTED, not inferred from the layout. Two candidates exist and the first
 # that resolves wins, so a mutant edited into the other copy leaves every arm green and reads
 # exactly like an arm that cannot fire. This line is what makes that visible in a suite log.
-echo "apply-restamp-worklist: driving $APPLY"
+echo "$NAME: driving $APPLY"
 
 # A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. On a consumer this file can arrive on the pull that
 # also carries the apply.sh it tests, and the fixture batch is written last, so an interrupted
@@ -319,6 +394,85 @@ pre_guard() {
 }
 n_handback() { awk -F'\t' '$1=="WORKLIST" || $1=="DECISION" {n++} END {print n+0}' <<< "$(pre_guard "$1")"; }
 
+EMIT="$REC/emit-report.sh"
+mk_report() { # mk_report <consumer> <theirs-to-render-at>
+  mkdir -p "$1/_bmad-output/ai-dlc-update" || return 1
+  { printf '# reconcile report (fixture)\n\n'
+    bash "$EMIT" "$DIST" "$BASE" "$1" "$2" 2>/dev/null
+  } > "$1/_bmad-output/ai-dlc-update/reconcile-report.md"
+}
+
+
+u5_seed_blocker() {
+  mkdir -p "$1/.claude/skills/ai-dlc/overrides" || return 1
+  cat > "$1/.claude/skills/ai-dlc/overrides/probe.md" <<'U5OVR'
+---
+shadows: core/rules/nonexistent.md#Nope
+base_sha: deadbeefdeadbeefdeadbeefdeadbeefdeadbeef
+reason: probe
+---
+
+## Nope
+
+probe body
+U5OVR
+}
+u5_build() { # u5_build <consumer> — approve WITH the blocker, then resolve it
+  mk_consumer "$1" green || return 1
+  u5_seed_blocker "$1" || return 1
+  mk_report "$1" "$THEIRS" || return 1
+  rm -rf "$1/.claude/skills/ai-dlc/overrides"
+}
+run_apply_err() { bash "$1" "$DIST" "$BASE" "$2" "$THEIRS" 2>"$3"; }
+# u5_score <apply-path> -> "<rc>|<stamp>|<marker>|<CAUSE|->|<REMEDY|->|<FWD|->"
+# PRESENCE-SHAPED IN EVERY FIELD, and a fresh consumer per drive so no arm reads a previous
+# one's leftovers.
+#
+# FWD IS THE FORWARDED STDERR, and it is keyed on the two things only the forward produces: a
+# `cause:` LINE at --verify's own indent, and at least one `<`/`>` diff line. The refusal message
+# itself interpolates the cause TEXT, so a `BLOCKERS-RESOLVED` conjunct is satisfied whether or
+# not the forward happened; and the message ends by telling the operator to read a diff, which
+# without the forward apply.sh has discarded — a pointer to a tool they must re-run.
+u5_score() {
+  local a="$1" c="$WORK/u5-$$-$RANDOM" e rc
+  u5_build "$c" || { echo "BROKEN|||||"; return; }
+  e="$c/stderr.txt"
+  run_apply_err "$a" "$c" "$e" >/dev/null; rc=$?
+  printf '%s|%s|%s|%s|%s|%s\n' "$rc" "$(stamp_ver "$c")" "$(marker "$c")" \
+    "$(grep -q 'BLOCKERS-RESOLVED' "$e" && echo CAUSE || echo -)" \
+    "$(grep -qF "re-render the region with emit-report.sh $DIST $BASE $c $THEIRS" "$e" \
+       && grep -q 're-run apply with the same four arguments' "$e" && echo REMEDY || echo -)" \
+    "$(grep -qE '^[[:space:]]*cause: ' "$e" && grep -qE '^[<>] ' "$e" && echo FWD || echo -)"
+}
+
+# Each is a COPY of the whole reconcile directory — apply.sh `eval`s map_consumer() out of its
+# sibling preclassify.sh and shells to retired-tokens.sh and unregistered-drift.sh, so a lone
+# script copy dies before printing anything — guarded by `cmp -s` so an edit that matched nothing
+# cannot pass as a mutation, and aimed at ONE arm.
+build_rec() { # build_rec <dir>
+  mkdir -p "$1" && cp "$REC"/* "$1"/ 2>/dev/null && [ -f "$1/apply.sh" ]
+}
+# Every mutant verdict is PRESENCE-shaped: a mutant that emits nothing must not score as a kill.
+# mut <n> <label> <arm-it-must-kill> <transform-command...> reading apply.sh on stdin
+mut_apply() { # mut_apply <dir> ; transform reads $REC/apply.sh from stdin, writes stdout
+  build_rec "$1" || return 1
+  cat > "$1/apply.sh"
+  ! cmp -s "$REC/apply.sh" "$1/apply.sh"
+}
+
+# The hook-registration validator is located ONCE, here, because both unit hr and unit hu read
+# HR_SKIP and the two units may be dealt to different shards.
+HR_VAL_SRC=""
+for cand in "$ROOT/core/scripts/validate-hook-registration.sh" "$ROOT/scripts/ai-dlc/validate-hook-registration.sh"; do
+  [ -f "$cand" ] && HR_VAL_SRC="$cand" && break
+done
+HR_SKIP=""
+if [ -z "$HR_VAL_SRC" ] || [ ! -f "$REC/settings-merge.sh" ]; then
+  HR_SKIP="the hook-registration validator or reconcile/settings-merge.sh is not on this tree (validator='${HR_VAL_SRC:-<none>}')"
+elif ! command -v python3 >/dev/null 2>&1; then
+  HR_SKIP="python3 is not on PATH, so the real validator cannot run and every world would read as unparsed"
+fi
+
 # --- SUBJECT PROBE: is the change installed at all? -------------------------------------------
 # The guard fix and `--finish` land together, so one probe covers both halves. `--finish` with no
 # positionals reaches the option parser and nothing else, so this costs a fork and writes nothing.
@@ -397,6 +551,7 @@ else
   echo; echo "apply-restamp-worklist: FIXTURE BROKEN" >&2; exit 2
 fi
 
+if sg cf; then
 # --- C1: a WORKLIST run leaves the stamp and the marker alone ---------------------------------
 # THE FILE CONTENT, not a row count. A manifest that says `restamp-withheld` while the stamp on
 # disk reads THEIRS is exactly the false claim this fixture exists for, and a row-count assertion
@@ -646,6 +801,9 @@ else
   bad "CWD driven from / the withheld stamp did not reproduce (stamp '$(stamp_ver "$C_CWD")', marker $(marker "$C_CWD")). Some path above resolves from the process cwd, so a green run from the repo root says nothing about a consumer's"
 fi
 
+fi  # ---- end of unit cf
+
+if sg u; then
 # --- U1-U4: union-gate condition (1) is DRIVEN by apply.sh, not narrated at it ----------------
 # SKILL.md step 8 lets apply write only after `emit-report.sh --verify` exits 0. That was prose,
 # and `theirs` was an argument the executing session supplied — so a session verifying the report
@@ -657,14 +815,6 @@ fi
 # into `handback`, and a non-zero hand-back withholds the re-stamp. A DECISION on either arm
 # would withhold it on every apply that has no report — which is every other fixture — and a
 # withheld stamp with the marker down is the wedge this whole file exists to prevent.
-EMIT="$REC/emit-report.sh"
-mk_report() { # mk_report <consumer> <theirs-to-render-at>
-  mkdir -p "$1/_bmad-output/ai-dlc-update" || return 1
-  { printf '# reconcile report (fixture)\n\n'
-    bash "$EMIT" "$DIST" "$BASE" "$1" "$2" 2>/dev/null
-  } > "$1/_bmad-output/ai-dlc-update/reconcile-report.md"
-}
-
 C_U1="$WORK/cons-u1"; C_U2="$WORK/cons-u2"; C_U3="$WORK/cons-u3"; C_U4="$WORK/cons-u4"
 for c in "$C_U1" "$C_U2" "$C_U3"; do
   mk_consumer "$c" green || { echo "FIXTURE BROKEN — could not build a union-gate consumer" >&2; exit 2; }
@@ -742,47 +892,6 @@ fi
 # STILL A REFUSAL. The four conjuncts are asserted in TWO arms on purpose. A gate that refuses
 # and a gate that refuses for the right reason are different claims, and the mutants below kill
 # them separately: A1 leaves the refusal and takes the diagnosis, A2 takes the refusal.
-u5_seed_blocker() {
-  mkdir -p "$1/.claude/skills/ai-dlc/overrides" || return 1
-  cat > "$1/.claude/skills/ai-dlc/overrides/probe.md" <<'U5OVR'
----
-shadows: core/rules/nonexistent.md#Nope
-base_sha: deadbeefdeadbeefdeadbeefdeadbeefdeadbeef
-reason: probe
----
-
-## Nope
-
-probe body
-U5OVR
-}
-u5_build() { # u5_build <consumer> — approve WITH the blocker, then resolve it
-  mk_consumer "$1" green || return 1
-  u5_seed_blocker "$1" || return 1
-  mk_report "$1" "$THEIRS" || return 1
-  rm -rf "$1/.claude/skills/ai-dlc/overrides"
-}
-run_apply_err() { bash "$1" "$DIST" "$BASE" "$2" "$THEIRS" 2>"$3"; }
-# u5_score <apply-path> -> "<rc>|<stamp>|<marker>|<CAUSE|->|<REMEDY|->|<FWD|->"
-# PRESENCE-SHAPED IN EVERY FIELD, and a fresh consumer per drive so no arm reads a previous
-# one's leftovers.
-#
-# FWD IS THE FORWARDED STDERR, and it is keyed on the two things only the forward produces: a
-# `cause:` LINE at --verify's own indent, and at least one `<`/`>` diff line. The refusal message
-# itself interpolates the cause TEXT, so a `BLOCKERS-RESOLVED` conjunct is satisfied whether or
-# not the forward happened; and the message ends by telling the operator to read a diff, which
-# without the forward apply.sh has discarded — a pointer to a tool they must re-run.
-u5_score() {
-  local a="$1" c="$WORK/u5-$$-$RANDOM" e rc
-  u5_build "$c" || { echo "BROKEN|||||"; return; }
-  e="$c/stderr.txt"
-  run_apply_err "$a" "$c" "$e" >/dev/null; rc=$?
-  printf '%s|%s|%s|%s|%s|%s\n' "$rc" "$(stamp_ver "$c")" "$(marker "$c")" \
-    "$(grep -q 'BLOCKERS-RESOLVED' "$e" && echo CAUSE || echo -)" \
-    "$(grep -qF "re-render the region with emit-report.sh $DIST $BASE $c $THEIRS" "$e" \
-       && grep -q 're-run apply with the same four arguments' "$e" && echo REMEDY || echo -)" \
-    "$(grep -qE '^[[:space:]]*cause: ' "$e" && grep -qE '^[<>] ' "$e" && echo FWD || echo -)"
-}
 
 C_U5="$WORK/cons-u5"
 mk_consumer "$C_U5" green || { echo "FIXTURE BROKEN — could not build the U5 consumer" >&2; exit 2; }
@@ -822,15 +931,10 @@ case "$U5" in
   *)       bad "U5 the refusal did not forward --verify's stderr ($U5) — the message quotes the cause text and then tells the operator to read a diff apply.sh discarded, which is a pointer to nothing" ;;
 esac
 
+fi  # ---- end of unit u
+
+if sg mut; then
 # --- MUTANTS ----------------------------------------------------------------------------------
-# Each is a COPY of the whole reconcile directory — apply.sh `eval`s map_consumer() out of its
-# sibling preclassify.sh and shells to retired-tokens.sh and unregistered-drift.sh, so a lone
-# script copy dies before printing anything — guarded by `cmp -s` so an edit that matched nothing
-# cannot pass as a mutation, and aimed at ONE arm.
-build_rec() { # build_rec <dir>
-  mkdir -p "$1" && cp "$REC"/* "$1"/ 2>/dev/null && [ -f "$1/apply.sh" ]
-}
-# Every mutant verdict is PRESENCE-shaped: a mutant that emits nothing must not score as a kill.
 mut_stamp()  { # mut_stamp <rec-dir> <mode> <hrv|-> [flag...] -> "<ver>|<marker>|<withheld?>|<driver?>"
   local rec="$1" mode="$2" hrv="$3"; shift 3
   local c="$WORK/m-$$-$RANDOM"
@@ -859,12 +963,6 @@ else
   bad "CONTROL could not stage a copy of $REC — every mutant verdict below is unreadable"
 fi
 
-# mut <n> <label> <arm-it-must-kill> <transform-command...> reading apply.sh on stdin
-mut_apply() { # mut_apply <dir> ; transform reads $REC/apply.sh from stdin, writes stdout
-  build_rec "$1" || return 1
-  cat > "$1/apply.sh"
-  ! cmp -s "$REC/apply.sh" "$1/apply.sh"
-}
 
 # --- m1: the guard reverted to `mech_fail` alone — the unfixed program. Must die on C1. -------
 if sed 's/^if \[ "$mech_fail" -gt 0 \].*$/if [ "$mech_fail" -gt 0 ]; then/' "$REC/apply.sh" \
@@ -1265,6 +1363,9 @@ else
   bad "A3 did not apply — apply.sh no longer forwards --verify's stderr with \`printf '%s\\n' \"\$_ug_verr\" >&2\`, so this mutant proves nothing. Re-anchor it on the current spelling."
 fi
 
+fi  # ---- end of unit mut
+
+if sg t; then
 # --- T1-T4: transient_ignore_row() DISCRIMINATES, on the two states where a wrong row does not --
 #
 # WHY HERE AND NOT IN transient-ignore-block. That fixture's subject is the RENDERER; this one
@@ -1494,6 +1595,9 @@ else
   fi
 fi
 
+fi  # ---- end of unit t
+
+if sg bl; then
 # ==============================================================================================
 # BL-276 -- THE TWO ROUTING ROWS, AND THE SITING THAT KEEPS THE FINISHER ABLE TO EXIT
 # ==============================================================================================
@@ -2098,6 +2202,9 @@ fi
 fi  # ---- end of the BL-S0 subject probe -------------------------------------------------------
 fi  # ---- end of the BL-276 block ------------------------------------------------------------
 
+fi  # ---- end of unit bl
+
+if sg hr; then
 # ==============================================================================================
 # BL-292 -- hook_registration_row() READS BOTH OF THE VALIDATOR'S FAILURE LISTS
 # ==============================================================================================
@@ -2155,16 +2262,6 @@ fi  # ---- end of the BL-276 block ---------------------------------------------
 # the stop and the stop covers the switch; removing either alone changes no row. That is recorded
 # in apply.sh beside the parse; a seed that separates them needs a validator section that does
 # not exist yet.
-HR_VAL_SRC=""
-for cand in "$ROOT/core/scripts/validate-hook-registration.sh" "$ROOT/scripts/ai-dlc/validate-hook-registration.sh"; do
-  [ -f "$cand" ] && HR_VAL_SRC="$cand" && break
-done
-HR_SKIP=""
-if [ -z "$HR_VAL_SRC" ] || [ ! -f "$REC/settings-merge.sh" ]; then
-  HR_SKIP="the hook-registration validator or reconcile/settings-merge.sh is not on this tree (validator='${HR_VAL_SRC:-<none>}')"
-elif ! command -v python3 >/dev/null 2>&1; then
-  HR_SKIP="python3 is not on PATH, so the real validator cannot run and every world would read as unparsed"
-fi
 
 # hr_json <names> -> a settings document registering ai-dlc-hra-<name>.sh for each name
 hr_json() {
@@ -2456,6 +2553,9 @@ fi
 fi  # ---- end of HR_PRESENT
 fi  # ---- end of the BL-292 block
 
+fi  # ---- end of unit hr
+
+if sg hu; then
 # ==============================================================================================
 # BL-103 -- AN UNREGISTERED ai-dlc- HOOK THEIRS NEITHER SHIPS NOR REGISTERS GETS ITS OWN ROW
 # ==============================================================================================
@@ -2616,6 +2716,9 @@ hu_try HU-M4 "$WORK/hu-m4" 'say WORKLIST hook-unshipped' 'say NOTE hook-unshippe
 hu_try HU-M5 "$WORK/hu-m5" '  hr_names="$hr_merge_names"' '  :' "0 1 1 1" "the settings-merge list not narrowed"
 fi  # ---- end of the BL-103 block
 
+fi  # ---- end of unit hu
+
+if sg vf; then
 # ==============================================================================================
 # VF -- `--finish` VERIFIES THE TREE IT STAMPS
 # ==============================================================================================
@@ -2983,7 +3086,9 @@ else
 fi
 fi  # ---- end of VF_PRESENT
 fi  # ---- end of the VF block
+fi  # ---- end of unit vf
 
+echo "  [shard $GROUP of apply-restamp-worklist: $asserts assertions, $fails failed]"
 echo
 if [ "$fails" -eq 0 ]; then
   echo "PASS  apply-restamp-worklist: a run that hands back a WORKLIST or a DECISION row leaves"
@@ -2997,5 +3102,5 @@ if [ "$fails" -eq 0 ]; then
   echo "      in-flight record cannot answer."
   exit 0
 fi
-echo "apply-restamp-worklist: FAIL ($fails)"
+echo "$NAME: FAIL ($fails)"
 exit 1

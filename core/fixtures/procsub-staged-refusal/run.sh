@@ -56,11 +56,83 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 OWN="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
+# ---------------------------------------------------------------------------- shards ----
+# THIS FILE IS THREE SHARDS OF ONE FIXTURE, AND THE SPLIT IS A SCHEDULING BOUNDARY, NOT A SUBJECT
+# BOUNDARY. Every section from the arm table onward is a UNIT guarded by `if sg <unit>; then ... fi`;
+# `--group <x>` runs the units dealt to shard <x>. The siblings `procsub-staged-refusal-{b,c}/run.sh`
+# are one-line drivers that `exec bash` this file with their group (the readset-skip shape), so the
+# pre-push pool can start each on its own and the suite's makespan stops tracking one 2600-line
+# directory. No `--group` runs shard 'a', so `bash core/fixtures/procsub-staged-refusal/run.sh` is shard a.
+#
+# THE SEED, EVERY ARM FUNCTION, THE CALIBRATIONS, THE MUTATION HARNESS AND THE SUBJECT COPY ARE NOT
+# UNITS: every shard pays them, because a shard that skipped them would score its mutants against a
+# harness that never ran. A shard other than 'a' refuses a foreign tree root, since the spelling arm and
+# the mutants are the units that need this repository's own tree.
+#
+# THE COVERAGE JOIN runs in EVERY shard before anything else: the declared units are DERIVED from this
+# file's own guard lines, the dealt lists must be disjoint and their union must equal the declared set
+# exactly, so no unit can fall out of every shard, and every declared shard must have a driver directory.
+# The join proves it can fire first, on a seeded duplicate and a seeded omission.
+SHARDS="a b c"
+UNITS_a="arms spell pf r5 lh"
+UNITS_b="bl b3 rh ctl"
+UNITS_c="mut"
+GROUP=a
+if [ "${1:-}" = "--group" ]; then
+  GROUP="${2:-}"
+  [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }
+  shift 2
+fi
+case " $SHARDS " in
+  *" $GROUP "*) ;;
+  *) echo "FIXTURE ERROR: unknown shard '$GROUP' (known: $SHARDS)" >&2; exit 2 ;;
+esac
+eval "MINE=\"\${UNITS_$GROUP:-}\""
+NAME="procsub-staged-refusal"; [ "$GROUP" = a ] || NAME="procsub-staged-refusal-$GROUP"
+[ -n "$MINE" ] || { echo "FIXTURE ERROR: shard '$GROUP' has no UNITS_$GROUP list; a shard dealt nothing passes everything it never checked" >&2; exit 2; }
+sg() { case " $MINE " in *" $1 "*) return 0 ;; esac; return 1; }
+SELF="$0"
+[ -f "$SELF" ] || { echo "FIXTURE ERROR: cannot read $SELF for the coverage join" >&2; exit 2; }
+partition_ok() { # <declared ids file> <dealt ids file> -> 0 when dealt is disjoint and covers declared exactly
+  local dup miss extra
+  dup="$(sort "$2" | uniq -d | tr '\n' ' ')"
+  miss="$(sort -u "$2" | comm -23 <(sort -u "$1") - | tr '\n' ' ')"
+  extra="$(sort -u "$2" | comm -13 <(sort -u "$1") - | tr '\n' ' ')"
+  [ -z "$dup$miss$extra" ] && return 0
+  echo "dealt twice: {${dup% }} dealt to no shard: {${miss% }} dealt but not declared: {${extra% }}"
+  return 1
+}
+JW="$(mktemp -d "${TMPDIR:-/tmp}/procsub-staged-refusal-join.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
+printf '%s\n' u1 u2 u3 > "$JW/pd"; printf '%s\n' u1 u2 u2 u3 > "$JW/pdup"; printf '%s\n' u1 u3 > "$JW/pmiss"; printf '%s\n' u3 u1 u2 > "$JW/pok"
+if partition_ok "$JW/pd" "$JW/pdup" >/dev/null || partition_ok "$JW/pd" "$JW/pmiss" >/dev/null \
+   || ! partition_ok "$JW/pd" "$JW/pok" >/dev/null; then
+  rm -rf "$JW"; echo "FIXTURE ERROR: the coverage join's self-probe did not discriminate (duplicate, omission, exact)" >&2; exit 2
+fi
+sed -n 's/^[[:space:]]*if sg \([a-z0-9_][a-z0-9_]*\); then$/\1/p' "$SELF" > "$JW/declared"
+for _s in $SHARDS; do eval "printf '%s\n' \${UNITS_$_s}" | tr ' ' '\n'; done | grep . > "$JW/dealt"
+ndecl="$(grep -c . "$JW/declared")" || ndecl=0
+ndupdecl="$(sort "$JW/declared" | uniq -d | grep -c .)" || ndupdecl=0
+if [ "$ndecl" -eq 0 ] || [ "$ndupdecl" -ne 0 ]; then
+  rm -rf "$JW"; echo "FIXTURE ERROR: $ndecl unit guards derived from $SELF ($ndupdecl declared twice)" >&2; exit 2
+fi
+if ! _why="$(partition_ok "$JW/declared" "$JW/dealt")"; then
+  rm -rf "$JW"; echo "FIXTURE ERROR: the shard partition does not cover the guarded units exactly -- $_why" >&2; exit 2
+fi
+for _s in $SHARDS; do
+  [ "$_s" = a ] && continue
+  _drv="$HERE/../procsub-staged-refusal-$_s/run.sh"
+  if [ ! -f "$_drv" ] || ! grep -qF -- "--group $_s" "$_drv"; then
+    rm -rf "$JW"; echo "FIXTURE ERROR: shard '$_s' is declared but $_drv does not drive it" >&2; exit 2
+  fi
+done
+rm -rf "$JW"
+echo "  [J0] coverage join: $ndecl units derived from the sg guards, dealt disjointly across {$SHARDS}, union exact; this shard runs {$MINE}"
 TREE="${1:-$OWN}"
 TREE="$(cd "$TREE" 2>/dev/null && pwd || true)"
 [ -n "$TREE" ] && [ -f "$TREE/core/scripts/validate-ci-gates.sh" ] \
   || { echo "FIXTURE ERROR: no core/scripts/validate-ci-gates.sh under '${1:-$OWN}'" >&2; exit 2; }
 SELF_TREE=0; [ "$TREE" = "$OWN" ] && SELF_TREE=1
+if [ "$SELF_TREE" -ne 1 ] && [ "$GROUP" != a ]; then echo "FIXTURE ERROR: shard '$GROUP' runs only against this fixture's own tree, not '$TREE' -- a shard that cannot run its units passes everything it never checked" >&2; exit 2; fi
 SC="$TREE/core/scripts"
 RC_="$TREE/core/skills/ai-dlc-update/reconcile"
 LEX="$TREE/core/skills/ai-dlc/steps/stories-test-strategy.md"
@@ -1490,10 +1562,194 @@ S_RLP="$RC_/retired-layer-passage.sh"; S_RLC="$RC_/retired-layer-contract.sh"
 S_RT="$RC_/retired-tokens.sh"; S_RO="$RC_/readopt-override.sh"; S_UD="$RC_/unregistered-drift.sh"
 S_MG="$SC/migrate-artifact-paths.sh"; S_AC="$SC/validate-ac-falsifiability.sh"; S_LE="$SC/validate-layer-entries.sh"
 S_LD="$RC_/layer-drift.sh"; S_RLT="$RC_/retired-layer-token.sh"; S_PB="$SC/validate-provenance-block.sh"; S_CV="$SC/validate-adversarial-convergence.sh"
+S_HB="$RC_/hard-blockers.sh"; S_WS="$RC_/warn-shadowed-local-validators.sh"; S_DD="$RC_/derivation-differential.sh"
+S_RD="$RC_/register-drift.sh"; S_SM="$RC_/settings-merge.sh"; S_AD="$RC_/adopt-extension-checks.sh"
+S_LIB="$RC_/lib.sh"; S_PC="$RC_/preclassify.sh"
+S_SUG="$RC_/self-update-gate.sh"
+S_RF="$RC_/retired-fixtures.sh"
 
 run_arm() { # run_arm <fn> <script> <text>
   if "$1" "$2"; then ok "$1: $3"; else bad "$1: $3 -- $ARM_WHY"; fi
 }
+echo "== a staging write that fails ($FBASH, trap '' XFSZ; ulimit -f): the calibration, which never runs a subject =="
+if [ -z "$FX_BV" ] || [ "$FX_BLK" -le 0 ] || [ -z "$FXRT_B" ] || [ -z "$FXRT_T" ]; then
+  bad "FIXTURE BROKEN: the staging-write cells need $FBASH (version '$FX_BV') and a measurable ulimit -f block (measured '$FX_BLK' B); every forced cell below is unreadable"
+else
+  _rtsz="$(fx_sz "$FW/rt-payload")"
+  if [ "$_rtsz" -ne "$FX_L" ]; then
+    bad "FIXTURE BROKEN: calibration [retired-tokens]: the z.sh blob is $_rtsz B, not exactly the $FX_L-byte limit, so the one-byte window (git show writes L, a here-string needs L+1) is not the one tested"
+    FX_CAL_FAILS=$((FX_CAL_FAILS+1))
+  else
+    ok "calibration [retired-tokens]: the z.sh blob is exactly the limit, $_rtsz B (wc -c) = $FX_N x $FX_BLK"
+  fi
+  fx_cal hard-blockers "$FX_N" "$FW/hb-payload"
+  fx_cal relabel "$FX_RX_N" "$FW/rx-payload" 2
+  fx_cal retired-layer-contract "$FX_N" "$RFC/.claude/skills/ai-dlc/extensions/e.md" 64
+  fx_cal warn-shadowed-closed "$FX_N" "$FW/ws-payload" "$(fx_sz "$FW/ws6-payload")"
+  fx_cal warn-shadowed-emitter 2 "$FW/ws6-payload" 16
+  fx_cal retired-tokens "$FX_N" "$FW/rt-payload" "$FX_L"
+  # The spellings file is the payload; the retired-path set and the base tree listing (its superset)
+  # must land whole, or the copy refuses before the site under test.
+  fx_cal retired-layer-contract-spellings "$FX_RLS_N" "$FW/rls-payload" \
+    "$(( ${#RLS_P} + 1 ))" "$(git -C "$RLSD" ls-tree -r --name-only "$RLS_BASE" | wc -c | tr -d ' ')"
+  fx_cal relabel-order "$FX_RX_N" "$FW/rx-payload" "$(fx_sz "$FW/rxo-nums")"
+  fx_cal readopt-override "$FX_RO_N" "$FW/ro-payload" "$(git -C "$ROD" show "${RO_BASE}:core/skills/ai-dlc/steps/x.md" | wc -c | tr -d ' ')"
+  # BL-360's R-H worlds: the one oversize payload each, and every other input the fixed script stages.
+  _ro2c="$(git -C "$ROD2" show "${RO2_THEIRS}:core/skills/ai-dlc/steps/x.md" | wc -c | tr -d ' ')"
+  fx_cal register-drift-section "$(fx_lim "$FW/rds-payload")" "$FW/rds-payload" \
+    "$(fx_sz "$RDS/cons/.claude/team-roles/x.md")" "$(fx_sz "$FW/rdo-payload")"
+  fx_cal register-drift-override "$RDO_N" "$FW/rdo-payload" "$(fx_sz "$RDS/cons/.claude/team-roles/x.md")"
+  fx_cal register-drift-headings "$(fx_lim "$FW/rdh-payload")" "$FW/rdh-payload"
+  fx_cal register-drift-wholefile "$(fx_lim "$FW/rdw-payload")" "$FW/rdw-payload" \
+    "$(fx_sz "$RDW/cons/.claude/team-roles/x.md")" "$(fx_sz "$RDW/dist/core/team-roles/x.md")"
+  fx_cal settings-merge "$(fx_lim "$FW/smw-payload")" "$FW/smw-payload"
+  fx_cal adopt-extension-checks "$(fx_lim "$FW/adw-payload")" "$FW/adw-payload"
+  fx_cal readopt-dossier 1 "$ROF2" "$_ro2c"
+  fx_cal readopt-merge 1 "$FW/rom-payload" "$_ro2c" "$(fx_sz "$FW/rom-fm")" "$(fx_sz "$FW/rom-body")"
+  [ "$FX_CAL_FAILS" -eq 0 ] && FX_READY=1
+fi
+echo "== lib.sh's awk emitters under ulimit -f 0: the calibration, which never sources lib.sh =="
+# Both directions, in the capture shape the cells use: a heredoc captured under the limit FAILS with
+# bash's own line, and a printf literal captured under the same limit lands whole.
+_emc_h="$FW/em-cal-heredoc"; _emc_p="$FW/em-cal-printf"; _emc_hr=0; _emc_pr=0
+if [ -z "$FX_BV" ]; then
+  bad "FIXTURE BROKEN: the emitter cells need $FBASH, which did not run"
+else
+  "$FBASH" -c 'trap "" XFSZ; ulimit -f 0 || exit 97; x="$(cat <<EOF
+calibration-heredoc-body
+EOF
+)"; r=$?; printf "%s\n" "$x"; exit "$r"' 2>&1 | cat > "$_emc_h" || _emc_hr=$?
+  "$FBASH" -c 'trap "" XFSZ; ulimit -f 0 || exit 97; x="$(printf "%s\n" calibration-printf-body)"; r=$?; printf "%s\n" "$x"; exit "$r"' 2>&1 | cat > "$_emc_p" || _emc_pr=$?
+  if [ "$_emc_hr" -ne 0 ] && [ "$_emc_hr" -ne 97 ] && grep -q 'cannot create temp file for here document' "$_emc_h" \
+     && ! grep -q 'calibration-heredoc-body' "$_emc_h" \
+     && [ "$_emc_pr" -eq 0 ] && [ "$(cat "$_emc_p")" = calibration-printf-body ]; then
+    ok "calibration [lib emitters]: under ulimit -f 0 ($FBASH $FX_BV) a captured heredoc fails rc=$_emc_hr with no body, and a captured printf literal lands whole"
+    if em_ref nrm_awk 'function nrm(s)' && em_ref ledger_entry_awk 'function ledger_entry_shape(' \
+       && em_ref backlog_entry_label_awk 'function backlog_entry_label('; then
+      EM_READY=1
+      ok "calibration [lib emitters]: the tree's three emitters, unforced, emit $(wc -c < "$FW/em-ref.nrm_awk" | tr -d ' ') / $(wc -c < "$FW/em-ref.ledger_entry_awk" | tr -d ' ') / $(wc -c < "$FW/em-ref.backlog_entry_label_awk" | tr -d ' ') B, each carrying its function"
+    else
+      bad "FIXTURE BROKEN: an unforced emitter of the tree's lib.sh did not emit its function (rc=$EM_RC)"
+    fi
+  else
+    bad "FIXTURE BROKEN: calibration [lib emitters]: heredoc rc=$_emc_hr [$(head -1 "$_emc_h" | cut -c1-80)], printf rc=$_emc_pr [$(head -1 "$_emc_p" | cut -c1-40)] -- this host cannot express the defect"
+  fi
+fi
+# ================================================================================================
+# LH -- NO HEREDOC OPENER IN lib.sh. The emitters are literals; a `<<WORD`, `<<-WORD`, `<<'WORD'`
+# or `<< "WORD"` on a line that is not a whole-line comment reintroduces the staging write. Runs of
+# three or more `<` are removed first, so a here-string (`<<<`) and an echoed `<<<<<<<` are not
+# openers; an arithmetic `<<2` is not, because a delimiter opens with a letter or `_`. FP set,
+# measured on lib.sh at the tip: it carries no `<<` of any kind, so the grammar is wider than the
+# corpus needs and costs nothing there; at b0c310a3 it reads exactly the three `cat <<'AWK'` lines.
+# ================================================================================================
+LH_AWK='/^[[:blank:]]*#/ { next }
+  { n++; l = $0; gsub(/<<<+/, "", l)
+    if (l ~ /<<-?[[:blank:]]*[\047"]?[A-Za-z_]/) { h++; at = at " " FNR } }
+  END { printf "%d %d%s\n", n, h, at }'
+lh_scan() { awk "$LH_AWK" "$1"; }
+arm_lh() { local r n h
+  r="$(lh_scan "$1")" || { ARM_WHY="awk could not scan $1"; return 1; }
+  n="${r%% *}"; h="${r#* }"; h="${h%% *}"
+  ARM_WHY="$n non-comment line(s) scanned, $h heredoc opener(s)$( [ "$h" -gt 0 ] && printf ' at%s' "${r#* * }" )"
+  [ "$n" -gt 0 ] && [ "$h" -eq 0 ]; }
+RH_FILES="register-drift.sh settings-merge.sh readopt-override.sh adopt-extension-checks.sh"
+# ================================================================================================
+# THE 322ef42c DIFFERENTIAL. Every staging-write cell and r5 is PRESENCE- or count-shaped, and each
+# is scored here against the copy of its script at 322ef42c -- the base these cells were built
+# against -- staged beside the tree's lib.sh. Each MUST FAIL there, which is the proof it can fire.
+# hard-blockers.sh and warn-shadowed-local-validators.sh fed their loops from `<<EOF` heredocs, not
+# `<<<`, so r5 does not score them; their forced cells do.
+# ================================================================================================
+# mkmut <src> <dst> <find> <replace> [<find> <replace>]... -- every find must match EXACTLY once.
+mkmut() {
+  python3 - "$@" <<'PY'
+import sys
+src, dst, pairs = sys.argv[1], sys.argv[2], sys.argv[3:]
+s = open(src, encoding="utf-8").read()
+for i in range(0, len(pairs), 2):
+    f, r = pairs[i], pairs[i + 1]
+    n = s.count(f)
+    if n != 1:
+        print("anchor %d matched %d time(s)" % (i // 2 + 1, n)); sys.exit(1)
+    s = s.replace(f, r)
+open(dst, "w", encoding="utf-8").write(s)
+PY
+}
+# THE HEREDOC EMITTERS, restored one emitter at a time: the `printf` literal becomes `cat <<'AWK'`
+# again, and ledger_entry_awk's body apostrophe loses its `'\''` spelling. Used by the EM-* mutants
+# and, all three at once, to build HL -- a reconcile/ copy whose lib.sh can fail to emit, which is
+# the only place warn-shadowed-local-validators.sh's emitter refusal still has a subject.
+EM_NRM=( $'  printf \'%s\\n\' \'function nrm(s){' $'  cat <<\'AWK\'\nfunction nrm(s){'
+         $'return s }\'\n}' $'return s }\nAWK\n}' )
+EM_LEDGER=( $'  printf \'%s\\n\' \'function ledger_entry_id(label) {' $'  cat <<\'AWK\'\nfunction ledger_entry_id(label) {'
+            $'consumer\'\\\'\'s' $'consumer\'s'
+            $'  return sh\n}\'\n}' $'  return sh\n}\nAWK\n}' )
+EM_LABEL=( $'  printf \'%s\\n\' \'function backlog_entry_label(l,' $'  cat <<\'AWK\'\nfunction backlog_entry_label(l,'
+           $'  return ""\n}\'\n}' $'  return ""\n}\nAWK\n}' )
+HL="$W/hl"; HL_OK=0
+if cp -R "$RC_" "$HL" && _hl_why="$(mkmut "$RC_/lib.sh" "$HL/lib.sh" "${EM_NRM[@]}" "${EM_LEDGER[@]}" "${EM_LABEL[@]}")" \
+   && bash -n "$HL/lib.sh" && [ "$(lh_scan "$HL/lib.sh" | cut -d' ' -f2)" -eq 3 ]; then
+  HL_OK=1; ok "heredoc lib.sh (HL): all three emitters restored to cat <<'AWK', it parses, and LH reads exactly 3 openers in it"
+else
+  bad "heredoc lib.sh (HL) could not be built: ${_hl_why:-copy, parse or LH count failed}"
+fi
+# ================================================================================================
+# MUTANTS. One copy of each subject directory; each mutant is a sibling file in that copy, so the
+# script finds lib.sh, setup-sites.md, preclassify.sh and artifact-path-config.sh beside it.
+# ================================================================================================
+MT="$W/mt"; mkdir -p "$MT"
+cp -R "$SC" "$MT/scripts" && cp -R "$RC_" "$MT/reconcile" && cp -R "$TREE/core/schemas" "$MT/schemas" \
+  || { echo "FIXTURE BROKEN: could not copy the subject directories" >&2; exit 2; }
+# The heredoc-lib copy is shared: the control (shard b) and the WS-EMITTER mutant (shard c) both drive it.
+if [ "$HL_OK" -eq 1 ]; then cp -R "$HL" "$MT/hl" || { echo "FIXTURE BROKEN: could not copy the heredoc lib.sh directory" >&2; exit 2; }; fi
+# mutant <id> <dir> <src-basename> <healthy-arm> "<arms it must FAIL>" <find> <replace> ...
+mutant() {
+  local id="$1" dir="$2" src="$3" healthy="$4" arms="$5" m why a survived=""
+  shift 5
+  m="$MT/$dir/_m_$id.sh"
+  if ! why="$(mkmut "$MT/$dir/$src" "$m" "$@")"; then bad "mutant $id DID NOT APPLY ($why)"; return; fi
+  if cmp -s "$MT/$dir/$src" "$m"; then bad "mutant $id DID NOT APPLY (the copy is byte-identical)"; return; fi
+  bash -n "$m" 2>/dev/null || { bad "mutant $id DID NOT APPLY (the mutated copy does not parse)"; return; }
+  if ! "$healthy" "$m"; then bad "mutant $id: its healthy twin $healthy failed on the mutant, so no kill can be read -- $ARM_WHY"; return; fi
+  for a in $arms; do "$a" "$m" && survived="$survived $a"; done
+  if [ -z "$survived" ]; then ok "mutant $id killed by:$(printf ' %s' $arms)"
+  else bad "mutant $id SURVIVED$survived -- that arm cannot see its own site"; fi
+}
+# libmutant <id> <script> <healthy-arm> "<arms>" <find> <replace>... -- mutate reconcile/lib.sh.
+# Every reconcile script sources "$SELF/lib.sh", so a lib.sh mutant is a WHOLE copy of the directory
+# whose lib.sh is mutated, and <script> is driven from inside that copy. The copy is asserted to
+# carry the mutation before any arm is read; `libcontrol` runs the same copy mechanics unmutated.
+libmutant() {
+  local id="$1" scr="$2" healthy="$3" arms="$4" d why a survived=""
+  shift 4
+  d="$MT/lib_$id"
+  cp -R "$MT/reconcile" "$d" || { bad "mutant $id DID NOT APPLY (could not copy reconcile/)"; return; }
+  if ! why="$(mkmut "$MT/reconcile/lib.sh" "$d/lib.sh" "$@")"; then bad "mutant $id DID NOT APPLY ($why)"; return; fi
+  if cmp -s "$MT/reconcile/lib.sh" "$d/lib.sh"; then bad "mutant $id DID NOT APPLY (lib.sh is byte-identical)"; return; fi
+  bash -n "$d/lib.sh" 2>/dev/null || { bad "mutant $id DID NOT APPLY (the mutated lib.sh does not parse)"; return; }
+  if ! "$healthy" "$d/$scr"; then bad "mutant $id: its healthy twin $healthy failed on the mutant, so no kill can be read -- $ARM_WHY"; return; fi
+  for a in $arms; do "$a" "$d/$scr" && survived="$survived $a"; done
+  if [ -z "$survived" ]; then ok "mutant $id (lib.sh) killed by:$(printf ' %s' $arms)"
+  else bad "mutant $id SURVIVED$survived -- that arm cannot see its own site"; fi
+}
+libcontrol() { # libcontrol <script> <arms...>
+  local scr="$1" d="$MT/lib_ctl" a failed=""; shift
+  [ -d "$d" ] || cp -R "$MT/reconcile" "$d" || { bad "control lib_ctl: could not copy reconcile/"; return; }
+  cmp -s "$MT/reconcile/lib.sh" "$d/lib.sh" || { bad "control lib_ctl: the copied lib.sh differs"; return; }
+  for a in "$@"; do "$a" "$d/$scr" || failed="$failed $a"; done
+  if [ -z "$failed" ]; then ok "control lib_ctl/$scr: an unmutated directory copy passes$(printf ' %s' "$@")"
+  else bad "control lib_ctl/$scr: an UNMUTATED directory copy failed$failed -- the lib mutant harness is broken"; fi
+}
+# The unmutated controls: the same copy mechanics, no edit, and every arm must still PASS.
+control() { # control <dir> <src> <arms...>
+  local dir="$1" src="$2" a failed=""; shift 2
+  cp "$MT/$dir/$src" "$MT/$dir/_m_ctl.sh"
+  for a in "$@"; do "$a" "$MT/$dir/_m_ctl.sh" || failed="$failed $a"; done
+  if [ -z "$failed" ]; then ok "control $src: an unmutated copy passes$(printf ' %s' "$@")"
+  else bad "control $src: an UNMUTATED copy failed$failed -- the mutant harness itself is broken"; fi
+}
+if sg arms; then
 echo "== healthy twins (same seed, no stub, the ordinary verdict) =="
 run_arm arm_ci_healthy  "$S_CI"  "validate-ci-gates reads 1 declared gate, 0 dormant, exit 0"
 run_arm arm_rx_healthy  "$S_RX"  "relabel previews the core-number collision, exit 1"
@@ -1578,44 +1834,6 @@ run_arm arm_rlc_shapes   "$S_RLC" "retired-layer-contract: shapes_of's grep exit
 run_arm arm_rlc_tokens   "$S_RLC" "retired-layer-contract: tokens_of's grep exits 2 on a layer file -> exit 2, not a lost row"
 run_arm arm_ld_fxv       "$S_LD"  "layer-drift: sup_measure's grep -Fxv exits 2 -> exit 1 refusal, not '0 of yours appear nowhere'"
 
-S_HB="$RC_/hard-blockers.sh"; S_WS="$RC_/warn-shadowed-local-validators.sh"; S_DD="$RC_/derivation-differential.sh"
-echo "== a staging write that fails ($FBASH, trap '' XFSZ; ulimit -f): the calibration, which never runs a subject =="
-if [ -z "$FX_BV" ] || [ "$FX_BLK" -le 0 ] || [ -z "$FXRT_B" ] || [ -z "$FXRT_T" ]; then
-  bad "FIXTURE BROKEN: the staging-write cells need $FBASH (version '$FX_BV') and a measurable ulimit -f block (measured '$FX_BLK' B); every forced cell below is unreadable"
-else
-  _rtsz="$(fx_sz "$FW/rt-payload")"
-  if [ "$_rtsz" -ne "$FX_L" ]; then
-    bad "FIXTURE BROKEN: calibration [retired-tokens]: the z.sh blob is $_rtsz B, not exactly the $FX_L-byte limit, so the one-byte window (git show writes L, a here-string needs L+1) is not the one tested"
-    FX_CAL_FAILS=$((FX_CAL_FAILS+1))
-  else
-    ok "calibration [retired-tokens]: the z.sh blob is exactly the limit, $_rtsz B (wc -c) = $FX_N x $FX_BLK"
-  fi
-  fx_cal hard-blockers "$FX_N" "$FW/hb-payload"
-  fx_cal relabel "$FX_RX_N" "$FW/rx-payload" 2
-  fx_cal retired-layer-contract "$FX_N" "$RFC/.claude/skills/ai-dlc/extensions/e.md" 64
-  fx_cal warn-shadowed-closed "$FX_N" "$FW/ws-payload" "$(fx_sz "$FW/ws6-payload")"
-  fx_cal warn-shadowed-emitter 2 "$FW/ws6-payload" 16
-  fx_cal retired-tokens "$FX_N" "$FW/rt-payload" "$FX_L"
-  # The spellings file is the payload; the retired-path set and the base tree listing (its superset)
-  # must land whole, or the copy refuses before the site under test.
-  fx_cal retired-layer-contract-spellings "$FX_RLS_N" "$FW/rls-payload" \
-    "$(( ${#RLS_P} + 1 ))" "$(git -C "$RLSD" ls-tree -r --name-only "$RLS_BASE" | wc -c | tr -d ' ')"
-  fx_cal relabel-order "$FX_RX_N" "$FW/rx-payload" "$(fx_sz "$FW/rxo-nums")"
-  fx_cal readopt-override "$FX_RO_N" "$FW/ro-payload" "$(git -C "$ROD" show "${RO_BASE}:core/skills/ai-dlc/steps/x.md" | wc -c | tr -d ' ')"
-  # BL-360's R-H worlds: the one oversize payload each, and every other input the fixed script stages.
-  _ro2c="$(git -C "$ROD2" show "${RO2_THEIRS}:core/skills/ai-dlc/steps/x.md" | wc -c | tr -d ' ')"
-  fx_cal register-drift-section "$(fx_lim "$FW/rds-payload")" "$FW/rds-payload" \
-    "$(fx_sz "$RDS/cons/.claude/team-roles/x.md")" "$(fx_sz "$FW/rdo-payload")"
-  fx_cal register-drift-override "$RDO_N" "$FW/rdo-payload" "$(fx_sz "$RDS/cons/.claude/team-roles/x.md")"
-  fx_cal register-drift-headings "$(fx_lim "$FW/rdh-payload")" "$FW/rdh-payload"
-  fx_cal register-drift-wholefile "$(fx_lim "$FW/rdw-payload")" "$FW/rdw-payload" \
-    "$(fx_sz "$RDW/cons/.claude/team-roles/x.md")" "$(fx_sz "$RDW/dist/core/team-roles/x.md")"
-  fx_cal settings-merge "$(fx_lim "$FW/smw-payload")" "$FW/smw-payload"
-  fx_cal adopt-extension-checks "$(fx_lim "$FW/adw-payload")" "$FW/adw-payload"
-  fx_cal readopt-dossier 1 "$ROF2" "$_ro2c"
-  fx_cal readopt-merge 1 "$FW/rom-payload" "$_ro2c" "$(fx_sz "$FW/rom-fm")" "$(fx_sz "$FW/rom-body")"
-  [ "$FX_CAL_FAILS" -eq 0 ] && FX_READY=1
-fi
 echo "== a staging write that fails: each cell prints the complete output or refuses, never rc 0 with a row missing or false =="
 run_arm arm_fx_hb_check  "$S_HB"  "hard-blockers --check, 200 blockers: '(200 total)' or REFUSED exit 1, never '(0 total)'"
 run_arm arm_fx_hb_print  "$S_HB"  "hard-blockers print, 200 blockers: every HARD row or REFUSED exit 1, never an empty region at rc 0"
@@ -1645,35 +1863,6 @@ if [ "$(id -u)" -eq 0 ]; then
 else
   run_arm arm_rlc_unread_layer "$S_RLC" "retired-layer-contract: a listed layer file cat cannot open refuses exit 2 naming it, no row"
 fi
-
-S_LIB="$RC_/lib.sh"; S_PC="$RC_/preclassify.sh"
-echo "== lib.sh's awk emitters under ulimit -f 0: the calibration, which never sources lib.sh =="
-# Both directions, in the capture shape the cells use: a heredoc captured under the limit FAILS with
-# bash's own line, and a printf literal captured under the same limit lands whole.
-_emc_h="$FW/em-cal-heredoc"; _emc_p="$FW/em-cal-printf"; _emc_hr=0; _emc_pr=0
-if [ -z "$FX_BV" ]; then
-  bad "FIXTURE BROKEN: the emitter cells need $FBASH, which did not run"
-else
-  "$FBASH" -c 'trap "" XFSZ; ulimit -f 0 || exit 97; x="$(cat <<EOF
-calibration-heredoc-body
-EOF
-)"; r=$?; printf "%s\n" "$x"; exit "$r"' 2>&1 | cat > "$_emc_h" || _emc_hr=$?
-  "$FBASH" -c 'trap "" XFSZ; ulimit -f 0 || exit 97; x="$(printf "%s\n" calibration-printf-body)"; r=$?; printf "%s\n" "$x"; exit "$r"' 2>&1 | cat > "$_emc_p" || _emc_pr=$?
-  if [ "$_emc_hr" -ne 0 ] && [ "$_emc_hr" -ne 97 ] && grep -q 'cannot create temp file for here document' "$_emc_h" \
-     && ! grep -q 'calibration-heredoc-body' "$_emc_h" \
-     && [ "$_emc_pr" -eq 0 ] && [ "$(cat "$_emc_p")" = calibration-printf-body ]; then
-    ok "calibration [lib emitters]: under ulimit -f 0 ($FBASH $FX_BV) a captured heredoc fails rc=$_emc_hr with no body, and a captured printf literal lands whole"
-    if em_ref nrm_awk 'function nrm(s)' && em_ref ledger_entry_awk 'function ledger_entry_shape(' \
-       && em_ref backlog_entry_label_awk 'function backlog_entry_label('; then
-      EM_READY=1
-      ok "calibration [lib emitters]: the tree's three emitters, unforced, emit $(wc -c < "$FW/em-ref.nrm_awk" | tr -d ' ') / $(wc -c < "$FW/em-ref.ledger_entry_awk" | tr -d ' ') / $(wc -c < "$FW/em-ref.backlog_entry_label_awk" | tr -d ' ') B, each carrying its function"
-    else
-      bad "FIXTURE BROKEN: an unforced emitter of the tree's lib.sh did not emit its function (rc=$EM_RC)"
-    fi
-  else
-    bad "FIXTURE BROKEN: calibration [lib emitters]: heredoc rc=$_emc_hr [$(head -1 "$_emc_h" | cut -c1-80)], printf rc=$_emc_pr [$(head -1 "$_emc_p" | cut -c1-40)] -- this host cannot express the defect"
-  fi
-fi
 echo "== lib.sh's awk emitters: each captured under ulimit -f 0 equals its unforced bytes, rc 0 =="
 run_arm arm_em_nrm    "$S_LIB" "nrm_awk under ulimit -f 0: rc 0 and byte-identical to the unforced emission"
 run_arm arm_em_ledger "$S_LIB" "ledger_entry_awk under ulimit -f 0: rc 0 and byte-identical, never an empty program"
@@ -1683,10 +1872,8 @@ run_arm arm_qa_plain "$S_RT" "retired-tokens end to end (no --bucket-rows): the 
 run_arm arm_qa_cafe  "$S_RT" "retired-tokens end to end: the non-ASCII core/scripts/caf\\303\\251.sh row stands beside plain.sh's"
 run_arm arm_qb_plain "$S_PC" "preclassify, pre-relocation consumer: plain.sh's RELOCATE-MOVE+consumer-edited row stands"
 run_arm arm_qb_cafe  "$S_PC" "preclassify, pre-relocation consumer: caf\\303\\251.sh's RELOCATE-MOVE+consumer-edited disclosure stands beside plain.sh's"
-S_SUG="$RC_/self-update-gate.sh"
 run_arm arm_qc_plain "$S_SUG" "self-update-gate arm C: the consumer-edited ASCII machinery file plain.md is carried (SELF-UPDATE-CARRY, raw path)"
 run_arm arm_qc_cafe  "$S_SUG" "self-update-gate arm C: the consumer-edited machinery file caf\\303\\251.md is carried under its RAW path beside plain.md"
-S_RF="$RC_/retired-fixtures.sh"
 run_arm arm_qd_plain "$S_RF" "retired-fixtures arm A through memo_ls_tree's fill: the ASCII dist-only orphan tests/fixtures/plain is reported"
 run_arm arm_qd_cafe  "$S_RF" "retired-fixtures arm A through memo_ls_tree's fill: the non-ASCII orphan tests/fixtures/caf\\303\\251 is reported beside plain"
 if [ "$QD_ROOT" -eq 1 ]; then
@@ -1706,6 +1893,7 @@ else
   bad "FIXTURE BROKEN -- the no-lib.sh copy of reconcile/ for the QF fallback cells could not be built"
 fi
 
+fi
 if [ "$SELF_TREE" -ne 1 ]; then
   skip "spelling arm and mutants -- they run only against this fixture's own tree, not $TREE"
   echo
@@ -1713,6 +1901,7 @@ if [ "$SELF_TREE" -ne 1 ]; then
   echo "procsub-staged-refusal: $fails assertion(s) FAILED" >&2; exit 1
 fi
 
+if sg spell; then
 # ================================================================================================
 # THE DIFF-SCOPED SPELLING ARM. Lines ADDED to shipped core/*.sh since the pin must not carry:
 #   r1  `done <<< "$(`                 a here-string of a substitution: the producer's status is lost
@@ -1790,6 +1979,8 @@ else
   fi
 fi
 
+fi
+if sg pf; then
 # ================================================================================================
 # THE PRE-FIX DIFFERENTIAL for the two BL-354 producers. The forced arms above are PRESENCE-shaped
 # (a refusal line must appear), and each is scored here against the pre-fix copy of its script,
@@ -1853,6 +2044,8 @@ else
   fi
 fi
 
+fi
+if sg r5; then
 # ================================================================================================
 # r5 -- NO NON-COMMENT HERE-STRING IN A CONVERTED FILE. Self-probe first, both directions, on a
 # seeded file: a live `<<<` at a line's start, middle and end must each count, and a comment line
@@ -1875,24 +2068,8 @@ else
 fi
 for _r5 in $R5_FILES; do run_arm arm_r5 "$RC_/$_r5" "r5: $_r5 carries no non-comment here-string"; done
 
-# ================================================================================================
-# LH -- NO HEREDOC OPENER IN lib.sh. The emitters are literals; a `<<WORD`, `<<-WORD`, `<<'WORD'`
-# or `<< "WORD"` on a line that is not a whole-line comment reintroduces the staging write. Runs of
-# three or more `<` are removed first, so a here-string (`<<<`) and an echoed `<<<<<<<` are not
-# openers; an arithmetic `<<2` is not, because a delimiter opens with a letter or `_`. FP set,
-# measured on lib.sh at the tip: it carries no `<<` of any kind, so the grammar is wider than the
-# corpus needs and costs nothing there; at b0c310a3 it reads exactly the three `cat <<'AWK'` lines.
-# ================================================================================================
-LH_AWK='/^[[:blank:]]*#/ { next }
-  { n++; l = $0; gsub(/<<<+/, "", l)
-    if (l ~ /<<-?[[:blank:]]*[\047"]?[A-Za-z_]/) { h++; at = at " " FNR } }
-  END { printf "%d %d%s\n", n, h, at }'
-lh_scan() { awk "$LH_AWK" "$1"; }
-arm_lh() { local r n h
-  r="$(lh_scan "$1")" || { ARM_WHY="awk could not scan $1"; return 1; }
-  n="${r%% *}"; h="${r#* }"; h="${h%% *}"
-  ARM_WHY="$n non-comment line(s) scanned, $h heredoc opener(s)$( [ "$h" -gt 0 ] && printf ' at%s' "${r#* * }" )"
-  [ "$n" -gt 0 ] && [ "$h" -eq 0 ]; }
+fi
+if sg lh; then
 LHP="$W/lh-probe.sh"
 { printf '%s\n' "  cat <<'AWK'" 'cat <<EOF' '  cat <<-EOF' 'cat << "X"'
   printf '%s\n' "  # cat <<'AWK'" 'x <<<"$y"' 'echo "<<<<<<< x"' 'y=$((1<<2))'; } > "$LHP"
@@ -1909,12 +2086,13 @@ run_arm arm_lh "$S_LIB" "LH: lib.sh carries no heredoc opener outside comments"
 # The two loops a forced cell cannot reach -- readopt's --merge span plan and its drift panel -- are
 # held by these floors alone: both iterate the anchor ids, which `shadow_ids` has already written to
 # a file earlier in the same run, so no world makes them the one write above the limit.
-RH_FILES="register-drift.sh settings-merge.sh readopt-override.sh adopt-extension-checks.sh"
 for _rh in $RH_FILES; do
   run_arm arm_r5 "$RC_/$_rh" "r5 (BL-360 R-H): $_rh carries no non-comment here-string"
   run_arm arm_lh "$RC_/$_rh" "LH (BL-360 R-H): $_rh carries no heredoc opener outside comments"
 done
 
+fi
+if sg bl; then
 # ================================================================================================
 # THE b0c310a3 DIFFERENTIAL. lib.sh and preclassify.sh at the base this release was cut from, staged
 # into a copy of reconcile/ beside the tree's other scripts. Every emitter cell, LH and both
@@ -1955,46 +2133,8 @@ else
   fi
 fi
 
-# ================================================================================================
-# THE 322ef42c DIFFERENTIAL. Every staging-write cell and r5 is PRESENCE- or count-shaped, and each
-# is scored here against the copy of its script at 322ef42c -- the base these cells were built
-# against -- staged beside the tree's lib.sh. Each MUST FAIL there, which is the proof it can fire.
-# hard-blockers.sh and warn-shadowed-local-validators.sh fed their loops from `<<EOF` heredocs, not
-# `<<<`, so r5 does not score them; their forced cells do.
-# ================================================================================================
-# mkmut <src> <dst> <find> <replace> [<find> <replace>]... -- every find must match EXACTLY once.
-mkmut() {
-  python3 - "$@" <<'PY'
-import sys
-src, dst, pairs = sys.argv[1], sys.argv[2], sys.argv[3:]
-s = open(src, encoding="utf-8").read()
-for i in range(0, len(pairs), 2):
-    f, r = pairs[i], pairs[i + 1]
-    n = s.count(f)
-    if n != 1:
-        print("anchor %d matched %d time(s)" % (i // 2 + 1, n)); sys.exit(1)
-    s = s.replace(f, r)
-open(dst, "w", encoding="utf-8").write(s)
-PY
-}
-# THE HEREDOC EMITTERS, restored one emitter at a time: the `printf` literal becomes `cat <<'AWK'`
-# again, and ledger_entry_awk's body apostrophe loses its `'\''` spelling. Used by the EM-* mutants
-# and, all three at once, to build HL -- a reconcile/ copy whose lib.sh can fail to emit, which is
-# the only place warn-shadowed-local-validators.sh's emitter refusal still has a subject.
-EM_NRM=( $'  printf \'%s\\n\' \'function nrm(s){' $'  cat <<\'AWK\'\nfunction nrm(s){'
-         $'return s }\'\n}' $'return s }\nAWK\n}' )
-EM_LEDGER=( $'  printf \'%s\\n\' \'function ledger_entry_id(label) {' $'  cat <<\'AWK\'\nfunction ledger_entry_id(label) {'
-            $'consumer\'\\\'\'s' $'consumer\'s'
-            $'  return sh\n}\'\n}' $'  return sh\n}\nAWK\n}' )
-EM_LABEL=( $'  printf \'%s\\n\' \'function backlog_entry_label(l,' $'  cat <<\'AWK\'\nfunction backlog_entry_label(l,'
-           $'  return ""\n}\'\n}' $'  return ""\n}\nAWK\n}' )
-HL="$W/hl"; HL_OK=0
-if cp -R "$RC_" "$HL" && _hl_why="$(mkmut "$RC_/lib.sh" "$HL/lib.sh" "${EM_NRM[@]}" "${EM_LEDGER[@]}" "${EM_LABEL[@]}")" \
-   && bash -n "$HL/lib.sh" && [ "$(lh_scan "$HL/lib.sh" | cut -d' ' -f2)" -eq 3 ]; then
-  HL_OK=1; ok "heredoc lib.sh (HL): all three emitters restored to cat <<'AWK', it parses, and LH reads exactly 3 openers in it"
-else
-  bad "heredoc lib.sh (HL) could not be built: ${_hl_why:-copy, parse or LH count failed}"
 fi
+if sg b3; then
 
 B3_PIN=322ef42c43be0c11db74e937930e8810cf6b5492
 if ! git -C "$OWN" cat-file -e "${B3_PIN}^{commit}" 2>/dev/null; then
@@ -2054,6 +2194,8 @@ else
   fi
 fi
 
+fi
+if sg rh; then
 # ================================================================================================
 # THE 1749b545 DIFFERENTIAL. BL-360's R-H cells against the four files at the base they were built
 # on, staged beside the tree's lib.sh. Every forced cell MUST FAIL there, and each failure is the
@@ -2098,59 +2240,8 @@ else
   fi
 fi
 
-# ================================================================================================
-# MUTANTS. One copy of each subject directory; each mutant is a sibling file in that copy, so the
-# script finds lib.sh, setup-sites.md, preclassify.sh and artifact-path-config.sh beside it.
-# ================================================================================================
-MT="$W/mt"; mkdir -p "$MT"
-cp -R "$SC" "$MT/scripts" && cp -R "$RC_" "$MT/reconcile" && cp -R "$TREE/core/schemas" "$MT/schemas" \
-  || { echo "FIXTURE BROKEN: could not copy the subject directories" >&2; exit 2; }
-# mutant <id> <dir> <src-basename> <healthy-arm> "<arms it must FAIL>" <find> <replace> ...
-mutant() {
-  local id="$1" dir="$2" src="$3" healthy="$4" arms="$5" m why a survived=""
-  shift 5
-  m="$MT/$dir/_m_$id.sh"
-  if ! why="$(mkmut "$MT/$dir/$src" "$m" "$@")"; then bad "mutant $id DID NOT APPLY ($why)"; return; fi
-  if cmp -s "$MT/$dir/$src" "$m"; then bad "mutant $id DID NOT APPLY (the copy is byte-identical)"; return; fi
-  bash -n "$m" 2>/dev/null || { bad "mutant $id DID NOT APPLY (the mutated copy does not parse)"; return; }
-  if ! "$healthy" "$m"; then bad "mutant $id: its healthy twin $healthy failed on the mutant, so no kill can be read -- $ARM_WHY"; return; fi
-  for a in $arms; do "$a" "$m" && survived="$survived $a"; done
-  if [ -z "$survived" ]; then ok "mutant $id killed by:$(printf ' %s' $arms)"
-  else bad "mutant $id SURVIVED$survived -- that arm cannot see its own site"; fi
-}
-# libmutant <id> <script> <healthy-arm> "<arms>" <find> <replace>... -- mutate reconcile/lib.sh.
-# Every reconcile script sources "$SELF/lib.sh", so a lib.sh mutant is a WHOLE copy of the directory
-# whose lib.sh is mutated, and <script> is driven from inside that copy. The copy is asserted to
-# carry the mutation before any arm is read; `libcontrol` runs the same copy mechanics unmutated.
-libmutant() {
-  local id="$1" scr="$2" healthy="$3" arms="$4" d why a survived=""
-  shift 4
-  d="$MT/lib_$id"
-  cp -R "$MT/reconcile" "$d" || { bad "mutant $id DID NOT APPLY (could not copy reconcile/)"; return; }
-  if ! why="$(mkmut "$MT/reconcile/lib.sh" "$d/lib.sh" "$@")"; then bad "mutant $id DID NOT APPLY ($why)"; return; fi
-  if cmp -s "$MT/reconcile/lib.sh" "$d/lib.sh"; then bad "mutant $id DID NOT APPLY (lib.sh is byte-identical)"; return; fi
-  bash -n "$d/lib.sh" 2>/dev/null || { bad "mutant $id DID NOT APPLY (the mutated lib.sh does not parse)"; return; }
-  if ! "$healthy" "$d/$scr"; then bad "mutant $id: its healthy twin $healthy failed on the mutant, so no kill can be read -- $ARM_WHY"; return; fi
-  for a in $arms; do "$a" "$d/$scr" && survived="$survived $a"; done
-  if [ -z "$survived" ]; then ok "mutant $id (lib.sh) killed by:$(printf ' %s' $arms)"
-  else bad "mutant $id SURVIVED$survived -- that arm cannot see its own site"; fi
-}
-libcontrol() { # libcontrol <script> <arms...>
-  local scr="$1" d="$MT/lib_ctl" a failed=""; shift
-  [ -d "$d" ] || cp -R "$MT/reconcile" "$d" || { bad "control lib_ctl: could not copy reconcile/"; return; }
-  cmp -s "$MT/reconcile/lib.sh" "$d/lib.sh" || { bad "control lib_ctl: the copied lib.sh differs"; return; }
-  for a in "$@"; do "$a" "$d/$scr" || failed="$failed $a"; done
-  if [ -z "$failed" ]; then ok "control lib_ctl/$scr: an unmutated directory copy passes$(printf ' %s' "$@")"
-  else bad "control lib_ctl/$scr: an UNMUTATED directory copy failed$failed -- the lib mutant harness is broken"; fi
-}
-# The unmutated controls: the same copy mechanics, no edit, and every arm must still PASS.
-control() { # control <dir> <src> <arms...>
-  local dir="$1" src="$2" a failed=""; shift 2
-  cp "$MT/$dir/$src" "$MT/$dir/_m_ctl.sh"
-  for a in "$@"; do "$a" "$MT/$dir/_m_ctl.sh" || failed="$failed $a"; done
-  if [ -z "$failed" ]; then ok "control $src: an unmutated copy passes$(printf ' %s' "$@")"
-  else bad "control $src: an UNMUTATED copy failed$failed -- the mutant harness itself is broken"; fi
-}
+fi
+if sg ctl; then
 echo "== unmutated controls =="
 control scripts   validate-ci-gates.sh          arm_ci_healthy arm_ci_retro arm_ci_surface
 control reconcile relabel-extension-checks.sh   arm_rx_healthy arm_rx_walk
@@ -2177,7 +2268,7 @@ control reconcile readopt-override.sh           arm_fx_ro_healthy arm_fx_ro
 control reconcile warn-shadowed-local-validators.sh arm_fx_ws_healthy arm_fx_ws_closed arm_fx_ws6_healthy arm_fx_ws_emitter arm_r5
 # The emitter refusal's control and mutant run beside the HEREDOC lib.sh: beside the tree's literal
 # emitters that refusal has no subject, and the mutant dropping it survives by construction.
-if [ "$HL_OK" -eq 1 ]; then cp -R "$HL" "$MT/hl"; control hl warn-shadowed-local-validators.sh arm_fx_ws6_healthy arm_fx_ws_emitter
+if [ "$HL_OK" -eq 1 ]; then control hl warn-shadowed-local-validators.sh arm_fx_ws6_healthy arm_fx_ws_emitter
 else bad "control hl/warn-shadowed-local-validators.sh: the heredoc lib.sh (HL) was not built"; fi
 control reconcile preclassify.sh                arm_qb_plain arm_qb_cafe
 libcontrol retired-tokens.sh        arm_qa_plain arm_qa_cafe
@@ -2192,6 +2283,8 @@ control reconcile settings-merge.sh             arm_fx_smw_healthy arm_fx_smw ar
 control reconcile adopt-extension-checks.sh     arm_fx_adw_healthy arm_fx_adw arm_r5 arm_lh
 control reconcile readopt-override.sh           arm_fx_rod_healthy arm_fx_rod arm_fx_rom_healthy arm_fx_rom arm_rom_cat arm_r5 arm_lh
 
+fi
+if sg mut; then
 echo "== mutants (each restores a discarded status at one site) =="
 mutant CI-RETRO scripts validate-ci-gates.sh arm_ci_healthy "arm_ci_retro" \
   'find "${RETRO_DIR}" -type f -name '"'"'*.md'"'"' 2>/dev/null > "$CI_T/retro-walk" || walk_rc=$?' ':' \
@@ -2582,7 +2675,8 @@ mutant RO-APPEND reconcile readopt-override.sh arm_fx_rom_healthy "arm_rom_cat" 
 mutant SM-TMPDIR reconcile settings-merge.sh arm_fx_smw_healthy "arm_sm_stage" \
   'OUT="$(mktemp "${CONSUMER}.merge.XXXXXX" 2>/dev/null)" ||' 'OUT="$(mktemp 2>/dev/null)" ||'
 
+fi
 echo
-if [ "$fails" -eq 0 ]; then echo "procsub-staged-refusal: PASS"; exit 0; fi
-echo "procsub-staged-refusal: $fails assertion(s) FAILED" >&2
+if [ "$fails" -eq 0 ]; then echo "$NAME: PASS"; exit 0; fi
+echo "$NAME: $fails assertion(s) FAILED" >&2
 exit 1

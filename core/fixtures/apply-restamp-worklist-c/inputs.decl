@@ -3,7 +3,7 @@
 core/fixtures/lib/
 core/skills/ai-dlc-update/reconcile/
 !core/skills/ai-dlc-update/reconcile/apply.sh
-core/git-hooks/pre-push
+!core/git-hooks/pre-push
 core/scripts/sync-transient-ignore.sh
 core/schemas/pipeline-state-paths.json
 core/scripts/validate-hook-registration.sh

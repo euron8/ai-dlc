@@ -779,7 +779,14 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   shipping directories (the six `.dist-only` shards cost it nothing). I82 14 -> 15 and I93
 #   32 -> 31 are the instrument's usual one-fork jitter. The gate itself read 3314 against 3310.
 #   HIGH reading 3314 plus the usual 6.
-FORK_BUDGET=3320
+#
+#   RAISED TO 3324 FOR FIVE MORE SHIPPING FIXTURE DIRECTORIES, NOT FOR A NEW ARM. `fork-profile.sh
+#   --section by-arm --stable`, base `github/main` 42d7ae1a (0.759.0) and the 0.760.0 release tree,
+#   one clone at the same path, every file committed: base 3312-3314 (STABLE 2), tip 3318 (STABLE 2,
+#   spread 3318-3318), so +4 to +6. 0.760.0 adds `check-24-adversarial-convergence-{b,c,d}` and
+#   `apply-restamp-worklist-{b,c}` as shipping directories; the four `.dist-only` procsub shards cost
+#   nothing. HIGH reading 3318 plus the usual 6.
+FORK_BUDGET=3324
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

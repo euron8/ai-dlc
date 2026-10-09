@@ -1,0 +1,5 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+It is shard 'c' of procsub-staged-refusal and inherits that fixture's reason without change: a MUTATION
+BATTERY editing copies of core's own reconcile sources, whose spelling arm diffs shipped core against a
+pinned distribution tree that only this repository carries.
