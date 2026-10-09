@@ -70,13 +70,8 @@ like one that passed.
 verify: manual -- close when a gated push at a width with no prior row records one, and the next push at that width compares against it instead of printing SKIP.
 
 **The manual close above is the operative receipt** (`scripts/backlog-reverify.sh` reads only an entry's first `verify:`
-line), and it stays so: only a real gated push exercises the hook's width sidecar. Beside it, the BEHAVIOURAL receipt for
-the validator half, run from the repo root under `set -uo pipefail`. It drives `scripts/validate-suite-pole.sh` with the
-hook's own argv (`--durations <gitdir>/ai-dlc-fixture-durations.last --record <gitdir>/ai-dlc-fixture-durations --jobs 4`,
-cwd the root) in a fresh `mktemp` git repo whose baseline carries only a width-12 row: a near-solo coverage SKIP first;
-three green runs at 500/520/510 that must each exit 0 with `CALIBRATING (n/3)`; three quiet runs at 300, admitted, for six
-history rows; an ordinary 450 that must exit 0 against B=520 (a 3-row window would have collapsed B to 300 and failed it);
-600, inside the band, exit 0; and 700, over the 692 ceiling, which must exit 1 with `GROWN`.
+line), and it stays so: only a real gated push exercises the hook's width sidecar. The BEHAVIOURAL receipt for the
+validator half is the fenced block at the end of this entry, described in the batch 216 paragraph above it.
 
 **Two rulings landed with the fix, batch 204, by the coordinator after the tip adversary measured B2 wrong.** B(W) is the
 max of EVERY usable row at the width since its rows were last dropped -- not of the 3 most recent, which with admission at
@@ -118,8 +113,74 @@ the history of the fixtures it actually ran, and records a row keyed on width an
 lowered. Buildable: `scripts/validate-suite-pole.sh:181` and the coverage check at `:744-748`, with the hook's
 `.last` as the dispatched set. Ships from the main checkout detached at its release commit if the hook changes.
 
+**BUILT, batch 216: per-unit history of EVERY dispatched unit (option (a)), count-banded, with a regime ceiling.**
+The design changed four times in review.
+- **Per unit, not the width's pole.** A suite pole is undefined when the dispatched set varies. On the real 0.760.0
+  `.last`, a keyed run at the same 117-unit count that dispatched an unchanged `adversarial-shard-merge-mutants`
+  (1132s) FAILED against `self-update-gate`'s 606s, though nothing grew. So this run's pole unit is compared only
+  against history rows naming that same unit, at the same width, from a dispatch whose count is within
+  +-`COUNT_BAND`=25% of this run's. A unit is never failed against another unit's figure.
+- **Option (a), operator ruling.** Every recorded run appends one row per dispatched on-disk unit, not only the
+  pole's. So a unit that grows and overtakes the pole is judged against its own earlier, cheaper rows. With
+  pole-only rows it calibrated at its grown figure.
+- **Admission is per unit.** Each unit's row is admitted by that unit's own rule:
+  - at or below its B when it has comparable rows;
+  - within the regime ceiling when it has 3 rows and none comparable;
+  - freely while it calibrates.
+
+  A refused unit is counted on one summary line. A FAILing run appends nothing.
+- **The regime ceiling replaces FROZEN.** A unit with 3 rows and none comparable FAILS `GROWN (regime)` past its own
+  max plus `REGIME_BAND`=100%. Within that, it records and the new count range calibrates. FROZEN had passed a 13x
+  regression at exit 0. `REGIME_BAND` is uncalibrated. On copies of the live record and `.last`, all 115
+  comparable keys read 1.000 and 0 disagree, against a perturbed-key control that read 1. No pre-fold figure
+  exists to calibrate it, and the per-unit rows recorded from now on are the first data that can.
+- **One append per run, spelling pinned.** awk builds the rows and one `printf '%s' "$ROWS" >> "$HIST"` writes
+  them. Under concurrency, awk-direct appends tore 2-112 lines; shell printf tore 0 of 400 up to 14KB on APFS.
+  That is a measurement, not a guarantee.
+- **The share is printed and is not an exit.** Legacy 5-column and malformed rows are never usable.
+
+Comparability rates over the last 21 measuring commits (runs with at least 3 comparable earlier rows):
+
+| Predicate | Runs |
+|---|---|
+| exact dispatched set | 0/21 |
+| 90% cost-weighted Jaccard overlap of sets | 2-5/21 |
+| load within +-25% | 10-17/21 |
+| dispatched count within +-25% | 10-15/21 |
+| same pole unit, count within +-25% | 10-15/21 |
+| pole unit DISPATCHED in 3+ earlier runs, count within +-25% | 10-15/21 |
+
+A 20000-row history costs the validator 0.63-0.75s, against 0.27-0.32s on an empty one. The stated acquittals
+are in the validator's header:
+- a unit's first 3 dispatches at a width;
+- a unit new to the suite that is the pole from its first run;
+- a regression shipped with a rename or shard;
+- the noise ratchet;
+- a regression under 2x at a dispatch count new to its unit.
+
+The header, under COMPARABILITY, is the description, and the `suite-pole-guard` fixture's arms are its probes.
+The fenced receipt below runs under `set -uo pipefail`. It drives the validator with the hook's argv in a fresh
+git repo:
+1. A 67.85%-share keyed run records.
+2. Three runs of fx1 at 11 units calibrate fx1 and record fx2..fx11 beside it.
+3. Every unit 40% slower FAILS `GROWN`.
+4. fx2, cheap beside the pole, grows to 1000 and FAILS against fx2's own 100.
+5. An unchanged heavy fx12 newly dispatched calibrates for fx12.
+6. fx1 600 at a novel count FAILS `GROWN (regime)` and appends nothing.
+7. fx1 700 at a count in band FAILS against fx1's own 150.
+
+Scores, batch 216:
+
+| Subject | Exit |
+|---|---|
+| tip | 0 |
+| base (origin/main d03d5bd9) | 1 |
+| ffe7cdb6 | 1 |
+| record-pole-only mutant | 1 |
+| the round-3 adversary's stub (`tip3_receipt.sh`) | 1 |
+
 ```
-V="$PWD/scripts/validate-suite-pole.sh"; [ -f "$V" ] || exit 9; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; R="$(mktemp -d)" && git init -q "$R" && G="$(git -C "$R" rev-parse --path-format=absolute --git-common-dir)" && mkdir -p "$R/core/fixtures/fx1" "$R/core/fixtures/fx2" "$R/docs" && echo 0 > "$R/VERSION" && echo 'exit 0' > "$R/core/fixtures/fx1/run.sh" && echo 'exit 0' > "$R/core/fixtures/fx2/run.sh" && printf '# history-band: 33\n# band: 15\n# jobs: 12\n# fixtures: 2\nfx1 100\n' > "$R/docs/suite-pole-baseline.tsv" || exit 9; L="$G/ai-dlc-fixture-durations.last"; D="$G/ai-dlc-fixture-durations"; hook() { o="$(cd "$R" && bash "$V" --durations "$L" --record "$D" --jobs 4 2>&1)"; c=$?; }; pole() { printf 'fx1 %s\nfx2 1\n' "$1" > "$L"; cp "$L" "$D"; echo 4 > "$L.jobs"; hook; }; printf 'fx1 10\n' > "$L"; printf 'fx1 10\nfx2 500\n' > "$D"; echo 4 > "$L.jobs"; hook; [ "$c" -eq 0 ] || exit 1; n=0; for s in 500 520 510; do n=$((n + 1)); pole "$s"; [ "$c" -eq 0 ] && grep -qF "CALIBRATING ($n/3)" <<<"$o" || exit 1; done; for s in 300 300 300; do pole "$s"; [ "$c" -eq 0 ] || exit 1; done; [ "$(awk 'END { print NR }' "$G/ai-dlc-suite-pole.history")" -eq 6 ] || exit 1; pole 450; [ "$c" -eq 0 ] && grep -qF 'pole fx1 450s against baseline fx1 520s' <<<"$o" || exit 1; pole 600; [ "$c" -eq 0 ] || exit 1; pole 700; [ "$c" -eq 1 ] && grep -qF GROWN <<<"$o" || exit 1; exit 0
+V="$PWD/scripts/validate-suite-pole.sh"; [ -f "$V" ] || exit 9; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; R="$(mktemp -d)" && git init -q "$R" && G="$(git -C "$R" rev-parse --path-format=absolute --git-common-dir)" && mkdir -p "$R/docs" && echo 0 > "$R/VERSION" && for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18; do mkdir -p "$R/core/fixtures/fx$i" && echo 'exit 0' > "$R/core/fixtures/fx$i/run.sh"; done && printf '# history-band: 33\n# band: 15\n# jobs: 12\n# fixtures: 18\nfx1 100\n' > "$R/docs/suite-pole-baseline.tsv" || exit 9; L="$G/ai-dlc-fixture-durations.last"; D="$G/ai-dlc-fixture-durations"; H="$G/ai-dlc-suite-pole.history"; hook() { cp "$L" "$D"; echo 4 > "$L.jobs"; o="$(cd "$R" && bash "$V" --durations "$L" --record "$D" --jobs 4 2>&1)"; c=$?; }; run() { rp="$1"; rn="$2"; rs="$3"; printf 'fx1 %s\n' "$rp" > "$L"; i=2; while [ "$i" -le "$rn" ]; do printf 'fx%s %s\n' "$i" "$rs" >> "$L"; i=$((i + 1)); done; hook; }; rows() { if [ -f "$H" ]; then awk -F'\t' -v u="$1" '$2 == u { n++ } END { print n + 0 }' "$H"; else echo 0; fi; }; printf 'fx1 60\nfx2 35\n' > "$L"; printf 'fx1 60\nfx2 35\nfx3 45\n' > "$D"; echo 4 > "$L.jobs"; o="$(cd "$R" && bash "$V" --durations "$L" --record "$D" --jobs 4 2>&1)"; c=$?; [ "$c" -eq 0 ] && [ "$(rows fx1)" -eq 1 ] || exit 1; : > "$H"; for n in 1 2 3; do run 150 11 100; [ "$c" -eq 0 ] && grep -qF "CALIBRATING ($n/3) for fx1" <<<"$o" || exit 1; done; [ "$(rows fx1)" -eq 3 ] && [ "$(rows fx2)" -eq 3 ] || exit 1; run 210 11 140; [ "$c" -eq 1 ] && grep -qF 'GROWN: fx1 at 210s against baseline fx1 at 150s' <<<"$o" || exit 1; printf 'fx1 150\nfx2 1000\n' > "$L"; i=3; while [ "$i" -le 11 ]; do printf 'fx%s 100\n' "$i" >> "$L"; i=$((i + 1)); done; hook; [ "$c" -eq 1 ] && grep -qF 'GROWN: fx2 at 1000s against baseline fx2 at 100s' <<<"$o" || exit 1; printf 'fx1 150\n' > "$L"; i=2; while [ "$i" -le 10 ]; do printf 'fx%s 100\n' "$i" >> "$L"; i=$((i + 1)); done; printf 'fx12 1132\n' >> "$L"; hook; [ "$c" -eq 0 ] && grep -qF 'CALIBRATING (1/3) for fx12' <<<"$o" && [ "$(rows fx12)" -eq 1 ] || exit 1; run 600 17 100; [ "$c" -eq 1 ] && grep -qF 'GROWN (regime): fx1 at 600s against its own max 150s' <<<"$o" || exit 1; [ "$(rows fx1)" -eq 4 ] || exit 1; run 700 14 100; [ "$c" -eq 1 ] && grep -qF 'GROWN: fx1 at 700s against baseline fx1 at 150s' <<<"$o" || exit 1; exit 0
 ```
 
 ## BL-474 — measure the first cross shard's serial tail before ruling on it
@@ -147,6 +208,29 @@ record the operator's ruling. **Keep it open:** take a second sprint's measureme
 
 verify: manual -- close when the measurement above is recorded in this entry from a real consumer review and the operator has ruled on it.
 
+
+## BL-490 — readset-skip declares two distribution-only scripts, so the hermetic runner refuses it on every consumer
+
+**DEFECT.** PC-S317-READSET-SKIP-DECLARES-DIST-ROOT-SCRIPTS-NO-CONSUMER-HOLDS. All four
+`core/fixtures/readset-skip{,-b,-c,-d}/inputs.decl` declared `scripts/validate-enforcement-map.sh` and
+`scripts/render-invariant-index.sh`. Neither is installed and `core-paths.sh` maps neither, so on a consumer
+`hermetic-run.sh` stops with `declared file absent` and exit 2 for every shard, and every consumer push fails.
+Their only reader was the one-hook-widened I66 arm in `readset-skip/run.sh`, which also accounted for five more
+declared paths: `gate-validation.md`, `enforcement-map.yaml`, `core-manifest.md`, `setup-sites.md` and
+`core/scripts/hermetic-run.sh`. That arm now lives in the `.dist-only` fixture `validator-arm-selection` as the phase
+`i66-onehook` in shard a, with the mutant it lacked. The mutant widens `READSET_UNKEYED_TOOLS` in `.githooks/pre-push`
+alone, and `--arms I66` must then exit non-zero naming the forked runners, beside an unmutated control that reads OK
+at rc 0. All seven lines are removed from the four declarations.
+
+The receipt installs the tree into an empty git repo with `_bmad/`, as `install.sh` requires, and runs
+`hermetic-run.sh --key-only` for all four shards on that consumer tree. It then requires the moved phase. Scored under
+`set -uo pipefail` in linked worktrees: tip 0, base (`d03d5bd9`) 1, and 1 for a mutant that re-adds
+`scripts/validate-enforcement-map.sh` to `readset-skip-c/inputs.decl` alone. On a git-inited
+`git -C /Users/n8/git/graph archive HEAD` copy with the readset-skip dirs overlaid, a full
+`scripts/ai-dlc/hermetic-run.sh --root <copy> readset-skip` read rc 2 at base, naming both validators; rc 0 at tip
+(`readset-skip: PASS (92 assertions)`, `sandbox_files=10`); and rc 2 with the validator line re-added to the tip decl.
+
+verify: sh [ -f scripts/install.sh ] && [ -f core/scripts/hermetic-run.sh ] || exit 9; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; T="$(mktemp -d)" && git init -q "$T" && mkdir "$T/_bmad" && bash scripts/install.sh "$T" >/dev/null 2>&1 && [ -f "$T/scripts/ai-dlc/hermetic-run.sh" ] && [ -f "$T/tests/fixtures/readset-skip/inputs.decl" ] && [ ! -e "$T/scripts/validate-enforcement-map.sh" ] && ( cd "$T" && git add -A && git -c user.email=r@r -c user.name=r commit -qm i ) >/dev/null 2>&1 || exit 9; for f in readset-skip readset-skip-b readset-skip-c readset-skip-d; do bash "$T/scripts/ai-dlc/hermetic-run.sh" --root "$T" --key-only "$f" >/dev/null 2>&1 || exit 1; done; grep -qF -- '--arms I66' core/fixtures/validator-arm-selection/run.sh && grep -qE '^PHASES_a=".* i66-onehook( |")' core/fixtures/validator-arm-selection/run.sh || exit 1; exit 0
 
 ## BL-481 — two fixtures cannot be traced even on an idle box, and ten run on every push
 
@@ -196,3 +280,22 @@ fixture data was built for the sibling `procsub-staged-refusal` and failed enfor
 second corpus. It leaves this list only by a committed trace; its three shards are three such traces. `hermetic-runner`,
 `self-update-gate` and `subject-partition` are untouched here.
 
+## BL-491 — the hermetic runner copied a declared directory whole, so an ignored link refused it
+
+**DEFECT, PC-S317-HERMETIC-RUN-REFUSES-CONSUMER-SKILL-SYMLINKS.** `core/scripts/hermetic-run.sh` copied each declared
+directory with `cp -Rp` and refused any symlink found on disk under it, while the KEY covered only tracked plus
+untracked-unignored files. On the reference consumer `.claude/skills/swap-integration` is a link listed in its
+`.gitignore`, so every fixture declaring `core/skills/` exited 2 and every push failed. `.claude/skills` there holds
+221 tracked files and over a thousand ignored ones, all copied and none keyed.
+
+The fix copies a declared directory by its git population (the `readset_manifest` `.paths` stage, before its `-f`
+filter), refuses any `-L` entry and any gitlink in that population, creates every declared directory, and copies with
+`cp -p`. The key still reads `.now` only and is byte-identical. `--key-only` now exits 2 when hashing fails, and a root
+that is not the top of a git work tree is exit 2. Arms P, Q, R, S, T, U and W in `core/fixtures/hermetic-runner`, with
+mutants M7 to M11, carry it.
+
+The receipt passes when an ignored link under a declared directory leaves the run at exit 0 with the link absent from
+the sandbox, and the same link force-tracked exits 2. Scored under `set -uo pipefail`: tip 0, base 1, and 1 against
+the copy loop reverted to `cp -Rp`.
+
+verify: sh d="$(mktemp -d)" || exit 9; [ -f core/scripts/hermetic-run.sh ] && [ -f .githooks/pre-push ] || exit 9; mkdir -p "$d/lib" "$d/.githooks" "$d/core/fixtures/probe" && cp .githooks/pre-push "$d/.githooks/pre-push" && printf 'x\n' > "$d/lib/x.txt" && printf '#!/usr/bin/env bash\ncat lib/x.txt && [ ! -e lib/ilnk ] && [ ! -L lib/ilnk ]\n' > "$d/core/fixtures/probe/run.sh" && printf 'lib/\n' > "$d/core/fixtures/probe/inputs.decl" && printf 'lib/ilnk\n' > "$d/.gitignore" && ( cd "$d" && git init -q && git add -A && git -c user.name=t -c user.email=t@t commit -qm p ) >/dev/null 2>&1 && ln -s /etc/hosts "$d/lib/ilnk" || exit 9; bash core/scripts/hermetic-run.sh --root "$d" probe >/dev/null 2>&1; a=$?; ( cd "$d" && git add -f lib/ilnk && git -c user.name=t -c user.email=t@t commit -qm t ) >/dev/null 2>&1 || exit 9; o="$(bash core/scripts/hermetic-run.sh --root "$d" probe 2>&1)"; b=$?; rm -rf "$d"; [ "$a" = 0 ] && [ "$b" = 2 ] && grep -q 'lib/ilnk is a symlink' <<<"$o"

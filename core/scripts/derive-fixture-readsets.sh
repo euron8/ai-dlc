@@ -630,8 +630,17 @@ drop_ignored() { # reads paths on stdin (repo-relative), writes the non-ignored 
   # would cut in half and then never match.
   ( cd "$TREE" && git ls-files -s -z 2>/dev/null ) | tr '\0' '\n' \
     | awk -F'\t' 'substr($1, 1, 7) == "160000 " { print $2 }' > "$gl"
+  # A PATH GIT MUST QUOTE NEVER LEAVES THIS FILTER, because check-ignore hands it back C-quoted -- a
+  # leading `"` and `\t` spelled out -- and the quoted spelling became a map row. The runner's manifest
+  # empties `.now` on any `"`-led path (pre-push readset_manifest), so ONE such row ran every fixture
+  # on every push and wrote no key record. Measured on the reference consumer: a fixture stat'd a
+  # tab-bearing manifest line as a path, the negative lookup was traced, and the local map carried
+  # `"RESOLVED\trelocate\t..."` until removed by hand. Dropping it loses nothing: the runner hashes
+  # no such name -- a real file by it already runs the whole suite there -- so its key cannot move.
+  # `core.quotePath=false` keeps a non-ASCII name unquoted, as the runner lists it.
   awk -v glf="$gl" -v subf="$sub" '
     BEGIN { while ((getline g < glf) > 0) if (g != "") gl[g] = 1 }
+    /[\t"\\]/ { next }
     {
       p = $0
       if (p == ".git/modules" || index(p, ".git/modules/") == 1) { print p > subf; next }
@@ -645,7 +654,7 @@ drop_ignored() { # reads paths on stdin (repo-relative), writes the non-ignored 
   # 0 (some ignored) and 1 (none ignored) are verdicts; anything else is not.
   {
     if [ -s "$ask" ]; then
-      ( cd "$TREE" && git check-ignore --stdin --non-matching --verbose < "$ask" ) > "$keep.ci" 2>/dev/null
+      ( cd "$TREE" && git -c core.quotePath=false check-ignore --stdin --non-matching --verbose < "$ask" ) > "$keep.ci" 2>/dev/null
       circ=$?
       if [ "$circ" -le 1 ] && sed -n 's/^::[[:space:]]*//p' "$keep.ci" | LC_ALL=C sort -u > "$keep" && [ -s "$keep" ]; then
         cat "$keep"

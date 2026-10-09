@@ -4,15 +4,7 @@
 .githooks/pre-push
 # The deriver: its READSET_* spans are extracted and driven. REQUIRED, printed where the LOCALMAP span is read.
 !core/scripts/derive-fixture-readsets.sh
-core/scripts/hermetic-run.sh
 core/fixtures/lib/
-# The one-hook-widened I66 arm runs the enforcement-map validator in a copy holding exactly these files.
-scripts/validate-enforcement-map.sh
-scripts/render-invariant-index.sh
-core/skills/ai-dlc/steps/gate-validation.md
-core/skills/ai-dlc/enforcement-map.yaml
-core/skills/ai-dlc/core-manifest.md
-core/skills/ai-dlc-update/reconcile/setup-sites.md
 # The shard drivers exec the parent run.sh, and the parent's coverage join reads every driver. A fixture's OWN
 # run.sh is not declared: the runner copies the fixture's own directory itself.
 core/fixtures/readset-skip-b/run.sh

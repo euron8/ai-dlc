@@ -20,26 +20,30 @@
 # any miss. It runs even when the real baseline is corrupt, which is what makes the ordering
 # observable: the probe's verdict precedes the corpus verdict in the output.
 #
-# WHY SKIP AND NOT FAIL ON NON-COMPARABLE INPUT. A LOADED cost is only meaningful against
-# another loaded cost taken the same way. A partial dispatch (the read-set skip narrows the
-# suite in place) leaves the pole scheduled beside thirty units instead of two hundred, which
-# is a near-solo figure and a guaranteed false green -- or, compared the other direction, a
-# false red. Every such state is a SKIP with its reason on exit 0, never a FAIL: a false red
-# here trains the operator to `--no-verify`, which is strictly worse than no guard at all.
+# WHY NON-COMPARABLE HISTORY IS SET ASIDE AND NEVER FAILED ON. A LOADED cost is only meaningful
+# against another loaded cost taken under a similar load. A keyed dispatch (the read-set skip
+# narrows the suite in place) times the pole beside seventy units instead of two hundred, and
+# compared against a full-suite figure that is a false green -- or, the other direction, a false
+# red. So each history row is COMPARABLE to this run or it is not (see COMPARABILITY below); a row
+# that is not is counted and named on the output, never refused, and a run with too few
+# comparable rows CALIBRATES. A false red here trains the operator to `--no-verify`, which is
+# strictly worse than no guard at all. The remaining SKIPs are states with no measurement at all.
 #
 # A DIFFERENT POOL WIDTH IS A DIFFERENT MACHINE, AND EVERY WIDTH IS GUARDED BY ITS OWN HISTORY.
 # A loaded figure is only comparable to one taken at the same width, and the first cut compared
 # only at widths someone had hand-calibrated a tracked row for -- every other width printed a
 # SKIP, which reads exactly like a pass (BL-465). Now every gated green run RECORDS its pole in a
-# history file keyed by width, and the comparison at width W reads W's own rows:
-#   - W has K=3 or more usable history rows: compare against B(W), the MAX OF EVERY usable row at
+# history file keyed by width, and this run's pole UNIT P at width W is compared against P's own rows
+# at W (see COMPARABILITY for which of them are usable):
+#   - P has K=3 or more usable rows at W: compare against B(W,P), the MAX OF EVERY usable row for P at
 #     W since its rows were last dropped, under the file-level `# history-band:` of the tracked
 #     baseline. History is the source at EVERY width once it exists, 12 and 16 included.
-#   - fewer than K rows and a tracked row at W: CALIBRATING against the tracked SEED -- print the
+#   - fewer than K rows and the tracked row at W names P: CALIBRATING against that SEED -- print the
 #     comparison, record, exit 0. A seed never FAILs: the hand-calibrated rows are what BL-465
-#     replaces, and a seed that could block would stop the history that replaces it from forming.
-#   - fewer than K rows and no tracked row: CALIBRATING (n/3) -- record, print the comparison
-#     against the max so far, exit 0. Nothing is enforced until K rows exist.
+#     replaces, and a seed that could block would stop the history that replaces it from forming. A
+#     seed naming a different unit is not consulted and nothing is printed about it.
+#   - fewer than K rows otherwise: CALIBRATING (n/3) for P -- record, print the comparison against
+#     P's max so far, exit 0. Nothing is enforced for P until K rows exist.
 #
 # B IS A MAX OVER ALL ROWS, NOT OVER A RECENT WINDOW, and the window is a measured defect. With
 # admission at or below B, a window of the K most recent rows ratchets ONE WAY: three quiet runs
@@ -48,8 +52,10 @@
 # from 410 to 500 failed the push. Over all rows, admitted rows cannot lower B either -- B moves
 # only through the reviewed drop command, exactly as a tracked row only moves by a reviewed edit.
 # The output names which source was used. History rows are `<jobs>\t<pole>\t<secs>\t<fixture-
-# count>\t<epoch>`, appended by ONE `printf ... >> "$HIST"` per row: no temp file, no rename, so
-# two pushes recording at once interleave whole lines rather than one discarding the other.
+# count>\t<epoch>\t<load>\t<dispatched>`, appended by ONE `printf ... >> "$HIST"` per row: no temp
+# file, no rename, so two pushes recording at once interleave whole lines rather than one
+# discarding the other. Rows written before the load and count columns existed carry the first
+# five only and are LEGACY rows, never usable (see COMPARABILITY).
 #
 # ADMISSION: B NEVER MOVES WITHOUT REVIEW. Once K rows exist a passing run is appended only if its
 # pole is at or below B; a run inside the band ABOVE B passes and is not recorded, so a slow creep
@@ -64,11 +70,15 @@
 # A HISTORY ROW WHOSE POLE DIRECTORY IS GONE IS IGNORED, NOT REFUSED. A renamed or sharded fixture
 # leaves rows naming nothing; they do not count toward K and do not enter B, and a NOTE says how
 # many were ignored. If ignoring them drops a width below K, it is back in CALIBRATING, which is
-# deliberate: a statistic over a partition that no longer exists is not a measurement.
+# deliberate: a statistic over a partition that no longer exists is not a measurement. "Gone" is
+# membership in the same on-disk population the load is summed over -- a directory carrying a run.sh.
 #
 # THE RECORD POINT IS THE END OF THE PROGRAM, after the comparison, and ONLY on PASS or
-# CALIBRATING -- never on a SKIP (no measurement, low coverage, absent pole), a FAIL, a refusal,
-# or the hook's `--durations /dev/null` branches, which reach verdict 3 and exit. It also requires
+# CALIBRATING -- never on a SKIP (no measurement, no record, no fixtures), a FAIL, a refusal,
+# or the hook's `--durations /dev/null` branches, which reach verdict 3 and exit. A keyed run whose
+# share of the record is low RECORDS: its count column is what makes it comparable later. Once a width
+# holds K rows, a run with no comparable row records only at or below their max (ADMISSION, in the
+# header's COMPARABILITY section). It also requires
 # the hook's WIDTH SIDECAR (`<durations>.jobs`, written beside the durations file only when a
 # green pool published it) to equal `--jobs`, so a stale durations file from a run at another
 # width is never recorded under this one. NOTE: "green" here is the POOL. A push whose fixture
@@ -93,21 +103,68 @@
 # THE BASELINE MOVES DOWN FREELY AND UP ONLY WITH A MEASUREMENT. That is the ratchet, and it is
 # a review rule carried by the file's own comment header, not by this program.
 #
-# COMPARABILITY IS COST COVERAGE, NOT A ROW COUNT. The first cut demanded that the run's
-# durations file hold exactly one row per fixture directory. The content-key skip means a real
-# push never dispatches the whole suite -- the usual figure is 220 of 227 -- so that equality
-# SKIPPED on almost every push and the comparison was reached once in a week of gates: a check
-# that could not fire. What makes a loaded figure loaded is how much of the suite's WORK ran
-# beside it, so the predicate is the share of the cumulative record's cost, over the fixture
-# directories on disk, that this run timed. The record is merged with this run before the
-# guard runs, so the observed pole sits on both sides of the ratio and cannot move it alone.
+# COMPARABILITY IS PER UNIT, AND WITHIN A UNIT IT IS THE DISPATCHED COUNT (BL-465). A suite pole is
+# undefined when the dispatched set varies: a keyed run that happens to dispatch an unchanged heavy
+# unit has a higher pole than one that did not, and nothing grew. Measured on the real 0.760.0 `.last`:
+# drop its cheapest unit and add `adversarial-shard-merge-mutants` at its record cost of 1132s, still
+# 117 units, and a width-wide comparison FAILED it against self-update-gate's 606s. So the DESIGN
+# SHIFTED from "the width's pole" to "this unit's own history": the run's pole unit P is compared only
+# against rows that name P. A unit is NEVER failed against another unit's figure. Within P's rows,
+# what makes a loaded figure loaded is how many units ran beside it, so every row records its run's
+# DISPATCHED COUNT -- the rows of its durations file naming a fixture directory on disk -- and a
+# 7-column row naming P is usable when its pole directory exists and its count is within
+# +-COUNT_BAND% of this run's. B is the max of P's usable rows. The count, and not the timed cost,
+# because a cost moves when the code gets slower: keyed on cost, a uniform slowdown moved the run out
+# of band and every regression of that shape calibrated instead of failing. The row's LOAD (timed
+# cost less its own pole) is still written and printed; it decides nothing. A LEGACY 5-column row
+# carries neither figure and is never usable; a row of any other shape, or a 7-column row with a
+# non-integer load or count, is MALFORMED and never usable. Both are counted and named, never refused.
+#
+# EVERY DISPATCHED UNIT IS RECORDED, NOT ONLY THE POLE -- OPTION (a), the operator's ruling at batch
+# 216. With pole-only rows a unit that grew and overtook the pole had no rows of its own: it calibrated
+# at its grown figure and that became its baseline (tip adversary, round 3). Now each recorded run
+# appends one row per dispatched on-disk unit, each admitted by that unit's own history (see THE RECORD
+# POINT), so a unit that grows into the pole is judged against its own earlier, cheaper rows. Measured
+# over the same 21 commits: a run whose pole unit was DISPATCHED -- not necessarily the pole -- in 3 or
+# more earlier runs at count +-25% is 10-15 of 21, the per-unit rate below.
+#
+# THE ACQUITTALS THIS DESIGN STATES, and does not close:
+#   - A unit's FIRST K DISPATCHES at a width calibrate, whatever they cost: there is nothing of its own
+#     to compare them with, and its pre-push cost is unobservable without a hook change -- the hook
+#     folds this run into the record before the guard reads it.
+#   - A unit NEW TO THE SUITE that is the pole on its first runs is judged by nothing until it has K rows.
+#   - A regression shipped together with a RENAME OR SHARD: the new name calibrates fresh.
+#   - THE NOISE RATCHET: B is the max of the first K rows admitted, so noise in those K is baked in
+#     until a reviewed drop.
+#   - THE REGIME CEILING (REGIME_BAND, uncalibrated): a regression under 2x shipped at a dispatch count
+#     new to its unit is admitted once and then compared.
+#
+# ADMISSION PER (WIDTH, UNIT), AND THE REGIME CEILING. A unit with fewer than K usable rows calibrates.
+# Once it holds K or more well-formed 7-column rows at the width, of ANY count, and none is comparable,
+# it is judged against its own max plus REGIME_BAND percent: past that ceiling it FAILS `GROWN
+# (regime)`; within it, its row is recorded and the new count range calibrates its own history. There
+# is no frozen state -- a frozen state passed a 13x regression and a load shift identically at exit 0.
+#
+# COST, AND PRUNING. History grows by about the dispatched count per recorded push (seventy to 120
+# rows); one awk pass reads it per push, and the comparison line prints the width's row count so the
+# growth is visible. The ONLY pruning is the printed drop command and a width's re-calibration.
+#
+# WHY NOT THE SHARE OF THE RECORD, AND WHY NOT THE DISPATCHED SET. The share test was the first
+# predicate here and it SKIPPED every keyed push: read-set keys dispatch about seventy of two
+# hundred and fifty units, so no keyed push reached 90% and none could record. Measured over the
+# last 21 measuring commits, a run with three or more comparable earlier rows was found for 0 of 21
+# by an exact dispatched set, 2-5 of 21 by a 90% cost-weighted overlap of sets, 10-17 of 21 by load
+# within +-25%, 10-15 of 21 by dispatched count within +-25%, and 10-15 of 21 by the same pole unit
+# with count within +-25% -- per-unit costs nothing in reach. A share of "the dispatched set's
+# record cost" is x/x = 100% always, because the hook folds this run into the record before the guard
+# runs. The share is still computed and PRINTED, so a near-solo comparison is visible; it decides nothing.
 #
 # Usage: validate-suite-pole.sh [--durations <file>] [--record <file>] [--baseline <file>] [--jobs <N>] [--root <dir>] [--history <file>]
 #   --durations  this run's own costs (the hook's .last file); its width sidecar is <file>.jobs
-#   --record     the cumulative merged record the coverage denominator is read from
+#   --record     the cumulative merged record the printed share is read from
 #   --history    the per-width pole history read and appended (default: in the git common dir)
 # Env:   AI_DLC_POLE_BASELINE=<file>   overrides the baseline path (same effect as --baseline)
-# Exit:  0 = pass, CALIBRATING, or SKIP on non-comparable input (all "do not block this push")
+# Exit:  0 = pass, CALIBRATING, or SKIP with no measurement (all "do not block this push")
 #        1 = the pole has GROWN beyond the band
 #        2 = refusal: bad usage, unreadable/malformed baseline, or a self-probe miss
 set -uo pipefail
@@ -175,10 +232,20 @@ case "$JOBS" in ''|*[!0-9]*) printf '%s: REFUSE -- --jobs "%s" is not a number\n
 # Canonical decimal, so `--jobs 016` selects the row keyed 16 rather than reading as no row.
 JOBS="$((10#$JOBS))"
 
-# The share of the record's cost a run must have timed before its pole is a LOADED figure.
-# 90 sits far above a near-solo dispatch (the 442s-loaded/112s-solo shard ran beside ~30 of
-# 200 units) and below the usual content-key dispatch (220 of 227 rows, 99.86% of the cost).
-COV_MIN=90
+# The percent either side of this run's dispatched count within which a 7-column history row is
+# comparable. 25 is the band the comparability rates in the header were measured at.
+COUNT_BAND=25
+
+# THE REGIME CEILING, percent above a unit's own max at the width, applied when the unit has K or more
+# rows there and none from a comparable dispatch count. AN UNCALIBRATED CONSTANT. No pre-fold per-unit
+# figure exists on disk to calibrate it from: the hook folds `.last` into the record before this guard
+# runs, so `.last`/record is 1.0 for every unit -- measured on copies of the live files at batch 216,
+# 115 of 115 comparable keys at 1.000 and 0 disagreeing, against a perturbed-key control that read 1 --
+# and any "calibration" read off those files would return its own floor while looking measured. What
+# 100 buys is a stated acquittal: a regression under 2x, shipped at a dispatch count new to its unit,
+# is admitted once and then compared like any other row. The per-unit rows this program records from
+# option (a) onward are the first data that can calibrate it.
+REGIME_BAND=100
 
 # K, the number of usable history rows at a width before history replaces the tracked seed and B
 # is enforced. Three loaded readings is the same n the tracked rows were calibrated from; B is
@@ -575,25 +642,78 @@ $STALE_SCAN
 EOF
 
 # ---------------------------------------------------------------------------------------
-# THE RECORD POINT, defined here and called ONLY at the two verdicts that may record: a PASS and
-# a CALIBRATING run. Every SKIP, the FAIL and every refusal exit before reaching it.
+# THE RECORD POINT (option (a), operator ruling batch 216), called at every verdict that does not
+# FAIL: a PASS, a CALIBRATING run, a seed run. Every SKIP, every FAIL and every refusal exit before
+# reaching it, so a FAILing run appends nothing -- not the pole's row and not any other unit's.
+#
+# ONE ROW PER DISPATCHED UNIT, NOT ONLY THE POLE'S. A unit that grows and overtakes the pole must be
+# judged against its OWN earlier, cheaper rows, and with pole-only rows it had none: it calibrated at
+# its grown figure and that became its baseline. So every row of the durations file naming a fixture
+# directory on disk is a candidate row -- `<jobs> <unit> <secs> <fixtures> <epoch> <load> <dispatched>`,
+# columns 4-7 this run's and identical on every row of it. A ghost name (no directory) is never written.
+# Each unit is ADMITTED on its own (unit_rows), by the rule the pole's verdict uses for itself:
+#   K or more comparable rows      -> append iff secs <= its B (B moves only by a reviewed drop);
+#   K or more rows, fewer comparable -> append iff secs is within the REGIME ceiling over its max;
+#   fewer than K rows              -> append (the unit is calibrating).
+# A refused unit is counted, not printed one by one: one summary line names how many, and the three
+# with the highest ratio of secs to the figure that refused them.
 #
 # THE WIDTH SIDECAR MUST EQUAL --jobs. The hook writes `<durations>.jobs` beside the durations
 # file only when a green pool published it, and empties it where the durations file is emptied,
 # so a durations file left over from a run at another width -- or written by nothing this push --
-# cannot be recorded as this width's pole. A missing or mismatched sidecar records nothing and
-# says so, naming the path, so a hook that stopped writing it is visible on the first push.
+# cannot be recorded at this width. A missing or mismatched sidecar records nothing and says so,
+# naming the path, so a hook that stopped writing it is visible on the first push. The sidecar is
+# CONSUMED once per run that passed this check -- after the append, and even when every unit was
+# refused -- so one published measurement is recorded at most once however often it is re-read.
 #
-# ONE `printf >>` PER ROW, never a temp file and a rename: two pushes recording at once then
-# interleave whole lines, where a rename would let one discard the other's row.
+# ONE WRITE PER RUN, AND ITS SPELLING IS PINNED. awk builds every admitted row into a shell variable,
+# and exactly one `printf '%s' "$ROWS" >> "$HIST"` appends them: never a temp file and a rename (two
+# pushes recording at once must interleave whole runs, not discard one), and never awk appending
+# directly. MEASURED on APFS, two concurrent writers: awk-direct appends tore 2-112 lines, one shell
+# printf per run tore 0 of 400 up to a 14KB payload. That is a MEASUREMENT on this filesystem, not a
+# guarantee -- a full dispatch of about 270 units writes roughly 16KB, past the measured size -- and the
+# backstop is that a torn line is MALFORMED and never usable. The fixture asserts the spelling.
 # ---------------------------------------------------------------------------------------
 RECORDED=0
-record_pole() { # <admit: yes|no> <why-not>  -> sets RECORDED=1 when a row was appended
-  local side="$DUR.jobs" sj=""
-  if [ "$1" != yes ]; then
-    printf '   not recorded: %s\n' "$2"
-    return 0
-  fi
+unit_rows() { # <epoch>  (stdin: on-disk fixture names) -> summary line, then the admitted rows
+  awk -F'\t' -v j="$JOBS" -v p="$OBS_POLE" -v C="$DISP" -v band="$COUNT_BAND" -v rband="$REGIME_BAND" \
+      -v K="$HIST_K" -v fx="$fx_count" -v ep="$1" -v ld="$LOAD" -v hf="$UR_HIST" -v df="$DUR" '
+    # KEYED ON FILENAME, NOT ON A FILE COUNTER: an empty or absent history contributes no line, so a
+    # counter bumped on FNR == 1 would read the durations file as history.
+    FILENAME != hf && FILENAME != df { d[$0] = 1; next }
+    FILENAME == hf {
+      if (NF < 7 || $1 != j || $3 !~ /^[0-9]+$/ || $3 <= 0 || $6 !~ /^[0-9]+$/ || $7 !~ /^[0-9]+$/) next
+      u = $2; s = $3 + 0; a[u]++; if (s > m[u]) m[u] = s
+      if ($7 * 100 >= C * (100 - band) && $7 * 100 <= C * (100 + band)) { n[u]++; if (s > b[u]) b[u] = s }
+      next
+    }
+    split($0, x, " ") == 2 && x[2] ~ /^[0-9]+$/ {
+      u = x[1]; s = x[2] + 0
+      if (!(u in d)) next
+      if (u in seen) next
+      seen[u] = 1; disp++
+      if (n[u] >= K) { lim = b[u]; why = "B" }
+      else if (a[u] >= K) { lim = m[u] + int((m[u] * rband + 99) / 100); why = "regime" }
+      else { lim = -1; why = "" }
+      ok = (lim < 0 || s <= lim)
+      if (!ok) { ref++; rl[ref] = u; rs[ref] = s; rb[ref] = (why == "B" ? b[u] : m[u]); next }
+      if (u == p) pa = 1
+      buf = buf sprintf("%s\t%s\t%s\t%s\t%s\t%s\t%s\n", j, u, s, fx, ep, ld, C)
+      adm++
+    }
+    END {
+      top = ""
+      for (t = 1; t <= 3 && t <= ref; t++) {
+        bi = 0; br = -1
+        for (i = 1; i <= ref; i++) if (!(i in used)) { r = (rb[i] > 0 ? rs[i] / rb[i] : rs[i]); if (r > br) { br = r; bi = i } }
+        used[bi] = 1; top = top sprintf("%s%s %ss vs %ss", (t > 1 ? ", " : ""), rl[bi], rs[bi], rb[bi])
+      }
+      printf "#\t%d\t%d\t%d\t%d\t%s\n", adm + 0, ref + 0, pa + 0, disp + 0, top
+      printf "%s", buf
+    }' - "$UR_HIST" "$DUR" 2>/dev/null
+}
+record_run() { # -> sets RECORDED=1 when rows were appended
+  local side="$DUR.jobs" sj="" all sum ROWS adm ref pa disp top
   if [ -z "$HIST" ]; then
     printf '   not recorded: %s is not a git repository and no --history was given, so there is no history file to append to\n' "$ROOT"
     return 0
@@ -604,19 +724,34 @@ record_pole() { # <admit: yes|no> <why-not>  -> sets RECORDED=1 when a row was a
     printf '   not recorded: the width sidecar %s reads "%s", not --jobs %s -- these durations were not published by a green pool at this width\n' "$side" "$sj" "$JOBS"
     return 0
   fi
-  if printf '%s\t%s\t%s\t%s\t%s\n' "$JOBS" "$OBS_POLE" "$OBS_SECS" "$fx_count" "$(date +%s)" >> "$HIST" 2>/dev/null; then
+  UR_HIST="$HIST"; [ -f "$HIST" ] || UR_HIST=/dev/null
+  all="$(printf '%s\n' "$ONDISK" | unit_rows "$(date +%s)"; printf x)"; all="${all%x}"
+  sum="${all%%$'\n'*}"; ROWS="${all#*$'\n'}"
+  IFS="$(printf '\t')" read -r _ adm ref pa disp top <<EOF
+$sum
+EOF
+  if [ -n "$ROWS" ]; then
+    if ! printf '%s' "$ROWS" >> "$HIST" 2>/dev/null; then
+      printf '   not recorded: could not append to %s\n' "$HIST"
+      return 0
+    fi
     RECORDED=1
-    # CONSUME THE SIDECAR: one published measurement is one row, however often it is re-read.
-    : > "$side" 2>/dev/null
+  fi
+  # CONSUME THE SIDECAR: one published measurement is recorded once, however often it is re-read.
+  : > "$side" 2>/dev/null
+  if [ "${pa:-0}" -eq 1 ]; then
     printf '   recorded: pool %s pole %s %ss in %s\n' "$JOBS" "$OBS_POLE" "$OBS_SECS" "$HIST"
-    # Said only when a row was really appended: a run whose sidecar did not match leaves the width
-    # at zero rows, and announcing a first pole there would name a record that does not exist.
-    if [ "$H_N" -eq 0 ]; then
+    # Only when the width held NO row at all, of any shape -- zero USABLE rows is not a first pole.
+    if [ "$W_ROWS" -eq 0 ]; then
       printf '   RECORDED -- first pole at pool width %s: %ss (%s)\n' "$JOBS" "$OBS_SECS" "$OBS_POLE"
     fi
+  elif [ "$SRC" = history ] && [ "$OBS_SECS" -gt "$BL_SECS" ]; then
+    printf '   not recorded: %ss is inside the band but above B=%ss; only a pole at or below B is admitted, so B moves only by a reviewed re-calibration\n' "$OBS_SECS" "$BL_SECS"
   else
-    printf '   not recorded: could not append to %s\n' "$HIST"
+    printf '   not recorded: %s %ss was refused by its own admission\n' "$OBS_POLE" "$OBS_SECS"
   fi
+  printf '   units: %s row(s) appended of %s dispatched unit(s) at pool %s; %s refused above their own baseline%s\n' \
+    "${adm:-0}" "${disp:-0}" "$JOBS" "${ref:-0}" "$([ "${ref:-0}" -gt 0 ] && printf ' (highest: %s)' "$top")"
   return 0
 }
 
@@ -645,73 +780,22 @@ else
 fi
 
 # ---------------------------------------------------------------------------------------
-# VERDICT 4 -- COMPARABILITY PRECONDITIONS AND THE COMPARISON SOURCE.
+# VERDICT 4 -- THE RUN'S OWN FIGURES, THEN THE COMPARISON SOURCE.
 #
-# (a) POOL WIDTH AND SOURCE. A different width is a different machine for a loaded figure, so
-#     the figure compared against is one taken at THIS width: its own history once it holds K
-#     usable rows, else the tracked row as a seed, else nothing -- CALIBRATING, which records
-#     and passes. There is no SKIP for "no row at this width" any more (BL-465).
-#
-#     Usable rows are this width's rows whose pole directory still exists; the rest are counted
-#     and reported, never refused. B is the MAX of every usable row; with fewer than K rows it is
-#     only ever printed.
+# (a) THE CUMULATIVE RECORD the printed share is read from. Absent or
+#     empty is a SKIP by name: without it there is no statement of what the whole suite costs.
 # ---------------------------------------------------------------------------------------
-H_RAW=""
-if [ -n "$HIST" ] && [ -s "$HIST" ]; then
-  H_RAW="$(awk -F'\t' -v j="$JOBS" 'NF >= 5 && $1 == j && $3 ~ /^[0-9]+$/ && $3 > 0 { print $2, $3 + 0, $4 }' "$HIST" 2>/dev/null)"
-fi
-H_N=0; H_STALE=0; H_LIST=""
-while IFS=' ' read -r _hp _hs _hf; do
-  [ -n "$_hp" ] || continue
-  if [ ! -d "$ROOT/core/fixtures/$_hp" ]; then H_STALE=$((H_STALE + 1)); continue; fi
-  H_N=$((H_N + 1))
-  H_LIST="$H_LIST$_hp $_hs $_hf
-"
-done <<EOF
-$H_RAW
-EOF
-H_B=0; H_BPOLE=""; H_BFIXT=""
-while IFS=' ' read -r _hp _hs _hf; do
-  [ -n "$_hp" ] || continue
-  if [ "$_hs" -gt "$H_B" ]; then H_B="$_hs"; H_BPOLE="$_hp"; H_BFIXT="$_hf"; fi
-done <<EOF
-$H_LIST
-EOF
-
-BL="$(select_width "$BL_ALL" "$JOBS")"
-if [ "$H_N" -ge "$HIST_K" ]; then
-  SRC=history
-  if [ -z "$HBAND" ]; then
-    printf '%s: REFUSE -- pool width %s has %s usable history rows in %s, so history is the comparison source, and %s carries no "# history-band: <N>" directive to compare it under.\n' "$ME" "$JOBS" "$H_N" "$HIST" "$BASE" >&2
-    exit 2
-  fi
-  BL_POLE="$H_BPOLE"; BL_SECS="$H_B"; BL_BAND="$HBAND"; BL_FIXT="${H_BFIXT:-?}"
-elif [ -n "$BL" ]; then
-  SRC=seed
-  BL_POLE="$(printf '%s' "$BL" | cut -d' ' -f1)"
-  BL_SECS="$(printf '%s' "$BL" | cut -d' ' -f2)"
-  BL_BAND="$(printf '%s' "$BL" | cut -d' ' -f3)"
-  BL_FIXT="$(printf '%s' "$BL" | cut -d' ' -f5)"
-else
-  SRC=calibrating
-fi
-
-# (b) THE CUMULATIVE RECORD the coverage denominator is read from. Absent or empty is a SKIP
-#     by name: without it there is no statement of what the whole suite costs.
 if [ ! -s "$REC" ]; then
   printf '   SKIP -- no cumulative durations record to measure coverage against (%s)\n' "$REC"
   exit 0
 fi
 
-# (c) COST COVERAGE. The read-set skip narrows the dispatch list in place, so a run can time
-#     the pole beside thirty units instead of two hundred. That is a near-solo figure and the
-#     two must never be compared -- one shard has measured 442s loaded against 112s solo.
-#
-#     BOTH SUMS ARE JOINED TO THE FIXTURE DIRECTORIES ON DISK. The record keeps a key for a
-#     deleted fixture forever (the hook's merge never prunes it), and a ghost key's cost in the
-#     denominator would read as work this run failed to do. The population is a directory
-#     under core/fixtures/ carrying a run.sh, the same one the hook's dispatch loop builds;
-#     only membership is read, never order, so the `find` shim and /usr/bin/find agree.
+# (b) THE ON-DISK POPULATION. Every sum below is joined to the fixture directories on disk: the
+#     record keeps a key for a deleted fixture forever (the hook's merge never prunes it), and a
+#     ghost key's cost would read as work this run failed to do, or as load it ran beside. The
+#     population is a directory under core/fixtures/ carrying a run.sh, the same one the hook's
+#     dispatch loop builds; only membership is read, never order, so the `find` shim and
+#     /usr/bin/find agree.
 ONDISK="$(find "$ROOT/core/fixtures" -mindepth 2 -maxdepth 2 -name run.sh -type f 2>/dev/null | awk -F/ '{ print $(NF - 1) }')"
 fx_count="$(printf '%s' "$ONDISK" | awk 'NF { n++ } END { print n + 0 }')"
 if [ "$fx_count" -eq 0 ]; then
@@ -727,74 +811,187 @@ fi
 OBS_POLE="${OBS%% *}"
 OBS_SECS="${OBS#* }"
 
-# Sum of a durations file's costs over the on-disk fixture names, which arrive on stdin.
-cov_sum() { # <durations-file>  (stdin: on-disk fixture names)
-  awk 'NR == FNR { d[$1] = 1; next } NF == 2 && $2 ~ /^[0-9]+$/ && ($1 in d) { s += $2 } END { print s + 0 }' - "$1" 2>/dev/null
+# (c) THE ONE JOIN SITE: a durations file's cost over the on-disk names (stdin), its on-disk row
+#     count, and that cost LESS the named pole. Over this run's file the third figure is the LOAD L;
+#     the pole is excluded BY NAME, never by subtracting its seconds, so a max row naming a fixture
+#     that is not on disk cannot under-count the load. One call per file; no second join to drift.
+cov_sum() { # <durations-file> <pole-name>  (stdin: on-disk fixture names) -> "<sum> <rows> <sum-less-pole>"
+  awk -v p="$2" 'NR == FNR { d[$1] = 1; next } NF == 2 && $2 ~ /^[0-9]+$/ && ($1 in d) { s += $2; n++; if ($1 != p) l += $2 } END { print s + 0, n + 0, l + 0 }' - "$1" 2>/dev/null
 }
-NUM="$(printf '%s\n' "$ONDISK" | cov_sum "$DUR")"
-DEN="$(printf '%s\n' "$ONDISK" | cov_sum "$REC")"
+read -r NUM DISP LOAD <<EOF
+$(printf '%s\n' "$ONDISK" | cov_sum "$DUR" "$OBS_POLE")
+EOF
+read -r DEN _rn _rl <<EOF
+$(printf '%s\n' "$ONDISK" | cov_sum "$REC" "$OBS_POLE")
+EOF
 case "$NUM" in ''|*[!0-9]*) NUM=0 ;; esac
 case "$DEN" in ''|*[!0-9]*) DEN=0 ;; esac
+case "$DISP" in ''|*[!0-9]*) DISP=0 ;; esac
+case "$LOAD" in ''|*[!0-9]*) LOAD=0 ;; esac
 if [ "$DEN" -eq 0 ]; then
   printf '   SKIP -- the record %s carries no cost for any of the %s fixture directories on disk\n' "$REC" "$fx_count"
   exit 0
 fi
+
+# (d) THE SHARE OF THE RECORD, PRINTED AND NEVER AN EXIT. It is how a reader sees that a comparison
+#     was made on a keyed or near-solo dispatch. It decides nothing.
 COV_BP=$((NUM * 10000 / DEN))
 COV_TXT="$(printf '%d.%02d%%' "$((COV_BP / 100))" "$((COV_BP % 100))")"
-if [ "$((NUM * 100))" -lt "$((DEN * COV_MIN))" ]; then
-  printf '   SKIP -- coverage %s is below %s%%: this run timed %ss of the %ss the record holds for the %s fixture directories on disk, so its pole is not a loaded figure\n' \
-    "$COV_TXT" "$COV_MIN" "$NUM" "$DEN" "$fx_count"
-  exit 0
+printf '   coverage %s (this run timed %ss of the record'"'"'s %ss over %s fixture directories; printed, not a gate)\n' \
+  "$COV_TXT" "$NUM" "$DEN" "$fx_count"
+
+# (e) THE HISTORY, READ IN ONE awk PASS -- no fork per row; the fixture drives this program many
+#     times. Inputs: the on-disk names (stdin), then the history. The comparison is PER UNIT: this
+#     run's pole unit P is compared only against rows that name P. A row at this width is, in order:
+#       gone       its pole directory is not on disk -- ignored, with its own NOTE;
+#       other      it names a unit that is not P -- not consulted, ever: a unit is never failed (or
+#                  acquitted) against another unit's figure;
+#       legacy     a 5-column row naming P -- recorded before the count existed, never usable;
+#       malformed  any other shape short of 7 columns, or a non-integer load or count;
+#       outband    its dispatched count is outside +-COUNT_BAND% of this run's count C;
+#     and otherwise USABLE, printed as `<pole> <secs> <fixtures> <count>`. The last line is
+#     `# <gone> <other> <outband> <legacy> <malformed> <width-rows> <unit-rows> <unit-max>`:
+#     width-rows counts every non-gone row at this width (the first-pole announcement reads it);
+#     unit-rows and unit-max are P's well-formed 7-column rows of ANY count and the max over them,
+#     which ADMISSION reads. The band test is exact integer arithmetic on both edges, so a row at
+#     exactly 75% or 125% of C is comparable.
+hist_read() { # stdin: on-disk fixture names
+  awk -F'\t' -v j="$JOBS" -v p="$OBS_POLE" -v C="$DISP" -v band="$COUNT_BAND" '
+    FNR == 1 { f++ }
+    f == 1 { d[$0] = 1; next }
+    NF >= 5 && $1 == j && $3 ~ /^[0-9]+$/ && $3 > 0 {
+      if (!($2 in d)) { gone++; next }
+      wrows++
+      wf = (NF >= 7 && $6 ~ /^[0-9]+$/ && $7 ~ /^[0-9]+$/)
+      if (wf && $2 == p) { arows++; if ($3 + 0 > amax) amax = $3 + 0 }
+      if ($2 != p) { other++; next }
+      if (NF == 5) { legacy++; next }
+      if (!wf) { malformed++; next }
+      if ($7 * 100 < C * (100 - band)) { outband++; next }
+      if ($7 * 100 > C * (100 + band)) { outband++; next }
+      print $2, $3 + 0, $4, $7 + 0
+    }
+    END { print "#", gone + 0, other + 0, outband + 0, legacy + 0, malformed + 0, wrows + 0, arows + 0, amax + 0 }' - "$HIST" 2>/dev/null
+}
+H_RAW=""
+if [ -n "$HIST" ] && [ -f "$HIST" ] && [ -s "$HIST" ]; then
+  H_RAW="$(printf '%s\n' "$ONDISK" | hist_read)"
 fi
-printf '   coverage %s (this run timed %ss of the record'"'"'s %ss over %s fixture directories; %s%% needed)\n' \
-  "$COV_TXT" "$NUM" "$DEN" "$fx_count" "$COV_MIN"
+H_N=0; H_STALE=0; H_OTHER=0; H_OUTBAND=0; H_LEGACY=0; H_MALFORMED=0; W_ROWS=0; A_ROWS=0; A_MAX=0; H_LIST=""
+while IFS=' ' read -r _hp _hs _hf _hl _hx _hm _hw _ha _hz; do
+  [ -n "$_hp" ] || continue
+  if [ "$_hp" = "#" ]; then
+    H_STALE="$_hs"; H_OTHER="$_hf"; H_OUTBAND="$_hl"; H_LEGACY="$_hx"; H_MALFORMED="$_hm"
+    W_ROWS="$_hw"; A_ROWS="$_ha"; A_MAX="$_hz"; continue
+  fi
+  H_N=$((H_N + 1))
+  H_LIST="$H_LIST$_hp $_hs $_hf $_hl
+"
+done <<EOF
+$H_RAW
+EOF
+H_NC=$((H_OUTBAND + H_LEGACY + H_MALFORMED))
+H_B=0; H_BPOLE=""; H_BFIXT=""; H_BCOUNT=""
+while IFS=' ' read -r _hp _hs _hf _hl; do
+  [ -n "$_hp" ] || continue
+  if [ "$_hs" -gt "$H_B" ]; then H_B="$_hs"; H_BPOLE="$_hp"; H_BFIXT="$_hf"; H_BCOUNT="$_hl"; fi
+done <<EOF
+$H_LIST
+EOF
+
+printf '   dispatched %s fixture directories (load %ss, this run'"'"'s on-disk cost less its pole %s, printed only); pool %s history for %s: %s usable, %s not comparable (%s count outside +-%s%%, %s legacy, %s malformed); %s row(s) of other units not consulted; %s row(s) at pool %s in all\n' \
+  "$DISP" "$LOAD" "$OBS_POLE" "$JOBS" "$OBS_POLE" "$H_N" "$H_NC" "$H_OUTBAND" "$COUNT_BAND" "$H_LEGACY" "$H_MALFORMED" "$H_OTHER" "$W_ROWS" "$JOBS"
+[ "$H_STALE" -gt 0 ] && printf '   NOTE  %s history row(s) at pool %s name a pole directory that no longer exists and were ignored\n' "$H_STALE" "$JOBS"
+
+# The reviewed remedy, %q-quoted so it is pasteable whatever the history path holds. The width form
+# drops every row at the width; the unit form drops only one unit's rows there, which is all a unit
+# that failed its regime ceiling needs -- other units' history is independent of it.
+drop_cmd() { # [unit]
+  if [ -n "${1:-}" ]; then
+    printf "awk -F'\\\\t' -v w=%s -v u=%q '!(\$1 == w && \$2 == u)' %q > %q && mv %q %q\n" "$JOBS" "$1" "$HIST" "$HIST.new" "$HIST.new" "$HIST"
+  else
+    printf "awk -F'\\\\t' -v w=%s '\$1 != w' %q > %q && mv %q %q\n" "$JOBS" "$HIST" "$HIST.new" "$HIST.new" "$HIST"
+  fi
+}
+
+# (f) THE SOURCE, PER UNIT. The figure compared against is one taken at THIS width for THIS unit: its
+#     usable history once that holds K rows; else the tracked seed, but only when the seed names this
+#     very unit; else nothing -- CALIBRATING for the unit, which records and passes. B is the MAX of the
+#     unit's usable rows. There is no width-wide B: two units are never compared with each other.
+BL="$(select_width "$BL_ALL" "$JOBS")"
+if [ "$H_N" -ge "$HIST_K" ]; then
+  SRC=history
+  if [ -z "$HBAND" ]; then
+    printf '%s: REFUSE -- %s at pool width %s has %s usable history rows in %s, so history is the comparison source, and %s carries no "# history-band: <N>" directive to compare it under.\n' "$ME" "$OBS_POLE" "$JOBS" "$H_N" "$HIST" "$BASE" >&2
+    exit 2
+  fi
+  BL_POLE="$H_BPOLE"; BL_SECS="$H_B"; BL_BAND="$HBAND"; BL_FIXT="${H_BFIXT:-?}"
+elif [ -n "$BL" ] && [ "$(printf '%s' "$BL" | cut -d' ' -f1)" = "$OBS_POLE" ]; then
+  SRC=seed
+  BL_POLE="$OBS_POLE"
+  BL_SECS="$(printf '%s' "$BL" | cut -d' ' -f2)"
+  BL_BAND="$(printf '%s' "$BL" | cut -d' ' -f3)"
+  BL_FIXT="$(printf '%s' "$BL" | cut -d' ' -f5)"
+else
+  SRC=calibrating
+fi
 
 # ---------------------------------------------------------------------------------------
-# CALIBRATING -- this width has fewer than K usable history rows and no tracked seed. Nothing is
-# enforced: record, print the comparison against the max so far, pass.
+# THE REGIME CEILING, decided before anything calibrating is printed. The unit has no comparable row,
+# but it already holds K or more well-formed rows at this width: it has been seen, at other dispatch
+# counts. Past its own max plus REGIME_BAND percent it FAILS -- a regression that moved itself to a new
+# dispatch count is not acquitted by the move. Within that ceiling the run goes on to calibrate (or to
+# its seed) and its row is recorded: the new count range calibrates its own history. There is no
+# frozen state. REGIME_BAND is uncalibrated -- see its definition.
+# ---------------------------------------------------------------------------------------
+if [ "$SRC" != history ] && [ "$A_ROWS" -ge "$HIST_K" ]; then
+  RCEIL=$(( A_MAX + (A_MAX * REGIME_BAND + 99) / 100 ))
+  if [ "$OBS_SECS" -gt "$RCEIL" ]; then
+    printf '   FAIL  the suite pole has GROWN (regime): %s at %ss against its own max %ss over %s row(s) at pool %s, none from a comparable dispatch (regime band %s%%, ceiling %ss)\n' \
+      "$OBS_POLE" "$OBS_SECS" "$A_MAX" "$A_ROWS" "$JOBS" "$REGIME_BAND" "$RCEIL"
+    printf '         No row of %s was taken beside a dispatch within +-%s%% of this run'"'"'s %s units, so it is judged against\n' "$OBS_POLE" "$COUNT_BAND" "$DISP"
+    printf '         the uncalibrated regime ceiling. A real change to it re-calibrates by dropping its rows at this width:\n'
+    printf '           %s\n' "$(drop_cmd "$OBS_POLE")"
+    printf '         Nothing is recorded by a failing run.\n'
+    exit 1
+  fi
+fi
+
+# ---------------------------------------------------------------------------------------
+# CALIBRATING -- this unit has fewer than K usable history rows here and no tracked seed names it.
+# Nothing is enforced: print the comparison against the unit's max so far, record, pass.
 # ---------------------------------------------------------------------------------------
 if [ "$SRC" = calibrating ]; then
-  printf '   CALIBRATING (%s/%s) -- pool width %s has %s usable history row(s) and no tracked row; pole %s %ss' \
-    "$((H_N + 1))" "$HIST_K" "$JOBS" "$H_N" "$OBS_POLE" "$OBS_SECS"
-  if [ "$H_N" -gt 0 ]; then printf ' against the max so far %s %ss' "$H_BPOLE" "$H_B"; fi
+  printf '   CALIBRATING (%s/%s) for %s -- pool width %s has %s usable history row(s) for it and no tracked seed names it; pole %s %ss' \
+    "$((H_N + 1))" "$HIST_K" "$OBS_POLE" "$JOBS" "$H_N" "$OBS_POLE" "$OBS_SECS"
+  if [ "$H_N" -gt 0 ]; then printf ' against its max so far %ss' "$H_B"; fi
   printf '\n'
-  [ "$H_STALE" -gt 0 ] && printf '   NOTE  %s history row(s) at pool %s name a pole directory that no longer exists and were ignored\n' "$H_STALE" "$JOBS"
-  record_pole yes ""
+  record_run # calibrating path
   exit 0
 fi
 
-# Whether the baseline's own pole was dispatched. Read only AFTER the ceiling below: growth
-# past it fails whichever unit grew, and absence alone is never a pass.
-BL_PRESENT="$(awk -v p="$BL_POLE" 'NF == 2 && $1 == p { print "y"; exit }' "$DUR" 2>/dev/null)"
-
 # ---------------------------------------------------------------------------------------
-# VERDICT 5 -- THE COMPARISON, ASYMMETRIC.
-#
-# Over the ceiling FAILS regardless of which unit is the max: a unit that is not the baseline
-# pole growing past the pole's ceiling is the suite getting slower, exactly as much as the pole
-# growing would be. Within band with the baseline pole ABSENT is a SKIP: the unit the row
-# watches was not timed, so "within band" there is a statement about other units and reading
-# it as a pass is a false green.
+# VERDICT 5 -- THE COMPARISON. The baseline is this unit's own: its max usable row, or the seed that
+# names it. A unit that is not the baseline's is never compared, so there is no cross-unit FAIL.
 # ---------------------------------------------------------------------------------------
 CEIL="$(pole_ceiling "$BL_SECS" "$BL_BAND")"
 
 if [ "$SRC" = history ]; then
-  printf '   source: history -- max of %s usable row(s) at pool %s in %s (band %s%% from # history-band:)\n' \
-    "$H_N" "$JOBS" "$HIST" "$BL_BAND"
+  printf '   source: history -- max of %s usable row(s) for %s at pool %s in %s (band %s%% from # history-band:); B'"'"'s row dispatched %s\n' \
+    "$H_N" "$OBS_POLE" "$JOBS" "$HIST" "$BL_BAND" "$H_BCOUNT"
 else
-  printf '   CALIBRATING (%s/%s) -- source: the tracked SEED row for pool %s in %s, compared and reported, never enforced; history at this width holds %s of the %s usable rows that replace it\n' \
-    "$((H_N + 1))" "$HIST_K" "$JOBS" "$BASE" "$H_N" "$HIST_K"
+  printf '   CALIBRATING (%s/%s) for %s -- source: the tracked SEED row for pool %s in %s, compared and reported, never enforced; history at this width holds %s of the %s usable rows for it that replace it\n' \
+    "$((H_N + 1))" "$HIST_K" "$OBS_POLE" "$JOBS" "$BASE" "$H_N" "$HIST_K"
 fi
-[ "$H_STALE" -gt 0 ] && printf '   NOTE  %s history row(s) at pool %s name a pole directory that no longer exists and were ignored\n' "$H_STALE" "$JOBS"
 
 if ! pole_verdict "$OBS_SECS" "$BL_SECS" "$BL_BAND"; then
-  # A SEED NEVER BLOCKS. Above its ceiling the run is reported, recorded and passed: the operator
-  # ruled the hand-calibrated rows the defect, and a seed that could FAIL a push would also stop
-  # the history that replaces it from ever forming.
+  # A SEED NEVER BLOCKS. Above its ceiling the run is reported and passed: the operator ruled the
+  # hand-calibrated rows the defect, and a seed that could FAIL a push would also stop the history
+  # that replaces it from ever forming. Admission was decided above, so it records.
   if [ "$SRC" = seed ]; then
-    printf '   ABOVE SEED  %s at %ss is above the tracked seed %s at %ss (band %s%%, ceiling %ss, pool %s) -- not enforced while pool %s calibrates\n' \
-      "$OBS_POLE" "$OBS_SECS" "$BL_POLE" "$BL_SECS" "$BL_BAND" "$CEIL" "$JOBS" "$JOBS"
-    record_pole yes ""
+    printf '   ABOVE SEED  %s at %ss is above the tracked seed %s at %ss (band %s%%, ceiling %ss, pool %s) -- not enforced while %s calibrates\n' \
+      "$OBS_POLE" "$OBS_SECS" "$BL_POLE" "$BL_SECS" "$BL_BAND" "$CEIL" "$JOBS" "$OBS_POLE"
+    record_run
     exit 0
   fi
   printf '   FAIL  the suite pole has GROWN: %s at %ss against baseline %s at %ss (band %s%%, ceiling %ss, pool %s, baseline taken over %s fixtures)\n' \
@@ -811,43 +1008,23 @@ if ! pole_verdict "$OBS_SECS" "$BL_SECS" "$BL_BAND"; then
   exit 1
 fi
 
-if [ -z "$BL_PRESENT" ]; then
-  printf '   SKIP -- baseline pole not dispatched -- no evidence: %s has no row in this run, and the max it did time (%s %ss) is within %s'"'"'s ceiling of %ss\n' \
-    "$BL_POLE" "$OBS_POLE" "$OBS_SECS" "$BL_POLE" "$CEIL"
-  exit 0
-fi
-
 printf '   pole %s %ss against baseline %s %ss (band %s%%, ceiling %ss, pool %s)\n' \
   "$OBS_POLE" "$OBS_SECS" "$BL_POLE" "$BL_SECS" "$BL_BAND" "$CEIL" "$JOBS"
 
-# NOTES, both non-failing.
-#
-# The pole MOVING is not growth and must not be reported as it: the suite is as fast as its
-# longest unit whatever that unit is called. It is worth saying out loud because a baseline
-# pinned to a fixture that is no longer the pole is watching the wrong number while passing.
-#
-# UNDER A HISTORY SOURCE THE REMEDY IS THE DROP COMMAND, never "edit the row": the tracked row is not
-# read at a width with history, so an operator told to lower it edits a file that changes nothing.
-# The same %q-quoted command the FAIL text prints, so it is pasteable whatever the path holds.
+# NOTE, non-failing. A baseline more than twice the observed figure is a ratchet that has stopped
+# ratcheting: it would take a 100%% regression to fire. NO DOWNWARD FAIL, deliberately -- see the
+# header. UNDER A HISTORY SOURCE THE REMEDY IS THE DROP COMMAND, never "edit the row": the tracked row
+# is not read at a unit with history, so an operator told to lower it edits a file that changes nothing.
+# (There is no "pole moved" note any more: the baseline is always the observed unit's own.)
 drop_hint() {
   printf "         Re-baseline pool %s by dropping its rows: awk -F'\\\\t' -v w=%s '\$1 != w' %q > %q && mv %q %q\n" \
     "$JOBS" "$JOBS" "$HIST" "$HIST.new" "$HIST.new" "$HIST"
 }
-if [ "$OBS_POLE" != "$BL_POLE" ]; then
-  printf '   NOTE  the pole has moved to %s; the baseline still names %s. Consider re-baselining -- a baseline pinned to a unit that is no longer longest passes while watching the wrong number.\n' "$OBS_POLE" "$BL_POLE"
-  [ "$SRC" = history ] && drop_hint
-fi
-# A baseline more than twice the observed figure is a ratchet that has stopped ratcheting: it
-# would take a 100%% regression to fire. NO DOWNWARD FAIL, deliberately -- see the header.
 if [ "$((OBS_SECS * 2))" -lt "$BL_SECS" ]; then
   printf '   NOTE  the baseline is more than twice this run'"'"'s figure -- lower the baseline. A ceiling this far above the real cost would take a doubling to fire.\n'
   [ "$SRC" = history ] && drop_hint
 fi
-# ADMISSION. Under a tracked seed (fewer than K history rows) every pass records: B does not exist
-# yet. Under history a pass records only at or below B, so B never moves except by a reviewed drop.
-if [ "$SRC" = history ] && [ "$OBS_SECS" -gt "$BL_SECS" ]; then
-  record_pole no "${OBS_SECS}s is inside the band but above B=${BL_SECS}s; only a pole at or below B is admitted, so B moves only by a reviewed re-calibration"
-else
-  record_pole yes ""
-fi
+# ADMISSION is per unit, in unit_rows: under history the pole records only at or below B, so B never
+# moves except by a reviewed drop, and every other dispatched unit is admitted by its own rule.
+record_run
 exit 0

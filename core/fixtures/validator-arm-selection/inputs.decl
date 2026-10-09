@@ -1,0 +1,21 @@
+# validator-arm-selection and its shard driver validator-arm-selection-b (which execs this run.sh
+# --group b) share ONE declaration shape.
+# The subject: every arm drives it, plain and with --arms. REQUIRED, printed where it is resolved.
+!scripts/validate-enforcement-map.sh
+# The arm-line parser the fixture enumerates ids with, and the seed that builds the mutated tree.
+scripts/render-invariant-index.sh
+core/fixtures/enforcement-map-sites/seed.sh
+# The seed copies core/, scripts/ and .githooks/ whole, and the plain baseline run reads the same tree
+# the validator reads at a repository root, so those are declared whole.
+core/
+scripts/
+.githooks/
+templates/
+patterns/
+CLAUDE.md
+docs/invariant-index.md
+docs/vocabulary-index.md
+docs/backlog.md
+.ai-dlc-fixture-readsets.tsv
+# The shard driver execs this run.sh; the coverage join reads every declared driver.
+core/fixtures/validator-arm-selection-b/run.sh

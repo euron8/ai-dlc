@@ -1,0 +1,44 @@
+# Tools run.sh, its seed (enforcement-map-sites/seed.sh), the validator and the renderer invoke.
+awk
+basename
+bash
+cat
+chmod
+cksum
+cmp
+comm
+cp
+cut
+diff
+dirname
+env
+find
+git
+grep
+head
+id
+join
+ln
+ls
+mkdir
+mktemp
+mv
+paste
+perl
+python3
+rm
+rmdir
+sed
+shasum
+sort
+split
+tail
+touch
+tr
+uniq
+wc
+xargs
+yes
+# node is reached, not keyed: I120 derives the ECMAScript whitespace set with it, and the hook lists it
+# in READSET_UNKEYED_TOOLS, so it resolves on the invoker's PATH.
+?node

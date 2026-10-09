@@ -80,7 +80,7 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 # stopped running produces no findings on that tree and the shard reports FIXTURE BROKEN
 # rather than a clean sweep. Neither shard can report green having run nothing.
 SHARDS="a b"
-PHASES_a="width unknown-id grammar all-ids sweep"
+PHASES_a="width unknown-id grammar i66-onehook all-ids sweep"
 PHASES_b="attrib union partition m1 m2 m3"
 
 # --- THE INNER POOL WIDTH, resolved in ONE place -------------------------------------------
@@ -154,6 +154,10 @@ fi
 
 VAL="$ROOT/scripts/validate-enforcement-map.sh"
 RENDERER="$ROOT/scripts/render-invariant-index.sh"
+# The hermetic runner's REQUIRED-input sentinel, printed where the subject is resolved, after the
+# distribution-only SKIP above and before any arm drives it. Printed once, by the top-level run only:
+# the --attrib-one / --sweep-one workers below re-enter this file and must not repeat it.
+case "${1:-}" in --attrib-one|--sweep-one) : ;; *) echo "HERMETIC-CONSUMED scripts/validate-enforcement-map.sh" ;; esac
 SEED="$ROOT/core/fixtures/enforcement-map-sites/seed.sh"
 
 # --- the per-id worker, re-entered through xargs ------------------------------------------
@@ -404,6 +408,57 @@ if [ "$u1_rc" -eq 2 ] && [ "$u2_rc" -eq 2 ] && [ "$u3_rc" -eq 2 ]; then
   ok "--arms with no value, an unknown flag and a trailing operand all exit 2"
 else
   bad "the flag grammar does not fail closed: '--arms' exited $u1_rc, '--not-a-flag' exited $u2_rc, a trailing operand exited $u3_rc — each must be 2"
+fi
+fi
+
+# --- Arm 2b: ONLY ONE HOOK WIDENED — `--arms I66` must fire on exactly that edit ----------
+# readset-skip drives whichever pre-push hook it resolves first, so a widening present in one
+# copy alone reads green there and reaches only half the population. I66 is the binding. The
+# arm lived in readset-skip until that fixture's declaration had to name this validator, which
+# no consumer holds; it lives here because this fixture is .dist-only and already drives it.
+#
+# Two copies holding just what `--arms I66` reads. The CONTROL is unmutated and must read the
+# verdict block's OK line at rc 0 -- presence-shaped, so a copy that could not run cannot pass
+# it. The MUTANT widens READSET_UNKEYED_TOOLS (the tools exempt from keying, an executable
+# line inside the FIXTURE_POOL block I66 joins) in the DISTRIBUTION hook alone; the consumer
+# copy is left byte-identical to the control's. The mutation is a literal replacement that must
+# match exactly once, and the two dist hooks must then differ, so a lost anchor reads as DID NOT
+# APPLY rather than as a kill. The kill is presence-shaped too: non-zero AND the fork message.
+if want i66-onehook; then
+RAN="$RAN i66-onehook"
+I66_FILES="scripts/validate-enforcement-map.sh scripts/render-invariant-index.sh
+core/skills/ai-dlc/steps/gate-validation.md core/skills/ai-dlc/enforcement-map.yaml
+core/skills/ai-dlc/core-manifest.md core/skills/ai-dlc-update/reconcile/setup-sites.md
+.githooks/pre-push core/git-hooks/pre-push core/scripts/hermetic-run.sh"
+for _t in i66c i66m; do
+  for _f in $I66_FILES; do
+    mkdir -p "$TMP/$_t/$(dirname "$_f")" && cp -p "$ROOT/$_f" "$TMP/$_t/$_f" \
+      || broke "could not copy $_f into the $_t tree for the I66 arm"
+  done
+done
+I66_FROM='READSET_UNKEYED_TOOLS="node npm npx claude"'
+I66_TO='READSET_UNKEYED_TOOLS="node npm npx claude sh"'
+I66_N="$(MF="$I66_FROM" MT="$I66_TO" MC="$TMP/i66.n" awk '
+  BEGIN { f = ENVIRON["MF"]; t = ENVIRON["MT"]; n = 0 }
+  $0 == f { print t; n++; next }
+  { print }
+  END { print n > ENVIRON["MC"] }' "$TMP/i66c/.githooks/pre-push" > "$TMP/i66m/.githooks/pre-push" && cat "$TMP/i66.n")"
+if [ "$I66_N" != 1 ] || cmp -s "$TMP/i66c/.githooks/pre-push" "$TMP/i66m/.githooks/pre-push"; then
+  broke "the one-hook I66 mutant DID NOT APPLY: the anchor '$I66_FROM' matched ${I66_N:-?} line(s) of .githooks/pre-push, not 1"
+fi
+cmp -s "$TMP/i66c/core/git-hooks/pre-push" "$TMP/i66m/core/git-hooks/pre-push" \
+  || broke "the one-hook I66 mutant touched the consumer hook too; it must widen ONE copy only"
+i66c_out="$(bash "$TMP/i66c/scripts/validate-enforcement-map.sh" --arms I66 2>&1)"; i66c_rc=$?
+i66m_out="$(bash "$TMP/i66m/scripts/validate-enforcement-map.sh" --arms I66 2>&1)"; i66m_rc=$?
+if [ "$i66c_rc" -eq 0 ] && grep -q '^OK: enforcement-map.yaml in sync' <<< "$i66c_out"; then
+  ok "I66 CONTROL: the unmutated copy reads OK at rc 0 under --arms I66, so the mutant verdict below is attributable"
+else
+  bad "I66 CONTROL: the unmutated copy did not read OK at rc 0 under --arms I66 (rc $i66c_rc): $(printf '%s' "$i66c_out" | head -3 | tr '\n' ' ' | cut -c1-200)"
+fi
+if [ "$i66m_rc" -ne 0 ] && grep -q 'I66 the two pre-push fixture-suite runners have forked' <<< "$i66m_out"; then
+  ok "MUTANT: widening READSET_UNKEYED_TOOLS in .githooks/pre-push alone makes --arms I66 exit $i66m_rc naming the forked runners"
+else
+  bad "MUTANT SURVIVED: widening READSET_UNKEYED_TOOLS in .githooks/pre-push alone left --arms I66 at rc $i66m_rc without the fork message. A widening in one hook copy reaches only half the population and nothing would say so: $(printf '%s' "$i66m_out" | head -2 | tr '\n' ' ' | cut -c1-200)"
 fi
 fi
 
