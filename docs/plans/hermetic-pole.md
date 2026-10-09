@@ -1,4 +1,9 @@
-# Hermetic pole — make the push short
+# DISCHARGED — Hermetic pole — make the push short
+
+> **THIS PLAN IS SPENT. DO NOT EXECUTE IT.** Every `### Done when` item is met. 0.763.0 landed as `6f9da269`,
+> the batch-219 re-derivation merged as PR #1091 (`155418d4`), and the later fresh-resume check and handoff
+> are recorded below. It is kept as the record of what was measured. The follow-on work is **BL-493** and the
+> orphaned consumer hook under **BL-481**, both in `docs/backlog.md`.
 
 ## RESUME HERE
 
@@ -91,8 +96,12 @@ uptime
    batch 219 as PR #1091.
 3. **FRESH-RESUME CHECK**: fresh clone of `origin/main` through the `github` remote's URL, read this plan there,
    re-run the derive block, assert the numbered actions name nothing already shipped, run the plan validator there as
-   the floor.
-4. **HAND THE PLAN TO A LOCAL AI-DLC SESSION, THEN STOP.** `ListAgents`; if a local `ai-dlc-*`
+   the floor. DONE after the batch-219 close on a fresh clone at `155418d4`: VERSION 0.763.0, `DECLARED 225`, `readset_vs_put` 0
+   in both hooks, `READSET_VS_BEGIN` 1 in the runner and 1 in the hook, 202 store entries, load 2.9, the validator
+   `43 plan(s) checked, 0 error(s)`.
+4. **HAND THE PLAN TO A LOCAL AI-DLC SESSION, THEN STOP.** DONE after the batch-219 close: `ai-dlc-c6` handed it on and the
+   receiving session replied ACCEPTED, found every done-when met, and closed the plan. `scripts/plan-rotate.sh`
+   reported 10202 bytes under the 150000-byte ceiling, nothing to move. `ListAgents`; if a local `ai-dlc-*`
    session is found (never a `graph-*` one), `SendMessage` it exactly
    `READ and FOLLOW docs/plans/hermetic-pole.md` and nothing else. A `REFUSED:` reply advances to the
    next untried session, idle ones first; silence does not. Once a session accepts, this session has
@@ -124,4 +133,4 @@ choices with a marked recommendation. Never narrow the scope on your own authori
    content key`, 0 run, exit 0 in about 90 seconds; `docs/` is an excluded top, so nothing was keyed.**
 5. The carriers are committed (**MET at 0.763.0**, four sentences across `tool-hazards.md`, `operator-rulings.md` and
    `verification-discipline.md`), this block re-derived, the plan validator green, the fresh-resume check passed, the
-   plan handed on.
+   plan handed on. **MET after the batch-219 close.**
