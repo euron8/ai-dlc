@@ -56,6 +56,9 @@ for f in "$INSTALL" "$UNINSTALL" "$HOOK"; do
   [ -f "$f" ] || { echo "run.sh: missing $f" >&2; exit 2; }
 done
 command -v jq >/dev/null 2>&1 || { echo "run.sh: jq required by install.sh" >&2; exit 2; }
+echo "HERMETIC-CONSUMED scripts/install.sh"
+echo "HERMETIC-CONSUMED scripts/uninstall.sh"
+echo "HERMETIC-CONSUMED core/hooks/ai-dlc-rules-floor.sh"
 
 # Scrub ambient AI_DLC_* before invoking any hook. A consumer that tunes one of these in
 # settings.json would otherwise fail this fixture against a hook behaving correctly, and

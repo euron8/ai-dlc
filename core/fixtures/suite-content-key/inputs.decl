@@ -1,0 +1,8 @@
+# suite-content-key copies scripts/, .githooks/ and templates/ whole into a throwaway git repository and keys THAT copy.
+# Only the copy is read, never the live repo's history. The key script is REQUIRED and printed where it is located.
+# core/fixtures/lib/ is the preamble run.sh sources; the fixture's own directory is copied by the runner without being named.
+!scripts/suite-content-key.sh
+scripts/
+.githooks/
+templates/
+core/fixtures/lib/
