@@ -49,9 +49,9 @@ and expect a rule here to cite a measurement whose story lives in the archive.**
 that file and a `path:line` into it would then fail `validate-plan-shape.sh`'s citation arm on a
 correct rotation.
 
-**ROTATE THIS FILE BEFORE YOU WRITE YOUR OWN BLOCK — IT IS THE FIRST THING EVERY BATCH FROM HERE
-OWES.** The file sits within one resume block of `P8`'s 150000 ceiling, so your push WILL fail on
-it. That is the designed order and not a surprise: `plan-rotate.sh` refuses to move anything while
+**ROTATE THIS FILE AFTER YOU WRITE YOUR OWN BLOCK — IT IS SOMETHING EVERY BATCH FROM HERE
+OWES.** Each close rotates the file back to just under `P8`'s 150000 ceiling, so the next resume
+block takes it over again and your push WILL fail on it. That is the designed order and not a surprise: `plan-rotate.sh` refuses to move anything while
 the file is UNDER the ceiling ("a plan under the ceiling rotates to itself"), so a batch cannot
 rotate pre-emptively however much it wants to. Let the arm fire, then `bash
 scripts/plan-rotate.sh docs/plans/graph-ledger-full-drain.md` to see what moves and `--apply` to
@@ -70,12 +70,14 @@ it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not i
 **BATCH 209 SHIPPED ONE RELEASE, `v0.754.0` (`ba8d8afd`, #1066), AND DISCHARGED NO CONSUMER CANDIDATE.** It was handed
 the plan by peer session ai-dlc-cd at `origin/main` `a5685087` (`VERSION` 0.751.0) and ran beside the hermetic program's
 `v0.752.0` (`c5f98e01`) and `v0.753.0` (`f4686761`, both ai-dlc-e2), one gated push on the box at a time by GATE START /
-LANDED messages; it took 0.754.0 by agreement and rebased onto 0.753.0's landed sha. The opening sweep read live 1,
-unfiled 1, worklist 0, TERMINAL 223, archive 345, every control passing, 25 qualifying refs. **The one live candidate is
-the advisor-gate id that `v0.751.0` already shipped in its release commit**; no backlog entry cites it (`BL-486` does
-not), so the plan's DISCHARGED, UNFILED and delivery-gap joins all score it as untouched. That is a blindness of the join,
-not new work: a candidate discharged by a release whose entry never named the id is invisible to `pc()`. The next sweep
-will read the same figure until graph pulls 0.751.0 and archives it.
+LANDED messages; it took 0.754.0 by agreement and rebased onto 0.753.0's landed sha. Batch 209's opening sweep (at
+`a5685087`) read live 1, unfiled 1, worklist 0, TERMINAL 223, archive 345, 25 qualifying refs; the fresh-resume sweep at
+`88bee037` reads **live 0, unfiled 0, worklist 0, TERMINAL 223, archive 346, 27 qualifying refs**, every control passing
+except the worklist block's "live must be non-zero", which fails BECAUSE live is 0 and is the first time this program has
+read an EMPTY live ledger. The one id that moved between the two sweeps is the advisor-gate candidate `v0.751.0` shipped:
+graph pulled 0.749.0 -> 0.751.0 (reconcile #1194) during this batch and archived it. While it was live, no backlog entry
+cited it (`BL-486` does not), so the DISCHARGED, UNFILED and delivery-gap joins all scored it as untouched: a candidate
+discharged by a release whose entry never named the id is invisible to `pc()`. A blindness of the join, not new work.
 - `v0.754.0`: `BL-480`, shipped alone (both pre-push hooks change). The local map's directory rows carry
   `#listing:<sha>` (deriver `readset_local_rows` inside the LOCALMAP span; manifest taken once in the trace copy before
   the fixture loop; plain `-` with a one-time note when the runner has no UNIVERSE span). `readset_local_validate`
@@ -127,10 +129,10 @@ the deriver, which sources it.
   and load 32-58; that is a defect under the wall-clock ruling and the measurement is owed by the next batch that finds
   the box idle.
 
-**THE DELIVERY GAP IS FIVE RELEASES.** graph's `.claude/.ai-dlc-version` reads 0.749.0 (skill_version 0.750.0; its
-self-update commit #1193 is on its sprint branch, stamp unmoved) against `VERSION` 0.754.0. 0.751.0 carries the one
-candidate graph still lists live; 0.754.0 changes both pre-push hooks and the deriver's sha, so graph's first push after
-pulling it retraces every locally-mapped fixture once. The banked ruling stands: report the gap and write no runbook.
+**THE DELIVERY GAP IS THREE RELEASES.** graph's `.claude/.ai-dlc-version` reads 0.751.0 (skill_version 0.753.0, its
+self-update #1195) against `VERSION` 0.754.0; it pulled twice during this batch. 0.754.0 changes both pre-push hooks and
+the deriver's sha, so graph's first push after pulling it retraces every locally-mapped fixture once. The banked ruling
+stands: report the gap and write no runbook.
 
 Batch 208's block below is history: batch 209's block replaces its open items, its BL-480 facts and its delivery gap.
 
@@ -810,7 +812,12 @@ done < /tmp/entry_pcs.tsv
 wc -l < /tmp/pc_backed.tsv     # THE WORKLIST: entries whose candidate is STILL LIVE upstream
 cat /tmp/pc_backed.tsv         # read it -- the ids are the batch's candidate set
 # controls, same invocation:
-wc -l < /tmp/live.txt                                            # must be NON-ZERO
+wc -l < /tmp/live.txt                                            # 0 is LEGITIMATE here -- it is the program's goal
+                                                                 # state, first read at batch 209's close -- PROVIDED
+                                                                 # the `live_main` presence control above is non-zero
+                                                                 # and `arch.txt` holds main's ids. A 0 beside a 0
+                                                                 # presence control is a broken derivation; do not
+                                                                 # "fix" a correct 0 by widening the grammar.
 grep -cxF 'PC-S316-UPDATE-STEP8-ORDERS-THE-LEDGER-DISPOSITIONS-AFTER-THE-PUSH-AND-MERGE' /tmp/arch.txt  # control: 1. READS `arch.txt`:
                                                                  # it read `live.txt` until the consumer archived the
                                                                  # id at its 0.691.0 pull, which turned a correct
