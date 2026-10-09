@@ -15,10 +15,81 @@
 # THE MUTANTS ARE SCORED ON WHICH CASE DIES, NOT ON WHETHER THE FIXTURE WENT RED. A fixture
 # reporting red for the wrong case is a mutant that killed nothing and reads identically to one
 # that worked, which is the defect this directory exists to catch one level up.
+#
+# SHARDED. The pre-push suite is POLE-BOUND, so this battery's 21 full runs of the shipped
+# fixture are dealt across three .dist-only drivers (`gate-adjudication-mutants-b`, `-c`) that
+# `exec bash <this file> --group <x>`. Every shard pays the M0 control and the coverage join;
+# the mutant partition below is declared HERE and joined (J0) against this file's own
+# `score "m<n> ` lines, so no mutant can fall out of every shard and no shard can be declared
+# without a driver. The shard arrives as an ARGUMENT, never the environment (scrubbed below).
+SHARDS="a b c"
+MUTANTS_a="m1 m4 m7 m10 m13 m16 m19"
+MUTANTS_b="m2 m5 m8 m11 m14 m17 m20"
+MUTANTS_c="m3 m6 m9 m12 m15 m18"
 set -u
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
-DIR="$(cd "$(dirname "$0")" && pwd)"
+GROUP=a
+if [ "${1:-}" = "--group" ]; then
+  GROUP="${2:-}"
+  [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }
+fi
+case " $SHARDS " in
+  *" $GROUP "*) ;;
+  *) echo "FIXTURE ERROR: unknown shard '$GROUP' (known: $SHARDS)" >&2; exit 2 ;;
+esac
+eval "MINE=\"\${MUTANTS_$GROUP:-}\""
+[ -n "$MINE" ] || { echo "FIXTURE ERROR: shard '$GROUP' has no MUTANTS_$GROUP list; a shard dealt nothing passes everything it never checked" >&2; exit 2; }
+NAME="gate-adjudication-mutants"
+[ "$GROUP" = a ] || NAME="$NAME-$GROUP"
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+SELF="$HERE/run.sh"
+[ -f "$SELF" ] || { echo "FIXTURE ERROR: cannot read $SELF for the coverage join" >&2; exit 2; }
+
+# partition_ok <declared ids file> <dealt ids file> -> 0 when dealt is disjoint and covers declared
+# exactly; prints the offending ids otherwise.
+partition_ok() {
+  local dup miss extra
+  dup="$(sort "$2" | uniq -d | tr '\n' ' ')"
+  miss="$(sort -u "$2" | comm -23 <(sort -u "$1") - | tr '\n' ' ')"
+  extra="$(sort -u "$2" | comm -13 <(sort -u "$1") - | tr '\n' ' ')"
+  [ -z "$dup$miss$extra" ] && return 0
+  echo "dealt twice: {${dup% }} dealt to no shard: {${miss% }} dealt but not declared: {${extra% }}"
+  return 1
+}
+JW="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
+printf '%s\n' m1 m2 m3 > "$JW/pd"
+printf '%s\n' m1 m2 m2 m3 > "$JW/pdup"
+printf '%s\n' m1 m3 > "$JW/pmiss"
+printf '%s\n' m3 m1 m2 > "$JW/pok"
+if partition_ok "$JW/pd" "$JW/pdup" >/dev/null || partition_ok "$JW/pd" "$JW/pmiss" >/dev/null \
+   || ! partition_ok "$JW/pd" "$JW/pok" >/dev/null; then
+  echo "FIXTURE BROKEN: the coverage join's self-probe did not discriminate (duplicate, omission, exact)" >&2
+  rm -rf "$JW"; exit 2
+fi
+sed -n 's/^score "\(m[0-9][0-9]*\) .*/\1/p' "$SELF" > "$JW/declared"
+for s in $SHARDS; do eval "printf '%s\n' \${MUTANTS_$s}"; done | grep . > "$JW/dealt"
+ndecl="$(grep -c . "$JW/declared")" || ndecl=0
+ndupdecl="$(sort "$JW/declared" | uniq -d | grep -c .)" || ndupdecl=0
+if [ "$ndecl" -eq 0 ] || [ "$ndupdecl" -ne 0 ]; then
+  echo "FIXTURE BROKEN: $ndecl score ids derived from $SELF ($ndupdecl declared twice)" >&2; rm -rf "$JW"; exit 2
+fi
+if ! why="$(partition_ok "$JW/declared" "$JW/dealt")"; then
+  echo "FIXTURE BROKEN: the shard partition does not cover the declared mutants exactly -- $why" >&2; rm -rf "$JW"; exit 2
+fi
+for s in $SHARDS; do
+  [ "$s" = a ] && continue
+  drv="$HERE/../gate-adjudication-mutants-$s/run.sh"
+  if [ ! -f "$drv" ] || ! grep -qF -- "--group $s" "$drv"; then
+    echo "FIXTURE BROKEN: shard '$s' is declared but $drv does not drive it" >&2; rm -rf "$JW"; exit 2
+  fi
+done
+rm -rf "$JW"
+NMINE="$(printf '%s\n' $MINE | grep -c .)" || NMINE=0
+echo "[J0] coverage join: $ndecl mutants derived from score lines, dealt disjointly across {$SHARDS}, union exact; this shard runs {$MINE}"
+
+DIR="$HERE"
 
 # Resolve the repo root by walking up for a marker; never count `..` hops. The answer has to be
 # the same from the repo root, from this directory and from a copied sandbox.
@@ -57,6 +128,7 @@ done
 # The path is the only thing that says which file was actually scored. TWO subjects here, and
 # that is the whole reason it matters: the predicate lives in the sibling and the join lives in
 # the caller, so a battery that mutated only one of them would prove half a fix.
+echo "HERMETIC-CONSUMED core/scripts/validate-gate-adjudication.sh"
 echo "caller:   $CALLER"
 echo "sibling:  $SIBLING"
 echo "fixture:  $FIXTURE/run.sh"
@@ -121,7 +193,11 @@ PY
 # set names all of them and the equality still holds.
 score() {
   local label="$1" target="$2" dead="$3" old="$4" new="$5" why="$6"
-  local sb out rc got want nlab nrow
+  local sb out rc got want nlab nrow mid
+  mid="${label%% *}"
+  if [ "$mid" != M0 ]; then
+    case " $MINE " in *" $mid "*) ;; *) return ;; esac
+  fi
   SCORED=$((SCORED + 1))
   sb="$(build_sandbox)"
   if ! mutate "$ROOT_DIR/core/scripts/$target" "$sb/core/scripts/$target" "$old" "$new"; then
@@ -581,13 +657,13 @@ score "m11 caller replaced by 'exit 0'" validate-gate-adjudication.sh NOPASS "" 
 # The kill count itself. A battery whose mutants all applied and killed nothing reports zero
 # failures, which is byte-identical to a battery that worked.
 # --------------------------------------------------------------------------
-if [ "$SCORED" -lt 21 ]; then
-  note_fail "only $SCORED mutant(s) were scored; this battery declares 21. A mutant that never
-  ran cannot have been survived or killed."
+if [ "$SCORED" -ne $((NMINE + 1)) ]; then
+  note_fail "$SCORED run(s) were scored; this shard was dealt $NMINE mutant(s) plus the M0 control.
+  A mutant that never ran cannot have been survived or killed."
 fi
 
 if [ "$FAILURES" -eq 0 ]; then
-  echo "ok: gate-adjudication-mutants — $SCORED mutant(s) scored across both subjects; the"
+  echo "ok: $NAME — $SCORED run(s) scored (M0 plus $NMINE mutant(s) of shard $GROUP); the"
   echo "    unmutated control passes with S1's SUPPRESSED line present, and removing the"
   echo "    sibling's rows, the catalog compare, the lifetime test, the malformed-shape"
   echo "    exclusion, the fail-closed default, the exact-id match, the empty-catalog rule,"
@@ -596,5 +672,5 @@ if [ "$FAILURES" -eq 0 ]; then
   echo "    either script itself each kills exactly the case set that owns that property."
   exit 0
 fi
-echo "FAILED: gate-adjudication-mutants — $FAILURES finding(s) across $SCORED mutant(s)"
+echo "FAILED: $NAME — $FAILURES finding(s) across $SCORED mutant(s)"
 exit 1

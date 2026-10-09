@@ -1,0 +1,6 @@
+# reconcile-emit-report-c is a shard driver: it execs the sibling reconcile-emit-report/run.sh --group c, which reads the reconcile directory whole (the seed, the mutant copies), the shared preamble and the sibling's seed.sh. The other shard driver is read by the sibling's J0 join.
+!core/skills/ai-dlc-update/reconcile/emit-report.sh
+core/skills/ai-dlc-update/reconcile/
+core/fixtures/lib/
+core/fixtures/reconcile-emit-report/
+core/fixtures/reconcile-emit-report-b/run.sh

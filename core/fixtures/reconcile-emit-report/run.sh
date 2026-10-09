@@ -21,6 +21,109 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+# --- THE SHARD SPLIT, AND IT IS A SCHEDULING BOUNDARY RATHER THAN A SUBJECT BOUNDARY ------------
+# The pre-push suite is POLE-BOUND: its makespan tracks its single longest DIRECTORY, because
+# `core/fixtures/*/run.sh` is what the outer pool globs. Unsharded this file was the fourth-longest
+# unit on the suite. Everything below the world-guard probe is a PHASE -- a block opened by a line
+# `if rer_phase <slug>; then` and closed by `fi # end rer_phase <slug>` -- and the phases are dealt
+# across the shards named in SHARDS. Every shard pays the seed, the sanity arm and the world-guard
+# probe, because a shard that skipped them could report green against a harness that never ran.
+#
+# THE SHARD ARRIVES AS AN ARGUMENT (`--group b`), never from the environment: the pre-push runner
+# scrubs AI_DLC_*, and a fallback-to-'a' design would run shard 'a' three times. A run with no
+# argument is shard 'a' -- which is what the pool globs for this directory -- and the sibling
+# directories `-b` and `-c` are drivers that run this file with their shard and exit 2 unless its
+# verdict line names that shard.
+#
+# THE COVERAGE JOIN (J0) runs in every shard before anything is seeded: the declared phase set is
+# derived from this file's own `if rer_phase` lines, every one must have its end marker, the lists
+# dealt across SHARDS must be disjoint, non-empty and union to it exactly, and every declared shard
+# but 'a' must have a driver directory that names it. The join proves it can fire, on a seeded
+# duplicate and a seeded omission, before it is trusted. J1, at the foot, proves the shard ENTERED
+# exactly the phases its list names. The mutants live inside the phases, so they inherit the join.
+#
+# A PHASE'S HELPERS LIVE INSIDE THE PHASE, and nothing is shared between phases except what is
+# defined above them: the world guards, `ok`/`bad`, the seed variables and the shadowed-validator
+# consumer seed. That was checked by listing every name each phase defines and every line outside
+# it that reads one.
+SHARDS="a b c"
+PHASES_a="seeded b230 moved shadow b1b2 wg"
+PHASES_b="vworlds1 vworlds2"
+PHASES_c="step3b sb"
+GROUP=a
+case "${1:-}" in
+  --group)
+    GROUP="${2:-}"
+    [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; } ;;
+  "") ;;
+  *) echo "FIXTURE ERROR: unknown argument '$1' (want --group <x>)" >&2; exit 2 ;;
+esac
+case " $SHARDS " in
+  *" $GROUP "*) ;;
+  *) echo "FIXTURE ERROR: unknown shard '$GROUP' (known: $SHARDS)" >&2; exit 2 ;;
+esac
+
+# rer_partition_ok <declared file> <dealt file> -> 0 when dealt is disjoint and covers declared
+# exactly; prints the offending names otherwise.
+rer_partition_ok() {
+  local dup miss extra
+  dup="$(sort "$2" | uniq -d | tr '\n' ' ')"
+  miss="$(sort -u "$2" | comm -23 <(sort -u "$1") - | tr '\n' ' ')"
+  extra="$(sort -u "$2" | comm -13 <(sort -u "$1") - | tr '\n' ' ')"
+  [ -z "$dup$miss$extra" ] && return 0
+  echo "dealt twice: {${dup% }} dealt to no shard: {${miss% }} dealt but not declared: {${extra% }}"
+  return 1
+}
+# The world-guard battery re-runs copies of this file in probe-only mode from a tree that carries no
+# sibling drivers; those copies exit before any phase, so the join has nothing to bind there.
+if [ -z "${AI_DLC_RER_PROBE_ONLY:-}" ]; then
+RER_SELF="$HERE/run.sh"
+[ -f "$RER_SELF" ] || { echo "FIXTURE ERROR: cannot read $RER_SELF for the coverage join" >&2; exit 2; }
+RER_JW="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed for the coverage join" >&2; exit 2; }
+printf '%s\n' u1 u2 u3 > "$RER_JW/pd"
+printf '%s\n' u1 u2 u2 u3 > "$RER_JW/pdup"
+printf '%s\n' u1 u3 > "$RER_JW/pmiss"
+printf '%s\n' u3 u1 u2 > "$RER_JW/pok"
+if rer_partition_ok "$RER_JW/pd" "$RER_JW/pdup" >/dev/null || rer_partition_ok "$RER_JW/pd" "$RER_JW/pmiss" >/dev/null \
+   || ! rer_partition_ok "$RER_JW/pd" "$RER_JW/pok" >/dev/null; then
+  echo "FIXTURE BROKEN: [J0] the coverage join's self-probe did not discriminate (duplicate, omission, exact)" >&2
+  rm -rf "$RER_JW"; exit 2
+fi
+sed -n 's/^if rer_phase \([a-z0-9_]*\); then$/\1/p' "$RER_SELF" > "$RER_JW/declared"
+sed -n 's/^fi # end rer_phase \([a-z0-9_]*\)$/\1/p' "$RER_SELF" > "$RER_JW/ended"
+for _s in $SHARDS; do eval "printf '%s\n' \${PHASES_$_s:-}"; done | grep . > "$RER_JW/dealt"
+rer_ndecl="$(grep -c . "$RER_JW/declared")" || rer_ndecl=0
+rer_ndup="$(sort "$RER_JW/declared" | uniq -d | grep -c .)" || rer_ndup=0
+if [ "$rer_ndecl" -eq 0 ] || [ "$rer_ndup" -ne 0 ] || ! cmp -s "$RER_JW/declared" "$RER_JW/ended"; then
+  echo "FIXTURE BROKEN: [J0] $rer_ndecl rer_phase blocks derived from $RER_SELF ($rer_ndup declared twice), or their end markers do not pair with them one for one" >&2
+  rm -rf "$RER_JW"; exit 2
+fi
+if ! rer_why="$(rer_partition_ok "$RER_JW/declared" "$RER_JW/dealt")"; then
+  echo "FIXTURE BROKEN: [J0] the phase deal does not cover the declared phases exactly -- $rer_why" >&2
+  rm -rf "$RER_JW"; exit 2
+fi
+for _s in $SHARDS; do
+  eval "_l=\"\${PHASES_$_s:-}\""
+  [ -n "$_l" ] || { echo "FIXTURE BROKEN: [J0] shard '$_s' is declared and dealt no phases; an empty shard passes everything it never checked" >&2; rm -rf "$RER_JW"; exit 2; }
+  [ "$_s" = a ] && continue
+  _drv="$HERE/../reconcile-emit-report-$_s/run.sh"
+  # The driver must INVOKE this file with its shard as the argument. Comments are stripped whole-
+  # line AND trailing, so `--group a # --group b` names shard a and nothing else.
+  # The stripped driver is STAGED in a variable and the reader fed a here-string: a pipe into a
+  # first-match reader reports NOT-FOUND under pipefail once the writer outruns the pipe buffer.
+  _drv_code=""; [ -f "$_drv" ] && _drv_code="$(sed -e '/^[[:blank:]]*#/d' -e 's/[[:blank:]]#.*$//' "$_drv")"
+  if [ ! -f "$_drv" ] || ! grep -qE -- "^[[:blank:]]*(exec[[:blank:]]+)?bash[[:blank:]]+\"\\\$IMPL\"[[:blank:]]+--group[[:blank:]]+$_s([[:blank:]]|\$)" <<<"$_drv_code"; then
+    echo "FIXTURE BROKEN: [J0] shard '$_s' is declared but $_drv does not drive it" >&2; rm -rf "$RER_JW"; exit 2
+  fi
+done
+rm -rf "$RER_JW"
+fi
+RER_ENTERED=""
+rer_phase() { # rer_phase <slug> -> 0 when this shard owns the phase, and records it as entered
+  eval "case \" \${PHASES_$GROUP} \" in *\" \$1 \"*) RER_ENTERED=\"\$RER_ENTERED \$1\"; return 0 ;; esac"
+  return 1
+}
+
 
 # PROBE-ONLY MODE SKIPS THE SEED, AND THAT IS A COST DECISION WITH A NUMBER BEHIND IT.
 # The world-guard battery at the foot of this file re-runs this whole script once per mutant,
@@ -43,8 +146,8 @@ else
   . "$WORK/env.sh"
 fi
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
+fails=0; oks=0
+ok()  { printf '  ok    %s\n' "$1"; oks=$((oks+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 
 # STDERR IS KEPT, in `$VERIFY_ERR`, overwritten by each call. It is read only by render_diag()
@@ -104,6 +207,7 @@ else
   echo; echo "reconcile-emit-report: FIXTURE BROKEN" >&2; exit 2
 fi
 
+if rer_phase seeded; then
 # --- Assertion 1: --verify PASSES a report carrying the region verbatim -------
 verify "$REPORT_GOOD"
 if [ "$RC" -eq 0 ]; then ok "--verify PASSES a report whose region matches the driver (exit 0)"
@@ -272,6 +376,7 @@ elif grep -q '\\`' <<<"$(sha_line_of "$MUTR/mutant-emit.sh")"; then
 else
   bad "the mutant emitted no backslashes — the assertion above cannot fail and is vacuous"
 fi
+fi # end rer_phase seeded
 
 # =============================================================================
 # THE REF'S SPELLING IS NOT THE REF
@@ -618,6 +723,7 @@ fi
 # A CONSUMER'S INSTALLED ENGINE MAY PREDATE THE FIX, because this fixture ships ahead of its
 # subject. There the arms SKIP. In the distribution the subject is always present, so they run
 # whatever the file says -- which is how the pre-fix engine is shown to fail them.
+if rer_phase b230; then
 case "$EMIT" in
   */core/skills/ai-dlc-update/reconcile/emit-report.sh) B230_DIST=1 ;;
   *) B230_DIST=0 ;;
@@ -855,7 +961,9 @@ B230HOOK
     fi
   fi
 fi
+fi # end rer_phase b230
 
+if rer_phase moved; then
 # The APPROVED render — theirs spelled symbolically, ref sitting where the operator approved it.
 REGION_SYM="$WORK/region-symbolic.md"
 bash "$EMIT" "$DIST" "$BASE" "$CONSUMER" "$MOVEREF" > "$REGION_SYM" 2>/dev/null
@@ -1061,6 +1169,7 @@ if [ "$anchor_hits" -eq 1 ] && ! cmp -s "$EMIT" "$MUTT/mutant-emit.sh" \
 else
   bad "MUTANT DID NOT SURVIVE ITS OWN DELETION (region rows present? / tree line gone? / rc=$mut_rc) — something OTHER than the tree line is carrying the moved-ref arms, so those arms do not test what they claim"
 fi
+fi # end rer_phase moved
 
 # --- Assertions 12-14: the shadowed-local-validator signal is REACHED by the driver ---
 # THE DEFECT. `warn-shadowed-local-validators.sh` shipped in reconcile/, named itself the twin
@@ -1096,6 +1205,7 @@ printf '#!/bin/sh\nexit 0\n' > "$CONSUMER/scripts/ai-dlc/validate-shadowprobe.sh
 printf '#!/bin/sh\nexit 0\n' > "$CONSUMER/scripts/ai-dlc-local/validate-keepprobe.sh"
 printf '#!/bin/sh\nexit 0\n' > "$CONSUMER/scripts/ai-dlc/validate-keepprobe.sh"
 
+if rer_phase shadow; then
 SHAD_REGION="$WORK/shadow-region.txt"
 bash "$EMIT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$SHAD_REGION" 2>/dev/null
 
@@ -1180,6 +1290,7 @@ elif [ -z "$i16_missing" ]; then
 else
   bad "these classifier sections are missing from the rendered region:$i16_missing — their findings are back to being narrated, where an omission cannot be caught by --verify"
 fi
+fi # end rer_phase shadow
 
 # =============================================================================
 # STEP 3b — THE FOURTH MANDATED DETECTOR, AND THE ONLY ONE THE SKILL NARRATED
@@ -1213,6 +1324,7 @@ fi
 #
 # EVERY ARM BELOW IS PRESENCE-SHAPED — each demands a specific row or message APPEAR — so a
 # subject replaced by `exit 0` fails them by construction rather than passing as a clean absence.
+if rer_phase step3b; then
 T_SECT() { awk '/Template pre-classification/{f=1;next} f&&/^\*\*/{exit} f' "$1"; }
 
 # t_stage <region-file> <emit-report.sh> — render into a STAGED FILE and return the producer's own
@@ -1623,6 +1735,7 @@ if [ "$t_got" = "$(printf '%s\n' $t_want | sort | tr '\n' ' ')" ]; then
 else
   bad "the step-3b mutants that applied were [${t_got:-none}] and had to be [$t_want] — a mutant that did not apply guards an arm nobody proved, and its absence reads exactly like a kill"
 fi
+fi # end rer_phase step3b
 
 # =============================================================================
 # A MISMATCH IS DECIDED, NOT ONLY REPORTED
@@ -1678,6 +1791,7 @@ fi
 # V-R and V-U are the discriminating PAIR for the unseen count — same verdict, same cause, and the
 # count is 0 on one and 1 on the other, so a count that stopped excluding boilerplate is visible
 # as a cell and not as a wording change.
+if rer_phase vworlds1; then
 VW="$WORK/vworlds"; mkdir -p "$VW"
 V_WORLDS="V-R V-N V-M V-B V-H V-HA V-S V-U V-D V-HC V-HB"
 # V-DR is scored under the shipped program only, as a CONTROL on V-D rather than a mutant target:
@@ -2366,6 +2480,7 @@ if [ "$v_vs" = "1|STAMP-MOVED|0|0|1|0" ] && grep -qE '^[<>] _stamp_ records ' "$
 else
   bad "V-S scored $v_vs (want 1|STAMP-MOVED|0|0|1|0 with the _stamp_ line in the diff) — a stamp folded into the base/theirs key reads as UPSTREAM-MOVED with both disjuncts false, and a stamp left out of every key reads as BLOCKERS-RESOLVED on a post-apply re-run, which tells the operator to re-approve and apply a range this tree already carries"
 fi
+fi # end rer_phase vworlds1
 
 # --- SB: THE STAMP'S `commit:` IS COMPARED TO BASE AS A COMMIT, NEVER AS A STRING -------------
 #
@@ -2394,6 +2509,7 @@ fi
 # nine cases, so a cell whose reconcile-mechanical region is absent or TRUNCATED -- BEGIN with no
 # END -- is BROKEN, never `none`. Cells are
 # computed in background jobs that write files; every verdict is read in the foreground.
+if rer_phase sb; then
 SB="$WORK/stamp-base"; mkdir -p "$SB/d/core" "$SB/mut" "$SB/c"
 sbg() { git -C "$SB/d" -c user.name=fixture -c user.email=f@f -c commit.gpgsign=false -c tag.gpgsign=false "$@"; }
 SB_OK=1
@@ -2548,7 +2664,9 @@ if [ -z "$SB_PRE" ]; then
     bad "SB only $_sb_n of 9 stamp-comparison mutants applied ([${SB_APPLIED# }]) — each missing one leaves a wrong fix nothing here can reject"
   fi
 fi
+fi # end rer_phase sb
 
+if rer_phase vworlds2; then
 v_vu="$(v_of V-U ship)"
 if [ "$v_vu" = "3|BLOCKERS-RESOLVED|1|1|1|1" ] && grep -q '^    unseen: OVERRIDE-ANCHOR-UNRESOLVED' "$VW/V-U/stderr.ship"; then
   ok "V-U a resolution that leaves a NON-HARD row the approval never saw still refuses, and the row is COUNTED and NAMED rather than asserted away — one, against V-R's zero on the same verdict"
@@ -2690,6 +2808,7 @@ v_kill E10 "V-HB" "V-HB:1|UNDECIDED|0|0|0|0" \
 if v_kill E11 "V-R V-N V-H V-HA V-S V-U V-HC V-HB" "V-HB:3|BLOCKERS-RESOLVED|1|1|0|0" "V-HC:1|UNDECIDED|0|1|0|0"; then
   ok "E11 (both guards removed together): V-HB reads BLOCKERS-RESOLVED — a wrapper that did not run is named as the operator's own resolution over a drift still on disk, which is the defect the pair exists to prevent and which neither mutant alone can reach"
 fi
+fi # end rer_phase vworlds2
 
 # --- B1/B2: emit-report HANDS unregistered-drift.sh the preclassify rows it already paid for ---
 #
@@ -2708,6 +2827,7 @@ fi
 # satisfied by the header comment above the call and by this comment block; the binding has to be
 # the line that EXECUTES the scan. The control below is the same grammar against an argument no
 # call site carries, and it must read 0 or the count beside it means nothing.
+if rer_phase b1b2; then
 B1_HIT="$(grep -cE '^[[:space:]]*bash "\$SELF/unregistered-drift\.sh" --bucket-rows ' "$EMIT")" || B1_HIT=0
 B1_CTL="$(grep -cE '^[[:space:]]*bash "\$SELF/unregistered-drift\.sh" --qqq-absent-rows ' "$EMIT")" || B1_CTL=0
 if [ "$B1_CTL" -ne 0 ]; then
@@ -2744,6 +2864,7 @@ else
   esac
   bad "B2 the flagged and standalone scans DISAGREE, so the rendered region depends on which caller ran the scan: $b2_why"
 fi
+fi # end rer_phase b1b2
 # =========================================================================================
 # MUTANTS FOR THE WORLD GUARDS
 #
@@ -2761,6 +2882,7 @@ fi
 # KEYED ON THE HELPERS' BODIES, never on a message string. The verdict text is what an
 # operator reads and it will be reworded; the `if` that decides is the property under test.
 # =========================================================================================
+if rer_phase wg; then
 echo ""
 echo "  --- world-guard mutants ---"
 
@@ -2935,8 +3057,32 @@ if [ "$WGN" -eq 6 ]; then
 else
   bad "only $WGN of 6 world-guard mutants were scored — a mutation that never became a mutant leaves its arm unproven and this fixture would report PASS over it"
 fi
+fi # end rer_phase wg
+
+# J1: the SET of phases entered equals this shard's list AS DECLARED IN THIS FILE'S TEXT, and no
+# phase dealt to another shard was entered. A count off the loop variable cannot see a shard whose
+# list was widened to every phase: it would run all of them and agree with itself.
+rer_declared_for() { sed -n "s/^PHASES_$1=\"\\([a-z0-9_ ]*\\)\"\$/\\1/p" "$RER_SELF" | tr ' ' '\n' | grep . | sort; }
+rer_got="$(printf '%s\n' $RER_ENTERED | grep . | sort)"
+rer_want="$(rer_declared_for "$GROUP")"
+rer_foreign=""
+for _s in $SHARDS; do
+  [ "$_s" = "$GROUP" ] && continue
+  for _p in $RER_ENTERED; do
+    _lst="$(rer_declared_for "$_s")"
+    grep -qxF -- "$_p" <<<"$_lst" && rer_foreign="$rer_foreign $_p"
+  done
+done
+if [ -z "$rer_want" ] || [ "$rer_got" != "$rer_want" ] || [ -n "$rer_foreign" ]; then
+  bad "[J1] shard $GROUP entered {$(printf '%s' "$rer_got" | tr '\n' ' ')}, its declared list is {$(printf '%s' "$rer_want" | tr '\n' ' ')}; entered from other shards: {${rer_foreign# }}"
+fi
 
 echo
-if [ "$fails" -eq 0 ]; then echo "reconcile-emit-report: PASS"; exit 0; fi
+if [ "$fails" -eq 0 ]; then
+  echo "reconcile-emit-report: PASS"
+  echo "PASS: all $oks assertions correct in shard '$GROUP' of '$SHARDS'."
+  exit 0
+fi
 echo "reconcile-emit-report: $fails assertion(s) FAILED" >&2
+echo "FAIL: $fails of $((oks + fails)) assertions wrong in shard '$GROUP' of '$SHARDS'."
 exit 1

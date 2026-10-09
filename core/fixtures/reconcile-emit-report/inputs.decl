@@ -5,3 +5,5 @@
 !core/skills/ai-dlc-update/reconcile/emit-report.sh
 core/skills/ai-dlc-update/reconcile/
 core/fixtures/lib/
+core/fixtures/reconcile-emit-report-b/run.sh
+core/fixtures/reconcile-emit-report-c/run.sh

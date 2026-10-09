@@ -19,6 +19,99 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.757.0] - 2026-10-09
+
+Batch 212 (hermetic-pole), release 1. The four longest units of the pre-push fixture suite are sharded into
+thirteen declared directories, so the suite's pole falls from one unit of about two thousand loaded seconds to
+shards of at most a few hundred. No pre-push hook, no bootstrapping file and no engine changes: every edit is
+under `core/fixtures/`, plus the three ship lists for the new shipping shard directories.
+
+### The rank was re-derived from a clean source before anything was built
+
+The durations record in the operator checkout named `readset-skip` at 11883s, `readset-skip-digest-mutants` at
+11878s, `fold-architect-ledger-join-mutants-b` at 11089s and `gate-adjudication-mutants` at 7442s. The
+suite-pole history for the same week recorded three 12-way gates whose pole was 1440-1481s, so every one of
+those figures exceeded any gate's wall clock and the record was wrong for them (orphaned pools and a shared
+worktree had overwritten it). The rank was taken instead from the per-run durations file of the 0.755.0 gate,
+a green 12-way run of 103 dispatched fixtures at load 84-100, written from that run's own `.dur` files alone:
+
+| rank | fixture | loaded s (12-way, load 84-100) |
+|---|---|---|
+| 1 | `readset-skip-digest-mutants` | 2025 |
+| 2 | `readset-skip` | 1860 |
+| 3 | `gate-adjudication-mutants` | 1665 |
+| 4 | `reconcile-emit-report` | 1484 |
+| 5 | `check-24-adversarial-convergence` | 1359 |
+| 10 | `fold-architect-ledger-join-mutants-b` | 1102 |
+
+The plan's fourth candidate, `fold-architect-ledger-join-mutants-b`, sat tenth and cannot move a pole; the
+fourth hand went to `reconcile-emit-report` instead. `review-shard-merge-mutants` (`BL-485`, 1171s) was left to
+batch 208 as the plan says.
+
+### Four units sharded in the `fold-architect-ledger-join-mutants-{,b,c}` shape, every shard declared
+
+Each parent carries the partition and a J0 coverage join that derives the dealt set from the file's own
+mutant or section lines, refuses a duplicate, an omission and a shard with no driver, and self-probes both
+before trusting its zero. Every shard pays the controls. Every directory carries `inputs.decl` and
+`tools.decl` and passes `core/scripts/hermetic-run.sh` with `required_missing=0`; each hand ran the isolation
+probe (one declared input dropped: exit 1 or 2 naming an absence) and the teeth probe (the
+`HERMETIC-CONSUMED` line deleted: hermetic exit 1 naming the `!` input while the fixture itself prints PASS).
+
+- **`readset-skip`** (ships): four shards `readset-skip{,-b,-c,-d}` by section group (a: arms ign man merge;
+  b: loc hr tk dg; c: tracer rc; d: ck). Root is read from `AI_DLC_PROJECT_ROOT` before the `AI_DLC_*` scrub,
+  because the hermetic sandbox is not a git repository and the fixture's first act was `git rev-parse
+  --show-toplevel`. The `CK_HELPERS`, `DG_WORLDS` and `TK_WORLDS` spans the digest battery sources by marker
+  are byte-identical to base (sha256 checked). The I66 arm now reports FIXTURE BROKEN in a distribution
+  layout when the validator or a hook is absent, where it printed SKIP and let a shrunk declaration pass.
+- **`readset-skip-digest-mutants`** (`.dist-only`): three shards (6, 6 and 12 mutants; c carries the deriver
+  mutant and the whole tool-key block). Same root fix. This unit had ZERO map rows and ran on every push
+  (`BL-481`); declared, it is keyed and no longer does.
+- **`gate-adjudication-mutants`** (`.dist-only`): three shards of 7, 7 and 6 mutants plus M0 each. Declares
+  the eleven subject files `build_sandbox` copies, `VERSION` for the root walk, and `?node` plus `python3`.
+- **`reconcile-emit-report`** (ships, already declared): three shards by phase (a: seeded worlds and
+  guards, 63 assertions; b: V worlds and the E-mutant battery, 52; c: step 3b and the stamp mutants, 51). The
+  two new drivers were first committed non-executable; `I77` caught it on the assembled branch and the mode
+  is fixed here. `emit-report-refusal` and `procsub-staged-refusal-boot`, which read this fixture's `seed.sh`
+  and `run.sh`, pass unchanged (hermetic exit 0 and `run.sh` exit 0 respectively).
+
+### Solo wall clock, before and after, same box, sequential, load beside each
+
+Before: the four parents at `cab72a8e`, run alone from a detached worktree, undeclared form where that was
+the shipped form. After: every shipped shard at this release's tree through `hermetic-run.sh`, sequentially.
+All taken between 00:23 and 01:26 on 2026-10-09 with every other session holding. One peer's receipt runs
+overlapped the first pass, so four after-rows started above load 5 (`readset-skip-digest-mutants-b` 6.3,
+`readset-skip` 5.2, `readset-skip-b` 5.2, `reconcile-emit-report-c` 5.2) and were re-taken at load 2.2-3.6
+along with the other two digest shards, which also confirms the digest battery against the final tree with
+the sharded `readset-skip` it sources spans from. The re-take figures are the ones in the table. The before
+rows ran at load 2-4 and the first-pass after rows at 4-6, a gradient that favours the parents, so the gain
+is understated where a first-pass figure remains.
+
+| unit | before (solo s, load) | after: shards (solo s, load) | longest shard |
+|---|---|---|---|
+| `readset-skip-digest-mutants` | 384 (4.0) | a 127 (2.2), b 128 (3.6), c 143 (2.7) | 143 |
+| `readset-skip` | 393 (3.3) | a 24 (2.7), b 74 (2.8), c 92 (4.7), d 206 (4.3) | 206 |
+| `gate-adjudication-mutants` | 250 (2.5) | a 103 (4.6), b 92 (4.4), c 93 (4.7) | 103 |
+| `reconcile-emit-report` | 264 (2.1) | a 59 (4.4), b 141 (4.0), c 75 (2.9) | 141 |
+
+Solo and loaded figures are different quantities and are not compared: the loaded 12-way pole of 2025s is the
+before figure for the done-when, and the after figure is the fixture-suite wall clock of this release's own
+gate, recorded in the next entry's resume block with its load. `readset-skip-d` (206s solo) is now the longest
+shard and is the first candidate for a re-deal.
+
+### The fork budget rises by ten for five shipping fixture directories
+
+The first gate of this release went red on `validator-fork-budget`: `validate-enforcement-map.sh` forked 3314
+against `FORK_BUDGET=3310`. Profiled base against tip in one worktree at the same path with
+`fork-profile.sh --section by-arm --stable`: 3309 against 3313, and the arm that moved is I8, fixture
+packaging, 85 to 89, which walks `core/fixtures/*/` against the install and uninstall loops. The five new
+SHIPPING shard directories are the whole cost; the six `.dist-only` shards cost it nothing. The budget is 3320,
+the measurement recorded beside it.
+
+### Declared count
+
+`find core/fixtures -mindepth 1 -maxdepth 1 -type d | wc -l` reads 263 directories; 169 carry `inputs.decl`
+(157 at 0.756.0, plus the twelve new or newly declared directories here).
+
 ## [0.756.0] - 2026-10-08
 
 Batch 210, release 1. It closes `BL-488` and fixes the subject half of `BL-487`. The consumer's live push-candidate
