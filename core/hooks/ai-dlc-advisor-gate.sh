@@ -13,8 +13,9 @@
 #   - When the agent's most recent `advisor_tool_result` carries `error_code: "unavailable"` the
 #     harness withdraws the tool, no call can clear a deny, and the gate only WARNS. A later
 #     result that is not `unavailable` re-arms the deny.
-#   - NO CONFIG KNOB AND NO DEFAULT on whether the gate applies (the one knob, THE RE-READ's
-#     `ADVISOR_GATE_REREADS`, can only make it stricter). That is decided PER AGENT from that
+#   - NO CONFIG KNOB AND NO DEFAULT on whether the gate applies (THE RE-READ's
+#     `ADVISOR_GATE_REREADS` can only make it stricter; THE WINDOW's `ADVISOR_GATE_WINDOW` sizes
+#     the recency window and never turns the gate off). That is decided PER AGENT from that
 #     agent's own transcript: the harness writes an `attachment` line of type `advisor_tool`
 #     (`available`, `toolChange`, `model`) when it grants the tool. No such line -> silent.
 #     The LATEST such line wins; `available: false` or `toolChange: "remove"` is a withdrawn
@@ -152,14 +153,38 @@
 # the Bash call in one response; after a 1s re-read every line of the message was present in 13
 # of 13, the advisor's `server_tool_use` included. Measured on graph: 6 of 7 pushes issued in
 # the same message as their advisor call were denied. So a verdict of DENY or WARN is not final
-# on the first read: the hook sleeps 1s and scans again, and once more after another 1s, and
-# judges the LAST scan. An ALLOW is final at once and pays nothing. When the incoming call's own
-# line is already on disk, every line of its message before it is too, so nothing that could
-# acquit is still in flight and the re-read is skipped. A re-read that cannot be scanned keeps
-# the verdict of the read that could. `ADVISOR_GATE_REREADS` (0, 1 or 2; default 2) can only
-# LOWER the number of re-reads, so it can make the gate stricter and never acquit; it exists so
-# a fixture's deny cells do not each pay 2s. The deny reason says to call the advisor in a
-# message of its own, which is the shape that never races.
+# on the first read: the hook re-scans every 0.25s until the incoming call's own line lands or a
+# wall-clock ceiling passes, and judges the LAST scan. An ALLOW is final at once and pays nothing.
+# When the incoming call's own line is already on disk, every line of its message before it is
+# too, so nothing that could acquit is still in flight and the re-read stops. A re-read that
+# cannot be scanned keeps the verdict of the read that could. `ADVISOR_GATE_REREADS` (0 -> no
+# re-read, 1 -> a 2s ceiling, default -> 10s) can only LOWER the ceiling, so it can make the gate
+# stricter and never acquit; it exists so a fixture's deny cells do not each pay the ceiling. The
+# deny reason says to call the advisor in a message of its own, which is the shape that never races.
+#
+# THE LOOSENINGS (operator ruling, batch 218: "the push hook must loosen its advisor requirement").
+# Filed by the consumer after graph's lead was denied a push whose own message carried the advisor
+# call, retried, and was denied again. Two root causes, both fixed above: the fixed 2 x 1s re-read
+# expired before the advisor line landed (now polled to the ceiling), and a quoted alternation such
+# as `grep -E 'x|git push -u origin HEAD|y'` split into a push segment (now `qmask`: a quoted string
+# holding a separator is one word, a heredoc body is data, a `-c` body keeps its quotes). Beside them
+# the operator ruled two loosenings in, and each ALLOWS where the test above would deny:
+#   THE WINDOW. Operator ruling, batch 218: an advisor attempt within the last 10 assistant turns
+#       clears the call; the advisor is not owed per push. A turn is one distinct assistant
+#       `message.id` (a line with none is its own turn), and the message carrying the incoming call
+#       is turn 1, so the window is that message and the 9 before it. It ALLOWS whatever gated calls
+#       shipped since that attempt. While the incoming call's line is not on disk its message is
+#       counted as a turn of its own after the last one on disk. `ADVISOR_GATE_WINDOW` sets N
+#       (default 10; 0 turns the window off, leaving the test above; anything else non-numeric is 10).
+#   L3  ALLOW, silent, a push whose outgoing commits touch only `_bmad-output/`. PreToolUse fires
+#       before the command, so the change set must not depend on it: only a command whose one push
+#       is its only segment that could change the tree (others: echo, printf, tail, head, grep, true,
+#       and a `cd` into the hook input's own cwd -- graph prefixes most commands with one),
+#       naming no other checkout (`-C`, `--git-dir`, `--work-tree`) and no multi-ref flag, whose every
+#       refspec is empty, `HEAD` or the current branch. The set is `git log --name-only` over the
+#       commits on HEAD not on the target: `@{u}` when its remote is the push's remote (default
+#       `origin`), else `refs/remotes/<remote>/HEAD`. Not derivable, empty, or one path outside
+#       `_bmad-output/` -> not exempt, and the test above decides.
 #
 # A TEAMMATE IS JUDGED ON ITS OWN TRANSCRIPT. Inside a subagent the input's `transcript_path`
 # names the PARENT session's file. The teammate's own is
@@ -207,7 +232,13 @@ def strip: (sub(wrapre; "") | sub(envre; "")) as $n
 def segs: [splits("&&|\\|\\||[;|\\n()]")] | map(sub("^\\s+"; "") | strip);
 # The closing quote of a bash -c body is shed ONLY when the command holds such a body: a quoted
 # alternation handed to pgrep -fl must not become a push (measured, 4 graph rows).
-def csegs: segs as $s | if test("(^|[\\s;&|(])(\\S*/)?(bash|sh|zsh)(\\s+-[A-Za-z]+)*\\s+-[A-Za-z]*c\\s")
+# A quoted string holding a separator is ONE shell word, never a command boundary, so a grep or ps
+# alternation `x|git push -u origin HEAD|y` must not split into a push segment (measured, 4 graph
+# rows). A heredoc body is data too. A `-c` body keeps its quotes and is re-split by strip.
+def qmask: gsub("<<-?\\s*[\"\\x27]?(?<t>[A-Za-z_][A-Za-z0-9_]*)[\"\\x27]?(?<r>[^\\n]*)\\n(?:[^\\n]*\\n)*?\\s*\\k<t>(?=\\n|$)"; "<<H" + .r)
+  | gsub("(?<p>-[A-Za-z]*c\\s+)?(?<q>\\x27[^\\x27]*\\x27|\"[^\"]*\")";
+    if .p != null then .p + .q elif (.q | test("[;&|()\\n]")) then "Q" else .q end);
+def csegs: (qmask | segs) as $s | if test("(^|[\\s;&|(])(\\S*/)?(bash|sh|zsh)(\\s+-[A-Za-z]+)*\\s+-[A-Za-z]*c\\s")
   then $s | map(sub("[\"\\x27]\\s*&?\\s*$"; "")) else $s end;
 def words: [splits("\\s+")] | map(select(. != "") | unq);
 def vars: [scan("(?:^|[\\s;&|(])([A-Za-z_][A-Za-z0-9_]*)=(\"[^\"]*\"|\\x27[^\\x27]*\\x27|[^\\s;&|()]+)")]
@@ -293,6 +324,21 @@ def mergedtext: test("Squashed and merged|Merged pull request|successfully merge
 # shipped(kind): an errored result whose text shows the gated call took effect anyway.
 def shipped($k): if $k == "push" then refupdate elif $k == "merge" then mergedtext else false end;
 def rtext: if type == "array" then (map(select(type == "object") | .text // "") | join("\n")) else tostring end;
+# L3: the one push shape whose change set this hook may read BEFORE the command runs. Exactly one push
+# segment, every other segment a word that cannot make a commit, no other checkout named, no
+# multi-ref flag. Prints `<remote>|<refspecs>`, or "" for every other shape (never exempted).
+def l3safe: test("^(echo|printf|tail|head|grep|true)(\\s|$)");
+def l3cd: test("^cd\\s+\\S+\\s*$");
+def l3push: csegs as $s
+  | ($s | map(select(. != "" and gitpush and (isdelete | not)))) as $p
+  | if ($p | length) == 1
+       and ($s | all(. == "" or (gitpush and (isdelete | not)) or l3safe or l3cd))
+       and ($p[0] | test("\\s(-C|--git-dir|--work-tree|--all|--mirror|--tags|--branches)(\\s|=|$)") | not)
+    then ($p[0] | sub("^.*?\\spush(\\s+|$)"; "") | gsub("[0-9&]?>>?\\|?\\s*\\S+"; "") | words
+          | map(select((startswith("-") or test("^[&;|]*$")) | not))) as $w
+         | (($w[0] // "") + "|" + ($w[1:] | join(" ")) + "|"
+            + ([$s[] | select(l3cd) | words | .[1]] | join(" ")))
+    else "" end;
 '
 
 # The incoming call: one jq pass decides its kind and hands the fields to the shell.
@@ -303,9 +349,10 @@ PARSED="$(printf '%s' "$IN" | jq -r --arg home "${HOME:-}" "$CLASSIFY"'
   | ($tp | if test("^.+/[^/]+/[^/]+\\.jsonl$") then sub("/[^/]+/[^/]+$"; "") else "" end) as $proj
   | (if ((.agent_id // "") | tostring) == "" then "lead" else "mate" end) as $role
   | (if ($call | twrite($proj; $home)) then "twrite" else ($call | kind($role)) end) as $k
-  | @sh "TP=\($tp) AID=\((.agent_id // "") | tostring) CWD=\((.cwd // "") | tostring) PROJ=\($proj) ROLE=\($role) KIND=\($k) FP=\(($ti.file_path // "") | tostring) NEWN=\(($ti.content // "") | tostring | heads) TUID=\((.tool_use_id // "") | tostring)"' 2>/dev/null)" \
+  | (if $k == "push" and $call.name == "Bash" then (($ti.command // "") | tostring | l3push) else "" end) as $l3
+  | @sh "TP=\($tp) AID=\((.agent_id // "") | tostring) CWD=\((.cwd // "") | tostring) PROJ=\($proj) ROLE=\($role) KIND=\($k) FP=\(($ti.file_path // "") | tostring) NEWN=\(($ti.content // "") | tostring | heads) TUID=\((.tool_use_id // "") | tostring) L3=\($l3)"' 2>/dev/null)" \
   || { say "the tool call is not readable JSON; gate skipped"; exit 0; }
-TP=""; AID=""; CWD=""; PROJ=""; ROLE=""; KIND=""; FP=""; NEWN=0; TUID=""
+TP=""; AID=""; CWD=""; PROJ=""; ROLE=""; KIND=""; FP=""; NEWN=0; TUID=""; L3=""
 eval "$PARSED"
 
 [ -n "$KIND" ] || exit 0
@@ -338,6 +385,10 @@ fi
 JUDGED="$TP"
 [ -z "$AID" ] || JUDGED="${TP%.jsonl}/subagents/agent-${AID}.jsonl"
 [ -r "$JUDGED" ] || { say "no readable transcript for this agent ($JUDGED); gate skipped"; exit 0; }
+# THE WINDOW's size in assistant turns: a non-negative integer, else the default 10.
+WIN="${ADVISOR_GATE_WINDOW:-10}"
+case "$WIN" in ''|*[!0-9]*) WIN=10 ;; esac
+WIN=$((10#$WIN))
 
 # One pass over the judged transcript. Lines that are not JSON are skipped, never fatal.
 #   grant: the latest `advisor_tool` attachment (null = never granted)
@@ -345,25 +396,31 @@ JUDGED="$TP"
 #   g:     tool_use id -> [line, path, kind] of every gated call; a call that did not ship is removed.
 #          The last gated action is the last one OF THE INCOMING CALL'S KIND.
 #   seen:  1 when the incoming call's own `tool_use` line is on disk, else 0.
+#   order/madv/cur: assistant turns in order of first line (key: `message.id`, else the line
+#          number), whether each holds an advisor attempt, and the one holding the incoming call.
+#   inwin: 1 when an advisor attempt sits in one of the last $win turns, the incoming call's turn 1.
 scan() {
-jq -n -R -r --arg home "${HOME:-}" --arg proj "$PROJ" --arg role "$ROLE" --arg tuid "$TUID" --arg fp "$FP" --arg kind "$KIND" "$CLASSIFY"'
+jq -n -R -r --arg home "${HOME:-}" --arg proj "$PROJ" --arg role "$ROLE" --arg tuid "$TUID" --arg fp "$FP" --arg kind "$KIND" --argjson win "$WIN" "$CLASSIFY"'
   reduce (inputs | (fromjson? // empty) as $l | select(($l | type) == "object") | [input_line_number, $l]) as [$n, $l]
-    ({grant: null, adv: 0, res: "-", g: {}, last: 0, seen: 0};
+    ({grant: null, adv: 0, res: "-", g: {}, last: 0, seen: 0, order: [], madv: {}, cur: null};
      .last = $n
      | if ($l.type == "attachment" and ($l.attachment | type) == "object" and $l.attachment.type == "advisor_tool") then
        .grant = (($l.attachment.available != false) and ($l.attachment.toolChange != "remove"))
      else
-       (if ($l.type == "user" and ($l | notif | not) and (($l.message.content? | type) == "string"
+       (if $l.type == "assistant" then ((($l.message.id? // "") | tostring) | if . == "" then "L\($n)" else . end) else null end) as $mk
+       | (if $mk != null and .madv[$mk] == null then (.order += [$mk] | .madv[$mk] = false) else . end)
+       | (if ($l.type == "user" and ($l | notif | not) and (($l.message.content? | type) == "string"
              or ([($l.message.content? // []) | .[]? | select(type == "object") | .type] | index("text") != null)))
         then .g |= map_values(.[1] = "") else . end)
        | reduce ((($l.message.content? // []) | if type == "array" then .[] else empty end | select(type == "object"))) as $b (.;
-         if ($b.type == "server_tool_use" and $b.name == "advisor") then .adv = $n
+         if ($b.type == "server_tool_use" and $b.name == "advisor") then
+           .adv = $n | (if $mk != null then .madv[$mk] = true else . end)
          elif $b.type == "advisor_tool_result" then
            .res = (if (($b.content | if type == "object" then .error_code else null end) // "") == "unavailable" then "U" else "R" end)
          elif ($b.type == "tool_use" and (($b.id // "") | tostring) != "" and (($b.id | tostring) != $tuid)) then
            ({name: $b.name, input: ($b.input // {})} | kind($role) | sub("^gatelogw$"; "gatelog")) as $k
            | if $k != "" then .g[$b.id | tostring] = [$n, (($b.input.file_path // "") | tostring), $k] else . end
-         elif ($b.type == "tool_use" and $tuid != "" and (($b.id // "") | tostring) == $tuid) then .seen = 1
+         elif ($b.type == "tool_use" and $tuid != "" and (($b.id // "") | tostring) == $tuid) then .seen = 1 | .cur = $mk
          elif ($b.type == "tool_result" and $b.is_error == true
                and (((($b.tool_use_id // "") | tostring) as $r | .g[$r][2] // "") as $gk
                     | ($b.content | rtext) | shipped($gk) | not)) then
@@ -374,45 +431,89 @@ jq -n -R -r --arg home "${HOME:-}" --arg proj "$PROJ" --arg role "$ROLE" --arg t
   | (if $tuid == "" then .g |= with_entries(select(.value[0] != $last)) else . end)
   | ([.g[] | select(.[2] == $kind) | .[0]] | max // 0) as $act
   | ([.g[] | select(.[1] != "" and .[1] == $fp)] | length) as $same
-  | "\(if .grant == null then "none" elif .grant then "on" else "off" end) \(.adv) \($act) \(.res) \($same) \(.seen)"' "$JUDGED" 2>/dev/null
+  | .order as $o | ($o | length) as $len | .madv as $ma | .cur as $cur
+  | (if .seen == 1 and $cur != null then (([range(0; $len) | select($o[.] == $cur)] | first) // $len)
+     else $len end) as $ci
+  | (if ([range([0, $ci - $win + 1] | max; [$ci + 1, $len] | min) | $ma[$o[.]] // false] | any) then 1 else 0 end) as $inwin
+  | "\(if .grant == null then "none" elif .grant then "on" else "off" end) \(.adv) \($act) \(.res) \($same) \(.seen) \($inwin)"' "$JUDGED" 2>/dev/null
 }
-# judge: sets GRANT LAST_ADV LAST_ACT LAST_RES SAME SEEN from STATE, and V to allow | owed.
+# judge: sets GRANT LAST_ADV LAST_ACT LAST_RES SAME SEEN INWIN from STATE, and V to allow | owed.
 judge() {
-  read -r GRANT LAST_ADV LAST_ACT LAST_RES SAME SEEN <<<"$STATE"
+  read -r GRANT LAST_ADV LAST_ACT LAST_RES SAME SEEN INWIN <<<"$STATE"
   V=owed
   # A teammate re-writing a deliverable it already wrote un-denied is not a new gated action.
   if [ "$ROLE" = mate ] && [ "${SAME:-0}" -gt 0 ] 2>/dev/null; then V=allow; fi
   if [ "${LAST_ADV:-0}" -gt "${LAST_ACT:-0}" ] 2>/dev/null; then V=allow; fi
+  # THE WINDOW: an advisor attempt within the last $WIN assistant turns clears the call.
+  if [ "${INWIN:-0}" = 1 ]; then V=allow; fi
   return 0
 }
+# L3: a push whose outgoing commits touch only `_bmad-output/` owes no consult. The change set is
+# read from git in the hook input's cwd: the commits on HEAD not on the push's remote-tracking
+# target (`@{u}` when its remote is the push's remote, else `refs/remotes/<remote>/HEAD`). Any
+# step that cannot be derived, an empty set, or one path outside `_bmad-output/` is NOT exempt.
+l3_exempt() (
+  set -f
+  [ -n "$L3" ] || exit 1
+  rem="${L3%%|*}"; rest="${L3#*|}"; refs="${rest%%|*}"; cds="${rest#*|}"
+  [ -n "$CWD" ] && [ -d "$CWD" ] || exit 1
+  here="$(cd "$CWD" && pwd -P)" || exit 1
+  for d in $cds; do
+    case "$d" in "~"/*) d="${HOME:-}/${d#\~/}" ;; esac
+    [ -d "$d" ] && [ "$(cd "$d" && pwd -P)" = "$here" ] || exit 1
+  done
+  gg() { env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git -C "$CWD" "$@"; }
+  br="$(gg symbolic-ref --short -q HEAD 2>/dev/null)" || exit 1
+  [ -n "$br" ] || exit 1
+  for r in $refs; do [ "$r" = HEAD ] || [ "$r" = "$br" ] || exit 1; done
+  urem="$(gg config --get "branch.${br}.remote" 2>/dev/null)" || urem=""
+  [ -n "$rem" ] || rem="${urem:-origin}"
+  tgt=""
+  if [ -n "$urem" ] && [ "$urem" = "$rem" ]; then tgt="$(gg rev-parse -q --verify '@{u}' 2>/dev/null)" || tgt=""; fi
+  [ -n "$tgt" ] || tgt="$(gg rev-parse -q --verify "refs/remotes/${rem}/HEAD" 2>/dev/null)" || exit 1
+  [ -n "$tgt" ] || exit 1
+  ch="$(gg log --format= --name-only --no-renames -m "${tgt}..HEAD" 2>/dev/null)" || exit 1
+  nb="$(grep -c '^_bmad-output/' <<<"$ch")" || nb=0
+  no="$(grep -vc -e '^_bmad-output/' -e '^$' <<<"$ch")" || no=0
+  [ "$nb" -gt 0 ] && [ "$no" -eq 0 ]
+)
 STATE="$(scan)" || { say "the transcript could not be scanned ($JUDGED); gate skipped"; exit 0; }
 judge
 # The grant line is written at session start, long before any gated call, so the first read decides it.
 [ "${GRANT:-none}" = on ] || exit 0
+# L3 is decided before the re-read, so a `_bmad-output/`-only push never waits on the poll.
+if [ "$V" != allow ] && [ "$KIND" = push ] && l3_exempt; then exit 0; fi
 # The re-read: an owed verdict (DENY or WARN) on a read that did not yet hold the incoming call's
-# own line is re-judged on a later read. A re-read that fails keeps the last good STATE.
-case "${ADVISOR_GATE_REREADS:-2}" in 0) _rr=0 ;; 1) _rr=1 ;; *) _rr=2 ;; esac
-while [ "$V" != allow ] && [ "${SEEN:-0}" != 1 ] && [ "$_rr" -gt 0 ]; do
-  _rr=$((_rr - 1))
-  sleep 1
+# own line is re-judged every 0.25s until that line lands (SEEN=1: nothing of its message is still
+# in flight) or a 10s ceiling passes. A re-read that fails keeps the last good STATE. Measured on
+# graph (CC 2.1.295): 3 of 4 same-message pushes were denied under the old fixed 2 x 1s.
+# The ceiling is wall clock, not a count: a scan's cost grows with the transcript and the load
+# (0.35s solo on a 4432-line graph prefix; graph's 815-line deny took 4.73s for 2 re-reads).
+case "${ADVISOR_GATE_REREADS:-2}" in 0) _cap=0 ;; 1) _cap=2 ;; *) _cap=10 ;; esac
+_t0=$SECONDS
+while [ "$V" != allow ] && [ "${SEEN:-0}" != 1 ] && [ $((SECONDS - _t0)) -lt "$_cap" ]; do
+  sleep 0.25
   STATE2="$(scan)" || STATE2="$STATE"
   STATE="$STATE2"
   judge
 done
 [ "$V" = allow ] && exit 0
 
-if [ "${LAST_RES:--}" = U ]; then
-  ctx="ai-dlc-advisor-gate: this ${KIND} is owed an advisor call (SKILL.md Rule 32), and this agent's most recent advisor result is an 'unavailable' error, so the harness has withdrawn the tool and the call is NOT blocked. A later successful advisor result re-arms the gate."
+# warn <text>: the WARNING emission, `additionalContext` with no decision.
+warn() {
   # PROVENANCE MARKER -- the library is a SIBLING in both layouts (core/hooks/, .claude/hooks/).
   # Fail-open: a hook that cannot mark its output still emits it.
   _AI_DLC_PROV="$(dirname "${BASH_SOURCE[0]}")/ai-dlc-context-provenance.sh"
   if [ -r "$_AI_DLC_PROV" ]; then . "$_AI_DLC_PROV"
   else ai_dlc_provenance_wrap() { printf %s "${3:-}"; }; fi
-  ctx="$(ai_dlc_provenance_wrap ai-dlc-advisor-gate PreToolUse "$ctx")"
+  ctx="$(ai_dlc_provenance_wrap ai-dlc-advisor-gate PreToolUse "$1")"
   jq -n --arg ctx "$ctx" '{hookSpecificOutput: {hookEventName: "PreToolUse", additionalContext: $ctx}}'
   exit 0
-fi
+}
 
+if [ "${LAST_RES:--}" = U ]; then
+  warn "ai-dlc-advisor-gate: this ${KIND} is owed an advisor call (SKILL.md Rule 32), and this agent's most recent advisor result is an 'unavailable' error, so the harness has withdrawn the tool and the call is NOT blocked. A later successful advisor result re-arms the gate."
+fi
 case "$KIND" in
   push) _what="git push" ;; merge) _what="PR merge" ;; close) _what="gate close" ;;
   gatelog) _what="Check 12 gate-log append" ;; verdict) _what="verdict or repair-record write" ;; *) _what="$KIND" ;;
