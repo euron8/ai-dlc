@@ -5335,7 +5335,7 @@ RT_EOF
     { [ "$rt_n" = 7 ] && [ "$rt_bad" = 0 ]; } || err "I66 (tools span) self-probe failed: the sentinel check did not flag a renamed, empty or swapped span, or flagged a moved one (read ${rt_n} of 7 files)."
   fi
   # The runner-extraction claim is SEPARATE: it is owed only when the hooks carry a tools span at all,
-  # and a hooks-only scratch copy must therefore copy the runner too (readset-skip's I66 arm does).
+  # and a hooks-only scratch copy must therefore copy the runner too (validator-arm-selection's i66-onehook phase does).
   if [ ! -f "$RT_RUNNER" ]; then
     err "I66 core/scripts/hermetic-run.sh is absent although the hooks carry the READSET_TOOLS span it extracts, so the runner's sentinel strings were not checked."
   else

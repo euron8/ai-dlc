@@ -930,34 +930,9 @@ if lit_mut aposdrop 1 '| readset_universe_paths | sort -u > "$out/.paths.all"' \
     bad "MANIFEST MUTANT aposdrop SURVIVED the apostrophe-hashed arm, or never ran"
   fi
 fi
-# ONLY ONE HOOK WIDENED. This fixture drives whichever hook it resolved first, so a waiver
-# present in one copy alone reads green here and reaches only half the population. I66 is the
-# binding; this arm proves it fires on exactly that edit. Run in a copy holding just what
-# `--arms I66` reads, with the unmutated copy first as a presence-shaped control. The validator
-# is distribution-only, so on a consumer this is a SKIP, not a pass.
-VEM="$ROOT/scripts/validate-enforcement-map.sh"
-if [ ! -f "$VEM" ] || [ ! -f "$ROOT/.githooks/pre-push" ] || [ ! -f "$ROOT/core/git-hooks/pre-push" ]; then
-  # A DISTRIBUTION TREE (core/scripts present) THAT LOST ONE OF THESE IS BROKEN, NEVER A SKIP: under the
-  # hermetic runner a dropped declaration reads exactly like a consumer tree, and a silent SKIP there
-  # would let the declaration shrink while the verdict stays PASS.
-  [ -d "$ROOT/core/scripts" ] && broken "the distribution layout is missing scripts/validate-enforcement-map.sh or one of its two pre-push hooks, so the I66 arm cannot run"
-  printf '  SKIP  one-hook-widened I66 arm: validate-enforcement-map.sh or one of the two hooks is absent (a consumer tree)\n'
-else
-  I66T="$WORK/i66"
-  for _f in scripts/validate-enforcement-map.sh scripts/render-invariant-index.sh \
-            core/skills/ai-dlc/steps/gate-validation.md core/skills/ai-dlc/enforcement-map.yaml \
-            core/skills/ai-dlc/core-manifest.md core/skills/ai-dlc-update/reconcile/setup-sites.md \
-            .githooks/pre-push core/git-hooks/pre-push core/scripts/hermetic-run.sh; do
-    mkdir -p "$I66T/$(dirname "$_f")" && cp -p "$ROOT/$_f" "$I66T/$_f" || broken "could not copy $_f for the I66 arm"
-  done
-  I66C="$(bash "$I66T/scripts/validate-enforcement-map.sh" --arms I66 2>&1)"; I66C_RC=$?
-  NEW_ARMS=$((NEW_ARMS+1))
-  if [ "$I66C_RC" -eq 0 ] && grep -q '^OK: enforcement-map.yaml in sync' <<< "$I66C"; then
-    ok "I66 CONTROL: the unmutated copy reads OK at rc 0, so the verdict below is attributable"
-  else
-    bad "I66 CONTROL: the unmutated copy did not read OK at rc 0 (rc $I66C_RC): $(printf '%s' "$I66C" | head -3 | tr '\n' ' ')"
-  fi
-fi
+# ONLY ONE HOOK WIDENED is not proven here: this fixture SHIPS, and the binding (I66) is a
+# distribution-only validator a consumer does not hold. The .dist-only fixture
+# validator-arm-selection carries that arm, phase `i66-onehook`, with its mutant.
 # Without the quoted-path test a tab-named file is listed in its quoted spelling, never reaches
 # `.files`, and the line counts still agree, so the manifest is NOT emptied.
 NEW_ARMS=$((NEW_ARMS+1))
