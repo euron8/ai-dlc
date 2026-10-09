@@ -332,9 +332,11 @@ acquittal.
 **Disposition and order.** Step 2's order is pinned as gate, write, runner, commit; graph's `f8c00ed4` already carries
 the runner log, so that is the real order. A runner red (exit 1, a fixture red or MISSING) takes the HOOK-REFUSED
 disposition `SELF-UPDATE-DEFER`, and the old "A red derived fixture STOPS the self-update" text is REPLACED. The
-uncommitted-red restore is written out: `git checkout --` the written tracked paths and the stamp, remove the new untracked
-paths by explicit pathspec (never a glob, the two records kept), return to the original branch, delete the self-update
-branch. The runner prints `# disposition: SELF-UPDATE-DEFER — carry slice + gate record + this log to step 7` on STDOUT on
+uncommitted-red restore is written out: `git restore --source=HEAD --staged --worktree --` the written tracked paths and
+the stamp (a STAGED slice survives a plain `git checkout --`, which restores from the index), `git rm -q --cached
+--ignore-unmatch --` then remove the new paths by explicit pathspec (never a glob, the two records kept), return to the
+original branch, delete the self-update branch. Step 2's HARD-STOPS clause and the old gate-write-runner order sentence
+are replaced, not left beside the new text. The runner prints `# disposition: SELF-UPDATE-DEFER — carry slice + gate record + this log to step 7` on STDOUT on
 the exit-1 path only; exit 2 stays a refusal.
 
 **BOOTSTRAPPING.** `self-update-fixtures.sh` is machinery, and step 2's order is gate, then write, then runner, so the
@@ -349,10 +351,14 @@ change ships, so nothing here depends on the installed gate.
 (`apply.sh:1101-1105`), never grouped by directory. An operator is present at that apply, which is why it is not this
 release. Do not read this entry's close as closing it.
 
-Arms: `self-update-fixture-log` Parts H1-H7 and HD1 (one ten-cell vector), Part HR (the restore, with a control),
-Parts W1-W4 with in-file mutants WM1-WM4. Battery: `self-update-fixture-log-mutants` HCTL and HM1-HM9.
+Arms: `self-update-fixture-log` Parts H1-H7 and HD1 (one ten-cell vector), Part HR (the restore in an unstaged and a
+STAGED shape, each with a control), Part HS (a consumer whose installed hook predates the dispatch SKIPs the H and HR
+arms, with in-file mutant HM-SKIP), and Parts W1-W7 with in-file mutants WM1-WM7. W1 must sit inside the fixture-write
+rule; W5 and W6 require the old order sentence and the HARD-STOPS clause ABSENT; every W cell is scored with HTML
+comments deleted first, so phrases appended in a comment satisfy nothing. Battery: `self-update-fixture-log-mutants` HCTL
+and HM1-HM9.
 
-verify: sh f=core/fixtures/self-update-fixture-log/run.sh; [ -f "$f" ] || exit 9; o="$(bash "$f" </dev/null 2>&1)"; rc=$?; grep -qF '  ok    Parts H1-H7, HD1: vector 1-1-1-1-1-1-1-1-1-1' <<<"$o" || exit 1; grep -qF '  ok    Parts W1-W4: ' <<<"$o" || exit 1; [ "$rc" -eq 0 ] || exit 1; exit 0
+verify: sh f=core/fixtures/self-update-fixture-log/run.sh; [ -f "$f" ] || exit 9; o="$(bash "$f" </dev/null 2>&1)"; rc=$?; grep -qF '  ok    Parts H1-H7, HD1: vector 1-1-1-1-1-1-1-1-1-1' <<<"$o" || exit 1; grep -qF '  ok    Parts W1-W7: ' <<<"$o" || exit 1; [ "$rc" -eq 0 ] || exit 1; exit 0
 
 The receipt above runs the fixture and needs both mechanisms. The per-mechanism receipts below are recorded beside it
 (`scripts/backlog-reverify.sh` reads only an entry's first `verify:` line). Each is run from the repo root under
@@ -367,6 +373,6 @@ L=core/fixtures/self-update-fixture-log/lib.sh; [ -f "$L" ] && grep -q '^hsig()'
 S2 receipt, the fixture-write rule. It runs the fixture's own `wsig` over the shipped SKILL.md:
 
 ```
-f=core/fixtures/self-update-fixture-log/run.sh; s=core/skills/ai-dlc-update/SKILL.md; [ -f "$f" ] && [ -f "$s" ] || exit 9; eval "$(awk '/^w_flat\(\) \{/,/^\}$/' "$f")"; eval "$(awk '/^wsig\(\) \{/,/^\}$/' "$f")"; command -v wsig >/dev/null || exit 9; [ "$(wsig "$s")" = "1-1-1-1" ]
+f=core/fixtures/self-update-fixture-log/run.sh; s=core/skills/ai-dlc-update/SKILL.md; [ -f "$f" ] && [ -f "$s" ] || exit 9; eval "$(awk '/^w_flat\(\) \{/,/^\}$/' "$f")"; eval "$(awk '/^wsig\(\) \{/,/^\}$/' "$f")"; command -v wsig >/dev/null || exit 9; [ "$(wsig "$s")" = "1-1-1-1-1-1-1" ]
 ```
 
