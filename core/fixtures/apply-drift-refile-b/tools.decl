@@ -1,0 +1,34 @@
+# External tools run.sh, seed.sh and the reconcile scripts invoke. python3 performs the
+# known_skills refile in apply.sh; jq is used there only behind command -v guards.
+bash
+cat
+cp
+sed
+grep
+awk
+mktemp
+rm
+mkdir
+dirname
+head
+tail
+tr
+sort
+cut
+wc
+mv
+chmod
+git
+cmp
+comm
+diff
+find
+basename
+paste
+ls
+uniq
+xargs
+date
+sleep
+python3
+jq

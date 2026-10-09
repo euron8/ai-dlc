@@ -1,9 +1,11 @@
 # readset-skip-digest-mutants sources the hook's FIXTURE_POOL block, the deriver's READSET_LOCALMAP span and the
 # CK_HELPERS / DG_WORLDS / TK_WORLDS spans of readset-skip/run.sh, and edits COPIES of them. The J0 coverage join
-# reads the OTHER two shard drivers; a fixture's own directory is copied by the runner, never declared.
+# reads the OTHER four shard drivers; a fixture's own directory is copied by the runner, never declared.
 !.githooks/pre-push
 !core/scripts/derive-fixture-readsets.sh
 !core/fixtures/readset-skip/run.sh
 core/fixtures/lib/
 core/fixtures/readset-skip-digest-mutants-b/run.sh
 core/fixtures/readset-skip-digest-mutants-c/run.sh
+core/fixtures/readset-skip-digest-mutants-d/run.sh
+core/fixtures/readset-skip-digest-mutants-e/run.sh

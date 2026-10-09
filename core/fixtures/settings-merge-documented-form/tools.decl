@@ -1,0 +1,14 @@
+bash
+basename
+cat
+cmp
+cut
+dirname
+grep
+head
+jq
+mktemp
+mv
+rm
+sed
+tr

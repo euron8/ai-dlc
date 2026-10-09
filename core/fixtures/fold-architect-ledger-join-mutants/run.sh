@@ -33,10 +33,14 @@
 # for 20 runs of the shipped fixture (C0, C1 and 18 mutants, ~22s each) plus the M6 premise's
 # three I32 runs, and a loaded cost runs well above a solo one, so it would have been the pole.
 #
-# THREE SHARDS, NOT TWO, AND THE FIXED COST IS WHY. Every shard pays the controls and the
+# FOUR SHARDS, NOT THREE, AND THE FIXED COST IS WHY. Every shard pays the controls and the
 # premise itself (below), about 65s solo, because a shard that skipped them could report a
-# kill against a harness that never ran. Two shards would be ~65 + 9 x 22 = ~260s each, over
-# the 200s bar; three are ~65 + 6 x 22 = ~200s.
+# kill against a harness that never ran. Two shards would be ~65 + 9 x 22 = ~260s each; three
+# were ~65 + 6 x 22 = ~200s solo. The last green gate's LOADED costs (12-way pool) were a 299s,
+# b 452s, c 291s -- b the second-longest unit on the push -- and re-dealing three shards cannot get
+# under ~347s each (1042 / 3). Four shards of seven mutants each are estimated at ~260s loaded
+# (1042 less three fixed-cost shares, over four); that is an estimate from the code, not a timing,
+# and the next green gate's recorded costs are the check on it.
 #
 # THE DEAL IS BY COST, AND NO MUTANT SHARES A PREREQUISITE WITH ANOTHER. Each mutant builds its
 # own tree and makes one full run of the fixture; the only shared prerequisites are the controls
@@ -47,19 +51,28 @@
 # machine, a 135s, b 130s, c 145s (c carries M13). Round v3.4 re-measured the three before adding
 # anything -- a 139s, b 135s, c 143s -- and dealt M26 and M27 both to b, the lowest.
 #
+# Round v3.6 (four shards) dealt seven apiece. Cost per mutant is one full run of the fixture plus,
+# for a `byp` 1 mutant, the un-bypassed self-probe; `byp` 0 mutants (M5 M6 M8 M14 M15 M16 M20 M27)
+# skip it. Every shard holds seven mutants: five byp-1 and two byp-0 (a: M5 M6, b: M8 M14,
+# c: M15 M16, d: M20 M27), and M13's 15-second watchdog hang sits in c. The old b (452s against
+# a 299s and c 291s) held ten mutants against nine and nine, seven of them byp-1 against six and
+# seven, so its excess is only partly explained by count; if a shard is still the slowest after
+# this deal, find the individually slow mutant rather than moving counts again.
+#
 # THE SHARD ARRIVES AS AN ARGUMENT (`--group b`), never from the environment: the scrub above
 # unsets AI_DLC_*, and a fallback-to-'a' design would run shard 'a' three times and report three
-# green fixtures. The sibling directories `-b` and `-c` are one-line drivers that exec this file.
+# green fixtures. The sibling directories `-b`, `-c` and `-d` are one-line drivers that exec this file.
 #
 # THE COVERAGE JOIN runs in EVERY shard, before any tree is built: the declared mutant set is
 # DERIVED from this file's own `run_mutant M<n>-` lines, and the dealt lists must be disjoint and
 # their union must equal it exactly, so no mutant can fall out of every shard; every declared shard
 # must also have a driver directory. The join proves it can fire, on a seeded duplicate and a
 # seeded omission, before it is trusted.
-SHARDS="a b c"
-MUTANTS_a="M1 M2 M3 M4 M5 M6 M19 M20 M25"
-MUTANTS_b="M7 M8 M9 M10 M11 M14 M21 M22 M26 M27"
-MUTANTS_c="M12 M13 M15 M16 M17 M18 M23 M24 M28"
+SHARDS="a b c d"
+MUTANTS_a="M1 M2 M3 M4 M5 M6 M19"
+MUTANTS_b="M7 M8 M9 M10 M11 M14 M25"
+MUTANTS_c="M12 M13 M15 M16 M17 M18 M23"
+MUTANTS_d="M20 M21 M22 M24 M26 M27 M28"
 set -uo pipefail
 
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
@@ -136,6 +149,7 @@ for f in "$FX/run.sh" "$FX/graph-ledger.jsonl" "$FX/graph-oneshot-s313.block" "$
   [ -f "$ROOT/$f" ] || { echo "FIXTURE ERROR: missing $ROOT/$f" >&2; exit 2; }
 done
 command -v python3 >/dev/null 2>&1 || { echo "FIXTURE ERROR: python3 not on PATH" >&2; exit 2; }
+echo "HERMETIC-CONSUMED $VSL_REL"
 
 WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd)"

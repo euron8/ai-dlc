@@ -39,6 +39,7 @@ broken() { printf '  FAIL  %s\n' "$1" >&2; echo "suite-content-key: FIXTURE BROK
 echo "suite-content-key:"
 
 [ -f "$DIST/scripts/suite-content-key.sh" ] || broken "no scripts/suite-content-key.sh at $DIST"
+echo "HERMETIC-CONSUMED scripts/suite-content-key.sh"
 
 # A real git repository, because the key reads `git ls-files` and `git check-ignore`
 # and would degrade to a different -- still stable -- value without one. A fixture

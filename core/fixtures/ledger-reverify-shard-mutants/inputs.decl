@@ -1,0 +1,16 @@
+# ledger-reverify-shard-mutants builds mutant trees by copying every core/ subtree except fixtures, plus the lib, the ledger-reverify parent and its b shard driver.
+# scripts/install.sh is the marker run.sh walks up for to find its root (distribution coordinates; it is not read).
+!core/skills/ai-dlc-update/reconcile/ledger-reverify.sh
+scripts/install.sh
+core/ci-templates/
+core/git-hooks/
+core/hooks/
+core/rules/
+core/schemas/
+core/scripts/
+core/session-driver/
+core/skills/
+core/team-roles/
+core/fixtures/lib/
+core/fixtures/ledger-reverify/
+core/fixtures/ledger-reverify-b/

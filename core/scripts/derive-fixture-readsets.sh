@@ -953,7 +953,7 @@ if [ "$TRACER" = sandbox ] || [ "$TRACER" = both ]; then
     || die "sandbox-exec refused the profile: $(head -1 "$WORK/sandbox-probe.err")"
 fi
 
-# `--local-map` PRECONDITIONS THAT NEED THE PROFILE, and the cleanup it owes. A one-second `log
+# `--local-map` PRECONDITIONS THAT NEED THE PROFILE, and the cleanup it owes. A short `log
 # stream` probe must see its own tagged sentinel read: a push made from INSIDE a sandbox (an agent
 # harness, a nested sandbox-exec) gets a stream that delivers nothing, and every fixture would then
 # be discarded one at a time for a reason that is not the fixture's. Refused here instead, once,
@@ -962,17 +962,23 @@ fi
 if [ -n "$LOCAL_MAP" ]; then
   CUR_FX="__liveness__"
   echo "liveness" > "$SENTINEL"
-  "$LOG_BIN" stream --level debug --style compact \
+  "$LOG_BIN" stream --style compact \
     --predicate "eventMessage CONTAINS \"FXTAG=$CUR_FX;\"" > "$WORK/liveness.raw" 2>&1 &
   lv_pid=$!
+  # THE WINDOW IS 10s, AND A STREAM THAT EXITS ENDS IT EARLY. It was 5 tries of 0.2s, about 1s, and
+  # a stream that attaches slowly on a loaded box missed it: readset-skip-c failed its --local-map
+  # arms at load 23-47 and passed solo at 18-26, and a stub stream started 2s late failed 16 arms
+  # under both stream levels. Inside a sandbox `log stream` exits at once ("Cannot run while
+  # sandboxed"), so the refusal that window exists for still comes in well under a second.
   lv_ok=0; i=0
-  while [ "$i" -lt 5 ]; do
+  while [ "$i" -lt 50 ]; do
     sandboxed cat "$SENTINEL" >/dev/null 2>&1 </dev/null
     if grep -q 'readset-sentinel' "$WORK/liveness.raw" 2>/dev/null; then lv_ok=1; break; fi
+    kill -0 "$lv_pid" 2>/dev/null || break
     sleep 0.2; i=$(( i + 1 ))
   done
   kill "$lv_pid" 2>/dev/null; wait "$lv_pid" 2>/dev/null
-  [ "$lv_ok" -eq 1 ] || die "LIVENESS: a 1s log stream never saw this run's own tagged sentinel read -- a push from inside a sandbox, or a stream that delivers nothing. Nothing traced, nothing written; the fixtures stay unmapped."
+  [ "$lv_ok" -eq 1 ] || die "LIVENESS: a 10s log stream never saw this run's own tagged sentinel read -- a push from inside a sandbox, or a stream that delivers nothing. Nothing traced, nothing written; the fixtures stay unmapped."
 fi
 
 # THE COPY COMES AFTER THE LIVENESS PROBE. A `--local-map` run whose stream delivers nothing refuses
@@ -1359,7 +1365,7 @@ for fx in $LIST; do
     # the sentinel both tracers settle on is the SAME read, in the same window.
     fs_usage -w -f filesys 2>/dev/null | grep --line-buffered -F -e "$TREE/" -e "$MARKDIR/" > "$raw.fsu" &
     fsu_pid=$!
-    "$LOG_BIN" stream --level debug --style compact \
+    "$LOG_BIN" stream --style compact \
       --predicate "sender == \"Sandbox\" AND eventMessage CONTAINS \"$TRACE_ROOT/\"" > "$raw" 2>&1 &
     fs_pid=$!
   elif [ "$TRACER" = fs_usage ]; then
@@ -1369,7 +1375,12 @@ for fx in $LIST; do
     # STARTED BEFORE THE FIXTURE, per window. `log show` afterwards returns nothing for these
     # reports, so a stream that was not live when an event fired has lost it for good -- which is
     # why the settle loop below and the end sentinel after the fixture are both required.
-    "$LOG_BIN" stream --level debug --style compact \
+    # NO `--level debug` ON ANY STREAM HERE (BL-481). Sandbox reports arrive at Default level -- 0 of
+    # 4,231,066 report lines in one reconcile's 50 windows were anything else -- so debug added no
+    # report, and subscribed the stream to every debug message on the box. Measured, interleaved,
+    # 1500 sandboxed reads at load 55-61: debug delivered 964-1378 with 40-155 drop notices, the
+    # default level 1500 of 1500 with 0, in all four runs.
+    "$LOG_BIN" stream --style compact \
       --predicate "$STREAM_PRED" > "$raw" 2>&1 &
     fs_pid=$!
   fi

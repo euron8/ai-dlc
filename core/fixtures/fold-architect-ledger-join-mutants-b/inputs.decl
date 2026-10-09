@@ -1,0 +1,17 @@
+# fold-architect-ledger-join-mutants-b runs the fold-architect-ledger-join mutation battery: mktree copies every core/ subtree except fixtures/, plus scripts/ whole and the
+# shipped fixture directory, and mutates the copies. The J0 coverage join reads the sibling shard drivers; a fixture's own directory is copied by the runner.
+!core/scripts/validate-spawn-ledger.sh
+core/ci-templates/
+core/git-hooks/
+core/hooks/
+core/rules/
+core/schemas/
+core/scripts/
+core/session-driver/
+core/skills/
+core/team-roles/
+core/fixtures/fold-architect-ledger-join/
+scripts/
+!core/fixtures/fold-architect-ledger-join-mutants/run.sh
+core/fixtures/fold-architect-ledger-join-mutants-c/run.sh
+core/fixtures/fold-architect-ledger-join-mutants-d/run.sh

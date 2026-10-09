@@ -1,0 +1,6 @@
+# path-mapping-render drives the renderer against the real tree (controlA) and against seeded copies of it, so it reads the renderer,
+# the VERSION marker the renderer and run.sh walk up for, SKILL.md (the rewritten target) and map_consumer()'s home, which sources lib.sh beside itself.
+!scripts/render-path-mapping.sh
+VERSION
+core/skills/ai-dlc-update/SKILL.md
+core/skills/ai-dlc-update/reconcile/

@@ -10,3 +10,4 @@ core/fixtures/lib/
 core/fixtures/readset-skip/run.sh
 core/fixtures/readset-skip-b/run.sh
 core/fixtures/readset-skip-d/run.sh
+core/scripts/hermetic-run.sh

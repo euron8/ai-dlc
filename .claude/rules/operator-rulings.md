@@ -47,7 +47,9 @@ it looks fine — the whole point is that looking fine was never the signal.
 
 Spawn agents liberally and in parallel. Background anything long. Never justify a decision in
 terms of token cost. When ordering work, profile the SCHEDULE per unit first: measurement
-decides the ORDER, never the membership.
+decides the ORDER, never the membership. A hand verifies ONLY its own change: `bash -n`, its discriminating
+probe, the one unit it edited. The gate runs everything else; a hand re-running it pays twice. Never message a
+`graph-*` session, not even a read-only question, without an explicit operator grant.
 
 ## Read-set traces use the sandbox tracer, and the session runs them
 

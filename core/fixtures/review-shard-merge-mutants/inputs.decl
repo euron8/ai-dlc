@@ -1,0 +1,16 @@
+# review-shard-merge-mutants copies partition-review-diff.sh and merge-review-shards.sh (with their two script siblings) into per-mutant
+# directories and rewrites one line of the copy. The predicates and seeds come from the sibling fixture's lib.sh and run.sh (declared whole);
+# lib.sh reads the gate/role/grammar documents. The shard drivers are re-read by the coverage join (J0); a fixture's own directory is copied by the runner.
+!core/scripts/partition-review-diff.sh
+!core/scripts/merge-review-shards.sh
+core/scripts/artifact-path-config.sh
+core/scripts/partition-document.sh
+core/skills/ai-dlc/artifact-path-grammar.md
+core/skills/ai-dlc/steps/gate-validation.md
+core/skills/ai-dlc/steps/implementation.md
+core/team-roles/code-reviewer.md
+core/team-roles/qa.md
+core/fixtures/review-shard-merge/
+core/fixtures/lib/
+core/fixtures/review-shard-merge-mutants-b/run.sh
+core/fixtures/review-shard-merge-mutants-c/run.sh

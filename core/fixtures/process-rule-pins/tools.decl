@@ -1,0 +1,19 @@
+# Tools run.sh and its awk pin scanner invoke.
+awk
+basename
+bash
+cat
+cmp
+cut
+dirname
+grep
+head
+id
+ln
+mkdir
+mktemp
+rm
+sed
+sort
+tr
+wc

@@ -36,6 +36,8 @@ for c in "$ROOT/core/skills/ai-dlc-update/SKILL.md" "$ROOT/.claude/skills/ai-dlc
 done
 [ -n "$SKILL" ] || { echo "FIXTURE ERROR: ai-dlc-update/SKILL.md not found in either layout" >&2; exit 2; }
 
+echo "HERMETIC-CONSUMED ${SKILL#"$ROOT"/}"
+
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }

@@ -41,6 +41,8 @@ ROOT="$(cd "$HERE/../../.." && pwd)"       # .dist-only: this fixture is never i
 VEM="$ROOT/scripts/validate-enforcement-map.sh"
 [ -f "$VEM" ] || { echo "FIXTURE ERROR: cannot locate scripts/validate-enforcement-map.sh from $HERE" >&2; exit 2; }
 
+echo "HERMETIC-CONSUMED scripts/validate-enforcement-map.sh"
+
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/crosswalk-home-decl.XXXXXX")" || exit 2
 trap 'rm -rf "$WORK"' EXIT
 

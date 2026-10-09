@@ -59,6 +59,8 @@ if [ ! -f "$D_ROOT/scripts/validate-enforcement-map.sh" ]; then
   exit 0
 fi
 
+echo "HERMETIC-CONSUMED scripts/validate-enforcement-map.sh"
+
 PRISTINE="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$PRISTINE" "$WORK"' EXIT

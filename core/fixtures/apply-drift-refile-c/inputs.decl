@@ -1,0 +1,15 @@
+# apply-drift-refile and its two shard drivers (b, c, which exec the parent's run.sh --group) share ONE declaration shape.
+# apply-drift-refile drives apply.sh and its reconcile siblings, and copies the whole directory to
+# build mutants. seed.sh and run.sh find it by a $0-rooted walk and read nothing else under the
+# repo root. The preamble is sourced by run.sh.
+!core/skills/ai-dlc-update/reconcile/
+core/fixtures/lib/
+# The shard drivers exec the parent run.sh, and the parent's coverage join reads every driver. A fixture's OWN
+# run.sh is not declared by itself, but the siblings' are, so each shard sandbox holds all three.
+core/fixtures/apply-drift-refile/run.sh
+core/fixtures/apply-drift-refile-b/run.sh
+# A shard sandbox holds only its own directory, so the parent's run.sh (which the driver execs) and seed.sh (which it runs) are declared here.
+core/fixtures/apply-drift-refile/run.sh
+core/fixtures/apply-drift-refile/seed.sh
+core/fixtures/apply-drift-refile-b/run.sh
+core/fixtures/apply-drift-refile-c/run.sh

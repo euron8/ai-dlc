@@ -57,6 +57,10 @@ Where a Bash result has to be exact, DERIVE it instead of reading it: `md5`, `wc
 
 ## Delegation hazards: eight ways a tool call lies about another agent
 
+**Never kill by pattern.** `pkill -f hermetic-run.sh` from one hand SIGTERMed a consumer's push mid-suite.
+Stop only a process you started, by the pid or group you recorded. **And a run that invokes `hermetic-run.sh`
+sets `AI_DLC_VERDICT_STORE` to a mktemp dir**: one test run without it wrote 184 entries into the real store.
+
 **A backgrounded `sleep` returns immediately**, so chained "waits" are rapid polling granting no
 wall clock. Measured: apparent ten-minute waits spanned one minute, four agents were called silent
 having barely started, one agent's finished work was redone. Block on the condition instead.
