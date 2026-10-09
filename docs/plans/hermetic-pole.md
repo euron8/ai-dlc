@@ -5,48 +5,73 @@
 **You were started with one sentence: `READ and FOLLOW docs/plans/hermetic-pole.md`. This section
 is the ONLY CURRENT STATUS RECORD in this file.**
 
-**Why this plan exists.** `docs/plans/hermetic-fixtures-poc.md` declared 157 fixtures hermetic across
-three releases and the push got no shorter: the pool at `.githooks/pre-push:1701` dispatches every selected
-fixture and waits for the longest, so a push costs its single longest selected fixture. The operator's
-instruction at batch 209's close: start on the pole, nothing else until it moves. A declared fixture is
-excluded from the trace queue at `core/scripts/derive-fixture-readsets.sh:305` and run by the sandbox the
-runner builds at `core/scripts/hermetic-run.sh:127`.
+**THE GOAL, OPERATOR ORDER AT BATCH 217: EVERY PUSH IS SHORT. NOTHING ELSE IN AI-DLC OUTRANKS IT.** A push runs every
+fixture it selects, so its wall clock tracks HOW MANY run, not the longest one. Measured at batch 217 on a gate's own log:
+`read-set keys: 122 of 277 fixture(s) run (57 changed, 8 unrecorded, 57 stale)`. The pole premise this plan carried
+through 0.760.0 was wrong. **No more pole sharding**: every new directory edits `setup-sites.md` and `core-manifest.md`
+and re-runs about fifty fixtures on its own push.
 
-**State after 0.760.0 landed (batch 214, `31617801`).** The rank was re-derived from the 0.757.0 gate's own
-per-run durations file (12-way, 68 dispatched, load 3 rising to 83): `check-24-adversarial-convergence` 743s,
-`readset-skip-d` 732s, `procsub-staged-refusal` 656s, `procsub-staged-refusal-boot` 619s,
-`apply-restamp-worklist` 599s, then `review-shard-merge-mutants{,-b,-c}` 595s (`BL-485`, batch 208's). All five
-are SHARDED at 0.760.0: fifteen directories, the 0.760.0 CHANGELOG entry carries the per-shard solo table with
-load beside each figure and the shipping-directory fork cost. `readset-skip` was re-dealt in place (no new
-directory). `procsub-staged-refusal` and `procsub-staged-refusal-boot` are reported UNSANDBOXABLE: both read this
-repository's own history by `git show <sha>:<path>`, and committing the pinned blobs under `core/` was built,
-passed the runner and failed enforcement-map arms I104, I113 and I65 as a second corpus. They stay undeclared,
-`.dist-only`, sharded; the shard proposal on file is a seeded repository inside the sandbox.
+**State: batch 217 built release work that is NOT on main.** main is whatever `origin/main` reads. Batch 216's 0.761.0
+(`0e30bfeb`) is the last landed release this block knows of. ai-dlc-cc was gating a self-update fix as 0.762.0 when this
+block was written, so take the next free number at push time.
 
-**The 0.760.0 gate's own figures (done-when 3).** 12-way, start load 2.7, 117 of 269 fixtures run (56 changed, 9 unrecorded,
-52 stale), suite phase 05:05 to 05:26 = about 1290s wall at end load 16, every one of the seventeen shard directories ok
-by name, `validator-fork-budget` 3318 of 3324. Its per-run durations file tops at `self-update-gate` 606s then
-`fold-architect-ledger-join-mutants-b` 452s, `readset-skip-digest-mutants` 439s, `review-shard-merge-mutants` 437s; the
-largest shard shipped here reads under 300s loaded. Against the 0.757.0 gate (68 dispatched, 1123s, start load 3.3) this
-run dispatched 117 and took longer in wall clock while its pole fell from 743s to 606s; it is not a same-selection
-comparison and done-when 3 is read on the pole, not the wall clock, because the wall clock is pole-bound only when the
-selection is held equal. The gate's own suite-pole phase printed SKIP (coverage 68% of the record under 90%).
+The assembled batch-217 release is `release-0.762.0-durable` at `7502966d` on GitHub, squashed on `0e30bfeb`. Its gate
+was STOPPED by the operator mid-suite, because its verdict store has a defect (below). It carries:
 
-**Second cause, independent of the pole.** Stale key records make every stale fixture run on every push.
-The 0.760.0 gate selected 52 stale of 269; its own detached post-green trace recorded 34 of 42 into the
-local map and the operator checkout's key records read 57 stale against 209 ok after it. Action 3 then ran `--reconcile`
-from the main checkout detached at 31617801: 50 named (43 stale, 5 unmapped, 2 changed), 24 recorded, 26 OMITTED by
-`log stream` drops at load 3-8, and the map committed with this docs commit (222 fixtures mapped, 12607 entries, down
-from 241 and 30065: the deriver drops a traced-and-omitted fixture's old rows so it runs always, the fail-closed
-direction). The OMITTED set is the `BL-481` class and is wider than that entry lists; the next push's `read-set keys:` line
-is where the stale count is read, and it must be read TOGETHER with that line's UNMAPPED count: nineteen
-previously mapped fixtures lost every row to this trace (`validator-arm-selection`, `layer-contract-conformance`,
-`self-update-join-gate` among them), so they leave `stale` and enter UNMAPPED with nothing cleared. Only the 24
-recorded fixtures can have moved to `ok`, and 24 is the most that line can credit.
+1. **A shared, per-project verdict store.** It lives at `${AI_DLC_VERDICT_STORE:-$HOME/.cache/ai-dlc/verdicts}/<root-commit>`,
+   and is OFF in a shallow clone. `hermetic-run.sh` and the hook record a declared fixture's pass, and the hook skips a
+   declared fixture whose entry matches. The key hashes the runner's `# HR_SANDBOX_BEGIN`/`END` span plus the hook's
+   universe spans.
+2. **Both pre-push hooks (I66).** A declared fixture with a stale record is decided on its declared keys. A passing
+   unmapped fixture is traced on a red push. The `^"` guard reads only the `ls-files` streams, so one quoted map row no
+   longer turns keying off. That last fix ends graph's every-push full run.
+3. **42 more fixtures declared.** Isolation and teeth probes ran on all of them, and no gap was found.
+4. **BL-481, first half.** The deriver drops `--level debug`; the `--local-map` liveness window is ~10s;
+   `readset-sandbox-root-clause` retries up to ten windows.
+5. **Four pole units sharded.**
 
-**What is next.** The suite pole is now whatever the 0.760.0 gate's per-run file says it is; derive it from
-`.git/ai-dlc-fixture-durations.last` in the main checkout before touching anything. `review-shard-merge-mutants`
-at 595s loaded is `BL-485` and belongs to batch 208 unless that batch's lead says done.
+**THE STORE DEFECT, measured on that gate.** The store skipped only 46 of about 104 declared fixtures it should have.
+The cause is that the HOOK's key for a declared fixture is not the RUNNER's key. On `apply-drift-after-write` the hook
+held 161 rows and `hermetic-run.sh --key-only` 67. The hook's extras were 88 tool rows, `.gitattributes` and 5
+`#listing` rows. 52 of the 58 misses still carry rows in the committed `.ai-dlc-fixture-readsets.tsv`. Control: a store
+hit, `adversarial-citation`, was byte-identical on both sides.
+
+The root cause is DUPLICATION, not a bad line. These are written twice:
+- the store path: `readset_vs_store` in the hook, `hr_store_put` in the runner;
+- the digest input: `readset_vs_input`, and the runner around `:465`;
+- a declared fixture's key rows: `readset_declared` + `readset_keys` in the hook, `hr_key_rows` in the runner.
+
+The hook's comment above `readset_declared` claims `--key-only` "prints the same rows", and nothing enforces it.
+The batch-217 lead's pre-gate "parity check" compared the runner to itself in two directories and never compared the
+hook's lookup to the runner's write. That is why the defect reached a gate.
+
+**IN FLIGHT AT HANDOFF.** `b217-vs-keyfix` at `f2237d9d`, on `7502966d`, holds NO code change. It holds only a
+census script, `census-wip.sh.txt`, which compares the hook's computed `.k` rows with `hermetic-run.sh --key-only` for
+every declared fixture.
+
+Its one run used FRESH records, with no prior key record, and found 223 of 225 identical. The two that differ are
+`layer-contract-conformance{,-b}`, where the hook has 1606 rows and the runner 1605; the extra row was not diffed.
+
+So the traced-map-rows hypothesis is REFUTED for fresh records. The gate's 161-versus-67 gap needs a PRIOR record. The
+suspect is the decision awk carrying an existing record's keys forward: `RK[f]` and the `ok`-record carry-over around
+`.githooks/pre-push:1421` on `7502966d`.
+
+Run the census with a seeded `stale` record and a seeded `ok` record first; that is where the gap should reproduce.
+The single-sourcing of NEXT ACTIONS 2 is still required: two implementations are why the gap was invisible. On `main`,
+the runner sources the hook's span at `core/scripts/hermetic-run.sh:244`, and the hook's declaration logic starts at
+`.githooks/pre-push:1219`.
+
+**Peers at handoff.**
+- **ai-dlc-e2** holds `b218-git-decl` at `febd4027`, rebased on `7502966d`. It seeds a git repository inside the sandbox
+  (`git.decl`: `seed`, `pin <sha>`, `pin? <sha>`) for `prepush-pool-depth`, both `procsub` parents and
+  `retired-layer-contract`. Its rule: a pass that skipped an optional pin is never recorded, `hr_pin_skipped` in
+  `hr_store_put`. It gates after the store fix lands, taking the next free number at push time.
+- **ai-dlc-a3** holds `b218-inpool-trace`, WIP. It traces an undeclared fixture during the suite's own run, in a
+  `clonefile` list-clone, so its rows come from the run that produced the verdict and the detached second run
+  disappears. The loss canary stays. It builds on e2's tip.
+- **ai-dlc-cc** shipped 0.761.0 and was gating its self-update fix as 0.762.0.
+
+Ask each for its current state; do not trust this paragraph.
 
 Your instructions are four sections: `## Start here`, `### NEXT ACTIONS`, `### Ping the operator`,
 `### Done when`.
@@ -58,34 +83,32 @@ Your instructions are four sections: `## Start here`, `### NEXT ACTIONS`, `### P
 happens there. `/Users/n8/git/ai-dlc`, the operator's main checkout: read `.git/ai-dlc-fixture-*` with
 `cat` only, and use it for the gated push only, detached at the release commit, after asking every
 live `ai-dlc-*` session for its window; every linked worktree under its `.claude/worktrees/` is bound
-by the same rule. `/Users/n8/git/graph`, the consumer: read it, never write it. Spawned hands: `isolation: "remote"`, a `mktemp -d` under the
-scratchpad, no `rm -rf` on a variable path, no load generator, `--no-verify` on every push a hand makes,
-no work under `/Users/n8/git/ai-dlc/.claude/worktrees/`. Remove every worktree a hand leaves before
-reporting closed.
+by the same rule. `/Users/n8/git/graph`, the consumer: read it, never write it, and NEVER message a `graph-*` session
+without an explicit operator grant, not even a read-only question. Learn about consumer activity from the process table
+and block on its pid.
 
-**The declaration method is the one in `hermetic-fixtures-poc.md` action 3** and the worked examples
-under `core/fixtures/*/inputs.decl` (157 of them). Two rules the 0.753.0 gate taught: no
-`$(dirname "$X")/../<subtree>` walk in a sentinel; a `run.sh` naming `core/hooks/` or `$HOOK` carries
-the `AI_DLC_*` scrub loop. `bash scripts/validate-enforcement-map.sh` must exit 0 on the stacked branch
-before any gate. A sentinel prints a `pwd -P`-resolved path or the declared relative path, never one
-carrying `..`.
+**Every hand brief carries these lines.** `isolation: "remote"`; a `mktemp -d` under the scratchpad; no `rm -rf` on a
+variable path; no load generator; `--no-verify` on every push the hand makes; no work under
+`/Users/n8/git/ai-dlc/.claude/worktrees/`. **Never `pkill`, `killall` or kill by pattern**: stop only processes you
+started, by the pid or process group recorded when you started them. A batch-217 hand's `pkill -f hermetic-run.sh` was
+in the window when graph's push was SIGTERMed. **Every run that invokes `hermetic-run.sh` sets `AI_DLC_VERDICT_STORE` to
+a mktemp dir**: a test run without it wrote 184 entries into the real store. Remove every worktree a hand leaves before
+reporting closed. A wait loop has an exit: a pid or a capped count, never only a marker that may never come.
 
-**Measure the push, not the count.** The figure this plan is judged on is the wall clock of a gated
-push's fixture suite phase, read from the hook's own output (`── fixture suite` to its tally), before
-and after, at the same pool width, with `uptime` load beside each. A declaration that does not move
-that figure is not progress here.
+**Measure only what a decision reads.** Operator ruling at batch 217: no solo timings, because no gate or done-when reads
+them. The figures this plan is judged on are an ordinary push's `read-set keys:` run count and its `verdict store: N
+fixture(s) skipped` line, with the fixture-suite wall clock and load beside them.
 
 ### Derive the state; do not trust the numbers above
 
 ```bash
 git rev-parse --short HEAD; git status --porcelain | wc -l
-n=0; for d in core/fixtures/*/; do [ -f "$d/inputs.decl" ] && n=$((n+1)); done; echo "DECLARED $n"   # 180 at 0.760.0 plus the batch-214 docs commit
-# the pole, from the main checkout, READ ONLY
-sort -k2 -nr /Users/n8/git/ai-dlc/.git/ai-dlc-fixture-durations.last | head -6   # the last GREEN gate, never the merged record
-# stale records, READ ONLY. CONTROL: the ok count is non-zero.
-grep -l '#state stale' /Users/n8/git/ai-dlc/.git/ai-dlc-fixture-keys/*.key | wc -l; grep -l '#state ok' /Users/n8/git/ai-dlc/.git/ai-dlc-fixture-keys/*.key | wc -l
-# the eleven declared shard directories of 0.760.0 (expect 11); the six procsub shards are undeclared by ruling
-for f in check-24-adversarial-convergence{,-b,-c,-d} readset-skip{,-b,-c,-d} apply-restamp-worklist{,-b,-c}; do [ -f core/fixtures/$f/inputs.decl ] && echo "DECL $f"; done | wc -l
+git ls-remote github refs/heads/main refs/heads/release-0.762.0-durable refs/heads/b217-vs-keyfix refs/heads/b218-git-decl refs/heads/b218-inpool-trace
+n=0; for d in core/fixtures/*/; do [ -f "$d/inputs.decl" ] && n=$((n+1)); done; echo "DECLARED $n"   # 225 on 7502966d
+# store duplication: these must print 0 once single-sourced (the runner's own copies are gone)
+git show github/b217-vs-keyfix:core/scripts/hermetic-run.sh 2>/dev/null | grep -c '^hr_key_rows()\|^hr_store_put()'
+# the real verdict store, READ ONLY; control: the base directory exists
+ls ~/.cache/ai-dlc/verdicts/ 2>/dev/null | head; ls -d ~/.cache/ai-dlc/verdicts 2>/dev/null | wc -l
 uptime
 ```
 
@@ -94,37 +117,49 @@ uptime
 1. **MAKE THE CLONE AND PIN IT** at `github/main`; ask every live `ai-dlc-*` session (`ListAgents`) what
    release number and batch number it holds and whether it holds the main checkout; WAIT for every answer;
    state the number you take to every one of them before building.
-2. **ATTACK THE MEASURED POLE, ONE FIXTURE PER HAND, ALL AT ONCE.** Derive the rank from
-   `.git/ai-dlc-fixture-durations.last` in the main checkout (the per-run file of the last GREEN gate; the merged
-   record is polluted). At 0.760.0 it reads `self-update-gate` 606s (ships, DECLARED at 0.759.0, so it is keyed on its
-   declaration and is a shard job), `fold-architect-ledger-join-mutants-b` 452s, `readset-skip-digest-mutants{,-c}` 439/422s,
-   `review-shard-merge-mutants{,-c}` 437/432s (`BL-485`, batch 208's; leave it unless its lead says done). A
-   fixture whose subject is the live repository's history (`procsub-staged-refusal`, `-boot`) is sharded and
-   left undeclared: do not build a pin corpus under `core/`. New SHIPPING shard directories move `FORK_BUDGET`
-   through arm I8 (+4 at 0.757.0, +4 to +6 at 0.760.0): profile base/tip with `fork-profile.sh --section by-arm
-   --stable` before the gate. Hands: `isolation: "remote"`, own literal-path clone, `--no-verify` pushes, no
-   timing, exit codes only, and a HOLD / WINDOW OPEN token so they build during a peer's gate and run only in an
-   agreed window; the lead times every shipped unit solo and sequentially, load under 5 beside each figure,
-   re-taking any row that started above 5. After assembling several hands, grep every new shard name in
-   `scripts/uninstall.sh`, `core-manifest.md` and `setup-sites.md`: a `-X theirs` cherry-pick drops the earlier
-   hand's words silently. Stage the release commit by path, never `git add -A` with a plan edit in the tree.
-3. **CLEAR THE STALE RECORDS.** `bash core/scripts/derive-fixture-readsets.sh --reconcile` from the clone
-   root names the stale, changed and unmapped set; trace it with `--list "<names>" --tracer sandbox` on the
-   main checkout detached at the landed sha (the session runs it, no sudo), commit the map, and confirm on
-   the next push's `read-set keys:` line that the stale count fell. Check first whether a detached post-green
-   trace is still running there (`ps` for `derive-fixture-readsets`, then block on its pid) and whether it
-   committed rows (`git log -3 -- .ai-dlc-fixture-readsets.tsv`). `readset_trace_add` holds a fixture after
-   three discards; the gate prints that list as `NOT re-tracing`, and those leave only by declaration.
-4. **ONE RELEASE, GATED, THEN MEASURE AGAIN.** Push only a durable copy of the release commit hookless; the
-   gated push from the main checkout detached at the squashed commit must CREATE `release/<version>`, or the
-   hook does not run. `AI_DLC_FIXTURE_JOBS=12` unless the operator names a width. Read the gate's exit, every
-   changed fixture by name, the `read-set keys:` and `read-set map:` lines, and the new `.last` pole; put before
-   and after in the CHANGELOG with load beside each. Every live `ai-dlc-*` session gets GATE START and LANDED.
-5. **RE-DERIVE THIS BLOCK**, `bash scripts/validate-plan-shape.sh`, commit, push once from the clone.
-6. **FRESH-RESUME CHECK**: merge the docs commit, fresh clone of `origin/main` through the `github`
+2. **SINGLE-SOURCE THE STORE**, on `b217-vs-keyfix` (or from `7502966d`), in BOTH hooks identically (I66).
+   - ONE function each for the store path, the digest input, and a declared fixture's key rows, in a span both the hook
+     and `hermetic-run.sh` source. The runner already sources the hook's `READSET_UNIVERSE` span; extend it or add one.
+   - DELETE the runner's own copies.
+   - Make the RUNNER the store's only writer: delete `readset_vs_put` and its call in `readset_keys_write` from both
+     hooks. Every declared fixture the hook runs goes through the runner at the `if [ -f "$d/inputs.decl" ]; then`
+     dispatch, so confirm that in both layouts first. e2's `hr_pin_skipped` rule then covers every write.
+   - Traced map rows must never enter a declared fixture's key.
+   - If the hook's key composition cannot be lifted into a sourced span, report why before building anything else.
+   - Keep these five texts byte-for-byte, because ai-dlc-cc's self-update fix matches on them: `# READSET_TOOLS_BEGIN`,
+     the dispatch line, `declared file absent:`, and the `rc=`/`sandbox_files=`/`required_missing=` summary line.
+3. **THE CENSUS IS A GATE ARM, NOT A CLAIM.** Add a fixture arm that runs on the REAL tree and, for every declared
+   fixture, byte-compares the hook's computed key rows with `hermetic-run.sh --key-only`. It must name the fixture and
+   the first differing row on any mismatch. Key it on both hooks, `hermetic-run.sh` and the shared span, so it re-runs
+   at every gate that touches key code. Add a mutant that edits one side only, which must fail it. Report the census
+   line and its count from a real run. **No one asserts the key is final; this arm passing at the gate is the only
+   evidence.**
+4. **RE-SQUASH, RE-SEED, GATE.**
+   - Squash onto the then-current `origin/main` as the next free version. Rewrite the 0.762.0 CHANGELOG entry of
+     `7502966d` under the new number, and add the single-sourcing.
+   - DELETE every entry under `~/.cache/ai-dlc/verdicts/`: every existing entry was recorded under the defective key.
+     Delete by exact listing, never a glob on a variable.
+   - Seed: run every declared fixture once through the release tree's `hermetic-run.sh` from a clean clone at the
+     release commit. Check the clone's `--key-only` rows against the main checkout's for a few fixtures first.
+   - GATE START to every `ai-dlc-*` session. Gate from the main checkout detached at the release commit, creating
+     `release/<version>`, `AI_DLC_FIXTURE_JOBS=12`.
+   - Read: the exit file; the census arm by name; `verdict store: N skipped`, which must be near the count of declared
+     fixtures the push would otherwise run; the `read-set keys:` line; `ls-remote` for the ref.
+   - `readset-sandbox-root-clause` fails above about load 60, the open half of BL-481. Run it alone first if load is
+     high.
+5. **MEASURE AN ORDINARY PUSH.** After the release lands, the next docs-only or single-fixture push's `read-set keys:` run
+   count and `verdict store:` line are the figures this plan is judged on. Record them with load beside them.
+6. **CARRIERS OWED** in the docs commit after the release:
+   - in `.claude/rules/tool-hazards.md`: "never kill by pattern; stop only your own recorded pid", and "a test that runs
+     `hermetic-run.sh` sets `AI_DLC_VERDICT_STORE`";
+   - in `.claude/rules/operator-rulings.md`: "never message a `graph-*` session without an explicit grant";
+   - in `verification-discipline.md`: one sentence saying a fixture named on the `verdict store:` line was skipped on a
+     recorded pass, which is not a read-set gap.
+7. **RE-DERIVE THIS BLOCK**, `bash scripts/validate-plan-shape.sh`, commit, push once from the clone.
+8. **FRESH-RESUME CHECK**: merge the docs commit, fresh clone of `origin/main` through the `github`
    remote's URL, read this plan there, re-run the derive block, assert the numbered actions name
    nothing already shipped, run the plan validator there as the floor.
-7. **HAND THE PLAN TO A LOCAL AI-DLC SESSION, THEN STOP.** `ListAgents`; if a local `ai-dlc-*`
+9. **HAND THE PLAN TO A LOCAL AI-DLC SESSION, THEN STOP.** `ListAgents`; if a local `ai-dlc-*`
    session is found (never a `graph-*` one), `SendMessage` it exactly
    `READ and FOLLOW docs/plans/hermetic-pole.md` and nothing else. A `REFUSED:` reply advances to the
    next untried session, idle ones first; silence does not. Once a session accepts, this session has
@@ -134,25 +169,19 @@ uptime
 ### Ping the operator
 
 Report on every question, every decision, and on completion including an early stop. Specifically:
-when a pole fixture cannot be sandboxed or sharded (with the escape named); when the stale trace needs
-the box and another session holds it; and when the release lands, with the before and after wall clock.
-Present a stall as choices with a marked recommendation. Never narrow the scope on your own authority.
+when the single-sourcing cannot lift the hook's key composition into a sourced span; when the census
+reports a mismatch; when the store's skip count at a gate is far below the declared fixtures the push would
+otherwise run; and when the release lands, with the ordinary push's run count and wall clock. Present a stall
+as choices with a marked recommendation. Never narrow the scope on your own authority.
 
 ### Done when
 
-1. Each of the four units at the top of the DERIVED rank (at 0.755.0: `readset-skip-digest-mutants`,
-   `readset-skip`, `gate-adjudication-mutants`, `reconcile-emit-report`) is declared, sharded with each shard
-   declared, or reported unsandboxable with the exact escape and a shard proposal. MET at 0.757.0. The five at the
-   top of the 0.757.0 gate's rank (`check-24-adversarial-convergence`, `readset-skip-d`, `procsub-staged-refusal`,
-   `procsub-staged-refusal-boot`, `apply-restamp-worklist`) likewise: MET at 0.760.0, the two procsub units
-   reported unsandboxable with their escapes and a seeded-repository proposal.
-2. A committed trace has cleared the stale set, read on a push's `read-set keys:` line as a lower
-   stale count than the batch-209 baseline (59-60 stale). PARTIAL at 0.760.0: the gate's trace plus action 3's trace moved the
-   operator checkout from 60 to 57 stale; the committed map is in the batch-214 docs commit and the next push reads it. Read `stale` and
-   UNMAPPED together: nineteen fixtures were reclassified stale -> UNMAPPED by that trace, and only the 24 recorded
-   can count as cleared.
-3. One gated push after the release shows a shorter fixture-suite wall clock than the baseline at the
-   same pool width, both figures with load beside them in the CHANGELOG. OPEN: no two gates since 0.755.0
-   have dispatched a comparable selection (103, 68, 117); the per-run POLE has fallen 2025s -> 743s -> 606s
-   across them and is the figure this plan now tracks until a same-selection pair exists.
-4. This block re-derived, the plan validator green, the fresh-resume check passed, the plan handed on.
+1. The pole work of 0.757.0 and 0.760.0 is MET and closed; the pole is no longer this plan's measure.
+2. The verdict store's key is single-sourced: the census arm reports every declared fixture's hook key equal to its
+   runner key, on the real tree, at the gate that ships it, and its one-side mutant is killed.
+3. That release has landed, and its gate printed a `verdict store: N skipped` line covering the declared fixtures the
+   push would otherwise have run.
+4. An ordinary push after it (no hook, runner or deriver change) shows its `read-set keys:` run count and fixture-suite
+   wall clock, with load beside them, recorded here against the batch-217 baseline of 122 run.
+5. The six carriers of action 6 are committed, this block re-derived, the plan validator green, the fresh-resume check
+   passed, the plan handed on.
