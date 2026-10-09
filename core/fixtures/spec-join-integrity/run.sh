@@ -46,6 +46,15 @@ want() { # <expected-rc> <label> <args...>
   local g=$?
   [ "$g" -eq "$exp" ] && ok "$lab" || bad "$lab (expected rc=$exp, got rc=$g)"
 }
+# Run, then assert the subject's OUTPUT contains a sentence. Defined here, before the first
+# call: a call that precedes the definition prints `says: command not found`, leaves rc
+# untouched, and reads exactly like a passing arm.
+says() { # <label> <must-contain> <args...>
+  local lab="$1" want_s="$2"; shift 2
+  local out; out="$(bash "$V" "$@" 2>&1)"
+  if grep -qF -- "$want_s" <<<"$out"; then ok "$lab"
+  else bad "$lab (message missing: \"$want_s\")"; fi
+}
 
 echo "spec-join-integrity:"
 # The candidate list above spans BOTH install layouts and takes the first that exists, so
@@ -171,13 +180,7 @@ want 2 "DISARM: a file with no '- **Binds:**' entries exits 2, never 0" \
 # EXIT CODE IS NOT THE ASSERTION FOR TWO OF THESE. key-absent and empty-without-why
 # both FAIL(1) before and after, so a fixture checking only rc scores a FALSE PASS
 # against the collapsed version -- this repo's own defect class, reproduced inside the
-# test written to catch it. Assert on the SENTENCE.
-says() { # <label> <must-contain> <args...>
-  local lab="$1" want_s="$2"; shift 2
-  local out; out="$(bash "$V" "$@" 2>&1)"
-  if grep -qF -- "$want_s" <<<"$out"; then ok "$lab"
-  else bad "$lab (message missing: \"$want_s\")"; fi
-}
+# test written to catch it. Assert on the SENTENCE, with says() defined beside want().
 
 says "trichotomy: key ABSENT says the field is absent" \
   "carries no 'capabilities:' frontmatter field at all" \
