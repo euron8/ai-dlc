@@ -31,15 +31,340 @@ done
 # preclassify.sh and setup-sites.md beside itself and the arms below read two more siblings.
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$GATE")" && pwd -P)/"
 
+# ---------------------------------------------------------------------------- shards ----
+# THIS FILE IS FOUR SHARDS OF ONE FIXTURE, AND THE SPLIT IS A SCHEDULING BOUNDARY, NOT A SUBJECT
+# BOUNDARY. Every section below is a UNIT guarded by `if sg <unit>; then ... fi`; `--group <x>` runs
+# the units dealt to shard <x>. The three siblings `self-update-gate-{b,c,d}/run.sh` are one-line
+# drivers that `exec bash` this file with their group (the check-24 shape), so the pre-push pool can
+# start each on its own and the suite's makespan stops tracking one 4700-line directory. No `--group`
+# runs shard 'a', so `bash core/fixtures/self-update-gate/run.sh` is shard a.
+#
+# THE SEED, THE GATE LOOKUP, THE SAFE-STOP WORLD AND THE HELPERS MORE THAN ONE UNIT CALLS ARE NOT
+# UNITS: every shard pays them, because a shard that skipped them would score its cases against a
+# harness that never ran. `hu` is two units (hu1, hu2) over ONE set of worlds, built under a compound
+# guard that the coverage join deliberately does not read as a unit.
+#
+# THE COVERAGE JOIN runs in EVERY shard before anything else: the declared units are DERIVED from this
+# file's own `if sg <unit>; then` lines, the dealt lists must be disjoint and their union must equal the
+# declared set exactly, so no unit can fall out of every shard, and every declared shard must have a
+# driver directory. The join proves it can fire first, on a seeded duplicate and a seeded omission.
+#   a  base ss sc ac su pp stg  the seed rows and the differential mutant, --safe-stop and its stamp and marker
+#                         arms, arm C's carry refusal and its mutants, arm C, arm D's preclassify, the push-hook layouts, the staging-write refusal
+#   b  vr pl hu1 sh       the verdict record, the pre-written miniature, the unchanged-script hook
+#                         worlds and the first half of their mutants, the hook shapes the scan must not misread
+#   c  pu hu2             the push wrapper (self-update-push.sh), the second half of the hook-world
+#                         mutants and the real-hook depth probe
+#   d  qw mp hk av        the quoting cells, the failed-producer worlds, the hook-the-push-runs worlds,
+#                         the hook's own argv and the remedy
+SHARDS="a b c d"
+UNITS_a="base ss sc ac su pp stg"
+UNITS_b="vr pl hu1 sh"
+UNITS_c="pu hu2"
+UNITS_d="qw mp hk av"
+GROUP=a
+if [ "${1:-}" = "--group" ]; then
+  GROUP="${2:-}"
+  [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }
+fi
+case " $SHARDS " in
+  *" $GROUP "*) ;;
+  *) echo "FIXTURE ERROR: unknown shard '$GROUP' (known: $SHARDS)" >&2; exit 2 ;;
+esac
+eval "MINE=\"\${UNITS_$GROUP:-}\""
+NAME="self-update-gate"; [ "$GROUP" = a ] || NAME="self-update-gate-$GROUP"
+broken() { printf '  FAIL  %s\n' "$1" >&2; echo "$NAME: FIXTURE BROKEN" >&2; exit 2; }
+[ -n "$MINE" ] || broken "shard '$GROUP' has no UNITS_$GROUP list; a shard dealt nothing passes everything it never checked"
+sg() { case " $MINE " in *" $1 "*) return 0 ;; esac; return 1; }
+SELF="$0"
+[ -f "$SELF" ] || broken "cannot read $SELF for the coverage join"
+partition_ok() { # <declared ids file> <dealt ids file> -> 0 when dealt is disjoint and covers declared exactly
+  local dup miss extra
+  dup="$(sort "$2" | uniq -d | tr '\n' ' ')"
+  miss="$(sort -u "$2" | comm -23 <(sort -u "$1") - | tr '\n' ' ')"
+  extra="$(sort -u "$2" | comm -13 <(sort -u "$1") - | tr '\n' ' ')"
+  [ -z "$dup$miss$extra" ] && return 0
+  echo "dealt twice: {${dup% }} dealt to no shard: {${miss% }} dealt but not declared: {${extra% }}"
+  return 1
+}
+JW="$(mktemp -d "${TMPDIR:-/tmp}/sug-join.XXXXXX")" || broken "mktemp failed"
+printf '%s\n' u1 u2 u3 > "$JW/pd"; printf '%s\n' u1 u2 u2 u3 > "$JW/pdup"; printf '%s\n' u1 u3 > "$JW/pmiss"; printf '%s\n' u3 u1 u2 > "$JW/pok"
+if partition_ok "$JW/pd" "$JW/pdup" >/dev/null || partition_ok "$JW/pd" "$JW/pmiss" >/dev/null \
+   || ! partition_ok "$JW/pd" "$JW/pok" >/dev/null; then
+  rm -rf "$JW"; broken "the coverage join's self-probe did not discriminate (duplicate, omission, exact)"
+fi
+sed -n 's/^[[:space:]]*if sg \([a-z0-9_][a-z0-9_]*\); then$/\1/p' "$SELF" > "$JW/declared"
+for _s in $SHARDS; do eval "printf '%s\n' \${UNITS_$_s}" | tr ' ' '\n'; done | grep . > "$JW/dealt"
+ndecl="$(grep -c . "$JW/declared")" || ndecl=0
+ndupdecl="$(sort "$JW/declared" | uniq -d | grep -c .)" || ndupdecl=0
+if [ "$ndecl" -eq 0 ] || [ "$ndupdecl" -ne 0 ]; then
+  rm -rf "$JW"; broken "$ndecl unit guards derived from $SELF ($ndupdecl declared twice)"
+fi
+if ! _why="$(partition_ok "$JW/declared" "$JW/dealt")"; then
+  rm -rf "$JW"; broken "the shard partition does not cover the guarded units exactly -- $_why"
+fi
+for _s in $SHARDS; do
+  [ "$_s" = a ] && continue
+  _drv="$DIR/../self-update-gate-$_s/run.sh"
+  if [ ! -f "$_drv" ] || ! grep -qF -- "--group $_s" "$_drv"; then
+    rm -rf "$JW"; broken "shard '$_s' is declared but $_drv does not drive it"
+  fi
+done
+rm -rf "$JW"
+echo "  [J0] coverage join: $ndecl units derived from the sg guards, dealt disjointly across {$SHARDS}, union exact; this shard runs {$MINE}"
+
 read -r DIST BASE THEIRS CONS < <(bash "$DIR/seed.sh")
 trap 'rm -rf "$(dirname "$DIST")"' EXIT
-
-OUT="$(bash "$GATE" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>&1)"
-RC=$?
-
 FAILURES=0
 ASSERTIONS=0
+echo "self-update-gate fixture"
+echo
 
+SS="$(dirname "$DIST")/ss"; rm -rf "$SS"
+mkdir -p "$SS/dist/core/skills/ai-dlc/steps" "$SS/cons/.claude/skills/ai-dlc/steps" "$SS/dist/core/rules"
+gvv() { printf '# gate\n'; for a in "$@"; do printf '<!-- CHECK_LOADED: %s -->\n' "$a"; done; }
+gvv 1 2 > "$SS/cons/.claude/skills/ai-dlc/steps/gate-validation.md"
+# The consumer's hook is the authority on what can block ITS push, and its ABSENCE is
+# UNDECIDED, not OK — correctly, since a gate that cannot see the hook cannot say what the
+# self-update would install. Without this the whole section ran on UNDECIDED and two arms
+# passed for a reason unrelated to what they assert; the precondition arms below exist
+# because that is exactly what happened.
+mkdir -p "$SS/cons/.githooks"
+printf '#!/usr/bin/env bash\n# invokes no scripts/ai-dlc/ validator, so the gating set is empty\nexit 0\n' > "$SS/cons/.githooks/pre-push"
+git -C "$SS/dist" init -q
+printf '1.0.0\n' > "$SS/dist/VERSION"; gvv 1 2 > "$SS/dist/core/skills/ai-dlc/steps/gate-validation.md"
+# ONE MACHINERY PATH, NEVER TOUCHED AGAIN, AND IT IS A PRECONDITION RATHER THAN DECORATION. Arm C
+# now resolves its population by `eval`ing `machinery_paths()` out of preclassify.sh, and reports
+# SELF-UPDATE-UNDECIDED when that set comes back EMPTY -- correctly, since a membership test over
+# an empty set rejects every path and its silence is byte-identical to a clean pull. A dist tree
+# holding only VERSION and a rulebook file resolves to nothing, so without this file every arm
+# below runs against an UNDECIDED verdict it never asked for. Unchanged across all five commits,
+# so it enters no base..theirs diff and produces no bucket and no CARRY row of its own.
+printf 'ss machinery\n' > "$SS/dist/core/rules/ss.md"
+git -C "$SS/dist" add -A >/dev/null 2>&1; git -C "$SS/dist" -c user.email=f@x -c user.name=f commit -qm base >/dev/null 2>&1
+SS_BASE="$(git -C "$SS/dist" rev-parse HEAD)"
+# r1 — a release that moves VERSION and nothing the consumer's rulebook is joined against.
+printf '1.1.0\n' > "$SS/dist/VERSION"
+git -C "$SS/dist" add -A >/dev/null 2>&1; git -C "$SS/dist" -c user.email=f@x -c user.name=f commit -qm r1 >/dev/null 2>&1
+SS_R1="$(git -C "$SS/dist" rev-parse HEAD)"
+# r2 — a release that declares a check anchor the consumer's rulebook does not carry (ARM R1).
+printf '1.2.0\n' > "$SS/dist/VERSION"; gvv 1 2 3 > "$SS/dist/core/skills/ai-dlc/steps/gate-validation.md"
+git -C "$SS/dist" add -A >/dev/null 2>&1; git -C "$SS/dist" -c user.email=f@x -c user.name=f commit -qm r2 >/dev/null 2>&1
+SS_R2="$(git -C "$SS/dist" rev-parse HEAD)"
+# r3 — the coupling is gone again, so base→r3 is a CLEAN single hop even though base→r2 is not.
+# This is the shape that proves the walk evaluates every candidate instead of stopping at the
+# first defer: r3 lands strictly more than r1 and an early-stopping walk can never name it.
+printf '1.3.0\n' > "$SS/dist/VERSION"; gvv 1 2 > "$SS/dist/core/skills/ai-dlc/steps/gate-validation.md"
+git -C "$SS/dist" add -A >/dev/null 2>&1; git -C "$SS/dist" -c user.email=f@x -c user.name=f commit -qm r3 >/dev/null 2>&1
+SS_R3="$(git -C "$SS/dist" rev-parse HEAD)"
+# d3 — a NON-release commit after the last clean release, and the only reason it exists.
+# The candidate set is release commits because the stamp records a VERSION, so a mid-release
+# stop is not a state a consumer can hold. Without a commit that is clean, later than r3 and
+# NOT a release, "candidates are releases" and "candidates are all commits" pick the same ref
+# and the property is untestable — a mutation widening the candidate set came back green until
+# this commit existed.
+printf 'docs only, no VERSION change\n' > "$SS/dist/NOTES.md"
+git -C "$SS/dist" add -A >/dev/null 2>&1; git -C "$SS/dist" -c user.email=f@x -c user.name=f commit -qm d3 >/dev/null 2>&1
+# r4 — THEIRS. Needed so r3 is an INTERMEDIATE candidate rather than the target itself.
+printf '1.4.0\n' > "$SS/dist/VERSION"; gvv 1 2 3 4 > "$SS/dist/core/skills/ai-dlc/steps/gate-validation.md"
+git -C "$SS/dist" add -A >/dev/null 2>&1; git -C "$SS/dist" -c user.email=f@x -c user.name=f commit -qm r4 >/dev/null 2>&1
+SS_R4="$(git -C "$SS/dist" rev-parse HEAD)"
+
+ss_assert() { # ss_assert <label> <got> <want> <why>
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ "$2" = "$3" ]; then printf '  ok    %-16s %s\n' "$1" "$4"
+  else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s got=[%s] want=[%s]  %s\n' "$1" "$2" "$3" "$4"; fi
+}
+ss_stamp() { # ss_stamp <skill_commit|-> ; `-` removes the stamp
+  if [ "$1" = "-" ]; then rm -f "$SS/cons/.claude/.ai-dlc-version"
+  else printf 'version: 1.0.0\ncommit: %s\nskill_version: 1.1.0\nskill_commit: %s\n' "$SS_BASE" "$1" \
+         > "$SS/cons/.claude/.ai-dlc-version"; fi
+}
+ss_marker() { # ss_marker on|off -- the interrupted-apply marker on the seeded consumer
+  if [ "$1" = on ]; then : > "$SS/cons/.claude/.ai-dlc-applying"
+  else rm -f "$SS/cons/.claude/.ai-dlc-applying"; fi
+}
+# ss_ack <gate> <theirs> -> "row=<0|1> acq=<n> wh=<n> pf=<n>" off the SAFE-STOP row's DETAIL.
+#
+# `pf` KEYS ON "its slice self-updates cleanly", NOT ON "pull to ... FIRST". The withheld wording
+# opens with that same phrase on purpose -- it is still telling the operator to pull first -- so
+# the shorter token cannot separate the withheld row from the untouched one and arm C, whose
+# whole job is that separation, would have passed against a guard sited anywhere.
+ss_ack() {
+  local d
+  d="$(bash "$1" "$SS/dist" "$SS_BASE" "$2" "$SS/cons" 2>&1 |
+         awk -F'\t' '$1=="SELF-UPDATE-SAFE-STOP" {print $3; exit}')"
+  printf 'row=%s acq=%s wh=%s pf=%s\n' \
+    "$([ -n "$d" ] && printf 1 || printf 0)" \
+    "$(printf '%s' "$d" | grep -c 'SPLIT BUYS NOTHING')" \
+    "$(printf '%s' "$d" | grep -c 'ACQUITTAL IS WITHHELD')" \
+    "$(printf '%s' "$d" | grep -c 'its slice self-updates cleanly')"
+}
+SU_PC="$(dirname "$GATE")/preclassify.sh"
+su_carry() { printf '%s\n' "$1" | awk -F'\t' '$1 == "SELF-UPDATE-CARRY" {print $2}' | sort | tr '\n' ','; }
+VR="$(dirname "$DIST")/vr"
+rm -rf "$VR"; mkdir -p "$VR"
+vr_cons() { # vr_cons <name> -> a fresh consumer copy with an EMPTY record directory
+  rm -rf "$VR/$1"
+  cp -R "$CONS" "$VR/$1"
+  rm -rf "$VR/$1/_bmad-output"
+  printf '%s\n' "$VR/$1"
+}
+vr_dir() { printf '%s\n' "$1/_bmad-output/ai-dlc-update"; }
+vr_n() { # vr_n <consumer> -> how many record files exist
+  local n
+  n="$(ls "$(vr_dir "$1")"/self-update-gate-*.md 2>/dev/null | grep -c .)" || n=0
+  printf '%s\n' "$n"
+}
+vr_newest() { ls -t "$(vr_dir "$1")"/self-update-gate-*.md 2>/dev/null | head -1; }
+# TRAILERS, NOT FILES, IS THE COUNT THAT SURVIVES THE FILENAME COLLISION. The record's name
+# carries a whole-second timestamp, so a nested invocation firing inside the same second reuses
+# the name and TRUNCATES the top-level's record instead of adding a file -- one file, two
+# `# verdict:` lines, and a file count of 1 that reads exactly like the guard working. This is
+# the observable the nested-write mutant below is scored on for that reason.
+vr_trailers() {
+  local n
+  n="$(cat "$(vr_dir "$1")"/self-update-gate-*.md 2>/dev/null | grep -c '^# verdict:')" || n=0
+  printf '%s\n' "$n"
+}
+vr_in() { sed -n 's/^# input: //p' "${1:-/dev/null}"; }
+vr_in_h() { vr_in "$1" | awk -F'\t' -v p="$2" '$1 == p {print $2; exit}'; }
+vr_in_c() { vr_in "$1" | awk -F'\t' -v p="$2" '$1 == p {print $3; exit}'; }
+vr_mut() { # vr_mut <name> <awk-program> -> path to the mutated gate, siblings beside it
+  local d="$VR/m-$1"
+  rm -rf "$d"; mkdir -p "$d"
+  cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$d"/ 2>/dev/null
+  awk "$2" "$GATE" > "$d/self-update-gate.sh" 2>/dev/null
+  printf '%s\n' "$d/self-update-gate.sh"
+}
+mp_killed() { # mp_killed <label> <got> <want> <why> -- a mutant whose engine could not be built is a FAIL
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ "$2" = "$3" ]; then printf '  ok    %-16s KILLED (%s)\n' "$1" "$4"
+  else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s SURVIVED or DID NOT APPLY: got [%s], want [%s]\n' "$1" "$2" "$3"; fi
+}
+AV="$(mktemp -d "${TMPDIR:-/tmp}/su-gate-av.XXXXXX")"
+av_git() { git -C "$1" -c user.email=f@x -c user.name=f -c commit.gpgsign=false "${@:2}"; }
+# av_render <file> <body> <comment> -- a renderer-shaped stub: bare exits 2, --root writes the body,
+# --check --root compares it.
+av_render() {
+  { printf '#!/usr/bin/env bash\n# %s\n' "$3"
+    printf 'm=w; r=""\nwhile [ $# -gt 0 ]; do\n  case "$1" in --check) m=c ;; --root) shift; r="${1:-}" ;; *) exit 2 ;; esac\n  shift\ndone\n'
+    printf '[ -n "$r" ] || exit 2\nb=%s\n' "'$2'"
+    printf 'if [ "$m" = w ]; then mkdir -p "$r/.claude/agents" && printf "%%s\\n" "$b" > "$r/.claude/agents/dev.md"; exit; fi\n'
+    printf '[ "$(cat "$r/.claude/agents/dev.md" 2>/dev/null)" = "$b" ] || exit 1\n'; } > "$1"
+}
+# av_scripts <dir> <side:base|theirs> <kind:A|B>
+av_scripts() {
+  local d="$1"
+  mkdir -p "$d"
+  if [ "$2" = theirs ] && [ "$3" = A ]; then
+    av_render "$d/render-agent-definitions.sh" 'FIRST action, before any other work.' 'renderer stub'
+  elif [ "$2" = theirs ]; then
+    av_render "$d/render-agent-definitions.sh" 'FIRST action before any other work.' 'renderer stub; reworded'
+  else
+    av_render "$d/render-agent-definitions.sh" 'FIRST action before any other work.' 'renderer stub'
+  fi
+  if [ "$2" = theirs ] && [ "$3" = A ]; then
+    printf '#!/bin/sh\ncase "${1:-}" in --fail-on=deterministic) exit 1 ;; *) exit 1 ;; esac\n' > "$d/audit-rule-files.sh"
+    printf '#!/bin/sh\nexit 1\n' > "$d/derive-fixture-readsets.sh"
+    printf '#!/bin/sh\n[ "${1:-}" = --trunk-push ] || exit 2\ngrep -q refs/heads/ && exit 1\nexit 0\n' > "$d/validate-audit-anchors.sh"
+    printf '#!/bin/sh\n# reworded\n. "$(dirname "$0")/artifact-path-config.sh" || exit 2\nexit "$APC_RC"\n' > "$d/validate-artifact-paths.sh"
+    printf 'APC_RC=1\n' > "$d/artifact-path-config.sh"
+    printf '#!/bin/sh\n# reworded\nexit 0\n' > "$d/validate-rooted.sh"
+    printf '#!/bin/sh\n# reworded\n[ "${1:-}" = --strays ] || exit 2\nexit 0\n' > "$d/validate-quiet.sh"
+  else
+    printf '#!/bin/sh\ncase "${1:-}" in --fail-on=deterministic) exit 0 ;; *) exit 1 ;; esac\n' > "$d/audit-rule-files.sh"
+    printf '#!/bin/sh\nexit 0\n' > "$d/derive-fixture-readsets.sh"
+    printf '#!/bin/sh\n[ "${1:-}" = --trunk-push ] || exit 2\ncat > /dev/null\nexit 0\n' > "$d/validate-audit-anchors.sh"
+    printf '#!/bin/sh\n. "$(dirname "$0")/artifact-path-config.sh" || exit 2\nexit "$APC_RC"\n' > "$d/validate-artifact-paths.sh"
+    printf 'APC_RC=0\n' > "$d/artifact-path-config.sh"
+    printf '#!/bin/sh\nexit 0\n' > "$d/validate-rooted.sh"
+    printf '#!/bin/sh\n[ "${1:-}" = --strays ] || exit 2\nexit 0\n' > "$d/validate-quiet.sh"
+  fi
+}
+# av_world <dir> <kind:A|B> <consumer:clean|drift> -> <dir>/{dist,cons,B,T}
+av_world() {
+  local w="$1"
+  mkdir -p "$w/dist/core/rules" "$w/cons/.githooks"
+  git -C "$w/dist" init -q
+  printf '1.0.0\n' > "$w/dist/VERSION"
+  printf 'av machinery\n' > "$w/dist/core/rules/av.md"
+  av_scripts "$w/dist/core/scripts" base "$2"
+  av_git "$w/dist" add -A >/dev/null 2>&1; av_git "$w/dist" commit -qm base >/dev/null 2>&1
+  git -C "$w/dist" rev-parse HEAD > "$w/B"
+  printf '1.1.0\n' > "$w/dist/VERSION"
+  av_scripts "$w/dist/core/scripts" theirs "$2"
+  av_git "$w/dist" add -A >/dev/null 2>&1; av_git "$w/dist" commit -qm theirs >/dev/null 2>&1
+  git -C "$w/dist" rev-parse HEAD > "$w/T"
+  av_scripts "$w/cons/scripts/ai-dlc" base "$2"
+  { printf '#!/usr/bin/env bash\nset -uo pipefail\nPUSH_REFS=""\n[ -t 0 ] || PUSH_REFS="$(cat)"\n'
+    printf 'trunk_push() { printf '"'%%s'"' "$PUSH_REFS" | bash scripts/ai-dlc/validate-audit-anchors.sh --trunk-push; }\n'
+    printf 'if [ -f scripts/ai-dlc/validate-audit-anchors.sh ]; then trunk_push; fi\n'
+    printf 'if [ -f scripts/ai-dlc/audit-rule-files.sh ]; then\n  bash scripts/ai-dlc/audit-rule-files.sh --fail-on=deterministic\nfi\n'
+    printf 'if [ -f scripts/ai-dlc/validate-artifact-paths.sh ]; then\n  bash scripts/ai-dlc/validate-artifact-paths.sh\nfi\n'
+    printf 'bash scripts/ai-dlc/validate-rooted.sh --root "$ROOT"\n'
+    printf 'bash scripts/ai-dlc/validate-quiet.sh --strays 2>"$LOG"\n'
+    printf 'if [ -f scripts/ai-dlc/render-agent-definitions.sh ]; then\n  agent_definitions() {\n    local out rc\n'
+    printf '    if [ ! -d .claude/agents ]; then\n      out="$(bash scripts/ai-dlc/render-agent-definitions.sh --root . 2>&1)"\n    fi\n'
+    printf '    out="$(bash scripts/ai-dlc/render-agent-definitions.sh --check --root . 2>&1)"; rc=$?\n'
+    printf '    case "$rc" in 0|3) return 0 ;; *) return 1 ;; esac\n  }\n  agent_definitions\nfi\n'
+    printf 'readset_deriver_path() {\n  local c\n'
+    printf '  for c in scripts/ai-dlc/derive-fixture-readsets.sh core/scripts/derive-fixture-readsets.sh; do\n'
+    printf '    [ -f "$c" ] && { printf '"'%%s'"' "$c"; return 0; }\n  done\n}\n'; } > "$w/cons/.githooks/pre-push"
+  chmod +x "$w/cons/.githooks/pre-push"
+  bash "$w/cons/scripts/ai-dlc/render-agent-definitions.sh" --root "$w/cons" >/dev/null 2>&1
+  [ "$3" = drift ] && printf 'a hand edit\n' > "$w/cons/.claude/agents/dev.md"
+  # A COMMITTED BRANCH, NO REMOTE: the ref line can be formed, and arm P is skipped -- the state in
+  # which the differential must still build its own stdin.
+  git -C "$w/cons" init -q
+  av_git "$w/cons" add -A >/dev/null 2>&1; av_git "$w/cons" commit -qm consumer >/dev/null 2>&1
+}
+# av_run <gate> <world> -> the gate's rows, against a FRESH copy of the world's consumer, then an
+# `AGENTS same|moved` row for that copy's .claude/agents across the run. FRESH BY `mktemp -d`, never
+# by a counter: av_run is called inside `$( )`, where a counter's increment is lost, and a reused
+# copy hands one mutant's writes to the next run -- measured, a write-mode mutant's rendered
+# definitions turned four later kills into the same wrong row.
+av_run() {
+  local c a0
+  c="$(mktemp -d "$AV/run.XXXXXX")" || return 1
+  c="$c/cons"
+  cp -R "$2/cons" "$c" || return 1
+  a0="$(cat "$c/.claude/agents/"* | cksum)"
+  bash "$1" "$2/dist" "$(cat "$2/B")" "$(cat "$2/T")" "$c" 2>/dev/null
+  if [ "$a0" = "$(cat "$c/.claude/agents/"* | cksum)" ]; then printf 'AGENTS\tsame\n'; else printf 'AGENTS\tmoved\n'; fi
+}
+av_st() { printf '%s\n' "$1" | awk -F'\t' -v s="$2" '$2 == s {print $1; exit}'; }
+av_has() { printf '%s\n' "$1" | awk -F'\t' -v s="$2" -v re="$3" '$2 == s && $3 ~ re {f=1} END{print (f ? "yes" : "no")}'; }
+av_ag() { printf '%s\n' "$1" | awk -F'\t' '$1 == "AGENTS" {print $2}'; }
+av_ref() { printf '%s\n' "$1" | awk -F'\t' '$1 ~ /^SELF-UPDATE-(DEFER|UNDECIDED)$/' | grep -c .; }
+# av_sig <rows> -> the whole world-A signature, one token per script
+av_sig() {
+  printf 'render=%s audit=%s derive=%s anchors=%s paths=%s rooted=%s quiet=%s agents=%s\n' \
+    "$(av_st "$1" render-agent-definitions.sh)" "$(av_st "$1" audit-rule-files.sh)" \
+    "$(av_st "$1" derive-fixture-readsets.sh)" "$(av_st "$1" validate-audit-anchors.sh)" \
+    "$(av_st "$1" validate-artifact-paths.sh)" "$(av_st "$1" validate-rooted.sh)" \
+    "$(av_st "$1" validate-quiet.sh)" "$(av_ag "$1")"
+}
+av_rc() { ( cd "$1" && bash "$2" ${3:+$3} >/dev/null 2>&1 < /dev/null ); printf '%s' "$?"; }
+# av_mut <name> <old> <new> [<old> <new>]... -> the mutated gate's path, or nothing when an anchor
+# is not unique, the copy is unchanged, or it is not a program.
+av_mut() {
+  local e="$AV/m-$1" mrc=0
+  shift
+  rm -rf "$e"; mkdir -p "$e"
+  cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$e"/ 2>/dev/null
+  [ "$#" -gt 0 ] || { printf '%s' "$e/self-update-gate.sh"; return 0; }
+  python3 -c 'import sys
+s = open(sys.argv[1]).read(); p = sys.argv[3:]
+for i in range(0, len(p), 2):
+    if s.count(p[i]) != 1: sys.exit(3)
+    s = s.replace(p[i], p[i + 1], 1)
+open(sys.argv[2], "w").write(s)' "$GATE" "$e/self-update-gate.sh" "$@" 2>/dev/null || mrc=$?
+  if [ "$mrc" -ne 0 ] || cmp -s "$GATE" "$e/self-update-gate.sh" || ! bash -n "$e/self-update-gate.sh" 2>/dev/null; then return 1; fi
+  printf '%s' "$e/self-update-gate.sh"
+}
+if sg base; then
+OUT="$(bash "$GATE" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>&1)"
+RC=$?
 # $1 script  $2 expected STATUS (or ABSENT)  $3 why
 row() {
   local s="$1" want="$2" why="$3" got
@@ -60,9 +385,6 @@ row() {
     printf '%s\n' "$OUT" | sed 's/^/          | /'
   fi
 }
-
-echo "self-update-gate fixture"
-echo
 
 row gate-pass.sh   SELF-UPDATE-OK        "incoming passes against the consumer tree, so installing it cannot block the push"
 row gate-defer.sh  SELF-UPDATE-DEFER     "current 0, incoming 1 — a genuinely new finding on pre-existing state"
@@ -142,6 +464,8 @@ else
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-16s unmutated copy gave %s — a copy that cannot run scores as a kill\n' "mutation-control" "${c_broken:-<none>}"
 fi
+fi
+if sg ss; then
 
 # --- --safe-stop: a DEFER must name the ref that ends it -------------------------------
 #
@@ -153,61 +477,6 @@ fi
 #
 # Own miniature distribution: the seeded one has no release history, and `--safe-stop`'s
 # candidate set IS the release history.
-SS="$(dirname "$DIST")/ss"; rm -rf "$SS"
-mkdir -p "$SS/dist/core/skills/ai-dlc/steps" "$SS/cons/.claude/skills/ai-dlc/steps" "$SS/dist/core/rules"
-gvv() { printf '# gate\n'; for a in "$@"; do printf '<!-- CHECK_LOADED: %s -->\n' "$a"; done; }
-gvv 1 2 > "$SS/cons/.claude/skills/ai-dlc/steps/gate-validation.md"
-# The consumer's hook is the authority on what can block ITS push, and its ABSENCE is
-# UNDECIDED, not OK — correctly, since a gate that cannot see the hook cannot say what the
-# self-update would install. Without this the whole section ran on UNDECIDED and two arms
-# passed for a reason unrelated to what they assert; the precondition arms below exist
-# because that is exactly what happened.
-mkdir -p "$SS/cons/.githooks"
-printf '#!/usr/bin/env bash\n# invokes no scripts/ai-dlc/ validator, so the gating set is empty\nexit 0\n' > "$SS/cons/.githooks/pre-push"
-git -C "$SS/dist" init -q
-printf '1.0.0\n' > "$SS/dist/VERSION"; gvv 1 2 > "$SS/dist/core/skills/ai-dlc/steps/gate-validation.md"
-# ONE MACHINERY PATH, NEVER TOUCHED AGAIN, AND IT IS A PRECONDITION RATHER THAN DECORATION. Arm C
-# now resolves its population by `eval`ing `machinery_paths()` out of preclassify.sh, and reports
-# SELF-UPDATE-UNDECIDED when that set comes back EMPTY -- correctly, since a membership test over
-# an empty set rejects every path and its silence is byte-identical to a clean pull. A dist tree
-# holding only VERSION and a rulebook file resolves to nothing, so without this file every arm
-# below runs against an UNDECIDED verdict it never asked for. Unchanged across all five commits,
-# so it enters no base..theirs diff and produces no bucket and no CARRY row of its own.
-printf 'ss machinery\n' > "$SS/dist/core/rules/ss.md"
-git -C "$SS/dist" add -A >/dev/null 2>&1; git -C "$SS/dist" -c user.email=f@x -c user.name=f commit -qm base >/dev/null 2>&1
-SS_BASE="$(git -C "$SS/dist" rev-parse HEAD)"
-# r1 — a release that moves VERSION and nothing the consumer's rulebook is joined against.
-printf '1.1.0\n' > "$SS/dist/VERSION"
-git -C "$SS/dist" add -A >/dev/null 2>&1; git -C "$SS/dist" -c user.email=f@x -c user.name=f commit -qm r1 >/dev/null 2>&1
-SS_R1="$(git -C "$SS/dist" rev-parse HEAD)"
-# r2 — a release that declares a check anchor the consumer's rulebook does not carry (ARM R1).
-printf '1.2.0\n' > "$SS/dist/VERSION"; gvv 1 2 3 > "$SS/dist/core/skills/ai-dlc/steps/gate-validation.md"
-git -C "$SS/dist" add -A >/dev/null 2>&1; git -C "$SS/dist" -c user.email=f@x -c user.name=f commit -qm r2 >/dev/null 2>&1
-SS_R2="$(git -C "$SS/dist" rev-parse HEAD)"
-# r3 — the coupling is gone again, so base→r3 is a CLEAN single hop even though base→r2 is not.
-# This is the shape that proves the walk evaluates every candidate instead of stopping at the
-# first defer: r3 lands strictly more than r1 and an early-stopping walk can never name it.
-printf '1.3.0\n' > "$SS/dist/VERSION"; gvv 1 2 > "$SS/dist/core/skills/ai-dlc/steps/gate-validation.md"
-git -C "$SS/dist" add -A >/dev/null 2>&1; git -C "$SS/dist" -c user.email=f@x -c user.name=f commit -qm r3 >/dev/null 2>&1
-SS_R3="$(git -C "$SS/dist" rev-parse HEAD)"
-# d3 — a NON-release commit after the last clean release, and the only reason it exists.
-# The candidate set is release commits because the stamp records a VERSION, so a mid-release
-# stop is not a state a consumer can hold. Without a commit that is clean, later than r3 and
-# NOT a release, "candidates are releases" and "candidates are all commits" pick the same ref
-# and the property is untestable — a mutation widening the candidate set came back green until
-# this commit existed.
-printf 'docs only, no VERSION change\n' > "$SS/dist/NOTES.md"
-git -C "$SS/dist" add -A >/dev/null 2>&1; git -C "$SS/dist" -c user.email=f@x -c user.name=f commit -qm d3 >/dev/null 2>&1
-# r4 — THEIRS. Needed so r3 is an INTERMEDIATE candidate rather than the target itself.
-printf '1.4.0\n' > "$SS/dist/VERSION"; gvv 1 2 3 4 > "$SS/dist/core/skills/ai-dlc/steps/gate-validation.md"
-git -C "$SS/dist" add -A >/dev/null 2>&1; git -C "$SS/dist" -c user.email=f@x -c user.name=f commit -qm r4 >/dev/null 2>&1
-SS_R4="$(git -C "$SS/dist" rev-parse HEAD)"
-
-ss_assert() { # ss_assert <label> <got> <want> <why>
-  ASSERTIONS=$((ASSERTIONS + 1))
-  if [ "$2" = "$3" ]; then printf '  ok    %-16s %s\n' "$1" "$4"
-  else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s got=[%s] want=[%s]  %s\n' "$1" "$2" "$3" "$4"; fi
-}
 
 # PRECONDITION FOR THE PRECONDITIONS. An empty machinery set makes every classify run here answer
 # UNDECIDED, which the two arms below read as "defer" — they would then fail, or worse pass, for a
@@ -277,11 +546,6 @@ ss_detail() { # ss_detail <theirs> -> the SAFE-STOP row's DETAIL field
   bash "$GATE" "$SS/dist" "$SS_BASE" "$1" "$SS/cons" 2>&1 |
     awk -F'\t' '$1=="SELF-UPDATE-SAFE-STOP" {print $3; exit}'
 }
-ss_stamp() { # ss_stamp <skill_commit|-> ; `-` removes the stamp
-  if [ "$1" = "-" ]; then rm -f "$SS/cons/.claude/.ai-dlc-version"
-  else printf 'version: 1.0.0\ncommit: %s\nskill_version: 1.1.0\nskill_commit: %s\n' "$SS_BASE" "$1" \
-         > "$SS/cons/.claude/.ai-dlc-version"; fi
-}
 
 # BASELINE, and it is the control that makes the next three readable: with no stamp the wording is
 # unchanged from before this guard existed.
@@ -335,26 +599,6 @@ ss_assert "ss-equals-base" "$(ss_detail "$SS_R2" | grep -c 'SPLIT BUYS NOTHING')
 # requiring the SAFE-STOP row to EXIST in the same tuple is what stops silence passing for
 # discrimination. Measured, by running this fixture against such a gate: with the conjunct the
 # three arms below fail, and every other cell of the tuple agrees with a clean run.
-ss_marker() { # ss_marker on|off -- the interrupted-apply marker on the seeded consumer
-  if [ "$1" = on ]; then : > "$SS/cons/.claude/.ai-dlc-applying"
-  else rm -f "$SS/cons/.claude/.ai-dlc-applying"; fi
-}
-# ss_ack <gate> <theirs> -> "row=<0|1> acq=<n> wh=<n> pf=<n>" off the SAFE-STOP row's DETAIL.
-#
-# `pf` KEYS ON "its slice self-updates cleanly", NOT ON "pull to ... FIRST". The withheld wording
-# opens with that same phrase on purpose -- it is still telling the operator to pull first -- so
-# the shorter token cannot separate the withheld row from the untouched one and arm C, whose
-# whole job is that separation, would have passed against a guard sited anywhere.
-ss_ack() {
-  local d
-  d="$(bash "$1" "$SS/dist" "$SS_BASE" "$2" "$SS/cons" 2>&1 |
-         awk -F'\t' '$1=="SELF-UPDATE-SAFE-STOP" {print $3; exit}')"
-  printf 'row=%s acq=%s wh=%s pf=%s\n' \
-    "$([ -n "$d" ] && printf 1 || printf 0)" \
-    "$(printf '%s' "$d" | grep -c 'SPLIT BUYS NOTHING')" \
-    "$(printf '%s' "$d" | grep -c 'ACQUITTAL IS WITHHELD')" \
-    "$(printf '%s' "$d" | grep -c 'its slice self-updates cleanly')"
-}
 
 # A -- OFFENDER. `skill_commit` at r1, which is at-or-past the ref the walk names, and the
 # interrupted-apply marker on disk.
@@ -440,6 +684,8 @@ ss_assert "ss-partial-mut-C" "$(ss_ack "$SSM/mut/self-update-gate.sh" "$SS_R4")"
 ss_marker off
 ss_stamp -
 
+fi
+if sg sc; then
 # --- THE STAMP IS AHEAD BECAUSE A PATH WAS CARRIED, SO THE ACQUITTAL IS WITHHELD -------------
 # The sibling of the partial-tree guard above, and the two are decided on different facts. That
 # one reads a MARKER `apply.sh` leaves on disk. This one reads a row THIS RUN emitted.
@@ -810,6 +1056,8 @@ else
   fi
 fi
 
+fi
+if sg ac; then
 # --- ARM C: SELF-UPDATE-CARRY, one row per machinery path the consumer diverged on ----
 #
 # Step 2 justifies its autonomy -- no operator gate, auto-merged PR -- on the claim that the
@@ -1131,6 +1379,8 @@ else
   fi
 fi
 
+fi
+if sg su; then
 # --- ARM D: THE THIRD SHA. A SPLIT PULL LEAVES THE CONSUMER AT A REF NEITHER ENDPOINT KNOWS --
 #
 # Arm C above reads preclassify's buckets and carries every machinery path that shows a consumer
@@ -1321,7 +1571,6 @@ su_stamp() { # su_stamp <skill_commit> ; `-` removes the stamp, `+` writes one w
   esac
 }
 
-SU_PC="$(dirname "$GATE")/preclassify.sh"
 su_buckets() { # su_buckets <preclassify> <consumer> -> "<core-path>=<bucket>," sorted
   bash "$1" "$SU/dist" "$SU_BASE" "$SU_THEIRS" "$2" 2>/dev/null |
     awk -F'\t' '$2 ~ /^core\// {print $2 "=" $4}' | sort | tr '\n' ','
@@ -1606,7 +1855,6 @@ ss_assert "su-spelling-inert" "$(su_buckets "$SU_G_SPELL" "$SU/nostamp")" "$SU_I
 su_stamp "$SU_MID"
 SU_GATE_MID="$(bash "$GATE" "$SU/dist" "$SU_BASE" "$SU_THEIRS" "$SU/cons" 2>&1)"
 SU_GATE_NO="$(bash "$GATE" "$SU/dist" "$SU_BASE" "$SU_THEIRS" "$SU/nostamp" 2>&1)"
-su_carry() { printf '%s\n' "$1" | awk -F'\t' '$1 == "SELF-UPDATE-CARRY" {print $2}' | sort | tr '\n' ','; }
 
 ss_assert "su-gate-quiet" "$(su_carry "$SU_GATE_MID")" \
   'core/rules/doomed.md,core/rules/edited.md,core/rules/indexed.md,' \
@@ -1653,6 +1901,8 @@ ss_assert "su-machfn-control" \
   "$(printf '%s\n' "$SU_GATE_MID" | grep -c 'SELF-UPDATE-UNDECIDED')" "0" \
   "the unmutated gate resolves a non-empty machinery set on this tree, so the UNDECIDED above is the mutation"
 
+fi
+if sg vr; then
 # --- THE VERDICT RECORD: an autonomous decision that leaves an artifact ------------------
 #
 # Step 2 cuts a branch, writes the machinery slice, pushes and auto-merges with no operator.
@@ -1665,32 +1915,7 @@ ss_assert "su-machfn-control" \
 # gate invocation above has already written a record into whichever consumer it was handed, so
 # `$CONS` holds an unknown number of them by the time this section runs; an arm asserting "exactly
 # one" against that directory would be asserting about the whole fixture's history.
-VR="$(dirname "$DIST")/vr"
-rm -rf "$VR"; mkdir -p "$VR"
 
-vr_cons() { # vr_cons <name> -> a fresh consumer copy with an EMPTY record directory
-  rm -rf "$VR/$1"
-  cp -R "$CONS" "$VR/$1"
-  rm -rf "$VR/$1/_bmad-output"
-  printf '%s\n' "$VR/$1"
-}
-vr_dir() { printf '%s\n' "$1/_bmad-output/ai-dlc-update"; }
-vr_n() { # vr_n <consumer> -> how many record files exist
-  local n
-  n="$(ls "$(vr_dir "$1")"/self-update-gate-*.md 2>/dev/null | grep -c .)" || n=0
-  printf '%s\n' "$n"
-}
-vr_newest() { ls -t "$(vr_dir "$1")"/self-update-gate-*.md 2>/dev/null | head -1; }
-# TRAILERS, NOT FILES, IS THE COUNT THAT SURVIVES THE FILENAME COLLISION. The record's name
-# carries a whole-second timestamp, so a nested invocation firing inside the same second reuses
-# the name and TRUNCATES the top-level's record instead of adding a file -- one file, two
-# `# verdict:` lines, and a file count of 1 that reads exactly like the guard working. This is
-# the observable the nested-write mutant below is scored on for that reason.
-vr_trailers() {
-  local n
-  n="$(cat "$(vr_dir "$1")"/self-update-gate-*.md 2>/dev/null | grep -c '^# verdict:')" || n=0
-  printf '%s\n' "$n"
-}
 
 VR_C1="$(vr_cons c1)"
 bash "$GATE" "$DIST" "$BASE" "$THEIRS" "$VR_C1" > "$VR/c1.out" 2> "$VR/c1.err"
@@ -1730,9 +1955,6 @@ ss_assert "rec-trailer" \
 # THE DIGESTS ARE ASSERTED AGAINST `git hash-object` OF THE FILES THEMSELVES, not against a list
 # spelled here: a hand-written expectation would go vacuous the release the seed gains a script,
 # and the property is that the record agrees with the TREE.
-vr_in() { sed -n 's/^# input: //p' "${1:-/dev/null}"; }
-vr_in_h() { vr_in "$1" | awk -F'\t' -v p="$2" '$1 == p {print $2; exit}'; }
-vr_in_c() { vr_in "$1" | awk -F'\t' -v p="$2" '$1 == p {print $3; exit}'; }
 
 # THE EXACT PATH SET, DERIVED FROM THE SEEDED TREE rather than spelled here: a literal list goes
 # vacuous the release the seed gains a script, and the property is that the record covers the
@@ -1970,13 +2192,6 @@ ss_assert "rec-unwritable-control" \
 # THE COPY NEEDS ITS SIBLINGS, for the reason every battery in this file states: the gate resolves
 # preclassify.sh and setup-sites.md by `dirname "$0"`, and a lone copy answers UNDECIDED off an
 # empty machinery set with no record arm ever reached.
-vr_mut() { # vr_mut <name> <awk-program> -> path to the mutated gate, siblings beside it
-  local d="$VR/m-$1"
-  rm -rf "$d"; mkdir -p "$d"
-  cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$d"/ 2>/dev/null
-  awk "$2" "$GATE" > "$d/self-update-gate.sh" 2>/dev/null
-  printf '%s\n' "$d/self-update-gate.sh"
-}
 # vr_score <gate> <consumer-name> -> "n=<records> rows=<identical|differ> v=<verdict>"
 vr_score() {
   local c out rec rows v
@@ -2370,6 +2585,79 @@ else
 fi
 
 
+# ONE ROW PER CONSUMER PATH, AND THE DEDUP IS LOAD-BEARING RATHER THAN COSMETIC. Two sites record
+# a gating script: the hook-named loop and the machinery loop, which `map_consumer` sends to the
+# same consumer path. Unmutated they emit BYTE-IDENTICAL rows -- same path, same digest, same core
+# path -- and `sort -u` collapses them to one. A reader iterating rows would otherwise check the
+# same file twice, and worse, two rows for one path that DISAGREED in any column would give it two
+# answers with no rule for choosing. Measured on this seed: 8 lines, one per consumer file.
+ss_assert "rec-inputs-unique" \
+  "$(vr_in "$VR_REC1" | awk -F'\t' '{print $1}' | sort | uniq -d | grep -c .)" "0" \
+  "no consumer path appears twice, so the two recording sites agree in every column and collapse"
+# CONTROL: the dedup has a subject -- the machinery loop really does reach the same paths, so the
+# zero above is agreement rather than a set the second site never touched.
+# READ OFF `$CONS`, THE SEED'S OWN CONSUMER, AND NOT OFF `$VR_C1`. The edit-detection arm below
+# REWRITES `$VR_C1`'s hook to a script naming nothing -- deliberately, that is its whole subject --
+# and a hook naming no scripts intersects the machinery set in zero members, so this control would
+# read `none` and fail while describing a tree nobody was asserting about.
+# THE HOOK-NAME CLASS IS READ OUT OF THE GATE, never retyped here. An ASCII copy of it could not
+# spell a hook-named `café.sh`, so the intersection below would come out short for exactly the
+# names the gate's widened class records, and the two counts would disagree for a reason that is
+# the fixture's. Extracted from the gate's own INVOKED line; an extraction that finds nothing is a
+# broken fixture, not an empty hook.
+VR_HOOK_CLASS="$(awk -v q="'" 'index($0,"INVOKED=\"$(grep -oE " q) == 1 { s = substr($0, length("INVOKED=\"$(grep -oE " q) + 1); e = index(s, q " \"$HOOK\""); if (e) print substr(s, 1, e - 1); exit }' "$GATE")"
+VR_Q="'"; VR_QQ="'\"'\"'"
+VR_HOOK_CLASS="${VR_HOOK_CLASS//$VR_QQ/$VR_Q}"
+# PROBED BY WHAT IT CAPTURES, not by its spelling: the extracted class must take a non-ASCII hook
+# name whole and stop at `;`. An extraction that found nothing reads the impossible default and
+# captures 0; an ASCII class captures 0 too, which is the narrowing this replaced.
+vr_cls_n="$(printf 'bash scripts/ai-dlc/caf\303\251.sh;\n' | grep -oE "${VR_HOOK_CLASS:-NO-CLASS-WAS-READ}" | grep -cx "scripts/ai-dlc/caf$(printf '\303\251').sh")" || vr_cls_n=0
+ss_assert "rec-hook-class-read" "$vr_cls_n" "1" \
+  "the hook-name class both intersections below use is the gate's own, extracted rather than retyped, and it spells a non-ASCII name"
+ss_assert "rec-inputs-unique-control" \
+  "$(bash "$SU/mach/list-machinery.sh" "$DIST" "$BASE" "$THEIRS" 2>/dev/null \
+     | sed -n 's|^core/scripts/||p' | sort -u \
+     | grep -Fxf <(grep -oE "$VR_HOOK_CLASS" "$CONS/.githooks/pre-push" | sed 's|.*/||' | sort -u) \
+     | grep -c . | awk '{print ($1 > 0) ? "overlap" : "none"}')" \
+  "overlap" "...and the two recording sites really do overlap on some script, so the collapse is agreement rather than a set the second site never touched"
+
+# THE CORE-PATH COLUMN HAS ITS OWN MUTANT. Written as `-` for a script, the record keeps every
+# path and every digest and the reader loses the theirs blob it needs to accept a file the slice
+# legitimately moved -- so every self-update whose range changes a gating script is refused.
+#
+# IT MOVES A SECOND CELL, AND THAT IS THE MUTATION RATHER THAN AN ENTANGLEMENT. With column 3
+# differing between the two recording sites their rows stop being identical, `sort -u` no longer
+# collapses them, and the same consumer path appears TWICE with contradictory core paths. Both
+# outcomes are the one defect and both are asserted, because a mutant scored on the column alone
+# would read identically to one that also made the record self-contradictory.
+VR_M10="$(vr_mut m10 'index($0,"  gate_input \"scripts/ai-dlc/$gi_name\" \"core/scripts/$gi_name\"") { print "  gate_input \"scripts/ai-dlc/$gi_name\" \"-\""; next } { print }')"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$GATE" "$VR_M10"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-16s mutation matched nothing, so the arm it scores is unproven\n' "rec-mut-corepath"
+else
+  VR_C10="$(vr_cons m10c)"
+  bash "$VR_M10" "$DIST" "$BASE" "$THEIRS" "$VR_C10" >/dev/null 2>&1
+  VR_R10="$(vr_newest "$VR_C10")"
+  vr_m10_got="$(vr_in_c "$VR_R10" 'scripts/ai-dlc/gate-defer.sh')|$(vr_in_c "$VR_R10" '.githooks/pre-push')|dup=$(vr_in "$VR_R10" | awk -F'\t' '{print $1}' | sort | uniq -d | grep -c .)"
+  # THE DUPLICATE COUNT IS DERIVED, NOT SPELLED: it is the INTERSECTION of the two recording
+  # sites -- the scripts the hook names AND the machinery set covers. `not-invoked.sh` is in the
+  # machinery set and not in the hook, so it is recorded once and cannot duplicate; a literal here
+  # would go vacuous the day the seed's hook gains a line.
+  vr_m10_dup="$(grep -oE "$VR_HOOK_CLASS" "$CONS/.githooks/pre-push" | sed 's|.*/||' | sort -u \
+                | grep -Fxf <(bash "$SU/mach/list-machinery.sh" "$DIST" "$BASE" "$THEIRS" 2>/dev/null \
+                              | sed -n 's|^core/scripts/||p' | sort -u) | grep -c .)" || vr_m10_dup=0
+  vr_m10_want="-|core/git-hooks/pre-push|dup=$vr_m10_dup"
+  if [ "$vr_m10_got" = "$vr_m10_want" ] && [ "$vr_m10_dup" -gt 0 ] 2>/dev/null; then
+    printf '  ok    %-16s KILLED (%s)\n' "rec-mut-corepath" \
+      "a script row whose core path is - leaves the reader no theirs blob for the write, and breaks the dedup so every doubly-recorded path carries two contradictory rows"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]\n' "rec-mut-corepath" "$vr_m10_got" "$vr_m10_want"
+  fi
+fi
+fi
+if sg pl; then
 # --- A SCRIPT A PRIOR SELF-UPDATE LANDED IS NOT ONE THIS CYCLE PRE-WROTE: THE `PL` MINIATURE ----
 #
 # The pre-written arm above refuses a consumer copy already at theirs, and its remedy is "re-run with
@@ -2616,77 +2904,8 @@ pl_kill "pl-mut-order" \
   "with the arm back above the not-gating terminal a mention-only pre-written script defers the run; W1 and W6 do not move" \
   "$PL_W8" moved.sh "$PL_W1" moved.sh "$PL_W6" moved.sh
 
-# ONE ROW PER CONSUMER PATH, AND THE DEDUP IS LOAD-BEARING RATHER THAN COSMETIC. Two sites record
-# a gating script: the hook-named loop and the machinery loop, which `map_consumer` sends to the
-# same consumer path. Unmutated they emit BYTE-IDENTICAL rows -- same path, same digest, same core
-# path -- and `sort -u` collapses them to one. A reader iterating rows would otherwise check the
-# same file twice, and worse, two rows for one path that DISAGREED in any column would give it two
-# answers with no rule for choosing. Measured on this seed: 8 lines, one per consumer file.
-ss_assert "rec-inputs-unique" \
-  "$(vr_in "$VR_REC1" | awk -F'\t' '{print $1}' | sort | uniq -d | grep -c .)" "0" \
-  "no consumer path appears twice, so the two recording sites agree in every column and collapse"
-# CONTROL: the dedup has a subject -- the machinery loop really does reach the same paths, so the
-# zero above is agreement rather than a set the second site never touched.
-# READ OFF `$CONS`, THE SEED'S OWN CONSUMER, AND NOT OFF `$VR_C1`. The edit-detection arm below
-# REWRITES `$VR_C1`'s hook to a script naming nothing -- deliberately, that is its whole subject --
-# and a hook naming no scripts intersects the machinery set in zero members, so this control would
-# read `none` and fail while describing a tree nobody was asserting about.
-# THE HOOK-NAME CLASS IS READ OUT OF THE GATE, never retyped here. An ASCII copy of it could not
-# spell a hook-named `café.sh`, so the intersection below would come out short for exactly the
-# names the gate's widened class records, and the two counts would disagree for a reason that is
-# the fixture's. Extracted from the gate's own INVOKED line; an extraction that finds nothing is a
-# broken fixture, not an empty hook.
-VR_HOOK_CLASS="$(awk -v q="'" 'index($0,"INVOKED=\"$(grep -oE " q) == 1 { s = substr($0, length("INVOKED=\"$(grep -oE " q) + 1); e = index(s, q " \"$HOOK\""); if (e) print substr(s, 1, e - 1); exit }' "$GATE")"
-VR_Q="'"; VR_QQ="'\"'\"'"
-VR_HOOK_CLASS="${VR_HOOK_CLASS//$VR_QQ/$VR_Q}"
-# PROBED BY WHAT IT CAPTURES, not by its spelling: the extracted class must take a non-ASCII hook
-# name whole and stop at `;`. An extraction that found nothing reads the impossible default and
-# captures 0; an ASCII class captures 0 too, which is the narrowing this replaced.
-vr_cls_n="$(printf 'bash scripts/ai-dlc/caf\303\251.sh;\n' | grep -oE "${VR_HOOK_CLASS:-NO-CLASS-WAS-READ}" | grep -cx "scripts/ai-dlc/caf$(printf '\303\251').sh")" || vr_cls_n=0
-ss_assert "rec-hook-class-read" "$vr_cls_n" "1" \
-  "the hook-name class both intersections below use is the gate's own, extracted rather than retyped, and it spells a non-ASCII name"
-ss_assert "rec-inputs-unique-control" \
-  "$(bash "$SU/mach/list-machinery.sh" "$DIST" "$BASE" "$THEIRS" 2>/dev/null \
-     | sed -n 's|^core/scripts/||p' | sort -u \
-     | grep -Fxf <(grep -oE "$VR_HOOK_CLASS" "$CONS/.githooks/pre-push" | sed 's|.*/||' | sort -u) \
-     | grep -c . | awk '{print ($1 > 0) ? "overlap" : "none"}')" \
-  "overlap" "...and the two recording sites really do overlap on some script, so the collapse is agreement rather than a set the second site never touched"
-
-# THE CORE-PATH COLUMN HAS ITS OWN MUTANT. Written as `-` for a script, the record keeps every
-# path and every digest and the reader loses the theirs blob it needs to accept a file the slice
-# legitimately moved -- so every self-update whose range changes a gating script is refused.
-#
-# IT MOVES A SECOND CELL, AND THAT IS THE MUTATION RATHER THAN AN ENTANGLEMENT. With column 3
-# differing between the two recording sites their rows stop being identical, `sort -u` no longer
-# collapses them, and the same consumer path appears TWICE with contradictory core paths. Both
-# outcomes are the one defect and both are asserted, because a mutant scored on the column alone
-# would read identically to one that also made the record self-contradictory.
-VR_M10="$(vr_mut m10 'index($0,"  gate_input \"scripts/ai-dlc/$gi_name\" \"core/scripts/$gi_name\"") { print "  gate_input \"scripts/ai-dlc/$gi_name\" \"-\""; next } { print }')"
-ASSERTIONS=$((ASSERTIONS + 1))
-if cmp -s "$GATE" "$VR_M10"; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-16s mutation matched nothing, so the arm it scores is unproven\n' "rec-mut-corepath"
-else
-  VR_C10="$(vr_cons m10c)"
-  bash "$VR_M10" "$DIST" "$BASE" "$THEIRS" "$VR_C10" >/dev/null 2>&1
-  VR_R10="$(vr_newest "$VR_C10")"
-  vr_m10_got="$(vr_in_c "$VR_R10" 'scripts/ai-dlc/gate-defer.sh')|$(vr_in_c "$VR_R10" '.githooks/pre-push')|dup=$(vr_in "$VR_R10" | awk -F'\t' '{print $1}' | sort | uniq -d | grep -c .)"
-  # THE DUPLICATE COUNT IS DERIVED, NOT SPELLED: it is the INTERSECTION of the two recording
-  # sites -- the scripts the hook names AND the machinery set covers. `not-invoked.sh` is in the
-  # machinery set and not in the hook, so it is recorded once and cannot duplicate; a literal here
-  # would go vacuous the day the seed's hook gains a line.
-  vr_m10_dup="$(grep -oE "$VR_HOOK_CLASS" "$CONS/.githooks/pre-push" | sed 's|.*/||' | sort -u \
-                | grep -Fxf <(bash "$SU/mach/list-machinery.sh" "$DIST" "$BASE" "$THEIRS" 2>/dev/null \
-                              | sed -n 's|^core/scripts/||p' | sort -u) | grep -c .)" || vr_m10_dup=0
-  vr_m10_want="-|core/git-hooks/pre-push|dup=$vr_m10_dup"
-  if [ "$vr_m10_got" = "$vr_m10_want" ] && [ "$vr_m10_dup" -gt 0 ] 2>/dev/null; then
-    printf '  ok    %-16s KILLED (%s)\n' "rec-mut-corepath" \
-      "a script row whose core path is - leaves the reader no theirs blob for the write, and breaks the dedup so every doubly-recorded path carries two contradictory rows"
-  else
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]\n' "rec-mut-corepath" "$vr_m10_got" "$vr_m10_want"
-  fi
 fi
+if sg pp; then
 
 # --- THE GATE NEVER RUNS THE PUSH HOOK; THE ENCLOSED LAYOUT IS STILL UNDECIDED -------------
 #
@@ -3011,6 +3230,8 @@ else
   fi
 fi
 
+fi
+if sg pu; then
 # --- reconcile/self-update-push.sh: THE ONE HOOK RUN, AS THE PUSH ---------------------------
 #
 # Step 2 pushes through this wrapper. It runs the consumer's pre-push hook EXACTLY ONCE, as git
@@ -3435,6 +3656,8 @@ else
 fi
 unset GIT_CONFIG_NOSYSTEM GIT_CONFIG_GLOBAL GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
 
+fi
+if sg stg; then
 # --- A STAGING WRITE THAT FAILS IS UNDECIDED (BL-360) -------------------------------------
 # Every loop in the gate reads a file `gate_stage` wrote into `$TMP`. The heredocs these replaced
 # ran their loop ZERO times when bash 3.2 could not write the body's temp file, and at the
@@ -3485,6 +3708,8 @@ else
 fi
 rm -rf "$SG"
 
+fi
+if sg qw; then
 # --- A NON-ASCII PATH IS LISTED RAW AND READ BY ITS RAW NAME (BL-364) ---------------------------
 # Under git's default `core.quotePath` a name carrying a byte above 0x7f is listed C-quoted —
 # `"core/scripts/caf\303\251.sh"` — and every reader below compares that line against a raw name.
@@ -3734,6 +3959,8 @@ qw_mut_pairs "quote-mut-r2rc" qr_fail "und=0 defer=0 ok=1 fired=1" \
   'core/team-roles/ 2>/dev/null)" || R2_RC=$?' 'core/team-roles/ 2>/dev/null)"'
 rm -rf "$QW"
 
+fi
+if sg mp; then
 # --- A FAILED MACHINERY PRODUCER IS NOT A NARROWER SET (BL-418) ---------------------------------
 # `machinery_paths()` ran both `ls-files --with-tree` listings with their status unread, so a listing
 # that failed at ONE ref returned the other ref's paths at rc 0 -- a NARROWER set, and non-empty, so
@@ -3763,11 +3990,6 @@ for i in range(0, len(p), 2):
 open(sys.argv[2], "w").write(s)' "$(dirname "$GATE")/$f" "$e/$f" "$@" 2>/dev/null || mrc=$?
   if [ "$mrc" -ne 0 ] || cmp -s "$(dirname "$GATE")/$f" "$e/$f" || ! bash -n "$e/$f" 2>/dev/null; then printf ''; return 1; fi
   printf '%s' "$e"
-}
-mp_killed() { # mp_killed <label> <got> <want> <why> -- a mutant whose engine could not be built is a FAIL
-  ASSERTIONS=$((ASSERTIONS + 1))
-  if [ "$2" = "$3" ]; then printf '  ok    %-16s KILLED (%s)\n' "$1" "$4"
-  else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s SURVIVED or DID NOT APPLY: got [%s], want [%s]\n' "$1" "$2" "$3"; fi
 }
 
 # The gate world: kappa diverged-and-untouched, omega deleted at theirs and consumer-modified.
@@ -3950,6 +4172,8 @@ mp_killed "mp-mut-perrow" "$got" "preclassify=3 derived=3 left=3 carried=3" \
 chmod -R u+rwX "$MP" 2>/dev/null
 rm -rf "$MP"
 
+fi
+if sg av; then
 # --- EACH GATING SCRIPT RUNS WITH THE HOOK'S OWN ARGV (BL-456) --------------------------------
 # The differential ran every hook-named script BARE. A script that needs arguments exits the same
 # usage code on both sides, so an incoming renderer whose rendered BODY changed -- `--check --root .`
@@ -3976,117 +4200,13 @@ rm -rf "$MP"
 #     render-agent-definitions.sh  hook argv 0,0 clean and 1,1 drifted                   -> OK both
 # The drifted consumer is the discriminating input for equal-non-zero: its renderer already fails
 # under the hook's argv on both sides, which is a pre-existing failure and not this pull's.
-AV="$(mktemp -d "${TMPDIR:-/tmp}/su-gate-av.XXXXXX")"
-av_git() { git -C "$1" -c user.email=f@x -c user.name=f -c commit.gpgsign=false "${@:2}"; }
-# av_render <file> <body> <comment> -- a renderer-shaped stub: bare exits 2, --root writes the body,
-# --check --root compares it.
-av_render() {
-  { printf '#!/usr/bin/env bash\n# %s\n' "$3"
-    printf 'm=w; r=""\nwhile [ $# -gt 0 ]; do\n  case "$1" in --check) m=c ;; --root) shift; r="${1:-}" ;; *) exit 2 ;; esac\n  shift\ndone\n'
-    printf '[ -n "$r" ] || exit 2\nb=%s\n' "'$2'"
-    printf 'if [ "$m" = w ]; then mkdir -p "$r/.claude/agents" && printf "%%s\\n" "$b" > "$r/.claude/agents/dev.md"; exit; fi\n'
-    printf '[ "$(cat "$r/.claude/agents/dev.md" 2>/dev/null)" = "$b" ] || exit 1\n'; } > "$1"
-}
-# av_scripts <dir> <side:base|theirs> <kind:A|B>
-av_scripts() {
-  local d="$1"
-  mkdir -p "$d"
-  if [ "$2" = theirs ] && [ "$3" = A ]; then
-    av_render "$d/render-agent-definitions.sh" 'FIRST action, before any other work.' 'renderer stub'
-  elif [ "$2" = theirs ]; then
-    av_render "$d/render-agent-definitions.sh" 'FIRST action before any other work.' 'renderer stub; reworded'
-  else
-    av_render "$d/render-agent-definitions.sh" 'FIRST action before any other work.' 'renderer stub'
-  fi
-  if [ "$2" = theirs ] && [ "$3" = A ]; then
-    printf '#!/bin/sh\ncase "${1:-}" in --fail-on=deterministic) exit 1 ;; *) exit 1 ;; esac\n' > "$d/audit-rule-files.sh"
-    printf '#!/bin/sh\nexit 1\n' > "$d/derive-fixture-readsets.sh"
-    printf '#!/bin/sh\n[ "${1:-}" = --trunk-push ] || exit 2\ngrep -q refs/heads/ && exit 1\nexit 0\n' > "$d/validate-audit-anchors.sh"
-    printf '#!/bin/sh\n# reworded\n. "$(dirname "$0")/artifact-path-config.sh" || exit 2\nexit "$APC_RC"\n' > "$d/validate-artifact-paths.sh"
-    printf 'APC_RC=1\n' > "$d/artifact-path-config.sh"
-    printf '#!/bin/sh\n# reworded\nexit 0\n' > "$d/validate-rooted.sh"
-    printf '#!/bin/sh\n# reworded\n[ "${1:-}" = --strays ] || exit 2\nexit 0\n' > "$d/validate-quiet.sh"
-  else
-    printf '#!/bin/sh\ncase "${1:-}" in --fail-on=deterministic) exit 0 ;; *) exit 1 ;; esac\n' > "$d/audit-rule-files.sh"
-    printf '#!/bin/sh\nexit 0\n' > "$d/derive-fixture-readsets.sh"
-    printf '#!/bin/sh\n[ "${1:-}" = --trunk-push ] || exit 2\ncat > /dev/null\nexit 0\n' > "$d/validate-audit-anchors.sh"
-    printf '#!/bin/sh\n. "$(dirname "$0")/artifact-path-config.sh" || exit 2\nexit "$APC_RC"\n' > "$d/validate-artifact-paths.sh"
-    printf 'APC_RC=0\n' > "$d/artifact-path-config.sh"
-    printf '#!/bin/sh\nexit 0\n' > "$d/validate-rooted.sh"
-    printf '#!/bin/sh\n[ "${1:-}" = --strays ] || exit 2\nexit 0\n' > "$d/validate-quiet.sh"
-  fi
-}
-# av_world <dir> <kind:A|B> <consumer:clean|drift> -> <dir>/{dist,cons,B,T}
-av_world() {
-  local w="$1"
-  mkdir -p "$w/dist/core/rules" "$w/cons/.githooks"
-  git -C "$w/dist" init -q
-  printf '1.0.0\n' > "$w/dist/VERSION"
-  printf 'av machinery\n' > "$w/dist/core/rules/av.md"
-  av_scripts "$w/dist/core/scripts" base "$2"
-  av_git "$w/dist" add -A >/dev/null 2>&1; av_git "$w/dist" commit -qm base >/dev/null 2>&1
-  git -C "$w/dist" rev-parse HEAD > "$w/B"
-  printf '1.1.0\n' > "$w/dist/VERSION"
-  av_scripts "$w/dist/core/scripts" theirs "$2"
-  av_git "$w/dist" add -A >/dev/null 2>&1; av_git "$w/dist" commit -qm theirs >/dev/null 2>&1
-  git -C "$w/dist" rev-parse HEAD > "$w/T"
-  av_scripts "$w/cons/scripts/ai-dlc" base "$2"
-  { printf '#!/usr/bin/env bash\nset -uo pipefail\nPUSH_REFS=""\n[ -t 0 ] || PUSH_REFS="$(cat)"\n'
-    printf 'trunk_push() { printf '"'%%s'"' "$PUSH_REFS" | bash scripts/ai-dlc/validate-audit-anchors.sh --trunk-push; }\n'
-    printf 'if [ -f scripts/ai-dlc/validate-audit-anchors.sh ]; then trunk_push; fi\n'
-    printf 'if [ -f scripts/ai-dlc/audit-rule-files.sh ]; then\n  bash scripts/ai-dlc/audit-rule-files.sh --fail-on=deterministic\nfi\n'
-    printf 'if [ -f scripts/ai-dlc/validate-artifact-paths.sh ]; then\n  bash scripts/ai-dlc/validate-artifact-paths.sh\nfi\n'
-    printf 'bash scripts/ai-dlc/validate-rooted.sh --root "$ROOT"\n'
-    printf 'bash scripts/ai-dlc/validate-quiet.sh --strays 2>"$LOG"\n'
-    printf 'if [ -f scripts/ai-dlc/render-agent-definitions.sh ]; then\n  agent_definitions() {\n    local out rc\n'
-    printf '    if [ ! -d .claude/agents ]; then\n      out="$(bash scripts/ai-dlc/render-agent-definitions.sh --root . 2>&1)"\n    fi\n'
-    printf '    out="$(bash scripts/ai-dlc/render-agent-definitions.sh --check --root . 2>&1)"; rc=$?\n'
-    printf '    case "$rc" in 0|3) return 0 ;; *) return 1 ;; esac\n  }\n  agent_definitions\nfi\n'
-    printf 'readset_deriver_path() {\n  local c\n'
-    printf '  for c in scripts/ai-dlc/derive-fixture-readsets.sh core/scripts/derive-fixture-readsets.sh; do\n'
-    printf '    [ -f "$c" ] && { printf '"'%%s'"' "$c"; return 0; }\n  done\n}\n'; } > "$w/cons/.githooks/pre-push"
-  chmod +x "$w/cons/.githooks/pre-push"
-  bash "$w/cons/scripts/ai-dlc/render-agent-definitions.sh" --root "$w/cons" >/dev/null 2>&1
-  [ "$3" = drift ] && printf 'a hand edit\n' > "$w/cons/.claude/agents/dev.md"
-  # A COMMITTED BRANCH, NO REMOTE: the ref line can be formed, and arm P is skipped -- the state in
-  # which the differential must still build its own stdin.
-  git -C "$w/cons" init -q
-  av_git "$w/cons" add -A >/dev/null 2>&1; av_git "$w/cons" commit -qm consumer >/dev/null 2>&1
-}
 av_world "$AV/a" A clean
 av_world "$AV/b" B clean
 av_world "$AV/d" B drift
-# av_run <gate> <world> -> the gate's rows, against a FRESH copy of the world's consumer, then an
-# `AGENTS same|moved` row for that copy's .claude/agents across the run. FRESH BY `mktemp -d`, never
-# by a counter: av_run is called inside `$( )`, where a counter's increment is lost, and a reused
-# copy hands one mutant's writes to the next run -- measured, a write-mode mutant's rendered
-# definitions turned four later kills into the same wrong row.
-av_run() {
-  local c a0
-  c="$(mktemp -d "$AV/run.XXXXXX")" || return 1
-  c="$c/cons"
-  cp -R "$2/cons" "$c" || return 1
-  a0="$(cat "$c/.claude/agents/"* | cksum)"
-  bash "$1" "$2/dist" "$(cat "$2/B")" "$(cat "$2/T")" "$c" 2>/dev/null
-  if [ "$a0" = "$(cat "$c/.claude/agents/"* | cksum)" ]; then printf 'AGENTS\tsame\n'; else printf 'AGENTS\tmoved\n'; fi
-}
-av_st() { printf '%s\n' "$1" | awk -F'\t' -v s="$2" '$2 == s {print $1; exit}'; }
-av_has() { printf '%s\n' "$1" | awk -F'\t' -v s="$2" -v re="$3" '$2 == s && $3 ~ re {f=1} END{print (f ? "yes" : "no")}'; }
-av_ag() { printf '%s\n' "$1" | awk -F'\t' '$1 == "AGENTS" {print $2}'; }
-av_ref() { printf '%s\n' "$1" | awk -F'\t' '$1 ~ /^SELF-UPDATE-(DEFER|UNDECIDED)$/' | grep -c .; }
-# av_sig <rows> -> the whole world-A signature, one token per script
-av_sig() {
-  printf 'render=%s audit=%s derive=%s anchors=%s paths=%s rooted=%s quiet=%s agents=%s\n' \
-    "$(av_st "$1" render-agent-definitions.sh)" "$(av_st "$1" audit-rule-files.sh)" \
-    "$(av_st "$1" derive-fixture-readsets.sh)" "$(av_st "$1" validate-audit-anchors.sh)" \
-    "$(av_st "$1" validate-artifact-paths.sh)" "$(av_st "$1" validate-rooted.sh)" \
-    "$(av_st "$1" validate-quiet.sh)" "$(av_ag "$1")"
-}
 
 # PRECONDITIONS, or every arm below asserts about a world that cannot express the defect: under
 # the hook's argv the renderer and the audit stub really go 0 to 1 in world A while their BARE
 # runs agree, and the drifted world's renderer really fails on both sides.
-av_rc() { ( cd "$1" && bash "$2" ${3:+$3} >/dev/null 2>&1 < /dev/null ); printf '%s' "$?"; }
 AVA="$AV/a"
 git -C "$AVA/dist" show "$(cat "$AVA/T"):core/scripts/render-agent-definitions.sh" > "$AV/new-render.sh"
 git -C "$AVA/dist" show "$(cat "$AVA/T"):core/scripts/audit-rule-files.sh" > "$AV/new-audit.sh"
@@ -4122,23 +4242,6 @@ ss_assert "av-dollar-nearmiss" "$(av_st "$AV_A" validate-quiet.sh)" SELF-UPDATE-
   "a \$ after 2> is outside the span, so that line is derived and run, not refused"
 
 # --- MUTANTS, each a copy of the WHOLE reconcile directory so the gate finds its siblings --------
-# av_mut <name> <old> <new> [<old> <new>]... -> the mutated gate's path, or nothing when an anchor
-# is not unique, the copy is unchanged, or it is not a program.
-av_mut() {
-  local e="$AV/m-$1" mrc=0
-  shift
-  rm -rf "$e"; mkdir -p "$e"
-  cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$e"/ 2>/dev/null
-  [ "$#" -gt 0 ] || { printf '%s' "$e/self-update-gate.sh"; return 0; }
-  python3 -c 'import sys
-s = open(sys.argv[1]).read(); p = sys.argv[3:]
-for i in range(0, len(p), 2):
-    if s.count(p[i]) != 1: sys.exit(3)
-    s = s.replace(p[i], p[i + 1], 1)
-open(sys.argv[2], "w").write(s)' "$GATE" "$e/self-update-gate.sh" "$@" 2>/dev/null || mrc=$?
-  if [ "$mrc" -ne 0 ] || cmp -s "$GATE" "$e/self-update-gate.sh" || ! bash -n "$e/self-update-gate.sh" 2>/dev/null; then return 1; fi
-  printf '%s' "$e/self-update-gate.sh"
-}
 # THE CONTROL: an unmutated copy beside its siblings reproduces world A's whole signature and the
 # drifted world's OK, so every kill below is its mutation and not a copy that could not run.
 AV_CTL="$(av_mut control)"
@@ -4256,6 +4359,8 @@ c3_kill "c3-mut-nowrite" "$(c3_apply_mut nowrite 'overwrite_from_theirs "$rel" &
   "DEFER pure-apply=yes worklist=no installed=current remedy=0 check=0->0" \
   "the apply reports pure-apply but never writes theirs' renderer: the current one stays installed, no re-render is owed, and the push carries the old text"
 
+fi
+if sg hk; then
 # --- THE HOOK THE PUSH RUNS IS THEIRS' WHEN THE SLICE WRITES IT (BL-456, round 2) ----------------
 # The gate scanned only the consumer's CURRENT hook, and its gating set was changed scripts that hook
 # invokes. When theirs' hook adds the renderer's --check step, turns a discarded `--check || true`
@@ -4353,6 +4458,8 @@ hk_kill "hk-mut-carried" "$(av_mut hk-carried '  if [ ! -f "$cur" ] && gate_has_
   "adds=DEFER reads=DEFER absent=DEFER same=OK deleted=DEFER" \
   "a carried script judged as though written: a consumer that deleted the renderer is refused over a copy step 2 never installs"
 
+fi
+if sg hu1 || sg hu2; then
 # --- AN UNCHANGED SCRIPT THE NEW HOOK ASKS IS JUDGED BY THE COPY THE PUSH RUNS (BL-456, round 3) ---
 # Theirs' hook adds a step for validate-y.sh, which the RANGE DOES NOT CHANGE. Step 2 writes only
 # the range diff, so after the write the push runs the CONSUMER'S copy of it, or nothing. Judging
@@ -4455,9 +4562,6 @@ hu_post() { # hu_post <world> -> the post-write hook's exit
   done < "$c.slice"
   ( cd "$c" && bash .githooks/pre-push origin x < /dev/null > /dev/null 2>&1 ); printf '%s' "$?"
 }
-ss_assert "hu-pre" "$(for n in $HU_WORLDS; do printf '%s=%s ' "$n" "$(hu_post "$AV/hu-$n")"; done)y-in-range=$(git -C "$AV/hu-lfail/dist" diff --name-only "$(cat "$AV/hu-lfail/B")" "$(cat "$AV/hu-lfail/T")" -- core/scripts/validate-y.sh | grep -c .)" \
-  "lfail=1 lpass=0 gdel=0 udel=1 orecho=1 andand=0 andor=1 block=0 else=1 keeptest=1 awkif=1 y-in-range=0" \
-  "the push theirs' hook gates fails exactly where the consumer's own copy fails or is missing unguarded, and the range never touches validate-y.sh"
 hu_sig() { # hu_sig <gate> -> one token per world, `+absent` when the row names the absence
   local n r out=""
   for n in $HU_WORLDS; do
@@ -4468,11 +4572,16 @@ hu_sig() { # hu_sig <gate> -> one token per world, `+absent` when the row names 
   printf '%s\n' "$out"
 }
 HU_SIG_FIX="lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=DEFER+absent andand=OK andor=DEFER+absent block=OK else=DEFER+absent keeptest=DEFER+absent awkif=DEFER+absent"
+hu_kill() { local got; if [ -z "$2" ]; then got="DID-NOT-APPLY"; else got="$(hu_sig "$2")"; fi; mp_killed "$1" "$got" "$3" "$4"; }
+fi
+if sg hu1; then
+ss_assert "hu-pre" "$(for n in $HU_WORLDS; do printf '%s=%s ' "$n" "$(hu_post "$AV/hu-$n")"; done)y-in-range=$(git -C "$AV/hu-lfail/dist" diff --name-only "$(cat "$AV/hu-lfail/B")" "$(cat "$AV/hu-lfail/T")" -- core/scripts/validate-y.sh | grep -c .)" \
+  "lfail=1 lpass=0 gdel=0 udel=1 orecho=1 andand=0 andor=1 block=0 else=1 keeptest=1 awkif=1 y-in-range=0" \
+  "the push theirs' hook gates fails exactly where the consumer's own copy fails or is missing unguarded, and the range never touches validate-y.sh"
 ss_assert "hu-signature" "$(hu_sig "$GATE")" "$HU_SIG_FIX" \
   "an unchanged script the new hook asks is judged by the copy the push runs: the consumer's, or the hook's own guard over its absence"
 mp_killed "hu-mut-control" "$(hu_sig "$(av_mut hu-control)")" "$HU_SIG_FIX" \
   "an unmutated copy reproduces all four verdicts, so a kill below is the mutation"
-hu_kill() { local got; if [ -z "$2" ]; then got="DID-NOT-APPLY"; else got="$(hu_sig "$2")"; fi; mp_killed "$1" "$got" "$3" "$4"; }
 # KEYED ON THE LINE THAT DECIDES WHICH COPY RUNS: without it every script is judged by theirs' copy.
 hu_kill "hu-mut-theirs" "$(av_mut hu-theirs '  gate_has_line "$CHANGED" "$name" || sc_written=0
 ' '  :
@@ -4490,6 +4599,8 @@ hu_kill "hu-mut-noguard" "$(av_mut hu-noguard "$HU_GUARD_LINE" '  :
 hu_kill "hu-mut-brace" "$(av_mut hu-brace '      if (pre ~ (GT "[[:space:]]*&&[[:space:]]*\\{' '      if (0 && pre ~ (GT "[[:space:]]*&&[[:space:]]*\\{')" \
   "lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=DEFER+absent andand=DEFER+absent andor=DEFER+absent block=OK else=DEFER+absent keeptest=DEFER+absent awkif=DEFER+absent" \
   "the && { … } arm dropped: a step the hook skips on a missing script is refused"
+fi
+if sg hu2; then
 hu_kill "hu-mut-andor" "$(av_mut hu-andor ' && index(tail, "||") == 0) return 1' ') return 1')" \
   "lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=DEFER+absent andand=OK andor=OK block=OK else=DEFER+absent keeptest=DEFER+absent awkif=DEFER+absent" \
   "the trailing || not read: [ -f y ] && bash y || fail=1 reads guarded while the push fails on the missing script"
@@ -4521,6 +4632,7 @@ HU_REAL=""
 for cand in "$DIR/../../git-hooks/pre-push" "$DIR/../../../.githooks/pre-push"; do
   [ -f "$cand" ] && { HU_REAL="$cand"; break; }
 done
+[ -n "$HU_REAL" ] && echo "HERMETIC-CONSUMED $(cd "$(dirname "$HU_REAL")" && pwd -P)/pre-push"
 hu_depth() { # hu_depth <gate-file> -> the if-frame depth after scanning the shipped hook
   ( eval "$(awk '/^gate_argv_scan\(\) \{/,/^\}/' "$1" | sed 's/ifpost(r) } }$/ifpost(r) }; printf "DEPTH\\t%d\\n", NIF }/')"
     gate_argv_scan "$HU_REAL" render-agent-definitions.sh ) 2>/dev/null | awk -F'\t' '$1 == "DEPTH" {print $2}'
@@ -4535,6 +4647,8 @@ case "$HU_OLD_D" in ''|0|*[!0-9]*) HU_OLD_UNBAL=no ;; *) HU_OLD_UNBAL=yes ;; esa
 ss_assert "hu-stack-depth" "${HU_REAL:+found} shipped=$(hu_depth "$GATE") old-opener-unbalanced=$HU_OLD_UNBAL" "found shipped=0 old-opener-unbalanced=yes" \
   "scanning the shipped pre-push ends at if-frame depth 0; the old opener test leaves it above 0 (read $HU_OLD_D), so this assertion can see the imbalance"
 
+fi
+if sg sh; then
 # --- HOOK SHAPES THE SCAN MUST NOT READ AS "NOT GATING" (BL-456, tip round) ----------------------
 # Each shape below is one reformat away from the real hook, and before this round the first three
 # scanned as a mention or a discarded capture, so a script whose incoming copy fails read
@@ -4608,6 +4722,7 @@ SH_HOOK=""
 for cand in "$DIR/../../git-hooks/pre-push" "$DIR/../../../.githooks/pre-push"; do
   [ -f "$cand" ] && { SH_HOOK="$cand"; break; }
 done
+[ -n "$SH_HOOK" ] && echo "HERMETIC-CONSUMED $(cd "$(dirname "$SH_HOOK")" && pwd -P)/pre-push"
 SH_RH="$( (eval "$(awk '/^gate_argv_scan\(\) \{/,/^\}/' "$GATE")"; gate_argv_scan "$SH_HOOK" render-agent-definitions.sh) 2>/dev/null \
   | awk -F'\t' '$1 == "D" || $1 == "R" {printf "%s%s[%s]", (n++ ? " " : ""), $1, $3}')"
 ss_assert "sh-real-229" "${SH_HOOK:+found} $SH_RH" "found D[--root .] R[--check --root .]" \
@@ -4663,8 +4778,10 @@ sh_kill "sh-mut-step" "$(av_mut sh-step 'stepped = (pre ~' 'stepped = 0 && (pre 
 sh_kill "sh-mut-steptrue" "$(av_mut sh-steptrue 'if (!stepped && match(tt,' 'if (match(tt,')" \
   "assign=UNDECIDED next=DEFER fnlast=DEFER fnlast2=DEFER w229=OK+ng true=OK+ng exit=DEFER step=DEFER steptrue=OK+ng" \
   "|| true after step read as discarding: the status step already read is lost and the script reads OK"
+fi
 rm -rf "$AV"
 
+echo "$NAME: shard $GROUP ran $ASSERTIONS assertions"
 echo
 if [ "$FAILURES" -gt 0 ]; then
   echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong."

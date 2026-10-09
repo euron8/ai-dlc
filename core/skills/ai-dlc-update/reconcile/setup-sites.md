@@ -241,6 +241,9 @@ core_manifest:
   - core/fixtures/retro-branch-behind-main/**
   - core/fixtures/route-defect-classification/**
   - core/fixtures/self-update-gate/**
+  - core/fixtures/self-update-gate-b/**
+  - core/fixtures/self-update-gate-c/**
+  - core/fixtures/self-update-gate-d/**
   - core/fixtures/setup-config-drift/**
   - core/fixtures/shadowed-local-validators/**
   - core/fixtures/snapshot-evidence-cell/**
