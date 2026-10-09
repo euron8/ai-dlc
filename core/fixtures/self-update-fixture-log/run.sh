@@ -1961,6 +1961,152 @@ else
 fi
 rm -rf "$CONS2/tests/fixtures/plain-touched" "$CONS2/tests/fixtures/$QU" "$QD"
 
+# --- Parts W1-W4: STEP 2's FIXTURE-WRITE RULE AND RED DISPOSITION, IN THE SHIPPED SKILL.md ----
+# The split-directory defect lived in prose: the agent held back a BOTH-CHANGED `run.sh` and wrote
+# the same directory's upstream-only `inputs.decl`, and the consumer's push refused the pair. No
+# program reads that rule, so the observable is the declared text, and every cell is PRESENCE-shaped
+# and whitespace-collapsed (a wrapped line cannot hide a phrase):
+#   W1 a fixture directory is ONE unit: any path held back -> write none, carry all
+#   W2 the gate-set disagreement stop is scoped to MACHINERY paths, fixture paths named outside it
+#   W3 the uncommitted-red restore: git checkout -- by pathspec, untracked by explicit pathspec,
+#      never a glob, the records kept, then the porcelain statement
+#   W4 the old "A red derived fixture STOPS the self-update" sentence is GONE, replaced by DEFER
+# A consumer whose installed SKILL.md predates this release SKIPs the four (this fixture can land
+# one pull ahead of its prose); the distribution never does. The mutant twin is in-file and runs on
+# a copy: each cell's phrase deleted from a copy must flip that cell alone.
+w_flat() { tr '\n' ' ' < "$1" | tr -s ' \t' '  '; }
+wsig() { # <skill.md> -> four cells
+  local t w1=0 w2=0 w3=0 w4=0
+  t="$(w_flat "$1")"
+  case "$t" in *"A FIXTURE DIRECTORY IS ONE UNIT: if ANY path under a derived fixture directory is held back as a consumer edit, write NONE of that directory and carry ALL of it"*) w1=1 ;; esac
+  case "$t" in *"if its set and yours disagree on a machinery path, stop"*"A fixture path is outside that comparison by construction"*) w2=1 ;; esac
+  case "$t" in *"run \`git checkout -- <every tracked path this cycle wrote, and the stamp>\`"*"remove every NEW untracked path this cycle wrote, each named by explicit pathspec, never by a glob, and never the gate record or the fixture log"*"\`git status --porcelain\` then lists the two records and nothing else this cycle wrote"*) w3=1 ;; esac
+  case "$t" in *"A red derived fixture STOPS the self-update"*) ;; *"A red runner exit (exit 1: a fixture red, or MISSING) takes the HOOK-REFUSED disposition, \`SELF-UPDATE-DEFER\`"*) w4=1 ;; esac
+  printf '%s-%s-%s-%s' "$w1" "$w2" "$w3" "$w4"
+}
+W_SKILL="$(pick "$HERE/../../skills/ai-dlc-update/SKILL.md" \
+                "$HERE/../../../core/skills/ai-dlc-update/SKILL.md" \
+                "$HERE/../../../.claude/skills/ai-dlc-update/SKILL.md")"
+W_DIST=0; [ "$W_SKILL" = "$HERE/../../skills/ai-dlc-update/SKILL.md" ] && W_DIST=1
+if [ -z "$W_SKILL" ]; then
+  # The J arms' convention: the fixture has landed and its subject has not. Never an `ok`.
+  echo "  SKIP  Parts W1-W4 -- ai-dlc-update/SKILL.md resolves in neither layout from $HERE, so these assert nothing here"
+else
+  w_got="$(wsig "$W_SKILL")"
+  if [ "$w_got" = "1-1-1-1" ]; then
+    ok "Parts W1-W4: the shipped SKILL.md carries a fixture directory as one unit, scopes the gate-set stop to machinery, spells the uncommitted-red restore by pathspec with the porcelain statement, and replaces the red-STOP sentence with the DEFER disposition"
+  elif [ "$W_DIST" = 0 ] && [ "$w_got" = "0-0-0-0" ]; then
+    echo "  SKIP  Parts W1-W4 -- the installed SKILL.md predates the fixture-write rule; they land with the pull that carries it"
+  else
+    bad "Parts W1-W4: vector $w_got, want 1-1-1-1 (cells: W1 dir-is-a-unit, W2 disagree-scoped, W3 uncommitted restore, W4 STOP replaced)"
+  fi
+  # MUTANT TWINS: one phrase per cell deleted from a COPY, and the vector must move in that cell only.
+  W_CP="$(mktemp -d)"; sufl_tmp "$W_CP"
+  w_mut() { # <label> <old> <new> <expected>
+    local m="$W_CP/$1.md" got
+    W_OLD="$2" W_NEW="$3" python3 -c 'import os,sys
+s = open(sys.argv[1]).read(); o = os.environ["W_OLD"]
+if s.count(o) != 1: sys.exit(3)
+open(sys.argv[2], "w").write(s.replace(o, os.environ["W_NEW"], 1))' "$W_SKILL" "$m" 2>/dev/null \
+      || { bad "FIXTURE ERROR: W mutant $1 DID NOT APPLY (anchor not exactly once)"; return; }
+    got="$(wsig "$m")"
+    if [ "$got" = "$4" ]; then ok "W mutant $1 killed: vector $got"
+    else bad "W mutant $1 scored $got, want $4"; fi
+  }
+  if [ "$W_DIST" = 1 ] || [ "$w_got" = "1-1-1-1" ]; then
+    w_mut WM1 'write NONE of that directory and carry ALL of it' 'write the upstream-only files of it' "0-1-1-1"
+    w_mut WM2 'disagree on a machinery path, stop' 'disagree, stop' "1-0-1-1"
+    w_mut WM3 '     by a glob, and never the gate record or the fixture log;' '     by a glob;' "1-1-0-1"
+    w_mut WM4 '     **A red runner exit (exit 1: a fixture red, or MISSING) takes the HOOK-REFUSED' '     **A red derived fixture STOPS the self-update. A red runner exit (exit 1: a fixture red, or MISSING) takes the HOOK-REFUSED' "1-1-1-0"
+  fi
+fi
+
+# --- Parts H1-H7 and HD1: THE RUNNER DISPATCHES THE WAY THE CONSUMER'S HOOK DOES -------------
+# The consumer's pre-push runs a fixture carrying `inputs.decl` through the hermetic runner and
+# refuses it on any non-zero exit; this runner ran every fixture plain, so a self-update reported
+# green on fixtures the push it was making then refused. One vector, nine cells, built by `hsig` in
+# lib.sh over three git-inited consumers carrying the REAL shipped hook and runner (see
+# build_h_world). Each cell is PRESENCE-shaped: it demands a row, an exit code AND a section line,
+# so a runner that emits nothing scores 0-0-0-0-0-0-0-0-0, not a pass.
+#   H1  a declared file absent, run.sh exit 0       -> red, `declared file absent:` (runner exit 2)
+#   H2  a clean declared fixture                     -> green through the runner, `rc=0 sandbox_files=`
+#   H3  a `!` REQUIRED input never consumed          -> red (runner exit 1, `required_missing=1`)
+#   H4  the runner absent                            -> red with the hook's not-found line
+#   H5  an undeclared fixture reading outside        -> green, run plain
+#   H6  PREPUSH_POOL_DEPTH from a sentinel 7         -> 8 on both the hermetic and the plain branch
+#   H7  a red run (runner exit 1)                    -> the disposition token on STDOUT
+#   H7t a green run                                  -> no token (the twin H7 needs)
+#   H7r an exit-2 refusal                            -> no token (a refusal is not a red suite)
+#   HD1 a hook predating the dispatch, declared fx   -> plain and green, and the log says why
+echo "HERMETIC-CONSUMED core/git-hooks/pre-push"
+echo "HERMETIC-CONSUMED core/scripts/hermetic-run.sh"
+echo "HERMETIC-CONSUMED core/scripts/core-paths.sh"
+if ! build_h_world || [ "$H_OK" != 1 ]; then
+  bad "FIXTURE BROKEN: the hermetic-dispatch world did not build (hook '${H_HOOK_SRC:-unresolved}', runner '${H_HR_SRC:-unresolved}', mapper '${H_CP_SRC:-unresolved}'); no H arm below would mean anything"
+else
+  # SEED CONTROL: the three hooks differ in exactly the dispatch line, and the sentinel survives.
+  h_c1="$(grep -cxF "$H_DISPATCH_LINE" "$HC1/.githooks/pre-push")" || h_c1=0
+  h_c3="$(grep -cxF "$H_DISPATCH_LINE" "$HC3/.githooks/pre-push")" || h_c3=0
+  h_t3="$(grep -cx '# READSET_TOOLS_BEGIN' "$HC3/.githooks/pre-push")" || h_t3=0
+  h_w3="$(grep -c 'inputs\.decl' "$HC3/.githooks/pre-push")" || h_w3=0
+  if [ "$h_c1" = 1 ] && [ "$h_c3" = 0 ] && [ "$h_t3" = 1 ] && [ "$h_w3" -gt 0 ] \
+     && [ -f "$HC1/scripts/ai-dlc/hermetic-run.sh" ] && [ ! -e "$HC2/scripts/ai-dlc/hermetic-run.sh" ]; then
+    ok "SEED: the pre-dispatch hook keeps READSET_TOOLS_BEGIN and $h_w3 inputs.decl mention(s) and lacks only the dispatch line; the runner is present in HC1 and absent in HC2"
+  else
+    bad "FIXTURE ERROR: the H seed does not discriminate (dispatch lines HC1=$h_c1 HC3=$h_c3, sentinel HC3=$h_t3, mentions HC3=$h_w3)"
+  fi
+  h_got="$(hsig "$RUNNER")"
+  if [ "$h_got" = "$HSIG_OK" ]; then
+    ok "Parts H1-H7, HD1: vector $h_got — declared-absent and never-consumed red, the clean declared fixture green through hermetic-run.sh with rc=0 sandbox_files=, runner-absent red with the hook's line, undeclared plain and green, depth 8 on both branches, the token on stdout on a red only (never on green, never on an exit-2 refusal), and a pre-dispatch hook run plain"
+  else
+    bad "Parts H1-H7, HD1: vector $h_got, want $HSIG_OK (cells: H1 H2 H3 H4 H5 H6 H7 H7t H7r HD1). A 0 cell is the restated hook rule broken in that clause"
+  fi
+
+  # --- Part HR: THE UNCOMMITTED-RED RESTORE, AS SKILL.md STEP 2 SPELLS IT -------------------------
+  # The order is write, runner, commit, so a red finds the slice UNCOMMITTED: `git checkout --` the
+  # written tracked paths and the stamp, remove the new untracked paths by explicit pathspec (never
+  # the two records), return to the original branch and delete the self-update branch. Afterwards
+  # `git status --porcelain` lists the records and nothing else. CONTROL, one step apart: the same
+  # sequence without the untracked removal leaves the new path listed.
+  for h_mode in full skip-rm; do
+    (
+      unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+      cd "$HC1" || exit 1
+      h_orig="$(git symbolic-ref -q --short HEAD)"
+      git checkout -q -b "su-$h_mode" || exit 1
+      printf 'written by the slice\n' > docs/slice.md
+      printf 'new from the slice\n' > scripts/ai-dlc/h-new.sh
+      exit 0
+    ) || bad "FIXTURE ERROR: Part HR ($h_mode) could not write the slice"
+    h_run "$RUNNER" "$HC1" h-unconsumed
+    h_rrc="$H_RC"
+    (
+      unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+      cd "$HC1" || exit 1
+      git checkout -q -- docs/slice.md || exit 1
+      [ "$h_mode" = full ] && { rm -f -- scripts/ai-dlc/h-new.sh || exit 1; }
+      git checkout -q - && git branch -q -D "su-$h_mode" || exit 1
+      exit 0
+    ) || bad "FIXTURE ERROR: Part HR ($h_mode) could not run the restore sequence"
+    h_por="$(git -C "$HC1" status --porcelain -uall 2>/dev/null | sed 's/^...//' | LC_ALL=C sort | tr '\n' ',')"
+    h_recs="$(cd "$HC1" && ls _bmad-output/ai-dlc-update/self-update-gate-*.md _bmad-output/ai-dlc-update/self-update-fixtures-*.md 2>/dev/null | LC_ALL=C sort | tr '\n' ',')"
+    h_br="$(git -C "$HC1" rev-parse -q --verify "refs/heads/su-$h_mode" >/dev/null && echo present || echo gone)"
+    if [ "$h_mode" = full ]; then
+      if [ "$h_rrc" -eq 1 ] && [ -n "$h_recs" ] && [ "$h_por" = "$h_recs" ] && [ "$h_br" = gone ]; then
+        ok "Part HR: after a runner red on the uncommitted slice, the restore leaves git status --porcelain listing exactly the two records ($h_por) and the self-update branch gone"
+      else
+        bad "Part HR: after the restore, porcelain lists '$h_por', want exactly the records '$h_recs' (runner rc=$h_rrc, branch $h_br)"
+      fi
+    else
+      case "$h_por" in
+        *scripts/ai-dlc/h-new.sh*) ok "Part HR control: the same sequence without the untracked removal leaves scripts/ai-dlc/h-new.sh listed, so the porcelain read above can see a leftover" ;;
+        *) bad "Part HR control: skipping the untracked removal left porcelain '$h_por', which does not name the new path — the arm above could not see a leftover" ;;
+      esac
+      rm -f -- "$HC1/scripts/ai-dlc/h-new.sh"
+    fi
+  done
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then
   echo "self-update-fixture-log: PASS"
