@@ -52,7 +52,9 @@
 # of the declared tools (keyed and unkeyed), `AI_DLC_PROJECT_ROOT` set to the sandbox root, and the fixture invoked as
 # `bash core/fixtures/<f>/run.sh` from the sandbox ROOT -- the pre-push pool's own invocation, never
 # a `cd` into the fixture directory (CLAUDE.md measures that as five fabricated failures).
-# The sandbox is removed on exit unless `AI_DLC_HERMETIC_KEEP=1`.
+# The sandbox is removed on exit unless `AI_DLC_HERMETIC_KEEP=1`. A declared DIRECTORY is copied by
+# its git population (tracked plus untracked-unignored, the key's own), never whole; the fixture's OWN
+# directory is the one stated exception, copied whole with links refused, and the reason is at the copy.
 #
 # A FIXTURE WITHOUT A DECLARATION IS NOT THIS RUNNER'S: exit 2. The hook dispatches to this runner
 # only when `inputs.decl` exists, so a missing declaration here is a caller defect, not a skip.
@@ -213,6 +215,48 @@ if [ ! -s "$HR_WORK/files" ] && [ ! -s "$HR_WORK/dirs" ]; then
 fi
 [ "$hr_bad" = 0 ] || exit 2
 
+# A GIT WORK TREE IS REQUIRED, key-only or not. The copy population and the key population are both
+# git's view of the tree (below), so a root git cannot list has neither: a key-only run there hashed
+# nothing, and a sandbox run fell back to copying whatever was on disk. The root must BE the work
+# tree's top, not merely sit inside one, or an enclosing repository would answer for a tree it does
+# not describe. Every caller (both pre-push hooks, the hermetic-runner probes, readset-skip's I66 arm)
+# runs on a git tree.
+hr_top="$(cd "$HR_ROOT" && git rev-parse --show-toplevel 2>/dev/null)" || hr_top=""
+[ -n "$hr_top" ] && hr_top="$(cd "$hr_top" && pwd -P)"
+[ "$hr_top" = "$HR_ROOT" ] || { printf 'hermetic-run: %s: hermetic-run needs a git work tree to derive the copy population, and %s is not the top of one\n' "$HR_FX" "$HR_ROOT" >&2; exit 2; }
+
+# THE POPULATION, ONE FUNCTION FOR THE KEY AND THE SANDBOX, built from the hook's own READSET_UNIVERSE
+# span. It writes $HR_WORK/p/.paths: tracked plus untracked-unignored, minus git-ignored, minus the
+# content key's excluded tops -- the readset_manifest `.paths` stage, BEFORE that function's `[ -f ]`
+# filter, so a tracked link to a directory, a dangling link and a gitlink are still in it. The SANDBOX
+# copies from this list and refuses from it.
+# `key` mode additionally runs readset_manifest itself into $HR_WORK/m, whose `.now` (the `-f` entries
+# hashed; `-f` follows a link) is the only thing the KEY reads, and requires its `.paths` to equal ours
+# byte for byte. The sandbox does not hash: hashing the whole tree on every sandboxed run is the cost
+# the key-only path alone pays. The equality check is what makes the two compositions one population.
+# Exit 2 when the span cannot be read or the two `.paths` disagree.
+hr_population() { # <copy|key>
+  local span="$HR_WORK/universe.sh"
+  sed -n '/^# READSET_UNIVERSE_BEGIN$/,/^# READSET_UNIVERSE_END$/p' "$HR_HOOK" > "$span"
+  grep -q '^readset_manifest() ' "$span" || { printf 'hermetic-run: %s carries no READSET_UNIVERSE span with readset_manifest\n' "$HR_HOOK" >&2; return 2; }
+  (
+    cd "$HR_ROOT" || exit 2
+    READSET_MAP=/dev/null READSET_LOCAL=/dev/null
+    . "$span" || exit 2
+    o="$HR_WORK/p"; mkdir -p "$o" || exit 2
+    { git -c core.quotePath=false ls-files 2>/dev/null
+      git -c core.quotePath=false ls-files --others --exclude-standard 2>/dev/null
+      readset_rows "$o" paths
+    } | readset_universe_paths | sort -u > "$o/.paths.all"
+    readset_drop_ignored "$o/.paths.all" "$o/.paths" || { printf 'hermetic-run: git check-ignore failed under %s, so the copy population is unknown\n' "$HR_ROOT" >&2; exit 2; }
+    [ "$1" = key ] || exit 0
+    mkdir -p "$HR_WORK/m" && readset_manifest "$HR_WORK/m"
+    cmp -s "$o/.paths" "$HR_WORK/m/.paths" || { printf 'hermetic-run: the copy population and readset_manifest disagree under %s -- the key and the sandbox would describe different trees\n' "$HR_ROOT" >&2; exit 2; }
+  )
+}
+if [ "$HR_KEY_ONLY" = 1 ]; then hr_population key || exit 2; else hr_population copy || exit 2; fi
+[ -s "$HR_WORK/p/.paths" ] || { printf 'hermetic-run: %s: git lists nothing under %s, so there is no copy population\n' "$HR_FX" "$HR_ROOT" >&2; exit 2; }
+
 # THE KEY ROWS, derived from the declaration against the live tree, in the hook's grammar. The
 # population is what git can see (tracked plus untracked-unignored), which is the hook's universe
 # minus the content key's excluded tops; a declaration naming a path under an excluded top is keyed
@@ -222,16 +266,12 @@ fi
 # immediate entry names IMPLIED BY THE FILE LIST (C-sorted, one per line -- the hook's
 # readset_listings grammar, never readdir); every file under the fixture's own directory; and each
 # declared tool by absolute path.
+# THE ROWS GO TO A FILE AND THE SUBSHELL'S EXIT IS RETURNED. Piped straight into `sort -u` (no
+# pipefail), its `exit 2` on an unhashable tree was discarded and `--key-only` printed nothing at exit 0.
 hr_key_rows() {
-  local hook="$HR_HOOK" span
-  span="$HR_WORK/universe.sh"
-  sed -n '/^# READSET_UNIVERSE_BEGIN$/,/^# READSET_UNIVERSE_END$/p' "$hook" > "$span"
-  grep -q '^readset_manifest() ' "$span" || { printf 'hermetic-run: %s carries no READSET_UNIVERSE span with readset_manifest\n' "$hook" >&2; return 2; }
+  local hr_kr
   (
     cd "$HR_ROOT" || exit 2
-    READSET_MAP=/dev/null READSET_LOCAL=/dev/null
-    . "$span" || exit 2
-    mkdir -p "$HR_WORK/m" && readset_manifest "$HR_WORK/m"
     [ -s "$HR_WORK/m/.now" ] || { printf 'hermetic-run: could not hash the working tree under %s\n' "$HR_ROOT" >&2; exit 2; }
     cut -f1 "$HR_WORK/m/.now" > "$HR_WORK/kall"
     { while IFS= read -r p; do [ -n "$p" ] && grep -xF -- "$p" "$HR_WORK/kall"; done < "$HR_WORK/files"
@@ -255,7 +295,9 @@ hr_key_rows() {
     [ -s "$HR_WORK/tools" ] && tr '\n' '\000' < "$HR_WORK/tools" | xargs -0 shasum -a 256 -- 2>/dev/null \
       | awk '{ p = $0; sub(/^[0-9a-f]+  /, "", p); print p "\t" $1 }'
     :
-  ) | LC_ALL=C sort -u
+  ) > "$HR_WORK/krows"; hr_kr=$?
+  [ "$hr_kr" = 0 ] || return "$hr_kr"
+  LC_ALL=C sort -u "$HR_WORK/krows"
 }
 if [ "$HR_KEY_ONLY" = 1 ]; then hr_key_rows; exit $?; fi
 
@@ -265,35 +307,87 @@ if [ "$HR_KEY_ONLY" = 1 ]; then hr_key_rows; exit $?; fi
 # fixture comparing AI_DLC_PROJECT_ROOT against its own `pwd` must see one spelling.
 mkdir -p "$HR_WORK/sb" "$HR_WORK/home" "$HR_WORK/tmp" || exit 2
 HR_SB="$(cd "$HR_WORK/sb" && pwd -P)" || exit 2
-# DIRECTORIES FIRST, FILES SECOND, AND THE DIRECTORY COPY REFUSES AN EXISTING TARGET. A declared
-# file under a declared directory had made the file's parent exist before `cp -Rp dir target` ran,
-# and BSD cp then copies INTO an existing target, nesting `d/d/` inside the sandbox -- measured by
-# the tip adversary. Copying directories first means a target never pre-exists; a declared
-# directory that is a sub-tree of another declared directory is already present after the outer
-# copy and is skipped rather than nested.
-# A SYMLINK IS A READ OUTSIDE THE DECLARATION. `cp -Rp` keeps a link as a link, so a declared
-# directory holding `lnk -> /etc/hosts` lets the sandboxed fixture read a file nobody declared --
-# measured by the tip adversary. Refused, not dereferenced: a dereferenced copy would silently key
-# the fixture on the link and not on its target. The fixture's own directory is held to the same rule.
+# A DECLARED DIRECTORY IS COPIED BY ITS POPULATION, NEVER BY `cp -Rp`. The key covers only what git
+# can see (tracked plus untracked-unignored, $HR_WORK/p/.paths); a whole-directory copy also carried
+# every IGNORED file, none of them keyed. Measured on the reference consumer: `.claude/skills` held 221
+# tracked and 1091 ignored files, all copied, and one ignored link (`swap-integration`, listed in its
+# .gitignore) refused every fixture declaring `core/skills/`. Now the sandbox holds exactly the files
+# the key names, by construction, and an ignored path is neither copied nor refused.
+# A SYMLINK IN THE POPULATION IS A READ OUTSIDE THE DECLARATION: exit 2 naming it. Refused, not
+# dereferenced -- a dereferenced copy would key the fixture on the link and not on its target. The
+# test is `-L` over the PRE-`-f` list, so a link to a directory and a dangling link (no `.now` row,
+# since `-f` follows links) are refused as well as a link to a file. A GITLINK (mode 160000) under a
+# declared directory is refused too: its contents belong to another repository's key.
+# Every declared directory exists in the sandbox even when its population is empty, and every copy is
+# `cp -p` per parent directory, so modes (an executable non-.sh file) survive. A declared directory
+# under another declared directory is simply re-listed; the copy refuses nothing that exists.
+# DECLARED FILES keep the direct `cp -p` below and are NOT gated by the population: a dist sandbox
+# declares VERSION and docs/backlog*.md, which sit under EXCLUDED tops and so are in no population.
+: > "$HR_WORK/copy"
+if [ -s "$HR_WORK/dirs" ]; then
+  ( cd "$HR_ROOT" && git -c core.quotePath=false ls-files -s 2>/dev/null ) \
+    | awk '$1 == "160000" { sub(/^[^\t]*\t/, ""); print }' > "$HR_WORK/gitlinks"
+  # Every population entry under a declared directory, one awk over the list. A name git QUOTES is
+  # listed with a leading `"`, so its prefix is matched after that quote too, or it would never reach
+  # the refusal below.
+  awk -F'\t' -v dl="$HR_WORK/dirs" 'BEGIN { while ((getline l < dl) > 0) if (l != "") d[++n] = l "/" }
+    { for (i = 1; i <= n; i++) if (index($1, d[i]) == 1 || index($1, "\"" d[i]) == 1) { print $1; next } }' "$HR_WORK/p/.paths" > "$HR_WORK/under"
+  awk -v dl="$HR_WORK/dirs" 'BEGIN { while ((getline l < dl) > 0) if (l != "") d[++n] = l "/" }
+    { for (i = 1; i <= n; i++) if (index($0, d[i]) == 1) { print; next } }' "$HR_WORK/gitlinks" > "$HR_WORK/under.gl"
+  if [ -s "$HR_WORK/under.gl" ]; then
+    printf 'hermetic-run: %s: %s is a gitlink (submodule) under a declared directory -- its contents are another repository'"'"'s, so it cannot be copied into the sandbox\n' "$HR_FX" "$(head -1 "$HR_WORK/under.gl")" >&2; exit 2
+  fi
+  # A NAME GIT STILL QUOTES (tab, newline, `"`, `\`) cannot be tested or copied by its listed
+  # spelling, so it would be dropped silently; refused here on its own terms rather than by relying
+  # on readset_manifest's quoted-path guard, which governs only the key.
+  if grep -q '^"' "$HR_WORK/under"; then
+    printf 'hermetic-run: %s: %s is a name git quotes, so it cannot be copied into the sandbox by its listed spelling\n' "$HR_FX" "$(grep '^"' "$HR_WORK/under" | head -1)" >&2; exit 2
+  fi
+  while IFS= read -r e; do
+    if [ -L "$HR_ROOT/$e" ]; then
+      printf 'hermetic-run: %s: %s is a symlink -- a link reaches outside the declaration, so it cannot be copied into the sandbox\n' "$HR_FX" "$e" >&2; exit 2
+    fi
+    [ -f "$HR_ROOT/$e" ] && printf '%s\n' "$e" >> "$HR_WORK/copy"
+  done < "$HR_WORK/under"
+fi
+while IFS= read -r d; do
+  [ -n "$d" ] || continue
+  mkdir -p "$HR_SB/$d" || exit 2
+done < "$HR_WORK/dirs"
+# One `cp -p` per destination parent directory, not one per file.
+if [ -s "$HR_WORK/copy" ]; then
+  LC_ALL=C sort -u "$HR_WORK/copy" | awk '{ p = $0; i = match(p, /\/[^\/]*$/); print (i > 0 ? substr(p, 1, i - 1) : ".") "\t" p }' > "$HR_WORK/copy.bp"
+  hr_par=""; set --
+  while IFS="$(printf '\t')" read -r par f; do
+    if [ "$par" != "$hr_par" ]; then
+      [ $# -eq 0 ] || cp -p "$@" "$HR_SB/$hr_par/" || exit 2
+      set --; hr_par="$par"; mkdir -p "$HR_SB/$par" || exit 2
+    fi
+    set -- "$@" "$HR_ROOT/$f"
+  done < "$HR_WORK/copy.bp"
+  [ $# -eq 0 ] || cp -p "$@" "$HR_SB/$hr_par/" || exit 2
+fi
 hr_no_symlinks() { # <root-relative path, file or dir>: exit 2 naming the first symlink under it
   local l
   l="$(cd "$HR_ROOT" && /usr/bin/find "$1" -type l -print 2>/dev/null | head -1)"
   [ -z "$l" ] || { printf 'hermetic-run: %s: %s is a symlink -- a link reaches outside the declaration, so it cannot be copied into the sandbox\n' "$HR_FX" "$l" >&2; exit 2; }
 }
-while IFS= read -r d; do
-  [ -n "$d" ] || continue
-  hr_no_symlinks "$d"
-  [ -e "$HR_SB/$d" ] && continue
-  mkdir -p "$HR_SB/$(dirname "$d")" && cp -Rp "$HR_ROOT/$d" "$HR_SB/$d" || exit 2
-done < "$HR_WORK/dirs"
 while IFS= read -r p; do
   [ -n "$p" ] || continue
   hr_no_symlinks "$p"
   [ -f "$HR_SB/$p" ] && continue
   mkdir -p "$HR_SB/$(dirname "$p")" && cp -p "$HR_ROOT/$p" "$HR_SB/$p" || exit 2
 done < "$HR_WORK/files"
+# THE FIXTURE'S OWN DIRECTORY IS THE STATED EXCEPTION: copied whole with `cp -Rp`, links refused by
+# `hr_no_symlinks` over the disk. Two reasons. `--fixture-dir` names a directory OUTSIDE the work tree
+# (the self-update path runs a fixture from a scratch copy), which git cannot list; and the key already
+# covers this directory as git sees it, so an ignored file here is a file the fixture's own author put
+# beside its run.sh. The population rule binds the DECLARED inputs, which is where a consumer's ignored
+# tree lives.
+mkdir -p "$HR_SB/$HR_FXROOT" || exit 2
 hr_no_symlinks "$HR_FXROOT/$HR_FX"
-mkdir -p "$HR_SB/$HR_FXROOT" && cp -Rp "$HR_FXDIR" "$HR_SB/$HR_FXROOT/$HR_FX" || exit 2
+[ "$HR_FXDIR" = "$HR_ROOT/$HR_FXROOT/$HR_FX" ] || hr_no_symlinks "$HR_FXDIR"
+cp -Rp "$HR_FXDIR" "$HR_SB/$HR_FXROOT/$HR_FX" || exit 2
 # UNKEYED TOOLS (`?name`) are resolved HERE, after the --key-only exit above, so the key is byte-identical
 # with and without the line. `command -v` on the invoker's PATH must answer an absolute executable path:
 # a function, an alias or a bare word is not one.

@@ -219,3 +219,22 @@ fixture data was built for the sibling `procsub-staged-refusal` and failed enfor
 second corpus. It leaves this list only by a committed trace; its three shards are three such traces. `hermetic-runner`,
 `self-update-gate` and `subject-partition` are untouched here.
 
+## BL-491 — the hermetic runner copied a declared directory whole, so an ignored link refused it
+
+**DEFECT, PC-S317-HERMETIC-RUN-REFUSES-CONSUMER-SKILL-SYMLINKS.** `core/scripts/hermetic-run.sh` copied each declared
+directory with `cp -Rp` and refused any symlink found on disk under it, while the KEY covered only tracked plus
+untracked-unignored files. On the reference consumer `.claude/skills/swap-integration` is a link listed in its
+`.gitignore`, so every fixture declaring `core/skills/` exited 2 and every push failed. `.claude/skills` there holds
+221 tracked files and over a thousand ignored ones, all copied and none keyed.
+
+The fix copies a declared directory by its git population (the `readset_manifest` `.paths` stage, before its `-f`
+filter), refuses any `-L` entry and any gitlink in that population, creates every declared directory, and copies with
+`cp -p`. The key still reads `.now` only and is byte-identical. `--key-only` now exits 2 when hashing fails, and a root
+that is not the top of a git work tree is exit 2. Arms P, Q, R, S, T, U and W in `core/fixtures/hermetic-runner`, with
+mutants M7 to M11, carry it.
+
+The receipt passes when an ignored link under a declared directory leaves the run at exit 0 with the link absent from
+the sandbox, and the same link force-tracked exits 2. Scored under `set -uo pipefail`: tip 0, base 1, and 1 against
+the copy loop reverted to `cp -Rp`.
+
+verify: sh d="$(mktemp -d)" || exit 9; [ -f core/scripts/hermetic-run.sh ] && [ -f .githooks/pre-push ] || exit 9; mkdir -p "$d/lib" "$d/.githooks" "$d/core/fixtures/probe" && cp .githooks/pre-push "$d/.githooks/pre-push" && printf 'x\n' > "$d/lib/x.txt" && printf '#!/usr/bin/env bash\ncat lib/x.txt && [ ! -e lib/ilnk ] && [ ! -L lib/ilnk ]\n' > "$d/core/fixtures/probe/run.sh" && printf 'lib/\n' > "$d/core/fixtures/probe/inputs.decl" && printf 'lib/ilnk\n' > "$d/.gitignore" && ( cd "$d" && git init -q && git add -A && git -c user.name=t -c user.email=t@t commit -qm p ) >/dev/null 2>&1 && ln -s /etc/hosts "$d/lib/ilnk" || exit 9; bash core/scripts/hermetic-run.sh --root "$d" probe >/dev/null 2>&1; a=$?; ( cd "$d" && git add -f lib/ilnk && git -c user.name=t -c user.email=t@t commit -qm t ) >/dev/null 2>&1 || exit 9; o="$(bash core/scripts/hermetic-run.sh --root "$d" probe 2>&1)"; b=$?; rm -rf "$d"; [ "$a" = 0 ] && [ "$b" = 2 ] && grep -q 'lib/ilnk is a symlink' <<<"$o"

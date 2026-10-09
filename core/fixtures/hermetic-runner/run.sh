@@ -25,7 +25,17 @@
 #      does not move when content changes (control: the file row moves)
 #   H  --fixture-dir is honoured
 #   I  the same runner honours a tests/fixtures/ (consumer) layout
-#   M  three mutants of the runner, each built on a COPY and guarded by `cmp -s`, each of which
+#   P  a declared directory is copied by its git population: an ignored link and an ignored file
+#      are absent and do not refuse, the tracked sibling is present, an empty-population declared
+#      dir exists, an executable non-.sh file keeps its mode
+#   Q  a tracked dir-link and a tracked dangling link are refused (control: a regular sub-directory)
+#   R  an untracked-unignored file-link is refused
+#   W  an untracked-unignored dir-link is refused
+#   S  a gitlink under a declared directory is refused
+#   T  the key did not move: with a deleted tracked file, runner rows equal the hook's
+#   U  a non-git root is exit 2; --key-only on an unhashable tree is non-zero; a name git quotes
+#      under a declared dir is exit 2 (near-miss: the same name outside every declared dir, exit 0)
+#   M  mutants of the runner, each built on a COPY and guarded by `cmp -s`, each of which
 #      must fail exactly its own arms
 #   cwd  the verdict is the same from two different working directories
 #
@@ -750,6 +760,147 @@ arm_N() {
   else echo "  SKIP  $CUR: $xp has no git-upload-pack"; ok "$CUR: git-upload-pack skipped visibly"; fi
   FXR="$FXR_SAVE"
 }
+# --- P..W: a declared directory is copied by its GIT POPULATION, links in it are refused ----------
+# The key covers tracked plus untracked-unignored files; the sandbox must hold exactly those. A
+# whole-directory copy carried every IGNORED file too, and one ignored link (the reference consumer's
+# `.claude/skills/swap-integration`) refused every fixture declaring `core/skills/`.
+stub_pop()       { cat <<'EOF'
+printf 'SBROOT=%s\n' "$(pwd -P)"
+find . -type f | LC_ALL=C sort
+[ -d emp ] && echo "EMPTY-DIR-PRESENT"
+[ -x lib/tool ] && echo "EXEC-MODE-KEPT"
+EOF
+}
+commit_all() { ( cd "$1" && git add -A && git -c user.name=t -c user.email=t@t commit -qm "$2" ) >/dev/null 2>&1; }
+# P: ignored link and ignored file under a declared dir are neither copied nor refused; the tracked
+# sibling is there (control); a declared dir whose population is empty still exists; a tracked
+# executable non-.sh file keeps its mode.
+arm_P() {
+  CUR=P
+  local P="$WK/P1" sb
+  mk_probe "$P" stub_pop $'data/a.txt\nlib/\nemp/'
+  mkdir -p "$P/emp" && printf 'i\n' > "$P/emp/only.log"
+  printf 'lib/ign.txt\nlib/ilnk\nemp/\n' > "$P/.gitignore"
+  printf 'ignored\n' > "$P/lib/ign.txt"
+  ln -s /etc/hosts "$P/lib/ilnk"
+  printf '#!/bin/sh\necho t\n' > "$P/lib/tool" && chmod 755 "$P/lib/tool"
+  commit_all "$P" pop
+  mkdir -p "$WK/P.tmp"
+  OUT="$(TMPDIR="$WK/P.tmp" AI_DLC_HERMETIC_KEEP=1 bash "$RUN" --root "$P" probe 2>&1)"; RC=$?
+  sb="$(sed -n 's/^SBROOT=//p' <<<"$OUT" | head -1)"
+  eq "ignored link + ignored file under a declared dir: exit 0" "$RC" 0
+  [ -n "$sb" ] && [ -d "$sb" ] && ok "$CUR: the kept sandbox is on disk" || bad "$CUR: no kept sandbox ($sb)"
+  [ -n "$sb" ] && [ -f "$sb/lib/x.txt" ] && ok "$CUR: control: tracked sibling lib/x.txt is in the sandbox" || bad "$CUR: tracked sibling lib/x.txt absent"
+  [ -n "$sb" ] && [ ! -e "$sb/lib/ilnk" ] && [ ! -L "$sb/lib/ilnk" ] && ok "$CUR: ignored link lib/ilnk is ABSENT from the sandbox" || bad "$CUR: ignored link lib/ilnk reached the sandbox"
+  [ -n "$sb" ] && [ ! -e "$sb/lib/ign.txt" ] && ok "$CUR: ignored file lib/ign.txt is ABSENT from the sandbox" || bad "$CUR: ignored file lib/ign.txt reached the sandbox"
+  yes "declared dir with an empty population exists in the sandbox" "$OUT" "EMPTY-DIR-PRESENT"
+  yes "executable non-.sh file keeps its mode" "$OUT" "EXEC-MODE-KEPT"
+  [ -x "$P/lib/tool" ] && ok "$CUR: control: lib/tool is executable at the source" || bad "$CUR: lib/tool not executable at the source"
+  [ -L "$P/lib/ilnk" ] && [ -f "$P/lib/ign.txt" ] && ok "$CUR: control: both ignored paths exist at the source" || bad "$CUR: an ignored path is missing at the source"
+}
+# Q: a TRACKED link that is not a regular file -- to a directory, or dangling -- is refused. `-f`
+# follows links, so a check placed after an `-f` filter would never see either of these.
+arm_Q() {
+  CUR=Q
+  mk_probe "$WK/Q1" stub_read_all $'data/a.txt\nlib/'
+  ln -s ../data "$WK/Q1/lib/dlnk"; commit_all "$WK/Q1" dlnk
+  run_hr "$WK/Q1"
+  eq "tracked dir-link under a declared dir: exit 2" "$RC" 2
+  yes "tracked dir-link: message names it" "$OUT" "lib/dlnk is a symlink"
+  mk_probe "$WK/Q2" stub_read_all $'data/a.txt\nlib/'
+  ln -s no-such-target "$WK/Q2/lib/dang"; commit_all "$WK/Q2" dang
+  run_hr "$WK/Q2"
+  eq "tracked dangling link under a declared dir: exit 2" "$RC" 2
+  yes "tracked dangling link: message names it" "$OUT" "lib/dang is a symlink"
+  # Near-miss: a tracked regular sub-directory in the same place is copied (exit 0).
+  mk_probe "$WK/Q3" stub_ls $'data/a.txt\nlib/'
+  mkdir -p "$WK/Q3/lib/sub2" && printf 's\n' > "$WK/Q3/lib/sub2/s.txt"; commit_all "$WK/Q3" sub2
+  run_hr "$WK/Q3"
+  eq "control: a tracked regular sub-directory: exit 0" "$RC" 0
+  yes "control: the sub-directory's file is copied" "$OUT" "./lib/sub2/s.txt"
+}
+# R: an untracked, unignored link to a FILE is in the population and is refused.
+arm_R() {
+  CUR=R
+  mk_probe "$WK/R1" stub_read_all $'data/a.txt\nlib/'
+  ln -s /etc/hosts "$WK/R1/lib/uflnk"
+  [ -z "$(cd "$WK/R1" && git ls-files lib/uflnk)" ] && ok "$CUR: control: lib/uflnk is untracked" || bad "$CUR: lib/uflnk is tracked"
+  run_hr "$WK/R1"
+  eq "untracked-unignored file-link under a declared dir: exit 2" "$RC" 2
+  yes "untracked-unignored file-link: message names it" "$OUT" "lib/uflnk is a symlink"
+}
+# W: an untracked, unignored link to a DIRECTORY -- both an -f-ordered check and a tracked-only
+# check miss it, so it has its own arm.
+arm_W() {
+  CUR=W
+  mk_probe "$WK/W1" stub_read_all $'data/a.txt\nlib/'
+  ln -s ../data "$WK/W1/lib/udlnk"
+  run_hr "$WK/W1"
+  eq "untracked-unignored dir-link under a declared dir: exit 2" "$RC" 2
+  yes "untracked-unignored dir-link: message names it" "$OUT" "lib/udlnk is a symlink"
+}
+# S: a gitlink (mode 160000) under a declared directory is refused.
+arm_S() {
+  CUR=S
+  local P="$WK/S1" h
+  mk_probe "$P" stub_read_all $'data/a.txt\nlib/'
+  h="$(cd "$P" && git rev-parse HEAD)"
+  ( cd "$P" && git update-index --add --cacheinfo "160000,$h,lib/sub" && git -c user.name=t -c user.email=t@t commit -qm gl ) >/dev/null 2>&1
+  [ "$(cd "$P" && git ls-files -s lib/sub | cut -c1-6)" = 160000 ] && ok "$CUR: control: lib/sub is a gitlink in the index" || bad "$CUR: the gitlink was not recorded"
+  run_hr "$P"
+  eq "gitlink under a declared dir: exit 2" "$RC" 2
+  yes "gitlink: message names it" "$OUT" "lib/sub is a gitlink"
+}
+# T: THE KEY DID NOT MOVE. A tracked file deleted from the working tree is in the copy population
+# (.paths) and not in the key (.now); the runner's rows must equal the hook's own and the listing must
+# be the one the key population implies.
+arm_T() {
+  CUR=T
+  local FXR_SAVE="$FXR" P="$WK/T1" hk hr lsha want
+  FXR="$(hook_fxroot)"
+  mk_probe "$P" stub_named $'data/a.txt\nlib/'
+  rm "$P/lib/y.txt"
+  [ -n "$(cd "$P" && git ls-files lib/y.txt)" ] && ok "$CUR: control: lib/y.txt is still tracked" || bad "$CUR: lib/y.txt is not tracked"
+  hook_dump "$P" "$P/.githooks/pre-push" "$WK/T1.o"
+  hk="$(grep -v '^#' "$WK/T1.o/.k/probe" 2>/dev/null)"
+  hr="$(bash "$RUN" --root "$P" --key-only probe 2>/dev/null)"
+  [ -n "$hk" ] && ok "$CUR: hook row set is non-empty" || bad "$CUR: hook row set empty"
+  if [ "$hk" = "$hr" ]; then ok "$CUR: runner rows equal the hook's with a deleted tracked file"; else bad "$CUR: runner rows differ from the hook's"; fi
+  want="$(printf 'x.txt\n' | shasum -a 256 | awk '{ print $1 }')"
+  lsha="$(sed -n "s/^lib\/${T}#listing://p" <<<"$hr")"
+  eq "lib/ listing is the key population's (x.txt only)" "$lsha" "$want"
+  FXR="$FXR_SAVE"
+}
+# U: a root git cannot list is exit 2 with a named message, and --key-only on a tree whose hashing
+# fails exits non-zero (control: the same tree without the unhashable name prints rows at 0).
+arm_U() {
+  CUR=U
+  local P="$WK/U1" P2="$WK/U2" rows
+  mk_probe "$P" stub_named 'data/a.txt'
+  mv "$P/.git" "$P/.git.off"
+  run_hr "$P"
+  eq "non-git root: exit 2" "$RC" 2
+  yes "non-git root: message" "$OUT" "needs a git work tree"
+  mk_probe "$P2" stub_named 'data/a.txt'
+  rows="$(bash "$RUN" --root "$P2" --key-only probe 2>/dev/null)"; RC=$?
+  eq "control: --key-only on a hashable tree: exit 0" "$RC" 0
+  yes "control: --key-only printed the declared row" "$rows" "data/a.txt${T}"
+  printf 'q\n' > "$P2/data/q\"x.txt"
+  OUT="$(bash "$RUN" --root "$P2" --key-only probe 2>&1)"; RC=$?
+  [ "$RC" -ne 0 ] && ok "$CUR: --key-only on an unhashable tree exits non-zero ($RC)" || bad "$CUR: --key-only on an unhashable tree exited 0"
+  yes "unhashable tree: the hashing message" "$OUT" "could not hash the working tree"
+  # Near-miss for the copy-path refusal below: the quoted name sits under an UNDECLARED directory,
+  # so it is in no declared population and the sandbox run is exit 0.
+  run_hr "$P2"
+  eq "near-miss: quoted name outside every declared dir: sandbox run exit 0" "$RC" 0
+  # A name git quotes UNDER a declared directory cannot be copied by its listed spelling: exit 2.
+  local P3="$WK/U3"
+  mk_probe "$P3" stub_read_all $'data/a.txt\nlib/'
+  printf 'q\n' > "$P3/lib/q\"x.txt"
+  run_hr "$P3"
+  eq "quoted name under a declared dir: exit 2" "$RC" 2
+  yes "quoted name under a declared dir: message" "$OUT" "is a name git quotes"
+}
 run_arms() { arm_A; arm_B; arm_C; arm_D; arm_E; arm_F; arm_H; arm_I; arm_K; arm_L; arm_N; }
 
 # --- main run -----------------------------------------------------------------------------------
@@ -758,11 +909,11 @@ if [ -z "$HOOK_SRC" ]; then echo "FIXTURE ERROR: no pre-push hook with a READSET
 # The main pass runs its arms in parallel subshells, each with its own output and FAILED file, then
 # replays the output in arm order so the transcript reads as before.
 mkdir -p "$WORK/par"
-for _a in A B C D E F H I K L N G J; do
+for _a in A B C D E F H I K L N G J P Q R S T U W; do
   ( "arm_$_a" > "$WORK/par/$_a.out" 2>&1; printf '%s' "$FAILED" > "$WORK/par/$_a.failed" ) &
 done
 wait
-for _a in A B C D E F H I K L N G J; do
+for _a in A B C D E F H I K L N G J P Q R S T U W; do
   cat "$WORK/par/$_a.out"
   [ -f "$WORK/par/$_a.failed" ] || { echo "FIXTURE ERROR: arm $_a produced no verdict" >&2; exit 2; }
   FAILED="$FAILED$(cat "$WORK/par/$_a.failed")"
@@ -791,17 +942,27 @@ run_mutant() {
 
 if [ "$NESTED" != 1 ]; then
   run_mutant M1 "B D" 'if ! grep -qxF -e "HERMETIC-CONSUMED $rr"' 'if false && grep -qxF -e "HERMETIC-CONSUMED $rr"' &
-  run_mutant M2 "A C D L B" 'mkdir -p "$HR_SB/$HR_FXROOT" && cp -Rp "$HR_FXDIR" "$HR_SB/$HR_FXROOT/$HR_FX" || exit 2' 'cp -Rp "$HR_ROOT/." "$HR_SB/" ; mkdir -p "$HR_SB/$HR_FXROOT/$HR_FX" && cp -Rp "$HR_FXDIR/." "$HR_SB/$HR_FXROOT/$HR_FX/" || exit 2' &
+  run_mutant M2 "A C D L B" 'mkdir -p "$HR_SB/$HR_FXROOT" || exit 2' 'cp -Rp "$HR_ROOT/." "$HR_SB/" ; mkdir -p "$HR_SB/$HR_FXROOT" || exit 2' &
   run_mutant M3 "F B" 'env -i PATH=' 'env PATH=' &
   run_mutant M4 "L A" '| bash "$HR_SCRIPT_DIR/core-paths.sh" --map >' '| cat >' &
   run_mutant M5 "K A" "'?'*)" "'NEVER?'*)" &
   run_mutant M6 "F B" 'HR_WORK="$(cd "$HR_WORK" && pwd -P)" || exit 2' 'HR_WORK="$HR_WORK"' &
+  # M7: a declared directory copied whole again (`cp -Rp`): the ignored link and file reach the sandbox.
+  run_mutant M7 "P Q" '  mkdir -p "$HR_SB/$d" || exit 2' '  { mkdir -p "$HR_SB/$(dirname "$d")" && { [ -e "$HR_SB/$d" ] || cp -Rp "$HR_ROOT/$d" "$HR_SB/$d"; }; } || exit 2' &
+  # M8: the link test placed behind an `-f` filter: a dir-link and a dangling link pass.
+  run_mutant M8 "Q W R" '    if [ -L "$HR_ROOT/$e" ]; then' '    if [ -f "$HR_ROOT/$e" ] && [ -L "$HR_ROOT/$e" ]; then' &
+  # M9: the link test scoped to TRACKED entries: untracked-unignored links pass.
+  run_mutant M9 "R W Q" '    if [ -L "$HR_ROOT/$e" ]; then' '    if [ -L "$HR_ROOT/$e" ] && ( cd "$HR_ROOT" && git ls-files --error-unmatch -- "$e" >/dev/null 2>&1 ); then' &
+  # M10: the copy population fed into the key: a deleted tracked file moves the listing row.
+  run_mutant M10 "T G" 'cut -f1 "$HR_WORK/m/.now" > "$HR_WORK/kall"' 'cat "$HR_WORK/p/.paths" > "$HR_WORK/kall"' &
+  # M11: the key subshell's exit lost again: an unhashable tree prints nothing at exit 0.
+  run_mutant M11 "U G" ') > "$HR_WORK/krows"; hr_kr=$?' ') > "$HR_WORK/krows"; hr_kr=0' &
   # cwd-invariance: two nested runs of this fixture from different working directories.
   ( cd "$ROOT" && HERMETIC_FX_NESTED=1 bash "$HERE/run.sh" > "$WORK/cwd1.out" 2>&1; echo $? > "$WORK/cwd1.rc" ) &
   ( cd "$(dirname "$RUN")" && HERMETIC_FX_NESTED=1 bash "$HERE/run.sh" > "$WORK/cwd2.out" 2>&1; echo $? > "$WORK/cwd2.rc" ) &
   wait
   CUR=M
-  for pair in "M1:B" "M2:A C D L" "M3:F" "M4:L" "M5:K" "M6:F"; do
+  for pair in "M1:B" "M2:A C D L" "M3:F" "M4:L" "M5:K" "M6:F" "M7:P" "M8:Q W" "M9:R W" "M10:T" "M11:U"; do
     mname="${pair%%:*}"; want="$(failed_set "${pair#*:}")"
     got="$(cat "$WORK/mut-$mname.res" 2>/dev/null)"
     if [ "$got" = "BROKEN" ] || [ -z "$got" ] && [ "$want" != "" ] && [ "$got" = "BROKEN" ]; then
