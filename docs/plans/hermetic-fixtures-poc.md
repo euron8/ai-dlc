@@ -83,13 +83,22 @@ declaration (`apply-restamp-worklist`'s T1-T4 had silently skipped on every cons
 cause: the no-repo-input and lib-only fixtures (stay on the map), the `BL-487` class, `self-update-gate`
 (live `show-toplevel`, action 5), and `review-shard-merge-mutants` (deferred to `BL-485`'s shards).
 
-**What the next batch owes.** Action 5: re-root the class-b rows, starting with the four in `BL-487`
-and `self-update-gate`; each is a fixture edit (scrub the override before driving the subject, or pass
-`--root`, or reuse the fixture's own candidate loop), then a declaration by the action-3 method. Before
-any gate: `bash scripts/validate-enforcement-map.sh` on the stacked branch must exit 0, and every
-sentinel obeys the two rules the 0.753.0 gate taught (no `$(dirname "$X")/../<subtree>` walk; a
-`run.sh` naming `core/hooks/` or `$HOOK` carries the `AI_DLC_*` scrub loop). Batch 208 (`ai-dlc-cd`)
-rewrites `BL-485`'s receipt when it builds the shards; do not touch that entry.
+**THE PUSH IS NOT SHORTER, AND THAT IS NOW ANOTHER PLAN'S JOB.** 157 declarations in
+smallest-map-rows-first order left the four longest fixtures untouched, and a push costs its single
+longest selected fixture. The operator ruled at batch 209's close that the pole comes first:
+`docs/plans/hermetic-pole.md` carries that work, is running on its own session, and holds the main
+checkout for its gate. This plan's remaining action is small and must not contend with it.
+
+**What the next batch owes.** Action 5: re-root the five class-b rows (`BL-487`'s four and
+`self-update-gate`), none of which is a pole fixture, so none moves the push. Each is a fixture edit
+(scrub the override before driving the subject, or pass `--root`, or reuse the fixture's own candidate
+loop), then a declaration by the action-3 method, measured in the clone. Hold the result on a branch:
+**its gate runs only after `hermetic-pole.md`'s first release has LANDED**, read as a CHANGELOG heading
+on `origin/main` whose entry cites that plan, or with that session's explicit window. Before any gate:
+`bash scripts/validate-enforcement-map.sh` on the stacked branch must exit 0, and every sentinel obeys
+the two rules the 0.753.0 gate taught (no `$(dirname "$X")/../<subtree>` walk; a `run.sh` naming
+`core/hooks/` or `$HOOK` carries the `AI_DLC_*` scrub loop). Batch 208 (`ai-dlc-cd`) rewrites `BL-485`'s
+receipt when it builds the shards; do not touch that entry.
 
 Your instructions are four sections. Read all four before acting: `## Start here` (the trees and
 the read/write boundary), `### NEXT ACTIONS — numbered, in order`, `### Ping the operator`, and
@@ -104,8 +113,10 @@ the read/write boundary), `### NEXT ACTIONS — numbered, in order`, `### Ping t
   `github/main`; if a release is unlanded on another session's branch, ask that session for its
   landed sha before basing on anything else.
 - **`/Users/n8/git/ai-dlc`** — the operator's main checkout. Edit nothing there and run no fixture,
-  hook or deriver there while another batch is pushing from it; check `ListAgents` and ask. The ONE
-  thing it is for is the gated release push (below). Every linked worktree under
+  hook or deriver there while another batch is pushing from it; check `ListAgents`, ask, AND WAIT
+  FOR EVERY ANSWER — a sent question is not a held window. Measured at batch 209: a session asked,
+  then ran `git checkout --detach` there before the answer arrived, under a gate that was mid-suite;
+  the gate was voided and re-run. The ONE thing it is for is the gated release push (below). Every linked worktree under
   `/Users/n8/git/ai-dlc/.claude/worktrees/` shares its `$GITDIR` and is bound by the same rule.
 - **`/Users/n8/git/graph`** — the consumer. Read it, never write it. `.claude/rules/consumer-boundary.md` is
   unconditional. Consumer-layout checks run on a tree built by `bash scripts/install.sh` into an
