@@ -31707,7 +31707,7 @@ verify: sh H=.githooks/pre-push; S=core/scripts/hermetic-run.sh; [ -f "$H" ] && 
 
 ## BL-480 — the local read-set map cannot see a directory's listing grow
 
-**LANDED (v0.754.0, verified c3239a16).** Local-map directory rows now carry `#listing:<sha>` and `readset_local_validate` refuses a `-` row while that name exists. The close condition below is met with one correction: the mutant restoring `-` on the local path (`dirplain`) is killed by the UNCHANGED-directory world `w10`, not by the grow world `w11` -- a `-` directory row is refused, which is exactly w11's expected outcome, so w11 cannot see that mutant. Known, not fixed: a gitlink's interior never matches its listing, so such a fixture is retraced every green push (fails safe).
+**LANDED (v0.754.0, verified ba8d8afd).** Local-map directory rows now carry `#listing:<sha>` and `readset_local_validate` refuses a `-` row while that name exists. The close condition below is met with one correction: the mutant restoring `-` on the local path (`dirplain`) is killed by the UNCHANGED-directory world `w10`, not by the grow world `w11` -- a `-` directory row is refused, which is exactly w11's expected outcome, so w11 cannot see that mutant. Known, not fixed: a gitlink's interior never matches its listing, so such a fixture is retraced every green push (fails safe).
 
 **DEFECT, filed at batch 204's close.** `0.745.0` gives a directory row its `#listing:<sha>` value on the COMMITTED
 digest path only. The local map (`ai-dlc-fixture-readsets.local`, written by `derive-fixture-readsets.sh --local-map`
