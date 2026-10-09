@@ -118,8 +118,25 @@ the history of the fixtures it actually ran, and records a row keyed on width an
 lowered. Buildable: `scripts/validate-suite-pole.sh:181` and the coverage check at `:744-748`, with the hook's
 `.last` as the dispatched set. Ships from the main checkout detached at its release commit if the hook changes.
 
+**BUILT, batch 216: the LOAD-BAND design.** A dispatched-set comparison was measured first and dropped. Over the
+last 21 measuring commits, a run with at least 3 comparable earlier rows was found for 0/21 by the exact dispatched
+set, 2-5/21 by a 90% cost-weighted Jaccard overlap of sets, and 10-17/21 by load within +-25% (17 if the 29 formerly
+unmapped fixtures always dispatch, 10 if not). A literal "share of the dispatched set's record cost" is x/x = 100%,
+because the hook folds the run into the record before the guard runs. So each history row now records two more
+columns: the run's LOAD (its timed cost over on-disk fixtures, less its own pole by name) and its dispatched count.
+A 7-column row is usable when its pole directory exists, this run timed its pole, and its load is within
++-`LOAD_BAND`=25% of this run's load. A legacy 5-column row is usable only when this run clears the old
+`COV_MIN=90` share test. Rows that fail are counted by reason on the output, never refused. The coverage SKIP is
+gone as an exit, and the share is printed. A seed whose pole was not timed now records. The validator's header,
+under COMPARABILITY, is the description; arms (a)-(g) of `core/fixtures/suite-pole-guard` are its probes. The
+fenced receipt below drives the validator with the hook's argv in a fresh git repo, under `set -uo pipefail`.
+First, a 67.85%-share keyed run must record a row, which base cannot do: it SKIPs on coverage. Then three
+calibrating runs. Then a unit that is cheap in history grows to 1000s; it must FAIL `GROWN`, because the grown
+unit does not count toward its own comparability. Last, a run at roughly 3x the load must CALIBRATE with all four
+rows out of band, and record. Scored batch 216: tip 0, base 1, drop-load-band 1, include-pole-in-load 1.
+
 ```
-V="$PWD/scripts/validate-suite-pole.sh"; [ -f "$V" ] || exit 9; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; R="$(mktemp -d)" && git init -q "$R" && G="$(git -C "$R" rev-parse --path-format=absolute --git-common-dir)" && mkdir -p "$R/core/fixtures/fx1" "$R/core/fixtures/fx2" "$R/docs" && echo 0 > "$R/VERSION" && echo 'exit 0' > "$R/core/fixtures/fx1/run.sh" && echo 'exit 0' > "$R/core/fixtures/fx2/run.sh" && printf '# history-band: 33\n# band: 15\n# jobs: 12\n# fixtures: 2\nfx1 100\n' > "$R/docs/suite-pole-baseline.tsv" || exit 9; L="$G/ai-dlc-fixture-durations.last"; D="$G/ai-dlc-fixture-durations"; hook() { o="$(cd "$R" && bash "$V" --durations "$L" --record "$D" --jobs 4 2>&1)"; c=$?; }; pole() { printf 'fx1 %s\nfx2 1\n' "$1" > "$L"; cp "$L" "$D"; echo 4 > "$L.jobs"; hook; }; printf 'fx1 10\n' > "$L"; printf 'fx1 10\nfx2 500\n' > "$D"; echo 4 > "$L.jobs"; hook; [ "$c" -eq 0 ] || exit 1; n=0; for s in 500 520 510; do n=$((n + 1)); pole "$s"; [ "$c" -eq 0 ] && grep -qF "CALIBRATING ($n/3)" <<<"$o" || exit 1; done; for s in 300 300 300; do pole "$s"; [ "$c" -eq 0 ] || exit 1; done; [ "$(awk 'END { print NR }' "$G/ai-dlc-suite-pole.history")" -eq 6 ] || exit 1; pole 450; [ "$c" -eq 0 ] && grep -qF 'pole fx1 450s against baseline fx1 520s' <<<"$o" || exit 1; pole 600; [ "$c" -eq 0 ] || exit 1; pole 700; [ "$c" -eq 1 ] && grep -qF GROWN <<<"$o" || exit 1; exit 0
+V="$PWD/scripts/validate-suite-pole.sh"; [ -f "$V" ] || exit 9; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; R="$(mktemp -d)" && git init -q "$R" && G="$(git -C "$R" rev-parse --path-format=absolute --git-common-dir)" && mkdir -p "$R/core/fixtures/fx1" "$R/core/fixtures/fx2" "$R/core/fixtures/fx3" "$R/docs" && echo 0 > "$R/VERSION" && for f in fx1 fx2 fx3; do echo 'exit 0' > "$R/core/fixtures/$f/run.sh"; done && printf '# history-band: 33\n# band: 15\n# jobs: 12\n# fixtures: 3\nfx1 100\n' > "$R/docs/suite-pole-baseline.tsv" || exit 9; L="$G/ai-dlc-fixture-durations.last"; D="$G/ai-dlc-fixture-durations"; H="$G/ai-dlc-suite-pole.history"; hook() { o="$(cd "$R" && bash "$V" --durations "$L" --record "$D" --jobs 4 2>&1)"; c=$?; }; run() { printf 'fx1 %s\nfx2 %s\nfx3 %s\n' "$1" "$2" "$3" > "$L"; cp "$L" "$D"; echo 4 > "$L.jobs"; hook; }; rows() { awk 'END { print NR }' "$H" 2>/dev/null || echo 0; }; printf 'fx1 60\nfx2 35\n' > "$L"; printf 'fx1 60\nfx2 35\nfx3 45\n' > "$D"; echo 4 > "$L.jobs"; hook; [ "$c" -eq 0 ] && [ "$(rows)" -eq 1 ] || exit 1; for n in 1 2 3; do run 100 100 100; [ "$c" -eq 0 ] && grep -qF "CALIBRATING ($n/3)" <<<"$o" || exit 1; done; [ "$(rows)" -eq 4 ] || exit 1; run 100 1000 100; [ "$c" -eq 1 ] && grep -qF 'GROWN: fx2 at 1000s against baseline fx1 at 100s' <<<"$o" || exit 1; run 400 1000 999; [ "$c" -eq 0 ] && grep -qF '4 load outside +-25%' <<<"$o" && grep -qF 'CALIBRATING (1/3)' <<<"$o" || exit 1; [ "$(rows)" -eq 5 ] || exit 1; exit 0
 ```
 
 ## BL-474 — measure the first cross shard's serial tail before ruling on it
