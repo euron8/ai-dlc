@@ -170,7 +170,7 @@ dg_mut b1_hashleak "w1 w2 w3 w4 w5 w7 w8 w9" 1 "[ -s \"\$READSET_MAP\" ] && grep
 # B2: the map's own path not skipped by the digest -- w8's alpha reads the map.
 dg_mut selfread "w8" 1 '($2 in k) && $2 != skip {' '($2 in k) {'
 # D1: a validated stale fixture still runs, as before this change. w13's alpha clears on local rows at push 3.
-dg_mut stale_runs "w1 w4 w7 w10 w13" 1 'else if (st == "stale" && !(f in LOC)) {' 'else if (st == "stale") {'
+dg_mut stale_runs "w1 w4 w7 w10 w13" 1 'else if (st == "stale" && !(f in LOC) && !((f in DECL) && RK[f] != "")) {' 'else if (st == "stale") {'
 # D1: the cleared record is not published, so it reads stale again on the next push (w13's s3 included).
 dg_mut nopublish "w1 w4 w7 w10 w13" 1 '($5 == "seeded" || $4 == "v" || $4 == "m" || $4 == "b")' '($5 == "seeded" || $4 == "m" || $4 == "b")'
 # BL-471 "deriver sha ignored": the LOCAL validator stops comparing the deriver sha.
