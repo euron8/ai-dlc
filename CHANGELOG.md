@@ -19,6 +19,34 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.762.0] - 2026-10-09
+
+Batch 216 (graph-ledger-full-drain), release 2. One graph filing, shipped ALONE: every file is in the
+`ai-dlc-update` skill, a bootstrapping subject. No pre-push hook, no `hermetic-run.sh`, no deriver change.
+
+### PC-S317-SELF-UPDATE-FIXTURE-RUNNER-IS-NOT-THE-HERMETIC-RUN-PRE-PUSH-PERFORMS (BL-492)
+
+graph's 0.760.0 self-update ran 90 derived fixtures green in step 2, then its own pre-push refused 6 of 210 units
+on hermeticity: `self-update-fixtures.sh` ran every fixture plain while the hook runs a declared one through
+`hermetic-run.sh`. Replayed on a clone of graph's self-update, the new runner reports 5 of those reds before
+anything is committed; the sixth, `taught-schema`'s ignored symlink, does not exist in a git clone.
+
+- **The runner.** A fixture carrying `inputs.decl` runs through the consumer's `hermetic-run.sh --root <consumer>
+  <name>` when, and only when, the consumer's own hook carries that dispatch (`# READSET_TOOLS_BEGIN` plus the
+  dispatch line); a hook that predates it runs plain and the log says why. Any non-zero exit is red; a missing
+  runner is red, never a plain fallback. `PREPUSH_POOL_DEPTH` is exported one deeper, as the hook does. A fixture
+  red prints `# disposition: SELF-UPDATE-DEFER` on stdout; an exit-2 refusal does not.
+- **SKILL.md step 2.** A derived fixture directory is one unit: if any path in it is held back as a consumer edit,
+  none of it is written and all of it is carried. The order is gate, write, runner, commit. The uncommitted-red
+  restore is spelled by explicit path and holds for a staged slice (`git restore --source=HEAD --staged --worktree`).
+  "A red derived fixture STOPS/HARD-STOPS the self-update" is replaced by the SELF-UPDATE-DEFER disposition.
+- **Bootstrapping.** The runner is machinery written before it runs, so it takes effect ON the delivering pull,
+  printed DEFER token included. The SKILL.md half takes effect on the re-invoke after a landed self-update.
+- **Open half.** `apply.sh` also writes fixture paths one at a time at the gated apply (`apply.sh:1142`); it is
+  recorded in the entry and not changed here.
+- `self-update-fixture-log` no longer needs `python3`; its H arms skip, not break, on a consumer whose hook predates
+  dispatch; every hermetic run in its arms uses a throwaway verdict store.
+
 ## [0.761.0] - 2026-10-09
 
 Batch 216 (graph-ledger-full-drain), one release for the two graph filings that refuse units on every graph push,
