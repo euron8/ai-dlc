@@ -2554,7 +2554,7 @@ MUT
     QR="$( cd "$CSEED/src" && git check-ignore --stdin --non-matching --verbose < "$CSEED/qbatch" 2>/dev/null | sed -n 's/^::[[:space:]]*//p' )"
     case "$QR" in *'"RESOLVED\t'*) ;; *) broken "raw check-ignore no longer quotes a tab-bearing name — the seed does not reproduce the defect" ;; esac
     DQ="$( TREE="$CSEED/src"; . "$DR"; drop_ignored < "$CSEED/qbatch" )"
-    if printf '%s\n' "$DQ" | grep -q '^"' || printf '%s\n' "$DQ" | grep -q 'RESOLVED'; then
+    if grep -q '^"' <<< "$DQ" || grep -q 'RESOLVED' <<< "$DQ"; then
       bad "a tab-bearing traced name reached the read-set (a quoted row empties the runner's manifest): $(printf '%s' "$DQ" | tr '\n' ' ')"
     elif [ "$(printf '%s\n' "$DQ" | LC_ALL=C sort)" != "$(printf 'caf\303\251.md\ntracked.txt\n' | LC_ALL=C sort)" ]; then
       bad "the quote-name batch did not filter to exactly the plain and the unquoted non-ASCII row: $(printf '%s' "$DQ" | tr '\n' ' ')"
