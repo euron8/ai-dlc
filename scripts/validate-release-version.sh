@@ -20,7 +20,8 @@
 #
 # THE PREDICATES, AND THE POPULATION THEY WERE MEASURED ON.
 #
-#   A. A subject carrying a `vX.Y.Z` token must match VERSION at that commit.
+#   A. A subject carrying a `vX.Y.Z` token must match VERSION at that commit. A bare
+#      `X.Y.Z` at the very START of the subject (`0.754.0 — ...`) counts too.
 #      Measured: 16 of the last 30 version bumps carry the token, and all 16 match.
 #      This is the predicate that catches the real defect above. A MISSING token is
 #      not a failure -- 14 of those 30 predate the convention entirely.
@@ -487,6 +488,14 @@ for c in $COMMITS; do
                 | grep -m1 -E '^## \[[0-9]+\.[0-9]+\.[0-9]+\]')")"
   subj_ver="$(printf '%s' "$subject" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
   subj_ver="${subj_ver#v}"
+  # THE BARE LEADING FORM IS A CLAIM TOO. Release subjects since the GitHub-squash
+  # era read `0.754.0 — ...` with no `v`, so the v-grammar above bound none of them
+  # and predicate A could not fire on a single current release. Measured over all
+  # 1865 non-merge commits on origin/main: the v-grammar alone binds 657, with this
+  # fallback 898, and the mismatch set is the SAME 7 commits under both -- zero new
+  # false positives. Anchored at the subject START: a bare version mid-subject
+  # (`docs: plan for 0.755.0`) is a mention, not the commit's claim about itself.
+  [ -n "$subj_ver" ] || subj_ver="$(printf '%s' "$subject" | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
 
   checked=$((checked+1))
   bad=0
