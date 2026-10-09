@@ -108,7 +108,7 @@ graph files; the alternative was to close this plan for a backlog-only successor
 control 0): `self-update-gate.sh` judges a machinery path whose consumer copy is ALREADY at theirs because a prior
 step-2 self-update in the same pull wrote it, emits `SELF-UPDATE-UNDECIDED` for it, and that row alone turns the run
 into `SELF-UPDATE-DEFER`; the consumer names the remedy as subtracting the same `ALREADY-AT-THEIRS` set step 2
-subtracts, or comparing against the copy at `skill_commit`. The close sweep reads live 1, unfiled 1, worklist 0.
+subtracts, or comparing against the copy at `skill_commit`. The close sweep (at `f9f4fe70`) reads live 1, unfiled 1, worklist 0, TERMINAL 223, archive 346, 28 qualifying refs (the 0.754.0 reconcile branch joined the 27), every control passing.
 **Recorded as a fact; the next session's sweep scopes it** (batch-183 ruling: a filing after the batch's releases are
 built does not reopen the batch). It touches a bootstrapping file and ships ALONE.
 
