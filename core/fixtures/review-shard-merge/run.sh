@@ -41,6 +41,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 NAME="review-shard-merge"
 [ -f "$HERE/lib.sh" ] || { echo "FIXTURE BROKEN: $HERE/lib.sh is absent; nothing was asserted" >&2; exit 2; }
 . "$HERE/lib.sh"
+echo "HERMETIC-CONSUMED core/scripts/partition-review-diff.sh"
+echo "HERMETIC-CONSUMED core/scripts/merge-review-shards.sh"
 
 # ---------------------------------------------------------------------------------- the arms
 echo "$NAME:"

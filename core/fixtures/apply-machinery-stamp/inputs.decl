@@ -1,0 +1,3 @@
+core/fixtures/lib/
+core/skills/ai-dlc-update/reconcile/
+!core/skills/ai-dlc-update/reconcile/apply.sh

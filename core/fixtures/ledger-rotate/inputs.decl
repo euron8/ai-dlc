@@ -1,0 +1,4 @@
+# ledger-rotate rotates ledgers with the reconcile scripts and copies that directory's *.sh (lib.sh, ledger-reverify.sh) into mutant sandboxes; it sources the shared preamble.
+!core/skills/ai-dlc-update/reconcile/ledger-rotate.sh
+core/skills/ai-dlc-update/reconcile/
+core/fixtures/lib/

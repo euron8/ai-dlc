@@ -85,6 +85,8 @@ fi
 # Print the RESOLVED path. A mutation applied to a copy the run never loads leaves every
 # arm green, and that reads exactly like an arm that cannot fire.
 echo "  subject: $RECON/preclassify.sh"
+echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/preclassify.sh"
+[ -f "$RECON/lib.sh" ] && echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/lib.sh"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/pc-mode.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd)"

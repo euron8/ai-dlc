@@ -1,0 +1,4 @@
+# ledger-reverify-dist-only-reach reads the engine under test and its sibling lib.sh (the whole reconcile directory,
+# which run.sh also copies wholesale for its mutants), plus the shared fixture preamble.
+!core/skills/ai-dlc-update/reconcile/
+core/fixtures/lib/

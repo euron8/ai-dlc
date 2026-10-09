@@ -35,6 +35,8 @@ trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
 
+[ -f "$VALIDATOR" ] && echo "HERMETIC-CONSUMED $VALIDATOR"
+
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }

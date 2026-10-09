@@ -1,0 +1,10 @@
+# derivation-differential-mutants reads: the helper it mutates (copied with its whole reconcile directory, because the
+# helper lifts functions out of apply.sh and preclassify.sh), the sibling driver derivation-differential/run.sh (re-executed
+# against each copy; declared whole), the shared preamble that driver sources, and the real validator the helper runs on both
+# sides. scripts/install.sh is the marker run.sh walks up for to find its root (distribution coordinates; it is not read).
+!core/skills/ai-dlc-update/reconcile/derivation-differential.sh
+core/skills/ai-dlc-update/reconcile/
+core/fixtures/derivation-differential/
+core/fixtures/lib/
+core/scripts/validate-artifact-derivations.sh
+scripts/install.sh

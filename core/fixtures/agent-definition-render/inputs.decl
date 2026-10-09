@@ -1,0 +1,5 @@
+# Reads the renderer under test and the consumer pre-push hook it copies into every seeded consumer (distribution layout),
+# plus the shared preamble. Map rows under core/, core/fixtures and the many core/scripts are walk-up or hook-run probes.
+!core/scripts/render-agent-definitions.sh
+!core/git-hooks/pre-push
+core/fixtures/lib/

@@ -1,0 +1,6 @@
+# provenance-flagless-default drives the validator under test and the schema it reads. Both are
+# REQUIRED: run.sh reports every arm as SKIP and exits 0 when either is absent.
+!core/scripts/validate-provenance-block.sh
+!core/schemas/provenance-block.json
+# The f-ctl seed control lifts its block from the sibling fixture's seed.sh.
+core/fixtures/check-17-bypass/seed.sh

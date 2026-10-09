@@ -1,0 +1,7 @@
+# ledger-reverify-d execs the sibling ledger-reverify/run.sh (shard d), which reads the reconcile engine whole and the shared preamble; the other shards' drivers are named so the sibling's J0 join finds them.
+!core/skills/ai-dlc-update/reconcile/ledger-reverify.sh
+core/skills/ai-dlc-update/reconcile/
+core/fixtures/lib/
+core/fixtures/ledger-reverify/
+core/fixtures/ledger-reverify-b/run.sh
+core/fixtures/ledger-reverify-c/run.sh

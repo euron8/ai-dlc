@@ -42,6 +42,7 @@ echo "layer-qualifier-grain:"
 # status_for <entry-substring>  -> the status column of that entry's row
 status_for() { printf '%s\n' "$DRIFT_OUT" | awk -v e="$1" -F'\t' '$2 ~ e {print $1}' | sort -u | tr '\n' ' '; }
 
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$DRIFT")" && pwd)/$(basename "$DRIFT")"
 DRIFT_OUT="$(bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>&1)"
 
 # --- Part 0: the seed is a real range, and the classifier ran ------------------
@@ -92,6 +93,9 @@ case "$mm_m$mm" in
 esac
 
 # --- Part 2: the authoring arms fire, one message each ------------------------
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$LINTER")" && pwd)/$(basename "$LINTER")"
+L_DIR="$(cd "$(dirname "$LINTER")" && pwd -P)"
+[ -f "$L_DIR/artifact-path-config.sh" ] && echo "HERMETIC-CONSUMED $L_DIR/artifact-path-config.sh"
 BAD_OUT="$(bash "$LINTER" "$BAD" 2>&1)"
 assert_msg() { # assert_msg <label> <grep-pattern>
   grep -q "$2" <<<"$BAD_OUT" && ok "$1" || bad "$1 — no message matching /$2/"

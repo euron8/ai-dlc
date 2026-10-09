@@ -141,6 +141,7 @@ for cand in \
   [ -f "$cand" ] && CLOSER="$cand" && break
 done
 [ -n "$CLOSER" ] || { printf 'FAIL: cannot locate ledger-reverify.sh from %s. Looked in:\n%s' "$DIR" "$LOOKED"; exit 1; }
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$CLOSER")" && pwd)/$(basename "$CLOSER")"
 
 # fd 3 is the run's own stderr, saved before any unit redirects it. The single EXIT trap
 # replays a unit's captured stderr there: a unit that exits from inside its body (`exit 2` on

@@ -63,6 +63,7 @@ if [ -n "$ROWS" ]; then : >> "$ROWS" || { echo "FIXTURE ERROR: cannot write --ro
 
 echo "$NAME:"
 echo "$NAME: resolved subject = $REC/apply.sh"
+[ -f "$REC/apply.sh" ] && echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/apply.sh"
 
 # THE JOIN: every predicate the shipped fixture calls -- through `arm`, or directly as one of its
 # two sanity gates -- is scored here, and every predicate scored here is one the shipped fixture

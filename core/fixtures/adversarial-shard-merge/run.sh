@@ -48,6 +48,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 NAME="adversarial-shard-merge"
 [ -f "$HERE/lib.sh" ] || { echo "FIXTURE BROKEN: $HERE/lib.sh is absent; nothing was asserted" >&2; exit 2; }
 . "$HERE/lib.sh"
+echo "HERMETIC-CONSUMED $MERGE"
 
 # ---------------------------------------------------------------------------------- the arms
 echo "$NAME:"

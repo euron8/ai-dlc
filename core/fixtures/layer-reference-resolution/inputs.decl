@@ -1,0 +1,7 @@
+# The validator under test, and the helper it loads fail-open from beside itself (W11 when absent).
+!core/scripts/validate-layer-entries.sh
+!core/scripts/artifact-path-config.sh
+# seed.sh copies the shipping contract into every seeded consumer.
+core/skills/ai-dlc/layer-contract.yaml
+# run.sh sources the preamble.
+core/fixtures/lib/

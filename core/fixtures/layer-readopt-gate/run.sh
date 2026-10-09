@@ -55,6 +55,8 @@ UNREG="$(pick "${2:-}" \
 
 [ -n "$READOPT" ] || { echo "FIXTURE ERROR: cannot locate readopt-override.sh" >&2; exit 2; }
 [ -n "$UNREG" ]   || { echo "FIXTURE ERROR: cannot locate unregistered-drift.sh" >&2; exit 2; }
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$READOPT")" && pwd -P)/$(basename "$READOPT")"
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$UNREG")" && pwd -P)/$(basename "$UNREG")"
 
 ROOT="$(bash "$HERE/seed.sh")"
 DIST="$ROOT/dist"; CONS="$ROOT/consumer"
@@ -785,6 +787,7 @@ REG="$(pick "$HERE/../../skills/ai-dlc-update/reconcile/register-drift.sh" \
 if [ -z "$REG" ]; then
   bad "cannot locate register-drift.sh"
 else
+  echo "HERMETIC-CONSUMED $(cd "$(dirname "$REG")" && pwd -P)/$(basename "$REG")"
   out="$(bash "$REG" "$DIST" "$BASE" "$CONS" team-roles/tea.md --apply 2>&1)"; rc=$?
   NEW="$CONS/.claude/skills/ai-dlc/overrides/team-roles__tea__consumer-drift.md"
 
@@ -1348,6 +1351,7 @@ DRIFT="$(pick "$HERE/../../skills/ai-dlc-update/reconcile/layer-drift.sh" \
 if [ -z "$DRIFT" ]; then
   bad "FIXTURE BROKEN — cannot locate layer-drift.sh; C3 would pass by not running"
 else
+  echo "HERMETIC-CONSUMED $(cd "$(dirname "$DRIFT")" && pwd -P)/$(basename "$DRIFT")"
   ld_out="$(bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>&1)"
   st_of() { printf '%s\n' "$ld_out" | awk -F'\t' -v e="$1" '$2 ~ e {print $1}'; }
 

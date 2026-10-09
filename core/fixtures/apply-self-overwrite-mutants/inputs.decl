@@ -1,0 +1,6 @@
+# apply-self-overwrite-mutants sources the sibling fixture's lib.sh and reads its run.sh, and copies
+# the reconcile directory whole into every mutant and every synthetic world.
+core/fixtures/apply-self-overwrite/
+core/fixtures/lib/
+!core/skills/ai-dlc-update/reconcile/apply.sh
+core/skills/ai-dlc-update/reconcile/

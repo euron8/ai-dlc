@@ -52,6 +52,7 @@ SUFL_RUNNER_ARG="${1:-}"
 [ -f "$HERE/lib.sh" ] || { echo "FIXTURE BROKEN: $HERE/lib.sh is absent; no world exists to assert against" >&2; exit 2; }
 # shellcheck source=lib.sh
 . "$HERE/lib.sh"
+echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh"
 
 # --- Part 0: the seed can EXPRESS the defect ----------------------------------------------
 # A fixture whose tree cannot reach the branch under test proves nothing, and every arm below

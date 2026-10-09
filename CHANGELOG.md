@@ -19,6 +19,55 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.755.0] - 2026-10-08
+
+Batch 209's third release and the close of plan action 4: **54 more fixtures declared hermetic, taking
+`DECLARED` from 103 to 157.** The same two peer sessions finished their sets (`ai-dlc-99`: 73 of 79
+declared; `ai-dlc-d9`: 76 of 79), each batch verified by the lead from branch content, stacked, and
+held to `scripts/validate-enforcement-map.sh` exit 0 before the cut, which is the step the 0.753.0
+gate taught. No hook, validator or runner change. Two fixture fixes ship inside their declaration
+commits, each a lead ruling; four fixtures are skipped with cause.
+
+**The measurements every fixture carries** are those of 0.753.0: runner PASS with the fixture's own
+assertion count equal to its plain run, both 5a probes, `--key-only` with no `node` row, the
+consumer-layout run or the `.dist-only` refusal, and the plain control. Every peer re-ran each fixture
+through the runner on its final batch branch before pushing.
+
+**Two fixture fixes shipped under declaration, both found by the sandbox:**
+
+- `apply-restamp-worklist`: its T1-T4 arms sat behind a guard that looked for `core/scripts/` and
+  `core/schemas/` under the consumer root, which never exist there, so **those four arms had silently
+  skipped on every consumer since they were written** (138 ok with a skip line). The guard now resolves
+  both files per layout; the consumer run reads 144 ok with no skip. The lead ruled the fix into the
+  commit rather than ship a declaration that turns a silent skip into a hard consumer-side failure.
+- `escalation-status-vocabulary`: assertion 7 copies the validator to a lone directory and asserts it
+  refuses to guess a vocabulary with no root in the environment; the runner's exported
+  `AI_DLC_PROJECT_ROOT` made the premise false and the arm failed only in the sandbox. The arm now
+  clears the variable on its own invocation, the shape `askuserquestion-citation`'s P6 arm already used.
+
+**Skipped, with cause.** `self-update-gate` runs `git rev-parse --show-toplevel` on the live tree at top
+level to find its hook (class b, action 5). `review-shard-merge-mutants` is `BL-485`'s subject and is
+deferred to the shard landing, where each shard gets its own declaration. `taught-schema` joins
+`BL-487` (its validator takes the root override ahead of its script-relative walk). `BL-487` also gains
+`h2-attest-scripts-dir` as a second instance of the escape class, resolved here by declaring
+`core/skills/ai-dlc/` so the walk stops inside the sandbox.
+
+**Declaration shapes worth knowing before touching those directories.** Fourteen fixtures declare
+`core/skills/ai-dlc-update/reconcile/` whole and three declare `core/scripts/` whole; a change under
+either reruns every declarer. Four declare `VERSION` or `docs/backlog.md` as walk markers, which yield
+no key row. An undeclared tool that lives in a fixed dir still resolves in the sandbox (`basename`,
+`cksum` seen), so a `tools.decl` omission weakens the key without failing the run.
+
+**Map findings from the second half of the set, none changing a verdict**: six fixtures with zero rows;
+five subjects at repo-root `scripts/` where the map names `core/scripts/`; `layer-crosswalk-home`'s
+1120 rows are an `install.sh` trace union of four real reads; a `cp -R` of a scripts directory inflates
+two maps by roughly seventy rows each.
+
+**All 157 declared fixtures through the runner and the hook's decision**, on a throwaway clone of this
+branch at load 6, 4-wide: 157 of 157 exit 0, 2971 sandbox files in total. With every key record
+published: an unchanged tree skips all 157; a byte appended to `docs/backlog.md` skips all 157; a byte
+appended to `core/scripts/validate-steering-budget.sh` reruns exactly the twelve that declare it.
+
 ## [0.754.0] - 2026-10-08
 
 Batch 209, release 3. It closes `BL-480`. Both pre-push hooks change, along with the read-set deriver.

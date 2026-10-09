@@ -108,6 +108,8 @@ if [ -z "$VALIDATOR" ] || [ -z "$SCHEMA" ]; then
 fi
 
 command -v python3 >/dev/null 2>&1 || { echo "FIXTURE ERROR: python3 not on PATH" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/scripts/validate-provenance-block.sh"
+echo "HERMETIC-CONSUMED core/schemas/provenance-block.json"
 
 # HERMETICITY. The hooks honour a set of AI_DLC_* tunables and a consumer that sets one in
 # settings.json exports it into every session, so the fixture would be adjudicating the

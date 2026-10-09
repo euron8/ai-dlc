@@ -64,6 +64,7 @@ trap 'rm -rf "$WORK"' EXIT
 RECON="$WORK/reconcile"
 mkdir -p "$RECON" || exit 2
 cp "$(dirname "$APPLY")"/* "$RECON/" 2>/dev/null || { echo "FIXTURE ERROR: could not copy reconcile/" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/"
 APPLY="$RECON/apply.sh"
 cat > "$RECON/setup-sites.md" <<'SITES'
 # Setup sites (fixture stand-in)

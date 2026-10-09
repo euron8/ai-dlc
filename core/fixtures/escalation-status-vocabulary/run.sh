@@ -12,6 +12,8 @@
 # Measured on the reference consumer: 8 entries on FILED and OPEN, accumulated across the
 # sprints they were written in, every gate in that window reporting Check 2 as passing.
 set -uo pipefail
+# The pre-push gate exports AI_DLC_* tunables; none is read here, but scrub them all the same.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
@@ -24,6 +26,7 @@ ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 
 echo "escalation-status-vocabulary:"
+echo "HERMETIC-CONSUMED $VALIDATOR"
 
 # --- Assertion 1: POSITIVE CONTROL — the published set passes ----------------
 # Without this, every assertion below is satisfied by a validator that reds on everything.
@@ -99,7 +102,7 @@ fi
 # reintroduced the hand-listed copy silently. Exit 2 (refusal), not 0 (clean).
 LONE="$WORK/lone"; mkdir -p "$LONE"
 cp "$VALIDATOR" "$LONE/validate-escalation-status-vocabulary.sh"
-LONE_OUT="$(cd "$LONE" && CLAUDE_PROJECT_DIR="$LONE" bash ./validate-escalation-status-vocabulary.sh "$DRIFT" 2>&1)"
+LONE_OUT="$(cd "$LONE" && env -u AI_DLC_PROJECT_ROOT CLAUDE_PROJECT_DIR="$LONE" bash ./validate-escalation-status-vocabulary.sh "$DRIFT" 2>&1)"
 lone_rc=$?
 if [ "$lone_rc" -eq 2 ] && grep -q "will not guess" <<<"$LONE_OUT"; then
   ok "with escalations.md unreachable the check REFUSES (rc=2) instead of passing"

@@ -76,6 +76,7 @@ C="$(copy_recon control)" || { echo "FIXTURE ERROR: could not copy $RECON" >&2; 
 for s in apply.sh preclassify.sh derivation-differential.sh; do
   [ -f "$C/$s" ] || { echo "FIXTURE ERROR: the copied reconcile directory lacks $s" >&2; exit 2; }
 done
+printf 'HERMETIC-CONSUMED %s\n' "$SUBJ"
 bash "$DRIVER" "$C/derivation-differential.sh" > "$WORK/control.log" 2>&1; crc=$?
 if [ "$crc" -eq 0 ] && grep -q '^  all assertions hold$' "$WORK/control.log" \
    && grep -q '^  ok    A1b ' "$WORK/control.log" \

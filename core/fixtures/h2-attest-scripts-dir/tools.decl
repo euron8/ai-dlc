@@ -1,0 +1,27 @@
+# Tools run.sh, the sibling fixtures and the copied core scripts invoke in the sandbox.
+bash
+awk
+cat
+cut
+find
+shasum
+sort
+tr
+date
+dirname
+basename
+cmp
+cp
+git
+grep
+mkdir
+mktemp
+sed
+python3
+chmod
+mv
+head
+tail
+wc
+rm
+env

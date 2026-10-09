@@ -52,6 +52,7 @@ WORK="$SEED_OUT"
 trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
+echo "HERMETIC-CONSUMED core/scripts/validate-write-format-steering.sh"
 
 OUTDIR="$WORK/out"
 mkdir -p "$OUTDIR" || { echo "write-format-steering-multiformat: FIXTURE ERROR — cannot create the capture area" >&2; exit 2; }

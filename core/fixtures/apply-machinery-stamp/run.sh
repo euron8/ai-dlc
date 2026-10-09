@@ -64,6 +64,7 @@ skip() { # skip <what> <why>
 
 echo "apply-machinery-stamp:"
 
+echo "HERMETIC-CONSUMED $APPLY"
 if ! grep -q -- '--carried-machinery-slice)' "$APPLY"; then
   skip "the whole file" "this apply.sh does not dispatch --carried-machinery-slice; it lands with this same pull"
   echo

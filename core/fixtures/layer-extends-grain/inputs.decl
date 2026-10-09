@@ -1,0 +1,10 @@
+# layer-extends-grain reads the linter (Part 2), the whole reconcile/ directory (layer-drift.sh
+# sources lib.sh beside itself, and every mutant is a cp -R of the directory), the layer contract
+# seed.sh copies into the consumer, and the shared fixture preamble.
+!core/scripts/validate-layer-entries.sh
+# The linter loads this beside itself and fails open (W11) when it is absent, so the verdict cannot
+# show it was consumed; the sentinel in run.sh does.
+!core/scripts/artifact-path-config.sh
+core/skills/ai-dlc-update/reconcile/
+core/skills/ai-dlc/layer-contract.yaml
+core/fixtures/lib/

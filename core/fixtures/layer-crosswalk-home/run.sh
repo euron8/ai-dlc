@@ -118,6 +118,7 @@ vector() { # vector <linter> <root>
 # ---------------------------------------------------------------------------
 R0="$(fresh)" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
 
+echo "HERMETIC-CONSUMED core/scripts/validate-layer-entries.sh"
 V0="$(vector "$LINTER" "$R0")"
 [ "$V0" = "e16=1 w8=0 rc=1" ] \
   && ok "premise: a consumer with a retired id and NO row anywhere reports E16 and is silent on W8 ($V0)" \
@@ -320,6 +321,7 @@ else
 
   # --- the file arrives, and it arrives as THEIRS' template rather than as anything ------
   read -r SD SB SC ST <<<"$(synth yes)"
+  echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/apply.sh"
   bash "$APPLY" "$SD" "$SB" "$SC" "$ST" > "$WORK/apply1.out" 2>&1
   if [ -f "$SC/$CW_REL" ] \
      && cmp -s "$SC/$CW_REL" "$SD/core/skills/ai-dlc/templates/$(basename "$CW_REL")"; then

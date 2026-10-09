@@ -51,6 +51,7 @@ else
   exit 2
 fi
 
+echo "HERMETIC-CONSUMED $APPLY"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/apply-relabel-noop.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 

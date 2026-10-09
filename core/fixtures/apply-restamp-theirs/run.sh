@@ -45,6 +45,7 @@ else
   echo "  looked in: $ROOT/core/skills/... (distribution), $ROOT/.claude/skills/... (consumer)" >&2
   exit 2
 fi
+echo "HERMETIC-CONSUMED $APPLY"
 
 # apply.sh WRITES the in-flight marker; pre-push READS it. Both halves are resolved here,
 # because a marker nothing refuses on is a file, not a guard.
@@ -262,6 +263,7 @@ fi
 if ! grep -q 'ai-dlc-applying' "$PREPUSH" 2>/dev/null; then
   skip "pre-push mid-pull refusal" "the resolved pre-push ($PREPUSH) predates the in-flight marker; it lands with this same pull"
 else
+echo "HERMETIC-CONSUMED $PREPUSH"
 PP="$WORK/pptree"
 mkdir -p "$PP/.claude" "$PP/tests/fixtures/x" || exit 2
 printf '#!/usr/bin/env bash\nexit 0\n' > "$PP/tests/fixtures/x/run.sh"

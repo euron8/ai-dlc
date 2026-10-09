@@ -1,0 +1,6 @@
+# setup-config-drift drives unregistered-drift.sh against a distribution it builds under mktemp.
+# The validator under test and its sibling files (lib.sh, preclassify.sh, setup-sites.md) are
+# read from the reconcile directory; run.sh also copies the whole directory to build mutants.
+!core/skills/ai-dlc-update/reconcile/unregistered-drift.sh
+core/skills/ai-dlc-update/reconcile/
+core/fixtures/lib/

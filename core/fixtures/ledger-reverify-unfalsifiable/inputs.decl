@@ -1,0 +1,4 @@
+# ledger-reverify.sh is the subject: it sources lib.sh from its own directory, and the mutants copy the whole reconcile/ directory. seed.sh walks up from the fixture to find the engine. run.sh sources the shared preamble.
+!core/skills/ai-dlc-update/reconcile/ledger-reverify.sh
+core/skills/ai-dlc-update/reconcile/
+core/fixtures/lib/

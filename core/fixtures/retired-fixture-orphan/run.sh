@@ -81,6 +81,7 @@ git_q() { git -C "$1" -c user.email=f@x -c user.name=f -c commit.gpgsign=false "
 DIST="$WORK/dist"
 mkdir -p "$DIST/core/skills/ai-dlc-update/reconcile"
 cp "$DETECT" "$DIST/core/skills/ai-dlc-update/reconcile/retired-fixtures.sh"
+echo "HERMETIC-CONSUMED $DETECT"
 # The mapper is delegated, not copied — so the fixture must supply the real one, and a
 # change to map_consumer() that broke fixture paths would fail here rather than silently.
 awk '/^map_consumer\(\) \{/,/^\}/' \

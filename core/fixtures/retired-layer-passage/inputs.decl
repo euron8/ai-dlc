@@ -1,0 +1,6 @@
+# retired-layer-passage reads the reconcile directory: seed.sh locates retired-layer-passage.sh in it,
+# run.sh copies the WHOLE directory (lib.sh, setup-sites.md) for its mutants, and the detector sources
+# lib.sh and reads setup-sites.md beside itself. Declared whole; the detector is the subject (!).
+!core/skills/ai-dlc-update/reconcile/retired-layer-passage.sh
+core/skills/ai-dlc-update/reconcile/
+core/fixtures/lib/

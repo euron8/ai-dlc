@@ -75,6 +75,7 @@ fi
 UD5="$(bash "$DRIFT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
 
 # --- Run the resolution driver -----------------------------------------------
+echo "HERMETIC-CONSUMED $APPLY"
 MANIFEST="$(bash "$APPLY" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
 
 # --- Assertion 1: every file the range moves is applied ------------------------

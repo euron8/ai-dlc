@@ -1,0 +1,7 @@
+# layer-adjudication-tier drives layer-drift.sh over a fully seeded dist and consumer pair (seed.sh
+# builds both with git). It copies every sibling of the validator into mutant dirs (cp dirname/*),
+# so the reconcile directory is declared whole; layer-drift.sh sources lib.sh beside itself and
+# exits 1 without it. The validator under test is the required input.
+!core/skills/ai-dlc-update/reconcile/layer-drift.sh
+core/skills/ai-dlc-update/reconcile/
+core/fixtures/lib/

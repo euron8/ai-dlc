@@ -1,0 +1,7 @@
+# ledger-reverify-b is a shard driver: it execs the sibling ledger-reverify/run.sh --group b, which reads the reconcile engine whole and the shared preamble. The other shard drivers are read by the sibling's J0 join.
+!core/skills/ai-dlc-update/reconcile/ledger-reverify.sh
+core/skills/ai-dlc-update/reconcile/
+core/fixtures/lib/
+core/fixtures/ledger-reverify/
+core/fixtures/ledger-reverify-c/run.sh
+core/fixtures/ledger-reverify-d/run.sh

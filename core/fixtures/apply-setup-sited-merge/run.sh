@@ -46,6 +46,7 @@ NAME=apply-setup-sited-merge
 HERE="$(cd "$(dirname "$0")" && pwd)"
 [ -f "$HERE/lib.sh" ] || { echo "$NAME: FIXTURE BROKEN -- lib.sh is absent beside this fixture" >&2; exit 2; }
 . "$HERE/lib.sh"
+echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/"
 
 # --- D10: the subject probe, at the emission site -----------------------------------------------
 if ! grep -qF 'say RESOLVED setup-site-merge' "$REC/apply.sh"; then

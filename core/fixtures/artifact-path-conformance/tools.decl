@@ -1,0 +1,23 @@
+# The tools run.sh, seed.sh and the three scripts invoke, keyed on their binaries.
+awk
+basename
+bash
+cat
+cmp
+cp
+cut
+diff
+dirname
+env
+git
+grep
+head
+mkdir
+mktemp
+mv
+rm
+sed
+shasum
+sort
+tr
+uniq

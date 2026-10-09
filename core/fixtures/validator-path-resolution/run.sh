@@ -119,6 +119,7 @@ for f in "$SRC"/*.sh; do
 done
 [ "$n_installed" -ge 10 ] || {
   echo "FIXTURE ERROR: only $n_installed core scripts found in $SRC" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/scripts/"
 
 # --- invocation table ----------------------------------------------------------
 # Default is a bare run. Overrides exist for two reasons only:

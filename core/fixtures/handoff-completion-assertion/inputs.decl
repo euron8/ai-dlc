@@ -1,0 +1,11 @@
+# handoff-completion-assertion drives three hooks and their shared predicate in place, copies the
+# whole hooks directory for its mutant battery (cp "$HOOKS_DIR"/*.sh), and reads the pause-routing
+# vocabulary. The settings template is deliberately NOT declared: the one arm that parses it
+# stands down with an ok when it is absent (it is distribution-only), and a declared path under
+# templates/ is exit 2 on a consumer, where it is not installed.
+core/hooks/
+!core/hooks/ai-dlc-continue.sh
+!core/hooks/ai-dlc-recover.sh
+!core/hooks/ai-dlc-handoff-pending.sh
+!core/schemas/pause-routing.json
+core/fixtures/lib/

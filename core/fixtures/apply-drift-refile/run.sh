@@ -9,6 +9,7 @@ WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 
 trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
+echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/"
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }

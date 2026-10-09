@@ -1,0 +1,7 @@
+# layer-qualifier-grain sources the shared preamble, drives the linter and the drift classifier, and copies the whole reconcile/ directory for its mutants.
+!core/scripts/validate-layer-entries.sh
+!core/scripts/artifact-path-config.sh
+!core/skills/ai-dlc-update/reconcile/layer-drift.sh
+core/skills/ai-dlc-update/reconcile/
+core/skills/ai-dlc/layer-contract.yaml
+core/fixtures/lib/

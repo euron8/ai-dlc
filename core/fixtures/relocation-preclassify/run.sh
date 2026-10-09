@@ -36,6 +36,7 @@ for cand in "$ROOT/core/skills/ai-dlc-update/reconcile" "$ROOT/.claude/skills/ai
   [ -f "$cand/preclassify.sh" ] && RECON="$cand" && break
 done
 [ -n "${RECON:-}" ] || { echo "FIXTURE ERROR: reconcile/preclassify.sh not found in either layout" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/reloc-pc.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd)"

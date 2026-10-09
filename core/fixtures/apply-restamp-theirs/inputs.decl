@@ -1,0 +1,5 @@
+# apply-restamp-theirs sources the shared preamble, drives apply.sh from copies of the reconcile directory (apply.sh reads many siblings of it), and runs the real pre-push hook in a seeded tree.
+core/fixtures/lib/
+core/skills/ai-dlc-update/reconcile/
+!core/skills/ai-dlc-update/reconcile/apply.sh
+!core/git-hooks/pre-push

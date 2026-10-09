@@ -39,6 +39,7 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 
 echo "retired-layer-token:"
 ok "resolved detector: $SCRIPT"
+echo "HERMETIC-CONSUMED $SCRIPT"
 
 # --- the five worlds every scored script is driven through --------------------------------
 # EVERY drive names its own cwd. The predicates below must answer the same from the repo

@@ -23,6 +23,7 @@ DRIFT="$(pick "${1:-}" "$HERE/../../../core/skills/ai-dlc-update/reconcile/layer
                        "$HERE/../../skills/ai-dlc-update/reconcile/layer-drift.sh" \
                        "$HERE/../../../.claude/skills/ai-dlc-update/reconcile/layer-drift.sh")"
 [ -n "$DRIFT" ] || { echo "FIXTURE ERROR: cannot locate layer-drift.sh" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/layer-drift.sh"
 
 ROOT="$(bash "$HERE/seed.sh")"
 trap 'rm -rf "$ROOT"' EXIT

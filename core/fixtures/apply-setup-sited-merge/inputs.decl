@@ -1,0 +1,5 @@
+# apply-setup-sited-merge drives the reconcile engine (apply.sh, setup-site-drift.sh and the
+# files they source) against synthetic worlds it builds itself; the engine directory is the subject.
+!core/skills/ai-dlc-update/reconcile/
+# run.sh sources the preamble.
+core/fixtures/lib/

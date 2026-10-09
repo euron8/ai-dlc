@@ -97,6 +97,7 @@ else
   exit 2
 fi
 REC="$(dirname "$APPLY")"
+echo "HERMETIC-CONSUMED $APPLY"
 
 # The marker's READER, resolved in both layouts. C6 exists because pre-push refuses on the
 # marker; if that refusal ever goes away, C6's whole premise goes with it and the arm should be
@@ -620,6 +621,7 @@ PP_TEST='^[[:space:]]*if[[:space:]]+\[[[:space:]]+-f[[:space:]]+\.claude/\.ai-dl
 if [ -z "$PREPUSH" ]; then
   bad "C6 premise: no pre-push was resolved in either layout (looked for core/git-hooks/pre-push and .githooks/pre-push). C6 asserts an escape from a refusal this fixture cannot see, so its severity is unverified"
 else
+  echo "HERMETIC-CONSUMED $PREPUSH"
   PP_STRIPPED="$WORK/pp-stripped"
   grep -vE "$PP_TEST" "$PREPUSH" > "$PP_STRIPPED"
   if ! grep -qE "$PP_TEST" "$PREPUSH"; then
@@ -1318,8 +1320,8 @@ mk_ti_consumer() { # <dir> <render yes|no> <ondisk yes|no> <tracked yes|no> <bre
   mkdir -p "$c/scripts/ai-dlc" "$c/.claude/schemas" "$c/_bmad-output" || return 1
   git -C "$c" init -q . 2>/dev/null || return 1
   git -C "$c" config user.email t@t; git -C "$c" config user.name t
-  cp "$REPO/core/schemas/pipeline-state-paths.json" "$c/.claude/schemas/" || return 1
-  cp "$REPO/core/scripts/sync-transient-ignore.sh"  "$c/scripts/ai-dlc/"  || return 1
+  cp "$TI_SCHEMA"   "$c/.claude/schemas/pipeline-state-paths.json" || return 1
+  cp "$TI_RENDERER" "$c/scripts/ai-dlc/sync-transient-ignore.sh"   || return 1
   printf 'node_modules/\n' > "$c/.gitignore"
   git -C "$c" add -A >/dev/null 2>&1; git -C "$c" commit -qm base >/dev/null 2>&1
   [ "$rnd" = yes ] && bash "$c/scripts/ai-dlc/sync-transient-ignore.sh" --root "$c" >/dev/null 2>&1
@@ -1338,10 +1340,19 @@ mk_ti_consumer() { # <dir> <render yes|no> <ondisk yes|no> <tracked yes|no> <bre
 }
 
 REPO="$(cd "$(dirname "$APPLY")/../../../.." && pwd)"
-if [ ! -f "$REPO/core/scripts/sync-transient-ignore.sh" ] || [ ! -f "$REPO/core/schemas/pipeline-state-paths.json" ]; then
+TI_RENDERER=""; TI_SCHEMA=""
+for cand in "$REPO/core/scripts/sync-transient-ignore.sh" "$REPO/scripts/ai-dlc/sync-transient-ignore.sh"; do
+  [ -f "$cand" ] && TI_RENDERER="$cand" && break
+done
+for cand in "$REPO/core/schemas/pipeline-state-paths.json" "$REPO/.claude/schemas/pipeline-state-paths.json"; do
+  [ -f "$cand" ] && TI_SCHEMA="$cand" && break
+done
+if [ -z "$TI_RENDERER" ] || [ -z "$TI_SCHEMA" ]; then
   # A core fixture ships AHEAD of its subject: say so rather than printing a green line.
   ok "T1-T4 skipped: sync-transient-ignore.sh / pipeline-state-paths.json are not in this tree, so the row's inputs cannot be built"
 else
+  [ -f "$TI_RENDERER" ] && echo "HERMETIC-CONSUMED $TI_RENDERER"
+  [ -f "$TI_SCHEMA" ] && echo "HERMETIC-CONSUMED $TI_SCHEMA"
   TI_UNREADABLE="$WORK/ti-unreadable"; TI_ONDISK="$WORK/ti-ondisk"; TI_TRACKED="$WORK/ti-tracked"
   if mk_ti_consumer "$TI_UNREADABLE" yes no no yes && mk_ti_consumer "$TI_ONDISK" yes yes no no \
      && mk_ti_consumer "$TI_TRACKED" yes yes yes no; then

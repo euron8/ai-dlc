@@ -1,0 +1,9 @@
+# layer-readopt-gate drives four scripts in the reconcile directory and copies the whole directory beside each mutant,
+# so the directory is declared whole. The scripts the verdict depends on carry a sentinel in run.sh.
+core/skills/ai-dlc-update/reconcile/
+!core/skills/ai-dlc-update/reconcile/readopt-override.sh
+!core/skills/ai-dlc-update/reconcile/unregistered-drift.sh
+!core/skills/ai-dlc-update/reconcile/register-drift.sh
+!core/skills/ai-dlc-update/reconcile/layer-drift.sh
+# Sourced as the first line of run.sh.
+core/fixtures/lib/

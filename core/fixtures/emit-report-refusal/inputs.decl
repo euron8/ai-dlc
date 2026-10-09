@@ -1,0 +1,9 @@
+# emit-report-refusal reads: the reconcile engine it mutates and drives (whole directory, copied
+# by mkprog), the emit-report.sh under test, the hook-registration validator H1 copies into a
+# scratch dist, the sibling fixture whose seed.sh and run.sh it runs and extracts from, and the
+# shared preamble it sources. The preamble is non-discriminating (env -i has no GIT_* to unset).
+core/skills/ai-dlc-update/reconcile/
+!core/skills/ai-dlc-update/reconcile/emit-report.sh
+!core/scripts/validate-hook-registration.sh
+core/fixtures/reconcile-emit-report/
+core/fixtures/lib/

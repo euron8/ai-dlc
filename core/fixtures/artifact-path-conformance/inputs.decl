@@ -1,0 +1,10 @@
+# artifact-path-conformance drives the validator, the migration and the config reader against
+# seeded scratch repos. The grammar is copied into each seed; the two team-roles feed section 7.
+# The validator is the subject, so it is the one REQUIRED input.
+!core/scripts/validate-artifact-paths.sh
+core/scripts/migrate-artifact-paths.sh
+core/scripts/artifact-path-config.sh
+core/skills/ai-dlc/artifact-path-grammar.md
+core/team-roles/code-reviewer.md
+core/team-roles/qa.md
+core/fixtures/lib/

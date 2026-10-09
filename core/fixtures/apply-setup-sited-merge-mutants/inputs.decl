@@ -1,0 +1,8 @@
+# Mutation battery over reconcile/apply.sh and setup-site-drift.sh. run.sh sources the sibling
+# fixture's lib.sh (worlds, drives, predicates) and the shared preamble; MP copies the preamble,
+# lib.sh and the whole reconcile directory into a probe tree. Every mutant is a copy of that
+# directory. DIST-ONLY: not shipped, so no consumer layout applies.
+!core/skills/ai-dlc-update/reconcile/apply.sh
+core/skills/ai-dlc-update/reconcile/
+core/fixtures/apply-setup-sited-merge/
+core/fixtures/lib/

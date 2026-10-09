@@ -1,0 +1,5 @@
+# reconcile-blocking-list drives hard-blockers.sh and the detectors it delegates to, all siblings in
+# one directory; seed.sh locates it from the repo root and run.sh copies the whole directory for
+# its mutants. The preamble is non-discriminating by ruling, so it is declared and never required.
+!core/skills/ai-dlc-update/reconcile/
+core/fixtures/lib/
