@@ -200,6 +200,14 @@ ss_ack() {
     "$(printf '%s' "$d" | grep -c 'its slice self-updates cleanly')"
 }
 SU_PC="$(dirname "$GATE")/preclassify.sh"
+# SHARED: the machinery lister the `vr` unit reads (the `su` unit builds its own copy under $SU).
+MACHD="$(dirname "$DIST")/mach"; rm -rf "$MACHD"; mkdir -p "$MACHD"
+cp "$(dirname "$SU_PC")"/*.sh "$(dirname "$SU_PC")"/*.md "$MACHD"/ 2>/dev/null
+cat > "$MACHD/list-machinery.sh" <<'MACHEOF2'
+DIST="$1"; BASE="$2"; THEIRS="$3"
+eval "$(awk '/^machinery_paths\(\) \{/,/^\}/' "$(dirname "$0")/preclassify.sh")"
+machinery_paths
+MACHEOF2
 su_carry() { printf '%s\n' "$1" | awk -F'\t' '$1 == "SELF-UPDATE-CARRY" {print $2}' | sort | tr '\n' ','; }
 VR="$(dirname "$DIST")/vr"
 rm -rf "$VR"; mkdir -p "$VR"
@@ -2615,7 +2623,7 @@ vr_cls_n="$(printf 'bash scripts/ai-dlc/caf\303\251.sh;\n' | grep -oE "${VR_HOOK
 ss_assert "rec-hook-class-read" "$vr_cls_n" "1" \
   "the hook-name class both intersections below use is the gate's own, extracted rather than retyped, and it spells a non-ASCII name"
 ss_assert "rec-inputs-unique-control" \
-  "$(bash "$SU/mach/list-machinery.sh" "$DIST" "$BASE" "$THEIRS" 2>/dev/null \
+  "$(bash "$MACHD/list-machinery.sh" "$DIST" "$BASE" "$THEIRS" 2>/dev/null \
      | sed -n 's|^core/scripts/||p' | sort -u \
      | grep -Fxf <(grep -oE "$VR_HOOK_CLASS" "$CONS/.githooks/pre-push" | sed 's|.*/||' | sort -u) \
      | grep -c . | awk '{print ($1 > 0) ? "overlap" : "none"}')" \
@@ -2645,7 +2653,7 @@ else
   # machinery set and not in the hook, so it is recorded once and cannot duplicate; a literal here
   # would go vacuous the day the seed's hook gains a line.
   vr_m10_dup="$(grep -oE "$VR_HOOK_CLASS" "$CONS/.githooks/pre-push" | sed 's|.*/||' | sort -u \
-                | grep -Fxf <(bash "$SU/mach/list-machinery.sh" "$DIST" "$BASE" "$THEIRS" 2>/dev/null \
+                | grep -Fxf <(bash "$MACHD/list-machinery.sh" "$DIST" "$BASE" "$THEIRS" 2>/dev/null \
                               | sed -n 's|^core/scripts/||p' | sort -u) | grep -c .)" || vr_m10_dup=0
   vr_m10_want="-|core/git-hooks/pre-push|dup=$vr_m10_dup"
   if [ "$vr_m10_got" = "$vr_m10_want" ] && [ "$vr_m10_dup" -gt 0 ] 2>/dev/null; then
