@@ -148,6 +148,29 @@ record the operator's ruling. **Keep it open:** take a second sprint's measureme
 verify: manual -- close when the measurement above is recorded in this entry from a real consumer review and the operator has ruled on it.
 
 
+## BL-490 — readset-skip declares two distribution-only scripts, so the hermetic runner refuses it on every consumer
+
+**DEFECT.** PC-S317-READSET-SKIP-DECLARES-DIST-ROOT-SCRIPTS-NO-CONSUMER-HOLDS. All four
+`core/fixtures/readset-skip{,-b,-c,-d}/inputs.decl` declared `scripts/validate-enforcement-map.sh` and
+`scripts/render-invariant-index.sh`. Neither is installed and `core-paths.sh` maps neither, so on a consumer
+`hermetic-run.sh` stops with `declared file absent` and exit 2 for every shard, and every consumer push fails.
+Their only reader was the one-hook-widened I66 arm in `readset-skip/run.sh`, which also accounted for five more
+declared paths: `gate-validation.md`, `enforcement-map.yaml`, `core-manifest.md`, `setup-sites.md` and
+`core/scripts/hermetic-run.sh`. That arm now lives in the `.dist-only` fixture `validator-arm-selection` as the phase
+`i66-onehook` in shard a, with the mutant it lacked. The mutant widens `READSET_UNKEYED_TOOLS` in `.githooks/pre-push`
+alone, and `--arms I66` must then exit non-zero naming the forked runners, beside an unmutated control that reads OK
+at rc 0. All seven lines are removed from the four declarations.
+
+The receipt installs the tree into an empty git repo with `_bmad/`, as `install.sh` requires, and runs
+`hermetic-run.sh --key-only` for all four shards on that consumer tree. It then requires the moved phase. Scored under
+`set -uo pipefail` in linked worktrees: tip 0, base (`d03d5bd9`) 1, and 1 for a mutant that re-adds
+`scripts/validate-enforcement-map.sh` to `readset-skip-c/inputs.decl` alone. On a git-inited
+`git -C /Users/n8/git/graph archive HEAD` copy with the readset-skip dirs overlaid, a full
+`scripts/ai-dlc/hermetic-run.sh --root <copy> readset-skip` read rc 2 at base, naming both validators; rc 0 at tip
+(`readset-skip: PASS (92 assertions)`, `sandbox_files=10`); and rc 2 with the validator line re-added to the tip decl.
+
+verify: sh [ -f scripts/install.sh ] && [ -f core/scripts/hermetic-run.sh ] || exit 9; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; T="$(mktemp -d)" && git init -q "$T" && mkdir "$T/_bmad" && bash scripts/install.sh "$T" >/dev/null 2>&1 && [ -f "$T/scripts/ai-dlc/hermetic-run.sh" ] && [ -f "$T/tests/fixtures/readset-skip/inputs.decl" ] && [ ! -e "$T/scripts/validate-enforcement-map.sh" ] && ( cd "$T" && git add -A && git -c user.email=r@r -c user.name=r commit -qm i ) >/dev/null 2>&1 || exit 9; for f in readset-skip readset-skip-b readset-skip-c readset-skip-d; do bash "$T/scripts/ai-dlc/hermetic-run.sh" --root "$T" --key-only "$f" >/dev/null 2>&1 || exit 1; done; grep -qF -- '--arms I66' core/fixtures/validator-arm-selection/run.sh && grep -qE '^PHASES_a=".* i66-onehook( |")' core/fixtures/validator-arm-selection/run.sh || exit 1; exit 0
+
 ## BL-481 — two fixtures cannot be traced even on an idle box, and ten run on every push
 
 **DEFECT, filed at batch 204's close.** The `0.745.0` map trace, run in a full clone with nothing else on the machine
