@@ -1005,6 +1005,69 @@ readset_live_trace() { # <out>
   return 0
 }
 
+# THE IN-POOL TRACE. An undeclared fixture queued in `$out/.trace` is run by its pool worker through
+# `derive-fixture-readsets.sh --in-pool`, in an APFS clone of the tree, so the run that gives the push its
+# verdict is the run that is traced -- readset_live_trace's second run after the suite is gone for it. Every
+# omission rule of the detached trace holds (drop notices, the loss canary, the unread control, the dirty
+# delta, TRIP, the driver), so a lossy window discards and never maps a smaller set; a TRIP re-runs the
+# fixture untraced and takes THAT verdict. Any failure to trace leaves the fixture to a plain run and to the
+# detached trace, exactly as before. readset_pool_trace_prep sets PT_ROOT, PT_LIST and PT_DV for the
+# worker; readset_pool_trace_merge is the ONE writer of the local map afterwards, under the live trace's lock.
+readset_pool_trace_prep() { # <out>
+  local out="$1" b why=""
+  PT_ROOT=""; PT_LIST=""; PT_DV=""
+  [ "${AI_DLC_READSET_LIVE_TRACE:-1}" = 0 ] && return 0
+  [ -s "$out/.trace" ] || return 0
+  while IFS= read -r b; do
+    [ -n "$b" ] && [ ! -f "${FXROOT}${b}/inputs.decl" ] || continue
+    PT_LIST="${PT_LIST}${PT_LIST:+ }$b"
+  done < "$out/.trace"
+  [ -n "$PT_LIST" ] || return 0
+  PT_DV="$(readset_deriver_path)"
+  [ -n "$PT_DV" ] || why="no derive-fixture-readsets.sh in either layout"
+  command -v sandbox-exec >/dev/null 2>&1 || why="${why:+$why; }no sandbox-exec"
+  [ -x /usr/bin/log ] || why="${why:+$why; }no /usr/bin/log"
+  command -v python3 >/dev/null 2>&1 || why="${why:+$why; }no python3"
+  [ "$(git rev-parse --git-dir 2>/dev/null)" = "$(git rev-parse --git-common-dir 2>/dev/null)" ] \
+    || why="${why:+$why; }a linked worktree (the trace clones .git, which is a file there)"
+  if [ -n "$why" ]; then
+    printf '   ..    read-set in-pool trace: skipped (%s); %s run plainly: %s\n' "$why" "$(printf '%s\n' $PT_LIST | grep -c .)" "$PT_LIST"
+    PT_LIST=""; PT_DV=""
+    return 0
+  fi
+  mkdir -p "$out/.lt" || { PT_LIST=""; PT_DV=""; return 0; }
+  PT_ROOT="${TMPDIR:-/tmp}"; PT_ROOT="${PT_ROOT%/}/ai-dlc-readset-pool.$$"
+  printf '   ..    read-set in-pool trace: %s fixture(s) traced in the pool: %s\n' "$(printf '%s\n' $PT_LIST | grep -c .)" "$PT_LIST"
+}
+readset_pool_trace_merge() { # <out>
+  local out="$1" lk b n=0 kept="" disc="" rest
+  [ -n "${PT_ROOT:-}" ] && [ -d "$out/.lt" ] || return 0
+  for b in $PT_LIST; do
+    [ -f "$out/.lt/$b/rows" ] && kept="${kept}${kept:+ }$b"
+    [ -f "$out/.lt/$b/discard" ] && disc="${disc}${disc:+ }$b"
+    [ -f "$out/.lt/$b/rows" ] || [ -f "$out/.lt/$b/discard" ] && n=$((n + 1))
+  done
+  # A fixture the pool TRACED, whatever came of it, leaves the detached trace's queue: its run was this one.
+  rest="$(while IFS= read -r b; do [ -f "$out/.lt/$b/rc" ] || printf '%s\n' "$b"; done < "$out/.trace")"
+  printf '%s\n' "$rest" | grep . > "$out/.trace.t"; mv "$out/.trace.t" "$out/.trace"
+  [ "$n" -gt 0 ] || return 0
+  lk="$READSET_LOCAL.lock"
+  if ! mkdir "$lk" 2>/dev/null; then
+    if readset_lock_stale "$lk"; then rm -f "$lk/pid"; rmdir "$lk" 2>/dev/null; fi
+    if ! mkdir "$lk" 2>/dev/null; then
+      printf '   ..    read-set in-pool trace: another trace holds %s -- %s in-pool trace(s) not recorded this push\n' "$lk" "$n"
+      return 0
+    fi
+  fi
+  printf '%s %s\n%s\n' "$$" "$(date +%s)" "$(readset_pid_start "$$")" > "$lk/pid" 2>/dev/null
+  if bash "$PT_DV" --merge-pool "$out/.lt" --local-map "$READSET_LOCAL" > "$out/.lt.merge" 2>&1; then
+    printf '   ..    read-set in-pool trace: recorded %s%s\n' "${kept:-none}" "${disc:+; discarded: $disc}"
+  else
+    printf '   ..    read-set in-pool trace: the merge refused, nothing recorded: %s\n' "$(tail -1 "$out/.lt.merge")"
+  fi
+  rm -f "$lk/pid"; rmdir "$lk" 2>/dev/null
+}
+
 readset_when() { # <epoch>: local wall-clock time, or the bare epoch where neither date spelling works
   date -r "$1" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date -d "@$1" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || printf 'epoch %s' "$1"
 }
@@ -1797,7 +1860,9 @@ run_fixtures() {
   # what it declares, and never by its own run.sh directly. The runner is resolved the way
   # readset_deriver_path resolves the deriver (consumer layout first); a declared fixture whose runner is
   # absent FAILS with a log line, because falling through to run.sh would run it un-sandboxed and read green.
-  PREPUSH_POOL_DEPTH="$((POOL_DEPTH_IN + 1))" AI_DLC_FX_OUT="$out" xargs -P "$FIXTURE_JOBS" -I{} bash -c '
+  readset_pool_trace_prep "$out"
+  PREPUSH_POOL_DEPTH="$((POOL_DEPTH_IN + 1))" AI_DLC_FX_OUT="$out" AI_DLC_FX_TRACE="$PT_ROOT" AI_DLC_FX_TRACE_LIST="$PT_LIST" AI_DLC_FX_DV="$PT_DV" \
+    xargs -P "$FIXTURE_JOBS" -I{} bash -c '
     d="$1"; b="$(basename "$d")"
     if [ -f "$d/inputs.decl" ]; then
       hr=""
@@ -1809,10 +1874,21 @@ run_fixtures() {
         printf FAIL > "$AI_DLC_FX_OUT/$b"
       elif bash "$hr" --root "$PWD" "$b" > "$AI_DLC_FX_OUT/.log/$b" 2>&1; then printf ok   > "$AI_DLC_FX_OUT/$b"
       else                                                                       printf FAIL > "$AI_DLC_FX_OUT/$b"; fi
+    elif [ -n "${AI_DLC_FX_TRACE:-}" ] && case " $AI_DLC_FX_TRACE_LIST " in *" $b "*) true ;; *) false ;; esac; then
+      tp="$AI_DLC_FX_OUT/.lt/$b"; tr="$AI_DLC_FX_TRACE.$b"
+      AI_DLC_READSET_TRACE_ROOT="$tr" bash "$AI_DLC_FX_DV" --list "$b" --tracer sandbox --in-pool "$tp" > "$tp.drv" 2>&1 </dev/null
+      if [ -f "$tp/rc" ] && [ ! -f "$tp/trip" ]; then
+        cp "$tp/log" "$AI_DLC_FX_OUT/.log/$b"
+        if [ "$(cat "$tp/rc")" = 0 ]; then printf ok > "$AI_DLC_FX_OUT/$b"; else printf FAIL > "$AI_DLC_FX_OUT/$b"; fi
+      elif bash "$d/run.sh" > "$AI_DLC_FX_OUT/.log/$b" 2>&1; then printf ok   > "$AI_DLC_FX_OUT/$b"
+      else                                      printf FAIL > "$AI_DLC_FX_OUT/$b"; fi
+      [ "$(cat "$AI_DLC_FX_OUT/$b")" = ok ] || rm -f "$tp/rows" "$tp/discard"
+      ( rm -rf "$tr" ) </dev/null >/dev/null 2>&1 &
     elif bash "$d/run.sh" > "$AI_DLC_FX_OUT/.log/$b" 2>&1; then printf ok   > "$AI_DLC_FX_OUT/$b"
     else                                      printf FAIL > "$AI_DLC_FX_OUT/$b"; fi
     printf "%s %s\n" "$b" "$SECONDS" > "$AI_DLC_FX_OUT/.dur/$b"
   ' _ {} < "$out/.order"
+  readset_pool_trace_merge "$out"
 
   # Rendered in list order, so the output is deterministic and diffable across runs even
   # though the work completed out of order.
