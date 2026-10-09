@@ -60,6 +60,9 @@ V="${1:-$ROOT/scripts/validate-suite-pole.sh}"
 # PRINT THE RESOLVED SUBJECT. A mutation applied to a copy the run never loads leaves every
 # arm green, which reads exactly like an arm that cannot fire.
 echo "  subject: ${V#"$ROOT"/}"
+# The hermetic runner's REQUIRED-input sentinel, printed where the subject is resolved and before any
+# arm drives it: inputs.decl marks scripts/validate-suite-pole.sh `!`.
+echo "HERMETIC-CONSUMED scripts/validate-suite-pole.sh"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/suite-pole-guard.XXXXXX")" || broken "mktemp -d failed"
 trap 'rm -rf "$WORK"' EXIT
@@ -1239,9 +1242,10 @@ arm_rows_per_unit() {
 # definition line, and a body that cannot be found is a failure, never an empty pass.
 arm_append_site_pinned() {
   local n body site
-  n="$(grep -cF "printf '%s' \"\$ROWS\" >" "$SUBJ")" || n=0
+  # CODE LINES ONLY: the subject's own header quotes the pinned spelling, so a comment is excluded.
+  site="$(awk -v s="printf '%s' \"\$ROWS\" >" 'index($0, s) && $0 !~ /^[ \t]*#/ { print }' "$SUBJ")"
+  n="$(awk 'NF { n++ } END { print n + 0 }' <<<"$site")"
   [ "$n" -eq 1 ] || return 1
-  site="$(grep -F "printf '%s' \"\$ROWS\" >" "$SUBJ")" || return 1
   grep -qF '"$HIST"' <<<"$site" || return 1
   body="$(awk '/^unit_rows\(\) \{/ { p = 1 } p { print } p && /^}$/ { exit }' "$SUBJ")"
   grep -qF 'buf = buf sprintf(' <<<"$body" || return 1
@@ -1676,7 +1680,7 @@ co_kills_ok() { # <label> -> the arms allowed to die beside the owner
     # drives a run timing fewer rows than the tree has directories and reads what the subject does
     # with it. coverage_partial owns the 220-of-227 case; the rest see the same skip from their own
     # keyed seed and stand down.
-    row-count-equality-restored) printf '%s' "pole_absent low_share_records stale_history_ignored seed_pole_absent_records producer_sequential uniform_slowdown launder_novel_count keyed_skip_launder pole_moved regime_ceiling" ;;
+    row-count-equality-restored) printf '%s' "pole_absent low_share_records stale_history_ignored seed_pole_absent_records producer_sequential uniform_slowdown launder_novel_count keyed_skip_launder pole_moved regime_ceiling grown_keyed_absent rows_per_unit" ;;
     # COMPARING A WIDTH WITH NO ROW AGAINST THE WIDTH-12 ROW and the first-row selector are the
     # same wrong answer at width 4 against a width-12-only baseline: no CALIBRATING, a comparison.
     # history_first_record owns the width-with-no-row case; jobs_mismatch owns selection among rows.
@@ -1687,7 +1691,7 @@ co_kills_ok() { # <label> -> the arms allowed to die beside the owner
     # history_no_collapse and sidecar_consumed both begin by calibrating a width with no row, so a
     # SKIP there records nothing and both read the absence. True of the same defect; they own the
     # window and the consume, and stand down for it.
-    no-row-still-skips)         printf '%s' "width_exact history_no_collapse sidecar_consumed load_excludes_pole producer_sequential uniform_slowdown launder_novel_count keyed_skip_launder pole_moved pole_absent seed_pole_absent_records regime_ceiling" ;;
+    no-row-still-skips)         printf '%s' "width_exact history_no_collapse sidecar_consumed load_excludes_pole producer_sequential uniform_slowdown launder_novel_count keyed_skip_launder pole_moved pole_absent seed_pole_absent_records regime_ceiling grown_into_pole grown_keyed_absent nonpole_admission rows_per_unit" ;;
     # DIVIDING WITHOUT THE OBSERVED POLE puts the pole on one side of the ratio only, so the
     # ghost arm's printed denominator loses the pole's 1000s and no longer reads 113224. That is
     # a TRUE finding about the same defect; coverage_partial owns it because it is the arm whose
@@ -1705,7 +1709,7 @@ co_kills_ok() { # <label> -> the arms allowed to die beside the owner
     # A TRUNCATING WRITE leaves one row however many runs record, so the collapse sequence never
     # reaches K rows and calibrates where it asserted a comparison. The collapse is only expressible
     # over an ACCUMULATED history; history_admission owns accumulation, and the window arm stands down.
-    history-truncating-write)   printf '%s' "history_no_collapse load_excludes_pole producer_sequential uniform_slowdown launder_novel_count keyed_skip_launder regime_ceiling" ;;
+    history-truncating-write)   printf '%s' "history_no_collapse load_excludes_pole producer_sequential uniform_slowdown launder_novel_count keyed_skip_launder regime_ceiling grown_into_pole grown_keyed_absent nonpole_admission" ;;
     # WITH NO SIDECAR CHECK, a consumed (emptied) sidecar no longer stops a second record: consuming
     # only has an effect THROUGH the check. sidecar_mismatch owns the check; sidecar_consumed owns the
     # consume line, and stands down here.
@@ -1722,14 +1726,21 @@ co_kills_ok() { # <label> -> the arms allowed to die beside the owner
     # pole_moved and notes_name_drop_command run beside a different load than their seeded rows carry,
     # and load_excludes_pole's grown unit moves the run's load by design (adversary B1). uniform_slowdown
     # owns the predicate; the rest see its consequence.
-    key-on-load-not-count)      printf '%s' "pole_moved notes_name_drop_command load_excludes_pole" ;;
+    key-on-load-not-count)      printf '%s' "pole_moved notes_name_drop_command load_excludes_pole grown_into_pole grown_keyed_absent" ;;
     # PER-UNIT (round 3). width-wide-b-restored and admission-per-width are the two halves of one wrong
     # model -- every unit's rows read as one population -- and each arm built on a second unit's rows sees
     # both: pole_moved (a heavy unit newly the pole), pole_absent (one unit's rows beside another's) and
     # keyed_skip_launder (a run recording under a different unit). pole_moved owns the comparison,
     # pole_absent owns admission; the others stand down for the half they do not own.
-    width-wide-b-restored)      printf '%s' "pole_absent keyed_skip_launder" ;;
-    admission-per-width)        printf '%s' "pole_moved keyed_skip_launder" ;;
+    width-wide-b-restored)      printf '%s' "pole_absent keyed_skip_launder tracked_seed load_excludes_pole producer_sequential regime_ceiling grown_into_pole grown_keyed_absent" ;;
+    # OPTION (a). record-pole-only removes every non-pole row: each arm whose subject is a unit that was
+    # not the pole when its history formed (keyed_skip_launder's fx2, regime_ceiling's fx2 at count 40,
+    # grown_keyed_absent, nonpole_admission, rows_per_unit) loses its rows. grown_into_pole owns it.
+    record-pole-only)           printf '%s' "keyed_skip_launder regime_ceiling grown_keyed_absent nonpole_admission rows_per_unit" ;;
+    # THE REGIME CEILING is what producer_sequential's keyed 400s run and launder_novel_count's novel-count
+    # 600 FAIL on; dropped, both pass. regime_ceiling owns the ceiling and its edges.
+    regime-ceiling-dropped)     printf '%s' "producer_sequential launder_novel_count" ;;
+    admission-per-width)        printf '%s' "pole_moved keyed_skip_launder tracked_seed launder_novel_count regime_ceiling" ;;
     # THE OBSERVED POLE READ FROM THE RECORD makes the ghost's 100000s the pole in ghost_record's world,
     # which then calibrates where the arm asserts GROWN. True of the same defect; record_pole_skipped owns it.
     observed-pole-from-record)  printf '%s' "ghost_record" ;;
@@ -2122,7 +2133,7 @@ mut k-window-restored \
 # H12: THE SIDECAR NOT CONSUMED -- one published measurement recorded once per invocation.
 mut sidecar-not-consumed \
   ': > "$side" 2>/dev/null' \
-  's/^    : > "\$side" 2>\/dev\/null$/    : # MUTANT-NO-CONSUME/' \
+  's/^  : > "\$side" 2>\/dev\/null$/  : # MUTANT-NO-CONSUME/' \
   sidecar_consumed \
   1 \
   'MUTANT-NO-CONSUME'
@@ -2171,11 +2182,12 @@ mut drop-count-band \
 
 # L1b (A): KEYED ON LOAD, NOT COUNT -- the shipped predicate before the adversary's blocker. A uniform
 # slowdown moves the load out of band and the regression calibrates instead of failing.
-# The band reads the load column against this run's load: three sites in one sed, keyed on the awk
-# variable binding, whose anchor must go to zero.
+# The comparator's band reads the load column against this run's load: three sites in one sed, keyed
+# on hist_read's own variable binding (the line ending in the program's opening quote), whose anchor
+# must go to zero. unit_rows binds C too, on a line that goes on to -v rband, and is left alone.
 mut key-on-load-not-count \
-  '-v C="$DISP"' \
-  's/-v C="\$DISP"/-v C="$LOAD"/; s/if (\$7 \* 100 < C/if ($6 * 100 < C/; s/if (\$7 \* 100 > C/if ($6 * 100 > C/' \
+  "-v C=\"\$DISP\" -v band=\"\$COUNT_BAND\" '" \
+  "s/-v C=\"\\\$DISP\" -v band=\"\\\$COUNT_BAND\" '\$/-v C=\"\$LOAD\" -v band=\"\$COUNT_BAND\" '/; s/if (\\\$7 \\* 100 < C/if (\$6 * 100 < C/; s/if (\\\$7 \\* 100 > C/if (\$6 * 100 > C/" \
   uniform_slowdown
 
 # L6 (a): RECORD THE POLE ONLY -- the pre-option-(a) recorder. Every non-pole unit is skipped, so a unit
@@ -2201,9 +2213,12 @@ mut ghost-units-recorded \
 # L10 (8): ROWS WRITTEN BY awk DIRECTLY -- awk appends to the history itself and the shell printf
 # writes nothing. Behaviourally identical with one writer; it tore 2-112 lines with two. Only the
 # structural arm can see it.
+# The history file is created up front so awk appends to the real file even on a first run (with the
+# /dev/null stand-in the rows would vanish and every first-run arm would die for a reason that is not
+# this mutant's), which keeps the mutant behaviourally identical to the tip with one writer.
 mut rows-written-by-awk \
   'buf = buf sprintf(' \
-  's/buf = buf sprintf(\(.*\))$/printf(\1) >> hf/' \
+  's/buf = buf sprintf(\(.*\))$/printf(\1) >> hf/; s/\[ -f "\$HIST" \] || UR_HIST=\/dev\/null/: >> "$HIST"/' \
   append_site_pinned
 
 # L2 (a): THE OBSERVED POLE COUNTED IN THE LOAD -- the grown unit votes on its own comparability, so

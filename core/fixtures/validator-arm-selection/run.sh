@@ -154,6 +154,10 @@ fi
 
 VAL="$ROOT/scripts/validate-enforcement-map.sh"
 RENDERER="$ROOT/scripts/render-invariant-index.sh"
+# The hermetic runner's REQUIRED-input sentinel, printed where the subject is resolved, after the
+# distribution-only SKIP above and before any arm drives it. Printed once, by the top-level run only:
+# the --attrib-one / --sweep-one workers below re-enter this file and must not repeat it.
+case "${1:-}" in --attrib-one|--sweep-one) : ;; *) echo "HERMETIC-CONSUMED scripts/validate-enforcement-map.sh" ;; esac
 SEED="$ROOT/core/fixtures/enforcement-map-sites/seed.sh"
 
 # --- the per-id worker, re-entered through xargs ------------------------------------------

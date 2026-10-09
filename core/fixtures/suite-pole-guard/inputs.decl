@@ -1,0 +1,6 @@
+# The subject: every arm drives it on mktemp probe trees. REQUIRED, printed where it is resolved.
+!scripts/validate-suite-pole.sh
+# The hook-step arms extract readset_lock_stale, pole_guard_step, the overlap probe and the width-sidecar
+# lines from the distribution hook and drive them against a stub validator.
+.githooks/pre-push
+core/fixtures/lib/
