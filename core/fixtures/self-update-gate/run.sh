@@ -2366,6 +2366,253 @@ else
   fi
 fi
 
+
+# --- A SCRIPT A PRIOR SELF-UPDATE LANDED IS NOT ONE THIS CYCLE PRE-WROTE: THE `PL` MINIATURE ----
+#
+# The pre-written arm above refuses a consumer copy already at theirs, and its remedy is "re-run with
+# the range the stamp names". A consumer whose PREVIOUS self-update wrote the script already did:
+# step 2 passes the stamp's `commit`, which advances only at the gated apply, so base..theirs still
+# spans the release that self-update took, and the copy is at theirs because that cycle wrote it.
+# The gate acquits such a script (`landed by the prior self-update`) only when ALL six conjuncts
+# hold: A1 the stamp's skill_commit peels to SK; A2 SK != theirs; A3 blob(SK) == the copy; A4 base
+# <= SK <= theirs by ancestry; A5 no `.ai-dlc-applying`; A6 the copy is COMMITTED at HEAD. Every
+# world below fails EXACTLY ONE conjunct, or none, and each conjunct has its own mutant.
+#
+# THE PW MINIATURE ABOVE CANNOT EXPRESS THIS, measured rather than assumed: it has no middle commit
+# for a skill_commit to name and its consumer is not a git repository, so A6 fails on every world
+# it can build and the acquittal is unreachable there. Hence a second distribution:
+#   pre    moved.sh ALREADY at its final content        (behind base: a skill_commit there is off the range)
+#   base   moved.sh rewritten, late.sh at its first content
+#   mid   moved.sh reaches its FINAL content           (the prior self-update's skill_commit)
+#   theirs VERSION bumped, late.sh changed               (moved.sh untouched: mid blob == theirs blob)
+#   side   mid's TREE on a commit whose parent is base   (same blob, NOT an ancestor of theirs)
+#
+# EACH WORLD CARRIES ITS OWN REFS in `.B`/`.T` beside its consumer, and every drive reads those,
+# never the globals. EACH DRIVE COPIES THE WORLD into a fresh directory, because the gate writes a
+# record under the consumer's `_bmad-output/` on every run and a world re-driven by seven mutants
+# would otherwise read a tree the previous drive changed.
+PL="$(dirname "$DIST")/pl"
+mkdir -p "$PL/dist/core/scripts" "$PL/dist/core/rules"
+git -C "$PL/dist" init -q
+pl_commit() { # pl_commit <msg> -> sha
+  git -C "$PL/dist" add -A >/dev/null 2>&1
+  git -C "$PL/dist" -c user.email=f@x -c user.name=f commit -qm "$1" >/dev/null 2>&1
+  git -C "$PL/dist" rev-parse HEAD
+}
+printf '0.1.0\n'                > "$PL/dist/VERSION"
+printf 'pl machinery\n'         > "$PL/dist/core/rules/pl.md"
+printf '#!/bin/sh\n# landed by the prior cycle\nexit 0\n' > "$PL/dist/core/scripts/moved.sh"
+printf '#!/bin/sh\n# late\nexit 0\n' > "$PL/dist/core/scripts/late.sh"
+PL_PRE="$(pl_commit pre)"
+printf '#!/bin/sh\nexit 0\n'    > "$PL/dist/core/scripts/moved.sh"
+PL_BASE="$(pl_commit base)"
+printf '#!/bin/sh\n# landed by the prior cycle\nexit 0\n' > "$PL/dist/core/scripts/moved.sh"
+PL_MID="$(pl_commit mid)"
+printf '0.2.0\n'                > "$PL/dist/VERSION"
+printf '#!/bin/sh\n# late, reworded in mid..theirs\nexit 0\n' > "$PL/dist/core/scripts/late.sh"
+PL_THEIRS="$(pl_commit theirs)"
+# The side commit is built with `commit-tree`, so the dist's working tree and HEAD never move.
+PL_SIDE="$(git -C "$PL/dist" -c user.email=f@x -c user.name=f commit-tree "${PL_MID}^{tree}" -p "$PL_BASE" -m side 2>/dev/null)"
+git -C "$PL/dist" update-ref refs/heads/pl-side "$PL_SIDE" >/dev/null 2>&1
+
+PL_HOOK_RUN='#!/usr/bin/env bash
+bash scripts/ai-dlc/moved.sh || exit 1
+bash scripts/ai-dlc/late.sh || exit 1
+'
+PL_HOOK_MENTION='#!/usr/bin/env bash
+# scripts/ai-dlc/moved.sh is named here and never run, so its exit status gates nothing
+bash scripts/ai-dlc/late.sh || exit 1
+'
+pl_world() { # pl_world <name> <moved-ref> <late-ref> <hook-text> -> world dir (consumer COMMITTED)
+  local w="$PL/w-$1"
+  mkdir -p "$w/cons/scripts/ai-dlc" "$w/cons/.githooks" "$w/cons/.claude"
+  printf '%s\n' "$PL_BASE"   > "$w/.B"
+  printf '%s\n' "$PL_THEIRS" > "$w/.T"
+  git -C "$PL/dist" show "${2}:core/scripts/moved.sh" > "$w/cons/scripts/ai-dlc/moved.sh"
+  git -C "$PL/dist" show "${3}:core/scripts/late.sh"  > "$w/cons/scripts/ai-dlc/late.sh"
+  printf '%s' "$4" > "$w/cons/.githooks/pre-push"
+  chmod +x "$w/cons/.githooks/pre-push" "$w/cons/scripts/ai-dlc"/*.sh
+  git -C "$w/cons" init -q
+  git -C "$w/cons" add -A >/dev/null 2>&1
+  git -C "$w/cons" -c user.email=f@x -c user.name=f commit -qm seed >/dev/null 2>&1
+  printf '%s\n' "$w"
+}
+pl_stamp() { # pl_stamp <world> <skill_commit> -- abbreviated to 8 chars, as the reference consumer writes it
+  printf 'version: 0.1.0\ncommit: %s\nskill_version: 0.2.0\nskill_commit: %s\n' \
+    "$(cat "$1/.B")" "$(printf '%s' "$2" | cut -c1-8)" > "$1/cons/.claude/.ai-dlc-version"
+}
+pl_drive() { # pl_drive <gate> <world> -> path of the gate's stdout, from a fresh copy of the consumer
+  local d
+  d="$(mktemp -d "$PL/drive.XXXXXX")"
+  cp -R "$2/cons/." "$d/"
+  bash "$1" "$PL/dist" "$(cat "$2/.B")" "$(cat "$2/.T")" "$d" > "$d.out" 2>/dev/null
+  printf '%s\n' "$d.out"
+}
+# "<status>|<tags>", tags a `+`-joined subset of {landed, pw, ng}. Compared by EXACT equality, so a
+# row carrying the acquittal marker AND the refusal marker cannot pass for either.
+pl_row() { # pl_row <gate> <world> <script>
+  awk -F'\t' -v s="$3" '$2 == s {
+      t = ""
+      if ($3 ~ /landed by the prior self-update/) t = t (t == "" ? "" : "+") "landed"
+      if ($3 ~ /ALREADY at theirs/)              t = t (t == "" ? "" : "+") "pw"
+      if ($3 ~ /^not gating/)                    t = t (t == "" ? "" : "+") "ng"
+      print $1 "|" t; exit }' "$(pl_drive "$1" "$2")"
+}
+
+PL_W1="$(pl_world w1 "$PL_MID" "$PL_BASE" "$PL_HOOK_RUN")"; pl_stamp "$PL_W1" "$PL_MID"
+PL_W2="$(pl_world w2 "$PL_MID" "$PL_BASE" "$PL_HOOK_RUN")"; pl_stamp "$PL_W2" "$PL_THEIRS"
+# W3 is POST-WRITE, COMMITTED, PRE-STAMP: late.sh at theirs and committed, the stamp still at mid.
+# Committed ON PURPOSE -- uncommitted, A6 would fail beside A3 and the A3 mutant could not kill.
+PL_W3="$(pl_world w3 "$PL_MID" "$PL_THEIRS" "$PL_HOOK_RUN")"; pl_stamp "$PL_W3" "$PL_MID"
+PL_W4="$(pl_world w4 "$PL_MID" "$PL_BASE" "$PL_HOOK_RUN")"; pl_stamp "$PL_W4" "$PL_MID"
+: > "$PL_W4/cons/.claude/.ai-dlc-applying"
+PL_W5="$(pl_world w5 "$PL_MID" "$PL_BASE" "$PL_HOOK_RUN")"; pl_stamp "$PL_W5" "$PL_SIDE"
+PL_W6="$(pl_world w6 "$PL_MID" "$PL_BASE" "$PL_HOOK_RUN")"
+# W7, THE HOLE: HEAD holds moved.sh at BASE, the working copy was overwritten with theirs' bytes
+# after that commit and never committed, the stamp still at mid. A1-A5 all hold; only A6 sees it.
+PL_W7="$(pl_world w7 "$PL_BASE" "$PL_BASE" "$PL_HOOK_RUN")"; pl_stamp "$PL_W7" "$PL_MID"
+git -C "$PL/dist" show "${PL_THEIRS}:core/scripts/moved.sh" > "$PL_W7/cons/scripts/ai-dlc/moved.sh"
+PL_W8="$(pl_world w8 "$PL_MID" "$PL_BASE" "$PL_HOOK_MENTION")"
+# W9 is W1 with the stamp BEHIND base: pre carries theirs' bytes, and A2, A3, A5 and A6 all hold,
+# as does SK <= theirs. Only A4's base <= SK half refuses it.
+PL_W9="$(pl_world w9 "$PL_MID" "$PL_BASE" "$PL_HOOK_RUN")"; pl_stamp "$PL_W9" "$PL_PRE"
+
+# PRECONDITIONS, AND EVERY WORLD BELOW IS VACUOUS WITHOUT THEM: both scripts are in the range's
+# changed set; moved.sh moved in base..mid and NOT in mid..theirs (so mid's blob IS theirs'); the
+# side commit holds that same blob and is not an ancestor of theirs; the run-hook READS both exit
+# statuses; W7's HEAD really is at base while its working copy is at theirs.
+pl_blob() { git -C "$PL/dist" rev-parse "${1}:core/scripts/${2}" 2>/dev/null; }
+ss_assert "pl-seed" \
+  "$(git -C "$PL/dist" diff --name-only "${PL_BASE}..${PL_THEIRS}" -- core/scripts/ | sort | tr '\n' ',')|$([ "$(pl_blob "$PL_BASE" moved.sh)" != "$(pl_blob "$PL_MID" moved.sh)" ] && printf moved || printf same)|$([ "$(pl_blob "$PL_MID" moved.sh)" = "$(pl_blob "$PL_THEIRS" moved.sh)" ] && printf mid=theirs || printf mid!=theirs)|$([ "$(pl_blob "$PL_SIDE" moved.sh)" = "$(pl_blob "$PL_MID" moved.sh)" ] && printf side=mid || printf side!=mid)|$(git -C "$PL/dist" merge-base --is-ancestor "$PL_SIDE" "$PL_THEIRS" 2>/dev/null && printf onrange || printf offrange)|runs=$(grep -c ' || exit 1$' "$PL_W1/cons/.githooks/pre-push" || :)|w7=$([ "$(git -C "$PL_W7/cons" rev-parse HEAD:scripts/ai-dlc/moved.sh 2>/dev/null)" = "$(pl_blob "$PL_BASE" moved.sh)" ] && [ "$(git hash-object "$PL_W7/cons/scripts/ai-dlc/moved.sh")" = "$(pl_blob "$PL_THEIRS" moved.sh)" ] && printf head-base,wc-theirs || printf other)|$(git -C "$PL/dist" merge-base --is-ancestor "$PL_PRE" "$PL_BASE" 2>/dev/null && printf pre-behind-base || printf pre-other)|$([ "$(pl_blob "$PL_PRE" moved.sh)" = "$(pl_blob "$PL_THEIRS" moved.sh)" ] && printf pre=theirs || printf pre!=theirs)" \
+  "core/scripts/late.sh,core/scripts/moved.sh,|moved|mid=theirs|side=mid|offrange|runs=2|w7=head-base,wc-theirs|pre-behind-base|pre=theirs" \
+  "both scripts are in the gating set, moved.sh's final bytes landed at mid, the side commit carries them off the range, W7's HEAD and working copy disagree, and pre sits behind base holding theirs' bytes"
+
+# W1 CARRIES ITS OWN CONTROL ROW: late.sh, at base and gating, gets the ordinary OK with NO marker,
+# so the two rows prove both scripts reached the differential side of the not-gating terminal.
+ss_assert "pl-w1-landed" "$(pl_row "$GATE" "$PL_W1" moved.sh);$(pl_row "$GATE" "$PL_W1" late.sh)" \
+  "SELF-UPDATE-OK|landed;SELF-UPDATE-OK|" \
+  "a gating script the prior self-update at mid wrote, committed, stamp still at mid, is acquitted as landed -- while its unwritten sibling keeps the ordinary verdict"
+ss_assert "pl-w2-poststamp" "$(pl_row "$GATE" "$PL_W2" moved.sh)" "SELF-UPDATE-UNDECIDED|pw" \
+  "...the same tree with the stamp rewritten to theirs is a post-write re-run, and is refused (A2)"
+ss_assert "pl-w3-prestamp" "$(pl_row "$GATE" "$PL_W3" late.sh);$(pl_row "$GATE" "$PL_W3" moved.sh)" \
+  "SELF-UPDATE-UNDECIDED|pw;SELF-UPDATE-OK|landed" \
+  "written and committed but not yet re-stamped: late.sh, which mid..theirs changes, is refused (A3) while moved.sh in the same run is acquitted"
+ss_assert "pl-w4-applying" "$(pl_row "$GATE" "$PL_W4" moved.sh)" "SELF-UPDATE-UNDECIDED|pw" \
+  "W1's tree with .ai-dlc-applying on disk is a partial apply, and the stamp does not vouch for it (A5)"
+ss_assert "pl-w5-offrange" "$(pl_row "$GATE" "$PL_W5" moved.sh)" "SELF-UPDATE-UNDECIDED|pw" \
+  "a skill_commit on a side branch holding the identical blob is not a self-update inside base..theirs (A4)"
+ss_assert "pl-w6-nostamp" "$(pl_row "$GATE" "$PL_W6" moved.sh)" "SELF-UPDATE-UNDECIDED|pw" \
+  "no stamp, no skill_commit, no acquittal (A1)"
+ss_assert "pl-w7-dirty" "$(pl_row "$GATE" "$PL_W7" moved.sh)" "SELF-UPDATE-UNDECIDED|pw" \
+  "the copy at theirs is UNCOMMITTED over a HEAD at base -- this cycle's write, not the prior one's -- and is refused (A6)"
+ss_assert "pl-w8-notgating" "$(pl_row "$GATE" "$PL_W8" moved.sh)" "SELF-UPDATE-OK|ng" \
+  "a pre-written script the hook only MENTIONS has no differential to refuse: OK, not gating, with no pre-written marker"
+ss_assert "pl-w9-behindbase" "$(pl_row "$GATE" "$PL_W9" moved.sh)" "SELF-UPDATE-UNDECIDED|pw" \
+  "a skill_commit BEHIND base carrying theirs' bytes is not a self-update inside base..theirs (A4, base <= SK)"
+
+# --- MUTANTS on the acquittal and on the arm's position ----------------------------------
+# ANCHORS ARE COUNTED IN THE GATE, by `index`, never by an interactive grep: each must occur exactly
+# once, so a mutation edits one site; an anchor nothing carries must count 0, so a count of 1 is a
+# reading and not a constant. None of them is an m8/m9 anchor.
+pl_anchor_n() { PL_AN="$1" awk 'index($0, ENVIRON["PL_AN"]) {n++} END {print n+0}' "$GATE"; }
+ss_assert "pl-anchors" \
+  "$(pl_anchor_n '&& [ "$pl_sk" != "$pl_th" ]')$(pl_anchor_n '[ "$pl_skb" = "$gi_cur_h" ]')$(pl_anchor_n 'git -C "$DIST" merge-base --is-ancestor "$BASE" "$pl_sk" 2>/dev/null')$(pl_anchor_n 'git -C "$DIST" merge-base --is-ancestor "$pl_sk" "$pl_th" 2>/dev/null')$(pl_anchor_n '[ ! -e "$CONSUMER/.claude/.ai-dlc-applying" ]')$(pl_anchor_n '[ -n "$pl_hd" ] && [ "$pl_hd" = "$gi_cur_h" ]')$(pl_anchor_n 'if [ "$pl_sk" != "-" ] && [ -n "$pl_th" ]')$(pl_anchor_n '  # ---- HOW THE HOOK RUNS IT')$(pl_anchor_n '  cur_absent=0')$(pl_anchor_n '> "$TMP/argvs"')|$(pl_anchor_n 'pl_NEVER_IN_THE_GATE_q7Zx')" \
+  "1111111111|0" \
+  "every mutation below edits exactly one site of the gate, and an anchor the gate lacks counts 0"
+
+# A literal-substring replacement, up to two sites, built through `vr_mut` (siblings beside it).
+pl_lit_mut() { # pl_lit_mut <name> <anchor> <repl> [<anchor2> <repl2>] -> mutated gate path
+  PL_A1="$2" PL_R1="$3" PL_A2="${4:-}" PL_R2="${5:-}"
+  export PL_A1 PL_R1 PL_A2 PL_R2
+  vr_mut "$1" 'BEGIN { A1 = ENVIRON["PL_A1"]; R1 = ENVIRON["PL_R1"]; A2 = ENVIRON["PL_A2"]; R2 = ENVIRON["PL_R2"] }
+    { i = index($0, A1); if (i) $0 = substr($0, 1, i - 1) R1 substr($0, i + length(A1))
+      if (A2 != "") { i = index($0, A2); if (i) $0 = substr($0, 1, i - 1) R2 substr($0, i + length(A2)) }
+      print }'
+  unset PL_A1 PL_R1 PL_A2 PL_R2
+}
+# A mutant is scored on THREE drives in one cell: its own world (which must flip), and two worlds it
+# must NOT move -- the unmutated W1 acquittal or its refusal twin, and a sibling. A copy that died
+# emits nothing and fails the control conjuncts, so silence cannot score as a kill. A copy identical
+# to the gate, or of a different length (every mutation here preserves the line count), DID NOT APPLY.
+pl_kill() { # pl_kill <label> <gate> <want> <why> <world> <script> <world> <script> <world> <script>
+  local got
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ ! -s "$2" ] || cmp -s "$GATE" "$2"; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s DID NOT APPLY: the mutation matched nothing, so the conjunct it scores is unproven\n' "$1"
+    return
+  fi
+  if [ "$(wc -l < "$GATE")" != "$(wc -l < "$2")" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s DID NOT APPLY: the mutant has %s lines against %s\n' "$1" "$(wc -l < "$2" | tr -d ' ')" "$(wc -l < "$GATE" | tr -d ' ')"
+    return
+  fi
+  got="$(pl_row "$2" "$5" "$6");$(pl_row "$2" "$7" "$8");$(pl_row "$2" "$9" "${10}")"
+  if [ "$got" = "$3" ]; then
+    printf '  ok    %-16s KILLED (%s)\n' "$1" "$4"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]  %s\n' "$1" "$got" "$3" "$4"
+  fi
+}
+
+pl_kill "pl-mut-a2" \
+  "$(pl_lit_mut pl-a2 '&& [ "$pl_sk" != "$pl_th" ]' '')" \
+  "SELF-UPDATE-OK|landed;SELF-UPDATE-OK|landed;SELF-UPDATE-UNDECIDED|pw" \
+  "without SK != theirs the post-stamp re-run is acquitted; W1 and the off-range W5 do not move" \
+  "$PL_W2" moved.sh "$PL_W1" moved.sh "$PL_W5" moved.sh
+pl_kill "pl-mut-a3" \
+  "$(pl_lit_mut pl-a3 '[ "$pl_skb" = "$gi_cur_h" ]' 'true')" \
+  "SELF-UPDATE-OK|landed;SELF-UPDATE-OK|landed;SELF-UPDATE-UNDECIDED|pw" \
+  "without blob(SK) == the copy, late.sh -- written THIS cycle -- is acquitted; W1 and the post-stamp W2 do not move" \
+  "$PL_W3" late.sh "$PL_W1" moved.sh "$PL_W2" moved.sh
+# BOTH ANCESTRY HALVES ARE DROPPED, the honest revert of A4, scored on W5 (SK -> theirs: the side
+# commit descends from base). The base -> SK half is scored alone by pl-mut-a4-base on W9.
+pl_kill "pl-mut-a4" \
+  "$(pl_lit_mut pl-a4 'git -C "$DIST" merge-base --is-ancestor "$BASE" "$pl_sk" 2>/dev/null' 'true' 'git -C "$DIST" merge-base --is-ancestor "$pl_sk" "$pl_th" 2>/dev/null' 'true')" \
+  "SELF-UPDATE-OK|landed;SELF-UPDATE-OK|landed;SELF-UPDATE-UNDECIDED|pw" \
+  "without the ancestry test a side-branch skill_commit carrying the same blob acquits; W1 and W2 do not move" \
+  "$PL_W5" moved.sh "$PL_W1" moved.sh "$PL_W2" moved.sh
+# ONLY the base -> SK half dropped: W9's stamp behind base acquits, while W1 and the side-branch W5
+# (which the SK -> theirs half still refuses) do not move.
+pl_kill "pl-mut-a4-base" \
+  "$(pl_lit_mut pl-a4b 'git -C "$DIST" merge-base --is-ancestor "$BASE" "$pl_sk" 2>/dev/null' 'true')" \
+  "SELF-UPDATE-OK|landed;SELF-UPDATE-OK|landed;SELF-UPDATE-UNDECIDED|pw" \
+  "without base <= SK a skill_commit behind base carrying theirs' bytes acquits; W1 and the off-range W5 do not move" \
+  "$PL_W9" moved.sh "$PL_W1" moved.sh "$PL_W5" moved.sh
+pl_kill "pl-mut-a5" \
+  "$(pl_lit_mut pl-a5 '[ ! -e "$CONSUMER/.claude/.ai-dlc-applying" ]' 'true')" \
+  "SELF-UPDATE-OK|landed;SELF-UPDATE-OK|landed;SELF-UPDATE-UNDECIDED|pw" \
+  "without the applying guard a partial apply's tree is acquitted; W1 and the dirty W7 do not move" \
+  "$PL_W4" moved.sh "$PL_W1" moved.sh "$PL_W7" moved.sh
+pl_kill "pl-mut-a6" \
+  "$(pl_lit_mut pl-a6 '[ -n "$pl_hd" ] && [ "$pl_hd" = "$gi_cur_h" ]' 'true')" \
+  "SELF-UPDATE-OK|landed;SELF-UPDATE-OK|landed;SELF-UPDATE-UNDECIDED|pw" \
+  "without the committed check this cycle's uncommitted write over a base HEAD is acquitted; W1 and the applying W4 do not move" \
+  "$PL_W7" moved.sh "$PL_W1" moved.sh "$PL_W4" moved.sh
+# THE WHOLE ACQUITTAL, scored on W1 -- the fix is load-bearing -- with the refusal twin W2 and the
+# not-gating W8 as the cells it must not move.
+pl_kill "pl-mut-all" \
+  "$(pl_lit_mut pl-all 'if [ "$pl_sk" != "-" ] && [ -n "$pl_th" ]' 'if false && [ -n "$pl_th" ]')" \
+  "SELF-UPDATE-UNDECIDED|pw;SELF-UPDATE-UNDECIDED|pw;SELF-UPDATE-OK|ng" \
+  "with the acquittal unreachable the prior-landed script is refused again; W2 and W8 do not move" \
+  "$PL_W1" moved.sh "$PL_W2" moved.sh "$PL_W8" moved.sh
+# THE REORDER, REVERTED AS A WHOLE: the pre-written block (`cur_absent=0` up to the `argvs` line)
+# moved back above the hook scan. The awk prints the file UNCHANGED unless all three boundaries are
+# found in order, so a lost anchor reads DID NOT APPLY rather than as a mutant.
+pl_kill "pl-mut-order" \
+  "$(vr_mut pl-order '{ L[NR] = $0 }
+    !h && index($0, "  # ---- HOW THE HOOK RUNS IT") == 1 { h = NR }
+    !c && $0 == "  cur_absent=0" { c = NR }
+    !a && index($0, "> \"$TMP/argvs\"") { a = NR }
+    END { if (h && c && a && h < c && c < a) {
+            for (i = 1; i < h; i++) print L[i]; for (i = c; i < a; i++) print L[i]
+            for (i = h; i < c; i++) print L[i]; for (i = a; i <= NR; i++) print L[i] }
+          else for (i = 1; i <= NR; i++) print L[i] }')" \
+  "SELF-UPDATE-UNDECIDED|pw;SELF-UPDATE-OK|landed;SELF-UPDATE-UNDECIDED|pw" \
+  "with the arm back above the not-gating terminal a mention-only pre-written script defers the run; W1 and W6 do not move" \
+  "$PL_W8" moved.sh "$PL_W1" moved.sh "$PL_W6" moved.sh
+
 # ONE ROW PER CONSUMER PATH, AND THE DEDUP IS LOAD-BEARING RATHER THAN COSMETIC. Two sites record
 # a gating script: the hook-named loop and the machinery loop, which `map_consumer` sends to the
 # same consumer path. Unmutated they emit BYTE-IDENTICAL rows -- same path, same digest, same core

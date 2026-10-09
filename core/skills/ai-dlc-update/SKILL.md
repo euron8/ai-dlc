@@ -490,6 +490,12 @@ prose is itself generated rather than composed.
    written tree compares each incoming script with a copy of itself, so it reports OK for the one
    reason that means nothing, and the runner refuses such a record as `PRE-WRITTEN`.
 
+   **A script a PRIOR self-update landed is not pre-written.** The gate identifies it by the
+   stamp's `skill_commit` and the consumer's committed copy, and reports it as `SELF-UPDATE-OK …
+   landed by the prior self-update`. A script that is already at theirs but that the hook only
+   mentions and never runs reads `not gating`. In both cases the slice still subtracts the script
+   as ALREADY-AT-THEIRS and does not write it.
+
    **One tolerance, and it exists because a fix to a bootstrapping step cannot be delivered by that
    step.** On the pull that delivers the recording gate the OLD gate runs and records nothing, so
    the runner proceeds with a `NOT-REQUIRED` line when no record exists AND the gate at `base` —

@@ -19,6 +19,65 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.758.0] - 2026-10-09
+
+Batch 211, release 1. It closes `BL-489`, a consumer filing against the self-update gate. It ships alone because its
+subject is the update skill, a bootstrapping file. No pre-push hook changes.
+
+### The self-update gate no longer refuses a gating script a prior self-update landed (PC-S317-SELF-UPDATE-GATE-UNDECIDED-ON-MACHINERY-A-PRIOR-SELF-UPDATE-LANDED)
+
+- **What failed.** `core/skills/ai-dlc-update/reconcile/self-update-gate.sh`'s pre-written arm refused, with
+  UNDECIDED, every script whose consumer copy was at `theirs` while `base..theirs` changed it. That includes a copy
+  an earlier, gate-approved self-update wrote. Step 2 passes the stamp's `commit`, and `commit` advances only at the
+  gated apply, so every pull between a self-update and the gated apply still spans that self-update's release. The
+  refusal turned the run into `SELF-UPDATE-DEFER`, and the arm's own remedy could not clear it.
+- **Measured on graph.** Stamp `commit: 74e8ea88`, `skill_commit: f4686761`, theirs `0a123701`.
+  `hermetic-run.sh` is blob `5985d4d5` at `skill_commit`, at theirs and in graph's tree, and `7565cf77` at base.
+  `f4686761..0a123701` changes only `derive-fixture-readsets.sh` under `core/scripts/`.
+- **The arm moves.** The whole pre-written arm now sits after the hook-scan terminals, so a script whose exit status
+  the hook never reads gets `SELF-UPDATE-OK … not gating` before it can be refused. graph's hook reaches
+  `hermetic-run.sh` only through a `for c in …` list, so the reorder alone answers the filed case. On a scratch copy of
+  graph with the filing's argv, tip printed `not gating (… line 1601 list mention)` with no DEFER, while base printed
+  UNDECIDED and DEFER.
+- **The acquittal.** Inside the arm, a script a prior self-update landed now reads `SELF-UPDATE-OK … landed by the
+  prior self-update at <sk>` and SKIPS the differential; a failure under theirs' new argv or under a sibling
+  helper changed in `base..theirs` is caught by `self-update-push.sh`'s own hook run as HOOK-REFUSED. It
+  requires all six conjuncts:
+  - the stamp's `skill_commit`, read through `gate_rec_skill_commit`, peels (abbreviated values count);
+  - `skill_commit` is not theirs;
+  - the blob at `skill_commit` equals the consumer's copy;
+  - base ≤ `skill_commit` ≤ theirs by ancestry;
+  - `.claude/.ai-dlc-applying` is absent;
+  - the copy is committed at the consumer's `HEAD`.
+- **The rejected remedy.** The filing also proposed subtracting preclassify's ALREADY-AT-THEIRS set. That would
+  acquit a post-write re-run, because after the write every slice path is at theirs. That re-run is the hazard the
+  arm exists for.
+- **The adversary's BLOCKER.** The contract adversary found that, between step 2's write and its commit, the stamp is
+  still at the prior split. A re-run of the gate then acquitted a script that held base content before the write. The
+  committed-copy conjunct closes that.
+- **The runner's mirror site.** `self-update-fixtures.sh`'s PRE-WRITTEN arm keeps its own conjunct set (recorded stamp,
+  no ancestry key, no committed-copy check, because it reads after the commit). Neither site shares a helper with the
+  other.
+- **Fixture.** `core/fixtures/self-update-gate/run.sh` gains a middle commit and a gating `late.sh` in its pre-written
+  miniature, and these worlds:
+  - prior-landed reads OK;
+  - stamp at theirs reads UNDECIDED;
+  - post-write pre-stamp reads UNDECIDED for `late.sh`;
+  - applying marker present reads UNDECIDED;
+  - off-range `skill_commit` reads UNDECIDED;
+  - no stamp reads UNDECIDED;
+  - uncommitted copy reads UNDECIDED;
+  - mention-only pre-written reads `not gating`.
+
+  Conjuncts A2 to A6 (A1 is subsumed by A3), both halves of the ancestry test, the whole acquittal and the reorder
+  each have a `cmp -s`-guarded mutant, and each mutant fails exactly one cell. A `skill_commit` BEHIND base
+  carrying theirs' bytes reads UNDECIDED (the tip adversary's world). The runner's PRE-WRITTEN arm accepts a
+  mention-only record whose stamp carries the bytes and refuses one whose stamp does not; that population is
+  hand-copied bytes or a post-write re-run, and the cost is a DEFER after the branch is cut rather than before.
+- **Bootstrapping.** graph's INSTALLED gate runs the pull that delivers this release. At that pull, base is
+  `0a123701` and graph's stamp has `commit == skill_commit`, so the arm cannot fire on it. The fix takes effect on the
+  pull after.
+
 ## [0.757.0] - 2026-10-09
 
 Batch 212 (hermetic-pole), release 1. The four longest units of the pre-push fixture suite are sharded into
