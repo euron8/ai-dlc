@@ -39,3 +39,6 @@ uniq
 wc
 xargs
 yes
+# node is reached, not keyed: I120 derives the ECMAScript whitespace set with it, and the hook lists it
+# in READSET_UNKEYED_TOOLS, so it resolves on the invoker's PATH.
+?node
