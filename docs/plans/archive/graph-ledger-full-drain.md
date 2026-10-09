@@ -17615,3 +17615,56 @@ hook runs; the saving starts on the pull after. The banked ruling stands: report
 Batch 202's block below is history: batch 203's block replaces its branches, its two unshipped candidates, its open
 items and its delivery gap.
 
+**BATCH 206 SHIPPED TWO RELEASES, `v0.746.0` (`011cd83e`, #1054) AND `v0.749.0` (`ff6890fc`, #1057), AND DISCHARGED ONE
+CONSUMER CANDIDATE.** It was handed the plan by peer session ai-dlc-a9 at `origin/main` `1dc97eeb` (`VERSION` 0.745.0)
+and ran across a machine reboot and beside the hermetic-fixtures program's `v0.746.0`-then-`v0.747.0` and `v0.748.0`
+(sessions ai-dlc-f2/0a/1e), one gated push on the box at a time by GATE START / LANDED messages. The opening sweep read
+live 3 (all discharged), unfiled 0 on committed refs, worklist 0, TERMINAL 219, every control passing; the one new
+candidate was UNCOMMITTED in graph's working tree at scoping and committed during the batch (`6db41b60`).
+- `v0.746.0`, cut first at the operator's direction so the hermetic release could land behind it: `validate-spawn-ledger.sh`
+  reads its join query through here-strings (a `printf | awk '… exit'` EPIPE put `Broken pipe` on the caller's first
+  stderr line under pool load), and `fa_resolve_variant`/`fa_xcheck` refuse a snapshot or sprint-status reader whose exit
+  status is non-zero instead of reading it as "no variant" (under load a killed reader fell through to sprint-status and
+  could answer `NOT-OWED` on a `carry-over` snapshot; visible only through mutant M26). What fails under load is NOT
+  identified; the refusal names the reader rc so the next pooled hit shows it. `fold-architect-ledger-join` 72 arms,
+  M28, M23 widened. Also `validate-backlog-receipts.sh` `R2 all-manual` (an all-`verify: manual` ledger is accounted
+  for, not a zero; hook floor `--min-sh-receipts` 1 -> 0) and `BL-483`.
+- `v0.749.0`: `PC-S317-ROLE-CONTRACTS-CARRY-NO-CHUNKED-WRITE-INSTRUCTION-AND-THE-ADVISOR-PARAGRAPH-FIRES-ONLY-AT-FIRST-WRITE`
+  as `BL-484`. One byte-identical paragraph in all 18 role contracts directly after the advisor paragraph; the
+  completion rule (a role whose deliverable section names a completion signal writes it last; one that names none
+  chunks to `<result>.draft` and lands the result path with one final whole-file `Write`) closes the twelve plain
+  `wait-for-deliverable.sh` join sites by instruction, not by observation: no consumer beat has yet seen a `.draft` on
+  disk. Arms `I123`/`I124`, `derived-fence-binding` three-way drop matrix, `FORK_BUDGET` 3287 -> 3310 measured by the
+  gate's own method (`env -i` reads 5 lower than the fixture's inherited environment; use the fixture's).
+
+Live backlog **6 -> 8** (BL-483, BL-484 rotated; BL-477 to BL-479 and BL-485 are the hermetic program's), archive **465 -> 476**.
+
+**HELD, NOT SHIPPED:** `b206-c3` at `db833943`, a stability predicate for plain joins in `wait-for-deliverable.sh`.
+Refuted by the script's own header (146.6s between one writer's writes, so a one-poll window cannot tell a paused writer
+from a finished one) and it flakes six fixture arms (`wait-beat-liveness` :328,:725,:865; `wait-stale-deliverable`
+:335,:358,:374). Delete the branch unless a later batch wants the measurement.
+
+**OPEN FINDINGS, NOT FILED (the batch's net was already negative and each needs a measurement first):**
+- A mutant battery's INNER fixture copy was killed by SIGTERM under the width-8 pool (`fold-architect-ledger-join-mutants-b`
+  M22, rc=143, "no verdict line"), passing solo and on the immediate re-push. No fixture or subject sends TERM to a
+  sibling; three detached `derive-fixture-readsets.sh` post-green traces from earlier pushes were alive on the box.
+  ai-dlc-1e saw the same shape. The post-green trace also blocked the suite-pole comparison on every gate this batch
+  (`SKIP: a read-set live trace overlapped this run`), so `BL-465` recorded no width-8 row.
+- The local advisor gate scored a refspec-refused `git push` (no hook ran, exit 1 at the transport) as a release push and
+  denied the corrected command; and once the advisor answered `unavailable` it dropped to a warning for the session.
+- The operator-prioritized fix cost one wasted gate (about 40 minutes): rotating an entry left an all-manual ledger and R2
+  read it as a zero, which 22 seconds of `validate-backlog-receipts.sh` solo would have shown. Every validator phase whose
+  input a release moves is run solo before the push, and again after any rebase.
+- A consumer filing can be UNCOMMITTED at scoping; the committed-ref sweep cannot see it and the consumer-history hand's
+  `git diff HEAD` on the ledger is what found it.
+
+**OPERATOR RULINGS, BATCH 206:**
+- A pool-only fixture flake another batch is blocked on is fixed FIRST, as its own release, ahead of the batch's subject.
+- A session's denied action is never carried through a peer's release (declined ai-dlc-0a's cherry-pick request).
+- The gate's width-8 run was requested for `BL-465` evidence; the live-trace overlap made it unreachable.
+
+**THE DELIVERY GAP IS FOUR RELEASES.** graph's `.claude/.ai-dlc-version` reads 0.745.0 against `VERSION` 0.749.0; 0.746.0
+and 0.747.0 both change the pre-push hooks. The banked ruling stands: report the gap and write no runbook.
+
+Batch 204's block below is history: batch 206's block replaces its open items and its delivery gap.
+
