@@ -85,6 +85,7 @@ if [ -z "$VAL" ] || [ -z "$CONTRACT" ]; then
   exit 0
 fi
 REPO="$(cd "$(dirname "$VAL")/.." && pwd)"
+echo "HERMETIC-CONSUMED scripts/validate-enforcement-map.sh"
 
 # ---------------------------------------------------------------------------
 # THE SHARD SPLIT, AND IT IS A MEASUREMENT RATHER THAN A PREFERENCE
