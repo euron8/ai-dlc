@@ -1,0 +1,5 @@
+# process-rule-pins scans the skill tree and the roles in place: the pinned step and rule-body files, adversary.md and remediator.md,
+# the flat skill files for the retired-range count, and layer-contract.yaml for the consumer-owned exclusions. The root is found by
+# the dist-layout marker pair core/skills/ai-dlc + core/team-roles.
+!core/skills/ai-dlc/
+core/team-roles/

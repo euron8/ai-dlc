@@ -1,0 +1,21 @@
+# Tools run.sh, the renderer and preclassify.sh invoke.
+awk
+basename
+bash
+cat
+cmp
+cp
+cut
+diff
+dirname
+expr
+grep
+head
+mkdir
+mktemp
+mv
+rm
+sed
+sort
+touch
+tr
