@@ -334,7 +334,7 @@ prose is itself generated rather than composed.
    `ai-dlc-update` can depend on machinery elsewhere, and two of them do: `check-15-bypass`
    resolves `scripts/ai-dlc/core-paths.sh` and `core-manifest.md`, `core-write-guard`
    resolves the core guard hook. Pulling only `skills/ai-dlc-update/**` left both asserting
-   against machinery this cycle did not carry, and a red derived fixture HARD-STOPS the
+   against machinery this cycle did not carry, and a red derived fixture DEFERS the
    cycle — so the self-update wedged on a pull that broke nothing. The machinery set is the
    smallest slice that closes that ~~, because a fixture's subject is always machinery~~.
 
@@ -389,8 +389,13 @@ prose is itself generated rather than composed.
    each by name in one line, and carry it to the step-7 gated apply, which already emits a
    `WORKLIST semantic-merge <path>` row for it — so the path reaches the operator instead of
    being overwritten. `reconcile/self-update-gate.sh` emits one `SELF-UPDATE-CARRY` row per
-   such path; if its set and yours disagree, stop and report that, because one of the two
-   derivations is wrong.
+   such MACHINERY path; if its set and yours disagree on a machinery path, stop and report
+   that, because one of the two derivations is wrong. **A fixture path is outside that
+   comparison by construction:** the gate classifies the machinery set, which holds no
+   `core/fixtures/` entry, so it never emits a CARRY row for a fixture. Whether a fixture
+   directory is carried is decided by the fixture-write rule in the cycle below and by
+   nothing else, and that rule carries a WHOLE directory, never one file of it. A fixture
+   path you carry that the gate did not name is NOT a disagreement.
 
    A carried path stays in the `base→theirs` diff on every later invocation, since `base`
    advances only at step 7. That is correct and is NOT the non-termination case above: it is
@@ -482,9 +487,10 @@ prose is itself generated rather than composed.
    every consumer file the verdict read, with its digest and the core path it maps from, and the
    runner re-reads each one.
 
-   **THE ORDER IS GATE, THEN WRITE, THEN RUNNER, AND THE GATE RUNS ONCE.** Run
+   **THE ORDER IS GATE, THEN WRITE, THEN RUNNER, THEN COMMIT, AND THE GATE RUNS ONCE.** Run
    `self-update-gate.sh` BEFORE writing anything, on the tree as the operator left it; write the
-   slice; then run the fixture runner. It accepts an input whose content is now what this pull
+   slice; run the fixture runner on the written, UNCOMMITTED tree; commit only after it is green.
+   The runner accepts an input whose content is now what this pull
    ships — that is the slice it just wrote — and refuses one that is neither the recorded content
    nor `theirs`. **Never re-run the gate after the write to refresh a record.** A gate run on the
    written tree compares each incoming script with a copy of itself, so it reports OK for the one
@@ -507,12 +513,11 @@ prose is itself generated rather than composed.
      `ai-dlc-update/self-update-<theirs-version>-<ts>`, write from `theirs` **only the paths
      that diff names AND that survived both subtractions above** — never a path carried by a
      `SELF-UPDATE-CARRY` row — each at the consumer destination `map_consumer()` gives it, and
-     `tests/fixtures/<dir>/` for the covering fixtures — never the derived set per
+     `tests/fixtures/<dir>/` for the covering fixtures, each directory WHOLE or not at all
+     (the fixture-write rule below) — never the derived set per
      directory, **update the stamp's
      `skill_version`/`skill_commit` to `theirs`** (rewrite the stamp in schema,
-     preserving `version`/`commit`/`installed_at`/`upstream`), commit
-     (`chore(ai-dlc-update): self-update <base-skill-ver> → <theirs-ver>`) — **including the
-     gate record and the fixture log, which are this cycle's approval artifact** — **run the
+     preserving `version`/`commit`/`installed_at`/`upstream`), then, BEFORE any commit, **run the
      derived fixtures through
      `reconcile/self-update-fixtures.sh <dist> <base> <theirs> <consumer> <fixture>...`
      — each `<fixture>` is a bare fixture DIRECTORY NAME, one per argument; the
@@ -521,7 +526,11 @@ prose is itself generated rather than composed.
      other slash form, and any single argument holding more than one name, is refused —
      **word-split the derived list explicitly**, because an unquoted variable holding a
      newline-joined list arrives as ONE argument under zsh —
-     **and require green BEFORE the push**, push **through the wrapper, never a bare `git push`**:
+     **and require green BEFORE the commit and the push**; a red run is the uncommitted-red
+     paragraph below. On green, commit
+     (`chore(ai-dlc-update): self-update <base-skill-ver> → <theirs-ver>`) — **including the
+     gate record and the fixture log, which are this cycle's approval artifact** — and push
+     **through the wrapper, never a bare `git push`**:
      `bash reconcile/self-update-push.sh <consumer> origin <self-update-branch> _bmad-output/ai-dlc-update/self-update-push-<ts>.md`
      (`origin` is the remote step 1 synced against; the last argument is a NEW untracked path
      the wrapper writes only on a hook refusal). Exit 0 means pushed: open a PR, and
@@ -609,6 +618,22 @@ prose is itself generated rather than composed.
      a fixture is not, and the derived set's FIRST term is grepped from the fixtures rather than
      from the diff, so it names fixtures this pull does not change.
 
+     **A FIXTURE DIRECTORY IS ONE UNIT: if ANY path under a derived fixture directory is held
+     back as a consumer edit, write NONE of that directory and carry ALL of it** to the step-7
+     gated apply, every path the diff names under it, reported by directory in one line. Never
+     write the upstream-only files of a directory whose other file you held back. Its `run.sh`,
+     `inputs.decl`, `tools.decl`, `seed.sh` and `lib.sh` describe one test, and a new `!`
+     REQUIRED line in an incoming `inputs.decl` beside the consumer's older `run.sh` that never
+     consumes it is a fixture the consumer's own pre-push refuses with `required_missing=1`.
+     Measured on the reference consumer's `0.760.0` self-update: `artifact-path-conformance`'s
+     `run.sh` was held back as BOTH-CHANGED, its upstream-only `inputs.decl` was written, and
+     the push refused that fixture. This is a WRITE rule only: a carried directory is still
+     NAMED to the runner (the KEEP-IT-IN-THE-DERIVED-SET paragraph below), and the runner then runs the consumer's
+     untouched copy. This rule does not touch `GATE_CARRY_STATE`, which the gate derives from
+     machinery CARRY rows alone; a fixture directory carried here is never a gate CARRY row.
+     **This prose takes effect on the invocation AFTER a landed self-update**: the agent reading
+     it during the pull that delivers it is still reading the installed copy.
+
      **DO NOT DERIVE THE VERDICT BY COMPARING REFS. `preclassify.sh` has already answered this,
      for these paths, in this run.** Take its bucket and apply the SAME subtraction that
      `reconcile/self-update-gate.sh` applies in the arm guarding its `SELF-UPDATE-CARRY` row —
@@ -654,19 +679,36 @@ prose is itself generated rather than composed.
      a bare directory name, or the `core/fixtures/<name>` / `tests/fixtures/<name>` form this
      step derives it in, which the runner normalises. A whole list in one argument is refused.
 
-     **A red derived fixture STOPS the self-update; it does not get pushed and sorted out
-     later.** The machinery slice closes the common dependency case by construction — a
-     fixture's subject is machinery, and the whole machinery set now moves together — but a
-     fixture can still depend on RULEBOOK content, which this cycle deliberately does not
-     pull. Running them here is what tells the two cases apart: green means the pulled set
-     is self-consistent, red means it is not, and the second is a finding to report — with
-     the fixture name and its output — not a gate to bypass. Pushing a known-red suite so
-     the reconcile can proceed leaves the next operator unable to tell this breakage from a
-     real one.
+     **A red runner exit (exit 1: a fixture red, or MISSING) takes the HOOK-REFUSED
+     disposition, `SELF-UPDATE-DEFER`, and is never pushed.** The runner runs each fixture the
+     way the consumer's own pre-push does — a fixture carrying `inputs.decl` through the
+     hermetic runner when the consumer's hook dispatches it — so its red is the refusal the
+     push would have made, and the remedy is the operator's at the gated apply. A fixture can
+     depend on RULEBOOK content this cycle does not pull, and a push of a known-red suite
+     leaves the next operator unable to tell this breakage from a real one. The runner prints
+     `# disposition: SELF-UPDATE-DEFER — carry slice + gate record + this log to step 7` on
+     stdout on exactly this path; exit 2 is a refusal of the RUN, not a red suite, and keeps
+     its own remedy. **The tree is UNCOMMITTED here** (the order is write, runner, commit), so
+     the restore is not the HOOK-REFUSED one. In this order: report the fixture names, the
+     `# disposition:` line and the log path in one line;
+     run `git restore --source=HEAD --staged --worktree -- <every tracked path this cycle wrote, and the stamp>`,
+     each named by explicit pathspec — `--source=HEAD --staged` because a slice that was
+     STAGED survives a plain `git checkout --`, which restores from the index;
+     for every NEW path this cycle wrote, run `git rm -q --cached --ignore-unmatch -- <new paths>`
+     and then remove the file, each named by explicit pathspec, never
+     by a glob, and never the gate record or the fixture log;
+     run `git checkout <original-branch>` and `git branch -D <self-update-branch>`, which
+     carries no commit of this cycle.
+     `git status --porcelain` then lists the two records and nothing else this cycle wrote.
+     Carry the slice, the gate record and the fixture log to the step-7 gated apply and commit
+     them there, as `reconcile/apply.sh --carried-machinery-slice <dist> <base> <consumer>
+     <theirs>`. `skill_version`/`skill_commit` stay where they were and advance with that
+     apply. The branch is NOT UN-SYNCED: steps 3–5 run, and step 6 does not refuse `apply` on
+     this account.
 
      **RUN THEM THROUGH `reconcile/self-update-fixtures.sh`, AND CITE THE LOG PATH IT
-     PRINTS IN THE STOP MESSAGE.** On red this cycle discards the branch and restores the
-     tree, so the state the fixtures ran against ceases to exist: `reconcile-log-<ts>.md`
+     PRINTS IN THE DEFER REPORT.** On red this cycle restores the tree and discards the
+     branch, so the state the fixtures ran against ceases to exist: `reconcile-log-<ts>.md`
      is step-7 only, and `reconcile-report.md` is not written until step 5. Run them any
      other way and the only record of WHY the self-update stopped is this agent's own
      context, which the next invocation does not have. The helper writes

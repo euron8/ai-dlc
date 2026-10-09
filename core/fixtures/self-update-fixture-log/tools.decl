@@ -24,3 +24,9 @@ cmp
 git
 diff
 basename
+ln
+readlink
+paste
+shasum
+find
+xargs

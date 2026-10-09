@@ -28,3 +28,7 @@ python3
 pgrep
 xargs
 find
+ln
+readlink
+paste
+shasum

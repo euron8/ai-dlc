@@ -712,3 +712,183 @@ q_run() {
     "$({ [ -n "$L" ] && sed -n '/^COVERAGE: the diff changes/,/^$/p' "$L" | sed -n 's/^  \([^ ][^ ]*\)$/\1/p' | LC_ALL=C sort | tr '\n' ','; } 2>/dev/null)" \
     "$(sec_set "$L")"
 }
+
+# --- BUILDER: the HERMETIC-DISPATCH world (arms H1-H7, HD1) ----------------------------------
+# The runner restates the consumer hook's dispatch rule: a fixture carrying `inputs.decl` runs
+# through `scripts/ai-dlc/hermetic-run.sh --root <consumer> <name>` when the consumer's hook carries
+# the dispatch, and FAILS when the runner is absent. These consumers are their OWN git repositories,
+# seeded with the REAL shipped hook, hermetic-run.sh and core-paths.sh, all committed BEFORE the gate
+# record is seeded, because `seed_record` derives its `# input:` rows from that hook and the files it
+# names: a record seeded first would carry rows for a tree that then moved, and every run would be
+# refused INPUT-MOVED for a reason no arm here is about.
+#
+# THREE CONSUMERS, ONE PROPERTY APART EACH:
+#   HC1 dispatching hook, runner present  -- H1-H3, H5-H7
+#   HC2 dispatching hook, runner ABSENT    -- H4 (the hook FAILS; never a plain fallback)
+#   HC3 a hook that keeps the READSET_TOOLS_BEGIN sentinel and every `inputs.decl` comment and
+#       lacks only the dispatch line       -- HD1 (plain, green, and the log says why)
+# The shipped files are resolved from this fixture's own location, in both layouts.
+H_HOOK_SRC="$(pick "$SUFL_DIR/../../../core/git-hooks/pre-push" "$SUFL_DIR/../../../.githooks/pre-push")"
+H_HR_SRC="$(pick "$SUFL_DIR/../../../core/scripts/hermetic-run.sh" "$SUFL_DIR/../../../scripts/ai-dlc/hermetic-run.sh")"
+H_CP_SRC="$(pick "$SUFL_DIR/../../../core/scripts/core-paths.sh" "$SUFL_DIR/../../../scripts/ai-dlc/core-paths.sh")"
+H_DISPATCH_LINE='    if [ -f "$d/inputs.decl" ]; then'
+SUFL_NL='
+'
+# aw_replace_once <src> <dst> <old> <new> -> <dst> is <src> with the ONE occurrence of <old> replaced;
+# exit 3, and no <dst> worth reading, unless <old> occurs exactly once. awk rather than a `sed`
+# (an `&` in the replacement is the whole match) and rather than python3 (a tool this shipping
+# fixture would otherwise carry onto every consumer). index()/substr() are literal, not regex;
+# the strings come in through ENVIRON, which `-v` would strip a level of backslashes from; the
+# file is joined into one string so a multi-line <old> can match; LC_ALL=C so a multibyte byte in
+# the subject cannot abort a BSD awk mid-file.
+aw_replace_once() {
+  AW_OLD="$3" AW_NEW="$4" LC_ALL=C awk '
+    { s = s $0 "\n" }
+    END {
+      o = ENVIRON["AW_OLD"]; n = ENVIRON["AW_NEW"]
+      if (o == "") exit 3
+      c = 0; t = s
+      while ((i = index(t, o)) > 0) { c++; t = substr(t, i + length(o)) }
+      if (c != 1) exit 3
+      i = index(s, o)
+      printf "%s%s%s", substr(s, 1, i - 1), n, substr(s, i + length(o))
+    }' "$1" > "$2"
+}
+# h_skip_why <hook> -> empty when the hook carries the hermetic dispatch, else the reason the H arms
+# cannot be built against it. A consumer whose INSTALLED hook predates the dispatch resolves that hook
+# here (consumer layout), and its HC3 near-miss has no dispatch line to remove: building the world
+# would report FIXTURE BROKEN and block that consumer's push on a state the pull itself creates.
+h_skip_why() {
+  local n_t n_d
+  [ -n "${1:-}" ] && [ -f "$1" ] || { printf 'no pre-push hook resolves from this fixture in either layout'; return 0; }
+  n_t="$(grep -cx '# READSET_TOOLS_BEGIN' "$1")" || n_t=0
+  n_d="$(grep -cxF "$H_DISPATCH_LINE" "$1")" || n_d=0
+  [ "$n_t" -gt 0 ] && [ "$n_d" -eq 1 ] && return 0
+  printf 'the resolved hook %s predates the hermetic dispatch (READSET_TOOLS_BEGIN lines: %s, dispatch lines: %s)' "$1" "$n_t" "$n_d"
+}
+HDG() { git -C "$HD" -c user.name=ai-dlc-fixture -c user.email=fixture@invalid -c commit.gpgsign=false "$@"; }
+H_FXS="h-clean h-absent h-unconsumed h-undecl"
+h_consumer() { # <dir> <hook: dispatch|predates> <runner: yes|no>
+  local c="$1" f
+  mkdir -p "$c/tests/fixtures" "$c/.githooks" "$c/scripts/ai-dlc" "$c/.claude" "$c/data" "$c/docs" "$c/_bmad-output/ai-dlc-update"
+  if [ "$2" = dispatch ]; then
+    cp "$H_HOOK_SRC" "$c/.githooks/pre-push" || return 1
+  else
+    # The near-miss hook: the dispatch line replaced, nothing else touched. Whole-line: the
+    # anchor carries the newline on both sides.
+    aw_replace_once "$H_HOOK_SRC" "$c/.githooks/pre-push" "$SUFL_NL$H_DISPATCH_LINE$SUFL_NL" "$SUFL_NL    if false; then$SUFL_NL" || return 1
+  fi
+  if [ "$3" = yes ]; then cp "$H_HR_SRC" "$c/scripts/ai-dlc/hermetic-run.sh" || return 1; fi
+  cp "$H_CP_SRC" "$c/scripts/ai-dlc/core-paths.sh" || return 1
+  chmod +x "$c/.githooks/pre-push" "$c/scripts/ai-dlc"/*.sh
+  printf 'h input\n' > "$c/data/h-input.txt"
+  printf 'outside every declaration\n' > "$c/data/outside.txt"
+  printf 'tracked doc\n' > "$c/docs/slice.md"
+  for f in $H_FXS; do mkdir -p "$c/tests/fixtures/$f"; done
+  # h-clean: one REQUIRED input, consumed, and the depth it was started at.
+  printf '!data/h-input.txt\n' > "$c/tests/fixtures/h-clean/inputs.decl"
+  printf '#!/usr/bin/env bash\ncat data/h-input.txt >/dev/null || exit 1\necho "HERMETIC-CONSUMED data/h-input.txt"\necho "h-depth=${PREPUSH_POOL_DEPTH:-unset}"\nexit 0\n' > "$c/tests/fixtures/h-clean/run.sh"
+  # h-absent: declares a file the consumer does not hold; its run.sh passes when run plain.
+  printf 'data/never-there.txt\n' > "$c/tests/fixtures/h-absent/inputs.decl"
+  printf '#!/usr/bin/env bash\necho "h-absent: run plain, passes"\nexit 0\n' > "$c/tests/fixtures/h-absent/run.sh"
+  # h-unconsumed: a REQUIRED input present and never consumed -- the hermetic runner's exit 1.
+  printf '!data/h-input.txt\n' > "$c/tests/fixtures/h-unconsumed/inputs.decl"
+  printf '#!/usr/bin/env bash\necho "h-unconsumed: passes, consumes nothing"\nexit 0\n' > "$c/tests/fixtures/h-unconsumed/run.sh"
+  # h-undecl: no declaration, and it reads a file no declaration names.
+  printf '#!/usr/bin/env bash\ncat data/outside.txt >/dev/null || exit 1\necho "h-depth=${PREPUSH_POOL_DEPTH:-unset}"\nexit 0\n' > "$c/tests/fixtures/h-undecl/run.sh"
+  chmod +x "$c/tests/fixtures"/*/run.sh
+  (
+    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+    git -c init.templateDir= init -q "$c" || exit 1
+    [ "$(git -C "$c" rev-parse --absolute-git-dir 2>/dev/null)" = "$(cd "$c" && pwd -P)/.git" ] || exit 1
+    git -C "$c" add -A -- .githooks scripts tests data docs || exit 1
+    git -C "$c" -c user.name=ai-dlc-fixture -c user.email=fixture@invalid -c commit.gpgsign=false \
+      commit -q --no-verify -m seed || exit 1
+  ) >/dev/null 2>&1 || return 1
+  seed_record "$c/_bmad-output/ai-dlc-update" "$HD" "$HD_B" "$HD_T" OK 050 >/dev/null
+}
+build_h_world() {
+  H_OK=0
+  { [ -n "$H_HOOK_SRC" ] && [ -n "$H_HR_SRC" ] && [ -n "$H_CP_SRC" ]; } || return 1
+  HD="$(mktemp -d)"; sufl_tmp "$HD"
+  (
+    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+    git -c init.templateDir= init -q "$HD" || exit 1
+    for f in $H_FXS; do mkdir -p "$HD/core/fixtures/$f"; printf 'exit 0\n' > "$HD/core/fixtures/$f/run.sh"; done
+    mkdir -p "$HD/core/scripts"; printf 'base\n' > "$HD/core/scripts/h-other.sh"
+    HDG add -A && HDG commit -q --no-verify -m base || exit 1
+    printf 'theirs\n' > "$HD/core/scripts/h-other.sh"
+    HDG add -A && HDG commit -q --no-verify -m theirs || exit 1
+  ) >/dev/null 2>&1 || return 1
+  HD_B="$(HDG rev-parse HEAD~1 2>/dev/null)"; HD_T="$(HDG rev-parse HEAD 2>/dev/null)"
+  HC1="$(mktemp -d)"; sufl_tmp "$HC1"; h_consumer "$HC1" dispatch yes || return 1
+  HC2="$(mktemp -d)"; sufl_tmp "$HC2"; h_consumer "$HC2" dispatch no || return 1
+  HC3="$(mktemp -d)"; sufl_tmp "$HC3"; h_consumer "$HC3" predates yes || return 1
+  H_OK=1
+}
+# h_enter <hook> -> sets H_ENTER to `SKIP <why>`, `BROKEN` or `BUILT`. MAIN SHELL: on BUILT the world's
+# variables (HC1, HC2, HC3, HD, ...) must survive, so this is never called inside `$( )` except by the
+# probe that only wants the verdict.
+h_enter() {
+  H_SKIP="$(h_skip_why "$1")"
+  if [ -n "$H_SKIP" ]; then H_ENTER="SKIP $H_SKIP"; return 0; fi
+  H_HOOK_SRC="$1"
+  if build_h_world && [ "$H_OK" = 1 ]; then H_ENTER=BUILT; else H_ENTER=BROKEN; fi
+}
+# h_run <runner> <consumer> <fixture...> -> sets H_RC, H_LOG (newest log), H_OUT (stdout file).
+# PREPUSH_POOL_DEPTH=7 is the sentinel the depth arm reads back as 8.
+h_run() {
+  local r="$1" c="$2"; shift 2
+  # Stdout goes OUTSIDE the consumer, so the restore arm's porcelain sees only what the cycle wrote.
+  [ -n "${HOUTD:-}" ] || { HOUTD="$(mktemp -d)"; sufl_tmp "$HOUTD"; }
+  H_OUT="$HOUTD/$(basename "$c").stdout"
+  rm -f "$c/_bmad-output/ai-dlc-update"/self-update-fixtures-*.md "$H_OUT"
+  H_RC=0
+  # A FRESH VERDICT STORE PER RUN. hermetic-run.sh may record each pass in a shared store at
+  # `${AI_DLC_VERDICT_STORE:-$HOME/.cache/ai-dlc/verdicts}`; the runner under test inherits whatever
+  # this sets, by design. Left unset, these runs would write the operator's real store, and a pass one
+  # run recorded could answer the next run's dispatch, so a cell would read a cached verdict rather
+  # than the behaviour it asserts. Harmless where the runner keeps no store.
+  H_VS="$(mktemp -d "$HOUTD/vstore.XXXXXX")" || { H_RC=99; return 0; }
+  AI_DLC_VERDICT_STORE="$H_VS" PREPUSH_POOL_DEPTH=7 bash "$r" "$HD" "$HD_B" "$HD_T" "$c" "$@" > "$H_OUT" 2>/dev/null || H_RC=$?
+  H_LOG="$(ls -t "$c/_bmad-output/ai-dlc-update"/self-update-fixtures-*.md 2>/dev/null | head -1)"
+}
+# h_section <log> <fixture> -> the lines of that fixture's section, joined on one line
+h_section() { sed -n "/^===== FIXTURE $2 =====\$/,/^----- rc=/p" "${1:-/dev/null}" 2>/dev/null | tr '\n' ' '; }
+H_TOKEN='# disposition: SELF-UPDATE-DEFER — carry slice + gate record + this log to step 7'
+# hsig <runner> -> nine cells, each 1 when the run shows the restated hook behaviour:
+#   H1 declared-absent red (exit 2 from the runner)   H2 clean declared green via the runner
+#   H3 never-consumed red (exit 1 from the runner)    H4 runner absent: red with the not-found line
+#   H5 undeclared green, plain                         H6 depth 8 on both branches from a sentinel 7
+#   H7 a red (runner exit 1) prints the token on stdout
+#   H7t a GREEN run prints no token                    H7r an exit-2 REFUSAL prints no token
+#   HD1 a hook predating the dispatch runs a declared fixture plain and green, and says why
+# Each cell reads its OWN run, so a mutant of one clause moves one cell: H7 reads the never-consumed
+# run (exit 1 from the runner, which every mutant of the rc test leaves red), H7t the HD1 run.
+hsig() {
+  local r="$1" h1=0 h2=0 h3=0 h4=0 h5=0 h6=0 h7=0 h7t=0 h7r=0 hd1=0 s1 s2
+  h_run "$r" "$HC1" h-clean h-undecl
+  s1="$(h_section "$H_LOG" h-clean)"; s2="$(h_section "$H_LOG" h-undecl)"
+  case "$s1" in *"DISPATCH: hermetic"*"hermetic-run: h-clean: rc=0 sandbox_files="*"----- rc=0 -----"*) h2=1 ;; esac
+  case "$s2" in *"DISPATCH: plain"*"----- rc=0 -----"*) grep -q '^   ok    h-undecl$' "$H_OUT" && h5=1 ;; esac
+  case "$s1" in *"h-depth=8"*) case "$s2" in *"h-depth=8"*) h6=1 ;; esac ;; esac
+  h_run "$r" "$HC1" h-absent
+  s1="$(h_section "$H_LOG" h-absent)"
+  case "$s1" in *"declared file absent: data/never-there.txt"*"----- rc=2 -----"*) [ "$H_RC" -eq 1 ] && grep -q '^   FAIL  h-absent$' "$H_OUT" && h1=1 ;; esac
+  h_run "$r" "$HC1" h-unconsumed
+  s1="$(h_section "$H_LOG" h-unconsumed)"
+  case "$s1" in *"required_missing=1"*"----- rc=1 -----"*) [ "$H_RC" -eq 1 ] && h3=1 ;; esac
+  if [ "$H_RC" -eq 1 ] && grep -qxF "$H_TOKEN" "$H_OUT"; then h7=1; fi
+  h_run "$r" "$HC2" h-clean
+  s1="$(h_section "$H_LOG" h-clean)"
+  case "$s1" in *"hermetic-run.sh not found at scripts/ai-dlc/hermetic-run.sh; h-clean declares inputs.decl"*) [ "$H_RC" -eq 1 ] && h4=1 ;; esac
+  h_run "$r" "$HC3" h-absent
+  s1="$(h_section "$H_LOG" h-absent)"
+  case "$s1" in *"DISPATCH: plain"*"predates the hermetic dispatch"*"h-absent: run plain, passes"*"----- rc=0 -----"*) [ "$H_RC" -eq 0 ] && hd1=1 ;; esac
+  if [ "$H_RC" -eq 0 ] && grep -q '^   ok    h-absent$' "$H_OUT" && ! grep -qF "$H_TOKEN" "$H_OUT"; then h7t=1; fi
+  # h-nope is in neither tree: the over-completeness arm refuses the run, exit 2, before any fixture.
+  h_run "$r" "$HC1" h-clean h-nope
+  if [ "$H_RC" -eq 2 ] && grep -q '^  h-nope — no run.sh at ' "${H_LOG:-/dev/null}" && ! grep -qF "$H_TOKEN" "$H_OUT"; then h7r=1; fi
+  printf '%s-%s-%s-%s-%s-%s-%s-%s-%s-%s' "$h1" "$h2" "$h3" "$h4" "$h5" "$h6" "$h7" "$h7t" "$h7r" "$hd1"
+}
+HSIG_OK="1-1-1-1-1-1-1-1-1-1"

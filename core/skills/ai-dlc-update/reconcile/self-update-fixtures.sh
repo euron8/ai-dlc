@@ -1094,6 +1094,52 @@ if [ -n "$uncovered" ]; then
 fi
 
 n_run=0; n_ok=0; n_fail=0; n_missing=0; reds=""
+# --- THE DISPATCH RULE IS THE CONSUMER HOOK'S, RESTATED ------------------------------------
+# The consumer's pre-push runs a fixture that carries `inputs.decl` through
+# `scripts/ai-dlc/hermetic-run.sh --root <root> <name>`, which hands it a sandbox holding only its
+# declared inputs, refuses a declared file that is absent, and fails a `!` REQUIRED input the fixture
+# never consumed. It FAILS such a fixture when the runner is not installed, and never falls back to a
+# plain run. This runner used to run every fixture plain, so a self-update could report green on a
+# set the push then refused: measured on the reference consumer's 0.760 step 2, 90 fixtures green
+# here and 6 refused by the push it was making.
+#
+# NO SOURCEABLE JOIN EXISTS, SO THIS IS A RESTATEMENT. The rule lives inside the hook's
+# FIXTURE_POOL `bash -c` body, which I66 binds byte-for-byte across both pre-push hooks; nothing
+# here can source it. The arms of `self-update-fixture-log` (H1-H7, HD1) pin each clause of the
+# restatement, and its battery holds a mutant per clause. Lifting the rule into a shared span both
+# hooks and this file read is a hook change and a separate release.
+#
+# THE RULE APPLIES ONLY WHERE THE CONSUMER'S OWN HOOK CARRIES IT. Dispatch is keyed on the hook as
+# it stands on disk now (after the slice was written, so a hook the slice delivers counts): the
+# `# READSET_TOOLS_BEGIN` sentinel AND the dispatch line itself, each a WHOLE line. The bare word
+# `inputs.decl` is not the key, because the hook's comments carry it on a hook that predates the
+# dispatch. A hook without the dispatch runs a declared fixture plain on push, so this run does too,
+# and the log says why.
+#
+# `PREPUSH_POOL_DEPTH` is exported one deeper than this process was started at, as the hook exports
+# it to its pool, so a fixture that runs a hook of its own sees the depth it sees on push. The git
+# variables the hook unsets before dispatch are unset here too, after the last read of `$DIST`.
+SU_HOOK_REL="$(map_consumer core/git-hooks/pre-push)"
+SU_HR_REL="$(map_consumer core/scripts/hermetic-run.sh)"
+SU_HOOK_DISPATCHES=0
+SU_HOOK_WHY=""
+if [ ! -f "$CONSUMER/$SU_HOOK_REL" ]; then
+  SU_HOOK_WHY="the consumer has no $SU_HOOK_REL, so no push of it dispatches a declared fixture to the hermetic runner"
+else
+  _hd_t="$(grep -cx '# READSET_TOOLS_BEGIN' "$CONSUMER/$SU_HOOK_REL" 2>/dev/null)" || _hd_t=0
+  _hd_d="$(grep -cxE '[[:space:]]*if \[ -f "\$d/inputs\.decl" \]; then' "$CONSUMER/$SU_HOOK_REL" 2>/dev/null)" || _hd_d=0
+  if [ "$_hd_t" -gt 0 ] && [ "$_hd_d" -gt 0 ]; then
+    SU_HOOK_DISPATCHES=1
+  else
+    SU_HOOK_WHY="the consumer's $SU_HOOK_REL predates the hermetic dispatch (READSET_TOOLS_BEGIN lines: $_hd_t, inputs.decl dispatch lines: $_hd_d), so its push runs this fixture plain"
+  fi
+fi
+_su_pd="${PREPUSH_POOL_DEPTH:-0}"
+case "$_su_pd" in ''|*[!0-9]*|??????*) _su_pd=2 ;; esac
+export PREPUSH_POOL_DEPTH="$(( 10#$_su_pd + 1 ))"
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+{ echo "# dispatch: hook $SU_HOOK_REL dispatches declared fixtures: $SU_HOOK_DISPATCHES   runner: $SU_HR_REL   PREPUSH_POOL_DEPTH=${PREPUSH_POOL_DEPTH:-}"
+  echo ""; } >> "$LOG"
 for name in "$@"; do
   dir="$CONSUMER/$FX_ROOT/$name"
   {
@@ -1114,7 +1160,31 @@ for name in "$@"; do
   # from (`bash "$d/run.sh"` with the repo root current). A fixture whose verdict depends
   # on the caller's directory has been shipped before — see v0.263.0 — so the runner that
   # decides a self-update must stand exactly where the gate that decides a push stands.
-  ( cd "$CONSUMER" && bash "$FX_ROOT/$name/run.sh" ) >> "$LOG" 2>&1
+  if [ -f "$dir/inputs.decl" ]; then
+    if [ "$SU_HOOK_DISPATCHES" = 1 ]; then
+      su_mode=hermetic
+    else
+      su_mode=plain; su_why="$SU_HOOK_WHY"
+    fi
+  else
+    su_mode=plain; su_why="undeclared: no inputs.decl, so the push runs it plain"
+  fi
+  if [ "$su_mode" = hermetic ] && [ ! -f "$CONSUMER/$SU_HR_REL" ]; then
+    # The hook FAILS here and never runs the fixture plain; so does this run. Counted as run and red,
+    # so the completeness assertion below still balances.
+    { echo "DISPATCH: hermetic — $name declares inputs.decl"
+      printf 'hermetic-run.sh not found at %s; %s declares inputs.decl and cannot run without it\n' "$SU_HR_REL" "$name"
+      echo "----- rc=runner-absent -----"; echo ""; } >> "$LOG"
+    n_run=$((n_run + 1)); n_fail=$((n_fail + 1)); reds="$reds $name"; printf '   FAIL  %s\n' "$name"
+    continue
+  fi
+  if [ "$su_mode" = hermetic ]; then
+    { echo "DISPATCH: hermetic — $name declares inputs.decl and the consumer hook dispatches it"; } >> "$LOG"
+    ( cd "$CONSUMER" && bash "$SU_HR_REL" --root "$CONSUMER" "$name" ) >> "$LOG" 2>&1
+  else
+    { echo "DISPATCH: plain — $su_why"; } >> "$LOG"
+    ( cd "$CONSUMER" && bash "$FX_ROOT/$name/run.sh" ) >> "$LOG" 2>&1
+  fi
   rc=$?
   { echo "----- rc=$rc -----"; echo ""; } >> "$LOG"
   n_run=$((n_run + 1))
@@ -1139,6 +1209,18 @@ echo "log: $LOG"
 if [ $((n_run + n_missing)) -ne $# ]; then
   echo "self-update-fixtures: ran $n_run + $n_missing missing, but $# were named — the loop did not reach every fixture." >&2
   exit 2
+fi
+
+# THE DISPOSITION TOKEN, AND WHY A PROGRAM PRINTS A RULE. A red here takes the HOOK-REFUSED
+# disposition verbatim: discard the branch, restore the records, carry the slice, the gate record and
+# this log to the step-7 gated apply; steps 3-5 run, and step 6 does not refuse `apply`. SKILL.md step 2
+# says so, but on the pull that DELIVERS that sentence the operating agent is still reading the
+# installed, older SKILL.md, and this file (written by the slice before it runs) is the only carrier
+# of the new rule. Printed on STDOUT, and only on this exit-1 path: an exit 2 above is a refusal of
+# the run, not a red suite, and keeps its own remedy.
+if [ "$n_fail" -ne 0 ] || [ "$n_missing" -ne 0 ]; then
+  SU_TOKEN='# disposition: SELF-UPDATE-DEFER — carry slice + gate record + this log to step 7'
+  echo "$SU_TOKEN"; echo "$SU_TOKEN" >> "$LOG"
 fi
 
 [ "$n_fail" -eq 0 ] && [ "$n_missing" -eq 0 ]

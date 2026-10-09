@@ -299,3 +299,80 @@ the sandbox, and the same link force-tracked exits 2. Scored under `set -uo pipe
 the copy loop reverted to `cp -Rp`.
 
 verify: sh d="$(mktemp -d)" || exit 9; [ -f core/scripts/hermetic-run.sh ] && [ -f .githooks/pre-push ] || exit 9; mkdir -p "$d/lib" "$d/.githooks" "$d/core/fixtures/probe" && cp .githooks/pre-push "$d/.githooks/pre-push" && printf 'x\n' > "$d/lib/x.txt" && printf '#!/usr/bin/env bash\ncat lib/x.txt && [ ! -e lib/ilnk ] && [ ! -L lib/ilnk ]\n' > "$d/core/fixtures/probe/run.sh" && printf 'lib/\n' > "$d/core/fixtures/probe/inputs.decl" && printf 'lib/ilnk\n' > "$d/.gitignore" && ( cd "$d" && git init -q && git add -A && git -c user.name=t -c user.email=t@t commit -qm p ) >/dev/null 2>&1 && ln -s /etc/hosts "$d/lib/ilnk" || exit 9; bash core/scripts/hermetic-run.sh --root "$d" probe >/dev/null 2>&1; a=$?; ( cd "$d" && git add -f lib/ilnk && git -c user.name=t -c user.email=t@t commit -qm t ) >/dev/null 2>&1 || exit 9; o="$(bash core/scripts/hermetic-run.sh --root "$d" probe 2>&1)"; b=$?; rm -rf "$d"; [ "$a" = 0 ] && [ "$b" = 2 ] && grep -q 'lib/ilnk is a symlink' <<<"$o"
+
+## BL-492 — step 2's fixture run is not the run the consumer's push performs, and a fixture directory was written split
+
+**DEFECT, filed batch 216 as PC-S317-SELF-UPDATE-FIXTURE-RUNNER-IS-NOT-THE-HERMETIC-RUN-PRE-PUSH-PERFORMS.** Two
+mechanisms, one candidate.
+
+**S1, the runner.** `core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh` ran every fixture plain
+(`( cd "$CONSUMER" && bash "$FX_ROOT/$name/run.sh" )`) and never read `inputs.decl`. The consumer's pre-push
+(`core/git-hooks/pre-push`, the FIXTURE_POOL `bash -c` body) runs a fixture carrying `inputs.decl` through
+`hermetic-run.sh --root "$PWD" <name>`, fails it on any non-zero exit, fails it (never falls back) when the runner is
+absent, and exports `PREPUSH_POOL_DEPTH` one deeper. On the reference consumer's 0.760 step 2, 90 fixtures read green here
+and 76 were declared, and the push then refused 6. Fixed: a declared fixture runs through the consumer's
+`map_consumer core/scripts/hermetic-run.sh` copy, with `PREPUSH_POOL_DEPTH` exported one deeper and the git variables the
+hook unsets unset, ONLY when the consumer's on-disk hook carries the dispatch. The key is the whole-line
+`# READSET_TOOLS_BEGIN` sentinel AND the dispatch line, never the bare word `inputs.decl`, which a pre-dispatch hook's
+comments carry. A hook without the dispatch runs it plain and the log says why. A runner that is absent where the hook
+dispatches is red, with the hook's own not-found line. Any non-zero exit is red. Undeclared fixtures run plain as before.
+The rule is RESTATED, because it lives inside the I66-bound FIXTURE_POOL body and nothing can source it. Lifting it into a
+shared span that both hooks and the runner read is a hook change, and it is a follow-up, not done here.
+
+**S2, the split fixture directory.** The gate never sees a fixture path: `setup-sites.md`'s `machinery:` list holds no
+`core/fixtures` entry, and graph's real gate record had 0 CARRY rows. The split happened in SKILL.md step 2's
+fixture-write rule. The agent held back `artifact-path-conformance/run.sh` as BOTH-CHANGED and wrote the same directory's
+upstream-only `inputs.decl`, whose new `!` REQUIRED line the old `run.sh` never consumes. The push refused it with
+`required_missing=1`, reproduced on graph's archives at `f8c00ed4` (rc 1) and `c60a98d4` (rc 0). Fixed in prose: a fixture
+directory is one unit, so if any path under it is held back, none of it is written and all of it is carried. The "if its
+set and yours disagree, stop" sentence is scoped to machinery paths. No gate arm was added, and nothing sets
+`GATE_CARRY_STATE=carried` for a fixture path, which would cost every consumer with a local fixture edit the SAFE-STOP
+acquittal.
+
+**Disposition and order.** Step 2's order is pinned as gate, write, runner, commit; graph's `f8c00ed4` already carries
+the runner log, so that is the real order. A runner red (exit 1, a fixture red or MISSING) takes the HOOK-REFUSED
+disposition `SELF-UPDATE-DEFER`, and the old "A red derived fixture STOPS the self-update" text is REPLACED. The
+uncommitted-red restore is written out: `git restore --source=HEAD --staged --worktree --` the written tracked paths and
+the stamp (a STAGED slice survives a plain `git checkout --`, which restores from the index), `git rm -q --cached
+--ignore-unmatch --` then remove the new paths by explicit pathspec (never a glob, the two records kept), return to the
+original branch, delete the self-update branch. Step 2's HARD-STOPS clause and the old gate-write-runner order sentence
+are replaced, not left beside the new text. The runner prints `# disposition: SELF-UPDATE-DEFER — carry slice + gate record + this log to step 7` on STDOUT on
+the exit-1 path only; exit 2 stays a refusal.
+
+**BOOTSTRAPPING.** `self-update-fixtures.sh` is machinery, and step 2's order is gate, then write, then runner, so the
+runner on disk when step 2 calls it is the copy the slice just wrote: **S1 takes effect ON the delivering pull**,
+including the printed DEFER token. S2 is SKILL.md prose, and the agent executing the delivering pull is still reading the
+installed SKILL.md: **S2, the order and restore text and the replaced STOP sentence take effect on the re-invoke after a
+landed self-update**, and on the delivering pull the printed token is the only carrier of the new disposition. No gate
+change ships, so nothing here depends on the installed gate.
+
+**OPEN HALF, out of this release (D6).** `reconcile/apply.sh` writes fixture paths one at a time too: its per-row loop at
+`apply.sh:1142` reads one `kind path cons bucket` row per path, and fixture rows are only reordered to the end of the batch
+(`apply.sh:1101-1105`), never grouped by directory. An operator is present at that apply, which is why it is not this
+release. Do not read this entry's close as closing it.
+
+Arms: `self-update-fixture-log` Parts H1-H7 and HD1 (one ten-cell vector), Part HR (the restore in an unstaged and a
+STAGED shape, each with a control), Part HS (a consumer whose installed hook predates the dispatch SKIPs the H and HR
+arms, with in-file mutant HM-SKIP), and Parts W1-W7 with in-file mutants WM1-WM7. W1 must sit inside the fixture-write
+rule; W5 and W6 require the old order sentence and the HARD-STOPS clause ABSENT; every W cell is scored with HTML
+comments deleted first, so phrases appended in a comment satisfy nothing. Battery: `self-update-fixture-log-mutants` HCTL
+and HM1-HM9.
+
+verify: sh f=core/fixtures/self-update-fixture-log/run.sh; [ -f "$f" ] || exit 9; o="$(bash "$f" </dev/null 2>&1)"; rc=$?; grep -qF '  ok    Parts H1-H7, HD1: vector 1-1-1-1-1-1-1-1-1-1' <<<"$o" || exit 1; grep -qF '  ok    Parts W1-W7: ' <<<"$o" || exit 1; [ "$rc" -eq 0 ] || exit 1; exit 0
+
+The receipt above runs the fixture and needs both mechanisms. The per-mechanism receipts below are recorded beside it
+(`scripts/backlog-reverify.sh` reads only an entry's first `verify:` line). Each is run from the repo root under
+`set -uo pipefail` with stdin closed.
+
+S1 receipt, the runner. It drives the shipping runner through the fixture's own H world and keys on its vector:
+
+```
+L=core/fixtures/self-update-fixture-log/lib.sh; [ -f "$L" ] && grep -q '^hsig()' "$L" || exit 9; o="$(NAME=receipt SUFL_RUNNER_ARG= bash -c '. "$1"; build_h_world || exit 9; hsig "$RUNNER"' _ "$L" </dev/null 2>/dev/null)"; [ "$o" = "1-1-1-1-1-1-1-1-1-1" ]
+```
+
+S2 receipt, the fixture-write rule. It runs the fixture's own `wsig` over the shipped SKILL.md:
+
+```
+f=core/fixtures/self-update-fixture-log/run.sh; s=core/skills/ai-dlc-update/SKILL.md; [ -f "$f" ] && [ -f "$s" ] || exit 9; eval "$(awk '/^w_flat\(\) \{/,/^\}$/' "$f")"; eval "$(awk '/^wsig\(\) \{/,/^\}$/' "$f")"; command -v wsig >/dev/null || exit 9; [ "$(wsig "$s")" = "1-1-1-1-1-1-1" ]
+```
+

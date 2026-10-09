@@ -1961,6 +1961,245 @@ else
 fi
 rm -rf "$CONS2/tests/fixtures/plain-touched" "$CONS2/tests/fixtures/$QU" "$QD"
 
+# --- Parts W1-W7: STEP 2's FIXTURE-WRITE RULE AND RED DISPOSITION, IN THE SHIPPED SKILL.md ----
+# The split-directory defect lived in prose: the agent held back a BOTH-CHANGED `run.sh` and wrote
+# the same directory's upstream-only `inputs.decl`, and the consumer's push refused the pair. No
+# program reads that rule, so the observable is the declared text, whitespace-collapsed (a wrapped
+# line cannot hide a phrase):
+#   W1 a fixture directory is ONE unit -- and the sentence sits INSIDE the fixture-write rule, between
+#      "A derived fixture is a consumer edit when" and "DO NOT DERIVE THE VERDICT BY COMPARING REFS"
+#   W2 the gate-set disagreement stop is scoped to MACHINERY paths, fixture paths named outside it
+#   W3 the uncommitted-red restore: `git restore --source=HEAD --staged --worktree` by pathspec, new
+#      paths unstaged by `git rm --cached` and removed by explicit pathspec, never a glob, the records
+#      kept, then the porcelain statement
+#   W4 the old "A red derived fixture STOPS the self-update" sentence is GONE, replaced by DEFER
+#   W5 the OLD order "GATE, THEN WRITE, THEN RUNNER, AND THE GATE" (no commit step) is ABSENT
+#   W6 the HARD-STOPS clause is ABSENT and that sentence says DEFERS
+#   W7 the W phrases are not ONLY inside an HTML comment (the text read is the file with every
+#      `<!-- ... -->` span deleted first, so W1-W6 are scored on what an agent actually reads)
+# W5 and W6 are absence-shaped, so each sits beside a presence conjunct that only the fixed text
+# carries, and each has its own mutant. A consumer whose installed SKILL.md predates this release
+# SKIPs the block (the fixture can land one pull ahead of its prose); the distribution never does.
+# The mutant twins are in-file and run on a copy: each one must flip its own cell alone.
+w_flat() {
+  tr '\n' ' ' < "$1" | tr -s ' \t' '  ' | LC_ALL=C awk '
+  { s = $0
+    while ((i = index(s, "<!--")) > 0) {
+      r = substr(s, i + 4); j = index(r, "-->")
+      if (j == 0) { s = substr(s, 1, i - 1); break }
+      s = substr(s, 1, i - 1) substr(r, j + 3)
+    }
+    print s }'
+}
+wsig() { # <skill.md> -> seven cells
+  local t w1=0 w2=0 w3=0 w4=0 w5=0 w6=0 w7=0
+  t="$(w_flat "$1")"
+  case "$t" in *"A derived fixture is a consumer edit when"*"A FIXTURE DIRECTORY IS ONE UNIT: if ANY path under a derived fixture directory is held back as a consumer edit, write NONE of that directory and carry ALL of it"*"DO NOT DERIVE THE VERDICT BY COMPARING REFS"*) w1=1 ;; esac
+  case "$t" in *"if its set and yours disagree on a machinery path, stop"*"A fixture path is outside that comparison by construction"*) w2=1 ;; esac
+  case "$t" in *"run \`git restore --source=HEAD --staged --worktree -- <every tracked path this cycle wrote, and the stamp>\`"*"run \`git rm -q --cached --ignore-unmatch -- <new paths>\` and then remove the file, each named by explicit pathspec, never by a glob, and never the gate record or the fixture log"*"\`git status --porcelain\` then lists the two records and nothing else this cycle wrote"*) w3=1 ;; esac
+  case "$t" in *"A red derived fixture STOPS the self-update"*) ;; *"A red runner exit (exit 1: a fixture red, or MISSING) takes the HOOK-REFUSED disposition, \`SELF-UPDATE-DEFER\`"*) w4=1 ;; esac
+  case "$t" in *"THE ORDER IS GATE, THEN WRITE, THEN RUNNER, AND THE GATE"*) ;; *"THE ORDER IS GATE, THEN WRITE, THEN RUNNER, THEN COMMIT, AND THE GATE RUNS ONCE"*) w5=1 ;; esac
+  case "$t" in *"HARD-STOPS"*) ;; *"a red derived fixture DEFERS the cycle"*) w6=1 ;; esac
+  case "$(tr '\n' ' ' < "$1" | tr -s ' \t' '  ')" in *"A FIXTURE DIRECTORY IS ONE UNIT"*) [ "$w1" = 1 ] && w7=1 ;; esac
+  printf '%s-%s-%s-%s-%s-%s-%s' "$w1" "$w2" "$w3" "$w4" "$w5" "$w6" "$w7"
+}
+W_OK="1-1-1-1-1-1-1"
+W_SKILL="$(pick "$HERE/../../skills/ai-dlc-update/SKILL.md" \
+                "$HERE/../../../core/skills/ai-dlc-update/SKILL.md" \
+                "$HERE/../../../.claude/skills/ai-dlc-update/SKILL.md")"
+W_DIST=0; [ "$W_SKILL" = "$HERE/../../skills/ai-dlc-update/SKILL.md" ] && W_DIST=1
+if [ -z "$W_SKILL" ]; then
+  # The J arms' convention: the fixture has landed and its subject has not. Never an `ok`.
+  echo "  SKIP  Parts W1-W7 -- ai-dlc-update/SKILL.md resolves in neither layout from $HERE, so these assert nothing here"
+else
+  w_got="$(wsig "$W_SKILL")"
+  # The pre-release text: W1-W3 absent, W4 absent, the old order and HARD-STOPS present.
+  if [ "$w_got" = "$W_OK" ]; then
+    ok "Parts W1-W7: the shipped SKILL.md carries a fixture directory as one unit inside the fixture-write rule, scopes the gate-set stop to machinery, spells the staged-safe uncommitted-red restore, replaces the red-STOP sentence and the HARD-STOPS clause with DEFER, and drops the old gate-write-runner order"
+  elif [ "$W_DIST" = 0 ] && [ "$w_got" = "0-0-0-0-0-0-0" ]; then
+    echo "  SKIP  Parts W1-W7 -- the installed SKILL.md predates the fixture-write rule; they land with the pull that carries it"
+  else
+    bad "Parts W1-W7: vector $w_got, want $W_OK (cells: W1 dir-is-a-unit in place, W2 disagree-scoped, W3 staged-safe restore, W4 STOP replaced, W5 old order gone, W6 HARD-STOPS gone, W7 not comment-only)"
+  fi
+  # MUTANT TWINS: one change per cell on a COPY, and the vector must move in that cell only.
+  W_CP="$(mktemp -d)"; sufl_tmp "$W_CP"
+  w_mut() { # <label> <old> <new> <expected>
+    local m="$W_CP/$1.md" got
+    aw_replace_once "$W_SKILL" "$m" "$2" "$3" 2>/dev/null \
+      || { bad "FIXTURE ERROR: W mutant $1 DID NOT APPLY (anchor not exactly once)"; return; }
+    cmp -s "$W_SKILL" "$m" && { bad "FIXTURE ERROR: W mutant $1 produced an identical copy"; return; }
+    got="$(wsig "$m")"
+    if [ "$got" = "$4" ]; then ok "W mutant $1 killed: vector $got"
+    else bad "W mutant $1 scored $got, want $4"; fi
+  }
+  if [ "$W_DIST" = 1 ] || [ "$w_got" = "$W_OK" ]; then
+    w_mut WM1 'write NONE of that directory and carry ALL of it' 'write the upstream-only files of it' "0-1-1-1-1-1-0"
+    w_mut WM2 'disagree on a machinery path, stop' 'disagree, stop' "1-0-1-1-1-1-1"
+    w_mut WM3 '--source=HEAD --staged --worktree' '--worktree' "1-1-0-1-1-1-1"
+    w_mut WM4 '     **A red runner exit (exit 1: a fixture red, or MISSING) takes the HOOK-REFUSED' '     **A red derived fixture STOPS the self-update. A red runner exit (exit 1: a fixture red, or MISSING) takes the HOOK-REFUSED' "1-1-1-0-1-1-1"
+    # WM5 re-inserts the OLD order beside the new one: the absence half must catch it.
+    w_mut WM5 '   **THE ORDER IS GATE, THEN WRITE, THEN RUNNER, THEN COMMIT, AND THE GATE RUNS ONCE.**' '   **THE ORDER IS GATE, THEN WRITE, THEN RUNNER, AND THE GATE RUNS ONCE.** **THE ORDER IS GATE, THEN WRITE, THEN RUNNER, THEN COMMIT, AND THE GATE RUNS ONCE.**' "1-1-1-1-0-1-1"
+    w_mut WM6 'a red derived fixture DEFERS the' 'a red derived fixture HARD-STOPS the' "1-1-1-1-1-0-1"
+    # WM7 wraps the W1 sentence, in place, in a CLOSED HTML comment: the adversary's stub shape. The
+    # phrase is still in the file, so only the comment-stripping read can tell it was never instruction.
+    w_mut WM7 '     **A FIXTURE DIRECTORY IS ONE UNIT: if ANY path under a derived fixture directory is held
+     back as a consumer edit, write NONE of that directory and carry ALL of it**' '     <!-- **A FIXTURE DIRECTORY IS ONE UNIT: if ANY path under a derived fixture directory is held
+     back as a consumer edit, write NONE of that directory and carry ALL of it** -->' "0-1-1-1-1-1-0"
+  fi
+fi
+
+# --- Parts H1-H7 and HD1: THE RUNNER DISPATCHES THE WAY THE CONSUMER'S HOOK DOES -------------
+# The consumer's pre-push runs a fixture carrying `inputs.decl` through the hermetic runner and
+# refuses it on any non-zero exit; this runner ran every fixture plain, so a self-update reported
+# green on fixtures the push it was making then refused. One vector, ten cells, built by `hsig` in
+# lib.sh over three git-inited consumers carrying the REAL shipped hook and runner (see
+# build_h_world). Each cell is PRESENCE-shaped: it demands a row, an exit code AND a section line,
+# so a runner that emits nothing scores all zeros, not a pass.
+#   H1  a declared file absent, run.sh exit 0       -> red, `declared file absent:` (runner exit 2)
+#   H2  a clean declared fixture                     -> green through the runner, `rc=0 sandbox_files=`
+#   H3  a `!` REQUIRED input never consumed          -> red (runner exit 1, `required_missing=1`)
+#   H4  the runner absent                            -> red with the hook's not-found line
+#   H5  an undeclared fixture reading outside        -> green, run plain
+#   H6  PREPUSH_POOL_DEPTH from a sentinel 7         -> 8 on both the hermetic and the plain branch
+#   H7  a red run (runner exit 1)                    -> the disposition token on STDOUT
+#   H7t a green run                                  -> no token (the twin H7 needs)
+#   H7r an exit-2 refusal                            -> no token (a refusal is not a red suite)
+#   HD1 a hook predating the dispatch, declared fx   -> plain and green, and the log says why
+#
+# THE WORLD IS BUILT FROM THE HOOK THIS FIXTURE RESOLVES, so on a consumer whose INSTALLED hook
+# predates the hermetic dispatch there is no dispatch line to build HC1 or to remove for HC3. That is
+# a SKIP with a named line, never FIXTURE BROKEN: a broken verdict would block that consumer's push on
+# a state its own pull creates, before the release carrying the dispatch could land. The SKIP is keyed
+# by `h_skip_why` on the same two whole lines the runner keys on.
+echo "HERMETIC-CONSUMED core/git-hooks/pre-push"
+echo "HERMETIC-CONSUMED core/scripts/hermetic-run.sh"
+echo "HERMETIC-CONSUMED core/scripts/core-paths.sh"
+h_enter "$H_HOOK_SRC"
+case "$H_ENTER" in
+  "SKIP "*) echo "  SKIP  Parts H1-H7, HD1, HR -- ${H_ENTER#SKIP }; they land with the pull that carries the dispatch" ;;
+  BROKEN)   bad "FIXTURE BROKEN: the hermetic-dispatch world did not build (hook '${H_HOOK_SRC:-unresolved}', runner '${H_HR_SRC:-unresolved}', mapper '${H_CP_SRC:-unresolved}'); no H arm below would mean anything" ;;
+esac
+if [ "$H_ENTER" = BUILT ]; then
+  # --- Part HS: THE PRE-DISPATCH SKIP, DRIVEN AND MUTATED -------------------------------------------
+  # `h_enter` is driven against HC3's hook (the dispatch line removed, everything else kept), which is
+  # the hook a consumer that has not yet pulled the dispatch carries. It must SKIP with a named line.
+  # Its MUTANT HM-SKIP is the same function with the SKIP branch removed, and it must report BROKEN
+  # -- the verdict that would block that consumer's push. Both run in a subshell whose TMPDIR is a
+  # registered scratch dir, so the world the mutant half-builds is removed at exit.
+  hs_t="$(mktemp -d)"; sufl_tmp "$hs_t"
+  hs_real="$( ( TMPDIR="$hs_t"; h_enter "$HC3/.githooks/pre-push"; printf '%s' "$H_ENTER" ) 2>/dev/null )"
+  declare -f h_enter > "$hs_t/h_enter.sh"
+  if aw_replace_once "$hs_t/h_enter.sh" "$hs_t/h_enter.mut.sh" '[ -n "$H_SKIP" ]' 'false' 2>/dev/null \
+     && ! cmp -s "$hs_t/h_enter.sh" "$hs_t/h_enter.mut.sh"; then
+    hs_mut="$( ( TMPDIR="$hs_t"; . "$hs_t/h_enter.mut.sh"; h_enter "$HC3/.githooks/pre-push"; printf '%s' "$H_ENTER" ) 2>/dev/null )"
+  else
+    hs_mut="DID NOT APPLY"
+  fi
+  case "$hs_real" in
+    "SKIP "*"predates the hermetic dispatch"*) ok "Part HS: a consumer whose installed hook predates the dispatch SKIPs the H and HR arms with a named line, never FIXTURE BROKEN" ;;
+    *) bad "Part HS: h_enter on a pre-dispatch hook gave '$hs_real', want a SKIP naming the missing dispatch" ;;
+  esac
+  case "$hs_mut" in
+    BROKEN) ok "Part HS mutant HM-SKIP killed: with the SKIP branch removed the same consumer reads BROKEN, which would block its push" ;;
+    *) bad "Part HS mutant HM-SKIP: with the SKIP branch removed h_enter gave '$hs_mut', want BROKEN" ;;
+  esac
+
+  # SEED CONTROL: the three hooks differ in exactly the dispatch line, and the sentinel survives.
+  h_c1="$(grep -cxF "$H_DISPATCH_LINE" "$HC1/.githooks/pre-push")" || h_c1=0
+  h_c3="$(grep -cxF "$H_DISPATCH_LINE" "$HC3/.githooks/pre-push")" || h_c3=0
+  h_t3="$(grep -cx '# READSET_TOOLS_BEGIN' "$HC3/.githooks/pre-push")" || h_t3=0
+  h_w3="$(grep -c 'inputs\.decl' "$HC3/.githooks/pre-push")" || h_w3=0
+  if [ "$h_c1" = 1 ] && [ "$h_c3" = 0 ] && [ "$h_t3" = 1 ] && [ "$h_w3" -gt 0 ] \
+     && [ -f "$HC1/scripts/ai-dlc/hermetic-run.sh" ] && [ ! -e "$HC2/scripts/ai-dlc/hermetic-run.sh" ]; then
+    ok "SEED: the pre-dispatch hook keeps READSET_TOOLS_BEGIN and $h_w3 inputs.decl mention(s) and lacks only the dispatch line; the runner is present in HC1 and absent in HC2"
+  else
+    bad "FIXTURE ERROR: the H seed does not discriminate (dispatch lines HC1=$h_c1 HC3=$h_c3, sentinel HC3=$h_t3, mentions HC3=$h_w3)"
+  fi
+  # SKIP GATE PROBE, both directions: the gate is silent on the hook this world was built from, and
+  # names the HC3 near-miss hook. A gate that skips everything would SKIP the whole block above.
+  h_sk1="$(h_skip_why "$HC1/.githooks/pre-push")"; h_sk3="$(h_skip_why "$HC3/.githooks/pre-push")"
+  case "$h_sk1|$h_sk3" in
+    "|"*"predates the hermetic dispatch"*) ok "SKIP GATE: silent on the dispatching hook, and names the near-miss hook as predating the dispatch" ;;
+    *) bad "SKIP GATE: on the dispatching hook '${h_sk1:-silent}', on the near-miss hook '${h_sk3:-silent}' -- want silent and a predates line" ;;
+  esac
+  h_got="$(hsig "$RUNNER")"
+  if [ "$h_got" = "$HSIG_OK" ]; then
+    ok "Parts H1-H7, HD1: vector $h_got — declared-absent and never-consumed red, the clean declared fixture green through hermetic-run.sh with rc=0 sandbox_files=, runner-absent red with the hook's line, undeclared plain and green, depth 8 on both branches, the token on stdout on a red only (never on green, never on an exit-2 refusal), and a pre-dispatch hook run plain"
+  else
+    bad "Parts H1-H7, HD1: vector $h_got, want $HSIG_OK (cells: H1 H2 H3 H4 H5 H6 H7 H7t H7r HD1). A 0 cell is the restated hook rule broken in that clause"
+  fi
+
+  # --- Part HR: THE UNCOMMITTED-RED RESTORE, AS SKILL.md STEP 2 SPELLS IT -------------------------
+  # The order is write, runner, commit, so a red finds the slice UNCOMMITTED -- and possibly STAGED.
+  # The restore: `git restore --source=HEAD --staged --worktree` the written tracked paths, `git rm
+  # --cached --ignore-unmatch` then remove the new paths by explicit pathspec (never the two records),
+  # return to the original branch and delete the self-update branch. Afterwards `git status
+  # --porcelain` lists the records and nothing else. Four shapes:
+  #   full       unstaged slice, the spelled restore           -> records only
+  #   staged     the slice `git add`ed, the spelled restore    -> records only
+  #   ctl-rm     unstaged, the untracked removal skipped       -> the new path listed (control)
+  #   ctl-stage  staged, the OLD `git checkout --` restore     -> the staged slice survives (control)
+  h_hr_run() { # <mode> -> sets h_por, h_recs, h_br, h_rrc
+    local m="$1"
+    (
+      unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+      cd "$HC1" || exit 1
+      git checkout -q -b "su-$m" || exit 1
+      printf 'written by the slice\n' > docs/slice.md
+      printf 'new from the slice\n' > scripts/ai-dlc/h-new.sh
+      case "$m" in staged|ctl-stage) git add -- docs/slice.md scripts/ai-dlc/h-new.sh || exit 1 ;; esac
+      exit 0
+    ) || bad "FIXTURE ERROR: Part HR ($m) could not write the slice"
+    h_run "$RUNNER" "$HC1" h-unconsumed
+    h_rrc="$H_RC"
+    (
+      unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+      cd "$HC1" || exit 1
+      if [ "$m" = ctl-stage ]; then
+        git checkout -q -- docs/slice.md || exit 1
+        rm -f -- scripts/ai-dlc/h-new.sh || exit 1
+      else
+        git restore --source=HEAD --staged --worktree -- docs/slice.md || exit 1
+        if [ "$m" != ctl-rm ]; then
+          git rm -q --cached --ignore-unmatch -- scripts/ai-dlc/h-new.sh || exit 1
+          rm -f -- scripts/ai-dlc/h-new.sh || exit 1
+        fi
+      fi
+      git checkout -q - || exit 1
+      git branch -q -D "su-$m" || exit 1
+      exit 0
+    ) || bad "FIXTURE ERROR: Part HR ($m) could not run the restore sequence"
+    h_por="$(git -C "$HC1" status --porcelain -uall 2>/dev/null | sed 's/^...//' | LC_ALL=C sort | tr '\n' ',')"
+    h_recs="$(cd "$HC1" && ls _bmad-output/ai-dlc-update/self-update-gate-*.md _bmad-output/ai-dlc-update/self-update-fixtures-*.md 2>/dev/null | LC_ALL=C sort | tr '\n' ',')"
+    h_br="$(git -C "$HC1" rev-parse -q --verify "refs/heads/su-$m" >/dev/null && echo present || echo gone)"
+  }
+  h_hr_reset() { # put HC1 back at its seed commit, so no shape reads another one's leftovers
+    ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+      cd "$HC1" && git reset -q --hard && rm -f -- scripts/ai-dlc/h-new.sh ) >/dev/null 2>&1
+  }
+  for h_mode in full staged; do
+    h_hr_run "$h_mode"
+    if [ "$h_rrc" -eq 1 ] && [ -n "$h_recs" ] && [ "$h_por" = "$h_recs" ] && [ "$h_br" = gone ]; then
+      ok "Part HR ($h_mode): after a runner red on the uncommitted slice, the restore leaves git status --porcelain listing exactly the two records and the self-update branch gone"
+    else
+      bad "Part HR ($h_mode): after the restore, porcelain lists '$h_por', want exactly the records '$h_recs' (runner rc=$h_rrc, branch $h_br)"
+    fi
+    h_hr_reset
+  done
+  h_hr_run ctl-rm
+  case "$h_por" in
+    *scripts/ai-dlc/h-new.sh*) ok "Part HR control (ctl-rm): skipping the untracked removal leaves scripts/ai-dlc/h-new.sh listed, so the porcelain read can see a leftover" ;;
+    *) bad "Part HR control (ctl-rm): skipping the untracked removal left porcelain '$h_por', which does not name the new path" ;;
+  esac
+  h_hr_reset
+  h_hr_run ctl-stage
+  case "$h_por" in
+    *docs/slice.md*) ok "Part HR control (ctl-stage): the old git checkout -- restore leaves a STAGED slice in place, so the staged shape above discriminates" ;;
+    *) bad "Part HR control (ctl-stage): the old restore on a staged slice left porcelain '$h_por', which does not name docs/slice.md -- the staged shape cannot tell the two restores apart" ;;
+  esac
+  h_hr_reset
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then
   echo "self-update-fixture-log: PASS"
