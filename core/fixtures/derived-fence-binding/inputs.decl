@@ -1,0 +1,9 @@
+# derived-fence-binding: seed.sh copies core/, scripts/, .githooks/, templates/, patterns/ and .claude/rules/ whole into the
+# pristine tree the I108/I121/I122/I123/I75 batteries mutate and run the enforcement-map validator in.
+!scripts/validate-enforcement-map.sh
+core/
+scripts/
+.githooks/
+templates/
+patterns/
+.claude/rules/
