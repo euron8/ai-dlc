@@ -198,8 +198,10 @@ run prints `says: command not found`, exit stays 0, and the "low-severity findin
 never executes; confirmed on the base tree. `core/fixtures/claude-rules-joins/run.sh` guards a
 nonexistent `core/.gitignore` with `[ -f ]` and silently skips it, a latent no-op arm. Both fixtures
 are declared and PASS; neither declaration touched the defect. Fix each arm so it can fire, with the
-probe-both-ways discipline the repo requires of a new check.
+probe-both-ways discipline the repo requires of a new check. The filing missed a second dead arm in
+the same file: the `says` call at line 160 ("OVER-FIRE CONTROL: and the spine-wide close is
+ANNOUNCED") also precedes the definition, so moving only line 99's call would leave it dead.
 
-verify: sh c="$(grep -n '^says() ' core/fixtures/spec-join-integrity/run.sh | head -1 | cut -d: -f1)"; u="$(grep -nE '^[^#]*\bsays ' core/fixtures/spec-join-integrity/run.sh | head -1 | cut -d: -f1)"; [ -n "$c" ] && [ -n "$u" ] && [ "$u" -gt "$c" ]
+verify: sh f=core/fixtures/claude-rules-joins/run.sh; [ -f "$f" ] || exit 1; out="$(bash core/fixtures/spec-join-integrity/run.sh 2>&1 </dev/null)"; n="$(printf '%s\n' "$out" | grep -c 'says: command not found')" || n=0; k="$(printf '%s\n' "$out" | grep -cE '^  ok    (low-severity findings are RECORDED|OVER-FIRE CONTROL: and the spine-wide close is ANNOUNCED)')" || k=0; g="$(grep -c -i gitignore "$f")" || g=0; [ "$n" -eq 0 ] && [ "$k" -eq 2 ] && [ "$g" -eq 0 ]
 
 
