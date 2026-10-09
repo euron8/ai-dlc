@@ -125,7 +125,7 @@ DECLARED_AREAS="$(cfg --areas)"
 # Where the report sends the operator. The contract's declared path even when the file does not
 # exist yet, because "go write this file" is the correct remedy then; only a missing CONTRACT
 # leaves it unnamed, and that is a broken install, not a paperwork gap.
-REMEDY_FILE="$(bash "$CONFIG" --consumer-file 2>/dev/null || true)"
+REMEDY_FILE="$(bash "$CONFIG" --consumer-file --root "$ROOT_ABS" 2>/dev/null || true)"
 
 if [ "$APPLY" -eq 1 ] && [ -n "$(git status --porcelain 2>/dev/null)" ]; then
   echo "$PROG: the work tree is DIRTY. Commit or stash first." >&2
