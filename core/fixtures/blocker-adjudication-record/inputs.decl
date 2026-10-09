@@ -1,0 +1,2 @@
+# blocker-adjudication-record greps the ai-dlc-update SKILL.md under test, resolved from the fixture's own root walk.
+!core/skills/ai-dlc-update/SKILL.md

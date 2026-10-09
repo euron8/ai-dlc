@@ -36,6 +36,7 @@ for f in "$FX/run.sh" "$FX/seed.sh" "$FX-b/run.sh" core/fixtures/lib/preamble.sh
          core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; do
   [ -f "$ROOT/$f" ] || { echo "FIXTURE ERROR: missing $ROOT/$f" >&2; exit 2; }
 done
+echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/ledger-reverify.sh"
 command -v python3 >/dev/null 2>&1 || { echo "FIXTURE ERROR: python3 not on PATH" >&2; exit 2; }
 
 WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }

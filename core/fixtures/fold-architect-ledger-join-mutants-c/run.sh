@@ -27,4 +27,5 @@ IMPL="$HERE/../fold-architect-ledger-join-mutants/run.sh"
   exit 2
 }
 
+echo "HERMETIC-CONSUMED core/fixtures/fold-architect-ledger-join-mutants/run.sh"
 exec bash "$IMPL" --group c

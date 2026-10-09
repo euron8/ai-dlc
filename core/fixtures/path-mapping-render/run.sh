@@ -79,6 +79,7 @@ if [ ! -f "$SRC_PRECLASS" ] || [ ! -f "$SRC_SKILL" ]; then
   exit 2
 fi
 
+echo "HERMETIC-CONSUMED scripts/render-path-mapping.sh"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 rc=0

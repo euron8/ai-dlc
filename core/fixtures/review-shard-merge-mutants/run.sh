@@ -129,6 +129,8 @@ SIB="$HERE/../review-shard-merge"
 [ -f "$SIB/lib.sh" ] || { echo "FIXTURE BROKEN: $SIB/lib.sh is absent; no predicate exists to score a mutant against" >&2; exit 2; }
 [ -f "$SIB/run.sh" ] || { echo "FIXTURE BROKEN: $SIB/run.sh is absent; the arm/P_ALL join has no subject" >&2; exit 2; }
 . "$SIB/lib.sh"
+echo "HERMETIC-CONSUMED core/scripts/partition-review-diff.sh"
+echo "HERMETIC-CONSUMED core/scripts/merge-review-shards.sh"
 # lib.sh's WORK is created after its argument parse ran here, so the rows file is opened only now.
 if [ -n "$ROWS" ]; then : >> "$ROWS" || { echo "FIXTURE ERROR: cannot write --rows $ROWS" >&2; exit 2; }; fi
 

@@ -1,0 +1,11 @@
+# enforcement-map-sites and its shard drivers (b, c, which exec the parent's run.sh --group) share ONE declaration.
+# seed.sh copies core/, scripts/, .githooks/ and templates/ whole and mutates the copies; the decoy root also takes VERSION.
+# The validator under test, REQUIRED: the sentinel prints where the parent run.sh passes its distribution-only guard.
+!scripts/validate-enforcement-map.sh
+scripts/
+.githooks/
+templates/
+core/
+VERSION
+core/fixtures/enforcement-map-sites/run.sh
+core/fixtures/enforcement-map-sites/seed.sh

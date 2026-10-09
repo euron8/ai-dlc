@@ -1,0 +1,3 @@
+# consumer-suite-pool copies the pre-push hook into synthetic repositories and drives it; the shared preamble is sourced.
+!core/git-hooks/pre-push
+core/fixtures/lib/

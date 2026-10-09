@@ -82,6 +82,7 @@ if [ ! -f "$INSTALL" ]; then
   echo "  this fixture is distribution-only; it cannot run in an installed tree" >&2
   exit 2
 fi
+echo "HERMETIC-CONSUMED scripts/install.sh"
 for _t in git python3 jq cksum; do
   command -v "$_t" >/dev/null 2>&1 || { echo "FIXTURE ERROR: $_t not on PATH" >&2; exit 2; }
 done

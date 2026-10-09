@@ -5,17 +5,164 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+
+# ---------------------------------------------------------------------------- shards ----
+# THIS FILE IS THREE SHARDS OF ONE FIXTURE, AND THE SPLIT IS A SCHEDULING BOUNDARY, NOT A SUBJECT
+# BOUNDARY. Every arm below is a UNIT guarded by `if sg <unit>; then ... fi`; `--group <x>` runs the
+# units dealt to shard <x>. `apply-drift-refile-{b,c}/run.sh` are one-line drivers that `exec bash` this
+# file with their group, so the pre-push pool starts each on its own. No `--group` runs shard 'a'.
+#
+# THE SEED AND THE SANITY ARMS ARE NOT UNITS: every shard builds the seed and runs Assertions 0 and 0b,
+# because a shard that skipped them would score its units against a harness that never ran. The world
+# builders and the mutant-copy helper (q_world, t_aworld, mut_copy, u_world) are hoisted above the units
+# for the same reason: units use each other's helpers, and a helper living inside a unit another shard
+# owns would be undefined there.
+#
+# THE COVERAGE JOIN runs in EVERY shard before anything else: the declared units are DERIVED from this
+# file's own `if sg <unit>; then` lines, the dealt lists must be disjoint and their union must equal the
+# declared set exactly, and every declared shard must have a driver directory. The join proves it can
+# fire first, on a seeded duplicate and a seeded omission.
+#   a  base fh r s x      Assertions 1-9b and the stamp-withhold mutant; BL-230 arms f/h; BL-336 r; BL-360 s; BL-364 x
+#   b  y t                 BL-413 arm y (the CLASSIFY record, six mutants); arm t
+#   c  q v u w            BL-402 arm q; BL-413 arm v; arm u; BL-414 w
+SHARDS="a b c"
+UNITS_a="base fh r s x"
+UNITS_b="y t"
+UNITS_c="q v u w"
+GROUP=a
+if [ "${1:-}" = "--group" ]; then
+  GROUP="${2:-}"
+  [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }
+fi
+case " $SHARDS " in
+  *" $GROUP "*) ;;
+  *) echo "FIXTURE ERROR: unknown shard '$GROUP' (known: $SHARDS)" >&2; exit 2 ;;
+esac
+eval "MINE=\"\${UNITS_$GROUP:-}\""
+NAME="apply-drift-refile"; [ "$GROUP" = a ] || NAME="apply-drift-refile-$GROUP"
+shard_broken() { echo "$NAME: FIXTURE BROKEN — $1" >&2; exit 2; }
+[ -n "$MINE" ] || shard_broken "shard '$GROUP' has no UNITS_$GROUP list; a shard dealt nothing passes everything it never checked"
+sg() { case " $MINE " in *" $1 "*) return 0 ;; esac; return 1; }
+SELF="$0"
+[ -f "$SELF" ] || shard_broken "cannot read $SELF for the coverage join"
+partition_ok() { # <declared ids file> <dealt ids file> -> 0 when dealt is disjoint and covers declared exactly
+  local dup miss extra
+  dup="$(sort "$2" | uniq -d | tr '\n' ' ')"
+  miss="$(sort -u "$2" | comm -23 <(sort -u "$1") - | tr '\n' ' ')"
+  extra="$(sort -u "$2" | comm -13 <(sort -u "$1") - | tr '\n' ' ')"
+  [ -z "$dup$miss$extra" ] && return 0
+  echo "dealt twice: {${dup% }} dealt to no shard: {${miss% }} dealt but not declared: {${extra% }}"
+  return 1
+}
+JW="$(mktemp -d "${TMPDIR:-/tmp}/apply-drift-join.XXXXXX")" || shard_broken "mktemp failed"
+printf '%s\n' u1 u2 u3 > "$JW/pd"; printf '%s\n' u1 u2 u2 u3 > "$JW/pdup"; printf '%s\n' u1 u3 > "$JW/pmiss"; printf '%s\n' u3 u1 u2 > "$JW/pok"
+if partition_ok "$JW/pd" "$JW/pdup" >/dev/null || partition_ok "$JW/pd" "$JW/pmiss" >/dev/null \
+   || ! partition_ok "$JW/pd" "$JW/pok" >/dev/null; then
+  rm -rf "$JW"; shard_broken "the coverage join's self-probe did not discriminate (duplicate, omission, exact)"
+fi
+sed -n 's/^[[:space:]]*if sg \([a-z0-9_][a-z0-9_]*\); then$/\1/p' "$SELF" > "$JW/declared"
+for _s in $SHARDS; do eval "printf '%s\n' \${UNITS_$_s}" | tr ' ' '\n'; done | grep . > "$JW/dealt"
+ndecl="$(grep -c . "$JW/declared")" || ndecl=0
+ndupdecl="$(sort "$JW/declared" | uniq -d | grep -c .)" || ndupdecl=0
+if [ "$ndecl" -eq 0 ] || [ "$ndupdecl" -ne 0 ]; then
+  rm -rf "$JW"; shard_broken "$ndecl unit guards derived from $SELF ($ndupdecl declared twice)"
+fi
+if ! _why="$(partition_ok "$JW/declared" "$JW/dealt")"; then
+  rm -rf "$JW"; shard_broken "the shard partition does not cover the guarded units exactly -- $_why"
+fi
+for _s in $SHARDS; do
+  [ "$_s" = a ] && continue
+  _drv="$HERE/../apply-drift-refile-$_s/run.sh"
+  if [ ! -f "$_drv" ] || ! grep -qF -- "--group $_s" "$_drv"; then
+    rm -rf "$JW"; shard_broken "shard '$_s' is declared but $_drv does not drive it"
+  fi
+done
+rm -rf "$JW"
+echo "  [J0] coverage join: $ndecl units derived from the sg guards, dealt disjointly across {$SHARDS}, union exact; this shard runs {$MINE}"
 WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
 echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+fails=0; asserts=0
+ok()  { printf '  ok    %s\n' "$1"; asserts=$((asserts+1)); }
+bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserts=$((asserts+1)); }
 
-echo "apply-drift-refile:"
+# Helpers hoisted above the units: units use each other's worlds, so a helper inside a unit another shard owns would be undefined there.
+q_world() { # q_world <reconcile-dir> <W|H|X> -> sets Q_* from a fresh seed, ordinary apply run
+  local w; w="$(TMPDIR="$WORK" bash "$HERE/seed.sh")" || return 1
+  eval "$(sed 's/^/Q_/' "$w/env.sh")"
+  chmod 000 "$Q_SCHEMA"
+  Q_OUT="$(bash "$1/apply.sh" "$Q_DIST" "$Q_BASE" "$Q_CONSUMER" "$Q_THEIRS" 2>/dev/null)"
+  chmod 644 "$Q_SCHEMA"
+  if [ "$2" != W ]; then
+    mkdir -p "$(dirname "$Q_EXT")" || return 1
+    printf '{\n  "known_skills": [\n    "my-persona-skill"\n  ]\n}\n' > "$Q_EXT" || return 1
+    git -C "$Q_DIST" show "${Q_THEIRS}:core/schemas/provenance-block.json" > "$Q_SCHEMA" || return 1
+  fi
+  if [ "$2" = X ]; then chmod +x "$Q_CONSUMER/scripts/ai-dlc/validate-synthetic.sh" || return 1; fi
+  return 0
+}
+t_aworld() { # t_aworld <add-persona 0|1> -> path of a fresh world, refs in .B/.T
+  local _w _d _c
+  _w="$(mktemp -d "$WORK/t.XXXXXX")" || return 1
+  _d="$_w/dist"; _c="$_w/cons"
+  mkdir -p "$_d/core/schemas" "$_d/core/scripts" "$_c/.claude/schemas" "$_c/scripts/ai-dlc" || return 1
+  printf '#!/usr/bin/env bash\necho v\n' > "$_d/core/scripts/validate-synthetic.sh"
+  printf '#!/usr/bin/env bash\necho v\n' > "$_c/scripts/ai-dlc/validate-synthetic.sh"
+  printf '{\n  "known_skills": [\n    "bmad-party-mode",\n    "retired-skill"\n  ]\n}\n' > "$_d/core/schemas/provenance-block.json"
+  printf '9.9.9\n' > "$_d/VERSION"
+  git -C "$_d" init -q && git -C "$_d" -c user.email=f@f -c user.name=fixture add -A \
+    && git -C "$_d" -c user.email=f@f -c user.name=fixture commit -qm base || return 1
+  git -C "$_d" rev-parse HEAD > "$_w/.B"
+  printf '{\n  "known_skills": [\n    "bmad-party-mode"\n  ]\n}\n' > "$_d/core/schemas/provenance-block.json"
+  git -C "$_d" -c user.email=f@f -c user.name=fixture commit -qam theirs || return 1
+  git -C "$_d" rev-parse HEAD > "$_w/.T"
+  if [ "$1" = 1 ]; then
+    printf '{\n  "known_skills": [\n    "bmad-party-mode",\n    "retired-skill",\n    "my-persona-skill"\n  ]\n}\n' > "$_c/.claude/schemas/provenance-block.json"
+  else
+    git -C "$_d" show "$(cat "$_w/.B"):core/schemas/provenance-block.json" > "$_c/.claude/schemas/provenance-block.json" || return 1
+  fi
+  printf 'version: 0.0.1\ncommit: %s\n' "$(cat "$_w/.B")" > "$_c/.claude/.ai-dlc-version"
+  printf '%s' "$_w"
+}
+# A mutant copy: each <anchor> -> <replacement> pair is applied once; refuses unless every anchor is
+# in apply.sh exactly once, the copy differs and parses, and preclassify.sh is beside it.
+mut_copy() { # mut_copy <dir> <anchor> <replacement> [<anchor> <replacement>]
+  local d="$1" n src; shift
+  cp -R "$(dirname "$APPLY")" "$d" || return 1
+  src="$APPLY"
+  while [ "$#" -ge 2 ]; do
+    n="$(grep -cF -- "$1" "$APPLY")" || n=0
+    [ "$n" = 1 ] || return 1
+    M_A="$1" M_R="$2" awk '{ i = index($0, ENVIRON["M_A"]); if (i) $0 = substr($0, 1, i-1) ENVIRON["M_R"] substr($0, i + length(ENVIRON["M_A"])); print }' \
+      "$src" > "$d/apply.sh.next" || return 1
+    mv "$d/apply.sh.next" "$d/apply.sh"; src="$d/apply.sh"; shift 2
+  done
+  ! cmp -s "$APPLY" "$d/apply.sh" && bash -n "$d/apply.sh" && [ -f "$d/preclassify.sh" ]
+}
+u_world() {
+  local _w _d _c _ld i
+  _w="$(mktemp -d "$WORK/u.XXXXXX")" || return 1
+  _d="$_w/dist"; _c="$_w/cons"
+  _ld="$(printf '%075d' 0 | tr 0 d)"
+  mkdir -p "$_d/core/session-driver/$_ld" "$_d/core/scripts" "$_c/.claude/session-driver/$_ld" "$_c/scripts/ai-dlc" || return 1
+  printf '#!/usr/bin/env bash\necho v\n' > "$_d/core/scripts/validate-synthetic.sh"
+  printf '#!/usr/bin/env bash\necho v\n' > "$_c/scripts/ai-dlc/validate-synthetic.sh"
+  i=0; while [ "$i" -lt 100 ]; do printf 'v1 %s\n' "$i" > "$_d/core/session-driver/$_ld/f$(printf %03d "$i")"; i=$((i+1)); done
+  printf '9.9.9\n' > "$_d/VERSION"
+  git -C "$_d" init -q && git -C "$_d" -c user.email=f@f -c user.name=fixture add -A \
+    && git -C "$_d" -c user.email=f@f -c user.name=fixture commit -qm base || return 1
+  git -C "$_d" rev-parse HEAD > "$_w/.B"
+  i=0; while [ "$i" -lt 100 ]; do printf 'v2 %s\n' "$i" > "$_d/core/session-driver/$_ld/f$(printf %03d "$i")"; i=$((i+1)); done
+  git -C "$_d" -c user.email=f@f -c user.name=fixture commit -qam theirs || return 1
+  git -C "$_d" rev-parse HEAD > "$_w/.T"
+  i=0; while [ "$i" -lt 100 ]; do printf 'v1 %s\n' "$i" > "$_c/.claude/session-driver/$_ld/f$(printf %03d "$i")"; i=$((i+1)); done
+  printf '%s' "$_w"
+}
+
+echo "$NAME:"
 
 # --- Assertion 0: SANITY — the drift is present before ------------------------
 if grep -q "my-persona-skill" "$SCHEMA" && [ ! -f "$EXT" ]; then
@@ -33,6 +180,7 @@ else
   bad "FIXTURE BROKEN — no staged session-driver update"; echo; echo "apply-drift-refile: FIXTURE BROKEN" >&2; exit 2
 fi
 
+if sg base; then
 # --- Run the resolution driver -----------------------------------------------
 MANIFEST="$(bash "$APPLY" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
 
@@ -166,7 +314,9 @@ if [ -n "$UD_OK" ] && ! grep -q '^HARD-DRIFT-SCAN-UNAVAILABLE' <<<"$UD_OK"; then
 else
   bad "the scan produced no usable rows with preclassify.sh present, so assertion 9 proves nothing: $(printf '%s' "$UD_OK" | tr '\n' '|' | cut -c1-200)"
 fi
+fi
 
+if sg fh; then
 # --- BL-230 arm f: apply STOPS, before writing, on a preclassify that did not classify ---------
 # apply.sh called preclassify as `2>/dev/null || true`, so a run that exited 2, or returned no
 # rows while base..theirs moves core/, handed phase 1 an empty or partial row set -- and the run
@@ -359,6 +509,8 @@ if [ "$H_RUN" = 1 ]; then
   fi
 fi
 
+fi
+if sg r; then
 # --- BL-336 arm r: THE REFILE'S "DID NOT RUN" ROW PRESCRIBES A PROCEDURE THAT FINISHES THE WORK ---
 # When the provenance refile's diff cannot run, apply raises `DECISION drift … did not run` and
 # withholds the stamp. Its remedy read "re-run apply" -- and on a consumer carrying the approved
@@ -452,6 +604,8 @@ if [ "$R_RUN" = 1 ]; then
   }
 fi
 
+fi
+if sg q; then
 # --- BL-402 arm q: `--finish` RE-CHECKS THE TWO REMEDIES ONLY A FRESH RUN PERFORMS ----------------
 # Three worlds, each from a fresh seed, each driven by the ordinary apply with the schema at mode 000
 # (the did-not-run row), then the mode restored:
@@ -462,20 +616,6 @@ fi
 #   X  as H, plus validate-synthetic.sh +x    -> --finish WITHHOLDS with `finish-exec-owed`. That
 #      (100644 upstream, OUTSIDE the range, so finish_verify_tree cannot see it)
 # Cell: "<W row names --finish? F|->|<W finish stamp>|<W refile-owed row>|<H stamp>|<X stamp>|<X exec row>"
-q_world() { # q_world <reconcile-dir> <W|H|X> -> sets Q_* from a fresh seed, ordinary apply run
-  local w; w="$(TMPDIR="$WORK" bash "$HERE/seed.sh")" || return 1
-  eval "$(sed 's/^/Q_/' "$w/env.sh")"
-  chmod 000 "$Q_SCHEMA"
-  Q_OUT="$(bash "$1/apply.sh" "$Q_DIST" "$Q_BASE" "$Q_CONSUMER" "$Q_THEIRS" 2>/dev/null)"
-  chmod 644 "$Q_SCHEMA"
-  if [ "$2" != W ]; then
-    mkdir -p "$(dirname "$Q_EXT")" || return 1
-    printf '{\n  "known_skills": [\n    "my-persona-skill"\n  ]\n}\n' > "$Q_EXT" || return 1
-    git -C "$Q_DIST" show "${Q_THEIRS}:core/schemas/provenance-block.json" > "$Q_SCHEMA" || return 1
-  fi
-  if [ "$2" = X ]; then chmod +x "$Q_CONSUMER/scripts/ai-dlc/validate-synthetic.sh" || return 1; fi
-  return 0
-}
 q_score() { # q_score <reconcile-dir> -> the cell above, or NOROW / BROKEN
   local rec="$1" c1 c2 c3 c4 c5 c6 fo
   q_world "$rec" W || { printf 'BROKEN'; return; }
@@ -535,6 +675,8 @@ if [ "$Q_RUN" = 1 ]; then
   }
 fi
 
+fi
+if sg t; then
 # --- arm t: `--finish`'s REFILE CHECK IS THE ORDINARY RUN'S PREDICATE, GATE AND ALL ----------------
 # finish_reapply_owed diffed theirs against the consumer schema with no in-place-edit gate, and read
 # a theirs line that only gained a trailing comma as consumer-added. Four worlds:
@@ -547,29 +689,6 @@ fi
 #   Bk  refile done by hand (extension holds the skill), schema KEPT as is -> no owed row, STAMPS
 #   Bn  as Bk with no extension written                                    -> owed, naming it
 # Cell: "<An owes retired-skill?>|<Ap owes my-persona-skill?>|<Bk owed row?>|<Bk stamp>|<Bn owed?>"
-t_aworld() { # t_aworld <add-persona 0|1> -> path of a fresh world, refs in .B/.T
-  local _w _d _c
-  _w="$(mktemp -d "$WORK/t.XXXXXX")" || return 1
-  _d="$_w/dist"; _c="$_w/cons"
-  mkdir -p "$_d/core/schemas" "$_d/core/scripts" "$_c/.claude/schemas" "$_c/scripts/ai-dlc" || return 1
-  printf '#!/usr/bin/env bash\necho v\n' > "$_d/core/scripts/validate-synthetic.sh"
-  printf '#!/usr/bin/env bash\necho v\n' > "$_c/scripts/ai-dlc/validate-synthetic.sh"
-  printf '{\n  "known_skills": [\n    "bmad-party-mode",\n    "retired-skill"\n  ]\n}\n' > "$_d/core/schemas/provenance-block.json"
-  printf '9.9.9\n' > "$_d/VERSION"
-  git -C "$_d" init -q && git -C "$_d" -c user.email=f@f -c user.name=fixture add -A \
-    && git -C "$_d" -c user.email=f@f -c user.name=fixture commit -qm base || return 1
-  git -C "$_d" rev-parse HEAD > "$_w/.B"
-  printf '{\n  "known_skills": [\n    "bmad-party-mode"\n  ]\n}\n' > "$_d/core/schemas/provenance-block.json"
-  git -C "$_d" -c user.email=f@f -c user.name=fixture commit -qam theirs || return 1
-  git -C "$_d" rev-parse HEAD > "$_w/.T"
-  if [ "$1" = 1 ]; then
-    printf '{\n  "known_skills": [\n    "bmad-party-mode",\n    "retired-skill",\n    "my-persona-skill"\n  ]\n}\n' > "$_c/.claude/schemas/provenance-block.json"
-  else
-    git -C "$_d" show "$(cat "$_w/.B"):core/schemas/provenance-block.json" > "$_c/.claude/schemas/provenance-block.json" || return 1
-  fi
-  printf 'version: 0.0.1\ncommit: %s\n' "$(cat "$_w/.B")" > "$_c/.claude/.ai-dlc-version"
-  printf '%s' "$_w"
-}
 t_score() { # t_score <reconcile-dir> -> the cell above, or NOROW / BROKEN
   local rec="$1" w fo c1 c2 c3 c4 c5
   w="$(t_aworld 0)" && [ -d "$w/cons" ] || { printf 'BROKEN'; return; }
@@ -589,21 +708,6 @@ t_score() { # t_score <reconcile-dir> -> the cell above, or NOROW / BROKEN
   fo="$(bash "$rec/apply.sh" --finish "$Q_DIST" "$Q_BASE" "$Q_CONSUMER" "$Q_THEIRS" 2>/dev/null)"
   c5="$(awk -F'\t' '$1=="WORKLIST" && $2=="finish-refile-owed" && index($4, "my-persona-skill") {f=1} END {print (f ? "OWED" : "-")}' <<<"$fo")"
   printf '%s|%s|%s|%s|%s' "$c1" "$c2" "$c3" "$c4" "$c5"
-}
-# A mutant copy: each <anchor> -> <replacement> pair is applied once; refuses unless every anchor is
-# in apply.sh exactly once, the copy differs and parses, and preclassify.sh is beside it.
-mut_copy() { # mut_copy <dir> <anchor> <replacement> [<anchor> <replacement>]
-  local d="$1" n src; shift
-  cp -R "$(dirname "$APPLY")" "$d" || return 1
-  src="$APPLY"
-  while [ "$#" -ge 2 ]; do
-    n="$(grep -cF -- "$1" "$APPLY")" || n=0
-    [ "$n" = 1 ] || return 1
-    M_A="$1" M_R="$2" awk '{ i = index($0, ENVIRON["M_A"]); if (i) $0 = substr($0, 1, i-1) ENVIRON["M_R"] substr($0, i + length(ENVIRON["M_A"])); print }' \
-      "$src" > "$d/apply.sh.next" || return 1
-    mv "$d/apply.sh.next" "$d/apply.sh"; src="$d/apply.sh"; shift 2
-  done
-  ! cmp -s "$APPLY" "$d/apply.sh" && bash -n "$d/apply.sh" && [ -f "$d/preclassify.sh" ]
 }
 T_WANT='-|-|-|STAMPED|OWED'
 T_RUN=1
@@ -640,6 +744,8 @@ if [ "$T_RUN" = 1 ]; then
   }
 fi
 
+fi
+if sg v; then
 # --- BL-413 arm v: `--finish` WITHHOLDS OVER A HANDED-BACK SEMANTIC MERGE NOBODY DID ---------------
 # arm t's Ap world, driven the way a consumer drives it: the ORDINARY run first, then `--finish`. The
 # ordinary run buckets the schema BOTH-CHANGED->CLASSIFY and hands it back as `semantic-merge`; it
@@ -720,6 +826,8 @@ if [ "$V_RUN" = 1 ]; then
   }
 fi
 
+fi
+if sg y; then
 # --- BL-413 arm y: THE CLASSIFY RECORD READS A MERGE THAT IS ONLY A chmod, SURVIVES A RE-POINTED OR
 # DELIVERING PULL, STANDS DOWN WHERE KEEPING THE CONSUMER COPY IS THE NORMAL OUTCOME, AND REFUSES A
 # DIRECTORY AT THE MARKER'S PATH ---------------------------------------------------------------------
@@ -925,6 +1033,8 @@ if [ "$Y_RUN" = 1 ]; then
   }
 fi
 
+fi
+if sg u; then
 # --- arm u: A `--finish` WHOSE FINISH-CHECK INPUT CANNOT BE STAGED WITHHOLDS THE STAMP ---------------
 # finish_verify_tree read preclassify's rows from a heredoc. Under a file-size limit bash 3.2 cannot
 # write the heredoc's temp file and runs the loop on EMPTY stdin: no finish-unapplied row, and the
@@ -932,25 +1042,6 @@ fi
 # under one long directory, so the rows (~22 KB) exceed a 14 and a 20 KB limit while everything else
 # the finish path writes fits under 14. Limits are in 1024-byte units, SIGXFSZ ignored.
 # Cell per limit: "<finish-unapplied rows>|<fv staging-refused or finish-unverified-tree row?>|<stamp>"
-u_world() {
-  local _w _d _c _ld i
-  _w="$(mktemp -d "$WORK/u.XXXXXX")" || return 1
-  _d="$_w/dist"; _c="$_w/cons"
-  _ld="$(printf '%075d' 0 | tr 0 d)"
-  mkdir -p "$_d/core/session-driver/$_ld" "$_d/core/scripts" "$_c/.claude/session-driver/$_ld" "$_c/scripts/ai-dlc" || return 1
-  printf '#!/usr/bin/env bash\necho v\n' > "$_d/core/scripts/validate-synthetic.sh"
-  printf '#!/usr/bin/env bash\necho v\n' > "$_c/scripts/ai-dlc/validate-synthetic.sh"
-  i=0; while [ "$i" -lt 100 ]; do printf 'v1 %s\n' "$i" > "$_d/core/session-driver/$_ld/f$(printf %03d "$i")"; i=$((i+1)); done
-  printf '9.9.9\n' > "$_d/VERSION"
-  git -C "$_d" init -q && git -C "$_d" -c user.email=f@f -c user.name=fixture add -A \
-    && git -C "$_d" -c user.email=f@f -c user.name=fixture commit -qm base || return 1
-  git -C "$_d" rev-parse HEAD > "$_w/.B"
-  i=0; while [ "$i" -lt 100 ]; do printf 'v2 %s\n' "$i" > "$_d/core/session-driver/$_ld/f$(printf %03d "$i")"; i=$((i+1)); done
-  git -C "$_d" -c user.email=f@f -c user.name=fixture commit -qam theirs || return 1
-  git -C "$_d" rev-parse HEAD > "$_w/.T"
-  i=0; while [ "$i" -lt 100 ]; do printf 'v1 %s\n' "$i" > "$_c/.claude/session-driver/$_ld/f$(printf %03d "$i")"; i=$((i+1)); done
-  printf '%s' "$_w"
-}
 u_cell() { # u_cell <world> <apply.sh> <limit|none>
   local w="$1" b t o
   b="$(cat "$w/.B")"; t="$(cat "$w/.T")"
@@ -1010,6 +1101,8 @@ if [ "$U_RUN" = 1 ]; then
   fi
 fi
 
+fi
+if sg w; then
 # --- BL-414 arm w: A BUCKET-ROW HAND-DOWN THAT CANNOT BE WRITTEN LEAKS NO PARTIAL ROW -------------
 # apply.sh wrote preclassify's rows to the unregistered-drift and retired-tokens hand-down files with
 # a builtin `printf … > file`. Under a file-size limit the write fails, its unflushed tail stays in
@@ -1076,6 +1169,8 @@ if [ "$W_RUN" = 1 ]; then
   fi
 fi
 
+fi
+if sg x; then
 # --- BL-364 arm x: A NON-ASCII core/ PATH REACHES apply.sh's LISTING READERS RAW ---------------------
 # Under the default core.quotePath git lists `core/scripts/café.sh` as `"core/scripts/caf\303\251.sh"`,
 # and a reader that strips `core/`, maps the name or matches it against a consumer path loses the row
@@ -1189,6 +1284,8 @@ if [ "$X_RUN" = 1 ]; then
   }
 fi
 
+fi
+if sg s; then
 # --- BL-360 arm s: A RELABEL TOOL THAT REFUSED IS A ROW, NOT "NOTHING TO RELABEL" -----------------
 # apply.sh read relabel-extension-checks.sh through `2>/dev/null || true`, so its refusal (exit 2,
 # no count printed) read exactly like a catalog with no collisions. The copy's relabel tool is
@@ -1242,8 +1339,9 @@ if [ "$S_RUN" = 1 ]; then
     bad "FIXTURE BROKEN [BL-360 arm s]: could not copy the reconcile dir"
   fi
 fi
+fi
 
 echo
-if [ "$fails" -eq 0 ]; then echo "apply-drift-refile: PASS"; exit 0; fi
-echo "apply-drift-refile: $fails assertion(s) FAILED" >&2
+if [ "$fails" -eq 0 ]; then echo "$NAME: PASS ($asserts assertions)"; exit 0; fi
+echo "$NAME: $fails assertion(s) FAILED" >&2
 exit 1

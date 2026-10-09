@@ -101,6 +101,8 @@ if [ -z "$RENDERER" ]; then
   echo "run.sh: could not locate scripts/render-vocabulary-index.sh from $DIR" >&2
   exit 2
 fi
+# The renderer is located and about to be driven; inputs.decl marks it REQUIRED.
+echo "HERMETIC-CONSUMED scripts/render-vocabulary-index.sh"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT

@@ -1,0 +1,12 @@
+# layer-contract-conformance and its shard driver b (which execs this run.sh --group b) share ONE declaration shape.
+# The validator walks the whole distribution tree and renders its arm map via render-invariant-index.sh; VERSION is the renderer's root marker.
+!scripts/validate-enforcement-map.sh
+scripts/
+core/
+templates/
+.githooks/
+patterns/
+.claude/rules/
+docs/
+CLAUDE.md
+VERSION

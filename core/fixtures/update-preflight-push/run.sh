@@ -80,6 +80,8 @@ if [ -z "$SUBJ" ]; then
   exit 0
 fi
 
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$SUBJ")" && pwd -P)/$(basename "$SUBJ")"
+
 OFF="$HERE/offender.md"
 NEAR="$HERE/nearmiss.md"
 for f in "$OFF" "$NEAR"; do

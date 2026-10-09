@@ -1,0 +1,5 @@
+# crosswalk-home-declaration: each pool worker mirrors core/ and scripts/ whole and runs the enforcement-map validator in the
+# mirror (the I69 subjects are files inside them), so both are declared whole.
+!scripts/validate-enforcement-map.sh
+core/
+scripts/

@@ -38,6 +38,7 @@ if [ -n "${AI_DLC_CMI_VALIDATOR:-}" ] && [ -f "${AI_DLC_CMI_VALIDATOR}" ]; then
   VAL="${AI_DLC_CMI_VALIDATOR}"
 elif [ -n "$ROOT" ] && [ -f "$ROOT/core/scripts/validate-layer-entries.sh" ]; then
   VAL="$ROOT/core/scripts/validate-layer-entries.sh"
+  echo "HERMETIC-CONSUMED core/scripts/validate-layer-entries.sh"
 elif [ -n "$ROOT" ] && [ -f "$ROOT/scripts/ai-dlc/validate-layer-entries.sh" ]; then
   VAL="$ROOT/scripts/ai-dlc/validate-layer-entries.sh"
 else

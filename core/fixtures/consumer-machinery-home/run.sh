@@ -80,6 +80,8 @@ if [ ! -f "$HERE/../../../scripts/validate-enforcement-map.sh" ]; then
   exit 0
 fi
 
+echo "HERMETIC-CONSUMED scripts/validate-enforcement-map.sh"
+
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 

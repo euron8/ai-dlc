@@ -32,6 +32,8 @@ SKILL="$(find_one skills/ai-dlc-update/SKILL.md)"
 MERGE="$(find_one skills/ai-dlc-update/reconcile/settings-merge.sh)"
 [ -n "$SKILL" ] || { echo "FIXTURE ERROR: ai-dlc-update/SKILL.md not found" >&2; exit 2; }
 [ -n "$MERGE" ] || { echo "FIXTURE ERROR: settings-merge.sh not found" >&2; exit 2; }
+echo "HERMETIC-CONSUMED $SKILL"
+echo "HERMETIC-CONSUMED $MERGE"
 
 TMPL=""
 for c in "$ROOT/templates/settings.json.template" "$ROOT/.claude/templates/settings.json.template"; do

@@ -1,0 +1,8 @@
+# core-write-guard drives the core-guard hook (which sources its sibling provenance hook) over a consumer tree seeded from the
+# real manifest, setup-sites copy and two role files.
+!core/hooks/ai-dlc-core-guard.sh
+core/hooks/ai-dlc-context-provenance.sh
+core/skills/ai-dlc/core-manifest.md
+core/skills/ai-dlc-update/reconcile/setup-sites.md
+core/team-roles/architect.md
+core/team-roles/dev.md

@@ -1,0 +1,18 @@
+# shipped-rule-version-floor runs the real install.sh and uninstall.sh into scratch consumers and drives the rules-floor hook.
+# The marker run.sh walks up for is scripts/install.sh. install.sh copies from every shipped core subtree and templates/ and patterns/;
+# core/fixtures/lib/ is the preamble run.sh sources; the fixture's own directory is copied by the runner without being named.
+!scripts/install.sh
+!scripts/uninstall.sh
+!core/hooks/ai-dlc-rules-floor.sh
+core/fixtures/lib/
+core/hooks/
+core/rules/
+core/schemas/
+core/scripts/
+core/session-driver/
+core/skills/
+core/team-roles/
+core/git-hooks/
+core/ci-templates/
+templates/
+patterns/

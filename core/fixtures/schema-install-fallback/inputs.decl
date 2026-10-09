@@ -1,0 +1,8 @@
+# schema-install-fallback walks up from its own directory for VERSION, then runs scripts/install.sh into an empty target; install.sh
+# copies from core/, patterns/ and templates/ (SCRIPT_DIR/../<tree>), and reads VERSION. The five scripts under test are the ones that
+# install lays down at scripts/ai-dlc/, taken from core/scripts/. A fixture's own directory is copied by the runner, never declared.
+!scripts/install.sh
+VERSION
+core/
+patterns/
+templates/
