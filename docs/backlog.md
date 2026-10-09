@@ -106,7 +106,9 @@ the last width-12 row failed one condition: coverage SKIPs at 47.86, 50.63 and 5
 every push whose predecessor's post-green trace was still alive (0.749.0 twice, 0.752.0, and 0.754.0's own gate at
 width 4, which printed `SKIP: a read-set live trace overlapped this run`), and a no-measurement SKIP on 0.750.0.
 `COV_MIN=90` was calibrated against 220 of 227 fixtures dispatched (`:96-103`, `:178-180`); read-set keys now dispatch
-about 70 of 251, roughly 57 percent of cost, so no keyed push can reach the floor, and lowering it would admit exactly
+about 70 of 251, and no keyed push has yet reached the floor: the highest measured is 0.754.0's gate, whose 70 timed rows
+replayed through the shipping validator on copies of the live durations read `coverage 83.24%` (54129s of 65021s), where
+the earlier "roughly 57 percent" was a prediction from fixture count. Lowering the floor would admit exactly
 the near-solo figure the guard exists to refuse. The three existing rows all came from full-suite runs at 99.8 percent.
 No code remedy without an operator ruling on what a comparable measurement is under read-set skipping; the guard is
 refusing correctly and the close keys on an event both mechanisms make rare.
@@ -160,9 +162,12 @@ every push.
 hermetic-runner implementation-join-yield procsub-staged-refusal-boot readset-skip-digest-mutants self-update-gate
 subject-partition`. Three of the original ten left by declaration or trace (`adversarial-shard-merge-mutants`,
 `remediator-shard-join-mutants`, `self-update-fixture-log-mutants`, and `review-shard-merge-mutants` by committed rows);
-`hermetic-runner` joined. The local map holds most of these at `#discards 3`, and `readset_trace_add`
+`hermetic-runner` joined. `readset_trace_add`
 (`.githooks/pre-push:812-814`) stops re-tracing a fixture at three discards on one key, so they stay unmapped until a
-declaration lands or their key changes. The same morning's trace also OMITTED `adversarial-shard-merge-mutants` (3701
+declaration lands or their key changes; re-derived from the local map (`.git/ai-dlc-fixture-readsets.local`, the one the
+hook reads), six of the seven sit at `#discards 1` under the key the deriver's current sha minted, so each will be traced
+twice more before it is held, and `subject-partition` holds 45 local trace rows with no discard row while the committed
+map holds none for it. One of the seven, `implementation-join-yield`, is now declared, so six remain. The same morning's trace also OMITTED `adversarial-shard-merge-mutants` (3701
 stream drops), `foreground-budget-deny` (89), `hermetic-runner` (551) and `readset-skip-digest-mutants` (786), so the
 untraceable set is wider than the two filed.
 
@@ -188,7 +193,19 @@ the sandbox. 113 fixtures already scrub `AI_DLC_*` before driving a subject; the
 remedy is in each fixture: unset the override in the tool invocation, or pass `--root`, or (for the
 walker) honour the override. Not a runner change: the other declared fixtures depend on the export.
 
-verify: sh for f in story-corpus-sprint-slot artifact-path-migration push-drain-refusals taught-schema; do [ -f core/fixtures/$f/inputs.decl ] || exit 1; done
+**PARTIAL: the `artifact-path-migration` case was a SUBJECT defect, not a fixture one, and it is fixed.**
+`migrate-artifact-paths.sh:128` and `validate-artifact-paths.sh:362` both called the resolver's
+`--consumer-file` without `--root "$ROOT_ABS"` while every other call site passed it, so the remedy path the
+operator is sent to named whichever tree the resolver found for itself (the distribution's own contract when
+run from the distribution, or `AI_DLC_PROJECT_ROOT`'s tree when set), not the tree under migration. Measured
+with three contracts carrying distinct consumer-file values: base named the distribution's file with the
+override unset and the override's tree with it set; fixed names the `--root` tree's file in every cell. Both
+sites now pass `--root`, and `artifact-path-migration` carries four arms and two mutants that discriminate; the
+entry's receipt runs that fixture (about 40s solo) so a comment carrying the literal cannot satisfy it. The
+three fixture-side cases (`story-corpus-sprint-slot`, `push-drain-refusals`, `taught-schema`) and all four
+declarations remain open and are the hermetic program's (`docs/plans/hermetic-fixtures-poc.md`, action 5).
+
+verify: sh for f in story-corpus-sprint-slot artifact-path-migration push-drain-refusals taught-schema; do [ -f core/fixtures/$f/inputs.decl ] || exit 1; done; k="$(bash core/fixtures/artifact-path-migration/run.sh 2>&1 </dev/null | grep -cE '^  ok    (migrate-remedy-(override|unset)|validate-noarea-(override|unset)|MUTANT remedy-root-(mig|val)) ')" || k=0; [ "$k" -eq 6 ]
 
 ## BL-488 — two pre-existing fixture defects the hermetic census read past
 
