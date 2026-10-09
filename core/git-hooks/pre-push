@@ -1244,6 +1244,84 @@ RD_EOF
 # are carried into the next one while it has any listing key, so a key added that way is not dropped
 # when the fixture next runs for another reason; a whole-tree record has no listing key, so an
 # unmapped fixture that gains a trace sheds it.
+# THE SHARED VERDICT STORE. A declared fixture's pass is keyed on content alone (the declared inputs, its own
+# files, its tools), so it is valid in any clone at any path. `${AI_DLC_VERDICT_STORE:-$HOME/.cache/ai-dlc/verdicts}`
+# holds one entry per pass, NAMED for the sha256 of its body: `#format k1`, `#state ok`, then the digest input
+# (`#fixture`, `#runner`, `#universe` and the key rows). `#runner` is the sha of hermetic-run.sh and `#universe` the
+# sha of the READSET_UNIVERSE and READSET_TOOLS spans the runner sources, so a pass under an older runner is not
+# reused. hermetic-run.sh writes the same entry on a clean pass; this hook writes one for every declared fixture it
+# records `ok`. A reader fails closed: no store, no entry, a malformed or truncated body, or a body that is not the
+# digest input just computed means the fixture runs. Only DECLARED fixtures are ever looked up.
+readset_vs_store() {
+  if [ -n "${AI_DLC_VERDICT_STORE:-}" ]; then printf '%s' "$AI_DLC_VERDICT_STORE"
+  elif [ -n "${HOME:-}" ]; then printf '%s' "$HOME/.cache/ai-dlc/verdicts"; fi
+}
+readset_vs_ident() { # prints "<runner sha> <spans sha>"; fails when either file is absent
+  local hk="" rn="" c
+  for c in .githooks/pre-push core/git-hooks/pre-push; do [ -f "$c" ] && { hk="$c"; break; }; done
+  for c in scripts/ai-dlc/hermetic-run.sh core/scripts/hermetic-run.sh; do [ -f "$c" ] && { rn="$c"; break; }; done
+  [ -n "$hk" ] && [ -n "$rn" ] || return 1
+  printf '%s %s' "$(shasum -a 256 -- "$rn" | cut -d' ' -f1)" \
+    "$( { sed -n '/^# READSET_UNIVERSE_BEGIN$/,/^# READSET_UNIVERSE_END$/p' "$hk"; sed -n '/^# READSET_TOOLS_BEGIN$/,/^# READSET_TOOLS_END$/p' "$hk"; } | shasum -a 256 | cut -d' ' -f1)"
+}
+readset_vs_input() { # <fx> <ident> <rows file>: the digest input
+  printf '#fixture %s\n#runner %s\n#universe %s\n' "$1" "${2%% *}" "${2#* }"
+  cat "$3"
+}
+readset_verdicts() { # <out>: a DECLARED fixture decided `run` whose current key rows are in the store is decided `skip`
+  local out="$1" store ident fx dig e
+  : > "$out/.vs"
+  [ -s "$out/.dfx" ] || return 0
+  store="$(readset_vs_store)"
+  [ -n "$store" ] && [ -d "$store" ] || return 0
+  ident="$(readset_vs_ident)" || return 0
+  [ -n "$ident" ] || return 0
+  : > "$out/.vs.hit"
+  awk -F'\t' '$2 == "run" && ($4 == "k" || $4 == "u" || $4 == "s") { print $1 }' "$out/.kdec" > "$out/.vs.cand"
+  while IFS= read -r fx; do
+    [ -n "$fx" ] || continue
+    grep -qxF -- "$fx" "$out/.dfx" || continue
+    awk -F'\t' -v f="$fx" '$1 == f { x = 1 } END { exit x ? 0 : 1 }' "$out/.dunres" && continue
+    awk -F'\t' -v f="$fx" '$1 == f { x = 1 } END { exit x ? 0 : 1 }' "$out/.qfx" && continue
+    [ -f "$out/.k/$fx" ] || continue
+    tail -n +4 "$out/.k/$fx" > "$out/.vs.rows" 2>/dev/null && [ -s "$out/.vs.rows" ] || continue
+    readset_vs_input "$fx" "$ident" "$out/.vs.rows" > "$out/.vs.d" || continue
+    dig="$(shasum -a 256 < "$out/.vs.d" | cut -d' ' -f1)"
+    [ "${#dig}" -eq 64 ] || continue
+    e="$store/$dig"
+    [ -f "$e" ] || continue
+    [ "$(sed -n '1,2p' "$e" 2>/dev/null)" = "$(printf '#format k1\n#state ok')" ] || continue
+    tail -n +3 "$e" > "$out/.vs.e" 2>/dev/null || continue
+    cmp -s "$out/.vs.e" "$out/.vs.d" || continue
+    printf '%s\n' "$fx" >> "$out/.vs.hit"
+  done < "$out/.vs.cand"
+  [ -s "$out/.vs.hit" ] || return 0
+  awk -F'\t' 'NR == FNR { h[$1] = 1; next } ($1 in h) && $2 == "run" { print $1 "\tskip\t\tv\tok"; next } { print }' "$out/.vs.hit" "$out/.kdec" > "$out/.kdec.t" \
+    && mv "$out/.kdec.t" "$out/.kdec" || return 0
+  while IFS= read -r fx; do
+    sed '2s/.*/#state ok/' "$out/.k/$fx" > "$out/.k/$fx.t" && mv "$out/.k/$fx.t" "$out/.k/$fx"
+  done < "$out/.vs.hit"
+  cp "$out/.vs.hit" "$out/.vs"
+  return 0
+}
+readset_vs_put() { # <out> <fx>: store the pass of a DECLARED fixture this push ran `ok`; never fails the push
+  local out="$1" b="$2" store ident dig t
+  grep -qxF -- "$b" "$out/.dfx" 2>/dev/null || return 0
+  [ "$(cat "$out/$b" 2>/dev/null)" = ok ] || return 0
+  [ -f "$out/.k/$b" ] || return 0
+  store="$(readset_vs_store)"; [ -n "$store" ] || return 0
+  ident="$(readset_vs_ident)" || return 0
+  [ -n "$ident" ] || return 0
+  mkdir -p "$store" 2>/dev/null || return 0
+  tail -n +4 "$out/.k/$b" > "$out/.vs.rows" 2>/dev/null && [ -s "$out/.vs.rows" ] || return 0
+  readset_vs_input "$b" "$ident" "$out/.vs.rows" > "$out/.vs.d" 2>/dev/null || return 0
+  dig="$(shasum -a 256 < "$out/.vs.d" | cut -d' ' -f1)"
+  [ "${#dig}" -eq 64 ] || return 0
+  t="$store/.tmp.$$.$b"
+  { printf '#format k1\n#state ok\n'; cat "$out/.vs.d"; } > "$t" 2>/dev/null && mv "$t" "$store/$dig" 2>/dev/null || rm -f "$t" 2>/dev/null
+  return 0
+}
+
 readset_keys() { # <list> <out>
   local list="$1" out="$2" seed=0 v2=/dev/null lp=/dev/null lv=/dev/null pp=/dev/null pv=/dev/null tab
   tab="$(printf '\t')"
@@ -1383,6 +1461,7 @@ readset_keys() { # <list> <out>
     BEGIN { while ((getline l < hdr) > 0) { t = index(l, "\t"); st[substr(l, 1, t - 1)] = substr(l, t + 1) } }
     $1 != f { if (f != "") close(o); f = $1; o = kd "/" f; print "#format k1" > o; print "#state " st[f] > o; print "#tools canonical" > o }
     { print substr($0, length(f) + 2) > o }'
+  readset_verdicts "$out"
 }
 
 # PUBLISH EACH PROSPECTIVE RECORD WHOSE FIXTURE PASSED, whatever its neighbours did, and every record a
@@ -1398,6 +1477,7 @@ readset_keys_write() { # <out>
     b="${f##*/}"
     if [ "$(cat "$out/$b" 2>/dev/null)" = ok ] || grep -qxF "$b" "$out/.k.always" 2>/dev/null; then
       cp "$f" "$KEYS_DIR/$b.key.tmp.$$" 2>/dev/null && mv "$KEYS_DIR/$b.key.tmp.$$" "$KEYS_DIR/$b.key" 2>/dev/null
+      readset_vs_put "$out" "$b"
     fi
   done
   if [ -s "$out/.now" ]; then
@@ -1472,6 +1552,7 @@ apply_readset_skip() {
   awk -F'\t' '$2 == "run" && n < 10 { n++; print "   ..      " $1 ": " $3 }' "$out/.kdec"
   awk -F'\t' '$4 == "b" { n++ } END { if (n) print "   ..    read-set listings: " n " record(s) skipped on a fixture-root listing moved only by new sibling fixture directories and republished with the new listing" }' "$out/.kdec"
   awk -F'\t' '$4 == "m" { n++ } END { if (n) print "   ..    read-set tool keys: " n " record(s) written before the fixed tool dirs skipped on their tree keys alone and are republished with canonical tool keys (once per record)" }' "$out/.kdec"
+  if [ -s "$out/.vs" ]; then printf '   ..    verdict store: %s fixture(s) skipped on a pass recorded elsewhere: %s\n' "$(grep -c . "$out/.vs")" "$(tr '\n' ' ' < "$out/.vs" | sed 's/ $//')"; fi
   # WHAT WOULD CLEAR EACH STALE FIXTURE: a committed trace whose `# digest` line matches this tree, or a
   # valid local row. Every stale fixture is named under the reason its committed rows did not clear it.
   RS_D="$out/.cdig" awk -F'\t' 'FILENAME == ENVIRON["RS_D"] { d[$1] = $2; next }

@@ -45,7 +45,7 @@ broken() { printf '  FAIL  %s\n' "$1" >&2; echo "${NAME:-readset-skip}: FIXTURE 
 #   a  arms ign man merge ckm1   pool selection worlds, the manifest, the deriver's merge and control, checksum-key mutants a-g
 #   b  loc hr tk dg ckm2         local map and trace report, hash rows, tool keys, committed digests, checksum-key mutants h-i
 #   c  tracer rc                 trace tree, lossy window, --tracer both and its stub worlds, --reconcile
-#   d  ckw ckm3                  checksum-key worlds (fifteen, against each hook) and checksum-key mutants j-o
+#   d  ckw ckm3 vs               shared verdict store (vs), checksum-key worlds (fifteen, against each hook) and checksum-key mutants j-o
 # The per-fixture checksum-key section (contract k1) is four units: ckw its worlds, ckm1..ckm3 its fifteen mutants dealt in
 # three runs. Each mutant re-drives all fifteen worlds, so the mutants carry the cost and are what is dealt.
 # `rc` rides with `tracer` because it drives the stub `sandbox-exec` and deriver copy that `tracer` builds.
@@ -53,7 +53,7 @@ SHARDS="a b c d"
 UNITS_a="arms ign man merge ckm1"
 UNITS_b="loc hr tk dg ckm2"
 UNITS_c="tracer rc"
-UNITS_d="ckw ckm3"
+UNITS_d="ckw ckm3 vs"
 GROUP=a
 if [ "${1:-}" = "--group" ]; then
   GROUP="${2:-}"
@@ -4974,12 +4974,188 @@ fi
 
 fi
 
+# -------------------------------------------------- the shared verdict store (unit vs) ----
+# A DECLARED fixture's pass is keyed on content alone, so a pass recorded in one clone is valid in any other clone at
+# any path. hermetic-run.sh writes `$AI_DLC_VERDICT_STORE/<sha256 of body>` on a clean pass (rc 0, no REQUIRED input
+# missing); the hook writes the same entry for every declared fixture it records `ok`, and its decision turns a
+# declared `run` into a `skip` (c `v`) when the store holds that entry. The body is the fixture name, the sha of the
+# runner, the sha of the hook spans the runner sources, and the --key-only rows, so a pass under an older runner or
+# universe is not reused. The reader fails closed. Undeclared fixtures never read the store.
+# THE OVERRIDE IS PASSED ON EACH COMMAND, never exported: this file scrubs AI_DLC_* at its top, so an export made
+# before the scrub would silently fall back to the default path and pass against whatever is there. Arm (a) asserts the
+# override directory holds entries, and the real default store is snapshotted before and after the unit.
+#   a  A's hermetic pass -> B (clone, other path, identical tree) SKIPS; announced by name; the store holds entries
+#   b  one declared input byte changed in B -> RUN (the pass was recorded on a different tree)
+#   t  A's own declared input changed after its pass -> RUN; B's fixture-own file added -> RUN
+#   g  one byte added to the tree's hermetic-run.sh -> RUN; a line added inside the READSET_UNIVERSE span -> RUN
+#   c  failed run, REQUIRED-sentinel-missing run, undeclared run: nothing written; their fixtures RUN in B
+#   d  an entry planted for an UNDECLARED fixture is ignored; the same plant for a declared one skips (the control)
+#   e  truncated, emptied, edited entry -> RUN; the restored entry skips (the control)
+#   f  an unwritable store, and no store and no HOME, drop the record and never fail the run
+#   h  the hook's own writer (readset_keys_write) stores the digest hermetic-run.sh stored for the same tree
+VS_ARMS=0
+if sg vs; then
+VS_RUN=""
+for _c in "$ROOT/core/scripts/hermetic-run.sh" "$ROOT/scripts/ai-dlc/hermetic-run.sh"; do [ -f "$_c" ] && { VS_RUN="$_c"; break; }; done
+if [ -z "$VS_RUN" ]; then
+  printf '  SKIP  verdict-store arms: no hermetic-run.sh in either layout\n'
+else
+echo "HERMETIC-CONSUMED ${VS_RUN#"$ROOT"/}"
+VS_REAL_HOME="$(eval "printf '%s' ~$(id -un)")"
+vs_snap() { { ls -laR "$1/.cache/ai-dlc/verdicts" 2>&1; find "$1/.cache/ai-dlc/verdicts" -type f 2>/dev/null | LC_ALL=C sort | while IFS= read -r _f; do md5 -q "$_f"; done; } | md5 -q; }
+VS_SNAP0="$(vs_snap "$VS_REAL_HOME")"; VS_SNAPH0="$(vs_snap "$HOME")"
+VS_DRV="$WORK/vs.drive.sh"
+printf '%s\n' 'cd "$2" || exit 1' '. "$1" 2>/dev/null' \
+  'for d in "$FXROOT"*/; do [ -f "$d/run.sh" ] && printf "%s\n" "$d"; done > "$3/list"' \
+  'apply_readset_skip "$3/list" "$3" > "$3/ann" 2>&1' > "$VS_DRV" || broken "could not write the verdict-store decision driver"
+vs_dec() { # <pool> <t> <store> <tag> -> decision dir $t.vd.<tag>
+  mkdir -p "$2.vd.$4" && env AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_VERDICT_STORE="$3" PATH="/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin" bash "$VS_DRV" "$1" "$2" "$2.vd.$4"
+}
+vs_cell() { awk -F'\t' -v f="$2" '$1 == f && ($2 == "run" || $2 == "skip") { printf "%s", $2 }' "$1/.kdec" 2>/dev/null; }
+vs_hr() { # <runner> <root> <fx> <store>: runs the declared fixture; prints its exit code
+  env AI_DLC_VERDICT_STORE="$4" bash "$1" --root "$2" "$3" >/dev/null 2>&1; printf '%s' "$?"
+}
+vs_n() { find "$1" -maxdepth 1 -type f ! -name '.tmp*' 2>/dev/null | grep -c . || :; }
+vs_mk() { # <t> <fixture root> <runner file>: a git repo holding the hook, the runner and four fixtures
+  local t="$1" x="$2" f rd
+  mkdir -p "$t/.githooks" "$t/src" || return 1
+  cp "$HOOK" "$t/.githooks/pre-push" || return 1
+  case "$x" in core/fixtures) rd=core/scripts ;; *) rd=scripts/ai-dlc ;; esac
+  mkdir -p "$t/$rd" && cp "$3" "$t/$rd/hermetic-run.sh" || return 1
+  printf 'v1\n' > "$t/src/a.sh"
+  for f in decl bad nosent undecl; do mkdir -p "$t/$x/$f" || return 1; done
+  printf '%s\n' 'if [ -f src/a.sh ]; then echo "HERMETIC-CONSUMED src/a.sh"; fi' 'exit 0' > "$t/$x/decl/run.sh"
+  printf '%s\n' 'echo "HERMETIC-CONSUMED src/a.sh"' 'exit 1' > "$t/$x/bad/run.sh"
+  printf '%s\n' 'exit 0' > "$t/$x/nosent/run.sh"; printf '%s\n' 'exit 0' > "$t/$x/undecl/run.sh"
+  for f in decl bad nosent; do printf '!src/a.sh\n' > "$t/$x/$f/inputs.decl"; done
+  ( cd "$t" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm seed ) >/dev/null 2>&1
+}
+vs_plant() { # <pool> <t> <decision dir> <store> <fx>: the entry the digest names, built from the hook's own functions
+  ( cd "$2" || exit 1
+    # shellcheck disable=SC1090
+    . "$1" 2>/dev/null
+    id="$(readset_vs_ident)" || exit 1
+    tail -n +4 "$3/.k/$5" > "$3/.pl.rows" && [ -s "$3/.pl.rows" ] || exit 1
+    readset_vs_input "$5" "$id" "$3/.pl.rows" > "$3/.pl.d" || exit 1
+    mkdir -p "$4" && { printf '#format k1\n#state ok\n'; cat "$3/.pl.d"; } > "$4/$(shasum -a 256 < "$3/.pl.d" | cut -d' ' -f1)" )
+}
+vs_world() { # <pool> <fixture root> <runner file> <t>: one vector
+  local p="$1" x="$2" rn="$3" t="$4" S="$4.S" A="$4/A" B="$4/B" rd e v n1 rcs
+  case "$x" in core/fixtures) rd=core/scripts ;; *) rd=scripts/ai-dlc ;; esac
+  mkdir -p "$t" "$S" || { printf SEED; return; }
+  vs_mk "$A" "$x" "$rn" || { printf SEED; return; }
+  v="rcd=$(vs_hr "$A/$rd/hermetic-run.sh" "$A" decl "$S") rcb=$(vs_hr "$A/$rd/hermetic-run.sh" "$A" bad "$S") rcn=$(vs_hr "$A/$rd/hermetic-run.sh" "$A" nosent "$S") rcu=$(vs_hr "$A/$rd/hermetic-run.sh" "$A" undecl "$S")"
+  n1="$(vs_n "$S")"
+  git clone -q "$A" "$B" >/dev/null 2>&1 || { printf CLONE; return; }
+  vs_dec "$p" "$B" "$S" a
+  v="$v a=$(vs_cell "$B.vd.a" decl)/$(vs_cell "$B.vd.a" bad)/$(vs_cell "$B.vd.a" nosent)/$(vs_cell "$B.vd.a" undecl) n=$n1"
+  v="$v ann=$(grep -cxF '   ..    verdict store: 1 fixture(s) skipped on a pass recorded elsewhere: decl' "$B.vd.a/ann" 2>/dev/null)"
+  printf 'v2\n' > "$B/src/a.sh"; vs_dec "$p" "$B" "$S" b; printf 'v1\n' > "$B/src/a.sh"
+  v="$v b=$(vs_cell "$B.vd.b" decl)"
+  printf 'v2\n' > "$A/src/a.sh"; vs_dec "$p" "$A" "$S" t1; printf 'v1\n' > "$A/src/a.sh"
+  printf 'x\n' > "$B/$x/decl/extra.txt"; vs_dec "$p" "$B" "$S" t2; rm -f "$B/$x/decl/extra.txt"
+  v="$v t=$(vs_cell "$A.vd.t1" decl)/$(vs_cell "$B.vd.t2" decl)"
+  cp "$B/$rd/hermetic-run.sh" "$t/rn.save"; printf '# x\n' >> "$B/$rd/hermetic-run.sh"; vs_dec "$p" "$B" "$S" g1; cp "$t/rn.save" "$B/$rd/hermetic-run.sh"
+  cp "$B/.githooks/pre-push" "$t/hk.save"
+  sed 's/^# READSET_UNIVERSE_BEGIN$/&\n# one more line/' "$t/hk.save" > "$B/.githooks/pre-push"; vs_dec "$p" "$B" "$S" g2; cp "$t/hk.save" "$B/.githooks/pre-push"
+  v="$v g=$(vs_cell "$B.vd.g1" decl)/$(vs_cell "$B.vd.g2" decl)"
+  e="$(find "$S" -maxdepth 1 -type f ! -name '.tmp*' | LC_ALL=C sort | while IFS= read -r _f; do grep -qxF '#fixture decl' "$_f" && { printf '%s' "$_f"; break; }; done)"
+  if [ -f "$e" ]; then
+    cp "$e" "$t/e.save"
+    head -c 120 "$t/e.save" > "$e"; vs_dec "$p" "$B" "$S" e1
+    : > "$e"; vs_dec "$p" "$B" "$S" e2
+    sed '3s/decl/dec1/' "$t/e.save" > "$e"; vs_dec "$p" "$B" "$S" e3
+    cp "$t/e.save" "$e"; vs_dec "$p" "$B" "$S" e4
+    v="$v e=$(vs_cell "$B.vd.e1" decl)/$(vs_cell "$B.vd.e2" decl)/$(vs_cell "$B.vd.e3" decl)/$(vs_cell "$B.vd.e4" decl)"
+  else v="$v e=NOENTRY"; fi
+  rm -rf "$t.S2"; vs_plant "$p" "$B" "$B.vd.a" "$t.S2" undecl || v="$v PLANTFAIL"
+  vs_dec "$p" "$B" "$t.S2" d1
+  vs_plant "$p" "$B" "$B.vd.a" "$t.S2" decl || v="$v PLANTFAIL"
+  vs_dec "$p" "$B" "$t.S2" d2
+  v="$v d=$(vs_cell "$B.vd.d1" undecl)/$(vs_cell "$B.vd.d2" undecl)/$(vs_cell "$B.vd.d2" decl)"
+  : > "$t.notadir"
+  rcs="$(vs_hr "$A/$rd/hermetic-run.sh" "$A" decl "$t.notadir")"
+  v="$v f=$rcs/$(env -u HOME -u AI_DLC_VERDICT_STORE bash "$A/$rd/hermetic-run.sh" --root "$A" decl >/dev/null 2>&1; printf '%s' "$?")/$([ -f "$t.notadir" ] && [ ! -s "$t.notadir" ] && echo intact)"
+  printf '%s' "$v"
+}
+VS_WANT='rcd=0 rcb=1 rcn=1 rcu=2 a=skip/run/run/run n=1 ann=1 b=run t=run/run g=run/run e=run/run/run/skip d=run/run/skip f=0/0/intact'
+VS_N=0
+for _h in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
+  [ -f "$_h" ] || continue
+  VS_N=$((VS_N+1)); VS_P="$WORK/vspool.$VS_N.sh"
+  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$_h" > "$VS_P"
+  VS_X="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$VS_P" | sort -u)"
+  [ "$VS_N" -eq 1 ] && { VS_P1="$VS_P"; VS_X1="$VS_X"; }
+  VS_ARMS=$((VS_ARMS+1)); _g="$(vs_world "$VS_P" "$VS_X" "$VS_RUN" "$WORK/vs.h$VS_N" 2>/dev/null)"
+  if [ "$_g" = "$VS_WANT" ]; then ok "(verdict store) ${_h#"$ROOT"/}: $_g"
+  else bad "(verdict store) ${_h#"$ROOT"/}: want '$VS_WANT' got '$_g'"; fi
+done
+# (h) the hook's own writer stores the digest hermetic-run.sh stored for the same tree.
+vs_h() { # <pool> <fixture root> <t>
+  local p="$1" x="$2" t="$3" S="$3.S" C="$3/C" rd o
+  case "$x" in core/fixtures) rd=core/scripts ;; *) rd=scripts/ai-dlc ;; esac
+  mkdir -p "$t" "$S" && vs_mk "$C" "$x" "$VS_RUN" || { printf SEED; return; }
+  vs_hr "$C/$rd/hermetic-run.sh" "$C" decl "$S" >/dev/null
+  o="$(vs_n "$S")"
+  rm -rf "$S"; mkdir -p "$S"
+  vs_dec "$p" "$C" "$S" h
+  ( cd "$C" && AI_DLC_VERDICT_STORE="$S" && export AI_DLC_VERDICT_STORE && . "$p" 2>/dev/null && printf 'ok' > "$C.vd.h/decl" && readset_keys_write "$C.vd.h" ) >/dev/null 2>&1
+  printf 'runner=%s hook=%s' "$o" "$(vs_n "$S")"
+}
+if [ "$VS_N" -ge 1 ]; then
+  VS_ARMS=$((VS_ARMS+1)); _g="$(vs_h "$VS_P1" "$VS_X1" "$WORK/vs.hw" 2>/dev/null)"
+  [ "$_g" = "runner=1 hook=1" ] && ok "(verdict store, h) the hook's writer stores one entry for a declared fixture it records ok, as the runner does: $_g" \
+    || bad "(verdict store, h) want 'runner=1 hook=1' got '$_g'"
+fi
+# MUTANTS. Each is a count-checked literal edit; the world is re-driven and the cells it must move are named.
+vs_mut() { # <name> <pool|runner> <must-move cell> then pairs <from> <to>
+  local name="$1" kind="$2" cell="$3" dst="$WORK/vs.mut.$1.sh" n _g; shift 3
+  VS_ARMS=$((VS_ARMS+1))
+  if [ "$kind" = pool ]; then cp "$VS_P1" "$dst"; else cp "$VS_RUN" "$dst"; fi
+  while [ $# -ge 2 ]; do
+    MF="$1" MT="$2" MC="$WORK/vs.mut.$name.n" awk '
+      BEGIN { f = ENVIRON["MF"]; t = ENVIRON["MT"]; n = 0 }
+      { line = $0; o = ""
+        while ((p = index(line, f)) > 0) { o = o substr(line, 1, p - 1) t; line = substr(line, p + length(f)); n++ }
+        print o line }
+      END { print n > ENVIRON["MC"] }' "$dst" > "$dst.t" && mv "$dst.t" "$dst"
+    n="$(cat "$WORK/vs.mut.$name.n" 2>/dev/null)"
+    [ "$n" = 1 ] || { bad "VS MUTANT $name: anchor matched ${n:-nothing} time(s), not 1 -- DID NOT APPLY"; return; }
+    shift 2
+  done
+  if [ "$kind" = pool ]; then cmp -s "$VS_P1" "$dst" && { bad "VS MUTANT $name: the copy is unchanged"; return; }
+    _g="$(vs_world "$dst" "$VS_X1" "$VS_RUN" "$WORK/vs.m.$name" 2>/dev/null)"
+  else cmp -s "$VS_RUN" "$dst" && { bad "VS MUTANT $name: the copy is unchanged"; return; }
+    _g="$(vs_world "$VS_P1" "$VS_X1" "$dst" "$WORK/vs.m.$name" 2>/dev/null)"; fi
+  [ "$_g" != "$VS_WANT" ] || { bad "VS MUTANT $name SURVIVED: the world still reads the want vector"; return; }
+  if [ "$(printf '%s\n' "$_g" | tr ' ' '\n' | grep "^$cell=")" != "$(printf '%s\n' "$VS_WANT" | tr ' ' '\n' | grep "^$cell=")" ]; then
+    ok "VS MUTANT $name is KILLED by cell $cell: $(printf '%s\n' "$_g" | tr ' ' '\n' | grep "^$cell=")"
+  else bad "VS MUTANT $name moved other cells but not $cell: $_g"; fi
+}
+if [ "$VS_N" -ge 1 ]; then
+  # (b) the reader ignores the digest: serves any entry in the store and skips the body comparison.
+  vs_mut nodigest pool b '    e="$store/$dig"' '    e="$(find "$store" -maxdepth 1 -type f ! -name ".tmp*" | head -1)"' \
+    '    cmp -s "$out/.vs.e" "$out/.vs.d" || continue' '    :'
+  # (c) the writer writes on failure (and on a missing sentinel): the store gains entries for the red runs.
+  vs_mut writefail runner n 'if [ "$hr_rc" -eq 0 ] && [ "$hr_missing" -eq 0 ]; then ( hr_store_put ) 2>/dev/null; exit 0; fi' '( hr_store_put ) 2>/dev/null; if [ "$hr_rc" -eq 0 ] && [ "$hr_missing" -eq 0 ]; then exit 0; fi'
+  # (d) the reader serves undeclared fixtures.
+  vs_mut undeclared pool d '    grep -qxF -- "$fx" "$out/.dfx" || continue' '    :'
+fi
+fi
+# THE REAL DEFAULT STORE IS UNCHANGED BY THE UNIT, in the home this run sees and in the account's own.
+if [ -n "$VS_RUN" ]; then
+  VS_ARMS=$((VS_ARMS+1))
+  if [ "$(vs_snap "$VS_REAL_HOME")" = "$VS_SNAP0" ] && [ "$(vs_snap "$HOME")" = "$VS_SNAPH0" ]; then ok "the real default store ($VS_REAL_HOME/.cache/ai-dlc/verdicts and \$HOME's) is byte-unchanged by the unit"
+  else bad "the unit changed a default verdict store"; fi
+fi
+fi
+
 # THE SUMMARY IS ALSO A COMPLETENESS CHECK. This fixture once ended mid-file after an editing
 # mistake: it printed two thirds of its arms, never reached a verdict line, and exited 0 --
 # which the suite's worker records as `ok`. A fixture that dies silently reads exactly like one
 # that passed, so the arm count is asserted against the number this file actually carries.
 BASE_ARMS=0; sg arms && BASE_ARMS=18
-EXPECTED=$(( BASE_ARMS + ${IGN_ARMS:-0} + ${NEW_ARMS:-0} + ${MERGE_ARMS:-0} + ${CONTROL_ARMS:-0} + ${TRACE_ARMS:-0} + ${BOTH_ARMS:-0} + ${LT_ARMS:-0} + ${CK_ARMS:-0} + ${TK_ARMS:-0} + ${DG_ARMS:-0} + ${RC_ARMS:-0} ))
+EXPECTED=$(( BASE_ARMS + ${IGN_ARMS:-0} + ${NEW_ARMS:-0} + ${MERGE_ARMS:-0} + ${CONTROL_ARMS:-0} + ${TRACE_ARMS:-0} + ${BOTH_ARMS:-0} + ${LT_ARMS:-0} + ${CK_ARMS:-0} + ${TK_ARMS:-0} + ${DG_ARMS:-0} + ${RC_ARMS:-0} + ${VS_ARMS:-0} ))
 if [ "$asserts" -lt "$EXPECTED" ]; then
   printf '  FAIL  only %s assertions ran; this fixture carries %s — it exited early and a short green run reads exactly like a passing one\n' "$asserts" "$EXPECTED"
   fails=$((fails+1))
