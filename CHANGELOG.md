@@ -43,8 +43,13 @@ itself whenever a declaration had already copied part of it in, on this tree AND
   an in-tree-only file is absent), Y3 (consumer layout, own `run.sh` declared: no nesting, the whole directory
   arrives). Mutants M20 (the nesting copy; fails Y and Y3), M21 (skip if the destination exists; fails Y3), M22 (no
   override filter; fails Y2).
-- **Cost, once.** The line sits inside the span the verdict store digests, so every recorded hermetic pass is
-  invalidated and the next gated push re-runs every declared fixture.
+- **Cost, measured.** The line sits inside the span the verdict store digests, so every recorded hermetic pass is
+  invalidated. That does NOT re-run every declared fixture: the read-set key skip is separate, and only units whose
+  keys moved ran. This release's first gate read `44 of 278 fixture(s) run (42 changed, 0 unrecorded, 2 stale);
+  skipping 234`.
+- **First gate red, one unit.** `readset-skip-d` arm (v) grepped the digested span for the old copy text
+  `cp -Rp "$HR_FXDIR"`, which this fix respells. Re-anchored on `cp -Rp "$HR_FXDIR/."`, checked both ways: the
+  shipped span matches 1, the span with the copy line removed matches 0.
 
 ### BL-481 — `validator-fork-budget` declared
 
