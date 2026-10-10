@@ -17868,3 +17868,70 @@ bootstrapping file. The banked ruling stands: report the gap and write no runboo
 
 Batch 209's block below is history: batch 210's block replaces its open items and its delivery gap.
 
+**BATCH 211 SHIPPED ONE RELEASE, `v0.758.0` (`423258c7`, #1076), AND DISCHARGED ONE CONSUMER CANDIDATE.** It was
+handed the plan by peer session ai-dlc-22 at `origin/main` `26f77e78` (`VERSION` 0.756.0) and ran beside the
+hermetic-pole program's `v0.757.0` (`7988a0d7`, ai-dlc-71, batch 212), the queued `v0.759.0` (ai-dlc-0e, batch 213) and
+`v0.760.0` (ai-dlc-a1, batch 214), one gated push on the box at a time by GATE START / LANDED messages. **The
+release-number protocol worked**: every peer was told the number before any hand built, and it caught ai-dlc-a1 about
+to take 0e's 0.759.0; the box queue (b9, 0e, a1) was agreed in the same exchange. The opening sweep (at `26f77e78`) read
+live 1, unfiled 1, worklist 0, DISCHARGED 0, TERMINAL 223, archive 346, 28 qualifying refs, every control passing.
+- `v0.758.0`: `PC-S317-SELF-UPDATE-GATE-UNDECIDED-ON-MACHINERY-A-PRIOR-SELF-UPDATE-LANDED` as `BL-489`, shipped alone
+  (the update skill is a bootstrapping file). The gate's pre-written arm now sits after the hook-scan terminals, so a
+  script the hook only mentions reads `SELF-UPDATE-OK … not gating` (graph's filed case: its hook reaches
+  `hermetic-run.sh` only through a `for c in …` list); inside the arm a script a PRIOR self-update landed is acquitted on
+  six conjuncts (stamp `skill_commit` peels; is not theirs; its blob equals the copy; base ≤ `skill_commit` ≤ theirs by
+  ancestry; no `.ai-dlc-applying`; copy committed at the consumer's HEAD) and the differential is SKIPPED, with
+  `self-update-push.sh`'s HOOK-REFUSED catching a failure under theirs' new argv or a changed sibling. Rejected remedy:
+  subtracting preclassify's ALREADY-AT-THEIRS set would acquit the post-write re-run the arm exists for. Contract
+  adversary 1 BLOCKER (the write-before-commit hole, now the committed-copy conjunct) / 4 DEFECT; tip adversary 0
+  BLOCKER / 3 DEFECT (the base-ancestry half had no world, now `pl-w9-behindbase` and `pl-mut-a4-base`; the runner's
+  PRE-WRITTEN arm refuses a mention-only record whose stamp does not carry the bytes, DRIVEN: the real-stamp case is
+  accepted, so documented at both sites and no runner code changed; "no differential is owed" reworded). The fixture's
+  PL miniature: nine worlds, eight mutants, 354/354. Rehearsed on a `git archive` copy of graph at `1a0ad1fd` with the
+  filing's argv: base UNDECIDED + DEFER, tip `not gating` and no DEFER, and with the hook edited to RUN the script the
+  stamp acquittal fires at `f4686761`. Gate from a linked worktree: 107 of 260 run on read-set keys (47 changed, 0
+  unrecorded, 60 stale), 24 phases PASS, 0 FAIL, exit 0, transport clean, `self-update-gate` and
+  `self-update-fixture-log` `ok` by name. Trace SKIPPED (linked worktree); 67 fixtures stay unmapped, three held at 3
+  discards; suite-pole SKIP for a peer's live trace, so `BL-465` again recorded no row.
+
+Live backlog **4 -> 4** (BL-489 filed and rotated in-release), archive **483 -> 484**. Net for the release: closed 1,
+filed 0.
+
+**WHOLE-BACKLOG ADJUDICATION (hand, against 26f77e78):** BL-465 PARTIAL; a width-4 replay of the latest `.last` through
+the shipping validator printed `SKIP -- coverage 36.93%` and the history still holds only its three width-12 rows;
+needs the operator's ruling on a comparable measurement under read-set skipping, and any fix is a hook change. BL-474
+LIVE, 0 `handovers:` on HEAD, main or any of 109 graph refs (control 64/43). BL-481 LIVE and batch 210's figure is
+stale: six unmapped (`check-24-adversarial-convergence`, `hermetic-runner`, `procsub-staged-refusal-boot`,
+`readset-skip-digest-mutants`, `self-update-gate`, `subject-partition`), five at `#discards 2`; the pole branch
+`origin/pole/readset-skip-digest-mutants` already declares one. BL-487 PARTIAL, its fixture half built on
+`origin/b210-class-b` (`f062da54`) and shipping as 0.759.0 (ai-dlc-0e). None closed this batch: 465 waits on the
+operator, 474 on graph, 481 and 487 are the hermetic program's in-flight branches.
+
+**PROCESS DEFECT, THIS BATCH, MINE:** the lead told the docs hand to run `backlog-rotate.sh --check` and `--apply`
+without knowing the rotator EXECUTES the closing entry's receipt, and BL-489's receipt runs `self-update-gate` (~5 min
+solo); with the hand's own scoring runs that put roughly five solo fixture runs plus ten seeded receipts inside
+ai-dlc-71's solo-timing window. 71 re-took rows by load-before. The rule now lives in action 5.
+
+**OPERATOR CHOICE THAT PROCEEDED ON THE MARKED RECOMMENDATION WITHOUT A REPLY** (the session was invoked by a peer):
+the runner-side DEFECT was DRIVEN and then documented rather than built, because the drive showed the runner accepts
+the real-stamp record and refuses only hand-copied bytes or a post-write re-run (a DEFER after the branch is cut
+rather than before).
+
+**OPEN FINDINGS, NOT FILED (net already negative, each needs a measurement):**
+- A read-set trace for `self-update-gate` (and the 67 unmapped) is owed; the hook traces only the main checkout and
+  the fixture is one of BL-481's untraceable set, so a session on the main checkout with no peer trace live owes it.
+- The BL-489 receipt counts distinct `ok` labels and requires the fixture's exit 0; an `echo` into `run.sh` could
+  still satisfy the label count, and the fixture's own mutants are the guard.
+- Batch 210's open findings (the trace-from-worktree gap, BL-488's two receipt forms, the release-version trailing
+  boundary, the `claude-rules-joins` ghost row, D6's timing) are unchanged.
+
+**THE DELIVERY GAP IS FOUR RELEASES.** graph's `.claude/.ai-dlc-version` reads 0.754.0 (`commit` = `skill_commit` =
+`0a123701`) against `VERSION` 0.758.0. The range changes a bootstrapping file (the update skill's `SKILL.md`,
+`self-update-gate.sh`, `self-update-fixtures.sh`, `setup-sites.md`). MEASURED: at graph's next pull base is `0a123701`,
+the changed `core/scripts/` set intersected with graph's hook is one script (`validate-artifact-paths.sh`) whose copy
+equals BASE not theirs, so 0 pre-written paths and the INSTALLED (unfixed) gate cannot fire on the pull that delivers
+this fix; it would DEFER again only if a self-update lands, another release changes a script it wrote, and graph pulls
+before the gated apply. The banked ruling stands: report the gap and write no runbook.
+
+Batch 210's block below is history: batch 211's block replaces its open items and its delivery gap.
+
