@@ -35,9 +35,12 @@ live 1, unfiled 0, worklist 0, DISCHARGED 1, every control passing.
 - **Map.** 530 rows for `self-update-join-gate`, its `# digest` line, and the header count; no other fixture's rows
   move (diff tabulated by fixture name: 530 added under that name, 0 under any other; `hermetic-runner` 17 before and
   after).
-- **Still true.** The rows include the `core/fixtures` listing, so this fixture re-runs on any push that adds a
-  fixture directory. A declaration would remove that; the fixture stays undeclared here because a trace is what the
-  entry's receipt asks for.
+- **Still true.** The rows hold 15 paths outside `.git/`, among them the `core/fixtures` listing and four update-skill
+  files (`lib.sh`, `preclassify.sh`, `self-update-gate.sh`, `setup-sites.md` under
+  `core/skills/ai-dlc-update/reconcile/`), so this fixture re-runs on any push that changes one of those 15, including
+  any push that adds a fixture directory. A declaration would remove the listing dependency; the fixture stays
+  undeclared here because a trace is what the entry's receipt asks for.
+- **Gate.** 7 of 279 run; the read-set line read `0 of 279 fixture dir(s) UNMAPPED`, which is BL-481's close.
 
 ## [0.771.0] - 2026-10-10
 
