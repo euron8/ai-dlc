@@ -5220,7 +5220,15 @@ vs_world() { # <pool> <fixture root> <runner file> <t>: one vector
   cp "$t/rn.save" "$B/$rd/hermetic-run.sh"
   cp "$B/.githooks/pre-push" "$t/hk.save"
   sed 's/^# READSET_UNIVERSE_BEGIN$/&\n# one more line/' "$t/hk.save" > "$B/.githooks/pre-push"; vs_dec "$p" "$B" "$SB" g2; cp "$t/hk.save" "$B/.githooks/pre-push"
-  v="$v g=$(vs_cell "$B.vd.g1" decl)/$(vs_cell "$B.vd.g2" decl)/$(vs_cell "$B.vd.g3" decl)/$(vs_cell "$B.vd.g4" decl)"
+  # g5: a COMMENT line inside the READSET_KEYROWS span of B's hook alone (the runner's bytes unchanged) moves
+  # `#universe`, so A's pass is not reused. g6, the near-miss: the same line outside every hashed span is reused.
+  # Inserted by awk, and the span must still extract with one more line, or the cell reads BADINS.
+  awk '{ print } $0 == "# READSET_KEYROWS_BEGIN" { print "# one more line" }' "$t/hk.save" > "$B/.githooks/pre-push"
+  if [ "$(sed -n '/^# READSET_KEYROWS_BEGIN$/,/^# READSET_KEYROWS_END$/p' "$B/.githooks/pre-push" | grep -c .)" -eq $(( $(sed -n '/^# READSET_KEYROWS_BEGIN$/,/^# READSET_KEYROWS_END$/p' "$t/hk.save" | grep -c .) + 1 )) ]; then
+    vs_dec "$p" "$B" "$SB" g5; g5="$(vs_cell "$B.vd.g5" decl)"; else g5=BADINS; fi
+  awk '{ print } NR == 1 { print "# one more line" }' "$t/hk.save" > "$B/.githooks/pre-push"; vs_dec "$p" "$B" "$SB" g6
+  cp "$t/hk.save" "$B/.githooks/pre-push"
+  v="$v g=$(vs_cell "$B.vd.g1" decl)/$(vs_cell "$B.vd.g2" decl)/$(vs_cell "$B.vd.g3" decl)/$(vs_cell "$B.vd.g4" decl)/$g5/$(vs_cell "$B.vd.g6" decl)"
   e="$(find "$S" -maxdepth 1 -type f ! -name '.tmp*' | LC_ALL=C sort | while IFS= read -r _f; do grep -qxF '#fixture decl' "$_f" && { printf '%s' "$_f"; break; }; done)"
   if [ -f "$e" ]; then
     cp "$e" "$t/e.save"
@@ -5246,7 +5254,7 @@ vs_world() { # <pool> <fixture root> <runner file> <t>: one vector
   v="$v p=$(vs_cell "$t/C2.vd.p1" decl)/$(vs_cell "$t/Sh.vd.p2" decl)/$(grep -c 'verdict store OFF' "$t/Sh.vd.p2/ann" 2>/dev/null)/$(ls -A "$t.S3" 2>/dev/null | grep -c .)"
   printf '%s' "$v"
 }
-VS_WANT='rcd=0 rcb=1 rcn=1 rcu=2 a=skip/run/run/run n=1 ann=1 b=run t=run/run g=run/run/skip/skip e=run/run/run/skip d=run/run/skip f=0/0/intact p=run/run/1/0'
+VS_WANT='rcd=0 rcb=1 rcn=1 rcu=2 a=skip/run/run/run n=1 ann=1 b=run t=run/run g=run/run/skip/skip/run/skip e=run/run/run/skip d=run/run/skip f=0/0/intact p=run/run/1/0'
 # (v) THE SPAN CANNOT GO VACUOUS: the digested runner span is non-empty and still holds the env -i line and the copy loop.
 VS_ARMS=$((VS_ARMS+1)); sed -n '/^# HR_SANDBOX_BEGIN$/,/^# HR_SANDBOX_END$/p' "$VS_RUN" > "$WORK/vs.span"
 if [ "$(grep -c . "$WORK/vs.span")" -gt 50 ] && grep -qF 'env -i PATH=' "$WORK/vs.span" && grep -qF 'cp -Rp "$HR_FXDIR"' "$WORK/vs.span" \
@@ -5290,7 +5298,16 @@ fi
 # push decides: fresh, then with every record republished `ok` and one foreign row injected, so the record-carry
 # path (an `ok` record's keys carried into X while it holds a listing key) runs.
 #   cen  a declared file, a declared dir with a nested subdir (listing keys), a declared dir under an excluded top, a tool
-#   ctl  a declared file and a tool, no listing key: the shape on which the two sides agree (the inverse control)
+#   ctl  a declared file and two tools, no listing key: the shape on which the two sides agree (the inverse control).
+#        Its second tool, cksum, is named by NO `.sh` in the world, so only the declared-tool hashing can key it (a
+#        tool some world `.sh` mentions is hashed by readset_tools anyway, and a mutant dropping that hashing is
+#        equivalent on it); the census arm proves the world's `.sh` files name cksum 0 times against awk's non-zero.
+#   ref  `src/a.sh` and `lib/`: the normalisation reference
+#   dsl  the same with `lib//`: the shared parse strips EVERY trailing slash, so it keys exactly as ref
+#   crlf the same with CRLF line ends: the shared parse strips the CR, so it keys exactly as ref
+#   cons (consumer layout only, scripts/ai-dlc/core-paths.sh present) `core/scripts/m.sh` and `core/skills/mk/`:
+#        both sides key the MAPPED paths, `scripts/ai-dlc/m.sh` and `.claude/skills/mk/`, and no `core/` row
+# The world's declared fixture names are written to <t>.fx, in census order.
 vs_cmk() { # <t> <fixture root> <runner file> <hook file>
   local t="$1" x="$2" rd f
   case "$x" in core/fixtures) rd=core/scripts ;; *) rd=scripts/ai-dlc ;; esac
@@ -5298,8 +5315,20 @@ vs_cmk() { # <t> <fixture root> <runner file> <hook file>
   cp "$4" "$t/.githooks/pre-push" && cp "$3" "$t/$rd/hermetic-run.sh" || return 1
   printf '# EXCLUDE_BEGIN\ndocs\n# EXCLUDE_END\n' > "$t/scripts/suite-content-key.sh"
   printf 'v1\n' > "$t/src/a.sh"; printf 'l\n' > "$t/lib/l.txt"; printf 's\n' > "$t/lib/sub/s.txt"; printf 'n\n' > "$t/docs/n.md"
-  for f in cen ctl; do mkdir -p "$t/$x/$f" && printf 'exit 0\n' > "$t/$x/$f/run.sh" && printf 'awk\n' > "$t/$x/$f/tools.decl" || return 1; done
+  printf '%s' 'ctl cen ref dsl crlf' > "$t.fx"
+  for f in cen ctl ref dsl crlf; do mkdir -p "$t/$x/$f" && printf 'exit 0\n' > "$t/$x/$f/run.sh" && printf 'awk\n' > "$t/$x/$f/tools.decl" || return 1; done
+  printf 'awk\ncksum\n' > "$t/$x/ctl/tools.decl"
   printf 'src/a.sh\nlib/\ndocs/\n' > "$t/$x/cen/inputs.decl"; printf 'src/a.sh\n' > "$t/$x/ctl/inputs.decl"
+  printf 'src/a.sh\nlib/\n' > "$t/$x/ref/inputs.decl"; printf 'src/a.sh\nlib//\n' > "$t/$x/dsl/inputs.decl"
+  printf 'src/a.sh\r\nlib/\r\n' > "$t/$x/crlf/inputs.decl"
+  if [ "$rd" = scripts/ai-dlc ]; then
+    cp "${3%/*}/core-paths.sh" "$t/$rd/core-paths.sh" || return 1
+    mkdir -p "$t/$x/cons" "$t/.claude/skills/mk/in" || return 1
+    printf 'm\n' > "$t/$rd/m.sh"; printf 'k\n' > "$t/.claude/skills/mk/in/k.txt"; printf 'j\n' > "$t/.claude/skills/mk/j.txt"
+    printf 'exit 0\n' > "$t/$x/cons/run.sh"; printf 'awk\n' > "$t/$x/cons/tools.decl"
+    printf 'src/a.sh\ncore/scripts/m.sh\ncore/skills/mk/\n' > "$t/$x/cons/inputs.decl"
+    printf '%s' ' cons' >> "$t.fx"
+  fi
   ( cd "$t" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm seed ) >/dev/null 2>&1
 }
 vs_cdrive() { # <pool> <world> <runner file>: decisions in <world>.cd/d1 (fresh) and <world>.cd/d2 (republished records, one foreign row each)
@@ -5309,10 +5338,11 @@ vs_cdrive() { # <pool> <world> <runner file>: decisions in <world>.cd/d1 (fresh)
     . "$1" 2>/dev/null
     o="$2.cd"; mkdir -p "$o/d1" "$o/d2" || exit 1
     KEYS_DIR="$o/keys"; VERIFIED_RECORD="$o/none"; READSET_LOCAL="$o/none.l"
+    fl="$(cat "$2.fx")" && [ -n "$fl" ] || exit 1
     for d in "$FXROOT"*/; do [ -f "$d/run.sh" ] && printf '%s\n' "$d"; done > "$o/list"
     readset_manifest "$o/d1" && readset_local_validate "$o/list" "$o/d1" && readset_keys "$o/list" "$o/d1" || exit 1
     # The runner's rows for THIS tree, taken per pass, because the tree changes between them (below).
-    for f in ctl cen; do env -u AI_DLC_VERDICT_STORE bash "$3" --root "$2" --key-only "$f" > "$o/d1/ko.$f" 2>/dev/null; done
+    for f in $fl; do env -u AI_DLC_VERDICT_STORE bash "$3" --root "$2" --key-only "$f" > "$o/d1/ko.$f" 2>/dev/null; done
     mkdir -p "$KEYS_DIR" || exit 1
     for f in "$o/d1/.k"/*; do [ -f "$f" ] || continue; b="${f##*/}"
       { sed -n 1p "$f"; printf '#state ok\n'; sed -n 3p "$f"; tail -n +4 "$f"; printf 'zz-foreign/%s\t0000\n' "$b"; } > "$KEYS_DIR/$b.key"; done
@@ -5322,7 +5352,7 @@ vs_cdrive() { # <pool> <world> <runner file>: decisions in <world>.cd/d1 (fresh)
     # which publishes nothing and leaves no rows to compare. Both shapes declare src/a.sh.
     printf 'v2\n' > src/a.sh
     readset_manifest "$o/d2" && readset_local_validate "$o/list" "$o/d2" && readset_keys "$o/list" "$o/d2" || exit 1
-    for f in ctl cen; do env -u AI_DLC_VERDICT_STORE bash "$3" --root "$2" --key-only "$f" > "$o/d2/ko.$f" 2>/dev/null; done ) >/dev/null 2>&1
+    for f in $fl; do env -u AI_DLC_VERDICT_STORE bash "$3" --root "$2" --key-only "$f" > "$o/d2/ko.$f" 2>/dev/null; done ) >/dev/null 2>&1
 }
 vs_census() { # <pool> <fixture root> <runner file> <t> <hook file>: "inj=<n> ctl=<fresh>/<carry> cen=<fresh>/<carry>"
   local p="$1" x="$2" t="$4" W="$4/W" rd f ps v n c
@@ -5330,7 +5360,7 @@ vs_census() { # <pool> <fixture root> <runner file> <t> <hook file>: "inj=<n> ct
   mkdir -p "$t" && vs_cmk "$W" "$x" "$3" "$5" || { printf SEED; return; }
   vs_cdrive "$p" "$W" "$W/$rd/hermetic-run.sh" || { printf DRIVE; return; }
   v="inj=$(grep -l '^zz-foreign/' "$W.cd/keys"/*.key 2>/dev/null | grep -c .)"
-  for f in ctl cen; do
+  for f in $(cat "$W.fx"); do
     c=""
     for ps in d1 d2; do
       [ -s "$W.cd/$ps/ko.$f" ] || { c="$c/KO"; continue; }
@@ -5343,7 +5373,41 @@ vs_census() { # <pool> <fixture root> <runner file> <t> <hook file>: "inj=<n> ct
   done
   printf '%s' "$v"
 }
-VS_CWANT='inj=2 ctl=same/same cen=same/same'
+# THE REGRESSION BYTE-COMPARE: every shape, both hooks, fresh and carried. The fixture list differs by layout (cons is
+# seeded in the consumer world only), so the want is named per layout rather than derived from what ran.
+VS_CWANT_D='inj=5 ctl=same/same cen=same/same ref=same/same dsl=same/same crlf=same/same'
+VS_CWANT_C='inj=6 ctl=same/same cen=same/same ref=same/same dsl=same/same crlf=same/same cons=same/same'
+vs_cwant() { case "$1" in core/fixtures) printf '%s' "$VS_CWANT_D" ;; *) printf '%s' "$VS_CWANT_C" ;; esac; }
+# THE NORMALISATION CELLS, read off a census world's fresh pass on BOTH sides: ref, dsl and crlf with each fixture's
+# own-directory rows removed must be the same rows, and those rows must hold the listing keys of lib/ and lib/sub/ and
+# no `lib//` row (the positive conjunct: three EMPTY row sets are also equal). cons, where seeded: the mapped file and
+# the mapped directory's listing are keyed and no row names core/. Prints
+# "dsl=<eq|ne> crlf=<eq|ne> lib=<n> sub=<n> dbl=<n> cons=<file>/<listing>/<core rows>|-" per side, `hk:` then `ko:`.
+vs_cnorm() { # <census t> <fixture root>
+  local t="$1" x="$2" W="$1/W" s f src v="" ok r
+  for s in hk ko; do
+    for f in ref dsl crlf cons; do
+      if [ "$s" = hk ]; then src="$W.cd/d1/.k/$f"; [ -f "$src" ] && tail -n +4 "$src" > "$t/n.$s.$f.all" || : > "$t/n.$s.$f.all"
+      else src="$W.cd/d1/ko.$f"; [ -f "$src" ] && cp "$src" "$t/n.$s.$f.all" || : > "$t/n.$s.$f.all"; fi
+      awk -F'\t' -v o="$x/$f/" 'index($1, o) != 1' "$t/n.$s.$f.all" > "$t/n.$s.$f"
+    done
+    r="$s:"
+    if cmp -s "$t/n.$s.ref" "$t/n.$s.dsl"; then r="$r dsl=eq"; else r="$r dsl=ne"; fi
+    if cmp -s "$t/n.$s.ref" "$t/n.$s.crlf"; then r="$r crlf=eq"; else r="$r crlf=ne"; fi
+    ok="$(grep -c '^lib/	#listing:' "$t/n.$s.dsl")" || ok=0; r="$r lib=$ok"
+    ok="$(grep -c '^lib/sub/	#listing:' "$t/n.$s.dsl")" || ok=0; r="$r sub=$ok"
+    ok="$(grep -c '^lib//' "$t/n.$s.dsl")" || ok=0; r="$r dbl=$ok"
+    if [ -s "$t/n.$s.cons.all" ]; then
+      r="$r cons=$(grep -c '^scripts/ai-dlc/m\.sh	[0-9a-f]\{64\}$' "$t/n.$s.cons")/$(grep -c '^\.claude/skills/mk/	#listing:' "$t/n.$s.cons")/$(grep -c '^core/' "$t/n.$s.cons")"
+    else r="$r cons=-"; fi
+    v="$v $r"
+  done
+  printf '%s' "${v# }"
+}
+vs_cnwant() { # <fixture root>
+  case "$1" in core/fixtures) printf 'hk: dsl=eq crlf=eq lib=1 sub=1 dbl=0 cons=- ko: dsl=eq crlf=eq lib=1 sub=1 dbl=0 cons=-' ;;
+    *) printf 'hk: dsl=eq crlf=eq lib=1 sub=1 dbl=0 cons=1/1/0 ko: dsl=eq crlf=eq lib=1 sub=1 dbl=0 cons=1/1/0' ;; esac
+}
 VS_CN=0
 for _h in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
   [ -f "$_h" ] || continue
@@ -5355,10 +5419,22 @@ for _h in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
   VS_ARMS=$((VS_ARMS+1))
   case "$_g" in *" ctl=same/same "*) ok "(verdict store, k) ${_h#"$ROOT"/}: the agreeing shape (ctl) is identical fresh and after the carry -- the census can pass" ;;
     *) bad "(verdict store, k) ${_h#"$ROOT"/}: the control shape ctl does not agree: $_g" ;; esac
-  VS_ARMS=$((VS_ARMS+1))
-  if [ "$_g" = "$VS_CWANT" ]; then ok "(verdict store, k) ${_h#"$ROOT"/}: hook key rows equal --key-only for every declared shape, fresh and carried: $_g"
-  else bad "(verdict store, k) ${_h#"$ROOT"/}: hook key rows differ from --key-only (fixture=fresh/carry, differ:<rows>:<first row>): want '$VS_CWANT' got '$_g'"; fi
+  VS_ARMS=$((VS_ARMS+1)); _w="$(vs_cwant "$VS_CX")"
+  if [ "$_g" = "$_w" ]; then ok "(verdict store, k) ${_h#"$ROOT"/}: hook key rows equal --key-only for every declared shape, fresh and carried: $_g"
+  else bad "(verdict store, k) ${_h#"$ROOT"/}: hook key rows differ from --key-only (fixture=fresh/carry, differ:<rows>:<first row>): want '$_w' got '$_g'"; fi
+  VS_ARMS=$((VS_ARMS+1)); _n="$(vs_cnorm "$WORK/vs.c$VS_CN" "$VS_CX")"; _w="$(vs_cnwant "$VS_CX")"
+  if [ "$_n" = "$_w" ]; then ok "(verdict store, k-norm) ${_h#"$ROOT"/}: lib// and a CRLF declaration key exactly as lib/ on both sides, with the listing keys present$( [ "$VS_CX" = core/fixtures ] || printf ', and the consumer world keys the MAPPED core/ file and directory and no core/ row'): $_n"
+  else bad "(verdict store, k-norm) ${_h#"$ROOT"/}: want '$_w' got '$_n'"; fi
 done
+# THE TOOL SEED IS DISCRIMINATING: ctl declares cksum, which no `.sh` in the census world names, so readset_tools can
+# never hash it and only the declared-tool hashing keys it. awk, named by the runner the world carries, is the control.
+if [ "$VS_CN" -ge 1 ]; then
+  VS_ARMS=$((VS_ARMS+1))
+  _a="$(find "$WORK/vs.c1/W" -name '*.sh' -type f ! -path '*/.git/*' -exec grep -lw awk {} + 2>/dev/null | grep -c .)" || _a=0
+  _k="$(find "$WORK/vs.c1/W" -name '*.sh' -type f ! -path '*/.git/*' -exec grep -lw cksum {} + 2>/dev/null | grep -c .)" || _k=0
+  if [ "$_k" = 0 ] && [ "$_a" -gt 0 ]; then ok "(verdict store, k) the census world's .sh files name cksum 0 times and awk in $_a file(s): ctl's cksum row is keyed by the declared-tool hashing alone"
+  else bad "(verdict store, k) the census world's .sh files name cksum in $_k file(s) (want 0) and awk in $_a (want >0): the hook-drops-tools mutant would be equivalent"; fi
+fi
 # (k) MUTANTS, each editing ONE side: the agreeing shape ctl must stop agreeing.
 vs_cmut() { # <name> <pool|runner> <from> <to>
   local name="$1" kind="$2" dst _g n
@@ -5374,12 +5450,83 @@ vs_cmut() { # <name> <pool|runner> <from> <to>
     _g="$(vs_census "$VS_CP1" "$VS_CX1" "$dst" "$WORK/vs.cm.$name.w" "$VS_CH1" 2>/dev/null)"; fi
   case "$_g" in *" ${5:-ctl}=differ"*|*" ${5:-ctl}=same/differ"*) ok "VS CENSUS MUTANT $name is KILLED: $_g" ;; *) bad "VS CENSUS MUTANT $name SURVIVED: $_g" ;; esac
 }
+# A HOOK-FILE MUTANT for an edit the runner must SEE too. The runner sources READSET_KEYROWS out of the world's own
+# hook, which vs_cmk copies from <hook file>, while the decision sources the pool; an edit made to the pool alone would
+# leave the runner on the clean span and the census would differ for that reason. So the edit is made to a copy of the
+# whole hook and the pool is re-extracted from it: both sides then run the edited span. Sets VS_HM (hook) and VS_HMP
+# (its pool); returns 1 with a FAIL when the anchor is not unique or the pool did not change.
+vs_hmut() { # <name> <from> <to> [<source hook>]
+  local s="${4:-$VS_CH1}" n
+  VS_HM="$WORK/vs.hm.$1.hook"; VS_HMP="$WORK/vs.hm.$1.pool"
+  n="$(grep -cF -- "$2" "$s")" || n=0
+  [ "$n" = 1 ] || { bad "VS CENSUS MUTANT $1: anchor matched $n time(s) in ${s##*/}, not 1 -- DID NOT APPLY"; return 1; }
+  MF="$2" MT="$3" awk '{ i = index($0, ENVIRON["MF"]); if (i > 0) $0 = substr($0, 1, i - 1) ENVIRON["MT"] substr($0, i + length(ENVIRON["MF"])); print }' "$s" > "$VS_HM" \
+    || { bad "VS CENSUS MUTANT $1: awk DID NOT APPLY"; return 1; }
+  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$s" > "$VS_HMP.src"
+  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$VS_HM" > "$VS_HMP"
+  if cmp -s "$s" "$VS_HM" || cmp -s "$VS_HMP.src" "$VS_HMP"; then bad "VS CENSUS MUTANT $1: the hook copy or its pool is unchanged"; return 1; fi
+  return 0
+}
+# How many of the census world's declared fixtures carry the probe row `zz-tag<TAB>1` in the hook's fresh record and
+# in --key-only: "tag=<hook>/<runner>".
+vs_ctag() { # <census t>
+  local W="$1/W" f h=0 k=0
+  for f in $(cat "$W.fx" 2>/dev/null); do
+    [ -f "$W.cd/d1/.k/$f" ] && grep -qxF "zz-tag	1" "$W.cd/d1/.k/$f" && h=$((h+1))
+    [ -f "$W.cd/d1/ko.$f" ] && grep -qxF "zz-tag	1" "$W.cd/d1/ko.$f" && k=$((k+1))
+  done
+  printf 'tag=%s/%s' "$h" "$k"
+}
 if [ "$VS_CN" -ge 1 ]; then
-  vs_cmut runner-drops-tools runner '[ -s "$HR_WORK/tools" ] && tr' 'false && tr'
-  vs_cmut hook-drops-tools pool 'n = split(DT[f], a, "\n"); for (j = 2; j <= n; j++) TK[a[j]] = 1' 'n = 0'
+  # Tool rows, each side alone. Re-anchored on the shared span's tool hashing: the runner calls it for its one
+  # fixture, readset_declared for the whole declared set; neither call sits inside the span, so one side moves.
+  vs_cmut runner-drops-tools runner 'readset_decl_tool_hashes "$HR_WORK/parse" "$HR_WORK/th"' ':'
+  vs_cmut hook-drops-tools pool 'readset_decl_tool_hashes "$out/.dparse" "$out/.tools"' ':'
   # The carry re-enabled for declared fixtures: an `ok` record's rows flow back into the published key, so the
   # carried pass of the listing-keyed shape (cen) gains the foreign row. Fresh stays same; only the carry differs.
   vs_cmut hook-carries-declared pool 'if (rl && !(f in DECL)) for (k in R)' 'if (rl) for (k in R)' cen
+  # (k-part) THE PARTITION. Equal rows do not prove ONE composer: two composers can agree on every seeded shape. So a
+  # probe edit makes the span's readset_decl_keys emit one extra row, `zz-tag<TAB>1`, for every fixture it keys; a
+  # side composing its rows anywhere else cannot carry it. Both sides must carry it for every declared fixture, and the
+  # census must still read the regression want (the probe moves nothing else).
+  VS_TAGA='for (f in FX) { n = split(TL[f], a, "\n");'
+  VS_TAGB='for (f in FX) out(f, "zz-tag", "1"); for (f in FX) { n = split(TL[f], a, "\n");'
+  VS_ARMS=$((VS_ARMS+1))
+  if vs_hmut probe "$VS_TAGA" "$VS_TAGB"; then
+    VS_PH="$VS_HM"; VS_PP="$VS_HMP"
+    _g="$(vs_census "$VS_PP" "$VS_CX1" "$VS_RUN" "$WORK/vs.cp" "$VS_PH" 2>/dev/null)"; _t="$(vs_ctag "$WORK/vs.cp")"
+    if [ "$_t" = "tag=5/5" ] && [ "$_g" = "$VS_CWANT_D" ]; then ok "(verdict store, k-part) a row only the READSET_KEYROWS span emits reaches the hook's record AND --key-only for all 5 declared fixtures, census unmoved: one composer, $_t"
+    else bad "(verdict store, k-part) the span's probe row did not reach both sides for every fixture (want tag=5/5 and '$VS_CWANT_D'): $_t $_g"; fi
+    # m2: the hook's DECL branch bypassed, so a declared fixture is keyed through ROWS/OWN like a traced one: the
+    # hook side loses the probe row, the runner keeps it.
+    VS_ARMS=$((VS_ARMS+1))
+    if vs_hmut hook-decl-bypass 'else if (f in DECL) { n = split(DK[f], a, "\n"); for (j = 2; j <= n; j++) K[a[j]] = 1 }' 'else if (0) { }' "$VS_PH"; then
+      _t="$(vs_census "$VS_HMP" "$VS_CX1" "$VS_RUN" "$WORK/vs.cm2" "$VS_HM" >/dev/null 2>&1; vs_ctag "$WORK/vs.cm2")"
+      if [ "$_t" = "tag=0/5" ]; then ok "VS CENSUS MUTANT hook-decl-bypass is KILLED by the partition arm: $_t"
+      else bad "VS CENSUS MUTANT hook-decl-bypass SURVIVED the partition arm (want tag=0/5): $_t"; fi
+    fi
+    # The runner composing from a PRIVATE copy of the span (the unprobed hook) instead of the world's own hook: the
+    # runner side loses the probe row, the hook keeps it.
+    VS_ARMS=$((VS_ARMS+1)); cp "$VS_RUN" "$WORK/vs.cm.rpriv"
+    _n="$(grep -cF '"$HR_HOOK" > "$HR_WORK/keyrows.sh"' "$WORK/vs.cm.rpriv")" || _n=0
+    if [ "$_n" != 1 ]; then bad "VS CENSUS MUTANT runner-private-span: anchor matched $_n time(s), not 1 -- DID NOT APPLY"
+    else
+      MF='"$HR_HOOK" > "$HR_WORK/keyrows.sh"' MT="\"$VS_CH1\" > \"\$HR_WORK/keyrows.sh\"" awk '{ i = index($0, ENVIRON["MF"]); if (i > 0) $0 = substr($0, 1, i - 1) ENVIRON["MT"] substr($0, i + length(ENVIRON["MF"])); print }' "$VS_RUN" > "$WORK/vs.cm.rpriv"
+      if cmp -s "$VS_RUN" "$WORK/vs.cm.rpriv"; then bad "VS CENSUS MUTANT runner-private-span: the copy is unchanged"
+      else _t="$(vs_census "$VS_PP" "$VS_CX1" "$WORK/vs.cm.rpriv" "$WORK/vs.cmr" "$VS_PH" >/dev/null 2>&1; vs_ctag "$WORK/vs.cmr")"
+        if [ "$_t" = "tag=5/0" ]; then ok "VS CENSUS MUTANT runner-private-span is KILLED by the partition arm: $_t"
+        else bad "VS CENSUS MUTANT runner-private-span SURVIVED the partition arm (want tag=5/0): $_t"; fi; fi
+    fi
+  fi
+  # m1: the shared PARSE strips ONE trailing slash instead of all of them. Both sides run the edited span, so the census
+  # stays equal for dsl (the mutation reached both: a one-side edit would move it) and only the normalisation cell dies.
+  VS_ARMS=$((VS_ARMS+1))
+  if vs_hmut parse-one-slash 'k = "F"; if ($0 ~ /\/$/) { k = "D"; sub(/\/+$/, "") }' 'k = "F"; if ($0 ~ /\/$/) { k = "D"; sub(/\/$/, "") }'; then
+    _g="$(vs_census "$VS_HMP" "$VS_CX1" "$VS_RUN" "$WORK/vs.cm1" "$VS_HM" 2>/dev/null)"; _n="$(vs_cnorm "$WORK/vs.cm1" "$VS_CX1")"
+    case "$_g:$_n" in
+      *" dsl=same/same "*:"hk: dsl=ne"*" ko: dsl=ne"*) ok "VS CENSUS MUTANT parse-one-slash is KILLED by the normalisation cell, with the census still equal on dsl (both sides ran the edit): $_n" ;;
+      *) bad "VS CENSUS MUTANT parse-one-slash: want dsl=same/same in the census and dsl=ne on both sides, got '$_g' / '$_n'" ;; esac
+  fi
 fi
 # MUTANTS. Each is a count-checked literal edit; the world is re-driven and the cells it must move are named.
 vs_mut() { # <name> <pool|runner> <must-move cell> then pairs <from> <to>
@@ -5431,6 +5578,63 @@ if [ "$VS_N" -ge 1 ]; then
   vs_mut wholefile pool g "sed -n '/^# HR_SANDBOX_BEGIN\$/,/^# HR_SANDBOX_END\$/p' \"\$rn\"" 'cat "$rn"'
   # (d) the reader serves undeclared fixtures.
   vs_mut undeclared pool d '    grep -qxF -- "$fx" "$out/.dfx" || continue' '    :'
+  # (g5) the READSET_KEYROWS span dropped from readset_vs_ident: a composer edit no longer moves `#universe`, so the
+  # pass recorded under the old composer is reused. Applied to the hook copy the world carries AND to the pool, so the
+  # writer and the reader still agree on every other cell (a pool-only edit would split their idents everywhere).
+  VS_ARMS=$((VS_ARMS+1))
+  VS_IDA="sed -n '/^# READSET_KEYROWS_BEGIN\$/,/^# READSET_KEYROWS_END\$/p' \"\$hk\";"
+  _a="$(grep -cF -- "$VS_IDA" "$HOOK")" || _a=0
+  if [ "$_a" != 1 ]; then bad "VS MUTANT ident-drops-keyrows: anchor matched '$_a', not 1 -- DID NOT APPLY"
+  else
+    MF="$VS_IDA" MT=':;' awk '{ i = index($0, ENVIRON["MF"]); if (i > 0) $0 = substr($0, 1, i - 1) ENVIRON["MT"] substr($0, i + length(ENVIRON["MF"])); print }' "$HOOK" > "$WORK/vs.ik.hook.sh"
+    sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$WORK/vs.ik.hook.sh" > "$WORK/vs.ik.pool.sh"
+    if cmp -s "$HOOK" "$WORK/vs.ik.hook.sh" || cmp -s "$VS_P1" "$WORK/vs.ik.pool.sh"; then bad "VS MUTANT ident-drops-keyrows: a copy is unchanged"
+    else
+      _g="$(VS_HOOK="$WORK/vs.ik.hook.sh" vs_world "$WORK/vs.ik.pool.sh" "$VS_X1" "$VS_RUN" "$WORK/vs.m.identkr" 2>/dev/null)"
+      _c="$(printf '%s\n' "$_g" | tr ' ' '\n' | grep '^g=')"
+      if [ "$_c" = "g=run/run/skip/skip/skip/skip" ] && [ "${_g%% g=*}" = "${VS_WANT%% g=*}" ]; then ok "VS MUTANT ident-drops-keyrows is KILLED by cell g5 alone: $_c"
+      else bad "VS MUTANT ident-drops-keyrows: want g=run/run/skip/skip/skip/skip and every earlier cell unmoved, got '$_g'"; fi
+    fi
+  fi
+fi
+# (s) VERSION SKEW: a runner newer than the hook it finds. With the READSET_KEYROWS span deleted from the world's hook,
+# a SANDBOX run still runs the fixture (rc 0, its own rc line printed) with the store OFF (announced, no entry), and
+# only --key-only refuses (exit 2). The control is the same world with the span: one entry, and key rows at rc 0.
+vs_skew() { # <runner file> <t> <strip 0|1>: "rc=<n> ran=<n> off=<n> n=<entries> ko=<rc>/<rows>"
+  local rn="$1" t="$2" A="$2/A" S="$2.S" rd o ra rc k
+  case "$VS_X1" in core/fixtures) rd=core/scripts ;; *) rd=scripts/ai-dlc ;; esac
+  mkdir -p "$t" "$S" && vs_mk "$A" "$VS_X1" "$rn" || { printf SEED; return; }
+  if [ "$3" = 1 ]; then
+    awk '$0 == "# READSET_KEYROWS_BEGIN" { s = 1 } !s { print } $0 == "# READSET_KEYROWS_END" { s = 0 }' "$A/.githooks/pre-push" > "$t/hk"
+    { cmp -s "$t/hk" "$A/.githooks/pre-push" || grep -qx '# READSET_KEYROWS_BEGIN' "$t/hk" || grep -q '^readset_decl_parse() ' "$t/hk"; } && { printf STRIP; return; }
+    cp "$t/hk" "$A/.githooks/pre-push"
+  fi
+  ra="$(cd "$A" && git rev-list --max-parents=0 HEAD | sed -n 1p)"
+  o="$(env AI_DLC_VERDICT_STORE="$S" bash "$A/$rd/hermetic-run.sh" --root "$A" decl 2>&1)"; rc=$?
+  k="$(env -u AI_DLC_VERDICT_STORE bash "$A/$rd/hermetic-run.sh" --root "$A" --key-only decl 2>/dev/null)"
+  printf 'rc=%s ran=%s off=%s n=%s ko=%s/%s' "$rc" "$(grep -c '^hermetic-run: decl: rc=0 sandbox_files=' <<< "$o")" \
+    "$(grep -c 'verdict store OFF: .* carries no READSET_KEYROWS span' <<< "$o")" "$(vs_n "$S/$ra")" \
+    "$(env -u AI_DLC_VERDICT_STORE bash "$A/$rd/hermetic-run.sh" --root "$A" --key-only decl >/dev/null 2>&1; printf '%s' "$?")" "$(grep -c . <<< "$k")"
+}
+if [ -n "${VS_X1:-}" ]; then
+  VS_ARMS=$((VS_ARMS+1)); _c="$(vs_skew "$VS_RUN" "$WORK/vs.sk0" 0 2>/dev/null)"
+  case "$_c" in "rc=0 ran=1 off=0 n=1 ko=0/"[1-9]*) ok "(verdict store, s) CONTROL: with the span the run passes, records 1 entry and --key-only prints rows at rc 0: $_c" ;;
+    *) bad "(verdict store, s) CONTROL: want rc=0 ran=1 off=0 n=1 ko=0/<rows>, got '$_c'" ;; esac
+  VS_ARMS=$((VS_ARMS+1)); _s="$(vs_skew "$VS_RUN" "$WORK/vs.sk1" 1 2>/dev/null)"
+  [ "$_s" = "rc=0 ran=1 off=1 n=0 ko=2/0" ] && ok "(verdict store, s) a hook with no READSET_KEYROWS span: the sandbox run still runs the fixture with the store OFF and records nothing, and --key-only exits 2: $_s" \
+    || bad "(verdict store, s) want 'rc=0 ran=1 off=1 n=0 ko=2/0' got '$_s'"
+  # The skew refused like --key-only: the sandbox run exits 2 where it should run the fixture.
+  VS_ARMS=$((VS_ARMS+1)); VS_SKA="  printf 'hermetic-run: %s: verdict store OFF: %s carries no READSET_KEYROWS span"
+  _a="$(grep -cF -- "$VS_SKA" "$VS_RUN")" || _a=0
+  if [ "$_a" != 1 ]; then bad "VS MUTANT skew-refuses: anchor matched '$_a', not 1 -- DID NOT APPLY"
+  else
+    mkdir -p "$WORK/vs.skm" && MF="$VS_SKA" MT="  exit 2; printf 'hermetic-run: %s: verdict store OFF: %s carries no READSET_KEYROWS span" awk '{ i = index($0, ENVIRON["MF"]); if (i > 0) $0 = substr($0, 1, i - 1) ENVIRON["MT"] substr($0, i + length(ENVIRON["MF"])); print }' "$VS_RUN" > "$WORK/vs.skm/hermetic-run.sh"
+    cp "${VS_RUN%/*}/core-paths.sh" "$WORK/vs.skm/core-paths.sh" 2>/dev/null
+    if cmp -s "$VS_RUN" "$WORK/vs.skm/hermetic-run.sh"; then bad "VS MUTANT skew-refuses: the copy is unchanged"
+    else _m="$(vs_skew "$WORK/vs.skm/hermetic-run.sh" "$WORK/vs.sk2" 1 2>/dev/null)"
+      case "$_m" in "rc=2 ran=0 "*) ok "VS MUTANT skew-refuses is KILLED by the skew arm: $_m" ;; *) bad "VS MUTANT skew-refuses SURVIVED the skew arm: $_m" ;; esac
+    fi
+  fi
 fi
 fi
 # THE REAL DEFAULT STORE IS UNCHANGED BY THE UNIT, in the home this run sees and in the account's own.

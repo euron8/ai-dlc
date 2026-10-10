@@ -11,3 +11,5 @@ core/fixtures/readset-skip/run.sh
 core/fixtures/readset-skip-c/run.sh
 core/fixtures/readset-skip-d/run.sh
 core/scripts/hermetic-run.sh
+# The consumer-layout census world maps core/ declarations with the real mapper.
+core/scripts/core-paths.sh

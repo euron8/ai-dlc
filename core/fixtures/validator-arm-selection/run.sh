@@ -460,6 +460,32 @@ if [ "$i66m_rc" -ne 0 ] && grep -q 'I66 the two pre-push fixture-suite runners h
 else
   bad "MUTANT SURVIVED: widening READSET_UNKEYED_TOOLS in .githooks/pre-push alone left --arms I66 at rc $i66m_rc without the fork message. A widening in one hook copy reaches only half the population and nothing would say so: $(printf '%s' "$i66m_out" | head -2 | tr '\n' ' ' | cut -c1-200)"
 fi
+# THE READSET_KEYROWS SPAN, edited in ONE hook. The runner sources the declared-fixture composer out of whichever hook
+# it finds, so a span that differs between the two keys a consumer's fixtures differently from this repo's. Two
+# mutants, each on a fresh copy of the control tree with the consumer hook left byte-identical: an EXECUTABLE line of
+# the span (readset_decl_tool_hashes' filter, which the comment-stripped pool compare must see) and the BEGIN SENTINEL
+# renamed (a comment, so only the span-sentinel check can see it). Each anchor must match exactly once.
+i66_one() { # <tag> <from> <to> <want message> <what>
+  local d="$TMP/i66$1" n out rc
+  mkdir -p "$d" && cp -Rp "$TMP/i66c/." "$d/" || broke "could not copy the I66 control tree for $1"
+  # A sentinel anchor is matched as a WHOLE LINE: readset_vs_ident's extraction regex carries the same text.
+  n="$(MF="$2" MT="$3" MX="${6:-0}" MC="$TMP/i66$1.n" awk '
+    BEGIN { f = ENVIRON["MF"]; t = ENVIRON["MT"]; x = ENVIRON["MX"]; n = 0 }
+    x == 1 { if ($0 == f) { $0 = t; n++ } print; next }
+    { i = index($0, f); if (i > 0) { $0 = substr($0, 1, i - 1) t substr($0, i + length(f)); n++ } print }
+    END { print n > ENVIRON["MC"] }' "$TMP/i66c/.githooks/pre-push" > "$d/.githooks/pre-push" && cat "$TMP/i66$1.n")"
+  if [ "$n" != 1 ] || cmp -s "$TMP/i66c/.githooks/pre-push" "$d/.githooks/pre-push"; then
+    broke "the one-hook READSET_KEYROWS mutant $1 DID NOT APPLY: the anchor matched ${n:-?} line(s) of .githooks/pre-push, not 1"
+  fi
+  cmp -s "$TMP/i66c/core/git-hooks/pre-push" "$d/core/git-hooks/pre-push" || broke "the KEYROWS mutant $1 touched the consumer hook too"
+  out="$(bash "$d/scripts/validate-enforcement-map.sh" --arms I66 2>&1)"; rc=$?
+  if [ "$rc" -ne 0 ] && grep -qF -- "$4" <<< "$out"; then ok "MUTANT: $5 in .githooks/pre-push alone makes --arms I66 exit $rc with '$4'"
+  else bad "MUTANT SURVIVED: $5 in .githooks/pre-push alone left --arms I66 at rc $rc without '$4': $(printf '%s' "$out" | head -2 | tr '\n' ' ' | cut -c1-200)"; fi
+}
+i66_one kx '$2 == "T" && !($3 in have) { have[$3] = 1; print $3 }' '$2 == "T" { have[$3] = 1; print $3 }' \
+  'I66 the two pre-push fixture-suite runners have forked' 'an executable READSET_KEYROWS line edited'
+i66_one ks '# READSET_KEYROWS_BEGIN' '# READSET_KEYROWS_BEGINS' \
+  'I66 the READSET_KEYROWS span of .githooks/pre-push is unsound' 'the READSET_KEYROWS_BEGIN sentinel renamed' 1
 fi
 
 # --- Arm 3: EVERY declared id selected must be BYTE-IDENTICAL to a plain run ---------------
