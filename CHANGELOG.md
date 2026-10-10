@@ -36,7 +36,8 @@ disappears for every fixture traced that way.
   through `--in-pool` and takes its rc, and `readset_pool_trace_merge` merges after the pool under the live trace's
   lock. Both pre-push hooks change identically (`I66`).
 - **No fail-open path.** A lossy window (drop notice, LOSS CANARY, unread control, dirty delta, TRIP, driver
-  missing) DISCARDS and never maps a smaller set; a discarded fixture falls back to the detached trace. A TRIP
+  missing) DISCARDS and never maps a smaller set; a discarded fixture leaves the detached trace's queue too (its run
+  was the pool's), stays unmapped, and is traced in the pool again on the next push. A TRIP
   re-runs the fixture untraced and takes that verdict. A linked worktree skips in-pool tracing with one line
   naming why. A declared fixture (`inputs.decl`) is never traced in the pool. `AI_DLC_READSET_LIVE_TRACE=0` turns
   it off with no output.
