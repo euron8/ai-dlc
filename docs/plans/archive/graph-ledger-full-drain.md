@@ -17803,3 +17803,68 @@ stands: report the gap and write no runbook.
 
 Batch 208's block below is history: batch 209's block replaces its open items, its BL-480 facts and its delivery gap.
 
+**BATCH 210 SHIPPED ONE RELEASE, `v0.756.0` (`f9f4fe70`, #1072), AND DISCHARGED NO CONSUMER CANDIDATE.** It was
+handed the plan by peer session ai-dlc-28 at `origin/main` `0a123701` (`VERSION` 0.754.0) and ran beside the hermetic
+program's `v0.755.0` (`cab72a8e`, ai-dlc-e2), the hermetic-pole plan (ai-dlc-71, holding 0.757.0) and a class-b hand
+(ai-dlc-0e), one gated push on the box at a time by GATE START / LANDED messages. It had assembled 0.755.0 before
+learning e2 held the number, renumbered to 0.756.0 and rebuilt on e2's landed sha. **The opening sweep read live 0 for
+the first time in this program**, with the presence control 4 and all four main-ref ids in the archive, unfiled 0,
+worklist 0, TERMINAL 223, archive 346, 27 qualifying refs; the batch's work came from the whole-backlog adjudication.
+- `v0.756.0`: `BL-488` closed (two dead `says` arms in `spec-join-integrity`, one of them the OVER-FIRE control the
+  filing missed, and the vacuous gitignore arm in `claude-rules-joins`); `BL-487`'s subject half fixed
+  (`migrate-artifact-paths.sh:128` and `validate-artifact-paths.sh:362` now pass `--root "$ROOT_ABS"`, with four arms
+  and two mutants in `artifact-path-migration`); `validate-release-version.sh` predicate A binds a bare leading
+  `X.Y.Z` subject (657 to 898 of 1865 non-merge commits bound, mismatches unchanged at 7); `BL-465` and `BL-481`
+  figures corrected. Contract adversary 0 BLOCKER / 6 DEFECT (all folded in); tip adversary 0 BLOCKER / 1 DEFECT
+  (BL-487's receipt was closable by a comment; now keyed on the fixture's own arms, cost about 40s in the hook's
+  backlog-receipts step). Gate from a linked worktree outside the main checkout: 64 of 251 run on read-set keys
+  (12 changed, 0 unrecorded, 52 stale), 22 phases PASS, 0 FAIL, four changed fixtures `ok` by name, 35 minutes,
+  transport clean. **The post-green read-set trace was SKIPPED because the hook traces only the main checkout**, so
+  the 52 stale records and the four edited fixtures' rows did not move; a trace is owed and was not run because two
+  peer traces were already live on the box through the close.
+
+Live backlog **5 -> 4** (BL-488 rotated), archive **482 -> 483**. Net for the release: closed 1, filed 0.
+
+**WHOLE-BACKLOG ADJUDICATION (hand, against 0a123701):** BL-465 PARTIAL; the "roughly 57 percent" coverage figure
+was a prediction and a real keyed push replayed through the validator read 83.24%, so the floor has not been reached
+rather than cannot be; still needs an operator ruling on what a comparable measurement is under read-set skipping.
+BL-474 LIVE, no sharded review on any graph ref (0 `handovers:` records, control 48 refs carrying the tool). BL-481
+LIVE, six of seven at `#discards 1`, `implementation-join-yield` declared by 0.755.0. BL-487 PARTIAL (above); its
+three fixture-side cases (0.755.0 added `taught-schema`) and four declarations are the hermetic program's
+(`docs/plans/hermetic-fixtures-poc.md`, action 5). **Left unbuilt with the measured reason: BL-481's declarations and
+BL-487's fixture fixes collide with the hermetic program's in-flight branches** (one declaration was already on an
+unlanded peer branch at scoping and landed mid-batch).
+
+**OPERATOR CHOICE THAT PROCEEDED ON THE MARKED RECOMMENDATION WITHOUT A REPLY** (the session was invoked by a peer):
+with the ledger empty, this program continues on a backlog-plus-measurement cadence, the ledger refilling whenever
+graph files; the alternative was to close this plan for a backlog-only successor.
+
+**A NEW CANDIDATE WAS FILED DURING THE GATE.** graph pulled 0.751.0 -> 0.754.0 (reconcile #1196) and filed
+`PC-S317-SELF-UPDATE-GATE-UNDECIDED-ON-MACHINERY-A-PRIOR-SELF-UPDATE-LANDED` (`-S` date 2026-10-08, impossible-id
+control 0): `self-update-gate.sh` judges a machinery path whose consumer copy is ALREADY at theirs because a prior
+step-2 self-update in the same pull wrote it, emits `SELF-UPDATE-UNDECIDED` for it, and that row alone turns the run
+into `SELF-UPDATE-DEFER`; the consumer names the remedy as subtracting the same `ALREADY-AT-THEIRS` set step 2
+subtracts, or comparing against the copy at `skill_commit`. The close sweep (at `f9f4fe70`) reads live 1, unfiled 1, worklist 0, TERMINAL 223, archive 346, 28 qualifying refs (the 0.754.0 reconcile branch joined the 27), every control passing.
+**Recorded as a fact; the next session's sweep scopes it** (batch-183 ruling: a filing after the batch's releases are
+built does not reopen the batch). It touches a bootstrapping file and ships ALONE.
+
+**OPEN FINDINGS, NOT FILED (net already negative, each needs a measurement):**
+- The hook's post-green trace runs only from the main checkout; a non-hook release gated from a linked worktree is a
+  correct gate that leaves the trace undone. Either the trace step accepts a linked worktree or the ruling that
+  non-hook releases gate from anywhere needs a trace step after.
+- e2's 0.755.0 rewrote BL-488's receipt to a line-order grep (`says()` definition before first call); this batch
+  replaced it at the cherry-pick conflict with the program-keyed receipt scored against five mutants, so the archive
+  carries one form and 0.755.0's diff another.
+- The release-version fallback has no trailing boundary: `0.756.0-rc1` and `0.756.0.1` both bind to `0.756.0`, as the
+  `v` grammar always did. No such subject exists on any ref.
+- `.ai-dlc-fixture-readsets.tsv` still carries a `core/.gitignore` row for `claude-rules-joins`, a file that never
+  existed; harmless, cleared by the next trace.
+- D6's base-vs-tip timing of `readset-skip` and its battery (owed since batch 209) is still owed: the box carried
+  two live traces and load 12-60 throughout.
+
+**THE DELIVERY GAP IS TWO RELEASES.** graph's `.claude/.ai-dlc-version` reads 0.754.0 (skill_version 0.754.0,
+reconcile #1196 during this batch) against `VERSION` 0.756.0. 0.755.0 and 0.756.0 change no hook and no
+bootstrapping file. The banked ruling stands: report the gap and write no runbook.
+
+Batch 209's block below is history: batch 210's block replaces its open items and its delivery gap.
+

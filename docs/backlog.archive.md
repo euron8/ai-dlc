@@ -32243,3 +32243,30 @@ space, a leading `&&`) were found by the tip adversary. The validator now record
 emits unconditionally to the runner, with the token ending at its own closing quote, and `>&2` stays accepted.
 
 verify: sh V=scripts/validate-hermetic-consumption.sh; [ -f "$V" ] && [ -f core/scripts/core-paths.sh ] || exit 9; for f in consumer-machinery-inventory extract-push-flag-decision; do grep -q '^!' "core/fixtures/$f/inputs.decl" || exit 9; done; o="$(bash "$V" 2>&1)"; r=$?; [ "$r" = 2 ] && exit 9; grep -q '^self-probe: ok' <<< "$o" || exit 9; grep -Eq '^FAIL: core/fixtures/(consumer-machinery-inventory|extract-push-flag-decision):' <<< "$o" && exit 1; grep -Eq '^hermetic-consumption: scanned=[1-9][0-9]* .*flagged=0$' <<< "$o" || exit 1; exit "$r"
+## BL-495 — fixtures declare whole directories as inputs, so one edit re-keys fixtures that may never read it
+
+**LANDED (v0.771.0, verified f2e0403f).** All 33 whole-directory declarations (32 at 0.768.0 plus
+`validator-fork-budget`'s from 0.770.0) are either narrowed against a fresh sandbox trace (3) or carry a `# reason:`
+line citing what enumerates the directory (30); `scripts/validate-decl-reasons.sh`, driven by the `.dist-only`
+fixture `decl-reasons`, holds the reason line. The residue — no join between a declaration and its trace — is BL-497.
+
+**DEFECT.** The 0.764.0 gate ran 47 of 277 fixtures although the release changed one shipped script
+(`core/scripts/hermetic-run.sh`), one fixture's `run.sh`, and new `.decl` files in eight fixture directories. A
+fixture whose `inputs.decl` declares a directory is re-keyed by any edit under it, and 31 `inputs.decl` files declare
+`core/` (14) or `core/scripts/` (17). How many of those fixtures actually read the file whose change selected them is
+NOT measured: a name-reference heuristic is not a read, because some (the `enforcement-map-*` units, through
+`validate-enforcement-map.sh`) read every file under `core/` by content.
+
+The fix narrows each broad declaration to the files the fixture reads, and each narrowing is checked against a
+read-set trace of that fixture. An under-declared fixture is skipped when a file it reads changes, silently, so the
+narrowing must never be justified by a declaration count alone.
+
+verify: manual -- close when every `inputs.decl` line declaring exactly `core/` or `core/scripts/` is either narrowed against a read-set trace of its fixture or carries a stated reason it reads that whole directory by content
+
+**Re-derived batch 220 (0.767.0).** The count is 32 rather than 31: of 233 `inputs.decl` files, 15 carry a whole
+line `core/` and 15 a whole line `core/scripts/` (`grep -lxE`, control `ZZ-never/` 0), and 2 more carry the REQUIRED
+spelling `!core/scripts/`, which a pattern without the `!?` prefix does not see. The receipt was `sh exit 9`,
+which scored nothing and, once BL-493 closed, left the ledger with no scorable receipt and failed the gate's
+`backlog receipts` step (R2); it is now a manual close stating the condition, because no mechanical predicate can
+tell a narrowed declaration from an under-declared one without the trace.
+
