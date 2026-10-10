@@ -268,40 +268,38 @@ step must hold its parent's pid and exit when that pid is gone; until it does, a
 nobody started on purpose. This stays open on the UNMAPPED receipt above; the orphan is a second subject and needs
 its own receipt when the fix is built.
 
+**The orphan subject's receipt, batch 220 (0.768.0).** Pid 47147 was the DETACHED trace subshell, not the hook's main
+body, so a parent-pid tie is the wrong fix: the trace is detached so the push never waits. The fix is a wall-clock
+ceiling (`readset_trace_ceiling`: 3x the listed fixtures' recorded durations, floor 600s, cap 20000s) enforced by a
+watchdog that kills the deriver's own process GROUP, then writes `exit timeout` and releases the lock. It is a HANG
+guard: the incident's 42-fixture list would get 7272s and was a slow, working trace. The fixture arm that holds it is
+`readset-skip-b` (t1); the fenced receipt below runs under `set -uo pipefail` from the repo root. It launches the real
+`readset_live_trace` from the pre-push pool block against a stub deriver that forks a sleeping grandchild and never
+exits, at a 2s ceiling, and exits 0 only if the lock is released, the deriver and its grandchild are both gone, and
+the status reads `exit timeout`. This receipt is the orphan subject's; the entry's operative `verify:` above stays the
+UNMAPPED one.
 
-## BL-493 — a declared fixture's key rows are still composed twice, held equal by a census rather than by one function
+| Subject | Exit |
+|---|---|
+| fix (b220-ceiling) | 0 |
+| base 9800057e | 1 |
+| ceiling computed, never enforced (watchdog exits without signalling) | 1 |
 
-**DEFECT, open, batch 219.** `0.763.0` single-sourced the verdict store's path, ident and digest input into the
-`READSET_VS` span and made the runner its only writer, but a declared fixture's KEY ROWS are still written twice: the
-hook composes them in `readset_declared` plus the decision awk of `readset_keys` (`.githooks/pre-push`,
-`core/git-hooks/pre-push`), and the runner composes them in `hr_key_rows` (`core/scripts/hermetic-run.sh`). The two
-were made to agree by editing the hook to the runner's rules (no carry-over from an older record for a declared
-fixture; a declared directory listed only where a universe file sits under it). What holds them equal now is the
-census arm, unit `vs` arm (k) in `core/fixtures/readset-skip/run.sh`, which byte-compares the two on every shape that
-has diverged and kills three one-side mutants. That is a detector, not a partition: a new shape neither side has
-seen can diverge, and the arm cannot see it until someone adds the shape.
+```
+H="$PWD/.githooks/pre-push"; [ -f "$H" ] || exit 9; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; W="$(mktemp -d)" || exit 9; sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$H" > "$W/pool.sh"; T="$W/t"; mkdir -p "$T/core/scripts" "$T/core/fixtures/gamma" "$W/tmp" "$W/o/.log" && printf 'exit 0\n' > "$T/core/fixtures/gamma/run.sh" && printf '#!/bin/bash\nsleep 600 </dev/null >/dev/null 2>&1 &\necho "$!" > "$RC_GC"; echo "$$" > "$RC_DP"\nwhile :; do sleep 1; done\n' > "$T/core/scripts/derive-fixture-readsets.sh" && git init -q "$T" && git -C "$T" add -A && git -C "$T" -c user.email=r@r -c user.name=r commit -qm s || exit 9; printf 'gamma\n' > "$W/o/.trace"; : > "$W/o/.trace.held"; printf ok > "$W/o/gamma"; printf '  ok\n' > "$W/o/.log/gamma"; export RC_GC="$W/gc" RC_DP="$W/dp" AI_DLC_READSET_LIVE_TRACE=1 AI_DLC_READSET_TRACE_CEILING=2 TMPDIR="$W/tmp/"; cd "$T" || exit 9; . "$W/pool.sh" 2>/dev/null; readset_live_trace "$W/o" >/dev/null 2>&1; i=0; while { [ ! -s "$W/gc" ] || [ ! -s "$W/dp" ]; } && [ "$i" -lt 50 ]; do sleep 0.1; i=$((i+1)); done; gc="$(cat "$W/gc" 2>/dev/null)"; dp="$(cat "$W/dp" 2>/dev/null)"; case "$gc$dp" in ''|*[!0-9]*) exit 9 ;; esac; kill -0 "$gc" 2>/dev/null || exit 9; lk="$GITDIR/ai-dlc-fixture-readsets.local.lock"; i=0; while [ -d "$lk" ] && [ "$i" -lt 150 ]; do sleep 0.1; i=$((i+1)); done; r=1; [ ! -d "$lk" ] && ! kill -0 "$gc" 2>/dev/null && ! kill -0 "$dp" 2>/dev/null && grep -qx 'exit timeout' "$READSET_LOCAL.status" && r=0; kill -KILL "$dp" "$gc" 2>/dev/null; exit "$r"
+```
 
-The fix is one function in a span both sides source, taking the fixture's declaration and a `.now` manifest and
-emitting the rows; the hook feeds it the manifest it already built, the runner feeds its own, and `hr_key_rows` and
-the hook's declared-row branch are deleted. The hook decides ~277 fixtures in one awk pass and the runner's
-`--key-only` costs ~2s per fixture, so the shared function must not re-hash per fixture.
+**Re-derived batch 220 (0.767.0 gate, then 0.768.0).** The 0.767.0 gate's line read **3 of 277 UNMAPPED**:
+`fixture-git-env-seam ledger-status-vocabulary validator-fork-budget`. `self-update-join-gate`, which no `git.decl`
+form can seed (it clones and walks 1483 commits of history), left the set because that gate's in-pool trace RECORDED
+it. 0.768.0 declares `fixture-git-env-seam` (`git.decl seed`; sandboxed rc 0, 21 arms; dropping its `!` input fails W
+and V) and `ledger-status-vocabulary` (`git.decl seed`; sandboxed rc 0, 11 assertions; dropping `templates/` fails I22
+and I119; stripping the sentinel fires `REQUIRED input … never consumed`). **`validator-fork-budget` stays
+undeclared**: sandboxed it counts 3327 forks against `FORK_BUDGET=3324`, unsandboxed 3323. Its headroom was 4 at
+0.766.0 (3320) and 0.767.0's `READSET_KEYROWS` sentinel arm in I66 spent 3 of them, so the budget is at its edge
+outside the sandbox too. The entry closes when that fixture leaves the UNMAPPED line, by a recorded trace or by a
+declaration whose sandboxed fork count fits the budget.
 
-verify: sh r=core/scripts/hermetic-run.sh; c="$(grep -v '^[[:space:]]*#' "$r")"; ! grep -q '^hr_key_rows()' "$r" && ! grep -q 'listing:' <<<"$c" && grep -q 'READSET_KEYROWS_BEGIN' <<<"$c" && grep -q '^# READSET_KEYROWS_BEGIN$' .githooks/pre-push && grep -q '^# READSET_KEYROWS_BEGIN$' core/git-hooks/pre-push && ! grep -q '\.drows' .githooks/pre-push && ! grep -q '\.drows' core/git-hooks/pre-push && grep -q '^readset_declared()' .githooks/pre-push && bash scripts/validate-enforcement-map.sh >/dev/null 2>&1
-
-**LANDED (v0.767.0, verified PENDING).**
-
-Shipped: a `READSET_KEYROWS` span carried executable-identical by both pre-push hooks (held by I66, hashed into
-`#universe`) owns the declaration parse (`readset_decl_parse`), the tool hashes (`readset_decl_tool_hashes`) and the
-key composition (`readset_decl_keys`, one awk pass over `.now` for every declared fixture). The hook's
-`readset_declared` is now the pre-pass that calls the span and words its refusals into `.dunres`; the decision awk
-reads a declared fixture's keys and values from `.dkeys`. `hermetic-run.sh` sources the span and `hr_key_rows` is
-deleted, so there is one key composer. The one behaviour change: a `lib//` line and a CRLF line are keyed the
-hook's way on both sides (CR stripped, every trailing `/` stripped); the runner went from 4 to 8 rows on `lib//`
-and from exit 2 to 5 rows on CRLF, the hook is unchanged, and `inputs.decl is empty` no longer fires beside
-`declared file absent`. The excluded-top premise expired: both sides already omitted a declared path under an
-excluded top, so omission is kept and the stale `hr_key_rows` header that claimed they differed is gone. The
-runner keeps a narrower `hr_parse_skew`, reached only when the hook carries no span (a consumer mid-pull); it
-writes no key row and turns the verdict store off for that run.
 
 ## BL-495 — fixtures declare whole directories as inputs, so one edit re-keys fixtures that may never read it
 

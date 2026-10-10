@@ -1,0 +1,9 @@
+# fixture-git-env-seam walks core/fixtures/ for the seam's population and drives scripts/validate-fixture-git-env.sh
+# (arms W and V); its audit-anchor and reconcile arms read the validator, schema and reconcile directory below.
+# The validator under test, REQUIRED: the sentinel prints in arm V where run.sh drives it on the shipping tree.
+!scripts/validate-fixture-git-env.sh
+core/fixtures/
+core/scripts/validate-audit-anchors.sh
+core/schemas/audit-anchors.json
+core/skills/ai-dlc-update/reconcile/
+VERSION

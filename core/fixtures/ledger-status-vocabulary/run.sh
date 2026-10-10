@@ -40,6 +40,7 @@ if [ ! -f "$VAL" ]; then
   echo "ledger-status-vocabulary: SKIP — validate-enforcement-map.sh is distribution-only and is not installed in a consumer tree."
   exit 0
 fi
+echo "HERMETIC-CONSUMED scripts/validate-enforcement-map.sh"
 REPO="$(cd "$(dirname "$VAL")/.." && pwd)"
 
 # The mutation surface is the working tree, so the copy is of TRACKED files at their working-tree

@@ -1345,6 +1345,156 @@ RT
       *) bad "(k) the launcher's lock is not the trace subshell's pid with its start time, HELD: '$RK' -- $(tr '\n' '/' < "$WORK/rto.k/pidfile" 2>/dev/null)" ;;
     esac
   fi
+  # (t) THE WALL-CLOCK CEILING. A consumer's detached trace outlived its push by 42 minutes holding a
+  # `log stream` per fixture. The real launcher is driven against a stub deriver that forks a sleeping
+  # GRANDCHILD (the `log stream` it stands for), writes its own pid, the grandchild's, a trace root and
+  # a map temp, and then sleeps forever (hang) or until told to finish (finish). Every liveness read is
+  # `kill -0` on a pid or group the subject or the stub RECORDED, each beside a LIVE control read in the
+  # same drive before the ceiling, never a process-table grep. The driver's wait is bounded; on expiry
+  # it reaps by those recorded groups and still scores, so a mutant that never kills cannot hang the shard.
+  #   (t1) hang, ceiling 3s: grandchild, deriver group and subshell group gone; status `exit timeout`;
+  #        lock released; trace root and map temp removed; map unchanged; report reads TIMED OUT
+  #   (t2) finish, ceiling 900s: the normal path -- `exit 0`, lock released, and group `$tp` empty,
+  #        which is the watchdog's `sleep` reaped (it is the only other member of that group)
+  #   (t3) hang, ceiling 900s, and a hand's `kill -TERM -- -<lock pid>`: the subshell forwards it to the
+  #        deriver's group, so the grandchild is gone too and the exit is written
+  LT_HANG='#!/bin/bash
+sleep 600 </dev/null >/dev/null 2>&1 &
+printf "%s\n" "$!" > "$STUB_GC"
+printf "%s\n" "$$" > "$STUB_SELF"
+mkdir -p "$AI_DLC_READSET_TRACE_ROOT"
+lm=""; while [ $# -gt 0 ]; do case "$1" in --local-map) lm="$2"; shift ;; esac; shift; done
+printf "partial\n" > "$lm.tmp.$$"
+if [ "$STUB_MODE" = hang ]; then while :; do sleep 1; done; fi
+i=0; while [ ! -f "$STUB_GO" ] && [ "$i" -lt 50 ]; do sleep 0.1; i=$((i+1)); done
+rm -f "$lm.tmp.$$"; kill "$(cat "$STUB_GC")" 2>/dev/null
+exit 0'
+  CT_DRIVER="$WORK/ct-driver.sh"
+  cat > "$CT_DRIVER" <<'CT'
+pool="$1"; t="$2"; o="$3"; ceil="$4"; mode="$5"; hk="$6"
+cd "$t" || exit 1
+mkdir -p "$o/tmp" "$o/.log"
+export STUB_GC="$o/gc" STUB_SELF="$o/self" STUB_GO="$o/go" STUB_MODE="$mode" AI_DLC_READSET_LIVE_TRACE=1 AI_DLC_READSET_TRACE_CEILING="$ceil" TMPDIR="$o/tmp/"
+. "$pool" 2>/dev/null
+printf 'gamma\n' > "$o/.trace"; : > "$o/.trace.held"
+printf ok > "$o/gamma"; printf '  ok    g\n' > "$o/.log/gamma"
+printf 'alpha\t#deriver\tseeded\n' > "$READSET_LOCAL"; cp "$READSET_LOCAL" "$o/map.before"
+lk="$GITDIR/ai-dlc-fixture-readsets.local.lock"
+al() { kill -0 -- "$1" 2>/dev/null && echo alive || echo gone; }
+readset_live_trace "$o" > "$o/msg" 2>&1
+tp="$(sed -n 1p "$lk/pid" 2>/dev/null | cut -d' ' -f1)"
+i=0; while { [ ! -s "$o/gc" ] || [ ! -s "$o/self" ] || ! ls "$READSET_LOCAL".tmp.* >/dev/null 2>&1; } && [ "$i" -lt 50 ]; do sleep 0.1; i=$((i+1)); done
+gc="$(cat "$o/gc" 2>/dev/null)"; dp="$(cat "$o/self" 2>/dev/null)"
+tr="$(ls -d "$o/tmp/"ai-dlc-readset-live.* 2>/dev/null)"
+case "$tp" in ''|*[!0-9]*) tp=0 ;; esac; case "$dp" in ''|*[!0-9]*) dp=0 ;; esac; case "$gc" in ''|*[!0-9]*) gc=0 ;; esac
+printf '%s,%s,%s,%s,%s' "$(al "-$tp")" "$(al "-$dp")" "$(al "$gc")" "$([ -n "$tr" ] && [ -d "$tr" ] && echo tr || echo notr)" \
+  "$(ls "$READSET_LOCAL".tmp.* >/dev/null 2>&1 && echo tmp || echo notmp)" > "$o/live"
+[ "$hk" = hk ] && kill -TERM -- "-$tp" 2>/dev/null
+[ "$mode" = finish ] && : > "$STUB_GO"
+n=$(( (ceil > 20 ? 4 : ceil + 8) * 10 )); i=0
+while [ -d "$lk" ] && [ "$i" -lt "$n" ]; do sleep 0.1; i=$((i+1)); done
+sleep 0.2
+printf '%s,%s,%s,%s,%s,%s,%s' "$([ -d "$lk" ] && echo held || echo released)" "$(al "-$tp")" "$(al "-$dp")" "$(al "$gc")" \
+  "$([ -n "$tr" ] && [ -d "$tr" ] && echo tr || echo notr)" "$(ls "$READSET_LOCAL".tmp.* >/dev/null 2>&1 && echo tmp || echo notmp)" \
+  "$(cmp -s "$o/map.before" "$READSET_LOCAL" && echo same || echo moved)" > "$o/after"
+sed -n 's/^exit //p' "$READSET_LOCAL.status" 2>/dev/null > "$o/exit"
+readset_trace_report "" > "$o/rep" 2>&1
+# REAP BY RECORDED PID AND GROUP ONLY. A mutant may have left all three alive; the kill is not scored.
+[ "$dp" != 0 ] && kill -KILL -- "-$dp" 2>/dev/null; [ "$gc" != 0 ] && kill -KILL "$gc" 2>/dev/null
+[ "$tp" != 0 ] && kill -KILL -- "-$tp" 2>/dev/null
+:
+CT
+  seed_ct() { # <t>: seed() plus the TRACKED hanging stub deriver
+    seed "$1" || return 1
+    mkdir -p "$1/core/scripts" && printf '%s\n' "$LT_HANG" > "$1/core/scripts/derive-fixture-readsets.sh" || return 1
+    ( cd "$1" && git add -A && git -c user.email=f@f -c user.name=f commit -qm hang ) >/dev/null 2>&1
+  }
+  ct_drive() { # <pool> <name> <ceiling> <hang|finish> [hk]; prints "<live>|<after>|<exit>|<report>"
+    local t="$WORK/ct.$2" o="$WORK/cto.$2" rp
+    seed_ct "$t" || { printf 'SEED FAILED'; return 1; }
+    mkdir -p "$o"
+    bash "$CT_DRIVER" "$1" "$t" "$o" "$3" "$4" "${5:-}" > "$o/driver.out" 2>&1
+    rp=other
+    grep -qF 'TIMED OUT at the 3s ceiling' "$o/rep" 2>/dev/null && grep -qF 'WARN  trace-report warning: the last trace TIMED OUT' "$o/rep" && rp=timed
+    grep -qF 'finished, exit timeout' "$o/rep" 2>/dev/null && rp=finished-timeout
+    grep -qF 'finished, exit 0' "$o/rep" 2>/dev/null && rp=finished-0
+    printf '%s|%s|%s|%s' "$(cat "$o/live" 2>/dev/null)" "$(cat "$o/after" 2>/dev/null)" "$(cat "$o/exit" 2>/dev/null)" "$rp"
+  }
+  # (t4) THE WATCHDOG'S SLEEP ON A FAST TRACE. A deriver that exits at once has the subshell stop the
+  # watchdog while it is still starting its `sleep`; a trap that read a saved pid found it empty there
+  # and left the sleep reparented to init for the whole ceiling. The leaked sleep keeps its process
+  # group, so `kill -0 -- -<trace pid>` once that pid is gone reads it directly: the group must empty.
+  # The trace pid is the status file's `pid`, written by the subject. Measured on the unfixed trap with
+  # this drive: 7 of 40 launches leaked (17.5%). FX_REPS clean launches are required of the fix; the
+  # mutant drive stops at its first leak and gives up after FX_MREPS, so at 17.5% it misses with
+  # probability 0.825^60, about 1e-5. Control, same drive: a group this driver started under `set -m`
+  # reads alive by the same `kill -0 -- -<pgid>` before it is killed by that pgid.
+  FX_REPS=30; FX_MREPS=60
+  FX_DRIVER="$WORK/fx-driver.sh"
+  cat > "$FX_DRIVER" <<'FX'
+pool="$1"; t="$2"; o="$3"; reps="$4"; stop1="$5"
+cd "$t" || exit 1
+mkdir -p "$o/tmp" "$o/.log"
+export AI_DLC_READSET_LIVE_TRACE=1 AI_DLC_READSET_TRACE_CEILING=777 TMPDIR="$o/tmp/"
+. "$pool" 2>/dev/null
+lk="$GITDIR/ai-dlc-fixture-readsets.local.lock"
+set -m; sleep 30 </dev/null >/dev/null 2>&1 & cg=$!; set +m
+if kill -0 -- "-$cg" 2>/dev/null; then ctl=alive; else ctl=dead; fi
+kill -- "-$cg" 2>/dev/null; wait "$cg" 2>/dev/null
+ran=0; leaks=0; fin=0; i=0
+while [ "$i" -lt "$reps" ]; do
+  i=$((i + 1))
+  printf 'gamma\n' > "$o/.trace"; : > "$o/.trace.held"; printf ok > "$o/gamma"; printf '  ok    g\n' > "$o/.log/gamma"
+  rm -f "$READSET_LOCAL.status"
+  readset_live_trace "$o" > "$o/msg" 2>&1
+  grep -q 'started detached' "$o/msg" || continue
+  ran=$((ran + 1))
+  j=0; while [ -d "$lk" ] && [ "$j" -lt 100 ]; do sleep 0.05; j=$((j + 1)); done
+  tp="$(sed -n 's/^pid //p' "$READSET_LOCAL.status" 2>/dev/null)"
+  case "$tp" in ''|*[!0-9]*) continue ;; esac
+  grep -qx 'exit 0' "$READSET_LOCAL.status" && fin=$((fin + 1))
+  j=0; while kill -0 "$tp" 2>/dev/null && [ "$j" -lt 100 ]; do sleep 0.05; j=$((j + 1)); done
+  j=0; while kill -0 -- "-$tp" 2>/dev/null && [ "$j" -lt 40 ]; do sleep 0.05; j=$((j + 1)); done
+  if kill -0 -- "-$tp" 2>/dev/null; then
+    leaks=$((leaks + 1))
+    kill -- "-$tp" 2>/dev/null
+    [ "$stop1" = 1 ] && break
+  fi
+done
+printf '%s|%s|%s|%s|%s' "$ctl" "$i" "$ran" "$fin" "$leaks" > "$o/res"
+FX
+  seed_fx() { # <t>: seed() plus a TRACKED deriver stub that exits at once
+    seed "$1" || return 1
+    mkdir -p "$1/core/scripts" && printf '#!/bin/bash\nexit 0\n' > "$1/core/scripts/derive-fixture-readsets.sh" || return 1
+    ( cd "$1" && git add -A && git -c user.email=f@f -c user.name=f commit -qm fast ) >/dev/null 2>&1
+  }
+  fx_drive() { # <pool> <name> <reps> <stop at first leak: 0|1>; prints "<control>|<reps>|<started>|<exit 0>|<leaks>"
+    local t="$WORK/fx.$2" o="$WORK/fxo.$2"
+    seed_fx "$t" || { printf 'SEED FAILED'; return 1; }
+    mkdir -p "$o"
+    bash "$FX_DRIVER" "$1" "$t" "$o" "$3" "$4" > "$o/driver.out" 2>&1
+    cat "$o/res" 2>/dev/null
+  }
+  RT4="$(fx_drive "$POOL" t4 "$FX_REPS" 0)"; lt_arm
+  case "$RT4" in
+    "alive|$FX_REPS|$FX_REPS|$FX_REPS|0") ok "(t4) $FX_REPS fast traces (deriver exits at once, ceiling 777s): every one finished exit 0 and its process group was empty once its pid was gone -- the watchdog's sleep was never left behind (control: a live group read alive)" ;;
+    *) bad "(t4) a fast trace left its watchdog's sleep alive, or the drive did not run: control|reps|started|exit0|leaks = '$RT4'" ;;
+  esac
+  CT_LIVE='alive,alive,alive,tr,tmp'
+  CT_T1="$CT_LIVE|released,gone,gone,gone,notr,notmp,same|timeout|timed"
+  RT1="$(ct_drive "$POOL" t1 3 hang)"; lt_arm
+  [ "$RT1" = "$CT_T1" ] && ok "(t1) at a 3s ceiling a hung deriver's GRANDCHILD, its group and the subshell's group are gone (each alive in the same drive before it), status reads exit timeout, the lock is released, the trace root and map temp are removed, the map is unchanged, and the report says TIMED OUT" \
+    || bad "(t1) the ceiling did not end a hung trace cleanly: want '$CT_T1', got '$RT1'"
+  RT2="$(ct_drive "$POOL" t2 900 finish)"; lt_arm
+  case "$RT2" in
+    "$CT_LIVE|released,gone,gone,gone,notr,notmp,same|0|finished-0") ok "(t2) at a 900s ceiling the normal finish is unchanged: exit 0, lock released, and group \$tp is empty -- the watchdog's sleep was reaped, not left for 900s" ;;
+    *) bad "(t2) the normal finish changed under the ceiling: '$RT2'" ;;
+  esac
+  RT3="$(ct_drive "$POOL" t3 900 hang hk)"; lt_arm
+  case "$RT3" in
+    "$CT_LIVE|released,gone,gone,gone,notr,notmp,same|"[0-9]*"|"*) ok "(t3) a hand's kill -TERM of the lock's group is forwarded to the deriver's group: the grandchild is gone, the exit is written and the lock released" ;;
+    *) bad "(t3) a TERM to the lock's group left the deriver or its child running, or wrote no exit: '$RT3'" ;;
+  esac
 fi
 
 # MUTANTS of the block, each a count-checked literal edit of a copy, scored by the arm's own predicate.
@@ -1738,6 +1888,50 @@ case "$RP_R6" in
   *"trace-report last trace: RUNNING since "*"pid $LOCKPID; no status file"*) ok "(r6) a live lock with no status file (an older hook's trace) still reads RUNNING, and says the status file is absent" ;;
   *) bad "(r6) a running trace with no status file was not reported: $(tr '\n' '|' <<< "$RP_R6")" ;;
 esac
+# (r9)-(r12) THE STOP LINE. A deriver group the status file names, still alive, with no exit: the report
+# prints the command that ends it when the trace subshell is gone (r9) or the trace is past its
+# ceiling (r10), and stays quiet for a live trace inside its ceiling (r11) and for a deriver group that
+# is already gone (r12). The live group is a `sleep` this fixture started under `set -m` and kills by
+# its recorded group on exit; the dead pid is a child that has already been reaped.
+set -m; sleep 600 </dev/null >/dev/null 2>&1 & SDG=$!; set +m
+trap 'kill '"$LOCKPID"' 2>/dev/null; kill -- -'"$SDG"' 2>/dev/null; rm -rf "$WORK"' EXIT
+sh -c 'exit 0' & SDEAD=$!; wait "$SDEAD"
+kill -0 -- "-$SDG" 2>/dev/null || broken "the stop-line worlds' live group -$SDG is not alive"
+kill -0 "$SDEAD" 2>/dev/null && broken "the stop-line worlds' dead pid $SDEAD is alive"
+RP_STOP="stop it with: kill -TERM -- -$SDG"
+rp_stop_world() { # <pool> <name> <status pid> <deriver> <ceiling> <age>
+  rp_world "$1" "$2" "printf 'start %s\npid %s\nlist gamma\nderiver %s\nceiling %s\n' \"\$((\$(date +%s) - $6))\" $3 $4 $5 > \"\$RL.status\""
+}
+RP_R9="$(rp_stop_world "$POOL" r9 "$SDEAD" "$SDG" 900 5)"; lt_arm
+case "$RP_R9" in
+  *"deriver group $SDG is still running and its trace subshell (pid $SDEAD) is gone; $RP_STOP"*) ok "(r9) a live deriver group whose trace subshell is gone: one WARN line naming kill -TERM -- -<deriver pgid>" ;;
+  *) bad "(r9) an orphaned deriver group was not named with its stop command: $(tr '\n' '|' <<< "$RP_R9")" ;;
+esac
+RP_R10="$(rp_stop_world "$POOL" r10 "$LOCKPID" "$SDG" 10 100)"; lt_arm
+case "$RP_R10" in
+  *"deriver group $SDG is still running and it has run "*"s, past its 10s ceiling; $RP_STOP"*) ok "(r10) a live trace past its ceiling plus grace: the same line, naming the overrun" ;;
+  *) bad "(r10) a trace past its ceiling was not named with its stop command: $(tr '\n' '|' <<< "$RP_R10")" ;;
+esac
+RP_R11="$(rp_stop_world "$POOL" r11 "$LOCKPID" "$SDG" 900 5)"; lt_arm
+case "$RP_R11" in
+  *"stop it with:"*) bad "(r11) a live trace inside its ceiling was told to stop: $(tr '\n' '|' <<< "$RP_R11")" ;;
+  *"trace-report last trace: started"*) ok "(r11) near-miss: a live trace inside its ceiling gets no stop line" ;;
+  *) bad "(r11) the near-miss report printed no last-trace line: $(tr '\n' '|' <<< "$RP_R11")" ;;
+esac
+RP_R12="$(rp_stop_world "$POOL" r12 "$SDEAD" "$SDEAD" 900 5)"; lt_arm
+case "$RP_R12" in
+  *"stop it with:"*) bad "(r12) a deriver group that is already gone was told to stop: $(tr '\n' '|' <<< "$RP_R12")" ;;
+  *"DIED without writing its exit"*) ok "(r12) near-miss: a gone deriver group gets no stop line (the trace still reads DIED)" ;;
+  *) bad "(r12) the near-miss report did not read DIED: $(tr '\n' '|' <<< "$RP_R12")" ;;
+esac
+if PM_FN=readset_trace_report pm_copy nostop 1 '[ -n "$why" ] && printf' '[ -n "$why" ] && false && printf'; then
+  lt_arm; R="$(rp_stop_world "$PM" pm.nostop "$SDEAD" "$SDG" 900 5)"
+  case "$R" in
+    *"$RP_STOP"*) bad "MUTANT nostop SURVIVED (r9)" ;;
+    *"trace-report last trace: started"*"DIED"*) ok "MUTANT nostop (the stop line dropped) is KILLED by (r9)" ;;
+    *) bad "MUTANT nostop: the copy printed no report -- NO VERDICT: $(tr '\n' '|' <<< "$R")" ;;
+  esac
+fi
 # THE CALL SITE: run_fixtures prints the report on a push that runs the suite, before the suite runs.
 rp_run() { # <pool> <name>; prints the run's output
   local p="$1" t="$WORK/rpr.$2"
@@ -1779,6 +1973,46 @@ if pm_copy noreport 1 '  readset_trace_report "$out"' '  :'; then
   if rp_called "$R"; then bad "MUTANT noreport SURVIVED (r7)"
   elif grep -q '^  *ok  *alpha' <<< "$R"; then ok "MUTANT noreport is KILLED by (r7): the suite ran and no report preceded it"
   else bad "MUTANT noreport: the copy never ran the suite -- NO VERDICT"; fi
+fi
+# MUTANTS of the ceiling, each driven through (t1)'s world and scored on the (t1) field it must move.
+# A drive whose LIVE control did not read alive is no verdict: the stub never ran under that copy.
+ct_mut() { # <name> <want: a glob over (t1)'s result>
+  local r; lt_arm
+  r="$(ct_drive "$PM" "pm.$1" 3 hang)"
+  case "$r" in
+    "$CT_LIVE|"*) ;;
+    *) bad "CEILING MUTANT $1: the live control did not read alive -- NO VERDICT: '$r'"; return ;;
+  esac
+  if [ "$r" = "$CT_T1" ]; then bad "CEILING MUTANT $1 SURVIVED (t1): '$r'"
+  else case "$r" in
+    $2) ok "CEILING MUTANT $1 is KILLED by (t1): '$r'" ;;
+    *) bad "CEILING MUTANT $1 moved (t1) but not as expected: '$r'" ;;
+  esac; fi
+}
+if [ "$LT_CAN" = 1 ]; then
+  # the ceiling never armed: the watchdog sleeps far past it.
+  # the watchdog's old trap, which kills the pid it saved and races the save.
+  if PM_FN=readset_live_trace pm_copy oldtrap 1 "    ( trap 'kill \$(jobs -p) 2>/dev/null; exit 0' TERM" "    ( s=\"\"; trap '[ -n \"\$s\" ] && kill \"\$s\" 2>/dev/null; exit 0' TERM"; then
+    lt_arm; R="$(fx_drive "$PM" pm.oldtrap "$FX_MREPS" 1)"
+    case "$R" in
+      alive\|*\|*\|*\|0) bad "CEILING MUTANT oldtrap SURVIVED (t4) over $FX_MREPS fast traces: '$R'" ;;
+      alive\|*) ok "CEILING MUTANT oldtrap (the trap kills a saved pid) is KILLED by (t4): a fast trace left its sleep in the group: '$R'" ;;
+      *) bad "CEILING MUTANT oldtrap: the control did not read alive -- NO VERDICT: '$R'" ;;
+    esac
+  fi
+  PM_FN=readset_live_trace pm_copy noceil 1 '      sleep "$cl" & s=$!; wait "$s"' '      sleep 600 & s=$!; wait "$s"' \
+    && ct_mut noceil "$CT_LIVE|held,alive,alive,alive,*"
+  # every kill aimed at the deriver's PID, not its group -- all four sites, TERM, the grace probe, KILL
+  # and the forwarded TERM, so no group kill is left to cover for the others.
+  PM_FN=readset_live_trace pm_copy pidonly 4 '-- "-$dp"' '"$dp"' \
+    && ct_mut pidonly "$CT_LIVE|released,gone,*,alive,*|timeout|*"
+  # the lock never released after the trace.
+  PM_FN=readset_live_trace pm_copy nolock 1 '    rm -f "$lk/pid"; rmdir "$lk" 2>/dev/null || { sleep 1; rm -f "$lk/pid"; rmdir "$lk" 2>/dev/null; }' '    :' \
+    && ct_mut nolock "$CT_LIVE|held,gone,gone,gone,*"
+  # D1: a timed-out trace reported as an ordinary finish -- both layers, the state line and the WARN.
+  PM_FN=readset_trace_report pm_copy asfinish 1 '  if [ "$s_exit" = timeout ]; then' '  if false; then' \
+    1 '      else if (ENVIRON["RS_FIN"] == "timeout") printf' '      else if (0) printf' \
+    && ct_mut asfinish "$CT_LIVE|released,gone,gone,gone,notr,notmp,same|timeout|finished-timeout"
 fi
 
 fi

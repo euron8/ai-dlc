@@ -1,0 +1,2 @@
+# `seed`: run.sh refuses a root that is not a git checkout and builds its copies from `git ls-files`.
+seed
