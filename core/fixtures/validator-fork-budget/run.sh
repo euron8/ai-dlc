@@ -72,6 +72,7 @@ fi
 PROFILER="$REPO/scripts/fork-profile.sh"
 VAL="$REPO/scripts/validate-enforcement-map.sh"
 [ -f "$VAL" ] || { echo "FIXTURE ERROR: missing $VAL" >&2; exit 2; }
+echo "HERMETIC-CONSUMED scripts/validate-enforcement-map.sh"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT

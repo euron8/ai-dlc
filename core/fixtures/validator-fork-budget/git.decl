@@ -1,0 +1,3 @@
+# `seed`: the validator reads git's index (I14 and I13 skip an untracked hook, I77 enumerates tracked modes) and I118
+# requires the read-set map wherever `.git` exists, so an unseeded sandbox runs different arms and forks a different count.
+seed

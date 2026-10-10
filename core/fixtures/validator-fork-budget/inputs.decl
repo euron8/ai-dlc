@@ -1,0 +1,18 @@
+# validator-fork-budget profiles scripts/validate-enforcement-map.sh through scripts/fork-profile.sh, so its read set
+# is the validator's whole read set plus the profiler's. The roots are derived from the validator's own `$REPO_ROOT/...`
+# reads: core/, scripts/, .githooks/ and templates/ (as enforcement-map-derivations), patterns/, .claude/rules/ and
+# CLAUDE.md (the I108/I121/I122/I123 corpus walks), and the committed read-set map (I118, which errs on a missing map
+# in a tree that is a repository). A root left out does not fail the run: each arm's absent-root fallback forks a
+# different number of times, so the fixture would measure a different program and still print PASS.
+# The validator under test, REQUIRED: run.sh prints the sentinel once it has located it.
+!scripts/validate-enforcement-map.sh
+# The profiler walks up from itself for VERSION; the renderer it calls for the arm map does the same.
+VERSION
+scripts/
+.githooks/
+templates/
+core/
+patterns/
+.claude/rules/
+CLAUDE.md
+.ai-dlc-fixture-readsets.tsv

@@ -5491,7 +5491,7 @@ vs_world() { # <pool> <fixture root> <runner file> <t>: one vector
 VS_WANT='rcd=0 rcb=1 rcn=1 rcu=2 a=skip/run/run/run n=1 ann=1 b=run t=run/run g=run/run/skip/skip/run/skip e=run/run/run/skip d=run/run/skip f=0/0/intact p=run/run/1/0'
 # (v) THE SPAN CANNOT GO VACUOUS: the digested runner span is non-empty and still holds the env -i line and the copy loop.
 VS_ARMS=$((VS_ARMS+1)); sed -n '/^# HR_SANDBOX_BEGIN$/,/^# HR_SANDBOX_END$/p' "$VS_RUN" > "$WORK/vs.span"
-if [ "$(grep -c . "$WORK/vs.span")" -gt 50 ] && grep -qF 'env -i PATH=' "$WORK/vs.span" && grep -qF 'cp -Rp "$HR_FXDIR"' "$WORK/vs.span" \
+if [ "$(grep -c . "$WORK/vs.span")" -gt 50 ] && grep -qF 'env -i PATH=' "$WORK/vs.span" && grep -qF 'cp -Rp "$HR_FXDIR/."' "$WORK/vs.span" \
    && grep -qF 'REQUIRED input' "$WORK/vs.span" && ! grep -qF 'hr_store_put' "$WORK/vs.span"; then ok "(verdict store, v) the HR_SANDBOX span is non-empty, holds the env -i invocation, the copy loop and the REQUIRED check, and no store code"
 else bad "(verdict store, v) the HR_SANDBOX span is empty, lost the env -i line, the copy or the REQUIRED check, or holds store code"; fi
 VS_N=0
