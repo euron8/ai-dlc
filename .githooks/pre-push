@@ -1414,7 +1414,7 @@ readset_tools() { # <out>
 # `mapper `), so the hermetic runner reports the refusal (exit 2). The record format is unchanged (`#format k1`).
 readset_declared() { # <list> <out>
   local list="$1" out="$2" d b p lay mp="" xp xpd
-  : > "$out/.dparse"; : > "$out/.dfx"; : > "$out/.dunres"; : > "$out/.dkeys"
+  : > "$out/.dparse"; : > "$out/.dfx"; : > "$out/.dunres"; : > "$out/.dkeys"; : > "$out/.dtools"
   lay=cons; [ -d core/scripts ] && lay=dist
   for p in scripts/ai-dlc/core-paths.sh core/scripts/core-paths.sh; do [ -f "$p" ] && { mp="$p"; break; }; done
   xp="$READSET_TOOL_XP"; [ -n "$xp" ] || xp="$(readset_git_exec_path)"; xpd="$xp:$READSET_TOOL_DIRS"
@@ -1433,6 +1433,8 @@ readset_declared() { # <list> <out>
     $3 == "absf" { print $1 "\tdeclared file absent " $4; next }
     $3 == "dup" { print $1 "\tduplicate basename " $4; next }
     { print $1 "\t" $4 }' "$out/.dparse" > "$out/.dunres"
+  # `.dtools` (`<fx>\t<tool path>`) is a VIEW of the parse for diagnostics and probes; the decision reads `.dkeys`.
+  awk -F'\t' '$2 == "T" { print $1 "\t" $3 }' "$out/.dparse" > "$out/.dtools"
   readset_decl_tool_hashes "$out/.dparse" "$out/.tools"
   readset_decl_keys "$out/.now" "$out/.ls.now" "$out/.dparse" "$out/.tools" "$FXROOT" > "$out/.dkeys"
 }

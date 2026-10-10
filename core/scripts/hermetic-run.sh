@@ -42,9 +42,12 @@
 # the hook's own: this script sources the READSET_UNIVERSE span out of the pre-push hook beside it
 # (the same span derive-fixture-readsets.sh sources) and takes its paths from readset_manifest, so
 # the content key's excluded tops, git-ignored paths and deleted-but-tracked names are treated
-# exactly as the hook treats them. The hook derives the identical rows from the declaration in
-# `readset_keys`; the self-probe fixture asserts the two agree byte-for-byte, because two
-# implementations of one key drift. A run with no hook to source is exit 2, key-only or not: the tool
+# exactly as the hook treats them. The rows are composed by ONE implementation: the hook's
+# READSET_KEYROWS span (readset_decl_parse, readset_decl_keys), sourced here and called by the hook
+# over its whole declared set, so there is no second composer to drift. A declared path absent from
+# the manifest (an excluded top, a git-ignored file) has no row on either side. A hook with no
+# KEYROWS span (version skew mid-pull) is `--key-only` exit 2; a sandbox run still runs the fixture,
+# with the verdict store OFF. A run with no hook to source is exit 2, key-only or not: the tool
 # dirs and the unkeyed-tool vocabulary come from the hook's READSET_TOOLS span, so there is no copy of
 # them here to drift.
 #
