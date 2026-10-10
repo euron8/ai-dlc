@@ -134,6 +134,11 @@ set -uo pipefail
 # `fixture git-env scrub` gate phase exist for exactly this class on the fixture side; this
 # program is not a fixture and had no such carrier.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+# AND THE CALLER'S `git -c` SETTINGS. git exports them to every hook child as GIT_CONFIG_PARAMETERS
+# (and GIT_CONFIG_COUNT/KEY_n/VALUE_n), which override every repository's own config -- so a push run
+# as `git -c core.hooksPath=X push` set X in the probe repository below, its post-checkout never ran,
+# and the BL-906 arm read PROSE-CLOSABLE: a false red on a clean tree.
+unset GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT
 
 # ---------------------------------------------------------------------------
 # THE PATH-SPLIT CHARACTER CLASS. This is the ONE grammar in this file that also exists

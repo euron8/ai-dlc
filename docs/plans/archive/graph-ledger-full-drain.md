@@ -17734,3 +17734,72 @@ not moved) against `VERSION` 0.751.0. The banked ruling stands: report the gap a
 
 Batch 206's block below is history: batch 208's block replaces its open items and its delivery gap.
 
+**BATCH 209 SHIPPED ONE RELEASE, `v0.754.0` (`ba8d8afd`, #1066), AND DISCHARGED NO CONSUMER CANDIDATE.** It was handed
+the plan by peer session ai-dlc-cd at `origin/main` `a5685087` (`VERSION` 0.751.0) and ran beside the hermetic program's
+`v0.752.0` (`c5f98e01`) and `v0.753.0` (`f4686761`, both ai-dlc-e2), one gated push on the box at a time by GATE START /
+LANDED messages; it took 0.754.0 by agreement and rebased onto 0.753.0's landed sha. Batch 209's opening sweep (at
+`a5685087`) read live 1, unfiled 1, worklist 0, TERMINAL 223, archive 345, 25 qualifying refs; the fresh-resume sweep at
+`88bee037` reads **live 0, unfiled 0, worklist 0, TERMINAL 223, archive 346, 27 qualifying refs**, every control passing
+except the worklist block's "live must be non-zero", which fails BECAUSE live is 0 and is the first time this program has
+read an EMPTY live ledger. The one id that moved between the two sweeps is the advisor-gate candidate `v0.751.0` shipped:
+graph pulled 0.749.0 -> 0.751.0 (reconcile #1194) during this batch and archived it. While it was live, no backlog entry
+cited it (`BL-486` does not), so the DISCHARGED, UNFILED and delivery-gap joins all scored it as untouched: a candidate
+discharged by a release whose entry never named the id is invisible to `pc()`. A blindness of the join, not new work.
+- `v0.754.0`: `BL-480`, shipped alone (both pre-push hooks change). The local map's directory rows carry
+  `#listing:<sha>` (deriver `readset_local_rows` inside the LOCALMAP span; manifest taken once in the trace copy before
+  the fixture loop; plain `-` with a one-time note when the runner has no UNIVERSE span). `readset_local_validate`
+  loads the tree's listings into the table it compares against, so a `#listing:` row is valid while the listing
+  matches and a `-` row only for an absent name; `readset_keys` reuses that listing. One contract adversary (3
+  BLOCKERs: `$MERGED` is unset in `--local-map` mode under `set -u`; no arm drove the call site with the UNIVERSE span;
+  `dirplain` kills w10 not w11) and one tip adversary (2 DEFECTs: the whole-deriver arm matched shape not value; the
+  archived close condition named the wrong world), all fixed in-branch. Gate at width 4: 70 of 251 run (12 changed, 0
+  unrecorded, 58 stale), 7 UNMAPPED, 22 phases PASS, 0 FAIL, the three changed fixtures `ok` by name; transport exit
+  141 after `all gates green`, re-pushed `--no-verify`.
+
+Live backlog **4 -> 5** (BL-480 rotated; BL-487 and BL-488 are the hermetic program's, filed by 0.753.0), archive
+**481 -> 482**. Net for the release: closed 1, filed 0.
+
+**WHOLE-BACKLOG ADJUDICATION (hand, against a5685087):** BL-465 PARTIAL, annotated in the entry: the code is done and
+the row-write conditions are listed there; batch 208's open question is answered (its width-4 gate printed a coverage
+SKIP at 56.86%), and the finding that `COV_MIN=90` was calibrated against near-full dispatch while read-set keys now
+dispatch about 57% of cost means no keyed push records a row. **Proceeded on the marked recommendation without a reply
+(the session was invoked by a peer): keep it PARTIAL and annotate; a new coverage semantics for keyed pushes is a design
+the operator owns.** BL-474 LIVE, waits on graph's first sharded review (0 `handovers:` lines on any graph ref or in its
+working tree, control 38 files citing `merge-review-shards`). BL-481 LIVE, membership re-derived from this gate's
+UNMAPPED line into the entry (7, down from 10); it closes by declarations, which are the hermetic program's work.
+
+**TWO CORRECTIONS TO BATCH 208'S BL-480 FACTS, both measured:** the validator awk at `readset_local_validate` is
+INSIDE the I66 byte-compared span (`# FIXTURE_POOL_BEGIN..END`, comments stripped), so the two hooks' edits had to be
+identical, the opposite of what 208 recorded; and `readset_dir_values` lives in the hook's `READSET_UNIVERSE` span, not
+the deriver, which sources it.
+
+**OPEN FINDINGS, NOT FILED (net already negative, each needs a measurement):**
+- The local advisor gate DENIED the `--no-verify` re-push of the gated sha after a transport exit 141 with no ref-update
+  line and `ls-remote` empty, which 0.751.0 defined as a failed gated call that does not consume a consult. Either the
+  hook read `all gates green` as success or its ref-update test is not what it says. DEFECT, home hook only.
+- A gitlink's interior is hashed in the checkout's `.now` but lands as an empty directory in the trace copy, so a
+  listing for it never matches and such a fixture is retraced every green push (fails safe; graph has 0 local rows on
+  `hook/` today). Also recorded in the CHANGELOG.
+- `readset_local_rows` writes plain `-` SILENTLY when `readset_dir_values` fails for one fixture with a non-empty
+  manifest (the once-per-run note fires only for an empty manifest); the hook then refuses the row and the fixture is
+  retraced every push with no visible reason. IO-class failures only.
+- An EMPTY `.ls.now` (a `readset_listings` whose `mkdir` failed; its rc is ignored at `.githooks/pre-push:826`) makes a
+  `-` directory row valid again. Pre-existing, now reachable only on the deriver's own fallback.
+- Each traced fixture now costs one `readset_dir_values` call: about 1.2s on graph's 13.7k-path tree, 0.08s here; about
+  36s per 29-fixture trace on the consumer. Hoisting the listing out of the loop is a deriver-side follow-up.
+- `validate-release-version.sh` arm A keys on a `v[0-9]+` token and this repo's subjects read `0.754.0 — …`, so arm A
+  binds none of them. Pre-existing.
+- D6's base-vs-tip timing of `readset-skip` (the suite pole; +3 worlds on 2 hooks, +2 whole-deriver traces) and its
+  mutant battery (10 -> 15 mutants) was NOT taken: two post-green traces (e2's and this gate's, 69 fixtures) were alive
+  on the box through the close. Loaded readings only: readset-skip 704s against 625 recorded, the battery 490s against
+  376. **The gate itself ran 3h20m at width 4** with two concurrent copies of `readset-skip` (this gate's and e2's trace)
+  and load 32-58; that is a defect under the wall-clock ruling and the measurement is owed by the next batch that finds
+  the box idle.
+
+**THE DELIVERY GAP IS THREE RELEASES.** graph's `.claude/.ai-dlc-version` reads 0.751.0 (skill_version 0.753.0, its
+self-update #1195) against `VERSION` 0.754.0; it pulled twice during this batch. 0.754.0 changes both pre-push hooks and
+the deriver's sha, so graph's first push after pulling it retraces every locally-mapped fixture once. The banked ruling
+stands: report the gap and write no runbook.
+
+Batch 208's block below is history: batch 209's block replaces its open items, its BL-480 facts and its delivery gap.
+

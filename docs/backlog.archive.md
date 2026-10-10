@@ -31994,3 +31994,44 @@ S2 receipt, the fixture-write rule. It runs the fixture's own `wsig` over the sh
 f=core/fixtures/self-update-fixture-log/run.sh; s=core/skills/ai-dlc-update/SKILL.md; [ -f "$f" ] && [ -f "$s" ] || exit 9; eval "$(awk '/^w_flat\(\) \{/,/^\}$/' "$f")"; eval "$(awk '/^wsig\(\) \{/,/^\}$/' "$f")"; command -v wsig >/dev/null || exit 9; [ "$(wsig "$s")" = "1-1-1-1-1-1-1" ]
 ```
 
+## BL-494 — the advisor gate denied a push whose own message carried the advisor call, and looped
+
+**DEFECT.** Filed by the consumer as `PC-S317-ADVISOR-GATE-DENIES-A-PUSH-AFTER-AN-ADVISOR-CALL-IN-ITS-OWN-MESSAGE-AND-LOOPS`.
+graph's lead was denied `git push -u origin HEAD --no-verify`, called the advisor in the next message
+beside the retry, and was denied again; a later `grep -E` over the ledger was denied as a push. The
+consumer's premise that the advisor sat in its "own message" is false (the retry shares one `message.id`
+with its advisor call); the deny was real. Two root causes, measured on graph's transcript by replay:
+
+- **R1, the same-message race.** The advisor line landed more than 2s after PreToolUse fired, and the
+  hook's fixed 2 x 1s re-read expired before it did (pushes at transcript lines 726, 816 and 879).
+- **R2, the classifier.** `segs` split on `|` inside a quoted alternation, so `grep -n -E
+  'X|git push -u origin HEAD --no-verify|Y' f` was scored a push (line 766; 4 rows in graph's 94,498
+  Bash calls).
+
+Operator ruling, batch 218: "the push hook must loosen its advisor requirement". Four changes in
+`core/hooks/ai-dlc-advisor-gate.sh`, each with a world and a control in `core/fixtures/advisor-gate-deny`
+and a mutant in the `advisor-gate-deny-mutants*` battery:
+
+- **F1** `qmask` before `segs`: a quoted string holding a separator is one word, a heredoc body is
+  data, and a quote after a `-c` flag is kept (it may be a `bash -c` body). Arm QUOTEDALT.
+- **F2** the re-read polls every 0.25s until the incoming call's own line lands or a wall-clock
+  ceiling passes (10s; `ADVISOR_GATE_REREADS` 1 -> 2s, 0 -> none, stricter only). Arm REREAD at 3s.
+- **WINDOW** an advisor attempt within the last 10 assistant turns clears the call; the advisor is
+  not owed per push. A turn is a distinct assistant `message.id`, the message carrying the incoming
+  call is turn 1, and the window holds however many gated calls shipped since that attempt.
+  `ADVISOR_GATE_WINDOW` sets N (default 10). Arm WINDOW: advisor 3 turns back with two shipped
+  pushes since -> SILENT; advisor 11 turns back -> DENY.
+- **L3** a push whose outgoing commits touch only `_bmad-output/` is ALLOWED silently, judged from
+  git in the hook input's cwd against `@{u}` or `refs/remotes/<remote>/HEAD`, and only for a command
+  that cannot change the tree before the push runs. Arm BMADONLY.
+
+The receipt drives the hook: a granted transcript with no advisor call, a non-repository cwd (so
+neither the update-branch nor the L3 exemption can reach it), and `ADVISOR_GATE_REREADS=0`. A bare
+`git push -u origin HEAD` must DENY or the receipt cannot measure (exit 9, which a hook replaced by
+`exit 0` scores); then the graph alternation must be SILENT. Scored under `set -uo pipefail`: tip 0,
+base (a2480c56) 1, the tip with `qmask` removed 1, a hook replaced by `exit 0` 9.
+
+**LANDED (v0.765.0, verified b7b1a985).** The squash on `main`; gated 35 of 277 run, 22 phases PASS, `advisor-gate-deny` and its five mutant shards `ok` by name.
+
+verify: sh h=core/hooks/ai-dlc-advisor-gate.sh; [ -f "$h" ] && command -v jq >/dev/null 2>&1 || exit 9; d="$(mktemp -d)" || exit 9; mkdir -p "$d/projects/p" && printf '%s\n' '{"type":"attachment","attachment":{"type":"advisor_tool","available":true,"toolChange":"add","model":"m"}}' > "$d/projects/p/t.jsonl" || exit 9; mkin() { jq -cn --arg t "$d/projects/p/t.jsonl" --arg d "$d" --arg c "$1" '{hook_event_name:"PreToolUse",tool_name:"Bash",tool_input:{command:$c},transcript_path:$t,cwd:$d,tool_use_id:"tNEW"}'; }; a="$(mkin 'git push -u origin HEAD' | ADVISOR_GATE_REREADS=0 bash "$h" 2>/dev/null)"; case "$a" in *'"deny"'*) ;; *) exit 9 ;; esac; b="$(mkin "grep -n -E 'X|git push -u origin HEAD --no-verify|Y' f" | ADVISOR_GATE_REREADS=0 bash "$h" 2>/dev/null)"; [ -z "$b" ]
+
