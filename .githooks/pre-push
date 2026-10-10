@@ -949,7 +949,7 @@ readset_lock_stale() { # <lock dir>
 # lock: if another trace holds it this push starts none and says so. Every precondition that fails
 # is ONE line naming it, and the fixtures stay unmapped -- the behaviour before this existed.
 readset_live_trace() { # <out>
-  local out="$1" b names="" n=0 dv why="" lk tr logf tp
+  local out="$1" b names="" n=0 dv why="" lk tr logf tp cl
   [ "${AI_DLC_READSET_LIVE_TRACE:-1}" = 0 ] && return 0
   if [ -s "$out/.trace.held" ]; then
     printf '   ..    read-set live trace: NOT re-tracing %s -- discarded 3 times in a row on the same run.sh and deriver; unmapped until one of them changes (see %s.log)\n' \
@@ -1005,7 +1005,8 @@ readset_live_trace() { # <out>
   # subshell removes the trace root and the deriver's map temp itself, by their literal names. Rows the
   # deriver finished before the kill stand (it writes the map after every fixture); the fixture in
   # progress gets none and stays unmapped. On a normal finish the watchdog is stopped by its pid and
-  # its trap reaps its `sleep`, so group `$tp` is empty once the lock is released. The deriver is
+  # its trap kills its `sleep`, so group `$tp` empties once this subshell exits, just after it
+  # releases the lock -- not at the release itself, which a reader must not assume. The deriver is
   # outside group `$tp`, so a hand's `kill -- -<lock pid>` would leave it running with no ceiling:
   # the subshell's TERM trap (a handler, never SIG_IGN, so the deriver does not inherit it) forwards
   # that TERM to `-$dp` and then waits the deriver out before writing the exit.
@@ -1025,8 +1026,12 @@ readset_live_trace() { # <out>
     # The subshell sends no signal to `-$dp` after it has reaped `$dp`: that group id may be reused, so
     # its forwarding trap is replaced by an ignore once the reap is done, which also keeps a late TERM
     # from interrupting `wait "$wp"` and losing the watchdog's verdict.
-    ( s=""; trap '[ -n "$s" ] && kill "$s" 2>/dev/null; exit 0' TERM
-      sleep "$cl" & s=$!; wait "$s"; s=""
+    # ITS TERM TRAP KILLS EVERY JOB IT HAS, NEVER A PID IT SAVED. A trap reading `$s` raced the
+    # assignment: a TERM landing after `sleep` forked and before `s=$!` ran found `s` empty, exited,
+    # and left the sleep reparented to init for up to the whole ceiling. Measured on the instant-exit
+    # deriver a fast trace always has: 7 of 40 launches leaked one; with `jobs -p`, none.
+    ( trap 'kill $(jobs -p) 2>/dev/null; exit 0' TERM
+      sleep "$cl" & s=$!; wait "$s"
       trap '' TERM
       kill -TERM -- "-$dp" 2>/dev/null || exit 0
       g=0; while kill -0 -- "-$dp" 2>/dev/null && [ "$g" -lt 50 ]; do sleep 0.1; g=$((g + 1)); done

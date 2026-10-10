@@ -1420,6 +1420,66 @@ CT
     grep -qF 'finished, exit 0' "$o/rep" 2>/dev/null && rp=finished-0
     printf '%s|%s|%s|%s' "$(cat "$o/live" 2>/dev/null)" "$(cat "$o/after" 2>/dev/null)" "$(cat "$o/exit" 2>/dev/null)" "$rp"
   }
+  # (t4) THE WATCHDOG'S SLEEP ON A FAST TRACE. A deriver that exits at once has the subshell stop the
+  # watchdog while it is still starting its `sleep`; a trap that read a saved pid found it empty there
+  # and left the sleep reparented to init for the whole ceiling. The leaked sleep keeps its process
+  # group, so `kill -0 -- -<trace pid>` once that pid is gone reads it directly: the group must empty.
+  # The trace pid is the status file's `pid`, written by the subject. Measured on the unfixed trap with
+  # this drive: 7 of 40 launches leaked (17.5%). FX_REPS clean launches are required of the fix; the
+  # mutant drive stops at its first leak and gives up after FX_MREPS, so at 17.5% it misses with
+  # probability 0.825^60, about 1e-5. Control, same drive: a group this driver started under `set -m`
+  # reads alive by the same `kill -0 -- -<pgid>` before it is killed by that pgid.
+  FX_REPS=30; FX_MREPS=60
+  FX_DRIVER="$WORK/fx-driver.sh"
+  cat > "$FX_DRIVER" <<'FX'
+pool="$1"; t="$2"; o="$3"; reps="$4"; stop1="$5"
+cd "$t" || exit 1
+mkdir -p "$o/tmp" "$o/.log"
+export AI_DLC_READSET_LIVE_TRACE=1 AI_DLC_READSET_TRACE_CEILING=777 TMPDIR="$o/tmp/"
+. "$pool" 2>/dev/null
+lk="$GITDIR/ai-dlc-fixture-readsets.local.lock"
+set -m; sleep 30 </dev/null >/dev/null 2>&1 & cg=$!; set +m
+if kill -0 -- "-$cg" 2>/dev/null; then ctl=alive; else ctl=dead; fi
+kill -- "-$cg" 2>/dev/null; wait "$cg" 2>/dev/null
+ran=0; leaks=0; fin=0; i=0
+while [ "$i" -lt "$reps" ]; do
+  i=$((i + 1))
+  printf 'gamma\n' > "$o/.trace"; : > "$o/.trace.held"; printf ok > "$o/gamma"; printf '  ok    g\n' > "$o/.log/gamma"
+  rm -f "$READSET_LOCAL.status"
+  readset_live_trace "$o" > "$o/msg" 2>&1
+  grep -q 'started detached' "$o/msg" || continue
+  ran=$((ran + 1))
+  j=0; while [ -d "$lk" ] && [ "$j" -lt 100 ]; do sleep 0.05; j=$((j + 1)); done
+  tp="$(sed -n 's/^pid //p' "$READSET_LOCAL.status" 2>/dev/null)"
+  case "$tp" in ''|*[!0-9]*) continue ;; esac
+  grep -qx 'exit 0' "$READSET_LOCAL.status" && fin=$((fin + 1))
+  j=0; while kill -0 "$tp" 2>/dev/null && [ "$j" -lt 100 ]; do sleep 0.05; j=$((j + 1)); done
+  j=0; while kill -0 -- "-$tp" 2>/dev/null && [ "$j" -lt 40 ]; do sleep 0.05; j=$((j + 1)); done
+  if kill -0 -- "-$tp" 2>/dev/null; then
+    leaks=$((leaks + 1))
+    kill -- "-$tp" 2>/dev/null
+    [ "$stop1" = 1 ] && break
+  fi
+done
+printf '%s|%s|%s|%s|%s' "$ctl" "$i" "$ran" "$fin" "$leaks" > "$o/res"
+FX
+  seed_fx() { # <t>: seed() plus a TRACKED deriver stub that exits at once
+    seed "$1" || return 1
+    mkdir -p "$1/core/scripts" && printf '#!/bin/bash\nexit 0\n' > "$1/core/scripts/derive-fixture-readsets.sh" || return 1
+    ( cd "$1" && git add -A && git -c user.email=f@f -c user.name=f commit -qm fast ) >/dev/null 2>&1
+  }
+  fx_drive() { # <pool> <name> <reps> <stop at first leak: 0|1>; prints "<control>|<reps>|<started>|<exit 0>|<leaks>"
+    local t="$WORK/fx.$2" o="$WORK/fxo.$2"
+    seed_fx "$t" || { printf 'SEED FAILED'; return 1; }
+    mkdir -p "$o"
+    bash "$FX_DRIVER" "$1" "$t" "$o" "$3" "$4" > "$o/driver.out" 2>&1
+    cat "$o/res" 2>/dev/null
+  }
+  RT4="$(fx_drive "$POOL" t4 "$FX_REPS" 0)"; lt_arm
+  case "$RT4" in
+    "alive|$FX_REPS|$FX_REPS|$FX_REPS|0") ok "(t4) $FX_REPS fast traces (deriver exits at once, ceiling 777s): every one finished exit 0 and its process group was empty once its pid was gone -- the watchdog's sleep was never left behind (control: a live group read alive)" ;;
+    *) bad "(t4) a fast trace left its watchdog's sleep alive, or the drive did not run: control|reps|started|exit0|leaks = '$RT4'" ;;
+  esac
   CT_LIVE='alive,alive,alive,tr,tmp'
   CT_T1="$CT_LIVE|released,gone,gone,gone,notr,notmp,same|timeout|timed"
   RT1="$(ct_drive "$POOL" t1 3 hang)"; lt_arm
@@ -1931,7 +1991,16 @@ ct_mut() { # <name> <want: a glob over (t1)'s result>
 }
 if [ "$LT_CAN" = 1 ]; then
   # the ceiling never armed: the watchdog sleeps far past it.
-  PM_FN=readset_live_trace pm_copy noceil 1 '      sleep "$cl" & s=$!; wait "$s"; s=""' '      sleep 600 & s=$!; wait "$s"; s=""' \
+  # the watchdog's old trap, which kills the pid it saved and races the save.
+  if PM_FN=readset_live_trace pm_copy oldtrap 1 "    ( trap 'kill \$(jobs -p) 2>/dev/null; exit 0' TERM" "    ( s=\"\"; trap '[ -n \"\$s\" ] && kill \"\$s\" 2>/dev/null; exit 0' TERM"; then
+    lt_arm; R="$(fx_drive "$PM" pm.oldtrap "$FX_MREPS" 1)"
+    case "$R" in
+      alive\|*\|*\|*\|0) bad "CEILING MUTANT oldtrap SURVIVED (t4) over $FX_MREPS fast traces: '$R'" ;;
+      alive\|*) ok "CEILING MUTANT oldtrap (the trap kills a saved pid) is KILLED by (t4): a fast trace left its sleep in the group: '$R'" ;;
+      *) bad "CEILING MUTANT oldtrap: the control did not read alive -- NO VERDICT: '$R'" ;;
+    esac
+  fi
+  PM_FN=readset_live_trace pm_copy noceil 1 '      sleep "$cl" & s=$!; wait "$s"' '      sleep 600 & s=$!; wait "$s"' \
     && ct_mut noceil "$CT_LIVE|held,alive,alive,alive,*"
   # every kill aimed at the deriver's PID, not its group -- all four sites, TERM, the grace probe, KILL
   # and the forwarded TERM, so no group kill is left to cover for the others.
