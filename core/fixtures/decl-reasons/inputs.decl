@@ -1,0 +1,3 @@
+# decl-reasons reads ONE file outside its own directory: the validator under test, located at
+# HERE/../../../scripts/validate-decl-reasons.sh. Every corpus it is run against is seeded under mktemp.
+!scripts/validate-decl-reasons.sh

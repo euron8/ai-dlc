@@ -1,0 +1,12 @@
+# The tools run.sh and the validator invoke, keyed on their binaries. Pure shell.
+awk
+bash
+cmp
+cp
+dirname
+grep
+mkdir
+mktemp
+rm
+sed
+sort

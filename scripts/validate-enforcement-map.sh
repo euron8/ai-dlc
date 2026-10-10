@@ -10004,7 +10004,8 @@ EOF
     # this script because arm E lives in it would acquit every future real emitter added here.
     ESV_EXEMPT='scripts/validate-plan-shape.sh does not ship, while core/skills/ai-dlc/enforcement-map.yaml does, so declaring it would write an emitter path into every consumer tree that resolves nowhere and can never be falsified at the only place it is wrong.
 scripts/validate-enforcement-map.sh does not ship either -- it checks the distribution s own two writers against each other, which a consumer has neither of -- so the same reason holds: a declared path would resolve nowhere in a consumer tree.
-scripts/ab-lead-model.js does not ship; it prices this repository s own transcript corpus against two model tiers and no consumer has that corpus, so a declared path would resolve nowhere in one.'
+scripts/ab-lead-model.js does not ship; it prices this repository s own transcript corpus against two model tiers and no consumer has that corpus, so a declared path would resolve nowhere in one.
+scripts/validate-decl-reasons.sh does not ship; it checks this repository s own core/fixtures/*/inputs.decl and its fixture is .dist-only, so a declared path would resolve nowhere in a consumer tree.'
 
     esv_exempt_paths=""
     while IFS= read -r esv_x; do
