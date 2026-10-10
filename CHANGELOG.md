@@ -20,6 +20,46 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.767.0] - 2026-10-09
+
+Batch 220 (graph-ledger-full-drain). A declared fixture's (`inputs.decl`) key rows were composed twice, by the
+hook's `readset_declared` plus its decision awk and by `hermetic-run.sh`'s `hr_key_rows`, and held equal only by a
+census arm. They are now composed once.
+
+### BL-493 — one parser and one composer for a declared fixture's key rows
+
+- **Hook.** A new `READSET_KEYROWS` span in both pre-push hooks (executable-identical, `I66`) holds
+  `readset_decl_parse` (normalises a declaration — comments, blanks, leading `!`, `\r`, every trailing `/` — refuses
+  absolute and `..` paths before mapping, maps `core/` paths in consumer layout, refuses absent files and
+  directories, resolves `tools.decl` and refuses duplicate basenames), `readset_decl_tool_hashes`, and
+  `readset_decl_keys`, which builds the key rows of every declared fixture in ONE awk pass over `.now` and the
+  implied listings. `readset_declared` is now the pre-pass that words the parse's refusals into `.dunres`; the
+  decision awk takes a declared fixture's keys from `.dkeys`. The span is hashed into the verdict store's
+  `#universe`, so entries written under the old composer are not reused. `readset_keys` measured 18.63s base,
+  8.59s tip on this repo; every one of 233 declared and 44 undeclared records is byte-identical.
+- **Runner.** `hermetic-run.sh` sources the span the way it sources `READSET_TOOLS`; `hr_key_rows` is deleted. A
+  hook with no span (a consumer mid-pull with a new runner and an old hook) still RUNS a fixture with the verdict
+  store OFF through a narrow `hr_parse_skew`; only `--key-only` refuses, exit 2.
+- **Behaviour change, runner side only:** a declared `lib//` keyed 4 rows and now keys 8 (as the hook always did),
+  and a CRLF declaration line exited 2 and now keys normally. `inputs.decl is empty` no longer fires beside
+  `declared file absent`. No `inputs.decl` here or in the reference consumer carries either shape. An excluded-top
+  path (`VERSION`, `docs/…`) is omitted by both sides, as before; the runner header that said otherwise is corrected.
+- **Enforcement.** `I66` gains a sentinel-soundness arm for `READSET_KEYROWS`. `readset-skip` arm (k) keeps the
+  byte-compare over six shapes and gains `k-part` (one row emitted by the span appears on both sides), `k-norm`
+  (`lib//`, CRLF, consumer-layout mapping), `g5`/`g6` (a span edit re-keys; an unhashed edit does not) and a skew
+  world; mutants `parse-one-slash`, `hook-decl-bypass`, `runner-private-span`, `ident-drops-keyrows`,
+  `skew-refuses`, and two one-hook mutants in `validator-arm-selection` phase `i66-onehook`. `hermetic-runner`'s
+  mutants M4, M5 and M10 are re-anchored on the span, and arm V drives the skew parser (M17-M19). A tip adversary
+  found `readset-skip-d` red in a CONSUMER install only (k-part hardcoded the census world's fixture count; runner
+  mutants had no mapper beside them); fixed, and proven from a consumer install (rc 0, 53 assertions) against an
+  `origin/main` install as control (rc 0, 43) and in the distribution layout (rc 0, 73).
+- **Consumer rehearsal.** On a scratch copy of the reference consumer, its 158 declared fixtures key identically
+  under the installed and the new hook and runner, apart from the two swapped files' own hash rows (24 fixtures
+  declare them and re-key once on the pull).
+- **Backlog.** BL-493's receipt is keyed on code; BL-495's `sh exit 9` became a manual close, because once BL-493
+  closed it left the ledger with no scorable receipt and failed the gate's `backlog receipts` step. A paragraph
+  about the orphaned post-green trace moved from BL-493 to BL-481, whose subject it is.
+
 ## [0.766.0] - 2026-10-09
 
 Batch 218 (in-pool read-set trace). After a green suite, `readset_live_trace` re-ran every undeclared unmapped or
