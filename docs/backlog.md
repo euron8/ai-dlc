@@ -176,28 +176,6 @@ outside the sandbox too. The entry closes when that fixture leaves the UNMAPPED 
 declaration whose sandboxed fork count fits the budget.
 
 
-## BL-495 — fixtures declare whole directories as inputs, so one edit re-keys fixtures that may never read it
-
-**DEFECT.** The 0.764.0 gate ran 47 of 277 fixtures although the release changed one shipped script
-(`core/scripts/hermetic-run.sh`), one fixture's `run.sh`, and new `.decl` files in eight fixture directories. A
-fixture whose `inputs.decl` declares a directory is re-keyed by any edit under it, and 31 `inputs.decl` files declare
-`core/` (14) or `core/scripts/` (17). How many of those fixtures actually read the file whose change selected them is
-NOT measured: a name-reference heuristic is not a read, because some (the `enforcement-map-*` units, through
-`validate-enforcement-map.sh`) read every file under `core/` by content.
-
-The fix narrows each broad declaration to the files the fixture reads, and each narrowing is checked against a
-read-set trace of that fixture. An under-declared fixture is skipped when a file it reads changes, silently, so the
-narrowing must never be justified by a declaration count alone.
-
-verify: manual -- close when every `inputs.decl` line declaring exactly `core/` or `core/scripts/` is either narrowed against a read-set trace of its fixture or carries a stated reason it reads that whole directory by content
-
-**Re-derived batch 220 (0.767.0).** The count is 32 rather than 31: of 233 `inputs.decl` files, 15 carry a whole
-line `core/` and 15 a whole line `core/scripts/` (`grep -lxE`, control `ZZ-never/` 0), and 2 more carry the REQUIRED
-spelling `!core/scripts/`, which a pattern without the `!?` prefix does not see. The receipt was `sh exit 9`,
-which scored nothing and, once BL-493 closed, left the ledger with no scorable receipt and failed the gate's
-`backlog receipts` step (R2); it is now a manual close stating the condition, because no mechanical predicate can
-tell a narrowed declaration from an under-declared one without the trace.
-
 ## BL-497 — nothing joins a fixture's `inputs.decl` against its read-set trace, so an under-declared fixture skips silently
 
 **DEFECT, filed at batch 221** as BL-495's residue, by the 0.771.0 tip adversary, measured at `4a4022e9`. BL-495 says
