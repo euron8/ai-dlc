@@ -1,5 +1,6 @@
 # h2-attest-scripts-dir copies every core script into a synthetic consumer and drives --attest, which runs check-17-bypass against sibling fixture dirs.
 !core/scripts/validate-h2-attestation.sh
+# reason: core/scripts/ is enumerated -- for f in "$SRC"/*.sh "$SRC"/*.js copies every script into the synthetic consumer, core/fixtures/h2-attest-scripts-dir/run.sh:106.
 core/scripts/
 core/schemas/
 core/fixtures/lib/

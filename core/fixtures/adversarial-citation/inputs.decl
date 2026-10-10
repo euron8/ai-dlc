@@ -1,5 +1,6 @@
 # adversarial-citation reads core/scripts/ whole: seed.sh and run.sh copy/resolve the validator beside its
 # steering sibling, and the floor mutants copy the WHOLE scripts directory (cp -R) so the predicate resolves
 # beside the mutated validator. The validator under test is the REQUIRED input.
+# reason: core/scripts/ is copied whole -- the floor mutants run cp -R "$FL_SRC_DIR" (the validator's own directory), core/fixtures/adversarial-citation/run.sh:341.
 core/scripts/
 !core/scripts/validate-adversarial-convergence.sh

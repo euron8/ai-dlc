@@ -6,6 +6,7 @@ core/git-hooks/
 core/hooks/
 core/rules/
 core/schemas/
+# reason: core/scripts/ is copied whole -- for e in "$ROOT"/core/* ... cp -R "$e", core/fixtures/fold-architect-ledger-join-mutants/run.sh:170-172.
 core/scripts/
 core/session-driver/
 core/skills/

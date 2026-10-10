@@ -5,6 +5,7 @@
 scripts/
 .githooks/
 templates/
+# reason: core/ is copied whole by the parent's seed this shard execs -- cp -RX "$DIST/core", core/fixtures/enforcement-map-sites/seed.sh:38.
 core/
 VERSION
 core/fixtures/enforcement-map-sites/run.sh

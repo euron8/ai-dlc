@@ -1,6 +1,7 @@
 # Shard driver: execs procsub-staged-refusal/run.sh --group b, so it declares that fixture's inputs plus its directory.
 core/fixtures/lib/
 core/hooks/
+# reason: core/scripts/ is enumerated by the parent this shard execs -- git diff over core/*.sh, core/fixtures/procsub-staged-refusal/run.sh:1967, and cp -R "$SC", run.sh:1702.
 core/scripts/
 core/session-driver/
 core/skills/

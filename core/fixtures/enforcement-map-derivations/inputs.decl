@@ -5,4 +5,5 @@
 scripts/
 .githooks/
 templates/
+# reason: core/ is copied whole -- cp -R "$D_ROOT/core", core/fixtures/enforcement-map-derivations/seed.sh:31; the enforcement-map validator then walks the copy by content.
 core/

@@ -2,5 +2,6 @@
 # mutant batteries copy the whole scripts dir so siblings resolve), every file beside it, so
 # core/scripts/ is declared whole. The validator is the REQUIRED input; the other scripts are
 # only copied. Its own directory is copied by the runner without being named.
+# reason: core/scripts/ is copied whole -- cp -R "$EN_SRC_DIR" / "$FL_SRC_DIR" (the validator's own directory), core/fixtures/escalation-citation/run.sh:565, :683, :845.
 core/scripts/
 !core/scripts/validate-escalation-resolution.sh

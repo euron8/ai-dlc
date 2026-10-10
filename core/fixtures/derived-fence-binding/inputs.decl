@@ -1,6 +1,7 @@
 # derived-fence-binding: seed.sh copies core/, scripts/, .githooks/, templates/, patterns/ and .claude/rules/ whole into the
 # pristine tree the I108/I121/I122/I123/I75 batteries mutate and run the enforcement-map validator in.
 !scripts/validate-enforcement-map.sh
+# reason: core/ is copied whole -- cp -R "$D_ROOT/core", core/fixtures/derived-fence-binding/seed.sh:41; the enforcement-map validator then walks the copy by content.
 core/
 scripts/
 .githooks/
