@@ -67,6 +67,55 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
 
+**BATCH 220 SHIPPED `v0.767.0` (`e6c241a1`, #1100) AND `v0.768.0` (`875a7b43`, #1101), AND DISCHARGED NO CONSUMER
+CANDIDATE.** Handed the plan by ai-dlc-ad at `origin/main` `a3bc6c9b` (`VERSION` 0.766.0); peers ai-dlc-7b, ai-dlc-b5
+(inpool-readset-trace), ai-dlc-ff and ai-dlc-1b, one gated push on the box at a time by GATE START / LANDED.
+- **Opening sweep** (at `a3bc6c9b`): live 2, unfiled 0, worklist 0, DISCHARGED 2 (`PC-S317-SELF-UPDATE-FIXTURE-RUNNER-IS-NOT-THE-HERMETIC-RUN-PRE-PUSH-PERFORMS`
+  by 0.762.0, `PC-S317-ADVISOR-GATE-DENIES-A-PUSH-AFTER-AN-ADVISOR-CALL-IN-ITS-OWN-MESSAGE-AND-LOOPS` by 0.765.0),
+  TERMINAL 226, archive 349, 38 qualifying refs, every control passing. With no candidate to build, the batch took the
+  whole-backlog adjudication's buildable entries.
+- **`v0.767.0`, BL-493 CLOSED.** One `READSET_KEYROWS` span in both hooks owns a declared fixture's parse and key rows;
+  `hermetic-run.sh` sources it and `hr_key_rows` is gone. Runner-side behaviour change: `lib//` and CRLF declaration
+  lines now key the hook's way. BL-495's `sh exit 9` became a manual receipt (with BL-493 closed it left the gate's
+  `backlog receipts` step unscorable). First gate RED on four units, all this release's: `I77` (a `run.sh` lost its
+  exec bit), `procsub-staged-refusal` (a pipe-fed `while` in the skew parser), `readset-skip-digest-mutants-e` (an
+  anchor on a respelled line), and `validator-fork-budget`, whose traced validator exited 1 on that same `I77` — NOT
+  load. Second gate green, 47 of 277 run. A tip adversary had caught `readset-skip-d` red in a CONSUMER install only
+  (hardcoded census count); fixed before the gate.
+- **`v0.768.0`, BL-481 PARTIAL.** A wall-clock ceiling on the detached post-green trace (3 x the listed fixtures'
+  recorded durations, floor 600s, cap 20000s), the trace and the deriver each launched as their own process group,
+  the watchdog killing the deriver's group; the next push names a timeout and prints the stop command for an orphaned
+  group. `fixture-git-env-seam` and `ledger-status-vocabulary` declared (both `.dist-only`). A tip adversary found a
+  watchdog race (7 of 40 launches orphaned a sleep) after the first green gate; fixed, re-gated green, 51 of 277 run.
+  BL-481 stays open on `validator-fork-budget` alone: sandboxed it counts 3327 forks against `FORK_BUDGET=3324`.
+- **`FORK_BUDGET` is at its edge**: 3320 at 0.766.0, 3323 at 0.767.0 (the `READSET_KEYROWS` sentinel arm in I66 spent
+  3 forks), 1 of headroom. The next arm added to `validate-enforcement-map.sh` turns `validator-fork-budget` red.
+- **BL-465 and BL-474 unchanged**: both close on future events (a push that compares a unit against its own width's
+  rows; a sharded review on the consumer), not on a build.
+- **Close sweep** (at `875a7b43`): live 1, unfiled 1, worklist 0, DISCHARGED 0, TERMINAL 228, archive 351, 45
+  qualifying refs, every control passing. graph archived both discharged candidates during the batch.
+- **A NEW FILING LANDED MID-BATCH AND WAS SEEN ONLY AT THE CLOSE SWEEP**:
+  `PC-S317-HERMETIC-REQUIRED-INPUT-NEVER-CONSUMED-REDS-TWO-SHIPPED-FIXTURES` (`-S` 2026-10-09 21:44 -0400, graph's
+  0.761.0 -> 0.766.0 reconcile #1202; impossible-id control 0), while 0.767.0 was still being built. No mid-batch
+  re-sweep ran, so it went unscoped. It is unfiled here and the next session's sweep owns it first. Since 0.763.0, graph's pre-push refuses every push on
+  `consumer-machinery-inventory` and `extract-push-flag-decision`: `REQUIRED input … was never consumed`. Both pass
+  run directly. graph pushes with `--no-verify` on operator instruction until it lands. A READING, not a measurement:
+  each `run.sh` echoes `HERMETIC-CONSUMED` only in its distribution-layout branch
+  (`core/fixtures/consumer-machinery-inventory/run.sh:41`, `core/fixtures/extract-push-flag-decision/run.sh:44`), and
+  the consumer-layout `elif` beside it prints nothing. Both fixtures ship. **It bites the consumer's every push.**
+- **graph delivery gap**: stamp 0.766.0 against `VERSION` 0.768.0. Both 0.767.0 and 0.768.0 change both pre-push hooks
+  and 0.767.0 changes `hermetic-run.sh`; the reference consumer's 158 declared fixtures were rehearsed identical under
+  the new hook and runner apart from the two swapped files' own hash rows. The pull is the operator's.
+- **graph boundary**: the ledger's working-tree md5 moved `15ac6d39…` -> `7b2cc010…` during the batch on graph's own
+  s317 commits; `git diff HEAD` of the ledger is empty and no dirty path under `_bmad-output/ai-dlc-update/` is this
+  program's. Nothing was written there.
+- **Left in place**: worktree `.claude/worktrees/agent-a11b1857554f0c9c6`, locked by a live pid (28013), clean apart
+  from a `pre-push.orig`.
+
+Net for the batch: closed 1 (BL-493), filed 0; BL-481 PARTIAL.
+
+Batch 218's block below is history: batch 220's block replaces its open items and its delivery gap.
+
 **BATCH 218 SHIPPED `v0.762.0` (`19feed35`, #1088) AND `v0.765.0` (`b7b1a985`, #1094), DISCHARGING BOTH LIVE
 CANDIDATES.** Handed the plan by ai-dlc-cc at `origin/main` `a2480c56` (`VERSION` 0.761.0), beside ai-dlc-c6
 (verdict store, `v0.763.0`), ai-dlc-59 (git.decl, `v0.764.0`), ai-dlc-7b (in-pool trace, `v0.766.0`) and
