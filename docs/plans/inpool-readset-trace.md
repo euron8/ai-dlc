@@ -34,8 +34,20 @@ end): exit 0, `pre-push: all gates green.`, 65 ok / 0 FAIL, the changed fixtures
 
 **Fail-closed held.** Each discard is a `log stream` drop (`BL-481`): 720, 524, 237, 710 and 261 drops per window, and
 ledger-status-vocabulary also tripped the LOSS CANARY. In the main checkout's `.git/ai-dlc-fixture-readsets.local` each
-of the five carries one `#discards` row and zero read-set rows; hermetic-runner kept its 17 committed rows rather than
-a smaller set. prepush-ssh-keepalive recorded 7 rows plus `#deriver` against 7 committed.
+of the five carries one `#discards` row and zero read-set rows, so each runs on every push: the fail-closed direction.
+prepush-ssh-keepalive recorded 7 rows plus a `#deriver` row carrying the 0.766.0 deriver's sha.
+
+**The merge erased two valid-looking local records, and that is by design.** ai-dlc-59's detached post-green trace
+finished at epoch 1791590283 having recorded `ledger-status-vocabulary` (1481 paths) and `self-update-join-gate` (257
+paths). The 0.766.0 gate started at 1791591370 and its merge replaced both with `#discards 1` and zero rows. Those rows
+carried the previous deriver's sha (`aa036297…`); 0.766.0 changed the deriver (`8ca3788b…`), and
+`readset_local_validate` keeps a local row only when its `#deriver` matches the current one (`.githooks/pre-push:842`
+and `:849`), so both were invalid and correctly re-traced. Any release that edits the deriver re-traces every
+locally-mapped fixture on its own push, and a lossy window then leaves it run-always rather than mapped smaller.
+
+**`#discards 1` is a fresh key, not a reset.** The count is per `run.sh sha:deriver sha`
+(`core/scripts/derive-fixture-readsets.sh:875` and `:903`), and the new deriver opened a new key for every in-pool
+fixture. The 22 fixtures held at 3 were not traced by this gate.
 
 **Done-when clause 1 is NOT MET on that gate**: the only fixture recorded was a mapped one, and all four UNMAPPED
 fixtures were discarded by BL-481 drops at load ~30. Clauses 2 and 3 are read on the next push from the main checkout
@@ -65,12 +77,26 @@ docs commit, as are this plan's earlier rulings that said the same.
 ## Next actions
 
 1. **Read clauses 2 and 3 on the next push from the main checkout.** Do not start one for this; read the next gated
-   push any session makes from the main checkout (a linked worktree skips in-pool tracing and does not count). From
-   its output take the `read-set keys:`, `read-set map: ... UNMAPPED` and `read-set in-pool trace:` lines, with load
-   beside them. If any of the four UNMAPPED fixtures prints under `recorded`, clause 1 is met on that push and clauses
-   2 and 3 are read on the push after it. If they are discarded again on stream drops, report the drop counts and load.
+   push any session makes from the main checkout that RUNS its fixture suite. Two kinds of push do not count: one from
+   a linked worktree, which skips in-pool tracing, and one whose suite skips on the content key, which prints no
+   `read-set` lines at all (this plan's own docs-close pushes were that kind). From the push's output take the
+   `read-set keys:`, `read-set map: ... UNMAPPED` and `read-set in-pool trace:` lines, with load beside them. If any of
+   the four UNMAPPED fixtures prints under `recorded`, clause 1 is met on that push and clauses 2 and 3 are read on the
+   push after it. If they are discarded again on stream drops, report the drop counts and load.
 2. **Re-derive this RESUME block after the merge** of whatever lands next: what landed, the push's own `read-set
-   in-pool trace:` lines, and its UNMAPPED and stale counts against the 0.766.0 gate's (4 UNMAPPED, 1 stale).
+   in-pool trace:` lines, and its UNMAPPED and stale counts against the 0.766.0 gate's (4 UNMAPPED, 1 stale). Run, with
+   `LOG` set to that push's saved hook output:
+
+   ```bash
+   L=/Users/n8/git/ai-dlc/.git/ai-dlc-fixture-readsets.local   # READ ONLY
+   for f in fixture-git-env-seam ledger-status-vocabulary self-update-join-gate validator-fork-budget hermetic-runner prepush-ssh-keepalive; do
+     printf '%s rows=%s markers=%s\n' "$f" "$(awk -F'\t' -v f="$f" '$1==f && $2 !~ /^#/' "$L" | wc -l | tr -d ' ')" \
+       "$(awk -F'\t' -v f="$f" '$1==f && $2 ~ /^#/ {printf "%s:%s ", $2, $3}' "$L")"
+   done
+   # CONTROL: a token no fixture carries must print 0.
+   awk -F'\t' '$1=="zq9-not-a-fixture"' "$L" | wc -l
+   sed 's/\x1b\[[0-9;]*m//g' "$LOG" | grep -E 'read-set (keys|map|in-pool)|pre-push:'
+   ```
 3. **Fresh-resume check**: merge the docs commit, read this plan from a fresh clone of `origin/main` as a stranger,
    re-run action 2's derivation there, assert no next action names work `origin/main` already ships, and run
    `bash scripts/validate-plan-shape.sh` there.
