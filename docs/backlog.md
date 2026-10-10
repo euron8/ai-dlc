@@ -351,6 +351,14 @@ or reports any flagged input. Scored against the fix tree, and against copies of
 | `.bak` near-miss echoed in the consumer branch | 1 |
 | top-of-file echo above the resolution | 1 |
 | fix B: the declared spelling after the chain's `fi`, both branch echoes removed | 0 |
+| consumer echo sent `> /dev/null` | 1 |
+| a trailing space inside the consumer echo's quoted token | 1 |
+| consumer echo behind `[ -n "${UNSET:-}" ] &&` | 1 |
+| consumer echo sent `>&2` (the runner captures `2>&1`, so this is a correct fix) | 0 |
 | a literal `origin/main` checkout (no validator) | 9 |
+
+The three rows the runner reds on while the first cut of the validator accepted them (`> /dev/null`, a trailing
+space, a leading `&&`) were found by the tip adversary. The validator now records a sentinel only when its statement
+emits unconditionally to the runner, with the token ending at its own closing quote, and `>&2` stays accepted.
 
 verify: sh V=scripts/validate-hermetic-consumption.sh; [ -f "$V" ] && [ -f core/scripts/core-paths.sh ] || exit 9; for f in consumer-machinery-inventory extract-push-flag-decision; do grep -q '^!' "core/fixtures/$f/inputs.decl" || exit 9; done; o="$(bash "$V" 2>&1)"; r=$?; [ "$r" = 2 ] && exit 9; grep -q '^self-probe: ok' <<< "$o" || exit 9; grep -Eq '^FAIL: core/fixtures/(consumer-machinery-inventory|extract-push-flag-decision):' <<< "$o" && exit 1; grep -Eq '^hermetic-consumption: scanned=[1-9][0-9]* .*flagged=0$' <<< "$o" || exit 1; exit "$r"
