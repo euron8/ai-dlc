@@ -406,10 +406,14 @@ done < "$HR_WORK/files"
 # covers this directory as git sees it, so an ignored file here is a file the fixture's own author put
 # beside its run.sh. The population rule binds the DECLARED inputs, which is where a consumer's ignored
 # tree lives.
+# THE CONTENTS, INTO A DESTINATION THAT MAY ALREADY EXIST. A fixture declaring `core/` (or its own
+# fixture root) has its own directory copied in by that population first, and `cp -Rp <dir> <dest>`
+# onto an existing <dest> copies INTO it: a nested `<fx>/<fx>/` that every walker over the sandbox
+# then counts as a second fixture. Measured: validator-fork-budget read I106 4 forks high on the copy.
 mkdir -p "$HR_SB/$HR_FXROOT" || exit 2
 hr_no_symlinks "$HR_FXROOT/$HR_FX"
 [ "$HR_FXDIR" = "$HR_ROOT/$HR_FXROOT/$HR_FX" ] || hr_no_symlinks "$HR_FXDIR"
-cp -Rp "$HR_FXDIR" "$HR_SB/$HR_FXROOT/$HR_FX" || exit 2
+mkdir -p "$HR_SB/$HR_FXROOT/$HR_FX" && cp -Rp "$HR_FXDIR/." "$HR_SB/$HR_FXROOT/$HR_FX/" || exit 2
 # A SEEDED REPOSITORY, WHEN THE FIXTURE DECLARES ONE IN `<fixture dir>/git.decl`. `seed` makes the
 # sandbox root a git work tree holding one commit of everything copied in. `pin <40-hex sha>` imports
 # that commit and its tree -- never its parents, so `log` past it fails loudly -- from the project's

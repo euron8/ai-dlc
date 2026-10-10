@@ -41,6 +41,8 @@
 #   X  git.decl: `seed` makes the sandbox a work tree with a HEAD; `pin` imports a commit whose blob
 #      differs from the tree's (control: no git.decl -> no repository); a required pin the project
 #      lacks is exit 2; `pin?` absent prints and continues; an abbreviated pin and an unknown line are exit 2
+#   Y  a declaration carrying bare `core/` copies the fixture's own directory once, never a nested
+#      `<fx>/<fx>/` (control: the own run.sh is listed; the count is exact)
 #   M  mutants of the runner, each built on a COPY and guarded by `cmp -s`, each of which
 #      must fail exactly its own arms. The declaration parse lives in the hook's READSET_KEYROWS
 #      span, so M4/M5 mutate a copy of the hook the probes copy (run_hook_mutant), not the runner.
@@ -1033,6 +1035,21 @@ arm_X() {
   eq "unknown git.decl line: exit 2" "$RC" 2
   yes "unknown git.decl line: message" "$OUT" "neither seed, pin <sha> nor pin? <sha>"
 }
+# Y: a fixture whose declaration carries bare `core/` has its own directory copied in TWICE -- once by
+# that population, once by the own-directory copy. The second must land on the first, never inside it.
+# Presence-shaped: the own run.sh must be LISTED (control) and the count must be exact, so a runner that
+# copied nothing cannot pass by also listing no nested directory.
+arm_Y() {
+  CUR=Y
+  local P="$WK/Y1" expy
+  mk_probe "$P" stub_ls $'data/a.txt\ncore/'
+  run_hr "$P"
+  eq "bare core/ declared: exit 0" "$RC" 0
+  yes "bare core/: the fixture's own run.sh is in the sandbox" "$OUT" "./$FXR/probe/run.sh"
+  no "bare core/: no nested <fx>/<fx>/ directory" "$OUT" "./$FXR/probe/probe/" "./$FXR/probe/run.sh"
+  expy=$((1 + $(nfiles "$P/core")))
+  yes "bare core/: count is exact ($expy, the fixture dir copied once)" "$OUT" "rc=0 sandbox_files=$expy required_missing=0"
+}
 run_arms() { arm_A; arm_B; arm_C; arm_D; arm_E; arm_F; arm_H; arm_I; arm_K; arm_L; arm_N; }
 
 # --- main run -----------------------------------------------------------------------------------
@@ -1041,11 +1058,11 @@ if [ -z "$HOOK_SRC" ]; then echo "FIXTURE ERROR: no pre-push hook with a READSET
 # The main pass runs its arms in parallel subshells, each with its own output and FAILED file, then
 # replays the output in arm order so the transcript reads as before.
 mkdir -p "$WORK/par"
-for _a in A B C D E F H I K L N G J P Q R S T U V W X; do
+for _a in A B C D E F H I K L N G J P Q R S T U V W X Y; do
   ( "arm_$_a" > "$WORK/par/$_a.out" 2>&1; printf '%s' "$FAILED" > "$WORK/par/$_a.failed" ) &
 done
 wait
-for _a in A B C D E F H I K L N G J P Q R S T U V W X; do
+for _a in A B C D E F H I K L N G J P Q R S T U V W X Y; do
   cat "$WORK/par/$_a.out"
   [ -f "$WORK/par/$_a.failed" ] || { echo "FIXTURE ERROR: arm $_a produced no verdict" >&2; exit 2; }
   FAILED="$FAILED$(cat "$WORK/par/$_a.failed")"
@@ -1119,12 +1136,14 @@ if [ "$NESTED" != 1 ]; then
   run_mutant M15 "X" '[ "${#hr_ps}" -eq 40 ] ||' 'true ||' &
   # M16: a pass with an optional pin skipped is recorded anyway, so a shallow clone's pass is reused by a full one.
   run_mutant M16 "X" '[ "${hr_pin_skipped:-0}" = 0 ] || return 0' ':' &
+  # M20: the own-directory copy restored to `cp -Rp <dir> <dest>`, which nests onto a dest `core/` already made.
+  run_mutant M20 "Y A" 'mkdir -p "$HR_SB/$HR_FXROOT/$HR_FX" && cp -Rp "$HR_FXDIR/." "$HR_SB/$HR_FXROOT/$HR_FX/" || exit 2' 'cp -Rp "$HR_FXDIR" "$HR_SB/$HR_FXROOT/$HR_FX" || exit 2' &
   # cwd-invariance: two nested runs of this fixture from different working directories.
   ( cd "$ROOT" && HERMETIC_FX_NESTED=1 bash "$HERE/run.sh" > "$WORK/cwd1.out" 2>&1; echo $? > "$WORK/cwd1.rc" ) &
   ( cd "$(dirname "$RUN")" && HERMETIC_FX_NESTED=1 bash "$HERE/run.sh" > "$WORK/cwd2.out" 2>&1; echo $? > "$WORK/cwd2.rc" ) &
   wait
   CUR=M
-  for pair in "M1:B" "M2:A C D L" "M3:F" "M4:L" "M5:K" "M6:F" "M7:P" "M8:Q W" "M9:R W" "M10:T" "M11:U" "M12:X" "M13:X" "M14:X" "M15:X" "M16:X" "M17:V" "M18:V" "M19:L"; do
+  for pair in "M1:B" "M2:A C D L" "M3:F" "M4:L" "M5:K" "M6:F" "M7:P" "M8:Q W" "M9:R W" "M10:T" "M11:U" "M12:X" "M13:X" "M14:X" "M15:X" "M16:X" "M17:V" "M18:V" "M19:L" "M20:Y"; do
     mname="${pair%%:*}"; want="$(failed_set "${pair#*:}")"
     got="$(cat "$WORK/mut-$mname.res" 2>/dev/null)"
     if [ "$got" = "BROKEN" ] || [ -z "$got" ] && [ "$want" != "" ] && [ "$got" = "BROKEN" ]; then
