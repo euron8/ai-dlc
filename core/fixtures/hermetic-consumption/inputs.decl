@@ -1,0 +1,12 @@
+# hermetic-consumption drives the validator under test over the real shipped corpus (arm C) and over
+# mini distributions it seeds in mktemp from two shipped fixtures' run.sh and inputs.decl.
+# reason: core/fixtures/ is declared whole because arm C scans every fixture directory's inputs.decl
+# and run.sh and derives the scanned count itself by enumerating core/fixtures/*/; a narrower
+# declaration would shrink the corpus and C would read a smaller clean line. It also covers lib/
+# (the sourced preamble) and the two producer fixtures the worlds are seeded from.
+# core-paths.sh is the mapper the validator resolves beside the corpus; VERSION is the marker both
+# this run.sh and the validator walk up for.
+!scripts/validate-hermetic-consumption.sh
+core/scripts/core-paths.sh
+core/fixtures/
+VERSION
