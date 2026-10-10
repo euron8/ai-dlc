@@ -41,6 +41,7 @@ elif [ -n "$ROOT" ] && [ -f "$ROOT/core/scripts/validate-layer-entries.sh" ]; th
   echo "HERMETIC-CONSUMED core/scripts/validate-layer-entries.sh"
 elif [ -n "$ROOT" ] && [ -f "$ROOT/scripts/ai-dlc/validate-layer-entries.sh" ]; then
   VAL="$ROOT/scripts/ai-dlc/validate-layer-entries.sh"
+  echo "HERMETIC-CONSUMED scripts/ai-dlc/validate-layer-entries.sh"
 else
   echo "FIXTURE ERROR: validate-layer-entries.sh not found in either layout" >&2; exit 2
 fi

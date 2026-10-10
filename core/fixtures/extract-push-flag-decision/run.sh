@@ -44,6 +44,7 @@ if [ -n "$ROOT" ] && [ -f "$ROOT/core/skills/ai-dlc-update/SKILL.md" ]; then
   echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/SKILL.md"
 elif [ -n "$ROOT" ] && [ -f "$ROOT/.claude/skills/ai-dlc-update/SKILL.md" ]; then
   SUBJ="$ROOT/.claude/skills/ai-dlc-update/SKILL.md"
+  echo "HERMETIC-CONSUMED .claude/skills/ai-dlc-update/SKILL.md"
 else
   echo "extract-push-flag-decision: FIXTURE BROKEN — ai-dlc-update/SKILL.md not found in either layout" >&2
   exit 2
