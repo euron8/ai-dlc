@@ -325,3 +325,18 @@ neither the update-branch nor the L3 exemption can reach it), and `ADVISOR_GATE_
 base (a2480c56) 1, the tip with `qmask` removed 1, a hook replaced by `exit 0` 9.
 
 verify: sh h=core/hooks/ai-dlc-advisor-gate.sh; [ -f "$h" ] && command -v jq >/dev/null 2>&1 || exit 9; d="$(mktemp -d)" || exit 9; mkdir -p "$d/projects/p" && printf '%s\n' '{"type":"attachment","attachment":{"type":"advisor_tool","available":true,"toolChange":"add","model":"m"}}' > "$d/projects/p/t.jsonl" || exit 9; mkin() { jq -cn --arg t "$d/projects/p/t.jsonl" --arg d "$d" --arg c "$1" '{hook_event_name:"PreToolUse",tool_name:"Bash",tool_input:{command:$c},transcript_path:$t,cwd:$d,tool_use_id:"tNEW"}'; }; a="$(mkin 'git push -u origin HEAD' | ADVISOR_GATE_REREADS=0 bash "$h" 2>/dev/null)"; case "$a" in *'"deny"'*) ;; *) exit 9 ;; esac; b="$(mkin "grep -n -E 'X|git push -u origin HEAD --no-verify|Y' f" | ADVISOR_GATE_REREADS=0 bash "$h" 2>/dev/null)"; [ -z "$b" ]
+
+## BL-495 — fixtures declare whole directories as inputs, so one edit re-keys fixtures that may never read it
+
+**DEFECT.** The 0.764.0 gate ran 47 of 277 fixtures although the release changed one shipped script
+(`core/scripts/hermetic-run.sh`), one fixture's `run.sh`, and new `.decl` files in eight fixture directories. A
+fixture whose `inputs.decl` declares a directory is re-keyed by any edit under it, and 31 `inputs.decl` files declare
+`core/` (14) or `core/scripts/` (17). How many of those fixtures actually read the file whose change selected them is
+NOT measured: a name-reference heuristic is not a read, because some (the `enforcement-map-*` units, through
+`validate-enforcement-map.sh`) read every file under `core/` by content.
+
+The fix narrows each broad declaration to the files the fixture reads, and each narrowing is checked against a
+read-set trace of that fixture. An under-declared fixture is skipped when a file it reads changes, silently, so the
+narrowing must never be justified by a declaration count alone.
+
+verify: sh exit 9
