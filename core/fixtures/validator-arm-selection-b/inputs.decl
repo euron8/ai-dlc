@@ -7,6 +7,7 @@ scripts/render-invariant-index.sh
 core/fixtures/enforcement-map-sites/seed.sh
 # The seed copies core/, scripts/ and .githooks/ whole, and the plain baseline run reads the same tree
 # the validator reads at a repository root, so those are declared whole.
+# reason: core/ is copied whole by the parent this shard execs -- its seed (validator-arm-selection/run.sh:543) does cp -RX "$DIST/core", core/fixtures/enforcement-map-sites/seed.sh:38.
 core/
 scripts/
 .githooks/

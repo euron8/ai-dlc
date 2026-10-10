@@ -3,6 +3,7 @@
 # install lays down at scripts/ai-dlc/, taken from core/scripts/. A fixture's own directory is copied by the runner, never declared.
 !scripts/install.sh
 VERSION
+# reason: core/ is enumerated -- install.sh (run at run.sh:144) globs core/scripts/*, core/hooks/*.sh, core/schemas/*.json and more, scripts/install.sh:471, :374, :550; run.sh:178 walks the installed scripts.
 core/
 patterns/
 templates/

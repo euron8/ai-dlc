@@ -20,7 +20,35 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
-## [0.770.0] - 2026-10-10
+## [0.771.0] - 2026-10-10
+
+Batch 221 (graph-ledger-full-drain), third release. Thirty-three `inputs.decl` files declared `core/` or
+`core/scripts/` whole, so one edit anywhere under either re-keyed fixtures that may never read it.
+
+### BL-495 — every whole-directory declaration is narrowed or states its reason, and a validator holds it
+
+- **Population.** 32 at 0.768.0: 15 `core/`, 15 `core/scripts/`, and 2 `!core/scripts/` that a pattern without the
+  `!?` prefix does not see (`taught-schema`, `validator-path-resolution`), plus `validator-fork-budget`, declared in
+  0.770.0.
+- **Narrowed, three.** `adversarial-shard-merge`, `subject-partition` and `upstream-routing` name specific scripts and
+  enumerate nothing. Each is narrowed to the files a fresh sandbox trace recorded, using paths that exist; each passes
+  through `hermetic-run.sh` with the same ok-line set as its unsandboxed run (40, 24, 54); removing one narrowed
+  file that is read turns each red. `validate-steering-budget.sh` in `adversarial-shard-merge` is declared on the
+  trace alone: its only reader is behind a seed no fixture world carries.
+- **Kept whole, thirty.** Each copies, globs or walks the directory (`cp -R`, `"$SRC"/*.sh`, `install.sh`, or
+  `validate-enforcement-map.sh`'s walk of `core/`), and each carries a `# reason:` line citing the line that does it.
+  The parser treats the line as a comment: `--key-only` gives byte-identical rows with and without it.
+- **Binding.** `scripts/validate-decl-reasons.sh`, run by the `.dist-only` fixture `decl-reasons` and nothing else:
+  a declaration carrying `core/` or `core/scripts/` whole, either spelling, must carry a `# reason:` line. Presence
+  only; citations are not resolved. It caught `validator-fork-budget`'s 0.770.0 declaration on its first run.
+  Self-probe before the corpus, both directions; mutants drop the probe, drop `!?`, and widen to a named file.
+- **Fork budget.** `FORK_BUDGET` 3335 → 3339 (I8 +1, I84 +2, I83 +1; tip 3332/3333).
+- **Map.** Fresh sandbox read-sets for the three narrowed fixtures; no other fixture's rows move.
+
+### Also
+
+- BL-465 and BL-496 annotated LANDED and rotated. BL-497 filed: nothing joins a fixture's declaration against its
+  read-set trace, and that join, run once, finds 110 of 182 traced declared fixtures reading an undeclared tracked file.
 
 Batch 221 (graph-ledger-full-drain), second release. `hermetic-run.sh` nested a fixture's own directory inside
 itself whenever a declaration had already copied part of it in, on this tree AND on consumers; and

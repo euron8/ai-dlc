@@ -1,6 +1,7 @@
 # consumer-machinery-home: seed.sh copies core/, scripts/, .githooks/ and templates/ whole into each worker tree and runs the
 # enforcement-map validator there (I43 and I44 subjects are files inside those trees), so all four are declared whole.
 !scripts/validate-enforcement-map.sh
+# reason: core/ is copied whole -- cp -R "$DIST/core", core/fixtures/consumer-machinery-home/seed.sh:29; the enforcement-map validator then walks the copy by content.
 core/
 scripts/
 .githooks/

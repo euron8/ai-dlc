@@ -2,6 +2,7 @@
 # each mutated copy, so it takes every top that validator reads, as enforcement-map-sites does.
 # The validator under test, REQUIRED: the sentinel prints past run.sh's distribution-only SKIP.
 !scripts/validate-enforcement-map.sh
+# reason: core/ is copied whole -- git ls-files over the repo, core/fixtures/ledger-status-vocabulary/run.sh:58; the enforcement-map validator then walks the copy by content.
 core/
 scripts/
 .githooks/

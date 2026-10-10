@@ -8,6 +8,7 @@ core/fixtures/lib/
 core/hooks/
 core/rules/
 core/schemas/
+# reason: core/scripts/ is enumerated -- install.sh (run at run.sh:140, :245) globs core_scripts=("$SCRIPT_DIR"/../core/scripts/*), scripts/install.sh:471.
 core/scripts/
 core/session-driver/
 core/skills/

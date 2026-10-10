@@ -3,6 +3,7 @@
 # directory holding one is declared whole: an undeclared script would read as a deletion in that diff.
 core/fixtures/lib/
 core/hooks/
+# reason: core/scripts/ is enumerated -- the spelling arm diffs every core/*.sh outside core/fixtures/ in the seeded repo, core/fixtures/procsub-staged-refusal/run.sh:1967, and cp -R "$SC" copies the dir, run.sh:1702.
 core/scripts/
 core/session-driver/
 core/skills/

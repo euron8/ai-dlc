@@ -58,131 +58,6 @@ have gone green, and would have reported "still open" forever.
 never the word anywhere in prose, because an entry that merely discusses landing something is
 not a closed entry.
 
-## BL-465 — the suite-pole guard compares only at pool widths someone hand-calibrated
-
-**DEFECT.** Operator ruling, batch 202. `docs/suite-pole-baseline.tsv` holds rows only for pool widths 12 and 16, and
-`scripts/validate-suite-pole.sh` SKIPs at any other width: a push at `AI_DLC_FIXTURE_JOBS=8` printed
-`SKIP -- pool width 8 has no baseline row (widths with a row: 12 16)`. The operator's spec: every gated push records its
-pole result keyed by the width it ran at, and the guard compares against that width's own recorded history, so any width
-the operator uses is covered without hand calibration. A guard that skips at every width nobody calibrated reads exactly
-like one that passed.
-
-verify: manual -- close when a gated push at a width with no prior row records one, and the next push at that width compares against it instead of printing SKIP.
-
-**The manual close above is the operative receipt** (`scripts/backlog-reverify.sh` reads only an entry's first `verify:`
-line), and it stays so: only a real gated push exercises the hook's width sidecar. The BEHAVIOURAL receipt for the
-validator half is the fenced block at the end of this entry, described in the batch 216 paragraph above it.
-
-**Two rulings landed with the fix, batch 204, by the coordinator after the tip adversary measured B2 wrong.** B(W) is the
-max of EVERY usable row at the width since its rows were last dropped -- not of the 3 most recent, which with admission at
-or below B ratcheted one way: calibrated at 500/520/510 then 300x3, every ordinary loaded figure from 410 to 500 failed.
-And a tracked row is a CALIBRATING SEED while its width has fewer than 3 history rows: compared and reported, recorded,
-never a FAIL -- the operator ruled the hand-calibrated 12/16 rows the defect, and a seed that could block would stop the
-history that replaces it from forming. A recorded run also consumes the width sidecar, so one published measurement is
-one history row however often it is re-read.
-
-**The re-push bypass is closed in the same branch.** `fixture_suite_step` records the content key before the pole step
-runs, so a push red on the pole alone used to leave a key that let the re-push skip the suite and hand the guard
-`/dev/null`. `pole_guard_step` now removes `$KEY_RECORD` when the validator exits 1, so the next push measures again --
-which matters at every width now that the guard fires at every width.
-
-Scored at batch 204 against the tip: base exit 1 (it prints `SKIP -- pool width 4 has no baseline row`), tip 0,
-admits-above-B 1, K-window-restored 1, history-never-read 1, SKIP-kept 1, records-at-coverage-SKIP 1.
-
-**PARTIAL, re-adjudicated batch 209: the code is done and the manual close is unreachable on an ordinary push.** The
-validator no longer SKIPs on a missing width (`scripts/validate-suite-pole.sh:653`): a width with no rows CALIBRATES
-(`:756-763`) and `record_pole` (`:591-621`) appends a history row whenever it runs. A row is written only when ALL of
-these hold: the suite was not skipped on its content key (`.githooks/pre-push:2067`); no earlier push's read-set trace is
-still running (`:1962-1966` sets `READSET_TRACE_OVERLAP`, `:2076-2080` then hands the guard `/dev/null`); the pool was
-green with a non-empty durations file (`:1980-1981`); this run timed at least `COV_MIN=90` percent of the cumulative
-record's cost (`validate-suite-pole.sh:181`, checked at `:744-748`); and the `.jobs` sidecar equals `--jobs` (`:603`).
-Batch 208's open question is answered: its width-4 gate printed `SKIP -- coverage 56.86% is below 90%`. Every gate since
-the last width-12 row failed one condition: coverage SKIPs at 47.86, 50.63 and 56.86 percent, trace-overlap SKIPs on
-every push whose predecessor's post-green trace was still alive (0.749.0 twice, 0.752.0, and 0.754.0's own gate at
-width 4, which printed `SKIP: a read-set live trace overlapped this run`), and a no-measurement SKIP on 0.750.0.
-`COV_MIN=90` was calibrated against 220 of 227 fixtures dispatched (`:96-103`, `:178-180`); read-set keys now dispatch
-about 70 of 251, and no keyed push has yet reached the floor: the highest measured is 0.754.0's gate, whose 70 timed rows
-replayed through the shipping validator on copies of the live durations read `coverage 83.24%` (54129s of 65021s), where
-the earlier "roughly 57 percent" was a prediction from fixture count. Lowering the floor would admit exactly
-the near-solo figure the guard exists to refuse. The three existing rows all came from full-suite runs at 99.8 percent.
-No code remedy without an operator ruling on what a comparable measurement is under read-set skipping; the guard is
-refusing correctly and the close keys on an event both mechanisms make rare.
-
-**OPERATOR RULING, batch 215: redefine coverage over the DISPATCHED set.** A keyed push compares its pole against
-the history of the fixtures it actually ran, and records a row keyed on width and on that set; `COV_MIN` is not
-lowered. Buildable: `scripts/validate-suite-pole.sh:181` and the coverage check at `:744-748`, with the hook's
-`.last` as the dispatched set. Ships from the main checkout detached at its release commit if the hook changes.
-
-**BUILT, batch 216: per-unit history of EVERY dispatched unit (option (a)), count-banded, with a regime ceiling.**
-The design changed four times in review.
-- **Per unit, not the width's pole.** A suite pole is undefined when the dispatched set varies. On the real 0.760.0
-  `.last`, a keyed run at the same 117-unit count that dispatched an unchanged `adversarial-shard-merge-mutants`
-  (1132s) FAILED against `self-update-gate`'s 606s, though nothing grew. So this run's pole unit is compared only
-  against history rows naming that same unit, at the same width, from a dispatch whose count is within
-  +-`COUNT_BAND`=25% of this run's. A unit is never failed against another unit's figure.
-- **Option (a), operator ruling.** Every recorded run appends one row per dispatched on-disk unit, not only the
-  pole's. So a unit that grows and overtakes the pole is judged against its own earlier, cheaper rows. With
-  pole-only rows it calibrated at its grown figure.
-- **Admission is per unit.** Each unit's row is admitted by that unit's own rule:
-  - at or below its B when it has comparable rows;
-  - within the regime ceiling when it has 3 rows and none comparable;
-  - freely while it calibrates.
-
-  A refused unit is counted on one summary line. A FAILing run appends nothing.
-- **The regime ceiling replaces FROZEN.** A unit with 3 rows and none comparable FAILS `GROWN (regime)` past its own
-  max plus `REGIME_BAND`=100%. Within that, it records and the new count range calibrates. FROZEN had passed a 13x
-  regression at exit 0. `REGIME_BAND` is uncalibrated. On copies of the live record and `.last`, all 115
-  comparable keys read 1.000 and 0 disagree, against a perturbed-key control that read 1. No pre-fold figure
-  exists to calibrate it, and the per-unit rows recorded from now on are the first data that can.
-- **One append per run, spelling pinned.** awk builds the rows and one `printf '%s' "$ROWS" >> "$HIST"` writes
-  them. Under concurrency, awk-direct appends tore 2-112 lines; shell printf tore 0 of 400 up to 14KB on APFS.
-  That is a measurement, not a guarantee.
-- **The share is printed and is not an exit.** Legacy 5-column and malformed rows are never usable.
-
-Comparability rates over the last 21 measuring commits (runs with at least 3 comparable earlier rows):
-
-| Predicate | Runs |
-|---|---|
-| exact dispatched set | 0/21 |
-| 90% cost-weighted Jaccard overlap of sets | 2-5/21 |
-| load within +-25% | 10-17/21 |
-| dispatched count within +-25% | 10-15/21 |
-| same pole unit, count within +-25% | 10-15/21 |
-| pole unit DISPATCHED in 3+ earlier runs, count within +-25% | 10-15/21 |
-
-A 20000-row history costs the validator 0.63-0.75s, against 0.27-0.32s on an empty one. The stated acquittals
-are in the validator's header:
-- a unit's first 3 dispatches at a width;
-- a unit new to the suite that is the pole from its first run;
-- a regression shipped with a rename or shard;
-- the noise ratchet;
-- a regression under 2x at a dispatch count new to its unit.
-
-The header, under COMPARABILITY, is the description, and the `suite-pole-guard` fixture's arms are its probes.
-The fenced receipt below runs under `set -uo pipefail`. It drives the validator with the hook's argv in a fresh
-git repo:
-1. A 67.85%-share keyed run records.
-2. Three runs of fx1 at 11 units calibrate fx1 and record fx2..fx11 beside it.
-3. Every unit 40% slower FAILS `GROWN`.
-4. fx2, cheap beside the pole, grows to 1000 and FAILS against fx2's own 100.
-5. An unchanged heavy fx12 newly dispatched calibrates for fx12.
-6. fx1 600 at a novel count FAILS `GROWN (regime)` and appends nothing.
-7. fx1 700 at a count in band FAILS against fx1's own 150.
-
-Scores, batch 216:
-
-| Subject | Exit |
-|---|---|
-| tip | 0 |
-| base (origin/main d03d5bd9) | 1 |
-| ffe7cdb6 | 1 |
-| record-pole-only mutant | 1 |
-| the round-3 adversary's stub (`tip3_receipt.sh`) | 1 |
-
-```
-V="$PWD/scripts/validate-suite-pole.sh"; [ -f "$V" ] || exit 9; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; R="$(mktemp -d)" && git init -q "$R" && G="$(git -C "$R" rev-parse --path-format=absolute --git-common-dir)" && mkdir -p "$R/docs" && echo 0 > "$R/VERSION" && for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18; do mkdir -p "$R/core/fixtures/fx$i" && echo 'exit 0' > "$R/core/fixtures/fx$i/run.sh"; done && printf '# history-band: 33\n# band: 15\n# jobs: 12\n# fixtures: 18\nfx1 100\n' > "$R/docs/suite-pole-baseline.tsv" || exit 9; L="$G/ai-dlc-fixture-durations.last"; D="$G/ai-dlc-fixture-durations"; H="$G/ai-dlc-suite-pole.history"; hook() { cp "$L" "$D"; echo 4 > "$L.jobs"; o="$(cd "$R" && bash "$V" --durations "$L" --record "$D" --jobs 4 2>&1)"; c=$?; }; run() { rp="$1"; rn="$2"; rs="$3"; printf 'fx1 %s\n' "$rp" > "$L"; i=2; while [ "$i" -le "$rn" ]; do printf 'fx%s %s\n' "$i" "$rs" >> "$L"; i=$((i + 1)); done; hook; }; rows() { if [ -f "$H" ]; then awk -F'\t' -v u="$1" '$2 == u { n++ } END { print n + 0 }' "$H"; else echo 0; fi; }; printf 'fx1 60\nfx2 35\n' > "$L"; printf 'fx1 60\nfx2 35\nfx3 45\n' > "$D"; echo 4 > "$L.jobs"; o="$(cd "$R" && bash "$V" --durations "$L" --record "$D" --jobs 4 2>&1)"; c=$?; [ "$c" -eq 0 ] && [ "$(rows fx1)" -eq 1 ] || exit 1; : > "$H"; for n in 1 2 3; do run 150 11 100; [ "$c" -eq 0 ] && grep -qF "CALIBRATING ($n/3) for fx1" <<<"$o" || exit 1; done; [ "$(rows fx1)" -eq 3 ] && [ "$(rows fx2)" -eq 3 ] || exit 1; run 210 11 140; [ "$c" -eq 1 ] && grep -qF 'GROWN: fx1 at 210s against baseline fx1 at 150s' <<<"$o" || exit 1; printf 'fx1 150\nfx2 1000\n' > "$L"; i=3; while [ "$i" -le 11 ]; do printf 'fx%s 100\n' "$i" >> "$L"; i=$((i + 1)); done; hook; [ "$c" -eq 1 ] && grep -qF 'GROWN: fx2 at 1000s against baseline fx2 at 100s' <<<"$o" || exit 1; printf 'fx1 150\n' > "$L"; i=2; while [ "$i" -le 10 ]; do printf 'fx%s 100\n' "$i" >> "$L"; i=$((i + 1)); done; printf 'fx12 1132\n' >> "$L"; hook; [ "$c" -eq 0 ] && grep -qF 'CALIBRATING (1/3) for fx12' <<<"$o" && [ "$(rows fx12)" -eq 1 ] || exit 1; run 600 17 100; [ "$c" -eq 1 ] && grep -qF 'GROWN (regime): fx1 at 600s against its own max 150s' <<<"$o" || exit 1; [ "$(rows fx1)" -eq 4 ] || exit 1; run 700 14 100; [ "$c" -eq 1 ] && grep -qF 'GROWN: fx1 at 700s against baseline fx1 at 150s' <<<"$o" || exit 1; exit 0
-```
-
 ## BL-474 — measure the first cross shard's serial tail before ruling on it
 
 **DEFECT, open by operator ruling, batch 204.** `0.744.0` shards code review and QA execution across their part agents,
@@ -316,49 +191,29 @@ narrowing must never be justified by a declaration count alone.
 
 verify: manual -- close when every `inputs.decl` line declaring exactly `core/` or `core/scripts/` is either narrowed against a read-set trace of its fixture or carries a stated reason it reads that whole directory by content
 
-**Re-derived batch 220 (0.767.0).** The count is 29 rather than 31: of 233 `inputs.decl` files, 14 carry a whole
-line `core/` and 15 a whole line `core/scripts/` (`grep -lxE`, control `ZZ-never/` 0). The receipt was `sh exit 9`,
+**Re-derived batch 220 (0.767.0).** The count is 32 rather than 31: of 233 `inputs.decl` files, 15 carry a whole
+line `core/` and 15 a whole line `core/scripts/` (`grep -lxE`, control `ZZ-never/` 0), and 2 more carry the REQUIRED
+spelling `!core/scripts/`, which a pattern without the `!?` prefix does not see. The receipt was `sh exit 9`,
 which scored nothing and, once BL-493 closed, left the ledger with no scorable receipt and failed the gate's
 `backlog receipts` step (R2); it is now a manual close stating the condition, because no mechanical predicate can
 tell a narrowed declaration from an under-declared one without the trace.
 
-## BL-496 — two shipped fixtures consume their REQUIRED input only in the distribution layout, and red on every consumer
+## BL-497 — nothing joins a fixture's `inputs.decl` against its read-set trace, so an under-declared fixture skips silently
 
-**DEFECT, filed at batch 221.** Filed by the consumer as
-`PC-S317-HERMETIC-REQUIRED-INPUT-NEVER-CONSUMED-REDS-TWO-SHIPPED-FIXTURES`. `core/scripts/hermetic-run.sh` requires a
-whole-line `HERMETIC-CONSUMED <path>` for each `!` input in a fixture's output. `consumer-machinery-inventory` and
-`extract-push-flag-decision` resolve their `!` input through an if/elif chain over both layouts and echoed the sentinel
-only in the `core/` branch, so under an installed consumer's runner both report `required_missing=1` and rc 1. The
-regression is 0.763.0 (`6f9da269`). A dynamic sweep of all 157 shipped `!` fixtures through an installed consumer's
-runner gave 155 rc 0 and these 2 rc 1. Nothing in this repo could fail on it, because no gate here runs a fixture in
-the installed layout.
+**DEFECT, filed at batch 221** as BL-495's residue, by the 0.771.0 tip adversary, measured at `4a4022e9`. BL-495 says
+no mechanical predicate can tell a narrowed declaration from an under-declared one without the trace; the trace
+exists for most fixtures, and nothing joins the two. Joining each declared fixture's `inputs.decl` against its own
+rows in `.ai-dlc-fixture-readsets.tsv` (tracked paths outside the fixture's own directory) found **110 of 182**
+traced declared fixtures reading at least one tracked file their declaration does not cover, **1927** paths in all.
+Much of it is root noise (`.gitignore`, `package.json`); `agent-definition-render` alone reads 59 `core/scripts/*`
+files it does not declare. An under-declared fixture is skipped when a file it reads changes, and its verdict-store
+pass is reused, which is the failure BL-495 warned narrowing could introduce. Control in the same join: removing
+`core-paths.sh` from `upstream-routing`'s declaration makes exactly that path appear.
 
-The fix echoes the consumer path in each consumer branch (fix A; the `!` lines stay). The binding is
-`scripts/validate-hermetic-consumption.sh`, a static scan run only by the `.dist-only` fixture
-`core/fixtures/hermetic-consumption/`. Over the 157 shipped `!` fixtures it flags exactly these two at base `2db3f4c0`
-and 0 at the fix. It scores 10 of 240 `!` inputs, and its header states the reach, so a clean result is a floor.
+The fix is the join as a validator (standalone, not an arm of `validate-enforcement-map.sh`, which the suite pole
+runs), with the root-noise class enumerated and its false-positive set measured before it ships, then each real
+gap declared. The map is stale for fixtures changed since its last derivation, so a row naming a file that no
+longer exists is the map's, not the declaration's.
 
-The receipt runs from the repo root under `set -uo pipefail`. It exits 9 when the validator, the mapper or either
-fixture's `!` line is missing, or when the validator's self-probe refuses. It exits 1 when the scan names either fixture
-or reports any flagged input. Scored against the fix tree, and against copies of that tree's scan inputs (VERSION,
-`core-paths.sh`, the validator, `core/fixtures/`) with one variant of `consumer-machinery-inventory/run.sh`:
+verify: manual -- close when a validator joining each declared fixture's inputs.decl against its committed read-set rows reports no uncovered tracked read outside an enumerated noise class, and every reported gap is declared
 
-| Subject | Exit |
-|---|---|
-| fix (both consumer branches echo) | 0 |
-| base: both `run.sh` at `origin/main` 2db3f4c0, fix validator | 1 |
-| dist-only echo (the consumer echo removed) | 1 |
-| `.bak` near-miss echoed in the consumer branch | 1 |
-| top-of-file echo above the resolution | 1 |
-| fix B: the declared spelling after the chain's `fi`, both branch echoes removed | 0 |
-| consumer echo sent `> /dev/null` | 1 |
-| a trailing space inside the consumer echo's quoted token | 1 |
-| consumer echo behind `[ -n "${UNSET:-}" ] &&` | 1 |
-| consumer echo sent `>&2` (the runner captures `2>&1`, so this is a correct fix) | 0 |
-| a literal `origin/main` checkout (no validator) | 9 |
-
-The three rows the runner reds on while the first cut of the validator accepted them (`> /dev/null`, a trailing
-space, a leading `&&`) were found by the tip adversary. The validator now records a sentinel only when its statement
-emits unconditionally to the runner, with the token ending at its own closing quote, and `>&2` stays accepted.
-
-verify: sh V=scripts/validate-hermetic-consumption.sh; [ -f "$V" ] && [ -f core/scripts/core-paths.sh ] || exit 9; for f in consumer-machinery-inventory extract-push-flag-decision; do grep -q '^!' "core/fixtures/$f/inputs.decl" || exit 9; done; o="$(bash "$V" 2>&1)"; r=$?; [ "$r" = 2 ] && exit 9; grep -q '^self-probe: ok' <<< "$o" || exit 9; grep -Eq '^FAIL: core/fixtures/(consumer-machinery-inventory|extract-push-flag-decision):' <<< "$o" && exit 1; grep -Eq '^hermetic-consumption: scanned=[1-9][0-9]* .*flagged=0$' <<< "$o" || exit 1; exit "$r"

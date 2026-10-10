@@ -4,6 +4,7 @@
 scripts/
 .githooks/
 templates/
+# reason: core/ is read by content -- controlA (run.sh:305) runs the renderer over the real tree, which globs core/schemas/*.json (scripts/render-vocabulary-index.sh:74) and opens owners derived from validator headers, which may live anywhere under core/ (scripts/render-vocabulary-index.sh:1256, :1290).
 core/
 docs/invariant-index.md
 docs/vocabulary-index.md
