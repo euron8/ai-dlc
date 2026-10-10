@@ -257,6 +257,17 @@ fixture data was built for the sibling `procsub-staged-refusal` and failed enfor
 second corpus. It leaves this list only by a committed trace; its three shards are three such traces. `hermetic-runner`,
 `self-update-gate` and `subject-partition` are untouched here.
 
+Moved here from BL-493 in batch 220, because its subject (the post-green trace step) is this entry's.
+**Re-derived batch 219 (0.763.0).** The first half shipped: the deriver drops `--level debug`, the liveness window is
+~10s, `readset-sandbox-root-clause` retries up to ten windows. A second defect in the same tracer, measured on this
+box: a consumer's pre-push hook (`/Users/n8/git/graph/.githooks/pre-push`, pid 47147) survived its `git push` by 42
+minutes with parent init, no client and no session, because the post-green trace step blocks on nothing that dies
+with the push. It spawned one `log stream --level debug` subscription per fixture the whole time and held
+`diagnosticd` at 30-50% CPU and `fseventsd` at 100% until the operator stopped it by its process group. The trace
+step must hold its parent's pid and exit when that pid is gone; until it does, an orphaned hook is a load generator
+nobody started on purpose. This stays open on the UNMAPPED receipt above; the orphan is a second subject and needs
+its own receipt when the fix is built.
+
 
 ## BL-493 — a declared fixture's key rows are still composed twice, held equal by a census rather than by one function
 
@@ -275,17 +286,22 @@ emitting the rows; the hook feeds it the manifest it already built, the runner f
 the hook's declared-row branch are deleted. The hook decides ~277 fixtures in one awk pass and the runner's
 `--key-only` costs ~2s per fixture, so the shared function must not re-hash per fixture.
 
-verify: sh ! grep -q '^hr_key_rows()' core/scripts/hermetic-run.sh && grep -q 'readset_declared' .githooks/pre-push && bash scripts/validate-enforcement-map.sh >/dev/null 2>&1
+verify: sh r=core/scripts/hermetic-run.sh; c="$(grep -v '^[[:space:]]*#' "$r")"; ! grep -q '^hr_key_rows()' "$r" && ! grep -q 'listing:' <<<"$c" && grep -q 'READSET_KEYROWS_BEGIN' <<<"$c" && grep -q '^# READSET_KEYROWS_BEGIN$' .githooks/pre-push && grep -q '^# READSET_KEYROWS_BEGIN$' core/git-hooks/pre-push && ! grep -q '\.drows' .githooks/pre-push && ! grep -q '\.drows' core/git-hooks/pre-push && grep -q '^readset_declared()' .githooks/pre-push && bash scripts/validate-enforcement-map.sh >/dev/null 2>&1
 
-**Re-derived batch 219 (0.763.0).** The first half shipped: the deriver drops `--level debug`, the liveness window is
-~10s, `readset-sandbox-root-clause` retries up to ten windows. A second defect in the same tracer, measured on this
-box: a consumer's pre-push hook (`/Users/n8/git/graph/.githooks/pre-push`, pid 47147) survived its `git push` by 42
-minutes with parent init, no client and no session, because the post-green trace step blocks on nothing that dies
-with the push. It spawned one `log stream --level debug` subscription per fixture the whole time and held
-`diagnosticd` at 30-50% CPU and `fseventsd` at 100% until the operator stopped it by its process group. The trace
-step must hold its parent's pid and exit when that pid is gone; until it does, an orphaned hook is a load generator
-nobody started on purpose. This stays open on the UNMAPPED receipt above; the orphan is a second subject and needs
-its own receipt when the fix is built.
+**LANDED (v0.767.0, verified PENDING).**
+
+Shipped: a `READSET_KEYROWS` span carried executable-identical by both pre-push hooks (held by I66, hashed into
+`#universe`) owns the declaration parse (`readset_decl_parse`), the tool hashes (`readset_decl_tool_hashes`) and the
+key composition (`readset_decl_keys`, one awk pass over `.now` for every declared fixture). The hook's
+`readset_declared` is now the pre-pass that calls the span and words its refusals into `.dunres`; the decision awk
+reads a declared fixture's keys and values from `.dkeys`. `hermetic-run.sh` sources the span and `hr_key_rows` is
+deleted, so there is one key composer. The one behaviour change: a `lib//` line and a CRLF line are keyed the
+hook's way on both sides (CR stripped, every trailing `/` stripped); the runner went from 4 to 8 rows on `lib//`
+and from exit 2 to 5 rows on CRLF, the hook is unchanged, and `inputs.decl is empty` no longer fires beside
+`declared file absent`. The excluded-top premise expired: both sides already omitted a declared path under an
+excluded top, so omission is kept and the stale `hr_key_rows` header that claimed they differed is gone. The
+runner keeps a narrower `hr_parse_skew`, reached only when the hook carries no span (a consumer mid-pull); it
+writes no key row and turns the verdict store off for that run.
 
 ## BL-495 — fixtures declare whole directories as inputs, so one edit re-keys fixtures that may never read it
 
