@@ -20,6 +20,39 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.768.0] - 2026-10-10
+
+Batch 220 (graph-ledger-full-drain), second release. The detached post-green read-set trace had no lifetime bound:
+on the reference consumer one survived its push by 42 minutes with parent init, holding `diagnosticd` and
+`fseventsd` busy until the operator killed its process group. And two of the fixtures that ran unmapped on every
+push are declared.
+
+### BL-481 — a wall-clock ceiling on the detached trace, and two declarations
+
+- **The process was the trace, not the hook.** Pid 47147 was the detached `readset_live_trace` subshell (parent 1,
+  the same age as its deriver child). Tying it to the hook's pid would kill every trace when the hook returns, which
+  is what the detachment exists to allow, so the fix is a ceiling and not a parent check.
+- **Ceiling.** `readset_trace_ceiling`: 3 x the listed fixtures' recorded durations (300s for one with no row),
+  floor 600s, cap 20000s — strictly below the lock's 21600s staleness epoch, past which a second trace would start
+  beside a live one. `AI_DLC_READSET_TRACE_CEILING` overrides it under the same cap. It is a HANG guard: a working
+  trace finishes inside 3x, and the incident's 42-fixture list (a slow, working trace under `--level debug`, which
+  0.763.0 removed) would have been given 7272s.
+- **Launch and kill.** The hook launches the trace subshell under `set -m`, so it leads its own process group (the
+  pid the lock records), and the subshell launches the deriver as the leader of a second group with its `log stream`
+  children. A watchdog sends TERM, then KILL after 5s, to the DERIVER's group, never to a pid alone, and exits 3; the
+  subshell reads `timeout` from that status, removes the trace copy (guarded on its literal name pattern) and the
+  map's temp file, writes `exit timeout`, and releases the lock. Rows the deriver wrote for finished fixtures stand;
+  the fixture in progress gets none. No `timeout(1)`, no `setsid`.
+- **Report.** The next push names a timed-out trace on its own line, and when a status file names a deriver group
+  that is still alive with no `exit` (its subshell gone, or past its ceiling) it prints the command that stops it.
+- **Declarations.** `fixture-git-env-seam` and `ledger-status-vocabulary` carry `inputs.decl`, `git.decl seed` and
+  `tools.decl`, and print `HERMETIC-CONSUMED` for their required validator. `validator-fork-budget` is NOT declared:
+  sandboxed it counts 3327 forks against `FORK_BUDGET=3324`.
+- **Fixture.** `readset-skip-b` arm t1 drives the real `readset_live_trace` against a stub deriver that forks a
+  sleeping grandchild and never exits, asserting with `kill -0` beside a live control (never a process-table grep);
+  r9-r12 hold the stop line both ways. Mutants `noceil`, `pidonly`, `nolock`, `asfinish`, `nostop`, each killed.
+- **Both pre-push hooks change** (`I66`), so this release's push re-runs every fixture that reads either hook.
+
 ## [0.767.0] - 2026-10-09
 
 Batch 220 (graph-ledger-full-drain). A declared fixture's (`inputs.decl`) key rows were composed twice, by the
@@ -59,6 +92,13 @@ census arm. They are now composed once.
 - **Backlog.** BL-493's receipt is keyed on code; BL-495's `sh exit 9` became a manual close, because once BL-493
   closed it left the ledger with no scorable receipt and failed the gate's `backlog receipts` step. A paragraph
   about the orphaned post-green trace moved from BL-493 to BL-481, whose subject it is.
+- **Gate.** The first gated run went red on four units, all caused by this release: `I77` (the readset-skip
+  `run.sh` had lost its executable bit, which a consumer pull would have propagated); `procsub-staged-refusal`'s
+  spelling arm (the skew parse fed a `while` loop from a pipe, losing the producer's status; it now reads a staged
+  file); `readset-skip-digest-mutants-e` (mutant `filetoo` anchored on the decision line this release respelled); and
+  `validator-fork-budget`, whose traced validator exited 1 on that same `I77`. The second run was green.
+- **Cost.** `validate-enforcement-map.sh` forks 3323 against `FORK_BUDGET=3324`, up from 3320 at 0.766.0: the new
+  `READSET_KEYROWS` sentinel arm spent 3 of the budget's 4 forks of headroom.
 
 ## [0.766.0] - 2026-10-09
 

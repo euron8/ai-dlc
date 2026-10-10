@@ -289,6 +289,17 @@ UNMAPPED one.
 H="$PWD/.githooks/pre-push"; [ -f "$H" ] || exit 9; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; W="$(mktemp -d)" || exit 9; sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$H" > "$W/pool.sh"; T="$W/t"; mkdir -p "$T/core/scripts" "$T/core/fixtures/gamma" "$W/tmp" "$W/o/.log" && printf 'exit 0\n' > "$T/core/fixtures/gamma/run.sh" && printf '#!/bin/bash\nsleep 600 </dev/null >/dev/null 2>&1 &\necho "$!" > "$RC_GC"; echo "$$" > "$RC_DP"\nwhile :; do sleep 1; done\n' > "$T/core/scripts/derive-fixture-readsets.sh" && git init -q "$T" && git -C "$T" add -A && git -C "$T" -c user.email=r@r -c user.name=r commit -qm s || exit 9; printf 'gamma\n' > "$W/o/.trace"; : > "$W/o/.trace.held"; printf ok > "$W/o/gamma"; printf '  ok\n' > "$W/o/.log/gamma"; export RC_GC="$W/gc" RC_DP="$W/dp" AI_DLC_READSET_LIVE_TRACE=1 AI_DLC_READSET_TRACE_CEILING=2 TMPDIR="$W/tmp/"; cd "$T" || exit 9; . "$W/pool.sh" 2>/dev/null; readset_live_trace "$W/o" >/dev/null 2>&1; i=0; while { [ ! -s "$W/gc" ] || [ ! -s "$W/dp" ]; } && [ "$i" -lt 50 ]; do sleep 0.1; i=$((i+1)); done; gc="$(cat "$W/gc" 2>/dev/null)"; dp="$(cat "$W/dp" 2>/dev/null)"; case "$gc$dp" in ''|*[!0-9]*) exit 9 ;; esac; kill -0 "$gc" 2>/dev/null || exit 9; lk="$GITDIR/ai-dlc-fixture-readsets.local.lock"; i=0; while [ -d "$lk" ] && [ "$i" -lt 150 ]; do sleep 0.1; i=$((i+1)); done; r=1; [ ! -d "$lk" ] && ! kill -0 "$gc" 2>/dev/null && ! kill -0 "$dp" 2>/dev/null && grep -qx 'exit timeout' "$READSET_LOCAL.status" && r=0; kill -KILL "$dp" "$gc" 2>/dev/null; exit "$r"
 ```
 
+**Re-derived batch 220 (0.767.0 gate, then 0.768.0).** The 0.767.0 gate's line read **3 of 277 UNMAPPED**:
+`fixture-git-env-seam ledger-status-vocabulary validator-fork-budget`. `self-update-join-gate`, which no `git.decl`
+form can seed (it clones and walks 1483 commits of history), left the set because that gate's in-pool trace RECORDED
+it. 0.768.0 declares `fixture-git-env-seam` (`git.decl seed`; sandboxed rc 0, 21 arms; dropping its `!` input fails W
+and V) and `ledger-status-vocabulary` (`git.decl seed`; sandboxed rc 0, 11 assertions; dropping `templates/` fails I22
+and I119; stripping the sentinel fires `REQUIRED input … never consumed`). **`validator-fork-budget` stays
+undeclared**: sandboxed it counts 3327 forks against `FORK_BUDGET=3324`, unsandboxed 3323. Its headroom was 4 at
+0.766.0 (3320) and 0.767.0's `READSET_KEYROWS` sentinel arm in I66 spent 3 of them, so the budget is at its edge
+outside the sandbox too. The entry closes when that fixture leaves the UNMAPPED line, by a recorded trace or by a
+declaration whose sandboxed fork count fits the budget.
+
 
 ## BL-495 — fixtures declare whole directories as inputs, so one edit re-keys fixtures that may never read it
 
