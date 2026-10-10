@@ -20,7 +20,42 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
-## [0.769.0] - 2026-10-10
+## [0.770.0] - 2026-10-10
+
+Batch 221 (graph-ledger-full-drain), second release. `hermetic-run.sh` nested a fixture's own directory inside
+itself whenever a declaration had already copied part of it in, on this tree AND on consumers; and
+`validator-fork-budget` is declared.
+
+### hermetic-run.sh — a fixture's own directory is copied once, never nested
+
+- **Defect.** The runner copied `$HR_FXDIR` into `$HR_SB/$HR_FXROOT/$HR_FX` with `cp -Rp dir dest`. When `dest`
+  already existed — because the fixture declared bare `core/` or `core/fixtures/`, or declared its own `run.sh` or
+  `seed.sh` — BSD `cp` put the copy INSIDE it, so the sandbox held `<fx>/<fx>/`. Measured on an installed consumer, the
+  13 shipping fixtures that declare their own files (`self-update-gate` a–d, `check-24-adversarial-convergence` a–d,
+  `apply-restamp-worklist` a–c, `apply-drift-refile-b`/`-c`) nested there; all still passed. A `--fixture-dir`
+  override on a fixture declaring `core/` was worse: the override nested and the IN-TREE `run.sh` ran, rc 0 — a
+  verdict on the wrong program.
+- **Fix.** `mkdir -p dest && cp -Rp "$HR_FXDIR/." dest/`. Under an override the declared copy lists drop every entry
+  under the fixture's own directory, so the sandbox's own directory is the override alone. Skipping the copy when the
+  destination exists is NOT a fix: on a consumer the declared `run.sh` creates it, and the rest of the directory then
+  never arrives.
+- **Arms.** `hermetic-runner` Y (distribution layout, bare `core/`), Y2 (`--fixture-dir` override: its token appears,
+  an in-tree-only file is absent), Y3 (consumer layout, own `run.sh` declared: no nesting, the whole directory
+  arrives). Mutants M20 (the nesting copy; fails Y and Y3), M21 (skip if the destination exists; fails Y3), M22 (no
+  override filter; fails Y2).
+- **Cost, once.** The line sits inside the span the verdict store digests, so every recorded hermetic pass is
+  invalidated and the next gated push re-runs every declared fixture.
+
+### BL-481 — `validator-fork-budget` declared
+
+- `inputs.decl` declares every root the validator, the profiler and the renderer read: `scripts/`, `.githooks/`,
+  `templates/`, `core/`, `patterns/`, `.claude/rules/`, `CLAUDE.md`, `VERSION` and the read-set map (arm I118 reads it;
+  without it the validator exits 1). `git.decl seed`, `tools.decl`, and a `HERMETIC-CONSUMED` sentinel for the
+  validator. Dropping the map turns the run red at I118; dropping `VERSION` refuses with exit 2.
+- **The sandboxed excess was the nesting above, not the declaration.** Sandboxed, the fixture read 3326–3327 against
+  3323 unsandboxed; the whole difference was I106 +4, its walk for `VERSION` finding the nested copy. Through the
+  fixed runner it reads 3323, arm for arm equal to the worktree, under `FORK_BUDGET=3335`.
+- BL-481 stays open: `self-update-join-gate` is still reported UNMAPPED beside `hermetic-runner`.
 
 Batch 221 (graph-ledger-full-drain), first release. Since 0.763.0 the reference consumer's pre-push refused every
 push on two shipped fixtures that pass when run directly, and the consumer has pushed with `--no-verify` since.
