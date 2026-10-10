@@ -1828,6 +1828,50 @@ case "$RP_R6" in
   *"trace-report last trace: RUNNING since "*"pid $LOCKPID; no status file"*) ok "(r6) a live lock with no status file (an older hook's trace) still reads RUNNING, and says the status file is absent" ;;
   *) bad "(r6) a running trace with no status file was not reported: $(tr '\n' '|' <<< "$RP_R6")" ;;
 esac
+# (r9)-(r12) THE STOP LINE. A deriver group the status file names, still alive, with no exit: the report
+# prints the command that ends it when the trace subshell is gone (r9) or the trace is past its
+# ceiling (r10), and stays quiet for a live trace inside its ceiling (r11) and for a deriver group that
+# is already gone (r12). The live group is a `sleep` this fixture started under `set -m` and kills by
+# its recorded group on exit; the dead pid is a child that has already been reaped.
+set -m; sleep 600 </dev/null >/dev/null 2>&1 & SDG=$!; set +m
+trap 'kill '"$LOCKPID"' 2>/dev/null; kill -- -'"$SDG"' 2>/dev/null; rm -rf "$WORK"' EXIT
+sh -c 'exit 0' & SDEAD=$!; wait "$SDEAD"
+kill -0 -- "-$SDG" 2>/dev/null || broken "the stop-line worlds' live group -$SDG is not alive"
+kill -0 "$SDEAD" 2>/dev/null && broken "the stop-line worlds' dead pid $SDEAD is alive"
+RP_STOP="stop it with: kill -TERM -- -$SDG"
+rp_stop_world() { # <pool> <name> <status pid> <deriver> <ceiling> <age>
+  rp_world "$1" "$2" "printf 'start %s\npid %s\nlist gamma\nderiver %s\nceiling %s\n' \"\$((\$(date +%s) - $6))\" $3 $4 $5 > \"\$RL.status\""
+}
+RP_R9="$(rp_stop_world "$POOL" r9 "$SDEAD" "$SDG" 900 5)"; lt_arm
+case "$RP_R9" in
+  *"deriver group $SDG is still running and its trace subshell (pid $SDEAD) is gone; $RP_STOP"*) ok "(r9) a live deriver group whose trace subshell is gone: one WARN line naming kill -TERM -- -<deriver pgid>" ;;
+  *) bad "(r9) an orphaned deriver group was not named with its stop command: $(tr '\n' '|' <<< "$RP_R9")" ;;
+esac
+RP_R10="$(rp_stop_world "$POOL" r10 "$LOCKPID" "$SDG" 10 100)"; lt_arm
+case "$RP_R10" in
+  *"deriver group $SDG is still running and it has run "*"s, past its 10s ceiling; $RP_STOP"*) ok "(r10) a live trace past its ceiling plus grace: the same line, naming the overrun" ;;
+  *) bad "(r10) a trace past its ceiling was not named with its stop command: $(tr '\n' '|' <<< "$RP_R10")" ;;
+esac
+RP_R11="$(rp_stop_world "$POOL" r11 "$LOCKPID" "$SDG" 900 5)"; lt_arm
+case "$RP_R11" in
+  *"stop it with:"*) bad "(r11) a live trace inside its ceiling was told to stop: $(tr '\n' '|' <<< "$RP_R11")" ;;
+  *"trace-report last trace: started"*) ok "(r11) near-miss: a live trace inside its ceiling gets no stop line" ;;
+  *) bad "(r11) the near-miss report printed no last-trace line: $(tr '\n' '|' <<< "$RP_R11")" ;;
+esac
+RP_R12="$(rp_stop_world "$POOL" r12 "$SDEAD" "$SDEAD" 900 5)"; lt_arm
+case "$RP_R12" in
+  *"stop it with:"*) bad "(r12) a deriver group that is already gone was told to stop: $(tr '\n' '|' <<< "$RP_R12")" ;;
+  *"DIED without writing its exit"*) ok "(r12) near-miss: a gone deriver group gets no stop line (the trace still reads DIED)" ;;
+  *) bad "(r12) the near-miss report did not read DIED: $(tr '\n' '|' <<< "$RP_R12")" ;;
+esac
+if PM_FN=readset_trace_report pm_copy nostop 1 '[ -n "$why" ] && printf' '[ -n "$why" ] && false && printf'; then
+  lt_arm; R="$(rp_stop_world "$PM" pm.nostop "$SDEAD" "$SDG" 900 5)"
+  case "$R" in
+    *"$RP_STOP"*) bad "MUTANT nostop SURVIVED (r9)" ;;
+    *"trace-report last trace: started"*"DIED"*) ok "MUTANT nostop (the stop line dropped) is KILLED by (r9)" ;;
+    *) bad "MUTANT nostop: the copy printed no report -- NO VERDICT: $(tr '\n' '|' <<< "$R")" ;;
+  esac
+fi
 # THE CALL SITE: run_fixtures prints the report on a push that runs the suite, before the suite runs.
 rp_run() { # <pool> <name>; prints the run's output
   local p="$1" t="$WORK/rpr.$2"

@@ -268,6 +268,27 @@ step must hold its parent's pid and exit when that pid is gone; until it does, a
 nobody started on purpose. This stays open on the UNMAPPED receipt above; the orphan is a second subject and needs
 its own receipt when the fix is built.
 
+**The orphan subject's receipt, batch 220 (0.768.0).** Pid 47147 was the DETACHED trace subshell, not the hook's main
+body, so a parent-pid tie is the wrong fix: the trace is detached so the push never waits. The fix is a wall-clock
+ceiling (`readset_trace_ceiling`: 3x the listed fixtures' recorded durations, floor 600s, cap 20000s) enforced by a
+watchdog that kills the deriver's own process GROUP, then writes `exit timeout` and releases the lock. It is a HANG
+guard: the incident's 42-fixture list would get 7272s and was a slow, working trace. The fixture arm that holds it is
+`readset-skip-b` (t1); the fenced receipt below runs under `set -uo pipefail` from the repo root. It launches the real
+`readset_live_trace` from the pre-push pool block against a stub deriver that forks a sleeping grandchild and never
+exits, at a 2s ceiling, and exits 0 only if the lock is released, the deriver and its grandchild are both gone, and
+the status reads `exit timeout`. This receipt is the orphan subject's; the entry's operative `verify:` above stays the
+UNMAPPED one.
+
+| Subject | Exit |
+|---|---|
+| fix (b220-ceiling) | 0 |
+| base 9800057e | 1 |
+| ceiling computed, never enforced (watchdog exits without signalling) | 1 |
+
+```
+H="$PWD/.githooks/pre-push"; [ -f "$H" ] || exit 9; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; W="$(mktemp -d)" || exit 9; sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$H" > "$W/pool.sh"; T="$W/t"; mkdir -p "$T/core/scripts" "$T/core/fixtures/gamma" "$W/tmp" "$W/o/.log" && printf 'exit 0\n' > "$T/core/fixtures/gamma/run.sh" && printf '#!/bin/bash\nsleep 600 </dev/null >/dev/null 2>&1 &\necho "$!" > "$RC_GC"; echo "$$" > "$RC_DP"\nwhile :; do sleep 1; done\n' > "$T/core/scripts/derive-fixture-readsets.sh" && git init -q "$T" && git -C "$T" add -A && git -C "$T" -c user.email=r@r -c user.name=r commit -qm s || exit 9; printf 'gamma\n' > "$W/o/.trace"; : > "$W/o/.trace.held"; printf ok > "$W/o/gamma"; printf '  ok\n' > "$W/o/.log/gamma"; export RC_GC="$W/gc" RC_DP="$W/dp" AI_DLC_READSET_LIVE_TRACE=1 AI_DLC_READSET_TRACE_CEILING=2 TMPDIR="$W/tmp/"; cd "$T" || exit 9; . "$W/pool.sh" 2>/dev/null; readset_live_trace "$W/o" >/dev/null 2>&1; i=0; while { [ ! -s "$W/gc" ] || [ ! -s "$W/dp" ]; } && [ "$i" -lt 50 ]; do sleep 0.1; i=$((i+1)); done; gc="$(cat "$W/gc" 2>/dev/null)"; dp="$(cat "$W/dp" 2>/dev/null)"; case "$gc$dp" in ''|*[!0-9]*) exit 9 ;; esac; kill -0 "$gc" 2>/dev/null || exit 9; lk="$GITDIR/ai-dlc-fixture-readsets.local.lock"; i=0; while [ -d "$lk" ] && [ "$i" -lt 150 ]; do sleep 0.1; i=$((i+1)); done; r=1; [ ! -d "$lk" ] && ! kill -0 "$gc" 2>/dev/null && ! kill -0 "$dp" 2>/dev/null && grep -qx 'exit timeout' "$READSET_LOCAL.status" && r=0; kill -KILL "$dp" "$gc" 2>/dev/null; exit "$r"
+```
+
 
 ## BL-493 — a declared fixture's key rows are still composed twice, held equal by a census rather than by one function
 

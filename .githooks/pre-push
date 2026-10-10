@@ -1160,7 +1160,7 @@ readset_when() { # <epoch>: local wall-clock time, or the bare epoch where neith
 readset_trace_report() { # <out, or empty where this push built no keys>
   local out="${1:-}" rl="$READSET_LOCAL" lg="$READSET_LOCAL.log" st="$READSET_LOCAL.status" lk="$READSET_LOCAL.lock"
   local P='   ..    trace-report' dv dsha="-" k v s_start="" s_pid="" s_list="" s_exit="" s_fin="" s_ceil="" s_dp="" now
-  local lp="" le="" run=0 died=0 state ck="" kd=/dev/null kl=/dev/null km=/dev/null
+  local lp="" le="" run=0 died=0 state ck="" kd=/dev/null kl=/dev/null km=/dev/null why=""
   now="$(date +%s)"
   if [ -f "$st" ]; then
     while read -r k v; do
@@ -1199,6 +1199,19 @@ readset_trace_report() { # <out, or empty where this push built no keys>
   if [ "$run" = 1 ] && [ -n "$s_start" ] && [ "$lp" != "$s_pid" ]; then
     printf '%s lock: another trace holds %s (pid %s since %s); the status file is not its own\n' "$P" "$lk" "${lp:-?}" "$(readset_when "$le")"
   fi
+  # A DERIVER GROUP THAT NOTHING WILL END. The deriver leads its own process group, outside the lock's,
+  # so a `kill -9` of the trace subshell leaves it and its `log stream` children running with no
+  # ceiling, and a hung one runs past the ceiling if the watchdog itself was lost. Keyed on what the
+  # status file records: a `deriver` pgid, no `exit`, that group still alive, and EITHER the status pid
+  # is gone OR the trace has run past its `ceiling` plus the kill grace. One line, with the command.
+  case "$s_dp" in ''|*[!0-9]*) ;; *)
+    if [ -z "$s_exit" ] && [ -n "$s_start" ] && kill -0 -- "-$s_dp" 2>/dev/null; then
+      why=""
+      case "$s_pid" in ''|*[!0-9]*) why="its trace subshell is unrecorded" ;; *) kill -0 "$s_pid" 2>/dev/null || why="its trace subshell (pid $s_pid) is gone" ;; esac
+      case "$s_ceil" in ''|*[!0-9]*) ;; *) [ -z "$why" ] && [ $(( now - s_start )) -gt $(( s_ceil + 5 )) ] && why="it has run $(( now - s_start ))s, past its ${s_ceil}s ceiling" ;; esac
+      [ -n "$why" ] && printf '   WARN  trace-report warning: the last trace'"'"'s deriver group %s is still running and %s; stop it with: kill -TERM -- -%s\n' "$s_dp" "$why" "$s_dp"
+    fi ;;
+  esac
   dv="$(readset_deriver_path)"
   [ -n "$dv" ] && dsha="$(shasum -a 256 -- "$dv" 2>/dev/null | cut -d' ' -f1)"
   if [ -s "$rl" ]; then
