@@ -1043,6 +1043,11 @@ arm_Y() {
   CUR=Y
   local P="$WK/Y1" expy
   mk_probe "$P" stub_ls $'data/a.txt\ncore/'
+  # A DISTRIBUTION layout, or bare `core/` has no consumer location and is refused before any copy:
+  # the runner decides the layout by `<root>/core/scripts` being a directory.
+  mkdir -p "$P/core/scripts" && printf 'x\n' > "$P/core/scripts/x.sh" \
+    && ( cd "$P" && git add -A && git -c user.name=t -c user.email=t@t commit -qm dist ) >/dev/null 2>&1 \
+    || { echo "FIXTURE ERROR: could not make probe $P a distribution layout" >&2; exit 2; }
   run_hr "$P"
   eq "bare core/ declared: exit 0" "$RC" 0
   yes "bare core/: the fixture's own run.sh is in the sandbox" "$OUT" "./$FXR/probe/run.sh"
