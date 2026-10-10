@@ -1,9 +1,13 @@
-# In-pool read-set trace — trace the run that gives the push its verdict
+# DISCHARGED — In-pool read-set trace — trace the run that gives the push its verdict
+
+> **THIS PLAN IS SPENT. DO NOT EXECUTE IT.** Every `## Done when` clause is met, on the two gated pushes of 0.767.0
+> from the main checkout (`4967fc36`, red; `3680941f`, green, landed as `e6c241a1`). It is kept as the record of what
+> was measured. The follow-on work is **BL-481** (dropped sandbox reports) in `docs/backlog.md`.
 
 ## RESUME HERE
 
 **You were started with one sentence: `READ and FOLLOW docs/plans/inpool-readset-trace.md`. This section
-is the ONLY CURRENT STATUS RECORD in this file.**
+is the ONLY CURRENT STATUS RECORD in this file, and it records a spent plan.**
 
 **Why.** Operator goal: every push must be short. A push runs every undeclared fixture that is unmapped or stale,
 and after a green suite `readset_live_trace` re-ran those fixtures a SECOND time under `derive-fixture-readsets.sh
@@ -16,48 +20,67 @@ APFS clone of the tracked + untracked-not-ignored list plus `.git`. One serial m
 existing lock. A TRIP re-runs the fixture untraced and takes that verdict. A linked worktree skips in-pool tracing
 with one line naming why. Declared fixtures (`inputs.decl`) are never traced in-pool.
 
-**LANDED as 0.766.0**, main `d2c7538c` (PR #1096), tree equal to the gated `c726c2fe`. The code: the modes are parsed
-at `core/scripts/derive-fixture-readsets.sh:184` and `:185`, the clone is `core/scripts/derive-fixture-readsets.sh:568`;
-the hook functions are `.githooks/pre-push:1016` (prep) and `.githooks/pre-push:1042` (merge), called around the pool
-at `.githooks/pre-push:1863` and `.githooks/pre-push:1891`. Both hooks are identical in the pool block (`I66`).
+**The mechanism LANDED as 0.766.0**, main `d2c7538c` (PR #1096). Code at `875a7b43` (0.768.0): the modes are parsed at
+`core/scripts/derive-fixture-readsets.sh:184` and `:185`; the in-pool worker records the verdict the moment the fixture
+exits at `core/scripts/derive-fixture-readsets.sh:1544`; the hook functions are `.githooks/pre-push:1091` (prep) and
+`.githooks/pre-push:1117` (merge), called around the pool at `.githooks/pre-push:2007` and `.githooks/pre-push:2035`.
+Both hooks are identical in the pool block (`I66`). The deriver blob is the same at `d2c7538c`, `4967fc36`,
+`3680941f`, `e6c241a1` and `875a7b43`, so the local map's `#deriver` validity key (`.githooks/pre-push:842`) held across all of it.
 
-**The release gate's own figures** (main checkout detached at `c726c2fe`, 12-way, 786s, load 4 at start and 32 at
-end): exit 0, `pre-push: all gates green.`, 65 ok / 0 FAIL, the changed fixtures ok by name (readset-skip, -b, -c,
--d, hermetic-runner, prepush-ssh-keepalive).
-- `read-set keys: 65 of 277 fixture(s) run (64 changed, 0 unrecorded, 1 stale); skipping 212`
+**Clause 1 MET on the first 0.767.0 gate** (`4967fc36`, main checkout detached, 12-way; load 3.84 at start, 32.52 at
+end; exit 1 on four failures, none of them `self-update-join-gate`):
 - `read-set map: ... 4 of 277 fixture dir(s) UNMAPPED ...: fixture-git-env-seam ledger-status-vocabulary
   self-update-join-gate validator-fork-budget`
-- `read-set in-pool trace: 6 fixture(s) traced in the pool: fixture-git-env-seam ledger-status-vocabulary
-  self-update-join-gate validator-fork-budget hermetic-runner prepush-ssh-keepalive`
-- `read-set in-pool trace: recorded prepush-ssh-keepalive; discarded: fixture-git-env-seam ledger-status-vocabulary
-  self-update-join-gate validator-fork-budget hermetic-runner`
+- `read-set in-pool trace: recorded self-update-join-gate prepush-ssh-keepalive; discarded: fixture-git-env-seam
+  ledger-status-vocabulary hermetic-runner`
 
-**Fail-closed held.** Each discard is a `log stream` drop (`BL-481`): 720, 524, 237, 710 and 261 drops per window, and
-ledger-status-vocabulary also tripped the LOSS CANARY. In the main checkout's `.git/ai-dlc-fixture-readsets.local` each
-of the five carries one `#discards` row and zero read-set rows, so each runs on every push: the fail-closed direction.
-prepush-ssh-keepalive recorded 7 rows plus a `#deriver` row carrying the 0.766.0 deriver's sha.
+`self-update-join-gate` has no `inputs.decl` (control: 233 fixtures on `origin/main` carry one), was UNMAPPED, ran
+`ok`, and the merge wrote it 348 rows plus a `#deriver` row matching the current deriver.
 
-**The merge erased two valid-looking local records, and that is by design.** ai-dlc-59's detached post-green trace
-finished at epoch 1791590283 having recorded `ledger-status-vocabulary` (1481 paths) and `self-update-join-gate` (257
-paths). The 0.766.0 gate started at 1791591370 and its merge replaced both with `#discards 1` and zero rows. Those rows
-carried the previous deriver's sha (`aa036297…`); 0.766.0 changed the deriver (`8ca3788b…`), and
-`readset_local_validate` keeps a local row only when its `#deriver` matches the current one (`.githooks/pre-push:842`
-and `:849`), so both were invalid and correctly re-traced. Any release that edits the deriver re-traces every
-locally-mapped fixture on its own push, and a lossy window then leaves it run-always rather than mapped smaller.
+**Clauses 2 and 3 MET on the second 0.767.0 gate** (`3680941f`, the same checkout; load 6.08 at start, 27.81 at end;
+exit 0, `pre-push: all gates green.`):
+- `read-set map: ... 3 of 277 fixture dir(s) UNMAPPED ...: fixture-git-env-seam ledger-status-vocabulary
+  validator-fork-budget` (`self-update-join-gate` is gone from it, mapped through `readset_local_validate`)
+- `read-set keys: 47 of 277 fixture(s) run (46 changed, 0 unrecorded, 1 stale); skipping 230`; the one stale is
+  `hermetic-runner`
+- zero `read-set live trace` lines in the log, against a control of 4 `read-set` lines in the same log, so
+  `readset_live_trace` (`.githooks/pre-push:951`) started no detached trace for anything
+- `read-set in-pool trace: recorded hermetic-runner self-update-join-gate; discarded: fixture-git-env-seam
+  ledger-status-vocabulary validator-fork-budget`
 
-**`#discards 1` is a fresh key, not a reset.** The count is per `run.sh sha:deriver sha`
-(`core/scripts/derive-fixture-readsets.sh:875` and `:903`), and the new deriver opened a new key for every in-pool
-fixture. The 22 fixtures held at 3 were not traced by this gate.
+**Why `self-update-join-gate` was traced in the pool again on the push that reported it mapped.** It counts as mapped
+at `.githooks/pre-push:842`, yet its key record at `.git/ai-dlc-fixture-keys/self-update-join-gate.key` reads
+`#state stale`. Two filters are involved. The `stale, N fixture(s)` report line keys on the decision code `s`. The
+post-green trace queue at `.githooks/pre-push:1877` keys on the NEXT state `ns == "stale"`, and `ns` turns stale at
+`.githooks/pre-push:1758` when a recorded key changed. The likely cause is that gate 1 wrote the key record while the
+fixture was still unmapped, keyed on the whole tree, so the key moved between the two gates. That cannot be verified
+now: gate 2 overwrote the record. A same-shape control shows the state settles. `prepush-ssh-keepalive` was recorded
+on the 0.766.0 gate, re-traced on gate 1, and is absent from gate 2's in-pool list and verdict lines, so it skipped
+on the second push after its recording. `self-update-join-gate` did the same: on the next suite-running push from the
+main checkout, ai-dlc-1d's first 0.768.0 gate (`0de54965`, exit 0, later re-gated for an unrelated watchdog race), it
+appears on no line of the log, against 51 `ok` verdict lines in the same log, and the UNMAPPED list read
+`1 of 277 ...: validator-fork-budget`. The landed 0.768.0 gate (`746fe744`, squashed as `875a7b43`, exit 0, load
+25.47 at start and 23.61 at end) read the same: `read-set in-pool trace: recorded hermetic-runner
+prepush-ssh-keepalive`, with `self-update-join-gate` absent.
 
-**Done-when clause 1 is NOT MET on that gate**: the only fixture recorded was a mapped one, and all four UNMAPPED
-fixtures were discarded by BL-481 drops at load ~30. Clauses 2 and 3 are read on the next push from the main checkout
-(action 1).
+**Two fixtures reached the hold, which is the fail-closed ruling arriving.** After gate 2 the main checkout's local
+map holds `fixture-git-env-seam` and `ledger-status-vocabulary` at `#discards 3`, every discard a `log stream` drop
+(`BL-481`). `readset_trace_add` (`.githooks/pre-push:883`) routes a fixture at 3 or more on the same `run.sh:deriver`
+key to `.trace.held`, which `readset_pool_trace_prep` never reads. 0.768.0 (`875a7b43`, BL-481) declared both of them,
+which takes them out of the trace path entirely. `validator-fork-budget` is the one UNMAPPED fixture left.
 
-**A discarded fixture does not fall back to the detached trace.** `readset_pool_trace_merge` removes every fixture
-with an in-pool `rc` from `$out/.trace`, discards included, by design (`.githooks/pre-push:1050`), and the gate printed
-no detached-trace line. A discarded fixture stays UNMAPPED and is traced in the pool again on the next push; nothing is
-mapped smaller. The 0.766.0 CHANGELOG entry said "falls back to the detached trace" and is corrected in this plan's
-docs commit, as are this plan's earlier rulings that said the same.
+**NOTE, not filed: a fixture that FAILS in the pool leaves the in-pool line without a mention.** On gate 1
+`validator-fork-budget` was among the six traced, failed in the suite, and is in neither `recorded` nor
+`discarded`. The worker writes `rc` before it traces (`core/scripts/derive-fixture-readsets.sh:1544`), and a nonzero
+exit becomes a discard reason at `core/scripts/derive-fixture-readsets.sh:1667`. The worker's own `discard` write
+was not observed for it, and its `#discards` stayed at 1 across that gate. The merge removes every fixture with an
+`rc` from the detached queue (`.githooks/pre-push:1126`), so the fixture is neither re-run nor mapped smaller: the
+fail-closed direction holds.
+
+**NOTE: the in-pool merge runs on a red suite.** `readset_live_trace` runs only after a green suite
+(`.githooks/pre-push:944`), while `readset_pool_trace_merge` at `.githooks/pre-push:2035` is not gated on green. Gate
+1 was red, and its merge recorded two fixtures whose own verdicts were `ok`. That is within the rulings above: each
+record comes from that fixture's own passing run.
 
 ## Start here
 
@@ -76,16 +99,10 @@ docs commit, as are this plan's earlier rulings that said the same.
 
 ## Next actions
 
-1. **Read clauses 2 and 3 on the next push from the main checkout.** Do not start one for this; read the next gated
-   push any session makes from the main checkout that RUNS its fixture suite. Two kinds of push do not count: one from
-   a linked worktree, which skips in-pool tracing, and one whose suite skips on the content key, which prints no
-   `read-set` lines at all (this plan's own docs-close pushes were that kind). From the push's output take the
-   `read-set keys:`, `read-set map: ... UNMAPPED` and `read-set in-pool trace:` lines, with load beside them. If any of
-   the four UNMAPPED fixtures prints under `recorded`, clause 1 is met on that push and clauses 2 and 3 are read on the
-   push after it. If they are discarded again on stream drops, report the drop counts and load.
-2. **Re-derive this RESUME block after the merge** of whatever lands next: what landed, the push's own `read-set
-   in-pool trace:` lines, and its UNMAPPED and stale counts against the 0.766.0 gate's (4 UNMAPPED, 1 stale). Run, with
-   `LOG` set to that push's saved hook output:
+1. **Read clauses 2 and 3 on the next push from the main checkout.** DONE: read on ai-dlc-1d's two 0.767.0 gates; the
+   figures are in the RESUME block.
+2. **Re-derive this RESUME block after the merge.** DONE against `e6c241a1`, with `LOG` set to the second gate's
+   saved hook output. The derivation as run:
 
    ```bash
    L=/Users/n8/git/ai-dlc/.git/ai-dlc-fixture-readsets.local   # READ ONLY
@@ -97,24 +114,27 @@ docs commit, as are this plan's earlier rulings that said the same.
    awk -F'\t' '$1=="zq9-not-a-fixture"' "$L" | wc -l
    sed 's/\x1b\[[0-9;]*m//g' "$LOG" | grep -E 'read-set (keys|map|in-pool)|pre-push:'
    ```
+
+   It printed `#discards:3` for fixture-git-env-seam and ledger-status-vocabulary, 428 rows for self-update-join-gate,
+   `#discards:2` for validator-fork-budget, 17 rows for hermetic-runner, 7 for prepush-ssh-keepalive, and 0 for the
+   control.
 3. **Fresh-resume check**: merge the docs commit, read this plan from a fresh clone of `origin/main` as a stranger,
    re-run action 2's derivation there, assert no next action names work `origin/main` already ships, and run
    `bash scripts/validate-plan-shape.sh` there.
-4. **Hand off and stop**: run `ListAgents`, then `SendMessage` the first local `ai-dlc-*` session (never `graph-*`),
-   idle ones first, exactly `READ and FOLLOW docs/plans/inpool-readset-trace.md`; on a `REFUSED:` reply try the
-   next; once one replies `ACCEPTED`, stop.
+4. **Hand off and stop.** Not run. The plan is spent, and P13 binds live plans only, so there is nothing to hand on.
 
 ## Done when
 
 A gated push from the main checkout prints `read-set in-pool trace: recorded <fixtures>` for at least one undeclared
 unmapped fixture, the next push from the same checkout reports that fixture mapped (not UNMAPPED, not stale), and
-`readset_live_trace` started no detached trace for it. Observation point: the 0.766.0 gate met none of the three for
-an UNMAPPED fixture (see the RESUME block); read them on later pushes from the main checkout.
+`readset_live_trace` started no detached trace for it. **MET** for `self-update-join-gate` on `4967fc36` and
+`3680941f` (see the RESUME block).
 
 ## Background (not instructions)
 
 - `BL-481` (dropped sandbox reports) is OPEN; residual default-level drops remain under load. In-pool tracing
-  inherits them, and the 0.766.0 gate lost five of six in-pool traces to them at load ~30.
+  inherits them: the 0.766.0 gate lost five of six in-pool traces to them at load ~30, and the two 0.767.0 gates lost
+  three of six and three of five at load ~30.
 - 16 fixtures carry a VERDICT discard in the main checkout's local map and are never mapped by the detached trace:
   apply-machinery-stamp, apply-restamp-theirs, apply-self-overwrite, derivation-differential,
   derivation-differential-mutants, handoff-resume-guard, layer-crosswalk-home, layer-extends-grain,
