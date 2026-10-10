@@ -171,8 +171,8 @@ LOG_BIN=/usr/bin/log
 die() { echo "ERROR: $*" >&2; exit "$DIE_RC"; }
 say() { echo "[$(date +%H:%M:%S)] $*"; }
 
-USAGE="usage: bash $0 [--all | --list \"<fixtures>\" | --reconcile] [--tracer fs_usage|sandbox|both] [--local-map <file>]   (fs_usage and both need sudo)"
-MODE=""; LIST_ARG=""; TRACER="fs_usage"; LOCAL_MAP=""; RECONCILE=0
+USAGE="usage: bash $0 [--all | --list \"<fixtures>\" | --reconcile] [--tracer fs_usage|sandbox|both] [--local-map <file>] [--in-pool <dir> | --merge-pool <dir>]   (fs_usage and both need sudo)"
+MODE=""; LIST_ARG=""; TRACER="fs_usage"; LOCAL_MAP=""; RECONCILE=0; IN_POOL=""; MERGE_POOL=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --all)       MODE="--all"; shift ;;
@@ -181,9 +181,34 @@ while [ $# -gt 0 ]; do
     --tracer)    TRACER="${2:-}"; shift; [ $# -gt 0 ] && shift ;;
     --tracer=*)  TRACER="${1#--tracer=}"; shift ;;
     --local-map) LOCAL_MAP="${2:-}"; shift; [ $# -gt 0 ] && shift; [ -n "$LOCAL_MAP" ] || die "--local-map needs a file. $USAGE" ;;
+    --in-pool)   IN_POOL="${2:-}"; shift; [ $# -gt 0 ] && shift; [ -n "$IN_POOL" ] || die "--in-pool needs a directory. $USAGE" ;;
+    --merge-pool) MERGE_POOL="${2:-}"; shift; [ $# -gt 0 ] && shift; [ -n "$MERGE_POOL" ] || die "--merge-pool needs a directory. $USAGE" ;;
     *)           die "$USAGE" ;;
   esac
 done
+# `--in-pool <dir>` IS THE PRE-PUSH POOL'S WORKER MODE. The worker runs ONE undeclared, unmapped or stale
+# fixture through it INSTEAD of `bash run.sh`, so the run that produces the push's verdict is the run that is
+# traced, and no second run follows the suite. It is `--local-map` for one fixture with three differences:
+# the tree is an APFS clone of the tracked + untracked-not-ignored list plus `.git` (readset_clone_tree, the
+# tar copy where cloning fails); there is no normal-run log, so the VERDICT condition does not apply; and
+# nothing is written to the local map. <dir> receives `log` (the fixture's output), `rc` (its exit),
+# `trip` (present when the window reported a TRIP) and `rows` or `discard`, in readset_local_write's
+# grammar. The trace root is NOT removed on exit: the worker removes it in the background after recording.
+# `--merge-pool <dir>` is the ONE serial writer afterwards: it folds every `<dir>/<fx>/{rows,discard}` into
+# the --local-map file through readset_local_write, which twelve concurrent workers could not share.
+if [ -n "$IN_POOL" ]; then
+  [ -z "$MERGE_POOL" ] && [ "$RECONCILE" = 0 ] || die "--in-pool takes no --merge-pool or --reconcile. $USAGE"
+  [ "$MODE" = --list ] && [ "$(printf '%s\n' $LIST_ARG | grep -c .)" = 1 ] || die "--in-pool needs --list with exactly ONE fixture. $USAGE"
+  TRACER=sandbox
+  mkdir -p "$IN_POOL" && IN_POOL="$(cd "$IN_POOL" && pwd -P)" || die "cannot create $IN_POOL"
+  rm -f "$IN_POOL/log" "$IN_POOL/rc" "$IN_POOL/trip" "$IN_POOL/rows" "$IN_POOL/discard"
+  LOCAL_MAP="$IN_POOL/local"
+fi
+if [ -n "$MERGE_POOL" ]; then
+  [ "$RECONCILE" = 0 ] && [ -z "$MODE" ] && [ -n "$LOCAL_MAP" ] || die "--merge-pool needs --local-map and takes no --list, --all or --reconcile. $USAGE"
+  [ -d "$MERGE_POOL" ] || die "--merge-pool: $MERGE_POOL is not a directory"
+  TRACER=sandbox; MODE=--list; LIST_ARG="-"
+fi
 # `--reconcile` TRACES WHAT THE MAP OWES, AND ONLY UNDER THE SANDBOX TRACER: it is the unprivileged
 # answer to "which fixtures need a trace", so it never takes sudo. It derives its own list below, once
 # the fixture root is known, and then runs exactly as `--list "<that list>" --tracer sandbox`.
@@ -532,6 +557,50 @@ readset_copy_tree() {
 }
 # READSET_COPY_END
 
+# readset_clone_tree <src> <dst> <scratch> -- `--in-pool`'s copy: the SAME list readset_copy_tree copies
+# (tracked + untracked-not-ignored, plus `.git` whole), made by APFS clonefile(2) in ONE python process,
+# never a fork per file. Measured, 12 concurrent on the real distribution checkout: 1.66-1.70s per clone
+# at load ~10 against 6.7-7.2s for the tar copy, and 4.3-5.0s at load 35-38; a whole-directory `cp -c`
+# was 7.9s, because clone cost tracks FILE COUNT and the directory carries every ignored file. clonefile
+# leaves the source's atimes alone (1416 of 1416 still at the forced epoch after a clone). Returns
+# non-zero when any clone fails -- another volume, a filesystem with no clonefile -- and the caller then
+# falls back to readset_copy_tree, so the copy is never partial.
+readset_clone_tree() {
+  local src="$1" dst="$2" scratch="$3"
+  ( cd "$src" && git ls-files -z --cached --others --exclude-standard ) > "$scratch/clone.list" \
+    || { echo "readset_clone_tree: git ls-files failed in $src" >&2; return 1; }
+  python3 -I -c '
+import ctypes, os, sys
+libc = ctypes.CDLL("libc.dylib", use_errno=True)
+libc.clonefile.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint32]
+src, dst, lst = sys.argv[1], sys.argv[2], sys.argv[3]
+n = miss = 0
+def one(rel):
+    global n, miss
+    s = os.path.join(src, rel); t = os.path.join(dst, rel)
+    if not os.path.lexists(s):
+        miss += 1; return
+    os.makedirs(os.path.dirname(t) or dst, exist_ok=True)
+    if os.path.islink(s):
+        os.symlink(os.readlink(s), t)
+    elif os.path.isdir(s):
+        os.makedirs(t, exist_ok=True)
+    elif libc.clonefile(s.encode(), t.encode(), 1) != 0:
+        raise OSError(ctypes.get_errno(), "clonefile failed: " + rel)
+    n += 1
+with open(lst, "rb") as f:
+    for p in f.read().split(b"\0"):
+        if p: one(p.decode())
+g = os.path.join(src, ".git")
+for root, dirs, files in os.walk(g):
+    r = os.path.relpath(root, src)
+    os.makedirs(os.path.join(dst, r), exist_ok=True)
+    for x in files: one(os.path.join(r, x))
+print("cloned %d path(s) plus .git/" % n)
+if miss: print("note: %d listed path(s) absent on disk, not cloned" % miss)
+' "$src" "$dst" "$scratch/clone.list"
+}
+
 command -v python3  >/dev/null || die "python3 not found (path normalisation)"
 # THE ROOT CHECK BELONGS TO fs_usage, NOT TO THE DERIVATION. The sandbox tracer is unprivileged
 # end to end, and it REFUSES root instead: its fixtures run as whoever invoked it, and a fixture
@@ -837,6 +906,40 @@ readset_local_write() {
 }
 # READSET_LOCALMAP_END
 
+# The PRESENT set for `--local-map`, read off the checkout the hook pushed from, not the trace copy:
+# a fixture deleted there since the copy was taken is gone for the next push too.
+readset_local_present() {
+  local _pd
+  for _pd in "$REPO_ROOT/$FIXTURE_ROOT"/*/; do
+    [ -f "${_pd}run.sh" ] || continue
+    _pd="${_pd%/}"; printf '%s\n' "${_pd##*/}"
+  done
+}
+
+# `--merge-pool` ENDS HERE, before any trace root, profile, stream or copy: it only writes. A fixture
+# directory with neither `rows` nor `discard` was not traced (its worker fell back to a plain run) and is
+# left out of the traced list, so its existing local rows stand.
+if [ -n "$MERGE_POOL" ]; then
+  MP_W="$(mktemp -d "${TMPDIR:-/tmp}/readset-merge.XXXXXX")" || die "mktemp failed"
+  trap 'rm -rf "$MP_W"' EXIT
+  : > "$MP_W/ok"; : > "$MP_W/disc"; mp_traced=""; mp_n=0
+  for mp_d in "$MERGE_POOL"/*/; do
+    [ -d "$mp_d" ] || continue
+    [ -f "${mp_d}rows" ] || [ -f "${mp_d}discard" ] || continue
+    mp_fx="${mp_d%/}"; mp_fx="${mp_fx##*/}"
+    [ -f "${mp_d}rows" ] && { cat "${mp_d}rows" >> "$MP_W/ok" || die "could not read ${mp_d}rows"; }
+    [ -f "${mp_d}discard" ] && { cat "${mp_d}discard" >> "$MP_W/disc" || die "could not read ${mp_d}discard"; }
+    mp_traced="${mp_traced}${mp_traced:+ }$mp_fx"; mp_n=$((mp_n + 1))
+  done
+  [ "$mp_n" -gt 0 ] || { say "merge-pool: no in-pool trace to merge under $MERGE_POOL"; exit 0; }
+  case "$LOCAL_MAP" in /*) ;; *) LOCAL_MAP="$PWD/$LOCAL_MAP" ;; esac
+  readset_local_present > "$MP_W/present"
+  readset_local_write "$LOCAL_MAP" "$MAP" "$MP_W/ok" "$MP_W/disc" "$mp_traced" "$DERIVER_SHA" "$MP_W/present" \
+    || die "could not write $LOCAL_MAP -- the in-pool traces of $mp_traced are not recorded"
+  say "merge-pool: wrote $LOCAL_MAP -- $mp_n in-pool trace(s): $mp_traced"
+  exit 0
+fi
+
 if [ "$TRACER" = fs_usage ]; then
   say "fs_usage runs as root; fixtures run as '$RUN_AS'"
 elif [ "$TRACER" = both ]; then
@@ -852,8 +955,9 @@ mkdir -p "$TRACE_ROOT/t" "$TRACE_ROOT/w" || die "cannot create $TRACE_ROOT"
 # `/private/tmp/...`; a `/tmp/...` root would make the sandbox's `subpath` and the stream
 # predicate match nothing, and every fixture would come back with an atime-only read-set.
 TRACE_ROOT="$(cd "$TRACE_ROOT" && pwd -P)" || die "cannot resolve $TRACE_ROOT"
-# `--local-map` removes the trace root it created on EVERY exit, a refusal included.
-[ -z "$LOCAL_MAP" ] || trap 'rm -rf "$TRACE_ROOT"' EXIT
+# `--local-map` removes the trace root it created on EVERY exit, a refusal included. `--in-pool` does
+# not: its worker removes the root in the background once the verdict is recorded, off the pool's path.
+[ -z "$LOCAL_MAP" ] || [ -n "$IN_POOL" ] || trap 'rm -rf "$TRACE_ROOT"' EXIT
 TREE="$TRACE_ROOT/t"
 WORK="$TRACE_ROOT/w"
 SENTINEL="$TREE/.readset-sentinel"
@@ -915,6 +1019,10 @@ CUR_FX="__probe__"
 RS_POOL_DEPTH="${PREPUSH_POOL_DEPTH:-0}"
 case "$RS_POOL_DEPTH" in *[!0-9]*|??????*) RS_POOL_DEPTH=2 ;; esac
 RS_POOL_DEPTH=$((10#$RS_POOL_DEPTH + 1))
+# `--in-pool` IS NOT A LEVEL. The pool worker that starts it already carries the depth a fixture it ran
+# plainly would see, so the traced fixture gets exactly that depth: one more here would put a fixture that
+# nests the hook at the refused depth 2 only when traced, and its verdict would differ for that reason alone.
+[ -z "$IN_POOL" ] || RS_POOL_DEPTH=$((RS_POOL_DEPTH - 1))
 sandboxed() {
   if [ "$TRACER" = both ]; then
     sudo -n -u "$RUN_AS" sandbox-exec -f "$PROFILE" "$@"
@@ -973,7 +1081,9 @@ if [ -n "$LOCAL_MAP" ]; then
   lv_ok=0; i=0
   while [ "$i" -lt 50 ]; do
     sandboxed cat "$SENTINEL" >/dev/null 2>&1 </dev/null
-    if grep -q 'readset-sentinel' "$WORK/liveness.raw" 2>/dev/null; then lv_ok=1; break; fi
+    # Keyed on THIS run's sentinel path, not the bare marker name: `--in-pool` runs a deriver per pool
+    # worker, every one probing under the same `__liveness__` tag, and a peer's sentinel read is not ours.
+    if grep -qF "$SENTINEL" "$WORK/liveness.raw" 2>/dev/null; then lv_ok=1; break; fi
     kill -0 "$lv_pid" 2>/dev/null || break
     sleep 0.2; i=$(( i + 1 ))
   done
@@ -986,7 +1096,11 @@ fi
 # the one step here that scales with the repository, is paid only by a run that can use it. Nothing
 # above reads the copy: the profile names $TREE as a string, and the probe reads a marker beside it.
 say "copying the tree to $TREE"
-readset_copy_tree "$REPO_ROOT" "$TREE" "$WORK" || die "copy failed"
+if [ -n "$IN_POOL" ]; then
+  readset_clone_tree "$REPO_ROOT" "$TREE" "$WORK" || { rm -rf "$TREE" && mkdir -p "$TREE" && readset_copy_tree "$REPO_ROOT" "$TREE" "$WORK"; } || die "copy failed"
+else
+  readset_copy_tree "$REPO_ROOT" "$TREE" "$WORK" || die "copy failed"
+fi
 [ -d "$TREE/.git" ] || die "copy carries no .git; git-backed fixtures would fail for the wrong reason"
 # THE UNREAD CONTROL. A file nothing reads, reset with every other file before each fixture and
 # required to be STILL at the 2001 epoch after it. If its atime moved, either the reset did not
@@ -1336,16 +1450,6 @@ if [ -e "$MAP" ]; then cp -p "$MAP" "$MAP_TMP" || die "could not stage $MAP_TMP 
 mv -f "$MAP_TMP" "$MAP" || { rm -f "$MAP_TMP"; die "could not move $MAP_TMP over $MAP -- $MAP is unchanged"; }
 }
 
-# The PRESENT set for `--local-map`, read off the checkout the hook pushed from, not the trace copy:
-# a fixture deleted there since the copy was taken is gone for the next push too.
-readset_local_present() {
-  local _pd
-  for _pd in "$REPO_ROOT/$FIXTURE_ROOT"/*/; do
-    [ -f "${_pd}run.sh" ] || continue
-    _pd="${_pd%/}"; printf '%s\n' "${_pd##*/}"
-  done
-}
-
 for fx in $LIST; do
   DONE="${DONE}${DONE:+ }$fx"
   [ -z "$LOCAL_MAP" ] || { : > "$WORK/local.ok"; : > "$WORK/local.discards"; }
@@ -1433,6 +1537,11 @@ for fx in $LIST; do
   else
     ( cd "$TREE" && sandboxed env PREPUSH_POOL_DEPTH="$RS_POOL_DEPTH" VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
     rc=$?
+  fi
+  # `--in-pool`: the verdict is recorded the moment the fixture exits, so a refusal anywhere below still
+  # leaves the worker the run that happened -- the push never runs a fixture twice for a tracing failure.
+  if [ -n "$IN_POOL" ]; then
+    cp "$WORK/$fx.log" "$IN_POOL/log" && printf '%s\n' "$rc" > "$IN_POOL/rc" || die "could not record $fx's verdict in $IN_POOL"
   fi
 
   flushed=1
@@ -1573,7 +1682,11 @@ for fx in $LIST; do
     trip="$(grep -c "FXTAG=$fx;TRIP" "$WORK/$fx.win" 2>/dev/null)" || trip=0
     [ "$trip" -eq 0 ] || why="${why:+$why; }TRIP: $trip exec(s) of a refused binary (setuid/setgid, log, sandbox-exec)"
     grep -qxF "$FIXTURE_ROOT/$fx/run.sh" "$WORK/$fx.set" || why="${why:+$why; }the set does not name its own $FIXTURE_ROOT/$fx/run.sh"
-    if [ ! -r "$LOCAL_MAP.logs/$fx" ]; then
+    # `--in-pool` HAS NO NORMAL RUN TO COMPARE: the traced run IS the push's run. A TRIP is recorded for
+    # the worker instead, which re-runs the fixture untraced and takes THAT run's verdict.
+    if [ -n "$IN_POOL" ]; then
+      [ "$trip" -eq 0 ] || : > "$IN_POOL/trip"
+    elif [ ! -r "$LOCAL_MAP.logs/$fx" ]; then
       why="${why:+$why; }VERDICT: no normal-run log at $LOCAL_MAP.logs/$fx to compare against"
     elif [ "$(readset_verdict_sig "$WORK/$fx.log" "$TREE" "$REPO_ROOT")" != "$(readset_verdict_sig "$LOCAL_MAP.logs/$fx" "$TREE" "$REPO_ROOT")" ]; then
       why="${why:+$why; }VERDICT: the sandboxed run's verdict lines differ from the normal run's"
@@ -1628,8 +1741,13 @@ for fx in $LIST; do
         || say "  per-fixture map write refused after $fx (the previous map stands): $(tail -1 "$WORK/$fx.write")"
     fi
   fi
+  # `--in-pool` writes NO local map: it leaves its one fixture's rows or discard for `--merge-pool`.
+  if [ -n "$IN_POOL" ]; then
+    { [ ! -s "$WORK/local.ok" ] || cp "$WORK/local.ok" "$IN_POOL/rows"; } \
+      && { [ ! -s "$WORK/local.discards" ] || cp "$WORK/local.discards" "$IN_POOL/discard"; } \
+      || die "could not record $fx's trace in $IN_POOL"
   # `--local-map` writes its file after EVERY fixture, kept or discarded, for the same reason.
-  if [ -n "$LOCAL_MAP" ]; then
+  elif [ -n "$LOCAL_MAP" ]; then
     readset_local_present > "$WORK/local.present"
     readset_local_write "$LOCAL_MAP" "$MAP" "$WORK/local.ok" "$WORK/local.discards" "$fx" "$DERIVER_SHA" "$WORK/local.present" \
       || die "could not write $LOCAL_MAP after tracing $fx -- that fixture's rows are unchanged"
@@ -1639,6 +1757,10 @@ done
 # `--local-map` ENDS HERE. It never reaches the controls or the committed map's write: those judge
 # a full map, and a one-fixture local trace would fail the plan-shape pair and the discrimination
 # control by construction. Its own conditions were applied, and its file written, per fixture above.
+if [ -n "$IN_POOL" ]; then
+  say "in-pool: $LIST ${OMITTED:+discarded}${OMITTED:-recorded} in $IN_POOL"
+  exit 0
+fi
 if [ -n "$LOCAL_MAP" ]; then
   say "wrote $LOCAL_MAP -- $MAPPED of $N_SUBJECT traced fixture(s) recorded${OMITTED:+; discarded: $OMITTED}"
   exit 0

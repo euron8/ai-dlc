@@ -1176,6 +1176,43 @@ else
     *"skipped ("*"a linked worktree"*"|not") ok "(e) from a LINKED worktree the launcher starts nothing and says so in one line" ;;
     *) bad "(e) a linked worktree started a trace or said nothing: '$R'" ;;
   esac
+  # THE IN-POOL PREP (readset_pool_trace_prep), driven directly like the launcher: a seeded `$out/.trace`
+  # naming gamma. It prints "<message>|<PT_LIST>". Two refusals share lines with readset_live_trace -- the
+  # knob and the linked-worktree check -- so each is scored by its OWN arm, with a near-miss control that
+  # lists gamma, and the mutants below are confined to this function by PM_FN.
+  pt_drive() { # <pool> <world> <setup>; prints "<message>|<PT_LIST>"
+    local p="$1" t="$2" setup="$3" o
+    o="$(mktemp -d "$WORK/pt.XXXXXX")" || return 1
+    ( cd "$t" || exit 1
+      export AI_DLC_READSET_LIVE_TRACE=1
+      . "$p" 2>/dev/null
+      mkdir -p "$o/.log"; printf 'gamma\n' > "$o/.trace"
+      eval "$setup"
+      readset_pool_trace_prep "$o" > "$o/msg" 2>&1
+      printf '%s|%s' "$(tr '\n' ' ' < "$o/msg")" "$PT_LIST"
+    )
+  }
+  R="$(pt_drive "$POOL" "$(lt_fresh pt1)" ':')"; lt_arm
+  case "$R" in
+    *"read-set in-pool trace: 1 fixture(s) traced in the pool: gamma"*"|gamma") ok "(pt1) near-miss control: with AI_DLC_READSET_LIVE_TRACE=1 the in-pool prep announces gamma and lists it" ;;
+    *) bad "(pt1) near-miss control failed, the prep did not list gamma with the knob at 1: '$R'" ;;
+  esac
+  R="$(pt_drive "$POOL" "$(lt_fresh pt0)" 'export AI_DLC_READSET_LIVE_TRACE=0')"; lt_arm
+  case "$R" in
+    "|") ok "(pt0) AI_DLC_READSET_LIVE_TRACE=0: the in-pool prep prints nothing and PT_LIST is empty" ;;
+    *) bad "(pt0) the knob at 0 did not silence the in-pool prep: '$R'" ;;
+  esac
+  R="$(pt_drive "$POOL" "$LW_T.wt" ':')"; lt_arm
+  case "$R" in
+    *"read-set in-pool trace: skipped ("*"a linked worktree"*"|") ok "(ptw) from a LINKED worktree the in-pool prep skips in one line naming the worktree and leaves PT_LIST empty" ;;
+    *) bad "(ptw) a linked worktree was not skipped by the in-pool prep: '$R'" ;;
+  esac
+  R="$(pt_drive "$POOL" "$(lt_fresh ptm)" ':')"; lt_arm
+  case "$R" in
+    *"a linked worktree"*) bad "(ptw) near-miss control failed, the main checkout was called a linked worktree: '$R'" ;;
+    *"traced in the pool: gamma"*"|gamma") ok "(ptw) near-miss control: in the main checkout the in-pool prep lists gamma" ;;
+    *) bad "(ptw) near-miss control failed, the main checkout did not list gamma: '$R'" ;;
+  esac
   # (a) and (f), through the real call site: run_fixtures in a seeded world.
   # run_fixtures GLOBS ITS OWN FIXTURE ROOT -- `core/fixtures/` in the distribution's hook,
   # `tests/fixtures/` in the consumer's, which is the one an installed tree resolves first. Read off
@@ -1227,8 +1264,16 @@ else
   esac
   RRG="$(rf_drive "$POOL" rg "printf 'exit 1\n' > $FXROOT/gamma/run.sh")"; lt_arm
   case "$RRG" in
-    "1|no|not|none|none||") ok "(f) a FAILED unmapped fixture is never traced, even on a red push" ;;
-    *) bad "(f) a failed unmapped fixture was traced or stashed: '$RRG'" ;;
+    "1|no|"*"|none|none||"*|"1|no|"*"|none|none|0|"*)
+      # Keyed on the OUTCOME (no gamma row lands, nothing is stashed), not on whether a trace was invoked: the
+      # in-pool trace starts the deriver for a failing fixture and discards it. The positive control is the
+      # sibling world RR above, where a PASSING gamma lands exactly one row in the same field; it is re-read
+      # here so this arm cannot pass while the row column is dead.
+      case "$RR" in
+        *"|stashed|1|"*) ok "(f) a FAILED unmapped fixture lands no gamma row and stashes nothing, even on a red push (control: a passing gamma landed its row)" ;;
+        *) bad "(f) the positive control failed: a passing gamma landed no row, so the no-row verdict above proves nothing: '$RR'" ;;
+      esac ;;
+    *) bad "(f) a failed unmapped fixture landed a row or was stashed: '$RRG'" ;;
   esac
   # (k) THE LOCK ROUND TRIP (BL-463). The real readset_live_trace takes the lock while STUB_GO holds
   # the stub deriver, so the trace subshell is alive when the pid file is read. A verdict alone cannot
@@ -1304,14 +1349,22 @@ fi
 
 # MUTANTS of the block, each a count-checked literal edit of a copy, scored by the arm's own predicate.
 pm_copy() { # <name> then triples <count> <from> <to>; sets PM, or reports DID NOT APPLY
+  # PM_FN, when set, confines every anchor search to the body of that one function (from its `name() {`
+  # line to the next line that is exactly `}`), so a line that two functions both carry is mutated in
+  # the intended one only and the anchor still has to match exactly <count> times inside it.
   local name="$1" dst="$WORK/pool.pm.$1.sh" n; shift; PM=""
   cp "$POOL" "$dst" || return 1
   while [ $# -ge 3 ]; do
-    MF="$2" MT="$3" MC="$WORK/pm.$name.n" awk '
-      BEGIN { f = ENVIRON["MF"]; t = ENVIRON["MT"]; n = 0 }
-      { line = $0; o = ""
-        while ((p = index(line, f)) > 0) { o = o substr(line, 1, p - 1) t; line = substr(line, p + length(f)); n++ }
-        print o line }
+    MF="$2" MT="$3" MC="$WORK/pm.$name.n" MFN="${PM_FN:-}" awk '
+      BEGIN { f = ENVIRON["MF"]; t = ENVIRON["MT"]; fn = ENVIRON["MFN"]; n = 0; inf = (fn == "") }
+      { if (fn != "") {
+          if (index($0, fn "() {") == 1) inf = 1
+          else if (inf && $0 == "}") { inf = 2 }
+        }
+        line = $0; o = ""
+        while (inf && (p = index(line, f)) > 0) { o = o substr(line, 1, p - 1) t; line = substr(line, p + length(f)); n++ }
+        print o line
+        if (inf == 2) inf = 0 }
       END { print n > ENVIRON["MC"] }' "$dst" > "$dst.t" && mv "$dst.t" "$dst"
     n="$(cat "$WORK/pm.$name.n" 2>/dev/null)"
     if [ "$n" != "$1" ]; then lt_arm; bad "BL-452 MUTANT $name: anchor matched ${n:-nothing} time(s), not $1 — DID NOT APPLY"; return 1; fi
@@ -1506,11 +1559,31 @@ if [ "$LT_CAN" = 1 ]; then
       *) ok "BL-452 MUTANT $1 is KILLED by $2: '$r'" ;;
     esac
   }
-  pm_copy knob 1 '  [ "${AI_DLC_READSET_LIVE_TRACE:-1}" = 0 ] && return 0' '  :' && pm_l knob k0 'export AI_DLC_READSET_LIVE_TRACE=0' '*"|not"'
+  PM_FN=readset_live_trace pm_copy knob 1 '  [ "${AI_DLC_READSET_LIVE_TRACE:-1}" = 0 ] && return 0' '  :' && pm_l knob k0 'export AI_DLC_READSET_LIVE_TRACE=0' '*"|not"'
   pm_copy lockall 1 '  local lk="$1" p="" e="" now' '  return 0' && pm_l lockall lk1 "$LK_LIVE" '*"another trace holds"*"|not"'
   pm_copy locknone 1 '  local lk="$1" p="" e="" now' '  return 1' && pm_l locknone lk2 "$LK_DEAD" '*"started detached"*"|invoked"'
-  pm_copy linked 1 '  [ "$(git rev-parse --git-dir 2>/dev/null)" = "$(git rev-parse --git-common-dir 2>/dev/null)" ] \' '  true \' \
+  PM_FN=readset_live_trace pm_copy linked 1 '  [ "$(git rev-parse --git-dir 2>/dev/null)" = "$(git rev-parse --git-common-dir 2>/dev/null)" ] \' '  true \' \
     && pm_l linked e ':' '*"a linked worktree"*"|not"' "$LW_T.wt"
+  # The in-pool prep carries the same two lines as readset_live_trace; PM_FN confines each mutant to the
+  # prep, and each is scored by its own arm alone (pt0 for the knob, ptw for the linked check).
+  pt_kill() { # <name> <arm that must fail> <setup> <world> -- every arm is scored, only <arm> may move
+    local m="$1" want="$2" r0 r1 rw flips="" w
+    r0="$(pt_drive "$PM" "$(lt_fresh pm.$m.0)" 'export AI_DLC_READSET_LIVE_TRACE=0')"
+    r1="$(pt_drive "$PM" "$(lt_fresh pm.$m.1)" ':')"
+    rw="$(pt_drive "$PM" "$LW_T.wt" ':')"; lt_arm
+    case "$r0" in "|") ;; *) flips="$flips pt0" ;; esac
+    case "$r1" in *"traced in the pool: gamma"*"|gamma") ;; *) flips="$flips pt1/ptw-main" ;; esac
+    case "$rw" in *"read-set in-pool trace: skipped ("*"a linked worktree"*"|") ;; *) flips="$flips ptw" ;; esac
+    PT_MATRIX="${PT_MATRIX}${m} -> ${flips:- none}\n"
+    case "$want" in pt0) w=" pt0" ;; ptw) w=" ptw" ;; esac
+    if [ "$flips" = "$w" ]; then ok "BL-452 MUTANT $m (in-pool prep) is KILLED by $want alone: knob0 '$r0' main '$r1' linked '$rw'"
+    else bad "BL-452 MUTANT $m (in-pool prep) moved '${flips:-nothing}', want exactly '$want': knob0 '$r0' main '$r1' linked '$rw'"; fi
+  }
+  PT_MATRIX=""
+  PM_FN=readset_pool_trace_prep pm_copy ptknob 1 '  [ "${AI_DLC_READSET_LIVE_TRACE:-1}" = 0 ] && return 0' '  :' && pt_kill ptknob pt0
+  PM_FN=readset_pool_trace_prep pm_copy ptlinked 1 '  [ "$(git rev-parse --git-dir 2>/dev/null)" = "$(git rev-parse --git-common-dir 2>/dev/null)" ] \' '  true \' \
+    && pt_kill ptlinked ptw
+  printf 'in-pool prep kill matrix (mutant -> arms that failed):\n%b' "$PT_MATRIX"
   pm_rf() { # <name> <arm> <setup> <correct result glob>
     local r; lt_arm
     r="$(rf_drive "$PM" "pm.$1" "$3")"
@@ -3581,7 +3654,7 @@ STUB
     sed '/^    \[ "\$trip" -eq 0 \] || why=/d' "$SL/deriver.sh" > "$SL/d.notrip.sh"
     sed 's/^    elif \[ "\$(readset_verdict_sig "\$WORK\/\$fx.log"/    elif false \&\& [ "$(readset_verdict_sig "$WORK\/$fx.log"/' "$SL/deriver.sh" > "$SL/d.noverdict.sh"
     sed 's/^  \[ "\$lv_ok" -eq 1 \] || die /  : || die /' "$SL/deriver.sh" > "$SL/d.nolive.sh"
-    sed '/^\[ -z "\$LOCAL_MAP" \] || trap /d' "$SL/deriver.sh" > "$SL/d.notrap.sh"
+    sed '/^\[ -z "\$LOCAL_MAP" \] || \[ -n "\$IN_POOL" \] || trap /d' "$SL/deriver.sh" > "$SL/d.notrap.sh"
     sed 's/n = ((f in pk) \&\& pk\[f\] == dk\[f\]) ? pn\[f\] + 1 : 1/n = 1/' "$SL/deriver.sh" > "$SL/d.nocount.sh"
     sed 's/^      if (\$2 in com) next$/      if (0) next/' "$SL/deriver.sh" > "$SL/d.noprune.sh"
     lm_mut() { # <name> <copy> <stream list> <stash> <arm> <killing glob> [env...]
@@ -3627,6 +3700,88 @@ STUB
       esac
     fi
     lm_seed; lm_run "$SL/deriver.sh" "$SL/whole.list" same STUB_TRIP=1 >/dev/null
+
+    # `--in-pool` AND `--merge-pool`, DRIVEN IN THE SAME STUB-STREAM WORLD. The worker traces ONE
+    # fixture and leaves `<dir>/{log,rc,trip,rows,discard}`; `--merge-pool <parent>` is the one serial
+    # writer that folds every `<parent>/<fx>/{rows,discard}` into the local map. Every arm below
+    # DEMANDS a file or a row to appear. ip_run prints
+    # "<rc>|<rows lines>|<rows carry src/a.sh's sha256>|<rc file>|<log>|<discard>|<trip>|<discard text>"
+    # and mp_run prints "<rc>|<fxl path rows>|<deriver row>|<fxl discards n>|<zz rows>|<other rows>".
+    IPP="$WORK/ippool"
+    ip_run() { # <deriver copy> <stream list> [env...]
+      local dv="$1" sl="$2" d="$IPP/fxl" r rows sh rcf lg ds tp dt
+      shift 2
+      cp "$dv" "$STUB_DERIVER"; rm -rf "$IPP" "$SL_TR"; mkdir -p "$d.logs-seed" || broken "mkdir failed"
+      rm -rf "$d.logs-seed"; mkdir -p "$d"
+      mkdir -p "$d/local.logs" && printf '  ok    one\n  ok    two\n' > "$d/local.logs/fxl" || broken "could not seed the in-pool normal-run log"
+      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SL:$PATH" STUB_FEED="$SL/feed" STUB_SB="$sl" "$@" \
+          AI_DLC_READSET_TRACE_ROOT="$SL_TR" bash core/scripts/derive-fixture-readsets.sh --list fxl --tracer sandbox --in-pool "$d" ) > "$WORK/ip.out" 2>&1 </dev/null
+      r=$?
+      ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
+      rows=0; [ -f "$d/rows" ] && rows="$(grep -c . "$d/rows")"
+      sh=no; [ -f "$d/rows" ] && awk -F'\t' -v s="$(shasum -a 256 -- "$BR/src/a.sh" | cut -d' ' -f1)" '$1 == "fxl" && $2 == "src/a.sh" && $3 == s { f = 1 } END { exit !f }' "$d/rows" && sh=yes
+      rcf=-; [ -f "$d/rc" ] && rcf="$(cat "$d/rc")"
+      lg=no; [ -s "$d/log" ] && lg=yes
+      ds=no; [ -f "$d/discard" ] && ds=yes
+      tp=no; [ -e "$d/trip" ] && tp=yes
+      dt=-; [ -f "$d/discard" ] && dt="$(awk -F'\t' '{ print $1; exit }' "$d/discard")"
+      rm -rf "$SL_TR"
+      printf '%s|%s|%s|%s|%s|%s|%s|%s' "$r" "$rows" "$sh" "$rcf" "$lg" "$ds" "$tp" "$dt"
+    }
+    mp_run() { # prints the merge's effect on $LMF; the pool under $IPP stays as ip_run left it
+      local r fr dok dn zz ot
+      ( cd "$BR" && env PATH="$SL:$PATH" bash core/scripts/derive-fixture-readsets.sh --merge-pool "$IPP" --local-map "$LMF" ) > "$WORK/mp.out" 2>&1 </dev/null
+      r=$?
+      fr="$(grep -c '^fxl	[^#]' "$LMF" 2>/dev/null)" || fr=0
+      dok=no; grep -qxF "fxl	#deriver	$(shasum -a 256 -- "$BR/core/scripts/derive-fixture-readsets.sh" | cut -d' ' -f1)" "$LMF" 2>/dev/null && dok=yes
+      dn="$(awk -F'\t' '$1 == "fxl" && $2 == "#discards" { print $3 }' "$LMF" 2>/dev/null)"
+      zz="$(grep -c '^zz	' "$LMF" 2>/dev/null)" || zz=0
+      ot="$(grep -c '^other	' "$LMF" 2>/dev/null)" || ot=0
+      printf '%s|%s|%s|%s|%s|%s' "$r" "$fr" "$dok" "${dn:--}" "$zz" "$ot"
+    }
+    ip_arm() { # <label> <result> <glob> <ok text>
+      TRACE_ARMS=$((TRACE_ARMS+1))
+      case "$2" in $3) ok "$4" ;; *) bad "$1: expected '$3', got '$2' — $(tail -2 "$WORK/ip.out" "$WORK/mp.out" 2>/dev/null | tr '\n' ' ')" ;; esac
+    }
+    # ip_world <deriver copy>: the scenarios, results in IPW_*.
+    ip_world() {
+      lm_seed; IPW_A="$(ip_run "$1" "$SL/whole.list")"; IPW_AM="$(mp_run)"
+      lm_seed; IPW_B="$(ip_run "$1" "$SL/whole.list" STUB_DROP=1)"; IPW_BM="$(mp_run)"
+      lm_seed; IPW_C="$(ip_run "$1" "$SL/lossy.list")"; IPW_CM="$(mp_run)"
+      lm_seed; IPW_D="$(ip_run "$1" "$SL/whole.list" STUB_TRIP=1)"
+      # E: a traced fxl beside two directories with neither rows nor discard; their local rows stand.
+      lm_seed; IPW_E0="$(ip_run "$1" "$SL/whole.list")"; mkdir -p "$IPP/zz" "$IPP/other"; IPW_EM="$(mp_run)"
+      # E2: only an empty directory -- nothing to merge, the map must stand byte for byte.
+      lm_seed; cp "$LMF" "$WORK/ip.seeded"; rm -rf "$IPP"; mkdir -p "$IPP/zz"; IPW_EN="$(mp_run)"
+      if cmp -s "$LMF" "$WORK/ip.seeded"; then IPW_EN="$IPW_EN|same"; else IPW_EN="$IPW_EN|changed"; fi
+      IPW_ENMSG=no; grep -q 'no in-pool trace to merge' "$WORK/mp.out" && IPW_ENMSG=yes
+    }
+    ip_world "$SL/deriver.sh"
+    ip_arm "IN-POOL clean" "$IPW_A" "0|2|yes|0|yes|no|no|-" "IN-POOL: a clean trace of fxl writes rows naming its paths with sha256 values, rc 0 and a log, and no discard or trip"
+    ip_arm "MERGE-POOL clean" "$IPW_AM" "0|2|yes|-|2|1" "MERGE-POOL: the rows land in the local map with a #deriver row, while the untraced zz and other keep theirs"
+    ip_arm "IN-POOL drop" "$IPW_B" "0|0|no|0|yes|yes|no|fxl" "IN-POOL: a drop notice in the window writes a discard and no rows"
+    ip_arm "MERGE-POOL drop" "$IPW_BM" "0|0|no|1|2|1" "MERGE-POOL: the discard lands as a #discards row and no fxl path rows"
+    ip_arm "IN-POOL canary" "$IPW_C" "0|0|no|0|yes|yes|no|fxl" "IN-POOL: the LOSS CANARY (a read the stream never reported) discards the trace"
+    ip_arm "MERGE-POOL canary" "$IPW_CM" "0|0|no|1|2|1" "  and the merge records that discard"
+    ip_arm "IN-POOL trip" "$IPW_D" "0|*|*|0|yes|*|yes|*" "IN-POOL: a refused exec leaves <dir>/trip and still writes rc"
+    ip_arm "MERGE-POOL empty dirs" "$IPW_EM" "0|2|yes|-|2|1" "MERGE-POOL: a subdirectory with neither rows nor discard changes nothing, so zz and other keep their rows"
+    ip_arm "MERGE-POOL nothing" "$IPW_EN|$IPW_ENMSG" "0|*|*|*|*|*|same|yes" "MERGE-POOL: a pool holding only an empty directory says so and writes nothing"
+    # nocanary: the loss canary disabled in the in-pool path only (the --local-map path keeps it). It must
+    # move arm C and nothing else: every other scenario's result is byte-identical to the clean world's.
+    awk '{ print } /^    canary="\$\(readset_loss_canary / { print "    [ -z \"$IN_POOL\" ] || canary=0" }' "$SL/deriver.sh" > "$SL/d.ipnocanary.sh"
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    if cmp -s "$SL/deriver.sh" "$SL/d.ipnocanary.sh" || ! bash -n "$SL/d.ipnocanary.sh" 2>/dev/null; then
+      bad "IN-POOL MUTANT nocanary did not apply"
+    else
+      C_A="$IPW_A|$IPW_AM|$IPW_B|$IPW_BM|$IPW_D|$IPW_EM|$IPW_EN"; C_C="$IPW_C|$IPW_CM"
+      ip_world "$SL/d.ipnocanary.sh"
+      M_A="$IPW_A|$IPW_AM|$IPW_B|$IPW_BM|$IPW_D|$IPW_EM|$IPW_EN"
+      if [ "$C_A" = "$M_A" ] && [ "$C_C" != "$IPW_C|$IPW_CM" ] && [ "$(printf '%s' "$IPW_C" | cut -d'|' -f6)" = no ]; then
+        ok "IN-POOL MUTANT nocanary is KILLED by the canary arm alone: the lossy fixture is no longer discarded ('$IPW_C'), and every other arm's result is byte-identical"
+      else
+        bad "IN-POOL MUTANT nocanary: moved the wrong arms or none. rest clean '$C_A' mutant '$M_A'; canary clean '$C_C' mutant '$IPW_C|$IPW_CM'"
+      fi
+    fi
 
     # THE MAP IS WRITTEN AFTER EACH ACCEPTED FIXTURE, SO AN INTERRUPTED RUN KEEPS WHAT IT TRACED.
     # Three fixtures with OLD committed rows; a `--list "fxw1 fxw2 fxw3"` run is SIGKILLed while

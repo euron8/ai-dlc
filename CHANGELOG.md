@@ -20,6 +20,39 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.766.0] - 2026-10-09
+
+Batch 218 (in-pool read-set trace). After a green suite, `readset_live_trace` re-ran every undeclared unmapped or
+stale fixture a second time under `derive-fixture-readsets.sh --tracer sandbox --local-map`. This release traces the
+pool's own run instead, so the read set comes from the run that gave the push its verdict, and the second run
+disappears for every fixture traced that way.
+
+- **Deriver.** `--in-pool <dir>` traces one fixture inside the pool worker and writes `log`, `rc`, `trip`, and
+  `rows` or `discard` into `<dir>`; it never writes the local map and makes no VERDICT comparison, because there is
+  no second run to compare. `--merge-pool <dir> --local-map <file>` is the one serial writer, through
+  `readset_local_write`. `readset_clone_tree` clones the tracked plus untracked-not-ignored list and `.git` per
+  file (clonefile in one python process, tar as the fallback), never the whole directory.
+- **Hook.** `readset_pool_trace_prep` picks the in-pool set before the pool, the worker runs a picked fixture
+  through `--in-pool` and takes its rc, and `readset_pool_trace_merge` merges after the pool under the live trace's
+  lock. Both pre-push hooks change identically (`I66`).
+- **No fail-open path.** A lossy window (drop notice, LOSS CANARY, unread control, dirty delta, TRIP, driver
+  missing) DISCARDS and never maps a smaller set; a discarded fixture falls back to the detached trace. A TRIP
+  re-runs the fixture untraced and takes that verdict. A linked worktree skips in-pool tracing with one line
+  naming why. A declared fixture (`inputs.decl`) is never traced in the pool. `AI_DLC_READSET_LIVE_TRACE=0` turns
+  it off with no output.
+- **Fixture.** `readset-skip` gains in-pool and merge arms (clean, drop, canary, trip, empty dirs, nothing to
+  merge), the `pt0`/`pt1`/`ptw` arms on the prep, and mutants `nocanary`, `ptknob` and `ptlinked`, each killed by
+  its own arm alone. `pm_copy` takes an optional `PM_FN` that confines a mutant's anchor to one function body.
+- **This hook edit re-runs every fixture that reads either pre-push hook** on this release's own push.
+
+### Measured before the gate
+
+A 2-way `file://` rehearsal on the pre-store base printed `read-set keys: 119 of 277 fixture(s) run (118 changed,
+0 unrecorded, 1 stale)` and `read-set in-pool trace: 6 fixture(s) traced in the pool`, the four UNMAPPED fixtures
+among them. It was stopped on operator direction (box load 164) before the merge step. On this base:
+`validate-enforcement-map.sh` rc 0, `validate-shell-portability.sh` rc 0, and readset-skip 92, -b 110, -c 108, -d 62
+ok, all 0 FAIL.
+
 ## [0.765.0] - 2026-10-09
 Batch 218 (graph ledger drain). The consumer's advisor gate loosened on the operator's ruling that the push hook
 must loosen its advisor requirement: the advisor is not owed per push.
