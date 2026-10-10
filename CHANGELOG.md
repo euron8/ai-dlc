@@ -20,7 +20,38 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
-## [0.768.0] - 2026-10-10
+## [0.769.0] - 2026-10-10
+
+Batch 221 (graph-ledger-full-drain), first release. Since 0.763.0 the reference consumer's pre-push refused every
+push on two shipped fixtures that pass when run directly, and the consumer has pushed with `--no-verify` since.
+
+### PC-S317-HERMETIC-REQUIRED-INPUT-NEVER-CONSUMED-REDS-TWO-SHIPPED-FIXTURES — BL-496
+
+- **Cause.** `core/scripts/hermetic-run.sh` requires a whole-line `HERMETIC-CONSUMED <path>` in a fixture's output for
+  each `!` input. `consumer-machinery-inventory` and `extract-push-flag-decision` (both declared in 0.763.0,
+  `6f9da269`) echoed it only in the `core/` branch of their layout chain, so under an installed consumer's runner each
+  read `rc=0 … required_missing=1` and exited 1. The consumer's inference that the read lands outside the sandbox does
+  not hold: the fixture runs inside the sandbox and passes there; only the sentinel was missing.
+- **Population.** All 157 shipped fixtures that declare a `!` input were run through an installed consumer's
+  `hermetic-run.sh`: 155 rc 0, and exactly these two rc 1.
+- **Fix.** Each consumer branch echoes its installed path. The `!` lines stay; dropping them would remove the guard
+  against a layout-tolerant fixture passing with one layout dropped. Installed into a fresh consumer, both fixtures
+  now read rc 0 through the installed runner, against rc 1 at the base.
+- **Binding.** `scripts/validate-hermetic-consumption.sh`, a static scan, run by the `.dist-only` fixture
+  `hermetic-consumption` and nothing else (not an arm of `validate-enforcement-map.sh`, not in a hook). For each
+  shipped fixture's `!` input, mapped through `core-paths.sh --map`, the chain that resolves it must emit a sentinel
+  for the installed path in its installed-path branch, or once unconditionally after the chain. A sentinel counts only
+  on a line the runner always sees: the `echo` starts its statement, the token ends at its closing quote, and only a
+  stderr redirect may follow (`>&2` is accepted because the runner captures `2>&1`). At the base it flags exactly the
+  two fixtures; at tip, none. Its reach is stated in its header: it scores 10 of 240 `!` inputs, the rest being
+  emitted through a variable, from another file, or having no installed-path branch, so its clean result is a floor.
+  The self-probe runs before the corpus: 8 seeds that must fire (including `> /dev/null`, a trailing space inside the
+  token, `[ … ] && echo`, and a heredoc), 6 that must stay quiet; removing any one guard fails the probe on its own seed.
+- **Fork budget.** `FORK_BUDGET` 3324 → 3335: the new script and fixture cost I8 +1, I84 +2, I83 +1, I106 +2; the tip
+  reads 3328/3329.
+
+BL-465 is adjudicated CLOSE this batch (a width-6 push compared its pole against its own width's three rows) and is
+annotated at the batch close.
 
 Batch 220 (graph-ledger-full-drain), second release. The detached post-green read-set trace had no lifetime bound:
 on the reference consumer one survived its push by 42 minutes with parent init, holding `diagnosticd` and

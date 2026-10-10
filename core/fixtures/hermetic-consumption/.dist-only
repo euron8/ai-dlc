@@ -1,0 +1,9 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Its subject is scripts/validate-hermetic-consumption.sh, which install.sh does not ship, and its
+corpus is this repository's own core/fixtures/: arm C scans every shipped fixture's inputs.decl
+and run.sh. On a consumer the validator is absent and the corpus is tests/fixtures/ in the
+installed layout, so this fixture could resolve nothing and only pass.
+
+It is also a MUTATION BATTERY: it builds mini distributions in mktemp, each carrying a copy (or
+a mutated copy) of the validator and worlds seeded from consumer-machinery-inventory's run.sh.

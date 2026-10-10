@@ -786,7 +786,17 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   spread 3318-3318), so +4 to +6. 0.760.0 adds `check-24-adversarial-convergence-{b,c,d}` and
 #   `apply-restamp-worklist-{b,c}` as shipping directories; the four `.dist-only` procsub shards cost
 #   nothing. HIGH reading 3318 plus the usual 6.
-FORK_BUDGET=3324
+#
+#   RAISED TO 3335 FOR ONE NEW DISTRIBUTION SCRIPT AND ONE NEW `.dist-only` FIXTURE DIRECTORY, NOT
+#   FOR A NEW ARM. `fork-profile.sh --section by-arm --stable`, base `origin/main` 2db3f4c0 and then
+#   the tip carrying `scripts/validate-hermetic-consumption.sh` and `core/fixtures/hermetic-consumption/`,
+#   twice each in ONE worktree at the same path, every file committed: base 3322 and 3323 (STABLE 2
+#   both), tip 3329 and 3328 (STABLE 2 both), so +5 to +7. I8 96 -> 97 walks the new fixture
+#   directory; I84 303 -> 305 and I83 150 -> 151 walk the new script; I106 41 -> 43 reads the two
+#   new files that walk up for the VERSION marker; I93 31 <-> 32 is the instrument's usual one-fork
+#   jitter. Re-measured twice after the sentinel-grammar fold at 786a4be4: 3328 and 3329 (STABLE 2
+#   both), the same four arms moving by the same amounts. HIGH reading 3329 plus the usual 6.
+FORK_BUDGET=3335
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

@@ -321,3 +321,44 @@ line `core/` and 15 a whole line `core/scripts/` (`grep -lxE`, control `ZZ-never
 which scored nothing and, once BL-493 closed, left the ledger with no scorable receipt and failed the gate's
 `backlog receipts` step (R2); it is now a manual close stating the condition, because no mechanical predicate can
 tell a narrowed declaration from an under-declared one without the trace.
+
+## BL-496 — two shipped fixtures consume their REQUIRED input only in the distribution layout, and red on every consumer
+
+**DEFECT, filed at batch 221.** Filed by the consumer as
+`PC-S317-HERMETIC-REQUIRED-INPUT-NEVER-CONSUMED-REDS-TWO-SHIPPED-FIXTURES`. `core/scripts/hermetic-run.sh` requires a
+whole-line `HERMETIC-CONSUMED <path>` for each `!` input in a fixture's output. `consumer-machinery-inventory` and
+`extract-push-flag-decision` resolve their `!` input through an if/elif chain over both layouts and echoed the sentinel
+only in the `core/` branch, so under an installed consumer's runner both report `required_missing=1` and rc 1. The
+regression is 0.763.0 (`6f9da269`). A dynamic sweep of all 157 shipped `!` fixtures through an installed consumer's
+runner gave 155 rc 0 and these 2 rc 1. Nothing in this repo could fail on it, because no gate here runs a fixture in
+the installed layout.
+
+The fix echoes the consumer path in each consumer branch (fix A; the `!` lines stay). The binding is
+`scripts/validate-hermetic-consumption.sh`, a static scan run only by the `.dist-only` fixture
+`core/fixtures/hermetic-consumption/`. Over the 157 shipped `!` fixtures it flags exactly these two at base `2db3f4c0`
+and 0 at the fix. It scores 10 of 240 `!` inputs, and its header states the reach, so a clean result is a floor.
+
+The receipt runs from the repo root under `set -uo pipefail`. It exits 9 when the validator, the mapper or either
+fixture's `!` line is missing, or when the validator's self-probe refuses. It exits 1 when the scan names either fixture
+or reports any flagged input. Scored against the fix tree, and against copies of that tree's scan inputs (VERSION,
+`core-paths.sh`, the validator, `core/fixtures/`) with one variant of `consumer-machinery-inventory/run.sh`:
+
+| Subject | Exit |
+|---|---|
+| fix (both consumer branches echo) | 0 |
+| base: both `run.sh` at `origin/main` 2db3f4c0, fix validator | 1 |
+| dist-only echo (the consumer echo removed) | 1 |
+| `.bak` near-miss echoed in the consumer branch | 1 |
+| top-of-file echo above the resolution | 1 |
+| fix B: the declared spelling after the chain's `fi`, both branch echoes removed | 0 |
+| consumer echo sent `> /dev/null` | 1 |
+| a trailing space inside the consumer echo's quoted token | 1 |
+| consumer echo behind `[ -n "${UNSET:-}" ] &&` | 1 |
+| consumer echo sent `>&2` (the runner captures `2>&1`, so this is a correct fix) | 0 |
+| a literal `origin/main` checkout (no validator) | 9 |
+
+The three rows the runner reds on while the first cut of the validator accepted them (`> /dev/null`, a trailing
+space, a leading `&&`) were found by the tip adversary. The validator now records a sentinel only when its statement
+emits unconditionally to the runner, with the token ending at its own closing quote, and `>&2` stays accepted.
+
+verify: sh V=scripts/validate-hermetic-consumption.sh; [ -f "$V" ] && [ -f core/scripts/core-paths.sh ] || exit 9; for f in consumer-machinery-inventory extract-push-flag-decision; do grep -q '^!' "core/fixtures/$f/inputs.decl" || exit 9; done; o="$(bash "$V" 2>&1)"; r=$?; [ "$r" = 2 ] && exit 9; grep -q '^self-probe: ok' <<< "$o" || exit 9; grep -Eq '^FAIL: core/fixtures/(consumer-machinery-inventory|extract-push-flag-decision):' <<< "$o" && exit 1; grep -Eq '^hermetic-consumption: scanned=[1-9][0-9]* .*flagged=0$' <<< "$o" || exit 1; exit "$r"
