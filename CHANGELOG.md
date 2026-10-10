@@ -20,6 +20,25 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.772.0] - 2026-10-10
+
+Batch 222 (graph-ledger-full-drain), first release. No consumer candidate was live to build; the opening sweep read
+live 1, unfiled 0, worklist 0, DISCHARGED 1, every control passing.
+
+### BL-481 — `self-update-join-gate` gets a committed read-set trace
+
+- **Subject.** The last undeclared, unmapped fixture on BL-481's list: no `inputs.decl` and 0 committed map rows, so it
+  ran on every push. Its local in-pool rows (428) existed but were dropped whenever the `core/fixtures` listing they
+  record changed, which is every push that adds a fixture directory.
+- **Trace.** `derive-fixture-readsets.sh --list "self-update-join-gate" --tracer sandbox` from the main checkout
+  detached at `50b5ca40`: 530 paths, the deriver's own proper-subset control PASS (224 of 224).
+- **Map.** 530 rows for `self-update-join-gate`, its `# digest` line, and the header count; no other fixture's rows
+  move (diff tabulated by fixture name: 530 added under that name, 0 under any other; `hermetic-runner` 17 before and
+  after).
+- **Still true.** The rows include the `core/fixtures` listing, so this fixture re-runs on any push that adds a
+  fixture directory. A declaration would remove that; the fixture stays undeclared here because a trace is what the
+  entry's receipt asks for.
+
 ## [0.771.0] - 2026-10-10
 
 Batch 221 (graph-ledger-full-drain), third release. Thirty-three `inputs.decl` files declared `core/` or
