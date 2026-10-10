@@ -895,25 +895,89 @@ readset_live_trace() { # <out>
   for b in $names; do cp "$out/.log/$b" "$READSET_LOCAL.logs/$b" 2>/dev/null; done
   tr="${TMPDIR:-/tmp}"; tr="${tr%/}/ai-dlc-readset-live.$$"
   logf="$READSET_LOCAL.log"
+  cl="$(readset_trace_ceiling "$names")"
   # THE STATUS FILE, `<local map>.status`, IS WRITTEN BY THE TRACE SUBSHELL ALONE, twice, each time
-  # whole (temp + mv): `start`, `pid`, `list` when it starts, and the same plus `exit` and `finish`
-  # when the deriver returns -- before the lock is released, so a reader that finds the lock gone
-  # finds the exit too, or knows the trace died. Its pid is read from inside it (`$PPID` of a child
-  # it execs), the pid the lock records as `$!`. readset_trace_report reads it on the next push.
+  # whole (temp + mv): `start`, `pid`, `list`, `deriver`, `ceiling` once the deriver is launched, and
+  # the same plus `exit` and `finish` when the deriver returns -- before the lock is released, so a
+  # reader that finds the lock gone finds the exit too, or knows the trace died. Its pid is read from
+  # inside it (`$PPID` of a child it execs), the pid the lock records as `$!`. `exit timeout` is a
+  # trace the ceiling killed. readset_trace_report reads it on the next push.
+  #
+  # THE CEILING, AND WHY THE KILL IS AIMED WHERE IT IS. A consumer's detached trace outlived its push
+  # by 42 minutes, holding one `log stream` per fixture, with nothing that could end it. Two process
+  # groups, each made by `set -m` around exactly one launch: the subshell is its own group (pgid
+  # `$tp`, the lock's pid), and inside it the deriver is a BARE background command, so its pid `$dp` is
+  # the deriver's own `$$` and the leader of a second group holding every `log stream` and sandboxed
+  # fixture it starts. The watchdog sits in group `$tp`; at the ceiling it sends TERM, then KILL after
+  # a 5s grace, to `-$dp` and nowhere else. Measured on bash 3.2: a KILL to `-$tp` kills this subshell,
+  # so nothing writes the exit or releases the lock; and `trap '' TERM` here would be inherited as
+  # SIG_IGN by the deriver, which then survives the TERM. A TERM to `$dp` alone leaves its children
+  # running -- the orphan this exists to end. After a kill the deriver's EXIT trap never ran, so this
+  # subshell removes the trace root and the deriver's map temp itself, by their literal names. Rows the
+  # deriver finished before the kill stand (it writes the map after every fixture); the fixture in
+  # progress gets none and stays unmapped. On a normal finish the watchdog is stopped by its pid and
+  # its trap reaps its `sleep`, so group `$tp` is empty once the lock is released. The deriver is
+  # outside group `$tp`, so a hand's `kill -- -<lock pid>` would leave it running with no ceiling:
+  # the subshell's TERM trap (a handler, never SIG_IGN, so the deriver does not inherit it) forwards
+  # that TERM to `-$dp` and then waits the deriver out before writing the exit.
+  set -m
   ( trap '' HUP
-    sp="$(exec sh -c 'printf %s "$PPID"')"; t0="$(date +%s)"
-    printf 'start %s\npid %s\nlist %s\n' "$t0" "$sp" "$names" > "$READSET_LOCAL.status.tmp.$sp" 2>/dev/null \
+    set +m
+    sp="$(exec sh -c 'printf %s "$PPID"')"; t0="$(date +%s)"; fl="$READSET_LOCAL.timeout.$sp"
+    rm -f "$fl"
+    set -m
+    AI_DLC_READSET_TRACE_ROOT="$tr" bash "$dv" --list "$names" --tracer sandbox --local-map "$READSET_LOCAL" &
+    dp=$!
+    set +m
+    printf 'start %s\npid %s\nlist %s\nderiver %s\nceiling %s\n' "$t0" "$sp" "$names" "$dp" "$cl" > "$READSET_LOCAL.status.tmp.$sp" 2>/dev/null \
       && mv "$READSET_LOCAL.status.tmp.$sp" "$READSET_LOCAL.status" 2>/dev/null
-    AI_DLC_READSET_TRACE_ROOT="$tr" bash "$dv" --list "$names" --tracer sandbox --local-map "$READSET_LOCAL"
-    rc=$?
-    printf 'start %s\npid %s\nlist %s\nexit %s\nfinish %s\n' "$t0" "$sp" "$names" "$rc" "$(date +%s)" > "$READSET_LOCAL.status.tmp.$sp" 2>/dev/null \
+    ( s=""; trap '[ -n "$s" ] && kill "$s" 2>/dev/null; exit 0' TERM
+      sleep "$cl" & s=$!; wait "$s"; s=""
+      : > "$fl"
+      if kill -TERM -- "-$dp" 2>/dev/null; then
+        g=0; while kill -0 -- "-$dp" 2>/dev/null && [ "$g" -lt 50 ]; do sleep 0.1; g=$((g + 1)); done
+        kill -KILL -- "-$dp" 2>/dev/null
+      else rm -f "$fl"; fi
+    ) &
+    wp=$!
+    trap 'kill -TERM -- "-$dp" 2>/dev/null' TERM
+    wait "$dp"; rc=$?
+    while kill -0 "$dp" 2>/dev/null; do wait "$dp"; rc=$?; done
+    [ -f "$fl" ] || kill "$wp" 2>/dev/null
+    wait "$wp" 2>/dev/null
+    if [ -f "$fl" ]; then rc=timeout; kill -KILL -- "-$dp" 2>/dev/null; rm -f "$fl"; fi
+    case "$tr" in */ai-dlc-readset-live.[0-9]*) rm -rf "$tr" ;; esac
+    rm -f "$READSET_LOCAL.tmp.$dp"
+    printf 'start %s\npid %s\nlist %s\nderiver %s\nceiling %s\nexit %s\nfinish %s\n' "$t0" "$sp" "$names" "$dp" "$cl" "$rc" "$(date +%s)" > "$READSET_LOCAL.status.tmp.$sp" 2>/dev/null \
       && mv "$READSET_LOCAL.status.tmp.$sp" "$READSET_LOCAL.status" 2>/dev/null
     rm -f "$lk/pid"; rmdir "$lk" 2>/dev/null || { sleep 1; rm -f "$lk/pid"; rmdir "$lk" 2>/dev/null; }
   ) </dev/null >"$logf" 2>&1 &
   tp="$!"
+  set +m
   printf '%s %s\n%s\n' "$tp" "$(date +%s)" "$(readset_pid_start "$tp")" > "$lk/pid" 2>/dev/null
-  printf '   ..    read-set live trace: started detached for %s unmapped fixture(s) (%s) -> %s\n' "$n" "$names" "$logf"
+  printf '   ..    read-set live trace: started detached for %s unmapped fixture(s) (%s) -> %s; killed at %ss\n' "$n" "$names" "$logf" "$cl"
   return 0
+}
+
+# THE TRACE'S WALL-CLOCK CEILING, in seconds: 3 x the sum of the listed fixtures' recorded durations
+# (DURATIONS_RECORD; a fixture with no row counts 300s), floored at 600s and capped at 20000s.
+# k = 3 because a trace costs about what its fixtures cost: measured on a consumer, 16 fixtures with
+# 649s of recorded durations traced in 371s, and a 42-fixture list of 2424s was still working at
+# 2508s -- so a working trace finishes inside 3x and only a hung one reaches it. The cap is strictly
+# below the lock's 6h (21600s) staleness epoch in readset_lock_stale, less the 5s kill grace: a live
+# trace past that reads stale and a second one starts beside it. AI_DLC_READSET_TRACE_CEILING
+# (whole seconds, >= 1) replaces the derived figure and is held to the same cap.
+readset_trace_ceiling() { # <space-separated fixture names>
+  local c dr=/dev/null
+  [ -s "$DURATIONS_RECORD" ] && dr="$DURATIONS_RECORD"
+  c="$(awk -v L="$1" 'BEGIN { n = split(L, a, " ") }
+    NF == 2 && $2 ~ /^[0-9]+$/ { d[$1] = $2 }
+    END { s = 0; for (i = 1; i <= n; i++) s += ((a[i] in d) ? d[a[i]] : 300); print 3 * s }' "$dr" 2>/dev/null)"
+  case "$c" in ''|*[!0-9]*) c=600 ;; esac
+  [ "$c" -lt 600 ] && c=600
+  case "${AI_DLC_READSET_TRACE_CEILING:-}" in ''|*[!0-9]*|??????*) ;; *) [ "$((10#$AI_DLC_READSET_TRACE_CEILING))" -ge 1 ] && c="$((10#$AI_DLC_READSET_TRACE_CEILING))" ;; esac
+  [ "$c" -gt 20000 ] && c=20000
+  printf '%s' "$c"
 }
 
 # THE IN-POOL TRACE. An undeclared fixture queued in `$out/.trace` is run by its pool worker through
@@ -1000,12 +1064,12 @@ readset_when() { # <epoch>: local wall-clock time, or the bare epoch where neith
 # every held line. A finished trace that recorded nothing, or one that died, is a WARN line.
 readset_trace_report() { # <out, or empty where this push built no keys>
   local out="${1:-}" rl="$READSET_LOCAL" lg="$READSET_LOCAL.log" st="$READSET_LOCAL.status" lk="$READSET_LOCAL.lock"
-  local P='   ..    trace-report' dv dsha="-" k v s_start="" s_pid="" s_list="" s_exit="" s_fin="" now
+  local P='   ..    trace-report' dv dsha="-" k v s_start="" s_pid="" s_list="" s_exit="" s_fin="" s_ceil="" s_dp="" now
   local lp="" le="" run=0 died=0 state ck="" kd=/dev/null kl=/dev/null km=/dev/null
   now="$(date +%s)"
   if [ -f "$st" ]; then
     while read -r k v; do
-      case "$k" in start) s_start="$v" ;; pid) s_pid="$v" ;; list) s_list="$v" ;; exit) s_exit="$v" ;; finish) s_fin="$v" ;; esac
+      case "$k" in start) s_start="$v" ;; pid) s_pid="$v" ;; list) s_list="$v" ;; exit) s_exit="$v" ;; finish) s_fin="$v" ;; ceiling) s_ceil="$v" ;; deriver) s_dp="$v" ;; esac
     done < "$st"
   fi
   case "$s_start" in ''|*[!0-9]*) s_start="" ;; esac
@@ -1015,7 +1079,13 @@ readset_trace_report() { # <out, or empty where this push built no keys>
     [ -f "$lk/pid" ] && read -r lp le < "$lk/pid"
     case "$le" in ''|*[!0-9]*) le="$now" ;; esac
   fi
-  if [ -n "$s_exit" ]; then
+  # A TIMED-OUT TRACE IS NOT A FINISH AND NOT A CRASH: the ceiling killed the deriver's process group,
+  # the fixtures it had not finished stay unmapped, and the WARN below names it once. The `deriver` and
+  # `ceiling` lines are absent from a status file an older hook wrote, and from one read in the gap
+  # before the subshell rewrites it with them; neither is required here.
+  if [ "$s_exit" = timeout ]; then
+    state="TIMED OUT at the ${s_ceil:-?}s ceiling, at $(readset_when "${s_fin:-0}") ($(( ${s_fin:-0} - ${s_start:-0} ))s); deriver group ${s_dp:-?} killed"
+  elif [ -n "$s_exit" ]; then
     state="finished, exit $s_exit, at $(readset_when "${s_fin:-0}") ($(( ${s_fin:-0} - ${s_start:-0} ))s)"
   elif [ -n "$s_start" ] && [ "$run" = 1 ] && [ "$lp" = "$s_pid" ]; then
     state="RUNNING since $(readset_when "$s_start") ($(( now - s_start ))s), pid $s_pid"
@@ -1121,6 +1191,7 @@ readset_trace_report() { # <out, or empty where this push built no keys>
           if (x[4] == "s") ns++; else if (!(x[1] in MAP)) nu++ }
         printf "%s uncleared this push: %d stale and %d unmapped fixture(s) run because no trace has cleared them\n", P, ns, nu }
       if (ENVIRON["RS_DIED"] == "1") printf "   WARN  trace-report warning: the last trace DIED without writing its exit -- nothing it was given can be trusted as recorded; see %s\n", ENVIRON["RS_LOGP"]
+      else if (ENVIRON["RS_FIN"] == "timeout") printf "   WARN  trace-report warning: the last trace TIMED OUT at its wall-clock ceiling and was killed; %d of %d fixture(s) recorded, the rest stay unmapped (AI_DLC_READSET_TRACE_CEILING raises it); see %s\n", nrec, ng, ENVIRON["RS_LOGP"]
       else if (ENVIRON["RS_FIN"] != "" && ng > 0 && nrec == 0) {
         b = ""; bn = 0; for (i = 1; i <= NC; i++) if (TC[C[i]] > bn) { bn = TC[C[i]]; b = C[i] }
         printf "   WARN  trace-report warning: the last trace recorded NOTHING for the %d fixture(s) it was given; dominant cause %s (%d)\n", ng, (b == "" ? "unknown" : b), bn }
