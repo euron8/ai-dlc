@@ -1,7 +1,9 @@
 # subject-partition drives partition-subject.sh with partition-document.sh beside it, copies both into mutant dirs, and its receipt.sh
-# (in the fixture's own directory, copied by the runner) drives merge-adversarial-shards.sh and validate-adversarial-convergence.sh,
-# which execs validate-steering-budget.sh from its own directory. Every world is a git repo built under mktemp; no live history is read.
-# core/scripts/ is declared whole because those siblings resolve each other by directory.
+# (in the fixture's own directory, copied by the runner) drives merge-adversarial-shards.sh and validate-adversarial-convergence.sh.
+# Every world is a git repo built under mktemp; no live history is read. Nothing enumerates core/scripts/: each sibling is
+# resolved by name (run.sh:41-50, receipt.sh:37-157), so the scripts are declared one by one, against a fresh sandbox read-set
+# trace. That trace reads no validate-steering-budget.sh: the convergence --series runs here never reach a steering citation.
 !core/scripts/partition-subject.sh
 !core/scripts/partition-document.sh
-core/scripts/
+core/scripts/merge-adversarial-shards.sh
+core/scripts/validate-adversarial-convergence.sh

@@ -1,5 +1,12 @@
-# adversarial-shard-merge drives the merge plus its sibling validators and partitioners (whole scripts dir, incl. lib/meta-gate.sh), the provenance schema, and sources the shared preamble.
+# adversarial-shard-merge drives the merge and the siblings it resolves beside itself by name (lib.sh:33-38, :324-347,
+# run.sh:171), the provenance schema, and sources the shared preamble. Nothing enumerates core/scripts/, so the
+# scripts are declared one by one, against a fresh sandbox read-set trace. validate-provenance-block.sh's optional
+# lib/meta-gate.sh does not exist at tip and is not declared.
 !core/scripts/merge-adversarial-shards.sh
-core/scripts/
+core/scripts/partition-document.sh
+core/scripts/partition-subject.sh
+core/scripts/validate-adversarial-convergence.sh
+core/scripts/validate-provenance-block.sh
+core/scripts/validate-steering-budget.sh
 core/schemas/provenance-block.json
 core/fixtures/lib/
