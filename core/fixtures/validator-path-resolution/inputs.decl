@@ -1,5 +1,6 @@
 # validator-path-resolution installs EVERY core script into a seeded consumer tree in both layouts
 # (a glob over the directory) and runs each bare, so the directory is declared whole.
+# reason: core/scripts/ is enumerated -- for f in "$SRC"/*.sh, core/fixtures/validator-path-resolution/run.sh:115 and :375.
 !core/scripts/
 # schemas copied into the seeded tree; the fixture exits 2 without a schemas directory.
 core/schemas/

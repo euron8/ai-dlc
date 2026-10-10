@@ -1,7 +1,7 @@
 # adversarial-shard-merge drives the merge and the siblings it resolves beside itself by name (lib.sh:33-38, :324-347,
 # run.sh:171), the provenance schema, and sources the shared preamble. Nothing enumerates core/scripts/, so the
 # scripts are declared one by one, against a fresh sandbox read-set trace. validate-provenance-block.sh's optional
-# lib/meta-gate.sh does not exist at tip and is not declared.
+# probes -- lib/meta-gate.sh and core/skills/ai-dlc/extensions/known-skills.json -- do not exist at tip and are not declared.
 !core/scripts/merge-adversarial-shards.sh
 core/scripts/partition-document.sh
 core/scripts/partition-subject.sh
