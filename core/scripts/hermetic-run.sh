@@ -185,7 +185,11 @@ if [ "$HR_KR" = 0 ]; then
 fi
 # THE SKEW PARSE: reachable ONLY when the hook carries no READSET_KEYROWS span, and never on a key-only run, so it
 # writes no key row and no store entry. It emits the span's parse-row grammar with the span's normalisation, so the
-# sandbox below reads one shape either way.
+# sandbox below reads one shape either way. It is a SECOND PARSER by necessity (the span owns the parse, and with no
+# span a sandbox run must still run), and it is deliberately narrower than the span: it does not check `?name`
+# against READSET_UNKEYED_TOOLS (the `command -v` resolution below still refuses an unreachable one) and does not
+# refuse a duplicate basename at parse time (the tool farm below still refuses two different paths). A probe of
+# the composer must therefore drive the span-present path, never this one.
 hr_parse_skew() { # <fx> <fixture dir> <dist|cons> <mapper> <tool search path> <scratch prefix>
   local fx="$1" fd="$2" w="$6" t p
   printf '%s\tN\n' "$fx"
@@ -198,10 +202,15 @@ hr_parse_skew() { # <fx> <fixture dir> <dist|cons> <mapper> <tool search path> <
     [ -f "$4" ] || { printf '%s\tX\tnomap\t%s\n' "$fx" "$4"; return 0; }
     awk -F'\t' '$2 != "X" { print $3 (($2 == "D") ? "/" : "") }' "$w.n" | bash "$4" --map > "$w.m" 2> "$w.e" \
       || { printf '%s\tX\tmaprefuse\t%s\n' "$fx" "$(sed -n 1p "$w.e" | tr '\t' ' ')"; return 0; }
-    awk -F'\t' 'NR == FNR { m[FNR] = $0; next } $2 == "X" { print; next } { n++; p = m[n]; sub(/\/+$/, "", p); print $1 "\t" $2 "\t" p "\t" $4 "\t" $3 }' "$w.m" "$w.n"
+    awk -F'\t' 'NR == FNR { m[FNR] = $0; next } $2 == "X" { print; next } { n++; p = m[n]; sub(/\/+$/, "", p); print $1 "\t" $2 "\t" p "\t" $4 "\t" $3 }' "$w.m" "$w.n" > "$w.r"
   else
-    awk -F'\t' '$2 == "X" { print; next } { print $1 "\t" $2 "\t" $3 "\t" $4 "\t" $3 }' "$w.n"
+    awk -F'\t' '$2 == "X" { print; next } { print $1 "\t" $2 "\t" $3 "\t" $4 "\t" $3 }' "$w.n" > "$w.r"
   fi
+  cat "$w.r"
+  awk -F'\t' '$2 == "F" || $2 == "D"' "$w.r" | while IFS="$(printf '\t')" read -r t k p a dp; do
+    if [ "$k" = D ]; then [ -d "$p" ] || printf '%s\tX\tabsd\t%s\t%s\n' "$fx" "$p" "$dp"
+    else [ -f "$p" ] || printf '%s\tX\tabsf\t%s\t%s\n' "$fx" "$p" "$dp"; fi
+  done
   [ -f "$fd/tools.decl" ] || return 0
   while IFS= read -r t || [ -n "$t" ]; do
     case "$t" in ''|'#'*) continue ;; '?'*) printf '%s\tU\t%s\n' "$fx" "${t#?}"; continue ;; */*) printf '%s\tX\ttpath\t%s\n' "$fx" "$t"; continue ;; esac
