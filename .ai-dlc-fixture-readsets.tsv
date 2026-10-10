@@ -14,8 +14,7 @@
 # path<TAB>sha lines in the runner's universe as traced; the runner clears a stale key record when
 # it recomputes the same value over the tree it is pushing.
 #
-# fixtures mapped: 222    entries: 12607
-# OMITTED by the last run (always run): consumer-machinery-home crosswalk-home-declaration derived-fence-binding enforcement-map-derivations-b enforcement-map-derivations enforcement-map-sites-b enforcement-map-sites fixture-git-env-seam fold-architect-ledger-join-mutants-b layer-contract-conformance-b layer-contract-conformance ledger-status-vocabulary prepush-pool-depth process-rule-pins procsub-staged-refusal-b review-shard-merge-mutants-b review-shard-merge-mutants-c review-shard-merge-mutants schema-install-fallback self-update-join-gate subject-partition suite-content-key suite-pole-guard validator-arm-selection-b validator-arm-selection validator-fork-budget
+# fixtures mapped: 223    entries: 12647
 absorbed-specifics-survive	core/fixtures/absorbed-specifics-survive/run.sh
 absorbed-specifics-survive	core/skills/ai-dlc/SKILL.md
 absorbed-specifics-survive	core/skills/ai-dlc/rule-bodies/rule-13.md
@@ -112,14 +111,12 @@ adversarial-shard-merge	.git/objects/d9
 adversarial-shard-merge	.git/objects/info/alternates
 adversarial-shard-merge	.git/objects/pack
 adversarial-shard-merge	.git/objects/pack/multi-pack-index
-adversarial-shard-merge	.git/objects/pack/pack-3af86136785cab26fb3cce940480121d41e2e3ba.keep
-adversarial-shard-merge	.git/objects/pack/pack-3af86136785cab26fb3cce940480121d41e2e3ba.mtimes
-adversarial-shard-merge	.git/objects/pack/pack-3af86136785cab26fb3cce940480121d41e2e3ba.pack
-adversarial-shard-merge	.git/objects/pack/pack-3af86136785cab26fb3cce940480121d41e2e3ba.promisor
-adversarial-shard-merge	.git/objects/pack/pack-b94b71641194fa77d8e7228f92ae4f180aeba501.keep
-adversarial-shard-merge	.git/objects/pack/pack-b94b71641194fa77d8e7228f92ae4f180aeba501.mtimes
-adversarial-shard-merge	.git/objects/pack/pack-b94b71641194fa77d8e7228f92ae4f180aeba501.pack
-adversarial-shard-merge	.git/objects/pack/pack-b94b71641194fa77d8e7228f92ae4f180aeba501.promisor
+adversarial-shard-merge	.git/objects/pack/multi-pack-index.d/multi-pack-index-chain
+adversarial-shard-merge	.git/objects/pack/pack-ec5b2f051a2947b101537b10f84f3f7005424440.idx
+adversarial-shard-merge	.git/objects/pack/pack-ec5b2f051a2947b101537b10f84f3f7005424440.keep
+adversarial-shard-merge	.git/objects/pack/pack-ec5b2f051a2947b101537b10f84f3f7005424440.mtimes
+adversarial-shard-merge	.git/objects/pack/pack-ec5b2f051a2947b101537b10f84f3f7005424440.pack
+adversarial-shard-merge	.git/objects/pack/pack-ec5b2f051a2947b101537b10f84f3f7005424440.promisor
 adversarial-shard-merge	.git/refs
 adversarial-shard-merge	.gitattributes
 adversarial-shard-merge	core
@@ -11862,6 +11859,44 @@ subagent-probe	core/fixtures/subagent-probe
 subagent-probe	core/fixtures/subagent-probe/run.sh
 subagent-probe	core/fixtures/subagent-probe/seed.sh
 subagent-probe	core/hooks/ai-dlc-subagent-probe.sh
+subject-partition	--scope-ref/sections/.manifest
+subject-partition	.git
+subject-partition	.git/HEAD
+subject-partition	.git/commondir
+subject-partition	.git/config
+subject-partition	.git/info/attributes
+subject-partition	.git/objects
+subject-partition	.git/objects/67
+subject-partition	.git/objects/98
+subject-partition	.git/objects/bc
+subject-partition	.git/objects/e3
+subject-partition	.git/objects/info/alternates
+subject-partition	.git/objects/pack
+subject-partition	.git/objects/pack/multi-pack-index
+subject-partition	.git/objects/pack/multi-pack-index.d/multi-pack-index-chain
+subject-partition	.git/objects/pack/pack-ec5b2f051a2947b101537b10f84f3f7005424440.idx
+subject-partition	.git/objects/pack/pack-ec5b2f051a2947b101537b10f84f3f7005424440.keep
+subject-partition	.git/objects/pack/pack-ec5b2f051a2947b101537b10f84f3f7005424440.mtimes
+subject-partition	.git/objects/pack/pack-ec5b2f051a2947b101537b10f84f3f7005424440.pack
+subject-partition	.git/objects/pack/pack-ec5b2f051a2947b101537b10f84f3f7005424440.promisor
+subject-partition	.git/refs
+subject-partition	.gitattributes
+subject-partition	core
+subject-partition	core/core/scripts/partition-subject.sh
+subject-partition	core/fixtures
+subject-partition	core/fixtures/core/scripts/partition-subject.sh
+subject-partition	core/fixtures/scripts/ai-dlc/partition-subject.sh
+subject-partition	core/fixtures/subject-partition
+subject-partition	core/fixtures/subject-partition/core/scripts/partition-subject.sh
+subject-partition	core/fixtures/subject-partition/receipt.sh
+subject-partition	core/fixtures/subject-partition/run.sh
+subject-partition	core/fixtures/subject-partition/scripts/ai-dlc/partition-subject.sh
+subject-partition	core/scripts
+subject-partition	core/scripts/ai-dlc/partition-subject.sh
+subject-partition	core/scripts/merge-adversarial-shards.sh
+subject-partition	core/scripts/partition-document.sh
+subject-partition	core/scripts/partition-subject.sh
+subject-partition	core/scripts/validate-adversarial-convergence.sh
 suite-dispatch-order	core
 suite-dispatch-order	core/fixtures
 suite-dispatch-order	core/fixtures/lib
@@ -12301,6 +12336,7 @@ upstream-routing	core/fixtures/upstream-routing/core/skills/ai-dlc
 upstream-routing	core/fixtures/upstream-routing/core/skills/ai-dlc-update/reconcile/setup-sites.md
 upstream-routing	core/fixtures/upstream-routing/core/skills/ai-dlc/core-manifest.md
 upstream-routing	core/fixtures/upstream-routing/run.sh
+upstream-routing	core/hooks
 upstream-routing	core/hooks/ai-dlc-context-provenance.sh
 upstream-routing	core/hooks/ai-dlc-core-guard.sh
 upstream-routing	core/scripts
@@ -12309,7 +12345,10 @@ upstream-routing	core/scripts/.git
 upstream-routing	core/scripts/audit-upstream-routing.sh
 upstream-routing	core/scripts/core-paths.sh
 upstream-routing	core/scripts/core/skills/ai-dlc
+upstream-routing	core/skills
 upstream-routing	core/skills/ai-dlc
+upstream-routing	core/skills/ai-dlc-update
+upstream-routing	core/skills/ai-dlc-update/reconcile
 upstream-routing	core/skills/ai-dlc-update/reconcile/setup-sites.md
 upstream-routing	core/skills/ai-dlc/core-manifest.md
 validate-mandatory-rules-revive	.git
@@ -12623,6 +12662,7 @@ write-format-steering-multiformat	core/scripts/.git
 write-format-steering-multiformat	core/scripts/core/skills/ai-dlc
 write-format-steering-multiformat	core/scripts/validate-write-format-steering.sh
 write-format-steering-multiformat	core/skills/ai-dlc-update/reconcile/lib.sh
+# digest adversarial-shard-merge 31682dc40a65c951cec79c8444c78de338d91d074be8bcd78104e983e7424846
 # digest advisor-gate-deny 7aae9015403f15e6cb40fa5de43b2f93726b6ae0d3be9236f466c98d1483b123
 # digest advisor-gate-deny-mutants 9fd24773eb4caa10e92d74e9f3de0c329e5de75ec5d88e1770953c14434b781f
 # digest blocker-adjudication-record 99314f2a1c6cc2fcca6d94d77cd3a5f29a9ea8d5f0598e00be2da52fe4ad932b
@@ -12648,7 +12688,8 @@ write-format-steering-multiformat	core/skills/ai-dlc-update/reconcile/lib.sh
 # digest retired-layer-contract e88a4774d6c4fd9472d48db3dc99d92dcec0886aa56f85cf29ac7da14d609a10
 # digest settings-merge-documented-form c8749c59bf12d4e1027eefb344a6678683e3c8ff76ca2c89b13e1d5d6b53f05f
 # digest shipped-rule-version-floor 4e995134bd73306bc6bdf413f206b16f294208e5f825399458510a560ef3f6c7
+# digest subject-partition cfd281009538f5e7e01e43d982fa30941d49813af95a91808bef887bc04b5409
 # digest update-preflight-push e83485232f100b9fa9fb0af07c0acb8815b5b2e7a57773a1b4dd503678335f39
-# digest upstream-routing efb8b4233ade0fe46072e8192a0b2df0afdb6920bc7ad5a185f7c5f382f91017
+# digest upstream-routing 1295d153d2989df414b4fd4afa9d054638a2f0c5002677c31e37238edeb780e2
 # digest vocabulary-index 285594f5acafe647f40c216cc477e52449741b209987713e5b02b8737e09c9a3
 # digest wait-beat-liveness b3831569f7ca7baf4eddeb40c255b41c5354519085722e343f308ab01dfa5685
