@@ -1022,7 +1022,9 @@ readset_live_trace() { # <out>
     # THE VERDICT IS THE WATCHDOG'S EXIT STATUS: 3 only when its own TERM to the deriver's group was
     # delivered. Once its sleep has run out it ignores TERM, so the stop sent below cannot cut a kill
     # in progress short and read it as a normal finish; a stop that lands during the sleep exits 0.
-    # The subshell sends no signal to `-$dp` after it has reaped `$dp`: that group id may be reused.
+    # The subshell sends no signal to `-$dp` after it has reaped `$dp`: that group id may be reused, so
+    # its forwarding trap is replaced by an ignore once the reap is done, which also keeps a late TERM
+    # from interrupting `wait "$wp"` and losing the watchdog's verdict.
     ( s=""; trap '[ -n "$s" ] && kill "$s" 2>/dev/null; exit 0' TERM
       sleep "$cl" & s=$!; wait "$s"; s=""
       trap '' TERM
@@ -1035,6 +1037,7 @@ readset_live_trace() { # <out>
     trap 'kill -TERM -- "-$dp" 2>/dev/null' TERM
     wait "$dp"; rc=$?
     while kill -0 "$dp" 2>/dev/null; do wait "$dp"; rc=$?; done
+    trap '' TERM
     kill "$wp" 2>/dev/null
     wait "$wp" 2>/dev/null; [ "$?" = 3 ] && rc=timeout
     case "$tr" in */ai-dlc-readset-live.[0-9]*) rm -rf "$tr" ;; esac
