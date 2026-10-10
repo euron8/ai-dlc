@@ -1039,21 +1039,64 @@ arm_X() {
 # that population, once by the own-directory copy. The second must land on the first, never inside it.
 # Presence-shaped: the own run.sh must be LISTED (control) and the count must be exact, so a runner that
 # copied nothing cannot pass by also listing no nested directory.
+# mk_core_probe <dir>: a probe declaring bare `core/`, in a DISTRIBUTION layout -- otherwise bare `core/` has
+# no consumer location and is refused before any copy (the runner keys the layout on `<root>/core/scripts`).
+mk_core_probe() {
+  mk_probe "$1" stub_ls $'data/a.txt\ncore/'
+  mkdir -p "$1/core/scripts" && printf 'x\n' > "$1/core/scripts/x.sh" \
+    && ( cd "$1" && git add -A && git -c user.name=t -c user.email=t@t commit -qm dist ) >/dev/null 2>&1 \
+    || { echo "FIXTURE ERROR: could not make probe $1 a distribution layout" >&2; exit 2; }
+}
 arm_Y() {
   CUR=Y
   local P="$WK/Y1" expy
-  mk_probe "$P" stub_ls $'data/a.txt\ncore/'
-  # A DISTRIBUTION layout, or bare `core/` has no consumer location and is refused before any copy:
-  # the runner decides the layout by `<root>/core/scripts` being a directory.
-  mkdir -p "$P/core/scripts" && printf 'x\n' > "$P/core/scripts/x.sh" \
-    && ( cd "$P" && git add -A && git -c user.name=t -c user.email=t@t commit -qm dist ) >/dev/null 2>&1 \
-    || { echo "FIXTURE ERROR: could not make probe $P a distribution layout" >&2; exit 2; }
+  mk_core_probe "$P"
   run_hr "$P"
   eq "bare core/ declared: exit 0" "$RC" 0
   yes "bare core/: the fixture's own run.sh is in the sandbox" "$OUT" "./$FXR/probe/run.sh"
   no "bare core/: no nested <fx>/<fx>/ directory" "$OUT" "./$FXR/probe/probe/" "./$FXR/probe/run.sh"
   expy=$((1 + $(nfiles "$P/core")))
   yes "bare core/: count is exact ($expy, the fixture dir copied once)" "$OUT" "rc=0 sandbox_files=$expy required_missing=0"
+}
+# Y2: the own-directory copy must OVERWRITE what the `core/` population put there, not merely avoid nesting.
+# A `--fixture-dir` override whose run.sh prints a token Y1's tree does not carry must be the run.sh that
+# runs. A runner that skips the copy when the destination exists passes all of Y and runs the in-tree
+# run.sh here, silently discarding the override (M21); the old nesting copy does the same (M20).
+arm_Y2() {
+  CUR=Y2
+  local P="$WK/Y2" ovr="$WK/Y2ovr"
+  mk_core_probe "$P"
+  # An IN-TREE-ONLY file: tracked, so the `core/` population carries it, and absent from the override.
+  printf 'h\n' > "$P/$FXR/probe/.hid"
+  ( cd "$P" && git add -A && git -c user.name=t -c user.email=t@t commit -qm hid ) >/dev/null 2>&1 \
+    || { echo "FIXTURE ERROR: could not commit $P/$FXR/probe/.hid" >&2; exit 2; }
+  run_hr "$P"
+  no "control: the in-tree run.sh lacks the override token" "$OUT" "OVERRIDE-CORE-b221" "./$FXR/probe/run.sh"
+  yes "control: without an override the in-tree-only file IS copied" "$OUT" "./$FXR/probe/.hid"
+  mkdir -p "$ovr" && cp -R "$P/$FXR/probe" "$ovr/probe" && rm -f "$ovr/probe/.hid" || exit 2
+  printf 'echo OVERRIDE-CORE-b221\n' >> "$ovr/probe/run.sh"
+  run_hr "$P" --fixture-dir "$ovr/probe"
+  eq "override with bare core/: exit 0" "$RC" 0
+  yes "override with bare core/: the override's run.sh ran" "$OUT" "OVERRIDE-CORE-b221"
+  no "override with bare core/: the in-tree-only file is ABSENT (the own dir is the override alone)" "$OUT" "./$FXR/probe/.hid" "./$FXR/probe/run.sh"
+  no "override with bare core/: no nested <fx>/<fx>/ directory" "$OUT" "./$FXR/probe/probe/" "./$FXR/probe/run.sh"
+}
+# Y3: the CONSUMER layout, where a fixture declares its own run.sh (`core/fixtures/<fx>/run.sh`, mapped to
+# `tests/fixtures/<fx>/run.sh`). That declared file creates the destination before the own-directory copy,
+# which is the path the shipping self-update-gate and check-24 families take on every consumer.
+arm_Y3() {
+  CUR=Y3
+  local save="$FXR" P="$WK/Y3"
+  FXR="tests/fixtures"
+  mk_probe "$P" stub_ls $'data/a.txt\ncore/fixtures/probe/run.sh'
+  run_hr "$P"
+  FXR="$save"
+  eq "consumer, own run.sh declared: exit 0" "$RC" 0
+  yes "consumer, own run.sh declared: the run.sh is in the sandbox" "$OUT" "./tests/fixtures/probe/run.sh"
+  # The own directory is copied WHOLE onto the one declared file: a copy that skipped the existing
+  # destination would leave run.sh alone there, without the inputs.decl beside it (M21).
+  yes "consumer, own run.sh declared: the rest of the own dir arrived" "$OUT" "./tests/fixtures/probe/inputs.decl"
+  no "consumer, own run.sh declared: no nested <fx>/<fx>/ directory" "$OUT" "./tests/fixtures/probe/probe/" "./tests/fixtures/probe/run.sh"
 }
 run_arms() { arm_A; arm_B; arm_C; arm_D; arm_E; arm_F; arm_H; arm_I; arm_K; arm_L; arm_N; }
 
@@ -1063,11 +1106,11 @@ if [ -z "$HOOK_SRC" ]; then echo "FIXTURE ERROR: no pre-push hook with a READSET
 # The main pass runs its arms in parallel subshells, each with its own output and FAILED file, then
 # replays the output in arm order so the transcript reads as before.
 mkdir -p "$WORK/par"
-for _a in A B C D E F H I K L N G J P Q R S T U V W X Y; do
+for _a in A B C D E F H I K L N G J P Q R S T U V W X Y Y2 Y3; do
   ( "arm_$_a" > "$WORK/par/$_a.out" 2>&1; printf '%s' "$FAILED" > "$WORK/par/$_a.failed" ) &
 done
 wait
-for _a in A B C D E F H I K L N G J P Q R S T U V W X Y; do
+for _a in A B C D E F H I K L N G J P Q R S T U V W X Y Y2 Y3; do
   cat "$WORK/par/$_a.out"
   [ -f "$WORK/par/$_a.failed" ] || { echo "FIXTURE ERROR: arm $_a produced no verdict" >&2; exit 2; }
   FAILED="$FAILED$(cat "$WORK/par/$_a.failed")"
@@ -1142,13 +1185,19 @@ if [ "$NESTED" != 1 ]; then
   # M16: a pass with an optional pin skipped is recorded anyway, so a shallow clone's pass is reused by a full one.
   run_mutant M16 "X" '[ "${hr_pin_skipped:-0}" = 0 ] || return 0' ':' &
   # M20: the own-directory copy restored to `cp -Rp <dir> <dest>`, which nests onto a dest `core/` already made.
-  run_mutant M20 "Y A" 'mkdir -p "$HR_SB/$HR_FXROOT/$HR_FX" && cp -Rp "$HR_FXDIR/." "$HR_SB/$HR_FXROOT/$HR_FX/" || exit 2' 'cp -Rp "$HR_FXDIR" "$HR_SB/$HR_FXROOT/$HR_FX" || exit 2' &
+  run_mutant M20 "Y Y2 Y3 A" 'mkdir -p "$HR_SB/$HR_FXROOT/$HR_FX" && cp -Rp "$HR_FXDIR/." "$HR_SB/$HR_FXROOT/$HR_FX/" || exit 2' 'cp -Rp "$HR_FXDIR" "$HR_SB/$HR_FXROOT/$HR_FX" || exit 2' &
+  # M21: the copy skipped when the destination already exists. Harmless where the population already holds
+  # the whole own dir (Y) and where the override filter leaves no destination (Y2); it strands the consumer's
+  # declared run.sh without the rest of its directory (Y3).
+  run_mutant M21 "Y Y2 Y3 A" 'mkdir -p "$HR_SB/$HR_FXROOT/$HR_FX" && cp -Rp "$HR_FXDIR/." "$HR_SB/$HR_FXROOT/$HR_FX/" || exit 2' '{ [ -d "$HR_SB/$HR_FXROOT/$HR_FX" ] || cp -Rp "$HR_FXDIR" "$HR_SB/$HR_FXROOT/$HR_FX"; } || exit 2' &
+  # M22: the override filter dropped: the in-tree own dir is copied first and the override lands on it.
+  run_mutant M22 "Y Y2 Y3 A" 'if [ "$HR_FXDIR" != "$HR_ROOT/$HR_FXROOT/$HR_FX" ]; then' 'if false; then' &
   # cwd-invariance: two nested runs of this fixture from different working directories.
   ( cd "$ROOT" && HERMETIC_FX_NESTED=1 bash "$HERE/run.sh" > "$WORK/cwd1.out" 2>&1; echo $? > "$WORK/cwd1.rc" ) &
   ( cd "$(dirname "$RUN")" && HERMETIC_FX_NESTED=1 bash "$HERE/run.sh" > "$WORK/cwd2.out" 2>&1; echo $? > "$WORK/cwd2.rc" ) &
   wait
   CUR=M
-  for pair in "M1:B" "M2:A C D L" "M3:F" "M4:L" "M5:K" "M6:F" "M7:P" "M8:Q W" "M9:R W" "M10:T" "M11:U" "M12:X" "M13:X" "M14:X" "M15:X" "M16:X" "M17:V" "M18:V" "M19:L" "M20:Y"; do
+  for pair in "M1:B" "M2:A C D L" "M3:F" "M4:L" "M5:K" "M6:F" "M7:P" "M8:Q W" "M9:R W" "M10:T" "M11:U" "M12:X" "M13:X" "M14:X" "M15:X" "M16:X" "M17:V" "M18:V" "M19:L" "M20:Y Y3" "M21:Y3" "M22:Y2"; do
     mname="${pair%%:*}"; want="$(failed_set "${pair#*:}")"
     got="$(cat "$WORK/mut-$mname.res" 2>/dev/null)"
     if [ "$got" = "BROKEN" ] || [ -z "$got" ] && [ "$want" != "" ] && [ "$got" = "BROKEN" ]; then

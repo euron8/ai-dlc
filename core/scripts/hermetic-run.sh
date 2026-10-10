@@ -372,6 +372,17 @@ if [ -s "$HR_WORK/dirs" ]; then
     [ -f "$HR_ROOT/$e" ] && printf '%s\n' "$e" >> "$HR_WORK/copy"
   done < "$HR_WORK/under"
 fi
+# AN OVERRIDE IS THE FIXTURE'S OWN DIRECTORY ALONE. With `--fixture-dir`, a declaration reaching the in-tree
+# fixture directory (bare `core/`, the fixture root, its own run.sh) would copy the IN-TREE files there first,
+# and the override would land on top of them: the sandbox's own directory a union of two trees, with every
+# in-tree file the override deleted still present. Those entries are dropped from both copy lists here.
+if [ "$HR_FXDIR" != "$HR_ROOT/$HR_FXROOT/$HR_FX" ]; then
+  for hr_l in copy files; do
+    [ -f "$HR_WORK/$hr_l" ] || continue
+    awk -v p="$HR_FXROOT/$HR_FX/" 'index($0, p) != 1' "$HR_WORK/$hr_l" > "$HR_WORK/$hr_l.ovr" \
+      && mv "$HR_WORK/$hr_l.ovr" "$HR_WORK/$hr_l" || exit 2
+  done
+fi
 while IFS= read -r d; do
   [ -n "$d" ] || continue
   mkdir -p "$HR_SB/$d" || exit 2
@@ -410,6 +421,10 @@ done < "$HR_WORK/files"
 # fixture root) has its own directory copied in by that population first, and `cp -Rp <dir> <dest>`
 # onto an existing <dest> copies INTO it: a nested `<fx>/<fx>/` that every walker over the sandbox
 # then counts as a second fixture. Measured: validator-fork-budget read I106 4 forks high on the copy.
+# THE CONSUMER CASE IS THE WIDER ONE: a fixture declaring its OWN run.sh or seed.sh (mapped to
+# tests/fixtures/<fx>/) creates the destination the same way, so 13 shipping fixtures -- among them
+# self-update-gate, check-24-adversarial-convergence and apply-drift-refile-b -- ran nested on every
+# consumer. A copy that SKIPS an existing destination is not a fix: it drops a `--fixture-dir` override.
 mkdir -p "$HR_SB/$HR_FXROOT" || exit 2
 hr_no_symlinks "$HR_FXROOT/$HR_FX"
 [ "$HR_FXDIR" = "$HR_ROOT/$HR_FXROOT/$HR_FX" ] || hr_no_symlinks "$HR_FXDIR"
