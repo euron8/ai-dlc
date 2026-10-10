@@ -207,10 +207,11 @@ hr_parse_skew() { # <fx> <fixture dir> <dist|cons> <mapper> <tool search path> <
     awk -F'\t' '$2 == "X" { print; next } { print $1 "\t" $2 "\t" $3 "\t" $4 "\t" $3 }' "$w.n" > "$w.r"
   fi
   cat "$w.r"
-  awk -F'\t' '$2 == "F" || $2 == "D"' "$w.r" | while IFS="$(printf '\t')" read -r t k p a dp; do
+  awk -F'\t' '$2 == "F" || $2 == "D"' "$w.r" > "$w.fd" || return 2
+  while IFS="$(printf '\t')" read -r t k p a dp; do
     if [ "$k" = D ]; then [ -d "$p" ] || printf '%s\tX\tabsd\t%s\t%s\n' "$fx" "$p" "$dp"
     else [ -f "$p" ] || printf '%s\tX\tabsf\t%s\t%s\n' "$fx" "$p" "$dp"; fi
-  done
+  done < "$w.fd"
   [ -f "$fd/tools.decl" ] || return 0
   while IFS= read -r t || [ -n "$t" ]; do
     case "$t" in ''|'#'*) continue ;; '?'*) printf '%s\tU\t%s\n' "$fx" "${t#?}"; continue ;; */*) printf '%s\tX\ttpath\t%s\n' "$fx" "$t"; continue ;; esac

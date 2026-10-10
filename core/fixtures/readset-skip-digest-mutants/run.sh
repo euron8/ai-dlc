@@ -279,7 +279,7 @@ if true; then
   fi
   tk_mut "mig migrun" noamnesty 1 'mig = (!seed && (f in RST) && RTL[f] != "canonical")' 'mig = 0'
   tk_mut "mig" nopublish 1 '$4 == "v" || $4 == "m" || $4 == "b")' '$4 == "v" || $4 == "b")'
-  tk_mut "migrun" filetoo 1 '            if (cur(k) == R[k]) continue' '            if (cur(k) == R[k] || mig) continue'
+  tk_mut "migrun" filetoo 1 '            if (cv(f, k) == R[k]) continue' '            if (cv(f, k) == R[k] || mig) continue'
   tk_mut "mig" carrytools 1 'for (k in R) if (substr(k, 1, 1) != "/") X[k] = 1 }' 'for (k in R) X[k] = 1 }'
 fi
 tkn=0; for _m in $TK_MINE; do tkn=$((tkn+1)); done
