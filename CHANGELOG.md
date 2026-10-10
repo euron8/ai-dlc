@@ -51,6 +51,11 @@ push are declared.
 - **Fixture.** `readset-skip-b` arm t1 drives the real `readset_live_trace` against a stub deriver that forks a
   sleeping grandchild and never exits, asserting with `kill -0` beside a live control (never a process-table grep);
   r9-r12 hold the stop line both ways. Mutants `noceil`, `pidonly`, `nolock`, `asfinish`, `nostop`, each killed.
+- **Watchdog race, found by the tip adversary before landing.** The watchdog's TERM trap killed a sleep pid it saved
+  with `s=$!`; a TERM landing between the fork and that assignment left the sleep orphaned under init for up to the
+  ceiling, on any deriver that exits quickly — 7 of 40 launches leaked. The trap now kills `$(jobs -p)`: 0 of 40.
+  Arm t4 drives 30 instant-exit traces and asserts each trace's process group is gone (`kill -0` on the group,
+  beside a live control); mutant `oldtrap` restores the saved-pid trap and is killed.
 - **Both pre-push hooks change** (`I66`), so this release's push re-runs every fixture that reads either hook.
 
 ## [0.767.0] - 2026-10-09
