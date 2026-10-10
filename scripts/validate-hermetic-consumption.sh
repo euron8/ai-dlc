@@ -25,16 +25,27 @@
 # It keys on the `!` INPUT, never on "the core branch emitted": a chain resolving an input that
 # is not marked `!` is never examined.
 #
+# WHAT COUNTS AS A SENTINEL -- a line the RUNNER would see, unconditionally. The `echo`/`printf`
+# starts its statement (line start, or after `then`/`else`/`do`/`;`/`{`/`(`), so an `&&` or `||`
+# before it on the same line disqualifies it: the emission is conditional. A quoted argument ends
+# at its OWN closing quote, never at the first space, so `"HERMETIC-CONSUMED p "` is the token
+# `p ` and is not `p`. After the argument only stderr redirections may follow before the
+# statement ends: `> /dev/null`, `> file`, `| cmd` disqualify it. `>&2`, `1>&2` and `2>&1` are
+# ACCEPTED ON PURPOSE, because hermetic-run.sh captures the fixture with `> "$HR_LOG" 2>&1` and
+# greps that log, so a sentinel sent to stderr reaches it -- do not tighten past this. A line that
+# is disqualified is counted under variable-sentinel (unscorable), never silently dropped.
+#
 # REACH -- A CLEAN RESULT IS A FLOOR, NOT A PROOF. The grammar is line-oriented shell, and the
 # summary line counts every input it could NOT score, so the floor's depth is printed, not
 # assumed. Measured over the 157 shipped `!` fixtures (240 `!` inputs) at the tip that fixed
 # the two offenders:
 #   layout-independent=1   the declared path IS the consumer path, so no branch to judge;
-#   variable-sentinel=113  run.sh names the input in no literal sentinel and emits at least one
-#                          sentinel through a variable or a printf `%s` -- outside the grammar;
+#   variable-sentinel=134  run.sh names the input in no qualifying literal sentinel and carries at
+#                          least one sentinel line it cannot score: through a variable, a printf
+#                          `%s`, or a conditional `[ -f x ] && echo` form -- outside the grammar;
 #   elsewhere=26           run.sh carries no sentinel for the input at all: it is emitted from a
 #                          sibling shard's run.sh or a sourced file -- outside the grammar;
-#   no-installed-branch=90 a literal sentinel, but no chain it belongs to tests the consumer path
+#   no-installed-branch=69 a literal sentinel, but no chain it belongs to tests the consumer path
 #                          (a candidate loop, a single walk, a dist-only resolution) -- not scored;
 #   scored=10, flagged=0.
 # So the scan judges 10 of 240 inputs. It is exactly the shape that shipped broken twice, and it
@@ -45,21 +56,27 @@
 # HOW THE FALSE-POSITIVE SET REACHED ZERO. Each narrowing below was measured by reverting it in a
 # copy and scanning the same tip corpus, self-probe off:
 #   - with no own-sentinel restriction (every chain whose test names the consumer path judged):
-#     flagged 2 -- `process-rule-pins` (a layout-detecting chain whose sentinel is emitted later
-#     through a variable) and `write-format-steering-multiformat` (a resolver inside a helper
-#     that seeds worlds, the sentinel emitted unconditionally at the top). Neither chain is where
-#     the input is consumed, so a chain is judged only when the input's own sentinel belongs to it;
-#   - with a test naming the path ANYWHERE, not as a file-test operand: flagged 1 more,
+#     flagged 1 -- `write-format-steering-multiformat` (a resolver inside a helper that seeds
+#     worlds, the sentinel emitted unconditionally at the top). Before the sentinel grammar
+#     refused conditional emissions it also flagged `process-rule-pins` (a layout-detecting chain
+#     whose sentinel is emitted later, behind `&&`). Neither chain is where the input is consumed,
+#     so a chain is judged only when the input's own sentinel belongs to it;
+#   - with a test naming the path ANYWHERE, not as a file-test operand: flagged 1,
 #     `emit-report-refusal`, whose `grep -qF '...scripts/ai-dlc/validate-hook-registration.sh'`
-#     names the path as a STRING it looks for; an earlier cut without the operand rule also
-#     flagged `prepush-worktree-env-scrub` on a `cmp -s` naming `.githooks/pre-push`;
+#     names the path as a STRING it looks for. With BOTH narrowings reverted it flags 3, adding
+#     `prepush-worktree-env-scrub` on a `cmp -s` naming `.githooks/pre-push`;
 #   - keyed on EVERY decl line instead of `!` lines: flagged 0 here -- structurally, because no
 #     unmarked input on today's corpus has the shape -- so the self-probe's `e-non-bang` seed (a
 #     fixed `!` input beside an unmarked input echoed in its core branch only) is the only thing
 #     that can tell the two apart, and the fixture's widening mutant asserts that it does;
 #   - the sentinel token compared as a PREFIX: flagged 0 here, and accepts the `.bak` near-miss,
 #     so it is compared whole and the self-probe's `d-bak` seed holds it.
-# No input was exempted by name, and none is.
+# No input was exempted by name, and none is. The first two narrowings were held only by today's
+# corpus until they got seeds of their own: `o-varlater` (a layout chain whose sentinel is emitted
+# later through a variable) and `m-grepq` (a branch that names the consumer path in a `grep -qF`)
+# must stay quiet, and removing either guard makes the self-probe refuse naming that seed. The
+# heredoc skip is held by `p-heredoc`, whose heredoc body carries a column-0 sentinel after the
+# chain that would otherwise acquit a dist-only echo.
 #
 # WHY A STANDALONE SCRIPT AND NOT AN ARM IN THE ENFORCEMENT MAP. That validator is invoked by
 # the suite's slowest fixtures and is held to `FORK_BUDGET`; this scan forks a fixed handful of
@@ -67,12 +84,16 @@
 # `core/fixtures/hermetic-consumption/`, which is the only thing that runs it at a push. It is
 # distribution-only: its corpus is `core/fixtures/`, which no consumer holds.
 #
-# EVERY RUN SELF-PROBES FIRST, in both directions, under a mktemp tree: four seeded offenders
-# (an echo in the dist branch only, a `.bak` near-miss in the consumer branch, an echo at the top
-# of the file above the resolution, an echo in the override branch only) must each be flagged;
-# three near-misses (the consumer-branch echo, the declared spelling after `fi`, and a fixed `!`
-# input beside an unmarked input whose chain echoes in its core branch only) must stay quiet;
-# and a `.dist-only` seed must not be scanned at all. A probe that disagrees refuses the corpus.
+# EVERY RUN SELF-PROBES FIRST, in both directions, under a mktemp tree. Eight seeded offenders
+# must each be flagged: an echo in the dist branch only, a `.bak` near-miss in the consumer
+# branch, an echo at the top of the file above the resolution, an echo in the override branch
+# only, a consumer echo sent to `> /dev/null`, one with a trailing space inside the quotes, one
+# behind `[ ... ] &&`, and a dist-only echo beside a heredoc body carrying the consumer sentinel.
+# Six near-misses must stay quiet: the consumer-branch echo, the declared spelling after `fi`, a
+# fixed `!` input beside an unmarked input whose chain echoes in its core branch only, the
+# consumer echo sent `>&2`, a `grep -qF` branch naming the consumer path, and a layout chain whose
+# sentinel comes later through a variable. A `.dist-only` seed must not be scanned at all. A
+# probe that disagrees refuses the corpus.
 #
 # Usage: validate-hermetic-consumption.sh [--quiet]
 # Exit:  0 = clean, 1 = at least one finding, 2 = usage, environment, or a refused self-probe.
@@ -116,12 +137,44 @@ function names(t, p,    i, off, pre, post, head) {
     post = substr(t, i + length(p), 1)
     head = substr(t, 1, i - 1)
     sub(/[^[:space:]]*$/, "", head)
-    if (pre !~ /[A-Za-z0-9_.-]/ && post !~ /[A-Za-z0-9_.-]/ && head ~ /(^|[[:space:]])-[defrsx][[:space:]]+$/) return 1
     off = i
+    if (head !~ /(^|[[:space:]])-[defrsx][[:space:]]+$/) continue
+    if (pre !~ /[A-Za-z0-9_.-]/ && post !~ /[A-Za-z0-9_.-]/) return 1
   }
   return 0
 }
 function reset() { dep = 0; nch = 0; ns = 0; hd = ""; hdtab = 0; anyvar = 0 }
+# sentinel(line) -- record a literal sentinel only when the line EMITS it to the runner unconditionally:
+# the echo or printf starts its statement, the argument ends at its own closing quote, and nothing
+# after it sends stdout anywhere but stderr (which the runner also captures).
+function sentinel(line,   p, pre, mm, cmdpre, q, cmd, rest, j, tok, tail, x) {
+  p = index(line, "HERMETIC-CONSUMED")
+  pre = substr(line, 1, p - 1)
+  if (!match(pre, ECHORE)) { anyvar = 1; return }
+  mm = substr(pre, RSTART, RLENGTH); cmdpre = substr(pre, 1, RSTART - 1)
+  if (mm !~ /^(echo|printf)/) { cmdpre = cmdpre substr(mm, 1, 1); mm = substr(mm, 2) }
+  q = substr(mm, length(mm), 1); if (q != DQ && q != SQ) q = ""
+  cmd = (mm ~ /^printf/) ? "printf" : "echo"
+  x = cmdpre; sub(/[[:space:]]+$/, "", x)
+  if (index(cmdpre, "&&") || index(cmdpre, "||") || (x != "" && x !~ /(^|[[:space:];])(then|else|do)$/ && x !~ /[;{)]$/ && x !~ /(^|[^$])[(]$/)) { anyvar = 1; return }
+  rest = substr(line, p + 17)
+  if (q != "") {
+    j = index(rest, q); if (j == 0) { anyvar = 1; return }
+    tok = substr(rest, 1, j - 1); tail = substr(rest, j + 1)
+  } else {
+    if (match(rest, /[;|&<>)#`]/)) { tok = substr(rest, 1, RSTART - 1); tail = substr(rest, RSTART) } else { tok = rest; tail = "" }
+    gsub(/[[:space:]]+/, " ", tok); sub(/ $/, "", tok)
+  }
+  if (substr(tok, 1, 1) != " ") return; tok = substr(tok, 2)
+  if (cmd == "printf") sub(/\\n$/, "", tok)
+  if (tok == "" || tok ~ /[$%`\\]/) { anyvar = 1; return }
+  x = tail; sub(/^[[:space:]]+/, "", x)
+  while (match(x, /^(1?>&2|2>&1|2>[^[:space:];&|]+)/)) { x = substr(x, RLENGTH + 1); sub(/^[[:space:]]+/, "", x) }
+  if (x != "" && x !~ /^(;|&&|[|][|]|#|[}]|[)])/) { anyvar = 1; return }
+  ns++; stok[ns] = tok; sdep[ns] = dep; sline[ns] = FNR; x = " "
+  for (j = 1; j <= dep; j++) x = x stk[j] ":" nb[stk[j]] " "
+  senc[ns] = x
+}
 function judge(   k, d, m, j, c, b, lit, ok, hasbr, bad, local_) {
   for (k = 1; k <= nt[cur]; k++) {
     d = td[cur, k]; m = tm[cur, k]; sub(/\/$/, "", d); sub(/\/$/, "", m)
@@ -171,14 +224,7 @@ FNR == 1 { if (cur != "") judge(); cur = FILENAME; sub(/\/run\.sh$/, "", cur); o
   } else if (dep > 0 && line ~ /^[[:space:]]*else([[:space:];]|$)/) {
     c = stk[dep]; nb[c]++; tt[c, nb[c]] = ""
   }
-  if (line ~ /HERMETIC-CONSUMED/ && line ~ /(echo|printf)[[:space:]]/) {
-    s = line; sub(/.*HERMETIC-CONSUMED[[:space:]]+/, "", s); sub(TEND, "", s)
-    if (s ~ /[$%`]/ || s == "") { anyvar = 1 } else {
-      ns++; stok[ns] = s; sdep[ns] = dep; sline[ns] = FNR; e = " "
-      for (i = 1; i <= dep; i++) e = e stk[i] ":" nb[stk[i]] " "
-      senc[ns] = e
-    }
-  }
+  if (line ~ /HERMETIC-CONSUMED/ && line ~ /(echo|printf)[[:space:]]/) sentinel(line)
   if (dep > 0 && (line ~ /^[[:space:]]*fi([^A-Za-z0-9_]|$)/ || (isif && line ~ /[;[:space:]]fi[[:space:]]*([;|&>]|$)/))) {
     cend[stk[dep]] = FNR; dep--
   }
@@ -220,8 +266,9 @@ scan() {
     [ -f "$d/run.sh" ] || { echo "validate-hermetic-consumption: $d marks an input REQUIRED and has no run.sh" >&2; return 2; }
     run_args+=("$d/run.sh"); n_run=$((n_run + 1))
   done < "$o/fixtures"
-  awk -v FLAGS="$o/flags" -v SUMMARY="$o/summary" -v QC="[\"']" \
-      -v HRE="<<-?[[:space:]]*[\"']?[A-Za-z_][A-Za-z0-9_]*" -v TEND="[\"'[:space:];)].*\$" \
+  awk -v FLAGS="$o/flags" -v SUMMARY="$o/summary" -v QC="[\"']" -v SQ="'" -v DQ='"' \
+      -v HRE="<<-?[[:space:]]*[\"']?[A-Za-z_][A-Za-z0-9_]*" \
+      -v ECHORE="(^|[^A-Za-z0-9_-])(echo|printf)[[:space:]]+(-[en]+[[:space:]]+)?[\"']?\$" \
       "$JUDGE" "$o/triples" "${run_args[@]}" || { echo "validate-hermetic-consumption: the judging pass failed" >&2; return 2; }
   [ "$(cut -f1 "$o/summary")" = "$n_run" ] || { echo "validate-hermetic-consumption: listed $n_run run.sh, opened $(cut -f1 "$o/summary")" >&2; return 2; }
   return 0
@@ -234,9 +281,17 @@ probe_seed() {
   mkdir -p "$d" || return 2
   printf '%s\n' '!core/scripts/probe-subject.sh' 'core/fixtures/lib/' > "$d/inputs.decl"
   ce='  echo "HERMETIC-CONSUMED core/scripts/probe-subject.sh"'
+  local grepq="" later="" here=""
   case "$v" in
     fix-a|non-bang) ue='  echo "HERMETIC-CONSUMED scripts/ai-dlc/probe-subject.sh"' ;;
     dist-only)      : ;;
+    devnull)        ue='  echo "HERMETIC-CONSUMED scripts/ai-dlc/probe-subject.sh" > /dev/null' ;;
+    stderr)         ue='  echo "HERMETIC-CONSUMED scripts/ai-dlc/probe-subject.sh" >&2' ;;
+    tspace)         ue='  echo "HERMETIC-CONSUMED scripts/ai-dlc/probe-subject.sh "' ;;
+    andand)         ue='  [ -n "${AI_DLC_PROBE_UNSET:-}" ] && echo "HERMETIC-CONSUMED scripts/ai-dlc/probe-subject.sh"' ;;
+    grepq)          ue='  echo "HERMETIC-CONSUMED scripts/ai-dlc/probe-subject.sh"'; grepq=1 ;;
+    varlater)       ue='  echo "HERMETIC-CONSUMED scripts/ai-dlc/probe-subject.sh"'; later=1 ;;
+    heredoc)        here=1 ;;
     fix-b)          ce=""; after='echo "HERMETIC-CONSUMED core/scripts/probe-subject.sh"' ;;
     bak)            ue='  echo "HERMETIC-CONSUMED scripts/ai-dlc/probe-subject.sh.bak"' ;;
     top)            top='echo "HERMETIC-CONSUMED scripts/ai-dlc/probe-subject.sh"' ;;
@@ -252,8 +307,18 @@ probe_seed() {
     [ -z "$ce" ] || printf '%s\n' "$ce"
     printf '%s\n' 'elif [ -n "$ROOT" ] && [ -f "$ROOT/scripts/ai-dlc/probe-subject.sh" ]; then' '  VAL="$ROOT/scripts/ai-dlc/probe-subject.sh"'
     [ -z "$ue" ] || printf '%s\n' "$ue"
+    # grepq: a branch that names the consumer path as a STRING it searches for, not as a file-test
+    # operand, and emits nothing -- it must not be judged as an installed-path branch.
+    [ -z "$grepq" ] || printf '%s\n' 'elif grep -qF "scripts/ai-dlc/probe-subject.sh" "$ROOT/manifest.txt"; then' '  VAL="$ROOT/manifest.txt"'
     printf '%s\n' 'else' '  echo "FIXTURE ERROR: probe-subject.sh not found in either layout" >&2; exit 2' 'fi'
     [ -z "$after" ] || printf '%s\n' "$after"
+    # varlater: a second, layout-DETECTING chain that tests the consumer path, sets a variable, and
+    # whose sentinel is emitted later through that variable -- not where the input is consumed.
+    [ -z "$later" ] || printf '%s\n' 'if [ -f "$ROOT/core/scripts/probe-subject.sh" ]; then' '  LAY=core/scripts' \
+      'elif [ -f "$ROOT/scripts/ai-dlc/probe-subject.sh" ]; then' '  LAY=scripts/ai-dlc' 'fi' 'echo "HERMETIC-CONSUMED $LAY/probe-subject.sh"'
+    # heredoc: the dist-only shape plus a heredoc body, after the chain, carrying a consumer-branch
+    # sentinel at column 0 -- text written to a file, never emitted, so it must not acquit the input.
+    [ -z "$here" ] || printf '%s\n' 'cat > "$ROOT/probe.sh" <<EOF' 'echo "HERMETIC-CONSUMED scripts/ai-dlc/probe-subject.sh"' 'echo "HERMETIC-CONSUMED core/scripts/probe-subject.sh"' 'EOF'
     if [ "$v" = "non-bang" ]; then
       printf '%s\n' 'cat > "$ROOT/probe.out" <<'"'"'EOF'"'"'' 'if [ -f x ]; then' 'fi' 'EOF'
       printf '%s\n' 'if [ -f "$ROOT/core/skills/probe/notes.md" ]; then' '  NOTES="$ROOT/core/skills/probe/notes.md"' \
@@ -268,19 +333,20 @@ probe_seed() {
 
 # The seeds, in an order where a quiet seed comes first and the offenders are not adjacent, so a
 # scan that judged only the first fixture cannot pass. `h-dist-marked` carries a dist-only echo
-# AND a `.dist-only` marker: it must not be scanned, so `scanned` must read 7, not 8.
-PROBE_FIRE="b-dist-only d-bak f-top g-override"
-PROBE_QUIET="a-fix-a c-fix-b e-non-bang"
+# AND a `.dist-only` marker: it must not be scanned, so `scanned` must read 14, not 15.
+PROBE_FIRE="b-dist-only d-bak f-top g-override j-devnull l-tspace n-andand p-heredoc"
+PROBE_QUIET="a-fix-a c-fix-b e-non-bang k-stderr m-grepq o-varlater"
 self_probe() {
   local fx="$WORK/probe/fx" o="$WORK/probe/out" bad=0 n s
-  for s in a-fix-a:fix-a b-dist-only:dist-only c-fix-b:fix-b d-bak:bak e-non-bang:non-bang f-top:top g-override:override h-dist-marked:dist-only; do
+  for s in a-fix-a:fix-a b-dist-only:dist-only c-fix-b:fix-b d-bak:bak e-non-bang:non-bang f-top:top g-override:override h-dist-marked:dist-only \
+           j-devnull:devnull k-stderr:stderr l-tspace:tspace m-grepq:grepq n-andand:andand o-varlater:varlater p-heredoc:heredoc; do
     probe_seed "$fx" "${s%%:*}" "${s#*:}" || { echo "validate-hermetic-consumption: self-probe could not seed ${s%%:*}" >&2; return 2; }
   done
   printf '%s\n' 'seeded: its subject is not present on a consumer' > "$fx/h-dist-marked/.dist-only"
   mkdir -p "$fx/i-no-decl" && printf '%s\n' 'echo "HERMETIC-CONSUMED core/scripts/probe-subject.sh"' > "$fx/i-no-decl/run.sh"
   scan "$fx" "$o" || { echo "validate-hermetic-consumption: self-probe: the scan refused its own seeded tree" >&2; return 2; }
   n="$(cut -f1 "$o/summary")"
-  [ "$n" = "7" ] || { echo "validate-hermetic-consumption: self-probe: scanned $n seeded fixtures, expected 7 -- the corpus walk is not the one this probe seeded" >&2; bad=1; }
+  [ "$n" = "14" ] || { echo "validate-hermetic-consumption: self-probe: scanned $n seeded fixtures, expected 14 -- the corpus walk is not the one this probe seeded" >&2; bad=1; }
   for s in $PROBE_FIRE; do
     grep -q "^$fx/$s	" "$o/flags" || { echo "validate-hermetic-consumption: self-probe: seeded offender $s was NOT flagged" >&2; bad=1; }
   done
@@ -288,7 +354,7 @@ self_probe() {
     grep -q "^$fx/$s	" "$o/flags" && { echo "validate-hermetic-consumption: self-probe: seeded near-miss $s WAS flagged" >&2; bad=1; }
   done
   [ "$bad" = "0" ] || return 2
-  say "self-probe: ok -- 4 seeded offenders flagged, 3 near-misses quiet, 1 .dist-only seed not scanned"
+  say "self-probe: ok -- 8 seeded offenders flagged, 6 near-misses quiet, 1 .dist-only seed not scanned"
   return 0
 }
 

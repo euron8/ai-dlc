@@ -25,6 +25,10 @@
 #   w6  the only sentinel moved into the override branch                -> exit 1, names it
 #   w7  w3 plus a `.dist-only` marker on the subject                    -> exit 0, scanned=1
 #   w8  no shipped fixture marks an input `!`                           -> exit 2, zero scanned
+#   w9  the consumer echo sent to `> /dev/null`                         -> exit 1, names it
+#   w10 a trailing space inside the consumer echo's quotes              -> exit 1, names it
+#   w11 the consumer echo behind `[ -n "${UNSET:-}" ] &&`               -> exit 1, names it
+#   w12 the consumer echo sent `>&2` (the runner captures 2>&1)         -> exit 0, flagged=0
 #   k   the unmutated copy over w1, in the mutants' harness             -> exit 0, `self-probe: ok`
 #   m1  the self-probe call removed            -> the `self-probe: ok` line must VANISH (c reads it)
 #   m2  the whole-token compare relaxed to a prefix (the near-miss check removed)
@@ -101,6 +105,10 @@ variant() {
     bak)      edit "$PROD/run.sh" "$d" repl "$UE" '  echo "HERMETIC-CONSUMED scripts/ai-dlc/validate-layer-entries.sh.bak"' ;;
     top)      edit "$PROD/run.sh" "$t" del "$UE" && edit "$t" "$d" after "$SETU" 'echo "HERMETIC-CONSUMED scripts/ai-dlc/validate-layer-entries.sh"' ;;
     override) edit "$PROD/run.sh" "$t" del "$UE" && edit "$t" "$t.2" del "$CE" && edit "$t.2" "$d" after "$OV" "$CE" ;;
+    devnull)  edit "$PROD/run.sh" "$d" repl "$UE" "$UE > /dev/null" ;;
+    stderr)   edit "$PROD/run.sh" "$d" repl "$UE" "$UE >&2" ;;
+    tspace)   edit "$PROD/run.sh" "$d" repl "$UE" '  echo "HERMETIC-CONSUMED scripts/ai-dlc/validate-layer-entries.sh "' ;;
+    andand)   edit "$PROD/run.sh" "$d" repl "$UE" '  [ -n "${AI_DLC_HC_UNSET:-}" ] && echo "HERMETIC-CONSUMED scripts/ai-dlc/validate-layer-entries.sh"' ;;
     fixb)     edit "$PROD/run.sh" "$t" del "$UE" && edit "$t" "$t.2" del "$CE" && edit "$t.2" "$d" afterfi "$ERRL" 'echo "HERMETIC-CONSUMED core/scripts/validate-layer-entries.sh"' ;;
     *) return 2 ;;
   esac
@@ -161,6 +169,10 @@ w w4 bak      1 y 2
 w w5 top      1 y 2
 w w6 override 1 y 2
 w w7 base     0 n 1 dist-only
+w w9 devnull  1 y 2
+w w10 tspace  1 y 2
+w w11 andand  1 y 2
+w w12 stderr  0 n 2
 d="$TMP/w.w8"
 if world "$d" "$VALIDATOR" none; then
   drive "$d"
