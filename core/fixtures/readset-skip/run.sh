@@ -5322,7 +5322,8 @@ vs_cmk() { # <t> <fixture root> <runner file> <hook file>
   printf 'src/a.sh\nlib/\n' > "$t/$x/ref/inputs.decl"; printf 'src/a.sh\nlib//\n' > "$t/$x/dsl/inputs.decl"
   printf 'src/a.sh\r\nlib/\r\n' > "$t/$x/crlf/inputs.decl"
   if [ "$rd" = scripts/ai-dlc ]; then
-    cp "${3%/*}/core-paths.sh" "$t/$rd/core-paths.sh" || return 1
+    # The mapper comes from beside the REAL runner, never beside <runner file>: a runner mutant is a lone copy.
+    cp "${VS_RUN%/*}/core-paths.sh" "$t/$rd/core-paths.sh" || return 1
     mkdir -p "$t/$x/cons" "$t/.claude/skills/mk/in" || return 1
     printf 'm\n' > "$t/$rd/m.sh"; printf 'k\n' > "$t/.claude/skills/mk/in/k.txt"; printf 'j\n' > "$t/.claude/skills/mk/j.txt"
     printf 'exit 0\n' > "$t/$x/cons/run.sh"; printf 'awk\n' > "$t/$x/cons/tools.decl"
@@ -5494,16 +5495,16 @@ if [ "$VS_CN" -ge 1 ]; then
   VS_ARMS=$((VS_ARMS+1))
   if vs_hmut probe "$VS_TAGA" "$VS_TAGB"; then
     VS_PH="$VS_HM"; VS_PP="$VS_HMP"
-    _g="$(vs_census "$VS_PP" "$VS_CX1" "$VS_RUN" "$WORK/vs.cp" "$VS_PH" 2>/dev/null)"; _t="$(vs_ctag "$WORK/vs.cp")"
-    if [ "$_t" = "tag=5/5" ] && [ "$_g" = "$VS_CWANT_D" ]; then ok "(verdict store, k-part) a row only the READSET_KEYROWS span emits reaches the hook's record AND --key-only for all 5 declared fixtures, census unmoved: one composer, $_t"
-    else bad "(verdict store, k-part) the span's probe row did not reach both sides for every fixture (want tag=5/5 and '$VS_CWANT_D'): $_t $_g"; fi
+    _g="$(vs_census "$VS_PP" "$VS_CX1" "$VS_RUN" "$WORK/vs.cp" "$VS_PH" 2>/dev/null)"; _t="$(vs_ctag "$WORK/vs.cp")"; VS_TN="$(wc -w < "$WORK/vs.cp/W.fx" 2>/dev/null | tr -d " ")"; VS_TW="$(vs_cwant "$VS_CX1")"
+    if [ -n "$VS_TN" ] && [ "$VS_TN" -gt 0 ] && [ "$_t" = "tag=$VS_TN/$VS_TN" ] && [ "$_g" = "$VS_TW" ]; then ok "(verdict store, k-part) a row only the READSET_KEYROWS span emits reaches the hook's record AND --key-only for all $VS_TN declared fixtures, census unmoved: one composer, $_t"
+    else bad "(verdict store, k-part) the span's probe row did not reach both sides for every fixture (want tag=$VS_TN/$VS_TN and '$VS_TW'): $_t $_g"; fi
     # m2: the hook's DECL branch bypassed, so a declared fixture is keyed through ROWS/OWN like a traced one: the
     # hook side loses the probe row, the runner keeps it.
     VS_ARMS=$((VS_ARMS+1))
     if vs_hmut hook-decl-bypass 'else if (f in DECL) { n = split(DK[f], a, "\n"); for (j = 2; j <= n; j++) K[a[j]] = 1 }' 'else if (0) { }' "$VS_PH"; then
       _t="$(vs_census "$VS_HMP" "$VS_CX1" "$VS_RUN" "$WORK/vs.cm2" "$VS_HM" >/dev/null 2>&1; vs_ctag "$WORK/vs.cm2")"
-      if [ "$_t" = "tag=0/5" ]; then ok "VS CENSUS MUTANT hook-decl-bypass is KILLED by the partition arm: $_t"
-      else bad "VS CENSUS MUTANT hook-decl-bypass SURVIVED the partition arm (want tag=0/5): $_t"; fi
+      if [ "$_t" = "tag=0/$VS_TN" ]; then ok "VS CENSUS MUTANT hook-decl-bypass is KILLED by the partition arm: $_t"
+      else bad "VS CENSUS MUTANT hook-decl-bypass SURVIVED the partition arm (want tag=0/$VS_TN): $_t"; fi
     fi
     # The runner composing from a PRIVATE copy of the span (the unprobed hook) instead of the world's own hook: the
     # runner side loses the probe row, the hook keeps it.
@@ -5514,8 +5515,8 @@ if [ "$VS_CN" -ge 1 ]; then
       MF='"$HR_HOOK" > "$HR_WORK/keyrows.sh"' MT="\"$VS_CH1\" > \"\$HR_WORK/keyrows.sh\"" awk '{ i = index($0, ENVIRON["MF"]); if (i > 0) $0 = substr($0, 1, i - 1) ENVIRON["MT"] substr($0, i + length(ENVIRON["MF"])); print }' "$VS_RUN" > "$WORK/vs.cm.rpriv"
       if cmp -s "$VS_RUN" "$WORK/vs.cm.rpriv"; then bad "VS CENSUS MUTANT runner-private-span: the copy is unchanged"
       else _t="$(vs_census "$VS_PP" "$VS_CX1" "$WORK/vs.cm.rpriv" "$WORK/vs.cmr" "$VS_PH" >/dev/null 2>&1; vs_ctag "$WORK/vs.cmr")"
-        if [ "$_t" = "tag=5/0" ]; then ok "VS CENSUS MUTANT runner-private-span is KILLED by the partition arm: $_t"
-        else bad "VS CENSUS MUTANT runner-private-span SURVIVED the partition arm (want tag=5/0): $_t"; fi; fi
+        if [ "$_t" = "tag=$VS_TN/0" ]; then ok "VS CENSUS MUTANT runner-private-span is KILLED by the partition arm: $_t"
+        else bad "VS CENSUS MUTANT runner-private-span SURVIVED the partition arm (want tag=$VS_TN/0): $_t"; fi; fi
     fi
   fi
   # m1: the shared PARSE strips ONE trailing slash instead of all of them. Both sides run the edited span, so the census
