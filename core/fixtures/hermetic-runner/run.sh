@@ -35,11 +35,15 @@
 #   T  the key did not move: with a deleted tracked file, runner rows equal the hook's
 #   U  a non-git root is exit 2; --key-only on an unhashable tree is non-zero; a name git quotes
 #      under a declared dir is exit 2 (near-miss: the same name outside every declared dir, exit 0)
+#   V  version skew: a hook with no READSET_KEYROWS span still runs the fixture through the runner's
+#      hr_parse_skew with the store OFF, maps a core/ declaration, honours `?name`; --key-only is exit 2
+#      (control: the span-present twin records its pass)
 #   X  git.decl: `seed` makes the sandbox a work tree with a HEAD; `pin` imports a commit whose blob
 #      differs from the tree's (control: no git.decl -> no repository); a required pin the project
 #      lacks is exit 2; `pin?` absent prints and continues; an abbreviated pin and an unknown line are exit 2
 #   M  mutants of the runner, each built on a COPY and guarded by `cmp -s`, each of which
-#      must fail exactly its own arms
+#      must fail exactly its own arms. The declaration parse lives in the hook's READSET_KEYROWS
+#      span, so M4/M5 mutate a copy of the hook the probes copy (run_hook_mutant), not the runner.
 #   cwd  the verdict is the same from two different working directories
 #
 # The probe is a throwaway git repo under mktemp: the runner's --key-only reads `git ls-files`.
@@ -908,6 +912,58 @@ arm_U() {
   eq "quoted name under a declared dir: exit 2" "$RC" 2
   yes "quoted name under a declared dir: message" "$OUT" "is a name git quotes"
 }
+# --- V: VERSION SKEW -- a hook with no READSET_KEYROWS span ----------------------------------------
+# A consumer mid-pull runs this runner against an older hook. The sandbox run still runs, through the
+# runner's own hr_parse_skew, with the verdict store OFF; --key-only refuses. The span-present twin (V0)
+# is the control that the OFF line and the empty store are the skew path's doing, and hr_parse_skew's
+# `?name` and mapping branches each get a world only they can pass (killed by M5 and M4).
+arm_V() {
+  CUR=V
+  local FXR_SAVE="$FXR" sb="$WK/V.bin" P1="$WK/V1" P0="$WK/V0" PC="$WK/V2" mapper n
+  mapper="$(dirname "$RUN")/core-paths.sh"
+  mkdir -p "$sb" && printf '#!/bin/sh\necho b207tool-ran\n' > "$sb/b207tool" && chmod +x "$sb/b207tool" || exit 2
+  FXR="$(hook_fxroot)"
+  # V1: skew, `?b207tool` reachable on PATH.
+  mk_probe "$P1" stub_k 'data/a.txt' '?b207tool'
+  edit_hook "$P1" 's/^READSET_UNKEYED_TOOLS="/&b207tool /'
+  edit_hook "$P1" '/^# READSET_KEYROWS_BEGIN$/,/^# READSET_KEYROWS_END$/d'
+  n="$(grep -c '^readset_decl_parse()' "$P1/.githooks/pre-push")" || n=0
+  eq "control: the skew probe's hook carries no readset_decl_parse" "$n" 0
+  n="$(grep -c '^# READSET_TOOLS_BEGIN$' "$P1/.githooks/pre-push")" || n=0
+  eq "control: the skew probe's hook still carries its READSET_TOOLS span" "$n" 1
+  commit_all "$P1" skew
+  mkdir -p "$WK/V1.store"
+  OUT="$(PATH="$sb:$PATH" AI_DLC_VERDICT_STORE="$WK/V1.store" bash "$RUN" --root "$P1" probe 2>&1)"; RC=$?
+  eq "skew, ?b207tool on PATH: sandbox run exit 0" "$RC" 0
+  yes "skew: the stub ran from the sandbox" "$OUT" "b207tool-ran"
+  yes "skew: the run says the store is OFF for want of the span" "$OUT" "carries no READSET_KEYROWS span (an older hook)"
+  eq "skew: no verdict store entry was written" "$(ls "$WK/V1.store" | wc -l | tr -d ' ')" 0
+  OUT="$(PATH="$sb:$PATH" bash "$RUN" --root "$P1" --key-only probe 2>&1)"; RC=$?
+  eq "skew: --key-only exit 2" "$RC" 2
+  yes "skew: --key-only names the missing span" "$OUT" "so there are no key rows to print"
+  # V0: the same probe WITH the span: no OFF line, and the pass IS recorded.
+  mk_probe "$P0" stub_k 'data/a.txt' '?b207tool'
+  edit_hook "$P0" 's/^READSET_UNKEYED_TOOLS="/&b207tool /'
+  commit_all "$P0" span
+  mkdir -p "$WK/V0.store"
+  OUT="$(PATH="$sb:$PATH" AI_DLC_VERDICT_STORE="$WK/V0.store" bash "$RUN" --root "$P0" probe 2>&1)"; RC=$?
+  eq "control: span present: exit 0" "$RC" 0
+  no "control: span present: no store-OFF line" "$OUT" "carries no READSET_KEYROWS span" "b207tool-ran"
+  eq "control: span present: the pass IS recorded" "$(ls "$WK/V0.store" | wc -l | tr -d ' ')" 1
+  # V2: skew in a CONSUMER layout: a core/ declaration mapped by hr_parse_skew's own mapper call.
+  FXR="tests/fixtures"
+  mk_probe "$PC" stub_lcons '!core/scripts/x.sh'
+  mkdir -p "$PC/scripts/ai-dlc" && printf 'x\n' > "$PC/scripts/ai-dlc/x.sh"
+  edit_hook "$PC" '/^# READSET_KEYROWS_BEGIN$/,/^# READSET_KEYROWS_END$/d'
+  commit_all "$PC" skewcons
+  [ -f "$mapper" ] && ok "$CUR: control: core-paths.sh is beside the runner under test" || bad "$CUR: no core-paths.sh beside $RUN"
+  OUT="$(bash "$RUN" --root "$PC" probe 2>&1)"; RC=$?
+  eq "skew, consumer layout, core/ declaration: exit 0" "$RC" 0
+  yes "skew, consumer layout: the store-OFF line (the skew path ran)" "$OUT" "carries no READSET_KEYROWS span (an older hook)"
+  yes "skew, consumer layout: the mapped spelling is in the sandbox" "$OUT" "./scripts/ai-dlc/x.sh"
+  no "skew, consumer layout: the declared spelling is NOT" "$OUT" "./core/scripts/x.sh" "./scripts/ai-dlc/x.sh"
+  FXR="$FXR_SAVE"
+}
 # --- X: git.decl -- a seeded repository and pinned commits inside the sandbox ---------------------
 # The stub reads the pinned commit's blob, which DIFFERS from the working tree's, so a pin answered
 # from the tree (or from a repository the sandbox should not see) cannot pass.
@@ -985,11 +1041,11 @@ if [ -z "$HOOK_SRC" ]; then echo "FIXTURE ERROR: no pre-push hook with a READSET
 # The main pass runs its arms in parallel subshells, each with its own output and FAILED file, then
 # replays the output in arm order so the transcript reads as before.
 mkdir -p "$WORK/par"
-for _a in A B C D E F H I K L N G J P Q R S T U W X; do
+for _a in A B C D E F H I K L N G J P Q R S T U V W X; do
   ( "arm_$_a" > "$WORK/par/$_a.out" 2>&1; printf '%s' "$FAILED" > "$WORK/par/$_a.failed" ) &
 done
 wait
-for _a in A B C D E F H I K L N G J P Q R S T U W X; do
+for _a in A B C D E F H I K L N G J P Q R S T U V W X; do
   cat "$WORK/par/$_a.out"
   [ -f "$WORK/par/$_a.failed" ] || { echo "FIXTURE ERROR: arm $_a produced no verdict" >&2; exit 2; }
   FAILED="$FAILED$(cat "$WORK/par/$_a.failed")"
@@ -1015,13 +1071,33 @@ run_mutant() {
   mutate "$m" "$3" "$4" || { echo "BROKEN" > "$WORK/mut-$1.res"; return; }
   ( RUN="$m"; WK="$WORK/m-$1"; mkdir -p "$WK"; VERBOSE=0; FAILED=""; for _a in $2; do "arm_$_a"; done; failed_set "$FAILED" > "$WORK/mut-$1.res" )
 }
+# run_hook_mutant <name> <arms> <old> <new>: the same, but the mutation is applied to a copy of the HOOK
+# every probe copies (HOOK_SRC, the file the runner under test sources its READSET_KEYROWS span from), and
+# the runner is the unmutated one. The declaration parse lives in that span, so a mutant of the parse the
+# runner OBSERVES has to be built there; a runner mutant cannot reach it.
+run_hook_mutant() {
+  local h="$WORK/hmutdir-$1/pre-push"
+  mkdir -p "$WORK/hmutdir-$1" || { echo "BROKEN" > "$WORK/mut-$1.res"; return; }
+  mutate_file "$HOOK_SRC" "$h" "$3" "$4" || { echo "BROKEN" > "$WORK/mut-$1.res"; return; }
+  ( HOOK_SRC="$h"; WK="$WORK/m-$1"; mkdir -p "$WK"; VERBOSE=0; FAILED=""; for _a in $2; do "arm_$_a"; done; failed_set "$FAILED" > "$WORK/mut-$1.res" )
+}
 
 if [ "$NESTED" != 1 ]; then
   run_mutant M1 "B D" 'if ! grep -qxF -e "HERMETIC-CONSUMED $rr"' 'if false && grep -qxF -e "HERMETIC-CONSUMED $rr"' &
   run_mutant M2 "A C D L B" 'mkdir -p "$HR_SB/$HR_FXROOT" || exit 2' 'cp -Rp "$HR_ROOT/." "$HR_SB/" ; mkdir -p "$HR_SB/$HR_FXROOT" || exit 2' &
   run_mutant M3 "F B" 'env -i PATH=' 'env PATH=' &
-  run_mutant M4 "L A" '| bash "$HR_SCRIPT_DIR/core-paths.sh" --map >' '| cat >' &
-  run_mutant M5 "K A" "'?'*)" "'NEVER?'*)" &
+  # M4: the span's mapper call made the identity, in the hook the runner sources: a core/ declaration on a
+  # consumer is not mapped, so the runner refuses it as absent.
+  run_hook_mutant M4 "L A" '| bash "$mp" --map >' '| cat >' &
+  # M5: the span's `?name` branch never taken, in the hook the runner sources: `?b207tool` is resolved as a
+  # keyed tool name and refused.
+  run_hook_mutant M5 "K A" "'?'*)" "'NEVER?'*)" &
+  # M17/M18: the same two properties in the runner's own skew parser, which runs only when the hook carries
+  # no READSET_KEYROWS span, so only arm V (span removed) can see them.
+  run_mutant M17 "V A" "'?'*) printf" "'NEVER?'*) printf" &
+  run_mutant M18 "V A" '| bash "$4" --map >' '| cat >' &
+  # M19: the runner hands the span the DISTRIBUTION layout on a consumer: no mapping, the declaration refused.
+  run_mutant M19 "L A" 'hr_lay=cons; [ "$HR_LAYOUT" = distribution ] && hr_lay=dist' 'hr_lay=dist' &
   run_mutant M6 "F B" 'HR_WORK="$(cd "$HR_WORK" && pwd -P)" || exit 2' 'HR_WORK="$HR_WORK"' &
   # M7: a declared directory copied whole again (`cp -Rp`): the ignored link and file reach the sandbox.
   run_mutant M7 "P Q" '  mkdir -p "$HR_SB/$d" || exit 2' '  { mkdir -p "$HR_SB/$(dirname "$d")" && { [ -e "$HR_SB/$d" ] || cp -Rp "$HR_ROOT/$d" "$HR_SB/$d"; }; } || exit 2' &
@@ -1030,7 +1106,7 @@ if [ "$NESTED" != 1 ]; then
   # M9: the link test scoped to TRACKED entries: untracked-unignored links pass.
   run_mutant M9 "R W Q" '    if [ -L "$HR_ROOT/$e" ]; then' '    if [ -L "$HR_ROOT/$e" ] && ( cd "$HR_ROOT" && git ls-files --error-unmatch -- "$e" >/dev/null 2>&1 ); then' &
   # M10: the copy population fed into the key: a deleted tracked file moves the listing row.
-  run_mutant M10 "T G" 'cut -f1 "$HR_WORK/m/.now" > "$HR_WORK/kall"' 'cat "$HR_WORK/p/.paths" > "$HR_WORK/kall"' &
+  run_mutant M10 "T G" 'cut -f1 "$HR_WORK/m/.now" > "$HR_WORK/m/.is"' 'cat "$o/.paths" > "$HR_WORK/m/.is"' &
   # M11: the key subshell's exit lost again: an unhashable tree prints nothing at exit 0.
   run_mutant M11 "U G" ') > "$HR_WORK/krows"; hr_kr=$?' ') > "$HR_WORK/krows"; hr_kr=0' &
   # M12: the pin pack never reaches the sandbox: a pinned blob is unreadable there.
@@ -1048,7 +1124,7 @@ if [ "$NESTED" != 1 ]; then
   ( cd "$(dirname "$RUN")" && HERMETIC_FX_NESTED=1 bash "$HERE/run.sh" > "$WORK/cwd2.out" 2>&1; echo $? > "$WORK/cwd2.rc" ) &
   wait
   CUR=M
-  for pair in "M1:B" "M2:A C D L" "M3:F" "M4:L" "M5:K" "M6:F" "M7:P" "M8:Q W" "M9:R W" "M10:T" "M11:U" "M12:X" "M13:X" "M14:X" "M15:X" "M16:X"; do
+  for pair in "M1:B" "M2:A C D L" "M3:F" "M4:L" "M5:K" "M6:F" "M7:P" "M8:Q W" "M9:R W" "M10:T" "M11:U" "M12:X" "M13:X" "M14:X" "M15:X" "M16:X" "M17:V" "M18:V" "M19:L"; do
     mname="${pair%%:*}"; want="$(failed_set "${pair#*:}")"
     got="$(cat "$WORK/mut-$mname.res" 2>/dev/null)"
     if [ "$got" = "BROKEN" ] || [ -z "$got" ] && [ "$want" != "" ] && [ "$got" = "BROKEN" ]; then

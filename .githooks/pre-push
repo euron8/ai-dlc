@@ -1277,13 +1277,112 @@ readset_vs_ident() { # <hook> <runner>: prints "<runner span sha> <hook spans sh
   local hk="$1" rn="$2"
   [ -f "$hk" ] && [ -f "$rn" ] || return 1
   printf '%s %s' "$(sed -n '/^# HR_SANDBOX_BEGIN$/,/^# HR_SANDBOX_END$/p' "$rn" | shasum -a 256 | cut -d' ' -f1)" \
-    "$( { sed -n '/^# READSET_UNIVERSE_BEGIN$/,/^# READSET_UNIVERSE_END$/p' "$hk"; sed -n '/^# READSET_TOOLS_BEGIN$/,/^# READSET_TOOLS_END$/p' "$hk"; sed -n '/^# READSET_VS_BEGIN$/,/^# READSET_VS_END$/p' "$hk"; } | shasum -a 256 | cut -d' ' -f1)"
+    "$( { sed -n '/^# READSET_UNIVERSE_BEGIN$/,/^# READSET_UNIVERSE_END$/p' "$hk"; sed -n '/^# READSET_TOOLS_BEGIN$/,/^# READSET_TOOLS_END$/p' "$hk"; sed -n '/^# READSET_VS_BEGIN$/,/^# READSET_VS_END$/p' "$hk"; sed -n '/^# READSET_KEYROWS_BEGIN$/,/^# READSET_KEYROWS_END$/p' "$hk"; } | shasum -a 256 | cut -d' ' -f1)"
 }
 readset_vs_input() { # <fx> <ident> <rows file>: the digest input
   printf '#fixture %s\n#runner %s\n#universe %s\n' "$1" "${2%% *}" "${2#* }"
   cat "$3"
 }
 # READSET_VS_END
+# A DECLARED FIXTURE'S KEY ROWS, ONE COMPOSER. This hook and hermetic-run.sh both source this span -- the runner at
+# top level, the way it sources READSET_TOOLS -- so the declaration is parsed, and the key rows composed, by ONE
+# implementation: there is no second composer to hold equal by a census. The span is hashed into `#universe`, so a
+# verdict-store entry written under one composer is never reused under the next.
+#   readset_decl_parse  ONE fixture's inputs.decl and tools.decl -> rows `<fx>\t<kind>\t...`:
+#     N                           the fixture is declared (always the first row)
+#     F|D <path> <req> <declared> a declared file / directory, mapped to the consumer layout where the
+#                                 declaration names core/ there; <declared> is the spelling before the map
+#     T <abs path> | U <name>     a keyed tool resolved against <tool search path> | an unkeyed `?name`
+#     X <class> <detail>          a refusal; each caller words it (the hook as a .dunres row, the runner on stderr)
+#   Normalisation is owned here and nowhere else: `#` and blank lines dropped, a trailing CR stripped, a leading
+#   `!` (REQUIRED) recorded and stripped, ALL trailing `/` stripped from a directory. An absolute path or a `..`
+#   component refuses the declaration BEFORE the mapper runs, which is fed exactly these normalised paths.
+#   A keyed tool and an unkeyed `?name` sharing a basename, or two keyed paths sharing one, are refused (`dup`).
+#   readset_decl_tool_hashes  append `<abs path>\t<sha256>` to <tool hash file> for each T row it lacks.
+#   readset_decl_keys  ONE awk pass over a `.now` manifest for EVERY fixture in <parse rows>: prints
+#     `<fx>\t<key>\t<value>`, the record grammar the hook's decision compares: each declared file present in
+#     <now> (its manifest hash, never recomputed), every file under a declared directory, `<dir>/` with the
+#     `#listing:` value from <ls.now> for the declared directory and every directory between it and such a file
+#     (readset_listings' grammar: immediate entry names implied by the file list, never readdir), every file
+#     under the fixture's own directory, and each T tool. A declared path absent from <now> -- an excluded top,
+#     a git-ignored file -- has NO row on either side.
+# READSET_KEYROWS_BEGIN
+readset_decl_parse() { # <fx> <fixture dir> <dist|cons> <mapper, or empty> <tool search path> <scratch prefix>
+  local fx="$1" fd="$2" lay="$3" mp="$4" xpd="$5" w="$6" t k p rq dp name found seen="|"
+  printf '%s\tN\n' "$fx"
+  awk -v fx="$fx" '{ sub(/\r$/, ""); if ($0 == "" || $0 ~ /^#/) next
+      r = 0; if (substr($0, 1, 1) == "!") { r = 1; $0 = substr($0, 2) }
+      if ($0 ~ /^\// || $0 ~ /(^|\/)\.\.(\/|$)/) { print fx "\tX\tabs\t" $0; bad = 1; next }
+      k = "F"; if ($0 ~ /\/$/) { k = "D"; sub(/\/+$/, "") }
+      if ($0 != "") print fx "\t" k "\t" $0 "\t" r }
+    END { exit bad ? 3 : 0 }' "$fd/inputs.decl" > "$w.n"
+  if [ $? -ne 0 ]; then awk -F'\t' '$2 == "X"' "$w.n"; return 0; fi
+  if [ "$lay" = cons ] && awk -F'\t' '$3 == "core" || index($3, "core/") == 1 { f = 1 } END { exit f ? 0 : 1 }' "$w.n"; then
+    if [ -z "$mp" ] || [ ! -f "$mp" ]; then printf '%s\tX\tnomap\t%s\n' "$fx" "$mp"; return 0; fi
+    awk -F'\t' '{ print $3 (($2 == "D") ? "/" : "") }' "$w.n" | bash "$mp" --map > "$w.m" 2> "$w.e" \
+      || { printf '%s\tX\tmaprefuse\t%s\n' "$fx" "$(sed -n 1p "$w.e" | tr '\t' ' ')"; return 0; }
+    [ "$(awk 'END { print NR }' "$w.m")" = "$(awk 'END { print NR }' "$w.n")" ] || { printf '%s\tX\tmapcount\t-\n' "$fx"; return 0; }
+    awk -F'\t' 'NR == FNR { m[FNR] = $0; next } { p = m[FNR]; sub(/\/+$/, "", p); print $1 "\t" $2 "\t" p "\t" $4 "\t" $3 }' "$w.m" "$w.n" > "$w.r"
+  else
+    awk -F'\t' '{ print $1 "\t" $2 "\t" $3 "\t" $4 "\t" $3 }' "$w.n" > "$w.r"
+  fi
+  cat "$w.r"
+  # Absent ON DISK under the root (the cwd): -f for a file, -d for a directory. A path on disk but outside the
+  # universe (an excluded top, a git-ignored file) is NOT refused; it simply has no key row.
+  while IFS="$(printf '\t')" read -r t k p rq dp; do
+    if [ "$k" = D ]; then [ -d "$p" ] || printf '%s\tX\tabsd\t%s\t%s\n' "$fx" "$p" "$dp"
+    else [ -f "$p" ] || printf '%s\tX\tabsf\t%s\t%s\n' "$fx" "$p" "$dp"; fi
+  done < "$w.r"
+  [ -f "$fd/tools.decl" ] || return 0
+  while IFS= read -r t || [ -n "$t" ]; do
+    case "$t" in ''|'#'*) continue ;; esac
+    case "$t" in
+      '?'*)
+        name="${t#?}"
+        case "$name" in ''|*[!A-Za-z0-9_.+-]*) printf '%s\tX\tqbad\t%s\n' "$fx" "$t"; continue ;; esac
+        case " $READSET_UNKEYED_TOOLS " in *" $name "*) ;; *) printf '%s\tX\tqout\t%s\n' "$fx" "$t"; continue ;; esac
+        case "$seen" in *"|$name=?|"*) continue ;; *"|$name="*) printf '%s\tX\tdup\t%s\n' "$fx" "$name"; continue ;; esac
+        seen="$seen$name=?|"; printf '%s\tU\t%s\n' "$fx" "$name"
+        continue ;;
+    esac
+    case "$t" in */*) printf '%s\tX\ttpath\t%s\n' "$fx" "$t"; continue ;; esac
+    found="$( IFS=:; for p in $xpd; do [ -x "$p/$t" ] && { printf '%s' "$p/$t"; break; }; done )"
+    [ -n "$found" ] || { printf '%s\tX\ttnone\t%s\n' "$fx" "$t"; continue; }
+    case "$seen" in *"|${found##*/}=$found|"*) continue ;; *"|${found##*/}="*) printf '%s\tX\tdup\t%s\n' "$fx" "${found##*/}"; continue ;; esac
+    seen="$seen${found##*/}=$found|"; printf '%s\tT\t%s\n' "$fx" "$found"
+  done < "$fd/tools.decl"
+  return 0
+}
+readset_decl_tool_hashes() { # <parse rows> <tool hash file, appended>
+  awk -F'\t' -v h="$2" 'BEGIN { while ((getline l < h) > 0) { t = index(l, "\t"); have[substr(l, 1, t - 1)] = 1 } }
+    $2 == "T" && !($3 in have) { have[$3] = 1; print $3 }' "$1" > "$2.want"
+  [ -s "$2.want" ] || return 0
+  tr '\n' '\000' < "$2.want" | xargs -0 shasum -a 256 -- 2>/dev/null \
+    | awk '{ p = $0; sub(/^[0-9a-f]+  /, "", p); print p "\t" $1 }' >> "$2"
+}
+readset_decl_keys() { # <now> <ls.now> <parse rows> <tool hash file> <fixture root, with its trailing />
+  RK_L="$2" RK_P="$3" RK_T="$4" awk -F'\t' -v root="$5" '
+    function out(f, k, v) { if (!((f SUBSEP k) in S)) { S[f SUBSEP k] = 1; print f "\t" k "\t" v } }
+    BEGIN {
+      while ((getline l < ENVIRON["RK_P"]) > 0) { split(l, a, "\t")
+        if (a[2] == "N") FX[a[1]] = 1
+        else if (a[2] == "F") FF[a[3]] = FF[a[3]] "\n" a[1]
+        else if (a[2] == "D") DD[a[3]] = DD[a[3]] "\n" a[1]
+        else if (a[2] == "T") TL[a[1]] = TL[a[1]] "\n" a[3] }
+      while ((getline l < ENVIRON["RK_L"]) > 0) { t = index(l, "\t"); LS[substr(l, 1, t - 1)] = substr(l, t + 1) }
+      while ((getline l < ENVIRON["RK_T"]) > 0) { t = index(l, "\t"); TH[substr(l, 1, t - 1)] = substr(l, t + 1) }
+      for (f in FX) { n = split(TL[f], a, "\n"); for (j = 2; j <= n; j++) out(f, a[j], (a[j] in TH) ? TH[a[j]] : "-") } }
+    { p = $1; v = $2
+      if (p in FF) { n = split(FF[p], a, "\n"); for (j = 2; j <= n; j++) out(a[j], p, v) }
+      if (index(p, root) == 1) { r = substr(p, length(root) + 1); i = index(r, "/"); if (i > 1 && (substr(r, 1, i - 1) in FX)) out(substr(r, 1, i - 1), p, v) }
+      q = p
+      while ((i = match(q, /\/[^\/]*$/)) > 0) { q = substr(q, 1, i - 1)
+        if (!(q in DD)) continue
+        n = split(DD[q], a, "\n")
+        for (j = 2; j <= n; j++) { out(a[j], p, v); r = p
+          while ((i2 = match(r, /\/[^\/]*$/)) > 0) { r = substr(r, 1, i2 - 1); out(a[j], r "/", ((r "/") in LS) ? LS[r "/"] : "-"); if (r == q) break } } } }' "$1"
+}
+# READSET_KEYROWS_END
 readset_tools() { # <out>
   local out="$1" xp="$READSET_TOOL_XP"
   [ -n "$xp" ] || xp="$(readset_git_exec_path)"
@@ -1302,96 +1401,42 @@ readset_tools() { # <out>
 }
 
 
-# DECLARED FIXTURES. A fixture directory carrying `inputs.decl` replaces its traced read set with the
-# declaration: one `<fx>\t<path>` row per declared file, per file under a declared directory (trailing `/`),
-# per directory between such a file and the declared one, and the declared directory path itself -- because
-# addk() in readset_keys turns a path that is a directory into the listing key `<dir>/`, which is what makes a
-# NEW file under a declared directory rerun the fixture. A leading `!` (REQUIRED) is runner-only semantics and
-# is stripped. The fixture's own files need no row: OWN[] adds them for every mapped fixture. These rows
-# REPLACE the fixture's committed-map rows in `.krows`, and the fixture joins `.mapped.all` so it is not keyed
-# on the whole tree and is never queued for a trace. It also never goes `stale` (stale means "re-trace", and
-# there is no trace). It takes no scanned tool keys (FT[] is skipped): its tool keys are exactly `tools.decl`,
-# each bare name resolved against READSET_TOOL_DIRS in order and keyed `<abs path>\t<sha>` (hashed here when
-# readset_tools did not already). A name that resolves nowhere lands in `.dunres` and the decision for that
-# fixture is `run`, reason `tool unresolved <name>`, so the runner reports it (exit 2). The record format is
-# unchanged (`#format k1`, `#tools canonical`); `hermetic-run.sh --key-only` prints the same rows.
+# DECLARED FIXTURES. A fixture directory carrying `inputs.decl` is keyed on its declaration instead of a traced
+# read set. readset_declared is the PRE-PASS: it runs the READSET_KEYROWS span's readset_decl_parse over every
+# declared fixture in <list> (the same parse hermetic-run.sh runs for one), words its refusal rows into `.dunres`,
+# hashes the declared tools into `.tools`, and calls readset_decl_keys ONCE over this push's `.now` for the whole
+# declared set, writing `.dkeys` (`<fx>\t<key>\t<value>`). The decision awk in readset_keys takes a declared
+# fixture's keys AND their values from `.dkeys` -- never from `.krows` and never from OWN[] -- so the hook and the
+# runner (`--key-only`, and the verdict store's rows) cannot key one fixture two ways.
+# Each declared fixture lands in `.dfx` and joins `.mapped.all` (readset_local_validate), so it is not keyed on the
+# whole tree, is never queued for a trace and never goes `stale`. It takes no scanned tool keys (FT[] is skipped).
+# A `.dunres` row makes the decision `run` with reason `tool unresolved <row>` (or the row itself where it begins
+# `mapper `), so the hermetic runner reports the refusal (exit 2). The record format is unchanged (`#format k1`).
 readset_declared() { # <list> <out>
-  local list="$1" out="$2" d b t p found h tab decl lay mp name xp xpd="" seen dk dp
-  : > "$out/.drows"; : > "$out/.dtools"; : > "$out/.dunres"; : > "$out/.dfx"
+  local list="$1" out="$2" d b p lay mp="" xp xpd
+  : > "$out/.dparse"; : > "$out/.dfx"; : > "$out/.dunres"; : > "$out/.dkeys"; : > "$out/.dtools"
   lay=cons; [ -d core/scripts ] && lay=dist
+  for p in scripts/ai-dlc/core-paths.sh core/scripts/core-paths.sh; do [ -f "$p" ] && { mp="$p"; break; }; done
+  xp="$READSET_TOOL_XP"; [ -n "$xp" ] || xp="$(readset_git_exec_path)"; xpd="$xp:$READSET_TOOL_DIRS"
   while IFS= read -r d; do
     b="${d%/}"; b="${b##*/}"
     [ -f "${FXROOT}${b}/inputs.decl" ] || continue
-    printf '%s\n' "$b" >> "$out/.dfx"
-    decl="${FXROOT}${b}/inputs.decl"
-    tab="$(printf '\t')"
-    # The runner refuses an absolute path or a `..` component BEFORE it maps; refuse the same shapes here,
-    # before the mapper pre-pass, or `core/scripts/../x` maps to a path the runner never sees.
-    if awk '{ sub(/\r$/, ""); if ($0 == "" || $0 ~ /^#/) next; if (substr($0, 1, 1) == "!") $0 = substr($0, 2)
-           if ($0 ~ /^\// || $0 ~ /(^|\/)\.\.(\/|$)/) bad = 1 } END { exit bad ? 0 : 1 }' "$decl"; then
-      printf '%s\tdeclaration path is absolute or contains ..\n' "$b" >> "$out/.dunres"; continue
-    fi
-    if [ "$lay" = cons ] && /usr/bin/grep -q '^!*core/' "$decl" 2>/dev/null; then
-      mp=""
-      for p in scripts/ai-dlc/core-paths.sh core/scripts/core-paths.sh; do [ -f "$p" ] && { mp="$p"; break; }; done
-      if [ -z "$mp" ]; then printf '%s\tmapper absent\n' "$b" >> "$out/.dunres"; continue; fi
-      awk '{ sub(/\r$/, ""); if ($0 == "" || $0 ~ /^#/) next; if (substr($0, 1, 1) == "!") $0 = substr($0, 2); print }' "$decl" \
-        | bash "$mp" --map > "$out/.dmap.$b" 2>/dev/null \
-        || { printf '%s\tmapper refused a declared path\n' "$b" >> "$out/.dunres"; continue; }
-      decl="$out/.dmap.$b"
-    fi
-    RD_DECL="$decl" awk -v fx="$b" '
-      BEGIN { while ((getline l < ENVIRON["RD_DECL"]) > 0) {
-          sub(/\r$/, "", l); if (l == "" || l ~ /^#/) continue
-          if (substr(l, 1, 1) == "!") l = substr(l, 2)
-          if (l ~ /\/$/) { sub(/\/+$/, "", l); D[l] = 1 } else F[l] = 1 } }
-      FNR == NR { IN[$0] = 1; next }
-      FNR == 1 { for (p in F) if (p in IN) print fx "\t" p }
-      { for (p in D) if (index($0, p "/") == 1) { print fx "\t" $0; print fx "\t" p; r = $0
-          while ((i = match(r, /\/[^\/]*$/)) > 0) { r = substr(r, 1, i - 1); if (length(r) <= length(p)) break; print fx "\t" r } } }' "$out/.is" "$out/.is" >> "$out/.drows"
-    # A declared FILE or DIRECTORY (after mapping) that does not exist ON DISK under the repo root is
-    # unresolvable: the runner exits 2 on it (-f / -d, the runner's own test), so the decision must be
-    # `run`. A path that is on disk but outside the universe (an excluded top, a git-ignored file) is NOT
-    # flagged; it keeps its no-row behaviour, and the runner passes it.
-    while IFS="$tab" read -r dk dp; do
-      [ -n "$dp" ] || continue
-      if [ "$dk" = D ]; then [ -d "$dp" ] || printf '%s\tdeclared directory absent %s\n' "$b" "$dp" >> "$out/.dunres"
-      else [ -f "$dp" ] || printf '%s\tdeclared file absent %s\n' "$b" "$dp" >> "$out/.dunres"; fi
-    done <<RD_EOF
-$(awk '{ sub(/\r$/, ""); if ($0 == "" || $0 ~ /^#/) next; if (substr($0, 1, 1) == "!") $0 = substr($0, 2)
-         if ($0 ~ /\/$/) { sub(/\/+$/, ""); print "D\t" $0 } else print "F\t" $0 }' "$decl")
-RD_EOF
-    if [ -f "${FXROOT}${b}/tools.decl" ]; then
-      seen=""
-      if [ -z "$xpd" ]; then
-        xp="$READSET_TOOL_XP"
-        [ -n "$xp" ] || xp="$(readset_git_exec_path)"
-        xpd="$xp:$READSET_TOOL_DIRS"
-      fi
-      while IFS= read -r t || [ -n "$t" ]; do
-        case "$t" in ''|'#'*) continue ;; esac
-        case "$t" in
-          '?'*)
-            name="${t#?}"
-            case "$name" in ''|*[!A-Za-z0-9_.+-]*) printf '%s\t%s\n' "$b" "$t" >> "$out/.dunres"; continue ;; esac
-            case " $READSET_UNKEYED_TOOLS " in *" $name "*) ;; *) printf '%s\t%s\n' "$b" "$t" >> "$out/.dunres" ;; esac
-            case "$seen" in *"|$name=?|"*) ;; *"|$name="*) printf '%s\tduplicate basename %s\n' "$b" "$name" >> "$out/.dunres" ;; *) seen="$seen|$name=?|" ;; esac
-            continue ;;
-        esac
-        found=""
-        case "$t" in */*) ;; *) found="$( IFS=:; for p in $xpd; do [ -x "$p/$t" ] && { printf '%s' "$p/$t"; break; }; done )" ;; esac
-        if [ -z "$found" ]; then printf '%s\t%s\n' "$b" "$t" >> "$out/.dunres"; continue; fi
-        case "$seen" in *"|${found##*/}=$found|"*) continue ;; *"|${found##*/}="*) printf '%s\tduplicate basename %s\n' "$b" "${found##*/}" >> "$out/.dunres"; continue ;; esac
-        seen="$seen|${found##*/}=$found|"
-        printf '%s\t%s\n' "$b" "$found" >> "$out/.dtools"
-        grep -qF "$found$tab" "$out/.tools" || { h="$(shasum -a 256 -- "$found" 2>/dev/null | cut -d' ' -f1)"; [ -n "$h" ] && printf '%s\t%s\n' "$found" "$h" >> "$out/.tools"; }
-      done < "${FXROOT}${b}/tools.decl"
-    fi
+    readset_decl_parse "$b" "${FXROOT}${b}" "$lay" "$mp" "$xpd" "$out/.dp.$b" >> "$out/.dparse"
   done < "$list"
+  awk -F'\t' '$2 == "N" { print $1 }' "$out/.dparse" > "$out/.dfx"
   [ -s "$out/.dfx" ] || return 0
-  awk -F'\t' 'NR == FNR { d[$1] = 1; next } !($1 in d)' "$out/.dfx" "$out/.krows" > "$out/.krows.t"
-  LC_ALL=C sort -u "$out/.drows" >> "$out/.krows.t"
-  mv "$out/.krows.t" "$out/.krows"
+  awk -F'\t' '$2 != "X" { next }
+    $3 == "abs" { print $1 "\tdeclaration path is absolute or contains .."; next }
+    $3 == "nomap" { print $1 "\tmapper absent"; next }
+    $3 == "maprefuse" || $3 == "mapcount" { print $1 "\tmapper refused a declared path"; next }
+    $3 == "absd" { print $1 "\tdeclared directory absent " $4; next }
+    $3 == "absf" { print $1 "\tdeclared file absent " $4; next }
+    $3 == "dup" { print $1 "\tduplicate basename " $4; next }
+    { print $1 "\t" $4 }' "$out/.dparse" > "$out/.dunres"
+  # `.dtools` (`<fx>\t<tool path>`) is a VIEW of the parse for diagnostics and probes; the decision reads `.dkeys`.
+  awk -F'\t' '$2 == "T" { print $1 "\t" $3 }' "$out/.dparse" > "$out/.dtools"
+  readset_decl_tool_hashes "$out/.dparse" "$out/.tools"
+  readset_decl_keys "$out/.now" "$out/.ls.now" "$out/.dparse" "$out/.tools" "$FXROOT" > "$out/.dkeys"
 }
 
 # THE RECORD, `$KEYS_DIR/<fx>.key`: `#format k1`, `#state ok|stale|seeded`, `#tools canonical`
@@ -1510,7 +1555,7 @@ readset_keys() { # <list> <out>
   : > "$out/.khdr"; : > "$out/.kout"
   KN="$out/.now" KLN="$out/.ls.now" KLP="$lp" KLV="$lv" KPP="$pp" KPV="$pv" KV2="$v2" KR="$out/.krows" \
   KM="$out/.mapped.all" KLOC="$out/.local.valid" KC="$out/.krecs" KF="$out/.kl" KH="$out/.khdr" KO="$out/.kout" \
-  KQ="$out/.qfx" KT="$out/.tools" KFT="$out/.ftools" KDF="$out/.dfx" KDT="$out/.dtools" KDU="$out/.dunres" awk -v seed="$seed" -v root="$FXROOT" '
+  KQ="$out/.qfx" KT="$out/.tools" KFT="$out/.ftools" KDF="$out/.dfx" KDK="$out/.dkeys" KDU="$out/.dunres" awk -v seed="$seed" -v root="$FXROOT" '
     function rd(file, arr,   l, t) { while ((getline l < file) > 0) { t = index(l, "\t"); arr[substr(l, 1, t - 1)] = substr(l, t + 1) } }
     function kids(file, set,   l, t, p, i) { while ((getline l < file) > 0) { t = index(l, "\t"); p = (t ? substr(l, 1, t - 1) : l)
         while ((i = match(p, /\/[^\/]*$/)) > 0) { set[substr(p, 1, i - 1) SUBSEP substr(p, i + 1)] = 1; p = substr(p, 1, i - 1) } } }
@@ -1519,6 +1564,10 @@ readset_keys() { # <list> <out>
     function sv(k) { if (substr(k, 1, 1) == "/") return cur(k)
       return (k ~ /\/$/) ? ((k in LV) ? LV[k] : "-") : ((k in VV) ? VV[k] : "-") }
     function addk(p) { if (p in NV) K[p] = 1; else if (p in DN) K[p "/"] = 1; else K[p] = 1 }
+    # A DECLARED fixture takes its key VALUES from the shared composer (`.dkeys`), so the compare and the record
+    # hold exactly what hermetic-run.sh --key-only prints; every other fixture reads the manifest through cur().
+    # (No apostrophe may appear here: this awk program is a single-quoted shell literal.)
+    function cv(f, k) { return ((f SUBSEP k) in DV) ? DV[f SUBSEP k] : cur(k) }
     function subtree(q,   p, r, i) {
       if (q in NV) X[q] = 1
       if (!(q in DN)) return
@@ -1561,7 +1610,7 @@ readset_keys() { # <list> <out>
         if (index(p, root) == 1) { r = substr(p, length(root) + 1); i = index(r, "/"); if (i > 1) OWN[substr(r, 1, i - 1)] = OWN[substr(r, 1, i - 1)] "\n" p } }
       while ((getline l < ENVIRON["KM"]) > 0) MAPPED[l] = 1
       while ((getline l < ENVIRON["KDF"]) > 0) DECL[l] = 1
-      while ((getline l < ENVIRON["KDT"]) > 0) { t = index(l, "\t"); f = substr(l, 1, t - 1); DT[f] = DT[f] "\n" substr(l, t + 1) }
+      while ((getline l < ENVIRON["KDK"]) > 0) { split(l, a, "\t"); DK[a[1]] = DK[a[1]] "\n" a[2]; DV[a[1] SUBSEP a[2]] = a[3] }
       while ((getline l < ENVIRON["KDU"]) > 0) { t = index(l, "\t"); f = substr(l, 1, t - 1); if (!(f in UN)) UN[f] = substr(l, t + 1) }
       while ((getline l < ENVIRON["KQ"]) > 0) { t = index(l, "\t"); QF[substr(l, 1, t - 1)] = substr(l, t + 1) }
       while ((getline l < ENVIRON["KLOC"]) > 0) { t = index(l, "\t"); LOC[substr(l, 1, t - 1)] = 1 }
@@ -1574,11 +1623,11 @@ readset_keys() { # <list> <out>
         delete K; delete R; delete X; delete LM
         um = !(f in MAPPED)
         if (um) { for (p in NV) K[p] = 1 }
+        else if (f in DECL) { n = split(DK[f], a, "\n"); for (j = 2; j <= n; j++) K[a[j]] = 1 }
         else { n = split(ROWS[f], a, "\n"); for (j = 2; j <= n; j++) addk(a[j])
                n = split(OWN[f], a, "\n"); for (j = 2; j <= n; j++) K[a[j]] = 1 }
         delete TK
         if (!(f in DECL)) for (k in K) if (k in FT) { n = split(FT[k], a, "\n"); for (j = 2; j <= n; j++) TK[a[j]] = 1 }
-        n = split(DT[f], a, "\n"); for (j = 2; j <= n; j++) TK[a[j]] = 1
         for (k in TK) K[k] = 1
         has = 0; st = ""; rl = 0
         # A SEEDED WHOLE-TREE KEY ALSO COMPARES EVERY v2 PATH: one deleted since v2 is not in K.
@@ -1590,7 +1639,7 @@ readset_keys() { # <list> <out>
         if (has) {
           for (k in R) { if ((f in DECL) && !(k in K)) continue
             if (k ~ /\/$/) rl = 1
-            if (cur(k) == R[k]) continue
+            if (cv(f, k) == R[k]) continue
             if (substr(k, 1, 1) == "/") { if (!mig) tch = 1; continue }
             if (k == root && sibs_only(k)) { SB = 1; continue }
             if (first == "" || k < first) first = k; if (k ~ /\/$/) LM[k] = 1; else fch = 1 }
@@ -1613,10 +1662,10 @@ readset_keys() { # <list> <out>
         else if (st == "stale" && !(f in DECL)) ns = ((f in LOC) ? "ok" : "stale")
         else if (fch && !(f in DECL)) ns = "stale"
         else { ns = "ok"; if (rl && !(f in DECL)) for (k in R) if (!mig || substr(k, 1, 1) != "/") X[k] = 1
-               for (k in LM) if (!grow(k) && !(f in DECL)) ns = "stale" }
+               if (!(f in DECL)) for (k in LM) if (!grow(k)) ns = "stale" }
         for (k in K) X[k] = 1
         print f "\t" ns > ENVIRON["KH"]
-        for (k in X) print f "\t" k "\t" cur(k) > ENVIRON["KO"]
+        for (k in X) print f "\t" k "\t" cv(f, k) > ENVIRON["KO"]
         print f "\t" (run ? "run" : "skip") "\t" why "\t" c "\t" ns }
     }' > "$out/.kdec"
   LC_ALL=C sort -t "$tab" -k1,1 -k2 "$out/.kout" | awk -F'\t' -v kd="$out/.k" -v hdr="$out/.khdr" '

@@ -5289,8 +5289,13 @@ fi
 # between them. ONE awk pass reads every file named (the five self-probe files first, then the two hooks)
 # and prints `<file><TAB><reason>` per file, empty reason when the span is sound: a per-file grep/sed/cut
 # chain here cost about fifty forks against the fork budget.
-rt_scan() { # <file>... -> one `<file>\t<reason>` line per file
-  awk '
+# THE READSET_KEYROWS SPAN IS HELD THE SAME WAY: the runner sources the shared declared-fixture composer out of the
+# hook by its sentinel lines, so a renamed or emptied KEYROWS sentinel in one hook leaves --key-only exiting 2 and
+# every sandbox run of that consumer with the verdict store OFF, and the comment-stripped compare above cannot see
+# it. rt_scan takes the span NAME first; the self-probe runs once per span, so each name is proven to discriminate.
+rt_scan() { # <span name> <file>... -> one `<file>\t<reason>` line per file
+  local rt_sn="$1"; shift
+  awk -v B="# ${rt_sn}_BEGIN" -v E="# ${rt_sn}_END" '
     function fin() {
       if (f == "") return
       if (b != 1 || e != 1) r = "BEGIN x" b ", END x" e " (want exactly one of each)"
@@ -5300,8 +5305,8 @@ rt_scan() { # <file>... -> one `<file>\t<reason>` line per file
       print f "\t" r
     }
     FNR == 1 { fin(); f = FILENAME; b = 0; e = 0; bl = 0; el = 0; code = 0; r = "" }
-    $0 == "# READSET_TOOLS_BEGIN" { b++; bl = FNR; inb = 1; next }
-    $0 == "# READSET_TOOLS_END" { e++; el = FNR; inb = 0; next }
+    $0 == B { b++; bl = FNR; inb = 1; next }
+    $0 == E { e++; el = FNR; inb = 0; next }
     inb && $0 !~ /^[ \t]*#/ && $0 !~ /^[ \t]*$/ { code = 1 }
     END { fin() }' "$@"
 }
@@ -5313,34 +5318,38 @@ else
   if [ -z "$rt_pd" ]; then
     err "I66 (tools span) could not create a scratch directory for its self-probe."
   else
-    printf 'x\n# READSET_TOOLS_BEGIN\nA=1\n# READSET_TOOLS_END\n' > "$rt_pd/1ok"
-    printf '# READSET_TOOLS_BEGIN\nA=1\n# READSET_TOOLS_END\nz\n' > "$rt_pd/2moved"
-    printf 'x\n# READSET_TOOLS_BEGINS\nA=1\n# READSET_TOOLS_END\n' > "$rt_pd/3renamed"
-    printf '# READSET_TOOLS_BEGIN\n# c\n# READSET_TOOLS_END\n' > "$rt_pd/4empty"
-    printf '# READSET_TOOLS_END\nA=1\n# READSET_TOOLS_BEGIN\n' > "$rt_pd/5swapped"
-    rt_out="$(rt_scan "$rt_pd/1ok" "$rt_pd/2moved" "$rt_pd/3renamed" "$rt_pd/4empty" "$rt_pd/5swapped" "$PP_DIST" "$PP_CONS")"
-    rm -rf "$rt_pd"
-    rt_tab="$(printf '\t')"; rt_bad=0; rt_n=0
-    while IFS="$rt_tab" read -r rt_f rt_r; do
-      rt_n=$((rt_n + 1))
-      case "$rt_n:${rt_r:+bad}" in
-        1:|2:) ;;                   # sound probes must be quiet (a moved span is still sound)
-        3:bad|4:bad|5:bad) ;;       # offenders must be flagged
-        [1-5]:*) rt_bad=1 ;;        # a quiet offender or a flagged near-miss: the check cannot discriminate
-        *) [ -z "$rt_r" ] || err "I66 the READSET_TOOLS span of ${rt_f#$REPO_ROOT/} is unsound: ${rt_r}. The hermetic runner extracts it by those exact sentinel lines and exits 2 on every declared fixture without it." ;;
-      esac
-    done <<RT_EOF
+    for rt_sn in READSET_TOOLS READSET_KEYROWS; do
+      printf 'x\n# %s_BEGIN\nA=1\n# %s_END\n' "$rt_sn" "$rt_sn" > "$rt_pd/1ok"
+      printf '# %s_BEGIN\nA=1\n# %s_END\nz\n' "$rt_sn" "$rt_sn" > "$rt_pd/2moved"
+      printf 'x\n# %s_BEGINS\nA=1\n# %s_END\n' "$rt_sn" "$rt_sn" > "$rt_pd/3renamed"
+      printf '# %s_BEGIN\n# c\n# %s_END\n' "$rt_sn" "$rt_sn" > "$rt_pd/4empty"
+      printf '# %s_END\nA=1\n# %s_BEGIN\n' "$rt_sn" "$rt_sn" > "$rt_pd/5swapped"
+      rt_out="$(rt_scan "$rt_sn" "$rt_pd/1ok" "$rt_pd/2moved" "$rt_pd/3renamed" "$rt_pd/4empty" "$rt_pd/5swapped" "$PP_DIST" "$PP_CONS")"
+      rt_tab="$(printf '\t')"; rt_bad=0; rt_n=0
+      while IFS="$rt_tab" read -r rt_f rt_r; do
+        rt_n=$((rt_n + 1))
+        case "$rt_n:${rt_r:+bad}" in
+          1:|2:) ;;                   # sound probes must be quiet (a moved span is still sound)
+          3:bad|4:bad|5:bad) ;;       # offenders must be flagged
+          [1-5]:*) rt_bad=1 ;;        # a quiet offender or a flagged near-miss: the check cannot discriminate
+          *) [ -z "$rt_r" ] || err "I66 the ${rt_sn} span of ${rt_f#$REPO_ROOT/} is unsound: ${rt_r}. The hermetic runner extracts it by those exact sentinel lines and exits 2 on every declared fixture without it (READSET_KEYROWS: --key-only exits 2 and a sandbox run records nothing)." ;;
+        esac
+      done <<RT_EOF
 $rt_out
 RT_EOF
-    { [ "$rt_n" = 7 ] && [ "$rt_bad" = 0 ]; } || err "I66 (tools span) self-probe failed: the sentinel check did not flag a renamed, empty or swapped span, or flagged a moved one (read ${rt_n} of 7 files)."
+      { [ "$rt_n" = 7 ] && [ "$rt_bad" = 0 ]; } || err "I66 (${rt_sn} span) self-probe failed: the sentinel check did not flag a renamed, empty or swapped span, or flagged a moved one (read ${rt_n} of 7 files)."
+    done
+    rm -rf "$rt_pd"
   fi
-  # The runner-extraction claim is SEPARATE: it is owed only when the hooks carry a tools span at all,
+  # The runner-extraction claim is SEPARATE: it is owed only when the hooks carry the spans at all,
   # and a hooks-only scratch copy must therefore copy the runner too (validator-arm-selection's i66-onehook phase does).
   if [ ! -f "$RT_RUNNER" ]; then
     err "I66 core/scripts/hermetic-run.sh is absent although the hooks carry the READSET_TOOLS span it extracts, so the runner's sentinel strings were not checked."
   else
     grep -qF "/^# READSET_TOOLS_BEGIN\$/,/^# READSET_TOOLS_END\$/p" "$RT_RUNNER" \
       || err "I66 core/scripts/hermetic-run.sh no longer extracts the span with the literal sentinels '# READSET_TOOLS_BEGIN' / '# READSET_TOOLS_END', so it and the hooks disagree about where the tools span is."
+    grep -qF "/^# READSET_KEYROWS_BEGIN\$/,/^# READSET_KEYROWS_END\$/p" "$RT_RUNNER" \
+      || err "I66 core/scripts/hermetic-run.sh no longer extracts the span with the literal sentinels '# READSET_KEYROWS_BEGIN' / '# READSET_KEYROWS_END', so it and the hooks disagree about where the declared-fixture composer is."
   fi
 fi
 

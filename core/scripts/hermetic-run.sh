@@ -42,9 +42,12 @@
 # the hook's own: this script sources the READSET_UNIVERSE span out of the pre-push hook beside it
 # (the same span derive-fixture-readsets.sh sources) and takes its paths from readset_manifest, so
 # the content key's excluded tops, git-ignored paths and deleted-but-tracked names are treated
-# exactly as the hook treats them. The hook derives the identical rows from the declaration in
-# `readset_keys`; the self-probe fixture asserts the two agree byte-for-byte, because two
-# implementations of one key drift. A run with no hook to source is exit 2, key-only or not: the tool
+# exactly as the hook treats them. The rows are composed by ONE implementation: the hook's
+# READSET_KEYROWS span (readset_decl_parse, readset_decl_keys), sourced here and called by the hook
+# over its whole declared set, so there is no second composer to drift. A declared path absent from
+# the manifest (an excluded top, a git-ignored file) has no row on either side. A hook with no
+# KEYROWS span (version skew mid-pull) is `--key-only` exit 2; a sandbox run still runs the fixture,
+# with the verdict store OFF. A run with no hook to source is exit 2, key-only or not: the tool
 # dirs and the unkeyed-tool vocabulary come from the hook's READSET_TOOLS span, so there is no copy of
 # them here to drift.
 #
@@ -163,61 +166,95 @@ HR_XPD="$HR_XP:$HR_TOOL_DIRS"
 HR_LAYOUT=consumer
 [ -d "$HR_ROOT/core/scripts" ] && HR_LAYOUT=distribution
 
-# Parse the declaration. Pass 1 reads `[!]path[/]` lines into <req><TAB><path as declared>; pass 2 maps
-# them (consumer layout, any path under core/) and fills the files, dirs and required lists.
-: > "$HR_WORK/files"; : > "$HR_WORK/dirs"; : > "$HR_WORK/required"; : > "$HR_WORK/tools"; : > "$HR_WORK/unkeyed"; : > "$HR_WORK/dl"
-hr_bad=0; hr_needmap=0
-while IFS= read -r line || [ -n "$line" ]; do
-  case "$line" in ''|'#'*) continue ;; esac
-  req=0; p="$line"
-  case "$p" in '!'*) req=1; p="${p#!}" ;; esac
-  case "$p" in /*|*/../*|../*|*/..|..) printf 'hermetic-run: %s: declaration path must be root-relative with no .. : %s\n' "$HR_FX" "$line" >&2; hr_bad=1; continue ;; esac
-  printf '%s\t%s\n' "$req" "$p" >> "$HR_WORK/dl"
-  case "$p" in core|core/|core/*) hr_needmap=1 ;; esac
-done < "$HR_FXDIR/inputs.decl"
-if [ "$HR_LAYOUT" = consumer ] && [ "$hr_needmap" = 1 ]; then
-  [ -f "$HR_SCRIPT_DIR/core-paths.sh" ] || { printf 'hermetic-run: %s: mapper absent -- %s/core-paths.sh is needed to map a core/ declaration onto a consumer layout\n' "$HR_FX" "$HR_SCRIPT_DIR" >&2; exit 2; }
-  cut -f2 "$HR_WORK/dl" | bash "$HR_SCRIPT_DIR/core-paths.sh" --map > "$HR_WORK/mp" 2> "$HR_WORK/mp.err" \
-    || { printf 'hermetic-run: %s: a declared core/ path has no consumer location: %s\n' "$HR_FX" "$(cat "$HR_WORK/mp.err")" >&2; exit 2; }
-  [ "$(grep -c . "$HR_WORK/mp")" = "$(grep -c . "$HR_WORK/dl")" ] || { printf 'hermetic-run: %s: the mapper returned a different number of paths than were declared\n' "$HR_FX" >&2; exit 2; }
-  paste "$HR_WORK/dl" "$HR_WORK/mp" > "$HR_WORK/dm"
-else
-  awk -F'\t' '{ print $0 "\t" $2 }' "$HR_WORK/dl" > "$HR_WORK/dm"
+# THE DECLARATION AND THE KEY ROWS ARE THE HOOK'S READSET_KEYROWS SPAN, sourced here at top level (the READSET_TOOLS
+# pattern): readset_decl_parse normalises and refuses the declaration and resolves tools.decl, readset_decl_keys
+# composes the key rows. The hook runs the same two functions over its whole declared set, so the two cannot key
+# one fixture two ways. VERSION SKEW (a consumer mid-pull running this runner against an OLDER hook that carries no
+# span) is not a refusal for a SANDBOX run: the fixture still runs, through hr_parse_skew below, and the verdict
+# store is OFF for it, because there is no composer to key the entry with. `--key-only` has nothing to print
+# without the span and exits 2.
+HR_KR=0
+sed -n '/^# READSET_KEYROWS_BEGIN$/,/^# READSET_KEYROWS_END$/p' "$HR_HOOK" > "$HR_WORK/keyrows.sh"
+if grep -q '^readset_decl_parse() ' "$HR_WORK/keyrows.sh" && grep -q '^readset_decl_keys() ' "$HR_WORK/keyrows.sh" && grep -q '^readset_decl_tool_hashes() ' "$HR_WORK/keyrows.sh"; then
+  . "$HR_WORK/keyrows.sh" || exit 2
+  HR_KR=1
 fi
-while IFS="$(printf '\t')" read -r req dp p; do
-  [ -n "$dp" ] || continue
-  # lbl is the path as the error names it: the mapped spelling, and the declared one when they differ.
-  lbl="$p"; [ "$p" = "$dp" ] || lbl="$p (declared as $dp)"
-  if [ "${p%/}" != "$p" ]; then
-    p="${p%/}"
-    [ -d "$HR_ROOT/$p" ] || { printf 'hermetic-run: %s: declared directory absent: %s\n' "$HR_FX" "$lbl" >&2; hr_bad=1; continue; }
-    printf '%s\n' "$p" >> "$HR_WORK/dirs"
-    [ "$req" = 1 ] && printf '%s/\t%s\n' "$p" "$dp" >> "$HR_WORK/required"
+if [ "$HR_KR" = 0 ]; then
+  [ "$HR_KEY_ONLY" = 1 ] && { printf 'hermetic-run: %s carries no READSET_KEYROWS span with readset_decl_parse, readset_decl_tool_hashes and readset_decl_keys, so there are no key rows to print\n' "$HR_HOOK" >&2; exit 2; }
+  printf 'hermetic-run: %s: verdict store OFF: %s carries no READSET_KEYROWS span (an older hook), so this run is not recorded\n' "$HR_FX" "$HR_HOOK"
+fi
+# THE SKEW PARSE: reachable ONLY when the hook carries no READSET_KEYROWS span, and never on a key-only run, so it
+# writes no key row and no store entry. It emits the span's parse-row grammar with the span's normalisation, so the
+# sandbox below reads one shape either way. It is a SECOND PARSER by necessity (the span owns the parse, and with no
+# span a sandbox run must still run), and it is deliberately narrower than the span: it does not check `?name`
+# against READSET_UNKEYED_TOOLS (the `command -v` resolution below still refuses an unreachable one) and does not
+# refuse a duplicate basename at parse time (the tool farm below still refuses two different paths). A probe of
+# the composer must therefore drive the span-present path, never this one.
+hr_parse_skew() { # <fx> <fixture dir> <dist|cons> <mapper> <tool search path> <scratch prefix>
+  local fx="$1" fd="$2" w="$6" t p
+  printf '%s\tN\n' "$fx"
+  awk -v fx="$fx" '{ sub(/\r$/, ""); if ($0 == "" || $0 ~ /^#/) next
+      r = 0; if (substr($0, 1, 1) == "!") { r = 1; $0 = substr($0, 2) }
+      if ($0 ~ /^\// || $0 ~ /(^|\/)\.\.(\/|$)/) { print fx "\tX\tabs\t" $0; next }
+      k = "F"; if ($0 ~ /\/$/) { k = "D"; sub(/\/+$/, "") }
+      if ($0 != "") print fx "\t" k "\t" $0 "\t" r }' "$fd/inputs.decl" > "$w.n"
+  if [ "$3" = cons ] && awk -F'\t' '$2 != "X" && ($3 == "core" || index($3, "core/") == 1) { f = 1 } END { exit f ? 0 : 1 }' "$w.n"; then
+    [ -f "$4" ] || { printf '%s\tX\tnomap\t%s\n' "$fx" "$4"; return 0; }
+    awk -F'\t' '$2 != "X" { print $3 (($2 == "D") ? "/" : "") }' "$w.n" | bash "$4" --map > "$w.m" 2> "$w.e" \
+      || { printf '%s\tX\tmaprefuse\t%s\n' "$fx" "$(sed -n 1p "$w.e" | tr '\t' ' ')"; return 0; }
+    awk -F'\t' 'NR == FNR { m[FNR] = $0; next } $2 == "X" { print; next } { n++; p = m[n]; sub(/\/+$/, "", p); print $1 "\t" $2 "\t" p "\t" $4 "\t" $3 }' "$w.m" "$w.n" > "$w.r"
   else
-    [ -f "$HR_ROOT/$p" ] || { printf 'hermetic-run: %s: declared file absent: %s\n' "$HR_FX" "$lbl" >&2; hr_bad=1; continue; }
-    printf '%s\n' "$p" >> "$HR_WORK/files"
-    [ "$req" = 1 ] && printf '%s\t%s\n' "$p" "$dp" >> "$HR_WORK/required"
+    awk -F'\t' '$2 == "X" { print; next } { print $1 "\t" $2 "\t" $3 "\t" $4 "\t" $3 }' "$w.n" > "$w.r"
   fi
-done < "$HR_WORK/dm"
-if [ -f "$HR_FXDIR/tools.decl" ]; then
+  cat "$w.r"
+  awk -F'\t' '$2 == "F" || $2 == "D"' "$w.r" > "$w.fd" || return 2
+  while IFS="$(printf '\t')" read -r t k p a dp; do
+    if [ "$k" = D ]; then [ -d "$p" ] || printf '%s\tX\tabsd\t%s\t%s\n' "$fx" "$p" "$dp"
+    else [ -f "$p" ] || printf '%s\tX\tabsf\t%s\t%s\n' "$fx" "$p" "$dp"; fi
+  done < "$w.fd"
+  [ -f "$fd/tools.decl" ] || return 0
   while IFS= read -r t || [ -n "$t" ]; do
-    case "$t" in ''|'#'*) continue ;; esac
-    case "$t" in
-      '?'*)
-        un="${t#?}"
-        case "$un" in ''|*[!A-Za-z0-9_.+-]*) printf 'hermetic-run: %s: tools.decl line is not an unkeyed tool name: %s\n' "$HR_FX" "$t" >&2; hr_bad=1; continue ;; esac
-        case " $READSET_UNKEYED_TOOLS " in *" $un "*) ;; *) printf 'hermetic-run: %s: tools.decl line %s names a tool outside READSET_UNKEYED_TOOLS (%s)\n' "$HR_FX" "$t" "$READSET_UNKEYED_TOOLS" >&2; hr_bad=1; continue ;; esac
-        printf '%s\n' "$un" >> "$HR_WORK/unkeyed"
-        continue ;;
-    esac
-    case "$t" in */*) printf 'hermetic-run: %s: tools.decl names a path, wants a bare name: %s\n' "$HR_FX" "$t" >&2; hr_bad=1; continue ;; esac
-    found=""
-    ( IFS=:; for d in $HR_XPD; do [ -x "$d/$t" ] && { printf '%s\n' "$d/$t"; break; }; done ) > "$HR_WORK/t1"
-    found="$(cat "$HR_WORK/t1")"
-    [ -n "$found" ] || { printf 'hermetic-run: %s: declared tool %s resolves in none of %s\n' "$HR_FX" "$t" "$HR_XPD" >&2; hr_bad=1; continue; }
-    printf '%s\n' "$found" >> "$HR_WORK/tools"
-  done < "$HR_FXDIR/tools.decl"
-fi
+    case "$t" in ''|'#'*) continue ;; '?'*) printf '%s\tU\t%s\n' "$fx" "${t#?}"; continue ;; */*) printf '%s\tX\ttpath\t%s\n' "$fx" "$t"; continue ;; esac
+    p="$( IFS=:; for d in $5; do [ -x "$d/$t" ] && { printf '%s' "$d/$t"; break; }; done )"
+    if [ -n "$p" ]; then printf '%s\tT\t%s\n' "$fx" "$p"; else printf '%s\tX\ttnone\t%s\n' "$fx" "$t"; fi
+  done < "$fd/tools.decl"
+}
+
+# Parse the declaration into $HR_WORK/parse (the span's rows), then word each refusal row the runner's way and
+# fill the files, dirs, required, tools and unkeyed lists the sandbox reads. Absent-on-disk is the span's test
+# (`-f` / `-d` under the root), so the parse runs FROM the root.
+: > "$HR_WORK/files"; : > "$HR_WORK/dirs"; : > "$HR_WORK/required"; : > "$HR_WORK/tools"; : > "$HR_WORK/unkeyed"
+hr_lay=cons; [ "$HR_LAYOUT" = distribution ] && hr_lay=dist
+( cd "$HR_ROOT" || exit 2
+  if [ "$HR_KR" = 1 ]; then readset_decl_parse "$HR_FX" "$HR_FXDIR" "$hr_lay" "$HR_SCRIPT_DIR/core-paths.sh" "$HR_XPD" "$HR_WORK/dp"
+  else hr_parse_skew "$HR_FX" "$HR_FXDIR" "$hr_lay" "$HR_SCRIPT_DIR/core-paths.sh" "$HR_XPD" "$HR_WORK/dp"; fi ) > "$HR_WORK/parse" || exit 2
+hr_bad=0
+hr_tab="$(printf '\t')"
+while IFS="$hr_tab" read -r f k a b c; do
+  # lbl is the path as an error names it: the mapped spelling, and the declared one when they differ.
+  lbl="$a"; [ -z "$b" ] || [ "$a" = "$b" ] || lbl="$a (declared as $b)"
+  case "$k" in
+    F) printf '%s\n' "$a" >> "$HR_WORK/files"; [ "$b" = 1 ] && printf '%s\t%s\n' "$a" "$c" >> "$HR_WORK/required" ;;
+    D) printf '%s\n' "$a" >> "$HR_WORK/dirs"; [ "$b" = 1 ] && printf '%s/\t%s/\n' "$a" "$c" >> "$HR_WORK/required" ;;
+    T) printf '%s\n' "$a" >> "$HR_WORK/tools" ;;
+    U) printf '%s\n' "$a" >> "$HR_WORK/unkeyed" ;;
+    X) hr_bad=1
+       case "$a" in
+         abs) printf 'hermetic-run: %s: declaration path must be root-relative with no .. : %s\n' "$HR_FX" "$b" >&2 ;;
+         nomap) printf 'hermetic-run: %s: mapper absent -- %s/core-paths.sh is needed to map a core/ declaration onto a consumer layout\n' "$HR_FX" "$HR_SCRIPT_DIR" >&2 ;;
+         maprefuse) printf 'hermetic-run: %s: a declared core/ path has no consumer location: %s\n' "$HR_FX" "$b" >&2 ;;
+         mapcount) printf 'hermetic-run: %s: the mapper returned a different number of paths than were declared\n' "$HR_FX" >&2 ;;
+         absd) lbl="$b/"; [ "$b" = "$c" ] || lbl="$b/ (declared as $c/)"; printf 'hermetic-run: %s: declared directory absent: %s\n' "$HR_FX" "$lbl" >&2 ;;
+         absf) lbl="$b"; [ "$b" = "$c" ] || lbl="$b (declared as $c)"; printf 'hermetic-run: %s: declared file absent: %s\n' "$HR_FX" "$lbl" >&2 ;;
+         qbad) printf 'hermetic-run: %s: tools.decl line is not an unkeyed tool name: %s\n' "$HR_FX" "$b" >&2 ;;
+         qout) printf 'hermetic-run: %s: tools.decl line %s names a tool outside READSET_UNKEYED_TOOLS (%s)\n' "$HR_FX" "$b" "$READSET_UNKEYED_TOOLS" >&2 ;;
+         tpath) printf 'hermetic-run: %s: tools.decl names a path, wants a bare name: %s\n' "$HR_FX" "$b" >&2 ;;
+         tnone) printf 'hermetic-run: %s: declared tool %s resolves in none of %s\n' "$HR_FX" "$b" "$HR_XPD" >&2 ;;
+         dup) printf 'hermetic-run: %s: two declared tools share the basename %s -- the sandbox farm holds one\n' "$HR_FX" "$b" >&2 ;;
+         *) printf 'hermetic-run: %s: the declaration was refused (%s %s)\n' "$HR_FX" "$a" "$b" >&2 ;;
+       esac ;;
+  esac
+done < "$HR_WORK/parse"
 if [ ! -s "$HR_WORK/files" ] && [ ! -s "$HR_WORK/dirs" ]; then
   printf 'hermetic-run: %s: inputs.decl is empty -- refusing to run the fixture against an empty tree\n' "$HR_FX" >&2
   hr_bad=1
@@ -260,55 +297,31 @@ hr_population() { # <copy|key>
     readset_drop_ignored "$o/.paths.all" "$o/.paths" || { printf 'hermetic-run: git check-ignore failed under %s, so the copy population is unknown\n' "$HR_ROOT" >&2; exit 2; }
     [ "$1" = key ] || exit 0
     mkdir -p "$HR_WORK/m" && readset_manifest "$HR_WORK/m"
+    cut -f1 "$HR_WORK/m/.now" > "$HR_WORK/m/.is" && readset_listings "$HR_WORK/m/.is" "$HR_WORK/m/.ls.now" || exit 2
     cmp -s "$o/.paths" "$HR_WORK/m/.paths" || { printf 'hermetic-run: the copy population and readset_manifest disagree under %s -- the key and the sandbox would describe different trees\n' "$HR_ROOT" >&2; exit 2; }
   )
 }
 if [ "$HR_KEY_ONLY" = 1 ]; then hr_population key || exit 2; else hr_population copy || exit 2; fi
 [ -s "$HR_WORK/p/.paths" ] || { printf 'hermetic-run: %s: git lists nothing under %s, so there is no copy population\n' "$HR_FX" "$HR_ROOT" >&2; exit 2; }
 
-# THE KEY ROWS, derived from the declaration against the live tree, in the hook's grammar. The
-# population is what git can see (tracked plus untracked-unignored), which is the hook's universe
-# minus the content key's excluded tops; a declaration naming a path under an excluded top is keyed
-# by the hook as absent and by this print as hashed, and that is the one place the two can differ.
-# Rows: every declared file; every file under a declared directory; the declared directory and
-# every directory under it as `<dir>/\t#listing:<sha>` where the listing is the directory's
-# immediate entry names IMPLIED BY THE FILE LIST (C-sorted, one per line -- the hook's
-# readset_listings grammar, never readdir); every file under the fixture's own directory; and each
-# declared tool by absolute path.
-# THE ROWS GO TO A FILE AND THE SUBSHELL'S EXIT IS RETURNED. Piped straight into `sort -u` (no
-# pipefail), its `exit 2` on an unhashable tree was discarded and `--key-only` printed nothing at exit 0.
-hr_key_rows() {
+# THE KEY ROWS are the span's readset_decl_keys over this run's own `.now` and the listings `hr_population key`
+# derived from it, fed the parse rows above: the hook calls the same function over its whole declared set, so the
+# rows cannot differ by implementation. Tool hashes are taken by the span's readset_decl_tool_hashes.
+# THE ROWS GO TO A FILE AND THE SUBSHELL'S EXIT IS RETURNED. Piped straight into `sort -u` (no pipefail), its
+# `exit 2` on an unhashable tree was discarded and `--key-only` printed nothing at exit 0.
+hr_rows() {
   local hr_kr
+  [ "$HR_KR" = 1 ] || return 2
   (
-    cd "$HR_ROOT" || exit 2
     [ -s "$HR_WORK/m/.now" ] || { printf 'hermetic-run: could not hash the working tree under %s\n' "$HR_ROOT" >&2; exit 2; }
-    cut -f1 "$HR_WORK/m/.now" > "$HR_WORK/kall"
-    { while IFS= read -r p; do [ -n "$p" ] && grep -xF -- "$p" "$HR_WORK/kall"; done < "$HR_WORK/files"
-      while IFS= read -r d; do [ -n "$d" ] && grep -- "^$(printf '%s' "$d" | sed 's/[][\.*^$]/\\&/g')/" "$HR_WORK/kall"; done < "$HR_WORK/dirs"
-      grep -- "^$(printf '%s' "$HR_FXROOT/$HR_FX" | sed 's/[][\.*^$]/\\&/g')/" "$HR_WORK/kall"
-      :; } | LC_ALL=C sort -u > "$HR_WORK/kfiles"
-    # File rows are the manifest's own hashes, never recomputed.
-    [ -s "$HR_WORK/kfiles" ] && awk -F'\t' -v kf="$HR_WORK/kfiles" 'BEGIN { while ((getline l < kf) > 0) w[l] = 1 } ($1 in w)' "$HR_WORK/m/.now"
-    # Listings implied by the whole universe list, for the declared directories and their subdirectories.
-    awk '{ p = $0; while ((i = match(p, /\/[^\/]*$/)) > 0) { d = substr(p, 1, i - 1); print d "\t" substr(p, i + 1); p = d } }' "$HR_WORK/kall" \
-      | LC_ALL=C sort -u > "$HR_WORK/kent"
-    : > "$HR_WORK/kdirs"
-    while IFS= read -r d; do
-      [ -n "$d" ] || continue
-      awk -F'\t' -v d="$d" '$1 == d || index($1, d "/") == 1 { print $1 }' "$HR_WORK/kent" >> "$HR_WORK/kdirs"
-    done < "$HR_WORK/dirs"
-    LC_ALL=C sort -u "$HR_WORK/kdirs" > "$HR_WORK/kdirs.u"
-    while IFS= read -r d; do
-      awk -F'\t' -v d="$d" '$1 == d { print $2 }' "$HR_WORK/kent" | shasum -a 256 | awk -v d="$d" '{ print d "/\t#listing:" $1 }'
-    done < "$HR_WORK/kdirs.u"
-    [ -s "$HR_WORK/tools" ] && tr '\n' '\000' < "$HR_WORK/tools" | xargs -0 shasum -a 256 -- 2>/dev/null \
-      | awk '{ p = $0; sub(/^[0-9a-f]+  /, "", p); print p "\t" $1 }'
-    :
+    : > "$HR_WORK/th"
+    readset_decl_tool_hashes "$HR_WORK/parse" "$HR_WORK/th"
+    readset_decl_keys "$HR_WORK/m/.now" "$HR_WORK/m/.ls.now" "$HR_WORK/parse" "$HR_WORK/th" "$HR_FXROOT/" | cut -f2-
   ) > "$HR_WORK/krows"; hr_kr=$?
   [ "$hr_kr" = 0 ] || return "$hr_kr"
   LC_ALL=C sort -u "$HR_WORK/krows"
 }
-if [ "$HR_KEY_ONLY" = 1 ]; then hr_key_rows; exit $?; fi
+if [ "$HR_KEY_ONLY" = 1 ]; then hr_rows; exit $?; fi
 
 # THE SANDBOX: copy declared files and directories at their own relative paths, the fixture's own
 # directory (or the override), and nothing else.
@@ -508,6 +521,8 @@ printf 'hermetic-run: %s: rc=%s sandbox_files=%s required_missing=%s\n' \
 # READSET_TOOLS pattern), so the reader and this writer are one implementation. No span: the store is OFF.
 sed -n '/^# READSET_VS_BEGIN$/,/^# READSET_VS_END$/p' "$HR_HOOK" > "$HR_WORK/vs.sh"
 grep -q '^readset_vs_store() ' "$HR_WORK/vs.sh" && . "$HR_WORK/vs.sh" || : > "$HR_WORK/vs.sh"
+# No READSET_KEYROWS span (version skew, above): no composer, so the store is OFF for this run.
+[ "$HR_KR" = 1 ] || : > "$HR_WORK/vs.sh"
 hr_store_put() {
   # A PASS WITH AN OPTIONAL PIN NOT IMPORTED IS NOT RECORDED. The key carries no trace of the pin, so a pass whose
   # pinned differential SKIPPED (a shallow clone) would be reused by a clone where that differential runs.
@@ -518,7 +533,7 @@ hr_store_put() {
   [ -n "$store" ] || { printf 'hermetic-run: %s: verdict store OFF: no store base, or the project root commit cannot be resolved\n' "$HR_FX"; return 0; }
   mkdir -p "$store" 2>/dev/null || return 0
   hr_population key || return 0
-  hr_key_rows > "$HR_WORK/vs.rows" || return 0
+  hr_rows > "$HR_WORK/vs.rows" || return 0
   [ -s "$HR_WORK/vs.rows" ] || return 0
   ident="$(readset_vs_ident "$HR_HOOK" "${BASH_SOURCE[0]}")" || return 0
   readset_vs_input "$HR_FX" "$ident" "$HR_WORK/vs.rows" > "$HR_WORK/vs.d" || return 0
