@@ -316,4 +316,10 @@ The fix narrows each broad declaration to the files the fixture reads, and each 
 read-set trace of that fixture. An under-declared fixture is skipped when a file it reads changes, silently, so the
 narrowing must never be justified by a declaration count alone.
 
-verify: sh exit 9
+verify: manual -- close when every `inputs.decl` line declaring exactly `core/` or `core/scripts/` is either narrowed against a read-set trace of its fixture or carries a stated reason it reads that whole directory by content
+
+**Re-derived batch 220 (0.767.0).** The count is 29 rather than 31: of 233 `inputs.decl` files, 14 carry a whole
+line `core/` and 15 a whole line `core/scripts/` (`grep -lxE`, control `ZZ-never/` 0). The receipt was `sh exit 9`,
+which scored nothing and, once BL-493 closed, left the ledger with no scorable receipt and failed the gate's
+`backlog receipts` step (R2); it is now a manual close stating the condition, because no mechanical predicate can
+tell a narrowed declaration from an under-declared one without the trace.
