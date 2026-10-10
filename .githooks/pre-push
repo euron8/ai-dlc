@@ -1012,29 +1012,31 @@ readset_live_trace() { # <out>
   set -m
   ( trap '' HUP
     set +m
-    sp="$(exec sh -c 'printf %s "$PPID"')"; t0="$(date +%s)"; fl="$READSET_LOCAL.timeout.$sp"
-    rm -f "$fl"
+    sp="$(exec sh -c 'printf %s "$PPID"')"; t0="$(date +%s)"
     set -m
     AI_DLC_READSET_TRACE_ROOT="$tr" bash "$dv" --list "$names" --tracer sandbox --local-map "$READSET_LOCAL" &
     dp=$!
     set +m
     printf 'start %s\npid %s\nlist %s\nderiver %s\nceiling %s\n' "$t0" "$sp" "$names" "$dp" "$cl" > "$READSET_LOCAL.status.tmp.$sp" 2>/dev/null \
       && mv "$READSET_LOCAL.status.tmp.$sp" "$READSET_LOCAL.status" 2>/dev/null
+    # THE VERDICT IS THE WATCHDOG'S EXIT STATUS: 3 only when its own TERM to the deriver's group was
+    # delivered. Once its sleep has run out it ignores TERM, so the stop sent below cannot cut a kill
+    # in progress short and read it as a normal finish; a stop that lands during the sleep exits 0.
+    # The subshell sends no signal to `-$dp` after it has reaped `$dp`: that group id may be reused.
     ( s=""; trap '[ -n "$s" ] && kill "$s" 2>/dev/null; exit 0' TERM
       sleep "$cl" & s=$!; wait "$s"; s=""
-      : > "$fl"
-      if kill -TERM -- "-$dp" 2>/dev/null; then
-        g=0; while kill -0 -- "-$dp" 2>/dev/null && [ "$g" -lt 50 ]; do sleep 0.1; g=$((g + 1)); done
-        kill -KILL -- "-$dp" 2>/dev/null
-      else rm -f "$fl"; fi
+      trap '' TERM
+      kill -TERM -- "-$dp" 2>/dev/null || exit 0
+      g=0; while kill -0 -- "-$dp" 2>/dev/null && [ "$g" -lt 50 ]; do sleep 0.1; g=$((g + 1)); done
+      kill -KILL -- "-$dp" 2>/dev/null
+      exit 3
     ) &
     wp=$!
     trap 'kill -TERM -- "-$dp" 2>/dev/null' TERM
     wait "$dp"; rc=$?
     while kill -0 "$dp" 2>/dev/null; do wait "$dp"; rc=$?; done
-    [ -f "$fl" ] || kill "$wp" 2>/dev/null
-    wait "$wp" 2>/dev/null
-    if [ -f "$fl" ]; then rc=timeout; kill -KILL -- "-$dp" 2>/dev/null; rm -f "$fl"; fi
+    kill "$wp" 2>/dev/null
+    wait "$wp" 2>/dev/null; [ "$?" = 3 ] && rc=timeout
     case "$tr" in */ai-dlc-readset-live.[0-9]*) rm -rf "$tr" ;; esac
     rm -f "$READSET_LOCAL.tmp.$dp"
     printf 'start %s\npid %s\nlist %s\nderiver %s\nceiling %s\nexit %s\nfinish %s\n' "$t0" "$sp" "$names" "$dp" "$cl" "$rc" "$(date +%s)" > "$READSET_LOCAL.status.tmp.$sp" 2>/dev/null \
@@ -1044,7 +1046,7 @@ readset_live_trace() { # <out>
   tp="$!"
   set +m
   printf '%s %s\n%s\n' "$tp" "$(date +%s)" "$(readset_pid_start "$tp")" > "$lk/pid" 2>/dev/null
-  printf '   ..    read-set live trace: started detached for %s unmapped fixture(s) (%s) -> %s; killed at %ss\n' "$n" "$names" "$logf" "$cl"
+  printf '   ..    read-set live trace: started detached for %s unmapped fixture(s) (%s) -> %s; ceiling %ss\n' "$n" "$names" "$logf" "$cl"
   return 0
 }
 
@@ -1052,7 +1054,8 @@ readset_live_trace() { # <out>
 # (DURATIONS_RECORD; a fixture with no row counts 300s), floored at 600s and capped at 20000s.
 # k = 3 because a trace costs about what its fixtures cost: measured on a consumer, 16 fixtures with
 # 649s of recorded durations traced in 371s, and a 42-fixture list of 2424s was still working at
-# 2508s -- so a working trace finishes inside 3x and only a hung one reaches it. The cap is strictly
+# 2508s -- so a working trace finishes inside 3x and only a hung one reaches it. This is a HANG guard:
+# that 42-fixture list's ceiling is 7272s, so it would not have ended that slow, working trace. The cap is strictly
 # below the lock's 6h (21600s) staleness epoch in readset_lock_stale, less the 5s kill grace: a live
 # trace past that reads stale and a second one starts beside it. AI_DLC_READSET_TRACE_CEILING
 # (whole seconds, >= 1) replaces the derived figure and is held to the same cap.
@@ -1064,7 +1067,7 @@ readset_trace_ceiling() { # <space-separated fixture names>
     END { s = 0; for (i = 1; i <= n; i++) s += ((a[i] in d) ? d[a[i]] : 300); print 3 * s }' "$dr" 2>/dev/null)"
   case "$c" in ''|*[!0-9]*) c=600 ;; esac
   [ "$c" -lt 600 ] && c=600
-  case "${AI_DLC_READSET_TRACE_CEILING:-}" in ''|*[!0-9]*|??????*) ;; *) [ "$((10#$AI_DLC_READSET_TRACE_CEILING))" -ge 1 ] && c="$((10#$AI_DLC_READSET_TRACE_CEILING))" ;; esac
+  case "${AI_DLC_READSET_TRACE_CEILING:-}" in ''|*[!0-9]*) ;; ??????*) c=20000 ;; *) [ "$((10#$AI_DLC_READSET_TRACE_CEILING))" -ge 1 ] && c="$((10#$AI_DLC_READSET_TRACE_CEILING))" ;; esac
   [ "$c" -gt 20000 ] && c=20000
   printf '%s' "$c"
 }

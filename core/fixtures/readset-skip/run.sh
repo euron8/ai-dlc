@@ -1889,9 +1889,9 @@ if [ "$LT_CAN" = 1 ]; then
   # the ceiling never armed: the watchdog sleeps far past it.
   PM_FN=readset_live_trace pm_copy noceil 1 '      sleep "$cl" & s=$!; wait "$s"; s=""' '      sleep 600 & s=$!; wait "$s"; s=""' \
     && ct_mut noceil "$CT_LIVE|held,alive,alive,alive,*"
-  # every kill aimed at the deriver's PID, not its group -- all five sites, TERM, the grace probe, KILL,
-  # the forwarded TERM and the post-wait KILL, so no group kill is left to cover for the others.
-  PM_FN=readset_live_trace pm_copy pidonly 5 '-- "-$dp"' '"$dp"' \
+  # every kill aimed at the deriver's PID, not its group -- all four sites, TERM, the grace probe, KILL
+  # and the forwarded TERM, so no group kill is left to cover for the others.
+  PM_FN=readset_live_trace pm_copy pidonly 4 '-- "-$dp"' '"$dp"' \
     && ct_mut pidonly "$CT_LIVE|released,gone,*,alive,*|timeout|*"
   # the lock never released after the trace.
   PM_FN=readset_live_trace pm_copy nolock 1 '    rm -f "$lk/pid"; rmdir "$lk" 2>/dev/null || { sleep 1; rm -f "$lk/pid"; rmdir "$lk" 2>/dev/null; }' '    :' \
