@@ -796,7 +796,16 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   new files that walk up for the VERSION marker; I93 31 <-> 32 is the instrument's usual one-fork
 #   jitter. Re-measured twice after the sentinel-grammar fold at 786a4be4: 3328 and 3329 (STABLE 2
 #   both), the same four arms moving by the same amounts. HIGH reading 3329 plus the usual 6.
-FORK_BUDGET=3335
+#
+#   RAISED TO 3339 FOR ONE NEW DISTRIBUTION SCRIPT AND ONE NEW `.dist-only` FIXTURE DIRECTORY, NOT
+#   FOR A NEW ARM. `fork-profile.sh --section by-arm --stable`, base 120c9711 (0.769.0 plus the
+#   0.770.0 changes) and then the tip carrying `scripts/validate-decl-reasons.sh` and
+#   `core/fixtures/decl-reasons/`, twice each in ONE worktree at the same path, every file committed:
+#   base 3329 and 3329 (STABLE 2 both), tip 3333 and 3332 (STABLE 2 and 3), so +3 to +4. I8 97 -> 98
+#   walks the new fixture directory; I84 305 -> 307 and I83 151 -> 152 walk the new script; I106
+#   43 -> 43 does not move, because the new script resolves no VERSION marker; I93 32 <-> 31 is the
+#   instrument's usual one-fork jitter. HIGH reading 3333 plus the usual 6.
+FORK_BUDGET=3339
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
