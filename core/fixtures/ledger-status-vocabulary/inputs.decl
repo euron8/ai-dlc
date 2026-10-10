@@ -1,0 +1,13 @@
+# ledger-status-vocabulary copies the seeded tree's tracked files and runs the whole enforcement-map validator over
+# each mutated copy, so it takes every top that validator reads, as enforcement-map-sites does.
+# The validator under test, REQUIRED: the sentinel prints past run.sh's distribution-only SKIP.
+!scripts/validate-enforcement-map.sh
+core/
+scripts/
+.githooks/
+templates/
+patterns/
+.claude/rules/
+CLAUDE.md
+.ai-dlc-fixture-readsets.tsv
+VERSION

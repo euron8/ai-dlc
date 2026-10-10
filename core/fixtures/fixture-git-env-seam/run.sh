@@ -684,6 +684,7 @@ V="$ROOT/scripts/validate-fixture-git-env.sh"
 if [ ! -f "$V" ]; then
   fail "V  scripts/validate-fixture-git-env.sh is absent — the binding half of this remedy is gone"
 else
+  echo "HERMETIC-CONSUMED scripts/validate-fixture-git-env.sh"
   AI_DLC_PROJECT_ROOT="$ROOT" bash "$V" --max-unscrubbed 0 >/dev/null 2>&1
   v_rc=$?
   if [ "$v_rc" -eq 0 ]; then
