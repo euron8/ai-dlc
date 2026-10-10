@@ -794,7 +794,8 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   both), tip 3329 and 3328 (STABLE 2 both), so +5 to +7. I8 96 -> 97 walks the new fixture
 #   directory; I84 303 -> 305 and I83 150 -> 151 walk the new script; I106 41 -> 43 reads the two
 #   new files that walk up for the VERSION marker; I93 31 <-> 32 is the instrument's usual one-fork
-#   jitter. HIGH reading 3329 plus the usual 6.
+#   jitter. Re-measured twice after the sentinel-grammar fold at 786a4be4: 3328 and 3329 (STABLE 2
+#   both), the same four arms moving by the same amounts. HIGH reading 3329 plus the usual 6.
 FORK_BUDGET=3335
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
