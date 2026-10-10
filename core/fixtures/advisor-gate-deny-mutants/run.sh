@@ -29,7 +29,7 @@
 #        nothing, 1 = an assertion failed, 2 = fixture broken.
 SHARDS="a b c d e"
 # A ratchet, raised when a mutant is added: lowering it is a visible edit, a lost mutant is not.
-MIN_MUTANTS=61
+MIN_MUTANTS=70
 set -uo pipefail
 
 # The pre-push gate exports AI_DLC_* tunables; none is read here, but scrub them all the same.
@@ -144,11 +144,11 @@ CTL="$(score "$MUT/hook-control.sh" "$W/failed.control")"
 # Expected sets are C-locale sorted, which is what score() prints.
 # 1. the whole subject replaced by silence: every arm holding a DENY, WARN or stderr cell fails.
 #    ENVELOPE holds only SILENT cells since batch 208 and survives it; FAILED and REREAD hold DENY cells.
-mut silence "BASHC BODY CLOSE DENIED DETACHED FAILED FAILOPEN GATELOG GHREPO MATE MATEABSENT MATEPATH MATEREWRITE MCPNAME MERGE ORDER PATHGIT PERKIND PUSH QUOTEDC QUOTEDENV REARM REASON REDISPATCH REREAD SELF SELFLAST STACK TWRITE UNAV UPDATE UPDATECUT UPDATEREF WITHDRAWN WRAP" -e '2i\
+mut silence "BASHC BMADONLY BODY CLOSE DENIED DETACHED FAILED FAILOPEN GATELOG GHREPO MATE MATEABSENT MATEPATH MATEREWRITE MCPNAME MERGE ORDER PATHGIT PERKIND PUSH QUOTEDALT QUOTEDC QUOTEDENV REARM REASON REDISPATCH REREAD SELF SELFLAST STACK TWRITE UNAV UPDATE UPDATECUT UPDATEREF WINDOW WITHDRAWN WRAP" -e '2i\
 exit 0'
 # 2. warn-only: the rejected design, the same text as context with no decision.
 #    UNAV survives it by design: the warn path is its own emission and this mutant leaves it intact.
-mut warn-only "BASHC BODY CLOSE DENIED DETACHED FAILED GATELOG GHREPO MATE MATEPATH MATEREWRITE MCPNAME MERGE ORDER PATHGIT PERKIND PUSH QUOTEDC QUOTEDENV REARM REASON REDISPATCH REREAD SELF SELFLAST STACK TWRITE UPDATE UPDATECUT UPDATEREF WITHDRAWN WRAP" \
+mut warn-only "BASHC BMADONLY BODY CLOSE DENIED DETACHED FAILED GATELOG GHREPO MATE MATEPATH MATEREWRITE MCPNAME MERGE ORDER PATHGIT PERKIND PUSH QUOTEDALT QUOTEDC QUOTEDENV REARM REASON REDISPATCH REREAD SELF SELFLAST STACK TWRITE UPDATE UPDATECUT UPDATEREF WINDOW WITHDRAWN WRAP" \
   -e 's/permissionDecision: "deny", permissionDecisionReason: \$m/additionalContext: $m/'
 # 3. no grant test: a hook with a knob-free default of ON.
 mut no-grant-test "NOGRANT WITHDRAWN" -e '/^\[ "\${GRANT:-none}" = on \] || exit 0$/d'
@@ -165,7 +165,7 @@ mut error-does-not-clear "ERRCLEAR" \
 #    hold an advisor call BEFORE the owed push, so the mutant allows where they warn and deny;
 #    so do FAILED, REDISPATCH (a9) and SELFLAST, whose deny cells all sit after an older advisor.
 #    REREAD's deny twin has no advisor at all, so it stands.
-mut any-advisor-clears "DENIED FAILED ORDER PERKIND REARM REDISPATCH SELF SELFLAST UNAV" -e 's/\[ "\${LAST_ADV:-0}" -gt "\${LAST_ACT:-0}" \]/[ "${LAST_ADV:-0}" -gt 0 ]/'
+mut any-advisor-clears "DENIED FAILED ORDER PERKIND REARM REDISPATCH SELF SELFLAST UNAV WINDOW" -e 's/\[ "\${LAST_ADV:-0}" -gt "\${LAST_ACT:-0}" \]/[ "${LAST_ADV:-0}" -gt 0 ]/'
 # 9. a branch delete is gated.
 mut delete-gated "DELETE" -e 's/gitpush and (isdelete | not)/gitpush/'
 # 10. the MCP merge tool escapes. FAILED's f-merge-ok is an MCP merge deny too.
@@ -246,8 +246,10 @@ mut no-quoted-env "QUOTEDENV" -e 's/^def envre: .*$/def envre: "^[A-Za-z_][A-Za-
 mut no-gh-repo "GHREPO" -e 's/gh(\\\\s+(-R|--repo)(\\\\s+|=)\\\\S+)\*\\\\s+pr/gh\\\\s+pr/'
 # 43. the kinds collapse back to one: any gated action owes the next.
 mut kinds-collapsed "PERKIND" -e 's/(\[\.g\[\] | select(\.\[2\] == \$kind) | \.\[0\]\] | max \/\/ 0) as \$act/([.g[] | .[0]] | max \/\/ 0) as $act/'
-# 42. the closing quote is shed from every segment, so a quoted pattern reads as a push.
-mut quote-shed-always "QUOTEDPAT" -e 's/^def csegs: segs as \$s | if test(.*$/def csegs: segs as $s | if true/'
+# 42. the closing quote is shed from every segment, so a quoted pattern reads as a push. Since the
+#     quote mask, only a quote after a `-c` flag (kept: it may be a bash -c body) still splits, so
+#     the cell that sees this is qp-dashc.
+mutc quote-shed-always "QUOTEDPAT" "QUOTEDPAT:qp-dashc" -e 's/^def csegs: (qmask | segs) as \$s | if test(.*$/def csegs: (qmask | segs) as $s | if true/'
 # 41. the template's regex is not mirrored: only the github server's tool is a merge.
 mut mcp-exact-name "MCPNAME" -e 's/startswith("mcp__") and endswith("__merge_pull_request")/. == "mcp__github__merge_pull_request"/'
 
@@ -292,6 +294,27 @@ mutc H-denied-ignores-iserror "DENIED FAILED MATEREWRITE PERKIND REDISPATCH SELF
 mutc I-no-tee-gatelog "GATELOG" "GATELOG:i-tee" -e 's/+ \[\$s\[\] | words | select(length > 0 and \.\[0\] == "tee") | \.\[1:\]\[\]\]//'
 # 59. J: a MultiEdit onto gate-log.md is not a Check 12 append.
 mutc J-no-multiedit-gatelog "GATELOG" "GATELOG:j-multi" -e 's/(if (\[\.input\.edits\[\]? | ((\.new_string \/\/ "") | tostring | heads) - ((\.old_string \/\/ "") | tostring | heads)\]/(if ([0]/'
+
+# --- batch 218: the two root causes and the three operator-ruled loosenings ---
+# 60. F1: no quote mask, so a quoted alternation and a heredoc body split into push segments.
+mut qmask-identity "QUOTEDALT" -e 's/^def csegs: (qmask | segs) as \$s/def csegs: segs as $s/'
+# 61. F2: the old fixed 2s re-read, so an advisor line landing at 3s is never judged.
+mutc fixed-2s-loop "REREAD" "REREAD:rr-late" -e 's/^case "\${ADVISOR_GATE_REREADS:-2}" in 0) _cap=0 ;; 1) _cap=2 ;; \*) _cap=10 ;; esac$/case "${ADVISOR_GATE_REREADS:-2}" in 0) _cap=0 ;; *) _cap=2 ;; esac/'
+# 69. L3 removed: a `_bmad-output/`-only push owes a consult.
+# 62. THE WINDOW ignored: an advisor 3 turns back with pushes shipped since does not acquit.
+mutc window-ignored "WINDOW" "WINDOW:win-in" -e 's/^  if \[ "\${INWIN:-0}" = 1 \]; then V=allow; fi$/  :/'
+mutc L3-no-exempt "BMADONLY" "BMADONLY:l3-bmad BMADONLY:l3-bmad-branch BMADONLY:l3-bmad-cd BMADONLY:l3-upstream" -e 's/^if \[ "\$V" != allow \] && \[ "\$KIND" = push \] && l3_exempt; then exit 0; fi$/:/'
+# 70. L3 on any `_bmad-output/` path, so a change set that also touches code is exempt.
+mutc L3-any-path "BMADONLY" "BMADONLY:l3-code" -e 's/^  \[ "\$nb" -gt 0 \] && \[ "\$no" -eq 0 \]$/  [ "$nb" -gt 0 ]/'
+# 71. L3 reads the change set whatever else the command runs, so a commit in it is exempted on
+#     the tree before that commit exists, and a `cd` elsewhere is read in the hook's cwd.
+mutc L3-any-segment "BMADONLY" "BMADONLY:l3-commit" -e 's/^def l3safe: test(.*$/def l3safe: true;/'
+# 71b. L3 trusts a `cd` without resolving it, so a push from another checkout is judged in this one.
+mutc L3-cd-unchecked "BMADONLY" "BMADONLY:l3-cd-elsewhere" -e 's/^    \[ -d "\$d" \] && \[ "\$(cd "\$d" && pwd -P)" = "\$here" \] || exit 1$/    :/'
+# 71c. L3 never reads `@{u}`, so a second push of a sprint branch is judged against origin/HEAD.
+mutc L3-no-upstream "BMADONLY" "BMADONLY:l3-upstream" -e 's/^  if \[ -n "\$urem" \] && \[ "\$urem" = "\$rem" \]; then tgt=/  if false; then tgt=/'
+# 72. L3 on any refspec, so a push of another branch is judged by HEAD's change set.
+mutc L3-any-ref "BMADONLY" "BMADONLY:l3-otherref" -e 's/^  for r in \$refs; do \[ "\$r" = HEAD \] || \[ "\$r" = "\$br" \] || exit 1; done$/  :/'
 
 
 # Every mutant dealt to this shard must have RUN, and every one that ran must have died exactly.

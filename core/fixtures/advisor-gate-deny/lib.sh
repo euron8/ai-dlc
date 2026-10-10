@@ -65,9 +65,21 @@
 #                carrying `(forced update)`, a ran-OK push carrying `<old>..<new>`, and a ran-OK
 #                `Everything up-to-date` (the cell the is_error test alone holds)
 #   REREAD       THE RACE: the advisor line and the incoming push are appended to the transcript
-#                APPEND_DELAY after the hook starts -> SILENT; twin: nothing appended -> DENY. Both
-#                run with ADVISOR_GATE_REREADS unset (the default, two re-reads); every other cell
-#                runs with it 0, so a deny cell does not pay the 2s of re-reads
+#                APPEND_DELAY (3s, past the old fixed 2 x 1s) after the hook starts -> SILENT, with
+#                ADVISOR_GATE_REREADS unset (the 10s poll ceiling); twin: nothing appended -> DENY,
+#                at 1 (2s ceiling). Every other cell runs with it 0, so a deny cell pays no ceiling
+#   QUOTEDALT    a quoted alternation holding `git push -u origin HEAD --no-verify` (the graph row
+#                that was denied) and a heredoc body carrying one -> SILENT; twin: `echo 'a;b' &&
+#                git push origin HEAD` -> DENY. QUOTEDPAT's qp-dashc holds the `-c`-flag carve-out
+#   WINDOW       an advisor attempt 3 assistant turns back with two shipped pushes since, then a push
+#                -> SILENT (WINDOW-IN); twin: the advisor 11 turns back -> DENY (WINDOW-OUT). Both run
+#                with ADVISOR_GATE_WINDOW unset (the default 10); every other cell runs with it 0, an
+#                empty window, so they hold the per-kind test the window loosens
+#   BMADONLY     L3: outgoing commits touching only `_bmad-output/` (bare, after a `cd` into the
+#                cwd, a named current branch piped to `tail`, and a second push judged through
+#                `@{u}` where `origin/HEAD` would include code) -> SILENT; twins -> DENY: a code path
+#                in the set, an empty set, a commit in the same command, another refspec, a `cd`
+#                into another checkout
 #   SELFLAST     no tool_use_id, the incoming push is the last line after an advisor -> SILENT;
 #                twin: the same push already answered by a tool_result -> DENY
 #   DETACHED     cwd detached HEAD, cwd not a repository: push -> DENY
@@ -267,7 +279,35 @@ mk "$P1/par/subagents/agent-a13.jsonl" "$GRANT" "$WV" "$(tr_ w1 false ok)" "$UHU
 mk "$P1/par/subagents/agent-a14.jsonl" "$GRANT" "$WV" "$(tr_ w1 false ok)" "$UPEER"
 mk "$P1/q.jsonl"        "$GRANT"
 mkdir -p "$P1/q/subagents"
+# WINDOW worlds. Real assistant lines carry `message.id`, and one message spans several lines; these
+# helpers stamp it, so a turn is a message and not a line. Every push after the advisor SHIPPED, so
+# the per-kind test owes the next push and only the window can acquit it.
+# tum <msg-id> <id> <tool> <input-json>;  advm/okm <msg-id>;  shipm <id>
+tum() { jq -cn --arg m "$1" --arg id "$2" --arg n "$3" --argjson i "$4" '{type:"assistant",message:{id:$m,content:[{type:"tool_use",id:$id,name:$n,input:$i}]}}'; }
+advm() { jq -cn --arg m "$1" '{type:"assistant",message:{id:$m,content:[{type:"server_tool_use",id:"s1",name:"advisor",input:{}}]}}'; }
+okm() { jq -cn --arg m "$1" '{type:"assistant",message:{id:$m,content:[{type:"advisor_tool_result",tool_use_id:"s1",content:{type:"advisor_redacted_result"}}]}}'; }
+shipm() { tr_ "$1" false 'To x
+   1111111..2222222  HEAD -> main'; }
+PUSHC='{"command":"git push -u origin HEAD"}'
+# WINDOW-IN: advisor in m1, a shipped push in m2 and in m3; the incoming push is m4 (turn 1), so the
+# advisor is turn 4, three turns back.
+mk "$P1/win-in.jsonl"   "$GRANT" "$USER" "$(advm m1)" "$(okm m1)" \
+  "$(tum m2 p2 Bash "$PUSHC")" "$(shipm p2)" "$(tum m3 p3 Bash "$PUSHC")" "$(shipm p3)"
+# WINDOW-OUT: advisor in m1, a shipped push in m2, then nine more turns m3..m11; the incoming push is
+# m12 (turn 1), so the advisor is turn 12, eleven turns back.
+_wo=""; _i=3
+while [ "$_i" -le 11 ]; do
+  _wo="$_wo$(tum "m$_i" "x$_i" Bash '{"command":"ls"}')
+$(tr_ "x$_i" false ok)
+"
+  _i=$((_i+1))
+done
+mk "$P1/win-out.jsonl"  "$GRANT" "$USER" "$(advm m1)" "$(okm m1)" "$(tum m2 p2 Bash "$PUSHC")" "$(shipm p2)"
+printf '%s' "$_wo" >> "$P1/win-out.jsonl"
+_wt="$(jq -r '.message.id? // empty' "$P1/win-out.jsonl" | sort -u | grep -c .)" || _wt=0
+[ "$_wt" -eq 11 ] || { echo "FIXTURE BROKEN: WINDOW-OUT holds $_wt assistant turns (want 11)" >&2; exit 2; }
 for _f in g none off regrant pa ap err unav rearm denied pushed deniedarr ran ranfull okenv apok apm amp ap1 ac par q \
+          win-in win-out \
           f404 fmergeok fmergedel fmerge404 f141 fdots fforced frej fsafe fhook fred fokref fokutd \
           par/subagents/agent-a7 par/subagents/agent-a9 par/subagents/agent-a10 par/subagents/agent-a11 par/subagents/agent-a12 \
           par/subagents/agent-a13 par/subagents/agent-a14; do
@@ -381,6 +421,17 @@ done
 B BASHC SILENT 'bash -c "echo git push"'
 # A quoted alternation carrying `git push` is a pattern, not a push (4 real graph rows).
 B QUOTEDPAT SILENT "pgrep -fl 'wait-for-deliverable|git push' | grep -v pgrep"
+# The quote after a `-c` flag is NOT masked (it may be a bash -c body), so it splits; its closing
+# quote must still not be shed when the command holds no bash -c body.
+ct QUOTEDPAT SILENT qp-dashc "$(bash_in "$P1/g.jsonl" "$SPRINT" "grep -c 'x|git push'")"
+# QUOTEDALT: a quoted string holding a separator is one word (the graph row that was denied), and
+# a heredoc body is data. Twin: a quoted separator BEFORE a real chained push still splits there.
+ct QUOTEDALT SILENT qa-alt "$(bash_in "$P1/g.jsonl" "$SPRINT" "grep -n -E 'X|git push -u origin HEAD --no-verify|Y' f")"
+ct QUOTEDALT SILENT qa-heredoc "$(bash_in "$P1/g.jsonl" "$SPRINT" "cat <<'EOF' > notes.txt
+then run:
+git push -u origin HEAD
+EOF")"
+ct QUOTEDALT DENY qa-twin "$(bash_in "$P1/g.jsonl" "$SPRINT" "echo 'a;b' && git push origin HEAD")"
 B PATHGIT DENY '/usr/bin/git push'
 B PATHGIT SILENT '/usr/bin/git push-status'
 for x in 'if true; then git push; fi' 'for i in 1; do git push; done' '{ git push; }'; do
@@ -469,17 +520,38 @@ ct FAILED DENY f-ok-ref "$(bash_in "$P1/fokref.jsonl" "$SPRINT" 'git push -u ori
 ct FAILED DENY f-ok-uptodate "$(bash_in "$P1/fokutd.jsonl" "$SPRINT" 'git push -u origin HEAD')"
 
 # REREAD (THE RACE). The judged transcript is rebuilt from rr.tmpl before each score; a
-# `$CELLS/<n>.app` file tells score() to do that, to run the hook with ADVISOR_GATE_REREADS UNSET,
-# and (for the appender cell) to append rr.add APPEND_DELAY seconds after the hook starts. 1s,
-# measured: the hook's first scan returns 0.09-0.22s after start, solo at load ~36, so a 4x loaded
-# slowdown still lands it before the append, and the append lands well before the LAST re-read
-# (~2.1s); whichever re-read sees it first judges SILENT. Too short and the first scan sees it
-# (mutant r survives); too long and no re-read sees it (the SILENT cell goes red).
-APPEND_DELAY=1
+# `$CELLS/<n>.app` file tells score() to do that, to run the hook with ADVISOR_GATE_REREADS set to
+# its fourth field (`-` = unset, the default 10s ceiling), and (for the appender cell) to append
+# rr.add APPEND_DELAY seconds after the hook starts. 3s: past the old fixed 2 x 1s re-read (graph's
+# advisor line landed >2s after PreToolUse), so a fixed-2s loop judges before the append and denies,
+# and well inside the 10s ceiling, where the poll sees it within 0.25s and stops (rr.add carries the
+# incoming call's own line). rr-none appends nothing and runs at 1 (2s ceiling) so its DENY does not
+# pay 10s on every score.
+APPEND_DELAY=3
 ct REREAD SILENT rr-late "$(bash_in "$P1/rr-late.jsonl" "$SPRINT" 'git push -u origin HEAD')"
-printf '%s\t%s\t%s\n' "$P1/rr-late.jsonl" "$P1/rr.add" "$APPEND_DELAY" > "$CELLS/$nc.app"
+printf '%s\t%s\t%s\t%s\n' "$P1/rr-late.jsonl" "$P1/rr.add" "$APPEND_DELAY" - > "$CELLS/$nc.app"
 ct REREAD DENY rr-none "$(bash_in "$P1/rr-none.jsonl" "$SPRINT" 'git push -u origin HEAD')"
-printf '%s\t%s\t%s\n' "$P1/rr-none.jsonl" - - > "$CELLS/$nc.app"
+printf '%s\t%s\t%s\t%s\n' "$P1/rr-none.jsonl" - - 1 > "$CELLS/$nc.app"
+
+# THE WINDOW (operator ruling): an advisor attempt within the last 10 assistant turns clears the
+# call, however many pushes shipped since. A `$CELLS/<n>.win` file runs the cell with
+# ADVISOR_GATE_WINDOW unset (the default); every other cell runs with it 0.
+ct WINDOW SILENT win-in "$(bash_in "$P1/win-in.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+: > "$CELLS/$nc.win"
+ct WINDOW DENY win-out "$(bash_in "$P1/win-out.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+: > "$CELLS/$nc.win"
+
+# L3: outgoing commits touching only `_bmad-output/` -> SILENT; one code path -> DENY; and every
+# command shape the hook cannot read before it runs stays gated.
+ct BMADONLY SILENT l3-bmad "$(bash_in "$P1/g.jsonl" "$BMAD" 'git push -u origin HEAD')"
+ct BMADONLY SILENT l3-bmad-cd "$(bash_in "$P1/g.jsonl" "$BMAD" "cd $BMAD && git push origin HEAD")"
+ct BMADONLY SILENT l3-bmad-branch "$(bash_in "$P1/g.jsonl" "$BMAD" 'git push origin sprint/4 2>&1 | tail -3')"
+ct BMADONLY SILENT l3-upstream "$(bash_in "$P1/g.jsonl" "$UPSTREAM" 'git push')"
+ct BMADONLY DENY l3-code "$(bash_in "$P1/g.jsonl" "$CODE" 'git push -u origin HEAD')"
+ct BMADONLY DENY l3-empty "$(bash_in "$P1/g.jsonl" "$EMPTYOUT" 'git push -u origin HEAD')"
+ct BMADONLY DENY l3-commit "$(bash_in "$P1/g.jsonl" "$BMAD" 'git commit -qam x && git push -u origin HEAD')"
+ct BMADONLY DENY l3-otherref "$(bash_in "$P1/g.jsonl" "$BMAD" 'git push origin release/9')"
+ct BMADONLY DENY l3-cd-elsewhere "$(bash_in "$P1/g.jsonl" "$BMAD" "cd $CODE && git push -u origin HEAD")"
 
 c SELF SILENT "$(bash_in "$P1/ap.jsonl" "$SPRINT" 'git push -u origin HEAD' '' t1)"
 c SELF DENY "$(bash_in "$P1/ap.jsonl" "$SPRINT" 'git push -u origin HEAD' '' tY)"
@@ -556,19 +628,25 @@ DECIDE='.hookSpecificOutput as $h
 score() {
   local h="$1" log="$2" failed="" exitbad=0 n id check arm want V REASON_TXT ERR_TXT
   : > "$log"
-  local tgt add dly apid
+  local tgt add dly rrk apid
   while IFS=$'\t' read -r n id check arm want <&3; do
     if [ -f "$CELLS/$n.app" ]; then
       apid=""
-      IFS=$'\t' read -r tgt add dly < "$CELLS/$n.app"
+      IFS=$'\t' read -r tgt add dly rrk < "$CELLS/$n.app"
       if ! cp "$P1/rr.tmpl" "$tgt"; then
         printf '%s\n' "$id" >> "$log"; case " $failed " in *" $arm "*) ;; *) failed="$failed $arm" ;; esac; continue
       fi
       if [ "$add" != - ]; then ( sleep "$dly"; cat "$add" >> "$tgt" ) & apid=$!; fi
-      env -u ADVISOR_GATE_REREADS HOME="$W" CLAUDE_PROJECT_DIR="$CPD" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
+      if [ "${rrk:--}" = - ]; then
+        env -u ADVISOR_GATE_REREADS ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$CPD" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
+      else
+        ADVISOR_GATE_REREADS="$rrk" ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$CPD" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
+      fi
       [ -z "$apid" ] || wait "$apid"
+    elif [ -f "$CELLS/$n.win" ]; then
+      env -u ADVISOR_GATE_WINDOW ADVISOR_GATE_REREADS=0 HOME="$W" CLAUDE_PROJECT_DIR="$CPD" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
     else
-      ADVISOR_GATE_REREADS=0 HOME="$W" CLAUDE_PROJECT_DIR="$CPD" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
+      ADVISOR_GATE_REREADS=0 ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$CPD" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
     fi
     if [ ! -s "$OUTF" ]; then V=SILENT; REASON_TXT=""
     else

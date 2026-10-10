@@ -42,6 +42,44 @@ g -C "$WORK/sprint" checkout -q -b sprint/3 || exit 2
 g -C "$WORK/update" checkout -q -b ai-dlc-update/x || exit 2
 g -C "$WORK/detached" checkout -q --detach || exit 2
 
+# L3: three repositories with a remote-tracking target and no remote (`refs/remotes/origin/HEAD`
+# -> `origin/main`), each on a branch whose outgoing commits are:
+#   BMAD      one commit touching only `_bmad-output/`                     -- exempt
+#   CODE      a `_bmad-output/` commit and one touching `src/`             -- gated
+#   EMPTYOUT  none                                                         -- gated
+for r in bmad code emptyout; do
+  mkdir -p "$WORK/$r" || exit 2
+  g -C "$WORK/$r" init -q || exit 2
+  printf 'x\n' > "$WORK/$r/f"
+  g -C "$WORK/$r" add f && g -C "$WORK/$r" commit -q -m seed || exit 2
+  g -C "$WORK/$r" update-ref refs/remotes/origin/main HEAD || exit 2
+  g -C "$WORK/$r" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main || exit 2
+  g -C "$WORK/$r" checkout -q -b sprint/4 || exit 2
+done
+for r in bmad code; do
+  mkdir -p "$WORK/$r/_bmad-output" && printf 'p\n' > "$WORK/$r/_bmad-output/pipeline-snapshot.md" || exit 2
+  g -C "$WORK/$r" add _bmad-output && g -C "$WORK/$r" commit -q -m snapshot || exit 2
+done
+mkdir -p "$WORK/code/src" && printf 'echo\n' > "$WORK/code/src/a.sh" || exit 2
+g -C "$WORK/code" add src && g -C "$WORK/code" commit -q -m code || exit 2
+#   UPSTREAM  a sprint branch already pushed with `-u` (code included), then one `_bmad-output/`
+#             commit: exempt through `@{u}`, gated through `origin/HEAD` (the range holds the code).
+mkdir -p "$WORK/upstream" && g -C "$WORK/upstream" init -q || exit 2
+printf 'x\n' > "$WORK/upstream/f" && g -C "$WORK/upstream" add f && g -C "$WORK/upstream" commit -q -m seed || exit 2
+g -C "$WORK/upstream" update-ref refs/remotes/origin/main HEAD || exit 2
+g -C "$WORK/upstream" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main || exit 2
+g -C "$WORK/upstream" checkout -q -b sprint/4 || exit 2
+mkdir -p "$WORK/upstream/src" && printf 'echo\n' > "$WORK/upstream/src/a.sh" || exit 2
+g -C "$WORK/upstream" add src && g -C "$WORK/upstream" commit -q -m code || exit 2
+g -C "$WORK/upstream" update-ref refs/remotes/origin/sprint/4 HEAD || exit 2
+# `@{u}` resolves only through a fetch refspec; the url names nothing and is never contacted.
+g -C "$WORK/upstream" config remote.origin.url "$WORK/upstream-none.git" || exit 2
+g -C "$WORK/upstream" config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*' || exit 2
+g -C "$WORK/upstream" config branch.sprint/4.remote origin || exit 2
+g -C "$WORK/upstream" config branch.sprint/4.merge refs/heads/sprint/4 || exit 2
+mkdir -p "$WORK/upstream/_bmad-output" && printf 'p\n' > "$WORK/upstream/_bmad-output/pipeline-snapshot.md" || exit 2
+g -C "$WORK/upstream" add _bmad-output && g -C "$WORK/upstream" commit -q -m snapshot || exit 2
+
 GL="$WORK/sprint/_bmad-output/implementation-artifacts/gate-log.md"
 mkdir -p "$(dirname "$GL")" || exit 2
 printf '# Gate Log\n\n## Gate Log: Sprint 2\nTimestamp: 2026-10-01T00:00Z\n| check | verdict |\n' > "$GL" || exit 2
@@ -54,6 +92,10 @@ SPRINT="$WORK/sprint"
 UPDATE="$WORK/update"
 DETACHED="$WORK/detached"
 NOREPO="$WORK/norepo"
+BMAD="$WORK/bmad"
+CODE="$WORK/code"
+EMPTYOUT="$WORK/emptyout"
+UPSTREAM="$WORK/upstream"
 P1="$WORK/projects/p1"
 MUT="$WORK/mut"
 CPD="$WORK/cpd"

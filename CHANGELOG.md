@@ -20,6 +20,25 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.765.0] - 2026-10-09
+Batch 218 (graph ledger drain). The consumer's advisor gate loosened on the operator's ruling that the push hook
+must loosen its advisor requirement: the advisor is not owed per push.
+
+### PC-S317-ADVISOR-GATE-DENIES-A-PUSH-AFTER-AN-ADVISOR-CALL-IN-ITS-OWN-MESSAGE-AND-LOOPS
+`BL-494`. `core/hooks/ai-dlc-advisor-gate.sh` changes four ways:
+- **A recency window.** An advisor attempt within the last 10 assistant turns clears a gated call, however many
+  gated calls have shipped since. `ADVISOR_GATE_WINDOW` sets the turn count.
+- **The same-message race.** The re-read polls every 0.25s until the incoming call's own line is on disk, up to a
+  10s ceiling, instead of two fixed 1s re-reads. On graph's transcript the advisor line landed more than 2s after
+  the push's PreToolUse, so 3 of 4 same-message pushes were denied.
+- **A quoted alternation is one word.** A quoted string holding a separator, and a heredoc body, no longer split
+  into command segments, so `grep -E 'x|git push … |y'` is not scored a push. Over graph's 94,498 recorded Bash
+  calls exactly 4 change kind, all quoted greps or `ps` lines.
+- **A push whose outgoing change set is only `_bmad-output/` needs no consult.** Where the change set cannot be
+  derived, no exemption applies.
+
+The fixture `advisor-gate-deny` carries a world per rule, each with a control that still denies.
+
 ## [0.764.0] - 2026-10-09
 
 One release. `hermetic-run.sh` builds a git repository inside the sandbox when a fixture declares one
