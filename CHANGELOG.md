@@ -70,6 +70,18 @@ TERMINAL 229, every control passing; a third filing sat uncommitted in the consu
 
 - Operator ruling, taken on the measurement: graph's 14 sharded reviews all read K=4, G=6, N=0. Rule 28 records it.
 
+### BL-497 — the coverage census instrument (entry stays open)
+
+- `scripts/census-hermetic-coverage.sh` runs each declared fixture under `hermetic-run.sh` and plainly (same tool farm,
+  scratch HOME and verdict store, from the repo root), compares the path-normalised multiset of `ok`/`PASS` lines and
+  the exit code, and reports EQUAL, MISMATCH (with direction), UNCOUNTABLE, LOW-RES, REFUSED or FLAKY (a MISMATCH not
+  reproduced on a second pair). A plain run that changes the root's git state stops the census.
+- Bound by the `.dist-only` fixture `census-hermetic-coverage`: seeded skip-branch, near-miss, uncountable and
+  git-state cases, and mutants (rc-only, `0 = 0` EQUAL, both sides sandboxed, plain run inside the fixture directory,
+  no tool farm, stdout only, exit 2 as MISMATCH, digit-normalised lines).
+- `--jail` was dropped: wrapping the sandboxed run would edit the verdict-digested runner span and flip the fixtures
+  that detect a sandbox. Residue (b), the sandbox being a copy and not a jail, stays open and unmeasured.
+
 ## [0.772.0] - 2026-10-10
 
 Batch 222 (graph-ledger-full-drain), first release. No consumer candidate was live to build; the opening sweep read
