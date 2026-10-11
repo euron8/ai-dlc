@@ -67,6 +67,49 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
 
+**BATCH 223 SHIPPED `v0.773.0` (`2bdb3a29`, #1110), DISCHARGING ALL THREE LIVE CANDIDATES AND CLOSING BL-474 ON AN
+OPERATOR RULING.** Started by the operator's one-liner at `origin/main` `aa594904` (`VERSION` 0.772.0); no ai-dlc peer
+was live, graph-f8 was busy and was never messaged.
+- **Opening sweep** (at `aa594904`): live 2, unfiled 2, worklist 0, DISCHARGED 0, invisible 0, TERMINAL 229, archive 352,
+  qualifying refs 0, every control passing. Both live ids (`PC-S317-3.2-DERIVATION-HOOK-CWD`,
+  `PC-S317-SPAWN-LEDGER-PIN-CHANGE-RETROACTIVE`) were filed on graph's `main` by `c127ed598` (2026-10-10). A THIRD
+  filing, `PC-S317-DEPLOY-VALIDATE-FIX-LOOP-ROUTES-TO-A-DEV-SEAT-NAMELESSLY-LEAVING-INLINE-LEAD-EXECUTION-UNGUARDED`, sat
+  UNCOMMITTED in graph's working-tree ledger, invisible to the committed-ref union; it was scoped from `git diff HEAD`
+  on the operator's choice. If graph commits it under a different id, `named_absorbed()` will not join it to 0.773.0.
+  graph's Sprint 317 squash (`fcb6afe96`) removed four `PC-S316-*` headings from its live ledger; all four are in
+  `arch.txt` (impossible-id control 0).
+- **`v0.773.0`**, one release, three candidates plus two backlog items:
+  - BL-498 (derivation hook): a linked worktree's `derived` fences are judged from that worktree's copy of the project
+    dir, accepted only when its `--git-common-dir` matches the project's; nested repos, submodules and outside-repo
+    files keep the project root; the hook's git calls ignore an exported `GIT_DIR`.
+  - BL-499 (Check 22): a row carrying `tier_pinned` is judged against the teammate's own transcript model from
+    `--probe`, joined by `tool_use_id`; unjoined rows are PENDING and a pin change is a NOTE. Replay on graph's
+    sprint-317 ledger: Rule 19 FAILs 288 -> 0. Coverage cost: rows carrying `tier_pinned` and no `tool_use_id` now read
+    PENDING (graph's sprints 298-310, 17 rows of 311, and 431 rows with a null sprint).
+  - BL-500 (deploy-validate §3): item 3 dispatches `dev`; the lead re-deploys and re-runs smoke.
+  - BL-474 CLOSED by operator ruling, **serial by design**, on 14 sharded reviews all K=4, G=6, N=0. Rule 28 records it.
+  - BL-497: `scripts/census-hermetic-coverage.sh` and its `.dist-only` fixture shipped; the entry stays open.
+  - A tip adversary found three DEFECTs after the first green gate (a subdirectory project dir refused correct
+    worktree writes, an exported `GIT_DIR` refused correct main-tree writes, a custom pin key false-FAILed); all fixed
+    in the release and re-gated. Gate green, 58 of 281 run, every changed fixture `ok` by name.
+- **`FORK_BUDGET` is 3339, tip reading 3337.** Two forks of headroom: the next fixture directory turns
+  `validator-fork-budget` red.
+- **CENSUS** (BL-497, operator ruling: build and run it this batch): PAUSED by the operator at 232 of 240, to be
+  resumed on the operator's signal and never before it: 197 EQUAL, 8 LOW-RES, 24 MISMATCH, 3 REFUSED. BL-497 lists the
+  eight unrun fixtures, every MISMATCH and REFUSED row, and two instrument defects (a locale-sensitive `awk` that can
+  drop lines, an exit trap that deletes the rows) to fix before any MISMATCH is read as a finding. Residue (b) is
+  unmeasured. The saved rows live only in this session's scratchpad, so a resume re-runs from the entry's lists.
+- **graph delivery gap**: stamp 0.772.0 (`aa594904`) against `VERSION` 0.773.0, one release. PENDING 3 (the two
+  committed ids plus the uncommitted third). Not bootstrapping: the range touches no `preclassify.sh`, `apply.sh` or
+  `ledger-reverify.sh`, and its one update-skill file is a one-line `setup-sites.md` site for the new fixture. The pull
+  is the operator's.
+- **graph boundary**: ledger working-tree md5 `cd43a09b…` at the opening and after the merge; porcelain 16 at the
+  opening, 22 after, all graph's own pipeline state. Nothing was written there.
+
+Net for the batch: closed 4 entries (BL-474, BL-498, BL-499, BL-500) and 3 candidates, filed 3; net -1.
+
+Batch 222's block below is history: batch 223's block replaces its open items and its delivery gap.
+
 **BATCH 222 SHIPPED `v0.772.0` (`a304562b`, #1108) AND CLOSED BL-481; NO CONSUMER CANDIDATE WAS LIVE TO BUILD.** Handed the
 plan by ai-dlc-ff at `origin/main` `50b5ca40` (`VERSION` 0.771.0); peers ai-dlc-ff, ai-dlc-1d and ai-dlc-b5, all idle, one
 gated push on the box at a time by GATE START / LANDED.
