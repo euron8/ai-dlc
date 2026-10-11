@@ -1,0 +1,31 @@
+# Tools run.sh, the hook and the validator invoke. git builds the repositories and worktrees and is
+# what the hook asks for the edited file's toplevel and common dir.
+awk
+basename
+bash
+cat
+cmp
+comm
+cp
+cut
+diff
+dirname
+env
+find
+git
+grep
+head
+jq
+ls
+mkdir
+mktemp
+nl
+rm
+sed
+sha256sum
+shasum
+sort
+tail
+tr
+uniq
+wc

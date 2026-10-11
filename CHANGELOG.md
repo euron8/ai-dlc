@@ -20,6 +20,56 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.773.0] - 2026-10-11
+
+Batch 223 (graph-ledger-full-drain), first release. The opening sweep read live 2, unfiled 2, worklist 0, DISCHARGED 0,
+TERMINAL 229, every control passing; a third filing sat uncommitted in the consumer's working tree. graph's stamp is
+0.772.0, so the delivery gap before this release is zero. All three candidates ship here, by operator choice.
+
+### PC-S317-3.2-DERIVATION-HOOK-CWD (BL-498)
+
+- **Defect.** `ai-dlc-derivation-capture.sh` ran the derivations validator with `AI_DLC_PROJECT_ROOT` set to the main
+  project, so a `derived` fence in a file edited in a linked worktree was evaluated against the main tree's files.
+- **Fix.** When the edited file is in another checkout whose `--git-common-dir` equals the project's, the hook judges
+  it from that checkout's copy of the project dir, so a project dir that is a subdirectory of its repository is
+  judged from `<worktree>/<subdir>`, not the worktree's toplevel; a nested repository, a submodule, a file outside
+  any repository and a main-tree edit all keep the project root.
+- **GIT_DIR isolation.** The hook's git calls run with `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE` and
+  `GIT_COMMON_DIR` unset, so an exported `GIT_DIR` no longer makes a main-tree subdirectory edit read as another
+  checkout and refuse a correct fence.
+- **Fixture.** `derivation-capture-worktree-root` (ships): both worktree layouts, a subdirectory project dir, an
+  exported `GIT_DIR`, a stale-in-both-trees anti-stub pair, the nested-repo and outside-repo fallbacks, and four
+  mutants (revert to the project root; drop the common-dir check; return the toplevel; leave `GIT_DIR` set).
+
+### PC-S317-SPAWN-LEDGER-PIN-CHANGE-RETROACTIVE (BL-499)
+
+- **Defect.** Check 22 compared every spawn row against the role's model pin read from settings at GATE time, so a
+  mid-sprint pin change failed every correct earlier dispatch (graph's sprint 317: 288 Rule 19 FAILs under its current
+  settings).
+- **Fix.** A row carrying `tier_pinned` (written by the dispatch guard since 0.158.0) is judged against the teammate's
+  own transcript model from the probe, joined by `tool_use_id`; unjoined rows are PENDING, and a pin that changed since
+  dispatch is a NOTE. Rows without `tier_pinned` keep the gate-time comparison. `pin_key` and `matches_pin` unchanged.
+- **Replay** on a copy of graph's sprint-317 ledger: Rule 19 FAILs 288 -> 0 (current settings) and 67 -> 0 (pre-pin
+  settings); 866 joined rows agree, 0 disagree, 126 PENDING.
+- **Custom pin keys.** A transcript model that misses the pin key is retried against the model the key resolves to
+  (the row's `model_pinned`, else `aiDlcModels[<key>]`), so a key such as `fast` naming `claude-sonnet-5-5` verifies;
+  a `<synthetic>` transcript model is PENDING. Rows without `tool_use_id` (graph's sprints 298-310 and 17 rows in
+  311) now read PENDING rather than being compared to gate-time settings.
+- **Fixture.** `check-22-spawn-ledger` gains the post-change, disagreement, unjoined, null and legacy arms, the
+  custom-key and `<synthetic>` arms, and six mutants.
+
+### PC-S317-DEPLOY-VALIDATE-FIX-LOOP-ROUTES-TO-A-DEV-SEAT-NAMELESSLY-LEAVING-INLINE-LEAD-EXECUTION-UNGUARDED (BL-500)
+
+- **Defect.** `deploy-validate.md` §3's smoke-failure loop said "route back to the dev teammate" with no dispatch, and a
+  lead edited product code inline.
+- **Fix.** Item 3 now dispatches `dev` for the code fix; the lead re-deploys and re-runs smoke, and a lead editing
+  product code there is applying a fix inline under Rule 28 (a). The filing was uncommitted upstream when scoped.
+- **Fixture.** `deploy-validate-smoke-classification` gains a §3-scoped dispatch arm and three mutants.
+
+### BL-474 — the first cross shard's serial tail is serial by design
+
+- Operator ruling, taken on the measurement: graph's 14 sharded reviews all read K=4, G=6, N=0. Rule 28 records it.
+
 ## [0.772.0] - 2026-10-10
 
 Batch 222 (graph-ledger-full-drain), first release. No consumer candidate was live to build; the opening sweep read

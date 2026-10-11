@@ -1765,8 +1765,13 @@ read that as "the effort comparison did not happen", never as a pass.
 
 It filters to this sprint, drops the out-of-scope rows named above, and
 decides all three Rule 19 comparisons per remaining row:
-**(a)** `model_bound` — the value the guard actually bound, not a self-report —
-matches `aiDlcRoles.<role>.model`; **(b)** `role_contract_cited` is `true`; and
+**(a)** the teammate ran on its role's pin **as it stood when the teammate was
+dispatched**. A row carrying `tier_pinned` (the key the guard resolved at dispatch)
+is judged by the model its own transcript recorded in the `--probe` file, joined by
+`tool_use_id`; with no joined row it is PENDING, and a pin changed since is a
+`NOTE:`, never a failure. A row without `tier_pinned` is judged as before:
+`model_bound` — the value the guard actually bound, not a self-report — against
+`aiDlcRoles.<role>.model` as it reads now; **(b)** `role_contract_cited` is `true`; and
 `role_file_readable` is not `false`, which is Rule 19's fail-closed case.
 
 **`role_contract_cited` records DELIVERY of the Rule 19(b) line, by one of two
