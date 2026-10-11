@@ -269,6 +269,7 @@ core_manifest:
   - core/fixtures/route-read-required/**
   - core/fixtures/artifact-derivations/**
   - core/fixtures/derivation-capture/**
+  - core/fixtures/derivation-capture-worktree-root/**
   - core/fixtures/architecture-index-cell-escaping/**
   - core/fixtures/prepush-worktree-env-scrub/**
   - core/fixtures/retro-compliance-workflow/**

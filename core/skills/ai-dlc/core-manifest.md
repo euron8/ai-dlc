@@ -353,6 +353,7 @@ core_manifest:
   - fixtures/route-read-required/**
   - fixtures/artifact-derivations/**
   - fixtures/derivation-capture/**
+  - fixtures/derivation-capture-worktree-root/**
   - fixtures/architecture-index-cell-escaping/**
   - fixtures/prepush-worktree-env-scrub/**
   - fixtures/retro-compliance-workflow/**

@@ -418,7 +418,56 @@ fi
 # a file that happens to carry fences elsewhere. Indent-tolerant for the reason above.
 grep -q '^[[:blank:]]*\$ ' "$MASK" 2>/dev/null || exit 0
 
-OUT=$( ( cd "$PROJECT_DIR" 2>/dev/null && AI_DLC_PROJECT_ROOT="$PROJECT_DIR" \
+# THE FENCES RUN IN THE EDITED FILE'S OWN TREE. A file in a linked worktree of the project (a
+# dev seat's story worktree) describes THAT tree, and the validator runs every command from
+# AI_DLC_PROJECT_ROOT, so handing it PROJECT_DIR evaluated the worktree's fences against the
+# main tree's files: measured on the reference consumer, one fence read 6 from the main tree and
+# 8 from the worktree, and the write was refused for an output that was right. The validator's
+# own `cd` is the one that matters; the `cd` below only keeps the two in step.
+#
+# The other checkout is taken ONLY when it is a different checkout of the SAME repository -- the
+# two toplevels differ and `--git-common-dir` of both is the same non-empty path. The root is then
+# that checkout's copy of the PROJECT DIR, not its toplevel: a project dir that is a subdirectory
+# of its repo (`repo/app`) has its fences written relative to `app/`, so a worktree edit is judged
+# from `<worktree>/app`. Returning the bare toplevel ran every such fence one level too high and
+# refused a correct write. The strip is done on PHYSICAL paths, because git reports physical
+# toplevels and a symlinked PROJECT_DIR would otherwise not carry `pt` as a prefix.
+#
+# Every other case keeps PROJECT_DIR exactly as before: the same toplevel (a main-tree edit,
+# whether or not the project dir is a subdirectory), a file in a nested repository or submodule
+# (a different common dir), a file outside any repository, a project dir that is not one, a
+# worktree that does not carry the project subdirectory, and a git too old for `--path-format`.
+# VALIDATOR stays the installed copy beside PROJECT_DIR.
+#
+# THE GIT CALLS RUN WITH THE REPOSITORY ENVIRONMENT UNSET. An exported GIT_DIR (a git hook, a
+# `git -c` wrapper, a harness that sets it) overrides `-C`'s discovery, so every call answered
+# about THAT repository: with GIT_DIR set and no GIT_WORK_TREE, git takes the CURRENT directory
+# as the toplevel, so a main-tree edit in `notes/` resolved its toplevel to `notes/` itself, read
+# as a different checkout sharing the common dir, and its fences ran from `notes/` -- measured, a
+# correct fence refused (exit 2) where the base hook accepted it. The subshell keeps the unset
+# local to these calls, as `hr_sbgit` does in hermetic-run.sh.
+DERIV_ROOT="$PROJECT_DIR"
+deriv_file_root() { # -> that checkout's copy of PROJECT_DIR when the file is in another checkout of its repo
+  (
+    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+    fd="$(dirname "$FILE")"
+    ft="$(git -C "$fd" rev-parse --show-toplevel 2>/dev/null)" || exit 1
+    pt="$(git -C "$PROJECT_DIR" rev-parse --show-toplevel 2>/dev/null)" || exit 1
+    [ -n "$ft" ] && [ -n "$pt" ] && [ "$ft" != "$pt" ] || exit 1
+    fc="$(git -C "$fd" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || exit 1
+    pc="$(git -C "$PROJECT_DIR" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || exit 1
+    [ -n "$fc" ] && [ "$fc" = "$pc" ] || exit 1
+    pp="$(cd "$PROJECT_DIR" 2>/dev/null && pwd -P)" || exit 1
+    case "$pp" in "$pt"|"$pt"/*) : ;; *) exit 1 ;; esac
+    [ -d "${ft}${pp#"$pt"}" ] || exit 1
+    printf '%s' "${ft}${pp#"$pt"}"
+  )
+}
+if command -v git >/dev/null 2>&1; then
+  _dr="$(deriv_file_root)" && [ -n "$_dr" ] && DERIV_ROOT="$_dr"
+fi
+
+OUT=$( ( cd "$DERIV_ROOT" 2>/dev/null && AI_DLC_PROJECT_ROOT="$DERIV_ROOT" \
          bash "$VALIDATOR" "$MASK" ) 2>&1 )
 RC=$?
 

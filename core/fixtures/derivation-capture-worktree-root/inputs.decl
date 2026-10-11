@@ -1,0 +1,7 @@
+# derivation-capture-worktree-root installs the hook and the validator into project repositories it
+# builds in mktemp (with linked worktrees and a nested repository) and drives the hook there; both are
+# required, and run.sh prints their HERMETIC-CONSUMED lines where it resolves them.
+!core/hooks/ai-dlc-derivation-capture.sh
+!core/scripts/validate-artifact-derivations.sh
+# run.sh sources the shared preamble (the GIT_DIR scrub) before any git call.
+core/fixtures/lib/

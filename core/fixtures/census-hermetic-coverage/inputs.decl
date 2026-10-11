@@ -1,0 +1,10 @@
+# census-hermetic-coverage seeds every world it measures under mktemp and copies five machinery files into
+# each: the census under test (REQUIRED, printed where run.sh resolves it), the pre-push hook whose READSET_*
+# spans hermetic-run sources, suite-content-key.sh for the universe's excluded tops, and hermetic-run.sh with
+# its mapper, which the census drives inside each world. lib/ is the sourced preamble.
+!scripts/census-hermetic-coverage.sh
+.githooks/pre-push
+scripts/suite-content-key.sh
+core/scripts/hermetic-run.sh
+core/scripts/core-paths.sh
+core/fixtures/lib/

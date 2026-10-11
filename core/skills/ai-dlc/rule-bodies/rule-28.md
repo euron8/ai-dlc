@@ -132,8 +132,8 @@ first and joins the part files itself only before the hand-over replays
 and the per-AC table (`implementation.md`, the Gate-1 and Gate-2
 dispatch paragraphs). What remains on that one agent is the canonical
 suite run and the replays a part HANDED OVER, run in the frozen worktree.
-**That residue is not serial by design: the operator has ruled it be measured
-first (`BL-474`), and only that measurement decides it.**
+**That residue is serial by design, by operator ruling (`BL-474`), taken on
+the measurement: every sharded review measured carried zero hand-overs.**
 A hand-over is defined as an AC whose replay cannot reach a GREEN
 baseline in a fresh detached worktree at the frozen sha, so a per-group
 copy made that same way repeats the failure. The frozen worktree's

@@ -5,7 +5,9 @@
 # per spawn-ledger row — `model_bound` against `aiDlcRoles.<role>.model`,
 # `role_contract_cited` true, `role_file_readable` not false — and its enforcement-map row
 # carried `enforcer: []`, so a teammate performed all three by reading a paragraph at every
-# implementation-phase gate. `validate-spawn-ledger.sh` is now their single home. The
+# implementation-phase gate. `validate-spawn-ledger.sh` is now their single home. (A row
+# carrying `tier_pinned` is now judged against the pin in force at its dispatch -- the
+# T-series at the end.) The
 # comparison itself was never new: `ai-dlc-dispatch-guard.sh` already made it at PreToolUse
 # (it is where `model_bound` gets its value) in a copy no gate could reach, so `pin_key()`
 # and `matches_pin()` are shared byte-identically and I56 binds them —
@@ -277,10 +279,11 @@ else
   bad "the failing run printed no counts line — got: $out"
 fi
 
-# --- 4. the pin is the CONFIG's, read at gate time ----------------------------
-# The ledger carries `tier_pinned` — the guard's own answer — and reading it would make this
-# check a self-report by the mechanism it audits, and blind to a settings.json that changed
-# after the dispatch. Same row, two configs, two verdicts.
+# --- 4. a row WITHOUT `tier_pinned` is judged against the CONFIG, read at gate time ---
+# These seeds predate the field, which is the legacy population: nothing on the row says
+# what pin was in force at dispatch, so today's is the only one it can be judged against.
+# Same row, two configs, two verdicts. A row that DOES carry `tier_pinned` is judged against
+# that pin by its own transcript model -- the T-series at the end of this file.
 cat > "$WORK/repinned.json" <<'JSON'
 { "aiDlcModels": { "opus": "claude-opus-5[1m]", "sonnet": "claude-sonnet-5" },
   "aiDlcRoles": { "dev": { "model": "opus" } } }
@@ -288,7 +291,7 @@ JSON
 bash "$VSL" --ledger "$WORK/clean.jsonl" --sprint 900 --settings "$WORK/settings.json" >/dev/null 2>&1; a=$?
 bash "$VSL" --ledger "$WORK/clean.jsonl" --sprint 900 --settings "$WORK/repinned.json" >/dev/null 2>&1; b=$?
 if [ "$a" -eq 0 ] && [ "$b" -eq 1 ]; then
-  ok "the verdict follows settings.json, not the ledger's own tier_pinned — repinning dev to opus turns the same clean row into a mismatch"
+  ok "a legacy row (no tier_pinned) follows settings.json — repinning dev to opus turns the same clean row into a mismatch"
 else
   bad "the same ledger gave rc=$a and rc=$b across two different pins; expected 0 then 1 (the check is reading the guard's answer back, not the config)"
 fi
@@ -1442,6 +1445,221 @@ else
       || bad "S3 MUTANT (rvd): moved [$mv_], expected [dev]"
   fi
 fi
+
+# ============================================================================
+# THE PIN IN FORCE AT DISPATCH. A guard-written row carries `tier_pinned`, the pin key the
+# guard resolved when it dispatched. Such a row is judged against THAT pin, by the model its
+# teammate's own transcript recorded (joined by tool_use_id); today's settings only decide a
+# NOTE saying the pin changed since. A row WITHOUT the field keeps the gate-time comparison
+# (arm 4 above, unchanged). Measured on the reference consumer: one mid-sprint pin commit
+# moved Check 22 from 67 FAILs to 288 on the same ledger, every added one a correct dispatch.
+#
+# FIVE CELLS, and each mutant below must move exactly one. Every ledger opens with an EPOCH
+# row that is not the subject: a `tea` dispatch whose role pinned nothing at dispatch
+# (`tier_pinned: null`) and pins nothing now -- UNPINNED on every implementation, so it can
+# move no cell, and the subject is never the ledger's first row.
+# `effort_bound` is null throughout so the effort arm reads UNDECLARED and cannot entangle.
+# ============================================================================
+trow() { # role tier(""=null) tool_use_id bound name
+  jq -nc --arg r "$1" --arg tp "$2" --arg t "$3" --arg b "$4" --arg n "$5" \
+    '{v:1, sprint:900, name:$n, role:$r, model_pinned:null,
+      tier_pinned:(if $tp == "" then null else $tp end),
+      model_requested:$b, model_bound:$b, effort_bound:null,
+      role_contract_cited:true, contract_via:"prompt", role_file_readable:true,
+      definition_bound:false, definition_stale:false, name_stripped:null,
+      tool_use_id:(if $t == "" then null else $t end), shard:null}'
+}
+trow tea '' toolu_TEPOCH inherit t-epoch                  > "$WORK/t-post.jsonl"
+trow dev sonnet toolu_TPOST sonnet t-postpin             >> "$WORK/t-post.jsonl"
+{ prow toolu_TEPOCH medium claude-sonnet-5 2.1.269
+  prow toolu_TPOST  high   claude-sonnet-5 2.1.269; }     > "$WORK/t-post.probe"
+trow tea '' toolu_TEPOCH inherit t-epoch                  > "$WORK/t-dis.jsonl"
+trow dev sonnet toolu_TDIS sonnet t-disagree             >> "$WORK/t-dis.jsonl"
+{ prow toolu_TEPOCH medium claude-sonnet-5 2.1.269
+  prow toolu_TDIS   high   'claude-opus-5[1m]' 2.1.269; } > "$WORK/t-dis.probe"
+# The unjoined row's probe carries rows for OTHER dispatches: an empty probe file would let a
+# reader that never opened it score the same way.
+trow tea '' toolu_TEPOCH inherit t-epoch                  > "$WORK/t-pend.jsonl"
+trow dev sonnet toolu_TPEND sonnet t-pending             >> "$WORK/t-pend.jsonl"
+{ prow toolu_TEPOCH medium claude-sonnet-5 2.1.269
+  prow toolu_TELSE  high   claude-sonnet-5 2.1.269; }     > "$WORK/t-pend.probe"
+# KEY PRESENT AND NULL: dev pinned nothing when this ran, and `settings.json` pins it now.
+# Not legacy -- the guard recorded the pin and it was none -- so it must NOTE, never FAIL.
+trow tea '' toolu_TEPOCH inherit t-epoch                  > "$WORK/t-null.jsonl"
+trow dev '' toolu_TNULL inherit t-null                   >> "$WORK/t-null.jsonl"
+{ prow toolu_TEPOCH medium claude-sonnet-5 2.1.269
+  prow toolu_TNULL  high   claude-sonnet-5 2.1.269; }     > "$WORK/t-null.probe"
+
+# CONTROL: the two settings files must disagree on dev's pin, or the post-pin cells ask one
+# question twice.
+T_OLD="$(jq -r '.aiDlcRoles.dev.model' "$WORK/settings.json")"
+T_NEW="$(jq -r '.aiDlcRoles.dev.model' "$WORK/repinned.json")"
+if [ "$T_OLD" = "sonnet" ] && [ "$T_NEW" = "opus" ]; then
+  ok "T CONTROL: settings.json pins dev '$T_OLD' and repinned.json pins it '$T_NEW' -- the pin-change cells below have two sides that differ"
+else
+  bad "T CONTROL is dead: dev pins '$T_OLD' and '$T_NEW'; the post-pin cells cannot discriminate"
+fi
+
+trun() { # script ledger probe settings -> "<rc>\n<output>"
+  local o r
+  o="$(bash "$1" --ledger "$WORK/$2" --sprint 900 --settings "$WORK/$4" --probe "$WORK/$3" 2>&1)"; r=$?
+  printf '%s\n%s' "$r" "$o"
+}
+tvec() { # script -> five cells: post postctl dis pend null
+  local S="$1" R c=""
+  # post: a correct dispatch under the OLD pin, gated after the pin changed -> NOTE, not FAIL.
+  R="$(trun "$S" t-post.jsonl t-post.probe repinned.json)"
+  if [ "$(ercv "$R")" -eq 0 ] && grep -q 'NOTE: \[t-postpin\] was dispatched under' <<<"$R" \
+     && grep -q 'tier_pinned, 1 verified' <<<"$R" && ! grep -q '^FAIL: \[' <<<"$R"
+  then c="post:noted"; else c="post:$(ercv "$R")"; fi
+  # postctl: the SAME ledger with no pin change -> verified and NO NOTE, so the NOTE above keys
+  # on the change rather than firing on every tier row.
+  R="$(trun "$S" t-post.jsonl t-post.probe settings.json)"
+  if [ "$(ercv "$R")" -eq 0 ] && ! grep -q 'was dispatched under' <<<"$R" \
+     && grep -q 'tier_pinned, 1 verified' <<<"$R"
+  then c="$c postctl:quiet"; else c="$c postctl:$(ercv "$R")"; fi
+  # dis: pinned sonnet at dispatch and its own transcript ran opus -> FAIL, naming both, with
+  # the clearing path. Run with NO pin change, so a current-settings reader also fails it.
+  R="$(trun "$S" t-dis.jsonl t-dis.probe settings.json)"
+  if [ "$(ercv "$R")" -eq 1 ] && grep -q 'FAIL: \[t-disagree\]' <<<"$R" \
+     && grep -qF "records model='claude-opus-5[1m]'" <<<"$R" && grep -qF -- "$DISP" <<<"$R"
+  then c="$c dis:failed"; else c="$c dis:$(ercv "$R")"; fi
+  # pend: no probe row joins -> PENDING and counted, never FAIL, even across a pin change.
+  R="$(trun "$S" t-pend.jsonl t-pend.probe repinned.json)"
+  if [ "$(ercv "$R")" -eq 0 ] && grep -q '1 awaiting a transcript model' <<<"$R" \
+     && ! grep -q '^FAIL: \[' <<<"$R"
+  then c="$c pend:pending"; else c="$c pend:$(ercv "$R")"; fi
+  # null: pinned nothing at dispatch, pinned now -> NOTE naming <none>, never FAIL.
+  R="$(trun "$S" t-null.jsonl t-null.probe settings.json)"
+  if [ "$(ercv "$R")" -eq 0 ] && grep -qF "NOTE: [t-null] was dispatched under aiDlcRoles.dev.model='<none>'" <<<"$R" \
+     && ! grep -q '^FAIL: \[' <<<"$R"
+  then c="$c null:noted"; else c="$c null:$(ercv "$R")"; fi
+  printf '%s' "$c"
+}
+T_EXPECTED="post:noted postctl:quiet dis:failed pend:pending null:noted"
+tmoved() { local got="$1" i=1 e m out=""
+  for e in $T_EXPECTED; do m="$(printf '%s' "$got" | cut -d' ' -f$i)"
+    [ "$e" != "$m" ] && out="$out ${e%%:*}"; i=$((i+1)); done
+  printf '%s' "${out# }"; }
+
+TGOT="$(tvec "$VSL")"
+if [ "$TGOT" = "$T_EXPECTED" ]; then
+  ok "T1-T5 a row carrying tier_pinned is judged against the pin in force AT ITS DISPATCH: a correct pre-change dispatch gated after a pin change is NOTED and not failed (and the same ledger with no change is quiet), a transcript model disagreeing with tier_pinned FAILS with the clearing path, an unjoined row is PENDING across a pin change, and a role that pinned nothing at dispatch is NOTED, not judged against today's pin"
+else
+  bad "T1-T5: expected [$T_EXPECTED], got [$TGOT] (differing: $(tmoved "$TGOT"))"
+fi
+
+# LEGACY ROWS ARE UNCHANGED, and arm 4 above is that assertion (same row, two configs, two
+# verdicts). This adds that such a row is COUNTED as legacy, so a run whose every row predates
+# the field cannot read like one whose every row was judged at dispatch.
+R="$(trun "$VSL" clean.jsonl t-post.probe settings.json)"
+if grep -q '0 row(s) carry tier_pinned' <<<"$R" && grep -q '2 legacy row(s) without tier_pinned' <<<"$R"; then
+  ok "  and rows without tier_pinned are counted as legacy, judged against today's pin as before"
+else
+  bad "  legacy rows were not counted as legacy: $R"
+fi
+
+# MUTANTS, each a copy of the unmutated control already in $WORK/mut, guarded by `cmp -s` and
+# `bash -n`, each required to move exactly ONE cell.
+TCTL="$(tvec "$WORK/mut/control.sh")"
+[ "$TCTL" = "$T_EXPECTED" ] \
+  && ok "T CONTROL: the unmutated copy in the mutant directory reproduces all five cells" \
+  || bad "T CONTROL copy did not reproduce the tier cells: expected [$T_EXPECTED], got [$TCTL]"
+tmut() { # name sed-expression expected-cell description
+  local n="$1" M="$WORK/mut/t-$1.sh" mv
+  sed "$2" "$WORK/mut/control.sh" > "$M" || { bad "FIXTURE BROKEN: could not write tier mutant $n"; return; }
+  if cmp -s "$WORK/mut/control.sh" "$M"; then
+    bad "FIXTURE BROKEN: tier mutation '$n' matched nothing -- the line it targets was renamed, so this mutant proves nothing"; return
+  fi
+  bash -n "$M" 2>/dev/null || { bad "FIXTURE BROKEN: tier mutant '$n' does not parse"; return; }
+  mv="$(tmoved "$(tvec "$M")")"
+  [ "$mv" = "$3" ] && ok "MUTANT t-$n killed: $4 -- moves only the $3 cell" \
+    || bad "MUTANT t-$n: moved [$mv], expected only [$3]"
+}
+# The defect itself: the dispatch-time pin replaced by the pin read from settings NOW.
+tmut current 's/^      EXPECT="\$tier_at_dispatch"$/      EXPECT="$(pin_key "$SETTINGS" "$role")"/' post \
+  "comparing a tier_pinned row against today's settings FAILS the correct pre-change dispatch"
+# No comparison at all: every joined tier row verified.
+tmut nocompare 's/^      elif matches_pin "\$tier_observed" || \[ "\$tier_resolved_ok" = true \]; then$/      elif true; then/' dis \
+  "dropping the transcript comparison passes a teammate that ran opus against a sonnet pin"
+# Null collapsed into absent: a role that pinned nothing at dispatch falls to the legacy path.
+tmut nullabsent 's/(if has("tier_pinned") then/(if .tier_pinned != null then/' null \
+  "collapsing a null tier_pinned into an absent one judges a role that pinned nothing at dispatch against today's pin"
+
+# ============================================================================
+# THE PIN KEY IS NOT THE MODEL. A consumer key `fast` naming `claude-sonnet-5-5` is not a
+# substring of the model it resolves to, so comparing the transcript model against the KEY alone
+# failed a teammate that ran exactly the model its role pinned. The tier arm retries a miss
+# against the RESOLVED string: the row's `model_pinned`, else `aiDlcModels[<key>]` from settings.
+# FOUR CELLS: resolved via model_pinned, resolved via settings (model_pinned null), a genuinely
+# different model under the same key (must still FAIL), and a `<synthetic>` transcript model
+# (no model produced the turn: PENDING, never FAIL).
+# ============================================================================
+cat > "$WORK/settings-fast.json" <<'JSON'
+{"aiDlcModels":{"fast":"claude-sonnet-5-5","opus":"claude-opus-5-5"},
+ "aiDlcRoles":{"dev":{"model":"fast"},"tea":{}}}
+JSON
+krow() { # tool_use_id model_pinned(""=null) name
+  trow dev fast "$1" claude-sonnet-5-5 "$3" | jq -c --arg mp "$2" '.model_pinned = (if $mp == "" then null else $mp end)'
+}
+trow tea '' toolu_TEPOCH inherit t-epoch          > "$WORK/k-mp.jsonl";  krow toolu_KMP  claude-sonnet-5-5 k-modelpinned >> "$WORK/k-mp.jsonl"
+trow tea '' toolu_TEPOCH inherit t-epoch          > "$WORK/k-set.jsonl"; krow toolu_KSET ''                k-settings    >> "$WORK/k-set.jsonl"
+trow tea '' toolu_TEPOCH inherit t-epoch          > "$WORK/k-dis.jsonl"; krow toolu_KDIS claude-sonnet-5-5 k-disagree    >> "$WORK/k-dis.jsonl"
+trow tea '' toolu_TEPOCH inherit t-epoch          > "$WORK/k-syn.jsonl"; krow toolu_KSYN claude-sonnet-5-5 k-synthetic   >> "$WORK/k-syn.jsonl"
+{ prow toolu_TEPOCH medium claude-sonnet-5-5 2.1.269; prow toolu_KMP  high claude-sonnet-5-5 2.1.269; } > "$WORK/k-mp.probe"
+{ prow toolu_TEPOCH medium claude-sonnet-5-5 2.1.269; prow toolu_KSET high claude-sonnet-5-5 2.1.269; } > "$WORK/k-set.probe"
+{ prow toolu_TEPOCH medium claude-sonnet-5-5 2.1.269; prow toolu_KDIS high claude-opus-5     2.1.269; } > "$WORK/k-dis.probe"
+{ prow toolu_TEPOCH medium claude-sonnet-5-5 2.1.269; prow toolu_KSYN high '<synthetic>'     2.1.269; } > "$WORK/k-syn.probe"
+# CONTROL: the key must NOT be a substring of the model, or every cell below passes on the key.
+case "claude-sonnet-5-5" in *fast*) bad "K CONTROL is dead: the key 'fast' is a substring of its model" ;;
+  *) ok "K CONTROL: the pin key 'fast' is not a substring of 'claude-sonnet-5-5', so a key-only comparison cannot verify these rows" ;; esac
+kvec() { # script -> four cells: mp set dis syn
+  local S="$1" R c=""
+  R="$(trun "$S" k-mp.jsonl k-mp.probe settings-fast.json)"
+  if [ "$(ercv "$R")" -eq 0 ] && grep -q 'tier_pinned, 1 verified' <<<"$R" && ! grep -q '^FAIL: \[' <<<"$R"
+  then c="mp:verified"; else c="mp:$(ercv "$R")"; fi
+  R="$(trun "$S" k-set.jsonl k-set.probe settings-fast.json)"
+  if [ "$(ercv "$R")" -eq 0 ] && grep -q 'tier_pinned, 1 verified' <<<"$R" && ! grep -q '^FAIL: \[' <<<"$R"
+  then c="$c set:verified"; else c="$c set:$(ercv "$R")"; fi
+  R="$(trun "$S" k-dis.jsonl k-dis.probe settings-fast.json)"
+  if [ "$(ercv "$R")" -eq 1 ] && grep -q 'FAIL: \[k-disagree\]' <<<"$R" && grep -qF "records model='claude-opus-5'" <<<"$R"
+  then c="$c dis:failed"; else c="$c dis:$(ercv "$R")"; fi
+  R="$(trun "$S" k-syn.jsonl k-syn.probe settings-fast.json)"
+  if [ "$(ercv "$R")" -eq 0 ] && grep -q '1 awaiting a transcript model' <<<"$R" && ! grep -q '^FAIL: \[' <<<"$R"
+  then c="$c syn:pending"; else c="$c syn:$(ercv "$R")"; fi
+  printf '%s' "$c"
+}
+K_EXPECTED="mp:verified set:verified dis:failed syn:pending"
+kmoved() { local got="$1" i=1 e m out=""
+  for e in $K_EXPECTED; do m="$(printf '%s' "$got" | cut -d' ' -f$i)"
+    [ "$e" != "$m" ] && out="$out ${e%%:*}"; i=$((i+1)); done
+  printf '%s' "${out# }"; }
+KGOT="$(kvec "$VSL")"
+if [ "$KGOT" = "$K_EXPECTED" ]; then
+  ok "K1-K4 a custom pin key is matched through the model it resolves to: verified by the row's model_pinned and, with that null, by aiDlcModels[key]; a different model under the same key still FAILS; a <synthetic> transcript model is PENDING"
+else
+  bad "K1-K4: expected [$K_EXPECTED], got [$KGOT] (differing: $(kmoved "$KGOT"))"
+fi
+KCTL="$(kvec "$WORK/mut/control.sh")"
+[ "$KCTL" = "$K_EXPECTED" ] && ok "K CONTROL: the unmutated copy in the mutant directory reproduces all four cells" \
+  || bad "K CONTROL copy did not reproduce the K cells: expected [$K_EXPECTED], got [$KCTL]"
+kmut() { # name sed-expression expected-cells description
+  local n="$1" M="$WORK/mut/k-$1.sh" mv
+  sed "$2" "$WORK/mut/control.sh" > "$M" || { bad "FIXTURE BROKEN: could not write K mutant $n"; return; }
+  if cmp -s "$WORK/mut/control.sh" "$M"; then bad "FIXTURE BROKEN: K mutation '$n' matched nothing"; return; fi
+  bash -n "$M" 2>/dev/null || { bad "FIXTURE BROKEN: K mutant '$n' does not parse"; return; }
+  mv="$(kmoved "$(kvec "$M")")"
+  [ "$mv" = "$3" ] && ok "MUTANT k-$n killed: $4 -- moves only [$3]" || bad "MUTANT k-$n: moved [$mv], expected only [$3]"
+}
+# The 0.773.0 shape: no retry against the resolved string, the key alone decides.
+kmut nokeyresolve 's/^      elif matches_pin "\$tier_observed" || \[ "\$tier_resolved_ok" = true \]; then$/      elif matches_pin "$tier_observed"; then/' "mp set" \
+  "comparing the transcript model against the pin KEY alone fails a correct run under a custom key"
+# The settings fallback removed: only model_pinned resolves.
+kmut nosettings 's/^        \[ "\$tier_resolved" = "__NONE__" \] && tier_resolved="\$(jq -r --arg k "\$tier_key" \\$/        [ "$tier_resolved" = "__NONE__" ] \&\& tier_resolved="" ; : "$(jq -r --arg k "$tier_key" \\/' set \
+  "dropping the aiDlcModels fallback fails a correct row whose model_pinned is null"
+# <synthetic> read as a model.
+kmut synthetic "s/^      case \"\\\$tier_observed\" in __NOJOIN__|__NONE__|'<synthetic>') tier_observed=\"\" ;; esac\$/      case \"\$tier_observed\" in __NOJOIN__|__NONE__) tier_observed=\"\" ;; esac/" syn \
+  "reading <synthetic> as a transcript model FAILS a row that has no ground truth"
 
 echo
 if [ "$fails" -eq 0 ]; then

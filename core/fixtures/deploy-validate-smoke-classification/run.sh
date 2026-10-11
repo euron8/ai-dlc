@@ -5,7 +5,8 @@
 # fields -- `first_run_failures`, `transient_failures_cleared_on_retry`,
 # `persistent_failures`, `per_action_attribution` -- requires one live mutation per
 # smoke run (an operator-fired §2a operation included), and defines a transient failure as one a retry cleared with
-# NO ACTION BY THE LEAD between the runs. The Production Validation Checkpoint's
+# NO ACTION BY THE LEAD between the runs, and requires the smoke-failure loop's code-issue
+# item to dispatch `dev` rather than leave the fix to the lead. The Production Validation Checkpoint's
 # `Deployment` block reports the same split. No script reads `smoke_run_evidence`; the
 # executing lead reads this prose, so the prose is the mechanism and this fixture pins it.
 #
@@ -46,6 +47,10 @@ ONEVAR='One live mutation per smoke run.'
 OPFIRED='A §2a destructive one-time operation fired by the operator is a live mutation'
 DEF='A failure is transient ONLY when a retry cleared it with NO ACTION BY THE LEAD between the runs'
 INRUN='in-run retry, same output'
+# THE FIX LOOP DISPATCHES. Item 3 once said "route back to the dev teammate", which names no
+# delegation, and a lead executed a code fix inline under it.
+DISPATCH='^3\. If code issue: dispatch `dev` to fix'
+LEADSCOPE='a lead that edits product code here is applying a fix inline, which Rule 28 makes a lead-conduct finding'
 
 sec3() { # <file> -> §3 body, heading line excluded
   awk '/^### 3\. Smoke Tests/{on=1; next} on && /^### /{exit} on{print}' "$1"
@@ -78,6 +83,11 @@ check() {
   case "$fl" in *'Every test in `persistent_failures` makes the smoke run red and enters the loop below'*) : ;; *) echo "LOOP: §3 does not send persistent failures into the fix loop" ;; esac
   case "$fl" in *"$ONEVAR"*) : ;; *) echo "ONEVAR: §3 does not require one live mutation per smoke run" ;; esac
   case "$fl" in *"$OPFIRED"*) : ;; *) echo "OPFIRED: §3 does not count an operator-fired §2a operation as a live mutation" ;; esac
+  # DISPATCH: the fix loop's code-issue item must itself OPEN with the `dev` dispatch. Line-anchored
+  # on the item, because §7 already carries `dispatch `dev`` and a comment or a later sentence
+  # inside §3 would satisfy a substring match while the item still routes namelessly.
+  grep -qE "$DISPATCH" <<<"$body" || echo "DISPATCH: §3's code-issue loop item does not open with a mandatory dev dispatch"
+  case "$fl" in *"$LEADSCOPE"*) : ;; *) echo "DISPATCH: §3 does not name a lead's inline product-code edit in the fix loop as a Rule 28 finding" ;; esac
   # VISUAL: §4 must tell the writer to record the tokens Check 5 of validate-mandatory-rules.sh
   # reads in the gate-log section. Keyed on §4, so a mention elsewhere does not satisfy it.
   fl="$(sec4 "$f" | flat)"
@@ -92,7 +102,7 @@ check() {
 # --- the subject -------------------------------------------------------------
 out="$(check "$STEP")"
 if [ -z "$out" ]; then
-  ok "§3 defines all four fields, the transient definition, the in-run value, the loop routing and the one-live-mutation-per-run rule including operator-fired §2a operations; §4 names the Check 5 tokens; the checkpoint reports the split"
+  ok "§3 defines all four fields, the transient definition, the in-run value, the loop routing, the dev dispatch in the fix loop and the one-live-mutation-per-run rule including operator-fired §2a operations; §4 names the Check 5 tokens; the checkpoint reports the split"
 else
   while IFS= read -r l; do bad "$l"; done <<<"$out"
 fi
@@ -184,6 +194,21 @@ mutant "no-visual-tokens" \
 mutant "move-visual" \
   '/^### 4\. Visual Verification/{s=1} s && /^### 4b/{s=0; print; printf "%s", held; next} s && /^- \*\*Name the evidence kind/{h=1} s && h{held=held $0 "\n"; next} {print}' \
   "VISUAL:" "moving the Check 5 token instruction out of §4 (into §4b) is caught"
+
+# REVERT: item 3 restored to the nameless route the dispatch replaced.
+mutant "revert-dispatch" \
+  '/^3\. If code issue: dispatch `dev`/{print "3. If code issue: route back to the dev teammate to fix, re-deploy,"; print "   and re-run smoke tests."; skip=1; next} skip && /^4\. /{skip=0} skip{next} {print}' \
+  "DISPATCH:" "reverting item 3 to an undelegated route is caught"
+
+# WEAK: the nameless item kept, the dispatch phrase parked in a comment inside §3. A §3-scoped
+# substring match is satisfied; the line-anchored item match must not be.
+mutant "comment-dispatch" \
+  '/^3\. If code issue: dispatch `dev` to fix/{print "<!-- dispatch `dev` to fix -->"; print "3. If code issue: route back to the dev teammate to fix the code and its tests; the"; next} {print}' \
+  "DISPATCH:" "a dispatch phrase parked beside an undelegated item 3 is caught"
+
+mutant "no-leadscope" \
+  '{ gsub(/a lead that edits product code here is applying a$/, "a lead may edit product code here when applying a"); print }' \
+  "DISPATCH:" "dropping the inline-edit-is-a-finding sentence from §3 is caught"
 
 # SECTION: §3's heading renamed -> nothing to isolate. Must be a finding, never clean.
 mutant "no-section" \

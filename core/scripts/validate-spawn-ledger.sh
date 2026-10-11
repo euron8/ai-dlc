@@ -10,6 +10,13 @@
 # config. Its enforcement-map row carried `enforcer: []`, so a teammate performed all
 # three by hand at every implementation-phase gate of every sprint.
 #
+# THE PIN IS THE ONE IN FORCE AT DISPATCH WHEREVER THE ROW RECORDED IT. A guard-written row
+# carrying `tier_pinned` is judged against that key, by the model its teammate's own
+# transcript recorded (`--probe`, joined by `tool_use_id`; unjoined is PENDING), and the
+# settings read at gate time only produce a NOTE when the pin has changed since. Only a row
+# WITHOUT `tier_pinned` is still compared against `aiDlcRoles.<role>.model` as read now.
+# Reason and measurement at the tier arm, above the main loop.
+#
 # AND THE COMPARISON WAS ALREADY PROGRAMMED. `core/hooks/ai-dlc-dispatch-guard.sh`
 # resolves the same pin and applies the same match tolerance at PreToolUse -- that is
 # how `model_bound` gets its value in the first place. But a PreToolUse hook cannot run
@@ -97,7 +104,9 @@
 #
 # EXIT
 #   0  every row for this sprint carries a resolvable role file, a Rule 19(b) contract
-#      citation, and a model matching its role's configured pin
+#      citation, and a model matching its role's configured pin -- the pin in force at
+#      dispatch for a row carrying `tier_pinned` (PENDING, and said so, until a transcript
+#      model joins), the pin in settings today for a row without it
 #   1  at least one row does not, or its effort_bound disagrees with its own transcript
 #      (a Rule 19 violation on any of those four routes), or a shardable row declared a
 #      serial exception outside Rule 28's four (arm S3, decided even where exit 3 would
@@ -1118,13 +1127,25 @@ if [ -f "$LEDGER" ]; then
   # while reporting normally. Absent values carry a sentinel and the loop restores
   # them. (Measured on the first draft of this script: a null `model_requested`
   # reported `requested model='true'`.)
-  RECORDS="$(jq -rs --argjson s "$SPRINT_NUM" '
+  # THE TIER ARM'S PROBE SIDE, joined inside the projection so the loop forks nothing per
+  # row (header above the main loop). An absent, unreadable or unparseable probe joins as
+  # an empty file -- every tier row PENDING -- which is what `probe_effort` answers for the
+  # same three states. Never the ledger read failing: `--slurpfile` on a bad file would
+  # abort the whole projection and route a full ledger to PRE-LEDGER.
+  TIER_PROBE=/dev/null
+  if [ -n "$PROBE" ] && [ -r "$PROBE" ] && jq -s 'length' "$PROBE" >/dev/null 2>&1; then
+    TIER_PROBE="$PROBE"
+  fi
+  RECORDS="$(jq -rs --argjson s "$SPRINT_NUM" --slurpfile probe "$TIER_PROBE" '
       # `tostring` renders JSON null as the four-character string "null", which would
       # be compared against the pin as though the dispatch had asked for a model
       # called null. Nulls are mapped to the sentinel BEFORE any stringification.
       def tok: if . == null then "__NONE__"
                else (tostring | if . == "" then "__NONE__" else . end) end;
-      .[]
+      # tool_use_id -> model, LAST probe row per id winning, as in probe_effort.
+      ( reduce ($probe[] | select(type == "object") | select((.tool_use_id // "") != ""))
+          as $r ({}; .[$r.tool_use_id | tostring] = $r.model) ) as $pm
+      | .[]
       | select(type == "object")
       | select((.sprint // null) == $s)
       | [ (.name | tok),
@@ -1149,7 +1170,24 @@ if [ -f "$LEDGER" ]; then
           # exactly the pre-migration state the PENDING path exists for.
           (.definition_bound | tok),
           (.effort_bound | tok),
-          (.tool_use_id | tok) ]
+          (.tool_use_id | tok),
+          # THE PIN IN FORCE AT DISPATCH, in THREE states, because two of them are not one.
+          # KEY ABSENT is a row written before the guard recorded the field, or a seed that
+          # never carried it: it keeps the gate-time settings comparison. KEY PRESENT AND
+          # NULL is the guard saying the role pinned nothing when it dispatched. A VALUE is
+          # the pin key the guard resolved for that dispatch. `tok` alone collapses the first
+          # two, which would send a party persona that pinned nothing at dispatch down the
+          # gate-time path and rebuild the retroactive FAIL for every role pinned since.
+          (if has("tier_pinned") then (.tier_pinned | tok) else "__ABSENT__" end),
+          # THE TEAMMATE TRANSCRIPT MODEL, joined HERE by exact tool_use_id. The sentinel
+          # __NOJOIN__ means no probe row carries this id; a joined row with no model reads
+          # __NONE__. Both are PENDING in the loop, and only a real string is compared.
+          ((.tool_use_id // "" | tostring) as $t
+           | if $t == "" or ($pm | has($t) | not) then "__NOJOIN__" else ($pm[$t] | tok) end),
+          # THE RESOLVED MODEL STRING the guard bound for that pin key at dispatch. A pin KEY
+          # need not be a substring of the model it names (a consumer key `fast` naming
+          # `claude-sonnet-5-5`), so the tier arm also accepts a transcript model matching this.
+          (.model_pinned | tok) ]
       | @tsv
     ' "$LEDGER" 2>/dev/null || true)"
 fi
@@ -1192,6 +1230,13 @@ EFFORT_PENDING=0
 EFFORT_REFUSED=0
 EFFORT_MISMATCH=0
 EFFORT_UNDECLARED=0
+# The dispatch-time tier arm, for rows carrying `tier_pinned`. Four outcomes, as on the
+# effort arm, plus the pin-change count -- which is a NOTE and never a finding.
+TIER_ROWS=0
+TIER_OK=0
+TIER_PENDING=0
+TIER_REPINNED=0
+TIER_LEGACY=0
 
 # THE LEDGER HOLDS ROWS RULE 19 DOES NOT BIND, AND JUDGING THEM IS A FALSE FAIL ON
 # CORRECT DATA. The dispatch guard derives `role` from `subagent_type` when the prompt
@@ -1309,7 +1354,30 @@ probe_effort() {  # tool_use_id
     ' "$PROBE" 2>/dev/null || true
 }
 
-while IFS="$(printf '\t')" read -r name role bound requested cited readable schema defbound effortbound tui; do
+# --- THE TIER ARM'S GROUND TRUTH, FOR A ROW THAT RECORDED ITS PIN AT DISPATCH ----------
+# `tier_pinned` is the pin key the dispatch guard resolved WHEN IT DISPATCHED, so it is the
+# pin in force for that spawn. Comparing it -- or `model_bound`, which the guard writes from
+# it -- against the settings read NOW makes every correct earlier dispatch a FAIL the
+# moment an operator changes a pin mid-sprint. Measured on the reference consumer: one pin
+# commit mid-sprint moved Check 22 from 67 FAILs to 288 on the SAME ledger, every added one
+# a dispatch that ran on exactly the tier its role pinned when it ran.
+#
+# BUT `tier_pinned` AGAINST `model_bound` IS A ROW AGREEING WITH ITSELF. The guard writes
+# both from one resolution, so that comparison cannot fail on anything it wrote. The
+# independent side is the model the teammate's OWN transcript recorded, which the subagent
+# probe reads off it and keys by the same `tool_use_id` the effort arm joins on -- the same
+# exact-id join, for the same reason (an ordered join mis-pairs same-role spawns and the
+# comparison then passes on the wrong pair). Unjoined is PENDING, as on the effort arm: a
+# row whose teammate has not stopped yet, or a call without --probe, has no ground truth.
+#
+# THE JOIN IS DONE IN THE RECORDS PROJECTION, NOT PER ROW. `probe_effort` forks a jq over the
+# whole probe per definition-bound row; a second per in-scope row would double that, and a
+# shell-side map read per row by pattern expansion was measured QUADRATIC -- a first draft of
+# this arm did not finish the reference consumer's ~1000-row sprint against its 6000-line probe
+# in ten minutes, where the base validator takes 29s. The projection carries the joined model
+# as the record's last column (`tiermodel`), LAST probe row per id winning as in `probe_effort`.
+
+while IFS="$(printf '\t')" read -r name role bound requested cited readable schema defbound effortbound tui tierpin tiermodel modelpin; do
   [ -n "$name" ] || continue
   [ "$name" = "__NONE__" ] && name="<unnamed>"
   [ "$role" = "__NONE__" ] && role=""
@@ -1318,6 +1386,9 @@ while IFS="$(printf '\t')" read -r name role bound requested cited readable sche
   [ "${defbound:-__NONE__}" = "__NONE__" ] && defbound=""
   [ "${effortbound:-__NONE__}" = "__NONE__" ] && effortbound=""
   [ "${tui:-__NONE__}" = "__NONE__" ] && tui=""
+  # Kept as its sentinel: `__ABSENT__` (no key) and `__NONE__` (null) are the two states the
+  # tier arm below must not collapse.
+  [ -n "${tierpin:-}" ] || tierpin="__ABSENT__"
 
   # A ROW THE GUARD DID NOT WRITE IS NOT A DISPATCH RECORD, and judging one manufactures
   # violations out of ABSENT fields rather than observed ones. `--ledger` names an
@@ -1393,7 +1464,76 @@ while IFS="$(printf '\t')" read -r name role bound requested cited readable sche
     VIOL=$((VIOL + 1)); UNCITED=$((UNCITED + 1))
   fi
 
-  # Rule 19(a). EXPECT is a global because `matches_pin` reads one -- it is the guard's
+  # Rule 19(a), FOR A ROW THAT RECORDED THE PIN IN FORCE AT ITS DISPATCH (`tier_pinned` present).
+  # The FAIL compares that pin against the model the teammate's own transcript recorded; the
+  # settings read now only decides whether a NOTE says the pin has changed since. Header above
+  # this loop for why neither `model_bound` nor today's settings can be the FAIL side.
+  if [ "$tierpin" != "__ABSENT__" ]; then
+    TIER_ROWS=$((TIER_ROWS + 1))
+    tier_now="$(pin_key "$SETTINGS" "$role")"
+    tier_at_dispatch=""
+    [ "$tierpin" = "__NONE__" ] || tier_at_dispatch="$tierpin"
+    if [ "$tier_now" != "$tier_at_dispatch" ]; then
+      echo "NOTE: [$name] was dispatched under aiDlcRoles.${role}.model='${tier_at_dispatch:-<none>}' (tier_pinned"
+      echo "      at dispatch); ${SETTINGS} pins '${tier_now:-<none>}' now. The pin changed after this"
+      echo "      spawn ran. Judged against the pin in force at its dispatch -- a pin change is"
+      echo "      reported here and is never a failure."
+      TIER_REPINNED=$((TIER_REPINNED + 1))
+    fi
+    if [ -z "$tier_at_dispatch" ]; then
+      UNPINNED=$((UNPINNED + 1))
+    else
+      EXPECT="$tier_at_dispatch"
+      if [ -n "$requested" ] && ! matches_pin "$requested"; then
+        echo "NOTE: [$name] requested model='${requested}' against pin '${EXPECT}'; the guard"
+        echo "      corrected it to '${bound}' before dispatch. Recorded, not a failure."
+        CORRECTED=$((CORRECTED + 1))
+      fi
+      tier_observed="${tiermodel:-__NOJOIN__}"
+      # `<synthetic>` is the harness's placeholder for a turn no model produced (an injected
+      # or error message), not a model the teammate ran on: no ground truth, so PENDING.
+      case "$tier_observed" in __NOJOIN__|__NONE__|'<synthetic>') tier_observed="" ;; esac
+      # THE KEY IS NOT THE MODEL. `matches_pin` tests the transcript model against the pin KEY,
+      # which holds only where the key is a substring of the model it names (`sonnet` in
+      # `claude-sonnet-5`). A consumer key such as `fast` naming `claude-sonnet-5-5` failed a
+      # correct run. So a miss on the key is retried against the RESOLVED string: the row's
+      # own `model_pinned` (what the guard bound at dispatch), else `aiDlcModels[<key>]` read
+      # now -- with and without a trailing `[...]` context suffix, which a transcript model id
+      # does not carry. The shared `matches_pin` is called unchanged (I56); only EXPECT moves,
+      # and it is restored, so the key this arm judges by is decided on ONE line above.
+      tier_resolved=""
+      tier_key="$EXPECT"
+      if [ -n "$tier_observed" ] && ! matches_pin "$tier_observed"; then
+        tier_resolved="${modelpin:-__NONE__}"
+        [ "$tier_resolved" = "__NONE__" ] && tier_resolved="$(jq -r --arg k "$tier_key" \
+          '.aiDlcModels[$k] // empty' "$SETTINGS" 2>/dev/null || true)"
+      fi
+      tier_resolved_ok=false
+      if [ -n "$tier_resolved" ]; then
+        EXPECT="$tier_resolved"; matches_pin "$tier_observed" && tier_resolved_ok=true
+        EXPECT="${tier_resolved%\[*\]}"; matches_pin "$tier_observed" && tier_resolved_ok=true
+        EXPECT="$tier_key"
+      fi
+      if [ -z "$tier_observed" ]; then
+        # PENDING, NOT FAIL, for the effort arm's reason: no --probe, telemetry that
+        # predates the row, or a teammate still running. Never a pass either -- counted.
+        TIER_PENDING=$((TIER_PENDING + 1))
+      elif matches_pin "$tier_observed" || [ "$tier_resolved_ok" = true ]; then
+        TIER_OK=$((TIER_OK + 1))
+      else
+        echo "FAIL: [$name] role '${role}' was pinned to aiDlcRoles.${role}.model='${EXPECT}' at dispatch" >&2
+        echo "      (tier_pinned), and its own transcript records model='${tier_observed}'. This is a" >&2
+        echo "      recorded Rule 19(a) tier mismatch against the pin in force when it ran, not the" >&2
+        echo "      pin in ${SETTINGS} today. It is a fact about the past: clear it only through Check 22's" >&2
+        echo "      four-arm disposition, never by re-running the gate." >&2
+        VIOL=$((VIOL + 1)); MISMATCH=$((MISMATCH + 1))
+      fi
+    fi
+  else
+  TIER_LEGACY=$((TIER_LEGACY + 1))
+  # Rule 19(a) for a row WITHOUT `tier_pinned` -- written before the guard recorded it, or by
+  # a seed that never did. Unchanged: the only pin it can be judged against is today's.
+  # EXPECT is a global because `matches_pin` reads one -- it is the guard's
   # function verbatim and closes over the same name there.
   EXPECT="$(pin_key "$SETTINGS" "$role")"
   if [ -z "$EXPECT" ]; then
@@ -1414,6 +1554,7 @@ while IFS="$(printf '\t')" read -r name role bound requested cited readable sche
     echo "NOTE: [$name] requested model='${requested}' against pin '${EXPECT}'; the guard"
     echo "      corrected it to '${bound}' before dispatch. Recorded, not a failure."
     CORRECTED=$((CORRECTED + 1))
+  fi
   fi
 
   # --- THE EFFORT ARM. THE SCOPE KEY IS `effort_bound`, NOT `definition_bound`, and that
@@ -1491,15 +1632,23 @@ echo "COUNTS: examined ${CHECKED} S${SPRINT_NUM} spawn row(s) of ${TOTAL} in ${L
 echo "  ${UNREADABLE} unreadable role file(s), ${UNCITED} missing Rule 19(b) citation(s),"
 echo "  ${MISMATCH} tier mismatch(es), ${CORRECTED} guard-corrected request(s) (not failures),"
 echo "  ${UNPINNED} row(s) whose role pins no model in ${SETTINGS},"
+# ONE expansion, not `${PROBE:+…}${PROBE:-…}` — those are not the two halves of an
+# either-or. `:+` fires on a SET value and `:-` on an UNSET one, but `:-` substitutes its
+# word only when the variable is empty, so with `PROBE` set BOTH expanded and the line
+# printed the path twice, concatenated. Caught by reading the arm's own output. Set here,
+# above its first reader, which is now the tier line below and no longer the effort line.
+if [ -n "$PROBE" ]; then PROBE_NOTE="probe: ${PROBE}"; else PROBE_NOTE="no --probe was passed"; fi
+# THE DISPATCH-TIME TIER ARM REPORTS WHAT IT COMPARED, for the effort arm's reason. Its PENDING
+# figure is worded apart from the effort arm's on purpose: the two are different joins over
+# different populations and one must never satisfy a reader looking for the other.
+echo "  tier at dispatch: ${TIER_ROWS} row(s) carry tier_pinned, ${TIER_OK} verified against the teammate's own transcript model,"
+echo "  ${TIER_PENDING} awaiting a transcript model (tier not yet observed; ${PROBE_NOTE}), ${TIER_REPINNED} dispatched under a pin since changed (NOTED),"
+echo "  ${TIER_LEGACY} legacy row(s) without tier_pinned judged against the pin in ${SETTINGS} today;"
 # THE EFFORT ARM REPORTS WHAT IT COMPARED ON EVERY PATH, for the reason the line above it
 # exists: a run that verified nothing and a run that found nothing print the same verdict
 # otherwise, and on this arm "nothing to verify" is the NORMAL state of a consumer that
 # has not yet pulled the renderer. The PENDING figure is what tells the two apart.
-# ONE expansion, not `${PROBE:+…}${PROBE:-…}` — those are not the two halves of an
-# either-or. `:+` fires on a SET value and `:-` on an UNSET one, but `:-` substitutes its
-# word only when the variable is empty, so with `PROBE` set BOTH expanded and the line
-# printed the path twice, concatenated. Caught by reading the arm's own output.
-if [ -n "$PROBE" ]; then PROBE_NOTE="probe: ${PROBE}"; else PROBE_NOTE="no --probe was passed"; fi
+# PROBE_NOTE is set above the tier line, its first reader.
 echo "  effort: ${EFFORT_OK} verified against the teammate's own transcript, ${EFFORT_MISMATCH} mismatch(es),"
 echo "  ${EFFORT_PENDING} PENDING (no probe row joined; ${PROBE_NOTE}), ${EFFORT_REFUSED} refused on a pre-2.1.267 pinned-effort record,"
 echo "  ${EFFORT_UNDECLARED} row(s) that bound no effort (no effort_bound: prose-only, drifted or absent definition, or a role declaring none);"
@@ -1630,4 +1779,10 @@ fi
 echo "OK: all ${CHECKED} S${SPRINT_NUM} spawn row(s) carry a resolvable role file, a Rule 19(b)"
 echo "  contract citation, and a model matching their role's configured pin"
 echo "  (${UNPINNED} row(s) pin no model and were not compared)."
+# A tier row awaiting its transcript model was NOT compared, so the sentence above does not
+# cover it, and it must say so rather than fold it into the claim.
+if [ "$TIER_PENDING" -gt 0 ]; then
+  echo "  ${TIER_PENDING} row(s) carrying tier_pinned have no joined transcript model yet: their tier"
+  echo "  is PENDING, not verified (${PROBE_NOTE})."
+fi
 exit 0

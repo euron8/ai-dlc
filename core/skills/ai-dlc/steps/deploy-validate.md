@@ -234,8 +234,12 @@ the gate log.
 **Smoke tests MUST pass.** If any smoke test fails:
 1. Do NOT proceed to the Production Validation Checkpoint.
 2. Diagnose the failure — is it a deployment issue or a code issue?
-3. If code issue: route back to the dev teammate to fix, re-deploy,
-   and re-run smoke tests.
+3. If code issue: dispatch `dev` to fix the code and its tests; the
+   lead then re-deploys and re-runs smoke tests. Only the code edit is
+   delegated. The lead's own work in this loop is the dispatch, the
+   commit, the re-deploy and the smoke re-run, under Rule 28 (a)
+   Orchestration; a lead that edits product code here is applying a
+   fix inline, which Rule 28 makes a lead-conduct finding.
 4. If deployment issue: dispatch the `ops` teammate to fix the
    deployment, re-deploy, and re-run smoke tests.
 5. Repeat until all smoke tests pass.
