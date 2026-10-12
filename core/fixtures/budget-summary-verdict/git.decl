@@ -1,0 +1,4 @@
+# `seed`: run.sh unsets every AI_DLC_* variable, so the validator under test resolves its root by walking up from
+# its own directory for `.git`, `.claude` or `core/skills/ai-dlc`. The sandbox root must carry the marker, or the
+# walk leaves the sandbox and answers from whatever directory above it happens to hold one.
+seed

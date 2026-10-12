@@ -7,3 +7,8 @@ It is also a MUTATION BATTERY: it edits copies of five installed core scripts
 validate-write-format-steering.sh, validate-gate-adjudication.sh) inside whole-tree copies of
 that install. The distribution-side half of the same property — each script consults its root
 before its install fallback — reaches consumers through validator-path-resolution, which ships.
+
+It also carries the distribution-only arms of two SHIPPING fixtures, which cannot declare
+scripts/install.sh or templates/ (absent on a consumer, so exit 2): layer-crosswalk-home's
+installer scaffold/preserve arms (CW1/CW2) and handoff-completion-assertion's e6-order
+template check and its control (HO1/HO2).

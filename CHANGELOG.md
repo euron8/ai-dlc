@@ -20,6 +20,48 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.774.0] - 2026-10-12
+
+Batch 223 (graph-ledger-full-drain), second release: what the BL-497 coverage census found, fixed. No consumer
+candidate is closed here; the three live candidates shipped in 0.773.0.
+
+### BL-497 — ten fixtures passed the gate by escaping their sandbox
+
+- **Defect.** Each of `inflight-row-shape`, `request-coverage`, `scope-confirmation`, `snapshot-conservation`,
+  `snapshot-section-schema`, `snapshot-supersession-marker`, `suppression-lifetime`, `budget-summary-verdict`,
+  `mandatory-rules-skip-accounting` and `mandatory-rules-snapshot-position` clears `AI_DLC_*`, discarding the root
+  `hermetic-run.sh` hands it. The validator under test then walked up out of the sandbox, which held no `.git`, and
+  in the gate resolved a stray `.claude/` directory above the per-user temp dir. With no marker above the sandbox all
+  ten fail (seven exit 1, three exit 2).
+- **Fix.** `git.decl` with `seed` in each, so the sandbox is a git work tree and the walk-up resolves inside it. Seeded,
+  all ten pass with the same ok lines as a plain run, in the distribution and in a consumer install. The two arms that
+  test behaviour with no repository build their trees beside the sandbox and are unaffected.
+
+### BL-497 — two fixtures' distribution-only arms never ran under the gate
+
+- `layer-crosswalk-home`'s two installer arms and `handoff-completion-assertion`'s e6-order check and its control
+  depended on inputs those shipping fixtures deliberately leave undeclared, so the sandbox stood them down on every
+  push. They move into `schema-install-fallback` (`.dist-only`, which declares `scripts/install.sh` and
+  `templates/`): 41 ok lines sandboxed and plain. `layer-crosswalk-home` now expects 19 assertions.
+
+### BL-497 — the coverage census instrument
+
+- Line extraction runs under `LC_ALL=C`; a multibyte byte no longer aborts `awk` and drops lines from one side.
+- An incomplete run (stopped, killed) keeps its work directory and lists the fixtures with no row and every scratch
+  root still on disk.
+- Each pair runs under a short physical scratch root (`/private/tmp/chc.XXXXXX`, `--scratch` to move it); a long temp
+  path made several fixtures fail for reasons unrelated to coverage. A marker walk refuses a scratch base with a
+  `.git`, `.claude` or `core/skills/ai-dlc` above it, before the run and again at the end.
+- New verdicts: `BOTH-FAIL` (both sides exit the same non-zero code, never `EQUAL`), a `fixture-rc-2` count separate
+  from a runner refusal, and `EQUIVALENT`: a row whose two sides differ only in tokens that vary between runs, judged
+  over three pairs; a differing count clears only when the two sides' observed ranges overlap.
+
+### BL-497 — the census result
+
+- Close run over 74 fixtures (every unresolved row plus the 43 declared fixtures that use a bare `mktemp -d` and clear
+  `AI_DLC_*`), the stray marker moved aside: 56 EQUAL, 11 EQUIVALENT, 1 LOW-RES, 6 MISMATCH. The entry stays open on
+  the six, which are recorded in it.
+
 ## [0.773.0] - 2026-10-11
 
 Batch 223 (graph-ledger-full-drain), first release. The opening sweep read live 2, unfiled 2, worklist 0, DISCHARGED 0,
