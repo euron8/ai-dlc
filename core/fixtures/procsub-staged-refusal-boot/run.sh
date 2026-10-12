@@ -155,7 +155,9 @@ for _b in "$REAL_TR" "$REAL_GIT" "$REAL_FIND" "$REAL_SED" "$REAL_COMM" "$REAL_GR
   case "$_b" in /*) ;; *) echo "FIXTURE ERROR: tr/git/find/sed/comm/grep/bash/cat/awk/mktemp must resolve to binaries on PATH (got '$_b'), or no stub can pass through" >&2; exit 2 ;; esac
 done
 
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/psb-boot.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
+# `pb.`, short on purpose: every character of this name is a character of the ld worlds' fixed
+# encoded path length (see LD_ENC_LEN) taken from the TMPDIR the fixture can accept.
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/pb.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd)"
 EW=""
 # A RUN THAT NEVER REACHED ITS VERDICT EXITS 2. A `set -u` abort mid-battery reaches this trap with
@@ -927,21 +929,27 @@ mk_ld_world() { # <dir> <ext|ds|big|huge>
 # LD_ENC_LEN is that encoded length of all four world dirs, each padded as ONE path component.
 # A short key's length is LD_ENC_LEN plus a per-path constant: +84 for ds's SKILL.md, +92 for
 # core-manifest.md, +93 for ext's steps/moving.md, +95 for layer-contract.yaml, +98 for huge's
-# steps/zz-psb-huge.md, +100 for the register schema. The fill-file suffix `.c.<pid>.<RANDOM>` is 6
-# to 14 characters, so a key of 241 or less is always cached and one of 250 or more always direct; in
-# between, the answer turns on the pid and on `$RANDOM`, and no admissible value lands a key there.
-# 141 is the LARGEST value at which every short key of every world is 241 or less -- cached for any
-# pid, the regime the unpadded worlds were in under the default TMPDIR, where this file's tables were
-# measured; the hooked-step keys (hundreds of characters) are direct at any length, as before. Above
-# it the register key enters the window, and the next deterministic point (everything but SKILL.md
-# direct, near 157) breaks L5-pre as measured above. The longest pad base is "$WORK/ldw-huge-", 12
-# encoded characters, so the scratch dir may be at most 129: a TMPDIR of at most 83 encoded under
-# hermetic-run.sh (it adds 40 characters and three `/`) -- the macOS /var/folders default is 68 --
-# and 111 for a bare run.sh. Shard b was measured whole at 140, 52 ok.
+# steps/zz-psb-huge.md, +100 for the register schema. The fill-file suffix `.c.<pid>.<RANDOM>` runs
+# from 6 characters to 16 (a pid of up to 7 digits, Linux's limit; RANDOM up to 32767), so against the
+# 255-character filename limit a key of 239 or less is always cached and one of 250 or more always
+# direct; in between, the answer turns on the pid and on `$RANDOM`. Every short key must be cached --
+# the regime the unpadded worlds were in under the default TMPDIR, where this file's tables were
+# measured -- and the hooked-step keys (hundreds of characters) are direct at any length, as before.
+# Near 141 the register key enters the window, and the next deterministic point (everything but
+# SKILL.md direct, near 157) breaks L5-pre as measured above. 131 holds the longest short key, the
+# register's, at 231: LD_MEMO_MARGIN (8) characters under the 7-digit-pid ceiling and 10 under the
+# 5-digit one macOS has, so a fill suffix that grows by up to eight in lib.sh cannot move it. The memo
+# calibration after the worlds are built re-derives this from lib.sh's own key and suffix lines and
+# refuses when the margin is gone. The world names are two letters (`le`, `ls`, `lb`, `lh`) and the
+# scratch dir `pb.XXXXXX`, so the pad base "$WORK/lh-" costs 6 encoded characters: the scratch dir may
+# be at most 125, a TMPDIR of at most 85 encoded under hermetic-run.sh (it adds `/hermetic-run.XXXXXX`,
+# `/tmp` and `/pb.XXXXXX`, 34 characters and three `/`) -- the macOS /var/folders default is 68 -- and
+# 113 for a bare run.sh. Shard b was measured whole at 140 (52 ok) before the margin was taken.
 # The CHARACTER length still floats two per `/` in the scratch dir, so the listings float 26 and 28 B
 # per `/`: they are not pinned, they are held off a block boundary by the 64-byte margin assert at
 # the cut calibration below, which fires before any cell runs if a deep TMPDIR walks them onto one.
-LD_ENC_LEN=141
+LD_ENC_LEN=131
+LD_MEMO_MARGIN=8
 ld_enc_len() { local s="${1//[!\/]/}"; printf '%s' $(( ${#1} + 2 * ${#s} )); }
 ld_pad() { # <dir> -> <dir> padded with `p` to LD_ENC_LEN encoded characters; non-zero when it cannot fit
   local d="$1-" n
@@ -949,13 +957,50 @@ ld_pad() { # <dir> -> <dir> padded with `p` to LD_ENC_LEN encoded characters; no
   [ "$n" -ge 0 ] || return 1
   printf '%s%s' "$d" "$(printf '%*s' "$n" '' | tr ' ' p)"
 }
-LW_EXT="$(ld_pad "$WORK/ldw-ext")" && LW_DS="$(ld_pad "$WORK/ldw-ds")" \
-  && LW_BIG="$(ld_pad "$WORK/ldw-big")" && LW_HUGE="$(ld_pad "$WORK/ldw-huge")" \
-  || { echo "FIXTURE ERROR: the scratch dir $WORK is $(ld_enc_len "$WORK") encoded characters (characters plus two per /), too long to pad the ld worlds to their fixed encoded length of $LD_ENC_LEN; this needs TMPDIR at 83 encoded characters or fewer under hermetic-run.sh, 111 for a bare run.sh -- point TMPDIR at a shorter directory" >&2; exit 2; }
+LW_EXT="$(ld_pad "$WORK/le")" && LW_DS="$(ld_pad "$WORK/ls")" \
+  && LW_BIG="$(ld_pad "$WORK/lb")" && LW_HUGE="$(ld_pad "$WORK/lh")" \
+  || { echo "FIXTURE ERROR: the scratch dir $WORK is $(ld_enc_len "$WORK") encoded characters (characters plus two per /), too long to pad the ld worlds to their fixed encoded length of $LD_ENC_LEN; this needs TMPDIR at $(( LD_ENC_LEN - 6 - 40 )) encoded characters or fewer under hermetic-run.sh, $(( LD_ENC_LEN - 6 - 12 )) for a bare run.sh -- point TMPDIR at a shorter directory" >&2; exit 2; }
 mk_ld_world "$LW_EXT" ext || { echo "FIXTURE ERROR: ld ext world" >&2; exit 2; }
 mk_ld_world "$LW_DS" ds || { echo "FIXTURE ERROR: ld ds world" >&2; exit 2; }
 mk_ld_world "$LW_BIG" big || { echo "FIXTURE ERROR: ld big world" >&2; exit 2; }
 mk_ld_world "$LW_HUGE" huge || { echo "FIXTURE ERROR: ld huge world" >&2; exit 2; }
+# THE MEMO CALIBRATION. Each world's memo keys are recomputed with lib.sh's OWN key line (memo_show's
+# `_k=` encoding, extracted and evaluated, never restated) for every path in that world's dist at
+# both refs, and the fill-file suffix is lib.sh's own `_t=` tail with `$$` and `$RANDOM` set to their
+# widest (7-digit pid, 32767) and narrowest (one digit each) values. Every path but the hooked step
+# must stay at least LD_MEMO_MARGIN characters clear of the 255-character filename limit at the widest
+# suffix (always cached); the hooked step must pass the limit at the narrowest (always direct). Either
+# one failing is a run whose cached set would turn on the pid or on `$RANDOM`, or not be the regime the
+# tables were measured in.
+LD_LIB="$RECON/lib.sh"
+LD_KLINE="$(sed -n '/^memo_show() {/,/^}/{/^  _k="s /p;}' "$LD_LIB")"
+LD_SFX="$(sed -n '/^_ai_dlc_memo_open() {/,/^}/{s/^  _t="\$_f\(.*\)"$/\1/p;}' "$LD_LIB")"
+_sw="${LD_SFX//\$\$/9999999}"; _sw="${_sw//\$RANDOM/32767}"
+_sn="${LD_SFX//\$\$/1}"; _sn="${_sn//\$RANDOM/1}"
+case "${LD_KLINE:+k}|$_sw|$_sn" in
+  '|'*|*'$'*|*'||'*|*'|') echo "FIXTURE ERROR: memo calibration: could not read memo_show's key line or _ai_dlc_memo_open's fill suffix from $LD_LIB (key line '$LD_KLINE', suffix '$LD_SFX')" >&2; exit 2 ;;
+esac
+ld_memo_key() { local _dist="$1" _ref="$2" _path="$3" _k; eval "$LD_KLINE"; printf '%s' "$_k"; }
+_mmax=0; _mmaxp=""; _hmin=99999; _nh=0; _np=0
+for _w in "$LW_EXT" "$LW_DS" "$LW_BIG" "$LW_HUGE"; do
+  for _ref in "$(cat "$_w/B")" "$(cat "$_w/T")"; do
+    git -C "$_w/dist" ls-tree -r --name-only "$_ref" > "$WORK/ld-memo-paths" \
+      || { echo "FIXTURE ERROR: memo calibration: could not list $_w/dist at $_ref" >&2; exit 2; }
+    while IFS= read -r _p; do
+      [ -n "$_p" ] || continue
+      _k="$(ld_memo_key "$_w/dist" "$_ref" "$_p")"
+      if [ "$_p" = "core/skills/ai-dlc/$LD_HOOK" ]; then
+        _nh=$((_nh+1)); [ "${#_k}" -lt "$_hmin" ] && _hmin="${#_k}"
+      else
+        _np=$((_np+1)); [ "${#_k}" -gt "$_mmax" ] && { _mmax="${#_k}"; _mmaxp="$_p"; }
+      fi
+    done < "$WORK/ld-memo-paths"
+  done
+done
+[ "$_nh" -eq 8 ] && [ "$_np" -gt 0 ] \
+  && [ $(( _mmax + ${#_sw} )) -le $(( 255 - LD_MEMO_MARGIN )) ] && [ $(( _hmin + ${#_sn} )) -gt 255 ] \
+  || { echo "FIXTURE ERROR: memo calibration: the longest key that must be cached ($_mmaxp, $_mmax characters over $_np path(s)) makes a fill file of $(( _mmax + ${#_sw} )) at the widest suffix '$_sw' (want at most $(( 255 - LD_MEMO_MARGIN )), $LD_MEMO_MARGIN under the 255-character filename limit), and the shortest hooked-step key ($_hmin over $_nh, want 8) one of $(( _hmin + ${#_sn} )) at the narrowest suffix '$_sn' (want over 255)" >&2; exit 2; }
+echo "  (ld memo: longest cached key $_mmax ($_mmaxp), fill file at most $(( _mmax + ${#_sw} )) of 255, margin $(( 255 - _mmax - ${#_sw} )); hooked-step keys at least $_hmin, direct)"
 # The base copy carries a0a9c556's hard-blockers.sh too: the C5 cells' failing control.
 LD_BASE="$WORK/ld-base"
 mkdir -p "$LD_BASE" && cp -R "$RECON/." "$LD_BASE/" \
