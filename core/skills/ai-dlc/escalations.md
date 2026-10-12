@@ -64,9 +64,13 @@ acted on.
 
 **Resolution lifecycle:** HARD_BLOCK / DEFERRAL_REQUEST resolved by human
 at the production validation checkpoint; status updated to RESOLVED with a
-decision. DECIDED_AUTONOMOUSLY reviewed by human at the checkpoint; no
-action unless the decision was wrong, in which case status updates to
-OVERRIDDEN with corrective direction.
+decision. A HARD_BLOCK on a locked requirement is the exception: it is
+resolved BEFORE the checkpoint, which is not presented while it lacks a
+recorded disposition — the lead files it, pauses per Rule 3 and stops,
+and the lead records the operator's disposition on the entry with its `Operator authorization:` citation
+(`steps/deploy-validate.md` §5). DECIDED_AUTONOMOUSLY reviewed by human
+at the checkpoint; no action unless the decision was wrong, in which
+case status updates to OVERRIDDEN with corrective direction.
 
 **RESOLVED / OVERRIDDEN must CITE the operator.** A HARD_BLOCK exists
 because the decision is the operator's; marking it `RESOLVED` (or a

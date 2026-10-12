@@ -7,8 +7,15 @@
 # smoke run (an operator-fired §2a operation included), and defines a transient failure as one a retry cleared with
 # NO ACTION BY THE LEAD between the runs, and requires the smoke-failure loop's code-issue
 # item to dispatch `dev` rather than leave the fix to the lead. The Production Validation Checkpoint's
-# `Deployment` block reports the same split. No script reads `smoke_run_evidence`; the
+# `Deployment` block reports the same split. §5's checkpoint template carries a
+# `### Locked-Requirement Coverage` block -- one line per LOCKED_REQUIREMENTS bullet, delivered /
+# deferred / descoped, with the HARD_BLOCK id and disposition token (approved-deferral / do-now /
+# descope) -- and §5's prose withholds the checkpoint while a locked requirement lacks a recorded
+# disposition. No script reads `smoke_run_evidence` or the coverage block; the
 # executing lead reads this prose, so the prose is the mechanism and this fixture pins it.
+#
+# §5 IS ISOLATED FENCE-AWARE: its template fence holds `### ` lines, so only a `### ` outside the
+# fence ends §5 (see sec5()). The block arms read the fence, the gating arm reads §5 prose only.
 #
 # KEYED ON THE SECTION, NOT THE FILE. Each field must be DEFINED as a `- \`<field>\` --`
 # bullet inside §3's body (heading `### 3. Smoke Tests` up to the next `### ` heading).
@@ -64,6 +71,57 @@ sec4() { # <file> -> §4 body, heading line excluded
 deploy_block() { # <file> -> the checkpoint's `### Deployment` block
   awk '/^### Deployment$/{on=1; next} on && /^### /{exit} on{print}' "$1"
 }
+# §5 IS FENCE-AWARE. Its checkpoint template is a ``` fence holding `### ` lines of its own, so
+# sec3()'s `/^### /{exit}` would stop at the template's first `### What Was Built`. Only a `### `
+# OUTSIDE a fence ends §5. Every body line is tagged `F<TAB>` (inside the template fence) or
+# `P<TAB>` (§5 prose), so an arm can say which of the two must carry its text.
+sec5() { # <file> -> §5 body, heading line excluded, each line tagged F or P
+  awk '/^### 5\. Production Validation Checkpoint/{on=1; next}
+       on && /^```/{f=!f; print "F\t" $0; next}
+       on && !f && /^### /{exit}
+       on{print (f ? "F\t" : "P\t") $0}' "$1"
+}
+# The template's Locked-Requirement Coverage block: its heading up to the next fenced `### `.
+# Keyed on the BLOCK BODY, because the template's Red-gate line already carries the three
+# disposition tokens and the What Was Built line carries `delivered`.
+locked_block() { # stdin: sec5 output -> the block body, tags stripped
+  awk -F'\t' '$1=="F" && $2=="### Locked-Requirement Coverage"{on=1; next}
+              on && $1=="F" && ($2 ~ /^### / || $2 ~ /^```/){exit}
+              on{print $2}'
+}
+LOCKED_HEAD='### Locked-Requirement Coverage'
+LOCKED_TOKENS='LOCKED_REQUIREMENTS delivered deferred descoped HARD_BLOCK approved-deferral do-now descope'
+# Phrases the block body must carry beyond its single-word tokens: the deferred-then-delivered
+# clause (same-sprint delivery does not cleanse a slipped lock), the Rule 14 phased status, and
+# the value reported when the sprint ships no locked-requirements.md.
+LOCKED_PHRASES='each bullet deferred and then delivered|phased — <the story or stories that deliver it>|carried from an earlier checkpoint of this plan: one line per bullet it marked phased|none recorded'
+# THE GATING SENTENCE: kept OUT of the template, so only §5 prose can satisfy it. "that needs one":
+# delivered and phased bullets legitimately carry no disposition.
+LOCKED_GATE='The checkpoint is not presented while any locked requirement that needs one lacks a recorded disposition.'
+LOCKED_REPLY='An operator reply to the checkpoint does not stand in for a recorded disposition.'
+# THE CHANNEL: the pause and the stop that happen BEFORE the checkpoint, so the disposition is not
+# sought at the checkpoint being withheld.
+# Through the citation: the LEAD records the operator's disposition with its `Operator authorization:`
+# citation, the RESOLVED contract escalations.md states -- not "the operator records" it.
+LOCKED_CHANNEL='marks the pause per Rule 3 (`touch _bmad-output/pipeline-paused.flag`) and STOPS, and the lead records the operator'"'"'s disposition — `approved-deferral` / `do-now` / `descope` — on that entry with its `Operator authorization:` citation.'
+# `phased` is not an escape hatch. Keyed on the CHECKPOINT, not a sprint number: no disposition
+# until the plan's FINAL checkpoint, an uncited line is deferred at any checkpoint, a slip defers.
+# "final" is DEFINED in the sentence, by story status -- §7's "single sprint or final sprint" calls an
+# in-sprint phase checkpoint final, which would defer every phased bullet at the first phase.
+LOCKED_FINAL='A `phased` bullet owes no disposition until the plan'"'"'s final checkpoint — the one after which no story of the plan remains not `done` in `sprint-status.yaml` — where any bullet not delivered counts as deferred and owes its `HARD_BLOCK`.'
+# A plan spanning sprint numbers: the block reads only this sprint's locked-requirements.md, so a
+# bullet phased at an earlier sprint is carried forward or it never reaches the operator.
+LOCKED_CARRY='At a later checkpoint of a Rule 14 plan the block also carries every bullet an earlier checkpoint of that plan marked `phased`, read from that earlier sprint'"'"'s `locked-requirements.md`.'
+LOCKED_UNCITED='A `phased` line citing no story counts as deferred at any checkpoint.'
+LOCKED_NOTPHASED='A `phased` line citing a story that is `done`, or one that does not carry the LR id, is not `phased` and counts as deferred.'
+LOCKED_SLIP='A bullet that slips its planned phase becomes deferred the moment it slips.'
+LOCKED_STORY='Each cited story carries the requirement'"'"'s LR id in its own LOCKED_REQUIREMENTS block, verbatim or in any form `steps/stories-test-strategy.md` §2a permits (`requires_context:` included), and its status in `sprint-status.yaml` is not `done`.'
+LOCKED_SPLIT='A bullet split across phases cites every story that carries a part of it.'
+# §6 and §7 CITE §5's rule rather than restating it at a narrower width.
+LOCKED_WAIT='A generic validation reply is not a disposition: each locked requirement that needs one under §5'"'"'s locked-requirement coverage rule keeps its own recorded `HARD_BLOCK` disposition.'
+LOCKED_ROUTE='Proceed to retro, once every locked requirement that needs a disposition under §5'"'"'s locked-requirement coverage rule carries its recorded `HARD_BLOCK` disposition'
+sec6() { awk '/^### 6\. Wait for Human/{on=1; next} on && /^### /{exit} on{print}' "$1"; }
+sec7() { awk '/^### 7\. Post-Validation Routing/{on=1; next} on && /^### /{exit} on{print}' "$1"; }
 
 # check <file> -> prints one line per failing arm; prints nothing when every arm holds.
 # Presence-shaped throughout: every arm demands a string APPEAR, so an empty §3 fails
@@ -97,12 +155,48 @@ check() {
     grep -qF -- "- Smoke tests:" <<<"$blk" || { echo "CHECKPOINT: no Smoke tests line in the Deployment block"; break; }
     grep -qF -- "$n" <<<"$blk" || echo "CHECKPOINT: '$n' absent from the Deployment block"
   done
+  # §5 LOCKED-REQUIREMENT COVERAGE. Each arm owns one prefix so a mutant fires one arm only:
+  # SECTION5 (§5 unisolatable), LOCKED (block heading in the fence, then its tokens -- the token
+  # arm stands down when the heading is absent, which the heading arm already reports), and
+  # LOCKED-GATE (the no-presentation sentence in §5 PROSE, never the template).
+  local s5 lb tok
+  s5="$(sec5 "$f")"
+  if [ -z "$s5" ]; then echo "SECTION5: §5 could not be isolated"; return; fi
+  if ! grep -qxF -- "F"$'\t'"$LOCKED_HEAD" <<<"$s5"; then
+    echo "LOCKED: no '$LOCKED_HEAD' block inside §5's fenced checkpoint template"
+  else
+    lb="$(locked_block <<<"$s5")"
+    for tok in $LOCKED_TOKENS; do
+      # -w: `descope` is a substring of `descoped`, so a bare -F grep lets the status word stand
+      # in for the disposition token.
+      grep -qwF -- "$tok" <<<"$lb" || echo "LOCKED: '$tok' absent from the Locked-Requirement Coverage block body"
+    done
+    fl="$(flat <<<"$lb")"
+    local IFS='|' ph
+    for ph in $LOCKED_PHRASES; do
+      case "$fl" in *"$ph"*) : ;; *) echo "LOCKED: '$ph' absent from the Locked-Requirement Coverage block body" ;; esac
+    done
+    unset IFS
+  fi
+  fl="$(grep "^P"$'\t' <<<"$s5" | cut -f2- | flat)"
+  case "$fl" in *"$LOCKED_GATE"*) : ;; *) echo "LOCKED-GATE: §5 prose does not withhold the checkpoint while a locked requirement lacks a recorded disposition" ;; esac
+  case "$fl" in *"$LOCKED_REPLY"*) : ;; *) echo "LOCKED-GATE: §5 prose does not say an operator reply to the checkpoint is no recorded disposition" ;; esac
+  case "$fl" in *"$LOCKED_CHANNEL"*) : ;; *) echo "LOCKED-CHANNEL: §5 prose does not pause and stop for the disposition before the checkpoint" ;; esac
+  case "$fl" in *"$LOCKED_FINAL"*) : ;; *) echo "LOCKED-FINAL: §5 prose does not defer an undelivered phased bullet at the plan's final checkpoint" ;; esac
+  case "$fl" in *"$LOCKED_CARRY"*) : ;; *) echo "LOCKED-CARRY: §5 prose does not carry an earlier checkpoint's phased bullets forward" ;; esac
+  case "$fl" in *"$LOCKED_UNCITED"*) : ;; *) echo "LOCKED-PHASED: §5 prose does not count a phased line citing no story as deferred" ;; esac
+  case "$fl" in *"$LOCKED_NOTPHASED"*) : ;; *) echo "LOCKED-NOTPHASED: §5 prose does not count a phased line citing a done or non-carrying story as deferred" ;; esac
+  case "$fl" in *"$LOCKED_SPLIT"*) : ;; *) echo "LOCKED-SPLIT: §5 prose does not make a split bullet cite every story carrying a part" ;; esac
+  case "$fl" in *"$LOCKED_SLIP"*) : ;; *) echo "LOCKED-SLIP: §5 prose does not defer a bullet that slips its planned sprint" ;; esac
+  case "$fl" in *"$LOCKED_STORY"*) : ;; *) echo "LOCKED-STORY: §5 prose does not require the cited story to carry the bullet and be not done" ;; esac
+  case "$(sec6 "$f" | flat)" in *"$LOCKED_WAIT"*) : ;; *) echo "LOCKED-WAIT: §6 does not cite §5's rule that a generic validation reply is no disposition" ;; esac
+  case "$(sec7 "$f" | flat)" in *"$LOCKED_ROUTE"*) : ;; *) echo "LOCKED-ROUTE: §7 does not hold the route to retro on §5's recorded dispositions" ;; esac
 }
 
 # --- the subject -------------------------------------------------------------
 out="$(check "$STEP")"
 if [ -z "$out" ]; then
-  ok "§3 defines all four fields, the transient definition, the in-run value, the loop routing, the dev dispatch in the fix loop and the one-live-mutation-per-run rule including operator-fired §2a operations; §4 names the Check 5 tokens; the checkpoint reports the split"
+  ok "§3 defines all four fields, the transient definition, the in-run value, the loop routing, the dev dispatch in the fix loop and the one-live-mutation-per-run rule including operator-fired §2a operations; §4 names the Check 5 tokens; the checkpoint reports the split; §5's template carries the Locked-Requirement Coverage block with its status and disposition tokens and §5 prose withholds the checkpoint without a recorded disposition"
 else
   while IFS= read -r l; do bad "$l"; done <<<"$out"
 fi
@@ -123,6 +217,13 @@ if [ -z "$(check "$CTL")" ] && [ -n "$(sec3 "$CTL")" ]; then
   ok "CONTROL: an unmutated copy passes and §3 is non-empty, so a mutant's finding below is the mutation"
 else
   bad "CONTROL: an unmutated copy fails -- every mutant verdict below is uninterpretable"
+fi
+# POSITIVE CONJUNCT for §5: the isolation must reach PAST the template fence (a `### ` inside it
+# would otherwise end §5) and the block body must be non-empty.
+if [ -n "$(sec5 "$CTL" | locked_block)" ] && grep -qF -- "$LOCKED_GATE" <<<"$(sec5 "$CTL" | grep "^P"$'\t' | cut -f2- | flat)"; then
+  ok "CONTROL5: §5 isolates past its template fence, the coverage block body is non-empty and the gating sentence sits in §5 prose"
+else
+  bad "CONTROL5: §5 isolation stopped inside the template or the coverage block is empty -- the §5 mutant verdicts are uninterpretable"
 fi
 
 mutant() { # <name> <awk-program> <expected-finding-prefix> <label>
@@ -209,6 +310,128 @@ mutant "comment-dispatch" \
 mutant "no-leadscope" \
   '{ gsub(/a lead that edits product code here is applying a$/, "a lead may edit product code here when applying a"); print }' \
   "DISPATCH:" "dropping the inline-edit-is-a-finding sentence from §3 is caught"
+
+# --- §5 Locked-Requirement Coverage --------------------------------------------
+# DELETE: the block goes, the Red-gate line (which carries the same disposition tokens) stays.
+# A token grep over §5's whole fence would still pass; the heading arm must not.
+mutant "del-locked-block" \
+  '/^### Locked-Requirement Coverage$/{s=1; next} s && /^### Next Steps$/{s=0} s{next} {print}' \
+  "LOCKED:" "deleting the Locked-Requirement Coverage block, Red-gate line kept, is caught"
+
+# MOVE: the block leaves §5's template verbatim and reappears at the END of §6 (just before §7's
+# heading, so §6's own sentence stays inside §6). A whole-file grep still finds the heading; the
+# fence-aware §5 isolation must not.
+mutant "move-locked-block" \
+  '/^### Locked-Requirement Coverage$/{s=1} s && /^### Next Steps$/{s=0} s{held=held $0 "\n"; next} /^### 7\. Post-Validation Routing$/{printf "%s", held; print; next} {print}' \
+  "LOCKED:" "moving the Locked-Requirement Coverage block out of §5 (into §6) is caught"
+
+# TOKENS: the block keeps its heading but loses its disposition tokens. The Red-gate line in the
+# same fence still carries them, so only an arm keyed on the BLOCK BODY sees the loss.
+mutant "locked-no-tokens" \
+  '/^### Locked-Requirement Coverage$/{s=1} s && /^### Next Steps$/{s=0} s{ gsub(/\(approved-deferral \/ do-now \/ descope\)/, "(as recorded)") } {print}' \
+  "LOCKED:" "stripping the disposition tokens from the block body is caught though the Red-gate line keeps them"
+
+# DESCOPE: only the disposition token `descope` dropped; the status word `descoped` stays in the
+# block, so this dies only if the token arm matches whole words.
+mutant "locked-no-descope-token" \
+  '/^### Locked-Requirement Coverage$/{s=1} s && /^### Next Steps$/{s=0} s{ gsub(/ \/ do-now \/ descope\)/, " / do-now)") } {print}' \
+  "LOCKED:" "dropping the descope disposition token while descoped stays is caught"
+
+# GATE: the no-presentation sentence deleted from §5 prose.
+mutant "del-locked-gate" \
+  '/^\*\*The checkpoint is not presented while any locked requirement that$/{getline; next} {print}' \
+  "LOCKED-GATE:" "deleting the checkpoint-withheld-without-disposition sentence from §5 is caught"
+
+# REPLY: the sentence saying a checkpoint reply is no recorded disposition deleted from §5 prose.
+mutant "del-locked-reply" \
+  '/^An operator reply to the checkpoint does not stand in for a recorded$/{getline; next} {print}' \
+  "LOCKED-GATE:" "deleting the checkpoint-reply-is-no-disposition sentence from §5 is caught"
+
+# CHANNEL: the five-line channel sentence (pause flag and STOPS) deleted from §5 prose.
+mutant "del-locked-channel" \
+  '/^The channel is the one a red gate already uses: the lead files the Tier 1$/{skip=1} skip && /`Operator authorization:` citation\.$/{skip=0; next} skip{next} {print}' \
+  "LOCKED-CHANNEL:" "deleting the pause-and-stop channel sentence from §5 is caught"
+
+# REVERT-RECORDER: the channel reverted to "the operator records" the disposition, which collides
+# with the RESOLVED contract (the lead writes it, citing the operator's message).
+mutant "revert-locked-recorder" \
+  '/^`HARD_BLOCK` in `docs\/escalations\/pending.md`, marks the pause per Rule 3$/{c=1} c && /^\(`touch _bmad-output\/pipeline-paused.flag`\) and STOPS, and the lead$/{print "(`touch _bmad-output/pipeline-paused.flag`) and STOPS, and the operator"; next} c && /^records the operator.s disposition — `approved-deferral` \/ `do-now` \/$/{print "records the disposition — `approved-deferral` / `do-now` /"; next} c && /^`descope` — on that entry with its `Operator authorization:` citation\.$/{print "`descope` — on that entry."; c=0; next} {print}' \
+  "LOCKED-CHANNEL:" "reverting the channel to the operator recording the disposition is caught"
+
+# FINAL: the final-checkpoint sentence deleted, so a phased bullet never owes a disposition.
+mutant "del-locked-final" \
+  '/^A `phased` bullet owes no disposition until the plan.s final checkpoint$/{skip=1} skip && /^and owes its `HARD_BLOCK`\.$/{skip=0; next} skip{next} {print}' \
+  "LOCKED-FINAL:" "deleting the undelivered-at-the-final-checkpoint-is-deferred sentence is caught"
+
+# FINAL-DEF: only the definition of "final" dropped, so the sprint-count reading of §7 decides it.
+mutant "drop-locked-final-def" \
+  '/^A `phased` bullet owes no disposition until the plan.s final checkpoint$/{print; getline; getline; sub(/^`sprint-status.yaml` — where/, "where"); print; next} {print}' \
+  "LOCKED-FINAL:" "dropping the story-status definition of the final checkpoint is caught"
+
+# CARRY: the carry-forward sentence deleted.
+mutant "del-locked-carry" \
+  '/^At a later checkpoint of a Rule 14 plan the block also carries every$/{skip=1} skip && /^earlier sprint.s `locked-requirements.md`\.$/{skip=0; next} skip{next} {print}' \
+  "LOCKED-CARRY:" "deleting the carry-phased-bullets-forward sentence is caught"
+
+# NOT-PHASED: the done-or-non-carrying-story sentence deleted.
+mutant "del-locked-notphased" \
+  '/^A `phased` line citing a story that is `done`, or one that does not carry$/{getline; next} {print}' \
+  "LOCKED-NOTPHASED:" "deleting the done-or-non-carrying-story-is-deferred sentence is caught"
+
+# CARRY TEMPLATE: the carried-forward line removed from the block.
+mutant "del-locked-carry-line" \
+  '/^### Locked-Requirement Coverage$/{s=1} s && /^### Next Steps$/{s=0} s && /^- \[carried from an earlier checkpoint of this plan:/{next} {print}' \
+  "LOCKED:" "dropping the carried-from-an-earlier-checkpoint line from the block body is caught"
+
+# UNCITED: the sentence that makes a phased line citing no story a deferral deleted.
+mutant "del-locked-uncited" \
+  '/^A `phased` line citing no story counts as deferred at any checkpoint\.$/{next} {print}' \
+  "LOCKED-PHASED:" "deleting the uncited-phased-is-deferred sentence is caught"
+
+# SPLIT: the split-bullet sentence deleted.
+mutant "del-locked-split" \
+  '/^A bullet split across phases cites every story that carries a part of it\.$/{next} {print}' \
+  "LOCKED-SPLIT:" "deleting the split-bullet-cites-every-story sentence is caught"
+
+# SLIP: the slip clause deleted.
+mutant "del-locked-slip" \
+  '/^A bullet that slips its planned phase becomes deferred the moment it$/{getline; next} {print}' \
+  "LOCKED-SLIP:" "deleting the slip-is-a-deferral sentence is caught"
+
+# STORY: the cited story loses its duty to carry the LR id and be not done in sprint-status.yaml.
+mutant "del-locked-story" \
+  '/^Each cited story carries the requirement.s LR id in its own$/{skip=1} skip && /^included\), and its status in `sprint-status.yaml` is not `done`\.$/{skip=0; next} skip{next} {print}' \
+  "LOCKED-STORY:" "deleting the cited-story-carries-the-LR-id-and-is-not-done sentence is caught"
+
+# WAIT: §6's citation of §5's rule deleted.
+mutant "del-locked-wait" \
+  '/^A generic validation reply is not a disposition: each locked$/{skip=1} skip && /^keeps its own recorded `HARD_BLOCK` disposition\.$/{skip=0; next} skip{next} {print}' \
+  "LOCKED-WAIT:" "deleting §6's generic-reply-is-no-disposition sentence is caught"
+
+# ROUTE: §7's retro route restored to the unconditional form it replaced.
+mutant "del-locked-route" \
+  '/^- If \*\*single sprint or final sprint:\*\* Proceed to retro, once every$/{print "- If **single sprint or final sprint:** Proceed to retro."; skip=1; next} skip && /^  disposition — the operator.s validation reply is not one\.$/{skip=0; next} skip{next} {print}' \
+  "LOCKED-ROUTE:" "dropping §7's disposition condition on the route to retro is caught"
+
+# DEFERRED-THEN-DELIVERED: the clause leaves the block, so a slipped-then-shipped lock reports no disposition.
+mutant "del-locked-deferred-delivered" \
+  '/^### Locked-Requirement Coverage$/{s=1} s && /^### Next Steps$/{s=0} s{ sub(/, and each bullet deferred and$/, ""); sub(/^    then delivered — /, "    — ") } {print}' \
+  "LOCKED:" "dropping the deferred-then-delivered clause from the block body is caught"
+
+# PHASED: the Rule 14 status removed from the block.
+mutant "del-locked-phased" \
+  '/^### Locked-Requirement Coverage$/{s=1} s && /^### Next Steps$/{s=0} s && /^  phased — <the story or stories that deliver it>$/{next} {print}' \
+  "LOCKED:" "dropping the phased status from the block body is caught"
+
+# NONE RECORDED: the value for a sprint with no locked-requirements.md removed from the block.
+mutant "del-locked-none" \
+  '/^### Locked-Requirement Coverage$/{s=1} s && /^### Next Steps$/{s=0} s && /none recorded\]$/{next} {print}' \
+  "LOCKED:" "dropping the none-recorded value from the block body is caught"
+
+# SECTION5: §5's heading renamed -> nothing to isolate. Must be a finding, never clean.
+mutant "no-section5" \
+  '/^### 5\. Production Validation Checkpoint$/{print "### 5. Operator checkpoint"; next} {print}' \
+  "SECTION5:" "an unisolatable §5 is a finding, not an empty pass"
 
 # SECTION: §3's heading renamed -> nothing to isolate. Must be a finding, never clean.
 mutant "no-section" \

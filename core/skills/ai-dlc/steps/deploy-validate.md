@@ -441,6 +441,17 @@ See: docs/escalations/pending.md
   token (approved-deferral / do-now / descope), the captured evidence
   path, and the failing output verbatim]
 
+### Locked-Requirement Coverage
+See: _bmad-output/planning-artifacts/s<N>/locked-requirements.md
+- [one line per bullet of this sprint's LOCKED_REQUIREMENTS block,
+  verbatim]: delivered / deferred / descoped /
+  phased — <the story or stories that deliver it>
+  - [for each deferred or descoped bullet, and each bullet deferred and
+    then delivered — the HARD_BLOCK id and its disposition token
+    (approved-deferral / do-now / descope)]
+- [carried from an earlier checkpoint of this plan: one line per bullet it marked phased]
+- [no locked-requirements.md for this sprint: none recorded]
+
 ### Next Steps
 [If multi-sprint: "Sprint 1 of N complete. Awaiting your validation
 before proceeding to Sprint 2."]
@@ -476,6 +487,55 @@ plus one recorded line per excluded PR. Remove when: the trunk audit
 derives the cluster and its exclusions mechanically, so the checkpoint
 reads a computed count rather than an enumerated one.
 
+**Locked-requirement coverage.** The checkpoint's Locked-Requirement
+Coverage block carries one line per bullet of this sprint's
+LOCKED_REQUIREMENTS block (`_bmad-output/planning-artifacts/s<N>/locked-requirements.md`),
+each marked delivered, deferred, descoped or phased. The locked-requirement rule
+in `steps/retro.md` §4a binds here, at the checkpoint: every deferred or
+descoped bullet, and every bullet deferred and then delivered in this
+sprint, needs a Tier 1 `HARD_BLOCK` carrying the operator's recorded
+disposition, and the block quotes that entry's id and disposition token.
+A bullet a later phase of the same Rule 14 plan delivers is marked
+`phased — <the story or stories that deliver it>`.
+Each cited story carries the requirement's LR id in its own
+LOCKED_REQUIREMENTS block, verbatim or in any form
+`steps/stories-test-strategy.md` §2a permits (`requires_context:`
+included), and its status in `sprint-status.yaml` is not `done`.
+A bullet split across phases cites every story that carries a part of it.
+A `phased` bullet owes no disposition until the plan's final checkpoint
+— the one after which no story of the plan remains not `done` in
+`sprint-status.yaml` — where any bullet not delivered counts as deferred
+and owes its `HARD_BLOCK`.
+At a later checkpoint of a Rule 14 plan the block also carries every
+bullet an earlier checkpoint of that plan marked `phased`, read from that
+earlier sprint's `locked-requirements.md`.
+A `phased` line citing no story counts as deferred at any checkpoint.
+A `phased` line citing a story that is `done`, or one that does not carry
+the LR id, is not `phased` and counts as deferred.
+A bullet that slips its planned phase becomes deferred the moment it
+slips.
+A sprint that ships no `locked-requirements.md` reports `none recorded`
+in the block.
+**The checkpoint is not presented while any locked requirement that
+needs one lacks a recorded disposition.**
+The channel is the one a red gate already uses: the lead files the Tier 1
+`HARD_BLOCK` in `docs/escalations/pending.md`, marks the pause per Rule 3
+(`touch _bmad-output/pipeline-paused.flag`) and STOPS, and the lead
+records the operator's disposition — `approved-deferral` / `do-now` /
+`descope` — on that entry with its `Operator authorization:` citation.
+An operator reply to the checkpoint does not stand in for a recorded
+disposition.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: a generic checkpoint
+reply accepted as the operator's word on a locked requirement left
+undelivered, so the sprint enters retro without the lock-slip ever being
+put to the operator as a decision. False-positive cost: one coverage line
+per locked requirement, plus the `HARD_BLOCK` each non-delivered one
+already owes under Rule 13. Removal condition: retire once the coverage
+block is derived from the locked-requirements file and the escalation
+log, and presentation is refused mechanically while a non-delivered
+bullet has no matching disposition.
+
 ### 6. Wait for Human
 
 First, mark the pause so the Stop hook does not push you past this
@@ -487,6 +547,10 @@ checkpoint (Rule 3): `touch _bmad-output/pipeline-paused.flag`.
 3. Approve or override autonomous decisions
 4. Approve any `DEFERRAL_REQUEST` entries (or reject and require implementation)
 5. Confirm validation or request fixes
+
+A generic validation reply is not a disposition: each locked
+requirement that needs one under §5's locked-requirement coverage rule
+keeps its own recorded `HARD_BLOCK` disposition.
 
 ### 7. Post-Validation Routing
 
@@ -507,7 +571,10 @@ After human validates:
 
   **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/sprint-review-next.md`
 
-- If **single sprint or final sprint:** Proceed to retro.
+- If **single sprint or final sprint:** Proceed to retro, once every
+  locked requirement that needs a disposition under §5's
+  locked-requirement coverage rule carries its recorded `HARD_BLOCK`
+  disposition — the operator's validation reply is not one.
 
   1. Refresh `## Pipeline Position` in `_bmad-output/pipeline-snapshot.md`
      FIRST, OVERWRITING the existing `current_step_file` bullet rather than

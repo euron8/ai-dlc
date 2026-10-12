@@ -133,6 +133,11 @@ pin_scan() {
 # rewritten to say the opposite. Each token is the clause whose negation inverts the rule.
 # Two texts are deliberately NOT pinned because they are being reworded: the repair clause of
 # the attribution rung, and the closing sentence of the §2c disposal paragraph.
+#
+# The pm-adr-* rows are line-mode `contains` pins inside one bullet list that `para` cannot
+# split. The line breaks in that pm.md bullet and in its Context Loading item 3 exist to keep
+# each pinned phrase on ONE line; reflowing either breaks the pin, so do not reflow them.
+# A comment line cannot go inside the table below: every line between the markers is a row.
 pins() {
   cat <<'PINS'
 gv-body-must|S|steps/gate-validation.md|### 12.|### 13.|**A state claim MUST carry its command.**|para|MUST carry, in the same row
@@ -151,6 +156,7 @@ adv-prem-body|R|adversary.md|## Severity|## |**An authorization whose named outc
 gv-state-claim|S|steps/gate-validation.md|### 12.|### 13.|**A state claim MUST carry its command.**|prefix
 r13-attribution|S|rule-bodies/rule-13.md||## HANDOFF PROTOCOL|**An operator attribution MUST cite the operator's message.**|prefix
 disc-attribution|S|steps/discovery.md|### 4a.|### 4b|**Every operator attribution carries a quote and a locator**|prefix
+esc-locked-disposition|S|escalations.md|**Resolution lifecycle:**|**RESOLVED / OVERRIDDEN must CITE the operator.**|the lead records the operator's disposition on the entry with its `Operator authorization:` citation|contains
 esc-premise|S|escalations.md|**Permanent-default change disclosure.**|**Terminal-entry archival|**Authorization-premise invalidation disclosure.**|prefix
 bug-2c-title|S|steps/bug-investigation.md|### 2b.|### 3.|### 2c. Adversarial verification of the root-cause claim|prefix
 bug-2c-pass|S|steps/bug-investigation.md|### 2c.|### 3.|**The root-cause claim gets an adversarial pass before section 3.**|prefix
@@ -172,6 +178,13 @@ party-unsharded|S|steps/_gate-procedures.md|## Validation cycle|## Where a chang
 party-unsharded-check|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**An unsharded round has the same write model.**|para|join-remediator-shards.sh --sources <that record> --sprint <N>
 srev-seats-record|S|steps/sprint-review.md|### 2. Sprint-Level Party Mode|### 3.|- Record every finding; the seats edit nothing|prefix
 rem-party-source|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**A party repair names the seat finding behind every entry.**|para|every entry carries a `source:` line
+pm-adr-probe|R|pm.md|## Responsibilities|## The evidence contract|in the story implementing the decision the ADR records|contains
+pm-adr-trigger|R|pm.md|## Responsibilities|## The evidence contract|carries as an unrun probe|contains
+pm-adr-tag|R|pm.md|## Responsibilities|## The evidence contract|`probabilistic/passive-monitoring` AC, written at creation|contains
+pm-adr-predicate|R|pm.md|## Responsibilities|## The evidence contract|with its discharge predicate named in the AC text|contains
+pm-adr-scope|R|pm.md|## Responsibilities|## The evidence contract|added to existing scope, never a new capability|contains
+pm-adr-context|R|pm.md|## Context Loading|## Communication|(the primary architecture document)|contains
+pm-adr-context-read|R|pm.md|## Context Loading|## Communication|The architecture and ADR sections for the stories in scope|contains
 PINS
 }
 
