@@ -1775,7 +1775,8 @@ if [ "$LT_CAN" = 1 ]; then
     case "$r" in
       $RT_OK) bad "BL-463 MUTANT $1 SURVIVED k: '$r'" ;;
       *"|noppid(none)|"*|*"|nosdiff"*) bad "BL-463 MUTANT $1: the drive's control failed, NO VERDICT: '$r'" ;;
-      *) ok "BL-463 MUTANT $1 is KILLED by k: '$r'" ;;
+      # The drive record carries pids, so it goes on its own non-ok line: an ok line holds no run-varying value.
+      *) ok "BL-463 MUTANT $1 is KILLED by k"; printf '        (drive: %s)\n' "$r" ;;
     esac
   }
   if ! ps_sandbox_skip "the lock writer's three mutants scored on (k) (BL-463)"; then
@@ -1996,7 +1997,9 @@ if [ "$LT_CAN" = 1 ]; then
     lt_arm; R="$(fx_drive "$PM" pm.oldtrap "$FX_MREPS" 1)"
     case "$R" in
       alive\|*\|*\|*\|0) bad "CEILING MUTANT oldtrap SURVIVED (t4) over $FX_MREPS fast traces: '$R'" ;;
-      alive\|*) ok "CEILING MUTANT oldtrap (the trap kills a saved pid) is KILLED by (t4): a fast trace left its sleep in the group: '$R'" ;;
+      # The record holds the index of the first leaking launch, which varies by run: it stays off the ok line.
+      alive\|*) ok "CEILING MUTANT oldtrap (the trap kills a saved pid) is KILLED by (t4): a fast trace left its sleep in the group"
+        printf '        (drive: %s)\n' "$R" ;;
       *) bad "CEILING MUTANT oldtrap: the control did not read alive -- NO VERDICT: '$R'" ;;
     esac
   fi
