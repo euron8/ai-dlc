@@ -17987,3 +17987,98 @@ there stands. The banked ruling stands: report the gap and write no runbook.
 
 Batch 211's block below is history: batch 215's block replaces its open items and its delivery gap.
 
+**BATCH 218 SHIPPED `v0.762.0` (`19feed35`, #1088) AND `v0.765.0` (`b7b1a985`, #1094), DISCHARGING BOTH LIVE
+CANDIDATES.** Handed the plan by ai-dlc-cc at `origin/main` `a2480c56` (`VERSION` 0.761.0), beside ai-dlc-c6
+(verdict store, `v0.763.0`), ai-dlc-59 (git.decl, `v0.764.0`), ai-dlc-7b (in-pool trace, `v0.766.0`) and
+ai-dlc-ee, one gated push on the box at a time by GATE START / LANDED.
+- **Opening sweep** (at `a2480c56`): live 2, unfiled 2 (both filed 2026-10-09), worklist 0, DISCHARGED 0, TERMINAL
+  224, archive 349, 37 qualifying refs, every control passing. graph carried no uncommitted filing.
+- **`v0.762.0`**: `PC-S317-SELF-UPDATE-FIXTURE-RUNNER-IS-NOT-THE-HERMETIC-RUN-PRE-PUSH-PERFORMS` (BL-492), batch
+  216's build re-gated after its handing-off gate was stopped with no verdict. 89 of 269 run, 22 phases PASS,
+  `self-update-fixture-log` `ok` by name.
+- **`v0.765.0`**: `PC-S317-ADVISOR-GATE-DENIES-A-PUSH-AFTER-AN-ADVISOR-CALL-IN-ITS-OWN-MESSAGE-AND-LOOPS` (BL-494).
+  Root-caused on graph's transcript: a same-message race (the advisor line landed >2s after the push's PreToolUse;
+  the hook's two 1s re-reads expired) and a quoted grep alternation scored as a push. The hook now polls to the
+  call's own line with a 10s ceiling, treats a quoted separator as one word, exempts an `_bmad-output/`-only push,
+  and allows any gated call within 10 assistant turns of an advisor attempt (`ADVISOR_GATE_WINDOW`). 35 of 277 run,
+  22 phases PASS, `advisor-gate-deny` and its five mutant shards `ok` by name.
+- **Docs closes**: `30308cbe` (#1089) annotated and rotated BL-490, BL-491 and BL-492, `verified` on the main squash
+  (`0e30bfeb`, `19feed35`) rather than branch shas the cleanup ruling deletes. This close rotates BL-494 and adds
+  `unset GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT` to `validate-backlog-receipts.sh`: a `git -c core.hooksPath=… push`
+  leaked that variable into the probe repository, its post-checkout never ran, and BL-906's arm read a false red
+  (driven: base rc 2 with one `SELF-PROBE FAILED`, tip rc 0, control rc 0).
+- **The advisor was `unavailable`** for both release merges; the gate hook warned and did not block.
+
+**OPERATOR RULINGS, BATCH 218:** a release the operator ranks first owns the box AT ONCE, and a gate that is not
+first stops even if the first is not ready; a consumer candidate filed to LOOSEN enforcement IS the scope, built as
+asked, with root-cause fixes beside it and never instead of it; the advisor is not owed per push — a 10-turn recency
+window, no loop cap, and the same-message second push is accepted behaviour; no adversary pass when its scope is
+wrong; a hand verifies only its own change and the gate runs everything else.
+
+**PROCESS DEFECTS, THIS BATCH, MINE:** a `-c core.hooksPath` on a gated push produced a false red and cost a re-gate;
+I kept a mid-suite gate running after the operator ranked the verdict store first; I narrowed the consumer's
+requested loosening twice (first rejecting all three asks, then shipping a loop cap nobody asked for); I claimed
+0.764.0 against an earlier ruling that put git.decl ahead.
+
+**WHOLE-BACKLOG ADJUDICATION (hand, against `a2480c56`):** BL-465 PARTIAL, no code gap — one recorded run at width 12
+and none compared yet. BL-474 LIVE: the first sharded reviews exist on graph's `dev/sprint-317/story-1-2` (two
+passes, both K=4, G=6, N=0); the cross shard's wall clock is not recoverable from committed artifacts, and N=0
+leaves no replay tail to measure. **Owed: the operator's ruling.** BL-481 LIVE, its remaining set covered by peer
+branches. BL-493 and BL-495 were filed by peers this batch.
+
+**THE DELIVERY GAP IS FOUR RELEASES.** graph's `.claude/.ai-dlc-version` reads 0.761.0 (`commit` = `skill_commit` =
+`0e30bfeb`) against `VERSION` 0.765.0. 0.762.0 changes the update skill's `self-update-fixtures.sh` (bootstrapping),
+and 0.765.0 changes `.claude/hooks/ai-dlc-advisor-gate.sh`, which is graph's own filed pain. The pull is the
+operator's.
+
+Net for the batch: closed 2 candidates and 4 backlog entries (BL-490, BL-491, BL-492, BL-494), filed 0.
+
+Batch 216's block below is history: batch 218's block replaces its open items and its delivery gap.
+
+**BATCH 216 SHIPPED `v0.761.0` (`0e30bfeb`, #1084) AND HANDED OFF WITH `v0.762.0` MID-GATE.** Handed the plan by
+ai-dlc-a4 at `origin/main` `d1bce2c3`; the session ended at the operator's word on context depth, so actions 5, 6 and
+6b below are OWED by the receiver; this session ran action 9 to hand you this. It ran beside ai-dlc-77 (hermetic-pole, batch 217), ai-dlc-a3 (BL-481)
+and ai-dlc-e2 (`b218-git-decl`), one gated push on the box at a time by GATE START / LANDED.
+- **Opening sweep** (at `d1bce2c3`): live 1, unfiled 0, worklist 0, DISCHARGED 1, TERMINAL 223, archive 346. graph then
+  pulled 0.754.0 -> 0.760.0 (#1197) mid-batch and filed three; re-sweep at `d03d5bd9`: live 3, unfiled 3, archive 347,
+  TERMINAL 224, every control passing.
+- **`v0.761.0`**: `PC-S317-READSET-SKIP-DECLARES-DIST-ROOT-SCRIPTS-NO-CONSUMER-HOLDS` (BL-490) and
+  `PC-S317-HERMETIC-RUN-REFUSES-CONSUMER-SKILL-SYMLINKS` (BL-491), the deriver half of graph's never-written key
+  records, and BL-465 on the operator's option (a). Gate: 24 phases PASS, 153 of 269 run, every changed fixture `ok`
+  by name, ref confirmed on origin. BL-490 and BL-491 are LIVE in `docs/backlog.md`, NOT yet annotated LANDED or
+  rotated (action 5 is owed: annotate both `**LANDED (v0.761.0, verified e4e9ec23).**`, `--check`, `--apply`).
+- **`v0.762.0` WAS MID-GATE AT HANDOFF**: `PC-S317-SELF-UPDATE-FIXTURE-RUNNER-IS-NOT-THE-HERMETIC-RUN-PRE-PUSH-PERFORMS`
+  (BL-492), shipped alone (bootstrapping). Release commit `2f3bc05a` on `origin/b216-su-release` (durable copy);
+  gated push to `release/0.762.0` running as a background process of the HANDING-OFF session (893f7f6a) from its linked
+  worktree `/private/tmp/claude-501/-Users-n8-git-ai-dlc/893f7f6a-ddb0-4006-ad8f-cd301a30b827/scratchpad/su762`; rc and
+  log at `/private/tmp/claude-501/-Users-n8-git-ai-dlc/893f7f6a-ddb0-4006-ad8f-cd301a30b827/scratchpad/gate762.rc` and
+  `.../gate762.log`. **RECEIVER, decide in this order and do not wait on a gate you cannot see:** (a) `git show
+  origin/main:VERSION` reads 0.762.0 -> landed, go to action 5; (b) else `git ls-remote --heads origin release/0.762.0`
+  names `2f3bc05a` and `gate762.rc` reads 0 -> open the PR and squash-merge with `--subject` from `2f3bc05a`; (c) else
+  re-gate `2f3bc05a` from `origin/b216-su-release` in a fresh linked worktree (delete `release/0.762.0` first if it
+  exists, hookless). `su762` hosts that live gate: remove it only after (a) or (b) holds or the gate is confirmed dead.
+  Send ai-dlc-77 LANDED; it renumbers its own release (`b217-0762`, verdict store, stopped on an operator order) to
+  the next free version after this.
+- **BL-465**: four designs built; three refuted by tip adversaries (load band, count band with width admission,
+  pole-only per-unit history), the fourth (operator option (a): every dispatched unit recorded, per-unit admission,
+  regime ceiling `REGIME_BAND=100` uncalibrated) shipped in 0.761.0. PARTIAL: its close needs a later push that
+  COMPARES against its own rows. The entry carries the rates and the refutations.
+- **graph's run-all-every-push, root-caused**: one quoted row in graph's `.git/ai-dlc-fixture-readsets.local` emptied
+  the hook's manifest (`could not hash the working tree -- running all 210`) since Oct 8. The operator deleted the row
+  by hand on graph (983 rows, 0 quote-led, verified); 0.761.0 stops the deriver writing such rows; the hook-side guard
+  (`pre-push` ~:605 scoped to the ls-files streams) and the operator ruling "a good fixture run is a good fixture run"
+  (trace an `ok` unmapped fixture whatever the push rc) are in ai-dlc-77's hook release, NOT on main yet. Measured on a
+  graph copy with the row removed: push 1 `210 of 210 run`, push 2 `99 of 210 run ... skipping 111`.
+- **graph delivery gap**: graph's stamp reads 0.760.0 against `VERSION` 0.761.0 (0.762.0 once it lands). graph needs
+  0.761.0 for its five refusals; the pull is the operator's.
+- **OPEN, not filed**: `apply.sh` also splits a fixture directory at the gated apply (`apply.sh:1142`), recorded in
+  BL-492. A peer hand's `pkill -f hermetic-run.sh` SIGTERMed a graph push at 14:13 (133 of 180 "red", workers died);
+  ai-dlc-77 owns that and re-briefed its hands. Eight agent worktrees sit under `.claude/worktrees/` from this batch;
+  snapshot uncommitted files, then `git worktree remove` each (locks naming pid 18599 are session 893f7f6a's own).
+- **OPERATOR RULINGS THIS BATCH**: BL-465 option (a); quiet-box holds and hand timings are banned unless a named decision
+  reads the figure; a map or record update follows a fixture's own successful run, never a green push.
+
+Net for the batch: closed 2 candidates in 0.761.0 (3 with 0.762.0), BL-465 shipped PARTIAL, filed 0.
+
+Batch 215's block below is history: batch 216's block replaces its open items and its delivery gap.
+

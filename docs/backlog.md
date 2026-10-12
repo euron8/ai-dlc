@@ -170,6 +170,29 @@ row above plus the 43 declared fixtures that use a bare `mktemp -d` and clear `A
   line on the sandboxed side, which then fails).
 A run over the other 166 declared fixtures with the fixed instrument has not been taken.
 
+**Batch 224: all six close-run rows adjudicated; none is lost coverage.** The recorded rc labels for
+`procsub-staged-refusal-boot-b` were swapped: the PLAIN side fails and the sandboxed side passes.
+- **Instrument, 3 rows** (`procsub-staged-refusal-b`, `fanout-payload-channel`, `preclassify-rename-row`): each
+  prints a length derived from a temp path, and the plain side's HOME/TMPDIR were 24 characters shorter than the
+  sandbox's. Branch `b224-census` (`515f41ce`) gives the plain side `$T/ptmp/<the sandbox's basename>/{home,tmp}`,
+  equal by construction; all three read EQUAL in a clean clone, and the census fixture binds it with seed
+  `s-pathlen` and mutant M23 (the old spelling reads MISMATCH DIFFER).
+- **Volatile ok lines, 2 rows** (`readset-skip-b`, `snapshot-archive-rotate`): pids, a random first-leak
+  index and race-dependent sweep counts printed inside ok lines. Branch `b224-volatile` (`025159f2`) moves each
+  value to a separate non-ok line. `snapshot-archive-rotate` reads EQUAL; `readset-skip-b` matched 124 = 124
+  but both census runs were REFUSED on git-state churn, so a clean census of it is owed.
+- **Fixture defect, 1 row** (`procsub-staged-refusal-boot-b`): its verdict depended on the physical TMPDIR
+  length (a staged listing crossing a 2048-byte block, and memo-key fill names near the 255-byte limit), so the
+  GATE failed it under `TMPDIR=/tmp`. Branch `b224-boot` (`9467cdce`) pads the ld worlds to a fixed encoded
+  length, asserts an 8-byte memo-key margin derived from `lib.sh`, and refuses past an 85-character encoded
+  TMPDIR; 52 ok under the default TMPDIR, `/tmp` and the limit.
+- **A shipped hook race found on the way** (`readset-skip` (t4), 1 in 14 runs under load): the watchdog's TERM
+  trap loses the signal when it lands between the child's fork and exec. Forced deterministically: 10 of 10
+  leaked under TERM, 0 of 10 under KILL. Branch `b224-hook` (`32b50af1`) sends KILL in both hooks, with a
+  forced-window world `(t4w)` and mutant `termtrap`.
+None of the four branches has shipped. The census over the 166 declared fixtures the fixed instrument has not
+measured is still owed, after they land.
+
 **Instrument limits recorded, not fixed:** the plain and sandboxed sides' temp paths still differ in length by a fixed
 amount, which is the most likely source of the first three rows above; and the range-overlap rule for counts acquits
 a stable side whose value lies inside the other side's range without ever appearing there (plain 13 x3 against
@@ -184,66 +207,3 @@ marker moved aside and each read `ok`.
 
 verify: manual -- close when an instrument run over every declared fixture reports, per fixture, the sandboxed run's assertion and skip counts equal to the plain run's, with every mismatch either fixed or covered by a `!` required input; the instrument must be shown to fire on a seeded fixture whose sandboxed count drops (an input left undeclared behind a skip branch) and stay quiet on one whose counts match
 
-## BL-501 — the deploy-gate checkpoint reported no line per locked requirement, so a generic validation reply carried the sprint into retro past an undelivered one
-
-**DEFECT.** Filed by the consumer as `PC-S317-PVC-TEMPLATE-HAS-NO-LINE-FOR-A-LOCKED-PRIORITY-LEFT-UNDELIVERED`.
-
-**What happened.** `core/skills/ai-dlc/steps/deploy-validate.md` §5's Production Validation Checkpoint template
-reported deployment, gate log, fix-forward cluster and escalations. Its only disposition line, `Red-gate
-dispositions`, covers gate verdicts left FAILED. Nothing asked, per bullet of the sprint's LOCKED_REQUIREMENTS
-block, whether it was delivered, deferred or descoped. In the consumer's S317 deploy gate, locked priority 1 was not
-delivered. The lead took a generic validation reply as sufficient and entered retro, and the descope disposition was
-recorded only after the operator asked. `steps/retro.md` §4a already requires a recorded operator disposition for a
-deferred locked requirement, but nothing put that requirement in front of the operator at the checkpoint.
-
-**The fix (batch 224).** §5's template gains a `### Locked-Requirement Coverage` block: one line per bullet of the
-sprint's LOCKED_REQUIREMENTS block marked delivered / deferred / descoped, quoting the `HARD_BLOCK` id and disposition
-token (approved-deferral / do-now / descope) for each non-delivered bullet and each bullet deferred and then delivered.
-§5's prose says retro.md §4a's rule binds at the checkpoint, and that the checkpoint is not presented while any locked
-requirement lacks a recorded disposition. §6 says a generic validation reply is not a disposition. §7's route to retro
-requires those dispositions first. A bullet a later phase of the same Rule 14 plan delivers reads `phased` and cites
-the story or stories delivering it (each carrying the requirement's LR id in any form §2a permits); it owes no
-disposition until the plan's final checkpoint (the one after which no story of the plan remains not `done`),
-later checkpoints carry forward every bullet an earlier one marked `phased`, and a `phased` line citing no story,
-a `done` story, or a story without the LR id counts as deferred; a sprint with no locked-requirements file reports `none recorded`. The channel is the red-gate one: the
-lead files the `HARD_BLOCK`, pauses per Rule 3 and stops, and records the operator's token on the entry with its
-`Operator authorization:` citation; Rule 3's pause point (b) names that stop;
-`escalations.md`'s resolution lifecycle names that exception, since it otherwise resolves a `HARD_BLOCK` at the
-checkpoint itself. No new gate: the
-`HARD_BLOCK` is the one Rule 13 already owes. `core/fixtures/deploy-validate-smoke-classification` isolates §5 aware
-of its fenced template (the fenced `### ` headings end a naive section read after 9 lines) and keys on the block body,
-because the Red-gate line already carries the disposition tokens. Each mutant is killed by its own arm.
-
-Three tip adversaries found the first cut's channel circular, its phasing case blocking every multi-sprint boundary,
-then `phased` citing a record no file writes, then a final-sprint rule that fired at every phase checkpoint of the
-consumer's in-sprint phasing; a fourth, walking the consumer's real checkpoints, found no reader for "final" and
-phased bullets dropped across sprint numbers. All are fixed and pinned (23 §5 mutants). The receipt below is scored under
-`set -uo pipefail`: 0 on the fixed tree and with the gating sentence's bold markers moved; 1 on the base `625ab4df`
-and with the final-checkpoint rule or its definition, the carry-forward sentence or template line, the
-uncited-`phased` rule, the lead-records wording, or the gating sentence's
-"that needs one" scope cut; 9 when §5 cannot be isolated.
-
-verify: sh F=core/skills/ai-dlc/steps/deploy-validate.md; [ -f "$F" ] || exit 9; S="$(awk '/^### 5\. Production Validation Checkpoint/{on=1;next} on&&/^```/{f=!f;next} on&&!f&&/^### /{exit} on{print (f?"F\t":"P\t") $0}' "$F")"; [ -n "$S" ] || exit 9; B="$(awk -F'\t' '$1=="F"&&$2~/^### Locked-Requirement Coverage/{b=1;next} $1=="F"&&b&&$2~/^### /{b=0} b&&$1=="F"{print $2}' <<<"$S" | tr '\n' ' ' | tr -s ' ')"; [ -n "$B" ] || exit 1; for t in delivered deferred descoped phased approved-deferral do-now descope HARD_BLOCK; do grep -qw -- "$t" <<<"$B" || exit 1; done; grep -qF 'deferred and then delivered' <<<"$B" || exit 1; P="$(awk -F'\t' '$1=="P"{print $2}' <<<"$S" | tr '\n' ' ' | sed 's/\*\*//g' | tr -s ' ')"; grep -qF 'The checkpoint is not presented while any locked requirement that needs one lacks a recorded disposition' <<<"$P" || exit 1; grep -qF 'reply to the checkpoint does not stand in for a recorded disposition' <<<"$P" || exit 1; grep -qF 'owes no disposition until the plan'"'"'s final checkpoint' <<<"$P" || exit 1; grep -qF 'line citing no story counts as deferred at any checkpoint' <<<"$P" || exit 1; grep -qF 'touch _bmad-output/pipeline-paused.flag' <<<"$P" || exit 1; grep -qF 'the lead records the operator'"'"'s disposition' <<<"$P" || exit 1; grep -qF 'the one after which no story of the plan remains not' <<<"$P" || exit 1; grep -qF 'the block also carries every bullet an earlier checkpoint of that plan marked' <<<"$P" || exit 1; grep -qF 'carried from an earlier checkpoint of this plan' <<<"$B" || exit 1; exit 0
-
-## BL-502 — the PM role turned an unrunnable acceptance criterion into a passive-monitoring AC, but not an architecture risk recorded as an unrun probe
-
-**DEFECT.** Filed by the consumer as `PC-S317-PM-ROLE-TAGS-PROBABILISTIC-ACS-BUT-NOT-AN-ADR-RISK-RECORDED-AS-PROBE-NOT-YET-RUN`.
-
-**What happened.** `core/team-roles/pm.md` requires an AC whose only discharge path nobody on the team controls to be
-tagged `probabilistic/passive-monitoring` at story creation. It said nothing about a risk an architecture decision
-record carries as an unrun probe, and the PM's Context Loading named only the product brief and the PRD, so the PM never
-read the architecture document. In the consumer's S317, a risk recorded in its `docs/architecture.md` as "probe not
-yet run" sat in no story's AC and surfaced only when a fix-forward made it live.
-
-**The fix (batch 224).** The probabilistic-AC bullet gains one sentence: such a risk becomes a
-`probabilistic/passive-monitoring` AC in the story implementing the decision the ADR records, with its discharge
-predicate, an AC added to existing scope and never a new capability. Context Loading gains item 3:
-`docs/architecture.md` first, then planning-phase architecture artifacts and `docs/adr/`, for the stories in scope.
-`core/fixtures/process-rule-pins` pins seven phrases (placement, trigger, tag, discharge predicate, no new capability, the
-Context Loading instruction and the primary document) with `contains` rows; 28 generated mutants are each killed.
-
-The receipt below is scored under `set -uo pipefail`: 0 on the fixed tree and with Context Loading renumbered;
-1 on the base `625ab4df`, with the Context Loading instruction inverted, and with "never a new capability"
-rewritten.
-
-verify: sh F=core/team-roles/pm.md; [ -f "$F" ] || exit 9; A="$(awk '/^## Responsibilities/{on=1;next} on&&/^## /{exit} on{print}' "$F" | tr '\n' ' ' | tr -s ' ')"; C="$(awk '/^## Context Loading/{on=1;next} on&&/^## /{exit} on{print}' "$F" | tr '\n' ' ' | tr -s ' ')"; [ -n "$A" ] && [ -n "$C" ] || exit 9; grep -qF 'carries as an unrun probe' <<<"$A" || exit 1; grep -qF 'in the story implementing the decision the ADR records' <<<"$A" || exit 1; grep -qF 'with its discharge predicate named in the AC text' <<<"$A" || exit 1; grep -qF 'added to existing scope, never a new capability' <<<"$A" || exit 1; grep -qF 'The architecture and ADR sections for the stories in scope' <<<"$C" || exit 1; grep -qF '`docs/architecture.md` (the primary architecture document)' <<<"$C" || exit 1; exit 0
