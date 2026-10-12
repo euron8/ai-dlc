@@ -40,6 +40,12 @@ source; do not infer either value from anywhere else.
   event nobody can schedule. A synthetic trigger is not an escape hatch where
   the effect is irreversible. This adds no gate — it is the carry-over pattern
   the pipeline already has, applied at spec time instead of at discovery time.
+  A risk an architecture decision record carries as an unrun probe ("probe not
+  yet run", or any equivalent unexercised-verification note) becomes a
+  `probabilistic/passive-monitoring` AC, written at creation
+  in the story implementing the decision the ADR records,
+  with its discharge predicate named in the AC text — an acceptance criterion
+  added to existing scope, never a new capability.
 - **Link a prior-artifact numeric anchor at authorship.** An AC citing a prior
   story's number as its scale anchor MUST link the artifact containing that
   number when the AC is written. A citation whose source cannot be located at
@@ -170,6 +176,8 @@ artifacts):
 
 1. `_bmad-output/planning-artifacts/product-brief.md`
 2. `_bmad-output/planning-artifacts/prd.md` (if it exists)
+3. The architecture and ADR sections for the stories in scope (if they exist):
+   `_bmad-output/planning-artifacts/architecture.md` and `docs/adr/`.
 
 ## Communication
 

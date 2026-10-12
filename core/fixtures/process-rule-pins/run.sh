@@ -172,6 +172,8 @@ party-unsharded|S|steps/_gate-procedures.md|## Validation cycle|## Where a chang
 party-unsharded-check|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**An unsharded round has the same write model.**|para|join-remediator-shards.sh --sources <that record> --sprint <N>
 srev-seats-record|S|steps/sprint-review.md|### 2. Sprint-Level Party Mode|### 3.|- Record every finding; the seats edit nothing|prefix
 rem-party-source|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**A party repair names the seat finding behind every entry.**|para|every entry carries a `source:` line
+pm-adr-probe|R|pm.md|## Responsibilities|## The evidence contract|in the story implementing the decision the ADR records|contains
+pm-adr-context|R|pm.md|## Context Loading|## Communication|3. The architecture and ADR sections for the stories in scope|prefix
 PINS
 }
 
