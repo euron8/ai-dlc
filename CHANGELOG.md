@@ -20,6 +20,27 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.777.0] - 2026-10-12
+
+Batch 225 (graph-ledger-full-drain), first release. The opening sweep read live 3, unfiled 0, worklist 0, DISCHARGED 3,
+TERMINAL 231, every control passing, so this release carries the four fixes batch 224 built for BL-497's six
+adjudicated census rows. BL-497 stays open: its census over the remaining declared fixtures runs on this tree.
+
+### BL-497: census instrument, volatile ok lines, a hook race, a TMPDIR-dependent fixture
+
+- **Census instrument.** `scripts/census-hermetic-coverage.sh` gives the plain side `$T/ptmp/<the sandbox's
+  basename>/{home,tmp}`, so its HOME and TMPDIR are as long as the sandbox's. Three rows that printed a length derived
+  from a temp path (`procsub-staged-refusal-b`, `fanout-payload-channel`, `preclassify-rename-row`) read EQUAL. The
+  census fixture binds it with seed `s-pathlen` and mutant M23.
+- **Volatile ok lines.** `readset-skip` and `snapshot-archive-rotate` print pids, a random first-leak index and
+  race-dependent sweep counts on separate non-ok lines, so a census compares only stable text.
+- **Read-set watchdog race.** The watchdog's trap in both pre-push hooks (`.githooks/pre-push`, `core/git-hooks/pre-push`)
+  sends KILL to its sleep. A TERM landing between the child's fork and exec was lost; forced, 10 of 10 leaked under
+  TERM and 0 of 10 under KILL. `readset-skip` gains the forced-window world `(t4w)` and mutant `termtrap`.
+- **`procsub-staged-refusal-boot`.** Its verdict depended on the physical TMPDIR length, and the gate failed it under
+  `TMPDIR=/tmp`. Its ld worlds are padded to a fixed encoded length, it asserts an 8-byte memo-key margin derived from
+  `lib.sh`, and it reports a FIXTURE ERROR past an 85-character encoded TMPDIR.
+
 ## [0.776.0] - 2026-10-12
 
 Batch 224 (graph-ledger-full-drain), first release. The opening sweep read live 3, unfiled 2, worklist 0, DISCHARGED 1,
