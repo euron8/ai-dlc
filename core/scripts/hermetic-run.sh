@@ -323,6 +323,34 @@ hr_rows() {
 }
 if [ "$HR_KEY_ONLY" = 1 ]; then hr_rows; exit $?; fi
 
+# NO PROJECT MARKER ABOVE THE SCRATCH DIRS. A fixture resolves its root the way this runner does, by
+# walking UP for a project marker, and the scratch trees it mints live under $HR_WORK/tmp or, for a bare
+# `mktemp -d` (macOS ignores TMPDIR there), under the system temp dir. A marker above either one makes
+# that walk land OUTSIDE the sandbox, on a tree nobody declared, and the fixture passes against it. The
+# predicate is this runner's own ai_dlc_resolve_root; the exit is 2 because no fixture ran.
+hr_tdir_root="$(ai_dlc_resolve_root "$(dirname "$HR_WORK")")" || hr_tdir_root=""
+# The bare probe runs with TMPDIR pointed at the work dir, so where it lands also answers whether a bare
+# mktemp -d honours TMPDIR at all on this platform.
+hr_bare="$(TMPDIR="$HR_WORK" mktemp -d 2>/dev/null)" || { printf 'hermetic-run: %s: a bare mktemp -d failed, so the system temp dir cannot be checked\n' "$HR_FX" >&2; exit 2; }
+hr_bare_dir="$(cd "$(dirname "$hr_bare")" && pwd -P)" || hr_bare_dir="$(dirname "$hr_bare")"; rmdir "$hr_bare" 2>/dev/null
+case "$hr_bare_dir/" in "$HR_WORK"/*) hr_honours=1 ;; *) hr_honours=0 ;; esac
+hr_sys_root="$(ai_dlc_resolve_root "$hr_bare_dir")" || hr_sys_root=""
+hr_home="$(cd "${HOME:-/nonexistent}" 2>/dev/null && pwd -P)" || hr_home=""
+# Both walks are over PHYSICAL paths, so one marker reached from both compares equal. The work-dir message
+# applies unless that marker is the system temp dir's as well AND a bare mktemp -d ignores TMPDIR (macOS):
+# then pointing TMPDIR elsewhere cannot help, and the system-temp message below names the real fix.
+if [ -n "$hr_tdir_root" ] && { [ "$hr_tdir_root" != "$hr_sys_root" ] || [ "$hr_honours" = 1 ]; }; then
+  printf 'hermetic-run: %s: sandbox escape: %s carries a project marker (.git, .claude/ or core/skills/ai-dlc) above the work dir %s, so a fixture walking up from its scratch dir resolves there. Point TMPDIR at a directory with no marker above it.\n' "$HR_FX" "$hr_tdir_root" "$HR_WORK" >&2; exit 2
+fi
+if [ -n "$hr_sys_root" ]; then
+  case "$hr_bare_dir/" in
+    # Reached only where a bare mktemp -d ignores TMPDIR, so moving TMPDIR cannot help, and a marker under
+    # $HOME is usually the user's own (~/.claude) and must not be removed.
+    "$hr_home"/*) [ -n "$hr_home" ] && { printf 'hermetic-run: %s: sandbox escape: the system temp dir %s sits under $HOME, and %s carries a project marker a fixture walking up from a bare mktemp -d resolves to. TMPDIR cannot move a bare mktemp -d here; do not remove the marker. Run under an account whose system temp dir is outside $HOME.\n' "$HR_FX" "$hr_bare_dir" "$hr_sys_root" >&2; exit 2; } ;;
+  esac
+  printf 'hermetic-run: %s: sandbox escape: %s carries a project marker (.git, .claude/ or core/skills/ai-dlc) above the system temp dir %s, where a bare mktemp -d lands whatever TMPDIR says. Remove the marker.\n' "$HR_FX" "$hr_sys_root" "$hr_bare_dir" >&2; exit 2
+fi
+
 # THE SANDBOX: copy declared files and directories at their own relative paths, the fixture's own
 # directory (or the override), and nothing else.
 # `pwd -P`, because macOS hands out TMPDIR under /var which is a symlink to /private/var, and a

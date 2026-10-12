@@ -67,7 +67,7 @@
 #   M16 BOTH-FAIL passes the exit test          -> s-quiet + s-bothfail exits 0 (control: 1)
 #   M17 only the pair link removed              -> physical chc.* roots leak under a non-keep run
 #   M18 pair dir built in the work tree         -> the pair dir is a plain dir, not a link
-#   M19 no preflight marker walk                -> s-low runs under a marked base
+#   M19 no preflight marker walk                -> s-low reaches the runner, whose escape guard refuses it
 #   M20 no end-of-run marker walk               -> the census exits 0 with s-marker's marker present
 #   M21 a count judged "moves on one side"      -> self-probe names FA1; probe removed, s-flicker reads EQUIVALENT
 #   M22 the probe's failure path keeps its root -> a self-probe resolve failure leaves one chc.* root
@@ -465,7 +465,10 @@ has "walk: the refusal names the marker" "$C_ERR" "has a project marker above it
 eq "walk: no fixture ran" "$(cell s-low 2)" ""
 if P="$(mut M19 1 'if hit="$(census_marker_walk "$CENSUS_SCRATCH")"; then' 'if false; then')"; then
   census "$P" "$WA" "s-low" 1
-  eq "M19 (no preflight walk): s-low runs and reads LOW-RES" "$(vd s-low)" "LOW-RES -"
+  # Without the census's own walk the pair reaches hermetic-run.sh, whose escape guard refuses it: a row exists
+  # (the unmutated census leaves none) and its note is the runner's refusal.
+  eq "M19 (no preflight walk): s-low reaches the runner and reads REFUSED" "$(vd s-low)" "REFUSED -"
+  has "M19: the runner's escape guard is what refused it" "$(cell s-low 12)" "sandbox escape"
 else bad "M19: DID NOT APPLY"; fi
 
 # End walk: s-marker writes a .claude above the scratch base during its own run; s-low beside it is the control.

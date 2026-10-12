@@ -92,7 +92,7 @@ is reused": FALSE as stated.** The skip is real: the hook keys a declared fixtur
 file does not rerun it. The harm is not, because the fixture never runs against that file. A declared fixture is
 run only by `core/scripts/hermetic-run.sh` (`.githooks/pre-push:2003-2006`, dispatch at
 `.githooks/pre-push:2011-2020`), in a fresh sandbox holding only its declared inputs
-(`core/scripts/hermetic-run.sh:54-57`, invocation at `core/scripts/hermetic-run.sh:510`), so the stored verdict cannot
+(`core/scripts/hermetic-run.sh:54-57`, invocation at `core/scripts/hermetic-run.sh:536`), so the stored verdict cannot
 depend on a file the sandbox does not hold. The map rows that produce the "gap" were traced UNSANDBOXED and predate
 the declarations: `agent-definition-render`'s rows were last written at `199721b6` (0.734.0) and `f7eec6f5` (0.674.0),
 its `inputs.decl` was added at `cab72a8e` (0.755.0). Measured: the kept sandbox of `agent-definition-render` at this
@@ -169,6 +169,18 @@ row above plus the 43 declared fixtures that use a bare `mktemp -d` and clear `A
 - `procsub-staged-refusal-boot-b`: sandboxed rc 1 with 52 ok against plain rc 0 with 51 (one extra `MUTANT KILLED`
   line on the sandboxed side, which then fails).
 A run over the other 166 declared fixtures with the fixed instrument has not been taken.
+
+**Instrument limits recorded, not fixed:** the plain and sandboxed sides' temp paths still differ in length by a fixed
+amount, which is the most likely source of the first three rows above; and the range-overlap rule for counts acquits
+a stable side whose value lies inside the other side's range without ever appearing there (plain 13 x3 against
+sandboxed 12, 14, 12 reads EQUIVALENT). The `verify:` line below predates EQUIVALENT and must be reworded when this
+entry closes.
+
+**The escape is now refused (0.775.0).** `hermetic-run.sh` exits 2 before building a sandbox when a project marker
+(`.git`, a `.claude/` directory, `core/skills/ai-dlc`) sits above its scratch directory or above the system temp dir
+a bare `mktemp -d` uses, naming the marker and the fix. The stray marker was deleted on 2026-10-12 after the reference
+consumer pulled 0.774.0. The ten seeded fixtures were proven at gate level: 0.774.0's gate re-ran all ten with the
+marker moved aside and each read `ok`.
 
 verify: manual -- close when an instrument run over every declared fixture reports, per fixture, the sandboxed run's assertion and skip counts equal to the plain run's, with every mismatch either fixed or covered by a `!` required input; the instrument must be shown to fire on a seeded fixture whose sandboxed count drops (an input left undeclared behind a skip branch) and stay quiet on one whose counts match
 

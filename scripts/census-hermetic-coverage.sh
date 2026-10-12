@@ -37,7 +37,7 @@
 #   plain     from the root (never a cd into the fixture dir, which CLAUDE.md measures as five fabricated
 #             failures): `env -i PATH=<READSET_TOOL_DIRS>:<kept sandbox>/bin HOME=<scratch> TMPDIR=<scratch>
 #             AI_DLC_PROJECT_ROOT=<root> PREPUSH_POOL_DEPTH=<same> bash <fixtures>/<fx>/run.sh`. The env is
-#             the sandbox's own invocation (hermetic-run.sh:510-512) with only the root moved. The TOOL FARM
+#             the sandbox's own invocation (hermetic-run.sh:536-538) with only the root moved. The TOOL FARM
 #             is hermetic-run's own kept `bin/`, so a declared tool resolved off git's exec-path or a
 #             READSET_TOOL_XP dir reaches both runs; there is no second tools.decl parser here to drift.
 #             READSET_TOOL_DIRS comes from the hook's READSET_TOOLS span, the same span hermetic-run sources.
