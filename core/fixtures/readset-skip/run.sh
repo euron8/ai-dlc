@@ -1424,12 +1424,12 @@ CT
   # watchdog while it is still starting its `sleep`; a trap that read a saved pid found it empty there
   # and left the sleep reparented to init for the whole ceiling. The leaked sleep keeps its process
   # group, so `kill -0 -- -<trace pid>` once that pid is gone reads it directly: the group must empty.
-  # The trace pid is the status file's `pid`, written by the subject. Measured on the unfixed trap with
-  # this drive: 7 of 40 launches leaked (17.5%). FX_REPS clean launches are required of the fix; the
-  # mutant drive stops at its first leak and gives up after FX_MREPS, so at 17.5% it misses with
-  # probability 0.825^60, about 1e-5. Control, same drive: a group this driver started under `set -m`
-  # reads alive by the same `kill -0 -- -<pgid>` before it is killed by that pgid.
-  FX_REPS=30; FX_MREPS=60
+  # The trace pid is the status file's `pid`, written by the subject. FX_REPS clean launches are required
+  # of the fix. The unfixed trap leaks here at about 1% per launch on an idle box, far too rare for a
+  # mutant verdict, so its mutant (oldtrap, below) is scored on (t4w), where the window is forced.
+  # Control, same drive: a group this driver started under `set -m` reads alive by the same
+  # `kill -0 -- -<pgid>` before it is killed by that pgid.
+  FX_REPS=30
   FX_DRIVER="$WORK/fx-driver.sh"
   cat > "$FX_DRIVER" <<'FX'
 pool="$1"; t="$2"; o="$3"; reps="$4"; stop1="$5"
@@ -2043,12 +2043,20 @@ if [ "$LT_CAN" = 1 ]; then
       *) bad "CEILING MUTANT termtrap: the control did not read alive -- NO VERDICT: '$R'" ;;
     esac
   fi
+  # The watchdog's ORIGINAL trap, both layers reverted (a saved pid, sent TERM). Scored on (t4w), never on
+  # (t4): (t4)'s unforced drive leaks this trap at about 1% per launch (measured 3, 3 and 8 of 400 idle, 25 of
+  # 400 loaded, and lower still under the hermetic runner's `env -i`), so 60 launches missed it about half the
+  # time and the verdict read as whichever way the draw fell. With the fork window held open it leaked 100 of
+  # 100 under `env -i` and 6 of 10 in a full login environment, so FW_MREPS launches stopping at the first leak
+  # miss it with probability under 1e-7. The saved-pid layer ALONE (SIGKILL kept) has no forcing world: under
+  # `env -i` it leaked 0 of 100 with the window open, so it is guarded by the positive (t4) arm only.
+  FW_MREPS=20
   if PM_FN=readset_live_trace pm_copy oldtrap 1 "    ( trap 'kill -KILL \$(jobs -p) 2>/dev/null; exit 0' TERM" "    ( s=\"\"; trap '[ -n \"\$s\" ] && kill \"\$s\" 2>/dev/null; exit 0' TERM"; then
-    lt_arm; R="$(fx_drive "$PM" pm.oldtrap "$FX_MREPS" 1)"
+    lt_arm; R="$(fw_drive "$PM" pm.oldtrap "$FW_MREPS" 1)"
     case "$R" in
-      alive\|*\|*\|*\|0) bad "CEILING MUTANT oldtrap SURVIVED (t4) over $FX_MREPS fast traces: '$R'" ;;
+      alive\|*\|*\|*\|0) bad "CEILING MUTANT oldtrap SURVIVED (t4w) over $FW_MREPS forced-window traces: '$R'" ;;
       # The record holds the index of the first leaking launch, which varies by run: it stays off the ok line.
-      alive\|*) ok "CEILING MUTANT oldtrap (the trap kills a saved pid) is KILLED by (t4): a fast trace left its sleep in the group"
+      alive\|*) ok "CEILING MUTANT oldtrap (the trap kills a saved pid) is KILLED by (t4w): a fast trace left its sleep in the group"
         printf '        (drive: %s)\n' "$R" ;;
       *) bad "CEILING MUTANT oldtrap: the control did not read alive -- NO VERDICT: '$R'" ;;
     esac
