@@ -155,7 +155,9 @@ for _b in "$REAL_TR" "$REAL_GIT" "$REAL_FIND" "$REAL_SED" "$REAL_COMM" "$REAL_GR
   case "$_b" in /*) ;; *) echo "FIXTURE ERROR: tr/git/find/sed/comm/grep/bash/cat/awk/mktemp must resolve to binaries on PATH (got '$_b'), or no stub can pass through" >&2; exit 2 ;; esac
 done
 
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/psb-boot.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
+# `pb.`, short on purpose: every character of this name is a character of the ld worlds' fixed
+# encoded path length (see LD_ENC_LEN) taken from the TMPDIR the fixture can accept.
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/pb.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd)"
 EW=""
 # A RUN THAT NEVER REACHED ITS VERDICT EXITS 2. A `set -u` abort mid-battery reaches this trap with
@@ -905,11 +907,100 @@ mk_ld_world() { # <dir> <ext|ds|big|huge>
   fi
   { gi "$C" init -q && gi "$C" add -A && gi "$C" commit -qm consumer; } >/dev/null 2>&1 || return 1
 }
-LW_EXT="$WORK/ldw-ext"; LW_DS="$WORK/ldw-ds"; LW_BIG="$WORK/ldw-big"; LW_HUGE="$WORK/ldw-huge"
+# THE FOUR LD WORLDS SIT AT A FIXED ENCODED PATH LENGTH, NOT AT WHATEVER $TMPDIR GIVES. The cuts below
+# start at `_fx`/`_fo`, one block past the staged entry LISTING, and that listing is `find` output:
+# one ABSOLUTE path per entry, 13 entries in ext and 14 in ds, so every character of $WORK adds 13
+# and 14 bytes to it. Measured on the unpadded worlds: at a $WORK of 88 characters ds listed 2020 B
+# and ext 1946 B, so `_fo` was 2 and L5e cut after 6 rows; at 96 they listed 2132 B and 2050 B, so
+# `_fo` was 3 and L5e cut after 9 -- a different regime, in which M-LD-probe's L5e reads RC1-MEMO
+# where the table says RC0-LOST. $WORK is $TMPDIR plus 40 under hermetic-run.sh, so the default
+# /private/var/folders TMPDIR sat in one regime and TMPDIR=/tmp in the other: a verdict keyed on the
+# scratch path's length.
+# THE RECONCILE MEMO IS THE SECOND QUANTITY, AND IT MOVES WITH THE PATH TOO. lib.sh names each cache
+# file after a key embedding the percent-encoded dist path (`/` -> `%2F`, three characters), and a
+# key whose fill file `<key>.c.<pid>.<RANDOM>` passes the 255-character filename limit is read
+# uncached. Its cached set did NOT move across the listing boundary above (identical at 88 and 96),
+# but it moves at other lengths and L5-pre READS it: that cell's REFUSED-CONTRACT is the contract's
+# memo FILL failing under the limit, and a contract read uncached goes through a pipe the limit never
+# touches. Measured: the big world unpadded under a 90-character TMPDIR read L5-pre as
+# OTHER(no-heredoc-failure,rc=2,whole=7,contract-refusal=0), and every L mutant ENTANGLED with it.
+# So the memo is pinned as well -- by padding to a fixed ENCODED length (characters plus two per `/`),
+# which is what the key carries, rather than to a character count.
+# LD_ENC_LEN is that encoded length of all four world dirs, each padded as ONE path component.
+# A short key's length is LD_ENC_LEN plus a per-path constant: +84 for ds's SKILL.md, +92 for
+# core-manifest.md, +93 for ext's steps/moving.md, +95 for layer-contract.yaml, +98 for huge's
+# steps/zz-psb-huge.md, +100 for the register schema. The fill-file suffix `.c.<pid>.<RANDOM>` runs
+# from 6 characters to 16 (a pid of up to 7 digits, Linux's limit; RANDOM up to 32767), so against the
+# 255-character filename limit a key of 239 or less is always cached and one of 250 or more always
+# direct; in between, the answer turns on the pid and on `$RANDOM`. Every short key must be cached --
+# the regime the unpadded worlds were in under the default TMPDIR, where this file's tables were
+# measured -- and the hooked-step keys (hundreds of characters) are direct at any length, as before.
+# Near 141 the register key enters the window, and the next deterministic point (everything but
+# SKILL.md direct, near 157) breaks L5-pre as measured above. 131 holds the longest short key, the
+# register's, at 231: LD_MEMO_MARGIN (8) characters under the 7-digit-pid ceiling and 10 under the
+# 5-digit one macOS has, so a fill suffix that grows by up to eight in lib.sh cannot move it. The memo
+# calibration after the worlds are built re-derives this from lib.sh's own key and suffix lines and
+# refuses when the margin is gone. The world names are two letters (`le`, `ls`, `lb`, `lh`) and the
+# scratch dir `pb.XXXXXX`, so the pad base "$WORK/lh-" costs 6 encoded characters: the scratch dir may
+# be at most 125, a TMPDIR of at most 85 encoded under hermetic-run.sh (it adds `/hermetic-run.XXXXXX`,
+# `/tmp` and `/pb.XXXXXX`, 34 characters and three `/`) -- the macOS /var/folders default is 68 -- and
+# 113 for a bare run.sh. Shard b was measured whole at 140 (52 ok) before the margin was taken.
+# The CHARACTER length still floats two per `/` in the scratch dir, so the listings float 26 and 28 B
+# per `/`: they are not pinned, they are held off a block boundary by the 64-byte margin assert at
+# the cut calibration below, which fires before any cell runs if a deep TMPDIR walks them onto one.
+LD_ENC_LEN=131
+LD_MEMO_MARGIN=8
+ld_enc_len() { local s="${1//[!\/]/}"; printf '%s' $(( ${#1} + 2 * ${#s} )); }
+ld_pad() { # <dir> -> <dir> padded with `p` to LD_ENC_LEN encoded characters; non-zero when it cannot fit
+  local d="$1-" n
+  n=$(( LD_ENC_LEN - $(ld_enc_len "$d") ))
+  [ "$n" -ge 0 ] || return 1
+  printf '%s%s' "$d" "$(printf '%*s' "$n" '' | tr ' ' p)"
+}
+LW_EXT="$(ld_pad "$WORK/le")" && LW_DS="$(ld_pad "$WORK/ls")" \
+  && LW_BIG="$(ld_pad "$WORK/lb")" && LW_HUGE="$(ld_pad "$WORK/lh")" \
+  || { echo "FIXTURE ERROR: the scratch dir $WORK is $(ld_enc_len "$WORK") encoded characters (characters plus two per /), too long to pad the ld worlds to their fixed encoded length of $LD_ENC_LEN; this needs TMPDIR at $(( LD_ENC_LEN - 6 - 40 )) encoded characters or fewer under hermetic-run.sh, $(( LD_ENC_LEN - 6 - 12 )) for a bare run.sh -- point TMPDIR at a shorter directory" >&2; exit 2; }
 mk_ld_world "$LW_EXT" ext || { echo "FIXTURE ERROR: ld ext world" >&2; exit 2; }
 mk_ld_world "$LW_DS" ds || { echo "FIXTURE ERROR: ld ds world" >&2; exit 2; }
 mk_ld_world "$LW_BIG" big || { echo "FIXTURE ERROR: ld big world" >&2; exit 2; }
 mk_ld_world "$LW_HUGE" huge || { echo "FIXTURE ERROR: ld huge world" >&2; exit 2; }
+# THE MEMO CALIBRATION. Each world's memo keys are recomputed with lib.sh's OWN key line (memo_show's
+# `_k=` encoding, extracted and evaluated, never restated) for every path in that world's dist at
+# both refs, and the fill-file suffix is lib.sh's own `_t=` tail with `$$` and `$RANDOM` set to their
+# widest (7-digit pid, 32767) and narrowest (one digit each) values. Every path but the hooked step
+# must stay at least LD_MEMO_MARGIN characters clear of the 255-character filename limit at the widest
+# suffix (always cached); the hooked step must pass the limit at the narrowest (always direct). Either
+# one failing is a run whose cached set would turn on the pid or on `$RANDOM`, or not be the regime the
+# tables were measured in.
+LD_LIB="$RECON/lib.sh"
+LD_KLINE="$(sed -n '/^memo_show() {/,/^}/{/^  _k="s /p;}' "$LD_LIB")"
+LD_SFX="$(sed -n '/^_ai_dlc_memo_open() {/,/^}/{s/^  _t="\$_f\(.*\)"$/\1/p;}' "$LD_LIB")"
+_sw="${LD_SFX//\$\$/9999999}"; _sw="${_sw//\$RANDOM/32767}"
+_sn="${LD_SFX//\$\$/1}"; _sn="${_sn//\$RANDOM/1}"
+case "${LD_KLINE:+k}|$_sw|$_sn" in
+  '|'*|*'$'*|*'||'*|*'|') echo "FIXTURE ERROR: memo calibration: could not read memo_show's key line or _ai_dlc_memo_open's fill suffix from $LD_LIB (key line '$LD_KLINE', suffix '$LD_SFX')" >&2; exit 2 ;;
+esac
+ld_memo_key() { local _dist="$1" _ref="$2" _path="$3" _k; eval "$LD_KLINE"; printf '%s' "$_k"; }
+_mmax=0; _mmaxp=""; _hmin=99999; _nh=0; _np=0
+for _w in "$LW_EXT" "$LW_DS" "$LW_BIG" "$LW_HUGE"; do
+  for _ref in "$(cat "$_w/B")" "$(cat "$_w/T")"; do
+    git -C "$_w/dist" ls-tree -r --name-only "$_ref" > "$WORK/ld-memo-paths" \
+      || { echo "FIXTURE ERROR: memo calibration: could not list $_w/dist at $_ref" >&2; exit 2; }
+    while IFS= read -r _p; do
+      [ -n "$_p" ] || continue
+      _k="$(ld_memo_key "$_w/dist" "$_ref" "$_p")"
+      if [ "$_p" = "core/skills/ai-dlc/$LD_HOOK" ]; then
+        _nh=$((_nh+1)); [ "${#_k}" -lt "$_hmin" ] && _hmin="${#_k}"
+      else
+        _np=$((_np+1)); [ "${#_k}" -gt "$_mmax" ] && { _mmax="${#_k}"; _mmaxp="$_p"; }
+      fi
+    done < "$WORK/ld-memo-paths"
+  done
+done
+[ "$_nh" -eq 8 ] && [ "$_np" -gt 0 ] \
+  && [ $(( _mmax + ${#_sw} )) -le $(( 255 - LD_MEMO_MARGIN )) ] && [ $(( _hmin + ${#_sn} )) -gt 255 ] \
+  || { echo "FIXTURE ERROR: memo calibration: the longest key that must be cached ($_mmaxp, $_mmax characters over $_np path(s)) makes a fill file of $(( _mmax + ${#_sw} )) at the widest suffix '$_sw' (want at most $(( 255 - LD_MEMO_MARGIN )), $LD_MEMO_MARGIN under the 255-character filename limit), and the shortest hooked-step key ($_hmin over $_nh, want 8) one of $(( _hmin + ${#_sn} )) at the narrowest suffix '$_sn' (want over 255)" >&2; exit 2; }
+echo "  (ld memo: longest cached key $_mmax ($_mmaxp), fill file at most $(( _mmax + ${#_sw} )) of 255, margin $(( 255 - _mmax - ${#_sw} )); hooked-step keys at least $_hmin, direct)"
 # The base copy carries a0a9c556's hard-blockers.sh too: the C5 cells' failing control.
 LD_BASE="$WORK/ld-base"
 mkdir -p "$LD_BASE" && cp -R "$RECON/." "$LD_BASE/" \
@@ -946,6 +1037,15 @@ ld_whole() { # <world> <L> -> the rows of the healthy output that end at or befo
 }
 _lx="$("$REAL_FIND" "$LW_EXT/consumer/.claude/skills/ai-dlc/extensions" -type f | wc -c | tr -d ' ')"
 _lo="$("$REAL_FIND" "$LW_DS/consumer/.claude/skills/ai-dlc/overrides" -type f | wc -c | tr -d ' ')"
+# THE FIXED LENGTH, ASSERTED where it is read: both worlds at LD_ENC_LEN, and each staged listing at
+# least 64 bytes clear of a block boundary, so the cut floors below cannot sit on a knife edge. The
+# unpadded ext listing at the default TMPDIR was 2050 B against a 2048 B boundary.
+_ex="$(ld_enc_len "$LW_EXT")"; _eo="$(ld_enc_len "$LW_DS")"
+[ "$_ex" -eq "$LD_ENC_LEN" ] && [ "$_eo" -eq "$LD_ENC_LEN" ] \
+  && [ "$(ld_enc_len "$LW_BIG")" -eq "$LD_ENC_LEN" ] && [ "$(ld_enc_len "$LW_HUGE")" -eq "$LD_ENC_LEN" ] \
+  && [ $(( _lx % LD_BLK )) -ge 64 ] && [ $(( _lx % LD_BLK )) -le $(( LD_BLK - 64 )) ] \
+  && [ $(( _lo % LD_BLK )) -ge 64 ] && [ $(( _lo % LD_BLK )) -le $(( LD_BLK - 64 )) ] \
+  || { echo "FIXTURE ERROR: ld worlds: encoded path lengths $_ex / $_eo / $(ld_enc_len "$LW_BIG") / $(ld_enc_len "$LW_HUGE") (want $LD_ENC_LEN), staged listings $_lx / $_lo B (want each at least 64 B from a multiple of the $LD_BLK B block)" >&2; exit 2; }
 # NO CUT BELOW 2 BLOCKS. Measured: at a 1-block limit the pre-fix engine, scanning on past its failed
 # write, fed a later here-string larger than 1 KiB and hit the here-string floor -- BROKEN-HEREDOC
 # on the base side of L5e, which the precondition correctly refused as a verdict.
@@ -972,7 +1072,7 @@ _ne="$(awk -F'\t' '$1=="EXTENSION-OK"' "$LW_EXT.out" | "$REAL_GREP" -c .)" || _n
 _no="$(awk -F'\t' '$1=="OVERRIDE-OK"' "$LW_DS.out" | "$REAL_GREP" -c .)" || _no=0
 [ "$LD_W_MID" -le $(( _ne - 2 )) ] && [ "$LD_W_OVR" -le $(( _no - 2 )) ] \
   || { echo "FIXTURE ERROR: ld worlds: the L5b cut leaves $LD_W_MID of $_ne EXTENSION-OK rows whole and the L5e cut $LD_W_OVR of $_no OVERRIDE-OK rows (want at most two short of each, so an entry remains after the cut row)" >&2; exit 2; }
-echo "  (ld worlds: block $LD_BLK B; L5b cut at $LD_L_MID block(s) after $LD_W_MID whole row(s), L5b-hard at $LD_L_HARD after $LD_W_HARD, L5e at $LD_L_OVR after $LD_W_OVR, L5d at $LD_L_DS after $LD_W_DS; staged listings $_lx / $_lo B)"
+echo "  (ld worlds: block $LD_BLK B; L5b cut at $LD_L_MID block(s) after $LD_W_MID whole row(s), L5b-hard at $LD_L_HARD after $LD_W_HARD, L5e at $LD_L_OVR after $LD_W_OVR, L5d at $LD_L_DS after $LD_W_DS; staged listings $_lx / $_lo B; ext/ds paths ${#LW_EXT} / ${#LW_DS} characters, $_ex / $_eo encoded)"
 # The refusal line, keyed on its PREFIX and phrase UNANCHORED (a leaked stdout buffer was measured
 # prefixing it; `apply.sh` reads it the same way), never on "write error". Xtrace lines are skipped:
 # under `bash -x` the printf that writes the refusal is traced with the same words.
