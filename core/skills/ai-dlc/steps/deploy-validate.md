@@ -445,7 +445,7 @@ See: docs/escalations/pending.md
 See: _bmad-output/planning-artifacts/s<N>/locked-requirements.md
 - [one line per bullet of this sprint's LOCKED_REQUIREMENTS block,
   verbatim]: delivered / deferred / descoped / phased — sprint k of N,
-  per the recorded phasing rationale
+  s<N>/stories/<story>.md
   - [for each deferred or descoped bullet, and each bullet deferred and
     then delivered — the HARD_BLOCK id and its disposition token
     (approved-deferral / do-now / descope)]
@@ -494,19 +494,27 @@ in `steps/retro.md` §4a binds here, at the checkpoint: every deferred or
 descoped bullet, and every bullet deferred and then delivered in this
 sprint, needs a Tier 1 `HARD_BLOCK` carrying the operator's recorded
 disposition, and the block quotes that entry's id and disposition token.
-A bullet scheduled for a later sprint of a Rule 14 multi-sprint plan is
-marked `phased — sprint k of N`, citing the phasing rationale recorded at
-sprint planning (`steps/stories-test-strategy.md` §3); it is not a
-deferral and owes no disposition while it stays on that plan, and it
-becomes deferred the moment it slips its planned sprint. A sprint that
-ships no `locked-requirements.md` reports `none recorded` in the block.
-**The checkpoint is not presented while any locked requirement lacks a
-recorded disposition.** The channel is the one a red gate already uses:
-the lead files the Tier 1 `HARD_BLOCK` in `docs/escalations/pending.md`,
-marks the pause per Rule 3 (`touch _bmad-output/pipeline-paused.flag`) and
-STOPS, and the operator records `approved-deferral` / `do-now` /
-`descope` on that entry. An operator reply to the checkpoint does not
-stand in for a recorded disposition.
+A bullet a later sprint of a Rule 14 multi-sprint plan delivers is
+marked `phased — sprint k of N, s<N>/stories/<story>.md`, citing the
+later-phase story created at initial planning: that story carries the
+bullet verbatim in its own LOCKED_REQUIREMENTS block and is not `done`.
+It is not a deferral and owes no disposition while it stays on that
+plan.
+A `phased` line with no story citation, and any `phased` line at the
+final sprint, counts as deferred and owes its `HARD_BLOCK`.
+A bullet that slips its planned sprint becomes deferred the moment it
+slips.
+A sprint that ships no `locked-requirements.md` reports `none recorded`
+in the block.
+**The checkpoint is not presented while any locked requirement that
+needs one lacks a recorded disposition.**
+The channel is the one a red gate already uses: the lead files the Tier 1
+`HARD_BLOCK` in `docs/escalations/pending.md`, marks the pause per Rule 3
+(`touch _bmad-output/pipeline-paused.flag`) and STOPS, and the lead
+records the operator's disposition — `approved-deferral` / `do-now` /
+`descope` — on that entry with its `Operator authorization:` citation.
+An operator reply to the checkpoint does not stand in for a recorded
+disposition.
 
 **Minimum mechanism (Rule 26(c)).** Failure caught: a generic checkpoint
 reply accepted as the operator's word on a locked requirement left

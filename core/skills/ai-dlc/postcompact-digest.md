@@ -57,7 +57,9 @@ handoff exception applies. Handoff triggers:
 The pipeline runs as a continuous, uninterrupted flow. Exactly
 FOUR pause points exist where you stop and wait for human input:
 - (a) **Ambiguity resolution and operator-only decisions** (Rule 11).
-- (b) **Production Validation Checkpoint** (Rule 10).
+- (b) **Production Validation Checkpoint** (Rule 10), including the
+  stop before it while a locked requirement awaits its recorded
+  disposition (`steps/deploy-validate.md` §5).
 - (c) **Retro commentary prompt**.
 - (d) **Sprint-scope confirmation** (`route.md` Step 6) -- the only
   pause point upstream of planning. Confirm or correct the scope you
