@@ -91,8 +91,18 @@ locked_block() { # stdin: sec5 output -> the block body, tags stripped
 }
 LOCKED_HEAD='### Locked-Requirement Coverage'
 LOCKED_TOKENS='LOCKED_REQUIREMENTS delivered deferred descoped HARD_BLOCK approved-deferral do-now descope'
+# Phrases the block body must carry beyond its single-word tokens: the deferred-then-delivered
+# clause (same-sprint delivery does not cleanse a slipped lock), the Rule 14 phased status, and
+# the value reported when the sprint ships no locked-requirements.md.
+LOCKED_PHRASES='each bullet deferred and then delivered|phased — sprint k of N, per the recorded phasing rationale|none recorded'
 # THE GATING SENTENCE: kept OUT of the template, so only §5 prose can satisfy it.
 LOCKED_GATE='The checkpoint is not presented while any locked requirement lacks a recorded disposition.'
+LOCKED_REPLY='An operator reply to the checkpoint does not stand in for a recorded disposition.'
+# §6 and §7 CITE §5's rule rather than restating it at a narrower width.
+LOCKED_WAIT='A generic validation reply is not a disposition: every locked requirement §5'"'"'s locked-requirement coverage rule requires one for keeps its own recorded `HARD_BLOCK` disposition.'
+LOCKED_ROUTE='Proceed to retro, once every locked requirement §5'"'"'s locked-requirement coverage rule requires a disposition for carries its recorded `HARD_BLOCK` disposition'
+sec6() { awk '/^### 6\. Wait for Human/{on=1; next} on && /^### /{exit} on{print}' "$1"; }
+sec7() { awk '/^### 7\. Post-Validation Routing/{on=1; next} on && /^### /{exit} on{print}' "$1"; }
 
 # check <file> -> prints one line per failing arm; prints nothing when every arm holds.
 # Presence-shaped throughout: every arm demands a string APPEAR, so an empty §3 fails
@@ -142,9 +152,18 @@ check() {
       # in for the disposition token.
       grep -qwF -- "$tok" <<<"$lb" || echo "LOCKED: '$tok' absent from the Locked-Requirement Coverage block body"
     done
+    fl="$(flat <<<"$lb")"
+    local IFS='|' ph
+    for ph in $LOCKED_PHRASES; do
+      case "$fl" in *"$ph"*) : ;; *) echo "LOCKED: '$ph' absent from the Locked-Requirement Coverage block body" ;; esac
+    done
+    unset IFS
   fi
   fl="$(grep "^P"$'\t' <<<"$s5" | cut -f2- | flat)"
   case "$fl" in *"$LOCKED_GATE"*) : ;; *) echo "LOCKED-GATE: §5 prose does not withhold the checkpoint while a locked requirement lacks a recorded disposition" ;; esac
+  case "$fl" in *"$LOCKED_REPLY"*) : ;; *) echo "LOCKED-GATE: §5 prose does not say an operator reply to the checkpoint is no recorded disposition" ;; esac
+  case "$(sec6 "$f" | flat)" in *"$LOCKED_WAIT"*) : ;; *) echo "LOCKED-WAIT: §6 does not cite §5's rule that a generic validation reply is no disposition" ;; esac
+  case "$(sec7 "$f" | flat)" in *"$LOCKED_ROUTE"*) : ;; *) echo "LOCKED-ROUTE: §7 does not hold the route to retro on §5's recorded dispositions" ;; esac
 }
 
 # --- the subject -------------------------------------------------------------
@@ -272,10 +291,11 @@ mutant "del-locked-block" \
   '/^### Locked-Requirement Coverage$/{s=1; next} s && /^### Next Steps$/{s=0} s{next} {print}' \
   "LOCKED:" "deleting the Locked-Requirement Coverage block, Red-gate line kept, is caught"
 
-# MOVE: the block leaves §5's template verbatim and reappears under §6. A whole-file grep still
-# finds the heading; the fence-aware §5 isolation must not.
+# MOVE: the block leaves §5's template verbatim and reappears at the END of §6 (just before §7's
+# heading, so §6's own sentence stays inside §6). A whole-file grep still finds the heading; the
+# fence-aware §5 isolation must not.
 mutant "move-locked-block" \
-  '/^### Locked-Requirement Coverage$/{s=1} s && /^### Next Steps$/{s=0} s{held=held $0 "\n"; next} /^### 6\. Wait for Human$/{print; printf "%s", held; next} {print}' \
+  '/^### Locked-Requirement Coverage$/{s=1} s && /^### Next Steps$/{s=0} s{held=held $0 "\n"; next} /^### 7\. Post-Validation Routing$/{printf "%s", held; print; next} {print}' \
   "LOCKED:" "moving the Locked-Requirement Coverage block out of §5 (into §6) is caught"
 
 # TOKENS: the block keeps its heading but loses its disposition tokens. The Red-gate line in the
@@ -294,6 +314,36 @@ mutant "locked-no-descope-token" \
 mutant "del-locked-gate" \
   '/^\*\*The checkpoint is not presented while any locked requirement lacks a$/{skip=1; next} skip && /^recorded disposition\.\*\* /{ sub(/^recorded disposition\.\*\* /, ""); skip=0 } {print}' \
   "LOCKED-GATE:" "deleting the checkpoint-withheld-without-disposition sentence from §5 is caught"
+
+# REPLY: the sentence saying a checkpoint reply is no recorded disposition deleted from §5 prose.
+mutant "del-locked-reply" \
+  '/^`descope` on that entry\. An operator reply to the checkpoint does not$/{print "`descope` on that entry."; skip=1; next} skip && /^stand in for a recorded disposition\.$/{skip=0; next} {print}' \
+  "LOCKED-GATE:" "deleting the checkpoint-reply-is-no-disposition sentence from §5 is caught"
+
+# WAIT: §6's citation of §5's rule deleted.
+mutant "del-locked-wait" \
+  '/^A generic validation reply is not a disposition: every locked$/{skip=1} skip && /^its own recorded `HARD_BLOCK` disposition\.$/{skip=0; next} skip{next} {print}' \
+  "LOCKED-WAIT:" "deleting §6's generic-reply-is-no-disposition sentence is caught"
+
+# ROUTE: §7's retro route restored to the unconditional form it replaced.
+mutant "del-locked-route" \
+  '/^- If \*\*single sprint or final sprint:\*\* Proceed to retro, once every$/{print "- If **single sprint or final sprint:** Proceed to retro."; skip=1; next} skip && /^  operator.s validation reply is not one\.$/{skip=0; next} skip{next} {print}' \
+  "LOCKED-ROUTE:" "dropping §7's disposition condition on the route to retro is caught"
+
+# DEFERRED-THEN-DELIVERED: the clause leaves the block, so a slipped-then-shipped lock reports no disposition.
+mutant "del-locked-deferred-delivered" \
+  '/^### Locked-Requirement Coverage$/{s=1} s && /^### Next Steps$/{s=0} s{ sub(/, and each bullet deferred and$/, ""); sub(/^    then delivered — /, "    — ") } {print}' \
+  "LOCKED:" "dropping the deferred-then-delivered clause from the block body is caught"
+
+# PHASED: the Rule 14 status removed from the block.
+mutant "del-locked-phased" \
+  '/^### Locked-Requirement Coverage$/{s=1} s && /^### Next Steps$/{s=0} s && / \/ phased — sprint k of N,$/{sub(/ \/ phased — sprint k of N,$/, ""); print; skip=1; next} skip && /^  per the recorded phasing rationale$/{skip=0; next} {print}' \
+  "LOCKED:" "dropping the phased status from the block body is caught"
+
+# NONE RECORDED: the value for a sprint with no locked-requirements.md removed from the block.
+mutant "del-locked-none" \
+  '/^### Locked-Requirement Coverage$/{s=1} s && /^### Next Steps$/{s=0} s && /none recorded\]$/{next} {print}' \
+  "LOCKED:" "dropping the none-recorded value from the block body is caught"
 
 # SECTION5: §5's heading renamed -> nothing to isolate. Must be a finding, never clean.
 mutant "no-section5" \

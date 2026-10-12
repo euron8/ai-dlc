@@ -444,10 +444,12 @@ See: docs/escalations/pending.md
 ### Locked-Requirement Coverage
 See: _bmad-output/planning-artifacts/s<N>/locked-requirements.md
 - [one line per bullet of this sprint's LOCKED_REQUIREMENTS block,
-  verbatim]: delivered / deferred / descoped
+  verbatim]: delivered / deferred / descoped / phased — sprint k of N,
+  per the recorded phasing rationale
   - [for each deferred or descoped bullet, and each bullet deferred and
     then delivered — the HARD_BLOCK id and its disposition token
     (approved-deferral / do-now / descope)]
+- [no locked-requirements.md for this sprint: none recorded]
 
 ### Next Steps
 [If multi-sprint: "Sprint 1 of N complete. Awaiting your validation
@@ -487,15 +489,24 @@ reads a computed count rather than an enumerated one.
 **Locked-requirement coverage.** The checkpoint's Locked-Requirement
 Coverage block carries one line per bullet of this sprint's
 LOCKED_REQUIREMENTS block (`_bmad-output/planning-artifacts/s<N>/locked-requirements.md`),
-each marked delivered, deferred or descoped. The locked-requirement rule
+each marked delivered, deferred, descoped or phased. The locked-requirement rule
 in `steps/retro.md` §4a binds here, at the checkpoint: every deferred or
 descoped bullet, and every bullet deferred and then delivered in this
 sprint, needs a Tier 1 `HARD_BLOCK` carrying the operator's recorded
 disposition, and the block quotes that entry's id and disposition token.
+A bullet scheduled for a later sprint of a Rule 14 multi-sprint plan is
+marked `phased — sprint k of N`, citing the phasing rationale recorded at
+sprint planning (`steps/stories-test-strategy.md` §3); it is not a
+deferral and owes no disposition while it stays on that plan, and it
+becomes deferred the moment it slips its planned sprint. A sprint that
+ships no `locked-requirements.md` reports `none recorded` in the block.
 **The checkpoint is not presented while any locked requirement lacks a
-recorded disposition.** The lead files the `HARD_BLOCK` and obtains the
-disposition first, through the escalation channel `escalations.md`
-specifies; an operator reply to the checkpoint does not stand in for one.
+recorded disposition.** The channel is the one a red gate already uses:
+the lead files the Tier 1 `HARD_BLOCK` in `docs/escalations/pending.md`,
+marks the pause per Rule 3 (`touch _bmad-output/pipeline-paused.flag`) and
+STOPS, and the operator records `approved-deferral` / `do-now` /
+`descope` on that entry. An operator reply to the checkpoint does not
+stand in for a recorded disposition.
 
 **Minimum mechanism (Rule 26(c)).** Failure caught: a generic checkpoint
 reply accepted as the operator's word on a locked requirement left
@@ -519,10 +530,9 @@ checkpoint (Rule 3): `touch _bmad-output/pipeline-paused.flag`.
 4. Approve any `DEFERRAL_REQUEST` entries (or reject and require implementation)
 5. Confirm validation or request fixes
 
-A generic validation reply is not a disposition: each locked requirement
-the Locked-Requirement Coverage block marks deferred or descoped keeps
-its own Rule 12 Tier 1 `HARD_BLOCK` disposition, filed per
-`escalations.md`.
+A generic validation reply is not a disposition: every locked
+requirement §5's locked-requirement coverage rule requires one for keeps
+its own recorded `HARD_BLOCK` disposition.
 
 ### 7. Post-Validation Routing
 
@@ -544,9 +554,9 @@ After human validates:
   **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/sprint-review-next.md`
 
 - If **single sprint or final sprint:** Proceed to retro, once every
-  locked requirement not delivered carries its Rule 12 Tier 1
-  `HARD_BLOCK` disposition filed per `escalations.md` — the operator's
-  validation reply is not one.
+  locked requirement §5's locked-requirement coverage rule requires a
+  disposition for carries its recorded `HARD_BLOCK` disposition — the
+  operator's validation reply is not one.
 
   1. Refresh `## Pipeline Position` in `_bmad-output/pipeline-snapshot.md`
      FIRST, OVERWRITING the existing `current_step_file` bullet rather than
