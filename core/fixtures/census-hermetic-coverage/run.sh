@@ -2,7 +2,7 @@
 # census-hermetic-coverage -- bind scripts/census-hermetic-coverage.sh: it must score a seeded fixture whose
 # skip branch hides an undeclared input as MISMATCH PLAIN-MORE, stay quiet (EQUAL) on a fixture that agrees
 # across the two runs for every reason a careless census would split them, and each wrong census
-# implementation (M1-M22) must be killed by a presence-shaped assertion.
+# implementation (M1-M23) must be killed by a presence-shaped assertion.
 #
 # Every corpus is a mini repository seeded under mktemp (hermetic-runner's mk_probe shape): the real hook,
 # suite-content-key.sh, hermetic-run.sh and core-paths.sh copied in, the seeded fixtures beside them, all
@@ -33,6 +33,8 @@
 #             over three reps keeps it, because {13} and {11,12} do not overlap.
 #   s-overlap EQUIVALENT DIFFER: plain 3335/3337 alternating, hermetic 3336 every rep -- validator-fork-budget's
 #             shape, the near-miss for s-flicker: a count, moving on one side, whose ranges DO overlap.
+#   s-pathlen EQUAL: prints the lengths of TMPDIR and HOME, which differ between the runs unless the plain
+#             side's paths are as long as the sandbox's (path-length world only).
 #   s-marker  writes `.claude` into the census's scratch base during its own run (end-walk world only).
 #   s-killed  on the plain side kills its own census worker (its parent, checked to be a `--pair` process),
 #             so the run is incomplete and the pair's physical root is left (incomplete-run world only).
@@ -71,6 +73,8 @@
 #   M20 no end-of-run marker walk               -> the census exits 0 with s-marker's marker present
 #   M21 a count judged "moves on one side"      -> self-probe names FA1; probe removed, s-flicker reads EQUIVALENT
 #   M22 the probe's failure path keeps its root -> a self-probe resolve failure leaves one chc.* root
+#   M23 short plain HOME/TMPDIR (`$T/phome`,    -> s-pathlen MISMATCH DIFFER (control: EQUAL)
+#       `$T/ptmp`), not the sandbox's length
 #
 # M11 and M13 are re-anchored on the three-rep rule: M11 acquits a line that moves as a whole, M13 checks no
 # token at all.
@@ -214,6 +218,10 @@ fx "$WA" s-overlap 'data/a.txt' "$(cnt "$WORK/overlap.count")
 echo \"ok \$k forks counted\"
 echo \"ok b\"; echo \"ok c\"
 exit 0"
+fx "$WA" s-pathlen 'data/a.txt' 'echo "ok tmpdir-len ${#TMPDIR}"
+echo "ok home-len ${#HOME}"
+echo "ok tail line"
+exit 0'
 fx "$WA" s-marker 'data/a.txt' 'b="${TMPDIR%%/chc.*}"; [ "$b" != "$TMPDIR" ] && mkdir -p "$b/.claude"
 echo "ok a"; echo "ok b"; echo "ok c"
 exit 0'
@@ -383,6 +391,20 @@ world_killed M4 s-quiet "MISMATCH HERMETIC-MORE" "H: ok cwd-read data/a.txt" \
   1 'bash "$CENSUS_FXREL/$fx/run.sh" )' 'bash run.sh )'
 world_killed M5 s-quiet "MISMATCH HERMETIC-MORE" "H: ok farm-tool farm-ran" 1 'PATH="$CENSUS_TOOLDIRS:$B"' 'PATH="$CENSUS_TOOLDIRS"'
 world_killed M6 s-quiet "MISMATCH HERMETIC-MORE" "H: ok stderr-line" 1 '"$T/p.raw" 2>&1' '"$T/p.raw" 2>/dev/null'
+
+# Path length: the plain HOME and TMPDIR are as long as the sandbox's, so a fixture printing their lengths
+# reads EQUAL; M23 restores the short `$T/phome` / `$T/ptmp` spelling and the same fixture splits.
+census "$CENSUS" "$WA" "s-quiet s-pathlen" 2
+eq "pathlen: s-pathlen (prints the lengths of TMPDIR and HOME) reads EQUAL" "$(vd s-pathlen)" "EQUAL -"
+eq "pathlen: s-pathlen counted 3 ok lines on each side" "$(cell s-pathlen 8)/$(cell s-pathlen 9)" "3/3"
+if P="$(mut M23 1 'mkdir -p "$T/htmp" "$T/vs" "$T/ptmp" || return 2' 'mkdir -p "$T/htmp" "$T/vs" "$T/phome" "$T/ptmp" || return 2' \
+    1 'HOME="$PW/home" TMPDIR="$PW/tmp"' 'HOME="$T/phome" TMPDIR="$T/ptmp"')"; then
+  census "$P" "$WA" "s-quiet s-pathlen" 2
+  has "M23: the self-probe still passes" "$C_ERR" "$PROBE_OK"
+  eq "M23: s-quiet still EQUAL, so the mutant ran" "$(vd s-quiet)" "EQUAL -"
+  eq "M23 (short plain HOME/TMPDIR): s-pathlen reads MISMATCH DIFFER" "$(vd s-pathlen)" "MISMATCH DIFFER"
+  has "M23: the note names the disjoint length" "$(cell s-pathlen 12)" "MISMATCH disjoint count"
+else bad "M23: DID NOT APPLY"; fi
 
 # --- BOTH-FAIL, the fixture-rc-2 split, and the token-level equivalence -----------------------------
 probe_killed M9 P11 s-bothfail "EQUAL -" \

@@ -35,8 +35,10 @@
 #   hermetic  `hermetic-run.sh --root R <fx>` with AI_DLC_HERMETIC_KEEP=1, a per-fixture TMPDIR, and
 #             AI_DLC_VERDICT_STORE a fresh directory, so the real store is never written.
 #   plain     from the root (never a cd into the fixture dir, which CLAUDE.md measures as five fabricated
-#             failures): `env -i PATH=<READSET_TOOL_DIRS>:<kept sandbox>/bin HOME=<scratch> TMPDIR=<scratch>
-#             AI_DLC_PROJECT_ROOT=<root> PREPUSH_POOL_DEPTH=<same> bash <fixtures>/<fx>/run.sh`. The env is
+#             failures): `env -i PATH=<READSET_TOOL_DIRS>:<kept sandbox>/bin HOME=<pair>/ptmp/<run>/home
+#             TMPDIR=<pair>/ptmp/<run>/tmp AI_DLC_PROJECT_ROOT=<root> PREPUSH_POOL_DEPTH=<same> bash
+#             <fixtures>/<fx>/run.sh`, where <run> is the kept sandbox's own `hermetic-run.XXXXXX` basename, so
+#             HOME and TMPDIR are as long as the sandbox's `<pair>/htmp/<run>/home` and `.../tmp`. The env is
 #             the sandbox's own invocation (hermetic-run.sh:536-538) with only the root moved. The TOOL FARM
 #             is hermetic-run's own kept `bin/`, so a declared tool resolved off git's exec-path or a
 #             READSET_TOOL_XP dir reaches both runs; there is no second tools.decl parser here to drift.
@@ -274,7 +276,7 @@ census_selfprobe() {
   probe_case P3 0 0 0 "checked\n" "checked\n" "UNCOUNTABLE -"
   probe_case P4 2 - 0 "ok a\nok b\nok c\n" "hermetic-run: p: declared file absent: data/x\n" "REFUSED -"
   probe_case P5 0 0 0 "ok n=3\nok b\nok c\n" "ok n=2\nok b\nok c\n" "MISMATCH DIFFER"
-  probe_case P6 0 0 0 "ok t $x/ptmp/tmp.AAAA/f\nok b\nok c\n" "ok t $xa/htmp/hermetic-run.Q1/tmp/tmp.BB/f\nok b\nok c\n" "EQUAL -"
+  probe_case P6 0 0 0 "ok t $x/ptmp/hermetic-run.Q1/tmp/tmp.AAAA/f\nok b\nok c\n" "ok t $xa/htmp/hermetic-run.Q1/tmp/tmp.BB/f\nok b\nok c\n" "EQUAL -"
   probe_case P7 0 0 0 "ok only\n" "ok only\n" "LOW-RES -"
   probe_case P8 0 0 1 "ok a\nok b\nok c\n" "ok a\nok b\nok c\n" "MISMATCH RC"
   probe_case P9 0 0 0 "ok a\nok b\nok c\nokay extra\n" "ok a\nok b\nok c\n" "EQUAL -"
@@ -345,7 +347,7 @@ census_pair_once() {
     ln -s "$T" "$2" || return 2
   fi
   T="$(cd "$2" && pwd -P)" || return 2
-  mkdir -p "$T/htmp" "$T/vs" "$T/phome" "$T/ptmp" || return 2
+  mkdir -p "$T/htmp" "$T/vs" "$T/ptmp" || return 2
   ( cd "$CENSUS_ROOT" && AI_DLC_HERMETIC_KEEP=1 TMPDIR="$T/htmp" AI_DLC_VERDICT_STORE="$T/vs" \
       PREPUSH_POOL_DEPTH="$CENSUS_PD" bash "$CENSUS_RUNNER" --root "$CENSUS_ROOT" "$fx" ) > "$T/h.raw" 2>&1 < /dev/null; hx=$?
   hrc="$(CN_FX="$fx" awk 'BEGIN { p = "hermetic-run: " ENVIRON["CN_FX"] ": rc=" }
@@ -356,9 +358,17 @@ census_pair_once() {
   for k in "$T"/htmp/hermetic-run.*; do [ -d "$k" ] && { n=$((n + 1)); K="$k"; }; done
   [ "$n" = 1 ] || K=""
   if [ -n "$K" ]; then K="$(cd "$K" && pwd -P)"; B="$K/bin"; SB="$K/sb"; else B="$T/no-farm"; SB="-"; fi
+  # The plain HOME and TMPDIR mirror the sandbox's `$HR_WORK/home` and `$HR_WORK/tmp` (hermetic-run.sh:538)
+  # LENGTH FOR LENGTH: `ptmp` is as long as `htmp`, and the runner's own mktemp basename is reused; with no
+  # kept sandbox, `hermetic-run.NOFARM` is as long as `hermetic-run.XXXXXX`.
+  # Measured: with `$T/ptmp` and `$T/phome` the plain paths were 24 characters shorter, and three fixtures that
+  # print a length or byte count derived from a temp path (a 300-char dist under $WORK, an env dump, a captured
+  # error message) read MISMATCH DIFFER at a disjoint count that was the gap, not a lost assertion.
+  PW="$T/ptmp/$(basename "${K:-$T/htmp/hermetic-run.NOFARM}")"
+  mkdir -p "$PW/home" "$PW/tmp" || return 2
   s0="$(census_gitstate)"
   PLAIN_ROOT="$CENSUS_ROOT"
-  ( cd "$PLAIN_ROOT" && exec env -i PATH="$CENSUS_TOOLDIRS:$B" HOME="$T/phome" TMPDIR="$T/ptmp" AI_DLC_PROJECT_ROOT="$PLAIN_ROOT" PREPUSH_POOL_DEPTH="$CENSUS_PD" bash "$CENSUS_FXREL/$fx/run.sh" ) > "$T/p.raw" 2>&1 < /dev/null; prc=$?
+  ( cd "$PLAIN_ROOT" && exec env -i PATH="$CENSUS_TOOLDIRS:$B" HOME="$PW/home" TMPDIR="$PW/tmp" AI_DLC_PROJECT_ROOT="$PLAIN_ROOT" PREPUSH_POOL_DEPTH="$CENSUS_PD" bash "$CENSUS_FXREL/$fx/run.sh" ) > "$T/p.raw" 2>&1 < /dev/null; prc=$?
   s1="$(census_gitstate)"
   printf '%s\n' "$s0" > "$T/git.before"; printf '%s\n' "$s1" > "$T/git.after"
   gd="$(awk 'NR == FNR { a[$1] = $0; next } a[$1] != $0 { printf "%s%s", sep, $1; sep = "+" }' "$T/git.before" "$T/git.after")"
