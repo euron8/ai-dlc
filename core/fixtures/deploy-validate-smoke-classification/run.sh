@@ -7,8 +7,15 @@
 # smoke run (an operator-fired §2a operation included), and defines a transient failure as one a retry cleared with
 # NO ACTION BY THE LEAD between the runs, and requires the smoke-failure loop's code-issue
 # item to dispatch `dev` rather than leave the fix to the lead. The Production Validation Checkpoint's
-# `Deployment` block reports the same split. No script reads `smoke_run_evidence`; the
+# `Deployment` block reports the same split. §5's checkpoint template carries a
+# `### Locked-Requirement Coverage` block -- one line per LOCKED_REQUIREMENTS bullet, delivered /
+# deferred / descoped, with the HARD_BLOCK id and disposition token (approved-deferral / do-now /
+# descope) -- and §5's prose withholds the checkpoint while a locked requirement lacks a recorded
+# disposition. No script reads `smoke_run_evidence` or the coverage block; the
 # executing lead reads this prose, so the prose is the mechanism and this fixture pins it.
+#
+# §5 IS ISOLATED FENCE-AWARE: its template fence holds `### ` lines, so only a `### ` outside the
+# fence ends §5 (see sec5()). The block arms read the fence, the gating arm reads §5 prose only.
 #
 # KEYED ON THE SECTION, NOT THE FILE. Each field must be DEFINED as a `- \`<field>\` --`
 # bullet inside §3's body (heading `### 3. Smoke Tests` up to the next `### ` heading).
@@ -64,6 +71,28 @@ sec4() { # <file> -> §4 body, heading line excluded
 deploy_block() { # <file> -> the checkpoint's `### Deployment` block
   awk '/^### Deployment$/{on=1; next} on && /^### /{exit} on{print}' "$1"
 }
+# §5 IS FENCE-AWARE. Its checkpoint template is a ``` fence holding `### ` lines of its own, so
+# sec3()'s `/^### /{exit}` would stop at the template's first `### What Was Built`. Only a `### `
+# OUTSIDE a fence ends §5. Every body line is tagged `F<TAB>` (inside the template fence) or
+# `P<TAB>` (§5 prose), so an arm can say which of the two must carry its text.
+sec5() { # <file> -> §5 body, heading line excluded, each line tagged F or P
+  awk '/^### 5\. Production Validation Checkpoint/{on=1; next}
+       on && /^```/{f=!f; print "F\t" $0; next}
+       on && !f && /^### /{exit}
+       on{print (f ? "F\t" : "P\t") $0}' "$1"
+}
+# The template's Locked-Requirement Coverage block: its heading up to the next fenced `### `.
+# Keyed on the BLOCK BODY, because the template's Red-gate line already carries the three
+# disposition tokens and the What Was Built line carries `delivered`.
+locked_block() { # stdin: sec5 output -> the block body, tags stripped
+  awk -F'\t' '$1=="F" && $2=="### Locked-Requirement Coverage"{on=1; next}
+              on && $1=="F" && ($2 ~ /^### / || $2 ~ /^```/){exit}
+              on{print $2}'
+}
+LOCKED_HEAD='### Locked-Requirement Coverage'
+LOCKED_TOKENS='LOCKED_REQUIREMENTS delivered deferred descoped HARD_BLOCK approved-deferral do-now descope'
+# THE GATING SENTENCE: kept OUT of the template, so only §5 prose can satisfy it.
+LOCKED_GATE='The checkpoint is not presented while any locked requirement lacks a recorded disposition.'
 
 # check <file> -> prints one line per failing arm; prints nothing when every arm holds.
 # Presence-shaped throughout: every arm demands a string APPEAR, so an empty §3 fails
@@ -97,12 +126,29 @@ check() {
     grep -qF -- "- Smoke tests:" <<<"$blk" || { echo "CHECKPOINT: no Smoke tests line in the Deployment block"; break; }
     grep -qF -- "$n" <<<"$blk" || echo "CHECKPOINT: '$n' absent from the Deployment block"
   done
+  # §5 LOCKED-REQUIREMENT COVERAGE. Each arm owns one prefix so a mutant fires one arm only:
+  # SECTION5 (§5 unisolatable), LOCKED (block heading in the fence, then its tokens -- the token
+  # arm stands down when the heading is absent, which the heading arm already reports), and
+  # LOCKED-GATE (the no-presentation sentence in §5 PROSE, never the template).
+  local s5 lb tok
+  s5="$(sec5 "$f")"
+  if [ -z "$s5" ]; then echo "SECTION5: §5 could not be isolated"; return; fi
+  if ! grep -qxF -- "F"$'\t'"$LOCKED_HEAD" <<<"$s5"; then
+    echo "LOCKED: no '$LOCKED_HEAD' block inside §5's fenced checkpoint template"
+  else
+    lb="$(locked_block <<<"$s5")"
+    for tok in $LOCKED_TOKENS; do
+      grep -qF -- "$tok" <<<"$lb" || echo "LOCKED: '$tok' absent from the Locked-Requirement Coverage block body"
+    done
+  fi
+  fl="$(grep "^P"$'\t' <<<"$s5" | cut -f2- | flat)"
+  case "$fl" in *"$LOCKED_GATE"*) : ;; *) echo "LOCKED-GATE: §5 prose does not withhold the checkpoint while a locked requirement lacks a recorded disposition" ;; esac
 }
 
 # --- the subject -------------------------------------------------------------
 out="$(check "$STEP")"
 if [ -z "$out" ]; then
-  ok "§3 defines all four fields, the transient definition, the in-run value, the loop routing, the dev dispatch in the fix loop and the one-live-mutation-per-run rule including operator-fired §2a operations; §4 names the Check 5 tokens; the checkpoint reports the split"
+  ok "§3 defines all four fields, the transient definition, the in-run value, the loop routing, the dev dispatch in the fix loop and the one-live-mutation-per-run rule including operator-fired §2a operations; §4 names the Check 5 tokens; the checkpoint reports the split; §5's template carries the Locked-Requirement Coverage block with its status and disposition tokens and §5 prose withholds the checkpoint without a recorded disposition"
 else
   while IFS= read -r l; do bad "$l"; done <<<"$out"
 fi
@@ -123,6 +169,13 @@ if [ -z "$(check "$CTL")" ] && [ -n "$(sec3 "$CTL")" ]; then
   ok "CONTROL: an unmutated copy passes and §3 is non-empty, so a mutant's finding below is the mutation"
 else
   bad "CONTROL: an unmutated copy fails -- every mutant verdict below is uninterpretable"
+fi
+# POSITIVE CONJUNCT for §5: the isolation must reach PAST the template fence (a `### ` inside it
+# would otherwise end §5) and the block body must be non-empty.
+if [ -n "$(sec5 "$CTL" | locked_block)" ] && grep -qF -- "$LOCKED_GATE" <<<"$(sec5 "$CTL" | grep "^P"$'\t' | cut -f2- | flat)"; then
+  ok "CONTROL5: §5 isolates past its template fence, the coverage block body is non-empty and the gating sentence sits in §5 prose"
+else
+  bad "CONTROL5: §5 isolation stopped inside the template or the coverage block is empty -- the §5 mutant verdicts are uninterpretable"
 fi
 
 mutant() { # <name> <awk-program> <expected-finding-prefix> <label>
@@ -209,6 +262,35 @@ mutant "comment-dispatch" \
 mutant "no-leadscope" \
   '{ gsub(/a lead that edits product code here is applying a$/, "a lead may edit product code here when applying a"); print }' \
   "DISPATCH:" "dropping the inline-edit-is-a-finding sentence from §3 is caught"
+
+# --- §5 Locked-Requirement Coverage --------------------------------------------
+# DELETE: the block goes, the Red-gate line (which carries the same disposition tokens) stays.
+# A token grep over §5's whole fence would still pass; the heading arm must not.
+mutant "del-locked-block" \
+  '/^### Locked-Requirement Coverage$/{s=1; next} s && /^### Next Steps$/{s=0} s{next} {print}' \
+  "LOCKED:" "deleting the Locked-Requirement Coverage block, Red-gate line kept, is caught"
+
+# MOVE: the block leaves §5's template verbatim and reappears under §6. A whole-file grep still
+# finds the heading; the fence-aware §5 isolation must not.
+mutant "move-locked-block" \
+  '/^### Locked-Requirement Coverage$/{s=1} s && /^### Next Steps$/{s=0} s{held=held $0 "\n"; next} /^### 6\. Wait for Human$/{print; printf "%s", held; next} {print}' \
+  "LOCKED:" "moving the Locked-Requirement Coverage block out of §5 (into §6) is caught"
+
+# TOKENS: the block keeps its heading but loses its disposition tokens. The Red-gate line in the
+# same fence still carries them, so only an arm keyed on the BLOCK BODY sees the loss.
+mutant "locked-no-tokens" \
+  '/^### Locked-Requirement Coverage$/{s=1} s && /^### Next Steps$/{s=0} s{ gsub(/\(approved-deferral \/ do-now \/ descope\)/, "(as recorded)") } {print}' \
+  "LOCKED:" "stripping the disposition tokens from the block body is caught though the Red-gate line keeps them"
+
+# GATE: the no-presentation sentence deleted from §5 prose.
+mutant "del-locked-gate" \
+  '/^\*\*The checkpoint is not presented while any locked requirement lacks a$/{skip=1; next} skip && /^recorded disposition\.\*\* /{ sub(/^recorded disposition\.\*\* /, ""); skip=0 } {print}' \
+  "LOCKED-GATE:" "deleting the checkpoint-withheld-without-disposition sentence from §5 is caught"
+
+# SECTION5: §5's heading renamed -> nothing to isolate. Must be a finding, never clean.
+mutant "no-section5" \
+  '/^### 5\. Production Validation Checkpoint$/{print "### 5. Operator checkpoint"; next} {print}' \
+  "SECTION5:" "an unisolatable §5 is a finding, not an empty pass"
 
 # SECTION: §3's heading renamed -> nothing to isolate. Must be a finding, never clean.
 mutant "no-section" \
