@@ -94,7 +94,7 @@ LOCKED_TOKENS='LOCKED_REQUIREMENTS delivered deferred descoped HARD_BLOCK approv
 # Phrases the block body must carry beyond its single-word tokens: the deferred-then-delivered
 # clause (same-sprint delivery does not cleanse a slipped lock), the Rule 14 phased status, and
 # the value reported when the sprint ships no locked-requirements.md.
-LOCKED_PHRASES='each bullet deferred and then delivered|phased — <the story or stories that deliver it>|none recorded'
+LOCKED_PHRASES='each bullet deferred and then delivered|phased — <the story or stories that deliver it>|carried from an earlier checkpoint of this plan: one line per bullet it marked phased|none recorded'
 # THE GATING SENTENCE: kept OUT of the template, so only §5 prose can satisfy it. "that needs one":
 # delivered and phased bullets legitimately carry no disposition.
 LOCKED_GATE='The checkpoint is not presented while any locked requirement that needs one lacks a recorded disposition.'
@@ -106,8 +106,14 @@ LOCKED_REPLY='An operator reply to the checkpoint does not stand in for a record
 LOCKED_CHANNEL='marks the pause per Rule 3 (`touch _bmad-output/pipeline-paused.flag`) and STOPS, and the lead records the operator'"'"'s disposition — `approved-deferral` / `do-now` / `descope` — on that entry with its `Operator authorization:` citation.'
 # `phased` is not an escape hatch. Keyed on the CHECKPOINT, not a sprint number: no disposition
 # until the plan's FINAL checkpoint, an uncited line is deferred at any checkpoint, a slip defers.
-LOCKED_FINAL='A `phased` bullet owes no disposition until the plan'"'"'s final checkpoint, where any bullet not delivered counts as deferred and owes its `HARD_BLOCK`.'
+# "final" is DEFINED in the sentence, by story status -- §7's "single sprint or final sprint" calls an
+# in-sprint phase checkpoint final, which would defer every phased bullet at the first phase.
+LOCKED_FINAL='A `phased` bullet owes no disposition until the plan'"'"'s final checkpoint — the one after which no story of the plan remains not `done` in `sprint-status.yaml` — where any bullet not delivered counts as deferred and owes its `HARD_BLOCK`.'
+# A plan spanning sprint numbers: the block reads only this sprint's locked-requirements.md, so a
+# bullet phased at an earlier sprint is carried forward or it never reaches the operator.
+LOCKED_CARRY='At a later checkpoint of a Rule 14 plan the block also carries every bullet an earlier checkpoint of that plan marked `phased`, read from that earlier sprint'"'"'s `locked-requirements.md`.'
 LOCKED_UNCITED='A `phased` line citing no story counts as deferred at any checkpoint.'
+LOCKED_NOTPHASED='A `phased` line citing a story that is `done`, or one that does not carry the LR id, is not `phased` and counts as deferred.'
 LOCKED_SLIP='A bullet that slips its planned phase becomes deferred the moment it slips.'
 LOCKED_STORY='Each cited story carries the requirement'"'"'s LR id in its own LOCKED_REQUIREMENTS block, verbatim or in any form `steps/stories-test-strategy.md` §2a permits (`requires_context:` included), and its status in `sprint-status.yaml` is not `done`.'
 LOCKED_SPLIT='A bullet split across phases cites every story that carries a part of it.'
@@ -177,7 +183,9 @@ check() {
   case "$fl" in *"$LOCKED_REPLY"*) : ;; *) echo "LOCKED-GATE: §5 prose does not say an operator reply to the checkpoint is no recorded disposition" ;; esac
   case "$fl" in *"$LOCKED_CHANNEL"*) : ;; *) echo "LOCKED-CHANNEL: §5 prose does not pause and stop for the disposition before the checkpoint" ;; esac
   case "$fl" in *"$LOCKED_FINAL"*) : ;; *) echo "LOCKED-FINAL: §5 prose does not defer an undelivered phased bullet at the plan's final checkpoint" ;; esac
+  case "$fl" in *"$LOCKED_CARRY"*) : ;; *) echo "LOCKED-CARRY: §5 prose does not carry an earlier checkpoint's phased bullets forward" ;; esac
   case "$fl" in *"$LOCKED_UNCITED"*) : ;; *) echo "LOCKED-PHASED: §5 prose does not count a phased line citing no story as deferred" ;; esac
+  case "$fl" in *"$LOCKED_NOTPHASED"*) : ;; *) echo "LOCKED-NOTPHASED: §5 prose does not count a phased line citing a done or non-carrying story as deferred" ;; esac
   case "$fl" in *"$LOCKED_SPLIT"*) : ;; *) echo "LOCKED-SPLIT: §5 prose does not make a split bullet cite every story carrying a part" ;; esac
   case "$fl" in *"$LOCKED_SLIP"*) : ;; *) echo "LOCKED-SLIP: §5 prose does not defer a bullet that slips its planned sprint" ;; esac
   case "$fl" in *"$LOCKED_STORY"*) : ;; *) echo "LOCKED-STORY: §5 prose does not require the cited story to carry the bullet and be not done" ;; esac
@@ -352,8 +360,28 @@ mutant "revert-locked-recorder" \
 
 # FINAL: the final-checkpoint sentence deleted, so a phased bullet never owes a disposition.
 mutant "del-locked-final" \
-  '/^A `phased` bullet owes no disposition until the plan.s final checkpoint,$/{getline; next} {print}' \
+  '/^A `phased` bullet owes no disposition until the plan.s final checkpoint$/{skip=1} skip && /^and owes its `HARD_BLOCK`\.$/{skip=0; next} skip{next} {print}' \
   "LOCKED-FINAL:" "deleting the undelivered-at-the-final-checkpoint-is-deferred sentence is caught"
+
+# FINAL-DEF: only the definition of "final" dropped, so the sprint-count reading of §7 decides it.
+mutant "drop-locked-final-def" \
+  '/^A `phased` bullet owes no disposition until the plan.s final checkpoint$/{print; getline; getline; sub(/^`sprint-status.yaml` — where/, "where"); print; next} {print}' \
+  "LOCKED-FINAL:" "dropping the story-status definition of the final checkpoint is caught"
+
+# CARRY: the carry-forward sentence deleted.
+mutant "del-locked-carry" \
+  '/^At a later checkpoint of a Rule 14 plan the block also carries every$/{skip=1} skip && /^earlier sprint.s `locked-requirements.md`\.$/{skip=0; next} skip{next} {print}' \
+  "LOCKED-CARRY:" "deleting the carry-phased-bullets-forward sentence is caught"
+
+# NOT-PHASED: the done-or-non-carrying-story sentence deleted.
+mutant "del-locked-notphased" \
+  '/^A `phased` line citing a story that is `done`, or one that does not carry$/{getline; next} {print}' \
+  "LOCKED-NOTPHASED:" "deleting the done-or-non-carrying-story-is-deferred sentence is caught"
+
+# CARRY TEMPLATE: the carried-forward line removed from the block.
+mutant "del-locked-carry-line" \
+  '/^### Locked-Requirement Coverage$/{s=1} s && /^### Next Steps$/{s=0} s && /^- \[carried from an earlier checkpoint of this plan:/{next} {print}' \
+  "LOCKED:" "dropping the carried-from-an-earlier-checkpoint line from the block body is caught"
 
 # UNCITED: the sentence that makes a phased line citing no story a deferral deleted.
 mutant "del-locked-uncited" \

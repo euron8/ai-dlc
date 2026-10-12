@@ -449,6 +449,7 @@ See: _bmad-output/planning-artifacts/s<N>/locked-requirements.md
   - [for each deferred or descoped bullet, and each bullet deferred and
     then delivered — the HARD_BLOCK id and its disposition token
     (approved-deferral / do-now / descope)]
+- [carried from an earlier checkpoint of this plan: one line per bullet it marked phased]
 - [no locked-requirements.md for this sprint: none recorded]
 
 ### Next Steps
@@ -501,9 +502,16 @@ LOCKED_REQUIREMENTS block, verbatim or in any form
 `steps/stories-test-strategy.md` §2a permits (`requires_context:`
 included), and its status in `sprint-status.yaml` is not `done`.
 A bullet split across phases cites every story that carries a part of it.
-A `phased` bullet owes no disposition until the plan's final checkpoint,
-where any bullet not delivered counts as deferred and owes its `HARD_BLOCK`.
+A `phased` bullet owes no disposition until the plan's final checkpoint
+— the one after which no story of the plan remains not `done` in
+`sprint-status.yaml` — where any bullet not delivered counts as deferred
+and owes its `HARD_BLOCK`.
+At a later checkpoint of a Rule 14 plan the block also carries every
+bullet an earlier checkpoint of that plan marked `phased`, read from that
+earlier sprint's `locked-requirements.md`.
 A `phased` line citing no story counts as deferred at any checkpoint.
+A `phased` line citing a story that is `done`, or one that does not carry
+the LR id, is not `phased` and counts as deferred.
 A bullet that slips its planned phase becomes deferred the moment it
 slips.
 A sprint that ships no `locked-requirements.md` reports `none recorded`
