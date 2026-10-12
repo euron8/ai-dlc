@@ -181,7 +181,9 @@ pm-adr-probe|R|pm.md|## Responsibilities|## The evidence contract|in the story i
 pm-adr-trigger|R|pm.md|## Responsibilities|## The evidence contract|carries as an unrun probe|contains
 pm-adr-tag|R|pm.md|## Responsibilities|## The evidence contract|`probabilistic/passive-monitoring` AC, written at creation|contains
 pm-adr-predicate|R|pm.md|## Responsibilities|## The evidence contract|with its discharge predicate named in the AC text|contains
+pm-adr-scope|R|pm.md|## Responsibilities|## The evidence contract|added to existing scope, never a new capability|contains
 pm-adr-context|R|pm.md|## Context Loading|## Communication|(the primary architecture document)|contains
+pm-adr-context-read|R|pm.md|## Context Loading|## Communication|The architecture and ADR sections for the stories in scope|contains
 PINS
 }
 
