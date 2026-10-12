@@ -17935,3 +17935,55 @@ before the gated apply. The banked ruling stands: report the gap and write no ru
 
 Batch 210's block below is history: batch 211's block replaces its open items and its delivery gap.
 
+**BATCH 215 SHIPPED NO RELEASE AND DISCHARGED NO CONSUMER CANDIDATE.** It was handed the plan by peer session
+ai-dlc-b9 at `origin/main` `5730ba11` (`VERSION` 0.758.0) and ran beside the hermetic-pole program's queued
+`v0.759.0` (`origin/b210-class-b`, ai-dlc-0e, batch 213) and `v0.760.0` (ai-dlc-a1, batch 214), with a peer's gate
+and post-green trace live on the main checkout throughout (load 13-18); it worked from a detached worktree outside
+the checkout and touched nothing there. It claimed 0.761.0 by the number protocol and RELEASED it unshipped, telling
+every peer. The opening sweep (at `5730ba11`, re-run after a first run on the LOCAL `main` `26f77e78` read a stale
+tree) read **live 1, unfiled 0, worklist 0, DISCHARGED 1, TERMINAL 223, archive 346, 32 qualifying refs**, every
+control passing; the one live id, `PC-S317-SELF-UPDATE-GATE-UNDECIDED-ON-MACHINERY-A-PRIOR-SELF-UPDATE-LANDED`, is
+discharged by `v0.758.0` (oldest release naming it, impossible-id control `UNNAMED`) and awaits the consumer's own
+close. graph carried no uncommitted filing (ledger diff against HEAD empty, control 7 committed ids) and no entry
+dated after 2026-10-09. Net for the batch: closed 0, filed 0.
+
+**WHOLE-BACKLOG ADJUDICATION (hand, re-derived by the lead against 5730ba11): none of the four closes on main, and
+none has a remedy this batch could build.** BL-487 PARTIAL on main (receipt exit 1 on the `inputs.decl` clause; the
+`artifact-path-migration` run passes its six named arms); `origin/b210-class-b` carries `inputs.decl` for all four
+fixtures plus `self-update-gate` (control: `taught-schema` absent on main, `implementation-join-yield` present) and
+already archives the entry as LANDED v0.759.0, so it closes when 0e's release lands. BL-481 LIVE; the hook-shaped
+derivation over 260 directories reads four UNMAPPED (`check-24-adversarial-convergence`, `hermetic-runner`,
+`procsub-staged-refusal-boot`, `self-update-gate`, each at `#discards 3`), of which `b210-class-b` declares one and
+`origin/b-pole/check-24-adversarial-convergence` shards and declares one; ai-dlc-a1's 0.760.0 holds a hand sharding
+and declaring `procsub-staged-refusal-boot`; `hermetic-runner` is undeclared BY DESIGN (the runner's own self-probe),
+so BL-481's close predicate is unreachable while that holds. BL-465 PARTIAL; the newest gate's `.last` replayed through
+the shipping validator reads `SKIP -- coverage 54.54%` (9397s of 17228s), history still three width-12 rows,
+`.last.jobs` 4. BL-474 LIVE; 0 files carrying `handovers:` across graph's refs (control 30 citing `merge-review-shards`
+in the working tree, 1241 across refs), the sprint-317 branches at 0.754.0 have produced no sharded review yet.
+
+**OPERATOR RULINGS, BATCH 215, both taken on the marked recommendation and written into the entries:** BL-465's
+coverage is redefined over the DISPATCHED set, `COV_MIN` not lowered, so a keyed push can record a row; that is now a
+buildable entry. BL-481's set excludes `hermetic-runner` as undeclared by design, and its receipt closes on the first
+push whose read-set line names only that fixture. Measured at `31617801` after both 0.759.0 and 0.760.0 landed:
+`self-update-gate`, the class-b four and the four `check-24-adversarial-convergence` directories are declared, but
+`procsub-staged-refusal-boot` was sharded into three directories and none is declared, BY RULING (0.760.0's
+CHANGELOG: both procsub fixtures read this repo's own history, and pinned blobs failed I104, I113 and I65 as a second
+corpus), so their close path is a committed TRACE. The 0.760.0 gate's line read 7 of 269 UNMAPPED: `hermetic-runner`,
+the six procsub directories, `subject-partition`; a1's post-green trace over them was running at this writing.
+
+**MEASUREMENTS OWED AND NOT TAKEN, with the reason:** the `self-update-gate` and unmapped-set read-set trace, and D6's
+base-vs-tip timing of `readset-skip`, both because a peer's trace (pid live on the main checkout) and gate ran
+throughout at load 13-18.
+
+**PROCESS DEFECT, THIS BATCH, MINE:** both hand briefs said to clone the LOCAL checkout and detach at `origin/main`,
+which in such a clone is the local repo's `main` (26f77e78, two commits behind GitHub). The sweep hand's first run
+read unfiled 1 and `VERSION` 0.756.0 on that tree and would have scoped shipped work; the advisor caught it and the
+hand re-ran after fetching GitHub's `origin/main` into the clone. A clone of a local path needs that fetch before
+`origin/main` means anything.
+
+**THE DELIVERY GAP IS FOUR RELEASES.** graph's `.claude/.ai-dlc-version` reads 0.754.0 (`commit` = `skill_commit` =
+`0a123701`) against `VERSION` 0.758.0, unchanged from batch 211's reading; the range's bootstrapping measurement
+there stands. The banked ruling stands: report the gap and write no runbook.
+
+Batch 211's block below is history: batch 215's block replaces its open items and its delivery gap.
+
