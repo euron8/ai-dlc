@@ -1005,7 +1005,7 @@ readset_live_trace() { # <out>
   # subshell removes the trace root and the deriver's map temp itself, by their literal names. Rows the
   # deriver finished before the kill stand (it writes the map after every fixture); the fixture in
   # progress gets none and stays unmapped. On a normal finish the watchdog is stopped by its pid and
-  # its trap kills its `sleep`, so group `$tp` empties once this subshell exits, just after it
+  # its `sleep` is swept by a TERM to group `$tp`, so that group empties once this subshell exits, just after it
   # releases the lock -- not at the release itself, which a reader must not assume. The deriver is
   # outside group `$tp`, so a hand's `kill -- -<lock pid>` would leave it running with no ceiling:
   # the subshell's TERM trap (a handler, never SIG_IGN, so the deriver does not inherit it) forwards
@@ -1026,15 +1026,18 @@ readset_live_trace() { # <out>
     # The subshell sends no signal to `-$dp` after it has reaped `$dp`: that group id may be reused, so
     # its forwarding trap is replaced by an ignore once the reap is done, which also keeps a late TERM
     # from interrupting `wait "$wp"` and losing the watchdog's verdict.
-    # ITS TERM TRAP KILLS EVERY JOB IT HAS, NEVER A PID IT SAVED. A trap reading `$s` raced the
-    # assignment: a TERM landing after `sleep` forked and before `s=$!` ran found `s` empty, exited,
-    # and left the sleep reparented to init for up to the whole ceiling. Measured on the instant-exit
-    # deriver a fast trace always has: 7 of 40 launches leaked one; with `jobs -p`, none.
-    # THE KILL IS SIGKILL, NOT TERM. The forked child of `sleep "$cl" &` runs this subshell's TERM
-    # handler until it execs, so a TERM landing between its fork and its exec is handled and lost, and
-    # the exec then starts a sleep nothing will stop. Measured with that window forced open (a long
-    # PATH search before the exec): TERM leaked 10 of 10 launches, KILL 0 of 10. KILL cannot be handled.
-    ( trap 'kill -KILL $(jobs -p) 2>/dev/null; exit 0' TERM
+    # THE WATCHDOG HAS NO TERM TRAP, AND ITS SLEEP IS SWEPT BY GROUP AFTER THE REAP. Every trap it
+    # carried leaked the sleep on a fast trace: one reading a saved `$s` raced the assignment (7 of 40);
+    # one sending TERM to `$(jobs -p)` was handled and lost by a child between fork and exec (10 of 10
+    # with that window forced); one sending KILL to `$(jobs -p)` leaked under load in two ways -- the
+    # trap ran with `jobs -p` not naming the sleep, or the stop arrived while the watchdog was blocked
+    # in `wait` and no trap ran at all, so `wait "$wp"` below hung with the lock held and no exit
+    # written. Measured, 12 concurrent drives of 150 fast traces: 12 of 1800 and 6 of 1800. With no
+    # trap the stop kills the watchdog by the default action, its sleep stays in group `$sp`, and the
+    # TERM to `-$sp` below, sent once `$wp` is reaped and while this subshell ignores TERM, ends it:
+    # 0 of 1800 under the same load, 0 of 10 with the fork-to-exec window forced (no handler exists
+    # to lose a TERM in that window). Without the sweep the sleep survives every fast trace.
+    (
       sleep "$cl" & s=$!; wait "$s"
       trap '' TERM
       kill -TERM -- "-$dp" 2>/dev/null || exit 0
@@ -1049,6 +1052,7 @@ readset_live_trace() { # <out>
     trap '' TERM
     kill "$wp" 2>/dev/null
     wait "$wp" 2>/dev/null; [ "$?" = 3 ] && rc=timeout
+    kill -TERM -- "-$sp" 2>/dev/null
     case "$tr" in */ai-dlc-readset-live.[0-9]*) rm -rf "$tr" ;; esac
     rm -f "$READSET_LOCAL.tmp.$dp"
     printf 'start %s\npid %s\nlist %s\nderiver %s\nceiling %s\nexit %s\nfinish %s\n' "$t0" "$sp" "$names" "$dp" "$cl" "$rc" "$(date +%s)" > "$READSET_LOCAL.status.tmp.$sp" 2>/dev/null \
