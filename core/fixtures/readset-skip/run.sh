@@ -1421,15 +1421,16 @@ CT
     printf '%s|%s|%s|%s' "$(cat "$o/live" 2>/dev/null)" "$(cat "$o/after" 2>/dev/null)" "$(cat "$o/exit" 2>/dev/null)" "$rp"
   }
   # (t4) THE WATCHDOG'S SLEEP ON A FAST TRACE. A deriver that exits at once has the subshell stop the
-  # watchdog while it is still starting its `sleep`; a trap that read a saved pid found it empty there
-  # and left the sleep reparented to init for the whole ceiling. The leaked sleep keeps its process
-  # group, so `kill -0 -- -<trace pid>` once that pid is gone reads it directly: the group must empty.
-  # The trace pid is the status file's `pid`, written by the subject. Measured on the unfixed trap with
-  # this drive: 7 of 40 launches leaked (17.5%). FX_REPS clean launches are required of the fix; the
-  # mutant drive stops at its first leak and gives up after FX_MREPS, so at 17.5% it misses with
-  # probability 0.825^60, about 1e-5. Control, same drive: a group this driver started under `set -m`
-  # reads alive by the same `kill -0 -- -<pgid>` before it is killed by that pgid.
-  FX_REPS=30; FX_MREPS=60
+  # watchdog while it is still starting its `sleep`; every TERM trap the watchdog carried could leave
+  # that sleep reparented to init for the whole ceiling. The leaked sleep keeps its process group, so
+  # `kill -0 -- -<trace pid>` once that pid is gone reads it directly: the group must empty. The trace
+  # pid is the status file's `pid`, written by the subject. FX_REPS clean launches are required of the
+  # fix. The traps it replaced leaked here too rarely for a verdict (the KILL-to-`jobs -p` trap 0 of 800
+  # idle, 18 of 3600 under 12 concurrent drives), so this arm guards the post-reap sweep, whose mutant
+  # (nosweep, below) leaks on every launch; a handler restored on the watchdog is scored on (t4w).
+  # Control, same drive: a group this driver started under `set -m` reads alive by the same
+  # `kill -0 -- -<pgid>` before it is killed by that pgid.
+  FX_REPS=30
   FX_DRIVER="$WORK/fx-driver.sh"
   cat > "$FX_DRIVER" <<'FX'
 pool="$1"; t="$2"; o="$3"; reps="$4"; stop1="$5"
@@ -1480,15 +1481,15 @@ FX
     "alive|$FX_REPS|$FX_REPS|$FX_REPS|0") ok "(t4) $FX_REPS fast traces (deriver exits at once, ceiling 777s): every one finished exit 0 and its process group was empty once its pid was gone -- the watchdog's sleep was never left behind (control: a live group read alive)" ;;
     *) bad "(t4) a fast trace left its watchdog's sleep alive, or the drive did not run: control|reps|started|exit0|leaks = '$RT4'" ;;
   esac
-  # (t4w) THE FORK-TO-EXEC WINDOW, FORCED. The forked child of the watchdog's `sleep "$cl" &` runs the
-  # watchdog's TERM handler until it execs, so a TERM forwarded to it in that window is handled and lost
-  # and the exec starts a sleep nothing stops. Under load that window is rare (1 in 14 runs of (t4));
-  # here it is held open without load: PATH is a shim directory linking every tool EXCEPT sleep, then
-  # FW_NDIRS relative entries that exist nowhere, then the real PATH. Every other command resolves in
-  # the shim at once; only `sleep` walks the absent entries first, so its child spends ~0.1s before the
-  # exec while the instant-exit deriver has the subshell stop the watchdog. The driver's own waits name
-  # /bin/sleep. Measured: a TERM in that trap leaked 10 of 10 launches, SIGKILL 0 of 10. The mutant
-  # termtrap below reverts the trap to TERM and must leak here; the fix must leak in none of FW_REPS.
+  # (t4w) THE FORK-TO-EXEC WINDOW, FORCED. The forked child of the watchdog's `sleep "$cl" &` carries
+  # any TERM handler the watchdog has until it execs, so a TERM reaching it in that window is handled
+  # and lost and the exec starts a sleep nothing stops. Under load that window is rare; here it is held
+  # open without load: PATH is a shim directory linking every tool EXCEPT sleep, then FW_NDIRS relative
+  # entries that exist nowhere, then the real PATH. Every other command resolves in the shim at once;
+  # only `sleep` walks the absent entries first, so its child spends ~0.1s before the exec while the
+  # instant-exit deriver has the subshell stop the watchdog. The driver's own waits name /bin/sleep.
+  # Measured: a watchdog with a TERM handler leaked 10 of 10 launches, with none 0 of 10. The mutant
+  # sleeptrap below restores a handler and must leak here; the fix must leak in none of FW_REPS.
   FW_REPS=10; FW_NDIRS=15000
   FW_SHIM="$WORK/fw-shim"; mkdir -p "$FW_SHIM"
   _ifs="$IFS"; IFS=:
@@ -2032,25 +2033,27 @@ ct_mut() { # <name> <want: a glob over (t1)'s result>
 }
 if [ "$LT_CAN" = 1 ]; then
   # the ceiling never armed: the watchdog sleeps far past it.
-  # the watchdog's old trap, which kills the pid it saved and races the save.
-  # the trap kills its jobs with TERM, which a child still between fork and exec handles and loses.
-  if PM_FN=readset_live_trace pm_copy termtrap 1 "trap 'kill -KILL \$(jobs -p) 2>/dev/null" "trap 'kill \$(jobs -p) 2>/dev/null"; then
-    lt_arm; R="$(fw_drive "$PM" pm.termtrap "$FW_REPS" 1)"
+  # a TERM handler restored on the watchdog, which the child still between fork and exec inherits, so the
+  # sweep's TERM is handled and lost there. Measured with the window forced: 10 of 10 leaked.
+  if PM_FN=readset_live_trace pm_copy sleeptrap 1 '      sleep "$cl" & s=$!; wait "$s"' "      trap 'exit 0' TERM; sleep \"\$cl\" & s=\$!; wait \"\$s\""; then
+    lt_arm; R="$(fw_drive "$PM" pm.sleeptrap "$FW_REPS" 1)"
     case "$R" in
-      alive\|*\|*\|*\|0) bad "CEILING MUTANT termtrap SURVIVED (t4w) over $FW_REPS forced-window traces: '$R'" ;;
-      alive\|*) ok "CEILING MUTANT termtrap (the trap sends TERM) is KILLED by (t4w): a sleep killed in its fork-to-exec window survived"
+      alive\|*\|*\|*\|0) bad "CEILING MUTANT sleeptrap SURVIVED (t4w) over $FW_REPS forced-window traces: '$R'" ;;
+      # The record holds the index of the first leaking launch, which varies by run: it stays off the ok line.
+      alive\|*) ok "CEILING MUTANT sleeptrap (a TERM handler on the watchdog) is KILLED by (t4w): a sleep signalled in its fork-to-exec window survived"
         printf '        (drive: %s)\n' "$R" ;;
-      *) bad "CEILING MUTANT termtrap: the control did not read alive -- NO VERDICT: '$R'" ;;
+      *) bad "CEILING MUTANT sleeptrap: the control did not read alive -- NO VERDICT: '$R'" ;;
     esac
   fi
-  if PM_FN=readset_live_trace pm_copy oldtrap 1 "    ( trap 'kill -KILL \$(jobs -p) 2>/dev/null; exit 0' TERM" "    ( s=\"\"; trap '[ -n \"\$s\" ] && kill \"\$s\" 2>/dev/null; exit 0' TERM"; then
-    lt_arm; R="$(fx_drive "$PM" pm.oldtrap "$FX_MREPS" 1)"
+  # the post-reap sweep removed: the stop kills the watchdog and nothing ends its sleep. Measured: 30 of 30
+  # leaked on an idle box, so (t4) scores it, stopping at the first leak.
+  if PM_FN=readset_live_trace pm_copy nosweep 1 '    kill -TERM -- "-$sp" 2>/dev/null' '    :'; then
+    lt_arm; R="$(fx_drive "$PM" pm.nosweep "$FX_REPS" 1)"
     case "$R" in
-      alive\|*\|*\|*\|0) bad "CEILING MUTANT oldtrap SURVIVED (t4) over $FX_MREPS fast traces: '$R'" ;;
-      # The record holds the index of the first leaking launch, which varies by run: it stays off the ok line.
-      alive\|*) ok "CEILING MUTANT oldtrap (the trap kills a saved pid) is KILLED by (t4): a fast trace left its sleep in the group"
+      alive\|*\|*\|*\|0) bad "CEILING MUTANT nosweep SURVIVED (t4) over $FX_REPS fast traces: '$R'" ;;
+      alive\|*) ok "CEILING MUTANT nosweep (no TERM to the subshell's group after the reap) is KILLED by (t4): a fast trace left its sleep in the group"
         printf '        (drive: %s)\n' "$R" ;;
-      *) bad "CEILING MUTANT oldtrap: the control did not read alive -- NO VERDICT: '$R'" ;;
+      *) bad "CEILING MUTANT nosweep: the control did not read alive -- NO VERDICT: '$R'" ;;
     esac
   fi
   PM_FN=readset_live_trace pm_copy noceil 1 '      sleep "$cl" & s=$!; wait "$s"' '      sleep 600 & s=$!; wait "$s"' \
