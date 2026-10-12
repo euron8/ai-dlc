@@ -1327,7 +1327,9 @@ for a in $ARMS; do
   ROHIST_SKIP=""
   if arm_run "$a"; then
     if [ -n "$ROHIST_SKIP" ]; then printf '  skip  %s (%s)\n' "$what" "$MSG"
-    elif [ "$a" = killed ]; then ok "$what ($MSG)"   # the sweep's reach is part of its verdict
+    # The sweep's reach is reported beside its verdict, on a non-ok line: 12 parallel workers stopping at
+    # the first failure make its counts race-dependent, and an ok line holds no run-varying value.
+    elif [ "$a" = killed ]; then ok "$what"; printf '        (%s)\n' "$MSG"
     else ok "$what"; fi
   else bad "$what ($MSG)"; fi
 done
@@ -1404,7 +1406,7 @@ score() {
       bad "$1 SURVIVED: arm '$2' did not fail ($MSG) — $6"
     fi
   else
-    ok "$1 KILLED by '$2' ($MSG) — $6"
+    ok "$1 KILLED by '$2' — $6"; printf '        (%s)\n' "$MSG"   # MSG carries race-dependent sweep counts
   fi
 }
 CH="$MD/hooks/ai-dlc-continue.sh"; PH="$MD/hooks/ai-dlc-pause.sh"
