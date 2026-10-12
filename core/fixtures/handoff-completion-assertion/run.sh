@@ -1423,42 +1423,21 @@ fi
 # entry hook alone with a hand-placed marker reports not-armed, correctly, about a sequence no
 # consumer ever executes; it cannot see either of the two defects a tip adversary found here.
 #
-# THE ORDER IS PARSED OUT OF THE SETTINGS TEMPLATE, NEVER ASSUMED. A fixture that hard-codes
-# "gate first" encodes one hand's belief about the registration, and the registration is the
-# thing that decides. If the template ever registered the entry hook on PreToolUse, or the
-# gate on PostToolUse, this section would be driving a sequence the consumer does not run and
-# would keep printing `ok`.
+# THE ORDER IS PARSED OUT OF THE SETTINGS TEMPLATE, NEVER ASSUMED -- AND NOT HERE. A fixture
+# that hard-codes "gate first" encodes one hand's belief about the registration, and the
+# registration is the thing that decides. If the template ever registered the entry hook on
+# PreToolUse, or the gate on PostToolUse, this section would be driving a sequence the consumer
+# does not run and would keep printing `ok`. That (e6-order) check and its impossible-hook
+# control live in `schema-install-fallback`, which is `.dist-only` and declares `templates/`.
+# They used to sit here behind a template-present test, and that test was the defect: this
+# fixture SHIPS, so it cannot declare `templates/settings.json.template` (a declared path absent
+# on a consumer is exit 2), so its sandbox never held the template and the check stood down on
+# every gated run while printing ok. The line below is not an assertion: it is an informational
+# `--` line, never an `ok`, and it counts toward no total, because nothing here checks the order
+# any more and an unconditional `ok` would claim a check that does not run. It prints the same
+# in a plain run and a sandboxed run.
 echo ""
-
-_HES_TMPL=""
-for _c in "$HERE/../../../templates/settings.json.template" \
-          "$HERE/../../templates/settings.json.template"; do
-  [ -f "$_c" ] && { _HES_TMPL="$_c"; break; }
-done
-if [ -z "${_HES_TMPL:-}" ]; then
-  # THE DISTRIBUTION-ONLY HALF STANDS DOWN LOUDLY. `templates/` is not installed on a
-  # consumer, so this arm cannot run there -- and a stand-down that printed nothing would be
-  # indistinguishable from a passing order check.
-  ok "(e6-order) the settings template is absent (consumer layout); the registration order is asserted only in the distribution, and the arms below still drive gate-then-entry"
-
-else
-  # jq over the template, because the shape is nested and a grep for two filenames cannot say
-  # which EVENT each sits under -- which is the only thing this arm is about.
-  _HES_GATE_EV="$(jq -r '.hooks | to_entries[] | select(.value[]?.hooks[]?.command // "" | test("ai-dlc-recover-gate\\.sh")) | .key' "$_HES_TMPL" 2>/dev/null | head -1)"
-  _HES_ENT_EV="$(jq -r  '.hooks | to_entries[] | select(.value[]?.hooks[]?.command // "" | test("ai-dlc-handoff-entry\\.sh")) | .key' "$_HES_TMPL" 2>/dev/null | head -1)"
-  if [ "$_HES_GATE_EV" = "PreToolUse" ] && [ "$_HES_ENT_EV" = "PostToolUse" ]; then
-    ok "(e6-order) the template registers the gate on PreToolUse and the entry hook on PostToolUse, so the shipped order on one Read is gate -> Read -> entry (this is what the arms below drive)"
-    _HES_ORDER_OK=1
-  else
-    bad "(e6-order) the template registers the gate on '${_HES_GATE_EV:-<nothing>}' and the entry hook on '${_HES_ENT_EV:-<nothing>}', not PreToolUse/PostToolUse. Every arm below drives gate-then-entry on the strength of that registration; if it moved, this section is driving a sequence no consumer runs and would keep printing ok"
-  fi
-  # CONTROL, same invocation: a hook name the template does NOT carry must resolve to nothing,
-  # or the two answers above came from a query that matches anything.
-  _HES_CTL="$(jq -r '.hooks | to_entries[] | select(.value[]?.hooks[]?.command // "" | test("ai-dlc-no-such-hook-141\\.sh")) | .key' "$_HES_TMPL" 2>/dev/null | head -1)"
-  [ -z "$_HES_CTL" ] \
-    && ok "  control: an impossible hook name resolves to no event, so the two readings above are real" \
-    || bad "  control: an impossible hook name resolved to '$_HES_CTL' — the query matches anything and the order reading establishes nothing"
-fi
+echo "  --    (e6-order) the registration order (gate on PreToolUse, entry on PostToolUse) is asserted against the settings template in schema-install-fallback (.dist-only, declares templates/); the arms below drive gate-then-entry"
 
 # `gdrive` runs the PreToolUse gate exactly as the harness does: JSON on stdin, decision on
 # stdout. `seq_read` then runs the SHIPPED SEQUENCE for one Read -- gate, then entry -- and

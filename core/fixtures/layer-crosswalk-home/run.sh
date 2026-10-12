@@ -60,10 +60,12 @@ bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
 # false branch, and the arm silently did not run — green lines, a PASS, and the mutant proving
 # the load-bearing branch gone. Counting what actually ran is what closes it.
 # 2 premises + 2 state vectors + 1 message content + 1 difference + 1 declaration-is-read + 1 refusal
-# + 2 core-yields-zero (claim + control) + 2 installer (scaffold + preserve)
+# + 2 core-yields-zero (claim + control)
 # + 4 pull-side (scaffold, preserve, refusal, mutant)
 # + 1 unmutated control + 4 mutants.
-EXPECTED_ASSERTIONS=21
+# The 2 installer arms (scaffold + preserve) moved to schema-install-fallback, which declares
+# scripts/install.sh; this fixture ships and cannot.
+EXPECTED_ASSERTIONS=19
 
 echo "layer-crosswalk-home:"
 
@@ -227,58 +229,30 @@ N_CTRL="$(harvest "$WORK/core-readme-plus-row.md")"
   || bad "CONTROL: expected 1 id from the shipped README plus one unfenced row, got $N_CTRL"
 
 # ---------------------------------------------------------------------------
-# the installer scaffolds it ONCE
+# the installer scaffolds it ONCE — asserted in schema-install-fallback, not here
 # ---------------------------------------------------------------------------
 # The whole ownership claim rests on this. A file the installer re-copies is core's however
 # the contract describes it, and the consumer's rows would vanish at the next install.
 #
-# TWO ARMS THAT EXIST ONLY UPSTREAM, AND THE SKIP IS ASSERTED RATHER THAN ASSUMED.
-# `install.sh` is not shipped to consumers, so these arms cannot run in the installed layout.
-# A silent skip there would be this repo's named class — an arm that never ran reads exactly
-# like one that passed — so the skip states its reason AND proves it: install.sh genuinely
-# absent, with a control that a script core DOES ship is present in the same tree. If both
-# come back absent the tree is wrong, not consumer-shaped, and that is a FAIL.
-INSTALL="$(pick "$HERE/../../../scripts/install.sh")"
-if [ -z "$INSTALL" ]; then
-  if [ -n "$(pick "$HERE/../../scripts/validate-layer-entries.sh" \
-                  "$HERE/../../../scripts/ai-dlc/validate-layer-entries.sh")" ]; then
-    ok "install.sh is absent and a shipped script is present: this is a CONSUMER tree, so the two installer arms are distribution-side and do not run here"
-    ok "  (the create-once and preserve-on-reinstall claims are proven upstream, where install.sh lives)"
-  else
-    bad "neither install.sh nor any shipped validator resolves from $HERE — this is not a distribution tree and not a consumer tree, so the installer arms were skipped for an unknown reason"
-    bad "  the create-once and preserve-on-reinstall claims are unverified and the skip above is not attributable"
-  fi
-else
-  # `_bmad/` is install.sh's own precondition — it exits 1 without one, and a fixture that
-  # skipped this would report "did not scaffold" for a reason that has nothing to do with the
-  # scaffold. Creating the marker is what makes the two `bad` branches below mean what they say.
-  INST="$WORK/installed"
-  mkdir -p "$INST/_bmad" && git init -q "$INST"
-  bash "$INSTALL" "$INST" >"$WORK/install.log" 2>&1
-  if [ -f "$INST/$CW_REL" ]; then
-    ok "install.sh scaffolds the declared crosswalk file into a fresh tree"
-    printf '\n%s\n' "$ROW" >> "$INST/$CW_REL"
-    SUM_BEFORE="$(cksum < "$INST/$CW_REL")"
-    bash "$INSTALL" "$INST" >/dev/null 2>&1
-    [ "$(cksum < "$INST/$CW_REL")" = "$SUM_BEFORE" ] \
-      && ok "a re-install PRESERVES a populated crosswalk file — the rows are the consumer's" \
-      || bad "a re-install overwrote the populated crosswalk file, which is the defect this release exists to end"
-  else
-    bad "install.sh did not scaffold '$CW_REL' into a fresh tree"
-    bad "preserve-on-reinstall not reached: nothing was scaffolded"
-  fi
-fi
+# THE TWO INSTALLER ARMS LIVE IN `schema-install-fallback`, WHICH IS `.dist-only` AND DECLARES
+# `scripts/install.sh` REQUIRED. They used to sit here behind a layout test, and that test was
+# the defect: this fixture SHIPS, so it cannot declare install.sh (a declared path absent on a
+# consumer is exit 2), so its sandbox read as a consumer tree and the two arms stood down on
+# every gated run while printing ok. They never ran where the gate could see them. The line
+# below is not an assertion and does not count toward EXPECTED_ASSERTIONS: there is nothing
+# left here that can skip, so there is no skip to attribute.
+echo "  --    the create-once and preserve-on-reinstall installer arms run in schema-install-fallback (.dist-only, declares scripts/install.sh)"
 
 # ---------------------------------------------------------------------------
 # THE PULL scaffolds it too, and this is the arm whose absence shipped
 # ---------------------------------------------------------------------------
-# MEASURED ON THE REFERENCE CONSUMER, one release after the installer arm above went green.
+# MEASURED ON THE REFERENCE CONSUMER, one release after the installer arm went green.
 # `install.sh` is not something a consumer ever runs again — a pull is how an existing tree
 # receives everything — so a create-once file introduced after that tree was installed
 # arrives through `apply.sh` or it does not arrive. It did not. The contract landed
 # declaring `consumer_crosswalk_file:`, the template landed under `templates/`, W8 told the
 # operator to move their rows to a path that did not exist, and no probe anywhere reported
-# an absence. The two installer assertions above were green throughout: `install.sh` and
+# an absence. The two installer assertions were green throughout: `install.sh` and
 # `apply.sh` are different programs and only one of them was being asked.
 #
 # These arms run in BOTH layouts, unlike the installer's, because `apply.sh` IS shipped.

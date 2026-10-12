@@ -60,6 +60,15 @@
 # write-format-steering also leaves D with no count to compare, and R2 also moves A, because an
 # override root whose docs are rendered answers --check about the wrong tree.
 #
+# FOLDED ARMS, at the end of the run: two SHIPPING fixtures' distribution-only checks, which
+# their own sandboxes could never reach because a shipping fixture cannot declare a path a
+# consumer lacks.
+#   CW1/CW2  layer-crosswalk-home: install.sh scaffolds the declared crosswalk file into a fresh
+#            tree (CW1), and a re-install preserves a populated one (CW2).
+#   HO1/HO2  handoff-completion-assertion (e6-order): templates/settings.json.template registers
+#            the recover gate on PreToolUse and the handoff entry hook on PostToolUse (HO1), with
+#            an impossible-hook-name control (HO2).
+#
 # DISTRIBUTION-ONLY (.dist-only): the subject is a tree install.sh builds, and install.sh is not
 # shipped. validator-path-resolution carries the distribution-side half of the same fix.
 set -uo pipefail
@@ -720,6 +729,65 @@ bl331_arm() {
   done
 }
 bl331_arm
+
+# --- FOLDED ARMS: distribution-only checks of two SHIPPING fixtures ---------------------------
+# These arms read inputs a shipping fixture cannot declare: a declared path that is absent on a
+# consumer is exit 2 there. The shipping fixtures therefore could not declare them, their
+# sandboxes never held them, and the arms stood down with an ok on every gated run. This fixture
+# is .dist-only and declares scripts/install.sh, core/ and templates/, so here they run. Each one
+# FAILS when its input is missing; a stand-down here would recreate the gap. They run after every
+# background worker above has been reaped. Between the install at the top and this point nothing
+# writes $BASE/t's crosswalk path: the legacy copies go to scripts/, the foreign roots sit beside
+# $BASE/t, and every mutant works on a copy.
+echo ""
+
+# CW1/CW2, from layer-crosswalk-home (LC-N7 / W8): the installer scaffolds the consumer's
+# crosswalk file ONCE and a re-install preserves it. A file the installer re-copies is core's
+# however the contract describes it, and the consumer's rows would vanish at the next install.
+# CW_REL is read from the contract the install shipped from, never hard-coded.
+CW_REL="$(sed -n 's/^consumer_crosswalk_file:[[:space:]]*//p' "$ROOT_DIR/core/skills/ai-dlc/layer-contract.yaml" 2>/dev/null \
+  | head -1 | sed 's/[[:space:]]*$//')"
+if [ -z "$CW_REL" ]; then
+  bad "CW1 (layer-crosswalk-home): core/skills/ai-dlc/layer-contract.yaml declares no consumer_crosswalk_file:, so there is no crosswalk path to check"
+  bad "CW2 (layer-crosswalk-home): preserve-on-reinstall not reached: no declared crosswalk path"
+elif [ -f "$BASE/t/$CW_REL" ]; then
+  ok "CW1 (layer-crosswalk-home): install.sh scaffolds the declared crosswalk file into a fresh tree"
+  printf '\n%s\n' '| 33 | `[ext:domain]` | Cross-story test-strategy deliverable presence | pre-migration gate logs | became 934 |' \
+    >> "$BASE/t/$CW_REL"
+  _cw_sum="$(cksum < "$BASE/t/$CW_REL")"
+  bash "$INSTALL" "$BASE/t" </dev/null >"$WORK/reinstall.log" 2>&1
+  [ "$(cksum < "$BASE/t/$CW_REL")" = "$_cw_sum" ] \
+    && ok "CW2 (layer-crosswalk-home): a re-install PRESERVES a populated crosswalk file — the rows are the consumer's" \
+    || bad "CW2 (layer-crosswalk-home): a re-install overwrote the populated crosswalk file, which is the defect LC-N7 exists to end"
+else
+  bad "CW1 (layer-crosswalk-home): install.sh did not scaffold '$CW_REL' into a fresh tree"
+  bad "CW2 (layer-crosswalk-home): preserve-on-reinstall not reached: nothing was scaffolded"
+fi
+
+# HO1/HO2, from handoff-completion-assertion's (e6)-(e13): that fixture drives the recover
+# gate, then the Read, then the handoff entry hook, on the strength of the REGISTRATION order.
+# The registration is the settings template; if it ever put the entry hook on PreToolUse or the
+# gate on PostToolUse, that section would drive a sequence no consumer runs and keep printing
+# ok. jq, because the shape is nested and a grep for two filenames cannot say which EVENT each
+# sits under. The control: a hook name the template does NOT carry must resolve to nothing, or
+# the two readings came from a query that matches anything.
+_HES_TMPL="$ROOT_DIR/templates/settings.json.template"
+if [ ! -f "$_HES_TMPL" ]; then
+  bad "HO1 (handoff-completion-assertion e6-order): templates/settings.json.template is absent from a tree that declares templates/ — the registration order is unverified"
+  bad "HO2 (handoff-completion-assertion e6-order control): not reached: no template"
+else
+  _HES_GATE_EV="$(jq -r '.hooks | to_entries[] | select(.value[]?.hooks[]?.command // "" | test("ai-dlc-recover-gate\\.sh")) | .key' "$_HES_TMPL" 2>/dev/null | head -1)"
+  _HES_ENT_EV="$(jq -r  '.hooks | to_entries[] | select(.value[]?.hooks[]?.command // "" | test("ai-dlc-handoff-entry\\.sh")) | .key' "$_HES_TMPL" 2>/dev/null | head -1)"
+  if [ "$_HES_GATE_EV" = "PreToolUse" ] && [ "$_HES_ENT_EV" = "PostToolUse" ]; then
+    ok "HO1 (handoff-completion-assertion e6-order): the template registers the gate on PreToolUse and the entry hook on PostToolUse, so the shipped order on one Read is gate -> Read -> entry"
+  else
+    bad "HO1 (handoff-completion-assertion e6-order): the template registers the gate on '${_HES_GATE_EV:-<nothing>}' and the entry hook on '${_HES_ENT_EV:-<nothing>}', not PreToolUse/PostToolUse. handoff-completion-assertion's (e6)-(e13) drive gate-then-entry on the strength of that registration"
+  fi
+  _HES_CTL="$(jq -r '.hooks | to_entries[] | select(.value[]?.hooks[]?.command // "" | test("ai-dlc-no-such-hook-141\\.sh")) | .key' "$_HES_TMPL" 2>/dev/null | head -1)"
+  [ -z "$_HES_CTL" ] \
+    && ok "HO2 (handoff-completion-assertion e6-order control): an impossible hook name resolves to no event, so the two readings above are real" \
+    || bad "HO2 (handoff-completion-assertion e6-order control): an impossible hook name resolved to '$_HES_CTL' — the query matches anything and the order reading establishes nothing"
+fi
 
 echo ""
 if [ "$fails" -eq 0 ]; then

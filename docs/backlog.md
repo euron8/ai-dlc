@@ -138,26 +138,37 @@ line and root and scratch paths reads EQUAL. Eight wrong census implementations 
 The `--jail` half was dropped before it was built, so **(b) remains, unmeasured**. The census measures (a) only:
 a fixture that reaches the real tree by absolute path reads it in both runs, and the two runs agree.
 
-**First census run, batch 223, PAUSED at 232 of 240 by the operator** (`--jobs 12` from a clean worktree at
-`2bdb3a29`, load 20-50 from a concurrent consumer pipeline): 197 EQUAL, 8 LOW-RES, 24 MISMATCH, 3 REFUSED. The run was
-stopped by killing its own process group. The eight UNRUN fixtures, the slowest group: `review-shard-merge-mutants`,
-`snapshot-archive-rotate`, `subject-partition`, `suite-pole-guard`, `validator-arm-selection-b`,
-`validator-arm-selection`, `validator-fork-budget`, `wait-beat-liveness`. Resume with `--list` over those eight from a
-clean worktree at the same commit.
+**Census, batch 223.** First run over all 240 declared fixtures at `2bdb3a29` (paused by the operator at 232, the
+last 8 run on resume): 203 EQUAL, 8 LOW-RES, 26 MISMATCH, 3 REFUSED. Adjudicated, then fixed in 0.774.0:
+- **Sandbox escape, 10 fixtures (residue (b), measured).** `inflight-row-shape`, `request-coverage`,
+  `scope-confirmation`, `snapshot-conservation`, `snapshot-section-schema`, `snapshot-supersession-marker`,
+  `suppression-lifetime`, `budget-summary-verdict`, `mandatory-rules-skip-accounting`,
+  `mandatory-rules-snapshot-position`. Each `run.sh` clears `AI_DLC_*`, discarding the sandbox root
+  `hermetic-run.sh` hands it; the validator's walk-up left the sandbox (no `.git` there) and in the gate resolved a
+  stray `.claude/` above the per-user temp dir (consumer `guarded-merge.sh` logs, 2026-05-31). Without that marker
+  all ten fail (seven rc 1, three rc 2). 0.774.0 gives each `git.decl: seed`; seeded, all ten pass with an ok-line
+  multiset equal to the plain run's, in the distribution and in a consumer install.
+- **Coverage gap, 2 fixtures.** `layer-crosswalk-home`'s installer arms and `handoff-completion-assertion`'s e6-order
+  check never ran under the gate (their distribution-only inputs are deliberately undeclared). 0.774.0 folds them
+  into `schema-install-fallback`, which declares those inputs; 41 = 41 sandboxed and plain.
+- **Instrument artifacts, the rest**: volatile tokens (seeded shas, fork counts), the census's long TMPDIR failing
+  memo-key filenames, and two failing runs read as EQUAL. 0.774.0's instrument has a short physical scratch root, a
+  marker walk at start and end, BOTH-FAIL, a `fixture-rc-2` split, and EQUIVALENT (a third pair; a differing count
+  clears only when the two sides' observed ranges overlap).
 
-**None of the 24 MISMATCH rows is a finding yet.** Two instrument defects bear on them. (1) The line-extraction `awk`
-(`scripts/census-hermetic-coverage.sh`, the program feeding the `LC_ALL=C sort` near line 110) runs in the caller's
-locale and aborted with `towc: multibyte conversion failure` on at least one fixture's output, so lines can be lost on
-one side. (2) The exit trap deletes the whole work directory, rows included, on any exit — a stopped census keeps
-nothing unless the rows are copied out first (they were: 232 rows saved). Fix both, then re-score the 24 MISMATCH and
-re-run the 3 REFUSED alone at `--jobs 1`, before reading any row as a coverage gap. MISMATCH:
-`apply-machinery-stamp`, `apply-restamp-theirs`, `apply-restamp-worklist-c`, `apply-self-overwrite`,
-`fanout-payload-channel`, `handoff-completion-assertion`, `inflight-row-shape`, `layer-crosswalk-home`,
-`layer-extends-grain`, `layer-readopt-gate`, `ledger-reverify-b`, `preclassify-rename-row`, `prepush-worktree-env-scrub`,
-`procsub-staged-refusal-b`, `procsub-staged-refusal-boot`, `readset-skip-b`, `readset-stage1-verdict`,
-`reconcile-emit-report-c`, `request-coverage`, `scope-confirmation`, `snapshot-conservation`, `snapshot-section-schema`,
-`snapshot-supersession-marker`, `suppression-lifetime`. REFUSED: `budget-summary-verdict`,
-`mandatory-rules-skip-accounting`, `mandatory-rules-snapshot-position`.
+**Close run, batch 223** (the fixed instrument on the 0.774.0 tree, the stray marker moved aside, 74 fixtures: every
+row above plus the 43 declared fixtures that use a bare `mktemp -d` and clear `AI_DLC_*`): 56 EQUAL, 11 EQUIVALENT,
+1 LOW-RES, **6 MISMATCH**, 0 REFUSED. All ten seeded fixtures and all 43 bare-`mktemp` fixtures read EQUAL.
+**The entry stays OPEN on the 6, none yet adjudicated:**
+- Stable per-side numbers that track the sandbox path length (plain/sandboxed): `procsub-staged-refusal-b` (138/162),
+  `fanout-payload-channel` (1230/1422), `preclassify-rename-row` (352/376). Likely the instrument, not coverage: the
+  two sides' paths differ in length by a fixed amount (each difference is a multiple of 24).
+- `readset-skip-b`: two pairs DIFFER, the third read HERMETIC-MORE at rc 1/0. Timing-sensitive mutants (`noppid`,
+  sleep-in-group); likely flaky, unconfirmed.
+- `snapshot-archive-rotate`: a sweep summary line whose wording differs, not only its numbers.
+- `procsub-staged-refusal-boot-b`: sandboxed rc 1 with 52 ok against plain rc 0 with 51 (one extra `MUTANT KILLED`
+  line on the sandboxed side, which then fails).
+A run over the other 166 declared fixtures with the fixed instrument has not been taken.
 
 verify: manual -- close when an instrument run over every declared fixture reports, per fixture, the sandboxed run's assertion and skip counts equal to the plain run's, with every mismatch either fixed or covered by a `!` required input; the instrument must be shown to fire on a seeded fixture whose sandboxed count drops (an input left undeclared behind a skip branch) and stay quiet on one whose counts match
 
