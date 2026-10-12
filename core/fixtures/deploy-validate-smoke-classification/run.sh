@@ -138,7 +138,9 @@ check() {
   else
     lb="$(locked_block <<<"$s5")"
     for tok in $LOCKED_TOKENS; do
-      grep -qF -- "$tok" <<<"$lb" || echo "LOCKED: '$tok' absent from the Locked-Requirement Coverage block body"
+      # -w: `descope` is a substring of `descoped`, so a bare -F grep lets the status word stand
+      # in for the disposition token.
+      grep -qwF -- "$tok" <<<"$lb" || echo "LOCKED: '$tok' absent from the Locked-Requirement Coverage block body"
     done
   fi
   fl="$(grep "^P"$'\t' <<<"$s5" | cut -f2- | flat)"
@@ -281,6 +283,12 @@ mutant "move-locked-block" \
 mutant "locked-no-tokens" \
   '/^### Locked-Requirement Coverage$/{s=1} s && /^### Next Steps$/{s=0} s{ gsub(/\(approved-deferral \/ do-now \/ descope\)/, "(as recorded)") } {print}' \
   "LOCKED:" "stripping the disposition tokens from the block body is caught though the Red-gate line keeps them"
+
+# DESCOPE: only the disposition token `descope` dropped; the status word `descoped` stays in the
+# block, so this dies only if the token arm matches whole words.
+mutant "locked-no-descope-token" \
+  '/^### Locked-Requirement Coverage$/{s=1} s && /^### Next Steps$/{s=0} s{ gsub(/ \/ do-now \/ descope\)/, " / do-now)") } {print}' \
+  "LOCKED:" "dropping the descope disposition token while descoped stays is caught"
 
 # GATE: the no-presentation sentence deleted from §5 prose.
 mutant "del-locked-gate" \
