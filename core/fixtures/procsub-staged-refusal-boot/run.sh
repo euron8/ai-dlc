@@ -905,7 +905,53 @@ mk_ld_world() { # <dir> <ext|ds|big|huge>
   fi
   { gi "$C" init -q && gi "$C" add -A && gi "$C" commit -qm consumer; } >/dev/null 2>&1 || return 1
 }
-LW_EXT="$WORK/ldw-ext"; LW_DS="$WORK/ldw-ds"; LW_BIG="$WORK/ldw-big"; LW_HUGE="$WORK/ldw-huge"
+# THE FOUR LD WORLDS SIT AT A FIXED ENCODED PATH LENGTH, NOT AT WHATEVER $TMPDIR GIVES. The cuts below
+# start at `_fx`/`_fo`, one block past the staged entry LISTING, and that listing is `find` output:
+# one ABSOLUTE path per entry, 13 entries in ext and 14 in ds, so every character of $WORK adds 13
+# and 14 bytes to it. Measured on the unpadded worlds: at a $WORK of 88 characters ds listed 2020 B
+# and ext 1946 B, so `_fo` was 2 and L5e cut after 6 rows; at 96 they listed 2132 B and 2050 B, so
+# `_fo` was 3 and L5e cut after 9 -- a different regime, in which M-LD-probe's L5e reads RC1-MEMO
+# where the table says RC0-LOST. $WORK is $TMPDIR plus 40 under hermetic-run.sh, so the default
+# /private/var/folders TMPDIR sat in one regime and TMPDIR=/tmp in the other: a verdict keyed on the
+# scratch path's length.
+# THE RECONCILE MEMO IS THE SECOND QUANTITY, AND IT MOVES WITH THE PATH TOO. lib.sh names each cache
+# file after a key embedding the percent-encoded dist path (`/` -> `%2F`, three characters), and a
+# key whose fill file `<key>.c.<pid>.<RANDOM>` passes the 255-character filename limit is read
+# uncached. Its cached set did NOT move across the listing boundary above (identical at 88 and 96),
+# but it moves at other lengths and L5-pre READS it: that cell's REFUSED-CONTRACT is the contract's
+# memo FILL failing under the limit, and a contract read uncached goes through a pipe the limit never
+# touches. Measured: the big world unpadded under a 90-character TMPDIR read L5-pre as
+# OTHER(no-heredoc-failure,rc=2,whole=7,contract-refusal=0), and every L mutant ENTANGLED with it.
+# So the memo is pinned as well -- by padding to a fixed ENCODED length (characters plus two per `/`),
+# which is what the key carries, rather than to a character count.
+# LD_ENC_LEN is that encoded length of all four world dirs, each padded as ONE path component.
+# A short key's length is LD_ENC_LEN plus a per-path constant: +84 for ds's SKILL.md, +92 for
+# core-manifest.md, +93 for ext's steps/moving.md, +95 for layer-contract.yaml, +98 for huge's
+# steps/zz-psb-huge.md, +100 for the register schema. The fill-file suffix `.c.<pid>.<RANDOM>` is 6
+# to 14 characters, so a key of 241 or less is always cached and one of 250 or more always direct; in
+# between, the answer turns on the pid and on `$RANDOM`, and no admissible value lands a key there.
+# 141 is the LARGEST value at which every short key of every world is 241 or less -- cached for any
+# pid, the regime the unpadded worlds were in under the default TMPDIR, where this file's tables were
+# measured; the hooked-step keys (hundreds of characters) are direct at any length, as before. Above
+# it the register key enters the window, and the next deterministic point (everything but SKILL.md
+# direct, near 157) breaks L5-pre as measured above. The longest pad base is "$WORK/ldw-huge-", 12
+# encoded characters, so the scratch dir may be at most 129: a TMPDIR of at most 83 encoded under
+# hermetic-run.sh (it adds 40 characters and three `/`) -- the macOS /var/folders default is 68 --
+# and 111 for a bare run.sh. Shard b was measured whole at 140, 52 ok.
+# The CHARACTER length still floats two per `/` in the scratch dir, so the listings float 26 and 28 B
+# per `/`: they are not pinned, they are held off a block boundary by the 64-byte margin assert at
+# the cut calibration below, which fires before any cell runs if a deep TMPDIR walks them onto one.
+LD_ENC_LEN=141
+ld_enc_len() { local s="${1//[!\/]/}"; printf '%s' $(( ${#1} + 2 * ${#s} )); }
+ld_pad() { # <dir> -> <dir> padded with `p` to LD_ENC_LEN encoded characters; non-zero when it cannot fit
+  local d="$1-" n
+  n=$(( LD_ENC_LEN - $(ld_enc_len "$d") ))
+  [ "$n" -ge 0 ] || return 1
+  printf '%s%s' "$d" "$(printf '%*s' "$n" '' | tr ' ' p)"
+}
+LW_EXT="$(ld_pad "$WORK/ldw-ext")" && LW_DS="$(ld_pad "$WORK/ldw-ds")" \
+  && LW_BIG="$(ld_pad "$WORK/ldw-big")" && LW_HUGE="$(ld_pad "$WORK/ldw-huge")" \
+  || { echo "FIXTURE ERROR: the scratch dir $WORK is $(ld_enc_len "$WORK") encoded characters (characters plus two per /), too long to pad the ld worlds to their fixed encoded length of $LD_ENC_LEN; this needs TMPDIR at 83 encoded characters or fewer under hermetic-run.sh, 111 for a bare run.sh -- point TMPDIR at a shorter directory" >&2; exit 2; }
 mk_ld_world "$LW_EXT" ext || { echo "FIXTURE ERROR: ld ext world" >&2; exit 2; }
 mk_ld_world "$LW_DS" ds || { echo "FIXTURE ERROR: ld ds world" >&2; exit 2; }
 mk_ld_world "$LW_BIG" big || { echo "FIXTURE ERROR: ld big world" >&2; exit 2; }
@@ -946,6 +992,15 @@ ld_whole() { # <world> <L> -> the rows of the healthy output that end at or befo
 }
 _lx="$("$REAL_FIND" "$LW_EXT/consumer/.claude/skills/ai-dlc/extensions" -type f | wc -c | tr -d ' ')"
 _lo="$("$REAL_FIND" "$LW_DS/consumer/.claude/skills/ai-dlc/overrides" -type f | wc -c | tr -d ' ')"
+# THE FIXED LENGTH, ASSERTED where it is read: both worlds at LD_ENC_LEN, and each staged listing at
+# least 64 bytes clear of a block boundary, so the cut floors below cannot sit on a knife edge. The
+# unpadded ext listing at the default TMPDIR was 2050 B against a 2048 B boundary.
+_ex="$(ld_enc_len "$LW_EXT")"; _eo="$(ld_enc_len "$LW_DS")"
+[ "$_ex" -eq "$LD_ENC_LEN" ] && [ "$_eo" -eq "$LD_ENC_LEN" ] \
+  && [ "$(ld_enc_len "$LW_BIG")" -eq "$LD_ENC_LEN" ] && [ "$(ld_enc_len "$LW_HUGE")" -eq "$LD_ENC_LEN" ] \
+  && [ $(( _lx % LD_BLK )) -ge 64 ] && [ $(( _lx % LD_BLK )) -le $(( LD_BLK - 64 )) ] \
+  && [ $(( _lo % LD_BLK )) -ge 64 ] && [ $(( _lo % LD_BLK )) -le $(( LD_BLK - 64 )) ] \
+  || { echo "FIXTURE ERROR: ld worlds: encoded path lengths $_ex / $_eo / $(ld_enc_len "$LW_BIG") / $(ld_enc_len "$LW_HUGE") (want $LD_ENC_LEN), staged listings $_lx / $_lo B (want each at least 64 B from a multiple of the $LD_BLK B block)" >&2; exit 2; }
 # NO CUT BELOW 2 BLOCKS. Measured: at a 1-block limit the pre-fix engine, scanning on past its failed
 # write, fed a later here-string larger than 1 KiB and hit the here-string floor -- BROKEN-HEREDOC
 # on the base side of L5e, which the precondition correctly refused as a verdict.
@@ -972,7 +1027,7 @@ _ne="$(awk -F'\t' '$1=="EXTENSION-OK"' "$LW_EXT.out" | "$REAL_GREP" -c .)" || _n
 _no="$(awk -F'\t' '$1=="OVERRIDE-OK"' "$LW_DS.out" | "$REAL_GREP" -c .)" || _no=0
 [ "$LD_W_MID" -le $(( _ne - 2 )) ] && [ "$LD_W_OVR" -le $(( _no - 2 )) ] \
   || { echo "FIXTURE ERROR: ld worlds: the L5b cut leaves $LD_W_MID of $_ne EXTENSION-OK rows whole and the L5e cut $LD_W_OVR of $_no OVERRIDE-OK rows (want at most two short of each, so an entry remains after the cut row)" >&2; exit 2; }
-echo "  (ld worlds: block $LD_BLK B; L5b cut at $LD_L_MID block(s) after $LD_W_MID whole row(s), L5b-hard at $LD_L_HARD after $LD_W_HARD, L5e at $LD_L_OVR after $LD_W_OVR, L5d at $LD_L_DS after $LD_W_DS; staged listings $_lx / $_lo B)"
+echo "  (ld worlds: block $LD_BLK B; L5b cut at $LD_L_MID block(s) after $LD_W_MID whole row(s), L5b-hard at $LD_L_HARD after $LD_W_HARD, L5e at $LD_L_OVR after $LD_W_OVR, L5d at $LD_L_DS after $LD_W_DS; staged listings $_lx / $_lo B; ext/ds paths ${#LW_EXT} / ${#LW_DS} characters, $_ex / $_eo encoded)"
 # The refusal line, keyed on its PREFIX and phrase UNANCHORED (a leaked stdout buffer was measured
 # prefixing it; `apply.sh` reads it the same way), never on "write error". Xtrace lines are skipped:
 # under `bash -x` the printf that writes the refusal is traced with the same words.
