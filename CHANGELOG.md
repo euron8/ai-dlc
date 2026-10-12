@@ -20,6 +20,27 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.775.0] - 2026-10-12
+
+Batch 223 (graph-ledger-full-drain), third release: the sandbox escape BL-497's census measured is now refused.
+
+### BL-497 — `hermetic-run.sh` refuses a run whose sandbox could escape to a project marker
+
+- **Defect.** A fixture that discards the sandbox root and resolves its validator's root by walking up could leave
+  the sandbox and resolve any `.git`, `.claude/` or `core/skills/ai-dlc` above the scratch directory. On the
+  maintainer's machine a stray `.claude/` above the per-user temp dir made ten fixtures pass that way (fixed in
+  0.774.0); nothing would have caught the next one.
+- **Fix.** Before building a sandbox, `hermetic-run.sh` runs its own root resolver from the parent of its scratch
+  directory, and from the parent of a throwaway bare `mktemp -d` (which ignores `TMPDIR` on macOS). If either resolves
+  a root it exits 2, naming the marker and the remedy: point `TMPDIR` elsewhere when the marker is above the scratch
+  directory, remove the marker when it is above the system temp dir, and never remove a `.claude/` under `$HOME`.
+- **Fixture.** `hermetic-runner` gains arms Z1-Z4 (a marker above refuses, beside does not, a worktree `.git` file
+  refuses, a seeded fixture runs, the remedy text matches the location, including a system temp dir under a
+  marked `$HOME`, where neither remedy applies) and mutants M23-M26. With a marker present the
+  fixture reports a precondition and runs only the refusal arms.
+- **Upgrade note.** On a machine with a project marker above its temp dir, every declared fixture now refuses until
+  the marker is removed or `TMPDIR` is moved; the message names which.
+
 ## [0.774.0] - 2026-10-12
 
 Batch 223 (graph-ledger-full-drain), second release: what the BL-497 coverage census found, fixed. No consumer

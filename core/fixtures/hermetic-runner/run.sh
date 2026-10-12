@@ -43,6 +43,14 @@
 #      lacks is exit 2; `pin?` absent prints and continues; an abbreviated pin and an unknown line are exit 2
 #   Y  a declaration carrying bare `core/` copies the fixture's own directory once, never a nested
 #      `<fx>/<fx>/` (control: the own run.sh is listed; the count is exact)
+#   Z1 a project marker in the work dir's own parent (TMPDIR holds .claude/) is exit 2 naming it
+#      (ALLOW twin: the marker beside TMPDIR, not above it -> 0)
+#   Z2 a marker further up -- TMPDIR under <x>/proj/.claude/, a worktree .git FILE above -- is exit 2
+#      naming it (ALLOW twin: a `seed` fixture, whose .git is inside its sandbox, under a clean TMPDIR -> 0)
+#   Z3 a bare mktemp -d that ignores TMPDIR (the macOS shape, shimmed) under a marker: the remedy is
+#      "Remove the marker", never "Point TMPDIR"
+#   Z4 the same shape with the system temp dir under a $HOME that carries a marker: neither remedy
+#      ("Point TMPDIR", "Remove the marker") is given
 #   M  mutants of the runner, each built on a COPY and guarded by `cmp -s`, each of which
 #      must fail exactly its own arms. The declaration parse lives in the hook's READSET_KEYROWS
 #      span, so M4/M5 mutate a copy of the hook the probes copy (run_hook_mutant), not the runner.
@@ -1098,6 +1106,112 @@ arm_Y3() {
   yes "consumer, own run.sh declared: the rest of the own dir arrived" "$OUT" "./tests/fixtures/probe/inputs.decl"
   no "consumer, own run.sh declared: no nested <fx>/<fx>/ directory" "$OUT" "./tests/fixtures/probe/probe/" "./tests/fixtures/probe/run.sh"
 }
+# --- Z1/Z2: no project marker above the scratch dirs ---------------------------------------------
+# A marker (.git file or dir, .claude/, core/skills/ai-dlc) above the runner's work dir is where a fixture
+# walking up from its own scratch dir lands, outside the sandbox. Every DENY cell asserts the message NAMING
+# the seeded marker dir (physical spelling, the runner takes HR_WORK with `pwd -P`), so a refusal for any
+# other reason -- the system temp dir carrying a stray marker included -- cannot pass it.
+# hr_tmp <probe> <TMPDIR>: run the probe under that TMPDIR; sets OUT and RC.
+hr_tmp() { OUT="$(TMPDIR="$2" bash "$RUN" --root "$1" probe 2>&1)"; RC=$?; }
+# STRAY is set (once, before the arms) when the runner refuses a marker-free TMPDIR because the SYSTEM temp
+# dir has a marker above it. The ALLOW cells below cannot pass on such a box and SKIP naming it; the DENY
+# cells still run, because the seeded marker is nearer and its message comes first.
+STRAY=""
+stray_check() {
+  local P="$WORK/stray" t="$WORK/stray.tmp"
+  mkdir -p "$t" || exit 2
+  mk_probe "$P" stub_named 'data/a.txt'
+  OUT="$(TMPDIR="$t" bash "$RUN" --root "$P" probe 2>&1)"
+  # Any escape refusal counts: this fixture's own WORK is a bare `mktemp -d`, so it sits in the system temp dir
+  # and a stray marker there is reported as one above the work dir.
+  STRAY="$(grep -F 'sandbox escape: ' <<<"$OUT" | head -1)"
+  if [ -n "$STRAY" ]; then
+    echo "hermetic-runner: PRECONDITION: a project marker sits above this fixture's scratch dir or the system temp dir, so EVERY probe run here is refused -- the reds below are that, not a regression: $STRAY"
+  fi
+}
+# Z1: TMPDIR is the directory HOLDING the marker -- the work dir's parent itself. Killed by a walk that starts
+# one level too high (M24). ALLOW twin: the marker BESIDE the TMPDIR, not above it.
+arm_Z1() {
+  CUR=Z1
+  local P="$WK/Z1p" x="$WK/Z1" px
+  mk_probe "$P" stub_named 'data/a.txt'
+  mkdir -p "$x/q/.claude" "$x/nm/side/.claude" "$x/nm/tmp" || exit 2
+  px="$(cd "$x" && pwd -P)"
+  hr_tmp "$P" "$x/q"
+  eq "a .claude/ in the TMPDIR itself: exit 2" "$RC" 2
+  yes "a .claude/ in the TMPDIR itself: the refusal names that dir" "$OUT" "sandbox escape: $px/q carries a project marker"
+  yes "a .claude/ in the TMPDIR itself: the remedy points TMPDIR elsewhere" "$OUT" "Point TMPDIR at a directory with no marker above it."
+  if [ -n "$STRAY" ]; then
+    [ "$VERBOSE" = 1 ] && echo "  SKIP  $CUR: ALLOW cell (marker beside TMPDIR): a stray marker refuses every run here"
+  else
+    hr_tmp "$P" "$x/nm/tmp"
+    eq "a .claude/ BESIDE the TMPDIR, not above it: exit 0" "$RC" 0
+    yes "a .claude/ beside the TMPDIR: the probe ran" "$OUT" "HERMETIC-CONSUMED data/a.txt"
+  fi
+}
+# Z2: the marker further up, in both forms -- a .claude/ two levels above the work dir (TMPDIR under
+# <x>/proj/.claude/) and a .git FILE (a linked worktree) above it. ALLOW twin: a `seed` fixture under a clean
+# TMPDIR, whose own .git sits inside the sandbox it builds, BELOW the work dir, and is never above it.
+arm_Z2() {
+  CUR=Z2
+  local P="$WK/Z2p" x="$WK/Z2" px
+  mk_probe "$P" stub_named 'data/a.txt'
+  mkdir -p "$x/proj/.claude/t" "$x/wt/a/b" "$x/clean" || exit 2
+  printf 'gitdir: /nonexistent/worktrees/wt\n' > "$x/wt/.git"
+  px="$(cd "$x" && pwd -P)"
+  hr_tmp "$P" "$x/proj/.claude/t"
+  eq "TMPDIR under <x>/proj/.claude/: exit 2" "$RC" 2
+  yes "TMPDIR under <x>/proj/.claude/: the refusal names <x>/proj" "$OUT" "sandbox escape: $px/proj carries a project marker"
+  hr_tmp "$P" "$x/wt/a/b"
+  eq "a worktree .git FILE above TMPDIR: exit 2" "$RC" 2
+  yes "a worktree .git FILE above TMPDIR: the refusal names its dir" "$OUT" "sandbox escape: $px/wt carries a project marker"
+  # The REMEDY is asserted too: where a bare mktemp -d honours TMPDIR (Linux), the system-temp walk starts
+  # from the same dir and refuses with "Remove the marker", so an exit-2 assertion alone would let the
+  # work-dir guard be deleted (M23) and stay green.
+  yes "a worktree .git FILE above TMPDIR: the remedy points TMPDIR elsewhere" "$OUT" "Point TMPDIR at a directory with no marker above it."
+  if [ -n "$STRAY" ]; then
+    [ "$VERBOSE" = 1 ] && echo "  SKIP  $CUR: ALLOW cell (seeded fixture, clean TMPDIR): a stray marker refuses every run here"
+  else
+    mk_git_probe "$WK/Z2s" 'seed'
+    hr_tmp "$WK/Z2s" "$x/clean"
+    eq "a seed fixture under a clean TMPDIR: exit 0" "$RC" 0
+    yes "a seed fixture under a clean TMPDIR: its own repository is there" "$OUT" "HEAD-OK"
+  fi
+}
+# Z3: the macOS shape -- a bare `mktemp -d` IGNORES TMPDIR and lands in the system temp dir, which here is
+# also the TMPDIR, under a marker. Pointing TMPDIR elsewhere cannot help, so the remedy must be "Remove the
+# marker", never "Point TMPDIR". A PATH shim makes the bare form land in <x>/sys/T whatever TMPDIR says, so
+# the cell is the same on every box (the sandboxed fixture runs under env -i and never sees the shim).
+arm_Z3() {
+  CUR=Z3
+  local P="$WK/Z3p" x="$WK/Z3" px real
+  real="$(command -v mktemp)"
+  mk_probe "$P" stub_named 'data/a.txt'
+  mkdir -p "$x/sys/.claude" "$x/sys/T" "$x/bin" || exit 2
+  px="$(cd "$x" && pwd -P)"
+  printf '#!/bin/sh\nif [ "$#" = 1 ] && [ "$1" = -d ]; then exec %s -d %s/sys/T/tmp.XXXXXXXX; fi\nexec %s "$@"\n' "$real" "$px" "$real" > "$x/bin/mktemp" && chmod +x "$x/bin/mktemp" || exit 2
+  OUT="$(PATH="$x/bin:$PATH" TMPDIR="$x/sys/T" bash "$RUN" --root "$P" probe 2>&1)"; RC=$?
+  eq "bare mktemp -d ignores TMPDIR, marker above both: exit 2" "$RC" 2
+  yes "bare mktemp -d ignores TMPDIR: the refusal names the marker above the system temp dir" "$OUT" "sandbox escape: $px/sys carries a project marker (.git, .claude/ or core/skills/ai-dlc) above the system temp dir"
+  no "bare mktemp -d ignores TMPDIR: the remedy does NOT point TMPDIR elsewhere" "$OUT" "Point TMPDIR" "Remove the marker."
+}
+# Z4: the system temp dir sits under a $HOME that carries a marker, and a bare `mktemp -d` ignores TMPDIR.
+# Neither remedy above fits: TMPDIR cannot move the bare form, and the marker is the user's own. The refusal
+# must say so and give neither "Point TMPDIR" nor "Remove the marker".
+arm_Z4() {
+  CUR=Z4
+  local P="$WK/Z4p" x="$WK/Z4" px real
+  real="$(command -v mktemp)"
+  mk_probe "$P" stub_named 'data/a.txt'
+  mkdir -p "$x/home/.claude" "$x/home/T" "$x/home/out" "$x/bin" || exit 2
+  px="$(cd "$x" && pwd -P)"
+  printf '#!/bin/sh\nif [ "$#" = 1 ] && [ "$1" = -d ]; then exec %s -d %s/home/T/tmp.XXXXXXXX; fi\nexec %s "$@"\n' "$real" "$px" "$real" > "$x/bin/mktemp" && chmod +x "$x/bin/mktemp" || exit 2
+  OUT="$(PATH="$x/bin:$PATH" HOME="$px/home" TMPDIR="$x/home/out" bash "$RUN" --root "$P" probe 2>&1)"; RC=$?
+  eq "system temp dir under a marked HOME: exit 2" "$RC" 2
+  yes "system temp dir under a marked HOME: the refusal says the temp dir sits under \$HOME" "$OUT" "sits under \$HOME"
+  no "system temp dir under a marked HOME: the remedy does NOT point TMPDIR elsewhere" "$OUT" "Point TMPDIR" "do not remove the marker"
+  no "system temp dir under a marked HOME: the remedy does NOT say to remove the marker" "$OUT" "Remove the marker." "do not remove the marker"
+}
 run_arms() { arm_A; arm_B; arm_C; arm_D; arm_E; arm_F; arm_H; arm_I; arm_K; arm_L; arm_N; }
 
 # --- main run -----------------------------------------------------------------------------------
@@ -1106,11 +1220,19 @@ if [ -z "$HOOK_SRC" ]; then echo "FIXTURE ERROR: no pre-push hook with a READSET
 # The main pass runs its arms in parallel subshells, each with its own output and FAILED file, then
 # replays the output in arm order so the transcript reads as before.
 mkdir -p "$WORK/par"
-for _a in A B C D E F H I K L N G J P Q R S T U V W X Y Y2 Y3; do
+stray_check
+# Under a stray marker the runner refuses every probe run before it builds a sandbox, so only the Z arms'
+# DENY cells can say anything: every other arm SKIPs, naming the marker, rather than reading as a regression.
+ARMS="A B C D E F H I K L N G J P Q R S T U V W X Y Y2 Y3 Z1 Z2 Z3 Z4"
+if [ -n "$STRAY" ]; then
+  echo "  SKIP  arms A B C D E F H I K L N G J P Q R S T U V W X Y Y2 Y3, mutants M1-M22 and cwd: each needs a probe run the stray marker refuses"
+  ARMS="Z1 Z2 Z3 Z4"
+fi
+for _a in $ARMS; do
   ( "arm_$_a" > "$WORK/par/$_a.out" 2>&1; printf '%s' "$FAILED" > "$WORK/par/$_a.failed" ) &
 done
 wait
-for _a in A B C D E F H I K L N G J P Q R S T U V W X Y Y2 Y3; do
+for _a in $ARMS; do
   cat "$WORK/par/$_a.out"
   [ -f "$WORK/par/$_a.failed" ] || { echo "FIXTURE ERROR: arm $_a produced no verdict" >&2; exit 2; }
   FAILED="$FAILED$(cat "$WORK/par/$_a.failed")"
@@ -1147,7 +1269,23 @@ run_hook_mutant() {
   ( HOOK_SRC="$h"; WK="$WORK/m-$1"; mkdir -p "$WK"; VERBOSE=0; FAILED=""; for _a in $2; do "arm_$_a"; done; failed_set "$FAILED" > "$WORK/mut-$1.res" )
 }
 
-if [ "$NESTED" != 1 ]; then
+# Under a stray marker only M23/M24 can be scored, and against the Z arms alone: arm A, their control, is
+# refused there for the stray marker's own reason.
+if [ "$NESTED" != 1 ] && [ -n "$STRAY" ]; then
+  run_mutant M23 "Z1 Z2" 'if [ -n "$hr_tdir_root" ] && {' 'if false && {' &
+  run_mutant M24 "Z1 Z2" 'ai_dlc_resolve_root "$(dirname "$HR_WORK")"' 'ai_dlc_resolve_root "$(dirname "$(dirname "$HR_WORK")")"' &
+  run_mutant M25 "Z3 Z1" '[ "$hr_honours" = 1 ]; }; then' 'true; }; then' &
+  run_mutant M26 "Z4 Z3" 'TMPDIR cannot move a bare mktemp -d here; do not remove the marker. Run under an account whose system temp dir is outside $HOME.' 'Point TMPDIR outside $HOME; do not remove the marker.' &
+  wait
+  CUR=M
+  for pair in "M23:Z1 Z2" "M24:Z1" "M25:Z3" "M26:Z4"; do
+    mname="${pair%%:*}"; want="$(failed_set "${pair#*:}")"
+    got="$(cat "$WORK/mut-$mname.res" 2>/dev/null)"
+    [ "$got" = "BROKEN" ] && { echo "FIXTURE ERROR: mutant $mname did not apply to $RUN_ORIG (the target line moved)" >&2; exit 2; }
+    eq "$mname fails exactly its own arms [$want]" "$got" "$want"
+  done
+fi
+if [ "$NESTED" != 1 ] && [ -z "$STRAY" ]; then
   run_mutant M1 "B D" 'if ! grep -qxF -e "HERMETIC-CONSUMED $rr"' 'if false && grep -qxF -e "HERMETIC-CONSUMED $rr"' &
   run_mutant M2 "A C D L B" 'mkdir -p "$HR_SB/$HR_FXROOT" || exit 2' 'cp -Rp "$HR_ROOT/." "$HR_SB/" ; mkdir -p "$HR_SB/$HR_FXROOT" || exit 2' &
   run_mutant M3 "F B" 'env -i PATH=' 'env PATH=' &
@@ -1192,12 +1330,21 @@ if [ "$NESTED" != 1 ]; then
   run_mutant M21 "Y Y2 Y3 A" 'mkdir -p "$HR_SB/$HR_FXROOT/$HR_FX" && cp -Rp "$HR_FXDIR/." "$HR_SB/$HR_FXROOT/$HR_FX/" || exit 2' '{ [ -d "$HR_SB/$HR_FXROOT/$HR_FX" ] || cp -Rp "$HR_FXDIR" "$HR_SB/$HR_FXROOT/$HR_FX"; } || exit 2' &
   # M22: the override filter dropped: the in-tree own dir is copied first and the override lands on it.
   run_mutant M22 "Y Y2 Y3 A" 'if [ "$HR_FXDIR" != "$HR_ROOT/$HR_FXROOT/$HR_FX" ]; then' 'if false; then' &
+  # M23: the work-dir escape guard deleted: no marker above TMPDIR is refused.
+  run_mutant M23 "Z1 Z2 A" 'if [ -n "$hr_tdir_root" ] && {' 'if false && {' &
+  # M24: the walk starts one level too high: a marker in the work dir's own parent is missed.
+  run_mutant M24 "Z1 Z2 A" 'ai_dlc_resolve_root "$(dirname "$HR_WORK")"' 'ai_dlc_resolve_root "$(dirname "$(dirname "$HR_WORK")")"' &
+  # M25: the work-dir message taken whenever a marker sits above the work dir, even where a bare mktemp -d
+  # ignores TMPDIR: the remedy points TMPDIR elsewhere, which cannot help.
+  run_mutant M25 "Z3 Z1 A" '[ "$hr_honours" = 1 ]; }; then' 'true; }; then' &
+  # M26: the $HOME message advises moving TMPDIR, which cannot move a bare mktemp -d where this branch is reachable.
+  run_mutant M26 "Z4 Z3" 'TMPDIR cannot move a bare mktemp -d here; do not remove the marker. Run under an account whose system temp dir is outside $HOME.' 'Point TMPDIR outside $HOME; do not remove the marker.' &
   # cwd-invariance: two nested runs of this fixture from different working directories.
   ( cd "$ROOT" && HERMETIC_FX_NESTED=1 bash "$HERE/run.sh" > "$WORK/cwd1.out" 2>&1; echo $? > "$WORK/cwd1.rc" ) &
   ( cd "$(dirname "$RUN")" && HERMETIC_FX_NESTED=1 bash "$HERE/run.sh" > "$WORK/cwd2.out" 2>&1; echo $? > "$WORK/cwd2.rc" ) &
   wait
   CUR=M
-  for pair in "M1:B" "M2:A C D L" "M3:F" "M4:L" "M5:K" "M6:F" "M7:P" "M8:Q W" "M9:R W" "M10:T" "M11:U" "M12:X" "M13:X" "M14:X" "M15:X" "M16:X" "M17:V" "M18:V" "M19:L" "M20:Y Y3" "M21:Y3" "M22:Y2"; do
+  for pair in "M1:B" "M2:A C D L" "M3:F" "M4:L" "M5:K" "M6:F" "M7:P" "M8:Q W" "M9:R W" "M10:T" "M11:U" "M12:X" "M13:X" "M14:X" "M15:X" "M16:X" "M17:V" "M18:V" "M19:L" "M20:Y Y3" "M21:Y3" "M22:Y2" "M23:Z1 Z2" "M24:Z1" "M25:Z3" "M26:Z4"; do
     mname="${pair%%:*}"; want="$(failed_set "${pair#*:}")"
     got="$(cat "$WORK/mut-$mname.res" 2>/dev/null)"
     if [ "$got" = "BROKEN" ] || [ -z "$got" ] && [ "$want" != "" ] && [ "$got" = "BROKEN" ]; then
@@ -1219,5 +1366,5 @@ if [ -n "$(failed_set "$FAILED")" ]; then
   echo "hermetic-runner: FAIL arms:$(failed_set "$FAILED")"
   exit 1
 fi
-echo "hermetic-runner: every arm holds"
+if [ -n "$STRAY" ]; then echo "hermetic-runner: every arm that could run holds (Z1 and Z2 DENY cells, Z3, Z4, M23, M24, M25, M26); the rest SKIPPED for the stray marker named above"; else echo "hermetic-runner: every arm holds"; fi
 exit 0

@@ -22,7 +22,7 @@ What landed for that:
 
 1. **One `READSET_VS` span** in both hooks, after `READSET_TOOLS`, holding `readset_vs_store <root>`
    (`.githooks/pre-push:1203`), `readset_vs_ident <hook> <runner>` and `readset_vs_input`. `hermetic-run.sh` extracts
-   and sources it at top level; its `hr_store_put` (`core/scripts/hermetic-run.sh:453`) is the one writer.
+   and sources it at top level; its `hr_store_put` (`core/scripts/hermetic-run.sh:571`) is the one writer.
    `#universe` hashes it too, so no entry written before 0.763.0 is reused.
 2. **The runner is the store's only writer.** `readset_vs_put` is gone from both hooks; derive block below holds it at 0.
 3. **A declared fixture's published key is exactly its declared key.** No carry-over from an older record; the run/skip
