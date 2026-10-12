@@ -178,9 +178,7 @@ artifacts):
 2. `_bmad-output/planning-artifacts/prd.md` (if it exists)
 3. The architecture and ADR sections for the stories in scope (if they exist):
    `docs/architecture.md` (the primary architecture document), then
-   `_bmad-output/planning-artifacts/architecture*` and `docs/adr/` —
-   **slice-read the section(s) covering the stories in scope (SKILL.md
-   Rule 25(b)); do NOT whole-read.**
+   `_bmad-output/planning-artifacts/architecture*` and `docs/adr/`.
 
 ## Communication
 
