@@ -20,6 +20,29 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.778.0] - 2026-10-12
+
+Batch 225 (graph-ledger-full-drain), second release. BL-497's census over the 166 declared fixtures 0.777.0 had not
+measured read 157 EQUAL, 7 LOW-RES, 2 FLAKY and no MISMATCH. Re-checked alone, `readset-skip-b` exposed two defects:
+a mutant scored on a race too rare to score, and the read-set watchdog leaking its sleep under load.
+
+### BL-497: the read-set watchdog leaked its sleep; `readset-skip`'s mutants re-scored
+
+- **Defect, hook.** The watchdog in both pre-push hooks (`.githooks/pre-push`, `core/git-hooks/pre-push`) stopped its
+  `sleep` from a TERM trap sending KILL to `$(jobs -p)`. Under load it leaked two ways: the trap ran before `jobs -p`
+  named the sleep, or the stop arrived while the watchdog was blocked in `wait` and no trap ran, leaving the trace
+  holding its lock with no `exit` recorded for the whole ceiling. Measured over 12 concurrent drives: 16 leaks in 4800
+  fast traces, 0 of 800 idle.
+- **Fix, hook.** The watchdog carries no TERM trap, so the stop kills it by the default action. Once it is reaped,
+  the trace subshell, ignoring TERM, sends one TERM to its own group, which ends the sleep. Measured: 0 of 1800 under
+  the same load, and 0 of 10 with the fork-to-exec window forced.
+- **Defect, fixture.** `readset-skip`'s `oldtrap` mutant was scored on `(t4)`'s unforced drive, which leaks it at
+  about 1% per launch, not the 17.5% its comment claimed. So its verdict was a coin flip in the sandbox and plain
+  alike (the census read MISMATCH PLAIN-MORE in 2 of 2 pairs), and the same rate holds at 0.776.0.
+- **Fix, fixture.** `termtrap` and `oldtrap`, both anchored on the removed trap, are replaced. `sleeptrap` restores a
+  TERM handler on the watchdog and dies on the forced-window world `(t4w)`. `nosweep` removes the group sweep and
+  dies on `(t4)`, leaking 30 of 30.
+
 ## [0.777.0] - 2026-10-12
 
 Batch 225 (graph-ledger-full-drain), first release. The opening sweep read live 3, unfiled 0, worklist 0, DISCHARGED 3,

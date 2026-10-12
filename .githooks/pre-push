@@ -1027,7 +1027,7 @@ readset_live_trace() { # <out>
     # its forwarding trap is replaced by an ignore once the reap is done, which also keeps a late TERM
     # from interrupting `wait "$wp"` and losing the watchdog's verdict.
     # THE WATCHDOG HAS NO TERM TRAP, AND ITS SLEEP IS SWEPT BY GROUP AFTER THE REAP. Every trap it
-    # carried leaked the sleep on a fast trace: one reading a saved `$s` raced the assignment (7 of 40);
+    # carried leaked the sleep on a fast trace: one reading a saved `$s` raced the assignment (about 1 in 100);
     # one sending TERM to `$(jobs -p)` was handled and lost by a child between fork and exec (10 of 10
     # with that window forced); one sending KILL to `$(jobs -p)` leaked under load in two ways -- the
     # trap ran with `jobs -p` not naming the sleep, or the stop arrived while the watchdog was blocked
