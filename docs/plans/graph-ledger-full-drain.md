@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 350..416. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 360..411. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -67,9 +67,11 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
 
-**BATCH 223 SHIPPED `v0.773.0` (`2bdb3a29`, #1110), DISCHARGING ALL THREE LIVE CANDIDATES AND CLOSING BL-474 ON AN
-OPERATOR RULING.** Started by the operator's one-liner at `origin/main` `aa594904` (`VERSION` 0.772.0); no ai-dlc peer
-was live, graph-f8 was busy and was never messaged.
+**BATCH 223 SHIPPED `v0.773.0` (`2bdb3a29`, #1110), `v0.774.0` (`95e0cee9`, #1112) AND `v0.775.0` (`a1f82ccd`,
+#1113). THE BATCH IS STILL OPEN: BL-497 HAS SIX UNADJUDICATED CENSUS ROWS AND THE OPERATOR HAS NOT RULED ON THEM.**
+Started by the operator's one-liner at `origin/main` `aa594904` (`VERSION` 0.772.0); no ai-dlc peer was live,
+graph-f8 was busy and was never messaged. #1111 was a premature close commit written while the census was paused;
+this block corrects it.
 - **Opening sweep** (at `aa594904`): live 2, unfiled 2, worklist 0, DISCHARGED 0, invisible 0, TERMINAL 229, archive 352,
   qualifying refs 0, every control passing. Both live ids (`PC-S317-3.2-DERIVATION-HOOK-CWD`,
   `PC-S317-SPAWN-LEDGER-PIN-CHANGE-RETROACTIVE`) were filed on graph's `main` by `c127ed598` (2026-10-10). A THIRD
@@ -94,19 +96,45 @@ was live, graph-f8 was busy and was never messaged.
     in the release and re-gated. Gate green, 58 of 281 run, every changed fixture `ok` by name.
 - **`FORK_BUDGET` is 3339, tip reading 3337.** Two forks of headroom: the next fixture directory turns
   `validator-fork-budget` red.
-- **CENSUS** (BL-497, operator ruling: build and run it this batch): PAUSED by the operator at 232 of 240, to be
-  resumed on the operator's signal and never before it: 197 EQUAL, 8 LOW-RES, 24 MISMATCH, 3 REFUSED. BL-497 lists the
-  eight unrun fixtures, every MISMATCH and REFUSED row, and two instrument defects (a locale-sensitive `awk` that can
-  drop lines, an exit trap that deletes the rows) to fix before any MISMATCH is read as a finding. Residue (b) is
-  unmeasured. The saved rows live only in this session's scratchpad, so a resume re-runs from the entry's lists.
-- **graph delivery gap**: stamp 0.772.0 (`aa594904`) against `VERSION` 0.773.0, one release. PENDING 3 (the two
-  committed ids plus the uncommitted third). Not bootstrapping: the range touches no `preclassify.sh`, `apply.sh` or
-  `ledger-reverify.sh`, and its one update-skill file is a one-line `setup-sites.md` site for the new fixture. The pull
-  is the operator's.
-- **graph boundary**: ledger working-tree md5 `cd43a09b…` at the opening and after the merge; porcelain 16 at the
-  opening, 22 after, all graph's own pipeline state. Nothing was written there.
+- **CENSUS** (BL-497, operator ruling: build and run it this batch): ran over all 240 declared fixtures (paused by the
+  operator at 232, resumed on the operator's signal). Adjudicated: 10 fixtures passed the gate only by escaping their
+  sandbox to a stray `.claude/` above the per-user temp dir (consumer `guarded-merge.sh` logs, 2026-05-31); 2 shipping
+  fixtures' distribution-only arms never ran under the gate; the rest were instrument artifacts.
+- **`v0.774.0`**: `git.decl: seed` for the 10, proven at gate level (seeding changed their keys, so the gate re-ran
+  all 10 with the marker moved aside, each `ok`); the 2 fixtures' arms folded into `schema-install-fallback`; the
+  census instrument fixed (`LC_ALL=C`, an incomplete run keeps its rows, a short scratch root, a marker walk,
+  BOTH-FAIL, `fixture-rc-2`, a three-pair EQUIVALENT with a range rule for counts). Close run over 74 fixtures, marker
+  aside: 56 EQUAL, 11 EQUIVALENT, 1 LOW-RES, **6 MISMATCH**. BL-497 names the six; none is adjudicated.
+- **`v0.775.0`**: `hermetic-run.sh` exits 2 before building a sandbox when `.git`, a `.claude/` directory or
+  `core/skills/ai-dlc` sits above its scratch dir or the system temp dir, naming the marker and the remedy.
+  `hermetic-runner` arms Z1-Z4, mutants M23-M26. A tip adversary found the M19 census arm stale under the guard and the
+  `$HOME` message advising a remedy that cannot work there; both fixed and re-gated (57 of 281 run). Unfixed NOTE: on
+  macOS a kill between the guard's probe `mktemp -d` and its `rmdir` leaves one empty `tmp.*` in the system temp dir.
+- **The stray marker** `/var/folders/qr/v63hkc2n6s16yk44l131v9700000gn/.claude` was deleted on 2026-10-12 after graph
+  pulled 0.774.0, by operator ruling. A walk up from the system temp dir now finds no marker (control: 2 from the repo).
+- **graph delivery**: graph pulled 0.773.0 (`e9ff06651`, #1210) and 0.774.0 (`92a1a0aa3`, #1212); stamp 0.774.0
+  (`95e0cee9`) against `VERSION` 0.775.0, one release behind. On graph's `main`,
+  `PC-S317-SPAWN-LEDGER-PIN-CHANGE-RETROACTIVE` and the deploy-validate candidate are ARCHIVED (the latter committed under
+  the id it was scoped by); `PC-S317-3.2-DERIVATION-HOOK-CWD` is still live there (impossible-id control 0 in both
+  files). 0.775.0 changes `hermetic-run.sh`, which ships; with no marker above graph's temp dirs it refuses nothing
+  (tip adversary, measured on an installed consumer). The pull is the operator's.
+- **graph boundary**: ledger working-tree md5 `cd43a09b…` at the opening, `9828b7e7…` at this writing, moved by
+  graph's own pulls and filings; porcelain 16 at the opening, 9 now. Nothing was written there.
+- **OPEN, AND THE RECEIVER OWES IT**: BL-497's six close-run MISMATCH rows. **Operator ruling, batch 223: adjudicate
+  all six now, fix what is real, and if the instrument is the cause ship the census fix as its own release and re-run
+  the census over the 166 declared fixtures the fixed instrument has not yet measured; BL-497 closes when that run is
+  clean.** An adjudication hand was stopped at a session handoff with one fact established: rows
+  `procsub-staged-refusal-b` (138/162), `fanout-payload-channel` (1230/1422) and `preclassify-rename-row` (352/376) are
+  the INSTRUMENT. The census's plain side runs with `TMPDIR=$T/ptmp` (4 characters past the pair dir) against the
+  sandbox's `$HR_WORK/tmp`, reached as `htmp/hermetic-run.XXXXXX/tmp` (28), a 24-character gap, and every one of those
+  gaps is a multiple of 24 (`preclassify-rename-row`'s `LONGD` derives from `$WORK`). The fix is equal-length temp
+  paths on the two sides; prove it turns those three EQUAL without acquitting a seeded real loss.
+  `readset-skip-b`, `snapshot-archive-rotate` and `procsub-staged-refusal-boot-b` are unexamined. The close census's
+  rows are recorded in BL-497 by name; its pairs were cleaned up, so re-run what you need with `--list`. The census is
+  a long run: state its wall clock before starting it, and never hold or kill it without the operator.
 
-Net for the batch: closed 4 entries (BL-474, BL-498, BL-499, BL-500) and 3 candidates, filed 3; net -1.
+Net for the batch: closed 4 entries (BL-474, BL-498, BL-499, BL-500) and 3 candidates, filed 3; net -1. 0.774.0 and
+0.775.0 closed and filed nothing.
 
 Batch 222's block below is history: batch 223's block replaces its open items and its delivery gap.
 
@@ -339,58 +367,6 @@ and ai-dlc-e2 (`b218-git-decl`), one gated push on the box at a time by GATE STA
 Net for the batch: closed 2 candidates in 0.761.0 (3 with 0.762.0), BL-465 shipped PARTIAL, filed 0.
 
 Batch 215's block below is history: batch 216's block replaces its open items and its delivery gap.
-
-**BATCH 215 SHIPPED NO RELEASE AND DISCHARGED NO CONSUMER CANDIDATE.** It was handed the plan by peer session
-ai-dlc-b9 at `origin/main` `5730ba11` (`VERSION` 0.758.0) and ran beside the hermetic-pole program's queued
-`v0.759.0` (`origin/b210-class-b`, ai-dlc-0e, batch 213) and `v0.760.0` (ai-dlc-a1, batch 214), with a peer's gate
-and post-green trace live on the main checkout throughout (load 13-18); it worked from a detached worktree outside
-the checkout and touched nothing there. It claimed 0.761.0 by the number protocol and RELEASED it unshipped, telling
-every peer. The opening sweep (at `5730ba11`, re-run after a first run on the LOCAL `main` `26f77e78` read a stale
-tree) read **live 1, unfiled 0, worklist 0, DISCHARGED 1, TERMINAL 223, archive 346, 32 qualifying refs**, every
-control passing; the one live id, `PC-S317-SELF-UPDATE-GATE-UNDECIDED-ON-MACHINERY-A-PRIOR-SELF-UPDATE-LANDED`, is
-discharged by `v0.758.0` (oldest release naming it, impossible-id control `UNNAMED`) and awaits the consumer's own
-close. graph carried no uncommitted filing (ledger diff against HEAD empty, control 7 committed ids) and no entry
-dated after 2026-10-09. Net for the batch: closed 0, filed 0.
-
-**WHOLE-BACKLOG ADJUDICATION (hand, re-derived by the lead against 5730ba11): none of the four closes on main, and
-none has a remedy this batch could build.** BL-487 PARTIAL on main (receipt exit 1 on the `inputs.decl` clause; the
-`artifact-path-migration` run passes its six named arms); `origin/b210-class-b` carries `inputs.decl` for all four
-fixtures plus `self-update-gate` (control: `taught-schema` absent on main, `implementation-join-yield` present) and
-already archives the entry as LANDED v0.759.0, so it closes when 0e's release lands. BL-481 LIVE; the hook-shaped
-derivation over 260 directories reads four UNMAPPED (`check-24-adversarial-convergence`, `hermetic-runner`,
-`procsub-staged-refusal-boot`, `self-update-gate`, each at `#discards 3`), of which `b210-class-b` declares one and
-`origin/b-pole/check-24-adversarial-convergence` shards and declares one; ai-dlc-a1's 0.760.0 holds a hand sharding
-and declaring `procsub-staged-refusal-boot`; `hermetic-runner` is undeclared BY DESIGN (the runner's own self-probe),
-so BL-481's close predicate is unreachable while that holds. BL-465 PARTIAL; the newest gate's `.last` replayed through
-the shipping validator reads `SKIP -- coverage 54.54%` (9397s of 17228s), history still three width-12 rows,
-`.last.jobs` 4. BL-474 LIVE; 0 files carrying `handovers:` across graph's refs (control 30 citing `merge-review-shards`
-in the working tree, 1241 across refs), the sprint-317 branches at 0.754.0 have produced no sharded review yet.
-
-**OPERATOR RULINGS, BATCH 215, both taken on the marked recommendation and written into the entries:** BL-465's
-coverage is redefined over the DISPATCHED set, `COV_MIN` not lowered, so a keyed push can record a row; that is now a
-buildable entry. BL-481's set excludes `hermetic-runner` as undeclared by design, and its receipt closes on the first
-push whose read-set line names only that fixture. Measured at `31617801` after both 0.759.0 and 0.760.0 landed:
-`self-update-gate`, the class-b four and the four `check-24-adversarial-convergence` directories are declared, but
-`procsub-staged-refusal-boot` was sharded into three directories and none is declared, BY RULING (0.760.0's
-CHANGELOG: both procsub fixtures read this repo's own history, and pinned blobs failed I104, I113 and I65 as a second
-corpus), so their close path is a committed TRACE. The 0.760.0 gate's line read 7 of 269 UNMAPPED: `hermetic-runner`,
-the six procsub directories, `subject-partition`; a1's post-green trace over them was running at this writing.
-
-**MEASUREMENTS OWED AND NOT TAKEN, with the reason:** the `self-update-gate` and unmapped-set read-set trace, and D6's
-base-vs-tip timing of `readset-skip`, both because a peer's trace (pid live on the main checkout) and gate ran
-throughout at load 13-18.
-
-**PROCESS DEFECT, THIS BATCH, MINE:** both hand briefs said to clone the LOCAL checkout and detach at `origin/main`,
-which in such a clone is the local repo's `main` (26f77e78, two commits behind GitHub). The sweep hand's first run
-read unfiled 1 and `VERSION` 0.756.0 on that tree and would have scoped shipped work; the advisor caught it and the
-hand re-ran after fetching GitHub's `origin/main` into the clone. A clone of a local path needs that fetch before
-`origin/main` means anything.
-
-**THE DELIVERY GAP IS FOUR RELEASES.** graph's `.claude/.ai-dlc-version` reads 0.754.0 (`commit` = `skill_commit` =
-`0a123701`) against `VERSION` 0.758.0, unchanged from batch 211's reading; the range's bootstrapping measurement
-there stands. The banked ruling stands: report the gap and write no runbook.
-
-Batch 211's block below is history: batch 215's block replaces its open items and its delivery gap.
 
 ### Derive the state; do not trust the numbers below
 
@@ -678,7 +654,7 @@ wc -l < /tmp/live_main.txt                          # CONTROL: must be NON-ZERO.
 # cannot fall below main's live set minus what the union has archived, so assert that floor.
 comm -23 /tmp/live_main.txt /tmp/arch.txt | wc -l    # the FLOOR
 wc -l < /tmp/live.txt                                # must be >= the floor above
-grep -rohE 'PC-[A-Z0-9][A-Z0-9-]+' docs/backlog.md docs/backlog.archive.md | sort -u > /tmp/filed.txt
+grep -rohE 'PC-[A-Z0-9][A-Z0-9.-]+' docs/backlog.md docs/backlog.archive.md | sed -E 's/[.-]+$//' | sort -u > /tmp/filed.txt
 wc -l < /tmp/live.txt                                 # LIVE candidates -- the denominator
 wc -l < /tmp/arch.txt                                 # already closed upstream, NOT our workload
 comm -12 /tmp/live.txt /tmp/arch.txt | wc -l          # control: must be 0, the two sets partition
@@ -727,6 +703,9 @@ grep -cx 'PC-S300-SEVEN-VALIDATORS-SHIPPED-NON-EXECUTABLE-AT-0.242.0' /tmp/arch.
                                                       # control: 1, a DOTTED id. Fails as a TRUNCATION
                                                       # if the class loses its `.`, and a truncated id
                                                       # is a false member, never a reported absence
+grep -cx 'PC-S317-3.2-DERIVATION-HOOK-CWD' /tmp/filed.txt   # control: 1, a DOTTED id in the BACKLOG. Before batch 223's
+                                                      # widening this read `PC-S317-3`, so a shipped candidate scored
+                                                      # UNFILED and UNTOUCHED (measured: 348 -> 345 ids with the strip)
 grep -cx 'PC-S999-NEVER' /tmp/filed.txt                                                  # control: 0
 ```
 
@@ -740,10 +719,10 @@ instead of a measurement of coverage. **Report the partition below. Never report
 entry counts as progress.**
 
 ```
-pc() { grep -rohE 'PC-[A-Z0-9][A-Z0-9-]+' "$1" | sort -u; }
+pc() { grep -rohE 'PC-[A-Z0-9][A-Z0-9.-]+' "$1" | sed -E 's/[.-]+$//' | sort -u; }
 pc docs/backlog.archive.md > /tmp/closed_here
 pc docs/backlog.md         > /tmp/open_here
-git log --format='%B' origin/main | grep -ohE 'PC-[A-Z0-9][A-Z0-9-]+' | sort -u > /tmp/in_msgs
+git log --format='%B' origin/main | grep -ohE 'PC-[A-Z0-9][A-Z0-9.-]+' | sed -E 's/[.-]+$//' | sort -u > /tmp/in_msgs
 comm -12 /tmp/live.txt /tmp/closed_here                    # DISCHARGED, still live upstream
 comm -12 /tmp/live.txt /tmp/open_here                      # in flight
 comm -23 /tmp/live.txt <(sort -u /tmp/closed_here /tmp/open_here)   # untouched
