@@ -444,8 +444,8 @@ See: docs/escalations/pending.md
 ### Locked-Requirement Coverage
 See: _bmad-output/planning-artifacts/s<N>/locked-requirements.md
 - [one line per bullet of this sprint's LOCKED_REQUIREMENTS block,
-  verbatim]: delivered / deferred / descoped / phased — sprint k of N,
-  s<N>/stories/<story>.md
+  verbatim]: delivered / deferred / descoped /
+  phased — <the story or stories that deliver it>
   - [for each deferred or descoped bullet, and each bullet deferred and
     then delivered — the HARD_BLOCK id and its disposition token
     (approved-deferral / do-now / descope)]
@@ -494,15 +494,17 @@ in `steps/retro.md` §4a binds here, at the checkpoint: every deferred or
 descoped bullet, and every bullet deferred and then delivered in this
 sprint, needs a Tier 1 `HARD_BLOCK` carrying the operator's recorded
 disposition, and the block quotes that entry's id and disposition token.
-A bullet a later sprint of a Rule 14 multi-sprint plan delivers is
-marked `phased — sprint k of N, s<N>/stories/<story>.md`, citing the
-later-phase story created at initial planning: that story carries the
-bullet verbatim in its own LOCKED_REQUIREMENTS block and is not `done`.
-It is not a deferral and owes no disposition while it stays on that
-plan.
-A `phased` line with no story citation, and any `phased` line at the
-final sprint, counts as deferred and owes its `HARD_BLOCK`.
-A bullet that slips its planned sprint becomes deferred the moment it
+A bullet a later phase of the same Rule 14 plan delivers is marked
+`phased — <the story or stories that deliver it>`.
+Each cited story carries the requirement's LR id in its own
+LOCKED_REQUIREMENTS block, verbatim or in any form
+`steps/stories-test-strategy.md` §2a permits (`requires_context:`
+included), and its status in `sprint-status.yaml` is not `done`.
+A bullet split across phases cites every story that carries a part of it.
+A `phased` bullet owes no disposition until the plan's final checkpoint,
+where any bullet not delivered counts as deferred and owes its `HARD_BLOCK`.
+A `phased` line citing no story counts as deferred at any checkpoint.
+A bullet that slips its planned phase becomes deferred the moment it
 slips.
 A sprint that ships no `locked-requirements.md` reports `none recorded`
 in the block.
