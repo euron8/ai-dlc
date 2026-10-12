@@ -276,7 +276,7 @@ census_selfprobe() {
   probe_case P3 0 0 0 "checked\n" "checked\n" "UNCOUNTABLE -"
   probe_case P4 2 - 0 "ok a\nok b\nok c\n" "hermetic-run: p: declared file absent: data/x\n" "REFUSED -"
   probe_case P5 0 0 0 "ok n=3\nok b\nok c\n" "ok n=2\nok b\nok c\n" "MISMATCH DIFFER"
-  probe_case P6 0 0 0 "ok t $x/ptmp/tmp.AAAA/f\nok b\nok c\n" "ok t $xa/htmp/hermetic-run.Q1/tmp/tmp.BB/f\nok b\nok c\n" "EQUAL -"
+  probe_case P6 0 0 0 "ok t $x/ptmp/hermetic-run.Q1/tmp/tmp.AAAA/f\nok b\nok c\n" "ok t $xa/htmp/hermetic-run.Q1/tmp/tmp.BB/f\nok b\nok c\n" "EQUAL -"
   probe_case P7 0 0 0 "ok only\n" "ok only\n" "LOW-RES -"
   probe_case P8 0 0 1 "ok a\nok b\nok c\n" "ok a\nok b\nok c\n" "MISMATCH RC"
   probe_case P9 0 0 0 "ok a\nok b\nok c\nokay extra\n" "ok a\nok b\nok c\n" "EQUAL -"
