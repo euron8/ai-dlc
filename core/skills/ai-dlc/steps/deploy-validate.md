@@ -530,9 +530,9 @@ checkpoint (Rule 3): `touch _bmad-output/pipeline-paused.flag`.
 4. Approve any `DEFERRAL_REQUEST` entries (or reject and require implementation)
 5. Confirm validation or request fixes
 
-A generic validation reply is not a disposition: every locked
-requirement §5's locked-requirement coverage rule requires one for keeps
-its own recorded `HARD_BLOCK` disposition.
+A generic validation reply is not a disposition: each locked
+requirement that needs one under §5's locked-requirement coverage rule
+keeps its own recorded `HARD_BLOCK` disposition.
 
 ### 7. Post-Validation Routing
 
@@ -554,9 +554,9 @@ After human validates:
   **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/sprint-review-next.md`
 
 - If **single sprint or final sprint:** Proceed to retro, once every
-  locked requirement §5's locked-requirement coverage rule requires a
-  disposition for carries its recorded `HARD_BLOCK` disposition — the
-  operator's validation reply is not one.
+  locked requirement that needs a disposition under §5's
+  locked-requirement coverage rule carries its recorded `HARD_BLOCK`
+  disposition — the operator's validation reply is not one.
 
   1. Refresh `## Pipeline Position` in `_bmad-output/pipeline-snapshot.md`
      FIRST, OVERWRITING the existing `current_step_file` bullet rather than

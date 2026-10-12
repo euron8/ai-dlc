@@ -99,8 +99,8 @@ LOCKED_PHRASES='each bullet deferred and then delivered|phased — sprint k of N
 LOCKED_GATE='The checkpoint is not presented while any locked requirement lacks a recorded disposition.'
 LOCKED_REPLY='An operator reply to the checkpoint does not stand in for a recorded disposition.'
 # §6 and §7 CITE §5's rule rather than restating it at a narrower width.
-LOCKED_WAIT='A generic validation reply is not a disposition: every locked requirement §5'"'"'s locked-requirement coverage rule requires one for keeps its own recorded `HARD_BLOCK` disposition.'
-LOCKED_ROUTE='Proceed to retro, once every locked requirement §5'"'"'s locked-requirement coverage rule requires a disposition for carries its recorded `HARD_BLOCK` disposition'
+LOCKED_WAIT='A generic validation reply is not a disposition: each locked requirement that needs one under §5'"'"'s locked-requirement coverage rule keeps its own recorded `HARD_BLOCK` disposition.'
+LOCKED_ROUTE='Proceed to retro, once every locked requirement that needs a disposition under §5'"'"'s locked-requirement coverage rule carries its recorded `HARD_BLOCK` disposition'
 sec6() { awk '/^### 6\. Wait for Human/{on=1; next} on && /^### /{exit} on{print}' "$1"; }
 sec7() { awk '/^### 7\. Post-Validation Routing/{on=1; next} on && /^### /{exit} on{print}' "$1"; }
 
@@ -322,12 +322,12 @@ mutant "del-locked-reply" \
 
 # WAIT: §6's citation of §5's rule deleted.
 mutant "del-locked-wait" \
-  '/^A generic validation reply is not a disposition: every locked$/{skip=1} skip && /^its own recorded `HARD_BLOCK` disposition\.$/{skip=0; next} skip{next} {print}' \
+  '/^A generic validation reply is not a disposition: each locked$/{skip=1} skip && /^keeps its own recorded `HARD_BLOCK` disposition\.$/{skip=0; next} skip{next} {print}' \
   "LOCKED-WAIT:" "deleting §6's generic-reply-is-no-disposition sentence is caught"
 
 # ROUTE: §7's retro route restored to the unconditional form it replaced.
 mutant "del-locked-route" \
-  '/^- If \*\*single sprint or final sprint:\*\* Proceed to retro, once every$/{print "- If **single sprint or final sprint:** Proceed to retro."; skip=1; next} skip && /^  operator.s validation reply is not one\.$/{skip=0; next} skip{next} {print}' \
+  '/^- If \*\*single sprint or final sprint:\*\* Proceed to retro, once every$/{print "- If **single sprint or final sprint:** Proceed to retro."; skip=1; next} skip && /^  disposition — the operator.s validation reply is not one\.$/{skip=0; next} skip{next} {print}' \
   "LOCKED-ROUTE:" "dropping §7's disposition condition on the route to retro is caught"
 
 # DEFERRED-THEN-DELIVERED: the clause leaves the block, so a slipped-then-shipped lock reports no disposition.
