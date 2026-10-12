@@ -20,6 +20,38 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.776.0] - 2026-10-12
+
+Batch 224 (graph-ledger-full-drain), first release. The opening sweep read live 3, unfiled 2, worklist 0, DISCHARGED 1,
+TERMINAL 231, every control passing. Both unfiled candidates ship here; both are prose fixes pinned by existing fixtures.
+
+### PC-S317-PVC-TEMPLATE-HAS-NO-LINE-FOR-A-LOCKED-PRIORITY-LEFT-UNDELIVERED (BL-501)
+
+- **Defect.** `deploy-validate.md` §5's checkpoint template had no line per locked requirement, so a generic
+  validation reply carried a sprint into retro with a locked requirement undelivered and no recorded disposition.
+- **Fix.** A `### Locked-Requirement Coverage` block in the template: one line per bullet of the sprint's
+  LOCKED_REQUIREMENTS block (delivered / deferred / descoped), quoting the `HARD_BLOCK` id and disposition token for
+  each non-delivered or deferred-then-delivered bullet. §5 binds `steps/retro.md` §4a's rule at the checkpoint and
+  withholds the checkpoint while a locked requirement lacks a recorded disposition; §6 and §7 say a validation reply
+  is not a disposition. A bullet a later phase of the plan delivers reads `phased`, citing the story or stories delivering it,
+  and owes no disposition until the plan's final checkpoint, defined as the one after which no story of the plan
+  remains not `done`; later checkpoints carry forward every bullet an earlier one marked `phased`; a `phased` line
+  citing no story, a `done` story, or a story without the LR id counts as deferred. The channel is the red-gate
+  one (file the `HARD_BLOCK`, pause, the lead records the operator's token with its citation); `escalations.md`'s
+  resolution lifecycle and SKILL.md Rule 3's pause point (b) name that stop. No new gate: the `HARD_BLOCK` is the one Rule 13 already owes.
+- **Fixture.** `deploy-validate-smoke-classification` isolates §5 aware of its fenced template and keys on the block
+  body; twenty-three §5 mutants, among them the block deleted with the Red-gate line kept, `descope` alone dropped, the
+  `phased` status and the operator-reply sentence deleted, and the §6 and §7 conditions deleted.
+
+### PC-S317-PM-ROLE-TAGS-PROBABILISTIC-ACS-BUT-NOT-AN-ADR-RISK-RECORDED-AS-PROBE-NOT-YET-RUN (BL-502)
+
+- **Defect.** `team-roles/pm.md` tagged an unrunnable AC `probabilistic/passive-monitoring` but said nothing about an
+  architecture risk recorded as an unrun probe, and the PM's Context Loading never named the architecture document.
+- **Fix.** Such a risk becomes a `probabilistic/passive-monitoring` AC in the story implementing the decision the ADR
+  records, with its discharge predicate, adding no capability. Context Loading item 3 names `docs/architecture.md`,
+  then planning-phase architecture artifacts and `docs/adr/`.
+- **Fixture.** `process-rule-pins` gains seven phrase rows and an `escalations.md` row; thirty-two generated mutants, each killed.
+
 ## [0.775.0] - 2026-10-12
 
 Batch 223 (graph-ledger-full-drain), third release: the sandbox escape BL-497's census measured is now refused.
