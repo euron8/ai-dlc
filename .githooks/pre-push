@@ -1030,7 +1030,11 @@ readset_live_trace() { # <out>
     # assignment: a TERM landing after `sleep` forked and before `s=$!` ran found `s` empty, exited,
     # and left the sleep reparented to init for up to the whole ceiling. Measured on the instant-exit
     # deriver a fast trace always has: 7 of 40 launches leaked one; with `jobs -p`, none.
-    ( trap 'kill $(jobs -p) 2>/dev/null; exit 0' TERM
+    # THE KILL IS SIGKILL, NOT TERM. The forked child of `sleep "$cl" &` runs this subshell's TERM
+    # handler until it execs, so a TERM landing between its fork and its exec is handled and lost, and
+    # the exec then starts a sleep nothing will stop. Measured with that window forced open (a long
+    # PATH search before the exec): TERM leaked 10 of 10 launches, KILL 0 of 10. KILL cannot be handled.
+    ( trap 'kill -KILL $(jobs -p) 2>/dev/null; exit 0' TERM
       sleep "$cl" & s=$!; wait "$s"
       trap '' TERM
       kill -TERM -- "-$dp" 2>/dev/null || exit 0

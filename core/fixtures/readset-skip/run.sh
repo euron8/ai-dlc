@@ -1480,6 +1480,46 @@ FX
     "alive|$FX_REPS|$FX_REPS|$FX_REPS|0") ok "(t4) $FX_REPS fast traces (deriver exits at once, ceiling 777s): every one finished exit 0 and its process group was empty once its pid was gone -- the watchdog's sleep was never left behind (control: a live group read alive)" ;;
     *) bad "(t4) a fast trace left its watchdog's sleep alive, or the drive did not run: control|reps|started|exit0|leaks = '$RT4'" ;;
   esac
+  # (t4w) THE FORK-TO-EXEC WINDOW, FORCED. The forked child of the watchdog's `sleep "$cl" &` runs the
+  # watchdog's TERM handler until it execs, so a TERM forwarded to it in that window is handled and lost
+  # and the exec starts a sleep nothing stops. Under load that window is rare (1 in 14 runs of (t4));
+  # here it is held open without load: PATH is a shim directory linking every tool EXCEPT sleep, then
+  # FW_NDIRS relative entries that exist nowhere, then the real PATH. Every other command resolves in
+  # the shim at once; only `sleep` walks the absent entries first, so its child spends ~0.1s before the
+  # exec while the instant-exit deriver has the subshell stop the watchdog. The driver's own waits name
+  # /bin/sleep. Measured: a TERM in that trap leaked 10 of 10 launches, SIGKILL 0 of 10. The mutant
+  # termtrap below reverts the trap to TERM and must leak here; the fix must leak in none of FW_REPS.
+  FW_REPS=10; FW_NDIRS=15000
+  FW_SHIM="$WORK/fw-shim"; mkdir -p "$FW_SHIM"
+  _ifs="$IFS"; IFS=:
+  for _d in $PATH; do
+    [ -d "$_d" ] || continue
+    for _f in "$_d"/*; do
+      _b="${_f##*/}"
+      [ "$_b" = sleep ] && continue
+      [ -x "$_f" ] && [ ! -d "$_f" ] && [ ! -e "$FW_SHIM/$_b" ] && ln -s "$_f" "$FW_SHIM/$_b" 2>/dev/null
+    done
+  done
+  IFS="$_ifs"
+  [ -e "$FW_SHIM/sleep" ] && broken "(t4w) the shim carries a sleep, so the forced window cannot open"
+  [ -e "$FW_SHIM/git" ] && [ -e "$FW_SHIM/bash" ] || broken "(t4w) the shim is missing git or bash -- it was not built from PATH"
+  FW_PATH="$FW_SHIM:$(awk -v n="$FW_NDIRS" 'BEGIN { for (i = 0; i < n; i++) printf "fw-absent-%d:", i }')$PATH"
+  FW_DRIVER="$WORK/fw-driver.sh"
+  sed -e 's|sleep 0\.05|/bin/sleep 0.05|g' -e 's|sleep 30 |/bin/sleep 30 |' "$FX_DRIVER" > "$FW_DRIVER"
+  grep -q '^set -m; /bin/sleep 30 ' "$FW_DRIVER" && [ "$(grep -c '/bin/sleep 0\.05' "$FW_DRIVER")" -eq 3 ] \
+    || broken "(t4w) the forced-window driver did not take /bin/sleep at its control and its three waits"
+  fw_drive() { # <pool> <name> <reps> <stop at first leak: 0|1>; prints "<control>|<reps>|<started>|<exit 0>|<leaks>"
+    local t="$WORK/fw.$2" o="$WORK/fwo.$2"
+    seed_fx "$t" || { printf 'SEED FAILED'; return 1; }
+    mkdir -p "$o"
+    PATH="$FW_PATH" bash "$FW_DRIVER" "$1" "$t" "$o" "$3" "$4" > "$o/driver.out" 2>&1
+    cat "$o/res" 2>/dev/null
+  }
+  RT4W="$(fw_drive "$POOL" t4w "$FW_REPS" 0)"; lt_arm
+  case "$RT4W" in
+    "alive|$FW_REPS|$FW_REPS|$FW_REPS|0") ok "(t4w) $FW_REPS fast traces with the watchdog sleep's fork-to-exec window held open: every process group emptied -- the trap's kill is not lost in that window (control: a live group read alive)" ;;
+    *) bad "(t4w) with the fork-to-exec window held open a watchdog sleep survived, or the drive did not run: control|reps|started|exit0|leaks = '$RT4W'" ;;
+  esac
   CT_LIVE='alive,alive,alive,tr,tmp'
   CT_T1="$CT_LIVE|released,gone,gone,gone,notr,notmp,same|timeout|timed"
   RT1="$(ct_drive "$POOL" t1 3 hang)"; lt_arm
@@ -1992,7 +2032,17 @@ ct_mut() { # <name> <want: a glob over (t1)'s result>
 if [ "$LT_CAN" = 1 ]; then
   # the ceiling never armed: the watchdog sleeps far past it.
   # the watchdog's old trap, which kills the pid it saved and races the save.
-  if PM_FN=readset_live_trace pm_copy oldtrap 1 "    ( trap 'kill \$(jobs -p) 2>/dev/null; exit 0' TERM" "    ( s=\"\"; trap '[ -n \"\$s\" ] && kill \"\$s\" 2>/dev/null; exit 0' TERM"; then
+  # the trap kills its jobs with TERM, which a child still between fork and exec handles and loses.
+  if PM_FN=readset_live_trace pm_copy termtrap 1 "trap 'kill -KILL \$(jobs -p) 2>/dev/null" "trap 'kill \$(jobs -p) 2>/dev/null"; then
+    lt_arm; R="$(fw_drive "$PM" pm.termtrap "$FW_REPS" 1)"
+    case "$R" in
+      alive\|*\|*\|*\|0) bad "CEILING MUTANT termtrap SURVIVED (t4w) over $FW_REPS forced-window traces: '$R'" ;;
+      alive\|*) ok "CEILING MUTANT termtrap (the trap sends TERM) is KILLED by (t4w): a sleep killed in its fork-to-exec window survived"
+        printf '        (drive: %s)\n' "$R" ;;
+      *) bad "CEILING MUTANT termtrap: the control did not read alive -- NO VERDICT: '$R'" ;;
+    esac
+  fi
+  if PM_FN=readset_live_trace pm_copy oldtrap 1 "    ( trap 'kill -KILL \$(jobs -p) 2>/dev/null; exit 0' TERM" "    ( s=\"\"; trap '[ -n \"\$s\" ] && kill \"\$s\" 2>/dev/null; exit 0' TERM"; then
     lt_arm; R="$(fx_drive "$PM" pm.oldtrap "$FX_MREPS" 1)"
     case "$R" in
       alive\|*\|*\|*\|0) bad "CEILING MUTANT oldtrap SURVIVED (t4) over $FX_MREPS fast traces: '$R'" ;;
