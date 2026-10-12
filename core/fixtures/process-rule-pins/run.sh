@@ -133,6 +133,11 @@ pin_scan() {
 # rewritten to say the opposite. Each token is the clause whose negation inverts the rule.
 # Two texts are deliberately NOT pinned because they are being reworded: the repair clause of
 # the attribution rung, and the closing sentence of the §2c disposal paragraph.
+#
+# The pm-adr-* rows are line-mode `contains` pins inside one bullet list that `para` cannot
+# split. The line breaks in that pm.md bullet and in its Context Loading item 3 exist to keep
+# each pinned phrase on ONE line; reflowing either breaks the pin, so do not reflow them.
+# A comment line cannot go inside the table below: every line between the markers is a row.
 pins() {
   cat <<'PINS'
 gv-body-must|S|steps/gate-validation.md|### 12.|### 13.|**A state claim MUST carry its command.**|para|MUST carry, in the same row
@@ -173,7 +178,10 @@ party-unsharded-check|S|steps/_gate-procedures.md|## Validation cycle|## Where a
 srev-seats-record|S|steps/sprint-review.md|### 2. Sprint-Level Party Mode|### 3.|- Record every finding; the seats edit nothing|prefix
 rem-party-source|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**A party repair names the seat finding behind every entry.**|para|every entry carries a `source:` line
 pm-adr-probe|R|pm.md|## Responsibilities|## The evidence contract|in the story implementing the decision the ADR records|contains
-pm-adr-context|R|pm.md|## Context Loading|## Communication|3. The architecture and ADR sections for the stories in scope|prefix
+pm-adr-trigger|R|pm.md|## Responsibilities|## The evidence contract|carries as an unrun probe|contains
+pm-adr-tag|R|pm.md|## Responsibilities|## The evidence contract|`probabilistic/passive-monitoring` AC, written at creation|contains
+pm-adr-predicate|R|pm.md|## Responsibilities|## The evidence contract|with its discharge predicate named in the AC text|contains
+pm-adr-context|R|pm.md|## Context Loading|## Communication|(the primary architecture document)|contains
 PINS
 }
 
