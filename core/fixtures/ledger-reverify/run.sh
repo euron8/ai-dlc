@@ -5851,6 +5851,7 @@ idc_rows() { bash "$1" "$DIST" "$BASE" "$CONS" "$THEIRS" "$IDW/ledger.md" 2>/dev
 # mutant below already pays for. Keyed on the per-receipt flag only the fixed engine carries.
 idc_det=1
 grep -qF 'SBC_CLOSE_AT_BASE' "$CLOSER" || idc_det=0
+grep -qF 'NA_ENTRY_KIND' "$CLOSER" || idc_det=0
 [ "$B2_ISDIST" = 1 ] && idc_det=1
 IDC_DCELLS=""
 if [ "$idc_det" = 1 ]; then
@@ -5859,6 +5860,17 @@ if [ "$idc_det" = 1 ]; then
 - **PC-S818-6.1-SH_CLOSED_AT_BASE** — an sh receipt already closed at base, and a commit names the id.
   verify: sh git -C "$DIST" cat-file -e "${THEIRS}:core/scripts/s818-subject.sh" && exit 1; exit 0
 
+- **PC-S821-SH-AFTER-EMPTY-RECEIPT** — directly after a named entry; the FIRST receipt is empty, the
+  second is an sh receipt already closed at base, and no commit names this id.
+  verify:
+  verify: sh git -C "$DIST" cat-file -e "${THEIRS}:core/scripts/s819-subject.sh" && exit 1; exit 0
+
+- **PC-S822-7.1-SH_CITED_ONLY** — cited only on a Not-discharged: line; receipt closed at base.
+  verify: sh git -C "$DIST" cat-file -e "${THEIRS}:core/scripts/s822-other.sh" && exit 1; exit 0
+
+- **PC-S823-7.2-SH_DOCS_ONLY** — named only by a docs-only commit; receipt closed at base.
+  verify: sh git -C "$DIST" cat-file -e "${THEIRS}:docs/s823-plan.md" && exit 1; exit 0
+
 - **PC-S819-SH-CLOSED-AT-BASE-UNNAMED** — the same shape, and no commit names the id.
   verify: sh git -C "$DIST" cat-file -e "${THEIRS}:core/scripts/s819-subject.sh" && exit 1; exit 0
 
@@ -5866,6 +5878,11 @@ if [ "$idc_det" = 1 ]; then
   verify: sh case "$(git -C "$DIST" show "${THEIRS}:core/skills/ai-dlc/SKILL.md")" in *MARKER_B*) exit 1 ;; esac; exit 0
 IDCSH
   IDC_DCELLS="s818:PC-S818-6.1-SH_CLOSED_AT_BASE:names-commit s819:PC-S819-SH-CLOSED-AT-BASE-UNNAMED:find-release s820:PC-S820-SH-REPRODUCED-AT-BASE:v-theirs"
+  # The two adversary cells. s821 sits directly after the named s818 and its FIRST receipt is empty,
+  # so an entry-level reset keyed on the receipt ORDINAL never fires for it and s818's shas leak in.
+  # s822 is cited ONLY on a Not-discharged: line, s823 only by a docs-only commit: neither naming
+  # is an absorption, so neither close may route the operator to "the commits that name the id".
+  IDC_DCELLS="$IDC_DCELLS s821:PC-S821-SH-AFTER-EMPTY-RECEIPT:find-release s822:PC-S822-7.1-SH_CITED_ONLY:find-release s823:PC-S823-7.2-SH_DOCS_ONLY:find-release"
 fi
 IDC_TV="$(git -C "$DIST" show "${THEIRS}:VERSION" 2>/dev/null)"
 IDC_S818="$(git -C "$DIST" log -F --grep='PC-S818-6.1-SH_CLOSED_AT_BASE' --format=%h "$THEIRS" 2>/dev/null)"
@@ -5876,7 +5893,18 @@ idc_dcls() {
   _d="$(printf '%s\n' "$1" | awk -F'\t' -v l="$2" '$2 == l && $1 == "CLOSE-CANDIDATE" {print $3; exit}')"
   [ -n "$_d" ] || { printf 'no-close'; return; }
   case "$_d" in *"'ADOPTED UPSTREAM (v$IDC_TV, verified"*) printf 'v-theirs'; return ;; esac
-  case "$_d" in *"names this entry's id in commit(s) "*"$IDC_S818"*) [ -n "$IDC_S818" ] && { printf 'names-commit'; return; } ;; esac
+  # s818's sha on ANY other label is a leak, whatever sentence carries it.
+  if [ "$2" != PC-S818-6.1-SH_CLOSED_AT_BASE ] && [ -n "$IDC_S818" ]; then
+    case "$_d" in *"$IDC_S818"*) printf 'leaks-s818'; return ;; esac
+  fi
+  # A NAMING SHA IN THE DETAIL IS `names-commit` ONLY ON s818's OWN LABEL. Anywhere else it is a
+  # leak (another entry's sha) or a naming that is no absorption (cited-only, docs-only): `cites-sha`.
+  case "$_d" in *"names this entry's id in commit(s) "*)
+    if [ "$2" = PC-S818-6.1-SH_CLOSED_AT_BASE ] && [ -n "$IDC_S818" ]; then
+      case "$_d" in *"$IDC_S818"*) printf 'names-commit'; return ;; esac
+    fi
+    printf 'cites-sha'; return ;;
+  esac
   case "$_d" in *"find the release at which this receipt first stops reproducing"*) printf 'find-release'; return ;; esac
   printf 'other'
 }
@@ -5964,9 +5992,22 @@ if [ "$idc_bound" = 1 ]; then
 fi
 if [ "$idc_det" = 1 ]; then
   # THE OLD DETAIL RESTORED: every sh close offers v<theirs>, whatever the base control said.
-  idc_case old-close-detail "s818=v-theirs s819=v-theirs" \
-    "an sh close already closed at base offering v<theirs> again is the defect, and id-class-s818/-s819 are what see it; the control s820 holds" \
+  idc_case old-close-detail "s818=v-theirs s819=v-theirs s821=v-theirs s822=v-theirs s823=v-theirs" \
+    "an sh close already closed at base offering v<theirs> again is the defect, and id-class-s818/-s819 are what see it (s821-s823, closed at base too, co-move); the control s820 holds" \
     '            if [ "${SBC_CLOSE_AT_BASE:-0}" = 1 ]; then' '            if false; then' 1
+  # THE SHIPPED-AT-555894ec RESET: keyed on a first ordinal inside the naming case, below the
+  # empty-directive skip. Both top-of-loop resets go and the ordinal reset comes back.
+  idc_case ordinal-keyed-reset "s821=leaks-s818" \
+    "a reset keyed on the first ordinal below the empty-receipt skip hands the named entry's sha to the next entry, and id-class-s821 is what sees it" \
+    '  case "$ord" in 1/*|0/0|"") NA_ENTRY_SHAS=""; NA_ENTRY_KIND="" ;; esac' '  :' 1 \
+    '  [ "$label" = "${_na_entry_label-}" ] || { NA_ENTRY_SHAS=""; NA_ENTRY_KIND=""; }' '  :' 1 \
+    '  case "$ord" in 1/*|0/0|"") na="$(named_absorbed "$label")"; [ -n "$na" ] || nam="$(named_ambiguous "$label")" ;; esac' \
+    '  case "$ord" in 1/*|0/0|"") na="$(named_absorbed "$label")"; [ -n "$na" ] || nam="$(named_ambiguous "$label")"; NA_ENTRY_SHAS="" ;; esac' 1
+  # THE SHIPPED-AT-555894ec RECORDING: shas kept for every naming kind, before the kind is decided.
+  idc_case shas-every-kind "s822=cites-sha s823=cites-sha" \
+    "keeping the naming shas for a cited-only or docs-only row routes the close to commits that row calls no absorption, and id-class-s822/-s823 are what see it" \
+    "    na_r=\"\$(printf '%s' \"\$na\" | awk '{print \$4}')\"" \
+    "    na_r=\"\$(printf '%s' \"\$na\" | awk '{print \$4}')\"; NA_ENTRY_SHAS=\"\$na_c\"" 1
   # THE NAMING BRANCH ALONE dropped: the named entry falls to the find-the-release text.
   idc_case close-detail-no-shas "s818=find-release" \
     "dropping the naming-commit branch sends a named entry to a bisect it does not need, and id-class-s818 is what sees it" \

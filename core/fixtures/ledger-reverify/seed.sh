@@ -319,6 +319,15 @@ git -C "$DIST" commit -q -m 'fix: absorb PC-S818-6.1-SH_CLOSED_AT_BASE'
 printf '#!/bin/sh\necho s819\n' > "$DIST/core/scripts/s819-subject.sh"
 git -C "$DIST" add -A
 git -C "$DIST" commit -q -m 'fix: a subject no entry id is named beside'
+# s822: cited ONLY on a Not-discharged: line. s823: named only by a docs-only commit. Each commit
+# adds the file its entry's receipt asserts absent, so both receipts are closed at base already.
+printf '#!/bin/sh\necho s822\n' > "$DIST/core/scripts/s822-other.sh"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m '0.099.8 -- a release that fixes something else once more' \
+  -m 'Not-discharged: PC-S822-7.1-SH_CITED_ONLY'
+printf 'a plan line\n' > "$DIST/docs/s823-plan.md"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'docs(plan): cross-reference PC-S823-7.2-SH_DOCS_ONLY'
 
 # --- base: neither marker present ---
 printf '# SKILL\nrule one\nrule two\n' > "$SK"
