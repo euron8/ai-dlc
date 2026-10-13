@@ -612,21 +612,44 @@ named_cited_filter() {
     function flush() { if (h != "" && keep) print h }
     BEGIN { n = ENVIRON["LR_N"]; p = ENVIRON["LR_P"]; re = p "([^0-9A-Za-z-]|$)" }
     substr($0, 1, 1) == "\001" { flush(); h = substr($0, 2); keep = 0; next }
-    $0 ~ /^Not-discharged: PC-S[0-9]+(-[A-Z0-9]+)*$/ { next }
+    $0 ~ /^Not-discharged: PC-S[0-9]+(-[A-Za-z0-9_.-]+)*$/ { next }
     (p == "" && index($0, n)) || (p != "" && $0 ~ re) { keep = 1 }
     END { flush() }')" || { printf '%s\n' "$1"; return 0; }
   printf '%s\n' "$_out" | grep . || true
 }
 
+# A LABEL IS ASKED ABOUT ONLY WHEN IT *IS* AN ENTRY ID: it must EQUAL its own `ledger_entry_id()`,
+# the shared rule from lib.sh, asked through awk exactly as the `manual` dispatch below asks it. No
+# local restatement of the character class. Both naming guards used to carry one -- `[A-Z0-9-]`,
+# the narrow spelling lib.sh widened for `_` and `.` -- and it went blind on the widened forms.
+# Measured on a scratch clone of the reference consumer at its 0.777.0 reconcile branch: an open
+# `PC-S317-3.2-...` entry, named by one distribution release commit, got NO NAMED-UPSTREAM-family
+# row; its two dash-only siblings named by the same commit closed. WIDENING THE CLASS INSTEAD IS
+# WRONG IN THE OTHER DIRECTION: it admits a RECEIPTED prose label such as `validate-ci-gates.sh`
+# (lowercase, a dash, a dot), which `git log -F --grep` then matches by its words, and a receipted
+# all-caps heading. Equality with the shared rule admits every id lib.sh admits and nothing else.
+#
+# EMPTY IS REFUSED HERE, NOT LEFT TO THE CALLER: `ledger_entry_id("")` is "" and "" equals "", so
+# an unguarded equality accepts the empty label. One line only, so a stray second line cannot vote.
+# Each caller runs a FORK-FREE `PC-*|BL-*` prefix refusal before this, so a prose label never pays
+# the awk fork; that is a prefix test, not a second copy of the class.
+label_is_own_entry_id() { # <label> -> rc 0 iff the label equals ledger_entry_id(label)
+  printf '%s\n' "$1" | LC_ALL=C awk "$(ledger_entry_awk)$(ledger_entry_id_awk)"'
+    NR == 1 && $0 != "" && ledger_entry_id($0) == $0 { ok = 1 }
+    END { exit !(ok && NR == 1) }'
+}
+
 named_absorbed() { # <label> -> "<how> <n> <sha>,<sha>,... <code|docs|cited>" if upstream's history names it, else ""
   local _id="$1" _hits _all _list _n _pfx _how _h
   case "$_id" in
-    *[!A-Z0-9-]*|'') return 0 ;;              # not id-shaped: prose label, nothing to ask
+    PC-*|BL-*) : ;;
+    *) return 0 ;;                            # not id-shaped: prose label, nothing to ask
   esac
   case "$_id" in
     *-*) : ;;
     *)   return 0 ;;                          # a single word is not an id
   esac
+  label_is_own_entry_id "$_id" || return 0    # not the shared id rule: prose label, nothing to ask
   _how=slug
   # THE WHOLE MATCH SET, NOT ONE COMMIT OF IT. This was `| tail -1` -- the OLDEST commit whose
   # MESSAGE names the id -- and the row then reported that commit's version as the absorbing
@@ -1159,7 +1182,7 @@ named_sibling() {
 # ledger entries carry it, and nothing in the commit says which -- so the operator reads the commit.
 named_ambiguous() { # <label> -> "<n-commits> <sha>,<sha>,... <n-entries> <code|docs>" when the prefix is shared
   local _id="$1" _pfx _n _c _hits
-  case "$_id" in *[!A-Z0-9-]*|'') return 0 ;; esac
+  case "$_id" in PC-*|BL-*) : ;; *) return 0 ;; esac
   # THE FORK-FREE GUARDS RUN FIRST, and that ordering is the whole cost of this function. All
   # four are pure predicates that return empty, so the order they are asked in cannot change the
   # answer -- only how many history walks are paid for an id that was never going to produce a
@@ -1180,6 +1203,10 @@ named_ambiguous() { # <label> -> "<n-commits> <sha>,<sha>,... <n-entries> <code|
       case "${_pfx#S}" in ""|*[!0-9]*) _pfx="" ;; *) _pfx="PC-$_pfx" ;; esac ;;
   esac
   [ -n "$_pfx" ] || return 0
+  # THE SHARED ID RULE, after the fork-free refusals and before `prefix_entry_count`, which forks.
+  # Its own guard, not inherited from `named_absorbed`: this function receives the same label that
+  # one just refused, and a prefix-shaped prose label would otherwise reach the prefix walk here.
+  label_is_own_entry_id "$_id" || return 0
   _n="$(prefix_entry_count "$_pfx")"
   [ "$_n" -gt 1 ] 2>/dev/null || return 0
   # READ INTO A VARIABLE, THEN TEST. `| grep -q .` leaves at its first match while git log is
@@ -2284,6 +2311,11 @@ lr_entries() { # <ledger-file> <keep-closed 0|1> -> label TAB ord TAB directive,
   # prose-titled or all-caps non-id heading stays silent: feeding prose to `git log --grep`
   # matches by common words. The loop below lets `0/0` emit NAMED-UPSTREAM(-AMBIGUOUS) and then
   # skips the verb dispatch, so no receipt verdict is ever invented for it.
+  # DEFENCE IN DEPTH NOW, NOT THE GUARD: the naming path no longer depends on this filter.
+  # `named_absorbed` and `named_ambiguous` each refuse a label that does not equal its own
+  # ledger_entry_id(), so a RECEIPTED prose label -- which this filter never saw, since it gates
+  # only the receipt-less 0/0 row -- is refused there too. Kept so a 0/0 row is never emitted for
+  # a label no naming query would ask about.
   function flush(){
     if (has_verify && (!closed || KEEP) && label != "")
       for (di = 1; di <= dn; di++)

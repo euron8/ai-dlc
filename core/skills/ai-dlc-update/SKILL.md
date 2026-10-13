@@ -1236,7 +1236,7 @@ prose is itself generated rather than composed.
      sibling's entry, then this entry's subject at `theirs`.
    - `NAMED-UPSTREAM-CITED-ONLY` → upstream's history names this entry's id, and **every**
      naming commit names it only on a body line reading exactly `Not-discharged: PC-S<n>` or
-     `Not-discharged: PC-S<n>-<SLUG>` — the form a distribution release uses to cite an entry
+     `Not-discharged: PC-S<n>-<SLUG>` (SLUG in the id class `[A-Za-z0-9_.-]`) — the form a distribution release uses to cite an entry
      it did NOT discharge. The row keeps the full sha list and is **not an absorption claim**.
      Read the commits for a rejection, a withdrawal or a split, then read the entry's subject
      at `theirs`. A commit carrying both that line and an ordinary mention of the id still
