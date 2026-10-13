@@ -2441,6 +2441,8 @@ fi
 #          Y's anchor and X's SECOND substring                              -> NAMED-UPSTREAM (split-off)
 #   S1035  Y's anchor is a substring of its own path; the commit edits only a
 #          filler line, so the anchor occurs only in the diff headers       -> NAMED-UPSTREAM (headers-matched)
+#   S1037  Y's slug occurs only continued by `_`, a longer id               -> NAMED-UPSTREAM (sibling-class-narrow)
+#   S1039  Y's slug occurs only continued by `.3-`, a longer id             -> NAMED-UPSTREAM (sibling-class-narrow)
 #   S1099  never named (control): must have a row and no NAMED- row
 #
 # SHIPS AHEAD OF ITS SUBJECT, keyed on the status only the fixed engine emits.
@@ -2463,7 +2465,7 @@ sb_rc=0
   g init -q
   mkdir -p "$SBD/core/scripts"
   printf '0.1.0\n' > "$SBD/VERSION"
-  for t in A C D E F G I J K N O; do
+  for t in A C D E F G I J K N O T U; do
     printf '#!/bin/sh\nFILLER_TOP\nf1\nf2\nf3\nf4\nANCHX_%s_\nANCHY_%s_\n' "$t" "$t" > "$SBD/core/scripts/sb-$t.sh"
   done
   printf '#!/bin/sh\nFILLER_TOP\nANCHX_B_\n' > "$SBD/core/scripts/sb-B.sh"
@@ -2512,6 +2514,10 @@ sb_rc=0
   sw sb-Q1.sh ANCHY_Q_ fixedQ; sw sb-Q2.sh ANCHX_Q2_ fixedXQ2; c 'fix: absorb PC-S1032-TWO-PATH-Y; cites PC-S1031-TWO-PATH-X'
   sw sb-R.sh ANCHY_R_ fixedR; sw sb-R.sh ANCH_B4 fixedB4; c 'fix: absorb PC-S1034-MULTI-SUB-Y; cites PC-S1033-MULTI-SUB-X'
   sw yfile.sh FILLER_TOP 'filler S'; c 'fix: absorb PC-S1036-HEADER-Y; cites PC-S1035-HEADER-X'
+  # S1037/S1039: the sibling's slug is followed only by an id byte of the SHARED class (`_`, or a
+  # `.` that continues the id), so the commit names a longer id and not the sibling.
+  sw sb-T.sh ANCHY_T_ fixedT; c 'fix: absorb PC-S1038-CONT_LONGER; cites PC-S1037-ID-CONT-X'
+  sw sb-U.sh ANCHY_U_ fixedU; c 'fix: absorb PC-S1040-DOT.3-LONGER; cites PC-S1039-DOT-CONT-X'
 ) >/dev/null 2>&1 || sb_rc=$?
 if [ "$sb_rc" -ne 0 ]; then
   FAILURES=$((FAILURES + 1))
@@ -2646,6 +2652,18 @@ cat > "$SBW/ledger.md" <<'SBLED'
 - **PC-S1036-HEADER-Y** — sibling whose anchor occurs only in the path.
   verify: theirs_has core/scripts/yfile.sh "yfile.sh"
 
+- **PC-S1037-ID-CONT-X** — my sibling's slug occurs only continued by an underscore.
+  verify: theirs_has core/scripts/sb-T.sh "ANCHX_T_"
+
+- **PC-S1038-CONT** — sibling, whose slug is continued by `_` in the naming commit.
+  verify: theirs_lacks core/scripts/sb-T.sh "ANCHY_T_"
+
+- **PC-S1039-DOT-CONT-X** — my sibling's slug occurs only continued by an id-continuing dot.
+  verify: theirs_has core/scripts/sb-U.sh "ANCHX_U_"
+
+- **PC-S1040-DOT** — sibling, whose slug is continued by `.3-` in the naming commit.
+  verify: theirs_lacks core/scripts/sb-U.sh "ANCHY_U_"
+
 - **PC-S1099-NEVER** — never named (control).
   verify: theirs_has core/scripts/sb-never.sh "never"
 SBLED
@@ -2658,9 +2676,9 @@ verify: theirs_lacks core/scripts/sb-D.sh "ANCHY_D_"
 SBARC
 sb_rows() { bash "$1" "$SBD" "$SBB" "$CONS" "$SBT" "$SBW/ledger.md" 2>/dev/null; }
 sb_kind() { printf '%s\n' "$1" | awk -F'\t' -v l="$2" '$2 == l && $1 ~ /^NAMED-UPSTREAM(-DOCS-ONLY|-CITED-ONLY|-OFF-SUBJECT|-SIBLING-ATTRIBUTED)?$/ {print $1; exit}'; }
-SB_IDS="PC-S1001-OFFENDER PC-S1003-DIFFERENT-FILE PC-S1005-INCOMMIT-X PC-S1007-ARCHIVE-ONLY PC-S1009-SPAN-NEIGHBOUR PC-S1011-SPANOFF-X PC-S1013-SHORT-ID-X PC-S1015-WHOLE-DIFF-X PC-S1017-TWO-COMMITS-X PC-S1019-MERGE-P2-X PC-S1021-MERGE-P1-X PC-S1023-MERGE-CONCAT-X PC-S1025-PREFIX-X PC-S1027-PIPE-X PC-S1029-BACKSLASH-X PC-S1031-TWO-PATH-X PC-S1033-MULTI-SUB-X PC-S1035-HEADER-X"
+SB_IDS="PC-S1001-OFFENDER PC-S1003-DIFFERENT-FILE PC-S1005-INCOMMIT-X PC-S1007-ARCHIVE-ONLY PC-S1009-SPAN-NEIGHBOUR PC-S1011-SPANOFF-X PC-S1013-SHORT-ID-X PC-S1015-WHOLE-DIFF-X PC-S1017-TWO-COMMITS-X PC-S1019-MERGE-P2-X PC-S1021-MERGE-P1-X PC-S1023-MERGE-CONCAT-X PC-S1025-PREFIX-X PC-S1027-PIPE-X PC-S1029-BACKSLASH-X PC-S1031-TWO-PATH-X PC-S1033-MULTI-SUB-X PC-S1035-HEADER-X PC-S1037-ID-CONT-X PC-S1039-DOT-CONT-X"
 SA=NAMED-UPSTREAM-SIBLING-ATTRIBUTED; NU=NAMED-UPSTREAM
-SB_WANT="$SA $NU $NU $SA $NU $NU $NU $NU $NU $SA $SA $NU $NU $SA $NU $NU $NU $NU"
+SB_WANT="$SA $NU $NU $SA $NU $NU $NU $NU $NU $SA $SA $NU $NU $SA $NU $NU $NU $NU $NU $NU"
 sb_expect() { local _i _k _w="$SB_WANT"; for _i in $SB_IDS; do _k="${_w%% *}"; _w="${_w#* }"; [ "$_i" = "$1" ] && { printf '%s' "$_k"; return; }; done; }
 sb_read() { local _i _s=""; for _i in $SB_IDS; do _s="$_s $_i=$(sb_kind "$1" "$_i")"; done; printf '%s' "${_s# }"; }
 # THE CONTROL IS PRESENCE-SHAPED: every X cell must carry a NAMED- row of exactly its kind, the
@@ -2769,10 +2787,16 @@ sb_case span-off-attribution PC-S1011-SPANOFF-X "$SA" "PC-S1009-SPAN-NEIGHBOUR" 
 sb_case sibling-prefix PC-S1013-SHORT-ID-X "$SA" - \
   "accepting a short id as naming the sibling attributes on a mention, and S1013 is what sees it" \
   'named(ENVIRON["LR_M"], $1) { print }' '(named(ENVIRON["LR_M"], $1) || (match($1, /^PC-S[0-9]+/) && named(ENVIRON["LR_M"], substr($1, 1, RLENGTH)))) { print }'
-sb_case slug-unanchored PC-S1025-PREFIX-X "$SA" - \
-  "an unanchored slug test names a sibling whose slug only prefixes a longer named one, and S1025 is what sees it" \
+sb_case slug-unanchored PC-S1025-PREFIX-X "$SA" "PC-S1037-ID-CONT-X PC-S1039-DOT-CONT-X" \
+  "an unanchored slug test names a sibling whose slug only prefixes a longer named one, and S1025 is what sees it (S1037/S1039, whose sibling slugs are also continued, co-move by construction)" \
   'if (c == "" || c !~ /[0-9A-Za-z_.-]/) return 1' 'return 1'
-sb_case first-touching-commit-only PC-S1017-TWO-COMMITS-X "$SA" - \
+# THE CLASS ALONE, back to the narrow `[0-9A-Za-z-]`. The full-stop line above it is left in place:
+# under the narrow class every `.` is already a boundary, so that line is subsumed and this single
+# edit IS the old behaviour. Distinct from slug-unanchored, which accepts every occurrence.
+sb_case sibling-class-narrow PC-S1037-ID-CONT-X "$SA" "PC-S1039-DOT-CONT-X" \
+  "a next-byte class without _ and . reads a slug continued by _ or .3- as naming the sibling, and S1037 is what sees it (S1039, the dot spelling, co-moves by construction)" \
+  'if (c == "" || c !~ /[0-9A-Za-z_.-]/) return 1' 'if (c == "" || c !~ /[0-9A-Za-z-]/) return 1'
+sb_case first-touching-commit-onlyPC-S1017-TWO-COMMITS-X "$SA" - \
   "judging only the newest naming commit misses an older one that changed X's anchor, and S1017 is what sees it" \
   "printf '%s\\n' \"\$2\" | tr ',' '\\n' > \"\$LR_STAGE/nsb-shas\"" "printf '%s\\n' \"\${2%%,*}\" > \"\$LR_STAGE/nsb-shas\""
 sb_case sha-list-unterminated PC-S1001-OFFENDER "$NU" "PC-S1007-ARCHIVE-ONLY PC-S1019-MERGE-P2-X PC-S1021-MERGE-P1-X PC-S1027-PIPE-X PC-S1017-TWO-COMMITS-X" \
