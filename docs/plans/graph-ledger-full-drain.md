@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 345..393. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 339..390. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,54 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 226 SHIPPED `v0.780.0` (`eedbb415`, #1121), A BOOTSTRAPPING RELEASE (`ledger-reverify.sh`): A CANDIDATE ID
+CONTAINING `.` OR `_` NOW REACHES THE UPSTREAM-NAMING JOIN.** Batch 225's block below is history: this block replaces
+its delivery gap. Handed the plan by ai-dlc-18 at `origin/main` `47d5fcae` (`VERSION` 0.779.0); graph-a4 was live and
+never messaged.
+- **Opening sweep** (at `47d5fcae`): live 1, unfiled 0, worklist 0, DISCHARGED 1 (`PC-S317-3.2-DERIVATION-HOOK-CWD`,
+  oldest naming release 0.773.0), invisible 0, TERMINAL 233, archive 356, 5 qualifying refs, every control passing;
+  backlog 0 live, 501 archived, one `DECLARED-EMPTY` row. graph carried no uncommitted filing (414 ids on every ref
+  ahead of graph `main` and in its working tree, all present on `main`; seeded-id detector control 0 -> 1). The close
+  sweep at `eedbb415` reads the same except 7 qualifying refs (graph's `0.779.0-reconcile` and `self-update-0.779.0`
+  branches joined the set).
+- **Why that candidate never closed.** graph's 0.773.0 and 0.777.0 reconcile reports carry no row for it, while both
+  siblings named by the same release commit `2bdb3a29` closed. Two causes, both measured on a scratch clone:
+  `named_absorbed` and `named_ambiguous` opened with a local `[A-Z0-9-]` guard, so an id carrying `.` got no
+  `NAMED-UPSTREAM` row; and graph's receipt is pinned to `a304562b` (0.772.0, pre-fix) and a literal DIST path, so it
+  reads STILL-LIVE at every ref, and `emit-report.sh` hides STILL-LIVE rows.
+- **`v0.780.0`**: both guards admit a label only when it equals its own `ledger_entry_id()` (lib.sh), behind a
+  fork-free `PC-*|BL-*` refusal; widening the class instead was refused by the contract adversary (a receipted prose
+  label `validate-ci-gates.sh` read `NAMED-UPSTREAM`). The prefix boundary in the prefix walks, `named_cited_filter`
+  and `named_sibling` no longer reads `_` or an id-continuing `.` as a boundary (a full stop still ends it). The
+  `Not-discharged:` grammar takes the shared class in the engine and `validate-release-version.sh` arm F. An `sh`
+  `CLOSE-CANDIDATE` whose receipt already did not reproduce at base no longer offers `v<theirs>`: it names a plain
+  `NAMED-UPSTREAM` row's commits, else says to find the release; step 8 routes the close there. Two tip adversaries
+  found four DEFECTs (a naming sha leaking to the next entry, cited/docs shas offered as the absorbing one, a vacuous
+  label-keyed reset, one CHANGELOG word); all fixed in the release. Three gates; the last green 22 of 22, all eight
+  `ledger-reverify*` and `release-version-triple` fixtures `ok` by name.
+- **Measured on a graph clone** (base 2819e2dc, theirs 47d5fcae): the fixed engine adds exactly one row,
+  `NAMED-UPSTREAM PC-S317-3.2-DERIVATION-HOOK-CWD` (2bdb3a29), 9 -> 10; archive with closes stripped: 292 -> 294
+  naming rows, both newly visible ids real, none refused. Four cells for that id: the engine fix adds the
+  `NAMED-UPSTREAM` row whatever the receipt; repointing the receipt at `"$DIST"`/`"${THEIRS}"` yields
+  `CLOSE-CANDIDATE` under either engine; `ledger-rotate.sh` archives it in no cell until the entry carries an
+  `ADOPTED UPSTREAM` annotation. The correct annotation is v0.773.0, which the 0.780.0 close detail now says.
+- **Cost**: loaded `ledger-reverify-shard-mutants` 174s -> 234s at the last gate (257s at the second). Its `run.sh` is
+  byte-identical to 0.779.0's but it builds trees from `ledger-reverify/run.sh`, so the new id-class unit reaches it.
+  Shards a-d read 403/386/335/359s against 532/607/538/549s before.
+- **graph delivery**: graph pulled 0.779.0 (`2bc435f26`, #1216); stamp 0.779.0 (`47d5fcae`) committed on its
+  `ai-dlc/carry-over/s318-artifact-consolidation` branch against `VERSION` 0.780.0, one release behind. The range
+  carries a BOOTSTRAPPING file (`ledger-reverify.sh`) and the update `SKILL.md`; `preclassify.sh` and `apply.sh` are
+  unchanged and no `core/scripts/` file changed, so graph's `self-update-gate.sh` reads `SELF-UPDATE-OK` (its no-fix
+  control read OK too, so that shows the gate permits the self-update, not that it could defer). graph's installed
+  `validate-layer-entries.sh` is byte-identical (`cmp -s` 0), so the differential cannot discriminate. Discharged and
+  awaiting graph's own close: `PC-S317-3.2-DERIVATION-HOOK-CWD`, which needs the receipt repointed and the entry
+  annotated `ADOPTED UPSTREAM (v0.773.0, …)`. The pull is the operator's.
+- **graph boundary**: ledger md5 `87f3419f…` at the opening and the close. Porcelain 142 at the opening, 46 at the
+  close, all graph's own pipeline and self-update state. Nothing was written there.
+- **Process facts**: every spawned worktree was removed and every batch branch deleted by name.
+
+Net for the batch: closed 0, filed 0. The backlog stays declared empty; the candidate's fix is attributed to 0.773.0.
 
 **BATCH 225 SHIPPED `v0.777.0` (`2819e2dc`, #1117), `v0.778.0` (`94573677`, #1118) AND `v0.779.0` (`6e9695f4`,
 #1119), CLOSED BL-497, AND LEFT `docs/backlog.md` DECLARED EMPTY — NO LIVE ENTRY, FOR THE FIRST TIME IN 533
@@ -289,58 +337,6 @@ gated push on the box at a time by GATE START / LANDED.
 Net for the batch: closed 1 (BL-481), filed 0.
 
 Batch 221's block below is history: batch 222's block replaces its open items and its delivery gap.
-
-**BATCH 221 SHIPPED `v0.769.0` (`60f776c2`, #1104), `v0.770.0` (`fc957e40`, #1105) AND `v0.771.0` (`f2e0403f`,
-#1106), DISCHARGING THE ONE LIVE CANDIDATE.** Handed the plan by ai-dlc-1d at `origin/main` `4718f6c3` (`VERSION`
-0.768.0); peers ai-dlc-1d, ai-dlc-1b and ai-dlc-b5, one gated push on the box at a time by GATE START / LANDED.
-- **Opening sweep** (at `4718f6c3`): live 1, unfiled 1, worklist 0, DISCHARGED 0, TERMINAL 228, archive 351, 45
-  qualifying refs, every control passing. graph carried no uncommitted filing.
-- **`v0.769.0`**: `PC-S317-HERMETIC-REQUIRED-INPUT-NEVER-CONSUMED-REDS-TWO-SHIPPED-FIXTURES` (BL-496). The two fixtures
-  echoed `HERMETIC-CONSUMED` only in their `core/` branch; of 157 shipped `!` fixtures run through an installed
-  consumer's runner, exactly these two read rc 1. Installed into a fresh consumer they now read rc 0 against rc 1 at
-  the base. Binding: `scripts/validate-hermetic-consumption.sh` plus the `.dist-only` fixture `hermetic-consumption`;
-  it scores 10 of 240 `!` inputs, so its clean result is a floor. The consumer's inference (a read outside the
-  sandbox) was wrong. Gate green, 29 of 278 run.
-- **`v0.770.0`**: `hermetic-run.sh` nested a fixture's own directory (`<fx>/<fx>/`) whenever a declaration had
-  created the destination — on consumers, the 13 shipping fixtures that declare their own `run.sh`; under a
-  `--fixture-dir` override on a `core/` declarer, the IN-TREE `run.sh` ran. `validator-fork-budget` declared (BL-481
-  half): its sandboxed I106 +4 was that nesting. First gate red on `readset-skip-d` arm (v), a stale anchor on the
-  respelled copy line; re-gated green, 30 of 278 run.
-- **`v0.771.0`**: BL-495 closed. 33 whole-directory declarations: 3 narrowed, 30 with a `# reason:` line, held by
-  `scripts/validate-decl-reasons.sh` plus the `.dist-only` fixture `decl-reasons`. BL-465 (adjudicated CLOSE, verified
-  on 0.761.0's `0e30bfeb`) and BL-496 rotated; BL-497 filed (no join between a declaration and its trace: 110 of 182
-  traced declared fixtures read an undeclared tracked file). Gate green, 42 of 279 run.
-- **A verdict-store invalidation does NOT re-run every declared fixture.** The read-set key skip is independent of the
-  store; both 0.770.0 gates changed the digested span and ran 44 and 30 of 278.
-- **`FORK_BUDGET` is 3339**, tip reading 3332/3333.
-- **BL-481 open on `self-update-join-gate` alone.** The gate's live-trace line also names `hermetic-runner` and
-  `prepush-ssh-keepalive`; both are STALE, not UNMAPPED (`hermetic-runner`'s committed digest no longer matches;
-  `prepush-ssh-keepalive`'s rows predate digest lines).
-- **BL-474 awaits the operator's ruling**, put to the operator this batch with three options: (a, recommended) rule
-  it serial by design and close it — five sharded reviews on graph, K=4, G=6, N=0 in every one, so nothing is
-  handed over to shard; (b) keep it open for a sprint with N>0; (c) build the APFS-clone sharding. The cross shard's
-  dispatch-to-last-write wall clock is unrecoverable (no timestamps; the story worktree is gone).
-- **graph delivery gap**: stamp 0.766.0 against `VERSION` 0.771.0 — five releases, WIDE. graph still pushes with
-  `--no-verify` until it pulls 0.769.0 or later. The pull is the operator's.
-- **Close sweep** (at `f2e0403f`, before this docs close rotated BL-495): live 1, unfiled 0, worklist 0, DISCHARGED 1
-  (`PC-S317-HERMETIC-REQUIRED-INPUT-NEVER-CONSUMED-REDS-TWO-SHIPPED-FIXTURES`, oldest naming release 0.769.0, control
-  `UNNAMED`), invisible 0, TERMINAL 228, archive 351, 46 qualifying refs, every control passing. It awaits graph's
-  own close after a pull.
-- **Action 7, both tests.** The `validate-layer-entries.sh` differential is a null with no discriminating power:
-  installed and distribution copies are byte-identical (`cmp -s`, and both siblings), both exit 0 with identical
-  output. The REQUIRED test is answered elsewhere: graph's installed `hermetic-run.sh` still reads
-  `consumer-machinery-inventory` and `extract-push-flag-decision` at exit 1, `required_missing=1`, and the fix is in
-  those fixtures' shipped `run.sh`, which only a pull delivers — so the pull is REQUIRED, not merely owed. In range:
-  `core/git-hooks/pre-push` and `core/scripts/hermetic-run.sh` (content changes); no `preclassify.sh`, `apply.sh`,
-  `ledger-reverify.sh` or `ai-dlc-update/` file; 0 of 63 mode-only.
-
-- **graph boundary**: the ledger's working-tree md5 read `7b2cc010…` at the opening and at the close; no dirty path
-  under `_bmad-output/ai-dlc-update/` at either read. Porcelain 5 at the opening, 2 at the close, all graph's own
-  pipeline state. Nothing was written there.
-
-Net for the batch: closed 1 candidate and 3 entries (BL-465, BL-495, BL-496), filed 2 (BL-496, BL-497).
-
-Batch 220's block below is history: batch 221's block replaces its open items and its delivery gap.
 
 ### Derive the state; do not trust the numbers below
 
@@ -1880,7 +1876,8 @@ Each of these is a command, and each was checked to be answerable at the point i
    `brief-annotation`, that row **cannot exist** — `flush()` gates on `has_verify &&` and
    `named_absorbed()` rejects a non-id-shaped label — so the criterion is instead that the brief
    renders the exact strict `**ADOPTED UPSTREAM (vX.Y.Z, verified <date>)**` string for each, and
-   that `ledger-rotate.sh --check` would archive it. Derive the two sets in the same invocation from
+   that `ledger-rotate.sh` (no flag; its default mode is the dry run, and `--check` is refused as an
+   unknown argument) would archive it. Derive the two sets in the same invocation from
    the channel column; do not hand-list either.
 6. The `HOLDS` set is empty — every entry is either remediated and cited, or filed as a `BL-`
    entry in `docs/backlog.md`.

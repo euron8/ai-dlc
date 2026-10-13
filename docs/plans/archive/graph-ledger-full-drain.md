@@ -18131,3 +18131,55 @@ Net for the batch: closed 1 (BL-493), filed 0; BL-481 PARTIAL.
 
 Batch 218's block below is history: batch 220's block replaces its open items and its delivery gap.
 
+**BATCH 221 SHIPPED `v0.769.0` (`60f776c2`, #1104), `v0.770.0` (`fc957e40`, #1105) AND `v0.771.0` (`f2e0403f`,
+#1106), DISCHARGING THE ONE LIVE CANDIDATE.** Handed the plan by ai-dlc-1d at `origin/main` `4718f6c3` (`VERSION`
+0.768.0); peers ai-dlc-1d, ai-dlc-1b and ai-dlc-b5, one gated push on the box at a time by GATE START / LANDED.
+- **Opening sweep** (at `4718f6c3`): live 1, unfiled 1, worklist 0, DISCHARGED 0, TERMINAL 228, archive 351, 45
+  qualifying refs, every control passing. graph carried no uncommitted filing.
+- **`v0.769.0`**: `PC-S317-HERMETIC-REQUIRED-INPUT-NEVER-CONSUMED-REDS-TWO-SHIPPED-FIXTURES` (BL-496). The two fixtures
+  echoed `HERMETIC-CONSUMED` only in their `core/` branch; of 157 shipped `!` fixtures run through an installed
+  consumer's runner, exactly these two read rc 1. Installed into a fresh consumer they now read rc 0 against rc 1 at
+  the base. Binding: `scripts/validate-hermetic-consumption.sh` plus the `.dist-only` fixture `hermetic-consumption`;
+  it scores 10 of 240 `!` inputs, so its clean result is a floor. The consumer's inference (a read outside the
+  sandbox) was wrong. Gate green, 29 of 278 run.
+- **`v0.770.0`**: `hermetic-run.sh` nested a fixture's own directory (`<fx>/<fx>/`) whenever a declaration had
+  created the destination — on consumers, the 13 shipping fixtures that declare their own `run.sh`; under a
+  `--fixture-dir` override on a `core/` declarer, the IN-TREE `run.sh` ran. `validator-fork-budget` declared (BL-481
+  half): its sandboxed I106 +4 was that nesting. First gate red on `readset-skip-d` arm (v), a stale anchor on the
+  respelled copy line; re-gated green, 30 of 278 run.
+- **`v0.771.0`**: BL-495 closed. 33 whole-directory declarations: 3 narrowed, 30 with a `# reason:` line, held by
+  `scripts/validate-decl-reasons.sh` plus the `.dist-only` fixture `decl-reasons`. BL-465 (adjudicated CLOSE, verified
+  on 0.761.0's `0e30bfeb`) and BL-496 rotated; BL-497 filed (no join between a declaration and its trace: 110 of 182
+  traced declared fixtures read an undeclared tracked file). Gate green, 42 of 279 run.
+- **A verdict-store invalidation does NOT re-run every declared fixture.** The read-set key skip is independent of the
+  store; both 0.770.0 gates changed the digested span and ran 44 and 30 of 278.
+- **`FORK_BUDGET` is 3339**, tip reading 3332/3333.
+- **BL-481 open on `self-update-join-gate` alone.** The gate's live-trace line also names `hermetic-runner` and
+  `prepush-ssh-keepalive`; both are STALE, not UNMAPPED (`hermetic-runner`'s committed digest no longer matches;
+  `prepush-ssh-keepalive`'s rows predate digest lines).
+- **BL-474 awaits the operator's ruling**, put to the operator this batch with three options: (a, recommended) rule
+  it serial by design and close it — five sharded reviews on graph, K=4, G=6, N=0 in every one, so nothing is
+  handed over to shard; (b) keep it open for a sprint with N>0; (c) build the APFS-clone sharding. The cross shard's
+  dispatch-to-last-write wall clock is unrecoverable (no timestamps; the story worktree is gone).
+- **graph delivery gap**: stamp 0.766.0 against `VERSION` 0.771.0 — five releases, WIDE. graph still pushes with
+  `--no-verify` until it pulls 0.769.0 or later. The pull is the operator's.
+- **Close sweep** (at `f2e0403f`, before this docs close rotated BL-495): live 1, unfiled 0, worklist 0, DISCHARGED 1
+  (`PC-S317-HERMETIC-REQUIRED-INPUT-NEVER-CONSUMED-REDS-TWO-SHIPPED-FIXTURES`, oldest naming release 0.769.0, control
+  `UNNAMED`), invisible 0, TERMINAL 228, archive 351, 46 qualifying refs, every control passing. It awaits graph's
+  own close after a pull.
+- **Action 7, both tests.** The `validate-layer-entries.sh` differential is a null with no discriminating power:
+  installed and distribution copies are byte-identical (`cmp -s`, and both siblings), both exit 0 with identical
+  output. The REQUIRED test is answered elsewhere: graph's installed `hermetic-run.sh` still reads
+  `consumer-machinery-inventory` and `extract-push-flag-decision` at exit 1, `required_missing=1`, and the fix is in
+  those fixtures' shipped `run.sh`, which only a pull delivers — so the pull is REQUIRED, not merely owed. In range:
+  `core/git-hooks/pre-push` and `core/scripts/hermetic-run.sh` (content changes); no `preclassify.sh`, `apply.sh`,
+  `ledger-reverify.sh` or `ai-dlc-update/` file; 0 of 63 mode-only.
+
+- **graph boundary**: the ledger's working-tree md5 read `7b2cc010…` at the opening and at the close; no dirty path
+  under `_bmad-output/ai-dlc-update/` at either read. Porcelain 5 at the opening, 2 at the close, all graph's own
+  pipeline state. Nothing was written there.
+
+Net for the batch: closed 1 candidate and 3 entries (BL-465, BL-495, BL-496), filed 2 (BL-496, BL-497).
+
+Batch 220's block below is history: batch 221's block replaces its open items and its delivery gap.
+
