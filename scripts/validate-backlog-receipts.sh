@@ -1014,7 +1014,21 @@ R2_ALLPASS=""
 # The R5 floor (`--min-sh-receipts`) is lowered only when the entry count fell with it.
 R2_ALLMANUAL=""
 [ "$SCORED" -eq 0 ] && [ "$N_PASS" -eq 0 ] && [ "$ENTRIES" -gt 0 ] && [ "${MANUAL_RECEIPTS:-0}" -eq "$ENTRIES" ] && R2_ALLMANUAL=" R2 all-manual"
-if [ "$SCORED" -eq 0 ] && [ "$N_PASS" -eq 0 ] && [ -z "$R2_ALLMANUAL" ]; then
+# AND WHEN THE LEDGER IS DECLARED EMPTY: zero entries, so zero receipts by construction, and the
+# state the rotation of the last entry leaves. Whether a zero is DECLARED is decided by
+# `backlog-reverify.sh --declared-empty` alone (marker last, no BL- id anywhere) and asked ONLY at
+# ENTRIES == 0 -- a ledger emptied by hand, or one whose entries the parser stopped seeing, is
+# still m8's zero. Its exit 2 is an environment failure and is this file's exit 2.
+R2_DECLEMPTY=""
+if [ "$ENTRIES" -eq 0 ]; then
+  bash "$SELF_ROOT/scripts/backlog-reverify.sh" --declared-empty "$LEDGER" >/dev/null 2>&1; _de=$?
+  case "$_de" in
+    0) R2_DECLEMPTY=" R2 declared-empty" ;;
+    1) : ;;
+    *) echo "$(me): FAIL -- backlog-reverify.sh --declared-empty exited $_de on $LEDGER, an environment failure; the zero could not be classified." >&2; exit 2 ;;
+  esac
+fi
+if [ "$SCORED" -eq 0 ] && [ "$N_PASS" -eq 0 ] && [ -z "$R2_ALLMANUAL" ] && [ -z "$R2_DECLEMPTY" ]; then
   echo "FAIL: R2: $LEDGER produced ZERO scored receipts (entries $ENTRIES, sh receipts ${SH_RECEIPTS:-0}, manual ${MANUAL_RECEIPTS:-0}, unscorable $N_UNSC, unseeded $N_UNSEED, out of population $N_OOP, already passing $N_PASS). Nothing was observed, and an arm that observed nothing is not a clean corpus." >&2
   exit 1
 fi
@@ -1078,7 +1092,7 @@ fi
 _where="$LEDGER"
 [ "$DEFAULTED" = "1" ] && _where="docs/backlog.md"
 if [ "$QUIET" != "1" ]; then
-  echo "OK: validate-backlog-receipts -- R2 ${N_PC}/${MAX_PC} prose-closable, R3 ${UNSCORED}/${MAX_UNSC} unscored, R4 ${N_OOP}/${MAX_OOP} out of population, R6 ${N_UNSTABLE}/${MAX_UNSTABLE} unstable, R5 ${SH_RECEIPTS} sh receipts over ${ENTRIES} live entries in ${_where} (${N_BOUND} bound, ${N_FS} format-sensitive, ${N_PASS} already passing; R0 bound the path-split class to ${CLASS_SOURCE}; R1 fired both directions over 10 seeded receipts; every receipt ran in its own ${PROVENANCE}, ${WT_OWN_AFTER} of this run's own checkouts still registered, caller porcelain ${PORC_BEFORE} unchanged).${R2_ALLPASS}${R2_ALLMANUAL}"
+  echo "OK: validate-backlog-receipts -- R2 ${N_PC}/${MAX_PC} prose-closable, R3 ${UNSCORED}/${MAX_UNSC} unscored, R4 ${N_OOP}/${MAX_OOP} out of population, R6 ${N_UNSTABLE}/${MAX_UNSTABLE} unstable, R5 ${SH_RECEIPTS} sh receipts over ${ENTRIES} live entries in ${_where} (${N_BOUND} bound, ${N_FS} format-sensitive, ${N_PASS} already passing; R0 bound the path-split class to ${CLASS_SOURCE}; R1 fired both directions over 10 seeded receipts; every receipt ran in its own ${PROVENANCE}, ${WT_OWN_AFTER} of this run's own checkouts still registered, caller porcelain ${PORC_BEFORE} unchanged).${R2_ALLPASS}${R2_ALLMANUAL}${R2_DECLEMPTY}"
 else
   # `--quiet` SUPPRESSES THE FINDING ROWS, NEVER THE PROVENANCE. A caller that asks for quiet
   # still has to be able to tell this arm's silence from a stub's: a fifteen-line heuristic
@@ -1086,6 +1100,6 @@ else
   # output, and there would be nothing to distinguish them. This line reports what the run
   # actually DID -- how many receipts were checked out and scored -- which no implementation
   # that seeds nothing can emit truthfully.
-  echo "OK: validate-backlog-receipts -- ${SCORED} receipt(s) scored in ${_where}, each in its own ${PROVENANCE}; ${N_PC}/${MAX_PC} prose-closable.${R2_ALLPASS}${R2_ALLMANUAL}"
+  echo "OK: validate-backlog-receipts -- ${SCORED} receipt(s) scored in ${_where}, each in its own ${PROVENANCE}; ${N_PC}/${MAX_PC} prose-closable.${R2_ALLPASS}${R2_ALLMANUAL}${R2_DECLEMPTY}"
 fi
 exit 0

@@ -47,8 +47,52 @@
 #                    which is how a CLEAN corpus is spelled -- the two must not collide.
 #   ALREADY-CLOSED   annotated `**LANDED (v` and awaiting rotation. Reported so the count is
 #                    conserved; `backlog-rotate.sh` is what moves them.
-# Exit:   0 ALWAYS.
+#   DECLARED-EMPTY   the ledger parsed to zero entries AND is declared empty (see below). One
+#                    run-scoped row in place of INPUT-UNRESOLVED; it is the only zero-entry
+#                    state that is not reported as unresolved.
+# Exit:   0 ALWAYS in row mode. The query modes below have their own codes.
+#
+# THE DECLARED-EMPTY PREDICATE LIVES HERE, ONCE, AND THREE OTHER PROGRAMS ASK IT. An empty parse
+# and a fully-rotated ledger are the same zero, which is why a zero used to be refused everywhere
+# -- and why the last live entry could never rotate. The two are separated by a DECLARATION the
+# single producer writes (`backlog-rotate.sh`, when the remainder parses to zero entries), not by
+# a guess. A ledger is declared empty when ALL of:
+#   (a) its LAST NON-BLANK LINE is exactly $EMPTY_MARKER below. Keyed on POSITION, so a quotation
+#       of the marker in the preamble or inside a fence neither counts nor double-counts;
+#   (c) `BL-[0-9]` appears NOWHERE in the file. This is what catches a parser regression: a
+#       heading, bullet or bare-bold entry the boundary rule stopped seeing still carries its id,
+#       so the raw count is non-zero and the zero parse stays unresolved. The legend's `verify:`
+#       lines carry no id, so a correctly emptied ledger reads 0.
+# and the boundary rule parsed zero entries. There is no archive clause; (c) and the self-probe
+# in validate-backlog-size.sh carry the parser-regression case.
+#
+# Query modes, each printing NOTHING except --print-marker, and never a row:
+#   --declared-empty <ledger>  exit 0 declared empty; 1 not (including zero entries without the
+#                              marker, and any ledger with entries); 2 environment failure.
+#   --marker-last <ledger>     exit 0 when the marker is the last non-blank line, whatever the
+#                              entry count; 1 when not; 2 environment failure. B1b and the
+#                              rotator ask this; neither restates the position rule.
+#   --print-marker             print the marker line and exit 0. The rotator writes what this
+#                              prints, so the text is spelled in this file and nowhere else.
+# Every early exit below routes through `unresolved`, which prints the INPUT-UNRESOLVED row and
+# exits 0 in row mode and exits 2 SILENTLY in a query mode -- a 0 there would read as "declared".
 set -uo pipefail
+
+EMPTY_MARKER='**EMPTY — every entry is closed and rotated to docs/backlog.archive.md.**'
+MODE=rows
+for _a in "$@"; do
+  case "$_a" in
+    --declared-empty) MODE=declared-empty ;;
+    --marker-last)    MODE=marker-last ;;
+    --print-marker)   MODE=print-marker ;;
+  esac
+done
+unset _a
+unresolved() { # unresolved <entry> <detail>
+  if [ "$MODE" = rows ]; then printf 'INPUT-UNRESOLVED\t%s\t%s\n' "$1" "$2"; exit 0; fi
+  exit 2
+}
+if [ "$MODE" = print-marker ]; then printf '%s\n' "$EMPTY_MARKER"; exit 0; fi
 
 # Resolve the repo root by WALKING UP FOR A MARKER, never by counting `..` hops -- a validator
 # that counts hops answers differently from the root, from a subdirectory and from a sandbox
@@ -60,8 +104,7 @@ while [ "$d" != "/" ]; do
   d="$(dirname "$d")"
 done
 if [ -z "$REPO_ROOT" ]; then
-  printf 'INPUT-UNRESOLVED\t%s\tunresolved: no VERSION marker above this script, so the repo root is unknown and every relative receipt path would resolve against the wrong tree. Nothing was re-verified; a zero row count here is not a clean corpus.\n' "$(dirname "$0")"
-  exit 0
+  unresolved "$(dirname "$0")" "unresolved: no VERSION marker above this script, so the repo root is unknown and every relative receipt path would resolve against the wrong tree. Nothing was re-verified; a zero row count here is not a clean corpus."
 fi
 
 # `--closed-receipts` DISABLES THE ANNOTATION SHORT-CIRCUIT BELOW, AND EXISTS FOR ONE CALLER.
@@ -76,21 +119,34 @@ LEDGER=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --closed-receipts) CLOSED_RECEIPTS=true; shift ;;
-    -*) printf 'INPUT-UNRESOLVED\t%s\tunresolved: unknown option. Nothing was re-verified; a zero row count here is not a clean corpus.\n' "$1"; exit 0 ;;
+    --declared-empty|--marker-last) shift ;;
+    -*) unresolved "$1" "unresolved: unknown option. Nothing was re-verified; a zero row count here is not a clean corpus." ;;
     *)  LEDGER="$1"; shift ;;
   esac
 done
 [ -n "$LEDGER" ] || LEDGER="$REPO_ROOT/docs/backlog.md"
 if [ ! -f "$LEDGER" ] || [ ! -r "$LEDGER" ]; then
-  printf 'INPUT-UNRESOLVED\t%s\tunresolved: the ledger path is not a readable file. Nothing was re-verified; a zero row count here is not a clean corpus.\n' "$LEDGER"
-  exit 0
+  unresolved "$LEDGER" "unresolved: the ledger path is not a readable file. Nothing was re-verified; a zero row count here is not a clean corpus."
+fi
+
+# marker_last <ledger> -- 0 when the last non-blank line is exactly the marker. One awk, no
+# `grep -c` (which prints its zero AND exits 1). Blank means empty or whitespace only.
+marker_last() {
+  awk -v m="$EMPTY_MARKER" '$0 ~ /[^ \t\r]/ { last = $0 } END { exit (last == m) ? 0 : 1 }' "$1"
+}
+# raw_ids <ledger> -- the count of lines carrying `BL-[0-9]` anywhere, clause (c).
+raw_ids() {
+  awk '/BL-[0-9]/ { n++ } END { print n+0 }' "$1"
+}
+if [ "$MODE" = marker-last ]; then
+  marker_last "$LEDGER"; _ml=$?
+  case "$_ml" in 0|1) exit "$_ml" ;; *) exit 2 ;; esac
 fi
 
 # The entry-boundary rule, single-sourced. See the header for why this is not copied.
 LIB="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
 if [ ! -f "$LIB" ]; then
-  printf 'INPUT-UNRESOLVED\t%s\tunresolved: reconcile/lib.sh is missing, so the entry-boundary rule cannot be loaded. Refusing to fall back to a private copy of that grammar -- the two copies this replaced drifted within one release. Nothing was re-verified.\n' "$LIB"
-  exit 0
+  unresolved "$LIB" "unresolved: reconcile/lib.sh is missing, so the entry-boundary rule cannot be loaded. Refusing to fall back to a private copy of that grammar -- the two copies this replaced drifted within one release. Nothing was re-verified."
 fi
 # WHAT lib.sh ADDS TO THIS SHELL IS DERIVED, NOT LISTED, SO A RECEIPT CAN BE RUN WITHOUT IT (BL-382).
 # Sourcing lib.sh builds a memo directory and EXPORTS `AI_DLC_RECONCILE_MEMO`, sets four more
@@ -109,16 +165,13 @@ _rv_added() { # <before> <after> -- the names in <after> absent from <before>, s
 _rv_pre_v="" _rv_pre_f=""
 _rv_pre_v="$(compgen -v)"; _rv_pre_f="$(compgen -A function)"
 # shellcheck source=../core/skills/ai-dlc-update/reconcile/lib.sh
-. "$LIB" || {
-  printf 'INPUT-UNRESOLVED\t%s\tunresolved: reconcile/lib.sh could not be sourced. Nothing was re-verified.\n' "$LIB"
-  exit 0
-}
+. "$LIB" || unresolved "$LIB" "unresolved: reconcile/lib.sh could not be sourced. Nothing was re-verified."
 LIB_VARS="AI_DLC_RECONCILE_MEMO $(_rv_added "$_rv_pre_v" "$(compgen -v)")"
 LIB_FNS="$(_rv_added "$_rv_pre_f" "$(compgen -A function)")"
 unset _rv_pre_v _rv_pre_f
 case " $LIB_FNS " in
   *" ai_dlc_memo_dir "*) ;;
-  *) printf 'INPUT-UNRESOLVED\t%s\tunresolved: the functions reconcile/lib.sh added could not be derived (ai_dlc_memo_dir is not among them), so receipts cannot be run without its state. Nothing was re-verified.\n' "$LIB"; exit 0 ;;
+  *) unresolved "$LIB" "unresolved: the functions reconcile/lib.sh added could not be derived (ai_dlc_memo_dir is not among them), so receipts cannot be run without its state. Nothing was re-verified." ;;
 esac
 
 # Split the ledger into one record per entry: LABEL <TAB> CLOSED <TAB> RECEIPT
@@ -133,7 +186,7 @@ esac
 # swallow the rest of the file and report `unexpected EOF` a hundred lines later, at a line
 # with nothing wrong with it. A minimal heredoc-in-substitution parses fine; it is the
 # unbalanced paren in the BODY that breaks it, which is why the construct looks innocent.
-AWKF="$(mktemp)" || { printf 'INPUT-UNRESOLVED\t-\tunresolved: mktemp failed, so the entry parser could not be built. Nothing was re-verified.\n'; exit 0; }
+AWKF="$(mktemp)" || unresolved "-" "unresolved: mktemp failed, so the entry parser could not be built. Nothing was re-verified."
 { ledger_entry_awk; cat <<'AWK'
 function flush(   r) {
   if (label == "") return
@@ -183,10 +236,28 @@ function flush(   r) {
 END { flush() }
 AWK
 } > "$AWKF"
-RECORDS="$(awk -f "$AWKF" "$LEDGER")"
+RECORDS="$(awk -f "$AWKF" "$LEDGER")" || { rm -f "$AWKF"; unresolved "$LEDGER" "unresolved: the entry parser failed on the ledger. Nothing was re-verified."; }
 rm -f "$AWKF"
 
+# THE ZERO IS SPLIT HERE, AND ONLY HERE. Both conjuncts are required; either alone reads the
+# other case as declared. The marker without (c) is an entry the parser stopped seeing; (c)
+# without the marker is a ledger emptied by hand, which nothing declared.
+declared_empty() {
+  [ -z "$RECORDS" ] || return 1
+  marker_last "$LEDGER" || return 1
+  [ "$(raw_ids "$LEDGER")" = 0 ] || return 1
+  return 0
+}
+if [ "$MODE" = declared-empty ]; then
+  declared_empty && exit 0
+  exit 1
+fi
+
 if [ -z "$RECORDS" ]; then
+  if declared_empty; then
+    printf 'DECLARED-EMPTY\t%s\tthe ledger carries zero entries, its last non-blank line is the empty marker backlog-rotate.sh writes, and no BL- id appears anywhere in it.\n' "$LEDGER"
+    exit 0
+  fi
   printf 'INPUT-UNRESOLVED\t%s\tunresolved: the ledger parsed to ZERO entries. An empty parse and a fully-closed backlog are the same zero, so this is reported rather than passed over.\n' "$LEDGER"
   exit 0
 fi

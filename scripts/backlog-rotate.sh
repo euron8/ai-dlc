@@ -330,6 +330,32 @@ if [ "$((LIVE_LINES + MOVE_LINES))" -ne "$ORIG_LINES" ]; then
   exit 2
 fi
 
+# THE EMPTY DECLARATION, WRITTEN BY THIS FILE AND NO OTHER. A ledger with zero entries is refused
+# by validate-backlog-size.sh (B1) and validate-backlog-receipts.sh (R2) as an empty PARSE unless
+# it is declared empty, and this -- the one program that removes entries -- is the one that
+# declares it: when the remainder parses to zero entries, the marker is appended as its last
+# line. Appended AFTER the conservation check above, so conservation is still computed on the
+# unmarked split. The text comes from backlog-reverify.sh --print-marker and its position rule
+# from --marker-last, so neither is spelled here. With entries remaining nothing is written, so a
+# rotation can never declare a ledger that still has work in it; a marker already last is not
+# written twice.
+REVERIFY="$REPO_ROOT/scripts/backlog-reverify.sh"
+LIVE_ENTRIES="$(LC_ALL=C awk "$(ledger_entry_awk)$BACKLOG_LABEL_AWK"'
+  { if (backlog_entry_label($0) != "") n++ } END { print n+0 }' "$AWKF.live" 2>/dev/null)"
+case "$LIVE_ENTRIES" in ''|*[!0-9]*) echo "backlog-rotate: the live remainder's entry count did not parse; nothing was written" >&2; exit 2 ;; esac
+MARKED=false
+if [ "$LIVE_ENTRIES" -eq 0 ]; then
+  EMPTY_MARKER="$(bash "$REVERIFY" --print-marker 2>/dev/null)"
+  [ -n "$EMPTY_MARKER" ] || { echo "backlog-rotate: backlog-reverify.sh --print-marker returned nothing; refusing to leave a zero-entry ledger undeclared. Nothing was written." >&2; exit 2; }
+  bash "$REVERIFY" --marker-last "$AWKF.live" >/dev/null 2>&1; ML=$?
+  case "$ML" in
+    0) : ;;
+    1) printf '\n%s\n' "$EMPTY_MARKER" >> "$AWKF.live"; MARKED=true ;;
+    *) echo "backlog-rotate: backlog-reverify.sh --marker-last exited $ML; nothing was written" >&2; exit 2 ;;
+  esac
+  echo "  the remainder carries zero entries; it ends in the empty marker$([ "$MARKED" = true ] && echo ' (appended)')."
+fi
+
 # ---------------------------------------------------------------------------------------------
 # THE EVIDENCE GUARD -- an entry leaves this ledger only if its evidence holds.
 #
@@ -462,8 +488,16 @@ if [ "$CHECK" = true ]; then
   # difference means a live entry was swept.
   BEFORE="$(bash "$REPO_ROOT/scripts/backlog-reverify.sh" "$LEDGER" | grep -v '^ALREADY-CLOSED')"
   AFTER="$(bash "$REPO_ROOT/scripts/backlog-reverify.sh" "$AWKF.live" | grep -v '^ALREADY-CLOSED')"
+  # ONE DIFFERENCE IS ENTITLED, AND ONLY WHEN NOTHING LIVE WAS THERE TO LOSE: the last entry left,
+  # so the marked remainder reads one DECLARED-EMPTY row where the original read none. Accepted
+  # only when BEFORE is EMPTY and AFTER is exactly that one row; any live row in BEFORE is an
+  # entry this rotation would sweep, and it still fails.
+  AFTER_N="$(printf '%s' "$AFTER" | awk 'END { print NR }')"
+  AFTER_ST="$(printf '%s' "$AFTER" | cut -f1)"
   if [ "$BEFORE" = "$AFTER" ]; then
     echo "  --check PASS: every non-closed verdict is byte-identical across the rotation."
+  elif [ -z "$BEFORE" ] && [ "$AFTER_N" = 1 ] && [ "$AFTER_ST" = "DECLARED-EMPTY" ]; then
+    echo "  --check PASS: the original carried no live verdict and the remainder reads one DECLARED-EMPTY row."
   else
     echo "  --check FAIL: the live verdicts DIFFER across the rotation, so an entry that was not closed would be archived." >&2
     diff <(printf '%s\n' "$BEFORE") <(printf '%s\n' "$AFTER") >&2
