@@ -328,6 +328,11 @@ git -C "$DIST" commit -q -m '0.099.8 -- a release that fixes something else once
 printf 'a plan line\n' > "$DIST/docs/s823-plan.md"
 git -C "$DIST" add -A
 git -C "$DIST" commit -q -m 'docs(plan): cross-reference PC-S823-7.2-SH_DOCS_ONLY'
+# s824: a DUPLICATE id (two consecutive entries share it). This core commit names it and adds the
+# file its first copy's receipt reads, so that copy is a plain NAMED-UPSTREAM.
+printf '#!/bin/sh\necho s824\n' > "$DIST/core/scripts/s824-subject.sh"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'fix: absorb PC-S824-DUPLICATE-ID'
 
 # --- base: neither marker present ---
 printf '# SKILL\nrule one\nrule two\n' > "$SK"

@@ -5876,6 +5876,14 @@ if [ "$idc_det" = 1 ]; then
 
 - **PC-S820-SH-REPRODUCED-AT-BASE** — the control: reproduces at base, stops reproducing at theirs.
   verify: sh case "$(git -C "$DIST" show "${THEIRS}:core/skills/ai-dlc/SKILL.md")" in *MARKER_B*) exit 1 ;; esac; exit 0
+
+- **PC-S824-DUPLICATE-ID** — the first copy: named by a commit, receipt still live.
+  verify: theirs_lacks core/scripts/s824-subject.sh "MARKER_A"
+
+- **PC-S824-DUPLICATE-ID** — the second copy of the same id: empty first receipt, then an sh
+  receipt already closed at base.
+  verify:
+  verify: sh git -C "$DIST" cat-file -e "${THEIRS}:core/scripts/s824-subject.sh" && exit 1; exit 0
 IDCSH
   IDC_DCELLS="s818:PC-S818-6.1-SH_CLOSED_AT_BASE:names-commit s819:PC-S819-SH-CLOSED-AT-BASE-UNNAMED:find-release s820:PC-S820-SH-REPRODUCED-AT-BASE:v-theirs"
   # The two adversary cells. s821 sits directly after the named s818 and its FIRST receipt is empty,
@@ -5883,9 +5891,17 @@ IDCSH
   # s822 is cited ONLY on a Not-discharged: line, s823 only by a docs-only commit: neither naming
   # is an absorption, so neither close may route the operator to "the commits that name the id".
   IDC_DCELLS="$IDC_DCELLS s821:PC-S821-SH-AFTER-EMPTY-RECEIPT:find-release s822:PC-S822-7.1-SH_CITED_ONLY:find-release s823:PC-S823-7.2-SH_DOCS_ONLY:find-release"
+  # A DUPLICATE ID: two consecutive entries share one label. The first is named (plain kind, its
+  # receipt still live, so it emits no close); the second has an empty first receipt and a
+  # base-closed sh second. A reset keyed on the label changing never fires between them.
+  IDC_DCELLS="$IDC_DCELLS s824:PC-S824-DUPLICATE-ID:find-release"
 fi
+# What the reset-gone mutant moves: every base-closed, unnamed-plain close after the named s818
+# leaks its sha, and the duplicate's second copy leaks the first copy's.
+IDC_RESET_MV="s821=leaks-s818 s822=leaks-s818 s823=leaks-s818 s819=leaks-s818 s824=leaks-first-copy"
 IDC_TV="$(git -C "$DIST" show "${THEIRS}:VERSION" 2>/dev/null)"
 IDC_S818="$(git -C "$DIST" log -F --grep='PC-S818-6.1-SH_CLOSED_AT_BASE' --format=%h "$THEIRS" 2>/dev/null)"
+IDC_S824="$(git -C "$DIST" log -F --grep='PC-S824-DUPLICATE-ID' --format=%h "$THEIRS" 2>/dev/null)"
 # <rows> <label> -> the CLOSE-CANDIDATE detail's class. `names-commit` requires the derived sha AND
 # the absence of the v<theirs> annotation; `v-theirs` requires that annotation text.
 idc_dcls() {
@@ -5893,6 +5909,10 @@ idc_dcls() {
   _d="$(printf '%s\n' "$1" | awk -F'\t' -v l="$2" '$2 == l && $1 == "CLOSE-CANDIDATE" {print $3; exit}')"
   [ -n "$_d" ] || { printf 'no-close'; return; }
   case "$_d" in *"'ADOPTED UPSTREAM (v$IDC_TV, verified"*) printf 'v-theirs'; return ;; esac
+  # The duplicate's second copy carrying the first copy's naming sha is a leak across the boundary.
+  if [ "$2" = PC-S824-DUPLICATE-ID ] && [ -n "$IDC_S824" ]; then
+    case "$_d" in *"$IDC_S824"*) printf 'leaks-first-copy'; return ;; esac
+  fi
   # s818's sha on ANY other label is a leak, whatever sentence carries it.
   if [ "$2" != PC-S818-6.1-SH_CLOSED_AT_BASE ] && [ -n "$IDC_S818" ]; then
     case "$_d" in *"$IDC_S818"*) printf 'leaks-s818'; return ;; esac
@@ -5992,17 +6012,14 @@ if [ "$idc_bound" = 1 ]; then
 fi
 if [ "$idc_det" = 1 ]; then
   # THE OLD DETAIL RESTORED: every sh close offers v<theirs>, whatever the base control said.
-  idc_case old-close-detail "s818=v-theirs s819=v-theirs s821=v-theirs s822=v-theirs s823=v-theirs" \
-    "an sh close already closed at base offering v<theirs> again is the defect, and id-class-s818/-s819 are what see it (s821-s823, closed at base too, co-move); the control s820 holds" \
+  idc_case old-close-detail "s818=v-theirs s819=v-theirs s821=v-theirs s822=v-theirs s823=v-theirs s824=v-theirs" \
+    "an sh close already closed at base offering v<theirs> again is the defect, and id-class-s818/-s819 are what see it (s821-s824, closed at base too, co-move); the control s820 holds" \
     '            if [ "${SBC_CLOSE_AT_BASE:-0}" = 1 ]; then' '            if false; then' 1
-  # THE SHIPPED-AT-555894ec RESET: keyed on a first ordinal inside the naming case, below the
-  # empty-directive skip. Both top-of-loop resets go and the ordinal reset comes back.
-  idc_case ordinal-keyed-reset "s821=leaks-s818" \
-    "a reset keyed on the first ordinal below the empty-receipt skip hands the named entry's sha to the next entry, and id-class-s821 is what sees it" \
-    '  case "$ord" in 1/*|0/0|"") NA_ENTRY_SHAS=""; NA_ENTRY_KIND="" ;; esac' '  :' 1 \
-    '  [ "$label" = "${_na_entry_label-}" ] || { NA_ENTRY_SHAS=""; NA_ENTRY_KIND=""; }' '  :' 1 \
-    '  case "$ord" in 1/*|0/0|"") na="$(named_absorbed "$label")"; [ -n "$na" ] || nam="$(named_ambiguous "$label")" ;; esac' \
-    '  case "$ord" in 1/*|0/0|"") na="$(named_absorbed "$label")"; [ -n "$na" ] || nam="$(named_ambiguous "$label")"; NA_ENTRY_SHAS="" ;; esac' 1
+  # THE ONE RESET LINE, AND ONLY IT, deleted. It is the sole reset of the per-entry naming state,
+  # so with it gone a named entry's shas reach every later base-closed close in the run.
+  idc_case ordinal-reset-gone "$IDC_RESET_MV" \
+    "without the per-entry ordinal reset a named entry's sha reaches the next entries' close details, and id-class-s821 and the duplicate-label cell id-class-s824 are what see it" \
+    '  case "$ord" in 1/*|0/0|"") NA_ENTRY_SHAS=""; NA_ENTRY_KIND="" ;; esac' '  :' 1
   # THE SHIPPED-AT-555894ec RECORDING: shas kept for every naming kind, before the kind is decided.
   idc_case shas-every-kind "s822=cites-sha s823=cites-sha" \
     "keeping the naming shas for a cited-only or docs-only row routes the close to commits that row calls no absorption, and id-class-s822/-s823 are what see it" \

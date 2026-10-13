@@ -2528,14 +2528,16 @@ if [ "$LR_SUBJ_OK" = 1 ] && lr_entries "$LEDGER" 1 > "$LR_STAGE/sib-entries" 2>/
 fi
 [ "$LR_SIB_OK" = 1 ] || echo "ledger-reverify: the sibling receipt set could not be staged, so no row is classified NAMED-UPSTREAM-SIBLING-ATTRIBUTED this run; every naming row keeps its prior kind" >&2
 while IFS="$(printf '\t')" read -r label ord directive; do
-  # THE PER-ENTRY NAMING STATE RESETS HERE, ABOVE THE EMPTY-DIRECTIVE SKIP, keyed on a NEW ENTRY --
-  # the label changing, or a first ordinal -- never on the ordinal alone further down. It sat in
-  # the naming `case` below, which the skip pre-empts: an entry whose FIRST receipt was an empty
-  # `verify:` line kept the PREVIOUS entry's naming shas, and its second receipt's close detail
-  # printed them as this entry's. Measured by an adversary probe on the release tip.
+  # THE PER-ENTRY NAMING STATE RESETS HERE, ABOVE THE EMPTY-DIRECTIVE SKIP. It sat in the naming
+  # `case` below, which the skip pre-empts: an entry whose FIRST receipt was an empty `verify:` line
+  # kept the PREVIOUS entry's naming shas, and its second receipt's close detail printed them as
+  # this entry's. Measured by an adversary probe on the release tip.
+  # THE ORDINAL ALONE SUFFICES, AND IT IS THE ONLY KEY THAT DOES. flush() emits the first row of
+  # EVERY entry with ordinal `1/<n>` (or `0/0` for a receipt-less one), the empty-directive row
+  # included, so this fires on every entry boundary before the skip can pre-empt it. A label-change
+  # key adds nothing -- deleting it measured byte-identical output -- and misses the one boundary
+  # that matters most: two consecutive entries sharing a label, a duplicate id.
   case "$ord" in 1/*|0/0|"") NA_ENTRY_SHAS=""; NA_ENTRY_KIND="" ;; esac
-  [ "$label" = "${_na_entry_label-}" ] || { NA_ENTRY_SHAS=""; NA_ENTRY_KIND=""; }
-  _na_entry_label="$label"
   [ -n "$directive" ] || continue
   # Empty suffix for a single-receipt entry, so those rows are unchanged.
   case "$ord" in
