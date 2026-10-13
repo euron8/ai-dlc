@@ -67,6 +67,33 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
 
+**BATCH 227 SHIPPED NO RELEASE. IT WROTE AND REHEARSED THE CONSUMER PULL RUNBOOK
+`docs/plans/graph-pull-0779-to-0780.md`, BECAUSE ACTION 7's SECOND TEST SAID THE PULL IS REQUIRED.** Batch 226's block
+below is history: this block replaces its delivery gap. Handed the plan by ai-dlc-9d at `origin/main` `8d00b5b5`
+(`VERSION` 0.780.0); graph-f8 was live and never messaged.
+- **Opening sweep** (at `8d00b5b5`): live 1, unfiled 0, worklist 0, DISCHARGED 1 (`PC-S317-3.2-DERIVATION-HOOK-CWD`,
+  oldest naming release 0.773.0), invisible 0, TERMINAL 233, archive 356, 7 qualifying refs, every control passing;
+  backlog 0 live, 501 archived, one `DECLARED-EMPTY` row. Ledger md5 `87f3419f…` on graph's checked-out carry-over
+  branch. No branch of 150 ahead of graph `main` carries an id outside main's ledger and archive (impossible-id control
+  0, known-id control 19 refs), and graph's working-tree ledger diff is empty.
+- **Action 7**: one release behind (stamp 0.779.0 on graph's carry-over branch, 0.773.0 on its `main`); the range
+  carries `ledger-reverify.sh` and the update `SKILL.md`, 0 `core/scripts/` files, 0 mode-only changes. The
+  differential that discriminates is the reverify engine, not `validate-layer-entries.sh`: on a graph clone the 0.780.0
+  engine adds exactly `NAMED-UPSTREAM PC-S317-3.2-DERIVATION-HOOK-CWD`, 9 -> 10 raw rows (`cmp -s` 1 between engines).
+  `self-update-gate.sh` reads `SELF-UPDATE-OK`, so the re-invoked run reports with the new engine.
+- **Closing the candidate**: the `ADOPTED UPSTREAM (v0.773.0, …)` annotation alone archives it (four cells measured);
+  repointing its receipt is optional. It is the only live graph receipt pinned to a literal path and sha (one archived
+  receipt has the same shape).
+- **The runbook's contract adversary** (simulated self-update, re-invocation and step-8 rotation on a clone) returned
+  one BLOCKER (the pre-write preclassify histogram would have stopped a correct OK-path run: the re-invoked report
+  reads `ALREADY-AT-THEIRS` ×4), three DEFECTs (raw vs rendered row counts, no `apply` or branch named for the
+  annotation, a done-when control that agreed with its absence) and six NOTEs. All folded before the commit.
+- **graph boundary**: ledger md5 `87f3419f…` at the opening and the close; porcelain 93 at the opening, 94 at the
+  close, 0 under `_bmad-output/ai-dlc-update/`. Nothing was written there.
+- **The pull is the operator's.** The runbook is ready, not authorized.
+
+Net for the batch: closed 0, filed 0. The backlog stays declared empty.
+
 **BATCH 226 SHIPPED `v0.780.0` (`eedbb415`, #1121), A BOOTSTRAPPING RELEASE (`ledger-reverify.sh`): A CANDIDATE ID
 CONTAINING `.` OR `_` NOW REACHES THE UPSTREAM-NAMING JOIN.** Batch 225's block below is history: this block replaces
 its delivery gap. Handed the plan by ai-dlc-18 at `origin/main` `47d5fcae` (`VERSION` 0.779.0); graph-a4 was live and
@@ -1644,8 +1671,10 @@ given at batch 90.
    **THE PATTERN IS A RUNBOOK IN `docs/plans/`, and it already exists — do not invent one.**
    `graph-pull-0353-to-0354.md` through `graph-pull-0356-to-0357.md`, `graph-0396-to-0403-pull.md`
    and roughly a dozen others are the corpus; **read the most recent before writing a new one.**
-   `docs/plans/graph-pull-0415-to-0425.md` is the most recent and is **DISCHARGED — read it as a
-   worked example, not as a live plan.** Its `## Discharge` section is the more useful half: it
+   Derive the most recent with `ls docs/plans/graph-pull-*.md | sort -V | tail -2`, never from
+   this sentence; this paragraph once named `graph-pull-0415-to-0425.md` while `0471-to-0479`
+   existed. A discharged one is a worked example, not a live plan. `graph-pull-0415-to-0425.md`'s
+   `## Discharge` section is still worth reading: it
    records that the pull SPLIT on a `SELF-UPDATE-SAFE-STOP`, that its rehearsal's row count did not
    decompose across the split, and that its stop list was an ENUMERATION where it should have been
    a class — the run hit two stop-worthy states it had not named. What the shape requires:
