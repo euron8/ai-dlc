@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 339..433. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 345..393. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,59 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 225 SHIPPED `v0.777.0` (`2819e2dc`, #1117), `v0.778.0` (`94573677`, #1118) AND `v0.779.0` (`6e9695f4`,
+#1119), CLOSED BL-497, AND LEFT `docs/backlog.md` DECLARED EMPTY — NO LIVE ENTRY, FOR THE FIRST TIME IN 533
+COMMITS.** Batch 224's block below is history: this block replaces its owed list and its delivery gap. Handed the plan by
+ai-dlc-d5 at `origin/main` `485b38a0` (`VERSION` 0.776.0); graph-8f was live and never messaged.
+- **Opening sweep** (at `485b38a0`): live 3, unfiled 0, worklist 0, DISCHARGED 3, invisible 0, TERMINAL 231, archive
+  354, 2 qualifying refs, every control passing. graph carried no uncommitted filing.
+- **graph pulled 0.777.0 mid-batch** (its own reconcile commit `3a22994df`, 13:20, branch
+  `ai-dlc-update/0.777.0-reconcile-20261012T170501Z`), which archived `PC-S317-PM-ROLE-TAGS-…` and
+  `PC-S317-PVC-TEMPLATE-…`. Re-swept at `2819e2dc`: live 1, unfiled 0, worklist 0, DISCHARGED 1
+  (`PC-S317-3.2-DERIVATION-HOOK-CWD`, oldest naming release 0.773.0), TERMINAL 233, archive 356, 5 qualifying refs.
+  The ledger md5 moved `9828b7e7…` -> `87f3419f…` by graph's own commit. **The same pull archived both ids named at
+  `485b38a0` and left `PC-S317-3.2-DERIVATION-HOOK-CWD` live**, though `2bdb3a29` (0.773.0) names it and graph is now
+  three releases past that: one pull, two closed, one not.
+- **`v0.777.0`**: batch 224's four BL-497 branches merged onto `origin/main` without the predicted conflict (both
+  sides' `readset-skip/run.sh` lines kept). Gate green, 22 of 22, six changed fixtures `ok` by name.
+- **BL-497's census over the 166 unmeasured declared fixtures** (a `file://` clone at `2819e2dc`, 12 jobs): 157 EQUAL,
+  7 LOW-RES, 2 FLAKY, 0 MISMATCH, 0 REFUSED. The operator paused it at 99 of 166 (`kill -STOP` of its process group)
+  and resumed it; one FLAKY row was a fixture frozen mid-run and read EQUAL alone. The six earlier MISMATCH rows read
+  EQUAL at the fixes. 0 of 240 declared fixtures name an absolute repo path.
+- **`v0.778.0`**: `readset-skip-b` exposed two defects. The `oldtrap` mutant was scored on a race leaking about 1% per
+  launch (its comment said 17.5%), and the shipped read-set watchdog leaked its sleep under load (16 of 4800 fast
+  traces): its TERM trap ran before `jobs -p` named the sleep, or the stop landed during `wait` and no trap ran. The
+  watchdog now has no trap, and the trace subshell sweeps its own group after the reap (0 of 1800). Mutants
+  `sleeptrap` and `nosweep` replace `termtrap` and `oldtrap`.
+- **`v0.779.0`** (operator's choice among three on a direct question): BL-497 rotated in the release commit, and the
+  backlog is DECLARED EMPTY. `backlog-reverify.sh` owns the predicate (zero parsed entries, the marker as the last
+  non-blank line, no `BL-<n>` token anywhere) and emits one `DECLARED-EMPTY` row; B1, B1b, R2 and the rotator consume
+  it. The rotator is the marker's only writer, and refuses when the moved set holds an entry-like id line the parser
+  cannot read. A contract adversary returned three BLOCKERs (all folded before the build), a tip adversary one DEFECT
+  (fixed in the release). The first gate failed only on plan shape: `hermetic-fixtures-poc.md` cited
+  BL-470 by a line of `docs/backlog.md` the rotation removed; repointed to the archive.
+- **Filing a new entry**: delete the marker line, then write the `## BL-` entry. B1b fails a marker left beside a live
+  entry.
+- **Withdrawn before filing**: a saved-pid-race entry drafted for 0.778.0. 0.778.0 removed the trap that race lived in.
+- **Unmeasured, recorded**: the `env -i` effect on the saved-pid-only watchdog variant (0 of 100 under `env -i`, 2-4 of
+  20 in a login environment) is unexplained, and the trap it concerned is gone. The plain side of the census reads a
+  correct empty ledger with CRLF line endings or a trailing space on the marker as not declared (the safe direction).
+- **graph delivery**: stamp 0.777.0 against `VERSION` 0.779.0, two releases behind. No bootstrapping file in the range
+  (0 of `preclassify.sh`, `apply.sh`, `ledger-reverify.sh`, `ai-dlc-update/`). The range ships `core/git-hooks/pre-push`
+  and `core/fixtures/readset-skip/run.sh`; the backlog scripts and their three fixtures are distribution-only.
+  graph's installed `validate-layer-entries.sh` is byte-identical to the distribution's (`cmp -s` 0), so the
+  differential cannot discriminate, and a hook fix for a load-dependent leak has no transient for it to fire on.
+  Discharged and awaiting graph's own close: `PC-S317-3.2-DERIVATION-HOOK-CWD`. The pull is the operator's.
+- **graph boundary**: ledger md5 `9828b7e7…` at the opening, `87f3419f…` after graph's own pull. Porcelain 27 at the
+  opening and 140 at the close, all graph's own pipeline state, 0 under `_bmad-output/ai-dlc-update/`. Nothing was
+  written there.
+- **Process facts**: every spawned worktree was removed. Box load during the census was the census itself (203
+  processes on 18 cores), not a peer.
+
+Net for the batch: closed 1 entry (BL-497), filed 0; net -1. The backlog has no live entry.
+
+Batch 224's block below is history: batch 225's block replaces its owed list and its delivery gap.
 
 **BATCH 224 SHIPPED `v0.776.0` (`62225ecf`, #1115) AND CLOSED BATCH 223's OPEN ITEM AS FAR AS A BUILD CAN: ALL SIX OF
 BL-497's MISMATCH ROWS ARE ADJUDICATED AND EACH HAS A BUILT, UNSHIPPED FIX ON ORIGIN. 0.777.0 IS UNCUT; THE OPERATOR
@@ -289,55 +342,6 @@ Net for the batch: closed 1 candidate and 3 entries (BL-465, BL-495, BL-496), fi
 
 Batch 220's block below is history: batch 221's block replaces its open items and its delivery gap.
 
-**BATCH 220 SHIPPED `v0.767.0` (`e6c241a1`, #1100) AND `v0.768.0` (`875a7b43`, #1101), AND DISCHARGED NO CONSUMER
-CANDIDATE.** Handed the plan by ai-dlc-ad at `origin/main` `a3bc6c9b` (`VERSION` 0.766.0); peers ai-dlc-7b, ai-dlc-b5
-(inpool-readset-trace), ai-dlc-ff and ai-dlc-1b, one gated push on the box at a time by GATE START / LANDED.
-- **Opening sweep** (at `a3bc6c9b`): live 2, unfiled 0, worklist 0, DISCHARGED 2 (`PC-S317-SELF-UPDATE-FIXTURE-RUNNER-IS-NOT-THE-HERMETIC-RUN-PRE-PUSH-PERFORMS`
-  by 0.762.0, `PC-S317-ADVISOR-GATE-DENIES-A-PUSH-AFTER-AN-ADVISOR-CALL-IN-ITS-OWN-MESSAGE-AND-LOOPS` by 0.765.0),
-  TERMINAL 226, archive 349, 38 qualifying refs, every control passing. With no candidate to build, the batch took the
-  whole-backlog adjudication's buildable entries.
-- **`v0.767.0`, BL-493 CLOSED.** One `READSET_KEYROWS` span in both hooks owns a declared fixture's parse and key rows;
-  `hermetic-run.sh` sources it and `hr_key_rows` is gone. Runner-side behaviour change: `lib//` and CRLF declaration
-  lines now key the hook's way. BL-495's `sh exit 9` became a manual receipt (with BL-493 closed it left the gate's
-  `backlog receipts` step unscorable). First gate RED on four units, all this release's: `I77` (a `run.sh` lost its
-  exec bit), `procsub-staged-refusal` (a pipe-fed `while` in the skew parser), `readset-skip-digest-mutants-e` (an
-  anchor on a respelled line), and `validator-fork-budget`, whose traced validator exited 1 on that same `I77` — NOT
-  load. Second gate green, 47 of 277 run. A tip adversary had caught `readset-skip-d` red in a CONSUMER install only
-  (hardcoded census count); fixed before the gate.
-- **`v0.768.0`, BL-481 PARTIAL.** A wall-clock ceiling on the detached post-green trace (3 x the listed fixtures'
-  recorded durations, floor 600s, cap 20000s), the trace and the deriver each launched as their own process group,
-  the watchdog killing the deriver's group; the next push names a timeout and prints the stop command for an orphaned
-  group. `fixture-git-env-seam` and `ledger-status-vocabulary` declared (both `.dist-only`). A tip adversary found a
-  watchdog race (7 of 40 launches orphaned a sleep) after the first green gate; fixed, re-gated green, 51 of 277 run.
-  BL-481 stays open on `validator-fork-budget` alone: sandboxed it counts 3327 forks against `FORK_BUDGET=3324`.
-- **`FORK_BUDGET` is at its edge**: 3320 at 0.766.0, 3323 at 0.767.0 (the `READSET_KEYROWS` sentinel arm in I66 spent
-  3 forks), 1 of headroom. The next arm added to `validate-enforcement-map.sh` turns `validator-fork-budget` red.
-- **BL-465 and BL-474 unchanged**: both close on future events (a push that compares a unit against its own width's
-  rows; a sharded review on the consumer), not on a build.
-- **Close sweep** (at `875a7b43`): live 1, unfiled 1, worklist 0, DISCHARGED 0, TERMINAL 228, archive 351, 45
-  qualifying refs, every control passing. graph archived both discharged candidates during the batch.
-- **A NEW FILING LANDED MID-BATCH AND WAS SEEN ONLY AT THE CLOSE SWEEP**:
-  `PC-S317-HERMETIC-REQUIRED-INPUT-NEVER-CONSUMED-REDS-TWO-SHIPPED-FIXTURES` (`-S` 2026-10-09 21:44 -0400, graph's
-  0.761.0 -> 0.766.0 reconcile #1202; impossible-id control 0), while 0.767.0 was still being built. No mid-batch
-  re-sweep ran, so it went unscoped. It is unfiled here and the next session's sweep owns it first. Since 0.763.0, graph's pre-push refuses every push on
-  `consumer-machinery-inventory` and `extract-push-flag-decision`: `REQUIRED input … was never consumed`. Both pass
-  run directly. graph pushes with `--no-verify` on operator instruction until it lands. A READING, not a measurement:
-  each `run.sh` echoes `HERMETIC-CONSUMED` only in its distribution-layout branch
-  (`core/fixtures/consumer-machinery-inventory/run.sh:41`, `core/fixtures/extract-push-flag-decision/run.sh:44`), and
-  the consumer-layout `elif` beside it prints nothing. Both fixtures ship. **It bites the consumer's every push.**
-- **graph delivery gap**: stamp 0.766.0 against `VERSION` 0.768.0. Both 0.767.0 and 0.768.0 change both pre-push hooks
-  and 0.767.0 changes `hermetic-run.sh`; the reference consumer's 158 declared fixtures were rehearsed identical under
-  the new hook and runner apart from the two swapped files' own hash rows. The pull is the operator's.
-- **graph boundary**: the ledger's working-tree md5 moved `15ac6d39…` -> `7b2cc010…` during the batch on graph's own
-  s317 commits; `git diff HEAD` of the ledger is empty and no dirty path under `_bmad-output/ai-dlc-update/` is this
-  program's. Nothing was written there.
-- **Left in place**: worktree `.claude/worktrees/agent-a11b1857554f0c9c6`, locked by a live pid (28013), clean apart
-  from a `pre-push.orig`.
-
-Net for the batch: closed 1 (BL-493), filed 0; BL-481 PARTIAL.
-
-Batch 218's block below is history: batch 220's block replaces its open items and its delivery gap.
-
 ### Derive the state; do not trust the numbers below
 
 Every figure here is a HYPOTHESIS about a tree that has moved. The measured base rate of expired
@@ -369,7 +373,7 @@ every fence in this section gets a syntax error on the record-forms example.
 git -C /Users/n8/git/ai-dlc log --oneline -1 origin/main
 grep -cE '^## BL-[0-9]+' docs/backlog.md          # live entries
 grep -cE '^## BL-[0-9]+' docs/backlog.archive.md  # archived
-bash scripts/backlog-reverify.sh | grep -oE 'CLOSE-CANDIDATE|STILL-LIVE|HAND-REVIEW|NEEDS-REVIEW' | sort | uniq -c
+bash scripts/backlog-reverify.sh | grep -oE 'CLOSE-CANDIDATE|STILL-LIVE|HAND-REVIEW|NEEDS-REVIEW|DECLARED-EMPTY|INPUT-UNRESOLVED' | sort | uniq -c
 ```
 
 **AND THE JOIN THAT MEASURES THE ACTUAL GOAL, which the block above does not.** Those four
@@ -743,7 +747,8 @@ LC_ALL=C awk '/^## BL-[0-9]+/{if(id!=""){out()}; id=$2; pcs=""}
      END{if(id!=""){out()}}
      function out(){ if(pcs!="") printf "%s\t%s\n", id, pcs }' docs/backlog.md > /tmp/entry_pcs.tsv
 wc -l < /tmp/entry_pcs.tsv     # INSTRUMENT: entries citing ANY PC id. NOT the worklist.
-[ -s /tmp/entry_pcs.tsv ] || echo "REFUSE: awk half matched nothing -- grammar, not corpus"
+if bash scripts/backlog-reverify.sh --declared-empty; then echo "worklist 0 (backlog declared empty)"
+else [ -s /tmp/entry_pcs.tsv ] || echo "REFUSE: awk half matched nothing -- grammar, not corpus"; fi
 : > /tmp/pc_backed.tsv
 while IFS="$(printf '\t')" read -r id pcs; do
   for p in $(printf '%s' "$pcs" | tr ',' ' '); do
