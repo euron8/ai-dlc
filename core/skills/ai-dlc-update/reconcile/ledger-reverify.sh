@@ -2528,6 +2528,14 @@ if [ "$LR_SUBJ_OK" = 1 ] && lr_entries "$LEDGER" 1 > "$LR_STAGE/sib-entries" 2>/
 fi
 [ "$LR_SIB_OK" = 1 ] || echo "ledger-reverify: the sibling receipt set could not be staged, so no row is classified NAMED-UPSTREAM-SIBLING-ATTRIBUTED this run; every naming row keeps its prior kind" >&2
 while IFS="$(printf '\t')" read -r label ord directive; do
+  # THE PER-ENTRY NAMING STATE RESETS HERE, ABOVE THE EMPTY-DIRECTIVE SKIP, keyed on a NEW ENTRY --
+  # the label changing, or a first ordinal -- never on the ordinal alone further down. It sat in
+  # the naming `case` below, which the skip pre-empts: an entry whose FIRST receipt was an empty
+  # `verify:` line kept the PREVIOUS entry's naming shas, and its second receipt's close detail
+  # printed them as this entry's. Measured by an adversary probe on the release tip.
+  case "$ord" in 1/*|0/0|"") NA_ENTRY_SHAS=""; NA_ENTRY_KIND="" ;; esac
+  [ "$label" = "${_na_entry_label-}" ] || { NA_ENTRY_SHAS=""; NA_ENTRY_KIND=""; }
+  _na_entry_label="$label"
   [ -n "$directive" ] || continue
   # Empty suffix for a single-receipt entry, so those rows are unchanged.
   case "$ord" in
@@ -2558,15 +2566,11 @@ while IFS="$(printf '\t')" read -r label ord directive; do
   # entry): the name is the ONLY mechanical signal such an entry has, and this block is the only
   # one its row reaches -- the `0/0` skip below the naming block keeps it out of the verb dispatch.
   na=""; nam=""
-  case "$ord" in 1/*|0/0|"") na="$(named_absorbed "$label")"; [ -n "$na" ] || nam="$(named_ambiguous "$label")"; NA_ENTRY_SHAS="" ;; esac
+  case "$ord" in 1/*|0/0|"") na="$(named_absorbed "$label")"; [ -n "$na" ] || nam="$(named_ambiguous "$label")" ;; esac
   if [ -n "$na" ]; then
     na_h="$(printf '%s' "$na" | awk '{print $1}')"
     na_n="$(printf '%s' "$na" | awk '{print $2}')"
     na_c="$(printf '%s' "$na" | awk '{print $3}')"
-    # KEPT FOR THE ENTRY, not the receipt: the naming is asked on the first receipt only, and a
-    # later receipt's CLOSE-CANDIDATE detail reads these shas when its base control says the pull
-    # did not move it. Reset above on every first receipt, so it never leaks to the next entry.
-    NA_ENTRY_SHAS="$na_c"
     na_r="$(printf '%s' "$na" | awk '{print $4}')"
     if [ "${na_n:-1}" -gt 1 ] 2>/dev/null; then
       # ALL OF THEM, newest first, none elected. Naming two ends told the operator to read two
@@ -2584,6 +2588,7 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       # the reach split because it is a property of the naming set, not of the receipt or of what the
       # commits touched: a release that changes core/ and disowns the discharge is exactly the
       # third class `named_reach` cannot see. The row is kept, with every sha.
+      NA_ENTRY_KIND=NAMED-UPSTREAM-CITED-ONLY
       emit NAMED-UPSTREAM-CITED-ONLY "$label" "upstream's own history NAMES this entry's id ${na_where}, and EVERY one of those commits names it ONLY on a \`Not-discharged:\` line -- the form a distribution release uses to cite an entry it did NOT discharge. This row is NOT an absorption claim.${na_note} Read the commit(s): the citation may record a rejection, a withdrawal or a split, which IS something to act on. Then read the entry's own subject at theirs, because a fix that never names the id is invisible to this search. Annotate only what that reading establishes, and otherwise leave the entry open."
     elif [ "$na_r" = docs ]; then
       # A NAMING SET THAT CHANGES NOTHING A CONSUMER INSTALLS AND CUTS NO RELEASE. See `named_reach`
@@ -2592,6 +2597,7 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       # "upstream took it" closed an entry on a `docs(plan):` commit that only cross-referenced it.
       # It does NOT say the entry is unabsorbed -- a fix that never names the id is invisible to the
       # message search -- so the text sends the operator to the subject, never forbids a close.
+      NA_ENTRY_KIND=NAMED-UPSTREAM-DOCS-ONLY
       emit NAMED-UPSTREAM-DOCS-ONLY "$label" "upstream's own history NAMES this entry's id ${na_where}, and NONE of those commits changes a path a consumer installs under core/ or templates/ (a path inside a distribution-only fixture, one carrying a .dist-only marker at theirs, is not installed and does not count) -- and none of them cuts a release (changes VERSION). A plan, a review or a ledger drain mentioning the id matches the same way a fix does, so this row is not evidence of an absorption.${na_note} It is NOT a close on its own. The fix can still have landed in a commit that does not name the id: read the commit(s) -- one may record a withdrawal or a split, which IS something to act on -- then read the entry's own subject at theirs. Annotate only what that reading establishes, and otherwise leave the entry open."
     elif named_subject "$label" "$na_c" && [ "$NS_STATE" = off ]; then
       # THE NAMING SET REACHES CODE AND CHANGES NONE OF THIS ENTRY'S RECEIPT PATHS, a release
@@ -2599,17 +2605,27 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       # only for a resolved, non-empty subject set -- see `named_subject`. The row keeps every sha.
       # It is not "not absorbed": a fix can land on a path the receipt does not name, and the id
       # may have been dispositioned by an EARLIER release, the naming here being a later mention.
+      NA_ENTRY_KIND=NAMED-UPSTREAM-OFF-SUBJECT
       emit NAMED-UPSTREAM-OFF-SUBJECT "$label" "upstream's own history NAMES this entry's id ${na_where}, and those commits change a path a consumer installs under core/ or templates/, or cut a release (change VERSION) -- but NONE of them changes this entry's own receipt path(s): ${NS_PATHS} (a naming commit that cuts a release is judged over its whole release span, back to the previous VERSION change).${na_note} A release that cross-references an entry, or records that some other route discharged it, matches the message search the same way a fix does, so this row is NOT evidence of an absorption -- and it is not evidence against one either: the id may already have been dispositioned by an earlier release and this naming be a later mention, or the fix may have landed on a path the receipt does not name. It is NOT a close on its own. Read the commit(s), then read the entry's subject (${NS_PATHS}) at theirs. Annotate only what that reading establishes, with the release that contains the change, and otherwise leave the entry open."
     elif [ "$NS_STATE" = touched ] && named_sibling "$label" "$na_c" && [ "$NSB_STATE" = attributed ]; then
       # A NAMING COMMIT CHANGED THIS ENTRY'S RECEIPT FILE ONLY WHERE A SIBLING'S ANCHOR SITS. Reached
       # only from `touched` (the branch above called `named_subject` for this row, so NS_STATE is
       # this row's). See `named_sibling`. The row keeps every sha and is never a close.
+      NA_ENTRY_KIND=NAMED-UPSTREAM-SIBLING-ATTRIBUTED
       emit NAMED-UPSTREAM-SIBLING-ATTRIBUTED "$label" "upstream's own history NAMES this entry's id ${na_where}, and a naming commit changes this entry's receipt file (${NS_PATHS}) -- but on every changed block of that file NONE of this entry's own receipt substrings is on a changed line, while a sibling entry the same commit names in full has its receipt substring there: ${NSB_SIBS} (a naming commit that cuts a release is judged over its whole release span, back to the previous VERSION change; every naming commit is judged, not only the first).${na_note} A release that fixes one entry and cross-references another on the same file matches the message search for both, so this row is NOT evidence that THIS entry was absorbed -- and it is not evidence against it either: a fix can leave a stale anchor untouched. It is NOT a close on its own. Read the commit(s) and the sibling's entry, then read this entry's subject (${NS_PATHS}) at theirs. Annotate only what that reading establishes, with the release that contains the change, and otherwise leave the entry open."
     elif [ "$ord" = "0/0" ]; then
       # RECEIPT-LESS: there is no receipt to be blind to it and none to re-anchor, so the receipt
       # clauses of the sibling detail would be false here. The close is the annotation alone.
       emit NAMED-UPSTREAM "$label" "upstream's own history NAMES this entry's id ${na_where}. This entry carries NO verify: receipt, so this row is the only mechanical signal it will ever get.${na_note} THIS ROW CARRIES NO VERSION, DELIBERATELY: naming is not absorbing. A commit naming an id to record a rejection, a split, a plan or a ledger drain is indistinguishable here from one that landed the fix, and a version read off the wrong commit goes into a permanent annotation. Read the commit(s) and decide whether the entry was ABSORBED; if it was, establish WHICH RELEASE contains the absorbing commit and close the entry BY ANNOTATION with THAT version -- **bolded, version immediately after the parenthesis** -- \`**ADOPTED UPSTREAM (v<version>, verified <date>)**\`. Do NOT delete the entry. Until it is annotated this row re-appears on every pull. THE FORM MATTERS: any occurrence of the phrase makes ledger-reverify SKIP this entry from here on, but only that exact form lets ledger-rotate.sh archive it, and an entry that is skipped without being archivable is invisible in every future report and never filed."
     else
+    # THE ONLY KIND WHOSE SHAS A LATER CLOSE DETAIL MAY HAND OVER AS CANDIDATE ABSORBING COMMITS.
+    # CITED-ONLY, DOCS-ONLY, OFF-SUBJECT and SIBLING-ATTRIBUTED each state in their own detail that
+    # they are NOT evidence of an absorption, so offering their shas as "the absorbing one" would
+    # contradict the row beside it -- measured by an adversary probe: a CITED-ONLY row and a close
+    # detail calling its `Not-discharged:` commit the absorbing one, in one run. Those kinds record
+    # only their name; AMBIGUOUS names a prefix shared by several entries, never this one, and
+    # records nothing.
+    NA_ENTRY_SHAS="$na_c"
     emit NAMED-UPSTREAM "$label" "upstream's own history NAMES this entry's id ${na_where}, which no receipt in this entry can see.${na_note} THIS ROW CARRIES NO VERSION, DELIBERATELY: naming is not absorbing. A commit naming an id to record a rejection, a split, a plan or a ledger drain is indistinguishable here from one that landed the fix, and a version read off the wrong commit goes into a permanent annotation. Read the commit(s) and decide whether the entry was ABSORBED; if it was, establish WHICH RELEASE contains the absorbing commit and annotate with THAT version -- **bolded, version immediately after the parenthesis** -- \`**ADOPTED UPSTREAM (v<version>, verified <date>)**\`, then re-anchor or drop the stale receipt. Do NOT delete the entry. THE FORM MATTERS: any occurrence of the phrase makes ledger-reverify SKIP this entry from here on, but only that exact form lets ledger-rotate.sh archive it, and an entry that is skipped without being archivable is invisible in every future report and never filed."
     fi
   elif [ -n "$nam" ]; then
@@ -3037,9 +3053,10 @@ while IFS="$(printf '\t')" read -r label ord directive; do
             # status stays CLOSE-CANDIDATE; only the version it hands the operator changes.
             if [ "${SBC_CLOSE_AT_BASE:-0}" = 1 ]; then
               if [ -n "${NA_ENTRY_SHAS:-}" ]; then
-                _cc_ver="upstream's history names this entry's id in commit(s) ${NA_ENTRY_SHAS} (this run's NAMED-UPSTREAM-family row): read them and annotate with the release that CARRIES the absorbing one"
+                _cc_ver="upstream's history names this entry's id in commit(s) ${NA_ENTRY_SHAS} (this run's NAMED-UPSTREAM row): read them and annotate with the release that CARRIES the absorbing one"
               else
                 _cc_ver="find the release at which this receipt first stops reproducing (bisect THEIRS between earlier distribution releases) and annotate with THAT version"
+                [ -z "${NA_ENTRY_KIND:-}" ] || _cc_ver="$_cc_ver (this run's ${NA_ENTRY_KIND} row names this entry's id, but that row is NOT evidence of an absorption, so its commits are not the answer)"
               fi
               emit CLOSE-CANDIDATE "$label" "verify sh: no longer reproduces at theirs ($TV) — but it ALREADY did not reproduce at base ($BASE): the base control exited non-zero too, so base..theirs did NOT absorb this and v$TV is NOT the version to annotate. To close, ${_cc_ver}: 'ADOPTED UPSTREAM (v<that release>, verified <date>)'. Never invent a version. Do NOT delete the entry. Every consumer-relative path this receipt names still exists, so the exit is not a moved subject; a subject named in a form this cannot see is still possible, so confirm before draining."
             else
