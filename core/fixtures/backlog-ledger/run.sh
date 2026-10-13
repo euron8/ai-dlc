@@ -843,6 +843,37 @@ else
   else bad "mutation-apply-marker" "SURVIVED: the unguarded rotator left no marker (or lost BL-501)"; fi
 fi
 
+# 3. THE ROTATOR ASKS --marker-last BEFORE APPENDING, so a presence-keyed position rule in the
+#    classifier makes it skip the marker whenever the preamble QUOTES it. Seed: the last entry,
+#    below a preamble that quotes the marker on its own line followed by more prose. Control: the
+#    unmutated pair appends it. Mutant: the classifier's marker_last swapped for a whole-file grep.
+mkdir -p "$WORK/q"; LQ="$WORK/q/backlog.md"
+{ printf '# Probe backlog — the marker quoted\n\nThe rotator writes this line when the ledger empties:\n\n%s\n\nIt is a declaration, not prose.\n\n' "$MARK"
+  printf '## BL-601 — closed, the last live entry\n\n<br>**LANDED (v0.370.0, verified d4fd318).** Done.\n\nverify: has VERSION "."\n'; } > "$LQ"
+cp "$LQ" "$LQ.orig"
+cp "$RT" "$RRT"
+bash "$RRT" "$LQ" --apply >/dev/null 2>&1
+Q_LAST="$(awk '/[^ \t]/ { l = $0 } END { print l }' "$LQ")"
+if [ -n "$MARK" ] && [ "$Q_LAST" = "$MARK" ]; then
+  ok "quoted-marker" "a preamble quoting the marker still gets it appended as the last line"
+else bad "quoted-marker" "with the marker quoted in the preamble the last line is '$Q_LAST'"; fi
+MPN="$(grep -cF 'END { exit (last == m) ? 0 : 1 }' "$RV")" || MPN=0
+if [ "$MPN" -ne 1 ]; then bad "mutation-marker-presence" "the position rule's line appears $MPN times; the mutation needs exactly one"
+elif ! sed 's@^  awk -v m="\$EMPTY_MARKER" .*END { exit (last == m) ? 0 : 1 }.*$@  grep -qF -- "$EMPTY_MARKER" "$1"@' "$RV" > "$RR/scripts/backlog-reverify.real.sh"; then
+  bad "mutation-marker-presence" "DID NOT APPLY: sed failed"
+elif cmp -s "$RV" "$RR/scripts/backlog-reverify.real.sh"; then bad "mutation-marker-presence" "DID NOT APPLY: the mutation matched nothing"
+else
+  cp "$LQ.orig" "$LQ"
+  bash "$RRT" "$LQ" --apply >/dev/null 2>&1
+  Q_LAST="$(awk '/[^ \t]/ { l = $0 } END { print l }' "$LQ")"
+  if grep -q '^## BL-601' "$LQ"; then
+    bad "mutation-marker-presence" "the entry was not rotated under the mutant — the root broke, not the rule"
+  elif [ "$Q_LAST" != "$MARK" ]; then
+    ok "mutation-marker-presence" "killed: a presence-keyed position rule leaves a zero-entry ledger without its trailing marker"
+  else bad "mutation-marker-presence" "SURVIVED: the presence-keyed rule still appended the marker"; fi
+fi
+cp "$RV" "$RR/scripts/backlog-reverify.real.sh"
+
 echo
 if [ "$FAIL" -eq 0 ]; then
   echo "PASS: every assertion holds."

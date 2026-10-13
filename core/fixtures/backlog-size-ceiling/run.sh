@@ -553,6 +553,33 @@ if [ "$ms_ok" -eq 1 ]; then
   else note "FAIL  ms SURVIVED: the self-probe still refused a bullet-blind parser without its bullet seed"; rc=1; fi
 fi
 
+# mp -- THE POSITION RULE replaced by presence: the classifier's marker_last body swapped for a
+# whole-file `grep -F` of the marker. d04 (quoted, not last, zero entries) then reads as declared
+# and passes; d03n (a live entry filed below a stale marker) then trips B1b. Each is scored on its
+# own seed, and both unmutated arms above are the controls. The anchor is asserted unique first.
+MP_SED='s@^  awk -v m="\$EMPTY_MARKER" .*END { exit (last == m) ? 0 : 1 }.*$@  grep -qF -- "$EMPTY_MARKER" "$1"@'
+mp_n="$(grep -cF 'END { exit (last == m) ? 0 : 1 }' "$REVERIFY")" || mp_n=0
+if [ "$mp_n" -ne 1 ]; then
+  note "FAIL  mp -- the position rule's line appears $mp_n times in backlog-reverify.sh; the mutation needs exactly one"; rc=1
+else
+  seed "$TMP/mp4"; de_ledger "$TMP/mp4/docs/backlog.md" "" "\nTrailing prose after the quotation.\n"
+  case "$(mutate "$TMP/mp4/scripts/backlog-reverify.sh" "$MP_SED"; echo $?)" in
+    0) mp4_out="$(run_v "" "$TMP/mp4")"; mp4_rc=$?
+       if [ "$mp4_rc" -eq 0 ] && grep -qF ', declared empty (' <<<"$mp4_out"; then
+         note "ok    mp/d04 -- KILLED: with the position rule replaced by presence, a marker quoted above trailing prose declares the ledger empty"
+       else note "FAIL  mp/d04 SURVIVED: presence-keyed marker and d04's ledger still exited $mp4_rc"; rc=1; fi ;;
+    *) note "FAIL  mp/d04 -- the position-rule mutation DID NOT APPLY"; rc=1 ;;
+  esac
+  seed "$TMP/mp3"; de_ledger "$TMP/mp3/docs/backlog.md" "" "\n## BL-001 — a live entry filed below a stale marker\n\nverify: manual\n\n"
+  case "$(mutate "$TMP/mp3/scripts/backlog-reverify.sh" "$MP_SED"; echo $?)" in
+    0) mp3_out="$(run_v "" "$TMP/mp3")"; mp3_rc=$?
+       if [ "$mp3_rc" -eq 1 ] && grep -qF "FAIL: B1b:" <<<"$mp3_out"; then
+         note "ok    mp/d03n -- KILLED: with the position rule replaced by presence, a live entry below a quoted marker trips B1b"
+       else note "FAIL  mp/d03n SURVIVED: presence-keyed marker and d03n's ledger exited $mp3_rc without B1b"; rc=1; fi ;;
+    *) note "FAIL  mp/d03n -- the position-rule mutation DID NOT APPLY"; rc=1 ;;
+  esac
+fi
+
 if [ "$rc" -eq 0 ]; then
   note "PASS  backlog-size-ceiling -- control green, every probe holds"
 fi
