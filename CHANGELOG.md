@@ -20,6 +20,32 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.779.0] - 2026-10-12
+
+Batch 225 (graph-ledger-full-drain), third release. BL-497 closes, which leaves `docs/backlog.md` with no live entry
+for the first time in 533 commits. Every reader of that ledger treated zero entries as a finding, because an empty
+parse and a fully-rotated ledger read the same zero; this release lets the rotator declare the empty state.
+
+### BL-497 closed; a declared-empty backlog
+
+- **Declared empty.** A ledger with zero parsed entries is declared empty when its last non-blank line is the marker
+  `backlog-reverify.sh --print-marker` prints and no `BL-<n>` token appears anywhere in it. `backlog-reverify.sh` owns
+  the predicate (`--declared-empty`, `--marker-last`, `--print-marker`) and emits one `DECLARED-EMPTY` row for such a
+  ledger. A ledger emptied without the marker still reads `INPUT-UNRESOLVED`.
+- **Readers.** `validate-backlog-size.sh` B1 passes a declared-empty ledger, and a new B1b fails the marker left in
+  place while entries exist. `validate-backlog-receipts.sh` R2 accepts `R2 declared-empty`. Each maps an
+  environment failure in the predicate to its own exit 2, never to a pass. B1's self-probe now seeds a bullet entry.
+- **Rotator.** `backlog-rotate.sh` is the only writer of the marker: it appends it after the conservation check when
+  the remainder parses to zero entries. `--check` accepts the one `DECLARED-EMPTY` row only when the original carried
+  no live verdict. Before writing it refuses (exit 2, nothing written) when the moved set holds more entry-like id
+  lines than entries, so a live entry spelled in a form the parser cannot read is not swept with the last closed
+  one, and when the marked remainder would not be declared empty.
+- **Fixtures.** `backlog-size-ceiling`, `backlog-receipt-binding` and `backlog-ledger` gain arms for each clause, a
+  seed per unparseable spelling, and mutants for the raw clause, B1b, the bullet seed, the R2 exemption, the marker
+  position, `--check`'s condition, the census and `--apply`'s validation.
+- **Closed.** BL-497: the census covers all 240 declared fixtures, each EQUAL, EQUIVALENT or LOW-RES, with every
+  mismatch fixed in 0.777.0 and 0.778.0; no declared fixture names an absolute repo path.
+
 ## [0.778.0] - 2026-10-12
 
 Batch 225 (graph-ledger-full-drain), second release. BL-497's census over the 166 declared fixtures 0.777.0 had not
