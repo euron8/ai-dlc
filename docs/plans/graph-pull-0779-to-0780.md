@@ -1,10 +1,12 @@
-# Pull the graph consumer from 0.779.0 to 0.780.0
+# DISCHARGED — DO NOT EXECUTE — pull the graph consumer from 0.779.0 to 0.780.0
 
-**READ and FOLLOW docs/plans/graph-pull-0779-to-0780.md**
+**THIS RUNBOOK IS SPENT. IT RAN, IT MERGED, AND IT IS A RECORD RATHER THAN AN INSTRUCTION.**
+Do not follow the numbered actions below; they describe work that is finished. Read `## Discharge`
+for what happened.
 
 ## RESUME HERE
 
-**STATE: WRITTEN AND REHEARSED, NOT STARTED.** The rehearsal ran on `file://` clones of the
+**STATE AT WRITING (history): WRITTEN AND REHEARSED, NOT STARTED.** The rehearsal ran on `file://` clones of the
 consumer, and every figure in `## Rehearsal` came from it. A contract adversary then simulated
 the self-update, the re-invocation and the step-8 annotate-and-rotate on a further clone; its
 findings are folded in.
@@ -236,4 +238,35 @@ the pre-fix pinned sha, so it does discriminate. After the rotation, the id read
 
 ## Discharge
 
-*Empty. The distribution-side session fills this in at action 10.*
+**Merged 2026-10-13 as the consumer's PRs #1217 (self-update, `776433bee`) and #1218 (reconcile,
+`cf886c04b`)**, squash-merged onto its carry-over branch `ai-dlc/carry-over/s318-artifact-consolidation`.
+Executed by a graph session under operator authorization; this section was written on the
+distribution side, which only read graph.
+
+**The run agreed with `## Rehearsal` on every predicted row, and there were no disagreements.** Taken
+from the consumer's reconcile log `reconcile-log-20261013T132309Z.md` and re-derived here:
+
+- Gate `SELF-UPDATE-OK`, self-update fixtures 1 green, and the re-invoked 0.780.0 engine wrote the
+  report (the OK path of action 4).
+- Report: `ALREADY-AT-THEIRS` ×4 and `DIST-ONLY-SKIP` ×1, no semantic worklist, 0 HARD blockers.
+  Ledger rows `NAMED-UPSTREAM PC-S317-3.2-DERIVATION-HOOK-CWD` and `RECEIPTS-UNDECIDED` came out of the
+  dry run, so done-when 2 was met before the annotation.
+- `PC-S317-3.2-DERIVATION-HOOK-CWD` was annotated `**ADOPTED UPSTREAM (v0.773.0, verified 2026-10-13)**`
+  and rotated as one entry. The reverify row set was identical before and after `--apply`.
+
+**Re-derived from the distribution side after the merge, controls in the same invocation:**
+
+- `.claude/.ai-dlc-version` reads `version: 0.780.0` in the working tree and at the consumer's HEAD
+  (done-when 1). The installed `ledger-reverify.sh` is byte-identical to 0.780.0's (`cmp` 0) and
+  differs from 0.779.0's (`cmp` 1).
+- The id counts 1 in `push-candidate-ledger.archive.md` and 0 in `push-candidate-ledger.md`, with 18
+  `^## ` headings in the ledger, both in the working tree and at HEAD. An impossible id reads 0 in
+  the archive (done-when 3).
+- The drain plan's derive block, run in a fresh worktree at `origin/main` `4e9e8329`, reads graph's
+  live candidate set as **0** across 9 qualifying refs. `arch` is 357, and main's live set of 3 lies
+  wholly inside it (floor 0). The DISCHARGED set is 0, and the impossible-id gap control prints
+  `UNNAMED`.
+
+One thing the executing session flagged: its own `>`+`mv` write of the self-update slice dropped
+exec bits, which it fixed with `chmod +x` before the fixture run. That was its write method, not
+the distribution's tooling, and nothing was filed.
