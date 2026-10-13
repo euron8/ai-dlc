@@ -68,7 +68,8 @@ exact and P8-P13 green. **A record is moved whole, including any standing rule w
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
 
 **BATCH 227 SHIPPED NO RELEASE. IT WROTE AND REHEARSED THE CONSUMER PULL RUNBOOK
-`docs/plans/graph-pull-0779-to-0780.md`, BECAUSE ACTION 7's SECOND TEST SAID THE PULL IS REQUIRED.** Batch 226's block
+`docs/plans/graph-pull-0779-to-0780.md`, BECAUSE ACTION 7's SECOND TEST SAID THE PULL IS REQUIRED; THE OPERATOR RAN
+THE PULL, AND GRAPH'S LIVE LEDGER NOW READS 0.** Batch 226's block
 below is history: this block replaces its delivery gap. Handed the plan by ai-dlc-9d at `origin/main` `8d00b5b5`
 (`VERSION` 0.780.0); graph-f8 was live and never messaged.
 - **Opening sweep** (at `8d00b5b5`): live 1, unfiled 0, worklist 0, DISCHARGED 1 (`PC-S317-3.2-DERIVATION-HOOK-CWD`,
@@ -90,9 +91,15 @@ below is history: this block replaces its delivery gap. Handed the plan by ai-dl
   annotation, a done-when control that agreed with its absence) and six NOTEs. All folded before the commit.
 - **graph boundary**: ledger md5 `87f3419f…` at the opening and the close; porcelain 93 at the opening, 94 at the
   close, 0 under `_bmad-output/ai-dlc-update/`. Nothing was written there.
-- **The pull is the operator's.** The runbook is ready, not authorized.
+- **The pull landed (2026-10-13), and this bullet replaces this block's earlier "ready, not authorized" delivery
+  gap.** The operator ran the runbook in a graph session. graph's PRs #1217 (self-update) and #1218 (reconcile)
+  merged onto its carry-over branch, and its stamp reads 0.780.0. `PC-S317-3.2-DERIVATION-HOOK-CWD` closed as
+  `ADOPTED UPSTREAM (v0.773.0)` and rotated: archive 1, ledger 0, 18 ledger headings. The runbook is discharged.
+  The derive block in a fresh worktree at `4e9e8329` reads live 0 across 9 qualifying refs, arch 357, floor 0,
+  DISCHARGED 0, worklist 0, installed = shipped = 0.780.0, and gap control `UNNAMED`. The ledger md5 moved
+  `87f3419f…` -> `e8af0344…` through graph's own #1218; this session wrote nothing there.
 
-Net for the batch: closed 0, filed 0. The backlog stays declared empty.
+Net for the batch: closed 1 (by graph's pull), filed 0. The backlog stays declared empty.
 
 **BATCH 226 SHIPPED `v0.780.0` (`eedbb415`, #1121), A BOOTSTRAPPING RELEASE (`ledger-reverify.sh`): A CANDIDATE ID
 CONTAINING `.` OR `_` NOW REACHES THE UPSTREAM-NAMING JOIN.** Batch 225's block below is history: this block replaces
