@@ -48,7 +48,7 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 # THESE ARMS REPORT THROUGH FAILURES OR EXIT 2, NEVER THROUGH ASSERTIONS. The shards' assertion
 # counts must sum, less three repeats of the shared six, to the unsharded total.
 SHARDS="a b c d"
-UNITS_a="close_anchor unicode_escape receipt_suffix"
+UNITS_a="close_anchor unicode_escape receipt_suffix id_class"
 UNITS_b="nonid_manual caller_error sh_base_control every_receipt name_signal short_id off_subject named_commits no_colon_swallow backslash_anchor dist_checkout bootstrap_window receiptless_named"
 UNITS_c="cwd_invariance sh_missing_subject receipts_undecided naming_set unreadable_path nonid_wrong_fixes bare_bold_record"
 UNITS_d="consumer_root entry_swallowed midline_receipt fenced_entries two_line_sh memo_lifecycle cited_only"
@@ -288,6 +288,33 @@ dp_kill() { # <name> <dir-or-empty> <kill-awk> <control-awk> <kill-msg> <ctl-msg
     printf '  FAIL  %-22s the mutation applied and the arm it targets did NOT change verdict — that arm cannot fire\n' "$n"
     printf '%s\n' "$out" | grep -E 'SH-DIST|SH-THEIRS-TREE' | sed 's/^/          | /'
   fi
+}
+
+# rl_mutant copies nothing: it replaces a LITERAL string in one named file of a directory rl_dir
+# built, with an exact expected count, and refuses the copy if the count is wrong, the file did not
+# change, or it does not parse. It can be called repeatedly on one directory, for a layer that
+# spans several sites or files. Hoisted: lr_unit_bare_bold_record and lr_unit_id_class both call it.
+rl_mutant() { # <dir> <file> <old> <new> <want-count> -> 0 iff applied exactly want-count times
+  local d="$1" f="$2" n
+  [ -f "$d/$f" ] || return 1
+  n="$(RL_O="$3" RL_N="$4" awk '
+    BEGIN { o = ENVIRON["RL_O"]; nw = ENVIRON["RL_N"]; c = 0 }
+    { s = $0; out = ""
+      while ((i = index(s, o)) > 0) { out = out substr(s, 1, i - 1) nw; s = substr(s, i + length(o)); c++ }
+      print out s > (FILENAME ".mut") }
+    END { print c }
+  ' "$d/$f")" || return 1
+  [ "$n" = "$5" ] || return 1
+  cmp -s "$d/$f" "$d/$f.mut" && return 1
+  mv "$d/$f.mut" "$d/$f"
+  bash -n "$d/$f" 2>/dev/null
+}
+rl_dir() { # <name> -> fresh copy of the reconcile directory on stdout
+  local d
+  d="$(dirname "$DIST")/mut-$1"; rm -rf "$d"; mkdir -p "$d"
+  cp "$(dirname "$CLOSER")"/*.sh "$(dirname "$CLOSER")"/*.md "$d/" 2>/dev/null
+  [ -f "$d/lib.sh" ] && [ -f "$d/ledger-reverify.sh" ] || return 1
+  printf '%s' "$d"
 }
 
 # THE B2 ARMS SHIP AHEAD OF THEIR SUBJECT. This fixture reaches a consumer a pull before the
@@ -1933,7 +1960,8 @@ if [ "$(reach_kind "$rc_ctl" PC-S950-DOCS-ONLY-NAMING)" = NAMED-UPSTREAM-DOCS-ON
   fi
   # BL-066's mutant: the newest citing commit only, the shape this row shipped with.
   ASSERTIONS=$((ASSERTIONS + 1))
-  _al="  _hits=\"\$(git -C \"\$DIST\" log -E --grep=\"\${_pfx}([^0-9A-Za-z-]|\\\$)\" --format=%h \"\$THEIRS\" 2>/dev/null)\""
+  # SINGLE-QUOTED: the anchor carries `$`, `\` and `"` together, and the line holds no `'`.
+  _al='  _hits="$(git -C "$DIST" log -E --grep="${_pfx}([^0-9A-Za-z_.-]|[.]([^0-9A-Za-z_-]|\$)|\$)" --format=%h "$THEIRS" 2>/dev/null)"'
   _am="$(reach_mut ambig-newest "$_al" "${_al%)\"} | head -1)\"")"
   if [ -z "$_am" ]; then
     FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the mutation DID NOT APPLY, so ambiguous-lists-all is unproven\n' "mutation-ambig-newest"
@@ -2030,13 +2058,13 @@ if [ "$co_ctl_read" = "$co_ctl_want" ]; then
     PC-S955-FORM-ONLY-CITATION NAMED-UPSTREAM "PC-S956-BOTH-FORMS-CITATION PC-S957-ORDINARY-X PC-S959-INLINE-FORM-CITATION" \
     "with no filter the form-only citation reads NAMED-UPSTREAM again -- the third class, reproduced, and S955 is what sees it"
   co_case filter-any-form-line \
-    '    $0 ~ /^Not-discharged: PC-S[0-9]+(-[A-Z0-9]+)*$/ { next }' \
-    '    $0 ~ /^Not-discharged: PC-S[0-9]+(-[A-Z0-9]+)*$/ && ((p == "" && index($0, n)) || (p != "" && $0 ~ re)) { h = ""; next }' \
+    '    $0 ~ /^Not-discharged: PC-S[0-9]+(-[A-Za-z0-9_.-]+)*$/ { next }' \
+    '    $0 ~ /^Not-discharged: PC-S[0-9]+(-[A-Za-z0-9_.-]+)*$/ && ((p == "" && index($0, n)) || (p != "" && $0 ~ re)) { h = ""; next }' \
     PC-S956-BOTH-FORMS-CITATION NAMED-UPSTREAM-CITED-ONLY "PC-S955-FORM-ONLY-CITATION PC-S957-ORDINARY-X PC-S957-FORM-Y PC-S958-FORM-CORE-ORDINARY-DOCS PC-S959-INLINE-FORM-CITATION" \
     "dropping any commit that carries a form line for the id demotes a commit that ALSO names it ordinarily, and S956 is what sees it"
   co_case filter-unanchored \
-    '    $0 ~ /^Not-discharged: PC-S[0-9]+(-[A-Z0-9]+)*$/ { next }' \
-    '    $0 ~ /Not-discharged: PC-S[0-9]+(-[A-Z0-9]+)*/ { next }' \
+    '    $0 ~ /^Not-discharged: PC-S[0-9]+(-[A-Za-z0-9_.-]+)*$/ { next }' \
+    '    $0 ~ /Not-discharged: PC-S[0-9]+(-[A-Za-z0-9_.-]+)*/ { next }' \
     PC-S959-INLINE-FORM-CITATION NAMED-UPSTREAM-CITED-ONLY "PC-S955-FORM-ONLY-CITATION PC-S956-BOTH-FORMS-CITATION PC-S957-ORDINARY-X PC-S957-FORM-Y PC-S958-FORM-CORE-ORDINARY-DOCS" \
     "an unanchored strip eats a mid-line mention and demotes it to a citation, and S959 is what sees it"
   co_case reach-unfiltered \
@@ -2743,7 +2771,7 @@ sb_case sibling-prefix PC-S1013-SHORT-ID-X "$SA" - \
   'named(ENVIRON["LR_M"], $1) { print }' '(named(ENVIRON["LR_M"], $1) || (match($1, /^PC-S[0-9]+/) && named(ENVIRON["LR_M"], substr($1, 1, RLENGTH)))) { print }'
 sb_case slug-unanchored PC-S1025-PREFIX-X "$SA" - \
   "an unanchored slug test names a sibling whose slug only prefixes a longer named one, and S1025 is what sees it" \
-  'if (c == "" || c !~ /[0-9A-Za-z-]/) return 1' 'return 1'
+  'if (c == "" || c !~ /[0-9A-Za-z_.-]/) return 1' 'return 1'
 sb_case first-touching-commit-only PC-S1017-TWO-COMMITS-X "$SA" - \
   "judging only the newest naming commit misses an older one that changed X's anchor, and S1017 is what sees it" \
   "printf '%s\\n' \"\$2\" | tr ',' '\\n' > \"\$LR_STAGE/nsb-shas\"" "printf '%s\\n' \"\${2%%,*}\" > \"\$LR_STAGE/nsb-shas\""
@@ -2903,14 +2931,15 @@ fi
 # MUTATION 2 — drop the id-shape guard. Entry A's prose label then matches the pre-base commit
 # that quotes it, and a wall of word-matched rows is exactly the lint an operator switches off.
 #
-# BOTH LAYERS GO. The guard is two conditions — the label contains only [A-Z0-9-], and it
-# contains at least one hyphen — and stripping either alone leaves the other still rejecting a
-# prose label. The first draft of this mutant removed only the charset arm, came out green, and
-# was therefore proving the layer it had left in place rather than the guard.
+# EVERY LAYER GOES. The guard is three conditions — the label opens `PC-`/`BL-`, it contains at
+# least one hyphen, and it EQUALS its own ledger_entry_id() — and stripping any subset leaves the
+# rest still rejecting a prose label. The first draft of this mutant removed only the charset arm,
+# came out green, and was therefore proving the layer it had left in place rather than the guard;
+# the two-deletion form survived again the release the shared-id-rule equality became the third.
 MUTG="$(dirname "$DIST")/mut-guard"
 rm -rf "$MUTG"; mkdir -p "$MUTG"
 cp "$(dirname "$CLOSER")"/*.sh "$MUTG/" 2>/dev/null
-sed -e '/not id-shaped: prose label/d' -e '/a single word is not an id/d' \
+sed -e '/not id-shaped: prose label/d' -e '/a single word is not an id/d' -e '/not the shared id rule/d' \
   "$CLOSER" > "$MUTG/ledger-reverify.sh"
 
 ASSERTIONS=$((ASSERTIONS + 1))
@@ -5455,32 +5484,8 @@ row_is "PC-FIXTURE-BARE-BOLD-MENTION-HOST" STILL-LIVE \
 row_is "PC-FIXTURE-MENTIONED-IN-A-BODY" ABSENT \
   "...and the mentioned id does not become an entry of its own"
 
-# THE MUTANTS. rl_mutant copies the whole reconcile directory, replaces a LITERAL string in one
-# named file with an exact expected count, and refuses the copy if the count is wrong, the file
-# did not change, or it does not parse. It can be called twice on one directory, for a layer that
-# spans two files. The control row for every one is nid_ctl, which no mutant here touches.
-rl_mutant() { # <dir> <file> <old> <new> <want-count> -> 0 iff applied exactly want-count times
-  local d="$1" f="$2" n
-  [ -f "$d/$f" ] || return 1
-  n="$(RL_O="$3" RL_N="$4" awk '
-    BEGIN { o = ENVIRON["RL_O"]; nw = ENVIRON["RL_N"]; c = 0 }
-    { s = $0; out = ""
-      while ((i = index(s, o)) > 0) { out = out substr(s, 1, i - 1) nw; s = substr(s, i + length(o)); c++ }
-      print out s > (FILENAME ".mut") }
-    END { print c }
-  ' "$d/$f")" || return 1
-  [ "$n" = "$5" ] || return 1
-  cmp -s "$d/$f" "$d/$f.mut" && return 1
-  mv "$d/$f.mut" "$d/$f"
-  bash -n "$d/$f" 2>/dev/null
-}
-rl_dir() { # <name> -> fresh copy of the reconcile directory on stdout
-  local d
-  d="$(dirname "$DIST")/mut-$1"; rm -rf "$d"; mkdir -p "$d"
-  cp "$(dirname "$CLOSER")"/*.sh "$(dirname "$CLOSER")"/*.md "$d/" 2>/dev/null
-  [ -f "$d/lib.sh" ] && [ -f "$d/ledger-reverify.sh" ] || return 1
-  printf '%s' "$d"
-}
+# THE MUTANTS. rl_mutant and rl_dir are hoisted above the shared control (lr_unit_id_class calls
+# them too). The control row for every one is nid_ctl, which no mutant here touches.
 RL_GATE='    if (!has_verify && !closed && label != "" && ledger_entry_id(label) != "")'
 BB_SHAPE='  if (l ~ /^\*\*`?(PC|BL)-[A-Za-z0-9_.-]+`?\*\*([ \t]+—|[ \t]*$)/) sh = "bullet"'
 
@@ -5491,9 +5496,17 @@ dp_kill mutation-receiptless-gate "$rl_m1" \
   "$nid_ctl" \
   'with the has_verify gate restored the named receipt-less entry emits nothing — the 0/0 row is what carries it to the naming query' \
   "$nid_ctlmsg"
-# m-guard — the extraction filter swapped for named_absorbed()'s local case guard (charset plus
-# a hyphen). The all-caps non-id heading then reaches the naming query and matches its commit.
-rl_m2="$(rl_dir rl-local-guard)" && rl_mutant "$rl_m2" ledger-reverify.sh 'ledger_entry_id(label) != "")' 'label ~ /^[A-Z0-9-]+$/ && label ~ /-/)' 1 || rl_m2=""
+# m-guard — the extraction filter swapped for the old local case guard (charset plus a hyphen),
+# AND named_absorbed()'s guard put back to that same shipped narrow form. Both layers, because
+# named_absorbed now asks the shared id rule itself: with only the filter swapped, the all-caps
+# non-id heading reaches the naming query and is refused there, and the mutant survives. With both
+# back, the heading reaches the query and matches its commit.
+rl_m2="$(rl_dir rl-local-guard)" \
+  && rl_mutant "$rl_m2" ledger-reverify.sh 'ledger_entry_id(label) != "")' 'label ~ /^[A-Z0-9-]+$/ && label ~ /-/)' 1 \
+  && rl_mutant "$rl_m2" ledger-reverify.sh '    PC-*|BL-*) : ;;' "    *[!A-Z0-9-]*|'') return 0 ;;" 1 \
+  && rl_mutant "$rl_m2" ledger-reverify.sh '    *) return 0 ;;                            # not id-shaped: prose label, nothing to ask' '    *) : ;;' 1 \
+  && rl_mutant "$rl_m2" ledger-reverify.sh '  label_is_own_entry_id "$_id" || return 0    # not the shared id rule: prose label, nothing to ask' '  :' 1 \
+  || rl_m2=""
 dp_kill mutation-receiptless-local-guard "$rl_m2" \
   '$2 ~ /^FIXTURE-CAPS-HEADING-NOT-AN-ID$/ && $1=="NAMED-UPSTREAM" {f=1} END{exit !f}' \
   "$nid_ctl" \
@@ -5734,6 +5747,145 @@ else
 fi
 
 } # end lr_unit_memo_lifecycle
+lr_unit_id_class() {
+# --- THE NAMING GUARDS ASK THE SHARED ID RULE, AND THE PREFIX ENDS AT THE SHARED ID CLASS --------
+# `named_absorbed` and `named_ambiguous` each opened with a local `[A-Z0-9-]` guard -- the narrow
+# spelling `ledger_entry_id()` was widened away from -- so an id carrying `.` or `_` got no naming
+# row of any kind: measured on the reference consumer, an open dotted entry named by one release
+# commit was silent while its two dash-only siblings named by the same commit closed. And the
+# sprint-prefix search read `_` and an id-continuing `.` as a boundary, so a commit naming only a
+# LONGER id was read as citing the bare prefix. Seeds S810-S817 and the prose label, seed.sh.
+#
+# SHIPS AHEAD OF ITS SUBJECT, like the B2 arms. Keyed on tokens only the fixed engine carries:
+# the guard's helper name, and the full-stop carve-out of the boundary class. A consumer whose
+# installed engine predates either SKIPs those arms; in the distribution they always run.
+idc_guard=1; idc_bound=1
+grep -qF 'label_is_own_entry_id' "$CLOSER" || idc_guard=0
+grep -qF '[.]([^0-9A-Za-z_-]' "$CLOSER" || idc_bound=0
+[ "$B2_ISDIST" = 1 ] && { idc_guard=1; idc_bound=1; }
+if [ "$idc_guard" = 0 ] && [ "$idc_bound" = 0 ]; then
+  LR_SKIPPED=1
+  printf '  SKIP  id-class naming arms -- the installed ledger-reverify.sh predates them; they land with the pull that carries this fixture\n'
+  return 0
+fi
+# LABELS ARE COMPARED WITH `==`, never the `~` of row_has/row_is: a dotted label read as a regex
+# matches ids it does not spell. Each cell is the FIRST NAMED-UPSTREAM-family status for that exact
+# label, or `none`; AMBIGUOUS cells read the prefix-keyed row.
+idc_kind() { # <rows> <label> -> status or none
+  printf '%s\n' "$1" | awk -F'\t' -v l="$2" '$2 == l && $1 ~ /^NAMED-UPSTREAM(-DOCS-ONLY|-CITED-ONLY|-OFF-SUBJECT)?$/ {print $1; f=1; exit} END{if (!f) print "none"}'
+}
+idc_amb() { # <rows> <prefix> -> AMBIGUOUS or none
+  printf '%s\n' "$1" | awk -F'\t' -v l="$2" '$2 == l && $1 == "NAMED-UPSTREAM-AMBIGUOUS" {f=1} END{print (f ? "AMBIGUOUS" : "none")}'
+}
+# THE CELLS, each `<tag>:<kind|amb>:<label>:<want>`, and the boundary cells only where the fixed
+# boundary is installed.
+IDC_CELLS="s810:k:PC-S810-3.2-DOTTED_SLUG-NAMED:NAMED-UPSTREAM s811:k:PC-S811-4.1_HEADING-FORM:NAMED-UPSTREAM s812:k:PC-S812-DASH-ONLY-CONTROL:NAMED-UPSTREAM s802:a:PC-S802:AMBIGUOUS s816:k:PC-S816-5.2-DOTTED_CITED:NAMED-UPSTREAM-CITED-ONLY prose:k:validate-fixture-gates.sh:none"
+[ "$idc_guard" = 1 ] || IDC_CELLS="s812:k:PC-S812-DASH-ONLY-CONTROL:NAMED-UPSTREAM prose:k:validate-fixture-gates.sh:none"
+[ "$idc_bound" = 1 ] && IDC_CELLS="$IDC_CELLS s813:k:PC-S813-UNDERSCORE-BOUNDARY:none s814:k:PC-S814-DOT-BOUNDARY:none s817:a:PC-S817:none s815:k:PC-S815-FULL-STOP-PREFIX:NAMED-UPSTREAM"
+idc_cell() { # <rows> <cell spec> -> the cell's reading
+  local _t="${2%%:*}" _r="${2#*:}" _m _l
+  _m="${_r%%:*}"; _r="${_r#*:}"; _l="${_r%:*}"
+  if [ "$_m" = a ]; then idc_amb "$1" "$_l"; else idc_kind "$1" "$_l"; fi
+}
+idc_why() {
+  case "$1" in
+    s810) echo "a dotted, underscored bullet id named by its full slug -> the plain kind, as any id" ;;
+    s811) echo "the same id class as a heading with an em-dash subtitle, the reference consumer's real shape" ;;
+    s812) echo "the dash-only control named by the same commit -> the plain kind under every engine" ;;
+    s802) echo "a prefix shared ONLY by dotted entries and cited bare -> one AMBIGUOUS row keyed on the prefix" ;;
+    s816) echo "a dotted id cited only on a Not-discharged: line -> the citation kind, never the plain one" ;;
+    prose) echo "a RECEIPTED lowercase prose label with a dash and a dot, named verbatim -> no naming row; it is not an entry id" ;;
+    s813) echo "the prefix mentioned only as <prefix>_X, a longer id -> \`_\` extends an id, so no naming row" ;;
+    s814) echo "the prefix mentioned only as <prefix>.3-X, a longer id -> an id-continuing \`.\` extends it, so no naming row" ;;
+    s817) echo "a SHARED prefix mentioned only as <prefix>_X -> no AMBIGUOUS row" ;;
+    s815) echo "the prefix followed by a full stop and a space -> punctuation, so the prefix IS cited: the presence twin" ;;
+  esac
+}
+for _c in $IDC_CELLS; do
+  ASSERTIONS=$((ASSERTIONS + 1))
+  _t="${_c%%:*}"; _w="${_c##*:}"; _g="$(idc_cell "$OUT" "$_c")"
+  if [ "$_g" = "$_w" ]; then printf '  ok    %-22s %s  (%s)\n' "id-class-$_t" "$_g" "$(idc_why "$_t")"
+  else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s read %s, want %s  (%s)\n' "id-class-$_t" "$_g" "$_w" "$(idc_why "$_t")"; fi
+done
+
+# THE MUTANTS run over a ledger cut to this block alone, each a copy of the whole reconcile
+# directory, each line-anchored with an exact expected count, refused when it changes nothing or
+# does not parse, and preceded by an UNMUTATED control over the same cut that must reproduce every
+# cell. A KILL IS THE EXACT SET OF CELLS THAT MOVED: the declared killer, plus any co-mover named
+# up front, and nothing else -- so each mutant is attributed to the arm that owns it.
+IDW="$(dirname "$DIST")/id-class"; mkdir -p "$IDW"
+awk '/^<!-- id-class block:/ {p=1; next} /^<!-- end id-class block -->/ {p=0} p' \
+  "$CONS/_bmad-output/ai-dlc-update/push-candidate-ledger.md" > "$IDW/ledger.md"
+idc_rows() { bash "$1" "$DIST" "$BASE" "$CONS" "$THEIRS" "$IDW/ledger.md" 2>/dev/null; }
+idc_read() { local _c _s=""; for _c in $IDC_CELLS; do _s="$_s ${_c%%:*}=$(idc_cell "$1" "$_c")"; done; printf '%s' "${_s# }"; }
+idc_want() { local _c _s=""; for _c in $IDC_CELLS; do _s="$_s ${_c%%:*}=${_c##*:}"; done; printf '%s' "${_s# }"; }
+ASSERTIONS=$((ASSERTIONS + 1))
+idc_ctl="$(idc_read "$(idc_rows "$CLOSER")")"
+if [ "$idc_ctl" != "$(idc_want)" ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s FIXTURE BROKEN -- the unmutated engine over the cut read {%s}, want {%s}; no mutant below is attributable\n' "id-class-control" "$idc_ctl" "$(idc_want)"
+  return 0
+fi
+printf '  ok    %-22s the unmutated engine over the cut reproduces every id-class cell\n' "id-class-control"
+# <tag> <moved cells "t=kind ..."> <why> then (<old> <new> <count>)... -> scored
+idc_case() {
+  local _tag="$1" _mv="$2" _why="$3" _d _r _c _t _w _g _bad=""
+  shift 3
+  ASSERTIONS=$((ASSERTIONS + 1))
+  _d="$(rl_dir "idc-$_tag")" || _d=""
+  while [ -n "$_d" ] && [ "$#" -ge 3 ]; do
+    rl_mutant "$_d" ledger-reverify.sh "$1" "$2" "$3" || _d=""
+    shift 3
+  done
+  if [ -z "$_d" ]; then FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s FIXTURE BROKEN -- the mutation DID NOT APPLY (an anchor matched the wrong count, or the mutant does not parse)\n' "mutation-$_tag"; return; fi
+  _r="$(idc_rows "$_d/ledger-reverify.sh")"
+  for _c in $IDC_CELLS; do
+    _t="${_c%%:*}"; _g="$(idc_cell "$_r" "$_c")"
+    case " $_mv " in *" $_t="*) _w=" $_mv "; _w="${_w#* $_t=}"; _w="${_w%% *}" ;; *) _w="${_c##*:}" ;; esac
+    [ "$_g" = "$_w" ] || _bad="$_bad $_t=$_g"
+  done
+  if [ -z "$_bad" ]; then printf '  ok    %-22s %s\n' "mutation-$_tag" "$_why"
+  else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the cells did not move exactly as declared {%s}; off by:%s\n' "mutation-$_tag" "$_mv" "$_bad"; fi
+}
+IDC_NA_CASE='    PC-*|BL-*) : ;;'
+IDC_NA_ELSE='    *) return 0 ;;                            # not id-shaped: prose label, nothing to ask'
+IDC_NA_EQ='  label_is_own_entry_id "$_id" || return 0    # not the shared id rule: prose label, nothing to ask'
+if [ "$idc_guard" = 1 ]; then
+  # named_absorbed's guard back to the shipped narrow form, every layer. S816 co-moves BY
+  # CONSTRUCTION: its citation row comes from named_absorbed too. S802 holds, because its row is
+  # named_ambiguous's, which this mutant does not touch -- that is what makes the two kills distinct.
+  idc_case narrow-named-absorbed "s810=none s811=none s816=none" \
+    "named_absorbed narrowed to [A-Z0-9-] loses both dotted ids, and id-class-s810/-s811 are what see it (s816, a citation from the same function, co-moves)" \
+    "$IDC_NA_CASE" "    *[!A-Z0-9-]*|'') return 0 ;;" 1 \
+    "$IDC_NA_ELSE" '    *) : ;;' 1 \
+    "$IDC_NA_EQ" '  :' 1
+  idc_case narrow-named-ambiguous "s802=none" \
+    "named_ambiguous narrowed to [A-Z0-9-] loses the prefix shared only by dotted entries, and id-class-s802 is what sees it" \
+    '  case "$_id" in PC-*|BL-*) : ;; *) return 0 ;; esac' "  case \"\$_id\" in *[!A-Z0-9-]*|'') return 0 ;; esac" 1
+  # WIDENING THE CLASS INSTEAD OF ANCHORING ON THE SHARED RULE: every id still reads right, and the
+  # receipted prose label is admitted and word-matched.
+  idc_case widen-class "prose=NAMED-UPSTREAM" \
+    "widening the guard to [A-Za-z0-9_.-] instead of asking the shared rule admits a receipted prose label, and id-class-prose is what sees it" \
+    "$IDC_NA_CASE" "    *[!A-Za-z0-9_.-]*|'') return 0 ;;" 1 \
+    "$IDC_NA_ELSE" '    *) : ;;' 1 \
+    "$IDC_NA_EQ" '  :' 1
+fi
+if [ "$idc_bound" = 1 ]; then
+  # ALL THREE BYTE-PAIRED SITES go back to the old boundary together: the two git EREs and the awk
+  # copy in named_cited_filter. Reverting one alone leaves the other rejecting the same commit,
+  # which reads as a citation row rather than as the defect.
+  idc_case narrow-boundary "s813=NAMED-UPSTREAM s814=NAMED-UPSTREAM s817=AMBIGUOUS" \
+    "a prefix boundary of [^0-9A-Za-z-] reads <prefix>_X and <prefix>.3-X as citing the bare prefix, and id-class-s813/-s814/-s817 are what see it; the full stop (s815) holds" \
+    '([^0-9A-Za-z_.-]|[.]([^0-9A-Za-z_-]|\$)|\$)' '([^0-9A-Za-z-]|\$)' 2 \
+    '"([^0-9A-Za-z_.-]|[.]([^0-9A-Za-z_-]|$)|$)"' '"([^0-9A-Za-z-]|$)"' 1
+  # THE CARVE-OUT, mirrored: every `.` read as id-continuing silences the full-stop citation.
+  idc_case dot-never-boundary "s815=none" \
+    "reading every . as id-continuing silences a prefix cited at the end of a sentence, and id-class-s815 is what sees it" \
+    '([^0-9A-Za-z_.-]|[.]([^0-9A-Za-z_-]|\$)|\$)' '([^0-9A-Za-z_.-]|\$)' 2 \
+    '"([^0-9A-Za-z_.-]|[.]([^0-9A-Za-z_-]|$)|$)"' '"([^0-9A-Za-z_.-]|$)"' 1
+fi
+
+} # end lr_unit_id_class
 
 # --- DISPATCH: this shard's units, then the joins that say they all ran -------------------------
 printf '  ok    %s\n' "$LR_JOIN_LINE"

@@ -484,7 +484,7 @@ else
   bad "the citation grammar has forked: engine {$(canon_of "$ENGINE" | tr '\n' ' ')} validator {$(canon_of "$VALIDATOR" | tr '\n' ' ')}"
 fi
 MUT_P="$WORK/pair-mutant.sh"
-sed 's|/^Not-discharged: PC-S\[0-9\]+(-\[A-Z0-9\]+)\*\$/|/^Not-discharged: PC-S[0-9]+(-[A-Z0-9]+)*$|' "$VALIDATOR" > "$MUT_P" || exit 2
+sed 's|/^Not-discharged: PC-S\[0-9\]+(-\[A-Za-z0-9_\.-\]+)\*\$/|/^Not-discharged: PC-S[0-9]+(-[A-Za-z0-9_.-]+)*$|' "$VALIDATOR" > "$MUT_P" || exit 2
 if cmp -s "$VALIDATOR" "$MUT_P"; then
   bad "the pair mutation matched nothing -- the validator's canonical regex was rewritten"
 elif pair_ok "$ENGINE" "$MUT_P"; then
@@ -498,7 +498,7 @@ fi
 # A validator whose canonical test lost its `$` would acquit it, so the self-probe seeds it
 # as an offender, and this mutant must be refused by that probe before any corpus is read.
 MUT_D="$WORK/drop-dollar.sh"
-sed 's|if (\$0 !~ /^Not-discharged: PC-S\[0-9\]+(-\[A-Z0-9\]+)\*\$/) print|if ($0 !~ /^Not-discharged: PC-S[0-9]+(-[A-Z0-9]+)*/) print|' "$VALIDATOR" > "$MUT_D" || exit 2
+sed 's|if (\$0 !~ /^Not-discharged: PC-S\[0-9\]+(-\[A-Za-z0-9_\.-\]+)\*\$/) print|if ($0 !~ /^Not-discharged: PC-S[0-9]+(-[A-Za-z0-9_.-]+)*/) print|' "$VALIDATOR" > "$MUT_D" || exit 2
 if cmp -s "$VALIDATOR" "$MUT_D"; then
   bad "the drop-\$ mutation matched nothing -- arm F's canonical test was rewritten"
 else
