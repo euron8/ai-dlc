@@ -610,7 +610,7 @@ named_cited_filter() {
   _out="$(printf '%s\n' "$1" | git -C "$DIST" log --no-walk=unsorted --stdin --format='%x01%h%n%B' 2>/dev/null \
     | LR_N="$2" LR_P="$3" LC_ALL=C awk '
     function flush() { if (h != "" && keep) print h }
-    BEGIN { n = ENVIRON["LR_N"]; p = ENVIRON["LR_P"]; re = p "([^0-9A-Za-z-]|$)" }
+    BEGIN { n = ENVIRON["LR_N"]; p = ENVIRON["LR_P"]; re = p "([^0-9A-Za-z_.-]|[.]([^0-9A-Za-z_-]|$)|$)" }
     substr($0, 1, 1) == "\001" { flush(); h = substr($0, 2); keep = 0; next }
     $0 ~ /^Not-discharged: PC-S[0-9]+(-[A-Za-z0-9_.-]+)*$/ { next }
     (p == "" && index($0, n)) || (p != "" && $0 ~ re) { keep = 1 }
@@ -723,7 +723,18 @@ named_absorbed() { # <label> -> "<how> <n> <sha>,<sha>,... <code|docs|cited>" if
     # word boundary rather than `\b`, which BSD and GNU disagree about: the next character must not
     # extend the id, so a digit, a letter or a dash all disqualify. The SLUG search above stays `-F`
     # -- a full slug is already specific, and a fixed string is the right tool for it.
-    _hits="$(git -C "$DIST" log -E --grep="${_pfx}([^0-9A-Za-z-]|\$)" --format=%h "$THEIRS" 2>/dev/null)"
+    #
+    # THE BOUNDARY IS THE SHARED ID CLASS `[A-Za-z0-9_.-]` OF lib.sh `ledger_entry_id()`, not the
+    # narrower `[0-9A-Za-z-]` it was written with, which read `_` and `.` as boundaries: a commit
+    # mentioning only `<prefix>_X` or `<prefix>.3-X` -- a DIFFERENT, longer id -- was read as citing
+    # the bare prefix. ONE CARVE-OUT, MEASURED: a `.` that is followed by a non-id byte or the end
+    # of the line is SENTENCE PUNCTUATION, not part of an id. 8 commits on the distribution main
+    # (47d5fcae) cite a bare sprint prefix with a full stop after it and 0 with an id byte after the
+    # dot; making every `.` non-boundary would have silenced all 8. `[.]` rather than an escaped dot,
+    # so the same bytes mean the same thing in git ERE and in the awk string paired with it in
+    # `named_cited_filter` (an awk dynamic-regex string eats one backslash). Paired, byte for byte,
+    # with the copy in `named_ambiguous` and the awk copy; change all three or none.
+    _hits="$(git -C "$DIST" log -E --grep="${_pfx}([^0-9A-Za-z_.-]|[.]([^0-9A-Za-z_-]|\$)|\$)" --format=%h "$THEIRS" 2>/dev/null)"
     _all="$_hits"
     _hits="$(named_cited_filter "$_all" "" "$_pfx")"
     _how=prefix
@@ -1017,8 +1028,8 @@ lr_sib_split() {
 # parent with no diff for P contributes no block), EVERY such block must satisfy BOTH:
 #   - no substring of any of X's receipts on P is on a `+`/`-` content line of the block (headers and
 #     context are not content: the diff is taken at `-U0` and only lines after a hunk header count);
-#   - some Y != X that c names by its FULL SLUG (followed by a byte outside `[0-9A-Za-z-]`, or by the
-#     end of a line) has a `theirs_has|theirs_lacks` receipt resolving to P whose substring is on
+#   - some Y != X that c names by its FULL SLUG (followed by a byte outside `[0-9A-Za-z_.-]`, a full
+#     stop that is itself followed by a non-id byte, or the end of a line) has a `theirs_has|theirs_lacks` receipt resolving to P whose substring is on
 #     such a line of that SAME block.
 # At least one block must exist. Matching is literal (`index`), values travel through ENVIRON and a
 # file read with a checked `getline`, never `awk -v` and never a regex. Receipts are split by the
@@ -1069,11 +1080,15 @@ named_sibling() {
     # message with a non-slug byte (or nothing) after it. EVERY occurrence is tried, so a slug that
     # is a prefix of a longer named slug is named only where it stands alone.
     LR_M="$_msg" LR_X="$_label" LC_ALL=C awk -F'\t' '
-      function named(m, n,   i, r, c) {
+      # THE NEXT BYTE IS TESTED AGAINST THE SHARED ID CLASS, with the same full-stop carve-out as
+      # the prefix ERE in named_absorbed: a dot followed by a non-id byte or the end is punctuation.
+      function named(m, n,   i, r, c, d) {
         r = m
         while ((i = index(r, n)) > 0) {
           c = substr(r, i + length(n), 1)
-          if (c == "" || c !~ /[0-9A-Za-z-]/) return 1
+          d = substr(r, i + length(n) + 1, 1)
+          if (c == "." && (d == "" || d !~ /[0-9A-Za-z_-]/)) return 1
+          if (c == "" || c !~ /[0-9A-Za-z_.-]/) return 1
           r = substr(r, i + 1)
         }
         return 0
@@ -1237,7 +1252,8 @@ named_ambiguous() { # <label> -> "<n-commits> <sha>,<sha>,... <n-entries> <code|
   # sibling now: the commit count, then the whole newest-first list, `%h` so no per-sha
   # `rev-parse --short` is paid, then the entry count the row's "and N entries in this ledger carry
   # it" is built from (ledger-rotate's fixture parses that phrase), then the reach.
-  _hits="$(git -C "$DIST" log -E --grep="${_pfx}([^0-9A-Za-z-]|\$)" --format=%h "$THEIRS" 2>/dev/null)"
+  # THE SAME BOUNDARY as the prefix arm of `named_absorbed`, byte for byte -- see its comment.
+  _hits="$(git -C "$DIST" log -E --grep="${_pfx}([^0-9A-Za-z_.-]|[.]([^0-9A-Za-z_-]|\$)|\$)" --format=%h "$THEIRS" 2>/dev/null)"
   # A prefix cited ONLY in the not-discharged form is SILENT here, not a row: this row attributes
   # nothing to any entry already, and a citation that disowns the discharge adds nothing to read.
   _hits="$(named_cited_filter "$_hits" "" "$_pfx")"
