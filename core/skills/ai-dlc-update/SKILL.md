@@ -2566,7 +2566,9 @@ declared sites, not everywhere unconditionally.
      Two other close forms are honoured
      and neither takes a version: `**WITHDRAWN (<date>) — <why>**` for an entry whose premise was
      false, and `**CLOSED AS REJECTED — BY DESIGN, adjudicated <date>**` for a candidate upstream
-     considered and declined. Never invent a version to make a close archivable.
+     considered and declined. Never invent a version to make a close archivable. When the
+     row's detail says the receipt ALREADY did not reproduce at base, `v<theirs>` is the wrong
+     version: annotate with the release that detail routes you to, never `v<theirs>`.
      **Do NOT delete the entry** — retro and the
      §8.1 fan-in read it. The annotation is an `Edit` under `_bmad-output/ai-dlc-update/**`
      (the updater's own directory, carved out of the Rule 29 acknowledge hook), never a

@@ -1649,6 +1649,11 @@ sh_base_rc() { # <sh_prog> -> the receipt's status with $THEIRS REBOUND to $BASE
     bash -c "$1" </dev/null >/dev/null 2>&1
 }
 sh_base_control() { # <receipt-text> <sh_prog> <theirs-side rc> -- accumulates, emits nothing
+  # SBC_CLOSE_AT_BASE IS THIS CALL'S OWN ANSWER, for the CLOSE-CANDIDATE detail the caller emits
+  # next: 1 only when the close side ALSO exited non-zero at base, the same per-receipt fact the
+  # RECEIPTS-UNDECIDED numerator counts. Reset FIRST, so an early return never leaves the previous
+  # receipt's answer standing.
+  SBC_CLOSE_AT_BASE=0
   refs_differ || return 0
   sh_base_eligible "$1" || return 0
   local _brc
@@ -1669,7 +1674,7 @@ sh_base_control() { # <receipt-text> <sh_prog> <theirs-side rc> -- accumulates, 
   if [ "$3" -eq 0 ]; then
     [ "$_brc" -eq 0 ] && sh_live_undecided=$(( ${sh_live_undecided:-0} + 1 ))
   else
-    [ "$_brc" -ne 0 ] && sh_close_undecided=$(( ${sh_close_undecided:-0} + 1 ))
+    [ "$_brc" -ne 0 ] && { sh_close_undecided=$(( ${sh_close_undecided:-0} + 1 )); SBC_CLOSE_AT_BASE=1; }
   fi
   return 0
 }
@@ -2553,11 +2558,15 @@ while IFS="$(printf '\t')" read -r label ord directive; do
   # entry): the name is the ONLY mechanical signal such an entry has, and this block is the only
   # one its row reaches -- the `0/0` skip below the naming block keeps it out of the verb dispatch.
   na=""; nam=""
-  case "$ord" in 1/*|0/0|"") na="$(named_absorbed "$label")"; [ -n "$na" ] || nam="$(named_ambiguous "$label")" ;; esac
+  case "$ord" in 1/*|0/0|"") na="$(named_absorbed "$label")"; [ -n "$na" ] || nam="$(named_ambiguous "$label")"; NA_ENTRY_SHAS="" ;; esac
   if [ -n "$na" ]; then
     na_h="$(printf '%s' "$na" | awk '{print $1}')"
     na_n="$(printf '%s' "$na" | awk '{print $2}')"
     na_c="$(printf '%s' "$na" | awk '{print $3}')"
+    # KEPT FOR THE ENTRY, not the receipt: the naming is asked on the first receipt only, and a
+    # later receipt's CLOSE-CANDIDATE detail reads these shas when its base control says the pull
+    # did not move it. Reset above on every first receipt, so it never leaks to the next entry.
+    NA_ENTRY_SHAS="$na_c"
     na_r="$(printf '%s' "$na" | awk '{print $4}')"
     if [ "${na_n:-1}" -gt 1 ] 2>/dev/null; then
       # ALL OF THEM, newest first, none elected. Naming two ends told the operator to read two
@@ -3021,7 +3030,21 @@ while IFS="$(printf '\t')" read -r label ord directive; do
             # attributes the absorption to -- and the row goes on to name a version to annotate
             # with. Counted, never silenced: the close still stands for the operator to confirm.
             sh_base_control "$rest" "$sh_prog" "$sh_rc"
+            # AND WHEN IT DID EXIT NON-ZERO AT BASE, THIS ROW MUST NOT OFFER `v$TV`. Measured on a
+            # scratch clone of the reference consumer: the detail said annotate v<theirs> while the
+            # same run's RECEIPTS-UNDECIDED row said base..theirs was not the event, and the fix had
+            # landed two releases earlier at a commit the same run's NAMED-UPSTREAM row listed. The
+            # status stays CLOSE-CANDIDATE; only the version it hands the operator changes.
+            if [ "${SBC_CLOSE_AT_BASE:-0}" = 1 ]; then
+              if [ -n "${NA_ENTRY_SHAS:-}" ]; then
+                _cc_ver="upstream's history names this entry's id in commit(s) ${NA_ENTRY_SHAS} (this run's NAMED-UPSTREAM-family row): read them and annotate with the release that CARRIES the absorbing one"
+              else
+                _cc_ver="find the release at which this receipt first stops reproducing (bisect THEIRS between earlier distribution releases) and annotate with THAT version"
+              fi
+              emit CLOSE-CANDIDATE "$label" "verify sh: no longer reproduces at theirs ($TV) — but it ALREADY did not reproduce at base ($BASE): the base control exited non-zero too, so base..theirs did NOT absorb this and v$TV is NOT the version to annotate. To close, ${_cc_ver}: 'ADOPTED UPSTREAM (v<that release>, verified <date>)'. Never invent a version. Do NOT delete the entry. Every consumer-relative path this receipt names still exists, so the exit is not a moved subject; a subject named in a form this cannot see is still possible, so confirm before draining."
+            else
             emit CLOSE-CANDIDATE "$label" "verify sh: no longer reproduces at theirs ($TV) — likely absorbed. Confirm, then annotate 'ADOPTED UPSTREAM (v$TV, verified <date>)'. Do NOT delete the entry. Every consumer-relative path this receipt names still exists, so the exit is not a moved subject; a subject named in a form this cannot see is still possible, so confirm before draining."
+            fi
           fi ;;
       esac
       ;;
