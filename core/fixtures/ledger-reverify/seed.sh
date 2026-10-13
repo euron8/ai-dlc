@@ -253,6 +253,87 @@ printf '#!/bin/sh\necho s902 second\n' > "$DIST/core/scripts/s902-second.sh"
 git -C "$DIST" add -A
 git -C "$DIST" commit -q -m 'fix: a second change citing PC-S902'
 
+# --- pre-base: IDS IN THE SHARED CLASS `[A-Za-z0-9_.-]`, AND THE PREFIX BOUNDARY THAT CLASS IMPLIES ---
+#
+# `named_absorbed` and `named_ambiguous` opened with a local `[A-Z0-9-]` guard, so an id carrying
+# `.` or `_` got no naming row at all; the sprint-prefix search read `_` and an id-continuing `.` as
+# the END of the prefix. Every commit below touches core/ and each entry's receipt path, so the
+# reach and subject predicates score the plain kind and only the id class decides:
+#
+#   PC-S810  a DOTTED+UNDERSCORED bullet id named by full slug          -> NAMED-UPSTREAM
+#   PC-S811  the same, as a `## ` HEADING with an em-dash subtitle      -> NAMED-UPSTREAM
+#            (the reference consumer's real instance is this shape)
+#   PC-S812  a dash-only id named by the SAME commit, the control       -> NAMED-UPSTREAM
+#   PC-S802  a prefix shared ONLY by two dotted entries, named by prefix -> one AMBIGUOUS row
+#   PC-S816  a dotted id cited only on a `Not-discharged:` line         -> NAMED-UPSTREAM-CITED-ONLY
+#   PC-S813  prefix mentioned only as `PC-S813_…`, a longer id          -> no naming row
+#   PC-S814  prefix mentioned only as `PC-S814.3-…`, a longer id        -> no naming row
+#   PC-S817  a SHARED prefix mentioned only as `PC-S817_…`              -> no AMBIGUOUS row
+#   PC-S815  prefix followed by a FULL STOP and a space                 -> NAMED-UPSTREAM (prefix)
+#   validate-fixture-gates.sh  a RECEIPTED lowercase prose label with a dash and a dot, named
+#            verbatim by a commit -> no naming row: a widened class admits it, the shared rule not
+for f in s810-subject s811-subject s812-subject; do printf '#!/bin/sh\necho %s\n' "$f" > "$DIST/core/scripts/$f.sh"; done
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'fix: absorb PC-S810-3.2-DOTTED_SLUG-NAMED, PC-S811-4.1_HEADING-FORM and PC-S812-DASH-ONLY-CONTROL'
+printf '#!/bin/sh\necho s802\n' > "$DIST/core/scripts/s802-subject.sh"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'fix: a change citing PC-S802 for both of its dotted entries'
+printf '#!/bin/sh\necho s816\n' > "$DIST/core/scripts/s816-other.sh"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m '0.099.7 -- a release that fixes something else again' \
+  -m 'Not-discharged: PC-S816-5.2-DOTTED_CITED'
+printf '#!/bin/sh\necho s813\n' > "$DIST/core/scripts/s813-other.sh"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'fix: a change to PC-S813_UNDERSCORE_CONTINUES, a longer id'
+printf '#!/bin/sh\necho s814\n' > "$DIST/core/scripts/s814-other.sh"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'fix: a change to PC-S814.3-DOT-CONTINUES, a longer id'
+printf '#!/bin/sh\necho s817\n' > "$DIST/core/scripts/s817-other.sh"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'fix: a change to PC-S817_SHARED_CONTINUES, a longer id'
+printf '#!/bin/sh\necho s815\n' > "$DIST/core/scripts/s815-subject.sh"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'fix: absorb the defect filed as PC-S815. Nothing else.'
+printf '#!/bin/sh\necho gates\n' > "$DIST/core/scripts/validate-fixture-gates.sh"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'fix: tighten validate-fixture-gates.sh'
+# THE SHAPES, ASSERTED AGAINST THE REPO. The shared-prefix slugs appear in no message and the bare
+# PC-S802 token in exactly one; the three continuation prefixes are followed by an id byte in one
+# message each and by a boundary byte in none; the full stop is followed by a space.
+s8_msgs="$(git -C "$DIST" log -9 --format=%B HEAD)"
+s8_slug="$(printf '%s\n' "$s8_msgs" | grep -cE 'PC-S802-|PC-S817-')" || s8_slug=0
+s8_tok="$(printf '%s\n' "$s8_msgs" | grep -cE 'PC-S802 ')" || s8_tok=0
+s8_cont="$(printf '%s\n' "$s8_msgs" | grep -cE 'PC-S81[347][_.][A-Z0-9]')" || s8_cont=0
+s8_bnd="$(printf '%s\n' "$s8_msgs" | grep -cE 'PC-S81[347]([^0-9A-Za-z_.-]|[.][^0-9A-Za-z_-]|[.]?$)')" || s8_bnd=0
+s8_stop="$(printf '%s\n' "$s8_msgs" | grep -cE 'PC-S815[.] ')" || s8_stop=0
+[ "$s8_slug" = 0 ] && [ "$s8_tok" = 1 ] && [ "$s8_cont" = 3 ] && [ "$s8_bnd" = 0 ] && [ "$s8_stop" = 1 ] \
+  || { echo "seed: the id-class shapes are wrong (shared slugs $s8_slug want 0, PC-S802 token $s8_tok want 1, continuations $s8_cont want 3, bare boundaries $s8_bnd want 0, full stop $s8_stop want 1)" >&2; exit 1; }
+
+# THE SUBJECTS OF THREE `sh` CLOSE-CANDIDATE DETAIL CELLS (run.sh lr_unit_id_class, which appends
+# their entries to its own cut ledger, so the main ledger and its RECEIPTS-UNDECIDED row do not
+# move). s818 and s819 exist from here on, so a receipt asserting their ABSENCE at a ref exits
+# non-zero at base AND at theirs: closed already at base. Only s818's id is named by a commit.
+printf '#!/bin/sh\necho s818\n' > "$DIST/core/scripts/s818-subject.sh"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'fix: absorb PC-S818-6.1-SH_CLOSED_AT_BASE'
+printf '#!/bin/sh\necho s819\n' > "$DIST/core/scripts/s819-subject.sh"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'fix: a subject no entry id is named beside'
+# s822: cited ONLY on a Not-discharged: line. s823: named only by a docs-only commit. Each commit
+# adds the file its entry's receipt asserts absent, so both receipts are closed at base already.
+printf '#!/bin/sh\necho s822\n' > "$DIST/core/scripts/s822-other.sh"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m '0.099.8 -- a release that fixes something else once more' \
+  -m 'Not-discharged: PC-S822-7.1-SH_CITED_ONLY'
+printf 'a plan line\n' > "$DIST/docs/s823-plan.md"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'docs(plan): cross-reference PC-S823-7.2-SH_DOCS_ONLY'
+# s824: a DUPLICATE id (two consecutive entries share it). This core commit names it and adds the
+# file its first copy's receipt reads, so that copy is a plain NAMED-UPSTREAM.
+printf '#!/bin/sh\necho s824\n' > "$DIST/core/scripts/s824-subject.sh"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'fix: absorb PC-S824-DUPLICATE-ID'
+
 # --- base: neither marker present ---
 printf '# SKILL\nrule one\nrule two\n' > "$SK"
 printf '0.100.0\n' > "$DIST/VERSION"
@@ -416,6 +497,56 @@ cat > "$LED" <<'LEDGER'
   upstream names neither its slug nor `PC-S903`. It must stay silent, or the prefix arm is
   matching on shape rather than on evidence.
   verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+<!-- id-class block: the run.sh unit lr_unit_id_class cuts its small ledger between these markers -->
+- **PC-S810-3.2-DOTTED_SLUG-NAMED** — an id carrying `.` and `_`, named by its full slug in a core
+  commit. The shared id rule admits it, so it must read NAMED-UPSTREAM like any dash-only id.
+  verify: theirs_lacks core/scripts/s810-subject.sh "MARKER_A"
+
+- **PC-S812-DASH-ONLY-CONTROL** — named by the SAME commit as the two dotted ids, the control: a
+  dash-only id every engine has named.
+  verify: theirs_lacks core/scripts/s812-subject.sh "MARKER_A"
+
+- **PC-S802-1.1-FIRST_DOTTED** — shares `PC-S802` with the entry below, and upstream cites only the
+  prefix. Both carriers are dotted, so the AMBIGUOUS row exists only if the guard admits them.
+  verify: theirs_lacks core/scripts/s802-subject.sh "MARKER_A"
+
+- **PC-S802-2.0-SECOND_DOTTED** — the other half of the dotted pair.
+  verify: theirs_lacks core/scripts/s802-subject.sh "MARKER_A"
+
+- **PC-S816-5.2-DOTTED_CITED** — cited ONLY on a `Not-discharged:` line, dotted. It must read
+  NAMED-UPSTREAM-CITED-ONLY, never the plain kind.
+  verify: theirs_lacks core/scripts/s816-other.sh "MARKER_A"
+
+- **PC-S813-UNDERSCORE-BOUNDARY** — upstream mentions only `PC-S813_…`, a longer id. `_` extends an
+  id, so the prefix is not cited and no naming row may appear.
+  verify: theirs_lacks core/scripts/s813-other.sh "MARKER_A"
+
+- **PC-S814-DOT-BOUNDARY** — upstream mentions only `PC-S814.3-…`, a longer id. A `.` followed by an
+  id byte extends the id, so no naming row may appear.
+  verify: theirs_lacks core/scripts/s814-other.sh "MARKER_A"
+
+- **PC-S817-SHARED-FIRST** — shares `PC-S817` with the entry below; upstream mentions only
+  `PC-S817_…`, so no AMBIGUOUS row may appear.
+  verify: theirs_lacks core/scripts/s817-other.sh "MARKER_A"
+
+- **PC-S817-SHARED-SECOND** — the other half of that pair.
+  verify: theirs_lacks core/scripts/s817-other.sh "MARKER_A"
+
+- **PC-S815-FULL-STOP-PREFIX** — upstream cites `PC-S815.` at the end of a sentence. A full stop
+  followed by a space is punctuation, so the prefix IS cited and the row is NAMED-UPSTREAM.
+  verify: theirs_lacks core/scripts/s815-subject.sh "MARKER_A"
+
+- **`validate-fixture-gates.sh`** — a RECEIPTED prose label: lowercase, a dash and a dot, and a
+  pre-base commit names it verbatim. It is not an entry id, so no naming row may appear.
+  verify: theirs_lacks core/scripts/validate-fixture-gates.sh "MARKER_A"
+
+## PC-S811-4.1_HEADING-FORM — a heading id in the shared class, with an em-dash subtitle
+
+The reference consumer's real instance is this shape. Named by the same commit as PC-S810's slug.
+
+verify: theirs_lacks core/scripts/s811-subject.sh "MARKER_A"
+<!-- end id-class block -->
 
 <!-- Each PC-S904..S906 and PC-S950..S959 entry anchors its receipt on a file its OWN naming commit
 (or, for S954, its release span) touches. A naming set that reaches code and changes none of the

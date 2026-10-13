@@ -610,23 +610,46 @@ named_cited_filter() {
   _out="$(printf '%s\n' "$1" | git -C "$DIST" log --no-walk=unsorted --stdin --format='%x01%h%n%B' 2>/dev/null \
     | LR_N="$2" LR_P="$3" LC_ALL=C awk '
     function flush() { if (h != "" && keep) print h }
-    BEGIN { n = ENVIRON["LR_N"]; p = ENVIRON["LR_P"]; re = p "([^0-9A-Za-z-]|$)" }
+    BEGIN { n = ENVIRON["LR_N"]; p = ENVIRON["LR_P"]; re = p "([^0-9A-Za-z_.-]|[.]([^0-9A-Za-z_-]|$)|$)" }
     substr($0, 1, 1) == "\001" { flush(); h = substr($0, 2); keep = 0; next }
-    $0 ~ /^Not-discharged: PC-S[0-9]+(-[A-Z0-9]+)*$/ { next }
+    $0 ~ /^Not-discharged: PC-S[0-9]+(-[A-Za-z0-9_.-]+)*$/ { next }
     (p == "" && index($0, n)) || (p != "" && $0 ~ re) { keep = 1 }
     END { flush() }')" || { printf '%s\n' "$1"; return 0; }
   printf '%s\n' "$_out" | grep . || true
 }
 
+# A LABEL IS ASKED ABOUT ONLY WHEN IT *IS* AN ENTRY ID: it must EQUAL its own `ledger_entry_id()`,
+# the shared rule from lib.sh, asked through awk exactly as the `manual` dispatch below asks it. No
+# local restatement of the character class. Both naming guards used to carry one -- `[A-Z0-9-]`,
+# the narrow spelling lib.sh widened for `_` and `.` -- and it went blind on the widened forms.
+# Measured on a scratch clone of the reference consumer at its 0.777.0 reconcile branch: an open
+# `PC-S317-3.2-...` entry, named by one distribution release commit, got NO NAMED-UPSTREAM-family
+# row; its two dash-only siblings named by the same commit closed. WIDENING THE CLASS INSTEAD IS
+# WRONG IN THE OTHER DIRECTION: it admits a RECEIPTED prose label such as `validate-ci-gates.sh`
+# (lowercase, a dash, a dot), which `git log -F --grep` then matches by its words, and a receipted
+# all-caps heading. Equality with the shared rule admits every id lib.sh admits and nothing else.
+#
+# EMPTY IS REFUSED HERE, NOT LEFT TO THE CALLER: `ledger_entry_id("")` is "" and "" equals "", so
+# an unguarded equality accepts the empty label. One line only, so a stray second line cannot vote.
+# Each caller runs a FORK-FREE `PC-*|BL-*` prefix refusal before this, so a prose label never pays
+# the awk fork; that is a prefix test, not a second copy of the class.
+label_is_own_entry_id() { # <label> -> rc 0 iff the label equals ledger_entry_id(label)
+  printf '%s\n' "$1" | LC_ALL=C awk "$(ledger_entry_awk)$(ledger_entry_id_awk)"'
+    NR == 1 && $0 != "" && ledger_entry_id($0) == $0 { ok = 1 }
+    END { exit !(ok && NR == 1) }'
+}
+
 named_absorbed() { # <label> -> "<how> <n> <sha>,<sha>,... <code|docs|cited>" if upstream's history names it, else ""
   local _id="$1" _hits _all _list _n _pfx _how _h
   case "$_id" in
-    *[!A-Z0-9-]*|'') return 0 ;;              # not id-shaped: prose label, nothing to ask
+    PC-*|BL-*) : ;;
+    *) return 0 ;;                            # not id-shaped: prose label, nothing to ask
   esac
   case "$_id" in
     *-*) : ;;
     *)   return 0 ;;                          # a single word is not an id
   esac
+  label_is_own_entry_id "$_id" || return 0    # not the shared id rule: prose label, nothing to ask
   _how=slug
   # THE WHOLE MATCH SET, NOT ONE COMMIT OF IT. This was `| tail -1` -- the OLDEST commit whose
   # MESSAGE names the id -- and the row then reported that commit's version as the absorbing
@@ -700,7 +723,18 @@ named_absorbed() { # <label> -> "<how> <n> <sha>,<sha>,... <code|docs|cited>" if
     # word boundary rather than `\b`, which BSD and GNU disagree about: the next character must not
     # extend the id, so a digit, a letter or a dash all disqualify. The SLUG search above stays `-F`
     # -- a full slug is already specific, and a fixed string is the right tool for it.
-    _hits="$(git -C "$DIST" log -E --grep="${_pfx}([^0-9A-Za-z-]|\$)" --format=%h "$THEIRS" 2>/dev/null)"
+    #
+    # THE BOUNDARY IS THE SHARED ID CLASS `[A-Za-z0-9_.-]` OF lib.sh `ledger_entry_id()`, not the
+    # narrower `[0-9A-Za-z-]` it was written with, which read `_` and `.` as boundaries: a commit
+    # mentioning only `<prefix>_X` or `<prefix>.3-X` -- a DIFFERENT, longer id -- was read as citing
+    # the bare prefix. ONE CARVE-OUT, MEASURED: a `.` that is followed by a non-id byte or the end
+    # of the line is SENTENCE PUNCTUATION, not part of an id. 8 commits on the distribution main
+    # (47d5fcae) cite a bare sprint prefix with a full stop after it and 0 with an id byte after the
+    # dot; making every `.` non-boundary would have silenced all 8. `[.]` rather than an escaped dot,
+    # so the same bytes mean the same thing in git ERE and in the awk string paired with it in
+    # `named_cited_filter` (an awk dynamic-regex string eats one backslash). Paired, byte for byte,
+    # with the copy in `named_ambiguous` and the awk copy; change all three or none.
+    _hits="$(git -C "$DIST" log -E --grep="${_pfx}([^0-9A-Za-z_.-]|[.]([^0-9A-Za-z_-]|\$)|\$)" --format=%h "$THEIRS" 2>/dev/null)"
     _all="$_hits"
     _hits="$(named_cited_filter "$_all" "" "$_pfx")"
     _how=prefix
@@ -994,8 +1028,8 @@ lr_sib_split() {
 # parent with no diff for P contributes no block), EVERY such block must satisfy BOTH:
 #   - no substring of any of X's receipts on P is on a `+`/`-` content line of the block (headers and
 #     context are not content: the diff is taken at `-U0` and only lines after a hunk header count);
-#   - some Y != X that c names by its FULL SLUG (followed by a byte outside `[0-9A-Za-z-]`, or by the
-#     end of a line) has a `theirs_has|theirs_lacks` receipt resolving to P whose substring is on
+#   - some Y != X that c names by its FULL SLUG (followed by a byte outside `[0-9A-Za-z_.-]`, a full
+#     stop that is itself followed by a non-id byte, or the end of a line) has a `theirs_has|theirs_lacks` receipt resolving to P whose substring is on
 #     such a line of that SAME block.
 # At least one block must exist. Matching is literal (`index`), values travel through ENVIRON and a
 # file read with a checked `getline`, never `awk -v` and never a regex. Receipts are split by the
@@ -1046,11 +1080,15 @@ named_sibling() {
     # message with a non-slug byte (or nothing) after it. EVERY occurrence is tried, so a slug that
     # is a prefix of a longer named slug is named only where it stands alone.
     LR_M="$_msg" LR_X="$_label" LC_ALL=C awk -F'\t' '
-      function named(m, n,   i, r, c) {
+      # THE NEXT BYTE IS TESTED AGAINST THE SHARED ID CLASS, with the same full-stop carve-out as
+      # the prefix ERE in named_absorbed: a dot followed by a non-id byte or the end is punctuation.
+      function named(m, n,   i, r, c, d) {
         r = m
         while ((i = index(r, n)) > 0) {
           c = substr(r, i + length(n), 1)
-          if (c == "" || c !~ /[0-9A-Za-z-]/) return 1
+          d = substr(r, i + length(n) + 1, 1)
+          if (c == "." && (d == "" || d !~ /[0-9A-Za-z_-]/)) return 1
+          if (c == "" || c !~ /[0-9A-Za-z_.-]/) return 1
           r = substr(r, i + 1)
         }
         return 0
@@ -1159,7 +1197,7 @@ named_sibling() {
 # ledger entries carry it, and nothing in the commit says which -- so the operator reads the commit.
 named_ambiguous() { # <label> -> "<n-commits> <sha>,<sha>,... <n-entries> <code|docs>" when the prefix is shared
   local _id="$1" _pfx _n _c _hits
-  case "$_id" in *[!A-Z0-9-]*|'') return 0 ;; esac
+  case "$_id" in PC-*|BL-*) : ;; *) return 0 ;; esac
   # THE FORK-FREE GUARDS RUN FIRST, and that ordering is the whole cost of this function. All
   # four are pure predicates that return empty, so the order they are asked in cannot change the
   # answer -- only how many history walks are paid for an id that was never going to produce a
@@ -1180,6 +1218,10 @@ named_ambiguous() { # <label> -> "<n-commits> <sha>,<sha>,... <n-entries> <code|
       case "${_pfx#S}" in ""|*[!0-9]*) _pfx="" ;; *) _pfx="PC-$_pfx" ;; esac ;;
   esac
   [ -n "$_pfx" ] || return 0
+  # THE SHARED ID RULE, after the fork-free refusals and before `prefix_entry_count`, which forks.
+  # Its own guard, not inherited from `named_absorbed`: this function receives the same label that
+  # one just refused, and a prefix-shaped prose label would otherwise reach the prefix walk here.
+  label_is_own_entry_id "$_id" || return 0
   _n="$(prefix_entry_count "$_pfx")"
   [ "$_n" -gt 1 ] 2>/dev/null || return 0
   # READ INTO A VARIABLE, THEN TEST. `| grep -q .` leaves at its first match while git log is
@@ -1210,7 +1252,8 @@ named_ambiguous() { # <label> -> "<n-commits> <sha>,<sha>,... <n-entries> <code|
   # sibling now: the commit count, then the whole newest-first list, `%h` so no per-sha
   # `rev-parse --short` is paid, then the entry count the row's "and N entries in this ledger carry
   # it" is built from (ledger-rotate's fixture parses that phrase), then the reach.
-  _hits="$(git -C "$DIST" log -E --grep="${_pfx}([^0-9A-Za-z-]|\$)" --format=%h "$THEIRS" 2>/dev/null)"
+  # THE SAME BOUNDARY as the prefix arm of `named_absorbed`, byte for byte -- see its comment.
+  _hits="$(git -C "$DIST" log -E --grep="${_pfx}([^0-9A-Za-z_.-]|[.]([^0-9A-Za-z_-]|\$)|\$)" --format=%h "$THEIRS" 2>/dev/null)"
   # A prefix cited ONLY in the not-discharged form is SILENT here, not a row: this row attributes
   # nothing to any entry already, and a citation that disowns the discharge adds nothing to read.
   _hits="$(named_cited_filter "$_hits" "" "$_pfx")"
@@ -1606,6 +1649,11 @@ sh_base_rc() { # <sh_prog> -> the receipt's status with $THEIRS REBOUND to $BASE
     bash -c "$1" </dev/null >/dev/null 2>&1
 }
 sh_base_control() { # <receipt-text> <sh_prog> <theirs-side rc> -- accumulates, emits nothing
+  # SBC_CLOSE_AT_BASE IS THIS CALL'S OWN ANSWER, for the CLOSE-CANDIDATE detail the caller emits
+  # next: 1 only when the close side ALSO exited non-zero at base, the same per-receipt fact the
+  # RECEIPTS-UNDECIDED numerator counts. Reset FIRST, so an early return never leaves the previous
+  # receipt's answer standing.
+  SBC_CLOSE_AT_BASE=0
   refs_differ || return 0
   sh_base_eligible "$1" || return 0
   local _brc
@@ -1626,7 +1674,7 @@ sh_base_control() { # <receipt-text> <sh_prog> <theirs-side rc> -- accumulates, 
   if [ "$3" -eq 0 ]; then
     [ "$_brc" -eq 0 ] && sh_live_undecided=$(( ${sh_live_undecided:-0} + 1 ))
   else
-    [ "$_brc" -ne 0 ] && sh_close_undecided=$(( ${sh_close_undecided:-0} + 1 ))
+    [ "$_brc" -ne 0 ] && { sh_close_undecided=$(( ${sh_close_undecided:-0} + 1 )); SBC_CLOSE_AT_BASE=1; }
   fi
   return 0
 }
@@ -2284,6 +2332,11 @@ lr_entries() { # <ledger-file> <keep-closed 0|1> -> label TAB ord TAB directive,
   # prose-titled or all-caps non-id heading stays silent: feeding prose to `git log --grep`
   # matches by common words. The loop below lets `0/0` emit NAMED-UPSTREAM(-AMBIGUOUS) and then
   # skips the verb dispatch, so no receipt verdict is ever invented for it.
+  # DEFENCE IN DEPTH NOW, NOT THE GUARD: the naming path no longer depends on this filter.
+  # `named_absorbed` and `named_ambiguous` each refuse a label that does not equal its own
+  # ledger_entry_id(), so a RECEIPTED prose label -- which this filter never saw, since it gates
+  # only the receipt-less 0/0 row -- is refused there too. Kept so a 0/0 row is never emitted for
+  # a label no naming query would ask about.
   function flush(){
     if (has_verify && (!closed || KEEP) && label != "")
       for (di = 1; di <= dn; di++)
@@ -2475,6 +2528,16 @@ if [ "$LR_SUBJ_OK" = 1 ] && lr_entries "$LEDGER" 1 > "$LR_STAGE/sib-entries" 2>/
 fi
 [ "$LR_SIB_OK" = 1 ] || echo "ledger-reverify: the sibling receipt set could not be staged, so no row is classified NAMED-UPSTREAM-SIBLING-ATTRIBUTED this run; every naming row keeps its prior kind" >&2
 while IFS="$(printf '\t')" read -r label ord directive; do
+  # THE PER-ENTRY NAMING STATE RESETS HERE, ABOVE THE EMPTY-DIRECTIVE SKIP. It sat in the naming
+  # `case` below, which the skip pre-empts: an entry whose FIRST receipt was an empty `verify:` line
+  # kept the PREVIOUS entry's naming shas, and its second receipt's close detail printed them as
+  # this entry's. Measured by an adversary probe on the release tip.
+  # THE ORDINAL ALONE SUFFICES, AND IT IS THE ONLY KEY THAT DOES. flush() emits the first row of
+  # EVERY entry with ordinal `1/<n>` (or `0/0` for a receipt-less one), the empty-directive row
+  # included, so this fires on every entry boundary before the skip can pre-empt it. A label-change
+  # key adds nothing -- deleting it measured byte-identical output -- and misses the one boundary
+  # that matters most: two consecutive entries sharing a label, a duplicate id.
+  case "$ord" in 1/*|0/0|"") NA_ENTRY_SHAS=""; NA_ENTRY_KIND="" ;; esac
   [ -n "$directive" ] || continue
   # Empty suffix for a single-receipt entry, so those rows are unchanged.
   case "$ord" in
@@ -2527,6 +2590,7 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       # the reach split because it is a property of the naming set, not of the receipt or of what the
       # commits touched: a release that changes core/ and disowns the discharge is exactly the
       # third class `named_reach` cannot see. The row is kept, with every sha.
+      NA_ENTRY_KIND=NAMED-UPSTREAM-CITED-ONLY
       emit NAMED-UPSTREAM-CITED-ONLY "$label" "upstream's own history NAMES this entry's id ${na_where}, and EVERY one of those commits names it ONLY on a \`Not-discharged:\` line -- the form a distribution release uses to cite an entry it did NOT discharge. This row is NOT an absorption claim.${na_note} Read the commit(s): the citation may record a rejection, a withdrawal or a split, which IS something to act on. Then read the entry's own subject at theirs, because a fix that never names the id is invisible to this search. Annotate only what that reading establishes, and otherwise leave the entry open."
     elif [ "$na_r" = docs ]; then
       # A NAMING SET THAT CHANGES NOTHING A CONSUMER INSTALLS AND CUTS NO RELEASE. See `named_reach`
@@ -2535,6 +2599,7 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       # "upstream took it" closed an entry on a `docs(plan):` commit that only cross-referenced it.
       # It does NOT say the entry is unabsorbed -- a fix that never names the id is invisible to the
       # message search -- so the text sends the operator to the subject, never forbids a close.
+      NA_ENTRY_KIND=NAMED-UPSTREAM-DOCS-ONLY
       emit NAMED-UPSTREAM-DOCS-ONLY "$label" "upstream's own history NAMES this entry's id ${na_where}, and NONE of those commits changes a path a consumer installs under core/ or templates/ (a path inside a distribution-only fixture, one carrying a .dist-only marker at theirs, is not installed and does not count) -- and none of them cuts a release (changes VERSION). A plan, a review or a ledger drain mentioning the id matches the same way a fix does, so this row is not evidence of an absorption.${na_note} It is NOT a close on its own. The fix can still have landed in a commit that does not name the id: read the commit(s) -- one may record a withdrawal or a split, which IS something to act on -- then read the entry's own subject at theirs. Annotate only what that reading establishes, and otherwise leave the entry open."
     elif named_subject "$label" "$na_c" && [ "$NS_STATE" = off ]; then
       # THE NAMING SET REACHES CODE AND CHANGES NONE OF THIS ENTRY'S RECEIPT PATHS, a release
@@ -2542,17 +2607,27 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       # only for a resolved, non-empty subject set -- see `named_subject`. The row keeps every sha.
       # It is not "not absorbed": a fix can land on a path the receipt does not name, and the id
       # may have been dispositioned by an EARLIER release, the naming here being a later mention.
+      NA_ENTRY_KIND=NAMED-UPSTREAM-OFF-SUBJECT
       emit NAMED-UPSTREAM-OFF-SUBJECT "$label" "upstream's own history NAMES this entry's id ${na_where}, and those commits change a path a consumer installs under core/ or templates/, or cut a release (change VERSION) -- but NONE of them changes this entry's own receipt path(s): ${NS_PATHS} (a naming commit that cuts a release is judged over its whole release span, back to the previous VERSION change).${na_note} A release that cross-references an entry, or records that some other route discharged it, matches the message search the same way a fix does, so this row is NOT evidence of an absorption -- and it is not evidence against one either: the id may already have been dispositioned by an earlier release and this naming be a later mention, or the fix may have landed on a path the receipt does not name. It is NOT a close on its own. Read the commit(s), then read the entry's subject (${NS_PATHS}) at theirs. Annotate only what that reading establishes, with the release that contains the change, and otherwise leave the entry open."
     elif [ "$NS_STATE" = touched ] && named_sibling "$label" "$na_c" && [ "$NSB_STATE" = attributed ]; then
       # A NAMING COMMIT CHANGED THIS ENTRY'S RECEIPT FILE ONLY WHERE A SIBLING'S ANCHOR SITS. Reached
       # only from `touched` (the branch above called `named_subject` for this row, so NS_STATE is
       # this row's). See `named_sibling`. The row keeps every sha and is never a close.
+      NA_ENTRY_KIND=NAMED-UPSTREAM-SIBLING-ATTRIBUTED
       emit NAMED-UPSTREAM-SIBLING-ATTRIBUTED "$label" "upstream's own history NAMES this entry's id ${na_where}, and a naming commit changes this entry's receipt file (${NS_PATHS}) -- but on every changed block of that file NONE of this entry's own receipt substrings is on a changed line, while a sibling entry the same commit names in full has its receipt substring there: ${NSB_SIBS} (a naming commit that cuts a release is judged over its whole release span, back to the previous VERSION change; every naming commit is judged, not only the first).${na_note} A release that fixes one entry and cross-references another on the same file matches the message search for both, so this row is NOT evidence that THIS entry was absorbed -- and it is not evidence against it either: a fix can leave a stale anchor untouched. It is NOT a close on its own. Read the commit(s) and the sibling's entry, then read this entry's subject (${NS_PATHS}) at theirs. Annotate only what that reading establishes, with the release that contains the change, and otherwise leave the entry open."
     elif [ "$ord" = "0/0" ]; then
       # RECEIPT-LESS: there is no receipt to be blind to it and none to re-anchor, so the receipt
       # clauses of the sibling detail would be false here. The close is the annotation alone.
       emit NAMED-UPSTREAM "$label" "upstream's own history NAMES this entry's id ${na_where}. This entry carries NO verify: receipt, so this row is the only mechanical signal it will ever get.${na_note} THIS ROW CARRIES NO VERSION, DELIBERATELY: naming is not absorbing. A commit naming an id to record a rejection, a split, a plan or a ledger drain is indistinguishable here from one that landed the fix, and a version read off the wrong commit goes into a permanent annotation. Read the commit(s) and decide whether the entry was ABSORBED; if it was, establish WHICH RELEASE contains the absorbing commit and close the entry BY ANNOTATION with THAT version -- **bolded, version immediately after the parenthesis** -- \`**ADOPTED UPSTREAM (v<version>, verified <date>)**\`. Do NOT delete the entry. Until it is annotated this row re-appears on every pull. THE FORM MATTERS: any occurrence of the phrase makes ledger-reverify SKIP this entry from here on, but only that exact form lets ledger-rotate.sh archive it, and an entry that is skipped without being archivable is invisible in every future report and never filed."
     else
+    # THE ONLY KIND WHOSE SHAS A LATER CLOSE DETAIL MAY HAND OVER AS CANDIDATE ABSORBING COMMITS.
+    # CITED-ONLY, DOCS-ONLY, OFF-SUBJECT and SIBLING-ATTRIBUTED each state in their own detail that
+    # they are NOT evidence of an absorption, so offering their shas as "the absorbing one" would
+    # contradict the row beside it -- measured by an adversary probe: a CITED-ONLY row and a close
+    # detail calling its `Not-discharged:` commit the absorbing one, in one run. Those kinds record
+    # only their name; AMBIGUOUS names a prefix shared by several entries, never this one, and
+    # records nothing.
+    NA_ENTRY_SHAS="$na_c"
     emit NAMED-UPSTREAM "$label" "upstream's own history NAMES this entry's id ${na_where}, which no receipt in this entry can see.${na_note} THIS ROW CARRIES NO VERSION, DELIBERATELY: naming is not absorbing. A commit naming an id to record a rejection, a split, a plan or a ledger drain is indistinguishable here from one that landed the fix, and a version read off the wrong commit goes into a permanent annotation. Read the commit(s) and decide whether the entry was ABSORBED; if it was, establish WHICH RELEASE contains the absorbing commit and annotate with THAT version -- **bolded, version immediately after the parenthesis** -- \`**ADOPTED UPSTREAM (v<version>, verified <date>)**\`, then re-anchor or drop the stale receipt. Do NOT delete the entry. THE FORM MATTERS: any occurrence of the phrase makes ledger-reverify SKIP this entry from here on, but only that exact form lets ledger-rotate.sh archive it, and an entry that is skipped without being archivable is invisible in every future report and never filed."
     fi
   elif [ -n "$nam" ]; then
@@ -2973,7 +3048,22 @@ while IFS="$(printf '\t')" read -r label ord directive; do
             # attributes the absorption to -- and the row goes on to name a version to annotate
             # with. Counted, never silenced: the close still stands for the operator to confirm.
             sh_base_control "$rest" "$sh_prog" "$sh_rc"
+            # AND WHEN IT DID EXIT NON-ZERO AT BASE, THIS ROW MUST NOT OFFER `v$TV`. Measured on a
+            # scratch clone of the reference consumer: the detail said annotate v<theirs> while the
+            # same run's RECEIPTS-UNDECIDED row said base..theirs was not the event, and the fix had
+            # landed two releases earlier at a commit the same run's NAMED-UPSTREAM row listed. The
+            # status stays CLOSE-CANDIDATE; only the version it hands the operator changes.
+            if [ "${SBC_CLOSE_AT_BASE:-0}" = 1 ]; then
+              if [ -n "${NA_ENTRY_SHAS:-}" ]; then
+                _cc_ver="upstream's history names this entry's id in commit(s) ${NA_ENTRY_SHAS} (this run's NAMED-UPSTREAM row): read them and annotate with the release that CARRIES the absorbing one"
+              else
+                _cc_ver="find the release at which this receipt first stops reproducing (bisect THEIRS between earlier distribution releases) and annotate with THAT version"
+                [ -z "${NA_ENTRY_KIND:-}" ] || _cc_ver="$_cc_ver (this run's ${NA_ENTRY_KIND} row names this entry's id, but that row is NOT evidence of an absorption, so its commits are not the answer)"
+              fi
+              emit CLOSE-CANDIDATE "$label" "verify sh: no longer reproduces at theirs ($TV) — but it ALREADY did not reproduce at base ($BASE): the base control exited non-zero too, so base..theirs did NOT absorb this and v$TV is NOT the version to annotate. To close, ${_cc_ver}: 'ADOPTED UPSTREAM (v<that release>, verified <date>)'. Never invent a version. Do NOT delete the entry. Every consumer-relative path this receipt names still exists, so the exit is not a moved subject; a subject named in a form this cannot see is still possible, so confirm before draining."
+            else
             emit CLOSE-CANDIDATE "$label" "verify sh: no longer reproduces at theirs ($TV) — likely absorbed. Confirm, then annotate 'ADOPTED UPSTREAM (v$TV, verified <date>)'. Do NOT delete the entry. Every consumer-relative path this receipt names still exists, so the exit is not a moved subject; a subject named in a form this cannot see is still possible, so confirm before draining."
+            fi
           fi ;;
       esac
       ;;

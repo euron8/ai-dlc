@@ -1236,7 +1236,7 @@ prose is itself generated rather than composed.
      sibling's entry, then this entry's subject at `theirs`.
    - `NAMED-UPSTREAM-CITED-ONLY` → upstream's history names this entry's id, and **every**
      naming commit names it only on a body line reading exactly `Not-discharged: PC-S<n>` or
-     `Not-discharged: PC-S<n>-<SLUG>` — the form a distribution release uses to cite an entry
+     `Not-discharged: PC-S<n>-<SLUG>` (SLUG in the id class `[A-Za-z0-9_.-]`) — the form a distribution release uses to cite an entry
      it did NOT discharge. The row keeps the full sha list and is **not an absorption claim**.
      Read the commits for a rejection, a withdrawal or a split, then read the entry's subject
      at `theirs`. A commit carrying both that line and an ordinary mention of the id still
@@ -2566,7 +2566,9 @@ declared sites, not everywhere unconditionally.
      Two other close forms are honoured
      and neither takes a version: `**WITHDRAWN (<date>) — <why>**` for an entry whose premise was
      false, and `**CLOSED AS REJECTED — BY DESIGN, adjudicated <date>**` for a candidate upstream
-     considered and declined. Never invent a version to make a close archivable.
+     considered and declined. Never invent a version to make a close archivable. When the
+     row's detail says the receipt ALREADY did not reproduce at base, `v<theirs>` is the wrong
+     version: annotate with the release that detail routes you to, never `v<theirs>`.
      **Do NOT delete the entry** — retro and the
      §8.1 fan-in read it. The annotation is an `Edit` under `_bmad-output/ai-dlc-update/**`
      (the updater's own directory, carved out of the Rule 29 acknowledge hook), never a

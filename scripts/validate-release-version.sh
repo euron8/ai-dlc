@@ -142,7 +142,8 @@
 #
 #   F. A release that cites a ledger id it did NOT discharge names it on a body
 #      line reading exactly `Not-discharged: PC-S<n>` or
-#      `Not-discharged: PC-S<n>-<SLUG>` -- column 0, no backticks, no bullet,
+#      `Not-discharged: PC-S<n>-<SLUG>` -- the SLUG in the shared id class
+#      `[A-Za-z0-9_.-]` of lib.sh `ledger_entry_id()` -- column 0, no backticks, no bullet,
 #      never the subject. `ledger-reverify.sh`'s `named_cited_filter` strips that
 #      line before asking whether the commit names the id, so the consumer reads
 #      the citation as NAMED-UPSTREAM-CITED-ONLY rather than as an absorption.
@@ -422,16 +423,16 @@ form_findings_in() { # <repo-dir> <newline-separated shas> -> "<short> <line>" p
       { l = tolower($0) }
       l ~ /^[[:space:]>*-]*`?not[[:space:]_-]*discharg/ {
         if (NR == 1) { print ENVIRON["C"] " subject: " $0; next }
-        if ($0 !~ /^Not-discharged: PC-S[0-9]+(-[A-Z0-9]+)*$/) print ENVIRON["C"] " body: " $0
+        if ($0 !~ /^Not-discharged: PC-S[0-9]+(-[A-Za-z0-9_.-]+)*$/) print ENVIRON["C"] " body: " $0
       }'
   done
 }
 
 # THE SELF-PROBE RUNS BEFORE THE CORPUS, both directions, under mktemp. Offenders:
 # a bulleted lowercase spelling, a backticked canonical line, a canonical line in
-# the SUBJECT. Near-misses, each one property from an offender: the canonical
-# body line itself, and the same phrase MID-line (the 3 corpus occurrences are
-# that shape).
+# the SUBJECT, trailing text after a canonical id (dash-only and dotted). Near-misses,
+# each one property from an offender: the canonical body line itself (dash-only and
+# dotted), and the same phrase MID-line (the 3 corpus occurrences are that shape).
 form_fail=0
 arm_f_ran=0
 probe_f="$(mktemp -d 2>/dev/null)" || {
@@ -451,14 +452,19 @@ trap 'rm -rf "$probe_e" "$probe_f"' EXIT
   git commit -q --allow-empty -m 'rel: trailing' -m 'Not-discharged: PC-S1-TRAIL (rejected, see BL-9)'
   git commit -q --allow-empty -m 'rel: separator' -m "$(printf 'Body PC-S1-SEPBYTE \001 forged')"
   git commit -q --allow-empty -m 'rel: canonical' -m 'Not-discharged: PC-S1-CANON'
+  # THE SHARED ID CLASS, `[A-Za-z0-9_.-]` as in lib.sh `ledger_entry_id()`. A dotted canonical id
+  # must NOT be reported -- the narrow `[A-Z0-9]` spelling refused it -- and the same dotted id with
+  # trailing text MUST be, so widening the class cannot drop the `$` anchor unseen.
+  git commit -q --allow-empty -m 'rel: canonical dotted' -m 'Not-discharged: PC-S1-3.2-DOT_CANON'
+  git commit -q --allow-empty -m 'rel: trailing dotted' -m 'Not-discharged: PC-S1-3.2-DOT_TRAIL (see 0.1.0)'
   git commit -q --allow-empty -m 'rel: midline' -m 'This entry was not discharged by this release.'
 ) >/dev/null 2>&1
 probe_f_hits="$(form_findings_in "$probe_f" "$(git -C "$probe_f" rev-list HEAD 2>/dev/null)")"
 probe_f_bad=""
-for tok in PC-S1-BULLET PC-S1-TICK PC-S1-SUBJECT PC-S1-TRAIL 'carries a \001 byte'; do
+for tok in PC-S1-BULLET PC-S1-TICK PC-S1-SUBJECT PC-S1-TRAIL PC-S1-3.2-DOT_TRAIL 'carries a \001 byte'; do
   grep -qF -- "$tok" <<<"$probe_f_hits" || probe_f_bad="${probe_f_bad:+$probe_f_bad; }the offender $tok was NOT reported"
 done
-for tok in PC-S1-CANON 'not discharged by this release'; do
+for tok in PC-S1-CANON PC-S1-3.2-DOT_CANON 'not discharged by this release'; do
   grep -qF -- "$tok" <<<"$probe_f_hits" && probe_f_bad="${probe_f_bad:+$probe_f_bad; }the near-miss '$tok' WAS reported"
 done
 if [ -n "$probe_f_bad" ]; then
@@ -586,8 +592,9 @@ if [ "$form_fail" -ne 0 ]; then
       prevent.
 
       Remedy: put each cited id on its own BODY line, column 0, exactly
-      `Not-discharged: PC-S<n>` or `Not-discharged: PC-S<n>-<SLUG>` -- no backticks,
-      no bullet, never in the subject -- and amend the commit.
+      `Not-discharged: PC-S<n>` or `Not-discharged: PC-S<n>-<SLUG>` (SLUG in the
+      id class [A-Za-z0-9_.-], so a dotted or underscored id is written as-is) --
+      no backticks, no bullet, never in the subject -- and amend the commit.
 EOF
 fi
 
