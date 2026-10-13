@@ -336,7 +336,7 @@ The deriver refuses a linked worktree at `core/scripts/derive-fixture-readsets.s
 dispatches through `xargs -P "$FIXTURE_JOBS"` (default 12 at `.githooks/pre-push:423`) and the two
 hooks are bound to one runner by **I66**.
 
-**Why it is fragile, each with its carrier.** `BL-470` (`docs/backlog.md:83`): the sandbox tracer's
+**Why it is fragile, each with its carrier.** `BL-470` (archived, `docs/backlog.archive.md`): the sandbox tracer's
 `log stream` drops reports under load and four fixtures traced OMITTED and run on every push.
 `BL-471` (`:102`): a committed trace could not clear a stale record, and 45 records went stale on
 one push. `BL-472` (`:118`): the operator must hand-list what to re-trace. At `60b467dc`, 11 of 246

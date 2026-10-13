@@ -727,6 +727,224 @@ else
   bad "subset" "the two predicates have converged; --check is now self-confirming"
 fi
 
+# ---------------------------------------------------------------------------------------
+# Seed G — rotating the LAST entry declares the ledger empty.
+# ---------------------------------------------------------------------------------------
+# The rotator is the single producer of the empty marker: it appends it after the conservation
+# check, only when the remainder parses to zero entries, with the text the classifier prints.
+# The marker is read from `--print-marker`, never typed here.
+MARK="$(bash "$RV" --print-marker 2>/dev/null)"
+[ -n "$MARK" ] && ok "marker-source" "backlog-reverify.sh --print-marker yields the marker" \
+  || bad "marker-source" "backlog-reverify.sh --print-marker returned nothing; no arm below can be built"
+# B (above) rotated with entries remaining: no marker may have been written.
+if [ -n "$MARK" ] && grep -qF -- "$MARK" "$LB"; then
+  bad "no-marker-with-entries" "a rotation that left live entries wrote the empty marker"
+else
+  ok "no-marker-with-entries" "a rotation that left live entries wrote no marker"
+fi
+LG="$WORK/g/backlog.md"; mkdir -p "$WORK/g"
+cat > "$LG" <<'EOM'
+# Probe backlog — the last entry
+
+Preamble that must never move. Legend: verify: sh, verify: manual.
+
+## BL-401 — closed, the last live entry
+
+<br>**LANDED (v0.370.0, verified d4fd318).** Done.
+
+verify: has VERSION "."
+EOM
+cp "$LG" "$LG.orig"
+G_O="$(wc -l < "$LG.orig" | tr -d ' ')"
+G_P="$(awk '/^## BL-/ { print NR - 1; exit }' "$LG.orig")"
+GROT="$(bash "$RT" "$LG" --check 2>&1)"
+if grep -q "check PASS" <<<"$GROT"; then ok "last-check" "--check passes when the last entry rotates"
+else bad "last-check" "--check did not PASS on the last entry: $(printf '%s' "$GROT" | tail -3 | tr '\n' ' ')"; fi
+bash "$RT" "$LG" --apply >/dev/null 2>&1
+G_LAST="$(awk '/[^ \t]/ { l = $0 } END { print l }' "$LG")"
+if [ -n "$MARK" ] && [ "$G_LAST" = "$MARK" ]; then ok "last-marker" "the marker is the last non-blank line after --apply"
+else bad "last-marker" "the last non-blank line is '$G_LAST', not the marker"; fi
+# CONSERVATION, BYTE-EXACT ON BOTH SIDES: the preamble is a prefix of the new ledger, the entry is
+# the tail of the archive, and the ledger grew by exactly k = 2 lines (a blank and the marker).
+G_L="$(wc -l < "$LG" | tr -d ' ')"
+if [ "$G_L" -eq $(( G_P + 2 )) ] && [ "$(head -n "$G_P" "$LG")" = "$(head -n "$G_P" "$LG.orig")" ] \
+   && [ "$(tail -n $(( G_O - G_P )) "$WORK/g/backlog.archive.md")" = "$(tail -n $(( G_O - G_P )) "$LG.orig")" ]; then
+  ok "last-conserves" "preamble ($G_P lines) kept as a prefix, the entry ($(( G_O - G_P )) lines) is the archive's tail, ledger = preamble + 2"
+else
+  bad "last-conserves" "conservation broken: ledger $G_L lines, want $(( G_P + 2 )); or a prefix/tail differs"
+fi
+GRV="$(bash "$RV" "$LG" 2>&1)"
+if [ "$(printf '%s\n' "$GRV" | grep -c .)" -eq 1 ] && grep -qE '^DECLARED-EMPTY	' <<<"$GRV"; then
+  ok "last-reverify" "the rotated ledger reads exactly one DECLARED-EMPTY row"
+else bad "last-reverify" "the rotated ledger reads: $(cut -f1 <<<"$GRV" | tr '\n' ' ')"; fi
+# The near-miss: the same remainder emptied BY HAND, no marker, is still unresolved.
+head -n "$G_P" "$LG.orig" > "$WORK/g/hand.md"
+GHV="$(bash "$RV" "$WORK/g/hand.md" 2>&1)"
+if grep -qE '^INPUT-UNRESOLVED	.*ZERO entries' <<<"$GHV" && ! grep -q '^DECLARED-EMPTY' <<<"$GHV"; then
+  ok "hand-emptied" "the same remainder emptied by hand reads INPUT-UNRESOLVED"
+else bad "hand-emptied" "a hand-emptied ledger reads: $(cut -f1 <<<"$GHV" | tr '\n' ' ')"; fi
+
+# TWO ROTATOR MUTANTS, in a root of their own. `scripts/backlog-reverify.sh` there is a WRAPPER
+# over a real copy that adds one live row for the ledger named in DRIFT_LEDGER, and only in row
+# mode: the drift --check exists to catch, which the shipped pair cannot produce (arm `subset`
+# pins rotate's closed set inside reverify's). Unset, it is a passthrough.
+RR="$WORK/rot-root"
+mkdir -p "$RR/scripts" "$RR/core/skills/ai-dlc-update/reconcile"
+printf '0.0.0\n' > "$RR/VERSION"
+cp "$MROOT/core/skills/ai-dlc-update/reconcile/lib.sh" "$RR/core/skills/ai-dlc-update/reconcile/lib.sh"
+cp "$RV" "$RR/scripts/backlog-reverify.real.sh"
+cat > "$RR/scripts/backlog-reverify.sh" <<'EOW'
+#!/usr/bin/env bash
+H="$(cd "$(dirname "$0")" && pwd)"
+out="$(bash "$H/backlog-reverify.real.sh" "$@")"; rc=$?
+[ -n "$out" ] && printf '%s\n' "$out"
+case " $* " in *" --"*) exit "$rc" ;; esac
+if [ -n "${DRIFT_LEDGER:-}" ] && [ "${1:-}" = "$DRIFT_LEDGER" ]; then
+  printf 'STILL-LIVE\tBL-999\ta live row the rotation would lose, seeded by the fixture\n'
+fi
+exit "$rc"
+EOW
+RRT="$RR/scripts/backlog-rotate.sh"
+mkdir -p "$WORK/h"; LH="$WORK/h/backlog.md"; cp "$LG.orig" "$LH"
+# CONTROL, FIRST: the unmutated rotator in this root must FAIL --check on the drift, and the root
+# must be live (its passthrough reads the last-entry seed as DECLARED-EMPTY after rotation).
+cp "$RT" "$RRT"
+HC="$(DRIFT_LEDGER="$LH" bash "$RRT" "$LH" --check 2>&1)"; HC_RC=$?
+if [ "$HC_RC" -eq 2 ] && grep -q "check FAIL" <<<"$HC" && grep -q "BL-999" <<<"$HC"; then
+  ok "drift-control" "the unmutated rotator fails --check when the original carries a live row and the remainder is DECLARED-EMPTY"
+else
+  bad "drift-control" "the unmutated rotator exited $HC_RC on the drift seed; the mutant below would be scored against nothing"
+fi
+# 1. --check ACCEPTS DECLARED-EMPTY UNCONDITIONALLY: the `BEFORE is empty` conjunct removed.
+DCN="$(grep -c '^  elif \[ -z "\$BEFORE" \] && \[ "\$AFTER_N" = 1 \] && \[ "\$AFTER_ST" = "DECLARED-EMPTY" \]; then$' "$RT")" || DCN=0
+if [ "$DCN" -ne 1 ]; then bad "mutation-check-empty" "the --check acceptance line appears $DCN times; the mutation needs exactly one"
+elif ! sed 's/^  elif \[ -z "\$BEFORE" \] && \[ "\$AFTER_N" = 1 \] && /  elif /' "$RT" > "$RRT"; then
+  bad "mutation-check-empty" "DID NOT APPLY: sed failed"
+elif cmp -s "$RT" "$RRT"; then bad "mutation-check-empty" "DID NOT APPLY: the mutation matched nothing"
+else
+  HM="$(DRIFT_LEDGER="$LH" bash "$RRT" "$LH" --check 2>&1)"; HM_RC=$?
+  if [ "$HM_RC" -eq 0 ] && grep -q "check PASS" <<<"$HM"; then
+    ok "mutation-check-empty" "killed: accepting DECLARED-EMPTY whatever BEFORE holds passes a rotation that loses a live row"
+  else bad "mutation-check-empty" "SURVIVED: the widened acceptance still exited $HM_RC"; fi
+fi
+# 2. --apply WRITES THE MARKER UNCONDITIONALLY: the zero-entry guard removed. Seed B's shape
+#    (entries remain) must then end in the marker, where the shipped rotator writes none.
+MKN="$(grep -c '^if \[ "\$LIVE_ENTRIES" -eq 0 \]; then$' "$RT")" || MKN=0
+if [ "$MKN" -ne 1 ]; then bad "mutation-apply-marker" "the zero-entry guard appears $MKN times; the mutation needs exactly one"
+elif ! sed 's/^if \[ "\$LIVE_ENTRIES" -eq 0 \]; then$/if true; then/' "$RT" > "$RRT"; then
+  bad "mutation-apply-marker" "DID NOT APPLY: sed failed"
+elif cmp -s "$RT" "$RRT"; then bad "mutation-apply-marker" "DID NOT APPLY: the mutation matched nothing"
+else
+  mkdir -p "$WORK/i"; LI="$WORK/i/backlog.md"
+  printf '# Probe\n\n## BL-501 — open\n\nverify: has VERSION "."\n\n## BL-502 — closed\n\n<br>**LANDED (v0.370.0, verified d4fd318).** Done.\n\nverify: has VERSION "."\n' > "$LI"
+  bash "$RRT" "$LI" --apply >/dev/null 2>&1
+  if grep -q '^## BL-501' "$LI" && [ -n "$MARK" ] && grep -qF -- "$MARK" "$LI"; then
+    ok "mutation-apply-marker" "killed: with the guard removed a rotation that leaves BL-501 live writes the empty marker"
+  else bad "mutation-apply-marker" "SURVIVED: the unguarded rotator left no marker (or lost BL-501)"; fi
+fi
+
+# 3. THE ROTATOR ASKS --marker-last BEFORE APPENDING, so a presence-keyed position rule in the
+#    classifier makes it skip the marker whenever the preamble QUOTES it. Seed: the last entry,
+#    below a preamble that quotes the marker on its own line followed by more prose. Control: the
+#    unmutated pair appends it. Mutant: the classifier's marker_last swapped for a whole-file grep.
+mkdir -p "$WORK/q"; LQ="$WORK/q/backlog.md"
+{ printf '# Probe backlog — the marker quoted\n\nThe rotator writes this line when the ledger empties:\n\n%s\n\nIt is a declaration, not prose.\n\n' "$MARK"
+  printf '## BL-601 — closed, the last live entry\n\n<br>**LANDED (v0.370.0, verified d4fd318).** Done.\n\nverify: has VERSION "."\n'; } > "$LQ"
+cp "$LQ" "$LQ.orig"
+cp "$RT" "$RRT"
+bash "$RRT" "$LQ" --apply >/dev/null 2>&1
+Q_LAST="$(awk '/[^ \t]/ { l = $0 } END { print l }' "$LQ")"
+if [ -n "$MARK" ] && [ "$Q_LAST" = "$MARK" ]; then
+  ok "quoted-marker" "a preamble quoting the marker still gets it appended as the last line"
+else bad "quoted-marker" "with the marker quoted in the preamble the last line is '$Q_LAST'"; fi
+MPN="$(grep -cF 'END { exit (last == m) ? 0 : 1 }' "$RV")" || MPN=0
+if [ "$MPN" -ne 1 ]; then bad "mutation-marker-presence" "the position rule's line appears $MPN times; the mutation needs exactly one"
+elif ! sed 's@^  awk -v m="\$EMPTY_MARKER" .*END { exit (last == m) ? 0 : 1 }.*$@  grep -qF -- "$EMPTY_MARKER" "$1"@' "$RV" > "$RR/scripts/backlog-reverify.real.sh"; then
+  bad "mutation-marker-presence" "DID NOT APPLY: sed failed"
+elif cmp -s "$RV" "$RR/scripts/backlog-reverify.real.sh"; then bad "mutation-marker-presence" "DID NOT APPLY: the mutation matched nothing"
+else
+  cp "$LQ.orig" "$LQ"
+  bash "$RRT" "$LQ" --apply >/dev/null 2>&1
+  Q_LAST="$(awk '/[^ \t]/ { l = $0 } END { print l }' "$LQ")"
+  if grep -q '^## BL-601' "$LQ"; then
+    bad "mutation-marker-presence" "the entry was not rotated under the mutant — the root broke, not the rule"
+  elif [ "$Q_LAST" != "$MARK" ]; then
+    ok "mutation-marker-presence" "killed: a presence-keyed position rule leaves a zero-entry ledger without its trailing marker"
+  else bad "mutation-marker-presence" "SURVIVED: the presence-keyed rule still appended the marker"; fi
+fi
+cp "$RV" "$RR/scripts/backlog-reverify.real.sh"
+
+# ---------------------------------------------------------------------------------------
+# Seed J — a LIVE entry the parser cannot see, below the last entry it can.
+# ---------------------------------------------------------------------------------------
+# Each spelling below is not an entry boundary to lib.sh, so the split absorbs it into the closed
+# BL-500 above it, BEFORE reads no live row, and the DECLARED-EMPTY acceptance would archive it.
+# The rotator's id census must refuse: --check exits 2, and --apply writes neither file.
+mkdir -p "$WORK/j"
+j_seed() { # j_seed <file> <live-heading-line>
+  { printf '# Carry-over backlog\n\nOpen work only. Each entry ends in a receipt line.\n\n## Receipts\n\n'
+    printf 'verify: sh <one-liner> -- exit 0 means fixed. verify: manual -- a human closes it.\n\n'
+    printf '## BL-500 — closed, the last entry the parser sees\n\n<br>**LANDED (v0.370.0, verified d4fd318).** Done.\n\nverify: has VERSION "."\n\n'
+    printf '%s — live, spelled so the boundary rule cannot see it\n\nverify: manual\n' "$2"; } > "$1"
+}
+J_SPELL_1='## `BL-501`'; J_SPELL_2='# BL-501'; J_SPELL_3=' ## BL-501'; J_SPELL_4='-**BL-501**'
+for j_i in 1 2 3 4; do
+  eval "j_sp=\"\$J_SPELL_$j_i\""
+  LJ="$WORK/j/backlog-$j_i.md"; j_seed "$LJ" "$j_sp"; cp "$LJ" "$LJ.orig"
+  JC="$(bash "$RT" "$LJ" --check 2>&1)"; JC_RC=$?
+  bash "$RT" "$LJ" --apply --archive "$WORK/j/archive-$j_i.md" >/dev/null 2>&1; JA_RC=$?
+  if [ "$JC_RC" -eq 2 ] && grep -q "entry-like id lines" <<<"$JC" && grep -qF "BL-501" <<<"$JC" \
+     && [ "$JA_RC" -eq 2 ] && cmp -s "$LJ" "$LJ.orig" && [ ! -e "$WORK/j/archive-$j_i.md" ]; then
+    ok "census-$j_i" "'$j_sp' below the last parseable entry: --check exits 2 naming it, --apply writes nothing"
+  else
+    bad "census-$j_i" "'$j_sp': --check rc=$JC_RC, --apply rc=$JA_RC, ledger $(cmp -s "$LJ" "$LJ.orig" && echo unchanged || echo CHANGED), archive $([ -e "$WORK/j/archive-$j_i.md" ] && echo WRITTEN || echo absent)"
+  fi
+done
+# CONTROL: the census does not fire on a plain last-entry rotation (seed G's shape, re-run).
+mkdir -p "$WORK/jc"; cp "$LG.orig" "$WORK/jc/backlog.md"
+# Captured first and read from a here-string: `grep -q` fed by a pipe answers with the writer's
+# EPIPE under pipefail and reads NOT-FOUND on output that contains the pattern.
+JCC="$(bash "$RT" "$WORK/jc/backlog.md" --check 2>&1)"
+if grep -q "check PASS" <<<"$JCC"; then
+  ok "census-control" "a plain last-entry rotation still passes --check with the census in place"
+else bad "census-control" "the census fires on a plain last-entry rotation"; fi
+# MUTANT: the census removed. The backticked spelling must then pass --check (the sweep).
+CSN="$(grep -c '^  if \[ "\$CENSUS_N" -gt "\$MOVED_COUNT" \]; then$' "$RT")" || CSN=0
+if [ "$CSN" -ne 1 ]; then bad "mutation-no-census" "the census line appears $CSN times; the mutation needs exactly one"
+elif ! sed 's/^  if \[ "\$CENSUS_N" -gt "\$MOVED_COUNT" \]; then$/  if false; then/' "$RT" > "$RRT"; then
+  bad "mutation-no-census" "DID NOT APPLY: sed failed"
+elif cmp -s "$RT" "$RRT"; then bad "mutation-no-census" "DID NOT APPLY: the mutation matched nothing"
+else
+  LJ="$WORK/j/backlog-1.md"
+  JM="$(bash "$RRT" "$LJ" --check 2>&1)"; JM_RC=$?
+  if [ "$JM_RC" -eq 0 ] && grep -q "check PASS" <<<"$JM"; then
+    ok "mutation-no-census" "killed: without the census a backticked live heading passes --check and would be archived"
+  else bad "mutation-no-census" "SURVIVED: with the census removed --check still exited $JM_RC"; fi
+fi
+
+# --apply WITHOUT --check must not write an invalid declaration: a preamble mentioning BL-1 leaves
+# a zero-entry remainder the classifier will not call declared, so --apply refuses before writing.
+mkdir -p "$WORK/k"; LK="$WORK/k/backlog.md"
+{ printf '# Probe backlog\n\nHistory: BL-1 was the first entry ever filed.\n\n'
+  printf '## BL-700 — closed, the last entry\n\n<br>**LANDED (v0.370.0, verified d4fd318).** Done.\n\nverify: has VERSION "."\n'; } > "$LK"
+cp "$LK" "$LK.orig"
+KA="$(bash "$RT" "$LK" --apply 2>&1)"; KA_RC=$?
+if [ "$KA_RC" -eq 2 ] && grep -q "declared-empty answers" <<<"$KA" && cmp -s "$LK" "$LK.orig" && [ ! -e "$WORK/k/backlog.archive.md" ]; then
+  ok "apply-declares-valid" "--apply refuses a zero-entry remainder whose preamble carries a BL- id, and writes nothing"
+else bad "apply-declares-valid" "--apply exited $KA_RC on a remainder that cannot be declared; ledger $(cmp -s "$LK" "$LK.orig" && echo unchanged || echo CHANGED)"; fi
+DVN="$(grep -c '^  if \[ "\$DE" -ne 0 \]; then$' "$RT")" || DVN=0
+if [ "$DVN" -ne 1 ]; then bad "mutation-apply-unvalidated" "the --apply validation line appears $DVN times; the mutation needs exactly one"
+elif ! sed 's/^  if \[ "\$DE" -ne 0 \]; then$/  if false; then/' "$RT" > "$RRT"; then
+  bad "mutation-apply-unvalidated" "DID NOT APPLY: sed failed"
+elif cmp -s "$RT" "$RRT"; then bad "mutation-apply-unvalidated" "DID NOT APPLY: the mutation matched nothing"
+else
+  cp "$LK.orig" "$LK"
+  bash "$RRT" "$LK" --apply >/dev/null 2>&1; KM_RC=$?
+  if [ "$KM_RC" -eq 0 ] && ! cmp -s "$LK" "$LK.orig"; then
+    ok "mutation-apply-unvalidated" "killed: without the check --apply writes a declaration the classifier refuses"
+  else bad "mutation-apply-unvalidated" "SURVIVED: the unvalidated --apply exited $KM_RC and left the ledger unchanged"; fi
+fi
+
 echo
 if [ "$FAIL" -eq 0 ]; then
   echo "PASS: every assertion holds."

@@ -2,7 +2,8 @@
 # backlog-size-ceiling -- exercise scripts/validate-backlog-size.sh, the live-entry ceiling
 # over docs/backlog.md.
 #
-# SIXTEEN PROBES PLUS AN UNMUTATED CONTROL, each a throwaway repo under a temp dir.
+# SIXTEEN PROBES, THE DECLARED-EMPTY ARMS AND THEIR MUTANTS, PLUS AN UNMUTATED CONTROL, each a
+# throwaway repo under a temp dir.
 # Exit 0 iff the control is green AND every probe holds.
 #
 # THE CEILING IS ENTRY-DENOMINATED AND THERE IS NO BYTE CLAUSE. A byte ceiling was proposed
@@ -399,13 +400,28 @@ fi
 
 # b16 -- the same join against the REAL ledger, which is the one that catches a drift filed
 # after this fixture was written.
+# WHEN THE REAL LEDGER IS DECLARED EMPTY the count join has no population, so the two sides are
+# asked the declared state instead: the ceiling must report 0 with its declared-empty OK line,
+# and the classifier must emit exactly one DECLARED-EMPTY row. Which branch runs is decided by the
+# classifier's own --declared-empty on the real file, and each branch is presence-shaped.
 if [ -n "$REVERIFY" ] && [ -n "$REAL_LEDGER" ]; then
   seed "$TMP/b16"; cp "$REAL_LEDGER" "$TMP/b16/docs/backlog.md"
   b16_out="$(run_v "AI_DLC_BACKLOG_MAX_ENTRIES=100000" "$TMP/b16")"
   b16_arm="$(bl_reported "$b16_out")"
-  b16_rev="$( cd "$TMP/b16" && bash scripts/backlog-reverify.sh docs/backlog.md 2>/dev/null \
-    | cut -f2 | sort -u | grep -c . )"
-  if [ -z "$b16_arm" ] || [ -z "$b16_rev" ] || [ "$b16_arm" -eq 0 ] || [ "$b16_rev" -eq 0 ]; then
+  b16_rows="$( cd "$TMP/b16" && bash scripts/backlog-reverify.sh docs/backlog.md 2>/dev/null )"
+  b16_rev="$(printf '%s\n' "$b16_rows" | cut -f2 | sort -u | grep -c . )"
+  ( cd "$TMP/b16" && bash scripts/backlog-reverify.sh --declared-empty docs/backlog.md >/dev/null 2>&1 ); b16_de=$?
+  if [ "$b16_de" -eq 0 ]; then
+    b16_nrow="$(printf '%s\n' "$b16_rows" | grep -c .)" || b16_nrow=0
+    if [ "$b16_arm" = 0 ] && grep -qF ', declared empty (' <<<"$b16_out" \
+       && [ "$b16_nrow" -eq 1 ] && [ "$(printf '%s\n' "$b16_rows" | cut -f1)" = DECLARED-EMPTY ]; then
+      note "ok    b16 -- the real ledger is declared empty, and the ceiling (0, declared empty) and the classifier (one DECLARED-EMPTY row) both say so"
+    else
+      note "FAIL  b16 -- the real ledger is declared empty but the sides disagree (arm='$b16_arm', classifier rows=$b16_nrow first='$(printf '%s\n' "$b16_rows" | sed -n '1p' | cut -f1)')"; rc=1
+    fi
+  elif [ "$b16_de" -ne 1 ]; then
+    note "FAIL  b16 -- backlog-reverify.sh --declared-empty exited $b16_de on the real ledger, an environment failure"; rc=1
+  elif [ -z "$b16_arm" ] || [ -z "$b16_rev" ] || [ "$b16_arm" -eq 0 ] || [ "$b16_rev" -eq 0 ]; then
     note "FAIL  b16 -- a side produced no usable value (arm='$b16_arm' reverify='$b16_rev')"; rc=1
   elif [ "$b16_arm" -ne "$b16_rev" ]; then
     note "FAIL  b16 -- on the REAL ledger the ceiling counts $b16_arm and backlog-reverify.sh classifies $b16_rev"; rc=1
@@ -424,7 +440,147 @@ fi
 # subject cannot differ is a guard whose removal changes nothing -- keeping it would have left
 # a green arm asserting a tautology.
 
+# ===== DECLARED EMPTY. ===================================================================
+# A zero parse is refused (b05/b06) UNLESS the ledger is declared empty, which is decided by
+# backlog-reverify.sh --declared-empty: the marker as the LAST non-blank line AND no `BL-[0-9]`
+# anywhere. The marker text is taken from the classifier's --print-marker, never typed here, so
+# this seed comes from what the producer writes. Every arm below has a twin one property apart.
+EMPTY_MARKER=""
+[ -n "$REVERIFY" ] && EMPTY_MARKER="$(bash "$REVERIFY" --print-marker 2>/dev/null)"
+if [ -z "$EMPTY_MARKER" ]; then
+  note "FAIL  d00 -- backlog-reverify.sh --print-marker returned nothing, so no declared-empty arm below can be built"; rc=1
+fi
+de_ledger() { # de_ledger <file> <body-before-marker> [<after-marker>]
+  { printf '# Carry-over backlog\n\nLegend: each entry ends in a receipt line, verify: sh or verify: manual.\n\n'
+    printf '%b' "$2"
+    printf '%s\n' "$EMPTY_MARKER"
+    printf '%b' "${3:-}"; } > "$1"
+}
+# mutate <file> <sed-expr> -- 0 when the copy changed, 1 when the sed matched nothing, 2 when it died.
+mutate() {
+  cp "$1" "$1.orig"
+  sed "$2" "$1.orig" > "$1" || { cp "$1.orig" "$1"; rm -f "$1.orig"; return 2; }
+  if cmp -s "$1" "$1.orig"; then rm -f "$1.orig"; return 1; fi
+  rm -f "$1.orig"; return 0
+}
+# selfprobe_check <name> <dir> -- the arm must refuse with exit 2 on its own self-probe.
+selfprobe_check() {
+  local out rc_v
+  out="$(run_v "" "$2")"; rc_v=$?
+  if [ "$rc_v" -eq 2 ] && grep -qF "SELF-PROBE FAILED" <<<"$out" && ! grep -qF "OK: validate-backlog-size" <<<"$out"; then
+    note "ok    $1 -- refused with exit 2 on the self-probe, before the corpus was read"
+  else
+    note "FAIL  $1 -- wanted exit 2 and SELF-PROBE FAILED, got exit $rc_v"
+    printf '%s\n' "$out" | sed 's/^/      /' | head -3; rc=1
+  fi
+}
+
+# d01 -- ALLOW: zero entries, the marker last, no id anywhere. OK, and the count reads 0.
+seed "$TMP/d01"; de_ledger "$TMP/d01/docs/backlog.md" "Prose with no entry in it.\n\n"
+d01_out="$(run_v "" "$TMP/d01")"; d01_rc=$?
+if [ "$d01_rc" -eq 0 ] && [ "$(bl_reported "$d01_out")" = 0 ] && grep -qF ', declared empty (' <<<"$d01_out"; then
+  note "ok    d01 -- a ledger declared empty passes B1 with the 'entries in' OK line reading 0, declared empty"
+else
+  note "FAIL  d01 -- a declared-empty ledger exited $d01_rc or did not say 'declared empty'"
+  printf '%s\n' "$d01_out" | sed 's/^/      /' | head -3; rc=1
+fi
+
+# d02 / d03 -- B1b: the marker last while a real entry is present, in each entry shape.
+seed "$TMP/d02"; de_ledger "$TMP/d02/docs/backlog.md" "## BL-001 — a live entry\n\nverify: manual\n\n"
+kill_check "d02 the empty marker beside a live '## BL-' entry fails B1b" "$TMP/d02" "" 1 "FAIL: B1b:"
+seed "$TMP/d03"; de_ledger "$TMP/d03/docs/backlog.md" "- **BL-001** — a live list entry\n\nverify: manual\n\n"
+kill_check "d03 the empty marker beside a live '- **BL-' entry fails B1b" "$TMP/d03" "" 1 "FAIL: B1b:"
+# d03n -- B1b's near-miss: a live entry with the marker QUOTED above it, not last, passes B1.
+seed "$TMP/d03n"; de_ledger "$TMP/d03n/docs/backlog.md" "" "\n## BL-001 — a live entry filed below a stale marker\n\nverify: manual\n\n"
+count_check "d03n a live entry below the marker is not B1b" "$TMP/d03n" "" 1
+
+# d04 -- zero entries with the marker quoted in the preamble but NOT last: undeclared, B1 fails.
+seed "$TMP/d04"; de_ledger "$TMP/d04/docs/backlog.md" "" "\nTrailing prose after the quotation.\n"
+kill_check "d04 a marker that is not the last non-blank line declares nothing" "$TMP/d04" "" 1 "parsed to ZERO entries"
+
+# d07 -- clause (c): zero entries, the marker last, but a BL- id in the prose. Undeclared.
+seed "$TMP/d07"; de_ledger "$TMP/d07/docs/backlog.md" "BL-497 moved to the archive.\n\n"
+kill_check "d07 a BL- id anywhere keeps a zero parse undeclared" "$TMP/d07" "" 1 "parsed to ZERO entries"
+
+# d05 / d06 -- the boundary rule broken in the seed's lib.sh, one shape each, with a real entry of
+# that shape plus the marker: a parser that stopped seeing the entry must refuse on the self-probe,
+# not read the ledger as declared empty or as a zero.
+seed "$TMP/d05"; de_ledger "$TMP/d05/docs/backlog.md" "## BL-001 — a live entry\n\nverify: manual\n\n"
+case "$(mutate "$TMP/d05/core/skills/ai-dlc-update/reconcile/lib.sh" 's|else if (l ~ /\^#{2,6}\[ \\t\]/) sh = "heading"|else if (0) sh = "heading"|'; echo $?)" in
+  0) selfprobe_check "d05 heading shape off in lib.sh, a '## BL-' entry and the marker" "$TMP/d05" ;;
+  *) note "FAIL  d05 -- the heading-shape mutation DID NOT APPLY"; rc=1 ;;
+esac
+seed "$TMP/d06"; de_ledger "$TMP/d06/docs/backlog.md" "- **BL-001** — a live list entry\n\nverify: manual\n\n"
+case "$(mutate "$TMP/d06/core/skills/ai-dlc-update/reconcile/lib.sh" 's|if (l ~ /\^- \\\*\\\*/)  *sh = "bullet"|if (0) sh = "bullet"|'; echo $?)" in
+  0) selfprobe_check "d06 bullet shape off in lib.sh, a '- **BL-' entry and the marker" "$TMP/d06" ;;
+  *) note "FAIL  d06 -- the bullet-shape mutation DID NOT APPLY"; rc=1 ;;
+esac
+
+# ===== DECLARED-EMPTY MUTANTS. Each is built in a fresh seed, scored on the arm that owns it; the
+# unmutated arm above is its control and must have passed. =====================================
+# mc -- clause (c) dropped from the classifier: d07's ledger now reads as declared.
+seed "$TMP/mc"; de_ledger "$TMP/mc/docs/backlog.md" "BL-497 moved to the archive.\n\n"
+case "$(mutate "$TMP/mc/scripts/backlog-reverify.sh" 's@^  \[ "\$(raw_ids "\$LEDGER")" = 0 \] || return 1$@  :@'; echo $?)" in
+  0) mc_out="$(run_v "" "$TMP/mc")"; mc_rc=$?
+     if [ "$mc_rc" -eq 0 ] && grep -qF ', declared empty (' <<<"$mc_out"; then
+       note "ok    mc -- KILLED: without clause (c) a zero parse carrying a BL- id passes as declared empty"
+     else note "FAIL  mc SURVIVED: clause (c) dropped and d07's ledger still exited $mc_rc"; rc=1; fi ;;
+  *) note "FAIL  mc -- the clause-(c) mutation DID NOT APPLY"; rc=1 ;;
+esac
+# mb -- B1b dropped: d02's ledger now passes.
+seed "$TMP/mb"; de_ledger "$TMP/mb/docs/backlog.md" "## BL-001 — a live entry\n\nverify: manual\n\n"
+case "$(mutate "$TMP/mb/scripts/validate-backlog-size.sh" 's@^bash "\$REVERIFY" --marker-last "\$LEDGER" >/dev/null 2>&1; ML=\$?$@ML=1@'; echo $?)" in
+  0) mb_out="$(run_v "" "$TMP/mb")"; mb_rc=$?
+     if [ "$mb_rc" -eq 0 ] && [ "$(bl_reported "$mb_out")" = 1 ]; then
+       note "ok    mb -- KILLED: without B1b a live entry above the empty marker passes"
+     else note "FAIL  mb SURVIVED: B1b dropped and d02's ledger still exited $mb_rc"; rc=1; fi ;;
+  *) note "FAIL  mb -- the B1b mutation DID NOT APPLY"; rc=1 ;;
+esac
+# ms -- the self-probe's bullet seed dropped: d06's bullet-blind parser is no longer refused on
+# the probe, and falls through to the corpus.
+seed "$TMP/ms"; de_ledger "$TMP/ms/docs/backlog.md" "- **BL-001** — a live list entry\n\nverify: manual\n\n"
+ms_ok=1
+case "$(mutate "$TMP/ms/scripts/validate-backlog-size.sh" 's@- \*\*BL-%03d\*\* — seeded as a list entry@## BL-%03d — seeded@'; echo $?)" in
+  0) : ;; *) note "FAIL  ms -- the self-probe mutation DID NOT APPLY"; rc=1; ms_ok=0 ;;
+esac
+case "$(mutate "$TMP/ms/core/skills/ai-dlc-update/reconcile/lib.sh" 's|if (l ~ /\^- \\\*\\\*/)  *sh = "bullet"|if (0) sh = "bullet"|'; echo $?)" in
+  0) : ;; *) note "FAIL  ms -- the bullet-shape mutation DID NOT APPLY"; rc=1; ms_ok=0 ;;
+esac
+if [ "$ms_ok" -eq 1 ]; then
+  ms_out="$(run_v "" "$TMP/ms")"; ms_rc=$?
+  if [ "$ms_rc" -ne 2 ] && ! grep -qF "SELF-PROBE FAILED" <<<"$ms_out"; then
+    note "ok    ms -- KILLED: with headings alone in the self-probe a bullet-blind parser reaches the corpus (exit $ms_rc)"
+  else note "FAIL  ms SURVIVED: the self-probe still refused a bullet-blind parser without its bullet seed"; rc=1; fi
+fi
+
+# mp -- THE POSITION RULE replaced by presence: the classifier's marker_last body swapped for a
+# whole-file `grep -F` of the marker. d04 (quoted, not last, zero entries) then reads as declared
+# and passes; d03n (a live entry filed below a stale marker) then trips B1b. Each is scored on its
+# own seed, and both unmutated arms above are the controls. The anchor is asserted unique first.
+MP_SED='s@^  awk -v m="\$EMPTY_MARKER" .*END { exit (last == m) ? 0 : 1 }.*$@  grep -qF -- "$EMPTY_MARKER" "$1"@'
+mp_n="$(grep -cF 'END { exit (last == m) ? 0 : 1 }' "$REVERIFY")" || mp_n=0
+if [ "$mp_n" -ne 1 ]; then
+  note "FAIL  mp -- the position rule's line appears $mp_n times in backlog-reverify.sh; the mutation needs exactly one"; rc=1
+else
+  seed "$TMP/mp4"; de_ledger "$TMP/mp4/docs/backlog.md" "" "\nTrailing prose after the quotation.\n"
+  case "$(mutate "$TMP/mp4/scripts/backlog-reverify.sh" "$MP_SED"; echo $?)" in
+    0) mp4_out="$(run_v "" "$TMP/mp4")"; mp4_rc=$?
+       if [ "$mp4_rc" -eq 0 ] && grep -qF ', declared empty (' <<<"$mp4_out"; then
+         note "ok    mp/d04 -- KILLED: with the position rule replaced by presence, a marker quoted above trailing prose declares the ledger empty"
+       else note "FAIL  mp/d04 SURVIVED: presence-keyed marker and d04's ledger still exited $mp4_rc"; rc=1; fi ;;
+    *) note "FAIL  mp/d04 -- the position-rule mutation DID NOT APPLY"; rc=1 ;;
+  esac
+  seed "$TMP/mp3"; de_ledger "$TMP/mp3/docs/backlog.md" "" "\n## BL-001 — a live entry filed below a stale marker\n\nverify: manual\n\n"
+  case "$(mutate "$TMP/mp3/scripts/backlog-reverify.sh" "$MP_SED"; echo $?)" in
+    0) mp3_out="$(run_v "" "$TMP/mp3")"; mp3_rc=$?
+       if [ "$mp3_rc" -eq 1 ] && grep -qF "FAIL: B1b:" <<<"$mp3_out"; then
+         note "ok    mp/d03n -- KILLED: with the position rule replaced by presence, a live entry below a quoted marker trips B1b"
+       else note "FAIL  mp/d03n SURVIVED: presence-keyed marker and d03n's ledger exited $mp3_rc without B1b"; rc=1; fi ;;
+    *) note "FAIL  mp/d03n -- the position-rule mutation DID NOT APPLY"; rc=1 ;;
+  esac
+fi
+
 if [ "$rc" -eq 0 ]; then
-  note "PASS  backlog-size-ceiling -- control green, 16/16 probes hold"
+  note "PASS  backlog-size-ceiling -- control green, every probe holds"
 fi
 exit "$rc"

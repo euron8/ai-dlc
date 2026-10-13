@@ -86,10 +86,15 @@
 #
 # THERE IS NO PATH WHERE AN ABSENT OR UNREADABLE LEDGER RETURNS 0. The `-f` test below exits 2,
 # and a file that exists but parses to zero entries exits 1 -- an empty parse and a fully-rotated
-# ledger are the same zero, and passing over it is how a ceiling stops observing anything.
+# ledger are the same zero, and passing over it is how a ceiling stops observing anything --
+# UNLESS the ledger is DECLARED empty. That decision is `backlog-reverify.sh --declared-empty`'s
+# alone (the marker as the last non-blank line, AND no `BL-[0-9]` anywhere); this file asks it
+# only when its own count is zero and never restates it. B1b is the converse: the marker as the
+# last non-blank line while entries remain is a stale declaration and exits 1.
 #
 # Usage: validate-backlog-size.sh [<ledger>] [--quiet]   (default: <repo-root>/docs/backlog.md)
-# Exit:  0 = under the ceiling; 1 = over it, or the ledger parsed to zero; 2 = usage/environment.
+# Exit:  0 = under the ceiling, or zero entries and declared empty; 1 = over it, a zero parse
+#        not declared empty, or a stale empty marker (B1b); 2 = usage/environment.
 set -uo pipefail
 
 QUIET=0
@@ -111,6 +116,9 @@ while [ "$ROOT" != "/" ] && [ ! -f "$ROOT/VERSION" ]; do ROOT="$(dirname "$ROOT"
 
 LIB="$ROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
 [ -f "$LIB" ] || { echo "validate-backlog-size: FAIL -- reconcile/lib.sh missing; refusing to fall back to a private copy of the entry-boundary rule" >&2; exit 2; }
+# The owner of the declared-empty predicate and the marker's position rule. See the header.
+REVERIFY="$ROOT/scripts/backlog-reverify.sh"
+[ -f "$REVERIFY" ] || { echo "validate-backlog-size: FAIL -- scripts/backlog-reverify.sh missing; it owns the declared-empty predicate and this file refuses to restate it" >&2; exit 2; }
 # shellcheck source=../core/skills/ai-dlc-update/reconcile/lib.sh
 . "$LIB" || { echo "validate-backlog-size: FAIL -- cannot source $LIB" >&2; exit 2; }
 
@@ -142,7 +150,12 @@ count_entries() { awk -f "$AWKF" "$1"; }
 # without first proving it can produce a breach has established that it ran, not that the ledger
 # is short. The probe tree is under mktemp and is never the real corpus.
 # ---------------------------------------------------------------------------
-seed() { i=1; : > "$2"; while [ "$i" -le "$1" ]; do printf '## BL-%03d — seeded\n\nverify: manual\n\n' "$i" >> "$2"; i=$((i+1)); done; }
+# THE LAST SEEDED ENTRY IS A `- **BL-` BULLET, NOT A HEADING. Clause (c) of the declared-empty
+# predicate catches an entry the parser stopped seeing only if something proves the parser still
+# sees both shapes; with headings alone a bullet-shape regression passes this probe, under-counts
+# the real ledger, and at zero could read as declared empty.
+seed() { i=1; : > "$2"; while [ "$i" -lt "$1" ]; do printf '## BL-%03d — seeded\n\nverify: manual\n\n' "$i" >> "$2"; i=$((i+1)); done
+  printf -- '- **BL-%03d** — seeded as a list entry\n\nverify: manual\n\n' "$i" >> "$2"; }
 seed 3 "$probe/over.md"; seed 2 "$probe/at.md"
 p_over="$(count_entries "$probe/over.md")"; p_at="$(count_entries "$probe/at.md")"
 if [ "$p_over" != "3" ] || [ "$p_at" != "2" ]; then
@@ -159,9 +172,32 @@ fi
 # ---------------------------------------------------------------------------
 N="$(count_entries "$LEDGER")"
 if [ "$N" -eq 0 ]; then
-  echo "FAIL: B1: $LEDGER parsed to ZERO entries. An empty parse and a fully-rotated ledger are the same zero, so this is reported rather than passed over -- the count is not a reading." >&2
-  exit 1
+  bash "$REVERIFY" --declared-empty "$LEDGER" >/dev/null 2>&1; DE=$?
+  case "$DE" in
+    0)
+      if [ "$QUIET" != "1" ]; then
+        _where="$LEDGER"; [ "$DEFAULTED" = "1" ] && _where="docs/backlog.md"
+        echo "OK: validate-backlog-size -- B1 0/${MAX} entries in ${_where}, declared empty (the last non-blank line is the empty marker backlog-rotate.sh writes and no BL- id appears in the file; backlog-reverify.sh --declared-empty decided)."
+      fi
+      exit 0 ;;
+    1)
+      echo "FAIL: B1: $LEDGER parsed to ZERO entries. An empty parse and a fully-rotated ledger are the same zero, so this is reported rather than passed over -- the count is not a reading. A ledger emptied by scripts/backlog-rotate.sh --apply ends in the empty marker it writes; one emptied by hand, or one carrying a BL- id the parser did not count, is not declared empty." >&2
+      exit 1 ;;
+    *)
+      echo "validate-backlog-size: FAIL -- backlog-reverify.sh --declared-empty exited $DE on $LEDGER, an environment failure; the zero could not be classified." >&2
+      exit 2 ;;
+  esac
 fi
+# B1b -- the empty marker is a declaration about a ledger with NO entries, so as the last
+# non-blank line of one that has entries it is stale. Position is reverify's rule, asked here.
+bash "$REVERIFY" --marker-last "$LEDGER" >/dev/null 2>&1; ML=$?
+case "$ML" in
+  0)
+    echo "FAIL: B1b: $LEDGER carries ${N} entries but its last non-blank line is the empty marker, which declares a ledger with none. Delete the marker when filing an entry below it; scripts/backlog-rotate.sh writes it only when a rotation leaves zero entries." >&2
+    exit 1 ;;
+  1) : ;;
+  *) echo "validate-backlog-size: FAIL -- backlog-reverify.sh --marker-last exited $ML on $LEDGER, an environment failure." >&2; exit 2 ;;
+esac
 if [ "$N" -gt "$MAX" ]; then
   echo "FAIL: B1: $LEDGER carries ${N} entries against a ceiling of ${MAX}. This ledger is a QUEUE; past this depth nobody reads it end to end and entries get re-filed rather than found. Run scripts/backlog-reverify.sh, annotate what has landed as '**LANDED (v<version>, verified <sha>).**', then scripts/backlog-rotate.sh --check --apply. Raising AI_DLC_BACKLOG_MAX_ENTRIES is the operator's call and the last resort." >&2
   exit 1

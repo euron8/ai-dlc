@@ -157,6 +157,9 @@ seed() { # seed <dir>
   cp "$VALIDATOR" "$d/scripts/validate-backlog-receipts.sh"
   cp "$LIBSRC" "$d/core/skills/ai-dlc-update/reconcile/lib.sh"
   cp "$REVSRC" "$d/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh"
+  # R2's declared-empty exemption asks the classifier, so every seed carries it; a seed without it
+  # turns every zero-entry probe into an environment exit 2.
+  [ -n "$REVERIFY" ] && cp "$REVERIFY" "$d/scripts/backlog-reverify.sh"
   printf 'alpha\nbeta\n' > "$d/probe/subject.txt"
   printf 'gamma\n' > "$d/probe/driven.txt"
   printf 'delta\n' > "$d/probe/guarded.txt"
@@ -596,7 +599,7 @@ else
   printf '%s\n' "$m8b_out" | grep -E '^(FAIL|OK):' | sed 's/^/      /' | head -3; rc=1
 fi
 # ...and its mutant: the old condition restored, the same ledger must refuse as a zero.
-if mut "$TMP/m8b" 's|^if \[ "$SCORED" -eq 0 \] \&\& \[ "$N_PASS" -eq 0 \] \&\& \[ -z "$R2_ALLMANUAL" \]; then|if [ "$SCORED" -eq 0 ]; then|'; then
+if mut "$TMP/m8b" 's|^if \[ "$SCORED" -eq 0 \] \&\& \[ "$N_PASS" -eq 0 \] \&\& \[ -z "$R2_ALLMANUAL" \] \&\& \[ -z "$R2_DECLEMPTY" \]; then|if [ "$SCORED" -eq 0 ]; then|'; then
   # shellcheck disable=SC2086
   m8bm_out="$(run_v "" "$TMP/m8b" $M8B_ARGS)"; m8bm_rc=$?
   if [ "$m8bm_rc" -eq 1 ] && grep -qF "produced ZERO scored receipts" <<<"$m8bm_out"; then
@@ -645,6 +648,47 @@ if mut "$TMP/m8cn" 's|\[ "${MANUAL_RECEIPTS:-0}" -eq "$ENTRIES" \] \&\& R2_ALLMA
   fi
 else
   note "FAIL  m8c-mut DID NOT APPLY"; rc=1
+fi
+
+# ===== M8d. A LEDGER DECLARED EMPTY IS ACCOUNTED FOR, NOT A ZERO. ===========================
+# The rotation of the last entry leaves zero entries and the empty marker as the last line. R2
+# asks backlog-reverify.sh --declared-empty, only at zero entries, and passes with `R2
+# declared-empty`. m8 above is its near-miss: zero entries, no marker, still refused. The marker
+# text comes from the classifier's --print-marker, never typed here.
+M8D_MARK=""
+[ -n "$REVERIFY" ] && M8D_MARK="$(bash "$REVERIFY" --print-marker 2>/dev/null)"
+M8D_ARGS="--max-prose-closable 0 --max-unscorable 0 --max-out-of-population 0 --max-unstable 0 --min-sh-receipts 0 --min-entries 0"
+if [ -z "$M8D_MARK" ]; then
+  note "FAIL  m8d -- backlog-reverify.sh --print-marker returned nothing, so the declared-empty seed cannot be built"; rc=1
+else
+  seed "$TMP/m8d"
+  printf '# Probe backlog\n\nEvery entry was rotated to the archive.\n\n%s\n' "$M8D_MARK" > "$TMP/m8d/docs/backlog.md"
+  ( cd "$TMP/m8d" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m declared >/dev/null 2>&1 )
+  # shellcheck disable=SC2086
+  m8d_out="$(run_v "" "$TMP/m8d" $M8D_ARGS)"; m8d_rc=$?
+  if [ "$m8d_rc" -eq 0 ] && grep -q '^OK: validate-backlog-receipts.* R2 declared-empty$' <<<"$m8d_out"; then
+    note "ok    m8d -- a ledger declared empty is OK and says R2 declared-empty"
+  else
+    note "FAIL  m8d -- a declared-empty ledger must pass and say so (rc=$m8d_rc)"
+    printf '%s\n' "$m8d_out" | grep -E '^(FAIL|OK):' | sed 's/^/      /' | head -3; rc=1
+  fi
+  # ...and the mutant: the exemption granted at zero entries WITHOUT asking the classifier. m8's
+  # undeclared ledger (no marker) must then pass, where the shipped arm refuses it.
+  seed "$TMP/m8dm"
+  printf '# Probe backlog\n\nEntries were renamed to a shape the predicate does not know.\n\n## BACKLOG-001\n\nBody.\n' \
+    > "$TMP/m8dm/docs/backlog.md"
+  ( cd "$TMP/m8dm" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m empty >/dev/null 2>&1 )
+  if mut "$TMP/m8dm" 's|^  bash "$SELF_ROOT/scripts/backlog-reverify.sh" --declared-empty "$LEDGER" >/dev/null 2>\&1; _de=\$?$|  _de=0|'; then
+    # shellcheck disable=SC2086
+    m8dm_out="$(run_v "" "$TMP/m8dm" $M8D_ARGS)"; m8dm_rc=$?
+    if [ "$m8dm_rc" -eq 0 ] && grep -q ' R2 declared-empty$' <<<"$m8dm_out"; then
+      note "ok    m8d-mut -- KILLED: an exemption that does not ask the classifier passes an undeclared zero as declared-empty"
+    else
+      note "FAIL  m8d-mut SURVIVED: the unasked exemption exited $m8dm_rc on the undeclared ledger"; rc=1
+    fi
+  else
+    note "FAIL  m8d-mut DID NOT APPLY"; rc=1
+  fi
 fi
 
 # ===== THE RATCHETS THAT EXIST BECAUSE THE FIRST ONE IS ESCAPABLE. =========================
@@ -744,8 +788,16 @@ if [ -n "$REVERIFY" ] && [ -n "$REAL_LEDGER" ]; then
   cp "$REAL_LEDGER" "$TMP/j1/docs/backlog.md"
   # The anchor must be an id the real ledger does not carry, or it is a second entry under one id.
   # Real entries are titled (`## BL-NNN — ...`), so the id is closed by a non-digit or line end.
-  if grep -qE "^## ${J1_ANCHOR}([^0-9]|\$)" "$TMP/j1/docs/backlog.md" || ! grep -q '^## BL-' "$TMP/j1/docs/backlog.md"; then
-    note "FAIL  j1 -- the real ledger already carries ${J1_ANCHOR}, or carries no '## BL-' entry at all; the anchor cannot be told apart"; rc=1
+  # A real ledger DECLARED EMPTY carries no `## BL-` entry by construction, so that half of the
+  # precondition binds only when the classifier says the ledger is not declared empty; the anchor
+  # then supplies the arm's whole population and the join below still runs.
+  ( cd "$TMP/j1" && bash scripts/backlog-reverify.sh --declared-empty docs/backlog.md >/dev/null 2>&1 ); j1_de=$?
+  if [ "$j1_de" -ne 0 ] && [ "$j1_de" -ne 1 ]; then
+    note "FAIL  j1 -- backlog-reverify.sh --declared-empty exited $j1_de on the real ledger, an environment failure"; rc=1
+  fi
+  if grep -qE "^## ${J1_ANCHOR}([^0-9]|\$)" "$TMP/j1/docs/backlog.md" \
+     || { [ "$j1_de" -ne 0 ] && ! grep -q '^## BL-' "$TMP/j1/docs/backlog.md"; }; then
+    note "FAIL  j1 -- the real ledger already carries ${J1_ANCHOR}, or carries no '## BL-' entry at all while not declared empty; the anchor cannot be told apart"; rc=1
   fi
   printf '\n## %s\n\nverify: sh grep -q %s probe/subject.txt\n\n' "$J1_ANCHOR" "'MARKJ1ANCHOR'" >> "$TMP/j1/docs/backlog.md"
   ( cd "$TMP/j1" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m real >/dev/null 2>&1 )
