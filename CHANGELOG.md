@@ -20,6 +20,39 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.780.0] - 2026-10-13
+
+Batch 226 (graph-ledger-full-drain). `ledger-reverify.sh` gave no upstream-naming row to a candidate id containing
+`.` or `_`, so a consumer pull never reported a release that had named such an id; the reference consumer's one live
+candidate of that shape stayed open across two pulls while both siblings named by the same release commit closed.
+
+### Dotted and underscored ids reach the upstream-naming join
+
+- **Naming guards.** `named_absorbed` and `named_ambiguous` opened with a local `[A-Z0-9-]` class, a leftover copy of
+  the spelling `ledger_entry_id()` in `lib.sh` was widened past. Both now admit a label only when it equals its own
+  `ledger_entry_id()`, behind a fork-free `PC-*|BL-*` prefix refusal. Widening the class instead would have let a
+  receipted prose label (`validate-ci-gates.sh`, named by 10 commits) read `NAMED-UPSTREAM`; anchoring refuses it.
+  On a synthetic ledger it also refuses a receipted caps heading the shipped engine read as
+  `NAMED-UPSTREAM-OFF-SUBJECT`; the reference consumer carries no such heading.
+- **Sprint-prefix boundary.** The prefix walks, `named_cited_filter` and `named_sibling` treated `_` and `.` as
+  word boundaries, so `PC-S317_X` read as a mention of `PC-S317`. An id byte now continues the id; a `.` followed by
+  a non-id byte or end of line is still a full stop, which 8 release commits use after a bare prefix.
+- **Cited-only grammar.** The `Not-discharged:` line takes the shared id class in `named_cited_filter` and in
+  `validate-release-version.sh` arm F, whose self-probe gains a dotted canonical line and a dotted offender.
+- **Close version.** An `sh` `CLOSE-CANDIDATE` whose receipt already did not reproduce at base no longer offers
+  `v<theirs>` as the version to annotate: it names the commits of the entry's upstream-naming row, or says to find the
+  release where the receipt first stops reproducing. The update skill's step 8 routes the close to that detail.
+  Only a plain `NAMED-UPSTREAM` row lends its commits; a cited-only, docs-only, off-subject or sibling-attributed
+  row is named as not the answer, and an ambiguous row lends nothing. The naming state resets on every entry's first
+  row, above the empty-receipt skip, so an entry whose first `verify:` line is empty, including a duplicate id, no
+  longer inherits the previous entry's commits.
+- **Fixtures.** `ledger-reverify` gains an id-class unit (bullet and heading `._` ids, a prefix shared only by `._`
+  ids, a receipted prose label, a dotted `Not-discharged:` line, `_` and `.3-` prefix mentions, the full-stop control,
+  seven close-detail cells) and a sibling world continued by id bytes, with mutants for each guard, the boundary,
+  the sibling class, the widen-instead-of-anchor form, the close detail, the per-entry reset and the per-kind sha
+  source. Re-keyed: `mutation-guard`,
+  `mutation-receiptless-local-guard`, the cited-only and ambiguous mutants, and `release-version-triple`'s arm F pair.
+
 ## [0.779.0] - 2026-10-12
 
 Batch 225 (graph-ledger-full-drain), third release. BL-497 closes, which leaves `docs/backlog.md` with no live entry
