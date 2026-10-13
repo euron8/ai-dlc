@@ -309,6 +309,17 @@ s8_stop="$(printf '%s\n' "$s8_msgs" | grep -cE 'PC-S815[.] ')" || s8_stop=0
 [ "$s8_slug" = 0 ] && [ "$s8_tok" = 1 ] && [ "$s8_cont" = 3 ] && [ "$s8_bnd" = 0 ] && [ "$s8_stop" = 1 ] \
   || { echo "seed: the id-class shapes are wrong (shared slugs $s8_slug want 0, PC-S802 token $s8_tok want 1, continuations $s8_cont want 3, bare boundaries $s8_bnd want 0, full stop $s8_stop want 1)" >&2; exit 1; }
 
+# THE SUBJECTS OF THREE `sh` CLOSE-CANDIDATE DETAIL CELLS (run.sh lr_unit_id_class, which appends
+# their entries to its own cut ledger, so the main ledger and its RECEIPTS-UNDECIDED row do not
+# move). s818 and s819 exist from here on, so a receipt asserting their ABSENCE at a ref exits
+# non-zero at base AND at theirs: closed already at base. Only s818's id is named by a commit.
+printf '#!/bin/sh\necho s818\n' > "$DIST/core/scripts/s818-subject.sh"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'fix: absorb PC-S818-6.1-SH_CLOSED_AT_BASE'
+printf '#!/bin/sh\necho s819\n' > "$DIST/core/scripts/s819-subject.sh"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'fix: a subject no entry id is named beside'
+
 # --- base: neither marker present ---
 printf '# SKILL\nrule one\nrule two\n' > "$SK"
 printf '0.100.0\n' > "$DIST/VERSION"

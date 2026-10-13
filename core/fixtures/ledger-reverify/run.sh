@@ -2796,7 +2796,7 @@ sb_case slug-unanchored PC-S1025-PREFIX-X "$SA" "PC-S1037-ID-CONT-X PC-S1039-DOT
 sb_case sibling-class-narrow PC-S1037-ID-CONT-X "$SA" "PC-S1039-DOT-CONT-X" \
   "a next-byte class without _ and . reads a slug continued by _ or .3- as naming the sibling, and S1037 is what sees it (S1039, the dot spelling, co-moves by construction)" \
   'if (c == "" || c !~ /[0-9A-Za-z_.-]/) return 1' 'if (c == "" || c !~ /[0-9A-Za-z-]/) return 1'
-sb_case first-touching-commit-onlyPC-S1017-TWO-COMMITS-X "$SA" - \
+sb_case first-touching-commit-only PC-S1017-TWO-COMMITS-X "$SA" - \
   "judging only the newest naming commit misses an older one that changed X's anchor, and S1017 is what sees it" \
   "printf '%s\\n' \"\$2\" | tr ',' '\\n' > \"\$LR_STAGE/nsb-shas\"" "printf '%s\\n' \"\${2%%,*}\" > \"\$LR_STAGE/nsb-shas\""
 sb_case sha-list-unterminated PC-S1001-OFFENDER "$NU" "PC-S1007-ARCHIVE-ONLY PC-S1019-MERGE-P2-X PC-S1021-MERGE-P1-X PC-S1027-PIPE-X PC-S1017-TWO-COMMITS-X" \
@@ -5841,10 +5841,61 @@ IDW="$(dirname "$DIST")/id-class"; mkdir -p "$IDW"
 awk '/^<!-- id-class block:/ {p=1; next} /^<!-- end id-class block -->/ {p=0} p' \
   "$CONS/_bmad-output/ai-dlc-update/push-candidate-ledger.md" > "$IDW/ledger.md"
 idc_rows() { bash "$1" "$DIST" "$BASE" "$CONS" "$THEIRS" "$IDW/ledger.md" 2>/dev/null; }
-idc_read() { local _c _s=""; for _c in $IDC_CELLS; do _s="$_s ${_c%%:*}=$(idc_cell "$1" "$_c")"; done; printf '%s' "${_s# }"; }
-idc_want() { local _c _s=""; for _c in $IDC_CELLS; do _s="$_s ${_c%%:*}=${_c##*:}"; done; printf '%s' "${_s# }"; }
+
+# THE sh CLOSE-CANDIDATE DETAIL CELLS. An `sh` receipt that ALREADY exited non-zero at base was not
+# absorbed by base..theirs, so its close must not hand the operator v<theirs>: it names the commits
+# this run's naming row lists (s818, a dotted id named by a seeded commit), or tells the operator to
+# find the release (s819, never named). The control (s820) reproduces at base and closes at theirs,
+# and keeps the v<theirs> text. The three entries are appended to THIS cut only, so the main
+# ledger's RECEIPTS-UNDECIDED row is unchanged; these cells read the cut's control run, which every
+# mutant below already pays for. Keyed on the per-receipt flag only the fixed engine carries.
+idc_det=1
+grep -qF 'SBC_CLOSE_AT_BASE' "$CLOSER" || idc_det=0
+[ "$B2_ISDIST" = 1 ] && idc_det=1
+IDC_DCELLS=""
+if [ "$idc_det" = 1 ]; then
+  cat >> "$IDW/ledger.md" <<'IDCSH'
+
+- **PC-S818-6.1-SH_CLOSED_AT_BASE** — an sh receipt already closed at base, and a commit names the id.
+  verify: sh git -C "$DIST" cat-file -e "${THEIRS}:core/scripts/s818-subject.sh" && exit 1; exit 0
+
+- **PC-S819-SH-CLOSED-AT-BASE-UNNAMED** — the same shape, and no commit names the id.
+  verify: sh git -C "$DIST" cat-file -e "${THEIRS}:core/scripts/s819-subject.sh" && exit 1; exit 0
+
+- **PC-S820-SH-REPRODUCED-AT-BASE** — the control: reproduces at base, stops reproducing at theirs.
+  verify: sh case "$(git -C "$DIST" show "${THEIRS}:core/skills/ai-dlc/SKILL.md")" in *MARKER_B*) exit 1 ;; esac; exit 0
+IDCSH
+  IDC_DCELLS="s818:PC-S818-6.1-SH_CLOSED_AT_BASE:names-commit s819:PC-S819-SH-CLOSED-AT-BASE-UNNAMED:find-release s820:PC-S820-SH-REPRODUCED-AT-BASE:v-theirs"
+fi
+IDC_TV="$(git -C "$DIST" show "${THEIRS}:VERSION" 2>/dev/null)"
+IDC_S818="$(git -C "$DIST" log -F --grep='PC-S818-6.1-SH_CLOSED_AT_BASE' --format=%h "$THEIRS" 2>/dev/null)"
+# <rows> <label> -> the CLOSE-CANDIDATE detail's class. `names-commit` requires the derived sha AND
+# the absence of the v<theirs> annotation; `v-theirs` requires that annotation text.
+idc_dcls() {
+  local _d
+  _d="$(printf '%s\n' "$1" | awk -F'\t' -v l="$2" '$2 == l && $1 == "CLOSE-CANDIDATE" {print $3; exit}')"
+  [ -n "$_d" ] || { printf 'no-close'; return; }
+  case "$_d" in *"'ADOPTED UPSTREAM (v$IDC_TV, verified"*) printf 'v-theirs'; return ;; esac
+  case "$_d" in *"names this entry's id in commit(s) "*"$IDC_S818"*) [ -n "$IDC_S818" ] && { printf 'names-commit'; return; } ;; esac
+  case "$_d" in *"find the release at which this receipt first stops reproducing"*) printf 'find-release'; return ;; esac
+  printf 'other'
+}
+idc_read() {
+  local _c _s="" _r
+  for _c in $IDC_CELLS; do _s="$_s ${_c%%:*}=$(idc_cell "$1" "$_c")"; done
+  for _c in $IDC_DCELLS; do _r="${_c#*:}"; _s="$_s ${_c%%:*}=$(idc_dcls "$1" "${_r%:*}")"; done
+  printf '%s' "${_s# }"
+}
+idc_want() { local _c _s=""; for _c in $IDC_CELLS $IDC_DCELLS; do _s="$_s ${_c%%:*}=${_c##*:}"; done; printf '%s' "${_s# }"; }
+idc_ctl_rows="$(idc_rows "$CLOSER")"
+for _c in $IDC_DCELLS; do
+  ASSERTIONS=$((ASSERTIONS + 1))
+  _t="${_c%%:*}"; _r="${_c#*:}"; _w="${_c##*:}"; _g="$(idc_dcls "$idc_ctl_rows" "${_r%:*}")"
+  if [ "$_g" = "$_w" ]; then printf '  ok    %-22s %s  (sh CLOSE-CANDIDATE detail)\n' "id-class-$_t" "$_g"
+  else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s detail reads %s, want %s (v<theirs> is %s, the naming commit %s)\n' "id-class-$_t" "$_g" "$_w" "${IDC_TV:-?}" "${IDC_S818:-<none>}"; fi
+done
 ASSERTIONS=$((ASSERTIONS + 1))
-idc_ctl="$(idc_read "$(idc_rows "$CLOSER")")"
+idc_ctl="$(idc_read "$idc_ctl_rows")"
 if [ "$idc_ctl" != "$(idc_want)" ]; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s FIXTURE BROKEN -- the unmutated engine over the cut read {%s}, want {%s}; no mutant below is attributable\n' "id-class-control" "$idc_ctl" "$(idc_want)"
@@ -5863,8 +5914,9 @@ idc_case() {
   done
   if [ -z "$_d" ]; then FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s FIXTURE BROKEN -- the mutation DID NOT APPLY (an anchor matched the wrong count, or the mutant does not parse)\n' "mutation-$_tag"; return; fi
   _r="$(idc_rows "$_d/ledger-reverify.sh")"
-  for _c in $IDC_CELLS; do
-    _t="${_c%%:*}"; _g="$(idc_cell "$_r" "$_c")"
+  for _c in $IDC_CELLS $IDC_DCELLS; do
+    _t="${_c%%:*}"
+    case " $IDC_DCELLS " in *" $_c "*) _g="${_c#*:}"; _g="$(idc_dcls "$_r" "${_g%:*}")" ;; *) _g="$(idc_cell "$_r" "$_c")" ;; esac
     case " $_mv " in *" $_t="*) _w=" $_mv "; _w="${_w#* $_t=}"; _w="${_w%% *}" ;; *) _w="${_c##*:}" ;; esac
     [ "$_g" = "$_w" ] || _bad="$_bad $_t=$_g"
   done
@@ -5878,8 +5930,10 @@ if [ "$idc_guard" = 1 ]; then
   # named_absorbed's guard back to the shipped narrow form, every layer. S816 co-moves BY
   # CONSTRUCTION: its citation row comes from named_absorbed too. S802 holds, because its row is
   # named_ambiguous's, which this mutant does not touch -- that is what makes the two kills distinct.
-  idc_case narrow-named-absorbed "s810=none s811=none s816=none" \
-    "named_absorbed narrowed to [A-Z0-9-] loses both dotted ids, and id-class-s810/-s811 are what see it (s816, a citation from the same function, co-moves)" \
+  _idc_na_mv="s810=none s811=none s816=none"
+  [ "$idc_det" = 1 ] && _idc_na_mv="$_idc_na_mv s818=find-release"
+  idc_case narrow-named-absorbed "$_idc_na_mv" \
+    "named_absorbed narrowed to [A-Z0-9-] loses both dotted ids, and id-class-s810/-s811 are what see it (s816, a citation from the same function, co-moves; so does s818, whose close detail reads the naming row's shas)" \
     "$IDC_NA_CASE" "    *[!A-Z0-9-]*|'') return 0 ;;" 1 \
     "$IDC_NA_ELSE" '    *) : ;;' 1 \
     "$IDC_NA_EQ" '  :' 1
@@ -5907,6 +5961,16 @@ if [ "$idc_bound" = 1 ]; then
     "reading every . as id-continuing silences a prefix cited at the end of a sentence, and id-class-s815 is what sees it" \
     '([^0-9A-Za-z_.-]|[.]([^0-9A-Za-z_-]|\$)|\$)' '([^0-9A-Za-z_.-]|\$)' 2 \
     '"([^0-9A-Za-z_.-]|[.]([^0-9A-Za-z_-]|$)|$)"' '"([^0-9A-Za-z_.-]|$)"' 1
+fi
+if [ "$idc_det" = 1 ]; then
+  # THE OLD DETAIL RESTORED: every sh close offers v<theirs>, whatever the base control said.
+  idc_case old-close-detail "s818=v-theirs s819=v-theirs" \
+    "an sh close already closed at base offering v<theirs> again is the defect, and id-class-s818/-s819 are what see it; the control s820 holds" \
+    '            if [ "${SBC_CLOSE_AT_BASE:-0}" = 1 ]; then' '            if false; then' 1
+  # THE NAMING BRANCH ALONE dropped: the named entry falls to the find-the-release text.
+  idc_case close-detail-no-shas "s818=find-release" \
+    "dropping the naming-commit branch sends a named entry to a bisect it does not need, and id-class-s818 is what sees it" \
+    '              if [ -n "${NA_ENTRY_SHAS:-}" ]; then' '              if false; then' 1
 fi
 
 } # end lr_unit_id_class
