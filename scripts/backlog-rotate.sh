@@ -345,6 +345,40 @@ LIVE_ENTRIES="$(LC_ALL=C awk "$(ledger_entry_awk)$BACKLOG_LABEL_AWK"'
 case "$LIVE_ENTRIES" in ''|*[!0-9]*) echo "backlog-rotate: the live remainder's entry count did not parse; nothing was written" >&2; exit 2 ;; esac
 MARKED=false
 if [ "$LIVE_ENTRIES" -eq 0 ]; then
+  # THE ID CENSUS: A LIVE ENTRY THE PARSER CANNOT SEE IS SWEPT WITH THE LAST ONE IT CAN. A heading
+  # spelled ``## `BL-501` ``, `# BL-501`, ` ## BL-501` (indented) or `-**BL-501**` is not an entry
+  # boundary to lib.sh, so the split absorbs it into the closed entry above it, BEFORE reads no live
+  # row, the DECLARED-EMPTY acceptance in --check passes, and the id is archived. With entries left
+  # live that cannot happen silently -- the declaration is the only path that turns "nothing live
+  # was visible" into permission -- so the census is sited here, on the moved set, before the marker
+  # is written or accepted. It counts entry-LIKE id lines (any heading level, any indent, a backtick
+  # around the id, a bullet with or without its space) and refuses when there are more than the
+  # entries the split moved.
+  # FALSE-POSITIVE SET, MEASURED OVER origin/main BEFORE THIS SHIPPED: docs/backlog.md 1 parsed / 1
+  # matched; docs/backlog.archive.md 500 parsed / 502 matched, the two extras being mid-body
+  # mentions at archive :15037 and :24255. They fire only if that text is inside the entry being
+  # moved, and a refusal costs one edit to the entry, never a lost line.
+  # SECOND NARROWING, AND A FIXTURE FORCED IT: LINES INSIDE A CLOSED FENCE ARE NOT COUNTED. As first
+  # built the census refused core/fixtures/backlog-rotate-fence-guard's near-miss ledger, whose last
+  # entry fences `#BL-9` and an indented `## BL-9` as quoted markdown -- body text of the entry being
+  # moved, not a live entry. The fence guard above has already refused every ledger where this
+  # file's fence reading and CommonMark's disagree, so a plain toggle on a delimiter at column 0-3
+  # is safe here.
+  CENSUS="$(LC_ALL=C awk '
+    { t = $0; sub(/^ ? ? ?/, "", t) }
+    !inf && (t ~ /^```/ || t ~ /^~~~/) { inf = 1; fc = substr(t, 1, 1); next }
+    inf { if (substr(t, 1, 1) == fc && t ~ /^(```+|~~~+)[ \t]*$/) inf = 0; next }
+    /^[ \t]*#+[ \t]*`?BL-[0-9]/ || /^[ \t]*-?[ \t]*\*\*`?BL-[0-9]+`?\*\*/ { print "  line " NR " of the moved set: " $0 }' "$AWKF.moved")"
+  CENSUS_N="$(printf '%s' "$CENSUS" | awk 'END { print NR }')"
+  if [ "$CENSUS_N" -gt "$MOVED_COUNT" ]; then
+    echo "backlog-rotate: REFUSING — this rotation empties the ledger, but the moved set carries $CENSUS_N entry-like id lines against $MOVED_COUNT entr(y|ies) the parser split out:" >&2
+    printf '%s\n' "$CENSUS" >&2
+    echo "  A line above that is not one of the moved entries' own headings is a LIVE entry the entry-boundary" >&2
+    echo "  rule cannot see, and it would be archived with the closed entry before it. Respell it as a" >&2
+    echo "  column-0 '## BL-<n>' heading (no backticks, no indent) or '- **BL-<n>**' bullet, or reword a mid-body" >&2
+    echo "  mention so it does not open a line. Nothing was moved and nothing was written." >&2
+    exit 2
+  fi
   EMPTY_MARKER="$(bash "$REVERIFY" --print-marker 2>/dev/null)"
   [ -n "$EMPTY_MARKER" ] || { echo "backlog-rotate: backlog-reverify.sh --print-marker returned nothing; refusing to leave a zero-entry ledger undeclared. Nothing was written." >&2; exit 2; }
   bash "$REVERIFY" --marker-last "$AWKF.live" >/dev/null 2>&1; ML=$?
@@ -510,6 +544,18 @@ if [ "$APPLY" != true ]; then
   exit 0
 fi
 
+# A DECLARATION IS WRITTEN ONLY IF IT IS VALID. `--apply` without `--check` never asks the
+# classifier about the remainder, so a zero-entry remainder whose preamble carries a `BL-` id would
+# be written with a marker that B1 and R2 then refuse. The classifier is asked here, before either
+# file -- the archive included -- is touched. Spelled `= 0` rather than `-eq 0` so the marker
+# guard above stays the unique anchor its mutant in core/fixtures/backlog-ledger keys on.
+if [ "$LIVE_ENTRIES" = 0 ]; then
+  bash "$REVERIFY" --declared-empty "$AWKF.live" >/dev/null 2>&1; DE=$?
+  if [ "$DE" -ne 0 ]; then
+    echo "backlog-rotate: REFUSING TO APPLY — the remainder carries zero entries but backlog-reverify.sh --declared-empty answers $DE on it, so the marker would declare a ledger B1 and R2 refuse. Usually a BL- id remains in the preamble; reword it. Nothing was moved and nothing was written." >&2
+    exit 2
+  fi
+fi
 if [ ! -f "$ARCHIVE" ]; then
   {
     echo "# Carry-over backlog — archive"

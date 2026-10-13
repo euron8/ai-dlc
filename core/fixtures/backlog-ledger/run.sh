@@ -874,6 +874,77 @@ else
 fi
 cp "$RV" "$RR/scripts/backlog-reverify.real.sh"
 
+# ---------------------------------------------------------------------------------------
+# Seed J — a LIVE entry the parser cannot see, below the last entry it can.
+# ---------------------------------------------------------------------------------------
+# Each spelling below is not an entry boundary to lib.sh, so the split absorbs it into the closed
+# BL-500 above it, BEFORE reads no live row, and the DECLARED-EMPTY acceptance would archive it.
+# The rotator's id census must refuse: --check exits 2, and --apply writes neither file.
+mkdir -p "$WORK/j"
+j_seed() { # j_seed <file> <live-heading-line>
+  { printf '# Carry-over backlog\n\nOpen work only. Each entry ends in a receipt line.\n\n## Receipts\n\n'
+    printf 'verify: sh <one-liner> -- exit 0 means fixed. verify: manual -- a human closes it.\n\n'
+    printf '## BL-500 — closed, the last entry the parser sees\n\n<br>**LANDED (v0.370.0, verified d4fd318).** Done.\n\nverify: has VERSION "."\n\n'
+    printf '%s — live, spelled so the boundary rule cannot see it\n\nverify: manual\n' "$2"; } > "$1"
+}
+J_SPELL_1='## `BL-501`'; J_SPELL_2='# BL-501'; J_SPELL_3=' ## BL-501'; J_SPELL_4='-**BL-501**'
+for j_i in 1 2 3 4; do
+  eval "j_sp=\"\$J_SPELL_$j_i\""
+  LJ="$WORK/j/backlog-$j_i.md"; j_seed "$LJ" "$j_sp"; cp "$LJ" "$LJ.orig"
+  JC="$(bash "$RT" "$LJ" --check 2>&1)"; JC_RC=$?
+  bash "$RT" "$LJ" --apply --archive "$WORK/j/archive-$j_i.md" >/dev/null 2>&1; JA_RC=$?
+  if [ "$JC_RC" -eq 2 ] && grep -q "entry-like id lines" <<<"$JC" && grep -qF "BL-501" <<<"$JC" \
+     && [ "$JA_RC" -eq 2 ] && cmp -s "$LJ" "$LJ.orig" && [ ! -e "$WORK/j/archive-$j_i.md" ]; then
+    ok "census-$j_i" "'$j_sp' below the last parseable entry: --check exits 2 naming it, --apply writes nothing"
+  else
+    bad "census-$j_i" "'$j_sp': --check rc=$JC_RC, --apply rc=$JA_RC, ledger $(cmp -s "$LJ" "$LJ.orig" && echo unchanged || echo CHANGED), archive $([ -e "$WORK/j/archive-$j_i.md" ] && echo WRITTEN || echo absent)"
+  fi
+done
+# CONTROL: the census does not fire on a plain last-entry rotation (seed G's shape, re-run).
+mkdir -p "$WORK/jc"; cp "$LG.orig" "$WORK/jc/backlog.md"
+# Captured first and read from a here-string: `grep -q` fed by a pipe answers with the writer's
+# EPIPE under pipefail and reads NOT-FOUND on output that contains the pattern.
+JCC="$(bash "$RT" "$WORK/jc/backlog.md" --check 2>&1)"
+if grep -q "check PASS" <<<"$JCC"; then
+  ok "census-control" "a plain last-entry rotation still passes --check with the census in place"
+else bad "census-control" "the census fires on a plain last-entry rotation"; fi
+# MUTANT: the census removed. The backticked spelling must then pass --check (the sweep).
+CSN="$(grep -c '^  if \[ "\$CENSUS_N" -gt "\$MOVED_COUNT" \]; then$' "$RT")" || CSN=0
+if [ "$CSN" -ne 1 ]; then bad "mutation-no-census" "the census line appears $CSN times; the mutation needs exactly one"
+elif ! sed 's/^  if \[ "\$CENSUS_N" -gt "\$MOVED_COUNT" \]; then$/  if false; then/' "$RT" > "$RRT"; then
+  bad "mutation-no-census" "DID NOT APPLY: sed failed"
+elif cmp -s "$RT" "$RRT"; then bad "mutation-no-census" "DID NOT APPLY: the mutation matched nothing"
+else
+  LJ="$WORK/j/backlog-1.md"
+  JM="$(bash "$RRT" "$LJ" --check 2>&1)"; JM_RC=$?
+  if [ "$JM_RC" -eq 0 ] && grep -q "check PASS" <<<"$JM"; then
+    ok "mutation-no-census" "killed: without the census a backticked live heading passes --check and would be archived"
+  else bad "mutation-no-census" "SURVIVED: with the census removed --check still exited $JM_RC"; fi
+fi
+
+# --apply WITHOUT --check must not write an invalid declaration: a preamble mentioning BL-1 leaves
+# a zero-entry remainder the classifier will not call declared, so --apply refuses before writing.
+mkdir -p "$WORK/k"; LK="$WORK/k/backlog.md"
+{ printf '# Probe backlog\n\nHistory: BL-1 was the first entry ever filed.\n\n'
+  printf '## BL-700 — closed, the last entry\n\n<br>**LANDED (v0.370.0, verified d4fd318).** Done.\n\nverify: has VERSION "."\n'; } > "$LK"
+cp "$LK" "$LK.orig"
+KA="$(bash "$RT" "$LK" --apply 2>&1)"; KA_RC=$?
+if [ "$KA_RC" -eq 2 ] && grep -q "declared-empty answers" <<<"$KA" && cmp -s "$LK" "$LK.orig" && [ ! -e "$WORK/k/backlog.archive.md" ]; then
+  ok "apply-declares-valid" "--apply refuses a zero-entry remainder whose preamble carries a BL- id, and writes nothing"
+else bad "apply-declares-valid" "--apply exited $KA_RC on a remainder that cannot be declared; ledger $(cmp -s "$LK" "$LK.orig" && echo unchanged || echo CHANGED)"; fi
+DVN="$(grep -c '^  if \[ "\$DE" -ne 0 \]; then$' "$RT")" || DVN=0
+if [ "$DVN" -ne 1 ]; then bad "mutation-apply-unvalidated" "the --apply validation line appears $DVN times; the mutation needs exactly one"
+elif ! sed 's/^  if \[ "\$DE" -ne 0 \]; then$/  if false; then/' "$RT" > "$RRT"; then
+  bad "mutation-apply-unvalidated" "DID NOT APPLY: sed failed"
+elif cmp -s "$RT" "$RRT"; then bad "mutation-apply-unvalidated" "DID NOT APPLY: the mutation matched nothing"
+else
+  cp "$LK.orig" "$LK"
+  bash "$RRT" "$LK" --apply >/dev/null 2>&1; KM_RC=$?
+  if [ "$KM_RC" -eq 0 ] && ! cmp -s "$LK" "$LK.orig"; then
+    ok "mutation-apply-unvalidated" "killed: without the check --apply writes a declaration the classifier refuses"
+  else bad "mutation-apply-unvalidated" "SURVIVED: the unvalidated --apply exited $KM_RC and left the ledger unchanged"; fi
+fi
+
 echo
 if [ "$FAIL" -eq 0 ]; then
   echo "PASS: every assertion holds."

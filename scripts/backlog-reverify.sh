@@ -92,7 +92,7 @@ unresolved() { # unresolved <entry> <detail>
   if [ "$MODE" = rows ]; then printf 'INPUT-UNRESOLVED\t%s\t%s\n' "$1" "$2"; exit 0; fi
   exit 2
 }
-if [ "$MODE" = print-marker ]; then printf '%s\n' "$EMPTY_MARKER"; exit 0; fi
+if [ "$MODE" = print-marker ] && [ "$#" -eq 1 ]; then printf '%s\n' "$EMPTY_MARKER"; exit 0; fi
 
 # Resolve the repo root by WALKING UP FOR A MARKER, never by counting `..` hops -- a validator
 # that counts hops answers differently from the root, from a subdirectory and from a sandbox
