@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 339..390. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 334..367. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -330,40 +330,6 @@ Net for the batch: closed 4 entries (BL-474, BL-498, BL-499, BL-500) and 3 candi
 0.775.0 closed and filed nothing.
 
 Batch 222's block below is history: batch 223's block replaces its open items and its delivery gap.
-
-**BATCH 222 SHIPPED `v0.772.0` (`a304562b`, #1108) AND CLOSED BL-481; NO CONSUMER CANDIDATE WAS LIVE TO BUILD.** Handed the
-plan by ai-dlc-ff at `origin/main` `50b5ca40` (`VERSION` 0.771.0); peers ai-dlc-ff, ai-dlc-1d and ai-dlc-b5, all idle, one
-gated push on the box at a time by GATE START / LANDED.
-- **Opening sweep** (at `50b5ca40`): live 1, unfiled 0, worklist 0, DISCHARGED 1
-  (`PC-S317-HERMETIC-REQUIRED-INPUT-NEVER-CONSUMED-REDS-TWO-SHIPPED-FIXTURES`, oldest naming release 0.769.0, control
-  `UNNAMED`), TERMINAL 228, archive 351, 46 qualifying refs, every control passing. The worklist join's `awk` half
-  printed `REFUSE: awk half matched nothing`; that is genuine, not grammar: no live `docs/backlog.md` entry cites a `PC-`
-  id. graph carried no uncommitted filing (ledger working tree = HEAD).
-- **`v0.772.0`, BL-481 CLOSED.** `self-update-join-gate`, the last undeclared unmapped fixture, got a committed sandbox
-  trace (530 rows; no other fixture's rows moved). Its local in-pool rows had been dropped whenever the `core/fixtures`
-  listing they record changed. Gate green, 7 of 279 run, read-set line `0 of 279 fixture dir(s) UNMAPPED`. The fixture
-  still re-runs on any push that changes one of its 15 non-`.git/` read paths: the `core/fixtures` listing (so any
-  added fixture directory), four update-skill reconcile files, and its own scripts.
-- **BL-497, DEAD-PREMISE on its stated harm, kept whole.** Its census reproduces (110 of 182, 1927 paths), but a
-  declared fixture runs in a `hermetic-run.sh` sandbox holding only its declared inputs and keys on the declaration, so
-  an undeclared read cannot cause a silent skip: the map rows predate the declarations, the kept sandbox of
-  `agent-definition-render` holds 0 of its 59 gap files, and sandboxed vs plain runs match on six fixtures carrying 80%
-  of the paths. Retitled to the live residue: a fixture tolerating a missing input passes with reduced coverage, and the
-  sandbox is a copy, not a jail. A one-time sandboxed-vs-plain census over every declared fixture (suite-scale wall
-  clock) is the instrument; **it was put to the operator and not run.**
-- **BL-474 unchanged, still owed the operator's ruling.** graph's HEAD now carries five sharded reviews and every
-  `handovers:` line in them reads 0 (across 127 refs: 619 at 0, 32 at 1, the nonzero ones all synthetic H16/H17 fixture
-  cases in a self-update fixtures report). Option (a), serial by design, was put to the operator again as recommended.
-- **graph delivery gap**: stamp 0.766.0 against `VERSION` 0.772.0, six releases, WIDE. The pull is REQUIRED (graph's
-  installed runner still reds `consumer-machinery-inventory` and `extract-push-flag-decision`; graph pushes with
-  `--no-verify`). The pull is the operator's.
-- **graph boundary**: ledger md5 `7b2cc010…` at the opening and the close; porcelain 2 at the opening and 6 at the
-  close, all graph's own pipeline state (one a new review shard under `docs/reviews/s317/shards/`), 0 under
-  `_bmad-output/ai-dlc-update/`. Nothing was written there.
-
-Net for the batch: closed 1 (BL-481), filed 0.
-
-Batch 221's block below is history: batch 222's block replaces its open items and its delivery gap.
 
 ### Derive the state; do not trust the numbers below
 
@@ -1639,10 +1605,14 @@ given at batch 90.
    nobody needed. Owed and required are two claims; take both.
 
    **THE SECOND TEST IS A DIFFERENTIAL AGAINST THE CONSUMER'S REAL TREE, and it is cheap.** Run the
-   consumer's INSTALLED `scripts/ai-dlc/validate-layer-entries.sh` and this distribution's copy, both
-   against `/Users/n8/git/graph`, and diff the finding sets. **Put a `cmp -s` control in the same
-   invocation asserting the two binaries differ** — otherwise two runs of one program produce a
-   perfect null and it reads exactly like agreement. If the findings are identical, the pull changes
+   consumer's INSTALLED copy of **whichever engine the range CHANGES** and this distribution's copy,
+   both against a `file://` clone of `/Users/n8/git/graph`, and diff the finding sets. Derive the
+   engine from the range's diff under `core/`, never from this sentence: `validate-layer-entries.sh`
+   is one candidate, and a range that leaves it byte-identical cannot discriminate there. Batches
+   224-226 each recorded that null and banked the pull, while batch 227's range changed
+   `ledger-reverify.sh` and that engine showed a row the consumer was missing. **Put a `cmp -s`
+   control in the same invocation asserting the two binaries differ** — otherwise two runs of one
+   program produce a perfect null and it reads exactly like agreement. If the findings are identical, the pull changes
    nothing observable today and the answer is BANK IT. If they diverge, the consumer is missing a
    finding and that IS the trigger — report it immediately.
 
