@@ -102,7 +102,19 @@ remediator spend (4/13 × $97 ≈ $30 s317, 9/21 × $80 ≈ $34 s318). The remed
 high to medium effort at the s317/s318 boundary coincides with the rise; that is confounded and is
 graph's setting, not core's. Subsumes the earlier "adversary series length" finding.
 
-verify: manual -- close when the remediator contract (`core/team-roles/remediator.md`, `_gate-procedures.md` adversarial repair dispatch) requires a repair to re-check every sibling site of the fixed text and every cite it moved before reporting, and a fixture pins that requirement.
+Efficacy, re-read for the fix: about 10 of about 33 sampled repair-introduced MAJORs are a sibling
+left unfixed or a moved cite; the rest are underived claims the existing evidence contract already
+forbids. The fix reaches that third, so the $105 is not what it recovers. The fix: every `repaired`
+entry with a real edit carries `- siblings:` and a fence that greps the replaced text across the
+artifact's own files (never the slot, `shards/` or a record, which hold the command's own text)
+plus a control count of the new text; moved cites are the serial remediator's after the join.
+`join-remediator-shards.sh` refuses a missing field once any entry of the set carries one, and is
+PENDING over a set where none does: 0 of graph's 202 s317/s318 shard parts carry it. Not caught:
+a remediator set omitting the field everywhere (PENDING, not refused); whether the grepped text
+is really the replaced text (the write ledger carries no old_string); a substantive mis-repair
+whose prose and pin agree.
+
+verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-508-siblings.sh
 
 ## BL-509 — elicitation fans out per part where one voice measured an order of magnitude cheaper
 
@@ -215,7 +227,17 @@ In the same round a remediator "repaired" sm-12's "two backends" MAJOR by adding
 rather than questioning why the audit reads SQLite (C-03). A scope disposition by the repair seat is
 a decision nobody adjudicates.
 
-verify: manual -- close when the remediator contract forbids dispositioning a party MAJOR as out of shard scope (it escalates instead), and a fixture pins that clause.
+The set-aside is `s318/shards/stories-party-repair-p1/5.md:111`. The fix: files mode gains the
+section and subject modes' clause (a fix outside your files is `escalated`), a partial repair is a
+`repaired` and an `escalated` entry under one `source:`, and the join refuses a `repaired`
+MAJOR/CRITICAL whose claim matches `outside (this|my|the) (shard|part|section)|not required` with
+no hand-off token. It prints `ESCALATED:` per escalated entry and a count, and the dispatch
+procedure sends the serial remediator whenever the count is above 0; before this, nothing consumed
+an escalated entry. Measured over graph's 202 s317/s318 shard parts (478 repaired MAJOR+ entries):
+1 hit, that entry, 0 false positives. Not caught: a set-aside reworded past the regex, and C-03's
+shape, a substantive mis-repair whose prose and pin agree.
+
+verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-519-set-aside.sh
 
 ## BL-520 — a teammate is told to "message the lead", a name the harness does not register
 

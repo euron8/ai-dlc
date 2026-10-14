@@ -37,6 +37,14 @@ source; do not infer either value from anywhere else.
    doubly-written file: every file you edit under `s<N>/` — stories, `epics/epics.md`, any
    sibling — appears on an `edit:` line. Your part file under `s<N>/shards/` is not counted.
 
+   **A fix that lies outside your files is escalated, never set aside.** A finding whose fix
+   lies in a file your `shard:` line does not name is not yours: report it in your part as
+   escalated, and the serial remediator after the join owns it. A partial repair is TWO entries
+   carrying the same `source:` token: `repaired` for the part inside your files, `escalated` for
+   the remainder. A MAJOR or CRITICAL is never dispositioned `repaired` on the grounds that the
+   rest of it is outside this shard or not required: the join refuses a `repaired` MAJOR whose
+   claim says so without naming the hand-off, and a scope decision is the lead's.
+
    In a repair dispatch, every edit to a file under the sprint slot goes through Edit, Write or
    MultiEdit, never a Bash redirect, `sed -i`, `tee` or a script's `open(…, 'w')`: only those
    produce the ledger row the join requires. Write your part through Write too, so the
@@ -99,6 +107,14 @@ Then, per finding:
 - source: <seat-file>#<finding-id> [<seat-file>#<finding-id> ...]   (a party repair only)
 - disposition: repaired | escalated | skipped (nit)
 - edit: <artifact file:line(s)>
+- siblings:   (every `repaired` entry whose edit is not n/a; the paragraph below)
+
+```derived
+$ grep -rn -F '<the text you replaced>' <the artifact's own files>
+$ grep -c -F '<the text you wrote>' <the file you edited>
+<n>
+```
+
 - derivation:
 
 ```derived
@@ -108,6 +124,20 @@ $ <the exact command>
 
 - claim now asserted: <the sentence you wrote, which the derivation above supports>
 ```
+
+**Re-check every sibling of the text you replaced.** A repair that fixes one copy of a sentence
+and leaves its sibling, or shifts a `<file>:<n>` cite, is the next pass's MAJOR. So every
+`repaired` entry whose `edit:` is not n/a carries a `- siblings:` field and a `derived` fence
+holding two commands: `grep -rn -F '<the text you replaced>'` over the artifact's own files
+(`_bmad-output/planning-artifacts/s<N>/stories` and `s<N>/epics` for a stories repair, the
+document for a document), whose output is empty or lists sites each carried as its own entry;
+and the control `grep -c -F '<the text you wrote>' <the file you edited>`, whose output is 1 or
+more. Never grep the sprint slot, `shards/` or any repair record: they hold this command's own
+text, so the replay after the join finds the replaced text there and the fence goes stale. A
+sibling in a file outside your shard is an `escalated` entry naming it. Cites the edit moved
+are re-checked by the serial remediator after the join, never inside a section shard. The join
+refuses a `repaired` entry with an edit and no `siblings:` field once any entry of the set
+carries one.
 
 **A party repair names the seat finding behind every entry.** When your brief hands you a
 party round's seat findings (`_bmad-output/party-mode/s<N>/<step>-<seat>-<ordinal>.md`), every

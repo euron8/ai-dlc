@@ -44,7 +44,7 @@ PARTITION="$SRCDIR/partition-document.sh"
 [ -f "$PARTITION" ] || { echo "FIXTURE ERROR: $PARTITION is not beside the join; document mode assembles through it" >&2; exit 2; }
 S21=story-2.1-positions-on-demand.md; S22=story-2.2-lifetime-pnl-on-demand.md; S31=story-3.1-dark-theme.md
 SEATS="architect-1 dev-1 tea-1 dev-4"
-for _s in "seed.$S21" "seed.$S22" "seed.$S31" seed.block-2.1.md seed.block-2.2.md seed.block-3.1.md seed.block-epics.md \
+for _s in "seed.$S21" "seed.$S22" "seed.$S31" seed.block-2.1.md seed.block-2.2.md seed.block-3.1.md seed.block-epics.md seed.block-sib.md seed.block-setaside.md seed.block-handoff.md \
           seed.seat-architecture-architect-1.md seed.seat-architecture-dev-1.md seed.seat-architecture-tea-1.md seed.seat-architecture-dev-4.md; do
   [ -s "$HERE/$_s" ] || { echo "FIXTURE ERROR: seed $HERE/$_s is missing or empty" >&2; exit 2; }
 done
@@ -599,7 +599,55 @@ p_sjnest() { # a NESTED state dir (out/bmad): map, split, join and the record ag
     p_sjoin "$1" )
 }
 
-P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4"
+# ---- THE ENTRY CONTRACT (BL-508 siblings, BL-519 set-aside). seed.block-setaside.md is graph's own
+# s318 entry (`s318/shards/stories-party-repair-p1/5.md:111`, sm-05 F-3), its edit re-pointed at this
+# world's story; seed.block-handoff.md is that entry one property apart -- the remainder split off as
+# an `escalated` entry carrying the same source. seed.block-sib.md is the post-rule entry shape.
+sibpart() { # <world> <name> <story file> -- a part in the post-rule shape: a siblings: fence, plus one escalated entry
+  sed "s/@STORY@/$3/g" "$HERE/seed.block-sib.md" > "$1/$SLOT/shards/stories-repair-p1/$2.md"
+}
+p_sibpending() { # every part predates the rule (no siblings: anywhere) -> JOINED with ONE PENDING line, 0 escalated
+  local w n; w="$(new_world)"; three_writers "$w"
+  part "$w" 01 2.1; part "$w" 02 2.2; part "$w" 03 3.1
+  run_join "$1" "$w"
+  n="$(grep -c '^PENDING: no entry of this set carries' "$JO")" || n=0
+  [ "$RC" -eq 0 ] && has "$JO" "(3 parts, 3 writers)" && [ "$n" -eq 1 ] && has "$JO" "ESCALATED-COUNT: 0"
+}
+p_sibok() { # every part carries siblings: -> JOINED, no PENDING, and each escalated entry printed by part with the count
+  local w; w="$(new_world)"; three_writers "$w"
+  sibpart "$w" 01 "$S21"; sibpart "$w" 02 "$S22"; sibpart "$w" 03 "$S31"
+  run_join "$1" "$w"
+  [ "$RC" -eq 0 ] && has "$JO" "(3 parts, 3 writers)" && ! has "$JO" "PENDING:" \
+    && has "$JO" "ESCALATED: 01.md F-2 — MINOR" && has "$JO" "ESCALATED: 03.md F-2 — MINOR" && has "$JO" "ESCALATED-COUNT: 3"
+}
+p_sibmissing() { # p_sibok one property apart: part 03 is a pre-rule entry (M6, repaired, an edit, no siblings:) -> REFUSED by name
+  local w; w="$(new_world)"; three_writers "$w"
+  sibpart "$w" 01 "$S21"; sibpart "$w" 02 "$S22"; part "$w" 03 3.1
+  run_join "$1" "$w"
+  refused "$w" "03.md: the M6 — MAJOR entry is repaired with an edit and carries no 'siblings:' field"
+}
+p_setaside() { # graph's set-aside MAJOR, repaired, no hand-off -> REFUSED naming the part and the entry heading line
+  local w; w="$(new_world)"
+  drive "$w" Edit "$w/$REL/$S21" "$AG1"
+  cp "$HERE/seed.block-setaside.md" "$w/$SLOT/shards/stories-repair-p1/01.md"
+  run_join "$1" "$w"
+  refused "$w" "01.md:1: the stories-sm-05.md#F-3 — MAJOR entry is dispositioned repaired while its claim sets part of the fix aside"
+}
+p_handoff() { # the same entry split, the remainder escalated under the same source -> JOINED, the escalated entry printed
+  local w; w="$(new_world)"
+  drive "$w" Edit "$w/$REL/$S21" "$AG1"
+  cp "$HERE/seed.block-handoff.md" "$w/$SLOT/shards/stories-repair-p1/01.md"
+  run_join "$1" "$w"
+  joined_one "$(out_of "$w")" && has "$JO" "ESCALATED: 01.md stories-sm-05.md#F-3 (remainder) — MAJOR" \
+    && has "$JO" "ESCALATED-COUNT: 1"
+}
+p_srcsetaside() { # --sources applies the set-aside arm too: a resolving source, the set-aside claim -> rc 2, the refusal named
+  local w; w="$(mktemp -d "$WORK/src.XXXXXX")" && mkdir -p "$w/.claude" && seat_seed "$w" 305 || return 1
+  src_rec "$w" '### F-1 — MAJOR\n- disposition: repaired\n- source: architecture-dev-1.md#F-1\n- edit: n/a (no edit)\n- claim now asserted: the rest is outside this shard and not required.\n' "$1"
+  [ "$RC" -eq 2 ] && has "$JO" "rec.md:1: the F-1 — MAJOR entry is dispositioned repaired while its claim sets part of the fix aside"
+}
+
+P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibpending sibok sibmissing setaside handoff srcsetaside"
 
 # ---- A PART'S DERIVATION SURVIVES THE JOIN. The part's ```derived fence is copied into the joined
 # record, and the gate re-runs `validate-artifact-derivations.sh` over the sprint dir AFTER the
