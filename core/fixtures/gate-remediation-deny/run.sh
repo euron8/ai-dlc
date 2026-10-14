@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # gate-remediation-deny — the lead may not repair a failing gate check itself,
 # and it may not write itself a permission slip to do so.
 #
