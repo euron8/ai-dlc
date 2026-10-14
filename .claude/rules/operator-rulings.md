@@ -77,6 +77,12 @@ The idle time between a handoff and the next `/ai-dlc resume` is never a finding
 or an opportunity in pipeline-efficiency analysis. Measure in-session time only, and state the
 exclusion once in the method.
 
+## A local-model lead is a goal
+
+Running the lead on a local model is an operator goal. A defect exposed under a local lead is an
+opportunity to fix the pipeline, never a finding against the model or a reason to recommend a hosted
+lead.
+
 ## Reaching the operator
 
 `AskUserQuestion` when a decision is genuinely theirs and the answer changes what happens
