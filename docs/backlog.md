@@ -206,7 +206,8 @@ a model one; toward the local-lead goal.
 **Premise correction (measured at batch 229).** The defect is born at snapshot WRITE time, not at resume.
 Over graph's 163 snapshot revisions since 2026-10-09, each replayed with now set to its own commit time,
 69 carry a stamp more than 10 min ahead (214 findings: 127 Recent Activity, 87 `dispatched-at`; smallest
-lead 10 min; 0 inside the slack). 0 of 20 resumes saw one. The cited history lines 215/219/225 resolve at
+lead 10 min; 0 inside the slack). The contract analysis counted 0 of 20 resumes seeing one (not
+re-derived here). The cited history lines 215/219/225 resolve at
 commit `3e5aeb070`, not HEAD. The arm therefore lives in `validate-artifact-budget.sh`'s snapshot branch,
 which gate Check 14 runs at every write and route Step 0a check 1 runs at resume, and its failure names
 the remedy (rewrite to `date -u`, keep order, one CLOCK CORRECTION line).

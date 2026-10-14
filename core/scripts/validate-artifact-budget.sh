@@ -1018,10 +1018,11 @@ check_inflight_status() {
 #
 # A `## Recent Activity` line and an In-Flight `dispatched-at` cell each record WHEN
 # something happened. One stamped after the current UTC time records an event that has
-# not happened yet. Measured on the reference consumer across sprints 317-318: 62 of 162
-# snapshot commits carried a stamp more than 5 minutes after their own commit time, and 0
-# of 20 resumes saw one -- the defect is born at snapshot WRITE time, which is why this
-# arm lives in the branch Check 14 runs at every gate write and not only at the resume.
+# not happened yet. Measured on the reference consumer across sprints 317-318: 69 of 163
+# snapshot revisions carried a stamp more than 10 minutes after their own commit time
+# (figures beside FUTURE_SLACK_S) -- the defect is born at snapshot WRITE time, which is
+# why this arm lives in the branch Check 14 runs at every gate write and not only at the
+# resume.
 #
 # THE GRAMMAR IS NARROW ON PURPOSE. Only a single full stamp is checked:
 # `YYYY-MM-DDTHH:MM(:SS)?Z`, NOT followed by `-`, an en dash, an arrow or a digit, and

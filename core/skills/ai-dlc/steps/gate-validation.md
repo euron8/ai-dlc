@@ -1138,8 +1138,8 @@ Exit 1 → **Check 14 FAILS**, on any of three independent verdicts:
 - **A stamp later than the current UTC time.** The validator names each `Recent
   Activity` stamp or In-Flight `dispatched-at` cell more than 10 minutes ahead of
   `date -u`. Rewrite each to `date -u`, keep line order, and add one `CLOCK
-  CORRECTION` line to `Recent Activity`, without asking. Ranges, `~` and `x`
-  placeholders, and date-only stamps are not checked.
+  CORRECTION` line to `Recent Activity`, without asking. Ranges, approximate
+  (tilde) and placeholder stamps, and date-only stamps are not checked.
 
 Then re-run Check 14 and Check 15.
 
