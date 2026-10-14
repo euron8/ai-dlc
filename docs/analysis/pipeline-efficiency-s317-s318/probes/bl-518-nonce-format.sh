@@ -5,7 +5,8 @@
 #   CONTROL  the canonical nonce must OPEN (exit 0), or this probe cannot measure (exit 9)
 #   SUBJECT  the hyphenated nonce graph minted at s317 (`implementation-2026-10-11T083048Z`) must
 #            exit 2, leave `current` naming the control, and name the canonical form on stderr
-#   SCOPE    `deploy-validate-s304-20260822T005500Z` (a gate type outside the schema's closed list)
+#   SCOPE    `deploy-validate-s304-20260822T005500Z` and the digit-free
+#            `deploy-validate-20260822T005500Z` (gate types outside the schema's closed list)
 #            must exit 2; a free-form `record` (`--nonce f1 record 1 PASS`) must still exit 0
 #
 # exit 0 fixed, 1 live, 9 precondition missing. Measured at 0.781.0: the subject opens with exit 0
@@ -28,6 +29,10 @@ case "$err" in
 esac
 
 bash "$V" --root "$d" --nonce deploy-validate-s304-20260822T005500Z open >/dev/null 2>&1; rc=$?
+[ "$rc" -eq 2 ] || exit 1
+# A digit-free foreign gate type: a loose `[a-z][a-z-]*-` prefix admits this one where the
+# schema's closed list does not, so the closed list is what this line measures.
+bash "$V" --root "$d" --nonce deploy-validate-20260822T005500Z open >/dev/null 2>&1; rc=$?
 [ "$rc" -eq 2 ] || exit 1
 
 bash "$V" --root "$d" --nonce f1 record 1 PASS >/dev/null 2>&1 || exit 1
