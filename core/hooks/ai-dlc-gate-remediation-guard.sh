@@ -211,7 +211,8 @@
 # marker, so the session is classified as of that call, not as of its end). Result: 8 DENY --
 # exactly the 8 product edits above -- and 1796 ALLOW: 1688 under `_bmad-output/` (the
 # sibling-worktree ones included), 58 scratchpad, 29 `docs/` (12 `docs/escalations/pending.md`,
-# 1 `docs/coding-conventions.md`), 20 under a `.claude/` path (operator memory included),
+# 5 `docs/architecture.md`, 11 `docs/reviews/s317/shards/**`, 1 `docs/coding-conventions.md`),
+# 20 under a `.claude/` path (operator memory included),
 # 1 `.gitignore`. No narrowing was needed to reach zero; the conjuncts were chosen from the
 # contract's enumeration of that set before the replay ran. The worktree set is as registered
 # when the replay ran: a since-removed worktree reads as outside every tree, i.e. ALLOW.
