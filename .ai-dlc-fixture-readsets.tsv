@@ -14,7 +14,7 @@
 # path<TAB>sha lines in the runner's universe as traced; the runner clears a stale key record when
 # it recomputes the same value over the tree it is pushing.
 #
-# fixtures mapped: 224    entries: 13173
+# fixtures mapped: 224    entries: 13175
 absorbed-specifics-survive	core/fixtures/absorbed-specifics-survive/run.sh
 absorbed-specifics-survive	core/skills/ai-dlc/SKILL.md
 absorbed-specifics-survive	core/skills/ai-dlc/rule-bodies/rule-13.md
@@ -4541,6 +4541,8 @@ gate-remediation-deny	core/fixtures
 gate-remediation-deny	core/fixtures/gate-remediation-deny
 gate-remediation-deny	core/fixtures/gate-remediation-deny/run.sh
 gate-remediation-deny	core/fixtures/gate-remediation-deny/seed.sh
+gate-remediation-deny	core/fixtures/lib
+gate-remediation-deny	core/fixtures/lib/preamble.sh
 gate-remediation-deny	core/hooks
 gate-remediation-deny	core/hooks/ai-dlc-acknowledge.sh
 gate-remediation-deny	core/hooks/ai-dlc-gate-remediation-guard.sh
@@ -13203,7 +13205,7 @@ write-format-steering-multiformat	core/skills/ai-dlc-update/reconcile/lib.sh
 # digest extract-push-flag-decision 59752e7e8ea6b269678c0a8d5f6ac4313b812f3edda95bad22c6994fc9a430f4
 # digest fold-architect-ledger-join-mutants 1939d7bea4f2daeaf00b22feeaff732d8af339b8ac25703c909ecdd40dc1cd81
 # digest fold-architect-ledger-join-mutants-c a5350d4e34302d4dd8e106b5f532ca3c3bba129167e29618c7ac2bd3f4bf020a
-# digest gate-remediation-deny d34f807c16d7b1e0c646abb2471974c3aea1225ae1eddce7af114d1078fe8626
+# digest gate-remediation-deny 9da8ce352e2ede18cbd4c635fff6a90ec6f77d9bc58d0431b27ac71344eaf430
 # digest gate-resume b768b19aa352273daf0f5072f964857d7b51d933ad3cdc3bf6c2ff73f57e870a
 # digest hermetic-runner d2f56113e2d2b3d25015c7f88987c63c762a208d94c9f3aa60651b984822e2e5
 # digest invariant-index c38877552a196895e4e9961dcef31590e3d2a3a729cdcd69fca52fefc54f5f23

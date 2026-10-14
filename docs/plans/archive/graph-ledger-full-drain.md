@@ -18288,3 +18288,68 @@ Net for the batch: closed 4 entries (BL-474, BL-498, BL-499, BL-500) and 3 candi
 
 Batch 222's block below is history: batch 223's block replaces its open items and its delivery gap.
 
+**BATCH 224 SHIPPED `v0.776.0` (`62225ecf`, #1115) AND CLOSED BATCH 223's OPEN ITEM AS FAR AS A BUILD CAN: ALL SIX OF
+BL-497's MISMATCH ROWS ARE ADJUDICATED AND EACH HAS A BUILT, UNSHIPPED FIX ON ORIGIN. 0.777.0 IS UNCUT; THE OPERATOR
+ASKED FOR A FRESH SESSION AFTER 0.776.0.** Batch 223's "still open" sentence below is replaced by this block. Handed the
+plan by ai-dlc-61 at `origin/main` `625ab4df` (`VERSION` 0.775.0); graph-9e was live and never messaged.
+- **Opening sweep** (at `625ab4df`): live 3, unfiled 2 (both filed 2026-10-11), worklist 0, DISCHARGED 1
+  (`PC-S317-3.2-DERIVATION-HOOK-CWD`, oldest naming release 0.773.0), invisible 0, TERMINAL 231, archive 354, 2
+  qualifying refs, every control passing. graph carried no uncommitted filing.
+- **`v0.776.0`**, both unfiled candidates:
+  - BL-501 (`PC-S317-PVC-TEMPLATE-HAS-NO-LINE-FOR-A-LOCKED-PRIORITY-LEFT-UNDELIVERED`): `deploy-validate.md` §5 gains a
+    Locked-Requirement Coverage block, and the checkpoint is withheld while a locked requirement that needs one lacks
+    a recorded disposition. `phased` is keyed on the plan's final checkpoint, defined by story status in
+    `sprint-status.yaml`, and carried forward across sprints. `escalations.md` and SKILL.md Rule 3 (b) name the stop.
+  - BL-502 (`PC-S317-PM-ROLE-TAGS-PROBABILISTIC-ACS-BUT-NOT-AN-ADR-RISK-RECORDED-AS-PROBE-NOT-YET-RUN`): `pm.md` turns
+    an ADR risk recorded as an unrun probe into a `probabilistic/passive-monitoring` AC; Context Loading reads
+    `docs/architecture.md`.
+  - **The squash body was emptied** (`gh pr merge --body ""`), so `62225ecf`'s message names neither id; both are
+    named in the batch-224 docs close commit instead, whose `VERSION` is 0.776.0.
+  - **Six cuts, four tip adversaries.** Round by round: a circular disposition channel and blocked multi-sprint
+    phasing; a receipts-validator red (the receipts used `case` globs it cannot score); `phased` citing a record no
+    file writes and a weakened pin; a final-sprint rule that fired at every phase checkpoint of graph's in-sprint
+    phasing (s302); no reader for "final" and phased bullets dropped across sprint numbers (s258/s259). The fifth
+    adversary walked s302 (three phases), s258, s259 and s317 under the shipped text and found no defect. Gate
+    green, 22 of 22 phases, both changed fixtures `ok` by name.
+- **Shipped-text NOTEs, not built** (fifth adversary): under the final-checkpoint definition s258 is its own plan's
+  final checkpoint, not s259; graph persists no coverage blocks, so earlier `phased` marks are rebuilt from the
+  stories' `phase:` keys; a bullet split across phases converts to deferred at an intermediate checkpoint once its
+  earlier-phase story is `done` (LR-S258-3's shape, firing at none of the walked checkpoints); pre-convention sprints
+  without `locked-requirements.md` read `none recorded`.
+- **BL-497: the six rows, all adjudicated, none lost coverage.** Its batch-224 paragraph names each row and branch.
+  The four branches are on origin and NOT shipped:
+  - `b224-census` `515f41ce`: equal-length plain-side temp paths; three instrument rows read EQUAL in a clean clone.
+  - `b224-volatile` `025159f2`: volatile values off the ok lines in `readset-skip` and `snapshot-archive-rotate`.
+  - `b224-hook` `32b50af1`: the watchdog trap sends KILL in both pre-push hooks (forced race: 10 of 10 leaked under
+    TERM, 0 of 10 under KILL), with world `(t4w)` and mutant `termtrap`. **It edits `.githooks/`, so the release
+    carrying it is pushed from the main checkout detached at its release commit.**
+  - `b224-boot` `9467cdce`: `procsub-staged-refusal-boot` made TMPDIR-length-independent (the gate failed it under
+    `TMPDIR=/tmp`), an 8-byte memo-key margin asserted from `lib.sh`, a FIXTURE ERROR past 85 encoded characters.
+  - **Merge conflict to expect**: `b224-volatile` and `b224-hook` edit neighbouring lines of `readset-skip/run.sh`.
+    Keep volatile's fixed-text ok line and hook's new pattern-match line (the one ending
+    `kill -KILL \$(jobs -p) 2>/dev/null; exit 0' TERM"`), then run `readset-skip-b` directly once.
+  - Each branch's hand verified only its own change; none of the four has been through the gate, together or apart.
+- **Owed for BL-497, in order:** ship the four branches; a clean census of `readset-skip-b`; then the census over the
+  166 declared fixtures the fixed instrument has not measured (the 240 `inputs.decl` directories minus the 74 BL-497
+  names). The batch-223 ruling governs: state its wall clock and start it, never hold or kill it without the operator.
+  Recorded loaded durations sum to 22524s over all 240 declared fixtures. Run every census from a `file://` clone of
+  `origin/main`, never the main checkout or a worktree: a census REFUSES on any change to `git worktree list`, and
+  every census this batch ran in a worktree was refused that way. `snapshot-archive-rotate` and the three instrument
+  rows read EQUAL only from a clone.
+- **Unmeasured, recorded**: three other fixtures (`procsub-staged-refusal`, `retired-layer-token`,
+  `setup-config-drift`) use `ulimit -f` with memo-reading reconcile scripts and could share the memo-key window; the
+  `(k)` ok line in `readset-skip` still embeds `$RK`, whose `after` field may vary.
+- **graph delivery**: stamp 0.775.0 (`625ab4df`, graph's #1213) against `VERSION` 0.776.0, one release behind. No
+  bootstrapping file in the range (0 of `preclassify.sh`, `apply.sh`, `ledger-reverify.sh`, `ai-dlc-update/`), and
+  graph's installed `validate-layer-entries.sh` is byte-identical to the distribution's (`cmp -s` 0), so the
+  differential cannot discriminate. Discharged and awaiting graph's own close: the two ids above plus
+  `PC-S317-3.2-DERIVATION-HOOK-CWD`. The pull is the operator's.
+- **graph boundary**: ledger md5 `9828b7e7…` at the opening and the close. Porcelain 9 at the opening, 24 at the
+  close, all graph's own pipeline state, 0 under `_bmad-output/ai-dlc-update/`. Nothing was written there.
+- **Process facts**: every spawned worktree was removed (8, each clean; the two locks named this session's pid). The
+  advisor-gate hook passed one push without an advisor attempt after a rate-limited call.
+
+Net for the batch: closed 2 candidates and 2 entries (BL-501, BL-502), filed 2 (BL-501, BL-502); net 0.
+
+Batch 223's block below is history: batch 224's block replaces its open item and its delivery gap.
+
