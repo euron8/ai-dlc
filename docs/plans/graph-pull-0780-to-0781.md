@@ -94,8 +94,9 @@ reports **12 `HARD-*` blocking-layer rows**, where the previous pull had none, a
 4. **EXPECT `SELF-UPDATE-DEFER`, and NO self-update branch, NO push and NO re-invocation.** The
    bootstrapping file set in the range is `reconcile/setup-sites.md` alone (prose about party
    personas); no `SKILL.md`, `preclassify.sh`, `apply.sh` or `ledger-reverify.sh` change, and no
-   file changes mode. But the range changes 11 rulebook files, and the gate's
-   `rulebook-coupled-fixtures` arm names 62 fixtures that assert against rulebook, so it returns
+   file changes mode. But the range changes rulebook files, and the gate's
+   `rulebook-coupled-fixtures` row names 11 of them and 62 fixtures that assert against rulebook
+   (the range's twelfth rulebook file, `rule-bodies/rule-28.md`, is not in that row), so it returns
    `SELF-UPDATE-DEFER` with a `SELF-UPDATE-SAFE-STOP -` row saying no intermediate release exists
    to split on. Follow the DEFER bullet (`core/skills/ai-dlc-update/SKILL.md:428`): carry the slice
    into the gated apply, which runs `apply.sh --carried-machinery-slice`
@@ -251,6 +252,10 @@ Criteria 2, 3 and 4 were checked as reachable on the rehearsal clone before this
   apply's push runs the consumer's whole pre-push suite with the 62 rulebook-coupled fixtures at
   0.781.0; whether that is green, and its wall clock, are unknown. The rehearsal also did not write
   the 12 adjudications or the `dev.md` merge, so the post-adjudication report is unrehearsed.
+- **The `pool 330000` figure was taken through a different branch of the window-library resolver.**
+  The rehearsal staged 0.781.0's `validate-artifact-budget.sh` beside a `../hooks/ai-dlc-window.sh`;
+  an installed tree resolves the library through `.claude/hooks/`. Same bytes, different lookup, so
+  done-when 4's pool figure is a prediction until read on the post-pull tree.
 
 ## Rehearsal
 
@@ -261,7 +266,7 @@ release commit. These are expectations, not guarantees. If the real run disagree
 |---|---|---|
 | releases behind | 1 | |
 | bootstrapping files in range | `reconcile/setup-sites.md` only; 0 mode-only changes | |
-| installed engine vs 0.781.0 | byte-identical: `preclassify.sh`, `apply.sh`, `ledger-reverify.sh`, `emit-report.sh`, `self-update-gate.sh`, `settings-merge.sh`, `lib.sh` | |
+| installed engine vs 0.781.0 | all 32 files under `reconcile/` byte-identical to 0.780.0's; only `setup-sites.md` differs at 0.781.0 | |
 | `self-update-gate.sh` | `SELF-UPDATE-DEFER` ×2 (`rulebook-coupled-fixtures`: 11 rulebook files, 62 fixtures; and `-`), `SELF-UPDATE-SAFE-STOP -` (no split exists) | 42s |
 | `preclassify.sh` raw | 40 rows: 38 `UPSTREAM-ONLY`, 1 `DIST-ONLY-SKIP`, 1 `BOTH-CHANGED->CLASSIFY` (`team-roles/dev.md`) | 10s |
 | rendered per-file buckets | the same 40; semantic worklist `core/team-roles/dev.md`; deletions none | 181s |
@@ -270,6 +275,7 @@ release commit. These are expectations, not guarantees. If the real run disagree
 | rendered other | 3 `CORE-TEMPLATE-SUBSTITUTED`; 5 `RETIRED-LAYER-PASSAGE`; hooks 22 present, 22 registered | |
 | reverify raw | 10 rows: 7 `STILL-LIVE`, 1 `RECEIPTS-UNDECIDED`, 2 `NAMED-UPSTREAM` (both sprint-318 ids); rendered: 3 rows | 6s |
 | `settings-merge.sh --check` | exit 0; `sensor_wired=true`, five windows declared, `model_window_needed=no` | |
+| `settings-merge.sh` write form, on the clone | exit 0; 0 changed keys in `aiDlcRoles`, `aiDlcModels` and `env`, and 0 changed top-level keys | |
 
 Controls in the same runs: an impossible id reads 0 in the reverify output and 0 in the naming
 query; each sprint-318 id is named by exactly one commit among the ancestors of `theirs`, and that
