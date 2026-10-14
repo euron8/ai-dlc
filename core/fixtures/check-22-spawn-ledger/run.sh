@@ -1318,8 +1318,9 @@ fi
 # with `merge-review-shards.sh --gate qa`, so qa is IN the shardable set. The allow direction is
 # held by `dev`, a pinned role outside SHARD_ROLES carrying the same invented exception: without
 # it a validator that judged EVERY role would pass every FAIL cell here. Settings PIN A MODEL for
-# every role seeded: the shardable set also takes every declared role with NO model (a party seat),
-# so an unpinned qa or dev would be judged for that reason and neither arm could see SHARD_ROLES.
+# every role seeded, and no `team-roles/` directory sits beside settings-rev.json, so no party
+# seat is derived here and the cells below can see SHARD_ROLES alone (the PT cells further down
+# own the party-seat derivation).
 # Every offender is Rule 19-clean (bound == pin, cited, readable) and sits after a dev epoch row,
 # so S3 is the only route to its exit 1.
 cat > "$WORK/settings-rev.json" <<'JSON'
@@ -1443,6 +1444,136 @@ else
     [ "$mv_" = "dev" ] \
       && ok "S3 MUTANT (rvd) killed: SHARD_ROLES gaining dev FAILS the dev near-miss -- S3-R6 alone moves, so R6's OK is about membership" \
       || bad "S3 MUTANT (rvd): moved [$mv_], expected [dev]"
+  fi
+fi
+
+# --- PARTY SEATS ARE DERIVED FROM THE ROLE FILE, AND A PERSONA WITH A MODEL IS STILL ONE ---------
+# The shipped template gives cis/sm/tea/ux a model. The earlier derivation (an aiDlcRoles entry
+# with NO model) then found no seat at all, and S1/S3 stopped judging every persona row with
+# nothing printed. The seat is now read from the `team-roles/` directory beside --settings: a
+# role file opening a line with `The lead spawns you as a party-mode persona`.
+#
+# THE ROLE FILES ARE COPIED FROM THE PRODUCER, NEVER RETYPED: the real tea.md (the seat) and the
+# real dev.md (not a seat), from whichever layout this tree has. Three cells:
+#   PT1  tea, MODEL-PINNED, Rule 19-clean, invented exception, team-roles beside settings -> FAIL1
+#   PT2  dev near-miss with the same seed and the same settings                          -> OK
+#   PT3  the PT1 ledger with NO team-roles beside settings -> the zero-seat WARN, tea unjudged, rc 0
+PT_SRC=""
+for _c in "$ROOT/core/team-roles" "$ROOT/.claude/team-roles"; do
+  [ -f "$_c/tea.md" ] && [ -f "$_c/dev.md" ] && { PT_SRC="$_c"; break; }
+done
+mkdir -p "$WORK/pt/team-roles" "$WORK/pt-noroles"
+cat > "$WORK/pt/settings.json" <<'JSON'
+{
+  "aiDlcModels": { "opus": "claude-opus-5[1m]", "sonnet": "claude-sonnet-5" },
+  "aiDlcRoles": {
+    "dev": { "model": "sonnet", "effort": "high" },
+    "tea": { "model": "sonnet", "effort": "high" }
+  }
+}
+JSON
+cp "$WORK/pt/settings.json" "$WORK/pt-noroles/settings.json"
+ptrow() { # role name
+  jq -nc --arg r "$1" --arg n "$2" \
+    '{v:1,sprint:900,name:$n,role:$r,model_bound:"sonnet",model_requested:"sonnet",
+      role_contract_cited:true,role_file_readable:true,shard:"invalid-exception",
+      shard_raw:"none (made up)",tool_use_id:("toolu_" + $n)}'
+}
+{ row dev sonnet sonnet true true pt-epoch; ptrow tea pt-tea; } > "$WORK/pt-tea.jsonl"
+{ row dev sonnet sonnet true true pt-epoch; ptrow dev pt-dev; } > "$WORK/pt-dev.jsonl"
+# ptvec <script> -> "PT1 PT2 PT3"
+# ptcell <script> <ledger> <settings-dir> <role> -> FAIL1 | OK | OKW (OK with the zero-seat WARN) | rc=N
+ptcell() {
+  local o rc w=""
+  o="$(bash "$1" --ledger "$WORK/$2" --sprint 900 --settings "$WORK/$3/settings.json" 2>&1)"; rc=$?
+  grep -qF 'no party seat was derived from' <<<"$o" && w=W
+  if [ "$rc" -eq 1 ] && grep -qF "role '$4' declared a serial exception" <<<"$o" \
+     && grep -qF '(arm S3)' <<<"$o"; then printf 'FAIL1'
+  elif [ "$rc" -eq 0 ] && grep -q 'OK: all 2 S900 spawn row' <<<"$o" \
+     && ! grep -qF 'declared a serial exception' <<<"$o"; then printf 'OK%s' "$w"
+  else printf 'rc=%s' "$rc"; fi
+}
+# PT2 owns the near-miss and nothing about the WARN, so its cell drops the W: otherwise every
+# mutant that empties the seat set moves PT2 too, which is the WARN's subject (PT3), not PT2's.
+ptvec() { local c2; c2="$(ptcell "$1" pt-dev.jsonl pt dev)"
+  printf '%s %s %s' "$(ptcell "$1" pt-tea.jsonl pt tea)" "${c2%W}" "$(ptcell "$1" pt-tea.jsonl pt-noroles tea)"; }
+# The pre-fix derivation, written as a file so the mutant below can splice it in whole.
+cat > "$WORK/pt-oldline.txt" <<'OLD'
+SHARD_SEATS="$(jq -r '.aiDlcRoles // {} | to_entries[] | select((.value.model // "") == "") | .key' "$SETTINGS" 2>/dev/null | tr '\n' ' ')"
+OLD
+if [ -z "$PT_SRC" ]; then
+  bad "FIXTURE BROKEN: no team-roles directory carrying tea.md and dev.md in either layout under $ROOT -- the party-seat cells have no producer to copy"
+elif ! grep -q '^The lead spawns you as a party-mode persona' "$PT_SRC/tea.md" \
+     || grep -q '^The lead spawns you as a party-mode persona' "$PT_SRC/dev.md"; then
+  bad "FIXTURE STALE: the real tea.md no longer opens a line with the persona sentence, or the real dev.md does -- the derivation's anchor moved, so these cells would test a seat set the shipped tree does not have"
+else
+  cp "$PT_SRC/tea.md" "$PT_SRC/dev.md" "$WORK/pt/team-roles/"
+  PTGOT="$(ptvec "$VSL")"
+  set -- $PTGOT
+  [ "$1" = FAIL1 ] && ok "PT1 a tea row whose role PINS a model (the shipped template's persona shape), Rule 19-clean, with an invented exception FAILS S3 -- the seat is derived from the real tea.md beside --settings" \
+    || bad "PT1 a model-pinned tea row with an invented exception scored [$1], expected FAIL1 -- a persona with a model has fallen out of the shardable set"
+  [ "$2" = OK ] && ok "PT2 near-miss: a dev row with the same seed against the same settings and role files is NOT judged (exit 0, the OK row) -- so PT1 is about tea's seat, not about the seed" \
+    || bad "PT2 the dev near-miss scored [$2], expected OK"
+  [ "$3" = OKW ] && ok "PT3 the PT1 ledger against settings with NO team-roles beside it: the zero-seat WARN prints and tea is not judged -- an empty seat set is announced, never silent" \
+    || bad "PT3 with no role directory the run scored [$3], expected OKW -- an empty seat derivation is silent"
+
+  ptmut() { # name sed-expr expected-vector description
+    local M
+    M="$(s3mut "$1" "$2")"
+    if [ -z "$M" ]; then bad "FIXTURE BROKEN: party-seat mutant ($1) did not apply -- its anchor was renamed"; return; fi
+    local got; got="$(ptvec "$M")"
+    [ "$got" = "$3" ] && ok "PT MUTANT ($1) killed: $4 [$got]" \
+      || bad "PT MUTANT ($1): scored [$got], expected [$3] -- $4"
+  }
+  # (pta) THE PRE-FIX DERIVATION: seats are aiDlcRoles entries with no model. A model-pinned tea
+  # is then no seat and its invented exception passes. PT1 alone moves (PT3 already reads empty).
+  ptmut pta "/^SHARD_SEATS=\"\\\$(party_seats \"\\\$SHARD_SEATS_DIR\")\"\$/{
+r $WORK/pt-oldline.txt
+d
+}" \
+    "OKW OK OKW" "the old model-less derivation drops a model-pinned persona from S3 -- PT1 alone moves, from FAIL1 to a pass"
+  # (ptb) the zero-seat WARN removed: an empty seat set prints a seat line naming nothing. PT3 alone.
+  ptmut ptb 's/^if \[ -n "\$SHARD_SEATS" \]; then$/if true; then/' \
+    "FAIL1 OK OK" "an empty derivation stops being announced, so a lost seat set reads as a clean run -- PT3 alone moves"
+  # (ptc) the derivation loses its line-start anchor, so a mid-line mention (the rule-body shape)
+  # makes a seat. The SELF-PROBE owns this: it seeds that mid-line file and refuses (exit 2)
+  # before any ledger is read, so every cell moves to rc=2 -- the probe runs the derivation.
+  ptmut ptc "s/grep -q '^The lead spawns you as a party-mode persona'/grep -q 'The lead spawns you as a party-mode persona'/" \
+    "rc=2 rc=2 rc=2" "an unanchored derivation is refused by the self-probe before the corpus"
+
+  # PS: THE SHIPPED SEAT SET. The derivation only WARNs when it finds no seat, so losing ONE
+  # persona (a reworded sentence in one role file) drops it from S1/S3 behind a normal-looking
+  # seat line. This cell runs the shipped validator over EVERY real role file and requires the
+  # seat line to name exactly the four personas the template declares. Its mutant rewords one
+  # seat file's sentence in the copied tree, the motivating shape, and the cell must move.
+  pscell() { # <team-roles dir> -> the derived seat list, or rc=N
+    local d o rc
+    d="$(dirname "$1")"
+    o="$(bash "$VSL" --ledger "$WORK/pt-dev.jsonl" --sprint 900 --settings "$d/settings.json" 2>&1)"; rc=$?
+    [ "$rc" -eq 0 ] || { printf 'rc=%s' "$rc"; return; }
+    sed -n 's/^  party seats judged as shardable: \(.*\) (derived from .*$/\1/p' <<<"$o"
+  }
+  # The four names are the DISTRIBUTION's persona set. On a consumer, .claude/team-roles may carry a
+  # persona of the consumer's own with the same sentence, which is correct there, so PS runs only
+  # where the role files are core's.
+  if [ "$PT_SRC" != "$ROOT/core/team-roles" ]; then
+    printf '  SKIP  PS the shipped seat set: role files are %s, not the distribution layout\n' "$PT_SRC"
+  else
+  mkdir -p "$WORK/ps/team-roles" "$WORK/psm/team-roles"
+  cp "$PT_SRC"/*.md "$WORK/ps/team-roles/"; cp "$PT_SRC"/*.md "$WORK/psm/team-roles/"
+  cp "$WORK/pt/settings.json" "$WORK/ps/settings.json"; cp "$WORK/pt/settings.json" "$WORK/psm/settings.json"
+  PSGOT="$(pscell "$WORK/ps/team-roles")"
+  [ "$PSGOT" = "cis sm tea ux" ] && ok "PS the shipped role files derive exactly the four persona seats [cis sm tea ux]" \
+    || bad "PS the shipped role files derive the seat set [$PSGOT], expected [cis sm tea ux] -- a persona has lost (or a non-persona gained) the line-start sentence, and S1/S3 judge a different set with no WARN"
+  sed 's/^The lead spawns you as a party-mode persona/The lead may spawn you as a party-mode persona/' \
+    "$PT_SRC/ux.md" > "$WORK/psm/team-roles/ux.md"
+  if cmp -s "$PT_SRC/ux.md" "$WORK/psm/team-roles/ux.md"; then
+    bad "FIXTURE BROKEN: the PS mutant (ux.md reworded) did not apply -- the persona sentence moved"
+  else
+    PSMUT="$(pscell "$WORK/psm/team-roles")"
+    [ "$PSMUT" = "cis sm tea" ] && ok "PS MUTANT (ux.md reworded) killed: the seat set reads [$PSMUT], so the PS cell would fail" \
+      || bad "PS MUTANT (ux.md reworded) scored [$PSMUT], expected [cis sm tea] -- the PS cell cannot see one lost seat"
+  fi
   fi
 fi
 

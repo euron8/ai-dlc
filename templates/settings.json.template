@@ -1,12 +1,14 @@
 {
   "aiDlcModels": {
-    "opus": "claude-opus-5[1m]",
-    "sonnet": "claude-sonnet-5[1m]"
+    "fable": "fable",
+    "opus": "opus",
+    "sonnet": "sonnet",
+    "haiku": "haiku"
   },
   "aiDlcRoles": {
     "adversary": {
       "model": "opus",
-      "effort": "high",
+      "effort": "medium",
       "omitClaudeMd": true
     },
     "analyst": {
@@ -16,63 +18,67 @@
     },
     "architect": {
       "model": "opus",
-      "effort": "high"
+      "effort": "medium"
     },
     "code-reviewer": {
       "model": "opus",
-      "effort": "high"
+      "effort": "medium"
     },
     "code-reviewer-escalated": {
       "model": "opus",
       "effort": "high"
     },
     "dev": {
-      "model": "sonnet",
+      "model": "haiku",
       "effort": "medium"
     },
     "dev-escalated": {
-      "model": "opus",
-      "effort": "high"
+      "model": "sonnet",
+      "effort": "medium"
     },
     "gate-adjudicator": {
-      "model": "opus",
-      "effort": "high",
+      "model": "sonnet",
+      "effort": "medium",
       "omitClaudeMd": true
     },
     "ops": {
       "model": "opus",
-      "effort": "xhigh"
+      "effort": "medium"
     },
     "pm": {
       "model": "sonnet",
-      "effort": "high"
+      "effort": "medium"
     },
     "pm-escalated": {
       "model": "opus",
-      "effort": "max"
+      "effort": "medium"
     },
     "protected-path-editor": {
-      "model": "opus",
-      "effort": "high"
+      "model": "sonnet",
+      "effort": "medium"
     },
     "qa": {
       "model": "sonnet",
       "effort": "medium"
     },
     "remediator": {
-      "model": "opus",
-      "effort": "high"
+      "model": "sonnet",
+      "effort": "medium"
     },
     "cis": {
+      "model": "sonnet",
       "effort": "high"
     },
     "sm": {
+      "model": "sonnet",
       "effort": "medium"
     },
     "tea": {
+      "model": "sonnet",
       "effort": "high"
     },
     "ux": {
+      "model": "sonnet",
       "effort": "medium"
     }
   },

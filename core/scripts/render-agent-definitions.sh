@@ -43,9 +43,9 @@
 # two render identically for THIS field, so the spelling is fixed for the field that follows --
 # a boolean read through `//` silently loses its falsy value, and the loss reads as absence.
 #
-# A ROLE WITH NO `model` KEY GETS NO FILE. The party personas (spawned inside /bmad-party-mode,
-# which controls their model -- see core/hooks/ai-dlc-dispatch-guard.sh's PARTY PERSONAS
-# paragraph for why their model is left alone) configure an effort and no model. Rendering a
+# A ROLE WITH NO `model` KEY GETS NO FILE. A party persona's model is optional (see
+# core/hooks/ai-dlc-dispatch-guard.sh's PARTY PERSONAS paragraph): one that sets a model gets a
+# definition like any role, and one without leaves its model to /bmad-party-mode. Rendering a
 # model-less definition for one would bind an effort onto a spawn the guard is told not to
 # touch, so the absence of a model is read as "not ours to define", not as an error. The four
 # names are NOT restated here; the condition is the model key's presence.
@@ -217,8 +217,8 @@ while IFS= read -r role; do
 
   mkey="$(jq -r --arg r "$role" '.aiDlcRoles[$r].model // empty' "$SETTINGS" 2>/dev/null)"
   if [ -z "$mkey" ]; then
-    # NORMAL, NOT AN ERROR. See the header: a role configuring an effort and no model is one
-    # this renderer has nothing to say about.
+    # NORMAL, NOT AN ERROR. See the header: a role configuring no model (a party persona whose
+    # model /bmad-party-mode chooses) is one this renderer has nothing to say about.
     skipped_nomodel=$((skipped_nomodel+1))
     continue
   fi

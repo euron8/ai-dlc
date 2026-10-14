@@ -182,6 +182,17 @@ expect_untouched "$CONSUMER" "$(mkjson Agent tea)" \
 expect_untouched "$CONSUMER" "$(mkjson Agent tea opus)" \
   "tea with an explicit model: the guard has no configured value to correct it to"
 
+# --- 6b. a party persona WITH a model -> BOUND like any role -------------------
+# A persona's model is optional. `sm` sets one (the shipped template's shape), so the guard
+# binds it exactly as it binds `dev`: absent param set, wrong tier corrected, right tier left
+# alone. One property apart from the tea cells above -- the presence of the model key.
+expect_set "$CONSUMER" "$(mkjson Agent sm)" sonnet \
+  "sm (a party persona that SETS a model), no model param"
+expect_set "$CONSUMER" "$(mkjson Agent sm opus)" sonnet \
+  "sm requested opus against its sonnet config → corrected (a /bmad-party-mode spawn is bound like any role)"
+expect_untouched "$CONSUMER" "$(mkjson Agent sm sonnet)" \
+  "sm requested sonnet against its sonnet config"
+
 # --- 7. model key not defined in aiDlcModels -> NO MODEL BOUND (fail-open) ---
 # architect's entry names `ghostkey`, which aiDlcModels does not define, so nothing resolves
 # to bind. Its effort is valid and still cannot be delivered by this guard: architect has no
@@ -372,6 +383,27 @@ else
   [ -n "$(printf '%s' "$mapp_prompt" | grep -oiE '(reasoning )?effort[^.]{0,40}(low|medium|high|xhigh|max)' | head -1)" ] \
     && ok "  and the effort-prose grammar sees it too — the second reading of the same property is live, not a restatement of the first" \
     || bad "  the effort-prose grammar scored its own subject as a non-instance: a reinstated directive was invisible to it, so its zero is a floor of unknown depth"
+fi
+
+# --- 13c-MUT2. PERSONA MUTANT: the old reading as code -- personas are never bound -----
+# Scored in BOTH directions: the with-model persona (sm) must stop being corrected, AND the
+# model-less persona (tea) must stay untouched under the mutant, so the kill is about the
+# persona special case and not a guard that stopped binding everything.
+MP="$WORK/guard-skippersona.sh"
+sed 's/^EXPECT="\$(pin_key "\$SETTINGS" "\$ROLE")"$/&; case "$ROLE" in cis|sm|tea|ux) EXPECT="" ;; esac/' "$HOOK" > "$MP"
+if cmp -s "$HOOK" "$MP"; then
+  bad "MUTANT skippersona matched nothing (cmp -s guard) — section 6b proves nothing"
+elif ! bash -n "$MP" 2>/dev/null; then
+  bad "MUTANT skippersona DID NOT APPLY as valid shell"
+else
+  mp_sm="$(printf '%s' "$(mkjson Agent sm opus)" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$MP" 2>/dev/null | jq -r '.hookSpecificOutput.updatedInput.model // "<unset>"' 2>/dev/null)"
+  mp_tea="$(printf '%s' "$(mkjson Agent tea)" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$MP" 2>/dev/null)"
+  mp_dev="$(printf '%s' "$(mkjson Agent dev opus)" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$MP" 2>/dev/null | jq -r '.hookSpecificOutput.updatedInput.model // "<unset>"' 2>/dev/null)"
+  if [ "$mp_sm" != "sonnet" ] && [ -z "$mp_tea" ] && [ "$mp_dev" = "sonnet" ]; then
+    ok "MUTANT skippersona killed: a guard that never binds a persona leaves sm's opus request uncorrected (section 6b catches it), while tea stays untouched and dev is still corrected — the kill is about the persona special case"
+  else
+    bad "MUTANT skippersona: sm='$mp_sm' (want not sonnet), tea='${mp_tea:-<nothing>}' (want nothing), dev='$mp_dev' (want sonnet)"
+  fi
 fi
 
 # --- 13d. a role with no config entry -> UNTOUCHED (fail-open) --------------

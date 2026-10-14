@@ -143,10 +143,11 @@ RECUR_TURNS="${AI_DLC_SENSOR_RECUR_TURNS:-20}"
 # A drop this large means the context was compacted or /clear'ed.
 RESET_DROP="${AI_DLC_SENSOR_RESET_DROP:-50000}"
 
-# The ceiling assumed for a model family whose window nobody declared. The smallest
-# current tier (Haiku's own true maximum) and Claude Code's own fallback for an
-# unrecognized model id. Assuming small fires early, which is noisy and non-blocking;
-# assuming large puts red past the real compaction point, which is silent.
+# The ceiling assumed when the window library is UNREADABLE -- a broken install, since
+# the library ships in the same copy step as this hook. The defaults themselves live
+# in ai-dlc-window.sh (ai_dlc_alias_default), shared with
+# validate-artifact-budget.sh. Assuming small fires early, which is noisy and
+# non-blocking; assuming large puts red past the real compaction point, which is silent.
 UNDECLARED_MODEL_MAX=200000
 
 # band_calc is the pure form of the threshold clamp: PCT/MIN_LEAD/MAX_LEAD plus
@@ -440,7 +441,7 @@ _AI_DLC_WIN_LIB="$(dirname "${BASH_SOURCE[0]}")/ai-dlc-window.sh"
 [ -r "$_AI_DLC_WIN_LIB" ] && . "$_AI_DLC_WIN_LIB"
 
 # -----------------------------------------------------------------------------
-# Model ceiling -- DECLARED per family by the operator, never inferred
+# Model ceiling -- one family policy, shared with validate-artifact-budget.sh
 #
 # The transcript records `claude-opus-4-8` for BOTH the 200K and the 1M variant
 # -- the `[1m]` suffix is stripped and no context_window_size is recorded
@@ -456,39 +457,37 @@ _AI_DLC_WIN_LIB="$(dirname "${BASH_SOURCE[0]}")/ai-dlc-window.sh"
 # through the compaction it exists to warn about.
 #
 # So: classify the lead model by family SUBSTRING of the id the arm record
-# already extracted (a version bump never needs a code change; a family with no
-# arm lands in OTHER), take that family's declared window from the settings
-# `env` block, and where none is declared assume UNDECLARED_MODEL_MAX. Nothing
-# is proven, learned or cached. `imminent` stays gated on WINDOW_DECLARED below,
-# because an assumed ceiling can be wrong in the silent direction; yellow and
-# red fire on the assumption, so an undeclared project is never left un-warned.
+# already extracted, and resolve that family's window through ai_dlc_model_window
+# in the library: a declaration (process env, then the settings `env` blocks), else
+# a `[1m]` suffix, else a default. The 1M default applies ONLY to an exact bare alias
+# (`fable`, `opus`, `sonnet`), because Claude Code maps a bare alias to its 1M variant
+# and a full id without `[1m]` is the 200K variant. A transcript records the FULL id
+# (`claude-opus-4-8`), never the alias, so an undeclared frontier lead lands on the
+# 200000 default here -- the same floor this hook used before the policy moved into
+# the library, and the safe direction: early, non-blocking reminders rather than a band
+# placed past the real compaction point. Declare AI_DLC_MODEL_<FAMILY>_WINDOW to lift
+# it. The precedence lives in the library and NOT here, because the Step 1a budget
+# validator resolves the analyst's window by the same policy and the two must not drift.
+#
+# A DEFAULT IS NOT A DECLARATION. `imminent` stays gated on WINDOW_DECLARED below,
+# because an assumed ceiling can be wrong in the silent direction (a 200K variant of a
+# 1M family reads identically in the transcript); yellow and red fire on the
+# assumption, so an undeclared project is never left un-warned. Library unreadable ->
+# OTHER at UNDECLARED_MODEL_MAX, the tightening direction.
 # -----------------------------------------------------------------------------
-case "$(printf '%s' "$LEAD_MODEL" | tr '[:upper:]' '[:lower:]')" in
-  *fable*|*mythos*) MODEL_FAMILY=FABLE  ;;
-  *opus*)           MODEL_FAMILY=OPUS   ;;
-  *sonnet*)         MODEL_FAMILY=SONNET ;;
-  *haiku*)          MODEL_FAMILY=HAIKU  ;;
-  *)                MODEL_FAMILY=OTHER  ;;
-esac
-
-case "$MODEL_FAMILY" in
-  FABLE)  DECLARED_WINDOW="${AI_DLC_MODEL_FABLE_WINDOW:-}"  ;;
-  OPUS)   DECLARED_WINDOW="${AI_DLC_MODEL_OPUS_WINDOW:-}"   ;;
-  SONNET) DECLARED_WINDOW="${AI_DLC_MODEL_SONNET_WINDOW:-}" ;;
-  HAIKU)  DECLARED_WINDOW="${AI_DLC_MODEL_HAIKU_WINDOW:-}"  ;;
-  *)      DECLARED_WINDOW="${AI_DLC_MODEL_OTHER_WINDOW:-}"  ;;
-esac
-
-# The declared value takes the library's own spellings (`1m`, `400k`, a bare
-# integer) so a consumer writes it the way they write autoCompactWindow. An
-# unparseable declaration is the same as none: the floor applies and the state
-# file says so, rather than a typo silently pinning a ceiling of zero.
+MODEL_FAMILY=OTHER
 MODEL_MAX="$UNDECLARED_MODEL_MAX"
 WINDOW_DECLARED=0
-if [ -n "$DECLARED_WINDOW" ] && command -v ai_dlc_parse_window >/dev/null 2>&1; then
-  if _PARSED_MAX="$(ai_dlc_parse_window "$DECLARED_WINDOW")" && [ "${_PARSED_MAX:-0}" -gt 0 ]; then
-    MODEL_MAX="$_PARSED_MAX"
-    WINDOW_DECLARED=1
+if command -v ai_dlc_model_window >/dev/null 2>&1; then
+  MODEL_FAMILY="$(ai_dlc_model_family "$LEAD_MODEL")"
+  _MW="$(ai_dlc_model_window "$LEAD_MODEL" "$SETTINGS_LOCAL" "$SETTINGS_PROJECT" 2>/dev/null || true)"
+  _MW_MAX="${_MW%%|*}"
+  _MW_REST="${_MW#*|}"
+  _MW_DECL="${_MW_REST%%|*}"
+  case "${_MW_MAX:-}" in ''|*[!0-9]*) _MW_MAX="" ;; esac
+  if [ -n "$_MW_MAX" ] && [ "$_MW_MAX" -gt 0 ]; then
+    MODEL_MAX="$_MW_MAX"
+    [ "$_MW_DECL" = "1" ] && WINDOW_DECLARED=1
   fi
 fi
 
@@ -650,7 +649,7 @@ else
 fi
 
 WINDOW_NOTE=""
-[ "$WINDOW_DECLARED" -eq 0 ] && WINDOW_NOTE=" No context window is declared for the ${MODEL_FAMILY} model family, so a ${UNDECLARED_MODEL_MAX}-token ceiling is assumed; set env AI_DLC_MODEL_${MODEL_FAMILY}_WINDOW in .claude/settings.json to declare it."
+[ "$WINDOW_DECLARED" -eq 0 ] && WINDOW_NOTE=" No context window is declared for the ${MODEL_FAMILY} model family, so a ${MODEL_MAX}-token default is assumed and the imminent band stays off; set env AI_DLC_MODEL_${MODEL_FAMILY}_WINDOW in .claude/settings.json to declare it."
 
 CONTEXT="[AI/DLC context sensor] Resident context is ~${TOKENS} tokens (~${PCT}% of the ${EFFECTIVE}-token effective window), crossing the $(printf '%s' "$LEVEL" | tr '[:lower:]' '[:upper:]') threshold (${THR}). ${ADVICE} This reminder is non-blocking: the pipeline continues and the decision is the user's. Reconcile the snapshot Context Reminders fields to this reading at the next gate.${WINDOW_NOTE}"
 

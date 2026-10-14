@@ -292,10 +292,31 @@ WHOLE_READ_SET="prd.md product-brief.md architecture.md carry-over-backlog.md"
 SPRINT_WHOLE_READ_SET="locked-requirements.md"
 
 # The analyst's context window, resolved through `aiDlcRoles.analyst` -> `aiDlcModels`
-# in the consumer's settings.json. `[1m]` is Claude Code's own suffix for the
-# 1M-context variant, which is why it is the token matched rather than a model-name
-# table -- a name table is a hand-maintained list that goes stale silently, and the
-# suffix is the thing that actually selects the window.
+# in the consumer's settings.json, then through ai_dlc_model_window in
+# ai-dlc-window.sh -- the SAME family policy the context sensor bands against, so the
+# two readers cannot drift. Precedence (the library owns layers 2-5):
+#   1. AI_DLC_READER_WINDOW_TOKENS (this validator only)
+#   2. process env AI_DLC_MODEL_<FAMILY>_WINDOW
+#   3. `.env.AI_DLC_MODEL_<FAMILY>_WINDOW` in settings.local.json, then settings.json
+#      (a declaration outside 50000..2000000 is rejected, named, and falls through)
+#   4. a `[1m]` suffix -> 1000000
+#   5. an EXACT bare alias: fable, opus, sonnet -> 1000000 (Claude Code maps a bare
+#      alias to its 1M variant); haiku -> 200000. Any other id -> 200000: a full id
+#      without `[1m]` (`claude-sonnet-4-5`) is the 200K variant.
+# <FAMILY> is classified from the resolved `aiDlcModels[key]` value, falling back to
+# the key itself when the key is absent from `aiDlcModels`.
+#
+# THE `[1m]` SUBSTRING USED TO BE THE ONLY 1M ROUTE, AND A BARE ALIAS FELL THROUGH IT.
+# A template mapping `sonnet` -> `sonnet` read 200000 here, so the Step 1a pool fell from
+# 330000 to 66000 and an in-budget pool became a HARD_BLOCK. The suffix survives as
+# layer 4; it is no longer the policy.
+#
+# LIBRARY UNREADABLE -> THE PRE-LIBRARY PATH, NEVER AN EXIT. The library is searched
+# in validate-compact-window.sh's order (AI_DLC_WINDOW_LIB, this script's ../hooks/,
+# $ROOT/.claude/hooks/, $ROOT/core/hooks/). Where none is readable this validator
+# falls back to `[1m]`-or-200000 and says so in WINDOW_SOURCE: a fixture that copies
+# the validator alone (retired-contract-token) must still get a pool, and the fallback
+# errs in the tightening direction.
 #
 # THIS FUNCTION USED TO GREP THE ROLE FILE FOR `^- Personal:`, AND THAT LINE HAS NOT
 # EXISTED SINCE v0.174.0. It shipped at v0.124.0, when role files carried
@@ -312,7 +333,8 @@ SPRINT_WHOLE_READ_SET="locked-requirements.md"
 # made the TIGHTENING default for the UNKNOWN case, used instead as the only reachable
 # one. Measured on the reference consumer: its analyst resolves to `claude-sonnet-5[1m]`
 # through the config block, a 330,000 pool, and the validator was reporting 66,000 and
-# a 417% breach.
+# a 417% breach. (That consumer has since moved to bare aliases, which is what the
+# bare-alias default in layer 5 exists for.)
 #
 # The comment two paragraphs up already named `aiDlcModels` as the source of truth; the
 # code simply never read it. The resolution idiom below is the one
@@ -320,10 +342,12 @@ SPRINT_WHOLE_READ_SET="locked-requirements.md"
 # a second reading of the same config.
 #
 # UNRESOLVED FALLS BACK TO 200000, NEVER TO THE LARGER NUMBER. No settings.json, no
-# jq, no `aiDlcRoles.analyst`, a key absent from `aiDlcModels`, and an unrecognised
-# model string all mean the same thing: we do not know. 200K is the standard window and
-# the value the context sensor already defaults to (`*) MODEL_MAX=200000`), so the
-# unknown case tightens the gate rather than opening it. A consumer whose analyst
+# jq, no `aiDlcRoles.analyst`, and a model string naming no known family all mean the
+# same thing: we do not know. 200K is the OTHER family's default in the shared library
+# (the same value the context sensor assumes for OTHER), so the unknown case tightens
+# the gate rather than opening it. A key absent from `aiDlcModels` is classified from
+# the key itself: `opus` dangling is still an opus alias, `mystery` dangling is OTHER
+# and tightens. A consumer whose analyst
 # genuinely has more room sets AI_DLC_READER_WINDOW_TOKENS -- and unlike the four
 # constants this replaces, the number being overridden has a derivation to argue
 # against.
@@ -334,16 +358,42 @@ SPRINT_WHOLE_READ_SET="locked-requirements.md"
 # Resolving a genuine 1M consumer to 200K -- what this function did for fifty releases
 # -- is a gate that cannot be passed, which is the inert-mechanism class and trains the
 # operator to ignore the row. Both are defects; only one is safe to guess.
+WINDOW_LIB=""
+if [ -n "${AI_DLC_WINDOW_LIB:-}" ] && [ -r "${AI_DLC_WINDOW_LIB}" ]; then
+  WINDOW_LIB="$AI_DLC_WINDOW_LIB"
+elif [ -r "${AI_DLC_SELF_DIR}/../hooks/ai-dlc-window.sh" ]; then
+  WINDOW_LIB="${AI_DLC_SELF_DIR}/../hooks/ai-dlc-window.sh"
+elif [ -r "${ROOT}/.claude/hooks/ai-dlc-window.sh" ]; then
+  WINDOW_LIB="${ROOT}/.claude/hooks/ai-dlc-window.sh"
+elif [ -r "${ROOT}/core/hooks/ai-dlc-window.sh" ]; then
+  WINDOW_LIB="${ROOT}/core/hooks/ai-dlc-window.sh"
+fi
+if [ -n "$WINDOW_LIB" ]; then
+  # shellcheck source=/dev/null
+  . "$WINDOW_LIB" 2>/dev/null || WINDOW_LIB=""
+fi
+command -v ai_dlc_model_window >/dev/null 2>&1 || WINDOW_LIB=""
+
+# Echoes "<window>|<source>".
 resolve_reader_window() {
   settings="$ROOT/.claude/settings.json"
-  [ -r "$settings" ] || { printf '200000'; return; }
-  command -v jq >/dev/null 2>&1 || { printf '200000'; return; }
+  [ -r "$settings" ] || { printf '200000|no .claude/settings.json'; return; }
+  command -v jq >/dev/null 2>&1 || { printf '200000|no jq'; return; }
   rrw_key="$(jq -r '.aiDlcRoles.analyst.model // empty' "$settings" 2>/dev/null || true)"
-  [ -n "$rrw_key" ] || { printf '200000'; return; }
+  [ -n "$rrw_key" ] || { printf '200000|no aiDlcRoles.analyst'; return; }
   rrw_model="$(jq -r --arg k "$rrw_key" '.aiDlcModels[$k] // empty' "$settings" 2>/dev/null || true)"
+  [ -n "$rrw_model" ] || rrw_model="$rrw_key"
+  if [ -n "$WINDOW_LIB" ]; then
+    rrw_out="$(ai_dlc_model_window "$rrw_model" "$ROOT/.claude/settings.local.json" "$settings" 2>/dev/null || true)"
+    rrw_win="${rrw_out%%|*}"
+    rrw_src="${rrw_out##*|}"
+    case "${rrw_win:-}" in ''|*[!0-9]*) ;; *)
+      printf '%s|aiDlcRoles.analyst -> %s, %s' "$rrw_win" "$rrw_model" "$rrw_src"; return ;;
+    esac
+  fi
   case "$rrw_model" in
-    *'[1m]'*) printf '1000000' ;;
-    *)        printf '200000' ;;
+    *'[1m]'*) printf '1000000|aiDlcRoles.analyst -> %s, [1m] suffix (fallback: ai-dlc-window.sh not found)' "$rrw_model" ;;
+    *)        printf '200000|aiDlcRoles.analyst -> %s, 200000 (fallback: ai-dlc-window.sh not found)' "$rrw_model" ;;
   esac
 }
 
@@ -351,8 +401,9 @@ if [ -n "${AI_DLC_READER_WINDOW_TOKENS:-}" ]; then
   READER_WINDOW_TOKENS="$AI_DLC_READER_WINDOW_TOKENS"
   WINDOW_SOURCE="AI_DLC_READER_WINDOW_TOKENS"
 else
-  READER_WINDOW_TOKENS="$(resolve_reader_window)"
-  WINDOW_SOURCE=".claude/settings.json aiDlcRoles.analyst"
+  _RRW="$(resolve_reader_window)"
+  READER_WINDOW_TOKENS="${_RRW%%|*}"
+  WINDOW_SOURCE=".claude/settings.json ${_RRW#*|}"
 fi
 ARTIFACT_SHARE_PCT="${AI_DLC_ARTIFACT_SHARE_PCT:-33}"
 WHOLE_READ_POOL=$(( READER_WINDOW_TOKENS * ARTIFACT_SHARE_PCT / 100 ))

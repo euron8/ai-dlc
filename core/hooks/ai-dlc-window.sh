@@ -143,3 +143,143 @@ ai_dlc_resolve_window() {
   # --- layer 4: nothing defined it -------------------------------------------
   printf '|%s|' "unset (model default)"
 }
+
+# =============================================================================
+# THE MODEL'S OWN WINDOW -- one family policy for every reader.
+#
+# A second question, distinct from the auto-compact window above: how large is the
+# context of the MODEL a role runs? Two readers ask it. The context sensor asks it of the
+# lead's transcript model id, to place its bands; validate-artifact-budget.sh asks it of
+# the analyst's configured `aiDlcModels` value, to size the Step 1a whole-read pool, which
+# is a HARD_BLOCK. They used to answer by two different routes -- the sensor by family
+# declaration with a 200000 floor, the validator by a `[1m]` substring with a 200000
+# fallback -- and a bare alias (`sonnet`) read 200000 in both, although Claude Code maps
+# every bare alias to its 1M-context variant (operator ruling). A shared policy is the
+# only way the two cannot drift, so it lives here and both source it.
+#
+# Precedence, highest first; a layer whose value is unparseable or outside
+# AI_DLC_WINDOW_MIN..AI_DLC_WINDOW_MAX does not define it, and the rejection is named in
+# the source tag of whichever lower layer answers:
+#   1. process env AI_DLC_MODEL_<FAMILY>_WINDOW
+#   2. `.env.AI_DLC_MODEL_<FAMILY>_WINDOW` in the settings files passed, in order
+#      (settings.local.json before settings.json). The USER settings file is not read
+#      here: a user-level declaration reaches a reader only through Claude Code's export
+#      of the merged env block into the process, i.e. layer 1.
+#   3. a `[1m]` suffix on the id -> 1000000
+#   4. an EXACT bare alias (lowercased, `[1m]` stripped): fable, opus, sonnet -> 1000000;
+#      haiku -> 200000
+#   5. anything else -> 200000
+#
+# THE ALIAS DEFAULT IS KEYED ON THE WHOLE ID, NEVER ON THE FAMILY SUBSTRING. The operator
+# ruling is that Claude Code maps a BARE alias to its 1M variant. A full id without `[1m]`
+# -- `claude-sonnet-4-5`, `us.anthropic.claude-opus-4-1-v1:0` -- is the 200K variant, and
+# a substring default read it as 1M: the sensor then stayed silent at 190K on a real 200K
+# session and the validator let a 330000 pool through a 200K analyst. Family
+# classification still uses the substring, because the declaration in layers 1-2 is per
+# family; only the DEFAULT is restricted.
+#
+# Layers 4 and 5 are ASSUMPTIONS (declared=0): the sensor keeps its imminent band gated
+# off on them, because an assumption in the large direction is silent.
+# =============================================================================
+
+AI_DLC_WINDOW_MIN=50000
+AI_DLC_WINDOW_MAX=2000000
+
+# ai_dlc_window_in_range <parsed value> -> 0 when it is a plausible model window.
+# A 20-digit declaration parses to a saturated or negative number (awk's %d), so the
+# digits-only test plus this range is what refuses it -- measured on four overflow
+# spellings; no separate length guard changes any outcome.
+ai_dlc_window_in_range() {
+  case "${1:-}" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$1" -ge "$AI_DLC_WINDOW_MIN" ] 2>/dev/null && [ "$1" -le "$AI_DLC_WINDOW_MAX" ] 2>/dev/null
+}
+
+# ai_dlc_model_family <model id or alias>
+# FABLE before OPUS: a fable/mythos id must never fall into a later arm.
+ai_dlc_model_family() {
+  case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in
+    *fable*|*mythos*) printf 'FABLE'  ;;
+    *opus*)           printf 'OPUS'   ;;
+    *sonnet*)         printf 'SONNET' ;;
+    *haiku*)          printf 'HAIKU'  ;;
+    *)                printf 'OTHER'  ;;
+  esac
+}
+
+# ai_dlc_alias_default <model id or alias>
+# Echoes "<window>|<source>". Only an EXACT bare alias gets the 1M default; see the
+# header for why a family substring must not.
+ai_dlc_alias_default() {
+  local a
+  a="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  a="${a%\[1m\]}"
+  case "$a" in
+    fable|opus|sonnet) printf '1000000|bare alias %s default' "$a" ;;
+    haiku)             printf '200000|bare alias %s default' "$a" ;;
+    *)                 printf '200000|not a bare alias: 200000 default' ;;
+  esac
+}
+
+# ai_dlc_family_window <FAMILY> [settings files...]
+# On success echoes "<window>|<source>" for the highest layer that DECLARES the family's
+# window (process env, then each settings file's env block) and returns 0. Otherwise
+# echoes "|<rejections>" -- empty when nothing was declared, else a note naming each
+# declaration refused as unparseable or out of range -- and returns 1.
+ai_dlc_family_window() {
+  local fam var val parsed f rej
+  fam="${1:-OTHER}"
+  case "$fam" in FABLE|OPUS|SONNET|HAIKU) ;; *) fam=OTHER ;; esac
+  var="AI_DLC_MODEL_${fam}_WINDOW"
+  rej=""
+  [ $# -gt 0 ] && shift
+  case "$fam" in
+    FABLE)  val="${AI_DLC_MODEL_FABLE_WINDOW:-}"  ;;
+    OPUS)   val="${AI_DLC_MODEL_OPUS_WINDOW:-}"   ;;
+    SONNET) val="${AI_DLC_MODEL_SONNET_WINDOW:-}" ;;
+    HAIKU)  val="${AI_DLC_MODEL_HAIKU_WINDOW:-}"  ;;
+    *)      val="${AI_DLC_MODEL_OTHER_WINDOW:-}"  ;;
+  esac
+  if [ -n "$val" ]; then
+    parsed="$(ai_dlc_parse_window "$val" 2>/dev/null)" || parsed=""
+    if ai_dlc_window_in_range "$parsed"; then
+      printf '%s|env %s' "$parsed" "$var"
+      return 0
+    fi
+    rej="${rej}; rejected env ${var}=${val} (not in ${AI_DLC_WINDOW_MIN}..${AI_DLC_WINDOW_MAX})"
+  fi
+  if command -v jq >/dev/null 2>&1; then
+    for f in "$@"; do
+      [ -n "$f" ] && [ -r "$f" ] || continue
+      val="$(jq -r --arg k "$var" '(.env // {})[$k] // empty | tostring' "$f" 2>/dev/null || true)"
+      [ -n "$val" ] || continue
+      parsed="$(ai_dlc_parse_window "$val" 2>/dev/null)" || parsed=""
+      if ai_dlc_window_in_range "$parsed"; then
+        printf '%s|%s env %s%s' "$parsed" "$(basename "$f")" "$var" "$rej"
+        return 0
+      fi
+      rej="${rej}; rejected $(basename "$f") env ${var}=${val} (not in ${AI_DLC_WINDOW_MIN}..${AI_DLC_WINDOW_MAX})"
+    done
+  fi
+  printf '|%s' "$rej"
+  return 1
+}
+
+# ai_dlc_model_window <model id or alias> [settings files...]
+# Echoes exactly one line: "<window>|<declared>|<source>". declared is 1 when a
+# declaration or a `[1m]` suffix answered, 0 when a default did.
+ai_dlc_model_window() {
+  local id fam fw rej ad
+  id="${1:-}"
+  [ $# -gt 0 ] && shift
+  fam="$(ai_dlc_model_family "$id")"
+  if fw="$(ai_dlc_family_window "$fam" "$@")"; then
+    printf '%s|1|%s' "${fw%%|*}" "${fw#*|}"
+    return 0
+  fi
+  rej="${fw#*|}"
+  case "$id" in
+    *'[1m]'|*'[1M]') printf '1000000|1|[1m] suffix%s' "$rej"; return 0 ;;
+  esac
+  ad="$(ai_dlc_alias_default "$id")"
+  printf '%s|0|%s%s' "${ad%%|*}" "${ad#*|}" "$rej"
+}

@@ -395,11 +395,13 @@ Documented so a future author doesn't add them:
 
 - **Effort.** It lives in `aiDlcRoles.<role>.effort`, alongside the model, and
   reconciles with it as consumer config. No role file states one.
-- **The party-persona role files (`tea.md`, `ux.md`, `sm.md`, `cis.md`).** By
-  design these name no model at all — they are spawned by the external
-  `/bmad-party-mode` sub-skill, which controls their model, so an ai-dlc key
-  there would be inert. Their `aiDlcRoles` entries carry an effort and no model,
-  so the guard binds the effort and leaves the model alone. Nothing to declare.
+- **The party-persona role files (`tea.md`, `ux.md`, `sm.md`, `cis.md`).** Like
+  every role file, these name no model — they are spawned by the external
+  `/bmad-party-mode` sub-skill. A persona's model is optional and lives in its
+  `aiDlcRoles` entry: set, the renderer writes a definition and the guard binds
+  it like any role, including correcting the model on a `/bmad-party-mode`
+  spawn; absent, `/bmad-party-mode` controls the model. Either way it is
+  consumer config. Nothing to declare.
 - **`{running_digest_command}` / `{function_verification_command}`** in
   `steps/deploy-validate.md`. These look identical to `{deploy_command}` /
   `{smoke_test_command}` (same `<!-- {token}: ... -->` comment shape) but

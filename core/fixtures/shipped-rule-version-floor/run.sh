@@ -237,7 +237,7 @@ seed_consumer() {
   printf '# a rule this consumer wrote\n' > "$d/.claude/rules/consumer-own.md"
   # bashOutputMaxChars equals the template's value ON PURPOSE: a fix deleting every key that
   # matches the template would delete the consumer's own setting, and this seed catches it.
-  # aiDlcRoles.dev is TUNED before install (the template pins dev to sonnet): consumer data.
+  # aiDlcRoles.dev is TUNED before install (the template pins dev to haiku): consumer data.
   printf '%s\n' '{"permissions":{"allow":["Bash(ls:*)"]},"env":{"CONSUMER_VAR":"1"},"bashOutputMaxChars":8000,"aiDlcRoles":{"dev":{"model":"opus","effort":"medium"}},"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"bash .claude/hooks/consumer-own.sh"}]}],"Notification":[{"hooks":[{"type":"command","command":"echo consumer-notify"}]}]}}' \
     > "$d/.claude/settings.json"
 }

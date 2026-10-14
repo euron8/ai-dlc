@@ -303,28 +303,16 @@ to the autonomous flow.
 ### Where Models Are Configured
 
 Every teammate's model comes from one place: the `aiDlcModels` block in
-`.claude/settings.json`. It maps a key to the model string this project uses.
+`.claude/settings.json`. It maps a key to the model string this project uses,
+and ships four keys: `fable`, `opus`, `sonnet` and `haiku`. Read the shipped
+values in that file; they are not copied here.
 
-```json
-"aiDlcModels": {
-  "opus": "claude-opus-5[1m]",
-  "sonnet": "claude-sonnet-5[1m]"
-}
-```
+A second block in the same file, `aiDlcRoles`, says what each role runs as — a
+model key and an effort level. Team-role files state neither; changing what a
+role runs on is a one-line edit there that touches no core file.
 
-A second block, `aiDlcRoles`, says what each role runs as — a model key and an
-effort level. Team-role files state neither; changing what a role runs on is a
-one-line edit here that touches no core file.
-
-```json
-"aiDlcRoles": {
-  "code-reviewer": { "model": "opus",   "effort": "high" },
-  "dev":           { "model": "sonnet", "effort": "medium" }
-}
-```
-
-On a Bedrock project, change the `aiDlcModels` values — the keys, the role
-entries, and the role files all stay as shipped.
+On a Bedrock project, replace each `aiDlcModels` value with its Bedrock string
+— the keys, the role entries, and the role files all stay as shipped.
 
 The lead session's own model is set by your shell function's `ANTHROPIC_MODEL`,
 not by this block.

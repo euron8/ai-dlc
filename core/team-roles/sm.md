@@ -11,10 +11,10 @@ sprint without thrash.
 `aiDlcRoles.sm` in `.claude/settings.json`.** That entry is the only
 source; do not infer either value from anywhere else.
 
-The lead spawns you as a party-mode persona; your model is set by the
-`/bmad-party-mode` invocation, not by an ai-dlc Agent spawn. (If a future step
-spawns you directly via the Agent tool, that dispatch supplies the `model`
-per SKILL.md Rule 19.)
+The lead spawns you as a party-mode persona. Your model is optional in that
+entry: when it sets one, the dispatch guard binds it on your spawn like any
+role's (SKILL.md Rule 19); when it sets none, the `/bmad-party-mode`
+invocation chooses it.
 
 ## Ownership
 

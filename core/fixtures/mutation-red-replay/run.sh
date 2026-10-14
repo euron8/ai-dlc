@@ -516,6 +516,238 @@ mkmut m13 "$prc" && mutant_pair m13 arm_later_pytest_word arm_pytest_stub_kill "
 sed 's|^  if \[ "\${#SC_ARGV\[@\]}" -eq 0 \]; then$|  if false; then|' "$VALIDATOR" > "$MUT/m14.sh"; prc=$?
 mkmut m14 "$prc" && mutant_pair m14 arm_ws_syntax_check arm_marker_control "no guard on a whitespace-only --syntax-check"
 
+# =============================================================================
+# THE RUN THAT EXITS 0 AND RAN NOTHING. pytest exits 0 when every selected test is
+# skipped, so an exit code reads an all-skipped baseline as GREEN and the all-skipped
+# mutated run as UNPROVEN. The validator reads pytest's summary line (last match, ANSI
+# stripped, count words against a whitelist) and refuses such a run with exit 2. Seeds
+# s1-s10 run REAL pytest, one world each; mutants sk1-sk7 are the wrong fixes. The stub
+# pytest arms above print no summary line at all, so they are the fail-open control: the
+# check must stand down on them, and the fail-closed mutant sk4 is killed by them.
+# =============================================================================
+PYTEST_QQ=(python3 -m pytest -qq -p no:cacheprovider)
+SKIP_NOTE_LINE='^  skip-check: not applied (no pytest summary line)$'
+
+# skworld <name> <m.py body> <test_m.py body> -> echoes the world dir
+skworld() {
+  local d; d="$(pyworld "$1" "$2")"
+  printf '%b' "$3" > "$d/test_m.py"
+  printf '%s\n' "$d"
+}
+T_SKIP='import pytest\nfrom m import f\n@pytest.mark.skip(reason="x")\ndef test_f():\n    assert f() == 2\n'
+T_MIXED='import pytest\nfrom m import f\n@pytest.mark.skip(reason="x")\ndef test_a():\n    assert f() == 2\ndef test_b():\n    assert f() == 2\n'
+M_F='def f():\n    return 2\n'
+
+arm_s1() {  # @pytest.mark.skip only -> 2 before any mutation, target byte-identical
+  local d before; d="$(skworld "s1-$2" "$M_F" "$T_SKIP")"; cp "$d/m.py" "$d/m.orig"
+  vrun "$1" "$d/m.py" 2 '    return 3' "${PYTEST[@]}" "$d/test_m.py"
+  why="exit $rc"
+  [ "$rc" -eq 2 ] && grep -qF 'UNEVALUABLE (no test ran) — the baseline is not GREEN: it ran no test' <<<"$out" \
+    && cmp -s "$d/m.py" "$d/m.orig" && ! grep -q '^mutation-red replay$' <<<"$out"
+}
+arm_s2() {  # -k keeps only the skipped test: rc 0, `1 skipped, 1 deselected` -> 2
+  local d; d="$(skworld "s2-$2" "$M_F" "$T_MIXED")"
+  vrun "$1" "$d/m.py" 2 '    return 3' "${PYTEST[@]}" "$d/test_m.py" -k test_a
+  why="exit $rc"
+  [ "$rc" -eq 2 ] && grep -qF 'UNEVALUABLE (no test ran)' <<<"$out"
+}
+arm_s3() {  # `1 skipped, 1 warning` -> 2 (a warning is not a test that ran)
+  local d; d="$(skworld "s3-$2" "$M_F" 'import warnings, pytest\nfrom m import f\nwarnings.warn("module warn")\n@pytest.mark.skip(reason="x")\ndef test_f():\n    assert f() == 2\n')"
+  vrun "$1" "$d/m.py" 2 '    return 3' "${PYTEST[@]}" "$d/test_m.py"
+  why="exit $rc"
+  [ "$rc" -eq 2 ] && grep -qF 'UNEVALUABLE (no test ran)' <<<"$out" && grep -q '1 skipped, 1 warning in' <<<"$out"
+}
+arm_s4() {  # PY_COLORS=1: the summary line is wrapped in ANSI escapes -> still 2
+  local d; d="$(skworld "s4-$2" "$M_F" "$T_SKIP")"
+  vrun "$1" "$d/m.py" 2 '    return 3' env PY_COLORS=1 "${PYTEST[@]}" "$d/test_m.py"
+  why="exit $rc"
+  [ "$rc" -eq 2 ] && grep -qF 'UNEVALUABLE (no test ran)' <<<"$out" && grep -q "$(printf '\033')" <<<"$out"
+}
+arm_s5() {  # one skipped and one passing test, a real kill -> 0 (a test ran)
+  local d; d="$(skworld "s5-$2" "$M_F" "$T_MIXED")"
+  vrun "$1" "$d/m.py" 2 '    return 3' "${PYTEST[@]}" "$d/test_m.py"
+  why="exit $rc"
+  [ "$rc" -eq 0 ] && grep -q '^PROVEN:' <<<"$out"
+}
+arm_s6() {  # a -s test PRINTS a fake all-skipped summary, then really passes: LAST match wins -> 0
+  local d; d="$(skworld "s6-$2" "$M_F" 'from m import f\ndef test_f():\n    print("1 skipped in 0.00s")\n    assert f() == 2\n')"
+  vrun "$1" "$d/m.py" 2 '    return 3' "${PYTEST[@]}" -s "$d/test_m.py"
+  why="exit $rc"
+  [ "$rc" -eq 0 ] && grep -q '^PROVEN:' <<<"$out"
+}
+arm_s7() {  # the mutation flips a skipif: baseline ran, mutated run skipped all -> 2 after restore
+  local d before
+  d="$(skworld "s7-$2" 'ENABLED = True\ndef f():\n    return 2\n' 'import pytest\nimport m\n@pytest.mark.skipif(not m.ENABLED, reason="off")\ndef test_f():\n    assert m.f() == 2\n')"
+  before="$(cksum < "$d/m.py")"
+  vrun "$1" "$d/m.py" 1 'ENABLED = False' "${PYTEST[@]}" "$d/test_m.py"
+  why="exit $rc"
+  [ "$rc" -eq 2 ] && grep -qF 'UNEVALUABLE (no test ran) — the mutated run ran no test' <<<"$out" \
+    && grep -q '^  restore:    byte-identical$' <<<"$out" && [ "$(cksum < "$d/m.py")" = "$before" ]
+}
+arm_s8() {  # skip-gated: baseline skips all, the mutation un-skips a failing test -> 2 (was 0)
+  local d
+  d="$(skworld "s8-$2" 'ENABLED = False\ndef f():\n    return 2\n' 'import pytest\nimport m\n@pytest.mark.skipif(not m.ENABLED, reason="off")\ndef test_f():\n    assert m.f() == 3\n')"
+  vrun "$1" "$d/m.py" 1 'ENABLED = True' "${PYTEST[@]}" "$d/test_m.py"
+  why="exit $rc"
+  [ "$rc" -eq 2 ] && grep -qF 'UNEVALUABLE (no test ran) — the baseline is not GREEN' <<<"$out"
+}
+arm_s9() {  # -qq suppresses the summary: all-skipped -> 1 with the note on STDOUT (fail open)
+  local d; d="$(skworld "s9-$2" "$M_F" "$T_SKIP")"
+  out="$(bash "$1" "$d/m.py" 2 '    return 3' "${PYTEST_QQ[@]}" "$d/test_m.py" 2>/dev/null)"; rc=$?
+  why="exit $rc"
+  [ "$rc" -eq 1 ] && grep -q "$SKIP_NOTE_LINE" <<<"$out"
+}
+arm_s9b() { # the note prints on PROVEN too: -qq with a real kill -> 0 AND the note
+  local d; d="$(pyworld "s9b-$2" "$M_F")"
+  vrun "$1" "$d/m.py" 2 '    return 3' "${PYTEST_QQ[@]}" "$d/test_m.py"
+  why="exit $rc"
+  [ "$rc" -eq 0 ] && grep -q '^PROVEN:' <<<"$out" && grep -q "$SKIP_NOTE_LINE" <<<"$out"
+}
+arm_s10() { # strict xfail: baseline xfailed (rc 0), the mutation makes it XPASS(strict) -> 0
+  local d; d="$(skworld "s10-$2" "$M_F" 'import pytest\nfrom m import f\n@pytest.mark.xfail(strict=True, reason="x")\ndef test_f():\n    assert f() == 3\n')"
+  vrun "$1" "$d/m.py" 2 '    return 3' "${PYTEST[@]}" "$d/test_m.py"
+  why="exit $rc"
+  [ "$rc" -eq 0 ] && grep -q '^PROVEN:' <<<"$out"
+}
+arm_stub_note() {   # the stub pytest prints no summary: the check stands down and SAYS so
+  arm_pytest_stub_kill "$1" && grep -q "$SKIP_NOTE_LINE" <<<"$out"
+}
+# A UTF-8 locale for s11. The fixture sets no locale, so under a C-locale hook env the seed
+# and the mutant that drops LC_ALL=C would agree; the seed pins one itself.
+U8=""
+if command -v locale >/dev/null 2>&1; then
+  _locs="$(locale -a 2>/dev/null)" || _locs=""
+  if grep -qx 'en_US.UTF-8' <<<"$_locs"; then U8=en_US.UTF-8
+  else U8="$(grep -iE '\.utf-?8$' <<<"$_locs" | head -n 1)" || U8=""; fi
+fi
+arm_s11() { # an all-skipped run whose log carries a non-UTF-8 byte (\xff under -s) -> 2
+  local d; d="$(skworld "s11-$2" "$M_F" 'import sys, pytest\nfrom m import f\nsys.stdout.buffer.write(b"\\xff\\n"); sys.stdout.flush()\n@pytest.mark.skip(reason="x")\ndef test_f():\n    assert f() == 2\n')"
+  out="$(LC_ALL="$U8" bash "$1" "$d/m.py" 2 '    return 3' "${PYTEST[@]}" -s "$d/test_m.py" 2>&1)"; rc=$?
+  why="exit $rc"
+  [ "$rc" -eq 2 ] && grep -qF 'UNEVALUABLE (no test ran)' <<<"$out"
+}
+# The `*)` arm: a parser that prints anything other than none/norun/ran must fail OPEN and
+# say so. Probed on a copy whose parser prints NOTHING (the shape awk's abort produced).
+arm_parser_dead() {
+  arm_pytest_stub_kill "$1" && grep -q "$SKIP_NOTE_LINE" <<<"$out"
+}
+
+arm_stub_note "$VALIDATOR" \
+  && ok "a pytest with no summary line (the stub) is not refused: PROVEN, with the skip-check note (fail open)" \
+  || bad "the stub pytest with no summary line was refused or carried no skip-check note ($why) — the skip check fails closed"
+
+if [ "$HAVE_PYTEST" -eq 1 ]; then
+  arm_s1 "$VALIDATOR" tip && ok "s1 -> 2/2: an all-skipped baseline exits 2 (no test ran) before mutating, target byte-identical" \
+    || bad "s1 -> 2/$rc: an all-skipped baseline was graded ($why) — exit 0 read as GREEN over a run that ran nothing"
+  arm_s2 "$VALIDATOR" tip && ok "s2 -> 2/2: '1 skipped, 1 deselected' (-k keeps only the skipped test) exits 2" \
+    || bad "s2 -> 2/$rc: a skipped+deselected run was graded ($why)"
+  arm_s3 "$VALIDATOR" tip && ok "s3 -> 2/2: '1 skipped, 1 warning' exits 2 (a warning is not a test)" \
+    || bad "s3 -> 2/$rc: a skipped+warning run was graded ($why)"
+  arm_s4 "$VALIDATOR" tip && ok "s4 -> 2/2: PY_COLORS=1 all-skipped exits 2 (ANSI stripped before parsing)" \
+    || bad "s4 -> 2/$rc: a coloured all-skipped run was graded ($why)"
+  arm_s5 "$VALIDATOR" tip && ok "s5 -> 0/0: one skipped plus one passing test with a real kill exits 0 (a test ran)" \
+    || bad "s5 -> 0/$rc: a mixed skip+pass run was not PROVEN ($why) — the check refuses runs that ran a test"
+  arm_s6 "$VALIDATOR" tip && ok "s6 -> 0/0: a -s test printing a fake '1 skipped' line is read by the LAST summary line and exits 0" \
+    || bad "s6 -> 0/$rc: a printed fake summary line decided the verdict ($why)"
+  arm_s7 "$VALIDATOR" tip && ok "s7 -> 2/2: a mutation flipping a skipif to skip-all exits 2 after a verified restore" \
+    || bad "s7 -> 2/$rc: an all-skipped MUTATED run was graded ($why)"
+  arm_s8 "$VALIDATOR" tip && ok "s8 -> 2/2: a skip-gated test (skipped at baseline, un-skipped and failing under mutation) exits 2" \
+    || bad "s8 -> 2/$rc: a skip-gated test was PROVEN off a baseline that ran nothing ($why)"
+  arm_s9 "$VALIDATOR" tip && ok "s9 -> 1/1: -qq all-skipped is not refused (no summary line): exit 1 with the skip-check note on stdout" \
+    || bad "s9 -> 1/$rc: -qq all-skipped did not fail open with the note ($why)"
+  arm_s9b "$VALIDATOR" tip && ok "s9b -> 0/0: -qq with a real kill is PROVEN and still prints the skip-check note" \
+    || bad "s9b -> 0/$rc: the skip-check note is not printed on PROVEN ($why)"
+  arm_s10 "$VALIDATOR" tip && ok "s10 -> 0/0: a strict xfail turned XPASS by the mutation exits 0 (xfailed counts as ran)" \
+    || bad "s10 -> 0/$rc: a strict-xfail kill was not PROVEN ($why)"
+  if [ -n "$U8" ]; then
+    arm_s11 "$VALIDATOR" tip && ok "s11 -> 2/2: an all-skipped run whose log carries \\xff exits 2 under LC_ALL=$U8 (the parser reads bytes)" \
+      || bad "s11 -> 2/$rc: a non-UTF-8 byte in the log defeated the skip check under LC_ALL=$U8 ($why)"
+  else
+    skip "no UTF-8 locale in 'locale -a' — s11 (non-UTF-8 byte in the log) did NOT run"
+  fi
+else
+  skip "pytest not importable by python3 — the skip-check seeds s1-s10 did NOT run"
+fi
+
+# --- MUTANTS sk1-sk7 of the skip check ---------------------------------------------------
+# sk1: both checks removed (every layer: the baseline and the mutated read).
+sed -e 's@^  case "\$(pytest_summary "\$BASE_LOG")" in$@  case "ran" in@' \
+    -e 's@^  case "\$(pytest_summary "\$MUT_LOG")" in$@  case "ran" in@' "$VALIDATOR" > "$MUT/sk1.sh"; prc=$?
+[ "$(grep -c '^  case "ran" in$' "$MUT/sk1.sh")" -eq 2 ] || prc=9
+mkmut sk1 "$prc" || true
+# sk2: refuse whenever any skipped/deselected word is present (ignores the words that ran).
+sed 's@^      print ((ran == 0 \&\& idle == 1) ? "norun" : "ran")$@      print (idle == 1 ? "norun" : "ran")@' \
+  "$VALIDATOR" > "$MUT/sk2.sh"; prc=$?
+mkmut sk2 "$prc" || true
+# sk3: the check applied to the baseline only.
+sed 's@^if \[ -z "\$REFUSED" \] && \[ "\$IS_PYTEST" -eq 1 \]; then$@if false; then@' \
+  "$VALIDATOR" > "$MUT/sk3.sh"; prc=$?
+mkmut sk3 "$prc" || true
+# sk4: fail CLOSED on a missing summary line at baseline.
+sed 's@^    \*) SKIP_NOTE="\$SKIP_NOTE_TEXT" ;;$@    *) echo "validate-mutation-red: UNEVALUABLE (no test ran) — no pytest summary line" >\&2; exit 2 ;;@' \
+  "$VALIDATOR" > "$MUT/sk4.sh"; prc=$?
+mkmut sk4 "$prc" || true
+# sk5: FIRST matching summary line instead of the last.
+sed 's@^        last = line$@        if (last == "") last = line@' "$VALIDATOR" > "$MUT/sk5.sh"; prc=$?
+mkmut sk5 "$prc" || true
+# sk6: no ANSI strip.
+sed 's@^      gsub(esc "\\\\\[\[0-9;\]\*m", "", line)$@      line = line@' "$VALIDATOR" > "$MUT/sk6.sh"; prc=$?
+mkmut sk6 "$prc" || true
+# sk7: refuse only a bare `N skipped` line.
+sed 's@^      print ((ran == 0 \&\& idle == 1) ? "norun" : "ran")$@      print ((n == 1 \&\& last ~ /^[0-9]+ skipped$/) ? "norun" : "ran")@' \
+  "$VALIDATOR" > "$MUT/sk7.sh"; prc=$?
+mkmut sk7 "$prc" || true
+
+# sk8: the parse runs in the caller's locale (LC_ALL=C dropped).
+sed 's@^  LC_ALL=C awk '"'"'$@  awk '"'"'@' "$VALIDATOR" > "$MUT/sk8.sh"; prc=$?
+mkmut sk8 "$prc" || true
+# The `*)` probe: a copy whose parser prints NOTHING (awk replaced by `true`, which takes
+# the program and the log as ignored arguments). sk9 is that copy with both `*)` arms
+# narrowed to `none)`, so an empty parse neither refuses nor notes.
+sed 's@^  LC_ALL=C awk '"'"'$@  LC_ALL=C true '"'"'@' "$VALIDATOR" > "$MUT/pdead.sh"; prc=$?
+mkmut pdead "$prc" || true
+sed -e 's@^    \*) SKIP_NOTE="\$SKIP_NOTE_TEXT" ;;$@    none) SKIP_NOTE="$SKIP_NOTE_TEXT" ;;@' \
+    -e 's@^    \*)     SKIP_NOTE="\$SKIP_NOTE_TEXT" ;;$@    none)  SKIP_NOTE="$SKIP_NOTE_TEXT" ;;@' \
+    "$MUT/pdead.sh" > "$MUT/sk9.sh"; prc=$?
+[ "$(grep -c 'SKIP_NOTE="\$SKIP_NOTE_TEXT" ;;$' "$MUT/sk9.sh")" -eq 2 ] \
+  && [ "$(grep -c '^    \*) *SKIP_NOTE=' "$MUT/sk9.sh")" -eq 0 ] && ! cmp -s "$MUT/pdead.sh" "$MUT/sk9.sh" || prc=9
+mkmut sk9 "$prc" || true
+if [ -s "$MUT/pdead.sh" ] && [ -s "$MUT/sk9.sh" ] && [ "$prc" -eq 0 ]; then
+  if arm_parser_dead "$MUT/pdead.sh"; then
+    ok "a parser that prints nothing fails OPEN through the \`*)\` arm: PROVEN with the skip-check note"
+    if ! arm_parser_dead "$MUT/sk9.sh"; then
+      ok "SKIP MUTANT sk9: the \`*)\` arms narrowed to none) is killed by arm_parser_dead ($why: no note on an empty parse)"
+    else bad "SKIP MUTANT sk9 (no \`*)\` arm) survived arm_parser_dead"; fi
+  else bad "a parser that prints nothing did not fail open with the note ($why) — the \`*)\` arm is missing"; fi
+fi
+
+# sk4 needs no python: the stub arms are its kill.
+[ -s "$MUT/sk4.sh" ] && ! cmp -s "$VALIDATOR" "$MUT/sk4.sh" \
+  && mutant_pair sk4 arm_pytest_stub_kill arm_nonpytest_exit2 "failing closed on a missing pytest summary line"
+if [ "$HAVE_PYTEST" -eq 1 ]; then
+  # skpair <name> <kill-arm> <near-miss-arm> <label>, each arm driven with a fresh world tag.
+  skpair() {
+    if ! "$2" "$MUT/$1.sh" "$1k"; then kwhy="$why"
+      if "$3" "$MUT/$1.sh" "$1n"; then ok "SKIP MUTANT $1: $4 is killed by $2 ($kwhy); $3 still holds"
+      else bad "SKIP MUTANT $1 ($4) also failed $3 ($why) — the kill is entangled"; fi
+    else bad "SKIP MUTANT $1 ($4) survived $2"; fi
+  }
+  skpair sk1 arm_s1 arm_s5  "the skip check removed"
+  skpair sk2 arm_s5 arm_s1  "refusing on any skipped word"
+  skpair sk3 arm_s7 arm_s1  "the skip check on the baseline only"
+  skpair sk4 arm_s9 arm_s1  "failing closed on a missing summary line"
+  skpair sk5 arm_s6 arm_s1  "the first summary line instead of the last"
+  skpair sk6 arm_s4 arm_s1  "no ANSI strip"
+  skpair sk7 arm_s2 arm_s1  "refusing only a bare 'N skipped' line"
+  if [ -n "$U8" ]; then
+    skpair sk8 arm_s11 arm_s1 "the summary parse in the caller's locale (no LC_ALL=C)"
+  else
+    skip "no UTF-8 locale — skip-check mutant sk8 did NOT run"
+  fi
+else
+  skip "pytest not importable by python3 — skip-check mutants sk1-sk3 and sk5-sk8 did NOT run"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "mutation-red-replay: PASS"; exit 0; fi
 echo "mutation-red-replay: $fails assertion(s) FAILED" >&2

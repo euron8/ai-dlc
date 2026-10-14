@@ -501,25 +501,22 @@ Ask the user:
 > 2. **AWS Bedrock**
 > 3. **Both** — Configure both, switch per session
 
-The answer decides only what the values look like. The shipped block is:
-
-```json
-"aiDlcModels": {
-  "opus": "claude-opus-5[1m]",
-  "sonnet": "claude-sonnet-5[1m]"
-}
-```
+The answer decides only what the values look like. The shipped `aiDlcModels`
+and `aiDlcRoles` blocks are the ones `install.sh` wrote into
+`.claude/settings.json` — read them there rather than from a copy here.
+`aiDlcModels` ships four keys, `fable`, `opus`, `sonnet` and `haiku`.
 
 - **Personal** — leave the defaults, or substitute the model strings the user
   prefers.
-- **Bedrock** — replace both values with the user's Bedrock strings, e.g.
+- **Bedrock** — replace each value with the user's Bedrock string, e.g.
   `"opus": "global.anthropic.claude-opus-4-6-v1"` and
   `"sonnet": "global.anthropic.claude-sonnet-4-6"`. **Change the values, never
   the keys** (see below).
 - **Both** — set the values to whichever provider the user launches with most
   often; switching is a one-line edit.
 
-Present the block and ask for confirmation before writing it.
+Present the `aiDlcModels` block as it stands in `.claude/settings.json` and ask
+for confirmation before writing any change to it.
 
 **The keys are not free-form.** A key is what the dispatch guard injects as the
 Agent tool's `model` parameter, and that parameter is an enum — `opus`,
@@ -535,7 +532,7 @@ files at it. Nothing in the rulebook forces an escalated role above its base —
 the same key as `dev.md` is a valid (if pointless) configuration. That is a
 deliberate consumer decision, not a default.
 
-**A project with no opus access** maps both keys to its sonnet string. Role
+**A project with no opus access** maps the `opus` key to its sonnet string. Role
 files are untouched. Escalated roles then resolve to the same string as their
 base roles — valid config, bound without comment. Record it in CLAUDE.md if the
 team needs to know; nothing at runtime checks it.
@@ -545,7 +542,7 @@ launch-time choice: the lead starts that teammate with the local model on the
 command line, and no `/model` switch is involved.
 
 Step 0 does NOT absorb model strings from archived team role files (they are
-ai-dlc-owned). Always present the shipped defaults above and let the user
+ai-dlc-owned). Always present the shipped defaults from `.claude/settings.json` and let the user
 override them.
 
 Context thresholds and auto-handoff mode are no longer template

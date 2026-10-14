@@ -11,7 +11,9 @@ action falls in the **non-delegable set**:
   merge and land-order integration (including merge-conflict resolution,
   `implementation.md` -- integration is orchestration), and discharge-
   predicate execution at deploy gates.
-- **(b) Routing** -- pipeline-variant selection and step sequencing.
+- **(b) Routing** -- pipeline-variant selection, step sequencing, and
+  story-to-role routing (an `escalate_model` tag set before a story's first
+  dev dispatch, `implementation.md` "Pre-dispatch routing").
 - **(c) Gate-validation decisions** -- resolving the manifest, running the
   `script` / `project` / `lead` checks, owning the PASS/FAIL, the remediation
   disposition and the escalation, and adopting the `gate-adjudicator`'s per-check

@@ -933,9 +933,18 @@ matches_pin() {
 #       ledger, not this sprint, because a shard row with a null sprint is still a dispatch.
 #
 # THE SHARDABLE SET is the roles named in SHARD_ROLES plus every PARTY SEAT, and the
-# seats are DERIVED, not listed: a party seat is a declared `aiDlcRoles` entry with no
-# `model` -- the definition ai-dlc-dispatch-guard.sh already uses (PARTY PERSONAS in its
-# header). A consumer adding a seat gets it here with no edit.
+# seats are DERIVED, not listed: a party seat is a role whose role file opens a line with
+# `The lead spawns you as a party-mode persona` (`party_seats` below), read from the
+# `team-roles/` directory beside the `--settings` file -- `.claude/team-roles/` for the
+# `.claude/settings.json` the gate passes. A consumer adding a seat gets it here with no edit.
+#
+# THE KEY IS THE ROLE FILE, NOT THE ABSENCE OF A MODEL, AND THE EARLIER KEY FAILED SILENTLY.
+# Seats were once the `aiDlcRoles` entries with no `model`. A persona's model is optional
+# (ai-dlc-dispatch-guard.sh, PARTY PERSONAS), and the shipped template now gives all four
+# one, so under that key no persona qualified and S1/S3 stopped judging every party seat
+# with nothing printed. The role file is what declares the persona; the config only says
+# what it runs on. The derived seats and their source directory print on every run, and
+# an empty derivation is a WARN, so a lost seat set cannot read as a clean one.
 #
 # THE GATE-1 REVIEWERS AND GATE-2 `qa` ARE IN IT. A code-reviewer (or code-reviewer-escalated)
 # dispatch, and a qa dispatch, is one part of `partition-review-diff.sh --map`, the cross
@@ -984,6 +993,22 @@ matches_pin() {
 SHARD_ROLES="adversary remediator gate-adjudicator analyst code-reviewer code-reviewer-escalated qa"
 NL='
 '
+
+# party_seats <team-roles dir> -> the party-seat role names, space-separated, sorted by the
+# glob. ANCHORED AT LINE START: the phrase also appears mid-sentence in rule bodies
+# (rule-20.md, rule-29.md), and a role file only declares the seat with the sentence that
+# opens its own line. An absent or empty directory yields nothing; the caller reports that.
+party_seats() {
+  ps_out=""
+  for ps_f in "$1"/*.md; do
+    [ -f "$ps_f" ] || continue
+    if grep -q '^The lead spawns you as a party-mode persona' "$ps_f" 2>/dev/null; then
+      ps_b="${ps_f##*/}"
+      ps_out="${ps_out}${ps_out:+ }${ps_b%.md}"
+    fi
+  done
+  printf '%s' "$ps_out"
+}
 
 # shard_scan <ledger> <sprint> <" role role ... "> <pass-dir> -> machine lines on stdout:
 #   X <name> <role> <shard_raw> <tool_use_id>   S3 offender (an invented exception; never an S line)
@@ -1065,9 +1090,25 @@ shard_self_probe() {
     'shard_tool_use_ids: 01=toolu_B 02=toolu_X 03=toolu_F cross=toolu_GONE' \
     'SKILL_INVOCATION_PROVENANCE_END -->' 'shard_tool_use_ids: 09=toolu_OUTSIDE' \
     > "$sp_d/pl/stories-adversarial-p1.md" || { rm -rf "$sp_d"; return 1; }
-  sp_out="$(shard_scan "$sp_d/l.jsonl" 7 " adversary tea " "$sp_d/pl")" || { rm -rf "$sp_d"; return 1; }
+  # THE SEAT IN THE PROBE IS DERIVED, NOT TYPED. Three role files: one whose line opens with
+  # the persona sentence (tea), one carrying the phrase only mid-line (the rule-body shape),
+  # and one carrying nothing (dev). The derivation must return exactly `tea`, and that
+  # result -- not a literal -- is what the scan below is handed, so a derivation that lost
+  # its seat makes the `seat` cell fail rather than the probe passing over a typed list.
+  mkdir -p "$sp_d/tr" || { rm -rf "$sp_d"; return 1; }
+  printf '%s\n' '# Role: tea' '' 'The lead spawns you as a party-mode persona; your model is optional.' \
+    > "$sp_d/tr/tea.md" || { rm -rf "$sp_d"; return 1; }
+  printf '%s\n' '# Rule' 'A file-write deliverable: every party-mode persona delivers its verdict.' \
+    'Prose that says The lead spawns you as a party-mode persona in passing.' \
+    > "$sp_d/tr/midline.md" || { rm -rf "$sp_d"; return 1; }
+  printf '%s\n' '# Role: dev' '' 'You implement stories.' > "$sp_d/tr/dev.md" || { rm -rf "$sp_d"; return 1; }
+  sp_seats="$(party_seats "$sp_d/tr")"
+  sp_absent="$(party_seats "$sp_d/no-such-dir")"
+  sp_out="$(shard_scan "$sp_d/l.jsonl" 7 " adversary ${sp_seats} " "$sp_d/pl")" || { rm -rf "$sp_d"; return 1; }
   rm -rf "$sp_d"
   sp_bad=0
+  [ "$sp_seats" = "tea" ] || { echo "FAIL: shard self-probe: party_seats derived '${sp_seats}', expected exactly 'tea' (a line-opening persona sentence, not a mid-line mention)." >&2; sp_bad=1; }
+  [ -z "$sp_absent" ] || { echo "FAIL: shard self-probe: party_seats derived '${sp_absent}' from a directory that does not exist." >&2; sp_bad=1; }
   sp_want() { case "${NL}${sp_out}${NL}" in *"${NL}$1${NL}"*) ;; *) echo "FAIL: shard self-probe: expected '$2'." >&2; sp_bad=1 ;; esac; }
   sp_not()  { case "${NL}${sp_out}${NL}" in *"$1"*) echo "FAIL: shard self-probe: '$2'." >&2; sp_bad=1 ;; esac; }
   TAB="$(printf '\t')"
@@ -1537,10 +1578,10 @@ while IFS="$(printf '\t')" read -r name role bound requested cited readable sche
   # function verbatim and closes over the same name there.
   EXPECT="$(pin_key "$SETTINGS" "$role")"
   if [ -z "$EXPECT" ]; then
-    # A role with no pin, or a key mapping to nothing, binds no model. The party
-    # personas legitimately carry an effort and no model, so this is a normal state
-    # and not a finding -- but it is COUNTED, because a settings.json that lost its
-    # aiDlcRoles block would otherwise clear every row in silence.
+    # A role with no pin, or a key mapping to nothing, binds no model. A party persona's
+    # model is optional (a persona without one is spawned on whatever /bmad-party-mode
+    # chooses), so this is a normal state and not a finding -- but it is COUNTED, because
+    # a settings.json that lost its aiDlcRoles block would otherwise clear every row in silence.
     UNPINNED=$((UNPINNED + 1))
   elif ! matches_pin "$bound"; then
     echo "FAIL: [$name] ran on model_bound='${bound}' against role '${role}' pinned to" >&2
@@ -1665,7 +1706,9 @@ echo "  ${FOREIGN} row(s) the dispatch guard did not write${FOREIGN_LIST:+ (role
 # shardable set is not Rule 19 scope and a sprint whose rows are all out of that scope can
 # still carry an invented serial exception.
 SHARD_PASSDIR="$(dirname "$LEDGER")/planning-artifacts/s${SPRINT_NUM}"
-SHARD_SET=" ${SHARD_ROLES} $(jq -r '.aiDlcRoles // {} | to_entries[] | select((.value.model // "") == "") | .key' "$SETTINGS" 2>/dev/null | tr '\n' ' ')"
+SHARD_SEATS_DIR="$(dirname "$SETTINGS")/team-roles"
+SHARD_SEATS="$(party_seats "$SHARD_SEATS_DIR")"
+SHARD_SET=" ${SHARD_ROLES} ${SHARD_SEATS} "
 SH_OUT=""
 SH_RC=0
 SH_OUT="$(shard_scan "$LEDGER" "$SPRINT_NUM" "$SHARD_SET" "$SHARD_PASSDIR")" || SH_RC=$?
@@ -1726,6 +1769,17 @@ fi
 echo "  shard: ${SH_OK} shardable row(s) carry a shard line, ${SHARD_VIOL} FAILED on an invented serial exception (S3), ${SH_WARN} WARNED without one,"
 echo "  ${SH_PENDING} PENDING (written before the guard recorded the field); merged-pass ids: ${SH_JOINED} joined,"
 echo "  ${SH_ORPHAN} WARNED with no ledger row (passes read from ${SHARD_PASSDIR})."
+# THE SEAT SET PRINTS ON EVERY RUN, because an empty one changes no verdict on its own: it only
+# removes rows from S1 and S3. WARN rather than exit 2 -- a consumer always has the directory
+# (the dispatch guard is inert without it), so an empty derivation is a moved or renamed
+# sentence, and refusing would wedge a gate over a census line.
+if [ -n "$SHARD_SEATS" ]; then
+  echo "  party seats judged as shardable: ${SHARD_SEATS} (derived from ${SHARD_SEATS_DIR})."
+else
+  echo "WARN: no party seat was derived from ${SHARD_SEATS_DIR} -- no role file there opens a line with"
+  echo "      'The lead spawns you as a party-mode persona', or the directory is absent. S1 and S3 judged"
+  echo "      no persona row (cis, sm, tea, ux in a shipped install), so their absence above is not a clean result."
+fi
 
 # EVERY IN-SPRINT ROW OUT OF SCOPE IS NOT A PASS, and it reaches this line by a different
 # route than PRE-LEDGER does: the ledger DOES cover this sprint, and nothing in it was a
@@ -1757,8 +1811,8 @@ if [ "$VIOL" -gt 0 ]; then
 fi
 # THE PIN CLAUSE OF THAT SENTENCE HAS TO HAVE BEEN TESTED TO BE SAID.
 # Rule 19(a) is compared only where `EXPECT` is non-empty; a row whose role pins no
-# model is COUNTED as UNPINNED and correctly not treated as a finding, because the party
-# personas legitimately carry an effort and no model. The counting was already here, and
+# model is COUNTED as UNPINNED and correctly not treated as a finding, because a party
+# persona's model is optional and one without it pins nothing. The counting was already here, and
 # the comment beside it already named the hazard -- a settings.json that lost its
 # aiDlcRoles block clears every row in silence. But nothing ever READ the count, so the
 # hazard it was counting for still ended in this sentence, which asserts every row's

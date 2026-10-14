@@ -1750,6 +1750,9 @@ scripts/ai-dlc/validate-spawn-ledger.sh \
   --settings .claude/settings.json
 ```
 
+Record its `party seats judged as shardable:` line with the `COUNTS:` line. An exit 0
+whose seat line names no seat judged no persona's shard declaration.
+
 **`--probe` IS WHAT MAKES THE EFFORT ARM REACHABLE, AND WITHOUT IT THAT ARM
 CANNOT FIRE AT THIS GATE.** `probe_effort()` returns empty unless `--probe`
 names a readable file, so every row lands in `EFFORT_PENDING` and none can
