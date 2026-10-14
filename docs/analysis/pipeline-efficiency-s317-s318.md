@@ -443,6 +443,40 @@ operator's context-mode and caveman plugins (`pretooluse.mjs`, `caveman-smart.js
 fixed injections are the recover heredoc (about 8.3 KB per compact resume), pause/continue/answer-capture,
 and the rules floor.
 
+## Ranked defects
+
+The DEFECT list below is grouped by severity, not ranked. This table ranks it. Every cost is
+API-list-equivalent over s317 and s318, in-session only, and **counts only what fixing that defect
+would remove**. Where two findings share cost, it is counted once, under the higher rank. Each row
+is filed as a `docs/backlog.md` entry that cites this rank as `[efficiency rank N]`, so the drain
+plan's whole-backlog adjudication carries the order. Rows exposed under the local qwen lead are
+pipeline fixes toward the operator's local-lead goal and are ranked on the same basis as the rest.
+
+| Rank | Defect | Cost removed | Confidence | Entry | Derivation |
+|---|---|---|---|---|---|
+| 1 | Full sharded re-review after rework, where a delta review served | **$282**, 1,258 agent-min | MEDIUM | BL-507 | the 11 full-fan-out re-review passes, less the median delta pass ($1.70), from `role-efficacy/impl/rework-labels.tsv` |
+| 2 | Repairs write the defects the next adversary pass finds (subsumes DEFECTs 3 and 9) | **≈$105** | LOW–MEDIUM | BL-508 | planning third passes run only because every pass-2 MAJOR was repair-made: $39 (s318) + $2 (s317), from `role-efficacy/planning/`; plus stories repair-introduced share of p2+p3 adversary and remediator spend: 4/13 × $97 ≈ $30 (s317) + 9/21 × $80 ≈ $34 (s318), from `role-efficacy/stories/` |
+| 3 | Elicitation sharded per part where one voice was measured cheaper | **≈$60** per run | LOW | BL-509 | s317 stories, 22 seats $69.53 against s318's single voice $9.37; equal finding yield not measured |
+| 4 | Implementation rework from evidence and bookkeeping, after rank 1's overlap (DEFECT 8) | **$34**, 131 agent-min | MEDIUM | BL-510 | the 22 E/B verdicts in `rework-labels.tsv`, each full pass capped at the median delta pass; understated where the dev was kept alive |
+| 5 | Step 1a budget blocks a sprint after the fact, and the sprint re-breaches it (DEFECT 6) | **$16 + 3.8 h** lead wait per occurrence | MEDIUM | BL-511 | the s318 route and artifact-consolidation segments |
+| 6 | Gate passes discarded for lead paperwork, mostly Check 22 (DEFECTs 7 and 10) | **$16**, 132 adjudicator-min | HIGH | BL-512 | `role-efficacy/lead/`: 7 lead-caused discards $13.18 + 2 inferred $2.89 |
+| 7 | Check 21 fails on dev-filled Strategy Test ID cells nothing re-checks after a rename | **≈$7** | HIGH | BL-513 | two sprint-review nonces and their repairs |
+| 8 | Subagents poll with bare `sleep`, and no guard sees it (DEFECT 5) | ≈$0; 5.4–12.4 h subagent wall clock | MEDIUM | BL-514 | `scripts/bash_cost.py`; the probe denies a lead call and allows a subagent's |
+| 9 | The lead re-sends cap-rejected spawns (DEFECT 4) | ≈$0; wall clock not measured | HIGH | BL-515 | 90 of 179 rejected calls re-sent, `role-efficacy/lead/` |
+| 10 | Mechanism gaps the local lead exposed: product-code edit, future snapshot stamps, malformed nonce | ≈$0 measured; the code edit is high-consequence | HIGH | BL-516, BL-517, BL-518 | `probes/bl-516-*.sh`, `probes/bl-518-*.sh`; snapshot history lines |
+| 11 | The remediator sets aside a party MAJOR as "outside this shard" | not measured; one reached sprint-review | MEDIUM | BL-519 | `role-efficacy/stories/` escape table |
+| 12 | Teammates told to message "lead", which no agent is named | not measured | HIGH | BL-520 | 11 `ESCALATION_UNDELIVERED` events |
+
+Old DEFECT 11 (no capital-path routing criterion for dev escalation) is not ranked: it shipped as
+BL-504 in v0.781.0, which graph has pulled. Ranks 4 and 7 recur after BL-397 and BL-398 closed the
+same classes at v0.674.0. Their entries say so, so a batch does not re-ship the earlier fix.
+
+**Measuring a fix.** A receipt closes an entry on the tree. Whether the fix moved anything is
+measured on consumer transcripts after it lands, by re-running this directory's scripts over the
+sprints since. graph is the reference consumer, not the only one: `magic-bonus-calc-engine` also
+runs ai-dlc (0.780.0) and has its own transcripts. Measure on every consumer that ran the fixed
+release, and name the population beside each figure.
+
 ## Efficient vs inefficient — findings
 
 Tiered on consequence. Each item names its measurement and the core file it would change.
