@@ -25,8 +25,8 @@
 #      because graph has 0 files with a column-0 `carried:` line (control: 365 files carry a
 #      column-0 `reviewed-sha:`). The s318 delta reviews answered their priors in a
 #      "Pass-N Finding Disposition" table, the pre-rule form;
-#   26 FAIL on a prior finding written as a bullet or bold line rather than a `#### ` heading,
-#      all in sprints before s317, where the template still said `- [finding]`;
+#   26 FAIL on a prior finding written as a bullet, bold line or prose rather than a `#### `
+#      heading, the form the template's `- [finding]` placeholder produces;
 #    3 PASS: a prior with no Critical/Important finding.
 #   That is 55 of 58, and 37 of the 40 APPROVED pairs, every one a review written before the
 #   rule. It reached ZERO by the PENDING rule rather than by narrowing the grammar: on a
