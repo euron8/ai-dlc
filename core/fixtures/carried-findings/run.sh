@@ -82,6 +82,13 @@
 #      s318/sprint-review-fix-code-review.md:48. Each is a review written before the rule that
 #      carries `reviewed-sha:`; it fails only if persisted after the pull, which B shows no
 #      graph pair does.
+#   WR the wrapped-label rule adds 0 to both: 58 pairs outside any repository (the marker alone
+#      decides, wider than B) read 0 form-fail pairs before and after it, and the 145 files under
+#      `--list` read the same 2 form-fail files. A grep for a column-0 bold finding-id span left
+#      unclosed finds 2 marked files: s318/sprint-review-fix-code-review.md:61, a bullet already
+#      failing above, and s316/FF1-code-review.md:32/59/75 (`**S1.`..`**S3.`), under
+#      `### Suggestions`, which is no container. 53 such lines sit in 25 unmarked files (NOTEs). Control:
+#      s308/1-code-review.md given the marker reads its line-67 Critical as lead-in before, FAIL after.
 #   Every B/B2 failure is a review written before the rule existed, re-committed after it on
 #   purpose; none is a false positive against a review written under the rule.
 set -uo pipefail
