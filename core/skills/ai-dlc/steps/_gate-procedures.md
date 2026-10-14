@@ -63,6 +63,13 @@ When a step file says "run sub-step snapshot update", execute:
    The script reports an overage inside the grace band (a `warn` line,
    exit 0) and breaches only past it.
 
+   - **Exit 1 naming a stamp later than the current UTC time → apply the
+     stamp remedy the verdict line prints FIRST, before any TRIM NOW or
+     MOVE IT NOW below**, without asking: rewrite each `FUTURE` stamp to
+     `date -u` in place, keep line order, add the one `CLOCK CORRECTION`
+     line it spells, and re-run. Never clear this verdict by moving the
+     future lines to `pipeline-snapshot-history.md`; that hides the stamp
+     instead of correcting it.
    - `warn` (over budget, within grace) → note it and continue.
    - **Do NOT add `--warn-only` to this invocation.** It is `retro.md`'s
      sprint-end posture, where blocking helps nobody because the sprint is

@@ -706,7 +706,7 @@ inline during implementation)".
 
 **Artifact-size audit (Rule 25(d), warn-only here).** Run:
 
-    scripts/ai-dlc/validate-artifact-budget.sh --warn-only --fail-on pipeline-snapshot.md
+    scripts/ai-dlc/validate-artifact-budget.sh --warn-only --fail-on pipeline-snapshot.md --fail-on whole-read-pool
 
 The script owns the canonical budgets and the per-artifact remedy — the numbers
 are NOT restated here. A project overrides a budget with `AI_DLC_BUDGET_<NAME>`
@@ -729,10 +729,24 @@ and retro is the passage where that happens. A ceiling nobody is ever blocked by
 is a number, not a ceiling. So the snapshot takes a hard verdict while every
 other artifact in the same run stays a warning.
 
-That hard verdict covers three independent findings, and each carries its own
+**The WHOLE-READ POOL takes a hard verdict too, and it is not "consolidate now".**
+`--fail-on whole-read-pool` blocks only when the pool is OVER **and** no OPEN item in
+`carry-over-backlog.md` cites it. Consolidation stays operator-supervised and is never
+run here. On that FAIL, file ONE item in
+`_bmad-output/planning-artifacts/carry-over-backlog.md` (sweep target 1's file):
+heading `### CO-S<N>-WHOLE-READ-POOL-OVER — <pool figure>`, a `**Status:** OPEN`
+line, and a body that quotes the run's `OVER  WHOLE-READ POOL` line and names
+`artifact-consolidation.md` as the operator-supervised action owed before the next
+sprint's route. **The token `WHOLE-READ-POOL` in its heading or body is what the
+validator reads.** Route Step 1 item 5 reads the OPEN item before Step 1a runs, so the
+next sprint starts from a recorded breach instead of a HARD_BLOCK nobody saw coming.
+Re-run the command; recording the item satisfies the verdict. Never file it in Open
+Items or `docs/escalations/pending.md`.
+
+That snapshot verdict covers four independent findings, and each carries its own
 remedy rather than being folded into a size number: over budget, a section
-outside the seven-section schema, and **superseded content marked in place rather
-than moved**. The third is the one nothing else catches — struck, bracketed, or
+outside the seven-section schema, a stamp later than the current UTC time, and
+**superseded content marked in place rather than moved**. The last is the one nothing else catches — struck, bracketed, or
 all-caps-stamped content sits under a canonical heading at any size, so the schema
 check and the byte budget both pass it in silence, and the size remedy then says
 "trim" when the correct action is "relocate".
@@ -766,7 +780,7 @@ largest single writing cost for its least-read content.
 | `audit-rule-files.sh` | PASS / FINDINGS | exit code + each class's verdict line |
 | `validate-reattach-budget.sh` | PASS / FAIL | exit code + the slack figure, read against the guard's ceiling, and the whole-file byte figure beside it — the second is an OBSERVATION and bounds nothing |
 | `validate-gate-manifest.sh` | PASS / FAIL | exit code + the `manifest source:` and `anchor sources:` lines + the MISSING/ORPHAN/UNLOADABLE lines |
-| `validate-artifact-budget.sh --warn-only --fail-on pipeline-snapshot.md` | CLEAN / BREACH | exit code + each breached artifact, and the run's own final summary line verbatim; a nonzero exit here is the snapshot's hard verdict (budget, schema, or in-place supersession marker). **Exit 0 is not by itself CLEAN under `--warn-only`** — the summary line says which, and it is `WARN  this run reported …` when anything was reported |
+| `validate-artifact-budget.sh --warn-only --fail-on pipeline-snapshot.md --fail-on whole-read-pool` | CLEAN / BREACH | exit code + each breached artifact, and the run's own final summary line verbatim; a nonzero exit here is the snapshot's hard verdict (budget, schema, future stamp, or in-place supersession marker) or an over-budget WHOLE-READ POOL with no OPEN carry-over item citing `WHOLE-READ-POOL` (cite the item's heading when the run prints `pool breach recorded`). **Exit 0 is not by itself CLEAN under `--warn-only`** — the summary line says which, and it is `WARN  this run reported …` when anything was reported |
 | `validate-layer-entries.sh` | CLEAN / N ERR, M WARN | exit code + the summary line, or "n/a (unlayered)" |
 
 **The evidence cell is mandatory and is never `—`.** An empty evidence cell is
@@ -1024,7 +1038,7 @@ not a skipped step.
 
 ### 5c. Pre-Commit Validation Gate
 
-Before committing retro artifacts, run all four checks in order.
+Before committing retro artifacts, run all five checks in order.
 Failure on any check blocks the Step 6 commit. **This gate is the only
 completeness check retro performs** — the scripts below read the gate log,
 the housekeeping envelope, the transcript shape and the provenance block, so
@@ -1069,8 +1083,15 @@ core-layer-immutability).
    MUST exit 0 — a drifted housekeeping schema is the defect this check exists
    to catch, not a clean file.
 
+5. **Whole-read pool recorded.** Re-run
+   `scripts/ai-dlc/validate-artifact-budget.sh --warn-only --fail-on pipeline-snapshot.md --fail-on whole-read-pool`.
+   MUST exit 0. A non-zero exit on the pool means the pool is over and §4a's
+   OPEN carry-over item citing `WHOLE-READ-POOL` was not filed: file it as §4a
+   says, then re-run. This blocks the Step 6 commit, so the breach is recorded
+   before the sprint closes rather than discovered at the next route.
+
 **An unclearable check in this gate escalates; it never self-clears.** The
-three absolute `MUST exit 0` mandates above (checks 2, 3 and 4) are
+four absolute `MUST exit 0` mandates above (checks 2, 3, 4 and 5) are
 satisfied by fixing the issue, and that is the whole of the lead's
 authority over them. When a check stays red after the repair the check's
 own output names — a validator whose precondition no action in this sprint

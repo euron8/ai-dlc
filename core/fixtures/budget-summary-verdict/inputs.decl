@@ -2,3 +2,6 @@
 # run.sh locates it by candidate list, drives it directly, copies it into $WORK/bin for the control,
 # and builds every mutant as a sed rewrite of it. Its own directory is copied by the runner.
 !core/scripts/validate-artifact-budget.sh
+# The F8 arm drives that validator THROUGH verdict.sh, the wrapper Check 14, route Step 0a and
+# the between-gates sub-step all call, and builds one mutant of it.
+!core/scripts/verdict.sh
