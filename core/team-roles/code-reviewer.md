@@ -161,10 +161,10 @@ column-0 `reviewed-sha: <full frozen sha>` line, resolved with `git rev-parse`
 in the frozen worktree: the next pass partitions its delta from that sha.
 
 **A re-review answers every carried finding.** On pass M >= 2 your brief
-carries the Critical and Important findings of pass M-1 assigned to you. Answer
-each with one column-0 line outside a fence, `carried: <its #### heading,
-verbatim> — resolved` or `carried: <its #### heading, verbatim> — open` (an em
-dash), and re-emit an open one as a `#### ` finding of this review. An open
+carries the Critical and Important findings of pass M-1 assigned to you, each
+as the carry string `validate-carried-findings.sh --list` printed. Answer each
+with one column-0 line outside a fence, `carried: <that string, verbatim> —
+resolved` or `carried: <that string, verbatim> — open` (an em dash), and re-emit an open one as a `#### ` finding of this review. An open
 carried finding forbids `APPROVED`. Check 1 runs `validate-carried-findings.sh`
 on the two files and fails the review otherwise.
 

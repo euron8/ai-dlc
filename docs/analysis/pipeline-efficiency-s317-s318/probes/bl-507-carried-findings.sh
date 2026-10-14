@@ -12,6 +12,10 @@
 #                   a story branch cut before the pull, its own worktree -> PENDING
 #                   a pair after the first add, program reverted and re-added -> binds (1)
 #                   a pre-rule bullet pass 1 carried by label after the pull  -> PASS
+#                   a post-rule (reviewed-sha:) bullet prior                  -> 1
+#                   a post-rule heading prior with lead-in prose, all carried -> 0
+#                   a lazily persisted unmarked prior carried by id alone     -> 0
+#                   --list prints the exact carry string
 #   SUBJECT 2     partition-review-diff.sh --map on a seeded two-commit repository, the prior sha as
 #                 <base>: the delta partitions (rc 0) and the reversed pair is refused (rc 2)
 #   SUBJECT 3     implementation.md's Gate-1 dispatch paragraph names the prior sha as the base and
@@ -81,6 +85,25 @@ p2 "$w/span/r/1-p2.md" APPROVED "carried: I1. stale cache $EM resolved"
 gw -C "$w/span" add -A; gw -C "$w/span" commit -qm "pass 2" || exit 9
 o="$(bash "$w/span/scripts/ai-dlc/validate-carried-findings.sh" "$w/span/r/1.md" "$w/span/r/1-p2.md" 2>&1)" || exit 1
 case "$o" in PASS:\ 1\ prior*) ;; *) exit 1 ;; esac
+# Post-rule priors (they carry the template's reviewed-sha: line) committed after the pull:
+#   a bullet finding                                          -> exit 1 (held to the #### form)
+#   #### headings under lead-in prose, every heading carried  -> exit 0 (prose is not a finding)
+# A lazily persisted pre-rule prior (no marker, written before the pull, committed after it)
+# carried by id alone (`carried: I1 — resolved`)              -> exit 0
+VS="$w/span/scripts/ai-dlc/validate-carried-findings.sh"
+printf '# Code Review: 2\n\nreviewed-sha: 7d3889e9e0e07c9699891956be739cb5c9339430\n\n## Verdict\nNEEDS_REWORK\n\n## Findings\n\n### Important\n- **I1. stale cache** body\n' > "$w/span/r/2.md"
+p2 "$w/span/r/2-p2.md" APPROVED "carried: I1. stale cache $EM resolved"
+printf '# Code Review: 3\n\nreviewed-sha: 7d3889e9e0e07c9699891956be739cb5c9339430\n\n## Verdict\nNEEDS_REWORK\n\n## Findings\n\n### Important\n\nThese two are pass-1 Importants the fix list did not include.\n\n#### %s\n\nbody\n\n#### %s\n\nbody\n' "$H1" "$H2" > "$w/span/r/3.md"
+cp "$d/both.md" "$w/span/r/3-p2.md"
+printf '# Code Review: 4\n\n## Verdict\nNEEDS_REWORK\n\n## Findings\n\n### Important\n- **I1. Stale cache.** body\n' > "$w/span/r/4.md"
+p2 "$w/span/r/4-p2.md" APPROVED "carried: I1 $EM resolved"
+gw -C "$w/span" add -A; gw -C "$w/span" commit -qm "post-rule passes" || exit 9
+bash "$VS" "$w/span/r/2.md" "$w/span/r/2-p2.md" >/dev/null 2>&1
+[ $? -eq 1 ] || exit 1
+bash "$VS" "$w/span/r/3.md" "$w/span/r/3-p2.md" >/dev/null 2>&1 || exit 1
+bash "$VS" "$w/span/r/4.md" "$w/span/r/4-p2.md" >/dev/null 2>&1 || exit 1
+# --list prints the carry strings and nothing else on stdout.
+[ "$(bash "$VS" --list "$w/span/r/4.md" 2>/dev/null)" = "I1. Stale cache." ] || exit 1
 
 # The delta partition. The repository carries the artifact-path grammar the partition reads.
 r="$d/r"; mkdir -p "$r/core/skills/ai-dlc" "$r/app/a" "$r/app/b" || exit 9
@@ -100,5 +123,6 @@ bash "$P" --map "$r" "$frozen" "$prior" --min-files 2 >/dev/null 2>&1
 para="$(awk '/^\*\*Gate-1 dispatch/{on=1} on&&/^\*\*[A-Z]/&&!/^\*\*Gate-1 dispatch/{exit} on' "$I" | tr '\n' ' ' | tr -s ' ')"
 case "$para" in *'run the partition with `<prior-sha>` in place of `<base>`'*) ;; *) exit 1 ;; esac
 case "$para" in *'run the full `<base>..<frozen-sha>` partition instead'*) ;; *) exit 1 ;; esac
+case "$para" in *'validate-carried-findings.sh --list <pass M-1 file>` and paste each line it prints'*) ;; *) exit 1 ;; esac
 grep -qF 'validate-carried-findings.sh <pass M-1 file> <pass M file>' "$GV" || exit 1
 exit 0

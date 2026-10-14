@@ -210,6 +210,7 @@ cr-serial-heading|R|code-reviewer.md|## Review Document Template|## As a Shard|*
 cr-serial-sha|R|code-reviewer.md|## Review Document Template|## As a Shard|**A serial review writes its findings the way a shard does.**|para|column-0 `reviewed-sha: <full frozen sha>` line
 impl-serial-form|S|steps/implementation.md|**Pre-gate commit-presence check.**|**DAR-fold preflight before gate-2 dispatch.**|**Gate-1 dispatch: the review partitions by changed-file group.**|para|A serial review writes its findings the way a shard does, each a `#### ` heading under its container, never a bullet
 impl-serial-sha|S|steps/implementation.md|**Pre-gate commit-presence check.**|**DAR-fold preflight before gate-2 dispatch.**|**Gate-1 dispatch: the review partitions by changed-file group.**|para|carries one column-0 `reviewed-sha: <full frozen sha>` line
+impl-rr-list|S|steps/implementation.md|**Pre-gate commit-presence check.**|**DAR-fold preflight before gate-2 dispatch.**|**Gate-1 dispatch: the review partitions by changed-file group.**|para|Run `scripts/ai-dlc/validate-carried-findings.sh --list <pass M-1 file>` and paste each line it prints into the brief of the shard that carries that finding, verbatim
 impl-rr-reemit|S|steps/implementation.md|**Pre-gate commit-presence check.**|**DAR-fold preflight before gate-2 dispatch.**|**Gate-1 dispatch: the review partitions by changed-file group.**|para|an `open` one is re-emitted as a finding of this pass
 PINS
 }

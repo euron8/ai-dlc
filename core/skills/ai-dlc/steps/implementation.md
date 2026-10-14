@@ -377,7 +377,8 @@ roots (the story file, its Dev Agent Record, RED evidence, `pending.md`), so the
 reviewer, or the serial reviewer, is briefed with the whole story record and the full
 `git diff <prior-sha>..<frozen-sha>` including scan-root paths, and every part reviewer gets
 the story record as context. Every Critical and Important `#### ` finding of pass M-1 is
-carried: to each delta part holding a file it cites, else to the first cross reviewer. The
+carried: to each delta part holding a file it cites, else to the first cross reviewer.
+Run `scripts/ai-dlc/validate-carried-findings.sh --list <pass M-1 file>` and paste each line it prints into the brief of the shard that carries that finding, verbatim, as the string its `carried:` line must name. The
 new review answers each with one column-0 line `carried: <prior heading> — resolved` or
 `carried: <prior heading> — open`, and an `open` one is re-emitted as a finding of this
 pass, so it carries again. Gate validation Check 1 runs `validate-carried-findings.sh` on

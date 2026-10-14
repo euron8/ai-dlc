@@ -250,7 +250,9 @@ H1/H2 stay with the lead — a self-test is never escalated into the mechanism i
   merged review and a serial one are each one file and are read the same way.
   `PENDING:` (exit 0) is a review whose own branch does not carry the program,
   or one committed before the program reached that branch, and it passes. A
-  `NOTE:` line names a pre-rule prior line it could not carry; record it.
+  `NOTE:` line names a prior line it did not carry, or a program the branch
+  never committed; record it. `REFUSED:` on a shallow repository fails this
+  check until the history is unshallowed.
 - **Zero matches FAILS this check; it is never a fallback to recollection.** An
   unreadable verdict is an unmet validation, not an absent one. Name the file.
   Do not infer the verdict from the review's prose, from its existence, or from
