@@ -835,7 +835,7 @@ remediator and never after it.
 **Every escalated entry reaches the serial remediator.** A shard whose fix lies partly outside
 its files writes two entries with one `source:` token, `repaired` and `escalated`. The join, in
 every mode, prints one `ESCALATED: <part> <entry>` line per escalated entry and then
-`ESCALATED-COUNT: <n>`. When the count is above 0, dispatch the serial remediator after the join
+`ESCALATED-COUNT: <n>` (followed, in `--sources` mode, by the closed count). When the count is above 0, dispatch the serial remediator after the join
 whether or not any finding cited two files, and its brief carries every `ESCALATED:` line
 verbatim. In `--sources` mode the `ESCALATED:` lines are the lead's to adjudicate, never a
 re-dispatch of the serial remediator: that record may be the serial remediator's own, and the
