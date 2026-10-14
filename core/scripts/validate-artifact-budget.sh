@@ -1029,6 +1029,11 @@ check_inflight_status() {
 # NOT preceded by `~`, `-`, an en dash or an arrow. Everything else is skipped:
 #   a range (`T09:55Z-10:45Z`, `T09:55-10:45Z`) -- the end is a plan, not a record, and
 #     the `-HH:MMZ` suffix must never be read as a UTC offset;
+#   a SPACED range start (`T09:55Z - 10:45Z`, an en dash, an arrow, `T09:55Z to 10:45Z`) --
+#     only when a digit follows the separator, so `T12:00Z - DEPLOY DONE` is still read.
+#     The END of a spaced range is a full stamp preceded by a space and IS read: a bullet's
+#     own `- ` is the same two bytes, so a preceding-separator skip would acquit every line;
+
 #   an approximation (`~2026-...`) and an `x` placeholder (`Txx:xxZ`);
 #   a date-only stamp and a bare `T09:55Z` -- neither names an instant.
 # The FP set and how it reached zero are recorded beside FUTURE_SLACK_S below.
@@ -1056,6 +1061,10 @@ check_inflight_status() {
 # THE NARROWING: 54 range forms (`T..Z-HH:MM`, en dash, arrow) sit in the same corpus,
 # and every one is skipped; read as single stamps their END would fire as a plan. The
 # In-Flight status cell's `since <stamp>` is excluded by reading the declared column.
+# The SPACED-range skip (` - `, en dash, arrow, ` to `, then a digit) was re-measured on the
+# same 163 revisions: 69 fire, 214 findings, 0 inside the slack -- identical, because the
+# corpus carries one spaced range (` to `), and its stamps are past. The digit requirement is
+# what keeps ` - DEPLOY DONE` read; the self-probe seeds both sides of it.
 FUTURE_SLACK_S=600
 check_future_stamps() { # check_future_stamps <file> <rel> <now-epoch>
   LC_ALL=C awk -v now="$3" -v slack="$FUTURE_SLACK_S" -v ART="$2" '
@@ -1069,6 +1078,20 @@ check_future_stamps() { # check_future_stamps <file> <rel> <now-epoch>
     }
     function adj(c) { return (c == "-" || c == "~") }
     function wide(c3) { return (c3 == "\342\200\223" || c3 == "\342\206\222") }
+    # A SPACED range start: one space, then `-`, an en dash, an arrow or the word `to`, then
+    # an optional space, then a DIGIT. The digit is what separates `T09:55Z - 10:45Z` (a
+    # range, skipped) from `T09:55Z - DEPLOY DONE` (a single stamp and a description, read).
+    function spaced(s, b,   n) {
+      if (substr(s, b, 1) != " ") return 0
+      n = 0
+      if (substr(s, b + 1, 1) == "-") n = 1
+      else if (wide(substr(s, b + 1, 3))) n = 3
+      else if (substr(s, b + 1, 2) == "to") n = 2
+      if (!n) return 0
+      n = b + 1 + n
+      if (substr(s, n, 1) == " ") n++
+      return (substr(s, n, 1) ~ /[0-9]/)
+    }
     function scan(str, where,   pos, rest, t, a, b, b3, p, p3, ep) {
       pos = 0
       rest = str
@@ -1083,6 +1106,7 @@ check_future_stamps() { # check_future_stamps <file> <rel> <now-epoch>
         b3 = substr(str, b, 3)
         if (adj(p) || wide(p3)) continue
         if (substr(str, b, 1) ~ /[-0-9]/ || wide(b3)) continue
+        if (spaced(str, b)) continue
         ep = epoch(t)
         if (ep - now > slack)
           printf "FUTURE  %s line %d: %s is %d min ahead of now (%s)\n", ART, NR, t, int((ep - now) / 60), where
@@ -1509,16 +1533,20 @@ fi
 # THE FUTURE-STAMP AND POOL-ITEM SELF-PROBES, for the same reason as the one above and
 # with the same posture: fatal, both directions, on mktemp files, before the corpus. Now
 # is pinned to 2026-01-01T00:00:00Z (1767225600) so the probe never depends on the clock.
-#   OFFENDER   a Recent Activity stamp 60 min ahead, a dispatched-at cell 60 min ahead
-#   NEAR-MISS  a range with an offset-shaped suffix, a stamp 5 min ahead, a date-only stamp,
-#              an `x` placeholder, a `~` approximation, and a future `since` in the STATUS
-#              cell -- each a form the arm must skip
+#   OFFENDER   a Recent Activity stamp 60 min ahead, one 120 min ahead followed by ` - text`
+#              (the spaced-range skip must not acquit it), a dispatched-at cell 60 min ahead
+#   NEAR-MISS  a range with an offset-shaped suffix, spaced ranges (` - `, ` to `, arrow), a
+#              stamp 5 min ahead, a date-only stamp, an `x` placeholder, a `~` approximation,
+#              a CLOCK CORRECTION line naming the old stamps as bare HH:MMZ (the remedy's own
+#              form, which must not re-fire), and a future `since` in the STATUS cell
 FPROBE="$TMPROOT/probe-future.md"
 {
   printf '## Recent Activity\n'
   printf -- '- 2026-01-01T01:00Z OFFENDER-RA\n'
   printf -- '- 2026-01-01T09:55-10:45Z range, 2026-01-01T09:55Z-10:45Z range, 2026-01-01T00:05Z five ahead, 2026-01-02 date only\n'
-  printf -- '- 2026-01-01Txx:xxZ placeholder, ~2026-01-01T05:00Z approx\n'
+  printf -- '- 2026-01-01Txx:xxZ placeholder, ~2026-01-01T05:00Z approx, 2026-01-01T03:00Z - 04:00Z, 2026-01-01T03:00Z to 04:00Z, 2026-01-01T03:00Z \342\206\222 04:00Z spaced\n'
+  printf -- '- 2026-01-01T02:00Z - OFFENDER-DASH\n'
+  printf -- '- 2025-12-31T23:59Z CLOCK CORRECTION: rewrote 2 future stamp(s) to date -u: 01:00Z, 02:45Z\n'
   printf '## In-Flight Teammates\n'
   printf 'agent | role | deliverable | dispatched-at | status\n'
   printf -- '--- | --- | --- | --- | ---\n'
@@ -1528,14 +1556,16 @@ FPROBE="$TMPROOT/probe-future.md"
 FPROBE_OUT="$(check_future_stamps "$FPROBE" probe 1767225600)"
 FPROBE_N="$(printf '%s\n' "$FPROBE_OUT" | grep -c '^FUTURE ')" || FPROBE_N=0
 case "$FPROBE_OUT" in *'line 2:'*'(Recent Activity)'*) FP_RA=1 ;; *) FP_RA=0 ;; esac
-case "$FPROBE_OUT" in *'line 8:'*'dispatched-at)'*) FP_IF=1 ;; *) FP_IF=0 ;; esac
+case "$FPROBE_OUT" in *'line 5:'*'(Recent Activity)'*) FP_DASH=1 ;; *) FP_DASH=0 ;; esac
+case "$FPROBE_OUT" in *'line 10:'*'dispatched-at)'*) FP_IF=1 ;; *) FP_IF=0 ;; esac
 rm -f "$FPROBE"
-if [ "$FP_RA" -ne 1 ] || [ "$FP_IF" -ne 1 ] || [ "$FPROBE_N" -ne 2 ]; then
-  echo "FAIL: the future-stamp self-probe expected exactly its two OFFENDERS (Recent Activity" >&2
-  echo "  line 2, dispatched-at line 8) and got ${FPROBE_N} finding(s):" >&2
+if [ "$FP_RA" -ne 1 ] || [ "$FP_DASH" -ne 1 ] || [ "$FP_IF" -ne 1 ] || [ "$FPROBE_N" -ne 3 ]; then
+  echo "FAIL: the future-stamp self-probe expected exactly its three OFFENDERS (Recent Activity" >&2
+  echo "  lines 2 and 5, dispatched-at line 10) and got ${FPROBE_N} finding(s):" >&2
   printf '%s\n' "$FPROBE_OUT" | sed 's/^/    /' >&2
   echo "  A missing offender means the arm cannot fire; an extra one means a skipped form" >&2
-  echo "  (range, 5-min slack, date-only, x, ~, status-cell since) is being read." >&2
+  echo "  (range, spaced range, 5-min slack, date-only, x, ~, a CLOCK CORRECTION line naming" >&2
+  echo "  bare HH:MMZ, status-cell since) is being read." >&2
   exit 1
 fi
 
@@ -1722,6 +1752,62 @@ SAW_UNGOV=0
 SAW_MARKER=0
 SAW_INFLIGHT=0
 SAW_FUTURE=0
+
+# A FIFTH INDEPENDENT VERDICT: a stamp after the clock. Not a size, a section, or a
+# marker, so it is folded into none of them. Hard on every path that does not ask for
+# --warn-only, and hard under --warn-only when the snapshot is hardened with --fail-on,
+# exactly as the marker verdict: Check 14, Step 0a, Step 1a and the sub-step path all
+# block on it, and retro's own invocation hardens the snapshot.
+#
+# IT IS PRINTED FIRST, AND ITS VERDICT LINE CARRIES THE WHOLE REMEDY, BECAUSE THE LEAD READS
+# IT THROUGH verdict.sh. Check 14, Step 0a check 1 and the between-gates sub-step all call
+# this validator through `verdict.sh`, which surfaces at most AI_DLC_VERDICT_LINES (6) lines
+# matching its FAIL/OVER/WARN/FUTURE alternation and drops the heredoc below entirely.
+# Printed after the budget verdict, a co-occurring OVER (the reference consumer's live
+# snapshot already spends 2 of the 6 on one) pushed the FUTURE rows past the cap, and the
+# remedy never reached the lead at all -- who then cleared the check by TRIMMING the future
+# lines into the history file, which is the one outcome the remedy exists to prevent. So
+# this verdict leads, and the one line verdict.sh is certain to show says what to do.
+#
+# THE OLD STAMPS ARE NAMED AS BARE `HH:MMZ`. A correction line naming them in full ISO form
+# is itself a future-stamped Recent Activity line and re-fires this arm; the bare form is
+# what the grammar above never reads (the self-probe seeds it as a near-miss).
+report_future_stamps() {
+  [ -s "$FUTURE_FILE" ] || return 0
+  SAW_FUTURE=1
+  say ""
+  if [ "$WARN_ONLY" -eq 1 ] && ! is_fail_on "pipeline-snapshot.md"; then
+    echo "WARN: pipeline-snapshot.md carries stamp(s) later than the current UTC time -- rewrite each FUTURE stamp below to \`date -u\` in place (keep line order), then add ONE Recent Activity line \`<date -u> CLOCK CORRECTION: rewrote <n> future stamp(s) to date -u: <old stamps as bare HH:MMZ>\`; do this WITHOUT ASKING and before any trim or move."
+  else
+    echo "FAIL: pipeline-snapshot.md carries stamp(s) later than the current UTC time -- rewrite each FUTURE stamp below to \`date -u\` in place (keep line order), then add ONE Recent Activity line \`<date -u> CLOCK CORRECTION: rewrote <n> future stamp(s) to date -u: <old stamps as bare HH:MMZ>\`; do this WITHOUT ASKING and before any trim or move." >&2
+    RC=1
+  fi
+  cat "$FUTURE_FILE" >&2
+  cat >&2 <<'EOF'
+
+      A Recent Activity entry or an In-Flight dispatched-at cell stamped more than
+      10 minutes after now records an event that has not happened. Every reader of
+      the snapshot -- a gate, a resume, a recovery -- orders by these stamps.
+
+      Remedy, applied by the lead WITHOUT ASKING, BEFORE any trim or section move:
+        1. Rewrite each stamp named above to the current time from `date -u`
+           (e.g. `date -u +%Y-%m-%dT%H:%MZ`). Keep every line where it is; do not
+           re-order the section, and do not move the line to the history file --
+           trimming a future stamp away hides it instead of correcting it.
+        2. Add ONE Recent Activity line, stamped from `date -u`, that reads
+           `CLOCK CORRECTION: rewrote <n> future stamp(s) to date -u: <old>` and
+           names each old stamp as a bare `HH:MMZ` (e.g. `02:30Z, 02:45Z`). Do NOT
+           name them in full `YYYY-MM-DDTHH:MMZ` form: that is a future stamp too,
+           and this check refuses the correction line itself.
+        3. Re-run this check.
+
+      Never take a stamp from memory or from another line -- `date -u` is the only
+      clock. Ranges (also spaced: ` - `, ` to `, an arrow, before a digit), `~`
+      approximations, `x` placeholders and date-only stamps are not checked.
+EOF
+}
+report_future_stamps
+rm -f "$FUTURE_FILE"
 
 if [ -s "$BREACH_FILE" ]; then
   SAW_BREACH=1
@@ -1955,42 +2041,6 @@ if [ -s "$MARKER_FILE" ]; then
 EOF
 fi
 rm -f "$MARKER_FILE"
-
-# A FIFTH INDEPENDENT VERDICT: a stamp after the clock. Not a size, a section, or a
-# marker, so it is folded into none of them. Hard on every path that does not ask for
-# --warn-only, and hard under --warn-only when the snapshot is hardened with --fail-on,
-# exactly as the marker verdict above: Check 14, Step 0a, Step 1a and the sub-step path
-# all block on it, and retro's own invocation hardens the snapshot.
-if [ -s "$FUTURE_FILE" ]; then
-  SAW_FUTURE=1
-  say ""
-  if [ "$WARN_ONLY" -eq 1 ] && ! is_fail_on "pipeline-snapshot.md"; then
-    echo "WARN: pipeline-snapshot.md carries stamp(s) later than the current UTC time."
-  else
-    echo "FAIL: pipeline-snapshot.md carries stamp(s) later than the current UTC time." >&2
-    RC=1
-  fi
-  cat "$FUTURE_FILE" >&2
-  cat >&2 <<'EOF'
-
-      A Recent Activity entry or an In-Flight dispatched-at cell stamped more than
-      10 minutes after now records an event that has not happened. Every reader of
-      the snapshot -- a gate, a resume, a recovery -- orders by these stamps.
-
-      Remedy, applied by the lead WITHOUT ASKING:
-        1. Rewrite each stamp named above to the current time from `date -u`
-           (e.g. `date -u +%Y-%m-%dT%H:%MZ`). Keep every line where it is; do not
-           re-order the section.
-        2. Add ONE Recent Activity line, stamped from `date -u`, that reads
-           `CLOCK CORRECTION: rewrote <n> future stamp(s) to date -u` and names them.
-        3. Re-run this check.
-
-      Never take a stamp from memory or from another line -- `date -u` is the only
-      clock. Ranges, `~` approximations, `x` placeholders and date-only stamps are
-      not checked.
-EOF
-fi
-rm -f "$FUTURE_FILE"
 
 # A THIRD independent verdict, for the same reason the schema one is separate: a
 # struck row is not "over budget", and sending the lead to `trim` would have it

@@ -146,10 +146,11 @@ Run these integrity checks in order:
    `SKILL.md` owns move-never-delete and the history destination, and
    `gate-validation.md` Check 14 owns the seven-section schema; follow
    them there rather than from a restatement here. If the verdict names
-   a stamp later than the current UTC time, apply the stamp remedy the
-   script prints, also without asking: rewrite each named stamp to
-   `date -u`, keep line order, and add one `CLOCK CORRECTION` line to
-   `Recent Activity`. Then re-run the same verdict.
+   a stamp later than the current UTC time, apply the stamp remedy its
+   first FAIL line prints, also without asking and before any trim:
+   rewrite each `FUTURE` stamp to `date -u` in place, keep line order,
+   and add the one `CLOCK CORRECTION` line that line spells. Then re-run
+   the same verdict.
 
    **The trim performs the whole read this check guards, and that is
    acceptable because the question it replaces performed it too.** A lead
@@ -266,6 +267,9 @@ Check for existing artifacts on disk:
 ### Step 1a: Artifact-Size Budget Gate (Rule 25(d)) — HARD_BLOCK
 
 Run `scripts/ai-dlc/validate-artifact-budget.sh`.
+
+If it names a stamp later than the current UTC time, apply Step 0a check 1's stamp
+remedy first, without asking; it is not a budget breach and no remedy below clears it.
 
 **Exit 0** — every living artifact is within budget. Continue to Step 2.
 

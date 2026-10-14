@@ -140,6 +140,7 @@ consolidation (it stays operator-supervised, never automatic). Retro §4a now ru
 `--fail-on whole-read-pool`, whose hard verdict is "pool OVER and no OPEN `carry-over-backlog.md` item
 carries `WHOLE-READ-POOL`". Retro §5c check 5 blocks the Step 6 commit on it, and route Step 1 item 5
 reads the item before Step 1a runs. Graph's own OPEN `CO-S318-WHOLE-READ-POOL-REBREACHED…` satisfies it.
+The receipt drives the §4a and §5c commands as retro.md spells them.
 
 verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-511-retro-pool-verdict.sh
 
@@ -210,7 +211,10 @@ lead 10 min; 0 inside the slack). The contract analysis counted 0 of 20 resumes 
 re-derived here). The cited history lines 215/219/225 resolve at
 commit `3e5aeb070`, not HEAD. The arm therefore lives in `validate-artifact-budget.sh`'s snapshot branch,
 which gate Check 14 runs at every write and route Step 0a check 1 runs at resume, and its failure names
-the remedy (rewrite to `date -u`, keep order, one CLOCK CORRECTION line).
+the remedy (rewrite to `date -u`, keep order, one CLOCK CORRECTION line naming the old stamps as bare
+`HH:MMZ`, since a full-form name is itself a future stamp). Every lead-facing call site reads the
+validator through `verdict.sh`, which shows 6 matching lines, so the stamp verdict prints first, its
+FAIL line carries the remedy, and `verdict.sh` surfaces `FUTURE` rows.
 
 verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-517-future-stamp.sh
 

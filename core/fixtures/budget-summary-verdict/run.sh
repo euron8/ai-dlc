@@ -51,6 +51,10 @@ for cand in \
 done
 [ -n "$V" ] || { echo "run.sh: could not locate validate-artifact-budget.sh in either layout" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/scripts/validate-artifact-budget.sh"
+# verdict.sh ships beside the validator in both layouts (core/scripts/, scripts/ai-dlc/).
+VW="$(dirname "$V")/verdict.sh"
+[ -f "$VW" ] || { echo "run.sh: could not locate verdict.sh beside $V" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/scripts/verdict.sh"
 
 rc=0
 ok()  { echo "ok: $1"; }
@@ -628,8 +632,68 @@ dateonly|- 2026-10-15 tomorrow
 xplace|- 2026-10-14Txx:xxZ placeholder and ~2026-10-14T13:00Z approx
 five|- 2026-10-14T11:05Z five minutes ahead
 past|- 2026-10-14T10:59Z just now
+spaced|- 2026-10-14T12:00Z - 12:45Z, 2026-10-14T12:00Z to 12:45Z, 2026-10-14T12:00Z → 12:45Z, 2026-10-14T12:00Z – 12:45Z planned
+correction|- 2026-10-14T10:58Z CLOCK CORRECTION: rewrote 2 future stamp(s) to date -u: 12:00Z, 12:45Z
 NEAR
-[ "$nm_ok" -eq 1 ] && ok "F2-F6 range, date-only, x/~ placeholder, 5-min-ahead and past stamps are all accepted"
+[ "$nm_ok" -eq 1 ] && ok "F2-F6 range, spaced range, date-only, x/~ placeholder, 5-min-ahead, past and bare-HH:MMZ CLOCK CORRECTION stamps are all accepted"
+
+# F1c OFFENDER TWINS of two near-misses above, each one property apart: a single stamp followed
+# by ` - ` and TEXT (the spaced-range skip needs a digit), a stamp MID-LINE, and a CLOCK
+# CORRECTION line naming the old stamps in FULL ISO form -- which the remedy forbids, because
+# it is itself a future stamp and re-fires this check.
+f1c_ok=1
+while IFS='|' read -r olabel oline; do
+  [ -n "$olabel" ] || continue
+  seed_stamped "$AF" "$oline" "$IF_HDR"
+  drive_now "off-$olabel" "$V" "$AF" --only pipeline-snapshot.md
+  if [ "$(status_of "off-$olabel")" != "1" ] || ! grep -q '^FUTURE .*2026-10-14T12:00Z' "$OUT"; then
+    f1c_ok=0; bad "offender twin '$olabel' was accepted: exit $(status_of "off-$olabel")"
+  fi
+done <<'OFF'
+dashtext|- 2026-10-14T12:00Z - DEPLOY DONE
+midline|- DEPLOY DONE at 2026-10-14T12:00Z
+fulliso|- 2026-10-14T10:58Z CLOCK CORRECTION: rewrote 1 future stamp(s) to date -u: 2026-10-14T12:00Z
+OFF
+[ "$f1c_ok" -eq 1 ] && ok "F1c ' - text', a mid-line stamp, and a full-ISO CLOCK CORRECTION line are each refused"
+
+# F8 THROUGH verdict.sh, WITH A CO-OCCURRING BUDGET OVER. Every lead-facing call site reads this
+# validator through the wrapper, which shows at most 6 matching lines. Five future stamps plus a
+# gate-log breach: printed after the budget verdict, the stamp FAIL line and its rows fall past
+# the cap; printed first, the wrapper shows the FAIL line carrying the remedy and every row.
+AW="$(arm_dir wrapper)"; seed_breach "$AW"
+seed_stamped "$AW" '- 2026-10-14T12:00Z DEPLOY DONE
+- 2026-10-14T12:05Z MERGED
+- 2026-10-14T12:10Z HANDOFF
+- 2026-10-14T12:15Z DISPATCHED dev
+- 2026-10-14T12:20Z GATE PASS' "$IF_HDR"
+wdrive() { # wdrive <label> <wrapper> <validator-dir>
+  OUT="$WORK/runs/$1.out"
+  ( cd "$AW" && AI_DLC_SNAPSHOT_NOW_EPOCH="$NOW_PIN" AI_DLC_SCRIPTS_DIR="$3" \
+      bash "$2" validate-artifact-budget --root "$AW" ) > "$OUT" 2>&1
+  printf '%s\t%s\t0\t0\n' "$1" "$?" >> "$LEDGER"
+}
+wcheck() { # wcheck <label> -> 0 when the wrapper output carries the remedy and all five rows
+  _o="$WORK/runs/$1.out"
+  [ "$(status_of "$1")" = "1" ] || return 1
+  grep -q 'FAIL: pipeline-snapshot.md carries stamp(s) later than the current UTC time -- rewrite each FUTURE stamp' "$_o" || return 1
+  grep -q 'CLOCK CORRECTION: rewrote <n> future stamp(s) to date -u: <old stamps as bare HH:MMZ>' "$_o" || return 1
+  [ "$(grep -c 'FUTURE  _bmad-output/pipeline-snapshot.md line' "$_o")" = "5" ] || return 1
+  grep -q 'OVER  ' "$_o" && return 1   # the cap is spent on the stamp verdict: proves co-occurrence was cut, not absent
+  return 0
+}
+wdrive f8 "$VW" "$(dirname "$V")"
+if wcheck f8; then
+  ok "F8 through verdict.sh under a co-occurring OVER: the stamp FAIL line carries the remedy and all 5 FUTURE rows survive the 6-line cap"
+else
+  bad "F8 through verdict.sh: stamp remedy or FUTURE rows missing (exit $(status_of f8))"
+  sed 's/^/      /' "$WORK/runs/f8.out" >&2
+fi
+# F8 control: the raw validator on the same tree reports the breach too, so the OVER absent above
+# was cut by the cap and not missing from the run.
+drive_now f8-raw "$V" "$AW"
+grep -q '^OVER  ' "$WORK/runs/f8-raw.out" && grep -q '^FUTURE ' "$WORK/runs/f8-raw.out" \
+  && ok "F8 control: the raw run carries both the OVER row and the FUTURE rows" \
+  || bad "F8 control: the raw run lacks the OVER row or the FUTURE rows -- F8 is not testing co-occurrence"
 
 # F7 posture: --warn-only alone warns (rc 0, summary names it); retro's flags harden it.
 seed_stamped "$AF" '- 2026-10-14T12:00Z DEPLOY DONE' "$IF_HDR"
@@ -723,6 +787,58 @@ if [ "$(status_of mp2-orig)" = "1" ] && [ "$(status_of mp2)" = "0" ]; then
   ok "MUTANT MP2 (item citation dropped) killed by P2"
 else
   bad "MUTANT MP2: shipped=$(status_of mp2-orig) (want 1) mutant=$(status_of mp2) (want 0)"
+fi
+# MF4 spaced-range skip deleted: the `spaced` near-miss must now be refused (the self-probe
+# carries the same near-miss and refuses first; either way the run is rc 1, where F2-F6's
+# shipped run of that near-miss was rc 0).
+MF4="$MUT_BIN/mf4-nospaced.sh"; mk "$MF4" '/^        if (spaced(str, b)) continue$/d'
+seed_stamped "$AF" '- 2026-10-14T12:00Z - 12:45Z planned' "$IF_HDR"
+drive_now mf4 "$MF4" "$AF" --only pipeline-snapshot.md
+[ "$(status_of mf4)" = "1" ] && [ "$(status_of nm-spaced)" = "0" ] \
+  && ok "MUTANT MF4 (spaced-range skip deleted) killed" || bad "MUTANT MF4 (spaced-range skip deleted) SURVIVED"
+# MF5 spaced skip WITHOUT its digit test: ` - DEPLOY DONE` is acquitted. F1c's dashtext twin
+# must lose its FUTURE row (the self-probe's dash offender also dies, so no row at all).
+MF5="$MUT_BIN/mf5-nodigit.sh"; mk "$MF5" 's|      return (substr(s, n, 1) ~ /\[0-9\]/)|      return 1|'
+seed_stamped "$AF" '- 2026-10-14T12:00Z - DEPLOY DONE' "$IF_HDR"
+drive_now mf5 "$MF5" "$AF" --only pipeline-snapshot.md
+if ! grep -q '^FUTURE .*2026-10-14T12:00Z' "$OUT" && [ "$(status_of off-dashtext)" = "1" ]; then
+  ok "MUTANT MF5 (spaced skip needs no digit) killed: the ' - text' offender loses its FUTURE row"
+else
+  bad "MUTANT MF5 (spaced skip needs no digit) SURVIVED"
+fi
+# MF6 ORDER: the stamp verdict printed AFTER the budget verdict (the pre-fix position). F8's
+# wrapper run must lose the remedy or rows. Built with awk (a moved line is two edits) and
+# cmp-guarded like mk.
+MF6="$MUT_BIN/mf6-order.sh"
+awk '/^report_future_stamps$/ { next }
+     /^rm -f "\$FUTURE_FILE"$/ { next }
+     { print }
+     /^rm -f "\$MARKER_FILE"$/ { print "report_future_stamps"; print "rm -f \"$FUTURE_FILE\"" }' "$V" > "$MF6" \
+  || { echo "FIXTURE ERROR: awk died building $MF6" >&2; exit 2; }
+if cmp -s "$V" "$MF6" || [ "$(grep -c '^report_future_stamps$' "$MF6")" != "1" ]; then
+  echo "FIXTURE ERROR: mutant $MF6 did not move the call" >&2; exit 2
+fi
+MF6D="$MUT_BIN/mf6dir"; mkdir -p "$MF6D" || exit 2
+cp "$MF6" "$MF6D/validate-artifact-budget.sh" || exit 2
+wdrive mf6 "$VW" "$MF6D"
+if grep -q '^FAIL  validate-artifact-budget.sh' "$WORK/runs/mf6.out" && ! wcheck mf6; then
+  ok "MUTANT MF6 (stamp verdict printed after the budget verdict) killed by F8"
+else
+  bad "MUTANT MF6 (stamp verdict order) SURVIVED or did not run"
+  sed 's/^/      /' "$WORK/runs/mf6.out" >&2
+fi
+# MW1 verdict.sh WITHOUT `FUTURE` in its alternations: F8 must lose the rows. The mutant
+# wrapper lives in MUT_BIN, so AI_DLC_SCRIPTS_DIR points it back at the real validator; the
+# positive conjunct (the stamp FAIL line is there) proves the copy ran.
+MW1="$MUT_BIN/mw1-verdict.sh"
+sed 's/|FUTURE)/)/g' "$VW" > "$MW1" || { echo "FIXTURE ERROR: sed died building $MW1" >&2; exit 2; }
+if cmp -s "$VW" "$MW1"; then echo "FIXTURE ERROR: mutant $MW1 matched nothing" >&2; exit 2; fi
+wdrive mw1 "$MW1" "$(dirname "$V")"
+if grep -q 'FAIL: pipeline-snapshot.md carries stamp(s) later' "$WORK/runs/mw1.out" && ! wcheck mw1; then
+  ok "MUTANT MW1 (verdict.sh drops FUTURE) killed by F8"
+else
+  bad "MUTANT MW1 (verdict.sh drops FUTURE) SURVIVED or did not run"
+  sed 's/^/      /' "$WORK/runs/mw1.out" >&2
 fi
 
 echo ""
