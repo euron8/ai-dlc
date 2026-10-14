@@ -204,7 +204,8 @@ case "$CASE" in
     mkdir -p "$W/.claude/skills/ai-dlc" "$W/reports" "$W/sessions-jsonl"
     cp "$_cfg" "$W/scripts/ai-dlc/artifact-path-config.sh" || { rm -rf "$W"; exit 2; }
     awk '{ print } /^```scan-roots$/ { print "reports" }' "$_gram" > "$W/.claude/skills/ai-dlc/artifact-path-grammar.md"
-    bash "$W/scripts/ai-dlc/artifact-path-config.sh" --scan-roots --root "$W" 2>/dev/null | grep -qx 'reports' \
+    _roots="$(bash "$W/scripts/ai-dlc/artifact-path-config.sh" --scan-roots --root "$W" 2>/dev/null)"
+    grep -qx 'reports' <<<"$_roots" \
       || { echo "seed.sh: the seeded grammar does not resolve the extra scan root 'reports'" >&2; rm -rf "$W"; exit 2; }
     printf 'line\n' > "$W/src/app.py"
     printf 'line\n' > "$W/src/.env"
