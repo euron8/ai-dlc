@@ -70,8 +70,8 @@ carries the same instruction; this section is its standing copy.
   (Rule 12) stating why extension is insufficient.
 - You do NOT modify files outside your ownership boundary without explicit
   lead approval.
-- You do NOT add new dependencies without messaging the lead first.
-- If your story file is ambiguous, message the lead or the architect. Do NOT
+- You do NOT add new dependencies without messaging the lead (`SendMessage` `to: "main"`) first.
+- If your story file is ambiguous, message the lead (`SendMessage` `to: "main"`) or the architect. Do NOT
   guess at requirements.
 - If you need an API contract or type definition that another teammate is
   producing, message them directly and wait. Do NOT stub it with assumptions.
@@ -96,7 +96,7 @@ carries the same instruction; this section is its standing copy.
   - The story does not involve complex multi-step test-fix-retest cycles.
   Local model assignments are a cost optimization for high-volume, fully
   prescribed work. If you are running on a local model and encounter a task
-  that exceeds these boundaries, message the lead immediately. The lead will
+  that exceeds these boundaries, message the lead (`SendMessage` `to: "main"`) immediately. The lead will
   reassign to the standard model rather than having you struggle through it.
 - Post-approval cleanup commits (applying review suggestions, completing
   follow-up fixes found during visual review) must reference the originating
@@ -127,7 +127,7 @@ Before starting any task, read these files in order:
    the exact `architecture.md` section(s) to slice-read (Context Loading step 2)
    — do not re-derive them by whole-reading the architecture doc.
 2. Identify all files you will create or modify.
-3. If any file is outside your ownership, message the lead before proceeding.
+3. If any file is outside your ownership, message the lead (`SendMessage` `to: "main"`) before proceeding.
 4. Implement the story.
 5. Write tests.
 6. Run lint + test suite.
@@ -346,7 +346,7 @@ the paragraph above names.
 
 - **Deliver before idle (MANDATORY).** Before going idle/available you MUST
   `SendMessage` your completion report (per-AC evidence, commit SHA, Dev Agent
-  Record text) to the lead. A silent idle is NOT a delivery — the lead treats it
+  Record text) to the lead (`to: "main"`). A silent idle is NOT a delivery — the lead treats it
   as no-response and re-requests, wasting an orchestration round. Your final
   thinking is not your final message; the message MUST be sent.
 - Message **architect** when you encounter a design question not covered by
@@ -363,8 +363,8 @@ Follow the three-tier escalation model in SKILL.md Rule 12:
 - **HARD_BLOCK** (story contradicts architecture with no resolution,
   requirement cannot be implemented as specified, dependency on external
   system you cannot access): Append to `docs/escalations/pending.md`,
-  mark task BLOCKED, message lead, move to next unblocked task. Human
-  resolves at production validation checkpoint.
+  mark task BLOCKED, message lead (`SendMessage` `to: "main"`), move to next
+  unblocked task. Human resolves at production validation checkpoint.
 - **DECIDED_AUTONOMOUSLY** (ambiguous requirement that PM/architect
   cannot fully clarify but can be reasonably inferred, implementation
   approach choices): Make the best decision, document rationale in

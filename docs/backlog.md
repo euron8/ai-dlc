@@ -224,4 +224,10 @@ s317-s318 failed with "No agent named 'lead'" (qwen lead 4, Sonnet lead 7). `cor
 tells a dev to "message the lead" at three sites and never names the address a subagent reaches its
 parent by. `ai-dlc-escalation-delivery.sh` records the failure after the fact.
 
-verify: manual -- close when every role file that tells a teammate to message the lead names the address a subagent actually reaches its parent by, and a fixture pins that address at each site.
+The 11 did not reproduce exactly. Re-derived read-only from graph: the committed flow logs carry 9
+`No agent named 'lead'` events for s317-s318 (5 in the s317 archive, 4 in the live log), and graph's
+transcripts hold 15 `SendMessage` calls `to: "lead"`, every one failed, against `to: "main"` 167 of
+167 delivered (Claude Code 2.1.276-2.1.296). The unaddressed instruction was not three dev.md sites
+but 21 across eight role files and SKILL.md's Tier 1 action.
+
+verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-520-lead-address.sh

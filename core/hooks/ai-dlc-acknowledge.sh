@@ -755,7 +755,8 @@ Event types:
   as tool errors, which is why they fell through silently; a nonzero count
   means an escalation the lead believed it had sent did not arrive. Read the
   recorded target -- a failure to reach `parent` is subagent routing, not an
-  operator escalation
+  operator escalation. A failure to reach `lead` is a teammate using a role
+  name as an address; a teammate reaches the lead with `to: "main"`
 
 Retro reviews this log to assess pipeline flow:
 

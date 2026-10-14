@@ -274,6 +274,18 @@ own question, a gate verdict on its own work. Two things it may never carry:
   teammate count is a `TaskStop` cleanup concern, never a dispatch-routing
   input.
 
+**A dispatched teammate reaches the lead with `SendMessage` `to: "main"`.** The
+word "lead" is a role, not an address: the harness registers no agent by that
+name. Measured on the reference consumer's plain-`Agent` dispatches across
+Claude Code 2.1.276-2.1.296: `to: "main"` delivered 167 of 167 sends, `to:
+"lead"` delivered 0 of 15 (`No agent named 'lead' is reachable`), and `to:
+"team-lead"` was accepted 19 times but is likely an agent-teams address, so it is
+not used. The address for a teammate spawned with `team_name` is UNMEASURED --
+the consumer never dispatches that way. Teammates do not load rule bodies, so
+every role-file and skill instruction telling a teammate to message or escalate
+to the lead carries the literal `to: "main"` at its own site; the
+`process-rule-pins` fixture fails on one that does not.
+
 **Minimum mechanism (Rule 26(c)).** Failure caught: the lead absorbing
 delegable work inline, saturating its context and collapsing the
 production/orchestration boundary -- and its mirror, the lead RECYCLING a

@@ -112,7 +112,7 @@ not optional background:
 ## Communication
 
 - **Deliver before idle (MANDATORY).** Before going idle you MUST `SendMessage`
-  your completion report to the lead: the diff (or its committed SHA), the
+  your completion report to the lead (`to: "main"`): the diff (or its committed SHA), the
   per-AC evidence, and the full list of cross-reference sites you updated. A
   silent idle is treated as no-delivery and re-requested.
 

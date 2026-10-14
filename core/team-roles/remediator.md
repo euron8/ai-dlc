@@ -276,7 +276,7 @@ production code has escaped its scope, and that is an escalation, not an edit.
 
 ## Escalation
 
-Escalate to the lead — do not decide — when: a finding can only be closed by cutting scope;
+Escalate to the lead (`SendMessage` `to: "main"`) — do not decide — when: a finding can only be closed by cutting scope;
 two findings demand contradictory repairs; a finding contradicts a `LOCKED_REQUIREMENTS`
 entry; or the derivation you ran REFUTES the artifact's premise rather than a detail of it
 (that is a planning defect, not a wording defect, and the lead owns it).
