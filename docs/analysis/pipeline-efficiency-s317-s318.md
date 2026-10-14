@@ -48,8 +48,8 @@ time before the first step Read, which is cold start and resume orientation.
 *Lead active* sums inter-line gaps of ≤5 min. *Waiting on agents* sums gaps over 5 min that are not
 ended by a human prompt; most are `queue-operation` lines, where the lead is blocked on background
 subagents. *Operator wait* sums gaps over 5 min that end in a human prompt. Time *between* sessions
-(a handoff waiting for `/ai-dlc resume`) is in no column. The flow log puts it at **52.5 h** in
-s317 (19 handoff pairs) and **10.9 h** in s318 (7 pairs).
+(a handoff waiting for `/ai-dlc resume`) is out of scope by operator ruling. Handoff gaps are not
+treated as an optimisation target and appear in no column or finding.
 
 **Bucketing.** A lead session with at least one step Read is `pipeline`. One with none, whose
 assistant lines are attributed to the `ai-dlc-update` skill, is `ai-dlc-update (reconcile)`.
@@ -150,9 +150,6 @@ Notes on reading it:
   the lead re-reads `gate-validation.md` per story during implementation. Read
   `implementation` and `gate-validation[implementation]` together: s317 40.2 h and $588, s318 11.8 h
   and $422 so far.
-- **s318 elapsed times are shorter** partly because the 4.1 h and 1.4 h agent-waits in
-  stories-test-strategy fell inside single sessions, while s317 split the same work across 9
-  sessions with handoffs in between. Handoff time is outside every column.
 - **Steps that did not run, by variant.** discovery, research-requirements, codebase-inventory,
   deep-codebase-analysis, doc-reconciliation, doc-repair-backfill, bug-investigation and
   sprint-review-next are not reached by graph's `carry-over` variant (route.md:481-497).
@@ -354,7 +351,7 @@ Rationale is cited to the distribution source. "FC" is a step file's `Failure ca
   - s318 produced **230 findings in 95 seats** (sprint-review-party-digest.md:3).
   - **Gate pass 1 FAILed in both sprints:**
     - s317 on Checks 1, 2 and 21 (60 min to PASS).
-    - s318 on Checks 21 and 915. Pass 2 came 3h37m later, 3h14m of which was a handoff.
+    - s318 on Checks 21 and 915. Pass 2 ran in the next session.
 
 ### deploy-validate (s317 $23 / 10.9 h)
 - **Sub-steps:** pre-deploy; deploy; 2a destructive-op gate; 2b deploy-freshness; 3 smoke (hard);
@@ -383,8 +380,7 @@ Rationale is cited to the distribution source. "FC" is a step file's `Failure ca
 - **Why:** Rule 2 path (a); CHN R20 (auto-handoff at safe seams).
 - **Measured:** each handoff costs a commit and push. A push runs graph's pre-push gate, which is
   expensive: `git push` averaged 37 s per call over 132 lead calls, and the 10-14 handoff push was
-  blocked by pre-push. **The bigger cost sits outside the step: 19 handoffs in s317 meant 19
-  cold-start resumes** (see pre-step and overheads below).
+  blocked by pre-push.
 
 ## Resident core-file cost (what the pipeline makes agents read)
 
@@ -428,7 +424,6 @@ Largest single sources:
 | **Sleep-polling in the lead** | 330 calls, 1.4 h | `bash_cost.py` |
 | **Validator runs inside agents** | `validate-mutation-red.sh` 1177 calls / 1.9 h; `validate-artifact-derivations.sh` 1930 sub + 258 lead calls / 1.5 h; `validate-spawn-ledger.sh` 120 calls / 0.8 h | `bash_cost.py` |
 | **Compactions** | s317 44 lead compactions (45 in compaction-log), s318 21 (24 in log) | units.jsonl; graph compaction logs |
-| **Session restarts** | s317 had 24 pipeline sessions and 19 handoff→resume pairs, idle 52.5 h between sessions; s318 had 8 sessions and 7 pairs, 10.9 h | flow log (graph-logs cross-check) |
 | **ai-dlc-update reconcile sessions** | s317 20 sessions, 38.2 h, $140 (19.7 h operator wait); s318 6 sessions, 5.0 h, $38 | table above |
 | **Hook injections** | 17,523 hook firings, 4.2 MB injected context. `PreToolUse:Read` additionalContext 4,507 firings / 1.86 MB (the context-mode guidance tip); SessionStart 135 / 1.42 MB. Hook process time 1157 s total. | `hooks.csv` |
 | **Flow-log noise** | PAUSE_SKIPPED 2065 (s317) + 1531 (s318); ALLOWED_BY_LIVE_BEAT 1040 + 919 | graph pipeline-continuation logs |
@@ -498,9 +493,6 @@ None. No measured cost blocks the pipeline from completing.
   ui-direction; handoff; and the lead's cache-read ratio (97–98%).
 - **Cache writes (37% of spend) scale with spawn count, not with work.** Any reduction in spawn count
   pays about 34K cw tokens per spawn avoided.
-- **s317's 19 handoffs and 52.5 h between sessions** dwarf any in-step cost in wall clock. s318 used
-  7 handoffs. The pipeline auto-handoff thresholds (Rule 2, CHN R20) and graph's operator cadence
-  both feed this; the split was not measured.
 - **ai-dlc-update reconcile** cost 38.2 h and $140 in s317 (20 sessions), against 5.0 h and $38 in
   s318.
 - **Hook injection is dominated by non-ai-dlc plugins.** context-mode's Read tip is 1.86 MB across
