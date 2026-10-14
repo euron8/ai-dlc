@@ -326,7 +326,7 @@ For each completed task, verify:
 
 - **Deliver before idle (MANDATORY).** Before going idle/available you MUST
   `SendMessage` your full validation verdict (per-AC PASS/FAIL with
-  Expected/Got) to the lead. A part shard delivers its shard file's absolute
+  Expected/Got) to the lead (`to: "main"`). A part shard delivers its shard file's absolute
   path and its `shard-verdict:` value instead, never per-AC rows, which only
   the first cross shard writes. The first cross shard (`cross-1`, or `cross`
   when there is one cross group) delivers its shard file's absolute path, its
@@ -337,7 +337,8 @@ For each completed task, verify:
   thinking is not your final message; the message MUST be sent.
 - Message **dev teammate** when rejecting a task (include specific failure
   reasons and the acceptance criterion that was not met).
-- Message **lead** when all tasks for a story are validated and ready for merge.
+- Message **lead** (`SendMessage` `to: "main"`) when all tasks for a story are
+  validated and ready for merge.
 - Message **architect** if you identify a pattern of quality issues that
   suggests an architectural concern.
 - **When you write the verdict to a file, the path is
@@ -475,8 +476,8 @@ Follow the three-tier escalation model in SKILL.md Rule 12:
 - **HARD_BLOCK** (quality concern so severe the sprint should not ship,
   test environment issue that prevents validation and cannot be worked
   around): Append to `docs/escalations/pending.md`, mark task BLOCKED,
-  message lead, move to next unblocked task. Human resolves at production
-  validation checkpoint.
+  message lead (`SendMessage` `to: "main"`), move to next unblocked task.
+  Human resolves at production validation checkpoint.
 - **DECIDED_AUTONOMOUSLY** (ambiguous acceptance criteria that can be
   reasonably interpreted, judgment calls on test coverage sufficiency):
   Make the best decision, document rationale in

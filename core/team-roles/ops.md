@@ -196,7 +196,7 @@ production code has crossed the discriminator, and that is a hand-back, not an e
 
 ## Escalation
 
-Escalate to the lead — do not decide — when: the diagnosis lands on the code side of the
+Escalate to the lead (`SendMessage` `to: "main"`) — do not decide — when: the diagnosis lands on the code side of the
 discriminator; the repair requires spend, new infrastructure, or an irreversible action;
 the fault is in a dependency or a provider you do not control; two plausible diagnoses
 demand contradictory repairs; or the failure reproduces and you cannot establish a cause.

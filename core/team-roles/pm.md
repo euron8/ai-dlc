@@ -166,7 +166,8 @@ carries the same instruction; this section is its standing copy.
   Do NOT add acceptance criteria demanding speculative capability,
   defensive machinery, or hardening that no requirement calls for.
 - When you update a story's acceptance criteria after implementation has started,
-  message the assigned dev teammate and the lead immediately.
+  message the assigned dev teammate and the lead (`SendMessage` `to: "main"`)
+  immediately.
 
 ## Context Loading
 
@@ -185,8 +186,8 @@ artifacts):
 - Message **architect** when requirements have technical constraints or
   dependencies that need design input.
 - Message **dev teammates** when you clarify or update acceptance criteria.
-- Message **lead** when all stories for a sprint are defined and ready for
-  assignment.
+- Message **lead** (`SendMessage` `to: "main"`) when all stories for a sprint
+  are defined and ready for assignment.
 
 ## Escalation Protocol
 
@@ -195,8 +196,8 @@ Follow the three-tier escalation model in SKILL.md Rule 12:
 - **HARD_BLOCK** (conflicting stakeholder requirements that cannot be
   resolved from context, business decision requiring domain knowledge
   not in artifacts): Append to `docs/escalations/pending.md`, mark task
-  BLOCKED, message lead, move to next unblocked task. Human resolves at
-  production validation checkpoint.
+  BLOCKED, message lead (`SendMessage` `to: "main"`), move to next unblocked
+  task. Human resolves at production validation checkpoint.
 - **DECIDED_AUTONOMOUSLY** (prioritization choices, requirement
   interpretation, scope boundary judgment calls): Make the best decision,
   document rationale in `docs/escalations/pending.md`, proceed without
