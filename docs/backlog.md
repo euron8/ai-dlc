@@ -158,10 +158,13 @@ discards are three nonces: s317 `implementation-20261010T230257Z` (a tier-pin wa
 and 42 code-reviewer rows" and no spawn), and s317 `124524Z` and s318 `011534Z` (waivers naming
 every `invalid-exception` spawn and citing no Rule 28 exception, or only "the four"). All four lead
 `OVERRIDDEN` writes in s317-s318 were Bash `cat >> … <<EOF` appends, so no Edit/Write matcher sees
-them. The check runs at dispatch: `ai-dlc-dispatch-guard.sh` refuses a `gate-adjudicator` dispatch
-when a current-sprint Check 22/Rule 19 `OVERRIDDEN` entry names no spawn of the sprint (catches
-230257Z), or when a shardable `invalid-exception` ledger row is not named by an `OVERRIDDEN` entry
-citing exception (1)-(4) (catches 124524Z and 011534Z).
+them. The check runs at dispatch: `ai-dlc-dispatch-guard.sh` refuses an implementation-gate
+`gate-adjudicator` dispatch (Check 22 is in that manifest row only) when a current-sprint `OVERRIDDEN`
+entry that dispositions Check 22 names no spawn of the sprint (catches 230257Z), or when a shardable
+`invalid-exception` ledger row is not named by an `OVERRIDDEN` entry that remediates it as Check 22
+clearing arm 4 accepts, by a sharded re-dispatch or a cited exception (1)-(4) (catches 124524Z and
+011534Z). A refused dispatch writes no spawn-ledger row. Over graph's pending-archive.md + pending.md,
+S298-S318, clause 1 denies nothing and clause 2 denies only S316/S317 rows arm S3 fails.
 
 verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-512-adjudicator-dispatch-waiver.sh
 
