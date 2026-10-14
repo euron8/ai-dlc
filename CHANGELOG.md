@@ -20,6 +20,60 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.782.0] - 2026-10-14
+
+Batch 229 (graph-ledger-full-drain), first release: three entries from the s317-s318 efficiency analysis. No upstream
+candidate is live, so this release closes no `PC-` id. Closes BL-514, BL-518 and BL-509; net -3 backlog entries.
+
+### `ai-dlc-foreground-budget.sh`: a subagent's foreground poll over the budget is denied (BL-514)
+
+A subagent call stayed exempt from the steering budget by design, and subagents spent their wall clock polling their
+own background jobs. A subagent Bash call is now denied when it is not backgrounded, declares a timeout over the budget,
+and polls: an `until`/`while`/`for` loop whose body runs `sleep`, or a `sleep` of 30s or more, at any command position.
+The loop body ends at a `done` terminator, not at any word `done`, so a loop whose condition tests a `.done` marker is
+still a poll. The deny says to re-issue the job with `run_in_background: true` and act on its completion notification.
+Every other subagent call stays allowed, and the lead's decisions are unchanged (1,955 real lead calls replayed, 0
+differences). The poll test runs only after the cheap gates.
+
+- Measured on the reference consumer's subagent transcripts: 1,599 foreground calls over budget, 198 denied (152
+  sleeping loops, 46 long sleeps), 17.0h of tool wall clock. Every denied loop has a completion test; retry loops that
+  declare no timeout stay allowed. The entry's filed 228 / 12.4h did not reproduce and is corrected.
+- `foreground-budget-deny` gains arm SUBPOLL and new near-misses in AGENT, BG, BOUNDARY, NOTIMEOUT and NODETECTOR;
+  23 mutants.
+
+### `gate-checkpoint.sh open` refuses a non-canonical gate nonce (BL-518)
+
+`open` now checks the nonce against the verdict schema's `patterns.gate_nonce`,
+`^(planning|story|implementation|sprint-review|retro)-[0-9]{8}T[0-9]{6}Z$`, before any write, and exits 2 naming the
+canonical form and how to mint it. The gate that was already open stays current. `record`, `done`, `list`, `close`,
+`clear` and `current` are unchanged, so ledgers keyed before the change stay readable. The reference consumer's lead
+minted `implementation-2026-10-11T083048Z` from a hyphenated `date` format, and the old check accepted it.
+
+- `gate-validation.md` and `_gate-procedures.md` now state the mint literally:
+  `<gate_type>-$(date -u +%Y%m%dT%H%M%SZ)`.
+- `gate-checkpoint.sh -h` prints its usage block by matching its text; the fixed line range it used had drifted off
+  the block.
+- Measured on the reference consumer: 94 of 94 real opens and 87 of 87 checkpoint ledgers pass the new check; the two
+  non-canonical opens are true positives.
+- `gate-resume` gains section F2 and mutants m7-m9. The BL-457 cliff sweep writes its padded nonce straight into
+  `.gate-checkpoint/OPEN`, since its subject is the recover hook's byte budget. Its read set now includes the schema.
+
+### Elicitation takes the adversarial pass's axis and shape for every subject (BL-509)
+
+`_gate-procedures.md` validation-cycle item 2 prescribed a shape only for the requirements subject, and the reference
+consumer's s318 stories elicitation ran as one voice over 13 story files under `shard: none (serial-document)`, which
+Rule 28's files axis does not allow. Item 2 now states the shape for every subject: on the files axis one adversary per
+story ordinal (the ordinals `merge-adversarial-shards.sh --map` prints for the next review pass's shard directory) plus
+one per cross group, and `shard: 1/1 <story-index>` for a one-file `stories/`; on the sections axis one per part plus
+cross groups, one serial-document voice only when the document does not partition; the requirements subject unchanged.
+It names the shard directory, the repair's `--artifact <artifact>-elicitation --pass 1` and the sha the split repair
+passes. `stories-test-strategy.md` step 4 names elicitation among the sharded passes.
+
+- Measured on the reference consumer (s317-s318, re-derived costs): critical and major findings per dollar are flat
+  across shapes, 0.50 to 0.77. One voice was cheaper per run and found fewer, not cheaper per finding. Whether fewer,
+  larger shards would be cheaper is open; the entry records the frozen-corpus run that would decide it.
+- `process-rule-pins` gains seven `elic-shape-*` / `sts-elic-*` rows.
+
 ## [0.781.0] - 2026-10-14
 
 Batch 228 (graph-ledger-full-drain). Both candidates the reference consumer filed in its sprint 318, and the operator's

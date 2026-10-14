@@ -14,7 +14,7 @@
 # path<TAB>sha lines in the runner's universe as traced; the runner clears a stale key record when
 # it recomputes the same value over the tree it is pushing.
 #
-# fixtures mapped: 224    entries: 13192
+# fixtures mapped: 224    entries: 13195
 absorbed-specifics-survive	core/fixtures/absorbed-specifics-survive/run.sh
 absorbed-specifics-survive	core/skills/ai-dlc/SKILL.md
 absorbed-specifics-survive	core/skills/ai-dlc/rule-bodies/rule-13.md
@@ -4635,25 +4635,28 @@ gate-repair-record-mutants	core/schemas/gate-adjudication-verdict.json
 gate-repair-record-mutants	core/scripts/validate-adversarial-convergence.sh
 gate-repair-record-mutants	core/scripts/validate-gate-adjudication.sh
 gate-repair-record-mutants	core/skills/ai-dlc/enforcement-map.yaml
-gate-resume	.git/HEAD
-gate-resume	.git/config
-gate-resume	.git/index
-gate-resume	.git/info/exclude
-gate-resume	.git/objects/56/f7af696dda5b014303e3cffd0566fc28bbc5ca
-gate-resume	.git/objects/d8/a7e36ebca3d08a68fa19a639ce173a08c0c1d9
-gate-resume	.git/objects/info/commit-graphs/commit-graph-chain
-gate-resume	.git/objects/info/commit-graphs/graph-93e6403e1d08d4a02b08f717afce6dcbebb27492.graph
-gate-resume	.git/objects/info/commit-graphs/graph-d42403a589c72531d2a70bbcab5c31aa22fceed3.graph
-gate-resume	.git/objects/pack/multi-pack-index
-gate-resume	.git/packed-refs
-gate-resume	.gitignore
+gate-resume	.git
+gate-resume	core
+gate-resume	core/.claude
+gate-resume	core/.git
+gate-resume	core/core/skills/ai-dlc
+gate-resume	core/fixtures
+gate-resume	core/fixtures/gate-resume
 gate-resume	core/fixtures/gate-resume/run.sh
 gate-resume	core/fixtures/gate-resume/seed.sh
 gate-resume	core/hooks/ai-dlc-context-provenance.sh
 gate-resume	core/hooks/ai-dlc-handoff-pending.sh
 gate-resume	core/hooks/ai-dlc-recover.sh
+gate-resume	core/schemas/gate-adjudication-verdict.json
+gate-resume	core/scripts
+gate-resume	core/scripts/.claude
+gate-resume	core/scripts/.git
+gate-resume	core/scripts/core/skills/ai-dlc
 gate-resume	core/scripts/gate-checkpoint.sh
 gate-resume	core/scripts/gate-slice.sh
+gate-resume	core/skills/ai-dlc
+gate-resume	core/skills/ai-dlc/extensions
+gate-resume	core/skills/ai-dlc/overrides
 gate-resume	core/skills/ai-dlc/steps/gate-validation.md
 gate-series-rung	.git
 gate-series-rung	.git/HEAD
@@ -13221,6 +13224,7 @@ write-format-steering-multiformat	core/skills/ai-dlc-update/reconcile/lib.sh
 # digest extract-push-flag-decision 59752e7e8ea6b269678c0a8d5f6ac4313b812f3edda95bad22c6994fc9a430f4
 # digest fold-architect-ledger-join-mutants 1939d7bea4f2daeaf00b22feeaff732d8af339b8ac25703c909ecdd40dc1cd81
 # digest fold-architect-ledger-join-mutants-c a5350d4e34302d4dd8e106b5f532ca3c3bba129167e29618c7ac2bd3f4bf020a
+# digest gate-resume b768b19aa352273daf0f5072f964857d7b51d933ad3cdc3bf6c2ff73f57e870a
 # digest hermetic-runner d2f56113e2d2b3d25015c7f88987c63c762a208d94c9f3aa60651b984822e2e5
 # digest invariant-index c38877552a196895e4e9961dcef31590e3d2a3a729cdcd69fca52fefc54f5f23
 # digest ledger-reverify-shard-mutants 81140f0210e48ca6d629e8f3be8115975b2411ad36c26f08c7b98b5ec12f75c6

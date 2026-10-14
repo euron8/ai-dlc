@@ -176,7 +176,7 @@ whose script checks already pass. Measured on the reference consumer: Check 2's 
 validator failed on a single token after the adjudicator had already been dispatched, and the
 gate paid a second full adjudication for a FAIL a script reports in under a second.
 
-At gate entry, once those pass: generate `gate_nonce` (`<gate_type>-<UTC>`), run
+At gate entry, once those pass: generate `gate_nonce` as `<gate_type>-$(date -u +%Y%m%dT%H%M%SZ)` (`open` refuses any other form), run
 `scripts/ai-dlc/gate-checkpoint.sh --nonce <gate_nonce> open`,
 then READ AND FOLLOW `_gate-procedures.md` "Gate-adjudication dispatch" — dispatch the
 adjudicator `run_in_background`, join its verdict. While it runs, evaluate ONLY the remaining

@@ -43,7 +43,8 @@ set -euo pipefail
 #
 # exit:
 #   0  the operation completed
-#   2  a refusal -- bad usage, unknown verdict token, unwritable state dir, no nonce.
+#   2  a refusal -- bad usage, unknown verdict token, unwritable state dir, no nonce,
+#      or an `open` whose nonce is not `<gate_type>-$(date -u +%Y%m%dT%H%M%SZ)`.
 #      Never 1: this script renders no verdict about the gate, so it has no failure arm
 #      a caller could confuse with a gate FAIL.
 #
@@ -105,7 +106,7 @@ while [ $# -gt 0 ]; do
     --nonce) NONCE="${2:-}"; shift 2 ;;
     --root)  ROOT="${2:-}"; shift 2 ;;
     --self-probe) PROBE=1; shift ;;
-    -h|--help) sed -n '38,47p' "$0" >&2; exit 2 ;;
+    -h|--help) sed -n '/^# usage:/,/^#      a caller could confuse/p' "$0" >&2; exit 2 ;;
     open|close|record|done|list|clear|current)
       ACTION="$1"; shift
       while [ $# -gt 0 ]; do ARGS="${ARGS}${ARGS:+$(printf '\037')}$1"; shift; done
@@ -199,8 +200,20 @@ if [ "$PROBE" = "1" ]; then
   _rows="$(bash "$_me" --root "$_pc" --nonce "$_n" list 2>/dev/null | wc -l | tr -d ' ')"
   [ "$_rows" = "20" ] || { echo "gate-checkpoint SELF-PROBE FAIL: 20 concurrent records landed ${_rows} rows." >&2; exit 2; }
 
+  # Direction 11: `open` refuses a non-canonical nonce and leaves the open gate unchanged;
+  # a canonical one (a hyphenated gate type included) opens; `record` is not gated.
+  if bash "$_me" --root "$_pr" --nonce "implementation-1970-01-01T000004Z" open >/dev/null 2>&1; then
+    echo "gate-checkpoint SELF-PROBE FAIL: a hyphenated-date nonce opened." >&2; exit 2
+  fi
+  _cur="$(bash "$_me" --root "$_pr" current 2>/dev/null || true)"
+  [ "$_cur" = "planning-19700101T000003Z" ] || { echo "gate-checkpoint SELF-PROBE FAIL: a refused open moved current to '${_cur}'." >&2; exit 2; }
+  bash "$_me" --root "$_pr" --nonce "sprint-review-19700101T000005Z" open >/dev/null 2>&1 \
+    || { echo "gate-checkpoint SELF-PROBE FAIL: a canonical sprint-review nonce was refused." >&2; exit 2; }
+  bash "$_me" --root "$_pr" --nonce "probe-free-form" record 1 PASS >/dev/null 2>&1 \
+    || { echo "gate-checkpoint SELF-PROBE FAIL: a non-canonical record was refused; only open is gated." >&2; exit 2; }
+
   [ "$_fail" = "0" ] || { echo "gate-checkpoint SELF-PROBE FAIL: a well-formed record returned non-zero." >&2; exit 2; }
-  echo "gate-checkpoint SELF-PROBE PASS: PASS/SKIP settle, FAIL/PENDING do not, a fresh nonce reads empty, bad verdicts and verdictless rows refuse, re-records replace, current reads the OPEN marker (not mtime) and open/close move it, 20 concurrent records land 20 rows."
+  echo "gate-checkpoint SELF-PROBE PASS: PASS/SKIP settle, FAIL/PENDING do not, a fresh nonce reads empty, bad verdicts and verdictless rows refuse, re-records replace, current reads the OPEN marker (not mtime) and open/close move it, open refuses a non-canonical nonce, 20 concurrent records land 20 rows."
   exit 0
 fi
 
@@ -247,8 +260,33 @@ esac
 
 LEDGER="${LEDGER_DIR}/${NONCE}.tsv"
 
+# `open` ADMITS ONLY THE CANONICAL NONCE, BEFORE ANY WRITE. The nonce is the stem of the
+# adjudication verdict path, and `validate-gate-adjudication.sh --series` orders a gate's
+# passes by it and refuses a nonce off the schema's `patterns.gate_nonce`. A lead that mints
+# `implementation-2026-10-11T083048Z` (from `date -u +%Y-%m-%dT…`) used to open it here with
+# exit 0, so the first program to notice was the one judging the finished gate. NONCE_RE is
+# that schema pattern with `\d` spelled `[0-9]` (ERE has no `\d`); core/fixtures/gate-resume
+# compares the two texts. Only `open` refuses: `record`/`done`/`list`/`close`/`clear` key a
+# ledger that already exists, and a resume must still be able to read one opened earlier.
+# FALSE-POSITIVE SET, measured on the reference consumer's real history: 94 of 94 opens and
+# 87 of 87 checkpoint ledgers carry the strict form except the 2 non-canonical opens this
+# refusal exists for -- both true positives. The set reached zero by keying on the schema's
+# closed gate-type list rather than any `<word>-` prefix, which would admit
+# `deploy-validate-s304-20260822T005500Z`.
+NONCE_RE='^(planning|story|implementation|sprint-review|retro)-[0-9]{8}T[0-9]{6}Z$'
+_require_canonical_nonce() {
+  if [[ "$NONCE" =~ $NONCE_RE ]]; then return 0; fi
+  echo "gate-checkpoint: FAIL -- refusing to open non-canonical nonce ${NONCE}." >&2
+  echo "  The canonical form is <gate_type>-YYYYMMDDTHHMMSSZ, gate_type one of planning, story," >&2
+  echo "  implementation, sprint-review, retro (e.g. implementation-20260715T140322Z)." >&2
+  echo "  Mint it as: <gate_type>-\$(date -u +%Y%m%dT%H%M%SZ) -- no hyphens or colons in the time." >&2
+  echo "  Nothing was written; the previously open gate (if any) is unchanged." >&2
+  exit 2
+}
+
 case "$ACTION" in
   open)
+    _require_canonical_nonce
     mkdir -p "$LEDGER_DIR" 2>/dev/null || { echo "gate-checkpoint: FAIL -- cannot create ${LEDGER_DIR}." >&2; exit 2; }
     _t="${OPEN_MARKER}.$$"
     printf '%s\n' "$NONCE" > "$_t" && mv "$_t" "$OPEN_MARKER" \
