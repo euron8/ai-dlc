@@ -1,0 +1,34 @@
+adversary                constant ('opus', 'medium') n=337
+analyst                  constant ('sonnet', 'medium') n=25
+architect
+   10-05T15:57 → 10-11T09:51  ('opus', 'high')           n=65
+   10-12T01:35 → 10-12T06:00  ('fable', 'medium')        n=11
+   10-12T08:57 → 10-12T08:57  ('opus', None)             n=18
+   10-12T19:07 → 10-14T07:54  ('opus', 'medium')         n=51
+code-reviewer
+   10-09T06:12 → 10-10T18:58  ('sonnet', 'high')         n=42
+   10-10T21:08 → 10-14T07:47  ('opus', 'medium')         n=61
+code-reviewer-escalated  constant ('opus', 'high') n=158
+dev
+   10-05T15:57 → 10-10T19:01  ('sonnet', 'medium')       n=61
+   10-10T20:04 → 10-11T11:22  ('haiku', 'high')          n=39
+   10-11T11:56 → 10-14T08:04  ('haiku', 'medium')        n=104
+dev-escalated
+   10-10T07:44 → 10-10T07:44  ('sonnet', 'high')         n=1
+   10-11T13:39 → 10-14T08:28  ('sonnet', 'medium')       n=6
+gate-adjudicator         constant ('sonnet', 'medium') n=128
+general-purpose          constant ('inherit', None) n=1
+pm                       constant ('sonnet', 'medium') n=87
+pm-escalated
+   10-05T23:37 → 10-05T23:37  ('sonnet', 'high')         n=1
+   10-12T18:23 → 10-12T18:23  ('opus', 'medium')         n=1
+protected-path-editor    constant ('sonnet', 'medium') n=3
+qa                       constant ('sonnet', 'medium') n=176
+remediator
+   10-05T17:02 → 10-09T05:48  ('sonnet', 'high')         n=115
+   10-11T12:58 → 10-14T11:06  ('sonnet', 'medium')       n=150
+sm                       constant ('sonnet', 'medium') n=46
+tea
+   10-05T15:57 → 10-11T10:48  ('sonnet', 'high')         n=87
+   10-12T01:35 → 10-14T08:05  ('sonnet', 'medium')       n=63
+ux                       constant ('sonnet', 'medium') n=1

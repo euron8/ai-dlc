@@ -68,8 +68,8 @@ sprint,bucket,step,role,model,spawns,span_h,compactions,in,cw,cr,out,calls
 317,pipeline,implementation,code-reviewer,_all,30.0,5.031,0.0,0,0,0,0,0
 317,pipeline,implementation,code-reviewer,opus,0,0,0,6730.0,1504715.0,23639188.0,228392.0,229.0
 317,pipeline,implementation,code-reviewer,sonnet,0,0,0,12366.0,3424834.0,38566741.0,386967.0,422.0
-317,pipeline,implementation,code-reviewer-escalated,_all,62.0,12.489,0.0,0,0,0,0,0
-317,pipeline,implementation,code-reviewer-escalated,opus,0,0,0,66137.0,11721006.0,230120608.0,2350830.0,1890.0
+317,pipeline,implementation,code-reviewer-escalated,_all,73.0,18.354,0.0,0,0,0,0,0
+317,pipeline,implementation,code-reviewer-escalated,opus,0,0,0,81815.0,15387674.0,317077171.0,3591378.0,2425.0
 317,pipeline,implementation,code-reviewer-escalated,synthetic,0,0,0,0.0,0.0,0.0,0.0,3.0
 317,pipeline,implementation,dev,_all,19.0,10.151,0.0,0,0,0,0,0
 317,pipeline,implementation,dev,haiku,0,0,0,11233.0,1741915.0,59721262.0,1946943.0,373.0
@@ -133,8 +133,6 @@ sprint,bucket,step,role,model,spawns,span_h,compactions,in,cw,cr,out,calls
 317,pipeline,stories-test-strategy,architect,_all,23.0,8.314,0.0,0,0,0,0,0
 317,pipeline,stories-test-strategy,architect,opus,0,0,0,26280.0,3971246.0,79324598.0,2059106.0,762.0
 317,pipeline,stories-test-strategy,architect,synthetic,0,0,0,0.0,0.0,0.0,0.0,1.0
-317,pipeline,stories-test-strategy,code-reviewer-escalated,_all,11.0,5.866,0.0,0,0,0,0,0
-317,pipeline,stories-test-strategy,code-reviewer-escalated,opus,0,0,0,15678.0,3666668.0,86956563.0,1240548.0,535.0
 317,pipeline,stories-test-strategy,dev,_all,24.0,3.839,0.0,0,0,0,0,0
 317,pipeline,stories-test-strategy,dev,sonnet,0,0,0,12214.0,1941944.0,31587345.0,730799.0,418.0
 317,pipeline,stories-test-strategy,dev,synthetic,0,0,0,0.0,0.0,0.0,0.0,3.0

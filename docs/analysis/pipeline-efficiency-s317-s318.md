@@ -6,7 +6,11 @@ reason for existing, so optimisation targets can be chosen from data.
 
 Data and the scripts that produced every figure are in
 [`pipeline-efficiency-s317-s318/`](pipeline-efficiency-s317-s318/). Every table below is
-rendered by `scripts/render.py` from those CSVs; no figure is hand-typed.
+rendered by `scripts/render.py` from those CSVs. The one exception is the "Role efficacy" section,
+whose figures come from four per-phase analyses. Their scripts and joined data are in
+[`pipeline-efficiency-s317-s318/role-efficacy/`](pipeline-efficiency-s317-s318/role-efficacy/)
+(`planning`, `stories`, `impl`, `lead`). They read from the session scratchpad paths written inside
+them, so they are evidence of the derivation, not a re-runnable pipeline.
 
 ## Population and method
 
@@ -93,10 +97,11 @@ qualitatively. Byte sizes of variable hook injections were not measured.
 - **The lead is mostly waiting.** In pipeline sessions, the waiting-on-agents column is 46 h of s317's
   113 h elapsed and 36 h of s318's 65 h. Subagents themselves ran 72.1 h of `Bash`, 12.4 h of that
   in `sleep`.
-- **Planning dominates and implementation does not.** stories-test-strategy is the most expensive
-  step in both sprints. The planning chain (carry-over-evaluation through stories-test-strategy, with
-  gates) is 57% of s317 pipeline-bucket spend ($1,227 of $2,172) and 59% of s318 ($994 of $1,675).
-  Implementation plus its gate is 27% and 25%.
+- **Planning dominates; implementation and stories are the two largest single steps.** With each
+  step's gate folded in, implementation is $659 (s317) and $422 (s318), and stories-test-strategy is
+  $622 and $414. The two are within 6% and 2% of each other. The planning chain (carry-over-evaluation
+  through stories-test-strategy, with gates) is 53% of s317 pipeline-bucket spend ($1,156 of $2,172)
+  and 64% of s318 ($1,073 of $1,675). Implementation plus its gate is 30% and 25%.
 
 ## Per-step table
 
@@ -112,9 +117,9 @@ qualitatively. Byte sizes of variable hook injections were not measured.
 | 317 | gate-validation[requirements] | 0.2 | 0.2 | 0.0 | 0.0 | 1 | 8 | 3 | 95% | 0.1 | 5 |
 | 317 | architecture | 10.9 | 5.3 | 5.2 | 0.4 | 3 | 154 | 306 | 95% | 9.5 | 286 |
 | 317 | gate-validation[architecture] | 0.3 | 0.3 | 0.0 | 0.0 | 0 | 11 | 3 | 97% | 0.1 | 5 |
-| 317 | stories-test-strategy | 16.7 | 9.1 | 6.7 | 0.9 | 5 | 251 | 750 | 94% | 18.6 | 688 |
+| 317 | stories-test-strategy | 14.6 | 7.3 | 6.4 | 0.9 | 4 | 236 | 658 | 94% | 17.1 | 617 |
 | 317 | gate-validation[stories-test-strategy] | 0.3 | 0.3 | 0.0 | 0.0 | 0 | 10 | 2 | 97% | 0.1 | 5 |
-| 317 | implementation | 23.9 | 16.9 | 6.8 | 0.1 | 7 | 324 | 547 | 94% | 9.1 | 375 |
+| 317 | implementation | 26.0 | 18.7 | 7.1 | 0.1 | 8 | 340 | 639 | 94% | 10.5 | 446 |
 | 317 | gate-validation[implementation] | 16.3 | 8.7 | 7.6 | 0.0 | 13 | 225 | 295 | 95% | 4.4 | 213 |
 | 317 | sprint-review | 5.6 | 5.1 | 0.5 | 0.0 | 4 | 86 | 561 | 93% | 12.4 | 265 |
 | 317 | gate-validation[sprint-review] | 1.5 | 0.9 | 0.6 | 0.0 | 1 | 25 | 12 | 95% | 0.3 | 6 |
@@ -148,7 +153,7 @@ Notes on reading it:
 
 - **Implementation is under-attributed.** In both sprints it overlaps its own gate segment, because
   the lead re-reads `gate-validation.md` per story during implementation. Read
-  `implementation` and `gate-validation[implementation]` together: s317 40.2 h and $588, s318 11.8 h
+  `implementation` and `gate-validation[implementation]` together: s317 42.3 h and $659, s318 11.8 h
   and $422 so far.
 - **Steps that did not run, by variant.** discovery, research-requirements, codebase-inventory,
   deep-codebase-analysis, doc-reconciliation, doc-repair-backfill, bug-investigation and
@@ -210,9 +215,9 @@ min (p90 60.8) and 2.56 M; code-reviewer-escalated 11.4 min and 3.67 M; architec
 
 | Sprint | Step (spawning segment) | Role | Spawns | API-equiv $ |
 |---|---|---|--:|--:|
+| 317 | implementation | code-reviewer-escalated | 73 | 259 |
 | 317 | stories-test-strategy | adversary | 99 | 216 |
 | 318 | requirements | adversary | 76 | 188 |
-| 317 | implementation | code-reviewer-escalated | 62 | 187 |
 | 318 | implementation | code-reviewer-escalated | 64 | 178 |
 | 318 | stories-test-strategy | adversary | 59 | 129 |
 | 317 | sprint-review | architect | 27 | 124 |
@@ -221,7 +226,6 @@ min (p90 60.8) and 2.56 M; code-reviewer-escalated 11.4 min and 3.67 M; architec
 | 317 | stories-test-strategy | remediator | 73 | 82 |
 | 317 | sprint-review | tea | 27 | 74 |
 | 318 | stories-test-strategy | tea | 21 | 72 |
-| 317 | stories-test-strategy | code-reviewer-escalated | 11 | 72 |
 | 317 | implementation | qa | 62 | 62 |
 | 317 | gate-validation[implementation] | code-reviewer-escalated | 18 | 61 |
 | 317 | architecture | adversary | 19 | 60 |
@@ -235,6 +239,7 @@ min (p90 60.8) and 2.56 M; code-reviewer-escalated 11.4 min and 3.67 M; architec
 | 318 | carry-over-evaluation | architect | 10 | 47 |
 | 317 | implementation | code-reviewer | 30 | 47 |
 | 317 | carry-over-evaluation | remediator | 14 | 46 |
+| 317 | architecture | tea | 10 | 45 |
 
 ## Step-by-step: what it does, why it exists, what it cost
 
@@ -292,7 +297,7 @@ Rationale is cited to the distribution source. "FC" is a step file's `Failure ca
 - **Measured:** the second most expensive planning step in s317. Its convergence is recorded as
   14, then 4, then 0 majors over three adversary passes (graph pipeline-snapshot-history:130).
 
-### stories-test-strategy (s317 $693 / 17.0 h; s318 $414 / 25.6 h). **The most expensive step in both sprints.**
+### stories-test-strategy (s317 $622 / 14.9 h; s318 $414 / 25.6 h). **The largest planning step in both sprints.**
 - **Sub-steps:** 1 implementation readiness, with its reference subsections (routing tags,
   discriminating-AC standard, layered AC accounting, pre-flight, out-of-scope, smoke AC precision);
   2 epics and stories; 2a/2b propagate locked requirements and `architecture_refs`; 3 sprint
@@ -303,8 +308,11 @@ Rationale is cited to the distribution source. "FC" is a step file's `Failure ca
   the whole document). 2a is Rule 13. 4 is Rule 8. **The file carries no FC lines, and the other
   sub-steps have no stated rationale.**
 - **Measured:**
-  - s317: 99 adversary spawns ($216), 44 tea ($120), 23 architect ($89), 73 remediator ($82) and
-    11 code-reviewer-escalated ($72).
+  - s317: 99 adversary spawns ($216), 44 tea ($120), 23 architect ($89) and 73 remediator ($82).
+    One segment is relabelled to implementation (`RELABEL` in `scripts/analyze.py`). In session
+    `1feefd46` the lead re-read `stories-test-strategy.md` mid-implementation, 10-10T08:53–10:53Z, and
+    all 11 spawns in that window are "gate-N cross-N" reviews of story 2.5 (code-reviewer-escalated,
+    $72).
   - s318: an 18.3 h agent-wait. The longest single wait is **4.1 h** (10-13T06:42Z, session
     `ed2d9d82`), which matches the flow log's 251-min idle gap and a 3-pass adversarial series
     (p1 29 majors, then NOT_MET, then MET at p3; graph HIST:110).
@@ -315,7 +323,7 @@ Rationale is cited to the distribution source. "FC" is a step file's `Failure ca
 - **Why:** ui-direction.md:10-11. It is non-blocking per Rule 10.
 - **Measured:** negligible. Did not run in s317.
 
-### implementation + gate-validation[implementation] (s317 $588 / 40.2 h; s318 $422 / 11.8 h to date)
+### implementation + gate-validation[implementation] (s317 $659 / 42.3 h; s318 $422 / 11.8 h to date)
 - **Sub-steps:**
   - 1 context.
   - 2 agent team (Rule 19 bindings, `_dispatch-protocol`).
@@ -330,7 +338,7 @@ Rationale is cited to the distribution source. "FC" is a step file's `Failure ca
   dispatch protocol's wave-DAG has an FC at `_dispatch-protocol.md:167` ("silent over-serialization …
   wasting wall-clock").
 - **Measured:**
-  - **code-reviewer-escalated (Opus, effort high) is the largest cell in both sprints:** $187 for 62
+  - **code-reviewer-escalated (Opus, effort high) is the largest cell in both sprints:** $259 for 73
     spawns in s317 and $178 for 64 in s318. That is more than all dev work combined.
   - **Review loops:** stories with more than one code-review pass were 8 of 21 (s317) and 8 of 13
     (s318). Extra review passes totalled 19 and 21 (`docs/reviews/s31{7,8}/` `-pN` suffixes).
@@ -445,12 +453,14 @@ None. No measured cost blocks the pipeline from completing.
 
 ### DEFECT
 
-1. **The review side outspends the build side by 30–40×, and code-reviewer-escalated is the largest
-   single cell.** In s318, review roles cost $1,258 against dev $33. code-reviewer-escalated runs
-   Opus at effort **high** (`templates/settings.json.template` `aiDlcRoles`) and costs $178–187 per
-   sprint in implementation alone, with a median of 3.67 M tok and 30 calls per spawn. The template
-   binding is the lever; whether escalated review earns high effort is unmeasured.
-   → `templates/settings.json.template`, `core/skills/ai-dlc/steps/implementation.md:134`.
+1. **The review side outspends the build side by 30–40×, and full fan-out re-review is the driver.**
+   In s318, review roles cost $1,258 against dev $33. code-reviewer-escalated (Opus/high, never
+   rebound) cost $433 across 146 implementation-window spawns. Its catches were real: s318 1.1's
+   address-validation bypass, 1.2's untested transfer amount, and s317 2.6's dead code. The cost came
+   from **process, not model**. In s317 every re-review was a full fan-out at $20–40 a pass (2.6: five
+   passes, about $149; 1.2: four, about $115). In s318, passes from the third onward were delta
+   reviews at $1–3. That switch saved more than any binding change measured (see "Role efficacy").
+   → `core/skills/ai-dlc/steps/implementation.md:309-330` (gate-1 sharding).
 2. **stories-test-strategy's validation cycle is the most expensive sub-step in the pipeline, and it
    carries no stated rationale for its fan-out shape.** Seats × story ordinals × adversary passes:
    s317 99 adversary, 44 tea and 73 remediator spawns; s318 an 18.3 h agent-wait including a 4.1 h
@@ -483,14 +493,43 @@ None. No measured cost blocks the pipeline from completing.
 7. **First-pass gate FAILs recur on bookkeeping checks.** These include Check 22 (waiver without
    `tool_use_id`, twice in s317), Check 21 (Strategy Test ID cells, sprint-review in both sprints),
    Check 5 (derived-story drift) and Check 6 (stale story copies). Each costs a fresh nonce and
-   15–60 min. These are checks an author-side script could satisfy before the gate opens.
-   → `gate-validation.md` Checks 5, 6, 21, 22.
+   15–60 min. These are checks an author-side script could satisfy before the gate opens. Check 21
+   traces to **dev-filled** `Resolves to` cells, not to tea's strategy: `stories-test-strategy.md:645-649`
+   leaves them "for the dev", and no review gate re-checks the table after a later rename.
+   → `gate-validation.md` Checks 5, 6, 21, 22; `stories-test-strategy.md:645-649`.
+8. **Rework loops come mostly from evidence and bookkeeping, not code.** 22 of 33 implementation
+   rework verdicts (67%) were evidence-format or bookkeeping: captures with no command or sha,
+   uncommitted or gitignored RED files, empty headings, a status not flipped. This held under every
+   dev binding and every reviewer tier.
+   → `core/team-roles/dev.md` handoff contract.
+9. **Repairs create the defects later adversary passes find.** In every *planning* series read
+   (carry-over, requirements, architecture), in both sprints, each MAJOR on pass 2 or 3 sat in text
+   the previous repair wrote or half-fixed: 19 traced, 16 read in full, and one true re-find. Those
+   passes cost about $39 extra in s318 planning. In *stories* the repair-introduced share is a subset,
+   by the adversary's own label: s317 p1 0/11, p2 2/9, p3 2/4; s318 p1 16/30, p2 8/19, p3 1/2. The
+   pass-1 rise (0/11 → 16/30) follows the stories party repair. The remediator can also set aside a party major as "outside this shard",
+   which is how C-18 (sweep_id never shown) reached sprint-review.
+   → `core/team-roles/remediator.md`; `_gate-procedures.md:753` (adversarial repair dispatch).
+10. **Lead-caused gate waste recurs under every lead model.** There were 7 discarded nonces costing
+    $13.18 and 117 adjudicator-minutes, at about 0.08 per active hour on both Sonnet and the local
+    qwen lead; 3 of the 7 were the same Check 22 waiver paperwork. The lead also re-sent 90 of 179
+    spawns rejected at the concurrency cap, against rejection text that says "Do not retry".
+    Other conduct: an inline product edit for ff1 (qwen/medium lead, later reverted), two wrong-base
+    reconcile PRs reverted (#1181, #1184, Opus pre-step), and three s318 merges without the Rule 32
+    advisor call.
+    → `gate-validation.md` Check 22; `RB/rule-28.md:155` (waves).
+11. **Dev escalation has no capital-path criterion.** s318 story 1.3 went to plain Haiku dev. The
+    operator questioned it, the lead conceded the routing had no risk basis, and the story was
+    re-dispatched to dev-escalated. The lead filed this in graph's ledger as a push candidate
+    (`PC-S318-DEV-ESCALATION-HAS-NO-CAPITAL-PATH-CRITERION…`).
+    → `stories-test-strategy.md:38-70` (routing tags).
 
 ### NOTE
 
-- **Efficient:** dev on Haiku (91 spawns, 381 M tok, $13 in s318); gate-adjudicator (median 3.1 min,
-  $0.46–0.55 per spawn); every `gate-validation[…]` planning gate (about $5 and ≤20 min each); route;
-  ui-direction; handoff; and the lead's cache-read ratio (97–98%).
+- **Efficient:** gate-adjudicator (median 3.1 min, $0.46–0.55 per spawn, no verdict overturned on
+  adjudicator error); every `gate-validation[…]` planning gate (about $5 and ≤20 min each); route;
+  ui-direction; handoff; and the lead's cache-read ratio (97–98%). Haiku dev is *cheap* per spawn, but
+  whether it is *efficient* is answered in "Role efficacy" below, not by its spawn cost.
 - **Cache writes (37% of spend) scale with spawn count, not with work.** Any reduction in spawn count
   pays about 34K cw tokens per spawn avoided.
 - **ai-dlc-update reconcile** cost 38.2 h and $140 in s317 (20 sessions), against 5.0 h and $38 in
@@ -502,6 +541,74 @@ None. No measured cost blocks the pipeline from completing.
   → `core/hooks/ai-dlc-escalation-delivery.sh`.
 - **Rationale gaps** (no stated reason found): stories-test-strategy sub-steps, architecture 2a–2d,
   sprint-review party fan-out shape, Rules 1, 5, 6, 9, 10 and 14.
+
+## Role efficacy: did each model and effort binding produce work that survived?
+
+The operator retuned subagent model and effort during these sprints to find a more efficient
+setting. Each change is a dated **change point** in the spawn ledger (`model_bound`, `effort_bound`,
+ordered by spawn start; `out/binding-changepoints.txt`). Each change is read below as an experiment.
+The outcome is the cost of work that passed, **including the rework it caused downstream**, not the
+cost per spawn.
+
+Four read-only analyses produced this section, one per phase group: planning; stories, ui-direction
+and sprint-review; implementation and deploy; and the lead with cross-cutting roles. Their scripts
+and joined data are in `pipeline-efficiency-s317-s318/role-efficacy/`.
+
+**The main confound.** Every change point except the dev and code-reviewer switches falls between
+the sprints. For those roles "before vs after" is also "s317 vs s318", which changes the subject
+matter, the review sharding (requirements pass 1 was one reviewer in s317 and 19 shards in s318),
+duplicate merging, the story author (sm to pm), and advisor availability (39 of 174 s318 adversary
+runs reported the advisor rate-limited). Baseline roles that never changed (adversary, qa, pm, sm,
+gate-adjudicator) moved as much as the changed roles in several measures. Read every verdict below
+at its stated confidence.
+
+### Subagent binding changes
+
+| Role | Change (UTC) | n before → after | What moved | Verdict | Confidence |
+|---|---|---|---|---|---|
+| dev | sonnet/medium → haiku/high (10-10T20:04) → haiku/medium (10-11T11:56) | stories 14 → 4 → 10 | First-pass clean 8/14 → 3/4 → 5/10. Substantive-defect rework 3/14 → 0/4 → 1/10. Dev $ per story $3.89 → $0.40 → $0.79. | No measured rise in code defects on Haiku. All four haiku/high stories were small and non-capital, and capital-path s318 stories went to dev-escalated. Haiku/medium's measured weakness is **incomplete delivery**: 2.4 had no commit, 2.3's rework was incomplete, and 1.5 had a false model trailer. | LOW |
+| dev (as a party seat) | sonnet → haiku | planning seats 15 → 40 | Cost per repaired finding 10–25× lower. 11 of 40 Haiku finals self-report a contract breach or an unverified claim, against 0 of 15 for Sonnet. Only seat with not-reproduced findings (3 of 46). | Cheap, but its findings need verification. | MEDIUM |
+| code-reviewer | sonnet/high → opus/medium (10-10T21:08) | spawns 28 → 39; stories first-reviewed 10 → 14 | First-pass NEEDS_REWORK 4/10 → 3/14. Same $ per spawn ($1.86 → $1.84), 44% faster (14.4 → 8.0 min). Substantive escapes to QA 0 → 0. | Faster at equal cost, no quality loss seen. Opus samples ran with the advisor rate-limited more often. | LOW–MEDIUM |
+| architect | opus/high → fable/medium (10-12T01:35) → opus/medium (10-12T19:07) | 65 → 11 → 51 (+18 with no effort recorded) | Fable cost about 6× opus/high per repaired finding in carry-over, with no better result. Opus medium vs high: cost per seat down 34% (stories) and 41% (sprint-review). 25 of 25 s318 majors acted on, and it was one of two roles finding majors no other seat found. | Opus/medium holds quality at lower cost; Fable/medium was the costliest. | LOW–MEDIUM |
+| tea | sonnet/high → sonnet/medium (10-12T01:35) | 87 → 63 | Findings and majors per seat flat. Median time 26.5 → 3.1 min (planning). Abandoned runs 2 → 0. No later defect traced to tea's strategy, at either effort. | No measurable quality loss. | MEDIUM |
+| remediator | sonnet/high → sonnet/medium (between 10-09T05:48 and 10-11T12:58) | 115 → 150 | Median time 10.8 → 1.8 min. Repairs that held: about 90% at both settings. **Repair-introduced majors rose:** 0.12 → 0.25 per repaired major (planning) and 0/11 → 16/30 of stories pass-1 majors. About $39 of extra third passes in s318 planning, against about $13 saved. | Cheaper per call, but more collateral damage; possibly net negative. Confounded by author, brief and sharding. | LOW–MEDIUM |
+| dev-escalated | sonnet/high → sonnet/medium | 1 → 4 | 2 of 3 after-stories needed substantive rework. | Not comparable at n=1 before. | LOW |
+| pm-escalated | sonnet/high → opus/medium | 1 → 1 | The two spawns did different tasks. | Not an experiment. | — |
+
+Baseline roles that never changed: adversary (opus/medium), qa, pm, sm, analyst and gate-adjudicator
+(all sonnet/medium), and code-reviewer-escalated (opus/high).
+
+### Lead model
+
+The lead ran **Sonnet 5.5** for most pipeline work in both sprints. A **local `qwen38flash-mlx`**
+model led 3,546 API calls (unique `message.id`; 9,423 transcript lines) of s317 pipeline work: route
+through stories on 10-08, then implementation, gate 3, sprint-review and deploy-validate from 10-10 to
+10-11. It is priced at $0, so the dollar tables understate s317's lead cost. Opus led only a handful
+of pipeline calls (68 transcript lines). The per-regime guard rates below are per active hour, which
+is unaffected by the line-versus-call distinction. The one lead *effort*
+change was qwen xhigh → medium at 10-11T12:42, which coincides with entering deploy-validate.
+
+Cost-bearing guard events (handoff guard, ACK denials, cap rejections) ran 3.25/h on plain Sonnet,
+about 1.4–1.7/h on Sonnet 1M and 0.56/h on qwen/xhigh. Each regime ran different phases, so these
+rates measure phase mix as much as model. Lead-caused nonce discards ran at about 0.08 per active hour
+on both Sonnet and qwen. **No lead-model effect is separable** (LOW).
+
+### What the bindings did *not* explain
+
+The largest measured rework sources recur under every binding:
+
+- **Evidence and bookkeeping.** 22 of 33 implementation rework verdicts (DEFECT 8).
+- **Repair-created defects** driving extra adversary passes (DEFECT 9).
+- **Full fan-out re-review** at $20–40 a pass in s317, against $1–3 delta re-review in s318 (DEFECT 1).
+- **Lead gate paperwork** (DEFECT 10).
+- **Dev-filled Strategy Test ID cells** that nothing re-checks (DEFECT 7).
+
+One case does tie a loop to a dev: s317 story 2.6 (sonnet/medium). Two of its four rework rounds were
+caused by the previous fix deleting other tests (MEDIUM).
+
+**Deploy fix-forwards ff1–ff3 trace to no reviewer or QA escape.** ff1 exposed a path that predated
+the sprint, ff2 is an enhancement ("Incident L does not reproduce"), and ff3 is a changed operator
+requirement (LOW–MEDIUM).
 
 ## Relation to the v0.380.0 investigation
 

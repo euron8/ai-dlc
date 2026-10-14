@@ -9,7 +9,10 @@ owner = json.load(open(os.path.join(OUT, "owner.json")))
 # Segment relabels, each justified by the subagent descriptions spawned inside the segment.
 # f849d75f "retro": 37 spawns, all "Elicitation part N" / "Elicitation repair N" -- the
 # requirements validation cycle; the lead Read retro.md mid-requirements (10:04Z).
-RELABEL = {("f849d75f-ab2c-43f9-a510-37a2db2b498a", "retro"): "requirements"}
+# 1feefd46 "stories-test-strategy" 08:53-10:53Z on 10-10: the lead re-read the stories step file
+# mid-implementation; its 11 spawns are "gate-# cross-#" implementation reviews (story 2.5).
+RELABEL = {("f849d75f-ab2c-43f9-a510-37a2db2b498a", "retro"): "requirements",
+           ("1feefd46-c902-4fb2-8d42-04c14ed43bc7", "stories-test-strategy"): "implementation"}
 for s in segs:
     if s["kind"] == "lead": s["step"] = RELABEL.get((s["sess"], s["step"]), s["step"])
 owner = {k: [v[0], RELABEL.get((v[0], v[1]), v[1]), v[2]] for k, v in owner.items()}
