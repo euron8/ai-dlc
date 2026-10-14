@@ -1114,7 +1114,7 @@ was measured, and the two are indistinguishable afterwards. Measured in the
 reference consumer: 12 consecutive Check 14 rows reading `done after this entry | —`,
 across a sprint in which the snapshot went from 99% to 156% of budget.
 
-Exit 1 → **Check 14 FAILS**, on either of two independent verdicts:
+Exit 1 → **Check 14 FAILS**, on any of three independent verdicts:
 
 - **Over budget.** Trim the snapshot (the `Recent Activity` section holds the last
   ~10 entries and nothing more; superseded narrative and handoff appendices move to
@@ -1134,6 +1134,12 @@ Exit 1 → **Check 14 FAILS**, on either of two independent verdicts:
   shadowing this check. The canonical set is data, not a case list. Do NOT write an
   override to widen it: an override replaces this section in full, so it freezes every
   other line here at its `base_sha` and silently shadows away later fixes to them.
+
+- **A stamp later than the current UTC time.** The validator names each `Recent
+  Activity` stamp or In-Flight `dispatched-at` cell more than 10 minutes ahead of
+  `date -u`. Rewrite each to `date -u`, keep line order, and add one `CLOCK
+  CORRECTION` line to `Recent Activity`, without asking. Ranges, `~` and `x`
+  placeholders, and date-only stamps are not checked.
 
 Then re-run Check 14 and Check 15.
 

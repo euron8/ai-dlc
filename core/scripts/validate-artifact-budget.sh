@@ -178,6 +178,10 @@ while [ $# -gt 0 ]; do
     # and nowhere else. A ceiling nobody is ever blocked by is a number, not a ceiling.
     #
     # Repeatable. `--fail-on a --fail-on b` hardens both.
+    #
+    # `--fail-on whole-read-pool` is the one non-basename token. It hardens the POOL row,
+    # and its hard verdict is "over AND no OPEN carry-over item cites WHOLE-READ-POOL"
+    # (see the breach block). No basename ever hardens the pool row.
     --fail-on)        FAIL_ON="$FAIL_ON ${2:-}"; shift 2 ;;
     --warn-only)      WARN_ONLY=1; shift ;;
     --quiet)          QUIET=1; shift ;;
@@ -199,6 +203,25 @@ is_fail_on() {
     *" $(basename "$1") "*) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+# pool_open_item <backlog> -> prints the heading of the first OPEN item citing the pool.
+# An item is a `### ` block (the CO-S<N>-<id> grammar carry-over-evaluation.md owns); it
+# is OPEN when a `Status:` line in it reads OPEN as its leading word (`**Status:** OPEN`,
+# `**Status:** OPEN.` and the like), and it cites the pool when the stable token
+# WHOLE-READ-POOL appears in its heading or body. A CLOSED or PARTIAL item carrying the
+# token does not count: a closed record is not an outstanding instruction to anybody.
+pool_open_item() {
+  [ -f "$1" ] || return 0
+  LC_ALL=C awk '
+    function done_item() { if (h != "" && open && cites) { print h; found = 1; exit } }
+    /^### / { done_item(); h = $0; open = 0; cites = 0 }
+    /^## /  { done_item(); h = ""; open = 0; cites = 0; next }
+    h == "" { next }
+    /WHOLE-READ-POOL/ { cites = 1 }
+    /(^|[^A-Za-z])Status:?(\*\*)?:?[[:space:]]*(\*\*)?[[:space:]]*OPEN([^A-Za-z]|$)/ { open = 1 }
+    END { if (!found) done_item() }
+  ' "$1" 2>/dev/null
 }
 
 # The verdict posture for ONE artifact: hard when --fail-on names it, otherwise
@@ -990,6 +1013,104 @@ check_inflight_status() {
       done
 }
 
+# -----------------------------------------------------------------------------
+# A SNAPSHOT STAMP LATER THAN THE CLOCK IS FABRICATED, AND NOTHING COMPARED THEM.
+#
+# A `## Recent Activity` line and an In-Flight `dispatched-at` cell each record WHEN
+# something happened. One stamped after the current UTC time records an event that has
+# not happened yet. Measured on the reference consumer across sprints 317-318: 62 of 162
+# snapshot commits carried a stamp more than 5 minutes after their own commit time, and 0
+# of 20 resumes saw one -- the defect is born at snapshot WRITE time, which is why this
+# arm lives in the branch Check 14 runs at every gate write and not only at the resume.
+#
+# THE GRAMMAR IS NARROW ON PURPOSE. Only a single full stamp is checked:
+# `YYYY-MM-DDTHH:MM(:SS)?Z`, NOT followed by `-`, an en dash, an arrow or a digit, and
+# NOT preceded by `~`, `-`, an en dash or an arrow. Everything else is skipped:
+#   a range (`T09:55Z-10:45Z`, `T09:55-10:45Z`) -- the end is a plan, not a record, and
+#     the `-HH:MMZ` suffix must never be read as a UTC offset;
+#   an approximation (`~2026-...`) and an `x` placeholder (`Txx:xxZ`);
+#   a date-only stamp and a bare `T09:55Z` -- neither names an instant.
+# The FP set and how it reached zero are recorded beside FUTURE_SLACK_S below.
+#
+# IN-FLIGHT IS READ BY COLUMN, NEVER BY LINE. The status cell legitimately carries
+# `in-flight, since <stamp>`; only the `dispatched-at` column the header declares is
+# read, located exactly as check_inflight_status locates `status`.
+#
+# THE HISTORY FILE IS NEVER READ. pipeline-snapshot-history.md is write-only (Rule 25a);
+# the stamps that matter are the ones a gate, a resume or a recovery will read.
+#
+# Epoch arithmetic is done in awk by hand: BSD awk has no mktime, and BSD date has no -d.
+# -----------------------------------------------------------------------------
+# A stamp more than this many seconds ahead of now is refused. Ten minutes absorbs a lead
+# rounding to the next quarter hour and ordinary clock skew between hosts.
+#
+# THE FALSE-POSITIVE SET IS ZERO, AND HERE IS HOW IT WAS MEASURED. Population: the
+# reference consumer's `git log --since=2026-10-09 -- _bmad-output/pipeline-snapshot.md`,
+# 163 revisions spanning sprints 317-318, each run with now = that revision's own commit
+# time. 69 revisions fire, 214 findings (127 Recent Activity, 87 dispatched-at), 201
+# distinct stamp-lines. Every fire was re-derived independently (BSD `date -j` parse
+# minus the commit time): 0 fall inside the 600 s slack, the smallest lead is 10 min.
+# All 59 distinct fired line texts were read: each records an event (DONE, MERGED,
+# HANDOFF, a dispatch) stamped after the commit that wrote it, none states a plan.
+# THE NARROWING: 54 range forms (`T..Z-HH:MM`, en dash, arrow) sit in the same corpus,
+# and every one is skipped; read as single stamps their END would fire as a plan. The
+# In-Flight status cell's `since <stamp>` is excluded by reading the declared column.
+FUTURE_SLACK_S=600
+check_future_stamps() { # check_future_stamps <file> <rel> <now-epoch>
+  LC_ALL=C awk -v now="$3" -v slack="$FUTURE_SLACK_S" -v ART="$2" '
+    function epoch(t,   y, mo, d, h, mi, s, yy, mm) {
+      y = substr(t, 1, 4) + 0; mo = substr(t, 6, 2) + 0; d = substr(t, 9, 2) + 0
+      h = substr(t, 12, 2) + 0; mi = substr(t, 15, 2) + 0
+      s = (substr(t, 17, 1) == ":") ? substr(t, 18, 2) + 0 : 0
+      yy = (mo <= 2) ? y - 1 : y; mm = (mo > 2) ? mo - 3 : mo + 9
+      return ((365 * yy + int(yy / 4) - int(yy / 100) + int(yy / 400) \
+               + int((153 * mm + 2) / 5) + d - 1 - 719468) * 86400) + h * 3600 + mi * 60 + s
+    }
+    function adj(c) { return (c == "-" || c == "~") }
+    function wide(c3) { return (c3 == "\342\200\223" || c3 == "\342\206\222") }
+    function scan(str, where,   pos, rest, t, a, b, b3, p, p3, ep) {
+      pos = 0
+      rest = str
+      while (match(rest, /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9](:[0-9][0-9])?Z/)) {
+        t = substr(rest, RSTART, RLENGTH)
+        a = pos + RSTART
+        b = a + RLENGTH
+        rest = substr(rest, RSTART + RLENGTH)
+        pos = b - 1
+        p = (a > 1) ? substr(str, a - 1, 1) : ""
+        p3 = (a > 3) ? substr(str, a - 3, 3) : ""
+        b3 = substr(str, b, 3)
+        if (adj(p) || wide(p3)) continue
+        if (substr(str, b, 1) ~ /[-0-9]/ || wide(b3)) continue
+        ep = epoch(t)
+        if (ep - now > slack)
+          printf "FUTURE  %s line %d: %s is %d min ahead of now (%s)\n", ART, NR, t, int((ep - now) / 60), where
+      }
+    }
+    /^## / {
+      sec = $0; sub(/^##[[:space:]]*/, "", sec)
+      ra = (substr(sec, 1, 15) == "Recent Activity")
+      inf = (substr(sec, 1, 19) == "In-Flight Teammates")
+      col = 0; ncols = 0
+      next
+    }
+    ra { scan($0, "Recent Activity"); next }
+    inf && /\|/ {
+      row = $0
+      piped = ($0 ~ /^[[:space:]]*\|/)
+      sub(/^[[:space:]]*\|/, "", row); sub(/\|[[:space:]]*$/, "", row)
+      n = split(row, cell, "|")
+      for (i = 1; i <= n; i++) {
+        c = cell[i]; gsub(/`/, "", c); gsub(/^[[:space:]]+|[[:space:]]+$/, "", c)
+        if (c == "dispatched-at") { col = i; ncols = n; next }
+      }
+      if (!col || col > n) next
+      if (!piped && n != ncols) next
+      scan(cell[col], "In-Flight Teammates dispatched-at")
+    }
+  ' "$1" 2>/dev/null
+}
+
 env_override() {
   # prd.md -> AI_DLC_BUDGET_PRD_MD
   local key
@@ -1292,6 +1413,21 @@ ENTRY_FILE="$TMPROOT/entry-shape"
 MARKER_FILE="$TMPROOT/marker"
 INFLIGHT_FILE="$TMPROOT/inflight"
 STATUS_FILE="$TMPROOT/inflight-status"
+FUTURE_FILE="$TMPROOT/future-stamp"
+
+# THE CLOCK THE FUTURE-STAMP ARM COMPARES AGAINST. `date -u +%s` is the only portable
+# spelling; AI_DLC_SNAPSHOT_NOW_EPOCH replaces it so a fixture can pin "now" and a
+# history sweep can replay each revision against its own commit time. A clock that
+# cannot be read is a refusal, never a skip: a skipped comparison reads exactly like a
+# snapshot with no future stamp in it.
+SNAP_NOW="${AI_DLC_SNAPSHOT_NOW_EPOCH:-}"
+[ -n "$SNAP_NOW" ] || SNAP_NOW="$(date -u +%s 2>/dev/null)"
+case "$SNAP_NOW" in
+  ''|*[!0-9]*)
+    echo "FAIL: cannot read the UTC clock for the snapshot future-stamp check (got '${SNAP_NOW}')." >&2
+    echo "      Set AI_DLC_SNAPSHOT_NOW_EPOCH to a whole number of seconds, or fix \`date -u +%s\`." >&2
+    exit 2 ;;
+esac
 
 # -----------------------------------------------------------------------------
 # THE ENTRY-SHAPE SELF-PROBE, AND IT RUNS BEFORE THE CORPUS.
@@ -1369,6 +1505,51 @@ if _probe_has 'under ## In-Flight Teammates'; then
 fi
 [ "$PROBE_RC" -eq 0 ] || exit 1
 
+# THE FUTURE-STAMP AND POOL-ITEM SELF-PROBES, for the same reason as the one above and
+# with the same posture: fatal, both directions, on mktemp files, before the corpus. Now
+# is pinned to 2026-01-01T00:00:00Z (1767225600) so the probe never depends on the clock.
+#   OFFENDER   a Recent Activity stamp 60 min ahead, a dispatched-at cell 60 min ahead
+#   NEAR-MISS  a range with an offset-shaped suffix, a stamp 5 min ahead, a date-only stamp,
+#              an `x` placeholder, a `~` approximation, and a future `since` in the STATUS
+#              cell -- each a form the arm must skip
+FPROBE="$TMPROOT/probe-future.md"
+{
+  printf '## Recent Activity\n'
+  printf -- '- 2026-01-01T01:00Z OFFENDER-RA\n'
+  printf -- '- 2026-01-01T09:55-10:45Z range, 2026-01-01T09:55Z-10:45Z range, 2026-01-01T00:05Z five ahead, 2026-01-02 date only\n'
+  printf -- '- 2026-01-01Txx:xxZ placeholder, ~2026-01-01T05:00Z approx\n'
+  printf '## In-Flight Teammates\n'
+  printf 'agent | role | deliverable | dispatched-at | status\n'
+  printf -- '--- | --- | --- | --- | ---\n'
+  printf 'dev-a | dev | s1 | 2026-01-01T01:00Z | in-flight\n'
+  printf 'dev-b | dev | s2 | 2025-12-31T23:00Z | in-flight, since 2026-01-01T05:00Z\n'
+} > "$FPROBE"
+FPROBE_OUT="$(check_future_stamps "$FPROBE" probe 1767225600)"
+FPROBE_N="$(printf '%s\n' "$FPROBE_OUT" | grep -c '^FUTURE ')" || FPROBE_N=0
+case "$FPROBE_OUT" in *'line 2:'*'(Recent Activity)'*) FP_RA=1 ;; *) FP_RA=0 ;; esac
+case "$FPROBE_OUT" in *'line 8:'*'dispatched-at)'*) FP_IF=1 ;; *) FP_IF=0 ;; esac
+rm -f "$FPROBE"
+if [ "$FP_RA" -ne 1 ] || [ "$FP_IF" -ne 1 ] || [ "$FPROBE_N" -ne 2 ]; then
+  echo "FAIL: the future-stamp self-probe expected exactly its two OFFENDERS (Recent Activity" >&2
+  echo "  line 2, dispatched-at line 8) and got ${FPROBE_N} finding(s):" >&2
+  printf '%s\n' "$FPROBE_OUT" | sed 's/^/    /' >&2
+  echo "  A missing offender means the arm cannot fire; an extra one means a skipped form" >&2
+  echo "  (range, 5-min slack, date-only, x, ~, status-cell since) is being read." >&2
+  exit 1
+fi
+
+PPROBE="$TMPROOT/probe-backlog.md"
+printf '### CO-S1-A WHOLE-READ-POOL closed\n**Status:** CLOSED\n### CO-S1-B unrelated\n**Status:** OPEN\n### CO-S1-C\n**Filed:** s1. **Status:** OPEN.\nthe WHOLE-READ-POOL is over\n' > "$PPROBE"
+PPROBE_HIT="$(pool_open_item "$PPROBE")"
+printf '### CO-S1-A WHOLE-READ-POOL closed\n**Status:** CLOSED\n### CO-S1-B unrelated\n**Status:** OPEN\n' > "$PPROBE"
+PPROBE_MISS="$(pool_open_item "$PPROBE")"
+rm -f "$PPROBE"
+if [ "$PPROBE_HIT" != "### CO-S1-C" ] || [ -n "$PPROBE_MISS" ]; then
+  echo "FAIL: the pool-item self-probe: found '${PPROBE_HIT}' (want '### CO-S1-C') and, with no" >&2
+  echo "  OPEN item citing WHOLE-READ-POOL, found '${PPROBE_MISS}' (want nothing)." >&2
+  exit 1
+fi
+
 say "bytes/token divisor : ${BPT} (calibrated with validate-reattach-budget.sh; under-counts 5-11% on this population)"
 say "project root        : ${ROOT}"
 say ""
@@ -1385,6 +1566,8 @@ say ""
 # them has.
 # -----------------------------------------------------------------------------
 POOL_APPLIES=0
+POOL_OVER=0
+POOL_BACKLOGS=""
 if [ -z "$ONLY" ]; then
   POOL_APPLIES=1
 else
@@ -1435,6 +1618,8 @@ if [ "$POOL_APPLIES" -eq 1 ]; then
     while IFS='|' read -r tokens rel; do
       POOL_TOTAL=$(( POOL_TOTAL + tokens ))
       POOL_FILES=$(( POOL_FILES + 1 ))
+      case "$rel" in carry-over-backlog.md|*/carry-over-backlog.md) POOL_BACKLOGS="${POOL_BACKLOGS}${rel}
+" ;; esac
       [ "$QUIET" -eq 1 ] || printf '      %-44s %8s tok\n' "$rel" "$tokens"
     done < "$POOL_TMP"
   fi
@@ -1450,6 +1635,7 @@ if [ "$POOL_APPLIES" -eq 1 ]; then
   POOL_CEILING=$(( WHOLE_READ_POOL + (WHOLE_READ_POOL * GRACE_PCT / 100) ))
   POOL_PCT=$(( POOL_TOTAL * 100 / WHOLE_READ_POOL ))
   if [ "$POOL_TOTAL" -gt "$POOL_CEILING" ]; then
+    POOL_OVER=1
     printf 'OVER  %-44s %8s tok  (pool %6s, %s%% of it)  -> consolidate\n' \
       "$POOL_LABEL" "$POOL_TOTAL" "$WHOLE_READ_POOL" "$POOL_PCT" >> "$BREACH_FILE"
   elif [ "$POOL_TOTAL" -gt "$WHOLE_READ_POOL" ]; then
@@ -1489,6 +1675,7 @@ printf '%s\n' "$BUDGETS" | while IFS='|' read -r name budget remedy; do
       check_inflight_rows "$f" "$rel"
       check_inflight_status "$f" "$rel"
       check_supersession_markers "$f" "$rel"
+      check_future_stamps "$f" "$rel" "$SNAP_NOW" >> "$FUTURE_FILE"
     fi
 
     if [ "$tokens" -gt "$ceiling" ]; then
@@ -1533,6 +1720,7 @@ SAW_UNGOV=0
 # the channel retro.md Step 5c's own invocation leaves at exit 0.
 SAW_MARKER=0
 SAW_INFLIGHT=0
+SAW_FUTURE=0
 
 if [ -s "$BREACH_FILE" ]; then
   SAW_BREACH=1
@@ -1588,11 +1776,50 @@ EOF
   if [ "$WARN_ONLY" -eq 1 ]; then
     while read -r _verdict brel _rest; do
       [ -n "${brel:-}" ] || continue
+      # The pool row's field 2 is `WHOLE-READ`, not a basename. It is hardened ONLY by
+      # the `whole-read-pool` token below; matching it here would let a basename that
+      # happens to equal a word of the label harden it by accident.
+      [ "$brel" = "WHOLE-READ" ] && continue
       if is_fail_on "$brel"; then
         echo "FAIL: $brel is over budget and was hardened with --fail-on, so this run blocks despite --warn-only." >&2
         RC=1
       fi
     done < "$BREACH_FILE"
+    # THE POOL'S HARD VERDICT AT RETRO, and it is NOT "the pool is over". Retro cannot
+    # consolidate -- artifact-consolidation.md is operator-supervised, never automatic --
+    # so blocking on the size alone would wedge a retro on an action it has no standing
+    # to take. What retro CAN do is make sure the next sprint does not discover the
+    # breach at route Step 1a after the fact: file an OPEN carry-over item that cites
+    # the pool, which route Step 1 item 5 reads before Step 1a runs. So the verdict is
+    # "pool OVER and no OPEN item in carry-over-backlog.md carries WHOLE-READ-POOL";
+    # recording the item satisfies it, and an item retro's own sweep appends cannot
+    # wedge it.
+    if [ "$POOL_OVER" -eq 1 ] && is_fail_on "whole-read-pool"; then
+      POOL_ITEM=""
+      while IFS= read -r _bl; do
+        [ -n "$_bl" ] || continue
+        POOL_ITEM="$(pool_open_item "$ROOT/$_bl")"
+        [ -n "$POOL_ITEM" ] && break
+      done <<EOF
+$POOL_BACKLOGS
+EOF
+      if [ -z "$POOL_ITEM" ]; then
+        echo "FAIL: the WHOLE-READ POOL is over budget, was hardened with --fail-on whole-read-pool, and no OPEN carry-over item cites it." >&2
+        cat >&2 <<'EOF'
+      Remedy, applied by the lead without asking: file ONE item in
+      _bmad-output/planning-artifacts/carry-over-backlog.md --
+        ### CO-S<N>-WHOLE-READ-POOL-OVER -- <one line naming the pool figure>
+        **Status:** OPEN
+      -- whose body quotes this run's OVER line and names artifact-consolidation.md
+      as the operator-supervised action owed before the next sprint's route. The
+      heading or body must carry the token WHOLE-READ-POOL. Then re-run this check.
+      Do NOT consolidate here: consolidation is never automatic.
+EOF
+        RC=1
+      else
+        say "      pool breach recorded: OPEN carry-over item ${POOL_ITEM}"
+      fi
+    fi
   else
     RC=1
   fi
@@ -1727,6 +1954,42 @@ if [ -s "$MARKER_FILE" ]; then
 EOF
 fi
 rm -f "$MARKER_FILE"
+
+# A FIFTH INDEPENDENT VERDICT: a stamp after the clock. Not a size, a section, or a
+# marker, so it is folded into none of them. Hard on every path that does not ask for
+# --warn-only, and hard under --warn-only when the snapshot is hardened with --fail-on,
+# exactly as the marker verdict above: Check 14, Step 0a, Step 1a and the sub-step path
+# all block on it, and retro's own invocation hardens the snapshot.
+if [ -s "$FUTURE_FILE" ]; then
+  SAW_FUTURE=1
+  say ""
+  if [ "$WARN_ONLY" -eq 1 ] && ! is_fail_on "pipeline-snapshot.md"; then
+    echo "WARN: pipeline-snapshot.md carries stamp(s) later than the current UTC time."
+  else
+    echo "FAIL: pipeline-snapshot.md carries stamp(s) later than the current UTC time." >&2
+    RC=1
+  fi
+  cat "$FUTURE_FILE" >&2
+  cat >&2 <<'EOF'
+
+      A Recent Activity entry or an In-Flight dispatched-at cell stamped more than
+      10 minutes after now records an event that has not happened. Every reader of
+      the snapshot -- a gate, a resume, a recovery -- orders by these stamps.
+
+      Remedy, applied by the lead WITHOUT ASKING:
+        1. Rewrite each stamp named above to the current time from `date -u`
+           (e.g. `date -u +%Y-%m-%dT%H:%MZ`). Keep every line where it is; do not
+           re-order the section.
+        2. Add ONE Recent Activity line, stamped from `date -u`, that reads
+           `CLOCK CORRECTION: rewrote <n> future stamp(s) to date -u` and names them.
+        3. Re-run this check.
+
+      Never take a stamp from memory or from another line -- `date -u` is the only
+      clock. Ranges, `~` approximations, `x` placeholders and date-only stamps are
+      not checked.
+EOF
+fi
+rm -f "$FUTURE_FILE"
 
 # A THIRD independent verdict, for the same reason the schema one is separate: a
 # struck row is not "over budget", and sending the lead to `trim` would have it
@@ -1899,13 +2162,14 @@ fi
 if [ "$RC" -eq 0 ]; then
   say ""
   if [ "$SAW_BREACH" -eq 1 ] || [ "$SAW_SCHEMA" -eq 1 ] || [ "$SAW_MARKER" -eq 1 ] \
-     || [ "$SAW_INFLIGHT" -eq 1 ] || [ "$SAW_STATUS" -eq 1 ]; then
+     || [ "$SAW_INFLIGHT" -eq 1 ] || [ "$SAW_STATUS" -eq 1 ] || [ "$SAW_FUTURE" -eq 1 ]; then
     _what=""
     [ "$SAW_BREACH" -eq 1 ] && _what="${_what}, over-budget artifact(s)"
     [ "$SAW_SCHEMA" -eq 1 ] && _what="${_what}, off-schema section(s)"
     [ "$SAW_MARKER" -eq 1 ] && _what="${_what}, superseded content marked in place"
     [ "$SAW_INFLIGHT" -eq 1 ] && _what="${_what}, struck-through In-Flight row(s)"
     [ "$SAW_STATUS" -eq 1 ] && _what="${_what}, unrecognised In-Flight status row(s)"
+    [ "$SAW_FUTURE" -eq 1 ] && _what="${_what}, future-stamped snapshot entr(ies)"
     _what="${_what#, }"
     say "WARN  this run reported ${_what} and is NOT a clean result."
     say "      Exit status is 0 because --warn-only was passed and no reported artifact was"

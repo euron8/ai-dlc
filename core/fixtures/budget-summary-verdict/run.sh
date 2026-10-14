@@ -569,6 +569,162 @@ else
   sed 's/^/      /' "$WORK/runs/control-warnonly.out" >&2
 fi
 
+# =====================================================================================
+# BL-517 -- THE FUTURE-STAMP VERDICT, and BL-511 -- THE POOL'S RETRO VERDICT.
+#
+# NOW IS PINNED through AI_DLC_SNAPSHOT_NOW_EPOCH (set per drive, after the scrub above),
+# to 2026-10-14T11:00:00Z = 1791975600, so no arm depends on the host clock.
+# =====================================================================================
+NOW_PIN=1791975600
+IF_HDR='agent | role | deliverable | dispatched-at | status
+--- | --- | --- | --- | ---'
+seed_stamped() { # seed_stamped <dir> <recent-activity line> <in-flight body>
+  printf '## Pipeline Position\n- at retro since 2026-10-14T23:00Z (mid-line, not checked)\n## Sprint Context\n- sprint 1\n## Recent Activity\n%s\n## Open Items\n- none\n## Locked Decisions\n- keep the threshold\n## In-Flight Teammates\n%s\n## Context Reminders\n- keep it small\n' \
+    "$2" "$3" > "$1/_bmad-output/pipeline-snapshot.md"
+}
+drive_now() { # drive_now <label> <script> <root> [args...]  -- drive with now pinned
+  _l="$1"; shift
+  AI_DLC_SNAPSHOT_NOW_EPOCH="$NOW_PIN" drive "$_l" "$@"
+}
+
+# --- F1-F6. ONE offender and five near-misses, each its own tree and its own run ------
+# F1 offender (60 min ahead, Recent Activity) -> refused, rc 1, the remedy is printed.
+AF="$(arm_dir future)"; seed_clean "$AF"
+seed_stamped "$AF" '- 2026-10-14T12:00Z DEPLOY DONE' "$IF_HDR"
+drive_now future-ra "$V" "$AF" --only pipeline-snapshot.md
+if [ "$(status_of future-ra)" = "1" ] && hasl 'FUTURE  _bmad-output/pipeline-snapshot.md line 6: 2026-10-14T12:00Z is 60 min ahead' \
+   && hasl 'CLOCK CORRECTION'; then
+  ok "F1 a Recent Activity stamp 60 min ahead is refused (rc 1) and the CLOCK CORRECTION remedy is named"
+else
+  bad "F1 future Recent Activity stamp: exit $(status_of future-ra), FUTURE row or remedy missing"
+  sed 's/^/      /' "$OUT" >&2
+fi
+# F1b the same offender in a dispatched-at CELL, and a future `since` in the STATUS cell
+# beside a past dispatched-at (the latter must stay quiet: only the declared column is read).
+seed_stamped "$AF" '- nothing notable' "$IF_HDR
+dev-a | dev | s1 | 2026-10-14T12:00Z | in-flight"
+drive_now future-if "$V" "$AF" --only pipeline-snapshot.md
+f1b=0; [ "$(status_of future-if)" = "1" ] && hasl '(In-Flight Teammates dispatched-at)' && f1b=1
+seed_stamped "$AF" '- nothing notable' "$IF_HDR
+dev-a | dev | s1 | 2026-10-14T10:00Z | in-flight, since 2026-10-14T23:00Z"
+drive_now future-status "$V" "$AF" --only pipeline-snapshot.md
+if [ "$f1b" -eq 1 ] && [ "$(status_of future-status)" = "0" ]; then
+  ok "F1b a future dispatched-at cell is refused; a future 'since' in the status cell is not read"
+else
+  bad "F1b dispatched-at=$(status_of future-if) (want 1), status-cell since=$(status_of future-status) (want 0)"
+fi
+# F2-F6 near-misses, one property each: rc 0 and no FUTURE row.
+nm_ok=1
+while IFS='|' read -r nlabel nline; do
+  [ -n "$nlabel" ] || continue
+  seed_stamped "$AF" "$nline" "$IF_HDR"
+  drive_now "nm-$nlabel" "$V" "$AF" --only pipeline-snapshot.md
+  if [ "$(status_of "nm-$nlabel")" != "0" ] || grep -q '^FUTURE ' "$OUT"; then
+    nm_ok=0; bad "near-miss '$nlabel' was refused: $(grep '^FUTURE ' "$OUT" | head -1)"
+  fi
+done <<'NEAR'
+range|- 2026-10-14T09:55-10:45Z window, and 2026-10-14T12:00Z-12:45Z planned
+dateonly|- 2026-10-15 tomorrow
+xplace|- 2026-10-14Txx:xxZ placeholder and ~2026-10-14T13:00Z approx
+five|- 2026-10-14T11:05Z five minutes ahead
+past|- 2026-10-14T10:59Z just now
+NEAR
+[ "$nm_ok" -eq 1 ] && ok "F2-F6 range, date-only, x/~ placeholder, 5-min-ahead and past stamps are all accepted"
+
+# F7 posture: --warn-only alone warns (rc 0, summary names it); retro's flags harden it.
+seed_stamped "$AF" '- 2026-10-14T12:00Z DEPLOY DONE' "$IF_HDR"
+drive_now future-warn "$V" "$AF" --warn-only
+drive_now future-retro "$V" "$AF" --warn-only --fail-on pipeline-snapshot.md
+if [ "$(status_of future-warn)" = "0" ] \
+   && grep -q 'WARN  this run reported future-stamped snapshot entr(ies)' "$WORK/runs/future-warn.out" \
+   && [ "$(status_of future-retro)" = "1" ]; then
+  ok "F7 --warn-only reports the stamp in the summary (rc 0); --fail-on pipeline-snapshot.md blocks (rc 1)"
+else
+  bad "F7 warn-only=$(status_of future-warn) (want 0 + summary), retro=$(status_of future-retro) (want 1)"
+fi
+
+# --- P1-P4. THE POOL'S RETRO VERDICT -------------------------------------------------
+# 300,000 bytes of prd.md is 75,000 tok against a 66,000 pool (200K window pinned), past
+# the 72,600 ceiling. The backlog is varied; the pool is not.
+AP="$(arm_dir pool)"; seed_clean "$AP"
+mkdir -p "$AP/_bmad-output/planning-artifacts" || exit 2
+head -c 300000 /dev/zero | tr '\0' 'x' > "$AP/_bmad-output/planning-artifacts/prd.md"
+BL="$AP/_bmad-output/planning-artifacts/carry-over-backlog.md"
+pool_drive() { AI_DLC_READER_WINDOW_TOKENS=200000 drive "$@"; }
+printf '# Carry-over backlog\n### CO-S1-OTHER\n**Status:** OPEN\nunrelated\n### CO-S1-WHOLE-READ-POOL-OLD\n**Status:** CLOSED\nold breach\n' > "$BL"
+pool_drive pool-warn "$V" "$AP" --warn-only
+pool_drive pool-basename "$V" "$AP" --warn-only --fail-on WHOLE-READ
+pool_drive pool-noitem "$V" "$AP" --warn-only --fail-on whole-read-pool
+p_seed=0; grep -q '^OVER  WHOLE-READ POOL' "$WORK/runs/pool-warn.out" && p_seed=1
+if [ "$p_seed" -ne 1 ]; then
+  echo "FIXTURE ERROR: the 300000-byte prd.md was not reported as an OVER pool row" >&2; exit 2
+fi
+if [ "$(status_of pool-warn)" = "0" ] && [ "$(status_of pool-basename)" = "0" ]; then
+  ok "P1 an over pool under --warn-only, and under --fail-on WHOLE-READ (a label word, not the token), stays rc 0"
+else
+  bad "P1 warn-only=$(status_of pool-warn), --fail-on WHOLE-READ=$(status_of pool-basename) (want 0 and 0)"
+fi
+if [ "$(status_of pool-noitem)" = "1" ] && grep -q 'no OPEN carry-over item cites it' "$WORK/runs/pool-noitem.out"; then
+  ok "P2 --fail-on whole-read-pool with no OPEN citing item (an OPEN non-citing and a CLOSED citing one present) is rc 1"
+else
+  bad "P2 pool with no OPEN citing item: exit $(status_of pool-noitem) (want 1 and the remedy)"
+fi
+printf '### CO-S1-POOL-OVER pool 75000 tok\n**Filed:** retro. **Status:** OPEN.\nWHOLE-READ-POOL over; artifact-consolidation.md owed before route.\n' >> "$BL"
+pool_drive pool-item "$V" "$AP" --warn-only --fail-on whole-read-pool
+if [ "$(status_of pool-item)" = "0" ] && grep -q 'pool breach recorded: OPEN carry-over item ### CO-S1-POOL-OVER' "$WORK/runs/pool-item.out"; then
+  ok "P3 the same run with an OPEN item citing WHOLE-READ-POOL is rc 0 and names the item"
+else
+  bad "P3 pool with an OPEN citing item: exit $(status_of pool-item) (want 0 + recorded line)"
+fi
+
+# --- MUTANTS for F and P. Copies, cmp-guarded, scored against the arm that must kill. --
+mk() { # mk <out> <sed-expr>
+  sed "$2" "$V" > "$1" || { echo "FIXTURE ERROR: sed died building $1" >&2; exit 2; }
+  if cmp -s "$V" "$1"; then echo "FIXTURE ERROR: mutant $1 matched nothing" >&2; exit 2; fi
+}
+# MF1 threshold 0: the 5-min-ahead near-miss must now be refused (the in-script self-probe
+# carries the same near-miss and is what refuses first; either way the run is rc 1).
+MF1="$MUT_BIN/mf1-slack0.sh"; mk "$MF1" 's/^FUTURE_SLACK_S=600$/FUTURE_SLACK_S=0/'
+seed_stamped "$AF" '- 2026-10-14T11:05Z five minutes ahead' "$IF_HDR"
+drive_now mf1 "$MF1" "$AF" --only pipeline-snapshot.md
+[ "$(status_of mf1)" = "1" ] && ok "MUTANT MF1 (slack 0) killed: the 5-min stamp is refused" \
+  || bad "MUTANT MF1 (slack 0) SURVIVED"
+# MF2 range not skipped: the `followed by - or digit` test deleted.
+MF2="$MUT_BIN/mf2-range.sh"; mk "$MF2" '/if (substr(str, b, 1) ~ \/\[-0-9\]\/ || wide(b3)) continue/d'
+seed_stamped "$AF" '- 2026-10-14T12:00Z-12:45Z planned window' "$IF_HDR"
+drive_now mf2 "$MF2" "$AF" --only pipeline-snapshot.md
+[ "$(status_of mf2)" = "1" ] && ok "MUTANT MF2 (range not skipped) killed" || bad "MUTANT MF2 (range not skipped) SURVIVED"
+# MF3 history file read: the call site re-pointed at pipeline-snapshot-history.md. The live
+# snapshot is clean, the history file carries a future stamp; only the mutant reads it.
+MF3="$MUT_BIN/mf3-history.sh"
+mk "$MF3" 's|check_future_stamps "\$f" "\$rel" "\$SNAP_NOW"|check_future_stamps "${f%.md}-history.md" "$rel" "$SNAP_NOW"|'
+seed_stamped "$AF" '- nothing notable' "$IF_HDR"
+printf '## Recent Activity\n- 2026-12-01T00:00Z archived future line\n' > "$AF/_bmad-output/pipeline-snapshot-history.md"
+drive_now mf3-orig "$V" "$AF" --only pipeline-snapshot.md
+drive_now mf3 "$MF3" "$AF" --only pipeline-snapshot.md
+if [ "$(status_of mf3-orig)" = "0" ] && [ "$(status_of mf3)" = "1" ]; then
+  ok "MUTANT MF3 (history file read) killed: the shipped arm ignores the history file, the mutant refuses it"
+else
+  bad "MUTANT MF3: shipped=$(status_of mf3-orig) (want 0) mutant=$(status_of mf3) (want 1)"
+fi
+rm -f "$AF/_bmad-output/pipeline-snapshot-history.md"
+# MP1 pool token matched by basename: the WHOLE-READ exclusion deleted.
+MP1="$MUT_BIN/mp1-basename.sh"; mk "$MP1" '/\[ "\$brel" = "WHOLE-READ" \] && continue/d'
+AI_DLC_READER_WINDOW_TOKENS=200000 drive mp1 "$MP1" "$AP" --warn-only --fail-on WHOLE-READ
+[ "$(status_of mp1)" = "1" ] && ok "MUTANT MP1 (pool hardened by basename) killed by P1" \
+  || bad "MUTANT MP1 (pool hardened by basename) SURVIVED"
+# MP2 item-citation check dropped: any backlog counts as recorded. P2's tree is restored
+# (the citing item removed) and must stay rc 1.
+MP2="$MUT_BIN/mp2-nocite.sh"; mk "$MP2" 's|POOL_ITEM="\$(pool_open_item "\$ROOT/\$_bl")"|POOL_ITEM="$_bl"|'
+printf '# Carry-over backlog\n### CO-S1-OTHER\n**Status:** OPEN\nunrelated\n' > "$BL"
+AI_DLC_READER_WINDOW_TOKENS=200000 drive mp2-orig "$V" "$AP" --warn-only --fail-on whole-read-pool
+AI_DLC_READER_WINDOW_TOKENS=200000 drive mp2 "$MP2" "$AP" --warn-only --fail-on whole-read-pool
+if [ "$(status_of mp2-orig)" = "1" ] && [ "$(status_of mp2)" = "0" ]; then
+  ok "MUTANT MP2 (item citation dropped) killed by P2"
+else
+  bad "MUTANT MP2: shipped=$(status_of mp2-orig) (want 1) mutant=$(status_of mp2) (want 0)"
+fi
+
 echo ""
 [ "$rc" -eq 0 ] && echo "budget-summary-verdict fixture: PASS"
 [ "$rc" -eq 0 ] || echo "budget-summary-verdict fixture: FAIL" >&2

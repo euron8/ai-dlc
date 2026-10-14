@@ -133,7 +133,15 @@ own authoring then re-breached the pool at 77,078 tokens against 66,000
 (`CO-S318-WHOLE-READ-POOL-REBREACHED-BY-S318-AUTHORING`), so s319 will block again. Nothing runs
 consolidation before the budget is exceeded.
 
-verify: manual -- close when a step that grows the whole-read pool (retro or sprint close) runs the Step 1a budget check and dispatches consolidation before the next sprint's route, and a fixture shows a breaching pool consolidated before route reads it.
+**Premise correction (measured at batch 229).** The s318 Step 1a block was the pre-0.781 200K-window
+resolution: at 0.773.0 the pool resolved to 66,000 (503%, rc 1), while the tip validator on the same tree
+resolves 330,000 (100%, within grace, rc 0). Graph reads 31% today. The repair therefore does not run
+consolidation (it stays operator-supervised, never automatic). Retro §4a now runs the audit with
+`--fail-on whole-read-pool`, whose hard verdict is "pool OVER and no OPEN `carry-over-backlog.md` item
+carries `WHOLE-READ-POOL`". Retro §5c check 5 blocks the Step 6 commit on it, and route Step 1 item 5
+reads the item before Step 1a runs. Graph's own OPEN `CO-S318-WHOLE-READ-POOL-REBREACHED…` satisfies it.
+
+verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-511-retro-pool-verdict.sh
 
 ## BL-512 — gate passes are discarded for lead paperwork, most often a Check 22 waiver
 
@@ -195,7 +203,15 @@ with corrections at `pipeline-snapshot-history.md:215, 219, 225` (10-14 02:11-02
 integrity validation does not compare an entry's stamp with the current time. A pipeline defect, not
 a model one; toward the local-lead goal.
 
-verify: manual -- close when Step 0a's integrity validation refuses a snapshot entry stamped after the current UTC time, and a fixture seeds a future-stamped Recent Activity line that the check refuses.
+**Premise correction (measured at batch 229).** The defect is born at snapshot WRITE time, not at resume.
+Over graph's 163 snapshot revisions since 2026-10-09, each replayed with now set to its own commit time,
+69 carry a stamp more than 10 min ahead (214 findings: 127 Recent Activity, 87 `dispatched-at`; smallest
+lead 10 min; 0 inside the slack). 0 of 20 resumes saw one. The cited history lines 215/219/225 resolve at
+commit `3e5aeb070`, not HEAD. The arm therefore lives in `validate-artifact-budget.sh`'s snapshot branch,
+which gate Check 14 runs at every write and route Step 0a check 1 runs at resume, and its failure names
+the remedy (rewrite to `date -u`, keep order, one CLOCK CORRECTION line).
+
+verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-517-future-stamp.sh
 
 ## BL-518 — gate-checkpoint opens a nonce of any shape
 

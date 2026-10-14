@@ -145,8 +145,11 @@ Run these integrity checks in order:
    the mechanics Step 1a's `trim` bullet already gives. Rule 25(a) in
    `SKILL.md` owns move-never-delete and the history destination, and
    `gate-validation.md` Check 14 owns the seven-section schema; follow
-   them there rather than from a restatement here. Then re-run the same
-   verdict.
+   them there rather than from a restatement here. If the verdict names
+   a stamp later than the current UTC time, apply the stamp remedy the
+   script prints, also without asking: rewrite each named stamp to
+   `date -u`, keep line order, and add one `CLOCK CORRECTION` line to
+   `Recent Activity`. Then re-run the same verdict.
 
    **The trim performs the whole read this check guards, and that is
    acceptable because the question it replaces performed it too.** A lead
