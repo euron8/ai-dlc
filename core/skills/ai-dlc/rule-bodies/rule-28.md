@@ -189,15 +189,19 @@ deliverable path to `wait-for-deliverable.sh`: nothing is writing it, so
 the join would exhaust its whole beat sequence and then spend the Rule 20
 one-re-dispatch budget on an agent that never ran. Arm only the paths of
 launched agents, and arm one beat over every outstanding path from all
-waves, never one beat per wave. Hold the rejected set, and re-dispatch
-exactly that set only after a bounded-join beat has returned with at
-least one `DELIVERED` line -- never in the next message. This is not the
-retry the harness forbids: its "Do not retry" forbids re-spawning with
-no evidence anything has changed, and a re-dispatch here waits for
-evidence of progress, a `DELIVERED` line, which is the sign that an agent
-of this round has finished its work and will exit. A spawn rejected twice
-waits for a further beat with a fresh `DELIVERED` before it is tried
-again. A rejected spawn's re-dispatch is its first launch, so it never
+waves, never one beat per wave. A slot frees when an agent exits, and
+not before. Hold the rejected set, and re-dispatch exactly that set only
+after an agent of this session has exited since the rejection -- never in
+the next message. Two records show it: an agent task-notification, which
+is an agent exiting, or a non-rejected `Agent`/`Task` tool_result, which
+is the cap admitting a spawn and so a slot having freed. A `DELIVERED`
+line is not one of them: the agent that wrote the file may not have
+exited yet. This is not the retry the harness forbids: its "Do not retry"
+forbids re-spawning with no evidence anything has changed, and a
+re-dispatch here waits for evidence that a slot has freed. A spawn
+rejected twice waits for a further exit after its second rejection before
+it is tried again. `ai-dlc-dispatch-guard.sh` refuses a lead re-send whose
+`description` was rejected with neither record after it. A rejected spawn's re-dispatch is its first launch, so it never
 spends the Rule 20 re-dispatch budget, and its path is armed in the next
 beat without `--reset` -- a `--reset` in that call would also restart the
 clock on every other path it names.

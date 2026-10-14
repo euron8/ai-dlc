@@ -126,7 +126,35 @@
 #   a key absent from it, unparseable input, or a `tool_input` jq cannot amend.
 #   A false correction would silently mis-bind a teammate's model, so fail-open
 #   (exit 0, no change) is the safe direction; the teeth are precise and
-#   positive-match only, and only ever ADD/CORRECT the model — never deny.
+#   positive-match only. The MODEL/DEFINITION path only ever ADDS or CORRECTS --
+#   it never denies. Two separate arms below DO deny, and only those two.
+#
+#   THE TWO DENY ARMS. Each emits `permissionDecision: "deny"` with a reason naming the
+#   remedy, and NEVER `updatedInput`: a denied call is not corrected, it is refused. Both
+#   fail OPEN on anything they cannot read (no transcript, no ledger, no pending.md, no
+#   sprint, a jq failure), because a deny that fires on a read failure blocks real spawns
+#   silently, which is worse than the waste either arm exists to stop.
+#
+#   CAP RE-SEND (Rule 28's held set). The concurrency-cap rejection (`Concurrent subagent
+#   limit reached. ... Do not retry.`) is produced by Claude Code AFTER PreToolUse, as an
+#   `is_error` tool_result; PostToolUse does not fire on it. So the only place a re-send
+#   can be refused is here, by reading what the transcript already recorded. A LEAD call
+#   (no `agent_id`) is denied when its `description` is one whose latest `Agent`/`Task`
+#   tool_result was that rejection, and nothing has released it since: no non-rejected
+#   `Agent`/`Task` tool_result and no agent task-notification after the rejection. The
+#   rejection is read from TOOL_RESULT records only, never from tool_use input or assistant
+#   text, so a brief or a Bash command that QUOTES the cap message rejects nothing. The scan
+#   is a bounded transcript tail, entered only when the tail carries the cap text at all.
+#
+#   ADJUDICATOR WAIVER (Check 22). A `gate-adjudicator` dispatch is denied when, for the
+#   snapshot's current sprint, `docs/escalations/pending.md` holds an `OVERRIDDEN` entry
+#   citing Check 22 or Rule 19 that NAMES NO SPAWN of that sprint, or when a
+#   `shard: invalid-exception` spawn-ledger row of that sprint is not named by an
+#   `OVERRIDDEN` entry that also names one of Rule 28's exceptions (1)-(4). Check 22 clears
+#   exactly the spawns an entry names, so either state fails the gate; refusing the
+#   dispatch saves the adjudicator pass the failure would discard. It runs at DISPATCH,
+#   not at the escalation write, because the lead writes those entries with a Bash append
+#   that no Edit/Write matcher sees.
 #
 #   PARTY PERSONAS: `cis`, `sm`, `tea`, `ux` are spawned by `/bmad-party-mode`, and
 #   a persona's MODEL IS OPTIONAL. Set (the shipped template sets all four), the
@@ -176,7 +204,7 @@
 #   PENDING, not as an omission.
 #
 #   RECORD-THEN-ALLOW ONLY. Nothing here denies, corrects or annotates a dispatch on the shard
-#   line: whether a scope is ONE part or several is a judgment about intent, and no act at
+#   line itself (the adjudicator-waiver arm reads RECORDED rows, never the brief): whether a scope is ONE part or several is a judgment about intent, and no act at
 #   dispatch separates the two. The line is a record Check 22 reads at the gate, where arm S3
 #   FAILS an `invalid-exception` row and arm S1 WARNs on a null one.
 #
@@ -719,6 +747,215 @@ jq -nc \
    | if $shard == "invalid-exception" then . + {shard_raw: $shardraw} else . end' >> "$SPAWN_LEDGER" 2>/dev/null || _sl_rc=$?
 # A failed append is recorded in _sl_rc and never blocks a dispatch: nothing reads it, and the hook goes on.
 # --- end SPAWN LEDGER ---------------------------------------------------------
+
+# --- THE TWO DENY ARMS (see THE TWO DENY ARMS in the CONTRACT header) ----------
+# Placed AFTER the ledger write, so a refused dispatch still leaves its row: the row is a
+# record of an attempted dispatch, and `role_contract_cited` already documents that a row can
+# exist for a dispatch that never ran. Placed BEFORE the role-file and no-correction exits,
+# because neither arm depends on whether the model needs binding.
+#
+# `dg_deny` emits `deny` and NO `updatedInput`. If jq cannot build the decision the hook
+# prints nothing and exits 0: a deny that cannot be expressed fails open.
+dg_deny() {
+  jq -n --arg reason "$1" '{
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "deny",
+      permissionDecisionReason: $reason
+    }
+  }' 2>/dev/null
+  exit 0
+}
+
+# ARM 1 -- CAP RE-SEND. Measured on the reference consumer's nine lead sessions that carry
+# the cap rejection (279 rejected `Agent` calls, 233 same-description re-sends, every one of
+# them role-bound, so this arm is reachable after the `[ -n "$ROLE" ]` exit above): this
+# predicate holds 3 re-sends, all 3 of which the harness rejected AGAIN, and 0 that it
+# launched. The previous key, "a beat returned a DELIVERED line", would have held 226 of which
+# 142 launched -- a deny set two-thirds wrong. 83 re-sends that were rejected again are NOT
+# held, because a launch or an agent notification sat between the two attempts; that is the
+# cost of releasing on an observable exit rather than guessing at the cap's occupancy.
+#
+# THE TAIL. A bounded tail is read, as ai-dlc-context-sensor.sh reads one. The first line of a
+# `tail -c` is usually a fragment; `fromjson?` drops it rather than a `sed 1d` that would also
+# drop a whole first line when the file is shorter than the window. Measured: the 1 MB window
+# and the whole file give identical hold sets on all nine sessions. A tool_use that scrolled
+# out of the window while its rejection is still inside it has no description to key on and is
+# not held -- the window can only ever RELEASE, never invent a hold. The `grep -F` gate keeps
+# the jq pass off every session whose tail carries no cap text at all; once the text is in the
+# tail, every lead dispatch pays the jq pass until it scrolls out.
+#
+# TOOL_RESULT RECORDS ONLY. A rejection is a `tool_result` with `is_error: true` whose text
+# carries the cap message, answering a tool_use this window saw as `Agent`/`Task`. A brief that
+# quotes the message, a Bash command that greps for it and its output are all invisible here,
+# because none of them is a tool_result to an Agent/Task call. The `grep -F` gate is only a
+# fast path and decides nothing.
+DG_AGENT_ID="$(printf '%s' "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null || true)"
+DG_TRANSCRIPT="$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/null || true)"
+DG_DESC="$(printf '%s' "$INPUT" | jq -r '.tool_input.description // empty' 2>/dev/null || true)"
+DG_CAP_TEXT='Concurrent subagent limit reached'
+DG_HELD=""
+if [ -z "$DG_AGENT_ID" ] && [ -n "$DG_DESC" ] && [ -n "$DG_TRANSCRIPT" ] && [ -r "$DG_TRANSCRIPT" ]; then
+  _dg_tail="$(mktemp "${TMPDIR:-/tmp}/ai-dlc-cap-tail.XXXXXX" 2>/dev/null || true)"
+  if [ -n "$_dg_tail" ]; then
+    tail -c "${AI_DLC_CAP_TAIL_BYTES:-1048576}" "$DG_TRANSCRIPT" > "$_dg_tail" 2>/dev/null || true
+    if grep -qF -- "$DG_CAP_TEXT" "$_dg_tail" 2>/dev/null; then
+      DG_HELD="$(jq -Rrn --arg d "$DG_DESC" --arg cap "$DG_CAP_TEXT" '
+        def txt: if type == "string" then .
+                 elif type == "array" then map(if type == "object" then (.text // "") else "" end) | join("\n")
+                 else "" end;
+        # An AGENT notification, keyed on record FIELDS as ai-dlc-advisor-gate.sh keys on
+        # origin.kind (the text opening is a harness-origin prefix I91 forbids restating), and
+        # on text summarising an Agent -- a Background command or Monitor notification is no
+        # agent exiting. THREE carriers, and the first is the one that matters: the harness
+        # writes a `queue-operation` ENQUEUE the moment the agent exits, and the user record
+        # and the queued_command attachment only when the notification is delivered to the
+        # model, which can be after the lead has already re-sent. Measured on the nine
+        # rejecting sessions: keyed on the two delivered carriers alone, 3 of 6 holds were
+        # spawns the harness then LAUNCHED; with the enqueue, 3 holds and 0 launched.
+        def agentnote: ((.type == "queue-operation" and .operation? == "enqueue")
+                        or .origin.kind? == "task-notification"
+                        or .attachment.origin.kind? == "task-notification")
+          and ([.content?, .message.content?, .attachment.prompt?]
+               | any(type == "string" and contains("<summary>Agent \"")));
+        reduce (inputs | fromjson? | select(type == "object" and .isSidechain != true)) as $r
+          ({ids: {}, held: false};
+           ($r.message | if type == "object" then .content else null end) as $c
+           | if $r.type == "assistant" and ($c | type) == "array" then
+               reduce ($c[] | select(type == "object" and .type == "tool_use"
+                                     and (.name == "Agent" or .name == "Task"))) as $u
+                 (.; .ids[($u.id // "")] = ($u.input.description // ""))
+             elif $r.type == "user" and ($c | type) == "array" then
+               reduce ($c[] | select(type == "object" and .type == "tool_result")) as $t (.;
+                 if (.ids | has($t.tool_use_id // "")) then
+                   if $t.is_error == true and (($t.content | txt) | contains($cap)) then
+                     (if .ids[$t.tool_use_id] == $d then .held = true else . end)
+                   else .held = false end
+                 else . end)
+             else . end
+           | if ($r | agentnote) then .held = false else . end)
+        | if .held then "held" else "" end' "$_dg_tail" 2>/dev/null || true)"
+    fi
+    rm -f "$_dg_tail"
+  fi
+fi
+if [ "$DG_HELD" = held ]; then
+  dg_deny "AI/DLC dispatch guard: refused a re-send. An \`Agent\` call with description \"${DG_DESC}\" was rejected by the concurrency cap (\"Concurrent subagent limit reached ... Do not retry\"), and no agent of this session has exited since: this transcript holds no agent task-notification and no non-rejected Agent/Task result after that rejection, so no slot has freed. Rule 28: \"Hold the rejected set, and re-dispatch exactly that set only after an agent of this session has exited since the rejection -- never in the next message.\" Arm one bounded-join beat over the launched agents' paths and re-dispatch this spawn after the next agent task-notification."
+fi
+
+# ARM 2 -- ADJUDICATOR WAIVER. Only a `gate-adjudicator` dispatch, only with a resolved sprint
+# (the same `SPAWN_SPRINT` the ledger row carries -- I104 binds that reader to one expression,
+# so it is reused rather than read a second time), and only with both pending.md and the ledger
+# readable. Every other state fails open.
+#
+# "NAMES A SPAWN" IS A WHOLE-TOKEN JOIN, NEVER A REGEX FOR AN ID SHAPE. The keys are the
+# sprint's ledger `tool_use_id`s, the sprint's agent ids from the probe's subagent-context
+# rows, and the sprint's dispatch `name`s -- EXCEPT a name that equals its own row's role.
+# gate-validation.md's Check 22 clearing arm 1 accepts a dispatch name or an agent id, and 4
+# of 9 archived Check-22 OVERRIDDEN entries on the reference consumer carry neither a toolu_ nor
+# an agent id, so a shape regex is wrong. The role-name exclusion is the FALSE-POSITIVE
+# NARROWING: 1006 of S317's 1018 ledger rows carry `name` equal to `role` (`dev`,
+# `code-reviewer`, ...), so an unnarrowed join reads the s317 tier-pin waiver -- "82 dev and 42
+# code-reviewer rows", which names no spawn and discarded gate nonce 230257Z -- as naming 124.
+#
+# "CITES AN EXCEPTION" MEANS A NUMBERED ONE OR ITS SHORT NAME. `exception (3)` and
+# `authoring-chain` cite one; "one of Rule 28's four serial exceptions" cites none, and that
+# generic sentence is exactly the s317 waiver that discarded nonce 124524Z.
+#
+# COVERAGE, measured on the reference consumer's three Check-22 discards: clause 1 (names no
+# spawn) catches s317 230257Z; clause 2 (invalid-exception row not covered) catches s317
+# 124524Z and s318 011534Z, whose waivers named every spawn and cited no exception.
+if [ "$ROLE" = gate-adjudicator ] && [ -n "${SPAWN_SPRINT:-}" ] \
+   && [ -r "$PROJECT_DIR/docs/escalations/pending.md" ] && [ -r "$SPAWN_LEDGER" ]; then
+  # THE INVALID-EXCEPTION POPULATION IS CHECK 22 ARM S3's, NOT EVERY ROW CARRYING THE VALUE. S3
+  # judges only SHARDABLE rows: the roles in validate-spawn-ledger.sh's SHARD_ROLES plus every
+  # party seat, derived there by `party_seats` from the role files' opening sentence. A row of
+  # another role recorded `invalid-exception` fails nothing at the gate, so refusing a dispatch
+  # over it would block a pass that would have succeeded -- measured on the reference consumer's
+  # S316, where 4 ledger rows carry the value and the validator fails 3 (the fourth is
+  # `dev-escalated`). The same set, derived the same way, so the two cannot disagree on a seat.
+  _dg_shardable=" adversary remediator gate-adjudicator analyst code-reviewer code-reviewer-escalated qa "
+  for _dg_rf in "$ROLES_DIR"/*.md; do
+    [ -f "$_dg_rf" ] || continue
+    if grep -q '^The lead spawns you as a party-mode persona' "$_dg_rf" 2>/dev/null; then
+      _dg_rb="${_dg_rf##*/}"
+      _dg_shardable="${_dg_shardable}${_dg_rb%.md} "
+    fi
+  done
+  _dg_keys="$(mktemp "${TMPDIR:-/tmp}/ai-dlc-waiver-keys.XXXXXX" 2>/dev/null || true)"
+  if [ -n "$_dg_keys" ]; then
+    {
+      jq -Rr --argjson s "$SPAWN_SPRINT" --arg sh "$_dg_shardable" '
+        fromjson? | select(type == "object" and .sprint == $s)
+        | ((.role // "") | tostring) as $role
+        | (if (.tool_use_id // "") != "" then "K\t" + .tool_use_id else empty end),
+          (if (.name // "") != "" and .name != .role then "K\t" + .name else empty end),
+          (if .shard == "invalid-exception" and ($sh | contains(" " + $role + " "))
+             then "I\t" + (.tool_use_id // "") + "\t"
+                  + (if (.name // "") != (.role // "") then (.name // "") else "" end)
+             else empty end)' "$SPAWN_LEDGER" 2>/dev/null
+      if [ -r "$SPAWN_STATE_DIR/subagent-context.jsonl" ]; then
+        jq -Rr --argjson s "$SPAWN_SPRINT" '
+          fromjson? | select(type == "object" and .sprint == $s and (.agent_id // "") != "")
+          | "K\t" + .agent_id' "$SPAWN_STATE_DIR/subagent-context.jsonl" 2>/dev/null
+      fi
+    } > "$_dg_keys" 2>/dev/null || true
+    _dg_waiver="$(LC_ALL=C awk -v sprint="$SPAWN_SPRINT" -v kf="$_dg_keys" '
+      BEGIN {
+        nk = 0; ni = 0
+        while ((rc = (getline l < kf)) > 0) {
+          split(l, f, "\t")
+          if (f[1] == "K" && f[2] != "") { key[f[2]] = 1; nk++ }
+          else if (f[1] == "I" && (f[2] != "" || f[3] != "")) { ni++; itui[ni] = f[2]; iname[ni] = f[3] }
+        }
+        # An unopenable key file (-1) or a sprint with no keys at all is a state this arm cannot
+        # judge: every waiver would read as naming nothing. Fail open.
+        if (rc < 0 || nk == 0) dead = 1
+      }
+      function flush(   b, n, i, t, toks, named, exc) {
+        if (dead || hdr == "" || status != "OVERRIDDEN") return
+        if (hdr !~ ("[Ss]" sprint "([^0-9]|$)")) return
+        b = body
+        gsub(/[^A-Za-z0-9_.-]+/, " ", b)
+        n = split(b, toks, " ")
+        split("", has)
+        named = 0
+        for (i = 1; i <= n; i++) {
+          t = toks[i]; sub(/[.]+$/, "", t)
+          has[t] = 1
+          if (t in key) named = 1
+        }
+        if ((body ~ /Check 22/ || body ~ /Rule 19/) && !named) print "U\t" hdr
+        exc = tolower(body)
+        if (exc ~ /exception \([1-4]\)([^-]|$)/ || exc ~ /exception [1-4]([^0-9-]|$)/ \
+            || exc ~ /data-dependency|pass-repair-pass|authoring-chain|serial-document/) {
+          for (i = 1; i <= ni; i++)
+            if ((itui[i] != "" && (itui[i] in has)) || (iname[i] != "" && (iname[i] in has))) cov[i] = 1
+        }
+      }
+      /^#{2,3} / { flush(); hdr = $0; body = $0; status = ""; next }
+      /^\*\*[Ss]tatus:\*\*/ {
+        s = $0; sub(/^\*\*[Ss]tatus:\*\*[[:space:]]*/, "", s)
+        if (match(s, /[A-Z_]+/)) status = substr(s, RSTART, RLENGTH)
+      }
+      { body = body "\n" $0 }
+      END {
+        flush()
+        if (!dead) for (i = 1; i <= ni; i++) if (!(i in cov)) print "X\t" (itui[i] != "" ? itui[i] : iname[i])
+      }' "$PROJECT_DIR/docs/escalations/pending.md" 2>/dev/null || true)"
+    rm -f "$_dg_keys"
+    _dg_unnamed="$(printf '%s\n' "$_dg_waiver" | sed -n 's/^U	//p')"
+    _dg_uncov="$(printf '%s\n' "$_dg_waiver" | sed -n 's/^X	//p' | tr '\n' ' ' | sed 's/ *$//')"
+    _dg_msg=""
+    if [ -n "$_dg_unnamed" ]; then
+      _dg_msg="An OVERRIDDEN entry for sprint ${SPAWN_SPRINT} in docs/escalations/pending.md cites Check 22 or Rule 19 and names no spawn of that sprint: $(printf '%s' "$_dg_unnamed" | tr '\n' ' ')-- Check 22 clears exactly the spawns an entry names (gate-validation.md, Check 22 clearing arm 1), so this waiver clears nothing and the gate would fail on it. Name each waived spawn verbatim: its spawn-ledger tool_use_id, its agent id, or its dispatch name (a name equal to the role, such as \`dev\`, names no one spawn)."
+    fi
+    if [ -n "$_dg_uncov" ]; then
+      _dg_msg="${_dg_msg:+$_dg_msg }Sprint ${SPAWN_SPRINT} has spawn-ledger rows recorded \`shard: invalid-exception\` that no OVERRIDDEN entry both names and dispositions with one of Rule 28's serial exceptions (1)-(4): ${_dg_uncov}. Check 22 arm S3 fails each one until an entry names it and states which exception actually applied (\`exception (3)\`, or its short name such as \`authoring-chain\`) -- a sentence saying none of the four applies, or naming them only as \"the four\", dispositions nothing. Otherwise re-dispatch the work sharded."
+    fi
+    [ -n "$_dg_msg" ] && dg_deny "AI/DLC dispatch guard: refused a gate-adjudicator dispatch, because the gate would discard its pass. ${_dg_msg}"
+  fi
+fi
 
 [ "$ROLE_FILE_READABLE" = true ] || exit 0   # recorded above; never correct blind
 
