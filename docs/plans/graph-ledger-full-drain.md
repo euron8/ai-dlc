@@ -104,8 +104,8 @@ shipped, which is that decision, not a stall.
   read as passing and were not: BL-518's receipt passed a loose regex, and BL-517's remedy never reached the lead because
   `verdict.sh` dropped `FUTURE` rows.
 - **HELD on origin, built and twice adversaried, NOT shipped.** Each is cut from `fe7d5ec2` and needs a rebase onto
-  `f621fd36`; expect real conflicts in `core/skills/ai-dlc/steps/implementation.md`, `_gate-procedures.md` and
-  `core/fixtures/process-rule-pins/run.sh`, resolved by content, never by side. The read-set map conflicts too: keep the
+  `f621fd36`. Derive the files that will conflict, never trust a list: `comm -12 <(git diff --name-only fe7d5ec2
+  f621fd36 | sort) <(git diff --name-only fe7d5ec2 <branch> | sort)`. Resolve by content, never by side. The read-set map conflicts too: keep the
   base's and re-trace. Each needs one more tip adversary on its final tip before it ships:
   - `b229-bl507` at `6072d37c`: `validate-carried-findings.sh` at Check 1, a sharded delta re-review through the existing
     `<base>` argument, `--list`. Three rounds found real false FAILs on graph's history; the last fix clears all form
@@ -140,7 +140,7 @@ shipped, which is that decision, not a stall.
   `_bmad-output/ai-dlc-update/`. Nothing was written there.
 
 Net for the batch: closed 8 entries (BL-509, 511, 513, 514, 516, 517, 518, 520), filed 0; six stay live (BL-507, 508,
-510, 512, 515, 519), five of them with a built branch or a shipped half.
+510, 512, 515, 519), every one with a held branch or a shipped half.
 
 **BATCH 228 SHIPPED `v0.781.0` (`6c8ea1d9`, #1126): BOTH CANDIDATES GRAPH FILED IN ITS SPRINT 318, AND THE OPERATOR'S
 `templates/settings.json.template` CHANGE WITH THE TWO DEFECTS MEASURED AGAINST IT. THE PULL IS REQUIRED, AND ITS
@@ -753,6 +753,7 @@ LC_ALL=C awk '/^## BL-[0-9]+/{if(id!=""){out()}; id=$2; pcs=""}
      function out(){ if(pcs!="") printf "%s\t%s\n", id, pcs }' docs/backlog.md > /tmp/entry_pcs.tsv
 wc -l < /tmp/entry_pcs.tsv     # INSTRUMENT: entries citing ANY PC id. NOT the worklist.
 if bash scripts/backlog-reverify.sh --declared-empty; then echo "worklist 0 (backlog declared empty)"
+elif [ "$(grep -cE 'PC-[A-Z0-9]' docs/backlog.md)" -eq 0 ]; then echo "worklist 0 (no live entry cites a PC id; control: $(grep -cE 'PC-[A-Z0-9]' docs/backlog.archive.md) archive lines do)"
 else [ -s /tmp/entry_pcs.tsv ] || echo "REFUSE: awk half matched nothing -- grammar, not corpus"; fi
 : > /tmp/pc_backed.tsv
 while IFS="$(printf '\t')" read -r id pcs; do
