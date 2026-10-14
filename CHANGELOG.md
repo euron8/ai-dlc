@@ -20,6 +20,85 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.783.0] - 2026-10-14
+
+Batch 229 (graph-ledger-full-drain), second release: six entries from the s317-s318 efficiency analysis. No upstream
+candidate is live, so this release closes no `PC-` id. Closes BL-516, BL-520, BL-517, BL-511 and BL-513, and ships the
+evidence half of BL-510, which stays open for its bookkeeping class by operator ruling. Net -5 backlog entries.
+
+### `ai-dlc-gate-remediation-guard.sh`: a lead edit to consumer product code is denied in an `/ai-dlc` session (BL-516)
+
+Rule 28 forbids the lead editing product code, and no hook enforced it. The reference consumer's local-model lead edited
+`rebalancer/execution.py` itself during s317, and a Sonnet lead edited a product test file in s318. New arm 3b fires
+whatever the gate state. A lead (no `agent_id`) Edit, Write or MultiEdit is denied when all of these hold, cheapest
+first:
+
+- the target resolves, after a lexical `.`/`..` collapse, inside the project or a registered worktree of it;
+- relative to that tree it is not under `.claude/`, `_bmad-output/`, `docs/` or a root `artifact-path-config.sh
+  --scan-roots` prints, and is not a repo-root dotfile or `CLAUDE.md`, `CLAUDE.local.md` or `AGENTS.md` (retro Step 4
+  tells the lead to edit `CLAUDE.md`);
+- the file holds no `<<<<<<< ` merge-conflict marker (Rule 28(a));
+- the session's last ai-dlc invocation is `/ai-dlc`, by the transcript scan `ai-dlc-acknowledge.sh` uses, held
+  byte-identical by the fixture. An operator's non-pipeline session is never denied.
+
+The deny names the `dev` / `dev-escalated` seat. The scan-roots resolver is abandoned after 5s. The arm does not claim
+a lead Bash `sed -i` or redirect, nor `NotebookEdit`. Measured over the reference consumer's 177 transcripts (4,412 lead
+Edit/Write/MultiEdit calls): 18 denies, all product code; 0 false positives. `gate-remediation-deny` gains a product
+world, mutants M3b-iv/-wt/-anchor/-iii/-gate/-roots/-claude/-lex, and now sources the git-env seam first.
+
+### Every teammate-to-lead send instruction names the address `to: "main"` (BL-520)
+
+Role files told teammates to "message the lead", a name the harness does not register: on the reference consumer every
+subagent send to `lead` failed (0 of 15), every send to `main` was delivered (167 of 167). Rule 28 now states the
+address and why each site carries it (teammates do not load rule bodies), with the team-mode measurement: 9 ad-hoc
+`team_name` teammates reached the lead at `team-lead`, and `main` from a team-mode teammate is unmeasured. All 23 send
+sites in dev, qa, pm, code-reviewer, architect, protected-path-editor, ops, remediator and SKILL.md Tier 1 carry the
+literal. The five byte-bound hook legend copies name `lead` as the measured failure. `process-rule-pins` fails any
+send instruction without the literal, with a floor of 23 sites and an empty false-positive set.
+
+The reference consumer carries four sites of its own this release does not reach (an override and three extensions);
+they are reported to it as a finding.
+
+### The snapshot refuses a stamp from the future, and the remedy reaches the lead (BL-517)
+
+`validate-artifact-budget.sh` refuses a `## Recent Activity` stamp or an In-Flight `dispatched-at` cell more than 10
+minutes later than now, so Check 14 (every gate write) and Step 0a (resume) both run it. Only a single full
+`YYYY-MM-DDTHH:MM(:SS)?Z` is checked; ranges, spaced and worded range starts, `~`, `x` placeholders and date-only
+stamps are skipped, and the history file is never read. The stamp verdict prints first and carries its remedy on one
+line (rewrite to `date -u`, keep order, add one CLOCK CORRECTION line naming the old stamps as bare `HH:MMZ`), and
+`verdict.sh` now passes `FUTURE` rows, so the remedy reaches the lead at every blocking caller. `_gate-procedures.md`
+step 5 applies it before any trim; trimming future lines into history no longer clears the check. Measured over the
+reference consumer's 163 snapshot revisions since 2026-10-09: 69 fire (214 findings), every one 10 minutes or more
+ahead, 0 inside the slack.
+
+### Retro records an over-budget whole-read pool for supervised consolidation (BL-511)
+
+Operator ruling: consolidation stays supervised, never automatic. `--fail-on whole-read-pool` hardens only the pool
+row (a basename no longer hardens it by accident), and blocks only when the pool is OVER and no OPEN `### ` item in the
+carry-over backlog carries `WHOLE-READ-POOL`. Retro §4a files that item and §5c blocks the Step 6 commit until it
+exists, so retro's own writes cannot wedge it; route Step 1 item 5 is its reader. The s318 block that motivated the
+entry was the pre-0.781.0 window resolution, and the reference consumer's pool reads 31% today.
+
+### A Strategy Test ID cell naming a renamed or missing test is refused before the gate (BL-513)
+
+`validate-handoff-evidence.sh --strategy` refuses a `test` row any of whose `path.py::node` tokens names an untracked
+file or a missing `def`/`class`, an empty `Kind` or `Resolves to` cell, and a row too short to carry `Resolves to`. It
+never refuses on `Kind` vocabulary or prose. Sprint-review §4 runs it at HEAD before Seam B; dev.md and the Rename
+Verification step require a rename to re-bind every cell naming the old node across all story files. Measured on the
+reference consumer: 1 refusal at the s318 sprint-review fix that renamed a test (the true positive), 0 at the cell fix
+and the sprint merges, and the 4 empty s317 cells.
+
+### A dev handoff's evidence is checked before gate 1 (BL-510, partial)
+
+`validate-handoff-evidence.sh`, run by implementation.md's pre-gate check, refuses a cited capture in the story's range
+with no command line, a cited mutation-RED capture not tracked at the frozen sha, and a glob or brace of which some
+alternative matches no tracked file. A missing or divergent `head:` is a WARN. Exit 1 blocks gate-1 dispatch; exit 2 is
+recorded and does not; on a rework re-handoff the base is the previous gate's frozen sha. dev.md prescribes the capture
+header and committed RED captures, and `validate-mutation-red.sh` prints `head:` and `cwd:`. Measured over the
+reference consumer's 32 approved story tips: 10 refusals in 5 stories, each a capture a reviewer could not read as
+evidence. The bookkeeping class (status not flipped, a missing Dev Agent Record line, empty headings) is not built, and
+BL-510 stays open for it.
+
 ## [0.782.0] - 2026-10-14
 
 Batch 229 (graph-ledger-full-drain), first release: three entries from the s317-s318 efficiency analysis. No upstream

@@ -178,7 +178,11 @@ Not built: the B class (status not flipped, a missing Dev Agent Record line, emp
 evidence headings). An empty-heading arm has a 3-story FP set on the same corpus and needs an
 operator ruling before it ships. This entry stays open for that class.
 
-verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-510-handoff-evidence.sh
+Operator ruling (batch 229): ship the evidence half and keep this entry open. The receipt chains the
+evidence probe to `probes/bl-510-bookkeeping.sh`, which the batch that builds the B class writes;
+until it exists the receipt exits non-zero and the entry cannot rotate as closed.
+
+verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-510-handoff-evidence.sh && bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-510-bookkeeping.sh
 
 ## BL-511 — the Step 1a whole-read budget blocks a sprint after the fact, and the same sprint re-breaches it
 
