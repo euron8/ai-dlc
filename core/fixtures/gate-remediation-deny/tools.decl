@@ -10,6 +10,7 @@ cut
 date
 dirname
 env
+git
 grep
 head
 jq

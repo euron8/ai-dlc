@@ -187,8 +187,8 @@ for p in "_bmad-output/pipeline-snapshot.md" \
 done
 # ...and OUTSIDE the guarded roots entirely.
 OUT="$(drive "$W" Edit "$W/src/main.c")"
-if denied "$OUT"; then bad "(c) source code DENIED — out of scope by declaration, and denying it has no measurement behind it"
-else ok "(c) source outside the guarded roots is untouched"; fi
+if denied "$OUT"; then bad "(c) source code DENIED with NO transcript — arm 3b's (iv) cannot hold without one, and no gate arm guards source"
+else ok "(c) source outside the guarded roots, driven with no transcript (so not a pipeline session for arm 3b), is untouched"; fi
 
 # ...but the permit list must be NARROW. The lead may not write the verdict, nor
 # its own repair record: either one is the opt-out rebuilt one file over.
@@ -1350,6 +1350,104 @@ for _m7a in m11-window-ignores-order m12-records-every-writer m14-write-never-bi
   kill_arm "$_m7a" allow "$W" "7a: ${_m7a} leaves the NO-LEDGER world allowing — the arm's subject is the ledger, not the second verdict"
 done
 rm -rf "$W"
+
+# =============================================================================
+# ARM 3b — THE LEAD'S PRODUCT EDIT, with NO gate directory at all. Every DENY cell has an
+# ALLOW twin one property apart, and every conjunct has a mutant that kills its own cell
+# while a cell it must not reach stays put.
+# =============================================================================
+# A pre-push run exports GIT_DIR into this process; the hook's `git worktree list` must ask
+# about the seeded repo, which is what a consumer session (no GIT_DIR) asks about.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+seed product
+SIB="$W.sib"
+TA="$W/sessions-jsonl/aidlc.jsonl"; TP="$W/sessions-jsonl/plain.jsonl"; TU="$W/sessions-jsonl/updater.jsonl"
+[ -d "$SIB/src" ] && [ ! -d "$W/_bmad-output/gate-adjudication" ] \
+  || { echo "FIXTURE ERROR: seed 'product' has no sibling worktree, or HAS a gate directory" >&2; exit 2; }
+lpe() { # <expect deny|allow> <label> <file_path> [transcript] [agent] [hook]
+  local o; o="$(drive "$W" Edit "$3" "${5:-}" "${4:-}" "${6:-$HOOK}")"
+  if [ "$1" = deny ]; then
+    if denied "$o"; then ok "$2"; else bad "$2"; fi
+  else
+    if denied "$o"; then bad "$2"; else ok "$2"; fi
+  fi
+}
+OUT="$(drive "$W" Edit "$W/src/app.py" "" "$TA")"
+if denied "$OUT"; then
+  ok "3b: a lead Edit to src/app.py in an /ai-dlc session with NO gate directory is DENIED"
+  case "$OUT" in *"THE LEAD DOES NOT EDIT PRODUCT CODE"*) ok "3b: ...by arm 3b, not by a gate arm" ;;
+    *) bad "3b: the deny is not arm 3b's — a gate arm fired with no gate directory" ;; esac
+  case "$OUT" in *'`dev` teammate'*dev-escalated*) ok "3b: the deny names the dev seat (dev / dev-escalated)" ;;
+    *) bad "3b: the deny does not name the dev seat to dispatch" ;; esac
+  case "$OUT" in *'Rule 28: \"The lead MUST delegate any action a subagent can service.\"'*) ok "3b: the deny quotes Rule 28" ;;
+    *) bad "3b: the deny does not quote Rule 28" ;; esac
+else
+  bad "3b: lead product Edit ALLOWED in an /ai-dlc session — the 8 measured edits walk through"
+  bad "  (by-arm-3b)"; bad "  (names-dev-seat)"; bad "  (quotes-rule-28)"
+fi
+lpe deny  "3b: a RELATIVE src/app.py is the same file and DENIED"                         "src/app.py" "$TA"
+lpe allow "3b: the same edit in a session with NO /ai-dlc invocation (only a mention) is ALLOWED" "$W/src/app.py" "$TP"
+lpe allow "3b: the same edit with no transcript at all is ALLOWED"                         "$W/src/app.py" ""
+lpe allow "3b: the same edit after a later /ai-dlc-update invocation is ALLOWED (last skill decides)" "$W/src/app.py" "$TU"
+lpe allow "3b: a dispatched teammate's identical product Edit is ALLOWED"                  "$W/src/app.py" "$TA" "a1b2c3"
+lpe allow "3b: a scratchpad path outside every tree is ALLOWED"                            "$W.scratch/notes.md" "$TA"
+lpe allow "3b: a sibling worktree's _bmad-output/ path is ALLOWED"                         "$SIB/_bmad-output/planning-artifacts/x.md" "$TA"
+lpe deny  "3b: a sibling worktree's src/app.py is DENIED (the worktree is the repo's tree)" "$SIB/src/app.py" "$TA"
+lpe allow "3b: docs/coding-conventions.md is ALLOWED"                                     "$W/docs/coding-conventions.md" "$TA"
+lpe allow "3b: a repo-root dotfile (.gitignore) is ALLOWED"                               "$W/.gitignore" "$TA"
+lpe deny  "3b: a dotfile NOT at the repo root (src/.env) is DENIED"                        "$W/src/.env" "$TA"
+lpe allow "3b: a file carrying a <<<<<<< conflict marker is ALLOWED (Rule 28(a))"         "$W/src/conflict.py" "$TA"
+lpe allow "3b: a path under a grammar scan root (seeded: reports/) is ALLOWED"             "$W/reports/r.md" "$TA"
+
+# (iv) IS ONE RULE: the `LAST_SKILL=` statement and its `case` are byte-identical in this hook
+# and `ai-dlc-acknowledge.sh`. Both directions: the two shipped blocks agree, and a one-byte
+# drift in a copy is reported.
+ACK="$(pick "$HERE/../../hooks/ai-dlc-acknowledge.sh" \
+            "$HERE/../../../.claude/hooks/ai-dlc-acknowledge.sh" \
+            "$HERE/../../../core/hooks/ai-dlc-acknowledge.sh")"
+skill_block() { sed -n '/^  LAST_SKILL=/,/^  esac$/p' "$1"; }
+if [ -z "$ACK" ]; then bad "3b-bind: cannot locate ai-dlc-acknowledge.sh"
+else
+  B_ACK="$(skill_block "$ACK")"; B_HOOK="$(skill_block "$HOOK")"
+  if [ -z "$B_ACK" ] || [ "$(printf '%s\n' "$B_ACK" | wc -l | tr -d ' ')" -lt 7 ]; then
+    bad "3b-bind: no 7-line LAST_SKILL block extracted from ai-dlc-acknowledge.sh — the binding is vacuous"
+  elif [ "$B_ACK" = "$B_HOOK" ]; then ok "3b-bind: the session-class scan is byte-identical in both hooks"
+  else bad "3b-bind: the session-class scan has FORKED between ai-dlc-acknowledge.sh and this hook"; fi
+  cp "$HOOK" "$MW/drift.sh"
+  sed -i.bak '/^  LAST_SKILL=/s/| tail -1)$/| tail -n 1)/' "$MW/drift.sh"; rm -f "$MW/drift.sh.bak"
+  if cmp -s "$HOOK" "$MW/drift.sh"; then bad "3b-bind: the drift seed changed no bytes"
+  elif [ "$(skill_block "$MW/drift.sh")" = "$B_ACK" ]; then bad "3b-bind: a drifted copy still compares equal — the binding cannot fire"
+  else ok "3b-bind: a one-token drift in the copy is reported (the binding can fire)"; fi
+fi
+
+# --- arm 3b's mutants. Each kills its own cell; each leaves P1 (or, for M3b-gate, the
+# sibling-_bmad-output allow) unchanged so a mutant that breaks the hook cannot score.
+if mut m3b-no-iv 's@^    if \[ "\$AIDLC_SESSION" -eq 1 \]; then$@    if true; then@'; then
+  lpe deny  "M3b-iv: dropping (iv) DENIES the non-pipeline session's product edit — (iv) is load-bearing" "$W/src/app.py" "$TP" "" "$MW/m3b-no-iv.sh"
+  lpe allow "M3b-iv: ...and the sibling _bmad-output/ allow is UNCHANGED"                    "$SIB/_bmad-output/planning-artifacts/x.md" "$TA" "" "$MW/m3b-no-iv.sh"
+fi
+if mut m3b-no-worktree 's@_lpe_wts="\$(git -C "\$LPE_PROJ" worktree list --porcelain 2>/dev/null | sed -n .s/^worktree //p.)"@_lpe_wts=""@'; then
+  lpe allow "M3b-wt: without worktree anchoring the sibling worktree's src/app.py is ALLOWED — anchoring is load-bearing" "$SIB/src/app.py" "$TA" "" "$MW/m3b-no-worktree.sh"
+  lpe deny  "M3b-wt: ...and P1 is UNCHANGED"                                                 "$W/src/app.py" "$TA" "" "$MW/m3b-no-worktree.sh"
+fi
+if mut m3b-anchor-anywhere 's@^if \[ -n "\$LPE_ROOT" \]; then$@[ -n "$LPE_ROOT" ] || LPE_ROOT="${LPE_TARGET%/*}"; if true; then@'; then
+  lpe deny  "M3b-anchor: treating any directory as a tree DENIES the scratchpad path — (i) is load-bearing" "$W.scratch/notes.md" "$TA" "" "$MW/m3b-anchor-anywhere.sh"
+  lpe deny  "M3b-anchor: ...and P1 is UNCHANGED"                                             "$W/src/app.py" "$TA" "" "$MW/m3b-anchor-anywhere.sh"
+fi
+if mut m3b-no-iii "s@grep -q '^<<<<<<< ' \"\$LPE_TARGET\" 2>/dev/null@false@"; then
+  lpe deny  "M3b-iii: dropping (iii) DENIES the conflict-marked file — (iii) is load-bearing" "$W/src/conflict.py" "$TA" "" "$MW/m3b-no-iii.sh"
+  lpe deny  "M3b-iii: ...and P1 is UNCHANGED"                                                "$W/src/app.py" "$TA" "" "$MW/m3b-no-iii.sh"
+fi
+if mut m3b-after-gate-exit 's@^case "\$FP" in /\*) LPE_ABS=@[ -d "$GATE_DIR" ] || exit 0; case "$FP" in /*) LPE_ABS=@'; then
+  lpe allow "M3b-gate: the arm placed after the GATE_DIR exit ALLOWS P1 with no gate directory — the placement is load-bearing" "$W/src/app.py" "$TA" "" "$MW/m3b-after-gate-exit.sh"
+  lpe allow "M3b-gate: ...and the sibling _bmad-output/ allow is UNCHANGED"                   "$SIB/_bmad-output/planning-artifacts/x.md" "$TA" "" "$MW/m3b-after-gate-exit.sh"
+fi
+if mut m3b-no-scanroots 's@case "\$LPE_REL" in "\$_lpe_sr"/\*|"\$_lpe_sr") LPE_PRODUCT=0 ;; esac@:@'; then
+  lpe deny  "M3b-roots: ignoring the grammar's scan roots DENIES reports/r.md — the resolver read is load-bearing" "$W/reports/r.md" "$TA" "" "$MW/m3b-no-scanroots.sh"
+  lpe deny  "M3b-roots: ...and P1 is UNCHANGED"                                              "$W/src/app.py" "$TA" "" "$MW/m3b-no-scanroots.sh"
+fi
+git -C "$W" worktree remove --force "$SIB" >/dev/null 2>&1
+rm -rf "$W" "$SIB"
 
 rm -rf "$MW"
 [ -n "$GRD_DECOY" ] && rm -rf "$GRD_DECOY"

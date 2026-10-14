@@ -217,7 +217,13 @@ verify: manual -- close when a re-sent `Agent` call whose description matches a 
 
 **DEFECT. [efficiency rank 10] cost not measured; high consequence.** The qwen/medium lead edited
 `rebalancer/execution.py` itself for s317's ff1 (5 Edits, 10-11T19:52-19:54Z), later reverted and
-re-done by a dev seat. Rule 28 forbids it in prose. `core-guard` covers core paths only, and
+re-done by a dev seat. Rule 28 forbids it in prose.
+
+Premise corrected on re-measurement: across the 1804 lead Edit/Write/MultiEdit calls of s317-s318
+there were 8 product edits by both leads, not 5 by qwen alone. Session af48eb49 (qwen) made 6
+(`rebalancer/execution.py` x5 and `rebalancer/tests/test_s316_b2_driven.py`); session 20bd359c
+(Sonnet) made 2 (`rebalancer/tests/test_s259_1_single_mint_efficiency.py`). No gate was open for
+any of them. `core-guard` covers core paths only, and
 `gate-remediation-guard` covers the artifact corpus only while a gate FAIL is recorded. Measured by
 the receipt's probe: a lead Edit to a core path is denied by `core-guard`, a lead Edit to product code
 by no hook. Toward the local-lead goal.
