@@ -14,7 +14,7 @@
 # path<TAB>sha lines in the runner's universe as traced; the runner clears a stale key record when
 # it recomputes the same value over the tree it is pushing.
 #
-# fixtures mapped: 224    entries: 13175
+# fixtures mapped: 225    entries: 13200
 absorbed-specifics-survive	core/fixtures/absorbed-specifics-survive/run.sh
 absorbed-specifics-survive	core/skills/ai-dlc/SKILL.md
 absorbed-specifics-survive	core/skills/ai-dlc/rule-bodies/rule-13.md
@@ -1254,6 +1254,31 @@ budget-summary-verdict	core/scripts/core/skills/ai-dlc
 budget-summary-verdict	core/scripts/sprint-status.sh
 budget-summary-verdict	core/scripts/validate-artifact-budget.sh
 budget-summary-verdict	core/scripts/verdict.sh
+carried-findings	core
+carried-findings	core/.claude/team-roles/code-reviewer.md
+carried-findings	core/core/scripts/validate-carried-findings.sh
+carried-findings	core/core/team-roles/code-reviewer.md
+carried-findings	core/fixtures
+carried-findings	core/fixtures/.claude/team-roles/code-reviewer.md
+carried-findings	core/fixtures/carried-findings
+carried-findings	core/fixtures/carried-findings/.claude/team-roles/code-reviewer.md
+carried-findings	core/fixtures/carried-findings/core/scripts/validate-carried-findings.sh
+carried-findings	core/fixtures/carried-findings/core/team-roles/code-reviewer.md
+carried-findings	core/fixtures/carried-findings/run.sh
+carried-findings	core/fixtures/carried-findings/scripts/ai-dlc/validate-carried-findings.sh
+carried-findings	core/fixtures/core/scripts/validate-carried-findings.sh
+carried-findings	core/fixtures/core/team-roles/code-reviewer.md
+carried-findings	core/fixtures/lib
+carried-findings	core/fixtures/lib/preamble.sh
+carried-findings	core/fixtures/scripts/ai-dlc/validate-carried-findings.sh
+carried-findings	core/scripts/ai-dlc/validate-carried-findings.sh
+carried-findings	core/scripts/validate-carried-findings.sh
+carried-findings	core/team-roles/code-reviewer.md
+carried-findings	file:/private/var/folders/qr/v63hkc2n6s16yk44l131v9700000gn/T/carried-findings.5Ve5Gr/main
+carried-findings	file:/private/var/folders/qr/v63hkc2n6s16yk44l131v9700000gn/T/carried-findings.5Ve5Gr/main.bundle
+carried-findings	file:/private/var/folders/qr/v63hkc2n6s16yk44l131v9700000gn/T/carried-findings.5Ve5Gr/main.git
+carried-findings	file:/private/var/folders/qr/v63hkc2n6s16yk44l131v9700000gn/T/carried-findings.5Ve5Gr/main.git/.git
+carried-findings	file:/private/var/folders/qr/v63hkc2n6s16yk44l131v9700000gn/T/carried-findings.5Ve5Gr/main/.git
 changelog-sprint-slot	.git/HEAD
 changelog-sprint-slot	.git/config
 changelog-sprint-slot	.git/index
@@ -13195,6 +13220,7 @@ write-format-steering-multiformat	core/skills/ai-dlc-update/reconcile/lib.sh
 # digest advisor-gate-deny-mutants 9fd24773eb4caa10e92d74e9f3de0c329e5de75ec5d88e1770953c14434b781f
 # digest blocker-adjudication-record 99314f2a1c6cc2fcca6d94d77cd3a5f29a9ea8d5f0598e00be2da52fe4ad932b
 # digest budget-summary-verdict 5af57cc2c8a71d2bdfbb1bd11931bf0d008a001799f1c7ef586ffdafb80ac5c7
+# digest carried-findings 354c66978da7d1744f0b6eb5c10a8e0da6c8427cd881bd2d8475092023d97372
 # digest check-22-spawn-ledger 0e5ff3a1b1ff961bc4148329da4248438069df6f46e35ebe20f59b0602c33ece
 # digest consumer-machinery-inventory d20cc399988d538e902de541916f7059332110ef170506b5a03ec3b34e0f7a07
 # digest consumer-suite-pool 7911a7e39a32ca5d34bd6ee397045a8fb6ffeb97334b9df9810a12980534db79
