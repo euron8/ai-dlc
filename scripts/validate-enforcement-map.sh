@@ -817,8 +817,9 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   RAISED TO 3355 FOR ONE NEW ARM, I125. `fork-profile.sh --stable --section by-arm`, base 893a3551
 #   (b230-bl515-512) and then the tip carrying I125, in ONE worktree at the same path, caller
 #   environment inherited: base 3340 (STABLE 2), tip 3349 (STABLE 2), so +9. I125 0 -> 11 is the
-#   shardable-role binding: one `mktemp`, four probe seed writes, one grep per file over the probe
-#   and the real pair, one `rm`; the instrument's usual one-fork jitter nets the rest. HIGH reading
+#   shardable-role binding: one `mktemp`, four `i125_check` calls at one grep per file each (three
+#   over the probe, one over the real pair), one `rm`; the probe's seed writes are builtins and fork
+#   nothing. The remaining -2 against the arm's 11 is the instrument's usual jitter. HIGH reading
 #   3349 plus the usual 6.
 FORK_BUDGET=3355
 

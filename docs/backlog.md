@@ -167,7 +167,13 @@ clearing arm 4 accepts, by a sharded re-dispatch or a cited exception (1)-(4) (c
 read, and a negation counts only in the clause before the `re-dispatch` claim (or before a cited
 exception), so "re-dispatched sharded, not serially" covers and "exception (3) does not apply" does
 not. A refused dispatch writes no spawn-ledger row. Over graph's pending-archive.md + pending.md,
-S298-S318, clause 1 denies nothing and clause 2 denies only S316/S317 rows arm S3 fails.
+S298-S318, clause 1 denies nothing, and clause 2 denies only S316/S317 rows that arm S3 fails under
+the 0.783.0 validator, which counts party seats as shardable (`party_seats`). Graph ran S317 under a
+validator with no `party_seats`, so a party-seat `invalid-exception` row passed Check 22 there and is
+denied here: graph's next pull refuses every S317-shaped adjudicator dispatch carrying such a row
+(the tea row `toolu_012cdPrfgjVUGRG1X3sAcT1g`, measured) until that row is waived. The tip
+adversary's replay over graph's S317 nonces: 20 denied, 19 of them recorded as Check 22 PASSED
+under graph's own validator.
 
 verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-512-adjudicator-dispatch-waiver.sh
 
