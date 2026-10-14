@@ -24,6 +24,19 @@
 #     the worktree is cut, for an absent or `false` tag (implementation.md Pre-dispatch routing).
 #     The sts-esc-why and dve-capital rows are line-mode `contains` pins: keep each pinned phrase
 #     on ONE line of its subject.
+#   - elicitation takes the axis and shape of the step's adversarial pass for every subject: the
+#     files axis per story plus cross groups and never one serial-document voice, the sections axis
+#     per part plus cross groups or one serial-document voice on a SERIAL answer
+#     (_gate-procedures.md "Validation cycle" item 2), and stories-test-strategy.md step 4 names
+#     elicitation among the sharded passes. sts-elic-sharded is a line-mode `contains` pin: keep
+#     that phrase on ONE line of step 4. The files-axis story ordinals come from
+#     `merge-adversarial-shards.sh --map` over the next review pass's `<artifact>-p<M>/` (it
+#     refuses the `-elicitation/` dir), a one-file `stories/` is `shard: 1/1`, and the
+#     sections-axis repair split expects the sha every elicitation shard notarized.
+#     KNOWN LIMIT (the "LEADS ARE NOT ENOUGH" note below, one step further): these para rows pin
+#     that each clause is PRESENT in the lead's paragraph. A separate sentence appended after it
+#     that contradicts it ("...; elicitation may instead run one voice") leaves every pinned
+#     clause intact and passes. No row here can fail on an addition; a reviewer reads for that.
 #
 # LEADS ARE NOT ENOUGH. A bold lead left intact over a body rewritten to say the opposite
 # ("need NOT carry", "dropped only through a HARD_BLOCK", "an assertion is a sufficient
@@ -198,6 +211,13 @@ impl-esc-before|S|steps/implementation.md|**Pre-dispatch routing (Rule 28).**|**
 impl-esc-keep|S|steps/implementation.md|**Pre-dispatch routing (Rule 28).**|**Pre-dispatch auth check.**|- Before a story's FIRST dev dispatch|para|A story already dispatched keeps its route
 impl-esc-false|S|steps/implementation.md|**Pre-dispatch routing (Rule 28).**|**Pre-dispatch auth check.**|- Before a story's FIRST dev dispatch|para|is absent or `false`
 dve-capital|R|dev-escalated.md|## Identity|## Contract|capital-path / high-blast-radius owned paths|contains
+elic-shape-files|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|one `adversary` per story ordinal plus one cross-story `adversary` per cross group, never one voice under `shard: none (serial-document)`
+elic-shape-sections|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|one `adversary` per part plus one cross-part `adversary` per cross group; a `SERIAL:` answer is ONE `adversary` under `shard: none (serial-document)`
+elic-shape-ordinals|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|The story ordinals are the ones `scripts/ai-dlc/merge-adversarial-shards.sh --map <shards-dir>` prints, `<shards-dir>` being the next review pass's `s<N>/shards/<artifact>-p<M>/`, which the lead creates first
+elic-shape-onefile|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|A `stories/` holding ONE file is ONE `adversary` briefed `shard: 1/1 <story-index>`
+elic-shape-expectsha|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|split into that same shard dir with `--expect-sha` the sha every elicitation shard notarized
+elic-shape-lead|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|a lighter shape is not the lead's to choose
+sts-elic-sharded|S|steps/stories-test-strategy.md|### 4.|### 5.|so the round, elicitation, each review pass and each repair|contains
 PINS
 }
 

@@ -106,12 +106,42 @@ verify: manual -- close when the remediator contract (`core/team-roles/remediato
 
 ## BL-509 — elicitation fans out per part where one voice measured an order of magnitude cheaper
 
-**DEFECT. [efficiency rank 3] about $60 per elicitation run.** s317 stories ran elicitation as 22 sharded
-seats ($69.53); s318 ran it as one voice ($9.37). s318 requirements ran 19 elicitation shards
-($56.73, 37 MAJORs). Whether the single voice finds as much has not been measured, so the close
-condition is a measurement, not a shard count.
+**DEFECT. [efficiency rank 3] the elicitation shape was the lead's choice, not the procedure's.**
+Population: graph sprints s317-s318, analysis costs re-derived over 1851 spawns ($3256.91); the
+three control figures reproduce (s317 stories 22 sharded seats $69.53, s318 requirements 19 shards
+$56.73, s318 stories one voice $9.37). Critical+major per dollar is FLAT across shapes: 0.50 (s317
+stories, 22 shards), 0.67 (s318 requirements, 19 shards), 0.53 (s318 stories, single voice), 0.77
+(s317 requirements, single). Per million output tokens: 27 / 32 / 21 / 24 in the same order. Yield
+follows how much the agents write, not the shape: on stories the single voice found about 4.5x
+fewer findings per KB for about 4.7x less money.
 
-verify: manual -- close when `_gate-procedures.md`'s validation cycle states the elicitation fan-out shape with a recorded measurement of findings per dollar for sharded vs single-voice elicitation on one corpus.
+The filed premise did not reproduce: one voice is cheaper per RUN, not per finding, so "an order of
+magnitude cheaper" bought proportionally fewer findings. The real defect is procedural. Validation
+cycle item 2 prescribed a shape only for the requirements subject, and stories-test-strategy.md
+step 4 never named elicitation, so s318 ran stories under `shard: none (serial-document)`, which is
+not Rule 28 compliant in substance (`stories/` is the files axis, rule-28.md ~:62; exception 4
+covers only a single serial document). Check 22 accepted it because validate-spawn-ledger.sh ~:973
+reads only the first parenthesised token. Built: item 2 now states that elicitation takes the
+axis and shape of the step's adversarial pass for every subject (files axis per story plus cross
+groups, never one serial-document voice; sections axis per part plus cross groups, or one
+serial-document voice on a `SERIAL:` answer; requirements unchanged), the files-axis story ordinals
+are the ones `merge-adversarial-shards.sh --map` prints for the next review pass's
+`<artifact>-p<M>/` (it refuses the `-elicitation/` dir), a one-file `stories/` is one voice under
+`shard: 1/1`, the sections-axis repair split expects the sha every elicitation shard notarized,
+step 4 names elicitation among its sharded passes, and process-rule-pins pins each clause. Those
+rows pin presence only: a contradicting sentence appended after a pinned clause passes them. Check 22 was not tightened: an S3 arm refusing
+`none (serial-document)` on a `stories/` subject was not built because its false-positive set on
+graph's ledgers was not measured; it would also fire on graph's recorded s318 stories row, a true
+finding on a closed sprint.
+
+Open follow-up, the cost question: the cheaper fewer-larger-shards shape is not Rule 28 compliant
+today (no binning partitioner) and has no controlled measurement. A frozen-corpus run is the only
+measurement that can justify a binning amendment to Rule 28: reconstruct s318's pre-elicitation
+stories corpus from the 13 `artifact_sha` tokens in graph's `s318/stories-elicitation.md`, run a
+single voice, 21-way sharded, and K~4 binned, all opus/medium under one brief, and score them
+against each other and against s318 p1's 30.
+
+verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-509-elicitation-shape.sh
 
 ## BL-510 — implementation rework is driven by evidence and bookkeeping, not code
 
