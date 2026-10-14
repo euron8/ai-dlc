@@ -164,7 +164,7 @@ p_partyx4 "$JOIN" && ok "PS12: an earlier step's pre-marker seat cited beside ma
 # ---- the entry contract (BL-508, BL-519). Each refusal has its ALLOW twin one property apart.
 p_sibtotal "$JOIN" && ok "EC1: every part omits siblings: (total omission) -> REFUSED, each repaired edit named, no PENDING (the era is the install, not the parts)" \
   || bad "EC1: a part set omitting siblings: everywhere was not refused (rc=$RC): $(cat "$JO")"
-p_sibok "$JOIN" && ok "EC2: every part carries siblings: -> JOINED, no PENDING, each escalated entry printed by part and ESCALATED-COUNT: 3" \
+p_sibok "$JOIN" && ok "EC2: every part carries siblings: -> JOINED, no PENDING, each escalated entry printed by part, ESCALATED-COUNT: 3 and SERIAL-REQUIRED: 3 (the edit: n/a repairs not counted)" \
   || bad "EC2: a post-rule part set did not join, or its escalated entries were not printed (rc=$RC): $(cat "$JO")"
 p_sibmissing "$JOIN" && ok "EC3: EC2 one property apart, part 03 a repaired MAJOR with an edit and no siblings: -> REFUSED by name, nothing written" \
   || bad "EC3: a repaired edit with no siblings: beside post-rule parts was not refused (rc=$RC): $(cat "$JO")"
@@ -178,8 +178,14 @@ p_srcpending "$JOIN" && ok "EC7: --sources over a pre-rule record (a repaired ed
   || bad "EC7: a pre-rule --sources record did not pass with one PENDING line (rc=$RC): $(cat "$JO")"
 p_srcera "$JOIN" && ok "EC8: --sources positional era: pre-rule entry, carrier, omitting entry -> rc 2 naming only the entry after the carrier" \
   || bad "EC8: the --sources positional era did not bind from its first carrier (rc=$RC): $(cat "$JO")"
-p_srcclosed "$JOIN" && ok "EC9: --sources: an escalated entry a later repaired entry closes is omitted; the open one and the split remainder are printed, count 2" \
+p_srcclosed "$JOIN" && ok "EC9: --sources: an escalated entry a later repaired entry names on closes: is printed ESCALATED-CLOSED; the open one and the split remainder are printed, count 2, no SERIAL-REQUIRED" \
   || bad "EC9: --sources escalated-entry closure answered wrongly (rc=$RC): $(cat "$JO")"
+p_srchalf "$JOIN" && ok "EC12: --sources over a joined record: a LATER half-repair under the same source token in another part, and a closes: written BEFORE the escalation -> the escalation stays open (graph s318 dev-05#F-3)" \
+  || bad "EC12: a token-sharing half repair or an earlier closes: closed an escalation (rc=$RC): $(cat "$JO")"
+p_srccross "$JOIN" && ok "EC13: --sources: one heading escalated in 01.md AND 02.md, closes: names 01.md -> 01.md CLOSED, 02.md open, count 1" \
+  || bad "EC13: a closes: line did not close exactly the part it names (rc=$RC): $(cat "$JO")"
+p_sibdoc "$JOIN" && ok "EC14: --document, one section part omitting siblings: -> REFUSED naming it with the pre-install re-dispatch remedy, the document not assembled" \
+  || bad "EC14: a --document part omitting siblings: was not refused (rc=$RC): $(cat "$JO")"
 p_setasideshard "$JOIN" && ok "EC10: a repaired MAJOR set aside only as 'outside this shard' -> REFUSED (the regex's first half)" \
   || bad "EC10: an 'outside this shard' set-aside was not refused (rc=$RC): $(cat "$JO")"
 p_setasidenr "$JOIN" && ok "EC11: a repaired MAJOR set aside only as 'not required' -> REFUSED (the regex's second half)" \

@@ -231,7 +231,7 @@ p_docjoin() { # three section writers, three parts -> JOINED, the document ASSEM
     && [ ! -e "$w/$RDREL/sections/2.md" ] && [ "$b" != "$a" ] \
     && grep -qx -- "- artifact: $DOCREL" "$o" \
     && grep -qx -- "- artifact_sha_before: $b" "$o" \
-    && grep -qx -- "- artifact_sha_after: $a" "$o"
+    && grep -qx -- "- artifact_sha_after: $a" "$o" && has "$JO" "SERIAL-REQUIRED: 3"
 }
 p_docoverlap() { # one section copy written by two agents -> REFUSED, the document not assembled
   local w; w="$(doc_world)" || return 1
@@ -628,7 +628,8 @@ p_sibtotal() { # TOTAL omission: every part is graph's pre-rule shape (no siblin
   rawpart "$w" 01 2.1; rawpart "$w" 02 2.2; rawpart "$w" 03 3.1
   run_join "$1" "$w"
   refused "$w" "01.md: the N9 — MINOR entry is repaired with an edit and carries no 'siblings:' field" \
-    && has "$JO" "03.md: the M6 — MAJOR entry is repaired with an edit and carries no 'siblings:' field" && ! has "$JO" "PENDING:"
+    && has "$JO" "03.md: the M6 — MAJOR entry is repaired with an edit and carries no 'siblings:' field" && ! has "$JO" "PENDING:" \
+    && has "$JO" "parts written before the install: re-dispatch the shards"
 }
 p_srcpending() { # --sources over a record that predates the rule (a repaired edit, no siblings: anywhere) -> rc 0, ONE PENDING line
   local w n; w="$(mktemp -d "$WORK/src.XXXXXX")" && mkdir -p "$w/.claude" && seat_seed "$w" 305 || return 1
@@ -640,14 +641,43 @@ p_srcera() { # --sources, positional era: a pre-rule entry, then a carrier, then
   local w; w="$(mktemp -d "$WORK/src.XXXXXX")" && mkdir -p "$w/.claude" && seat_seed "$w" 305 || return 1
   src_rec "$w" '### F-1 — MAJOR\n- disposition: repaired\n- source: architecture-dev-1.md#F-1\n- edit: s305/stories/a.md:3\n\n### F-2 — MAJOR\n- disposition: repaired\n- source: architecture-dev-1.md#F-2\n- edit: s305/stories/a.md:9\n- siblings: n/a (insertion)\n\n### F-3 — MAJOR\n- disposition: repaired\n- source: architecture-dev-1.md#F-3\n- edit: s305/stories/a.md:12\n' "$1"
   [ "$RC" -eq 2 ] && has "$JO" "rec.md: the F-3 — MAJOR entry is repaired with an edit and carries no 'siblings:' field" \
-    && ! has "$JO" "the F-1 — MAJOR entry is repaired with an edit"
+    && ! has "$JO" "the F-1 — MAJOR entry is repaired with an edit" && ! has "$JO" "re-dispatch the shards"
 }
-p_srcclosed() { # --sources: an escalated F-1 a LATER repaired entry closes (source spelled by path), an open F-2, and a
-  # split pair (repaired THEN escalated under F-3) whose remainder stays open -> rc 0, F-2 and F-3 printed, F-1 not, count 2
+p_srcclosed() { # --sources: an escalated F-1 a LATER repaired entry names on a `closes:` line, an open F-2, and a split
+  # pair (repaired THEN escalated under F-3) whose remainder stays open -> rc 0, F-2 and F-3 open, F-1 printed CLOSED,
+  # count 2; no SERIAL-REQUIRED line (that record may be the serial remediator's own)
   local w; w="$(mktemp -d "$WORK/src.XXXXXX")" && mkdir -p "$w/.claude" && seat_seed "$w" 305 || return 1
-  src_rec "$w" '### F-1 — MAJOR\n- disposition: escalated\n- source: architecture-dev-1.md#F-1\n- edit: n/a\n\n### F-2 — MAJOR\n- disposition: escalated\n- source: architecture-dev-1.md#F-2\n- edit: n/a\n\n### F-3 — MAJOR\n- disposition: repaired\n- source: architecture-dev-1.md#F-3\n- edit: n/a (no edit)\n\n### F-3 (remainder) — MAJOR\n- disposition: escalated\n- source: architecture-dev-1.md#F-3\n- edit: n/a\n\n### serial F-1 — MAJOR\n- disposition: repaired\n- source: _bmad-output/party-mode/s305/architecture-dev-1.md#F-1\n- edit: n/a (no edit)\n' "$1"
+  src_rec "$w" '### F-1 — MAJOR\n- disposition: escalated\n- source: architecture-dev-1.md#F-1\n- edit: n/a\n\n### F-2 — MAJOR\n- disposition: escalated\n- source: architecture-dev-1.md#F-2\n- edit: n/a\n\n### F-3 — MAJOR\n- disposition: repaired\n- source: architecture-dev-1.md#F-3\n- edit: n/a (no edit)\n\n### F-3 (remainder) — MAJOR\n- disposition: escalated\n- source: architecture-dev-1.md#F-3\n- edit: n/a\n\n### serial F-1 — MAJOR\n- disposition: repaired\n- source: _bmad-output/party-mode/s305/architecture-dev-1.md#F-1\n- edit: n/a (no edit)\n- closes: rec.md F-1 — MAJOR\n' "$1"
   [ "$RC" -eq 0 ] && has "$JO" "ESCALATED: rec.md F-2 — MAJOR" && has "$JO" "ESCALATED: rec.md F-3 (remainder) — MAJOR" \
-    && ! has "$JO" "ESCALATED: rec.md F-1 — MAJOR" && has "$JO" "ESCALATED-COUNT: 2 (1 closed by a later repaired entry sharing a source)"
+    && ! has "$JO" "ESCALATED: rec.md F-1 — MAJOR" && has "$JO" "ESCALATED-CLOSED: rec.md F-1 — MAJOR" \
+    && has "$JO" "ESCALATED-COUNT: 2 (1 closed by a later repaired entry's closes: line)" && ! has "$JO" "SERIAL-REQUIRED"
+}
+p_srchalf() { # --sources over a JOINED record (shard markers): 01.md escalates F-3; 02.md, LATER, repairs another conjunct
+  # of F-3 under the SAME source token and names no closes:; and a closes: naming 01.md's F-3 written BEFORE the
+  # escalation -> the escalation stays OPEN: graph s318 architecture-party-repair-p1's dev-05#F-3 shape, which a
+  # token-keyed closure closed. Its part is the shard marker, never the record name.
+  local w; w="$(mktemp -d "$WORK/src.XXXXXX")" && mkdir -p "$w/.claude" && seat_seed "$w" 305 || return 1
+  src_rec "$w" '<!-- shard: 01.md -->\n### F-2 — MAJOR\n- disposition: repaired\n- source: architecture-dev-1.md#F-2\n- edit: n/a (no edit)\n- closes: 01.md F-3 — MAJOR\n\n### F-3 — MAJOR\n- disposition: escalated\n- source: architecture-dev-1.md#F-3\n- edit: n/a (escalated: the other conjunct lies in 02.md)\n\n<!-- shard: 02.md -->\n### F-3 — MAJOR\n- disposition: repaired\n- source: architecture-dev-1.md#F-3\n- edit: n/a (no edit)\n' "$1"
+  [ "$RC" -eq 0 ] && has "$JO" "ESCALATED: 01.md F-3 — MAJOR" && ! has "$JO" "ESCALATED-CLOSED:" \
+    && has "$JO" "ESCALATED-COUNT: 1 (0 closed"
+}
+p_srccross() { # --sources over a JOINED record: F-1 escalated in BOTH 01.md and 02.md; the serial remediator's entry
+  # closes 01.md's by name -> 01.md's printed CLOSED, 02.md's still open, count 1
+  local w; w="$(mktemp -d "$WORK/src.XXXXXX")" && mkdir -p "$w/.claude" && seat_seed "$w" 305 || return 1
+  src_rec "$w" '<!-- shard: 01.md -->\n### F-1 — MAJOR\n- disposition: escalated\n- source: architecture-dev-1.md#F-1\n- edit: n/a\n\n<!-- shard: 02.md -->\n### F-1 — MAJOR\n- disposition: escalated\n- source: architecture-dev-1.md#F-1\n- edit: n/a\n\n### serial F-1 — MAJOR\n- disposition: repaired\n- source: architecture-dev-1.md#F-1\n- edit: n/a (no edit)\n- **closes:** `01.md F-1 — MAJOR`\n' "$1"
+  [ "$RC" -eq 0 ] && has "$JO" "ESCALATED-CLOSED: 01.md F-1 — MAJOR" && has "$JO" "ESCALATED: 02.md F-1 — MAJOR" \
+    && ! has "$JO" "ESCALATED: 01.md F-1 — MAJOR" && has "$JO" "ESCALATED-COUNT: 1 (1 closed"
+}
+p_sibdoc() { # --document: three section parts, the FIRST omitting siblings: (the others carry the section-shard form)
+  # -> REFUSED naming it, with the pre-install remedy; the siblings arm is every parts mode, not files mode alone
+  local w; w="$(doc_world)" || return 1
+  cp "$w/$DOCREL" "$w/prd.before"
+  sec_edit "$w" 1 "$AG1"; sec_edit "$w" 2 "$AG2"; sec_edit "$w" 3 "$AG3"
+  docpart "$w" 1; docpart "$w" 2; docpart "$w" 3
+  grep -v 'siblings:' "$w/$RDREL/1.md" > "$w/p1" && mv "$w/p1" "$w/$RDREL/1.md"
+  run_docjoin "$1" "$w"
+  doc_refused "$w" "1.md: the (before any heading) entry is repaired with an edit and carries no 'siblings:' field" \
+    && has "$JO" "parts written before the install: re-dispatch the shards" && cmp -s "$w/$DOCREL" "$w/prd.before"
 }
 saworld() { # <join> <claim tail> -- one writer, one part: a repaired MAJOR with an edit, its siblings line, the claim
   local w; w="$(new_world)"
@@ -669,7 +699,8 @@ p_sibok() { # every part carries siblings: -> JOINED, no PENDING, and each escal
   sibpart "$w" 01 "$S21"; sibpart "$w" 02 "$S22"; sibpart "$w" 03 "$S31"
   run_join "$1" "$w"
   [ "$RC" -eq 0 ] && has "$JO" "(3 parts, 3 writers)" && ! has "$JO" "PENDING:" \
-    && has "$JO" "ESCALATED: 01.md F-2 — MINOR" && has "$JO" "ESCALATED: 03.md F-2 — MINOR" && has "$JO" "ESCALATED-COUNT: 3"
+    && has "$JO" "ESCALATED: 01.md F-2 — MINOR" && has "$JO" "ESCALATED: 03.md F-2 — MINOR" && has "$JO" "ESCALATED-COUNT: 3" \
+    && has "$JO" "SERIAL-REQUIRED: 3"
 }
 p_sibmissing() { # p_sibok one property apart: part 03 is a pre-rule entry (M6, repaired, an edit, no siblings:) -> REFUSED by name
   local w; w="$(new_world)"; three_writers "$w"
@@ -690,7 +721,7 @@ p_handoff() { # the same entry split, the remainder escalated under the same sou
   cp "$HERE/seed.block-handoff.md" "$w/$SLOT/shards/stories-repair-p1/01.md"
   run_join "$1" "$w"
   joined_one "$(out_of "$w")" && has "$JO" "ESCALATED: 01.md stories-sm-05.md#F-3 (remainder) — MAJOR" \
-    && has "$JO" "ESCALATED-COUNT: 1"
+    && has "$JO" "ESCALATED-COUNT: 1" && has "$JO" "SERIAL-REQUIRED: 1"
 }
 p_srcsetaside() { # --sources applies the set-aside arm too: a resolving source, the set-aside claim -> rc 2, the refusal named
   local w; w="$(mktemp -d "$WORK/src.XXXXXX")" && mkdir -p "$w/.claude" && seat_seed "$w" 305 || return 1
@@ -698,7 +729,7 @@ p_srcsetaside() { # --sources applies the set-aside arm too: a resolving source,
   [ "$RC" -eq 2 ] && has "$JO" "rec.md:1: the F-1 — MAJOR entry is dispositioned repaired while its claim sets part of the fix aside"
 }
 
-P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr"
+P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc"
 
 # ---- A PART'S DERIVATION SURVIVES THE JOIN. The part's ```derived fence is copied into the joined
 # record, and the gate re-runs `validate-artifact-derivations.sh` over the sprint dir AFTER the

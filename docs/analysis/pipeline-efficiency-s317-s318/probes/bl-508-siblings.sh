@@ -12,12 +12,18 @@
 #   OFFENDER  TWIN with part 02's siblings: removed                      -> must REFUSE naming it
 #   SETASIDE  one part, a repaired MAJOR carrying siblings:, set aside only as "outside this shard"
 #                                                                        -> must REFUSE
+#   TWIN also prints `SERIAL-REQUIRED: 2` (the two real edits; the edit: n/a MINORs are not counted):
+#             the count that dispatches the serial remediator's cross-file sibling grep.
+#   DOC       --document mode, the real splitter; part 1 omits siblings:, part 2 carries the
+#             section-shard form                                       -> must REFUSE naming part 1
 # --sources worlds (a record no join wrote; one seat file F-1..F-3 under party-mode/s305):
 #   SRC-ERA   pre-rule entry, a carrier, an entry omitting the field   -> rc 2 naming the third only
 #   SRC-ESC   a pre-rule repaired edit and one escalated entry          -> rc 0, one PENDING line,
 #                                                                         `ESCALATED-COUNT: 1`
 # exit 0 fixed, 1 live (any world answers the wrong way), 9 precondition missing.
 # Measured at 0.781.0 (origin/main fe7d5ec2): TOTAL and OFFENDER join -> exit 1. Run from the repo root.
+# Regressions scored non-zero: the siblings arm applied in files mode only (DOC); SERIAL-REQUIRED not
+# printed, or counted over every repaired entry (TWIN).
 set -u
 J="$(pwd)/core/scripts/join-remediator-shards.sh"; H="$(pwd)/core/hooks/ai-dlc-gate-remediation-guard.sh"
 [ -f "$J" ] && [ -f "$H" ] || exit 9
@@ -61,9 +67,35 @@ w="$(world)"; entry a.md no > "$w/$SLOT/$D/01.md"; entry b.md no > "$w/$SLOT/$D/
 join "$w"; [ "$RC" -eq 2 ] || exit 1
 case "$OUT" in *"01.md: the F-1 — MAJOR $NOSIB"*"02.md: the F-1 — MAJOR $NOSIB"*) ;; *) exit 1 ;; esac
 case "$OUT" in *PENDING*) exit 1 ;; esac
-# TWIN
+# TWIN (and the serial remediator's dispatch count: the two real edits, never the edit: n/a F-9s)
 w="$(world)"; entry a.md yes > "$w/$SLOT/$D/01.md"; entry b.md yes > "$w/$SLOT/$D/02.md"
 join "$w"; [ "$RC" -eq 0 ] || exit 1
+case "$OUT" in *"SERIAL-REQUIRED: 2"*) ;; *) exit 1 ;; esac
+# DOC: --document mode, the REAL splitter, two section edits through the REAL hook; part 1 omits
+# siblings:, part 2 carries the section-shard form -> REFUSED naming part 1 (the arm is every parts mode)
+w="$(mktemp -d)" || exit 9
+mkdir -p "$w/$SLOT" "$w/_bmad-output/gate-adjudication" || exit 9
+printf '# Pipeline Snapshot\n' > "$w/_bmad-output/pipeline-snapshot.md"
+DOC=_bmad-output/planning-artifacts/prd.md; RD=$SLOT/shards/prd-repair-p1
+{ printf '# PRD\n\n## Goals\nThe first goal, in one line of prose.\nThe second goal, in one line of prose.\n\n'
+  printf '## Scope\nThe first scope item, in one line of prose.\nThe second scope item, in one line of prose.\n\n'
+  printf '## Risks\nThe first risk, in one line of prose.\nThe second risk, in one line of prose.\n'; } > "$w/$DOC"
+bash "$(pwd)/core/scripts/partition-document.sh" --split "$w/$DOC" "$w/$RD" >/dev/null 2>&1 || exit 9
+[ -f "$w/$RD/sections/3.md" ] || exit 9
+for p in 1:a16fddf14ea289491 2:acd81ddfb7c535037 3:a078671394c90dc56; do
+  printf 'Repaired.\n' >> "$w/$RD/sections/${p%%:*}.md"
+  jq -nc --arg f "$w/$RD/sections/${p%%:*}.md" --arg a "${p#*:}" \
+    '{session_id:"t", tool_name:"Edit", transcript_path:"", tool_input:{file_path:$f}, agent_id:$a}' \
+    | CLAUDE_PROJECT_DIR="$w" bash "$H" >/dev/null 2>&1
+done
+printf '### S-1 — MAJOR\n- disposition: repaired\n- edit: %s/sections/1.md:2\n- derivation: n/a (no factual claim)\n' "$RD" > "$w/$RD/1.md"
+for o in 2 3; do
+  printf '### S-%s — MAJOR\n- disposition: repaired\n- edit: %s/sections/%s.md:2\n- siblings: n/a (section shard; re-checked by the serial remediator after assembly)\n- derivation: n/a (no factual claim)\n' "$o" "$RD" "$o" > "$w/$RD/$o.md"
+done
+OUT="$(AI_DLC_PROJECT_ROOT="$w" bash "$J" --document "$DOC" "$w/$RD" --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z 2>&1)"; RC=$?
+[ "$RC" -eq 2 ] || exit 1
+case "$OUT" in *"1.md: the S-1 — MAJOR $NOSIB"*) ;; *) exit 1 ;; esac
+case "$OUT" in *"2.md: the S-2 — MAJOR $NOSIB"*) exit 1 ;; esac
 # OFFENDER
 w="$(world)"; entry a.md yes > "$w/$SLOT/$D/01.md"; entry b.md no > "$w/$SLOT/$D/02.md"
 join "$w"; [ "$RC" -eq 2 ] || exit 1

@@ -110,8 +110,14 @@ replaced text over ONLY its own files (a concurrent shard fixing a copy elsewher
 wider fence stale) plus a control count of the new text, and names an out-of-shard sibling on an
 unfenced `escalated` entry. A section or subject shard writes `n/a (section shard; re-checked by
 the serial remediator after assembly)`, because assembly deletes the section file its control
-names. An insertion-only edit writes `n/a (insertion)`. The serial remediator runs the cross-file
-grep over the assembled files and re-checks moved cites, after the join. `join-remediator-shards.sh`
+names. An insertion-only edit writes `n/a (insertion)`, a deletion-only edit `n/a (deletion)`. The serial
+remediator runs the cross-file grep over the assembled files (`s<N>/stories s<N>/epics` after a
+files-mode join, never the slot, `shards/` or a record) and re-checks moved cites, after the join.
+Every repaired edit owes that grep, so the join prints `SERIAL-REQUIRED: <n>` (repaired entries
+with a real edit) beside `ESCALATED-COUNT`, and the procedure dispatches the serial remediator in
+every mode when either is above 0. Before this it ran only for an escalation or a multi-file
+finding, and in graph s318 `stories-repair-p3` and `stories-elicitation-repair-p1` no serial
+remediator ran. `join-remediator-shards.sh`
 refuses a missing field in every parts mode, total omission included: the era is the install,
 since parts are written fresh by agents reading the installed role file. Only `--sources`, which
 checks a record that may span a pull, keeps a PENDING line, binding from the record's first
@@ -200,8 +206,14 @@ section and subject modes' clause (a fix outside your files is `escalated`), a p
 MAJOR/CRITICAL whose claim matches `outside (this|my|the) (shard|part|section)|not required` with
 no hand-off token. It prints `ESCALATED:` per escalated entry and a count, and the dispatch
 procedure sends the serial remediator whenever the count is above 0; before this, nothing consumed
-an escalated entry. In `--sources` mode the lead adjudicates those lines rather than re-dispatching,
-and the join omits an escalated entry that a later `repaired` entry sharing its `source:` closes.
+an escalated entry. In `--sources` mode the lead adjudicates those lines rather than re-dispatching.
+An escalated entry closes only when a later `repaired` entry carries `- closes: <part> <heading>`
+copied from its `ESCALATED:` line, and is then printed as `ESCALATED-CLOSED:`. Closure keyed on the
+`source:` token was wrong: a later half repair of another conjunct under the same token, or in
+another part, closed the whole escalation. Measured over a scratch copy of graph's s318
+`architecture-party-repair-p1.md`, where dev-05#F-3 is escalated in part 5.md and repaired under
+the same token in the later part 6.md, the token-keyed join closed 5 of its 8 escalations and the
+`closes:`-keyed join closes none.
 Measured over graph's 202 s317/s318 shard parts (478 repaired MAJOR+ entries, counted with the
 join's own heading-severity and disposition grammar): 1 hit, that entry, 0 false positives. Not caught: a set-aside reworded past the regex, and C-03's
 shape, a substantive mis-repair whose prose and pin agree.
