@@ -36,8 +36,9 @@ read (`cr`) and output. "API-equiv $" prices them at list rates from the `claude
 (cached 2026-10-06): Opus 5.5 $4/$20, Sonnet 5.5 $2/$10, Haiku 5.5 $0.10/$0.50, Fable 5.1
 $10/$50 per M input/output. Cache reads are priced at $0.20 (Opus/Sonnet) and $0.25 (Fable).
 **Two prices are assumptions, not quoted figures:** a 1-hour cache write at 2× input, and a Haiku
-cache read at 0.1× input. Sprint 317's lead partly ran on a local `qwen38flash-mlx` model (3539
-calls). It is priced at $0 and is excluded from the dollar figures, but not from token counts. The
+cache read at 0.1× input. Sprint 317's lead partly ran on a local `qwen38flash-mlx` model (3,546
+API calls by unique `message.id`, of which 3,539 carry a `usage` block and enter the token tables).
+It is priced at $0 and is excluded from the dollar figures, but not from token counts. The
 dollar column is a relative weight for ranking, not an invoice.
 
 **Step attribution.** A lead session is segmented at each `Read` of
@@ -580,8 +581,14 @@ Baseline roles that never changed: adversary (opus/medium), qa, pm, sm, analyst 
 
 ### Lead model
 
+**Running the lead on the local `qwen38flash-mlx` model is an operator goal.** Defects the pipeline
+exposes under a local lead are opportunities to fix in the pipeline, not reasons to move the lead
+back to a hosted model. A lead-model comparison here is therefore not a choice between models. It
+is a list of what has to change for the local lead to run cleanly.
+
 The lead ran **Sonnet 5.5** for most pipeline work in both sprints. A **local `qwen38flash-mlx`**
-model led 3,546 API calls (unique `message.id`; 9,423 transcript lines) of s317 pipeline work: route
+model led 3,546 API calls (unique `message.id`, the same basis as the Method section; 9,423
+transcript lines) of s317 pipeline work: route
 through stories on 10-08, then implementation, gate 3, sprint-review and deploy-validate from 10-10 to
 10-11. It is priced at $0, so the dollar tables understate s317's lead cost. Opus led only a handful
 of pipeline calls (68 transcript lines). The per-regime guard rates below are per active hour, which
@@ -592,6 +599,41 @@ Cost-bearing guard events (handoff guard, ACK denials, cap rejections) ran 3.25/
 about 1.4–1.7/h on Sonnet 1M and 0.56/h on qwen/xhigh. Each regime ran different phases, so these
 rates measure phase mix as much as model. Lead-caused nonce discards ran at about 0.08 per active hour
 on both Sonnet and qwen. **No lead-model effect is separable** (LOW).
+
+**Defects exposed under the local lead (opportunities toward the goal):**
+
+- **Inline product edit, Rule 28.** The qwen/medium lead edited `rebalancer/execution.py` itself for
+  ff1 (5 Edits, 10-11T19:52–19:54Z, session `af48eb49`). The edit was later reverted and a dev seat
+  re-dispatched. The rule is prose. `core-guard` and `gate-remediation-guard` did not stop a lead edit
+  to consumer product code outside a recorded gate FAIL.
+  → `core/hooks/ai-dlc-gate-remediation-guard.sh`; `RB/rule-28.md`.
+- **Fabricated future timestamps** in the pipeline snapshot, in the same qwen/medium window. They
+  were found by the s317 retro, not by a mechanism. **The same defect recurs under the Sonnet lead
+  in s318:** the snapshot clock ran ahead, with corrections at pipeline-snapshot-history.md:215, 219
+  and 225 (10-14 02:11–02:58Z). It is the pipeline's defect, not the model's.
+  → `core/skills/ai-dlc/steps/route.md` step 0a (snapshot integrity).
+- **Malformed gate nonce.** Nonce `083048Z` (qwen/xhigh) was minted with a stray hyphen from
+  `date -u +%Y-%m-%dT…`, and its checkpoint closed before dispatch. A hand-composed nonce format is a
+  free-text step that a scripted minter would remove.
+  → `core/scripts/gate-checkpoint.sh`.
+- **Lead-authored gate paperwork.** Nonce `230257Z` (qwen/xhigh) was discarded because "The FAIL
+  was the lead's own paperwork" (an OVERRIDDEN waiver). This is the same Check 22 class Sonnet also
+  failed (DEFECT 10).
+- **Skipped post-compaction recovery MUSTs** in s317 (retro), across qwen and Sonnet stints.
+  `recover-gate` exists, but the MUSTs were still skipped.
+  → `core/hooks/ai-dlc-recover-gate.sh`.
+
+They fall into three kinds, which need different fixes:
+
+- **No mechanism.** The inline product edit: Rule 28 is prose only.
+- **A mechanism with a gap.**
+  - Snapshot integrity (route 0a) does not catch future stamps.
+  - `gate-checkpoint.sh` accepts a nonce the lead composed by hand without validating its format.
+  - `recover-gate` exists, but the recovery MUSTs were still skipped.
+- **A mechanism that fired and cost a re-pass.** Check 22 caught the bad waiver; the waste was the
+  discarded nonce, not an escape.
+
+A local lead exercises these gaps first. Closing them helps every lead model.
 
 ### What the bindings did *not* explain
 
