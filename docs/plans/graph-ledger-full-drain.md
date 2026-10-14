@@ -961,6 +961,9 @@ otherwise, and where any older paragraph in this file reads narrower, these win.
   Fan it out, one hand per slice of about 14 entries, in the same spawn block as the sweep. Every
   close that holds up, and every live entry with a small fix, rides the batch's releases beside
   the candidates.
+- *Added 2026-10-14 from the efficiency analysis, on the operator's acceptance of the recommendation,
+  not a batch-174 ruling:* an entry citing `[efficiency rank N]` is ordered by N among backlog
+  entries; its context is `docs/analysis/pipeline-efficiency-s317-s318.md`, section "Ranked defects".
 - **Ship each release the moment its builders are collected.** Never hold a finished fix for a
   slower one. A batch splits into as many releases as its collection order produces. Action 2's
   batching conditions govern what goes into ONE release among the builders already collected;
