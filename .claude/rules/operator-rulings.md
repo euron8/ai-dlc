@@ -71,6 +71,12 @@ A fixture or gate that takes tens of minutes is a test doing more work than its 
 not a scheduling detail. Report a cost that grew under your own change when you see it, with the
 before and after, and never quote a long wall clock as normal.
 
+## Handoff gaps are out of scope for efficiency analysis
+
+The idle time between a handoff and the next `/ai-dlc resume` is never a finding, an overhead row
+or an opportunity in pipeline-efficiency analysis. Measure in-session time only, and state the
+exclusion once in the method.
+
 ## Reaching the operator
 
 `AskUserQuestion` when a decision is genuinely theirs and the answer changes what happens
