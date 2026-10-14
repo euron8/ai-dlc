@@ -398,6 +398,27 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    proceed.
 2. `/bmad-advanced-elicitation` — probe until zero ambiguity and update the
    artifact. **Run sub-step snapshot update**, then proceed.
+
+   **Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**
+   The subject is sharded for elicitation exactly as "Adversarial review dispatch" shards it for
+   the step's convergence passes; a lighter shape is not the lead's to choose. Two or more files
+   (`stories/`, the files axis): one `adversary` per story ordinal plus one cross-story
+   `adversary` per cross group, never one voice under `shard: none (serial-document)`, which Rule
+   28 keeps for a single document. One document that `partition-document.sh --map` partitions
+   (the sections axis): one `adversary` per part plus one cross-part `adversary` per cross group;
+   a `SERIAL:` answer is ONE `adversary` under `shard: none (serial-document)` (Rule 28 exception
+   4), which is how an architecture or carry-over evaluation that does not partition runs. The
+   requirements subject: as below. On the files and sections axes each shard runs
+   `/bmad-advanced-elicitation` in its own context scoped to its part, records findings and edits
+   nothing, writes early and closes with its `seat-complete:` line as item 1 states, and writes
+   `_bmad-output/planning-artifacts/s<N>/shards/<artifact>-elicitation/<ordinal>.md` (a cross
+   shard: `cross-<g>.md`, or `cross.md` when there is one group) with
+   `skill: bmad-advanced-elicitation` and no `verdict:` line. Beat-join every shard path with
+   `--complete`. No merge reads that directory (`merge-adversarial-shards.sh --elicitation` merges
+   only the requirements subject), so the shard records ARE the elicitation record, and the
+   elicitation repair reads them shard by shard, dispatched on the same axis by "Adversarial
+   repair dispatch".
+
    **When the subject is the requirements subject**, elicitation is sharded (Rule 28, "Split
    dispatch": subject axis): one `adversary` per part of the subject map, each invoking
    `/bmad-advanced-elicitation` in its own context scoped to its part, plus one cross-part

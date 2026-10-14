@@ -24,6 +24,12 @@
 #     the worktree is cut, for an absent or `false` tag (implementation.md Pre-dispatch routing).
 #     The sts-esc-why and dve-capital rows are line-mode `contains` pins: keep each pinned phrase
 #     on ONE line of its subject.
+#   - elicitation takes the axis and shape of the step's adversarial pass for every subject: the
+#     files axis per story plus cross groups and never one serial-document voice, the sections axis
+#     per part plus cross groups or one serial-document voice on a SERIAL answer
+#     (_gate-procedures.md "Validation cycle" item 2), and stories-test-strategy.md step 4 names
+#     elicitation among the sharded passes. sts-elic-sharded is a line-mode `contains` pin: keep
+#     that phrase on ONE line of step 4.
 #
 # LEADS ARE NOT ENOUGH. A bold lead left intact over a body rewritten to say the opposite
 # ("need NOT carry", "dropped only through a HARD_BLOCK", "an assertion is a sufficient
@@ -198,6 +204,10 @@ impl-esc-before|S|steps/implementation.md|**Pre-dispatch routing (Rule 28).**|**
 impl-esc-keep|S|steps/implementation.md|**Pre-dispatch routing (Rule 28).**|**Pre-dispatch auth check.**|- Before a story's FIRST dev dispatch|para|A story already dispatched keeps its route
 impl-esc-false|S|steps/implementation.md|**Pre-dispatch routing (Rule 28).**|**Pre-dispatch auth check.**|- Before a story's FIRST dev dispatch|para|is absent or `false`
 dve-capital|R|dev-escalated.md|## Identity|## Contract|capital-path / high-blast-radius owned paths|contains
+elic-shape-files|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|one `adversary` per story ordinal plus one cross-story `adversary` per cross group, never one voice under `shard: none (serial-document)`
+elic-shape-sections|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|one `adversary` per part plus one cross-part `adversary` per cross group; a `SERIAL:` answer is ONE `adversary` under `shard: none (serial-document)`
+elic-shape-lead|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|a lighter shape is not the lead's to choose
+sts-elic-sharded|S|steps/stories-test-strategy.md|### 4.|### 5.|so the round, elicitation, each review pass and each repair|contains
 PINS
 }
 
