@@ -79,7 +79,10 @@
 #   before any label prints a NOTE and is not carried.
 #   In a post-rule prior, a line inside a Critical/Important container before its first `#### `
 #   FAILS only when it is shaped like a dropped finding: a bullet (`-`, `*`, `+`, `1.`, `1)`)
-#   or a bold span opening with a finding id. Any other line there is lead-in prose and prints a
+#   or a bold span opening with a finding id, including one whose closing `**` is not on that
+#   line (a WRAPPED label: graph s308 1-code-review.md:67 opens `**C1 — ... AC11` and closes on
+#   the next line; read as prose it carried nothing and passed). Pre-rule priors read a wrapped
+#   label as a NOTE, unchanged. Any other line there is lead-in prose and prints a
 #   NOTE (graph's real heading-form reviews open a container with a sentence or two).
 #
 # MATCHING. A carried line answers a prior finding when the two agree after trimming blanks,
@@ -205,15 +208,19 @@ priors="$(CF_POST="$POST" awk '
     if (l ~ /^none([^a-z]|$)/) next
     # The bold span a column-0 line opens with (after an optional bullet), when it begins with a
     # finding id (`I1.`, `C-2.`, `I3 --`, or exactly `C1`): that span is a finding label.
-    b = $0; sub(/^[-*][ \t]+/, "", b); lab = ""; id = ""
+    # A bold span that opens with a finding id and does not close on its line is a WRAPPED label
+    # (graph s308 1-code-review.md:67, `**C1 — ...` closing on the next line): wrap = 1.
+    b = $0; sub(/^[-*][ \t]+/, "", b); lab = ""; id = ""; wrap = 0
     if (substr(b, 1, 2) == "**") { b = substr(b, 3); e = index(b, "**")
       if (e > 1) { c = norm(substr(b, 1, e - 1))
         if (match(c, /^[A-Za-z]+-?[0-9]+/) && substr(c, RLENGTH + 1, 1) !~ /[A-Za-z0-9]/) {
-          lab = c; id = substr(c, 1, RLENGTH) } } }
+          lab = c; id = substr(c, 1, RLENGTH) } }
+      else if (e == 0 && norm(b) ~ /^[A-Za-z]+-?[0-9]+([^A-Za-z0-9]|$)/) wrap = 1 }
     if (post) {
-      # A post-rule prior: a line shaped like a finding written another way FAILS; anything else
-      # before the first #### is lead-in prose.
+      # A post-rule prior: a line shaped like a finding written another way FAILS, a wrapped
+      # finding-id label included; anything else before the first #### is lead-in prose.
       if (t ~ /^[-*+][ \t]/ || t ~ /^[0-9]+[.)][ \t]/ || lab != "") print "UNPARSED\t" sev "\t" NR ": " t
+      else if (wrap) print "UNPARSED\t" sev "\t" NR ": " t
       else print "LEADIN\t" sev "\t" NR ": " t
       next
     }

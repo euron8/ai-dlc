@@ -43,6 +43,10 @@
 #   H1 a depth-1 clone of the S1 world -> REFUSED (exit 2); H2 a full clone -> PASS
 # THE FORM ARMS (S4, S5, S7) take a post-rule heading prior with lead-in prose before its first
 # `#### `: prose is a NOTE (S4), a bullet (S5) or a bold finding-id line (S7) there FAILS.
+# THE WRAPPED-LABEL ARMS (WR1-WR3) take graph s308 1-code-review.md:67's Critical, a bold
+# finding-id label whose closing `**` is on the next line: marked it FAILS and --list exits 1 with
+# no carry string (WR1); unmarked it is a NOTE (WR2, the pre-rule price above); marked, a wrapped
+# bold span opening with no finding id is lead-in prose (WR3).
 # THE MATCHING ARMS (K1-K5): a label prior carried by id alone, I11 never answering I1, trailing
 # punctuation dropped, a span that is exactly an id, an id two labels share answering neither.
 # LIST: `--list` prints exactly the carry strings on stdout, NOTEs on stderr.
@@ -207,6 +211,21 @@ printf '# Code Review: 2-5\n\nreviewed-sha: 7d3889e9e0e07c9699891956be739cb5c933
 awk -v x='- **I3. Cache TTL outlives the test.** body' '{ print } /^None of them touches/ { print x }' "$S/leadin.md" > "$S/leadin-bullet.md"
 awk -v x='**I3. Cache TTL outlives the test.** body' '{ print } /^None of them touches/ { print x }' "$S/leadin.md" > "$S/leadin-bold.md"
 p2 "$S/leadin-p2.md" APPROVED "$(c_res "$H1")" "$(c_res "$H2")"
+# A WRAPPED bold label, copied from graph s308 1-code-review.md:67: the finding id opens a bold
+# span whose closing `**` is on the next line. Marked (post-rule) it FAILS; unmarked (pre-rule) it
+# is a NOTE and carries nothing; marked, a wrapped bold span that opens with no finding id is
+# lead-in prose.
+wrapped_prior() { # <file> <with reviewed-sha: 1|0> <label opening>
+  { printf '# Code Review: 1\n\n'
+    [ "$2" = 1 ] && printf 'reviewed-sha: 7d3889e9e0e07c9699891956be739cb5c9339430\n\n'
+    printf '## Verdict\n\nNEEDS_REWORK\n\n## Findings\n\n### Critical (must fix before merge)\n\n'
+    printf '**%s %s AC9'"'"'s recorded derivation of Risk 1(c) is factually wrong, and at `T = 50.0` the new AC11\n' "$3" "$EM"
+    printf 'smoke assertion fails whenever the guard fires on the CO-S307 pool shape.**\n\n*Sites:* derivation recorded at the story file.\n\n'
+    printf '### Important (should fix, can be follow-up)\n\nNone.\n'; } > "$1"
+}
+wrapped_prior "$S/wrap-mark.md" 1 C1
+wrapped_prior "$S/wrap-nomark.md" 0 C1
+wrapped_prior "$S/wrap-prose.md" 1 Evidence
 # Label priors (no reviewed-sha:, so read by label): carried by id alone, with trailing
 # punctuation dropped, and by a span that is exactly an id. I11 must not answer I1; an id two
 # labels share answers neither.
@@ -356,6 +375,16 @@ arm_S6() { run "$VS" "$WS/docs/reviews/s4/4-code-review.md" "$WS/docs/reviews/s4
            [ "$rc" -eq 0 ] && grep -q '^PASS: 1 prior' <<<"$out" && [ "$(grep -c '^NOTE:' <<<"$out")" -eq 2 ]; }
 arm_S5() { run "$1" "$S/leadin-bullet.md" "$S/leadin-p2.md"
            [ "$rc" -eq 1 ] && grep -q 'Important finding that is not a "#### " heading' <<<"$out" && ! grep -q '^FAIL: prior' <<<"$out"; }
+# WR: a wrapped bold finding-id label. WR1 marked -> FAIL on form, and --list exits 1 printing no
+# carry string; WR2 unmarked (pre-rule) -> PASS with the label as a NOTE; WR3 marked, a wrapped
+# bold span with no finding id -> lead-in prose.
+arm_WR1() { run "$1" "$S/wrap-mark.md" "$S/empty.md"
+            [ "$rc" -eq 1 ] && grep -q 'Critical finding that is not a "#### " heading' <<<"$out" || return 1
+            local a; a="$(bash "$1" --list "$S/wrap-mark.md" 2>/dev/null)"; [ "$?" -eq 1 ] && [ -z "$a" ]; }
+arm_WR2() { run "$1" "$S/wrap-nomark.md" "$S/empty.md"
+            [ "$rc" -eq 0 ] && grep -q '^PASS: 0 prior' <<<"$out" && grep -q '^NOTE: .*: \*\*C1 .*not carried' <<<"$out"; }
+arm_WR3() { run "$1" "$S/wrap-prose.md" "$S/empty.md"
+            [ "$rc" -eq 0 ] && grep -q '^PASS: 0 prior' <<<"$out" && grep -q '^NOTE: .*: \*\*Evidence .*lead-in prose' <<<"$out"; }
 # K: label matching. K1 id alone; K2 I11 does not answer I1; K3 trailing punctuation dropped;
 # K4 a span that is exactly an id; K5 an id two labels share answers neither.
 arm_K1() { run "$1" "$S/lab.md" "$S/lab-id.md"; [ "$rc" -eq 0 ] && grep -q '^PASS: 2 prior' <<<"$out"; }
@@ -384,7 +413,7 @@ arm_LIST() { local a b
 NLF='
 '
 
-ARMS="C F1 F2 N2 F3 N3 F4 F5 F6 T P1 P2 P3 W1 W2 D1 S1 S3 L1 S4 S5 S6 S7 K1 K2 K3 K4 K5 G1 G2 H1 H2 LIST"
+ARMS="C F1 F2 N2 F3 N3 F4 F5 F6 T P1 P2 P3 W1 W2 D1 S1 S3 L1 S4 S5 S6 S7 WR1 WR2 WR3 K1 K2 K3 K4 K5 G1 G2 H1 H2 LIST"
 install "$V"
 for a in $ARMS; do
   if "arm_$a" "$V"; then ok "$a"; else bad "$a: rc=$rc out=$(head -2 <<<"$out" | tr '\n' ' ')"; fi
@@ -421,7 +450,11 @@ score "$(mut anyopen 's/^    NEEDS_REWORK|BLOCKED) ;;/    __NEVER__) ;;/')" N2 "
 # (F3), a bullet after the pull (S3), a bullet in a lead-in (S5), a bold id line in a lead-in (S7).
 score "$(mut unparsed 's/lab != "") print "UNPARSED\\t" sev/lab != "") print "LEADIN\\t" sev/')" "F3 S3 S5 S7" "a dropped finding in a post-rule prior is read as lead-in prose"
 score "$(mut boldlead 's/ || lab != "") print "UNPARSED/) print "UNPARSED/')" S7 "a bold finding-id line in a post-rule lead-in is prose"
-score "$(mut leadfail 's/else print "LEADIN\\t" sev/else print "UNPARSED\\t" sev/')" "S3 S4" "lead-in prose in a post-rule prior fails"
+score "$(mut leadfail 's/else print "LEADIN\\t" sev/else print "UNPARSED\\t" sev/')" "S3 S4 WR3" "lead-in prose in a post-rule prior fails"
+# The wrapped-label rule: reverted, a marked wrapped label is lead-in prose and carries nothing
+# (WR1); widened to any unclosed bold span, a wrapped non-id span fails (WR3).
+score "$(mut wrapoff 's/else if (wrap) print "UNPARSED/else if (0) print "UNPARSED/')" WR1 "a wrapped finding-id label in a post-rule prior is lead-in prose"
+score "$(mut wrapany 's/else if (e == 0 && norm(b) ~ .*) wrap = 1/else if (e == 0) wrap = 1/')" WR3 "any unclosed bold span in a post-rule prior is a wrapped label"
 # The None rule is read by both a None-only prior (N3) and a lead-in opening with "None." (S4).
 score "$(mut nonebul 's/^    if (l ~ \/\^none(\[\^a-z\]|\$)\/) next/    if (0) next/')" "N3 S4" "a None line is read as an unparsed finding"
 score "$(mut sep 's/if (st == "" || h == "") print "BAD/if (0) print "BAD/')" F4 "a malformed carried line is silently ignored"
@@ -441,14 +474,14 @@ score "$(mut_after selfloc '  TOP="$(cd "$TOP" && pwd -P)" || return 1' '  case 
 score "$(mut ignpend 's/^  \[ -z "\$UNC" \] || return 1$/  :/')" "G1 G2" "a gitignored program reads PENDING"
 score "$(mut shallow 's/= "true" \] &&$/= "__never__" ] \&\&/')" H1 "a shallow repository is read, not refused"
 # Which prior is held to the heading form: marker AND not committed before the add.
-score "$(mut alwayslabels 's/\[ "\$EARLY" -eq 0 \] && POST=1$/[ "$EARLY" -eq 0 ] \&\& POST=0/')" "F3 S3 S4 S5 S7" "every prior is read by label (the post-rule marker ignored)"
+score "$(mut alwayslabels 's/\[ "\$EARLY" -eq 0 \] && POST=1$/[ "$EARLY" -eq 0 ] \&\& POST=0/')" "F3 S3 S4 S5 S7 WR1 WR3" "every prior is read by label (the post-rule marker ignored)"
 score "$(mut markonly 's/^\[ "\$MARK" = "1" \] && \[ "\$EARLY" -eq 0 \] && POST=1$/[ "$MARK" = "1" ] \&\& POST=1/')" S6 "a marked prior committed before the pull is held to the form"
-score "$(mut earlyonly 's/^\[ "\$MARK" = "1" \] && \[ "\$EARLY" -eq 0 \] && POST=1$/[ "$EARLY" -eq 0 ] \&\& POST=1/')" "L1 K1 K2 K3 K4 K5 LIST" "a prior committed after the add is held to the form whatever it carries"
+score "$(mut earlyonly 's/^\[ "\$MARK" = "1" \] && \[ "\$EARLY" -eq 0 \] && POST=1$/[ "$EARLY" -eq 0 ] \&\& POST=1/')" "L1 WR2 K1 K2 K3 K4 K5 LIST" "a prior committed after the add is held to the form whatever it carries"
 # The label reading.
 score "$(mut nolabel 's/lab = c; id = substr(c, 1, RLENGTH)/lab = ""; id = ""/')" "S1 L1 S6 S7 K1 K2 K3 K4 K5 H2 LIST" "a bold-labelled finding is not carried"
 # Only the id-boundary guard is removed: match() still runs, so a non-id span gets an empty id.
 score "$(mut anybold 's/if (match(c, \/\^\[A-Za-z\]+-?\[0-9\]+\/) && substr(c, RLENGTH + 1, 1) !~ \/\[A-Za-z0-9\]\/)/if (match(c, \/^[A-Za-z]+-?[0-9]+\/) || 1)/')" "S1 L1 S6 H2 LIST" "any bold span is a finding label"
-score "$(mut notefail 's/if (!labd) print "NOTE\\t"/if (!labd) print "UNPARSED\\t"/')" "S1 L1 S6 H2 LIST" "an unlabelled pre-rule line fails"
+score "$(mut notefail 's/if (!labd) print "NOTE\\t"/if (!labd) print "UNPARSED\\t"/')" "S1 L1 S6 WR2 H2 LIST" "an unlabelled pre-rule line fails"
 score "$(mut exactspan 's/uid="\$id"; fi$/uid=""; fi/')" K1 "a label prior is carried only by its exact span"
 score "$(mut idprefix 's/(ENVIRON\["CF_I"\] != "" && \$3 == ENVIRON\["CF_I"\])/(ENVIRON["CF_I"] != "" \&\& index($3, ENVIRON["CF_I"]) == 1)/')" K2 "an id answers any carried string it prefixes"
 score "$(mut nopunct 's/function key(s) { s = norm(s); sub(\/\[.:;, \\t\]+\$\/, "", s); return s }/function key(s) { return norm(s) }/')" K3 "trailing punctuation is significant"
