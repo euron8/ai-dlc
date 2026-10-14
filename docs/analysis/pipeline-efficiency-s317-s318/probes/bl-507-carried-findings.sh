@@ -7,6 +7,11 @@
 #                   two prior Importants, one answered            -> non-zero
 #                   both answered                                 -> 0
 #                   an `open` carried line under APPROVED          -> non-zero
+#                   the same `open` line under NEEDS_REWORK        -> 0
+#                 and on a seeded repository with linked worktrees, the main checkout's copy:
+#                   a story branch cut before the pull, its own worktree -> PENDING
+#                   a pair after the first add, program reverted and re-added -> binds (1)
+#                   a pre-rule bullet pass 1 carried by label after the pull  -> PASS
 #   SUBJECT 2     partition-review-diff.sh --map on a seeded two-commit repository, the prior sha as
 #                 <base>: the delta partitions (rc 0) and the reversed pair is refused (rc 2)
 #   SUBJECT 3     implementation.md's Gate-1 dispatch paragraph names the prior sha as the base and
@@ -34,9 +39,48 @@ p2() { local f="$1" v="$2"; shift 2
 p2 "$d/one.md" APPROVED "carried: $H1 $EM resolved"
 p2 "$d/both.md" APPROVED "carried: $H1 $EM resolved" "carried: $H2 $EM resolved"
 p2 "$d/open.md" APPROVED "carried: $H1 $EM resolved" "carried: $H2 $EM open"
+p2 "$d/open-nr.md" NEEDS_REWORK "carried: $H1 $EM resolved" "carried: $H2 $EM open"
 bash "$V" "$d/p1.md" "$d/one.md" >/dev/null 2>&1 && exit 1
 bash "$V" "$d/p1.md" "$d/both.md" >/dev/null 2>&1 || exit 1
 bash "$V" "$d/p1.md" "$d/open.md" >/dev/null 2>&1 && exit 1
+bash "$V" "$d/p1.md" "$d/open-nr.md" >/dev/null 2>&1 || exit 1
+
+# The consumer topology: a story reviewed in its own worktree, checked by the main checkout's copy.
+#   pre   a story branch cut BEFORE the pull drops a carry          -> PENDING (exit 0)
+#   rr    a pair committed after the first add, then the program reverted and re-added; the pass 2
+#         drops a carry                                             -> binds (exit 1)
+#   span  a pre-rule bullet pass 1, the pull, then a pass 2 carrying it by label -> exit 0
+w="$d/w"; mkdir -p "$w" || exit 9
+gw() { git -c user.name=p -c user.email=p@p.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
+gw init -q "$w/main" || exit 9
+printf 'x\n' > "$w/main/a"; gw -C "$w/main" add -A; gw -C "$w/main" commit -qm base || exit 9
+gw -C "$w/main" branch pre || exit 9
+gw -C "$w/main" branch span || exit 9
+mkdir -p "$w/main/scripts/ai-dlc"; cp "$V" "$w/main/scripts/ai-dlc/" || exit 9
+gw -C "$w/main" add -A; gw -C "$w/main" commit -qm pull || exit 9
+gw -C "$w/main" branch rr || exit 9
+VM="$w/main/scripts/ai-dlc/validate-carried-findings.sh"
+gw -C "$w/main" worktree add -q "$w/pre" pre || exit 9
+mkdir -p "$w/pre/r"; cp "$d/p1.md" "$w/pre/r/1.md"; cp "$d/one.md" "$w/pre/r/1-p2.md"
+gw -C "$w/pre" add -A; gw -C "$w/pre" commit -qm reviews || exit 9
+o="$(bash "$VM" "$w/pre/r/1.md" "$w/pre/r/1-p2.md" 2>&1)" || exit 1
+case "$o" in PENDING:*) ;; *) exit 1 ;; esac
+gw -C "$w/main" worktree add -q "$w/rr" rr || exit 9
+mkdir -p "$w/rr/r"; cp "$d/p1.md" "$w/rr/r/1.md"; cp "$d/one.md" "$w/rr/r/1-p2.md"
+gw -C "$w/rr" add -A; gw -C "$w/rr" commit -qm reviews || exit 9
+gw -C "$w/rr" rm -q scripts/ai-dlc/validate-carried-findings.sh; gw -C "$w/rr" commit -qm revert || exit 9
+mkdir -p "$w/rr/scripts/ai-dlc"; cp "$V" "$w/rr/scripts/ai-dlc/"; gw -C "$w/rr" add -A; gw -C "$w/rr" commit -qm repull || exit 9
+bash "$w/rr/scripts/ai-dlc/validate-carried-findings.sh" "$w/rr/r/1.md" "$w/rr/r/1-p2.md" >/dev/null 2>&1
+[ $? -eq 1 ] || exit 1
+gw -C "$w/main" worktree add -q "$w/span" span || exit 9
+mkdir -p "$w/span/r" "$w/span/scripts/ai-dlc"
+printf '# Code Review: 1\n\n## Verdict\nNEEDS_REWORK\n\n## Findings\n\n### Important\n- **I1. stale cache** body\n' > "$w/span/r/1.md"
+gw -C "$w/span" add -A; gw -C "$w/span" commit -qm "pre-rule pass 1" || exit 9
+cp "$V" "$w/span/scripts/ai-dlc/"; gw -C "$w/span" add -A; gw -C "$w/span" commit -qm pull || exit 9
+p2 "$w/span/r/1-p2.md" APPROVED "carried: I1. stale cache $EM resolved"
+gw -C "$w/span" add -A; gw -C "$w/span" commit -qm "pass 2" || exit 9
+o="$(bash "$w/span/scripts/ai-dlc/validate-carried-findings.sh" "$w/span/r/1.md" "$w/span/r/1-p2.md" 2>&1)" || exit 1
+case "$o" in PASS:\ 1\ prior*) ;; *) exit 1 ;; esac
 
 # The delta partition. The repository carries the artifact-path grammar the partition reads.
 r="$d/r"; mkdir -p "$r/core/skills/ai-dlc" "$r/app/a" "$r/app/b" || exit 9

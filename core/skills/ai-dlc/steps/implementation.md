@@ -361,7 +361,10 @@ serial or shard, does NOT make the `done` transition, `deferred_acs` or the
 closing commit; the closing writer does, after gate 3. Persisting the gate-1
 review file is unchanged: a serial reviewer commits it to its Git-tracked path
 before the verdict is recorded, as Check 1 requires. The lead persists
-the shard directory together with the merged file.
+the shard directory together with the merged file. A serial review writes its findings the way a
+shard does, each a `#### ` heading under its container, never a bullet, and carries one column-0
+`reviewed-sha: <full frozen sha>` line, because the next pass carries by that heading and
+partitions from that sha.
 A re-review, pass M >= 2, reviews the fix delta and dispatches through this same fan-out:
 run the partition with `<prior-sha>` in place of `<base>`, where `<prior-sha>` is the
 column-0 `reviewed-sha:` of the pass M-1 review file, into the `-p<M>` shard directory, so

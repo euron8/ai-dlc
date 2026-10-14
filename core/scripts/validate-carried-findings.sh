@@ -46,14 +46,23 @@
 # PRE-MIGRATION (PENDING, exit 0). A review written before this rule shipped carries no
 #   `carried:` lines, and failing it would wedge a sprint that pulled the rule mid-story. The test
 #   reads only records git wrote, never the review's own text (an omission must not exempt
-#   itself): the pair is pre-migration when THIS program is tracked in the review's repository and
-#   the commit that last added the pass M file is NOT a descendant of the commit that last added
-#   this program (`git merge-base --is-ancestor`). Every other state BINDS: this program
-#   untracked or outside that repository, the review file untracked (it is being written now), or
-#   no git at all. So the exemption reaches only a review committed on history that predates the
-#   pull. Measured over graph's 42 tracked consecutive pass pairs in s308-s318: graph does not
-#   carry this program, so in place every pair binds; scored as copies (the rule's verdict with no
-#   exemption) see the FALSE-POSITIVE SET in the fixture header (core/fixtures/carried-findings).
+#   itself), and it reads them from the REVIEW's repository and HEAD, never from where this copy
+#   sits: a story is reviewed in its own worktree and checked by the main checkout's copy. VADD is
+#   the EARLIEST commit on the review's HEAD history that added this program at
+#   `scripts/ai-dlc/` or `core/scripts/` (`log --diff-filter=A --reverse`, first line), so a
+#   revert and re-add cannot move the epoch forward and acquit what lies between.
+#     - no such commit (a story branch cut before the pull)              -> PENDING;
+#     - the pass M file committed on a commit that does not descend from VADD -> PENDING;
+#     - every other state BINDS: the pass M file untracked (being written now) on a branch that
+#       has the program, an unborn HEAD, the review outside any repository, no git at all.
+#   The PRIOR file gets the same test: a pass M-1 committed before VADD (a story spanning the
+#   pull) was written under no rule, so its form is never a failure. Its findings are read by
+#   `#### ` heading or by a column-0 bold label that opens with a finding id (`- **I1. title**
+#   ...` and `**C-1. title.** ...` are carried as `I1. title` and `C-1. title.`, the lines after
+#   a label being its body), and a line before any label prints a NOTE and is not carried. A
+#   prior written after VADD gets no such reading: a bullet there is a FAIL.
+#   The false-positive set over graph's real pairs is recorded in the fixture header
+#   (core/fixtures/carried-findings).
 set -u
 export LC_ALL=C
 
@@ -69,45 +78,84 @@ PRIOR="$1"; CUR="$2"
 # An inherited GIT_DIR (any hook run from a linked worktree exports it) would point every
 # `git -C` below at the caller's repository instead of the review's.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
-pending_reason() { # prints a reason and returns 0 when the pair is pre-migration
+NL='
+'
+VAD_OK=0; VADD=""; TOP=""
+# locate: the review's repository (TOP) and the EARLIEST commit on its HEAD's history that added
+# this program in either layout (VADD). Read from the REVIEW's checkout, never from where this
+# copy sits: a story reviewed in its own worktree is checked by the main checkout's copy.
+locate() {
   command -v git >/dev/null 2>&1 || return 1
-  local cdir top self v r
+  local cdir adds
   cdir="$(cd "$(dirname "$CUR")" 2>/dev/null && pwd -P)" || return 1
-  top="$(git -C "$cdir" rev-parse --show-toplevel 2>/dev/null)" || return 1
-  [ -n "$top" ] || return 1
-  top="$(cd "$top" && pwd -P)" || return 1
-  self="$(cd "$(dirname "$0")" 2>/dev/null && pwd -P)/$(basename "$0")" || return 1
-  case "$self" in "$top"/*) ;; *) return 1 ;; esac
-  v="$(git -C "$top" log --diff-filter=A --format=%H -1 -- "${self#"$top"/}" 2>/dev/null)" || return 1
-  [ -n "$v" ] || return 1
-  r="$(git -C "$top" log --diff-filter=A --format=%H -1 -- "$cdir/$(basename "$CUR")" 2>/dev/null)" || return 1
+  TOP="$(git -C "$cdir" rev-parse --show-toplevel 2>/dev/null)" || return 1
+  [ -n "$TOP" ] || return 1
+  TOP="$(cd "$TOP" && pwd -P)" || return 1
+  adds="$(git -C "$TOP" log --diff-filter=A --reverse --format=%H HEAD -- \
+    scripts/ai-dlc/validate-carried-findings.sh core/scripts/validate-carried-findings.sh 2>/dev/null)" || return 1
+  VADD="${adds%%"$NL"*}"
+  VAD_OK=1
+}
+addc() { # addc <file> -> the most recent commit on HEAD's history that added it, or empty
+  local d
+  d="$(cd "$(dirname "$1")" 2>/dev/null && pwd -P)" || return 0
+  case "$d/" in "$TOP"/*) ;; *) return 0 ;; esac
+  git -C "$TOP" log --diff-filter=A --format=%H -1 HEAD -- "$d/$(basename "$1")" 2>/dev/null
+}
+locate || VAD_OK=0
+pending_reason() { # prints a reason and returns 0 when the pair is pre-migration
+  local r
+  [ "$VAD_OK" -eq 1 ] || return 1
+  [ -n "$VADD" ] || { printf 'no commit on the history of HEAD in %s adds validate-carried-findings.sh' "$TOP"; return 0; }
+  r="$(addc "$CUR")"
   [ -n "$r" ] || return 1
-  git -C "$top" merge-base --is-ancestor "$v" "$r" 2>/dev/null && return 1
-  printf 'the review was added at %s, which does not descend from %s (the commit that added %s)' \
-    "${r%"${r#????????????}"}" "${v%"${v#????????????}"}" "${self#"$top"/}"
+  git -C "$TOP" merge-base --is-ancestor "$VADD" "$r" 2>/dev/null && return 1
+  printf 'the review was added at %s, which does not descend from %s (the first commit that added this program)' \
+    "${r%"${r#????????????}"}" "${VADD%"${VADD#????????????}"}"
   return 0
 }
 if why="$(pending_reason)"; then
   printf 'PENDING: %s predates the carried-findings rule; %s\n' "$CUR" "$why"
   exit 0
 fi
+# A PRIOR pass committed before the program reached its branch was written under no rule, so its
+# form is not held against the pass that carries it (a story spanning the pull): its findings are
+# read by heading OR by bold label, and a finding with neither is a NOTE, never a failure.
+PRE=0
+if [ "$VAD_OK" -eq 1 ]; then
+  pr="$(addc "$PRIOR")"
+  if [ -n "$pr" ] && ! git -C "$TOP" merge-base --is-ancestor "$VADD" "$pr" 2>/dev/null; then PRE=1; fi
+fi
 
 # ---- the prior Critical/Important finding headings -------------------------------------------
-priors="$(awk '
+priors="$(CF_PRE="$PRE" awk '
   function norm(s) { gsub(/[ \t]+/, " ", s); sub(/^ /, "", s); sub(/ $/, "", s); return s }
+  BEGIN { pre = (ENVIRON["CF_PRE"] == "1") }
   { t = $0; sub(/^[ \t]+/, "", t) }
   fence != "" { if (substr(t, 1, 3) == fence) fence = ""; next }
   substr(t, 1, 3) == "```" || substr(t, 1, 3) == "~~~" { fence = substr(t, 1, 3); next }
   /^# / || /^## / { fs = (substr($0, 1, 3) == "## " && tolower(norm(substr($0, 4))) ~ /^findings/); sev = ""; next }
   /^### / { h = tolower(norm(substr($0, 5))); sub(/^\**/, "", h)
-            sev = (h ~ /^critical/ ? "Critical" : (h ~ /^important/ ? "Important" : "")); seen = 0; next }
+            sev = (h ~ /^critical/ ? "Critical" : (h ~ /^important/ ? "Important" : "")); seen = 0; labd = 0; next }
   /^#### / { if (fs && sev != "") { print sev "\t" norm(substr($0, 6)); seen = 1 }; next }
   # A finding written any other way (a bullet, a bold line) cannot be carried by heading, and
   # reading it as "no findings" would acquit exactly the review that dropped it. Only a "None"
   # line may stand in a container before its first #### heading.
   fs && sev != "" && !seen && t != "" {
     l = tolower(t); sub(/^[-*][ \t]+/, "", l); sub(/^[*_(]+/, "", l)
-    if (l !~ /^none([^a-z]|$)/) print "UNPARSED\t" sev "\t" NR ": " t }' "$PRIOR")"
+    if (l ~ /^none([^a-z]|$)/) next
+    # A pre-rule prior: a column-0 line opening (after an optional bullet) with a bold span whose
+    # text begins with a finding id (`I1.`, `C-2.`, `I3 —`) is a finding labelled by that whole
+    # span; the lines after it are its body. A line before any label is a NOTE. Neither fails.
+    if (pre) {
+      b = $0; sub(/^[-*][ \t]+/, "", b)
+      if (substr(b, 1, 2) == "**") { b = substr(b, 3); e = index(b, "**")
+        if (e > 1) { lab = norm(substr(b, 1, e - 1))
+          if (lab ~ /^[A-Za-z]+-?[0-9]+[^A-Za-z0-9]/) { print sev "\t" lab; labd = 1; next } } }
+      if (!labd) print "NOTE\t" sev "\t" NR ": " t
+      next
+    }
+    print "UNPARSED\t" sev "\t" NR ": " t }' "$PRIOR")"
 
 # ---- the carried lines of pass M -------------------------------------------------------------
 # Emits: OK <state> <heading>   or   BAD <line number> <line>
@@ -143,6 +191,10 @@ $carried
 EOF
 while IFS="$(printf '\t')" read -r sev head rest; do
   [ -n "$head" ] || continue
+  if [ "$sev" = "NOTE" ]; then
+    printf 'NOTE: %s:%s is a %s line of a prior pass written before this rule, neither a "#### " heading nor a bold label; not carried\n' "$PRIOR" "$rest" "$head"
+    continue
+  fi
   if [ "$sev" = "UNPARSED" ]; then
     printf 'FAIL: %s:%s carries a %s finding that is not a "#### " heading, so it cannot be carried\n' "$PRIOR" "$rest" "$head"
     fails=$((fails + 1)); continue

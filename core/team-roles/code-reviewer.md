@@ -106,6 +106,8 @@ is refused by the same rule, and the write-time guard denies it at the keystroke
 ```markdown
 # Code Review: <Story ID>
 
+reviewed-sha: <full frozen sha>
+
 ## Summary
 One-paragraph assessment of the change.
 
@@ -115,13 +117,16 @@ APPROVED | NEEDS_REWORK | BLOCKED
 ## Findings
 
 ### Critical (must fix before merge)
-- [finding]
+
+#### <finding title>
 
 ### Important (should fix, can be follow-up)
-- [finding]
+
+#### <finding title>
 
 ### Suggestions (optional improvements)
-- [finding]
+
+#### <finding title>
 
 ## Architecture Alignment
 Does this change follow the patterns in the architecture doc? Y/N + notes.
@@ -145,6 +150,15 @@ grep-sources the gate answer from this line and FAILS when it cannot find it,
 so a renamed heading or a verdict buried in prose blocks the gate rather than
 degrading quietly. Emit the value alone on the line after the heading, or as
 `## Verdict: <VALUE>`.
+
+**A serial review writes its findings the way a shard does.** Each finding is a
+`#### ` heading under its `### Critical`, `### Important` or `### Suggestions`
+container in `## Findings`, never a bullet, its body below the heading; a
+container with nothing in it says `None.` A re-review carries a prior finding
+by that heading, and `validate-carried-findings.sh` fails a prior whose
+Critical or Important finding is a bullet. The review also carries one
+column-0 `reviewed-sha: <full frozen sha>` line, resolved with `git rev-parse`
+in the frozen worktree: the next pass partitions its delta from that sha.
 
 **A re-review answers every carried finding.** On pass M >= 2 your brief
 carries the Critical and Important findings of pass M-1 assigned to you. Answer
