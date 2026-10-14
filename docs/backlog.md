@@ -129,11 +129,20 @@ no capture header and no "head sha", and graph's captures are committed `test-re
 cited by path, not story fences. **PARTIAL.** Built: `core/scripts/validate-handoff-evidence.sh`,
 run by implementation.md's pre-gate commit-presence check before gate 1, refuses a cited capture
 in the story's range with no command line, a cited mutation-RED capture not tracked at the frozen
-sha, and a glob or brace cited as a capture; a missing or divergent `head:` is a WARN, never a
-refusal. dev.md `## QA Handoff Evidence` now prescribes the header (`$ <command>`, `head: <sha>`)
-and committed RED captures, and `validate-mutation-red.sh` prints `head:` and `cwd:`. Reach: about
-7 of the 12 evidence (E) verdicts and 0 of the 10 bookkeeping (B) verdicts. The FP set, measured
-over every s317/s318 story merge, is enumerated in the script header: 7 (a), 2 (b), 4 (c).
+sha, and a glob or brace cited as a capture of which some alternative matches no tracked file; a
+missing or divergent `head:` is a WARN, never a refusal. Exit 1 blocks gate-1 dispatch; exit 2 is
+recorded and does not. dev.md `## QA Handoff Evidence` now prescribes the header (`$ <command>`,
+`head: <sha>`, `(+dirty)` for an uncommitted tree) and committed RED captures, and
+`validate-mutation-red.sh` prints `head:` and `cwd:`. Reach: about 7 of the 12 evidence (E)
+verdicts and 0 of the 10 bookkeeping (B) verdicts. Measured over all 32 s317/s318 story merges:
+10 refusals in 5 stories, each a capture the reviewer could not read as evidence — (a) s317 1.2
+`p2-full`, `p3-full`, s317 2.2 `p2-db-passed`, s318 2.3 `ac4-pin-tests`, s318 2.5
+`head-canonical-run` and the two `mutation-drop-*-full` (no command line); (b) s317 2.1
+`mutation-pop`, `mutation-recorder` (gitignored REDs); (c) s317 2.2 `s317-2-2-mutation-*.txt` (a
+glob over gitignored REDs, matching nothing tracked). The three other globs (s318 2.3 twice, s318
+2.4 `seed{1,2,3}`) match committed files and are acquitted. Each refusal is enumerated in the
+script header. The 30 head-tree WARNs were artifacts of a BSD `awk -v` abort on multi-line input
+until it moved to ENVIRON; they are now computed, and stderr is empty on all 32.
 
 Not built: the B class (status not flipped, a missing Dev Agent Record line, empty or demoted
 evidence headings). An empty-heading arm has a 3-story FP set on the same corpus and needs an
@@ -172,8 +181,9 @@ BL-398 closed at v0.674.0; the rename path is new.
 
 Premise correction: the re-check belongs in sprint-review §4 "Gate Validation and Proceed", not
 §3, because graph overrides §3. `validate-handoff-evidence.sh --strategy` refuses an empty `Kind`
-or `Resolves to` cell and a `test` cell whose `<path>.py::<name>` node is untracked or undefined
-at the ref. It never refuses on the `Kind` vocabulary or on a `test` cell with no `.py::` node,
+or `Resolves to` cell, a `test` cell any of whose `<path>.py::<name>` nodes is untracked or
+undefined at the ref, and a row too short to carry `Resolves to` under a header that has the
+column (0 such rows at the five measured shas). It never refuses on the `Kind` vocabulary or on a `test` cell with no `.py::` node,
 because 72 off-vocabulary and 43 no-node rows in the s317/s318 corpus would false-fire. Measured
 on graph: 1 refusal at `7d917eb94` (TS-2.7-04(b), the true positive), 0 at `148518a74`,
 `28a15fce4` and `2176343a4`; 4 empty cells at `0259395b4` (s317 2.7, true positives). It runs

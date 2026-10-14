@@ -314,7 +314,9 @@ project that replaces that section does not replace this one.
   committed.** A capture file you cite (a `.txt`, `.log` or `.out` under the
   repo) opens with `$ <the exact command>` on its first line and a line
   carrying `head: <full sha>` of the tree it ran against; for the
-  full-collection run that is the run above. `validate-mutation-red.sh`
+  full-collection run that is the run above. `head:` is `HEAD` of the
+  repository the command ran in, not the working tree: when the run had
+  uncommitted changes, write `head: <full sha> (+dirty)`. `validate-mutation-red.sh`
   prints its own header (`mutation-red replay`, `head:`, `cwd:`); keep it.
   Every mutation-RED capture you cite is committed (`git add -f` when the
   directory is gitignored), and every capture is cited by its own path,
