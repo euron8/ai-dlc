@@ -14,7 +14,7 @@
 # path<TAB>sha lines in the runner's universe as traced; the runner clears a stale key record when
 # it recomputes the same value over the tree it is pushing.
 #
-# fixtures mapped: 224    entries: 13195
+# fixtures mapped: 224    entries: 13183
 absorbed-specifics-survive	core/fixtures/absorbed-specifics-survive/run.sh
 absorbed-specifics-survive	core/skills/ai-dlc/SKILL.md
 absorbed-specifics-survive	core/skills/ai-dlc/rule-bodies/rule-13.md
@@ -4549,30 +4549,18 @@ gate-adjudication-rotate	core/fixtures/scripts/ai-dlc/rotate-gate-adjudication.s
 gate-adjudication-rotate	core/hooks/ai-dlc-gate-remediation-guard.sh
 gate-adjudication-rotate	core/scripts/ai-dlc/rotate-gate-adjudication.sh
 gate-adjudication-rotate	core/scripts/rotate-gate-adjudication.sh
-gate-remediation-deny	.git/HEAD
-gate-remediation-deny	.git/config
-gate-remediation-deny	.git/index
-gate-remediation-deny	.git/info/exclude
-gate-remediation-deny	.git/objects/33/a4425c0ed05dea70f881660ffdf01c7c86da33
-gate-remediation-deny	.git/objects/7f/1479d0f091b8393b8613744a84c3c8229a65a3
-gate-remediation-deny	.git/objects/info/commit-graphs/commit-graph-chain
-gate-remediation-deny	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
-gate-remediation-deny	.git/objects/info/commit-graphs/graph-61ac52da05ee113a5a22871cdc3010f8f63bd5f1.graph
-gate-remediation-deny	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
-gate-remediation-deny	.git/objects/info/commit-graphs/graph-fa7bbe6bcd67e84c678384cfb84f17a16d6fa8fa.graph
-gate-remediation-deny	.git/objects/pack/multi-pack-index
-gate-remediation-deny	.git/packed-refs
-gate-remediation-deny	.git/refs/heads/main
-gate-remediation-deny	.gitignore
 gate-remediation-deny	core
 gate-remediation-deny	core/fixtures
 gate-remediation-deny	core/fixtures/gate-remediation-deny
 gate-remediation-deny	core/fixtures/gate-remediation-deny/run.sh
 gate-remediation-deny	core/fixtures/gate-remediation-deny/seed.sh
 gate-remediation-deny	core/hooks
+gate-remediation-deny	core/hooks/ai-dlc-acknowledge.sh
 gate-remediation-deny	core/hooks/ai-dlc-gate-remediation-guard.sh
+gate-remediation-deny	core/scripts/artifact-path-config.sh
 gate-remediation-deny	core/scripts/validate-steering-budget.sh
 gate-remediation-deny	core/scripts/validate-suppression-lifetime.sh
+gate-remediation-deny	core/skills/ai-dlc/artifact-path-grammar.md
 gate-remediation-deny	core/skills/ai-dlc/enforcement-map.yaml
 gate-repair-record	.git
 gate-repair-record	.git/HEAD
@@ -13224,6 +13212,7 @@ write-format-steering-multiformat	core/skills/ai-dlc-update/reconcile/lib.sh
 # digest extract-push-flag-decision 59752e7e8ea6b269678c0a8d5f6ac4313b812f3edda95bad22c6994fc9a430f4
 # digest fold-architect-ledger-join-mutants 1939d7bea4f2daeaf00b22feeaff732d8af339b8ac25703c909ecdd40dc1cd81
 # digest fold-architect-ledger-join-mutants-c a5350d4e34302d4dd8e106b5f532ca3c3bba129167e29618c7ac2bd3f4bf020a
+# digest gate-remediation-deny d34f807c16d7b1e0c646abb2471974c3aea1225ae1eddce7af114d1078fe8626
 # digest gate-resume b768b19aa352273daf0f5072f964857d7b51d933ad3cdc3bf6c2ff73f57e870a
 # digest hermetic-runner d2f56113e2d2b3d25015c7f88987c63c762a208d94c9f3aa60651b984822e2e5
 # digest invariant-index c38877552a196895e4e9961dcef31590e3d2a3a729cdcd69fca52fefc54f5f23
