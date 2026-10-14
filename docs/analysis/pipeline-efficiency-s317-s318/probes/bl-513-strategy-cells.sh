@@ -46,6 +46,12 @@ case "$o" in *"REFUSED node-missing stories/s.md: TS-1 case a"*"not tracked"*) ;
 sed 's#tests/test_x.py::#tests/test_y.py::#' "$d/stories/s.md" > "$d/s.tmp" && mv "$d/s.tmp" "$d/stories/s.md"
 g commit -qam rebind-move || exit 9
 bash "$V" -C "$d" --strategy HEAD stories/s.md >/dev/null 2>&1 || exit 1
+# A second node in one cell is read too: the first resolves, the second does not.
+printf '| TS-3 | b | test | tests/test_y.py::TestA::test_new, tests/test_y.py::TestA::test_gone |\n' >> "$d/stories/s.md"
+g commit -qam second || exit 9
+o=$(bash "$V" -C "$d" --strategy HEAD stories/s.md 2>&1); [ $? -eq 1 ] || exit 1
+case "$o" in *"REFUSED node-missing stories/s.md: TS-3 case b"*"test_gone"*) ;; *) exit 1 ;; esac
+grep -v '^| TS-3 ' "$d/stories/s.md" > "$d/s.tmp" && mv "$d/s.tmp" "$d/stories/s.md"
 printf '| TS-2 | - | test |  |\n' >> "$d/stories/s.md"
 g commit -qam empty || exit 9
 o=$(bash "$V" -C "$d" --strategy HEAD stories/s.md 2>&1); [ $? -eq 1 ] || exit 1

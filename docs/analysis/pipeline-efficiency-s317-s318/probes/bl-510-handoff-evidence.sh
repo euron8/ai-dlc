@@ -8,8 +8,8 @@
 #   SUBJECT       core/scripts/validate-handoff-evidence.sh, driven against seeded git worlds:
 #                   clean world (a `$ `-headed capture, a committed RED capture, a gitignored
 #                   full-suite capture NOT cited as RED, a glob whose every match is
-#                   committed, three captures cited)              -> exit 0, stderr only the
-#                                                                    script's own verdict line
+#                   committed, three captures cited)              -> exit 0, stderr empty
+#                                                                    (the OK line is stdout)
 #                   + a committed capture with no command line    -> exit 1, `no-command`
 #                   + a cited RED capture left untracked          -> exit 1, `red-untracked`
 #                   + a brace glob one of whose files is untracked -> exit 1, `glob-cited`
