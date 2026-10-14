@@ -404,7 +404,13 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    the step's convergence passes; a lighter shape is not the lead's to choose. Two or more files
    (`stories/`, the files axis): one `adversary` per story ordinal plus one cross-story
    `adversary` per cross group, never one voice under `shard: none (serial-document)`, which Rule
-   28 keeps for a single document. One document that `partition-document.sh --map` partitions
+   28 keeps for a single document. The story ordinals are the ones
+   `scripts/ai-dlc/merge-adversarial-shards.sh --map <shards-dir>` prints, `<shards-dir>` being
+   the next review pass's `s<N>/shards/<artifact>-p<M>/`, which the lead creates first, as item 1
+   does for the party round; `--map` refuses the `<artifact>-elicitation/` directory, whose name is
+   not `<artifact>-p<M>`. A `stories/` holding ONE file is ONE `adversary` briefed
+   `shard: 1/1 <story-index>` (Rule 28, files axis) with no cross shard, never `shard: none (…)`.
+   One document that `partition-document.sh --map` partitions
    (the sections axis): one `adversary` per part plus one cross-part `adversary` per cross group;
    a `SERIAL:` answer is ONE `adversary` under `shard: none (serial-document)` (Rule 28 exception
    4), which is how an architecture or carry-over evaluation that does not partition runs. The
@@ -413,7 +419,8 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    nothing, writes early and closes with its `seat-complete:` line as item 1 states, and writes
    `_bmad-output/planning-artifacts/s<N>/shards/<artifact>-elicitation/<ordinal>.md` (a cross
    shard: `cross-<g>.md`, or `cross.md` when there is one group) with
-   `skill: bmad-advanced-elicitation` and no `verdict:` line. Beat-join every shard path with
+   `skill: bmad-advanced-elicitation`, the `artifact:` and `artifact_sha:` an adversarial shard on
+   its axis notarizes, and no `verdict:` line. Beat-join every shard path with
    `--complete`. No merge reads that directory (`merge-adversarial-shards.sh --elicitation` merges
    only the requirements subject), so the shard records ARE the elicitation record, and the
    elicitation repair reads them shard by shard, dispatched on the same axis by "Adversarial
@@ -421,7 +428,8 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    `--artifact <artifact>-elicitation --pass 1`, the shard dir
    `_bmad-output/planning-artifacts/s<N>/shards/<artifact>-elicitation-repair-p1/` and the joined
    record `_bmad-output/planning-artifacts/s<N>/<artifact>-elicitation-repair-p1.md`; sections
-   are repaired as "Shard by section" does, split into that same shard dir and joined with
+   are repaired as "Shard by section" does, split into that same shard dir with `--expect-sha`
+   the sha every elicitation shard notarized, and joined with
    `join-remediator-shards.sh --document <doc> <that dir>`.
 
    **When the subject is the requirements subject**, elicitation is sharded (Rule 28, "Split

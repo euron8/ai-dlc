@@ -124,8 +124,12 @@ covers only a single serial document). Check 22 accepted it because validate-spa
 reads only the first parenthesised token. Built: item 2 now states that elicitation takes the
 axis and shape of the step's adversarial pass for every subject (files axis per story plus cross
 groups, never one serial-document voice; sections axis per part plus cross groups, or one
-serial-document voice on a `SERIAL:` answer; requirements unchanged), step 4 names elicitation among
-its sharded passes, and process-rule-pins pins both. Check 22 was not tightened: an S3 arm refusing
+serial-document voice on a `SERIAL:` answer; requirements unchanged), the files-axis story ordinals
+are the ones `merge-adversarial-shards.sh --map` prints for the next review pass's
+`<artifact>-p<M>/` (it refuses the `-elicitation/` dir), a one-file `stories/` is one voice under
+`shard: 1/1`, the sections-axis repair split expects the sha every elicitation shard notarized,
+step 4 names elicitation among its sharded passes, and process-rule-pins pins each clause. Those
+rows pin presence only: a contradicting sentence appended after a pinned clause passes them. Check 22 was not tightened: an S3 arm refusing
 `none (serial-document)` on a `stories/` subject was not built because its false-positive set on
 graph's ledgers was not measured; it would also fire on graph's recorded s318 stories row, a true
 finding on a closed sprint.
