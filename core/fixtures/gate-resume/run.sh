@@ -355,6 +355,73 @@ else
 fi
 
 # ============================================================================
+# F2. `open` ADMITS ONLY THE CANONICAL NONCE (BL-518). A local lead minted
+# `implementation-2026-10-11T083048Z` from `date -u +%Y-%m-%dT…` and `open` took it with
+# exit 0. Now `open` refuses before any write, `current` keeps naming the gate that was
+# open, and every other action is unchanged -- `record` at a free-form nonce must still
+# land, because a ledger keyed before this change must stay readable. The regex text in
+# the script must equal the schema's `patterns.gate_nonce` (with `\d` spelled `[0-9]`).
+# FP set: 94/94 real reference-consumer opens and 87/87 of its checkpoint ledgers carry
+# the strict form; the 2 non-canonical opens are true positives.
+# ============================================================================
+f2_canon_open() { # f2_canon_open <ckpt> <root> -> rc of a canonical sprint-review open
+  bash "$1" --root "$2" --nonce "sprint-review-20261011T083048Z" open >/dev/null 2>&1
+}
+if [ -n "$CKPT" ]; then
+  _f2root="$WORK/ckpt-f2"; mkdir -p "$_f2root/_bmad-output"
+  _f2ctl="implementation-20261011T083048Z"
+  bash "$CKPT" --root "$_f2root" --nonce "$_f2ctl" open >/dev/null 2>&1
+  _f2err="$(bash "$CKPT" --root "$_f2root" --nonce "implementation-2026-10-11T083048Z" open 2>&1 >/dev/null)"; _f2rc=$?
+  _f2cur="$(bash "$CKPT" --root "$_f2root" current 2>/dev/null)"
+  case "$_f2err" in
+    *'<gate_type>-YYYYMMDDTHHMMSSZ'*'date -u +%Y%m%dT%H%M%SZ'*) _f2named=1 ;;
+    *) _f2named=0 ;;
+  esac
+  if [ "$_f2rc" -eq 2 ] && [ "$_f2named" = 1 ] && [ "$_f2cur" = "$_f2ctl" ]; then
+    ok "BL-518 (a): 'open' refuses the hyphenated-date nonce, exit 2, names the canonical form and the mint rule, and 'current' still names ${_f2ctl}"
+  else
+    bad "BL-518 (a): hyphenated-date open rc=${_f2rc} (want 2), names-canonical=${_f2named} (want 1), current='${_f2cur}' (want ${_f2ctl})"
+  fi
+
+  bash "$CKPT" --root "$_f2root" --nonce "deploy-validate-s304-20260822T005500Z" open >/dev/null 2>&1; _rc=$?
+  [ "$_rc" -eq 2 ] && ok "BL-518 (b): 'open' refuses a nonce whose gate type is outside the schema's closed list (deploy-validate-s304-...), exit 2" \
+    || bad "BL-518 (b): deploy-validate-s304-20260822T005500Z open exited ${_rc}, expected 2"
+
+  f2_canon_open "$CKPT" "$_f2root"; _rc=$?
+  _f2cur="$(bash "$CKPT" --root "$_f2root" current 2>/dev/null)"
+  if [ "$_rc" -eq 0 ] && [ "$_f2cur" = "sprint-review-20261011T083048Z" ]; then
+    ok "BL-518 (c): a canonical nonce with a hyphenated gate type (sprint-review-...) opens, exit 0, and becomes current"
+  else
+    bad "BL-518 (c): canonical sprint-review open rc=${_rc} current='${_f2cur}', expected 0 and that nonce"
+  fi
+
+  bash "$CKPT" --root "$_f2root" --nonce f1 record 1 PASS >/dev/null 2>&1; _rc=$?
+  [ "$_rc" -eq 0 ] && ok "BL-518 (d): 'record' at a non-canonical nonce (f1) still exits 0 -- only 'open' is gated" \
+    || bad "BL-518 (d): non-canonical record exited ${_rc}, expected 0 (the refusal must not reach record)"
+
+  # (e) the script's regex text equals the schema's pattern. The schema lands at
+  # core/schemas/ here and .claude/schemas/ on a consumer; resolve both.
+  f2_regex_of() { sed -n "s/^NONCE_RE='\\(.*\\)'\$/\\1/p" "$1"; }
+  _f2schema=""
+  for _c in "$ROOT/core/schemas/gate-adjudication-verdict.json" "$ROOT/.claude/schemas/gate-adjudication-verdict.json"; do
+    [ -f "$_c" ] && { _f2schema="$_c"; break; }
+  done
+  if [ -n "$_f2schema" ]; then
+    _f2want="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["patterns"]["gate_nonce"].replace("\\d","[0-9]"))' "$_f2schema" 2>/dev/null)"
+    _f2have="$(f2_regex_of "$CKPT")"
+    if [ -n "$_f2want" ] && [ -n "$_f2have" ] && [ "$_f2want" = "$_f2have" ]; then
+      ok "BL-518 (e): gate-checkpoint.sh's NONCE_RE equals the schema's patterns.gate_nonce (\\d as [0-9])"
+    else
+      bad "BL-518 (e): NONCE_RE='${_f2have}' differs from (or either is empty) the schema's '${_f2want}'"
+    fi
+  else
+    skip "BL-518 (e) regex/schema equality" "gate-adjudication-verdict.json is not present in this tree"
+  fi
+else
+  skip "BL-518 canonical-nonce open refusal (a)-(e)" "gate-checkpoint.sh is not present in this tree"
+fi
+
+# ============================================================================
 # G. END TO END: seed a scratch consumer tree, record 3 PASS at nonce N, drive
 # ai-dlc-recover.sh with source=compact, and assert the resume text names the nonce and
 # gate-slice.sh, under the 10000-char cliff. Control: no ledger dir -> "no gate in flight".
@@ -478,8 +545,11 @@ fi
 #       the tell that the hook received the setting rather than a scrubbed default;
 #   NC  one fire mints ONE provenance nonce, and the marker carries that nonce: the wrap is
 #       measured without a second mint.
-# Nonces are seeded through the REAL gate-checkpoint.sh `open`, never a stub, so a nonce the
-# script refuses leaves no gate section and the stale-guards below say so.
+# WC and the wrap probe seed their nonce through the REAL gate-checkpoint.sh `open`, never a
+# stub, so a nonce the script refuses leaves no gate section and the stale-guards below say
+# so. The cliff SWEEP is the exception: its padded nonce (`...Zxxx`) is deliberately not
+# canonical, and `open` refuses it (BL-518), so the sweep writes it straight into
+# `.gate-checkpoint/OPEN` -- its subject is the recover hook's byte budget, not `open`.
 # ============================================================================
 B457_V_ALL="S0=1 S1=1 S2=1 S3=1 WC=1 RB=1 NC=1"
 if [ -n "$CKPT" ]; then
@@ -532,7 +602,9 @@ print(len(c), int("Mechanical state captured immediately before this compaction"
     n=0
     while [ "$n" -le 192 ]; do
       nonce="implementation-20261006T120000Z$(printf '%*s' "$n" '' | tr ' ' x)"
-      _mkc457 "$D/sw$n" "$H" unres yes "$nonce" 0
+      _mkc457 "$D/sw$n" "$H" unres yes "" 0
+      mkdir -p "$D/sw$n/_bmad-output/.gate-checkpoint"
+      printf '%s\n' "$nonce" > "$D/sw$n/_bmad-output/.gate-checkpoint/OPEN"
       r="$(_fire457 "$D/sw$n")"; printf 'sweep n=%s len=%s\n' "$n" "$r" >> "$log"
       set -- $r
       if [ "$1" = none ] || [ "$6" != 1 ]; then s0=0; s1=0; s3=0; printf '  STALE: no emission or no gate section at n=%s\n' "$n" >> "$log"
@@ -816,14 +888,17 @@ else
   # A settled, CLOSED (never re-opened) ledger, then time passes, then a concurrent
   # session's ledger for a different nonce is written but never opened either -- the
   # exact shape the header describes as the failure this fix closes.
-  bash "$CKPT" --root "$_m5root" --nonce m5-old open   >/dev/null 2>&1
-  bash "$CKPT" --root "$_m5root" --nonce m5-old record 1 PASS >/dev/null 2>&1
-  bash "$CKPT" --root "$_m5root" --nonce m5-old close  >/dev/null 2>&1
+  # m5-old is OPENED, so it must be canonical (BL-518). m5-new stays non-canonical on
+  # purpose: it is only ever RECORDED, and `record` must still accept a free-form nonce.
+  _m5old="planning-20260101T000500Z"
+  bash "$CKPT" --root "$_m5root" --nonce "$_m5old" open   >/dev/null 2>&1
+  bash "$CKPT" --root "$_m5root" --nonce "$_m5old" record 1 PASS >/dev/null 2>&1
+  bash "$CKPT" --root "$_m5root" --nonce "$_m5old" close  >/dev/null 2>&1
   sleep 1
   bash "$CKPT" --root "$_m5root" --nonce m5-new record 1 PASS >/dev/null 2>&1
   _m5real="$(bash "$CKPT" --root "$_m5root" current 2>/dev/null)"
   _m5mut="$(bash "$MUT5"  --root "$_m5root" current 2>/dev/null)"
-  if [ -z "$_m5real" ] && [ "$_m5mut" = "m5-new" ]; then
+  if [ -z "$_m5real" ] && [ "$_m5mut" = "m5-new" ] && [ -f "$_m5root/_bmad-output/.gate-checkpoint/${_m5old}.tsv" ]; then
     ok "mutant m5: reverting 'current' to a directory mtime scan makes an unopened, never-armed ledger (m5-new) read as the live gate, where the real script correctly reports no gate in flight"
   else
     bad "MUTANT DID NOT FAIL AS EXPECTED: m5 -- real current='${_m5real}' (want empty), mutant current='${_m5mut}' (want m5-new)"
@@ -899,8 +974,93 @@ else
   skip "mutant m6 (inline example registers as extension anchor)" "gate-slice.sh is not present in this tree"
 fi
 
+# --- m7-m9: BL-518's canonical-nonce refusal on `open` ----------------------------------
+# Each built as a copy by literal replacement whose anchor must occur EXACTLY once (a lost
+# or duplicated anchor is FIXTURE STALE, never a pass), then cmp -s and bash -n. Each is
+# scored by the observable its own section-F2 arm keys on.
+#   m7  the refusal sits AFTER the OPEN marker write: exit 2 still, but `current` moved
+#   m8  the refusal runs for EVERY action: a free-form `record` is refused
+#   m9  the regex loosens to any `<word>-` prefix: `deploy-validate-s304-...` opens, and
+#       (e)'s schema equality breaks
+ck_mut() { # ck_mut <out> <old> <new> -> 0 built, 3 anchor not unique
+  python3 - "$CKPT" "$1" "$2" "$3" <<'PY'
+import sys
+src = open(sys.argv[1]).read()
+if src.count(sys.argv[3]) != 1:
+    sys.exit(3)
+open(sys.argv[2], "w").write(src.replace(sys.argv[3], sys.argv[4]))
+PY
+}
+ck_mut_ok() { # ck_mut_ok <tag> <out> -> 0 when the built copy is a real, different program
+  if cmp -s "$CKPT" "$2"; then bad "FIXTURE STALE: $1 mutant is byte-identical to gate-checkpoint.sh"; return 1; fi
+  if ! bash -n "$2" 2>/dev/null; then bad "FIXTURE STALE: $1 mutant is not valid shell"; return 1; fi
+  return 0
+}
+if [ -n "$CKPT" ]; then
+  _ckopen_old="$(printf '    _require_canonical_nonce\n    mkdir -p "$LEDGER_DIR"')"
+  _ckopen_new='    mkdir -p "$LEDGER_DIR"'
+  _ckopened="    printf 'gate-checkpoint: opened %s\\n' \"\$NONCE\" >&2"
+
+  # m7: move the call to after the marker write (two edits, one mutant).
+  MUT7="$WORK/ckpt-m7.sh"; MUT7A="$WORK/ckpt-m7a.sh"
+  if ! ck_mut "$MUT7A" "$_ckopen_old" "$_ckopen_new" \
+     || ! python3 - "$MUT7A" "$MUT7" "$_ckopened" <<'PY'
+import sys
+src = open(sys.argv[1]).read()
+if src.count(sys.argv[3]) != 1:
+    sys.exit(3)
+open(sys.argv[2], "w").write(src.replace(sys.argv[3], "    _require_canonical_nonce\n" + sys.argv[3]))
+PY
+  then
+    bad "FIXTURE STALE: m7 -- the open block's anchors are absent or not unique in gate-checkpoint.sh"
+  elif ck_mut_ok m7 "$MUT7"; then
+    _m7root="$WORK/ckpt-m7-root"; mkdir -p "$_m7root/_bmad-output"
+    bash "$MUT7" --root "$_m7root" --nonce "implementation-20261011T083048Z" open >/dev/null 2>&1
+    bash "$MUT7" --root "$_m7root" --nonce "implementation-2026-10-11T083048Z" open >/dev/null 2>&1; _m7rc=$?
+    _m7cur="$(bash "$MUT7" --root "$_m7root" current 2>/dev/null)"
+    if [ "$_m7rc" -eq 2 ] && [ "$_m7cur" = "implementation-2026-10-11T083048Z" ]; then
+      ok "mutant m7: the refusal placed after the OPEN marker write still exits 2 but 'current' now names the refused nonce -- (a)'s current conjunct kills it"
+    else
+      bad "MUTANT DID NOT FAIL AS EXPECTED: m7 -- rc=${_m7rc} (want 2), current='${_m7cur}' (want the refused nonce)"
+    fi
+  fi
+
+  # m8: the refusal applied to every action.
+  MUT8="$WORK/ckpt-m8.sh"
+  if ! ck_mut "$MUT8" "$(printf '\ncase "$ACTION" in\n  open)\n')" "$(printf '\n_require_canonical_nonce\ncase "$ACTION" in\n  open)\n')"; then
+    bad "FIXTURE STALE: m8 -- the action dispatch anchor is absent or not unique in gate-checkpoint.sh"
+  elif ck_mut_ok m8 "$MUT8"; then
+    _m8root="$WORK/ckpt-m8-root"; mkdir -p "$_m8root/_bmad-output"
+    bash "$CKPT" --root "$_m8root" --nonce f1 record 1 PASS >/dev/null 2>&1; _m8real=$?
+    bash "$MUT8" --root "$_m8root" --nonce f1 record 1 PASS >/dev/null 2>&1; _m8mut=$?
+    if [ "$_m8real" -eq 0 ] && [ "$_m8mut" -eq 2 ]; then
+      ok "mutant m8: the refusal applied to every action refuses 'record' at f1 (rc 2, real rc 0) -- (d) kills it"
+    else
+      bad "MUTANT DID NOT FAIL AS EXPECTED: m8 -- real record rc=${_m8real} (want 0), mutant rc=${_m8mut} (want 2)"
+    fi
+  fi
+
+  # m9: the loose regex.
+  MUT9="$WORK/ckpt-m9.sh"
+  if ! ck_mut "$MUT9" "NONCE_RE='^(planning|story|implementation|sprint-review|retro)-[0-9]{8}T[0-9]{6}Z\$'" "NONCE_RE='^[a-z][a-z0-9-]*-[0-9]{8}T[0-9]{6}Z\$'"; then
+    bad "FIXTURE STALE: m9 -- the NONCE_RE literal is absent or not unique in gate-checkpoint.sh"
+  elif ck_mut_ok m9 "$MUT9"; then
+    _m9root="$WORK/ckpt-m9-root"; mkdir -p "$_m9root/_bmad-output"
+    bash "$MUT9" --root "$_m9root" --nonce "deploy-validate-s304-20260822T005500Z" open >/dev/null 2>&1; _m9rc=$?
+    f2_canon_open "$MUT9" "$_m9root"; _m9ctl=$?
+    _m9re="$(f2_regex_of "$MUT9")"
+    if [ "$_m9rc" -eq 0 ] && [ "$_m9ctl" -eq 0 ] && [ -n "$_m9re" ] && [ "$_m9re" != "${_f2want:-}" ]; then
+      ok "mutant m9: a loose <word>- regex opens deploy-validate-s304-... (rc 0) and its text no longer equals the schema's pattern -- (b) and (e) kill it"
+    else
+      bad "MUTANT DID NOT FAIL AS EXPECTED: m9 -- deploy-validate open rc=${_m9rc} (want 0), canonical rc=${_m9ctl} (want 0), regex '${_m9re}' vs schema '${_f2want:-}'"
+    fi
+  fi
+else
+  skip "mutants m7-m9 (canonical-nonce refusal)" "gate-checkpoint.sh is not present in this tree"
+fi
+
 # ============================================================================
-EXPECTED_ASSERTIONS=55
+EXPECTED_ASSERTIONS=63
 echo
 if [ "$total" -lt "$EXPECTED_ASSERTIONS" ]; then
   bad "only ${total} assertion(s) ran, below the ${EXPECTED_ASSERTIONS}-assertion floor -- an arm silently failed to fire rather than to pass"

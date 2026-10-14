@@ -200,9 +200,13 @@ verify: manual -- close when Step 0a's integrity validation refuses a snapshot e
 ## BL-518 — gate-checkpoint opens a nonce of any shape
 
 **DEFECT. [efficiency rank 10] cost not measured.** The qwen/xhigh lead minted
-`implementation-2026-10-10T083048Z` from `date -u +%Y-%m-%dT…`, a hyphenated timestamp, and its
+`implementation-2026-10-11T083048Z` from `date -u +%Y-%m-%dT…`, a hyphenated timestamp, and its
 checkpoint closed before dispatch. `gate-checkpoint.sh open` accepts it exactly as it accepts the
-canonical `implementation-20261010T083048Z`. Toward the local-lead goal.
+canonical `implementation-20261011T083048Z`. Toward the local-lead goal.
+
+The date was 2026-10-10 in this entry as first filed; graph's evidence carries only 2026-10-11.
+The fix is on `open` alone, keyed on the schema's `patterns.gate_nonce`; `record` and the other
+actions still take any bare token, so ledgers keyed before the change stay readable.
 
 verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-518-nonce-format.sh
 

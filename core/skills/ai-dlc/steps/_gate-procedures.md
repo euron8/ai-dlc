@@ -167,7 +167,7 @@ no adjudicator is running while the repair happens. Only once those pass does th
 the nonce and dispatch. A script FAIL discovered after a dispatch costs a second full
 adjudication, because there is no partial re-adjudication to fall back on.
 
-**At gate entry, generate the nonce** — `<gate_type>-<UTC timestamp>`, e.g.
+**At gate entry, generate the nonce** — `<gate_type>-$(date -u +%Y%m%dT%H%M%SZ)`, e.g.
 `implementation-20260715T140322Z` — and derive the verdict path:
 
     ${AI_DLC_STATE_DIR:-_bmad-output}/gate-adjudication/<gate_nonce>.verdict.json
