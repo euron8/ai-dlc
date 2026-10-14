@@ -102,15 +102,25 @@ narrower range and the carried-finding brief, not from a single delta reviewer.
 **Pre-migration.** The validator reads the review's own repository and HEAD, never where its
 running copy sits, because a story is reviewed in its own worktree and checked by the main
 checkout's copy. A branch whose history never added the program reads PENDING, and so does a
-review committed before the earliest add. A prior pass committed before the add is never failed
-on form: its findings are carried by heading or by an id-led bold label, and any other line
-prints a NOTE. The serial template in `code-reviewer.md` now writes `#### ` findings and a
-column-0 `reviewed-sha:` line.
+review committed before the earliest add. A program that sits in the checkout but was never
+committed there (gitignored or untracked) binds, with a NOTE. A shallow repository is refused.
+A prior is held to the `#### ` form only when it carries the template's column-0 `reviewed-sha:`
+line and was not committed before the add. graph's leads persist reviews late (one snapshot
+commit persisted s318 2.4 p1 and p2 together), so the commit alone cannot say a prior was written
+under the rule. Any other prior has its findings carried by heading or by an id-led bold label,
+and any other line in it prints a NOTE. In a held prior, lead-in prose before the first `#### `
+is a NOTE, and only a bullet or a bold finding-id line there fails. A label prior is also
+answered by its finding id alone, and trailing punctuation never decides a match.
+`validate-carried-findings.sh --list <prior>` prints the exact carry strings, and the Gate-1
+re-review brief carries them. The serial template in `code-reviewer.md` now writes `#### `
+findings and a column-0 `reviewed-sha:` line.
 
 The earlier prose receipt was closable by one sentence and is replaced by a probe. The probe runs
 the validator on seeded pass pairs, including an `open` carry under NEEDS_REWORK that must pass.
 It also runs a seeded worktree topology: a pre-pull story branch reads PENDING, a revert and
-re-add of the program still binds, and a story spanning the pull passes. It runs `--map` on a
+re-add of the program still binds, and a story spanning the pull passes. After the pull, a marked
+bullet prior fails, a marked heading prior with lead-in prose passes, and a lazily persisted
+unmarked prior carried by id alone passes. `--list` must print the exact carry string. It runs `--map` on a
 seeded repository with the prior sha as the base (rc 0) and with the pair reversed (rc 2), and
 requires the step and Check 1 text.
 
