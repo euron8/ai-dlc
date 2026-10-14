@@ -93,16 +93,30 @@ command -v jq >/dev/null 2>&1 || { say "jq not found, so the tool call cannot be
 # The `&` of a redirection (`2>&1`, `>&2`, `&>`) is not a chain, so a bare push with `2>&1` stays exempt.
 #
 # POLL, the third field. A call carrying an `agent_id` is in scope only when it is a POLL: its
-# command runs an `until`/`while`/`for` loop whose body runs `sleep` (the loop stops at `done`),
-# or a `sleep N` with N of 30 or more, either one at any command position -- the start, or after
-# `;` `&&` `||` `|` `(` a newline `then` `do` or `else` -- so `S=/x; for ...` and
-# `cd /x && sleep 200` are polls too, not only a command whose first word is the loop. The other
-# gates are the lead's: not backgrounded, a declared timeout over the budget. Measured on graph's
-# 3,058 subagent transcripts: 156 loop calls / 16.1 h matched, every one a poll on the agent's own
-# background job or an artifact, and no legitimate retry loop matched (those declare no timeout).
+# command runs an `until`/`while`/`for` loop whose body runs `sleep`, or a `sleep N` with N of 30
+# or more, either one at any command position -- the start, or after `;` `&&` `||` `|` `(` a
+# newline `then` `do` or `else` -- so `S=/x; for ...` and `cd /x && sleep 200` are polls too, not
+# only a command whose first word is the loop. The loop body ends at the `done` TERMINATOR (loopend:
+# a `done` after a separator, followed by a blank, separator, `)`, a redirect or the end), never at
+# a word `done` inside the condition, so `grep -q '^done' f` and `[ -f $S/chain.done ]` loops are
+# seen. Known miss: a sleep in an OUTER loop placed after a nested inner loop's `done`. `{` is not a
+# command position: graph's replay holds no `{`-prefixed poll, so adding it could not be shown to
+# catch anything. The other gates are the lead's. The cheap jq ones -- Bash, an object input, not
+# backgrounded, a numeric timeout, not a push -- run FIRST, so the poll regex is evaluated only for
+# a subagent call that passed them; the comparison against the budget follows in the shell,
+# because the detector read is deferred to in-scope calls. Measured by replaying graph's 3,227
+# transcript files (104,914 sidechain Bash calls; 1,599 foreground over 120 s) through this hook
+# with agent_id set and the real detector's 120 s default: 198 denied, 152 sleeping loops and 46
+# sleeps of 30 s or more with no loop; 17.0 h of wall clock, measured per call as the tool_use to
+# tool_result timestamp delta (0 unpaired; the declared timeouts sum to 27.7 h). Every denied
+# loop carries a completion test on the agent's own job or an artifact (condition shapes: 64
+# counted `for` with an inner test, 62 `grep -q`, 23 `kill -0`/`ps`/`pgrep`, 3 `[ -f ]`). No retry
+# loop is in scope: by a looser loop-then-sleep regex over all calls, the 26 sleeping loops that
+# declare no timeout, the 10 at or under budget and the 54 backgrounded ones never reach the test.
 T="$(jq -r '
   def cmdpos: "(^|[;&|\n(]|(^|[ \t;\n])(then|do|else)[ \t\n])[ \t\n]*";
-  def loopsleep: test(cmdpos + "(until|while|for)[ \t](?:(?!\\bdone\\b)[\\s\\S])*" + cmdpos + "sleep([ \t]|$)");
+  def loopend: "[;&|\n][ \t]*done([ \t;&|)<>\n]|$)";
+  def loopsleep: test(cmdpos + "(until|while|for)[ \t](?:(?!" + loopend + ")[\\s\\S])*" + cmdpos + "sleep([ \t]|$)");
   def longsleep: [match(cmdpos + "sleep[ \t]+([0-9]+)"; "g") | .captures[-1].string | tonumber] | any(. >= 30);
   def is_poll: ((if (.tool_input | type) == "object" then .tool_input.command else "" end) // "") | tostring | (loopsleep or longsleep);
   def pushfirst: test("^[ \t]*(cd[ \t]+[^;&|\n]+&&[ \t]*)?([A-Za-z_][A-Za-z0-9_]*=[^ \t;&|\n]*[ \t]+)*git[ \t]+push([ \t]|$)");
@@ -112,15 +126,15 @@ T="$(jq -r '
       and ($c | chained | not);
   def pushchain: ((if (.tool_input | type) == "object" then .tool_input.command else "" end) // "") | tostring | pushfirst and chained;
   pushchain as $pc
-  | ((.agent_id // "") | tostring) as $agent
-  | (if $agent == "" or .tool_name != "Bash" then false else is_poll end) as $poll
   | if .tool_name == "Bash"
-     and ($agent == "" or $poll)
      and (.tool_input | type) == "object"
      and .tool_input.run_in_background != true
      and (.tool_input.timeout | type) == "number"
      and (is_push | not)
-  then .tool_input.timeout | if . < 0 then 0 elif . > 1e9 then 1e9 else . end | -((-.) | floor) | tostring | . + " " + (if $pc then "1" else "0" end) + " " + (if $poll then "1" else "0" end)
+  then ((.agent_id // "") | tostring) as $agent
+    | (if $agent == "" then false else is_poll end) as $poll
+    | select($agent == "" or $poll)
+    | .tool_input.timeout | if . < 0 then 0 elif . > 1e9 then 1e9 else . end | -((-.) | floor) | tostring | . + " " + (if $pc then "1" else "0" end) + " " + (if $poll then "1" else "0" end)
   else empty end' 2>/dev/null)"
 PARSE_RC=$?
 if [ "$PARSE_RC" -ne 0 ]; then

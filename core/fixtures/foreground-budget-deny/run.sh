@@ -32,16 +32,25 @@
 #               (the pipeline requires a foreground push at that timeout)
 #   PUSHNEAR    `echo git push` and `git log --grep=push` at 600000 -> deny
 #   AGENT       a subagent's NON-poll calls at 600000 -> allow: `bash scripts/ai-dlc/ci-local.sh`,
-#               `sleep 20` (under the poll threshold) and the wait-for-deliverable helper's own
-#               command; the ci-local payload without `agent_id` -> deny
+#               `sleep 20` (under the poll threshold), the wait-for-deliverable helper's own
+#               command, and a non-sleeping loop followed by `sleep 5` after `done;`, `done>out;`,
+#               `done</dev/null;` and `done 2>/dev/null;`; the ci-local payload without
+#               `agent_id` -> deny
 #   SUBPOLL     a subagent's foreground POLL at 600000 -> deny with the poll reason (names the
 #               job's own `run_in_background: true` and `wait-for-deliverable.sh --complete`, and
 #               not the shorter-timeout remedy): `sleep 200; tail f`, `cd /x && sleep 200`,
-#               `sleep 30`, `until grep -q EXIT f; do sleep 5; done`, and the prefixed
-#               `S=/x; for ...; sleep 10; done`. Its allow twins live in the arm owning each
+#               `sleep 30`, `until grep -q EXIT f; do sleep 5; done`, the prefixed
+#               `S=/x; for ...; sleep 10; done`, and two loops whose CONDITION carries a `done`
+#               token (`grep -q '^done' f`, `[ -f $S/chain.done ]`). Its allow twins live in the arm owning each
 #               shared gate: the loop with `run_in_background` in BG, at 120000 in BOUNDARY, and
 #               with no timeout plus a `pg_isready` retry loop with no timeout in NOTIMEOUT
 #   EXIT        every call above exits 0
+#
+# THE POLL FP SET. Replaying graph's 1,599 foreground over-budget subagent Bash calls (3,227
+# transcript files) through the hook denies 198: 152 sleeping loops, 46 long sleeps, 17.0 h of
+# tool_use -> tool_result wall clock. All carry a completion test on the agent's own job or an
+# artifact; none is a retry loop. The `done`-in-condition seeds are the 25 of those a scan that
+# stopped at any word `done` let through.
 #
 # MUTANTS. Each is a copy of the hook, guarded with `cmp -s` so a `sed` that matched nothing
 # reports DID NOT APPLY instead of scoring. Each declares the EXACT set of arms it must fail,
@@ -188,15 +197,27 @@ score() {
   [ "$DEC" = allow ] || note AGENT
   call "$h" "$REAL" - "$(cmd_call 'bash scripts/ai-dlc/wait-for-deliverable.sh --complete p' 'a1b2c3')"; chk_rc
   [ "$DEC" = allow ] || note AGENT
+  # The loop-end near-misses: a loop that does NOT sleep, closed by `done` followed by a
+  # separator, a redirect or a blank, then a short sleep. The scan must stop at that `done`, so
+  # the trailing `sleep 5` is not read as the loop's body.
+  for _c in 'for f in a b; do echo $f; done; sleep 5' 'for f in a b; do echo $f; done>out; sleep 5' \
+            'for f in a b; do echo $f; done</dev/null; sleep 5' 'for f in a b; do echo $f; done 2>/dev/null; sleep 5'; do
+    call "$h" "$REAL" - "$(cmd_call "$_c" 'a1b2c3')"; chk_rc
+    [ "$DEC" = allow ] || note AGENT
+  done
   call "$h" "$REAL" - "$(cmd_call 'bash scripts/ai-dlc/ci-local.sh' '')"; chk_rc
   [ "$DEC" = deny ] || note AGENT
 
   # SUBPOLL: a subagent's foreground poll over the budget is denied with the poll reason. The
   # last two seeds put the poll AFTER a prefix, so a match anchored to the first word misses them;
-  # the `for` seed sleeps 10, under the threshold, so only the loop match can catch it.
+  # the `for` seed sleeps 10, under the threshold, so only the loop match can catch it. The last
+  # two carry a `done` token inside the loop CONDITION (`'^done'`, `chain.done`), which is not
+  # the loop's end: a scan that stops at any word `done` misses both.
   for _c in 'sleep 200; tail f' 'cd /x && sleep 200' 'sleep 30' \
             'until grep -q EXIT f; do sleep 5; done' \
-            'S=/x; for i in $(seq 1 25); do grep -q EXIT $S/f && break; sleep 10; done'; do
+            'S=/x; for i in $(seq 1 25); do grep -q EXIT $S/f && break; sleep 10; done' \
+            "until grep -q '^done' f; do sleep 5; done" \
+            'S=/x; for i in $(seq 1 27); do [ -f $S/chain.done ] && break; sleep 20; done'; do
     call "$h" "$REAL" - "$(cmd_call "$_c" 'a1b2c3')"; chk_rc
     [ "$DEC" = deny ] || note SUBPOLL
     case "$REASON_TXT" in *'re-issue the job itself with `run_in_background: true`'*'do not poll it'*'wait-for-deliverable.sh --complete'*) ;; *) note SUBPOLL ;; esac
@@ -258,7 +279,7 @@ CTL="$(score "$MUT/hook-control.sh")"
 
 # Expected sets are written in C-locale sorted order, which is what score() prints.
 # Mutants 1 and 12 remove the whole deny channel rather than one guard, so they fail every arm
-# holding a deny cell; each of the other nineteen fails its own arm alone.
+# holding a deny cell; each of the others fails its own arm alone.
 # 1. warning-only: the same text as context, no decision. The rejected design.
 mut warn-only "AGENT BOUNDARY DEFAULT ENV OVER PUSHCHAIN PUSHNEAR REASON SUBPOLL" \
   -e '/permissionDecision: "deny",/d' -e 's/permissionDecisionReason: \$reason/additionalContext: $reason/'
@@ -275,7 +296,7 @@ mut any-tool "NONBASH" -e 's/if \.tool_name == "Bash"/if true/'
 # 7. no declared timeout read as a long one.
 mut no-timeout-is-long "NOTIMEOUT" \
   -e 's/and (\.tool_input\.timeout | type) == "number"/and true/' \
-  -e 's/then \.tool_input\.timeout | if/then (.tool_input.timeout \/\/ 600000) | if/'
+  -e 's/| \.tool_input\.timeout | if/| (.tool_input.timeout \/\/ 600000) | if/'
 # 8. malformed input allowed silently.
 mut silent-malformed "MALFORMED" -e '/not readable JSON/d'
 # 9. no detector: fall back to a literal and deny.
@@ -292,11 +313,11 @@ mut drop-push "PUSH" -e '/and (is_push | not)/d'
 # 14. the push match loses its start anchor, so `echo git push` rides the exemption.
 mut push-unanchored "PUSHNEAR" -e 's/test("^\[ \\t\]\*(cd/test("(cd/'
 # 15. no agent_id exit: a teammate's non-poll call is denied though it is its job, not a wait.
-mut drop-agent "AGENT" -e '/and (\$agent == "" or \$poll)/d'
+mut drop-agent "AGENT" -e 's/| select(\$agent == "" or \$poll)/| select(true)/'
 # 16. the PUSHCHAIN field dropped: a chained push gets the general reason, run_in_background and all.
 mut drop-pushchain "PUSHCHAIN" -e 's/^PUSHCHAIN="\${T##\* }"$/PUSHCHAIN=0/'
 # 17. the poll predicate removed: a subagent's poll rides the agent_id exemption again.
-mut drop-poll "SUBPOLL" -e 's/and (\$agent == "" or \$poll)/and $agent == ""/'
+mut drop-poll "SUBPOLL" -e 's/| select(\$agent == "" or \$poll)/| select($agent == "")/'
 # 18. the loop match anchored to word 1: a poll loop after `S=/x;` is no longer seen.
 mut loop-word1 "SUBPOLL" -e 's/def loopsleep: test(cmdpos + "(until/def loopsleep: test("^[ \\t]*(until/'
 # 19. the long-sleep match anchored to word 1: `cd /x && sleep 200` is no longer seen.
@@ -305,6 +326,10 @@ mut sleep-word1 "SUBPOLL" -e 's/match(cmdpos + "sleep\[/match("^[ \\t]*sleep[/'
 mut threshold-zero "AGENT" -e 's/any(\. >= 30)/any(. >= 0)/'
 # 21. the poll reason never chosen: a denied poll gets the lead's shorter-timeout remedy.
 mut drop-poll-reason "SUBPOLL" -e 's/^POLL="\${T##\* }"$/POLL=0/'
+# 22. the loop scan stops at ANY word `done`: a `done` in the loop condition hides the poll.
+mut loopend-word "SUBPOLL" -e 's/(?!" + loopend + ")/(?!\\\\bdone\\\\b)/'
+# 23. the loop end without the redirect characters: `done>out; sleep 5` reads as a poll.
+mut loopend-no-redirect "AGENT" -e 's/done(\[ \\t;&|)<>\\n\]|\$)/done([ \\t;\&|)\\n]|$)/'
 
 [ "$n_mut" -gt 0 ] && [ "$n_kill" -eq "$n_mut" ] \
   && ok "$n_kill of $n_mut mutants killed" \

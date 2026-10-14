@@ -10,12 +10,20 @@
 #              `S=/x; for i in $(seq 1 25); do grep -q EXIT $S/f && break; sleep 10; done`
 #                (a loop poll AFTER a prefix, sleeping under the long-sleep threshold) -> deny
 #              `cd /x && sleep 200` (a long sleep after a prefix)                      -> deny
+#              `until grep -q '^done' f; do sleep 5; done`
+#                (a `done` token inside the loop CONDITION, not the loop's end)       -> deny
+#              `bash scripts/ai-dlc/ci-local.sh` (the agent's job, not a poll)        -> allow
+#              `sleep 20` (a short sleep, no loop)                                     -> allow
 #            with agent_id, NO timeout:
 #              `for i in $(seq 1 20); do pg_isready && break; sleep 2; done`           -> allow
-#   exit 0 when all three hold (fixed), 1 when any does not (live).
+#   exit 0 when every cell holds (fixed), 1 when any does not (live).
 #
-# Measured at 0.781.0: CONTROL denied, both polls allowed (agent_id exempts them) -> exit 1.
-# Run from the repo root.
+# Each allow cell kills a wrong fix the deny cells pass: ci-local kills a hook that drops the
+# agent_id exemption outright, `sleep 20` kills a poll test reduced to "mentions sleep", and the
+# `'^done'` loop kills a body scan that stops at any word `done`.
+#
+# Measured at 0.781.0: CONTROL denied, every poll allowed (agent_id exempts them) -> exit 1.
+# The mktemp project is left in place under TMPDIR, not deleted. Run from the repo root.
 set -u
 H=core/hooks/ai-dlc-foreground-budget.sh
 D=core/scripts/validate-steering-budget.sh
@@ -35,5 +43,8 @@ decision() {
 [ "$(decision 'bash scripts/ai-dlc/ci-local.sh' '' 600000)" = deny ] || exit 9
 [ "$(decision 'S=/x; for i in $(seq 1 25); do grep -q EXIT $S/f && break; sleep 10; done' a1 600000)" = deny ] || exit 1
 [ "$(decision 'cd /x && sleep 200' a1 600000)" = deny ] || exit 1
+[ "$(decision "until grep -q '^done' f; do sleep 5; done" a1 600000)" = deny ] || exit 1
+[ "$(decision 'bash scripts/ai-dlc/ci-local.sh' a1 600000)" = allow ] || exit 1
+[ "$(decision 'sleep 20' a1 600000)" = allow ] || exit 1
 [ "$(decision 'for i in $(seq 1 20); do pg_isready && break; sleep 2; done' a1 null)" = allow ] || exit 1
 exit 0
