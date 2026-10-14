@@ -1,10 +1,12 @@
-# Pull the graph consumer from 0.780.0 to 0.781.0
+# DISCHARGED — DO NOT EXECUTE — pull the graph consumer from 0.780.0 to 0.781.0
 
-READ and FOLLOW docs/plans/graph-pull-0780-to-0781.md
+**THIS RUNBOOK IS SPENT. IT RAN, IT MERGED, AND IT IS A RECORD RATHER THAN AN INSTRUCTION.**
+Do not follow the numbered actions below; they describe work that is finished. Read `## Discharge`
+for what happened.
 
 ## RESUME HERE
 
-**STATE AT WRITING: WRITTEN AND REHEARSED, NOT STARTED.** The rehearsal ran on a `file://` clone
+**STATE AT WRITING (history): WRITTEN AND REHEARSED, NOT STARTED.** The rehearsal ran on a `file://` clone
 of the consumer, on the consumer's checked-out carry-over branch, and every figure in
 `## Rehearsal` came from it.
 
@@ -302,3 +304,55 @@ After the rotation each id read 0 in the ledger and 1 in the archive, against 18
 the ledger and an impossible id reading 0 in the archive.
 
 ## Discharge
+
+**Merged 2026-10-14 as the consumer's PR #1219 (reconcile, `7a8c6c98a`)**, squash-merged onto its
+carry-over branch `ai-dlc/carry-over/s318-artifact-consolidation`. There was no self-update PR,
+as action 4 predicted. A graph session ran the pull under operator authorization. This section was
+written on the distribution side, which only read graph.
+
+**The run agreed with `## Rehearsal` on every predicted row.** These figures come from the consumer's
+reconcile log `reconcile-log-20261014T133425Z.md` and were re-derived here:
+
+- The gate returned `SELF-UPDATE-DEFER` ×2 and `SELF-UPDATE-SAFE-STOP -`. The slice was carried into
+  `apply.sh --carried-machinery-slice`, and the gate record `self-update-gate-20261014T130751Z.md`
+  was committed (action 4).
+- The 12 `HARD-*` rows went to 0. Both drifted overrides were re-adopted with `readopt-override.sh
+  --merge`, cleanly and with 0 conflicts. The 10 LC-E4 verdicts and the 2 LC-E19 verdicts were recorded
+  as still-additive. The dispositions are in `blocker-adjudication-20261014T131459Z.md`.
+- `team-roles/dev.md` was merged as a setup site, taking theirs' text and keeping the consumer's
+  ownership list. `QUICKSTART.md` was prose-merged. `settings.json` was merged with no consumer value
+  changed.
+- Both sprint-318 ids came out `NAMED-UPSTREAM` by `6c8ea1d9` in the dry run (done-when 2). Each was
+  annotated `**ADOPTED UPSTREAM (v0.781.0, verified 2026-10-14)**`. `ledger-rotate.sh --apply` moved
+  2 entries (42 lines), and the reverify row set was identical before and after.
+
+**Two actions went beyond this runbook, and both were the operator's direction in the graph
+session:**
+
+- graph's `dev-domain.md` (RT-S287-1) and `code-reviewer-domain.md` (RT-S172-3) extensions were
+  rewritten so that capital-path work routes to the escalated roles, with model and effort read from
+  `aiDlcRoles` alone.
+- `derivation-differential.sh` reported 38 `NEWLY-FAILING` derivations, all in s316-s318 sprint
+  artifacts and party transcripts that grep core text 0.781.0 moved. They were left as history.
+
+**Re-derived from the distribution side after the merge, with controls in the same invocation:**
+
+- `.claude/.ai-dlc-version` reads `version: 0.781.0`, `commit: 3de460dd`, in the working tree and at
+  the consumer's HEAD (done-when 1).
+- Each sprint-318 id counts 1 in `push-candidate-ledger.archive.md` and 0 in
+  `push-candidate-ledger.md`, both at HEAD and in the working tree, against 18 `^## ` ledger headings.
+  The impossible id `PC-ZZ-IMPOSSIBLE-CONTROL-Q7` reads 0 in both files. The archive at HEAD carries 2
+  `ADOPTED UPSTREAM (v0.781.0` lines (done-when 3).
+- Done-when 4 was measured on a `file://` clone at `7a8c6c98a`. The installed `validate-spawn-ledger.sh`
+  and `.claude/hooks/ai-dlc-window.sh` are byte-identical to the distribution's (`cmp` 0).
+  `validate-spawn-ledger.sh`, run with the sprint-317 argv, prints 57 persona warnings and 11 arm-S3
+  failures against the `[qa]` control of 72, exit 1. `validate-artifact-budget.sh --root .` prints
+  `pool 330000` with one `OVER`, exit 1. Both match the rehearsal's 0.781.0 column, and the
+  installed-library lookup the Hazards section left as a prediction resolved to the same pool.
+- The drain plan's derive block, run in a fresh worktree at `origin/main` `3de460dd`, reads graph's
+  live candidate set as **0** across 24 qualifying refs. The arch figure is 359, DISCHARGED is 0, the
+  worklist is 0, installed = shipped = 0.781.0, and the gap control prints `UNNAMED`. TERMINAL
+  moved 234 -> 236, by the two rotations. Three refs are new since the batch-228 close. The pull's own
+  `origin/ai-dlc-update/0.781.0-reconcile-20261014T132318Z` reads live 0. `ai-dlc/s318-sprint-review-fix`
+  and `dev/sprint-318/story-1-5` each carry both sprint-318 ids, and both ids are already in the pulled
+  archive, so neither adds to the live set.
