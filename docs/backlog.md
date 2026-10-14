@@ -143,7 +143,17 @@ exception, under both the Sonnet and the local qwen lead at about 0.08 per activ
 fired correctly each time; the waste is the discarded pass, not an escape. Two further discards
 (Check 1 verdict form, Check 5 drift) are inferred, not stated as lead error.
 
-verify: manual -- close when a Check 22 waiver that names no Rule 28 exception is refused at the moment the lead writes it, before any adjudicator is dispatched, and a fixture seeds the waiver form graph wrote.
+The count did not reproduce as stated. Re-derived from graph's lead transcripts, the measured Check 22
+discards are three nonces: s317 `implementation-20261010T230257Z` (a tier-pin waiver naming "82 dev
+and 42 code-reviewer rows" and no spawn), and s317 `124524Z` and s318 `011534Z` (waivers naming
+every `invalid-exception` spawn and citing no Rule 28 exception, or only "the four"). All four lead
+`OVERRIDDEN` writes in s317-s318 were Bash `cat >> … <<EOF` appends, so no Edit/Write matcher sees
+them. The check runs at dispatch: `ai-dlc-dispatch-guard.sh` refuses a `gate-adjudicator` dispatch
+when a current-sprint Check 22/Rule 19 `OVERRIDDEN` entry names no spawn of the sprint (catches
+230257Z), or when a shardable `invalid-exception` ledger row is not named by an `OVERRIDDEN` entry
+citing exception (1)-(4) (catches 124524Z and 011534Z).
+
+verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-512-adjudicator-dispatch-waiver.sh
 
 ## BL-513 — Check 21 fails on dev-filled Strategy Test ID cells that nothing re-checks after a rename
 
@@ -174,7 +184,16 @@ re-sent with the same description; the worst burst was 32 rejections in one minu
 sprint-review, 40 of 95 party seats). `RB/rule-28.md` already says to hold the rejected set until a
 beat returns a `DELIVERED` line, so this is the lead not following written prose.
 
-verify: manual -- close when a re-sent `Agent` call whose description matches a spawn rejected in the same session with no intervening `DELIVERED` beat is refused by a hook, and a fixture seeds the rejection text.
+The `DELIVERED` key did not survive measurement. Over graph's nine rejecting lead sessions (279
+rejections, 233 same-description re-sends), holding until a `DELIVERED` beat would deny 226 re-sends,
+142 of which the harness then launched. Per the operator ruling, a slot frees when an agent exits:
+`rule-28.md` now releases the held set on an agent task-notification or a non-rejected
+`Agent`/`Task` result, and `ai-dlc-dispatch-guard.sh` denies a lead re-send of a rejected
+description with neither after the rejection. On the same corpus it denies 3 re-sends, all rejected
+again, and 0 that launched. 83 re-sends rejected again are not held because a release record sat
+between the attempts.
+
+verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-515-resend-after-cap.sh
 
 ## BL-516 — no guard stops the lead editing consumer product code
 

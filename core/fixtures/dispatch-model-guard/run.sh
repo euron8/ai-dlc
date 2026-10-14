@@ -1066,6 +1066,214 @@ OUT_RO="$(setmodel "$CONSUMER" "$(mkjson Agent remediator sonnet)")"
   || bad "with no state dir the guard injected '$OUT_RO', expected opus — the ledger write is not fail-open"
 mkdir -p "$CONSUMER/_bmad-output"
 
+# --- 14. DENY ARM 1: A CAP-REJECTED SPAWN RE-SENT BEFORE ANY AGENT EXITED ---------
+# FALSE-POSITIVE SET, measured by driving this guard at each of the 233 same-description lead
+# re-sends in the reference consumer's nine cap-rejecting sessions (transcript cut at the re-send's
+# record): 3 denied, 3 of them rejected again by the harness, 0 launched. It reached zero through two
+# narrowings, each with its own case here: releasing on a non-rejected Agent result (14b; without it
+# 48 held, 33 launched) and counting the queue ENQUEUE as an agent exit (14c''; without it 6 held, 3
+# launched). Slowest call on the corpus, a 44 MB transcript, 0.34 s.
+# The rejection is produced by Claude Code AFTER PreToolUse, so it can only be SEEDED: the real
+# record shapes, taken from the reference consumer's lead transcripts, are an assistant
+# `tool_use` and a user `tool_result` whose content is the cap text with `is_error: true`. Every
+# dispatch below is `dev` with `model: sonnet`, a call the model path leaves UNTOUCHED -- so any
+# output at all is this arm's, an allow is the empty string, and a deny is `deny`.
+CAPTXT='Concurrent subagent limit reached. You can run 20 subagents at once. Do not retry. If the user wants more concurrent subagents, ask them to increase CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS.'
+t_use() { # t_use <id> <tool> <description> [command]
+  jq -nc --arg id "$1" --arg n "$2" --arg d "$3" --arg c "${4-}" '{type:"assistant",isSidechain:false,
+    message:{role:"assistant",content:[{type:"tool_use",id:$id,name:$n,
+      input:({description:$d} + (if $c != "" then {command:$c} else {} end))}]}}'
+}
+t_res() { # t_res <id> <text> <is_error>
+  jq -nc --arg id "$1" --arg t "$2" --argjson e "$3" '{type:"user",isSidechain:false,
+    message:{role:"user",content:[{type:"tool_result",tool_use_id:$id,content:$t,is_error:$e}]}}'
+}
+t_note() { # t_note <summary-kind>   -- a notification as the harness records it: origin.kind on the record
+  jq -nc --arg c "$(printf '<task-notification>\n<task-id>a0</task-id>\n<status>completed</status>\n<summary>%s "seat" finished</summary>\n</task-notification>' "$1")" \
+    '{type:"user",isSidechain:false,origin:{kind:"task-notification"},message:{role:"user",content:$c}}'
+}
+CAPDIR="$WORK/cap"; mkdir -p "$CAPDIR"
+# The rejected spawn, preceded by an UNRELATED launched one, so the rejection is not the first
+# record and a launch BEFORE it must not release it.
+{ t_use u0 Agent "Earlier seat"; t_res u0 "Async agent launched successfully." false
+  t_use u1 Agent "Party seat 7"; t_res u1 "$CAPTXT" true; } > "$CAPDIR/a.jsonl"
+{ cat "$CAPDIR/a.jsonl"; t_use u2 Agent "Party seat 8"; t_res u2 "Async agent launched successfully." false; } > "$CAPDIR/b.jsonl"
+{ cat "$CAPDIR/a.jsonl"; t_note Agent; } > "$CAPDIR/c.jsonl"
+# c3: the agent's exit recorded ONLY as the harness's queue ENQUEUE, before delivery -- the
+# earliest record of an exit, and the one a lead re-send most often races.
+{ cat "$CAPDIR/a.jsonl"
+  jq -nc --arg c "$(printf '<%s>\n<status>completed</status>\n<summary>Agent "seat" finished</summary>' task-notification)" \
+    '{type:"queue-operation",operation:"enqueue",content:$c}'; } > "$CAPDIR/c3.jsonl"
+# c2: the near-miss for (c) -- a notification for a BACKGROUND COMMAND, which is no agent exiting.
+{ cat "$CAPDIR/a.jsonl"; t_note "Background command"; } > "$CAPDIR/c2.jsonl"
+# d: the cap text ONLY in a Bash call's command and that call's error result. The Bash tool_use
+# carries a `description` equal to the re-sent one, so an arm that read every tool's results
+# would hold it. No Agent call was ever rejected here.
+{ t_use b1 Bash "Party seat 7" "grep -c 'Concurrent subagent limit reached' t.jsonl"
+  t_res b1 "$CAPTXT" true; } > "$CAPDIR/d.jsonl"
+
+capj() { # capj <transcript> <description> [agent_id]
+  mkjson Agent dev sonnet | jq -c --arg t "$1" --arg d "$2" --arg a "${3-}" \
+    '.transcript_path = $t | .tool_input.description = $d | if $a != "" then .agent_id = $a else . end'
+}
+capout() { raw "${3:-$CONSUMER}" "$(capj "$1" "$2" "${4-}")"; }
+expect_deny() { # expect_deny <out> <label>
+  if [ "$(printf '%s' "$1" | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null)" = deny ] \
+     && printf '%s' "$1" | jq -e '.hookSpecificOutput | has("updatedInput") | not' >/dev/null 2>&1; then
+    ok "$2 -> DENIED, with no updatedInput"
+  else bad "$2 -> expected a deny with no updatedInput, got '$(printf '%s' "$1" | cut -c1-200)'"; fi
+}
+expect_quiet() { # expect_quiet <out> <label>
+  [ -z "$1" ] && ok "$2 -> allowed (no decision)" || bad "$2 -> expected NO decision, got '$(printf '%s' "$1" | cut -c1-200)'"
+}
+CAP_A="$(capout "$CAPDIR/a.jsonl" "Party seat 7")"
+expect_deny "$CAP_A" "14a a re-send of a cap-rejected description with nothing released since"
+grep -qF 'an agent of this session has exited since the rejection' <<<"$CAP_A" \
+  && ok "  and the remedy quotes Rule 28's held-set paragraph" \
+  || bad "  the deny does not quote Rule 28's held-set release condition"
+expect_quiet "$(capout "$CAPDIR/b.jsonl" "Party seat 7")" "14b the same, after a non-rejected Agent result (the cap admitted a spawn)"
+expect_quiet "$(capout "$CAPDIR/c.jsonl" "Party seat 7")" "14c the same, after an agent task-notification (an agent exited)"
+expect_quiet "$(capout "$CAPDIR/c3.jsonl" "Party seat 7")" "14c'' the same, after an agent exit recorded only as the queue enqueue"
+expect_deny "$(capout "$CAPDIR/c2.jsonl" "Party seat 7")" "14c' the same, after only a BACKGROUND-COMMAND notification"
+expect_quiet "$(capout "$CAPDIR/d.jsonl" "Party seat 7")" "14d the cap text only inside a Bash command and its result"
+expect_quiet "$(capout "$CAPDIR/a.jsonl" "Party seat 9")" "14e a different description"
+expect_quiet "$(capout "$CAPDIR/a.jsonl" "Party seat 7" "" a1234567890abcdef)" "14f a subagent's call (agent_id set)"
+expect_quiet "$(capout "$CAPDIR/a.jsonl" "Party seat 7" "$NOSTAMP")" "14g a non-layered tree"
+
+# MUTANTS. Each is a copy of the guard, guarded by `cmp -s`, and must fail ONLY its own case.
+CAPCTL="$WORK/guard-cap-control.sh"; cp "$HOOK" "$CAPCTL"
+cap_mut() { # cap_mut <script> <transcript> <description> [agent_id] -> decision or empty
+  printf '%s' "$(capj "$2" "$3" "${4-}")" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" 2>/dev/null \
+    | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null
+}
+[ "$(cap_mut "$CAPCTL" "$CAPDIR/a.jsonl" "Party seat 7")" = deny ] \
+  && ok "CAP MUTANT CONTROL: an unmutated copy denies 14a" \
+  || bad "CAP MUTANT CONTROL is dead -- the kills below are unearned"
+cap_kill() { # cap_kill <name> <sed-expr> <transcript> <description> <agent_id> <label>
+  local m="$WORK/guard-cap-$1.sh"
+  sed "$2" "$HOOK" > "$m" || { bad "CAP MUTANT $1: sed DID NOT APPLY"; return; }
+  if cmp -s "$HOOK" "$m"; then bad "CAP MUTANT $1 matched nothing (cmp -s guard)"; return; fi
+  [ "$(cap_mut "$m" "$3" "$4" "$5")" = deny ] \
+    && ok "CAP MUTANT $1 killed: $6" || bad "CAP MUTANT $1 SURVIVED: $6"
+}
+cap_kill anytool 's/and (.name == "Agent" or .name == "Task")))/))/' \
+  "$CAPDIR/d.jsonl" "Party seat 7" "" "reading every tool's results holds a Bash call's quoted text (14d)"
+cap_kill nodesc 's/(if .ids\[\$t.tool_use_id\] == \$d then .held = true else . end)/.held = true/' \
+  "$CAPDIR/a.jsonl" "Party seat 9" "" "dropping the description match holds every description (14e)"
+cap_kill nolead 's/^if \[ -z "\$DG_AGENT_ID" \] && \[ -n "\$DG_DESC" \]/if [ -n "$DG_DESC" ]/' \
+  "$CAPDIR/a.jsonl" "Party seat 7" a1234567890abcdef "dropping the lead-only scope denies a subagent (14f)"
+cap_kill nolaunch 's/                   else .held = false end$/                   else . end/' \
+  "$CAPDIR/b.jsonl" "Party seat 7" "" "dropping the launch release holds past an admitted spawn (14b)"
+cap_kill nonote 's/| if (\$r | agentnote) then .held = false else . end)/| if ($r | agentnote) then . else . end)/' \
+  "$CAPDIR/c.jsonl" "Party seat 7" "" "dropping the notification release holds past an agent exit (14c)"
+cap_kill noenqueue 's/        def agentnote: ((.type == "queue-operation" and .operation? == "enqueue")$/        def agentnote: (false/' \
+  "$CAPDIR/c3.jsonl" "Party seat 7" "" "dropping the enqueue carrier holds past an exit not yet delivered (14c'')"
+
+# --- 15. DENY ARM 2: A GATE-ADJUDICATOR DISPATCHED OVER A WAIVER CHECK 22 WILL REJECT ---------
+# FALSE-POSITIVE SET, measured by driving this guard over the reference consumer's live pending.md
+# and pending-archive.md with its real ledger, probe rows and team-roles, sprints 310-318. Clause 1
+# (names no spawn): 0 denies; it reached 0 by excluding names equal to their role (15a's mutant).
+# Clause 2 (uncovered invalid-exception row): it denies live S316 (3 rows) and S317 (11 rows), and
+# archive S316/S317/S318. Each of those rows is one validate-spawn-ledger.sh arm S3 FAILS, which
+# makes each a true positive: Check 22 would discard the pass. The archived S318 rows are covered
+# in the live file by an entry citing exceptions (3) and (2). Clause 2 reached that set by scoping
+# to S3's shardable roles (15g; without it S316 adds a dev-escalated row S3 does not judge).
+# Each world is a fresh project: stamp, roles and settings copied from CONSUMER, a snapshot
+# naming the sprint, a seeded spawn ledger and a seeded pending.md. The ledger holds a non-subject
+# epoch row FIRST, so no arm passes by reading only the first row.
+WAIVER_SRC="$HERE/s317-tier-pin-waiver.md"
+[ -r "$WAIVER_SRC" ] || bad "15 the extracted s317 waiver body ($WAIVER_SRC) is missing -- section 15 asserts nothing"
+ledrow() { # ledrow <sprint> <name> <role> <tool_use_id> [shard]
+  jq -nc --argjson s "$1" --arg n "$2" --arg r "$3" --arg t "$4" --arg sh "${5-}" \
+    '{v:1,sprint:$s,name:$n,role:$r,tool_use_id:$t,shard:(if $sh == "" then null else $sh end)}'
+}
+mkworld() { # mkworld <name> <sprint> -> prints the project dir; ledger and pending.md from stdin-free files
+  local p="$WORK/waiver-$1"
+  mkdir -p "$p/.claude" "$p/_bmad-output" "$p/docs/escalations"
+  cp -R "$CONSUMER/.claude/team-roles" "$p/.claude/"
+  cp "$CONSUMER/.claude/.ai-dlc-version" "$CONSUMER/.claude/settings.json" "$p/.claude/"
+  printf -- '- sprint_id: %s\n' "$2" > "$p/_bmad-output/pipeline-snapshot.md"
+  { ledrow 316 epoch-row analyst toolu_EPOCH0
+    ledrow 317 dev dev toolu_01DEVROW000000000000001
+    ledrow 317 code-reviewer code-reviewer toolu_01CRROW0000000000000001
+    ledrow 317 s317-w8 dev toolu_01W8ROW0000000000000001
+  } > "$p/_bmad-output/spawn-ledger.jsonl"
+  : > "$p/docs/escalations/pending.md"
+  printf '%s\n' "$p"
+}
+entry() { # entry <file> <header> <body-line>...
+  local f="$1" h="$2"; shift 2
+  { printf '\n%s\n**Status:** OVERRIDDEN\n' "$h"; for l in "$@"; do printf '%s\n' "$l"; done; } >> "$f"
+}
+adj() { raw "$1" "$(mkjson Agent gate-adjudicator opus)"; }
+ADJ_REM="**Remediation:** outputs verified against the role contract."
+
+W1="$(mkworld unnamed 317)"; cat "$WAIVER_SRC" >> "$W1/docs/escalations/pending.md"
+W1_OUT="$(adj "$W1")"
+expect_deny "$W1_OUT" "15a the real s317 tier-pin waiver (names 82 dev and 42 code-reviewer rows, no spawn)"
+grep -qF 'names no spawn' <<<"$W1_OUT" && ok "  and the reason names the unnamed-waiver clause" \
+  || bad "  the deny does not say the waiver names no spawn"
+expect_quiet "$(raw "$W1" "$(mkjson Agent dev sonnet)")" "15a' the same world, a NON-adjudicator dispatch"
+
+W2="$(mkworld tooluse 317)"
+entry "$W2/docs/escalations/pending.md" "## [S317-CHECK22-WAIVER] lead - 2026-10-10" \
+  "**Context:** Check 22 tier mismatch on toolu_01DEVROW000000000000001." "$ADJ_REM"
+expect_quiet "$(adj "$W2")" "15b a Check 22 waiver naming a ledger tool_use_id"
+
+W3="$(mkworld nameonly 317)"
+entry "$W3/docs/escalations/pending.md" "## [S317-CHECK22-WAIVER] lead - 2026-10-10" \
+  "**Context:** Check 22 tier mismatch on the dispatch s317-w8." "$ADJ_REM"
+expect_quiet "$(adj "$W3")" "15c a Check 22 waiver naming a ledger dispatch name only"
+
+W4="$(mkworld prior 318)"; cat "$WAIVER_SRC" >> "$W4/docs/escalations/pending.md"
+expect_quiet "$(adj "$W4")" "15d the same unnamed waiver, from a PRIOR sprint"
+
+# THE INVALID-EXCEPTION CLAUSE. One remediator row recorded `invalid-exception` in S317.
+inv_world() { # inv_world <name> <entry-body-line> -> project dir
+  local p; p="$(mkworld "$1" 317)"
+  ledrow 317 remediator remediator toolu_01REMINV000000000000001 invalid-exception >> "$p/_bmad-output/spawn-ledger.jsonl"
+  [ -n "$2" ] && entry "$p/docs/escalations/pending.md" "## [S317-CHECK22-S3] lead - 2026-10-10" \
+    "**Context:** Check 22 arm S3 on toolu_01REMINV000000000000001." "$2"
+  printf '%s\n' "$p"
+}
+W5="$(inv_world uncovered "**Remediation:** no Rule 28 exception applies, and none is invented here.")"
+W5_OUT="$(adj "$W5")"
+expect_deny "$W5_OUT" "15e an invalid-exception row named by a waiver that cites no exception"
+grep -qF 'toolu_01REMINV000000000000001' <<<"$W5_OUT" && ok "  and the reason names the uncovered row" \
+  || bad "  the deny does not name the uncovered invalid-exception row"
+expect_deny "$(adj "$(inv_world generic "**Remediation:** one of Rule 28's four serial exceptions applied.")")" \
+  "15e' the same, citing the exceptions only as \"the four\" (the s317 124524Z form)"
+expect_quiet "$(adj "$(inv_world covered "**Remediation:** the exception that applied is exception (4), a serial document.")")" \
+  "15f the same row, covered by an entry citing exception (4)"
+W7="$(mkworld nonshard 317)"
+ledrow 317 dev-escalated dev-escalated toolu_01DEVESCINV00000000001 invalid-exception >> "$W7/_bmad-output/spawn-ledger.jsonl"
+expect_quiet "$(adj "$W7")" "15g an invalid-exception row on a NON-shardable role (Check 22 arm S3 does not judge it)"
+
+# MUTANTS for arm 2, each a copy guarded by `cmp -s`, each killed by its own world only.
+ADJCTL="$WORK/guard-adj-control.sh"; cp "$HOOK" "$ADJCTL"
+adj_mut() { printf '%s' "$(mkjson Agent gate-adjudicator opus)" | CLAUDE_PROJECT_DIR="$2" bash "$1" 2>/dev/null \
+  | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null; }
+[ "$(adj_mut "$ADJCTL" "$W1")" = deny ] && ok "ADJ MUTANT CONTROL: an unmutated copy denies 15a" \
+  || bad "ADJ MUTANT CONTROL is dead -- the kills below are unearned"
+adj_kill() { # adj_kill <name> <sed-expr> <world> <want: deny|allow> <label>
+  local m="$WORK/guard-adj-$1.sh" got
+  sed "$2" "$HOOK" > "$m" || { bad "ADJ MUTANT $1: sed DID NOT APPLY"; return; }
+  if cmp -s "$HOOK" "$m"; then bad "ADJ MUTANT $1 matched nothing (cmp -s guard)"; return; fi
+  got="$(adj_mut "$m" "$3")"; [ -n "$got" ] || got=allow
+  [ "$got" = "$4" ] && ok "ADJ MUTANT $1 killed: $5" || bad "ADJ MUTANT $1 SURVIVED: $5"
+}
+adj_kill regexonly 's/          if (t in key) named = 1$/          if (t ~ \/^(toolu_|a[0-9a-f]{16}$)\/) named = 1/' \
+  "$W3" deny "a shape-regex join cannot see a waiver that names a spawn by dispatch name (15c)"
+adj_kill rolename 's/          (if (.name \/\/ "") != "" and .name != .role then "K\\t" + .name else empty end),$/          (if (.name \/\/ "") != "" then "K\\t" + .name else empty end),/' \
+  "$W1" allow "joining role-equal names reads \"82 dev and 42 code-reviewer rows\" as naming spawns (15a)"
+adj_kill nosprint 's/^        if (hdr !~ ("\[Ss\]" sprint "(\[^0-9\]|\$)")) return$/        if (0) return/' \
+  "$W4" deny "dropping the sprint scope refuses over a prior sprint's waiver (15d)"
+adj_kill noinvalid 's/^        if (!dead) for (i = 1; i <= ni; i++) if (!(i in cov)) print "X\\t".*$/        if (0) print/' \
+  "$W5" allow "dropping the invalid-exception clause misses an uncovered S3 row (15e)"
+adj_kill anyexc 's/        if (exc ~ \/exception \\(\[1-4\]\\)(\[^-\]|\$)\/ || exc ~ \/exception \[1-4\](\[^0-9-\]|\$)\/ \\$/        if (exc ~ \/exception\/ || exc ~ \/exception \/ \\/' \
+  "$(inv_world generic2 "**Remediation:** one of Rule 28's four serial exceptions applied.")" allow \
+  "a bare-word exception match accepts \"the four\" as a citation (15e')"
+
 echo
 if [ "$fails" -eq 0 ]; then echo "dispatch-model-guard: PASS"; exit 0; fi
 echo "dispatch-model-guard: $fails assertion(s) FAILED" >&2
