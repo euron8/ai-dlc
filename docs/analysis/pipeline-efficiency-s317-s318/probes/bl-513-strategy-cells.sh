@@ -8,6 +8,8 @@
 #                   cells resolve                                -> exit 0
 #                   the test renamed, cell not re-bound          -> exit 1, `node-missing`
 #                   cell re-bound to the new name                -> exit 0
+#                   the test FILE moved, cell not re-bound       -> exit 1, `node-missing`
+#                   cell re-bound to the new path                -> exit 0
 #                 plus an empty `Resolves to` cell               -> exit 1, `empty-cell`
 #                 and sprint-review §4 runs it before Seam B.
 #   exit 0 fixed, 1 live (the script is absent, a commit scores wrong, or §4 is unwired).
@@ -37,6 +39,12 @@ o=$(bash "$V" -C "$d" --strategy HEAD stories/s.md 2>&1); [ $? -eq 1 ] || exit 1
 case "$o" in *"REFUSED node-missing stories/s.md: TS-1 case a"*) ;; *) exit 1 ;; esac
 sed 's/::test_old /::test_new /' "$d/stories/s.md" > "$d/s.tmp" && mv "$d/s.tmp" "$d/stories/s.md"
 g commit -qam rebind || exit 9
+bash "$V" -C "$d" --strategy HEAD stories/s.md >/dev/null 2>&1 || exit 1
+g mv tests/test_x.py tests/test_y.py && g commit -qm move || exit 9
+o=$(bash "$V" -C "$d" --strategy HEAD stories/s.md 2>&1); [ $? -eq 1 ] || exit 1
+case "$o" in *"REFUSED node-missing stories/s.md: TS-1 case a"*"not tracked"*) ;; *) exit 1 ;; esac
+sed 's#tests/test_x.py::#tests/test_y.py::#' "$d/stories/s.md" > "$d/s.tmp" && mv "$d/s.tmp" "$d/stories/s.md"
+g commit -qam rebind-move || exit 9
 bash "$V" -C "$d" --strategy HEAD stories/s.md >/dev/null 2>&1 || exit 1
 printf '| TS-2 | - | test |  |\n' >> "$d/stories/s.md"
 g commit -qam empty || exit 9

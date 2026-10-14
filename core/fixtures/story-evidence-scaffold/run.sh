@@ -323,6 +323,7 @@ EOS
     rename|rebind)
            printf 'class TestA:\n    def test_renamed(self):\n        assert 1 == 1\n' > "$w/tests/test_x.py"
            [ "$v" = rebind ] && sed 's/TestA::test_new`/TestA::test_renamed`/' "$w/$STORY" > "$w/.s" && mv "$w/.s" "$w/$STORY" ;;
+    movefile) gitw "$w" mv tests/test_x.py tests/test_y.py || return 2 ;;
     *) return 2 ;;
   esac
   gitw "$w" add -A && gitw "$w" commit -qm "$v" --allow-empty || return 2
@@ -337,15 +338,29 @@ verdict() {
   case "$o" in *"WARN head-tree test-results/full.txt"*) k="$k:W" ;; esac
   printf '%s:%s' "$rc" "$k"
 }
-CASES='clean:h clean:s nocmd:h redun:h glob:h empty:s rename:s rebind:s'
-WANT='0::W 0: 1:no-command,:W 1:red-untracked,:W 1:glob-cited,:W 1:empty-cell, 1:node-missing, 0:'
+CASES='clean:h clean:s nocmd:h redun:h glob:h empty:s rename:s rebind:s movefile:s'
+WANT='0::W 0: 1:no-command,:W 1:red-untracked,:W 1:glob-cited,:W 1:empty-cell, 1:node-missing, 0: 1:node-missing,'
 WORLDS_OK=1
-for v in clean nocmd redun glob empty rename rebind; do
+for v in clean nocmd redun glob empty rename rebind movefile; do
   build_world "$WORK/world-$v" "$v" || { WORLDS_OK=0; bad "FIXTURE BROKEN: could not seed git world '$v'"; }
 done
 vector() { # <script> -> space-separated verdicts in CASES order
-  local s="$1" c out=""
-  for c in $CASES; do out="$out $(verdict "$s" "$WORK/world-${c%%:*}" "${c#*:}")"; done
+  # The cases are independent reads of distinct worlds, so they run concurrently: serial,
+  # 14 vectors x 9 cases made this fixture 201s against 16s before the git arms existed.
+  # Each case writes its own file and the join reads them back in CASES order; a case that
+  # wrote nothing reads as `missing`, which no WANT entry carries.
+  local s="$1" c out="" i=0 vd
+  vd="$(mktemp -d "$WORK/vec.XXXXXX")"
+  for c in $CASES; do
+    i=$((i+1))
+    ( verdict "$s" "$WORK/world-${c%%:*}" "${c#*:}" > "$vd/$i" ) &
+  done
+  wait
+  i=0
+  for c in $CASES; do
+    i=$((i+1))
+    if [ -s "$vd/$i" ]; then out="$out $(cat "$vd/$i")"; else out="$out missing"; fi
+  done
   printf '%s' "${out# }"
 }
 if [ "$WORLDS_OK" -eq 1 ]; then
@@ -358,7 +373,7 @@ if [ "$WORLDS_OK" -eq 1 ]; then
   fi
   # he_mutant <name> <from-literal> <to-literal> <case indices (1-based) that must move> <label>
   # An ARM mutant must move only its own offender's case. A NEAR-MISS mutant moves every
-  # case of its mode (cases 1 3 4 5 handoff, 2 6 7 8 strategy), because every offender world
+  # case of its mode (cases 1 3 4 5 handoff, 2 6 7 8 9 strategy), because every offender world
   # is CLEAN plus one defect and so carries the clean world's near-misses too.
   he_mutant() {
     local name="$1" from="$2" to="$3" want="$4" label="$5" m="$WORK/he-$1.sh" mv i=0 diffs="" wv wi
@@ -380,9 +395,13 @@ if [ "$WORLDS_OK" -eq 1 ]; then
   he_mutant no-arm-c '[ "$hit" -eq 1 ] && refuse "glob-cited' '[ "$hit" -eq 9 ] && refuse "glob-cited' 5 "(c) glob-cited arm removed"
   he_mutant no-arm-d 'if [ -z "$kind" ] || [ -z "$res" ]; then' 'if false; then' 6 "(d) empty-cell arm removed"
   he_mutant no-arm-e 'if ! grep -qE "^[[:space:]]*((async' 'if false && ! grep -qE "^[[:space:]]*((async' 7 "(e) node-missing def lookup removed"
+  # The path half of (e): with the tracked-path check gone, a moved test file reads as an
+  # empty source, so the def lookup must not be what catches it -- the mutant makes the
+  # untracked path fall through to `continue`, and only the movefile case may move.
+  he_mutant no-arm-e-path 'if ! tracked "$ref" "$path"; then' 'if ! tracked "$ref" "$path"; then continue; fi; if false; then' 9 "(e) untracked test-file path check removed"
   he_mutant nm-b-any-untracked 'if [ "$isred" -eq 1 ] && ! tracked' 'if ! tracked' '1 3 4 5' "near-miss: an untracked full-suite capture not cited as RED is refused"
-  he_mutant nm-no-node '[ -n "$tok" ] || continue' '[ -n "$tok" ] || { refuse "node-missing $story: $id"; continue; }' '2 6 7 8' "near-miss: a bare test_* row is refused"
-  he_mutant nm-kind-vocab '[ "$kind" = "test" ] || continue' 'case "$kind" in test|predicate|deploy-time) ;; *) refuse "kind $id"; continue ;; esac; [ "$kind" = "test" ] || continue' '2 6 7 8' "near-miss: an off-vocabulary Kind is refused"
+  he_mutant nm-no-node '[ -n "$tok" ] || continue' '[ -n "$tok" ] || { refuse "node-missing $story: $id"; continue; }' '2 6 7 8 9' "near-miss: a bare test_* row is refused"
+  he_mutant nm-kind-vocab '[ "$kind" = "test" ] || continue' 'case "$kind" in test|predicate|deploy-time) ;; *) refuse "kind $id"; continue ;; esac; [ "$kind" = "test" ] || continue' '2 6 7 8 9' "near-miss: an off-vocabulary Kind is refused"
   he_mutant nm-warn-refuses 'warn "head-tree' 'refuse "head-tree' '1 3 4 5' "near-miss: a head sha that differs from frozen refuses instead of warning"
   he_mutant nm-subtree-glob 'case "$last" in *[!*{},]*) case' 'case "$last" in *) case' '1 3 4 5' "near-miss: a test-results/** subtree is refused as a glob capture"
   he_mutant nm-any-brace '    hit=0' '    hit=0; case "$g" in *"{"*"}"*) hit=1 ;; esac' '1 3 4 5' "near-miss: an /api/x/{id} route is refused as a brace capture"
