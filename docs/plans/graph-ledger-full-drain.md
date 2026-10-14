@@ -123,7 +123,9 @@ shipped, which is that decision, not a stall.
 - **Process facts**: the first 0.782.0 gate failed only the suite pole (load ~100 from builders re-running fixtures that
   pin their edited files); builder verification was narrowed to their own fixtures and the re-push passed. The first
   0.783.0 gate failed only `fixture-git-env-seam`: `gate-remediation-deny` ran `git init` before scrubbing the inherited
-  git environment, fixed by sourcing the preamble on line 2. Every agent worktree was removed and every shipped batch
+  git environment, fixed by sourcing the preamble on line 2. The docs close's first push failed only
+  `validator-fork-budget` (3340 against 3339): 0.783.0's new core script costs +4 forks and its own gate passed by the
+  one-fork jitter; the close raises `FORK_BUDGET` to 3346 with the measurement beside it. Every agent worktree was removed and every shipped batch
   branch deleted by name.
 - **graph delivery**: stamp 0.781.0 against `VERSION` 0.783.0, two releases behind. No candidate is discharged, so
   action 7's first test reads PENDING 0; the range carries no bootstrapping file. The pull is the operator's.
