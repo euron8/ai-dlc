@@ -24,14 +24,23 @@
 #   DEFAULT     no env, the detector's own default moved to 60, timeout 90000 -> deny;
 #               90000 against the real detector's 120 -> allow
 #   NONBASH     a Read carrying timeout 600000                    -> allow
-#   NODETECTOR  no env, no detector, timeout 600000 -> allow, and stderr says why
+#   NODETECTOR  no env, no detector, timeout 600000 -> allow, and stderr says why; the same
+#               for a subagent poll (it inherits the lead arm's fail-open)
 #   MALFORMED   unparseable stdin -> allow, and stderr says fail-open
 #   PUSH        `git push -u origin HEAD`, `cd /x && git push` and `git push -u origin HEAD 2>&1`
 #               (the `&` of a redirection is not a chain), foreground at 600000 -> allow
 #               (the pipeline requires a foreground push at that timeout)
 #   PUSHNEAR    `echo git push` and `git log --grep=push` at 600000 -> deny
-#   AGENT       a payload carrying `agent_id`, 600000 -> allow; the same payload without it
-#               -> deny (Check A never counts a sidechain call)
+#   AGENT       a subagent's NON-poll calls at 600000 -> allow: `bash scripts/ai-dlc/ci-local.sh`,
+#               `sleep 20` (under the poll threshold) and the wait-for-deliverable helper's own
+#               command; the ci-local payload without `agent_id` -> deny
+#   SUBPOLL     a subagent's foreground POLL at 600000 -> deny with the poll reason (names the
+#               job's own `run_in_background: true` and `wait-for-deliverable.sh --complete`, and
+#               not the shorter-timeout remedy): `sleep 200; tail f`, `cd /x && sleep 200`,
+#               `sleep 30`, `until grep -q EXIT f; do sleep 5; done`, and the prefixed
+#               `S=/x; for ...; sleep 10; done`. Its allow twins live in the arm owning each
+#               shared gate: the loop with `run_in_background` in BG, at 120000 in BOUNDARY, and
+#               with no timeout plus a `pg_isready` retry loop with no timeout in NOTIMEOUT
 #   EXIT        every call above exits 0
 #
 # MUTANTS. Each is a copy of the hook, guarded with `cmp -s` so a `sed` that matched nothing
@@ -88,6 +97,7 @@ score() {
   # The general (non-push) reason: names the background re-issue, and is not the push reason.
   case "$REASON_TXT" in *'run_in_background: true'*) ;; *) note REASON ;; esac
   case "$REASON_TXT" in *'starts with a git push'*) note REASON ;; esac
+  case "$REASON_TXT" in *'do not poll it'*) note REASON ;; esac
 
   # PUSHCHAIN: a push with something chained or piped after it is denied with the push reason,
   # whose one remedy is to drop the rest; it never offers run_in_background (a backgrounded push
@@ -111,11 +121,19 @@ score() {
 
   call "$h" "$REAL" - "$(bash_call 600000 true)"; chk_rc
   [ "$DEC" = allow ] || note BG
+  call "$h" "$REAL" - "$(jq -nc '{tool_name:"Bash", agent_id:"a1b2c3", tool_input:{command:"until grep -q EXIT f; do sleep 5; done", timeout:600000, run_in_background:true}}')"; chk_rc
+  [ "$DEC" = allow ] || note BG
 
   call "$h" "$REAL" - "$(bash_call null false)"; chk_rc
   [ "$DEC" = allow ] || note NOTIMEOUT
+  call "$h" "$REAL" - "$(jq -nc '{tool_name:"Bash", agent_id:"a1b2c3", tool_input:{command:"until grep -q EXIT f; do sleep 5; done"}}')"; chk_rc
+  [ "$DEC" = allow ] || note NOTIMEOUT
+  call "$h" "$REAL" - "$(jq -nc '{tool_name:"Bash", agent_id:"a1b2c3", tool_input:{command:"for i in $(seq 1 20); do pg_isready && break; sleep 2; done"}}')"; chk_rc
+  [ "$DEC" = allow ] || note NOTIMEOUT
 
   call "$h" "$REAL" - "$(bash_call 120000 false)"; chk_rc
+  [ "$DEC" = allow ] || note BOUNDARY
+  call "$h" "$REAL" - "$(jq -nc '{tool_name:"Bash", agent_id:"a1b2c3", tool_input:{command:"until grep -q EXIT f; do sleep 5; done", timeout:120000}}')"; chk_rc
   [ "$DEC" = allow ] || note BOUNDARY
   call "$h" "$REAL" - "$(bash_call 120001 false)"; chk_rc
   [ "$DEC" = deny ] || note BOUNDARY
@@ -138,6 +156,10 @@ score() {
   call "$h" "$NONE" - "$(bash_call 600000 false)"; chk_rc
   [ "$DEC" = allow ] || note NODETECTOR
   case "$ERR_TXT" in *'validate-steering-budget.sh'*'fail-open'*) ;; *) note NODETECTOR ;; esac
+  # A subagent poll inherits the lead arm's fail-open: no detector, no budget, no deny.
+  call "$h" "$NONE" - "$(cmd_call 'sleep 200; tail f' 'a1b2c3')"; chk_rc
+  [ "$DEC" = allow ] || note NODETECTOR
+  case "$ERR_TXT" in *'validate-steering-budget.sh'*'fail-open'*) ;; *) note NODETECTOR ;; esac
 
   call "$h" "$REAL" - '{"tool_name":"Bash","tool_input":{"command":"x","timeout":600000'; chk_rc
   [ "$DEC" = allow ] || note MALFORMED
@@ -156,10 +178,31 @@ score() {
   call "$h" "$REAL" - "$(cmd_call 'git log --grep=push' '')"; chk_rc
   [ "$DEC" = deny ] || note PUSHNEAR
 
+  # AGENT owns a subagent's over-budget calls that are NOT polls: its job, a short sleep, and
+  # the wait helper's own command. Twin: the same ci-local call from the lead is denied.
   call "$h" "$REAL" - "$(cmd_call 'bash scripts/ai-dlc/ci-local.sh' 'a1b2c3')"; chk_rc
+  [ "$DEC" = allow ] || note AGENT
+  call "$h" "$REAL" - "$(cmd_call 'sleep 20' 'a1b2c3')"; chk_rc
+  [ "$DEC" = allow ] || note AGENT
+  call "$h" "$REAL" - "$(cmd_call 'bash scripts/ai-dlc/wait-for-deliverable.sh --complete p' 'a1b2c3')"; chk_rc
   [ "$DEC" = allow ] || note AGENT
   call "$h" "$REAL" - "$(cmd_call 'bash scripts/ai-dlc/ci-local.sh' '')"; chk_rc
   [ "$DEC" = deny ] || note AGENT
+
+  # SUBPOLL: a subagent's foreground poll over the budget is denied with the poll reason. The
+  # last two seeds put the poll AFTER a prefix, so a match anchored to the first word misses them;
+  # the `for` seed sleeps 10, under the threshold, so only the loop match can catch it.
+  for _c in 'sleep 200; tail f' 'cd /x && sleep 200' 'sleep 30' \
+            'until grep -q EXIT f; do sleep 5; done' \
+            'S=/x; for i in $(seq 1 25); do grep -q EXIT $S/f && break; sleep 10; done'; do
+    call "$h" "$REAL" - "$(cmd_call "$_c" 'a1b2c3')"; chk_rc
+    [ "$DEC" = deny ] || note SUBPOLL
+    case "$REASON_TXT" in *'re-issue the job itself with `run_in_background: true`'*'do not poll it'*'wait-for-deliverable.sh --complete'*) ;; *) note SUBPOLL ;; esac
+    case "$REASON_TXT" in *'declare a timeout of at most'*) note SUBPOLL ;; esac
+  done
+  # Its allow twins -- the loop backgrounded, at the budget, with no timeout, and a readiness
+  # retry with no timeout -- sit in BG, BOUNDARY and NOTIMEOUT: those gates are shared with the
+  # lead's arm, so the arm that owns each gate owns its poll twin too.
 
   [ "$exitbad" -eq 0 ] || note EXIT
   printf '%s\n' "$failed" | tr ' ' '\n' | sed '/^$/d' | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//'
@@ -175,7 +218,7 @@ printf 'HERMETIC-CONSUMED %s\n' "$DETECTOR"
 [ -x "$HOOK" ] || bad "hook is not executable: $HOOK -- settings.json invokes it as a bare path"
 GOT="$(score "$HOOK")"
 if [ -z "$GOT" ]; then
-  ok "shipped hook passes every arm (OVER REASON PUSHCHAIN BG NOTIMEOUT BOUNDARY ENV DEFAULT NONBASH NODETECTOR MALFORMED PUSH PUSHNEAR AGENT EXIT)"
+  ok "shipped hook passes every arm (OVER REASON PUSHCHAIN BG NOTIMEOUT BOUNDARY ENV DEFAULT NONBASH NODETECTOR MALFORMED PUSH PUSHNEAR AGENT SUBPOLL EXIT)"
 else
   bad "shipped hook fails arm(s): $GOT"
 fi
@@ -213,9 +256,9 @@ CTL="$(score "$MUT/hook-control.sh")"
 
 # Expected sets are written in C-locale sorted order, which is what score() prints.
 # Mutants 1 and 12 remove the whole deny channel rather than one guard, so they fail every arm
-# holding a deny cell; each of the other fourteen fails its own arm alone.
+# holding a deny cell; each of the other nineteen fails its own arm alone.
 # 1. warning-only: the same text as context, no decision. The rejected design.
-mut warn-only "AGENT BOUNDARY DEFAULT ENV OVER PUSHCHAIN PUSHNEAR REASON" \
+mut warn-only "AGENT BOUNDARY DEFAULT ENV OVER PUSHCHAIN PUSHNEAR REASON SUBPOLL" \
   -e '/permissionDecision: "deny",/d' -e 's/permissionDecisionReason: \$reason/additionalContext: $reason/'
 # 2. denies a call already sent to the background.
 mut denies-background "BG" -e '/and \.tool_input\.run_in_background != true/d'
@@ -240,16 +283,28 @@ mut reason-drops-background "REASON" -e 's/Re-issue the same call with run_in_ba
 # 11. the deny path exits non-zero.
 mut deny-exits-nonzero "EXIT" -e '$s/^exit 0$/exit 2/'
 # 12. the whole subject replaced by silence: every presence-shaped arm must fail.
-mut silence "AGENT BOUNDARY DEFAULT ENV MALFORMED NODETECTOR OVER PUSHCHAIN PUSHNEAR REASON" -e '2i\
+mut silence "AGENT BOUNDARY DEFAULT ENV MALFORMED NODETECTOR OVER PUSHCHAIN PUSHNEAR REASON SUBPOLL" -e '2i\
 exit 0'
 # 13. no push allowance: the pipeline's required foreground push is denied.
 mut drop-push "PUSH" -e '/and (is_push | not)/d'
 # 14. the push match loses its start anchor, so `echo git push` rides the exemption.
 mut push-unanchored "PUSHNEAR" -e 's/test("^\[ \\t\]\*(cd/test("(cd/'
-# 15. no agent_id exit: a teammate's call is denied though Check A never counts it.
-mut drop-agent "AGENT" -e '/and ((\.agent_id \/\/ "") | tostring) == ""/d'
+# 15. no agent_id exit: a teammate's non-poll call is denied though it is its job, not a wait.
+mut drop-agent "AGENT" -e '/and (\$agent == "" or \$poll)/d'
 # 16. the PUSHCHAIN field dropped: a chained push gets the general reason, run_in_background and all.
 mut drop-pushchain "PUSHCHAIN" -e 's/^PUSHCHAIN="\${T##\* }"$/PUSHCHAIN=0/'
+# 17. the poll predicate removed: a subagent's poll rides the agent_id exemption again. It also
+#     fails NODETECTOR, whose poll cell asserts the fail-open stderr that only an IN-SCOPE poll
+#     can reach -- both findings are true, and that stderr is what makes the cell presence-shaped.
+mut drop-poll "NODETECTOR SUBPOLL" -e 's/and (\$agent == "" or \$poll)/and $agent == ""/'
+# 18. the loop match anchored to word 1: a poll loop after `S=/x;` is no longer seen.
+mut loop-word1 "SUBPOLL" -e 's/def loopsleep: test(cmdpos + "(until/def loopsleep: test("^[ \\t]*(until/'
+# 19. the long-sleep match anchored to word 1: `cd /x && sleep 200` is no longer seen.
+mut sleep-word1 "SUBPOLL" -e 's/match(cmdpos + "sleep\[/match("^[ \\t]*sleep[/'
+# 20. the sleep threshold dropped to 0: a subagent's short `sleep 20` is denied as a poll.
+mut threshold-zero "AGENT" -e 's/any(\. >= 30)/any(. >= 0)/'
+# 21. the poll reason never chosen: a denied poll gets the lead's shorter-timeout remedy.
+mut drop-poll-reason "SUBPOLL" -e 's/^POLL="\${T##\* }"$/POLL=0/'
 
 [ "$n_mut" -gt 0 ] && [ "$n_kill" -eq "$n_mut" ] \
   && ok "$n_kill of $n_mut mutants killed" \

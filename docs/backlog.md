@@ -165,7 +165,12 @@ any call carrying an `agent_id` by design, and `validate-steering-budget.sh` dro
 records, so neither can see it. Measured: a lead call with `timeout: 900000` is denied, a subagent's
 `sleep 200` with the same timeout is not.
 
-verify: manual -- close when a subagent's bare `sleep` poll is bounded by a mechanism that sees subagent calls (a hook arm keyed on `agent_id`, or a role contract pinned by a fixture), and a fixture seeds a qa-shaped `sleep 200` that the arm refuses or the pin catches.
+Premise corrected on re-measurement: the 228 first-token `sleep` calls / 12.4 h do not reproduce.
+There are 80 first-word subagent sleeps (57 refused by the harness, 23 ran, 0.03 h). The cost is
+foreground sleeping LOOPS, 184 calls / 16.5 h, usually behind a prefix such as `S=/x;` or `cd x &&`,
+so the arm matches a sleeping loop or a `sleep` of 30 s or more at any command position.
+
+verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-514-subagent-poll.sh
 
 ## BL-515 — the lead re-sends spawns the concurrency cap rejected
 
