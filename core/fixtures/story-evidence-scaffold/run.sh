@@ -344,22 +344,20 @@ WORLDS_OK=1
 for v in clean nocmd redun glob empty rename rebind movefile; do
   build_world "$WORK/world-$v" "$v" || { WORLDS_OK=0; bad "FIXTURE BROKEN: could not seed git world '$v'"; }
 done
-vector() { # <script> -> space-separated verdicts in CASES order
-  # The cases are independent reads of distinct worlds, so they run concurrently: serial,
-  # 14 vectors x 9 cases made this fixture 201s against 16s before the git arms existed.
-  # Each case writes its own file and the join reads them back in CASES order; a case that
-  # wrote nothing reads as `missing`, which no WANT entry carries.
-  local s="$1" c out="" i=0 vd
-  vd="$(mktemp -d "$WORK/vec.XXXXXX")"
+vector() { # <script> [h|s] -> space-separated verdicts in CASES order
+  # With a mode, only that mode's cases run and every other case is reported as its WANT
+  # value, so it can never move: a mutant inside one mode's code path cannot reach the
+  # other mode's worlds, and running them anyway made this fixture 201s against 16s.
+  # Serial on purpose: running the cases concurrently lost reads from the sandbox read-set
+  # tracer's stream (73 paths) and the map then OMITTED this fixture.
+  local s="$1" only="${2:-}" c out="" i=0
   for c in $CASES; do
     i=$((i+1))
-    ( verdict "$s" "$WORK/world-${c%%:*}" "${c#*:}" > "$vd/$i" ) &
-  done
-  wait
-  i=0
-  for c in $CASES; do
-    i=$((i+1))
-    if [ -s "$vd/$i" ]; then out="$out $(cat "$vd/$i")"; else out="$out missing"; fi
+    if [ -n "$only" ] && [ "${c#*:}" != "$only" ]; then
+      out="$out $(awk -v n="$i" '{print $n}' <<<"$WANT")"
+    else
+      out="$out $(verdict "$s" "$WORK/world-${c%%:*}" "${c#*:}")"
+    fi
   done
   printf '%s' "${out# }"
 }
@@ -375,11 +373,15 @@ if [ "$WORLDS_OK" -eq 1 ]; then
   # An ARM mutant must move only its own offender's case. A NEAR-MISS mutant moves every
   # case of its mode (cases 1 3 4 5 handoff, 2 6 7 8 9 strategy), because every offender world
   # is CLEAN plus one defect and so carries the clean world's near-misses too.
+  # The mode a mutant runs is read off its expected cases (2 6 7 8 9 are strategy, 1 3 4 5
+  # handoff), so a mutant whose kill lands in the other mode would read SURVIVED, never a
+  # false kill.
   he_mutant() {
-    local name="$1" from="$2" to="$3" want="$4" label="$5" m="$WORK/he-$1.sh" mv i=0 diffs="" wv wi
+    local name="$1" from="$2" to="$3" want="$4" label="$5" m="$WORK/he-$1.sh" mv i=0 diffs="" wv wi mode=h
+    case " $want " in *" 2 "*|*" 6 "*|*" 7 "*|*" 8 "*|*" 9 "*) mode=s ;; esac
     FROM="$from" TO="$to" awk 'BEGIN{f=ENVIRON["FROM"]; t=ENVIRON["TO"]} !done && (p=index($0,f)) {$0=substr($0,1,p-1) t substr($0,p+length(f)); done=1} {print}' "$HE" > "$m"
     if cmp -s "$HE" "$m"; then bad "FIXTURE ERROR: handoff mutation '$name' matched nothing"; return; fi
-    mv="$(vector "$m")"
+    mv="$(vector "$m" "$mode")"
     for wv in $mv; do
       i=$((i+1))
       wi="$(awk -v n="$i" '{print $n}' <<<"$WANT")"
