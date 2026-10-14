@@ -225,7 +225,8 @@
 #   ALLOW (`_bmad-output/` incl. sibling worktrees, scratchpad, `docs/`, `.claude/`, `.gitignore`).
 #   That window held no lead `CLAUDE.md` edit, so it could not see the false positive below.
 #   The WIDER corpus, every top-level transcript the consumer has (177, 4412 lead edit calls, 4084
-#   of them in an /ai-dlc session at call time): before the narrowing, 23 DENY -- 5 of them
+#   of them after a last marker of `/ai-dlc` -- 4044 typed, 40 Skill tool_use -- and 327 after
+#   `/ai-dlc-update`, 1 with no marker): before the narrowing, 23 DENY -- 5 of them
 #   repo-root `CLAUDE.md` (sessions 5ef555a1 x4, a27bbf0d x1), which retro Step 4 tells the lead
 #   to edit. THOSE FIVE ARE THE FALSE-POSITIVE SET, and (ii) now allows repo-root `CLAUDE.md`,
 #   `CLAUDE.local.md` and `AGENTS.md` for them. After it: 18 DENY, every one product code -- the
@@ -679,7 +680,10 @@ if [ -n "$LPE_ROOT" ]; then
   # runs in the background into a temp file and a watcher polling every 0.1s kills it after
   # LPE_RESOLVER_TICKS ticks. The watcher exits on its own within one tick of the resolver, so no
   # `sleep` outlives the hook by more than that. A killed or failed resolver's partial output is
-  # discarded: no roots, never half of them.
+  # discarded: no roots, never half of them. That drops nothing a completing resolver would have
+  # given: `artifact-path-config.sh --scan-roots` prints its roots and exits 0, or prints nothing
+  # and exits 2 (its `if [ "$MODE" = "--scan-roots" ]` block); no path prints and then fails.
+  # The kill reaps the resolver's own process, not a child it forked.
   if [ "$LPE_PRODUCT" -eq 1 ] && [ -f "${PROJECT_DIR}/scripts/ai-dlc/artifact-path-config.sh" ]; then
     LPE_RESOLVER_TICKS=50
     _lpe_out="$(mktemp "${TMPDIR:-/tmp}/ai-dlc-scanroots.XXXXXX" 2>/dev/null)" || _lpe_out=""
@@ -727,7 +731,7 @@ Rule 28: \"The lead MUST delegate any action a subagent can service.\" Writing p
 
 DO THIS INSTEAD: DISPATCH a \`dev\` teammate (\`.claude/team-roles/dev.md\`), or \`dev-escalated\` (\`.claude/team-roles/dev-escalated.md\`) where the story's \`escalate_model\` routes it there, with the file, the change and the acceptance it must meet. A dispatched teammate carries an \`agent_id\` and this hook never denies it.
 
-STILL ALLOWED: everything under \`.claude/\`, \`${STATE_DIR_NAME}/\` and \`docs/\`; repo-root dotfiles; a file carrying a \`<<<<<<< \` conflict marker (merge-conflict resolution is Rule 28(a) orchestration); any path outside this repo and its registered worktrees; all git operations and every read-only tool."
+STILL ALLOWED: everything under \`.claude/\`, \`${STATE_DIR_NAME}/\` and \`docs/\`; repo-root dotfiles; repo-root \`CLAUDE.md\`, \`CLAUDE.local.md\` and \`AGENTS.md\`; a file carrying a \`<<<<<<< \` conflict marker (merge-conflict resolution is Rule 28(a) orchestration); any path outside this repo and its registered worktrees; all git operations and every read-only tool."
       log_event LEAD_PRODUCT_EDIT_DENIED \
         "Tool denied: ${TOOL_NAME}" \
         "Target: ${FP}" \
