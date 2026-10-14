@@ -417,7 +417,12 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    `--complete`. No merge reads that directory (`merge-adversarial-shards.sh --elicitation` merges
    only the requirements subject), so the shard records ARE the elicitation record, and the
    elicitation repair reads them shard by shard, dispatched on the same axis by "Adversarial
-   repair dispatch".
+   repair dispatch": files are repaired as "Shard by file" does, with
+   `--artifact <artifact>-elicitation --pass 1`, the shard dir
+   `_bmad-output/planning-artifacts/s<N>/shards/<artifact>-elicitation-repair-p1/` and the joined
+   record `_bmad-output/planning-artifacts/s<N>/<artifact>-elicitation-repair-p1.md`; sections
+   are repaired as "Shard by section" does, split into that same shard dir and joined with
+   `join-remediator-shards.sh --document <doc> <that dir>`.
 
    **When the subject is the requirements subject**, elicitation is sharded (Rule 28, "Split
    dispatch": subject axis): one `adversary` per part of the subject map, each invoking
