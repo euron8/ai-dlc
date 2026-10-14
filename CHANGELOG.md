@@ -20,6 +20,42 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.784.0] - 2026-10-14
+
+Batch 230 (graph-ledger-full-drain), first release: the dispatch guard's two arms held from batch 229, rebased onto
+0.783.0, twice adversaried before the rebase and once after. Closes BL-515 and BL-512. No `PC-` id is closed here; the
+five sprint-318 candidates ride later releases of this batch. Net -2 backlog entries.
+
+### `ai-dlc-dispatch-guard.sh`: a cap-rejected spawn is held until an agent of the session exits (BL-515)
+
+Rule 28 told the lead to hold a concurrency-cap-rejected set until a `DELIVERED` beat, and over the reference
+consumer's nine rejecting lead sessions that key would have denied 226 re-sends, 142 of which the harness then
+launched. Per the operator ruling the hold now ends when an agent exits: an agent task-notification or a non-error
+`Agent`/`Task` result releases it; a hook-refused or failed call does not. The guard denies a lead re-send of a
+rejected description with neither after the rejection. Replayed over 765 real lead Agent calls: 3 denies, all of them
+rejected by the cap again, 0 that launched. `rule-28.md` states the same key.
+
+### `ai-dlc-dispatch-guard.sh`: an implementation-gate adjudicator is refused over a waiver Check 22 rejects (BL-512)
+
+Three gate nonces were discarded because the lead wrote a Check 22 `OVERRIDDEN` waiver that named no spawn or cited no
+Rule 28 exception. All four real waiver writes were Bash `cat >>` appends, which no Edit/Write matcher sees, so the
+check runs at `gate-adjudicator` dispatch (operator ruling): it refuses when a current-sprint Check 22 `OVERRIDDEN`
+entry names no spawn of the sprint, or when a shardable `invalid-exception` ledger row is not remediated by a sharded
+re-dispatch or a cited exception (1)-(4). A refused dispatch writes no ledger row.
+
+**Consumer note.** The guard counts party seats as shardable, as the 0.783.0 spawn-ledger validator does. A consumer
+whose prior sprint passed Check 22 under an older validator without `party_seats` will see its next implementation-gate
+adjudicator refused for each party-seat `invalid-exception` row until that row is waived. Replayed over the reference
+consumer's S317 nonces: 20 refused, 19 of them recorded there as Check 22 PASSED.
+
+### I125: the guard's shardable-role list is bound to `SHARD_ROLES`
+
+The guard carries its own copy of `validate-spawn-ledger.sh`'s `SHARD_ROLES`, because reading the validator at hook
+time would silently shrink the list to the party seats if the file were missing. New invariant I125 in
+`validate-enforcement-map.sh` byte-compares the two, with a self-probe in both directions, and
+`docs/vocabulary-index.md` gains the `shard-roles` row. `FORK_BUDGET` rises 3346 -> 3355 (I125 costs 11 forks).
+`dispatch-model-guard` gains arms 14a-14i and 15a-15p, CAP and ADJ mutants, and a `noshardable` mutant for 15g.
+
 ## [0.783.0] - 2026-10-14
 
 Batch 229 (graph-ledger-full-drain), second release: six entries from the s317-s318 efficiency analysis. No upstream
