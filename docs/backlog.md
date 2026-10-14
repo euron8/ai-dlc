@@ -163,7 +163,10 @@ them. The check runs at dispatch: `ai-dlc-dispatch-guard.sh` refuses an implemen
 entry that dispositions Check 22 names no spawn of the sprint (catches 230257Z), or when a shardable
 `invalid-exception` ledger row is not named by an `OVERRIDDEN` entry that remediates it as Check 22
 clearing arm 4 accepts, by a sharded re-dispatch or a cited exception (1)-(4) (catches 124524Z and
-011534Z). A refused dispatch writes no spawn-ledger row. Over graph's pending-archive.md + pending.md,
+011534Z). The Remediation field is assembled across graph's wrapped continuation lines before it is
+read, and a negation counts only in the clause before the `re-dispatch` claim (or before a cited
+exception), so "re-dispatched sharded, not serially" covers and "exception (3) does not apply" does
+not. A refused dispatch writes no spawn-ledger row. Over graph's pending-archive.md + pending.md,
 S298-S318, clause 1 denies nothing and clause 2 denies only S316/S317 rows arm S3 fails.
 
 verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-512-adjudicator-dispatch-waiver.sh
@@ -178,8 +181,8 @@ beat returns a `DELIVERED` line, so this is the lead not following written prose
 The `DELIVERED` key did not survive measurement. Over graph's nine rejecting lead sessions (279
 rejections, 233 same-description re-sends), holding until a `DELIVERED` beat would deny 226 re-sends,
 142 of which the harness then launched. Per the operator ruling, a slot frees when an agent exits:
-`rule-28.md` now releases the held set on an agent task-notification or a non-rejected
-`Agent`/`Task` result, and `ai-dlc-dispatch-guard.sh` denies a lead re-send of a rejected
+`rule-28.md` now releases the held set on an agent task-notification or a non-error
+`Agent`/`Task` result (a hook-refused or otherwise failed call frees no slot), and `ai-dlc-dispatch-guard.sh` denies a lead re-send of a rejected
 description with neither after the rejection. On the same corpus it denies 3 re-sends, all rejected
 again, and 0 that launched. 83 re-sends rejected again are not held because a release record sat
 between the attempts.

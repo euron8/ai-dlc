@@ -193,9 +193,10 @@ waves, never one beat per wave. A slot frees when an agent exits, and
 not before. Hold the rejected set, and re-dispatch exactly that set only
 after an agent of this session has exited since the rejection -- never in
 the next message. Two records show it: an agent task-notification, which
-is an agent exiting, or a non-rejected `Agent`/`Task` tool_result, which
+is an agent exiting, or a non-error `Agent`/`Task` tool_result, which
 is the cap admitting a spawn and so a slot having freed, unless it
-answers a call from the same message as the rejection. A `DELIVERED`
+answers a call from the same message as the rejection. An error result
+of any kind, a hook refusal included, launched nothing and frees nothing. A `DELIVERED`
 line is not one of them: the agent that wrote the file may not have
 exited yet. This is not the retry the harness forbids: its "Do not retry"
 forbids re-spawning with no evidence anything has changed, and a

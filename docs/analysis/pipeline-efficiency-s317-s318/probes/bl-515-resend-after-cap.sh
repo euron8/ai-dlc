@@ -11,6 +11,8 @@
 #   (d) the cap text only inside a Bash tool_use command  -> ALLOWED (no Agent was rejected)
 #   (e) (a), with a DIFFERENT description                 -> ALLOWED (the hold is per description)
 #   (f) (a), re-sent by a subagent (agent_id set)          -> ALLOWED (the held set is the lead's)
+#   (g) (a) plus a BACKGROUND-COMMAND notification         -> DENIED (no agent exited)
+#   (h) (a) plus a hook-REFUSED Agent result (is_error)    -> DENIED (nothing launched, no slot freed)
 # CONTROL: a call with no transcript at all must produce no decision, or the guard denies for some
 # other reason and this probe cannot measure (exit 9).
 #
@@ -28,11 +30,13 @@ printf '# Role: dev\n' > "$d/.claude/team-roles/dev.md"
 CAP='Concurrent subagent limit reached. You can run 20 subagents at once. Do not retry. If the user wants more concurrent subagents, ask them to increase CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS.'
 use() { jq -nc --arg id "$1" --arg d "$2" '{type:"assistant",message:{role:"assistant",content:[{type:"tool_use",id:$id,name:"Agent",input:{description:$d}}]}}'; }
 res() { jq -nc --arg id "$1" --arg t "$2" --argjson e "$3" '{type:"user",message:{role:"user",content:[{type:"tool_result",tool_use_id:$id,content:$t,is_error:$e}]}}'; }
-note() { jq -nc --arg c "$(printf '<%s>\n<status>completed</status>\n<summary>Agent "Party seat 1" finished</summary>' task-notification)" \
+note() { jq -nc --arg c "$(printf '<%s>\n<status>completed</status>\n<summary>%s "Party seat 1" finished</summary>' task-notification "${1:-Agent}")" \
   '{type:"user",origin:{kind:"task-notification"},message:{role:"user",content:$c}}'; }
 { use u1 "Party seat 7"; res u1 "$CAP" true; } > "$d/a.jsonl"
 { cat "$d/a.jsonl"; use u2 "Party seat 8"; res u2 "Async agent launched successfully." false; } > "$d/b.jsonl"
 { cat "$d/a.jsonl"; note; } > "$d/c.jsonl"
+{ cat "$d/a.jsonl"; note "Background command"; } > "$d/g.jsonl"
+{ cat "$d/a.jsonl"; use u3 "Party seat 8"; res u3 "PreToolUse:Agent hook error: refused" true; } > "$d/h.jsonl"
 # (d) the cap text ONLY inside a Bash tool_use command and that call's result: no Agent was rejected.
 { jq -nc --arg c "grep -c '${CAP%%.*}' t.jsonl" '{type:"assistant",message:{role:"assistant",content:[{type:"tool_use",
     id:"b1",name:"Bash",input:{description:"Party seat 7",command:$c}}]}}'
@@ -57,6 +61,8 @@ grep -qF "$COND" "$G" || exit 1
 [ "$(decide "$d/b.jsonl")" = none ] || exit 1
 [ "$(decide "$d/c.jsonl")" = none ] || exit 1
 [ "$(decide "$d/d.jsonl")" = none ] || exit 1
+[ "$(decide "$d/g.jsonl")" = deny ] || exit 1
+[ "$(decide "$d/h.jsonl")" = deny ] || exit 1
 # (f) the (a) re-send made by a SUBAGENT (agent_id set): the held set is the lead's.
 j="$(jq -nc --arg t "$d/a.jsonl" '{tool_name:"Agent",agent_id:"a1234567890abcdef",transcript_path:$t,
   tool_input:{description:"Party seat 7",prompt:"Your operating contract is `.claude/team-roles/dev.md`."}}')"
