@@ -13240,7 +13240,7 @@ write-format-steering-multiformat	core/skills/ai-dlc-update/reconcile/lib.sh
 # digest self-update-join-gate 1ebfed9e70229033fc77264c31a9adbe59f70973c41518bf13d14c6752c0b54f
 # digest settings-merge-documented-form c8749c59bf12d4e1027eefb344a6678683e3c8ff76ca2c89b13e1d5d6b53f05f
 # digest shipped-rule-version-floor 4e995134bd73306bc6bdf413f206b16f294208e5f825399458510a560ef3f6c7
-# digest story-evidence-scaffold 1a09c2a70b7b0bebceda4152a088bc935cf512c3f39f86fa52f3f4e51c068f18
+# digest story-evidence-scaffold 534b54ead30a1029255ad10190ed33e8d5a842c0201b92b096959dd6d3025762
 # digest subject-partition cfd281009538f5e7e01e43d982fa30941d49813af95a91808bef887bc04b5409
 # digest update-preflight-push e83485232f100b9fa9fb0af07c0acb8815b5b2e7a57773a1b4dd503678335f39
 # digest upstream-routing 1295d153d2989df414b4fd4afa9d054638a2f0c5002677c31e37238edeb780e2
