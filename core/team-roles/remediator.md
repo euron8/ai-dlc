@@ -114,7 +114,7 @@ Then, per finding:
 - source: <seat-file>#<finding-id> [<seat-file>#<finding-id> ...]   (a party repair only)
 - disposition: repaired | escalated | skipped (nit)
 - edit: <artifact file:line(s)>
-- siblings:   (every `repaired` entry whose edit is not n/a, in ONE of three forms; the paragraph below)
+- siblings:   (every `repaired` entry whose edit is not n/a, in ONE of four forms; the paragraph below)
 
 ```derived
 $ grep -rn -F '<the text you replaced>' <your shard's own files, or the document>
@@ -124,6 +124,8 @@ $ grep -c -F '<the text you wrote>' <the file you edited>
 
 - siblings: n/a (section shard; re-checked by the serial remediator after assembly)
 - siblings: n/a (insertion)
+- siblings: n/a (deletion)
+- closes: <part> <heading>   (the serial remediator only, copied from the `ESCALATED:` line it resolves)
 
 - derivation:
 
@@ -140,7 +142,8 @@ and leaves its sibling, or shifts a `<file>:<n>` cite, is the next pass's MAJOR.
 `repaired` entry whose `edit:` is not n/a carries a `- siblings:` field and a `derived` fence
 holding two commands: `grep -rn -F '<the text you replaced>'` over the files your `shard:` line
 names (as a files-mode shard), or over the document (as the one serial remediator of a
-document), whose output is empty or lists sites each carried as its own entry; and the control
+document); run the fence after your last edit; its output is empty, or lists only sites you
+dispositioned not to change; and the control
 `grep -c -F '<the text you wrote>' <the file you edited>`, whose output is 1 or more. A
 files-mode shard greps ONLY its own files: another shard is editing the rest concurrently, so a
 copy you record there is fixed under you and your fence goes stale. A sibling you know of in a
@@ -150,9 +153,23 @@ slot, `shards/` or any repair record: they hold this command's own text, so the 
 the join finds the replaced text there and the fence goes stale. A section or subject shard
 writes `- siblings: n/a (section shard; re-checked by the serial remediator after assembly)`
 instead of a fence: the control names your section file, which assembly deletes. An edit that
-only inserts new text, replacing none, writes `- siblings: n/a (insertion)`. Cites the edit
+only inserts new text, replacing none, writes `- siblings: n/a (insertion)`; an edit that only
+deletes text, writing none, writes `- siblings: n/a (deletion)` (it has no new text to count,
+and the serial remediator's cross-file grep still covers what it deleted). Cites the edit
 moved are re-checked by the serial remediator after the join, never inside a shard. The join
 refuses a `repaired` entry with an edit and no `siblings:` field.
+
+**As the serial remediator after a join**, your brief carries the join's `ESCALATED:` lines and
+its `SERIAL-REQUIRED:` count. For every shard entry `repaired` with an edit, and every escalated
+sibling, run `grep -rn -F '<the text that entry replaced>'` over the artifact's own files: after
+a files-mode join that is `_bmad-output/planning-artifacts/s<N>/stories
+_bmad-output/planning-artifacts/s<N>/epics`; after a section or subject join it is the assembled
+document or subject files. Never grep the sprint slot `s<N>/` itself, `shards/` or any repair
+record. Record each as its own entry with a `siblings:` fence, and re-read every `<file>:<n>`
+cite into each edited file. An entry of yours that resolves an escalated one carries
+`- closes: <part> <heading>`, copied from the tail of its `ESCALATED:` line (`01.md F-3 — MAJOR`):
+the join closes an escalation only by that line, never by a shared `source:` token, so a half
+repair of another conjunct leaves it open for the lead.
 
 **A party repair names the seat finding behind every entry.** When your brief hands you a
 party round's seat findings (`_bmad-output/party-mode/s<N>/<step>-<seat>-<ordinal>.md`), every
