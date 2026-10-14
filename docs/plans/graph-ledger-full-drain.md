@@ -69,7 +69,8 @@ it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not i
 
 **BATCH 228 SHIPPED `v0.781.0` (`6c8ea1d9`, #1126): BOTH CANDIDATES GRAPH FILED IN ITS SPRINT 318, AND THE OPERATOR'S
 `templates/settings.json.template` CHANGE WITH THE TWO DEFECTS MEASURED AGAINST IT. THE PULL IS REQUIRED, AND ITS
-RUNBOOK `docs/plans/graph-pull-0780-to-0781.md` IS WRITTEN AND REHEARSED; RUNNING IT IS THE OPERATOR'S CALL.**
+RUNBOOK `docs/plans/graph-pull-0780-to-0781.md` IS WRITTEN AND REHEARSED; THE OPERATOR RAN THE PULL, AND GRAPH'S LIVE
+LEDGER NOW READS 0.**
 Batch 227's block below is history: this block replaces its delivery gap. Started by the operator's one-liner at
 `origin/main` `b1b5affb` (`VERSION` 0.780.0); graph-60 was live and busy, and was never messaged.
 - **Opening sweep** (at `b1b5affb`): live 2, unfiled 2, worklist 0, DISCHARGED 0, invisible 0, TERMINAL 234, archive
@@ -123,9 +124,18 @@ Batch 227's block below is history: this block replaces its delivery gap. Starte
   close, all graph's own pipeline state, 0 under `_bmad-output/ai-dlc-update/`. Nothing was written there.
 - **Process facts**: the model gateway dropped agent sessions repeatedly (HTTP 500 / ECONNRESET). One tip adversary
   was respawned fresh after three failed resumes.
+- **The pull landed (2026-10-14). This bullet replaces this block's earlier "running it is the operator's call"
+  delivery gap.** The operator ran the runbook in a graph session. graph's PR #1219 (reconcile, `7a8c6c98a`) merged
+  onto its carry-over branch with no self-update PR, and its stamp reads 0.781.0. The 12 `HARD-*` rows were
+  adjudicated to 0. Both sprint-318 ids closed as `ADOPTED UPSTREAM (v0.781.0)` and rotated: archive 1, ledger 0, 18
+  ledger headings. On a clone at the pulled head, done-when 4 reads 57 persona warnings against the `[qa]` control of
+  72, and `pool 330000`. The derive block in a fresh worktree at `3de460dd` reads live 0 across 24 qualifying refs,
+  arch 359, TERMINAL 236, DISCHARGED 0, worklist 0, installed = shipped = 0.781.0, and gap control `UNNAMED`. The runbook is
+  discharged. The ledger md5 moved `e6a33acb…` -> `6f733a18…` through graph's own #1219; this session wrote nothing
+  there.
 
-Net for the batch: closed 2 candidates; filed 4 entries (BL-503..506) and closed all 4 in the release. The backlog
-stays declared empty.
+Net for the batch: closed 2 candidates, which graph's pull closed on its side; filed 4 entries (BL-503..506) and
+closed all 4 in the release. The backlog stays declared empty.
 
 **BATCH 227 SHIPPED NO RELEASE. IT WROTE AND REHEARSED THE CONSUMER PULL RUNBOOK
 `docs/plans/graph-pull-0779-to-0780.md`, BECAUSE ACTION 7's SECOND TEST SAID THE PULL IS REQUIRED; THE OPERATOR RAN
