@@ -267,8 +267,9 @@ PROBE_NEW='src_probe() { return 0; }
 src_probe_disabled() {'
 # JX18: the id-only key with the self-probe IN PLACE -- the probe refuses before any corpus is read,
 # so every party run stops at it: the arms that expect a party join or a NAMED refusal all die.
-# srcsetaside (BL-519) dies too: it is a --sources run, and the probe stops every one before its arm.
-mutant "JX18 source keyed on the id alone (self-probe in place)" "sjnames party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 srcsetaside" \
+# srcsetaside, srcpending, srcera and srcclosed (BL-508/519) die too: each is a --sources run, and the
+# probe stops every one before its arm.
+mutant "JX18 source keyed on the id alone (self-probe in place)" "sjnames party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 srcsetaside srcpending srcera srcclosed" \
   "$IDONLY_OLD" "$IDONLY_NEW"
 # JX19: the same key AND the probe removed -- now only the arms that seed an id another seat carries see it.
 mutant2 "JX19 source keyed on the id alone, self-probe removed" "partyunres srcunres" \
@@ -286,8 +287,8 @@ mutant "JX22 files/document mode not a party repair for <name>-party" "partyunre
 mutant "JX23 subject --pass party not a party repair" "sjpartysrc" \
   '[ "$SUBJMODE" = 1 ] && [ "$PASS" = party ] && [ -z "$ARTIFACT" ] && PARTY=1' \
   'false && PARTY=1'
-# srcsetaside dies too: its set-aside refusal is reported and then acquitted by the same exit 0.
-mutant "JX24 --sources reports refusals and exits 0" "srcunres srcsetaside" \
+# srcsetaside and srcera die too: each refusal is reported and then acquitted by the same exit 0.
+mutant "JX24 --sources reports refusals and exits 0" "srcunres srcsetaside srcera" \
   '  [ "$refuse_n" -eq 0 ] || exit 2
   echo "SOURCES:' \
   '  true || exit 2
@@ -310,15 +311,45 @@ mutant "JX27 the marker era not decided per step" "partyx4" \
 CTPROBE_OLD='contract_probe() {'
 CTPROBE_NEW='contract_probe() { return 0; }
 contract_probe_disabled() {'
-mutant "JX28 the siblings arm's PENDING line not printed" "sibpending" \
-  '    echo "PENDING: no entry of this set carries' \
-  '    : "PENDING: no entry of this set carries'
-mutant "JX29 a repaired edit with no siblings: not refused" "sibmissing" \
-  '      refuse "${r}: the ${d} entry is repaired with an edit and carries no' \
-  '      : "${r}: the ${d} entry is repaired with an edit and carries no'
-mutant "JX30 the set-aside refusal removed" "setaside srcsetaside" \
+mutant "JX28 the --sources siblings PENDING line not printed" "srcpending" \
+  '    echo "PENDING: ${npend} repaired edit(s)' \
+  '    : "PENDING: ${npend} repaired edit(s)'
+mutant "JX29 a repaired edit with no siblings: not refused" "sibtotal sibmissing srcera" \
+  '    refuse "${r}: the ${d} entry is repaired with an edit and carries no' \
+  '    : "${r}: the ${d} entry is repaired with an edit and carries no'
+mutant "JX30 the set-aside refusal removed" "setaside srcsetaside setasideshard setasidenr" \
   '      SETASIDE) refuse' \
   '      SETASIDE) :'
+# JX36 (D1): the era decided over the parts again -- parts mode binds only once some entry carries the
+# field, so TOTAL omission reads PENDING and joins. sibmissing survives it: its parts 01/02 carry the field.
+mutant2 "JX36 parts mode era-gated on a carrier, self-probe removed" "sibtotal" \
+  '          if (src == 0 || era) print "NOSIB\t" cf "\t" cur' \
+  '          if (era) print "NOSIB\t" cf "\t" cur' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
+# JX37 (D3): no escalated entry is ever closed in --sources mode.
+mutant2 "JX37 --sources closure removed, self-probe removed" "srcclosed" \
+  '          for (k = 1; k <= n; k++) for (i = 1; i <= nesc; i++) if (index(et[i], " " a[k] " ")) ex[i] = 1' \
+  '          for (k = 1; k <= n; k++) for (i = 1; i <= nesc; i++) if (0) ex[i] = 1' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
+# JX38 (D3): closure keyed on ANY repaired entry, earlier ones included -- the split pair's own
+# repaired half closes its remainder. Built by recording repaired tokens and applying them at the end.
+mutant2 "JX38 closure not order-keyed (an earlier repaired entry closes), self-probe removed" "srcclosed" \
+  '        if (disp == "repaired" && src == 1 && toks != "") {' \
+  '        if (disp == "repaired" && src == 1 && toks != "") { rt = rt toks " " }
+        if (0) {' \
+  "      for (i = 1; i <= nesc; i++) print (ex[i] ? \"X\" : \"E\") \"\\t\" ef[i] \"\\t\" en[i]" \
+  "      for (i = 1; i <= nesc; i++) { n = split(et[i], a, \" \"); for (k = 1; k <= n; k++) if (index(rt \" \", \" \" a[k] \" \")) ex[i] = 1 }
+      for (i = 1; i <= nesc; i++) print (ex[i] ? \"X\" : \"E\") \"\\t\" ef[i] \"\\t\" en[i]"
+# JX39/JX40 (N1): the set-aside regex cut to ONE half each; the probe's offender carries both halves.
+mutant "JX39 set-aside regex cut to 'not required' only" "setasideshard" \
+  'claim ~ /outside (this|my|the) (shard|part|section)|not required/' \
+  'claim ~ /not required/'
+mutant "JX40 set-aside regex cut to the shard phrase only" "setasidenr" \
+  'claim ~ /outside (this|my|the) (shard|part|section)|not required/' \
+  'claim ~ /outside (this|my|the) (shard|part|section)/'
+mutant "JX41 --sources prints no ESCALATED-COUNT line" "srcclosed" \
+  '  echo "ESCALATED-COUNT: ${ESC_N} (${ESC_X} closed' \
+  '  : "ESCALATED-COUNT: ${ESC_N} (${ESC_X} closed'
 mutant2 "JX31 the set-aside hand-off exemption removed, self-probe removed" "handoff" \
   '            && claim !~ /escalat|serial remediator/) print "SETASIDE' \
   '            ) print "SETASIDE' \
@@ -336,9 +367,9 @@ mutant "JX34 the joined run prints no ESCALATED: lines" "sibok handoff" \
 printf '"'"'%s'"'"' "$ESC_LINES"' \
   '# with every one of these entries in its brief (_gate-procedures.md, "Adversarial repair dispatch").
 :'
-mutant "JX35 --sources does not apply the entry contract" "srcsetaside" \
-  '  contract_refusals "$(contract_check "$SRC_REC")"' \
-  '  ESC_LINES=""; ESC_N=0'
+mutant "JX35 --sources does not apply the entry contract" "srcsetaside srcpending srcera srcclosed" \
+  '  contract_refusals "$(contract_check 1 "$SRC_REC")"' \
+  '  ESC_LINES=""; ESC_N=0; ESC_X=0'
 # ---- END JX MUTANTS.
 
 # ------------------------------------------------------------------------------ the reap

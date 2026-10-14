@@ -162,8 +162,8 @@ p_partyx4 "$JOIN" && ok "PS12: an earlier step's pre-marker seat cited beside ma
   || bad "PS12: a pre-marker seat of another step was refused (rc=$RC): $(cat "$JO")"
 
 # ---- the entry contract (BL-508, BL-519). Each refusal has its ALLOW twin one property apart.
-p_sibpending "$JOIN" && ok "EC1: every part predates the siblings rule -> JOINED, one PENDING line, ESCALATED-COUNT: 0 (the join does not wedge a pre-rule repair)" \
-  || bad "EC1: a pre-rule part set did not join with one PENDING line (rc=$RC): $(cat "$JO")"
+p_sibtotal "$JOIN" && ok "EC1: every part omits siblings: (total omission) -> REFUSED, each repaired edit named, no PENDING (the era is the install, not the parts)" \
+  || bad "EC1: a part set omitting siblings: everywhere was not refused (rc=$RC): $(cat "$JO")"
 p_sibok "$JOIN" && ok "EC2: every part carries siblings: -> JOINED, no PENDING, each escalated entry printed by part and ESCALATED-COUNT: 3" \
   || bad "EC2: a post-rule part set did not join, or its escalated entries were not printed (rc=$RC): $(cat "$JO")"
 p_sibmissing "$JOIN" && ok "EC3: EC2 one property apart, part 03 a repaired MAJOR with an edit and no siblings: -> REFUSED by name, nothing written" \
@@ -174,6 +174,16 @@ p_handoff "$JOIN" && ok "EC5: the same entry split, the remainder escalated unde
   || bad "EC5: a handed-off split pair did not join with its escalated line (rc=$RC): $(cat "$JO")"
 p_srcsetaside "$JOIN" && ok "EC6: --sources on a record whose resolving entry sets a MAJOR aside -> rc 2, the set-aside refusal named (PS7 is its ALLOW twin)" \
   || bad "EC6: --sources did not apply the set-aside arm (rc=$RC): $(cat "$JO")"
+p_srcpending "$JOIN" && ok "EC7: --sources over a pre-rule record (a repaired edit, no siblings: anywhere) -> rc 0, one PENDING line" \
+  || bad "EC7: a pre-rule --sources record did not pass with one PENDING line (rc=$RC): $(cat "$JO")"
+p_srcera "$JOIN" && ok "EC8: --sources positional era: pre-rule entry, carrier, omitting entry -> rc 2 naming only the entry after the carrier" \
+  || bad "EC8: the --sources positional era did not bind from its first carrier (rc=$RC): $(cat "$JO")"
+p_srcclosed "$JOIN" && ok "EC9: --sources: an escalated entry a later repaired entry closes is omitted; the open one and the split remainder are printed, count 2" \
+  || bad "EC9: --sources escalated-entry closure answered wrongly (rc=$RC): $(cat "$JO")"
+p_setasideshard "$JOIN" && ok "EC10: a repaired MAJOR set aside only as 'outside this shard' -> REFUSED (the regex's first half)" \
+  || bad "EC10: an 'outside this shard' set-aside was not refused (rc=$RC): $(cat "$JO")"
+p_setasidenr "$JOIN" && ok "EC11: a repaired MAJOR set aside only as 'not required' -> REFUSED (the regex's second half)" \
+  || bad "EC11: a 'not required' set-aside was not refused (rc=$RC): $(cat "$JO")"
 
 # R1: the role file the remediator is bound to teaches the write tool and the citation form. Walked
 # up from this fixture in both layouts; install copies team-roles/ verbatim, so no render exists.
