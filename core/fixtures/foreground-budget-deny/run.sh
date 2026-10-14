@@ -24,8 +24,8 @@
 #   DEFAULT     no env, the detector's own default moved to 60, timeout 90000 -> deny;
 #               90000 against the real detector's 120 -> allow
 #   NONBASH     a Read carrying timeout 600000                    -> allow
-#   NODETECTOR  no env, no detector, timeout 600000 -> allow, and stderr says why; the same
-#               for a subagent poll (it inherits the lead arm's fail-open)
+#   NODETECTOR  no env, no detector, timeout 600000 -> allow, and stderr says why; a subagent
+#               poll there -> allow too (its fail-open stderr is asserted under SUBPOLL)
 #   MALFORMED   unparseable stdin -> allow, and stderr says fail-open
 #   PUSH        `git push -u origin HEAD`, `cd /x && git push` and `git push -u origin HEAD 2>&1`
 #               (the `&` of a redirection is not a chain), foreground at 600000 -> allow
@@ -156,10 +156,12 @@ score() {
   call "$h" "$NONE" - "$(bash_call 600000 false)"; chk_rc
   [ "$DEC" = allow ] || note NODETECTOR
   case "$ERR_TXT" in *'validate-steering-budget.sh'*'fail-open'*) ;; *) note NODETECTOR ;; esac
-  # A subagent poll inherits the lead arm's fail-open: no detector, no budget, no deny.
+  # A subagent poll inherits the lead arm's fail-open: no detector, no budget, no deny. The
+  # decision is NODETECTOR's; the stderr proves the poll REACHED the budget read, which is
+  # SUBPOLL's subject (a poll that rode the agent_id exemption exits before it, silently).
   call "$h" "$NONE" - "$(cmd_call 'sleep 200; tail f' 'a1b2c3')"; chk_rc
   [ "$DEC" = allow ] || note NODETECTOR
-  case "$ERR_TXT" in *'validate-steering-budget.sh'*'fail-open'*) ;; *) note NODETECTOR ;; esac
+  case "$ERR_TXT" in *'validate-steering-budget.sh'*'fail-open'*) ;; *) note SUBPOLL ;; esac
 
   call "$h" "$REAL" - '{"tool_name":"Bash","tool_input":{"command":"x","timeout":600000'; chk_rc
   [ "$DEC" = allow ] || note MALFORMED
@@ -293,10 +295,8 @@ mut push-unanchored "PUSHNEAR" -e 's/test("^\[ \\t\]\*(cd/test("(cd/'
 mut drop-agent "AGENT" -e '/and (\$agent == "" or \$poll)/d'
 # 16. the PUSHCHAIN field dropped: a chained push gets the general reason, run_in_background and all.
 mut drop-pushchain "PUSHCHAIN" -e 's/^PUSHCHAIN="\${T##\* }"$/PUSHCHAIN=0/'
-# 17. the poll predicate removed: a subagent's poll rides the agent_id exemption again. It also
-#     fails NODETECTOR, whose poll cell asserts the fail-open stderr that only an IN-SCOPE poll
-#     can reach -- both findings are true, and that stderr is what makes the cell presence-shaped.
-mut drop-poll "NODETECTOR SUBPOLL" -e 's/and (\$agent == "" or \$poll)/and $agent == ""/'
+# 17. the poll predicate removed: a subagent's poll rides the agent_id exemption again.
+mut drop-poll "SUBPOLL" -e 's/and (\$agent == "" or \$poll)/and $agent == ""/'
 # 18. the loop match anchored to word 1: a poll loop after `S=/x;` is no longer seen.
 mut loop-word1 "SUBPOLL" -e 's/def loopsleep: test(cmdpos + "(until/def loopsleep: test("^[ \\t]*(until/'
 # 19. the long-sleep match anchored to word 1: `cd /x && sleep 200` is no longer seen.
