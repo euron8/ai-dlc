@@ -1,0 +1,3 @@
+# carried-findings drives validate-carried-findings.sh on seeded review files and a seeded repository.
+!core/scripts/validate-carried-findings.sh
+core/fixtures/lib/

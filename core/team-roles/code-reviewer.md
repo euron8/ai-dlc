@@ -146,6 +146,14 @@ so a renamed heading or a verdict buried in prose blocks the gate rather than
 degrading quietly. Emit the value alone on the line after the heading, or as
 `## Verdict: <VALUE>`.
 
+**A re-review answers every carried finding.** On pass M >= 2 your brief
+carries the Critical and Important findings of pass M-1 assigned to you. Answer
+each with one column-0 line outside a fence, `carried: <its #### heading,
+verbatim> — resolved` or `carried: <its #### heading, verbatim> — open` (an em
+dash), and re-emit an open one as a `#### ` finding of this review. An open
+carried finding forbids `APPROVED`. Check 1 runs `validate-carried-findings.sh`
+on the two files and fails the review otherwise.
+
 ## As a Shard
 
 **As a shard** — your brief carries `shard: <ordinal>/<K> <group>` or
