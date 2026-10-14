@@ -129,8 +129,10 @@
 #                   MUTATED and the path to the backup is printed. Restore it before
 #                   running anything else; every later result is against mutated source.
 #
-# No git, no schema, no project layout: it takes explicit paths and an explicit command,
-# so it runs from any directory, on any language, inside or outside a repository.
+# No schema, no project layout: it takes explicit paths and an explicit command, so it
+# runs from any directory, on any language, inside or outside a repository. Git is read
+# only for the capture header's `head:` line, which says so when there is no work tree
+# (or no git at all).
 #
 # bash 3.2+.
 
@@ -446,6 +448,12 @@ if ! cmp -s "$BACKUP" "$TARGET"; then
 fi
 
 printf 'mutation-red replay\n'
+# head and cwd make a committed capture checkable against the commit it claims to grade
+# (validate-handoff-evidence.sh reads `head:`). Outside a git work tree the line still
+# prints, so a capture's shape does not depend on where it was taken.
+HEAD_SHA="$(git -C "$(dirname "$TARGET")" rev-parse HEAD 2>/dev/null)" || HEAD_SHA=""
+printf '  head:       %s\n' "${HEAD_SHA:-(not a git work tree)}"
+printf '  cwd:        %s\n' "$PWD"
 printf '  target:     %s:%s\n' "$TARGET" "$LINE"
 printf '  was:        %s\n' "$CURRENT"
 printf '  mutated to: %s\n' "$REPL"

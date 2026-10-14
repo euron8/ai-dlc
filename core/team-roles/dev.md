@@ -307,7 +307,20 @@ project that replaces that section does not replace this one.
   `Resolves to` for every row, one per case letter. A `test` row names the
   collectable node id, and that node is on disk in this commit. A case letter
   you did not write a test for is written down as missing, never left blank;
-  gate-validation Check 21 fails a blank row at sprint-review.
+  gate-validation Check 21 fails a blank row at sprint-review. A rename of a
+  test node re-binds every `## Strategy Test IDs` cell naming the old node,
+  across all story files, in the same commit as the rename.
+- **Every capture file carries its command, and every RED capture is
+  committed.** A capture file you cite (a `.txt`, `.log` or `.out` under the
+  repo) opens with `$ <the exact command>` on its first line and a line
+  carrying `head: <full sha>` of the tree it ran against; for the
+  full-collection run that is the run above. `validate-mutation-red.sh`
+  prints its own header (`mutation-red replay`, `head:`, `cwd:`); keep it.
+  Every mutation-RED capture you cite is committed (`git add -f` when the
+  directory is gitignored), and every capture is cited by its own path,
+  never by a glob or `{a,b}` brace. The lead runs
+  `scripts/ai-dlc/validate-handoff-evidence.sh` before gate 1 and refuses
+  the handoff on any of these.
 
 **Verify with one read-only command per Bash call.** A check that reads the tree to confirm a
 claim (a count, a citation, a listing) is either a `derived` fence in your deliverable, replayed

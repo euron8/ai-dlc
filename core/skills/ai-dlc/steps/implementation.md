@@ -304,7 +304,14 @@ arm's cross-check, because the Scope Verification, Dev Agent Record and
 <base>..HEAD` on the story branch and confirm at least one non-merge
 commit exists. Zero commits = the dev produced no deliverable; resume
 or re-dispatch the dev BEFORE gating. Gating a zero-commit story is a
-process violation; surface at retro.
+process violation; surface at retro. Beside it, at the frozen SHA, run
+`scripts/ai-dlc/validate-handoff-evidence.sh -C <worktree> <story-file> <base> <frozen-sha>`
+and `scripts/ai-dlc/validate-handoff-evidence.sh -C <worktree> --strategy <frozen-sha> <story-file>`.
+Exit 1 refuses the handoff: send the dev its `REFUSED` lines (a capture with
+no command line, a mutation-RED capture not committed, a glob cited as a
+capture, an empty or unresolvable Strategy Test IDs cell) and dispatch
+code review only once both exit 0. `WARN` lines do not refuse; exit 2 means
+nothing was checked and is recorded verbatim in the story's gate log.
 
 **Gate-1 dispatch: the review partitions by changed-file group.** At the
 commit-presence check, with the frozen SHA recorded (the freeze below),
