@@ -229,7 +229,7 @@ The 11 did not reproduce exactly. Re-derived read-only from graph: the committed
 transcripts hold 15 `SendMessage` calls `to: "lead"`, every one failed, against `to: "main"` 167 of
 167 delivered (Claude Code 2.1.276-2.1.296); `to: "team-lead"` was accepted 18 times (a 19th was
 refused for an empty message). `team-lead` is the agent-teams address: graph's 9 ad-hoc teammates
-spawned with `team_name` addressed `team-lead` and the lead received those sends; `main` from such a
+spawned with `team_name` sent 4 messages to `team-lead` and the lead received them; `main` from such a
 teammate is unmeasured. Role-bound dispatches carry no `name` (Rule 19(c)), so the role files use
 `main`. The unaddressed instruction was not three dev.md sites but 22 across eight role files and
 SKILL.md's Tier 1 action, including code-reviewer.md's "hand the review to the lead".

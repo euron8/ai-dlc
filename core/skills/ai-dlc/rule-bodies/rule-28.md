@@ -281,7 +281,7 @@ Claude Code 2.1.276-2.1.296: `to: "main"` delivered 167 of 167 sends, `to:
 "lead"` delivered 0 of 15 (`No agent named 'lead' is reachable`), and `to:
 "team-lead"` was accepted 18 times (a 19th was refused for an empty message).
 `team-lead` is the agent-teams address: the consumer's 9 ad-hoc teammates spawned
-with `team_name` addressed `to: "team-lead"` and the lead received those sends,
+with `team_name` sent 4 messages `to: "team-lead"` and the lead received them,
 while `to: "main"` from a teammate spawned with `team_name` is UNMEASURED. A
 role-bound dispatch carries no `name` (Rule 19(c)), so it is never such a
 teammate, and the role files use `main`. Teammates do not load rule bodies, so
