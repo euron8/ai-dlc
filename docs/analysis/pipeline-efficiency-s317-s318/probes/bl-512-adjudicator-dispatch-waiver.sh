@@ -16,6 +16,11 @@
 #   R  an OVERRIDDEN Check 30 entry mentioning Rule 19(b) and Check-22 only in passing   -> ALLOW
 #   H  a Check 22 waiver whose spawn list sits under a `###` subheading                  -> ALLOW
 #   V  U's world, dispatched for a SPRINT-REVIEW gate (Check 22 is not in its manifest)   -> ALLOW
+#   NG the X row, named by a NEGATED sharded sentence ("was not re-dispatched sharded")   -> DENY
+#   WP the X row, named by a sharded Remediation WRAPPED across two physical lines        -> ALLOW
+#   SN the X row, named by "re-dispatched sharded, not serially" (negation AFTER claim)   -> ALLOW
+#   EN the X row, named by "exception (3) does not apply" (a negated citation)           -> DENY
+#   XS the X row, a citation whose only negator sits in the PRIOR sentence               -> ALLOW
 # Every adjudicator brief carries a gate nonce, as all 264 real ones do.
 # CONTROL: a non-adjudicator dispatch over U must produce no decision, or the guard is refusing for
 # some other reason and this probe cannot measure (exit 9).
@@ -87,6 +92,21 @@ printf '\n## [S317-Z] lead - 2026-10-10\n**Status:** OVERRIDDEN\n**Blocker type:
 H="$(world H)"
 printf '\n## [S317-Y] lead - 2026-10-10\n**Status:** OVERRIDDEN\n**Context:** Check 22 tier mismatch waived.\n**Remediation:** verified.\n### Spawns waived\ntoolu_01DEVROW000000000000001\n' \
   >> "$H/docs/escalations/pending.md"
+rem_world() { # rem_world <name> <remediation-lines> -> dir: the X row, an entry naming it, that Remediation
+  local p; p="$(world "$1")"
+  printf '{"v":1,"sprint":317,"name":"remediator","role":"remediator","tool_use_id":"toolu_01REMINV000000000000001","shard":"invalid-exception"}\n' \
+    >> "$p/_bmad-output/spawn-ledger.jsonl"
+  printf '\n## [S317-CHECK22-S3] lead - 2026-10-10\n**Status:** OVERRIDDEN\n**Context:** Check 22 arm S3 on toolu_01REMINV000000000000001.\n%s\n' "$2" \
+    >> "$p/docs/escalations/pending.md"
+  printf '%s\n' "$p"
+}
+NG="$(rem_world NG '**Remediation:** the work was not
+re-dispatched sharded; outputs verified.')"
+WP="$(rem_world WP '**Remediation:** the work was re-dispatched
+sharded as rem-p1a and rem-p1b; output verified.')"
+SN="$(rem_world SN '**Remediation:** the work was re-dispatched sharded, not serially, as rem-p1a and rem-p1b.')"
+EN="$(rem_world EN '**Remediation:** Rule 28 exception (3) does not apply; outputs verified.')"
+XS="$(rem_world XS '**Remediation:** The four were not invented. Exception (3) applied to toolu_01REMINV000000000000001.')"
 [ "$(decide "$U" dev)" = none ] || exit 9
 [ "$(decide "$U" gate-adjudicator)" = deny ] || exit 1
 [ "$(decide "$N" gate-adjudicator)" = none ] || exit 1
@@ -98,4 +118,9 @@ printf '\n## [S317-Y] lead - 2026-10-10\n**Status:** OVERRIDDEN\n**Context:** Ch
 [ "$(decide "$R" gate-adjudicator)" = none ] || exit 1
 [ "$(decide "$H" gate-adjudicator)" = none ] || exit 1
 [ "$(decide "$U" gate-adjudicator sprint-review-20261011T101010Z)" = none ] || exit 1
+[ "$(decide "$NG" gate-adjudicator)" = deny ] || exit 1
+[ "$(decide "$WP" gate-adjudicator)" = none ] || exit 1
+[ "$(decide "$SN" gate-adjudicator)" = none ] || exit 1
+[ "$(decide "$EN" gate-adjudicator)" = deny ] || exit 1
+[ "$(decide "$XS" gate-adjudicator)" = none ] || exit 1
 exit 0
