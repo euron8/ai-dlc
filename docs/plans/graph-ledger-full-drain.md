@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 334..367. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 330..400. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,66 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 228 SHIPPED `v0.781.0` (`6c8ea1d9`, #1126): BOTH CANDIDATES GRAPH FILED IN ITS SPRINT 318, AND THE OPERATOR'S
+`templates/settings.json.template` CHANGE WITH THE TWO DEFECTS MEASURED AGAINST IT. THE PULL IS REQUIRED, AND ITS
+RUNBOOK `docs/plans/graph-pull-0780-to-0781.md` IS WRITTEN AND REHEARSED; RUNNING IT IS THE OPERATOR'S CALL.**
+Batch 227's block below is history: this block replaces its delivery gap. Started by the operator's one-liner at
+`origin/main` `b1b5affb` (`VERSION` 0.780.0); graph-60 was live and busy, and was never messaged.
+- **Opening sweep** (at `b1b5affb`): live 2, unfiled 2, worklist 0, DISCHARGED 0, invisible 0, TERMINAL 234, archive
+  357, 20 qualifying refs, every control passing; backlog 0 live, 501 archived, one `DECLARED-EMPTY` row. The two ids,
+  filed 2026-10-13 and 2026-10-14, sat on graph's local carry-over branch and its sprint-318 story branches, not on
+  graph `main` and not on `origin`; graph's working-tree ledger diff was empty.
+- **Operator change mid-batch**: the operator edited `templates/settings.json.template` uncommitted and asked for it in
+  the batch: bare aliases `fable`/`opus`/`sonnet`/`haiku`, role tiers as graph runs them (`dev` haiku, `dev-escalated`
+  sonnet, efforts lowered), and a model on `cis`/`sm`/`tea`/`ux`. It shipped byte-identical. **Operator ruling, batch
+  228: "The bare opus, sonnet, etc is mapped in claude code to the [1m] variant."** It covers a bare alias only.
+- **`v0.781.0`**, one release:
+  - BL-503 (`validate-mutation-red.sh`): a pytest run whose summary counts are only skipped, deselected or warnings
+    exits 2 `UNEVALUABLE (no test ran)`, at baseline and on the mutated run. A missing or unreadable summary fails
+    open with a note on every verdict. A skip-gated test that was PROVEN now reads 2.
+  - BL-504 (dev escalation): the routing map states the capital-path / high-blast-radius criterion. Before a story's
+    first dev dispatch the lead sets a missing or `false` tag and commits it before the dev worktree is cut. Rule 28(b)
+    names story-to-role routing. No step or role file names a model for an escalated route.
+  - BL-505 (window resolver): one family-window policy in `ai-dlc-window.sh` serves the Step 1a budget validator and
+    the context sensor, and reads the settings `.env` block. The 1M default applies to an exact bare alias only; any
+    other id without `[1m]` is 200K. A declared window outside 50000..2000000 is rejected.
+  - BL-506 (party seats): `validate-spawn-ledger.sh` derives a seat from the role file's line-start persona sentence,
+    not from "no model in `aiDlcRoles`", which the new template emptied. A persona's model is optional in every carrier.
+  - **Adversaries.** Three contract adversaries found four BLOCKERs, all folded before any builder started: a tag
+    write after the worktree cut, which graph's artifact fold overwrites; a tag write at rework; a window table that
+    did not exist; and the settings `.env` block going unread. Four tip adversaries found three more, each fixed in
+    the release with an arm and a mutant: a non-UTF-8 byte disabled the skip check silently; full 200K ids such as
+    `global.anthropic.claude-sonnet-4-6` read 1M by substring; one reworded persona file dropped a seat with no warning.
+  - **Gates.** Three. The first was stopped for an amend. The second failed only `whole-read-pool`: the fixture's
+    `AI_DLC_*` scrub also removed `AI_DLC_PROJECT_ROOT`, which `hermetic-run.sh` sets, so the sandboxed validator
+    could not resolve a root. The third was green, 22 of 22 phases, with `whole-read-pool` `ok` by name; the other
+    seven changed fixtures were `ok` by name on the second gate, and the two commits differ only in that fixture and
+    its map row.
+  - **Unfixed, recorded**: `core/fixtures/context-sensor/run.sh` carries the same scrub. It runs plainly because it has
+    no `inputs.decl`; the day it gains one it fails the same way.
+- **Close sweep** (at `6c8ea1d9`): live 2, unfiled 0, DISCHARGED 2 (corrected 2), in-flight 0, invisible 0, TERMINAL
+  234, archive 357, 21 qualifying refs; backlog 0 live, 505 archived, one `DECLARED-EMPTY` row; worklist 0. Both ids
+  have 0.781.0 as their oldest naming release, and the control reads `UNNAMED`.
+- **graph delivery**: stamp 0.780.0 against `VERSION` 0.781.0, one release behind. **Action 7's second test reads YES.**
+  graph's installed `validate-spawn-ledger.sh` scores 0 persona S1 warnings and 10 S3 failures on its S317 ledger,
+  where 0.781.0 scores 57 and 11 (one real undeclared tea exception). Its installed budget validator cannot read the
+  settings `.env` windows.
+- **The runbook's rehearsal** (at the unmerged release commit; the shipped commit differs only in one fixture):
+  `SELF-UPDATE-DEFER`, from the rulebook-coupled-fixtures row; that is harmless, because 32 of 32 installed `reconcile/` files
+  match 0.780.0. Preclassify gave 40 rows: 38 `UPSTREAM-ONLY`, 1 `DIST-ONLY-SKIP`, and 1 `BOTH-CHANGED->CLASSIFY`
+  for `team-roles/dev.md`. **12 `HARD-*` rows block `apply` until they are adjudicated**: 10
+  `HARD-LAYER-ADJUDICATION-MISSING` and 2 `HARD-OVERRIDE-DRIFT-SECTION`, on graph's dev and tea overrides, because
+  the range edits `dev.md` and `tea.md`. Both candidates get `NAMED-UPSTREAM` rows and close on annotation and
+  rotation. `settings-merge.sh` changes none of graph's role values; graph's `cis`/`tea` efforts stay `medium`
+  against the template's `high`.
+- **graph boundary**: ledger md5 `e6a33acb…` at the opening and the close. Porcelain 14 at the opening and 10 at the
+  close, all graph's own pipeline state, 0 under `_bmad-output/ai-dlc-update/`. Nothing was written there.
+- **Process facts**: the model gateway dropped agent sessions repeatedly (HTTP 500 / ECONNRESET). One tip adversary
+  was respawned fresh after three failed resumes.
+
+Net for the batch: closed 2 candidates; filed 4 entries (BL-503..506) and closed all 4 in the release. The backlog
+stays declared empty.
 
 **BATCH 227 SHIPPED NO RELEASE. IT WROTE AND REHEARSED THE CONSUMER PULL RUNBOOK
 `docs/plans/graph-pull-0779-to-0780.md`, BECAUSE ACTION 7's SECOND TEST SAID THE PULL IS REQUIRED; THE OPERATOR RAN
@@ -266,77 +326,6 @@ plan by ai-dlc-61 at `origin/main` `625ab4df` (`VERSION` 0.775.0); graph-9e was 
 Net for the batch: closed 2 candidates and 2 entries (BL-501, BL-502), filed 2 (BL-501, BL-502); net 0.
 
 Batch 223's block below is history: batch 224's block replaces its open item and its delivery gap.
-
-**BATCH 223 SHIPPED `v0.773.0` (`2bdb3a29`, #1110), `v0.774.0` (`95e0cee9`, #1112) AND `v0.775.0` (`a1f82ccd`,
-#1113). THE BATCH IS STILL OPEN: BL-497 HAS SIX UNADJUDICATED CENSUS ROWS AND THE OPERATOR HAS NOT RULED ON THEM.**
-Started by the operator's one-liner at `origin/main` `aa594904` (`VERSION` 0.772.0); no ai-dlc peer was live,
-graph-f8 was busy and was never messaged. #1111 was a premature close commit written while the census was paused;
-this block corrects it.
-- **Opening sweep** (at `aa594904`): live 2, unfiled 2, worklist 0, DISCHARGED 0, invisible 0, TERMINAL 229, archive 352,
-  qualifying refs 0, every control passing. Both live ids (`PC-S317-3.2-DERIVATION-HOOK-CWD`,
-  `PC-S317-SPAWN-LEDGER-PIN-CHANGE-RETROACTIVE`) were filed on graph's `main` by `c127ed598` (2026-10-10). A THIRD
-  filing, `PC-S317-DEPLOY-VALIDATE-FIX-LOOP-ROUTES-TO-A-DEV-SEAT-NAMELESSLY-LEAVING-INLINE-LEAD-EXECUTION-UNGUARDED`, sat
-  UNCOMMITTED in graph's working-tree ledger, invisible to the committed-ref union; it was scoped from `git diff HEAD`
-  on the operator's choice. If graph commits it under a different id, `named_absorbed()` will not join it to 0.773.0.
-  graph's Sprint 317 squash (`fcb6afe96`) removed four `PC-S316-*` headings from its live ledger; all four are in
-  `arch.txt` (impossible-id control 0).
-- **`v0.773.0`**, one release, three candidates plus two backlog items:
-  - BL-498 (derivation hook): a linked worktree's `derived` fences are judged from that worktree's copy of the project
-    dir, accepted only when its `--git-common-dir` matches the project's; nested repos, submodules and outside-repo
-    files keep the project root; the hook's git calls ignore an exported `GIT_DIR`.
-  - BL-499 (Check 22): a row carrying `tier_pinned` is judged against the teammate's own transcript model from
-    `--probe`, joined by `tool_use_id`; unjoined rows are PENDING and a pin change is a NOTE. Replay on graph's
-    sprint-317 ledger: Rule 19 FAILs 288 -> 0. Coverage cost: rows carrying `tier_pinned` and no `tool_use_id` now read
-    PENDING (graph's sprints 298-310, 17 rows of 311, and 431 rows with a null sprint).
-  - BL-500 (deploy-validate §3): item 3 dispatches `dev`; the lead re-deploys and re-runs smoke.
-  - BL-474 CLOSED by operator ruling, **serial by design**, on 14 sharded reviews all K=4, G=6, N=0. Rule 28 records it.
-  - BL-497: `scripts/census-hermetic-coverage.sh` and its `.dist-only` fixture shipped; the entry stays open.
-  - A tip adversary found three DEFECTs after the first green gate (a subdirectory project dir refused correct
-    worktree writes, an exported `GIT_DIR` refused correct main-tree writes, a custom pin key false-FAILed); all fixed
-    in the release and re-gated. Gate green, 58 of 281 run, every changed fixture `ok` by name.
-- **`FORK_BUDGET` is 3339, tip reading 3337.** Two forks of headroom: the next fixture directory turns
-  `validator-fork-budget` red.
-- **CENSUS** (BL-497, operator ruling: build and run it this batch): ran over all 240 declared fixtures (paused by the
-  operator at 232, resumed on the operator's signal). Adjudicated: 10 fixtures passed the gate only by escaping their
-  sandbox to a stray `.claude/` above the per-user temp dir (consumer `guarded-merge.sh` logs, 2026-05-31); 2 shipping
-  fixtures' distribution-only arms never ran under the gate; the rest were instrument artifacts.
-- **`v0.774.0`**: `git.decl: seed` for the 10, proven at gate level (seeding changed their keys, so the gate re-ran
-  all 10 with the marker moved aside, each `ok`); the 2 fixtures' arms folded into `schema-install-fallback`; the
-  census instrument fixed (`LC_ALL=C`, an incomplete run keeps its rows, a short scratch root, a marker walk,
-  BOTH-FAIL, `fixture-rc-2`, a three-pair EQUIVALENT with a range rule for counts). Close run over 74 fixtures, marker
-  aside: 56 EQUAL, 11 EQUIVALENT, 1 LOW-RES, **6 MISMATCH**. BL-497 names the six; none is adjudicated.
-- **`v0.775.0`**: `hermetic-run.sh` exits 2 before building a sandbox when `.git`, a `.claude/` directory or
-  `core/skills/ai-dlc` sits above its scratch dir or the system temp dir, naming the marker and the remedy.
-  `hermetic-runner` arms Z1-Z4, mutants M23-M26. A tip adversary found the M19 census arm stale under the guard and the
-  `$HOME` message advising a remedy that cannot work there; both fixed and re-gated (57 of 281 run). Unfixed NOTE: on
-  macOS a kill between the guard's probe `mktemp -d` and its `rmdir` leaves one empty `tmp.*` in the system temp dir.
-- **The stray marker** `/var/folders/qr/v63hkc2n6s16yk44l131v9700000gn/.claude` was deleted on 2026-10-12 after graph
-  pulled 0.774.0, by operator ruling. A walk up from the system temp dir now finds no marker (control: 2 from the repo).
-- **graph delivery**: graph pulled 0.773.0 (`e9ff06651`, #1210) and 0.774.0 (`92a1a0aa3`, #1212); stamp 0.774.0
-  (`95e0cee9`) against `VERSION` 0.775.0, one release behind. On graph's `main`,
-  `PC-S317-SPAWN-LEDGER-PIN-CHANGE-RETROACTIVE` and the deploy-validate candidate are ARCHIVED (the latter committed under
-  the id it was scoped by); `PC-S317-3.2-DERIVATION-HOOK-CWD` is still live there (impossible-id control 0 in both
-  files). 0.775.0 changes `hermetic-run.sh`, which ships; with no marker above graph's temp dirs it refuses nothing
-  (tip adversary, measured on an installed consumer). The pull is the operator's.
-- **graph boundary**: ledger working-tree md5 `cd43a09b…` at the opening, `9828b7e7…` at this writing, moved by
-  graph's own pulls and filings; porcelain 16 at the opening, 9 now. Nothing was written there.
-- **OPEN, AND THE RECEIVER OWES IT**: BL-497's six close-run MISMATCH rows. **Operator ruling, batch 223: adjudicate
-  all six now, fix what is real, and if the instrument is the cause ship the census fix as its own release and re-run
-  the census over the 166 declared fixtures the fixed instrument has not yet measured; BL-497 closes when that run is
-  clean.** An adjudication hand was stopped at a session handoff with one fact established: rows
-  `procsub-staged-refusal-b` (138/162), `fanout-payload-channel` (1230/1422) and `preclassify-rename-row` (352/376) are
-  the INSTRUMENT. The census's plain side runs with `TMPDIR=$T/ptmp` (4 characters past the pair dir) against the
-  sandbox's `$HR_WORK/tmp`, reached as `htmp/hermetic-run.XXXXXX/tmp` (28), a 24-character gap, and every one of those
-  gaps is a multiple of 24 (`preclassify-rename-row`'s `LONGD` derives from `$WORK`). The fix is equal-length temp
-  paths on the two sides; prove it turns those three EQUAL without acquitting a seeded real loss.
-  `readset-skip-b`, `snapshot-archive-rotate` and `procsub-staged-refusal-boot-b` are unexamined. The close census's
-  rows are recorded in BL-497 by name; its pairs were cleaned up, so re-run what you need with `--list`. The census is
-  a long run: state its wall clock before starting it, and never hold or kill it without the operator.
-
-Net for the batch: closed 4 entries (BL-474, BL-498, BL-499, BL-500) and 3 candidates, filed 3; net -1. 0.774.0 and
-0.775.0 closed and filed nothing.
-
-Batch 222's block below is history: batch 223's block replaces its open items and its delivery gap.
 
 ### Derive the state; do not trust the numbers below
 
@@ -821,9 +810,10 @@ for id in $(comm -12 /tmp/live.txt /tmp/closed_here) PC-ZZ-IMPOSSIBLE-CONTROL-Q7
 done                                    # the last row IS the control, run in the same loop: it must print UNNAMED
 ```
 
-**NO RUNBOOK IS LIVE.** Every `docs/plans/graph-pull-*` file is retitled `DO NOT EXECUTE` at its
-first line. Read them as worked examples, never as live plans, and check the first line of any you
-open. **Keep measuring the gap and reporting it; do not run the pull, and do not treat its growth
+**AT MOST ONE RUNBOOK IS LIVE: the newest, `ls docs/plans/graph-pull-*.md | sort -V | tail -1`, and only
+while its first line is not `DISCHARGED — DO NOT EXECUTE`.** Every older one is retitled that way. Read the
+discharged ones as worked examples, never as live plans, and check the first line of any you open. A live
+runbook is for the operator's graph session; this session neither runs it nor hands it to a peer. **Keep measuring the gap and reporting it; do not run the pull, and do not treat its growth
 as a reason to reorder the work.**
 
 **A PENDING CANDIDATE FROM A SPRINT THE CONSUMER IS STILL RUNNING** raises what the deferral
