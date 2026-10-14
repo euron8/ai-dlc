@@ -127,7 +127,8 @@ groups, never one serial-document voice; sections axis per part plus cross group
 serial-document voice on a `SERIAL:` answer; requirements unchanged), step 4 names elicitation among
 its sharded passes, and process-rule-pins pins both. Check 22 was not tightened: an S3 arm refusing
 `none (serial-document)` on a `stories/` subject was not built because its false-positive set on
-graph's ledgers was not measured, and graph's recorded s318 stories row is a known member of it.
+graph's ledgers was not measured; it would also fire on graph's recorded s318 stories row, a true
+finding on a closed sprint.
 
 Open follow-up, the cost question: the cheaper fewer-larger-shards shape is not Rule 28 compliant
 today (no binning partitioner) and has no controlled measurement. A frozen-corpus run is the only
