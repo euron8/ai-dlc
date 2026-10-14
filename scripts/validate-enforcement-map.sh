@@ -805,7 +805,15 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   walks the new fixture directory; I84 305 -> 307 and I83 151 -> 152 walk the new script; I106
 #   43 -> 43 does not move, because the new script resolves no VERSION marker; I93 32 <-> 31 is the
 #   instrument's usual one-fork jitter. HIGH reading 3333 plus the usual 6.
-FORK_BUDGET=3339
+#
+#   RAISED TO 3346 FOR ONE NEW CORE SCRIPT, NOT FOR A NEW ARM. `fork-profile.sh --section by-arm
+#   --stable`, base 6fe903b6 (0.782.0) and tip f621fd36 (0.783.0, which adds
+#   `core/scripts/validate-handoff-evidence.sh`), twice each in ONE worktree at the same path, every
+#   file committed: base 3336 and 3335 (STABLE 2 both), tip 3340 and 3339 (STABLE 2 both), so +4.
+#   I84 309 -> 311 and I83 153 -> 154 walk the new script; I82 14 <-> 15 is the instrument's usual
+#   one-fork jitter. 0.783.0's own gate read 3339 at the old budget and passed by that jitter; the
+#   next push read 3340 and failed. HIGH reading 3340 plus the usual 6.
+FORK_BUDGET=3346
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

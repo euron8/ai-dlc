@@ -104,45 +104,6 @@ graph's setting, not core's. Subsumes the earlier "adversary series length" find
 
 verify: manual -- close when the remediator contract (`core/team-roles/remediator.md`, `_gate-procedures.md` adversarial repair dispatch) requires a repair to re-check every sibling site of the fixed text and every cite it moved before reporting, and a fixture pins that requirement.
 
-## BL-509 — elicitation fans out per part where one voice measured an order of magnitude cheaper
-
-**DEFECT. [efficiency rank 3] the elicitation shape was the lead's choice, not the procedure's.**
-Population: graph sprints s317-s318, analysis costs re-derived over 1851 spawns ($3256.91); the
-three control figures reproduce (s317 stories 22 sharded seats $69.53, s318 requirements 19 shards
-$56.73, s318 stories one voice $9.37). Critical+major per dollar is FLAT across shapes: 0.50 (s317
-stories, 22 shards), 0.67 (s318 requirements, 19 shards), 0.53 (s318 stories, single voice), 0.77
-(s317 requirements, single). Per million output tokens: 27 / 32 / 21 / 24 in the same order. Yield
-follows how much the agents write, not the shape: on stories the single voice found about 4.5x
-fewer findings per KB for about 4.7x less money.
-
-The filed premise did not reproduce: one voice is cheaper per RUN, not per finding, so "an order of
-magnitude cheaper" bought proportionally fewer findings. The real defect is procedural. Validation
-cycle item 2 prescribed a shape only for the requirements subject, and stories-test-strategy.md
-step 4 never named elicitation, so s318 ran stories under `shard: none (serial-document)`, which is
-not Rule 28 compliant in substance (`stories/` is the files axis, rule-28.md ~:62; exception 4
-covers only a single serial document). Check 22 accepted it because validate-spawn-ledger.sh ~:973
-reads only the first parenthesised token. Built: item 2 now states that elicitation takes the
-axis and shape of the step's adversarial pass for every subject (files axis per story plus cross
-groups, never one serial-document voice; sections axis per part plus cross groups, or one
-serial-document voice on a `SERIAL:` answer; requirements unchanged), the files-axis story ordinals
-are the ones `merge-adversarial-shards.sh --map` prints for the next review pass's
-`<artifact>-p<M>/` (it refuses the `-elicitation/` dir), a one-file `stories/` is one voice under
-`shard: 1/1`, the sections-axis repair split expects the sha every elicitation shard notarized,
-step 4 names elicitation among its sharded passes, and process-rule-pins pins each clause. Those
-rows pin presence only: a contradicting sentence appended after a pinned clause passes them. Check 22 was not tightened: an S3 arm refusing
-`none (serial-document)` on a `stories/` subject was not built because its false-positive set on
-graph's ledgers was not measured; it would also fire on graph's recorded s318 stories row, a true
-finding on a closed sprint.
-
-Open follow-up, the cost question: the cheaper fewer-larger-shards shape is not Rule 28 compliant
-today (no binning partitioner) and has no controlled measurement. A frozen-corpus run is the only
-measurement that can justify a binning amendment to Rule 28: reconstruct s318's pre-elicitation
-stories corpus from the 13 `artifact_sha` tokens in graph's `s318/stories-elicitation.md`, run a
-single voice, 21-way sharded, and K~4 binned, all opus/medium under one brief, and score them
-against each other and against s318 p1's 30.
-
-verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-509-elicitation-shape.sh
-
 ## BL-510 — implementation rework is driven by evidence and bookkeeping, not code
 
 **DEFECT. [efficiency rank 4] $34, 131 agent-minutes after removing BL-507's overlap.** 22 of 33
@@ -184,25 +145,6 @@ until it exists the receipt exits non-zero and the entry cannot rotate as closed
 
 verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-510-handoff-evidence.sh && bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-510-bookkeeping.sh
 
-## BL-511 — the Step 1a whole-read budget blocks a sprint after the fact, and the same sprint re-breaches it
-
-**DEFECT. [efficiency rank 5] $16 and 3.8 h of lead waiting per occurrence.** route.md Step 1a
-HARD_BLOCKed graph's s318 start; the lead dispatched artifact-consolidation and waited 3.8 h. s318's
-own authoring then re-breached the pool at 77,078 tokens against 66,000
-(`CO-S318-WHOLE-READ-POOL-REBREACHED-BY-S318-AUTHORING`), so s319 will block again. Nothing runs
-consolidation before the budget is exceeded.
-
-**Premise correction (measured at batch 229).** The s318 Step 1a block was the pre-0.781 200K-window
-resolution: at 0.773.0 the pool resolved to 66,000 (503%, rc 1), while the tip validator on the same tree
-resolves 330,000 (100%, within grace, rc 0). Graph reads 31% today. The repair therefore does not run
-consolidation (it stays operator-supervised, never automatic). Retro §4a now runs the audit with
-`--fail-on whole-read-pool`, whose hard verdict is "pool OVER and no OPEN `carry-over-backlog.md` item
-carries `WHOLE-READ-POOL`". Retro §5c check 5 blocks the Step 6 commit on it, and route Step 1 item 5
-reads the item before Step 1a runs. Graph's own OPEN `CO-S318-WHOLE-READ-POOL-REBREACHED…` satisfies it.
-The receipt drives the §4a and §5c commands as retro.md spells them.
-
-verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-511-retro-pool-verdict.sh
-
 ## BL-512 — gate passes are discarded for lead paperwork, most often a Check 22 waiver
 
 **DEFECT. [efficiency rank 6] $16, 132 adjudicator-minutes.** Seven gate nonces were discarded for
@@ -213,46 +155,6 @@ fired correctly each time; the waste is the discarded pass, not an escape. Two f
 
 verify: manual -- close when a Check 22 waiver that names no Rule 28 exception is refused at the moment the lead writes it, before any adjudicator is dispatched, and a fixture seeds the waiver form graph wrote.
 
-## BL-513 — Check 21 fails on dev-filled Strategy Test ID cells that nothing re-checks after a rename
-
-**DEFECT. [efficiency rank 7] about $7.** `stories-test-strategy.md` leaves the `Kind` and
-`Resolves to` cells "for the dev". Check 21 FAILed the sprint-review gate in both sprints on those
-cells: s317 empty cells (Sonnet dev, story 2.7), s318 prose instead of a test node (Haiku dev, 2.2)
-and a test that a sprint-review fix renamed (dev-escalated, commit `7d917eb94`), which escalated
-review and QA then passed. Not tea's strategy: no failing cell traces to it. This is the class
-BL-398 closed at v0.674.0; the rename path is new.
-
-Premise correction: the re-check belongs in sprint-review §4 "Gate Validation and Proceed", not
-§3, because graph overrides §3. `validate-handoff-evidence.sh --strategy` refuses an empty `Kind`
-or `Resolves to` cell, a `test` cell any of whose `<path>.py::<name>` nodes is untracked or
-undefined at the ref, and a row too short to carry `Resolves to` under a header that has the
-column (0 such rows at the five measured shas). It never refuses on the `Kind` vocabulary or on a `test` cell with no `.py::` node,
-because 72 off-vocabulary and 43 no-node rows in the s317/s318 corpus would false-fire. Measured
-on graph: 1 refusal at `7d917eb94` (TS-2.7-04(b), the true positive), 0 at `148518a74`,
-`28a15fce4` and `2176343a4`; 4 empty cells at `0259395b4` (s317 2.7, true positives). It runs
-before Seam B and in implementation's pre-gate step. dev.md and stories-test-strategy.md Rename
-Verification require a rename to re-bind every cell naming the old node across all story files.
-
-verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-513-strategy-cells.sh
-
-## BL-514 — subagents poll with bare `sleep`, and no guard sees a subagent's wait
-
-**DEFECT. [efficiency rank 8] 5.4-12.4 h of subagent wall clock.** 228 subagent Bash calls whose first
-token is `sleep` ran 12.4 h, about 196 s each; the narrow count (commands beginning `sleep`, `until`
-or `while`) is 125 calls, 5.4 h, mostly qa and code-reviewer. `ai-dlc-foreground-budget.sh` exempts
-any call carrying an `agent_id` by design, and `validate-steering-budget.sh` drops `isSidechain`
-records, so neither can see it. Measured: a lead call with `timeout: 900000` is denied, a subagent's
-`sleep 200` with the same timeout is not.
-
-Premise corrected on re-measurement: the 228 first-token `sleep` calls / 12.4 h do not reproduce.
-There are 80 first-word subagent sleeps (57 refused by the harness, 23 ran, 0.03 h). The cost is
-foreground sleeping LOOPS, usually behind a prefix such as `S=/x;` or `cd x &&`, so the arm matches
-a sleeping loop or a `sleep` of 30 s or more at any command position. Replaying graph's subagent
-Bash calls through the fixed hook (budget 120 s) denies 198: 152 loops and 46 long sleeps, 17.0 h of
-tool_use-to-tool_result wall clock.
-
-verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-514-subagent-poll.sh
-
 ## BL-515 — the lead re-sends spawns the concurrency cap rejected
 
 **DEFECT. [efficiency rank 9] wall clock not measured.** 90 of 179 cap-rejected `Agent` calls were
@@ -261,60 +163,6 @@ sprint-review, 40 of 95 party seats). `RB/rule-28.md` already says to hold the r
 beat returns a `DELIVERED` line, so this is the lead not following written prose.
 
 verify: manual -- close when a re-sent `Agent` call whose description matches a spawn rejected in the same session with no intervening `DELIVERED` beat is refused by a hook, and a fixture seeds the rejection text.
-
-## BL-516 — no guard stops the lead editing consumer product code
-
-**DEFECT. [efficiency rank 10] cost not measured; high consequence.** The qwen/medium lead edited
-`rebalancer/execution.py` itself for s317's ff1 (5 Edits, 10-11T19:52-19:54Z), later reverted and
-re-done by a dev seat. Rule 28 forbids it in prose.
-
-Premise corrected on re-measurement: across the 1804 lead Edit/Write/MultiEdit calls of s317-s318
-there were 8 product edits by both leads, not 5 by qwen alone. Session af48eb49 (qwen) made 6
-(`rebalancer/execution.py` x5 and `rebalancer/tests/test_s316_b2_driven.py`); session 20bd359c
-(Sonnet) made 2 (`rebalancer/tests/test_s259_1_single_mint_efficiency.py`). No gate was open for
-any of them. Across all 177 consumer transcripts (4412 lead edit calls) the built arm denies 18,
-all product code (10 more in session 5ef555a1); repo-root `CLAUDE.md`, which retro Step 4 tells
-the lead to edit, is allowed. `core-guard` covers core paths only, and
-`gate-remediation-guard` covers the artifact corpus only while a gate FAIL is recorded. Measured by
-the receipt's probe: a lead Edit to a core path is denied by `core-guard`, a lead Edit to product code
-by no hook. Toward the local-lead goal.
-
-verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-516-lead-product-edit.sh
-
-## BL-517 — the snapshot accepts entries stamped in the future
-
-**DEFECT. [efficiency rank 10] cost not measured.** The s317 retro found fabricated future timestamps
-in graph's pipeline snapshot during the qwen/medium lead window; s318 recurred under the Sonnet lead,
-with corrections at `pipeline-snapshot-history.md:215, 219, 225` (10-14 02:11-02:58Z). Step 0a's
-integrity validation does not compare an entry's stamp with the current time. A pipeline defect, not
-a model one; toward the local-lead goal.
-
-**Premise correction (measured at batch 229).** The defect is born at snapshot WRITE time, not at resume.
-Over graph's 163 snapshot revisions since 2026-10-09, each replayed with now set to its own commit time,
-69 carry a stamp more than 10 min ahead (214 findings: 127 Recent Activity, 87 `dispatched-at`; smallest
-lead 10 min; 0 inside the slack). The contract analysis counted 0 of 20 resumes seeing one (not
-re-derived here). The cited history lines 215/219/225 resolve at
-commit `3e5aeb070`, not HEAD. The arm therefore lives in `validate-artifact-budget.sh`'s snapshot branch,
-which gate Check 14 runs at every write and route Step 0a check 1 runs at resume, and its failure names
-the remedy (rewrite to `date -u`, keep order, one CLOCK CORRECTION line naming the old stamps as bare
-`HH:MMZ`, since a full-form name is itself a future stamp). Every lead-facing call site reads the
-validator through `verdict.sh`, which shows 6 matching lines, so the stamp verdict prints first, its
-FAIL line carries the remedy, and `verdict.sh` surfaces `FUTURE` rows.
-
-verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-517-future-stamp.sh
-
-## BL-518 — gate-checkpoint opens a nonce of any shape
-
-**DEFECT. [efficiency rank 10] cost not measured.** The qwen/xhigh lead minted
-`implementation-2026-10-11T083048Z` from `date -u +%Y-%m-%dT…`, a hyphenated timestamp, and its
-checkpoint closed before dispatch. `gate-checkpoint.sh open` accepts it exactly as it accepts the
-canonical `implementation-20261011T083048Z`. Toward the local-lead goal.
-
-The date was 2026-10-10 in this entry as first filed; graph's evidence carries only 2026-10-11.
-The fix is on `open` alone, keyed on the schema's `patterns.gate_nonce`; `record` and the other
-actions still take any bare token, so ledgers keyed before the change stay readable.
-
-verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-518-nonce-format.sh
 
 ## BL-519 — the remediator can set aside a party MAJOR as "outside this shard"
 
@@ -327,21 +175,3 @@ a decision nobody adjudicates.
 
 verify: manual -- close when the remediator contract forbids dispositioning a party MAJOR as out of shard scope (it escalates instead), and a fixture pins that clause.
 
-## BL-520 — a teammate is told to "message the lead", a name the harness does not register
-
-**DEFECT. [efficiency rank 12] cost not measured.** 11 `ESCALATION_UNDELIVERED` events across graph
-s317-s318 failed with "No agent named 'lead'" (qwen lead 4, Sonnet lead 7). `core/team-roles/dev.md`
-tells a dev to "message the lead" at three sites and never names the address a subagent reaches its
-parent by. `ai-dlc-escalation-delivery.sh` records the failure after the fact.
-
-The 11 did not reproduce exactly. Re-derived read-only from graph: the committed flow logs carry 9
-`No agent named 'lead'` events for s317-s318 (5 in the s317 archive, 4 in the live log), and graph's
-transcripts hold 15 `SendMessage` calls `to: "lead"`, every one failed, against `to: "main"` 167 of
-167 delivered (Claude Code 2.1.276-2.1.296); `to: "team-lead"` was accepted 18 times (a 19th was
-refused for an empty message). `team-lead` is the agent-teams address: graph's 9 ad-hoc teammates
-spawned with `team_name` sent 4 messages to `team-lead` and the lead received them; `main` from such a
-teammate is unmeasured. Role-bound dispatches carry no `name` (Rule 19(c)), so the role files use
-`main`. The unaddressed instruction was not three dev.md sites but 22 across eight role files and
-SKILL.md's Tier 1 action, including code-reviewer.md's "hand the review to the lead".
-
-verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-520-lead-address.sh
