@@ -227,7 +227,11 @@ parent by. `ai-dlc-escalation-delivery.sh` records the failure after the fact.
 The 11 did not reproduce exactly. Re-derived read-only from graph: the committed flow logs carry 9
 `No agent named 'lead'` events for s317-s318 (5 in the s317 archive, 4 in the live log), and graph's
 transcripts hold 15 `SendMessage` calls `to: "lead"`, every one failed, against `to: "main"` 167 of
-167 delivered (Claude Code 2.1.276-2.1.296). The unaddressed instruction was not three dev.md sites
-but 21 across eight role files and SKILL.md's Tier 1 action.
+167 delivered (Claude Code 2.1.276-2.1.296); `to: "team-lead"` was accepted 18 times (a 19th was
+refused for an empty message). `team-lead` is the agent-teams address: graph's 9 ad-hoc teammates
+spawned with `team_name` addressed `team-lead` and the lead received those sends; `main` from such a
+teammate is unmeasured. Role-bound dispatches carry no `name` (Rule 19(c)), so the role files use
+`main`. The unaddressed instruction was not three dev.md sites but 22 across eight role files and
+SKILL.md's Tier 1 action, including code-reviewer.md's "hand the review to the lead".
 
 verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-520-lead-address.sh

@@ -279,9 +279,12 @@ word "lead" is a role, not an address: the harness registers no agent by that
 name. Measured on the reference consumer's plain-`Agent` dispatches across
 Claude Code 2.1.276-2.1.296: `to: "main"` delivered 167 of 167 sends, `to:
 "lead"` delivered 0 of 15 (`No agent named 'lead' is reachable`), and `to:
-"team-lead"` was accepted 19 times but is likely an agent-teams address, so it is
-not used. The address for a teammate spawned with `team_name` is UNMEASURED --
-the consumer never dispatches that way. Teammates do not load rule bodies, so
+"team-lead"` was accepted 18 times (a 19th was refused for an empty message).
+`team-lead` is the agent-teams address: the consumer's 9 ad-hoc teammates spawned
+with `team_name` addressed `to: "team-lead"` and the lead received those sends,
+while `to: "main"` from a teammate spawned with `team_name` is UNMEASURED. A
+role-bound dispatch carries no `name` (Rule 19(c)), so it is never such a
+teammate, and the role files use `main`. Teammates do not load rule bodies, so
 every role-file and skill instruction telling a teammate to message or escalate
 to the lead carries the literal `to: "main"` at its own site; the
 `process-rule-pins` fixture fails on one that does not.

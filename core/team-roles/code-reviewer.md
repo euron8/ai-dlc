@@ -616,7 +616,7 @@ yours to write and its paths are not yours to name.
 
 **THEN HAND THE REVIEW TO THE LEAD TO PERSIST, BEFORE REPORTING THE
 GATE-1 VERDICT, NOT AFTER.** Report the path you wrote, relative to
-your own root; the lead persists it to the canonical branch checkout
+your own root, with `SendMessage` `to: "main"`; the lead persists it to the canonical branch checkout
 and answers for that write.
 
 A verdict reported without a resolvable review-file path is

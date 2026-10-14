@@ -355,7 +355,7 @@ three tiers that determine whether work blocks or continues.
   divergence) and needs human sign-off on an alternative approach.
 - A carry-over item deferral is proposed (`DEFERRAL_REQUEST`).
 
-Action: mark task BLOCKED, message lead (`SendMessage` `to: "main"`), move to next unblocked task.
+Action: mark task BLOCKED, message the lead (a teammate: `SendMessage` `to: "main"`), move to next unblocked task.
 
 **Tier 2 -- DECIDED_AUTONOMOUSLY (work continues):**
 - A trade-off has no objectively correct answer; agent picks the best

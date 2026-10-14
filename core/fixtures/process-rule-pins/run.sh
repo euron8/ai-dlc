@@ -252,6 +252,9 @@ range_scope() { # the core-installed paths only; paths carry no whitespace in ei
 #       mentions a message and later the lead cannot join (pm.md "dev teammate and the lead").
 #   P3  sendmessage, then no period, then "to the lead" -- the Deliver-before-idle bullets,
 #       including the shape where `SendMessage` is followed by a backtick and a line wrap.
+#   P4  hand/hands/handed/handing, then plain words only, then "to the lead" -- code-reviewer.md
+#       "HAND THE REVIEW TO THE LEAD TO PERSIST". Words only (no punctuation) between verb and
+#       object, so "handoff" and "the lead hands it back" cannot join.
 #
 # HOW THE FALSE-POSITIVE SET REACHED ZERO. A broader predicate (message within a sentence of
 # lead) flagged eight sentences that describe the lead receiving or judging a message rather
@@ -260,11 +263,18 @@ range_scope() { # the core-installed paths only; paths carry no whitespace in ei
 # gate-adjudicator.md item 3, rule-20.md "File-write deliverable", deploy-validate.md "Minimum
 # mechanism", escalations.md "RESOLVED / OVERRIDDEN". Requiring the verb to be IMMEDIATELY
 # followed by its object (P1), a punctuation-free object list (P2), or "to the lead" after
-# SendMessage (P3) drops all eight. Measured over core/**/*.md less fixtures and
-# ai-dlc-update: every remaining hit is a send instruction, plus Rule 28's own paragraph, which
+# SendMessage (P3) drops all eight. P4 measured alone over the same corpus hits exactly one item,
+# the code-reviewer.md send instruction, against 239 items carrying a bare "hand" word. Measured
+# over lead_files (below) AND over core/**/*.md less fixtures and ai-dlc-update -- the wider set
+# adds 11 files and 0 hits: every hit is a send instruction, plus Rule 28's own paragraph, which
 # carries the literal. FP set: empty. The probes below seed the "text-only final message ...
 # and the lead treats an absent file" shape, which a looser P2 accepted, as a near-miss.
-LEAD_FLOOR=22
+#
+# THE CORPUS is lead_files: the install-scoped flat skill files, steps/, rule-bodies/ and the
+# roles -- never extensions/ or overrides/, which on a consumer hold consumer-owned prose this
+# fixture has no standing over (the reference consumer carries bare sites there). The BL-520
+# receipt reads this corpus through --lead-verdict with no file list.
+LEAD_FLOOR=23
 # The MEASURED address. Deriving the literal from Rule 28 binds the sites to the rule; this binds
 # the rule to the measurement, so a rule and its sites rewritten together to `to: "lead"` (the
 # address that failed 15 of 15) still fail. Change it only with a new measurement.
@@ -281,7 +291,8 @@ lead_scan() { # <addr> <files...> -> one "<file>:<line><TAB>HAS|BARE" row per si
     q = p; gsub(/[ \t]+/, " ", q); lq = tolower(q)
     if (lq ~ /(^|[^a-z])(messag(e|es|ing)|escalate) +((to|with) +)?(the +)?\**lead\**([^a-z0-9_-]|$)/ \
      || lq ~ /(^|[^a-z])messag(e|ing) the [a-z ]+ and (the +)?\**lead\**([^a-z0-9_-]|$)/ \
-     || lq ~ /(^|[^a-z])sendmessage[^.]*to +(the +)?\**lead\**([^a-z0-9_-]|$)/) {
+     || lq ~ /(^|[^a-z])sendmessage[^.]*to +(the +)?\**lead\**([^a-z0-9_-]|$)/ \
+     || lq ~ /(^|[^a-z])hand(s|ed|ing)? +([a-z0-9-]+ +)*to +(the +)?\**lead\**([^a-z0-9_-]|$)/) {
       has = (index(q, A) > 0)
       printf "%s:%d\t%s\n", pf, pl, (has ? "HAS" : "BARE")
     }
@@ -388,15 +399,20 @@ corpus_report() {
 }
 
 RESOLVED="$(resolve_root "$HERE" || true)"
-# --lead-verdict <floor|-> <addr|-> <files...> -- the lead-address arm alone, over the files
-# given. `-` takes LEAD_FLOOR and the literal derived from the resolved tree's Rule 28. Used by
-# the mutants below and by the BL-520 receipt. Exit 0 pass, 1 fail, 2 no root for a `-` addr.
+# --lead-verdict <floor|-> <addr|-> [<files...>] -- the lead-address arm alone, over the files
+# given, or over lead_files of the resolved tree when none are. `-` takes LEAD_FLOOR and the
+# literal derived from the resolved tree's Rule 28. Used by the mutants below and by the BL-520
+# receipt. Exit 0 pass, 1 fail, 2 no root where one is needed.
 if [ "${1:-}" = "--lead-verdict" ]; then
   lv_f="${2:-}"; lv_a="${3:-}"; shift 3 2>/dev/null || exit 2
   [ "$lv_f" = "-" ] && lv_f="$LEAD_FLOOR"
-  if [ "$lv_a" = "-" ]; then
+  if [ "$lv_a" = "-" ] || [ "$#" -eq 0 ]; then
     [ -n "$RESOLVED" ] && dirs_for "$RESOLVED" || exit 2
-    lv_a="$(lead_addr "$SKILL_DIR/rule-bodies/rule-28.md")"
+  fi
+  [ "$lv_a" = "-" ] && lv_a="$(lead_addr "$SKILL_DIR/rule-bodies/rule-28.md")"
+  if [ "$#" -eq 0 ]; then
+    # shellcheck disable=SC2046 # lead_files prints one path per line, none with a blank
+    lead_verdict "$lv_f" "$lv_a" $(lead_files); exit $?
   fi
   lead_verdict "$lv_f" "$lv_a" "$@"; exit $?
 fi
@@ -826,20 +842,22 @@ printf -- '- When you update a story, message the assigned dev teammate and the 
 printf -- '- **Deliver before idle.** Before going idle you MUST `SendMessage`\n  your completion report to the lead: the diff and the evidence.\n' > "$LP/o5.md"
 printf -- '- **HARD_BLOCK**: mark task BLOCKED, message\n  lead, move to next unblocked task.\n' > "$LP/o6.md"
 printf -- '- If any file is outside your ownership, message the lead (`SendMessage` `to: "lead"`).\n' > "$LP/o7.md"
+printf '**THEN HAND THE REVIEW TO THE LEAD TO PERSIST.** Report the path you wrote.\n' > "$LP/o8.md"
 # Near-misses: the lead receiving or judging a message, and a fenced or commented instruction.
 printf '3. **Write findings and return ONLY that path.** A text-only final message is unreliable\n   transport, and the lead treats an absent file as non-delivery.\n' > "$LP/n1.md"
 printf 'A message counts as an operator message only when the operator wrote it. It is NOT the lead.\n' > "$LP/n2.md"
 printf '```\nmessage the lead\n```\n<!--\nmessage the lead\n-->\n' > "$LP/n3.md"
 printf 'Messages the leading teammate sends are logged; the misleading message is dropped.\n' > "$LP/n4.md"
+printf 'The handoff to the lead is recorded; the lead hands the review back, to the lead-in reader.\n' > "$LP/n5.md"
 # Addressed: the literal joined across a wrapped bullet must read HAS.
 printf -- '- Message **lead** (`SendMessage`\n  `to: "main"`) if a PR is BLOCKED.\n' > "$LP/h1.md"
 lrow() { lead_scan "$LA" "$1" | cut -f2 | tr '\n' ' ' | sed 's/ $//'; }
 lp_bad=""
-for o in o1 o2 o3 o4 o5 o6 o7; do [ "$(lrow "$LP/$o.md")" = "BARE" ] || lp_bad="$lp_bad $o=$(lrow "$LP/$o.md")"; done
-for nm in n1 n2 n3 n4; do [ -z "$(lrow "$LP/$nm.md")" ] || lp_bad="$lp_bad $nm=$(lrow "$LP/$nm.md")"; done
+for o in o1 o2 o3 o4 o5 o6 o7 o8; do [ "$(lrow "$LP/$o.md")" = "BARE" ] || lp_bad="$lp_bad $o=$(lrow "$LP/$o.md")"; done
+for nm in n1 n2 n3 n4 n5; do [ -z "$(lrow "$LP/$nm.md")" ] || lp_bad="$lp_bad $nm=$(lrow "$LP/$nm.md")"; done
 [ "$(lrow "$LP/h1.md")" = "HAS" ] || lp_bad="$lp_bad h1=$(lrow "$LP/h1.md")"
 if [ -z "$lp_bad" ]; then
-  ok "lead-pre: 7 unaddressed shapes read BARE (bare, bold, escalate, and-the-lead, backtick-wrapped SendMessage, wrapped HARD_BLOCK, a wrong to: literal); 4 near-misses read nothing; a wrapped addressed bullet reads HAS"
+  ok "lead-pre: 8 unaddressed shapes read BARE (bare, bold, escalate, and-the-lead, backtick-wrapped SendMessage, wrapped HARD_BLOCK, a wrong to: literal, hand-to-the-lead); 5 near-misses read nothing; a wrapped addressed bullet reads HAS"
 else
   bad "lead-pre: FIXTURE BROKEN --$lp_bad"
 fi
@@ -876,6 +894,7 @@ lead_mut() {
 }
 lead_mut floor-dropped 's/^  if \[ "\$n" -lt "\$fl" \]; then$/  if false; then/' 1 "$LA" "$LP/n1.md" "$LP/n2.md"
 lead_mut literal-mismatch 's/^      has = (index(q, A) > 0)$/      has = (index(q, "to: \\"") > 0)/' 1 "$LA" "$LP/o7.md" "$LP/h1.md"
+lead_mut p4-dropped 's/hand(s|ed|ing)? +/hand@@never@@ +/' 1 "$LA" "$LP/o8.md" "$LP/h1.md"
 # A rule and a site agreeing on the address that failed: the measured-address check owns it.
 printf -- '- Message **lead** (`SendMessage` `to: "lead"`) if a PR is BLOCKED.\n' > "$LP/wrong.md"
 lead_mut measured-dropped 's/^  \[ "\$a" = "\$LEAD_ADDR_MEASURED" \] ||/  true ||/' 1 'to: "lead"' "$LP/wrong.md"
