@@ -1,5 +1,10 @@
 # gate-remediation-deny drives the hook under test (!) and seeds copies of the sibling validators and the catalog into each workspace.
 !core/hooks/ai-dlc-gate-remediation-guard.sh
 core/scripts/validate-steering-budget.sh
+# arm 3b: the scan-roots resolver and grammar are seeded into the product workspace, and the
+# session-class scan is cmp'd against ai-dlc-acknowledge.sh's copy.
+core/scripts/artifact-path-config.sh
+core/skills/ai-dlc/artifact-path-grammar.md
+core/hooks/ai-dlc-acknowledge.sh
 core/scripts/validate-suppression-lifetime.sh
 core/skills/ai-dlc/enforcement-map.yaml

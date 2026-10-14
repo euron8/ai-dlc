@@ -150,10 +150,39 @@ implementation rework verdicts in s317-s318 were evidence (12: captures with no 
 uncommitted or gitignored RED files, a truncated capture) or bookkeeping (10: empty headings, status
 not flipped, a missing Dev Agent Record line). They held under every dev binding and every reviewer
 tier. This is the class BL-397 closed at v0.674.0; it recurs under 0.78x. Understated: in s318 the dev
-spawn stayed alive across fix rounds, so its fix work cannot be split out. Per-verdict labels and
-costs: `pipeline-efficiency-s317-s318/role-efficacy/impl/rework-labels.tsv`.
+spawn stayed alive across fix rounds, so its fix work cannot be split out. Per-verdict labels:
+`docs/analysis/pipeline-efficiency-s317-s318/role-efficacy/impl/exp.py:7-26` (the `CLS` table;
+the `rework-labels.tsv` this entry first cited exists nowhere).
 
-verify: manual -- close when a dev's handoff is refused mechanically (before gate 1) on a capture with no command or head sha, or on a RED capture not in the commit, and a fixture seeds both.
+Premise correction: the capture grammar the close condition names did not exist. dev.md prescribed
+no capture header and no "head sha", and graph's captures are committed `test-results/*.txt` files
+cited by path, not story fences. **PARTIAL.** Built: `core/scripts/validate-handoff-evidence.sh`,
+run by implementation.md's pre-gate commit-presence check before gate 1, refuses a cited capture
+in the story's range with no command line, a cited mutation-RED capture not tracked at the frozen
+sha, and a glob or brace cited as a capture of which some alternative matches no tracked file; a
+missing or divergent `head:` is a WARN, never a refusal. Exit 1 blocks gate-1 dispatch; exit 2 is
+recorded and does not. dev.md `## QA Handoff Evidence` now prescribes the header (`$ <command>`,
+`head: <sha>`, `(+dirty)` for an uncommitted tree) and committed RED captures, and
+`validate-mutation-red.sh` prints `head:` and `cwd:`. Reach: about 7 of the 12 evidence (E)
+verdicts and 0 of the 10 bookkeeping (B) verdicts. Measured over all 32 s317/s318 story merges:
+10 refusals in 5 stories, each a capture the reviewer could not read as evidence — (a) s317 1.2
+`p2-full`, `p3-full`, s317 2.2 `p2-db-passed`, s318 2.3 `ac4-pin-tests`, s318 2.5
+`head-canonical-run` and the two `mutation-drop-*-full` (no command line); (b) s317 2.1
+`mutation-pop`, `mutation-recorder` (gitignored REDs); (c) s317 2.2 `s317-2-2-mutation-*.txt` (a
+glob over gitignored REDs, matching nothing tracked). The three other globs (s318 2.3 twice, s318
+2.4 `seed{1,2,3}`) match committed files and are acquitted. Each refusal is enumerated in the
+script header. The 30 head-tree WARNs were artifacts of a BSD `awk -v` abort on multi-line input
+until it moved to ENVIRON; they are now computed, and stderr is empty on all 32.
+
+Not built: the B class (status not flipped, a missing Dev Agent Record line, empty or demoted
+evidence headings). An empty-heading arm has a 3-story FP set on the same corpus and needs an
+operator ruling before it ships. This entry stays open for that class.
+
+Operator ruling (batch 229): ship the evidence half and keep this entry open. The receipt chains the
+evidence probe to `probes/bl-510-bookkeeping.sh`, which the batch that builds the B class writes;
+until it exists the receipt exits non-zero and the entry cannot rotate as closed.
+
+verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-510-handoff-evidence.sh && bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-510-bookkeeping.sh
 
 ## BL-511 — the Step 1a whole-read budget blocks a sprint after the fact, and the same sprint re-breaches it
 
@@ -163,7 +192,16 @@ own authoring then re-breached the pool at 77,078 tokens against 66,000
 (`CO-S318-WHOLE-READ-POOL-REBREACHED-BY-S318-AUTHORING`), so s319 will block again. Nothing runs
 consolidation before the budget is exceeded.
 
-verify: manual -- close when a step that grows the whole-read pool (retro or sprint close) runs the Step 1a budget check and dispatches consolidation before the next sprint's route, and a fixture shows a breaching pool consolidated before route reads it.
+**Premise correction (measured at batch 229).** The s318 Step 1a block was the pre-0.781 200K-window
+resolution: at 0.773.0 the pool resolved to 66,000 (503%, rc 1), while the tip validator on the same tree
+resolves 330,000 (100%, within grace, rc 0). Graph reads 31% today. The repair therefore does not run
+consolidation (it stays operator-supervised, never automatic). Retro §4a now runs the audit with
+`--fail-on whole-read-pool`, whose hard verdict is "pool OVER and no OPEN `carry-over-backlog.md` item
+carries `WHOLE-READ-POOL`". Retro §5c check 5 blocks the Step 6 commit on it, and route Step 1 item 5
+reads the item before Step 1a runs. Graph's own OPEN `CO-S318-WHOLE-READ-POOL-REBREACHED…` satisfies it.
+The receipt drives the §4a and §5c commands as retro.md spells them.
+
+verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-511-retro-pool-verdict.sh
 
 ## BL-512 — gate passes are discarded for lead paperwork, most often a Check 22 waiver
 
@@ -184,7 +222,18 @@ and a test that a sprint-review fix renamed (dev-escalated, commit `7d917eb94`),
 review and QA then passed. Not tea's strategy: no failing cell traces to it. This is the class
 BL-398 closed at v0.674.0; the rename path is new.
 
-verify: manual -- close when sprint-review step 3 re-binds every Strategy Test ID cell a fix renamed before the gate opens, and a fixture seeds a renamed test whose cell then fails Check 21 before the fix and passes after.
+Premise correction: the re-check belongs in sprint-review §4 "Gate Validation and Proceed", not
+§3, because graph overrides §3. `validate-handoff-evidence.sh --strategy` refuses an empty `Kind`
+or `Resolves to` cell, a `test` cell any of whose `<path>.py::<name>` nodes is untracked or
+undefined at the ref, and a row too short to carry `Resolves to` under a header that has the
+column (0 such rows at the five measured shas). It never refuses on the `Kind` vocabulary or on a `test` cell with no `.py::` node,
+because 72 off-vocabulary and 43 no-node rows in the s317/s318 corpus would false-fire. Measured
+on graph: 1 refusal at `7d917eb94` (TS-2.7-04(b), the true positive), 0 at `148518a74`,
+`28a15fce4` and `2176343a4`; 4 empty cells at `0259395b4` (s317 2.7, true positives). It runs
+before Seam B and in implementation's pre-gate step. dev.md and stories-test-strategy.md Rename
+Verification require a rename to re-bind every cell naming the old node across all story files.
+
+verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-513-strategy-cells.sh
 
 ## BL-514 — subagents poll with bare `sleep`, and no guard sees a subagent's wait
 
@@ -217,7 +266,15 @@ verify: manual -- close when a re-sent `Agent` call whose description matches a 
 
 **DEFECT. [efficiency rank 10] cost not measured; high consequence.** The qwen/medium lead edited
 `rebalancer/execution.py` itself for s317's ff1 (5 Edits, 10-11T19:52-19:54Z), later reverted and
-re-done by a dev seat. Rule 28 forbids it in prose. `core-guard` covers core paths only, and
+re-done by a dev seat. Rule 28 forbids it in prose.
+
+Premise corrected on re-measurement: across the 1804 lead Edit/Write/MultiEdit calls of s317-s318
+there were 8 product edits by both leads, not 5 by qwen alone. Session af48eb49 (qwen) made 6
+(`rebalancer/execution.py` x5 and `rebalancer/tests/test_s316_b2_driven.py`); session 20bd359c
+(Sonnet) made 2 (`rebalancer/tests/test_s259_1_single_mint_efficiency.py`). No gate was open for
+any of them. Across all 177 consumer transcripts (4412 lead edit calls) the built arm denies 18,
+all product code (10 more in session 5ef555a1); repo-root `CLAUDE.md`, which retro Step 4 tells
+the lead to edit, is allowed. `core-guard` covers core paths only, and
 `gate-remediation-guard` covers the artifact corpus only while a gate FAIL is recorded. Measured by
 the receipt's probe: a lead Edit to a core path is denied by `core-guard`, a lead Edit to product code
 by no hook. Toward the local-lead goal.
@@ -232,7 +289,19 @@ with corrections at `pipeline-snapshot-history.md:215, 219, 225` (10-14 02:11-02
 integrity validation does not compare an entry's stamp with the current time. A pipeline defect, not
 a model one; toward the local-lead goal.
 
-verify: manual -- close when Step 0a's integrity validation refuses a snapshot entry stamped after the current UTC time, and a fixture seeds a future-stamped Recent Activity line that the check refuses.
+**Premise correction (measured at batch 229).** The defect is born at snapshot WRITE time, not at resume.
+Over graph's 163 snapshot revisions since 2026-10-09, each replayed with now set to its own commit time,
+69 carry a stamp more than 10 min ahead (214 findings: 127 Recent Activity, 87 `dispatched-at`; smallest
+lead 10 min; 0 inside the slack). The contract analysis counted 0 of 20 resumes seeing one (not
+re-derived here). The cited history lines 215/219/225 resolve at
+commit `3e5aeb070`, not HEAD. The arm therefore lives in `validate-artifact-budget.sh`'s snapshot branch,
+which gate Check 14 runs at every write and route Step 0a check 1 runs at resume, and its failure names
+the remedy (rewrite to `date -u`, keep order, one CLOCK CORRECTION line naming the old stamps as bare
+`HH:MMZ`, since a full-form name is itself a future stamp). Every lead-facing call site reads the
+validator through `verdict.sh`, which shows 6 matching lines, so the stamp verdict prints first, its
+FAIL line carries the remedy, and `verdict.sh` surfaces `FUTURE` rows.
+
+verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-517-future-stamp.sh
 
 ## BL-518 — gate-checkpoint opens a nonce of any shape
 
@@ -265,4 +334,14 @@ s317-s318 failed with "No agent named 'lead'" (qwen lead 4, Sonnet lead 7). `cor
 tells a dev to "message the lead" at three sites and never names the address a subagent reaches its
 parent by. `ai-dlc-escalation-delivery.sh` records the failure after the fact.
 
-verify: manual -- close when every role file that tells a teammate to message the lead names the address a subagent actually reaches its parent by, and a fixture pins that address at each site.
+The 11 did not reproduce exactly. Re-derived read-only from graph: the committed flow logs carry 9
+`No agent named 'lead'` events for s317-s318 (5 in the s317 archive, 4 in the live log), and graph's
+transcripts hold 15 `SendMessage` calls `to: "lead"`, every one failed, against `to: "main"` 167 of
+167 delivered (Claude Code 2.1.276-2.1.296); `to: "team-lead"` was accepted 18 times (a 19th was
+refused for an empty message). `team-lead` is the agent-teams address: graph's 9 ad-hoc teammates
+spawned with `team_name` sent 4 messages to `team-lead` and the lead received them; `main` from such a
+teammate is unmeasured. Role-bound dispatches carry no `name` (Rule 19(c)), so the role files use
+`main`. The unaddressed instruction was not three dev.md sites but 22 across eight role files and
+SKILL.md's Tier 1 action, including code-reviewer.md's "hand the review to the lead".
+
+verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-520-lead-address.sh

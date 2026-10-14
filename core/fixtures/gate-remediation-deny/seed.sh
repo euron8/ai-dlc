@@ -187,6 +187,53 @@ case "$CASE" in
     rmdir "$W/_bmad-output/gate-adjudication"
     ;;
 
+  # --- arm 3b, THE LEAD'S PRODUCT EDIT --------------------------------------------------
+  # NO gate directory: arm 3b must fire before arm 4's exit. A real git repo with ONE
+  # registered sibling worktree OUTSIDE the project (the reference consumer's layout:
+  # `graph-s316-ff1` beside `graph`), the shipped scan-roots resolver and grammar with one
+  # extra seeded root (`reports`, so the scan-roots conjunct has a subject no other conjunct
+  # covers), and three transcripts in the harness's own record shapes.
+  product)
+    rmdir "$W/_bmad-output/gate-adjudication"
+    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+    _cfg="$(pick "$HERE/../../scripts/artifact-path-config.sh" \
+                 "$HERE/../../../scripts/ai-dlc/artifact-path-config.sh")"
+    _gram="$(pick "$HERE/../../skills/ai-dlc/artifact-path-grammar.md" \
+                  "$HERE/../../../.claude/skills/ai-dlc/artifact-path-grammar.md")"
+    [ -n "$_cfg" ] && [ -n "$_gram" ] || { echo "seed.sh: cannot locate artifact-path-config.sh or artifact-path-grammar.md; the scan-roots conjunct would have no resolver" >&2; rm -rf "$W"; exit 2; }
+    mkdir -p "$W/.claude/skills/ai-dlc" "$W/reports" "$W/sessions-jsonl"
+    cp "$_cfg" "$W/scripts/ai-dlc/artifact-path-config.sh" || { rm -rf "$W"; exit 2; }
+    awk '{ print } /^```scan-roots$/ { print "reports" }' "$_gram" > "$W/.claude/skills/ai-dlc/artifact-path-grammar.md"
+    _roots="$(bash "$W/scripts/ai-dlc/artifact-path-config.sh" --scan-roots --root "$W" 2>/dev/null)"
+    grep -qx 'reports' <<<"$_roots" \
+      || { echo "seed.sh: the seeded grammar does not resolve the extra scan root 'reports'" >&2; rm -rf "$W"; exit 2; }
+    printf 'line\n' > "$W/src/app.py"
+    printf 'line\n' > "$W/src/.env"
+    printf 'a\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> topic\n' > "$W/src/conflict.py"
+    printf '# Conventions\n' > "$W/docs/coding-conventions.md"
+    printf 'node_modules/\n' > "$W/.gitignore"
+    printf '# Project rules\n' > "$W/CLAUDE.md"
+    printf '# r\n' > "$W/reports/r.md"
+    git -C "$W" init -q >/dev/null 2>&1 \
+      && git -C "$W" -c user.name=fixture -c user.email=fixture@example.invalid commit -q --allow-empty -m seed >/dev/null 2>&1 \
+      && git -C "$W" worktree add -q --detach "$W.sib" >/dev/null 2>&1 \
+      || { echo "seed.sh: git repo or sibling worktree could not be created; the worktree conjunct would have no subject" >&2; rm -rf "$W"; exit 2; }
+    mkdir -p "$W.sib/_bmad-output/planning-artifacts" "$W.sib/src"
+    printf '# x\n' > "$W.sib/_bmad-output/planning-artifacts/x.md"
+    printf 'line\n' > "$W.sib/src/app.py"
+    # A typed `/ai-dlc` invocation, then the router Read (so `ai-dlc-acknowledge.sh`'s Check 2z
+    # stands down for a driver that runs every Edit hook), in the shapes the harness writes.
+    printf '{"type":"user","message":{"role":"user","content":"<command-message>ai-dlc</command-message>\\n<command-name>/ai-dlc</command-name>\\n<command-args></command-args>"}}\n' > "$W/sessions-jsonl/aidlc.jsonl"
+    printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_01","name":"Read","input":{"file_path":"/w/.claude/skills/ai-dlc/steps/route.md"}}]}}\n' >> "$W/sessions-jsonl/aidlc.jsonl"
+    # A session that never invoked a skill, but MENTIONS `/ai-dlc` in a tool_result -- the
+    # escaped form the scan must not read as an invocation.
+    printf '{"type":"user","message":{"role":"user","content":"fix the typo in src/app.py"}}\n' > "$W/sessions-jsonl/plain.jsonl"
+    printf '{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_02","content":"see <command-name>/ai-dlc</command-name> in \\"name\\":\\"Skill\\""}]}}\n' >> "$W/sessions-jsonl/plain.jsonl"
+    # `/ai-dlc` first, then `/ai-dlc-update` as a Skill tool_use: the LAST invocation decides.
+    cp "$W/sessions-jsonl/aidlc.jsonl" "$W/sessions-jsonl/updater.jsonl"
+    printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_03","name":"Skill","input":{"skill":"ai-dlc-update"}}]}}\n' >> "$W/sessions-jsonl/updater.jsonl"
+    ;;
+
   # --- arm 7a, THE DISPATCH BINDING ---------------------------------------------------
   # Every case here is `stale-then-clean` plus a ledger, because `stale-then-clean` IS the
   # shape of the attack: an OLDER failing pass and a NEWER clean one, where the reader picks
@@ -380,7 +427,12 @@ for _need in "$W/_bmad-output/pipeline-snapshot.md" \
              "$W/docs/architecture.md"; do
   [ -s "$_need" ] || { echo "seed.sh: FAILED to write ${_need#$W/} for case '$CASE'" >&2; rm -rf "$W"; exit 2; }
 done
-if [ "$CASE" != "no-gate" ]; then
+if [ "$CASE" = "product" ]; then
+  # Arm 3b's world asserts the OPPOSITE: no gate directory, or the deny could be a gate arm's.
+  [ ! -d "$W/_bmad-output/gate-adjudication" ] && [ -s "$W/src/app.py" ] && [ -s "$W.sib/src/app.py" ] \
+    && [ -s "$W/sessions-jsonl/aidlc.jsonl" ] && [ -s "$W/sessions-jsonl/plain.jsonl" ] \
+    || { echo "seed.sh: case 'product' has a gate directory or is missing a subject file" >&2; rm -rf "$W" "$W.sib"; exit 2; }
+elif [ "$CASE" != "no-gate" ]; then
   ls "$W"/_bmad-output/gate-adjudication/*.verdict.json >/dev/null 2>&1 \
     || { echo "seed.sh: case '$CASE' wrote no verdict file" >&2; rm -rf "$W"; exit 2; }
 fi

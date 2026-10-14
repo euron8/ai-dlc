@@ -10,6 +10,7 @@ cut
 date
 dirname
 env
+git
 grep
 head
 jq
@@ -21,6 +22,7 @@ mv
 python3
 rm
 sed
+sleep
 sort
 stat
 touch

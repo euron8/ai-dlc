@@ -266,7 +266,10 @@ the dev fills it:
   disposition, and a control: one identifier the same command must find,
   with its non-zero count. A re-point story's consumer list is this
   output, never a list recalled from the diff. A story that renames and
-  re-points nothing writes `not a rename` under the heading.
+  re-points nothing writes `not a rename` under the heading. A rename of a
+  test node re-binds every `## Strategy Test IDs` cell naming the old node,
+  across all story files, not only this story's; a fix that renames one
+  at sprint-review owes the same re-bind.
 - `## Strategy Test IDs` — the table below, one row per strategy test id
   that names this story, and one row per case letter when the strategy
   row lists lettered cases `(a)`, `(b)`, …:
@@ -646,7 +649,10 @@ strategy. Steps 1a–2 below otherwise proceed.
    repaired strategy assigns to a story, write its rows into that story's
    `## Strategy Test IDs` table (Pre-Flight Checklist item (c)): the id, and
    one row per lettered case the strategy row lists, `Kind` and
-   `Resolves to` left for the dev. A lettered case exists only in the
+   `Resolves to` left for the dev, who fills them before QA handoff; an
+   empty cell or a `test` node that does not resolve is refused by
+   `scripts/ai-dlc/validate-handoff-evidence.sh --strategy` before gate 1
+   and again before the sprint-review gate. A lettered case exists only in the
    strategy's prose until this row names it, and nothing later can ask for
    a test the story file never listed. Count the case letters in the
    strategy and the rows across the story files; the two counts are equal

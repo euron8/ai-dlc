@@ -253,6 +253,106 @@ range_scope() { # the core-installed paths only; paths carry no whitespace in ei
   done
 }
 
+# --- the lead's address ---------------------------------------------------------
+# A teammate told to "message the lead" with no address sends `to: "lead"`, which the harness
+# does not register: measured 0 of 15 delivered on the reference consumer, against 167 of 167
+# for `to: "main"`. Teammates do not load rule bodies, so the address is carried at EVERY site
+# that tells a teammate to message or escalate to the lead, and Rule 28 holds only the reason.
+# The literal is DERIVED from Rule 28's own lead sentence, so a site and the rule cannot carry
+# two different addresses; an empty derivation fails, never passes.
+#
+# THE UNIT IS THE JOINED ITEM. Blank lines, headings, fences, comments and every list-item
+# opener end an item; continuation lines join into it, whitespace collapsed. A site whose
+# instruction and literal sit on different wrapped lines of one bullet is one string.
+#
+# THE PREDICATE, three shapes over the lowercased item:
+#   P1  message/messages/messaging/escalate, then optional to/with, optional the, then lead
+#       (bold or not): "message lead", "Message **lead**", "Escalate to the lead".
+#   P2  "message the <words> and the lead" -- no punctuation between, so a sentence that merely
+#       mentions a message and later the lead cannot join (pm.md "dev teammate and the lead").
+#   P3  sendmessage, then no period, then "to the lead" -- the Deliver-before-idle bullets,
+#       including the shape where `SendMessage` is followed by a backtick and a line wrap.
+#   P4  hand/hands/handed/handing, then plain words only, then "to the lead" -- code-reviewer.md
+#       "HAND THE REVIEW TO THE LEAD TO PERSIST". Words only (no punctuation) between verb and
+#       object, so "handoff" and "the lead hands it back" cannot join.
+#
+# HOW THE FALSE-POSITIVE SET REACHED ZERO. A broader predicate (message within a sentence of
+# lead) flagged eight sentences that describe the lead receiving or judging a message rather
+# than instructing a send: remediator.md "Measured: a repair removed...", pm-escalated.md
+# "Where a gap in the input...", adversary.md item 3 and its operator_authorization paragraph,
+# gate-adjudicator.md item 3, rule-20.md "File-write deliverable", deploy-validate.md "Minimum
+# mechanism", escalations.md "RESOLVED / OVERRIDDEN". Requiring the verb to be IMMEDIATELY
+# followed by its object (P1), a punctuation-free object list (P2), or "to the lead" after
+# SendMessage (P3) drops all eight. P4 measured alone over the same corpus hits exactly one item,
+# the code-reviewer.md send instruction, against 239 items carrying a bare "hand" word. Measured
+# over lead_files (below) AND over core/**/*.md less fixtures and ai-dlc-update -- the wider set
+# adds 11 files and 0 hits: every hit is a send instruction, plus Rule 28's own paragraph, which
+# carries the literal. FP set: empty. The probes below seed the "text-only final message ...
+# and the lead treats an absent file" shape, which a looser P2 accepted, as a near-miss.
+#
+# THE CORPUS is lead_files: the install-scoped flat skill files, steps/, rule-bodies/ and the
+# roles -- never extensions/ or overrides/, which on a consumer hold consumer-owned prose this
+# fixture has no standing over (the reference consumer carries bare sites there). The BL-520
+# receipt reads this corpus through --lead-verdict with no file list.
+LEAD_FLOOR=23
+# The MEASURED address. Deriving the literal from Rule 28 binds the sites to the rule; this binds
+# the rule to the measurement, so a rule and its sites rewritten together to `to: "lead"` (the
+# address that failed 15 of 15) still fail. Change it only with a new measurement.
+LEAD_ADDR_MEASURED='to: "main"'
+lead_addr() { # <rule-28 path> -> the address literal in its lead sentence, or nothing
+  [ -f "$1" ] || return 0
+  awk 'index($0, "**A dispatched teammate reaches the lead with") == 1 {
+         if (match($0, /to: "[^"]*"/)) { print substr($0, RSTART, RLENGTH); exit } }' "$1"
+}
+lead_scan() { # <addr> <files...> -> one "<file>:<line><TAB>HAS|BARE" row per site item
+  LS_ADDR="$1" awk '
+  function flush(   q, lq) {
+    if (p == "") return
+    q = p; gsub(/[ \t]+/, " ", q); lq = tolower(q)
+    if (lq ~ /(^|[^a-z])(messag(e|es|ing)|escalate) +((to|with) +)?(the +)?\**lead\**([^a-z0-9_-]|$)/ \
+     || lq ~ /(^|[^a-z])messag(e|ing) the [a-z ]+ and (the +)?\**lead\**([^a-z0-9_-]|$)/ \
+     || lq ~ /(^|[^a-z])sendmessage[^.]*to +(the +)?\**lead\**([^a-z0-9_-]|$)/ \
+     || lq ~ /(^|[^a-z])hand(s|ed|ing)? +([a-z0-9-]+ +)*to +(the +)?\**lead\**([^a-z0-9_-]|$)/) {
+      has = (index(q, A) > 0)
+      printf "%s:%d\t%s\n", pf, pl, (has ? "HAS" : "BARE")
+    }
+    p = ""
+  }
+  BEGIN { A = ENVIRON["LS_ADDR"] }
+  FNR == 1 { flush(); fence = ""; com = 0 }
+  {
+    t = $0; sub(/^[ \t]+/, "", t)
+    if (com) { if (index($0, "-->")) com = 0; flush(); next }
+    if (fence != "") { if (substr(t, 1, 3) == fence) fence = ""; next }
+    if (substr(t, 1, 3) == "```" || substr(t, 1, 3) == "~~~") { flush(); fence = substr(t, 1, 3); next }
+    if (substr(t, 1, 4) == "<!--") { if (!index(substr(t, 5), "-->")) com = 1; flush(); next }
+    if (t == "" || substr(t, 1, 1) == "#") { flush(); next }
+    if (t ~ /^([-*+]|[0-9]+[.)]) /) flush()
+    if (p == "") { pf = FILENAME; pl = FNR; p = t } else p = p " " t
+  }
+  END { flush() }' "${@:2}"
+}
+lead_verdict() { # <floor> <addr> <files...> -> one "PASS ..." or "FAIL ..." line; rc 0 or 1
+  local fl="$1" a="$2" rows n nb; shift 2
+  # One guard owns both failures: an empty derivation (Rule 28's lead sentence gone) and a wrong one.
+  [ "$a" = "$LEAD_ADDR_MEASURED" ] || { echo "FAIL lead-address: Rule 28's lead sentence names '${a:-<nothing>}', not the measured $LEAD_ADDR_MEASURED"; return 1; }
+  [ "$#" -ge 1 ] || { echo "FAIL lead-address: empty corpus"; return 1; }
+  rows="$(lead_scan "$a" "$@")"
+  n="$(grep -c . <<<"$rows")" || n=0
+  nb="$(grep -c "$(printf '\t')BARE\$" <<<"$rows")" || nb=0
+  if [ "$n" -lt "$fl" ]; then
+    echo "FAIL lead-address: $n site(s) found, floor $fl -- the predicate cannot see the sites it guards, so its zero is no finding"; return 1
+  fi
+  if [ "$nb" -gt 0 ]; then
+    echo "FAIL lead-address: $nb of $n site(s) tell a teammate to message the lead without $a: $(grep "BARE\$" <<<"$rows" | cut -f1 | sed "s|^${ROOT:-@@}/||" | tr '\n' ' ')"; return 1
+  fi
+  echo "PASS lead-address: $n of $n site(s) carry Rule 28's $a (floor $fl)"
+}
+lead_files() { # the install-scoped markdown corpus, sorted; no path carries a blank
+  # shellcheck disable=SC2046 # range_scope prints blank-separated paths on purpose
+  find $(range_scope) -type f -name '*.md' 2>/dev/null | LC_ALL=C sort
+}
+
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
@@ -309,9 +409,33 @@ corpus_report() {
   else
     ok "range: 0 lines carry the retired 0–2b range (control: $new carry 0–2c)"
   fi
+
+  # Every site telling a teammate to message the lead carries Rule 28's address literal.
+  local la lout
+  la="$(lead_addr "$SKILL_DIR/rule-bodies/rule-28.md")"
+  # shellcheck disable=SC2046 # lead_files prints one path per line, none with a blank
+  lout="$(lead_verdict "$LEAD_FLOOR" "$la" $(lead_files))"
+  case "$lout" in PASS*) ok "${lout#PASS }" ;; *) bad "${lout#FAIL }" ;; esac
 }
 
 RESOLVED="$(resolve_root "$HERE" || true)"
+# --lead-verdict <floor|-> <addr|-> [<files...>] -- the lead-address arm alone, over the files
+# given, or over lead_files of the resolved tree when none are. `-` takes LEAD_FLOOR and the
+# literal derived from the resolved tree's Rule 28. Used by the mutants below and by the BL-520
+# receipt. Exit 0 pass, 1 fail, 2 no root where one is needed.
+if [ "${1:-}" = "--lead-verdict" ]; then
+  lv_f="${2:-}"; lv_a="${3:-}"; shift 3 2>/dev/null || exit 2
+  [ "$lv_f" = "-" ] && lv_f="$LEAD_FLOOR"
+  if [ "$lv_a" = "-" ] || [ "$#" -eq 0 ]; then
+    [ -n "$RESOLVED" ] && dirs_for "$RESOLVED" || exit 2
+  fi
+  [ "$lv_a" = "-" ] && lv_a="$(lead_addr "$SKILL_DIR/rule-bodies/rule-28.md")"
+  if [ "$#" -eq 0 ]; then
+    # shellcheck disable=SC2046 # lead_files prints one path per line, none with a blank
+    lead_verdict "$lv_f" "$lv_a" $(lead_files); exit $?
+  fi
+  lead_verdict "$lv_f" "$lv_a" "$@"; exit $?
+fi
 if [ "${1:-}" = "--report" ]; then
   [ -n "$RESOLVED" ] && dirs_for "$RESOLVED" || { echo "FIXTURE ERROR: no ai-dlc skill dir above $HERE" >&2; exit 2; }
   corpus_report
@@ -727,6 +851,74 @@ else
   ok "join/mutant: every --complete stripped from each of $jb_paras real paragraphs ($jb_sites sites), one paragraph at a time, is flagged ($jb_killed/$jb_paras)"
 fi
 
+# --- 4c. the lead-address arm: probes both directions, then mutants ---------------
+LP="$WORK/lead"; mkdir -p "$LP" || exit 2
+LA='to: "main"'
+# Offenders: every predicate shape, unaddressed. Each must read BARE.
+printf -- '- If your story file is ambiguous, message the lead or the architect.\n' > "$LP/o1.md"
+printf -- '- Message **lead** when all stories for a sprint are defined and ready for\n  assignment.\n' > "$LP/o2.md"
+printf 'Escalate to the lead — do not decide — when: two repairs conflict.\n' > "$LP/o3.md"
+printf -- '- When you update a story, message the assigned dev teammate and the lead immediately.\n' > "$LP/o4.md"
+printf -- '- **Deliver before idle.** Before going idle you MUST `SendMessage`\n  your completion report to the lead: the diff and the evidence.\n' > "$LP/o5.md"
+printf -- '- **HARD_BLOCK**: mark task BLOCKED, message\n  lead, move to next unblocked task.\n' > "$LP/o6.md"
+printf -- '- If any file is outside your ownership, message the lead (`SendMessage` `to: "lead"`).\n' > "$LP/o7.md"
+printf '**THEN HAND THE REVIEW TO THE LEAD TO PERSIST.** Report the path you wrote.\n' > "$LP/o8.md"
+# Near-misses: the lead receiving or judging a message, and a fenced or commented instruction.
+printf '3. **Write findings and return ONLY that path.** A text-only final message is unreliable\n   transport, and the lead treats an absent file as non-delivery.\n' > "$LP/n1.md"
+printf 'A message counts as an operator message only when the operator wrote it. It is NOT the lead.\n' > "$LP/n2.md"
+printf '```\nmessage the lead\n```\n<!--\nmessage the lead\n-->\n' > "$LP/n3.md"
+printf 'Messages the leading teammate sends are logged; the misleading message is dropped.\n' > "$LP/n4.md"
+printf 'The handoff to the lead is recorded; the lead hands the review back, to the lead-in reader.\n' > "$LP/n5.md"
+# Addressed: the literal joined across a wrapped bullet must read HAS.
+printf -- '- Message **lead** (`SendMessage`\n  `to: "main"`) if a PR is BLOCKED.\n' > "$LP/h1.md"
+lrow() { lead_scan "$LA" "$1" | cut -f2 | tr '\n' ' ' | sed 's/ $//'; }
+lp_bad=""
+for o in o1 o2 o3 o4 o5 o6 o7 o8; do [ "$(lrow "$LP/$o.md")" = "BARE" ] || lp_bad="$lp_bad $o=$(lrow "$LP/$o.md")"; done
+for nm in n1 n2 n3 n4 n5; do [ -z "$(lrow "$LP/$nm.md")" ] || lp_bad="$lp_bad $nm=$(lrow "$LP/$nm.md")"; done
+[ "$(lrow "$LP/h1.md")" = "HAS" ] || lp_bad="$lp_bad h1=$(lrow "$LP/h1.md")"
+if [ -z "$lp_bad" ]; then
+  ok "lead-pre: 8 unaddressed shapes read BARE (bare, bold, escalate, and-the-lead, backtick-wrapped SendMessage, wrapped HARD_BLOCK, a wrong to: literal, hand-to-the-lead); 5 near-misses read nothing; a wrapped addressed bullet reads HAS"
+else
+  bad "lead-pre: FIXTURE BROKEN --$lp_bad"
+fi
+# The verdict, both directions, plus the derivation.
+lv_good="$(lead_verdict 1 "$LA" "$LP/h1.md" "$LP/n1.md")"; lv_bad="$(lead_verdict 1 "$LA" "$LP/o1.md" "$LP/h1.md")"
+lv_none="$(lead_verdict 1 "$LA" "$LP/n1.md" "$LP/n2.md")"
+printf '**A dispatched teammate reaches the lead with `SendMessage` `to: "main"`.** Reason.\n' > "$LP/r28.md"
+printf '**Some other lead sentence** `to: "main"`.\n' > "$LP/r28x.md"
+d_ok="$(lead_addr "$LP/r28.md")"; d_x="$(lead_addr "$LP/r28x.md")"; d_abs="$(lead_addr "$LP/absent.md")"
+case "$lv_good|$lv_bad|$lv_none" in
+  PASS*"|"FAIL*"1 of 2"*"|"FAIL*"floor 1"*) lv_ok=1 ;; *) lv_ok=0 ;;
+esac
+if [ "$lv_ok" = 1 ] && [ "$d_ok" = 'to: "main"' ] && [ -z "$d_x" ] && [ -z "$d_abs" ]; then
+  ok "lead-verdict: addressed corpus PASS, one bare site FAIL, zero sites FAIL on the floor; the literal derives from Rule 28's lead sentence only (other sentence and absent file derive nothing)"
+else
+  bad "lead-verdict: FIXTURE BROKEN -- good='$lv_good' bad='$lv_bad' none='$lv_none' derived='$d_ok' other='$d_x' absent='$d_abs'"
+fi
+# MUTANTS, as copies of this script driven through --lead-verdict. Each must turn a FAIL the real
+# arm reports into a PASS, and an unmutated copy is driven first so a copy that cannot run reads
+# as broken rather than as a kill.
+LM="$WORK/lead-mut"; mkdir -p "$LM" || exit 2
+cp "$SELF" "$LM/real.sh" || exit 2
+ctl="$(bash "$LM/real.sh" --lead-verdict 1 "$LA" "$LP/h1.md")"
+case "$ctl" in PASS*) ok "lead-mutant CONTROL: an unmutated copy runs --lead-verdict and passes an addressed corpus" ;;
+  *) bad "lead-mutant CONTROL: unmutated copy did not pass ('$ctl') -- no mutant verdict below is evidence" ;; esac
+# lead_mut <name> <sed-expr> <floor> <addr> <files...>: real must FAIL, mutant must PASS
+lead_mut() {
+  local nm="$1" ex="$2" fl="$3" a="$4" r m; shift 4
+  sed -e "$ex" "$SELF" > "$LM/$nm.sh"
+  if cmp -s "$SELF" "$LM/$nm.sh"; then bad "MUTANT lead/$nm: DID NOT APPLY"; return; fi
+  r="$(bash "$LM/real.sh" --lead-verdict "$fl" "$a" "$@")"; m="$(bash "$LM/$nm.sh" --lead-verdict "$fl" "$a" "$@")"
+  case "$r|$m" in FAIL*"|"PASS*) ok "MUTANT lead/$nm: killed (real: ${r%%:*}, mutant: ${m%%:*})" ;;
+    *) bad "MUTANT lead/$nm: SURVIVED or broken (real='$r' mutant='$m')" ;; esac
+}
+lead_mut floor-dropped 's/^  if \[ "\$n" -lt "\$fl" \]; then$/  if false; then/' 1 "$LA" "$LP/n1.md" "$LP/n2.md"
+lead_mut literal-mismatch 's/^      has = (index(q, A) > 0)$/      has = (index(q, "to: \\"") > 0)/' 1 "$LA" "$LP/o7.md" "$LP/h1.md"
+lead_mut p4-dropped 's/hand(s|ed|ing)? +/hand@@never@@ +/' 1 "$LA" "$LP/o8.md" "$LP/h1.md"
+# A rule and a site agreeing on the address that failed: the measured-address check owns it.
+printf -- '- Message **lead** (`SendMessage` `to: "lead"`) if a PR is BLOCKED.\n' > "$LP/wrong.md"
+lead_mut measured-dropped 's/^  \[ "\$a" = "\$LEAD_ADDR_MEASURED" \] ||/  true ||/' 1 'to: "lead"' "$LP/wrong.md"
+
 # --- 5. the real corpus ---------------------------------------------------------
 echo ""
 echo "  corpus:"
@@ -736,8 +928,8 @@ n_ok="$(grep -c '^  ok ' <<<"$REP_HERE")" || n_ok=0
 n_bad="$(grep -c '^  FAIL ' <<<"$REP_HERE")" || n_bad=0
 fails=$((fails + n_bad))
 [ "$rc_here" -eq 0 ] || [ "$n_bad" -gt 0 ] || bad "corpus: --report exited $rc_here with no FAIL line"
-n_want=$(( $(pins | wc -l) + 2 ))
-[ "$n_ok" -eq "$n_want" ] || bad "corpus: $n_ok ok line(s), wanted $n_want (one per pin, plus order and range) — a report that ran nothing is not a pass"
+n_want=$(( $(pins | wc -l) + 3 ))
+[ "$n_ok" -eq "$n_want" ] || bad "corpus: $n_ok ok line(s), wanted $n_want (one per pin, plus order, range and lead-address) — a report that ran nothing is not a pass"
 
 # --- 6. cwd-invariance: the same verdict from a decoy tree ----------------------
 DECOY="$WORK/decoy"

@@ -175,7 +175,8 @@ Before starting any work, read these files in order:
 
 ## Communication
 
-- Message the **lead** when you complete or update the architecture doc.
+- Message the **lead** (`SendMessage` `to: "main"`) when you complete or update
+  the architecture doc.
 - Message **dev** teammates when your decisions affect their implementation
   approach (e.g., new dependency, schema change, API contract change).
 - Message **QA** when you define new non-functional requirements that need
@@ -187,7 +188,8 @@ Follow the three-tier escalation model in SKILL.md Rule 12:
 
 - **HARD_BLOCK** (contradicts approved decision, requirement divergence):
   Append to `docs/escalations/pending.md`, mark task BLOCKED, message
-  lead, move to next unblocked task. Human resolves at production
+  lead (`SendMessage` `to: "main"`), move to next unblocked task. Human
+  resolves at production
   validation checkpoint.
 - **DECIDED_AUTONOMOUSLY** (trade-offs, ambiguous requirements, design
   choices): Make the best decision, document rationale in

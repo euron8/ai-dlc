@@ -616,7 +616,7 @@ yours to write and its paths are not yours to name.
 
 **THEN HAND THE REVIEW TO THE LEAD TO PERSIST, BEFORE REPORTING THE
 GATE-1 VERDICT, NOT AFTER.** Report the path you wrote, relative to
-your own root; the lead persists it to the canonical branch checkout
+your own root, with `SendMessage` `to: "main"`; the lead persists it to the canonical branch checkout
 and answers for that write.
 
 A verdict reported without a resolvable review-file path is
@@ -718,7 +718,7 @@ without verbatim REPL trace.**
 
 - **Deliver before idle (MANDATORY).** Before going idle/available you MUST
   `SendMessage` your full verdict (APPROVED | NEEDS_REWORK | BLOCKED, with
-  per-finding severity + file:line) to the lead. A part shard delivers its
+  per-finding severity + file:line) to the lead (`to: "main"`). A part shard delivers its
   shard file's absolute path, its `shard-verdict:` value and its `handovers:`
   count; the first cross shard delivers its path, its `shard-verdict:` value
   and the count of hand-overs it ran. A
@@ -730,7 +730,8 @@ without verbatim REPL trace.**
 - Message **QA** when you approve so they can proceed with their validation.
 - Message **architect** if you find a pattern violation that affects multiple
   stories (systemic issue, not just one PR).
-- Message **lead** if a PR is BLOCKED, explaining the risk.
+- Message **lead** (`SendMessage` `to: "main"`) if a PR is BLOCKED, explaining
+  the risk.
 
 ## Relationship to QA
 
@@ -752,8 +753,8 @@ Follow the three-tier escalation model in SKILL.md Rule 12:
 - **HARD_BLOCK** (security issue so severe work should stop, design flaw
   that contradicts approved architecture and architect cannot resolve):
   Append to `docs/escalations/pending.md`, mark task BLOCKED, message
-  lead, move to next unblocked task. Human resolves at production
-  validation checkpoint.
+  lead (`SendMessage` `to: "main"`), move to next unblocked task. Human
+  resolves at production validation checkpoint.
 - **DECIDED_AUTONOMOUSLY** (judgment calls on finding severity, ambiguous
   architecture patterns): Make the best decision, document rationale in
   `docs/escalations/pending.md`, proceed without blocking.

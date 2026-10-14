@@ -61,6 +61,8 @@
 #   2. payload carries agent_id      -> RECORD the write (verdict, planning artifact), then allow (a dispatched teammate;
 #                                       THE remediator, and the only event that names a writer)
 #   3. tool is not an edit           -> allow
+#  3b. lead edit to PRODUCT CODE in an /ai-dlc session -> DENY, and log LEAD_PRODUCT_EDIT_DENIED
+#                                       (gate state is not read; see "ARM 3b" below)
 #   4. no conforming verdict file    -> allow (no gate has ever run here)
 #   5. newest pass records no FAIL   -> carry on to 7a; it is 7a that decides whether that
 #                                       clean pass is entitled to clear the deny
@@ -156,12 +158,83 @@
 # THE GUARDED ROOTS (deliberately narrow -- Rule 26 minimum mechanism)
 #   `_bmad-output/planning-artifacts/**`, `_bmad-output/implementation-artifacts/**`,
 #   `docs/**`. That is where all four measured top edit targets live, plus the
-#   `docs/architecture.md` insertion pass 11 named as the root cause. SOURCE CODE
-#   IS OUT OF SCOPE and that is a limit, not an oversight: a `[story]` or
-#   `[planning]` gate adjudicates documents, an `[implementation]` gate's repairs
-#   run through the dev/qa loop which already has its own delegation, and widening
-#   this to the whole tree would deny the lead's Rule 28(a) merge-conflict
-#   resolution with no measurement behind it.
+#   `docs/architecture.md` insertion pass 11 named as the root cause. These roots
+#   bound the GATE arms (4-10) only. Product code is not a gate-remediation
+#   subject at all -- an `[implementation]` gate's repairs run through the dev/qa
+#   loop -- and it is denied to the lead by arm 3b, which reads no gate state.
+#
+# ARM 3b -- THE LEAD DOES NOT EDIT PRODUCT CODE (Rule 28), GATE OR NO GATE
+# Measured on the reference consumer, sprints 317-318: 1803 lead Edit/Write/MultiEdit
+# calls, 8 of them on product code -- `rebalancer/execution.py` x5 and a test file
+# (qwen lead), `rebalancer/tests/test_s259_1_single_mint_efficiency.py` x2 (Sonnet
+# lead) -- with no gate open, so arms 4-10 never saw them. Rule 28 forbade every one
+# in prose. It sits AFTER arm 3 and BEFORE arm 4's `[ -d "$GATE_DIR" ] || exit 0`
+# because that exit is exactly where those eight walked through. A lead (no
+# `agent_id`) edit is DENIED when ALL FOUR hold, evaluated cheapest first:
+#   (i)   the target resolves inside PROJECT_DIR or inside a registered worktree of
+#         that repo (`git worktree list --porcelain`), compared on PHYSICAL spellings
+#         (`cd -P`): a worktree registered as `/private/tmp/x` and a payload saying
+#         `/tmp/x` are one tree. Outside every tree (a scratchpad, `~/.claude/...`
+#         memory) is not product code. The fork is skipped for a path under
+#         PROJECT_DIR's own state directory or `docs/`; every other path pays it, so a
+#         worktree nested in `.claude/worktrees/` is resolved as its own tree.
+#   (ii)  relative to that tree's root it is not under `.claude/`, the state
+#         directory (`_bmad-output/`), `docs/`, nor any root printed by
+#         `scripts/ai-dlc/artifact-path-config.sh --scan-roots`, it is not a
+#         repo-root dotfile (`.gitignore`: the one measured operator-directed in-tree
+#         write), and it is not repo-root `CLAUDE.md`, `CLAUDE.local.md` or `AGENTS.md`.
+#         `CLAUDE.md` is there because retro Step 4 (`steps/retro.md`) tells the lead to
+#         apply exit-1 improvements to it; the other two are that file under other names.
+#         A grep of `core/skills` and `core/team-roles` for every other repo-root file a
+#         step might send the lead to (`README`, `CHANGELOG`, `AGENTS.md`,
+#         `CLAUDE.local.md`) found no edit instruction for any of them, against a control
+#         token present in 29 files; coding conventions live under `docs/` and rule files
+#         under `.claude/`, both already allowed. A resolver that is absent, refuses, or
+#         runs past a 5s bound adds no roots; every root it prints today is under `docs/`
+#         or `_bmad-output/`, so nothing moves. The path is collapsed lexically (`.`, `..`)
+#         before any of this, so `docs/nx/../../src/app.py` is `src/app.py` even when
+#         `docs/nx` does not exist.
+#   (iii) the file holds no `^<<<<<<< ` line: Rule 28(a) merge-conflict resolution
+#         is the lead's. Keyed on the FILE, never on `.git/MERGE_HEAD`, which is not a
+#         directory entry in a linked worktree.
+#   (iv)  the session is an /ai-dlc pipeline session -- LAST, because it reads the
+#         transcript. The scan is `ai-dlc-acknowledge.sh`'s `LAST_SKILL=` statement
+#         and its `case`, copied BYTE-IDENTICALLY (the last real `/ai-dlc` or
+#         `/ai-dlc-update` invocation, typed or Skill tool_use, decides, so an updater
+#         session is not a pipeline session); fixture `gate-remediation-deny` cmp's the
+#         two blocks and seeds a drift that fails. Copied rather than factored because
+#         two mutant batteries anchor their seds on acknowledge.sh's line. Snapshot
+#         presence is NOT this predicate: the reference consumer tracks its snapshot,
+#         and seven non-pipeline operator sessions there would have been denied.
+#         No transcript, or an unreadable one, is not a pipeline session -> ALLOW.
+# Every conjunct that cannot be evaluated ALLOWS. The deny names the dev seat.
+#
+# WHAT ARM 3b DOES NOT CLAIM. A lead `Bash` `sed -i`, redirect or script write to product
+# code never reaches this Edit|Write|MultiEdit matcher, and is not denied. Measured in the
+# same window: one `sed -i.bak ... rebalancer/api.py` from the lead. The arm bounds the
+# edit TOOLS; the Bash route is open and stated here so no reader takes this as a seal.
+# `NotebookEdit` is not on this hook's matcher either (see INSTALL), so a lead notebook edit
+# to product code is not denied by this arm.
+#
+# ARM 3b's FALSE-POSITIVE SET IS EMPTY, MEASURED BY REPLAYING THE BUILT ARM, AND IT GOT THERE BY
+# ONE NARROWING. Each lead Edit/Write/MultiEdit was driven through this hook with
+# CLAUDE_PROJECT_DIR at the reference consumer's checkout and a transcript holding the last
+# `/ai-dlc*` marker before the call (the scan takes the last marker, so the session is classified
+# as of that call, not as of its end).
+#   The s317-s318 window, 1804 calls: 8 DENY -- exactly the 8 product edits above -- and 1796
+#   ALLOW (`_bmad-output/` incl. sibling worktrees, scratchpad, `docs/`, `.claude/`, `.gitignore`).
+#   That window held no lead `CLAUDE.md` edit, so it could not see the false positive below.
+#   The WIDER corpus, every top-level transcript the consumer has (177, 4412 lead edit calls, 4084
+#   of them after a last marker of `/ai-dlc` -- 4044 typed, 40 Skill tool_use -- and 327 after
+#   `/ai-dlc-update`, 1 with no marker): before the narrowing, 23 DENY -- 5 of them
+#   repo-root `CLAUDE.md` (sessions 5ef555a1 x4, a27bbf0d x1), which retro Step 4 tells the lead
+#   to edit. THOSE FIVE ARE THE FALSE-POSITIVE SET, and (ii) now allows repo-root `CLAUDE.md`,
+#   `CLAUDE.local.md` and `AGENTS.md` for them. After it: 18 DENY, every one product code -- the
+#   8 above plus 10 in session 5ef555a1 (`scripts/tests/*.sh` x8, `scripts/ecs-deploy-subgraph.sh`,
+#   `infra/lib/network-stack.ts`) -- and 4394 ALLOW. The replay left the consumer's
+#   `git status` byte-identical (digest compared before and after). The worktree set is as
+#   registered when the replay ran: 4 product edits in the since-removed `graph-s315-ff2`
+#   worktree read as outside every tree, i.e. ALLOW -- a replay artifact, not a hole in (i).
 #
 # ORDERING THE PASSES: THE NONCE, NEVER mtime
 # `gate_nonce` is `<gate_type>-<YYYYMMDD>T<HHMMSS>Z` (schema `patterns.gate_nonce`)
@@ -176,7 +249,7 @@
 # OUTPUT
 # - Appends to: _bmad-output/pipeline-continuation-log.md
 #   (GATE_REMEDIATION_DENIED / GATE_REMEDIATION_LIFTED / GATE_REMEDIATION_SUPPRESSED /
-#    GATE_STATE_UNADJUDICABLE / GATE_VERDICT_UNBOUND)
+#    GATE_STATE_UNADJUDICABLE / GATE_VERDICT_UNBOUND / LEAD_PRODUCT_EDIT_DENIED)
 # - Appends to: _bmad-output/gate-adjudication/.verdict-writes.jsonl (arm 7a's own record;
 #   durable, because it is evidence about a pass and is read by
 #   `validate-gate-adjudication.sh` at the gate as well as by this hook)
@@ -512,6 +585,170 @@ fi
 # --- 3. Only edits.
 case "$TOOL_NAME" in Edit|Write|MultiEdit) ;; *) exit 0 ;; esac
 [ -n "$FP" ] || exit 0
+
+# --- 3b. THE LEAD DOES NOT EDIT PRODUCT CODE, gate or no gate. Header: "ARM 3b". Every
+# conjunct below that cannot be evaluated ALLOWS; only all four holding denies.
+#
+# The physical spelling of a path: the deepest EXISTING directory resolved with `pwd -P`, the
+# not-yet-created remainder appended. Registered worktrees are spelled `/private/tmp/...` while a
+# payload may say `/tmp/...`, and a prefix test across the two spellings misses every time.
+lpe_phys() { # $1 absolute path -> physical spelling on stdout, or rc 1
+  _lp_p="$1"; _lp_s=""
+  while [ -n "$_lp_p" ] && [ ! -d "$_lp_p" ]; do
+    _lp_s="/${_lp_p##*/}${_lp_s}"
+    case "$_lp_p" in */*) _lp_p="${_lp_p%/*}" ;; *) _lp_p="" ;; esac
+  done
+  [ -n "$_lp_p" ] || _lp_p="/"
+  _lp_d="$(cd -P "$_lp_p" 2>/dev/null && pwd -P)" || return 1
+  [ "$_lp_d" = "/" ] && _lp_d=""
+  printf '%s%s' "$_lp_d" "$_lp_s"
+}
+# `.` and `..` collapsed LEXICALLY, before `lpe_phys`. `lpe_phys` walks up to the deepest
+# EXISTING directory and appends the rest verbatim, so a `..` that climbs out of a directory that
+# does not exist survived into the tree-relative path: `docs/nx/../../src/app.py` kept its
+# `docs/` prefix, matched the pipeline-tree allow, and the product edit walked through.
+lpe_lex() { # $1 absolute path -> the same path with `.`, `..` and empty segments collapsed
+  _ll_in="$1"; _ll_out=""
+  while [ -n "$_ll_in" ]; do
+    _ll_seg="${_ll_in%%/*}"
+    case "$_ll_in" in */*) _ll_in="${_ll_in#*/}" ;; *) _ll_in="" ;; esac
+    case "$_ll_seg" in
+      ""|.) ;;
+      ..) _ll_out="${_ll_out%/*}" ;;
+      *)  _ll_out="${_ll_out}/${_ll_seg}" ;;
+    esac
+  done
+  printf '%s' "${_ll_out:-/}"
+}
+case "$FP" in /*) LPE_ABS="$FP" ;; *) LPE_ABS="${PROJECT_DIR}/${FP}" ;; esac
+case "$LPE_ABS" in /*) ;; *) LPE_ABS="${PWD}/${LPE_ABS}" ;; esac
+LPE_ABS="$(lpe_lex "$LPE_ABS")"
+LPE_TARGET="$(lpe_phys "$LPE_ABS")" || LPE_TARGET=""
+LPE_PROJ="$(cd -P "$PROJECT_DIR" 2>/dev/null && pwd -P)" || LPE_PROJ=""
+LPE_ROOT=""
+if [ -n "$LPE_TARGET" ] && [ -n "$LPE_PROJ" ]; then
+  # (i) A path's TREE is the longest of PROJECT_DIR and the registered worktrees containing it.
+  # A path under PROJECT_DIR's own state directory or `docs/` -- nearly every lead edit -- is
+  # decided without a fork. Anything else, in particular `.claude/` where agent worktrees
+  # nest, pays for `git worktree list`, so a worktree nested in the tree is still its own tree.
+  _lpe_fork=1
+  case "$LPE_TARGET" in
+    "$LPE_PROJ"/*)
+      LPE_ROOT="$LPE_PROJ"
+      case "${LPE_TARGET#"$LPE_PROJ"/}" in
+        _bmad-output/*|"${STATE_DIR_NAME}"/*|docs/*) _lpe_fork=0 ;;
+      esac
+      ;;
+  esac
+  if [ "$_lpe_fork" -eq 1 ]; then
+    _lpe_wts="$(git -C "$LPE_PROJ" worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p')"
+    while IFS= read -r _lpe_w; do
+      [ -n "$_lpe_w" ] || continue
+      _lpe_w="$(cd -P "$_lpe_w" 2>/dev/null && pwd -P)" || continue
+      [ "$_lpe_w" != "/" ] || continue
+      case "$LPE_TARGET" in
+        "$_lpe_w"/*) [ "${#_lpe_w}" -gt "${#LPE_ROOT}" ] && LPE_ROOT="$_lpe_w" ;;
+      esac
+    done <<LPEEOF
+$_lpe_wts
+LPEEOF
+  fi
+fi
+if [ -n "$LPE_ROOT" ]; then
+  LPE_REL="${LPE_TARGET#"$LPE_ROOT"/}"
+  LPE_PRODUCT=1
+  # (ii) The pipeline's own trees, a repo-root dotfile, and the repo-root agent-instruction
+  # files are never product code. `CLAUDE.md` is the one the steps name: retro Step 4 tells the
+  # lead to apply exit-1 improvements to it (`steps/retro.md`, "CLAUDE.md, coding conventions").
+  # `CLAUDE.local.md` and `AGENTS.md` are the same file class under another harness's name.
+  case "$LPE_REL" in
+    ""|.claude/*|_bmad-output/*|"${STATE_DIR_NAME}"/*|"${_STATE_DIR#./}"/*|docs/*) LPE_PRODUCT=0 ;;
+    CLAUDE.md|CLAUDE.local.md|AGENTS.md) LPE_PRODUCT=0 ;;
+    */*) ;;
+    .*) LPE_PRODUCT=0 ;;
+  esac
+  # (iii) Rule 28(a)'s merge-conflict resolution is the lead's: a file carrying a conflict
+  # marker is mid-merge, whatever tree it is in. Keyed on the FILE, never on `.git/MERGE_HEAD`,
+  # which in a linked worktree is not where `.git` points.
+  if [ "$LPE_PRODUCT" -eq 1 ] && [ -f "$LPE_TARGET" ] && grep -q '^<<<<<<< ' "$LPE_TARGET" 2>/dev/null; then
+    LPE_PRODUCT=0
+  fi
+  # (ii, continued) The grammar's scan roots, read from the PROJECT's grammar (one grammar for
+  # every worktree of the repo). Resolver absent, refusing or HUNG -> no extra roots.
+  # A BOUNDED WAIT, because this runs on every lead edit to a non-pipeline path and a hung
+  # resolver would hang the edit with it. bash 3.2 and BSD have no `timeout`, so the resolver
+  # runs in the background into a temp file and a watcher polling every 0.1s kills it after
+  # LPE_RESOLVER_TICKS ticks. The watcher exits on its own within one tick of the resolver, so no
+  # `sleep` outlives the hook by more than that. A killed or failed resolver's partial output is
+  # discarded: no roots, never half of them. That drops nothing a completing resolver would have
+  # given: `artifact-path-config.sh --scan-roots` prints its roots and exits 0, or prints nothing
+  # and exits 2 (its `if [ "$MODE" = "--scan-roots" ]` block); no path prints and then fails.
+  # The kill reaps the resolver's own process, not a child it forked.
+  if [ "$LPE_PRODUCT" -eq 1 ] && [ -f "${PROJECT_DIR}/scripts/ai-dlc/artifact-path-config.sh" ]; then
+    LPE_RESOLVER_TICKS=50
+    _lpe_out="$(mktemp "${TMPDIR:-/tmp}/ai-dlc-scanroots.XXXXXX" 2>/dev/null)" || _lpe_out=""
+    _lpe_roots=""
+    if [ -n "$_lpe_out" ]; then
+      bash "${PROJECT_DIR}/scripts/ai-dlc/artifact-path-config.sh" --scan-roots --root "$PROJECT_DIR" \
+        > "$_lpe_out" 2>/dev/null &
+      _lpe_pid=$!
+      ( _lpe_t=0
+        while kill -0 "$_lpe_pid" 2>/dev/null; do
+          _lpe_t=$((_lpe_t + 1))
+          [ "$_lpe_t" -gt "$LPE_RESOLVER_TICKS" ] && { kill "$_lpe_pid" 2>/dev/null; break; }
+          sleep 0.1
+        done ) >/dev/null 2>&1 &
+      wait "$_lpe_pid" 2>/dev/null && _lpe_roots="$(cat "$_lpe_out" 2>/dev/null)"
+      rm -f "$_lpe_out"
+    fi
+    while IFS= read -r _lpe_sr; do
+      _lpe_sr="${_lpe_sr%/}"
+      [ -n "$_lpe_sr" ] || continue
+      case "$LPE_REL" in "$_lpe_sr"/*|"$_lpe_sr") LPE_PRODUCT=0 ;; esac
+    done <<LPEEOF
+$_lpe_roots
+LPEEOF
+  fi
+  # (iv) LAST, because it reads the transcript. The two statements from `LAST_SKILL=` to the
+  # `esac` are BYTE-IDENTICAL to `ai-dlc-acknowledge.sh`'s, and the fixture
+  # `gate-remediation-deny` cmp's the two blocks: a pipeline session is decided by one rule.
+  if [ "$LPE_PRODUCT" -eq 1 ]; then
+    UPDATER_SESSION=0
+    AIDLC_SESSION=0
+    if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
+  LAST_SKILL=$(grep -oE '"role":"user","content":"<command-message>ai-dlc(-update)?</command-message>\\n<command-name>/ai-dlc(-update)?</command-name>|"name":"Skill","input":\{"skill":"ai-dlc(-update)?"' "$TRANSCRIPT" 2>/dev/null | tail -1)
+  case "$LAST_SKILL" in
+    *'/ai-dlc-update</command-name>') UPDATER_SESSION=1 ;;
+    *'"skill":"ai-dlc-update"')       UPDATER_SESSION=1 ;;
+    *'/ai-dlc</command-name>')        AIDLC_SESSION=1 ;;
+    *'"skill":"ai-dlc"')              AIDLC_SESSION=1 ;;
+  esac
+    fi
+    if [ "$AIDLC_SESSION" -eq 1 ]; then
+      LPE_REASON="AI/DLC Rule 28: THE LEAD DOES NOT EDIT PRODUCT CODE. \`${TOOL_NAME}\` on \`${FP}\` is DENIED: it is product code (\`${LPE_REL}\` in the tree at \`${LPE_ROOT}\`) and this is an /ai-dlc pipeline session.
+
+Rule 28: \"The lead MUST delegate any action a subagent can service.\" Writing product code is not in the non-delegable set -- (a) orchestration, (b) routing, (c) gate-validation decisions -- and no gate state changes that.
+
+DO THIS INSTEAD: DISPATCH a \`dev\` teammate (\`.claude/team-roles/dev.md\`), or \`dev-escalated\` (\`.claude/team-roles/dev-escalated.md\`) where the story's \`escalate_model\` routes it there, with the file, the change and the acceptance it must meet. A dispatched teammate carries an \`agent_id\` and this hook never denies it.
+
+STILL ALLOWED: everything under \`.claude/\`, \`${STATE_DIR_NAME}/\` and \`docs/\`; repo-root dotfiles; repo-root \`CLAUDE.md\`, \`CLAUDE.local.md\` and \`AGENTS.md\`; a file carrying a \`<<<<<<< \` conflict marker (merge-conflict resolution is Rule 28(a) orchestration); any path outside this repo and its registered worktrees; all git operations and every read-only tool."
+      log_event LEAD_PRODUCT_EDIT_DENIED \
+        "Tool denied: ${TOOL_NAME}" \
+        "Target: ${FP}" \
+        "Tree: ${LPE_ROOT}; relative path: ${LPE_REL}" \
+        "Session invoked /ai-dlc; the lead may not write product code (Rule 28)"
+      jq -n --arg reason "$LPE_REASON" \
+        '{
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: $reason
+          }
+        }'
+      exit 0
+    fi
+  fi
+fi
 
 # --- 4. Which pass is live? Filter inside the pick; order by nonce, never mtime.
 [ -d "$GATE_DIR" ] || exit 0

@@ -51,6 +51,10 @@ for cand in \
 done
 [ -n "$V" ] || { echo "run.sh: could not locate validate-artifact-budget.sh in either layout" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/scripts/validate-artifact-budget.sh"
+# verdict.sh ships beside the validator in both layouts (core/scripts/, scripts/ai-dlc/).
+VW="$(dirname "$V")/verdict.sh"
+[ -f "$VW" ] || { echo "run.sh: could not locate verdict.sh beside $V" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/scripts/verdict.sh"
 
 rc=0
 ok()  { echo "ok: $1"; }
@@ -567,6 +571,274 @@ if [ "$ctl_ok" -eq 1 ] && [ "$ctl_cov" -eq 1 ]; then
 else
   bad "CONTROL: the unmutated copy did not reproduce the subject (breach=$ctl_ok coverage=$ctl_cov) -- every mutant verdict above is unattributable"
   sed 's/^/      /' "$WORK/runs/control-warnonly.out" >&2
+fi
+
+# =====================================================================================
+# BL-517 -- THE FUTURE-STAMP VERDICT, and BL-511 -- THE POOL'S RETRO VERDICT.
+#
+# NOW IS PINNED through AI_DLC_SNAPSHOT_NOW_EPOCH (set per drive, after the scrub above),
+# to 2026-10-14T11:00:00Z = 1791975600, so no arm depends on the host clock.
+# =====================================================================================
+NOW_PIN=1791975600
+IF_HDR='agent | role | deliverable | dispatched-at | status
+--- | --- | --- | --- | ---'
+seed_stamped() { # seed_stamped <dir> <recent-activity line> <in-flight body>
+  printf '## Pipeline Position\n- at retro since 2026-10-14T23:00Z (mid-line, not checked)\n## Sprint Context\n- sprint 1\n## Recent Activity\n%s\n## Open Items\n- none\n## Locked Decisions\n- keep the threshold\n## In-Flight Teammates\n%s\n## Context Reminders\n- keep it small\n' \
+    "$2" "$3" > "$1/_bmad-output/pipeline-snapshot.md"
+}
+drive_now() { # drive_now <label> <script> <root> [args...]  -- drive with now pinned
+  _l="$1"; shift
+  AI_DLC_SNAPSHOT_NOW_EPOCH="$NOW_PIN" drive "$_l" "$@"
+}
+
+# --- F1-F6. ONE offender and five near-misses, each its own tree and its own run ------
+# F1 offender (60 min ahead, Recent Activity) -> refused, rc 1, the remedy is printed.
+AF="$(arm_dir future)"; seed_clean "$AF"
+seed_stamped "$AF" '- 2026-10-14T12:00Z DEPLOY DONE' "$IF_HDR"
+drive_now future-ra "$V" "$AF" --only pipeline-snapshot.md
+if [ "$(status_of future-ra)" = "1" ] && hasl 'FUTURE  _bmad-output/pipeline-snapshot.md line 6: 2026-10-14T12:00Z is 60 min ahead' \
+   && hasl 'CLOCK CORRECTION'; then
+  ok "F1 a Recent Activity stamp 60 min ahead is refused (rc 1) and the CLOCK CORRECTION remedy is named"
+else
+  bad "F1 future Recent Activity stamp: exit $(status_of future-ra), FUTURE row or remedy missing"
+  sed 's/^/      /' "$OUT" >&2
+fi
+# F1b the same offender in a dispatched-at CELL, and a future `since` in the STATUS cell
+# beside a past dispatched-at (the latter must stay quiet: only the declared column is read).
+seed_stamped "$AF" '- nothing notable' "$IF_HDR
+dev-a | dev | s1 | 2026-10-14T12:00Z | in-flight"
+drive_now future-if "$V" "$AF" --only pipeline-snapshot.md
+f1b=0; [ "$(status_of future-if)" = "1" ] && hasl '(In-Flight Teammates dispatched-at)' && f1b=1
+seed_stamped "$AF" '- nothing notable' "$IF_HDR
+dev-a | dev | s1 | 2026-10-14T10:00Z | in-flight, since 2026-10-14T23:00Z"
+drive_now future-status "$V" "$AF" --only pipeline-snapshot.md
+if [ "$f1b" -eq 1 ] && [ "$(status_of future-status)" = "0" ]; then
+  ok "F1b a future dispatched-at cell is refused; a future 'since' in the status cell is not read"
+else
+  bad "F1b dispatched-at=$(status_of future-if) (want 1), status-cell since=$(status_of future-status) (want 0)"
+fi
+# F2-F6 near-misses, one property each: rc 0 and no FUTURE row.
+nm_ok=1
+while IFS='|' read -r nlabel nline; do
+  [ -n "$nlabel" ] || continue
+  seed_stamped "$AF" "$nline" "$IF_HDR"
+  drive_now "nm-$nlabel" "$V" "$AF" --only pipeline-snapshot.md
+  if [ "$(status_of "nm-$nlabel")" != "0" ] || grep -q '^FUTURE ' "$OUT"; then
+    nm_ok=0; bad "near-miss '$nlabel' was refused: $(grep '^FUTURE ' "$OUT" | head -1)"
+  fi
+done <<'NEAR'
+range|- 2026-10-14T09:55-10:45Z window, and 2026-10-14T12:00Z-12:45Z planned
+dateonly|- 2026-10-15 tomorrow
+xplace|- 2026-10-14Txx:xxZ placeholder and ~2026-10-14T13:00Z approx
+five|- 2026-10-14T11:05Z five minutes ahead
+past|- 2026-10-14T10:59Z just now
+spaced|- 2026-10-14T12:00Z - 12:45Z, 2026-10-14T12:00Z to 12:45Z, 2026-10-14T12:00Z → 12:45Z, 2026-10-14T12:00Z – 12:45Z planned
+correction|- 2026-10-14T10:58Z CLOCK CORRECTION: rewrote 2 future stamp(s) to date -u: 12:00Z, 12:45Z
+NEAR
+[ "$nm_ok" -eq 1 ] && ok "F2-F6 range, spaced range, date-only, x/~ placeholder, 5-min-ahead, past and bare-HH:MMZ CLOCK CORRECTION stamps are all accepted"
+
+# F1c OFFENDER TWINS of two near-misses above, each one property apart: a single stamp followed
+# by ` - ` and TEXT (the spaced-range skip needs a digit), a stamp MID-LINE, and a CLOCK
+# CORRECTION line naming the old stamps in FULL ISO form -- which the remedy forbids, because
+# it is itself a future stamp and re-fires this check.
+f1c_ok=1
+while IFS='|' read -r olabel oline; do
+  [ -n "$olabel" ] || continue
+  seed_stamped "$AF" "$oline" "$IF_HDR"
+  drive_now "off-$olabel" "$V" "$AF" --only pipeline-snapshot.md
+  if [ "$(status_of "off-$olabel")" != "1" ] || ! grep -q '^FUTURE .*2026-10-14T12:00Z' "$OUT"; then
+    f1c_ok=0; bad "offender twin '$olabel' was accepted: exit $(status_of "off-$olabel")"
+  fi
+done <<'OFF'
+dashtext|- 2026-10-14T12:00Z - DEPLOY DONE
+midline|- DEPLOY DONE at 2026-10-14T12:00Z
+fulliso|- 2026-10-14T10:58Z CLOCK CORRECTION: rewrote 1 future stamp(s) to date -u: 2026-10-14T12:00Z
+OFF
+[ "$f1c_ok" -eq 1 ] && ok "F1c ' - text', a mid-line stamp, and a full-ISO CLOCK CORRECTION line are each refused"
+
+# F8 THROUGH verdict.sh, WITH A CO-OCCURRING BUDGET OVER. Every lead-facing call site reads this
+# validator through the wrapper, which shows at most 6 matching lines. Five future stamps plus a
+# gate-log breach: printed after the budget verdict, the stamp FAIL line and its rows fall past
+# the cap; printed first, the wrapper shows the FAIL line carrying the remedy and every row.
+AW="$(arm_dir wrapper)"; seed_breach "$AW"
+seed_stamped "$AW" '- 2026-10-14T12:00Z DEPLOY DONE
+- 2026-10-14T12:05Z MERGED
+- 2026-10-14T12:10Z HANDOFF
+- 2026-10-14T12:15Z DISPATCHED dev
+- 2026-10-14T12:20Z GATE PASS' "$IF_HDR"
+wdrive() { # wdrive <label> <wrapper> <validator-dir>
+  OUT="$WORK/runs/$1.out"
+  ( cd "$AW" && AI_DLC_SNAPSHOT_NOW_EPOCH="$NOW_PIN" AI_DLC_SCRIPTS_DIR="$3" \
+      bash "$2" validate-artifact-budget --root "$AW" ) > "$OUT" 2>&1
+  printf '%s\t%s\t0\t0\n' "$1" "$?" >> "$LEDGER"
+}
+wcheck() { # wcheck <label> -> 0 when the wrapper output carries the remedy and all five rows
+  _o="$WORK/runs/$1.out"
+  [ "$(status_of "$1")" = "1" ] || return 1
+  grep -q 'FAIL: pipeline-snapshot.md carries stamp(s) later than the current UTC time -- rewrite each FUTURE stamp' "$_o" || return 1
+  grep -q 'CLOCK CORRECTION: rewrote <n> future stamp(s) to date -u: <old stamps as bare HH:MMZ>' "$_o" || return 1
+  [ "$(grep -c 'FUTURE  _bmad-output/pipeline-snapshot.md line' "$_o")" = "5" ] || return 1
+  grep -q 'OVER  ' "$_o" && return 1   # the cap is spent on the stamp verdict: proves co-occurrence was cut, not absent
+  return 0
+}
+wdrive f8 "$VW" "$(dirname "$V")"
+if wcheck f8; then
+  ok "F8 through verdict.sh under a co-occurring OVER: the stamp FAIL line carries the remedy and all 5 FUTURE rows survive the 6-line cap"
+else
+  bad "F8 through verdict.sh: stamp remedy or FUTURE rows missing (exit $(status_of f8))"
+  sed 's/^/      /' "$WORK/runs/f8.out" >&2
+fi
+# F8 control: the raw validator on the same tree reports the breach too, so the OVER absent above
+# was cut by the cap and not missing from the run.
+drive_now f8-raw "$V" "$AW"
+grep -q '^OVER  ' "$WORK/runs/f8-raw.out" && grep -q '^FUTURE ' "$WORK/runs/f8-raw.out" \
+  && ok "F8 control: the raw run carries both the OVER row and the FUTURE rows" \
+  || bad "F8 control: the raw run lacks the OVER row or the FUTURE rows -- F8 is not testing co-occurrence"
+
+# F7 posture: --warn-only alone warns (rc 0, summary names it); retro's flags harden it.
+seed_stamped "$AF" '- 2026-10-14T12:00Z DEPLOY DONE' "$IF_HDR"
+drive_now future-warn "$V" "$AF" --warn-only
+drive_now future-retro "$V" "$AF" --warn-only --fail-on pipeline-snapshot.md
+if [ "$(status_of future-warn)" = "0" ] \
+   && grep -q 'WARN  this run reported future-stamped snapshot entr(ies)' "$WORK/runs/future-warn.out" \
+   && [ "$(status_of future-retro)" = "1" ]; then
+  ok "F7 --warn-only reports the stamp in the summary (rc 0); --fail-on pipeline-snapshot.md blocks (rc 1)"
+else
+  bad "F7 warn-only=$(status_of future-warn) (want 0 + summary), retro=$(status_of future-retro) (want 1)"
+fi
+
+# --- P1-P4. THE POOL'S RETRO VERDICT -------------------------------------------------
+# 300,000 bytes of prd.md is 75,000 tok against a 66,000 pool (200K window pinned), past
+# the 72,600 ceiling. The backlog is varied; the pool is not.
+AP="$(arm_dir pool)"; seed_clean "$AP"
+mkdir -p "$AP/_bmad-output/planning-artifacts" || exit 2
+head -c 300000 /dev/zero | tr '\0' 'x' > "$AP/_bmad-output/planning-artifacts/prd.md"
+BL="$AP/_bmad-output/planning-artifacts/carry-over-backlog.md"
+pool_drive() { AI_DLC_READER_WINDOW_TOKENS=200000 drive "$@"; }
+printf '# Carry-over backlog\n### CO-S1-OTHER\n**Status:** OPEN\nunrelated\n### CO-S1-WHOLE-READ-POOL-OLD\n**Status:** CLOSED\nold breach\n' > "$BL"
+pool_drive pool-warn "$V" "$AP" --warn-only
+pool_drive pool-basename "$V" "$AP" --warn-only --fail-on WHOLE-READ
+pool_drive pool-noitem "$V" "$AP" --warn-only --fail-on whole-read-pool
+p_seed=0; grep -q '^OVER  WHOLE-READ POOL' "$WORK/runs/pool-warn.out" && p_seed=1
+if [ "$p_seed" -ne 1 ]; then
+  echo "FIXTURE ERROR: the 300000-byte prd.md was not reported as an OVER pool row" >&2; exit 2
+fi
+if [ "$(status_of pool-warn)" = "0" ] && [ "$(status_of pool-basename)" = "0" ]; then
+  ok "P1 an over pool under --warn-only, and under --fail-on WHOLE-READ (a label word, not the token), stays rc 0"
+else
+  bad "P1 warn-only=$(status_of pool-warn), --fail-on WHOLE-READ=$(status_of pool-basename) (want 0 and 0)"
+fi
+if [ "$(status_of pool-noitem)" = "1" ] && grep -q 'no OPEN carry-over item cites it' "$WORK/runs/pool-noitem.out"; then
+  ok "P2 --fail-on whole-read-pool with no OPEN citing item (an OPEN non-citing and a CLOSED citing one present) is rc 1"
+else
+  bad "P2 pool with no OPEN citing item: exit $(status_of pool-noitem) (want 1 and the remedy)"
+fi
+printf '### CO-S1-POOL-OVER pool 75000 tok\n**Filed:** retro. **Status:** OPEN.\nWHOLE-READ-POOL over; artifact-consolidation.md owed before route.\n' >> "$BL"
+pool_drive pool-item "$V" "$AP" --warn-only --fail-on whole-read-pool
+if [ "$(status_of pool-item)" = "0" ] && grep -q 'pool breach recorded: OPEN carry-over item ### CO-S1-POOL-OVER' "$WORK/runs/pool-item.out"; then
+  ok "P3 the same run with an OPEN item citing WHOLE-READ-POOL is rc 0 and names the item"
+else
+  bad "P3 pool with an OPEN citing item: exit $(status_of pool-item) (want 0 + recorded line)"
+fi
+
+# --- MUTANTS for F and P. Copies, cmp-guarded, scored against the arm that must kill. --
+mk() { # mk <out> <sed-expr>
+  sed "$2" "$V" > "$1" || { echo "FIXTURE ERROR: sed died building $1" >&2; exit 2; }
+  if cmp -s "$V" "$1"; then echo "FIXTURE ERROR: mutant $1 matched nothing" >&2; exit 2; fi
+}
+# MF1 threshold 0: the 5-min-ahead near-miss must now be refused (the in-script self-probe
+# carries the same near-miss and is what refuses first; either way the run is rc 1).
+MF1="$MUT_BIN/mf1-slack0.sh"; mk "$MF1" 's/^FUTURE_SLACK_S=600$/FUTURE_SLACK_S=0/'
+seed_stamped "$AF" '- 2026-10-14T11:05Z five minutes ahead' "$IF_HDR"
+drive_now mf1 "$MF1" "$AF" --only pipeline-snapshot.md
+[ "$(status_of mf1)" = "1" ] && ok "MUTANT MF1 (slack 0) killed: the 5-min stamp is refused" \
+  || bad "MUTANT MF1 (slack 0) SURVIVED"
+# MF2 range not skipped: the `followed by - or digit` test deleted.
+MF2="$MUT_BIN/mf2-range.sh"; mk "$MF2" '/if (substr(str, b, 1) ~ \/\[-0-9\]\/ || wide(b3)) continue/d'
+seed_stamped "$AF" '- 2026-10-14T12:00Z-12:45Z planned window' "$IF_HDR"
+drive_now mf2 "$MF2" "$AF" --only pipeline-snapshot.md
+[ "$(status_of mf2)" = "1" ] && ok "MUTANT MF2 (range not skipped) killed" || bad "MUTANT MF2 (range not skipped) SURVIVED"
+# MF3 history file read: the call site re-pointed at pipeline-snapshot-history.md. The live
+# snapshot is clean, the history file carries a future stamp; only the mutant reads it.
+MF3="$MUT_BIN/mf3-history.sh"
+mk "$MF3" 's|check_future_stamps "\$f" "\$rel" "\$SNAP_NOW"|check_future_stamps "${f%.md}-history.md" "$rel" "$SNAP_NOW"|'
+seed_stamped "$AF" '- nothing notable' "$IF_HDR"
+printf '## Recent Activity\n- 2026-12-01T00:00Z archived future line\n' > "$AF/_bmad-output/pipeline-snapshot-history.md"
+drive_now mf3-orig "$V" "$AF" --only pipeline-snapshot.md
+drive_now mf3 "$MF3" "$AF" --only pipeline-snapshot.md
+if [ "$(status_of mf3-orig)" = "0" ] && [ "$(status_of mf3)" = "1" ]; then
+  ok "MUTANT MF3 (history file read) killed: the shipped arm ignores the history file, the mutant refuses it"
+else
+  bad "MUTANT MF3: shipped=$(status_of mf3-orig) (want 0) mutant=$(status_of mf3) (want 1)"
+fi
+rm -f "$AF/_bmad-output/pipeline-snapshot-history.md"
+# MP1 pool token matched by basename: the WHOLE-READ exclusion deleted.
+MP1="$MUT_BIN/mp1-basename.sh"; mk "$MP1" '/\[ "\$brel" = "WHOLE-READ" \] && continue/d'
+AI_DLC_READER_WINDOW_TOKENS=200000 drive mp1 "$MP1" "$AP" --warn-only --fail-on WHOLE-READ
+[ "$(status_of mp1)" = "1" ] && ok "MUTANT MP1 (pool hardened by basename) killed by P1" \
+  || bad "MUTANT MP1 (pool hardened by basename) SURVIVED"
+# MP2 item-citation check dropped: any backlog counts as recorded. P2's tree is restored
+# (the citing item removed) and must stay rc 1.
+MP2="$MUT_BIN/mp2-nocite.sh"; mk "$MP2" 's|POOL_ITEM="\$(pool_open_item "\$ROOT/\$_bl")"|POOL_ITEM="$_bl"|'
+printf '# Carry-over backlog\n### CO-S1-OTHER\n**Status:** OPEN\nunrelated\n' > "$BL"
+AI_DLC_READER_WINDOW_TOKENS=200000 drive mp2-orig "$V" "$AP" --warn-only --fail-on whole-read-pool
+AI_DLC_READER_WINDOW_TOKENS=200000 drive mp2 "$MP2" "$AP" --warn-only --fail-on whole-read-pool
+if [ "$(status_of mp2-orig)" = "1" ] && [ "$(status_of mp2)" = "0" ]; then
+  ok "MUTANT MP2 (item citation dropped) killed by P2"
+else
+  bad "MUTANT MP2: shipped=$(status_of mp2-orig) (want 1) mutant=$(status_of mp2) (want 0)"
+fi
+# MF4 spaced-range skip deleted: the `spaced` near-miss must now be refused (the self-probe
+# carries the same near-miss and refuses first; either way the run is rc 1, where F2-F6's
+# shipped run of that near-miss was rc 0).
+MF4="$MUT_BIN/mf4-nospaced.sh"; mk "$MF4" '/^        if (spaced(str, b)) continue$/d'
+seed_stamped "$AF" '- 2026-10-14T12:00Z - 12:45Z planned' "$IF_HDR"
+drive_now mf4 "$MF4" "$AF" --only pipeline-snapshot.md
+[ "$(status_of mf4)" = "1" ] && [ "$(status_of nm-spaced)" = "0" ] \
+  && ok "MUTANT MF4 (spaced-range skip deleted) killed" || bad "MUTANT MF4 (spaced-range skip deleted) SURVIVED"
+# MF5 spaced skip WITHOUT its digit test: ` - DEPLOY DONE` is acquitted. F1c's dashtext twin
+# must lose its FUTURE row (the self-probe's dash offender also dies, so no row at all).
+MF5="$MUT_BIN/mf5-nodigit.sh"; mk "$MF5" 's|      return (substr(s, n, 1) ~ /\[0-9\]/)|      return 1|'
+seed_stamped "$AF" '- 2026-10-14T12:00Z - DEPLOY DONE' "$IF_HDR"
+drive_now mf5 "$MF5" "$AF" --only pipeline-snapshot.md
+if ! grep -q '^FUTURE .*2026-10-14T12:00Z' "$OUT" && [ "$(status_of off-dashtext)" = "1" ]; then
+  ok "MUTANT MF5 (spaced skip needs no digit) killed: the ' - text' offender loses its FUTURE row"
+else
+  bad "MUTANT MF5 (spaced skip needs no digit) SURVIVED"
+fi
+# MF6 ORDER: the stamp verdict printed AFTER the budget verdict (the pre-fix position). F8's
+# wrapper run must lose the remedy or rows. Built with awk (a moved line is two edits) and
+# cmp-guarded like mk.
+MF6="$MUT_BIN/mf6-order.sh"
+awk '/^report_future_stamps$/ { next }
+     /^rm -f "\$FUTURE_FILE"$/ { next }
+     { print }
+     /^rm -f "\$MARKER_FILE"$/ { print "report_future_stamps"; print "rm -f \"$FUTURE_FILE\"" }' "$V" > "$MF6" \
+  || { echo "FIXTURE ERROR: awk died building $MF6" >&2; exit 2; }
+if cmp -s "$V" "$MF6" || [ "$(grep -c '^report_future_stamps$' "$MF6")" != "1" ]; then
+  echo "FIXTURE ERROR: mutant $MF6 did not move the call" >&2; exit 2
+fi
+MF6D="$MUT_BIN/mf6dir"; mkdir -p "$MF6D" || exit 2
+cp "$MF6" "$MF6D/validate-artifact-budget.sh" || exit 2
+wdrive mf6 "$VW" "$MF6D"
+if grep -q '^FAIL  validate-artifact-budget.sh' "$WORK/runs/mf6.out" && ! wcheck mf6; then
+  ok "MUTANT MF6 (stamp verdict printed after the budget verdict) killed by F8"
+else
+  bad "MUTANT MF6 (stamp verdict order) SURVIVED or did not run"
+  sed 's/^/      /' "$WORK/runs/mf6.out" >&2
+fi
+# MW1 verdict.sh WITHOUT `FUTURE` in its alternations: F8 must lose the rows. The mutant
+# wrapper lives in MUT_BIN, so AI_DLC_SCRIPTS_DIR points it back at the real validator; the
+# positive conjunct (the stamp FAIL line is there) proves the copy ran.
+MW1="$MUT_BIN/mw1-verdict.sh"
+sed 's/|FUTURE)/)/g' "$VW" > "$MW1" || { echo "FIXTURE ERROR: sed died building $MW1" >&2; exit 2; }
+if cmp -s "$VW" "$MW1"; then echo "FIXTURE ERROR: mutant $MW1 matched nothing" >&2; exit 2; fi
+wdrive mw1 "$MW1" "$(dirname "$V")"
+if grep -q 'FAIL: pipeline-snapshot.md carries stamp(s) later' "$WORK/runs/mw1.out" && ! wcheck mw1; then
+  ok "MUTANT MW1 (verdict.sh drops FUTURE) killed by F8"
+else
+  bad "MUTANT MW1 (verdict.sh drops FUTURE) SURVIVED or did not run"
+  sed 's/^/      /' "$WORK/runs/mw1.out" >&2
 fi
 
 echo ""
