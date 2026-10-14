@@ -226,6 +226,10 @@ impl-rr-never|S|steps/implementation.md|**Pre-gate commit-presence check.**|**DA
 impl-rr-story|S|steps/implementation.md|**Pre-gate commit-presence check.**|**DAR-fold preflight before gate-2 dispatch.**|**Gate-1 dispatch: the review partitions by changed-file group.**|para|is briefed with the whole story record and the full `git diff <prior-sha>..<frozen-sha>` including scan-root paths
 impl-rr-parts|S|steps/implementation.md|**Pre-gate commit-presence check.**|**DAR-fold preflight before gate-2 dispatch.**|**Gate-1 dispatch: the review partitions by changed-file group.**|para|every part reviewer gets the story record as context
 impl-rr-carry|S|steps/implementation.md|**Pre-gate commit-presence check.**|**DAR-fold preflight before gate-2 dispatch.**|**Gate-1 dispatch: the review partitions by changed-file group.**|para|Every Critical and Important `#### ` finding of pass M-1 is carried
+cr-serial-heading|R|code-reviewer.md|## Review Document Template|## As a Shard|**A serial review writes its findings the way a shard does.**|para|never a bullet
+cr-serial-sha|R|code-reviewer.md|## Review Document Template|## As a Shard|**A serial review writes its findings the way a shard does.**|para|column-0 `reviewed-sha: <full frozen sha>` line
+impl-serial-form|S|steps/implementation.md|**Pre-gate commit-presence check.**|**DAR-fold preflight before gate-2 dispatch.**|**Gate-1 dispatch: the review partitions by changed-file group.**|para|A serial review writes its findings the way a shard does, each a `#### ` heading under its container, never a bullet
+impl-serial-sha|S|steps/implementation.md|**Pre-gate commit-presence check.**|**DAR-fold preflight before gate-2 dispatch.**|**Gate-1 dispatch: the review partitions by changed-file group.**|para|carries one column-0 `reviewed-sha: <full frozen sha>` line
 impl-rr-reemit|S|steps/implementation.md|**Pre-gate commit-presence check.**|**DAR-fold preflight before gate-2 dispatch.**|**Gate-1 dispatch: the review partitions by changed-file group.**|para|an `open` one is re-emitted as a finding of this pass
 PINS
 }

@@ -248,8 +248,9 @@ H1/H2 stay with the lead — a self-test is never escalated into the mechanism i
   or Important finding with no `carried:` line, an `open` carried finding under
   a verdict other than `NEEDS_REWORK` or `BLOCKED`, or a pair it cannot read. A
   merged review and a serial one are each one file and are read the same way.
-  `PENDING:` (exit 0) is a review committed before the program reached this
-  tree, and it passes.
+  `PENDING:` (exit 0) is a review whose own branch does not carry the program,
+  or one committed before the program reached that branch, and it passes. A
+  `NOTE:` line names a pre-rule prior line it could not carry; record it.
 - **Zero matches FAILS this check; it is never a fallback to recollection.** An
   unreadable verdict is an unmet validation, not an absent one. Name the file.
   Do not infer the verdict from the review's prose, from its existence, or from

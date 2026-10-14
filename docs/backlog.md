@@ -99,9 +99,20 @@ shard, to about 10 seats each, because test-results captures count as reviewable
 filed above will therefore not fully reproduce under the sharding ruling. The saving comes from the
 narrower range and the carried-finding brief, not from a single delta reviewer.
 
+**Pre-migration.** The validator reads the review's own repository and HEAD, never where its
+running copy sits, because a story is reviewed in its own worktree and checked by the main
+checkout's copy. A branch whose history never added the program reads PENDING, and so does a
+review committed before the earliest add. A prior pass committed before the add is never failed
+on form: its findings are carried by heading or by an id-led bold label, and any other line
+prints a NOTE. The serial template in `code-reviewer.md` now writes `#### ` findings and a
+column-0 `reviewed-sha:` line.
+
 The earlier prose receipt was closable by one sentence and is replaced by a probe. The probe runs
-the validator on seeded pass pairs, runs `--map` on a seeded repository with the prior sha as the
-base (rc 0) and with the pair reversed (rc 2), and requires the step and Check 1 text.
+the validator on seeded pass pairs, including an `open` carry under NEEDS_REWORK that must pass.
+It also runs a seeded worktree topology: a pre-pull story branch reads PENDING, a revert and
+re-add of the program still binds, and a story spanning the pull passes. It runs `--map` on a
+seeded repository with the prior sha as the base (rc 0) and with the pair reversed (rc 2), and
+requires the step and Check 1 text.
 
 verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-507-carried-findings.sh
 
