@@ -503,9 +503,12 @@ src_probe() {
 #       before the first carrier is never checked. The install stamp (`.claude/.ai-dlc-version`
 #       `installed_at`) is not used: a record carries no window to compare it to, and an mtime is
 #       not one.
-#       PRE-RULE PARTS, MEASURED. graph's s317/s318 shard dirs hold 202 parts and 0 carry the
-#       field, so every one would refuse under this arm -- 202 true positives that are never
-#       re-joined: 20 of the 23 dirs already have their joined record beside them (a join never
+#       PRE-RULE PARTS, MEASURED by running this file's own contract_check (parts mode) over
+#       scratch copies of graph's s317/s318 shard parts -- the arm's program, not the whole join,
+#       which needs ledger rows those dirs do not carry. 202 parts, 0 carry the field; 936 NOSIB
+#       entries in 193 of them (the other 9 hold only escalated or `edit: n/a` entries); the same
+#       run's SETASIDE count is 1, the known `5.md:111`, as its control. These are true positives
+#       that are never re-joined: 20 of the 23 dirs already have their joined record beside them (a join never
 #       overwrites one, so a re-join refuses before this arm matters), the other 3 are closed
 #       sprints' dirs no procedure re-joins, and no shipped program invokes this join (a grep of
 #       core/scripts, core/hooks, core/git-hooks and the update skill finds only message prose).

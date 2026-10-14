@@ -115,8 +115,9 @@ grep over the assembled files and re-checks moved cites, after the join. `join-r
 refuses a missing field in every parts mode, total omission included: the era is the install,
 since parts are written fresh by agents reading the installed role file. Only `--sources`, which
 checks a record that may span a pull, keeps a PENDING line, binding from the record's first
-carrier onward. 0 of graph's 202 s317/s318 shard parts carry the field, so all 202 would refuse.
-They are never re-joined, though: 20 of their 23 dirs already hold a joined record, which a join
+carrier onward. 0 of graph's 202 s317/s318 shard parts carry the field. The arm's own awk, run
+over scratch copies of them, flags 936 entries in 193 parts, with the same run's set-aside count of
+1 as its control. Those parts are never re-joined, though: 20 of their 23 dirs already hold a joined record, which a join
 refuses to overwrite; the other 3 belong to closed sprints; and no shipped program calls the join.
 Not caught: a `--sources` record omitting the field everywhere (PENDING); whether the grepped text
 is really the replaced text (the write ledger carries no old_string); a substantive mis-repair
