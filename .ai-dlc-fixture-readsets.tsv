@@ -14,7 +14,7 @@
 # path<TAB>sha lines in the runner's universe as traced; the runner clears a stale key record when
 # it recomputes the same value over the tree it is pushing.
 #
-# fixtures mapped: 224    entries: 13177
+# fixtures mapped: 224    entries: 13192
 absorbed-specifics-survive	core/fixtures/absorbed-specifics-survive/run.sh
 absorbed-specifics-survive	core/skills/ai-dlc/SKILL.md
 absorbed-specifics-survive	core/skills/ai-dlc/rule-bodies/rule-13.md
@@ -1448,6 +1448,25 @@ check-22-spawn-ledger	core/scripts
 check-22-spawn-ledger	core/scripts/validate-spawn-ledger.sh
 check-22-spawn-ledger	core/skills/ai-dlc/steps
 check-22-spawn-ledger	core/skills/ai-dlc/steps/gate-validation.md
+check-22-spawn-ledger	core/team-roles
+check-22-spawn-ledger	core/team-roles/adversary.md
+check-22-spawn-ledger	core/team-roles/analyst.md
+check-22-spawn-ledger	core/team-roles/architect.md
+check-22-spawn-ledger	core/team-roles/cis.md
+check-22-spawn-ledger	core/team-roles/code-reviewer-escalated.md
+check-22-spawn-ledger	core/team-roles/code-reviewer.md
+check-22-spawn-ledger	core/team-roles/dev-escalated.md
+check-22-spawn-ledger	core/team-roles/dev.md
+check-22-spawn-ledger	core/team-roles/gate-adjudicator.md
+check-22-spawn-ledger	core/team-roles/ops.md
+check-22-spawn-ledger	core/team-roles/pm-escalated.md
+check-22-spawn-ledger	core/team-roles/pm.md
+check-22-spawn-ledger	core/team-roles/protected-path-editor.md
+check-22-spawn-ledger	core/team-roles/qa.md
+check-22-spawn-ledger	core/team-roles/remediator.md
+check-22-spawn-ledger	core/team-roles/sm.md
+check-22-spawn-ledger	core/team-roles/tea.md
+check-22-spawn-ledger	core/team-roles/ux.md
 check-23-draft-stamps	.git/HEAD
 check-23-draft-stamps	.git/config
 check-23-draft-stamps	.git/index
@@ -1735,21 +1754,6 @@ context-provenance-mutants	core/fixtures/scripts/install.sh
 context-provenance-mutants	core/hooks/ai-dlc-context-provenance.sh
 context-provenance-mutants	core/scripts/install.sh
 context-provenance-mutants	scripts/install.sh
-context-sensor	.git/HEAD
-context-sensor	.git/config
-context-sensor	.git/index
-context-sensor	.git/info/exclude
-context-sensor	.git/objects/33/a4425c0ed05dea70f881660ffdf01c7c86da33
-context-sensor	.git/objects/7f/1479d0f091b8393b8613744a84c3c8229a65a3
-context-sensor	.git/objects/info/commit-graphs/commit-graph-chain
-context-sensor	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
-context-sensor	.git/objects/info/commit-graphs/graph-61ac52da05ee113a5a22871cdc3010f8f63bd5f1.graph
-context-sensor	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
-context-sensor	.git/objects/info/commit-graphs/graph-fa7bbe6bcd67e84c678384cfb84f17a16d6fa8fa.graph
-context-sensor	.git/objects/pack/multi-pack-index
-context-sensor	.git/packed-refs
-context-sensor	.git/refs/heads/main
-context-sensor	.gitignore
 context-sensor	core
 context-sensor	core/fixtures
 context-sensor	core/fixtures/context-sensor
@@ -1763,8 +1767,31 @@ context-sensor	core/fixtures/context-sensor/post-compact-reattached.jsonl
 context-sensor	core/fixtures/context-sensor/post-compact-stale.jsonl
 context-sensor	core/fixtures/context-sensor/run.sh
 context-sensor	core/fixtures/context-sensor/sidechain-tail.jsonl
+context-sensor	core/hooks
+context-sensor	core/hooks/ai-dlc-acknowledge.sh
+context-sensor	core/hooks/ai-dlc-advisor-gate.sh
+context-sensor	core/hooks/ai-dlc-answer-capture.sh
+context-sensor	core/hooks/ai-dlc-artifact-path-guard.sh
 context-sensor	core/hooks/ai-dlc-context-provenance.sh
 context-sensor	core/hooks/ai-dlc-context-sensor.sh
+context-sensor	core/hooks/ai-dlc-continue.sh
+context-sensor	core/hooks/ai-dlc-core-guard.sh
+context-sensor	core/hooks/ai-dlc-derivation-capture.sh
+context-sensor	core/hooks/ai-dlc-dispatch-guard.sh
+context-sensor	core/hooks/ai-dlc-driver-signal.sh
+context-sensor	core/hooks/ai-dlc-escalation-delivery.sh
+context-sensor	core/hooks/ai-dlc-foreground-budget.sh
+context-sensor	core/hooks/ai-dlc-gate-remediation-guard.sh
+context-sensor	core/hooks/ai-dlc-handoff-entry.sh
+context-sensor	core/hooks/ai-dlc-handoff-pending.sh
+context-sensor	core/hooks/ai-dlc-pause.sh
+context-sensor	core/hooks/ai-dlc-postcompact.sh
+context-sensor	core/hooks/ai-dlc-precompact.sh
+context-sensor	core/hooks/ai-dlc-protect.sh
+context-sensor	core/hooks/ai-dlc-recover-gate.sh
+context-sensor	core/hooks/ai-dlc-recover.sh
+context-sensor	core/hooks/ai-dlc-rules-floor.sh
+context-sensor	core/hooks/ai-dlc-subagent-probe.sh
 context-sensor	core/hooks/ai-dlc-window.sh
 core-paths-audit-diff	.git/HEAD
 core-paths-audit-diff	.git/config
@@ -1967,6 +1994,7 @@ dispatch-model-guard	core/fixtures/dispatch-model-guard/run.sh
 dispatch-model-guard	core/fixtures/dispatch-model-guard/seed.sh
 dispatch-model-guard	core/hooks
 dispatch-model-guard	core/hooks/ai-dlc-acknowledge.sh
+dispatch-model-guard	core/hooks/ai-dlc-advisor-gate.sh
 dispatch-model-guard	core/hooks/ai-dlc-answer-capture.sh
 dispatch-model-guard	core/hooks/ai-dlc-artifact-path-guard.sh
 dispatch-model-guard	core/hooks/ai-dlc-context-provenance.sh
@@ -13120,21 +13148,6 @@ wait-stale-deliverable	core/fixtures/wait-stale-deliverable/run.sh
 wait-stale-deliverable	core/fixtures/wait-stale-deliverable/seed.sh
 wait-stale-deliverable	core/scripts/wait-for-deliverable.sh
 whole-read-pool	.git
-whole-read-pool	.git/HEAD
-whole-read-pool	.git/config
-whole-read-pool	.git/index
-whole-read-pool	.git/info/exclude
-whole-read-pool	.git/objects/33/a4425c0ed05dea70f881660ffdf01c7c86da33
-whole-read-pool	.git/objects/7f/1479d0f091b8393b8613744a84c3c8229a65a3
-whole-read-pool	.git/objects/info/commit-graphs/commit-graph-chain
-whole-read-pool	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
-whole-read-pool	.git/objects/info/commit-graphs/graph-61ac52da05ee113a5a22871cdc3010f8f63bd5f1.graph
-whole-read-pool	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
-whole-read-pool	.git/objects/info/commit-graphs/graph-fa7bbe6bcd67e84c678384cfb84f17a16d6fa8fa.graph
-whole-read-pool	.git/objects/pack/multi-pack-index
-whole-read-pool	.git/packed-refs
-whole-read-pool	.git/refs/heads/main
-whole-read-pool	.gitignore
 whole-read-pool	core
 whole-read-pool	core/.claude
 whole-read-pool	core/.git
@@ -13142,6 +13155,8 @@ whole-read-pool	core/core/skills/ai-dlc
 whole-read-pool	core/fixtures
 whole-read-pool	core/fixtures/whole-read-pool
 whole-read-pool	core/fixtures/whole-read-pool/run.sh
+whole-read-pool	core/hooks/ai-dlc-context-sensor.sh
+whole-read-pool	core/hooks/ai-dlc-window.sh
 whole-read-pool	core/schemas
 whole-read-pool	core/schemas/sprint-status.json
 whole-read-pool	core/scripts
@@ -13196,9 +13211,12 @@ write-format-steering-multiformat	core/skills/ai-dlc-update/reconcile/lib.sh
 # digest advisor-gate-deny 7aae9015403f15e6cb40fa5de43b2f93726b6ae0d3be9236f466c98d1483b123
 # digest advisor-gate-deny-mutants 9fd24773eb4caa10e92d74e9f3de0c329e5de75ec5d88e1770953c14434b781f
 # digest blocker-adjudication-record 99314f2a1c6cc2fcca6d94d77cd3a5f29a9ea8d5f0598e00be2da52fe4ad932b
+# digest check-22-spawn-ledger 0e5ff3a1b1ff961bc4148329da4248438069df6f46e35ebe20f59b0602c33ece
 # digest consumer-machinery-inventory d20cc399988d538e902de541916f7059332110ef170506b5a03ec3b34e0f7a07
 # digest consumer-suite-pool 7911a7e39a32ca5d34bd6ee397045a8fb6ffeb97334b9df9810a12980534db79
+# digest context-sensor 4faee78c607735a26a9c4304975d8aca9370bcc0d2c5e529ddc639350136bf58
 # digest core-write-guard eb1bee086635b85fec4e29a8caa87203db0f1ab513ac5ab3282ee0289cc25a59
+# digest dispatch-model-guard e94ae7aca4fcc96a3254a750fbbfa6bb912ebc099ca5a7330591410f65265426
 # digest enforcement-map-sites-c ad22aba223876cdef48939f8dc768f25c486d1c0dd191baa45329909c92a7bae
 # digest extract-push-flag-decision 59752e7e8ea6b269678c0a8d5f6ac4313b812f3edda95bad22c6994fc9a430f4
 # digest fold-architect-ledger-join-mutants 1939d7bea4f2daeaf00b22feeaff732d8af339b8ac25703c909ecdd40dc1cd81
@@ -13224,3 +13242,4 @@ write-format-steering-multiformat	core/skills/ai-dlc-update/reconcile/lib.sh
 # digest upstream-routing 1295d153d2989df414b4fd4afa9d054638a2f0c5002677c31e37238edeb780e2
 # digest vocabulary-index 285594f5acafe647f40c216cc477e52449741b209987713e5b02b8737e09c9a3
 # digest wait-beat-liveness b3831569f7ca7baf4eddeb40c255b41c5354519085722e343f308ab01dfa5685
+# digest whole-read-pool ad55a901b3a0454fe5b11d93f598c5bdf83c46b0b8278d6e9f469e1bdc3fe5a4

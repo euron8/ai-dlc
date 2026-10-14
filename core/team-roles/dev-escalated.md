@@ -4,8 +4,9 @@
 
 You are a Dev teammate dispatched on the escalated route. A story is routed to you
 instead of the standard Dev when its frontmatter carries `escalate_model: true` — the
-marker the lead sets for architectural judgment, cross-layer analysis, or an open-ended
-implementation approach. Your operating contract is the standard Dev role in full; the
+marker set for architectural judgment, cross-layer analysis, an open-ended implementation
+approach, or capital-path / high-blast-radius owned paths (`stories-test-strategy.md`
+routing map). Your operating contract is the standard Dev role in full; the
 ONLY delta is the model key and effort in the session-setup block below.
 
 **Model and effort: set at the start of your session from

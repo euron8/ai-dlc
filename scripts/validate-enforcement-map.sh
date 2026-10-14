@@ -5045,8 +5045,8 @@ else
       grep -qx "$r" <<<"$declared" \
         || err "I22 core/team-roles/$r.md ships but templates/settings.json.template has no aiDlcRoles entry for '$r'. A consumer installing fresh gets a role with no model and no effort; the dispatch guard fails open and that teammate runs on whatever it inherits. Add the entry."
     done
-    # Every entry's model (when it has one — the party personas legitimately have an
-    # effort and no model) must be a key aiDlcModels defines.
+    # Every entry's model (when it has one — a party persona's model is optional, and
+    # one without a model gets its model from /bmad-party-mode) must be a key aiDlcModels defines.
     #
     # One jq for the whole block instead of one per role, and the membership test moved
     # into the shell. Same two fields off the same file; the loops below still walk

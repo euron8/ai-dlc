@@ -18,6 +18,10 @@
 #   delta   model + an INVALID effort         -> a definition whose effort line is OMITTED, and
 #           + an INVALID omitClaudeMd           a stderr report -- and the same for its
 #                                               omitClaudeMd, which is not a boolean
+#   sm      a PARTY PERSONA name WITH a model -> a full definition, exactly like alpha. A persona's
+#                                               model is optional; set (as the shipped template
+#                                               sets it), the persona is defined like any role.
+#                                               Last, so it is never the first member read.
 #
 # `alpha` IS DELIBERATELY NOT THE ONLY MEMBER AND NOT THE ONLY INTERESTING ONE. A seeded set of
 # one cannot tell "iterated the declared roles" from "rendered the first one", and `charlie` and
@@ -42,7 +46,8 @@ cat > "$WORK/project/.claude/settings.json" <<'JSON'
     "alpha":   { "model": "opus",   "effort": "xhigh", "omitClaudeMd": true },
     "bravo":   { "model": "sonnet" },
     "charlie": { "effort": "high" },
-    "delta":   { "model": "opus",   "effort": "turbo", "omitClaudeMd": "sometimes" }
+    "delta":   { "model": "opus",   "effort": "turbo", "omitClaudeMd": "sometimes" },
+    "sm":      { "model": "sonnet", "effort": "medium" }
   },
   "env": { "SOMETHING_ELSE": "1" }
 }

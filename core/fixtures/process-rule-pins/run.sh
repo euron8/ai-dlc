@@ -17,7 +17,13 @@
 #     entry carrying `source: <seat-file>#<finding-id>` (_gate-procedures.md "Validation cycle",
 #     sprint-review.md §2, remediator.md). The `source:` resolution itself is mechanised in
 #     join-remediator-shards.sh and owned by remediator-shard-join; these rows pin the PROSE that
-#     tells the seats not to write, which no program can read off a seat's behaviour.
+#     tells the seats not to write, which no program can read off a seat's behaviour;
+#   - the capital-path / high-blast-radius criterion that escalates a review also escalates a
+#     dev (stories-test-strategy.md routing map and Model escalation, dev-escalated.md), and the
+#     lead's one upward tag write lands before the story's FIRST dev dispatch, committed before
+#     the worktree is cut, for an absent or `false` tag (implementation.md Pre-dispatch routing).
+#     The sts-esc-why and dve-capital rows are line-mode `contains` pins: keep each pinned phrase
+#     on ONE line of its subject.
 #
 # LEADS ARE NOT ENOUGH. A bold lead left intact over a body rewritten to say the opposite
 # ("need NOT carry", "dropped only through a HARD_BLOCK", "an assertion is a sufficient
@@ -185,6 +191,13 @@ pm-adr-predicate|R|pm.md|## Responsibilities|## The evidence contract|with its d
 pm-adr-scope|R|pm.md|## Responsibilities|## The evidence contract|added to existing scope, never a new capability|contains
 pm-adr-context|R|pm.md|## Context Loading|## Communication|(the primary architecture document)|contains
 pm-adr-context-read|R|pm.md|## Context Loading|## Communication|The architecture and ADR sections for the stories in scope|contains
+sts-esc-why|S|steps/stories-test-strategy.md|**Routing map|Absent any routing tag|or whose owned paths are capital-path or high-blast-radius|contains
+sts-esc-first|S|steps/stories-test-strategy.md|**Model escalation**|**Protected-path catalog**|- `escalate_model: true`|para|before the story's FIRST dev dispatch
+impl-esc-cut|S|steps/implementation.md|**Pre-dispatch routing (Rule 28).**|**Pre-dispatch auth check.**|- Before a story's FIRST dev dispatch|para|reachable on the dev's branch base
+impl-esc-before|S|steps/implementation.md|**Pre-dispatch routing (Rule 28).**|**Pre-dispatch auth check.**|- Before a story's FIRST dev dispatch|para|BEFORE the dev worktree is cut
+impl-esc-keep|S|steps/implementation.md|**Pre-dispatch routing (Rule 28).**|**Pre-dispatch auth check.**|- Before a story's FIRST dev dispatch|para|A story already dispatched keeps its route
+impl-esc-false|S|steps/implementation.md|**Pre-dispatch routing (Rule 28).**|**Pre-dispatch auth check.**|- Before a story's FIRST dev dispatch|para|is absent or `false`
+dve-capital|R|dev-escalated.md|## Identity|## Contract|capital-path / high-blast-radius owned paths|contains
 PINS
 }
 
@@ -510,6 +523,45 @@ while IFS='|' read -r id base rel s e lead mode tok; do
     esac
   done
 done <<<"$(pins)"
+
+# --- 4a. named rewordings of the dev-escalation rows -----------------------------
+# The generic negate mutant substitutes a placeholder; these are the plausible rewrites that
+# invert the rule while keeping the lead, each applied to a copy (flattened for a para row, so a
+# clause wrapped across lines is one string) and each required to kill ITS row. A control first
+# requires the unmutated copy to score in-span 1.
+# Fields: id | S/R | file | span start | span end | lead | mode | token | old text | new text
+named_mutants() {
+  cat <<'NAMED'
+impl-esc-before|S|steps/implementation.md|**Pre-dispatch routing (Rule 28).**|**Pre-dispatch auth check.**|- Before a story's FIRST dev dispatch|para|BEFORE the dev worktree is cut|BEFORE the dev worktree is cut|after the dev worktree is cut
+impl-esc-keep|S|steps/implementation.md|**Pre-dispatch routing (Rule 28).**|**Pre-dispatch auth check.**|- Before a story's FIRST dev dispatch|para|A story already dispatched keeps its route|A story already dispatched keeps its route, rework included|A story already dispatched is re-evaluated at rework
+impl-esc-false|S|steps/implementation.md|**Pre-dispatch routing (Rule 28).**|**Pre-dispatch auth check.**|- Before a story's FIRST dev dispatch|para|is absent or `false`|is absent or `false` and|is absent and
+sts-esc-why|S|steps/stories-test-strategy.md|**Routing map|Absent any routing tag|or whose owned paths are capital-path or high-blast-radius|contains||, or whose owned paths are capital-path or high-blast-radius — the same criterion that routes a review to `code-reviewer-escalated`.|.
+NAMED
+}
+# lreplace <src> <dst> <old> <new> — the first literal occurrence on each line, no regex. A line
+# carrying the text is whitespace-collapsed first, as pmutate does, so a clause that a flattened
+# paragraph joined across an indented wrap matches its single-spaced spelling here.
+lreplace() {
+  LR_OLD="$3" LR_NEW="$4" awk 'BEGIN { o = ENVIRON["LR_OLD"]; n = ENVIRON["LR_NEW"] }
+    { q = $0; gsub(/[ \t]+/, " ", q); i = index(q, o)
+      if (i) $0 = substr(q, 1, i - 1) n substr(q, i + length(o)); print }' "$1" > "$2"
+}
+n_named=0
+while IFS='|' read -r id base rel s e lead mode tok old new; do
+  n_named=$((n_named + 1))
+  f="$(pin_path "$base" "$rel")"
+  [ -f "$f" ] || { bad "$id/named: subject absent"; continue; }
+  src="$f"
+  if [ "$mode" = "para" ]; then src="$M/$id.named.flat.md"; flatten "$f" "$src"; fi
+  c="$(pin_scan "$src" "$s" "$e" "$lead" "$mode" "$tok")"
+  [ "${c%% *}" = "1" ] || { bad "$id/named: CONTROL — unmutated in-span=${c%% *}, wanted 1"; continue; }
+  dst="$M/$id.named.md"; lreplace "$src" "$dst" "$old" "$new"
+  if cmp -s "$src" "$dst"; then bad "$id/named: rewording '$new' did not apply"; continue; fi
+  out="$(pin_scan "$dst" "$s" "$e" "$lead" "$mode" "$tok")"
+  [ "${out%% *}" = "0" ] && ok "$id/named: rewritten to '$new' — killed" \
+                         || bad "$id/named: rewritten to '$new' SURVIVED (in-span=${out%% *})"
+done <<<"$(named_mutants)"
+[ "$n_named" -eq 4 ] || bad "named: $n_named named mutant(s) read, wanted 4"
 
 # --- 4b. a join over seat or cross files passes --complete -----------------------
 # A seat or cross shard writes its file early and is finished only at its final `seat-complete:`

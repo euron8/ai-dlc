@@ -20,6 +20,66 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.781.0] - 2026-10-14
+
+Batch 228 (graph-ledger-full-drain). Both candidates the reference consumer filed in its sprint 318, and the operator's
+settings-template change with the two defects measured against it. Closes BL-503, BL-504, BL-505 and BL-506, filed in
+this release; net 2 candidates closed.
+
+### `validate-mutation-red.sh`: a pytest run in which no test ran is UNEVALUABLE
+
+`PC-S318-VALIDATE-MUTATION-RED-PRINTS-BASELINE-GREEN-FOR-AN-ALL-SKIPPED-RUN-AND-SCORES-IT-UNPROVEN-NOT-UNEVALUABLE` (BL-503).
+
+- For a pytest runner the script reads the last summary line, ANSI-stripped, under `LC_ALL=C`. A run whose counts
+  are only `skipped`, `deselected` or `warning(s)`, or `no tests ran`, exits 2 `UNEVALUABLE (no test ran)`: before
+  the mutation at baseline, after the verified restore on the mutated run. Any other count word means a test ran.
+- A missing or unreadable summary fails open and prints `skip-check: not applied (no pytest summary line)` on every
+  verdict, PROVEN included.
+- Verdict change: a test skipped at baseline and un-skipped by the mutation was PROVEN and is now 2.
+- `dev.md` and `code-reviewer.md` name the new exit-2 cause. `mutation-red-replay` gains real-pytest seeds s1-s11
+  and mutants sk1-sk9.
+
+### Dev escalation takes the review route's capital-path criterion
+
+`PC-S318-DEV-ESCALATION-HAS-NO-CAPITAL-PATH-CRITERION-WHILE-CODE-REVIEWER-ESCALATION-DOES` (BL-504).
+
+- The routing map's `escalate_model` row states capital-path or high-blast-radius owned paths as a reason, and the
+  review route cites that row. Core names no path list.
+- Before a story's first dev dispatch, a tag absent or `false` on a story meeting the criterion is set by the lead
+  and committed so it is on the dev's branch base before the worktree is cut (Rule 28(b), which now names
+  story-to-role routing). A dispatched story keeps its route; a refused write goes to `docs/escalations/pending.md`.
+  Check 22 is unchanged.
+- No step or role file names a model for an escalated route.
+- `process-rule-pins` gains seven rows and four rewording mutants.
+
+### Settings template: aliases and role tiers as the reference consumer runs them
+
+- `templates/settings.json.template` (operator change): `aiDlcModels` maps `fable`, `opus`, `sonnet` and `haiku` to
+  the bare aliases; role tiers and efforts as the reference consumer runs them (`dev` haiku, `dev-escalated` sonnet,
+  efforts lowered); `cis`, `sm`, `tea` and `ux` carry a model. `settings-merge.sh` keeps a consumer's own values, so a
+  pull adds only the new `fable` and `haiku` keys to an existing settings file.
+
+### One model-window policy for the budget validator and the context sensor (BL-505)
+
+- `ai-dlc-window.sh` gains `ai_dlc_model_family`, `ai_dlc_family_window` and `ai_dlc_model_window`. Order: process
+  env `AI_DLC_MODEL_<F>_WINDOW`, the same key in the `.env` block of `settings.local.json` then `settings.json`, a
+  `[1m]` suffix, then a default for an exact bare alias only: `opus`, `sonnet` and `fable` 1M (a bare alias is the 1M
+  variant), `haiku` 200K. Any other id without `[1m]` is 200K. A declared window outside 50000..2000000 is rejected.
+- `validate-artifact-budget.sh` used to grant 1M only to a `[1m]` id, so a bare alias cut the Step 1a whole-read pool
+  from 330000 to 66000 tokens. It now sources the library and falls back to its old rule when it cannot.
+- The context sensor sources the same library. It sees full transcript ids, so an undeclared frontier lead keeps
+  its 200K floor; the settings `.env` block now declares a window without Claude Code's env export.
+- `whole-read-pool` and `context-sensor` gain the arms, a two-reader agreement probe and mutants.
+
+### Party seats are derived from the role file, and a persona's model is optional (BL-506)
+
+- `validate-spawn-ledger.sh` defined a party seat as an `aiDlcRoles` entry with no model, so a persona given one left
+  the shardable set and S1/S3 stopped judging it. A seat is now a role file whose line starts `The lead spawns you as
+  a party-mode persona`, read beside `--settings`; the self-probe runs the derivation.
+- The dispatch guard, the renderer, `setup-sites.md`, the persona role files and I22's comment say a persona's model
+  is optional. The setup SKILL and `QUICKSTART.md.template` point at the shipped blocks instead of copying them.
+- `check-22-spawn-ledger`, `dispatch-model-guard` and `agent-definition-render` gain arms and mutants.
+
 ## [0.780.0] - 2026-10-13
 
 Batch 226 (graph-ledger-full-drain). `ledger-reverify.sh` gave no upstream-naming row to a candidate id containing

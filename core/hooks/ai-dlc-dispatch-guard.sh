@@ -128,19 +128,21 @@
 #   (exit 0, no change) is the safe direction; the teeth are precise and
 #   positive-match only, and only ever ADD/CORRECT the model — never deny.
 #
-#   PARTY PERSONAS: `cis`, `sm`, `tea`, `ux` configure an effort and no model —
-#   they are spawned by `/bmad-party-mode`, which controls their model. Their
-#   effort binds like any other role's; their model is left alone. A missing model
-#   is a normal configured state here, not an error, which is why the two resolve
-#   independently rather than one gating the other.
+#   PARTY PERSONAS: `cis`, `sm`, `tea`, `ux` are spawned by `/bmad-party-mode`, and
+#   a persona's MODEL IS OPTIONAL. Set (the shipped template sets all four), the
+#   renderer writes the persona a definition and this guard binds it like any other
+#   role, including correcting the model on a `/bmad-party-mode` spawn. Absent,
+#   `/bmad-party-mode` controls the model and this guard leaves it alone. A missing
+#   model is a normal configured state here, not an error, which is why model and
+#   effort resolve independently rather than one gating the other.
 #
-#   AND THE RENDERER SKIPS THEM FOR THAT REASON. `render-agent-definitions.sh` writes a
-#   definition only for a role whose `model` key resolves, so a model-less persona gets
-#   no `.claude/agents/<role>.md` at all. This is where that decision belongs, because
+#   THE RENDERER FOLLOWS THE MODEL KEY, NOT THE PERSONA NAME. `render-agent-definitions.sh`
+#   writes a definition only for a role whose `model` key resolves, so a model-less persona
+#   gets no `.claude/agents/<role>.md` at all. This is where that decision belongs, because
 #   the consequence is here: a model-less definition would still carry an `effort:` key,
 #   and the harness would bind it on the very spawns `/bmad-party-mode` controls and this
 #   guard is told to leave alone. The renderer cites this paragraph rather than restating
-#   the four names — one list, in the config, read by both.
+#   the four names — the config decides, read by both.
 #
 #   THE SHARD LINE -- THE ONE DEFINITION OF ITS GRAMMAR. Rule 28 splits a dispatch into one
 #   agent per independent part, and each brief states which part it is, or which of the four
@@ -401,8 +403,8 @@ if [ -r "$DEF_FILE" ] && grep -qF "$DEF_MARKER" "$DEF_FILE" 2>/dev/null; then
 fi
 # A definition that resolves NO model binds nothing the harness can select, and the
 # renderer never writes one (see the PARTY PERSONAS paragraph in the header). Treating a
-# model-less marked file as bindable would rewrite `subagent_type` for exactly the party
-# seats `/bmad-party-mode` controls, so it falls to the absent branch here too.
+# model-less marked file as bindable would rewrite `subagent_type` for exactly the
+# model-less party seats `/bmad-party-mode` controls, so it falls to the absent branch here too.
 [ -n "$DEF_MODEL" ] || DEFINITION_BOUND=false
 
 # THE DEFINITION CARRIER for the Rule 19(b) citation (see the block at ROLE_CONTRACT_CITED
@@ -424,8 +426,8 @@ fi
 #
 # MODEL is bound as the Agent tool's `model` parameter. Unresolvable config — no
 # `aiDlcRoles` entry, no `model` in it, or a key absent from `aiDlcModels` — leaves it
-# unbound rather than guessing. The party personas (cis/sm/tea/ux) legitimately have an
-# effort but no model, so a missing model is a normal state, not an error.
+# unbound rather than guessing. A party persona's (cis/sm/tea/ux) model is optional, so a
+# missing model is a normal state, not an error; a persona that sets one is bound here.
 NEEDS_MODEL=false
 if [ -n "$EXPECT" ] && ! matches_pin "$REQUESTED"; then
   NEEDS_MODEL=true

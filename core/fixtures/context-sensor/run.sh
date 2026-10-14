@@ -107,19 +107,22 @@ PASS=0
 FAIL=0
 
 # Every case starts from a clean sidecar AND an explicit ceiling. The committed transcripts
-# and the at() helper record the model as claude-opus-4-8, so `reset1m` declares the OPUS
+# and the at() helper record the model as claude-haiku-4-5, so `reset1m` declares the HAIKU
 # family at 1M -- the role a cached `row=1M` seed played before the sensor stopped caching
-# -- and `reset` leaves every family undeclared, which is the 200000 floor. The sensor
-# never writes a model file any more; a case that needs a ceiling declares one.
-reset()   { unset AI_DLC_MODEL_OPUS_WINDOW; rm -f "$STATE"; }
-reset1m() { reset; export AI_DLC_MODEL_OPUS_WINDOW=1m; }
+# -- and `reset` leaves every family undeclared. HAIKU's family default is 200000, so an
+# undeclared case sits on that floor. The seeds were opus until the family policy moved
+# into ai-dlc-window.sh: OPUS undeclared now defaults to 1M (Claude Code maps a bare alias
+# to its 1M variant), which would have put every band of every floor case at 300000. The
+# sensor never writes a model file; a case that needs a ceiling declares one.
+reset()   { unset AI_DLC_MODEL_OPUS_WINDOW AI_DLC_MODEL_HAIKU_WINDOW; rm -f "$STATE"; }
+reset1m() { reset; export AI_DLC_MODEL_HAIKU_WINDOW=1m; }
 fire()   { printf '{"transcript_path":"%s","session_id":"t"%s}' "$FIXTURES/$1" "${2:-}" \
              | CLAUDE_PROJECT_DIR="$WORK" "$HOOK" 2>/dev/null; }
 ctx()    { jq -r '.hookSpecificOutput.additionalContext // empty' 2>/dev/null; }
 field()  { sed -n "s/^$1=//p" "$STATE" 2>/dev/null | head -1; }
 at()     { # $1 = tokens  [$2 = model id] -> writes a one-line transcript, returns its path
   printf '{"type":"assistant","isSidechain":false,"message":{"model":"%s","usage":{"input_tokens":2,"cache_creation_input_tokens":0,"cache_read_input_tokens":%s}}}\n' \
-    "${2:-claude-opus-4-8}" "$(( $1 - 2 ))" > "$WORK/at.jsonl"
+    "${2:-claude-haiku-4-5}" "$(( $1 - 2 ))" > "$WORK/at.jsonl"
   printf '%s' "$WORK/at.jsonl"
 }
 raw()    { printf '{"transcript_path":"%s","session_id":"t"}' "$1" | CLAUDE_PROJECT_DIR="$WORK" "$HOOK" 2>/dev/null; }
@@ -268,31 +271,162 @@ check "  CONTROL: the state sidecar WAS written" "$([ -e "$STATE" ] && echo pres
 # An unparseable declaration is the same as none, never a ceiling of zero.
 reset
 printf '{"transcript_path":"%s","session_id":"t"}' "$(at 100000)" \
-  | AI_DLC_MODEL_OPUS_WINDOW=banana CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1
+  | AI_DLC_MODEL_HAIKU_WINDOW=banana CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1
 check "an unparseable declaration falls to the floor" "$(field effective_window)" "200000"
 check "  and is recorded as undeclared" "$(field window_declared)" "0"
 
-# MUTANT CONTROL for the floor arm: seed the OLD 1M constant in place of 200000 and the
-# floor arm must fail. Built as a COPY with its sibling library beside it, guarded by
-# cmp -s so a sed that matched nothing cannot pass as a mutation.
+# MUTANT CONTROL for the floor arm: the defaults live in the LIBRARY now, so the mutation
+# is on a library copy beside an unmutated hook copy. The seed's id is the FULL id
+# `claude-haiku-4-5`, which takes the not-a-bare-alias default; that default moved to 1M
+# and the floor arm must fail. cmp -s so a sed that matched nothing cannot pass as a
+# mutation.
 HOOK_PATH="${HOOK#bash }"
+WINLIB="$(dirname "$HOOK_PATH")/ai-dlc-window.sh"
 MUTD="$WORK/mutant"; mkdir -p "$MUTD"
-cp "$(dirname "$HOOK_PATH")/ai-dlc-window.sh" "$MUTD/" 2>/dev/null || true
-sed 's/^UNDECLARED_MODEL_MAX=200000$/UNDECLARED_MODEL_MAX=1000000/' "$HOOK_PATH" > "$MUTD/ai-dlc-context-sensor.sh"
-if cmp -s "$HOOK_PATH" "$MUTD/ai-dlc-context-sensor.sh"; then
+cp "$HOOK_PATH" "$MUTD/ai-dlc-context-sensor.sh"
+sed 's/^    \*)                 printf .200000|not a bare alias/    *)                 printf '"'"'1000000|not a bare alias/' "$WINLIB" > "$MUTD/ai-dlc-window.sh"
+if cmp -s "$WINLIB" "$MUTD/ai-dlc-window.sh"; then
   bad "floor mutant applied" "sed matched nothing; the copy is byte-identical"
 else
   reset
   printf '{"transcript_path":"%s","session_id":"t"}' "$FIXTURES/at-250000.jsonl" \
     | CLAUDE_PROJECT_DIR="$WORK" bash "$MUTD/ai-dlc-context-sensor.sh" >/dev/null 2>&1
-  check "MUTANT: with the old 1M constant the floor arm fails (effective 300000)" "$(field effective_window)" "300000"
+  check "MUTANT: with the non-alias default at 1M the floor arm fails (effective 300000)" "$(field effective_window)" "300000"
 fi
+
+# --- the shared window policy (ai-dlc-window.sh) -----------------------------
+# A BARE alias is its 1M variant in Claude Code, so an undeclared `opus`/`sonnet`/`fable`
+# assumes 1M. A FULL id without `[1m]` is the 200K variant and assumes 200000 -- which is
+# what a transcript records, so an undeclared frontier lead stays on the 200000 floor.
+# Both stay undeclared, so imminent stays gated. The project window (300000) is removed
+# for these arms so effective_window echoes MODEL_MAX itself, not the clamp.
+mv "$WORK/.claude/settings.json" "$WORK/.claude/settings.json.bak"
+for spec in "sonnet:SONNET:1000000" "opus:OPUS:1000000" "fable:FABLE:1000000" \
+            "haiku:HAIKU:200000" \
+            "claude-opus-4-8:OPUS:200000" "claude-sonnet-5:SONNET:200000" \
+            "claude-sonnet-4-5:SONNET:200000" "global.anthropic.claude-sonnet-4-6:SONNET:200000" \
+            "us.anthropic.claude-opus-4-1-v1:0:OPUS:200000" "claude-fable-1:FABLE:200000" \
+            "claude-haiku-4-5:HAIKU:200000" "local-qwen3-max:OTHER:200000"; do
+  w="${spec##*:}"; rest="${spec%:*}"; f="${rest##*:}"; m="${rest%:*}"
+  reset
+  raw "$(at 100000 "$m")" >/dev/null
+  check "undeclared $m ($f) assumes $w" "$(field effective_window)" "$w"
+  check "  and is recorded as undeclared" "$(field window_declared)" "0"
+  check "  and classifies as $f" "$(field model_family)" "$f"
+done
+# MUTANT: substring defaulting restored -- the 1M default keyed on the FAMILY, not on the
+# exact alias. The full-id arms above (claude-sonnet-4-5 and the Bedrock id) must read 1M.
+MUTSUB="$WORK/mutant-subdefault"; mkdir -p "$MUTSUB"
+cp "$HOOK_PATH" "$MUTSUB/ai-dlc-context-sensor.sh"
+sed 's/^    fable|opus|sonnet) printf/    *fable*|*opus*|*sonnet*) printf/' "$WINLIB" > "$MUTSUB/ai-dlc-window.sh"
+if cmp -s "$WINLIB" "$MUTSUB/ai-dlc-window.sh"; then
+  bad "substring-default mutant applied" "sed matched nothing; the copy is byte-identical"
+else
+  for m in claude-sonnet-4-5 global.anthropic.claude-sonnet-4-6; do
+    reset
+    printf '{"transcript_path":"%s","session_id":"t"}' "$(at 100000 "$m")" \
+      | CLAUDE_PROJECT_DIR="$WORK" bash "$MUTSUB/ai-dlc-context-sensor.sh" >/dev/null 2>&1
+    check "MUTANT: substring defaulting reads $m at 1000000 (the arm above catches it)" "$(field effective_window)" "1000000"
+  done
+fi
+# DECLARATION RANGE: a declared window outside 50000..2000000 is rejected and falls through
+# to the next layer. `99` would be a 99-token window; a 20-digit value overflows awk.
+for v in 99 99999999999999999999 5m; do
+  reset
+  printf '{"transcript_path":"%s","session_id":"t"}' "$(at 100000)" \
+    | AI_DLC_MODEL_HAIKU_WINDOW="$v" CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1
+  check "a declared HAIKU window of $v is rejected and falls to 200000" "$(field effective_window)" "200000"
+  check "  and is recorded as undeclared" "$(field window_declared)" "0"
+done
+reset
+printf '{"transcript_path":"%s","session_id":"t"}' "$(at 100000)" \
+  | AI_DLC_MODEL_HAIKU_WINDOW=2m CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1
+check "  CONTROL: the 2000000 bound itself is accepted" "$(field effective_window)" "2000000"
+# A rejected process env falls through to a VALID settings .env, not to the default.
+echo '{"env":{"AI_DLC_MODEL_HAIKU_WINDOW":"300000"}}' > "$WORK/.claude/settings.json"
+reset
+printf '{"transcript_path":"%s","session_id":"t"}' "$(at 100000)" \
+  | AI_DLC_MODEL_HAIKU_WINDOW=99 CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1
+check "  a rejected process env falls through to the settings .env (300000)" "$(field effective_window)" "300000"
+rm -f "$WORK/.claude/settings.json"
+# MUTANT: the range check removed (any positive parse accepted). 99 must then be taken.
+MUTR="$WORK/mutant-range"; mkdir -p "$MUTR"
+cp "$HOOK_PATH" "$MUTR/ai-dlc-context-sensor.sh"
+sed 's/^  \[ "\$1" -ge "\$AI_DLC_WINDOW_MIN" \] 2>\/dev\/null && \[ "\$1" -le "\$AI_DLC_WINDOW_MAX" \] 2>\/dev\/null$/  [ "$1" -gt 0 ]/' "$WINLIB" > "$MUTR/ai-dlc-window.sh"
+if cmp -s "$WINLIB" "$MUTR/ai-dlc-window.sh"; then
+  bad "range mutant applied" "sed matched nothing; the copy is byte-identical"
+else
+  reset
+  printf '{"transcript_path":"%s","session_id":"t"}' "$(at 100000)" \
+    | AI_DLC_MODEL_HAIKU_WINDOW=99 CLAUDE_PROJECT_DIR="$WORK" bash "$MUTR/ai-dlc-context-sensor.sh" >/dev/null 2>&1
+  check "MUTANT: with the range check gone a declared 99 is taken" "$(field effective_window)" "99"
+fi
+# A [1m] id is a declaration (the suffix names the variant).
+reset
+raw "$(at 100000 'claude-sonnet-5[1m]')" >/dev/null
+check "a [1m] id resolves to 1000000" "$(field effective_window)" "1000000"
+check "  and counts as declared" "$(field window_declared)" "1"
+# The settings .env layer, with no process env: the project file's env block declares
+# HAIKU at 400k and the sensor takes it.
+echo '{"env":{"AI_DLC_MODEL_HAIKU_WINDOW":"400k"}}' > "$WORK/.claude/settings.json"
+reset
+raw "$(at 100000)" >/dev/null
+check "settings.json .env AI_DLC_MODEL_HAIKU_WINDOW is honoured with no process env" "$(field effective_window)" "400000"
+check "  and counts as declared" "$(field window_declared)" "1"
+# settings.local.json outranks settings.json for the same key.
+echo '{"env":{"AI_DLC_MODEL_HAIKU_WINDOW":"350000"}}' > "$WORK/.claude/settings.local.json"
+reset
+raw "$(at 100000)" >/dev/null
+check "  settings.local.json .env outranks settings.json .env" "$(field effective_window)" "350000"
+rm -f "$WORK/.claude/settings.local.json"
+# Process env outranks the settings .env layer.
+reset
+printf '{"transcript_path":"%s","session_id":"t"}' "$(at 100000)" \
+  | AI_DLC_MODEL_HAIKU_WINDOW=260000 CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1
+check "  process env AI_DLC_MODEL_HAIKU_WINDOW outranks the settings .env" "$(field effective_window)" "260000"
+# MUTANT: the settings .env layer ignored (its jq read returns nothing). Library copy
+# beside an unmutated hook copy; the .env arm must fall back to the HAIKU default.
+MUTE="$WORK/mutant-env"; mkdir -p "$MUTE"
+cp "$HOOK_PATH" "$MUTE/ai-dlc-context-sensor.sh"
+sed 's/^\( *\)val="\$(jq -r --arg k "\$var" .*/\1val=""/' "$WINLIB" > "$MUTE/ai-dlc-window.sh"
+if cmp -s "$WINLIB" "$MUTE/ai-dlc-window.sh"; then
+  bad "settings-env mutant applied" "sed matched nothing; the copy is byte-identical"
+else
+  reset
+  printf '{"transcript_path":"%s","session_id":"t"}' "$(at 100000)" \
+    | CLAUDE_PROJECT_DIR="$WORK" bash "$MUTE/ai-dlc-context-sensor.sh" >/dev/null 2>&1
+  check "MUTANT: with the settings .env ignored the .env arm reads the HAIKU default" "$(field effective_window)" "200000"
+fi
+# MUTANT: a `[1m]`-substring-only resolver (the bare-alias 1M default gone) -- the
+# pre-change validator's policy. Undeclared bare `sonnet` must then read 200000.
+MUTS="$WORK/mutant-substr"; mkdir -p "$MUTS"
+cp "$HOOK_PATH" "$MUTS/ai-dlc-context-sensor.sh"
+sed 's/^    fable|opus|sonnet) printf .1000000|/    NONE) printf '"'"'200000|/' "$WINLIB" > "$MUTS/ai-dlc-window.sh"
+if cmp -s "$WINLIB" "$MUTS/ai-dlc-window.sh"; then
+  bad "substring mutant applied" "sed matched nothing; the copy is byte-identical"
+else
+  echo '{}' > "$WORK/.claude/settings.json"
+  reset
+  printf '{"transcript_path":"%s","session_id":"t"}' "$(at 100000 sonnet)" \
+    | CLAUDE_PROJECT_DIR="$WORK" bash "$MUTS/ai-dlc-context-sensor.sh" >/dev/null 2>&1
+  check "MUTANT: a [1m]-only resolver reads undeclared bare sonnet at 200000" "$(field effective_window)" "200000"
+fi
+# LIBRARY ABSENT: a lone hook copy falls to OTHER at UNDECLARED_MODEL_MAX, never dies.
+MUTL="$WORK/nolib"; mkdir -p "$MUTL"
+cp "$HOOK_PATH" "$MUTL/ai-dlc-context-sensor.sh"
+echo '{}' > "$WORK/.claude/settings.json"
+reset
+printf '{"transcript_path":"%s","session_id":"t"}' "$(at 100000 sonnet)" \
+  | CLAUDE_PROJECT_DIR="$WORK" bash "$MUTL/ai-dlc-context-sensor.sh" >/dev/null 2>&1
+check "library absent: the sensor falls to 200000 and still writes state" "$(field effective_window)" "200000"
+check "  classified OTHER" "$(field model_family)" "OTHER"
+mv "$WORK/.claude/settings.json.bak" "$WORK/.claude/settings.json"
 
 reset
 OUT="$(printf '{"transcript_path":"%s","session_id":"t"}' "$(at 185000)" \
-        | AI_DLC_MODEL_OPUS_WINDOW=1M CLAUDE_PROJECT_DIR="$WORK" "$HOOK" 2>/dev/null | ctx)"
+        | AI_DLC_MODEL_HAIKU_WINDOW=1M CLAUDE_PROJECT_DIR="$WORK" "$HOOK" 2>/dev/null | ctx)"
 check "a declaration takes the library's spellings (1M)" "$(field window_declared)" "1"
-check "  185000 is yellow with OPUS at 1M (300000 window -> yellow 180000)" \
+check "  185000 is yellow with HAIKU at 1M (300000 window -> yellow 180000)" \
   "$(printf '%s' "$OUT" | grep -c 'YELLOW' | tr -d ' ')" "1"
 
 # --- compact_imminent band ----------------------------------------------------
@@ -562,14 +696,14 @@ check "Stop still echoes Stop" \
 # reports it), so the seed declares 200000 -- the same figure the floor would use.
 reset
 printf '{"transcript_path":"%s","session_id":"t","hook_event_name":"PostToolBatch"}' "$(at 150000)" \
-  | AI_DLC_MODEL_OPUS_WINDOW=200000 CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1   # first read: not throttled, records last_read_size
+  | AI_DLC_MODEL_HAIKU_WINDOW=200000 CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1   # first read: not throttled, records last_read_size
 SIZE1="$(evfield last_read_size)"
 [ -n "$SIZE1" ] && ok "PostToolBatch records last_read_size" || bad "PostToolBatch records last_read_size" "absent"
 # second PostToolBatch on the SAME tiny size class, cached reading far from any threshold:
 # below throttle delta -> skipped, so last_measured must NOT change.
 BEFORE="$(evfield last_measured)"
 printf '{"transcript_path":"%s","session_id":"t","hook_event_name":"PostToolBatch"}' "$FIXTURES/at-red.jsonl" \
-  | AI_DLC_MODEL_OPUS_WINDOW=200000 CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1   # different file, same tiny size class
+  | AI_DLC_MODEL_HAIKU_WINDOW=200000 CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1   # different file, same tiny size class
 AFTER="$(evfield last_measured)"
 check "  second PostToolBatch within throttle window is skipped (cached at IMMINENT: no unfired threshold, so no relax)" "$AFTER" "$BEFORE"
 # a Stop is never throttled: it reads even within the window.
@@ -599,9 +733,9 @@ check "  and the crossing FIRES on that read (last_level yellow)" "$(evfield las
 
 reset
 printf '{"transcript_path":"%s","session_id":"t","hook_event_name":"Stop"}' "$(at 150000)" \
-  | AI_DLC_MODEL_OPUS_WINDOW=200000 CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1   # cache 150000: past IMMINENT on a declared 200000, no next threshold
+  | AI_DLC_MODEL_HAIKU_WINDOW=200000 CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1   # cache 150000: past IMMINENT on a declared 200000, no next threshold
 printf '{"transcript_path":"%s","session_id":"t","hook_event_name":"PostToolBatch"}' "$(at 160000)" \
-  | AI_DLC_MODEL_OPUS_WINDOW=200000 CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1
+  | AI_DLC_MODEL_HAIKU_WINDOW=200000 CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1
 check "relax control: cached at IMMINENT has no unfired threshold above it, so the same sub-throttle PostToolBatch is SKIPPED (cost guard intact)" \
   "$(evfield last_measured)" "150000"
 
@@ -640,7 +774,7 @@ armfield() { tail -1 "$ARM" 2>/dev/null | jq -r "$1 // empty" 2>/dev/null; }
 
 armreset
 fire below-yellow.jsonl >/dev/null
-check "arm recorded from the transcript's model field" "$(armfield .lead_model)" "claude-opus-4-8"
+check "arm recorded from the transcript's model field" "$(armfield .lead_model)" "claude-haiku-4-5"
 check "  arm record is schema-stamped" "$(armfield .v)" "1"
 
 # Deduped: a second identical reading must not append. An arm log that grows one

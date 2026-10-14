@@ -80,11 +80,25 @@ NOT hardcode a second copy here. The two routes today:
   are dispatched one at a time.
 - `escalate_model: true` → dispatch the story to a `dev-escalated`
   teammate (from `.claude/team-roles/dev-escalated.md`) instead of
-  `dev`. Same Dev contract, stronger (opus-tier) model. Do NOT instead
+  `dev`. Same Dev contract, on a stronger model than `dev`, as configured
+  in `aiDlcRoles`. Do NOT instead
   pass a higher `model` param to a `dev` dispatch — the dispatch guard
   binds `dev`'s model to `dev.md`'s pin and rebinds a call-site override
   back to it, so a higher `model` on a `dev` dispatch is silently corrected
   to dev's tier, never honored. Escalation is a ROLE, not a call-site param.
+
+- Before a story's FIRST dev dispatch, if its `escalate_model` is absent
+  or `false` and its owned paths meet the routing map's capital-path /
+  high-blast-radius criterion, the lead sets `escalate_model: true` in the
+  canonical story file (Rule 28(b), routing) and commits it so it is
+  reachable on the dev's branch base (`_dispatch-protocol.md`
+  canonical-story-file pre-flight (b)) BEFORE the dev worktree is cut, then
+  dispatches `dev-escalated`. Check 22 re-derives the route from that
+  persisted tag. A story already dispatched keeps its route, rework
+  included, and the lead never removes the tag. If the write is refused,
+  dispatch per the persisted tag and record the owed escalation in
+  `docs/escalations/pending.md`, which the refusing hook permits, and in the
+  gate log once the deny lifts; never route around the hook that refused it.
 
 Lead MAY invoke validation sub-skills via the Skill tool per Rule 20.
 Catalog and field semantics defined in `stories-test-strategy.md` "Story
@@ -115,9 +129,11 @@ axis, as `_dispatch-protocol.md` "Bounded-join ≠ serial execution" applies it.
 - **dev** from `dev.md`. Assign ownership based on story scope per the
   ownership paths defined in the dev role file.
 - **code-reviewer** from `code-reviewer.md`. Read-only, produces reviews
-  in docs/reviews/. For a capital-path or high-blast-radius diff, dispatch a
+  in docs/reviews/. For a capital-path or high-blast-radius diff (the
+  criterion the routing map's `escalate_model` row states), dispatch a
   `code-reviewer-escalated` teammate (from `code-reviewer-escalated.md`)
-  instead — same review contract, stronger (opus-tier) model. As with
+  instead — same review contract, on a stronger model than
+  `code-reviewer`, as configured in `aiDlcRoles`. As with
   `dev-escalated`, escalation is a ROLE, not a call-site `model` param: a
   higher `model` on a plain `code-reviewer` dispatch is silently corrected to
   the standard tier by the dispatch guard. A gate-1 review is Rule 28,
@@ -185,7 +201,7 @@ Verify:
   log.
 - Every story tagged `escalate_model: true` was dispatched to a
   `dev-escalated` teammate, not to a plain `dev`. Record the dispatch in
-  the gate log.
+  the gate log, and whether the tag was authored or set at dispatch.
 
 Log task list validation in gate log.
 

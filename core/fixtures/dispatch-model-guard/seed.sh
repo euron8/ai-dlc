@@ -58,6 +58,7 @@ cat > "$CONSUMER/.claude/settings.json" <<'SETTINGS'
     "dev-escalated":    { "model": "opus",   "effort": "high" },
     "architect":        { "model": "ghostkey", "effort": "high" },
     "tea":              { "effort": "high" },
+    "sm":               { "model": "sonnet", "effort": "medium" },
     "badeffort":        { "model": "sonnet", "effort": "reallyhigh" },
     "defok":            { "model": "opus",   "effort": "high" },
     "defstalemodel":    { "model": "opus",   "effort": "high" },
@@ -86,7 +87,9 @@ Do the thing the role does.
 ROLE
 }
 
-for r in gate-adjudicator remediator analyst dev dev-escalated architect tea badeffort nocfg; do
+# `tea` and `sm` are both party personas: tea keeps the model-less shape (the guard leaves it
+# alone), sm carries a model as the shipped template now gives every persona (bound like any role).
+for r in gate-adjudicator remediator analyst dev dev-escalated architect tea sm badeffort nocfg; do
   render_role "$r"
 done
 

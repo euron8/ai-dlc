@@ -62,6 +62,23 @@
 # The parse and syntax checks run on the mutant BEFORE the mutated test run, so a refused
 # mutant never runs the suite.
 #
+# THE RUN THAT EXITS 0 AND RAN NOTHING. pytest exits 0 when every selected test was
+# SKIPPED (a `skip` marker, a true `skipif`, a `-k` that keeps only skipped tests), so an
+# exit code alone reads such a baseline as GREEN, and the all-skipped mutated run that
+# follows as "stayed GREEN under a real mutation". Nothing ran. For a pytest runner this
+# script reads pytest's terminal summary line — the LAST line of the form
+# `[=== ]<N word>[, <N word>...] in <dur>s[ (h:mm:ss)][ ===]` or `no tests ran in <dur>s`,
+# after stripping ANSI colour — and refuses with exit 2, `UNEVALUABLE (no test ran)`, when
+# every count word on it is skipped, deselected or warning(s) and at least one is skipped
+# or deselected. The predicate is a WHITELIST: any other word (passed, failed, error,
+# xfailed, xpassed, a plugin's own) means a test ran and the check stands down. It applies
+# to the baseline, where it refuses BEFORE the file is mutated, and to the mutated run,
+# where it refuses after the verified restore. A skip-gated test — skipped at baseline,
+# its `skipif` flipped by the mutation so the mutated run fails — therefore exits 2, not 0:
+# no GREEN -> RED of a test was observed, only RED of a test that never ran GREEN.
+# When no summary line can be found the check fails OPEN: it prints
+# `skip-check: not applied (no pytest summary line)` on whatever verdict follows.
+#
 # RESIDUE — WHAT EXIT 0 STILL DOES NOT RULE OUT. "Never PROVEN for an untested mutation"
 # is not reachable from an exit code: unittest exits 1 for every failure class, and an
 # import inside a test body that raises NameError is `1 failed` in a file that parses
@@ -70,6 +87,19 @@
 # `-m pytest` (`make test`, `make -C dir pytest`, `tox`, `uv run pytest`),
 # when pytest runs with `--continue-on-collection-errors` (exit 1), when the error is a
 # runtime error inside a test body, and for a non-Python runner given no `--syntax-check`.
+# An ALL-SKIPPED run is read only for pytest: a non-pytest runner (unittest, a wrapper
+# around pytest, any other harness) that skips every test and exits 0 still reads GREEN,
+# and its mutated run UNPROVEN. Under pytest the skip check is not applied, and the
+# `skip-check: not applied` note says so, when the summary line is missing or rewritten:
+# `-qq`, `-p no:terminal`, a plugin that rewrites the terminal output, a `--co` run that
+# collected nothing (`no tests collected`), or any parser output the script does not
+# expect. A `--co` run that collected a test prints `N test(s) collected`, which reads as a
+# run, so it stays GREEN under mutation and exits 1 as before. A test pytest counts as
+# xfailed may not have run its body: `xfail(run=False)` and an imperative `pytest.xfail()`
+# in a fixture both read as a test that ran. Last-match is defeated by output printed
+# AFTER pytest's summary (an `atexit` hook that prints a skipped-looking line): that line
+# is the one read. A PROVEN carrying the skip-check note does not show the test executed;
+# re-run the replay without `-qq`.
 # Read the RED evidence the run prints; the exit code is not the whole claim.
 #
 # Usage:
@@ -90,10 +120,11 @@
 #   1  UNPROVEN     the mutation landed and the named test stayed GREEN — it never
 #                   reaches the line, or reaches it without asserting on its value.
 #   2  UNEVALUABLE  nothing was tested: usage, unreadable target, no such line, a
-#                   no-op replacement, a baseline that was not GREEN, or a mutation that
-#                   landed and broke the file rather than the test (the parse,
-#                   syntax-check or pytest-exit arm). A claim graded here is neither
-#                   proven nor refuted.
+#                   no-op replacement, a baseline that was not GREEN, a pytest baseline
+#                   or mutated run that ran no test (every selected test skipped or
+#                   deselected: the no-test-ran arm), or a mutation that landed and
+#                   broke the file rather than the test (the parse, syntax-check or
+#                   pytest-exit arm). A claim graded here is neither proven nor refuted.
 #   3  HARD         the restore did not come back byte-identical. The tree is LEFT
 #                   MUTATED and the path to the backup is printed. Restore it before
 #                   running anything else; every later result is against mutated source.
@@ -123,9 +154,12 @@ usage: validate-mutation-red.sh [--syntax-check '<cmd>'] [--] <target-file> <lin
   replacement-line  the mutated line, verbatim, including its indentation
   test-cmd...       the named test, exactly as it is run normally
 
-exit: 0 proven · 1 unproven · 2 unevaluable (nothing was mutated, or the mutation broke
-      the file rather than the test: it fails to parse, or pytest exited outside {0,1})
-      · 3 restore failed
+exit: 0 proven · 1 unproven · 2 unevaluable (nothing was mutated, a pytest baseline or
+      mutated run ran no test because every selected test was skipped or deselected, or
+      the mutation broke the file rather than the test: it fails to parse, or pytest
+      exited outside {0,1}) · 3 restore failed
+      Under pytest an all-skipped run is read from pytest's summary line; with no summary
+      line (-qq, -p no:terminal) the check prints `skip-check: not applied` and stands down.
 EOF
 }
 
@@ -236,7 +270,8 @@ clear_pycache() {
 evidence() {
   # $1 = label, $2 = log file
   printf '  --- %s (last %s lines) ---\n' "$1" "$EVIDENCE_LINES"
-  tail -n "$EVIDENCE_LINES" "$2" | sed 's/^/  | /'
+  # LC_ALL=C: a log carrying a non-UTF-8 byte is `illegal byte sequence` to a UTF-8 sed.
+  tail -n "$EVIDENCE_LINES" "$2" | LC_ALL=C sed 's/^/  | /'
 }
 
 # --- the two differential parse checks. $2 is a label only; it keeps the baseline and
@@ -267,6 +302,46 @@ for word in "${TEST_CMD[@]}"; do
   prev_word="$word"
 done
 
+# pytest's summary line, read from a captured log in ONE awk pass: strip ANSI colour, keep
+# the LAST line matching the summary grammar (a test run with -s can print a fake one
+# earlier), then classify its count words against a WHITELIST. Prints exactly one word:
+#   none   no summary line found (-qq, -p no:terminal, rewritten output): fail open
+#   norun  every count word is skipped/deselected/warning(s), at least one skipped or
+#          deselected, or the line is `no tests ran`
+#   ran    any other word (passed, failed, error, xfailed, xpassed, a plugin word)
+# LC_ALL=C: under a UTF-8 locale /usr/bin/awk ABORTS on a non-UTF-8 byte in the log
+# (`towc: multibyte conversion failure`, exit 2, no output). Every caller also treats any
+# output other than these three words as `none`, so a parser that dies fails open and says so.
+pytest_summary() {
+  # $1 = log file
+  LC_ALL=C awk '
+    BEGIN { esc = sprintf("%c", 27); last = "" }
+    {
+      line = $0
+      gsub(esc "\\[[0-9;]*m", "", line)
+      gsub(/\r/, "", line)
+      sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line)
+      if (line ~ /^(=+ )?(no tests ran|[0-9]+ [a-z]+( [a-z]+)*(, [0-9]+ [a-z]+( [a-z]+)*)*) in [0-9]+(\.[0-9]+)?s( \([0-9]+:[0-9]+:[0-9]+\))?( =+)?$/)
+        last = line
+    }
+    END {
+      if (last == "") { print "none"; exit }
+      sub(/^=+ /, "", last); sub(/ =+$/, "", last); sub(/ in [0-9]+(\.[0-9]+)?s.*$/, "", last)
+      if (last == "no tests ran") { print "norun"; exit }
+      n = split(last, part, ", ")
+      ran = 0; idle = 0
+      for (i = 1; i <= n; i++) {
+        word = part[i]; sub(/^[0-9]+ /, "", word)
+        if (word == "skipped" || word == "deselected") idle = 1
+        else if (word != "warning" && word != "warnings") ran = 1
+      }
+      print ((ran == 0 && idle == 1) ? "norun" : "ran")
+    }
+  ' "$1"
+}
+SKIP_NOTE=""
+SKIP_NOTE_TEXT="skip-check: not applied (no pytest summary line)"
+
 # --- baseline: the named test must be GREEN, or there is no transition to observe ----
 clear_pycache
 "${TEST_CMD[@]}" > "$BASE_LOG" 2>&1
@@ -276,6 +351,22 @@ if [ "$base_rc" -ne 0 ]; then
   echo "  A GREEN -> RED transition cannot be read off a run that was already RED." >&2
   evidence "baseline run" "$BASE_LOG" >&2
   exit 2
+fi
+
+# --- baseline skip check: an exit 0 in which pytest ran no test is not GREEN -----------
+# Refused here, BEFORE the mutation, so the target is never touched.
+if [ "$IS_PYTEST" -eq 1 ]; then
+  case "$(pytest_summary "$BASE_LOG")" in
+    norun)
+      echo "validate-mutation-red: UNEVALUABLE (no test ran) — the baseline is not GREEN: it ran no test (every selected test was skipped or deselected)." >&2
+      echo "  pytest exits 0 when it skips everything, so the exit code reads GREEN over a run" >&2
+      echo "  that put nothing under test. Nothing was mutated." >&2
+      evidence "baseline run" "$BASE_LOG" >&2
+      exit 2
+      ;;
+    ran) ;;
+    *) SKIP_NOTE="$SKIP_NOTE_TEXT" ;;
+  esac
 fi
 
 # --- baseline parse checks: an arm applies only where the UNMUTATED file passes it ----
@@ -331,6 +422,17 @@ if [ -z "$REFUSED" ]; then
   mut_rc=$?
 fi
 
+# --- mutated skip check: a mutated run that ran no test is neither a kill nor a survival.
+# Read here, refused below only after the verified restore.
+MUT_NORUN=0
+if [ -z "$REFUSED" ] && [ "$IS_PYTEST" -eq 1 ]; then
+  case "$(pytest_summary "$MUT_LOG")" in
+    norun) MUT_NORUN=1 ;;
+    ran)   ;;
+    *)     SKIP_NOTE="$SKIP_NOTE_TEXT" ;;
+  esac
+fi
+
 # --- restore, and verify the restore ------------------------------------------------
 cp "$BACKUP" "$TARGET" 2>/dev/null
 if ! cmp -s "$BACKUP" "$TARGET"; then
@@ -351,6 +453,7 @@ printf '  test:       %s\n' "${TEST_CMD[*]}"
 printf '  baseline:   GREEN (exit 0)\n'
 [ -z "$PARSE_NOTE" ] || printf '  %s\n' "$PARSE_NOTE"
 [ -z "$SC_NOTE" ] || printf '  %s\n' "$SC_NOTE"
+[ -z "$SKIP_NOTE" ] || printf '  %s\n' "$SKIP_NOTE"
 
 # Every refusal below is printed only after the restore above was VERIFIED.
 if [ "$REFUSED" = "parse" ]; then
@@ -368,6 +471,15 @@ if [ "$REFUSED" = "syntax-check" ]; then
   echo "validate-mutation-red: UNEVALUABLE (syntax-check) — '$SYNTAX_CHECK' passes the baseline and fails the mutated $TARGET." >&2
   echo "  A mutant that does not parse is not a claim about the named test." >&2
   evidence "syntax-check of the mutant" "$CHECK_LOG" >&2
+  exit 2
+fi
+if [ "$MUT_NORUN" -eq 1 ]; then
+  printf '  mutated:    exit %s, ran no test (every selected test was skipped or deselected)\n' "$mut_rc"
+  printf '  restore:    byte-identical\n'
+  echo "validate-mutation-red: UNEVALUABLE (no test ran) — the mutated run ran no test (every selected test was skipped or deselected)." >&2
+  echo "  The mutation changed what pytest selects or skips, so neither a GREEN nor a RED here" >&2
+  echo "  is a claim about the named test's assertion." >&2
+  evidence "mutated run" "$MUT_LOG" >&2
   exit 2
 fi
 

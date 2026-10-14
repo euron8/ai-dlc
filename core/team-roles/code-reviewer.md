@@ -591,11 +591,15 @@ Verify that evidence by replaying it, not by reading it:
 finding above; exit 2 means the claim was never testable as written (no such
 line, a replacement identical to the line it replaces, or a mutation that
 breaks the file instead of the test: a `*.py` mutant that does not compile, a
-mutant failing `--syntax-check '<cmd>'`, or pytest exiting outside {0, 1}) and
-the record has to be corrected before it can be graded either way. Exit 0 is
-not the whole claim: a runner hidden behind a wrapper, a runtime error inside a
-test body, or a non-Python target replayed without `--syntax-check` can still
-read PROVEN, so read the RED evidence it prints.
+mutant failing `--syntax-check '<cmd>'`, or pytest exiting outside {0, 1}, or a
+pytest baseline or mutated run that ran no test because every selected test was
+skipped or deselected) and the record has to be corrected before it can be
+graded either way. Exit 0 is not the whole claim: a runner hidden behind a
+wrapper, a runtime error inside a test body, or a non-Python target replayed
+without `--syntax-check` can still read PROVEN, so read the RED evidence it
+prints. A PROVEN carrying `skip-check: not applied` does not show the test
+executed (pytest's summary line was suppressed); re-run the replay without
+`-qq`.
 
 ### Gate-1 Review File Not Persisted To Disk = Gate-1 Not APPROVED
 

@@ -38,7 +38,7 @@ ONE place, to add a route):**
 | Frontmatter flag           | Routed role file                        | Why |
 |----------------------------|-----------------------------------------|-----|
 | `protected_path_editor: true` | `.claude/team-roles/protected-path-editor.md` | Editing the rulebook/governance surface needs the strictest change discipline and lead-reviewed diffs. |
-| `escalate_model: true`     | `.claude/team-roles/dev-escalated.md`   | The standard Dev contract on a stronger (opus-tier) model, for work that needs architectural judgment, cross-layer analysis, or an open-ended implementation approach. |
+| `escalate_model: true`     | `.claude/team-roles/dev-escalated.md`   | The standard Dev contract on a stronger model than `dev`, as configured in `aiDlcRoles`, for work that needs architectural judgment, cross-layer analysis, or an open-ended implementation approach, or whose owned paths are capital-path or high-blast-radius — the same criterion that routes a review to `code-reviewer-escalated`. |
 
 Absent any routing tag, a story is dispatched to `dev` as usual.
 
@@ -63,10 +63,16 @@ Absent any routing tag, a story is dispatched to `dev` as usual.
   instead of `dev`. That role reads and follows `dev.md` in full — same
   ownership boundaries and constraints — and differs ONLY in the model key
   it names. Use it for a story whose difficulty warrants the escalated
-  route; a well-scoped story with a precise checklist stays on `dev`. What
-  the route resolves to is operator config; do not evaluate it. The tag is
-  authored with the story (by PM/architect), not chosen at dispatch, so
-  the routing is auditable from the persisted story file.
+  route, and for a story whose owned paths meet the capital-path /
+  high-blast-radius criterion in the routing map's row — one criterion, the
+  judgment the review route applies; core names no path list, so a
+  consumer's own conventions say which paths qualify. A well-scoped story
+  with a precise checklist and no such path stays on `dev`. What the route
+  resolves to is operator config; do not evaluate it. The tag is authored
+  with the story (by PM/architect). The lead may ADD it once, before the
+  story's FIRST dev dispatch (`implementation.md` "Pre-dispatch routing"),
+  and never removes it, so the routing stays auditable from the persisted
+  story file.
 
 **Protected-path catalog** (default; consumers extend via
 `CLAUDE.md` or a project-local override):

@@ -98,7 +98,10 @@ render() { # <subject> <project> [args...]
 # instead of quietly making four arms vacuous.
 P0="$(fresh)" || { echo "FIXTURE BROKEN: seed.sh failed" >&2; exit 2; }
 S0="$P0/.claude/settings.json"
-WITH_MODEL="$(jq -r '.aiDlcRoles | to_entries[] | select(.value.model) | .key' "$S0")"
+# THE PERSONA WITH A MODEL IS OWNED BY ITS OWN ARM, so arm 1's set excludes the four persona names:
+# a mutant that skips personas would otherwise fail arm 1 too, which is entanglement, not two findings.
+PERSONA_WITH_MODEL="$(jq -r '.aiDlcRoles | to_entries[] | select(.value.model) | select(.key | test("^(cis|sm|tea|ux)$")) | .key' "$S0" | sed -n 1p)"
+WITH_MODEL="$(jq -r '.aiDlcRoles | to_entries[] | select(.value.model) | select(.key | test("^(cis|sm|tea|ux)$") | not) | .key' "$S0")"
 NO_MODEL="$(jq -r '.aiDlcRoles | to_entries[] | select(.value.model | not) | .key' "$S0")"
 WITH_EFFORT="$(jq -r '.aiDlcRoles | to_entries[] | select(.value.model and (.value.effort // "" | test("^(low|medium|high|xhigh|max)$"))) | .key' "$S0" | sed -n 1p)"
 NO_EFFORT="$(jq -r '.aiDlcRoles | to_entries[] | select(.value.model and (.value.effort == null)) | .key' "$S0" | sed -n 1p)"
@@ -117,8 +120,8 @@ BAD_OMIT="$(jq -r '.aiDlcRoles | to_entries[] | select(.value.model and (.value.
 N_WITH_MODEL="$(printf '%s\n' "$WITH_MODEL" | grep -c .)"
 if [ -z "$WITH_EFFORT" ] || [ -z "$NO_EFFORT" ] || [ -z "$BAD_EFFORT" ] \
    || [ -z "$WITH_OMIT" ] || [ -z "$NO_OMIT" ] || [ -z "$BAD_OMIT" ] \
-   || [ -z "${NO_MODEL// /}" ] || [ "$N_WITH_MODEL" -lt 2 ]; then
-  echo "FIXTURE BROKEN: the seeded declaration yields with-effort='$WITH_EFFORT' no-effort='$NO_EFFORT' bad-effort='$BAD_EFFORT' with-omit='$WITH_OMIT' no-omit='$NO_OMIT' bad-omit='$BAD_OMIT' no-model='$NO_MODEL' with-model=$N_WITH_MODEL — the arms below cannot discriminate" >&2
+   || [ -z "${NO_MODEL// /}" ] || [ "$N_WITH_MODEL" -lt 2 ] || [ -z "$PERSONA_WITH_MODEL" ]; then
+  echo "FIXTURE BROKEN: the seeded declaration yields with-effort='$WITH_EFFORT' no-effort='$NO_EFFORT' bad-effort='$BAD_EFFORT' with-omit='$WITH_OMIT' no-omit='$NO_OMIT' bad-omit='$BAD_OMIT' no-model='$NO_MODEL' with-model=$N_WITH_MODEL persona-with-model='$PERSONA_WITH_MODEL' — the arms below cannot discriminate" >&2
   drop "$P0"
   exit 2
 fi
@@ -145,6 +148,21 @@ arm_renders_model_bearing_roles() {
   done <<EOF
 $WITH_MODEL
 EOF
+  return 0
+}
+
+# Arm 1c: a PARTY PERSONA that sets a model is defined like any role -- its model key and its
+# effort both rendered. The renderer keys on the model key alone, so this holds by construction
+# today; the arm and its mutant (M11) exist so a fix that special-cases persona names fails here.
+arm_persona_with_model_is_defined() {
+  local p="$1" subj="$2" f m e
+  render "$subj" "$p" >/dev/null || return 1
+  f="$p/.claude/agents/$PERSONA_WITH_MODEL.md"
+  [ -f "$f" ] || return 1
+  m="$(jq -r --arg r "$PERSONA_WITH_MODEL" '.aiDlcRoles[$r].model' "$p/.claude/settings.json")"
+  e="$(jq -r --arg r "$PERSONA_WITH_MODEL" '.aiDlcRoles[$r].effort' "$p/.claude/settings.json")"
+  grep -qxF -- "model: $m" "$f" || return 1
+  grep -qxF -- "effort: $e" "$f" || return 1
   return 0
 }
 
@@ -411,7 +429,7 @@ arm_idempotent() {
   return 0
 }
 
-ARMS="renders_model_bearing_roles marker_sits_below_the_frontmatter no_file_for_model_less_role effort_line_tracks_the_declaration
+ARMS="renders_model_bearing_roles persona_with_model_is_defined marker_sits_below_the_frontmatter no_file_for_model_less_role effort_line_tracks_the_declaration
 invalid_effort_omitted_and_reported omit_claude_md_tracks_the_declaration check_joins_declaration_to_projection
 foreign_definition_untouched stale_projection_is_caught_and_cleared check_never_writes
 three_states_are_distinct idempotent"
@@ -431,6 +449,7 @@ while IFS=: read -r name rc; do
   [ -n "$name" ] || continue
   case "$name" in
     renders_model_bearing_roles)         msg="every role with a resolvable model gets a definition naming that model KEY ($N_WITH_MODEL role(s))" ;;
+    persona_with_model_is_defined)       msg="a party persona ($PERSONA_WITH_MODEL) that SETS a model gets a definition carrying its model key and effort, like any role" ;;
     marker_sits_below_the_frontmatter)   msg="the model:/effort: lines sit INSIDE the frontmatter fences and the generated marker sits below them (asserted as line numbers)" ;;
     no_file_for_model_less_role)         msg="a role with NO model gets NO definition, while one with a model does (the party-persona partition)" ;;
     effort_line_tracks_the_declaration)  msg="a declared effort is rendered and an undeclared one produces no effort line" ;;
@@ -618,6 +637,13 @@ mut emits-omit-line-unconditionally \
 mut accepts-any-omit-value \
   's/^    true|false) return 0 ;;$/    *) return 0 ;;/' \
   omit_claude_md_tracks_the_declaration
+
+# M11: the persona-name special case -- the old reading ("personas carry no model, skip them")
+# written as code. A persona that SETS a model then gets no definition. Arm 1c alone moves:
+# arm 1's set excludes the persona names, and arm 2 asserts only the model-less roles.
+mut skips-persona-names \
+  's/^  mkey="\$(jq -r --arg r "\$role" '"'"'.aiDlcRoles\[\$r\].model \/\/ empty'"'"' "\$SETTINGS" 2>\/dev\/null)"$/&; case "$role" in cis|sm|tea|ux) mkey="" ;; esac/' \
+  persona_with_model_is_defined
 
 # UNMUTATED CONTROL, with a POSITIVE conjunct. A control asserting only "nothing went wrong"
 # passes against a subject replaced by `exit 0`, because rc=0 with nothing reported is exactly

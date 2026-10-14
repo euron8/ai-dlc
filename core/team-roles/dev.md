@@ -226,8 +226,13 @@ Before starting any task, read these files in order:
           nothing was tested — nothing was mutated, or the mutation broke
           the file instead of the test (a `*.py` mutant that does not
           compile, a mutant failing `--syntax-check '<cmd>'`, or pytest
-          exiting outside {0, 1}); a no-op replay is not a failed one —
+          exiting outside {0, 1}), or a pytest baseline or mutated run
+          ran no test (every selected test skipped or deselected: `no
+          test ran`); a no-op replay is not a failed one —
           **3** the restore did not verify and the tree is still mutated.
+          A PROVEN that prints `skip-check: not applied` does not show the
+          test executed (pytest's summary line was suppressed); re-run the
+          replay without `-qq`.
           For a non-Python target pass `--syntax-check` with the language's
           parser (`'bash -n'`, `'node --check'`); without it a non-parsing
           mutant of that file can still read PROVEN.
