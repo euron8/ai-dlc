@@ -832,6 +832,15 @@ to the joined record, opening them with its own `- artifact:` / `- artifact_sha_
 `- artifact_sha_after:` triple per file it edits, each before equal to the bytes the join left. The join never overwrites a record, so it is run before the serial
 remediator and never after it.
 
+**Every escalated entry reaches the serial remediator.** A shard whose fix lies partly outside
+its files writes two entries with one `source:` token, `repaired` and `escalated`. The join, in
+every mode, prints one `ESCALATED: <part> <entry>` line per escalated entry and then
+`ESCALATED-COUNT: <n>`. When the count is above 0, dispatch the serial remediator after the join
+whether or not any finding cited two files, and its brief carries every `ESCALATED:` line
+verbatim. The join also refuses a `repaired` MAJOR or CRITICAL whose claim sets part of the fix
+aside as outside the shard or not required without naming a hand-off, and a `repaired` entry
+with an edit and no `siblings:` field once any entry of the set carries one.
+
 After a join refusal naming a file `which no dispatched agent wrote`:
 
 1. Re-dispatch that shard, writing through Edit, Write or MultiEdit, and re-run the join. The
@@ -912,14 +921,21 @@ in this order:
    parts AND every finding whose fix lies in PRD text outside the in-scope parts — a part shard
    never edits text outside its section file, so such a finding has no other owner.
 
-The party and elicitation repairs run this same procedure with `--pass party` and
-`--pass elicitation`, under the shard dirs and record names "Validation cycle" items 1 and 2
-give them. The requirements gate's FAILURE repair runs it with `--artifact gate-<type> --pass <M>`
+The party and elicitation repairs run this same procedure, under the shard dirs and record
+names "Validation cycle" items 1 and 2 give them. For the requirements subject they take
+`--pass party` and `--pass elicitation`. On the files and sections axes they take
+`--artifact <artifact>-party --pass 1` and `--artifact <artifact>-elicitation --pass 1`: outside
+the subject the join reads `--pass` only as a pass number, and refuses `--pass elicitation`
+there. The requirements gate's FAILURE repair runs it with `--artifact gate-<type> --pass <M>`
 (`<type>` the gate type, `<M>` numeric), splitting into
 `s<N>/shards/gate-<type>-repair-p<M>/` and joining into `s<N>/gate-<type>-repair-p<M>.md`, the
 name the non-subject gate caller writes; `--pass party`, `--pass elicitation` and `--artifact`
-are never combined. Those record names sit outside `*-repair-p<M>.md`, so neither can stand in for an
-adversarial pass's repair record.
+are never combined. The subject's `requirements-party-repair.md` and
+`requirements-elicitation-repair.md` sit outside `*-repair-p<M>.md`. The files- and
+sections-axis records (`<artifact>-party-repair-p1.md`, `<artifact>-elicitation-repair-p1.md`)
+and the gate record sit inside that glob; arm H of `validate-adversarial-convergence.sh` reads a
+record whose name does not carry the series' stem as another repair's (a party or elicitation
+round, or a gate repair), so none of them stands in for an adversarial pass's repair record.
 
 It writes the repaired artifact in place plus a **repair record** (`<M>` = the pass repaired) at
 `_bmad-output/planning-artifacts/s<N>/<artifact>-repair-p<M>.md` when the caller is an
@@ -948,6 +964,11 @@ The second line applies to a section-sharded repair and names the ASSEMBLED docu
 command that reads its own file measured a section copy while the shard ran, so only the
 assembled bytes answer, and a line-number self-reference is falsified by any edit above it.
 Run it after the join and after the serial cross-section remediator.
+
+**Moved cites are the serial remediator's, after the join.** A `<file>:<n>` cite into a region a
+shard's edit shifted cannot be checked inside that shard: a section shard sees only its copy.
+The serial remediator re-reads every cite into each edited file AFTER the join or assembly,
+before these validators run, and repairs any that moved as its own entry.
 
 Exit 1 from `validate-artifact-derivations.sh` is a repair that falsified a
 derivation — most often not its own, but one

@@ -267,7 +267,8 @@ PROBE_NEW='src_probe() { return 0; }
 src_probe_disabled() {'
 # JX18: the id-only key with the self-probe IN PLACE -- the probe refuses before any corpus is read,
 # so every party run stops at it: the arms that expect a party join or a NAMED refusal all die.
-mutant "JX18 source keyed on the id alone (self-probe in place)" "sjnames party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4" \
+# srcsetaside (BL-519) dies too: it is a --sources run, and the probe stops every one before its arm.
+mutant "JX18 source keyed on the id alone (self-probe in place)" "sjnames party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 srcsetaside" \
   "$IDONLY_OLD" "$IDONLY_NEW"
 # JX19: the same key AND the probe removed -- now only the arms that seed an id another seat carries see it.
 mutant2 "JX19 source keyed on the id alone, self-probe removed" "partyunres srcunres" \
@@ -285,7 +286,8 @@ mutant "JX22 files/document mode not a party repair for <name>-party" "partyunre
 mutant "JX23 subject --pass party not a party repair" "sjpartysrc" \
   '[ "$SUBJMODE" = 1 ] && [ "$PASS" = party ] && [ -z "$ARTIFACT" ] && PARTY=1' \
   'false && PARTY=1'
-mutant "JX24 --sources reports refusals and exits 0" "srcunres" \
+# srcsetaside dies too: its set-aside refusal is reported and then acquitted by the same exit 0.
+mutant "JX24 --sources reports refusals and exits 0" "srcunres srcsetaside" \
   '  [ "$refuse_n" -eq 0 ] || exit 2
   echo "SOURCES:' \
   '  true || exit 2
@@ -302,6 +304,41 @@ mutant "JX26 the marker era decided over the cited seat files only" "partyx1" \
 mutant "JX27 the marker era not decided per step" "partyx4" \
   '      case "$b" in "$st"-*)' \
   '      case "$b" in *)'
+# ---- BL-508 / BL-519 entry contract. The self-probe refuses before any corpus is read, so a
+# mutant the probe sees kills every join; those that reach a single arm are paired with the probe
+# removed (mutant2), as JX19 is.
+CTPROBE_OLD='contract_probe() {'
+CTPROBE_NEW='contract_probe() { return 0; }
+contract_probe_disabled() {'
+mutant "JX28 the siblings arm's PENDING line not printed" "sibpending" \
+  '    echo "PENDING: no entry of this set carries' \
+  '    : "PENDING: no entry of this set carries'
+mutant "JX29 a repaired edit with no siblings: not refused" "sibmissing" \
+  '      refuse "${r}: the ${d} entry is repaired with an edit and carries no' \
+  '      : "${r}: the ${d} entry is repaired with an edit and carries no'
+mutant "JX30 the set-aside refusal removed" "setaside srcsetaside" \
+  '      SETASIDE) refuse' \
+  '      SETASIDE) :'
+mutant2 "JX31 the set-aside hand-off exemption removed, self-probe removed" "handoff" \
+  '            && claim !~ /escalat|serial remediator/) print "SETASIDE' \
+  '            ) print "SETASIDE' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
+mutant2 "JX32 an n/a edit read as a real edit, self-probe removed" "sibok" \
+  '      if (match(v, /[A-Za-z0-9_.\/-]+[.](md|json|jsonl|yaml|yml|txt|csv)/)) edt = 1' \
+  '      edt = 1' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
+mutant2 "JX33 every heading read as MAJOR, self-probe removed" "sibok" \
+  '                 sev = (h ~ /(^|[^A-Z])(CRITICAL|MAJOR)([^A-Z]|$)/); next }' \
+  '                 sev = 1; next }' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
+mutant "JX34 the joined run prints no ESCALATED: lines" "sibok handoff" \
+  '# with every one of these entries in its brief (_gate-procedures.md, "Adversarial repair dispatch").
+printf '"'"'%s'"'"' "$ESC_LINES"' \
+  '# with every one of these entries in its brief (_gate-procedures.md, "Adversarial repair dispatch").
+:'
+mutant "JX35 --sources does not apply the entry contract" "srcsetaside" \
+  '  contract_refusals "$(contract_check "$SRC_REC")"' \
+  '  ESC_LINES=""; ESC_N=0'
 # ---- END JX MUTANTS.
 
 # ------------------------------------------------------------------------------ the reap

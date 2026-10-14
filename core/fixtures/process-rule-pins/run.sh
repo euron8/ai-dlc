@@ -197,6 +197,15 @@ party-unsharded|S|steps/_gate-procedures.md|## Validation cycle|## Where a chang
 party-unsharded-check|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**An unsharded round has the same write model.**|para|join-remediator-shards.sh --sources <that record> --sprint <N>
 srev-seats-record|S|steps/sprint-review.md|### 2. Sprint-Level Party Mode|### 3.|- Record every finding; the seats edit nothing|prefix
 rem-party-source|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**A party repair names the seat finding behind every entry.**|para|every entry carries a `source:` line
+rem-sib-field|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**Re-check every sibling of the text you replaced.**|para|carries a `- siblings:` field
+rem-sib-own-files|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**Re-check every sibling of the text you replaced.**|para|Never grep the sprint slot, `shards/` or any repair record
+rem-sib-control|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**Re-check every sibling of the text you replaced.**|para|whose output is 1 or more
+rem-esc-outside|R|remediator.md|## Contract|## The evidence contract|**A fix that lies outside your files is escalated, never set aside.**|para|report it in your part as escalated
+rem-esc-split|R|remediator.md|## Contract|## The evidence contract|**A fix that lies outside your files is escalated, never set aside.**|para|A partial repair is TWO entries carrying the same `source:` token
+rem-esc-never|R|remediator.md|## Contract|## The evidence contract|**A fix that lies outside your files is escalated, never set aside.**|para|is never dispositioned `repaired` on the grounds
+gp-esc-dispatch|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Every escalated entry reaches the serial remediator.**|para|When the count is above 0, dispatch the serial remediator
+gp-esc-brief|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Every escalated entry reaches the serial remediator.**|para|its brief carries every `ESCALATED:` line
+gp-moved-cites|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Moved cites are the serial remediator's, after the join.**|para|re-reads every cite into each edited file AFTER the join or assembly
 pm-adr-probe|R|pm.md|## Responsibilities|## The evidence contract|in the story implementing the decision the ADR records|contains
 pm-adr-trigger|R|pm.md|## Responsibilities|## The evidence contract|carries as an unrun probe|contains
 pm-adr-tag|R|pm.md|## Responsibilities|## The evidence contract|`probabilistic/passive-monitoring` AC, written at creation|contains

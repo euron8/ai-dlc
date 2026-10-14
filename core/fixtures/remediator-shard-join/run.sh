@@ -161,6 +161,20 @@ p_partyx1 "$JOIN" && ok "PS11: the only cited seat (architect-1) unmarked, its s
 p_partyx4 "$JOIN" && ok "PS12: an earlier step's pre-marker seat cited beside marked architecture seats -> JOINED (its step has no marker)" \
   || bad "PS12: a pre-marker seat of another step was refused (rc=$RC): $(cat "$JO")"
 
+# ---- the entry contract (BL-508, BL-519). Each refusal has its ALLOW twin one property apart.
+p_sibpending "$JOIN" && ok "EC1: every part predates the siblings rule -> JOINED, one PENDING line, ESCALATED-COUNT: 0 (the join does not wedge a pre-rule repair)" \
+  || bad "EC1: a pre-rule part set did not join with one PENDING line (rc=$RC): $(cat "$JO")"
+p_sibok "$JOIN" && ok "EC2: every part carries siblings: -> JOINED, no PENDING, each escalated entry printed by part and ESCALATED-COUNT: 3" \
+  || bad "EC2: a post-rule part set did not join, or its escalated entries were not printed (rc=$RC): $(cat "$JO")"
+p_sibmissing "$JOIN" && ok "EC3: EC2 one property apart, part 03 a repaired MAJOR with an edit and no siblings: -> REFUSED by name, nothing written" \
+  || bad "EC3: a repaired edit with no siblings: beside post-rule parts was not refused (rc=$RC): $(cat "$JO")"
+p_setaside "$JOIN" && ok "EC4: graph's s318 sm-05 F-3 entry, a repaired MAJOR set aside as outside this shard and not required -> REFUSED at its heading" \
+  || bad "EC4: a set-aside MAJOR was not refused (rc=$RC): $(cat "$JO")"
+p_handoff "$JOIN" && ok "EC5: the same entry split, the remainder escalated under the same source -> JOINED, ESCALATED: 01.md ... (remainder), ESCALATED-COUNT: 1" \
+  || bad "EC5: a handed-off split pair did not join with its escalated line (rc=$RC): $(cat "$JO")"
+p_srcsetaside "$JOIN" && ok "EC6: --sources on a record whose resolving entry sets a MAJOR aside -> rc 2, the set-aside refusal named (PS7 is its ALLOW twin)" \
+  || bad "EC6: --sources did not apply the set-aside arm (rc=$RC): $(cat "$JO")"
+
 # R1: the role file the remediator is bound to teaches the write tool and the citation form. Walked
 # up from this fixture in both layouts; install copies team-roles/ verbatim, so no render exists.
 ROLE=""
