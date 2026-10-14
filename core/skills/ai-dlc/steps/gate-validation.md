@@ -240,6 +240,16 @@ H1/H2 stay with the lead — a self-test is never escalated into the mechanism i
   `artifact-path-grammar.md` rule 5 requires — never by mtime and never by
   listing order — so `-p2` outranks the unsuffixed file and `-p10` outranks
   `-p9`.
+- **A gate-1 re-review answers the pass before it.** When the gate-1 file read
+  is a `-p<M>` file with M >= 2, run
+  `scripts/ai-dlc/validate-carried-findings.sh <pass M-1 file> <pass M file>`
+  (pass M-1 is `-p<M-1>`, or the unsuffixed file when M is 2) and record its
+  output line in the gate log. Exit 1 or 2 FAILS this check: a prior Critical
+  or Important finding with no `carried:` line, an `open` carried finding under
+  a verdict other than `NEEDS_REWORK` or `BLOCKED`, or a pair it cannot read. A
+  merged review and a serial one are each one file and are read the same way.
+  `PENDING:` (exit 0) is a review committed before the program reached this
+  tree, and it passes.
 - **Zero matches FAILS this check; it is never a fallback to recollection.** An
   unreadable verdict is an unmet validation, not an absent one. Name the file.
   Do not infer the verdict from the review's prose, from its existence, or from

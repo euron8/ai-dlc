@@ -373,6 +373,23 @@ closing commit; the closing writer does, after gate 3. Persisting the gate-1
 review file is unchanged: a serial reviewer commits it to its Git-tracked path
 before the verdict is recorded, as Check 1 requires. The lead persists
 the shard directory together with the merged file.
+A re-review, pass M >= 2, reviews the fix delta and dispatches through this same fan-out:
+run the partition with `<prior-sha>` in place of `<base>`, where `<prior-sha>` is the
+column-0 `reviewed-sha:` of the pass M-1 review file, into the `-p<M>` shard directory, so
+the manifest's `base` line records the prior sha, and dispatch on its answer exactly as
+above, `SERIAL` included. When that run is refused (exit 2: the prior sha does not resolve
+or is not an ancestor of the frozen sha, after a rebase or a force-push), record the refusal
+line in the gate log and run the full `<base>..<frozen-sha>` partition instead; a re-review
+never dispatches a `shard: 1/1` delta of no stated range. The partition drops the scan
+roots (the story file, its Dev Agent Record, RED evidence, `pending.md`), so the first cross
+reviewer, or the serial reviewer, is briefed with the whole story record and the full
+`git diff <prior-sha>..<frozen-sha>` including scan-root paths, and every part reviewer gets
+the story record as context. Every Critical and Important `#### ` finding of pass M-1 is
+carried: to each delta part holding a file it cites, else to the first cross reviewer. The
+new review answers each with one column-0 line `carried: <prior heading> — resolved` or
+`carried: <prior heading> — open`, and an `open` one is re-emitted as a finding of this
+pass, so it carries again. Gate validation Check 1 runs `validate-carried-findings.sh` on
+the two files.
 
 **DAR-fold preflight before gate-2 dispatch.** After gate1 (code
 review) approves a story and BEFORE dispatching gate2 (QA), the lead

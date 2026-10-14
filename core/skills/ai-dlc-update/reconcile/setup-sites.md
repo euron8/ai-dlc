@@ -203,6 +203,7 @@ core_manifest:
   - core/fixtures/mandatory-rules-skip-accounting/**
   - core/fixtures/mandatory-rules-snapshot-position/**
   - core/fixtures/mutation-red-replay/**
+  - core/fixtures/carried-findings/**
   - core/fixtures/trunk-audit-classes/**
   - core/fixtures/story-fields-derive/**
   - core/fixtures/transient-ignore-block/**
