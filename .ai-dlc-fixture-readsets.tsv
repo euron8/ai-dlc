@@ -14,7 +14,7 @@
 # path<TAB>sha lines in the runner's universe as traced; the runner clears a stale key record when
 # it recomputes the same value over the tree it is pushing.
 #
-# fixtures mapped: 224    entries: 13183
+# fixtures mapped: 224    entries: 13173
 absorbed-specifics-survive	core/fixtures/absorbed-specifics-survive/run.sh
 absorbed-specifics-survive	core/skills/ai-dlc/SKILL.md
 absorbed-specifics-survive	core/skills/ai-dlc/rule-bodies/rule-13.md
@@ -1237,21 +1237,6 @@ bmad-invocation-resolve	core/scripts/.git
 bmad-invocation-resolve	core/scripts/core/skills/ai-dlc
 bmad-invocation-resolve	core/scripts/validate-bmad-invocations.sh
 budget-summary-verdict	.git
-budget-summary-verdict	.git/HEAD
-budget-summary-verdict	.git/config
-budget-summary-verdict	.git/index
-budget-summary-verdict	.git/info/exclude
-budget-summary-verdict	.git/objects/33/a4425c0ed05dea70f881660ffdf01c7c86da33
-budget-summary-verdict	.git/objects/7f/1479d0f091b8393b8613744a84c3c8229a65a3
-budget-summary-verdict	.git/objects/info/commit-graphs/commit-graph-chain
-budget-summary-verdict	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
-budget-summary-verdict	.git/objects/info/commit-graphs/graph-61ac52da05ee113a5a22871cdc3010f8f63bd5f1.graph
-budget-summary-verdict	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
-budget-summary-verdict	.git/objects/info/commit-graphs/graph-fa7bbe6bcd67e84c678384cfb84f17a16d6fa8fa.graph
-budget-summary-verdict	.git/objects/pack/multi-pack-index
-budget-summary-verdict	.git/packed-refs
-budget-summary-verdict	.git/refs/heads/main
-budget-summary-verdict	.gitignore
 budget-summary-verdict	core
 budget-summary-verdict	core/.claude
 budget-summary-verdict	core/.git
@@ -1259,6 +1244,7 @@ budget-summary-verdict	core/core/skills/ai-dlc
 budget-summary-verdict	core/fixtures
 budget-summary-verdict	core/fixtures/budget-summary-verdict
 budget-summary-verdict	core/fixtures/budget-summary-verdict/run.sh
+budget-summary-verdict	core/hooks/ai-dlc-window.sh
 budget-summary-verdict	core/schemas
 budget-summary-verdict	core/schemas/sprint-status.json
 budget-summary-verdict	core/scripts
@@ -1267,6 +1253,7 @@ budget-summary-verdict	core/scripts/.git
 budget-summary-verdict	core/scripts/core/skills/ai-dlc
 budget-summary-verdict	core/scripts/sprint-status.sh
 budget-summary-verdict	core/scripts/validate-artifact-budget.sh
+budget-summary-verdict	core/scripts/verdict.sh
 changelog-sprint-slot	.git/HEAD
 changelog-sprint-slot	.git/config
 changelog-sprint-slot	.git/index
@@ -12282,7 +12269,10 @@ story-evidence-scaffold	core
 story-evidence-scaffold	core/fixtures
 story-evidence-scaffold	core/fixtures/story-evidence-scaffold
 story-evidence-scaffold	core/fixtures/story-evidence-scaffold/run.sh
+story-evidence-scaffold	core/scripts/validate-handoff-evidence.sh
 story-evidence-scaffold	core/skills/ai-dlc/steps/gate-validation.md
+story-evidence-scaffold	core/skills/ai-dlc/steps/implementation.md
+story-evidence-scaffold	core/skills/ai-dlc/steps/sprint-review.md
 story-evidence-scaffold	core/skills/ai-dlc/steps/stories-test-strategy.md
 story-evidence-scaffold	core/team-roles/code-reviewer.md
 story-evidence-scaffold	core/team-roles/dev.md
@@ -13202,6 +13192,7 @@ write-format-steering-multiformat	core/skills/ai-dlc-update/reconcile/lib.sh
 # digest advisor-gate-deny 7aae9015403f15e6cb40fa5de43b2f93726b6ae0d3be9236f466c98d1483b123
 # digest advisor-gate-deny-mutants 9fd24773eb4caa10e92d74e9f3de0c329e5de75ec5d88e1770953c14434b781f
 # digest blocker-adjudication-record 99314f2a1c6cc2fcca6d94d77cd3a5f29a9ea8d5f0598e00be2da52fe4ad932b
+# digest budget-summary-verdict 5af57cc2c8a71d2bdfbb1bd11931bf0d008a001799f1c7ef586ffdafb80ac5c7
 # digest check-22-spawn-ledger 0e5ff3a1b1ff961bc4148329da4248438069df6f46e35ebe20f59b0602c33ece
 # digest consumer-machinery-inventory d20cc399988d538e902de541916f7059332110ef170506b5a03ec3b34e0f7a07
 # digest consumer-suite-pool 7911a7e39a32ca5d34bd6ee397045a8fb6ffeb97334b9df9810a12980534db79
@@ -13230,6 +13221,7 @@ write-format-steering-multiformat	core/skills/ai-dlc-update/reconcile/lib.sh
 # digest self-update-join-gate 1ebfed9e70229033fc77264c31a9adbe59f70973c41518bf13d14c6752c0b54f
 # digest settings-merge-documented-form c8749c59bf12d4e1027eefb344a6678683e3c8ff76ca2c89b13e1d5d6b53f05f
 # digest shipped-rule-version-floor 4e995134bd73306bc6bdf413f206b16f294208e5f825399458510a560ef3f6c7
+# digest story-evidence-scaffold 52cfdc66b8497b9f556abbc762a174d7db229a7ad1aec19fb083d350b9594dff
 # digest subject-partition cfd281009538f5e7e01e43d982fa30941d49813af95a91808bef887bc04b5409
 # digest update-preflight-push e83485232f100b9fa9fb0af07c0acb8815b5b2e7a57773a1b4dd503678335f39
 # digest upstream-routing 1295d153d2989df414b4fd4afa9d054638a2f0c5002677c31e37238edeb780e2
