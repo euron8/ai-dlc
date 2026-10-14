@@ -39,7 +39,9 @@ source; do not infer either value from anywhere else.
 
    **A fix that lies outside your files is escalated, never set aside.** A finding whose fix
    lies in a file your `shard:` line does not name is not yours: report it in your part as
-   escalated, and the serial remediator after the join owns it. A partial repair is TWO entries
+   escalated, and the serial remediator after the join owns it. Your siblings fence greps only
+   your own files; a sibling outside them is named on an `escalated` entry, unfenced (the
+   evidence contract, "Re-check every sibling of the text you replaced"). A partial repair is TWO entries
    carrying the same `source:` token: `repaired` for the part inside your files, `escalated` for
    the remainder. A MAJOR or CRITICAL is never dispositioned `repaired` on the grounds that the
    rest of it is outside this shard or not required: the join refuses a `repaired` MAJOR whose
@@ -57,7 +59,10 @@ source; do not infer either value from anywhere else.
    section file. Every `edit:` line cites the section file by the project-relative path in the
    ledger's spelling (`_bmad-output/planning-artifacts/s<N>/…`), never a bare basename. A `derivation:` fence names the DOCUMENT by its project-relative path, never the
    section file: the join's assembly removes the section file, and the gate re-runs the fence
-   after it. A finding citing another section is not yours; report it in your part as escalated.
+   after it. For the same reason a section shard writes no siblings fence: every `repaired`
+   entry with an edit carries `- siblings: n/a (section shard; re-checked by the serial
+   remediator after assembly)`. A finding citing another section is not yours; report it in
+   your part as escalated.
 
    **As a subject shard** over the requirements subject (Rule 28, "Split dispatch": subject
    axis), your brief names either a section file or, for a whole-file part such as the SPEC,
@@ -67,6 +72,8 @@ source; do not infer either value from anywhere else.
    follow it. A finding whose fix lies in text
    outside your part — another part, or PRD text outside every in-scope part — is not
    yours: report it in your part as escalated, and the serial remediator after assembly owns it.
+   A subject shard writes no siblings fence either: every `repaired` entry with an edit carries
+   `- siblings: n/a (section shard; re-checked by the serial remediator after assembly)`.
 2. **Repair every CRITICAL and MAJOR.** MINOR/NIT at your discretion; say which you
    skipped and why.
 3. **Write the repaired artifact in place**, and write a **repair record** to
@@ -107,13 +114,16 @@ Then, per finding:
 - source: <seat-file>#<finding-id> [<seat-file>#<finding-id> ...]   (a party repair only)
 - disposition: repaired | escalated | skipped (nit)
 - edit: <artifact file:line(s)>
-- siblings:   (every `repaired` entry whose edit is not n/a; the paragraph below)
+- siblings:   (every `repaired` entry whose edit is not n/a, in ONE of three forms; the paragraph below)
 
 ```derived
-$ grep -rn -F '<the text you replaced>' <the artifact's own files>
+$ grep -rn -F '<the text you replaced>' <your shard's own files, or the document>
 $ grep -c -F '<the text you wrote>' <the file you edited>
 <n>
 ```
+
+- siblings: n/a (section shard; re-checked by the serial remediator after assembly)
+- siblings: n/a (insertion)
 
 - derivation:
 
@@ -128,16 +138,21 @@ $ <the exact command>
 **Re-check every sibling of the text you replaced.** A repair that fixes one copy of a sentence
 and leaves its sibling, or shifts a `<file>:<n>` cite, is the next pass's MAJOR. So every
 `repaired` entry whose `edit:` is not n/a carries a `- siblings:` field and a `derived` fence
-holding two commands: `grep -rn -F '<the text you replaced>'` over the artifact's own files
-(`_bmad-output/planning-artifacts/s<N>/stories` and `s<N>/epics` for a stories repair, the
-document for a document), whose output is empty or lists sites each carried as its own entry;
-and the control `grep -c -F '<the text you wrote>' <the file you edited>`, whose output is 1 or
-more. Never grep the sprint slot, `shards/` or any repair record: they hold this command's own
-text, so the replay after the join finds the replaced text there and the fence goes stale. A
-sibling in a file outside your shard is an `escalated` entry naming it. Cites the edit moved
-are re-checked by the serial remediator after the join, never inside a section shard. The join
-refuses a `repaired` entry with an edit and no `siblings:` field once any entry of the set
-carries one.
+holding two commands: `grep -rn -F '<the text you replaced>'` over the files your `shard:` line
+names (as a files-mode shard), or over the document (as the one serial remediator of a
+document), whose output is empty or lists sites each carried as its own entry; and the control
+`grep -c -F '<the text you wrote>' <the file you edited>`, whose output is 1 or more. A
+files-mode shard greps ONLY its own files: another shard is editing the rest concurrently, so a
+copy you record there is fixed under you and your fence goes stale. A sibling you know of in a
+file outside your shard goes on an `escalated` entry naming the file and the text, with no
+fence; the cross-file grep is the serial remediator's, after the join. Never grep the sprint
+slot, `shards/` or any repair record: they hold this command's own text, so the replay after
+the join finds the replaced text there and the fence goes stale. A section or subject shard
+writes `- siblings: n/a (section shard; re-checked by the serial remediator after assembly)`
+instead of a fence: the control names your section file, which assembly deletes. An edit that
+only inserts new text, replacing none, writes `- siblings: n/a (insertion)`. Cites the edit
+moved are re-checked by the serial remediator after the join, never inside a shard. The join
+refuses a `repaired` entry with an edit and no `siblings:` field.
 
 **A party repair names the seat finding behind every entry.** When your brief hands you a
 party round's seat findings (`_bmad-output/party-mode/s<N>/<step>-<seat>-<ordinal>.md`), every

@@ -105,12 +105,20 @@ graph's setting, not core's. Subsumes the earlier "adversary series length" find
 Efficacy, re-read for the fix: about 10 of about 33 sampled repair-introduced MAJORs are a sibling
 left unfixed or a moved cite; the rest are underived claims the existing evidence contract already
 forbids. The fix reaches that third, so the $105 is not what it recovers. The fix: every `repaired`
-entry with a real edit carries `- siblings:` and a fence that greps the replaced text across the
-artifact's own files (never the slot, `shards/` or a record, which hold the command's own text)
-plus a control count of the new text; moved cites are the serial remediator's after the join.
-`join-remediator-shards.sh` refuses a missing field once any entry of the set carries one, and is
-PENDING over a set where none does: 0 of graph's 202 s317/s318 shard parts carry it. Not caught:
-a remediator set omitting the field everywhere (PENDING, not refused); whether the grepped text
+entry with a real edit carries `- siblings:`. A files-mode shard writes a fence grepping the
+replaced text over ONLY its own files (a concurrent shard fixing a copy elsewhere would turn a
+wider fence stale) plus a control count of the new text, and names an out-of-shard sibling on an
+unfenced `escalated` entry. A section or subject shard writes `n/a (section shard; re-checked by
+the serial remediator after assembly)`, because assembly deletes the section file its control
+names. An insertion-only edit writes `n/a (insertion)`. The serial remediator runs the cross-file
+grep over the assembled files and re-checks moved cites, after the join. `join-remediator-shards.sh`
+refuses a missing field in every parts mode, total omission included: the era is the install,
+since parts are written fresh by agents reading the installed role file. Only `--sources`, which
+checks a record that may span a pull, keeps a PENDING line, binding from the record's first
+carrier onward. 0 of graph's 202 s317/s318 shard parts carry the field, so all 202 would refuse.
+They are never re-joined, though: 20 of their 23 dirs already hold a joined record, which a join
+refuses to overwrite; the other 3 belong to closed sprints; and no shipped program calls the join.
+Not caught: a `--sources` record omitting the field everywhere (PENDING); whether the grepped text
 is really the replaced text (the write ledger carries no old_string); a substantive mis-repair
 whose prose and pin agree.
 
@@ -233,8 +241,10 @@ section and subject modes' clause (a fix outside your files is `escalated`), a p
 MAJOR/CRITICAL whose claim matches `outside (this|my|the) (shard|part|section)|not required` with
 no hand-off token. It prints `ESCALATED:` per escalated entry and a count, and the dispatch
 procedure sends the serial remediator whenever the count is above 0; before this, nothing consumed
-an escalated entry. Measured over graph's 202 s317/s318 shard parts (478 repaired MAJOR+ entries):
-1 hit, that entry, 0 false positives. Not caught: a set-aside reworded past the regex, and C-03's
+an escalated entry. In `--sources` mode the lead adjudicates those lines rather than re-dispatching,
+and the join omits an escalated entry that a later `repaired` entry sharing its `source:` closes.
+Measured over graph's 202 s317/s318 shard parts (478 repaired MAJOR+ entries, counted with the
+join's own heading-severity and disposition grammar): 1 hit, that entry, 0 false positives. Not caught: a set-aside reworded past the regex, and C-03's
 shape, a substantive mis-repair whose prose and pin agree.
 
 verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-519-set-aside.sh

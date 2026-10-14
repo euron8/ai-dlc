@@ -82,9 +82,24 @@ drive() { # <world> <tool> <file_path> <agent_id or ""> -- the REAL hook, a PreT
      + (if $a == "" then {} else {agent_id:$a} end)' \
     | CLAUDE_PROJECT_DIR="$1" bash "$HOOK" >/dev/null 2>&1
 }
-part() { # <world> <name> <block...> -- a remediator part: real repair blocks, no agent id
+# THE SIBLINGS FIELD (BL-508). The join refuses, in every parts mode, a repaired entry with an edit
+# and no `siblings:` line, so every part writer below carries one: the seed blocks are graph's real
+# pre-rule entries and gain `n/a (insertion)` after their edit line (sibinject); the synthetic
+# document- and subject-mode parts carry the section-shard form the role file prescribes there.
+# rawpart is the ONE writer that leaves a seed block as graph wrote it -- the offender.
+SIB_INS='- **siblings:** n/a (insertion)'
+SIB_SEC='- **siblings:** n/a (section shard; re-checked by the serial remediator after assembly)'
+sibinject() { # <file> -- a siblings line after the first edit: line
+  awk -v s="$SIB_INS" '{ print } !d && /^[[:space:]-]*[*_`]*edit[*_`]*:/ { print s; d = 1 }' "$1"
+}
+rawpart() { # <world> <name> <block...> -- seed blocks verbatim, no siblings: line
   local w="$1" n="$2" b; shift 2
   for b in "$@"; do cat "$HERE/seed.block-$b.md"; printf '  (continued in the consumer record)\n\n'; done \
+    > "$w/_bmad-output/planning-artifacts/s305/shards/stories-repair-p1/$n.md"
+}
+part() { # <world> <name> <block...> -- a remediator part: real repair blocks, no agent id
+  local w="$1" n="$2" b; shift 2
+  for b in "$@"; do sibinject "$HERE/seed.block-$b.md"; printf '  (continued in the consumer record)\n\n'; done \
     > "$w/_bmad-output/planning-artifacts/s305/shards/stories-repair-p1/$n.md"
 }
 # THE FIXED SCRATCH PATHS. Every predicate writes the join's output to $JO and builds its worlds
@@ -187,8 +202,8 @@ sec_edit() { # <world> <ordinal> <agent> -- the remediator edits its section cop
   drive "$1" Edit "$1/$RDREL/sections/$2.md" "$3"
 }
 docpart() { # <world> <ordinal> -- the part beside sections/, citing its section file by full path
-  printf -- '- **disposition:** repaired\n- **edit:** `%s/sections/%s.md:2`\n- **derivation:** the section %s finding, edited in its copy\n' \
-    "$RDREL" "$2" "$2" > "$1/$RDREL/$2.md"
+  printf -- '- **disposition:** repaired\n- **edit:** `%s/sections/%s.md:2`\n%s\n- **derivation:** the section %s finding, edited in its copy\n' \
+    "$RDREL" "$2" "$SIB_SEC" "$2" > "$1/$RDREL/$2.md"
 }
 doc_out() { printf '%s' "$1/$SLOT/prd-repair-p1.md"; }
 run_docjoin() { # <join-script> <world>
@@ -252,7 +267,7 @@ p_filesguard() { # the SAME split dir joined in FILES mode -> refused: its secti
 # The nested-state and trailing-slash worlds separate a strip of the STATE DIR'S PARENT from a strip
 # of the project root: the root is not the parent there, or is spelled with a `//`.
 abspart() { # <part dir> <cited path> -- one synthetic part citing one file
-  printf -- '- **disposition:** repaired\n- **edit:** `%s:3`\n- **derivation:** n/a (no factual claim)\n' "$2" > "$1/01.md"
+  printf -- '- **disposition:** repaired\n- **edit:** `%s:3`\n%s\n- **derivation:** n/a (no factual claim)\n' "$2" "$SIB_INS" > "$1/01.md"
 }
 joined_one() { # <out file> -- rc 0, one part, one writer, the record written
   [ "$RC" -eq 0 ] && has "$JO" "(1 parts, 1 writers)" && [ -f "$1" ]
@@ -349,7 +364,7 @@ sj_edit() { # <world> <global ordinal> <agent> -- edits that part's section copy
   SJ_LAST="$f"
 }
 sj_part() { # <world> <global ordinal> <cited path>
-  printf -- '- **disposition:** repaired\n- **edit:** `%s:2`\n- **derivation:** the part %s finding\n' "$3" "$2" > "$1/$SJRD/$2.md"
+  printf -- '- **disposition:** repaired\n- **edit:** `%s:2`\n%s\n- **derivation:** the part %s finding\n' "$3" "$SIB_SEC" "$2" > "$1/$SJRD/$2.md"
 }
 sj_all() { # <world> -- one distinct agent per part, each part citing what it wrote
   local w="$1" o n=0
@@ -408,7 +423,7 @@ sj_party() { # <join> <source token> -> RC, $JO, SJP_W: a --pass party join, eve
     n=$((n + 1)); row="$(awk -F'\t' -v o="$o" '$1 == "part" && $2 == o' "$rd/.subject")"
     f="$(printf '%s' "$row" | cut -f7)"; [ "$f" = "-" ] && f="$(printf '%s' "$row" | cut -f4)"
     printf 'party %s\n' "$o" >> "$w/$f"; drive "$w" Edit "$w/$f" "b$(printf '%016d' "$n")"
-    printf -- '- **disposition:** repaired\n- **edit:** `%s:2`\n- **derivation:** party %s\n- **source:** %s\n' "$f" "$o" "$2" > "$rd/$o.md"
+    printf -- '- **disposition:** repaired\n- **edit:** `%s:2`\n%s\n- **derivation:** party %s\n- **source:** %s\n' "$f" "$SIB_SEC" "$o" "$2" > "$rd/$o.md"
   done
   AI_DLC_PROJECT_ROOT="$w" bash "$1" --subject 9 --pass party --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1; RC=$?
 }
@@ -433,7 +448,7 @@ seat_seed() { # <world> <sprint> -- the sprint's seat files under party-mode/s<N
 }
 PRD=$SLOT/shards/stories-party-repair-p1
 ppart() { # <world> <name> <block> <source tokens> -- a real repair block, its source line after the heading
-  awk -v s="$4" 'NR == 1 { print; print "- **source:** " s; next } { print }' "$HERE/seed.block-$3.md" > "$1/$PRD/$2.md"
+  sibinject "$HERE/seed.block-$3.md" | awk -v s="$4" 'NR == 1 { print; print "- **source:** " s; next } { print }' > "$1/$PRD/$2.md"
 }
 run_pjoin() { # <join> <world>
   AI_DLC_PROJECT_ROOT="$2" bash "$1" --sprint 305 --artifact stories-party --pass 1 --artifact-path "$SLOT" \
@@ -542,8 +557,8 @@ p_partydoc() { # seats x sections: a document split into <doc>-party-repair-p1, 
   for o in 1 2 3; do
     printf 'Repaired by the section %s remediator.\n' "$o" >> "$w/$rd/sections/$o.md"
     drive "$w" Edit "$w/$rd/sections/$o.md" "a00000000000000$o"
-    printf -- '### F-%s\n- **source:** architecture-tea-1.md#F-%s\n- **disposition:** repaired\n- **edit:** `%s/sections/%s.md:2`\n- **derivation:** the section %s finding\n' \
-      "$o" "$o" "$rd" "$o" "$o" > "$w/$rd/$o.md"
+    printf -- '### F-%s\n- **source:** architecture-tea-1.md#F-%s\n- **disposition:** repaired\n- **edit:** `%s/sections/%s.md:2`\n%s\n- **derivation:** the section %s finding\n' \
+      "$o" "$o" "$rd" "$o" "$SIB_SEC" "$o" > "$w/$rd/$o.md"
   done
   AI_DLC_PROJECT_ROOT="$w" bash "$1" --document "$DOCREL" "$w/$rd" \
     --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1; RC=$?
@@ -601,17 +616,53 @@ p_sjnest() { # a NESTED state dir (out/bmad): map, split, join and the record ag
 
 # ---- THE ENTRY CONTRACT (BL-508 siblings, BL-519 set-aside). seed.block-setaside.md is graph's own
 # s318 entry (`s318/shards/stories-party-repair-p1/5.md:111`, sm-05 F-3), its edit re-pointed at this
-# world's story; seed.block-handoff.md is that entry one property apart -- the remainder split off as
+# world's story and given the `siblings: n/a (insertion)` line a post-rule part carries, so the set-aside
+# is its ONLY defect; seed.block-handoff.md is that entry one property apart -- the remainder split off as
 # an `escalated` entry carrying the same source. seed.block-sib.md is the post-rule entry shape.
 sibpart() { # <world> <name> <story file> -- a part in the post-rule shape: a siblings: fence, plus one escalated entry
   sed "s/@STORY@/$3/g" "$HERE/seed.block-sib.md" > "$1/$SLOT/shards/stories-repair-p1/$2.md"
 }
-p_sibpending() { # every part predates the rule (no siblings: anywhere) -> JOINED with ONE PENDING line, 0 escalated
-  local w n; w="$(new_world)"; three_writers "$w"
-  part "$w" 01 2.1; part "$w" 02 2.2; part "$w" 03 3.1
+p_sibtotal() { # TOTAL omission: every part is graph's pre-rule shape (no siblings: anywhere) -> REFUSED,
+  # each repaired edit named, no PENDING line. The era is the install: an era decided over the parts reads PENDING here.
+  local w; w="$(new_world)"; three_writers "$w"
+  rawpart "$w" 01 2.1; rawpart "$w" 02 2.2; rawpart "$w" 03 3.1
   run_join "$1" "$w"
-  n="$(grep -c '^PENDING: no entry of this set carries' "$JO")" || n=0
-  [ "$RC" -eq 0 ] && has "$JO" "(3 parts, 3 writers)" && [ "$n" -eq 1 ] && has "$JO" "ESCALATED-COUNT: 0"
+  refused "$w" "01.md: the N9 — MINOR entry is repaired with an edit and carries no 'siblings:' field" \
+    && has "$JO" "03.md: the M6 — MAJOR entry is repaired with an edit and carries no 'siblings:' field" && ! has "$JO" "PENDING:"
+}
+p_srcpending() { # --sources over a record that predates the rule (a repaired edit, no siblings: anywhere) -> rc 0, ONE PENDING line
+  local w n; w="$(mktemp -d "$WORK/src.XXXXXX")" && mkdir -p "$w/.claude" && seat_seed "$w" 305 || return 1
+  src_rec "$w" '### F-1 — MAJOR\n- disposition: repaired\n- source: architecture-dev-1.md#F-1\n- edit: s305/stories/a.md:3\n' "$1"
+  n="$(grep -c '^PENDING: 1 repaired edit(s) of this record precede its first entry carrying' "$JO")" || n=0
+  [ "$RC" -eq 0 ] && [ "$n" -eq 1 ]
+}
+p_srcera() { # --sources, positional era: a pre-rule entry, then a carrier, then an entry omitting the field -> rc 2 naming the LAST only
+  local w; w="$(mktemp -d "$WORK/src.XXXXXX")" && mkdir -p "$w/.claude" && seat_seed "$w" 305 || return 1
+  src_rec "$w" '### F-1 — MAJOR\n- disposition: repaired\n- source: architecture-dev-1.md#F-1\n- edit: s305/stories/a.md:3\n\n### F-2 — MAJOR\n- disposition: repaired\n- source: architecture-dev-1.md#F-2\n- edit: s305/stories/a.md:9\n- siblings: n/a (insertion)\n\n### F-3 — MAJOR\n- disposition: repaired\n- source: architecture-dev-1.md#F-3\n- edit: s305/stories/a.md:12\n' "$1"
+  [ "$RC" -eq 2 ] && has "$JO" "rec.md: the F-3 — MAJOR entry is repaired with an edit and carries no 'siblings:' field" \
+    && ! has "$JO" "the F-1 — MAJOR entry is repaired with an edit"
+}
+p_srcclosed() { # --sources: an escalated F-1 a LATER repaired entry closes (source spelled by path), an open F-2, and a
+  # split pair (repaired THEN escalated under F-3) whose remainder stays open -> rc 0, F-2 and F-3 printed, F-1 not, count 2
+  local w; w="$(mktemp -d "$WORK/src.XXXXXX")" && mkdir -p "$w/.claude" && seat_seed "$w" 305 || return 1
+  src_rec "$w" '### F-1 — MAJOR\n- disposition: escalated\n- source: architecture-dev-1.md#F-1\n- edit: n/a\n\n### F-2 — MAJOR\n- disposition: escalated\n- source: architecture-dev-1.md#F-2\n- edit: n/a\n\n### F-3 — MAJOR\n- disposition: repaired\n- source: architecture-dev-1.md#F-3\n- edit: n/a (no edit)\n\n### F-3 (remainder) — MAJOR\n- disposition: escalated\n- source: architecture-dev-1.md#F-3\n- edit: n/a\n\n### serial F-1 — MAJOR\n- disposition: repaired\n- source: _bmad-output/party-mode/s305/architecture-dev-1.md#F-1\n- edit: n/a (no edit)\n' "$1"
+  [ "$RC" -eq 0 ] && has "$JO" "ESCALATED: rec.md F-2 — MAJOR" && has "$JO" "ESCALATED: rec.md F-3 (remainder) — MAJOR" \
+    && ! has "$JO" "ESCALATED: rec.md F-1 — MAJOR" && has "$JO" "ESCALATED-COUNT: 2 (1 closed by a later repaired entry sharing a source)"
+}
+saworld() { # <join> <claim tail> -- one writer, one part: a repaired MAJOR with an edit, its siblings line, the claim
+  local w; w="$(new_world)"
+  drive "$w" Edit "$w/$REL/$S21" "$AG1"
+  printf -- '### F-4 — MAJOR\n- disposition: repaired\n- edit: %s/%s:4\n- siblings: n/a (insertion)\n- derivation: n/a (no factual claim)\n- claim now asserted: the title reads loads on demand. %s\n' \
+    "$REL" "$S21" "$2" > "$w/$SLOT/shards/stories-repair-p1/01.md"
+  run_join "$1" "$w"; SA_W="$w"
+}
+p_setasideshard() { # the regex's FIRST half alone: "outside this shard", no "not required", no hand-off -> REFUSED
+  saworld "$1" 'The dashboard display in Story 1.4 is outside this shard.'
+  refused "$SA_W" "01.md:1: the F-4 — MAJOR entry is dispositioned repaired while its claim sets part of the fix aside"
+}
+p_setasidenr() { # the regex's SECOND half alone: "not required", no shard phrase, no hand-off -> REFUSED
+  saworld "$1" 'The dashboard display in Story 1.4 is not required for the AC to hold.'
+  refused "$SA_W" "01.md:1: the F-4 — MAJOR entry is dispositioned repaired while its claim sets part of the fix aside"
 }
 p_sibok() { # every part carries siblings: -> JOINED, no PENDING, and each escalated entry printed by part with the count
   local w; w="$(new_world)"; three_writers "$w"
@@ -622,7 +673,7 @@ p_sibok() { # every part carries siblings: -> JOINED, no PENDING, and each escal
 }
 p_sibmissing() { # p_sibok one property apart: part 03 is a pre-rule entry (M6, repaired, an edit, no siblings:) -> REFUSED by name
   local w; w="$(new_world)"; three_writers "$w"
-  sibpart "$w" 01 "$S21"; sibpart "$w" 02 "$S22"; part "$w" 03 3.1
+  sibpart "$w" 01 "$S21"; sibpart "$w" 02 "$S22"; rawpart "$w" 03 3.1
   run_join "$1" "$w"
   refused "$w" "03.md: the M6 — MAJOR entry is repaired with an edit and carries no 'siblings:' field"
 }
@@ -647,7 +698,7 @@ p_srcsetaside() { # --sources applies the set-aside arm too: a resolving source,
   [ "$RC" -eq 2 ] && has "$JO" "rec.md:1: the F-1 — MAJOR entry is dispositioned repaired while its claim sets part of the fix aside"
 }
 
-P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibpending sibok sibmissing setaside handoff srcsetaside"
+P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr"
 
 # ---- A PART'S DERIVATION SURVIVES THE JOIN. The part's ```derived fence is copied into the joined
 # record, and the gate re-runs `validate-artifact-derivations.sh` over the sprint dir AFTER the
@@ -673,8 +724,8 @@ deriv_world() { # -> a doc_world carrying the validator where the hook resolves 
 }
 fence_part() { # <world> <path the fence reads> -- the part, its fence's output derived from the section copy
   local n; n="$(grep -c 'Repaired by the section 2' "$1/$RDREL/sections/2.md")" || n=0
-  printf -- '- **disposition:** repaired\n- **edit:** `%s/sections/2.md:2`\n- **derivation:**\n\n```derived\n$ grep -c %s %s\n%s\n```\n' \
-    "$RDREL" "'Repaired by the section 2'" "$2" "$n" > "$1/$RDREL/2.md"
+  printf -- '- **disposition:** repaired\n- **edit:** `%s/sections/2.md:2`\n%s\n- **derivation:**\n\n```derived\n$ grep -c %s %s\n%s\n```\n' \
+    "$RDREL" "$SIB_SEC" "'Repaired by the section 2'" "$2" "$n" > "$1/$RDREL/2.md"
 }
 capture() { # <hook> <world> <file> -> CAP_RC; a Write of the file's whole content, as a PostToolUse payload
   jq -nc --arg f "$3" --arg c "$(cat "$3")" '{tool_name:"Write",tool_input:{file_path:$f,content:$c}}' \

@@ -2,6 +2,7 @@
 - source: stories-sm-05.md#F-3
 - disposition: repaired
 - edit: _bmad-output/planning-artifacts/s305/stories/story-2.1-positions-on-demand.md:84
+- siblings: n/a (insertion)
 - derivation:
 
 ```derived

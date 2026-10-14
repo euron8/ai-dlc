@@ -796,9 +796,12 @@ its files writes two entries with one `source:` token, `repaired` and `escalated
 every mode, prints one `ESCALATED: <part> <entry>` line per escalated entry and then
 `ESCALATED-COUNT: <n>`. When the count is above 0, dispatch the serial remediator after the join
 whether or not any finding cited two files, and its brief carries every `ESCALATED:` line
-verbatim. The join also refuses a `repaired` MAJOR or CRITICAL whose claim sets part of the fix
-aside as outside the shard or not required without naming a hand-off, and a `repaired` entry
-with an edit and no `siblings:` field once any entry of the set carries one.
+verbatim. In `--sources` mode the `ESCALATED:` lines are the lead's to adjudicate, never a
+re-dispatch of the serial remediator: that record may be the serial remediator's own, and the
+join already omits any escalated entry a later `repaired` entry carrying one of its `source:`
+tokens closes. The join also refuses a `repaired` MAJOR or CRITICAL whose claim sets part of the
+fix aside as outside the shard or not required without naming a hand-off, and, in every parts
+mode, a `repaired` entry with an edit and no `siblings:` field.
 
 After a join refusal naming a file `which no dispatched agent wrote`:
 
@@ -927,7 +930,13 @@ Run it after the join and after the serial cross-section remediator.
 **Moved cites are the serial remediator's, after the join.** A `<file>:<n>` cite into a region a
 shard's edit shifted cannot be checked inside that shard: a section shard sees only its copy.
 The serial remediator re-reads every cite into each edited file AFTER the join or assembly,
-before these validators run, and repairs any that moved as its own entry.
+before these validators run, and repairs any that moved as its own entry. It also owns the
+cross-file sibling grep: a shard's siblings fence greps only its own files (a concurrent shard
+fixing a copy elsewhere would turn it stale), and a section or subject shard writes `siblings:
+n/a (section shard; ...)`, so for every `repaired` shard entry with an edit, and every
+escalated sibling line, the serial remediator runs `grep -rn -F '<the text that entry
+replaced>'` over the ASSEMBLED files (`s<N>/stories` and `s<N>/epics`, or the document), never the
+slot, `shards/` or a record, and records it as its own entry with a `siblings:` fence.
 
 Exit 1 from `validate-artifact-derivations.sh` is a repair that falsified a
 derivation — most often not its own, but one

@@ -4,13 +4,13 @@
 - siblings:
 
 ```derived
-$ grep -rn -F 'loads eagerly' _bmad-output/planning-artifacts/s305/stories _bmad-output/planning-artifacts/s305/epics
+$ grep -rn -F 'loads eagerly' _bmad-output/planning-artifacts/s305/stories/@STORY@
 $ grep -c -F 'loads on demand' _bmad-output/planning-artifacts/s305/stories/@STORY@
 1
 ```
 
 - derivation: n/a (no factual claim)
-- claim now asserted: the title reads "loads on demand", and no file of the artifact still carries the replaced "loads eagerly".
+- claim now asserted: the title reads "loads on demand", and no file of this shard still carries the replaced "loads eagerly".
 
 ### F-3 — MINOR
 - disposition: repaired
