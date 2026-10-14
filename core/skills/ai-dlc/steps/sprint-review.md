@@ -158,6 +158,15 @@ branch.
 
 ### 4. Gate Validation and Proceed
 
+Before Seam B, run
+`scripts/ai-dlc/validate-handoff-evidence.sh --strategy HEAD <every story file of this sprint>`
+on the sprint branch. A fix in Step 3 that renamed a test node leaves the
+`## Strategy Test IDs` cells naming the old node, and Check 21 fails them at
+the gate. On exit 1, re-bind every cell its `REFUSED` lines name (fill an
+empty `Kind` or `Resolves to`; point a `test` row at the node as it now
+exists), commit, and re-run until it exits 0. Exit 2 is recorded verbatim in
+the gate log.
+
 Run auto-handoff evaluation at `Seam B` with the label
 `sprint-review end-of-step pre-gate` (see `_gate-procedures.md`
 \"Auto-handoff evaluation\"). If evaluation returns CONTINUE, run
