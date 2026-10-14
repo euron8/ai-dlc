@@ -1158,7 +1158,7 @@ cap_kill() { # cap_kill <name> <sed-expr> <transcript> <description> <agent_id> 
 }
 cap_kill anytool 's/and (.name == "Agent" or .name == "Task")))/))/' \
   "$CAPDIR/d.jsonl" "Party seat 7" "" "reading every tool's results holds a Bash call's quoted text (14d)"
-cap_kill nodesc 's/(if .ids\[\$t.tool_use_id\] == \$d then .held = true else . end)/.held = true/' \
+cap_kill nodesc 's/(if .ids\[\$t.tool_use_id\] == \$d then .held = true | .hmid = .mid\[\$t.tool_use_id\] else . end)/(.held = true | .hmid = .mid[$t.tool_use_id])/' \
   "$CAPDIR/a.jsonl" "Party seat 9" "" "dropping the description match holds every description (14e)"
 cap_kill nolead 's/^if \[ -z "\$DG_AGENT_ID" \] && \[ -n "\$DG_DESC" \]/if [ -n "$DG_DESC" ]/' \
   "$CAPDIR/a.jsonl" "Party seat 7" a1234567890abcdef "dropping the lead-only scope denies a subagent (14f)"
@@ -1171,8 +1171,13 @@ cap_kill noenqueue 's/        def agentnote: ((.type == "queue-operation" and .o
 
 # --- 15. DENY ARM 2: A GATE-ADJUDICATOR DISPATCHED OVER A WAIVER CHECK 22 WILL REJECT ---------
 # FALSE-POSITIVE SET, measured by driving this guard over the reference consumer's live pending.md
-# and pending-archive.md with its real ledger, probe rows and team-roles, sprints 310-318. Clause 1
-# (names no spawn): 0 denies; it reached 0 by excluding names equal to their role (15a's mutant).
+# and pending-archive.md (each alone and concatenated) with its real ledger, probe rows and
+# team-roles, sprints 298-318, under an implementation nonce. Clause 1 (names no spawn): 0 denies;
+# it reached 0 by excluding names equal to their role (15a's mutant) and by keying on a Check 22
+# DISPOSITION rather than a substring (15i's mutant) -- the substring form scored 19 of 32
+# OVERRIDDEN entries and denied S302 (two S302-5 entries, Check 11 and Check 16 dispositions citing
+# "Check-22 pattern by analogy" in their Resolution) and S307 (a Check 929 entry whose Blocker type
+# reads "Rule 19-adjacent"); the keyed form scores the other 16.
 # Clause 2 (uncovered invalid-exception row): it denies live S316 (3 rows) and S317 (11 rows), and
 # archive S316/S317/S318. Each of those rows is one validate-spawn-ledger.sh arm S3 FAILS, which
 # makes each a true positive: Check 22 would discard the pass. The archived S318 rows are covered
@@ -1205,7 +1210,12 @@ entry() { # entry <file> <header> <body-line>...
   local f="$1" h="$2"; shift 2
   { printf '\n%s\n**Status:** OVERRIDDEN\n' "$h"; for l in "$@"; do printf '%s\n' "$l"; done; } >> "$f"
 }
-adj() { raw "$1" "$(mkjson Agent gate-adjudicator opus)"; }
+# Every adjudicator brief carries its gate nonce, as all 264 of the reference consumer's do; the
+# arm judges IMPLEMENTATION gates only (Check 22's manifest row), so a world driven without one
+# would assert nothing.
+adjj() { mkjson Agent gate-adjudicator opus | jq -c --arg n "${1:-implementation-20261010T230257Z}" \
+  '.tool_input.prompt += (" gate_nonce: " + $n)'; }
+adj() { raw "$1" "$(adjj "${2-}")"; }
 ADJ_REM="**Remediation:** outputs verified against the role contract."
 
 W1="$(mkworld unnamed 317)"; cat "$WAIVER_SRC" >> "$W1/docs/escalations/pending.md"
@@ -1251,15 +1261,15 @@ expect_quiet "$(adj "$W7")" "15g an invalid-exception row on a NON-shardable rol
 
 # MUTANTS for arm 2, each a copy guarded by `cmp -s`, each killed by its own world only.
 ADJCTL="$WORK/guard-adj-control.sh"; cp "$HOOK" "$ADJCTL"
-adj_mut() { printf '%s' "$(mkjson Agent gate-adjudicator opus)" | CLAUDE_PROJECT_DIR="$2" bash "$1" 2>/dev/null \
+adj_mut() { printf '%s' "$(adjj "${3-}")" | CLAUDE_PROJECT_DIR="$2" bash "$1" 2>/dev/null \
   | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null; }
 [ "$(adj_mut "$ADJCTL" "$W1")" = deny ] && ok "ADJ MUTANT CONTROL: an unmutated copy denies 15a" \
   || bad "ADJ MUTANT CONTROL is dead -- the kills below are unearned"
-adj_kill() { # adj_kill <name> <sed-expr> <world> <want: deny|allow> <label>
+adj_kill() { # adj_kill <name> <sed-expr> <world> <want: deny|allow> <label> [nonce]
   local m="$WORK/guard-adj-$1.sh" got
   sed "$2" "$HOOK" > "$m" || { bad "ADJ MUTANT $1: sed DID NOT APPLY"; return; }
   if cmp -s "$HOOK" "$m"; then bad "ADJ MUTANT $1 matched nothing (cmp -s guard)"; return; fi
-  got="$(adj_mut "$m" "$3")"; [ -n "$got" ] || got=allow
+  got="$(adj_mut "$m" "$3" "${6-}")"; [ -n "$got" ] || got=allow
   [ "$got" = "$4" ] && ok "ADJ MUTANT $1 killed: $5" || bad "ADJ MUTANT $1 SURVIVED: $5"
 }
 adj_kill regexonly 's/          if (t in key) named = 1$/          if (t ~ \/^(toolu_|a[0-9a-f]{16}$)\/) named = 1/' \
@@ -1273,6 +1283,106 @@ adj_kill noinvalid 's/^        if (!dead) for (i = 1; i <= ni; i++) if (!(i in c
 adj_kill anyexc 's/        if (exc ~ \/exception \\(\[1-4\]\\)(\[^-\]|\$)\/ || exc ~ \/exception \[1-4\](\[^0-9-\]|\$)\/ \\$/        if (exc ~ \/exception\/ || exc ~ \/exception \/ \\/' \
   "$(inv_world generic2 "**Remediation:** one of Rule 28's four serial exceptions applied.")" allow \
   "a bare-word exception match accepts \"the four\" as a citation (15e')"
+
+# THE SHARDED-REMEDIATION ARM of clause 2: Check 22 clearing arm 4 accepts, for this class, "the
+# work was re-dispatched sharded" as well as a named exception. The three near-misses each carry
+# `re-dispatch` and `shard` in the entry and must still deny: an UNCHOSEN option (the s317 form),
+# a negated remediation, and one that never says sharded.
+W8="$(inv_world sharded "**Remediation:** the work was re-dispatched sharded as rem-p1a and rem-p1b; output verified.")"
+expect_quiet "$(adj "$W8")" "15h an invalid-exception row covered by a Remediation stating a sharded re-dispatch"
+W8I="$(inv_world shardinline "Remediation: the work was re-dispatched sharded as rem-p1a and rem-p1b; output verified.")"
+expect_quiet "$(adj "$W8I")" "15h' the same, written as an inline Remediation: (the adversary's s9 form)"
+W8O="$(inv_world shardoption "**Options:** (a) OVERRIDDEN [chosen]; (b) re-dispatch the nine as sharded spawns.")"
+expect_deny "$(adj "$W8O")" "15h'' a sharded re-dispatch only as an UNCHOSEN option (the s317 124524Z entry's form)"
+W8N="$(inv_world shardneg "**Remediation:** No spawn is re-dispatched sharded; outputs verified.")"
+expect_deny "$(adj "$W8N")" "15h''' a negated sharded re-dispatch in the Remediation"
+W8U="$(inv_world shardnone "**Remediation:** the work was re-dispatched serially; output verified.")"
+expect_deny "$(adj "$W8U")" "15h'''' a re-dispatch that is not sharded"
+
+# CLAUSE 1 KEYS ON A CHECK 22 DISPOSITION. The near-miss carries both shapes the reference
+# consumer's two false positives had: `Rule 19` in a field (S307 Check 929's "Rule 19-adjacent")
+# and `Check-22` only in a Resolution (S302-5's "Check-22 pattern by analogy").
+W9="$(mkworld substr 317)"
+entry "$W9/docs/escalations/pending.md" "## [S317-Z] lead - 2026-10-10" \
+  "**Blocker type:** Check 30 spec join ruling; unrelated to the Rule 19(b) binding." \
+  "**Resolution:** disposition by the Check-22 pattern, by analogy."
+expect_quiet "$(adj "$W9")" "15i an OVERRIDDEN Check 30 entry mentioning Rule 19(b) and Check-22 only in passing"
+W9P="$(mkworld substrpos 317)"
+entry "$W9P/docs/escalations/pending.md" "## [S317-Z] lead - 2026-10-10" \
+  "**Blocker type:** Check 30 spec join ruling; unrelated to the Rule 19(b) binding." \
+  "**Context:** Check 22 tier mismatch on the dev rows." "$ADJ_REM"
+expect_deny "$(adj "$W9P")" "15i' its twin: the same entry with Check 22 in its Context (a disposition naming no spawn)"
+W9C="$(mkworld substrcont 317)"
+entry "$W9C/docs/escalations/pending.md" "## [S317-Z] lead - 2026-10-10" \
+  "**Context:** Gate 3 ran the ledger validator, and" "the Check 22 FAIL lists the dev rows." "$ADJ_REM"
+expect_deny "$(adj "$W9C")" "15i'' Check 22 on a wrapped continuation line of the Context field"
+
+# ENTRIES SPLIT ON `## ` ONLY: a `###` subheading carrying the waiver's spawn list is the entry's.
+W10="$(mkworld h3 317)"
+entry "$W10/docs/escalations/pending.md" "## [S317-Y] lead - 2026-10-10" \
+  "**Context:** Check 22 tier mismatch waived." "$ADJ_REM" "### Spawns waived" "toolu_01DEVROW000000000000001"
+expect_quiet "$(adj "$W10")" "15j a Check 22 waiver whose spawn list sits under a ### subheading"
+
+# ONLY AN IMPLEMENTATION GATE. The 15a world, dispatched for a sprint-review gate, for a brief
+# naming two gate types, and for one naming no nonce: none judges Check 22.
+expect_quiet "$(adj "$W1" sprint-review-20261011T101010Z)" "15k the 15a world, a SPRINT-REVIEW adjudicator"
+expect_quiet "$(adj "$W1" "implementation-20261010T230257Z sprint-review-20261011T101010Z")" \
+  "15k' the 15a world, a brief naming an implementation AND a sprint-review nonce"
+expect_quiet "$(raw "$W1" "$(mkjson Agent gate-adjudicator opus)")" "15k'' the 15a world, a brief naming no nonce"
+
+# A REFUSED DISPATCH WRITES NO LEDGER ROW; an allowed one in the same world writes exactly one.
+L0="$(wc -l < "$W1/_bmad-output/spawn-ledger.jsonl" | tr -d ' ')"
+adj "$W1" >/dev/null
+L1="$(wc -l < "$W1/_bmad-output/spawn-ledger.jsonl" | tr -d ' ')"
+adj "$W1" sprint-review-20261011T101010Z >/dev/null
+L2="$(wc -l < "$W1/_bmad-output/spawn-ledger.jsonl" | tr -d ' ')"
+[ "$L1" = "$L0" ] && [ "$L2" = "$((L0 + 1))" ] \
+  && ok "15l a denied adjudicator dispatch leaves no ledger row; the allowed control adds one ($L0 -> $L1 -> $L2)" \
+  || bad "15l ledger rows $L0 -> $L1 (denied) -> $L2 (allowed); expected $L0 -> $L0 -> $((L0 + 1))"
+
+adj_kill substr 's/^        if (c22 \&\& !named) print "U\\t" hdr$/        if ((body ~ \/Check 22\/ || body ~ \/Check-22\/ || body ~ \/Rule 19\/) \&\& !named) print "U\\t" hdr/' \
+  "$W9" deny "a bare substring reads a passing Rule 19 / Check-22 mention as a disposition (15i)"
+adj_kill h3split 's/^      \/^## \/ { flush(); hdr = \$0;/      \/^#{2,3} \/ { flush(); hdr = $0;/' \
+  "$W10" deny "splitting on ### drops the spawn list under a subheading (15j)"
+adj_kill nosharded 's/^            || sharded) {$/            ) {/' \
+  "$W8" deny "dropping the sharded-remediation disjunct refuses arm 4's other remedy (15h)"
+adj_kill anyfield 's/^      field ~ \/^Remediation\/ \&\& remsharded(\$0) { sharded = 1 }$/      remsharded($0) { sharded = 1 }/' \
+  "$W8O" allow "reading a sharded re-dispatch from any field accepts an unchosen option (15h'')"
+adj_kill nonegation 's/^              \&\& s !~ \/(^|\[^a-z\])(no|not|never|none|nor)/              \&\& s ~ \/(^|[^a-z])(no|not|never|none|nor)/' \
+  "$W8N" allow "dropping the negation test accepts \"No spawn is re-dispatched sharded\" (15h''')"
+adj_kill noimplscope 's/^\[ "\$_dg_gt" = "implementation " \] \&\& DG_IMPL_GATE=true$/DG_IMPL_GATE=true/' \
+  "$W1" deny "dropping the implementation-gate scope refuses a sprint-review adjudicator (15k)" sprint-review-20261011T101010Z
+# The ledger placement, mutated: a row appended BEFORE the deny arms.
+LM="$WORK/guard-adj-ledgerfirst.sh"
+sed 's/^# --- THE TWO DENY ARMS/mkdir -p "$SPAWN_STATE_DIR"; printf "{}\\n" >> "$SPAWN_LEDGER"; &/' "$HOOK" > "$LM"
+if cmp -s "$HOOK" "$LM"; then bad "ADJ MUTANT ledgerfirst matched nothing (cmp -s guard)"
+else
+  LA="$(wc -l < "$W1/_bmad-output/spawn-ledger.jsonl" | tr -d ' ')"
+  LD="$(adj_mut "$LM" "$W1")"
+  LB="$(wc -l < "$W1/_bmad-output/spawn-ledger.jsonl" | tr -d ' ')"
+  [ "$LD" = deny ] && [ "$LB" != "$LA" ] \
+    && ok "ADJ MUTANT ledgerfirst killed: a row written before the arms survives a refused dispatch (15l)" \
+    || bad "ADJ MUTANT ledgerfirst SURVIVED (decision '$LD', rows $LA -> $LB)"
+fi
+
+# BL-515 SAME-BATCH ORDER. Claude Code writes each tool_use of one assistant message as its own
+# record sharing `message.id`. A sibling the cap ADMITTED in the rejection's own batch frees no slot.
+t_usem() { # t_usem <message-id> <id> <description>
+  jq -nc --arg m "$1" --arg id "$2" --arg d "$3" '{type:"assistant",isSidechain:false,
+    message:{id:$m,role:"assistant",content:[{type:"tool_use",id:$id,name:"Agent",input:{description:$d}}]}}'
+}
+{ t_usem msg_B1 v1 "Party seat 7"; t_usem msg_B1 v2 "Party seat 8"
+  t_res v1 "$CAPTXT" true; t_res v2 "Async agent launched successfully." false; } > "$CAPDIR/sb.jsonl"
+{ t_usem msg_B1 v1 "Party seat 7"; t_res v1 "$CAPTXT" true
+  t_usem msg_B2 v2 "Party seat 8"; t_res v2 "Async agent launched successfully." false; } > "$CAPDIR/sb2.jsonl"
+expect_deny "$(capout "$CAPDIR/sb.jsonl" "Party seat 7")" "14h a re-send whose only later launch was a sibling in the rejection's own batch"
+expect_quiet "$(capout "$CAPDIR/sb2.jsonl" "Party seat 7")" "14h' its twin: the same launch from a LATER message releases"
+SBM="$WORK/guard-cap-samebatch.sh"
+sed 's/^                   elif .held and .hmid != "" and .mid\[\$t.tool_use_id\] == .hmid then .$/                   elif false then ./' "$HOOK" > "$SBM"
+if cmp -s "$HOOK" "$SBM"; then bad "CAP MUTANT samebatch matched nothing (cmp -s guard)"
+elif [ -z "$(cap_mut "$SBM" "$CAPDIR/sb.jsonl" "Party seat 7")" ] && [ "$(cap_mut "$SBM" "$CAPDIR/a.jsonl" "Party seat 7")" = deny ]; then
+  ok "CAP MUTANT samebatch killed: releasing on a same-batch sibling allows 14h (and still denies 14a)"
+else bad "CAP MUTANT samebatch SURVIVED: 14h still denied, or the mutant stopped denying 14a"; fi
 
 echo
 if [ "$fails" -eq 0 ]; then echo "dispatch-model-guard: PASS"; exit 0; fi

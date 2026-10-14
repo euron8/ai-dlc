@@ -146,11 +146,14 @@
 #   text, so a brief or a Bash command that QUOTES the cap message rejects nothing. The scan
 #   is a bounded transcript tail, entered only when the tail carries the cap text at all.
 #
-#   ADJUDICATOR WAIVER (Check 22). A `gate-adjudicator` dispatch is denied when, for the
+#   ADJUDICATOR WAIVER (Check 22). An IMPLEMENTATION-gate `gate-adjudicator` dispatch (the
+#   only gate type whose manifest row carries Check 22) is denied when, for the
 #   snapshot's current sprint, `docs/escalations/pending.md` holds an `OVERRIDDEN` entry
-#   citing Check 22 or Rule 19 that NAMES NO SPAWN of that sprint, or when a
+#   that dispositions Check 22 and NAMES NO SPAWN of that sprint, or when a
 #   `shard: invalid-exception` spawn-ledger row of that sprint is not named by an
-#   `OVERRIDDEN` entry that also names one of Rule 28's exceptions (1)-(4). Check 22 clears
+#   `OVERRIDDEN` entry that also remediates it as Check 22 clearing arm 4 accepts: a
+#   sharded re-dispatch, or one of Rule 28's exceptions (1)-(4). A denied dispatch writes
+#   no spawn-ledger row. Check 22 clears
 #   exactly the spawns an entry names, so either state fails the gate; refusing the
 #   dispatch saves the adjudicator pass the failure would discard. It runs at DISPATCH,
 #   not at the escalation write, because the lead writes those entries with a Bash append
@@ -695,64 +698,17 @@ SPAWN_SPRINT="$(sed -n 's/^- *[*]*sprint_id:[*]* *\([0-9][0-9]*\).*/\1/p' "$SPAW
 # would silently orphan any consumer report that does.
 SPAWN_PINS="$PIN_MODEL"
 
-mkdir -p "$SPAWN_STATE_DIR" 2>/dev/null || true
-jq -nc \
-   --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true)" \
-   --arg sprint "${SPAWN_SPRINT:-}" \
-   --arg name "${SPAWN_NAME:-}" \
-   --arg role "$ROLE" \
-   --arg pinned "${SPAWN_PINS:-}" \
-   --arg tier "${EXPECT:-}" \
-   --arg req "${REQUESTED:-}" \
-   --arg bound "$SPAWN_BOUND" \
-   --arg effort "${SPAWN_EFFORT:-}" \
-   --arg tui "${SPAWN_TUI:-}" \
-   --arg stripped "${SPAWN_NAME_STRIPPED:-}" \
-   --arg via "${CONTRACT_VIA:-}" \
-   --arg shard "${SPAWN_SHARD:-}" \
-   --arg shardraw "${SPAWN_SHARD_RAW:-}" \
-   --argjson cited "$ROLE_CONTRACT_CITED" \
-   --argjson readable "$ROLE_FILE_READABLE" \
-   --argjson defbound "$DEFINITION_BOUND" \
-   --argjson defstale "$DEFINITION_STALE" '{
-     v: 1, ts: $ts,
-     sprint: (if $sprint == "" then null else ($sprint | tonumber? // null) end),
-     name: (if $name == "" then null else $name end),
-     role: $role,
-     model_pinned: (if $pinned == "" then null else $pinned end),
-     tier_pinned: (if $tier == "" then null else $tier end),
-     model_requested: (if $req == "" then null else $req end),
-     model_bound: $bound,
-     # Mirrors `model_bound` above: the DISPATCH, not the config. Non-null only on a
-     # definition-bound row, where the harness applies the `effort:` key of the rendered
-     # definition; null everywhere else, because no other path binds an effort at all.
-     # NO APOSTROPHE IN THIS COMMENT: the whole object is one single-quoted
-     # shell argument, so a possessive here CLOSES it and bash reports a syntax error.
-     effort_bound: (if $effort == "" then null else $effort end),
-     role_contract_cited: $cited,
-     # WHICH carrier delivered the Rule 19(b) line: prompt or definition, null when
-     # neither did. Delivery at dispatch only, never a read. NO APOSTROPHE HERE either.
-     contract_via: (if $via == "" then null else $via end),
-     role_file_readable: $readable,
-     definition_bound: $defbound,
-     definition_stale: $defstale,
-     name_stripped: (if $stripped == "" then null else $stripped end),
-     tool_use_id: (if $tui == "" then null else $tui end),
-     # The brief shard line, canonicalised; null when absent, repeated or unparseable. The KEY
-     # is always written, because its absence is how Check 22 recognises an older guard row.
-     shard: (if $shard == "" then null else $shard end)
-   }
-   # The lead text of an invented exception, written ONLY beside that value, so its presence
-   # is itself the marker Check 22 arm S3 prints from. NO APOSTROPHE HERE either.
-   | if $shard == "invalid-exception" then . + {shard_raw: $shardraw} else . end' >> "$SPAWN_LEDGER" 2>/dev/null || _sl_rc=$?
-# A failed append is recorded in _sl_rc and never blocks a dispatch: nothing reads it, and the hook goes on.
-# --- end SPAWN LEDGER ---------------------------------------------------------
-
 # --- THE TWO DENY ARMS (see THE TWO DENY ARMS in the CONTRACT header) ----------
-# Placed AFTER the ledger write, so a refused dispatch still leaves its row: the row is a
-# record of an attempted dispatch, and `role_contract_cited` already documents that a row can
-# exist for a dispatch that never ran. Placed BEFORE the role-file and no-correction exits,
-# because neither arm depends on whether the model needs binding.
+# Placed BEFORE the ledger append, so a REFUSED dispatch leaves NO row. Two readers score a row
+# as a dispatch that ran: ai-dlc-gate-remediation-guard.sh binds a verdict stem to any
+# `gate-adjudicator` row inside the nonce window (`bound-dispatch`), so a phantom row from a
+# refused adjudicator could bind a verdict no adjudicator wrote; and validate-spawn-ledger.sh
+# judges every row of the sprint, so a refused re-send would add a Check 22 violation for a
+# spawn that never existed. Every variable the arms read (ROLE, ROLES_DIR, SPAWN_LEDGER,
+# SPAWN_STATE_DIR, SPAWN_SPRINT, INPUT) is bound above this line. Arm 2 therefore reads the
+# ledger WITHOUT this dispatch's own row, which is the right population: the adjudicator being
+# dispatched is not a spawn its own gate judges. Placed BEFORE the role-file and no-correction
+# exits, because neither arm depends on whether the model needs binding.
 #
 # `dg_deny` emits `deny` and NO `updatedInput`. If jq cannot build the decision the hook
 # prints nothing and exits 0: a deny that cannot be expressed fails open.
@@ -818,18 +774,27 @@ if [ -z "$DG_AGENT_ID" ] && [ -n "$DG_DESC" ] && [ -n "$DG_TRANSCRIPT" ] && [ -r
                         or .attachment.origin.kind? == "task-notification")
           and ([.content?, .message.content?, .attachment.prompt?]
                | any(type == "string" and contains("<summary>Agent \"")));
+        # SAME-BATCH RESULTS DO NOT RELEASE. Claude Code writes each tool_use of one assistant
+        # message as its OWN record, all carrying that message`s `message.id` (measured on the nine
+        # rejecting sessions: 183 message ids shared by more than one Agent record, 1 record holding
+        # two Agent blocks). A sibling the cap ADMITTED in the same batch as the rejection is a slot
+        # that was already free when the batch was judged, not one that freed afterwards, so a
+        # launch answering a tool_use of the held rejection`s own message is ignored. A missing id
+        # ("") never matches, so a record without one still releases.
         reduce (inputs | fromjson? | select(type == "object" and .isSidechain != true)) as $r
-          ({ids: {}, held: false};
+          ({ids: {}, mid: {}, held: false, hmid: ""};
            ($r.message | if type == "object" then .content else null end) as $c
            | if $r.type == "assistant" and ($c | type) == "array" then
-               reduce ($c[] | select(type == "object" and .type == "tool_use"
+               ($r.message.id // "" | tostring) as $m
+               | reduce ($c[] | select(type == "object" and .type == "tool_use"
                                      and (.name == "Agent" or .name == "Task"))) as $u
-                 (.; .ids[($u.id // "")] = ($u.input.description // ""))
+                 (.; .ids[($u.id // "")] = ($u.input.description // "") | .mid[($u.id // "")] = $m)
              elif $r.type == "user" and ($c | type) == "array" then
                reduce ($c[] | select(type == "object" and .type == "tool_result")) as $t (.;
                  if (.ids | has($t.tool_use_id // "")) then
                    if $t.is_error == true and (($t.content | txt) | contains($cap)) then
-                     (if .ids[$t.tool_use_id] == $d then .held = true else . end)
+                     (if .ids[$t.tool_use_id] == $d then .held = true | .hmid = .mid[$t.tool_use_id] else . end)
+                   elif .held and .hmid != "" and .mid[$t.tool_use_id] == .hmid then .
                    else .held = false end
                  else . end)
              else . end
@@ -862,10 +827,56 @@ fi
 # `authoring-chain` cite one; "one of Rule 28's four serial exceptions" cites none, and that
 # generic sentence is exactly the s317 waiver that discarded nonce 124524Z.
 #
+# "COVERS AN INVALID-EXCEPTION ROW" IS CHECK 22 CLEARING ARM 4's OWN DISJUNCTION. For that class
+# gate-validation.md accepts EITHER "the work was re-dispatched sharded" OR "the exception that
+# actually applied (one of Rule 28's four) is named". Arm 4 is adjudicated, so there is no script
+# grammar to reuse; the step text is the grammar. An entry covers a row when it names the row AND
+# either cites an exception (1)-(4) or states a sharded re-dispatch IN ITS REMEDIATION -- a
+# `**Remediation...:**` field or an inline `Remediation:` -- in one sentence that carries
+# `re-dispatch` and `shard` and no negation. Keyed on the Remediation field because the only
+# such sentence on the reference consumer is an UNCHOSEN `**Options:**` line ("(b) re-dispatch the
+# nine as sharded spawns") in the s317 entry whose pass was discarded, and the s317 tier-pin
+# Remediation reads "No spawn is re-dispatched".
+#
+# "CITES CHECK 22" IS A CHECK 22 DISPOSITION, NOT A SUBSTRING. Clause 1 fires on an entry whose
+# HEADER carries `Check 22`, `CHECK22`/`CHECK-22` or `Rule 19`, or whose `**Blocker type:**`,
+# `**Context:**`, `**Decision...:**` or `**Spawn...:**` field (continuation lines included, up to a
+# blank line or the next field) carries `Check 22`. NARROWING, measured by driving THIS awk over
+# every OVERRIDDEN entry of the reference consumer's pending-archive.md + pending.md concatenated
+# (32 entries): the bare substring matched 19, of which 3 are not Check 22 dispositions -- the two
+# S302-5 entries (a Check 11 and a Check 16 disposition, each naming "Check-22 pattern by analogy"
+# only in `**Resolution:**`) and S307 Check 929 ("Rule 19-adjacent" only in `**Blocker type:**`).
+# The keyed form matches the other 16 and none of those three; `Rule 19` is a key in the HEADER
+# only, because in a field it is the adjacent-mention shape.
+#
+# KNOWN OVER-MATCH of the negation test, stated rather than narrowed: `n.t` and `n...t` stand in for
+# an apostrophe this single-quoted program cannot hold, so a word ending in `n` followed by a
+# one-letter `t` token reads as negated, and that sharded remediation is denied. It fails CLOSED,
+# and the remedy names the exact form that releases.
+#
+# ENTRIES SPLIT ON `## ` ONLY. A `###` line is a subheading of the open entry (a `### Spawns
+# waived` list belongs to its waiver), so it is appended to the body and ends the current field.
+# The LAST `**Status:**` line of an entry wins: on the reference consumer 20 entries from S298 on
+# carry two or more, every one a later disposition superseding an earlier state (S311
+# HARD_BLOCK -> OVERRIDDEN). Three S308 `###` sub-items with their own Status fold into their
+# RESOLVED parent and none is OVERRIDDEN.
+#
+# ONLY AN IMPLEMENTATION GATE. Check 22 is in the implementation manifest row alone
+# (gate-validation.md GATE_MANIFEST, "### 22 ... implementation gates only"), so a planning,
+# story or sprint-review adjudicator never judges a waiver and is never refused over one. The gate
+# type is read from the brief's nonce: every one of the reference consumer's 264 lead
+# gate-adjudicator briefs carries one, and all three discards below carried `implementation-`.
+# A brief naming an implementation nonce AND another gate type's nonce (1 of 264, a sprint-review
+# gate citing an earlier implementation nonce) is not scoped; neither is a brief naming none.
+#
 # COVERAGE, measured on the reference consumer's three Check-22 discards: clause 1 (names no
 # spawn) catches s317 230257Z; clause 2 (invalid-exception row not covered) catches s317
 # 124524Z and s318 011534Z, whose waivers named every spawn and cited no exception.
-if [ "$ROLE" = gate-adjudicator ] && [ -n "${SPAWN_SPRINT:-}" ] \
+DG_IMPL_GATE=false
+_dg_gt="$(printf '%s\n' "$PROMPT" | grep -oE '(^|[^A-Za-z0-9-])(planning|story|implementation|sprint-review|retro)-[0-9]{8}T[0-9]{6}Z' 2>/dev/null \
+  | sed -E 's/^[^a-z]*//; s/-[0-9]{8}T[0-9]{6}Z$//' | sort -u | tr '\n' ' ' || true)"
+[ "$_dg_gt" = "implementation " ] && DG_IMPL_GATE=true
+if [ "$ROLE" = gate-adjudicator ] && [ "$DG_IMPL_GATE" = true ] && [ -n "${SPAWN_SPRINT:-}" ] \
    && [ -r "$PROJECT_DIR/docs/escalations/pending.md" ] && [ -r "$SPAWN_LEDGER" ]; then
   # THE INVALID-EXCEPTION POPULATION IS CHECK 22 ARM S3's, NOT EVERY ROW CARRYING THE VALUE. S3
   # judges only SHARDABLE rows: the roles in validate-spawn-ledger.sh's SHARD_ROLES plus every
@@ -925,19 +936,35 @@ if [ "$ROLE" = gate-adjudicator ] && [ -n "${SPAWN_SPRINT:-}" ] \
           has[t] = 1
           if (t in key) named = 1
         }
-        if ((body ~ /Check 22/ || body ~ /Rule 19/) && !named) print "U\t" hdr
+        if (c22 && !named) print "U\t" hdr
         exc = tolower(body)
         if (exc ~ /exception \([1-4]\)([^-]|$)/ || exc ~ /exception [1-4]([^0-9-]|$)/ \
-            || exc ~ /data-dependency|pass-repair-pass|authoring-chain|serial-document/) {
+            || exc ~ /data-dependency|pass-repair-pass|authoring-chain|serial-document/ \
+            || sharded) {
           for (i = 1; i <= ni; i++)
             if ((itui[i] != "" && (itui[i] in has)) || (iname[i] != "" && (iname[i] in has))) cov[i] = 1
         }
       }
-      /^#{2,3} / { flush(); hdr = $0; body = $0; status = ""; next }
+      # A sentence of a Remediation field stating a sharded re-dispatch, with no negation.
+      function remsharded(t,   n, i, s, S) {
+        n = split(tolower(t), S, /[.;]( |$)/)
+        for (i = 1; i <= n; i++) {
+          s = S[i]
+          if (s ~ /re-?dispatch/ && s ~ /shard/ \
+              && s !~ /(^|[^a-z])(no|not|never|none|nor)([^a-z]|$)|n([^a-z]|[^a-z][^a-z][^a-z])t([^a-z]|$)/) return 1
+        }
+        return 0
+      }
+      /^## / { flush(); hdr = $0; body = $0; status = ""; field = ""; c22 = ($0 ~ /Check[ -]?22([^0-9]|$)|CHECK[-_ ]?22([^0-9]|$)|Rule 19([^0-9]|$)/); sharded = 0; next }
       /^\*\*[Ss]tatus:\*\*/ {
         s = $0; sub(/^\*\*[Ss]tatus:\*\*[[:space:]]*/, "", s)
         if (match(s, /[A-Z_]+/)) status = substr(s, RSTART, RLENGTH)
       }
+      /^\*\*[^*]+:\*\*/ { fl = $0; sub(/^\*\*/, "", fl); sub(/:\*\*.*$/, "", fl); field = fl }
+      /^###/ || /^[[:space:]]*$/ { field = "" }
+      field ~ /^(Blocker type|Context|Decision|Spawn)/ && $0 ~ /Check[ -]?22([^0-9]|$)/ { c22 = 1 }
+      field ~ /^Remediation/ && remsharded($0) { sharded = 1 }
+      field !~ /^Remediation/ && $0 ~ /(^|[^A-Za-z])Remediation:/ { r = $0; sub(/^.*Remediation:/, "", r); if (remsharded(r)) sharded = 1 }
       { body = body "\n" $0 }
       END {
         flush()
@@ -948,14 +975,67 @@ if [ "$ROLE" = gate-adjudicator ] && [ -n "${SPAWN_SPRINT:-}" ] \
     _dg_uncov="$(printf '%s\n' "$_dg_waiver" | sed -n 's/^X	//p' | tr '\n' ' ' | sed 's/ *$//')"
     _dg_msg=""
     if [ -n "$_dg_unnamed" ]; then
-      _dg_msg="An OVERRIDDEN entry for sprint ${SPAWN_SPRINT} in docs/escalations/pending.md cites Check 22 or Rule 19 and names no spawn of that sprint: $(printf '%s' "$_dg_unnamed" | tr '\n' ' ')-- Check 22 clears exactly the spawns an entry names (gate-validation.md, Check 22 clearing arm 1), so this waiver clears nothing and the gate would fail on it. Name each waived spawn verbatim: its spawn-ledger tool_use_id, its agent id, or its dispatch name (a name equal to the role, such as \`dev\`, names no one spawn)."
+      _dg_msg="An OVERRIDDEN entry for sprint ${SPAWN_SPRINT} in docs/escalations/pending.md dispositions Check 22 and names no spawn of that sprint: $(printf '%s' "$_dg_unnamed" | tr '\n' ' ')-- Check 22 clears exactly the spawns an entry names (gate-validation.md, Check 22 clearing arm 1), so this waiver clears nothing and the gate would fail on it. Name each waived spawn verbatim: its spawn-ledger tool_use_id, its agent id, or its dispatch name (a name equal to the role, such as \`dev\`, names no one spawn)."
     fi
     if [ -n "$_dg_uncov" ]; then
-      _dg_msg="${_dg_msg:+$_dg_msg }Sprint ${SPAWN_SPRINT} has spawn-ledger rows recorded \`shard: invalid-exception\` that no OVERRIDDEN entry both names and dispositions with one of Rule 28's serial exceptions (1)-(4): ${_dg_uncov}. Check 22 arm S3 fails each one until an entry names it and states which exception actually applied (\`exception (3)\`, or its short name such as \`authoring-chain\`) -- a sentence saying none of the four applies, or naming them only as \"the four\", dispositions nothing. Otherwise re-dispatch the work sharded."
+      _dg_msg="${_dg_msg:+$_dg_msg }Sprint ${SPAWN_SPRINT} has spawn-ledger rows recorded \`shard: invalid-exception\` that no OVERRIDDEN entry both names and remediates: ${_dg_uncov}. Check 22 arm S3 fails each one until an OVERRIDDEN entry names it and remediates it one of the two ways Check 22 clearing arm 4 accepts for this class -- the work was re-dispatched sharded, stated in the entry's Remediation (\`**Remediation:** the work was re-dispatched sharded as <names>\`), or the exception that actually applied is named (\`exception (3)\`, or its short name such as \`authoring-chain\`). A sentence saying none of the four applies, or naming them only as \"the four\", remediates nothing."
     fi
     [ -n "$_dg_msg" ] && dg_deny "AI/DLC dispatch guard: refused a gate-adjudicator dispatch, because the gate would discard its pass. ${_dg_msg}"
   fi
 fi
+
+mkdir -p "$SPAWN_STATE_DIR" 2>/dev/null || true
+jq -nc \
+   --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true)" \
+   --arg sprint "${SPAWN_SPRINT:-}" \
+   --arg name "${SPAWN_NAME:-}" \
+   --arg role "$ROLE" \
+   --arg pinned "${SPAWN_PINS:-}" \
+   --arg tier "${EXPECT:-}" \
+   --arg req "${REQUESTED:-}" \
+   --arg bound "$SPAWN_BOUND" \
+   --arg effort "${SPAWN_EFFORT:-}" \
+   --arg tui "${SPAWN_TUI:-}" \
+   --arg stripped "${SPAWN_NAME_STRIPPED:-}" \
+   --arg via "${CONTRACT_VIA:-}" \
+   --arg shard "${SPAWN_SHARD:-}" \
+   --arg shardraw "${SPAWN_SHARD_RAW:-}" \
+   --argjson cited "$ROLE_CONTRACT_CITED" \
+   --argjson readable "$ROLE_FILE_READABLE" \
+   --argjson defbound "$DEFINITION_BOUND" \
+   --argjson defstale "$DEFINITION_STALE" '{
+     v: 1, ts: $ts,
+     sprint: (if $sprint == "" then null else ($sprint | tonumber? // null) end),
+     name: (if $name == "" then null else $name end),
+     role: $role,
+     model_pinned: (if $pinned == "" then null else $pinned end),
+     tier_pinned: (if $tier == "" then null else $tier end),
+     model_requested: (if $req == "" then null else $req end),
+     model_bound: $bound,
+     # Mirrors `model_bound` above: the DISPATCH, not the config. Non-null only on a
+     # definition-bound row, where the harness applies the `effort:` key of the rendered
+     # definition; null everywhere else, because no other path binds an effort at all.
+     # NO APOSTROPHE IN THIS COMMENT: the whole object is one single-quoted
+     # shell argument, so a possessive here CLOSES it and bash reports a syntax error.
+     effort_bound: (if $effort == "" then null else $effort end),
+     role_contract_cited: $cited,
+     # WHICH carrier delivered the Rule 19(b) line: prompt or definition, null when
+     # neither did. Delivery at dispatch only, never a read. NO APOSTROPHE HERE either.
+     contract_via: (if $via == "" then null else $via end),
+     role_file_readable: $readable,
+     definition_bound: $defbound,
+     definition_stale: $defstale,
+     name_stripped: (if $stripped == "" then null else $stripped end),
+     tool_use_id: (if $tui == "" then null else $tui end),
+     # The brief shard line, canonicalised; null when absent, repeated or unparseable. The KEY
+     # is always written, because its absence is how Check 22 recognises an older guard row.
+     shard: (if $shard == "" then null else $shard end)
+   }
+   # The lead text of an invented exception, written ONLY beside that value, so its presence
+   # is itself the marker Check 22 arm S3 prints from. NO APOSTROPHE HERE either.
+   | if $shard == "invalid-exception" then . + {shard_raw: $shardraw} else . end' >> "$SPAWN_LEDGER" 2>/dev/null || _sl_rc=$?
+# A failed append is recorded in _sl_rc and never blocks a dispatch: nothing reads it, and the hook goes on.
+# --- end SPAWN LEDGER ---------------------------------------------------------
 
 [ "$ROLE_FILE_READABLE" = true ] || exit 0   # recorded above; never correct blind
 
