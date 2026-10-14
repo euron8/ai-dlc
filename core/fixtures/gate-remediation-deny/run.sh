@@ -1398,6 +1398,25 @@ lpe allow "3b: a repo-root dotfile (.gitignore) is ALLOWED"                     
 lpe deny  "3b: a dotfile NOT at the repo root (src/.env) is DENIED"                        "$W/src/.env" "$TA"
 lpe allow "3b: a file carrying a <<<<<<< conflict marker is ALLOWED (Rule 28(a))"         "$W/src/conflict.py" "$TA"
 lpe allow "3b: a path under a grammar scan root (seeded: reports/) is ALLOWED"             "$W/reports/r.md" "$TA"
+# Retro Step 4 tells the lead to edit repo-root CLAUDE.md; a nested one is not that file.
+lpe allow "3b: repo-root CLAUDE.md (retro Step 4 sends the lead there) is ALLOWED"         "$W/CLAUDE.md" "$TA"
+lpe allow "3b: repo-root AGENTS.md is ALLOWED"                                             "$W/AGENTS.md" "$TA"
+lpe deny  "3b: a CLAUDE.md NOT at the repo root (src/CLAUDE.md) is DENIED"                 "$W/src/CLAUDE.md" "$TA"
+# `..` through a directory that does NOT exist must not keep the allowed prefix.
+[ ! -e "$W/docs/nx" ] || bad "3b: seed precondition — docs/nx must not exist for the traversal cell"
+lpe deny  "3b: docs/nx/../../src/app.py (nx absent) is src/app.py and DENIED"             "$W/docs/nx/../../src/app.py" "$TA"
+lpe deny  "3b: relative _bmad-output/nx/../../src/app.py is DENIED"                         "_bmad-output/nx/../../src/app.py" "$TA"
+lpe allow "3b: src/../docs/x.md (a .. that lands in docs/) is ALLOWED"                      "$W/src/../docs/x.md" "$TA"
+# A resolver that HANGS must not hang the edit: the bounded wait gives up and adds no roots.
+mkdir -p "$W.hang/scripts/ai-dlc"
+cp -R "$W/." "$W.hang/" 2>/dev/null
+# `exec`, so the pid the hook kills IS the sleeper and nothing is left running for 30s.
+printf '#!/bin/bash\nexec sleep 30\n' > "$W.hang/scripts/ai-dlc/artifact-path-config.sh"
+_h0=$(date +%s)
+OUT="$(drive "$W.hang" Edit "$W.hang/src/app.py" "" "$TA")"
+_h1=$(date +%s)
+if denied "$OUT" && [ $((_h1 - _h0)) -lt 15 ]; then ok "3b: a hung scan-roots resolver is abandoned within the bound ($((_h1 - _h0))s) and the product edit is still DENIED"
+else bad "3b: a hung scan-roots resolver: elapsed $((_h1 - _h0))s, denied=$(denied "$OUT" && echo y || echo n) — the bound did not hold"; fi
 
 # (iv) IS ONE RULE: the `LAST_SKILL=` statement and its `case` are byte-identical in this hook
 # and `ai-dlc-acknowledge.sh`. Both directions: the two shipped blocks agree, and a one-byte
@@ -1446,8 +1465,16 @@ if mut m3b-no-scanroots 's@case "\$LPE_REL" in "\$_lpe_sr"/\*|"\$_lpe_sr") LPE_P
   lpe deny  "M3b-roots: ignoring the grammar's scan roots DENIES reports/r.md — the resolver read is load-bearing" "$W/reports/r.md" "$TA" "" "$MW/m3b-no-scanroots.sh"
   lpe deny  "M3b-roots: ...and P1 is UNCHANGED"                                              "$W/src/app.py" "$TA" "" "$MW/m3b-no-scanroots.sh"
 fi
+if mut m3b-no-claude-md 's@^    CLAUDE.md|CLAUDE.local.md|AGENTS.md) LPE_PRODUCT=0 ;;$@    CLAUDE.md|CLAUDE.local.md|AGENTS.md) ;;@'; then
+  lpe deny  "M3b-claude: without the allowance repo-root CLAUDE.md is DENIED — the allowance is load-bearing" "$W/CLAUDE.md" "$TA" "" "$MW/m3b-no-claude-md.sh"
+  lpe allow "M3b-claude: ...and the .gitignore allow is UNCHANGED"                            "$W/.gitignore" "$TA" "" "$MW/m3b-no-claude-md.sh"
+fi
+if mut m3b-no-lex 's@^LPE_ABS="\$(lpe_lex "\$LPE_ABS")"$@:@'; then
+  lpe allow "M3b-lex: without the lexical collapse docs/nx/../../src/app.py is ALLOWED — the collapse is load-bearing" "$W/docs/nx/../../src/app.py" "$TA" "" "$MW/m3b-no-lex.sh"
+  lpe deny  "M3b-lex: ...and P1 is UNCHANGED"                                                 "$W/src/app.py" "$TA" "" "$MW/m3b-no-lex.sh"
+fi
 git -C "$W" worktree remove --force "$SIB" >/dev/null 2>&1
-rm -rf "$W" "$SIB"
+rm -rf "$W" "$SIB" "$W.hang"
 
 rm -rf "$MW"
 [ -n "$GRD_DECOY" ] && rm -rf "$GRD_DECOY"

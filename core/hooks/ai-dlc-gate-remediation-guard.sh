@@ -180,10 +180,20 @@
 #         worktree nested in `.claude/worktrees/` is resolved as its own tree.
 #   (ii)  relative to that tree's root it is not under `.claude/`, the state
 #         directory (`_bmad-output/`), `docs/`, nor any root printed by
-#         `scripts/ai-dlc/artifact-path-config.sh --scan-roots`, and it is not a
+#         `scripts/ai-dlc/artifact-path-config.sh --scan-roots`, it is not a
 #         repo-root dotfile (`.gitignore`: the one measured operator-directed in-tree
-#         write). A resolver that is absent or refuses adds no roots; every root it
-#         prints today is under `docs/` or `_bmad-output/`, so nothing moves.
+#         write), and it is not repo-root `CLAUDE.md`, `CLAUDE.local.md` or `AGENTS.md`.
+#         `CLAUDE.md` is there because retro Step 4 (`steps/retro.md`) tells the lead to
+#         apply exit-1 improvements to it; the other two are that file under other names.
+#         A grep of `core/skills` and `core/team-roles` for every other repo-root file a
+#         step might send the lead to (`README`, `CHANGELOG`, `AGENTS.md`,
+#         `CLAUDE.local.md`) found no edit instruction for any of them, against a control
+#         token present in 29 files; coding conventions live under `docs/` and rule files
+#         under `.claude/`, both already allowed. A resolver that is absent, refuses, or
+#         runs past a 5s bound adds no roots; every root it prints today is under `docs/`
+#         or `_bmad-output/`, so nothing moves. The path is collapsed lexically (`.`, `..`)
+#         before any of this, so `docs/nx/../../src/app.py` is `src/app.py` even when
+#         `docs/nx` does not exist.
 #   (iii) the file holds no `^<<<<<<< ` line: Rule 28(a) merge-conflict resolution
 #         is the lead's. Keyed on the FILE, never on `.git/MERGE_HEAD`, which is not a
 #         directory entry in a linked worktree.
@@ -203,19 +213,27 @@
 # code never reaches this Edit|Write|MultiEdit matcher, and is not denied. Measured in the
 # same window: one `sed -i.bak ... rebalancer/api.py` from the lead. The arm bounds the
 # edit TOOLS; the Bash route is open and stated here so no reader takes this as a seal.
+# `NotebookEdit` is not on this hook's matcher either (see INSTALL), so a lead notebook edit
+# to product code is not denied by this arm.
 #
-# ARM 3b's FALSE-POSITIVE SET IS EMPTY, MEASURED BY REPLAYING THE BUILT ARM. Every lead
-# Edit/Write/MultiEdit in the reference consumer's top-level s317-s318 transcripts (1804 calls,
-# 65 sessions) was driven through this hook with CLAUDE_PROJECT_DIR at that consumer's checkout
-# and a transcript holding the last `/ai-dlc*` marker before the call (the scan takes the last
-# marker, so the session is classified as of that call, not as of its end). Result: 8 DENY --
-# exactly the 8 product edits above -- and 1796 ALLOW: 1688 under `_bmad-output/` (the
-# sibling-worktree ones included), 58 scratchpad, 29 `docs/` (12 `docs/escalations/pending.md`,
-# 5 `docs/architecture.md`, 11 `docs/reviews/s317/shards/**`, 1 `docs/coding-conventions.md`),
-# 20 under a `.claude/` path (operator memory included),
-# 1 `.gitignore`. No narrowing was needed to reach zero; the conjuncts were chosen from the
-# contract's enumeration of that set before the replay ran. The worktree set is as registered
-# when the replay ran: a since-removed worktree reads as outside every tree, i.e. ALLOW.
+# ARM 3b's FALSE-POSITIVE SET IS EMPTY, MEASURED BY REPLAYING THE BUILT ARM, AND IT GOT THERE BY
+# ONE NARROWING. Each lead Edit/Write/MultiEdit was driven through this hook with
+# CLAUDE_PROJECT_DIR at the reference consumer's checkout and a transcript holding the last
+# `/ai-dlc*` marker before the call (the scan takes the last marker, so the session is classified
+# as of that call, not as of its end).
+#   The s317-s318 window, 1804 calls: 8 DENY -- exactly the 8 product edits above -- and 1796
+#   ALLOW (`_bmad-output/` incl. sibling worktrees, scratchpad, `docs/`, `.claude/`, `.gitignore`).
+#   That window held no lead `CLAUDE.md` edit, so it could not see the false positive below.
+#   The WIDER corpus, every top-level transcript the consumer has (177, 4412 lead edit calls, 4084
+#   of them in an /ai-dlc session at call time): before the narrowing, 23 DENY -- 5 of them
+#   repo-root `CLAUDE.md` (sessions 5ef555a1 x4, a27bbf0d x1), which retro Step 4 tells the lead
+#   to edit. THOSE FIVE ARE THE FALSE-POSITIVE SET, and (ii) now allows repo-root `CLAUDE.md`,
+#   `CLAUDE.local.md` and `AGENTS.md` for them. After it: 18 DENY, every one product code -- the
+#   8 above plus 10 in session 5ef555a1 (`scripts/tests/*.sh` x8, `scripts/ecs-deploy-subgraph.sh`,
+#   `infra/lib/network-stack.ts`) -- and 4394 ALLOW. The replay left the consumer's
+#   `git status` byte-identical (digest compared before and after). The worktree set is as
+#   registered when the replay ran: 4 product edits in the since-removed `graph-s315-ff2`
+#   worktree read as outside every tree, i.e. ALLOW -- a replay artifact, not a hole in (i).
 #
 # ORDERING THE PASSES: THE NONCE, NEVER mtime
 # `gate_nonce` is `<gate_type>-<YYYYMMDD>T<HHMMSS>Z` (schema `patterns.gate_nonce`)
@@ -584,7 +602,26 @@ lpe_phys() { # $1 absolute path -> physical spelling on stdout, or rc 1
   [ "$_lp_d" = "/" ] && _lp_d=""
   printf '%s%s' "$_lp_d" "$_lp_s"
 }
+# `.` and `..` collapsed LEXICALLY, before `lpe_phys`. `lpe_phys` walks up to the deepest
+# EXISTING directory and appends the rest verbatim, so a `..` that climbs out of a directory that
+# does not exist survived into the tree-relative path: `docs/nx/../../src/app.py` kept its
+# `docs/` prefix, matched the pipeline-tree allow, and the product edit walked through.
+lpe_lex() { # $1 absolute path -> the same path with `.`, `..` and empty segments collapsed
+  _ll_in="$1"; _ll_out=""
+  while [ -n "$_ll_in" ]; do
+    _ll_seg="${_ll_in%%/*}"
+    case "$_ll_in" in */*) _ll_in="${_ll_in#*/}" ;; *) _ll_in="" ;; esac
+    case "$_ll_seg" in
+      ""|.) ;;
+      ..) _ll_out="${_ll_out%/*}" ;;
+      *)  _ll_out="${_ll_out}/${_ll_seg}" ;;
+    esac
+  done
+  printf '%s' "${_ll_out:-/}"
+}
 case "$FP" in /*) LPE_ABS="$FP" ;; *) LPE_ABS="${PROJECT_DIR}/${FP}" ;; esac
+case "$LPE_ABS" in /*) ;; *) LPE_ABS="${PWD}/${LPE_ABS}" ;; esac
+LPE_ABS="$(lpe_lex "$LPE_ABS")"
 LPE_TARGET="$(lpe_phys "$LPE_ABS")" || LPE_TARGET=""
 LPE_PROJ="$(cd -P "$PROJECT_DIR" 2>/dev/null && pwd -P)" || LPE_PROJ=""
 LPE_ROOT=""
@@ -619,9 +656,13 @@ fi
 if [ -n "$LPE_ROOT" ]; then
   LPE_REL="${LPE_TARGET#"$LPE_ROOT"/}"
   LPE_PRODUCT=1
-  # (ii) The pipeline's own trees, and a repo-root dotfile, are never product code.
+  # (ii) The pipeline's own trees, a repo-root dotfile, and the repo-root agent-instruction
+  # files are never product code. `CLAUDE.md` is the one the steps name: retro Step 4 tells the
+  # lead to apply exit-1 improvements to it (`steps/retro.md`, "CLAUDE.md, coding conventions").
+  # `CLAUDE.local.md` and `AGENTS.md` are the same file class under another harness's name.
   case "$LPE_REL" in
     ""|.claude/*|_bmad-output/*|"${STATE_DIR_NAME}"/*|"${_STATE_DIR#./}"/*|docs/*) LPE_PRODUCT=0 ;;
+    CLAUDE.md|CLAUDE.local.md|AGENTS.md) LPE_PRODUCT=0 ;;
     */*) ;;
     .*) LPE_PRODUCT=0 ;;
   esac
@@ -632,14 +673,36 @@ if [ -n "$LPE_ROOT" ]; then
     LPE_PRODUCT=0
   fi
   # (ii, continued) The grammar's scan roots, read from the PROJECT's grammar (one grammar for
-  # every worktree of the repo). Resolver absent or refusing -> no extra roots.
+  # every worktree of the repo). Resolver absent, refusing or HUNG -> no extra roots.
+  # A BOUNDED WAIT, because this runs on every lead edit to a non-pipeline path and a hung
+  # resolver would hang the edit with it. bash 3.2 and BSD have no `timeout`, so the resolver
+  # runs in the background into a temp file and a watcher polling every 0.1s kills it after
+  # LPE_RESOLVER_TICKS ticks. The watcher exits on its own within one tick of the resolver, so no
+  # `sleep` outlives the hook by more than that. A killed or failed resolver's partial output is
+  # discarded: no roots, never half of them.
   if [ "$LPE_PRODUCT" -eq 1 ] && [ -f "${PROJECT_DIR}/scripts/ai-dlc/artifact-path-config.sh" ]; then
+    LPE_RESOLVER_TICKS=50
+    _lpe_out="$(mktemp "${TMPDIR:-/tmp}/ai-dlc-scanroots.XXXXXX" 2>/dev/null)" || _lpe_out=""
+    _lpe_roots=""
+    if [ -n "$_lpe_out" ]; then
+      bash "${PROJECT_DIR}/scripts/ai-dlc/artifact-path-config.sh" --scan-roots --root "$PROJECT_DIR" \
+        > "$_lpe_out" 2>/dev/null &
+      _lpe_pid=$!
+      ( _lpe_t=0
+        while kill -0 "$_lpe_pid" 2>/dev/null; do
+          _lpe_t=$((_lpe_t + 1))
+          [ "$_lpe_t" -gt "$LPE_RESOLVER_TICKS" ] && { kill "$_lpe_pid" 2>/dev/null; break; }
+          sleep 0.1
+        done ) >/dev/null 2>&1 &
+      wait "$_lpe_pid" 2>/dev/null && _lpe_roots="$(cat "$_lpe_out" 2>/dev/null)"
+      rm -f "$_lpe_out"
+    fi
     while IFS= read -r _lpe_sr; do
       _lpe_sr="${_lpe_sr%/}"
       [ -n "$_lpe_sr" ] || continue
       case "$LPE_REL" in "$_lpe_sr"/*|"$_lpe_sr") LPE_PRODUCT=0 ;; esac
     done <<LPEEOF
-$(bash "${PROJECT_DIR}/scripts/ai-dlc/artifact-path-config.sh" --scan-roots --root "$PROJECT_DIR" 2>/dev/null)
+$_lpe_roots
 LPEEOF
   fi
   # (iv) LAST, because it reads the transcript. The two statements from `LAST_SKILL=` to the

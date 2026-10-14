@@ -212,6 +212,7 @@ case "$CASE" in
     printf 'a\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> topic\n' > "$W/src/conflict.py"
     printf '# Conventions\n' > "$W/docs/coding-conventions.md"
     printf 'node_modules/\n' > "$W/.gitignore"
+    printf '# Project rules\n' > "$W/CLAUDE.md"
     printf '# r\n' > "$W/reports/r.md"
     git -C "$W" init -q >/dev/null 2>&1 \
       && git -C "$W" -c user.name=fixture -c user.email=fixture@example.invalid commit -q --allow-empty -m seed >/dev/null 2>&1 \

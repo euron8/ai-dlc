@@ -13,6 +13,10 @@
 #             product-code reason ("THE LEAD DOES NOT EDIT PRODUCT CODE"); a deny for any other
 #             reason does not count (exit 1 if none)
 #   NEAR-MISS the same Edit in the non-pipeline session -> no hook may deny it (exit 3 if one does)
+#   NEAR-MISS in the /ai-dlc session, the lead's own in-tree and out-of-tree targets --
+#             `_bmad-output/x.md`, `docs/x.md`, repo-root `CLAUDE.md` (retro Step 4 tells the lead
+#             to edit it) and a scratchpad path outside the tree -> no hook may deny any of them
+#             (exit 3). Without these a hook denying EVERY lead edit in an /ai-dlc session passed.
 # Exit 0 fixed, 1 live, 3 over-broad, 9 precondition missing.
 #
 # Measured at 0.781.0: CONTROL denied by ai-dlc-core-guard.sh, SUBJECT denied by none -> exit 1.
@@ -59,4 +63,10 @@ denies() {
 denies "$d/.claude/skills/ai-dlc/steps/route.md" "$d/tr/plain.jsonl" || exit 9
 denies "$d/src/app.py" "$d/tr/aidlc.jsonl" "THE LEAD DOES NOT EDIT PRODUCT CODE" || exit 1
 denies "$d/src/app.py" "$d/tr/plain.jsonl" && exit 3
+s=$(mktemp -d)
+printf 'line\n' > "$d/_bmad-output/x.md"; mkdir -p "$d/docs"; printf 'line\n' > "$d/docs/x.md"
+printf 'line\n' > "$d/CLAUDE.md"; printf 'line\n' > "$s/notes.md"
+for nm in "$d/_bmad-output/x.md" "$d/docs/x.md" "$d/CLAUDE.md" "$s/notes.md"; do
+  denies "$nm" "$d/tr/aidlc.jsonl" && exit 3
+done
 exit 0

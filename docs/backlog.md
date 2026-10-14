@@ -223,7 +223,9 @@ Premise corrected on re-measurement: across the 1804 lead Edit/Write/MultiEdit c
 there were 8 product edits by both leads, not 5 by qwen alone. Session af48eb49 (qwen) made 6
 (`rebalancer/execution.py` x5 and `rebalancer/tests/test_s316_b2_driven.py`); session 20bd359c
 (Sonnet) made 2 (`rebalancer/tests/test_s259_1_single_mint_efficiency.py`). No gate was open for
-any of them. `core-guard` covers core paths only, and
+any of them. Across all 177 consumer transcripts (4412 lead edit calls) the built arm denies 18,
+all product code (10 more in session 5ef555a1); repo-root `CLAUDE.md`, which retro Step 4 tells
+the lead to edit, is allowed. `core-guard` covers core paths only, and
 `gate-remediation-guard` covers the artifact corpus only while a gate FAIL is recorded. Measured by
 the receipt's probe: a lead Edit to a core path is denied by `core-guard`, a lead Edit to product code
 by no hook. Toward the local-lead goal.
