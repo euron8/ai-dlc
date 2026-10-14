@@ -1290,6 +1290,8 @@ adj_kill noinvalid 's/^        if (!dead) for (i = 1; i <= ni; i++) if (!(i in c
 adj_kill anyexc 's/^        EXC = ".*"$/        EXC = "exception"/' \
   "$(inv_world generic2 "**Remediation:** one of Rule 28's four serial exceptions applied.")" allow \
   "a bare-word exception match accepts \"the four\" as a citation (15e')"
+adj_kill noshardable 's/^\(          (if .shard == "invalid-exception"\) and (\$sh | contains(" " + \$role + " "))$/\1/' \
+  "$W7" deny "dropping the shardable-role filter refuses over a dev-escalated row Check 22 arm S3 does not judge (15g)"
 
 # THE SHARDED-REMEDIATION ARM of clause 2: Check 22 clearing arm 4 accepts, for this class, "the
 # work was re-dispatched sharded" as well as a named exception. The three near-misses each carry

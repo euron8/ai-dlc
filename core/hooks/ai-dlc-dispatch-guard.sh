@@ -905,7 +905,9 @@ if [ "$ROLE" = gate-adjudicator ] && [ "$DG_IMPL_GATE" = true ] && [ -n "${SPAWN
   # another role recorded `invalid-exception` fails nothing at the gate, so refusing a dispatch
   # over it would block a pass that would have succeeded -- measured on the reference consumer's
   # S316, where 4 ledger rows carry the value and the validator fails 3 (the fourth is
-  # `dev-escalated`). The same set, derived the same way, so the two cannot disagree on a seat.
+  # `dev-escalated`). The fixed roles below are a COPY of SHARD_ROLES, kept literal because a
+  # hook reading a missing validator fails open; invariant I125 in validate-enforcement-map.sh
+  # binds the two byte-for-byte. The seats are derived the same way the validator derives them.
   _dg_shardable=" adversary remediator gate-adjudicator analyst code-reviewer code-reviewer-escalated qa "
   for _dg_rf in "$ROLES_DIR"/*.md; do
     [ -f "$_dg_rf" ] || continue

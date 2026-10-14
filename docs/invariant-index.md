@@ -142,3 +142,4 @@ To change this file, change the arm header it came from and re-run the renderer.
 | I122 | every role contract carries the advisor paragraph exactly once, byte-identical, and no other file carries it |
 | I123 | every role contract carries the chunked-write paragraph once, byte-identical, directly after the advisor paragraph, and no other file carries it |
 | I124 | the party-seat section is byte-identical across exactly architect, dev, pm and tea, and no other file carries it |
+| I125 | the shardable-role set is ONE set across Check 22's validator and the dispatch guard |

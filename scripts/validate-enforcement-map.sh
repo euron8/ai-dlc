@@ -813,7 +813,14 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   I84 309 -> 311 and I83 153 -> 154 walk the new script; I82 14 <-> 15 is the instrument's usual
 #   one-fork jitter. 0.783.0's own gate read 3339 at the old budget and passed by that jitter; the
 #   next push read 3340 and failed. HIGH reading 3340 plus the usual 6.
-FORK_BUDGET=3346
+#
+#   RAISED TO 3355 FOR ONE NEW ARM, I125. `fork-profile.sh --stable --section by-arm`, base 893a3551
+#   (b230-bl515-512) and then the tip carrying I125, in ONE worktree at the same path, caller
+#   environment inherited: base 3340 (STABLE 2), tip 3349 (STABLE 2), so +9. I125 0 -> 11 is the
+#   shardable-role binding: one `mktemp`, four probe seed writes, one grep per file over the probe
+#   and the real pair, one `rm`; the instrument's usual one-fork jitter nets the rest. HIGH reading
+#   3349 plus the usual 6.
+FORK_BUDGET=3355
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
@@ -13552,6 +13559,88 @@ else
     err "I124: the party-seat section is not bound across architect, dev, pm and tea. Findings, one per line (MISSING: a listed file lacks the exact heading line; MULTI: it carries the heading twice; DRIFT: its section differs from the copy the others agree on, heading through the line before the next '## '; EXTRA: a file outside the four carries a heading opening 'As a party seat'; UNREAD: a listed file was not read; CONTROL: a listed file carrying the heading was not among half B's hits, so half B did not read the tree it reports on):
 $i124_out
 The four copies are the standing copy of one join protocol, so a fork among them is two protocols. Make the section byte-identical in the four files, and keep it out of every other file -- if a fifth role becomes a party seat, add it to i124_names in the same change."
+  fi
+fi
+
+
+# --- I125: the shardable-role set is ONE set across Check 22's validator and the dispatch guard ---
+# vocabulary: shardable roles
+# vocabulary-invariant: I125
+# vocabulary-owner: core/scripts/validate-spawn-ledger.sh
+# vocabulary-extract: shard-roles
+# vocabulary-readers: core/hooks/ai-dlc-dispatch-guard.sh
+#
+# WHAT IT BINDS. `SHARD_ROLES` in validate-spawn-ledger.sh names the fixed roles Check 22's arm S3
+# judges for an invented Rule 28 exception; the party seats are added to it at run time, derived
+# from the role files. The dispatch guard's adjudicator-waiver arm refuses a gate-adjudicator over
+# an uncovered `invalid-exception` row, and it must refuse over EXACTLY the rows S3 fails -- so it
+# carries the same fixed list as `_dg_shardable`, framed by one space each side for its
+# `contains(" " + $role + " ")` test. The validator is the OWNER: it is what decides the gate.
+#
+# WHY A COPY AND NOT A READ. A consumer-layout read is constructible -- ai-dlc-foreground-budget.sh
+# reads `$PROJECT_DIR/scripts/ai-dlc/validate-steering-budget.sh` and is not an I33 walk -- but
+# that hook's subject is a LIMIT, where a missing file harmlessly means no limit. Here a missing
+# or unparseable validator would collapse the set to the party seats alone and the deny arm would
+# go quiet on seven roles while printing nothing: I104's fail-open, in the direction that loses a
+# refusal. So the guard keeps its literal, and this arm is what makes the duplicate safe.
+#
+# THE FAILURE IS ASYMMETRIC AND BOTH DIRECTIONS ARE ONE FINDING. A guard copy that LOSES a role
+# lets an adjudicator run over a waiver Check 22 will discard; one that GAINS a role refuses a
+# dispatch over a row S3 never judges, which is the false positive the arm's scoping was built to
+# remove (the reference consumer's S316 `dev-escalated` row). The comparison is of the inner token
+# list, byte for byte and in order, so a reorder is reported too: two copies that are meant to be
+# one are kept literally one.
+#
+# ONE GREP PER FILE. Each line is lifted by a pattern anchored on its whole shape and counted;
+# exactly one hit per file is required, so a lost anchor reports MISSING and a second assignment
+# reports MULTI rather than either reading as agreement. The guard pattern requires the literal
+# space after the opening quote: the guard's next line, `_dg_shardable="${_dg_shardable}...`,
+# appends the party seats and opens with the same nine characters. Measured on the real tree:
+# 2 lines in the guard carry `_dg_shardable="`, 1 matches the pattern; 1 line in the validator
+# matches `^SHARD_ROLES=` (SHARD_SET does not).
+#
+# FALSE-POSITIVE SET: EMPTY, measured on the real tree before this shipped -- both lines carry
+# `adversary remediator gate-adjudicator analyst code-reviewer code-reviewer-escalated qa`.
+i125_check() { # i125_check <validator> <guard> -> one finding per line, nothing on agreement
+  local v g nl='
+'
+  if [ ! -r "$1" ] || [ ! -r "$2" ]; then printf 'UNREAD %s %s\n' "$1" "$2"; return; fi
+  v="$(grep -E '^SHARD_ROLES="[a-z -]*"$' "$1")" || v=''
+  g="$(grep -E '^  _dg_shardable=" [a-z -]* "$' "$2")" || g=''
+  case "$v" in '') printf 'MISSING SHARD_ROLES in %s\n' "$1"; return ;; *"$nl"*) printf 'MULTI SHARD_ROLES in %s\n' "$1"; return ;; esac
+  case "$g" in '') printf 'MISSING _dg_shardable in %s\n' "$2"; return ;; *"$nl"*) printf 'MULTI _dg_shardable in %s\n' "$2"; return ;; esac
+  v="${v#SHARD_ROLES=\"}"; v="${v%\"}"
+  g="${g#  _dg_shardable=\" }"; g="${g% \"}"
+  [ "$v" = "$g" ] || printf 'DRIFT validator=[%s] guard=[%s]\n' "$v" "$g"
+}
+
+# THE PROBE, RUN BEFORE THE CORPUS, IN BOTH DIRECTIONS. Every finding here is presence-shaped,
+# but a grammar that stopped matching the real lines would report MISSING on the corpus, never
+# silence -- the probe is for the other direction: a pattern that matched the APPEND line, or a
+# comparison that normalised away a dropped role, would read as agreement.
+i125_pd="$(mktemp -d "${TMPDIR:-/tmp}/i125-XXXXXX")"
+i125_roles='adversary remediator gate-adjudicator analyst code-reviewer code-reviewer-escalated qa'
+printf 'SHARD_ROLES="%s"\nSHARD_SET=" ${SHARD_ROLES} "\n' "$i125_roles" > "$i125_pd/v.sh"
+#  ok    the guard's real shape, the party-seat append line beside it as a decoy.
+printf '  _dg_shardable=" %s "\n      _dg_shardable="${_dg_shardable}${_dg_rb%%.md} "\n' "$i125_roles" > "$i125_pd/g-ok.sh"
+#  drift the same with `qa` dropped -- the exact state the arm exists to report.
+printf '  _dg_shardable=" %s "\n      _dg_shardable="${_dg_shardable}${_dg_rb%%.md} "\n' "${i125_roles% qa}" > "$i125_pd/g-drift.sh"
+#  gone  only the append line: the literal replaced by something the grammar cannot spell.
+printf '      _dg_shardable="${_dg_shardable}${_dg_rb%%.md} "\n' > "$i125_pd/g-gone.sh"
+i125_bad=''
+[ -z "$(i125_check "$i125_pd/v.sh" "$i125_pd/g-ok.sh")" ] || i125_bad="$i125_bad match-not-quiet"
+case "$(i125_check "$i125_pd/v.sh" "$i125_pd/g-drift.sh")" in DRIFT*) ;; *) i125_bad="$i125_bad drift-not-reported" ;; esac
+case "$(i125_check "$i125_pd/v.sh" "$i125_pd/g-gone.sh")" in MISSING*) ;; *) i125_bad="$i125_bad gone-not-reported" ;; esac
+rm -rf "$i125_pd"
+
+if [ -n "$i125_bad" ]; then
+  err "I125's probe failed on seed(s):$i125_bad, so the corpus below was not read. match-not-quiet: identical lists with the party-seat append line beside them were reported; drift-not-reported: a guard copy missing \`qa\` was not called DRIFT; gone-not-reported: a guard carrying only the append line was not called MISSING. Any of them means I125 would report agreement for the reason a broken grammar does."
+else
+  i125_out="$(i125_check "$REPO_ROOT/core/scripts/validate-spawn-ledger.sh" "$REPO_ROOT/core/hooks/ai-dlc-dispatch-guard.sh")"
+  if [ -n "$i125_out" ]; then
+    err "I125: the shardable-role set has forked between Check 22's validator and the dispatch guard:
+$i125_out
+SHARD_ROLES in core/scripts/validate-spawn-ledger.sh decides which rows arm S3 fails; _dg_shardable in core/hooks/ai-dlc-dispatch-guard.sh decides which of those rows refuse a gate-adjudicator dispatch. A role in one and not the other either lets an adjudicator run over a waiver the gate will discard, or refuses one over a row the gate never judges. Make the guard's inner list byte-identical to SHARD_ROLES (the guard keeps one framing space each side), on the single line each file carries."
   fi
 fi
 

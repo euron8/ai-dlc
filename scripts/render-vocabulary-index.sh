@@ -432,7 +432,14 @@ vocab_extract_cite_verdicts() {
   awk "$CITE_VERDICTS_AWK" "$1" | awk -F"$(printf '\t')" '$1 == "M" { print $2 }' | LC_ALL=C sort -u
 }
 
-IMPLEMENTED='ledger-statuses extension-kinds adjudicated-codes pr-class-keys intensity-table syntax-globs empty-subject-verdict inflight-statuses effort-levels review-verdicts cite-verdicts'
+vocab_extract_shard_roles() {
+  # KEYED ON THE ASSIGNMENT LINE ALONE. The owner's header and its remedy text name the roles in
+  # prose, and `SHARD_SET` re-expands the variable; neither is the declaration. The near-miss
+  # probe seeds both.
+  sed -n 's/^SHARD_ROLES="\([a-z -]*\)"$/\1/p' "$1" | tr ' ' '\n' | grep -v '^$' | LC_ALL=C sort -u
+}
+
+IMPLEMENTED='ledger-statuses extension-kinds adjudicated-codes pr-class-keys intensity-table syntax-globs empty-subject-verdict inflight-statuses effort-levels review-verdicts cite-verdicts shard-roles'
 
 # =========================================================================================
 # THE PATH LISTS. A marker's `vocabulary-readers:` and `vocabulary-emitters:` fields carry
@@ -513,6 +520,7 @@ extract_with() { # extract_with <slug> <owner-path>
     effort-levels)      vocab_extract_effort_levels      "$2" ;;
     review-verdicts)    vocab_extract_review_verdicts    "$2" ;;
     cite-verdicts)      vocab_extract_cite_verdicts      "$2" ;;
+    shard-roles)        vocab_extract_shard_roles        "$2" ;;
     *) return 3 ;;
   esac
 }
@@ -973,6 +981,12 @@ cv_u="$(awk "$CITE_VERDICTS_AWK" "$PROBE_DIR/cite-var.js" | awk -F"$(printf '\t'
 printf '%s\n' "console.log(${cvq}PROBE-BEFORE${cvq});" 'if (COUNT) {' "  console.log(${cvq}PROBE-NOTCITE${cvq});" '}' > "$PROBE_DIR/cite-none.js"
 [ -z "$(vocab_extract_cite_verdicts "$PROBE_DIR/cite-none.js")" ] || \
   probe_fail "the cite-verdicts extractor returned a member from a file carrying no \`if (CITE) {\` block; it is reading every console.log in the file, and the owner prints a finding count and a report that are not verdicts."
+
+printf '%s\n' '# SHARD_ROLES names probe-prose here' 'SHARD_ROLES="probe-b probe-a"' 'SHARD_SET=" ${SHARD_ROLES} probe-seat "' > "$PROBE_DIR/shard.sh"
+probe_extract shard-roles "$PROBE_DIR/shard.sh" "probe-a probe-b"
+printf '%s\n' '# SHARD_ROLES="probe-commented"' '  SHARD_ROLES="probe-indented"' > "$PROBE_DIR/shard-none.sh"
+[ -z "$(vocab_extract_shard_roles "$PROBE_DIR/shard-none.sh")" ] || \
+  probe_fail "the shard-roles extractor returned a member from a file whose only SHARD_ROLES lines are a comment and an indented local; it is reading text about the set rather than the top-level assignment Check 22 runs."
 
 # --- probe 3b: the PATH lists, positive and in every near-miss direction ---------------
 # The seed carries both lists, a scalar `token:` inside the block, and a decoy list under a
