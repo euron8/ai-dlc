@@ -178,6 +178,16 @@ mutant2() { # <label> <expected> <old1> <new1> <old2> <new2> -- two layers rever
   bash -n "$d/join-remediator-shards.sh" 2>/dev/null || { bad "$1: FIXTURE BROKEN -- the mutated join does not parse"; return; }
   dispatch "$1" "$d/join-remediator-shards.sh" "$2"
 }
+mutant3() { # <label> <expected> <old1> <new1> <old2> <new2> <old3> <new3> -- three layers reverted together
+  local d; d="$(mutdir "${1%% *}")" || { bad "$1: FIXTURE BROKEN -- the sandbox could not be built"; return; }
+  if ! apply "$d/join-remediator-shards.sh" "$3" "$4" || ! apply "$d/join-remediator-shards.sh" "$5" "$6" \
+     || ! apply "$d/join-remediator-shards.sh" "$7" "$8"; then
+    bad "$1: FIXTURE STALE -- a mutation anchor is not in the join exactly once; re-anchor it, never relax the assertion"; return
+  fi
+  cmp -s "$JOIN" "$d/join-remediator-shards.sh" && { bad "$1: FIXTURE STALE -- the mutated copy is byte-identical"; return; }
+  bash -n "$d/join-remediator-shards.sh" 2>/dev/null || { bad "$1: FIXTURE BROKEN -- the mutated join does not parse"; return; }
+  dispatch "$1" "$d/join-remediator-shards.sh" "$2"
+}
 
 C0="$(mutdir jx0)"
 if [ -f "$C0/join-remediator-shards.sh" ] && [ -f "$C0/validate-adversarial-convergence.sh" ] \
@@ -333,13 +343,16 @@ mutant2 "JX37 --sources closure removed, self-probe removed" "srcclosed" \
   "$CTPROBE_OLD" "$CTPROBE_NEW"
 # JX38 (D3): closure keyed on ANY repaired entry, earlier ones included -- the split pair's own
 # repaired half closes its remainder. Built by recording repaired tokens and applying them at the end.
-mutant2 "JX38 closure not order-keyed (an earlier repaired entry closes), self-probe removed" "srcclosed" \
+# Three layers: with the self-probe in place its split pair refuses every join (measured), so the
+# probe is removed to show srcclosed owns the property on its own.
+mutant3 "JX38 closure not order-keyed (an earlier repaired entry closes), self-probe removed" "srcclosed" \
   '        if (disp == "repaired" && src == 1 && toks != "") {' \
   '        if (disp == "repaired" && src == 1 && toks != "") { rt = rt toks " " }
         if (0) {' \
   "      for (i = 1; i <= nesc; i++) print (ex[i] ? \"X\" : \"E\") \"\\t\" ef[i] \"\\t\" en[i]" \
   "      for (i = 1; i <= nesc; i++) { n = split(et[i], a, \" \"); for (k = 1; k <= n; k++) if (index(rt \" \", \" \" a[k] \" \")) ex[i] = 1 }
-      for (i = 1; i <= nesc; i++) print (ex[i] ? \"X\" : \"E\") \"\\t\" ef[i] \"\\t\" en[i]"
+      for (i = 1; i <= nesc; i++) print (ex[i] ? \"X\" : \"E\") \"\\t\" ef[i] \"\\t\" en[i]" \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
 # JX39/JX40 (N1): the set-aside regex cut to ONE half each; the probe's offender carries both halves.
 mutant "JX39 set-aside regex cut to 'not required' only" "setasideshard" \
   'claim ~ /outside (this|my|the) (shard|part|section)|not required/' \
@@ -379,7 +392,7 @@ nd="$(ndone)"
 # DECLARED is read off this file's own source, between the markers; JUDGED is counted below as the
 # reap walks the index. A control alone is NOT a battery: with every mutant call deleted the
 # control still dispatches, still holds, and the run would otherwise read PASS.
-ndecl="$(awk '/^# ---- BEGIN JX MUTANTS/ { on = 1; next } /^# ---- END JX MUTANTS/ { on = 0 } on && /^mutant2? "/' "$SELF" | grep -c .)" || ndecl=0
+ndecl="$(awk '/^# ---- BEGIN JX MUTANTS/ { on = 1; next } /^# ---- END JX MUTANTS/ { on = 0 } on && /^mutant[23]? "/' "$SELF" | grep -c .)" || ndecl=0
 if [ "$NDISP" -ge 2 ] && [ "$nidx" -eq "$NDISP" ] && [ "$nd" -eq "$NDISP" ]; then
   ok "MR: $NDISP scorers dispatched, $nidx recorded, $nd completed"
 else
