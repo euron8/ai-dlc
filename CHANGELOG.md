@@ -20,7 +20,7 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
-## [UNRELEASED — b230-bl510]
+## [0.787.0] - 2026-10-15
 
 ### Added
 
