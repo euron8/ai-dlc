@@ -30,7 +30,7 @@ source; do not infer either value from anywhere else.
 
 The lead's dispatch gives you (a) the `gate_type`, (b) the `gate_nonce`, (c) the verdict
 output path (`${AI_DLC_STATE_DIR:-_bmad-output}/gate-adjudication/<gate_nonce>.verdict.json`),
-and (d) the artifact roots you may read. You MUST:
+(d) the artifact roots you may read, and (e) the `gate_series_id`. You MUST:
 
 1. **Derive your worklist — do not accept a hand-passed list.** Run
 
@@ -146,7 +146,9 @@ which is also the file `validate-gate-adjudication.sh` LOADS to check your verdi
 second copy to drift from it. `gate_nonce` MUST equal the one the lead handed you (and the
 verdict filename stem) — it is the freshness anchor: a verdict at the wrong nonce is a stale
 verdict, and the gate refuses it. Your verdict binds to this one dispatch (every shard of a sharded one shares its nonce); a later gate entry
-gets a new nonce and a fresh adjudication, never a reuse of this one. `catalog` is `core` unless you were told a consumer extension
+gets a new nonce and a fresh adjudication, never a reuse of this one.
+`gate_series_id` is copied byte-for-byte from your brief, never invented: the lead mints it as `<gate_type>-s<N>-<TS>`, and the gate refuses a new pass whose series id lacks that form or carries a time later than its nonce.
+`catalog` is `core` unless you were told a consumer extension
 catalog. The set of `check_id`s MUST equal the derived escalated set exactly — no omission, no
 extra, no duplicate.
 
@@ -155,7 +157,7 @@ extra, no duplicate.
 {
   "schema_id": "GATE_ADJUDICATION_VERDICT v1",
   "gate_type": "implementation",
-  "gate_series_id": "<the value the lead stamped at gate entry \u2014 IDENTICAL on every pass of this gate>",
+  "gate_series_id": "<copied from your brief: <gate_type>-s<N>-<TS>, IDENTICAL on every pass of this gate>",
   "gate_nonce": "implementation-20260715T140322Z",
   "generated_at": "2026-07-15T14:05:07Z",
   "adjudicator_agent_id": "<agent_id of THIS gate-adjudicator dispatch>",

@@ -66,7 +66,7 @@
       "name": "gate_series_id",
       "required": true,
       "non_empty": true,
-      "doc": "the identity of the GATE, stamped ONCE when the lead first enters it and repeated byte-identically on every pass of that gate. This is the axis gate_nonce is not: the nonce is minted PER PASS, so eleven passes of one gate carry eleven nonces and nothing in the data says they were one gate. Without this field no series-level property is expressible — which is why an 11-pass cascade could run with a stated remedy of 'escalate after remediation' and no counter to reach it. Deliberately unpatterned: required and non-empty, nothing more. A new value is a gate RESET (pass count restarts at zero); the prior series is retained on disk, never deleted."
+      "doc": "the identity of the GATE, stamped ONCE when the lead first enters it and repeated byte-identically on every pass of that gate. This is the axis gate_nonce is not: the nonce is minted PER PASS, so eleven passes of one gate carry eleven nonces and nothing in the data says they were one gate. Without this field no series-level property is expressible — which is why an 11-pass cascade could run with a stated remedy of 'escalate after remediation' and no counter to reach it. The lead mints it as <gate_type>-s<N>-<TS> and the brief hands it to the adjudicator. It carries no pattern here: written history predates the form, so validate-gate-adjudication.sh holds the form only on a pass whose nonce falls at or after its SERIES_FORM_FROM, with <TS> no later than the nonce. A new value is a gate RESET (pass count restarts at zero); the prior series is retained on disk, never deleted."
     },
     {
       "name": "gate_nonce",
@@ -163,7 +163,7 @@
   "taught_example": {
     "schema_id": "GATE_ADJUDICATION_VERDICT v1",
     "gate_type": "implementation",
-    "gate_series_id": "<the value the lead stamped at gate entry — IDENTICAL on every pass of this gate>",
+    "gate_series_id": "<copied from your brief: <gate_type>-s<N>-<TS>, IDENTICAL on every pass of this gate>",
     "gate_nonce": "implementation-20260715T140322Z",
     "generated_at": "2026-07-15T14:05:07Z",
     "adjudicator_agent_id": "<agent_id of THIS gate-adjudicator dispatch>",

@@ -186,7 +186,7 @@ closes the "absent verdict reads as pass" hole.
 **Dispatch** ONE `gate-adjudicator` (or N worklist shards, "Shard the worklist" below), `Agent` tool, `run_in_background: true` (Rule 29 — it must
 not block the operator), bound to `.claude/team-roles/gate-adjudicator.md` per SKILL.md Rule 19
 (both bindings: `model` and the standing role-contract Read line). Give it: the `gate_type`, the
-`gate_nonce`, the verdict output path, and the artifact roots it may read. It derives its own
+`gate_nonce`, the `gate_series_id` decided by the same-series rule in `gate-validation.md` "At gate entry", the verdict output path, and the artifact roots it may read. It derives its own
 worklist with `scripts/ai-dlc/validate-gate-adjudication.sh --expected <gate_type>` (the SAME derivation
 Check 26 uses), reads each escalated check's body in `gate-validation.md` as the spec, and writes
 one `GATE_ADJUDICATION_VERDICT v1` JSON to the verdict path. No Skill, no provenance block — it is
@@ -202,7 +202,7 @@ ONE `gate_nonce`. Each shard derives its own slice with
 `scripts/ai-dlc/validate-gate-adjudication.sh --expected <gate_type> --shard <i>/<N>` and writes
 `<gate_nonce>.part-<i>of<N>.jsonl` beside the verdict path, never a `.json` (`--series` walks
 that directory and refuses any `.json` that is not a verdict). Its brief carries
-`shard: <i>/<N> <gate_type>`. Dispatch the shards right after minting the nonce: a merged verdict
+`shard: <i>/<N> <gate_type>` and the one `gate_series_id` every shard of this dispatch stamps, since `--merge` refuses parts that disagree on it. Dispatch the shards right after minting the nonce: a merged verdict
 is written by the validator, gets no verdict-write ledger row, and binds only through a
 `gate-adjudicator` spawn-ledger row within 900s of the nonce. The join is the program: beat-join
 every part path, then run
@@ -213,7 +213,8 @@ verdict and runs the coverage arms on it. Check 26 reads that file as it reads a
 
 **A re-dispatch is a whole new dispatch.** The escalation preamble at the top of
 `gate-validation.md` governs: a fresh `gate_nonce`, every escalated check re-derived from current
-state, and no verdict carried forward, cited or merged from a superseded dispatch. There is no
+state, and no verdict carried forward, cited or merged from a superseded dispatch. The
+`gate_series_id` is exempt: the same-series rule decides it at dispatch, never `close`. There is no
 partial or targeted re-adjudication, and a verdict file assembled by hand is not a dispatch's
 verdict. `scripts/ai-dlc/validate-gate-adjudication.sh` is what makes that binding rather than
 advisory: it refuses any verdict whose covered set differs from the escalated set (the schema's
