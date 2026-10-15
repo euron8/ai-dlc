@@ -209,8 +209,14 @@ because the compliant option has to read "swap skipped for balances <= 0.01 toke
 `security.wallet_address` checksum question is scored as a config leaf. The rule is prose with no enforcer on
 `AskUserQuestion` itself, so the walk shows what the rule reaches, not that a lead will follow it.
 
-**Uncovered.** The updater's reconcile questions in `ai-dlc-update/SKILL.md` (~1905-1907) are outside this fix.
-Eight of the 20 that keep the badge (walk rows 18, 19, 22, 31, 32, 34, 36, 38) came from consumer-pull and
-reconcile turns.
+Eighteen is what Rule 11(a)'s list reaches, not what this fix reaches. Eleven of the 38 rows (18, 19, 22, 31-38)
+were asked by the updater's reconcile flow, which asks from its own template and not from Rule 11(a). Three of
+the 18 are among them: rows 33 and 35 (config leaf `aiDlcRoles.dev-escalated.model`) and row 37 (byte-pin,
+sha-locked gate evidence). The shipped fix therefore reaches 15 of the 38, and the other 3 stay open until the
+updater's template is covered.
+
+**Uncovered.** The updater's reconcile questions in `ai-dlc-update/SKILL.md` (~1905-1907, "a closed question
+with your recommendation") are outside this fix. That flow asked 11 of the 38 badged questions. Three of them
+(rows 33, 35, 37) would lose the badge under the rule and still carry it, and the other 8 keep it either way.
 
 verify: sh V=core/scripts/validate-adversarial-convergence.sh; S=core/fixtures/check-24-adversarial-convergence/seed.sh; P=core/fixtures/pause-question-in-prose/run.sh; [ -f "$V" ] && [ -f "$S" ] && [ -f "$P" ] || exit 9; R="$(bash "$S" | tail -1)"; D="$R/divergent-resolved"; [ -f "$D/s1-resolution-p2.md" ] || exit 9; T="$R/operator-transcript.jsonl"; run() { bash "$V" --series "$R/$1/s1-adversarial-p" --transcript "$T" --transcript-dir "$R" 2>&1; }; run divergent-resolved >/dev/null || exit 9; for k in lb ln; do mkdir "$R/$k" && cp "$D"/*.md "$R/$k/" || exit 9; done; awk '{print} /^adjudicated_by:/{print "locked_requirements_touched: LR-S1-3"}' "$D/s1-resolution-p2.md" > "$R/lb/s1-resolution-p2.md" || exit 9; awk '/^recommended_option:/{print "recommended_option: none"; next} {print} /^adjudicated_by:/{print "locked_requirements_touched: LR-S1-3"}' "$D/s1-resolution-p2.md" > "$R/ln/s1-resolution-p2.md" || exit 9; grep -q '^recommended_option: [A-Z]' "$R/lb/s1-resolution-p2.md" || exit 9; o="$(run lb)" && exit 1; grep -qF "names a locked requirement" <<<"$o" || exit 1; run ln >/dev/null || exit 1; bash "$P" >/dev/null 2>&1 || exit 1; grep -q '^(i) A Rule 11(a) AMBIGUITY QUESTION: .*then no option is badged' core/hooks/ai-dlc-continue.sh || exit 1; exit 0
