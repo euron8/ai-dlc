@@ -53,6 +53,11 @@
 #     the whole checklist is ONE paragraph to para mode (no blank line between its items): keep
 #     each pinned phrase on ONE line of the item. dv-lrcov-degraded spans §5 to §6, not the
 #     coverage lead, so relocating the paragraph out of §5 moves it out of the span.
+#   - a worktree dev dispatch brief carries two standing lines: every git command is
+#     `git -C <worktree>` (or a cd on every Bash call), and one story per dispatch, never a second
+#     claimed from a task list (_dispatch-protocol.md "Worktree-explicit dev dispatch" point 3,
+#     dev.md Responsibilities, and dev.md's HARD_BLOCK bullet going idle). Points 0-7 carry no blank line between them, so para mode reads
+#     the whole list as ONE paragraph whose lead is point 0; the dp-* tokens pin point 3 inside it.
 #
 # LEADS ARE NOT ENOUGH. A bold lead left intact over a body rewritten to say the opposite
 # ("need NOT carry", "dropped only through a HARD_BLOCK", "an assertion is a sufficient
@@ -344,6 +349,10 @@ retro-gar-survivor|S|steps/retro.md|### 7. Merge and Next-Sprint Handoff|6. **Ve
 retro-gar-legacy|S|steps/retro.md|### 7. Merge and Next-Sprint Handoff|6. **Verify no-loss per file:**|**A `--series` run may itself exit 1 and print a `--legacy-through` remedy.**|para|then re-run the `--series` line before re-running the close
 retro-gar-close|S|steps/retro.md|### 7. Merge and Next-Sprint Handoff|6. **Verify no-loss per file:**|**Confirm every hinted sprint against the sprint-close commits before adding `--apply`.**|para|where a sprint has none, it is the merge commit of that sprint's retro PR
 retro-gar-utc|S|steps/retro.md|### 7. Merge and Next-Sprint Handoff|6. **Verify no-loss per file:**|**Confirm every hinted sprint against the sprint-close commits before adding `--apply`.**|para|Read `TZ=UTC git log --date=format-local:%Y%m%dT%H%M%SZ --format='%ad %s'` for this repo's sprint-close commits
+dp-git-c|S|steps/_dispatch-protocol.md|**Worktree-explicit dev dispatch.**|**Bounded-join dispatch mandate (Rule 29).**|0. Lead MUST commit all planning artifacts|para|`git -C <worktree absolute path> <cmd>`, or the dev `cd`s into the worktree on EVERY Bash call
+dp-one-story|S|steps/_dispatch-protocol.md|**Worktree-explicit dev dispatch.**|**Bounded-join dispatch mandate (Rule 29).**|0. Lead MUST commit all planning artifacts|para|The dev works only the story it was dispatched for, one story per dispatch, and never claims another from a task list
+dev-one-story|R|dev.md|## Responsibilities|## As a party seat|- Implement the story the lead dispatched you for|para|Implement the story the lead dispatched you for: one story per dispatch.
+dev-hardblock-idle|R|dev.md|## Escalation Protocol|## CI-vs-local divergence diagnostic order|- **HARD_BLOCK** (story contradicts architecture|para|and go idle; you do not pick up another story.
 PINS
 }
 
