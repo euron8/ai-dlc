@@ -99,33 +99,43 @@ passed no series id, so the adjudicator invented one. In the reference consumer'
 verdicts), 94 carry none, 42 carry the nonce-style `<gate>-<TS>` that the rotator's `--sprint` flag cannot
 match, and 34 more carry ad-hoc shapes.
 
-- **Form.** `gate-validation.md` "At gate entry" prescribes exactly `<gate_type>-s<N>-<TS>` for an unscoped
-  gate and `<gate_type>-s<N>-<slug>-<TS>` for a gate scoped to one story. `<N>` is the `sprint_id` line of
-  the pipeline snapshot. The slug is `story` plus the story index with each `.` or `-` written as `x`: one
-  lowercase `[a-z0-9]` segment ending in a digit. `<TS>` is the series-entry time, never later than the
+- **Form.** `gate-validation.md` "At gate entry" prescribes exactly `<gate_type>-<slug>-s<N>-<TS>` for a
+  gate dispatched for exactly one story and `<gate_type>-s<N>-<TS>` for every other gate. `<N>` is the
+  `sprint_id` line of the pipeline snapshot, with no leading zero. The slug's only source is the
+  `<story-index>` on the dispatch's `shard: 1/1 <story-index>` line, lowercased with each `.` or `-` written
+  as `x` and prefixed `story`, so the consumer's `4.2a`, `B6` and `2-17e2e` become `story4x2a`, `storyb6` and
+  `story2x17e2e`. A gate over several stories or none carries no slug, whatever its gate number. The slug
+  sits before the sprint field so `<TS>` always directly follows `-s<N>-`, where the dispatch guard's
+  unanchored nonce regex cannot match inside the id. `<TS>` is the series-entry time, never later than the
   nonce of a pass that carries it.
 - **Same-series rule.** The id is decided at dispatch, never from `close`. A Gate Reset id wins. Otherwise
-  the newest stem whose id has exactly that form for this `gate_type`, sprint and slug, with every part
-  agreeing, is reused byte-for-byte when it did not pass. Not passing is read from the `26` row of its
-  `.gate-checkpoint/<nonce>.tsv` ledger, never from the verdict's per-check rows, which still record a
-  suppressed check as FAIL. That ledger is local to the checkout that ran the gate, so where it is absent
-  the verdict is judged itself: any FAIL row is not passing. Otherwise a new id is minted, so a malformed id
-  is never reused and two stories' gates in flight together never share a series. Replayed on the
-  consumer's interleaved s304 story gates, the rule yields 4 series and reports both real check-22 STALLs.
-- **Gate Reset** is performed before gate entry. It mints the new id and records the retired one, or
-  `legacy`. The adjudicator brief and every shard brief carry the id; it is exempt from "nothing carried
+  the newest stem whose id has exactly that form for this `gate_type`, slug and sprint, with every part
+  agreeing, is reused byte-for-byte when it did not pass. An unmerged part set is not passing. A
+  `.gate-checkpoint/<nonce>.tsv` ledger with a `26` row decides by that row, never by the verdict's
+  per-check rows, which still record a suppressed check as FAIL. A ledger that is absent (it is local to
+  the checkout that ran the gate) or has no `26` row falls back to the verdict's own FAIL rows. Otherwise a
+  new id is minted, so a malformed id is never reused and two stories' gates in flight together never
+  share a series. Walked over the consumer's s316 and s317 implementation gates (38 stems), the rule gives
+  32 series and the arm refuses none of the ids.
+- **Gate Reset** is performed before gate entry. It mints the new id keeping any slug, and records the
+  retired one, or `legacy`. The adjudicator brief and every shard brief carry the id; it is exempt from "nothing carried
   forward" and is never passed to `gate-checkpoint.sh --nonce`. `gate-adjudicator.md` copies it
   byte-for-byte and never invents one.
 - **Validator.** `validate-gate-adjudication.sh` gains a per-pass envelope arm requiring the `gate_type`
-  prefix, the `-s<digits>-` field, an optional well-formed slug, and a trailing timestamp no later than the
-  nonce. It judges only a pass whose nonce is at or after `SERIES_FORM_FROM` (`20261015T000000Z`), which
-  scores 0 of the consumer's 239 committed verdicts; unscoped it fires on 61. The arm's header records the
-  narrowing. The schema doc no longer calls the field deliberately unpatterned; it names the brief as the
+  prefix, an optional `story[a-z0-9]+` slug, the `-s<N>-` field with N carrying no leading zero, and a
+  `\Z`-anchored trailing timestamp no later than the nonce. It judges only a pass whose nonce is at or after
+  `SERIES_FORM_FROM` (`20261015T000000Z`), which scores 0 of the consumer's 239 committed verdicts; with the
+  cutoff opened it fires on 77. The arm's header records the narrowing. The schema doc no longer calls the field deliberately unpatterned; it names the brief as the
   source and the validator as the owner of the form.
-- **Fixtures.** `gate-adjudication` gains ten series-form cases (SF0, SF0b, SF1-SF8: two near-misses for
-  the bare form, one for the slug, and seven named offenders). `gate-adjudication-mutants` gains m21-m28,
-  one per property of the arm, dealt across all three shards. `process-rule-pins` gains 28 rows.
+- **Fixtures.** `gate-adjudication` gains fifteen series-form cases (SF0, SF0b, SF1-SF4, SF5, SF5b, SF5c,
+  SF6-SF11): accepted bare and reused ids, three slugs from the consumer's real story indices, and named
+  offenders for each property, including a hyphenated or uppercase slug, a slug after the sprint field, a
+  bare-digit or zero-padded sprint field, and a trailing newline. `gate-adjudication-mutants` gains m21-m31,
+  dealt across all three shards. `process-rule-pins` gains 29 series-id rows.
 - The rotator's `--sprint s<N>` selector (`*-s<N>-*`) moves a slugged id.
+- `rotate-gate-adjudication.sh`'s refusal for a series no `--sprint` can name no longer says the schema
+  leaves the field unpatterned. It cites `gate-validation.md` "At gate entry" and
+  `validate-gate-adjudication.sh`, and gives the re-stamp as `<gate_type>-s<N>-<nonce TS>`.
 
 Fixture `gate-adjudication-rotate` adds these worlds:
 

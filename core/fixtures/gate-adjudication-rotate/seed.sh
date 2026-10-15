@@ -100,10 +100,9 @@ seed_shadow() {
           "planning-20260910T120000Z" "planning-s309-20260910T120000Z" "$S309_ALLPASS"
 }
 
-# THE SECOND UNMOVABLE SHAPE. `gate-adjudication-verdict.json` leaves
-# `gate_series_id` "deliberately unpatterned: required and non-empty, nothing
-# more", so a sprint-FIRST id is schema-legal and no `*-s<N>-*` selector can name
-# it. Observed on the reference consumer as `s310-planning`, written by a live
+# THE SECOND UNMOVABLE SHAPE. A verdict minted before gate-validation.md
+# "At gate entry" prescribed the `gate_series_id` form can carry a sprint-FIRST
+# id, which no `*-s<N>-*` selector can name. Observed on the reference consumer as `s310-planning`, written by a live
 # session. It is worse than a legacy verdict: --legacy-through skips it too,
 # because it HAS a series id. Neither refusal nor escape reached it until the
 # predicate was widened from "is legacy" to "no mode can move it".

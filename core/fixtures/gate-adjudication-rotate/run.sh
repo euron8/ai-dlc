@@ -307,8 +307,8 @@ fi
 
 # =============================================================================
 # ARM (h.4) — the SECOND unmovable shape: a survivor with a series id that no
-# `*-s<N>-*` selector can name. The schema leaves `gate_series_id` deliberately
-# unpatterned, so this is legal input, and it is worse than a legacy verdict
+# `*-s<N>-*` selector can name. A verdict minted before the series-id form was
+# prescribed can carry such an id, so this is real input, and it is worse than a legacy verdict
 # because `--legacy-through` skips it too. A predicate keyed on legacy-ness
 # scores it movable and lets the rotation strand it — no refusal, no escape.
 # =============================================================================

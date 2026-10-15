@@ -36,8 +36,10 @@
 # refusal below computes that outcome and refuses the move. See its header.
 #
 # A SERIES ID NO --sprint CAN NAME IS A REFUSAL ON AN EMPTY SELECTION WHEN ITS
-# SERIES' NEWEST MEMBER FAILS, AND A WARN OTHERWISE. The schema leaves `gate_series_id`
-# unpatterned, and the reference consumer's writers stamp ids with no sprint token
+# SERIES' NEWEST MEMBER FAILS, AND A WARN OTHERWISE. Verdicts minted before
+# gate-validation.md "At gate entry" prescribed the `gate_series_id` form (which
+# validate-gate-adjudication.sh checks) carry whatever their writer stamped, and
+# the reference consumer's writers stamp ids with no sprint token
 # at all -- `<gate>-<nonce>`, `s310-planning`, `story-s311`. Measured on that
 # consumer's live directory: 239 verdicts, 94 with no series id, 93 carrying a
 # `-s<N>-` token, and 52 carrying an id no `*-s<N>-*` selector can match, 42 of
@@ -437,10 +439,11 @@ conforming_nonce() {
 # THE PREDICATE IS "NO MODE CAN MOVE IT", NOT "IT IS LEGACY", AND THE NARROWER
 # SPELLING LEFT A SECOND DOOR OPEN. A verdict is unmovable in TWO ways: it
 # carries no `gate_series_id` (legacy, moved only by --legacy-through), or it
-# carries one that `*-s<N>-*` cannot select. The schema calls the field
-# "deliberately unpatterned: required and non-empty, nothing more", so the glob
-# is an UNSTATED pattern imposed on a field nothing constrains -- any writer
-# stamping a legal-but-differently-ordered id produces a member. Measured on the
+# carries one that `*-s<N>-*` cannot select. gate-validation.md "At gate entry"
+# prescribes the field's form and validate-gate-adjudication.sh checks it, but only
+# on a pass whose nonce is at or after its cutoff, so a verdict minted earlier can
+# carry any non-empty id -- any writer that stamped a differently-ordered id produced
+# a member, and this glob is the only pattern this rotator can apply. Measured on the
 # reference consumer: `s310-planning`, sprint-first, written by a live session
 # and matching no `*-s<N>-*`. Such a verdict is worse than a legacy one, because
 # --legacy-through skips it too (`[ -n "$series" ] && continue`): no refusal AND
@@ -776,13 +779,13 @@ if [ "$SURVIVOR_UNMOVABLE" -eq 1 ] && [ -n "$SURVIVOR_FAILS" ] && { [ "$SURVIVOR
     # --series is the mechanical remedy for this case. Before it existed this
     # branch said there was none, which was true then and is false now.
     _sv_series="$(jq -r '.gate_series_id // empty' "${SRC}/${SURVIVOR_STEM}.verdict.json" 2>/dev/null)"
-    echo "  Its gate_series_id is well-formed by the schema, which leaves the field" >&2
-    echo "  deliberately unpatterned, but no --sprint selector can name it and" >&2
+    echo "  Its gate_series_id is not in the form gate-validation.md \"At gate entry\"" >&2
+    echo "  prescribes and validate-gate-adjudication.sh checks, so no --sprint selector can name it and" >&2
     echo "  --legacy-through skips it because it HAS a series id. THE REMEDY IS TO MOVE" >&2
     echo "  THAT SERIES BY ITS EXACT ID into the sprint it belongs to, then re-run this command:" >&2
     echo "    ${SELF_CMD} --sprint s<N> --series '$(shq "$_sv_series")' --apply" >&2
-    echo "  Or Re-stamp that verdict's gate_series_id in the '<gate_type>-s<N>-<nonce>' form" >&2
-    echo "  its siblings use. Either way, report the writer that stamped it, because it will" >&2
+    echo "  Or Re-stamp that verdict's gate_series_id as '<gate_type>-s<N>-<nonce TS>', the unslugged" >&2
+    echo "  form a re-stamped single series takes. Either way, report the writer that stamped it, because it will" >&2
     echo "  keep producing verdicts no --sprint can move." >&2
   fi
   echo "" >&2
