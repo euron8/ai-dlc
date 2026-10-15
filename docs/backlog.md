@@ -204,9 +204,13 @@ first on every question. `_gate-procedures.md` step 2(c) required exactly one ba
   lowercased. A token of `none`, `0`, `n/a`, `-` or `[]`, or no token at all, keeps the old rule, so `none — <prose>`,
   `none changed; ...` and `None.` are unlocked. Any other token names an entry, and then the record must carry
   `recommended_option: none` or no such line, and the new F7b finding fails a named badge.
-  `recommended_option:` is read the same way, so `none (Recommended)`, `None.` and `n/a` name no option. The remedy text in `ai-dlc-acknowledge.sh` and
-  `ai-dlc-continue.sh` matches. `check-24-adversarial-convergence` adds five worlds, two silence controls and two
-  `--cycle-state` rows.
+  `recommended_option:` is read the same way, so `none (Recommended)`, `None.` and `n/a` name no option. The remedy
+  text in `ai-dlc-acknowledge.sh` and `ai-dlc-continue.sh` matches, and the validator's says "mark NO option
+  (Recommended)". `check-24-adversarial-convergence` adds twelve worlds (five locked-branch shapes, six unlocked
+  spellings and one `LR-S1-1 (...)` locked world), eight silence controls and four `--cycle-state` rows.
+  `divergence-hard-block` pins "value it leaves in force" in both hooks' ADJUDICATE step, with one mutant per hook
+  that flips only its own arm. `process-rule-pins` adds four rows: the Rule 11(a) effects sentence and its unbadged
+  clause, and the `_gate-procedures.md` 2(c) effects and no-badge clauses.
 - `bug-investigation.md` §2b badges "apply now" only when the relief sets no operator-owned value.
   `remediator.md` gives no recommendation on a locked or operator-owned item. `route.md` no longer claims the
   token appears nowhere in the skill. The continue hook's Rule 11(a) paragraph carries the clause, and

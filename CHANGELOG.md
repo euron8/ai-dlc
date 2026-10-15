@@ -27,12 +27,16 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 Rule 11(a) now requires every option of an operator question to state its concrete effect, including the value
 it leaves in force. A question goes out unbadged, with no option marked `(Recommended)`, when any option sets,
 relaxes, inherits or leaves in force one of these: a config leaf, a money-path threshold or literal, a byte-pin,
-an `LR-`/`LRC-` id, or a `D-<n>` decision. The post-compact digest was re-rendered and did not change.
+an `LR-`/`LRC-` id, or a `D-<n>` decision. The five values are one sentence rather than a list. Rule 11 still
+grew 729 bytes, which moved Rule 12's two `escalations.md` disclosure pointers past the 20121-byte re-attach cut
+(to bytes 20396 and 20589); that eviction is accepted. The post-compact digest was re-rendered and did not change.
 
 The adversarial STOP follows the same rule, keyed on the resolution record's `locked_requirements_touched:`
 field. If that field names an entry, `validate-adversarial-convergence.sh` now fails a record that names a
-`recommended_option:` (finding F7b), and passes `recommended_option: none` or a record with no such line. If the
-field is empty, absent or `none`, the old rule holds, so every existing record still passes. An unlocked record
+`recommended_option:` (finding F7b), and passes `recommended_option: none` or a record with no such line. Both
+fields are read on their first token, lowercased and cut at the first blank, `.`, `,`, `;` or dash. A token of
+`none`, `0`, `n/a`, `-` or `[]`, or no field at all, keeps the old rule, so a consumer's `none — <prose>` or
+`none changed; ...` is unlocked and `none (Recommended)` names no option. An unlocked record
 that writes `recommended_option: none` takes the existing missing-recommendation finding. The STOP remedy text in
 `ai-dlc-acknowledge.sh`, `ai-dlc-continue.sh` and `_gate-procedures.md` step 2(c) states the branch.
 
