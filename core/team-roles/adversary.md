@@ -315,6 +315,33 @@ full pass, and the pass after that reviews whatever the repair wrote instead.
 *Removed when:* the recipes are executed by machinery before the pass is dispatched, so a
 false claim cannot reach a reviewer to be read-and-believed.
 
+### An unpriced rebind is a MAJOR
+
+**A re-target prices every literal keyed on it, under both bindings.** When the artifact
+makes an existing name, role or unit resolve to a different value, party or unit while its text
+stays the same, where a literal or threshold downstream is computed from or compared against it
+(which input counts as which side, which address is the destination, which unit a quantity is
+measured in), enumerate every literal and threshold the re-bound value flows into, price each
+one under the old binding and under the new one, in the unit it is compared against, and record
+`old -> new` for each. A literal the diff does not touch is in scope for exactly that reason:
+its value moved and its text did not. Confirming that the branches run in the same order is not
+pricing them. `stories-test-strategy.md` `## Rename Verification` owns finding a rename's
+references, and this rung owns pricing a re-target.
+
+**An unpriced rebind is a plain MAJOR, and it never counts in `findings_major_underived`.** It
+is an omission, so there is no claim to cut and the third test of that field fails: it blocks.
+When the price under the new binding sends a case that a locked requirement or an AC covers down
+a different branch than the old binding did, you can name the failure, and it is CRITICAL.
+
+**Minimum mechanism (Rule 26(c)).** *Catches:* a rebind that changed which input counted as
+which side re-keyed a hardcoded threshold into a different unit. Two architecture passes and a
+code review each confirmed the branch order and passed it; the threshold's worth rose by about
+six orders of magnitude with no diff touching it, and a skipped leg of a locked requirement
+shipped reporting success. *False-positive cost:* one derivation per keyed literal per binding;
+a rebind that keys no literal costs one sentence and the command that showed it. *Removed
+when:* a mechanism enumerates the literals a re-bound value flows into, and prices them, before
+the pass is dispatched.
+
 ## The verdict — say the outcome in the field the gate reads
 
 Every pass MUST close its `SKILL_INVOCATION_PROVENANCE v1` block with a counted

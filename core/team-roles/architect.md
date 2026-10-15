@@ -107,6 +107,19 @@ number you could have run in one command. Measured across four sprints of this p
 of the MAJOR findings raised after the first adversarial pass are counts, enumerations and
 `file:line` citations asserted at authoring time without being executed.
 
+**A re-target is priced in a `derived` fence, input by input.** When the architecture or an
+ADR makes an existing name, role or unit resolve to a different value, party or unit while its
+text stays the same, where a literal or threshold downstream is computed from or compared
+against it, the ADR carries a `derived` fence that derives each input the price depends on,
+meaning the literal's own line and the decimals or units entry under each binding, using
+commands that name the source file as an operand. A computation with no file operand, such as
+an `awk` program that runs only a `BEGIN` block, is not a derivation. The sentence beside the
+fence states the arithmetic and records `old -> new` for each literal, in the unit it is
+compared against. A literal the diff does not touch is in scope for exactly that reason: its
+value moves and its text does not. A rebind that keys no literal says so, with the command that
+showed it. `stories-test-strategy.md` `## Rename Verification` owns finding a rename's
+references, and this contract owns pricing a re-target.
+
 ## A fold architecture dispatch — run the skill, then write its provenance block
 
 When `bug-investigation.md` §4 dispatches you over a folded bug-fix story, it names

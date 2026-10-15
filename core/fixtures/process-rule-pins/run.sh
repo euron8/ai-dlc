@@ -37,6 +37,14 @@
 #     that each clause is PRESENT in the lead's paragraph. A separate sentence appended after it
 #     that contradicts it ("...; elicitation may instead run one voice") leaves every pinned
 #     clause intact and passes. No row here can fail on an addition; a reviewer reads for that.
+#   - a change that makes an existing name, role or unit resolve to a different value, party or
+#     unit while its text stays the same prices every literal and threshold the re-bound value
+#     flows into under both bindings, in the unit it is compared against, and records old -> new,
+#     an untouched literal included: the adversary's Severity rung (a plain blocking MAJOR, never
+#     underived), the code reviewer's severity classification, and the architect's
+#     evidence-contract `derived` fence, which derives each input from a named source file. The
+#     trigger and the `every literal` scope are pinned separately, so narrowing either fails.
+#     Each lead sits on ONE line of its subject so the raw-file lead check can find it.
 #
 # LEADS ARE NOT ENOUGH. A bold lead left intact over a body rewritten to say the opposite
 # ("need NOT carry", "dropped only through a HARD_BLOCK", "an assertion is a sufficient
@@ -258,6 +266,24 @@ impl-serial-form|S|steps/implementation.md|**Pre-gate commit-presence check.**|*
 impl-serial-sha|S|steps/implementation.md|**Pre-gate commit-presence check.**|**DAR-fold preflight before gate-2 dispatch.**|**Gate-1 dispatch: the review partitions by changed-file group.**|para|carries one column-0 `reviewed-sha: <full frozen sha>` line
 impl-rr-list|S|steps/implementation.md|**Pre-gate commit-presence check.**|**DAR-fold preflight before gate-2 dispatch.**|**Gate-1 dispatch: the review partitions by changed-file group.**|para|Run `scripts/ai-dlc/validate-carried-findings.sh --list <pass M-1 file>` and paste each line it prints into the brief of the shard that carries that finding, verbatim
 impl-rr-reemit|S|steps/implementation.md|**Pre-gate commit-presence check.**|**DAR-fold preflight before gate-2 dispatch.**|**Gate-1 dispatch: the review partitions by changed-file group.**|para|an `open` one is re-emitted as a finding of this pass
+adv-rebind-rung|R|adversary.md|## Severity|## |### An unpriced rebind is a MAJOR|prefix
+adv-rebind-trigger|R|adversary.md|## Severity|## |**A re-target prices every literal keyed on it, under both bindings.**|para|while its text stays the same, where a literal or threshold downstream is computed from or compared against it
+adv-rebind-every|R|adversary.md|## Severity|## |**A re-target prices every literal keyed on it, under both bindings.**|para|every literal and threshold the re-bound value flows into
+adv-rebind-unit|R|adversary.md|## Severity|## |**A re-target prices every literal keyed on it, under both bindings.**|para|in the unit it is compared against
+adv-rebind-untouched|R|adversary.md|## Severity|## |**A re-target prices every literal keyed on it, under both bindings.**|para|A literal the diff does not touch is in scope for exactly that reason
+adv-rebind-oldnew|R|adversary.md|## Severity|## |**A re-target prices every literal keyed on it, under both bindings.**|para|record `old -> new` for each
+adv-rebind-major|R|adversary.md|## Severity|## |**An unpriced rebind is a plain MAJOR, and it never counts in `findings_major_underived`.**|para|the third test of that field fails: it blocks
+cr-rebind-head|R|code-reviewer.md|## Mandatory Severity Classifications|## Self-Discrimination Map|### A Rebind Without Priced Literals = Important (minimum)|prefix
+cr-rebind-trigger|R|code-reviewer.md|## Mandatory Severity Classifications|## Self-Discrimination Map|**A re-target prices every literal keyed on it, under both bindings.**|para|while its text stays the same, where a literal or threshold downstream is computed from or compared against it
+cr-rebind-every|R|code-reviewer.md|## Mandatory Severity Classifications|## Self-Discrimination Map|**A re-target prices every literal keyed on it, under both bindings.**|para|every literal and threshold the re-bound value flows into
+cr-rebind-unit|R|code-reviewer.md|## Mandatory Severity Classifications|## Self-Discrimination Map|**A re-target prices every literal keyed on it, under both bindings.**|para|in the unit it is compared against
+cr-rebind-untouched|R|code-reviewer.md|## Mandatory Severity Classifications|## Self-Discrimination Map|**A re-target prices every literal keyed on it, under both bindings.**|para|A literal the diff does not touch is in scope for exactly that reason
+cr-rebind-sev|R|code-reviewer.md|## Mandatory Severity Classifications|## Self-Discrimination Map|An unpriced keyed literal is **Important** at minimum.|para|derives each input the price depends on, meaning the literal's own line and the decimals or units entry under each binding, using commands that name the source file as an operand
+arch-rebind-trigger|R|architect.md|## The evidence contract|## A fold architecture dispatch|**A re-target is priced in a `derived` fence, input by input.**|para|while its text stays the same, where a literal or threshold downstream is computed from or compared against it
+arch-rebind-fence|R|architect.md|## The evidence contract|## A fold architecture dispatch|**A re-target is priced in a `derived` fence, input by input.**|para|derives each input the price depends on, meaning the literal's own line and the decimals or units entry under each binding, using commands that name the source file as an operand
+arch-rebind-unit|R|architect.md|## The evidence contract|## A fold architecture dispatch|**A re-target is priced in a `derived` fence, input by input.**|para|in the unit it is compared against
+arch-rebind-oldnew|R|architect.md|## The evidence contract|## A fold architecture dispatch|**A re-target is priced in a `derived` fence, input by input.**|para|records `old -> new` for each
+arch-rebind-untouched|R|architect.md|## The evidence contract|## A fold architecture dispatch|**A re-target is priced in a `derived` fence, input by input.**|para|A literal the diff does not touch is in scope for exactly that reason
 PINS
 }
 

@@ -48,6 +48,39 @@ TaskCreate calls carry an `agent_id` and stay denied, except `ai-dlc-update`, wh
   Explore cells and an ERE byte-compare arm, and its mutation battery gains fourteen mutants, each killing exactly its
   own cells.
 
+### A rebind prices every literal keyed on it, under both bindings (BL-522)
+
+A change that makes an existing name, role or unit resolve to a different value, party or unit while its text stays the
+same, where a literal or threshold downstream is computed from or compared against it, now has to price every literal
+and threshold the re-bound value flows into under the old and the new binding, in the unit the literal is compared
+against, and record `old -> new`. A literal the diff does not touch is in scope for exactly that reason. A rename whose
+text changes is not this rule's subject: `stories-test-strategy.md` `## Rename Verification` owns finding a rename's
+references, and this rule owns pricing a re-target.
+
+The reference consumer's sprint 318 re-targeted which token counted as non-stable. Its `dust_raw` is
+`0.01 * 10^dec_ns` raw units of the non-stable token and is compared against that token's raw balance, so it is priced
+in raw units of that token: under the new binding the non-stable token is WETH, whose `TOKEN_DECIMALS` entry is 18, so
+the floor is `0.01 * 10^18 = 10^16` raw WETH (0.01 WETH). Under the old binding it was `0.01 * 10^dec` raw units of
+the previously non-stable token, whose identity is set by graph's live config and is not re-derived here. The dollar
+figure, about $0.00002 before and about $24 after, is graph's retro figure, not re-derived. No diff touched the literal,
+and two architecture passes and a code review confirmed the branch order without pricing it.
+
+- `adversary.md`: a new Severity rung, "An unpriced rebind is a MAJOR". It is a plain blocking MAJOR and never counts in
+  `findings_major_underived`, because an omission has nothing to cut. It is CRITICAL when the new price sends a case a
+  locked requirement or AC covers down a different branch.
+- `code-reviewer.md`: a new severity classification, "A Rebind Without Priced Literals", Important at minimum, with the
+  same CRITICAL condition. Its evidence is a `derived` fence that derives each input the price depends on (the literal's
+  line, and the decimals or units entry under each binding) with commands naming the source file as an operand; an
+  `awk` program that runs only a `BEGIN` block is not a derivation, and the arithmetic goes in the sentence beside it.
+- `architect.md`: the evidence contract requires the same input-by-input `derived` fence for a re-target in an ADR.
+- `core/fixtures/process-rule-pins` pins eighteen new rows across the three files, including the trigger in each file
+  and the `every literal and threshold the re-bound value flows into` scope in the adversary and code-reviewer passages.
+
+**Recorded for the reference consumer (a finding, not an instruction).** graph's `docs/coding-conventions.md` section
+"A hardcoded threshold on a money path MUST be priced under every binding and its skip MUST be observable" carries three
+bullets. Its first bullet (price every literal under the new binding) is now carried by core and can retire. The second
+(a distinct skip reason in the execution row) and the third (a threshold as a config leaf) are not covered by this change.
+
 ## [0.785.0] - 2026-10-14
 
 Batch 230 (graph-ledger-full-drain), second release: BL-507, held from batch 229, rebased onto 0.784.0 and adversaried
