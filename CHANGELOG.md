@@ -41,6 +41,15 @@ missing carries in pre-rule reviews. Stated residual: a delta pass does not re-f
 delta; Check 21(b) and BL-513's refusal catch it downstream. New fixture `carried-findings` (worlds, wrapped-label arms
 WR1-WR3, mutants `wrapoff`/`wrapany`), traced read set; `process-rule-pins` gains `impl-rr-*` rows.
 
+### `validate-backlog-receipts.sh`: a receipt that only runs a tracked script is `DRIVER`, and R2 accepts an all-driver ledger
+
+R2 failed a ledger whose every `sh` receipt drove a probe script, because a driver greps no literal and so landed in
+`UNSCORABLE`, while R2's own remedy text tells authors to write exactly such receipts. A one-liner made only of
+`bash <repo-rel>.sh [args]` segments joined by `&&`, every script tracked, is now its own status; R2 passes a zero only
+when at least one receipt is `DRIVER` and every `sh` receipt is `DRIVER`, `ALREADY-PASSING` or `OUT-OF-POPULATION`.
+`DRIVER` does not count toward R3. An untracked script is not a driver. R1 gains two seeded receipts (12 total) and
+asserts the escape both ways.
+
 ## [0.784.0] - 2026-10-14
 
 Batch 230 (graph-ledger-full-drain), first release: the dispatch guard's two arms held from batch 229, rebased onto
