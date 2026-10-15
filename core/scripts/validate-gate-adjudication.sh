@@ -1530,11 +1530,11 @@ if not re.match(PATTERNS["gate_nonce"], V["gate_nonce"]):
 #
 # HOW THE FALSE-POSITIVE SET REACHED ZERO. Measured against the reference consumer's committed
 # verdict corpus (239 verdicts, nonces 20260715..20261014T142805Z), driven through this
-# validator's --coverage mode with the cutoff opened to 00000000T000000Z: the arm fires on 61 --
+# validator's --coverage mode with the cutoff opened to 00000000T000000Z: the arm fires on 77 --
 # 60 carry a form the prescription never existed for (`<gate>-<TS>`, bare `story-s311`,
 # `s310-planning`, `architecture.md-s311`, a 4-digit time, a hyphenated slug such as
 # `-deploy-validate-` or `-reset-`) and 1 well-formed id has a series timestamp 2 minutes after
-# its own nonce. The 76 include 16 of the consumer's own `-s<N>-story<M>-<TS>` story-gate ids, which put
+# its own nonce. The other 16 are the consumer's own `-s<N>-story<M>-<TS>` story-gate ids, which put
 # the slug AFTER the sprint field; the prescribed form puts it before, so they are refused, and
 # being pre-cutoff history they are never judged. The other 94 carry no series id and
 # are refused by the required-field arm above before this one is reached. Scoping by "judge only ids already in the new form"
