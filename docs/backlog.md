@@ -76,6 +76,109 @@ consumer that has run the fixed release, and name the population beside each fig
 
 
 
+## Sprint 319 lead-transcript review (filed 2026-10-15)
+
+Found by reading graph's s319 lead session `62eadbbe-59c3-436d-bf7c-931ebc09ecba` through
+carry-over-evaluation's adversarial pass 1 (to about 21:45Z), with graph on 0.789.0 (`7e8d62d7`).
+These are in addition to the four `PC-S319-*` candidates already in graph's uncommitted
+push-candidate ledger, and none of them restates one. Every receipt is `manual` at filing: the batch
+that builds an entry owes its behavioural `sh` receipt and the probe behind it.
+
+## BL-528 — the snapshot future-stamp check does not run when a step writes the snapshot
+
+**DEFECT.** Reopens the delivery half of BL-517 (landed v0.783.0). On 0.789.0 the s319 lead wrote
+Recent Activity entries stamped `21:50Z`, `21:55Z` and `22:10Z` starting at about 21:28Z. Lead
+snapshot Edits carrying those stamps were sent at 21:28:01, 21:30:14, 21:33:49 and 21:38:37, and
+none was refused or warned. The stamps were found only when the lead ran
+`validate-artifact-budget.sh` by hand at 21:39:57, and corrected by a `CLOCK CORRECTION` line
+(graph `_bmad-output/pipeline-snapshot.md:30`).
+
+BL-517's close text says the arm runs at every write. It runs where `check_future_stamps`
+is called (`core/scripts/validate-artifact-budget.sh:1709`): gate Check 14 and route Step 0a. The
+step-level procedure that writes the snapshot most often, `_gate-procedures.md` "Sub-step snapshot
+update" (lines 16-45), never names the validator. None of graph's `Edit|Write|MultiEdit` hooks
+(`derivation-capture`, `core-guard`, `gate-remediation-guard`, `artifact-path-guard`,
+`advisor-gate`, `acknowledge`) runs it. The BL-517 probe drives the validator through `verdict.sh`
+over a seeded root (`probes/bl-517-future-stamp.sh:77`), so it proves the check and not any trigger.
+
+Owed: a write-time carrier for the future-stamp verdict on `pipeline-snapshot.md`, so a future stamp
+is refused or flagged at the write that creates it, plus a receipt that drives that trigger.
+
+**Second half (measured 2026-10-15T21:54Z, graph s319 planning gate).** The future-stamp arm also refuses a CORRECT future value. The lead recorded an operator-set monitor deadline, `2026-10-21T16:08:54Z` (Stories 2.6/2.7 staleness ceiling, 7 days from deploy), in a Recent Activity line. `verdict.sh validate-artifact-budget --only pipeline-snapshot.md` returned rc=1 with `FUTURE _bmad-output/pipeline-snapshot.md line 30: 2026-10-21T16:08:54Z is 8294 min ahead of now (Recent Activity)`, and its remedy text says to rewrite the stamp to `date -u` without asking. That would have overwritten an operator ruling with the current time. Instead the lead ran `sed -i '' 's/2026-10-21T16:08:54Z/21 Oct 16:08Z/'` on the snapshot, a form `check_future_stamps` does not parse, so the arm passed. The workaround is also a BL-530 instance: a Bash in-place write with no ledger row. The arm cannot tell an entry's own stamp (the leading `- <ISO>` that must not be in the future) from a future date the entry RECORDS. Owed besides the write-time carrier: the arm keys on the entry's leading stamp only, or the snapshot grammar gives a recorded deadline a form the arm exempts. A probe should show both that a future leading stamp still fails and that a recorded future deadline passes.
+
+verify: manual
+
+## BL-529 — the derivation re-run the repair procedure requires over `s<N>/` can never pass once seat files are frozen
+
+**DEFECT.** `_gate-procedures.md:981` requires
+`validate-artifact-derivations.sh _bmad-output/planning-artifacts/s<N>/` after every repair join, and
+`:1004` says exit 1 is sent back to the remediator. The validator walks every `.md` under its target
+(`core/scripts/validate-artifact-derivations.sh:790`, `find "$target" -type f -name '*.md'`). That
+includes `shards/` and any frozen record no remediator may edit, so moved cites in those
+files keep the run at exit 1 for the rest of the sprint.
+
+Measured in graph s319: the whole-directory run reported 12 stale derivations in 27 files (4 in
+frozen elicitation seat files, 8 in elicitation-repair part records), while the joined record (67 OK)
+and the document (34 OK) were clean. The lead's control over the closed s318 slot read FAIL, 1905
+stale of 4608 in 382 files. The lead passed the step by tolerating the failures against that
+baseline, so the required check is one that always fails and is always waived.
+
+Owed: a derivation scope at `:981` that names only the live artifacts a repair can edit, or a
+validator mode that excludes frozen shard and seat records, with a probe showing a stale live
+artifact still fails.
+
+verify: manual
+
+## BL-530 — a Bash in-place edit rewrites gate inputs with no ledger row, including the adversary's independence field
+
+**DEFECT.** At 21:38:58 the s319 lead ran `perl -0pi` over the 12 `shards/coe-p1/*.md` adversary
+shards, replacing `tool_use_id: unavailable` with ids it read from its own transcript, so that
+`merge-adversarial-shards.sh` (which refuses a non-`toolu_` id, lines 573-575) would accept them. The
+merge then exited 0. `core/team-roles/adversary.md:77` calls that field the only evidence that the
+review was independent, and `:360` says it is checked for shape only. The lead also edited the
+snapshot with `sed -i` at 19:25:50.
+
+Neither write produced a row in `.artifact-writes.jsonl`. Every write-capturing hook matches
+`Edit|Write|MultiEdit`, and `core/hooks/ai-dlc-gate-remediation-guard.sh:212-215` states that a Bash
+`sed -i`, redirect or script write is not covered. The join's two-writer refusal and the merge's id
+checks read records a Bash rewrite never enters. The consumer's
+`PC-S319-CONVERGENCE-ADVERSARY-CANNOT-KNOW-ITS-OWN-TOOL-USE-ID` treats this patch as the remedy; it
+is a separate defect.
+
+Owed: the dispatch id reaches the shard by a path that is not a lead hand-edit (for example written
+at dispatch or by the merge from the transcript), and a lead Bash in-place write to a shard,
+record or snapshot under the sprint slot is either denied or recorded.
+
+verify: manual
+
+## BL-531 — a message typed in another session of the same project raises the lead's pause flag
+
+**DEFECT. Operator ruling 2026-10-15: a message typed in another session in the same project must
+not create the pause flag.** `core/hooks/ai-dlc-pause.sh:381-382` touches
+`_bmad-output/pipeline-paused.flag` for a typed prompt in any session once the pipeline is active.
+The typing session's id is logged (`:391`) and never compared with anything. No hook or snapshot
+field records which session is the lead, so there is no value to compare it against.
+
+Measured in graph s319: a message typed at 19:15:51Z in session `0efd887c-26f7-44e5-94aa-2147fa1496fd`
+paused lead session `62eadbbe-59c3-436d-bf7c-931ebc09ecba`. Six remediator dispatches were denied by
+Rule 29 (19:24:56-19:25:26); the lead then removed the flag at 19:25:43, read the message at 19:25:53,
+and re-dispatched all six (19:26:04-19:26:30) before telling the operator at 19:27:01. The archived
+entry about the same hook (`docs/backlog.archive.md:15400`, a missed opening prompt) is a different
+subject.
+
+Owed:
+1. The lead records its own session id when it routes (route.md Step 6, fresh start) and again on
+   every resume (Step 0, a new session). A compaction keeps the id.
+2. `ai-dlc-pause.sh` raises the flag only when the typing session matches that id. A prompt from any
+   other session is still captured to `operator-requests-history.md` (Check 33 and
+   `user_request_cite` depend on full capture) and logged as a distinct event, not a pause.
+3. With no recorded lead id (a pre-migration tree) the hook pauses as it does today, so a missing
+   binding never lets the lead's own operator message through unpaused.
+4. A probe in both directions: the bound session pauses; a different session captures and does not
+   pause; no binding pauses.
+
+verify: manual
+
 ## BL-532 — the remediator-shard join could not join a party repair after one section's remediator was re-run
 
 **DEFECT.** Discharges `PC-S319-JOIN-REFUSES-A-SINGLE-SECTION-RERUN-IN-DOCUMENT-MODE`.
