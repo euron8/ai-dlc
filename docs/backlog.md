@@ -229,8 +229,13 @@ at the frozen sha through git and refuses `status-not-review` (the story's statu
 sprint-status.yaml) and `heading-demoted` (one of the four evidence headings appears only below
 `## ` or only at `# `, code fences stripped). The status grammar and the row join are
 `sprint-status.sh`'s, through a new `story-status --ref <sha> <story-file>` mode, so there is one
-parser. Every absence a status arm cannot decide (no yaml, no row, no status) prints a
-`SKIP STATUS (<reason>)` line and does not refuse. The heading grammar is one awk function shared
+parser. A committed story with no status refuses `status-missing`, and a story file not tracked at
+the frozen sha refuses `story-untracked`, because the reviewer reads the commit (both 0 over the 63
+gate-1 snapshots below). An absence the row arm cannot decide (no yaml, no row) prints a
+`SKIP STATUS (<reason>)` line and does not refuse; the reason is the sibling's stderr, and the
+story line is parsed even when the row half fails. Lines are read with a trailing CR stripped and
+under `LC_ALL=C`, and the story and yaml are decoded with replacement, so a CRLF story or one
+non-UTF-8 byte cannot turn an arm into a silent pass. The heading grammar is one awk function shared
 with strategy mode; `## Rename Verification (dev)` is that heading at level 2 in both.
 
 Covered shapes, at gate 1: s317 4.3a CR p1 (status `in-progress`) and s318 1.5 CR p1 (three

@@ -28,9 +28,10 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   the frozen sha: a story whose status is not `review` (`status-not-review`), a story whose status
   disagrees with its row in the implementation view of sprint-status.yaml
   (`status-yaml-mismatch`), and an evidence heading written only below or above `## `
-  (`heading-demoted`). When a status cannot be decided it prints `SKIP STATUS (<reason>)`, which
-  does not refuse. On the reference consumer's gate-1 snapshots it refuses 3 passes, all true
-  positives, and 0 false positives.
+  (`heading-demoted`). A committed story with no status refuses `status-missing`, and a story not
+  tracked at the frozen sha refuses `story-untracked`. When the row cannot be decided (no yaml, no
+  row) it prints `SKIP STATUS (<reason>)`, which does not refuse. On the reference consumer's
+  gate-1 snapshots it refuses 3 passes, all true positives, and 0 false positives.
 - `sprint-status.sh story-status --ref <sha> [--root <repo>] <story-file>` prints one story's
   status and its implementation-view row, both read at a commit. The validator calls it, so the
   status grammar and the row join have one home.
@@ -41,7 +42,13 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - Strategy mode reads `## Strategy Test IDs` followed by trailing text as the table heading,
   through the heading grammar it now shares with the demoted-heading arm. No evidence or strategy
   refusal changed over the 35 story-merge tips.
-- `implementation.md`'s pre-gate commit-presence paragraph names the new refusals and the SKIP line.
+- `implementation.md`'s pre-gate commit-presence paragraph names the new refusals and the SKIP line,
+  and sends a SKIP that names the story's or yaml's own content back to the dev.
+
+### Fixed
+
+- `validate-handoff-evidence.sh` runs its awk programs under `LC_ALL=C`. In a UTF-8 locale, BSD awk
+  aborted on one non-UTF-8 byte in a story, and the capture and heading arms then read nothing.
 
 ## [0.786.0] - 2026-10-14
 
