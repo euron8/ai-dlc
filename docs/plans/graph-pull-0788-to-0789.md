@@ -1,9 +1,12 @@
-READ and FOLLOW docs/plans/graph-pull-0788-to-0789.md
+# DISCHARGED — DO NOT EXECUTE — pull the graph consumer to 0.789.0
 
-# Pull the graph consumer to 0.789.0
+**Discharged by graph's own run: `b3f2fe199`, "reconcile distribution 0.788.0 → 0.789.0" (#1226), stamp `version:
+0.789.0` on graph `main`, with PC-S319 archived.** The PC-S319 "local work remaining" is
+`docs/plans/graph-implementation-push-s2-narrow.md`.
 
 ## RESUME HERE
 
+**SPENT: graph ran this pull as #1226; see `## Discharge`. What follows is the state at writing.**
 **STATE AT WRITING: WRITTEN AND REHEARSED, NOT STARTED.** The rehearsal ran on a `file://` clone of
 the consumer at its `main` head, with the consumer's INSTALLED engine run from the clone root,
 against the 0.789.0 release content before that release was squash-merged. Every figure in
@@ -324,3 +327,24 @@ pre-annotation-vs-before different (`cmp` 1) as the control that the comparison 
 adjudications, or run the consumer's pre-push; see `## Hazards`.
 
 ## Discharge
+
+Ran in a graph session on 2026-10-15 and merged as graph #1226 (`b3f2fe199`). The stamp on graph `main` reads
+`version: 0.789.0`, `commit: 7e8d62d7`. Recorded from graph's committed history, read only, by a distribution-side
+session. The run's own account is graph's `_bmad-output/ai-dlc-update/reconcile-log-20261015T172805Z.md`.
+
+- **Matched `## Rehearsal`**, per that log: `SELF-UPDATE-DEFER` with the slice carried; every bucket, `HARD-*` row and
+  ledger row agreed. The `dev.md` merge took theirs on all three passages and kept graph's nine ownership-path lines.
+  Both `LC-E4` adjudications were recorded `still-additive` on `roles/dev-domain.md` and `roles/dev-push.md`.
+- **Done-when 1-3 re-derived here against graph `main`; 4 taken from graph's log:**
+  - `push-drain.sh` at `7e8d62d7` reads 5 `PUSH-REFUSED` and 0 `PUSH-CANDIDATE`.
+  - PC-S319 counts 1 on `^### ` in the archive and 0 in the live ledger, with 19 `^## ` lines still live.
+  - PC-S318's rotate id counts 1 archived and 0 live.
+  - The impossible id `PC-ZZ-IMPOSSIBLE-CONTROL-Q9X` counts 0 in both files.
+  - The rotation's row-set comparison read `cmp` 0, against a control pair that differed. That figure comes from
+    graph's log; it was not re-run here.
+- **Graph's pre-push suite**, which this file did not rehearse, is not recorded in that log. The PR merged; its
+  gate result and wall clock were not derived here.
+- **Post-apply** (per the log): `hard-blockers.sh --post-apply` `0 HARD blockers.`, `setup-site-drift.sh` and
+  `validate-hook-registration.sh` exit 0.
+- **Left as follow-up:** narrowing `implementation-push.md` §2. On the operator's ruling it runs between sprints, as
+  `docs/plans/graph-implementation-push-s2-narrow.md`.
