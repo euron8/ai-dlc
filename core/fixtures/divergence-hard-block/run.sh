@@ -263,6 +263,54 @@ case "$OUT" in
 esac
 rm -rf "$W"
 
+# --- THE EFFECTS CLAUSE. On a locked entry ADJUDICATE recommends nothing and states each
+# option's effect, INCLUDING the value it leaves in force -- the half an unbadged menu needs
+# for the operator to see what each option does. Both hooks carry it; each is pinned on its
+# own message. Classified PRESENCE-first: `none` = no deny/block to inspect, never a pass.
+effects_class() { # <out> -> yes | no | none
+  case "$1" in *'"permissionDecision": "deny"'*|*'"permissionDecision":"deny"'*|*'"decision":"block"'*|*'"decision": "block"'*) ;; *) echo none; return ;; esac
+  case "$1" in *"value it leaves in force"*) echo yes ;; *) echo no ;; esac
+}
+drive_effects() { # <ack-hook> <stop-hook> -> "<ack-class> <stop-class>"
+  local w a s
+  w="$(bash "$HERE/seed.sh" divergent)"
+  a="$(printf '{"session_id":"t","transcript_path":"","tool_name":"Agent","tool_input":{"file_path":""}}' \
+        | CLAUDE_PROJECT_DIR="$w" bash "$1" 2>/dev/null)"
+  rm -f "$w/_bmad-output/pipeline-paused.flag"
+  s="$(printf '{"session_id":"t","transcript_path":""}' | CLAUDE_PROJECT_DIR="$w" bash "$2" 2>/dev/null)"
+  rm -rf "$w"
+  printf '%s %s' "$(effects_class "$a")" "$(effects_class "$s")"
+}
+EFF="$(drive_effects "$ACK_HOOK" "$STOP_HOOK")"
+case "$EFF" in
+  "yes "*) ok "ACK_HOOK: the ADJUDICATE step names the value each option leaves in force" ;;
+  *) bad "ACK_HOOK: the dispatch deny does not name the value each option leaves in force ($EFF)" ;;
+esac
+case "$EFF" in
+  *" yes") ok "STOP_HOOK: the ADJUDICATE step names the value each option leaves in force" ;;
+  *) bad "STOP_HOOK: the Stop block does not name the value each option leaves in force ($EFF)" ;;
+esac
+# MUTANTS: delete the phrase from ONE hook at a time, in a copy of the whole hooks dir. Each
+# must flip exactly its own arm; a copy that printed nothing reads `none` and is BROKEN.
+for _mh in ACK STOP; do
+  MUTD="$(mktemp -d "${TMPDIR:-/tmp}/divergence-eff-XXXXXX")"
+  cp -R "$(dirname "$ACK_HOOK")/." "$MUTD/"
+  if [ "$_mh" = ACK ]; then _mf="$(basename "$ACK_HOOK")"; _want="no yes"; else _mf="$(basename "$STOP_HOOK")"; _want="yes no"; fi
+  sed 's/value it leaves in force/value it chooses/' "$MUTD/$_mf" > "$MUTD/$_mf.mut" && mv "$MUTD/$_mf.mut" "$MUTD/$_mf"
+  if cmp -s "$MUTD/$_mf" "$(dirname "$ACK_HOOK")/$_mf"; then
+    bad "FIXTURE BROKEN: the effects-clause mutant did not apply to $_mf"
+  else
+    MEFF="$(drive_effects "$MUTD/$(basename "$ACK_HOOK")" "$MUTD/$(basename "$STOP_HOOK")")"
+    case "$MEFF" in
+      "$_want") ok "mutant $_mh-effects-deleted is KILLED by its own arm only ($MEFF)" ;;
+      *none*) bad "FIXTURE BROKEN: a mutant hook copy printed no deny/block ($MEFF) -- it did not run, so no kill is scored" ;;
+      *) bad "mutant $_mh-effects-deleted: got '$MEFF', wanted '$_want'" ;;
+    esac
+  fi
+  rm -rf "$MUTD"
+done
+unset _mh _mf _want
+
 # =============================================================================
 # 4. THE DECOYS — a guard that fires on a working cycle gets ripped out.
 # =============================================================================

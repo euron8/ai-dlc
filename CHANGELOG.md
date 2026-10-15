@@ -101,6 +101,31 @@ bullets. Its first bullet (price every literal under the new binding) is now car
 - `process-rule-pins` gains nine rows pinning both texts (eight line-mode rows in qa.md and one
   para row spanning §5 of deploy-validate.md).
 
+### An operator-owned value is put to the operator without a badge (BL-524)
+
+Rule 11(a) now requires every option of an operator question to state its concrete effect, including the value
+it leaves in force. A question goes out unbadged, with no option marked `(Recommended)`, when any option sets,
+relaxes, inherits or leaves in force one of these: a config leaf, a money-path threshold or literal, a byte-pin,
+an `LR-`/`LRC-` id, or a `D-<n>` decision. The five values are one sentence rather than a list. Rule 11 still
+grew 729 bytes, which moved Rule 12's two `escalations.md` disclosure pointers past the 20121-byte re-attach cut
+(to bytes 20396 and 20589); that eviction is accepted. The post-compact digest was re-rendered and did not change.
+
+The adversarial STOP follows the same rule, keyed on the resolution record's `locked_requirements_touched:`
+field. If that field names an entry, `validate-adversarial-convergence.sh` now fails a record that names a
+`recommended_option:` (finding F7b), and passes `recommended_option: none` or a record with no such line. Both
+fields are read on their first token, lowercased and cut at the first blank, `.`, `,`, `;` or dash. A token of
+`none`, `0`, `n/a`, `-` or `[]`, or no field at all, keeps the old rule, so a consumer's `none — <prose>` or
+`none changed; ...` is unlocked and `none (Recommended)` names no option. An unlocked record
+that writes `recommended_option: none` takes the existing missing-recommendation finding. The STOP remedy text in
+`ai-dlc-acknowledge.sh`, `ai-dlc-continue.sh` and `_gate-procedures.md` step 2(c) states the branch.
+
+`bug-investigation.md` §2b badges "apply now" only when the relief sets no operator-owned value. `remediator.md`
+gives no recommendation on a locked or operator-owned item. `route.md` no longer claims that `(Recommended)`
+appears nowhere in the skill. The continue hook's Rule 11(a) paragraph carries the effects clause and the
+unbadged case, and `pause-question-in-prose` F2 pins that text.
+
+Out of scope: the updater's reconcile questions in `ai-dlc-update/SKILL.md`.
+
 ## [0.785.0] - 2026-10-14
 
 Batch 230 (graph-ledger-full-drain), second release: BL-507, held from batch 229, rebased onto 0.784.0 and adversaried

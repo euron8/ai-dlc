@@ -1248,7 +1248,9 @@ THE EXIT:  STOP -> ADJUDICATE -> RESOLVE -> VERIFY
 2. ADJUDICATE. Put this to the operator now. Present: (a) the finding and the repair that
    caused it; (b) whether that repair deleted or weakened something LOAD-BEARING -- an AC,
    a predicate, a guard, a LOCKED_REQUIREMENTS entry. A repair that makes a check
-   unfalsifiable is the defect, not the fix; (c) your recommended resolution KIND.
+   unfalsifiable is the defect, not the fix; (c) your recommended resolution KIND, unless
+   an option touches a LOCKED_REQUIREMENTS entry -- then no recommendation: each option's
+   effect on that entry, including the value it leaves in force.
 3. RESOLVE. A repair edits the artifact to close findings on UNCHANGED scope -- that is
    what diverged, and doing it again is not a resolution. A resolution changes WHAT IS
    UNDER REVIEW:
@@ -1629,7 +1631,7 @@ FIDELITY CHECK: Do NOT pattern-match on prior sprint execution. Re-read the curr
 if pq_fire; then
   REASON="RULE 11(a) -- THE LAST LINE OF YOUR REPLY IS A QUESTION AND THIS TURN CARRIES NO AskUserQuestion. A question left in prose with no pause flag is not a pause: the pipeline blocks, you are told to create the flag, and a flag on its own does not make the question visible. Take whichever of the two readings you are in.
 
-(i) A Rule 11(a) AMBIGUITY QUESTION: put it with AskUserQuestion, recommended option first, and set NO pause flag -- the tool holds the turn open, so a flag there is a pause nobody clears.
+(i) A Rule 11(a) AMBIGUITY QUESTION: put it with AskUserQuestion, every option stating its effect and the value it leaves in force, recommended option first unless an option sets or leaves in force an operator-owned value (a config leaf, a money-path threshold, a byte-pin, an LR-/LRC- id, a D-<n> decision) -- then no option is badged -- and set NO pause flag -- the tool holds the turn open, so a flag there is a pause nobody clears.
 
 (ii) The PRODUCTION VALIDATION CHECKPOINT or the RETRO COMMENTARY PROMPT: those are asked in prose, so touch _bmad-output/pipeline-paused.flag and end the turn again (Rule 3).
 

@@ -422,3 +422,62 @@ Filed by the reference consumer as
 
 verify: sh R=core/fixtures/process-rule-pins/run.sh; [ -f "$R" ] || exit 9; o="$(bash "$R" --report 2>&1)"; n="$(grep -cE '^  ok    (qa-lrdiv-(lead|never-pass|empty|rework|outcome|exempt|exempt3|other-type)|dv-lrcov-degraded): pinned inside' <<<"$o")" || n=0; [ "$n" -eq 9 ]
 
+## BL-524 — the operator-question template badged an operator-owned trade-off "(Recommended)"
+
+**DEFECT.** Filed by the consumer as `PC-S318-OPERATOR-QUESTION-TEMPLATE-LABELS-AN-OPERATOR-OWNED-TRADE-OFF-RECOMMENDED`.
+
+**What happened.** Graph's s317-s318 transcripts carry 38 distinct `AskUserQuestion` questions with a
+`(Recommended)` option. The motivating one asked whether the HODL sweep should inherit the offramp 0.01 dust
+floor, and badged "Inherit and say so". The label never said that inheriting leaves a token0 balance at or below
+0.01 unswapped while the press ends complete. SKILL.md Rule 11(a) told the lead to put the recommended option
+first on every question. `_gate-procedures.md` step 2(c) required exactly one badge on the adversarial STOP, and
+`validate-adversarial-convergence.sh` F7 failed any record that named none, even when the options touched a
+`LOCKED_REQUIREMENTS` entry.
+
+**The fix (batch 230).**
+- Rule 11(a): every option states its concrete effect, including the value it leaves in force. A question is
+  unbadged when an option sets, relaxes, inherits or leaves in force a config leaf, a money-path threshold or
+  literal, a byte-pin, an `LR-`/`LRC-` id, or a `D-<n>` decision.
+- Rule 11 grew 729 bytes (17877 to 18606 bytes to its end at base and tip). That pushed Rule 12's two `escalations.md`
+  disclosure pointers past the 20121-byte re-attach cut: "AC verification-category-change disclosure" now ends at
+  byte 20396 and "Authorization-premise invalidation disclosure" at byte 20589, against 19667 and 19860 at base.
+  The five-item unbadged list was folded into one sentence, which saved 10 bytes and did not bring either pointer
+  back. **The eviction is accepted.** The post-compact digest does not carry them either, because it renders only
+  Rule 12's first paragraph (0 hits for either pointer, against 1 for Rule 12's heading). What survives the cut is
+  Rule 12's "READ AND FOLLOW `escalations.md`" sentence, which ends at byte 20116, 5 bytes inside the cut. The two
+  disclosures are sections of that file. The digest re-rendered with no byte change.
+- The adversarial STOP branches on the record's `locked_requirements_touched:`, read on its first token. Backticks
+  and leading blanks are dropped, the value is cut at the first blank, `.`, `,`, `;` or dash, and the result is
+  lowercased. A token of `none`, `0`, `n/a`, `-` or `[]`, or no token at all, keeps the old rule, so `none — <prose>`,
+  `none changed; ...` and `None.` are unlocked. Any other token names an entry, and then the record must carry
+  `recommended_option: none` or no such line, and the new F7b finding fails a named badge.
+  `recommended_option:` is read the same way, so `none (Recommended)`, `None.` and `n/a` name no option. The remedy
+  text in `ai-dlc-acknowledge.sh` and `ai-dlc-continue.sh` matches, and the validator's says "mark NO option
+  (Recommended)". `check-24-adversarial-convergence` adds twelve worlds (five locked-branch shapes, six unlocked
+  spellings and one `LR-S1-1 (...)` locked world), eight silence controls and four `--cycle-state` rows.
+  `divergence-hard-block` pins "value it leaves in force" in both hooks' ADJUDICATE step, with one mutant per hook
+  that flips only its own arm. `process-rule-pins` adds four rows: the Rule 11(a) effects sentence and its unbadged
+  clause, and the `_gate-procedures.md` 2(c) effects and no-badge clauses.
+- `bug-investigation.md` §2b badges "apply now" only when the relief sets no operator-owned value.
+  `remediator.md` gives no recommendation on a locked or operator-owned item. `route.md` no longer claims the
+  token appears nowhere in the skill. The continue hook's Rule 11(a) paragraph carries the clause, and
+  `pause-question-in-prose` F2 pins it.
+
+**The walk.** Of the 38 badged graph questions, 18 lose the badge under the rule as built: 7 on a config leaf,
+2 on a money-path threshold or literal, 5 on a byte-pin, 2 on an `LR-`/`LRC-` id and 2 on a `D-<n>`. The other
+20 keep it. The dust-floor question is one of the two money-path questions. It is caught by the effects clause,
+because the compliant option has to read "swap skipped for balances <= 0.01 token0". One is borderline: the
+`security.wallet_address` checksum question is scored as a config leaf. The rule is prose with no enforcer on
+`AskUserQuestion` itself, so the walk shows what the rule reaches, not that a lead will follow it.
+
+Eighteen is what Rule 11(a)'s list reaches, not what this fix reaches. Eleven of the 38 rows (18, 19, 22, 31-38)
+were asked by the updater's reconcile flow, which asks from its own template and not from Rule 11(a). Three of
+the 18 are among them: rows 33 and 35 (config leaf `aiDlcRoles.dev-escalated.model`) and row 37 (byte-pin,
+sha-locked gate evidence). The shipped fix therefore reaches 15 of the 38, and the other 3 stay open until the
+updater's template is covered.
+
+**Uncovered.** The updater's reconcile questions in `ai-dlc-update/SKILL.md` (~1905-1907, "a closed question
+with your recommendation") are outside this fix. That flow asked 11 of the 38 badged questions. Three of them
+(rows 33, 35, 37) would lose the badge under the rule and still carry it, and the other 8 keep it either way.
+
+verify: sh V=core/scripts/validate-adversarial-convergence.sh; S=core/fixtures/check-24-adversarial-convergence/seed.sh; P=core/fixtures/pause-question-in-prose/run.sh; [ -f "$V" ] && [ -f "$S" ] && [ -f "$P" ] || exit 9; R="$(bash "$S" | tail -1)"; D="$R/divergent-resolved"; [ -f "$D/s1-resolution-p2.md" ] || exit 9; T="$R/operator-transcript.jsonl"; run() { bash "$V" --series "$R/$1/s1-adversarial-p" --transcript "$T" --transcript-dir "$R" 2>&1; }; run divergent-resolved >/dev/null || exit 9; for k in lb ln; do mkdir "$R/$k" && cp "$D"/*.md "$R/$k/" || exit 9; done; awk '{print} /^adjudicated_by:/{print "locked_requirements_touched: LR-S1-3"}' "$D/s1-resolution-p2.md" > "$R/lb/s1-resolution-p2.md" || exit 9; awk '/^recommended_option:/{print "recommended_option: none"; next} {print} /^adjudicated_by:/{print "locked_requirements_touched: LR-S1-3"}' "$D/s1-resolution-p2.md" > "$R/ln/s1-resolution-p2.md" || exit 9; grep -q '^recommended_option: [A-Z]' "$R/lb/s1-resolution-p2.md" || exit 9; o="$(run lb)" && exit 1; grep -qF "names a locked requirement" <<<"$o" || exit 1; run ln >/dev/null || exit 1; bash "$P" >/dev/null 2>&1 || exit 1; grep -q '^(i) A Rule 11(a) AMBIGUITY QUESTION: .*then no option is badged' core/hooks/ai-dlc-continue.sh || exit 1; grep -qF 'INCLUDING the value it leaves' core/skills/ai-dlc/SKILL.md || exit 1; exit 0

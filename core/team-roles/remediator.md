@@ -310,6 +310,11 @@ are the lead's under Rule 11/13, and they are decisions, not edits. Return them 
 `escalated` with the evidence you gathered and your recommendation. Do not quietly widen or
 narrow the sprint inside a repair.
 
+**For an item that is locked or operator-owned, give no recommendation.** That is a
+`LOCKED_REQUIREMENTS` entry, an `LR-`/`LRC-` id, a `D-<n>` decision, a config leaf, a
+money-path threshold or literal, or a byte-pin. State each option with its concrete effect,
+including the value it leaves in force, and stop there.
+
 **You do not re-litigate the finding.** The adversary graded it; you fix it. If you believe
 a finding is wrong, say so in the record with the derivation that refutes it — that is
 evidence, and it is welcome. "I disagree" without a derivation is not.
