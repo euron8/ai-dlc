@@ -314,70 +314,6 @@ shape, a substantive mis-repair whose prose and pin agree.
 
 verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-519-set-aside.sh
 
-## BL-525 — the pause gate denies every dispatch while an operator message is outstanding, including a search
-
-**DEFECT.** Filed by the consumer as `PC-S318-PAUSE-GATE-DENIES-READ-ONLY-OPS-DISPATCH-WHILE-AN-OPERATOR-MESSAGE-IS-OUTSTANDING`.
-While the pause flag is up, Check 3 of `ai-dlc-acknowledge.sh` denies every `Agent`/`Task` call, so a
-search the lead needs to answer the operator runs inline in the lead instead. The operator's ruling is
-an Explore-only carve-out: the lead's own dispatch of the built-in `Explore` subagent passes, and
-nothing else does. Explore has no Agent, Edit, Write or NotebookEdit, so it adds nothing the lead's
-allowed Bash lacks; it is not read-only. The carve-out fails closed on a teammate caller, on any
-`subagent_type` other than the exact string `"Explore"`, on a `name` or `team_name` in the call (either
-routes it to the in-process teammate runner), on a `team-roles/<role>.md` citation in the prompt (the
-dispatch guard rewrites `subagent_type` from one), and on any `.claude/agents/*.md` in the project or
-under `$HOME` whose frontmatter `name:` is Explore, case-insensitively. It sits after the Rule 8 STOP
-exit, so a STOP still denies it.
-
-**What it does NOT fix, measured.** The motivating dispatch was `ops`, and `ops` stays denied: it writes
-its repair record under `_bmad-output/planning-artifacts/` (`core/team-roles/ops.md`, step 4). In graph
-s318 there were 5 ACK_DENIED rows, 2 of them Agent and 0 Explore. Over the measured window, 32 Agent
-calls were Rule-29-denied and 0 were Explore. So the carve-out would newly allow 0 of graph's real
-denied calls.
-
-The receipt drives the hook with two seeded payloads in a paused scratch tree. It exits 0 when an
-Explore dispatch is allowed, 1 when it is denied, and 9 when the `ops` control is not denied, because
-a hook that allows everything must not close this entry. It reads 0 at this tip and 1 at `11ae360d`.
-
-verify: sh H=core/hooks/ai-dlc-acknowledge.sh; [ -f "$H" ] || exit 9; command -v jq >/dev/null 2>&1 || exit 9; D="$(mktemp -d)" || exit 9; mkdir "$D/_bmad-output" || exit 9; : > "$D/_bmad-output/pipeline-snapshot.md"; : > "$D/_bmad-output/pipeline-paused.flag"; E="$(jq -nc '{session_id:"r",tool_name:"Agent",tool_input:{subagent_type:"Explore",prompt:"list the callers of sprint-status.sh"}}' | HOME="$D" CLAUDE_PROJECT_DIR="$D" bash "$H" 2>/dev/null)"; O="$(jq -nc '{session_id:"r",tool_name:"Agent",tool_input:{subagent_type:"ops",prompt:"list the callers of sprint-status.sh"}}' | HOME="$D" CLAUDE_PROJECT_DIR="$D" bash "$H" 2>/dev/null)"; rm -f "$D/_bmad-output/pipeline-snapshot.md" "$D/_bmad-output/pipeline-paused.flag" "$D/_bmad-output/pipeline-continuation-log.md"; rmdir "$D/_bmad-output" "$D" 2>/dev/null; case "$O" in *'"permissionDecision": "deny"'*) ;; *) exit 9 ;; esac; case "$E" in *'"permissionDecision": "deny"'*) exit 1 ;; esac; exit 0
-
-## BL-522 — a rebind passed three reviews with nobody pricing the literal it re-keyed
-
-**DEFECT.** Filed by the consumer as `PC-S318-ARCHITECT-ROLE-DOES-NOT-ASK-WHAT-A-LITERAL-IS-WORTH-AFTER-A-REBIND`.
-
-**What happened.** In graph s318, story 1.2's `if hodl:` block set `stable_token = "token1"` (graph main
-`rebalancer/execution.py:23351`), which changes which token counts as non-stable. `dust_raw` (main `:23459-23460`) is
-`Decimal("0.01")` units of the non-stable token and gates the swap, so the floor moved with no diff touching it; the
-retro (`_bmad-output/party-mode-transcripts/s318/retro.md:70`, not re-derived here) puts it at about $0.00002 before and
-about $24 after. A live press held 0.0091 WETH under that floor, skipped the swap and ended SUCCESS. The second keyed
-literal, the stable-side `Decimal("0.01")` at main `:25078`, was named only by the retro (`:76`, `:120`). The reviewer
-that passed the rebind was the adversary, not the architect: `architecture-adversarial-p2.md:83` confirmed the dust gate
-precedes the chain refusal and concluded a below-dust press "behaves as on the proven path"; p1 `:669` wrote "above the
-dust floor" as a fixture precondition; `docs/reviews/s318/1-2-code-review.md` mutation-tested every rebind line and priced
-nothing. `requirements-architect-05.md:8-13,20` came closest: it named the unit flip and wrote "0.01 units of token0"
-without a value under either binding.
-
-**The fix (batch 230).** One domain-neutral clause in three roles. A change that makes an existing name, role or unit
-resolve to a different value, party or unit while its text stays the same, where a literal or threshold downstream is
-computed from or compared against it, prices every literal and threshold the re-bound value flows into under the old and
-the new binding, in the unit it is compared against, and records `old -> new`. A literal the diff does not touch is in
-scope for that reason. `stories-test-strategy.md` `## Rename Verification` owns finding a rename's references, and this
-clause owns pricing a re-target. In `adversary.md` it is a Severity rung, a plain blocking MAJOR that never counts as
-underived, CRITICAL when the new price sends a covered case down a different branch. In `code-reviewer.md` it is a
-severity classification, Important minimum. In `architect.md` and in the code reviewer's evidence line, the `derived`
-fence derives each input the price depends on (the literal's line, and the decimals or units entry under each binding)
-with commands naming the source file as an operand; a `BEGIN`-only `awk` computation is not a derivation, and the
-arithmetic and `old -> new` go in the sentence beside the fence. `core/fixtures/process-rule-pins` pins eighteen rows
-across the three files, including the trigger and the `every literal` scope.
-
-**Scope under the trigger.** In: `dust_raw` (its text is unchanged, it resolves through `dec_ns` of the re-targeted
-non-stable token, and the swap gate compares the balance against it); the stable-side `Decimal("0.01")` at `:25078` (its
-text is unchanged, it resolves through `dec_s` of the token a `stable_token` binding selects, here the startup check's own local read
-from pool config rather than the HODL block's assignment, and the stable balance is compared against it; it is in by
-the same shape, not because the s318 block reaches it). Out: the ADR-S317-6 predicate rename and a test-node rename, because each changes its text, which
-`## Rename Verification` covers.
-
-verify: sh F=core/fixtures/process-rule-pins/run.sh; [ -f "$F" ] || exit 9; o="$(bash "$F" --report 2>&1)" || exit 1; n="$(grep -cE '^  ok    (adv-rebind-(rung|trigger|every|unit|untouched|oldnew|major)|cr-rebind-(head|trigger|every|unit|untouched|sev)|arch-rebind-(trigger|fence|unit|oldnew|untouched)): pinned inside ' <<<"$o")" || n=0; [ "$n" -eq 18 ]
-
 ## BL-521 — QA passes an AC that skips an action a locked requirement requires
 
 **DEFECT.** graph s318 story 1.2 AC5(b) specified that a HODL press with token0 at or below the
@@ -421,6 +357,44 @@ Filed by the reference consumer as
 `PC-S318-QA-ROLE-HAS-NO-RULE-THAT-A-SKIP-AGAINST-A-LOCKED-REQUIREMENT-IS-A-DEVIATION-TO-PUT-TO-THE-OPERATOR`.
 
 verify: sh R=core/fixtures/process-rule-pins/run.sh; [ -f "$R" ] || exit 9; o="$(bash "$R" --report 2>&1)"; n="$(grep -cE '^  ok    (qa-lrdiv-(lead|never-pass|empty|rework|outcome|exempt|exempt3|other-type)|dv-lrcov-degraded): pinned inside' <<<"$o")" || n=0; [ "$n" -eq 9 ]
+
+## BL-522 — a rebind passed three reviews with nobody pricing the literal it re-keyed
+
+**DEFECT.** Filed by the consumer as `PC-S318-ARCHITECT-ROLE-DOES-NOT-ASK-WHAT-A-LITERAL-IS-WORTH-AFTER-A-REBIND`.
+
+**What happened.** In graph s318, story 1.2's `if hodl:` block set `stable_token = "token1"` (graph main
+`rebalancer/execution.py:23351`), which changes which token counts as non-stable. `dust_raw` (main `:23459-23460`) is
+`Decimal("0.01")` units of the non-stable token and gates the swap, so the floor moved with no diff touching it; the
+retro (`_bmad-output/party-mode-transcripts/s318/retro.md:70`, not re-derived here) puts it at about $0.00002 before and
+about $24 after. A live press held 0.0091 WETH under that floor, skipped the swap and ended SUCCESS. The second keyed
+literal, the stable-side `Decimal("0.01")` at main `:25078`, was named only by the retro (`:76`, `:120`). The reviewer
+that passed the rebind was the adversary, not the architect: `architecture-adversarial-p2.md:83` confirmed the dust gate
+precedes the chain refusal and concluded a below-dust press "behaves as on the proven path"; p1 `:669` wrote "above the
+dust floor" as a fixture precondition; `docs/reviews/s318/1-2-code-review.md` mutation-tested every rebind line and priced
+nothing. `requirements-architect-05.md:8-13,20` came closest: it named the unit flip and wrote "0.01 units of token0"
+without a value under either binding.
+
+**The fix (batch 230).** One domain-neutral clause in three roles. A change that makes an existing name, role or unit
+resolve to a different value, party or unit while its text stays the same, where a literal or threshold downstream is
+computed from or compared against it, prices every literal and threshold the re-bound value flows into under the old and
+the new binding, in the unit it is compared against, and records `old -> new`. A literal the diff does not touch is in
+scope for that reason. `stories-test-strategy.md` `## Rename Verification` owns finding a rename's references, and this
+clause owns pricing a re-target. In `adversary.md` it is a Severity rung, a plain blocking MAJOR that never counts as
+underived, CRITICAL when the new price sends a covered case down a different branch. In `code-reviewer.md` it is a
+severity classification, Important minimum. In `architect.md` and in the code reviewer's evidence line, the `derived`
+fence derives each input the price depends on (the literal's line, and the decimals or units entry under each binding)
+with commands naming the source file as an operand; a `BEGIN`-only `awk` computation is not a derivation, and the
+arithmetic and `old -> new` go in the sentence beside the fence. `core/fixtures/process-rule-pins` pins eighteen rows
+across the three files, including the trigger and the `every literal` scope.
+
+**Scope under the trigger.** In: `dust_raw` (its text is unchanged, it resolves through `dec_ns` of the re-targeted
+non-stable token, and the swap gate compares the balance against it); the stable-side `Decimal("0.01")` at `:25078` (its
+text is unchanged, it resolves through `dec_s` of the token a `stable_token` binding selects, here the startup check's own local read
+from pool config rather than the HODL block's assignment, and the stable balance is compared against it; it is in by
+the same shape, not because the s318 block reaches it). Out: the ADR-S317-6 predicate rename and a test-node rename, because each changes its text, which
+`## Rename Verification` covers.
+
+verify: sh F=core/fixtures/process-rule-pins/run.sh; [ -f "$F" ] || exit 9; o="$(bash "$F" --report 2>&1)" || exit 1; n="$(grep -cE '^  ok    (adv-rebind-(rung|trigger|every|unit|untouched|oldnew|major)|cr-rebind-(head|trigger|every|unit|untouched|sev)|arch-rebind-(trigger|fence|unit|oldnew|untouched)): pinned inside ' <<<"$o")" || n=0; [ "$n" -eq 18 ]
 
 ## BL-524 — the operator-question template badged an operator-owned trade-off "(Recommended)"
 
@@ -481,3 +455,29 @@ with your recommendation") are outside this fix. That flow asked 11 of the 38 ba
 (rows 33, 35, 37) would lose the badge under the rule and still carry it, and the other 8 keep it either way.
 
 verify: sh V=core/scripts/validate-adversarial-convergence.sh; S=core/fixtures/check-24-adversarial-convergence/seed.sh; P=core/fixtures/pause-question-in-prose/run.sh; [ -f "$V" ] && [ -f "$S" ] && [ -f "$P" ] || exit 9; R="$(bash "$S" | tail -1)"; D="$R/divergent-resolved"; [ -f "$D/s1-resolution-p2.md" ] || exit 9; T="$R/operator-transcript.jsonl"; run() { bash "$V" --series "$R/$1/s1-adversarial-p" --transcript "$T" --transcript-dir "$R" 2>&1; }; run divergent-resolved >/dev/null || exit 9; for k in lb ln; do mkdir "$R/$k" && cp "$D"/*.md "$R/$k/" || exit 9; done; awk '{print} /^adjudicated_by:/{print "locked_requirements_touched: LR-S1-3"}' "$D/s1-resolution-p2.md" > "$R/lb/s1-resolution-p2.md" || exit 9; awk '/^recommended_option:/{print "recommended_option: none"; next} {print} /^adjudicated_by:/{print "locked_requirements_touched: LR-S1-3"}' "$D/s1-resolution-p2.md" > "$R/ln/s1-resolution-p2.md" || exit 9; grep -q '^recommended_option: [A-Z]' "$R/lb/s1-resolution-p2.md" || exit 9; o="$(run lb)" && exit 1; grep -qF "names a locked requirement" <<<"$o" || exit 1; run ln >/dev/null || exit 1; bash "$P" >/dev/null 2>&1 || exit 1; grep -q '^(i) A Rule 11(a) AMBIGUITY QUESTION: .*then no option is badged' core/hooks/ai-dlc-continue.sh || exit 1; grep -qF 'INCLUDING the value it leaves' core/skills/ai-dlc/SKILL.md || exit 1; exit 0
+
+## BL-525 — the pause gate denies every dispatch while an operator message is outstanding, including a search
+
+**DEFECT.** Filed by the consumer as `PC-S318-PAUSE-GATE-DENIES-READ-ONLY-OPS-DISPATCH-WHILE-AN-OPERATOR-MESSAGE-IS-OUTSTANDING`.
+While the pause flag is up, Check 3 of `ai-dlc-acknowledge.sh` denies every `Agent`/`Task` call, so a
+search the lead needs to answer the operator runs inline in the lead instead. The operator's ruling is
+an Explore-only carve-out: the lead's own dispatch of the built-in `Explore` subagent passes, and
+nothing else does. Explore has no Agent, Edit, Write or NotebookEdit, so it adds nothing the lead's
+allowed Bash lacks; it is not read-only. The carve-out fails closed on a teammate caller, on any
+`subagent_type` other than the exact string `"Explore"`, on a `name` or `team_name` in the call (either
+routes it to the in-process teammate runner), on a `team-roles/<role>.md` citation in the prompt (the
+dispatch guard rewrites `subagent_type` from one), and on any `.claude/agents/*.md` in the project or
+under `$HOME` whose frontmatter `name:` is Explore, case-insensitively. It sits after the Rule 8 STOP
+exit, so a STOP still denies it.
+
+**What it does NOT fix, measured.** The motivating dispatch was `ops`, and `ops` stays denied: it writes
+its repair record under `_bmad-output/planning-artifacts/` (`core/team-roles/ops.md`, step 4). In graph
+s318 there were 5 ACK_DENIED rows, 2 of them Agent and 0 Explore. Over the measured window, 32 Agent
+calls were Rule-29-denied and 0 were Explore. So the carve-out would newly allow 0 of graph's real
+denied calls.
+
+The receipt drives the hook with two seeded payloads in a paused scratch tree. It exits 0 when an
+Explore dispatch is allowed, 1 when it is denied, and 9 when the `ops` control is not denied, because
+a hook that allows everything must not close this entry. It reads 0 at this tip and 1 at `11ae360d`.
+
+verify: sh H=core/hooks/ai-dlc-acknowledge.sh; [ -f "$H" ] || exit 9; command -v jq >/dev/null 2>&1 || exit 9; D="$(mktemp -d)" || exit 9; mkdir "$D/_bmad-output" || exit 9; : > "$D/_bmad-output/pipeline-snapshot.md"; : > "$D/_bmad-output/pipeline-paused.flag"; E="$(jq -nc '{session_id:"r",tool_name:"Agent",tool_input:{subagent_type:"Explore",prompt:"list the callers of sprint-status.sh"}}' | HOME="$D" CLAUDE_PROJECT_DIR="$D" bash "$H" 2>/dev/null)"; O="$(jq -nc '{session_id:"r",tool_name:"Agent",tool_input:{subagent_type:"ops",prompt:"list the callers of sprint-status.sh"}}' | HOME="$D" CLAUDE_PROJECT_DIR="$D" bash "$H" 2>/dev/null)"; rm -f "$D/_bmad-output/pipeline-snapshot.md" "$D/_bmad-output/pipeline-paused.flag" "$D/_bmad-output/pipeline-continuation-log.md"; rmdir "$D/_bmad-output" "$D" 2>/dev/null; case "$O" in *'"permissionDecision": "deny"'*) ;; *) exit 9 ;; esac; case "$E" in *'"permissionDecision": "deny"'*) exit 1 ;; esac; exit 0
