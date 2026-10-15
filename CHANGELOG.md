@@ -20,10 +20,12 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
-## [UNRELEASED — b231-0788]
+## [0.788.0] - 2026-10-15
 
-Both halves of one consumer candidate ship together: the rotator's `--sprint` flag is the reader half
-(BL-523), and the gate's prescription of `gate_series_id` is the writer half (BL-526).
+Batch 231 (graph-ledger-full-drain), second release. Closes
+`PC-S318-ROTATE-GATE-ADJUDICATION-SPRINT-FLAG-NEVER-MATCHES-NONCE-STYLE-SERIES-IDS`. Both halves of that
+consumer candidate ship together: the rotator's `--sprint` flag is the reader half (BL-523), and the gate's
+prescription of `gate_series_id` is the writer half (BL-526).
 
 ### `rotate-gate-adjudication.sh`: an empty sprint selection beside a FAIL-carrying unmatchable series is refused, and `--series` is the escape (BL-523)
 
