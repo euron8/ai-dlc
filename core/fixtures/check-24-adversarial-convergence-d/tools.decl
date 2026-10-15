@@ -33,3 +33,4 @@ touch
 tr
 uniq
 wc
+jq

@@ -39,7 +39,9 @@
 # (origin/main at dd7e40ad), so D6 holds files mode to its old bytes rather than to whatever the
 # current merge prints. Regenerated once for the cross groups (BL-464): K=3 now owes cross-1..3,
 # and the diff against the earlier golden is confined to the cross headers, the shard count and
-# the two id lines -- every ordinal shard's body is byte-identical.
+# the two id lines -- every ordinal shard's body is byte-identical. Regenerated again when the
+# dispatch ids became DERIVED from the harness records: the diff is confined to the same two id
+# lines (lines 118-119), now carrying the ids lib.sh's hr_ids derives from each shard's dir and name.
 #
 # Every arm that scores a merge calls its predicate as `p_<name> "$MERGE"` at the start of a
 # line; the battery's join J1 reads exactly that shape to prove the shipped arm set and P_ALL
@@ -162,6 +164,30 @@ p_stem_near "$MERGE" && ok "S3: shards/adversarial-notes-p1/ (the word, not the 
   || bad "S3: a stem containing 'adversarial' without ending in it was refused (rc=$RC): $(cat "$MO")"
 p_stem_files "$MERGE" && ok "S4: files mode and --map on shards/stories-adversarial-p1/ -> each REFUSED naming the series, nothing written" \
   || bad "S4: files mode or --map accepted a series-named shard dir (rc=$RC): $(cat "$MO")"
+
+# ---- the dispatch id is DERIVED from the harness records, never self-reported (T1-T10). Every
+# shard helper drives the REAL remediation-guard hook with a PreToolUse Write payload, and seeds the
+# agent's meta file and an adversary spawn row; each cell below varies ONE of those for shard 2.
+p_tuid_main "$MERGE" && ok "T1: self ids NOT_ACCESSIBLE, unavailable, absent and the forged toolu_cross1_g1_dispatch each merge; shard_tool_use_ids are the derived ids, tool_use_id is cross-1's, the forged string absent" \
+  || bad "T1: a set with real records did not merge to the derived ids (rc=$RC): $(cat "$MO")"
+p_tuid_norow "$MERGE" && ok "T2: shard 2 with no write-ledger row (a Bash write) and a toolu_-prefixed self id -> REFUSED 'has no row', nothing written" \
+  || bad "T2: (rc=$RC) $(cat "$MO")"
+p_tuid_nometa "$MERGE" && ok "T3: shard 2's writer has no meta file, no probe row, and a real-shaped self id -> REFUSED, nothing written" \
+  || bad "T3: (rc=$RC) $(cat "$MO")"
+p_tuid_selfdiff "$MERGE" && ok "T4: a real-shaped self id differing from the derived one -> REFUSED; the derived id self-reported merges" \
+  || bad "T4: (rc=$RC) $(cat "$MO")"
+p_tuid_role "$MERGE" && ok "T5: shard 2 written only by a remediator dispatch, and by an adversary plus a remediator -> each REFUSED naming the role" \
+  || bad "T5: (rc=$RC) $(cat "$MO")"
+p_tuid_twowriters "$MERGE" && ok "T6: two adversary dispatches wrote shard 2 -> REFUSED, neither taken" \
+  || bad "T6: (rc=$RC) $(cat "$MO")"
+p_tuid_oneagent "$MERGE" && ok "T7: one agent wrote shards 2 and 3 -> REFUSED 'one dispatch delivered two shards'" \
+  || bad "T7: (rc=$RC) $(cat "$MO")"
+p_tuid_nospawn "$MERGE" && ok "T8: the meta file's dispatch id has no spawn-ledger row -> REFUSED" \
+  || bad "T8: (rc=$RC) $(cat "$MO")"
+p_tuid_session "$MERGE" && ok "T9: payload session_id differs from the transcript stem -> the meta file is found by the row's transcript_path and agent_id, and the set merges" \
+  || bad "T9: (rc=$RC) $(cat "$MO")"
+p_tuid_pre "$MERGE" && ok "T10: a row with no transcript_path takes the probe row's id and merges; without the probe row it is REFUSED naming the agent and 'predates transcript_path'" \
+  || bad "T10: (rc=$RC) $(cat "$MO")"
 
 # R6: a finding heading EXACTLY as the real pass wrote it carries no severity word, so the heads
 # counted (0 MAJOR) disagree with findings_major -- refused, never counted as zero.

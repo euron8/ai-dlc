@@ -9,6 +9,8 @@
 #   merge-adversarial-shards.sh --document <path> <shard-dir>
 #                                                   SECTION mode: one single-file artifact, sharded
 #                                                   by the parts partition-document.sh --map prints
+#   Every merge mode (not --map) also reads the three harness records named under THE DISPATCH ID,
+#   and refuses a shard set they do not cover: a caller seeding shards by hand seeds the records too.
 #
 #   <shard-dir> is `<planning>/s<N>/shards/<artifact>-p<M>/`. Everything else is DERIVED from
 #   that one path, so the placement cannot be mis-spelled by a caller:
@@ -17,7 +19,46 @@
 #   No project root is resolved: the siblings read are the convergence validator and, in
 #   section mode, partition-document.sh, both located beside this script (both layouts put them
 #   in one directory). A shard's relative `artifact:` is resolved by walking UP from s<N>/ for
-#   the first directory it names a file under -- a walk, never a root.
+#   the first directory it names a file under -- a walk, never a root. The three harness records
+#   the dispatch ids come from (THE DISPATCH ID, below) are found the same way: `<planning>` must
+#   be named `planning-artifacts`, and the state directory is its parent.
+#     write ledger    <planning>/.artifact-writes.jsonl
+#     spawn ledger    <state>/spawn-ledger.jsonl
+#     probe ledger    <state>/subagent-context.jsonl     (pre-upgrade rows only)
+#
+# THE DISPATCH ID IS DERIVED, NEVER SELF-REPORTED. A dispatched model cannot know the
+#   `tool_use_id` of the Agent call that spawned it, so a shard's own `tool_use_id:` is whatever
+#   someone typed. Measured on the reference consumer, sprints 315-319: of 413 convergence shard
+#   files, 360 carried a final id written by someone other than the adversary; the lead hand-filled
+#   whole shard sets; a hand-copied typo merged; 12 fabricated ids passed the old `toolu_` shape
+#   check and 13 carried `NOT_ACCESSIBLE`. So each shard's id is derived from records the harness
+#   wrote, in three hops:
+#     1. shard -> writing agent: the write ledger's `kind: "artifact-write"` rows whose `path` is
+#        `<state-dir-name>/planning-artifacts/s<N>/shards/<artifact>-p<M>/<file>` (the spelling
+#        ai-dlc-gate-remediation-guard.sh normalises every payload path to). Each gives `agent_id`.
+#     2. agent -> dispatch id: `<transcript_path minus .jsonl>/subagents/agent-<agent_id>.meta.json`,
+#        field `toolUseId`, from that row's own `transcript_path`. A row with no `transcript_path`
+#        (written before the hook recorded one) falls back to the probe ledger's `agent_id ->
+#        tool_use_id` row, and to nothing else.
+#     3. dispatch id -> role: every spawn-ledger row carrying that `tool_use_id` names role
+#        `adversary`.
+#   REFUSED (exit 2, nothing written): a shard with no write-ledger row; a writer whose meta file
+#   or `toolUseId` is absent; a pre-upgrade writer with no probe row; a dispatch id with no spawn
+#   row; a writer of any role other than `adversary` (a remediator, an sm, ...); two or more
+#   adversary dispatches writing one shard; one dispatch deriving for two shards; and a self-
+#   reported id that is REAL-SHAPED (`toolu_` and 24 base62 characters, the shape every harness id
+#   on the reference consumer carries) and differs from the derived one. Any other self value --
+#   `NOT_ACCESSIBLE`, `unavailable`, absent, or a fabricated `toolu_cross1_g1_dispatch` -- is
+#   ignored: the derived id is written. NOTHING FALLS BACK TO THE SELF-REPORT. There is no
+#   zero-writer refusal of its own: a shard with no writer has no row, and a shard whose writers
+#   are all of another role is refused on the role.
+#   The merged `tool_use_id` is the derived id of the first cross shard, and `shard_tool_use_ids`
+#   lists the derived ids.
+#   LIMITS. A shard written with Bash (a redirect, `sed -i`, a script's open) leaves no row and is
+#   refused: write shards with Write or Edit. A row is an ATTEMPT recorded at PreToolUse, not proof
+#   that the recorded agent authored the bytes on disk. A lead Bash write to any of the three
+#   records can forge the join; that is the hook's existing floor, and BL-530's second half owns it.
+#   No second ledger is kept here.
 #
 # THE SERIES STEM IS NOT THE ARTIFACT. A shard dir whose <artifact> ends in `-adversarial`
 #   (`shards/coe-adversarial-p1/`) names the SERIAL file's stem, not the artifact, and was merged
@@ -136,9 +177,9 @@
 #     EXIT_CONDITION_NOT_MET otherwise.
 #   Both ceilings are READ from validate-adversarial-convergence.sh, never restated here.
 #   artifact_sha is `<basename-stem>=<sha> ...` in ordinal order (each per-ordinal shard claim,
-#   each checked against the story bytes on disk); tool_use_id is the FIRST cross shard's
-#   (`cross` or `cross-1`); shard_tool_use_ids is `<ordinal>=<id> ... cross-1=<id> ... cross-<G>=<id>`
-#   (`cross=<id>` when G=1); invoked_at is the EARLIEST shard. The merged body opens with the
+#   each checked against the story bytes on disk); tool_use_id is the FIRST cross shard's DERIVED
+#   id (`cross` or `cross-1`); shard_tool_use_ids is `<ordinal>=<id> ... cross-1=<id> ... cross-<G>=<id>`
+#   (`cross=<id>` when G=1), every id derived; invoked_at is the EARLIEST shard. The merged body opens with the
 #   ordinal map (the `--map` output, fenced), then every shard body in ordinal order, the cross
 #   shards last in group order under one header per group, each with its own provenance block
 #   stripped, so the output carries exactly ONE provenance block.
@@ -433,6 +474,100 @@ for idx in $ORDINALS $CROSS_KEYS; do
   [ -n "$(awk -F'\t' -v k="$idx" '$1 == k { print; exit }' "$T/shards")" ] || refuse "shard $idx is missing from $SHARD_DIR (expected: $ORDINALS and $CROSS_KEYS)"
 done
 
+# ---- the dispatch ids, DERIVED from the harness records (see THE DISPATCH ID in the header) ----
+# After the set-level refusals above, so a duplicate, unknown or missing shard keeps its own
+# message; before any shard is parsed. Writes $T/ids: one `<key>\t<derived id>` row per shard, in
+# the shard-set order, the id EMPTY for a shard with no write-ledger row (refused per shard in the
+# loop below, naming the file), or a single `REFUSE\t<reason>` row.
+command -v jq >/dev/null 2>&1 \
+  || refuse "jq is not on PATH; each shard's dispatch id is derived from the harness's JSON records and cannot be read without it"
+REC_PLAN="$(dirname "$SPRINT_DIR")"
+[ "$(basename "$REC_PLAN")" = "planning-artifacts" ] \
+  || refuse "$SPRINT_DIR is not under a planning-artifacts/ directory; each shard's writer is read from <state>/planning-artifacts/.artifact-writes.jsonl, so the shard dir is <state>/planning-artifacts/s<N>/shards/<artifact>-p<M>/"
+REC_STATE="$(dirname "$REC_PLAN")"
+REC_WRITES="$REC_PLAN/.artifact-writes.jsonl"
+REC_SPAWNS="$REC_STATE/spawn-ledger.jsonl"
+REC_PROBES="$REC_STATE/subagent-context.jsonl"
+REC_PREFIX="$(basename "$REC_STATE")/planning-artifacts/$(basename "$SPRINT_DIR")/shards/$SHARD_BASE/"
+# One jq per record. Write rows: `<file under the shard dir>\t<agent_id>\t<meta path, empty when
+# the row carries no transcript_path>`.
+: > "$T/wrows" && : > "$T/spawns" && : > "$T/probes" && : > "$T/metas" || refuse "cannot stage the harness records"
+if [ -f "$REC_WRITES" ]; then
+  jq -rn --arg p "$REC_PREFIX" '[inputs | select(type == "object") | select(.kind == "artifact-write")
+      | select((.path // "") | type == "string" and startswith($p)) | select((.agent_id // "") != "")
+      | [(.path | ltrimstr($p)), .agent_id,
+         (if (.transcript_path // "") == "" then ""
+          else (.transcript_path | rtrimstr(".jsonl")) + "/subagents/agent-" + .agent_id + ".meta.json" end)]]
+    | unique | .[] | @tsv' "$REC_WRITES" > "$T/wrows" 2>/dev/null \
+    || refuse "the write ledger $REC_WRITES does not parse as JSON lines"
+fi
+if [ -f "$REC_SPAWNS" ]; then
+  jq -rn '[inputs | select(type == "object") | select((.tool_use_id // "") | type == "string" and . != "")
+      | [.tool_use_id, (.role // "" | tostring)]] | unique | .[] | @tsv' "$REC_SPAWNS" > "$T/spawns" 2>/dev/null \
+    || refuse "the spawn ledger $REC_SPAWNS does not parse as JSON lines"
+fi
+if [ -f "$REC_PROBES" ]; then
+  jq -rn '[inputs | select(type == "object") | select((.agent_id // "") != "" and (.tool_use_id // "") != "")
+      | [.agent_id, .tool_use_id]] | unique | .[] | @tsv' "$REC_PROBES" > "$T/probes" 2>/dev/null \
+    || refuse "the probe ledger $REC_PROBES does not parse as JSON lines"
+fi
+# The meta files the rows name, read in one jq over those that exist; one that does not is absent
+# from $T/metas and refused by name in the join.
+read_metas() {
+  local mp
+  set --
+  while IFS= read -r mp; do [ -n "$mp" ] && [ -f "$mp" ] && set -- "$@" "$mp"; done < "$T/mpaths"
+  [ "$#" -gt 0 ] || return 0
+  jq -r '[input_filename, (if type == "object" then (.toolUseId // "" | tostring) else "" end)] | @tsv' "$@"
+}
+cut -f3 "$T/wrows" | sort -u > "$T/mpaths" || refuse "cannot stage the meta paths"
+read_metas > "$T/metas" 2>/dev/null || refuse "a subagent meta file named by $REC_WRITES does not parse as JSON"
+# THE JOIN. One awk over the four tables and the shard set; it stops at the first refusal.
+awk -F'\t' -v fm="$T/metas" -v fp="$T/probes" -v fs="$T/spawns" -v fw="$T/wrows" \
+    -v lw="$REC_WRITES" -v ls="$REC_SPAWNS" -v lp="$REC_PROBES" '
+  function no(m) { print "REFUSE\t" m; bad = 1; exit 3 }
+  FILENAME == fm { meta[$1] = $2; next }
+  FILENAME == fp { if (!($1 in probe)) probe[$1] = $2; next }
+  FILENAME == fs { role[$1] = (($1 in role) ? role[$1] "\t" : "") $2; next }
+  FILENAME == fw {
+    if (!(($1, $2) in sw)) { sw[$1, $2] = 1; wr[$1] = wr[$1] " " $2 }
+    if ($3 != "" && !(($2, $3) in sm)) { sm[$2, $3] = 1; am[$2] = am[$2] "\t" $3 }
+    next
+  }
+  {
+    key = $1; sf = $2; b = sf; sub(/.*\//, "", b)
+    if (!(b in wr)) { print key "\t"; next }
+    n = split(substr(wr[b], 2), A, " "); did = ""
+    for (i = 1; i <= n; i++) {
+      a = A[i]; id = ""
+      if (a in am) {
+        m = split(substr(am[a], 2), M, "\t")
+        for (j = 1; j <= m; j++) {
+          if (!(M[j] in meta)) no(sf " was written by agent " a ", whose meta file " M[j] " is absent; its dispatch id cannot be derived")
+          if (meta[M[j]] == "") no(sf " was written by agent " a ", whose meta file " M[j] " carries no toolUseId; its dispatch id cannot be derived")
+          if (id != "" && id != meta[M[j]]) no(sf " was written by agent " a ", whose meta files name two dispatch ids (" id ", " meta[M[j]] ")")
+          id = meta[M[j]]
+        }
+      } else if (a in probe) id = probe[a]
+      else no(sf " was written by agent " a " in a row that predates transcript_path, and " lp " has no tool_use_id row for that agent; its dispatch id cannot be derived")
+      if (!(id in role)) no(sf " was written by agent " a ", dispatch " id ", which has no row in " ls "; a dispatch the guard never recorded is not an adversary")
+      r = split(role[id], R, "\t")
+      for (j = 1; j <= r; j++)
+        if (R[j] != "adversary") no(sf " was written by agent " a ", dispatch " id ", dispatched as role " (R[j] == "" ? "<none>" : R[j]) "; only an adversary writes an adversary shard")
+      if (did != "") no(sf " was written by more than one adversary dispatch (" did ", " id "); one shard is one adversary")
+      did = id
+    }
+    if (did in used) no(sf " derives dispatch " did ", which also wrote shard " used[did] "; one dispatch delivered two shards")
+    used[did] = key; print key "\t" did
+  }' "$T/metas" "$T/probes" "$T/spawns" "$T/wrows" "$T/shards" > "$T/ids"
+JOIN_RC=$?
+# A refusal is the LAST line written (the awk exits on it), after any rows already joined.
+JOIN_LAST="$(tail -1 "$T/ids")"
+case "$JOIN_LAST" in REFUSE*) refuse "${JOIN_LAST#REFUSE	}" ;; esac
+[ "$JOIN_RC" -eq 0 ] || refuse "the dispatch-id join over $REC_WRITES did not run (awk exit $JOIN_RC)"
+# A REAL-SHAPED self id: `toolu_` and 24 base62 characters. Only such a value is compared.
+RE_REAL_TUID='^toolu_[0-9A-Za-z]{24}$'
+
 # ---- seat-complete (the belt; the join beat's --complete is the braces) --------------------
 # If ANY shard's last non-blank line is the marker, every shard's must be. See the header.
 : > "$T/sc" || refuse "cannot stage the completion check"
@@ -581,8 +716,14 @@ for key in $ORDINALS $CROSS_KEYS; do
   at_key "$at"
   if [ -z "$EARLIEST" ] || [[ "$AT_KEY" < "$EARLIEST_KEY" ]]; then EARLIEST="$at"; EARLIEST_KEY="$AT_KEY"; fi
 
-  tid="$(field "$P" tool_use_id)"
-  case "$tid" in toolu_?*) ;; *) refuse "$sf tool_use_id '${tid:-<none>}' is not a toolu_ id" ;; esac
+  # The DERIVED id (the pre-pass above). The self-report is read only to be compared: a real-shaped
+  # value that differs refuses; any other value is ignored and never written.
+  tid="$(awk -F'\t' -v k="$key" '$1 == k { print $2; exit }' "$T/ids")"
+  [ -n "$tid" ] || refuse "$sf has no row in $REC_WRITES; a shard written with Bash (or by the lead) has no harness record of its writer, so its dispatch id cannot be derived -- the adversary writes its shard with Write or Edit"
+  self="$(field "$P" tool_use_id)"
+  if [[ $self =~ $RE_REAL_TUID ]] && [ "$self" != "$tid" ]; then
+    refuse "$sf self-reports tool_use_id $self, but the harness records derive $tid for the dispatch that wrote it; the shard's id was written by someone else"
+  fi
   case " $ALL_IDS " in *" $tid "*) refuse "$sf repeats tool_use_id $tid of another shard; one dispatch delivered twice" ;; esac
   ALL_IDS="$ALL_IDS $tid"
   ID_LIST="$ID_LIST $key=$tid"
