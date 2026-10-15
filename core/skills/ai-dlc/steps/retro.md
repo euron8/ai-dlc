@@ -1348,7 +1348,37 @@ follow their audit, these must follow the merge.
    `GATE_REMEDIATION_DENIED` events naming the prior sprint's `sprint-review`
    nonce and six clerical edits routed through remediators. Rotation removes the
    affordance. A non-zero exit here is a HARD_BLOCK: do not commit, read the
-   refusal, and investigate before re-running.
+   refusal, and investigate before re-running. When the refusal says verdicts carry a
+   `gate_series_id` no `--sprint` selector can match, the remedy is the escape it
+   prints, one line per id, in the order printed:
+
+       bash scripts/ai-dlc/rotate-gate-adjudication.sh --sprint s<M> --series '<exact-id>'
+
+   Run each line as printed, which is a dry run. Confirm `s<M>`, which is a hint the
+   rotator inferred and never applies itself. Then add `--apply`.
+
+   **A `--series` run may itself exit 1 and print a `--legacy-through` remedy.** Apply that
+   remedy the same way, as a dry run first and then with `--apply`, then re-run the
+   `--series` line before re-running the close.
+
+   **After the last `--series` move, re-run `--sprint s<N> --apply` above; the close is done only when it exits 0.**
+   A run that moved this sprint's verdicts and exits 0 with a WARN naming such verdicts
+   is not a HARD_BLOCK; apply the same printed lines before the commit. The same run
+   exits 1 when it would leave one of them as a FAILing live pass, and that refusal is
+   a HARD_BLOCK like any other.
+
+   **Confirm every hinted sprint against the sprint-close commits before adding `--apply`.**
+   Read `TZ=UTC git log --date=format-local:%Y%m%dT%H%M%SZ --format='%ad %s'` for this repo's sprint-close commits and check that the
+   id's oldest verdict nonce falls after the previous sprint's close and before `s<M>`'s close.
+   A line printed `--sprint s<N>` with `NO HINT`, or a hint those commits do not confirm, is
+   an `AskUserQuestion` to the operator naming the id, its nonces and the candidate sprints;
+   never pick the sprint yourself. A verdict minted before `gate-validation.md` "At gate entry"
+   prescribed the series-id form can carry no `-s<N>-` field, and while one stays live a
+   retro HARD_BLOCKS here whenever this sprint's selection is empty and an unmatchable
+   series' newest member records a FAIL, re-runs included.
+   A sprint's close commit is its `chore(s<N>): rotate ... post-retro-merge` commit from
+   7a-post; where a sprint has none, it is the merge commit of that sprint's retro PR.
+
 6. **Verify no-loss per file:** each archive's byte count MUST equal that file's
    pre-rotation live byte count, and each new live log MUST contain only its
    header. A mismatch is a HARD_BLOCK — do not commit; restore from git and

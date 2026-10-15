@@ -1516,6 +1516,74 @@ if V["gate_nonce"] != stem:
 if not re.match(PATTERNS["gate_nonce"], V["gate_nonce"]):
     block(1, f"gate_nonce {V['gate_nonce']!r} does not match the required "
              f"<gate_type>-<UTC-timestamp> shape.")
+# --- THE SERIES-ID FORM ------------------------------------------------------------------------
+# The lead mints gate_series_id as `<gate_type>-s<N>-<TS>`, or `<gate_type>-<slug>-s<N>-<TS>` for a
+# gate dispatched for exactly one story (gate-validation.md "At gate entry";
+# the same-series rule there decides mint vs reuse at dispatch). Field order is load-bearing:
+# the dispatch guard's nonce regex is unanchored, and with <TS> directly after `-s<N>-` it
+# cannot match the timestamp inside a series id. <TS> is the series-entry time, so it can never
+# be later than this pass's nonce. Six properties, each its own message: the gate_type prefix,
+# the `-s<N>-` field, N without a leading zero, the slug's form, a `\Z`-anchored trailing
+# timestamp, and that timestamp no later than the nonce. The sprint number is
+# NOT checked against anything: this validator has no reliable reader of the snapshot's
+# sprint_id, and the field's job here is grouping, which the stall rung does by equality.
+#
+# HOW THE FALSE-POSITIVE SET REACHED ZERO. Measured against the reference consumer's committed
+# verdict corpus (239 verdicts, nonces 20260715..20261014T142805Z), driven through this
+# validator's --coverage mode with the cutoff opened to 00000000T000000Z: the arm fires on 77 --
+# 60 carry a form the prescription never existed for (`<gate>-<TS>`, bare `story-s311`,
+# `s310-planning`, `architecture.md-s311`, a 4-digit time, a hyphenated slug such as
+# `-deploy-validate-` or `-reset-`) and 1 well-formed id has a series timestamp 2 minutes after
+# its own nonce. The other 16 are the consumer's own `-s<N>-story<M>-<TS>` story-gate ids, which put
+# the slug AFTER the sprint field; the prescribed form puts it before, so they are refused, and
+# being pre-cutoff history they are never judged. The other 94 carry no series id and
+# are refused by the required-field arm above before this one is reached. Scoping by "judge only ids already in the new form"
+# is not an option: it scores the motivating defect -- the `<gate>-<TS>` ids the adjudicator
+# invents -- as a non-instance. So the arm judges by NONCE TIMESTAMP: a pass whose nonce is at
+# or after SERIES_FORM_FROM was minted after the prescription shipped; earlier passes are
+# written history and are not re-judged. SERIES_FORM_FROM is derived as strictly after that
+# corpus's latest nonce and after every nonce literal in core/fixtures/ that predates it, which
+# leaves 0 of 239 in scope. KNOWN LIMIT: a pass minted after the cutoff under OLD prose (a
+# consumer that pulls mid-gate) fails here once; its re-dispatch mints a new-form id under the
+# same-series rule's step 3, so the gate re-dispatches once and does not wedge.
+SERIES_FORM_FROM = "20261015T000000Z"
+_nonce_ts = V["gate_nonce"].rsplit("-", 1)[-1]
+if _nonce_ts >= SERIES_FORM_FROM:
+    _sid = str(V["gate_series_id"])
+    _gt = V["gate_type"]
+    if not _sid.startswith(_gt + "-"):
+        block(1, f"gate_series_id {_sid!r} does not start with this verdict's gate_type "
+                 f"'{_gt}-'. The lead mints it as <gate_type>-s<N>-<TS> at gate entry "
+                 f"(gate-validation.md) and the brief hands it to you; never invent one.")
+    # The one optional field is a single-story gate's slug, and it sits BEFORE -s<N>-, so <TS>
+    # always directly follows -s<N>-: the dispatch guard's unanchored
+    # `(planning|story|implementation|sprint-review|retro)-<ts>` regex then cannot match inside
+    # the id whatever letters the slug ends in (measured: `-storyretro-s317-<TS>` gives it no
+    # match, while the slug-after placement `-s317-storyretro-<TS>` gives it `retro-<ts>`). The
+    # slug begins `story`, so it can never be an `s<digits>` token the rotator's `*-s<N>-*`
+    # selector would read as a sprint. re.S keeps a trailing newline inside the tail, where the
+    # `\Z`-anchored timestamp check refuses it.
+    _m = re.match(r"(?:(.*?)-)?s([0-9]+)-(.*)", _sid[len(_gt) + 1:], re.S)
+    if not _m:
+        block(1, f"gate_series_id {_sid!r} carries no -s<N>- sprint field after "
+                 f"'{_gt}-'. The prescribed form is <gate_type>-s<N>-<TS>, N being the "
+                 f"snapshot's sprint_id; copy the id from the brief, never invent one.")
+    _slug, _sn, _sts = _m.group(1), _m.group(2), _m.group(3)
+    if not re.match(r"[1-9][0-9]*\Z", _sn):
+        block(1, f"gate_series_id {_sid!r} carries sprint field s{_sn}; N is the snapshot's "
+                 f"sprint_id, a positive integer with no leading zero.")
+    if _slug is not None and not re.match(r"story[a-z0-9]+\Z", _slug):
+        block(1, f"gate_series_id {_sid!r} carries story slug {_slug!r}, which is not 'story' "
+                 f"followed by lowercase [a-z0-9]: the lead writes the dispatched story-index "
+                 f"lowercased, with each . or - as x, before the -s<N>- field.")
+    if not re.match(r"[0-9]{8}T[0-9]{6}Z\Z", _sts):
+        block(1, f"gate_series_id {_sid!r} does not end in a <YYYYMMDDTHHMMSSZ> "
+                 f"series-entry timestamp directly after its -s<N>- field.")
+    if _sts > _nonce_ts:
+        block(1, f"gate_series_id {_sid!r} carries series-entry time {_sts}, LATER than this "
+                 f"pass's nonce time {_nonce_ts}. A series is entered at or before every one "
+                 f"of its passes, so this id was minted after the pass it labels.")
+
 if not re.match(PATTERNS["iso8601_utc"], str(V["generated_at"])):
     block(1, f"generated_at {V['generated_at']!r} is not ISO 8601 UTC.")
 

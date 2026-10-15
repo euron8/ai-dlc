@@ -20,6 +20,165 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.788.0] - 2026-10-15
+
+Batch 231 (graph-ledger-full-drain), second release. Closes
+`PC-S318-ROTATE-GATE-ADJUDICATION-SPRINT-FLAG-NEVER-MATCHES-NONCE-STYLE-SERIES-IDS`. Both halves of that
+consumer candidate ship together: the rotator's `--sprint` flag is the reader half (BL-523), and the gate's
+prescription of `gate_series_id` is the writer half (BL-526).
+
+### `rotate-gate-adjudication.sh`: an empty sprint selection beside a FAIL-carrying unmatchable series is refused, and `--series` is the escape (BL-523)
+
+`--sprint s<N>` selects verdicts by the `-s<N>-` token in `gate_series_id`, a field the schema leaves
+unpatterned. On the reference consumer's live directory, 52 of 239 verdicts carry an id with no such token,
+most of them `<gate>-<nonce>`. Such a sprint selected nothing and exited 0 with "nothing to move". Retro
+step 5b then passed while that sprint's verdicts stayed live for the gate-remediation guard.
+
+- **Refusal.** In `--sprint` mode, an empty selection now exits 1 when an unmatchable series (a non-empty
+  id no `--sprint` selector can name) has a NEWEST member recording a FAIL. The refusal names every file
+  of every such series and prints one command per distinct id. Any other unmatchable series gets a WARN
+  with the same commands and exit 0, because the guard reads a stale clean verdict as its allow state, and
+  a series moves whole, so an older FAIL under a PASSing retry can never become the live pass. A sidecar
+  does not exempt a series. Legacy verdicts with no series id are not counted; `--legacy-through` owns
+  them. The check stands alone and does not go through the survivor FAIL refusal.
+- **Re-run.** The refusal is re-evaluated from the live directory on every run and keys on no record of an
+  earlier run. Running only the first printed `--series` line fills this sprint's archive, and the re-run
+  still refuses while a newer FAIL series stays live. A second `--apply` exits 0 once nothing it refuses
+  is live.
+- **Survivor refusal.** On a remedy step (`--series` or `--legacy-through`) it fires only when the move
+  promotes a new live pass, meaning the newest moved nonce is newer than the survivor's. A `--series` walk
+  that moved an older series first was refused before, which forced a second pass. If `--legacy-through`
+  also refused unconditionally, a legacy FAIL below an unmatchable FAIL series would deadlock: each
+  remedy's refusal would print the other. On the close (`--sprint` without `--series`) it fires whenever
+  the run leaves an unmovable FAIL as the live pass, promoted or not, because nothing follows the close to
+  clear it. A moved verdict whose nonce ties the survivor's counts as promotion, because the guard
+  orders a tie by glob and the moved verdict may have been the live pass.
+- **Escape.** `--sprint s<N> --series <exact-id> [--apply]` moves every verdict whose series id equals
+  `<exact-id>`, with its sidecars. It is a dry run without `--apply`. It refuses (exit 2) an id that a
+  `--sprint` selector can already name, and `--series ''` is a usage error (exit 2). The printed commands
+  carry no `--apply`, quote an `'` in the id as `'\''`, and print oldest series first. They are spelled
+  `bash scripts/ai-dlc/...` from an installed layout and `bash core/scripts/...` from the distribution.
+- **Hint.** A command's sprint is a labelled HINT, printed only when exactly one sprint is possible: the
+  id's own `s<digits>` field, the archive whose nonce range holds the verdict, or a window between
+  archives (or above the newest one, up to the sprint being closed) that holds one sprint. Anything else
+  prints a placeholder sprint that `--sprint` rejects, under `NO HINT (s<a>..s<b>)`, `NO HINT (..s<N>)`
+  when no sprint archive exists, or `NO HINT (backfill below s<L>)` when the sprint being closed is not
+  above the newest archive.
+- **WARN.** On a NON-empty selection the tagged verdicts move, the unmatchable ones stay live, and a WARN line
+  names them with the same commands. Exit 0.
+- **Apply.** A destination file that already exists is refused before anything is written. A verdict now
+  moves before its sidecars.
+- The survivor refusal's unselectable-series branch had said "no mechanical remedy". It now prescribes
+  `--series` and still offers a re-stamp.
+- `retro.md` step 5b names the escape as the remedy. It says to confirm each hinted sprint against the
+  sprint-close commits read with `TZ=UTC git log --date=format-local:%Y%m%dT%H%M%SZ --format='%ad %s'`, so
+  the dates compare with nonces, and to put a NO HINT or unconfirmed id to the operator as an
+  `AskUserQuestion`. It states that a retro HARD_BLOCKS on an empty selection beside a series whose
+  newest member FAILs, re-runs included, while a verdict minted before the series-id prescription stays
+  live. It names the close commit: the
+  `chore(s<N>): rotate ... post-retro-merge` commit, or the retro PR's merge commit where a sprint has
+  none. It tells the reader to re-run `--sprint s<N> --apply` after the last `--series` move, and says a
+  run that moved this sprint's verdicts still exits 1 when it would leave a FAILing live pass. It says a
+  `--series` run may itself exit 1 and print a `--legacy-through` remedy, applied the same way before the
+  `--series` line and the close are re-run. `process-rule-pins` pins all seven clauses.
+
+Measured on a `git archive` copy of the consumer's `gate-adjudication` directory and sprint archives at
+graph `2b6f952e7`. `--sprint s318` exits 1. Keyed on the newest member, it names 4 files in 4 series and
+WARNs 48 files under 44 commands; keyed on any member it named 12 files in 8 series. Scored against the
+consumer's sprint-close commits, the 48 printed commands carry 39 correct hints, 0 wrong and 9 NO HINT. The
+rule that hinted the archive above the nonce named s313 for six s312 verdicts, because the s312 archive
+holds one verdict. With every archive removed, the old rule hinted the closing sprint and scored 18 right
+and 30 wrong; it now prints 8 right, 0 wrong and 40 NO HINT. In a simulated s319 close with a new FAILing `<gate>-<nonce>` verdict,
+walking the printed commands in order finishes in one pass with 11 commands, 2 operator questions and 0
+refused applies, and `--sprint s319 --apply` exits 0. The PASS seed takes 10 commands and 1 question.
+The writer half below ships in this same release. It makes a NEW verdict selectable by `--sprint`; the
+refusal and the `--series` escape stay the remedy for every verdict minted before it.
+
+### `gate_series_id` is prescribed by the lead and held to its form per pass (BL-526)
+
+`_gate-procedures.md` named `gate_series_id` 0 times against 6 for `gate_nonce`, and the adjudicator brief
+passed no series id, so the adjudicator invented one. In the reference consumer's committed corpus (239
+verdicts), 94 carry none, 42 carry the nonce-style `<gate>-<TS>` that the rotator's `--sprint` flag cannot
+match, and 34 more carry ad-hoc shapes.
+
+- **Form.** `gate-validation.md` "At gate entry" prescribes exactly `<gate_type>-<slug>-s<N>-<TS>` for a
+  gate dispatched for exactly one story and `<gate_type>-s<N>-<TS>` for every other gate. `<N>` is the
+  `sprint_id` line of the pipeline snapshot, with no leading zero. No step file put a story index on a gate
+  dispatch (the consumer's 432 gate-adjudicator spawn rows carry none), so the lead now writes a
+  `story: <story-index>` line on the adjudicator brief and every shard brief of a gate dispatched for
+  exactly one story, and `_gate-procedures.md` lists it. That line is the slug's only source: trailing
+  punctuation stripped, lowercased with each `.` or `-` written as `x`, prefixed `story`, so the consumer's
+  `4.2a`, `4.2a.`, `B6` and `B-1` become `story4x2a`, `story4x2a`, `storyb6` and `storybx1`. A gate over
+  several stories or none carries no `story:` line and no slug, whatever its gate number. The slug
+  sits before the sprint field so `<TS>` always directly follows `-s<N>-`, where the dispatch guard's
+  unanchored nonce regex cannot match inside the id. `<TS>` is the series-entry time, never later than the
+  nonce of a pass that carries it.
+- **Same-series rule.** The id is decided at dispatch, never from `close`. A Gate Reset id wins. Otherwise
+  the newest stem whose id has exactly that form for this `gate_type`, slug and sprint, with every part
+  agreeing, is reused byte-for-byte when it did not pass. An unmerged part set is not passing. A
+  `.gate-checkpoint/<nonce>.tsv` ledger with a `26` row decides by that row, never by the verdict's
+  per-check rows, which still record a suppressed check as FAIL. A ledger that is absent (it is local to
+  the checkout that ran the gate) or has no `26` row falls back to the verdict's own FAIL rows. Otherwise a
+  new id is minted, so a malformed id is never reused and two stories' gates in flight together never
+  share a series. Walked over the consumer's s316 and s317 implementation gates (38 stems), the rule gives
+  32 series and the arm refuses none of the ids.
+- **Gate Reset** is performed before gate entry. It mints the new id keeping any slug, and records the
+  retired one, or `legacy`. The adjudicator brief and every shard brief carry the id; it is exempt from "nothing carried
+  forward" and is never passed to `gate-checkpoint.sh --nonce`. `gate-adjudicator.md` copies it
+  byte-for-byte and never invents one.
+- **Validator.** `validate-gate-adjudication.sh` gains a per-pass envelope arm requiring the `gate_type`
+  prefix, an optional `story[a-z0-9]+` slug, the `-s<N>-` field with N carrying no leading zero, and a
+  `\Z`-anchored trailing timestamp no later than the nonce. It judges only a pass whose nonce is at or after
+  `SERIES_FORM_FROM` (`20261015T000000Z`), which scores 0 of the consumer's 239 committed verdicts; with the
+  cutoff opened it fires on 77. The arm's header records the narrowing. The schema doc no longer calls the field deliberately unpatterned; it names the brief as the
+  source and the validator as the owner of the form.
+- **Fixtures.** `gate-adjudication` gains fifteen series-form cases (SF0, SF0b, SF1-SF4, SF5, SF5b, SF5c,
+  SF6-SF11): accepted bare and reused ids, three slugs from the consumer's real story indices, and named
+  offenders for each property, including a hyphenated or uppercase slug, a slug after the sprint field, a
+  bare-digit or zero-padded sprint field, and a trailing newline. `gate-adjudication-mutants` gains m21-m31,
+  dealt across all three shards. `process-rule-pins` gains 32 series-id rows.
+- The rotator's `--sprint s<N>` selector (`*-s<N>-*`) moves a slugged id.
+- `rotate-gate-adjudication.sh`'s refusal for a series no `--sprint` can name no longer says the schema
+  leaves the field unpatterned. It cites `gate-validation.md` "At gate entry" and
+  `validate-gate-adjudication.sh`, and gives the re-stamp as `<gate_type>-s<N>-<nonce TS>`.
+
+Fixture `gate-adjudication-rotate` adds these worlds:
+
+- an empty selection beside an older FAIL-carrying unmatchable verdict and a newer PASS-only one, where it
+  executes the printed escape and asserts convergence;
+- the PASS-only near-miss, which WARNs and exits 0;
+- a FAIL-carrying `story-s311` id that is not nonce-tailed;
+- an id carrying an apostrophe, parsed by the shell and executed;
+- the hint window, hinted when it holds one sprint and NO HINT when it holds two;
+- both install layouts' command spelling;
+- the clobber refusal and `--series ''`;
+- tagged verdicts with no match;
+- a `--series` dry run and apply against an id and its prefixed twin;
+- a mixed selection that WARNs;
+- a series with an older FAIL and a newer PASS, which WARNs, and its twin with the newest FAILing, which
+  refuses;
+- a `--sprint` close that promotes nothing but leaves an unmatchable FAIL as the live pass, which refuses;
+- a partial walk of two FAIL series, where the re-run after the first line still refuses and the re-run
+  after the second exits 0;
+- a first line that moves a PASS-only series, after which the re-run still refuses;
+- a legacy FAIL below an unmatchable FAIL series, where the printed remedies converge (1 1 0 0 0);
+- a legacy FAIL and an unmatchable PASS sharing one nonce, where the `--series` step refuses;
+- a `--legacy-through` that would promote an unmatchable FAIL to live, which refuses;
+- archives s309 and s312 closing s313, which prints `NO HINT (s310..s311)`;
+- a backfill below the newest archive, which prints `NO HINT (backfill below s310)`.
+
+The archive-less worlds now assert `--sprint s<N>` and `NO HINT (..s308)`. Arms (j.2) and (j.4) execute
+the printed line after replacing `s<N>` with a sprint the arm supplies as the operator's answer.
+
+Mutants are killed for the restored early exit, the reverted FAIL narrowing (mutation 6, revised with the
+contract), `--series` matching by prefix, keying the FAIL on any member (8), restoring the promotion conjunct
+in `--sprint` mode (9), keying the empty-selection refusal on an empty archive (10), hinting the closing
+sprint between archives (11), dropping the `--series` exemption from the survivor refusal (12),
+refusing unconditionally in `--legacy-through` (13), exempting a re-run whose archive holds no FAIL
+(14), a strict comparison that does not count a tie as promotion (15) and `--legacy-through` never
+refusing on the survivor (16). A predicate counting only `<gate>-<nonce>` ids is killed by the
+`story-s311` world and by the BL-523 receipt. Mutation 1's arm is re-keyed on the s308 set not being
+selected, because under that mutant every `gate_type` reads as an unmatchable id.
 ## [0.787.0] - 2026-10-15
 
 Batch 231 (graph-ledger-full-drain), first release: BL-510's bookkeeping half, held on origin from batch 230. It went

@@ -175,6 +175,38 @@ pin_scan() {
 # A comment line cannot go inside the table below: every line between the markers is a row.
 pins() {
   cat <<'PINS'
+gv-series-form|S|steps/gate-validation.md|## Validation Checklist|### 1.|**The series id is decided at dispatch, never from `close`.**|para|Its form is exactly `<gate_type>-<slug>-s<N>-<TS>` for a gate dispatched for exactly one story and exactly `<gate_type>-s<N>-<TS>` for every other gate, with nothing between the fields
+gv-series-sprintid|S|steps/gate-validation.md|## Validation Checklist|### 1.|**The series id is decided at dispatch, never from `close`.**|para|`<N>` is the `sprint_id` line of `_bmad-output/pipeline-snapshot.md` (not `sprint-status.sh sprint-id`) with no leading zero
+gv-series-reset|S|steps/gate-validation.md|## Validation Checklist|### 1.|Find the newest stem|para|If this dispatch is pass 1 of a **Gate Reset**, the id that reset minted wins.
+gv-series-reuse|S|steps/gate-validation.md|## Validation Checklist|### 1.|Find the newest stem|para|Otherwise, if that candidate did not pass, reuse its id byte-for-byte.
+gv-series-wellformed|S|steps/gate-validation.md|## Validation Checklist|### 1.|**The series id is decided at dispatch, never from `close`.**|para|`<slug>` is `story` followed by lowercase `[a-z0-9]`
+gv-series-placement|S|steps/gate-validation.md|## Validation Checklist|### 1.|**The series id is decided at dispatch, never from `close`.**|para|so the slug goes before the sprint field and never after it.
+gv-series-slug|S|steps/gate-validation.md|## Validation Checklist|### 1.|**The slug names the one story the gate was dispatched for.**|para|Its only source is the `<story-index>` the lead writes on this gate's adjudicator brief as its `story: <story-index>` line
+gv-series-slugnorm|S|steps/gate-validation.md|## Validation Checklist|### 1.|**The slug names the one story the gate was dispatched for.**|para|strip any trailing punctuation from the index, lowercase it and write each `.` or `-` as `x`, then prefix `story`
+gv-series-unscoped|S|steps/gate-validation.md|## Validation Checklist|### 1.|**The slug names the one story the gate was dispatched for.**|para|A gate dispatched over several stories, or over none, carries no `story:` line and no slug, whichever gate number it is.
+gv-series-lookup|S|steps/gate-validation.md|## Validation Checklist|### 1.|Find the newest stem|para|whose `gate_series_id` is in that exact form for this `gate_type`, this gate's slug (or no slug) and the current `sprint_id`.
+gv-series-notpassing|S|steps/gate-validation.md|## Validation Checklist|### 1.|Find the newest stem|para|A pass whose parts never merged into a verdict counts as not passing.
+gv-series-ledger|S|steps/gate-validation.md|## Validation Checklist|### 1.|Find the newest stem|para|When its ledger `.gate-checkpoint/<its gate_nonce>.tsv` exists and has a `26` row, that row decides, never the verdict's per-check rows: `PASS` passes and any other value does not
+gv-series-fallback|S|steps/gate-validation.md|## Validation Checklist|### 1.|Find the newest stem|para|When the ledger is absent or has no `26` row, judge the verdict itself: a verdict with no `FAIL` row passes and one with any `FAIL` row does not, because the ledger is local to the checkout that ran the gate
+gv-series-parts|S|steps/gate-validation.md|## Validation Checklist|### 1.|Find the newest stem|para|A stem carrying another slug, another sprint or any other form is not a candidate, and neither is a part set whose parts disagree on the id or lack it.
+gv-series-noreuse|S|steps/gate-validation.md|## Validation Checklist|### 1.|With no candidate, rule 3 mints|para|so a malformed id is never reused, and two stories' gates in flight together never share a series.
+gv-reset-before|S|steps/gate-validation.md|## Gate Reset|## Not self-authorizable|A reset is performed BEFORE gate entry, before pass 1's `gate_nonce` is minted|contains
+gv-reset-slug|S|steps/gate-validation.md|## Gate Reset|## Not self-authorizable|its slug, as `<gate_type>-<slug>-s<N>-<reset TS>`.|contains
+gv-series-mint|S|steps/gate-validation.md|## Validation Checklist|### 1.|Find the newest stem|para|Otherwise mint the id in that form with `<TS>` this nonce's timestamp.
+gv-series-noclose|S|steps/gate-validation.md|## Validation Checklist|### 1.|Whether `gate-checkpoint.sh close` ran plays no part in the choice.|para|a series still carrying an old-form id is not continued
+gv-series-nononce|S|steps/gate-validation.md|## Validation Checklist|### 1.|Whether `gate-checkpoint.sh close` ran plays no part in the choice.|para|it is never passed to `gate-checkpoint.sh --nonce`
+gv-series-exempt|S|steps/gate-validation.md|## Validation Checklist|### 1.|**Record every verdict the moment it is reached.**|para|The `gate_series_id` is exempt from that: the same-series rule above decides whether it carries forward.
+gv-fail-series|S|steps/gate-validation.md|## Gate Failure|## Gate Reset|`gate_series_id` rides into that dispatch's brief under the same-series rule|contains
+gv-reset-mint|S|steps/gate-validation.md|## Gate Reset|## Not self-authorizable|1. Mint the new id as `<gate_type>-s<N>-<reset TS>`|contains
+gv-reset-legacy|S|steps/gate-validation.md|## Gate Reset|## Not self-authorizable|entry naming the retired `gate_series_id` (or `legacy` when the retired series|contains
+gv-reset-stamp|S|steps/gate-validation.md|## Gate Reset|## Not self-authorizable|3. Run the gate from pass 1 under the new `gate_series_id`, which is stamped on the next dispatch's brief.|prefix
+gp-brief-series|S|steps/_gate-procedures.md|## Gate-adjudication dispatch|## Validation cycle|**Dispatch** ONE `gate-adjudicator`|para|the `gate_series_id` decided by the same-series rule in `gate-validation.md` "At gate entry"
+gp-shard-series|S|steps/_gate-procedures.md|## Gate-adjudication dispatch|## Validation cycle|**Shard the worklist|para|the one `gate_series_id` every shard of this dispatch stamps, since `--merge` refuses parts that disagree on it
+gp-story-series|S|steps/_gate-procedures.md|## Gate-adjudication dispatch|## Validation cycle|**Dispatch** ONE `gate-adjudicator`|para|When the gate is dispatched for exactly one story, the brief also carries a `story: <story-index>` line naming it, the only source of the series id's slug; a gate dispatched over several stories, or over none, carries no `story:` line.
+gp-shardstory-series|S|steps/_gate-procedures.md|## Gate-adjudication dispatch|## Validation cycle|**Shard the worklist|para|the gate's `story: <story-index>` line when it has one
+gp-redispatch-series|S|steps/_gate-procedures.md|## Gate-adjudication dispatch|## Validation cycle|**A re-dispatch is a whole new dispatch.**|para|The `gate_series_id` is exempt: the same-series rule decides it at dispatch, never `close`.
+gadj-brief-series|R|gate-adjudicator.md|## Contract|## The verdict|The lead's dispatch gives you|para|(e) the `gate_series_id`
+gadj-copy-series|R|gate-adjudicator.md|## The verdict|## Ownership|Write exactly the shape below.|para|`gate_series_id` is copied byte-for-byte from your brief, never invented
 gv-body-must|S|steps/gate-validation.md|### 12.|### 13.|**A state claim MUST carry its command.**|para|MUST carry, in the same row
 gv-body-output|S|steps/gate-validation.md|### 12.|### 13.|**A state claim MUST carry its command.**|para|the command that produced it and that command's output
 r13-body-void|S|rule-bodies/rule-13.md||## HANDOFF PROTOCOL|**An operator attribution MUST cite the operator's message.**|para|never entered the locked set
@@ -305,6 +337,13 @@ r11a-effects|S|SKILL.md|### Rule 11 |### Rule 12 |**Every option states its conc
 r11a-unbadged|S|SKILL.md|### Rule 11 |### Rule 12 |**Every option states its concrete effect, INCLUDING the value it leaves|para|none marked `(Recommended)` and none placed first as the pick
 gp-2c-locked-effects|S|steps/_gate-procedures.md|## Divergence resolution dispatch|## Adversarial repair dispatch|a. **One sentence naming the decision.**|para|State each option's effect on that entry instead, including the value it leaves in force
 gp-2c-locked-nobadge|S|steps/_gate-procedures.md|## Divergence resolution dispatch|## Adversarial repair dispatch|a. **One sentence naming the decision.**|para|**mark NO option `(Recommended)`.**
+retro-gar-confirm|S|steps/retro.md|### 7. Merge and Next-Sprint Handoff|6. **Verify no-loss per file:**|**Confirm every hinted sprint against the sprint-close commits before adding `--apply`.**|para|is an `AskUserQuestion` to the operator naming the id
+retro-gar-block|S|steps/retro.md|### 7. Merge and Next-Sprint Handoff|6. **Verify no-loss per file:**|**Confirm every hinted sprint against the sprint-close commits before adding `--apply`.**|para|a retro HARD_BLOCKS here whenever this sprint's selection is empty and an unmatchable series' newest member records a FAIL, re-runs included
+retro-gar-rerun|S|steps/retro.md|### 7. Merge and Next-Sprint Handoff|6. **Verify no-loss per file:**|**After the last `--series` move, re-run `--sprint s<N> --apply` above; the close is done only when it exits 0.**|para|the close is done only when it exits 0
+retro-gar-survivor|S|steps/retro.md|### 7. Merge and Next-Sprint Handoff|6. **Verify no-loss per file:**|**After the last `--series` move, re-run `--sprint s<N> --apply` above; the close is done only when it exits 0.**|para|exits 1 when it would leave one of them as a FAILing live pass, and that refusal is a HARD_BLOCK like any other
+retro-gar-legacy|S|steps/retro.md|### 7. Merge and Next-Sprint Handoff|6. **Verify no-loss per file:**|**A `--series` run may itself exit 1 and print a `--legacy-through` remedy.**|para|then re-run the `--series` line before re-running the close
+retro-gar-close|S|steps/retro.md|### 7. Merge and Next-Sprint Handoff|6. **Verify no-loss per file:**|**Confirm every hinted sprint against the sprint-close commits before adding `--apply`.**|para|where a sprint has none, it is the merge commit of that sprint's retro PR
+retro-gar-utc|S|steps/retro.md|### 7. Merge and Next-Sprint Handoff|6. **Verify no-loss per file:**|**Confirm every hinted sprint against the sprint-close commits before adding `--apply`.**|para|Read `TZ=UTC git log --date=format-local:%Y%m%dT%H%M%SZ --format='%ad %s'` for this repo's sprint-close commits
 PINS
 }
 

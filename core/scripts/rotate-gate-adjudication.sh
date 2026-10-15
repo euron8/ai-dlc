@@ -35,6 +35,91 @@
 # verdict to live pass, which is a deny no later rotation can clear -- so the
 # refusal below computes that outcome and refuses the move. See its header.
 #
+# A SERIES ID NO --sprint CAN NAME IS A REFUSAL ON AN EMPTY SELECTION WHEN ITS
+# SERIES' NEWEST MEMBER FAILS, AND A WARN OTHERWISE. Verdicts minted before
+# gate-validation.md "At gate entry" prescribed the `gate_series_id` form (which
+# validate-gate-adjudication.sh checks) carry whatever their writer stamped, and
+# the reference consumer's writers stamp ids with no sprint token
+# at all -- `<gate>-<nonce>`, `s310-planning`, `story-s311`. Measured on that
+# consumer's live directory: 239 verdicts, 94 with no series id, 93 carrying a
+# `-s<N>-` token, and 52 carrying an id no `*-s<N>-*` selector can match, 42 of
+# them exactly `<gate>-<nonce>`. Every sprint whose writers stamped only such ids
+# reported "nothing to move" and exited 0, so retro's rotation step passed while
+# moving nothing and the closed sprint's verdicts stayed live. So, in --sprint mode:
+#   - EMPTY selection, and any unmatchable series (a NON-EMPTY id that
+#     `survivor_unmovable` scores unmovable) whose NEWEST member records a FAIL:
+#     exit 1, naming every file of every such series and printing one `--series`
+#     command per distinct id. A legacy verdict (no id) never counts here;
+#     --legacy-through owns those.
+#   - EMPTY selection and no such series: "nothing to move", a WARN naming the
+#     unmatchable ones with the same commands, exit 0.
+#   - NON-EMPTY selection: the selected verdicts move as before, the unmatchable
+#     ones stay live, and a WARN line names them with the same commands. Exit 0,
+#     unless the survivor refusal below fires because one of them is left as a
+#     FAILing live pass. The empty-selection HARD_BLOCK does not fire here, because
+#     a sprint whose own verdicts were tagged has been rotated, and refusing that
+#     move over a different series would wedge the close for something it did not cause.
+#
+# A RE-RUN IS RE-EVALUATED, NEVER EXEMPTED, AND AN EARLIER REVISION EXEMPTED IT. It
+# skipped the refusal whenever this sprint's archive already held a verdict, on the
+# grounds that the sprint "has been rotated". One `--series ... --apply` into s<N> --
+# the FIRST printed line, run alone -- also fills that archive, so the next
+# `--sprint s<N> --apply` WARNed and exited 0 while a newer FAIL series stayed live as
+# the guard's live pass. The refusal is now computed from the live directory on every
+# run and keyed on no record of earlier runs, so a re-run is exit 0 exactly when the
+# state it would refuse is gone.
+#
+# THE REFUSAL WAS NARROWED TO FAIL-CARRYING SERIES, AND AN EARLIER REVISION KEYED IT
+# ON THE ID ALONE. The guard reads only the live directory, and a stale verdict that
+# records no FAIL is its ALLOW state: leaving one live denies nothing. A stale FAIL
+# is what denies, so it is what the close must not pass over. Measured on the
+# reference consumer: 8 of the 52 unmatchable verdicts carry a FAIL, and the
+# motivating s318 close still refuses. Of the 12 unmatchable verdicts newer than
+# the s317 archive, 2 carry a FAIL. The fixture's mutation 6 therefore REVERTS the
+# narrowing (every unmatchable series counts) and requires the PASS-only world to
+# flip from exit 0 to exit 1; it used to apply the narrowing as the wrong fix.
+#
+# THE FAIL IS READ OFF EACH SERIES' NEWEST MEMBER, NOT OFF ANY MEMBER. A series
+# moves whole -- `--series` takes every verdict carrying the id -- and its newest
+# member always sorts above its older ones, so an older FAIL can never become the
+# guard's live pass while its PASSing retry stays live beside it. A sidecar does not
+# exempt a series: the guard reads one only for the live nonce. Measured on the
+# reference consumer, keying on any member named 12 files in 8 series at the s318
+# close; keyed on the newest member it names 4 files in 4 series. A series with no
+# member whose stem carries a nonce is invisible to the guard's ordering, and is
+# kept on the conservative side: any FAIL in it counts.
+#
+# The sprint printed in each command is a HINT, labelled as one, and given only
+# when exactly one sprint is possible:
+#   - the id's own `s<digits>` field when it has one;
+#   - the archived sprint whose nonce range holds the verdict's nonce;
+#   - newer than the newest archive s<N>: the candidates are s<N+1> through the
+#     sprint being closed, and a hint is printed only when that is one sprint;
+#   - between archives s<L> and s<H>: the candidates are s<L+1> through s<H-1>,
+#     the same rule, so two ADJACENT archives give no candidate at all.
+# Anything else prints `NO HINT (...)` and a placeholder sprint that --sprint
+# validation rejects, so an unknown sprint cannot be run by accident. That covers
+# no sprint archive at all, printed `NO HINT (..s<N>)` for the sprint being closed:
+# measured on the reference consumer with its archives removed, the old rule
+# hinting the closing sprint named a wrong sprint on 30 of 48 printed commands. It also covers a
+# nonce newer than the newest archive when the sprint being closed is not above it,
+# a backfill, printed `NO HINT (backfill below s<L+1>)` rather than an inverted range.
+# The last two rules exclude the archive below the nonce, which is right only
+# when that archive is complete; measured on the reference consumer, the s312
+# archive holds one verdict while six of s312's sit live after it, and the rule
+# that hinted N+1 there named s313 for all six. Nothing applies a hint; each
+# printed command is a dry run until the operator confirms the sprint and adds
+# --apply. The commands are spelled for the layout this copy runs from:
+# `bash scripts/ai-dlc/...` installed, `bash core/scripts/...` in the distribution.
+#
+# THE ESCAPE IS `--sprint s<N> --series <exact-id>`. It moves every verdict whose
+# `gate_series_id` EQUALS <exact-id> -- string equality, never a prefix, because
+# `<gate>-<nonce>` ids share prefixes with their retries -- into s<N>'s archive,
+# with sidecars, under every refusal --sprint mode honours. It refuses an id a
+# --sprint selector can already name, since moving that one by hand could file it
+# under the wrong sprint. Run the printed commands in the order printed: oldest
+# series first, so the newest verdict stays live until its own series moves.
+#
 # SIDECARS move with their verdict: any regular file in the source directory
 # whose name is `<nonce-stem>.<anything>` -- `<stem>.repair.md`,
 # `<stem>.repair2.md`, `<stem>.repair2-addendum.md`, `<stem>.authorization.md`
@@ -49,8 +134,12 @@
 #
 # Usage:
 #   rotate-gate-adjudication.sh --sprint s<N> [--apply] [--state-dir <dir>]
+#   rotate-gate-adjudication.sh --sprint s<N> --series <exact-id> [--apply] [--state-dir <dir>]
 #   rotate-gate-adjudication.sh --legacy-through <nonce> [--apply] [--state-dir <dir>]
 #     --apply           write; default is a report that changes nothing
+#     --series          move the verdicts whose gate_series_id is EXACTLY <exact-id>
+#                       into s<N>, instead of selecting by the `-s<N>-` token. The
+#                       remedy the unmatchable-series refusal prints.
 #     --state-dir       default: ${AI_DLC_STATE_DIR:-_bmad-output}, resolved under
 #                       the repo root found by walking UP for a `VERSION` file or a
 #                       `.git` directory from the CURRENT WORKING DIRECTORY. Given
@@ -69,7 +158,7 @@
 #                  (--legacy-through)
 #
 # Exit: 0 = reported or rotated (nothing to rotate is a normal, affirmative
-#           result, and so is a second --apply for an already-rotated sprint)
+#           result, and so is a second --apply once nothing it refuses is live)
 #       1 = REFUSED or HARD_BLOCK: an integrity check failed and NOTHING more
 #           was written than had already landed before the failure
 #       2 = usage / cannot resolve a repo root
@@ -77,9 +166,26 @@ set -uo pipefail
 
 SELF_NAME="rotate-gate-adjudication"
 
+# The command a remedy line prints, spelled for the layout THIS copy runs from, so an
+# operator can paste it from the repo root: install.sh puts core/scripts/<x> at
+# scripts/ai-dlc/<x>. Derived from this script's own directory, never hardcoded.
+SELF_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd)" || SELF_DIR=""
+case "$SELF_DIR" in
+  */scripts/ai-dlc) SELF_CMD="bash scripts/ai-dlc/${SELF_NAME}.sh" ;;
+  */core/scripts)   SELF_CMD="bash core/scripts/${SELF_NAME}.sh" ;;
+  *)                SELF_CMD="bash ${SELF_DIR:-.}/${SELF_NAME}.sh" ;;
+esac
+
+# shq <string> -> the string with every ' spelled '\'' so it can sit inside a
+# single-quoted shell word and be pasted as printed.
+shq() { printf '%s' "$1" | sed "s/'/'\\\\''/g"; }
+
 usage() {
   echo "usage: rotate-gate-adjudication.sh --sprint s<N> [--apply] [--state-dir <dir>]" >&2
+  echo "       rotate-gate-adjudication.sh --sprint s<N> --series <exact-id> [--apply] [--state-dir <dir>]" >&2
   echo "       rotate-gate-adjudication.sh --legacy-through <nonce> [--apply] [--state-dir <dir>]" >&2
+  echo "  --series moves the verdicts whose gate_series_id is exactly <exact-id> into s<N>;" >&2
+  echo "  it is what the unmatchable-series refusal prescribes." >&2
   echo "  --legacy-through moves PRE-SERIES verdicts at or before <nonce> (inclusive)," >&2
   echo "  which no --sprint invocation can move. It is what the stranding refusal prescribes." >&2
   exit 2
@@ -89,10 +195,14 @@ SPRINT=""
 APPLY=0
 STATE_DIR_ARG=""
 LEGACY_THROUGH=""
+SERIES=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --sprint)     SPRINT="${2:?--sprint needs a value}"; shift 2 ;;
+    --series)     [ $# -ge 2 ] && [ -n "$2" ] || {
+                    echo "${SELF_NAME}: --series needs a non-empty, exact gate_series_id" >&2; usage; }
+                  SERIES="$2"; shift 2 ;;
     --apply)      APPLY=1; shift ;;
     --state-dir)  STATE_DIR_ARG="${2:?--state-dir needs a path}"; shift 2 ;;
     --legacy-through) LEGACY_THROUGH="${2:?--legacy-through needs a nonce}"; shift 2 ;;
@@ -106,6 +216,8 @@ done
 if [ -n "$LEGACY_THROUGH" ]; then
   [ -n "$SPRINT" ] && {
     echo "${SELF_NAME}: --legacy-through and --sprint are separate modes; pass one" >&2; exit 2; }
+  [ -n "$SERIES" ] && {
+    echo "${SELF_NAME}: --series needs --sprint, not --legacy-through" >&2; exit 2; }
   case "$LEGACY_THROUGH" in
     [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z) ;;
     *) echo "${SELF_NAME}: --legacy-through must be a nonce like 20260811T000000Z (got '${LEGACY_THROUGH}')" >&2
@@ -178,6 +290,7 @@ trap 'rm -rf "$TMPD"' EXIT
 # ---------------------------------------------------------------------------
 : > "$TMPD/move_stems"
 : > "$TMPD/unparseable"
+: > "$TMPD/series_rows"
 
 for f in "$SRC"/*.verdict.json; do
   [ -e "$f" ] || continue
@@ -217,6 +330,14 @@ for f in "$SRC"/*.verdict.json; do
     continue
   fi
   [ -n "$series" ] || continue   # legacy: no gate_series_id -- never moves
+  # Every series-bearing verdict is recorded for the unmatchable-series check,
+  # which runs once the predicate it calls is defined below.
+  printf '%s\t%s\n' "$series" "$f" >> "$TMPD/series_rows"
+  if [ -n "$SERIES" ]; then
+    # --series: exact string equality, never a prefix or a glob.
+    [ "$series" = "$SERIES" ] && basename "$f" .verdict.json >> "$TMPD/move_stems"
+    continue
+  fi
   case "$series" in
     *"-${SPRINT}-"*) basename "$f" .verdict.json >> "$TMPD/move_stems" ;;
     *) ;;                         # a different sprint's series id -- never moves
@@ -253,14 +374,16 @@ while IFS= read -r stem; do
 done < "$TMPD/move_stems"
 
 sort -u "$TMPD/move_files" -o "$TMPD/move_files"
+# VERDICTS MOVE BEFORE THEIR SIDECARS. `sort` puts `<stem>.repair.md` ahead of
+# `<stem>.verdict.json`, so an abort between the two would leave a live verdict
+# whose repair record had already left, and the guard would read that FAIL as owed
+# again. Moving the verdict first means an abort can only strand a sidecar.
+grep '\.verdict\.json$' "$TMPD/move_files" > "$TMPD/move_files_ordered"
+grep -v '\.verdict\.json$' "$TMPD/move_files" >> "$TMPD/move_files_ordered"
+cp "$TMPD/move_files_ordered" "$TMPD/move_files"
 N_VERDICTS="$(grep -c . "$TMPD/move_stems" 2>/dev/null)" || N_VERDICTS=0
 N_FILES="$(grep -c . "$TMPD/move_files" 2>/dev/null)" || N_FILES=0
 N_SIDECARS=$(( N_FILES - N_VERDICTS ))
-
-if [ "$N_FILES" -eq 0 ]; then
-  echo "${SELF_NAME}: no verdict under '${SRC}' names series '${SPRINT}' -- nothing to move."
-  exit 0
-fi
 
 # ---------------------------------------------------------------------------
 # REFUSAL: this rotation would leave a FAILing LEGACY verdict as the guard's
@@ -316,10 +439,11 @@ conforming_nonce() {
 # THE PREDICATE IS "NO MODE CAN MOVE IT", NOT "IT IS LEGACY", AND THE NARROWER
 # SPELLING LEFT A SECOND DOOR OPEN. A verdict is unmovable in TWO ways: it
 # carries no `gate_series_id` (legacy, moved only by --legacy-through), or it
-# carries one that `*-s<N>-*` cannot select. The schema calls the field
-# "deliberately unpatterned: required and non-empty, nothing more", so the glob
-# is an UNSTATED pattern imposed on a field nothing constrains -- any writer
-# stamping a legal-but-differently-ordered id produces a member. Measured on the
+# carries one that `*-s<N>-*` cannot select. gate-validation.md "At gate entry"
+# prescribes the field's form and validate-gate-adjudication.sh checks it, but only
+# on a pass whose nonce is at or after its cutoff, so a verdict minted earlier can
+# carry any non-empty id -- any writer that stamped a differently-ordered id produced
+# a member, and this glob is the only pattern this rotator can apply. Measured on the
 # reference consumer: `s310-planning`, sprint-first, written by a live session
 # and matching no `*-s<N>-*`. Such a verdict is worse than a legacy one, because
 # --legacy-through skips it too (`[ -n "$series" ] && continue`): no refusal AND
@@ -372,6 +496,216 @@ survivor_unmovable() { # <series> -> 0 when no mode can ever move this verdict
   return 0
 }
 
+# ---------------------------------------------------------------------------
+# UNMATCHABLE SERIES IDS: a refusal on an empty --sprint selection, a WARN on a
+# non-empty one, and the `--series` escape that clears both. See the header.
+#
+# STANDALONE BY DESIGN, NOT ROUTED THROUGH THE SURVIVOR BLOCK BELOW. That block
+# asks whether the NEWEST verdict left behind FAILs; this one asks, per unmatchable
+# series, whether THAT series' newest member FAILs, wherever the series sorts. Keyed
+# on the survivor it would pass the reference consumer's s318 close, whose newest
+# unmatchable verdict PASSes while older series whose newest member FAILs stay live.
+# ---------------------------------------------------------------------------
+if [ -n "$SERIES" ] && ! survivor_unmovable "$SERIES"; then
+  echo "${SELF_NAME}: --series '${SERIES}' carries a -s<N>- token, so --sprint already selects it;" >&2
+  echo "  run --sprint with that sprint instead. --series is only for ids no --sprint can name." >&2
+  exit 2
+fi
+
+# The verdicts whose non-empty series id no --sprint selector can name, as
+# "<series>\t<file>" rows. A legacy verdict has no row here: --legacy-through owns it.
+# fail_series lists every such id whose NEWEST member records a FAIL (see the header);
+# the whole series is then FAIL-carrying and every one of its files is named.
+# member_rows holds "<series>\t<nonce|->\t<fails 0|1>" per member; a member whose stem
+# carries no nonce scores `-`, which no nonce outranks, and a series whose members ALL
+# score `-` is FAIL-carrying when any member FAILs.
+: > "$TMPD/unmatchable"
+: > "$TMPD/fail_series"
+: > "$TMPD/member_rows"
+while IFS="$(printf '\t')" read -r _um_series _um_file; do
+  [ -n "$_um_series" ] || continue
+  survivor_unmovable "$_um_series" || continue
+  printf '%s\t%s\n' "$_um_series" "$_um_file" >> "$TMPD/unmatchable"
+  _um_fc="$(jq -r '[.verdicts[]? | select(.verdict=="FAIL")] | length' "$_um_file" 2>/dev/null)" || _um_fc=0
+  _um_ts="$(conforming_nonce "$(basename "$_um_file" .verdict.json)")" || _um_ts="-"
+  _um_f=0; [ "${_um_fc:-0}" != 0 ] && _um_f=1
+  printf '%s\t%s\t%s\n' "$_um_series" "$_um_ts" "$_um_f" >> "$TMPD/member_rows"
+done < "$TMPD/series_rows"
+# Per series: the FAIL bit of the member with the greatest nonce; with no nonce-bearing
+# member, the OR of every member's bit. Ties on one nonce OR together.
+awk -F'\t' '
+  { s = $1
+    if ($2 == "-") { anyf[s] = anyf[s] || $3; seen[s] = 1; next }
+    seen[s] = 1
+    if (!(s in top) || $2 > top[s]) { top[s] = $2; topf[s] = $3 }
+    else if ($2 == top[s]) { topf[s] = topf[s] || $3 } }
+  END { for (s in seen) { f = (s in top) ? topf[s] : anyf[s]; if (f) print s } }' \
+  "$TMPD/member_rows" > "$TMPD/fail_series"
+# Partition the rows by series: FAIL-carrying series refuse an empty selection,
+# PASS-only series only WARN. A per-row grep, never an awk NR==FNR join, which
+# misreads its second file as the first when fail_series is empty.
+: > "$TMPD/unmatchable_fail"
+: > "$TMPD/unmatchable_pass"
+while IFS="$(printf '\t')" read -r _pt_series _pt_file; do
+  if grep -qxF -- "$_pt_series" "$TMPD/fail_series"; then
+    printf '%s\t%s\n' "$_pt_series" "$_pt_file" >> "$TMPD/unmatchable_fail"
+  else
+    printf '%s\t%s\n' "$_pt_series" "$_pt_file" >> "$TMPD/unmatchable_pass"
+  fi
+done < "$TMPD/unmatchable"
+N_UM_FAIL="$(grep -c . "$TMPD/unmatchable_fail" 2>/dev/null)" || N_UM_FAIL=0
+N_UM_PASS="$(grep -c . "$TMPD/unmatchable_pass" 2>/dev/null)" || N_UM_PASS=0
+
+# Each archived sprint's nonce range, "<N>\t<min>\t<max>", sorted by N. Read only
+# to print a HINT; nothing below applies it.
+archive_ranges() {
+  for _ar_dir in "$STATE_DIR/implementation-artifacts"/s*/gate-adjudication; do
+    [ -d "$_ar_dir" ] || continue
+    _ar_s="$(basename "$(dirname "$_ar_dir")")"
+    _ar_n="${_ar_s#s}"
+    case "$_ar_n" in ''|*[!0-9]*) continue ;; esac
+    _ar_min=""; _ar_max=""
+    for _ar_f in "$_ar_dir"/*.verdict.json; do
+      [ -e "$_ar_f" ] || continue
+      _ar_ts="$(conforming_nonce "$(basename "$_ar_f" .verdict.json)")" || continue
+      { [ -z "$_ar_min" ] || [ "$_ar_ts" \< "$_ar_min" ]; } && _ar_min="$_ar_ts"
+      { [ -z "$_ar_max" ] || [ "$_ar_ts" \> "$_ar_max" ]; } && _ar_max="$_ar_ts"
+    done
+    [ -n "$_ar_min" ] && printf '%s\t%s\t%s\n' "$_ar_n" "$_ar_min" "$_ar_max"
+  done | sort -n
+}
+
+# hint_sprint <series> <oldest-member-nonce> -> "<sprint>\t<why>". A hint is given
+# only when exactly ONE sprint is possible; otherwise the sprint is "s<N>" (the
+# literal placeholder, which --sprint validation rejects, so an unknown sprint
+# cannot be run by accident) and <why> opens with "NO HINT". See the header.
+hint_sprint() {
+  _h_rest="$1"
+  while [ -n "$_h_rest" ]; do
+    case "$_h_rest" in
+      *-*) _h_field="${_h_rest%%-*}"; _h_rest="${_h_rest#*-}" ;;
+      *)   _h_field="$_h_rest"; _h_rest="" ;;
+    esac
+    case "$_h_field" in
+      s[0-9]*) case "${_h_field#s}" in *[!0-9]*) ;; *)
+        printf '%s\t%s\n' "$_h_field" "the id itself carries the token '${_h_field}'"; return 0 ;; esac ;;
+    esac
+  done
+  _h_ts="$2"
+  if [ ! -s "$TMPD/ranges" ]; then
+    printf 's<N>\t%s\n' "NO HINT (..${SPRINT}): no sprint archive exists yet, so any sprint up to ${SPRINT} is possible -- pick the sprint"; return 0
+  fi
+  [ -n "$_h_ts" ] || { printf 's<N>\t%s\n' "NO HINT (its stem carries no nonce) -- pick the sprint"; return 0; }
+  # _h_n/_h_max: the highest archive whose range opens at or before the nonce.
+  # _h_hi: the next archived sprint above it, if any.
+  _h_n=""; _h_max=""; _h_hi=""; _h_first=""
+  while IFS="$(printf '\t')" read -r _r_n _r_min _r_max; do
+    [ -n "$_h_first" ] || _h_first="$_r_n"
+    if [ ! "$_r_min" \> "$_h_ts" ]; then
+      _h_n="$_r_n"; _h_max="$_r_max"; _h_hi=""
+    elif [ -z "$_h_hi" ]; then
+      _h_hi="$_r_n"
+    fi
+  done < "$TMPD/ranges"
+  if [ -z "$_h_n" ]; then
+    printf 's<N>\t%s\n' "NO HINT (..s$(( _h_first - 1 ))): nonce ${_h_ts} predates every sprint archive -- pick the sprint"; return 0
+  fi
+  if [ ! "$_h_ts" \> "$_h_max" ]; then
+    printf 's%s\t%s\n' "$_h_n" "nonce ${_h_ts} falls inside s${_h_n}'s archived range"; return 0
+  fi
+  _h_lo=$(( _h_n + 1 ))
+  if [ -n "$_h_hi" ]; then
+    _h_top=$(( _h_hi - 1 ))
+    _h_where="between s${_h_n}'s archive and s${_h_hi}'s"
+  else
+    _h_top="${SPRINT#s}"
+    case "$_h_top" in ''|*[!0-9]*) _h_top=-1 ;; esac
+    _h_where="newer than s${_h_n}'s archive, the newest, closing ${SPRINT}"
+  fi
+  if [ "$_h_top" -eq "$_h_lo" ]; then
+    printf 's%s\t%s\n' "$_h_lo" "nonce ${_h_ts} is ${_h_where}, and s${_h_lo} is the only sprint in that window"; return 0
+  fi
+  if [ "$_h_top" -gt "$_h_lo" ]; then
+    printf 's<N>\t%s\n' "NO HINT (s${_h_lo}..s${_h_top}): nonce ${_h_ts} is ${_h_where} -- pick the sprint"; return 0
+  fi
+  # A backfill: the sprint being closed is not above the newest archive, so the
+  # window above it is empty and would print as an inverted range.
+  if [ -z "$_h_hi" ]; then
+    printf 's<N>\t%s\n' "NO HINT (backfill below s${_h_lo}): nonce ${_h_ts} is ${_h_where}, which is not above it -- pick the sprint"; return 0
+  fi
+  # An empty window: the archive below the nonce is itself incomplete, so it and
+  # the one above are the candidates.
+  printf 's<N>\t%s\n' "NO HINT (s${_h_n}..s${_h_hi}): nonce ${_h_ts} is ${_h_where}, and no sprint lies strictly between -- pick the sprint"
+}
+
+# print_series_commands <rows-file>: one dry-run `--series` command per distinct id
+# in "<series>\t<file>" rows, OLDEST SERIES FIRST (ordered by each id's newest
+# member), so the newest verdict stays live until its own series is the one moving.
+print_series_commands() {
+  archive_ranges > "$TMPD/ranges"
+  : > "$TMPD/series_ts"
+  while IFS="$(printf '\t')" read -r _p_series _p_file; do
+    _p_ts="$(conforming_nonce "$(basename "$_p_file" .verdict.json)")" || _p_ts=""
+    printf '%s\t%s\n' "$_p_series" "$_p_ts" >> "$TMPD/series_ts"
+  done < "$1"
+  awk -F'\t' '{ if (!($1 in mn) || $2 < mn[$1]) mn[$1]=$2; if (!($1 in mx) || $2 > mx[$1]) mx[$1]=$2 }
+              END { for (k in mx) printf "%s\t%s\t%s\n", mx[k], mn[k], k }' "$TMPD/series_ts" \
+    > "$TMPD/series_order_raw"
+  sort "$TMPD/series_order_raw" > "$TMPD/series_order"
+  while IFS="$(printf '\t')" read -r _p_max _p_min _p_series; do
+    _p_hint="$(hint_sprint "$_p_series" "$_p_min")"
+    _p_sprint="${_p_hint%%	*}"; _p_why="${_p_hint#*	}"
+    echo "    ${SELF_CMD} --sprint ${_p_sprint} --series '$(shq "$_p_series")'" >&2
+    case "$_p_why" in
+      "NO HINT"*) echo "        ${_p_why}" >&2 ;;
+      *)          echo "        sprint is a HINT, not a finding: ${_p_why}" >&2 ;;
+    esac
+  done < "$TMPD/series_order"
+}
+
+warn_pass_only() { # <rows-file> <count>
+  echo "${SELF_NAME}: WARN -- $2 verdict(s) carry a gate_series_id no --sprint selector can match and stay live;" >&2
+  echo "  no series' newest member records a FAIL, so none of them can become a denying live pass:" >&2
+  cut -f2 "$1" | sed 's/^/    /' >&2
+  echo "  This run still proceeds. To move them, run each command below (a dry run), confirm" >&2
+  echo "  its sprint, then add --apply, in the order printed:" >&2
+  print_series_commands "$1"
+}
+
+if [ "$N_FILES" -eq 0 ]; then
+  # Keyed on the live directory alone, never on this sprint's archive: see the header's
+  # re-run paragraph.
+  if [ -z "$LEGACY_THROUGH" ] && [ -z "$SERIES" ] && [ "$N_UM_FAIL" -gt 0 ]; then
+    echo "${SELF_NAME}: REFUSED -- no verdict names series '${SPRINT}', and ${N_UM_FAIL} verdict(s) carry a" >&2
+    echo "  gate_series_id no --sprint selector can match, in a series whose newest member" >&2
+    echo "  records a FAIL, so this sprint's verdicts may be among them:" >&2
+    cut -f2 "$TMPD/unmatchable_fail" | sed 's/^/    /' >&2
+    echo "  An empty-selection exit 0 here would let the retro pass while every one of them" >&2
+    echo "  stayed live for the gate-remediation guard. Nothing written." >&2
+    echo "" >&2
+    echo "  THE REMEDY IS ONE --series MOVE PER ID. Run each command below as printed (a dry" >&2
+    echo "  run), confirm its sprint, then add --apply. Run them in the order printed. A line" >&2
+    echo "  marked NO HINT names no sprint; ask the operator which sprint it belongs to:" >&2
+    print_series_commands "$TMPD/unmatchable_fail"
+    echo "  Then re-run this command. Report the writer that stamped these ids too: it will" >&2
+    echo "  keep producing verdicts no --sprint can move." >&2
+    if [ "$N_UM_PASS" -gt 0 ]; then
+      echo "" >&2
+      warn_pass_only "$TMPD/unmatchable_pass" "$N_UM_PASS"
+    fi
+    exit 1
+  fi
+  if [ -z "$LEGACY_THROUGH" ] && [ -z "$SERIES" ] && [ "$N_UM_PASS" -gt 0 ]; then
+    warn_pass_only "$TMPD/unmatchable_pass" "$N_UM_PASS"
+  fi
+  if [ -n "$SERIES" ]; then
+    echo "${SELF_NAME}: no verdict under '${SRC}' carries series id '${SERIES}' -- nothing to move."
+  else
+    echo "${SELF_NAME}: no verdict under '${SRC}' names series '${SPRINT}' -- nothing to move."
+  fi
+  exit 0
+fi
+
 SURVIVOR_STEM=""; SURVIVOR_TS=""; SURVIVOR_FAILS=""; SURVIVOR_UNMOVABLE=0; SURVIVOR_WHY=""
 for f in "$SRC"/*.verdict.json; do
   [ -e "$f" ] || continue
@@ -397,12 +731,41 @@ for f in "$SRC"/*.verdict.json; do
   fi
 done
 
-if [ "$SURVIVOR_UNMOVABLE" -eq 1 ] && [ -n "$SURVIVOR_FAILS" ]; then
+# A REMEDY STEP -- --series OR --legacy-through -- REFUSES ONLY WHEN THE MOVE PROMOTES A
+# NEW LIVE PASS: the newest moved nonce is newer than the survivor's. A remedy step is one
+# step of a walk, and the survivor it leaves is something a LATER step moves; refusing
+# that step wedges the walk. Measured on the reference consumer's s319 FAIL walk: refused
+# applies, a second pass. And measured on a legacy FAIL below an unmatchable FAIL series:
+# with --legacy-through refusing unconditionally, the --series refusal printed
+# --legacy-through as its remedy and --legacy-through refused printing --series, so each
+# refused the other and no printed remedy converged.
+#
+# THE CLOSE -- --sprint WITHOUT --series -- REFUSES WHENEVER IT LEAVES AN UNMOVABLE FAIL AS
+# THE LIVE PASS, PROMOTED OR NOT, AND AN EARLIER REVISION APPLIED THE PROMOTION CONJUNCT
+# HERE TOO. Nothing follows the close to clear the survivor: an older selected verdict
+# below a newer unmatchable FAIL promoted nothing, so the close exited 0 and the FAIL
+# stayed live, denying the next sprint's first edit. Base refused that world.
+SURVIVOR_ALWAYS=0
+[ -z "$SERIES" ] && [ -z "$LEGACY_THROUGH" ] && SURVIVOR_ALWAYS=1
+MOVED_MAX_TS=""
+while IFS= read -r _mv_stem; do
+  _mv_ts="$(conforming_nonce "$_mv_stem")" || continue
+  { [ -z "$MOVED_MAX_TS" ] || [ "$_mv_ts" \> "$MOVED_MAX_TS" ]; } && MOVED_MAX_TS="$_mv_ts"
+done < "$TMPD/move_stems"
+# A TIE COUNTS AS PROMOTION. Two verdicts sharing a nonce are ordered by the guard's
+# directory glob, not by nonce, so a moved verdict that ties the survivor may have been
+# the live pass, and moving it hands that role to the survivor. Measured: an unmatchable
+# PASS tying a legacy FAIL was live, a strict comparison let --series move it as
+# "promoting nothing", and the legacy FAIL became the live pass under a close that exited 0.
+PROMOTES=0
+[ -n "$MOVED_MAX_TS" ] && [ ! "$MOVED_MAX_TS" \< "${SURVIVOR_TS:-}" ] && PROMOTES=1
+
+if [ "$SURVIVOR_UNMOVABLE" -eq 1 ] && [ -n "$SURVIVOR_FAILS" ] && { [ "$SURVIVOR_ALWAYS" -eq 1 ] || [ "$PROMOTES" -eq 1 ]; }; then
   echo "${SELF_NAME}: REFUSED -- this rotation would strand a FAILing verdict no mode can move." >&2
   echo "  Newest verdict left in '${SRC}' after this move:" >&2
   echo "    ${SURVIVOR_STEM} -- ${SURVIVOR_WHY}; FAILed check(s): ${SURVIVOR_FAILS}" >&2
   echo "  The gate-remediation guard picks its live pass by trailing nonce with no notion of" >&2
-  echo "  sprint, so that verdict would become the live pass and deny artifact edits, and the" >&2
+  echo "  sprint, so that verdict is or would become the live pass and deny artifact edits, and the" >&2
   echo "  deny would not clear on its own. Nothing written." >&2
   echo "" >&2
   # THE REMEDY DIFFERS BY CASE AND MUST NOT BE PRINTED UNCONDITIONALLY. A
@@ -411,15 +774,19 @@ if [ "$SURVIVOR_UNMOVABLE" -eq 1 ] && [ -n "$SURVIVOR_FAILS" ]; then
   # already corrected for once.
   if [ -z "$(jq -r '.gate_series_id // empty' "${SRC}/${SURVIVOR_STEM}.verdict.json" 2>/dev/null)" ]; then
     echo "  THE REMEDY IS TO ROTATE THE PRE-SERIES VERDICTS OUT, then re-run this command:" >&2
-    echo "    ${SELF_NAME}.sh --legacy-through ${SURVIVOR_TS} --apply" >&2
+    echo "    ${SELF_CMD} --legacy-through ${SURVIVOR_TS} --apply" >&2
   else
-    echo "  THIS ONE HAS NO MECHANICAL REMEDY, and that is the finding rather than an" >&2
-    echo "  oversight. Its gate_series_id is well-formed by the schema, which leaves the" >&2
-    echo "  field deliberately unpatterned, but no --sprint selector can name it and" >&2
-    echo "  --legacy-through skips it because it HAS a series id. Re-stamp that verdict's" >&2
-    echo "  gate_series_id in the '<gate_type>-s<N>-<nonce>' form its siblings use, then" >&2
-    echo "  re-run this command -- and report the writer that stamped it, because it will" >&2
-    echo "  keep producing verdicts no rotation can move." >&2
+    # --series is the mechanical remedy for this case. Before it existed this
+    # branch said there was none, which was true then and is false now.
+    _sv_series="$(jq -r '.gate_series_id // empty' "${SRC}/${SURVIVOR_STEM}.verdict.json" 2>/dev/null)"
+    echo "  Its gate_series_id is not in the form gate-validation.md \"At gate entry\"" >&2
+    echo "  prescribes and validate-gate-adjudication.sh checks, so no --sprint selector can name it and" >&2
+    echo "  --legacy-through skips it because it HAS a series id. THE REMEDY IS TO MOVE" >&2
+    echo "  THAT SERIES BY ITS EXACT ID into the sprint it belongs to, then re-run this command:" >&2
+    echo "    ${SELF_CMD} --sprint s<N> --series '$(shq "$_sv_series")' --apply" >&2
+    echo "  Or Re-stamp that verdict's gate_series_id as '<gate_type>-s<N>-<nonce TS>', the unslugged" >&2
+    echo "  form a re-stamped single series takes. Either way, report the writer that stamped it, because it will" >&2
+    echo "  keep producing verdicts no --sprint can move." >&2
   fi
   echo "" >&2
   echo "  A SIDECAR DOES NOT LIFT THIS. The guard's repair and authorization records are" >&2
@@ -428,6 +795,22 @@ if [ "$SURVIVOR_UNMOVABLE" -eq 1 ] && [ -n "$SURVIVOR_FAILS" ]; then
   echo "  Deferring until the next sprint's first verdict lands also only moves the block:" >&2
   echo "  it clears this close and refuses the following one, one sprint behind forever." >&2
   exit 1
+fi
+
+# WARN, never refuse, on a non-empty selection: this sprint's tagged verdicts
+# move, and the unmatchable ones (minus any this --series run moves) stay live.
+: > "$TMPD/unmatchable_left"
+while IFS="$(printf '\t')" read -r _w_series _w_file; do
+  grep -qxF "$(basename "$_w_file" .verdict.json)" "$TMPD/move_stems" 2>/dev/null && continue
+  printf '%s\t%s\n' "$_w_series" "$_w_file" >> "$TMPD/unmatchable_left"
+done < "$TMPD/unmatchable"
+N_LEFT="$(grep -c . "$TMPD/unmatchable_left" 2>/dev/null)" || N_LEFT=0
+if [ -z "$LEGACY_THROUGH" ] && [ "$N_LEFT" -gt 0 ]; then
+  echo "${SELF_NAME}: WARN -- ${N_LEFT} verdict(s) carry a gate_series_id no --sprint selector can match and stay live:" >&2
+  cut -f2 "$TMPD/unmatchable_left" | sed 's/^/    /' >&2
+  echo "  This run still proceeds. To move them, run each command below (a dry run), confirm" >&2
+  echo "  its sprint, then add --apply, in the order printed:" >&2
+  print_series_commands "$TMPD/unmatchable_left"
 fi
 
 # ---------------------------------------------------------------------------
@@ -456,6 +839,23 @@ if [ "$IN_GIT" -eq 1 ] && [ -n "$GITROOT" ] && git -C "$GITROOT" check-ignore -q
   echo "  Rotating a sprint's gate-adjudication records into a path git ignores would move" >&2
   echo "  them somewhere the retro and the series validator are not expected to look. Nothing" >&2
   echo "  written. Un-ignore the path, or pass --state-dir with one that is tracked." >&2
+  exit 1
+fi
+
+# REFUSAL: a destination file already exists. `mv` would replace it silently,
+# and the size check after the move compares source with destination, so it cannot
+# see what was lost. Checked over the whole move set before the first write.
+: > "$TMPD/clobber"
+while IFS= read -r name; do
+  [ -n "$name" ] || continue
+  if [ -e "$DEST/$name" ]; then printf '%s\n' "$DEST/$name" >> "$TMPD/clobber"; fi
+done < "$TMPD/move_files"
+N_CLOBBER="$(grep -c . "$TMPD/clobber" 2>/dev/null)" || N_CLOBBER=0
+if [ "$N_CLOBBER" -gt 0 ]; then
+  echo "${SELF_NAME}: REFUSED -- ${N_CLOBBER} destination file(s) already exist and would be overwritten:" >&2
+  sed 's/^/    /' "$TMPD/clobber" >&2
+  echo "  Compare each with its live namesake under '${SRC}' and remove whichever is not" >&2
+  echo "  the record to keep, then re-run. Nothing written." >&2
   exit 1
 fi
 

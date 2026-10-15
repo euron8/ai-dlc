@@ -307,8 +307,8 @@ fi
 
 # =============================================================================
 # ARM (h.4) — the SECOND unmovable shape: a survivor with a series id that no
-# `*-s<N>-*` selector can name. The schema leaves `gate_series_id` deliberately
-# unpatterned, so this is legal input, and it is worse than a legacy verdict
+# `*-s<N>-*` selector can name. A verdict minted before the series-id form was
+# prescribed can carry such an id, so this is real input, and it is worse than a legacy verdict
 # because `--legacy-through` skips it too. A predicate keyed on legacy-ness
 # scores it movable and lets the rotation strand it — no refusal, no escape.
 # =============================================================================
@@ -329,7 +329,8 @@ fi
 # Keyed on the PRESCRIBED COMMAND LINE, not on the token: the prose explains why
 # --legacy-through does not apply here, so a bare token grep matches that
 # explanation and reads as the wrong remedy being offered.
-if ! grep -qE '^ +rotate-gate-adjudication\.sh --legacy-through' <<<"$out" \
+if ! grep -qE '^ +bash [^ ]*rotate-gate-adjudication\.sh --legacy-through' <<<"$out" \
+   && grep -qE "^ +bash [^ ]*rotate-gate-adjudication\.sh --sprint s<N> --series 's310-planning' --apply$" <<<"$out" \
    && grep -q 'Re-stamp that' <<<"$out"; then
   ok "(h.4b) the unselectable case prescribes a re-stamp and does NOT offer the legacy escape, which cannot move it"
 else
@@ -396,6 +397,645 @@ else
 fi
 
 # =============================================================================
+# ARM (j) — REFUSAL: an EMPTY --sprint selection while an unmatchable series (an id
+# no --sprint can name) records a FAIL. Before this arm the rotator said "nothing
+# to move" and exited 0, so retro passed while the sprint's verdicts stayed live.
+# The FAIL-carrying unmatchable verdict is NOT the newest -- a PASS-only one sorts
+# above it -- so the survivor block's FAIL refusal cannot be what refuses here; a
+# legacy verdict sits beside them and must NOT be named.
+# =============================================================================
+UM_STEM="planning-20260910T120000Z"   # PASS-only unmatchable, the newest
+UM_FAIL="planning-20260909T120000Z"   # FAIL-carrying unmatchable, older
+# The refusal block alone: from the REFUSED line up to the WARN that may follow it.
+refusal_block() { awk '/REFUSED --/{f=1} /WARN --/{f=0} f' <<<"$1"; }
+warn_block()    { awk '/WARN --/{f=1} f' <<<"$1"; }
+seed unmatchable
+BEFORE_J="$(treehash "$PROJ")"
+out_j="$(rotate --sprint s308 --apply 2>&1)"; rc=$?
+AFTER_J="$(treehash "$PROJ")"
+ref_j="$(refusal_block "$out_j")"; warn_j="$(warn_block "$out_j")"
+if [ "$rc" -eq 1 ] && [ "$BEFORE_J" = "$AFTER_J" ] \
+   && grep -q "^    .*/${UM_FAIL}\.verdict\.json$" <<<"$ref_j" \
+   && ! grep -q "/${UM_STEM}\.verdict\.json$" <<<"$ref_j" \
+   && grep -q "^    .*/${UM_STEM}\.verdict\.json$" <<<"$warn_j" \
+   && ! grep -q 'implementation-20260720T011606Z' <<<"$out_j" \
+   && ! grep -q 'nothing to move' <<<"$out_j"; then
+  ok "(j) REFUSAL: empty s308 selection plus an older FAIL-carrying unmatchable verdict exits 1, names it in the refusal, WARNs the newer PASS-only one, not the legacy one, tree byte-identical"
+else
+  bad "(j) an empty selection beside a FAIL-carrying unmatchable series id was not refused as specified (rc=$rc): $out_j"
+fi
+
+# (j.0) THE NEAR-MISS: the same world without the FAIL series. A stale clean verdict
+# is the guard's allow state, so the close WARNs and proceeds.
+seed unmatchable-pass
+BEFORE_J0="$(treehash "$PROJ")"
+out_j0="$(rotate --sprint s308 --apply 2>&1)"; rc=$?
+AFTER_J0="$(treehash "$PROJ")"
+if [ "$rc" -eq 0 ] && [ "$BEFORE_J0" = "$AFTER_J0" ] && grep -q 'nothing to move' <<<"$out_j0" \
+   && ! grep -q 'REFUSED' <<<"$out_j0" \
+   && grep -q "^    .*/${UM_STEM}\.verdict\.json$" <<<"$(warn_block "$out_j0")" \
+   && grep -qE "^ +bash [^ ]*rotate-gate-adjudication\.sh --sprint s<N> --series '${UM_STEM}'$" <<<"$out_j0" \
+   && grep -qF 'NO HINT (..s308)' <<<"$out_j0"; then
+  ok "(j.0) NEAR-MISS: an empty selection beside a PASS-only unmatchable verdict WARNs with its escape and exits 0 'nothing to move'; with no archive the sprint is NO HINT (..s308)"
+else
+  bad "(j.0) a PASS-only unmatchable verdict was refused or not WARNed (rc=$rc): $out_j0"
+fi
+
+# (j.2) The escape is printed as a dry-run command, and with no sprint archive its
+# sprint is the `s<N>` placeholder under NO HINT: the lead asks the operator and
+# substitutes the answer. The arm plays that lead -- the operator says s309, a sprint
+# other than the one closing -- and EXECUTES THE PRINTED LINE with only `s<N>`
+# replaced: dry run writes nothing, --apply moves the verdict and its sidecar, and the
+# refused command then exits 0.
+OPERATOR_SPRINT="s309"
+ESC_LINE="$(grep -E "^ +bash [^ ]*rotate-gate-adjudication\.sh --sprint s<N> --series '[^']+'$" <<<"$ref_j" | head -1)"
+ESC_SPRINT="$OPERATOR_SPRINT"
+ESC_ID="$(sed -n "s/.*--series '\\([^']*\\)'\$/\\1/p" <<<"$ESC_LINE")"
+seed unmatchable
+if [ -z "$ESC_LINE" ] || [ "$ESC_ID" != "$UM_FAIL" ] || ! grep -qF 'NO HINT (..s308)' <<<"$ref_j"; then
+  bad "(j.2) the refusal printed no runnable --series escape for '${UM_FAIL}' under NO HINT (..s308): $out_j"
+else
+  BEFORE_JD="$(treehash "$PROJ")"
+  out_d="$(rotate --sprint "$ESC_SPRINT" --series "$ESC_ID" 2>&1)"; rc_d=$?
+  AFTER_JD="$(treehash "$PROJ")"
+  out_a="$(rotate --sprint "$ESC_SPRINT" --series "$ESC_ID" --apply 2>&1)"; rc_a=$?
+  D_ESC="$PROJ/_bmad-output/implementation-artifacts/${ESC_SPRINT}/gate-adjudication"
+  out_r="$(rotate --sprint s308 --apply 2>&1)"; rc_r=$?
+  if [ "$rc_d" -eq 0 ] && [ "$AFTER_JD" = "$BEFORE_JD" ] && [ "$rc_a" -eq 0 ] \
+     && [ -f "$D_ESC/${UM_FAIL}.verdict.json" ] && [ -f "$D_ESC/${UM_FAIL}.repair.md" ] \
+     && [ ! -e "$GA/${UM_FAIL}.verdict.json" ] && [ -f "$GA/implementation-20260720T011606Z.verdict.json" ] \
+     && [ -f "$GA/${UM_STEM}.verdict.json" ] \
+     && [ "$rc_r" -eq 0 ] && grep -q 'nothing to move' <<<"$out_r"; then
+    ok "(j.2) the printed escape (--sprint ${ESC_SPRINT} --series '${ESC_ID}') is a dry run as printed, moves verdict + sidecar with --apply, and the refused close then exits 0"
+  else
+    bad "(j.2) the printed escape did not converge (dry rc=$rc_d, apply rc=$rc_a, re-run rc=$rc_r): $out_a / $out_r"
+  fi
+fi
+
+# (j.3) A FAIL-carrying id that is NOT nonce-tailed -- `story-s311`, a shape the
+# reference consumer's writers stamp -- is the only unmatchable verdict. A predicate
+# counting only `<gate>-<nonce>` ids misses it.
+seed story-s311
+out="$(rotate --sprint s308 --apply 2>&1)"; rc=$?
+if [ "$rc" -eq 1 ] && grep -q '^    .*/story-20260913T044428Z\.verdict\.json$' <<<"$(refusal_block "$out")"; then
+  ok "(j.3) a FAIL-carrying 'story-s311' id, not nonce-tailed, refuses the empty selection and is named"
+else
+  bad "(j.3) a FAIL-carrying 'story-s311' id did not refuse (rc=$rc): $out"
+fi
+
+# (j.4) An id carrying an apostrophe is printed quoted, so the line pastes as printed.
+# Parsed by the shell itself, then executed: the id must arrive intact and move.
+seed apostrophe
+out="$(rotate --sprint s308 2>&1)"; rc=$?
+# With no archive the sprint is the `s<N>` placeholder, which would parse as a redirect,
+# so the operator's sprint replaces it before eval -- exactly the lead's substitution.
+AP_LINE="$(grep -E "^ +bash [^ ]*rotate-gate-adjudication\.sh --sprint s<N> --series '[^<>|;&\`\$]*'$" <<<"$(refusal_block "$out")" | head -1)"
+AP_LINE="${AP_LINE/--sprint s<N> /--sprint s308 }"
+AP_SPRINT=""; AP_ID=""
+if [ -n "$AP_LINE" ]; then eval "set -- $AP_LINE"; AP_SPRINT="${4:-}"; AP_ID="${6:-}"; fi
+if [ "$rc" -eq 1 ] && [ "$AP_ID" = "it's-planning-20260909T130000Z" ]; then
+  out_ap="$(rotate --sprint "$AP_SPRINT" --series "$AP_ID" --apply 2>&1)"; rc_ap=$?
+  if [ "$rc_ap" -eq 0 ] && [ -f "$PROJ/_bmad-output/implementation-artifacts/${AP_SPRINT}/gate-adjudication/planning-20260909T130000Z.verdict.json" ] \
+     && [ ! -e "$GA/planning-20260909T130000Z.verdict.json" ]; then
+    ok "(j.4) an id with an apostrophe is printed shell-quoted; the parsed line carries it intact and moves the verdict"
+  else
+    bad "(j.4) the parsed apostrophe id did not move (rc=$rc_ap): $out_ap"
+  fi
+else
+  bad "(j.4) the apostrophe id was not printed pasteable (rc=$rc, parsed id='${AP_ID}'): $out"
+fi
+
+# (j.5) THE HINT WINDOW. The FAIL-carrying verdict is newer than the only archive,
+# s309. Closing s310 leaves one candidate sprint, so it is hinted; closing s311
+# leaves s310..s311, so no sprint is hinted and the placeholder is printed.
+seed hint-window
+out10="$(rotate --sprint s310 2>&1)"; rc10=$?
+out11="$(rotate --sprint s311 2>&1)"; rc11=$?
+if [ "$rc10" -eq 1 ] && grep -qE "^ +bash [^ ]*rotate-gate-adjudication\.sh --sprint s310 --series '${UM_FAIL}'$" <<<"$out10" \
+   && [ "$rc11" -eq 1 ] && grep -qE "^ +bash [^ ]*rotate-gate-adjudication\.sh --sprint s<N> --series '${UM_FAIL}'$" <<<"$out11" \
+   && grep -q 'NO HINT (s310\.\.s311)' <<<"$out11"; then
+  ok "(j.5) newer than the newest archive: hinted s310 when that is the only candidate, NO HINT (s310..s311) when it is not"
+else
+  bad "(j.5) the hint window was not honoured (s310 rc=$rc10, s311 rc=$rc11): $out10 / $out11"
+fi
+
+# (j.5b) THE GAP WINDOW. The same verdict between two archives. s309 and s311
+# leave s310 alone, so it is hinted whatever sprint is closing; s309 and s310 are
+# adjacent, so the archive below may be incomplete and nothing is hinted.
+seed hint-gap
+out_g="$(rotate --sprint s312 2>&1)"; rc_g=$?
+seed hint-adjacent
+out_a="$(rotate --sprint s312 2>&1)"; rc_a=$?
+if [ "$rc_g" -eq 1 ] && grep -qE "^ +bash [^ ]*rotate-gate-adjudication\.sh --sprint s310 --series '${UM_FAIL}'$" <<<"$out_g" \
+   && [ "$rc_a" -eq 1 ] && grep -qE "^ +bash [^ ]*rotate-gate-adjudication\.sh --sprint s<N> --series '${UM_FAIL}'$" <<<"$out_a" \
+   && grep -q 'NO HINT (s309\.\.s310)' <<<"$out_a"; then
+  ok "(j.5b) between archives: hinted s310 when it is alone in the gap, NO HINT (s309..s310) between adjacent archives"
+else
+  bad "(j.5b) the gap window was not honoured (gap rc=$rc_g, adjacent rc=$rc_a): $out_g / $out_a"
+fi
+
+# (j.5c) A WIDE GAP: archives s309 and s312, the verdict between them, closing s313.
+# Two candidates, s310..s311, so no hint -- in particular not the sprint being closed.
+seed hint-wide-gap
+out_w="$(rotate --sprint s313 2>&1)"; rc_w=$?
+if [ "$rc_w" -eq 1 ] && grep -qE "^ +bash [^ ]*rotate-gate-adjudication\.sh --sprint s<N> --series '${UM_FAIL}'$" <<<"$out_w" \
+   && grep -qF 'NO HINT (s310..s311)' <<<"$out_w" && ! grep -q -- '--sprint s313 --series' <<<"$out_w"; then
+  ok "(j.5c) between archives s309 and s312, closing s313: NO HINT (s310..s311), never the closing sprint"
+else
+  bad "(j.5c) the wide gap was hinted (rc=$rc_w): $out_w"
+fi
+
+# (j.5d) A BACKFILL: the verdict is newer than the newest archive, s309, while the
+# sprint being closed is s308. The window above s309 is empty, and the line must not
+# print an inverted range such as s310..s308.
+seed hint-window
+out_bf="$(rotate --sprint s308 2>&1)"; rc_bf=$?
+if [ "$rc_bf" -eq 1 ] && grep -qE "^ +bash [^ ]*rotate-gate-adjudication\.sh --sprint s<N> --series '${UM_FAIL}'$" <<<"$out_bf" \
+   && grep -qF 'NO HINT (backfill below s310)' <<<"$out_bf" && ! grep -qF 's310..s308' <<<"$out_bf"; then
+  ok "(j.5d) a backfill below the newest archive prints NO HINT (backfill below s310), not an inverted range"
+else
+  bad "(j.5d) the backfill hint was wrong (rc=$rc_bf): $out_bf"
+fi
+
+# (j.9) NEWEST MEMBER. One unmatchable series: an older FAIL and a newer PASSing retry
+# under the same id. The series moves whole, so the older FAIL can never be the live
+# pass: WARN, exit 0. Its twin, one property apart -- the NEWEST member FAILs -- refuses.
+seed series-newest-pass
+out_np="$(rotate --sprint s308 --apply 2>&1)"; rc_np=$?
+seed series-newest-fail
+out_nf="$(rotate --sprint s308 --apply 2>&1)"; rc_nf=$?
+if [ "$rc_np" -eq 0 ] && ! grep -q 'REFUSED' <<<"$out_np" && grep -q 'nothing to move' <<<"$out_np" \
+   && grep -q '^    .*/planning-20260909T120000Z\.verdict\.json$' <<<"$(warn_block "$out_np")" \
+   && [ "$rc_nf" -eq 1 ] && grep -q '^    .*/planning-20260909T120000Z\.verdict\.json$' <<<"$(refusal_block "$out_nf")" \
+   && grep -q '^    .*/planning-20260912T000000Z\.verdict\.json$' <<<"$(refusal_block "$out_nf")"; then
+  ok "(j.9) a series whose older member FAILs and newest PASSes is WARNed (exit 0); its twin with the newest FAILing refuses and names both files"
+else
+  bad "(j.9) the series was not keyed on its newest member (pass-newest rc=$rc_np, fail-newest rc=$rc_nf): $out_np / $out_nf"
+fi
+
+# (j.10) A --sprint CLOSE THAT LEAVES AN UNMOVABLE FAIL AS THE LIVE PASS REFUSES, PROMOTED
+# OR NOT. The FAIL-carrying unmatchable verdict is newer than the s308 verdict, so it is
+# the live pass before the move and after it. Nothing follows the close to clear it, so it
+# would deny the next sprint's first edit: the close refuses, names it, writes nothing.
+seed reapply
+BEFORE_R="$(treehash "$PROJ")"
+out_r1="$(rotate --sprint s308 --apply 2>&1)"; rc_r1=$?
+AFTER_R="$(treehash "$PROJ")"
+if [ "$rc_r1" -eq 1 ] && grep -q 'would strand' <<<"$out_r1" && grep -q "${UM_FAIL} -- " <<<"$out_r1" \
+   && [ "$BEFORE_R" = "$AFTER_R" ] && [ -f "$GA/sprint-review-20260907T002257Z.verdict.json" ]; then
+  ok "(j.10) a --sprint close leaving an unpromoted unmatchable FAIL as the live pass refuses (exit 1), names it, tree byte-identical"
+else
+  bad "(j.10) a close leaving a FAILing unmatchable live pass was not refused (rc=$rc_r1): $out_r1"
+fi
+
+# (j.11) THE PARTIAL WALK. Two FAIL-carrying unmatchable series, older A and newer B, no
+# tagged s308 verdict. The operator runs only the FIRST printed line (A into s308), which
+# fills s308's archive while B stays the live pass: the re-run must still refuse. Then
+# line 2, and the re-run is exit 0. Each step's exit is recorded for the mutants below.
+UM_FAIL_B="implementation-20260914T000000Z"
+seed partial-walk
+out_p0="$(rotate --sprint s308 2>&1)"; rc_p0=$?
+p_lines="$(grep -E "^ +bash [^ ]*rotate-gate-adjudication\.sh --sprint s<N> --series '[^']+'$" <<<"$out_p0" | sed -n "s/.*--series '\\([^']*\\)'\$/\\1/p" | tr '\n' ' ')"
+out_p1="$(rotate --sprint s308 --series "$UM_FAIL" --apply 2>&1)"; rc_p1=$?
+out_p2="$(rotate --sprint s308 --apply 2>&1)"; rc_p2=$?
+out_p3="$(rotate --sprint s308 --series "$UM_FAIL_B" --apply 2>&1)"; rc_p3=$?
+out_p4="$(rotate --sprint s308 --apply 2>&1)"; rc_p4=$?
+if [ "$rc_p0" -eq 1 ] && [ "$p_lines" = "${UM_FAIL} ${UM_FAIL_B} " ] \
+   && [ "$rc_p1" -eq 0 ] && [ -f "$DEST_S308/${UM_FAIL}.verdict.json" ] \
+   && [ "$rc_p2" -eq 1 ] && grep -q "^    .*/${UM_FAIL_B}\.verdict\.json$" <<<"$(refusal_block "$out_p2")" \
+   && [ "$rc_p3" -eq 0 ] && [ -f "$DEST_S308/${UM_FAIL_B}.verdict.json" ] && [ "$rc_p4" -eq 0 ] && grep -q 'nothing to move' <<<"$out_p4" \
+   && ! grep -q 'REFUSED' <<<"$out_p4"; then
+  ok "(j.11) partial walk: line 1 alone fills s308's archive and the re-run still refuses on the live newer FAIL; after line 2 the re-run exits 0"
+else
+  bad "(j.11) the partial walk was not re-evaluated (rc: initial=$rc_p0 lines='$p_lines' line1=$rc_p1 rerun=$rc_p2 line2=$rc_p3 final=$rc_p4): $out_p1 / $out_p2 / $out_p4"
+fi
+
+# (j.12) THE FIRST LINE MOVES A PASS-ONLY SERIES. An older PASS-only unmatchable series
+# and a newer FAIL one. Moving the PASS series alone leaves s308's archive holding no
+# FAIL, while the FAIL series stays the live pass: the re-run must still refuse.
+UM_PASS_OLD="planning-20260908T000000Z"
+seed pass-first
+out_q0="$(rotate --sprint s308 --apply 2>&1)"; rc_q0=$?
+out_q1="$(rotate --sprint s308 --series "$UM_PASS_OLD" --apply 2>&1)"; rc_q1=$?
+out_q2="$(rotate --sprint s308 --apply 2>&1)"; rc_q2=$?
+if [ "$rc_q0" -eq 1 ] && [ "$rc_q1" -eq 0 ] && [ -f "$DEST_S308/${UM_PASS_OLD}.verdict.json" ] \
+   && [ "$rc_q2" -eq 1 ] && grep -q "^    .*/${UM_FAIL}\.verdict\.json$" <<<"$(refusal_block "$out_q2")"; then
+  ok "(j.12) moving only an older PASS-only series fills s308's archive with no FAIL, and the re-run still refuses on the live FAIL"
+else
+  bad "(j.12) the re-run after a PASS-only first line did not refuse (close=$rc_q0 line=$rc_q1 rerun=$rc_q2): $out_q2"
+fi
+
+# (j.13) THE REMEDY STEPS CONVERGE. A FAILing legacy verdict below a FAIL-carrying
+# unmatchable series. The close refuses and prints --series; that step refuses and prints
+# --legacy-through, because it would promote the legacy FAIL; --legacy-through leaves the
+# unmatchable FAIL live but promotes nothing, so it applies; then --series, then the close.
+# Every command is the one the previous refusal PRINTED, with only s<N> substituted.
+seed legacy-then-series
+out_d0="$(rotate --sprint s308 --apply 2>&1)"; rc_d0=$?
+d_ser="$(grep -E "^ +bash [^ ]*rotate-gate-adjudication\.sh --sprint s<N> --series '[^']+'$" <<<"$out_d0" | sed -n "s/.*--series '\\([^']*\\)'\$/\\1/p" | head -1)"
+out_d1="$(rotate --sprint s308 --series "$d_ser" --apply 2>&1)"; rc_d1=$?
+d_bound="$(sed -n 's/.*--legacy-through \([0-9TZ]*\) --apply$/\1/p' <<<"$out_d1" | head -1)"
+out_d2="$(rotate --legacy-through "$d_bound" --apply 2>&1)"; rc_d2=$?
+out_d3="$(rotate --sprint s308 --series "$d_ser" --apply 2>&1)"; rc_d3=$?
+out_d4="$(rotate --sprint s308 --apply 2>&1)"; rc_d4=$?
+if [ "$rc_d0" -eq 1 ] && [ "$d_ser" = "$UM_FAIL" ] && [ "$rc_d1" -eq 1 ] && [ "$d_bound" = "20260701T000000Z" ] \
+   && [ "$rc_d2" -eq 0 ] && [ ! -e "$GA/legacy-20260701T000000Z.verdict.json" ] \
+   && [ "$rc_d3" -eq 0 ] && [ -f "$DEST_S308/${UM_FAIL}.verdict.json" ] \
+   && [ "$rc_d4" -eq 0 ] && grep -q 'nothing to move' <<<"$out_d4"; then
+  ok "(j.13) legacy FAIL below an unmatchable FAIL: close, --series, the printed --legacy-through, --series, close converge (1 1 0 0 0)"
+else
+  bad "(j.13) the printed remedies did not converge (close=$rc_d0 series='$d_ser' $rc_d1 bound='$d_bound' legacy=$rc_d2 series=$rc_d3 close=$rc_d4): $out_d1 / $out_d2"
+fi
+
+# (j.14) A SAME-SECOND TIE IS A PROMOTION. A legacy FAIL and an unmatchable PASS share one
+# nonce; the PASS sorts first in the glob and is live. Moving it by --series hands the live
+# pass to the legacy FAIL, so the step refuses and writes nothing.
+seed tie
+BEFORE_T="$(treehash "$PROJ")"
+out_t="$(rotate --sprint s308 --series aplanning-20260909T120000Z --apply 2>&1)"; rc_t=$?
+AFTER_T="$(treehash "$PROJ")"
+if [ "$rc_t" -eq 1 ] && grep -q 'would strand' <<<"$out_t" && grep -q 'legacy-20260909T120000Z -- ' <<<"$out_t" \
+   && [ "$BEFORE_T" = "$AFTER_T" ]; then
+  ok "(j.14) a --series move of a verdict tying a legacy FAIL's nonce counts as promotion and refuses (exit 1), tree byte-identical"
+else
+  bad "(j.14) a same-nonce tie was not treated as promotion (rc=$rc_t): $out_t"
+fi
+
+# (j.15) --legacy-through REFUSES WHEN IT PROMOTES A FAIL. A legacy PASS is the live pass
+# above an older FAIL-carrying unmatchable series; moving the PASS would make that FAIL live.
+seed legacy-promote
+BEFORE_LP="$(treehash "$PROJ")"
+out_lp="$(rotate --legacy-through 20260920T000000Z --apply 2>&1)"; rc_lp=$?
+AFTER_LP="$(treehash "$PROJ")"
+if [ "$rc_lp" -eq 1 ] && grep -q 'would strand' <<<"$out_lp" && grep -q "${UM_FAIL} -- " <<<"$out_lp" \
+   && [ "$BEFORE_LP" = "$AFTER_LP" ] && [ -f "$GA/legacy-20260920T000000Z.verdict.json" ]; then
+  ok "(j.15) --legacy-through that would promote an unmatchable FAIL to live refuses (exit 1), tree byte-identical"
+else
+  bad "(j.15) a promoting --legacy-through was not refused (rc=$rc_lp): $out_lp"
+fi
+
+# (j.6) The printed command is spelled for the layout the rotator runs from. Two
+# copies of it, one per layout, against the same world.
+seed unmatchable
+mkdir -p "$W/lay-c/scripts/ai-dlc" "$W/lay-d/core/scripts"
+cp "$ROT" "$W/lay-c/scripts/ai-dlc/rotate-gate-adjudication.sh"
+cp "$ROT" "$W/lay-d/core/scripts/rotate-gate-adjudication.sh"
+out_c="$( ( cd "$PROJ" && bash "$W/lay-c/scripts/ai-dlc/rotate-gate-adjudication.sh" --sprint s308 ) 2>&1 )"
+out_d="$( ( cd "$PROJ" && bash "$W/lay-d/core/scripts/rotate-gate-adjudication.sh" --sprint s308 ) 2>&1 )"
+if grep -qE "^ +bash scripts/ai-dlc/rotate-gate-adjudication\.sh --sprint s<N> --series '${UM_FAIL}'$" <<<"$out_c" \
+   && grep -qE "^ +bash core/scripts/rotate-gate-adjudication\.sh --sprint s<N> --series '${UM_FAIL}'$" <<<"$out_d"; then
+  ok "(j.6) the remedy line reads 'bash scripts/ai-dlc/...' from an installed layout and 'bash core/scripts/...' from the distribution"
+else
+  bad "(j.6) the remedy line is not spelled for its layout: $out_c / $out_d"
+fi
+
+# (j.7) REFUSAL: a destination file already exists. Nothing is overwritten and the
+# source stays live.
+seed unmatchable
+D_CL="$PROJ/_bmad-output/implementation-artifacts/s308/gate-adjudication"
+mkdir -p "$D_CL"
+printf '{"collide":true}\n' > "$D_CL/${UM_FAIL}.verdict.json"
+BEFORE_CL="$(treehash "$PROJ")"
+out="$(rotate --sprint s308 --series "$UM_FAIL" --apply 2>&1)"; rc=$?
+AFTER_CL="$(treehash "$PROJ")"
+if [ "$rc" -eq 1 ] && [ "$BEFORE_CL" = "$AFTER_CL" ] && grep -q 'already exist' <<<"$out" \
+   && grep -q '"collide":true' "$D_CL/${UM_FAIL}.verdict.json" && [ -f "$GA/${UM_FAIL}.verdict.json" ]; then
+  ok "(j.7) REFUSAL: an existing destination file is not overwritten (exit 1), tree byte-identical"
+else
+  bad "(j.7) an existing destination file was overwritten or not refused (rc=$rc): $out"
+fi
+
+# (j.8) --series '' is a usage error.
+out="$(rotate --sprint s308 --series '' 2>&1)"; rc=$?
+if [ "$rc" -eq 2 ] && grep -q 'non-empty' <<<"$out"; then
+  ok "(j.8) --series '' is a usage error (exit 2)"
+else
+  bad "(j.8) --series '' was not a usage error (rc=$rc): $out"
+fi
+
+# =============================================================================
+# ARM (k) — tagged verdicts only, none for this sprint: still "nothing to move".
+# The near-miss twin of (j): series ids present, every one matchable.
+# =============================================================================
+seed tagged-nomatch
+BEFORE_K="$(treehash "$PROJ")"
+out="$(rotate --sprint s308 --apply 2>&1)"; rc=$?
+AFTER_K="$(treehash "$PROJ")"
+if [ "$rc" -eq 0 ] && [ "$BEFORE_K" = "$AFTER_K" ] && grep -q 'nothing to move' <<<"$out" \
+   && ! grep -q 'REFUSED\|WARN' <<<"$out"; then
+  ok "(k) tagged verdicts only, none for s308: exit 0, 'nothing to move', no refusal and no WARN"
+else
+  bad "(k) a tagged-only directory with no match was not a clean no-op (rc=$rc): $out"
+fi
+
+# =============================================================================
+# ARM (l) — the --series escape moves EXACTLY that id: a dry run writes nothing,
+# and --apply leaves the id that merely STARTS WITH it in place.
+# =============================================================================
+seed series-move
+BEFORE_L="$(treehash "$PROJ")"
+out="$(rotate --sprint s309 --series "$UM_STEM" 2>&1)"; rc=$?
+AFTER_L="$(treehash "$PROJ")"
+if [ "$rc" -eq 0 ] && [ "$BEFORE_L" = "$AFTER_L" ] && [ ! -d "$DEST_S309" ] \
+   && grep -q '1 verdict(s) and 1 sidecar(s) would move' <<<"$out"; then
+  ok "(l.1) --series dry run: reports 1 verdict + 1 sidecar, tree byte-identical, no destination"
+else
+  bad "(l.1) the --series dry run wrote or misreported (rc=$rc): $out"
+fi
+out="$(rotate --sprint s309 --series "$UM_STEM" --apply 2>&1)"; rc=$?
+if [ "$rc" -eq 0 ] && [ -f "$DEST_S309/${UM_STEM}.verdict.json" ] && [ -f "$DEST_S309/${UM_STEM}.repair.md" ] \
+   && [ -f "$GA/planning-20260911T000000Z.verdict.json" ] && [ ! -e "$DEST_S309/planning-20260911T000000Z.verdict.json" ] \
+   && [ -f "$GA/implementation-20260720T011606Z.verdict.json" ]; then
+  ok "(l.2) --series --apply moves the exact id with its sidecar and leaves '${UM_STEM}-retry' and the legacy verdict live"
+else
+  bad "(l.2) --series --apply did not move exactly one id (rc=$rc): $out"
+fi
+# A tokenised id is refused: --sprint already selects it, and moving it by hand
+# could file it under the wrong sprint.
+seed base
+out="$(rotate --sprint s310 --series planning-s309-20260907T160702Z 2>&1)"; rc=$?
+if [ "$rc" -eq 2 ] && grep -q 'already selects it' <<<"$out" && [ -f "$GA/planning-20260907T160702Z.verdict.json" ]; then
+  ok "(l.3) --series refuses an id carrying a -s<N>- token (exit 2), nothing moved"
+else
+  bad "(l.3) --series accepted a tokenised id (rc=$rc): $out"
+fi
+
+# =============================================================================
+# ARM (m) — mixed: a NON-empty s308 selection plus an unmatchable verdict. The
+# s308 set moves, the unmatchable one stays live, a WARN names it, exit 0.
+# =============================================================================
+seed mixed
+out="$(rotate --sprint s308 --apply 2>&1)"; rc=$?
+if [ "$rc" -eq 0 ] && [ -f "$DEST_S308/sprint-review-20260907T002257Z.verdict.json" ] \
+   && [ -f "$GA/${UM_STEM}.verdict.json" ] \
+   && grep -q '^rotate-gate-adjudication: WARN -- 1 verdict(s)' <<<"$out" \
+   && grep -q "^    .*/${UM_STEM}\.verdict\.json$" <<<"$out" \
+   && grep -qE "^ +bash [^ ]*rotate-gate-adjudication\.sh --sprint s<N> --series '${UM_STEM}'$" <<<"$out"; then
+  ok "(m) mixed: the s308 set moved, the unmatchable verdict stayed live, a WARN named it with its escape, exit 0"
+else
+  bad "(m) a mixed selection did not move-and-WARN (rc=$rc): $out"
+fi
+
+# Literal single-line replacement into a COPY, for mutations whose text carries
+# characters a sed expression would have to escape. Strings arrive by ENVIRON,
+# which awk -v would otherwise strip a level of escaping from.
+mut_replace() { # <src> <dst> <old-line-substring> <new-text>
+  MR_OLD="$3" MR_NEW="$4" awk '{ i = index($0, ENVIRON["MR_OLD"]); if (i) { $0 = substr($0, 1, i-1) ENVIRON["MR_NEW"] substr($0, i + length(ENVIRON["MR_OLD"])) } print }' "$1" > "$2"
+}
+
+# =============================================================================
+# MUTATION 5 — restore the old early exit: an empty selection says "nothing to
+# move" and exits 0 before the unmatchable check. Arm (j) must go red.
+# =============================================================================
+MUT5="$W/mut-earlyexit.sh"
+awk '{ print } $0 == "N_SIDECARS=$(( N_FILES - N_VERDICTS ))" {
+  print "if [ \"$N_FILES\" -eq 0 ]; then"
+  print "  echo \"${SELF_NAME}: no verdict under ${SRC} names series ${SPRINT} -- nothing to move.\""
+  print "  exit 0"
+  print "fi" }' "$ROT" > "$MUT5"
+if cmp -s "$ROT" "$MUT5"; then
+  bad "MUTATION 5: the early-exit insertion matched nothing; arm (j) is UNPROVEN"
+else
+  seed unmatchable
+  out="$( ( cd "$PROJ" && bash "$MUT5" --sprint s308 --apply ) 2>&1 )"; rc=$?
+  if [ "$rc" -eq 0 ] && grep -q 'nothing to move' <<<"$out"; then
+    ok "MUTATION 5: with the early exit restored, the unmatchable world exits 0 'nothing to move' -- arm (j) is live"
+  else
+    bad "MUTATION 5: restoring the early exit did not change the outcome (rc=$rc): $out"
+  fi
+fi
+
+# =============================================================================
+# MUTATION 6 — REVERT THE FAIL NARROWING: every unmatchable series refuses an empty
+# selection, PASS-only or not. Arm (j.0) must go red: its PASS-only world flips
+# from exit 0 to exit 1. (Revised with the contract: this mutation used to APPLY the
+# narrowing as the wrong fix; the narrowing is now the design, and its revert is the
+# regression -- measured on the reference consumer, it refuses s318 on 52 files
+# where 12 carry the FAIL series that can deny.)
+# =============================================================================
+MUT6="$W/mut-failrevert.sh"
+mut_replace "$ROT" "$MUT6" \
+  'if grep -qxF -- "$_pt_series" "$TMPD/fail_series"; then' \
+  'if true; then'
+if cmp -s "$ROT" "$MUT6"; then
+  bad "MUTATION 6: the narrowing-revert edit matched nothing; arm (j.0) is UNPROVEN against it"
+else
+  seed unmatchable-pass
+  out="$( ( cd "$PROJ" && bash "$MUT6" --sprint s308 --apply ) 2>&1 )"; rc=$?
+  if [ "$rc" -eq 1 ] && grep -q 'REFUSED' <<<"$out" && grep -q "/${UM_STEM}\.verdict\.json$" <<<"$out"; then
+    ok "MUTATION 6: with the FAIL narrowing reverted, the PASS-only unmatchable world refuses (exit 1) -- arm (j.0) is live"
+  else
+    bad "MUTATION 6: reverting the FAIL narrowing did not change the outcome (rc=$rc): $out"
+  fi
+fi
+
+# =============================================================================
+# MUTATION 7 — --series matches by PREFIX instead of exactly. Arm (l.2) must go
+# red: the '-retry' id moves too.
+# =============================================================================
+MUT7="$W/mut-seriesprefix.sh"
+mut_replace "$ROT" "$MUT7" \
+  '[ "$series" = "$SERIES" ] &&' \
+  'case "$series" in "$SERIES"*) true ;; *) false ;; esac &&'
+if cmp -s "$ROT" "$MUT7"; then
+  bad "MUTATION 7: the prefix edit matched nothing; arm (l.2) is UNPROVEN"
+else
+  seed series-move
+  out="$( ( cd "$PROJ" && bash "$MUT7" --sprint s309 --series "$UM_STEM" --apply ) 2>&1 )"; rc=$?
+  if [ "$rc" -eq 0 ] && [ -f "$DEST_S309/planning-20260911T000000Z.verdict.json" ]; then
+    ok "MUTATION 7: a prefix match moves '${UM_STEM}-retry' too -- arm (l.2) is live"
+  else
+    bad "MUTATION 7: a prefix match did not move the retry id (rc=$rc): $out"
+  fi
+fi
+
+# =============================================================================
+# MUTATION 8 — key the FAIL series on ANY member instead of the newest. Arm (j.9)'s
+# newest-PASS world must flip from exit 0 to exit 1. The mutant ORs every member's bit.
+# =============================================================================
+MUT8="$W/mut-anymember.sh"
+mut_replace "$ROT" "$MUT8" \
+  'END { for (s in seen) { f = (s in top) ? topf[s] : anyf[s]; if (f) print s } }' \
+  'END { for (s in seen) { f = anyf[s]; if (f) print s } }'
+mut_replace "$MUT8" "$MUT8.2" \
+  '    if ($2 == "-") { anyf[s] = anyf[s] || $3; seen[s] = 1; next }' \
+  '    anyf[s] = anyf[s] || $3; if ($2 == "-") { seen[s] = 1; next }'
+if cmp -s "$ROT" "$MUT8" || cmp -s "$MUT8" "$MUT8.2"; then
+  bad "MUTATION 8: the any-member edit matched nothing; arm (j.9) is UNPROVEN"
+else
+  seed series-newest-pass
+  out="$( ( cd "$PROJ" && bash "$MUT8.2" --sprint s308 --apply ) 2>&1 )"; rc=$?
+  if [ "$rc" -eq 1 ] && grep -q 'REFUSED' <<<"$out"; then
+    ok "MUTATION 8: keyed on any member, the older-FAIL newest-PASS series refuses (exit 1) -- arm (j.9) is live"
+  else
+    bad "MUTATION 8: keying on any member did not change the outcome (rc=$rc): $out"
+  fi
+fi
+
+# =============================================================================
+# MUTATION 9 — restore the promotion conjunct in every mode: refuse an unmovable FAIL
+# survivor only when the move promotes it. Arm (j.10)'s close must flip to exit 0.
+# =============================================================================
+SURV_ANCHOR='{ [ "$SURVIVOR_ALWAYS" -eq 1 ] || [ "$PROMOTES" -eq 1 ]; }'
+MUT9="$W/mut-promoteonly.sh"
+mut_replace "$ROT" "$MUT9" "$SURV_ANCHOR" '[ "$PROMOTES" -eq 1 ]'
+if cmp -s "$ROT" "$MUT9"; then
+  bad "MUTATION 9: the promotion-conjunct edit matched nothing; arm (j.10) is UNPROVEN"
+else
+  seed reapply
+  out="$( ( cd "$PROJ" && bash "$MUT9" --sprint s308 --apply ) 2>&1 )"; rc=$?
+  if [ "$rc" -eq 0 ] && [ -f "$DEST_S308/sprint-review-20260907T002257Z.verdict.json" ] && [ -f "$GA/${UM_FAIL}.verdict.json" ]; then
+    ok "MUTATION 9: with the promotion conjunct restored, the close exits 0 leaving the FAIL as live pass -- arm (j.10) is live"
+  else
+    bad "MUTATION 9: restoring the promotion conjunct did not change the outcome (rc=$rc): $out"
+  fi
+fi
+
+# =============================================================================
+# MUTATION 10 — key the empty-selection refusal on an EMPTY ARCHIVE for this sprint, the
+# exemption the partial walk defeats. Arm (j.11)'s re-run after line 1 must flip to exit 0.
+# Steps before the re-run run on the unmutated rotator.
+# =============================================================================
+MUT10="$W/mut-archivekey.sh"
+mut_replace "$ROT" "$MUT10" \
+  'if [ -z "$LEGACY_THROUGH" ] && [ -z "$SERIES" ] && [ "$N_UM_FAIL" -gt 0 ]; then' \
+  'if [ -z "$LEGACY_THROUGH" ] && [ -z "$SERIES" ] && [ "$N_UM_FAIL" -gt 0 ] && { set -- "$DEST"/*.verdict.json; [ ! -f "$1" ]; }; then'
+if cmp -s "$ROT" "$MUT10"; then
+  bad "MUTATION 10: the archive-keying edit matched nothing; arm (j.11) is UNPROVEN"
+else
+  seed partial-walk
+  rotate --sprint s308 --series "$UM_FAIL" --apply >/dev/null 2>&1; rc_first=$?
+  out="$( ( cd "$PROJ" && bash "$MUT10" --sprint s308 --apply ) 2>&1 )"; rc=$?
+  if [ "$rc_first" -eq 0 ] && [ "$rc" -eq 0 ] && grep -q 'nothing to move' <<<"$out" && [ -f "$GA/${UM_FAIL_B}.verdict.json" ]; then
+    ok "MUTATION 10: keyed on an empty archive, the re-run after line 1 exits 0 with the newer FAIL live -- arm (j.11) is live"
+  else
+    bad "MUTATION 10: archive keying did not change the outcome (first rc=$rc_first, rc=$rc): $out"
+  fi
+fi
+
+# =============================================================================
+# MUTATION 13 — the unconditional survivor refusal applies to --legacy-through too.
+# Arm (j.13)'s --legacy-through step must flip to exit 1: each remedy refuses the other.
+# The steps before it run on the unmutated rotator.
+# =============================================================================
+MUT13="$W/mut-legacyalways.sh"
+mut_replace "$ROT" "$MUT13" \
+  '[ -z "$SERIES" ] && [ -z "$LEGACY_THROUGH" ] && SURVIVOR_ALWAYS=1' \
+  '[ -z "$SERIES" ] && SURVIVOR_ALWAYS=1'
+if cmp -s "$ROT" "$MUT13"; then
+  bad "MUTATION 13: the legacy-always edit matched nothing; arm (j.13) is UNPROVEN"
+else
+  seed legacy-then-series
+  rotate --sprint s308 --series "$UM_FAIL" --apply >/dev/null 2>&1; rc_first=$?
+  out="$( ( cd "$PROJ" && bash "$MUT13" --legacy-through 20260701T000000Z --apply ) 2>&1 )"; rc=$?
+  if [ "$rc_first" -eq 1 ] && [ "$rc" -eq 1 ] && grep -q 'would strand' <<<"$out" && grep -q -- "--series '${UM_FAIL}'" <<<"$out"; then
+    ok "MUTATION 13: refusing unconditionally in --legacy-through, its step refuses and prints --series back -- arm (j.13) is live"
+  else
+    bad "MUTATION 13: the legacy-always mutant did not change the outcome (first rc=$rc_first, rc=$rc): $out"
+  fi
+fi
+
+# =============================================================================
+# MUTATION 14 — exempt a re-run when this sprint's archive holds verdicts and NONE of them
+# FAILs. Arm (j.12)'s re-run after the PASS-only first line must flip to exit 0.
+# =============================================================================
+MUT14="$W/mut-failfreearchive.sh"
+mut_replace "$ROT" "$MUT14" \
+  'if [ -z "$LEGACY_THROUGH" ] && [ -z "$SERIES" ] && [ "$N_UM_FAIL" -gt 0 ]; then' \
+  'if [ -z "$LEGACY_THROUGH" ] && [ -z "$SERIES" ] && [ "$N_UM_FAIL" -gt 0 ] && [ "$(jq -s "[.[].verdicts[]?|select(.verdict==\"FAIL\")]|length" "$DEST"/*.verdict.json 2>/dev/null || echo x)" != 0 ]; then'
+if cmp -s "$ROT" "$MUT14"; then
+  bad "MUTATION 14: the fail-free-archive edit matched nothing; arm (j.12) is UNPROVEN"
+else
+  seed pass-first
+  out0="$( ( cd "$PROJ" && bash "$MUT14" --sprint s308 --apply ) 2>&1 )"; rc0=$?
+  rotate --sprint s308 --series "$UM_PASS_OLD" --apply >/dev/null 2>&1; rc_first=$?
+  out="$( ( cd "$PROJ" && bash "$MUT14" --sprint s308 --apply ) 2>&1 )"; rc=$?
+  if [ "$rc0" -eq 1 ] && [ "$rc_first" -eq 0 ] && [ "$rc" -eq 0 ] && grep -q 'nothing to move' <<<"$out" && [ -f "$GA/${UM_FAIL}.verdict.json" ]; then
+    ok "MUTATION 14: exempting a FAIL-free archive, the re-run exits 0 with the FAIL live (control: its close still refuses) -- arm (j.12) is live"
+  else
+    bad "MUTATION 14: the fail-free-archive mutant did not change the outcome (close=$rc0 first=$rc_first rerun=$rc): $out"
+  fi
+fi
+
+# =============================================================================
+# MUTATION 15 — a tie is not a promotion (strict `>`). Arm (j.14)'s --series step must
+# flip to exit 0, leaving the legacy FAIL as the live pass.
+# =============================================================================
+MUT15="$W/mut-strictpromote.sh"
+mut_replace "$ROT" "$MUT15" \
+  '[ ! "$MOVED_MAX_TS" \< "${SURVIVOR_TS:-}" ] && PROMOTES=1' \
+  '[ "$MOVED_MAX_TS" \> "${SURVIVOR_TS:-}" ] && PROMOTES=1'
+if cmp -s "$ROT" "$MUT15"; then
+  bad "MUTATION 15: the strict-promotion edit matched nothing; arm (j.14) is UNPROVEN"
+else
+  seed tie
+  out="$( ( cd "$PROJ" && bash "$MUT15" --sprint s308 --series aplanning-20260909T120000Z --apply ) 2>&1 )"; rc=$?
+  if [ "$rc" -eq 0 ] && [ -f "$GA/legacy-20260909T120000Z.verdict.json" ] && [ ! -e "$GA/aplanning-20260909T120000Z.verdict.json" ]; then
+    ok "MUTATION 15: with a strict comparison the tied PASS moves and the legacy FAIL is left live (exit 0) -- arm (j.14) is live"
+  else
+    bad "MUTATION 15: the strict comparison did not change the outcome (rc=$rc): $out"
+  fi
+fi
+
+# =============================================================================
+# MUTATION 16 — --legacy-through never refuses on the survivor. Arm (j.15) must flip to
+# exit 0. The opposite direction from MUTATION 13, which makes it refuse unconditionally.
+# =============================================================================
+MUT16="$W/mut-legacynever.sh"
+mut_replace "$ROT" "$MUT16" \
+  '[ -n "$MOVED_MAX_TS" ] && [ ! "$MOVED_MAX_TS" \< "${SURVIVOR_TS:-}" ] && PROMOTES=1' \
+  '[ -z "$LEGACY_THROUGH" ] && [ -n "$MOVED_MAX_TS" ] && [ ! "$MOVED_MAX_TS" \< "${SURVIVOR_TS:-}" ] && PROMOTES=1'
+if cmp -s "$ROT" "$MUT16"; then
+  bad "MUTATION 16: the legacy-never edit matched nothing; arm (j.15) is UNPROVEN"
+else
+  seed legacy-promote
+  out="$( ( cd "$PROJ" && bash "$MUT16" --legacy-through 20260920T000000Z --apply ) 2>&1 )"; rc=$?
+  if [ "$rc" -eq 0 ] && [ ! -e "$GA/legacy-20260920T000000Z.verdict.json" ] && [ -f "$GA/${UM_FAIL}.verdict.json" ]; then
+    ok "MUTATION 16: with --legacy-through never refusing, the PASS moves and the unmatchable FAIL is left live (exit 0) -- arm (j.15) is live"
+  else
+    bad "MUTATION 16: the legacy-never mutant did not change the outcome (rc=$rc): $out"
+  fi
+fi
+
+# =============================================================================
+# MUTATION 12 — drop the --series exemption: a --series step refuses whenever it leaves
+# an unmovable FAIL live. Arm (j.11)'s line 1 must flip to exit 1, wedging the walk.
+# =============================================================================
+MUT12="$W/mut-seriesrefuse.sh"
+mut_replace "$ROT" "$MUT12" "$SURV_ANCHOR" 'true'
+if cmp -s "$ROT" "$MUT12"; then
+  bad "MUTATION 12: the --series-exemption edit matched nothing; arm (j.11) is UNPROVEN"
+else
+  seed partial-walk
+  out="$( ( cd "$PROJ" && bash "$MUT12" --sprint s308 --series "$UM_FAIL" --apply ) 2>&1 )"; rc=$?
+  if [ "$rc" -eq 1 ] && grep -q 'would strand' <<<"$out" && [ -f "$GA/${UM_FAIL}.verdict.json" ]; then
+    ok "MUTATION 12: without the --series exemption, line 1 of the walk refuses (exit 1) -- arm (j.11) is live"
+  else
+    bad "MUTATION 12: dropping the --series exemption did not change the outcome (rc=$rc): $out"
+  fi
+fi
+
+# =============================================================================
+# MUTATION 11 — between archives with two or more candidates, hint the CLOSING sprint.
+# Arm (j.5c) must go red; (j.5)'s newer-than-newest arm cannot see this mutant.
+# =============================================================================
+MUT11="$W/mut-gaphint.sh"
+mut_replace "$ROT" "$MUT11" \
+  '  if [ "$_h_top" -gt "$_h_lo" ]; then' \
+  '  if [ -n "$_h_hi" ] && [ "$_h_top" -gt "$_h_lo" ]; then printf "%s\t%s\n" "$SPRINT" "mutant"; return 0; fi; if [ "$_h_top" -gt "$_h_lo" ]; then'
+if cmp -s "$ROT" "$MUT11"; then
+  bad "MUTATION 11: the gap-hint edit matched nothing; arm (j.5c) is UNPROVEN"
+else
+  seed hint-wide-gap
+  out="$( ( cd "$PROJ" && bash "$MUT11" --sprint s313 ) 2>&1 )"; rc=$?
+  if [ "$rc" -eq 1 ] && grep -q -- '--sprint s313 --series' <<<"$out" && ! grep -qF 'NO HINT (s310..s311)' <<<"$out"; then
+    ok "MUTATION 11: hinting the closing sprint between archives prints --sprint s313 -- arm (j.5c) is live"
+  else
+    bad "MUTATION 11: the gap-hint mutant did not change the outcome (rc=$rc): $out"
+  fi
+fi
+
+# =============================================================================
 # MUTATION 4 — strip the stranding refusal; arm (h.1) must go red.
 #
 # Keyed on the refusal's own emission, so a mutant that matched nothing cannot
@@ -407,7 +1047,11 @@ MUT4="$W/mut-strand.sh"
 # it": the old anchor named `SURVIVOR_LEGACY`, which no longer exists. The
 # `cmp -s` guard below caught the dead anchor rather than letting a no-op
 # mutation score a kill, which is the whole reason it is there.
-sed 's/^if \[ "\$SURVIVOR_UNMOVABLE" -eq 1 \] && \[ -n "\$SURVIVOR_FAILS" \]; then/if false; then/' "$ROT" > "$MUT4"
+# Re-anchored again when the refusal gained its promotion conjunct (`$PROMOTES`), and
+# again when that conjunct was confined to --series mode.
+mut_replace "$ROT" "$MUT4" \
+  'if [ "$SURVIVOR_UNMOVABLE" -eq 1 ] && [ -n "$SURVIVOR_FAILS" ] && { [ "$SURVIVOR_ALWAYS" -eq 1 ] || [ "$PROMOTES" -eq 1 ]; }; then' \
+  'if false; then'
 if cmp -s "$ROT" "$MUT4"; then
   bad "MUTATION 4: the sed matched nothing, so the stranding refusal in arm (h.1) is UNPROVEN"
 else
@@ -438,7 +1082,11 @@ else
   # real field selects the s308 set.
   seed base
   out2="$( ( cd "$PROJ" && bash "$MUT1" --sprint s308 ) 2>&1 )"
-  if grep -q 'nothing to move' <<<"$out2"; then
+  # Keyed on the s308 set NOT being selected, not on the empty-selection wording:
+  # under the mutant every gate_type value reads as an unmatchable series id, so
+  # the empty selection now refuses rather than printing "nothing to move".
+  if ! grep -q 'would move' <<<"$out2" \
+     && grep -q "no verdict .*names series 's308'" <<<"$out2"; then
     ok "MUTATION 1: selection keyed on the wrong JSON field (gate_type instead of gate_series_id) finds nothing to move in the base world where the real field selects one -- arm (b)/(a) would FAIL against this subject"
   else
     bad "MUTATION 1: selection keyed on the wrong field still found the s308 set; the field-selection is UNPROVEN by this mutant"

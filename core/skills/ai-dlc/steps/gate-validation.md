@@ -178,7 +178,22 @@ gate paid a second full adjudication for a FAIL a script reports in under a seco
 
 At gate entry, once those pass: generate `gate_nonce` as `<gate_type>-$(date -u +%Y%m%dT%H%M%SZ)` (`open` refuses any other form), run
 `scripts/ai-dlc/gate-checkpoint.sh --nonce <gate_nonce> open`,
-then READ AND FOLLOW `_gate-procedures.md` "Gate-adjudication dispatch" — dispatch the
+then decide this dispatch's `gate_series_id` before the brief is written.
+
+**The series id is decided at dispatch, never from `close`.** Its form is exactly `<gate_type>-<slug>-s<N>-<TS>` for a gate dispatched for exactly one story and exactly `<gate_type>-s<N>-<TS>` for every other gate, with nothing between the fields: `<slug>` is `story` followed by lowercase `[a-z0-9]`, `<N>` is the `sprint_id` line of `_bmad-output/pipeline-snapshot.md` (not `sprint-status.sh sprint-id`) with no leading zero, and `<TS>` is the series-entry time as `YYYYMMDDTHHMMSSZ`, never later than the nonce of a pass that carries it. `scripts/ai-dlc/validate-gate-adjudication.sh` refuses any other form on a new pass. The field order is load-bearing because the dispatch guard's nonce regex is unanchored and cannot match a timestamp that directly follows `-s<N>-`, so the slug goes before the sprint field and never after it.
+
+**The slug names the one story the gate was dispatched for.** Its only source is the `<story-index>` the lead writes on this gate's adjudicator brief as its `story: <story-index>` line (`_gate-procedures.md` "Gate-adjudication dispatch"): strip any trailing punctuation from the index, lowercase it and write each `.` or `-` as `x`, then prefix `story`, so `4` is `story4`, `4.2a`, `4-2a` and `4.2a.` are all `story4x2a`, `B6` is `storyb6`, and `B-1` is `storybx1`. A gate dispatched over several stories, or over none, carries no `story:` line and no slug, whichever gate number it is.
+
+Find the newest stem in the live `gate-adjudication/` directory (its verdict, else its part set) whose `gate_series_id` is in that exact form for this `gate_type`, this gate's slug (or no slug) and the current `sprint_id`. A stem carrying another slug, another sprint or any other form is not a candidate, and neither is a part set whose parts disagree on the id or lack it. Then apply the first rule that holds:
+1. If this dispatch is pass 1 of a **Gate Reset**, the id that reset minted wins.
+2. Otherwise, if that candidate did not pass, reuse its id byte-for-byte. A pass whose parts never merged into a verdict counts as not passing. When its ledger `.gate-checkpoint/<its gate_nonce>.tsv` exists and has a `26` row, that row decides, never the verdict's per-check rows: `PASS` passes and any other value does not, because Check 26 passes over a `FAIL` that an in-force suppression covers while the verdict still records that check as `FAIL`. When the ledger is absent or has no `26` row, judge the verdict itself: a verdict with no `FAIL` row passes and one with any `FAIL` row does not, because the ledger is local to the checkout that ran the gate, and treating a pass that cleared Check 26 under a suppression as not passing only continues its series, which cannot hide a stall.
+3. Otherwise mint the id in that form with `<TS>` this nonce's timestamp.
+
+With no candidate, rule 3 mints, so a malformed id is never reused, and two stories' gates in flight together never share a series.
+
+Whether `gate-checkpoint.sh close` ran plays no part in the choice. The exact-form candidate test means a series still carrying an old-form id is not continued; the next pass mints a new-form one. The series id goes in the adjudicator's brief and every shard's brief, and it is never passed to `gate-checkpoint.sh --nonce`.
+
+READ AND FOLLOW `_gate-procedures.md` "Gate-adjudication dispatch": dispatch the
 adjudicator `run_in_background`, join its verdict. While it runs, evaluate ONLY the remaining
 `project` / `lead` checks below — the script checks are already done;
 inline-evaluating an `llm` check is a Rule 20 solo violation.
@@ -194,7 +209,8 @@ Adopt the adjudicator's per-check verdicts through the terminal **Check 26** (fa
 A verdict is valid ONLY for the dispatch that produced it. If you re-dispatch — because
 state moved, or the prior verdict cited state that has since changed — generate a fresh
 `gate_nonce` and re-derive every check from current state; never carry forward, cite, or
-reconcile against a verdict from a superseded dispatch. The nonce is that dispatch's
+reconcile against a verdict from a superseded dispatch. The `gate_series_id` is exempt from
+that: the same-series rule above decides whether it carries forward. The nonce is that dispatch's
 identity, not a staleness comparator: deleting inheritance dissolves the freshness problem
 rather than adding a corrector fed from the snapshot it corrects.
 H1/H2 stay with the lead — a self-test is never escalated into the mechanism it polices.
@@ -3205,7 +3221,9 @@ If any check fails:
    A script-arm FAIL found before the dispatch is re-run as that script alone, and
    no adjudicator is involved. A FAIL inside the adjudicator's verdict is a whole
    new dispatch: the lead mints a fresh `gate_nonce` and the adjudicator
-   re-derives the full escalated set at a fresh nonce.
+   re-derives the full escalated set at a fresh nonce. The failed pass's
+   `gate_series_id` rides into that dispatch's brief under the same-series rule
+   at gate entry.
    `scripts/ai-dlc/validate-gate-adjudication.sh` refuses any verdict whose
    covered set differs from the escalated set (the schema's `coverage_exact`
    rule), so there is no targeted or partial re-adjudication to reach for.
@@ -3231,11 +3249,17 @@ A gate that has already recorded passes is RESET by minting a new
 `gate_series_id`. The pass count restarts at zero, and the stall rung in step 4
 above counts passes of the new series only.
 
-1. Write the reset as an escalation entry naming the retired `gate_series_id`,
-   the new one, and the reason for the reset.
+A reset is performed BEFORE gate entry, before pass 1's `gate_nonce` is minted, so the reset time
+is never later than that nonce.
+
+1. Mint the new id as `<gate_type>-s<N>-<reset TS>`, with `<N>` the snapshot's
+   `sprint_id` and `<reset TS>` the reset time; a gate dispatched for one story keeps
+   its slug, as `<gate_type>-<slug>-s<N>-<reset TS>`. Write the reset as an escalation
+   entry naming the retired `gate_series_id` (or `legacy` when the retired series
+   has none), the new one, and the reason for the reset.
 2. Retain every verdict file of the retired series on disk under its own
    `gate_series_id`. A reset deletes nothing and overwrites nothing.
-3. Run the gate from pass 1 under the new `gate_series_id`.
+3. Run the gate from pass 1 under the new `gate_series_id`, which is stamped on the next dispatch's brief.
 
 ## Not self-authorizable
 

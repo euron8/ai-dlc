@@ -100,10 +100,9 @@ seed_shadow() {
           "planning-20260910T120000Z" "planning-s309-20260910T120000Z" "$S309_ALLPASS"
 }
 
-# THE SECOND UNMOVABLE SHAPE. `gate-adjudication-verdict.json` leaves
-# `gate_series_id` "deliberately unpatterned: required and non-empty, nothing
-# more", so a sprint-FIRST id is schema-legal and no `*-s<N>-*` selector can name
-# it. Observed on the reference consumer as `s310-planning`, written by a live
+# THE SECOND UNMOVABLE SHAPE. A verdict minted before gate-validation.md
+# "At gate entry" prescribed the `gate_series_id` form can carry a sprint-FIRST
+# id, which no `*-s<N>-*` selector can name. Observed on the reference consumer as `s310-planning`, written by a live
 # session. It is worse than a legacy verdict: --legacy-through skips it too,
 # because it HAS a series id. Neither refusal nor escape reached it until the
 # predicate was widened from "is legacy" to "no mode can move it".
@@ -122,6 +121,92 @@ seed_unselectable_fail2() {
   verdict "$GA/story-20260702T000000Z.verdict.json" \
           "story-20260702T000000Z" "x-s310" "$LEGACY_FAIL"
 }
+
+# THE UNMATCHABLE-SERIES SHAPE THE REFERENCE CONSUMER'S WRITERS ACTUALLY STAMP:
+# `<gate>-<nonce>`, no sprint token (42 of its 52 unmatchable ids). This one records
+# a FAIL, which is what makes an empty selection refuse. It is OLDER than the
+# PASS-only unmatchable verdict seeded beside it in `unmatchable`, so it is never the
+# newest, and the survivor block's FAIL refusal -- which reads only the newest --
+# cannot be what refuses it.
+seed_unmatchable_fail() {
+  verdict "$GA/planning-20260909T120000Z.verdict.json" \
+          "planning-20260909T120000Z" "planning-20260909T120000Z" "$LEGACY_FAIL"
+  printf 'Repair notes for the FAIL-carrying unmatchable series.\n' \
+    > "$GA/planning-20260909T120000Z.repair.md"
+}
+
+# The same shape, PASS-only: the near-miss. The guard reads a stale clean verdict as
+# its allow state, so this one WARNs and never refuses.
+seed_unmatchable_pass() {
+  verdict "$GA/planning-20260910T120000Z.verdict.json" \
+          "planning-20260910T120000Z" "planning-20260910T120000Z" "$S309_ALLPASS"
+  printf 'Repair notes for the unmatchable series.\n' \
+    > "$GA/planning-20260910T120000Z.repair.md"
+}
+
+# A second id that STARTS WITH the first one, so an escape matching by prefix
+# moves both where an exact match moves one.
+seed_unmatchable_retry() {
+  verdict "$GA/planning-20260911T000000Z.verdict.json" \
+          "planning-20260911T000000Z" "planning-20260910T120000Z-retry" "$S309_ALLPASS"
+}
+
+# ONE unmatchable series, two members: an older FAIL and its newer PASSing retry under
+# the same id. A series moves whole, so the older FAIL can never be the live pass while
+# the retry stays live; the series is keyed on its NEWEST member and only WARNs.
+seed_series_newest_pass() {
+  verdict "$GA/planning-20260909T120000Z.verdict.json" \
+          "planning-20260909T120000Z" "planning-20260909T120000Z" "$LEGACY_FAIL"
+  verdict "$GA/planning-20260912T000000Z.verdict.json" \
+          "planning-20260912T000000Z" "planning-20260909T120000Z" "$S309_ALLPASS"
+}
+# Its twin, one property apart: the NEWEST member FAILs, so the series refuses.
+seed_series_newest_fail() {
+  verdict "$GA/planning-20260909T120000Z.verdict.json" \
+          "planning-20260909T120000Z" "planning-20260909T120000Z" "$S309_ALLPASS"
+  verdict "$GA/planning-20260912T000000Z.verdict.json" \
+          "planning-20260912T000000Z" "planning-20260909T120000Z" "$LEGACY_FAIL"
+}
+
+# A SECOND FAIL-carrying `<gate>-<nonce>` series, NEWER than seed_unmatchable_fail's, so
+# a walk of the printed lines that runs only the first (older) one leaves this one live
+# as the guard's live pass.
+seed_unmatchable_fail_newer() {
+  verdict "$GA/implementation-20260914T000000Z.verdict.json" \
+          "implementation-20260914T000000Z" "implementation-20260914T000000Z" "$LEGACY_FAIL"
+}
+
+# A PASS-only `<gate>-<nonce>` series OLDER than seed_unmatchable_fail's, so the first
+# line an operator walks moves a series that records no FAIL into this sprint's archive.
+seed_unmatchable_pass_older() {
+  verdict "$GA/planning-20260908T000000Z.verdict.json" \
+          "planning-20260908T000000Z" "planning-20260908T000000Z" "$S309_ALLPASS"
+}
+
+# A sprint-LAST id the reference consumer's writers stamped: `story-s311`, which is
+# NOT nonce-tailed (its stem is). It is the only unmatchable verdict in its world and
+# it records a FAIL, so a predicate counting only `<gate>-<nonce>` ids misses it.
+seed_story_s311_fail() {
+  verdict "$GA/story-20260913T044428Z.verdict.json" \
+          "story-20260913T044428Z" "story-s311" "$LEGACY_FAIL"
+}
+
+# An id carrying an apostrophe, which the printed command must quote so it can be
+# pasted as printed. Nonce-tailed on purpose, so a predicate counting only
+# `<gate>-<nonce>` ids still sees it and only the quoting is under test here.
+seed_apostrophe_fail() {
+  verdict "$GA/planning-20260909T130000Z.verdict.json" \
+          "planning-20260909T130000Z" "it's-planning-20260909T130000Z" "$LEGACY_FAIL"
+}
+
+# A sprint archive whose range ends before the unmatchable verdicts, so the hint has
+# an archive below the nonce and none above it.
+seed_archive() { # <sprint> <nonce>: one archived verdict, so the sprint has a nonce range
+  mkdir -p "$PROJ/_bmad-output/implementation-artifacts/$1/gate-adjudication"
+  verdict "$PROJ/_bmad-output/implementation-artifacts/$1/gate-adjudication/planning-$2.verdict.json" \
+          "planning-$2" "planning-$1-$2" "$S309_ALLPASS"
+}
+seed_archive_s309() { seed_archive s309 20260901T000000Z; }
 
 seed_noise() {
   printf '{"line":1}\n' > "$GA/.verdict-writes.jsonl"
@@ -177,6 +262,97 @@ case "$CASE" in
   strand-unselectable2)
     seed_s308; seed_unselectable_fail2
     ;;
+  # Empty --sprint s308 selection, an older unmatchable verdict that FAILs, a newest
+  # one that PASSes, and a legacy verdict that must not be counted. Refused on the
+  # FAIL series, the PASS-only one WARNed, escapes printed.
+  unmatchable)
+    seed_unmatchable_fail; seed_unmatchable_pass; seed_legacy
+    ;;
+  # The near-miss: the same world without the FAIL series. WARN, exit 0.
+  unmatchable-pass)
+    seed_unmatchable_pass; seed_legacy
+    ;;
+  # The only unmatchable verdict is a FAIL-carrying `story-s311` id, not nonce-tailed.
+  story-s311)
+    seed_story_s311_fail; seed_legacy
+    ;;
+  # A FAIL-carrying id with an apostrophe in it.
+  apostrophe)
+    seed_apostrophe_fail; seed_legacy
+    ;;
+  # A FAIL-carrying `<gate>-<nonce>` id newer than the only archive, s309.
+  hint-window)
+    seed_archive_s309; seed_unmatchable_fail
+    ;;
+  # The same verdict BETWEEN two archives: s309 and s311 leave s310 alone in the
+  # window; s309 and s310 are adjacent and leave none.
+  hint-gap)
+    seed_archive_s309; seed_archive s311 20260920T000000Z; seed_unmatchable_fail
+    ;;
+  hint-adjacent)
+    seed_archive_s309; seed_archive s310 20260920T000000Z; seed_unmatchable_fail
+    ;;
+  # Archives s309 and s312 with the verdict between them: two candidates, s310..s311,
+  # so no hint whatever sprint is closing.
+  hint-wide-gap)
+    seed_archive_s309; seed_archive s312 20260920T000000Z; seed_unmatchable_fail
+    ;;
+  # One unmatchable series with an older FAIL and a newer PASS: WARN, never refuse.
+  series-newest-pass)
+    seed_series_newest_pass; seed_legacy
+    ;;
+  # The twin: older PASS, newer FAIL. Refused.
+  series-newest-fail)
+    seed_series_newest_fail; seed_legacy
+    ;;
+  # An s308 selection beside a FAIL-carrying unmatchable verdict NEWER than the s308
+  # verdict, so it is the live pass before the move and after it. The move promotes
+  # nothing, and the close must still refuse: the FAIL stays the live pass.
+  reapply)
+    seed_s308; seed_unmatchable_fail; seed_legacy
+    ;;
+  # Two FAIL-carrying unmatchable series, older A and newer B, no tagged s308 verdict:
+  # the partial walk. Moving A alone into s308 fills s308's archive while B stays live.
+  partial-walk)
+    seed_unmatchable_fail; seed_unmatchable_fail_newer; seed_legacy
+    ;;
+  # An older PASS-only unmatchable series and a newer FAIL one: moving the PASS series
+  # alone fills this sprint's archive with no FAIL while the FAIL stays live.
+  pass-first)
+    seed_unmatchable_pass_older; seed_unmatchable_fail; seed_legacy
+    ;;
+  # A FAILing legacy verdict below a FAIL-carrying unmatchable series: the --series step
+  # prescribes --legacy-through, which must not in turn refuse and prescribe --series.
+  legacy-then-series)
+    seed_legacy_fail; seed_unmatchable_fail
+    ;;
+  # A legacy FAIL and an unmatchable PASS sharing ONE nonce. The PASS sorts first in the
+  # glob, so it is the live pass; moving it promotes the legacy FAIL though no nonce is newer.
+  tie)
+    verdict "$GA/legacy-20260909T120000Z.verdict.json" \
+            "legacy-20260909T120000Z" "" "$LEGACY_FAIL"
+    verdict "$GA/aplanning-20260909T120000Z.verdict.json" \
+            "aplanning-20260909T120000Z" "aplanning-20260909T120000Z" "$S309_ALLPASS"
+    ;;
+  # A legacy PASS that is the live pass, above an older FAIL-carrying unmatchable series.
+  # --legacy-through over the PASS promotes that FAIL to live, so the remedy step refuses.
+  legacy-promote)
+    verdict "$GA/legacy-20260920T000000Z.verdict.json" \
+            "legacy-20260920T000000Z" "" "$LEGACY_PASS"
+    seed_unmatchable_fail
+    ;;
+  # Tagged verdicts only, none for s308: still "nothing to move", exit 0.
+  tagged-nomatch)
+    seed_s309_pass; seed_legacy
+    ;;
+  # The --series escape, against two ids one of which is a prefix of the other.
+  series-move)
+    seed_unmatchable_pass; seed_unmatchable_retry; seed_legacy
+    ;;
+  # A non-empty s308 selection AND an unmatchable verdict: move, WARN, exit 0.
+  mixed)
+    seed_s308; seed_unmatchable_pass; seed_legacy
+    ;;
   badjson)
     seed_s308; seed_s309_pass; seed_legacy; seed_noise
     printf '{ "schema_id": "GATE_ADJUDICATION_VERDICT v1", "gate_nonce": "broken-20260101T000000Z", "verdicts": [ \n' \
@@ -203,6 +379,7 @@ cat > "$W/env.sh" <<EOF
 PROJ="$PROJ"
 GA="$GA"
 DEST_S308="$PROJ/_bmad-output/implementation-artifacts/s308/gate-adjudication"
+DEST_S309="$PROJ/_bmad-output/implementation-artifacts/s309/gate-adjudication"
 EOF
 
 printf '%s' "$W"

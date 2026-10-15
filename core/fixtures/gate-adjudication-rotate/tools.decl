@@ -5,6 +5,7 @@ bash
 cat
 chmod
 cmp
+cp
 cut
 date
 dirname

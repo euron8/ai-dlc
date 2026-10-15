@@ -131,6 +131,92 @@ py_edit 'del doc["gate_series_id"]'
 run "$VERDICT"
 [ "$RC" -eq 1 ] && ok "deleting gate_series_id → exit 1 (the pass would be invisible to --series)" || bad "a verdict with no gate_series_id did NOT fail with exit 1 (rc=$RC) — it would drop out of the stall rung's count"
 
+# --- SF0–SF11: THE PRESCRIBED SERIES-ID FORM ----------------------------------
+# A pass minted at or after the validator's SERIES_FORM_FROM carries gate_series_id as
+# <gate_type>-s<N>-<TS> with <TS> no later than the nonce. Every case below sits at its OWN
+# post-cutoff nonce path (the pristine verdict is pre-cutoff and old-form, and its exit-0 above
+# is the control that written history is not re-judged). Each offender is PRESENCE-shaped: it
+# must exit 1 AND print the sentence only its own property emits, so a validator refusing for
+# another reason does not score. Two near-misses carry every property the offenders lack: the
+# series entered AT the nonce (pass 1, which a strict-less-than regression would refuse) and
+# entered BEFORE it (a reused series on a later pass).
+SF_NONCE="implementation-20261101T120000Z"
+SF_PATH="$WORK/gate-adjudication/$SF_NONCE.verdict.json"
+sf_case() { # sf_case <series-id> -> RC, and $SF_ERR carries stderr
+  python3 - "$PRISTINE" "$SF_PATH" "$SF_NONCE" "$1" <<'PY'
+import json, sys
+src, out, nonce, sid = sys.argv[1:5]
+doc = json.load(open(src))
+doc["gate_nonce"] = nonce
+doc["gate_series_id"] = sid
+open(out, "w").write(json.dumps(doc, indent=2) + "\n")
+PY
+  SF_ERR="$(AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
+    bash "$VALIDATOR" "$GATE_TYPE" "$SF_PATH" 2>&1 >/dev/null)"
+  RC=$?
+}
+sf_says() { local n; n="$(grep -cF -- "$1" <<<"$SF_ERR")" || n=0; [ "$n" -gt 0 ]; }
+sf_case "implementation-s318-20261101T120000Z"
+[ "$RC" -eq 0 ] && ok "SF0: a post-cutoff pass whose series was entered AT its nonce (pass 1) → exit 0" \
+  || bad "SF0: a well-formed pass-1 series id was refused (rc=$RC) — the arm cannot tell the prescribed form from a defect: $SF_ERR"
+sf_case "implementation-s318-20261101T090000Z"
+[ "$RC" -eq 0 ] && ok "SF0b: a post-cutoff pass reusing a series entered BEFORE its nonce → exit 0" \
+  || bad "SF0b: a reused series id was refused (rc=$RC): $SF_ERR"
+sf_case "implementation-20261101T120000Z"
+{ [ "$RC" -eq 1 ] && sf_says "carries no -s<N>- sprint field"; } \
+  && ok "SF1: the adjudicator-invented <gate>-<TS> id on a post-cutoff pass → exit 1, named" \
+  || bad "SF1: a series id with no -s<N>- field was not refused by the series-form arm (rc=$RC): $SF_ERR"
+sf_case "implementation-s318-20261101T120001Z"
+{ [ "$RC" -eq 1 ] && sf_says "LATER than this pass's nonce time"; } \
+  && ok "SF2: a series-entry time one second after the nonce → exit 1, named" \
+  || bad "SF2: a series id minted after its own pass was not refused by the timestamp check (rc=$RC): $SF_ERR"
+sf_case "story-s318-20261101T120000Z"
+{ [ "$RC" -eq 1 ] && sf_says "does not start with this verdict's gate_type"; } \
+  && ok "SF3: a series id prefixed with another gate_type → exit 1, named" \
+  || bad "SF3: a foreign gate_type prefix was not refused by the prefix check (rc=$RC): $SF_ERR"
+sf_case "implementation-s318-20261101T1200Z"
+{ [ "$RC" -eq 1 ] && sf_says "does not end in a <YYYYMMDDTHHMMSSZ>"; } \
+  && ok "SF4: a trailing time with four digits, not six → exit 1, named" \
+  || bad "SF4: a series id with no trailing timestamp after -s<N>- was not refused (rc=$RC): $SF_ERR"
+# SF5–SF11: the optional story slug, which sits BEFORE -s<N>-, and the sprint field's form. The
+# accepted slugs are the ones the reference consumer's real story indices produce (4.2a, B6,
+# B-1), each entered before its nonce so that only SF0 owns the at-the-nonce boundary. Each
+# offender breaks one property and must print the sentence only that property emits.
+sf_case "implementation-story4x2a-s318-20261101T090000Z"
+[ "$RC" -eq 0 ] && ok "SF5: the slug of story-index 4.2a (story4x2a) before -s<N>- → exit 0" \
+  || bad "SF5: a well-formed slug from index 4.2a was refused (rc=$RC): $SF_ERR"
+sf_case "implementation-storyb6-s318-20261101T090000Z"
+[ "$RC" -eq 0 ] && ok "SF5b: the slug of story-index B6 (storyb6, ends in a letter after lowercasing) → exit 0" \
+  || bad "SF5b: a well-formed slug from index B6 was refused (rc=$RC): $SF_ERR"
+sf_case "implementation-storybx1-s318-20261101T090000Z"
+[ "$RC" -eq 0 ] && ok "SF5c: the slug of story-index B-1 (storybx1) → exit 0" \
+  || bad "SF5c: a well-formed slug from index B-1 was refused (rc=$RC): $SF_ERR"
+sf_case "implementation-story-4-s318-20261101T120000Z"
+{ [ "$RC" -eq 1 ] && sf_says "carries story slug"; } \
+  && ok "SF6: a slug holding a hyphen → exit 1, named" \
+  || bad "SF6: a hyphenated slug was not refused by the slug form (rc=$RC): $SF_ERR"
+sf_case "implementation-storyB6-s318-20261101T120000Z"
+{ [ "$RC" -eq 1 ] && sf_says "carries story slug"; } \
+  && ok "SF7: a slug carrying an uppercase letter → exit 1, named" \
+  || bad "SF7: an uppercase slug was not refused by the slug form (rc=$RC): $SF_ERR"
+sf_case "implementation-s318-story4-20261101T120000Z"
+{ [ "$RC" -eq 1 ] && sf_says "does not end in a <YYYYMMDDTHHMMSSZ>"; } \
+  && ok "SF8: a slug placed AFTER -s<N>- (the dispatch guard's nonce regex can match there) → exit 1, named" \
+  || bad "SF8: a slug after the sprint field was not refused (rc=$RC): $SF_ERR"
+sf_case "implementation-318-20261101T120000Z"
+{ [ "$RC" -eq 1 ] && sf_says "carries no -s<N>- sprint field"; } \
+  && ok "SF9: a bare-digit sprint field with no s → exit 1, named" \
+  || bad "SF9: a sprint field without its s was not refused (rc=$RC): $SF_ERR"
+sf_case "implementation-s0318-20261101T120000Z"
+{ [ "$RC" -eq 1 ] && sf_says "a positive integer with no leading zero"; } \
+  && ok "SF10: a zero-padded sprint field → exit 1, named" \
+  || bad "SF10: a zero-padded sprint was not refused (rc=$RC): $SF_ERR"
+sf_case $'implementation-s318-20261101T120000Z\n'
+{ [ "$RC" -eq 1 ] && sf_says "does not end in a <YYYYMMDDTHHMMSSZ>"; } \
+  && ok "SF11: a series id with a trailing newline → exit 1, named" \
+  || bad "SF11: a trailing newline was not refused by the anchored timestamp check (rc=$RC): $SF_ERR"
+rm -f "$SF_PATH"
+
 # --- Assertion 9: RESTORE (step c) → exit 0 ----------------------------------
 restore
 run "$VERDICT"
