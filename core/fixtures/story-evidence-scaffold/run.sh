@@ -492,9 +492,10 @@ KCASES='14 15 16 17 18 19 20 21 22 25 26 27 28 29 30 31 32'
 # non-UTF-8 byte. Empty where none does (gawk, mawk, or no UTF-8 locale installed): the abort the
 # world is about cannot happen on this host, and its mutant below says so instead of scoring.
 UTF8_LOCALE=""
+LATIN1_PROBE="$(printf 'caf\351')"
 for l in en_US.UTF-8 C.UTF-8; do
   # A regex match, because that is what aborts: a bare record count reads the byte fine.
-  if ! LC_ALL="$l" awk '{gsub(/a/, "")} END{print 1}' <<<"$(printf 'caf\351')" >/dev/null 2>&1; then UTF8_LOCALE="$l"; break; fi
+  if ! LC_ALL="$l" awk '{gsub(/a/, "")} END{print 1}' <<<"$LATIN1_PROBE" >/dev/null 2>&1; then UTF8_LOCALE="$l"; break; fi
 done
 WORLDS_OK=1
 for v in clean nocmd redun glob empty rename rebind movefile headeq second short shortnores noyaml dirtyyaml notreview yamlmis planlag demoted level1 trail fence stratrail crlfstrat crlfdemoted latin1yaml latin1story dirtystory dirtyhead nostatus untracked mixfence latin1strat; do
