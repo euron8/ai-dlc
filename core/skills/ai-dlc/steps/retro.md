@@ -1358,6 +1358,16 @@ follow their audit, these must follow the merge.
    rotator inferred and never applies itself. Then add `--apply`, and re-run the `--sprint s<N> --apply`
    above. A WARN naming such verdicts on a run that moved this sprint's verdicts
    is not a HARD_BLOCK; apply the same printed lines before the commit.
+
+   **Confirm every hinted sprint against the sprint-close commits before adding `--apply`.**
+   Read `git log --format='%ad %s'` for this repo's sprint-close commits and check that the
+   id's oldest verdict nonce falls after the previous sprint's close and before `s<M>`'s close.
+   A line printed `--sprint s<N>` with `NO HINT`, or a hint those commits do not confirm, is
+   an `AskUserQuestion` to the operator naming the id, its nonces and the candidate sprints;
+   never pick the sprint yourself. Until the writer half stamps `<gate_type>-s<N>-<nonce>` at
+   mint time, a retro HARD_BLOCKS here whenever this sprint's selection is empty beside an
+   unmatchable series that records a FAIL.
+
 6. **Verify no-loss per file:** each archive's byte count MUST equal that file's
    pre-rotation live byte count, and each new live log MUST contain only its
    header. A mismatch is a HARD_BLOCK — do not commit; restore from git and
