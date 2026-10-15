@@ -367,6 +367,21 @@ conversion is correct by tracing the full unit chain from source to
 display, classify as **Critical**. **Evidence required:** Include a unit
 chain trace in the review doc.
 
+### A Rebind Without Priced Literals = Important (minimum)
+
+**A diff that re-binds a name, role or unit prices every literal keyed on it, under both
+bindings.** When the diff re-binds a name, a role or a unit that downstream literals or
+thresholds are keyed on, the review enumerates every literal and threshold the re-bound value
+flows into, prices each one under the old binding and under the new one, in the unit it is
+compared against, and records `old -> new` for each. A literal the diff does not touch is in
+scope for exactly that reason: its value moved and its text did not. A mutation that proves the
+rebind line is exercised does not price what the rebind fed.
+
+An unpriced keyed literal is **Important** at minimum. When the price under the new binding
+sends a case a locked requirement or an AC covers down a different branch than the old binding
+did, it is **Critical**. **Evidence required:** one `derived` command per keyed literal per
+binding in the review doc, with `old -> new` stated beside it.
+
 ### Unverifiable API Field Names = Important
 
 Any field name in consumer code that cannot be verified against the actual

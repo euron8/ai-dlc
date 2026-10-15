@@ -107,6 +107,15 @@ number you could have run in one command. Measured across four sprints of this p
 of the MAJOR findings raised after the first adversarial pass are counts, enumerations and
 `file:line` citations asserted at authoring time without being executed.
 
+**A design that re-binds a name, role or unit prices every literal keyed on it, in a `derived`
+fence.** When the architecture or an ADR re-binds a name, a role or a unit that downstream
+literals or thresholds are keyed on, the ADR carries a `derived` fence with one command per
+keyed literal per binding whose output is that literal's value under the old binding and under
+the new one, in the unit it is compared against, and the sentence beside the fence records
+`old -> new` for each. A literal the diff does not touch is in scope for exactly that reason:
+its value moves and its text does not. A rebind that keys no literal says so, with the command
+that showed it.
+
 ## A fold architecture dispatch — run the skill, then write its provenance block
 
 When `bug-investigation.md` §4 dispatches you over a folded bug-fix story, it names
