@@ -180,12 +180,16 @@ At gate entry, once those pass: generate `gate_nonce` as `<gate_type>-$(date -u 
 `scripts/ai-dlc/gate-checkpoint.sh --nonce <gate_nonce> open`,
 then decide this dispatch's `gate_series_id` before the brief is written.
 
-**The series id is decided at dispatch, never from `close`.** Its form is `<gate_type>-s<N>-<TS>`: `<N>` is the `sprint_id` line of `_bmad-output/pipeline-snapshot.md` (not `sprint-status.sh sprint-id`), `<TS>` is the series-entry time, and the field order is load-bearing because the dispatch guard's nonce regex is unanchored and cannot match a timestamp that follows `-s<N>-`. Find the newest `<gate_type>-*` stem in the live `gate-adjudication/` directory (its verdict, else its part set), then apply the first rule that holds:
-1. If this dispatch is pass 1 of a **Gate Reset**, the id that reset minted wins.
-2. Otherwise, if that newest pass did NOT PASS **Check 26** (its parts never merged into a verdict counts as not passing), and its `gate_series_id` is well formed — the `<gate_type>-` prefix, then `-s<N>-` for the current `sprint_id`, then a trailing `<YYYYMMDDTHHMMSSZ>` no later than that pass's nonce — and every part of its set carries that same id, reuse that id byte-for-byte.
-3. Otherwise mint `<gate_type>-s<N>-<TS>` with `<TS>` this nonce's timestamp.
+**The series id is decided at dispatch, never from `close`.** Its form is exactly `<gate_type>-s<N>-<TS>` for an unscoped gate and exactly `<gate_type>-s<N>-<slug>-<TS>` for a gate scoped to one story, with nothing between the fields: `<N>` is the `sprint_id` line of `_bmad-output/pipeline-snapshot.md` (not `sprint-status.sh sprint-id`), `<slug>` is one lowercase `[a-z0-9]` segment ending in a digit, and `<TS>` is the series-entry time as `YYYYMMDDTHHMMSSZ`, never later than the nonce of a pass that carries it. `scripts/ai-dlc/validate-gate-adjudication.sh` refuses any other form on a new pass. The field order is load-bearing because the dispatch guard's nonce regex is unanchored and cannot match a timestamp that follows `-s<N>-` or a slug ending in a digit.
 
-A malformed id, or a part set whose parts disagree on the id or lack it, is never reused: rule 3 mints. No verdict field records a gate's subject, so concurrent same-type gates on different subjects (two stories' implementation gates in flight together) are out of scope for reuse: while same-type gates are in flight on more than one subject, every dispatch of that `gate_type` mints under rule 3.
+**The slug names the story.** A gate scoped to one story (gate 3, the per-story `[implementation]` gate) takes its slug from that story's `<story-index>`, the `<M>` of its canonical `story-<M>-*.md` and the token the closing writer's `shard: 1/1 <story-index>` line carries: `story` followed by the index with each `.` or `-` written as `x`, so index `4` is `story4`, and `2.4` and `2-4` are both `story2x4`. Every other gate carries no slug.
+
+Find the newest stem in the live `gate-adjudication/` directory (its verdict, else its part set) whose `gate_series_id` is in that exact form for this `gate_type`, the current `sprint_id` and this gate's slug, or carries no slug for an unscoped gate. A stem carrying another slug, another sprint or any other form is not a candidate, and neither is a part set whose parts disagree on the id or lack it. Then apply the first rule that holds:
+1. If this dispatch is pass 1 of a **Gate Reset**, the id that reset minted wins.
+2. Otherwise, if that candidate did not pass, reuse its id byte-for-byte. A pass whose parts never merged into a verdict, or whose ledger `.gate-checkpoint/<its gate_nonce>.tsv` has no `26` row or a `26` row other than `PASS`, counts as not passing. Read that ledger row, never the verdict's per-check rows: Check 26 passes over a `FAIL` that an in-force suppression covers, and the verdict still records that check as `FAIL`.
+3. Otherwise mint the id in that form with `<TS>` this nonce's timestamp.
+
+With no candidate, rule 3 mints, so a malformed id is never reused, and two stories' gates in flight together never share a series.
 
 Whether `gate-checkpoint.sh close` ran plays no part in the choice. Rule 2's `-s<N>-` test means a series still carrying an old-form id is not continued; the next pass mints a new-form one. The series id goes in the adjudicator's brief and every shard's brief, and it is never passed to `gate-checkpoint.sh --nonce`.
 
@@ -3249,7 +3253,8 @@ A reset is performed BEFORE gate entry, before pass 1's `gate_nonce` is minted, 
 is never later than that nonce.
 
 1. Mint the new id as `<gate_type>-s<N>-<reset TS>`, with `<N>` the snapshot's
-   `sprint_id` and `<reset TS>` the reset time. Write the reset as an escalation
+   `sprint_id` and `<reset TS>` the reset time; a gate scoped to one story keeps
+   its slug, as `<gate_type>-s<N>-<slug>-<reset TS>`. Write the reset as an escalation
    entry naming the retired `gate_series_id` (or `legacy` when the retired series
    has none), the new one, and the reason for the reset.
 2. Retain every verdict file of the retired series on disk under its own

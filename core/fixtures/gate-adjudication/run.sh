@@ -174,10 +174,29 @@ sf_case "story-s318-20261101T120000Z"
 { [ "$RC" -eq 1 ] && sf_says "does not start with this verdict's gate_type"; } \
   && ok "SF3: a series id prefixed with another gate_type → exit 1, named" \
   || bad "SF3: a foreign gate_type prefix was not refused by the prefix check (rc=$RC): $SF_ERR"
-sf_case "implementation-s318-story6-20261101T120000Z"
+sf_case "implementation-s318-20261101T1200Z"
 { [ "$RC" -eq 1 ] && sf_says "does not end in a <YYYYMMDDTHHMMSSZ>"; } \
-  && ok "SF4: an extra field between -s<N>- and the timestamp → exit 1, named" \
+  && ok "SF4: a trailing time with four digits, not six → exit 1, named" \
   || bad "SF4: a series id with no trailing timestamp after -s<N>- was not refused (rc=$RC): $SF_ERR"
+# SF5–SF8: the optional story slug. SF5 is the near-miss carrying every property the offenders
+# lack (lowercase, one segment, ends in a digit, the x for a dotted index); each offender breaks
+# exactly one of them and must be refused by the timestamp-form sentence, which is the only one
+# that sees the slug.
+sf_case "implementation-s318-story2x4-20261101T120000Z"
+[ "$RC" -eq 0 ] && ok "SF5: a story-scoped series id with a well-formed slug → exit 0" \
+  || bad "SF5: a well-formed slugged series id was refused (rc=$RC): $SF_ERR"
+sf_case "implementation-s318-story-4-20261101T120000Z"
+{ [ "$RC" -eq 1 ] && sf_says "does not end in a <YYYYMMDDTHHMMSSZ>"; } \
+  && ok "SF6: a slug holding a hyphen (two segments) → exit 1, named" \
+  || bad "SF6: a two-segment slug was not refused by the slug form (rc=$RC): $SF_ERR"
+sf_case "implementation-s318-Story4-20261101T120000Z"
+{ [ "$RC" -eq 1 ] && sf_says "does not end in a <YYYYMMDDTHHMMSSZ>"; } \
+  && ok "SF7: a slug carrying an uppercase letter → exit 1, named" \
+  || bad "SF7: an uppercase slug was not refused by the slug form (rc=$RC): $SF_ERR"
+sf_case "implementation-s318-xstory-20261101T120000Z"
+{ [ "$RC" -eq 1 ] && sf_says "does not end in a <YYYYMMDDTHHMMSSZ>"; } \
+  && ok "SF8: a slug ending in a gate_type word (the guard's nonce regex would match inside it) → exit 1, named" \
+  || bad "SF8: a slug ending in a letter was not refused (rc=$RC): $SF_ERR"
 rm -f "$SF_PATH"
 
 # --- Assertion 9: RESTORE (step c) → exit 0 ----------------------------------

@@ -175,16 +175,21 @@ pin_scan() {
 # A comment line cannot go inside the table below: every line between the markers is a row.
 pins() {
   cat <<'PINS'
-gv-series-form|S|steps/gate-validation.md|## Validation Checklist|### 1.|**The series id is decided at dispatch, never from `close`.**|para|Its form is `<gate_type>-s<N>-<TS>`
+gv-series-form|S|steps/gate-validation.md|## Validation Checklist|### 1.|**The series id is decided at dispatch, never from `close`.**|para|Its form is exactly `<gate_type>-s<N>-<TS>` for an unscoped gate and exactly `<gate_type>-s<N>-<slug>-<TS>` for a gate scoped to one story, with nothing between the fields
 gv-series-sprintid|S|steps/gate-validation.md|## Validation Checklist|### 1.|**The series id is decided at dispatch, never from `close`.**|para|`<N>` is the `sprint_id` line of `_bmad-output/pipeline-snapshot.md` (not `sprint-status.sh sprint-id`)
-gv-series-reset|S|steps/gate-validation.md|## Validation Checklist|### 1.|**The series id is decided at dispatch, never from `close`.**|para|If this dispatch is pass 1 of a **Gate Reset**, the id that reset minted wins.
-gv-series-reuse|S|steps/gate-validation.md|## Validation Checklist|### 1.|**The series id is decided at dispatch, never from `close`.**|para|if that newest pass did NOT PASS **Check 26** (its parts never merged into a verdict counts as not passing)
-gv-series-wellformed|S|steps/gate-validation.md|## Validation Checklist|### 1.|**The series id is decided at dispatch, never from `close`.**|para|the `<gate_type>-` prefix, then `-s<N>-` for the current `sprint_id`, then a trailing `<YYYYMMDDTHHMMSSZ>` no later than that pass's nonce
-gv-series-parts|S|steps/gate-validation.md|## Validation Checklist|### 1.|**The series id is decided at dispatch, never from `close`.**|para|and every part of its set carries that same id, reuse that id byte-for-byte.
-gv-series-noreuse|S|steps/gate-validation.md|## Validation Checklist|### 1.|A malformed id, or a part set|para|whose parts disagree on the id or lack it, is never reused: rule 3 mints.
-gv-series-concurrent|S|steps/gate-validation.md|## Validation Checklist|### 1.|A malformed id, or a part set|para|concurrent same-type gates on different subjects (two stories' implementation gates in flight together) are out of scope for reuse
+gv-series-reset|S|steps/gate-validation.md|## Validation Checklist|### 1.|Find the newest stem|para|If this dispatch is pass 1 of a **Gate Reset**, the id that reset minted wins.
+gv-series-reuse|S|steps/gate-validation.md|## Validation Checklist|### 1.|Find the newest stem|para|Otherwise, if that candidate did not pass, reuse its id byte-for-byte.
+gv-series-wellformed|S|steps/gate-validation.md|## Validation Checklist|### 1.|**The series id is decided at dispatch, never from `close`.**|para|`<slug>` is one lowercase `[a-z0-9]` segment ending in a digit, and `<TS>` is the series-entry time as `YYYYMMDDTHHMMSSZ`, never later than the nonce of a pass that carries it
+gv-series-slug|S|steps/gate-validation.md|## Validation Checklist|### 1.|**The slug names the story.**|para|`story` followed by the index with each `.` or `-` written as `x`, so index `4` is `story4`, and `2.4` and `2-4` are both `story2x4`
+gv-series-unscoped|S|steps/gate-validation.md|## Validation Checklist|### 1.|**The slug names the story.**|para|Every other gate carries no slug.
+gv-series-lookup|S|steps/gate-validation.md|## Validation Checklist|### 1.|Find the newest stem|para|whose `gate_series_id` is in that exact form for this `gate_type`, the current `sprint_id` and this gate's slug, or carries no slug for an unscoped gate
+gv-series-notpassing|S|steps/gate-validation.md|## Validation Checklist|### 1.|Find the newest stem|para|A pass whose parts never merged into a verdict, or whose ledger `.gate-checkpoint/<its gate_nonce>.tsv` has no `26` row or a `26` row other than `PASS`, counts as not passing.
+gv-series-ledger|S|steps/gate-validation.md|## Validation Checklist|### 1.|Find the newest stem|para|Read that ledger row, never the verdict's per-check rows
+gv-series-parts|S|steps/gate-validation.md|## Validation Checklist|### 1.|Find the newest stem|para|A stem carrying another slug, another sprint or any other form is not a candidate, and neither is a part set whose parts disagree on the id or lack it.
+gv-series-noreuse|S|steps/gate-validation.md|## Validation Checklist|### 1.|With no candidate, rule 3 mints|para|so a malformed id is never reused, and two stories' gates in flight together never share a series.
 gv-reset-before|S|steps/gate-validation.md|## Gate Reset|## Not self-authorizable|A reset is performed BEFORE gate entry, before pass 1's `gate_nonce` is minted|contains
-gv-series-mint|S|steps/gate-validation.md|## Validation Checklist|### 1.|**The series id is decided at dispatch, never from `close`.**|para|Otherwise mint `<gate_type>-s<N>-<TS>` with `<TS>` this nonce's timestamp.
+gv-reset-slug|S|steps/gate-validation.md|## Gate Reset|## Not self-authorizable|a gate scoped to one story keeps|contains
+gv-series-mint|S|steps/gate-validation.md|## Validation Checklist|### 1.|Find the newest stem|para|Otherwise mint the id in that form with `<TS>` this nonce's timestamp.
 gv-series-noclose|S|steps/gate-validation.md|## Validation Checklist|### 1.|Whether `gate-checkpoint.sh close` ran plays no part in the choice.|para|a series still carrying an old-form id is not continued
 gv-series-nononce|S|steps/gate-validation.md|## Validation Checklist|### 1.|Whether `gate-checkpoint.sh close` ran plays no part in the choice.|para|it is never passed to `gate-checkpoint.sh --nonce`
 gv-series-exempt|S|steps/gate-validation.md|## Validation Checklist|### 1.|**Record every verdict the moment it is reached.**|para|The `gate_series_id` is exempt from that: the same-series rule above decides whether it carries forward.
