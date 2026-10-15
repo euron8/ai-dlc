@@ -442,6 +442,28 @@ log_event() { # <event> <line>...
 # declares for the repair record, for the same reason: this hook can prove a dispatch touched
 # the path and cannot prove authorship of the bytes. What it removes is the case BL-176's
 # subject is made of, where nothing at all binds the file to any dispatch.
+#
+# THE THREE EVIDENCE FIELDS, shared with `record_artifact_write` below and built by
+# `record_evidence`. Each is RECORD-ONLY: no reader in this hook keys on it and no allow or
+# deny moves with it, and every key is written even when empty, so a row's key set never
+# depends on the payload.
+#  - `tool_use_id` is the harness's id for THIS tool call, read from the payload, never from
+#    the tool input. It is what names the call inside whichever transcript holds it.
+#  - `transcript_path` is the PARENT session's transcript, not the agent's: every subagent of
+#    one session carries the same value. It is therefore NEVER an identity on its own -- two
+#    rows sharing it are two calls in one session, not one writer.
+#  - `agent_transcript` is a boolean SNAPSHOT taken at PreToolUse time: whether
+#    `<transcript_path minus .jsonl>/subagents/agent-<agent_id>.jsonl` existed then. `false`
+#    attests only that the file was absent at that instant -- an agent whose transcript the
+#    harness has not yet created reads `false` too -- and an empty `transcript_path` reads `false`.
+record_evidence() { # -> sets _rev_tp and _rev_at; no fork (test builtins only)
+  _rev_tp="${TRANSCRIPT:-}"
+  _rev_at=false
+  if [ -n "$_rev_tp" ] && [ -n "$AGENT_ID" ] \
+     && [ -f "${_rev_tp%.jsonl}/subagents/agent-${AGENT_ID}.jsonl" ]; then
+    _rev_at=true
+  fi
+}
 record_verdict_write() { # $1 file_path -- silent no-op unless this is a verdict write
   case "$TOOL_NAME" in Edit|Write|MultiEdit) ;; *) return 0 ;; esac
   case "$1" in
@@ -457,10 +479,18 @@ record_verdict_write() { # $1 file_path -- silent no-op unless this is a verdict
     *) return 0 ;;
   esac
   mkdir -p "$GATE_DIR" 2>/dev/null || return 0
-  jq -nc --arg ts "$TIMESTAMP" --arg stem "$_rvw_stem" --arg agent "$AGENT_ID" \
+  record_evidence
+  # The payload goes in on STDIN by HERE-STRING, not as an argument -- a Write payload carries
+  # the whole file and an argument that large is refused by exec -- and not by a pipe, whose left
+  # stage is a forked subshell. `tool_use_id` is read in the jq that already wrote the row, so the
+  # new field costs no fork. Bash 3.2 backs a here-string with a temp file; an unwritable TMPDIR
+  # loses the row, which is the same silent drop as any failed append here.
+  jq -c --arg ts "$TIMESTAMP" --arg stem "$_rvw_stem" --arg agent "$AGENT_ID" \
          --arg session "${SESSION_ID:-}" --arg tool "$TOOL_NAME" \
-     '{v: 1, ts: $ts, stem: $stem, agent_id: $agent, session: $session, tool: $tool}' \
-     >> "$WRITE_LEDGER" 2>/dev/null || true
+         --arg tp "$_rev_tp" --argjson at "$_rev_at" \
+     '{v: 1, ts: $ts, stem: $stem, agent_id: $agent, session: $session, tool: $tool,
+       tool_use_id: (.tool_use_id // ""), transcript_path: $tp, agent_transcript: $at}' \
+     <<< "$INPUT" >> "$WRITE_LEDGER" 2>/dev/null || true
 }
 
 # THE PLANNING-ARTIFACT WRITE LEDGER -- which dispatched agent asked to write which artifact file.
@@ -500,12 +530,19 @@ record_artifact_write() { # $1 file_path -- silent no-op unless this is a planni
     *) return 0 ;;
   esac
   mkdir -p "$ARTIFACT_LEDGER_DIR" 2>/dev/null || return 0
+  # The three evidence fields are `record_verdict_write`'s, with the same meaning and the same
+  # limit: `transcript_path` is the parent's and never an identity alone. They come AFTER the
+  # existing keys, so the `"path":` spelling every reader matches is unchanged.
+  record_evidence
   # A failed append returns 0 by name rather than folding into success: the allow is the same
   # either way, and a lost row surfaces as the join's "cites a file no agent wrote" refusal.
-  if ! jq -nc --arg ts "$TIMESTAMP" --arg path "$_raw_rel" --arg agent "$AGENT_ID" \
+  # The payload is fed by here-string for the reason `record_verdict_write` gives: no fork.
+  if ! jq -c --arg ts "$TIMESTAMP" --arg path "$_raw_rel" --arg agent "$AGENT_ID" \
          --arg session "${SESSION_ID:-}" --arg tool "$TOOL_NAME" \
-     '{v: 1, kind: "artifact-write", ts: $ts, path: $path, agent_id: $agent, session: $session, tool: $tool}' \
-     >> "$ARTIFACT_LEDGER" 2>/dev/null; then
+         --arg tp "$_rev_tp" --argjson at "$_rev_at" \
+     '{v: 1, kind: "artifact-write", ts: $ts, path: $path, agent_id: $agent, session: $session, tool: $tool,
+       tool_use_id: (.tool_use_id // ""), transcript_path: $tp, agent_transcript: $at}' \
+     <<< "$INPUT" >> "$ARTIFACT_LEDGER" 2>/dev/null; then
     return 0
   fi
 }
