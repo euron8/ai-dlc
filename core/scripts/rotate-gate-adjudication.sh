@@ -92,7 +92,7 @@
 # validation rejects, so an unknown sprint cannot be run by accident. That covers
 # no sprint archive at all, printed `NO HINT (..s<N>)` for the sprint being closed:
 # measured on the reference consumer with its archives removed, the old rule
-# hinting the closing sprint named a wrong sprint for most ids. It also covers a
+# hinting the closing sprint named a wrong sprint on 30 of 48 printed commands. It also covers a
 # nonce newer than the newest archive when the sprint being closed is not above it,
 # a backfill, printed `NO HINT (backfill below s<L+1>)` rather than an inverted range.
 # The last two rules exclude the archive below the nonce, which is right only

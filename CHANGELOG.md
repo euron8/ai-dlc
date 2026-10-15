@@ -70,8 +70,8 @@ graph `2b6f952e7`. `--sprint s318` exits 1. Keyed on the newest member, it names
 WARNs 48 files under 44 commands; keyed on any member it named 12 files in 8 series. Scored against the
 consumer's sprint-close commits, the 48 printed commands carry 39 correct hints, 0 wrong and 9 NO HINT. The
 rule that hinted the archive above the nonce named s313 for six s312 verdicts, because the s312 archive
-holds one verdict. With every archive removed, the old rule hinted the closing sprint; it now prints 8
-right, 0 wrong and 40 NO HINT. In a simulated s319 close with a new FAILing `<gate>-<nonce>` verdict,
+holds one verdict. With every archive removed, the old rule hinted the closing sprint and scored 18 right
+and 30 wrong; it now prints 8 right, 0 wrong and 40 NO HINT. In a simulated s319 close with a new FAILing `<gate>-<nonce>` verdict,
 walking the printed commands in order finishes in one pass with 11 commands, 2 operator questions and 0
 refused applies, and `--sprint s319 --apply` exits 0. The PASS seed takes 10 commands and 1 question.
 The writer half, which stamps `<gate_type>-s<N>-<nonce>` at mint time, is a follow-on.

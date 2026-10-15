@@ -91,7 +91,7 @@ A hint is printed only when exactly one sprint is possible. Otherwise the line p
 `NO HINT (..s<N>)` when no sprint archive exists, or `NO HINT (backfill below s<L>)` when the sprint being
 closed is not above the newest archive. Scored against the consumer's sprint-close commits, the 48 printed
 commands give 39 correct hints, 0 wrong and 9 NO HINT. With every archive removed, the old rule hinted the
-closing sprint; it now gives 8 right, 0 wrong and 40 NO HINT. In a simulated s319 close with a new FAILing
+closing sprint and scored 18 right and 30 wrong; it now gives 8 right, 0 wrong and 40 NO HINT. In a simulated s319 close with a new FAILing
 `<gate>-<nonce>` verdict, walking the printed commands in order finishes in one pass: 11 commands, 2
 operator questions, 0 refused applies, and `--sprint s319 --apply` exits 0. The PASS seed takes 10
 commands and 1 question.
