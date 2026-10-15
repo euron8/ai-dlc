@@ -22,6 +22,9 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 
 ## [0.787.0] - 2026-10-15
 
+Batch 231 (graph-ledger-full-drain), first release: BL-510's bookkeeping half, held on origin from batch 230. It went
+through two tip adversaries and a fix round. BL-510 closes with it.
+
 ### Added
 
 - `validate-handoff-evidence.sh` refuses three bookkeeping defects at the pre-gate-1 handoff, read at
@@ -56,7 +59,9 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   exit survived the fixture before this world and is now killed.
 - `story-evidence-scaffold` drives a strategy-mode world under a UTF-8 locale, with a non-UTF-8
   byte in a table row above an empty cell. A mutant that drops `LC_ALL=C` from strategy mode's awk
-  is now killed. The fixture runs under `env -i`, where no locale is set, so the world forces one.
+  is now killed. With no locale set, BSD awk never aborts, so the world forces one.
+- `story-evidence-scaffold`'s read-set row names `sprint-status.sh` and `sprint-status.json`, traced
+  with the sandbox tracer, so a change to either now selects the fixture that holds their mutants.
 - The `bl-510-bookkeeping.sh` receipt probe is tracked as executable (I77).
 
 ## [0.786.0] - 2026-10-14
