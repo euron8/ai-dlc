@@ -166,7 +166,14 @@ already did. Do not read a quiet Check C as "leads stopped over-waiting.")
 `_bmad-output/pipeline-paused.flag` (UserPromptSubmit hook). While it exists
 you MUST NOT advance the pipeline -- the `PreToolUse` hook denies `Agent`,
 `Skill`, `TaskCreate`, and `_bmad-output/` writes until you deal with it (an
-`/ai-dlc-update` session is exempt: it advances no sprint). Read
+`/ai-dlc-update` session is exempt: it advances no sprint). One dispatch
+passes: the lead's own built-in `Explore`, when all four hold --
+`subagent_type: "Explore"` exactly, no `name` or `team_name` in the call,
+no `team-roles/<role>.md` in the prompt, and no agent definition whose
+frontmatter `name:` is Explore under `.claude/agents/` or
+`$HOME/.claude/agents/`. Explore has no Agent,
+Edit, Write or NotebookEdit, so it adds nothing the lead's allowed Bash
+lacks; it is not read-only. `ops` stays denied: it writes a repair record. Read
 the message, respond in text, then classify: resume intent -> `rm -f
 _bmad-output/pipeline-paused.flag` and re-read the step file (Rule 22);
 question or correction -> answer it and leave the flag set; the operator is

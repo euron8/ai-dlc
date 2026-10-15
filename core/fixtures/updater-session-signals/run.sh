@@ -151,16 +151,26 @@ TR_M_READ="$WORK/m-read.jsonl"; TR_M_TEXT="$WORK/m-text.jsonl"; TR_M_HEAD="$WORK
 
 # Drive the PreToolUse hook. `skill` is present only on a Skill payload, exactly as the
 # harness sends it -- every other tool carries no such field.
-drive() { # <work> <tool> <transcript> [skill] [file_path] [agent_id] -> stdout
-  local w="$1" tool="$2" tr="$3" skill="${4:-}" fp="${5:-}" ag="${6:-}"
+# The last three arguments seed a dispatch: `subagent_type` as RAW JSON (so `["Explore"]`, `null` and
+# `"Explore\n"` reach the hook exactly), the prompt, and a top-level `agent_type` carried WITHOUT an
+# `agent_id` -- the shape of a lead started with `claude --agent <name>`.
+# The tenth argument is a JSON object merged into `tool_input` (`{"name":"scout"}`).
+# HOME IS THE WORLD's `.home`, never the operator's: the Explore carve-out reads
+# `$HOME/.claude/agents/`, and a real definition named Explore there would flip every ALLOW cell.
+drive() { # <work> <tool> <transcript> [skill] [file_path] [agent_id] [subagent_type json] [prompt] [agent_type] [tool_input extra json] -> stdout
+  local w="$1" tool="$2" tr="$3" skill="${4:-}" fp="${5:-}" ag="${6:-}" st="${7:-}" pr="${8:-}" at="${9:-}" ex="${10:-}"
   local ti
   if [ -n "$skill" ]; then ti="$(jq -nc --arg s "$skill" '{skill:$s}')"
   elif [ -n "$fp" ]; then ti="$(jq -nc --arg p "$fp" '{file_path:$p}')"
   else ti="$(jq -nc '{}')"; fi
-  jq -nc --arg t "$tool" --arg tr "$tr" --argjson ti "$ti" --arg ag "$ag" \
+  [ -z "$st" ] || ti="$(jq -nc --argjson ti "$ti" --argjson s "$st" '$ti + {subagent_type:$s}')"
+  [ -z "$pr" ] || ti="$(jq -nc --argjson ti "$ti" --arg p "$pr" '$ti + {prompt:$p}')"
+  [ -z "$ex" ] || ti="$(jq -nc --argjson ti "$ti" --argjson x "$ex" '$ti + $x')"
+  jq -nc --arg t "$tool" --arg tr "$tr" --argjson ti "$ti" --arg ag "$ag" --arg at "$at" \
      '{session_id:"t",transcript_path:$tr,tool_name:$t,tool_input:$ti}
-      + (if $ag == "" then {} else {agent_id:$ag,agent_type:"general-purpose"} end)' \
-    | CLAUDE_PROJECT_DIR="$w" bash "$HOOK" 2>/dev/null
+      + (if $ag == "" then {} else {agent_id:$ag,agent_type:"general-purpose"} end)
+      + (if $at == "" then {} else {agent_type:$at} end)' \
+    | HOME="$w/.home" CLAUDE_PROJECT_DIR="$w" bash "$HOOK" 2>/dev/null
 }
 denied() { case "$1" in *'"permissionDecision": "deny"'*|*'"permissionDecision":"deny"'*) return 0 ;; esac; return 1; }
 # A DENY THAT IS THE PAUSE's, by value. Check 2z denies the same tools with a different reason, and a
@@ -333,6 +343,144 @@ mexpect() { # <label> <transcript> <what>
 mexpect read "$TR_M_READ" "a Read of ledger text carrying the typed marker (tool_result, mid-line)"
 mexpect text "$TR_M_TEXT" "assistant text quoting the typed marker pair"
 mexpect head "$TR_M_HEAD" "a tool_result whose output STARTS with the typed marker pair"
+
+# =============================================================================
+# E. THE EXPLORE CARVE-OUT — the lead's built-in Explore dispatch passes the pause; nothing else does.
+# =============================================================================
+# While paused the lead may dispatch `subagent_type: "Explore"` and no other subagent. Explore has
+# no Agent, Edit, Write or NotebookEdit, so it adds nothing the lead's allowed Bash lacks. Every
+# conjunct is a way the NAME arrives without the built-in behind it, and each one gets a DENY cell
+# beside the ALLOW cell it is one property away from. `ops` is the dispatch the reference consumer
+# was denied, and it stays denied: it writes a repair record. Every cell is a fresh paused tree in a
+# routed `/ai-dlc` pipeline session; a DENY must carry the Rule 29 reason and one ACK_DENIED row.
+TR_ECELL="$TR_PIPE_ROUTED"
+EXPLORE_PROMPT_PLAIN='Find every caller of sprint-status.sh sprint-id and report the file:line list.'
+EXPLORE_PROMPT_ROLE='Read .claude/team-roles/remediator.md and follow it. Find every caller of sprint-status.sh.'
+# -> "<ALLOW|DENY|STOP|OTHER> <ACK_DENIED rows>"
+# The shadow worlds: the harness selects an agent definition by its frontmatter `name:`, so the
+# FILENAME is never the key. Each DENY world has an ALLOW twin one property away: `Explorer` is not
+# `Explore`, and a `name: Explore` line in the BODY is prose, not the definition's name.
+ecell() { # <label> <tool> <subagent_type json> <prompt> [agent_id] [agent_type] [world]
+  local w out v ex=""
+  w="$(seed "e-$1")"
+  case "${7:-}" in
+    explore-md) mkdir -p "$w/.claude/agents"; printf -- '---\nname: Explore\n---\n' > "$w/.claude/agents/Explore.md" ;;
+    named-other) mkdir -p "$w/.claude/agents"; printf -- '---\nname: Explore\ndescription: x\ntools: Read, Write, Edit, Bash, Agent\n---\nbody\n' > "$w/.claude/agents/search.md" ;;
+    named-explorer) mkdir -p "$w/.claude/agents"; printf -- '---\nname: Explorer\ndescription: x\n---\nbody\n' > "$w/.claude/agents/search.md" ;;
+    named-in-body) mkdir -p "$w/.claude/agents"; printf -- '---\nname: helper\n---\nname: Explore\n' > "$w/.claude/agents/search.md" ;;
+    home-named) mkdir -p "$w/.home/.claude/agents"; printf -- '---\nname: "explore"\n---\nbody\n' > "$w/.home/.claude/agents/scout.md" ;;
+    home-explorer) mkdir -p "$w/.home/.claude/agents"; printf -- '---\nname: "Explorer"\n---\nbody\n' > "$w/.home/.claude/agents/scout.md" ;;
+    tin-name) ex='{"name":"scout"}' ;;
+    tin-team) ex='{"team_name":"t"}' ;;
+    stop)
+      # A Rule 8 STOP that Check 2a reaches: one pass of a series in the declared sprint's slot,
+      # and a convergence validator that answers STALLED with the one exit code that denies.
+      : > "$w/_bmad-output/planning-artifacts/s7/prd-adversarial-p1.md"
+      printf '#!/bin/sh\nprintf "STALLED\\t%%s\\n" "$2"\nexit 3\n' > "$w/scripts/ai-dlc/validate-adversarial-convergence.sh"
+      chmod +x "$w/scripts/ai-dlc/validate-adversarial-convergence.sh" ;;
+  esac
+  out="$(drive "$w" "$2" "$TR_ECELL" "" "" "${5:-}" "$3" "$4" "${6:-}" "$ex")"
+  # A DENIED Explore must never be told in the same breath that Explore is allowed unconditionally:
+  # every deny names the four conditions, and a deny of an Explore dispatch names the failed one.
+  # Only a Rule 29 deny is held to this: a Rule 8 STOP's text is Check 2a's, not the pause's.
+  if paused_deny "$out"; then
+    case "$out" in *'only when all four hold'*) ;; *) v=NOCONDITIONS ;; esac
+    # The LEAD's denied Explore. A teammate's is denied for being a teammate, and the four
+    # conditions are stated as the lead's, so its text offers it nothing.
+    case "${5:-}:$3:$out" in
+      ':"Explore":'*'Explore dispatch is DENIED because'*) ;;
+      ':"Explore":'*) v=UNEXPLAINED ;;
+    esac
+  fi
+  [ -z "${v:-}" ] || { printf '%s %s' "$v" "$(rows "$w" ACK_DENIED)"; return; }
+  if paused_deny "$out"; then v=DENY
+  elif denied "$out"; then case "$out" in *'AI/DLC Rule 8: THE ADVERSARIAL CYCLE HAS STOPPED'*) v=STOP ;; *) v=OTHER ;; esac
+  else v=ALLOW; fi
+  printf '%s %s' "$v" "$(rows "$w" ACK_DENIED)"
+}
+eexpect() { # <label> <expected cell> <tool> <subagent_type json> <prompt> <agent_id> <agent_type> <world> <ok> <bad>
+  local got; got="$(ecell "$1" "$3" "$4" "$5" "$6" "$7" "$8")"
+  if [ "$got" = "$2" ]; then ok "${9}"; else bad "${10} (cell '$got', expected '$2')"; fi
+}
+eexpect allow "ALLOW 0" Agent '"Explore"' "$EXPLORE_PROMPT_PLAIN" "" "" "" \
+  "EXPLORE: the lead's Agent(subagent_type \"Explore\") with no role citation is ALLOWED while paused, and logs nothing" \
+  "EXPLORE ALLOW: the lead's built-in Explore dispatch is not a silent allow while paused"
+eexpect allow-task "ALLOW 0" Task '"Explore"' "$EXPLORE_PROMPT_PLAIN" "" "" "" \
+  "EXPLORE: the same dispatch through the Task tool name is ALLOWED and logs nothing" \
+  "EXPLORE ALLOW (Task): the lead's built-in Explore dispatch through Task is not a silent allow"
+eexpect role "DENY 1" Agent '"Explore"' "$EXPLORE_PROMPT_ROLE" "" "" "" \
+  "EXPLORE: a prompt citing team-roles/remediator.md is DENIED — the dispatch guard would rewrite it to the role" \
+  "EXPLORE ROLE CITATION: LEAK — an Explore dispatch citing a team-roles file passed, and the dispatch guard runs it as that role"
+eexpect teammate "DENY 1" Agent '"Explore"' "$EXPLORE_PROMPT_PLAIN" ax "" "" \
+  "EXPLORE: a teammate's (agent_id) Explore dispatch is DENIED — the lead only" \
+  "EXPLORE TEAMMATE: LEAK — a dispatched teammate spawned Explore while paused"
+eexpect agent-type "DENY 1" Agent '"remediator"' "$EXPLORE_PROMPT_PLAIN" "" Explore "" \
+  "EXPLORE: a lead whose top-level agent_type is Explore dispatching subagent_type remediator is DENIED" \
+  "EXPLORE AGENT_TYPE: LEAK — the top-level agent_type was read as the dispatched subagent_type"
+for _st in '["Explore"]' '"Explore\n"' '"Explore "' '"explore"' 'null'; do
+  eexpect "malformed-$(printf '%s' "$_st" | tr -c 'A-Za-z' '_')" "DENY 1" Agent "$_st" "$EXPLORE_PROMPT_PLAIN" "" "" "" \
+    "EXPLORE: subagent_type $_st is not the built-in — DENIED" \
+    "EXPLORE MALFORMED $_st: LEAK — a near-miss subagent_type passed as Explore"
+done
+eexpect ops "DENY 1" Agent '"ops"' "$EXPLORE_PROMPT_PLAIN" "" "" "" \
+  "EXPLORE: an ops dispatch is still DENIED — it writes its repair record" \
+  "EXPLORE OPS: LEAK — ops dispatched while paused, and ops writes under _bmad-output/"
+eexpect absent "DENY 1" Agent "" "$EXPLORE_PROMPT_PLAIN" "" "" "" \
+  "EXPLORE: an Agent dispatch with NO subagent_type is DENIED (the CONTROL for this section)" \
+  "FIXTURE BROKEN: an Agent dispatch with no subagent_type is not denied while paused, so every EXPLORE ALLOW proves nothing"
+eexpect stop "STOP 0" Agent '"Explore"' "$EXPLORE_PROMPT_PLAIN" "" "" stop \
+  "EXPLORE: an Explore dispatch while a Rule 8 STOP is pending is DENIED by the STOP — the carve-out never escapes it" \
+  "EXPLORE STOP: LEAK — an Explore dispatch was not denied by a pending Rule 8 STOP"
+eexpect explore-md "DENY 1" Agent '"Explore"' "$EXPLORE_PROMPT_PLAIN" "" "" explore-md \
+  "EXPLORE: with .claude/agents/Explore.md in the project the dispatch is DENIED — a project definition may shadow the built-in" \
+  "EXPLORE SHADOWED: LEAK — Explore passed while a project .claude/agents/Explore.md may shadow the built-in"
+eexpect named-other "DENY 1" Agent '"Explore"' "$EXPLORE_PROMPT_PLAIN" "" "" named-other \
+  "EXPLORE: a project .claude/agents/search.md whose frontmatter name: is Explore DENIES the dispatch — the harness keys on name:, not the filename" \
+  "EXPLORE NAMED OTHER: LEAK — an agent definition named Explore under another filename did not fail the carve-out closed"
+eexpect named-explorer "ALLOW 0" Agent '"Explore"' "$EXPLORE_PROMPT_PLAIN" "" "" named-explorer \
+  "EXPLORE: a project definition named Explorer (the near-miss) leaves the dispatch ALLOWED" \
+  "EXPLORE NAMED EXPLORER: a definition named Explorer was read as Explore — the name match is not exact"
+eexpect named-in-body "ALLOW 0" Agent '"Explore"' "$EXPLORE_PROMPT_PLAIN" "" "" named-in-body \
+  "EXPLORE: a name: Explore line in a definition's BODY leaves the dispatch ALLOWED — only the frontmatter names it" \
+  "EXPLORE NAMED IN BODY: a body line was read as the definition's name — the reader is not frontmatter-bounded"
+eexpect home-named "DENY 1" Agent '"Explore"' "$EXPLORE_PROMPT_PLAIN" "" "" home-named \
+  "EXPLORE: a \$HOME/.claude/agents definition named \"explore\" (quoted, lower case) DENIES the dispatch" \
+  "EXPLORE HOME NAMED: LEAK — a user-level agent definition named Explore did not fail the carve-out closed"
+eexpect home-explorer "ALLOW 0" Agent '"Explore"' "$EXPLORE_PROMPT_PLAIN" "" "" home-explorer \
+  "EXPLORE: a \$HOME/.claude/agents definition named \"Explorer\" (the near-miss) leaves the dispatch ALLOWED" \
+  "EXPLORE HOME EXPLORER: a user-level definition named Explorer was read as Explore"
+eexpect tin-name "DENY 1" Agent '"Explore"' "$EXPLORE_PROMPT_PLAIN" "" "" tin-name \
+  "EXPLORE: an Explore dispatch carrying name is DENIED — it runs in the in-process teammate runner" \
+  "EXPLORE TOOL_INPUT NAME: LEAK — an Explore dispatch with a name passed, and it runs as a teammate"
+eexpect tin-team "DENY 1" Agent '"Explore"' "$EXPLORE_PROMPT_PLAIN" "" "" tin-team \
+  "EXPLORE: an Explore dispatch carrying team_name is DENIED — it runs in the in-process teammate runner" \
+  "EXPLORE TOOL_INPUT TEAM_NAME: LEAK — an Explore dispatch with a team_name passed, and it runs as a teammate"
+
+# THE ROLE-CITATION ERE IS WRITTEN TWICE, and the carve-out is only as wide as the dispatch guard's
+# copy. If the guard's ERE widens (say to upper case) and this hook's does not, a prompt the guard
+# rewrites to a role reads here as no citation, and the carve-out passes it. Byte-compare the two.
+# The extractor is proved able to fire first, on a copy carrying a seeded mismatch.
+ere_of() { # <hook file> -> the single `team-roles/...` ERE its grep carries, or nothing
+  sed -n "s/.*grep -[oq]E '\(team-roles\/[^']*\)'.*/\1/p" "$1" 2>/dev/null
+}
+GUARD="$(pick "$HERE/../../hooks/ai-dlc-dispatch-guard.sh" \
+              "$HERE/../../../.claude/hooks/ai-dlc-dispatch-guard.sh" \
+              "$HERE/../../../core/hooks/ai-dlc-dispatch-guard.sh")"
+if [ -z "$GUARD" ]; then
+  bad "FIXTURE BROKEN: cannot locate ai-dlc-dispatch-guard.sh, so the role-citation ERE is unbound"
+else
+  echo "HERMETIC-CONSUMED $(cd "$(dirname "$GUARD")" && pwd)/$(basename "$GUARD")"
+  ERE_ACK="$(ere_of "$HOOK")"; ERE_DG="$(ere_of "$GUARD")"
+  sed 's#team-roles/\[a-z\]#team-roles/[A-Za-z]#' "$GUARD" > "$WORK/guard-widened.sh"
+  ERE_SEEDED="$(ere_of "$WORK/guard-widened.sh")"
+  if [ -z "$ERE_ACK" ] || [ -z "$ERE_DG" ] || [ -z "$ERE_SEEDED" ] || [ "$ERE_DG" = "$ERE_SEEDED" ]; then
+    bad "FIXTURE BROKEN: the ERE extractor read '${ERE_ACK}' / '${ERE_DG}' and could not tell a seeded widening '${ERE_SEEDED}' apart"
+  elif [ "$ERE_ACK" = "$ERE_DG" ]; then
+    ok "EXPLORE: the team-roles ERE is byte-identical in the acknowledge hook and the dispatch guard ($ERE_ACK)"
+  else
+    bad "EXPLORE ERE DRIFT: the acknowledge hook carries '$ERE_ACK' and the dispatch guard '$ERE_DG'"
+  fi
+fi
 
 # =============================================================================
 # 9. AND CHECK 2a MUST NOT HAVE BEEN WHAT ANSWERED. If the seed tripped the

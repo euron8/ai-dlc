@@ -314,3 +314,29 @@ shape, a substantive mis-repair whose prose and pin agree.
 
 verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-519-set-aside.sh
 
+## BL-525 — the pause gate denies every dispatch while an operator message is outstanding, including a search
+
+**DEFECT.** Filed by the consumer as `PC-S318-PAUSE-GATE-DENIES-READ-ONLY-OPS-DISPATCH-WHILE-AN-OPERATOR-MESSAGE-IS-OUTSTANDING`.
+While the pause flag is up, Check 3 of `ai-dlc-acknowledge.sh` denies every `Agent`/`Task` call, so a
+search the lead needs to answer the operator runs inline in the lead instead. The operator's ruling is
+an Explore-only carve-out: the lead's own dispatch of the built-in `Explore` subagent passes, and
+nothing else does. Explore has no Agent, Edit, Write or NotebookEdit, so it adds nothing the lead's
+allowed Bash lacks; it is not read-only. The carve-out fails closed on a teammate caller, on any
+`subagent_type` other than the exact string `"Explore"`, on a `name` or `team_name` in the call (either
+routes it to the in-process teammate runner), on a `team-roles/<role>.md` citation in the prompt (the
+dispatch guard rewrites `subagent_type` from one), and on any `.claude/agents/*.md` in the project or
+under `$HOME` whose frontmatter `name:` is Explore, case-insensitively. It sits after the Rule 8 STOP
+exit, so a STOP still denies it.
+
+**What it does NOT fix, measured.** The motivating dispatch was `ops`, and `ops` stays denied: it writes
+its repair record under `_bmad-output/planning-artifacts/` (`core/team-roles/ops.md`, step 4). In graph
+s318 there were 5 ACK_DENIED rows, 2 of them Agent and 0 Explore. Over the measured window, 32 Agent
+calls were Rule-29-denied and 0 were Explore. So the carve-out would newly allow 0 of graph's real
+denied calls.
+
+The receipt drives the hook with two seeded payloads in a paused scratch tree. It exits 0 when an
+Explore dispatch is allowed, 1 when it is denied, and 9 when the `ops` control is not denied, because
+a hook that allows everything must not close this entry. It reads 0 at this tip and 1 at `11ae360d`.
+
+verify: sh H=core/hooks/ai-dlc-acknowledge.sh; [ -f "$H" ] || exit 9; command -v jq >/dev/null 2>&1 || exit 9; D="$(mktemp -d)" || exit 9; mkdir "$D/_bmad-output" || exit 9; : > "$D/_bmad-output/pipeline-snapshot.md"; : > "$D/_bmad-output/pipeline-paused.flag"; E="$(jq -nc '{session_id:"r",tool_name:"Agent",tool_input:{subagent_type:"Explore",prompt:"list the callers of sprint-status.sh"}}' | HOME="$D" CLAUDE_PROJECT_DIR="$D" bash "$H" 2>/dev/null)"; O="$(jq -nc '{session_id:"r",tool_name:"Agent",tool_input:{subagent_type:"ops",prompt:"list the callers of sprint-status.sh"}}' | HOME="$D" CLAUDE_PROJECT_DIR="$D" bash "$H" 2>/dev/null)"; rm -f "$D/_bmad-output/pipeline-snapshot.md" "$D/_bmad-output/pipeline-paused.flag" "$D/_bmad-output/pipeline-continuation-log.md"; rmdir "$D/_bmad-output" "$D" 2>/dev/null; case "$O" in *'"permissionDecision": "deny"'*) ;; *) exit 9 ;; esac; case "$E" in *'"permissionDecision": "deny"'*) exit 1 ;; esac; exit 0
+

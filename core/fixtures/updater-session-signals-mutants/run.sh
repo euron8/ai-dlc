@@ -155,6 +155,74 @@ expect_set payload-arm-widened 2 'exempts ANY Skill call|stays exempt forever' \
 expect_set payload-revoke-deleted 1 'stays exempt forever' \
   '/ai-dlc)        UPDATER_SESSION=0/d'
 
+# E. THE EXPLORE CARVE-OUT, one conjunct at a time. Each mutant reds exactly the DENY cell whose
+#    near-miss only that conjunct separates from the ALLOW cell.
+#
+# E1. WIDENED to any subagent_type: jq -e on the bare field is true for every non-null, non-false
+#    value. Every named near-miss passes; null and the absent field (the section's CONTROL) do not.
+expect_set explore-any-subagent-type 6 'EXPLORE MALFORMED (\["Explore"\]|"Explore\\n"|"Explore "|"explore")|EXPLORE OPS|EXPLORE AGENT_TYPE' \
+  's/jq -e '"'"'\.tool_input\.subagent_type == "Explore"'"'"'/jq -e '"'"'.tool_input.subagent_type'"'"'/'
+
+# E2. THE ROLE-CITATION CLAUSE DROPPED: the dispatch guard rewrites a cited role's subagent_type,
+#    so an Explore that cites team-roles/remediator.md runs as the remediator.
+#    Neutralised in place rather than deleted, so the ERE stays on the line and the byte-compare arm
+#    does not red with it.
+expect_set explore-role-clause-dropped 1 'EXPLORE ROLE CITATION' \
+  's/^          elif grep -qE /          elif false \&\& grep -qE /'
+
+# E3. THE LEAD-ONLY CLAUSE DROPPED: a dispatched teammate spawns Explore while paused.
+expect_set explore-lead-clause-dropped 1 'EXPLORE TEAMMATE' \
+  's/^        if \[ -z "\$AGENT_ID" \] \\$/        if true \\/'
+
+# E4. THE COMPARISON MOVED OUTSIDE jq: `$( )` strips the trailing newline of "Explore\n", so that
+#    near-miss alone passes. Every other one still differs after `jq -r`.
+expect_set explore-compare-outside-jq 1 'EXPLORE MALFORMED "Explore\\n"' \
+  's/\&\& jq -e '"'"'\.tool_input\.subagent_type == "Explore"'"'"' <<< "\$INPUT" >\/dev\/null 2>&1; then$/\&\& [ "$(jq -r '"'"'.tool_input.subagent_type'"'"' <<< "$INPUT")" = Explore ]; then/'
+
+# E5. THE CARVE-OUT SITED BEFORE THE STOP EXIT: Check 2a skips an Explore dispatch, so a pending
+#    Rule 8 STOP no longer denies it and Check 3's carve-out lets it through.
+expect_set explore-before-stop 1 'EXPLORE STOP' \
+  's/^if \[ "\$ADVANCING_TOOL" -eq 1 \] \&\& \[ "\$UPDATER_SESSION" -eq 0 \]; then$/if [ "$ADVANCING_TOOL" -eq 1 ] \&\& [ "$UPDATER_SESSION" -eq 0 ] \&\& ! jq -e '"'"'.tool_input.subagent_type == "Explore"'"'"' <<< "$INPUT" >\/dev\/null 2>\&1; then/'
+
+# E6. THE SHADOW CHECK REVERTED TO THE FILENAME: the harness selects a definition by its frontmatter
+#    `name:`, so a search.md named Explore, and a user-level one, pass. Explore.md itself still denies.
+expect_set explore-shadow-filename-only 2 'EXPLORE NAMED OTHER|EXPLORE HOME NAMED' \
+  's/^          elif explore_shadowed; then$/          elif [ -e "${PROJECT_DIR}\/.claude\/agents\/Explore.md" ]; then/'
+
+# E7. THE SHADOW CHECK DROPPED WHOLE: every world carrying a definition named Explore passes.
+expect_set explore-shadow-clause-dropped 3 'EXPLORE SHADOWED|EXPLORE NAMED OTHER|EXPLORE HOME NAMED' \
+  's/^          elif explore_shadowed; then$/          elif false; then/'
+
+# E8. THE $HOME SCAN DROPPED: a user-level definition named Explore shadows the built-in unseen.
+expect_set explore-shadow-home-dropped 1 'EXPLORE HOME NAMED' \
+  's/ "\${HOME:+\${HOME}\/\.claude\/agents}"//'
+
+# E9. THE FRONTMATTER BOUND DROPPED: a `name: Explore` line in a definition's BODY reads as its name.
+expect_set explore-shadow-unbounded 1 'EXPLORE NAMED IN BODY' \
+  '/^       !fm { next }$/d'
+
+# E10. THE NAME MATCH LOOSENED to a substring: `Explorer` reads as Explore, in both scopes.
+expect_set explore-shadow-substring 2 'EXPLORE NAMED EXPLORER|EXPLORE HOME EXPLORER' \
+  's/if (tolower(v) == "explore") found = 1/if (tolower(v) ~ "explore") found = 1/'
+
+# E11. THE NAME MATCH MADE CASE-SENSITIVE: the user-level `"explore"` no longer matches.
+expect_set explore-shadow-case-sensitive 1 'EXPLORE HOME NAMED' \
+  's/if (tolower(v) == "explore") found = 1/if (v == "Explore") found = 1/'
+
+# E12. THE name / team_name CLAUSE DROPPED: an Explore routed to the in-process teammate runner passes.
+expect_set explore-teammate-runner-dropped 2 'EXPLORE TOOL_INPUT (NAME|TEAM_NAME)' \
+  's/^          if ! jq -e .\.tool_input | (has("name")/          if false \&\& jq -e '"'"'.tool_input | (has("name")/'
+
+# E13. THE HOOK's ROLE ERE WIDENED ALONE: every seeded citation is lower case, so no verdict moves --
+#    only the byte-compare against the dispatch guard's copy can see the two drift apart.
+expect_set explore-ere-drift 1 'EXPLORE ERE DRIFT' \
+  's#grep -qE '"'"'team-roles/\[a-z\]#grep -qE '"'"'team-roles/[A-Za-z]#'
+
+# E14. THE DENY TEXT NEVER NAMES THE FAILED CONDITION: every lead Explore dispatch the carve-out
+#    refuses is denied without saying why, beside a paragraph that reads as offering it.
+expect_set explore-why-dropped 6 "cell .UNEXPLAINED" \
+  's/^\[ -z "\$EXPLORE_WHY" \] || EXPLORE_TEXT=/: || EXPLORE_TEXT=/'
+
 echo
 if [ "$fails" -eq 0 ]; then echo "updater-session-signals-mutants: PASS"; exit 0; fi
 echo "updater-session-signals-mutants: $fails assertion(s) FAILED" >&2
