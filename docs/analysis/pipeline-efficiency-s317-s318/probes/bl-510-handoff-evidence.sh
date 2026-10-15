@@ -19,6 +19,9 @@
 # The stderr check is what catches a multi-line value passed through `awk -v` (BSD awk prints
 # `newline in string` and the head-tree arm reads nothing): the clean world cites 3 captures.
 #
+# Every world's story carries `status: review`: a committed story with no status is itself a
+# refusal (status-missing), which the clean world must not carry.
+#
 # Measured at fe7d5ec2 (origin/main before the fix): no such script -> exit 1.
 # Run from the repo root.
 set -u
@@ -42,7 +45,7 @@ world() { # <name> <variant>
   printf '$ pytest -q\nhead: %s\n1 passed\n' "$(cat "$w/.B")" > "$w/test-results/full.txt"
   printf 'mutation-red replay\n  head: %s\nPROVEN: app.py:1\n' "$(cat "$w/.B")" > "$w/test-results/red-x.txt"
   printf '1 passed\n' > "$w/test-results/full-suite.txt"
-  printf '# S\nRun: `test-results/full.txt`. Mutation RED: `test-results/red-x.txt`.\nLocal re-run: `test-results/full-suite.txt` (gitignored).\nAll REDs: `test-results/red-*.txt`.\n' > "$w/stories/s.md"
+  printf -- '---\nstatus: review\n---\n# S\nRun: `test-results/full.txt`. Mutation RED: `test-results/red-x.txt`.\nLocal re-run: `test-results/full-suite.txt` (gitignored).\nAll REDs: `test-results/red-*.txt`.\n' > "$w/stories/s.md"
   case "$2" in
     nocmd) printf '1 passed\n' > "$w/test-results/smoke.txt"; printf 'Smoke: `test-results/smoke.txt`.\n' >> "$w/stories/s.md"
            g "$1" add -f test-results/smoke.txt || return 9 ;;

@@ -20,6 +20,50 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.787.0] - 2026-10-15
+
+Batch 231 (graph-ledger-full-drain), first release: BL-510's bookkeeping half, held on origin from batch 230. It went
+through two tip adversaries and a fix round. BL-510 closes with it.
+
+### Added
+
+- `validate-handoff-evidence.sh` refuses three bookkeeping defects at the pre-gate-1 handoff, read at
+  the frozen sha: a story whose status is not `review` (`status-not-review`), a story whose status
+  disagrees with its row in the implementation view of sprint-status.yaml
+  (`status-yaml-mismatch`), and an evidence heading written only below or above `## `
+  (`heading-demoted`). A committed story with no status refuses `status-missing`, and a story not
+  tracked at the frozen sha refuses `story-untracked`. When the row cannot be decided (no yaml, no
+  row) it prints `SKIP STATUS (<reason>)`, which does not refuse. On the reference consumer's
+  gate-1 snapshots it refuses 3 passes, all true positives, and 0 false positives.
+- `sprint-status.sh story-status --ref <sha> [--root <repo>] <story-file>` prints one story's
+  status and its implementation-view row, both read at a commit. The validator calls it, so the
+  status grammar and the row join have one home.
+- `docs/analysis/pipeline-efficiency-s317-s318/probes/bl-510-bookkeeping.sh`, the receipt probe.
+
+### Changed
+
+- Strategy mode reads `## Strategy Test IDs` followed by trailing text as the table heading,
+  through the heading grammar it now shares with the demoted-heading arm. No evidence or strategy
+  refusal changed over the 35 story-merge tips.
+- `implementation.md`'s pre-gate commit-presence paragraph names the new refusals and the SKIP line,
+  and sends a SKIP that names the story's or yaml's own content back to the dev.
+
+### Fixed
+
+- `validate-handoff-evidence.sh` runs its awk programs under `LC_ALL=C`. In a UTF-8 locale, BSD awk
+  aborted on one non-UTF-8 byte in a story, and the capture and heading arms then read nothing.
+- `story-evidence-scaffold` now proves that the story line is parsed whatever `sprint-status.sh`
+  exits. Two copy trees wrap the sibling so that it runs the real `story-status` and then exits 3 in
+  one tree and 0 in the other. Over an `in-progress` story, both refuse `status-not-review`, and
+  only the exit-3 tree adds a `SKIP STATUS` line for the row. A mutant that gates arm (g) on the
+  exit survived the fixture before this world and is now killed.
+- `story-evidence-scaffold` drives a strategy-mode world under a UTF-8 locale, with a non-UTF-8
+  byte in a table row above an empty cell. A mutant that drops `LC_ALL=C` from strategy mode's awk
+  is now killed. With no locale set, BSD awk never aborts, so the world forces one.
+- `story-evidence-scaffold`'s read-set row names `sprint-status.sh` and `sprint-status.json`, traced
+  with the sandbox tracer, so a change to either now selects the fixture that holds their mutants.
+- The `bl-510-bookkeeping.sh` receipt probe is tracked as executable (I77).
+
 ## [0.786.0] - 2026-10-14
 
 Batch 230 (graph-ledger-full-drain), third release: four of the reference consumer's five sprint-318 candidates, and
