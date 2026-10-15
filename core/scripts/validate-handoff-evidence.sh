@@ -75,8 +75,11 @@
 # refusals, all true positives: s317 4.2a p1 (status `ready-for-dev`, APPROVED anyway; its QA
 # validation records the lead flipping the sprint-branch copy instead), s317 4.3a p1
 # (`in-progress`), s318 1.5 p1 (three evidence headings at `###`). 0 status-yaml-mismatch; the
-# planning view would have refused 6 correct passes. 0 level-1 evidence headings. The shared
-# heading grammar changed no strategy or handoff verdict over the 32 story-merge tips.
+# planning view would have refused 8 passes over 6 gates, 2 of them APPROVED. 0 level-1 evidence
+# headings. The shared heading grammar changed no evidence or strategy refusal over the 35
+# story-merge second-parents. Not run at gate 2: at the QA go-signal shas the row arm refuses
+# s317 4.2a QA p2 and p3, whose story branch carried a lagging row while the lead kept the
+# canonical one on the sprint branch, and p3 PASSED.
 #
 # STRATEGY MODE — three refusals.
 #

@@ -219,13 +219,54 @@ glob over gitignored REDs, matching nothing tracked). The three other globs (s31
 script header. The 30 head-tree WARNs were artifacts of a BSD `awk -v` abort on multi-line input
 until it moved to ENVIRON; they are now computed, and stderr is empty on all 32.
 
-Not built: the B class (status not flipped, a missing Dev Agent Record line, empty or demoted
-evidence headings). An empty-heading arm has a 3-story FP set on the same corpus and needs an
-operator ruling before it ships. This entry stays open for that class.
-
 Operator ruling (batch 229): ship the evidence half and keep this entry open. The receipt chains the
 evidence probe to `probes/bl-510-bookkeeping.sh`, which the batch that builds the B class writes;
 until it exists the receipt exits non-zero and the entry cannot rotate as closed.
+
+Bookkeeping half (batch 230). Built: the same script, at the same pre-gate-1 call, reads the story
+at the frozen sha through git and refuses `status-not-review` (the story's status is not `review`),
+`status-yaml-mismatch` (it disagrees with the story's row in the IMPLEMENTATION view of
+sprint-status.yaml) and `heading-demoted` (one of the four evidence headings appears only below
+`## ` or only at `# `, code fences stripped). The status grammar and the row join are
+`sprint-status.sh`'s, through a new `story-status --ref <sha> <story-file>` mode, so there is one
+parser. Every absence a status arm cannot decide (no yaml, no row, no status) prints a
+`SKIP STATUS (<reason>)` line and does not refuse. The heading grammar is one awk function shared
+with strategy mode; `## Rename Verification (dev)` is that heading at level 2 in both.
+
+Covered shapes, at gate 1: s317 4.3a CR p1 (status `in-progress`) and s318 1.5 CR p1 (three
+headings at `###`), 2 of the 10 B labels. s317 4.2a also: its status read `ready-for-dev` in the
+story and both yaml views at an APPROVED gate-1 sha, and its QA validation
+(`docs/reviews/s317/4-2a-qa-validation.md:57` in graph) records the lead flipping the sprint-branch
+copy instead. The arm refuses that pass. 6 of the 10 B labels are at QA, not gate 1.
+
+Uncovered shapes. The Dev Agent Record: `dev.md:166` requires it before submission, while
+`implementation.md`'s DAR-fold preflight (gate-2 dispatch) folds it into the story AFTER gate 1
+approves. s317 2.7 and 4.2a were APPROVED without one. The two contradict each other; reconciling
+them is a flow change and not in this release. Empty evidence headings: no arm (operator ruling,
+batch 230). Three B labels match no shape here: s317 2.6 QA p1 (the dev edited another story's
+artifacts), s318 1.5 QA p1 (stale derived fences) and s318 2.6 CR p3 (a recipe anchor line).
+
+False-positive set, by population. Graph, a read-only clone at 2b6f952e7. Gate 1: every s317/s318
+code-review pass with a `reviewed-sha:` (56; the contract counted 49) plus, for the 7 that record
+none (s317 1-4, 1-6, 2-2 twice, 3-2, 4-2b, 4-3b), the first story-branch commit reading `review`:
+63 snapshots over 34 story files. 3 refusals, 0 false positives, as named above. 0 level-1 evidence
+headings (control: 63 `# Story` headings). Arm 2 refuses 0. The same run with the PLANNING view
+refuses 8 passes (s317 1.2 four times, 2.2 twice, s318 2.1 and 2.6), 2 of them APPROVED gates. The
+story-merge tips (35 merge second-parents over 34 stories, re-derived; the 0.783.0 header says 32):
+base and tip scripts print identical evidence and strategy refusals; the only
+new lines are 19 `status-not-review` on tips that read `done`, which is post-gate state.
+
+Gate 2, not added. At each QA go-signal sha (44 of 45 validation files; s317 4-2b records none) the
+bookkeeping arms refuse 3: s317 4.2a QA p1 (`ready-for-dev`, a true positive) and 4.2a QA p2 and
+p3 (`status-yaml-mismatch`, story `review`, story-branch row `ready-for-dev`). p3 PASSED, and p2
+records the status finding closed: by then the lead keeps the canonical row on the sprint branch,
+so the story branch's copy lags. Those two are false positives. The contract's condition was a
+false-positive set of 0, so there is no second invocation at gate 2.
+
+Narrowing. Merge tips were the first population and are wrong for it: 19 of 35 read `done`. The
+planning view was the first row source and lags at three APPROVED gate-1 shas. A missing Dev Agent
+Record was an arm and was dropped because core's own flow puts it after gate 1. The trailing-text
+heading counts as level 2; read as absent it would hide `(dev)` headings.
 
 verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-510-handoff-evidence.sh && bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-510-bookkeeping.sh
 
