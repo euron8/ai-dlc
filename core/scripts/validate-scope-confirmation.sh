@@ -260,6 +260,12 @@ esac
 
 # --- the cite ----------------------------------------------------------------
 CITE="$(field_of scope_confirmed_cite "$SNAPSHOT")"
+# The hook's record line is `- SHA256: <hex>`, and a lead copying "the SHA256: value" off it
+# naturally carries the label: graph wrote `SHA256:<hex>` in 3 snapshot commits, and every one
+# resolved bare. Exactly ONE literal `SHA256:` is stripped HERE, at the assignment, so the resolve
+# grep below and the deferred-items timestamp join both read the bare hex. Not `${CITE#*:}` (any
+# label would pass), not case-folded, not repeated (`SHA256:SHA256:<hex>` stays refused).
+CITE="${CITE#SHA256:}"
 if [ -z "$CITE" ]; then
   echo "FAIL: scope_confirmed is '${VALUE}' but there is no scope_confirmed_cite." >&2
   echo "      Without it the field is the lead's account of a conversation the lead had," >&2

@@ -198,3 +198,48 @@ verify: manual
 Owed: a stated lead response to a notification for an agent whose deliverable an armed beat covers: no per-agent status line, no re-check, end the turn. Optionally, a hook that injects that instruction when the notified agent's deliverable is inside `.beat-inflight`'s path set. Measure it by re-running the per-wake count on the next consumer sprint.
 
 verify: manual
+
+## BL-534 — the scope validator refused a routing-record cite copied with its `SHA256:` label
+
+**DEFECT.** Discharges `PC-S319-ROUTING-RECORD-CITE-PREFIX-REJECTED-BY-SCOPE-VALIDATOR`.
+
+Filed by graph on 2026-10-15 from Sprint 319, in its working-tree
+`_bmad-output/ai-dlc-update/push-candidate-ledger.md`. The filing is uncommitted there.
+`route.md` Step 6 named both routing-record cites as "the `SHA256:` value" of the capture hook's
+`- SHA256: <hex>` line, and leads copied the label in with the hex. `validate-scope-confirmation.sh`
+then refused `scope_confirmed_cite: SHA256:<hex>` at its hex arm, though the bare hex resolves.
+`validate-request-coverage.sh --cite-sha SHA256:<hex>` exited 2 for the same reason.
+
+**Census.** graph has 545 pipeline-snapshot commits. `scope_confirmed_cite` carried the prefix in 3
+of them, all in s306. `user_request_cite` carried it in 22, across s302, s306, s316 and s317. The
+commits hold 5 distinct prefixed values, and every one resolves to a capture entry once the label is
+removed. FP set: 0, meaning no prefixed value that fails to resolve bare.
+
+**The s306 rewrite.** In s306 the routing record, which graph's snapshot heads "written once,
+never rewritten", was rewritten mid-gate. No program detects a rewritten routing record, and this
+fix does not add one.
+
+Fix, on both sides. `route.md` now names each value as the 64 hex characters after `- SHA256: `,
+copied without the `SHA256:` label. `validate-scope-confirmation.sh` strips exactly one literal
+`SHA256:` right after the cite is assigned and before any arm reads it, so the resolve grep and the
+deferred-items timestamp join both see the bare hex. `validate-request-coverage.sh` strips the
+same single label from `cite_sha`. It also refuses an empty remainder with exit 2, because
+`SHA256:` alone would otherwise read as "no pin" and fall through to the newest entry. Neither
+validator strips any other label, folds case or strips twice.
+
+Carrier: `core/fixtures/process-rule-pins/run.sh` rows `route-cite-user` and `route-cite-scope`
+(contains mode, span `### Step 6:` to `## FAILURE MODES`). The labelled-cite cells and four mutants
+are in `core/fixtures/scope-confirmation/run.sh`, and five `--cite-sha` cells beside assertion 9 are
+in `core/fixtures/request-coverage/run.sh`.
+
+**NOTE.** `gate-validation.md` lines 1037, 1046 and 3080 still use "the `SHA256:` of" phrasing.
+Those lines describe the check and do not instruct the write, so they are harmless. They were not
+aligned.
+
+The receipt keys only on the two validators' exit codes, never on stderr or route.md text. It seeds
+one answers entry and one request entry. Bare-hex controls must pass on both validators first, or
+it exits 9. Then a labelled real cite must pass, and a labelled fabricated hash, a `foo:` label, a
+doubled label and `SHA256:` alone must all still fail. A labelled pin against a brief that dropped
+the asked id must still exit 1.
+
+verify: sh V=core/scripts/validate-scope-confirmation.sh; C=core/scripts/validate-request-coverage.sh; [ -f "$V" ] && [ -f "$C" ] && command -v shasum >/dev/null && command -v python3 >/dev/null || exit 9; T="$(mktemp -d)" || exit 9; H="$(printf Confirmed | shasum -a 256 | cut -d' ' -f1)"; F=0000000000000000000000000000000000000000000000000000000000000000; Q="$(printf '\140\140\140')"; [ "${#H}" -eq 64 ] || exit 9; printf '# answers\n\n## 2026-10-15T00:00:00Z -- AskUserQuestion\n- SHA256: %s\n%stext\nConfirmed\n%s\n' "$H" "$Q" "$Q" > "$T/a.md"; : > "$T/b.md"; grep -q "^- SHA256: $F\$" "$T/a.md" && exit 9; s() { printf -- '- user_request_verbatim: x\n- scope_confirmed: confirmed\n- scope_confirmed_cite: %s\n- scope_deferred_items: none\n' "$1" > "$T/s.md"; AI_DLC_PROJECT_ROOT="$T" bash "$V" --snapshot "$T/s.md" --answers "$T/a.md" --backlog "$T/b.md" >/dev/null 2>&1; echo $?; }; [ "$(s "$H")" = 0 ] || exit 9; printf '# requests\n\n## 2026-10-15T00:00:00Z -- (typed)\n- Session: s1\n- SHA256: %s\n%stext\nplease do CO-S1-X\n%s\n' "$H" "$Q" "$Q" > "$T/r.md"; printf '# Product Brief\n\n<!-- LOCKED_REQUIREMENTS — DO NOT MODIFY DURING VALIDATION -->\n### LOCKED block: S42\n- **LR-S42-0 (%sCO-S1-X%s):** do it.\n<!-- END LOCKED_REQUIREMENTS -->\n' '`' '`' > "$T/k.md"; sed 's/CO-S1-X/CO-S9-Y/' "$T/k.md" > "$T/d.md"; c() { AI_DLC_PROJECT_ROOT="$T" bash "$C" --requests "$T/r.md" --brief "$T/$2" --sprint 42 --cite-sha "$1" >/dev/null 2>&1; echo $?; }; [ "$(c "$H" k.md)" = 0 ] && [ "$(c "$H" d.md)" = 1 ] || exit 9; [ "$(s "SHA256:$H")" = 0 ] && [ "$(s "SHA256:$F")" = 1 ] && [ "$(s "foo:$H")" = 1 ] && [ "$(s "SHA256:SHA256:$H")" = 1 ] && [ "$(s "SHA256:")" = 1 ] && [ "$(c "SHA256:$H" k.md)" = 0 ] && [ "$(c "SHA256:$F" k.md)" = 2 ] && [ "$(c "foo:$H" k.md)" = 2 ] && [ "$(c "SHA256:" k.md)" = 2 ] && [ "$(c "SHA256:$H" d.md)" = 1 ] || exit 1; exit 0

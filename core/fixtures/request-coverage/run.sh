@@ -119,6 +119,27 @@ OUT="$(bash "$VALIDATOR" --requests "$REQ" --brief "$COVERED" --sprint 42 --cite
 if [ "$RC" = "2" ]; then ok "a hash resolving to no captured request exits 2 — a fabricated citation cannot pass"
 else bad "a fabricated --cite-sha did not fail closed (exit $RC) — the routing record could cite anything"; fi
 
+# --- Assertion 9b: a cite copied WITH its `SHA256:` label ----------------------
+# The capture line is `- SHA256: <hex>`, and a routing record copied off it can carry the label.
+# Exactly one literal `SHA256:` is stripped; every other shape stays refused. The dropped-brief
+# cell proves the labelled pin still reaches the coverage verdict rather than short-circuiting it,
+# and `SHA256:` alone must not fall through to the unpinned newest-entry path.
+OUT="$(bash "$VALIDATOR" --requests "$REQ" --brief "$COVERED" --sprint 42 --cite-sha "SHA256:$SHA" 2>&1)"; RC=$?
+if [ "$RC" = "0" ]; then ok "--cite-sha SHA256:<hex> resolves as the bare hex does"
+else bad "--cite-sha SHA256:<hex> did not resolve (exit $RC) — a cite copied with its label is refused though its hex is captured"; fi
+OUT="$(bash "$VALIDATOR" --requests "$REQ" --brief "$COVERED" --sprint 42 --cite-sha "SHA256:deadbeef" 2>&1)"; RC=$?
+if [ "$RC" = "2" ]; then ok "--cite-sha SHA256:<fabricated> still resolves to nothing and exits 2"
+else bad "a labelled fabricated --cite-sha exited $RC instead of 2"; fi
+OUT="$(bash "$VALIDATOR" --requests "$REQ" --brief "$COVERED" --sprint 42 --cite-sha "foo:$SHA" 2>&1)"; RC=$?
+if [ "$RC" = "2" ]; then ok "--cite-sha foo:<hex> exits 2 — only the literal SHA256: label is stripped"
+else bad "--cite-sha foo:<hex> exited $RC instead of 2 — the strip is wider than one literal label"; fi
+OUT="$(bash "$VALIDATOR" --requests "$REQ" --brief "$COVERED" --sprint 42 --cite-sha "SHA256:" 2>&1)"; RC=$?
+if [ "$RC" = "2" ]; then ok "--cite-sha SHA256: with no digest exits 2 — it does not fall through to the newest entry"
+else bad "--cite-sha SHA256: alone exited $RC instead of 2 — an empty pin fell through to the unpinned path"; fi
+OUT="$(bash "$VALIDATOR" --requests "$REQ" --brief "$DROPPED" --sprint 42 --cite-sha "SHA256:$SHA" 2>&1)"; RC=$?
+if [ "$RC" = "1" ]; then ok "--cite-sha SHA256:<hex> against the dropped brief still FAILS (exit 1) — the labelled pin reaches the coverage verdict"
+else bad "--cite-sha SHA256:<hex> against the dropped brief exited $RC instead of 1"; fi
+
 # --- Assertion 10: UNMUTATED CONTROL -----------------------------------------
 # The mutants are copies. This validator resolves a sibling script by $0's directory and shells
 # into python; a copy placed elsewhere dies resolving that sibling and prints nothing, which

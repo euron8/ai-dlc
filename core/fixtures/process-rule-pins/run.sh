@@ -64,6 +64,10 @@
 #     re-dispatch (_gate-procedures.md "After a join refusal" item 1b, and the document and subject
 #     "Join and assemble" steps). Those steps' items carry no blank line between them, so para mode
 #     reads each list as ONE paragraph whose lead is item 1 ("Split."); gp-rerun-doc/subj pin inside it.
+#   - the routing record's two cites (route.md Step 6, `user_request_cite` and `scope_confirmed_cite`)
+#     are named as the 64 hex characters after `- SHA256: `, so a lead does not copy the label in.
+#     route-cite-user and route-cite-scope are line-mode `contains` pins (the bullets are indented):
+#     keep each field name and its bare-hex phrase on ONE line.
 #
 # LEADS ARE NOT ENOUGH. A bold lead left intact over a body rewritten to say the opposite
 # ("need NOT carry", "dropped only through a HARD_BLOCK", "an assertion is a sufficient
@@ -244,6 +248,8 @@ adv-attr-lead|R|adversary.md|## Severity|## |**An operator attribution missing i
 adv-prem-rung|R|adversary.md|## Severity|## |### A premise a later event contradicted is a MAJOR|prefix
 adv-prem-lead|R|adversary.md|## Severity|## |**An authorization whose named outcome a later event contradicted is a MAJOR.**|prefix
 route-range|S|steps/route.md|### Step 4:|### Step 5:|sections 0–2c|contains
+route-cite-user|S|steps/route.md|### Step 6:|## FAILURE MODES|`user_request_cite` — the 64 hex characters after `- SHA256: `|contains
+route-cite-scope|S|steps/route.md|### Step 6:|## FAILURE MODES|`scope_confirmed_cite` — the 64 hex characters after `- SHA256: `|contains
 sts-range|S|steps/stories-test-strategy.md|### 3a.|### 4.|sections 0–2c|contains
 sts-names-2c|S|steps/stories-test-strategy.md|### 3a.|### 4.|§2c's adversarial verification of the root-cause|contains
 party-seats-record|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**The seats edit nothing, in every case below.**|para|Each seat writes one findings file per (seat, shard)
