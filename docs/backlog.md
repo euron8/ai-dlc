@@ -77,8 +77,8 @@ exactly that id. On a non-empty selection the rotator prints a WARN and exits 0.
 **The scope was revised from the id alone to FAIL-carrying series.** The guard reads only the live
 directory, and a stale verdict with no FAIL is its allow state, so only a stale FAIL can deny. On the
 consumer's tree, 8 of the 52 unmatchable verdicts carry a FAIL. `--sprint s318` still refuses: it names 12
-files in 8 FAIL-carrying series, 2 of them among the 12 unmatchable verdicts newer than the s317 archive.
-It WARNs the other 40. The fixture's mutation 6 now reverts the narrowing and must turn the PASS-only
+files in 8 FAIL-carrying series and WARNs the other 40. Of the 12 unmatchable verdicts newer than the s317
+archive, 2 carry a FAIL, and their 2 series hold 4 of the 12 named files. The fixture's mutation 6 now reverts the narrowing and must turn the PASS-only
 world from exit 0 to exit 1.
 
 A hint is printed only when exactly one sprint is possible, and `NO HINT (s<a>..s<b>)` otherwise. Scored

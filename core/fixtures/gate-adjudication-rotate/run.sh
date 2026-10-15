@@ -486,7 +486,7 @@ out="$(rotate --sprint s308 2>&1)"; rc=$?
 AP_LINE="$(grep -E "^ +bash [^ ]*rotate-gate-adjudication\.sh --sprint s[0-9]+ --series '[^<>|;&\`\$]*'$" <<<"$(refusal_block "$out")" | head -1)"
 AP_SPRINT=""; AP_ID=""
 if [ -n "$AP_LINE" ]; then eval "set -- $AP_LINE"; AP_SPRINT="${4:-}"; AP_ID="${6:-}"; fi
-if [ "$rc" -eq 1 ] && [ "$AP_ID" = "it's-planning" ]; then
+if [ "$rc" -eq 1 ] && [ "$AP_ID" = "it's-planning-20260909T130000Z" ]; then
   out_ap="$(rotate --sprint "$AP_SPRINT" --series "$AP_ID" --apply 2>&1)"; rc_ap=$?
   if [ "$rc_ap" -eq 0 ] && [ -f "$PROJ/_bmad-output/implementation-artifacts/${AP_SPRINT}/gate-adjudication/planning-20260909T130000Z.verdict.json" ] \
      && [ ! -e "$GA/planning-20260909T130000Z.verdict.json" ]; then
@@ -510,6 +510,21 @@ if [ "$rc10" -eq 1 ] && grep -qE "^ +bash [^ ]*rotate-gate-adjudication\.sh --sp
   ok "(j.5) newer than the newest archive: hinted s310 when that is the only candidate, NO HINT (s310..s311) when it is not"
 else
   bad "(j.5) the hint window was not honoured (s310 rc=$rc10, s311 rc=$rc11): $out10 / $out11"
+fi
+
+# (j.5b) THE GAP WINDOW. The same verdict between two archives. s309 and s311
+# leave s310 alone, so it is hinted whatever sprint is closing; s309 and s310 are
+# adjacent, so the archive below may be incomplete and nothing is hinted.
+seed hint-gap
+out_g="$(rotate --sprint s312 2>&1)"; rc_g=$?
+seed hint-adjacent
+out_a="$(rotate --sprint s312 2>&1)"; rc_a=$?
+if [ "$rc_g" -eq 1 ] && grep -qE "^ +bash [^ ]*rotate-gate-adjudication\.sh --sprint s310 --series '${UM_FAIL}'$" <<<"$out_g" \
+   && [ "$rc_a" -eq 1 ] && grep -qE "^ +bash [^ ]*rotate-gate-adjudication\.sh --sprint s<N> --series '${UM_FAIL}'$" <<<"$out_a" \
+   && grep -q 'NO HINT (s309\.\.s310)' <<<"$out_a"; then
+  ok "(j.5b) between archives: hinted s310 when it is alone in the gap, NO HINT (s309..s310) between adjacent archives"
+else
+  bad "(j.5b) the gap window was not honoured (gap rc=$rc_g, adjacent rc=$rc_a): $out_g / $out_a"
 fi
 
 # (j.6) The printed command is spelled for the layout the rotator runs from. Two

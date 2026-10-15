@@ -161,19 +161,21 @@ seed_story_s311_fail() {
 }
 
 # An id carrying an apostrophe, which the printed command must quote so it can be
-# pasted as printed.
+# pasted as printed. Nonce-tailed on purpose, so a predicate counting only
+# `<gate>-<nonce>` ids still sees it and only the quoting is under test here.
 seed_apostrophe_fail() {
   verdict "$GA/planning-20260909T130000Z.verdict.json" \
-          "planning-20260909T130000Z" "it's-planning" "$LEGACY_FAIL"
+          "planning-20260909T130000Z" "it's-planning-20260909T130000Z" "$LEGACY_FAIL"
 }
 
 # A sprint archive whose range ends before the unmatchable verdicts, so the hint has
 # an archive below the nonce and none above it.
-seed_archive_s309() {
-  mkdir -p "$PROJ/_bmad-output/implementation-artifacts/s309/gate-adjudication"
-  verdict "$PROJ/_bmad-output/implementation-artifacts/s309/gate-adjudication/planning-20260901T000000Z.verdict.json" \
-          "planning-20260901T000000Z" "planning-s309-20260901T000000Z" "$S309_ALLPASS"
+seed_archive() { # <sprint> <nonce>: one archived verdict, so the sprint has a nonce range
+  mkdir -p "$PROJ/_bmad-output/implementation-artifacts/$1/gate-adjudication"
+  verdict "$PROJ/_bmad-output/implementation-artifacts/$1/gate-adjudication/planning-$2.verdict.json" \
+          "planning-$2" "planning-$1-$2" "$S309_ALLPASS"
 }
+seed_archive_s309() { seed_archive s309 20260901T000000Z; }
 
 seed_noise() {
   printf '{"line":1}\n' > "$GA/.verdict-writes.jsonl"
@@ -250,6 +252,14 @@ case "$CASE" in
   # A FAIL-carrying `<gate>-<nonce>` id newer than the only archive, s309.
   hint-window)
     seed_archive_s309; seed_unmatchable_fail
+    ;;
+  # The same verdict BETWEEN two archives: s309 and s311 leave s310 alone in the
+  # window; s309 and s310 are adjacent and leave none.
+  hint-gap)
+    seed_archive_s309; seed_archive s311 20260920T000000Z; seed_unmatchable_fail
+    ;;
+  hint-adjacent)
+    seed_archive_s309; seed_archive s310 20260920T000000Z; seed_unmatchable_fail
     ;;
   # Tagged verdicts only, none for s308: still "nothing to move", exit 0.
   tagged-nomatch)

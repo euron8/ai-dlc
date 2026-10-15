@@ -62,8 +62,9 @@
 # records no FAIL is its ALLOW state: leaving one live denies nothing. A stale FAIL
 # is what denies, so it is what the close must not pass over. Measured on the
 # reference consumer: 8 of the 52 unmatchable verdicts carry a FAIL, and the
-# motivating s318 close still refuses, on 2 of the 12 unmatchable verdicts newer
-# than the s317 archive. The fixture's mutation 6 therefore REVERTS the narrowing
+# motivating s318 close still refuses. Of the 12 unmatchable verdicts newer than
+# the s317 archive, 2 carry a FAIL; their 2 series hold 4 of the 12 files the
+# refusal names. The fixture's mutation 6 therefore REVERTS the narrowing
 # (every unmatchable series counts) and requires the PASS-only world to flip from
 # exit 0 to exit 1; it used to apply the narrowing as the wrong fix.
 #
