@@ -23,9 +23,9 @@
 # `score "m<n> ` lines, so no mutant can fall out of every shard and no shard can be declared
 # without a driver. The shard arrives as an ARGUMENT, never the environment (scrubbed below).
 SHARDS="a b c"
-MUTANTS_a="m1 m4 m7 m10 m13 m16 m19 m21"
+MUTANTS_a="m1 m4 m7 m10 m13 m16 m19"
 MUTANTS_b="m2 m5 m8 m11 m14 m17 m20 m22 m25"
-MUTANTS_c="m3 m6 m9 m12 m15 m18 m23 m24"
+MUTANTS_c="m3 m6 m9 m12 m15 m18 m21 m23 m24"
 set -u
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 

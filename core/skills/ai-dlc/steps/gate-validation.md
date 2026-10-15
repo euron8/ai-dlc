@@ -182,8 +182,10 @@ then decide this dispatch's `gate_series_id` before the brief is written.
 
 **The series id is decided at dispatch, never from `close`.** Its form is `<gate_type>-s<N>-<TS>`: `<N>` is the `sprint_id` line of `_bmad-output/pipeline-snapshot.md` (not `sprint-status.sh sprint-id`), `<TS>` is the series-entry time, and the field order is load-bearing because the dispatch guard's nonce regex is unanchored and cannot match a timestamp that follows `-s<N>-`. Find the newest `<gate_type>-*` stem in the live `gate-adjudication/` directory (its verdict, else its part set), then apply the first rule that holds:
 1. If this dispatch is pass 1 of a **Gate Reset**, the id that reset minted wins.
-2. Otherwise, if that newest pass did NOT PASS (any `FAIL`, or its parts never merged into a verdict) and its `gate_series_id` carries `-s<N>-` for the current `sprint_id`, reuse that id byte-for-byte.
+2. Otherwise, if that newest pass did NOT PASS **Check 26** (its parts never merged into a verdict counts as not passing), and its `gate_series_id` is well formed — the `<gate_type>-` prefix, then `-s<N>-` for the current `sprint_id`, then a trailing `<YYYYMMDDTHHMMSSZ>` no later than that pass's nonce — and every part of its set carries that same id, reuse that id byte-for-byte.
 3. Otherwise mint `<gate_type>-s<N>-<TS>` with `<TS>` this nonce's timestamp.
+
+A malformed id, or a part set whose parts disagree on the id or lack it, is never reused: rule 3 mints. No verdict field records a gate's subject, so concurrent same-type gates on different subjects (two stories' implementation gates in flight together) are out of scope for reuse: while same-type gates are in flight on more than one subject, every dispatch of that `gate_type` mints under rule 3.
 
 Whether `gate-checkpoint.sh close` ran plays no part in the choice. Rule 2's `-s<N>-` test means a series still carrying an old-form id is not continued; the next pass mints a new-form one. The series id goes in the adjudicator's brief and every shard's brief, and it is never passed to `gate-checkpoint.sh --nonce`.
 
@@ -3242,6 +3244,9 @@ If any check fails:
 A gate that has already recorded passes is RESET by minting a new
 `gate_series_id`. The pass count restarts at zero, and the stall rung in step 4
 above counts passes of the new series only.
+
+A reset is performed BEFORE gate entry, before pass 1's `gate_nonce` is minted, so the reset time
+is never later than that nonce.
 
 1. Mint the new id as `<gate_type>-s<N>-<reset TS>`, with `<N>` the snapshot's
    `sprint_id` and `<reset TS>` the reset time. Write the reset as an escalation
