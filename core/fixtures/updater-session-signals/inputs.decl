@@ -1,2 +1,3 @@
-# Reads one file outside its own directory: the acknowledge hook under test. The map rows under .git, core and core/fixtures are walk-up probes.
+# Reads two files outside its own directory: the acknowledge hook under test, and the dispatch guard whose team-roles ERE the Explore carve-out must match byte for byte. The map rows under .git, core and core/fixtures are walk-up probes.
 !core/hooks/ai-dlc-acknowledge.sh
+!core/hooks/ai-dlc-dispatch-guard.sh
