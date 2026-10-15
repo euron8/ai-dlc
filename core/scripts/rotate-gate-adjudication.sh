@@ -749,8 +749,13 @@ while IFS= read -r _mv_stem; do
   _mv_ts="$(conforming_nonce "$_mv_stem")" || continue
   { [ -z "$MOVED_MAX_TS" ] || [ "$_mv_ts" \> "$MOVED_MAX_TS" ]; } && MOVED_MAX_TS="$_mv_ts"
 done < "$TMPD/move_stems"
+# A TIE COUNTS AS PROMOTION. Two verdicts sharing a nonce are ordered by the guard's
+# directory glob, not by nonce, so a moved verdict that ties the survivor may have been
+# the live pass, and moving it hands that role to the survivor. Measured: an unmatchable
+# PASS tying a legacy FAIL was live, a strict comparison let --series move it as
+# "promoting nothing", and the legacy FAIL became the live pass under a close that exited 0.
 PROMOTES=0
-[ -n "$MOVED_MAX_TS" ] && [ "$MOVED_MAX_TS" \> "${SURVIVOR_TS:-}" ] && PROMOTES=1
+[ -n "$MOVED_MAX_TS" ] && [ ! "$MOVED_MAX_TS" \< "${SURVIVOR_TS:-}" ] && PROMOTES=1
 
 if [ "$SURVIVOR_UNMOVABLE" -eq 1 ] && [ -n "$SURVIVOR_FAILS" ] && { [ "$SURVIVOR_ALWAYS" -eq 1 ] || [ "$PROMOTES" -eq 1 ]; }; then
   echo "${SELF_NAME}: REFUSED -- this rotation would strand a FAILing verdict no mode can move." >&2

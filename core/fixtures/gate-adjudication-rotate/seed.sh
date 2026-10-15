@@ -327,6 +327,21 @@ case "$CASE" in
   legacy-then-series)
     seed_legacy_fail; seed_unmatchable_fail
     ;;
+  # A legacy FAIL and an unmatchable PASS sharing ONE nonce. The PASS sorts first in the
+  # glob, so it is the live pass; moving it promotes the legacy FAIL though no nonce is newer.
+  tie)
+    verdict "$GA/legacy-20260909T120000Z.verdict.json" \
+            "legacy-20260909T120000Z" "" "$LEGACY_FAIL"
+    verdict "$GA/aplanning-20260909T120000Z.verdict.json" \
+            "aplanning-20260909T120000Z" "aplanning-20260909T120000Z" "$S309_ALLPASS"
+    ;;
+  # A legacy PASS that is the live pass, above an older FAIL-carrying unmatchable series.
+  # --legacy-through over the PASS promotes that FAIL to live, so the remedy step refuses.
+  legacy-promote)
+    verdict "$GA/legacy-20260920T000000Z.verdict.json" \
+            "legacy-20260920T000000Z" "" "$LEGACY_PASS"
+    seed_unmatchable_fail
+    ;;
   # Tagged verdicts only, none for s308: still "nothing to move", exit 0.
   tagged-nomatch)
     seed_s309_pass; seed_legacy

@@ -647,6 +647,33 @@ else
   bad "(j.13) the printed remedies did not converge (close=$rc_d0 series='$d_ser' $rc_d1 bound='$d_bound' legacy=$rc_d2 series=$rc_d3 close=$rc_d4): $out_d1 / $out_d2"
 fi
 
+# (j.14) A SAME-SECOND TIE IS A PROMOTION. A legacy FAIL and an unmatchable PASS share one
+# nonce; the PASS sorts first in the glob and is live. Moving it by --series hands the live
+# pass to the legacy FAIL, so the step refuses and writes nothing.
+seed tie
+BEFORE_T="$(treehash "$PROJ")"
+out_t="$(rotate --sprint s308 --series aplanning-20260909T120000Z --apply 2>&1)"; rc_t=$?
+AFTER_T="$(treehash "$PROJ")"
+if [ "$rc_t" -eq 1 ] && grep -q 'would strand' <<<"$out_t" && grep -q 'legacy-20260909T120000Z -- ' <<<"$out_t" \
+   && [ "$BEFORE_T" = "$AFTER_T" ]; then
+  ok "(j.14) a --series move of a verdict tying a legacy FAIL's nonce counts as promotion and refuses (exit 1), tree byte-identical"
+else
+  bad "(j.14) a same-nonce tie was not treated as promotion (rc=$rc_t): $out_t"
+fi
+
+# (j.15) --legacy-through REFUSES WHEN IT PROMOTES A FAIL. A legacy PASS is the live pass
+# above an older FAIL-carrying unmatchable series; moving the PASS would make that FAIL live.
+seed legacy-promote
+BEFORE_LP="$(treehash "$PROJ")"
+out_lp="$(rotate --legacy-through 20260920T000000Z --apply 2>&1)"; rc_lp=$?
+AFTER_LP="$(treehash "$PROJ")"
+if [ "$rc_lp" -eq 1 ] && grep -q 'would strand' <<<"$out_lp" && grep -q "${UM_FAIL} -- " <<<"$out_lp" \
+   && [ "$BEFORE_LP" = "$AFTER_LP" ] && [ -f "$GA/legacy-20260920T000000Z.verdict.json" ]; then
+  ok "(j.15) --legacy-through that would promote an unmatchable FAIL to live refuses (exit 1), tree byte-identical"
+else
+  bad "(j.15) a promoting --legacy-through was not refused (rc=$rc_lp): $out_lp"
+fi
+
 # (j.6) The printed command is spelled for the layout the rotator runs from. Two
 # copies of it, one per layout, against the same world.
 seed unmatchable
@@ -927,6 +954,46 @@ else
     ok "MUTATION 14: exempting a FAIL-free archive, the re-run exits 0 with the FAIL live (control: its close still refuses) -- arm (j.12) is live"
   else
     bad "MUTATION 14: the fail-free-archive mutant did not change the outcome (close=$rc0 first=$rc_first rerun=$rc): $out"
+  fi
+fi
+
+# =============================================================================
+# MUTATION 15 — a tie is not a promotion (strict `>`). Arm (j.14)'s --series step must
+# flip to exit 0, leaving the legacy FAIL as the live pass.
+# =============================================================================
+MUT15="$W/mut-strictpromote.sh"
+mut_replace "$ROT" "$MUT15" \
+  '[ ! "$MOVED_MAX_TS" \< "${SURVIVOR_TS:-}" ] && PROMOTES=1' \
+  '[ "$MOVED_MAX_TS" \> "${SURVIVOR_TS:-}" ] && PROMOTES=1'
+if cmp -s "$ROT" "$MUT15"; then
+  bad "MUTATION 15: the strict-promotion edit matched nothing; arm (j.14) is UNPROVEN"
+else
+  seed tie
+  out="$( ( cd "$PROJ" && bash "$MUT15" --sprint s308 --series aplanning-20260909T120000Z --apply ) 2>&1 )"; rc=$?
+  if [ "$rc" -eq 0 ] && [ -f "$GA/legacy-20260909T120000Z.verdict.json" ] && [ ! -e "$GA/aplanning-20260909T120000Z.verdict.json" ]; then
+    ok "MUTATION 15: with a strict comparison the tied PASS moves and the legacy FAIL is left live (exit 0) -- arm (j.14) is live"
+  else
+    bad "MUTATION 15: the strict comparison did not change the outcome (rc=$rc): $out"
+  fi
+fi
+
+# =============================================================================
+# MUTATION 16 — --legacy-through never refuses on the survivor. Arm (j.15) must flip to
+# exit 0. The opposite direction from MUTATION 13, which makes it refuse unconditionally.
+# =============================================================================
+MUT16="$W/mut-legacynever.sh"
+mut_replace "$ROT" "$MUT16" \
+  '[ -n "$MOVED_MAX_TS" ] && [ ! "$MOVED_MAX_TS" \< "${SURVIVOR_TS:-}" ] && PROMOTES=1' \
+  '[ -z "$LEGACY_THROUGH" ] && [ -n "$MOVED_MAX_TS" ] && [ ! "$MOVED_MAX_TS" \< "${SURVIVOR_TS:-}" ] && PROMOTES=1'
+if cmp -s "$ROT" "$MUT16"; then
+  bad "MUTATION 16: the legacy-never edit matched nothing; arm (j.15) is UNPROVEN"
+else
+  seed legacy-promote
+  out="$( ( cd "$PROJ" && bash "$MUT16" --legacy-through 20260920T000000Z --apply ) 2>&1 )"; rc=$?
+  if [ "$rc" -eq 0 ] && [ ! -e "$GA/legacy-20260920T000000Z.verdict.json" ] && [ -f "$GA/${UM_FAIL}.verdict.json" ]; then
+    ok "MUTATION 16: with --legacy-through never refusing, the PASS moves and the unmatchable FAIL is left live (exit 0) -- arm (j.15) is live"
+  else
+    bad "MUTATION 16: the legacy-never mutant did not change the outcome (rc=$rc): $out"
   fi
 fi
 

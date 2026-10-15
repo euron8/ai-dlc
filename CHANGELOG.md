@@ -46,7 +46,8 @@ step 5b then passed while that sprint's verdicts stayed live for the gate-remedi
   also refused unconditionally, a legacy FAIL below an unmatchable FAIL series would deadlock: each
   remedy's refusal would print the other. On the close (`--sprint` without `--series`) it fires whenever
   the run leaves an unmovable FAIL as the live pass, promoted or not, because nothing follows the close to
-  clear it.
+  clear it. A moved verdict whose nonce ties the survivor's counts as promotion, because the guard
+  orders a tie by glob and the moved verdict may have been the live pass.
 - **Escape.** `--sprint s<N> --series <exact-id> [--apply]` moves every verdict whose series id equals
   `<exact-id>`, with its sidecars. It is a dry run without `--apply`. It refuses (exit 2) an id that a
   `--sprint` selector can already name, and `--series ''` is a usage error (exit 2). The printed commands
@@ -71,8 +72,9 @@ step 5b then passed while that sprint's verdicts stayed live for the gate-remedi
   newest member FAILs, re-runs included, until the writer half lands. It names the close commit: the
   `chore(s<N>): rotate ... post-retro-merge` commit, or the retro PR's merge commit where a sprint has
   none. It tells the reader to re-run `--sprint s<N> --apply` after the last `--series` move, and says a
-  run that moved this sprint's verdicts still exits 1 when it would leave a FAILing live pass.
-  `process-rule-pins` pins all six clauses.
+  run that moved this sprint's verdicts still exits 1 when it would leave a FAILing live pass. It says a
+  `--series` run may itself exit 1 and print a `--legacy-through` remedy, applied the same way before the
+  `--series` line and the close are re-run. `process-rule-pins` pins all seven clauses.
 
 Measured on a `git archive` copy of the consumer's `gate-adjudication` directory and sprint archives at
 graph `2b6f952e7`. `--sprint s318` exits 1. Keyed on the newest member, it names 4 files in 4 series and
@@ -105,6 +107,8 @@ Fixture `gate-adjudication-rotate` adds these worlds:
   after the second exits 0;
 - a first line that moves a PASS-only series, after which the re-run still refuses;
 - a legacy FAIL below an unmatchable FAIL series, where the printed remedies converge (1 1 0 0 0);
+- a legacy FAIL and an unmatchable PASS sharing one nonce, where the `--series` step refuses;
+- a `--legacy-through` that would promote an unmatchable FAIL to live, which refuses;
 - archives s309 and s312 closing s313, which prints `NO HINT (s310..s311)`;
 - a backfill below the newest archive, which prints `NO HINT (backfill below s310)`.
 
@@ -115,8 +119,9 @@ Mutants are killed for the restored early exit, the reverted FAIL narrowing (mut
 contract), `--series` matching by prefix, keying the FAIL on any member (8), restoring the promotion conjunct
 in `--sprint` mode (9), keying the empty-selection refusal on an empty archive (10), hinting the closing
 sprint between archives (11), dropping the `--series` exemption from the survivor refusal (12),
-refusing unconditionally in `--legacy-through` (13) and exempting a re-run whose archive holds no FAIL
-(14). A predicate counting only `<gate>-<nonce>` ids is killed by the
+refusing unconditionally in `--legacy-through` (13), exempting a re-run whose archive holds no FAIL
+(14), a strict comparison that does not count a tie as promotion (15) and `--legacy-through` never
+refusing on the survivor (16). A predicate counting only `<gate>-<nonce>` ids is killed by the
 `story-s311` world and by the BL-523 receipt. Mutation 1's arm is re-keyed on the s308 set not being
 selected, because under that mutant every `gate_type` reads as an unmatchable id.
 ## [0.787.0] - 2026-10-15

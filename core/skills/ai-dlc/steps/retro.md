@@ -1357,6 +1357,10 @@ follow their audit, these must follow the merge.
    Run each line as printed, which is a dry run. Confirm `s<M>`, which is a hint the
    rotator inferred and never applies itself. Then add `--apply`.
 
+   **A `--series` run may itself exit 1 and print a `--legacy-through` remedy.** Apply that
+   remedy the same way, as a dry run first and then with `--apply`, then re-run the
+   `--series` line before re-running the close.
+
    **After the last `--series` move, re-run `--sprint s<N> --apply` above; the close is done only when it exits 0.**
    A run that moved this sprint's verdicts and exits 0 with a WARN naming such verdicts
    is not a HARD_BLOCK; apply the same printed lines before the commit. The same run
