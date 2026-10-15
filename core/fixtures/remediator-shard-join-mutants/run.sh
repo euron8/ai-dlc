@@ -235,8 +235,8 @@ mutant "JX8 the state-parent strip removed" "absroot absnested absslash absdoubl
   "$STRIP" \
   '    :'
 mutant "JX10 the cited token's slash squeeze removed" "absdouble" \
-  'tok = substr(line, RSTART, RLENGTH); gsub(/\/\/+/, "/", tok); print tok' \
-  'tok = substr(line, RSTART, RLENGTH); print tok'
+  'tok = substr(line, RSTART, RLENGTH); gsub(/\/\/+/, "/", tok); tk[++nt] = tok' \
+  'tok = substr(line, RSTART, RLENGTH); tk[++nt] = tok'
 mutant "JX9 any .../<state-dir-name>/... rewritten to <state-dir-name>/..." "absforeign" \
   "$STRIP" \
   "$STRIP"'
@@ -301,9 +301,9 @@ mutant "JX23 subject --pass party not a party repair" "sjpartysrc" \
 # srcsetaside and srcera die too: each refusal is reported and then acquitted by the same exit 0.
 mutant "JX24 --sources reports refusals and exits 0" "srcunres srcsetaside srcera" \
   '  [ "$refuse_n" -eq 0 ] || exit 2
-  echo "SOURCES:' \
+  [ "$SRCMODE" = 1 ] && echo "SOURCES:' \
   '  true || exit 2
-  echo "SOURCES:'
+  [ "$SRCMODE" = 1 ] && echo "SOURCES:'
 # ---- BL-464 seat-complete belt: removed, and widened from the CITED seat files to the whole dir.
 mutant "JX25 the seat-complete belt removed" "partyunmarked partyx1" \
   '  [ -n "$steps" ] || return 0' \
@@ -325,7 +325,8 @@ contract_probe_disabled() {'
 mutant "JX28 the --sources siblings PENDING line not printed" "srcpending" \
   '    echo "PENDING: ${npend} repaired edit(s)' \
   '    : "PENDING: ${npend} repaired edit(s)'
-mutant "JX29 a repaired edit with no siblings: not refused" "sibtotal sibmissing srcera sibdoc" \
+# sibprose dies too: the word in prose, no field, is the same missing field.
+mutant "JX29 a repaired edit with no siblings: not refused" "sibtotal sibmissing srcera sibdoc sibprose" \
   '    refuse "${r}: the ${d} entry is repaired with an edit and carries no' \
   '    : "${r}: the ${d} entry is repaired with an edit and carries no'
 mutant "JX30 the set-aside refusal removed" "setaside srcsetaside setasideshard setasidenr" \
@@ -334,13 +335,15 @@ mutant "JX30 the set-aside refusal removed" "setaside srcsetaside setasideshard 
 # JX36 (D1): the era decided over the parts again -- parts mode binds only once some entry carries the
 # field, so TOTAL omission reads PENDING and joins. sibmissing survives it: its parts 01/02 carry the field.
 # sibdoc dies: its omitting part 1.md is read BEFORE the carriers 2.md and 3.md.
-mutant2 "JX36 parts mode era-gated on a carrier, self-probe removed" "sibtotal sibdoc" \
-  '          if (src == 0 || era) print "NOSIB\t" cf "\t" cur' \
-  '          if (era) print "NOSIB\t" cf "\t" cur' \
+# sibprose dies too: its one part carries no field anywhere, so nothing opens the era.
+mutant2 "JX36 parts mode era-gated on a carrier, self-probe removed" "sibtotal sibdoc sibprose" \
+  '          else if (src == 0 || era) print "NOSIB\t" cf "\t" cur' \
+  '          else if (era) print "NOSIB\t" cf "\t" cur' \
   "$CTPROBE_OLD" "$CTPROBE_NEW"
 # JX37 (D3): no escalated entry is ever closed in --sources mode.
 CLOSE_LINE='          for (k = 1; k <= ncl; k++) for (i = 1; i <= nesc; i++) if (cl[k] == ef[i] " " en[i]) ex[i] = 1'
-mutant2 "JX37 --sources closure removed, self-probe removed" "srcclosed srccross" \
+# escopen and escclosed (--escalations) die too: one closure, two modes.
+mutant2 "JX37 --sources closure removed, self-probe removed" "srcclosed srccross escopen escclosed" \
   "$CLOSE_LINE" \
   '          for (k = 1; k <= ncl; k++) for (i = 1; i <= nesc; i++) if (0) ex[i] = 1' \
   "$CTPROBE_OLD" "$CTPROBE_NEW"
@@ -361,7 +364,7 @@ mutant3 "JX38 closure not order-keyed (an earlier closes: line closes), self-pro
 # again -- any LATER repaired entry carrying the escalation's token, cut to its basename as the
 # f0d0af91 join cut it, closes it. srchalf is graph's dev-05#F-3 shape; srccross dies too, because
 # the serial entry shares the token of BOTH parts' escalations.
-mutant3 "JX42 closure keyed on the source: token, self-probe removed" "srchalf srccross" \
+mutant3 "JX42 closure keyed on the source: token, self-probe removed" "srchalf srccross escopen escclosed" \
   '        if (disp ~ /^escalat/) { nesc++; ef[nesc] = part; en[nesc] = cur; ex[nesc] = 0 }
         if (disp == "repaired" && src == 1)
 '"$CLOSE_LINE" \
@@ -378,7 +381,7 @@ mutant2 "JX43 closure keyed on the heading alone (part ignored), self-probe remo
   "$CLOSE_LINE" \
   '          for (k = 1; k <= ncl; k++) for (i = 1; i <= nesc; i++) if (substr(cl[k], index(cl[k], " ") + 1) == en[i]) ex[i] = 1' \
   "$CTPROBE_OLD" "$CTPROBE_NEW"
-mutant "JX44 ESCALATED-CLOSED lines not printed" "srcclosed srccross" \
+mutant "JX44 ESCALATED-CLOSED lines not printed" "srcclosed srccross escopen escclosed" \
   '  printf '"'"'%s'"'"' "$ESC_CLOSED"' \
   '  :'
 # ---- the BLOCKER: SERIAL-REQUIRED, the count that dispatches the serial remediator for the
@@ -411,14 +414,15 @@ mutant "JX39 set-aside regex cut to 'not required' only" "setasideshard" \
 mutant "JX40 set-aside regex cut to the shard phrase only" "setasidenr" \
   'claim ~ /outside (this|my|the) (shard|part|section)|not required/' \
   'claim ~ /outside (this|my|the) (shard|part|section)/'
-mutant "JX41 --sources prints no ESCALATED-COUNT line" "srcclosed srchalf srccross" \
+mutant "JX41 --sources prints no ESCALATED-COUNT line" "srcclosed srchalf srccross escopen escclosed" \
   '  echo "ESCALATED-COUNT: ${ESC_N} (${ESC_X} closed' \
   '  : "ESCALATED-COUNT: ${ESC_N} (${ESC_X} closed'
 mutant2 "JX31 the set-aside hand-off exemption removed, self-probe removed" "handoff" \
   '            && claim !~ /escalat|serial remediator/) print "SETASIDE' \
   '            ) print "SETASIDE' \
   "$CTPROBE_OLD" "$CTPROBE_NEW"
-mutant2 "JX32 an n/a edit read as a real edit, self-probe removed" "sibok" \
+# escclosed dies too: its serial entry, edit: n/a, then reads as a repaired edit with no siblings: after a carrier.
+mutant2 "JX32 an n/a edit read as a real edit, self-probe removed" "sibok escclosed" \
   '      if (match(v, /[A-Za-z0-9_.\/-]+[.](md|json|jsonl|yaml|yml|txt|csv)/)) edt = 1' \
   '      edt = 1' \
   "$CTPROBE_OLD" "$CTPROBE_NEW"
@@ -426,14 +430,40 @@ mutant2 "JX33 every heading read as MAJOR, self-probe removed" "sibok" \
   '                 sev = (h ~ /(^|[^A-Z])(CRITICAL|MAJOR)([^A-Z]|$)/); next }' \
   '                 sev = 1; next }' \
   "$CTPROBE_OLD" "$CTPROBE_NEW"
-mutant "JX34 the joined run prints no ESCALATED: lines" "sibok handoff" \
+mutant "JX34 the joined run prints no ESCALATED: lines" "sibok handoff escpath" \
   '# "Adversarial repair dispatch").
 printf '"'"'%s'"'"' "$ESC_LINES"' \
   '# "Adversarial repair dispatch").
 :'
-mutant "JX35 --sources does not apply the entry contract" "srcsetaside srcpending srcera srcclosed srchalf srccross" \
-  '  contract_refusals 1 "$(contract_check 1 "$SRC_REC")"' \
+# escopen and escclosed die too: --escalations runs the same record_tail.
+mutant "JX35 --sources does not apply the entry contract" "srcsetaside srcpending srcera srcclosed srchalf srccross escopen escclosed" \
+  '  contract_refusals 1 "$(contract_check 1 "$1")"' \
   '  ESC_LINES=""; ESC_CLOSED=""; ESC_N=0; ESC_X=0'
+# ---- the four siblings forms, the point-in-time fence, escalated citations, --escalations.
+SIBREAD='    /^[[:space:]-]*[*_`]*siblings[*_`]*:/ { sibf = 1; v = $0; sub(/^[^:]*:/, "", v); v = vtrim(v); if (v == "") sibw = 1; else if (v in SIBNA) sib = 1; inclaim = 0; next }'
+# JX50: the tip adversary's m508 -- the siblings reader loosened to any line mentioning the word.
+mutant2 "JX50 siblings read off any line mentioning the word, self-probe removed" "srcera sibforms sibprose sibnever" \
+  "$SIBREAD" \
+  '    /[Ss]iblings?/ { sib = 1 }' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
+# JX51: the field's PRESENCE read as the field (the reader this branch shipped first).
+mutant2 "JX51 any siblings: spelling accepted, self-probe removed" "sibforms sibnever" \
+  "$SIBREAD" \
+  '    /^[[:space:]-]*[*_`]*siblings[*_`]*:/ { sibf = 1; sib = 1; inclaim = 0; next }' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
+mutant2 "JX52 a derived siblings fence accepted as the text form, self-probe removed" "sibforms" \
+  '                            if (b == "```text") {' \
+  '                            if (b == "```text" || b == "```derived") {' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
+mutant "JX53 the siblings control not counted at the join" "sibnever" \
+  '      CTL) sib_control "$r" "$d" "$l" "$m" ;;' \
+  '      CTL) : ;;'
+mutant "JX54 an escalated entry's edit: path counted as a shard citation" "escpath" \
+  '    function emit(   i) { if (disp !~ /^escalat/) for (i = 1; i <= nt; i++) print tk[i]; nt = 0; disp = "" }' \
+  '    function emit(   i) { for (i = 1; i <= nt; i++) print tk[i]; nt = 0; disp = "" }'
+mutant "JX55 --escalations runs as --sources (needs a seat dir)" "escopen escclosed" \
+  '    --escalations) SRC_REC="${2:-}"; SRCMODE=2; shift 2 ;;' \
+  '    --escalations) SRC_REC="${2:-}"; SRCMODE=1; shift 2 ;;'
 # ---- END JX MUTANTS.
 
 # ------------------------------------------------------------------------------ the reap

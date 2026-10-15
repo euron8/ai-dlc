@@ -729,7 +729,88 @@ p_srcsetaside() { # --sources applies the set-aside arm too: a resolving source,
   [ "$RC" -eq 2 ] && has "$JO" "rec.md:1: the F-1 — MAJOR entry is dispositioned repaired while its claim sets part of the fix aside"
 }
 
-P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc"
+# ---- THE FOUR SIBLINGS FORMS, AND THE FENCE AS A POINT-IN-TIME RECORD (BL-508). One writer, one
+# part, one repaired MAJOR whose `siblings:` field is spelled wrong; each spelling its own world.
+# The prose world carries NO field and mentions a sibling in its claim: a reader keyed on the word
+# acquits it, a reader keyed on the field refuses it as NOSIB.
+SIBW_EDIT="- edit: $REL/$S21:4"
+sibworld() { # <join> <siblings text, printf %b> -> RC, $JO, SB_W: one writer, one part
+  local w; w="$(new_world)"
+  drive "$w" Edit "$w/$REL/$S21" "$AG1"
+  printf '### F-4 — MAJOR\n- disposition: repaired\n%s\n%b- derivation: n/a (no factual claim)\n- claim now asserted: the title reads loads on demand.\n' \
+    "$SIBW_EDIT" "$2" > "$w/$SLOT/shards/stories-repair-p1/01.md"
+  run_join "$1" "$w"; SB_W="$w"
+}
+SB_RN="\$ grep -rn -F 'loads eagerly' $REL/$S21"
+SB_CTL="\$ grep -c -F 'loads on demand' $REL/$S21"
+p_sibforms() { # five wrong spellings of the field -> each REFUSED as none of the four forms, nothing written
+  local s
+  for s in '- siblings: checked\n' \
+           '- siblings:\n- note: re-checked by hand\n' \
+           "- siblings:\n\n\`\`\`derived\n$SB_RN\n$SB_CTL\n1\n\`\`\`\n\n" \
+           "- siblings:\n\n\`\`\`text\n$SB_CTL\n1\n\`\`\`\n\n" \
+           "- siblings:\n\n\`\`\`text\n$SB_RN\n$SB_CTL\n0\n\`\`\`\n\n"; do
+    sibworld "$1" "$s"
+    refused "$SB_W" "01.md: the F-4 — MAJOR entry is repaired with an edit and its 'siblings:' field is none of its four forms" || return 1
+  done
+}
+p_sibprose() { # no siblings: field, the word in the claim prose -> REFUSED as NOSIB (the field is read, never the word)
+  local w; w="$(new_world)"
+  drive "$w" Edit "$w/$REL/$S21" "$AG1"
+  printf '### F-4 — MAJOR\n- disposition: repaired\n%s\n- derivation: n/a (no factual claim)\n- claim now asserted: the title reads loads on demand; no sibling copy of the old title remains.\n' \
+    "$SIBW_EDIT" > "$w/$SLOT/shards/stories-repair-p1/01.md"
+  run_join "$1" "$w"
+  refused "$w" "01.md: the F-4 — MAJOR entry is repaired with an edit and carries no 'siblings:' field"
+}
+p_sibnever() { # a ```text fence whose control text was never written to the file -> REFUSED at the join
+  sibworld "$1" "- siblings:\n\n\`\`\`text\n$SB_RN\n\$ grep -c -F 'loads lazily' $REL/$S21\n1\n\`\`\`\n\n"
+  refused "$SB_W" "01.md: the F-4 — MAJOR entry's siblings control counts 'loads lazily' in $REL/$S21, which holds it 0 times at the join"
+}
+p_sibstale() { # the fence joined, then its text legitimately rewritten -> the slot-wide derivations re-run reads
+  # NO stale; the same record with the fence re-labelled derived reads STALE in the same run (the two sides differ)
+  # The validator's output goes to a file in THIS world: DV_OUT is a $WORK path bind_scratch does not
+  # rebind, so concurrent scorers of the battery would race on it.
+  local w r o; sibworld "$1" "- siblings:\n\n\`\`\`text\n$SB_RN\n$SB_CTL\n1\n\`\`\`\n\n"; w="$SB_W"; o="$w/dv.out"
+  [ "$RC" -eq 0 ] || return 1
+  r="$(out_of "$w")"
+  sed 's/loads on demand/loads when opened/' "$w/$REL/$S21" > "$w/st" && mv "$w/st" "$w/$REL/$S21" || return 1
+  ( cd "$w" && AI_DLC_PROJECT_ROOT="$w" bash "$DVAL" "$SLOT" ) > "$o" 2>&1; DV_RC=$?
+  [ "$DV_RC" -eq 0 ] && ! has "$o" "STALE" || return 1
+  sed 's/^```text$/```derived/' "$r" > "$w/ctl.md" || return 1
+  ( cd "$w" && AI_DLC_PROJECT_ROOT="$w" bash "$DVAL" "$w/ctl.md" ) > "$o" 2>&1; DV_RC=$?
+  [ "$DV_RC" -eq 1 ] && has "$o" "FAIL (STALE)"
+}
+p_escpath() { # the tip adversary's collision: 01 repairs story 2.1 and escalates a sibling in story 2.2,
+  # naming 2.2 on its escalated edit: line; 02 repairs 2.2 -> JOINED, the escalated path is not a citation
+  local w; w="$(new_world)"
+  drive "$w" Edit "$w/$REL/$S21" "$AG1"; drive "$w" Edit "$w/$REL/$S22" "$AG2"
+  printf '### F-1 — MAJOR\n- disposition: repaired\n- edit: %s/%s:4\n%s\n- derivation: n/a (no factual claim)\n\n### F-1 sibling — MAJOR\n- disposition: escalated\n- edit: %s/%s:4 (escalated: the sibling sentence lies outside this shard)\n- derivation: n/a (no factual claim)\n' \
+    "$REL" "$S21" "$SIB_INS" "$REL" "$S22" > "$w/$SLOT/shards/stories-repair-p1/01.md"
+  printf '### F-2 — MAJOR\n- disposition: repaired\n- edit: %s/%s:4\n%s\n- derivation: n/a (no factual claim)\n' \
+    "$REL" "$S22" "$SIB_INS" > "$w/$SLOT/shards/stories-repair-p1/02.md"
+  run_join "$1" "$w"
+  joined_two() { [ "$RC" -eq 0 ] && has "$JO" "(2 parts, 2 writers)" && [ -f "$(out_of "$w")" ]; }
+  joined_two && has "$JO" "ESCALATED: 01.md F-1 sibling — MAJOR" && has "$JO" "ESCALATED-COUNT: 1"
+}
+esc_rec() { # <join> <body> -> RC, $JO: --escalations over a record, NO party-mode seat dir in the world
+  local w; w="$(mktemp -d "$WORK/esc.XXXXXX")" && mkdir -p "$w/.claude" || return 1
+  printf '%b' "$2" > "$w/stories-repair-p1.md"
+  [ ! -e "$w/_bmad-output/party-mode" ] || return 1
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --escalations "$w/stories-repair-p1.md" --sprint 305 > "$JO" 2>&1; RC=$?
+}
+p_escopen() { # a non-party repair after its serial pass, one escalation left open -> rc 0, reported, never refused
+  esc_rec "$1" '<!-- shard: 01.md -->\n### F-1 — MAJOR\n- disposition: escalated\n- edit: _bmad-output/planning-artifacts/s305/stories/b.md:4\n\n### F-2 — MAJOR\n- disposition: escalated\n- edit: n/a\n\n### serial F-2 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n- closes: 01.md F-2 — MAJOR\n'
+  [ "$RC" -eq 0 ] && has "$JO" "ESCALATED: 01.md F-1 — MAJOR" && has "$JO" "ESCALATED-CLOSED: 01.md F-2 — MAJOR" \
+    && has "$JO" "ESCALATED-COUNT: 1 (1 closed" && ! has "$JO" "REFUSED" && ! has "$JO" "SERIAL-REQUIRED"
+}
+p_escclosed() { # every escalation closed by the serial pass, and a shard entry whose fence text the serial pass
+  # has since rewritten (its control text is in no file) -> rc 0, count 0: the control is counted at the join only
+  esc_rec "$1" '<!-- shard: 01.md -->\n### F-1 — MAJOR\n- disposition: repaired\n- edit: _bmad-output/planning-artifacts/s305/stories/a.md:4\n- siblings:\n\n```text\n$ grep -rn -F \047loads eagerly\047 _bmad-output/planning-artifacts/s305/stories/a.md\n$ grep -c -F \047loads on demand\047 _bmad-output/planning-artifacts/s305/stories/a.md\n1\n```\n\n### F-2 — MAJOR\n- disposition: escalated\n- edit: _bmad-output/planning-artifacts/s305/stories/b.md:4\n\n### serial F-2 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n- closes: 01.md F-2 — MAJOR\n'
+  [ "$RC" -eq 0 ] && has "$JO" "ESCALATED-CLOSED: 01.md F-2 — MAJOR" && has "$JO" "ESCALATED-COUNT: 0 (1 closed" \
+    && ! has "$JO" "ESCALATED: 01.md" && ! has "$JO" "REFUSED"
+}
+
+P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed"
 
 # ---- A PART'S DERIVATION SURVIVES THE JOIN. The part's ```derived fence is copied into the joined
 # record, and the gate re-runs `validate-artifact-derivations.sh` over the sprint dir AFTER the

@@ -3,9 +3,9 @@
 - edit: _bmad-output/planning-artifacts/s305/stories/@STORY@:4
 - siblings:
 
-```derived
+```text
 $ grep -rn -F 'loads eagerly' _bmad-output/planning-artifacts/s305/stories/@STORY@
-$ grep -c -F 'loads on demand' _bmad-output/planning-artifacts/s305/stories/@STORY@
+$ grep -c -F 'title: ' _bmad-output/planning-artifacts/s305/stories/@STORY@
 1
 ```
 

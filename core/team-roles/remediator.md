@@ -116,8 +116,9 @@ Then, per finding:
 - edit: <artifact file:line(s)>
 - siblings:   (every `repaired` entry whose edit is not n/a, in ONE of four forms; the paragraph below)
 
-```derived
+```text
 $ grep -rn -F '<the text you replaced>' <your shard's own files, or the document>
+<its output, verbatim>
 $ grep -c -F '<the text you wrote>' <the file you edited>
 <n>
 ```
@@ -126,6 +127,7 @@ $ grep -c -F '<the text you wrote>' <the file you edited>
 - siblings: n/a (insertion)
 - siblings: n/a (deletion)
 - closes: <part> <heading>   (the serial remediator only, copied from the `ESCALATED:` line it resolves)
+- edit: <project-relative path of the file the fix lies in>:<line(s)> (escalated)   (an `escalated` entry's edit: line)
 
 - derivation:
 
@@ -139,16 +141,22 @@ $ <the exact command>
 
 **Re-check every sibling of the text you replaced.** A repair that fixes one copy of a sentence
 and leaves its sibling, or shifts a `<file>:<n>` cite, is the next pass's MAJOR. So every
-`repaired` entry whose `edit:` is not n/a carries a `- siblings:` field and a `derived` fence
-holding two commands: `grep -rn -F '<the text you replaced>'` over the files your `shard:` line
+`repaired` entry whose `edit:` is not n/a carries a `- siblings:` field with no value, then a
+` ```text ` fence holding two commands: `grep -rn -F '<the text you replaced>'` over the files your `shard:` line
 names (as a files-mode shard), or over the document (as the one serial remediator of a
 document); run the fence after your last edit; its output is empty, or lists only sites you
 dispositioned not to change; and the control
-`grep -c -F '<the text you wrote>' <the file you edited>`, whose output is 1 or more. A
+`grep -c -F '<the text you wrote>' <the file you edited>`, whose output is 1 or more. The
+fence is `text`, never `derived`: it records what the grep returned at your edit, and a later
+pass that rewrites that text must not turn it stale. The join counts the control's text in the
+file it names, once, and refuses a fence whose text is not there. Any other spelling of the
+field (`- siblings: checked`, a value with no fence, a `derived` fence) is refused. A
 files-mode shard greps ONLY its own files: another shard is editing the rest concurrently, so a
 copy you record there is fixed under you and your fence goes stale. A sibling you know of in a
-file outside your shard goes on an `escalated` entry naming the file and the text, with no
-fence; the cross-file grep is the serial remediator's, after the join. Never grep the sprint
+file outside your shard goes on an `escalated` entry with no fence, whose `edit:` line names
+that file as `- edit: <project-relative path>:<line(s)> (escalated)` and whose claim quotes the
+text; the join reads no escalated entry's `edit:` as a citation, because that file is the serial
+remediator's to edit. The cross-file grep is the serial remediator's, after the join. Never grep the sprint
 slot, `shards/` or any repair record: they hold this command's own text, so the replay after
 the join finds the replaced text there and the fence goes stale. A section or subject shard
 writes `- siblings: n/a (section shard; re-checked by the serial remediator after assembly)`

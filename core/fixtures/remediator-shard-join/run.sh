@@ -186,6 +186,20 @@ p_srccross "$JOIN" && ok "EC13: --sources: one heading escalated in 01.md AND 02
   || bad "EC13: a closes: line did not close exactly the part it names (rc=$RC): $(cat "$JO")"
 p_sibdoc "$JOIN" && ok "EC14: --document, one section part omitting siblings: -> REFUSED naming it with the pre-install re-dispatch remedy, the document not assembled" \
   || bad "EC14: a --document part omitting siblings: was not refused (rc=$RC): $(cat "$JO")"
+p_sibforms "$JOIN" && ok "EC15: five wrong siblings spellings (checked, an empty value with no fence, a derived fence, a text fence missing its grep -rn, a control count of 0) -> each REFUSED as none of the four forms" \
+  || bad "EC15: a wrong siblings spelling was accepted, or refused under another reason (rc=$RC): $(cat "$JO")"
+p_sibprose "$JOIN" && ok "EC16: no siblings: field, the word sibling in the claim prose -> REFUSED as a missing field (the reader keys on the field, never the word)" \
+  || bad "EC16: an entry mentioning a sibling only in prose was not refused as NOSIB (rc=$RC): $(cat "$JO")"
+p_sibnever "$JOIN" && ok "EC17: a text fence whose control text was never written to the file -> REFUSED at the join, 0 times" \
+  || bad "EC17: a siblings control naming absent text was not refused (rc=$RC): $(cat "$JO")"
+p_sibstale "$JOIN" && ok "EC18: the joined fence, its text later rewritten -> the slot-wide derivations re-run reads no STALE; the same fence re-labelled derived reads STALE" \
+  || bad "EC18: the siblings fence is replayed by the derivations validator, or the derived control did not go stale (rc=$RC dv=${DV_RC:-}): $(cat "$JO" "$SB_W/dv.out" 2>/dev/null | head -20)"
+p_escpath "$JOIN" && ok "EC19: an escalated entry naming the sibling's path on edit:, beside the shard that repairs that file -> JOINED (the escalated path is no citation)" \
+  || bad "EC19: an escalated entry's edit: path collided with another shard's citation (rc=$RC): $(cat "$JO")"
+p_escopen "$JOIN" && ok "EC20: --escalations, no seat dir, one escalation open and one closed -> rc 0, the open one reported, ESCALATED-COUNT: 1, no SERIAL-REQUIRED" \
+  || bad "EC20: --escalations did not report an open escalation on a non-party record (rc=$RC): $(cat "$JO")"
+p_escclosed "$JOIN" && ok "EC21: --escalations, every escalation closed and a shard fence whose text the serial pass rewrote -> rc 0, ESCALATED-COUNT: 0" \
+  || bad "EC21: --escalations did not pass a fully closed record (rc=$RC): $(cat "$JO")"
 p_setasideshard "$JOIN" && ok "EC10: a repaired MAJOR set aside only as 'outside this shard' -> REFUSED (the regex's first half)" \
   || bad "EC10: an 'outside this shard' set-aside was not refused (rc=$RC): $(cat "$JO")"
 p_setasidenr "$JOIN" && ok "EC11: a repaired MAJOR set aside only as 'not required' -> REFUSED (the regex's second half)" \

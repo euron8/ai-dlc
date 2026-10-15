@@ -16,7 +16,12 @@
 #             -> rc 0, the remainder open, `ESCALATED-CLOSED:` for the closed one, `ESCALATED-COUNT:
 #             1 (1 closed ...)`, no SERIAL-REQUIRED line
 #   TWIN also prints `SERIAL-REQUIRED: 1`: the dispatch count for the serial remediator.
-# Regressions scored non-zero: closure keyed on the source: token (SRC); SERIAL-REQUIRED not printed (TWIN).
+#   ESC       --escalations over a NON-party record (no seat dir): one escalation open, one closed
+#             -> rc 0, the open one reported; every one closed -> `ESCALATED-COUNT: 0`
+#   ESCPATH   an escalated entry naming the sibling file on edit:, beside the shard repairing that
+#             file -> must JOIN (the escalated path is not a shard citation)
+# Regressions scored non-zero: closure keyed on the source: token (SRC); SERIAL-REQUIRED not printed (TWIN);
+# --escalations absent or needing a seat dir (ESC); an escalated edit: path read as a citation (ESCPATH).
 # Every parts-mode entry carries `siblings: n/a (insertion)`, so the set-aside is each world's only
 # defect. exit 0 fixed, 1 live (any world answers the wrong way), 9 precondition missing.
 # Measured at 0.781.0 (origin/main fe7d5ec2): OFFENDER joins -> exit 1. Run from the repo root.
@@ -82,6 +87,36 @@ src '<!-- shard: 01.md -->\n### F-3 — MAJOR\n- source: stories-sm-05.md#F-3\n-
 [ "$RC" -eq 0 ] || exit 1
 case "$OUT" in *"ESCALATED: 01.md F-3 (remainder) — MAJOR"*"ESCALATED-CLOSED: 01.md F-2 — MAJOR"*"ESCALATED-COUNT: 1 (1 closed"*) ;; *) exit 1 ;; esac
 case "$OUT" in *SERIAL-REQUIRED*) exit 1 ;; esac
+# ESC: a NON-party repair record after its serial pass -- no party-mode seat dir at all. One escalation
+# open, one closed by `closes:` -> --escalations rc 0, the open one reported; the same record with both
+# closed -> count 0. --sources exits 2 here for want of a seat dir, so before --escalations nothing read
+# these closes: lines.
+esc() { # <body> -> RC, OUT
+  local w; w="$(mktemp -d)" || exit 9
+  mkdir -p "$w/.claude" || exit 9
+  printf '%b' "$1" > "$w/stories-repair-p1.md"
+  OUT="$(AI_DLC_PROJECT_ROOT="$w" bash "$J" --escalations "$w/stories-repair-p1.md" --sprint 305 2>&1)"; RC=$?
+}
+EB='<!-- shard: 01.md -->\n### F-1 — MAJOR\n- disposition: escalated\n- edit: _bmad-output/planning-artifacts/s305/stories/b.md:4 (escalated)\n\n### F-2 — MAJOR\n- disposition: escalated\n- edit: n/a\n\n### serial F-2 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n- closes: 01.md F-2 — MAJOR\n'
+esc "$EB"
+[ "$RC" -eq 0 ] || exit 1
+case "$OUT" in *"ESCALATED: 01.md F-1 — MAJOR"*"ESCALATED-CLOSED: 01.md F-2 — MAJOR"*"ESCALATED-COUNT: 1 (1 closed"*) ;; *) exit 1 ;; esac
+esc "${EB}\n### serial F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n- closes: 01.md F-1 — MAJOR\n"
+[ "$RC" -eq 0 ] || exit 1
+case "$OUT" in *"ESCALATED-COUNT: 0 (2 closed"*) ;; *) exit 1 ;; esac
+# ESCPATH: an escalated entry naming the sibling file b.md on edit:, beside the shard that repairs
+# b.md -> JOINED (graph's parts: 15 of 66 escalated entries carry a path on edit:)
+w="$(world)"
+printf 'story\n' > "$w/$SLOT/stories/b.md"
+jq -nc --arg f "$w/$SLOT/stories/b.md" \
+  '{session_id:"t", tool_name:"Edit", transcript_path:"", tool_input:{file_path:$f}, agent_id:"acd81ddfb7c535037"}' \
+  | CLAUDE_PROJECT_DIR="$w" bash "$H" >/dev/null 2>&1
+{ head_part 'The Story b display is outside this shard and is escalated in the entry below.'
+  printf '\n### F-3 sibling — MAJOR\n- disposition: escalated\n- edit: %s/stories/b.md:4 (escalated)\n- derivation: n/a (no factual claim)\n' "$SLOT"; } > "$w/$SLOT/$P"
+printf '### F-4 — MAJOR\n- disposition: repaired\n- edit: %s/stories/b.md:1\n- siblings: n/a (insertion)\n- derivation: n/a (no factual claim)\n' "$SLOT" > "$w/$SLOT/shards/stories-repair-p1/02.md"
+join "$w"
+[ "$RC" -eq 0 ] || exit 1
+case "$OUT" in *"(2 parts, 2 writers)"*"ESCALATED: 01.md F-3 sibling — MAJOR"*) ;; *) exit 1 ;; esac
 # OFFENDER, last
 w="$(world)"
 head_part 'A dashboard display of the returned id in Story 1.4 would be more ergonomic on iOS but is outside this shard and is not required for the AC to hold.' > "$w/$SLOT/$P"

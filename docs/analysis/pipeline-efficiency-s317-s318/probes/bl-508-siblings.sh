@@ -23,7 +23,10 @@
 # exit 0 fixed, 1 live (any world answers the wrong way), 9 precondition missing.
 # Measured at 0.781.0 (origin/main fe7d5ec2): TOTAL and OFFENDER join -> exit 1. Run from the repo root.
 # Regressions scored non-zero: the siblings arm applied in files mode only (DOC); SERIAL-REQUIRED not
-# printed, or counted over every repaired entry (TWIN).
+# printed, or counted over every repaired entry (TWIN); the field read by presence (CHECKED); the
+# field read off any line mentioning the word, the tip adversary's m508 (PROSE); the fence's
+# control not counted at the join (NEVER). TWIN's fence is ```text: a point-in-time record the
+# derivations validator never replays.
 set -u
 J="$(pwd)/core/scripts/join-remediator-shards.sh"; H="$(pwd)/core/hooks/ai-dlc-gate-remediation-guard.sh"
 [ -f "$J" ] && [ -f "$H" ] || exit 9
@@ -44,7 +47,9 @@ world() { # -> a project root with stories a.md and b.md, each edited by its own
 }
 entry() { # <story> <with siblings: yes|no> [claim tail]
   printf '### F-1 — MAJOR\n- disposition: repaired\n- edit: %s/stories/%s:1\n' "$SLOT" "$1"
-  [ "$2" = yes ] && printf -- "- siblings:\n\n\`\`\`derived\n\$ grep -rn -F 'loads eagerly' %s/stories/%s\n\$ grep -c -F 'loads on demand' %s/stories/%s\n1\n\`\`\`\n\n" "$SLOT" "$1" "$SLOT" "$1"
+  [ "$2" = yes ] && printf -- "- siblings:\n\n\`\`\`text\n\$ grep -rn -F 'loads eagerly' %s/stories/%s\n\$ grep -c -F 'loads on demand' %s/stories/%s\n1\n\`\`\`\n\n" "$SLOT" "$1" "$SLOT" "$1"
+  [ "$2" = checked ] && printf -- '- siblings: checked\n'
+  [ "$2" = never ] && printf -- "- siblings:\n\n\`\`\`text\n\$ grep -rn -F 'loads eagerly' %s/stories/%s\n\$ grep -c -F 'loads lazily' %s/stories/%s\n1\n\`\`\`\n\n" "$SLOT" "$1" "$SLOT" "$1"
   printf -- '- derivation: n/a (no factual claim)\n- claim now asserted: the title reads loads on demand.%s\n\n' "${3:-}"
   printf '### F-9 — MINOR\n- disposition: repaired\n- edit: n/a (wording only)\n- derivation: n/a (no factual claim)\n- claim now asserted: wording; the trailing clause the finding proposed is not required.\n'
 }
@@ -100,6 +105,19 @@ case "$OUT" in *"2.md: the S-2 — MAJOR $NOSIB"*) exit 1 ;; esac
 w="$(world)"; entry a.md yes > "$w/$SLOT/$D/01.md"; entry b.md no > "$w/$SLOT/$D/02.md"
 join "$w"; [ "$RC" -eq 2 ] || exit 1
 case "$OUT" in *"02.md: the F-1 — MAJOR $NOSIB"*) ;; *) exit 1 ;; esac
+# CHECKED: the field present in none of its four forms -> REFUSED (a presence reader joins it)
+w="$(world)"; entry a.md yes > "$w/$SLOT/$D/01.md"; entry b.md checked > "$w/$SLOT/$D/02.md"
+join "$w"; [ "$RC" -eq 2 ] || exit 1
+case "$OUT" in *"02.md: the F-1 — MAJOR entry is repaired with an edit and its 'siblings:' field is none of its four forms"*) ;; *) exit 1 ;; esac
+# PROSE: no field, the word sibling in the claim -> REFUSED as a missing field (a reader keyed on
+# the word, the tip adversary's m508, joins it)
+w="$(world)"; entry a.md yes > "$w/$SLOT/$D/01.md"; entry b.md no ' No sibling copy of the old title remains.' > "$w/$SLOT/$D/02.md"
+join "$w"; [ "$RC" -eq 2 ] || exit 1
+case "$OUT" in *"02.md: the F-1 — MAJOR $NOSIB"*) ;; *) exit 1 ;; esac
+# NEVER: a text fence whose control text was never written -> REFUSED at the join
+w="$(world)"; entry a.md yes > "$w/$SLOT/$D/01.md"; entry b.md never > "$w/$SLOT/$D/02.md"
+join "$w"; [ "$RC" -eq 2 ] || exit 1
+case "$OUT" in *"02.md: the F-1 — MAJOR entry's siblings control counts 'loads lazily'"*) ;; *) exit 1 ;; esac
 # SETASIDE
 w="$(world)"; entry a.md yes ' The dashboard display in Story 1.4 is outside this shard.' > "$w/$SLOT/$D/01.md"
 entry b.md yes > "$w/$SLOT/$D/02.md"

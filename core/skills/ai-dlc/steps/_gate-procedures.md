@@ -845,9 +845,15 @@ parts, and its brief carries every `ESCALATED:` line verbatim. In `--sources` mo
 that record may be the serial remediator's own, so no SERIAL-REQUIRED line is printed there. An
 escalated entry is closed only by a later `repaired` entry carrying `- closes: <part> <entry>`
 copied from its `ESCALATED:` line, never by a shared `source:` token; the join prints each closed
-one as `ESCALATED-CLOSED: <part> <entry>`. The join also refuses a `repaired` MAJOR or CRITICAL whose claim sets part of the
+one as `ESCALATED-CLOSED: <part> <entry>`. After the serial remediator appends to a record that
+has no party seat files (an adversarial, elicitation or gate repair), the lead runs
+`scripts/ai-dlc/join-remediator-shards.sh --escalations <the joined record> --sprint <N>`, which
+reads the `closes:` lines with no `party-mode/s<N>/` directory and prints every escalation still
+open; each open one is the lead's to adjudicate. A party record takes `--sources`, which does the
+same. The join also refuses a `repaired` MAJOR or CRITICAL whose claim sets part of the
 fix aside as outside the shard or not required without naming a hand-off, and, in every parts
-mode, a `repaired` entry with an edit and no `siblings:` field.
+mode, a `repaired` entry with an edit whose `siblings:` field is absent or in none of its four
+forms, and a siblings fence whose control text is not in the file it names.
 
 After a join refusal naming a file `which no dispatched agent wrote`:
 
