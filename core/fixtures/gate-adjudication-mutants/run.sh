@@ -16,7 +16,7 @@
 # reporting red for the wrong case is a mutant that killed nothing and reads identically to one
 # that worked, which is the defect this directory exists to catch one level up.
 #
-# SHARDED. The pre-push suite is POLE-BOUND, so this battery's 25 full runs of the shipped
+# SHARDED. The pre-push suite is POLE-BOUND, so this battery's 26 full runs of the shipped
 # fixture are dealt across three .dist-only drivers (`gate-adjudication-mutants-b`, `-c`) that
 # `exec bash <this file> --group <x>`. Every shard pays the M0 control and the coverage join;
 # the mutant partition below is declared HERE and joined (J0) against this file's own
@@ -24,7 +24,7 @@
 # without a driver. The shard arrives as an ARGUMENT, never the environment (scrubbed below).
 SHARDS="a b c"
 MUTANTS_a="m1 m4 m7 m10 m13 m16 m19 m21"
-MUTANTS_b="m2 m5 m8 m11 m14 m17 m20 m22"
+MUTANTS_b="m2 m5 m8 m11 m14 m17 m20 m22 m25"
 MUTANTS_c="m3 m6 m9 m12 m15 m18 m23 m24"
 set -u
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
@@ -680,6 +680,11 @@ score "m24 series arm never checks the gate_type prefix" validate-gate-adjudicat
   '    if not _sid.startswith(_gt + "-"):' \
   '    if False:' \
   "A series id carrying another gate's prefix was not refused by the prefix check."
+score "m25 series arm never checks the trailing timestamp form" validate-gate-adjudication.sh \
+  "SF4" \
+  '    if not re.match(r"^[0-9]{8}T[0-9]{6}Z$", _sts):' \
+  '    if False:' \
+  "A series id with an extra field between -s<N>- and its timestamp was accepted."
 
 # --------------------------------------------------------------------------
 # The kill count itself. A battery whose mutants all applied and killed nothing reports zero
@@ -697,7 +702,9 @@ if [ "$FAILURES" -eq 0 ]; then
   echo "    exclusion, the fail-closed default, the exact-id match, the empty-catalog rule,"
   echo "    the per-ENTRY exclusion, the sibling's stderr channel, the citation verifier's"
   echo "    ask, its fail-closed default, its answer, its corpus depth, its exit tiers, or"
-  echo "    either script itself each kills exactly the case set that owns that property."
+  echo "    either script itself, or any of the series-id form arm's four checks (prefix,"
+  echo "    -s<N>- field, trailing timestamp, no later than the nonce) each kills exactly"
+  echo "    the case set that owns that property."
   exit 0
 fi
 echo "FAILED: $NAME — $FAILURES finding(s) across $SCORED mutant(s)"
