@@ -191,7 +191,7 @@ Find the newest stem in the live `gate-adjudication/` directory (its verdict, el
 
 With no candidate, rule 3 mints, so a malformed id is never reused, and two stories' gates in flight together never share a series.
 
-Whether `gate-checkpoint.sh close` ran plays no part in the choice. Rule 2's `-s<N>-` test means a series still carrying an old-form id is not continued; the next pass mints a new-form one. The series id goes in the adjudicator's brief and every shard's brief, and it is never passed to `gate-checkpoint.sh --nonce`.
+Whether `gate-checkpoint.sh close` ran plays no part in the choice. The exact-form candidate test means a series still carrying an old-form id is not continued; the next pass mints a new-form one. The series id goes in the adjudicator's brief and every shard's brief, and it is never passed to `gate-checkpoint.sh --nonce`.
 
 READ AND FOLLOW `_gate-procedures.md` "Gate-adjudication dispatch": dispatch the
 adjudicator `run_in_background`, join its verdict. While it runs, evaluate ONLY the remaining
