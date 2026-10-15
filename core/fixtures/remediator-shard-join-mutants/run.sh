@@ -44,10 +44,11 @@
 #
 # THE SHARDS. The pre-push suite is POLE-BOUND: its makespan tracks its single longest DIRECTORY,
 # and this battery, 63 mutants in one unit, was that directory at 1051s loaded (404s solo). So the
-# mutant set is dealt across three units, this directory (shard a) and the one-line drivers
-# `remediator-shard-join-mutants-b` and `-c`, each `exec bash "$IMPL" --group <x>`, the shape
+# mutant set is dealt across four units, this directory (shard a) and the one-line drivers
+# `remediator-shard-join-mutants-b`, `-c` and `-d`, each `exec bash "$IMPL" --group <x>`, the shape
 # `review-shard-merge-mutants` carries. Every scorer runs every predicate, so the cost per mutant
-# is roughly uniform and an equal count balances: 21 each, in declaration order by family.
+# is roughly uniform and an equal count balances: 18 each, in declaration order by family. Shard d
+# was added when 72 mutants over three shards measured 245-295s solo each.
 # Every shard pays the unmutated control JX0, the J1 join and the MJ probe itself, because a shard
 # that skipped them could report a kill against a harness that never ran.
 #
@@ -60,10 +61,11 @@
 # a driver directory naming it. The join proves it can fire, on a seeded duplicate and a seeded
 # omission, before it is trusted. After the reap, [J2] asserts this shard dispatched exactly the
 # mutants dealt to it.
-SHARDS="a b c"
-MUTANTS_a="JX1 JX2 JX3 JX4 JX5 JX6 JX7 JX8 JX10 JX9 JX11 JX12 JX13 JX14 JX15 JX16 JX17 JX18 JX19 JX20 JX21"
-MUTANTS_b="JX22 JX23 JX24 JX25 JX26 JX27 JX28 JX29 JX30 JX36 JX37 JX38 JX42 JX43 JX44 JX45 JX46 JX47 JX48 JX49 JX39"
-MUTANTS_c="JX40 JX41 JX31 JX32 JX33 JX34 JX35 JX50 JX51 JX52 JX53 JX54 JX55 JX56 JX57 JX58 JX59 JX60 JX61 JX62 JX63"
+SHARDS="a b c d"
+MUTANTS_a="JX1 JX2 JX3 JX4 JX5 JX6 JX7 JX8 JX10 JX9 JX11 JX12 JX13 JX14 JX15 JX16 JX17 JX18"
+MUTANTS_b="JX19 JX20 JX21 JX22 JX23 JX24 JX25 JX26 JX27 JX28 JX29 JX30 JX36 JX37 JX38 JX42 JX43 JX44"
+MUTANTS_c="JX45 JX46 JX47 JX48 JX49 JX39 JX40 JX41 JX31 JX32 JX33 JX34 JX35 JX50 JX51 JX52 JX53 JX54"
+MUTANTS_d="JX55 JX56 JX57 JX58 JX59 JX60 JX61 JX62 JX63 JX64 JX65 JX66 JX67 JX68 JX69 JX70 JX71 JX72"
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
@@ -304,7 +306,8 @@ mutant "JX2 the uncited-file refusal removed" "missing" \
 SHF='| select($doc == "1" or ((.path | startswith($sh + "/")) | not))'
 SHF_ROWS='   | [.path, .agent_id]] | unique | .[] | @tsv'
 SHF_DROWS='     | [.path, .agent_id, .ts, (.session | d), (.tool_use_id | d), (.transcript_path | d),'
-mutant2 "JX3 the shards/ exclusion removed" "shardrow" \
+# rrfiles dies too: its re-run writer's part-record Write becomes a written file no part cites.
+mutant2 "JX3 the shards/ exclusion removed" "shardrow rrfiles" \
   "   $SHF
 $SHF_ROWS" \
   "   | select(true)
@@ -319,7 +322,7 @@ $SHF_DROWS"
 # whole-file part rows outside shards/, so the join still reaches the source check and refuses by name.
 # sibdoc (BL-508) dies too: with no section rows the join refuses on the empty ledger before its siblings arm.
 # The document- and subject-mode re-run arms die too: with no section rows nothing is re-run.
-mutant2 "JX4 section rows dropped in document mode (the pre-BL-372 file set)" "docjoin docoverlap asmrefuse sjoin sjnames sjgate sjnest partydoc sibdoc rrgraph rrout rrlate rrlatein rrsame rrspan rrsubj" \
+mutant2 "JX4 section rows dropped in document mode (the pre-BL-372 file set)" "docjoin docoverlap asmrefuse sjoin sjnames sjgate sjnest partydoc sibdoc rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrsubj" \
   "   $SHF
 $SHF_ROWS" \
   "   | select((.path | startswith(\$sh + \"/\")) | not)
@@ -582,7 +585,8 @@ mutant "JX55 --escalations runs as --sources (needs a seat dir)" "escopen escclo
 RR_DROP='          if ((f in fp) && t < S[fp[f]]) {
             p = fp[f]; drop[i] = 1; sw[p, a] = 1'
 # JX56: no narrowing -- nothing is superseded, so the re-run part keeps every writer.
-mutant "JX56 --rerun narrows nothing" "rrgraph rrout rrlate rrlatein rrsame rrfiles rrsubj" \
+# rrprlate and rrprout die too: with nothing superseded the original is no superseded writer.
+mutant "JX56 --rerun narrows nothing" "rrgraph rrout rrlate rrlatein rrsame rrprlate rrprout rrfiles rrsubj" \
   "$RR_DROP" \
   '          if (0) {
             p = fp[f]; drop[i] = 1; sw[p, a] = 1'
@@ -609,7 +613,8 @@ mutant2 "JX61 alias clause 2 dropped (A may have a transcript)" "alown" \
   '      :'
 # JX62: clause 3 by grep -- any line of B's transcript carrying the id, a tool_result included,
 # read as one Edit of the file, so the later name and path checks still pass.
-mutant "JX62 alias clause 3 by grep, not a parsed tool_use" "alresult" \
+# altwo and altool die too: the grep stand-in reads one Edit whatever the count or the tool name.
+mutant "JX62 alias clause 3 by grep, not a parsed tool_use" "alresult altwo altool" \
   '        _blk="$(tu_blocks "${_sd}/subagents/agent-${_B}.jsonl" "$_tuid")"' \
   '        _blk="$(grep -qF -- "$_tuid" "${_sd}/subagents/agent-${_B}.jsonl" 2>/dev/null && printf "Edit\t%s\n" "$_f")"'
 # JX63: a shared transcript_path read as one writer -- clause 3 and its name/path checks replaced.
@@ -622,7 +627,37 @@ AL_C3='        _blk="$(tu_blocks "${_sd}/subagents/agent-${_B}.jsonl" "$_tuid")"
         [ "$(hook_norm "$_bfp")" = "$_f" ] || continue'
 AL_TP='        _btp="$(printf '"$_Q"'%s\n'"$_Q"' "$DROWS" | awk -F'"$_Q"'\t'"$_Q"' -v f="$_f" -v b="$_B" '"$_Q"'$1 == f && $2 == b { print $6; exit }'"$_Q"')"
         [ "$_btp" = "$_tpath" ] || continue'
-mutant "JX63 alias on a shared transcript_path" "alresult alsecond" "$AL_C3" "$AL_TP"
+mutant "JX63 alias on a shared transcript_path" "alresult alsecond altwo altool" "$AL_C3" "$AL_TP"
+# The three clauses the tip adversary found untestable (its W6, W7, W9), each now owned by one arm.
+mutant "JX64 alias clause 1 session match dropped" "alsess" \
+  '        [ "$_bs" = "$_sess" ] || continue' \
+  '        :'
+mutant "JX65 alias clause 3 exactly-one relaxed to at-least-one" "altwo" \
+  '        [ "$(printf '"$_Q"'%s\n'"$_Q"' "$_blk" | grep -c .)" = 1 ] || continue' \
+  '        [ -n "$_blk" ] || continue; _blk="$(printf '"$_Q"'%s\n'"$_Q"' "$_blk" | head -1)"'
+mutant "JX66 alias clause 3 tool-name check dropped" "altool" \
+  '        case "$_bn" in Edit|Write|MultiEdit) ;; *) continue ;; esac' \
+  '        :'
+# ---- the part-record refusals: the account's author, read off rows under the repair dir.
+mutant "JX67 a superseded writer's part-record row after S_P not refused" "rrprlate" \
+  '        PRLATE) refuse' \
+  '        PRLATE) :'
+mutant "JX68 a superseded writer's row on another part's record not refused" "rrprout" \
+  '        PROUT) refuse' \
+  '        PROUT) :'
+mutant "JX69 a foreign row on the re-run part's own record after S_P not refused" "rrprforeign" \
+  '        PRFOREIGN) refuse' \
+  '        PRFOREIGN) :'
+mutant "JX70 a re-run with no row on its own part record not refused" "rrprnone" \
+  '        PRNONE) refuse' \
+  '        PRNONE) :'
+mutant "JX71 a re-run writer with rows outside its part not refused" "rrreuse" \
+  '        RWOUT) refuse' \
+  '        RWOUT) :'
+# JX72: only the part-record half of the re-run writer's reach removed; rrreuse asserts both spellings.
+mutant "JX72 a re-run writer's row on another part's record not refused" "rrreuse" \
+  '            if (((p, a) in rw) && b != p && !((p, a, b, "R") in pq)) {' \
+  '            if (0) {'
 # ---- END JX MUTANTS.
 
 # ------------------------------------------------------------------------------ the reap

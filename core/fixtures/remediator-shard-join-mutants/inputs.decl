@@ -12,3 +12,4 @@ core/fixtures/remediator-shard-join/
 core/fixtures/lib/
 core/fixtures/remediator-shard-join-mutants-b/run.sh
 core/fixtures/remediator-shard-join-mutants-c/run.sh
+core/fixtures/remediator-shard-join-mutants-d/run.sh

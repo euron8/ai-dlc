@@ -265,6 +265,16 @@ p_rrsame "$JOIN" && ok "RR5: the same id both sides of S_P, the orphan before, n
   || bad "RR5: a re-run by the superseded writer itself was not refused (rc=$RC): $(cat "$JO")"
 p_rrspan "$JOIN" && ok "RR6: the re-run writer also writes section 4 -> REFUSED, section 4 has two writers" \
   || bad "RR6: a re-run writer writing another section was not refused (rc=$RC): $(cat "$JO")"
+p_rrprlate "$JOIN" && ok "RR10: the original writes 2.md's own part record after S_P -> REFUSED, a superseded writer writing an account" \
+  || bad "RR10: a superseded writer's part-record row after S_P was not refused (rc=$RC): $(cat "$JO")"
+p_rrprout "$JOIN" && ok "RR11: the original wrote another part's record (3.md) before S_P -> REFUSED, it was not only 2.md's writer" \
+  || bad "RR11: a superseded writer's row on another part's record was not refused (rc=$RC): $(cat "$JO")"
+p_rrprforeign "$JOIN" && ok "RR12: another agent writes 2.md's record after S_P beside the re-run's -> REFUSED, the account is the re-run writer's alone" \
+  || bad "RR12: a foreign row on the re-run part's record after S_P was not refused (rc=$RC): $(cat "$JO")"
+p_rrprnone "$JOIN" && ok "RR13: the re-run never writes 2.md's record -> REFUSED, the covering account is not the re-run's" \
+  || bad "RR13: a re-run with no part-record row was not refused (rc=$RC): $(cat "$JO")"
+p_rrreuse "$JOIN" && ok "RR14: section 3's finished owner does the section-2 re-run -> REFUSED on its section-3 file and its 3.md record" \
+  || bad "RR14: a finished part's agent re-running another part was not refused (rc=$RC): $(cat "$JO")"
 p_rrargs "$JOIN" && ok "RR7: --rerun argument refusals -- an unknown part, a part named twice, a start outside the window, a malformed start, no @, a part citing no written file, and --rerun with --escalations" \
   || bad "RR7: a --rerun argument refusal did not fire as named (rc=$RC): $(cat "$JO")"
 p_rrfiles "$JOIN" && ok "RR8: FILES mode -- story 2.1 re-run by a new agent -> REFUSED without --rerun, JOINED with it, its rerun: line and '1 superseded rows'" \
@@ -285,6 +295,12 @@ p_alsecond "$JOIN" && ok "AL5: a genuine second remediator sharing the parent tr
   || bad "AL5: a second remediator sharing transcript_path was aliased (rc=$RC): $(cat "$JO")"
 p_alother "$JOIN" && ok "AL6: the orphan id has a second row in the file set -> REFUSED, '2 row(s)' named" \
   || bad "AL6: an id with another row was aliased (rc=$RC): $(cat "$JO")"
+p_alsess "$JOIN" && ok "AL7: the holding tool_use is in the transcript of a writer whose rows are in ANOTHER session -> REFUSED" \
+  || bad "AL7: an alias across sessions was accepted (rc=$RC): $(cat "$JO")"
+p_altwo "$JOIN" && ok "AL8: the id is held by TWO tool_use blocks -> REFUSED, '2 block(s)' named" \
+  || bad "AL8: an id held by two tool_use blocks was aliased (rc=$RC): $(cat "$JO")"
+p_altool "$JOIN" && ok "AL9: the one tool_use holding the id is a Read -> REFUSED" \
+  || bad "AL9: an id held by a non-write tool_use was aliased (rc=$RC): $(cat "$JO")"
 
 # R1: the role file the remediator is bound to teaches the write tool and the citation form. Walked
 # up from this fixture in both layouts; install copies team-roles/ verbatim, so no render exists.

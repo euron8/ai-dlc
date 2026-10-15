@@ -94,12 +94,20 @@
 #     at or after S_P (the original is still writing); P's re-run writer being one of its
 #     superseded writers (the re-run is a NEW dispatch, a new agent id). Refused with --sources and
 #     --escalations, which read no ledger.
+#   - THE PART RECORDS `<repair dir>/<part>.md` sit outside every mode's file set, so they are read
+#     separately, non-recursively, in the outer window. Refused: a superseded writer of P with a row
+#     on ANY part record at or after S_P; a superseded writer with a row on ANOTHER part's record;
+#     a row on P's own record at or after S_P by any agent but P's re-run writer, or no such row by
+#     the re-run writer at all (the covering account is then the re-run's); the re-run writer (any
+#     writer of F_P at or after S_P) with a row on any file or part record outside F_P and P's own
+#     record in the outer window -- a finished part's agent is not a new dispatch.
 #   - Subject mode classifies in-place writes (sectioned or part-less subject files) on the
 #     unnarrowed rows, before any narrowing.
 #   - The record keeps the outer `window` line and adds one `rerun: <part> since <S_P>; superseded
 #     on <file>: <ids> (<n> rows, <first>..<last>)` line per re-run; JOINED counts the superseded.
 #   Residual, stated: bytes a superseded writer wrote before S_P stay in the file, covered only by
-#   the re-run part's own account of the whole diff against the split slice.
+#   the re-run part's own account of the whole diff against the split slice. That account's AUTHOR
+#   is enforced (the part-record refusals above); its CONTENT is not checked by any program.
 #
 # AN ALIAS IS ONE WRITER, AND ONLY ON TRANSCRIPT EVIDENCE. The hook records, beside `agent_id`,
 #   the payload's `tool_use_id`, its `transcript_path` (the PARENT session's file, which every
@@ -1085,9 +1093,22 @@ if [ -n "$RERUN" ]; then
 $RERUN
 RREOF
   if [ -n "$_rspec" ]; then
-    _rres="$({ printf '%s' "$_rspec"; printf '%s\n' "$DROWS" | sed '/^$/d; s/^/D\t/'; } | awk -F'\t' '
+    # THE PART RECORDS: rows on `<repair dir>/<part>.md`, non-recursive, in the outer window. They sit
+    # outside every mode's file set (shards/ is dropped in files mode; document and subject mode keep
+    # only section copies and subject files), so the authorship of the account is read here alone.
+    _prpfx="${SHARD_REL}/${SHARD_DIR##*/}/"
+    _prrows="$(jq -rn --arg since "$SINCE" --arg until "$UNTIL" --arg px "$_prpfx" '
+      inputs | select(type == "object") | select(.kind == "artifact-write")
+       | select((.agent_id // "") != "") | select((.ts | type) == "string")
+       | select(.ts >= $since and .ts <= $until)
+       | select((.path | type) == "string" and (.path | startswith($px)))
+       | (.path | ltrimstr($px)) as $b | select(($b | contains("/") | not) and ($b | endswith(".md")))
+       | [$b, .agent_id, .ts] | @tsv' "$LEDGER" 2>/dev/null)" \
+      || die "the write ledger ${LEDGER} does not parse as JSON lines"
+    _rres="$({ printf '%s' "$_rspec"; printf '%s\n' "$DROWS" | sed '/^$/d; s/^/D\t/'; printf '%s\n' "$_prrows" | sed '/^$/d; s/^/Q\t/'; } | awk -F'\t' -v px="$_prpfx" '
       $1 == "R" { if (!($2 in S)) { S[$2] = $3; PP[++npp] = $2 }; inF[$2, $4] = 1; nf[$2]++; F[$2, nf[$2]] = $4; fp[$4] = $2; next }
       $1 == "D" { nr++; for (j = 2; j <= NF; j++) r[nr, j - 1] = $j; next }
+      $1 == "Q" { nq++; qb[nq] = $2; qa[nq] = $3; qt[nq] = $4; next }
       END {
         # Pass 1: rows on a re-run file before its start are superseded; their writers are the superseded writers of P.
         for (i = 1; i <= nr; i++) {
@@ -1113,6 +1134,34 @@ RREOF
           }
           if (!(i in drop)) { l = r[i, 1]; for (j = 2; j <= 7; j++) l = l "\t" r[i, j]; print "K\t" l }
         }
+        # The RE-RUN WRITERS of P: every writer of a row on F_P at or after S_P.
+        for (i = 1; i <= nr; i++) {
+          f = r[i, 1]; a = r[i, 2]; t = r[i, 3]
+          if ((f in fp) && t >= S[fp[f]]) rw[fp[f], a] = 1
+        }
+        # The re-run writer is a NEW dispatch: no row on a file outside F_P, in any part or none.
+        for (i = 1; i <= nr; i++) {
+          f = r[i, 1]; a = r[i, 2]; t = r[i, 3]
+          for (q = 1; q <= npp; q++) { p = PP[q]
+            if (((p, a) in rw) && !((p, f) in inF) && !((p, a, f) in rwo)) { rwo[p, a, f] = 1; print "RWOUT\t" p "\t" a "\t" f "\t" t }
+          }
+        }
+        # The part records: who wrote which account, and when.
+        for (i = 1; i <= nq; i++) {
+          b = qb[i]; a = qa[i]; t = qt[i]
+          for (q = 1; q <= npp; q++) { p = PP[q]
+            if ((p, a) in sw) {
+              if (t >= S[p] && !((p, a, b, "L") in pq)) { pq[p, a, b, "L"] = 1; print "PRLATE\t" p "\t" a "\t" px b "\t" t }
+              if (b != p && !((p, a, b, "O") in pq)) { pq[p, a, b, "O"] = 1; print "PROUT\t" p "\t" a "\t" px b "\t" t }
+            }
+            if (b == p && t >= S[p]) {
+              if ((p, a) in rw) own[p] = 1
+              else if (!((p, a, "F") in pq)) { pq[p, a, "F"] = 1; print "PRFOREIGN\t" p "\t" a "\t" px b "\t" t }
+            }
+            if (((p, a) in rw) && b != p && !((p, a, b, "R") in pq)) { pq[p, a, b, "R"] = 1; print "RWOUT\t" p "\t" a "\t" px b "\t" t }
+          }
+        }
+        for (q = 1; q <= npp; q++) { p = PP[q]; if (!(p in own)) print "PRNONE\t" p "\t" px p }
         for (q = 1; q <= npp; q++) { p = PP[q]; ln = "rerun: " p " since " S[p]
           for (m = 1; m <= nf[p]; m++) { f = F[p, m]; k = p SUBSEP f
             if (k in sn) { ln = ln "; superseded on " f ": " sids[k] " (" sn[k] " rows, " sf[k] ".." sl[k] ")"; ns += sn[k] }
@@ -1125,6 +1174,11 @@ RREOF
         OUT)  refuse "--rerun ${_a}: ${_b} is a superseded writer of ${_a} and also wrote ${_c} at ${_d}, outside the files ${_a} cites; it was not only ${_a}'s writer, so its earlier writes cannot be set aside" ;;
         LATE) refuse "--rerun ${_a}: ${_b} is a superseded writer of ${_a} and wrote ${_c} at ${_d}, at or after the re-run start; the original is still writing" ;;
         SAME) refuse "--rerun ${_a}: ${_b} wrote ${_c} both before the re-run start and at ${_d}, after it; the re-run is a NEW dispatch, and its writer must not be one of the writers it supersedes" ;;
+        PRLATE) refuse "--rerun ${_a}: ${_b} is a superseded writer of ${_a} and wrote the part record ${_c} at ${_d}, at or after the re-run start; a superseded writer writes no account after it is superseded" ;;
+        PROUT) refuse "--rerun ${_a}: ${_b} is a superseded writer of ${_a} and also wrote ${_c} at ${_d}, another part's record; it was not only ${_a}'s writer, so its earlier writes cannot be set aside" ;;
+        PRFOREIGN) refuse "--rerun ${_a}: ${_b} wrote ${_a}'s own part record ${_c} at ${_d}, at or after the re-run start, and is not its re-run writer; the covering account is the re-run writer's alone" ;;
+        PRNONE) refuse "--rerun ${_a}: no row on ${_a}'s own part record ${_b} at or after the re-run start was written by its re-run writer; the account covering the superseded bytes must be the re-run's" ;;
+        RWOUT) refuse "--rerun ${_a}: ${_b}, the re-run writer of ${_a}, also wrote ${_c} at ${_d}, which belongs to no file ${_a} cites; the re-run is a NEW dispatch, never a finished part's agent" ;;
         L) RR_LINES="${RR_LINES}${_a}
 " ;;
         N) RR_SUPERSEDED="$_a" ;;
@@ -1140,6 +1194,7 @@ fi
 # --- THE ALIAS RULE (see "AN ALIAS IS ONE WRITER"). Tested only on a file the narrowed rows still
 # give two or more writers; rows without the hook's evidence keys never enter it.
 # hook_norm <file_path> -> the ledger spelling record_artifact_write gives it, or nothing.
+# Cuts at the FIRST `<state-dir-name>/` in the path, so a nested repeat of that name mis-spells: fails safe (no alias).
 hook_norm() {
   local _n="${_STATE_DIR%/}"; _n="${_n##*/}"
   case "$1" in

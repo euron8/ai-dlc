@@ -869,18 +869,20 @@ than one agent in the window`:
    join lists every reason it refused; clear each one.
 
 1b. **Re-run one part with `--rerun`.** When the refusal is confined to one part's files, re-run
-   that part alone and run the join again with the same `--since <ISO> --until <ISO>` plus
-   `--rerun <part>.md@<S_P>`, in files, `--document` and `--subject` modes alike. The re-run is a
-   NEW dispatch with a new agent id, never a continuation of the refused part's agent: the join
-   refuses a re-run writer that is one of the writers it supersedes. Its brief requires the re-run
-   remediator to account for the whole section diff against the split slice (in files mode, against
-   the bytes the pass reviewed), not only its own edits, because the earlier writer's bytes stay in
-   the file and the re-run part's account is all that covers them. The lead picks S_P by reading
-   `date -u +%Y-%m-%dT%H:%M:%SZ` after the refused part's writer has stopped and immediately before
-   sending the re-dispatch, so every earlier write on that part's files falls before S_P and the
-   re-run's first write falls at or after it; S_P sits inside `--since/--until`, which stay the
-   whole repair's window. A refusal naming a superseded writer that also wrote outside the part's
-   files, or wrote at or after S_P, is a finding to adjudicate, never a timestamp to move.
+   that part alone and run the join again.
+   Keep the refused join's `--since <ISO>`, take a NEW `--until <ISO>` after the re-run part reports, and add `--rerun <part>.md@<S_P>`;
+   S_P falls inside that window. This holds in files, `--document` and `--subject` modes alike.
+   The re-run is a NEW dispatch with a new agent id, never a continuation of the refused part's agent: the join
+   refuses a re-run writer that is one of the writers it supersedes, or that wrote any other part's
+   file or record in the window. The re-run writer rewrites the part's own record
+   `<repair-dir>/<part>.md` after S_P, and the join refuses that record written after S_P by anyone else, or not at all by the re-run writer.
+   Its brief requires the re-run remediator to account for the whole section diff against the split slice
+   (in files mode, against the bytes the pass reviewed), not only its own edits, because the earlier
+   writer's bytes stay in the file and the re-run part's account is all that covers them.
+   The lead picks S_P by reading `date -u +%Y-%m-%dT%H:%M:%SZ` after the refused part's writer has stopped and immediately before sending the re-dispatch,
+   so every earlier write on that part's files falls before S_P and the re-run's first write falls at
+   or after it. A refusal naming a superseded writer that also wrote outside the part's files, or
+   wrote at or after S_P, is a finding to adjudicate, never a timestamp to move.
 
 2. Only if the operator approves in this session: hand-assemble the record, with a disclosure
    header naming every unledgered file and the refusal's lines.
