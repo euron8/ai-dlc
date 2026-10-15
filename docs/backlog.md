@@ -111,7 +111,10 @@ Not built (NOTES): `git branch -D` after `git worktree remove` (a missing one is
 work); `git worktree list` before merge (redundant once git -C holds); `lead_only` stories and "dev must
 not commit `_bmad-output/**`" are graph-local and contradict core (`implementation.md:71-75`,
 protected-path editing "is delegable, not lead-only"; `dev.md:58-66`, the dev DOES commit its story's
-status marks under `_bmad-output/**`). The two new sentences are not pinned in `core/fixtures/process-rule-pins/run.sh`; this
-receipt is the only thing holding their wording.
+status marks under `_bmad-output/**`).
+
+`core/fixtures/process-rule-pins/run.sh` pins both new point-3 sentences, dev.md's one-story line and its
+HARD_BLOCK "you do not pick up another story" clause (rows `dp-git-c`, `dp-one-story`, `dev-one-story`,
+`dev-hardblock-idle`); deleting any one sentence fails only its own row.
 
 verify: sh command -v shasum >/dev/null || exit 9; T=core/skills/ai-dlc-update/reconcile/push-refusals.tsv; D=core/skills/ai-dlc/steps/_dispatch-protocol.md; V=core/team-roles/dev.md; [ -f "$T" ] && [ -f "$D" ] && [ -f "$V" ] || exit 9; n="$(awk -F'\t' '$1=="b0e3cc6b32827bc2e5926bf2bf5130840ac14ec3"' "$T" | grep -c .)" || n=0; [ "$n" -eq 1 ] || exit 1; f="$(awk -F'\t' '$1=="b0e3cc6b32827bc2e5926bf2bf5130840ac14ec3" { print NF }' "$T")"; [ "$f" = 3 ] || exit 1; c="$(mktemp -d)" || exit 9; mkdir -p "$c/.claude/skills/ai-dlc/extensions" || exit 9; bash core/skills/ai-dlc-update/reconcile/push-drain.sh "$PWD" HEAD "$c" >/dev/null 2>&1 || exit 1; grep -qF 'git -C <worktree absolute path> <cmd>`, or the dev `cd`s into the' "$D" || exit 1; grep -qF 'and never claims another from a task list' "$D" || exit 1; grep -qF 'Implement the story the lead dispatched you for: one story per dispatch.' "$V" || exit 1

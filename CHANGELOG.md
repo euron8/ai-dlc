@@ -20,6 +20,41 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.789.0] - 2026-10-15
+
+Batch 232 (graph-ledger-full-drain). Closes
+`PC-S319-IMPLEMENTATION-PUSH-WORKTREE-EXPLICIT-DISPATCH-BLOCK-RESTATES-CORE-DISPATCH-PROTOCOL` (BL-527).
+
+### Worktree dispatch states `git -C` on every command and one story per dispatch; the resurfaced block is refused as absorbed (BL-527)
+
+The reference consumer's `implementation-push.md` §2 "Worktree-explicit dev dispatch" was refused as absorbed in
+0.713.0 (`push-refusals.tsv` row `8a28c2ef…`). The consumer then added `to: "main"` to its point 5, which is
+core's own teammate-send rule from 0.783.0. That one line changed the block's digest to `b0e3cc6b…`, and
+`push-drain.sh` returned it as a push candidate again, which is the record's designed behaviour. The pre-edit body
+digests to exactly the refused row; the diff since is that one line.
+
+Re-adjudicating the block against core found that two of its points were not, in fact, carried by core:
+
+- **`git -C` on every git command.** Core told the dev to `cd` into its worktree as its first action. A
+  teammate's working directory resets between Bash calls, so a later `git add -A` or `git commit -a` lands on
+  whatever the primary tree has checked out. `_dispatch-protocol.md` point 3 now carries a standing line: every
+  git command is `git -C <worktree absolute path> <cmd>`, or the dev `cd`s on every call.
+- **One story per dispatch.** `team-roles/dev.md` told the dev to implement stories "from the shared task list",
+  while core cuts one worktree per dispatched story. Point 3 and `dev.md` now say the dev works only the story it
+  was dispatched for and, finished early, reports `to: "main"` and goes idle; the HARD_BLOCK path goes idle too.
+
+`process-rule-pins` pins both point-3 sentences and both `dev.md` sites, and a deletion of any one fails only its
+own row. `push-refusals.tsv` gains the row for `b0e3cc6b…`; row `8a28c2ef…` stays for a consumer still on the
+older body.
+
+Not absorbed, recorded: `git branch -D` after `git worktree remove` (a loud stall, not wrong work); `git worktree
+list` before merge (redundant once `git -C` holds); `lead_only` stories and "dev never commits `_bmad-output/**`"
+(consumer-local, and both contradict core: `implementation.md` routes protected-path editing to a teammate, and
+`dev.md` has the dev commit its story's status marks).
+
+**Consumer:** on the next pull, step 8's `push-drain.sh` reads the §2 block `PUSH-REFUSED`, and the candidate
+closes. Narrowing §2 to its consumer-specific points is the consumer's call.
+
 ## [0.788.0] - 2026-10-15
 
 Batch 231 (graph-ledger-full-drain), second release. Closes
