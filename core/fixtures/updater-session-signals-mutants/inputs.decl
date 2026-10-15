@@ -1,4 +1,6 @@
-# updater-session-signals-mutants reads two things outside its own directory: the hook it mutates
-# (copied and sed-rewritten per mutant) and the sibling fixture it re-runs against each copy.
+# updater-session-signals-mutants reads three things outside its own directory: the hook it mutates
+# (copied and sed-rewritten per mutant), the sibling fixture it re-runs against each copy, and the
+# dispatch guard that sibling's ERE byte-compare arm reads unmutated.
 !core/hooks/ai-dlc-acknowledge.sh
+!core/hooks/ai-dlc-dispatch-guard.sh
 core/fixtures/updater-session-signals/

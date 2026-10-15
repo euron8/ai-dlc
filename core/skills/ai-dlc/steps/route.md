@@ -613,9 +613,12 @@ Compose the question from what you resolved, not from memory:
 - Anything in the ask you are deliberately NOT taking this sprint, named.
 
 **Option labels carry no recommendation.** Do not append `(Recommended)`, or
-any equivalent, to an option. That token appears nowhere in this skill — it
-was invented by a lead, and on the corpus where it was measured the operator
-took the option carrying it in 3 of 5 turns. A lead that has already
+any equivalent, to an option. The skill asks for that token in two other
+places — a Rule 11(a) question whose options leave no operator-owned value in
+force, and the adversarial STOP's adjudication when no locked requirement is
+touched (`_gate-procedures.md` step 2(c)) — and this pause point is neither.
+On the corpus where it was measured here, the operator took the option
+carrying it in 3 of 5 turns. A lead that has already
 misresolved the scope will label the misreading `(Recommended)`, and the
 badge does its most damage in exactly the case this pause point exists to
 catch. Present the options flat and let the operator choose.

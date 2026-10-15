@@ -20,6 +20,135 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.786.0] - 2026-10-14
+
+Batch 230 (graph-ledger-full-drain), third release: four of the reference consumer's five sprint-318 candidates, and
+the BL-508/BL-519 remediator branch held from batch 229. Every one went through a contract adversary, a builder, a tip
+adversary and a fix round; the BL-508/519 branch went through two tip adversaries. Closes
+`PC-S318-ARCHITECT-ROLE-DOES-NOT-ASK-WHAT-A-LITERAL-IS-WORTH-AFTER-A-REBIND` (BL-522),
+`PC-S318-OPERATOR-QUESTION-TEMPLATE-LABELS-AN-OPERATOR-OWNED-TRADE-OFF-RECOMMENDED` (BL-524),
+`PC-S318-PAUSE-GATE-DENIES-READ-ONLY-OPS-DISPATCH-WHILE-AN-OPERATOR-MESSAGE-IS-OUTSTANDING` (BL-525) and
+`PC-S318-QA-ROLE-HAS-NO-RULE-THAT-A-SKIP-AGAINST-A-LOCKED-REQUIREMENT-IS-A-DEVIATION-TO-PUT-TO-THE-OPERATOR` (BL-521),
+and closes BL-508 and BL-519. The fifth candidate rides a later release of this batch. Filed 4, closed 6: net -2.
+
+### A remediator re-checks the siblings of replaced text, and an out-of-shard fix is escalated, never set aside (BL-508, BL-519)
+
+A repair pass wrote the defects the next adversary pass found: one copy fixed and its sibling left, cites shifted, a
+false count. And a party remediator dispositioned a MAJOR "outside this shard … not required", so it reached
+sprint-review unadjudicated. `remediator.md` now binds a `siblings:` field in every parts mode, in exactly one of four
+forms; `join-remediator-shards.sh` refuses any other spelling. The control text sits in a `text` fence, which no
+derivation replay re-checks, so a later legitimate rewrite never reads as stale, while a control naming text that was
+never written is refused at the join. An out-of-shard fix is escalated in every parts mode (`ESCALATED:`), its
+`edit:` path cites nothing for the coverage join, and the join prints `SERIAL-REQUIRED` and dispatches the serial
+remediator, which closes each escalation by an explicit `closes:` line. `--escalations <record>` checks those lines
+for a non-party repair, which has no seat files. Moved cites are re-checked by the serial remediator after the join
+(operator ruling: BL-508 closes on that shape). Over the reference consumer's eight real rounds: 0 false refusals; the
+one refusal is the sm-05 set-aside itself. Cost: `SERIAL-REQUIRED` reads 71, 185, 23, 11, 4, 31 and 24 on those rounds.
+Residue is recorded in BL-508's entry.
+
+### While paused, the lead may dispatch the built-in Explore subagent and nothing else (BL-525)
+
+While an operator message is outstanding, the Rule 29 pause gate denied every `Agent` and `Task` call. A search the
+lead needed to answer the operator therefore ran inline in the lead. Check 3 of `ai-dlc-acknowledge.sh` now lets one
+dispatch through, unlogged: the lead's own `subagent_type: "Explore"`. Explore has no Agent, Edit, Write or
+NotebookEdit tool, so it adds nothing the lead's allowed Bash lacks. It is not read-only. Its own Skill and
+TaskCreate calls carry an `agent_id` and stay denied, except `ai-dlc-update`, which the lead may call too.
+
+- The carve-out fails closed when a teammate (`agent_id`) makes the call, and when `subagent_type` is anything but the
+  exact string `"Explore"`, compared inside jq. `["Explore"]`, `"Explore\n"`, `"Explore "`, `"explore"` and null are
+  all denied.
+- It fails closed when the prompt cites `team-roles/<role>.md`, because the dispatch guard rewrites `subagent_type` from
+  that citation. It fails closed when the call carries `name` or `team_name`, either of which routes it to the
+  in-process teammate runner. It also fails closed when any agent definition under `.claude/agents/` or
+  `$HOME/.claude/agents/` has frontmatter `name: Explore`, matched case-insensitively with optional quotes, because the
+  harness selects a definition by that name and not by its filename.
+- The deny text states all four conditions, and a denied Explore dispatch is told which one it failed. The two copies of
+  the `team-roles` ERE, here and in the dispatch guard, are byte-compared by `updater-session-signals`.
+- It sits after the Rule 8 STOP exit, so a stopped adversarial cycle still denies an Explore dispatch.
+- `ops` stays denied, because it writes its repair record. That was the dispatch the reference consumer was denied, so
+  this change does not relieve it. In graph's sprint 318, 0 of the Rule-29-denied Agent calls were Explore, and over
+  the measured window 0 of 32 were. The carve-out would have allowed none of graph's real denied calls.
+- The hook header, the deny text and `rule-29.md` state the new surface. `updater-session-signals` gains twenty-one
+  Explore cells and an ERE byte-compare arm, and its mutation battery gains fourteen mutants, each killing exactly its
+  own cells.
+
+### A rebind prices every literal keyed on it, under both bindings (BL-522)
+
+A change that makes an existing name, role or unit resolve to a different value, party or unit while its text stays the
+same, where a literal or threshold downstream is computed from or compared against it, now has to price every literal
+and threshold the re-bound value flows into under the old and the new binding, in the unit the literal is compared
+against, and record `old -> new`. A literal the diff does not touch is in scope for exactly that reason. A rename whose
+text changes is not this rule's subject: `stories-test-strategy.md` `## Rename Verification` owns finding a rename's
+references, and this rule owns pricing a re-target.
+
+The reference consumer's sprint 318 re-targeted which token counted as non-stable. Its `dust_raw` is
+`0.01 * 10^dec_ns` raw units of the non-stable token and is compared against that token's raw balance, so it is priced
+in raw units of that token: under the new binding the non-stable token is WETH, whose `TOKEN_DECIMALS` entry is 18, so
+the floor is `0.01 * 10^18 = 10^16` raw WETH (0.01 WETH). Under the old binding it was `0.01 * 10^dec` raw units of
+the previously non-stable token, whose identity is set by graph's live config and is not re-derived here. The dollar
+figure, about $0.00002 before and about $24 after, is graph's retro figure, not re-derived. No diff touched the literal,
+and two architecture passes and a code review confirmed the branch order without pricing it.
+
+- `adversary.md`: a new Severity rung, "An unpriced rebind is a MAJOR". It is a plain blocking MAJOR and never counts in
+  `findings_major_underived`, because an omission has nothing to cut. It is CRITICAL when the new price sends a case a
+  locked requirement or AC covers down a different branch.
+- `code-reviewer.md`: a new severity classification, "A Rebind Without Priced Literals", Important at minimum, with the
+  same CRITICAL condition. Its evidence is a `derived` fence that derives each input the price depends on (the literal's
+  line, and the decimals or units entry under each binding) with commands naming the source file as an operand; an
+  `awk` program that runs only a `BEGIN` block is not a derivation, and the arithmetic goes in the sentence beside it.
+- `architect.md`: the evidence contract requires the same input-by-input `derived` fence for a re-target in an ADR.
+- `core/fixtures/process-rule-pins` pins eighteen new rows across the three files, including the trigger in each file
+  and the `every literal and threshold the re-bound value flows into` scope in the adversary and code-reviewer passages.
+
+**Recorded for the reference consumer (a finding, not an instruction).** graph's `docs/coding-conventions.md` section
+"A hardcoded threshold on a money path MUST be priced under every binding and its skip MUST be observable" carries three
+bullets. Its first bullet (price every literal under the new binding) is now carried by core and can retire. The second
+(a distinct skip reason in the execution row) and the third (a threshold as a config leaf) are not covered by this change.
+
+### QA puts an AC that omits a locked requirement's action to the operator (BL-521)
+
+- A new HARD GATE item in `team-roles/qa.md` Validation Checklist fires
+  when an AC's precondition falls inside a locked requirement's verbatim scope and its expected
+  outcome omits an action the text requires. QA files a Tier 1 `HARD_BLOCK` (`requirement
+  divergence`) and writes `Verdict: NEEDS_REWORK` with a finding naming it. Before dispatching
+  rework, the lead puts it to the operator by `AskUserQuestion` under Rule 3(a), with no flag. If
+  the operator accepts the degraded branch, QA re-validates to PASS citing the entry. A `do-now`
+  disposition proceeds as rework. Three cases are exempt: a degraded outcome the requirement's own
+  text prescribes; an existing requirement-divergence `HARD_BLOCK` that cites this LR and this
+  branch and carries a disposition; and an outcome that performs none of the requirement's actions
+  and reports a non-success to the caller, unless the requirement's text forbids that refusal. A
+  `trade-off` entry naming no LR does not exempt. `escalations.md`, `implementation.md` and the
+  Escalation Protocol in `qa.md` name the same filer (QA) and the same route.
+- `steps/deploy-validate.md` §5 records an operator-accepted degraded branch as a `descope` of the
+  omitted action alone, never `delivered`, quoting the `HARD_BLOCK`'s id and token.
+- `process-rule-pins` gains nine rows pinning both texts (eight line-mode rows in qa.md and one
+  para row spanning §5 of deploy-validate.md).
+
+### An operator-owned value is put to the operator without a badge (BL-524)
+
+Rule 11(a) now requires every option of an operator question to state its concrete effect, including the value
+it leaves in force. A question goes out unbadged, with no option marked `(Recommended)`, when any option sets,
+relaxes, inherits or leaves in force one of these: a config leaf, a money-path threshold or literal, a byte-pin,
+an `LR-`/`LRC-` id, or a `D-<n>` decision. The five values are one sentence rather than a list. Rule 11 still
+grew 729 bytes, which moved Rule 12's two `escalations.md` disclosure pointers past the 20121-byte re-attach cut
+(to bytes 20396 and 20589); that eviction is accepted. The post-compact digest was re-rendered and did not change.
+
+The adversarial STOP follows the same rule, keyed on the resolution record's `locked_requirements_touched:`
+field. If that field names an entry, `validate-adversarial-convergence.sh` now fails a record that names a
+`recommended_option:` (finding F7b), and passes `recommended_option: none` or a record with no such line. Both
+fields are read on their first token, lowercased and cut at the first blank, `.`, `,`, `;` or dash. A token of
+`none`, `0`, `n/a`, `-` or `[]`, or no field at all, keeps the old rule, so a consumer's `none — <prose>` or
+`none changed; ...` is unlocked and `none (Recommended)` names no option. An unlocked record
+that writes `recommended_option: none` takes the existing missing-recommendation finding. The STOP remedy text in
+`ai-dlc-acknowledge.sh`, `ai-dlc-continue.sh` and `_gate-procedures.md` step 2(c) states the branch.
+
+`bug-investigation.md` §2b badges "apply now" only when the relief sets no operator-owned value. `remediator.md`
+gives no recommendation on a locked or operator-owned item. `route.md` no longer claims that `(Recommended)`
+appears nowhere in the skill. The continue hook's Rule 11(a) paragraph carries the effects clause and the
+unbadged case, and `pause-question-in-prose` F2 pins that text.
+
+Out of scope: the updater's reconcile questions in `ai-dlc-update/SKILL.md`.
+
 ## [0.785.0] - 2026-10-14
 
 Batch 230 (graph-ledger-full-drain), second release: BL-507, held from batch 229, rebased onto 0.784.0 and adversaried

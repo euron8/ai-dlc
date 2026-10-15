@@ -37,6 +37,22 @@
 #     that each clause is PRESENT in the lead's paragraph. A separate sentence appended after it
 #     that contradicts it ("...; elicitation may instead run one voice") leaves every pinned
 #     clause intact and passes. No row here can fail on an addition; a reviewer reads for that.
+#   - a change that makes an existing name, role or unit resolve to a different value, party or
+#     unit while its text stays the same prices every literal and threshold the re-bound value
+#     flows into under both bindings, in the unit it is compared against, and records old -> new,
+#     an untouched literal included: the adversary's Severity rung (a plain blocking MAJOR, never
+#     underived), the code reviewer's severity classification, and the architect's
+#     evidence-contract `derived` fence, which derives each input from a named source file. The
+#     trigger and the `every literal` scope are pinned separately, so narrowing either fails.
+#     Each lead sits on ONE line of its subject so the raw-file lead check can find it.
+#   - an AC whose expected outcome omits an action a locked requirement's verbatim text requires
+#     is a requirement-divergence HARD_BLOCK for the operator, never a PASS (qa.md Validation
+#     Checklist): QA writes NEEDS_REWORK and the lead asks by AskUserQuestion before rework; the
+#     exemptions (2) and (3) are pinned whole and (1) only by its tail; §5 of deploy-validate.md records an accepted degraded
+#     branch as a `descope` of the omitted action, never `delivered`. The qa-lrdiv-* rows are line-mode pins because
+#     the whole checklist is ONE paragraph to para mode (no blank line between its items): keep
+#     each pinned phrase on ONE line of the item. dv-lrcov-degraded spans §5 to §6, not the
+#     coverage lead, so relocating the paragraph out of §5 moves it out of the span.
 #
 # LEADS ARE NOT ENOUGH. A bold lead left intact over a body rewritten to say the opposite
 # ("need NOT carry", "dropped only through a HARD_BLOCK", "an assertion is a sufficient
@@ -197,6 +213,32 @@ party-unsharded|S|steps/_gate-procedures.md|## Validation cycle|## Where a chang
 party-unsharded-check|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**An unsharded round has the same write model.**|para|join-remediator-shards.sh --sources <that record> --sprint <N>
 srev-seats-record|S|steps/sprint-review.md|### 2. Sprint-Level Party Mode|### 3.|- Record every finding; the seats edit nothing|prefix
 rem-party-source|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**A party repair names the seat finding behind every entry.**|para|every entry carries a `source:` line
+rem-sib-field|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**Re-check every sibling of the text you replaced.**|para|carries a `- siblings:` field
+rem-sib-own-files|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**Re-check every sibling of the text you replaced.**|para|Never grep the sprint slot, `shards/` or any repair record
+rem-sib-control|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**Re-check every sibling of the text you replaced.**|para|whose output is 1 or more
+rem-sib-own-only|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**Re-check every sibling of the text you replaced.**|para|A files-mode shard greps ONLY its own files
+rem-sib-insertion|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**Re-check every sibling of the text you replaced.**|para|writes `- siblings: n/a (insertion)`
+rem-sib-section|R|remediator.md|## Contract|## The evidence contract|**As a section shard**|para|carries `- siblings: n/a (section shard; re-checked by the serial remediator after assembly)`
+rem-sib-subject|R|remediator.md|## Contract|## The evidence contract|**As a subject shard**|para|carries `- siblings: n/a (section shard; re-checked by the serial remediator after assembly)`
+gp-esc-sources|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Every escalated entry reaches the serial remediator.**|para|In `--sources` mode the `ESCALATED:` lines are the lead's to adjudicate, never a re-dispatch of the serial remediator
+gp-cross-sib|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Moved cites are the serial remediator's, after the join.**|para|It also owns the cross-file sibling grep
+rem-esc-outside|R|remediator.md|## Contract|## The evidence contract|**A fix that lies outside your files is escalated, never set aside.**|para|report it in your part as escalated
+rem-esc-split|R|remediator.md|## Contract|## The evidence contract|**A fix that lies outside your files is escalated, never set aside.**|para|A partial repair is TWO entries carrying the same `source:` token
+rem-esc-never|R|remediator.md|## Contract|## The evidence contract|**A fix that lies outside your files is escalated, never set aside.**|para|is never dispositioned `repaired` on the grounds
+gp-esc-dispatch|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Every escalated entry reaches the serial remediator.**|para|In every mode (files, sections, subject), dispatch the serial remediator after the join whenever SERIAL-REQUIRED or ESCALATED-COUNT is above 0
+gp-serial-count|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Every escalated entry reaches the serial remediator.**|para|`SERIAL-REQUIRED: <n>`, the count of `repaired` entries with a real edit
+gp-esc-closes|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Every escalated entry reaches the serial remediator.**|para|never by a shared `source:` token
+gp-serial-why|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Moved cites are the serial remediator's, after the join.**|para|That is why SERIAL-REQUIRED dispatches it
+rem-sib-fence-after|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**Re-check every sibling of the text you replaced.**|para|run the fence after your last edit; its output is empty, or lists only sites you dispositioned not to change
+rem-sib-text-fence|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**Re-check every sibling of the text you replaced.**|para|The fence is `text`, never `derived`
+rem-sib-forms-only|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**Re-check every sibling of the text you replaced.**|para|Any other spelling of the field (`- siblings: checked`, a value with no fence, a `derived` fence) is refused
+rem-esc-edit-form|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**Re-check every sibling of the text you replaced.**|para|that file as `- edit: <project-relative path>:<line(s)> (escalated)`
+gp-esc-nonparty|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Every escalated entry reaches the serial remediator.**|para|join-remediator-shards.sh --escalations <the joined record> --sprint <N>
+rem-sib-deletion|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**Re-check every sibling of the text you replaced.**|para|writes `- siblings: n/a (deletion)`
+rem-serial-scope|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**As the serial remediator after a join**|para|after a files-mode join that is `_bmad-output/planning-artifacts/s<N>/stories _bmad-output/planning-artifacts/s<N>/epics`
+rem-serial-closes|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**As the serial remediator after a join**|para|carries `- closes: <part> <heading>`, copied from the tail of its `ESCALATED:` line
+gp-esc-brief|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Every escalated entry reaches the serial remediator.**|para|its brief carries every `ESCALATED:` line
+gp-moved-cites|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Moved cites are the serial remediator's, after the join.**|para|re-reads every cite into each edited file AFTER the join or assembly
 pm-adr-probe|R|pm.md|## Responsibilities|## The evidence contract|in the story implementing the decision the ADR records|contains
 pm-adr-trigger|R|pm.md|## Responsibilities|## The evidence contract|carries as an unrun probe|contains
 pm-adr-tag|R|pm.md|## Responsibilities|## The evidence contract|`probabilistic/passive-monitoring` AC, written at creation|contains
@@ -232,6 +274,37 @@ impl-serial-form|S|steps/implementation.md|**Pre-gate commit-presence check.**|*
 impl-serial-sha|S|steps/implementation.md|**Pre-gate commit-presence check.**|**DAR-fold preflight before gate-2 dispatch.**|**Gate-1 dispatch: the review partitions by changed-file group.**|para|carries one column-0 `reviewed-sha: <full frozen sha>` line
 impl-rr-list|S|steps/implementation.md|**Pre-gate commit-presence check.**|**DAR-fold preflight before gate-2 dispatch.**|**Gate-1 dispatch: the review partitions by changed-file group.**|para|Run `scripts/ai-dlc/validate-carried-findings.sh --list <pass M-1 file>` and paste each line it prints into the brief of the shard that carries that finding, verbatim
 impl-rr-reemit|S|steps/implementation.md|**Pre-gate commit-presence check.**|**DAR-fold preflight before gate-2 dispatch.**|**Gate-1 dispatch: the review partitions by changed-file group.**|para|an `open` one is re-emitted as a finding of this pass
+adv-rebind-rung|R|adversary.md|## Severity|## |### An unpriced rebind is a MAJOR|prefix
+adv-rebind-trigger|R|adversary.md|## Severity|## |**A re-target prices every literal keyed on it, under both bindings.**|para|while its text stays the same, where a literal or threshold downstream is computed from or compared against it
+adv-rebind-every|R|adversary.md|## Severity|## |**A re-target prices every literal keyed on it, under both bindings.**|para|every literal and threshold the re-bound value flows into
+adv-rebind-unit|R|adversary.md|## Severity|## |**A re-target prices every literal keyed on it, under both bindings.**|para|in the unit it is compared against
+adv-rebind-untouched|R|adversary.md|## Severity|## |**A re-target prices every literal keyed on it, under both bindings.**|para|A literal the diff does not touch is in scope for exactly that reason
+adv-rebind-oldnew|R|adversary.md|## Severity|## |**A re-target prices every literal keyed on it, under both bindings.**|para|record `old -> new` for each
+adv-rebind-major|R|adversary.md|## Severity|## |**An unpriced rebind is a plain MAJOR, and it never counts in `findings_major_underived`.**|para|the third test of that field fails: it blocks
+cr-rebind-head|R|code-reviewer.md|## Mandatory Severity Classifications|## Self-Discrimination Map|### A Rebind Without Priced Literals = Important (minimum)|prefix
+cr-rebind-trigger|R|code-reviewer.md|## Mandatory Severity Classifications|## Self-Discrimination Map|**A re-target prices every literal keyed on it, under both bindings.**|para|while its text stays the same, where a literal or threshold downstream is computed from or compared against it
+cr-rebind-every|R|code-reviewer.md|## Mandatory Severity Classifications|## Self-Discrimination Map|**A re-target prices every literal keyed on it, under both bindings.**|para|every literal and threshold the re-bound value flows into
+cr-rebind-unit|R|code-reviewer.md|## Mandatory Severity Classifications|## Self-Discrimination Map|**A re-target prices every literal keyed on it, under both bindings.**|para|in the unit it is compared against
+cr-rebind-untouched|R|code-reviewer.md|## Mandatory Severity Classifications|## Self-Discrimination Map|**A re-target prices every literal keyed on it, under both bindings.**|para|A literal the diff does not touch is in scope for exactly that reason
+cr-rebind-sev|R|code-reviewer.md|## Mandatory Severity Classifications|## Self-Discrimination Map|An unpriced keyed literal is **Important** at minimum.|para|derives each input the price depends on, meaning the literal's own line and the decimals or units entry under each binding, using commands that name the source file as an operand
+arch-rebind-trigger|R|architect.md|## The evidence contract|## A fold architecture dispatch|**A re-target is priced in a `derived` fence, input by input.**|para|while its text stays the same, where a literal or threshold downstream is computed from or compared against it
+arch-rebind-fence|R|architect.md|## The evidence contract|## A fold architecture dispatch|**A re-target is priced in a `derived` fence, input by input.**|para|derives each input the price depends on, meaning the literal's own line and the decimals or units entry under each binding, using commands that name the source file as an operand
+arch-rebind-unit|R|architect.md|## The evidence contract|## A fold architecture dispatch|**A re-target is priced in a `derived` fence, input by input.**|para|in the unit it is compared against
+arch-rebind-oldnew|R|architect.md|## The evidence contract|## A fold architecture dispatch|**A re-target is priced in a `derived` fence, input by input.**|para|records `old -> new` for each
+arch-rebind-untouched|R|architect.md|## The evidence contract|## A fold architecture dispatch|**A re-target is priced in a `derived` fence, input by input.**|para|A literal the diff does not touch is in scope for exactly that reason
+qa-lrdiv-lead|R|qa.md|## Validation Checklist|## Communication|- [ ] **An AC that omits a locked requirement's action is a deviation for the operator (HARD GATE).**|prefix
+qa-lrdiv-never-pass|R|qa.md|## Validation Checklist|## Communication|An AC whose expected outcome omits an action the text requires is a requirement divergence, never a PASS.|contains
+qa-lrdiv-empty|R|qa.md|## Validation Checklist|## Communication|A precondition under which the required action has nothing to act on (an empty balance, an empty set)|contains
+qa-lrdiv-rework|R|qa.md|## Validation Checklist|## Communication|QA writes `Verdict: NEEDS_REWORK` with a `####` finding naming the HARD_BLOCK id; the lead puts it to the operator by `AskUserQuestion` under Rule 3(a), with no flag, before dispatching dev rework.|contains
+qa-lrdiv-outcome|R|qa.md|## Validation Checklist|## Communication|If the operator accepts the degraded branch (`descope` of the omitted action), QA re-validates to PASS citing the entry; `do-now` proceeds as rework.|contains
+qa-lrdiv-exempt|R|qa.md|## Validation Checklist|## Communication|value), (2) a Tier 1 `HARD_BLOCK` with blocker type `requirement divergence` that cites this LR and names this degraded branch already carries a recorded operator disposition (cite that entry), or|contains
+qa-lrdiv-exempt3|R|qa.md|## Validation Checklist|## Communication|(3) the AC's outcome performs none of the requirement's actions and reports that to the caller as a non-success (a refusal or error status, a disabled control, a dry-run marker), unless the requirement's verbatim text forbids that refusal.|contains
+qa-lrdiv-other-type|R|qa.md|## Validation Checklist|## Communication|An entry of another blocker type, or one that names no LR, does not exempt.|contains
+dv-lrcov-degraded|S|steps/deploy-validate.md|### 5. Production Validation Checkpoint|### 6. Wait for Human|**Locked-requirement coverage.**|para|An operator's acceptance of a degraded branch on a Tier 1 `requirement divergence` `HARD_BLOCK` (`qa.md` Validation Checklist) is a `descope` of the omitted action alone, never `delivered`: the bullet is marked `descoped`, and its line names that action and quotes the `HARD_BLOCK`'s id and its `descope` token.
+r11a-effects|S|SKILL.md|### Rule 11 |### Rule 12 |**Every option states its concrete effect, INCLUDING the value it leaves|para|INCLUDING the value it leaves in force
+r11a-unbadged|S|SKILL.md|### Rule 11 |### Rule 12 |**Every option states its concrete effect, INCLUDING the value it leaves|para|none marked `(Recommended)` and none placed first as the pick
+gp-2c-locked-effects|S|steps/_gate-procedures.md|## Divergence resolution dispatch|## Adversarial repair dispatch|a. **One sentence naming the decision.**|para|State each option's effect on that entry instead, including the value it leaves in force
+gp-2c-locked-nobadge|S|steps/_gate-procedures.md|## Divergence resolution dispatch|## Adversarial repair dispatch|a. **One sentence naming the decision.**|para|**mark NO option `(Recommended)`.**
 PINS
 }
 

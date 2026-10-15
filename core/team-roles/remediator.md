@@ -37,6 +37,16 @@ source; do not infer either value from anywhere else.
    doubly-written file: every file you edit under `s<N>/` — stories, `epics/epics.md`, any
    sibling — appears on an `edit:` line. Your part file under `s<N>/shards/` is not counted.
 
+   **A fix that lies outside your files is escalated, never set aside.** A finding whose fix
+   lies in a file your `shard:` line does not name is not yours: report it in your part as
+   escalated, and the serial remediator after the join owns it. Your siblings fence greps only
+   your own files; a sibling outside them is named on an `escalated` entry, unfenced (the
+   evidence contract, "Re-check every sibling of the text you replaced"). A partial repair is TWO entries
+   carrying the same `source:` token: `repaired` for the part inside your files, `escalated` for
+   the remainder. A MAJOR or CRITICAL is never dispositioned `repaired` on the grounds that the
+   rest of it is outside this shard or not required: the join refuses a `repaired` MAJOR whose
+   claim says so without naming the hand-off, and a scope decision is the lead's.
+
    In a repair dispatch, every edit to a file under the sprint slot goes through Edit, Write or
    MultiEdit, never a Bash redirect, `sed -i`, `tee` or a script's `open(…, 'w')`: only those
    produce the ledger row the join requires. Write your part through Write too, so the
@@ -49,7 +59,10 @@ source; do not infer either value from anywhere else.
    section file. Every `edit:` line cites the section file by the project-relative path in the
    ledger's spelling (`_bmad-output/planning-artifacts/s<N>/…`), never a bare basename. A `derivation:` fence names the DOCUMENT by its project-relative path, never the
    section file: the join's assembly removes the section file, and the gate re-runs the fence
-   after it. A finding citing another section is not yours; report it in your part as escalated.
+   after it. For the same reason a section shard writes no siblings fence: every `repaired`
+   entry with an edit carries `- siblings: n/a (section shard; re-checked by the serial
+   remediator after assembly)`. A finding citing another section is not yours; report it in
+   your part as escalated.
 
    **As a subject shard** over the requirements subject (Rule 28, "Split dispatch": subject
    axis), your brief names either a section file or, for a whole-file part such as the SPEC,
@@ -59,6 +72,8 @@ source; do not infer either value from anywhere else.
    follow it. A finding whose fix lies in text
    outside your part — another part, or PRD text outside every in-scope part — is not
    yours: report it in your part as escalated, and the serial remediator after assembly owns it.
+   A subject shard writes no siblings fence either: every `repaired` entry with an edit carries
+   `- siblings: n/a (section shard; re-checked by the serial remediator after assembly)`.
 2. **Repair every CRITICAL and MAJOR.** MINOR/NIT at your discretion; say which you
    skipped and why.
 3. **Write the repaired artifact in place**, and write a **repair record** to
@@ -99,6 +114,21 @@ Then, per finding:
 - source: <seat-file>#<finding-id> [<seat-file>#<finding-id> ...]   (a party repair only)
 - disposition: repaired | escalated | skipped (nit)
 - edit: <artifact file:line(s)>
+- siblings:   (every `repaired` entry whose edit is not n/a, in ONE of four forms; the paragraph below)
+
+```text
+$ grep -rn -F '<the text you replaced>' <your shard's own files, or the document>
+<its output, verbatim>
+$ grep -c -F '<the text you wrote>' <the file you edited>
+<n>
+```
+
+- siblings: n/a (section shard; re-checked by the serial remediator after assembly)
+- siblings: n/a (insertion)
+- siblings: n/a (deletion)
+- closes: <part> <heading>   (the serial remediator only, copied from the `ESCALATED:` line it resolves)
+- edit: <project-relative path of the file the fix lies in>:<line(s)> (escalated)   (an `escalated` entry's edit: line)
+
 - derivation:
 
 ```derived
@@ -108,6 +138,46 @@ $ <the exact command>
 
 - claim now asserted: <the sentence you wrote, which the derivation above supports>
 ```
+
+**Re-check every sibling of the text you replaced.** A repair that fixes one copy of a sentence
+and leaves its sibling, or shifts a `<file>:<n>` cite, is the next pass's MAJOR. So every
+`repaired` entry whose `edit:` is not n/a carries a `- siblings:` field with no value, then a
+` ```text ` fence holding two commands: `grep -rn -F '<the text you replaced>'` over the files your `shard:` line
+names (as a files-mode shard), or over the document (as the one serial remediator of a
+document); run the fence after your last edit; its output is empty, or lists only sites you
+dispositioned not to change; and the control
+`grep -c -F '<the text you wrote>' <the file you edited>`, whose output is 1 or more. The
+fence is `text`, never `derived`: it records what the grep returned at your edit, and a later
+pass that rewrites that text must not turn it stale. The join counts the control's text in the
+file it names, once, and refuses a fence whose text is not there. Any other spelling of the
+field (`- siblings: checked`, a value with no fence, a `derived` fence) is refused. A
+files-mode shard greps ONLY its own files: another shard is editing the rest concurrently, so a
+copy you record there is fixed under you and your fence goes stale. A sibling you know of in a
+file outside your shard goes on an `escalated` entry with no fence, whose `edit:` line names
+that file as `- edit: <project-relative path>:<line(s)> (escalated)` and whose claim quotes the
+text; the join reads no escalated entry's `edit:` as a citation, because that file is the serial
+remediator's to edit. The cross-file grep is the serial remediator's, after the join. Never grep the sprint
+slot, `shards/` or any repair record: they hold this command's own text, so the replay after
+the join finds the replaced text there and the fence goes stale. A section or subject shard
+writes `- siblings: n/a (section shard; re-checked by the serial remediator after assembly)`
+instead of a fence: the control names your section file, which assembly deletes. An edit that
+only inserts new text, replacing none, writes `- siblings: n/a (insertion)`; an edit that only
+deletes text, writing none, writes `- siblings: n/a (deletion)` (it has no new text to count,
+and the serial remediator's cross-file grep still covers what it deleted). Cites the edit
+moved are re-checked by the serial remediator after the join, never inside a shard. The join
+refuses a `repaired` entry with an edit and no `siblings:` field.
+
+**As the serial remediator after a join**, your brief carries the join's `ESCALATED:` lines and
+its `SERIAL-REQUIRED:` count. For every shard entry `repaired` with an edit, and every escalated
+sibling, run `grep -rn -F '<the text that entry replaced>'` over the artifact's own files: after
+a files-mode join that is `_bmad-output/planning-artifacts/s<N>/stories
+_bmad-output/planning-artifacts/s<N>/epics`; after a section or subject join it is the assembled
+document or subject files. Never grep the sprint slot `s<N>/` itself, `shards/` or any repair
+record. Record each as its own entry with a `siblings:` fence, and re-read every `<file>:<n>`
+cite into each edited file. An entry of yours that resolves an escalated one carries
+`- closes: <part> <heading>`, copied from the tail of its `ESCALATED:` line (`01.md F-3 — MAJOR`):
+the join closes an escalation only by that line, never by a shared `source:` token, so a half
+repair of another conjunct leaves it open for the lead.
 
 **A party repair names the seat finding behind every entry.** When your brief hands you a
 party round's seat findings (`_bmad-output/party-mode/s<N>/<step>-<seat>-<ordinal>.md`), every
@@ -239,6 +309,11 @@ you break the sprint.** Escalate instead; it costs the lead one turn.
 are the lead's under Rule 11/13, and they are decisions, not edits. Return them as
 `escalated` with the evidence you gathered and your recommendation. Do not quietly widen or
 narrow the sprint inside a repair.
+
+**For an item that is locked or operator-owned, give no recommendation.** That is a
+`LOCKED_REQUIREMENTS` entry, an `LR-`/`LRC-` id, a `D-<n>` decision, a config leaf, a
+money-path threshold or literal, or a byte-pin. State each option with its concrete effect,
+including the value it leaves in force, and stop there.
 
 **You do not re-litigate the finding.** The adversary graded it; you fix it. If you believe
 a finding is wrong, say so in the record with the derivation that refutes it — that is

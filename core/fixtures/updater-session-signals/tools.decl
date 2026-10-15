@@ -16,3 +16,5 @@ mktemp
 rm
 sed
 tail
+tr
+awk

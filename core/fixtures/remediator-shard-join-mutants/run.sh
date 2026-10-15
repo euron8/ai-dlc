@@ -178,6 +178,16 @@ mutant2() { # <label> <expected> <old1> <new1> <old2> <new2> -- two layers rever
   bash -n "$d/join-remediator-shards.sh" 2>/dev/null || { bad "$1: FIXTURE BROKEN -- the mutated join does not parse"; return; }
   dispatch "$1" "$d/join-remediator-shards.sh" "$2"
 }
+mutant3() { # <label> <expected> <old1> <new1> <old2> <new2> <old3> <new3> -- three layers reverted together
+  local d; d="$(mutdir "${1%% *}")" || { bad "$1: FIXTURE BROKEN -- the sandbox could not be built"; return; }
+  if ! apply "$d/join-remediator-shards.sh" "$3" "$4" || ! apply "$d/join-remediator-shards.sh" "$5" "$6" \
+     || ! apply "$d/join-remediator-shards.sh" "$7" "$8"; then
+    bad "$1: FIXTURE STALE -- a mutation anchor is not in the join exactly once; re-anchor it, never relax the assertion"; return
+  fi
+  cmp -s "$JOIN" "$d/join-remediator-shards.sh" && { bad "$1: FIXTURE STALE -- the mutated copy is byte-identical"; return; }
+  bash -n "$d/join-remediator-shards.sh" 2>/dev/null || { bad "$1: FIXTURE BROKEN -- the mutated join does not parse"; return; }
+  dispatch "$1" "$d/join-remediator-shards.sh" "$2"
+}
 
 C0="$(mutdir jx0)"
 if [ -f "$C0/join-remediator-shards.sh" ] && [ -f "$C0/validate-adversarial-convergence.sh" ] \
@@ -205,7 +215,8 @@ mutant "JX3 the shards/ exclusion removed" "shardrow" \
 # every section row, so the join sees no write at all.
 # partydoc is a document join too, and dies with the others. sjpartysrc does NOT: its subject keeps
 # whole-file part rows outside shards/, so the join still reaches the source check and refuses by name.
-mutant "JX4 section rows dropped in document mode (the pre-BL-372 file set)" "docjoin docoverlap asmrefuse sjoin sjnames sjgate sjnest partydoc" \
+# sibdoc (BL-508) dies too: with no section rows the join refuses on the empty ledger before its siblings arm.
+mutant "JX4 section rows dropped in document mode (the pre-BL-372 file set)" "docjoin docoverlap asmrefuse sjoin sjnames sjgate sjnest partydoc sibdoc" \
   '   | select($doc == "1" or ((.path | startswith($sh + "/")) | not))' \
   '   | select((.path | startswith($sh + "/")) | not)'
 mutant "JX5 the assembly skipped" "docjoin asmrefuse partydoc" \
@@ -224,8 +235,8 @@ mutant "JX8 the state-parent strip removed" "absroot absnested absslash absdoubl
   "$STRIP" \
   '    :'
 mutant "JX10 the cited token's slash squeeze removed" "absdouble" \
-  'tok = substr(line, RSTART, RLENGTH); gsub(/\/\/+/, "/", tok); print tok' \
-  'tok = substr(line, RSTART, RLENGTH); print tok'
+  'tok = substr(line, RSTART, RLENGTH); gsub(/\/\/+/, "/", tok); tk[++nt] = tok' \
+  'tok = substr(line, RSTART, RLENGTH); tk[++nt] = tok'
 mutant "JX9 any .../<state-dir-name>/... rewritten to <state-dir-name>/..." "absforeign" \
   "$STRIP" \
   "$STRIP"'
@@ -267,7 +278,9 @@ PROBE_NEW='src_probe() { return 0; }
 src_probe_disabled() {'
 # JX18: the id-only key with the self-probe IN PLACE -- the probe refuses before any corpus is read,
 # so every party run stops at it: the arms that expect a party join or a NAMED refusal all die.
-mutant "JX18 source keyed on the id alone (self-probe in place)" "sjnames party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4" \
+# srcsetaside, srcpending, srcera and srcclosed (BL-508/519) die too: each is a --sources run, and the
+# probe stops every one before its arm.
+mutant "JX18 source keyed on the id alone (self-probe in place)" "sjnames party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 srcsetaside srcpending srcera srcclosed srchalf srccross" \
   "$IDONLY_OLD" "$IDONLY_NEW"
 # JX19: the same key AND the probe removed -- now only the arms that seed an id another seat carries see it.
 mutant2 "JX19 source keyed on the id alone, self-probe removed" "partyunres srcunres" \
@@ -285,11 +298,12 @@ mutant "JX22 files/document mode not a party repair for <name>-party" "partyunre
 mutant "JX23 subject --pass party not a party repair" "sjpartysrc" \
   '[ "$SUBJMODE" = 1 ] && [ "$PASS" = party ] && [ -z "$ARTIFACT" ] && PARTY=1' \
   'false && PARTY=1'
-mutant "JX24 --sources reports refusals and exits 0" "srcunres" \
+# srcsetaside and srcera die too: each refusal is reported and then acquitted by the same exit 0.
+mutant "JX24 --sources reports refusals and exits 0" "srcunres srcsetaside srcera" \
   '  [ "$refuse_n" -eq 0 ] || exit 2
-  echo "SOURCES:' \
+  [ "$SRCMODE" = 1 ] && echo "SOURCES:' \
   '  true || exit 2
-  echo "SOURCES:'
+  [ "$SRCMODE" = 1 ] && echo "SOURCES:'
 # ---- BL-464 seat-complete belt: removed, and widened from the CITED seat files to the whole dir.
 mutant "JX25 the seat-complete belt removed" "partyunmarked partyx1" \
   '  [ -n "$steps" ] || return 0' \
@@ -302,6 +316,154 @@ mutant "JX26 the marker era decided over the cited seat files only" "partyx1" \
 mutant "JX27 the marker era not decided per step" "partyx4" \
   '      case "$b" in "$st"-*)' \
   '      case "$b" in *)'
+# ---- BL-508 / BL-519 entry contract. The self-probe refuses before any corpus is read, so a
+# mutant the probe sees kills every join; those that reach a single arm are paired with the probe
+# removed (mutant2), as JX19 is.
+CTPROBE_OLD='contract_probe() {'
+CTPROBE_NEW='contract_probe() { return 0; }
+contract_probe_disabled() {'
+mutant "JX28 the --sources siblings PENDING line not printed" "srcpending" \
+  '    echo "PENDING: ${npend} repaired edit(s)' \
+  '    : "PENDING: ${npend} repaired edit(s)'
+# sibprose dies too: the word in prose, no field, is the same missing field.
+mutant "JX29 a repaired edit with no siblings: not refused" "sibtotal sibmissing srcera sibdoc sibprose" \
+  '    refuse "${r}: the ${d} entry is repaired with an edit and carries no' \
+  '    : "${r}: the ${d} entry is repaired with an edit and carries no'
+mutant "JX30 the set-aside refusal removed" "setaside srcsetaside setasideshard setasidenr" \
+  '      SETASIDE) refuse' \
+  '      SETASIDE) :'
+# JX36 (D1): the era decided over the parts again -- parts mode binds only once some entry carries the
+# field, so TOTAL omission reads PENDING and joins. sibmissing survives it: its parts 01/02 carry the field.
+# sibdoc dies: its omitting part 1.md is read BEFORE the carriers 2.md and 3.md.
+# sibprose dies too: its one part carries no field anywhere, so nothing opens the era.
+mutant2 "JX36 parts mode era-gated on a carrier, self-probe removed" "sibtotal sibdoc sibprose" \
+  '          else if (src == 0 || era) print "NOSIB\t" cf "\t" cur' \
+  '          else if (era) print "NOSIB\t" cf "\t" cur' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
+# JX37 (D3): no escalated entry is ever closed in --sources mode.
+CLOSE_LINE='          for (k = 1; k <= ncl; k++) for (i = 1; i <= nesc; i++) if (cl[k] == ef[i] " " en[i]) ex[i] = 1'
+# escopen and escclosed (--escalations) die too: one closure, two modes.
+mutant2 "JX37 --sources closure removed, self-probe removed" "srcclosed srccross escopen escclosed" \
+  "$CLOSE_LINE" \
+  '          for (k = 1; k <= ncl; k++) for (i = 1; i <= nesc; i++) if (0) ex[i] = 1' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
+# JX38 (D3): closure not order-keyed -- a `closes:` line written BEFORE the escalated entry closes
+# it. Built by recording every repaired entry's closes: values and applying them at the end. Three
+# layers: the self-probe's early closes: refuses every join under it, so the probe is removed to
+# show srchalf owns the property on its own.
+mutant3 "JX38 closure not order-keyed (an earlier closes: line closes), self-probe removed" "srchalf" \
+  '        if (disp == "repaired" && src == 1)
+'"$CLOSE_LINE" \
+  '        if (disp == "repaired" && src == 1)
+          for (k = 1; k <= ncl; k++) rcl[cl[k]] = 1' \
+  "      for (i = 1; i <= nesc; i++) print (ex[i] ? \"X\" : \"E\") \"\\t\" ef[i] \"\\t\" en[i]" \
+  "      for (i = 1; i <= nesc; i++) if ((ef[i] \" \" en[i]) in rcl) ex[i] = 1
+      for (i = 1; i <= nesc; i++) print (ex[i] ? \"X\" : \"E\") \"\\t\" ef[i] \"\\t\" en[i]" \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
+# JX42 (D2, the regression the second tip adversary named): closure keyed on the `source:` token
+# again -- any LATER repaired entry carrying the escalation's token, cut to its basename as the
+# f0d0af91 join cut it, closes it. srchalf is graph's dev-05#F-3 shape; srccross dies too, because
+# the serial entry shares the token of BOTH parts' escalations.
+mutant3 "JX42 closure keyed on the source: token, self-probe removed" "srchalf srccross escopen escclosed" \
+  '        if (disp ~ /^escalat/) { nesc++; ef[nesc] = part; en[nesc] = cur; ex[nesc] = 0 }
+        if (disp == "repaired" && src == 1)
+'"$CLOSE_LINE" \
+  '        if (disp ~ /^escalat/) { nesc++; ef[nesc] = part; en[nesc] = cur; ex[nesc] = 0; es[nesc] = st }
+        if (disp == "repaired" && src == 1)
+          for (i = 1; i <= nesc; i++) if (st != "" && es[i] == st) ex[i] = 1
+        st = ""' \
+  '    /^[[:space:]-]*[*_`]*closes[*_`]*:/ {' \
+  '    /^[[:space:]-]*[*_`]*source[*_`]*:/ { v = $0; sub(/^[^:]*:/, "", v); sub(/.*\//, "", v); st = trim(v); inclaim = 0; next }
+    /^[[:space:]-]*[*_`]*closes[*_`]*:/ {' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
+# JX43: the closes: key reads the heading alone, so naming one part's escalation closes every part's.
+mutant2 "JX43 closure keyed on the heading alone (part ignored), self-probe removed" "srccross" \
+  "$CLOSE_LINE" \
+  '          for (k = 1; k <= ncl; k++) for (i = 1; i <= nesc; i++) if (substr(cl[k], index(cl[k], " ") + 1) == en[i]) ex[i] = 1' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
+mutant "JX44 ESCALATED-CLOSED lines not printed" "srcclosed srccross escopen escclosed" \
+  '  printf '"'"'%s'"'"' "$ESC_CLOSED"' \
+  '  :'
+# ---- the BLOCKER: SERIAL-REQUIRED, the count that dispatches the serial remediator for the
+# cross-file sibling grep and moved cites no shard can run.
+mutant "JX45 SERIAL-REQUIRED not printed" "docjoin sibok handoff" \
+  'echo "SERIAL-REQUIRED: ${SERIAL_N}"' \
+  ':'
+# JX46: counted over every repaired entry, `edit: n/a` included -- sibok reads 6, not 3.
+mutant2 "JX46 SERIAL-REQUIRED counts repaired entries with no edit, self-probe removed" "sibok" \
+  '        if (disp == "repaired" && edt) nrep++' \
+  '        if (disp == "repaired") nrep++' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
+# ---- the NOSIB remedy and the siblings arm's reach.
+mutant "JX47 the pre-install re-dispatch remedy dropped" "sibtotal sibdoc" \
+  '  [ "$srcm" = 0 ] && remedy=' \
+  '  false && remedy='
+mutant "JX48 the pre-install remedy printed in --sources mode too" "srcera" \
+  '  [ "$srcm" = 0 ] && remedy=' \
+  '  remedy='
+mutant "JX49 the siblings arm applied in files mode only" "sibdoc" \
+  '    [ -n "$r" ] || continue
+    refuse "${r}: the ${d} entry is repaired with an edit' \
+  '    [ -n "$r" ] || continue
+    [ "$DOCMODE$SUBJMODE" = 00 ] || continue
+    refuse "${r}: the ${d} entry is repaired with an edit'
+# JX39/JX40 (N1): the set-aside regex cut to ONE half each; the probe's offender carries both halves.
+mutant "JX39 set-aside regex cut to 'not required' only" "setasideshard" \
+  'claim ~ /outside (this|my|the) (shard|part|section)|not required/' \
+  'claim ~ /not required/'
+mutant "JX40 set-aside regex cut to the shard phrase only" "setasidenr" \
+  'claim ~ /outside (this|my|the) (shard|part|section)|not required/' \
+  'claim ~ /outside (this|my|the) (shard|part|section)/'
+mutant "JX41 --sources prints no ESCALATED-COUNT line" "srcclosed srchalf srccross escopen escclosed" \
+  '  echo "ESCALATED-COUNT: ${ESC_N} (${ESC_X} closed' \
+  '  : "ESCALATED-COUNT: ${ESC_N} (${ESC_X} closed'
+mutant2 "JX31 the set-aside hand-off exemption removed, self-probe removed" "handoff" \
+  '            && claim !~ /escalat|serial remediator/) print "SETASIDE' \
+  '            ) print "SETASIDE' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
+# escclosed dies too: its serial entry, edit: n/a, then reads as a repaired edit with no siblings: after a carrier.
+mutant2 "JX32 an n/a edit read as a real edit, self-probe removed" "sibok escclosed" \
+  '      if (match(v, /[A-Za-z0-9_.\/-]+[.](md|json|jsonl|yaml|yml|txt|csv)/)) edt = 1' \
+  '      edt = 1' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
+mutant2 "JX33 every heading read as MAJOR, self-probe removed" "sibok" \
+  '                 sev = (h ~ /(^|[^A-Z])(CRITICAL|MAJOR)([^A-Z]|$)/); next }' \
+  '                 sev = 1; next }' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
+mutant "JX34 the joined run prints no ESCALATED: lines" "sibok handoff escpath" \
+  '# "Adversarial repair dispatch").
+printf '"'"'%s'"'"' "$ESC_LINES"' \
+  '# "Adversarial repair dispatch").
+:'
+# escopen and escclosed die too: --escalations runs the same record_tail.
+mutant "JX35 --sources does not apply the entry contract" "srcsetaside srcpending srcera srcclosed srchalf srccross escopen escclosed" \
+  '  contract_refusals 1 "$(contract_check 1 "$1")"' \
+  '  ESC_LINES=""; ESC_CLOSED=""; ESC_N=0; ESC_X=0'
+# ---- the four siblings forms, the point-in-time fence, escalated citations, --escalations.
+SIBREAD='    /^[[:space:]-]*[*_`]*siblings[*_`]*:/ { sibf = 1; v = $0; sub(/^[^:]*:/, "", v); v = vtrim(v); if (v == "") sibw = 1; else if (v in SIBNA) sib = 1; inclaim = 0; next }'
+# JX50: the tip adversary's m508 -- the siblings reader loosened to any line mentioning the word.
+mutant2 "JX50 siblings read off any line mentioning the word, self-probe removed" "srcera sibforms sibprose sibnever" \
+  "$SIBREAD" \
+  '    /[Ss]iblings?/ { sib = 1 }' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
+# JX51: the field's PRESENCE read as the field (the reader this branch shipped first).
+mutant2 "JX51 any siblings: spelling accepted, self-probe removed" "sibforms sibnever" \
+  "$SIBREAD" \
+  '    /^[[:space:]-]*[*_`]*siblings[*_`]*:/ { sibf = 1; sib = 1; inclaim = 0; next }' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
+mutant2 "JX52 a derived siblings fence accepted as the text form, self-probe removed" "sibforms" \
+  '                            if (b == "```text") {' \
+  '                            if (b == "```text" || b == "```derived") {' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
+mutant "JX53 the siblings control not counted at the join" "sibnever" \
+  '      CTL) sib_control "$r" "$d" "$l" "$m" ;;' \
+  '      CTL) : ;;'
+mutant "JX54 an escalated entry's edit: path counted as a shard citation" "escpath" \
+  '    function emit(   i) { if (disp !~ /^escalat/) for (i = 1; i <= nt; i++) print tk[i]; nt = 0; disp = "" }' \
+  '    function emit(   i) { for (i = 1; i <= nt; i++) print tk[i]; nt = 0; disp = "" }'
+mutant "JX55 --escalations runs as --sources (needs a seat dir)" "escopen escclosed" \
+  '    --escalations) SRC_REC="${2:-}"; SRCMODE=2; shift 2 ;;' \
+  '    --escalations) SRC_REC="${2:-}"; SRCMODE=1; shift 2 ;;'
 # ---- END JX MUTANTS.
 
 # ------------------------------------------------------------------------------ the reap
@@ -311,7 +473,7 @@ nd="$(ndone)"
 # DECLARED is read off this file's own source, between the markers; JUDGED is counted below as the
 # reap walks the index. A control alone is NOT a battery: with every mutant call deleted the
 # control still dispatches, still holds, and the run would otherwise read PASS.
-ndecl="$(awk '/^# ---- BEGIN JX MUTANTS/ { on = 1; next } /^# ---- END JX MUTANTS/ { on = 0 } on && /^mutant2? "/' "$SELF" | grep -c .)" || ndecl=0
+ndecl="$(awk '/^# ---- BEGIN JX MUTANTS/ { on = 1; next } /^# ---- END JX MUTANTS/ { on = 0 } on && /^mutant[23]? "/' "$SELF" | grep -c .)" || ndecl=0
 if [ "$NDISP" -ge 2 ] && [ "$nidx" -eq "$NDISP" ] && [ "$nd" -eq "$NDISP" ]; then
   ok "MR: $NDISP scorers dispatched, $nidx recorded, $nd completed"
 else

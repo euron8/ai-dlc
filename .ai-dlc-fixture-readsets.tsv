@@ -14,7 +14,7 @@
 # path<TAB>sha lines in the runner's universe as traced; the runner clears a stale key record when
 # it recomputes the same value over the tree it is pushing.
 #
-# fixtures mapped: 225    entries: 13200
+# fixtures mapped: 225    entries: 13174
 absorbed-specifics-survive	core/fixtures/absorbed-specifics-survive/run.sh
 absorbed-specifics-survive	core/skills/ai-dlc/SKILL.md
 absorbed-specifics-survive	core/skills/ai-dlc/rule-bodies/rule-13.md
@@ -12843,48 +12843,22 @@ update-preflight-push	core/fixtures/update-preflight-push/nearmiss.md
 update-preflight-push	core/fixtures/update-preflight-push/offender.md
 update-preflight-push	core/fixtures/update-preflight-push/run.sh
 update-preflight-push	core/skills/ai-dlc-update/SKILL.md
-updater-session-signals	.git/HEAD
-updater-session-signals	.git/config
-updater-session-signals	.git/index
-updater-session-signals	.git/info/exclude
-updater-session-signals	.git/objects/33/a4425c0ed05dea70f881660ffdf01c7c86da33
-updater-session-signals	.git/objects/7f/1479d0f091b8393b8613744a84c3c8229a65a3
-updater-session-signals	.git/objects/info/commit-graphs/commit-graph-chain
-updater-session-signals	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
-updater-session-signals	.git/objects/info/commit-graphs/graph-61ac52da05ee113a5a22871cdc3010f8f63bd5f1.graph
-updater-session-signals	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
-updater-session-signals	.git/objects/info/commit-graphs/graph-fa7bbe6bcd67e84c678384cfb84f17a16d6fa8fa.graph
-updater-session-signals	.git/objects/pack/multi-pack-index
-updater-session-signals	.git/packed-refs
-updater-session-signals	.git/refs/heads/main
-updater-session-signals	.gitignore
 updater-session-signals	core
 updater-session-signals	core/fixtures
 updater-session-signals	core/fixtures/updater-session-signals
 updater-session-signals	core/fixtures/updater-session-signals/run.sh
+updater-session-signals	core/hooks
 updater-session-signals	core/hooks/ai-dlc-acknowledge.sh
-updater-session-signals-mutants	.git/HEAD
-updater-session-signals-mutants	.git/config
-updater-session-signals-mutants	.git/index
-updater-session-signals-mutants	.git/info/exclude
-updater-session-signals-mutants	.git/objects/33/a4425c0ed05dea70f881660ffdf01c7c86da33
-updater-session-signals-mutants	.git/objects/7f/1479d0f091b8393b8613744a84c3c8229a65a3
-updater-session-signals-mutants	.git/objects/info/commit-graphs/commit-graph-chain
-updater-session-signals-mutants	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
-updater-session-signals-mutants	.git/objects/info/commit-graphs/graph-61ac52da05ee113a5a22871cdc3010f8f63bd5f1.graph
-updater-session-signals-mutants	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
-updater-session-signals-mutants	.git/objects/info/commit-graphs/graph-fa7bbe6bcd67e84c678384cfb84f17a16d6fa8fa.graph
-updater-session-signals-mutants	.git/objects/pack/multi-pack-index
-updater-session-signals-mutants	.git/packed-refs
-updater-session-signals-mutants	.git/refs/heads/main
-updater-session-signals-mutants	.gitignore
+updater-session-signals	core/hooks/ai-dlc-dispatch-guard.sh
 updater-session-signals-mutants	core
 updater-session-signals-mutants	core/fixtures
 updater-session-signals-mutants	core/fixtures/updater-session-signals
 updater-session-signals-mutants	core/fixtures/updater-session-signals-mutants
 updater-session-signals-mutants	core/fixtures/updater-session-signals-mutants/run.sh
 updater-session-signals-mutants	core/fixtures/updater-session-signals/run.sh
+updater-session-signals-mutants	core/hooks
 updater-session-signals-mutants	core/hooks/ai-dlc-acknowledge.sh
+updater-session-signals-mutants	core/hooks/ai-dlc-dispatch-guard.sh
 upstream-routing	.git
 upstream-routing	core
 upstream-routing	core/.claude
@@ -13252,6 +13226,8 @@ write-format-steering-multiformat	core/skills/ai-dlc-update/reconcile/lib.sh
 # digest story-evidence-scaffold 52cfdc66b8497b9f556abbc762a174d7db229a7ad1aec19fb083d350b9594dff
 # digest subject-partition cfd281009538f5e7e01e43d982fa30941d49813af95a91808bef887bc04b5409
 # digest update-preflight-push e83485232f100b9fa9fb0af07c0acb8815b5b2e7a57773a1b4dd503678335f39
+# digest updater-session-signals f479cb58b22393c7341928ba146ad1b6c5395aa3ac44c1560ff5189a7b5b61c7
+# digest updater-session-signals-mutants f4f99122323cfaa4b72dff5a398d5f56f2136d4e0af0d7edaa0477c6814c836d
 # digest upstream-routing 1295d153d2989df414b4fd4afa9d054638a2f0c5002677c31e37238edeb780e2
 # digest vocabulary-index 285594f5acafe647f40c216cc477e52449741b209987713e5b02b8737e09c9a3
 # digest wait-beat-liveness b3831569f7ca7baf4eddeb40c255b41c5354519085722e343f308ab01dfa5685
