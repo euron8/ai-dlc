@@ -26,10 +26,16 @@
 # Denied:  Agent, Skill, TaskCreate, and Write/Edit under _bmad-output/.
 #          Per Rule 28 delegation is the default, so the lead cannot advance
 #          the pipeline without one of these. This is the whole surface.
-#          Two exceptions, both in Check 3: a dispatched teammate's (agent_id)
-#          Write/Edit under _bmad-output/ is allowed and logged; and in an
+#          Three exceptions, all in Check 3: a dispatched teammate's (agent_id)
+#          Write/Edit under _bmad-output/ is allowed and logged; in an
 #          /ai-dlc-update session the whole surface is allowed and NOT logged --
-#          its dispatches and its writes alike, since the updater advances no sprint.
+#          its dispatches and its writes alike, since the updater advances no sprint;
+#          and the LEAD's own Agent/Task dispatch of the built-in `Explore` subagent
+#          (exact `subagent_type: "Explore"`, no `team-roles/<role>.md` citation in
+#          its prompt, no `.claude/agents/Explore.md` in the project) is allowed and
+#          NOT logged. Explore carries no Agent, Edit, Write or NotebookEdit, so it
+#          adds nothing the lead's own allowed Bash lacks. Every other dispatch,
+#          `ops` included, is denied. A Rule 8 STOP (Check 2a) denies Explore too.
 # Allowed: Read, Grep, Glob, Bash, and everything else -- so the lead can
 #          investigate the operator's question, AND so it can always run
 #          `rm -f _bmad-output/pipeline-paused.flag` to resume. Allowing Bash
@@ -571,7 +577,8 @@ fi
 # THIS IS AN APPROXIMATION OF QUIESCE, NOT QUIESCE. True quiesce would let only the writes that
 # were IN FLIGHT when the flag was raised complete. This hook has no record of what was in flight,
 # so a teammate dispatched before the pause may keep writing under `_bmad-output/` for as long as
-# it runs. What bounds it is the Agent deny above: no NEW teammate can be dispatched while paused.
+# it runs. What bounds it is the Agent deny above: no NEW teammate can be dispatched while paused,
+# except a built-in `Explore` by the lead (below), which cannot Write or Edit at all.
 #
 # `agent_id`, NEVER `agent_type`. A lead started with `claude --agent <name>` carries `agent_type`
 # and no `agent_id`, and that lead is exactly what this check exists to stop.
@@ -589,6 +596,40 @@ case "$TOOL_NAME" in
     # and the deny stands -- for a teammate too; the teammate exception is on
     # the Write arm below, beside the updater's.
     [ "$UPDATER_SESSION" -eq 1 ] || ADVANCING=1
+
+    # THE LEAD MAY DISPATCH THE BUILT-IN `Explore` SUBAGENT WHILE PAUSED, AND NOTHING ELSE.
+    # Answering the operator usually needs a search, and a search is exactly what this deny
+    # pushed inline into the lead's own context. Explore's tool set is Bash, Skill, TaskCreate,
+    # MCP and the read tools -- it has NO Agent, Edit, Write or NotebookEdit. It is NOT
+    # read-only: its Bash can write anything. But the lead's own Bash is allowed while paused
+    # (it is the escape hatch, above), so an Explore dispatch adds no capability the lead lacks.
+    # Its own Skill and TaskCreate calls carry an `agent_id` and stay denied by this arm.
+    #
+    # EVERY CONJUNCT IS A WAY THE NAME "Explore" CAN ARRIVE WITHOUT THE BUILT-IN BEHIND IT:
+    #   - `agent_id` empty: the lead only. A teammate may not spawn work while paused.
+    #   - the comparison is INSIDE jq, exact: `["Explore"]`, `"Explore\n"`, `"Explore "`,
+    #     `"explore"` and null are all something else. A shell compare of `jq -r` output would
+    #     strip the trailing newline and pass one of them.
+    #   - no `team-roles/<role>.md` in the prompt: `ai-dlc-dispatch-guard.sh` derives a role from
+    #     that citation with this same ERE and REWRITES `subagent_type` to it (`updatedInput`).
+    #     Whether this hook sees the payload before or after that rewrite is not established, so
+    #     a call reading "Explore" here may run as the role. Fail closed on any citation.
+    #   - no `.claude/agents/Explore.md`: a project definition of that name may shadow the
+    #     built-in with any tool set. Fail closed if one exists.
+    # `ops` STAYS DENIED. It writes its repair record under `_bmad-output/planning-artifacts/`
+    # (`team-roles/ops.md`, step 4) -- it advances the pipeline, which is what this check stops.
+    # NOT LOGGED, like the Read/Grep/Bash it substitutes for: ACK_DENIED counts real denials.
+    # SITED AFTER Check 2a's Rule 8 STOP exit, so a stopped adversarial cycle denies it as well.
+    case "$TOOL_NAME" in
+      Agent|Task)
+        if [ -z "$AGENT_ID" ] \
+          && jq -e '.tool_input.subagent_type == "Explore"' <<< "$INPUT" >/dev/null 2>&1 \
+          && EXPLORE_PROMPT="$(jq -r '.tool_input.prompt // empty' <<< "$INPUT" 2>/dev/null)" \
+          && ! grep -qE 'team-roles/[a-z][a-z-]*\.md' <<< "$EXPLORE_PROMPT" \
+          && [ ! -e "${PROJECT_DIR}/.claude/agents/Explore.md" ]; then
+          ADVANCING=0
+        fi ;;
+    esac
     ;;
   Write|Edit|MultiEdit|NotebookEdit)
     # Only artifact production under _bmad-output/ counts. Escalations
@@ -697,6 +738,8 @@ Do this now, in order:
    (c) Handoff request -> follow the Rule 2 handoff protocol; leave the flag in place.
 
 Read-only tools (Read, Grep, Glob, Bash) are still ALLOWED -- use them to investigate the operator's question, and to clear the flag when you resume. Only pipeline-advancing calls are blocked.
+
+To search on the operator's behalf, the lead may dispatch the built-in Explore subagent: \`subagent_type: \"Explore\"\` exactly, with no \`team-roles/<role>.md\` in its prompt. It has no Agent, Edit, Write or NotebookEdit, so it adds nothing your own Bash lacks. Every other dispatch is denied, \`ops\` included -- ops writes its repair record.
 
 This is not a stall and Rule 3 does not override it. Rule 3 forbids stalling when NO ONE is waiting on you. Here a human IS waiting on you. Answer them."
 

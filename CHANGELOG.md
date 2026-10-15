@@ -20,6 +20,29 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [UNRELEASED — b230-c4-pause]
+
+### While paused, the lead may dispatch the built-in Explore subagent and nothing else (BL-525)
+
+While an operator message is outstanding, the Rule 29 pause gate denied every `Agent` and `Task` call. A search the
+lead needed to answer the operator therefore ran inline in the lead. Check 3 of `ai-dlc-acknowledge.sh` now lets one
+dispatch through, unlogged: the lead's own `subagent_type: "Explore"`. Explore has no Agent, Edit, Write or
+NotebookEdit tool, so it adds nothing the lead's allowed Bash lacks. It is not read-only, and its own Skill and
+TaskCreate calls carry an `agent_id` and stay denied.
+
+- The carve-out fails closed when a teammate (`agent_id`) makes the call, and when `subagent_type` is anything but the
+  exact string `"Explore"`, compared inside jq. `["Explore"]`, `"Explore\n"`, `"Explore "`, `"explore"` and null are
+  all denied.
+- It fails closed when the prompt cites `team-roles/<role>.md`, because the dispatch guard rewrites `subagent_type` from
+  that citation. It also fails closed when the project has a `.claude/agents/Explore.md`, which may shadow the built-in.
+- It sits after the Rule 8 STOP exit, so a stopped adversarial cycle still denies an Explore dispatch.
+- `ops` stays denied, because it writes its repair record. That was the dispatch the reference consumer was denied, so
+  this change does not relieve it. In graph's sprint 318, 0 of the Rule-29-denied Agent calls were Explore, and over
+  the measured window 0 of 32 were. The carve-out would have allowed none of graph's real denied calls.
+- The hook header, the deny text and `rule-29.md` state the new surface. `updater-session-signals` gains fourteen
+  Explore cells, and its mutation battery gains six mutants, each killing exactly its own cell.
+
+
 ## [0.783.0] - 2026-10-14
 
 Batch 229 (graph-ledger-full-drain), second release: six entries from the s317-s318 efficiency analysis. No upstream

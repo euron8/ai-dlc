@@ -155,6 +155,38 @@ expect_set payload-arm-widened 2 'exempts ANY Skill call|stays exempt forever' \
 expect_set payload-revoke-deleted 1 'stays exempt forever' \
   '/ai-dlc)        UPDATER_SESSION=0/d'
 
+# E. THE EXPLORE CARVE-OUT, one conjunct at a time. Each mutant reds exactly the DENY cell whose
+#    near-miss only that conjunct separates from the ALLOW cell.
+#
+# E1. WIDENED to any subagent_type: jq -e on the bare field is true for every non-null, non-false
+#    value. Every named near-miss passes; null and the absent field (the section's CONTROL) do not.
+expect_set explore-any-subagent-type 6 'EXPLORE MALFORMED (\["Explore"\]|"Explore\\n"|"Explore "|"explore")|EXPLORE OPS|EXPLORE AGENT_TYPE' \
+  's/jq -e '"'"'\.tool_input\.subagent_type == "Explore"'"'"'/jq -e '"'"'.tool_input.subagent_type'"'"'/'
+
+# E2. THE ROLE-CITATION CLAUSE DROPPED: the dispatch guard rewrites a cited role's subagent_type,
+#    so an Explore that cites team-roles/remediator.md runs as the remediator.
+expect_set explore-role-clause-dropped 1 'EXPLORE ROLE CITATION' \
+  '/\&\& ! grep -qE .team-roles\/\[a-z\]\[a-z-\]\*\\\.md. <<< "\$EXPLORE_PROMPT"/d'
+
+# E3. THE LEAD-ONLY CLAUSE DROPPED: a dispatched teammate spawns Explore while paused.
+expect_set explore-lead-clause-dropped 1 'EXPLORE TEAMMATE' \
+  's/^        if \[ -z "\$AGENT_ID" \] \\$/        if true \\/'
+
+# E4. THE COMPARISON MOVED OUTSIDE jq: `$( )` strips the trailing newline of "Explore\n", so that
+#    near-miss alone passes. Every other one still differs after `jq -r`.
+expect_set explore-compare-outside-jq 1 'EXPLORE MALFORMED "Explore\\n"' \
+  's/\&\& jq -e '"'"'\.tool_input\.subagent_type == "Explore"'"'"' <<< "\$INPUT" >\/dev\/null 2>&1 \\$/\&\& [ "$(jq -r '"'"'.tool_input.subagent_type'"'"' <<< "$INPUT")" = Explore ] \\/'
+
+# E5. THE CARVE-OUT SITED BEFORE THE STOP EXIT: Check 2a skips an Explore dispatch, so a pending
+#    Rule 8 STOP no longer denies it and Check 3's carve-out lets it through.
+expect_set explore-before-stop 1 'EXPLORE STOP' \
+  's/^if \[ "\$ADVANCING_TOOL" -eq 1 \] \&\& \[ "\$UPDATER_SESSION" -eq 0 \]; then$/if [ "$ADVANCING_TOOL" -eq 1 ] \&\& [ "$UPDATER_SESSION" -eq 0 ] \&\& ! jq -e '"'"'.tool_input.subagent_type == "Explore"'"'"' <<< "$INPUT" >\/dev\/null 2>\&1; then/'
+
+# E6. THE SHADOW CLAUSE DROPPED: a project .claude/agents/Explore.md, which may carry any tool set,
+#    no longer fails the carve-out closed.
+expect_set explore-shadow-clause-dropped 1 'EXPLORE SHADOWED' \
+  's/^          \&\& \[ ! -e "\${PROJECT_DIR}\/\.claude\/agents\/Explore\.md" \]; then$/          ; then/'
+
 echo
 if [ "$fails" -eq 0 ]; then echo "updater-session-signals-mutants: PASS"; exit 0; fi
 echo "updater-session-signals-mutants: $fails assertion(s) FAILED" >&2
