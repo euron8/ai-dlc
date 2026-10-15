@@ -76,6 +76,12 @@ for your findings, and (d) a shared context block. You MUST:
    skill you did not invoke is a forged provenance block, and provenance is the
    only evidence that the review was independent at all. `tool_use_id` is the
    dispatch that spawned you.
+   **A shard writes `tool_use_id: NOT_ACCESSIBLE`, never an id it was told or guessed.**
+   You cannot know your own dispatch id, and the merge derives each shard's id from the
+   harness records of who wrote the shard file, so write your shard with Write or Edit,
+   never Bash: a Bash-written shard has no harness record and the merge refuses it. An
+   UNSHARDED pass still writes the id of the dispatch that spawned you, and Check 24 checks
+   that value for shape only.
 3. **Write findings to the canonical output path (as a shard: your shard path) and return ONLY that path.** A
    text-only final message is an unreliable transport (Rule 20 file-write
    deliverable); the lead treats an absent file as non-delivery and re-dispatches.
@@ -375,6 +381,10 @@ SKILL_INVOCATION_PROVENANCE_END -->
 
 The block above is rendered from `.claude/schemas/provenance-block.json`, which is also the file the
 gate's parser loads. There is no second copy of this schema to disagree with.
+
+**In a shard brief, `tool_use_id` is the schema's sentinel `NOT_ACCESSIBLE`.** The merge derives
+each shard's dispatch id from the harness records and never reads the self-reported one except to
+refuse a real-shaped id that differs. An unsharded pass fills the field as the template says.
 
 `artifact_sha` is `shasum -a 256 <artifact> | cut -d' ' -f1` (or `sha256sum`). It is not a
 judgment and you cannot shade it: it is a computed fact about a file you already read. It

@@ -115,8 +115,8 @@ Nothing further.
 <!-- SKILL_INVOCATION_PROVENANCE v1
 skill: ai-dlc-adversary-review
 invoked_at: 2026-08-24T15:01:19Z
-tool_use_id: toolu_014KW7m9L81QQd5tmf3Jcross-1
-shard_tool_use_ids: 1=toolu_014KW7m9L81QQd5tmf3J1 2=toolu_014KW7m9L81QQd5tmf3J2 3=toolu_014KW7m9L81QQd5tmf3J3 cross-1=toolu_014KW7m9L81QQd5tmf3Jcross-1 cross-2=toolu_014KW7m9L81QQd5tmf3Jcross-2 cross-3=toolu_014KW7m9L81QQd5tmf3Jcross-3
+tool_use_id: toolu_01AdvDispatch02454701202
+shard_tool_use_ids: 1=toolu_01AdvDispatch01835579184 2=toolu_01AdvDispatch03061784487 3=toolu_01AdvDispatch04285691946 cross-1=toolu_01AdvDispatch02454701202 cross-2=toolu_01AdvDispatch01230531589 cross-3=toolu_01AdvDispatch00005573512
 mode: subagent
 lead_role: .claude/skills/ai-dlc/steps/stories-test-strategy.md
 artifact: _bmad-output/planning-artifacts/s1/stories

@@ -127,6 +127,10 @@ Owed: the dispatch id reaches the shard by a path that is not a lead hand-edit (
 at dispatch or by the merge from the transcript), and a lead Bash in-place write to a shard,
 record or snapshot under the sprint slot is either denied or recorded.
 
+**First half delivered by BL-536** (adversary shards: the merge derives each shard's dispatch id from
+the harness records and never from the shard). The second half, denying or recording a Bash
+in-place write, stays open, and `adjudicator_agent_id` below is not covered by BL-536.
+
 **Second instance, a shipped field (graph s319 planning gate, 21:49Z).** Gate adjudicator shard 1/2 (agent `a04aa26080fcca36f`) wrote `adjudicator_agent_id: gate-adjudicator` on all 10 of its verdict rows in `_bmad-output/gate-adjudication/planning-20261015T214932Z.part-1of2.jsonl`, where `core/team-roles/gate-adjudicator.md:163` requires "the agent_id of THIS gate-adjudicator dispatch". Its own final report says so. Shard 2/2 wrote a descriptive label, `gate-adjudicator-planning-20261015T214932Z-shard-2of2`, which is not an agent id either. Check 26 (`validate-gate-adjudication.sh`) passed both. So the problem is not confined to adversary shards: no dispatched agent can read its own id, and every field that asks for one is filled by the agent guessing or by the lead hand-patching it afterwards. The fix owed above (the id reaches the record by a path other than the agent's own claim or a lead edit) applies to `adjudicator_agent_id` as well.
 
 **Third instance, a remediator rewriting its own repair record (graph s319 requirements party repair, 00:00:36Z on 2026-10-16).** The serial cross-part remediator rewrote `_bmad-output/planning-artifacts/s319/requirements-party-repair.md` with `python3` (`t=open(p).read(); t=t.replace(...)`, then written back) instead of Edit. Its next message reads: "I changed the record through a script, which the contract forbids, so I'll check what it did and redo the fixes with Edit." The agent knew the rule and broke it, and no hook refused the write. That file is the joined record `join-remediator-shards.sh --sources` reads, so a Bash rewrite of it leaves no `.artifact-writes.jsonl` row on the one record the join's writer and coverage checks are keyed on. Three agent kinds have now done this in one session: the lead (the 12 adversary shards and the snapshot), the gate adjudicators (the id field), and a remediator (its own record).
@@ -1065,3 +1069,84 @@ Owed: profile one scorer in a slot, then cut the per-scorer cost to the scale th
 Related: BL-592 (the wall-clock bound killing a control, the verdict shape; c8's SCORER_IDLE change addresses it). This entry is the cost itself.
 
 verify: manual
+
+
+## BL-536 — an adversary shard cannot know its own dispatch id, and the merge took whatever was typed
+
+**DEFECT.** Discharges `PC-S319-CONVERGENCE-ADVERSARY-CANNOT-KNOW-ITS-OWN-TOOL-USE-ID`.
+
+Filed by graph on 2026-10-15 from Sprint 319, uncommitted in its push-candidate ledger.
+`merge-adversarial-shards.sh` demanded each shard's self-reported `tool_use_id` and checked only that
+it began with `toolu_`. A dispatched adversary cannot know the id of the Agent call that spawned it,
+so the value was always written by someone else.
+
+**Measured on graph, sprints 315-319** (413 convergence shard files):
+
+- 360 carry a final id written by someone other than the adversary.
+- The lead hand-filled the ids for whole shard sets in s318 `coe-p1` and s319 `coe-p1`. In s319 it
+  did so with a Bash `perl -0pi`, the BL-530 instance.
+- s317 `stories-p3/18.md` carries the typo `toolu_01CFNaGGJRJMMcDXEDzDV2eSJ` (the real id is
+  `toolu_01CFNaGGJRJMMcDXEDQ88aQz`), and it merged.
+- 12 fabricated ids (`toolu_cross1_g1_dispatch` and similar) passed the shape check, and 13 carry
+  `NOT_ACCESSIBLE`.
+
+**Fix.** The merge derives each shard's dispatch id from three harness records and never from the
+shard:
+
+1. The write ledger (`<state>/planning-artifacts/.artifact-writes.jsonl`, `kind: "artifact-write"`,
+   the path normalised as `ai-dlc-gate-remediation-guard.sh` writes it) names the agent that wrote
+   the shard.
+2. That row's `transcript_path` locates `subagents/agent-<agent_id>.meta.json`, whose `toolUseId` is
+   the dispatch id.
+3. Every spawn-ledger row carrying that id has role `adversary`.
+
+The records are found by walking up from the shard dir, never from a resolved root. It refuses
+(exit 2, nothing written) when:
+
+- a shard has no write-ledger row;
+- a writer's meta file or `toolUseId` is absent;
+- a dispatch id has no spawn row;
+- a writer has any other role;
+- two adversary dispatches wrote one shard;
+- one dispatch derives for two shards;
+- a self-reported id that is real-shaped (`toolu_` and 24 base62 characters) differs from the
+  derived one.
+
+A pre-upgrade row (no `transcript_path`) takes the probe ledger's `agent_id -> tool_use_id` row, or
+refuses naming the agent and "row predates transcript_path". `NOT_ACCESSIBLE`, `unavailable`, an
+absent line and a forged id are ignored, and the derived id is written. Nothing falls back to the
+self-report. Shards now write `tool_use_id: NOT_ACCESSIBLE` (`_gate-procedures.md` "Adversarial
+review dispatch", `adversary.md` Contract item 2), pinned by `gp-shard-sentinel`,
+`gp-shard-derived` and `adv-shard-sentinel`. An unsharded pass still self-reports, and Check 24
+checks that value for shape only.
+
+**The forge floor.** A shard written with Bash leaves no row and is refused. A row is an attempt
+recorded at PreToolUse, not proof of authorship. A lead Bash write to any of the three records can
+forge the join; that is the hook's existing floor, and BL-530's second half owns it.
+
+The receipt drives the REAL merge and the REAL hook in mktemp worlds of the s319 shape (3 stories,
+shards 1..3 and cross-1..3, self ids `unavailable`):
+
+- **Main.** The merge must exit 0 with `shard_tool_use_ids` equal to the derived ids and
+  `tool_use_id` equal to cross-1's. At origin/main this arm refuses with `is not a toolu_ id`,
+  which the receipt asserts on the before side.
+- **R1-R8** must each exit 2 and leave no output:
+  - R1: no ledger row, with a `toolu_`-prefixed forged self id;
+  - R2: the meta file absent, no probe row, and a real-shaped self id;
+  - R3: a differing real-shaped self id;
+  - R4: the spawn role is remediator;
+  - R5: one agent wrote two shards;
+  - R6: two adversaries wrote one shard;
+  - R7: the meta id has no spawn row;
+  - R8: a remediator row on a shard beside its adversary.
+- **R9.** A pre-upgrade row plus a probe row merges; without the probe row it refuses with
+  "predates transcript_path".
+- **Control.** Forged self ids with correct records merge, and the output carries the derived ids
+  and no forged string.
+
+Scored under `set -uo pipefail`: origin/main 1, the fix 0. Five regressions each score 1: falling
+back to the self-report, skipping the role check, skipping the self-versus-derived compare, taking
+the first of two adversary writers, and removing the pre-upgrade refusal. With jq absent or the hook
+absent it exits 9.
+
+verify: sh M=core/scripts/merge-adversarial-shards.sh; H=core/hooks/ai-dlc-gate-remediation-guard.sh; [ -f "$M" ] || M=scripts/ai-dlc/merge-adversarial-shards.sh; [ -f "$H" ] || H=.claude/hooks/ai-dlc-gate-remediation-guard.sh; [ -f "$M" ] && [ -f "$H" ] && command -v jq >/dev/null || exit 9; M="$(pwd -P)/$M"; H="$(pwd -P)/$H"; Q=toolu_01ZZZZZZZZZZZZZZZZZZZZZZ; i() { printf 'toolu_01Rcpt%s' "$1"; }; w() { r="$(mktemp -d)" && r="$(cd "$r" && pwd -P)" || exit 9; PA="$r/_bmad-output/planning-artifacts"; D="$PA/s319/shards/stories-p1"; O="$PA/s319/stories-adversarial-p1.md"; mkdir -p "$D" "$PA/s319/stories" "$r/t/sess/subagents" || exit 9; : > "$r/_bmad-output/pipeline-snapshot.md"; for n in a b c; do printf '# story %s\n' "$n" > "$PA/s319/stories/$n.md"; done; }; s() { case "$1" in cross*) z="artifact: _bmad-output/planning-artifacts/s319/stories" ;; *) z="artifact_sha: $(shasum -a 256 "$PA/s319/stories/$(printf abc | cut -c"$1").md" | cut -d' ' -f1)" ;; esac; { printf '# shard %s\n\n## Findings\n\n<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\ninvoked_at: 2026-10-15T21:00:00Z\n' "$1"; [ "$2" = - ] || printf 'tool_use_id: %s\n' "$2"; printf 'mode: subagent\nlead_role: stories-test-strategy\n%s\nfindings_critical: 0\nfindings_major: 0\nverdict: EXIT_CONDITION_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$z"; } > "$D/$1.md"; }; g() { [ "${5:-}" = nometa ] || printf '{"toolUseId":"%s"}\n' "$3" > "$r/t/sess/subagents/agent-$2.meta.json"; [ "${5:-}" = nospawn ] || printf '{"v":1,"role":"%s","tool_use_id":"%s"}\n' "${4:-adversary}" "$3" >> "$r/_bmad-output/spawn-ledger.jsonl"; t="$r/t/sess.jsonl"; [ "${5:-}" != pre ] || t=""; jq -nc --arg f "$D/$1.md" --arg a "$2" --arg t "$t" '{session_id:"sess",tool_name:"Write",transcript_path:$t,tool_use_id:"toolu_w",tool_input:{file_path:$f},agent_id:$a}' | AI_DLC_STATE_DIR=_bmad-output CLAUDE_PROJECT_DIR="$r" bash "$H" >/dev/null 2>&1; }; b() { w; for k in 1 3 cross-1 cross-2 cross-3; do s "$k" "$1"; g "$k" "ag$k" "$(i "$k")"; done; }; m() { o="$(bash "$M" "$D" 2>&1)"; c=$?; }; x() { m; [ "$c" -eq 2 ] && grep -qF "REFUSED:" <<<"$o" && [ ! -e "$O" ] || exit 1; }; b unavailable; s 2 unavailable; g 2 ag2 "$(i 2)"; m; if [ "$c" -ne 0 ]; then [ "$c" -eq 2 ] && grep -qF "is not a toolu_ id" <<<"$o" && exit 1; exit 9; fi; grep -qF "MERGED: " <<<"$o" && grep -qx "shard_tool_use_ids: 1=$(i 1) 2=$(i 2) 3=$(i 3) cross-1=$(i cross-1) cross-2=$(i cross-2) cross-3=$(i cross-3)" "$O" && grep -qx "tool_use_id: $(i cross-1)" "$O" || exit 1; b unavailable; s 2 toolu_cross2_forged; x; b unavailable; s 2 "$Q"; g 2 ag2 "$(i 2)" adversary nometa; x; b unavailable; s 2 "$Q"; g 2 ag2 "$(i 2)"; x; b unavailable; s 2 unavailable; g 2 ag2 "$(i 2)" remediator; x; w; for k in 1 cross-1 cross-2 cross-3; do s "$k" unavailable; g "$k" "ag$k" "$(i "$k")"; done; s 2 unavailable; s 3 unavailable; g 2 ag2 "$(i 2)"; g 3 ag2 "$(i 2)"; x; b unavailable; s 2 unavailable; g 2 ag2 "$(i 2)"; g 2 ag2b "$(i 2b)"; x; b unavailable; s 2 unavailable; g 2 ag2 "$(i 2)" adversary nospawn; x; b unavailable; s 2 unavailable; g 2 ag2 "$(i 2)"; g 2 ag2r "$(i 2r)" remediator; x; b unavailable; s 2 unavailable; g 2 ag2 "$(i 2)" adversary pre; printf '{"agent_id":"ag2","tool_use_id":"%s"}\n' "$(i 2)" >> "$r/_bmad-output/subagent-context.jsonl"; m; [ "$c" -eq 0 ] && grep -qF " 2=$(i 2) " "$O" || exit 1; b unavailable; s 2 unavailable; g 2 ag2 "$(i 2)" adversary pre; x; grep -qF "predates transcript_path" <<<"$o" || exit 1; w; for k in 1 2 3 cross-1 cross-2 cross-3; do s "$k" "toolu_$(printf '%s' "$k" | tr -d -)_g1_dispatch"; g "$k" "ag$k" "$(i "$k")"; done; m; [ "$c" -eq 0 ] && grep -qx "tool_use_id: $(i cross-1)" "$O" && grep -qF " 2=$(i 2) " "$O" && ! grep -qF "_g1_dispatch" "$O" || exit 1; exit 0

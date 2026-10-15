@@ -547,13 +547,17 @@ findings=<n>`, `<shard>` being the brief's `shard:` value (`none` when it carrie
 exactly one, or whose `findings=<n>` differs from the findings it parses there. Its limit: a directory where no shard carries the marker merges
 unchecked, exactly as before. That is a directory written before this instruction, and also a
 round where no shard has finished — which the join's `--complete` beat, not the merge, keeps
-from reaching the merge. The merged record's `tool_use_id` is the first cross group's shard's.
+from reaching the merge. The merged record's `tool_use_id` is the derived id of cross-1 (of `cross` when there is one cross shard).
 
 It writes findings to `_bmad-output/planning-artifacts/s<N>/<artifact>-adversarial-p<M>.md`
 carrying a `SKILL_INVOCATION_PROVENANCE v1` block with `skill: ai-dlc-adversary-review`,
 `mode: subagent`, the `tool_use_id` of THIS Agent dispatch, `artifact` + `artifact_sha`, the four
-`findings_*` counts, and the `verdict:`. Filename numbering is load-bearing: Check 24 orders the
-series by the `p<M>` token.
+`findings_*` counts, and the `verdict:`. A SHARD writes `tool_use_id: NOT_ACCESSIBLE`, because a
+dispatched adversary cannot know its own dispatch id, and the merge derives each shard's dispatch id
+from the harness records: the write ledger names the agent that wrote the shard, its meta file names
+the dispatch, and the spawn ledger must record that dispatch as an `adversary`. Write your shard
+with Write or Edit, never Bash; a Bash-written shard has no harness record and the merge refuses it.
+Filename numbering is load-bearing: Check 24 orders the series by the `p<M>` token.
 
 **Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh --complete <findings_path>`, which takes a file as delivered only once it ends in its `seat-complete:` line.
 

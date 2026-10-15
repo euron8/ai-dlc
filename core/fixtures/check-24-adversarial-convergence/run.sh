@@ -2203,6 +2203,32 @@ k3g() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$1" -c user.na
 k3lorem() { local i; for i in $(seq 1 "$2"); do printf '%s line %d of the section, carrying enough prose to weigh something real.\n' "$1" "$i"; done; }
 k3sha() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1; else sha256sum "$1" | cut -d' ' -f1; fi; }
 K3PA=_bmad-output/planning-artifacts
+# The merge derives each shard's dispatch id from the harness records (merge-adversarial-shards.sh,
+# THE DISPATCH ID), so every k3 shard written under shards/ is recorded the way a dispatched
+# adversary's Write is: the REAL remediation-guard hook appends the write-ledger row, and the meta
+# file and the adversary spawn row are seeded beside it. None of the three is read by the validator.
+K3_HOOK=""
+_k3d="$K3S"
+while [ -n "$_k3d" ] && [ "$_k3d" != "/" ]; do
+  for _k3c in "$_k3d/core/hooks/ai-dlc-gate-remediation-guard.sh" "$_k3d/.claude/hooks/ai-dlc-gate-remediation-guard.sh"; do
+    [ -f "$_k3c" ] && { K3_HOOK="$_k3c"; break 2; }
+  done
+  _k3d="$(dirname "$_k3d")"
+done
+k3_rec() { # <shard file under <state>/planning-artifacts/s<N>/shards/<dir>/>
+  local f="$1" st root tp c ag id
+  case "$f" in */planning-artifacts/s*/shards/*/*) ;; *) return 0 ;; esac
+  [ -n "$K3_HOOK" ] && command -v jq >/dev/null 2>&1 || return 1
+  st="$(dirname "$(dirname "$(dirname "$(dirname "$(dirname "$f")")")")")"; root="$(dirname "$st")"
+  c="$(printf '%s' "$f" | cksum)"; c="${c%% *}"; ag="$(printf 'a%016x' "$c")"; id="$(printf 'toolu_01K3Dispatch%012d' "$c")"
+  tp="$root/.harness/k3-session.jsonl"; mkdir -p "${tp%.jsonl}/subagents" || return 1
+  [ -f "$st/pipeline-snapshot.md" ] || : > "$st/pipeline-snapshot.md"
+  printf '{"toolUseId":"%s","agentType":"adversary"}\n' "$id" > "${tp%.jsonl}/subagents/agent-$ag.meta.json"
+  printf '{"v":1,"ts":"2026-10-01T09:00:00Z","role":"adversary","tool_use_id":"%s"}\n' "$id" >> "$st/spawn-ledger.jsonl"
+  jq -nc --arg f "$f" --arg a "$ag" --arg t "$tp" '{session_id:"k3-session",transcript_path:$t,hook_event_name:"PreToolUse",tool_name:"Write",tool_use_id:"toolu_01K3WriteCall",agent_id:$a,tool_input:{file_path:$f,content:"shard"}}' \
+    | AI_DLC_STATE_DIR=_bmad-output CLAUDE_PROJECT_DIR="$root" bash "$K3_HOOK" >/dev/null 2>&1
+  return 0
+}
 # k3_world <name> <stamp-date> [serial] [scripts-dir] [stamp-version] -> the world path. serial: only
 # the SPEC changes. stamp-version defaults to 9.0.0, above every release constant the validator binds.
 k3_world() {
@@ -2231,6 +2257,7 @@ k3_shard() { # <dir> <key> <cite> <minute> <artifact> <artifact_sha> [n-major]
     printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\ninvoked_at: 2026-10-01T10:%02d:00Z\n' "$4"
     printf 'tool_use_id: toolu_k3%s%s\nmode: subagent\nlead_role: requirements\nartifact: %s\nartifact_sha: %s\n' "$2" "$4" "$5" "$6"
     printf 'findings_critical: 0\nfindings_major: %s\nverdict: EXIT_CONDITION_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n' "${7:-0}"; } > "$1/$2.md"
+  k3_rec "$1/$2.md"
 }
 k3_stems() { local w="$1"
   printf 'product-brief=%s SPEC=%s prd=%s architecture-impact=%s' "$(k3sha "$w/$K3PA/product-brief.md")" \
