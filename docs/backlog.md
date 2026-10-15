@@ -206,8 +206,9 @@ across the three files, including the trigger and the `every literal` scope.
 
 **Scope under the trigger.** In: `dust_raw` (its text is unchanged, it resolves through `dec_ns` of the re-targeted
 non-stable token, and the swap gate compares the balance against it); the stable-side `Decimal("0.01")` at `:25078` (its
-text is unchanged, it resolves through `dec_s` of the token that `stable_token`, the re-targeted name, selects, and the
-stable balance is compared against it). Out: the ADR-S317-6 predicate rename and a test-node rename, because each changes its text, which
+text is unchanged, it resolves through `dec_s` of the token a `stable_token` binding selects, here the startup check's own local read
+from pool config rather than the HODL block's assignment, and the stable balance is compared against it; it is in by
+the same shape, not because the s318 block reaches it). Out: the ADR-S317-6 predicate rename and a test-node rename, because each changes its text, which
 `## Rename Verification` covers.
 
 verify: sh F=core/fixtures/process-rule-pins/run.sh; [ -f "$F" ] || exit 9; o="$(bash "$F" --report 2>&1)" || exit 1; n="$(grep -cE '^  ok    (adv-rebind-(rung|trigger|every|unit|untouched|oldnew|major)|cr-rebind-(head|trigger|every|unit|untouched|sev)|arch-rebind-(trigger|fence|unit|oldnew|untouched)): pinned inside ' <<<"$o")" || n=0; [ "$n" -eq 18 ]
