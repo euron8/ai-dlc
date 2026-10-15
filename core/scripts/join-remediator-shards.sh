@@ -152,6 +152,10 @@
 #   the document-mode dir parse and the derivation-capture hook's `*/shards/*-repair-p*/` section
 #   exemption hold unchanged; arm H reads such a record for an adversarial series only as FOREIGN.
 #
+#   join-remediator-shards.sh --escalations <record> [--sprint <N>]
+#   the same entry contract and escalation closure over a record with no seat files (the entry
+#   contract's arm 5); writes nothing, refuses no open escalation.
+#
 #   join-remediator-shards.sh --sources <record> --sprint <N>
 #   checks one record that no join wrote -- the unsharded round's single repair writer, the
 #   one-part subject, the serial remediator's appended entries -- and writes nothing.
@@ -199,6 +203,7 @@ SUBJMODE=0; SUBJ_BASE=""; SRCMODE=0; SRC_REC=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --sources) SRC_REC="${2:-}"; SRCMODE=1; shift 2 ;;
+    --escalations) SRC_REC="${2:-}"; SRCMODE=2; shift 2 ;;
     --subject) SPRINT="${2:-}"; SUBJMODE=1; shift 2 ;;
     --base) SUBJ_BASE="${2:-}"; shift 2 ;;
     --sprint) SPRINT="${2:-}"; shift 2 ;;
@@ -208,7 +213,7 @@ while [ $# -gt 0 ]; do
     --since) SINCE="${2:-}"; shift 2 ;;
     --until) UNTIL="${2:-}"; shift 2 ;;
     --document) DOCUMENT="${2:-}"; DOCMODE=1; shift 2 ;;
-    -h|--help) sed -n '2,188p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,192p' "$0"; exit 0 ;;
     -*) die "unknown argument '$1' (see --help)" ;;
     *) { [ "$DOCMODE" = 1 ] || [ "$SUBJMODE" = 1 ]; } && [ -z "$REPDIR" ] || die "unknown argument '$1' (see --help)"
        REPDIR="$1"; shift ;;
@@ -216,11 +221,11 @@ while [ $# -gt 0 ]; do
 done
 # A party repair: its entries must each name the seat finding they apply.
 PARTY=0
-if [ "$SRCMODE" = 1 ]; then
+if [ "$SRCMODE" != 0 ]; then
   [ "$DOCMODE$SUBJMODE" = 00 ] && [ -z "$ARTIFACT$PASS$APATH$SINCE$UNTIL$REPDIR" ] \
-    || die "--sources checks one record and takes only --sprint <N>"
-  [ -n "$SRC_REC" ] && [ -f "$SRC_REC" ] || die "--sources needs an existing record (got '${SRC_REC}')"
-  PARTY=1
+    || die "--sources and --escalations check one record and take only --sprint <N>"
+  [ -n "$SRC_REC" ] && [ -f "$SRC_REC" ] || die "--sources and --escalations need an existing record (got '${SRC_REC}')"
+  [ "$SRCMODE" = 1 ] && PARTY=1
 fi
 [ "$SUBJMODE" = 1 ] && [ "$PASS" = party ] && [ -z "$ARTIFACT" ] && PARTY=1
 if [ "$SUBJMODE" = 1 ]; then
@@ -255,9 +260,11 @@ if [ "$DOCMODE" = 1 ] && [ -n "$REPDIR" ]; then
   [ -n "$SPRINT" ] || SPRINT="$_rs"
 fi
 SPRINT="${SPRINT#s}"
+# --escalations reads one record and no seat directory, so its --sprint is optional.
+[ "$SRCMODE" = 2 ] && [ -z "$SPRINT" ] && SPRINT=0
 case "$SPRINT" in ''|*[!0-9]*) die "--sprint must be a sprint number (got '${SPRINT}')" ;; esac
 case "$ARTIFACT" in *-party) PARTY=1 ;; esac
-if [ "$SRCMODE" = 1 ]; then
+if [ "$SRCMODE" != 0 ]; then
   :
 else
 [ "$SUBJMODE" = 1 ] || case "$PASS" in ''|*[!0-9]*) die "--pass must be a pass number (got '${PASS}')" ;; esac
@@ -479,15 +486,325 @@ src_probe() {
   case "$o" in UNRESOLVED*"b-1.md#F-1"*) ;; *) rm -rf "$d"; die "the source resolver's self-probe failed: an id only another seat carries read '${o}'; no verdict" ;; esac
   rm -rf "$d"
 }
+
+# --- THE ENTRY CONTRACT (BL-508, BL-519). Every mode, and --sources. Three arms over every entry
+# (the text under one heading that carries a `disposition:` line, as src_check reads it):
+#   (1) SIBLINGS. A `repaired` entry with a real edit carries a `siblings:` field (`n/a (deletion)`
+#       is one of its forms): the grep for
+#       the replaced text across the artifact's own files and the control for the new text
+#       (team-roles/remediator.md, "Re-check every sibling of the text you replaced"). A REAL
+#       edit is one whose `edit:` line yields a path token under the coverage join's OWN token
+#       grammar (the `_toks` awk below), so `edit: n/a`, `none`, `n/a (escalated)` and every
+#       other prose spelling are exempt by construction rather than by a list of spellings.
+#       THE FIELD IS READ IN ONE OF FOUR FORMS AND NO OTHER, the four the refusal names: the
+#       values `n/a (section shard; re-checked by the serial remediator after assembly)`,
+#       `n/a (insertion)` and `n/a (deletion)` (byte-equal once `*`, `_`, backticks and blanks
+#       around them are trimmed), or an EMPTY value followed, blank lines aside, by a ```text fence
+#       holding a `$ grep -rn -F` line and a `$ grep -c -F '<text>' <file>` line whose next line is a
+#       count of 1 or more. A field present in any other spelling -- `- siblings: checked`, a value
+#       with no fence, a ```derived fence, a fence missing either command -- is BADSIB, its own
+#       refusal; a field absent is NOSIB. A reader keyed on the field's presence passed
+#       `- siblings: checked` (the tip adversary's finding), and one keyed on the word passed any
+#       entry whose prose mentions a sibling.
+#       THE FENCE IS ```text, NOT ```derived, ON PURPOSE: it is a point-in-time record of the
+#       remediation, and `validate-artifact-derivations.sh` (the slot-wide re-run that exits 1 for
+#       "send back to the remediator") and the capture hook replay only ```derived. Replayed, its
+#       control went STALE the first time a later pass legitimately rewrote the text it counts;
+#       graph's s318 slot reads 3316 stale of 4475 derivations. Instead, in parts mode, THIS join
+#       counts the control once (sib_control): the text must be in the named file at the join, so a
+#       fence naming text that was never written is refused here, and a later rewrite is never read.
+#       THE ERA IS THE INSTALL, NOT THE PARTS. In parts mode (files, --document, --subject) the arm
+#       applies UNCONDITIONALLY: parts are written fresh, inside the repair window, by agents that
+#       read the installed role file, so a part set written after the install that omits the
+#       field EVERYWHERE is refused like one that omits it once. An era decided over the parts
+#       ("PENDING when no entry carries it") could not fire on total omission, the commonest form.
+#       PENDING survives only in --sources mode, which checks a RECORD with no window, possibly
+#       written across a pull (the serial remediator appends to a joined record): there the era is
+#       POSITIONAL -- the arm binds from the record's first entry carrying `siblings:` onward, and
+#       the repaired edits before it are counted on one PENDING line. Its hole, stated: a record
+#       whose every entry post-dates the install and omits the field reads PENDING; and an entry
+#       before the first carrier is never checked. The install stamp (`.claude/.ai-dlc-version`
+#       `installed_at`) is not used: a record carries no window to compare it to, and an mtime is
+#       not one.
+#       PRE-RULE PARTS, MEASURED by running this file's own contract_check (parts mode) over
+#       scratch copies of graph's s317/s318 shard parts -- the arm's program, not the whole join,
+#       which needs ledger rows those dirs do not carry. 202 parts, 0 carry the field; 936 NOSIB
+#       entries in 193 of them (the other 9 hold only escalated or `edit: n/a` entries); the same
+#       run's SETASIDE count is 1, the known `5.md:111`, as its control. These are true positives
+#       that are never re-joined: 20 of the 23 dirs already have their joined record beside them (a join never
+#       overwrites one, so a re-join refuses before this arm matters), the other 3 are closed
+#       sprints' dirs no procedure re-joins, and no shipped program invokes this join (a grep of
+#       core/scripts, core/hooks, core/git-hooks and the update skill finds only message prose).
+#       The residual, stated rather than hidden: a repair round whose parts were written BEFORE a
+#       pull and joined AFTER it is refused, and the shards are re-dispatched under the new role.
+#   (2) SET-ASIDE. A `repaired` entry under a CRITICAL or MAJOR heading whose `claim now
+#       asserted:` text matches `outside (this|my|the) (shard|part|section)|not required` and
+#       names no hand-off (`escalat` or `serial remediator`) is refused: the out-of-shard part of
+#       a fix is a second, `escalated` entry, never a scope ruling by the repair seat.
+#       FALSE-POSITIVE SET, MEASURED over graph's s317/s318 repair shard parts (202 parts, 478
+#       repaired MAJOR+ entries, counted with this awk's own heading-severity and disposition
+#       grammar over `s31[78]/shards/*repair*/*.md`): 1 hit, the true positive
+#       `s318/shards/stories-party-repair-p1/5.md:111` (sm-05 F-3, "outside this shard and is not
+#       required"), 0 false positives; 8 further entries match the phrase and carry a hand-off,
+#       and are accepted. THE NARROWING: `out of scope` was a candidate alternative and is NOT in
+#       the regex, because its hits in that corpus are PRODUCT scope ("out of scope for this
+#       story"), not shard scope. Severity is read off the entry HEADING (`### F-1 — MAJOR`):
+#       the same corpus carries 0 `severity:` lines, so the heading is the grammar.
+#   (3) ESCALATED, CLOSED IN --sources MODE ONLY, AND ONLY BY NAME. Every escalated entry is
+#       printed as one `ESCALATED: <part> <heading>` line and counted. In --sources mode the record
+#       may carry the serial remediator's own appended entries, so an escalated entry is CLOSED --
+#       printed as `ESCALATED-CLOSED: <part> <heading>`, still visible to the lead, and left out of
+#       the open count -- when a LATER entry dispositioned `repaired` carries a
+#       `- closes: <part> <heading>` line naming it, byte-equal to its `ESCALATED:` line's tail
+#       (whitespace and backticks around the value trimmed). <part> is the `<!-- shard: NN.md -->`
+#       marker the join writes above each part, or the record's basename above the first marker.
+#       NEVER keyed on the `source:` token: a later half-repair under the same token, of another
+#       conjunct or in another part, closed the whole escalation (graph s318
+#       architecture-party-repair-p1: dev-05#F-3 escalated in part 5.md and repaired under the same
+#       token in the later part 6.md; dev-05#F-2 escalated in both 2.md and 5.md). Parts mode
+#       closes nothing -- no part is later than another. Stated hole: the serial remediator's
+#       appended entries sit after the LAST marker and so read as that shard's; an escalated entry
+#       the serial remediator itself writes is closed only by a still later `closes:` naming that part.
+#   (4) SERIAL-REQUIRED, PARTS MODE ONLY. The count of `repaired` entries with a real edit (arm 1's
+#       predicate; `edit: n/a` entries are not counted). Each one owes the serial remediator's
+#       cross-file sibling grep and moved-cite check, which no shard can run, so the procedure
+#       dispatches the serial remediator when it OR ESCALATED-COUNT is above 0, in every mode. Not
+#       printed in --sources mode: that record may be the serial remediator's own.
+#   Not caught, by design: a set-aside reworded past the regex; a substantive mis-repair whose
+#   prose and pin agree; whether the grepped text in the siblings fence is really the replaced
+#   text (the write ledger carries no old_string); the `grep -rn -F` line's output is recorded,
+#   never re-run; and a files-mode shard writing the section-shard form skips the fence (the four
+#   forms are not gated by mode).
+#   (5) --escalations <record> [--sprint <N>]: arms 1-3 over one record with NO seat files, after a
+#   serial pass appended to an adversarial, elicitation or gate repair record. --sources needs the
+#   sprint's party-mode/s<N> seat dir and refuses without it, so before this mode nothing read the
+#   serial remediator's closes: lines there. Prints ESCALATED: per open escalation, ESCALATED-CLOSED:
+#   per closed one and the count; an open escalation is the lead's, reported and never refused.
+# contract_check <0 parts | 1 --sources> <record>... -> one line per finding, then the tail
+#   "N\t<entries>\t<entries with a real edit>\t<entries carrying siblings:>\t<pre-era edits>\t<repaired real edits>".
+#   E\t<part>\t<entry>         an open escalated entry (routed by the caller)
+#   X\t<part>\t<entry>         an escalated entry a later repaired entry's closes: line named (--sources only)
+#   NOSIB\t<rec>\t<entry>      a repaired entry with a real edit and no siblings: field
+#   BADSIB\t<rec>\t<entry>     the same entry carrying the field in none of its four forms
+#   CTL\t<rec>\t<entry>\t<file>\t<text>   a siblings fence's control, counted by the caller (parts mode)
+#   SETASIDE\t<rec>\t<entry>\t<line>
+contract_check() {
+  local srcm="$1"; shift
+  awk -v src="$srcm" '
+    BEGIN { SIBNA["n/a (insertion)"] = 1; SIBNA["n/a (deletion)"] = 1
+            SIBNA["n/a (section shard; re-checked by the serial remediator after assembly)"] = 1 }
+    function trim(v) { gsub(/^[ \t`]+|[ \t`]+$/, "", v); return v }
+    function vtrim(v) { gsub(/^[ \t*_`]+|[ \t*_`]+$/, "", v); return v }
+    function flush(   i, k) {
+      if (disp != "") {
+        ne++
+        if (edt) nedt++
+        if (disp == "repaired" && edt) nrep++
+        if (sibf) { nsib++; era = 1 }
+        if (disp ~ /^escalat/) { nesc++; ef[nesc] = part; en[nesc] = cur; ex[nesc] = 0 }
+        if (disp == "repaired" && src == 1)
+          for (k = 1; k <= ncl; k++) for (i = 1; i <= nesc; i++) if (cl[k] == ef[i] " " en[i]) ex[i] = 1
+        if (disp == "repaired" && edt && !sib) {
+          if (sibf) print "BADSIB\t" cf "\t" cur
+          else if (src == 0 || era) print "NOSIB\t" cf "\t" cur
+          else npend++
+        }
+        if (disp == "repaired" && edt && sib && src == 0 && sfile != "") print "CTL\t" cf "\t" cur "\t" sfile "\t" stext
+        if (disp == "repaired" && sev && claim ~ /outside (this|my|the) (shard|part|section)|not required/ \
+            && claim !~ /escalat|serial remediator/) print "SETASIDE\t" cf "\t" cur "\t" hl
+      }
+      disp = ""; edt = 0; sib = 0; sibf = 0; sibw = 0; sibin = 0; sfile = ""; stext = ""; claim = ""; inclaim = 0; ncl = 0
+    }
+    # THE SIBLINGS FENCE. `- siblings:` with no value, then (blank lines aside) a ```text fence holding a
+    # `$ grep -rn -F` line and the control `$ grep -c -F <quoted text> <file>` whose next line is a count of
+    # 1 or more. Anything else after an empty value is a wrong spelling (BADSIB), a ```derived fence included.
+    function sibclose() {
+      if (srn && sctl == 2 && sn ~ /^[1-9][0-9]*$/ && ctext != "" && cfile != "") { sib = 1; sfile = cfile; stext = ctext }
+      sibin = 0
+    }
+    function sibctl(l,   r, q, i) {
+      r = substr(l, 14); q = substr(r, 1, 1); ctext = ""; cfile = ""
+      if (q != "\047" && q != "\"") return
+      r = substr(r, 2); i = index(r, q)
+      if (i < 2) return
+      ctext = substr(r, 1, i - 1); r = substr(r, i + 1); sub(/^[ \t]+/, "", r); sub(/[ \t]+$/, "", r)
+      if (r != "" && r !~ /[ \t]/) cfile = r; else ctext = ""
+    }
+    FNR == 1 { flush(); cur = "(before any heading)"; sev = 0; hl = 0; cf = FILENAME; sub(/.*\//, "", cf); part = cf; fence = 0 }
+    /^[ \t]*(```|~~~)/ {
+      if (!fence && sibw) { b = $0; sub(/^[ \t]+/, "", b); sub(/[ \t]+$/, "", b); sibw = 0
+                            if (b == "```text") { sibin = 1; srn = 0; sctl = 0; sn = "" } }
+      else if (fence && sibin) sibclose()
+      fence = !fence; inclaim = 0; next }
+    fence && sibin {
+      l = $0; sub(/^[ \t]+/, "", l); sub(/[ \t]+$/, "", l)
+      if (sctl == 1) { sctl = 2; sn = l }
+      else if (index(l, "$ grep -rn -F ") == 1) srn = 1
+      else if (index(l, "$ grep -c -F ") == 1) { sibctl(l); sctl = 1 }
+      next }
+    fence { next }
+    sibw && !/^[ \t]*$/ { sibw = 0 }
+    /^<!-- shard: [^ ]+ -->[ \t]*$/ { flush(); cur = "(before any heading)"; sev = 0
+                 part = $0; sub(/^<!-- shard: /, "", part); sub(/ -->.*$/, "", part); next }
+    /^#+[ \t]/ { flush(); cur = $0; sub(/^#+[ \t]+/, "", cur); cur = trim(cur); h = toupper($0); hl = FNR
+                 sev = (h ~ /(^|[^A-Z])(CRITICAL|MAJOR)([^A-Z]|$)/); next }
+    /^[ \t]*$/ { inclaim = 0; next }
+    /^[[:space:]-]*[*_`]*disposition[*_`]*:/ {
+      v = tolower($0); sub(/^[^:]*:/, "", v); gsub(/[*_`]/, "", v); sub(/^[ \t]+/, "", v)
+      split(v, a, /[^a-z]/); disp = a[1]; inclaim = 0; next }
+    /^[[:space:]-]*[*_`]*edit[*_`]*:/ {
+      v = $0; sub(/^[^:]*:/, "", v)
+      if (match(v, /[A-Za-z0-9_.\/-]+[.](md|json|jsonl|yaml|yml|txt|csv)/)) edt = 1
+      inclaim = 0; next }
+    /^[[:space:]-]*[*_`]*siblings[*_`]*:/ { sibf = 1; v = $0; sub(/^[^:]*:/, "", v); v = vtrim(v); if (v == "") sibw = 1; else if (v in SIBNA) sib = 1; inclaim = 0; next }
+    /^[[:space:]-]*[*_`]*closes[*_`]*:/ { v = $0; sub(/^[^:]*:/, "", v); sub(/^[*_`]+/, "", v); cl[++ncl] = trim(v); inclaim = 0; next }
+    /^[[:space:]-]*[*_`]*claim now asserted[*_`]*:/ { claim = tolower($0); inclaim = 1; next }
+    /^[[:space:]-]*[*_`]*[a-z][a-z _]*[*_`]*:/ { inclaim = 0 }
+    inclaim { claim = claim " " tolower($0) }
+    END {
+      flush()
+      for (i = 1; i <= nesc; i++) print (ex[i] ? "X" : "E") "\t" ef[i] "\t" en[i]
+      print "N\t" ne + 0 "\t" nedt + 0 "\t" nsib + 0 "\t" npend + 0 "\t" nrep + 0
+    }' "$@"
+}
+# sib_control <part> <entry> <file> <text> -- the siblings fence's control, counted ONCE, here, at the
+# join: the text the fence says the edit wrote must be in the file it names now, which is the
+# remediation moment. The fence is ```text, which validate-artifact-derivations.sh and the capture
+# hook never replay, so a later legitimate rewrite of that text reads as nothing at all; a fence whose
+# text was never written is refused here. Counted with the literal as an argument, never by running
+# text out of a part. Parts mode only: a --sources record may hold shard entries whose text the serial
+# remediator has since rewritten. The file resolves under the project root, then under the state
+# dir's parent (the ledger spelling), then as an absolute path.
+sib_control() {
+  local r="$1" d="$2" f="$3" t="$4" p="" n
+  case "$f" in
+    /*) p="$f" ;;
+    *) if [ -f "${JR_ROOT}/${f}" ]; then p="${JR_ROOT}/${f}"; elif [ -f "${STATE_PARENT}${f}" ]; then p="${STATE_PARENT}${f}"; fi ;;
+  esac
+  if [ -z "$p" ] || [ ! -f "$p" ]; then
+    refuse "${r}: the ${d} entry's siblings control names ${f}, which is not a file under ${JR_ROOT}; the control counts the text you wrote in the file you edited"
+    return
+  fi
+  n="$(grep -c -F -- "$t" "$p")" || n=0
+  [ "$n" -ge 1 ] || refuse "${r}: the ${d} entry's siblings control counts '${t}' in ${f}, which holds it 0 times at the join; the control names the text your edit wrote, verbatim"
+}
+# contract_refusals <0 parts | 1 --sources> <contract_check output> -> refuse per finding;
+# ESC_LINES / ESC_N carry the open escalated entries and ESC_CLOSED / ESC_X the closed ones, for the
+# caller to print once the run has otherwise cleared; SERIAL_N counts the repaired entries with a
+# real edit (the serial remediator's cross-file sibling grep and moved-cite check, after the join).
+contract_refusals() {
+  local srcm="$1" k r d l m q ne nedt nsib npend nosib="" remedy=""
+  shift
+  ESC_LINES=""; ESC_CLOSED=""; ESC_N=0; ESC_X=0; SERIAL_N=0; ne=0; nedt=0; nsib=0; npend=0
+  # A parts-mode refusal of a missing field is, for a round whose parts predate the install, the
+  # pre-rule shape: the remedy is the re-dispatch, never a hand-added field.
+  [ "$srcm" = 0 ] && remedy="; parts written before the install: re-dispatch the shards"
+  while IFS='	' read -r k r d l m q; do
+    case "$k" in
+      N) ne="$r"; nedt="$d"; nsib="$l"; npend="$m"; SERIAL_N="${q:-0}" ;;
+      E) ESC_N=$((ESC_N + 1)); ESC_LINES="${ESC_LINES}ESCALATED: ${r} ${d}
+" ;;
+      X) ESC_X=$((ESC_X + 1)); ESC_CLOSED="${ESC_CLOSED}ESCALATED-CLOSED: ${r} ${d}
+" ;;
+      NOSIB) nosib="${nosib}${r}	${d}
+" ;;
+      BADSIB) refuse "${r}: the ${d} entry is repaired with an edit and its 'siblings:' field is none of its four forms; write '- siblings:' then a \`\`\`text fence holding the '\$ grep -rn -F' over your shard's own files and the control '\$ grep -c -F' with its count, or 'n/a (section shard; re-checked by the serial remediator after assembly)', 'n/a (insertion)' or 'n/a (deletion)' (team-roles/remediator.md, \"Re-check every sibling of the text you replaced\")" ;;
+      CTL) sib_control "$r" "$d" "$l" "$m" ;;
+      SETASIDE) refuse "${r}:${l}: the ${d} entry is dispositioned repaired while its claim sets part of the fix aside as outside the shard or not required, and names no hand-off; a fix that lies outside your files is a second entry, disposition escalated, carrying the same source: token" ;;
+    esac
+  done <<CTEOF
+$1
+CTEOF
+  while IFS='	' read -r r d; do
+    [ -n "$r" ] || continue
+    refuse "${r}: the ${d} entry is repaired with an edit and carries no 'siblings:' field; every repaired edit carries one (team-roles/remediator.md, \"Re-check every sibling of the text you replaced\"): the fence over your shard's own files, 'n/a (section shard; ...)', 'n/a (insertion)' or 'n/a (deletion)'${remedy}"
+  done <<NSEOF
+$nosib
+NSEOF
+  if [ "${npend:-0}" -gt 0 ]; then
+    echo "PENDING: ${npend} repaired edit(s) of this record precede its first entry carrying 'siblings:' (${nsib} of ${ne} entries carry it); the siblings arm binds a record from that entry onward"
+  fi
+}
+# The self-probe, before any corpus is read. Arm (2): a set-aside refuses, and the split pair
+# handing the remainder off passes. Arm (1): an entry with an edit and no siblings: is reported in
+# parts mode even when NO entry carries the field, and an `edit: n/a` entry without one is not; in
+# --sources mode the same record reads PENDING, and binds from its first carrier. Closure (3), on
+# a record with two shard markers escalating the SAME heading: a later repaired entry naming
+# `closes: 01.md <heading>` closes 01's and leaves 02's open; a later repaired entry sharing the
+# escalation's `source:` token and carrying no `closes:` closes nothing; a `closes:` written BEFORE
+# the escalated entry closes nothing. The siblings forms: `siblings: checked` and a ```derived fence
+# are BADSIB, and a ```text fence carrying both commands and a count yields its CTL line. The tail's sixth field, the SERIAL-REQUIRED count, is read
+# on every record: repaired entries with a real edit, and never one with `edit: n/a`.
+contract_probe() {
+  local d o
+  d="$(mktemp -d "${TMPDIR:-/tmp}/join-ctprobe.XXXXXX")" || die "mktemp failed; the entry contract cannot be probed"
+  printf '### F-1 — MAJOR\n- disposition: repaired\n- edit: s1/stories/a.md:3\n- siblings: n/a (insertion)\n- claim now asserted: X. Y is outside this shard and is not required.\n' > "$d/bad.md"
+  printf '### F-1 — MAJOR\n- source: x/s-1.md#F-1\n- disposition: repaired\n- edit: s1/stories/a.md:3\n- siblings: n/a (insertion)\n- claim now asserted: X. Y is outside this shard; escalated below.\n\n### F-1 (remainder) — MAJOR\n- source: s-1.md#F-1\n- disposition: escalated\n- edit: n/a\n' > "$d/good.md"
+  printf '### F-7 — MINOR\n- disposition: repaired\n- edit: s1/stories/a.md:3\n- siblings: checked\n\n### F-8 — MINOR\n- disposition: repaired\n- edit: s1/stories/a.md:4\n- **siblings:**\n\n```text\n$ grep -rn -F \047old\047 s1/stories/a.md\n$ grep -c -F \047new words\047 s1/stories/a.md\n1\n```\n\n### F-9 — MINOR\n- disposition: repaired\n- edit: s1/stories/a.md:5\n- siblings:\n\n```derived\n$ grep -rn -F \047old\047 s1/stories/a.md\n$ grep -c -F \047new\047 s1/stories/a.md\n1\n```\n' > "$d/forms.md"
+  o="$(contract_check 0 "$d/forms.md")"
+  [ "$o" = "BADSIB	forms.md	F-7 — MINOR
+CTL	forms.md	F-8 — MINOR	s1/stories/a.md	new words
+BADSIB	forms.md	F-9 — MINOR
+N	3	3	3	0	3" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: the siblings forms read '${o}'; no verdict"; }
+  printf '### F-2 — MINOR\n- disposition: repaired\n- edit: s1/stories/a.md:3\n\n### F-3 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n' > "$d/sib.md"
+  printf '### F-2 — MINOR\n- disposition: repaired\n- edit: s1/stories/a.md:3\n\n### F-4 — MAJOR\n- disposition: repaired\n- edit: s1/stories/a.md:9\n- siblings: n/a (insertion)\n\n### F-5 — MAJOR\n- disposition: repaired\n- edit: s1/stories/a.md:12\n' > "$d/era.md"
+  printf '<!-- shard: 01.md -->\n### F-6 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n- closes: 01.md F-6 — MAJOR\n\n### F-1 — MAJOR\n- source: s-1.md#F-1\n- disposition: escalated\n- edit: n/a\n\n### F-6 — MAJOR\n- disposition: escalated\n- edit: n/a\n\n<!-- shard: 02.md -->\n### F-1 — MAJOR\n- source: s-1.md#F-1\n- disposition: escalated\n- edit: n/a\n\n### serial F-1 by token — MAJOR\n- source: s-1.md#F-1\n- disposition: repaired\n- edit: n/a (no edit)\n\n### serial F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n- **closes:** `01.md F-1 — MAJOR`\n' > "$d/close.md"
+  o="$(contract_check 0 "$d/bad.md")"
+  case "$o" in SETASIDE*"F-1 — MAJOR"*) ;; *) rm -rf "$d"; die "the entry contract's self-probe failed: a set-aside read '${o}'; no verdict" ;; esac
+  o="$(contract_check 1 "$d/good.md")"
+  [ "$o" = "E	good.md	F-1 (remainder) — MAJOR
+N	2	1	1	0	1" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: a handed-off split pair read '${o}'; no verdict"; }
+  o="$(contract_check 0 "$d/sib.md")"
+  [ "$o" = "NOSIB	sib.md	F-2 — MINOR
+N	2	1	0	0	1" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: the siblings reader read '${o}' in parts mode; no verdict"; }
+  o="$(contract_check 1 "$d/sib.md")"
+  [ "$o" = "N	2	1	0	1	1" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: a pre-rule --sources record read '${o}'; no verdict"; }
+  o="$(contract_check 1 "$d/era.md")"
+  [ "$o" = "NOSIB	era.md	F-5 — MAJOR
+N	3	3	1	1	3" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: the --sources positional era read '${o}'; no verdict"; }
+  o="$(contract_check 1 "$d/close.md")"
+  [ "$o" = "X	01.md	F-1 — MAJOR
+E	01.md	F-6 — MAJOR
+E	02.md	F-1 — MAJOR
+N	6	0	0	0	0" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: escalated-entry closure read '${o}'; no verdict"; }
+  o="$(contract_check 0 "$d/close.md")"
+  [ "$o" = "E	01.md	F-1 — MAJOR
+E	01.md	F-6 — MAJOR
+E	02.md	F-1 — MAJOR
+N	6	0	0	0	0" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: parts mode closed an escalated entry ('${o}'); no verdict"; }
+  rm -rf "$d"
+}
+# record_tail <record> -- the entry contract over one record no join wrote, then its escalations:
+# shared by --sources and --escalations, so each line below exists once.
+record_tail() {
+  contract_probe
+  contract_refusals 1 "$(contract_check 1 "$1")"
+  [ "$refuse_n" -eq 0 ] || exit 2
+  [ "$SRCMODE" = 1 ] && echo "SOURCES: ${1} -- ${SRC_E} entries, ${SRC_S} sources, every one resolved in ${SEAT_DIR}"
+  [ "$SRCMODE" = 2 ] && echo "ESCALATIONS: ${1} -- every escalated entry, open or closed by a closes: line"
+  # These are the LEAD's to adjudicate, never a re-dispatch of the serial remediator: the record may
+  # be the serial remediator's own, appended after the join. So no SERIAL-REQUIRED line is printed
+  # here; the closed entries stay visible to the lead.
+  printf '%s' "$ESC_LINES"
+  printf '%s' "$ESC_CLOSED"
+  echo "ESCALATED-COUNT: ${ESC_N} (${ESC_X} closed by a later repaired entry's closes: line)"
+  exit 0
+}
 if [ "$SRCMODE" = 1 ]; then
   [ -d "$SEAT_DIR" ] || die "no seat files at ${SEAT_DIR}; a party repair's sources resolve there"
   src_probe
   src_refusals "$(src_check "$SEAT_DIR" "$SRC_REC")"
   seat_complete_check "$SEAT_DIR" "$SRC_REC"
   [ "$SRC_E" -gt 0 ] || refuse "${SRC_REC} carries no entry with a 'disposition:' line; nothing is attributed"
-  [ "$refuse_n" -eq 0 ] || exit 2
-  echo "SOURCES: ${SRC_REC} -- ${SRC_E} entries, ${SRC_S} sources, every one resolved in ${SEAT_DIR}"
-  exit 0
+  record_tail "$SRC_REC"
+fi
+# --escalations: the same contract and closure over a record with NO seat files -- an adversarial,
+# elicitation or gate repair after its serial pass appended -- where --sources refuses for want of a
+# party-mode/s<N> directory. Open escalations are reported, never a refusal.
+if [ "$SRCMODE" = 2 ]; then
+  n_disp="$(grep -c -E '^[[:space:]-]*[*_`]*disposition[*_`]*:' "$SRC_REC")" || n_disp=0
+  [ "$n_disp" -gt 0 ] || die "${SRC_REC} carries no entry with a 'disposition:' line; no escalation can be read"
+  record_tail "$SRC_REC"
 fi
 
 SHARD_DIR="${PA}/s${SPRINT}/shards/${ARTIFACT}-repair-p${PASS}"
@@ -657,14 +974,25 @@ while IFS= read -r p; do
   # A run of slashes in a cited token is squeezed to one before the strip below: a TMPDIR ending in
   # `/` spells every path under it `T//x`, while STATE_PARENT comes from `pwd`, which collapses it,
   # so the literal prefix strip never matched and an absolute citation under the root refused.
+  # AN ESCALATED ENTRY CITES NOTHING. Its `edit:` names the file the fix lies in (remediator.md pins
+  # that form), which is the serial remediator's to edit after the join, never this shard's: counted
+  # as a citation it read as a second shard claiming a sibling's file (DOUBLE) or as a claimed edit
+  # with no write (UNWRITTEN). So tokens are buffered per heading and dropped when the entry under it
+  # is dispositioned escalated. Measured over graph's s317/s318 shard parts: 15 of 66 escalated
+  # entries carry a path on `edit:`.
   _toks="$(awk '
+    function emit(   i) { if (disp !~ /^escalat/) for (i = 1; i <= nt; i++) print tk[i]; nt = 0; disp = "" }
+    /^#+[ \t]/ { emit(); next }
+    /^[[:space:]-]*[*_`]*disposition[*_`]*:/ {
+      disp = tolower($0); sub(/^[^:]*:/, "", disp); gsub(/[*_`]/, "", disp); sub(/^[ \t]+/, "", disp); next }
     /^[[:space:]-]*[*_`]*edit[*_`]*:/ {
       line = $0; sub(/^[^:]*:/, "", line)
       while (match(line, /[A-Za-z0-9_.\/-]+[.](md|json|jsonl|yaml|yml|txt|csv)/)) {
-        tok = substr(line, RSTART, RLENGTH); gsub(/\/\/+/, "/", tok); print tok
+        tok = substr(line, RSTART, RLENGTH); gsub(/\/\/+/, "/", tok); tk[++nt] = tok
         line = substr(line, RSTART + RLENGTH)
       }
-    }' "$p" | sort -u)"
+    }
+    END { emit() }' "$p" | sort -u)"
   while IFS= read -r _t; do
     [ -n "$_t" ] || continue
     _t="${_t#"$STATE_PARENT"}"; _t="${_t#"$STATE_PARENT_P"}"
@@ -748,6 +1076,14 @@ SRCPEOF
   fi
 fi
 
+# The entry contract over every part, in every mode (BL-508 siblings, BL-519 set-aside).
+contract_probe
+set --
+while IFS= read -r p; do [ -n "$p" ] && set -- "$@" "$p"; done <<CTPEOF
+$PARTS
+CTPEOF
+contract_refusals 0 "$(contract_check 0 "$@")"
+
 [ -e "$OUT" ] && refuse "${OUT} already exists; a join never overwrites a repair record"
 
 [ "$refuse_n" -eq 0 ] || exit 2
@@ -818,4 +1154,11 @@ CATEOF
 } > "$TMP" || { echo "REFUSED: could not write ${TMP}" >&2; exit 2; }
 mv "$TMP" "$OUT" || { echo "REFUSED: could not move the joined record into ${OUT}" >&2; exit 2; }
 echo "JOINED: ${OUT} ($(printf '%s\n' "$PARTS" | grep -c .) parts, $(printf '%s\n' "$WRITERS" | grep -c .) writers)"
+# Every escalated entry, by part, and the count; then the repaired edits whose cross-file siblings
+# and moved cites only the serial remediator can check. Either count above 0 dispatches the serial
+# remediator, in every mode, with every ESCALATED: line in its brief (_gate-procedures.md,
+# "Adversarial repair dispatch").
+printf '%s' "$ESC_LINES"
+echo "ESCALATED-COUNT: ${ESC_N}"
+echo "SERIAL-REQUIRED: ${SERIAL_N}"
 exit 0

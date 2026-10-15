@@ -139,7 +139,54 @@ remediator spend (4/13 × $97 ≈ $30 s317, 9/21 × $80 ≈ $34 s318). The remed
 high to medium effort at the s317/s318 boundary coincides with the rise; that is confounded and is
 graph's setting, not core's. Subsumes the earlier "adversary series length" finding.
 
-verify: manual -- close when the remediator contract (`core/team-roles/remediator.md`, `_gate-procedures.md` adversarial repair dispatch) requires a repair to re-check every sibling site of the fixed text and every cite it moved before reporting, and a fixture pins that requirement.
+Efficacy, re-read for the fix: about 10 of about 33 sampled repair-introduced MAJORs are a sibling
+left unfixed or a moved cite; the rest are underived claims the existing evidence contract already
+forbids. The fix reaches that third, so the $105 is not what it recovers. The fix: every `repaired`
+entry with a real edit carries `- siblings:`. A files-mode shard writes a fence grepping the
+replaced text over ONLY its own files (a concurrent shard fixing a copy elsewhere would turn a
+wider fence stale) plus a control count of the new text, and names an out-of-shard sibling on an
+unfenced `escalated` entry. A section or subject shard writes `n/a (section shard; re-checked by
+the serial remediator after assembly)`, because assembly deletes the section file its control
+names. An insertion-only edit writes `n/a (insertion)`, a deletion-only edit `n/a (deletion)`. The serial
+remediator runs the cross-file grep over the assembled files (`s<N>/stories s<N>/epics` after a
+files-mode join, never the slot, `shards/` or a record) and re-checks moved cites, after the join.
+Every repaired edit owes that grep, so the join prints `SERIAL-REQUIRED: <n>` (repaired entries
+with a real edit) beside `ESCALATED-COUNT`, and the procedure dispatches the serial remediator in
+every mode when either is above 0. Before this it ran only for an escalation or a multi-file
+finding, and in graph s318 `stories-repair-p3` and `stories-elicitation-repair-p1` no serial
+remediator ran. `join-remediator-shards.sh`
+refuses a missing field in every parts mode, total omission included: the era is the install,
+since parts are written fresh by agents reading the installed role file. Only `--sources`, which
+checks a record that may span a pull, keeps a PENDING line, binding from the record's first
+carrier onward. 0 of graph's 202 s317/s318 shard parts carry the field. The arm's own awk, run
+over scratch copies of them, flags 936 entries in 193 parts, with the same run's set-aside count of
+1 as its control. Those parts are never re-joined, though: 20 of their 23 dirs already hold a joined record, which a join
+refuses to overwrite; the other 3 belong to closed sprints; and no shipped program calls the join.
+The field is read in its four forms and no other: a presence reader passed `- siblings: checked`,
+and a reader keyed on the word passed any entry whose prose mentions a sibling. The fence is a
+`text`-labelled one, a point-in-time record that `validate-artifact-derivations.sh` and the capture
+hook never replay: as a `derived` fence its control went STALE the first time a later pass rewrote the
+text it counts, and the slot-wide re-run exits 1, "send back to the remediator" (graph's s318 slot
+already reads 3316 stale of 4475). The join counts the control once, in parts mode, and refuses a
+fence whose text is not in the file it names.
+
+Cost, measured by re-running the join over graph's eight files-mode s317/s318 stories repair
+rounds, with a compliant `siblings:` line added to every non-escalated entry: SERIAL-REQUIRED reads
+71, 185, 23, 11, 4, 31 and 24 on the seven that join (s317 elicitation, party, adversarial p1, p2;
+s318 elicitation, stories p1, p2). That is 349 repaired edits whose cross-file sibling grep the
+serial remediator now owes, against the earlier dispatch rule, under which s318 stories-repair-p3
+and stories-elicitation-repair-p1 ran no serial remediator. The eighth round, s318 party, refuses on
+the known sm-05 set-aside (BL-519), its one true positive; there are 0 false refusals.
+
+Residue (operator ruling: BL-508 closes on the after-join cite re-check, with this recorded): the
+`grep -rn -F` line's output is recorded at the edit, never checked at write time (the capture hook
+replays only `derived` fences) and never re-run; whether the grepped text is
+really the replaced text (the write ledger carries no old_string); a files-mode shard writing the
+section-shard form skips the fence, because the four forms are not gated by mode; a `--sources`
+record omitting the field everywhere reads PENDING; and a substantive mis-repair whose prose and
+pin agree.
+
+verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-508-siblings.sh
 
 ## BL-510 — implementation rework is driven by evidence and bookkeeping, not code
 
@@ -241,5 +288,29 @@ In the same round a remediator "repaired" sm-12's "two backends" MAJOR by adding
 rather than questioning why the audit reads SQLite (C-03). A scope disposition by the repair seat is
 a decision nobody adjudicates.
 
-verify: manual -- close when the remediator contract forbids dispositioning a party MAJOR as out of shard scope (it escalates instead), and a fixture pins that clause.
+The set-aside is `s318/shards/stories-party-repair-p1/5.md:111`. The fix: files mode gains the
+section and subject modes' clause (a fix outside your files is `escalated`), a partial repair is a
+`repaired` and an `escalated` entry under one `source:`, and the join refuses a `repaired`
+MAJOR/CRITICAL whose claim matches `outside (this|my|the) (shard|part|section)|not required` with
+no hand-off token. It prints `ESCALATED:` per escalated entry and a count, and the dispatch
+procedure sends the serial remediator whenever the count is above 0; before this, nothing consumed
+an escalated entry. In `--sources` mode the lead adjudicates those lines rather than re-dispatching.
+An escalated entry closes only when a later `repaired` entry carries `- closes: <part> <heading>`
+copied from its `ESCALATED:` line, and is then printed as `ESCALATED-CLOSED:`. Closure keyed on the
+`source:` token was wrong: a later half repair of another conjunct under the same token, or in
+another part, closed the whole escalation. Measured over a scratch copy of graph's s318
+`architecture-party-repair-p1.md`, where dev-05#F-3 is escalated in part 5.md and repaired under
+the same token in the later part 6.md, the token-keyed join closed 5 of its 8 escalations and the
+`closes:`-keyed join closes none. `--sources` needs the sprint's `party-mode/s<N>/` seat
+directory and exits 2 without it, so for an adversarial, elicitation or gate repair nothing read the
+serial remediator's `closes:` lines. `--escalations <record>` runs the same contract and closure with
+no seat files and reports every escalation still open. An escalated entry names the file its fix lies
+in as `- edit: <path>:<line(s)> (escalated)`, and the coverage join reads no escalated entry's
+`edit:` as a citation. Before this, such an entry made a correct pass refuse as "cited by more than
+one shard record", and 15 of graph's 66 escalated s317/s318 entries carry a path there.
+Measured over graph's 202 s317/s318 shard parts (478 repaired MAJOR+ entries, counted with the
+join's own heading-severity and disposition grammar): 1 hit, that entry, 0 false positives. Not caught: a set-aside reworded past the regex, and C-03's
+shape, a substantive mis-repair whose prose and pin agree.
+
+verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-519-set-aside.sh
 

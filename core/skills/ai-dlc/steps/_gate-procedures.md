@@ -814,7 +814,8 @@ finding of the adversarial pass, or every FAILED check of the gate pass.
 **Shard by file (Rule 28, "Split dispatch": files axis).** Partition the findings by the files
 their `edit:` targets name. A finding touching one file goes to that file's shard, and each
 shard edits its files IN PLACE, never a copy. A finding citing more than one file goes to ONE
-serial remediator dispatched after the join. A single-file artifact is sharded by section
+serial remediator dispatched after the join, which is dispatched as "Every escalated entry
+reaches the serial remediator" says, not only for such a finding. A single-file artifact is sharded by section
 (below). Each shard's brief carries `shard: <i>/<N> <files>` and the parts path
 `_bmad-output/planning-artifacts/s<N>/shards/<artifact>-repair-p<M>/<i>.md`. Every `edit:` line
 cites the project-relative path in the ledger's spelling (`_bmad-output/planning-artifacts/s<N>/…`)
@@ -831,6 +832,28 @@ repair record below. The serial cross-file remediator runs after that and APPEND
 to the joined record, opening them with its own `- artifact:` / `- artifact_sha_before:` /
 `- artifact_sha_after:` triple per file it edits, each before equal to the bytes the join left. The join never overwrites a record, so it is run before the serial
 remediator and never after it.
+
+**Every escalated entry reaches the serial remediator.** A shard whose fix lies partly outside
+its files writes two entries with one `source:` token, `repaired` and `escalated`. The join, in
+every parts mode, prints one `ESCALATED: <part> <entry>` line per escalated entry, then
+`ESCALATED-COUNT: <n>`, then `SERIAL-REQUIRED: <n>`, the count of `repaired` entries with a
+real edit, each of which owes the cross-file sibling grep and moved-cite check below. In every
+mode (files, sections, subject), dispatch the serial remediator after the join whenever
+SERIAL-REQUIRED or ESCALATED-COUNT is above 0, whether or not any finding cited two files or
+parts, and its brief carries every `ESCALATED:` line verbatim. In `--sources` mode the
+`ESCALATED:` lines are the lead's to adjudicate, never a re-dispatch of the serial remediator:
+that record may be the serial remediator's own, so no SERIAL-REQUIRED line is printed there. An
+escalated entry is closed only by a later `repaired` entry carrying `- closes: <part> <entry>`
+copied from its `ESCALATED:` line, never by a shared `source:` token; the join prints each closed
+one as `ESCALATED-CLOSED: <part> <entry>`. After the serial remediator appends to a record that
+has no party seat files (an adversarial, elicitation or gate repair), the lead runs
+`scripts/ai-dlc/join-remediator-shards.sh --escalations <the joined record> --sprint <N>`, which
+reads the `closes:` lines with no `party-mode/s<N>/` directory and prints every escalation still
+open; each open one is the lead's to adjudicate. A party record takes `--sources`, which does the
+same. The join also refuses a `repaired` MAJOR or CRITICAL whose claim sets part of the
+fix aside as outside the shard or not required without naming a hand-off, and, in every parts
+mode, a `repaired` entry with an edit whose `siblings:` field is absent or in none of its four
+forms, and a siblings fence whose control text is not in the file it names.
 
 After a join refusal naming a file `which no dispatched agent wrote`:
 
@@ -851,7 +874,8 @@ document in place. Otherwise, in this order:
    document is not the bytes that pass reviewed or when `sections/` already exists.
 2. **Parts.** Partition the findings by their `sections:` line. A finding citing one section goes
    to that section's shard; a finding citing two or more goes to ONE serial remediator after
-   assembly (step 4). Each shard's brief carries `shard: <ordinal>/<K> <heading>`, the full path of
+   assembly (step 4), which is dispatched as "Every escalated entry reaches the serial
+   remediator" says, not only for such a finding. Each shard's brief carries `shard: <ordinal>/<K> <heading>`, the full path of
    its section file, that part's first-line offset from the map (a finding's document line `L` is
    line `L - first + 1` of the section file), and the part path `<that dir>/<ordinal>.md`. A shard
    edits ONLY its section file, never the document, and every `edit:` line cites that section
@@ -889,7 +913,8 @@ in this order:
    its one shard edits the file itself, and its expected bytes are that stem's sha.
 2. **Parts.** Partition the findings by their `sections:` line. A finding citing one part goes
    to that part's shard; a finding citing two or more goes to ONE serial remediator after
-   assembly. A section part's shard edits ONLY its section file, as "Shard by section" step 2
+   assembly, which is dispatched as "Every escalated entry reaches the serial remediator"
+   says, not only for such a finding. A section part's shard edits ONLY its section file, as "Shard by section" step 2
    describes. A whole-file part's shard edits its file in place. The SPEC part's shard never
    edits `SPEC.md` by hand: it appends a `(decision)` entry to the spec's `.memlog.md` and
    re-renders `SPEC.md` through `bmad-spec` (the amendment procedure's item 2 path, "Divergence
@@ -912,14 +937,21 @@ in this order:
    parts AND every finding whose fix lies in PRD text outside the in-scope parts — a part shard
    never edits text outside its section file, so such a finding has no other owner.
 
-The party and elicitation repairs run this same procedure with `--pass party` and
-`--pass elicitation`, under the shard dirs and record names "Validation cycle" items 1 and 2
-give them. The requirements gate's FAILURE repair runs it with `--artifact gate-<type> --pass <M>`
+The party and elicitation repairs run this same procedure, under the shard dirs and record
+names "Validation cycle" items 1 and 2 give them. For the requirements subject they take
+`--pass party` and `--pass elicitation`. On the files and sections axes they take
+`--artifact <artifact>-party --pass 1` and `--artifact <artifact>-elicitation --pass 1`: outside
+the subject the join reads `--pass` only as a pass number, and refuses `--pass elicitation`
+there. The requirements gate's FAILURE repair runs it with `--artifact gate-<type> --pass <M>`
 (`<type>` the gate type, `<M>` numeric), splitting into
 `s<N>/shards/gate-<type>-repair-p<M>/` and joining into `s<N>/gate-<type>-repair-p<M>.md`, the
 name the non-subject gate caller writes; `--pass party`, `--pass elicitation` and `--artifact`
-are never combined. Those record names sit outside `*-repair-p<M>.md`, so neither can stand in for an
-adversarial pass's repair record.
+are never combined. The subject's `requirements-party-repair.md` and
+`requirements-elicitation-repair.md` sit outside `*-repair-p<M>.md`. The files- and
+sections-axis records (`<artifact>-party-repair-p1.md`, `<artifact>-elicitation-repair-p1.md`)
+and the gate record sit inside that glob; arm H of `validate-adversarial-convergence.sh` reads a
+record whose name does not carry the series' stem as another repair's (a party or elicitation
+round, or a gate repair), so none of them stands in for an adversarial pass's repair record.
 
 It writes the repaired artifact in place plus a **repair record** (`<M>` = the pass repaired) at
 `_bmad-output/planning-artifacts/s<N>/<artifact>-repair-p<M>.md` when the caller is an
@@ -948,6 +980,19 @@ The second line applies to a section-sharded repair and names the ASSEMBLED docu
 command that reads its own file measured a section copy while the shard ran, so only the
 assembled bytes answer, and a line-number self-reference is falsified by any edit above it.
 Run it after the join and after the serial cross-section remediator.
+
+**Moved cites are the serial remediator's, after the join.** A `<file>:<n>` cite into a region a
+shard's edit shifted cannot be checked inside that shard: a section shard sees only its copy.
+The serial remediator re-reads every cite into each edited file AFTER the join or assembly,
+before these validators run, and repairs any that moved as its own entry. It also owns the
+cross-file sibling grep: a shard's siblings fence greps only its own files (a concurrent shard
+fixing a copy elsewhere would turn it stale), and a section or subject shard writes `siblings:
+n/a (section shard; ...)`, so for every `repaired` shard entry with an edit, and every
+escalated sibling line, the serial remediator runs `grep -rn -F '<the text that entry
+replaced>'` over the ASSEMBLED files (`s<N>/stories` and `s<N>/epics`, or the document), never the
+slot, `shards/` or a record, and records it as its own entry with a `siblings:` fence. That is
+why SERIAL-REQUIRED dispatches it: a round whose every finding stayed inside one shard still
+owes this grep.
 
 Exit 1 from `validate-artifact-derivations.sh` is a repair that falsified a
 derivation — most often not its own, but one

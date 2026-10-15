@@ -161,6 +161,50 @@ p_partyx1 "$JOIN" && ok "PS11: the only cited seat (architect-1) unmarked, its s
 p_partyx4 "$JOIN" && ok "PS12: an earlier step's pre-marker seat cited beside marked architecture seats -> JOINED (its step has no marker)" \
   || bad "PS12: a pre-marker seat of another step was refused (rc=$RC): $(cat "$JO")"
 
+# ---- the entry contract (BL-508, BL-519). Each refusal has its ALLOW twin one property apart.
+p_sibtotal "$JOIN" && ok "EC1: every part omits siblings: (total omission) -> REFUSED, each repaired edit named, no PENDING (the era is the install, not the parts)" \
+  || bad "EC1: a part set omitting siblings: everywhere was not refused (rc=$RC): $(cat "$JO")"
+p_sibok "$JOIN" && ok "EC2: every part carries siblings: -> JOINED, no PENDING, each escalated entry printed by part, ESCALATED-COUNT: 3 and SERIAL-REQUIRED: 3 (the edit: n/a repairs not counted)" \
+  || bad "EC2: a post-rule part set did not join, or its escalated entries were not printed (rc=$RC): $(cat "$JO")"
+p_sibmissing "$JOIN" && ok "EC3: EC2 one property apart, part 03 a repaired MAJOR with an edit and no siblings: -> REFUSED by name, nothing written" \
+  || bad "EC3: a repaired edit with no siblings: beside post-rule parts was not refused (rc=$RC): $(cat "$JO")"
+p_setaside "$JOIN" && ok "EC4: graph's s318 sm-05 F-3 entry, a repaired MAJOR set aside as outside this shard and not required -> REFUSED at its heading" \
+  || bad "EC4: a set-aside MAJOR was not refused (rc=$RC): $(cat "$JO")"
+p_handoff "$JOIN" && ok "EC5: the same entry split, the remainder escalated under the same source -> JOINED, ESCALATED: 01.md ... (remainder), ESCALATED-COUNT: 1" \
+  || bad "EC5: a handed-off split pair did not join with its escalated line (rc=$RC): $(cat "$JO")"
+p_srcsetaside "$JOIN" && ok "EC6: --sources on a record whose resolving entry sets a MAJOR aside -> rc 2, the set-aside refusal named (PS7 is its ALLOW twin)" \
+  || bad "EC6: --sources did not apply the set-aside arm (rc=$RC): $(cat "$JO")"
+p_srcpending "$JOIN" && ok "EC7: --sources over a pre-rule record (a repaired edit, no siblings: anywhere) -> rc 0, one PENDING line" \
+  || bad "EC7: a pre-rule --sources record did not pass with one PENDING line (rc=$RC): $(cat "$JO")"
+p_srcera "$JOIN" && ok "EC8: --sources positional era: pre-rule entry, carrier, omitting entry -> rc 2 naming only the entry after the carrier" \
+  || bad "EC8: the --sources positional era did not bind from its first carrier (rc=$RC): $(cat "$JO")"
+p_srcclosed "$JOIN" && ok "EC9: --sources: an escalated entry a later repaired entry names on closes: is printed ESCALATED-CLOSED; the open one and the split remainder are printed, count 2, no SERIAL-REQUIRED" \
+  || bad "EC9: --sources escalated-entry closure answered wrongly (rc=$RC): $(cat "$JO")"
+p_srchalf "$JOIN" && ok "EC12: --sources over a joined record: a LATER half-repair under the same source token in another part, and a closes: written BEFORE the escalation -> the escalation stays open (graph s318 dev-05#F-3)" \
+  || bad "EC12: a token-sharing half repair or an earlier closes: closed an escalation (rc=$RC): $(cat "$JO")"
+p_srccross "$JOIN" && ok "EC13: --sources: one heading escalated in 01.md AND 02.md, closes: names 01.md -> 01.md CLOSED, 02.md open, count 1" \
+  || bad "EC13: a closes: line did not close exactly the part it names (rc=$RC): $(cat "$JO")"
+p_sibdoc "$JOIN" && ok "EC14: --document, one section part omitting siblings: -> REFUSED naming it with the pre-install re-dispatch remedy, the document not assembled" \
+  || bad "EC14: a --document part omitting siblings: was not refused (rc=$RC): $(cat "$JO")"
+p_sibforms "$JOIN" && ok "EC15: five wrong siblings spellings (checked, an empty value with no fence, a derived fence, a text fence missing its grep -rn, a control count of 0) -> each REFUSED as none of the four forms" \
+  || bad "EC15: a wrong siblings spelling was accepted, or refused under another reason (rc=$RC): $(cat "$JO")"
+p_sibprose "$JOIN" && ok "EC16: no siblings: field, the word sibling in the claim prose -> REFUSED as a missing field (the reader keys on the field, never the word)" \
+  || bad "EC16: an entry mentioning a sibling only in prose was not refused as NOSIB (rc=$RC): $(cat "$JO")"
+p_sibnever "$JOIN" && ok "EC17: a text fence whose control text was never written to the file -> REFUSED at the join, 0 times" \
+  || bad "EC17: a siblings control naming absent text was not refused (rc=$RC): $(cat "$JO")"
+p_sibstale "$JOIN" && ok "EC18: the joined fence, its text later rewritten -> the slot-wide derivations re-run reads no STALE; the same fence re-labelled derived reads STALE" \
+  || bad "EC18: the siblings fence is replayed by the derivations validator, or the derived control did not go stale (rc=$RC dv=${DV_RC:-}): $(cat "$JO" "$SB_W/dv.out" 2>/dev/null | head -20)"
+p_escpath "$JOIN" && ok "EC19: an escalated entry naming the sibling's path on edit:, beside the shard that repairs that file -> JOINED (the escalated path is no citation)" \
+  || bad "EC19: an escalated entry's edit: path collided with another shard's citation (rc=$RC): $(cat "$JO")"
+p_escopen "$JOIN" && ok "EC20: --escalations, no seat dir, one escalation open and one closed -> rc 0, the open one reported, ESCALATED-COUNT: 1, no SERIAL-REQUIRED" \
+  || bad "EC20: --escalations did not report an open escalation on a non-party record (rc=$RC): $(cat "$JO")"
+p_escclosed "$JOIN" && ok "EC21: --escalations, every escalation closed and a shard fence whose text the serial pass rewrote -> rc 0, ESCALATED-COUNT: 0" \
+  || bad "EC21: --escalations did not pass a fully closed record (rc=$RC): $(cat "$JO")"
+p_setasideshard "$JOIN" && ok "EC10: a repaired MAJOR set aside only as 'outside this shard' -> REFUSED (the regex's first half)" \
+  || bad "EC10: an 'outside this shard' set-aside was not refused (rc=$RC): $(cat "$JO")"
+p_setasidenr "$JOIN" && ok "EC11: a repaired MAJOR set aside only as 'not required' -> REFUSED (the regex's second half)" \
+  || bad "EC11: a 'not required' set-aside was not refused (rc=$RC): $(cat "$JO")"
+
 # R1: the role file the remediator is bound to teaches the write tool and the citation form. Walked
 # up from this fixture in both layouts; install copies team-roles/ verbatim, so no render exists.
 ROLE=""
