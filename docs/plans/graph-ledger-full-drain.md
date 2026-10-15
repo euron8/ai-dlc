@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 350..414. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 356..456. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,111 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 230 SHIPPED `v0.784.0` (`d4880724`, #1137), `v0.785.0` (`0f7e0e0c`, #1138) AND `v0.786.0` (`4aa734c4`,
+#1139): NINE ENTRIES CLOSED, FOUR OF GRAPH'S FIVE SPRINT-318 CANDIDATES CLOSED UPSTREAM. THIS CLOSE ITSELF IS HELD, NOT
+MERGED: IT SITS ON ORIGIN AS `b230-close` BY OPERATOR RULING, AND LANDS ONLY AFTER `b230-bl510` HAS LANDED.**
+Batch 229's block below is history: this block replaces its delivery gap. Started by peer ai-dlc-7d's one-liner at
+`origin/main` `11ae360d` (`VERSION` 0.783.0); graph-2e was live and was never messaged. The operator asked for a handoff
+to a fresh session because this one's context was deep.
+- **FIRST, BEFORE THE SWEEP: THE ORDER THE HELD WORK LANDS IN.** You are reading this block on branch `b230-close`, not on
+  `main`, unless the steps below are already done; check `git log origin/main --oneline -3` for a `batch 230 close`
+  subject. If it is absent:
+  1. Land `b230-bl510` as `0.787.0` (its owed tip adversary, then a rebase onto main; expect a conflict in
+     `core/skills/ai-dlc/steps/implementation.md`, where a §6 bullet was added). The C5(a) rotator may ride the same
+     release (below).
+  2. Rebase `b230-close` onto that main. It rotated nine entries out of `docs/backlog.md`, so resolve that file by
+     content. Add BL-510's `**LANDED (v0.787.0, verified <squash sha>).**` (and BL-523's if C5(a) rode along), re-run
+     `scripts/backlog-rotate.sh --check` then `--apply`, then `bash scripts/validate-backlog-receipts.sh`.
+  3. Push, merge, and verify the close; then continue from action 1.
+  **Why the close is held.** With the nine entries rotated, BL-510 is the only live entry. Its receipt chains to
+  `probes/bl-510-bookkeeping.sh`, which exists only on `b230-bl510`, so on main it exits 127, scores OUT-OF-POPULATION,
+  and R2 fails with `ZERO scored receipts (entries 1, sh receipts 1, … out of population 1 …)`. The operator ruled to
+  hold the close rather than switch BL-510 to a manual receipt. Do not widen R2 to pass this state.
+- **Opening sweep** (at `11ae360d`): live 5, unfiled 5, worklist 0, TERMINAL 236, archive 359, 0 qualifying refs, every
+  control passing. Backlog 6 live and 513 archived; ledger md5 `8261b9ab…`; graph porcelain 7, with 0 under
+  `_bmad-output/ai-dlc-update/`. The five unfiled were graph's sprint-318 retro filings. Scope: those five plus the three
+  branches held by batch 229.
+- **Operator rulings, batch 230** (each binds its entry until the operator says otherwise):
+  - BL-508: ship and close as is.
+  - BL-512: the waiver check stays at adjudicator dispatch time.
+  - BL-510: the empty-heading arm is left out.
+  - BL-525: the pause gate gets an Explore-only carve-out; `ops` stays denied.
+  - BL-524 (Rule 11(a)): every option states its effects, and an option touching a locked value goes out unbadged.
+  - The close: hold it rather than give BL-510 a manual receipt, and hand off with it parked.
+- **`v0.784.0`**: BL-515 (a cap-rejected re-send is held until an agent of the session exits) and BL-512 (an
+  implementation-gate adjudicator is refused over a waiver Check 22 rejects); I125 binds the guard's
+  `_dg_shardable` to `SHARD_ROLES`. **Its CHANGELOG consumer note was wrong, and this close corrects it there and in
+  BL-512's archived body**: the guard judges only the snapshot's current `sprint_id` (`core/hooks/ai-dlc-dispatch-guard.sh`
+  ~695), so a prior sprint's rows never refuse a later adjudicator. The trigger is the current sprint's own shardable
+  `invalid-exception` rows: graph holds 3, 11 and 3 in S316, S317 and S318.
+- **`v0.785.0`**: BL-507 (a gate-1 re-review after rework is a sharded delta review that carries every prior finding;
+  `validate-carried-findings.sh`). The receipts validator gained a `DRIVER` class, and R2 now accepts an all-driver
+  ledger.
+- **`v0.786.0`**: BL-522, BL-524, BL-525 and BL-521 (`PC-S318-ARCHITECT-ROLE-…`, `PC-S318-OPERATOR-QUESTION-TEMPLATE-…`,
+  `PC-S318-PAUSE-GATE-…`, `PC-S318-QA-ROLE-…`; derive the full ids from the merge message), plus BL-508 and BL-519.
+  Rule 12 moved out of the resident block to make room for Rule 11's +729 bytes: two `escalations.md` pointers now sit
+  past the 20121-byte cut, at 20396 and 20589. That eviction was reviewed and accepted.
+- **HELD on origin, NOT shipped.** Each owes one tip adversary on its FINAL tip, then a rebase onto main. Derive
+  conflicting files with `comm -12`, never a list; resolve by content; for the read-set map keep the base side and
+  re-trace.
+  - `b230-bl510` at `d80af0c5`: BL-510's bookkeeping half. Arms: status-not-review, status-yaml-mismatch (implementation
+    view), status-missing, story-untracked and heading-demoted; plus `sprint-status.sh story-status --ref`. Gate-1's
+    false-positive set is 0 over 63 snapshots, with 3 true-positive refusals. Gate-2 is NOT wired: its false-positive
+    set is 2.
+  - `b230-c5a-rotate` at `f36fcd8c`: BL-523, the reader half of
+    `PC-S318-ROTATE-GATE-ADJUDICATION-SPRINT-FLAG-NEVER-MATCHES-NONCE-STYLE-SERIES-IDS`. The refusal keys on each series'
+    newest member and on promotion. Its scope narrowed when measured: on graph, `--sprint s318` names 4 files in 4
+    series, not the 12 first estimated. Hints with archives: 39 right, 0 wrong, 9 none; with no archive: 8, 0, 40.
+    Re-runs are idempotent. retro.md 5b pins a UTC confirm command. Expect a conflict in `process-rule-pins`. The release
+    carrying it names that PC id and says the writer half follows; the id is NOT closed by this half.
+- **C5(b), the writer half: contracted and adversaried, NOT built.** This is the contract, adversary findings folded in.
+  Cut it from `b230-c5a-rotate`, or from main after C5(a) lands. BL-523 exists only on that branch.
+  - Defect: nothing upstream prescribes `gate_series_id`. `_gate-procedures.md` names it 0 times against 6 for
+    `gate_nonce`. The adjudicator brief (~188-189) passes no series id, so the adjudicator invents one. Graph's s318
+    verdicts are all `<gate>-<TS>`, and s317 has 25 of 26 untagged. Every untagged series needs a hand `--series` move at
+    retro.
+  - Mint the id once per gate SERIES as `<gate_type>-s<N>-<TS>`. **Field order is load-bearing**, because the dispatch
+    guard's nonce regex is unanchored (~897). `<N>` comes from the `sprint_id` line of
+    `_bmad-output/pipeline-snapshot.md`, NOT from `sprint-status.sh sprint-id`, which returns N+1 once retro step 4a
+    closes the sprint, before the retro gate at 5c. `<TS>` is the series-entry time: the first nonce normally, the
+    reset time on a reset. Nothing parses it back out.
+  - Same-series rule: a re-dispatch while `gate-checkpoint.sh current` names a nonce of this gate type reuses that
+    nonce's verdict's `gate_series_id`, read BEFORE `open`; after `close`, the next dispatch starts a new series. Exempt
+    the id from "nothing carried forward". Pin four sites: `gate-validation.md` ~190, ~194-197 and ~3204-3208, and
+    `_gate-procedures.md` ~214-216. Gate Reset (~3230) is a third writer.
+  - Add `gate_series_id` to the adjudicator brief list and to shard briefs, because `--merge` refuses parts that
+    disagree. Say once that it is never passed to `gate-checkpoint.sh --nonce`.
+  - The schema example in `core/schemas/gate-adjudication-verdict.json` stays a placeholder naming the brief as the
+    source; add no `pattern:`. Add one hand-written sentence in `gate-adjudicator.md` prose (~145-151), and run
+    `core/scripts/sync-taught-schema.sh --check`. Point the rotator header at the owner sentence (the old ~420 is now
+    ~709).
+  - Carrier: a per-pass arm in `validate-gate-adjudication.sh` beside ~1516, with a mutant. It requires a `<gate_type>-`
+    prefix, an `-s<digits>-` field, and a trailing timestamp no later than the nonce. Add `process-rule-pins` rows.
+  - Before building, the contract walk is owed on graph's real sprints, read only: s318 story 2.4 implementation p1 to
+    p2, one s317 planning gate, and one reset gate if any exists.
+- **The consumer pull runbook** `docs/plans/graph-pull-0781-to-0787.md` lands with this close. It was rehearsed from the
+  installed 0.781.0 against the 0.786.0 range: SELF-UPDATE-DEFER, 72 rows, 3 BOTH-CHANGED (`dev.md`, `qa.md`,
+  `deploy-validate.md`), 27 HARD-* rows to adjudicate, and 0 of 129 series changed under the convergence validator. It
+  STOPs pending a re-rehearsal after 0.787.0. Action 7 holds the Check 22 waiver shape and action 8 the rotator
+  `--series` steps. The four 0.786.0 ids close as `ADOPTED UPSTREAM (v0.786.0, verified <date>)`. It is ready, not
+  authorized: the pull is the operator's.
+- **graph delivery**: installed 0.781.0 against `VERSION` 0.786.0, five releases behind. Action 7's second test reads
+  YES (the rotator refusal, the guard's sprint rows, and a live but STOPped runbook).
+- **Unfixed, recorded**:
+  - The DAR text in `dev.md` ~166 contradicts `implementation.md` ~377-390.
+  - The derivations validator does not enforce the BEGIN-only `awk` ban.
+  - A pin cannot see text appended after an opt-in sentence.
+  - The updater's reconcile questions are out of BL-524's scope and still carry the badge.
+  - BL-510's gate-2 false-positive set is 2, which is why gate-2 is unwired.
+  - R2's all-already-passing arm (`R2_ALLPASS`) is looser than its all-manual sibling.
+- **Process facts**: 0.785.0's merge shared a parallel block with a `--no-verify` branch delete. The advisor gate denied
+  the merge, the delete ran anyway, and the PR closed; it was recovered by re-pushing the branch and reopening.
+  `tool-hazards.md` now says so beside the parallel-block rule. 0.786.0's gate went green on its fourth push: an I118
+  read-set gap, the mutants harness's undeclared dispatch guard, and `FORK_BUDGET` 3355 -> 3363 (measured base 3353, tip
+  3357; I79 grew 113 -> 118 with Rule 11).
+- **Net for the batch**: 9 entries closed (BL-507, 508, 512, 515, 519, 521, 522, 524, 525); 4 filed (BL-521, 522, 524,
+  525); net -5 once the close lands; 9 entries move to `docs/backlog.archive.md`. BL-510 stays live. BL-523 is filed on `b230-c5a-rotate` only.
 
 **BATCH 229 SHIPPED `v0.782.0` (`6fe903b6`, #1134) AND `v0.783.0` (`f621fd36`, #1135): EIGHT OF THE FOURTEEN
 s317-s318 EFFICIENCY ENTRIES CLOSED, BL-510's EVIDENCE HALF SHIPPED, AND THREE BUILT BRANCHES ARE HELD ON ORIGIN FOR THE
@@ -247,107 +352,6 @@ below is history: this block replaces its delivery gap. Handed the plan by ai-dl
   `87f3419f…` -> `e8af0344…` through graph's own #1218; this session wrote nothing there.
 
 Net for the batch: closed 1 (by graph's pull), filed 0. The backlog stays declared empty.
-
-**BATCH 226 SHIPPED `v0.780.0` (`eedbb415`, #1121), A BOOTSTRAPPING RELEASE (`ledger-reverify.sh`): A CANDIDATE ID
-CONTAINING `.` OR `_` NOW REACHES THE UPSTREAM-NAMING JOIN.** Batch 225's block below is history: this block replaces
-its delivery gap. Handed the plan by ai-dlc-18 at `origin/main` `47d5fcae` (`VERSION` 0.779.0); graph-a4 was live and
-never messaged.
-- **Opening sweep** (at `47d5fcae`): live 1, unfiled 0, worklist 0, DISCHARGED 1 (`PC-S317-3.2-DERIVATION-HOOK-CWD`,
-  oldest naming release 0.773.0), invisible 0, TERMINAL 233, archive 356, 5 qualifying refs, every control passing;
-  backlog 0 live, 501 archived, one `DECLARED-EMPTY` row. graph carried no uncommitted filing (414 ids on every ref
-  ahead of graph `main` and in its working tree, all present on `main`; seeded-id detector control 0 -> 1). The close
-  sweep at `eedbb415` reads the same except 7 qualifying refs (graph's `0.779.0-reconcile` and `self-update-0.779.0`
-  branches joined the set).
-- **Why that candidate never closed.** graph's 0.773.0 and 0.777.0 reconcile reports carry no row for it, while both
-  siblings named by the same release commit `2bdb3a29` closed. Two causes, both measured on a scratch clone:
-  `named_absorbed` and `named_ambiguous` opened with a local `[A-Z0-9-]` guard, so an id carrying `.` got no
-  `NAMED-UPSTREAM` row; and graph's receipt is pinned to `a304562b` (0.772.0, pre-fix) and a literal DIST path, so it
-  reads STILL-LIVE at every ref, and `emit-report.sh` hides STILL-LIVE rows.
-- **`v0.780.0`**: both guards admit a label only when it equals its own `ledger_entry_id()` (lib.sh), behind a
-  fork-free `PC-*|BL-*` refusal; widening the class instead was refused by the contract adversary (a receipted prose
-  label `validate-ci-gates.sh` read `NAMED-UPSTREAM`). The prefix boundary in the prefix walks, `named_cited_filter`
-  and `named_sibling` no longer reads `_` or an id-continuing `.` as a boundary (a full stop still ends it). The
-  `Not-discharged:` grammar takes the shared class in the engine and `validate-release-version.sh` arm F. An `sh`
-  `CLOSE-CANDIDATE` whose receipt already did not reproduce at base no longer offers `v<theirs>`: it names a plain
-  `NAMED-UPSTREAM` row's commits, else says to find the release; step 8 routes the close there. Two tip adversaries
-  found four DEFECTs (a naming sha leaking to the next entry, cited/docs shas offered as the absorbing one, a vacuous
-  label-keyed reset, one CHANGELOG word); all fixed in the release. Three gates; the last green 22 of 22, all eight
-  `ledger-reverify*` and `release-version-triple` fixtures `ok` by name.
-- **Measured on a graph clone** (base 2819e2dc, theirs 47d5fcae): the fixed engine adds exactly one row,
-  `NAMED-UPSTREAM PC-S317-3.2-DERIVATION-HOOK-CWD` (2bdb3a29), 9 -> 10; archive with closes stripped: 292 -> 294
-  naming rows, both newly visible ids real, none refused. Four cells for that id: the engine fix adds the
-  `NAMED-UPSTREAM` row whatever the receipt; repointing the receipt at `"$DIST"`/`"${THEIRS}"` yields
-  `CLOSE-CANDIDATE` under either engine; `ledger-rotate.sh` archives it in no cell until the entry carries an
-  `ADOPTED UPSTREAM` annotation. The correct annotation is v0.773.0, which the 0.780.0 close detail now says.
-- **Cost**: loaded `ledger-reverify-shard-mutants` 174s -> 234s at the last gate (257s at the second). Its `run.sh` is
-  byte-identical to 0.779.0's but it builds trees from `ledger-reverify/run.sh`, so the new id-class unit reaches it.
-  Shards a-d read 403/386/335/359s against 532/607/538/549s before.
-- **graph delivery**: graph pulled 0.779.0 (`2bc435f26`, #1216); stamp 0.779.0 (`47d5fcae`) committed on its
-  `ai-dlc/carry-over/s318-artifact-consolidation` branch against `VERSION` 0.780.0, one release behind. The range
-  carries a BOOTSTRAPPING file (`ledger-reverify.sh`) and the update `SKILL.md`; `preclassify.sh` and `apply.sh` are
-  unchanged and no `core/scripts/` file changed, so graph's `self-update-gate.sh` reads `SELF-UPDATE-OK` (its no-fix
-  control read OK too, so that shows the gate permits the self-update, not that it could defer). graph's installed
-  `validate-layer-entries.sh` is byte-identical (`cmp -s` 0), so the differential cannot discriminate. Discharged and
-  awaiting graph's own close: `PC-S317-3.2-DERIVATION-HOOK-CWD`, which needs the receipt repointed and the entry
-  annotated `ADOPTED UPSTREAM (v0.773.0, …)`. The pull is the operator's.
-- **graph boundary**: ledger md5 `87f3419f…` at the opening and the close. Porcelain 142 at the opening, 46 at the
-  close, all graph's own pipeline and self-update state. Nothing was written there.
-- **Process facts**: every spawned worktree was removed and every batch branch deleted by name.
-
-Net for the batch: closed 0, filed 0. The backlog stays declared empty; the candidate's fix is attributed to 0.773.0.
-
-**BATCH 225 SHIPPED `v0.777.0` (`2819e2dc`, #1117), `v0.778.0` (`94573677`, #1118) AND `v0.779.0` (`6e9695f4`,
-#1119), CLOSED BL-497, AND LEFT `docs/backlog.md` DECLARED EMPTY — NO LIVE ENTRY, FOR THE FIRST TIME IN 533
-COMMITS.** Batch 224's block below is history: this block replaces its owed list and its delivery gap. Handed the plan by
-ai-dlc-d5 at `origin/main` `485b38a0` (`VERSION` 0.776.0); graph-8f was live and never messaged.
-- **Opening sweep** (at `485b38a0`): live 3, unfiled 0, worklist 0, DISCHARGED 3, invisible 0, TERMINAL 231, archive
-  354, 2 qualifying refs, every control passing. graph carried no uncommitted filing.
-- **graph pulled 0.777.0 mid-batch** (its own reconcile commit `3a22994df`, 13:20, branch
-  `ai-dlc-update/0.777.0-reconcile-20261012T170501Z`), which archived `PC-S317-PM-ROLE-TAGS-…` and
-  `PC-S317-PVC-TEMPLATE-…`. Re-swept at `2819e2dc`: live 1, unfiled 0, worklist 0, DISCHARGED 1
-  (`PC-S317-3.2-DERIVATION-HOOK-CWD`, oldest naming release 0.773.0), TERMINAL 233, archive 356, 5 qualifying refs.
-  The ledger md5 moved `9828b7e7…` -> `87f3419f…` by graph's own commit. **The same pull archived both ids named at
-  `485b38a0` and left `PC-S317-3.2-DERIVATION-HOOK-CWD` live**, though `2bdb3a29` (0.773.0) names it and graph is now
-  three releases past that: one pull, two closed, one not.
-- **`v0.777.0`**: batch 224's four BL-497 branches merged onto `origin/main` without the predicted conflict (both
-  sides' `readset-skip/run.sh` lines kept). Gate green, 22 of 22, six changed fixtures `ok` by name.
-- **BL-497's census over the 166 unmeasured declared fixtures** (a `file://` clone at `2819e2dc`, 12 jobs): 157 EQUAL,
-  7 LOW-RES, 2 FLAKY, 0 MISMATCH, 0 REFUSED. The operator paused it at 99 of 166 (`kill -STOP` of its process group)
-  and resumed it; one FLAKY row was a fixture frozen mid-run and read EQUAL alone. The six earlier MISMATCH rows read
-  EQUAL at the fixes. 0 of 240 declared fixtures name an absolute repo path.
-- **`v0.778.0`**: `readset-skip-b` exposed two defects. The `oldtrap` mutant was scored on a race leaking about 1% per
-  launch (its comment said 17.5%), and the shipped read-set watchdog leaked its sleep under load (16 of 4800 fast
-  traces): its TERM trap ran before `jobs -p` named the sleep, or the stop landed during `wait` and no trap ran. The
-  watchdog now has no trap, and the trace subshell sweeps its own group after the reap (0 of 1800). Mutants
-  `sleeptrap` and `nosweep` replace `termtrap` and `oldtrap`.
-- **`v0.779.0`** (operator's choice among three on a direct question): BL-497 rotated in the release commit, and the
-  backlog is DECLARED EMPTY. `backlog-reverify.sh` owns the predicate (zero parsed entries, the marker as the last
-  non-blank line, no `BL-<n>` token anywhere) and emits one `DECLARED-EMPTY` row; B1, B1b, R2 and the rotator consume
-  it. The rotator is the marker's only writer, and refuses when the moved set holds an entry-like id line the parser
-  cannot read. A contract adversary returned three BLOCKERs (all folded before the build), a tip adversary one DEFECT
-  (fixed in the release). The first gate failed only on plan shape: `hermetic-fixtures-poc.md` cited
-  BL-470 by a line of `docs/backlog.md` the rotation removed; repointed to the archive.
-- **Filing a new entry**: delete the marker line, then write the `## BL-` entry. B1b fails a marker left beside a live
-  entry.
-- **Withdrawn before filing**: a saved-pid-race entry drafted for 0.778.0. 0.778.0 removed the trap that race lived in.
-- **Unmeasured, recorded**: the `env -i` effect on the saved-pid-only watchdog variant (0 of 100 under `env -i`, 2-4 of
-  20 in a login environment) is unexplained, and the trap it concerned is gone. The plain side of the census reads a
-  correct empty ledger with CRLF line endings or a trailing space on the marker as not declared (the safe direction).
-- **graph delivery**: stamp 0.777.0 against `VERSION` 0.779.0, two releases behind. No bootstrapping file in the range
-  (0 of `preclassify.sh`, `apply.sh`, `ledger-reverify.sh`, `ai-dlc-update/`). The range ships `core/git-hooks/pre-push`
-  and `core/fixtures/readset-skip/run.sh`; the backlog scripts and their three fixtures are distribution-only.
-  graph's installed `validate-layer-entries.sh` is byte-identical to the distribution's (`cmp -s` 0), so the
-  differential cannot discriminate, and a hook fix for a load-dependent leak has no transient for it to fire on.
-  Discharged and awaiting graph's own close: `PC-S317-3.2-DERIVATION-HOOK-CWD`. The pull is the operator's.
-- **graph boundary**: ledger md5 `9828b7e7…` at the opening, `87f3419f…` after graph's own pull. Porcelain 27 at the
-  opening and 140 at the close, all graph's own pipeline state, 0 under `_bmad-output/ai-dlc-update/`. Nothing was
-  written there.
-- **Process facts**: every spawned worktree was removed. Box load during the census was the census itself (203
-  processes on 18 cores), not a peer.
-
-Net for the batch: closed 1 entry (BL-497), filed 0; net -1. The backlog has no live entry.
-
-Batch 224's block below is history: batch 225's block replaces its owed list and its delivery gap.
 
 ### Derive the state; do not trust the numbers below
 

@@ -67,7 +67,8 @@ having barely started, one agent's finished work was redone. Block on the condit
 
 **A CLAIM about a call's output must not share a parallel block with the call** — both dispatch
 together, so the claim predates the result. Measured: "a `find` returns nothing" was sent in the
-same block as that find, which returned the file.
+same block as that find, which returned the file. Cleanup presupposing an action's success is the
+same hazard: a branch delete sent beside its merge ran though the merge was denied.
 
 **An untracked file is not a missing file.** `git ls-files`, `git show HEAD:` and any tree grep
 cannot see one, and the clean run reads as a real absence. Measured: three delegated deliverables
