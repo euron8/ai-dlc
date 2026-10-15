@@ -17,7 +17,9 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # driving `ai-dlc-gate-remediation-guard.sh` with a PreToolUse payload carrying a harness-shaped
 # `agent_id` (17 hex characters, the shape the reference consumer's `.verdict-writes.jsonl`
 # carries). No row is hand-written, so a change to what the hook records is a change this fixture
-# sees. The PARTS carry no agent id at all: the join keys a part on the files its `edit:` lines
+# sees. The one exception is AL2, which strips the three evidence keys from real rows with
+# `jq del(...)` to build a pre-upgrade ledger; the re-run arms pin the hook's clock through a
+# `date` shim and still let the hook write every row. The PARTS carry no agent id at all: the join keys a part on the files its `edit:` lines
 # cite, never on an id a model reports about itself.
 #
 # SEEDS ARE REAL CONSUMER BYTES, TRIMMED. `seed.story-*.md` are the first 12 lines of three
@@ -67,6 +69,51 @@ if [ -f "$w2/_bmad-output/gate-adjudication/.verdict-writes.jsonl" ] \
 else
   bad "L3: a dispatched verdict write did not route to .verdict-writes.jsonl alone"
 fi
+
+# L4: the hook's three evidence keys, on both ledgers. A payload carrying tool_use_id and the parent
+# transcript_path -> the row carries that id and path; agent_transcript true exactly when
+# <transcript minus .jsonl>/subagents/agent-<id>.jsonl exists; a payload with no tool_use_id -> the key
+# present and EMPTY. The allow is unchanged: hook stdout and rc are byte-equal for the keyed and the
+# keyless payload of the same write. A function of the hook, so the HX mutants below score it.
+l4_check() { # <hook> -> 0 when every property holds; L4_MSG names what was read
+  local HOOK="$1" w tp L V l4 l4v want l4k l4n
+  w="$(new_world)"; tp="$w/projects/sess-9.jsonl"; mkdir -p "$w/projects/sess-9/subagents"
+  : > "$w/projects/sess-9/subagents/agent-$AG1.jsonl"
+  drive "$w" Edit "$w/$REL/$S21" "$AG1" toolu_L4A "$tp"
+  drive "$w" Edit "$w/$REL/$S22" "$AG2" toolu_L4B "$tp"
+  drive "$w" Edit "$w/$REL/$S31" "$AG3"
+  drive "$w" Write "$w/_bmad-output/gate-adjudication/story-20260811T193044Z.verdict.json" "$AG1" toolu_L4V "$tp"
+  L="$w/_bmad-output/planning-artifacts/.artifact-writes.jsonl"; V="$w/_bmad-output/gate-adjudication/.verdict-writes.jsonl"
+  l4="$(jq -rs '[.[] | [.agent_id, (.tool_use_id | tostring), (.transcript_path | tostring), (.agent_transcript | tostring)] | join(",")] | join(" ")' "$L" 2>/dev/null)"
+  l4v="$(jq -rs '[.[] | [(.tool_use_id | tostring), (.agent_transcript | tostring)] | join(",")] | join(" ")' "$V" 2>/dev/null)"
+  want="$AG1,toolu_L4A,$tp,true $AG2,toolu_L4B,$tp,false $AG3,,,false"
+  jq -nc --arg f "$w/$REL/$S21" --arg tp "$tp" --arg a "$AG1" '{session_id:"t", tool_name:"Edit", transcript_path:$tp, tool_use_id:"toolu_L4C", agent_id:$a, tool_input:{file_path:$f}}' > "$WORK/l4k.json"
+  jq -nc --arg f "$w/$REL/$S21" --arg a "$AG1" '{session_id:"t", tool_name:"Edit", transcript_path:"", agent_id:$a, tool_input:{file_path:$f}}' > "$WORK/l4n.json"
+  CLAUDE_PROJECT_DIR="$w" bash "$HOOK" < "$WORK/l4k.json" > "$WORK/l4k.out" 2>&1; l4k=$?
+  CLAUDE_PROJECT_DIR="$w" bash "$HOOK" < "$WORK/l4n.json" > "$WORK/l4n.out" 2>&1; l4n=$?
+  L4_MSG="rows [$l4] want [$want]; verdict row [$l4v] want [toolu_L4V,true]; hook rc keyed=$l4k keyless=$l4n; stdout equal: $(cmp -s "$WORK/l4k.out" "$WORK/l4n.out" && echo yes || echo no)"
+  [ "$l4" = "$want" ] && [ "$l4v" = "toolu_L4V,true" ] && [ "$l4k" -eq 0 ] && [ "$l4n" -eq 0 ] && cmp -s "$WORK/l4k.out" "$WORK/l4n.out"
+}
+if l4_check "$HOOK"; then
+  ok "L4: tool_use_id and transcript_path recorded from the payload on both ledgers, an absent id an EMPTY key, agent_transcript true only where the agent's own transcript exists; the allow byte-identical with and without the keys"
+else
+  bad "L4: $L4_MSG"
+fi
+# HX1/HX2: L4's failing direction, on copies of the hook. tool_use_id never read from the payload
+# (both ledgers), and agent_transcript never true -- each must turn L4 red.
+for hx in 'HX1|s/tool_use_id: (\.tool_use_id \/\/ "")/tool_use_id: ""/g|tool_use_id never read' \
+          'HX2|s/^    _rev_at=true$/    _rev_at=false/|agent_transcript never true'; do
+  _id="${hx%%|*}"; _r="${hx#*|}"; _e="${_r%%|*}"; _lab="${_r#*|}"
+  _hd="$(mktemp -d "$WORK/$_id.XXXXXX")" || exit 2
+  sed "$_e" "$HOOK" > "$_hd/ai-dlc-gate-remediation-guard.sh"
+  if cmp -s "$HOOK" "$_hd/ai-dlc-gate-remediation-guard.sh"; then
+    bad "$_id: FIXTURE STALE -- the hook mutation ($_lab) matched nothing; re-anchor it, never relax the assertion"
+  elif l4_check "$_hd/ai-dlc-gate-remediation-guard.sh"; then
+    bad "$_id $_lab: SURVIVED -- L4 holds against a hook that does not record the key"
+  else
+    ok "$_id $_lab: KILLED by [L4]"
+  fi
+done
 
 p_disjoint "$JOIN"  && ok "J1: three disjoint writers and three parts (real s305 repair blocks, no agent id) -> JOINED, 3 parts / 3 writers" \
   || bad "J1: a disjoint shard set did not join (rc=$RC): $(cat "$JO")"
@@ -204,6 +251,40 @@ p_setasideshard "$JOIN" && ok "EC10: a repaired MAJOR set aside only as 'outside
   || bad "EC10: an 'outside this shard' set-aside was not refused (rc=$RC): $(cat "$JO")"
 p_setasidenr "$JOIN" && ok "EC11: a repaired MAJOR set aside only as 'not required' -> REFUSED (the regex's second half)" \
   || bad "EC11: a 'not required' set-aside was not refused (rc=$RC): $(cat "$JO")"
+
+# ---- re-run of one part (--rerun <part>.md@<ISO>): graph's S319 shape, its refusals, and every mode.
+p_rrgraph "$JOIN" && ok "RR1: six sections, section 2 by its original writer, an orphan and the original again, then a NEW agent after S_P -> REFUSED without --rerun; JOINED with it, the rerun: line naming both superseded ids (3 rows), the outer window kept, 'in its window', '3 superseded rows'" \
+  || bad "RR1: the graph-shape re-run did not refuse-then-join as specified (rc=$RC): $(cat "$JO")"
+p_rrout "$JOIN" && ok "RR2: section 3's owner also wrote section 2 before S_P -> REFUSED, a superseded writer with a row outside the re-run part's files" \
+  || bad "RR2: a superseded writer that owns another section was not refused (rc=$RC): $(cat "$JO")"
+p_rrlate "$JOIN" && ok "RR3: the original still writing after S_P outside F_P -> REFUSED in both spellings (still writing, and outside the part's files)" \
+  || bad "RR3: a superseded writer writing after S_P outside F_P was not refused in both spellings (rc=$RC): $(cat "$JO")"
+p_rrlatein "$JOIN" && ok "RR4: the original still writing after S_P inside F_P, beside the new writer -> REFUSED with the new-id line" \
+  || bad "RR4: a superseded writer writing after S_P inside F_P was not refused by the new-id line (rc=$RC): $(cat "$JO")"
+p_rrsame "$JOIN" && ok "RR5: the same id both sides of S_P, the orphan before, no new writer -> REFUSED: the re-run is a NEW dispatch" \
+  || bad "RR5: a re-run by the superseded writer itself was not refused (rc=$RC): $(cat "$JO")"
+p_rrspan "$JOIN" && ok "RR6: the re-run writer also writes section 4 -> REFUSED, section 4 has two writers" \
+  || bad "RR6: a re-run writer writing another section was not refused (rc=$RC): $(cat "$JO")"
+p_rrargs "$JOIN" && ok "RR7: --rerun argument refusals -- an unknown part, a part named twice, a start outside the window, a malformed start, no @, a part citing no written file, and --rerun with --escalations" \
+  || bad "RR7: a --rerun argument refusal did not fire as named (rc=$RC): $(cat "$JO")"
+p_rrfiles "$JOIN" && ok "RR8: FILES mode -- story 2.1 re-run by a new agent -> REFUSED without --rerun, JOINED with it, its rerun: line and '1 superseded rows'" \
+  || bad "RR8: a files-mode re-run did not refuse-then-join (rc=$RC): $(cat "$JO")"
+p_rrsubj "$JOIN" && ok "RR9: SUBJECT mode -- one sectioned part re-run by a new agent -> REFUSED without --rerun, JOINED with it, 'in its window'" \
+  || bad "RR9: a subject-mode re-run did not refuse-then-join (rc=$RC): $(cat "$JO")"
+
+# ---- the alias rule: a no-transcript id whose tool_use_id is ONE assistant tool_use in another writer's transcript.
+p_alias "$JOIN" && ok "AL1: the orphan row's tool_use_id is one assistant tool_use in the other writer's transcript, the orphan has none -> JOINED, '1 alias rows', the alias: line in the record" \
+  || bad "AL1: a transcript-evidenced alias did not join (rc=$RC): $(cat "$JO")"
+p_alnokeys "$JOIN" && ok "AL2: AL1's ledger with the three keys stripped (pre-upgrade) -> REFUSED as before, no evidence line" \
+  || bad "AL2: a keyless ledger was not judged as before (rc=$RC): $(cat "$JO")"
+p_alresult "$JOIN" && ok "AL3: the id appears only inside a tool_result -> REFUSED, 'held by no writer's transcript'" \
+  || bad "AL3: an id quoted in a tool_result was read as a tool_use (rc=$RC): $(cat "$JO")"
+p_alown "$JOIN" && ok "AL4: the orphan has its own transcript -> REFUSED, the transcript named as existing" \
+  || bad "AL4: an agent with its own transcript was aliased (rc=$RC): $(cat "$JO")"
+p_alsecond "$JOIN" && ok "AL5: a genuine second remediator sharing the parent transcript_path -> REFUSED (a shared transcript_path is never evidence)" \
+  || bad "AL5: a second remediator sharing transcript_path was aliased (rc=$RC): $(cat "$JO")"
+p_alother "$JOIN" && ok "AL6: the orphan id has a second row in the file set -> REFUSED, '2 row(s)' named" \
+  || bad "AL6: an id with another row was aliased (rc=$RC): $(cat "$JO")"
 
 # R1: the role file the remediator is bound to teaches the write tool and the citation form. Walked
 # up from this fixture in both layouts; install copies team-roles/ verbatim, so no render exists.

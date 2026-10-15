@@ -202,24 +202,45 @@ fi
 # this file as the DECLARED set, and requires every one of them judged.
 # J2's world ALSO trips other refusals, so this mutant still exits 2 there; the kill is the
 # missing overlap SENTENCE, which is the only thing that names the defect to the lead.
-mutant "JX1 the >1-writer refusal removed" "overlap docoverlap sjspec2" \
+# rrgraph, rrfiles and rrsubj assert the overlap sentence on their no-rerun half, rrspan on the
+# re-run writer's second section, alnokeys on a keyless ledger.
+mutant "JX1 the >1-writer refusal removed" "overlap docoverlap sjspec2 rrgraph rrspan rrfiles rrsubj alnokeys" \
   'if [ -n "$OVERLAPS" ]; then' \
   'if false; then'
 mutant "JX2 the uncited-file refusal removed" "missing" \
   '      if (!(p in cov)) print "UNCITED\t" p "\t" wr[p]' \
   '      if (0) print "UNCITED\t" p "\t" wr[p]'
-mutant "JX3 the shards/ exclusion removed" "shardrow" \
-  '   | select($doc == "1" or ((.path | startswith($sh + "/")) | not))' \
-  '   | select(true)'
+# The shards/ filter is spelled twice since the re-run join: in ROWS and in the detailed DROWS read.
+# JX3 and JX4 revert BOTH, each anchored on the line after it that tells the two apart.
+SHF='| select($doc == "1" or ((.path | startswith($sh + "/")) | not))'
+SHF_ROWS='   | [.path, .agent_id]] | unique | .[] | @tsv'
+SHF_DROWS='     | [.path, .agent_id, .ts, (.session | d), (.tool_use_id | d), (.transcript_path | d),'
+mutant2 "JX3 the shards/ exclusion removed" "shardrow" \
+  "   $SHF
+$SHF_ROWS" \
+  "   | select(true)
+$SHF_ROWS" \
+  "     $SHF
+$SHF_DROWS" \
+  "     | select(true)
+$SHF_DROWS"
 # JX4 is the defect this mode exists to close: the files-mode filter applied in document mode drops
 # every section row, so the join sees no write at all.
 # partydoc is a document join too, and dies with the others. sjpartysrc does NOT: its subject keeps
 # whole-file part rows outside shards/, so the join still reaches the source check and refuses by name.
 # sibdoc (BL-508) dies too: with no section rows the join refuses on the empty ledger before its siblings arm.
-mutant "JX4 section rows dropped in document mode (the pre-BL-372 file set)" "docjoin docoverlap asmrefuse sjoin sjnames sjgate sjnest partydoc sibdoc" \
-  '   | select($doc == "1" or ((.path | startswith($sh + "/")) | not))' \
-  '   | select((.path | startswith($sh + "/")) | not)'
-mutant "JX5 the assembly skipped" "docjoin asmrefuse partydoc" \
+# The document- and subject-mode re-run arms die too: with no section rows nothing is re-run.
+mutant2 "JX4 section rows dropped in document mode (the pre-BL-372 file set)" "docjoin docoverlap asmrefuse sjoin sjnames sjgate sjnest partydoc sibdoc rrgraph rrout rrlate rrlatein rrsame rrspan rrsubj" \
+  "   $SHF
+$SHF_ROWS" \
+  "   | select((.path | startswith(\$sh + \"/\")) | not)
+$SHF_ROWS" \
+  "     $SHF
+$SHF_DROWS" \
+  "     | select((.path | startswith(\$sh + \"/\")) | not)
+$SHF_DROWS"
+# rrgraph asserts the re-run writer's edit reached the assembled document.
+mutant "JX5 the assembly skipped" "docjoin asmrefuse partydoc rrgraph" \
   '  ASM_LINE="$(bash "$PARTITION" --assemble "$SHARD_DIR" 2>&1)" || {' \
   '  ASM_LINE="skipped" || {'
 mutant "JX6 the assembler's refusal ignored" "asmrefuse" \
@@ -464,6 +485,55 @@ mutant "JX54 an escalated entry's edit: path counted as a shard citation" "escpa
 mutant "JX55 --escalations runs as --sources (needs a seat dir)" "escopen escclosed" \
   '    --escalations) SRC_REC="${2:-}"; SRCMODE=2; shift 2 ;;' \
   '    --escalations) SRC_REC="${2:-}"; SRCMODE=1; shift 2 ;;'
+# ---- the re-run window (--rerun <part>.md@<ISO>). Expected sets are the measured kills; the
+# re-run predicates' ALLOW twins (rrgraph, rrfiles, rrsubj) run in the same battery. JX59 is killed
+# only by rrlate's second spelling: outside F_P the OUT line fires beside LATE, so no verdict moves.
+# JX58 kills rrlate too, for the same reason. JX60 kills rrsame on VERDICT: narrowed, the same id
+# leaves one writer and the mutant joins. JX63 kills alresult too: a shared path aliases it.
+RR_DROP='          if ((f in fp) && t < S[fp[f]]) {
+            p = fp[f]; drop[i] = 1; sw[p, a] = 1'
+# JX56: no narrowing -- nothing is superseded, so the re-run part keeps every writer.
+mutant "JX56 --rerun narrows nothing" "rrgraph rrout rrlate rrlatein rrsame rrfiles rrsubj" \
+  "$RR_DROP" \
+  '          if (0) {
+            p = fp[f]; drop[i] = 1; sw[p, a] = 1'
+# JX57: S_P applied to every part's files, not only to the re-run part's.
+mutant "JX57 the re-run start applied to every part" "rrgraph rrspan rrfiles rrsubj" \
+  "$RR_DROP" \
+  '          if (t < S[PP[1]]) {
+            p = PP[1]; drop[i] = 1; sw[p, a] = 1'
+mutant "JX58 refusal 3 removed (a superseded writer outside F_P)" "rrout rrlate" \
+  '        OUT)  refuse' \
+  '        OUT)  :'
+mutant "JX59 refusal 4 removed (a superseded writer still writing)" "rrlate" \
+  '        LATE) refuse' \
+  '        LATE) :'
+mutant "JX60 the new-id rule removed" "rrlatein rrsame" \
+  '        SAME) refuse' \
+  '        SAME) :'
+# ---- the alias rule. Clause 2 is two layers -- the recorded agent_transcript and the join-time
+# file test -- and both are reverted.
+mutant2 "JX61 alias clause 2 dropped (A may have a transcript)" "alown" \
+  '[ "$_tuid" != "-" ] && [ "$_atr" = false ] && [ "$_tpath" != "-" ]' \
+  '[ "$_tuid" != "-" ] && [ "$_tpath" != "-" ]' \
+  '      [ -e "${_sd}/subagents/agent-${_A}.jsonl" ] && continue' \
+  '      :'
+# JX62: clause 3 by grep -- any line of B's transcript carrying the id, a tool_result included,
+# read as one Edit of the file, so the later name and path checks still pass.
+mutant "JX62 alias clause 3 by grep, not a parsed tool_use" "alresult" \
+  '        _blk="$(tu_blocks "${_sd}/subagents/agent-${_B}.jsonl" "$_tuid")"' \
+  '        _blk="$(grep -qF -- "$_tuid" "${_sd}/subagents/agent-${_B}.jsonl" 2>/dev/null && printf "Edit\t%s\n" "$_f")"'
+# JX63: a shared transcript_path read as one writer -- clause 3 and its name/path checks replaced.
+# Single-quoted literals, never a quoted heredoc inside $( ): bash 3.2 expands that body.
+_T="$(printf '\t')"; _Q="'"
+AL_C3='        _blk="$(tu_blocks "${_sd}/subagents/agent-${_B}.jsonl" "$_tuid")"
+        [ "$(printf '"$_Q"'%s\n'"$_Q"' "$_blk" | grep -c .)" = 1 ] || continue
+        _bn="${_blk%%'"$_T"'*}"; _bfp="${_blk#*'"$_T"'}"
+        case "$_bn" in Edit|Write|MultiEdit) ;; *) continue ;; esac
+        [ "$(hook_norm "$_bfp")" = "$_f" ] || continue'
+AL_TP='        _btp="$(printf '"$_Q"'%s\n'"$_Q"' "$DROWS" | awk -F'"$_Q"'\t'"$_Q"' -v f="$_f" -v b="$_B" '"$_Q"'$1 == f && $2 == b { print $6; exit }'"$_Q"')"
+        [ "$_btp" = "$_tpath" ] || continue'
+mutant "JX63 alias on a shared transcript_path" "alresult alsecond" "$AL_C3" "$AL_TP"
 # ---- END JX MUTANTS.
 
 # ------------------------------------------------------------------------------ the reap
