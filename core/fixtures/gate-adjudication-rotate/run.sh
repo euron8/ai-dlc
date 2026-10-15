@@ -396,6 +396,184 @@ else
 fi
 
 # =============================================================================
+# ARM (j) — REFUSAL: an EMPTY --sprint selection while a verdict carries a series
+# id no --sprint can name. Before this arm the rotator said "nothing to move" and
+# exited 0, so retro passed while the sprint's verdicts stayed live. The newest
+# unmatchable verdict PASSes, so the survivor block's FAIL refusal cannot be what
+# refuses here; a legacy verdict sits beside it and must NOT be named.
+# =============================================================================
+UM_STEM="planning-20260910T120000Z"
+seed unmatchable
+BEFORE_J="$(treehash "$PROJ")"
+out_j="$(rotate --sprint s308 --apply 2>&1)"; rc=$?
+AFTER_J="$(treehash "$PROJ")"
+if [ "$rc" -eq 1 ] && [ "$BEFORE_J" = "$AFTER_J" ] \
+   && grep -q "^    .*/${UM_STEM}\.verdict\.json$" <<<"$out_j" \
+   && ! grep -q 'implementation-20260720T011606Z' <<<"$out_j" \
+   && ! grep -q 'nothing to move' <<<"$out_j"; then
+  ok "(j) REFUSAL: empty s308 selection plus an unmatchable PASSing verdict exits 1, names that file and not the legacy one, tree byte-identical"
+else
+  bad "(j) an empty selection beside an unmatchable series id was not refused (rc=$rc): $out_j"
+fi
+
+# (j.2) The escape is printed as a dry-run command, its sprint labelled a HINT,
+# and EXECUTING THE PRINTED LINE converges: dry run writes nothing, --apply moves
+# the verdict and its sidecar, and the refused command then exits 0.
+ESC_LINE="$(grep -E "^ +rotate-gate-adjudication\.sh --sprint s[0-9]+ --series '[^']+'$" <<<"$out_j" | head -1)"
+ESC_SPRINT="$(sed -n 's/.*--sprint \(s[0-9]*\) --series.*/\1/p' <<<"$ESC_LINE")"
+ESC_ID="$(sed -n "s/.*--series '\\([^']*\\)'\$/\\1/p" <<<"$ESC_LINE")"
+if [ -z "$ESC_LINE" ] || [ "$ESC_ID" != "$UM_STEM" ] || ! grep -q 'is a HINT' <<<"$out_j"; then
+  bad "(j.2) the refusal printed no runnable --series escape for '${UM_STEM}' labelled as a hint: $out_j"
+else
+  out_d="$(rotate --sprint "$ESC_SPRINT" --series "$ESC_ID" 2>&1)"; rc_d=$?
+  AFTER_JD="$(treehash "$PROJ")"
+  out_a="$(rotate --sprint "$ESC_SPRINT" --series "$ESC_ID" --apply 2>&1)"; rc_a=$?
+  D_ESC="$PROJ/_bmad-output/implementation-artifacts/${ESC_SPRINT}/gate-adjudication"
+  out_r="$(rotate --sprint s308 --apply 2>&1)"; rc_r=$?
+  if [ "$rc_d" -eq 0 ] && [ "$AFTER_JD" = "$BEFORE_J" ] && [ "$rc_a" -eq 0 ] \
+     && [ -f "$D_ESC/${UM_STEM}.verdict.json" ] && [ -f "$D_ESC/${UM_STEM}.repair.md" ] \
+     && [ ! -e "$GA/${UM_STEM}.verdict.json" ] && [ -f "$GA/implementation-20260720T011606Z.verdict.json" ] \
+     && [ "$rc_r" -eq 0 ] && grep -q 'nothing to move' <<<"$out_r"; then
+    ok "(j.2) the printed escape (--sprint ${ESC_SPRINT} --series '${ESC_ID}') is a dry run as printed, moves verdict + sidecar with --apply, and the refused close then exits 0"
+  else
+    bad "(j.2) the printed escape did not converge (dry rc=$rc_d, apply rc=$rc_a, re-run rc=$rc_r): $out_a / $out_r"
+  fi
+fi
+
+# =============================================================================
+# ARM (k) — tagged verdicts only, none for this sprint: still "nothing to move".
+# The near-miss twin of (j): series ids present, every one matchable.
+# =============================================================================
+seed tagged-nomatch
+BEFORE_K="$(treehash "$PROJ")"
+out="$(rotate --sprint s308 --apply 2>&1)"; rc=$?
+AFTER_K="$(treehash "$PROJ")"
+if [ "$rc" -eq 0 ] && [ "$BEFORE_K" = "$AFTER_K" ] && grep -q 'nothing to move' <<<"$out" \
+   && ! grep -q 'REFUSED\|WARN' <<<"$out"; then
+  ok "(k) tagged verdicts only, none for s308: exit 0, 'nothing to move', no refusal and no WARN"
+else
+  bad "(k) a tagged-only directory with no match was not a clean no-op (rc=$rc): $out"
+fi
+
+# =============================================================================
+# ARM (l) — the --series escape moves EXACTLY that id: a dry run writes nothing,
+# and --apply leaves the id that merely STARTS WITH it in place.
+# =============================================================================
+seed series-move
+BEFORE_L="$(treehash "$PROJ")"
+out="$(rotate --sprint s309 --series "$UM_STEM" 2>&1)"; rc=$?
+AFTER_L="$(treehash "$PROJ")"
+if [ "$rc" -eq 0 ] && [ "$BEFORE_L" = "$AFTER_L" ] && [ ! -d "$DEST_S309" ] \
+   && grep -q '1 verdict(s) and 1 sidecar(s) would move' <<<"$out"; then
+  ok "(l.1) --series dry run: reports 1 verdict + 1 sidecar, tree byte-identical, no destination"
+else
+  bad "(l.1) the --series dry run wrote or misreported (rc=$rc): $out"
+fi
+out="$(rotate --sprint s309 --series "$UM_STEM" --apply 2>&1)"; rc=$?
+if [ "$rc" -eq 0 ] && [ -f "$DEST_S309/${UM_STEM}.verdict.json" ] && [ -f "$DEST_S309/${UM_STEM}.repair.md" ] \
+   && [ -f "$GA/planning-20260911T000000Z.verdict.json" ] && [ ! -e "$DEST_S309/planning-20260911T000000Z.verdict.json" ] \
+   && [ -f "$GA/implementation-20260720T011606Z.verdict.json" ]; then
+  ok "(l.2) --series --apply moves the exact id with its sidecar and leaves '${UM_STEM}-retry' and the legacy verdict live"
+else
+  bad "(l.2) --series --apply did not move exactly one id (rc=$rc): $out"
+fi
+# A tokenised id is refused: --sprint already selects it, and moving it by hand
+# could file it under the wrong sprint.
+seed base
+out="$(rotate --sprint s310 --series planning-s309-20260907T160702Z 2>&1)"; rc=$?
+if [ "$rc" -eq 2 ] && grep -q 'already selects it' <<<"$out" && [ -f "$GA/planning-20260907T160702Z.verdict.json" ]; then
+  ok "(l.3) --series refuses an id carrying a -s<N>- token (exit 2), nothing moved"
+else
+  bad "(l.3) --series accepted a tokenised id (rc=$rc): $out"
+fi
+
+# =============================================================================
+# ARM (m) — mixed: a NON-empty s308 selection plus an unmatchable verdict. The
+# s308 set moves, the unmatchable one stays live, a WARN names it, exit 0.
+# =============================================================================
+seed mixed
+out="$(rotate --sprint s308 --apply 2>&1)"; rc=$?
+if [ "$rc" -eq 0 ] && [ -f "$DEST_S308/sprint-review-20260907T002257Z.verdict.json" ] \
+   && [ -f "$GA/${UM_STEM}.verdict.json" ] \
+   && grep -q '^rotate-gate-adjudication: WARN -- 1 verdict(s)' <<<"$out" \
+   && grep -q "^    .*/${UM_STEM}\.verdict\.json$" <<<"$out" \
+   && grep -qE "^ +rotate-gate-adjudication\.sh --sprint s[0-9]+ --series '${UM_STEM}'$" <<<"$out"; then
+  ok "(m) mixed: the s308 set moved, the unmatchable verdict stayed live, a WARN named it with its escape, exit 0"
+else
+  bad "(m) a mixed selection did not move-and-WARN (rc=$rc): $out"
+fi
+
+# Literal single-line replacement into a COPY, for mutations whose text carries
+# characters a sed expression would have to escape. Strings arrive by ENVIRON,
+# which awk -v would otherwise strip a level of escaping from.
+mut_replace() { # <src> <dst> <old-line-substring> <new-text>
+  MR_OLD="$3" MR_NEW="$4" awk '{ i = index($0, ENVIRON["MR_OLD"]); if (i) { $0 = substr($0, 1, i-1) ENVIRON["MR_NEW"] substr($0, i + length(ENVIRON["MR_OLD"])) } print }' "$1" > "$2"
+}
+
+# =============================================================================
+# MUTATION 5 — restore the old early exit: an empty selection says "nothing to
+# move" and exits 0 before the unmatchable check. Arm (j) must go red.
+# =============================================================================
+MUT5="$W/mut-earlyexit.sh"
+awk '{ print } $0 == "N_SIDECARS=$(( N_FILES - N_VERDICTS ))" {
+  print "if [ \"$N_FILES\" -eq 0 ]; then"
+  print "  echo \"${SELF_NAME}: no verdict under ${SRC} names series ${SPRINT} -- nothing to move.\""
+  print "  exit 0"
+  print "fi" }' "$ROT" > "$MUT5"
+if cmp -s "$ROT" "$MUT5"; then
+  bad "MUTATION 5: the early-exit insertion matched nothing; arm (j) is UNPROVEN"
+else
+  seed unmatchable
+  out="$( ( cd "$PROJ" && bash "$MUT5" --sprint s308 --apply ) 2>&1 )"; rc=$?
+  if [ "$rc" -eq 0 ] && grep -q 'nothing to move' <<<"$out"; then
+    ok "MUTATION 5: with the early exit restored, the unmatchable world exits 0 'nothing to move' -- arm (j) is live"
+  else
+    bad "MUTATION 5: restoring the early exit did not change the outcome (rc=$rc): $out"
+  fi
+fi
+
+# =============================================================================
+# MUTATION 6 — route the predicate through FAIL: count an unmatchable verdict
+# only when it records a FAIL, as the survivor block does. The (j) world's
+# unmatchable verdict PASSes, so arm (j) must go red.
+# =============================================================================
+MUT6="$W/mut-failroute.sh"
+mut_replace "$ROT" "$MUT6" \
+  'survivor_unmovable "$_um_series" && printf' \
+  'survivor_unmovable "$_um_series" && [ -n "$(jq -r '"'"'[.verdicts[]? | select(.verdict=="FAIL")] | .[0].check_id // empty'"'"' "$_um_file")" ] && printf'
+if cmp -s "$ROT" "$MUT6"; then
+  bad "MUTATION 6: the FAIL-routing edit matched nothing; arm (j) is UNPROVEN against it"
+else
+  seed unmatchable
+  out="$( ( cd "$PROJ" && bash "$MUT6" --sprint s308 --apply ) 2>&1 )"; rc=$?
+  if [ "$rc" -eq 0 ] && grep -q 'nothing to move' <<<"$out"; then
+    ok "MUTATION 6: keyed on FAIL, the PASSing unmatchable verdict slips through (exit 0) -- arm (j) is keyed on the id, not on the verdict"
+  else
+    bad "MUTATION 6: routing the predicate through FAIL did not change the outcome (rc=$rc): $out"
+  fi
+fi
+
+# =============================================================================
+# MUTATION 7 — --series matches by PREFIX instead of exactly. Arm (l.2) must go
+# red: the '-retry' id moves too.
+# =============================================================================
+MUT7="$W/mut-seriesprefix.sh"
+mut_replace "$ROT" "$MUT7" \
+  '[ "$series" = "$SERIES" ] &&' \
+  'case "$series" in "$SERIES"*) true ;; *) false ;; esac &&'
+if cmp -s "$ROT" "$MUT7"; then
+  bad "MUTATION 7: the prefix edit matched nothing; arm (l.2) is UNPROVEN"
+else
+  seed series-move
+  out="$( ( cd "$PROJ" && bash "$MUT7" --sprint s309 --series "$UM_STEM" --apply ) 2>&1 )"; rc=$?
+  if [ "$rc" -eq 0 ] && [ -f "$DEST_S309/planning-20260911T000000Z.verdict.json" ]; then
+    ok "MUTATION 7: a prefix match moves '${UM_STEM}-retry' too -- arm (l.2) is live"
+  else
+    bad "MUTATION 7: a prefix match did not move the retry id (rc=$rc): $out"
+  fi
+fi
+
+# =============================================================================
 # MUTATION 4 — strip the stranding refusal; arm (h.1) must go red.
 #
 # Keyed on the refusal's own emission, so a mutant that matched nothing cannot
@@ -438,7 +616,11 @@ else
   # real field selects the s308 set.
   seed base
   out2="$( ( cd "$PROJ" && bash "$MUT1" --sprint s308 ) 2>&1 )"
-  if grep -q 'nothing to move' <<<"$out2"; then
+  # Keyed on the s308 set NOT being selected, not on the empty-selection wording:
+  # under the mutant every gate_type value reads as an unmatchable series id, so
+  # the empty selection now refuses rather than printing "nothing to move".
+  if ! grep -q 'would move' <<<"$out2" \
+     && grep -q "no verdict .*names series 's308'" <<<"$out2"; then
     ok "MUTATION 1: selection keyed on the wrong JSON field (gate_type instead of gate_series_id) finds nothing to move in the base world where the real field selects one -- arm (b)/(a) would FAIL against this subject"
   else
     bad "MUTATION 1: selection keyed on the wrong field still found the s308 set; the field-selection is UNPROVEN by this mutant"

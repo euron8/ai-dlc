@@ -123,6 +123,24 @@ seed_unselectable_fail2() {
           "story-20260702T000000Z" "x-s310" "$LEGACY_FAIL"
 }
 
+# THE UNMATCHABLE-SERIES SHAPE THE REFERENCE CONSUMER'S WRITERS ACTUALLY STAMP:
+# `<gate>-<nonce>`, no sprint token (42 of its 52 unmatchable ids). It PASSes on
+# purpose and is the NEWEST verdict, so the survivor block's FAIL refusal can never
+# be what refuses it -- a predicate routed through SURVIVOR_FAILS stays silent here.
+seed_unmatchable_pass() {
+  verdict "$GA/planning-20260910T120000Z.verdict.json" \
+          "planning-20260910T120000Z" "planning-20260910T120000Z" "$S309_ALLPASS"
+  printf 'Repair notes for the unmatchable series.\n' \
+    > "$GA/planning-20260910T120000Z.repair.md"
+}
+
+# A second id that STARTS WITH the first one, so an escape matching by prefix
+# moves both where an exact match moves one.
+seed_unmatchable_retry() {
+  verdict "$GA/planning-20260911T000000Z.verdict.json" \
+          "planning-20260911T000000Z" "planning-20260910T120000Z-retry" "$S309_ALLPASS"
+}
+
 seed_noise() {
   printf '{"line":1}\n' > "$GA/.verdict-writes.jsonl"
   mkdir -p "$GA/s293"
@@ -177,6 +195,23 @@ case "$CASE" in
   strand-unselectable2)
     seed_s308; seed_unselectable_fail2
     ;;
+  # Empty --sprint s308 selection, a newest unmatchable verdict that PASSes, and a
+  # legacy verdict that must not be counted. Refused, file named, escape printed.
+  unmatchable)
+    seed_unmatchable_pass; seed_legacy
+    ;;
+  # Tagged verdicts only, none for s308: still "nothing to move", exit 0.
+  tagged-nomatch)
+    seed_s309_pass; seed_legacy
+    ;;
+  # The --series escape, against two ids one of which is a prefix of the other.
+  series-move)
+    seed_unmatchable_pass; seed_unmatchable_retry; seed_legacy
+    ;;
+  # A non-empty s308 selection AND an unmatchable verdict: move, WARN, exit 0.
+  mixed)
+    seed_s308; seed_unmatchable_pass; seed_legacy
+    ;;
   badjson)
     seed_s308; seed_s309_pass; seed_legacy; seed_noise
     printf '{ "schema_id": "GATE_ADJUDICATION_VERDICT v1", "gate_nonce": "broken-20260101T000000Z", "verdicts": [ \n' \
@@ -203,6 +238,7 @@ cat > "$W/env.sh" <<EOF
 PROJ="$PROJ"
 GA="$GA"
 DEST_S308="$PROJ/_bmad-output/implementation-artifacts/s308/gate-adjudication"
+DEST_S309="$PROJ/_bmad-output/implementation-artifacts/s309/gate-adjudication"
 EOF
 
 printf '%s' "$W"

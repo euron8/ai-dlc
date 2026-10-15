@@ -1348,7 +1348,16 @@ follow their audit, these must follow the merge.
    `GATE_REMEDIATION_DENIED` events naming the prior sprint's `sprint-review`
    nonce and six clerical edits routed through remediators. Rotation removes the
    affordance. A non-zero exit here is a HARD_BLOCK: do not commit, read the
-   refusal, and investigate before re-running.
+   refusal, and investigate before re-running. When the refusal says verdicts carry a
+   `gate_series_id` no `--sprint` selector can match, the remedy is the escape it
+   prints, one line per id, in the order printed:
+
+       bash scripts/ai-dlc/rotate-gate-adjudication.sh --sprint s<M> --series '<exact-id>'
+
+   Run each line as printed, which is a dry run. Confirm `s<M>`, which is a hint the
+   rotator inferred and never applies itself. Then add `--apply`, and re-run the `--sprint s<N> --apply`
+   above. A WARN naming such verdicts on a run that moved this sprint's verdicts
+   is not a HARD_BLOCK; apply the same printed lines before the commit.
 6. **Verify no-loss per file:** each archive's byte count MUST equal that file's
    pre-rotation live byte count, and each new live log MUST contain only its
    header. A mismatch is a HARD_BLOCK — do not commit; restore from git and
