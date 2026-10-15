@@ -16,8 +16,14 @@
 #                   + implementation row ready-for-dev     -> exit 1, `status-yaml-mismatch`
 #                   + `### Smoke Test Updates` only        -> exit 1, `heading-demoted`
 #                   + `# Strategy Test IDs` only           -> exit 1, `heading-demoted`
+#                   + committed in-progress, the working tree flipped to review (story and
+#                     row) after the commit                -> exit 1, `status-not-review`
+#                   + committed `### Smoke Test Updates`, the working tree promoted to `## `
+#                     after the commit                     -> exit 1, `heading-demoted`
 #                 and implementation.md's pre-gate commit-presence paragraph names the three
 #                 kinds and the SKIP line (prose alone cannot pass: the worlds must score).
+#                 The two working-tree worlds are what kill a reader of the disk instead of
+#                 <frozen>: the clean world's uncommitted yaml edit is quiet either way.
 #   exit 0 fixed, 1 live.
 #
 # Measured at 11ae360d (origin/main before the fix): exit 1 (no kind printed by any world).
@@ -45,9 +51,9 @@ yaml() { # <status>
 world() { # <name> <variant>
   local w="$d/$1" st=review row=review h3='## Smoke Test Updates' h4='## Strategy Test IDs'
   case "$2" in
-    notreview) st=in-progress; row=in-progress ;;
+    notreview|dirtystory) st=in-progress; row=in-progress ;;
     mismatch)  row=ready-for-dev ;;
-    deep)      h3='### Smoke Test Updates' ;;
+    deep|dirtyhead) h3='### Smoke Test Updates' ;;
     level1)    h4='# Strategy Test IDs' ;;
   esac
   mkdir -p "$w/${S%/*}" "$w/${IMPL%/*}" && g "$1" init -q || return 9
@@ -64,10 +70,19 @@ world() { # <name> <variant>
   g "$1" add -A && g "$1" commit -qm work || return 9
   g "$1" rev-parse HEAD > "$w/.T"
   [ "$2" = clean ] && yaml done > "$w/$IMPL"
+  # After the commit, the working tree is fixed and the frozen sha is not.
+  if [ "$2" = dirtystory ]; then
+    awk '{ sub(/^status: in-progress$/, "status: review"); print }' "$w/$S" > "$w/.s" && mv "$w/.s" "$w/$S" || return 9
+    yaml review > "$w/$IMPL"; grep -q '^status: review$' "$w/$S" || return 9
+  fi
+  if [ "$2" = dirtyhead ]; then
+    awk '{ sub(/^### Smoke Test Updates$/, "## Smoke Test Updates"); print }' "$w/$S" > "$w/.s" && mv "$w/.s" "$w/$S" || return 9
+    grep -q '^## Smoke Test Updates$' "$w/$S" || return 9
+  fi
   return 0
 }
 run() { bash "$V" -C "$d/$1" "$S" "$(cat "$d/$1/.B")" "$(cat "$d/$1/.T")" 2>"$d/$1.err"; }
-for w in clean noyaml notreview mismatch deep level1; do world "$w" "$w" || exit 9; done
+for w in clean noyaml notreview mismatch deep level1 dirtystory dirtyhead; do world "$w" "$w" || exit 9; done
 
 o="$(run clean)" || exit 1
 case "$o" in *REFUSED*|*"SKIP STATUS"*) exit 1 ;; esac
@@ -88,4 +103,6 @@ expect notreview status-not-review 1 || exit 1
 expect mismatch status-yaml-mismatch 1 || exit 1
 expect deep heading-demoted 1 || exit 1
 expect level1 heading-demoted 1 || exit 1
+expect dirtystory status-not-review 1 || exit 1
+expect dirtyhead heading-demoted 1 || exit 1
 exit 0

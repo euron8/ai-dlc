@@ -59,8 +59,13 @@
 #   (h) STATUS-YAML-MISMATCH. The story's status disagrees with its row in the IMPLEMENTATION
 #       view of the canonical sprint-status yaml. Never the planning view: it lagged at three
 #       APPROVED gate-1 shas on the reference consumer (s318 2.1, s317 2.2, s317 1.2).
-#   SKIP STATUS (<reason>). No story status, no yaml, no row, or the sibling missing or failing:
-#       printed on stdout, never a refusal, never silent.
+#   STATUS-MISSING. The story is committed at <frozen> and no grammar finds a status in it.
+#   STORY-UNTRACKED. The story file is not tracked at <frozen>: the reviewer reads the commit.
+#   SKIP STATUS (<reason>). No yaml, no row, or the sibling missing or failing: printed on
+#       stdout, never a refusal, never silent. The reason is the sibling's stderr, never a data line.
+#   Lines are read with a trailing CR stripped, so a CRLF story is read as the same story, and
+#   under LC_ALL=C: BSD awk in a UTF-8 locale ABORTS on one non-UTF-8 byte (`towc: multibyte
+#   conversion failure`) and the heading arm then reads nothing. The grammar is ASCII-only.
 #   (i) HEADING-DEMOTED. One of the four evidence headings dev.md requires at `## ` appears only
 #       deeper (`### Smoke Test Updates`) or only at level 1. Code fences are stripped. The
 #       heading grammar is one awk function shared with strategy mode: `## <heading>` followed by
@@ -171,6 +176,7 @@ story_text() { # <ref> <story> -> the story bytes on stdout; 1 if unreadable
 # that runs on into more word characters (`## Strategy Test IDsX`) is a different heading.
 HEADING_AWK='
 function ev_level(line, h,   lvl, rest, after) {
+  sub(/\r$/, "", line)
   if (!match(line, /^#+/)) return 0
   lvl = RLENGTH; rest = substr(line, lvl + 1)
   if (rest !~ /^[ \t]+/) return 0
@@ -189,7 +195,7 @@ strategy_one() { # <ref> <story>
   # separator row are dropped. A row with fewer than four cells is emitted as
   # `SHORT <TAB> id` when the table's header carries a `Resolves to` column (that row has no
   # cell to resolve and is refused), and dropped otherwise (a table this mode cannot read).
-  rows="$(awk "$HEADING_AWK"'
+  rows="$(LC_ALL=C awk "$HEADING_AWK"'
     ev_level($0, "Strategy Test IDs") == 2 {on=1; next}
     on && /^## / {exit}
     on && /^[[:space:]]*\|/ {
@@ -267,7 +273,7 @@ fi
 CAPX='\.(txt|log|out)'
 # Capture tokens: contain '/', end in a capture extension, no '...'. One per line, with the
 # citing line's RED flag beside it: "<0|1>\t<path>".
-CAPS="$(awk -v capx="$CAPX" '
+CAPS="$(LC_ALL=C awk -v capx="$CAPX" '
   {
     line=$0; red = (line ~ /(^|[^A-Za-z])(RED|PROVEN)([^A-Za-z]|$)/) ? 1 : 0
     while (match(line, /[A-Za-z0-9_.\/-]+/)) {
@@ -387,25 +393,37 @@ SS="$HE_SELF/sprint-status.sh"
 if [ ! -f "$SS" ]; then
   skip_status "sprint-status.sh is not beside this script at $HE_SELF"
 else
+  # The `story` line is parsed whatever the exit, so a failure in the row half (a yaml the
+  # parser chokes on) can never silence arm (g). Stdout carries only `story`/`row` lines, so
+  # every other line is stderr, and a SKIP reason is built from those alone (the last one: a
+  # Traceback's last line names the exception), never from a data line.
   ss_out="$(bash "$SS" story-status --ref "$FROZEN" --root "$REPO" "$STORY" 2>&1)"; ss_rc=$?
-  if [ "$ss_rc" -ne 0 ]; then
-    skip_status "sprint-status.sh story-status exited $ss_rc: $(head -n 1 <<<"$ss_out")"
+  ss_err="$(awk -F'\t' '$1 != "story" && $1 != "row" && NF {l = $0} END {print l}' <<<"$ss_out")"
+  ss_fail="sprint-status.sh story-status exited $ss_rc: ${ss_err:-no stderr}"
+  st_line="$(awk -F'\t' '$1 == "story" {print "y"; exit}' <<<"$ss_out")"
+  st_val="$(awk -F'\t' '$1 == "story" {print $2; exit}' <<<"$ss_out")"
+  st_why="$(awk -F'\t' '$1 == "story" {print $3; exit}' <<<"$ss_out")"
+  row_val="$(awk -F'\t' '$1 == "row" {print $2; exit}' <<<"$ss_out")"
+  row_why="$(awk -F'\t' '$1 == "row" {print $3; exit}' <<<"$ss_out")"
+  if [ -z "$st_line" ]; then
+    skip_status "story $STORY at ${FROZEN:0:12}: $ss_fail"
+  elif [ -z "$st_val" ]; then
+    case "$st_why" in
+      # STORY-UNTRACKED. The reviewer reads the commit; a story file absent from it is no handoff.
+      "not tracked at "*) refuse "story-untracked $STORY: the story file is not tracked at ${FROZEN:0:12}; commit it on the story branch before the handoff" ;;
+      # STATUS-MISSING. Committed, but no grammar finds a status in it: nothing says `review`.
+      *) refuse "status-missing $STORY: no status at ${FROZEN:0:12} ($st_why); write 'status: review' in the story and commit it before the handoff" ;;
+    esac
   else
-    st_val="$(awk -F'\t' '$1 == "story" {print $2; exit}' <<<"$ss_out")"
-    st_why="$(awk -F'\t' '$1 == "story" {print $3; exit}' <<<"$ss_out")"
-    row_val="$(awk -F'\t' '$1 == "row" {print $2; exit}' <<<"$ss_out")"
-    row_why="$(awk -F'\t' '$1 == "row" {print $3; exit}' <<<"$ss_out")"
-    if [ -z "$st_val" ]; then
-      skip_status "story $STORY at ${FROZEN:0:12}: ${st_why:-no story line from sprint-status.sh}"
-    else
-      # STATUS-NOT-REVIEW. The dev flips the story to `review` in the commit gate 1 reads.
-      [ "$st_val" = "review" ] || refuse "status-not-review $STORY: status is '$st_val' ($st_why) at ${FROZEN:0:12}, not 'review'; flip it in the story file on the story branch and commit it before the handoff"
-      # STATUS-YAML-MISMATCH. The implementation view only: the planning view lags by design.
-      if [ -z "$row_val" ]; then
-        skip_status "implementation-view row for $STORY at ${FROZEN:0:12}: ${row_why:-no row line from sprint-status.sh}"
-      elif [ "$row_val" != "$st_val" ]; then
-        refuse "status-yaml-mismatch $STORY: the story says '$st_val' and its implementation-view row $row_why says '$row_val' at ${FROZEN:0:12}; make them agree in the commit"
-      fi
+    # STATUS-NOT-REVIEW. The dev flips the story to `review` in the commit gate 1 reads.
+    [ "$st_val" = "review" ] || refuse "status-not-review $STORY: status is '$st_val' ($st_why) at ${FROZEN:0:12}, not 'review'; flip it in the story file on the story branch and commit it before the handoff"
+    # STATUS-YAML-MISMATCH. The implementation view only: the planning view lags by design.
+    if [ "$ss_rc" -ne 0 ]; then
+      skip_status "implementation-view row for $STORY at ${FROZEN:0:12}: $ss_fail"
+    elif [ -z "$row_val" ]; then
+      skip_status "implementation-view row for $STORY at ${FROZEN:0:12}: ${row_why:-no row line from sprint-status.sh}"
+    elif [ "$row_val" != "$st_val" ]; then
+      refuse "status-yaml-mismatch $STORY: the story says '$st_val' and its implementation-view row $row_why says '$row_val' at ${FROZEN:0:12}; make them agree in the commit"
     fi
   fi
 fi
@@ -414,9 +432,14 @@ fi
 # One that appears ONLY deeper (`### Smoke Test Updates`) or ONLY at level 1 is a heading no
 # `## `-keyed reader finds. Code fences are stripped first. Absent entirely is not this arm's.
 if tracked "$FROZEN" "$STORY"; then
-  demoted="$(G show "$FROZEN:$STORY" | awk "$HEADING_AWK"'
-    /^[ \t]*(```|~~~)/ {fence = !fence; next}
-    fence {next}
+  demoted="$(G show "$FROZEN:$STORY" | LC_ALL=C awk "$HEADING_AWK"'
+    {
+      m = ""
+      if ($0 ~ /^[ \t]*```/) m = "```"
+      else if ($0 ~ /^[ \t]*~~~/) m = "~~~"
+      if (fence == "" && m != "") { fence = m; next }
+      if (fence != "") { if (m == fence) fence = ""; next }
+    }
     {
       for (i = 1; i <= 4; i++) {
         l = ev_level($0, H[i]); if (!l) continue

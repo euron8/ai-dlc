@@ -315,11 +315,15 @@ no command line, a mutation-RED capture not committed, a glob cited as a
 capture that matches no committed file, an empty or unresolvable Strategy
 Test IDs cell, `status-not-review` for a story whose status at the frozen SHA
 is not `review`, `status-yaml-mismatch` for a story whose status disagrees
-with its row in the implementation view of sprint-status.yaml, and
-`heading-demoted` for an evidence heading written only below or above `## `)
-and do not dispatch code review while either exits 1. A `SKIP STATUS (<reason>)`
-line means a status check could not decide (no yaml, no row, no status at the
-frozen SHA); it does not refuse, and the lead records it in the gate log. Only
+with its row in the implementation view of sprint-status.yaml, `status-missing`
+for a committed story with no status, `story-untracked` for a story file not
+committed at the frozen SHA, and `heading-demoted` for an evidence heading
+written only below or above `## `) and do not dispatch code review while either
+exits 1. A `SKIP STATUS (<reason>)` line means a status check could not decide
+(no yaml, no row); it does not refuse, and the lead records it in the gate log.
+A SKIP whose reason names the story's or the yaml's own content goes back to the
+dev; only a structural SKIP (the sibling script missing, no envelope yet)
+proceeds to dispatch. Only
 exit 1 blocks dispatch. `WARN` lines do not refuse; exit 2 means nothing was
 checked, is recorded verbatim in the story's gate log, and does NOT block
 dispatch. On a rework re-handoff, `<base>` is the previous gate's frozen SHA,

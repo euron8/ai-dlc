@@ -1452,34 +1452,52 @@ def story_status_at_ref():
     says why:
         story<TAB><status><TAB><grammar or reason>
         row<TAB><status><TAB><entry key or reason>
-    Exit 0 whenever the ref resolves (an absence is an answer, not an error), 1 when it does not
-    or git cannot list it, 2 on usage."""
+    Exit 0 whenever the ref resolves (an absence is an answer, not an error), 1 when it does not,
+    2 on usage. The `story` line is printed and flushed BEFORE the yaml is read, so a failure in
+    the row half never takes the story's status with it.
+
+    Bytes are decoded here, never by subprocess: a story or yaml carrying one non-UTF-8 byte (a
+    latin-1 comment) is read with U+FFFD in its place, not raised as a Traceback that turns
+    every status arm into a SKIP.
+
+    Existence is asked per path (`cat-file -e`) and a directory is listed one level deep, so the
+    cost tracks the candidates the join tries, not the size of the whole tree at the ref."""
     import subprocess
     ref = os.environ.get("REF", "")
     story = os.environ.get("FILE", "")
 
     def git(*a):
-        r = subprocess.run(["git", "-C", str(root)] + list(a), capture_output=True, text=True)
-        return r.stdout if r.returncode == 0 else None
+        r = subprocess.run(["git", "-c", "core.quotePath=off", "-C", str(root)] + list(a),
+                           capture_output=True)
+        return r.stdout.decode("utf-8", errors="replace") if r.returncode == 0 else None
 
     full = git("rev-parse", "--verify", "--quiet", ref + "^{commit}")
     if not full:
         fail("story-status: ref does not resolve in %s: %s" % (root, ref), code=1)
     full = full.strip()
-    listing = git("ls-tree", "-r", "--name-only", full)
-    if listing is None:
-        fail("story-status: cannot list the tree at %s" % full[:12], code=1)
-    tracked = set(listing.split("\n")) - {""}
+
+    known = {}
+
+    def at(rel_path):
+        """Is <rel_path> a file tracked at the ref. One `cat-file -e` per distinct path."""
+        if rel_path not in known:
+            ok = (not rel_path.startswith("..") and not os.path.isabs(rel_path)
+                  and subprocess.run(["git", "-C", str(root), "cat-file", "-e",
+                                      "%s:%s" % (full, rel_path)],
+                                     capture_output=True).returncode == 0)
+            known[rel_path] = ok
+        return known[rel_path]
+
     story_rel = os.path.normpath(story)
 
-    if story_rel not in tracked:
-        print("story\t\tnot tracked at %s" % full[:12])
+    if not at(story_rel):
+        print("story\t\tnot tracked at %s" % full[:12], flush=True)
     else:
         sv, how = story_text_status(git("show", "%s:%s" % (full, story_rel)) or "")
-        print("story\t%s\t%s" % (sv or "", how))
+        print("story\t%s\t%s" % (sv or "", how), flush=True)
 
     view_rel = os.path.relpath(str(VIEWS[PRIMARY]), str(root))
-    if view_rel not in tracked:
+    if not at(view_rel):
         print("row\t\tno %s view tracked at %s (%s)" % (PRIMARY, full[:12], view_rel))
         return 0
     text = git("show", "%s:%s" % (full, view_rel)) or ""
@@ -1496,13 +1514,24 @@ def story_status_at_ref():
         return os.path.normpath(os.path.relpath(str(p), str(root)))
 
     def exists_at(p):
-        return rel(p) in tracked
+        return at(rel(p))
 
     def list_at(d, pat):
+        """The blobs directly inside <d> at the ref whose basename matches <pat>. `-z`, so a
+        non-ASCII name arrives as its own bytes rather than as a quoted octal escape."""
         import fnmatch
         dr = rel(d)
-        return sorted(root / t for t in tracked
-                      if os.path.dirname(t) == dr and fnmatch.fnmatchcase(os.path.basename(t), pat))
+        if dr.startswith("..") or os.path.isabs(dr):
+            return []
+        out = git("ls-tree", "-z", full, "--", dr + "/")
+        hits = []
+        for rec in (out or "").split("\0"):
+            meta, sep, path = rec.partition("\t")
+            if not sep or meta.split(" ")[1:2] != ["blob"]:
+                continue
+            if os.path.dirname(path) == dr and fnmatch.fnmatchcase(os.path.basename(path), pat):
+                hits.append(root / path)
+        return sorted(hits)
 
     hits = []
     for key, fields, lineno in entries:
