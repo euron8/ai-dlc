@@ -51,7 +51,8 @@ mut_reds() { # <label> <sed program, empty for the control> -> the subject's FAI
     sed "$prog" "$HOOK" > "$copy" 2>/dev/null
     if cmp -s "$HOOK" "$copy"; then printf 'UNMUTATED\n'; return 0; fi
   fi
-  AI_DLC_USS_HOOK="$copy" bash "$SUBJ" 2>/dev/null | sed -n 's/^  FAIL  //p'
+  AI_DLC_USS_HOOK="$copy" bash "$SUBJ" > "$WORK/$label.out" 2>/dev/null
+  sed -n 's/^  FAIL  //p' "$WORK/$label.out"
 }
 
 expect_set() { # <label> <expected count> <ERE every red must match> <sed>
@@ -81,6 +82,11 @@ if [ -z "$CTRL" ]; then
 else
   bad "CONTROL: an unmutated copy already reds — the harness, not the mutants, is what these arms measure: $(printf '%s' "$CTRL" | tr '\n' ';')"
 fi
+# THE DISPATCH GUARD IS AN INPUT TOO, read UNMUTATED by the subject's ERE byte-compare arm. The
+# subject resolves it from ITS OWN directory, never beside the hook copy, so the guard reaches
+# that arm only through this battery's declaration -- and the sandbox's proof the arm reached it is
+# the subject's own sentinel, forwarded from the control run rather than echoed here.
+grep '^HERMETIC-CONSUMED .*/ai-dlc-dispatch-guard\.sh$' "$WORK/control.out"
 
 # 1. THE PAYLOAD ARM, removed whole. It is the only signal that exists at the dispatch
 #    itself, and it is also what lets a resume override a stale transcript. The other-order
