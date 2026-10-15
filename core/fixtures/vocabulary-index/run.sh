@@ -184,9 +184,18 @@ seed() {
                 '    console.log(`CITE-THREE ${r.ts}`); process.exit(0);' \
                 '  console.log("CITE-FOUR"); process.exit(2);' '}' \
                 'console.log("CITE-OUT-AFTER");' > "$d/owners/cite.js"
+  # The shardable-role owner: the top-level `SHARD_ROLES="…"` assignment beside the three shapes
+  # the real owner (validate-spawn-ledger.sh) carries that are NOT it -- a header comment naming
+  # the roles in prose, a commented-out assignment, and the `SHARD_SET` re-expansion that adds a
+  # run-time seat -- plus an indented local. `shard-out-*` is demanded ABSENT below; presence of
+  # `shard-one` and absence of `shard-out` are one assertion in two halves.
+  printf '%s\n' '# SHARD_ROLES names shard-out-prose here' '# SHARD_ROLES="shard-out-commented"' \
+                'SHARD_ROLES="shard-two shard-one"' \
+                'SHARD_SET=" ${SHARD_ROLES} shard-out-seat "' \
+                '  SHARD_ROLES="shard-out-indented"' > "$d/owners/shard.sh"
 
   # --- the readers each vocabulary is joined to ---
-  for r in ledger kinds contract cycle skill hook emap budget guard reviewer cite; do
+  for r in ledger kinds contract cycle skill hook emap budget guard reviewer cite shard; do
     printf 'reader\n' > "$d/readers/$r.md"
   done
 
@@ -277,6 +286,13 @@ err "I813 fired"
 # vocabulary-extract: cite-verdicts
 # vocabulary-readers: readers/cite.md
 err "I814 fired"
+# --- I815: the shardable-role set is ONE set ---------------------------------
+# vocabulary: shardable roles
+# vocabulary-invariant: I815
+# vocabulary-owner: owners/shard.sh
+# vocabulary-extract: shard-roles
+# vocabulary-readers: readers/shard.md
+err "I815 fired"
 # --- I808: an ordinary arm, and a NEAR MISS -- it binds ONE string, not a set -
 # The wording is deliberate. `one string` is one character-class away from `one set`, which
 # is what the demand arm keys on, so this line is the seed's standing proof that the arm
@@ -289,7 +305,7 @@ EOF
   # --- the invariant index the markers' citations resolve against ---
   {
     printf '# Invariant index\n\n| ID | What it binds |\n|----|---------------|\n'
-    for i in 801 802 803 804 805 806 807 808 810 811 812 813 814; do printf '| I%s | seeded |\n' "$i"; done
+    for i in 801 802 803 804 805 806 807 808 810 811 812 813 814 815; do printf '| I%s | seeded |\n' "$i"; done
   } > "$d/docs/invariant-index.md"
 
   # --- one schema, so the second table is non-empty ---
@@ -314,8 +330,8 @@ fi
 # --- controlB: the synthetic seed renders and round-trips --------------------
 seed "$TMP/controlB"
 outB="$(render_in "$TMP/controlB")"
-if ! grep -q "12 cross-file vocabular(ies), 1 schema enum(s)" <<<"$outB"; then
-  note "FIXTURE BROKEN: the synthetic seed did not render 12 vocabularies and 1 schema enum."
+if ! grep -q "13 cross-file vocabular(ies), 1 schema enum(s)" <<<"$outB"; then
+  note "FIXTURE BROKEN: the synthetic seed did not render 13 vocabularies and 1 schema enum."
   printf '%s\n' "$outB" | sed 's/^/      /' | head -6
   exit 1
 fi
@@ -324,7 +340,7 @@ fi
 # be identical.
 missing=""
 for want in 'ALPHA' 'kind-one' 'CODE-A' 'keyone' 'heavy' 'one/\*.sh' 'YES' 'SEEDED NOTHING' 'seed-one' 'SEED_ONE' \
-            'CITE-ONE' 'CITE-TWO' 'CITE-THREE' 'CITE-FOUR'; do
+            'CITE-ONE' 'CITE-TWO' 'CITE-THREE' 'CITE-FOUR' 'shard-one' 'shard-two'; do
   grep -qE "$want" "$TMP/controlB/docs/vocabulary-index.md" || missing="$missing $want"
 done
 if [ -n "$missing" ]; then
@@ -361,6 +377,14 @@ fi
 if grep -qE 'CITE-OUT|r\.ts' "$TMP/controlB/docs/vocabulary-index.md"; then
   note "FIXTURE BROKEN: the cite-verdicts extractor rendered a token from outside the \`if (CITE) {\` block, from stderr, from a comment, or the value after a template literal's leading word."
   grep 'cite' "$TMP/controlB/docs/vocabulary-index.md" | sed 's/^/      /'
+  exit 1
+fi
+# AND THE SHARDABLE-ROLE ROW MUST NOT CARRY A NON-DECLARATION. Every `shard-out-*` token is prose,
+# a comment, the run-time `SHARD_SET` seat, or an indented local -- never the top-level assignment
+# Check 22 runs.
+if grep -q 'shard-out' "$TMP/controlB/docs/vocabulary-index.md"; then
+  note "FIXTURE BROKEN: the shard-roles extractor rendered a token from outside the top-level \`SHARD_ROLES=\` assignment."
+  grep 'shardable' "$TMP/controlB/docs/vocabulary-index.md" | sed 's/^/      /'
   exit 1
 fi
 # The consumer-owned row must render WITHOUT members and must not have shifted its fields.
@@ -612,7 +636,7 @@ fi
 seed "$TMP/n1"
 if mutate "$TMP/n1/$MAP" '/^# --- I802: the kind vocabulary is one set/d'; then
   green_check "n1  block-scope    two adjacent blocks, one field each" "$TMP/n1" \
-    "12 cross-file vocabular(ies), 1 schema enum(s)" '| ledger statuses |' '| kinds |'
+    "13 cross-file vocabular(ies), 1 schema enum(s)" '| ledger statuses |' '| kinds |'
 else
   note "SKIP  n1 -- sed matched nothing; no mutation occurred"; rc=1
 fi
@@ -841,7 +865,7 @@ fi
 seed "$TMP/n2"
 if mutate "$TMP/n2/$MAP" 's|^# vocabulary: adjudicated codes$|# vocabulary: ledger statuses two|'; then
   green_check "n2  name-prefix    two names sharing a prefix" "$TMP/n2" \
-    "12 cross-file vocabular(ies), 1 schema enum(s)" '| ledger statuses |' '| ledger statuses two |'
+    "13 cross-file vocabular(ies), 1 schema enum(s)" '| ledger statuses |' '| ledger statuses two |'
 else
   note "SKIP  n2 -- sed matched nothing; no mutation occurred"; rc=1
 fi
@@ -861,7 +885,7 @@ printf '%s\n' '{"fields": [{"name": "verdict", "enum": ["YES", "NO"], "enum2": [
 # The backtick is built, not typed: I85 scans for one inside a quoted operator-facing string.
 N3_BT="$(printf '\140')"
 green_check "n3  key-prefix     enum/enum2 in one object, enum in a sibling" "$TMP/n3" \
-  "12 cross-file vocabular(ies), 2 schema enum(s)" \
+  "13 cross-file vocabular(ies), 2 schema enum(s)" \
   "| ${N3_BT}seeded.json${N3_BT} | ${N3_BT}verdict${N3_BT} | ${N3_BT}YES${N3_BT} ${N3_BT}NO${N3_BT} |" \
   "| ${N3_BT}seeded.json${N3_BT} | ${N3_BT}other${N3_BT} | ${N3_BT}UP${N3_BT} |"
 
