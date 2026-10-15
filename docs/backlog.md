@@ -175,3 +175,42 @@ a decision nobody adjudicates.
 
 verify: manual -- close when the remediator contract forbids dispositioning a party MAJOR as out of shard scope (it escalates instead), and a fixture pins that clause.
 
+## BL-524 — the operator-question template badged an operator-owned trade-off "(Recommended)"
+
+**DEFECT.** Filed by the consumer as `PC-S318-OPERATOR-QUESTION-TEMPLATE-LABELS-AN-OPERATOR-OWNED-TRADE-OFF-RECOMMENDED`.
+
+**What happened.** Graph's s317-s318 transcripts carry 38 distinct `AskUserQuestion` questions with a
+`(Recommended)` option. The motivating one asked whether the HODL sweep should inherit the offramp 0.01 dust
+floor, and badged "Inherit and say so". The label never said that inheriting leaves a token0 balance at or below
+0.01 unswapped while the press ends complete. SKILL.md Rule 11(a) told the lead to put the recommended option
+first on every question. `_gate-procedures.md` step 2(c) required exactly one badge on the adversarial STOP, and
+`validate-adversarial-convergence.sh` F7 failed any record that named none, even when the options touched a
+`LOCKED_REQUIREMENTS` entry.
+
+**The fix (batch 230).**
+- Rule 11(a): every option states its concrete effect, including the value it leaves in force. A question is
+  unbadged when an option sets, relaxes, inherits or leaves in force a config leaf, a money-path threshold or
+  literal, a byte-pin, an `LR-`/`LRC-` id, or a `D-<n>` decision. The post-compact digest is re-rendered, with no
+  byte change.
+- The adversarial STOP branches on the record's `locked_requirements_touched:`. When that field is empty, absent
+  or `none`, the old rule holds. When it names an entry, the record must carry `recommended_option: none` or no
+  such line, and the new F7b finding fails a named badge. The remedy text in `ai-dlc-acknowledge.sh` and
+  `ai-dlc-continue.sh` matches. `check-24-adversarial-convergence` adds five worlds, two silence controls and two
+  `--cycle-state` rows.
+- `bug-investigation.md` §2b badges "apply now" only when the relief sets no operator-owned value.
+  `remediator.md` gives no recommendation on a locked or operator-owned item. `route.md` no longer claims the
+  token appears nowhere in the skill. The continue hook's Rule 11(a) paragraph carries the clause, and
+  `pause-question-in-prose` F2 pins it.
+
+**The walk.** Of the 38 badged graph questions, 18 lose the badge under the rule as built: 7 on a config leaf,
+2 on a money-path threshold or literal, 5 on a byte-pin, 2 on an `LR-`/`LRC-` id and 2 on a `D-<n>`. The other
+20 keep it. The dust-floor question is one of the two money-path questions. It is caught by the effects clause,
+because the compliant option has to read "swap skipped for balances <= 0.01 token0". One is borderline: the
+`security.wallet_address` checksum question is scored as a config leaf. The rule is prose with no enforcer on
+`AskUserQuestion` itself, so the walk shows what the rule reaches, not that a lead will follow it.
+
+**Uncovered.** The updater's reconcile questions in `ai-dlc-update/SKILL.md` (~1905-1907) are outside this fix.
+Eight of the 20 that keep the badge (walk rows 18, 19, 22, 31, 32, 34, 36, 38) came from consumer-pull and
+reconcile turns.
+
+verify: sh V=core/scripts/validate-adversarial-convergence.sh; S=core/fixtures/check-24-adversarial-convergence/seed.sh; P=core/fixtures/pause-question-in-prose/run.sh; [ -f "$V" ] && [ -f "$S" ] && [ -f "$P" ] || exit 9; R="$(bash "$S" | tail -1)"; D="$R/divergent-resolved"; [ -f "$D/s1-resolution-p2.md" ] || exit 9; T="$R/operator-transcript.jsonl"; run() { bash "$V" --series "$R/$1/s1-adversarial-p" --transcript "$T" --transcript-dir "$R" 2>&1; }; run divergent-resolved >/dev/null || exit 9; for k in lb ln; do mkdir "$R/$k" && cp "$D"/*.md "$R/$k/" || exit 9; done; awk '{print} /^adjudicated_by:/{print "locked_requirements_touched: LR-S1-3"}' "$D/s1-resolution-p2.md" > "$R/lb/s1-resolution-p2.md" || exit 9; awk '/^recommended_option:/{print "recommended_option: none"; next} {print} /^adjudicated_by:/{print "locked_requirements_touched: LR-S1-3"}' "$D/s1-resolution-p2.md" > "$R/ln/s1-resolution-p2.md" || exit 9; grep -q '^recommended_option: [A-Z]' "$R/lb/s1-resolution-p2.md" || exit 9; o="$(run lb)" && exit 1; grep -qF "names a locked requirement" <<<"$o" || exit 1; run ln >/dev/null || exit 1; bash "$P" >/dev/null 2>&1 || exit 1; grep -q '^(i) A Rule 11(a) AMBIGUITY QUESTION: .*then no option is badged' core/hooks/ai-dlc-continue.sh || exit 1; exit 0
