@@ -72,7 +72,8 @@ step 5b then passed while that sprint's verdicts stayed live for the gate-remedi
   sprint-close commits read with `TZ=UTC git log --date=format-local:%Y%m%dT%H%M%SZ --format='%ad %s'`, so
   the dates compare with nonces, and to put a NO HINT or unconfirmed id to the operator as an
   `AskUserQuestion`. It states that a retro HARD_BLOCKS on an empty selection beside a series whose
-  newest member FAILs, re-runs included, until the writer half lands. It names the close commit: the
+  newest member FAILs, re-runs included, while a verdict minted before the series-id prescription stays
+  live. It names the close commit: the
   `chore(s<N>): rotate ... post-retro-merge` commit, or the retro PR's merge commit where a sprint has
   none. It tells the reader to re-run `--sprint s<N> --apply` after the last `--series` move, and says a
   run that moved this sprint's verdicts still exits 1 when it would leave a FAILing live pass. It says a

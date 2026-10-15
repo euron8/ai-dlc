@@ -1372,9 +1372,10 @@ follow their audit, these must follow the merge.
    id's oldest verdict nonce falls after the previous sprint's close and before `s<M>`'s close.
    A line printed `--sprint s<N>` with `NO HINT`, or a hint those commits do not confirm, is
    an `AskUserQuestion` to the operator naming the id, its nonces and the candidate sprints;
-   never pick the sprint yourself. Until the writer half stamps `<gate_type>-s<N>-<nonce>` at
-   mint time, a retro HARD_BLOCKS here whenever this sprint's selection is empty and an
-   unmatchable series' newest member records a FAIL, re-runs included.
+   never pick the sprint yourself. A verdict minted before `gate-validation.md` "At gate entry"
+   prescribed the series-id form can carry no `-s<N>-` field, and while one stays live a
+   retro HARD_BLOCKS here whenever this sprint's selection is empty and an unmatchable
+   series' newest member records a FAIL, re-runs included.
    A sprint's close commit is its `chore(s<N>): rotate ... post-retro-merge` commit from
    7a-post; where a sprint has none, it is the merge commit of that sprint's retro PR.
 
