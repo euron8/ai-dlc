@@ -329,7 +329,8 @@ fi
 # Keyed on the PRESCRIBED COMMAND LINE, not on the token: the prose explains why
 # --legacy-through does not apply here, so a bare token grep matches that
 # explanation and reads as the wrong remedy being offered.
-if ! grep -qE '^ +rotate-gate-adjudication\.sh --legacy-through' <<<"$out" \
+if ! grep -qE '^ +bash [^ ]*rotate-gate-adjudication\.sh --legacy-through' <<<"$out" \
+   && grep -qE "^ +bash [^ ]*rotate-gate-adjudication\.sh --sprint s<N> --series 's310-planning' --apply$" <<<"$out" \
    && grep -q 'Re-stamp that' <<<"$out"; then
   ok "(h.4b) the unselectable case prescribes a re-stamp and does NOT offer the legacy escape, which cannot move it"
 else
@@ -396,48 +397,158 @@ else
 fi
 
 # =============================================================================
-# ARM (j) — REFUSAL: an EMPTY --sprint selection while a verdict carries a series
-# id no --sprint can name. Before this arm the rotator said "nothing to move" and
-# exited 0, so retro passed while the sprint's verdicts stayed live. The newest
-# unmatchable verdict PASSes, so the survivor block's FAIL refusal cannot be what
-# refuses here; a legacy verdict sits beside it and must NOT be named.
+# ARM (j) — REFUSAL: an EMPTY --sprint selection while an unmatchable series (an id
+# no --sprint can name) records a FAIL. Before this arm the rotator said "nothing
+# to move" and exited 0, so retro passed while the sprint's verdicts stayed live.
+# The FAIL-carrying unmatchable verdict is NOT the newest -- a PASS-only one sorts
+# above it -- so the survivor block's FAIL refusal cannot be what refuses here; a
+# legacy verdict sits beside them and must NOT be named.
 # =============================================================================
-UM_STEM="planning-20260910T120000Z"
+UM_STEM="planning-20260910T120000Z"   # PASS-only unmatchable, the newest
+UM_FAIL="planning-20260909T120000Z"   # FAIL-carrying unmatchable, older
+# The refusal block alone: from the REFUSED line up to the WARN that may follow it.
+refusal_block() { awk '/REFUSED --/{f=1} /WARN --/{f=0} f' <<<"$1"; }
+warn_block()    { awk '/WARN --/{f=1} f' <<<"$1"; }
 seed unmatchable
 BEFORE_J="$(treehash "$PROJ")"
 out_j="$(rotate --sprint s308 --apply 2>&1)"; rc=$?
 AFTER_J="$(treehash "$PROJ")"
+ref_j="$(refusal_block "$out_j")"; warn_j="$(warn_block "$out_j")"
 if [ "$rc" -eq 1 ] && [ "$BEFORE_J" = "$AFTER_J" ] \
-   && grep -q "^    .*/${UM_STEM}\.verdict\.json$" <<<"$out_j" \
+   && grep -q "^    .*/${UM_FAIL}\.verdict\.json$" <<<"$ref_j" \
+   && ! grep -q "/${UM_STEM}\.verdict\.json$" <<<"$ref_j" \
+   && grep -q "^    .*/${UM_STEM}\.verdict\.json$" <<<"$warn_j" \
    && ! grep -q 'implementation-20260720T011606Z' <<<"$out_j" \
    && ! grep -q 'nothing to move' <<<"$out_j"; then
-  ok "(j) REFUSAL: empty s308 selection plus an unmatchable PASSing verdict exits 1, names that file and not the legacy one, tree byte-identical"
+  ok "(j) REFUSAL: empty s308 selection plus an older FAIL-carrying unmatchable verdict exits 1, names it in the refusal, WARNs the newer PASS-only one, not the legacy one, tree byte-identical"
 else
-  bad "(j) an empty selection beside an unmatchable series id was not refused (rc=$rc): $out_j"
+  bad "(j) an empty selection beside a FAIL-carrying unmatchable series id was not refused as specified (rc=$rc): $out_j"
+fi
+
+# (j.0) THE NEAR-MISS: the same world without the FAIL series. A stale clean verdict
+# is the guard's allow state, so the close WARNs and proceeds.
+seed unmatchable-pass
+BEFORE_J0="$(treehash "$PROJ")"
+out_j0="$(rotate --sprint s308 --apply 2>&1)"; rc=$?
+AFTER_J0="$(treehash "$PROJ")"
+if [ "$rc" -eq 0 ] && [ "$BEFORE_J0" = "$AFTER_J0" ] && grep -q 'nothing to move' <<<"$out_j0" \
+   && ! grep -q 'REFUSED' <<<"$out_j0" \
+   && grep -q "^    .*/${UM_STEM}\.verdict\.json$" <<<"$(warn_block "$out_j0")" \
+   && grep -qE "^ +bash [^ ]*rotate-gate-adjudication\.sh --sprint s[0-9]+ --series '${UM_STEM}'$" <<<"$out_j0"; then
+  ok "(j.0) NEAR-MISS: an empty selection beside a PASS-only unmatchable verdict WARNs with its escape and exits 0 'nothing to move'"
+else
+  bad "(j.0) a PASS-only unmatchable verdict was refused or not WARNed (rc=$rc): $out_j0"
 fi
 
 # (j.2) The escape is printed as a dry-run command, its sprint labelled a HINT,
 # and EXECUTING THE PRINTED LINE converges: dry run writes nothing, --apply moves
 # the verdict and its sidecar, and the refused command then exits 0.
-ESC_LINE="$(grep -E "^ +rotate-gate-adjudication\.sh --sprint s[0-9]+ --series '[^']+'$" <<<"$out_j" | head -1)"
+ESC_LINE="$(grep -E "^ +bash [^ ]*rotate-gate-adjudication\.sh --sprint s[0-9]+ --series '[^']+'$" <<<"$ref_j" | head -1)"
 ESC_SPRINT="$(sed -n 's/.*--sprint \(s[0-9]*\) --series.*/\1/p' <<<"$ESC_LINE")"
 ESC_ID="$(sed -n "s/.*--series '\\([^']*\\)'\$/\\1/p" <<<"$ESC_LINE")"
-if [ -z "$ESC_LINE" ] || [ "$ESC_ID" != "$UM_STEM" ] || ! grep -q 'is a HINT' <<<"$out_j"; then
-  bad "(j.2) the refusal printed no runnable --series escape for '${UM_STEM}' labelled as a hint: $out_j"
+seed unmatchable
+if [ -z "$ESC_LINE" ] || [ "$ESC_ID" != "$UM_FAIL" ] || ! grep -q 'is a HINT' <<<"$ref_j"; then
+  bad "(j.2) the refusal printed no runnable --series escape for '${UM_FAIL}' labelled as a hint: $out_j"
 else
+  BEFORE_JD="$(treehash "$PROJ")"
   out_d="$(rotate --sprint "$ESC_SPRINT" --series "$ESC_ID" 2>&1)"; rc_d=$?
   AFTER_JD="$(treehash "$PROJ")"
   out_a="$(rotate --sprint "$ESC_SPRINT" --series "$ESC_ID" --apply 2>&1)"; rc_a=$?
   D_ESC="$PROJ/_bmad-output/implementation-artifacts/${ESC_SPRINT}/gate-adjudication"
   out_r="$(rotate --sprint s308 --apply 2>&1)"; rc_r=$?
-  if [ "$rc_d" -eq 0 ] && [ "$AFTER_JD" = "$BEFORE_J" ] && [ "$rc_a" -eq 0 ] \
-     && [ -f "$D_ESC/${UM_STEM}.verdict.json" ] && [ -f "$D_ESC/${UM_STEM}.repair.md" ] \
-     && [ ! -e "$GA/${UM_STEM}.verdict.json" ] && [ -f "$GA/implementation-20260720T011606Z.verdict.json" ] \
+  if [ "$rc_d" -eq 0 ] && [ "$AFTER_JD" = "$BEFORE_JD" ] && [ "$rc_a" -eq 0 ] \
+     && [ -f "$D_ESC/${UM_FAIL}.verdict.json" ] && [ -f "$D_ESC/${UM_FAIL}.repair.md" ] \
+     && [ ! -e "$GA/${UM_FAIL}.verdict.json" ] && [ -f "$GA/implementation-20260720T011606Z.verdict.json" ] \
+     && [ -f "$GA/${UM_STEM}.verdict.json" ] \
      && [ "$rc_r" -eq 0 ] && grep -q 'nothing to move' <<<"$out_r"; then
     ok "(j.2) the printed escape (--sprint ${ESC_SPRINT} --series '${ESC_ID}') is a dry run as printed, moves verdict + sidecar with --apply, and the refused close then exits 0"
   else
     bad "(j.2) the printed escape did not converge (dry rc=$rc_d, apply rc=$rc_a, re-run rc=$rc_r): $out_a / $out_r"
   fi
+fi
+
+# (j.3) A FAIL-carrying id that is NOT nonce-tailed -- `story-s311`, a shape the
+# reference consumer's writers stamp -- is the only unmatchable verdict. A predicate
+# counting only `<gate>-<nonce>` ids misses it.
+seed story-s311
+out="$(rotate --sprint s308 --apply 2>&1)"; rc=$?
+if [ "$rc" -eq 1 ] && grep -q '^    .*/story-20260913T044428Z\.verdict\.json$' <<<"$(refusal_block "$out")"; then
+  ok "(j.3) a FAIL-carrying 'story-s311' id, not nonce-tailed, refuses the empty selection and is named"
+else
+  bad "(j.3) a FAIL-carrying 'story-s311' id did not refuse (rc=$rc): $out"
+fi
+
+# (j.4) An id carrying an apostrophe is printed quoted, so the line pastes as printed.
+# Parsed by the shell itself, then executed: the id must arrive intact and move.
+seed apostrophe
+out="$(rotate --sprint s308 2>&1)"; rc=$?
+# The sprint must be numeric before eval: a placeholder `s<N>` would parse as a redirect.
+AP_LINE="$(grep -E "^ +bash [^ ]*rotate-gate-adjudication\.sh --sprint s[0-9]+ --series '[^<>|;&\`\$]*'$" <<<"$(refusal_block "$out")" | head -1)"
+AP_SPRINT=""; AP_ID=""
+if [ -n "$AP_LINE" ]; then eval "set -- $AP_LINE"; AP_SPRINT="${4:-}"; AP_ID="${6:-}"; fi
+if [ "$rc" -eq 1 ] && [ "$AP_ID" = "it's-planning" ]; then
+  out_ap="$(rotate --sprint "$AP_SPRINT" --series "$AP_ID" --apply 2>&1)"; rc_ap=$?
+  if [ "$rc_ap" -eq 0 ] && [ -f "$PROJ/_bmad-output/implementation-artifacts/${AP_SPRINT}/gate-adjudication/planning-20260909T130000Z.verdict.json" ] \
+     && [ ! -e "$GA/planning-20260909T130000Z.verdict.json" ]; then
+    ok "(j.4) an id with an apostrophe is printed shell-quoted; the parsed line carries it intact and moves the verdict"
+  else
+    bad "(j.4) the parsed apostrophe id did not move (rc=$rc_ap): $out_ap"
+  fi
+else
+  bad "(j.4) the apostrophe id was not printed pasteable (rc=$rc, parsed id='${AP_ID}'): $out"
+fi
+
+# (j.5) THE HINT WINDOW. The FAIL-carrying verdict is newer than the only archive,
+# s309. Closing s310 leaves one candidate sprint, so it is hinted; closing s311
+# leaves s310..s311, so no sprint is hinted and the placeholder is printed.
+seed hint-window
+out10="$(rotate --sprint s310 2>&1)"; rc10=$?
+out11="$(rotate --sprint s311 2>&1)"; rc11=$?
+if [ "$rc10" -eq 1 ] && grep -qE "^ +bash [^ ]*rotate-gate-adjudication\.sh --sprint s310 --series '${UM_FAIL}'$" <<<"$out10" \
+   && [ "$rc11" -eq 1 ] && grep -qE "^ +bash [^ ]*rotate-gate-adjudication\.sh --sprint s<N> --series '${UM_FAIL}'$" <<<"$out11" \
+   && grep -q 'NO HINT (s310\.\.s311)' <<<"$out11"; then
+  ok "(j.5) newer than the newest archive: hinted s310 when that is the only candidate, NO HINT (s310..s311) when it is not"
+else
+  bad "(j.5) the hint window was not honoured (s310 rc=$rc10, s311 rc=$rc11): $out10 / $out11"
+fi
+
+# (j.6) The printed command is spelled for the layout the rotator runs from. Two
+# copies of it, one per layout, against the same world.
+seed unmatchable
+mkdir -p "$W/lay-c/scripts/ai-dlc" "$W/lay-d/core/scripts"
+cp "$ROT" "$W/lay-c/scripts/ai-dlc/rotate-gate-adjudication.sh"
+cp "$ROT" "$W/lay-d/core/scripts/rotate-gate-adjudication.sh"
+out_c="$( ( cd "$PROJ" && bash "$W/lay-c/scripts/ai-dlc/rotate-gate-adjudication.sh" --sprint s308 ) 2>&1 )"
+out_d="$( ( cd "$PROJ" && bash "$W/lay-d/core/scripts/rotate-gate-adjudication.sh" --sprint s308 ) 2>&1 )"
+if grep -qE "^ +bash scripts/ai-dlc/rotate-gate-adjudication\.sh --sprint s308 --series '${UM_FAIL}'$" <<<"$out_c" \
+   && grep -qE "^ +bash core/scripts/rotate-gate-adjudication\.sh --sprint s308 --series '${UM_FAIL}'$" <<<"$out_d"; then
+  ok "(j.6) the remedy line reads 'bash scripts/ai-dlc/...' from an installed layout and 'bash core/scripts/...' from the distribution"
+else
+  bad "(j.6) the remedy line is not spelled for its layout: $out_c / $out_d"
+fi
+
+# (j.7) REFUSAL: a destination file already exists. Nothing is overwritten and the
+# source stays live.
+seed unmatchable
+D_CL="$PROJ/_bmad-output/implementation-artifacts/s308/gate-adjudication"
+mkdir -p "$D_CL"
+printf '{"collide":true}\n' > "$D_CL/${UM_FAIL}.verdict.json"
+BEFORE_CL="$(treehash "$PROJ")"
+out="$(rotate --sprint s308 --series "$UM_FAIL" --apply 2>&1)"; rc=$?
+AFTER_CL="$(treehash "$PROJ")"
+if [ "$rc" -eq 1 ] && [ "$BEFORE_CL" = "$AFTER_CL" ] && grep -q 'already exist' <<<"$out" \
+   && grep -q '"collide":true' "$D_CL/${UM_FAIL}.verdict.json" && [ -f "$GA/${UM_FAIL}.verdict.json" ]; then
+  ok "(j.7) REFUSAL: an existing destination file is not overwritten (exit 1), tree byte-identical"
+else
+  bad "(j.7) an existing destination file was overwritten or not refused (rc=$rc): $out"
+fi
+
+# (j.8) --series '' is a usage error.
+out="$(rotate --sprint s308 --series '' 2>&1)"; rc=$?
+if [ "$rc" -eq 2 ] && grep -q 'non-empty' <<<"$out"; then
+  ok "(j.8) --series '' is a usage error (exit 2)"
+else
+  bad "(j.8) --series '' was not a usage error (rc=$rc): $out"
 fi
 
 # =============================================================================
@@ -497,7 +608,7 @@ if [ "$rc" -eq 0 ] && [ -f "$DEST_S308/sprint-review-20260907T002257Z.verdict.js
    && [ -f "$GA/${UM_STEM}.verdict.json" ] \
    && grep -q '^rotate-gate-adjudication: WARN -- 1 verdict(s)' <<<"$out" \
    && grep -q "^    .*/${UM_STEM}\.verdict\.json$" <<<"$out" \
-   && grep -qE "^ +rotate-gate-adjudication\.sh --sprint s[0-9]+ --series '${UM_STEM}'$" <<<"$out"; then
+   && grep -qE "^ +bash [^ ]*rotate-gate-adjudication\.sh --sprint s[0-9]+ --series '${UM_STEM}'$" <<<"$out"; then
   ok "(m) mixed: the s308 set moved, the unmatchable verdict stayed live, a WARN named it with its escape, exit 0"
 else
   bad "(m) a mixed selection did not move-and-WARN (rc=$rc): $out"
@@ -533,23 +644,26 @@ else
 fi
 
 # =============================================================================
-# MUTATION 6 — route the predicate through FAIL: count an unmatchable verdict
-# only when it records a FAIL, as the survivor block does. The (j) world's
-# unmatchable verdict PASSes, so arm (j) must go red.
+# MUTATION 6 — REVERT THE FAIL NARROWING: every unmatchable series refuses an empty
+# selection, PASS-only or not. Arm (j.0) must go red: its PASS-only world flips
+# from exit 0 to exit 1. (Revised with the contract: this mutation used to APPLY the
+# narrowing as the wrong fix; the narrowing is now the design, and its revert is the
+# regression -- measured on the reference consumer, it refuses s318 on 52 files
+# where 12 carry the FAIL series that can deny.)
 # =============================================================================
-MUT6="$W/mut-failroute.sh"
+MUT6="$W/mut-failrevert.sh"
 mut_replace "$ROT" "$MUT6" \
-  'survivor_unmovable "$_um_series" && printf' \
-  'survivor_unmovable "$_um_series" && [ -n "$(jq -r '"'"'[.verdicts[]? | select(.verdict=="FAIL")] | .[0].check_id // empty'"'"' "$_um_file")" ] && printf'
+  'if grep -qxF -- "$_pt_series" "$TMPD/fail_series"; then' \
+  'if true; then'
 if cmp -s "$ROT" "$MUT6"; then
-  bad "MUTATION 6: the FAIL-routing edit matched nothing; arm (j) is UNPROVEN against it"
+  bad "MUTATION 6: the narrowing-revert edit matched nothing; arm (j.0) is UNPROVEN against it"
 else
-  seed unmatchable
+  seed unmatchable-pass
   out="$( ( cd "$PROJ" && bash "$MUT6" --sprint s308 --apply ) 2>&1 )"; rc=$?
-  if [ "$rc" -eq 0 ] && grep -q 'nothing to move' <<<"$out"; then
-    ok "MUTATION 6: keyed on FAIL, the PASSing unmatchable verdict slips through (exit 0) -- arm (j) is keyed on the id, not on the verdict"
+  if [ "$rc" -eq 1 ] && grep -q 'REFUSED' <<<"$out" && grep -q "/${UM_STEM}\.verdict\.json$" <<<"$out"; then
+    ok "MUTATION 6: with the FAIL narrowing reverted, the PASS-only unmatchable world refuses (exit 1) -- arm (j.0) is live"
   else
-    bad "MUTATION 6: routing the predicate through FAIL did not change the outcome (rc=$rc): $out"
+    bad "MUTATION 6: reverting the FAIL narrowing did not change the outcome (rc=$rc): $out"
   fi
 fi
 

@@ -124,9 +124,20 @@ seed_unselectable_fail2() {
 }
 
 # THE UNMATCHABLE-SERIES SHAPE THE REFERENCE CONSUMER'S WRITERS ACTUALLY STAMP:
-# `<gate>-<nonce>`, no sprint token (42 of its 52 unmatchable ids). It PASSes on
-# purpose and is the NEWEST verdict, so the survivor block's FAIL refusal can never
-# be what refuses it -- a predicate routed through SURVIVOR_FAILS stays silent here.
+# `<gate>-<nonce>`, no sprint token (42 of its 52 unmatchable ids). This one records
+# a FAIL, which is what makes an empty selection refuse. It is OLDER than the
+# PASS-only unmatchable verdict seeded beside it in `unmatchable`, so it is never the
+# newest, and the survivor block's FAIL refusal -- which reads only the newest --
+# cannot be what refuses it.
+seed_unmatchable_fail() {
+  verdict "$GA/planning-20260909T120000Z.verdict.json" \
+          "planning-20260909T120000Z" "planning-20260909T120000Z" "$LEGACY_FAIL"
+  printf 'Repair notes for the FAIL-carrying unmatchable series.\n' \
+    > "$GA/planning-20260909T120000Z.repair.md"
+}
+
+# The same shape, PASS-only: the near-miss. The guard reads a stale clean verdict as
+# its allow state, so this one WARNs and never refuses.
 seed_unmatchable_pass() {
   verdict "$GA/planning-20260910T120000Z.verdict.json" \
           "planning-20260910T120000Z" "planning-20260910T120000Z" "$S309_ALLPASS"
@@ -139,6 +150,29 @@ seed_unmatchable_pass() {
 seed_unmatchable_retry() {
   verdict "$GA/planning-20260911T000000Z.verdict.json" \
           "planning-20260911T000000Z" "planning-20260910T120000Z-retry" "$S309_ALLPASS"
+}
+
+# A sprint-LAST id the reference consumer's writers stamped: `story-s311`, which is
+# NOT nonce-tailed (its stem is). It is the only unmatchable verdict in its world and
+# it records a FAIL, so a predicate counting only `<gate>-<nonce>` ids misses it.
+seed_story_s311_fail() {
+  verdict "$GA/story-20260913T044428Z.verdict.json" \
+          "story-20260913T044428Z" "story-s311" "$LEGACY_FAIL"
+}
+
+# An id carrying an apostrophe, which the printed command must quote so it can be
+# pasted as printed.
+seed_apostrophe_fail() {
+  verdict "$GA/planning-20260909T130000Z.verdict.json" \
+          "planning-20260909T130000Z" "it's-planning" "$LEGACY_FAIL"
+}
+
+# A sprint archive whose range ends before the unmatchable verdicts, so the hint has
+# an archive below the nonce and none above it.
+seed_archive_s309() {
+  mkdir -p "$PROJ/_bmad-output/implementation-artifacts/s309/gate-adjudication"
+  verdict "$PROJ/_bmad-output/implementation-artifacts/s309/gate-adjudication/planning-20260901T000000Z.verdict.json" \
+          "planning-20260901T000000Z" "planning-s309-20260901T000000Z" "$S309_ALLPASS"
 }
 
 seed_noise() {
@@ -195,10 +229,27 @@ case "$CASE" in
   strand-unselectable2)
     seed_s308; seed_unselectable_fail2
     ;;
-  # Empty --sprint s308 selection, a newest unmatchable verdict that PASSes, and a
-  # legacy verdict that must not be counted. Refused, file named, escape printed.
+  # Empty --sprint s308 selection, an older unmatchable verdict that FAILs, a newest
+  # one that PASSes, and a legacy verdict that must not be counted. Refused on the
+  # FAIL series, the PASS-only one WARNed, escapes printed.
   unmatchable)
+    seed_unmatchable_fail; seed_unmatchable_pass; seed_legacy
+    ;;
+  # The near-miss: the same world without the FAIL series. WARN, exit 0.
+  unmatchable-pass)
     seed_unmatchable_pass; seed_legacy
+    ;;
+  # The only unmatchable verdict is a FAIL-carrying `story-s311` id, not nonce-tailed.
+  story-s311)
+    seed_story_s311_fail; seed_legacy
+    ;;
+  # A FAIL-carrying id with an apostrophe in it.
+  apostrophe)
+    seed_apostrophe_fail; seed_legacy
+    ;;
+  # A FAIL-carrying `<gate>-<nonce>` id newer than the only archive, s309.
+  hint-window)
+    seed_archive_s309; seed_unmatchable_fail
     ;;
   # Tagged verdicts only, none for s308: still "nothing to move", exit 0.
   tagged-nomatch)
