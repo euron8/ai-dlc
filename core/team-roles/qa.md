@@ -161,18 +161,16 @@ For each completed task, verify:
   requirement's verbatim text, compare the AC's expected outcome with every
   action that text requires.
   An AC whose expected outcome omits an action the text requires is a requirement divergence, never a PASS.
-  A precondition under which the required action has nothing to act on (an
-  empty balance, an empty set) does not trigger this item.
+  A precondition under which the required action has nothing to act on (an empty balance, an empty set) does not trigger this item.
   QA files a Tier 1 `HARD_BLOCK` with blocker type `requirement divergence`
   (SKILL.md Rule 12), quoting the LR id, its verbatim text and the omitted
-  action, through the Escalation Protocol below. QA marks the task BLOCKED
-  and holds the verdict until the operator's disposition is recorded on that entry.
-  The entry is resolved before the checkpoint, and the lead pauses per Rule 3
-  for it (`escalations.md` Resolution lifecycle).
-  A recorded disposition accepting the degraded branch makes the AC PASS, citing the entry id; `do-now` makes it NEEDS_REWORK.
+  action, through the Escalation Protocol below.
+  QA writes `Verdict: NEEDS_REWORK` with a `####` finding naming the HARD_BLOCK id; the lead puts it to the operator by `AskUserQuestion` under Rule 3(a), with no flag, before dispatching dev rework.
+  If the operator accepts the degraded branch (`descope` of the omitted action), QA re-validates to PASS citing the entry; `do-now` proceeds as rework.
   Exempt only when (1) the degraded outcome is the one the requirement's own
   text prescribes (it asks to fail closed, or to degrade to exactly that
-  value), or (2) a Tier 1 `HARD_BLOCK` with blocker type `requirement divergence` that cites this LR and names this degraded branch already carries a recorded operator disposition; cite that entry.
+  value), (2) a Tier 1 `HARD_BLOCK` with blocker type `requirement divergence` that cites this LR and names this degraded branch already carries a recorded operator disposition (cite that entry), or
+  (3) the AC's outcome performs none of the requirement's actions and reports that to the caller as a non-success (a refusal or error status, a disabled control, a dry-run marker), unless the requirement's verbatim text forbids that refusal.
   An entry of another blocker type, or one that names no LR, does not exempt.
   An answer to a trade-off is not a disposition of a requirement the AC no
   longer delivers. Catches a skip or degraded branch written into an AC
@@ -503,6 +501,9 @@ Follow the three-tier escalation model in SKILL.md Rule 12:
   around): Append to `docs/escalations/pending.md`, mark task BLOCKED,
   message lead (`SendMessage` `to: "main"`), move to next unblocked task.
   Human resolves at production validation checkpoint.
+  A `requirement divergence` HARD_BLOCK from the Validation Checklist is the
+  exception: QA writes `Verdict: NEEDS_REWORK` instead of marking the task
+  BLOCKED, and the lead asks the operator (see that item).
 - **DECIDED_AUTONOMOUSLY** (ambiguous acceptance criteria that can be
   reasonably interpreted, judgment calls on test coverage sufficiency):
   Make the best decision, document rationale in

@@ -186,23 +186,36 @@ arbitrary minimum that was set that caused the swap to be skipped." `qa.md` had 
 omitting a locked requirement's action is a deviation to put to the operator. Its null-impl gate
 asks whether some AC goes red against a degenerate implementation, and AC1, AC3 and AC5(c) did.
 
-**The narrow exemption is the point.** An entry was on record before QA ran:
-`S318-HODL-INHERITS-OFFRAMP-DUST-FLOOR-AND-SLIPPAGE`, RESOLVED with operator authorization at
-2026-10-14T10:49:39Z ("Inherit and say so (Recommended)"), while the s318 QA merge is 12:04 the
-same day. It is blocker type `trade-off`, framed as which config leaf owns the floor, and it
-names no LR. A looser exemption ("an operator disposition already covers this AC") acquits
-AC5(b) on that entry, and the retro correction records that the operator did not read it as
-approving the skip. The exemption therefore takes only a Tier 1 `HARD_BLOCK`, blocker type
-`requirement divergence`, that cites the LR and names the degraded branch.
+**The narrow exemption is the point.** The timeline, in UTC: s318 1.2's QA PASS was committed at
+`1f1c06c39` 02:40Z, and the sprint-review fix QA at `77961c8c2` 09:01Z.
+`S318-HODL-INHERITS-OFFRAMP-DUST-FLOOR-AND-SLIPPAGE` was first committed at `ada77ec60` 08:42Z as a
+HARD_BLOCK, blocker type `trade-off`, framed as which config leaf owns the floor, naming no LR. The
+operator answered it at 10:49:39Z ("Inherit and say so (Recommended)"), and PR #1220 merged at
+16:04Z. The retro correction records that the operator did not read that answer as approving the
+skip, so the exemption takes only a Tier 1 `HARD_BLOCK`, blocker type `requirement divergence`,
+that cites the LR and names the degraded branch. A looser exemption would have acquitted AC5(b) on
+any QA run after 10:49Z; none occurred.
 
-Built: a HARD GATE item in `core/team-roles/qa.md` Validation Checklist (trigger, two exemptions,
-the HARD_BLOCK route and the PASS / NEEDS_REWORK outcomes), one sentence in
-`steps/deploy-validate.md` §5 marking such a bullet `delivered` and quoting the HARD_BLOCK id (the
-disposition vocabulary is unchanged), and seven `process-rule-pins` rows. The receipt runs the
-fixture's `--report` and requires all seven rows `ok`.
+**Scored on graph `main`.** Every s318 epic-1 story carrying an LR (1.2, 1.3, 1.4) fires on 1.2
+AC5(b) only: it performs one required action (the transfer), omits the swap on a non-zero token0
+balance, and reports `complete`. Each refusal outcome performs none of the actions and reports a
+non-success, so exemption (3) acquits it: 1.2 AC6 (`ValueError` before any transaction), 1.2 AC7
+(dry-run), 1.2 AC8 (`failed`, `aggregator_unavailable`), 1.3 AC1 (a)/(e) (400), 1.3 AC4 (409/503)
+and 1.4 AC2 (a)-(k) (a disabled button). 1.2 AC9 and 1.3 AC7 are out-of-scope declarations that
+require no LR action. s317 2.5 AC8 is not acquitted by (3), because LR-S317-7 says
+"SHALL be honoured, not refused"; it does not fire because its precondition is an empty layer, a
+position set with nothing to rebalance, which is the nothing-to-act-on clause. A non-zero balance
+under a floor is not that clause.
+
+Built: a HARD GATE item in `core/team-roles/qa.md` Validation Checklist (trigger, three
+exemptions, the HARD_BLOCK route, `Verdict: NEEDS_REWORK` and the lead's `AskUserQuestion` before
+rework), the matching sentence in the Escalation Protocol, `escalations.md` and `implementation.md`,
+one sentence in `steps/deploy-validate.md` §5 recording an accepted degraded branch as a `descope`
+of the omitted action, never `delivered`, and nine `process-rule-pins` rows. The receipt runs the
+fixture's `--report` and requires all nine rows `ok`.
 
 Filed by the reference consumer as
 `PC-S318-QA-ROLE-HAS-NO-RULE-THAT-A-SKIP-AGAINST-A-LOCKED-REQUIREMENT-IS-A-DEVIATION-TO-PUT-TO-THE-OPERATOR`.
 
-verify: sh R=core/fixtures/process-rule-pins/run.sh; [ -f "$R" ] || exit 9; o="$(bash "$R" --report 2>&1)"; n="$(grep -cE '^  ok    (qa-lrdiv-(lead|never-pass|hold|outcome|exempt|other-type)|dv-lrcov-degraded): pinned inside' <<<"$o")" || n=0; [ "$n" -eq 7 ]
+verify: sh R=core/fixtures/process-rule-pins/run.sh; [ -f "$R" ] || exit 9; o="$(bash "$R" --report 2>&1)"; n="$(grep -cE '^  ok    (qa-lrdiv-(lead|never-pass|empty|rework|outcome|exempt|exempt3|other-type)|dv-lrcov-degraded): pinned inside' <<<"$o")" || n=0; [ "$n" -eq 9 ]
 

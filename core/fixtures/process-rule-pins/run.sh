@@ -39,8 +39,9 @@
 #     clause intact and passes. No row here can fail on an addition; a reviewer reads for that.
 #   - an AC whose expected outcome omits an action a locked requirement's verbatim text requires
 #     is a requirement-divergence HARD_BLOCK for the operator, never a PASS (qa.md Validation
-#     Checklist), and §5 of deploy-validate.md marks a bullet delivered on an accepted degraded
-#     branch `delivered`, quoting that HARD_BLOCK. The qa-lrdiv-* rows are line-mode pins because
+#     Checklist): QA writes NEEDS_REWORK and the lead asks by AskUserQuestion before rework; the
+#     exemptions (2) and (3) are pinned whole and (1) only by its tail; §5 of deploy-validate.md records an accepted degraded
+#     branch as a `descope` of the omitted action, never `delivered`. The qa-lrdiv-* rows are line-mode pins because
 #     the whole checklist is ONE paragraph to para mode (no blank line between its items): keep
 #     each pinned phrase on ONE line of the item. dv-lrcov-degraded spans §5 to §6, not the
 #     coverage lead, so relocating the paragraph out of §5 moves it out of the span.
@@ -227,11 +228,13 @@ elic-shape-lead|S|steps/_gate-procedures.md|## Validation cycle|## Where a chang
 sts-elic-sharded|S|steps/stories-test-strategy.md|### 4.|### 5.|so the round, elicitation, each review pass and each repair|contains
 qa-lrdiv-lead|R|qa.md|## Validation Checklist|## Communication|- [ ] **An AC that omits a locked requirement's action is a deviation for the operator (HARD GATE).**|prefix
 qa-lrdiv-never-pass|R|qa.md|## Validation Checklist|## Communication|An AC whose expected outcome omits an action the text requires is a requirement divergence, never a PASS.|contains
-qa-lrdiv-hold|R|qa.md|## Validation Checklist|## Communication|and holds the verdict until the operator's disposition is recorded on that entry.|contains
-qa-lrdiv-outcome|R|qa.md|## Validation Checklist|## Communication|A recorded disposition accepting the degraded branch makes the AC PASS, citing the entry id; `do-now` makes it NEEDS_REWORK.|contains
-qa-lrdiv-exempt|R|qa.md|## Validation Checklist|## Communication|value), or (2) a Tier 1 `HARD_BLOCK` with blocker type `requirement divergence` that cites this LR and names this degraded branch already carries a recorded operator disposition; cite that entry.|contains
+qa-lrdiv-empty|R|qa.md|## Validation Checklist|## Communication|A precondition under which the required action has nothing to act on (an empty balance, an empty set)|contains
+qa-lrdiv-rework|R|qa.md|## Validation Checklist|## Communication|QA writes `Verdict: NEEDS_REWORK` with a `####` finding naming the HARD_BLOCK id; the lead puts it to the operator by `AskUserQuestion` under Rule 3(a), with no flag, before dispatching dev rework.|contains
+qa-lrdiv-outcome|R|qa.md|## Validation Checklist|## Communication|If the operator accepts the degraded branch (`descope` of the omitted action), QA re-validates to PASS citing the entry; `do-now` proceeds as rework.|contains
+qa-lrdiv-exempt|R|qa.md|## Validation Checklist|## Communication|value), (2) a Tier 1 `HARD_BLOCK` with blocker type `requirement divergence` that cites this LR and names this degraded branch already carries a recorded operator disposition (cite that entry), or|contains
+qa-lrdiv-exempt3|R|qa.md|## Validation Checklist|## Communication|(3) the AC's outcome performs none of the requirement's actions and reports that to the caller as a non-success (a refusal or error status, a disabled control, a dry-run marker), unless the requirement's verbatim text forbids that refusal.|contains
 qa-lrdiv-other-type|R|qa.md|## Validation Checklist|## Communication|An entry of another blocker type, or one that names no LR, does not exempt.|contains
-dv-lrcov-degraded|S|steps/deploy-validate.md|### 5. Production Validation Checkpoint|### 6. Wait for Human|**Locked-requirement coverage.**|para|A bullet delivered with a degraded branch the operator accepted on a Tier 1 `HARD_BLOCK` (`qa.md` Validation Checklist) is marked `delivered`, and its line quotes that `HARD_BLOCK`'s id.
+dv-lrcov-degraded|S|steps/deploy-validate.md|### 5. Production Validation Checkpoint|### 6. Wait for Human|**Locked-requirement coverage.**|para|An operator's acceptance of a degraded branch on a Tier 1 `requirement divergence` `HARD_BLOCK` (`qa.md` Validation Checklist) is a `descope` of the omitted action alone, never `delivered`: the bullet is marked `descoped`, and its line names that action and quotes the `HARD_BLOCK`'s id and its `descope` token.
 PINS
 }
 

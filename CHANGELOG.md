@@ -28,16 +28,19 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   the operator (BL-521).** A new HARD GATE item in `team-roles/qa.md` Validation Checklist fires
   when an AC's precondition falls inside a locked requirement's verbatim scope and its expected
   outcome omits an action the text requires. QA files a Tier 1 `HARD_BLOCK` (`requirement
-  divergence`), marks the task BLOCKED and holds its verdict until the operator's disposition is
-  recorded. If the operator accepts the degraded branch, the AC passes and cites the entry. A
-  `do-now` disposition makes it NEEDS_REWORK. Two cases are exempt: a degraded outcome the
-  requirement's own text prescribes, and an existing requirement-divergence `HARD_BLOCK` that
-  cites this LR and this branch and carries a disposition. A `trade-off` entry naming no LR does
-  not exempt.
-- `steps/deploy-validate.md` §5 marks a bullet delivered with an operator-accepted degraded branch
-  as `delivered` and quotes that `HARD_BLOCK`'s id. The disposition vocabulary is unchanged.
-- `process-rule-pins` gains seven rows pinning both texts (six line-mode rows in qa.md and one para
-  row spanning §5 of deploy-validate.md).
+  divergence`) and writes `Verdict: NEEDS_REWORK` with a finding naming it. Before dispatching
+  rework, the lead puts it to the operator by `AskUserQuestion` under Rule 3(a), with no flag. If
+  the operator accepts the degraded branch, QA re-validates to PASS citing the entry. A `do-now`
+  disposition proceeds as rework. Three cases are exempt: a degraded outcome the requirement's own
+  text prescribes; an existing requirement-divergence `HARD_BLOCK` that cites this LR and this
+  branch and carries a disposition; and an outcome that performs none of the requirement's actions
+  and reports a non-success to the caller, unless the requirement's text forbids that refusal. A
+  `trade-off` entry naming no LR does not exempt. `escalations.md`, `implementation.md` and the
+  Escalation Protocol in `qa.md` name the same filer (QA) and the same route.
+- `steps/deploy-validate.md` §5 records an operator-accepted degraded branch as a `descope` of the
+  omitted action alone, never `delivered`, quoting the `HARD_BLOCK`'s id and token.
+- `process-rule-pins` gains nine rows pinning both texts (eight line-mode rows in qa.md and one
+  para row spanning §5 of deploy-validate.md).
 
 ## [0.783.0] - 2026-10-14
 
