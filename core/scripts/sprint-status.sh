@@ -29,6 +29,11 @@
 #                                              # would otherwise wedge. Measured on the reference
 #                                              # consumer's s316 at its HEAD 73b2943f: 17 of 17
 #                                              # entries `review`, each named in a gate-3 section.
+#   sprint-status.sh story-status --ref <sha> [--root <repo>] <story-file>
+#                                              # ONE story's status and its implementation-view
+#                                              # row's status, both read AT <sha> (git show),
+#                                              # never the working tree. validate-handoff-evidence.sh
+#                                              # calls it at gate 1's frozen sha.
 #   sprint-status.sh derive-stories [--check] [--sprint <N>] [--root <dir>]
 #                                              # the WRITE half of that same join: rewrite each
 #                                              # derivable field's value from the story file
@@ -174,13 +179,16 @@ case "${1:-}" in
   close)      MODE="close"; shift ;;
   check-stories) MODE="check-stories"; shift ;;
   derive-stories) MODE="derive-stories"; shift ;;
-  "")         echo "usage: sprint-status.sh --render | --check <file> | sprint-id | roll --sprint <N> | close --evidence <text> | check-stories [--require-done] [--sprint <N>] | derive-stories [--check] [--sprint <N>]" >&2; exit 2 ;;
+  story-status) MODE="story-status"; shift ;;
+  "")         echo "usage: sprint-status.sh --render | --check <file> | sprint-id | roll --sprint <N> | close --evidence <text> | check-stories [--require-done] [--sprint <N>] | derive-stories [--check] [--sprint <N>] | story-status --ref <sha> [--root <repo>] <story-file>" >&2; exit 2 ;;
   *)          echo "sprint-status: unknown command '$1'" >&2; exit 2 ;;
 esac
 
-DRY=""; REQUIRE_DONE=""
+DRY=""; REQUIRE_DONE=""; REF=""
 while [ $# -gt 0 ]; do
   case "$1" in
+    --ref)       [ "$MODE" = "story-status" ] || { echo "sprint-status: --ref is a flag of story-status" >&2; exit 2; }
+                 REF="${2:-}"; shift 2 2>/dev/null || shift ;;
     --require-done) [ "$MODE" = "check-stories" ] || { echo "sprint-status: --require-done is a flag of check-stories" >&2; exit 2; }
                  REQUIRE_DONE="1"; shift ;;
     --check)     [ "$MODE" = "derive-stories" ] || { echo "sprint-status: --check is a mode of its own, or a flag of derive-stories" >&2; exit 2; }
@@ -193,9 +201,14 @@ while [ $# -gt 0 ]; do
     --evidence)  EVIDENCE="${2:-}"; shift 2 ;;
     --closed-at) CLOSED_AT="${2:-}"; shift 2 ;;
     --retro-doc) RETRO_DOC="${2:-}"; shift 2 ;;
-    *)           echo "sprint-status: unknown option '$1'" >&2; exit 2 ;;
+    -*)          echo "sprint-status: unknown option '$1'" >&2; exit 2 ;;
+    *)           if [ "$MODE" = "story-status" ] && [ -z "$FILE" ]; then FILE="$1"; shift
+                 else echo "sprint-status: unknown option '$1'" >&2; exit 2; fi ;;
   esac
 done
+if [ "$MODE" = "story-status" ] && { [ -z "$REF" ] || [ -z "$FILE" ]; }; then
+  echo "usage: sprint-status.sh story-status --ref <sha> [--root <repo>] <story-file>" >&2; exit 2
+fi
 
 if [ "$MODE" = "check" ] && [ -z "$FILE" ]; then
   echo "usage: sprint-status.sh --check <file>" >&2; exit 2
@@ -232,7 +245,7 @@ done
 MODE="$MODE" FILE="$FILE" SCHEMA="$SCHEMA" PROJECT_ROOT="$PROJECT_ROOT" \
 SPRINT="$SPRINT" NAME="$NAME" VARIANT="$VARIANT" INTENSITY="$INTENSITY" \
 EVIDENCE="$EVIDENCE" CLOSED_AT="$CLOSED_AT" RETRO_DOC="$RETRO_DOC" \
-DRY="$DRY" REQUIRE_DONE="$REQUIRE_DONE" STORY_FIELDS_FILE="${STORY_FIELDS_FILE:-}" \
+DRY="$DRY" REQUIRE_DONE="$REQUIRE_DONE" REF="$REF" STORY_FIELDS_FILE="${STORY_FIELDS_FILE:-}" \
 STORY_FIELDS_REL="${STORY_FIELDS_REL:-}" python3 - <<'PY'
 import json, os, re, sys
 from pathlib import Path
@@ -757,6 +770,12 @@ def story_file_status(path):
         text = Path(path).read_text(errors="replace")
     except OSError:
         return (None, "cannot read the file")
+    return story_text_status(text)
+
+
+def story_text_status(text):
+    """story_file_status on bytes already read, so `story-status --ref` reads a COMMITTED story
+    through the same grammar the working-tree readers use. One parse, two sources."""
     fm_text = None
     if text.startswith("---\n") or text.startswith("---\r\n"):
         end = text.find("\n---", 3)
@@ -801,7 +820,7 @@ def story_key_stem(key, sprint):
     return "-".join(out) if out else key
 
 
-def resolve_story_file(view_path, key, declared, sprint):
+def resolve_story_file(view_path, key, declared, sprint, exists=None, lister=None):
     """First candidate that exists, never a single guessed path. The two canonicals sit in
     DIFFERENT directories and both name the story corpus with the same relative `file:` value, so
     resolving relative to the canonical alone finds the corpus from one view and nothing from the
@@ -810,7 +829,15 @@ def resolve_story_file(view_path, key, declared, sprint):
     THE SPRINT COMES FROM THE DECLARATION, NOT FROM THE KEY OR THE FILESYSTEM. That is the join
     this release re-derived: the old form globbed the whole key against one flat directory shared
     by 56 sprints, which is why `story-S299-1` and `story-297-1` needed two spellings to be
-    findable at all."""
+    findable at all.
+
+    `exists` and `lister` default to the working tree. `story-status --ref` passes predicates over
+    the file set tracked AT THE REF, so the committed join runs this same candidate order rather
+    than a second matcher."""
+    if exists is None:
+        exists = lambda p: p.is_file()
+    if lister is None:
+        lister = lambda d, pat: sorted(d.glob(pat)) if d.is_dir() else []
     stories = root / stories_dir(sprint)
     cands = []
     if declared:
@@ -827,9 +854,9 @@ def resolve_story_file(view_path, key, declared, sprint):
     stem = story_key_stem(key, sprint)
     cands.append(stories / (stem + ".md"))
     for c in cands:
-        if c.is_file():
+        if exists(c):
             return c
-    hits = sorted(stories.glob(stem + "-*.md")) if stories.is_dir() else []
+    hits = lister(stories, stem + "-*.md")
     if len(hits) == 1:
         return hits[0]
     if len(hits) > 1:
@@ -1408,6 +1435,95 @@ def derive_stories():
     return 0
 
 
+def story_status_at_ref():
+    """`story-status --ref <sha> <story-file>`: ONE story's status and its row's status in the
+    PRIMARY (implementation) view, both read from the COMMIT, never the working tree.
+
+    validate-handoff-evidence.sh calls this at gate 1's frozen sha. It is a mode here rather than
+    a parse there because this file already owns the envelope grammar, the story-status grammar
+    and the entry-to-file join; a second parser in the validator is the drift I48 exists for.
+
+    Only the PRIMARY view is read. The planning view lags: at three APPROVED gate-1 shas on the
+    reference consumer (s318 2.1, s317 2.2, s317 1.2) it still read `ready`/`ready-for-dev` while
+    the implementation view and the story read `review`, so comparing it refuses correct handoffs.
+
+    Output, stdout, two tab-separated lines; an EMPTY value is an absence and the third field
+    says why:
+        story<TAB><status><TAB><grammar or reason>
+        row<TAB><status><TAB><entry key or reason>
+    Exit 0 whenever the ref resolves (an absence is an answer, not an error), 1 when it does not
+    or git cannot list it, 2 on usage."""
+    import subprocess
+    ref = os.environ.get("REF", "")
+    story = os.environ.get("FILE", "")
+
+    def git(*a):
+        r = subprocess.run(["git", "-C", str(root)] + list(a), capture_output=True, text=True)
+        return r.stdout if r.returncode == 0 else None
+
+    full = git("rev-parse", "--verify", "--quiet", ref + "^{commit}")
+    if not full:
+        fail("story-status: ref does not resolve in %s: %s" % (root, ref), code=1)
+    full = full.strip()
+    listing = git("ls-tree", "-r", "--name-only", full)
+    if listing is None:
+        fail("story-status: cannot list the tree at %s" % full[:12], code=1)
+    tracked = set(listing.split("\n")) - {""}
+    story_rel = os.path.normpath(story)
+
+    if story_rel not in tracked:
+        print("story\t\tnot tracked at %s" % full[:12])
+    else:
+        sv, how = story_text_status(git("show", "%s:%s" % (full, story_rel)) or "")
+        print("story\t%s\t%s" % (sv or "", how))
+
+    view_rel = os.path.relpath(str(VIEWS[PRIMARY]), str(root))
+    if view_rel not in tracked:
+        print("row\t\tno %s view tracked at %s (%s)" % (PRIMARY, full[:12], view_rel))
+        return 0
+    text = git("show", "%s:%s" % (full, view_rel)) or ""
+    vsprint, _ = parse(text)
+    if vsprint is None:
+        print("row\t\t%s carries no `sprint:` at %s" % (view_rel, full[:12]))
+        return 0
+    state, entries = parse_story_entries(text)
+    if state != "ok":
+        print("row\t\t%s `stories:` is %s at %s" % (view_rel, state, full[:12]))
+        return 0
+
+    def rel(p):
+        return os.path.normpath(os.path.relpath(str(p), str(root)))
+
+    def exists_at(p):
+        return rel(p) in tracked
+
+    def list_at(d, pat):
+        import fnmatch
+        dr = rel(d)
+        return sorted(root / t for t in tracked
+                      if os.path.dirname(t) == dr and fnmatch.fnmatchcase(os.path.basename(t), pat))
+
+    hits = []
+    for key, fields, lineno in entries:
+        r = resolve_story_file(root / view_rel, key, fields.get("file"), vsprint,
+                               exists=exists_at, lister=list_at)
+        if r is None or isinstance(r, list):
+            continue
+        if rel(r) == story_rel:
+            hits.append((key, fields.get("status"), lineno))
+    if not hits:
+        print("row\t\tno entry of %s (sprint %d) names %s at %s"
+              % (view_rel, vsprint, story_rel, full[:12]))
+    elif len(hits) > 1:
+        print("row\t\t%d entries of %s name %s (%s)"
+              % (len(hits), view_rel, story_rel, ", ".join(h[0] for h in hits)))
+    elif hits[0][1] is None:
+        print("row\t\tentry %s carries no `status:` (line %d)" % (hits[0][0], hits[0][2]))
+    else:
+        print("row\t%s\t%s (%s line %d)" % (hits[0][1], hits[0][0], view_rel, hits[0][2]))
+    return 0
+
+
 if mode == "render":
     print(render_header())
     sys.exit(0)
@@ -1424,6 +1540,8 @@ elif mode == "check-stories":
     sys.exit(check_stories())
 elif mode == "derive-stories":
     sys.exit(derive_stories())
+elif mode == "story-status":
+    sys.exit(story_status_at_ref())
 else:
     fail("unknown mode '%s'" % mode, code=2)
 PY
