@@ -755,8 +755,10 @@ DG_HELD=""
 if [ -z "$DG_AGENT_ID" ] && [ -n "$DG_DESC" ] && [ -n "$DG_TRANSCRIPT" ] && [ -r "$DG_TRANSCRIPT" ]; then
   _dg_tail="$(mktemp "${TMPDIR:-/tmp}/ai-dlc-cap-tail.XXXXXX" 2>/dev/null || true)"
   if [ -n "$_dg_tail" ]; then
-    tail -c "${AI_DLC_CAP_TAIL_BYTES:-1048576}" "$DG_TRANSCRIPT" > "$_dg_tail" 2>/dev/null || true
-    if grep -qF -- "$DG_CAP_TEXT" "$_dg_tail" 2>/dev/null; then
+    # A FAILED TAIL WRITE FAILS OPEN: no hold. A short write can keep the rejection and lose the
+    # release that followed it, which would invent a hold -- the one thing this window must not do.
+    if tail -c "${AI_DLC_CAP_TAIL_BYTES:-1048576}" "$DG_TRANSCRIPT" > "$_dg_tail" 2>/dev/null \
+       && grep -qF -- "$DG_CAP_TEXT" "$_dg_tail" 2>/dev/null; then
       DG_HELD="$(jq -Rrn --arg d "$DG_DESC" --arg cap "$DG_CAP_TEXT" '
         def txt: if type == "string" then .
                  elif type == "array" then map(if type == "object" then (.text // "") else "" end) | join("\n")
@@ -918,6 +920,10 @@ if [ "$ROLE" = gate-adjudicator ] && [ "$DG_IMPL_GATE" = true ] && [ -n "${SPAWN
   done
   _dg_keys="$(mktemp "${TMPDIR:-/tmp}/ai-dlc-waiver-keys.XXXXXX" 2>/dev/null || true)"
   if [ -n "$_dg_keys" ]; then
+    # A FAILED KEY WRITE FAILS OPEN. Each producer's status is recorded, because a brace group
+    # reports only its last command's: a ledger jq that dies mid-stream leaves PARTIAL keys, and a
+    # waiver naming a spawn the file lost would read as naming nothing -- a false deny.
+    _dg_kok=1
     {
       jq -Rr --argjson s "$SPAWN_SPRINT" --arg sh "$_dg_shardable" '
         fromjson? | select(type == "object" and .sprint == $s)
@@ -927,14 +933,14 @@ if [ "$ROLE" = gate-adjudicator ] && [ "$DG_IMPL_GATE" = true ] && [ -n "${SPAWN
           (if .shard == "invalid-exception" and ($sh | contains(" " + $role + " "))
              then "I\t" + (.tool_use_id // "") + "\t"
                   + (if (.name // "") != (.role // "") then (.name // "") else "" end)
-             else empty end)' "$SPAWN_LEDGER" 2>/dev/null
+             else empty end)' "$SPAWN_LEDGER" 2>/dev/null || _dg_kok=0
       if [ -r "$SPAWN_STATE_DIR/subagent-context.jsonl" ]; then
         jq -Rr --argjson s "$SPAWN_SPRINT" '
           fromjson? | select(type == "object" and .sprint == $s and (.agent_id // "") != "")
-          | "K\t" + .agent_id' "$SPAWN_STATE_DIR/subagent-context.jsonl" 2>/dev/null
+          | "K\t" + .agent_id' "$SPAWN_STATE_DIR/subagent-context.jsonl" 2>/dev/null || _dg_kok=0
       fi
-    } > "$_dg_keys" 2>/dev/null || true
-    _dg_waiver="$(LC_ALL=C awk -v sprint="$SPAWN_SPRINT" -v kf="$_dg_keys" '
+    } > "$_dg_keys" 2>/dev/null || _dg_kok=0
+    _dg_waiver="$(LC_ALL=C awk -v sprint="$SPAWN_SPRINT" -v kf="$_dg_keys" -v kok="$_dg_kok" '
       BEGIN {
         nk = 0; ni = 0
         while ((rc = (getline l < kf)) > 0) {
@@ -943,8 +949,9 @@ if [ "$ROLE" = gate-adjudicator ] && [ "$DG_IMPL_GATE" = true ] && [ -n "${SPAWN
           else if (f[1] == "I" && (f[2] != "" || f[3] != "")) { ni++; itui[ni] = f[2]; iname[ni] = f[3] }
         }
         # An unopenable key file (-1) or a sprint with no keys at all is a state this arm cannot
-        # judge: every waiver would read as naming nothing. Fail open.
-        if (rc < 0 || nk == 0) dead = 1
+        # judge: every waiver would read as naming nothing. So is a key file whose write failed
+        # (kok != 1): its keys are partial. Fail open.
+        if (rc < 0 || nk == 0 || kok != 1) dead = 1
         AP = "\047"
         NT = "n" AP "t$"
         WSEP = "[^a-z0-9" AP "-]+"
