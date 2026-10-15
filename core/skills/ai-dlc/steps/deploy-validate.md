@@ -495,6 +495,7 @@ in `steps/retro.md` §4a binds here, at the checkpoint: every deferred or
 descoped bullet, and every bullet deferred and then delivered in this
 sprint, needs a Tier 1 `HARD_BLOCK` carrying the operator's recorded
 disposition, and the block quotes that entry's id and disposition token.
+A bullet delivered with a degraded branch the operator accepted on a Tier 1 `HARD_BLOCK` (`qa.md` Validation Checklist) is marked `delivered`, and its line quotes that `HARD_BLOCK`'s id.
 A bullet a later phase of the same Rule 14 plan delivers is marked
 `phased — <the story or stories that deliver it>`.
 Each cited story carries the requirement's LR id in its own

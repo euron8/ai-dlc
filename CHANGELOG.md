@@ -20,6 +20,25 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [UNRELEASED — b230-c1-qa]
+
+### Added
+
+- **QA now treats an AC that omits an action a locked requirement requires as a deviation for
+  the operator (BL-521).** A new HARD GATE item in `team-roles/qa.md` Validation Checklist fires
+  when an AC's precondition falls inside a locked requirement's verbatim scope and its expected
+  outcome omits an action the text requires. QA files a Tier 1 `HARD_BLOCK` (`requirement
+  divergence`), marks the task BLOCKED and holds its verdict until the operator's disposition is
+  recorded. If the operator accepts the degraded branch, the AC passes and cites the entry. A
+  `do-now` disposition makes it NEEDS_REWORK. Two cases are exempt: a degraded outcome the
+  requirement's own text prescribes, and an existing requirement-divergence `HARD_BLOCK` that
+  cites this LR and this branch and carries a disposition. A `trade-off` entry naming no LR does
+  not exempt.
+- `steps/deploy-validate.md` §5 marks a bullet delivered with an operator-accepted degraded branch
+  as `delivered` and quotes that `HARD_BLOCK`'s id. The disposition vocabulary is unchanged.
+- `process-rule-pins` gains seven rows pinning both texts (six line-mode rows in qa.md and one para
+  row spanning §5 of deploy-validate.md).
+
 ## [0.783.0] - 2026-10-14
 
 Batch 229 (graph-ledger-full-drain), second release: six entries from the s317-s318 efficiency analysis. No upstream

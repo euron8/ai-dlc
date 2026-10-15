@@ -175,3 +175,34 @@ a decision nobody adjudicates.
 
 verify: manual -- close when the remediator contract forbids dispositioning a party MAJOR as out of shard scope (it escalates instead), and a fixture pins that clause.
 
+## BL-521 — QA passes an AC that skips an action a locked requirement requires
+
+**DEFECT.** graph s318 story 1.2 AC5(b) specified that a HODL press with token0 at or below the
+0.01 dust floor skips the swap and transfers token1. LR-S318-2's verbatim text is "This function
+will swap current wallet balance of offramp_hodl_token0 and swap to offramp_hodl_token1." QA
+passed AC5 as specified (`docs/reviews/s318/1-2-qa-validation.md`, AC5 row PASS), the story
+shipped, and two live presses skipped the swap. At retro the operator said "I did not approve the
+arbitrary minimum that was set that caused the swap to be skipped." `qa.md` had no rule that an AC
+omitting a locked requirement's action is a deviation to put to the operator. Its null-impl gate
+asks whether some AC goes red against a degenerate implementation, and AC1, AC3 and AC5(c) did.
+
+**The narrow exemption is the point.** An entry was on record before QA ran:
+`S318-HODL-INHERITS-OFFRAMP-DUST-FLOOR-AND-SLIPPAGE`, RESOLVED with operator authorization at
+2026-10-14T10:49:39Z ("Inherit and say so (Recommended)"), while the s318 QA merge is 12:04 the
+same day. It is blocker type `trade-off`, framed as which config leaf owns the floor, and it
+names no LR. A looser exemption ("an operator disposition already covers this AC") acquits
+AC5(b) on that entry, and the retro correction records that the operator did not read it as
+approving the skip. The exemption therefore takes only a Tier 1 `HARD_BLOCK`, blocker type
+`requirement divergence`, that cites the LR and names the degraded branch.
+
+Built: a HARD GATE item in `core/team-roles/qa.md` Validation Checklist (trigger, two exemptions,
+the HARD_BLOCK route and the PASS / NEEDS_REWORK outcomes), one sentence in
+`steps/deploy-validate.md` §5 marking such a bullet `delivered` and quoting the HARD_BLOCK id (the
+disposition vocabulary is unchanged), and seven `process-rule-pins` rows. The receipt runs the
+fixture's `--report` and requires all seven rows `ok`.
+
+Filed by the reference consumer as
+`PC-S318-QA-ROLE-HAS-NO-RULE-THAT-A-SKIP-AGAINST-A-LOCKED-REQUIREMENT-IS-A-DEVIATION-TO-PUT-TO-THE-OPERATOR`.
+
+verify: sh R=core/fixtures/process-rule-pins/run.sh; [ -f "$R" ] || exit 9; o="$(bash "$R" --report 2>&1)"; n="$(grep -cE '^  ok    (qa-lrdiv-(lead|never-pass|hold|outcome|exempt|other-type)|dv-lrcov-degraded): pinned inside' <<<"$o")" || n=0; [ "$n" -eq 7 ]
+

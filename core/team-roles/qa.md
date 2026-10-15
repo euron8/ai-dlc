@@ -156,6 +156,31 @@ For each completed task, verify:
   is a requirement whose only type-valid impl is the correct one (name it);
   remove when locked-requirement discrimination is enforced by a
   producer-side gate.
+- [ ] **An AC that omits a locked requirement's action is a deviation for the operator (HARD GATE).**
+  For each AC whose precondition falls inside the scope of a locked
+  requirement's verbatim text, compare the AC's expected outcome with every
+  action that text requires.
+  An AC whose expected outcome omits an action the text requires is a requirement divergence, never a PASS.
+  A precondition under which the required action has nothing to act on (an
+  empty balance, an empty set) does not trigger this item.
+  QA files a Tier 1 `HARD_BLOCK` with blocker type `requirement divergence`
+  (SKILL.md Rule 12), quoting the LR id, its verbatim text and the omitted
+  action, through the Escalation Protocol below. QA marks the task BLOCKED
+  and holds the verdict until the operator's disposition is recorded on that entry.
+  The entry is resolved before the checkpoint, and the lead pauses per Rule 3
+  for it (`escalations.md` Resolution lifecycle).
+  A recorded disposition accepting the degraded branch makes the AC PASS, citing the entry id; `do-now` makes it NEEDS_REWORK.
+  Exempt only when (1) the degraded outcome is the one the requirement's own
+  text prescribes (it asks to fail closed, or to degrade to exactly that
+  value), or (2) a Tier 1 `HARD_BLOCK` with blocker type `requirement divergence` that cites this LR and names this degraded branch already carries a recorded operator disposition; cite that entry.
+  An entry of another blocker type, or one that names no LR, does not exempt.
+  An answer to a trade-off is not a disposition of a requirement the AC no
+  longer delivers. Catches a skip or degraded branch written into an AC
+  against a locked requirement and passed as specified, so the requirement
+  ships undelivered and the operator first learns of it live; false positive
+  is an action the text requires only under a precondition the AC excludes
+  (name the precondition); remove when the stories step refuses an AC that
+  omits a locked requirement's action without a recorded disposition.
 - [ ] **Protective-direction check (HARD GATE).** Any AC guarding a
   bound / limit / ceiling MUST assert the bound in the protective direction —
   the side that constrains the risk — not merely the absence of the known

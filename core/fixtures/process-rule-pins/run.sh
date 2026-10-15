@@ -37,6 +37,13 @@
 #     that each clause is PRESENT in the lead's paragraph. A separate sentence appended after it
 #     that contradicts it ("...; elicitation may instead run one voice") leaves every pinned
 #     clause intact and passes. No row here can fail on an addition; a reviewer reads for that.
+#   - an AC whose expected outcome omits an action a locked requirement's verbatim text requires
+#     is a requirement-divergence HARD_BLOCK for the operator, never a PASS (qa.md Validation
+#     Checklist), and §5 of deploy-validate.md marks a bullet delivered on an accepted degraded
+#     branch `delivered`, quoting that HARD_BLOCK. The qa-lrdiv-* rows are line-mode pins because
+#     the whole checklist is ONE paragraph to para mode (no blank line between its items): keep
+#     each pinned phrase on ONE line of the item. dv-lrcov-degraded spans §5 to §6, not the
+#     coverage lead, so relocating the paragraph out of §5 moves it out of the span.
 #
 # LEADS ARE NOT ENOUGH. A bold lead left intact over a body rewritten to say the opposite
 # ("need NOT carry", "dropped only through a HARD_BLOCK", "an assertion is a sufficient
@@ -218,6 +225,13 @@ elic-shape-onefile|S|steps/_gate-procedures.md|## Validation cycle|## Where a ch
 elic-shape-expectsha|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|split into that same shard dir with `--expect-sha` the sha every elicitation shard notarized
 elic-shape-lead|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|a lighter shape is not the lead's to choose
 sts-elic-sharded|S|steps/stories-test-strategy.md|### 4.|### 5.|so the round, elicitation, each review pass and each repair|contains
+qa-lrdiv-lead|R|qa.md|## Validation Checklist|## Communication|- [ ] **An AC that omits a locked requirement's action is a deviation for the operator (HARD GATE).**|prefix
+qa-lrdiv-never-pass|R|qa.md|## Validation Checklist|## Communication|An AC whose expected outcome omits an action the text requires is a requirement divergence, never a PASS.|contains
+qa-lrdiv-hold|R|qa.md|## Validation Checklist|## Communication|and holds the verdict until the operator's disposition is recorded on that entry.|contains
+qa-lrdiv-outcome|R|qa.md|## Validation Checklist|## Communication|A recorded disposition accepting the degraded branch makes the AC PASS, citing the entry id; `do-now` makes it NEEDS_REWORK.|contains
+qa-lrdiv-exempt|R|qa.md|## Validation Checklist|## Communication|value), or (2) a Tier 1 `HARD_BLOCK` with blocker type `requirement divergence` that cites this LR and names this degraded branch already carries a recorded operator disposition; cite that entry.|contains
+qa-lrdiv-other-type|R|qa.md|## Validation Checklist|## Communication|An entry of another blocker type, or one that names no LR, does not exempt.|contains
+dv-lrcov-degraded|S|steps/deploy-validate.md|### 5. Production Validation Checkpoint|### 6. Wait for Human|**Locked-requirement coverage.**|para|A bullet delivered with a degraded branch the operator accepted on a Tier 1 `HARD_BLOCK` (`qa.md` Validation Checklist) is marked `delivered`, and its line quotes that `HARD_BLOCK`'s id.
 PINS
 }
 
