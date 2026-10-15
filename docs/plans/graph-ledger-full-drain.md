@@ -86,7 +86,9 @@ Batch 232's block below is history: this block replaces its delivery gap. Starte
 - **§2 narrowing**: at graph's request, on the operator's ruling that it runs between sprints,
   `docs/plans/graph-implementation-push-s2-narrow.md` (#1146) moves the graph-local residue of `implementation-push.md`
   §2 into `implementation-domain.md` (`push_candidate: false`) and deletes the block whole, so the next drain reads 4
-  `PUSH-REFUSED` and 0 candidates. Rehearsed on a clone; graph executes it after operator approval.
+  `PUSH-REFUSED` and 0 candidates. Graph executed it as #1227 (`d82236cee`). Graph's report says every figure
+  matched the rehearsal; the digests, the drain and `validate-layer-entries` were re-derived here. The plan is
+  discharged.
 - **Net for the batch**: closed 0 entries, filed 0; 1 candidate closed upstream by graph's pull. Backlog 0 live, 526
   archived.
 

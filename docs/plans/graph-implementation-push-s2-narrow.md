@@ -1,9 +1,11 @@
-READ and FOLLOW docs/plans/graph-implementation-push-s2-narrow.md
+# DISCHARGED — DO NOT EXECUTE — narrow graph's `implementation-push.md` §2 to its graph-local points
 
-# Narrow graph's `implementation-push.md` §2 to its graph-local points
+**Discharged by graph's own run: `d82236cee`, "narrow implementation-push §2 to graph-local points" (#1227), on graph
+`main`.** See `## Discharge`.
 
 ## RESUME HERE
 
+**SPENT: graph ran this plan as #1227; see `## Discharge`. What follows is the state at writing.**
 **STATE AT WRITING: WRITTEN AND REHEARSED, NOT STARTED.** Requested by the graph session after
 graph's 0.789.0 pull (#1226) closed `PC-S319-IMPLEMENTATION-PUSH-WORKTREE-EXPLICIT-DISPATCH-BLOCK-RESTATES-CORE-DISPATCH-PROTOCOL`.
 That entry's "local work remaining" is this file's subject. The operator moved it out of sprint
@@ -217,3 +219,19 @@ that validator can see this edit. With point 9 kept, it reads 86 both sides.
 **Not rehearsed:** graph's pre-push suite and its wall clock, and the PR flow.
 
 ## Discharge
+
+Executed 2026-10-15 by the graph session. Per that session's report, the operator approved it; that was not checked
+from here. It merged as graph #1227 (`d82236cee`), changing
+only the two extension files (+22 / -63).
+
+- **Graph session's report:** every action 5 figure matched `## Rehearsal`, including the before and after `cmp` 0 on
+  `validate-layer-entries.sh`, `--list-adjudications` (9 keyed) and the classify histogram (46 rows, 0 `HARD-*`). Graph's
+  pre-push suite read `all gates green` with 0 FAIL lines. A grep of graph's live docs for the deleted heading found 0
+  hits; as the control, the heading counted 1 in core's `_dispatch-protocol.md`. No disagreement was reported.
+- **Re-derived here, read only, against graph `main`:**
+  - `--digest` on `implementation-push.md` gives 4 rows, `be4a1031…`, `67934240…`, `e5cc0af2…` and `3205b931…`. `b0e3cc6b`
+    counts 0 there against 1 at `d82236cee^`.
+  - `implementation-domain.md` has 3 blocks, the new one at `bf81ce4320e99e434497571a4ddc5ae1f18b9630`.
+  - `push-drain.sh` at `7e8d62d7` reads 4 `PUSH-REFUSED` and 0 `PUSH-CANDIDATE`.
+  - `validate-layer-entries.sh` exits 0.
+- PC-S319's "local work remaining" is discharged. Graph left its ledger archive unedited.
