@@ -681,7 +681,7 @@ score "m24 series arm never checks the gate_type prefix" validate-gate-adjudicat
   '    if False:' \
   "A series id carrying another gate's prefix was not refused by the prefix check."
 score "m25 series arm never checks the trailing timestamp form" validate-gate-adjudication.sh \
-  "SF4" \
+  "SF4 SF6 SF7 SF8" \
   '    if not re.match(r"^[0-9]{8}T[0-9]{6}Z$", _sts):' \
   '    if False:' \
   "A series id whose trailing time is not YYYYMMDDTHHMMSSZ was accepted, and with it every

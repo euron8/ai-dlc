@@ -182,7 +182,7 @@ sf_case "implementation-s318-20261101T1200Z"
 # lack (lowercase, one segment, ends in a digit, the x for a dotted index); each offender breaks
 # exactly one of them and must be refused by the timestamp-form sentence, which is the only one
 # that sees the slug.
-sf_case "implementation-s318-story2x4-20261101T120000Z"
+sf_case "implementation-s318-story2x4-20261101T090000Z"
 [ "$RC" -eq 0 ] && ok "SF5: a story-scoped series id with a well-formed slug → exit 0" \
   || bad "SF5: a well-formed slugged series id was refused (rc=$RC): $SF_ERR"
 sf_case "implementation-s318-story-4-20261101T120000Z"
