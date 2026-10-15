@@ -30,6 +30,7 @@ invariant because the set kept getting restated from memory somewhere else.
 | code-review verdicts | `APPROVED` `BLOCKED` `NEEDS_REWORK` | `core/team-roles/code-reviewer.md` | I112 | — | `core/skills/ai-dlc/steps/gate-validation.md` |
 | QA verdicts | `NEEDS_REWORK` `PASS` | `core/team-roles/qa.md` | I112 | — | `core/skills/ai-dlc/steps/gate-validation.md` |
 | steering-budget --cite verdicts | `MATCH` `NOMATCH` `NOMATCH-NO-RECORDS` `NOMATCH-SHORT` `NOMATCH-TRANSCRIPT-PRUNED` | `core/scripts/validate-steering-budget.sh` | I117 | — | `core/scripts/validate-adversarial-convergence.sh` |
+| shardable roles | `adversary` `analyst` `code-reviewer` `code-reviewer-escalated` `gate-adjudicator` `qa` `remediator` | `core/scripts/validate-spawn-ledger.sh` | I125 | — | `core/hooks/ai-dlc-dispatch-guard.sh` |
 
 ## Schema enums
 

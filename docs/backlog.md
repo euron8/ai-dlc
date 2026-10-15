@@ -153,7 +153,29 @@ exception, under both the Sonnet and the local qwen lead at about 0.08 per activ
 fired correctly each time; the waste is the discarded pass, not an escape. Two further discards
 (Check 1 verdict form, Check 5 drift) are inferred, not stated as lead error.
 
-verify: manual -- close when a Check 22 waiver that names no Rule 28 exception is refused at the moment the lead writes it, before any adjudicator is dispatched, and a fixture seeds the waiver form graph wrote.
+The count did not reproduce as stated. Re-derived from graph's lead transcripts, the measured Check 22
+discards are three nonces: s317 `implementation-20261010T230257Z` (a tier-pin waiver naming "82 dev
+and 42 code-reviewer rows" and no spawn), and s317 `124524Z` and s318 `011534Z` (waivers naming
+every `invalid-exception` spawn and citing no Rule 28 exception, or only "the four"). All four lead
+`OVERRIDDEN` writes in s317-s318 were Bash `cat >> … <<EOF` appends, so no Edit/Write matcher sees
+them. The check runs at dispatch: `ai-dlc-dispatch-guard.sh` refuses an implementation-gate
+`gate-adjudicator` dispatch (Check 22 is in that manifest row only) when a current-sprint `OVERRIDDEN`
+entry that dispositions Check 22 names no spawn of the sprint (catches 230257Z), or when a shardable
+`invalid-exception` ledger row is not named by an `OVERRIDDEN` entry that remediates it as Check 22
+clearing arm 4 accepts, by a sharded re-dispatch or a cited exception (1)-(4) (catches 124524Z and
+011534Z). The Remediation field is assembled across graph's wrapped continuation lines before it is
+read, and a negation counts only in the clause before the `re-dispatch` claim (or before a cited
+exception), so "re-dispatched sharded, not serially" covers and "exception (3) does not apply" does
+not. A refused dispatch writes no spawn-ledger row. Over graph's pending-archive.md + pending.md,
+S298-S318, clause 1 denies nothing, and clause 2 denies only S316/S317 rows that arm S3 fails under
+the 0.783.0 validator, which counts party seats as shardable (`party_seats`). Graph ran S317 under a
+validator with no `party_seats`, so a party-seat `invalid-exception` row passed Check 22 there and is
+denied here: graph's next pull refuses every S317-shaped adjudicator dispatch carrying such a row
+(the tea row `toolu_012cdPrfgjVUGRG1X3sAcT1g`, measured) until that row is waived. The tip
+adversary's replay over graph's S317 nonces: 20 denied, 19 of them recorded as Check 22 PASSED
+under graph's own validator.
+
+verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-512-adjudicator-dispatch-waiver.sh
 
 ## BL-515 — the lead re-sends spawns the concurrency cap rejected
 
@@ -162,7 +184,16 @@ re-sent with the same description; the worst burst was 32 rejections in one minu
 sprint-review, 40 of 95 party seats). `RB/rule-28.md` already says to hold the rejected set until a
 beat returns a `DELIVERED` line, so this is the lead not following written prose.
 
-verify: manual -- close when a re-sent `Agent` call whose description matches a spawn rejected in the same session with no intervening `DELIVERED` beat is refused by a hook, and a fixture seeds the rejection text.
+The `DELIVERED` key did not survive measurement. Over graph's nine rejecting lead sessions (279
+rejections, 233 same-description re-sends), holding until a `DELIVERED` beat would deny 226 re-sends,
+142 of which the harness then launched. Per the operator ruling, a slot frees when an agent exits:
+`rule-28.md` now releases the held set on an agent task-notification or a non-error
+`Agent`/`Task` result (a hook-refused or otherwise failed call frees no slot), and `ai-dlc-dispatch-guard.sh` denies a lead re-send of a rejected
+description with neither after the rejection. On the same corpus it denies 3 re-sends, all rejected
+again, and 0 that launched. 83 re-sends rejected again are not held because a release record sat
+between the attempts.
+
+verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-515-resend-after-cap.sh
 
 ## BL-519 — the remediator can set aside a party MAJOR as "outside this shard"
 
