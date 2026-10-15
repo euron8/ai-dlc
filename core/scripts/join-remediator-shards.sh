@@ -27,6 +27,8 @@
 #   --since/--until   the repair window, `YYYY-MM-DDTHH:MM:SSZ`, inclusive both ends. Explicit
 #                     and required: an mtime or a "last N minutes" default is a window the
 #                     filesystem or the clock can move.
+#   --rerun <part>.md@<ISO>   (repeatable) judge that part's cited files from <ISO> on; see
+#                     "RE-RUN OF ONE PART" below.
 #
 # READS   <state>/planning-artifacts/.artifact-writes.jsonl
 #         <state>/planning-artifacts/s<N>/shards/<artifact>-repair-p<M>/*.md   (placement rule P1)
@@ -74,6 +76,47 @@
 # conservative direction. Writes made through Bash reach no Edit matcher and no ledger row.
 # The slot is wide on purpose, so ANY other dispatched agent writing in it inside the window is
 # an uncited file and a refusal: the window must be the repair window alone.
+#
+# RE-RUN OF ONE PART -- `--rerun <part>.md@<ISO>`, repeatable; files, --document and --subject.
+#   One owner per file in its window; earlier writes on re-run files are superseded, and the
+#   re-run part accounts for the whole section diff against the split slice. When one part's
+#   remediator is re-run after the others finished, no single window joins: a narrow one reads the
+#   other parts UNWRITTEN, a wide one gives the re-run part's files two writers. So the outer
+#   window stays every other part's, and the named part P gets its own start S_P:
+#   - F_P is the set of written files P's `edit:` lines cite, resolved against the UNNARROWED rows.
+#     Only rows on F_P with ts < S_P are dropped; their writers are P's SUPERSEDED writers. Every
+#     arm above (distinct-writer, UNWRITTEN, AMBIG, UNCITED, DOUBLE, SPAN) then runs unchanged on the
+#     narrowed rows, so P's files need exactly one writer in [S_P, until] and every other part still
+#     needs its own writes in [since, until].
+#   - Refused: a part not among the parts; a part named twice; S_P malformed or outside
+#     [since, until]; a part citing no written file; a superseded writer with ANY row on a file
+#     outside F_P in the outer window (it was not only P's writer); a superseded writer with any row
+#     at or after S_P (the original is still writing); P's re-run writer being one of its
+#     superseded writers (the re-run is a NEW dispatch, a new agent id). Refused with --sources and
+#     --escalations, which read no ledger.
+#   - Subject mode classifies in-place writes (sectioned or part-less subject files) on the
+#     unnarrowed rows, before any narrowing.
+#   - The record keeps the outer `window` line and adds one `rerun: <part> since <S_P>; superseded
+#     on <file>: <ids> (<n> rows, <first>..<last>)` line per re-run; JOINED counts the superseded.
+#   Residual, stated: bytes a superseded writer wrote before S_P stay in the file, covered only by
+#   the re-run part's own account of the whole diff against the split slice.
+#
+# AN ALIAS IS ONE WRITER, AND ONLY ON TRANSCRIPT EVIDENCE. The hook records, beside `agent_id`,
+#   the payload's `tool_use_id`, its `transcript_path` (the PARENT session's file, which every
+#   subagent of the session carries) and `agent_transcript` (whether that agent's own
+#   `<session dir>/subagents/agent-<id>.jsonl` existed at write time). A row r by agent A on file f
+#   is read as B's write (B another writer of f in the window) only when ALL hold:
+#     1. r carries a non-empty tool_use_id and r's session is every one of B's rows' session on f;
+#     2. A has no transcript: r's agent_transcript is false AND `<session dir>/subagents/agent-A.jsonl`
+#        is absent at join time;
+#     3. B's transcript holds EXACTLY ONE assistant `tool_use` block -- parsed with jq, so a
+#        tool_result quoting the id never counts -- whose id is r's, whose name is Edit, Write or
+#        MultiEdit, and whose `input.file_path` normalises to f by the hook's own normalisation;
+#     4. A has no other row in the file set.
+#   A shared transcript_path is NEVER evidence of one writer: it is the parent's, on every subagent.
+#   A row that fails any clause still refuses, and the refusal names its tool_use_id, whether A's
+#   transcript exists and which transcript, if any, holds that id. A row carrying none of the new
+#   keys is judged exactly as before they existed.
 #
 # NOT A MODE OF THE ADVERSARY MERGE. A separate program on purpose: the adversary-shard fix and
 # this one close different backlog entries, and a shared mode would let either close both.
@@ -199,9 +242,12 @@ refuse() { echo "REFUSED: $*" >&2; refuse_n=$((refuse_n + 1)); }
 die() { echo "REFUSED: $*" >&2; exit 2; }
 
 SPRINT=""; ARTIFACT=""; PASS=""; APATH=""; SINCE=""; UNTIL=""; DOCUMENT=""; REPDIR=""; DOCMODE=0
-SUBJMODE=0; SUBJ_BASE=""; SRCMODE=0; SRC_REC=""
+SUBJMODE=0; SUBJ_BASE=""; SRCMODE=0; SRC_REC=""; RERUN=""
 while [ $# -gt 0 ]; do
   case "$1" in
+    --rerun) [ $# -ge 2 ] || die "--rerun needs <part>.md@<ISO>"
+             RERUN="${RERUN}${2}
+"; shift 2 ;;
     --sources) SRC_REC="${2:-}"; SRCMODE=1; shift 2 ;;
     --escalations) SRC_REC="${2:-}"; SRCMODE=2; shift 2 ;;
     --subject) SPRINT="${2:-}"; SUBJMODE=1; shift 2 ;;
@@ -213,7 +259,7 @@ while [ $# -gt 0 ]; do
     --since) SINCE="${2:-}"; shift 2 ;;
     --until) UNTIL="${2:-}"; shift 2 ;;
     --document) DOCUMENT="${2:-}"; DOCMODE=1; shift 2 ;;
-    -h|--help) sed -n '2,192p' "$0"; exit 0 ;;
+    -h|--help) awk 'NR == 1 { next } !/^#/ { exit } { print }' "$0"; exit 0 ;;
     -*) die "unknown argument '$1' (see --help)" ;;
     *) { [ "$DOCMODE" = 1 ] || [ "$SUBJMODE" = 1 ]; } && [ -z "$REPDIR" ] || die "unknown argument '$1' (see --help)"
        REPDIR="$1"; shift ;;
@@ -224,6 +270,7 @@ PARTY=0
 if [ "$SRCMODE" != 0 ]; then
   [ "$DOCMODE$SUBJMODE" = 00 ] && [ -z "$ARTIFACT$PASS$APATH$SINCE$UNTIL$REPDIR" ] \
     || die "--sources and --escalations check one record and take only --sprint <N>"
+  [ -z "$RERUN" ] || die "--rerun narrows a join's ledger window; --sources and --escalations read no ledger"
   [ -n "$SRC_REC" ] && [ -f "$SRC_REC" ] || die "--sources and --escalations need an existing record (got '${SRC_REC}')"
   [ "$SRCMODE" = 1 ] && PARTY=1
 fi
@@ -944,6 +991,257 @@ $_bad
 BADEOF
   fi
 fi
+
+# part_cites <part> -> the ledger-spelled tokens its `edit:` lines cite, one per line.
+# A run of slashes in a cited token is squeezed to one before the strip below: a TMPDIR ending in
+# `/` spells every path under it `T//x`, while STATE_PARENT comes from `pwd`, which collapses it,
+# so the literal prefix strip never matched and an absolute citation under the root refused.
+# AN ESCALATED ENTRY CITES NOTHING. Its `edit:` names the file the fix lies in (remediator.md pins
+# that form), which is the serial remediator's to edit after the join, never this shard's: counted
+# as a citation it read as a second shard claiming a sibling's file (DOUBLE) or as a claimed edit
+# with no write (UNWRITTEN). So tokens are buffered per heading and dropped when the entry under it
+# is dispositioned escalated. Measured over graph's s317/s318 shard parts: 15 of 66 escalated
+# entries carry a path on `edit:`.
+part_cites() {
+  local _toks _t
+  _toks="$(awk '
+    function emit(   i) { if (disp !~ /^escalat/) for (i = 1; i <= nt; i++) print tk[i]; nt = 0; disp = "" }
+    /^#+[ \t]/ { emit(); next }
+    /^[[:space:]-]*[*_`]*disposition[*_`]*:/ {
+      disp = tolower($0); sub(/^[^:]*:/, "", disp); gsub(/[*_`]/, "", disp); sub(/^[ \t]+/, "", disp); next }
+    /^[[:space:]-]*[*_`]*edit[*_`]*:/ {
+      line = $0; sub(/^[^:]*:/, "", line)
+      while (match(line, /[A-Za-z0-9_.\/-]+[.](md|json|jsonl|yaml|yml|txt|csv)/)) {
+        tok = substr(line, RSTART, RLENGTH); gsub(/\/\/+/, "/", tok); tk[++nt] = tok
+        line = substr(line, RSTART + RLENGTH)
+      }
+    }
+    END { emit() }' "$1" | sort -u)"
+  while IFS= read -r _t; do
+    [ -n "$_t" ] || continue
+    _t="${_t#"$STATE_PARENT"}"; _t="${_t#"$STATE_PARENT_P"}"
+    # Subject mode: a part may cite the root-relative spelling `.subject` records; the ledger spells
+    # the state dir by its basename.
+    [ "$SUBJMODE" = 1 ] && case "$_t" in "${SREL}"/*) _t="${STATE_NAME}/${_t#"${SREL}"/}" ;; esac
+    printf '%s\n' "$_t"
+  done <<PCEOF
+$_toks
+PCEOF
+}
+# resolve_cites <ledger paths> <tokens> -> the written file each token names (equal, or a `/`-suffix
+# of exactly one), the coverage join's own rule below; a token naming none or several prints nothing.
+resolve_cites() {
+  { printf '%s\n' "$1" | sed '/^$/d; s/^/W\t/'; printf '%s\n' "$2" | sed '/^$/d; s/^/C\t/'; } | awk -F'\t' '
+    $1 == "W" { if (!($2 in s)) { s[$2] = 1; P[++np] = $2 }; next }
+    { n = 0; for (i = 1; i <= np; i++) { p = P[i]
+        if (p == $2 || (length(p) > length($2) && substr(p, length(p) - length($2)) == "/" $2)) { n++; h = p } }
+      if (n == 1) print h }' | sort -u
+}
+
+# --- THE DETAILED ROWS: every row (not unique per writer) with its ts and the hook's evidence keys.
+# Read only when a --rerun narrows the window or the distinct-writer arm already has an overlap to
+# test for an alias; otherwise ROWS above is the whole input and the default join is unchanged.
+# Fields: path, agent, ts, session, tool_use_id, transcript_path, agent_transcript; `-` for empty.
+DROWS=""; RR_SUPERSEDED=0; RR_LINES=""; AL_LINES=""; AL_N=0
+_ovl0="$(printf '%s\n' "$ROWS" | awk -F'\t' 'NF >= 2 { n[$1]++ } END { for (f in n) if (n[f] > 1) { print f; exit } }')"
+if [ -n "$RERUN" ] || [ -n "$_ovl0" ]; then
+  DROWS="$(jq -rn --arg since "$SINCE" --arg until "$UNTIL" --arg ap "$APATH" --arg sh "$SHARD_REL" --arg doc "$_jdoc" '
+    def d: if . == null or . == "" then "-" else tostring end;
+    inputs | select(type == "object") | select(.kind == "artifact-write")
+     | select((.agent_id // "") != "") | select((.ts | type) == "string")
+     | select(.ts >= $since and .ts <= $until)
+     | select(.path == $ap or (.path | startswith($ap + "/")))
+     | select($doc == "1" or ((.path | startswith($sh + "/")) | not))
+     | [.path, .agent_id, .ts, (.session | d), (.tool_use_id | d), (.transcript_path | d),
+        (if has("agent_transcript") then (.agent_transcript | tostring) else "-" end)] | @tsv' "$LEDGER" 2>/dev/null)" \
+    || die "the write ledger ${LEDGER} does not parse as JSON lines"
+  # Subject mode kept only the subject's file set; keep the same paths here.
+  DROWS="$({ printf '%s\n' "$ROWS" | sed '/^$/d; s/^/K\t/'; printf '%s\n' "$DROWS" | sed '/^$/d; s/^/D\t/'; } | awk -F'\t' '
+    $1 == "K" { k[$2] = 1; next } ($2 in k) { print substr($0, 3) }')"
+fi
+
+# --- RE-RUN NARROWING (see "RE-RUN OF ONE PART"). F_P resolves against the UNNARROWED rows.
+if [ -n "$RERUN" ]; then
+  _rspec=""; _rseen=" "
+  _allpaths="$(printf '%s\n' "$ROWS" | awk -F'\t' 'NF >= 2 { print $1 }' | sort -u)"
+  while IFS= read -r _r; do
+    [ -n "$_r" ] || continue
+    case "$_r" in *@*) ;; *) refuse "--rerun ${_r} is not <part>.md@<ISO>"; continue ;; esac
+    _rp="${_r%@*}"; _rs="${_r##*@}"
+    # shellcheck disable=SC2254
+    case "$_rs" in $ISO) ;; *) refuse "--rerun ${_r}: the re-run start must be YYYY-MM-DDTHH:MM:SSZ (got '${_rs}')"; continue ;; esac
+    if [ "$_rs" \< "$SINCE" ] || [ "$_rs" \> "$UNTIL" ]; then
+      refuse "--rerun ${_r}: the re-run start ${_rs} is outside the window [${SINCE}, ${UNTIL}]"; continue
+    fi
+    case "$_rseen" in *" ${_rp} "*) refuse "--rerun names ${_rp} twice; one part has one re-run start"; continue ;; esac
+    _rseen="${_rseen}${_rp} "
+    _rpf="$(printf '%s\n' "$PARTS" | awk -v b="$_rp" '{ n = $0; sub(/.*\//, "", n) } n == b { print; exit }')"
+    [ -n "$_rpf" ] || { refuse "--rerun ${_r}: ${_rp} is not a part under ${SHARD_DIR}"; continue; }
+    _rfp="$(resolve_cites "$_allpaths" "$(part_cites "$_rpf")")"
+    [ -n "$_rfp" ] || { refuse "--rerun ${_r}: ${_rp} cites no file written in the window, so it has nothing to re-run"; continue; }
+    _rspec="${_rspec}$(printf '%s\n' "$_rfp" | awk -v p="$_rp" -v s="$_rs" '{ print "R\t" p "\t" s "\t" $0 }')
+"
+  done <<RREOF
+$RERUN
+RREOF
+  if [ -n "$_rspec" ]; then
+    _rres="$({ printf '%s' "$_rspec"; printf '%s\n' "$DROWS" | sed '/^$/d; s/^/D\t/'; } | awk -F'\t' '
+      $1 == "R" { if (!($2 in S)) { S[$2] = $3; PP[++npp] = $2 }; inF[$2, $4] = 1; nf[$2]++; F[$2, nf[$2]] = $4; fp[$4] = $2; next }
+      $1 == "D" { nr++; for (j = 2; j <= NF; j++) r[nr, j - 1] = $j; next }
+      END {
+        # Pass 1: rows on a re-run file before its start are superseded; their writers are the superseded writers of P.
+        for (i = 1; i <= nr; i++) {
+          f = r[i, 1]; a = r[i, 2]; t = r[i, 3]
+          if ((f in fp) && t < S[fp[f]]) {
+            p = fp[f]; drop[i] = 1; sw[p, a] = 1
+            k = p SUBSEP f; sn[k]++
+            if (!((k, a) in sid)) { sid[k, a] = 1; sids[k] = (k in sids) ? sids[k] " " a : a }
+            if (!(k in sf) || t < sf[k]) sf[k] = t
+            if (!(k in sl) || t > sl[k]) sl[k] = t
+          }
+        }
+        # Pass 2: every row of a superseded writer, over the whole file set.
+        for (i = 1; i <= nr; i++) {
+          f = r[i, 1]; a = r[i, 2]; t = r[i, 3]
+          for (q = 1; q <= npp; q++) { p = PP[q]
+            if (!((p, a) in sw)) continue
+            if (!((p, f) in inF)) print "OUT\t" p "\t" a "\t" f "\t" t
+            if (t >= S[p]) {
+              if ((p, f) in inF) { if (!((p, a) in same)) { same[p, a] = 1; print "SAME\t" p "\t" a "\t" f "\t" t } }
+              else print "LATE\t" p "\t" a "\t" f "\t" t
+            }
+          }
+          if (!(i in drop)) { l = r[i, 1]; for (j = 2; j <= 7; j++) l = l "\t" r[i, j]; print "K\t" l }
+        }
+        for (q = 1; q <= npp; q++) { p = PP[q]; ln = "rerun: " p " since " S[p]
+          for (m = 1; m <= nf[p]; m++) { f = F[p, m]; k = p SUBSEP f
+            if (k in sn) { ln = ln "; superseded on " f ": " sids[k] " (" sn[k] " rows, " sf[k] ".." sl[k] ")"; ns += sn[k] }
+            else ln = ln "; superseded on " f ": none" }
+          print "L\t" ln }
+        print "N\t" ns + 0
+      }')"
+    while IFS='	' read -r _k _a _b _c _d; do
+      case "$_k" in
+        OUT)  refuse "--rerun ${_a}: ${_b} is a superseded writer of ${_a} and also wrote ${_c} at ${_d}, outside the files ${_a} cites; it was not only ${_a}'s writer, so its earlier writes cannot be set aside" ;;
+        LATE) refuse "--rerun ${_a}: ${_b} is a superseded writer of ${_a} and wrote ${_c} at ${_d}, at or after the re-run start; the original is still writing" ;;
+        SAME) refuse "--rerun ${_a}: ${_b} wrote ${_c} both before the re-run start and at ${_d}, after it; the re-run is a NEW dispatch, and its writer must not be one of the writers it supersedes" ;;
+        L) RR_LINES="${RR_LINES}${_a}
+" ;;
+        N) RR_SUPERSEDED="$_a" ;;
+      esac
+    done <<RROUT
+$(printf '%s\n' "$_rres" | grep -v '^K	')
+RROUT
+    DROWS="$(printf '%s\n' "$_rres" | sed -n 's/^K	//p')"
+    ROWS="$(printf '%s\n' "$DROWS" | awk -F'\t' 'NF >= 2 { print $1 "\t" $2 }' | sort -u)"
+  fi
+fi
+
+# --- THE ALIAS RULE (see "AN ALIAS IS ONE WRITER"). Tested only on a file the narrowed rows still
+# give two or more writers; rows without the hook's evidence keys never enter it.
+# hook_norm <file_path> -> the ledger spelling record_artifact_write gives it, or nothing.
+hook_norm() {
+  local _n="${_STATE_DIR%/}"; _n="${_n##*/}"
+  case "$1" in
+    "$STATE"/planning-artifacts/*|"$STATE"/specs/s[0-9]*/*) printf '%s\n' "${_n}/${1#"$STATE"/}" ;;
+    */"${_n}"/planning-artifacts/*|*/"${_n}"/specs/s[0-9]*/*) printf '%s\n' "${_n}/${1#*/"${_n}"/}" ;;
+    "${_n}"/planning-artifacts/*|"${_n}"/specs/s[0-9]*/*) printf '%s\n' "$1" ;;
+  esac
+}
+# tu_blocks <transcript> <tool_use_id> -> "<name>\t<input.file_path>" per ASSISTANT tool_use block with
+# that id, parsed structurally: a tool_result or any prose quoting the id is not a block.
+tu_blocks() {
+  [ -f "$1" ] || return 0
+  jq -nrR --arg id "$2" '
+    inputs | fromjson? | select(type == "object" and .type == "assistant")
+    | (.message | if type == "object" then .content else null end)
+    | if type == "array" then .[] else empty end
+    | select(type == "object" and .type == "tool_use" and (.id // "") == $id)
+    | [(.name // "" | tostring), (.input.file_path // "" | tostring)] | @tsv' "$1" 2>/dev/null
+}
+if [ -n "$DROWS" ]; then
+  _ovl="$(printf '%s\n' "$DROWS" | awk -F'\t' 'NF >= 2 && !(($1, $2) in s) { s[$1, $2] = 1; n[$1]++ } END { for (f in n) if (n[f] > 1) print f }' | sort)"
+  _drop=""; _evid=""
+  while IFS= read -r _f; do
+    [ -n "$_f" ] || continue
+    _ws="$(printf '%s\n' "$DROWS" | awk -F'\t' -v f="$_f" '$1 == f { print $2 }' | sort -u)"
+    _fdone=0
+    while IFS= read -r _A; do
+      [ -n "$_A" ] && [ "$_fdone" = 0 ] || continue
+      _nA="$(printf '%s\n' "$DROWS" | awk -F'\t' -v a="$_A" '$2 == a { n++ } END { print n + 0 }')"
+      _rA="$(printf '%s\n' "$DROWS" | awk -F'\t' -v a="$_A" -v f="$_f" '$1 == f && $2 == a { print; exit }')"
+      IFS='	' read -r _p _a _ts _sess _tuid _tpath _atr <<RAEOF
+$_rA
+RAEOF
+      [ "$_nA" = 1 ] && [ "$_tuid" != "-" ] && [ "$_atr" = false ] && [ "$_tpath" != "-" ] && [ "$_sess" != "-" ] || continue
+      _sd="${_tpath%.jsonl}"
+      [ -e "${_sd}/subagents/agent-${_A}.jsonl" ] && continue
+      while IFS= read -r _B; do
+        [ -n "$_B" ] && [ "$_B" != "$_A" ] || continue
+        _bs="$(printf '%s\n' "$DROWS" | awk -F'\t' -v f="$_f" -v b="$_B" '$1 == f && $2 == b { print $4 }' | sort -u)"
+        [ "$_bs" = "$_sess" ] || continue
+        _blk="$(tu_blocks "${_sd}/subagents/agent-${_B}.jsonl" "$_tuid")"
+        [ "$(printf '%s\n' "$_blk" | grep -c .)" = 1 ] || continue
+        _bn="${_blk%%	*}"; _bfp="${_blk#*	}"
+        case "$_bn" in Edit|Write|MultiEdit) ;; *) continue ;; esac
+        [ "$(hook_norm "$_bfp")" = "$_f" ] || continue
+        _drop="${_drop}${_f}	${_A}
+"
+        AL_N=$((AL_N + 1))
+        AL_LINES="${AL_LINES}alias: ${_A}'s row on ${_f} (${_ts}, tool_use_id ${_tuid}) is ${_B}'s write; its one tool_use with that id is in ${_sd}/subagents/agent-${_B}.jsonl and ${_A} has no transcript
+"
+        _fdone=1
+        break
+      done <<RBEOF
+$_ws
+RBEOF
+    done <<RWEOF
+$_ws
+RWEOF
+  done <<ROEOF
+$_ovl
+ROEOF
+  if [ -n "$_drop" ]; then
+    DROWS="$({ printf '%s' "$_drop" | sed 's/^/X\t/'; printf '%s\n' "$DROWS" | sed '/^$/d; s/^/D\t/'; } | awk -F'\t' '
+      $1 == "X" { x[$2, $3] = 1; next } !(($2, $3) in x) { print substr($0, 3) }')"
+    ROWS="$(printf '%s\n' "$DROWS" | awk -F'\t' 'NF >= 2 { print $1 "\t" $2 }' | sort -u)"
+  fi
+  # A file still overlapping: name the evidence of every writer whose rows carry the hook's keys.
+  _ovl="$(printf '%s\n' "$DROWS" | awk -F'\t' 'NF >= 2 && !(($1, $2) in s) { s[$1, $2] = 1; n[$1]++ } END { for (f in n) if (n[f] > 1) print f }' | sort)"
+  while IFS= read -r _f; do
+    [ -n "$_f" ] || continue
+    _ws="$(printf '%s\n' "$DROWS" | awk -F'\t' -v f="$_f" '$1 == f { print $2 }' | sort -u)"
+    while IFS= read -r _A; do
+      [ -n "$_A" ] || continue
+      _nA="$(printf '%s\n' "$DROWS" | awk -F'\t' -v a="$_A" '$2 == a { n++ } END { print n + 0 }')"
+      _rA="$(printf '%s\n' "$DROWS" | awk -F'\t' -v a="$_A" -v f="$_f" '$1 == f && $2 == a && $5 != "-" { print; exit }')"
+      [ -n "$_rA" ] || continue
+      IFS='	' read -r _p _a _ts _sess _tuid _tpath _atr <<RAEOF
+$_rA
+RAEOF
+      _ex="no transcript_path recorded"; _hold="none"
+      if [ "$_tpath" != "-" ]; then
+        _sd="${_tpath%.jsonl}"
+        if [ -e "${_sd}/subagents/agent-${_A}.jsonl" ]; then _ex="exists (${_sd}/subagents/agent-${_A}.jsonl)"; else _ex="absent (agent_transcript ${_atr} at write time)"; fi
+        _hold=""
+        while IFS= read -r _B; do
+          [ -n "$_B" ] || continue
+          _bt="${_sd}/subagents/agent-${_B}.jsonl"
+          _c="$(tu_blocks "$_bt" "$_tuid" | grep -c .)" || _c=0
+          [ "$_c" -gt 0 ] && _hold="${_hold}${_hold:+, }${_bt} (${_c} block(s))"
+        done <<RHEOF
+$_ws
+RHEOF
+        [ -n "$_hold" ] || _hold="no writer's transcript"
+      fi
+      refuse "${_f}: ${_A}'s row at ${_ts} is not an alias of another writer (tool_use_id ${_tuid}; ${_A}'s transcript ${_ex}; ${_A} has ${_nA} row(s) in the file set; the id is held by ${_hold})"
+    done <<RWEOF
+$_ws
+RWEOF
+  done <<ROEOF
+$_ovl
+ROEOF
+fi
 [ -n "$ROWS" ] || die "the ledger records no dispatched write under ${APATH} in [${SINCE}, ${UNTIL}]; disjointness is unproven"
 
 OVERLAPS="$(printf '%s\n' "$ROWS" | awk -F'\t' '
@@ -971,38 +1269,12 @@ while IFS= read -r p; do
   for fld in disposition edit derivation; do
     repair_field "$fld" "$p" || refuse "$(basename "$p") has no '${fld}:' field as arm H reads it; the joined record would read structured on another part's labels"
   done
-  # A run of slashes in a cited token is squeezed to one before the strip below: a TMPDIR ending in
-  # `/` spells every path under it `T//x`, while STATE_PARENT comes from `pwd`, which collapses it,
-  # so the literal prefix strip never matched and an absolute citation under the root refused.
-  # AN ESCALATED ENTRY CITES NOTHING. Its `edit:` names the file the fix lies in (remediator.md pins
-  # that form), which is the serial remediator's to edit after the join, never this shard's: counted
-  # as a citation it read as a second shard claiming a sibling's file (DOUBLE) or as a claimed edit
-  # with no write (UNWRITTEN). So tokens are buffered per heading and dropped when the entry under it
-  # is dispositioned escalated. Measured over graph's s317/s318 shard parts: 15 of 66 escalated
-  # entries carry a path on `edit:`.
-  _toks="$(awk '
-    function emit(   i) { if (disp !~ /^escalat/) for (i = 1; i <= nt; i++) print tk[i]; nt = 0; disp = "" }
-    /^#+[ \t]/ { emit(); next }
-    /^[[:space:]-]*[*_`]*disposition[*_`]*:/ {
-      disp = tolower($0); sub(/^[^:]*:/, "", disp); gsub(/[*_`]/, "", disp); sub(/^[ \t]+/, "", disp); next }
-    /^[[:space:]-]*[*_`]*edit[*_`]*:/ {
-      line = $0; sub(/^[^:]*:/, "", line)
-      while (match(line, /[A-Za-z0-9_.\/-]+[.](md|json|jsonl|yaml|yml|txt|csv)/)) {
-        tok = substr(line, RSTART, RLENGTH); gsub(/\/\/+/, "/", tok); tk[++nt] = tok
-        line = substr(line, RSTART + RLENGTH)
-      }
-    }
-    END { emit() }' "$p" | sort -u)"
   while IFS= read -r _t; do
     [ -n "$_t" ] || continue
-    _t="${_t#"$STATE_PARENT"}"; _t="${_t#"$STATE_PARENT_P"}"
-    # Subject mode: a part may cite the root-relative spelling `.subject` records; the ledger spells
-    # the state dir by its basename.
-    [ "$SUBJMODE" = 1 ] && case "$_t" in "${SREL}"/*) _t="${STATE_NAME}/${_t#"${SREL}"/}" ;; esac
     CITES="${CITES}C	$(basename "$p")	${_t}
 "
   done <<TOKEOF
-$_toks
+$(part_cites "$p")
 TOKEOF
 done <<PAREOF
 $PARTS
@@ -1125,22 +1397,31 @@ TMP="${OUT}.join.$$"
   echo "# ${ARTIFACT} repair — sprint ${SPRINT}, pass ${PASS} (joined from $(printf '%s\n' "$PARTS" | grep -c .) shard records)"
   echo ""
   echo "Joined by join-remediator-shards.sh from ${SHARD_DIR#"${JR_ROOT}"/}; window ${SINCE} .. ${UNTIL};"
+  # A re-run: one owner per file in ITS window, and every re-run's window and superseded writers named.
+  _inwin="in that window"
+  if [ -n "$RR_LINES" ]; then
+    printf '%s' "$RR_LINES"
+    echo "one owner per file in its window: a re-run part's cited files from its re-run start, every other file in the window above;"
+    echo "earlier writes on re-run files are superseded, and the re-run part accounts for the whole section diff against the split slice;"
+    _inwin="in its window"
+  fi
+  [ -z "$AL_LINES" ] || printf '%s' "$AL_LINES"
   if [ "$SUBJMODE" = 1 ]; then
-    echo "every subject file and section copy was written by exactly one agent in that window;"
+    echo "every subject file and section copy was written by exactly one agent ${_inwin};"
     printf '%s\n' "$ASM_LINE" | sed 's/^/partition-subject.sh: /'
     echo ""
     echo "- artifact: ${_srm}"
     echo "- artifact_sha_before:${SUBJ_BEFORE}"
     echo "- artifact_sha_after:${SUBJ_AFTER}"
   elif [ "$DOCMODE" = 1 ]; then
-    echo "every section under ${APATH} was written by exactly one agent in that window;"
+    echo "every section under ${APATH} was written by exactly one agent ${_inwin};"
     echo "partition-document.sh: ${ASM_LINE}"
     echo ""
     echo "- artifact: ${DOC_REL}"
     echo "- artifact_sha_before: ${DOC_BEFORE}"
     echo "- artifact_sha_after: ${DOC_AFTER}"
   else
-    echo "every file under ${APATH} outside ${SHARD_REL}/ was written by exactly one agent in that window."
+    echo "every file under ${APATH} outside ${SHARD_REL}/ was written by exactly one agent ${_inwin}."
   fi
   echo ""
   while IFS= read -r p; do
@@ -1153,7 +1434,10 @@ $PARTS
 CATEOF
 } > "$TMP" || { echo "REFUSED: could not write ${TMP}" >&2; exit 2; }
 mv "$TMP" "$OUT" || { echo "REFUSED: could not move the joined record into ${OUT}" >&2; exit 2; }
-echo "JOINED: ${OUT} ($(printf '%s\n' "$PARTS" | grep -c .) parts, $(printf '%s\n' "$WRITERS" | grep -c .) writers)"
+_jx=""
+[ -z "$RERUN" ] || _jx=", ${RR_SUPERSEDED} superseded rows"
+[ "$AL_N" = 0 ] || _jx="${_jx}, ${AL_N} alias rows"
+echo "JOINED: ${OUT} ($(printf '%s\n' "$PARTS" | grep -c .) parts, $(printf '%s\n' "$WRITERS" | grep -c .) writers${_jx})"
 # Every escalated entry, by part, and the count; then the repaired edits whose cross-file siblings
 # and moved cites only the serial remediator can check. Either count above 0 dispatches the serial
 # remediator, in every mode, with every ESCALATED: line in its brief (_gate-procedures.md,
