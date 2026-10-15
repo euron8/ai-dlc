@@ -821,7 +821,14 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   over the probe, one over the real pair), one `rm`; the probe's seed writes are builtins and fork
 #   nothing. The remaining -2 against the arm's 11 is the instrument's usual jitter. HIGH reading
 #   3349 plus the usual 6.
-FORK_BUDGET=3355
+#
+#   RAISED TO 3363 FOR RULE 11's GROWTH UNDER I79, NOT FOR A NEW ARM. `fork-profile.sh --stable
+#   --section by-arm`, base 0f7e0e0c (0.785.0) and tip cc5dbcb8 (0.786.0, BL-524's Rule 11(a) effects
+#   clause and unbadged list), in ONE detached worktree at the same path: base 3353 (STABLE 2, spread
+#   3351-3353), tip 3357 (STABLE 2, spread 3356-3357), so +4. I79 113 -> 118 counts the rules below
+#   the re-attach cut, which Rule 11's +729 bytes moved; I93 32 <-> 31 is the instrument's usual
+#   one-fork jitter. The gate read 3358 at the old budget. HIGH reading 3357 plus the usual 6.
+FORK_BUDGET=3363
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
