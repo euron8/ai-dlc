@@ -439,8 +439,8 @@ EOS
 # verdict line (an `awk: newline in string` abort is how the multi-line `-v` defect showed).
 verdict() {
   local s="$1" w="$2" m="$3" o rc k e="$WORK/.stderr" lc=""
-  # A world carrying `.LC` is driven under that locale: the suite runs under `env -i`, where no
-  # locale is set and BSD awk never aborts, so a world about the abort must force one itself.
+  # A world carrying `.LC` is driven under that locale: with no locale set (`env -i`, or an
+  # inherited C locale) BSD awk never aborts, so a world about the abort must force one itself.
   [ -f "$w/.LC" ] && lc="$(cat "$w/.LC")"
   if [ "$m" = s ]; then o="$(env ${lc:+LC_ALL="$lc"} bash "$s" -C "$w" --strategy "$(cat "$w/.T")" "$STORY" 2>"$e")"; rc=$?
   else o="$(bash "$s" -C "$w" "$STORY" "$(cat "$w/.B")" "$(cat "$w/.T")" 2>"$e")"; rc=$?; fi
