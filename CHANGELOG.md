@@ -20,7 +20,31 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
-## [UNRELEASED — 0.786.0]
+## [0.786.0] - 2026-10-14
+
+Batch 230 (graph-ledger-full-drain), third release: four of the reference consumer's five sprint-318 candidates, and
+the BL-508/BL-519 remediator branch held from batch 229. Every one went through a contract adversary, a builder, a tip
+adversary and a fix round; the BL-508/519 branch went through two tip adversaries. Closes
+`PC-S318-ARCHITECT-ROLE-DOES-NOT-ASK-WHAT-A-LITERAL-IS-WORTH-AFTER-A-REBIND` (BL-522),
+`PC-S318-OPERATOR-QUESTION-TEMPLATE-LABELS-AN-OPERATOR-OWNED-TRADE-OFF-RECOMMENDED` (BL-524),
+`PC-S318-PAUSE-GATE-DENIES-READ-ONLY-OPS-DISPATCH-WHILE-AN-OPERATOR-MESSAGE-IS-OUTSTANDING` (BL-525) and
+`PC-S318-QA-ROLE-HAS-NO-RULE-THAT-A-SKIP-AGAINST-A-LOCKED-REQUIREMENT-IS-A-DEVIATION-TO-PUT-TO-THE-OPERATOR` (BL-521),
+and closes BL-508 and BL-519. The fifth candidate rides a later release of this batch. Filed 4, closed 6: net -2.
+
+### A remediator re-checks the siblings of replaced text, and an out-of-shard fix is escalated, never set aside (BL-508, BL-519)
+
+A repair pass wrote the defects the next adversary pass found: one copy fixed and its sibling left, cites shifted, a
+false count. And a party remediator dispositioned a MAJOR "outside this shard … not required", so it reached
+sprint-review unadjudicated. `remediator.md` now binds a `siblings:` field in every parts mode, in exactly one of four
+forms; `join-remediator-shards.sh` refuses any other spelling. The control text sits in a `text` fence, which no
+derivation replay re-checks, so a later legitimate rewrite never reads as stale, while a control naming text that was
+never written is refused at the join. An out-of-shard fix is escalated in every parts mode (`ESCALATED:`), its
+`edit:` path cites nothing for the coverage join, and the join prints `SERIAL-REQUIRED` and dispatches the serial
+remediator, which closes each escalation by an explicit `closes:` line. `--escalations <record>` checks those lines
+for a non-party repair, which has no seat files. Moved cites are re-checked by the serial remediator after the join
+(operator ruling: BL-508 closes on that shape). Over the reference consumer's eight real rounds: 0 false refusals; the
+one refusal is the sm-05 set-aside itself. Cost: `SERIAL-REQUIRED` reads 71, 185, 23, 11, 4, 31 and 24 on those rounds.
+Residue is recorded in BL-508's entry.
 
 ### While paused, the lead may dispatch the built-in Explore subagent and nothing else (BL-525)
 
@@ -81,10 +105,9 @@ and two architecture passes and a code review confirmed the branch order without
 bullets. Its first bullet (price every literal under the new binding) is now carried by core and can retire. The second
 (a distinct skip reason in the execution row) and the third (a threshold as a config leaf) are not covered by this change.
 
-### Added
+### QA puts an AC that omits a locked requirement's action to the operator (BL-521)
 
-- **QA now treats an AC that omits an action a locked requirement requires as a deviation for
-  the operator (BL-521).** A new HARD GATE item in `team-roles/qa.md` Validation Checklist fires
+- A new HARD GATE item in `team-roles/qa.md` Validation Checklist fires
   when an AC's precondition falls inside a locked requirement's verbatim scope and its expected
   outcome omits an action the text requires. QA files a Tier 1 `HARD_BLOCK` (`requirement
   divergence`) and writes `Verdict: NEEDS_REWORK` with a finding naming it. Before dispatching
