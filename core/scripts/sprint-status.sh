@@ -1460,8 +1460,9 @@ def story_status_at_ref():
     latin-1 comment) is read with U+FFFD in its place, not raised as a Traceback that turns
     every status arm into a SKIP.
 
-    Existence is asked per path (`cat-file -e`) and a directory is listed one level deep, so the
-    cost tracks the candidates the join tries, not the size of the whole tree at the ref."""
+    Existence is asked per path (one `cat-file --batch-check` process for every candidate) and a
+    directory is listed one level deep, so the cost tracks the candidates the join tries, not the
+    size of the whole tree at the ref."""
     import subprocess
     ref = os.environ.get("REF", "")
     story = os.environ.get("FILE", "")
@@ -1477,16 +1478,27 @@ def story_status_at_ref():
     full = full.strip()
 
     known = {}
+    probe = []
 
     def at(rel_path):
-        """Is <rel_path> a file tracked at the ref. One `cat-file -e` per distinct path."""
-        if rel_path not in known:
-            ok = (not rel_path.startswith("..") and not os.path.isabs(rel_path)
-                  and subprocess.run(["git", "-C", str(root), "cat-file", "-e",
-                                      "%s:%s" % (full, rel_path)],
-                                     capture_output=True).returncode == 0)
-            known[rel_path] = ok
-        return known[rel_path]
+        """Is <rel_path> a blob tracked at the ref. Every candidate is asked of ONE
+        `cat-file --batch-check` process: a fork per candidate cost 5x the whole-tree listing it
+        replaced on the reference consumer, and the listing costs the size of the tree."""
+        if rel_path in known:
+            return known[rel_path]
+        ok = False
+        if (rel_path and not rel_path.startswith("..") and not os.path.isabs(rel_path)
+                and "\n" not in rel_path):
+            if not probe:
+                probe.append(subprocess.Popen(["git", "-C", str(root), "cat-file", "--batch-check"],
+                                              stdin=subprocess.PIPE, stdout=subprocess.PIPE))
+            p = probe[0]
+            p.stdin.write(("%s:%s\n" % (full, rel_path)).encode("utf-8", errors="surrogateescape"))
+            p.stdin.flush()
+            ans = p.stdout.readline().decode("utf-8", errors="replace").rstrip("\n").split(" ")
+            ok = len(ans) == 3 and ans[1] == "blob"
+        known[rel_path] = ok
+        return ok
 
     story_rel = os.path.normpath(story)
 
@@ -1523,15 +1535,17 @@ def story_status_at_ref():
         dr = rel(d)
         if dr.startswith("..") or os.path.isabs(dr):
             return []
-        out = git("ls-tree", "-z", full, "--", dr + "/")
-        hits = []
-        for rec in (out or "").split("\0"):
-            meta, sep, path = rec.partition("\t")
-            if not sep or meta.split(" ")[1:2] != ["blob"]:
-                continue
-            if os.path.dirname(path) == dr and fnmatch.fnmatchcase(os.path.basename(path), pat):
-                hits.append(root / path)
-        return sorted(hits)
+        if dr not in listed:
+            out = git("ls-tree", "-z", full, "--", dr + "/")
+            names = []
+            for rec in (out or "").split("\0"):
+                meta, sep, path = rec.partition("\t")
+                if sep and meta.split(" ")[1:2] == ["blob"] and os.path.dirname(path) == dr:
+                    names.append(path)
+            listed[dr] = names
+        return sorted(root / p for p in listed[dr] if fnmatch.fnmatchcase(os.path.basename(p), pat))
+
+    listed = {}
 
     hits = []
     for key, fields, lineno in entries:
