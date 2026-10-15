@@ -317,14 +317,16 @@ false claim cannot reach a reviewer to be read-and-believed.
 
 ### An unpriced rebind is a MAJOR
 
-**A change that re-binds a name, role or unit prices every literal keyed on it, under both
-bindings.** When the artifact re-binds a name, a role or a unit that downstream literals or
-thresholds are keyed on (which input counts as which side, which address is the destination,
-which unit a quantity is measured in), enumerate every literal and threshold the re-bound value
-flows into, price each one under the old binding and under the new one, in the unit it is
-compared against, and record `old -> new` for each. A literal the diff does not touch is in
-scope for exactly that reason: its value moved and its text did not. Confirming that the
-branches run in the same order is not pricing them.
+**A re-target prices every literal keyed on it, under both bindings.** When the artifact
+makes an existing name, role or unit resolve to a different value, party or unit while its text
+stays the same, where a literal or threshold downstream is computed from or compared against it
+(which input counts as which side, which address is the destination, which unit a quantity is
+measured in), enumerate every literal and threshold the re-bound value flows into, price each
+one under the old binding and under the new one, in the unit it is compared against, and record
+`old -> new` for each. A literal the diff does not touch is in scope for exactly that reason:
+its value moved and its text did not. Confirming that the branches run in the same order is not
+pricing them. `stories-test-strategy.md` `## Rename Verification` owns finding a rename's
+references, and this rung owns pricing a re-target.
 
 **An unpriced rebind is a plain MAJOR, and it never counts in `findings_major_underived`.** It
 is an omission, so there is no claim to cut and the third test of that field fails: it blocks.

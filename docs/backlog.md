@@ -191,13 +191,24 @@ dust floor" as a fixture precondition; `docs/reviews/s318/1-2-code-review.md` mu
 nothing. `requirements-architect-05.md:8-13,20` came closest: it named the unit flip and wrote "0.01 units of token0"
 without a value under either binding.
 
-**The fix (batch 230).** One domain-neutral clause in three roles: a change that re-binds a name, role or unit that
-downstream literals or thresholds are keyed on prices every such literal under the old and the new binding, in the unit
-it is compared against, and records `old -> new`; a literal the diff does not touch is in scope for that reason. In
-`adversary.md` it is a Severity rung, a plain blocking MAJOR that never counts as underived, CRITICAL when the new price
-sends a covered case down a different branch. In `code-reviewer.md` it is a severity classification, Important minimum.
-In `architect.md` the evidence contract requires a `derived` fence with one command per keyed literal per binding.
-`core/fixtures/process-rule-pins` pins thirteen rows across the three files.
+**The fix (batch 230).** One domain-neutral clause in three roles. A change that makes an existing name, role or unit
+resolve to a different value, party or unit while its text stays the same, where a literal or threshold downstream is
+computed from or compared against it, prices every literal and threshold the re-bound value flows into under the old and
+the new binding, in the unit it is compared against, and records `old -> new`. A literal the diff does not touch is in
+scope for that reason. `stories-test-strategy.md` `## Rename Verification` owns finding a rename's references, and this
+clause owns pricing a re-target. In `adversary.md` it is a Severity rung, a plain blocking MAJOR that never counts as
+underived, CRITICAL when the new price sends a covered case down a different branch. In `code-reviewer.md` it is a
+severity classification, Important minimum. In `architect.md` and in the code reviewer's evidence line, the `derived`
+fence derives each input the price depends on (the literal's line, and the decimals or units entry under each binding)
+with commands naming the source file as an operand; a `BEGIN`-only `awk` computation is not a derivation, and the
+arithmetic and `old -> new` go in the sentence beside the fence. `core/fixtures/process-rule-pins` pins eighteen rows
+across the three files, including the trigger and the `every literal` scope.
 
-verify: sh F=core/fixtures/process-rule-pins/run.sh; [ -f "$F" ] || exit 9; o="$(bash "$F" --report 2>&1)" || exit 1; n="$(grep -cE '^  ok    (adv-rebind-(rung|unit|untouched|oldnew|major)|cr-rebind-(head|unit|untouched|sev)|arch-rebind-(fence|unit|oldnew|untouched)): pinned inside ' <<<"$o")" || n=0; [ "$n" -eq 13 ]
+**Scope under the trigger.** In: `dust_raw` (its text is unchanged, it resolves through `dec_ns` of the re-targeted
+non-stable token, and the swap gate compares the balance against it); the stable-side `Decimal("0.01")` at `:25078` (its
+text is unchanged, it resolves through `dec_s` of the token that `stable_token`, the re-targeted name, selects, and the
+stable balance is compared against it). Out: the ADR-S317-6 predicate rename and a test-node rename, because each changes its text, which
+`## Rename Verification` covers.
+
+verify: sh F=core/fixtures/process-rule-pins/run.sh; [ -f "$F" ] || exit 9; o="$(bash "$F" --report 2>&1)" || exit 1; n="$(grep -cE '^  ok    (adv-rebind-(rung|trigger|every|unit|untouched|oldnew|major)|cr-rebind-(head|trigger|every|unit|untouched|sev)|arch-rebind-(trigger|fence|unit|oldnew|untouched)): pinned inside ' <<<"$o")" || n=0; [ "$n" -eq 18 ]
 

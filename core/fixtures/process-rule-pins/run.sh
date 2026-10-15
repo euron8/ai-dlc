@@ -37,10 +37,13 @@
 #     that each clause is PRESENT in the lead's paragraph. A separate sentence appended after it
 #     that contradicts it ("...; elicitation may instead run one voice") leaves every pinned
 #     clause intact and passes. No row here can fail on an addition; a reviewer reads for that.
-#   - a change that re-binds a name, role or unit prices every literal keyed on it under both
-#     bindings, in the unit it is compared against, and records old -> new, an untouched literal
-#     included: the adversary's Severity rung (a plain blocking MAJOR, never underived), the code
-#     reviewer's severity classification, and the architect's evidence-contract `derived` fence.
+#   - a change that makes an existing name, role or unit resolve to a different value, party or
+#     unit while its text stays the same prices every literal and threshold the re-bound value
+#     flows into under both bindings, in the unit it is compared against, and records old -> new,
+#     an untouched literal included: the adversary's Severity rung (a plain blocking MAJOR, never
+#     underived), the code reviewer's severity classification, and the architect's
+#     evidence-contract `derived` fence, which derives each input from a named source file. The
+#     trigger and the `every literal` scope are pinned separately, so narrowing either fails.
 #     Each lead sits on ONE line of its subject so the raw-file lead check can find it.
 #
 # LEADS ARE NOT ENOUGH. A bold lead left intact over a body rewritten to say the opposite
@@ -224,18 +227,23 @@ elic-shape-expectsha|S|steps/_gate-procedures.md|## Validation cycle|## Where a 
 elic-shape-lead|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|a lighter shape is not the lead's to choose
 sts-elic-sharded|S|steps/stories-test-strategy.md|### 4.|### 5.|so the round, elicitation, each review pass and each repair|contains
 adv-rebind-rung|R|adversary.md|## Severity|## |### An unpriced rebind is a MAJOR|prefix
-adv-rebind-unit|R|adversary.md|## Severity|## |**A change that re-binds a name, role or unit prices every literal keyed on it|para|in the unit it is compared against
-adv-rebind-untouched|R|adversary.md|## Severity|## |**A change that re-binds a name, role or unit prices every literal keyed on it|para|A literal the diff does not touch is in scope for exactly that reason
-adv-rebind-oldnew|R|adversary.md|## Severity|## |**A change that re-binds a name, role or unit prices every literal keyed on it|para|record `old -> new` for each
+adv-rebind-trigger|R|adversary.md|## Severity|## |**A re-target prices every literal keyed on it, under both bindings.**|para|while its text stays the same, where a literal or threshold downstream is computed from or compared against it
+adv-rebind-every|R|adversary.md|## Severity|## |**A re-target prices every literal keyed on it, under both bindings.**|para|every literal and threshold the re-bound value flows into
+adv-rebind-unit|R|adversary.md|## Severity|## |**A re-target prices every literal keyed on it, under both bindings.**|para|in the unit it is compared against
+adv-rebind-untouched|R|adversary.md|## Severity|## |**A re-target prices every literal keyed on it, under both bindings.**|para|A literal the diff does not touch is in scope for exactly that reason
+adv-rebind-oldnew|R|adversary.md|## Severity|## |**A re-target prices every literal keyed on it, under both bindings.**|para|record `old -> new` for each
 adv-rebind-major|R|adversary.md|## Severity|## |**An unpriced rebind is a plain MAJOR, and it never counts in `findings_major_underived`.**|para|the third test of that field fails: it blocks
 cr-rebind-head|R|code-reviewer.md|## Mandatory Severity Classifications|## Self-Discrimination Map|### A Rebind Without Priced Literals = Important (minimum)|prefix
-cr-rebind-unit|R|code-reviewer.md|## Mandatory Severity Classifications|## Self-Discrimination Map|**A diff that re-binds a name, role or unit prices every literal keyed on it|para|in the unit it is compared against
-cr-rebind-untouched|R|code-reviewer.md|## Mandatory Severity Classifications|## Self-Discrimination Map|**A diff that re-binds a name, role or unit prices every literal keyed on it|para|A literal the diff does not touch is in scope for exactly that reason
-cr-rebind-sev|R|code-reviewer.md|## Mandatory Severity Classifications|## Self-Discrimination Map|An unpriced keyed literal is **Important** at minimum.|para|one `derived` command per keyed literal per binding
-arch-rebind-fence|R|architect.md|## The evidence contract|## A fold architecture dispatch|**A design that re-binds a name, role or unit prices every literal keyed on it, in a `derived`|para|carries a `derived` fence with one command per keyed literal per binding
-arch-rebind-unit|R|architect.md|## The evidence contract|## A fold architecture dispatch|**A design that re-binds a name, role or unit prices every literal keyed on it, in a `derived`|para|in the unit it is compared against
-arch-rebind-oldnew|R|architect.md|## The evidence contract|## A fold architecture dispatch|**A design that re-binds a name, role or unit prices every literal keyed on it, in a `derived`|para|records `old -> new` for each
-arch-rebind-untouched|R|architect.md|## The evidence contract|## A fold architecture dispatch|**A design that re-binds a name, role or unit prices every literal keyed on it, in a `derived`|para|A literal the diff does not touch is in scope for exactly that reason
+cr-rebind-trigger|R|code-reviewer.md|## Mandatory Severity Classifications|## Self-Discrimination Map|**A re-target prices every literal keyed on it, under both bindings.**|para|while its text stays the same, where a literal or threshold downstream is computed from or compared against it
+cr-rebind-every|R|code-reviewer.md|## Mandatory Severity Classifications|## Self-Discrimination Map|**A re-target prices every literal keyed on it, under both bindings.**|para|every literal and threshold the re-bound value flows into
+cr-rebind-unit|R|code-reviewer.md|## Mandatory Severity Classifications|## Self-Discrimination Map|**A re-target prices every literal keyed on it, under both bindings.**|para|in the unit it is compared against
+cr-rebind-untouched|R|code-reviewer.md|## Mandatory Severity Classifications|## Self-Discrimination Map|**A re-target prices every literal keyed on it, under both bindings.**|para|A literal the diff does not touch is in scope for exactly that reason
+cr-rebind-sev|R|code-reviewer.md|## Mandatory Severity Classifications|## Self-Discrimination Map|An unpriced keyed literal is **Important** at minimum.|para|derives each input the price depends on, meaning the literal's own line and the decimals or units entry under each binding, using commands that name the source file as an operand
+arch-rebind-trigger|R|architect.md|## The evidence contract|## A fold architecture dispatch|**A re-target is priced in a `derived` fence, input by input.**|para|while its text stays the same, where a literal or threshold downstream is computed from or compared against it
+arch-rebind-fence|R|architect.md|## The evidence contract|## A fold architecture dispatch|**A re-target is priced in a `derived` fence, input by input.**|para|derives each input the price depends on, meaning the literal's own line and the decimals or units entry under each binding, using commands that name the source file as an operand
+arch-rebind-unit|R|architect.md|## The evidence contract|## A fold architecture dispatch|**A re-target is priced in a `derived` fence, input by input.**|para|in the unit it is compared against
+arch-rebind-oldnew|R|architect.md|## The evidence contract|## A fold architecture dispatch|**A re-target is priced in a `derived` fence, input by input.**|para|records `old -> new` for each
+arch-rebind-untouched|R|architect.md|## The evidence contract|## A fold architecture dispatch|**A re-target is priced in a `derived` fence, input by input.**|para|A literal the diff does not touch is in scope for exactly that reason
 PINS
 }
 
