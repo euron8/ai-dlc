@@ -56,7 +56,7 @@
 #   - a worktree dev dispatch brief carries two standing lines: every git command is
 #     `git -C <worktree>` (or a cd on every Bash call), and one story per dispatch, never a second
 #     claimed from a task list (_dispatch-protocol.md "Worktree-explicit dev dispatch" point 3,
-#     dev.md Responsibilities). Points 0-7 carry no blank line between them, so para mode reads
+#     dev.md Responsibilities, and dev.md's HARD_BLOCK bullet going idle). Points 0-7 carry no blank line between them, so para mode reads
 #     the whole list as ONE paragraph whose lead is point 0; the dp-* tokens pin point 3 inside it.
 #
 # LEADS ARE NOT ENOUGH. A bold lead left intact over a body rewritten to say the opposite
@@ -352,6 +352,7 @@ retro-gar-utc|S|steps/retro.md|### 7. Merge and Next-Sprint Handoff|6. **Verify 
 dp-git-c|S|steps/_dispatch-protocol.md|**Worktree-explicit dev dispatch.**|**Bounded-join dispatch mandate (Rule 29).**|0. Lead MUST commit all planning artifacts|para|`git -C <worktree absolute path> <cmd>`, or the dev `cd`s into the worktree on EVERY Bash call
 dp-one-story|S|steps/_dispatch-protocol.md|**Worktree-explicit dev dispatch.**|**Bounded-join dispatch mandate (Rule 29).**|0. Lead MUST commit all planning artifacts|para|The dev works only the story it was dispatched for, one story per dispatch, and never claims another from a task list
 dev-one-story|R|dev.md|## Responsibilities|## As a party seat|- Implement the story the lead dispatched you for|para|Implement the story the lead dispatched you for: one story per dispatch.
+dev-hardblock-idle|R|dev.md|## Escalation Protocol|## CI-vs-local divergence diagnostic order|- **HARD_BLOCK** (story contradicts architecture|para|and go idle; you do not pick up another story.
 PINS
 }
 
