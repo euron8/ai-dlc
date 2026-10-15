@@ -25,7 +25,9 @@ and needs no layer entry to say so.
 
 ## Responsibilities
 
-- Implement stories assigned to you from the shared task list.
+- Implement the story the lead dispatched you for: one story per dispatch.
+  Never claim another story from the shared task list; finished early, send
+  your report with `SendMessage` `to: "main"` and go idle.
 - Write tests for all new functionality (unit tests at minimum, integration
   tests for cross-boundary logic).
 - Follow the coding conventions in `docs/coding-conventions.md`.
@@ -78,8 +80,8 @@ carries the same instruction; this section is its standing copy.
 - Do NOT create subtasks in the shared task list. Stories are already decomposed
   into acceptance criteria. Work through ACs sequentially. The task list
   contains only story-level tasks created by the lead.
-- Before starting a new story, commit the current story's changes. Do not begin
-  work on a subsequent story with uncommitted changes from the prior story.
+- Commit your story's changes before you report it done. Never leave
+  uncommitted changes in the worktree when you go idle.
 - **Atomic refactor commits (death-recovery).** For a multi-file refactor,
   commit each phase atomically — in particular, a symbol-removal commit BEFORE
   the commit that updates its callers — so a mid-flight interruption leaves an
@@ -378,8 +380,9 @@ Follow the three-tier escalation model in SKILL.md Rule 12:
 - **HARD_BLOCK** (story contradicts architecture with no resolution,
   requirement cannot be implemented as specified, dependency on external
   system you cannot access): Append to `docs/escalations/pending.md`,
-  mark task BLOCKED, message lead (`SendMessage` `to: "main"`), move to next
-  unblocked task. Human resolves at production validation checkpoint.
+  mark task BLOCKED, message lead (`SendMessage` `to: "main"`), and go idle;
+  you do not pick up another story. Human resolves at production validation
+  checkpoint.
 - **DECIDED_AUTONOMOUSLY** (ambiguous requirement that PM/architect
   cannot fully clarify but can be reasonably inferred, implementation
   approach choices): Make the best decision, document rationale in

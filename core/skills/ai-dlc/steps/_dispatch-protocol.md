@@ -35,10 +35,24 @@ follow the worktree-explicit dispatch protocol:
    dispatch time. The lead MUST NOT branch dev worktrees off `main`
    unless the sprint branch has not diverged from main.
 3. The Agent call MUST set `mode: "bypassPermissions"` and include
-   the worktree absolute path in the prompt. The dev prompt MUST
-   instruct the dev to `cd` into the worktree as its first action.
-   The worktree path is the ONLY absolute path the prompt may carry
-   (see 7).
+   the worktree absolute path in the prompt. The worktree path is the
+   ONLY absolute path the prompt may carry (see 7). The brief carries
+   two standing lines, in the dispatch template like 6:
+   - Every git command the dev runs is
+     `git -C <worktree absolute path> <cmd>`, or the dev `cd`s into the
+     worktree on EVERY Bash call, because a teammate's working directory
+     resets between calls. A first-action `cd` alone is not compliance.
+     Failure caught: a later `git add -A` or `git commit -a` that lands on
+     whatever branch the primary tree has checked out. False-positive
+     cost: none. Removal condition: only if a teammate's working
+     directory begins persisting across Bash calls.
+   - The dev works only the story it was dispatched for, one story per
+     dispatch, and never claims another from a task list; finished early,
+     it sends its report with `SendMessage` `to: "main"` and goes idle.
+     Failure caught: a dev claiming a second story inside a worktree cut
+     for the first, outside the lead's merge and gate order.
+     False-positive cost: an idle dev the lead re-dispatches. Removal
+     condition: none while one worktree is cut per dispatched story (1).
 4. On story completion, the lead merges the dev branch into the
    sprint branch and removes the worktree:
    `git merge dev/sprint-<N>/story-<X> && git worktree remove <path>`
