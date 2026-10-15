@@ -157,7 +157,7 @@ extra, no duplicate.
 {
   "schema_id": "GATE_ADJUDICATION_VERDICT v1",
   "gate_type": "implementation",
-  "gate_series_id": "<copied from your brief: <gate_type>-s<N>-<TS>, IDENTICAL on every pass of this gate>",
+  "gate_series_id": "<copied from your brief in the form it names; validate-gate-adjudication.sh owns the check; IDENTICAL on every pass of this gate>",
   "gate_nonce": "implementation-20260715T140322Z",
   "generated_at": "2026-07-15T14:05:07Z",
   "adjudicator_agent_id": "<agent_id of THIS gate-adjudicator dispatch>",

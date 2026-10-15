@@ -121,8 +121,10 @@ unscoped gate and `<gate_type>-s<N>-<slug>-<TS>` for a gate scoped to one story.
 one lowercase `[a-z0-9]` segment ending in a digit. A same-series rule decides the id at dispatch,
 never from `close`. The only reuse candidate is the newest stem whose id has that exact form for this
 gate_type, sprint and slug, with every part agreeing. A Gate Reset id wins. Otherwise a candidate that
-did not pass is reused, where not passing is read from the `26` row of its `.gate-checkpoint/<nonce>.tsv`
-ledger and never from the verdict's per-check rows, which still record a suppressed check as FAIL.
+did not pass is reused. Not passing is read from the `26` row of its `.gate-checkpoint/<nonce>.tsv` ledger
+when that ledger exists, never from the verdict's per-check rows, which still record a suppressed check as
+FAIL. The ledger is gitignored and local to the checkout that ran the gate, so when it is absent the
+verdict is judged itself: any FAIL row is not passing, which can only continue a series, never hide a stall.
 Otherwise a new id is minted, so a malformed id is never reused and two stories' gates never share a
 series. Replayed on graph's interleaved s304 story gates, that yields 4 series, and `--series` reports
 both real check-22 STALLs (story1, story4). A Gate Reset is performed before gate entry. It mints the new
@@ -134,9 +136,9 @@ its FP set 0 of graph's 239; unscoped it fires on 61. The arm's header records t
 rotator's `--sprint s<N>` selector (`*-s<N>-*`) moves a slugged id.
 
 The receipt runs the `gate-adjudication` fixture and needs its ten series-form cases, including the
-slugged near-miss and the three malformed-slug offenders. It also needs the 27 series-id rows of
+slugged near-miss and the three malformed-slug offenders. It also needs the 28 series-id rows of
 `process-rule-pins --report`. It exits 1 at `4aa734c4`, on a rule 2 that reuses a malformed id, counts
 a suppressed FAIL or ignores the gate's story, on the arm without its slug, trailing-timestamp or
 series-time check, and on the prose with no arm. It exits 0 at this tip.
 
-verify: sh F=core/fixtures/gate-adjudication/run.sh; P=core/fixtures/process-rule-pins/run.sh; [ -f "$F" ] && [ -f "$P" ] || exit 9; o="$(bash "$F" 2>&1)" || exit 1; n="$(grep -cE '^  ok    SF(0|0b|1|2|3|4|5|6|7|8): ' <<<"$o")" || n=0; [ "$n" -eq 10 ] || exit 1; r="$(bash "$P" --report 2>&1)" || exit 1; m="$(grep -cE '^  ok    (gv-series-[a-z]+|gv-fail-series|gv-reset-[a-z]+|gp-[a-z]+-series|gadj-[a-z]+-series): pinned inside ' <<<"$r")" || m=0; [ "$m" -eq 27 ]
+verify: sh F=core/fixtures/gate-adjudication/run.sh; P=core/fixtures/process-rule-pins/run.sh; [ -f "$F" ] && [ -f "$P" ] || exit 9; o="$(bash "$F" 2>&1)" || exit 1; n="$(grep -cE '^  ok    SF(0|0b|1|2|3|4|5|6|7|8): ' <<<"$o")" || n=0; [ "$n" -eq 10 ] || exit 1; r="$(bash "$P" --report 2>&1)" || exit 1; m="$(grep -cE '^  ok    (gv-series-[a-z]+|gv-fail-series|gv-reset-[a-z]+|gp-[a-z]+-series|gadj-[a-z]+-series): pinned inside ' <<<"$r")" || m=0; [ "$m" -eq 28 ]
