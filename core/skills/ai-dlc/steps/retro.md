@@ -1355,9 +1355,13 @@ follow their audit, these must follow the merge.
        bash scripts/ai-dlc/rotate-gate-adjudication.sh --sprint s<M> --series '<exact-id>'
 
    Run each line as printed, which is a dry run. Confirm `s<M>`, which is a hint the
-   rotator inferred and never applies itself. Then add `--apply`, and re-run the `--sprint s<N> --apply`
-   above. A WARN naming such verdicts on a run that moved this sprint's verdicts
-   is not a HARD_BLOCK; apply the same printed lines before the commit.
+   rotator inferred and never applies itself. Then add `--apply`.
+
+   **After the last `--series` move, re-run `--sprint s<N> --apply` above; the close is done only when it exits 0.**
+   A run that moved this sprint's verdicts and exits 0 with a WARN naming such verdicts
+   is not a HARD_BLOCK; apply the same printed lines before the commit. The same run
+   exits 1 when it would leave one of them as a FAILing live pass, and that refusal is
+   a HARD_BLOCK like any other.
 
    **Confirm every hinted sprint against the sprint-close commits before adding `--apply`.**
    Read `TZ=UTC git log --date=format-local:%Y%m%dT%H%M%SZ --format='%ad %s'` for this repo's sprint-close commits and check that the

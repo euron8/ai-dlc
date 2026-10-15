@@ -40,11 +40,13 @@ step 5b then passed while that sprint's verdicts stayed live for the gate-remedi
   earlier run. Running only the first printed `--series` line fills this sprint's archive, and the re-run
   still refuses while a newer FAIL series stays live. A second `--apply` exits 0 once nothing it refuses
   is live.
-- **Survivor refusal.** In `--series` mode it fires only when the move promotes a new live pass, meaning
-  the newest moved nonce is newer than the survivor's. A `--series` walk that moved an older series first
-  was refused before, which forced a second pass. In `--sprint` and `--legacy-through` mode it fires
-  whenever the run leaves an unmovable FAIL as the live pass, promoted or not, because nothing follows
-  the close to clear it.
+- **Survivor refusal.** On a remedy step (`--series` or `--legacy-through`) it fires only when the move
+  promotes a new live pass, meaning the newest moved nonce is newer than the survivor's. A `--series` walk
+  that moved an older series first was refused before, which forced a second pass. If `--legacy-through`
+  also refused unconditionally, a legacy FAIL below an unmatchable FAIL series would deadlock: each
+  remedy's refusal would print the other. On the close (`--sprint` without `--series`) it fires whenever
+  the run leaves an unmovable FAIL as the live pass, promoted or not, because nothing follows the close to
+  clear it.
 - **Escape.** `--sprint s<N> --series <exact-id> [--apply]` moves every verdict whose series id equals
   `<exact-id>`, with its sidecars. It is a dry run without `--apply`. It refuses (exit 2) an id that a
   `--sprint` selector can already name, and `--series ''` is a usage error (exit 2). The printed commands
@@ -68,7 +70,9 @@ step 5b then passed while that sprint's verdicts stayed live for the gate-remedi
   `AskUserQuestion`. It states that a retro HARD_BLOCKS on an empty selection beside a series whose
   newest member FAILs, re-runs included, until the writer half lands. It names the close commit: the
   `chore(s<N>): rotate ... post-retro-merge` commit, or the retro PR's merge commit where a sprint has
-  none. `process-rule-pins` pins all four clauses.
+  none. It tells the reader to re-run `--sprint s<N> --apply` after the last `--series` move, and says a
+  run that moved this sprint's verdicts still exits 1 when it would leave a FAILing live pass.
+  `process-rule-pins` pins all six clauses.
 
 Measured on a `git archive` copy of the consumer's `gate-adjudication` directory and sprint archives at
 graph `2b6f952e7`. `--sprint s318` exits 1. Keyed on the newest member, it names 4 files in 4 series and
@@ -99,6 +103,8 @@ Fixture `gate-adjudication-rotate` adds these worlds:
 - a `--sprint` close that promotes nothing but leaves an unmatchable FAIL as the live pass, which refuses;
 - a partial walk of two FAIL series, where the re-run after the first line still refuses and the re-run
   after the second exits 0;
+- a first line that moves a PASS-only series, after which the re-run still refuses;
+- a legacy FAIL below an unmatchable FAIL series, where the printed remedies converge (1 1 0 0 0);
 - archives s309 and s312 closing s313, which prints `NO HINT (s310..s311)`;
 - a backfill below the newest archive, which prints `NO HINT (backfill below s310)`.
 
@@ -108,7 +114,9 @@ the printed line after replacing `s<N>` with a sprint the arm supplies as the op
 Mutants are killed for the restored early exit, the reverted FAIL narrowing (mutation 6, revised with the
 contract), `--series` matching by prefix, keying the FAIL on any member (8), restoring the promotion conjunct
 in `--sprint` mode (9), keying the empty-selection refusal on an empty archive (10), hinting the closing
-sprint between archives (11) and dropping the `--series` exemption from the survivor refusal (12). A predicate counting only `<gate>-<nonce>` ids is killed by the
+sprint between archives (11), dropping the `--series` exemption from the survivor refusal (12),
+refusing unconditionally in `--legacy-through` (13) and exempting a re-run whose archive holds no FAIL
+(14). A predicate counting only `<gate>-<nonce>` ids is killed by the
 `story-s311` world and by the BL-523 receipt. Mutation 1's arm is re-keyed on the s308 set not being
 selected, because under that mutant every `gate_type` reads as an unmatchable id.
 ## [0.787.0] - 2026-10-15

@@ -177,6 +177,13 @@ seed_unmatchable_fail_newer() {
           "implementation-20260914T000000Z" "implementation-20260914T000000Z" "$LEGACY_FAIL"
 }
 
+# A PASS-only `<gate>-<nonce>` series OLDER than seed_unmatchable_fail's, so the first
+# line an operator walks moves a series that records no FAIL into this sprint's archive.
+seed_unmatchable_pass_older() {
+  verdict "$GA/planning-20260908T000000Z.verdict.json" \
+          "planning-20260908T000000Z" "planning-20260908T000000Z" "$S309_ALLPASS"
+}
+
 # A sprint-LAST id the reference consumer's writers stamped: `story-s311`, which is
 # NOT nonce-tailed (its stem is). It is the only unmatchable verdict in its world and
 # it records a FAIL, so a predicate counting only `<gate>-<nonce>` ids misses it.
@@ -309,6 +316,16 @@ case "$CASE" in
   # the partial walk. Moving A alone into s308 fills s308's archive while B stays live.
   partial-walk)
     seed_unmatchable_fail; seed_unmatchable_fail_newer; seed_legacy
+    ;;
+  # An older PASS-only unmatchable series and a newer FAIL one: moving the PASS series
+  # alone fills this sprint's archive with no FAIL while the FAIL stays live.
+  pass-first)
+    seed_unmatchable_pass_older; seed_unmatchable_fail; seed_legacy
+    ;;
+  # A FAILing legacy verdict below a FAIL-carrying unmatchable series: the --series step
+  # prescribes --legacy-through, which must not in turn refuse and prescribe --series.
+  legacy-then-series)
+    seed_legacy_fail; seed_unmatchable_fail
     ;;
   # Tagged verdicts only, none for s308: still "nothing to move", exit 0.
   tagged-nomatch)

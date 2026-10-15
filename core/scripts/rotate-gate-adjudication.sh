@@ -728,17 +728,22 @@ for f in "$SRC"/*.verdict.json; do
   fi
 done
 
-# IN --series MODE ONLY, THE REFUSAL FIRES ONLY WHEN THE MOVE PROMOTES A NEW LIVE PASS:
-# the newest moved nonce is newer than the survivor's. A --series run is one step of a
-# walk ordered oldest series first, and the survivor it leaves is a series a LATER line
-# of that walk moves; refusing that step wedged the walk. Measured on the reference
-# consumer's s319 FAIL walk: refused applies, a second pass.
+# A REMEDY STEP -- --series OR --legacy-through -- REFUSES ONLY WHEN THE MOVE PROMOTES A
+# NEW LIVE PASS: the newest moved nonce is newer than the survivor's. A remedy step is one
+# step of a walk, and the survivor it leaves is something a LATER step moves; refusing
+# that step wedges the walk. Measured on the reference consumer's s319 FAIL walk: refused
+# applies, a second pass. And measured on a legacy FAIL below an unmatchable FAIL series:
+# with --legacy-through refusing unconditionally, the --series refusal printed
+# --legacy-through as its remedy and --legacy-through refused printing --series, so each
+# refused the other and no printed remedy converged.
 #
-# A --sprint OR --legacy-through RUN REFUSES WHENEVER IT LEAVES AN UNMOVABLE FAIL AS THE
-# LIVE PASS, PROMOTED OR NOT, AND AN EARLIER REVISION APPLIED THE PROMOTION CONJUNCT HERE
-# TOO. That run is the close, and nothing follows it to clear the survivor: an older
-# selected verdict below a newer unmatchable FAIL promoted nothing, so the close exited 0
-# and the FAIL stayed live, denying the next sprint's first edit. Base refused that world.
+# THE CLOSE -- --sprint WITHOUT --series -- REFUSES WHENEVER IT LEAVES AN UNMOVABLE FAIL AS
+# THE LIVE PASS, PROMOTED OR NOT, AND AN EARLIER REVISION APPLIED THE PROMOTION CONJUNCT
+# HERE TOO. Nothing follows the close to clear the survivor: an older selected verdict
+# below a newer unmatchable FAIL promoted nothing, so the close exited 0 and the FAIL
+# stayed live, denying the next sprint's first edit. Base refused that world.
+SURVIVOR_ALWAYS=0
+[ -z "$SERIES" ] && [ -z "$LEGACY_THROUGH" ] && SURVIVOR_ALWAYS=1
 MOVED_MAX_TS=""
 while IFS= read -r _mv_stem; do
   _mv_ts="$(conforming_nonce "$_mv_stem")" || continue
@@ -747,7 +752,7 @@ done < "$TMPD/move_stems"
 PROMOTES=0
 [ -n "$MOVED_MAX_TS" ] && [ "$MOVED_MAX_TS" \> "${SURVIVOR_TS:-}" ] && PROMOTES=1
 
-if [ "$SURVIVOR_UNMOVABLE" -eq 1 ] && [ -n "$SURVIVOR_FAILS" ] && { [ -z "$SERIES" ] || [ "$PROMOTES" -eq 1 ]; }; then
+if [ "$SURVIVOR_UNMOVABLE" -eq 1 ] && [ -n "$SURVIVOR_FAILS" ] && { [ "$SURVIVOR_ALWAYS" -eq 1 ] || [ "$PROMOTES" -eq 1 ]; }; then
   echo "${SELF_NAME}: REFUSED -- this rotation would strand a FAILing verdict no mode can move." >&2
   echo "  Newest verdict left in '${SRC}' after this move:" >&2
   echo "    ${SURVIVOR_STEM} -- ${SURVIVOR_WHY}; FAILed check(s): ${SURVIVOR_FAILS}" >&2

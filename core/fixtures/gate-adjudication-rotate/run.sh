@@ -610,6 +610,43 @@ else
   bad "(j.11) the partial walk was not re-evaluated (rc: initial=$rc_p0 lines='$p_lines' line1=$rc_p1 rerun=$rc_p2 line2=$rc_p3 final=$rc_p4): $out_p1 / $out_p2 / $out_p4"
 fi
 
+# (j.12) THE FIRST LINE MOVES A PASS-ONLY SERIES. An older PASS-only unmatchable series
+# and a newer FAIL one. Moving the PASS series alone leaves s308's archive holding no
+# FAIL, while the FAIL series stays the live pass: the re-run must still refuse.
+UM_PASS_OLD="planning-20260908T000000Z"
+seed pass-first
+out_q0="$(rotate --sprint s308 --apply 2>&1)"; rc_q0=$?
+out_q1="$(rotate --sprint s308 --series "$UM_PASS_OLD" --apply 2>&1)"; rc_q1=$?
+out_q2="$(rotate --sprint s308 --apply 2>&1)"; rc_q2=$?
+if [ "$rc_q0" -eq 1 ] && [ "$rc_q1" -eq 0 ] && [ -f "$DEST_S308/${UM_PASS_OLD}.verdict.json" ] \
+   && [ "$rc_q2" -eq 1 ] && grep -q "^    .*/${UM_FAIL}\.verdict\.json$" <<<"$(refusal_block "$out_q2")"; then
+  ok "(j.12) moving only an older PASS-only series fills s308's archive with no FAIL, and the re-run still refuses on the live FAIL"
+else
+  bad "(j.12) the re-run after a PASS-only first line did not refuse (close=$rc_q0 line=$rc_q1 rerun=$rc_q2): $out_q2"
+fi
+
+# (j.13) THE REMEDY STEPS CONVERGE. A FAILing legacy verdict below a FAIL-carrying
+# unmatchable series. The close refuses and prints --series; that step refuses and prints
+# --legacy-through, because it would promote the legacy FAIL; --legacy-through leaves the
+# unmatchable FAIL live but promotes nothing, so it applies; then --series, then the close.
+# Every command is the one the previous refusal PRINTED, with only s<N> substituted.
+seed legacy-then-series
+out_d0="$(rotate --sprint s308 --apply 2>&1)"; rc_d0=$?
+d_ser="$(grep -E "^ +bash [^ ]*rotate-gate-adjudication\.sh --sprint s<N> --series '[^']+'$" <<<"$out_d0" | sed -n "s/.*--series '\\([^']*\\)'\$/\\1/p" | head -1)"
+out_d1="$(rotate --sprint s308 --series "$d_ser" --apply 2>&1)"; rc_d1=$?
+d_bound="$(sed -n 's/.*--legacy-through \([0-9TZ]*\) --apply$/\1/p' <<<"$out_d1" | head -1)"
+out_d2="$(rotate --legacy-through "$d_bound" --apply 2>&1)"; rc_d2=$?
+out_d3="$(rotate --sprint s308 --series "$d_ser" --apply 2>&1)"; rc_d3=$?
+out_d4="$(rotate --sprint s308 --apply 2>&1)"; rc_d4=$?
+if [ "$rc_d0" -eq 1 ] && [ "$d_ser" = "$UM_FAIL" ] && [ "$rc_d1" -eq 1 ] && [ "$d_bound" = "20260701T000000Z" ] \
+   && [ "$rc_d2" -eq 0 ] && [ ! -e "$GA/legacy-20260701T000000Z.verdict.json" ] \
+   && [ "$rc_d3" -eq 0 ] && [ -f "$DEST_S308/${UM_FAIL}.verdict.json" ] \
+   && [ "$rc_d4" -eq 0 ] && grep -q 'nothing to move' <<<"$out_d4"; then
+  ok "(j.13) legacy FAIL below an unmatchable FAIL: close, --series, the printed --legacy-through, --series, close converge (1 1 0 0 0)"
+else
+  bad "(j.13) the printed remedies did not converge (close=$rc_d0 series='$d_ser' $rc_d1 bound='$d_bound' legacy=$rc_d2 series=$rc_d3 close=$rc_d4): $out_d1 / $out_d2"
+fi
+
 # (j.6) The printed command is spelled for the layout the rotator runs from. Two
 # copies of it, one per layout, against the same world.
 seed unmatchable
@@ -809,10 +846,10 @@ else
 fi
 
 # =============================================================================
-# MUTATION 9 — restore the promotion conjunct in --sprint mode: refuse an unmovable FAIL
+# MUTATION 9 — restore the promotion conjunct in every mode: refuse an unmovable FAIL
 # survivor only when the move promotes it. Arm (j.10)'s close must flip to exit 0.
 # =============================================================================
-SURV_ANCHOR='{ [ -z "$SERIES" ] || [ "$PROMOTES" -eq 1 ]; }'
+SURV_ANCHOR='{ [ "$SURVIVOR_ALWAYS" -eq 1 ] || [ "$PROMOTES" -eq 1 ]; }'
 MUT9="$W/mut-promoteonly.sh"
 mut_replace "$ROT" "$MUT9" "$SURV_ANCHOR" '[ "$PROMOTES" -eq 1 ]'
 if cmp -s "$ROT" "$MUT9"; then
@@ -846,6 +883,50 @@ else
     ok "MUTATION 10: keyed on an empty archive, the re-run after line 1 exits 0 with the newer FAIL live -- arm (j.11) is live"
   else
     bad "MUTATION 10: archive keying did not change the outcome (first rc=$rc_first, rc=$rc): $out"
+  fi
+fi
+
+# =============================================================================
+# MUTATION 13 — the unconditional survivor refusal applies to --legacy-through too.
+# Arm (j.13)'s --legacy-through step must flip to exit 1: each remedy refuses the other.
+# The steps before it run on the unmutated rotator.
+# =============================================================================
+MUT13="$W/mut-legacyalways.sh"
+mut_replace "$ROT" "$MUT13" \
+  '[ -z "$SERIES" ] && [ -z "$LEGACY_THROUGH" ] && SURVIVOR_ALWAYS=1' \
+  '[ -z "$SERIES" ] && SURVIVOR_ALWAYS=1'
+if cmp -s "$ROT" "$MUT13"; then
+  bad "MUTATION 13: the legacy-always edit matched nothing; arm (j.13) is UNPROVEN"
+else
+  seed legacy-then-series
+  rotate --sprint s308 --series "$UM_FAIL" --apply >/dev/null 2>&1; rc_first=$?
+  out="$( ( cd "$PROJ" && bash "$MUT13" --legacy-through 20260701T000000Z --apply ) 2>&1 )"; rc=$?
+  if [ "$rc_first" -eq 1 ] && [ "$rc" -eq 1 ] && grep -q 'would strand' <<<"$out" && grep -q -- "--series '${UM_FAIL}'" <<<"$out"; then
+    ok "MUTATION 13: refusing unconditionally in --legacy-through, its step refuses and prints --series back -- arm (j.13) is live"
+  else
+    bad "MUTATION 13: the legacy-always mutant did not change the outcome (first rc=$rc_first, rc=$rc): $out"
+  fi
+fi
+
+# =============================================================================
+# MUTATION 14 — exempt a re-run when this sprint's archive holds verdicts and NONE of them
+# FAILs. Arm (j.12)'s re-run after the PASS-only first line must flip to exit 0.
+# =============================================================================
+MUT14="$W/mut-failfreearchive.sh"
+mut_replace "$ROT" "$MUT14" \
+  'if [ -z "$LEGACY_THROUGH" ] && [ -z "$SERIES" ] && [ "$N_UM_FAIL" -gt 0 ]; then' \
+  'if [ -z "$LEGACY_THROUGH" ] && [ -z "$SERIES" ] && [ "$N_UM_FAIL" -gt 0 ] && [ "$(jq -s "[.[].verdicts[]?|select(.verdict==\"FAIL\")]|length" "$DEST"/*.verdict.json 2>/dev/null || echo x)" != 0 ]; then'
+if cmp -s "$ROT" "$MUT14"; then
+  bad "MUTATION 14: the fail-free-archive edit matched nothing; arm (j.12) is UNPROVEN"
+else
+  seed pass-first
+  out0="$( ( cd "$PROJ" && bash "$MUT14" --sprint s308 --apply ) 2>&1 )"; rc0=$?
+  rotate --sprint s308 --series "$UM_PASS_OLD" --apply >/dev/null 2>&1; rc_first=$?
+  out="$( ( cd "$PROJ" && bash "$MUT14" --sprint s308 --apply ) 2>&1 )"; rc=$?
+  if [ "$rc0" -eq 1 ] && [ "$rc_first" -eq 0 ] && [ "$rc" -eq 0 ] && grep -q 'nothing to move' <<<"$out" && [ -f "$GA/${UM_FAIL}.verdict.json" ]; then
+    ok "MUTATION 14: exempting a FAIL-free archive, the re-run exits 0 with the FAIL live (control: its close still refuses) -- arm (j.12) is live"
+  else
+    bad "MUTATION 14: the fail-free-archive mutant did not change the outcome (close=$rc0 first=$rc_first rerun=$rc): $out"
   fi
 fi
 
@@ -902,7 +983,7 @@ MUT4="$W/mut-strand.sh"
 # Re-anchored again when the refusal gained its promotion conjunct (`$PROMOTES`), and
 # again when that conjunct was confined to --series mode.
 mut_replace "$ROT" "$MUT4" \
-  'if [ "$SURVIVOR_UNMOVABLE" -eq 1 ] && [ -n "$SURVIVOR_FAILS" ] && { [ -z "$SERIES" ] || [ "$PROMOTES" -eq 1 ]; }; then' \
+  'if [ "$SURVIVOR_UNMOVABLE" -eq 1 ] && [ -n "$SURVIVOR_FAILS" ] && { [ "$SURVIVOR_ALWAYS" -eq 1 ] || [ "$PROMOTES" -eq 1 ]; }; then' \
   'if false; then'
 if cmp -s "$ROT" "$MUT4"; then
   bad "MUTATION 4: the sed matched nothing, so the stranding refusal in arm (h.1) is UNPROVEN"
