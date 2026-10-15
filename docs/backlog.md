@@ -69,22 +69,32 @@ empty selection exited 0 with "nothing to move", so retro step 5b passed while t
 stayed live for the gate-remediation guard.
 
 **Reader half, this branch.** An empty `--sprint` selection is now exit 1 when an unmatchable series
-(a non-empty id no selector can name) has at least one member recording a FAIL. The refusal names every
-file of every such series and prints one dry-run `--sprint s<M> --series '<exact-id>'` command per id.
-A PASS-only unmatchable series gets a WARN with the same commands and does not refuse. `--series` moves
-exactly that id. On a non-empty selection the rotator prints a WARN and exits 0.
+(a non-empty id no selector can name) has a NEWEST member recording a FAIL, and this sprint's archive
+holds no verdict yet. The refusal names every file of every such series and prints one dry-run
+`--sprint s<M> --series '<exact-id>'` command per id. Any other unmatchable series gets a WARN with the
+same commands and does not refuse, and so does an empty re-run over an already-rotated sprint. `--series`
+moves exactly that id. On a non-empty selection the rotator prints a WARN and exits 0. The survivor
+refusal fires only when the move promotes a new live pass, so moving a series older than a stranded FAIL
+is not refused.
 
-**The scope was revised from the id alone to FAIL-carrying series.** The guard reads only the live
-directory, and a stale verdict with no FAIL is its allow state, so only a stale FAIL can deny. On the
-consumer's tree, 8 of the 52 unmatchable verdicts carry a FAIL. `--sprint s318` still refuses: it names 12
-files in 8 FAIL-carrying series and WARNs the other 40. Of the 12 unmatchable verdicts newer than the s317
-archive, 2 carry a FAIL, and their 2 series hold 4 of the 12 named files. The fixture's mutation 6 now reverts the narrowing and must turn the PASS-only
-world from exit 0 to exit 1.
+**The scope was revised twice: from the id alone to FAIL-carrying series, then to each series' newest
+member.** The guard reads only the live directory, and a stale verdict with no FAIL is its allow state, so
+only a stale FAIL can deny. A series moves whole and its newest member sorts above its older ones, so an
+older FAIL can never become the live pass while its PASSing retry stays live; a sidecar does not exempt a
+series, because the guard reads one only for the live nonce. On the consumer's tree, `--sprint s318` keyed
+on any member named 12 files in 8 series. Keyed on the newest member it names 4 files in 4 series
+(`s311-stories-test-strategy-7`, `s311-sprint-review`, `sprint-review-20260919T193432Z`,
+`implementation-20261005T022120Z`) and WARNs 48 files under 44 commands. Mutation 6 reverts the FAIL
+narrowing and mutation 8 keys on any member; each flips a WARN world to exit 1.
 
-A hint is printed only when exactly one sprint is possible, and `NO HINT (s<a>..s<b>)` otherwise. Scored
-against the consumer's sprint-close commits, the 48 printed commands give 39 correct hints, 0 wrong and 9
-NO HINT. Applying the 8 FAIL-series commands, with the one NO HINT id filed by its close commit, makes
-`--sprint s318 --apply` exit 0, and the real guard then ALLOWs.
+A hint is printed only when exactly one sprint is possible. Otherwise the line prints `NO HINT (s<a>..s<b>)`,
+`NO HINT (..s<N>)` when no sprint archive exists, or `NO HINT (backfill below s<L>)` when the sprint being
+closed is not above the newest archive. Scored against the consumer's sprint-close commits, the 48 printed
+commands give 39 correct hints, 0 wrong and 9 NO HINT. With every archive removed, the old rule hinted the
+closing sprint; it now gives 8 right, 0 wrong and 40 NO HINT. In a simulated s319 close with a new FAILing
+`<gate>-<nonce>` verdict, walking the printed commands in order finishes in one pass: 11 commands, 2
+operator questions, 0 refused applies, and `--sprint s319 --apply` exits 0. The PASS seed takes 10
+commands and 1 question.
 
 **Writer half, a follow-on in this batch.** It stamps `<gate_type>-s<N>-<nonce>` at mint time, so new
 verdicts carry the token. It is built after the two branches that edit the same files merge.

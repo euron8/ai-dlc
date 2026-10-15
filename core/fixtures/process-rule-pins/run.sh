@@ -306,7 +306,8 @@ r11a-unbadged|S|SKILL.md|### Rule 11 |### Rule 12 |**Every option states its con
 gp-2c-locked-effects|S|steps/_gate-procedures.md|## Divergence resolution dispatch|## Adversarial repair dispatch|a. **One sentence naming the decision.**|para|State each option's effect on that entry instead, including the value it leaves in force
 gp-2c-locked-nobadge|S|steps/_gate-procedures.md|## Divergence resolution dispatch|## Adversarial repair dispatch|a. **One sentence naming the decision.**|para|**mark NO option `(Recommended)`.**
 retro-gar-confirm|S|steps/retro.md|### 7. Merge and Next-Sprint Handoff|6. **Verify no-loss per file:**|**Confirm every hinted sprint against the sprint-close commits before adding `--apply`.**|para|is an `AskUserQuestion` to the operator naming the id
-retro-gar-block|S|steps/retro.md|### 7. Merge and Next-Sprint Handoff|6. **Verify no-loss per file:**|**Confirm every hinted sprint against the sprint-close commits before adding `--apply`.**|para|a retro HARD_BLOCKS here whenever this sprint's selection is empty beside an unmatchable series that records a FAIL
+retro-gar-block|S|steps/retro.md|### 7. Merge and Next-Sprint Handoff|6. **Verify no-loss per file:**|**Confirm every hinted sprint against the sprint-close commits before adding `--apply`.**|para|a retro HARD_BLOCKS here whenever this sprint's selection is empty, this sprint has no archived verdicts yet, and an unmatchable series' newest member records a FAIL
+retro-gar-utc|S|steps/retro.md|### 7. Merge and Next-Sprint Handoff|6. **Verify no-loss per file:**|**Confirm every hinted sprint against the sprint-close commits before adding `--apply`.**|para|Read `TZ=UTC git log --date=format-local:%Y%m%dT%H%M%SZ --format='%ad %s'` for this repo's sprint-close commits
 PINS
 }
 

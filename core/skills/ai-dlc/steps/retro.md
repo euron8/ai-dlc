@@ -1360,13 +1360,13 @@ follow their audit, these must follow the merge.
    is not a HARD_BLOCK; apply the same printed lines before the commit.
 
    **Confirm every hinted sprint against the sprint-close commits before adding `--apply`.**
-   Read `git log --format='%ad %s'` for this repo's sprint-close commits and check that the
+   Read `TZ=UTC git log --date=format-local:%Y%m%dT%H%M%SZ --format='%ad %s'` for this repo's sprint-close commits and check that the
    id's oldest verdict nonce falls after the previous sprint's close and before `s<M>`'s close.
    A line printed `--sprint s<N>` with `NO HINT`, or a hint those commits do not confirm, is
    an `AskUserQuestion` to the operator naming the id, its nonces and the candidate sprints;
    never pick the sprint yourself. Until the writer half stamps `<gate_type>-s<N>-<nonce>` at
-   mint time, a retro HARD_BLOCKS here whenever this sprint's selection is empty beside an
-   unmatchable series that records a FAIL.
+   mint time, a retro HARD_BLOCKS here whenever this sprint's selection is empty, this sprint
+   has no archived verdicts yet, and an unmatchable series' newest member records a FAIL.
 
 6. **Verify no-loss per file:** each archive's byte count MUST equal that file's
    pre-rotation live byte count, and each new live log MUST contain only its

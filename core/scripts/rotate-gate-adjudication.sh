@@ -36,7 +36,7 @@
 # refusal below computes that outcome and refuses the move. See its header.
 #
 # A SERIES ID NO --sprint CAN NAME IS A REFUSAL ON AN EMPTY SELECTION WHEN ITS
-# SERIES CARRIES A FAIL, AND A WARN OTHERWISE. The schema leaves `gate_series_id`
+# SERIES' NEWEST MEMBER FAILS, AND A WARN OTHERWISE. The schema leaves `gate_series_id`
 # unpatterned, and the reference consumer's writers stamp ids with no sprint token
 # at all -- `<gate>-<nonce>`, `s310-planning`, `story-s311`. Measured on that
 # consumer's live directory: 239 verdicts, 94 with no series id, 93 carrying a
@@ -45,12 +45,15 @@
 # reported "nothing to move" and exited 0, so retro's rotation step passed while
 # moving nothing and the closed sprint's verdicts stayed live. So, in --sprint mode:
 #   - EMPTY selection, and any unmatchable series (a NON-EMPTY id that
-#     `survivor_unmovable` scores unmovable) with at least one member recording a
-#     FAIL: exit 1, naming every file of every such series and printing one
-#     `--series` command per distinct id. A legacy verdict (no id) never counts
-#     here; --legacy-through owns those.
-#   - EMPTY selection and only PASS-only unmatchable series: "nothing to move", a
-#     WARN naming them with the same commands, exit 0.
+#     `survivor_unmovable` scores unmovable) whose NEWEST member records a FAIL:
+#     exit 1, naming every file of every such series and printing one `--series`
+#     command per distinct id. A legacy verdict (no id) never counts here;
+#     --legacy-through owns those.
+#   - EMPTY selection and no such series: "nothing to move", a WARN naming the
+#     unmatchable ones with the same commands, exit 0.
+#   - EMPTY selection when this sprint's archive already holds verdicts: the same
+#     WARN, exit 0, never the refusal. The sprint has been rotated, so this is the
+#     re-run the exit contract below promises is exit 0.
 #   - NON-EMPTY selection: the selected verdicts move as before, the unmatchable
 #     ones stay live, and a WARN line names them with the same commands. Exit 0.
 #     The HARD_BLOCK fires only on an empty selection, because a sprint whose
@@ -63,22 +66,35 @@
 # is what denies, so it is what the close must not pass over. Measured on the
 # reference consumer: 8 of the 52 unmatchable verdicts carry a FAIL, and the
 # motivating s318 close still refuses. Of the 12 unmatchable verdicts newer than
-# the s317 archive, 2 carry a FAIL; their 2 series hold 4 of the 12 files the
-# refusal names. The fixture's mutation 6 therefore REVERTS the narrowing
-# (every unmatchable series counts) and requires the PASS-only world to flip from
-# exit 0 to exit 1; it used to apply the narrowing as the wrong fix.
+# the s317 archive, 2 carry a FAIL. The fixture's mutation 6 therefore REVERTS the
+# narrowing (every unmatchable series counts) and requires the PASS-only world to
+# flip from exit 0 to exit 1; it used to apply the narrowing as the wrong fix.
+#
+# THE FAIL IS READ OFF EACH SERIES' NEWEST MEMBER, NOT OFF ANY MEMBER. A series
+# moves whole -- `--series` takes every verdict carrying the id -- and its newest
+# member always sorts above its older ones, so an older FAIL can never become the
+# guard's live pass while its PASSing retry stays live beside it. A sidecar does not
+# exempt a series: the guard reads one only for the live nonce. Measured on the
+# reference consumer, keying on any member named 12 files in 8 series at the s318
+# close; keyed on the newest member it names 4 files in 4 series. A series with no
+# member whose stem carries a nonce is invisible to the guard's ordering, and is
+# kept on the conservative side: any FAIL in it counts.
 #
 # The sprint printed in each command is a HINT, labelled as one, and given only
 # when exactly one sprint is possible:
 #   - the id's own `s<digits>` field when it has one;
-#   - no sprint archive at all: the sprint being closed;
 #   - the archived sprint whose nonce range holds the verdict's nonce;
 #   - newer than the newest archive s<N>: the candidates are s<N+1> through the
 #     sprint being closed, and a hint is printed only when that is one sprint;
 #   - between archives s<L> and s<H>: the candidates are s<L+1> through s<H-1>,
 #     the same rule, so two ADJACENT archives give no candidate at all.
-# Anything else prints `NO HINT (s<a>..s<b>)` and a placeholder sprint that
-# --sprint validation rejects, so an unknown sprint cannot be run by accident.
+# Anything else prints `NO HINT (...)` and a placeholder sprint that --sprint
+# validation rejects, so an unknown sprint cannot be run by accident. That covers
+# no sprint archive at all, printed `NO HINT (..s<N>)` for the sprint being closed:
+# measured on the reference consumer with its archives removed, the old rule
+# hinting the closing sprint named a wrong sprint for most ids. It also covers a
+# nonce newer than the newest archive when the sprint being closed is not above it,
+# a backfill, printed `NO HINT (backfill below s<L+1>)` rather than an inverted range.
 # The last two rules exclude the archive below the nonce, which is right only
 # when that archive is complete; measured on the reference consumer, the s312
 # archive holds one verdict while six of s312's sit live after it, and the rule
@@ -475,10 +491,10 @@ survivor_unmovable() { # <series> -> 0 when no mode can ever move this verdict
 # non-empty one, and the `--series` escape that clears both. See the header.
 #
 # STANDALONE BY DESIGN, NOT ROUTED THROUGH THE SURVIVOR BLOCK BELOW. That block
-# asks whether the NEWEST verdict left behind FAILs; this one asks whether ANY
-# unmatchable series records a FAIL, wherever it sorts. Keyed on the survivor it
-# would pass the reference consumer's s318 close, whose newest unmatchable verdict
-# PASSes while two older s318 verdicts in FAIL-carrying series stay live.
+# asks whether the NEWEST verdict left behind FAILs; this one asks, per unmatchable
+# series, whether THAT series' newest member FAILs, wherever the series sorts. Keyed
+# on the survivor it would pass the reference consumer's s318 close, whose newest
+# unmatchable verdict PASSes while older series whose newest member FAILs stay live.
 # ---------------------------------------------------------------------------
 if [ -n "$SERIES" ] && ! survivor_unmovable "$SERIES"; then
   echo "${SELF_NAME}: --series '${SERIES}' carries a -s<N>- token, so --sprint already selects it;" >&2
@@ -488,17 +504,33 @@ fi
 
 # The verdicts whose non-empty series id no --sprint selector can name, as
 # "<series>\t<file>" rows. A legacy verdict has no row here: --legacy-through owns it.
-# fail_series lists every such id with at least one member recording a FAIL; the
-# whole series is then FAIL-carrying, so a retry that PASSes does not split it.
+# fail_series lists every such id whose NEWEST member records a FAIL (see the header);
+# the whole series is then FAIL-carrying and every one of its files is named.
+# member_rows holds "<series>\t<nonce|->\t<fails 0|1>" per member; a member whose stem
+# carries no nonce scores `-`, which no nonce outranks, and a series whose members ALL
+# score `-` is FAIL-carrying when any member FAILs.
 : > "$TMPD/unmatchable"
 : > "$TMPD/fail_series"
+: > "$TMPD/member_rows"
 while IFS="$(printf '\t')" read -r _um_series _um_file; do
   [ -n "$_um_series" ] || continue
   survivor_unmovable "$_um_series" || continue
   printf '%s\t%s\n' "$_um_series" "$_um_file" >> "$TMPD/unmatchable"
   _um_fc="$(jq -r '[.verdicts[]? | select(.verdict=="FAIL")] | length' "$_um_file" 2>/dev/null)" || _um_fc=0
-  [ "${_um_fc:-0}" != 0 ] && printf '%s\n' "$_um_series" >> "$TMPD/fail_series"
+  _um_ts="$(conforming_nonce "$(basename "$_um_file" .verdict.json)")" || _um_ts="-"
+  _um_f=0; [ "${_um_fc:-0}" != 0 ] && _um_f=1
+  printf '%s\t%s\t%s\n' "$_um_series" "$_um_ts" "$_um_f" >> "$TMPD/member_rows"
 done < "$TMPD/series_rows"
+# Per series: the FAIL bit of the member with the greatest nonce; with no nonce-bearing
+# member, the OR of every member's bit. Ties on one nonce OR together.
+awk -F'\t' '
+  { s = $1
+    if ($2 == "-") { anyf[s] = anyf[s] || $3; seen[s] = 1; next }
+    seen[s] = 1
+    if (!(s in top) || $2 > top[s]) { top[s] = $2; topf[s] = $3 }
+    else if ($2 == top[s]) { topf[s] = topf[s] || $3 } }
+  END { for (s in seen) { f = (s in top) ? topf[s] : anyf[s]; if (f) print s } }' \
+  "$TMPD/member_rows" > "$TMPD/fail_series"
 # Partition the rows by series: FAIL-carrying series refuse an empty selection,
 # PASS-only series only WARN. A per-row grep, never an awk NR==FNR join, which
 # misreads its second file as the first when fail_series is empty.
@@ -551,7 +583,7 @@ hint_sprint() {
   done
   _h_ts="$2"
   if [ ! -s "$TMPD/ranges" ]; then
-    printf '%s\t%s\n' "$SPRINT" "no sprint archive exists yet, so the sprint being closed"; return 0
+    printf 's<N>\t%s\n' "NO HINT (..${SPRINT}): no sprint archive exists yet, so any sprint up to ${SPRINT} is possible -- pick the sprint"; return 0
   fi
   [ -n "$_h_ts" ] || { printf 's<N>\t%s\n' "NO HINT (its stem carries no nonce) -- pick the sprint"; return 0; }
   # _h_n/_h_max: the highest archive whose range opens at or before the nonce.
@@ -586,9 +618,14 @@ hint_sprint() {
   if [ "$_h_top" -gt "$_h_lo" ]; then
     printf 's<N>\t%s\n' "NO HINT (s${_h_lo}..s${_h_top}): nonce ${_h_ts} is ${_h_where} -- pick the sprint"; return 0
   fi
+  # A backfill: the sprint being closed is not above the newest archive, so the
+  # window above it is empty and would print as an inverted range.
+  if [ -z "$_h_hi" ]; then
+    printf 's<N>\t%s\n' "NO HINT (backfill below s${_h_lo}): nonce ${_h_ts} is ${_h_where}, which is not above it -- pick the sprint"; return 0
+  fi
   # An empty window: the archive below the nonce is itself incomplete, so it and
   # the one above are the candidates.
-  printf 's<N>\t%s\n' "NO HINT (s${_h_n}..s${_h_hi:-${SPRINT#s}}): nonce ${_h_ts} is ${_h_where}, and no sprint lies strictly between -- pick the sprint"
+  printf 's<N>\t%s\n' "NO HINT (s${_h_n}..s${_h_hi}): nonce ${_h_ts} is ${_h_where}, and no sprint lies strictly between -- pick the sprint"
 }
 
 # print_series_commands <rows-file>: one dry-run `--series` command per distinct id
@@ -618,18 +655,25 @@ print_series_commands() {
 
 warn_pass_only() { # <rows-file> <count>
   echo "${SELF_NAME}: WARN -- $2 verdict(s) carry a gate_series_id no --sprint selector can match and stay live;" >&2
-  echo "  none of their series records a FAIL, so the guard reads them as clean:" >&2
+  echo "  no series' newest member records a FAIL, so none of them can become a denying live pass:" >&2
   cut -f2 "$1" | sed 's/^/    /' >&2
   echo "  This run still proceeds. To move them, run each command below (a dry run), confirm" >&2
   echo "  its sprint, then add --apply, in the order printed:" >&2
   print_series_commands "$1"
 }
 
+# Whether this sprint's archive already holds a verdict: an empty selection is then the
+# re-run of a rotated sprint, which WARNs and exits 0 rather than refusing.
+ALREADY_ROTATED=0
+for _ar_v in "$DEST"/*.verdict.json; do
+  [ -f "$_ar_v" ] && { ALREADY_ROTATED=1; break; }
+done
+
 if [ "$N_FILES" -eq 0 ]; then
-  if [ -z "$LEGACY_THROUGH" ] && [ -z "$SERIES" ] && [ "$N_UM_FAIL" -gt 0 ]; then
+  if [ -z "$LEGACY_THROUGH" ] && [ -z "$SERIES" ] && [ "$N_UM_FAIL" -gt 0 ] && [ "$ALREADY_ROTATED" -eq 0 ]; then
     echo "${SELF_NAME}: REFUSED -- no verdict names series '${SPRINT}', and ${N_UM_FAIL} verdict(s) carry a" >&2
-    echo "  gate_series_id no --sprint selector can match, in a series that records a FAIL, so this" >&2
-    echo "  sprint's verdicts may be among them:" >&2
+    echo "  gate_series_id no --sprint selector can match, in a series whose newest member" >&2
+    echo "  records a FAIL, so this sprint's verdicts may be among them:" >&2
     cut -f2 "$TMPD/unmatchable_fail" | sed 's/^/    /' >&2
     echo "  An empty-selection exit 0 here would let the retro pass while every one of them" >&2
     echo "  stayed live for the gate-remediation guard. Nothing written." >&2
@@ -645,6 +689,16 @@ if [ "$N_FILES" -eq 0 ]; then
       warn_pass_only "$TMPD/unmatchable_pass" "$N_UM_PASS"
     fi
     exit 1
+  fi
+  if [ -z "$LEGACY_THROUGH" ] && [ -z "$SERIES" ] && [ "$N_UM_FAIL" -gt 0 ]; then
+    # Reached only when this sprint is already rotated (see the refusal above).
+    echo "${SELF_NAME}: WARN -- ${SPRINT} is already rotated ('${DEST}' holds verdicts), so this empty" >&2
+    echo "  selection is a re-run and does not refuse. ${N_UM_FAIL} verdict(s) still carry a gate_series_id no" >&2
+    echo "  --sprint selector can match, in a series whose newest member records a FAIL:" >&2
+    cut -f2 "$TMPD/unmatchable_fail" | sed 's/^/    /' >&2
+    echo "  To move them, run each command below (a dry run), confirm its sprint, then add --apply," >&2
+    echo "  in the order printed:" >&2
+    print_series_commands "$TMPD/unmatchable_fail"
   fi
   if [ -z "$LEGACY_THROUGH" ] && [ -z "$SERIES" ] && [ "$N_UM_PASS" -gt 0 ]; then
     warn_pass_only "$TMPD/unmatchable_pass" "$N_UM_PASS"
@@ -682,7 +736,20 @@ for f in "$SRC"/*.verdict.json; do
   fi
 done
 
-if [ "$SURVIVOR_UNMOVABLE" -eq 1 ] && [ -n "$SURVIVOR_FAILS" ]; then
+# THE REFUSAL FIRES ONLY WHEN THE MOVE PROMOTES A NEW LIVE PASS: the newest moved nonce
+# is newer than the survivor's. When the survivor already outranks every moved verdict
+# it was the live pass before this run and stays it after, so refusing changes nothing
+# the guard reads -- and it wedged a --series walk that moved older series first.
+# Measured on the reference consumer's s319 FAIL walk: refused applies, a second pass.
+MOVED_MAX_TS=""
+while IFS= read -r _mv_stem; do
+  _mv_ts="$(conforming_nonce "$_mv_stem")" || continue
+  { [ -z "$MOVED_MAX_TS" ] || [ "$_mv_ts" \> "$MOVED_MAX_TS" ]; } && MOVED_MAX_TS="$_mv_ts"
+done < "$TMPD/move_stems"
+PROMOTES=0
+[ -n "$MOVED_MAX_TS" ] && [ "$MOVED_MAX_TS" \> "${SURVIVOR_TS:-}" ] && PROMOTES=1
+
+if [ "$PROMOTES" -eq 1 ] && [ "$SURVIVOR_UNMOVABLE" -eq 1 ] && [ -n "$SURVIVOR_FAILS" ]; then
   echo "${SELF_NAME}: REFUSED -- this rotation would strand a FAILing verdict no mode can move." >&2
   echo "  Newest verdict left in '${SRC}' after this move:" >&2
   echo "    ${SURVIVOR_STEM} -- ${SURVIVOR_WHY}; FAILed check(s): ${SURVIVOR_FAILS}" >&2

@@ -152,6 +152,23 @@ seed_unmatchable_retry() {
           "planning-20260911T000000Z" "planning-20260910T120000Z-retry" "$S309_ALLPASS"
 }
 
+# ONE unmatchable series, two members: an older FAIL and its newer PASSing retry under
+# the same id. A series moves whole, so the older FAIL can never be the live pass while
+# the retry stays live; the series is keyed on its NEWEST member and only WARNs.
+seed_series_newest_pass() {
+  verdict "$GA/planning-20260909T120000Z.verdict.json" \
+          "planning-20260909T120000Z" "planning-20260909T120000Z" "$LEGACY_FAIL"
+  verdict "$GA/planning-20260912T000000Z.verdict.json" \
+          "planning-20260912T000000Z" "planning-20260909T120000Z" "$S309_ALLPASS"
+}
+# Its twin, one property apart: the NEWEST member FAILs, so the series refuses.
+seed_series_newest_fail() {
+  verdict "$GA/planning-20260909T120000Z.verdict.json" \
+          "planning-20260909T120000Z" "planning-20260909T120000Z" "$S309_ALLPASS"
+  verdict "$GA/planning-20260912T000000Z.verdict.json" \
+          "planning-20260912T000000Z" "planning-20260909T120000Z" "$LEGACY_FAIL"
+}
+
 # A sprint-LAST id the reference consumer's writers stamped: `story-s311`, which is
 # NOT nonce-tailed (its stem is). It is the only unmatchable verdict in its world and
 # it records a FAIL, so a predicate counting only `<gate>-<nonce>` ids misses it.
@@ -260,6 +277,25 @@ case "$CASE" in
     ;;
   hint-adjacent)
     seed_archive_s309; seed_archive s310 20260920T000000Z; seed_unmatchable_fail
+    ;;
+  # Archives s309 and s312 with the verdict between them: two candidates, s310..s311,
+  # so no hint whatever sprint is closing.
+  hint-wide-gap)
+    seed_archive_s309; seed_archive s312 20260920T000000Z; seed_unmatchable_fail
+    ;;
+  # One unmatchable series with an older FAIL and a newer PASS: WARN, never refuse.
+  series-newest-pass)
+    seed_series_newest_pass; seed_legacy
+    ;;
+  # The twin: older PASS, newer FAIL. Refused.
+  series-newest-fail)
+    seed_series_newest_fail; seed_legacy
+    ;;
+  # An s308 selection beside a FAIL-carrying unmatchable verdict NEWER than the s308
+  # verdict, so it is the live pass before the move and after it. The move promotes nothing and must not be refused; a second --apply is
+  # then an empty selection over an already-rotated sprint and must not be refused either.
+  reapply)
+    seed_s308; seed_unmatchable_fail; seed_legacy
     ;;
   # Tagged verdicts only, none for s308: still "nothing to move", exit 0.
   tagged-nomatch)
