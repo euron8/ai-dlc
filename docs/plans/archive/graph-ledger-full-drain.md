@@ -18488,3 +18488,73 @@ below is history: this block replaces its delivery gap. Handed the plan by ai-dl
 
 Net for the batch: closed 1 (by graph's pull), filed 0. The backlog stays declared empty.
 
+**BATCH 228 SHIPPED `v0.781.0` (`6c8ea1d9`, #1126): BOTH CANDIDATES GRAPH FILED IN ITS SPRINT 318, AND THE OPERATOR'S
+`templates/settings.json.template` CHANGE WITH THE TWO DEFECTS MEASURED AGAINST IT. THE PULL IS REQUIRED, AND ITS
+RUNBOOK `docs/plans/graph-pull-0780-to-0781.md` IS WRITTEN AND REHEARSED; THE OPERATOR RAN THE PULL, AND GRAPH'S LIVE
+LEDGER NOW READS 0.**
+Batch 227's block below is history: this block replaces its delivery gap. Started by the operator's one-liner at
+`origin/main` `b1b5affb` (`VERSION` 0.780.0); graph-60 was live and busy, and was never messaged.
+- **Opening sweep** (at `b1b5affb`): live 2, unfiled 2, worklist 0, DISCHARGED 0, invisible 0, TERMINAL 234, archive
+  357, 20 qualifying refs, every control passing; backlog 0 live, 501 archived, one `DECLARED-EMPTY` row. The two ids,
+  filed 2026-10-13 and 2026-10-14, sat on graph's local carry-over branch and its sprint-318 story branches, not on
+  graph `main` and not on `origin`; graph's working-tree ledger diff was empty.
+- **Operator change mid-batch**: the operator edited `templates/settings.json.template` uncommitted and asked for it in
+  the batch: bare aliases `fable`/`opus`/`sonnet`/`haiku`, role tiers as graph runs them (`dev` haiku, `dev-escalated`
+  sonnet, efforts lowered), and a model on `cis`/`sm`/`tea`/`ux`. It shipped byte-identical. **Operator ruling, batch
+  228: "The bare opus, sonnet, etc is mapped in claude code to the [1m] variant."** It covers a bare alias only.
+- **`v0.781.0`**, one release:
+  - BL-503 (`validate-mutation-red.sh`): a pytest run whose summary counts are only skipped, deselected or warnings
+    exits 2 `UNEVALUABLE (no test ran)`, at baseline and on the mutated run. A missing or unreadable summary fails
+    open with a note on every verdict. A skip-gated test that was PROVEN now reads 2.
+  - BL-504 (dev escalation): the routing map states the capital-path / high-blast-radius criterion. Before a story's
+    first dev dispatch the lead sets a missing or `false` tag and commits it before the dev worktree is cut. Rule 28(b)
+    names story-to-role routing. No step or role file names a model for an escalated route.
+  - BL-505 (window resolver): one family-window policy in `ai-dlc-window.sh` serves the Step 1a budget validator and
+    the context sensor, and reads the settings `.env` block. The 1M default applies to an exact bare alias only; any
+    other id without `[1m]` is 200K. A declared window outside 50000..2000000 is rejected.
+  - BL-506 (party seats): `validate-spawn-ledger.sh` derives a seat from the role file's line-start persona sentence,
+    not from "no model in `aiDlcRoles`", which the new template emptied. A persona's model is optional in every carrier.
+  - **Adversaries.** Three contract adversaries found four BLOCKERs, all folded before any builder started: a tag
+    write after the worktree cut, which graph's artifact fold overwrites; a tag write at rework; a window table that
+    did not exist; and the settings `.env` block going unread. Four tip adversaries found three more, each fixed in
+    the release with an arm and a mutant: a non-UTF-8 byte disabled the skip check silently; full 200K ids such as
+    `global.anthropic.claude-sonnet-4-6` read 1M by substring; one reworded persona file dropped a seat with no warning.
+  - **Gates.** Three. The first was stopped for an amend. The second failed only `whole-read-pool`: the fixture's
+    `AI_DLC_*` scrub also removed `AI_DLC_PROJECT_ROOT`, which `hermetic-run.sh` sets, so the sandboxed validator
+    could not resolve a root. The third was green, 22 of 22 phases, with `whole-read-pool` `ok` by name; the other
+    seven changed fixtures were `ok` by name on the second gate, and the two commits differ only in that fixture and
+    its map row.
+  - **Unfixed, recorded**: `core/fixtures/context-sensor/run.sh` carries the same scrub. It runs plainly because it has
+    no `inputs.decl`; the day it gains one it fails the same way.
+- **Close sweep** (at `6c8ea1d9`): live 2, unfiled 0, DISCHARGED 2 (corrected 2), in-flight 0, invisible 0, TERMINAL
+  234, archive 357, 21 qualifying refs; backlog 0 live, 505 archived, one `DECLARED-EMPTY` row; worklist 0. Both ids
+  have 0.781.0 as their oldest naming release, and the control reads `UNNAMED`.
+- **graph delivery**: stamp 0.780.0 against `VERSION` 0.781.0, one release behind. **Action 7's second test reads YES.**
+  graph's installed `validate-spawn-ledger.sh` scores 0 persona S1 warnings and 10 S3 failures on its S317 ledger,
+  where 0.781.0 scores 57 and 11 (one real undeclared tea exception). Its installed budget validator cannot read the
+  settings `.env` windows.
+- **The runbook's rehearsal** (at the unmerged release commit; the shipped commit differs only in one fixture):
+  `SELF-UPDATE-DEFER`, from the rulebook-coupled-fixtures row; that is harmless, because 32 of 32 installed `reconcile/` files
+  match 0.780.0. Preclassify gave 40 rows: 38 `UPSTREAM-ONLY`, 1 `DIST-ONLY-SKIP`, and 1 `BOTH-CHANGED->CLASSIFY`
+  for `team-roles/dev.md`. **12 `HARD-*` rows block `apply` until they are adjudicated**: 10
+  `HARD-LAYER-ADJUDICATION-MISSING` and 2 `HARD-OVERRIDE-DRIFT-SECTION`, on graph's dev and tea overrides, because
+  the range edits `dev.md` and `tea.md`. Both candidates get `NAMED-UPSTREAM` rows and close on annotation and
+  rotation. `settings-merge.sh` changes none of graph's role values; graph's `cis`/`tea` efforts stay `medium`
+  against the template's `high`.
+- **graph boundary**: ledger md5 `e6a33acb…` at the opening and the close. Porcelain 14 at the opening and 10 at the
+  close, all graph's own pipeline state, 0 under `_bmad-output/ai-dlc-update/`. Nothing was written there.
+- **Process facts**: the model gateway dropped agent sessions repeatedly (HTTP 500 / ECONNRESET). One tip adversary
+  was respawned fresh after three failed resumes.
+- **The pull landed (2026-10-14). This bullet replaces this block's earlier "running it is the operator's call"
+  delivery gap.** The operator ran the runbook in a graph session. graph's PR #1219 (reconcile, `7a8c6c98a`) merged
+  onto its carry-over branch with no self-update PR, and its stamp reads 0.781.0. The 12 `HARD-*` rows were
+  adjudicated to 0. Both sprint-318 ids closed as `ADOPTED UPSTREAM (v0.781.0)` and rotated: archive 1, ledger 0, 18
+  ledger headings. On a clone at the pulled head, done-when 4 reads 57 persona warnings against the `[qa]` control of
+  72, and `pool 330000`. The derive block in a fresh worktree at `3de460dd` reads live 0 across 24 qualifying refs,
+  arch 359, TERMINAL 236, DISCHARGED 0, worklist 0, installed = shipped = 0.781.0, and gap control `UNNAMED`. The runbook is
+  discharged. The ledger md5 moved `e6a33acb…` -> `6f733a18…` through graph's own #1219; this session wrote nothing
+  there.
+
+Net for the batch: closed 2 candidates, which graph's pull closed on its side; filed 4 entries (BL-503..506) and
+closed all 4 in the release. The backlog stays declared empty.
+

@@ -33626,3 +33626,48 @@ ignores the dispatched story, and on the prose with no arm. It exits 0 at this t
 **LANDED (v0.788.0, verified c96ad358).**
 
 verify: sh F=core/fixtures/gate-adjudication/run.sh; P=core/fixtures/process-rule-pins/run.sh; [ -f "$F" ] && [ -f "$P" ] || exit 9; o="$(bash "$F" 2>&1)" || exit 1; n="$(grep -cE '^  ok    SF(0|0b|1|2|3|4|5|5b|5c|6|7|8|9|10|11): ' <<<"$o")" || n=0; [ "$n" -eq 15 ] || exit 1; r="$(bash "$P" --report 2>&1)" || exit 1; m="$(grep -cE '^  ok    (gv-series-[a-z]+|gv-fail-series|gv-reset-[a-z]+|gp-[a-z]+-series|gadj-[a-z]+-series): pinned inside ' <<<"$r")" || m=0; [ "$m" -eq 32 ]
+## BL-527 — the worktree dispatch protocol let a dev's git commands run in the primary tree and let a dev claim a second story
+
+**LANDED (v0.789.0, verified dc8efe43).**
+
+**DEFECT.** Discharges `PC-S319-IMPLEMENTATION-PUSH-WORKTREE-EXPLICIT-DISPATCH-BLOCK-RESTATES-CORE-DISPATCH-PROTOCOL`.
+
+graph's `push-drain.sh` run at 4aa734c4 returned one PUSH-CANDIDATE block:
+`.claude/skills/ai-dlc/extensions/steps-domain/implementation-push.md` §2 "Worktree-explicit dev dispatch",
+digest `b0e3cc6b32827bc2e5926bf2bf5130840ac14ec3`. The same block was refused as absorbed in 0.713.0, at
+digest `8a28c2eff8ca8d6787aa3709e120f055058e64bf` (row 1 of `push-refusals.tsv`). graph changed it by
+exactly one line, in graph 8f313c3c0 (the 0.781.0 to 0.785.0 pull): point 5 went from `messages lead`
+to ``messages the lead (`SendMessage` `to: "main"`)``, which is core's own 0.783.0 teammate-send rule.
+The body changed, so the digest changed, so the refusal stopped matching. That is the record's designed
+behaviour, not a reader defect.
+
+The 0.713.0 "absorbed" ruling was not true in full. The contract adversary measured two of the block's
+points that `_dispatch-protocol.md` stated nowhere:
+
+- **git -C on every command (BLOCKER).** Point 3 told the dev to `cd` into the worktree as its first
+  action. A teammate's working directory resets between Bash calls, so a later `git add -A` or
+  `git commit -a` runs in the primary tree and lands on whatever branch it has checked out.
+  `_dispatch-protocol.md` carried no `git -C` at all; core's other uses were the lead's own commands
+  (`implementation.md:306`, `:503`) and hooks.
+- **One story per dispatch (DEFECT).** `core/team-roles/dev.md:28` read "Implement stories assigned to
+  you from the shared task list", and two more dev.md sentences presupposed a queue of stories. A dev
+  could claim a second story inside a worktree cut for the first, outside the lead's merge and gate order.
+
+Fix (this release): `_dispatch-protocol.md` point 3 carries two standing brief lines: every git command
+is `git -C <worktree absolute path> <cmd>`, or a `cd` on every Bash call, and a first-action `cd` alone is
+not compliance; and the dev works only the story it was dispatched for, never claims another from a task
+list, and when finished early sends its report `to: "main"` and goes idle. dev.md's three queue sentences
+are reworded to match. `push-refusals.tsv` gains a row for `b0e3cc6b…` naming both, and keeps row 1 for a
+consumer still carrying the older body.
+
+Not built (NOTES): `git branch -D` after `git worktree remove` (a missing one is a loud stall, not wrong
+work); `git worktree list` before merge (redundant once git -C holds); `lead_only` stories and "dev must
+not commit `_bmad-output/**`" are graph-local and contradict core (`implementation.md:71-75`,
+protected-path editing "is delegable, not lead-only"; `dev.md:58-66`, the dev DOES commit its story's
+status marks under `_bmad-output/**`).
+
+`core/fixtures/process-rule-pins/run.sh` pins both new point-3 sentences, dev.md's one-story line and its
+HARD_BLOCK "you do not pick up another story" clause (rows `dp-git-c`, `dp-one-story`, `dev-one-story`,
+`dev-hardblock-idle`); deleting any one sentence fails only its own row.
+
+verify: sh command -v shasum >/dev/null || exit 9; T=core/skills/ai-dlc-update/reconcile/push-refusals.tsv; D=core/skills/ai-dlc/steps/_dispatch-protocol.md; V=core/team-roles/dev.md; [ -f "$T" ] && [ -f "$D" ] && [ -f "$V" ] || exit 9; n="$(awk -F'\t' '$1=="b0e3cc6b32827bc2e5926bf2bf5130840ac14ec3"' "$T" | grep -c .)" || n=0; [ "$n" -eq 1 ] || exit 1; f="$(awk -F'\t' '$1=="b0e3cc6b32827bc2e5926bf2bf5130840ac14ec3" { print NF }' "$T")"; [ "$f" = 3 ] || exit 1; c="$(mktemp -d)" || exit 9; mkdir -p "$c/.claude/skills/ai-dlc/extensions" || exit 9; bash core/skills/ai-dlc-update/reconcile/push-drain.sh "$PWD" HEAD "$c" >/dev/null 2>&1 || exit 1; grep -qF 'git -C <worktree absolute path> <cmd>`, or the dev `cd`s into the' "$D" || exit 1; grep -qF 'and never claims another from a task list' "$D" || exit 1; grep -qF 'Implement the story the lead dispatched you for: one story per dispatch.' "$V" || exit 1
