@@ -68,15 +68,26 @@ live directory (239 verdicts), 52 carry an id with no such token, 42 of them exa
 empty selection exited 0 with "nothing to move", so retro step 5b passed while the sprint's verdicts
 stayed live for the gate-remediation guard.
 
-**Reader half, this branch.** An empty `--sprint` selection beside any verdict whose non-empty series id
-no selector can name is now exit 1. The refusal names every such file and prints one dry-run
-`--sprint s<M> --series '<exact-id>'` command per id, with its sprint marked as a hint. `--series` moves
-exactly that id. On a non-empty selection the rotator prints a WARN and exits 0. On the consumer's tree,
-s318 and s317 refuse naming 52 files. Applying all 48 printed commands in order makes s318 exit 0, and
-applying only the 10 hinted at s318 leaves 40 named.
+**Reader half, this branch.** An empty `--sprint` selection is now exit 1 when an unmatchable series
+(a non-empty id no selector can name) has at least one member recording a FAIL. The refusal names every
+file of every such series and prints one dry-run `--sprint s<M> --series '<exact-id>'` command per id.
+A PASS-only unmatchable series gets a WARN with the same commands and does not refuse. `--series` moves
+exactly that id. On a non-empty selection the rotator prints a WARN and exits 0.
+
+**The scope was revised from the id alone to FAIL-carrying series.** The guard reads only the live
+directory, and a stale verdict with no FAIL is its allow state, so only a stale FAIL can deny. On the
+consumer's tree, 8 of the 52 unmatchable verdicts carry a FAIL. `--sprint s318` still refuses: it names 12
+files in 8 FAIL-carrying series, 2 of them among the 12 unmatchable verdicts newer than the s317 archive.
+It WARNs the other 40. The fixture's mutation 6 now reverts the narrowing and must turn the PASS-only
+world from exit 0 to exit 1.
+
+A hint is printed only when exactly one sprint is possible, and `NO HINT (s<a>..s<b>)` otherwise. Scored
+against the consumer's sprint-close commits, the 48 printed commands give 39 correct hints, 0 wrong and 9
+NO HINT. Applying the 8 FAIL-series commands, with the one NO HINT id filed by its close commit, makes
+`--sprint s318 --apply` exit 0, and the real guard then ALLOWs.
 
 **Writer half, a follow-on in this batch.** It stamps `<gate_type>-s<N>-<nonce>` at mint time, so new
 verdicts carry the token. It is built after the two branches that edit the same files merge.
 
-verify: sh R="$PWD/core/scripts/rotate-gate-adjudication.sh"; [ -f "$R" ] || exit 9; command -v jq >/dev/null || exit 9; d="$(mktemp -d)" || exit 9; g="$d/s/gate-adjudication"; a="$d/s/implementation-artifacts/s309/gate-adjudication"; mkdir -p "$g" || exit 9; printf '{"gate_nonce":"planning-20260910T120000Z","gate_series_id":"planning-20260910T120000Z","verdicts":[{"check_id":"1","verdict":"PASS"}]}\n' > "$g/planning-20260910T120000Z.verdict.json"; printf '{"gate_nonce":"planning-20260911T000000Z","gate_series_id":"planning-20260910T120000Z-retry","verdicts":[{"check_id":"1","verdict":"PASS"}]}\n' > "$g/planning-20260911T000000Z.verdict.json"; o="$(bash "$R" --sprint s308 --state-dir "$d/s" 2>&1)"; r=$?; [ "$r" -eq 1 ] || exit 1; grep -q '/planning-20260910T120000Z\.verdict\.json$' <<<"$o" || exit 1; bash "$R" --sprint s309 --series planning-20260910T120000Z --apply --state-dir "$d/s" >/dev/null 2>&1 || exit 1; [ -f "$a/planning-20260910T120000Z.verdict.json" ] && [ -f "$g/planning-20260911T000000Z.verdict.json" ] || exit 1; bash "$R" --sprint s309 --series planning-20260910T120000Z-retry --apply --state-dir "$d/s" >/dev/null 2>&1 || exit 1; bash "$R" --sprint s308 --state-dir "$d/s" >/dev/null 2>&1
+verify: sh R="$PWD/core/scripts/rotate-gate-adjudication.sh"; [ -f "$R" ] || exit 9; command -v jq >/dev/null || exit 9; d="$(mktemp -d)" || exit 9; g="$d/s/gate-adjudication"; a="$d/s/implementation-artifacts/s309/gate-adjudication"; h="$d/t/gate-adjudication"; mkdir -p "$g" "$h" || exit 9; printf '{"gate_nonce":"planning-20260909T120000Z","gate_series_id":"planning-20260909T120000Z","verdicts":[{"check_id":"1","verdict":"FAIL"}]}\n' > "$g/planning-20260909T120000Z.verdict.json"; printf '{"gate_nonce":"planning-20260910T120000Z","gate_series_id":"planning-20260909T120000Z-retry","verdicts":[{"check_id":"1","verdict":"PASS"}]}\n' > "$g/planning-20260910T120000Z.verdict.json"; printf '{"gate_nonce":"story-20260913T044428Z","gate_series_id":"story-s311","verdicts":[{"check_id":"2","verdict":"FAIL"}]}\n' > "$h/story-20260913T044428Z.verdict.json"; o="$(bash "$R" --sprint s308 --state-dir "$d/s" 2>&1)"; r=$?; [ "$r" -eq 1 ] || exit 1; grep -q '/planning-20260909T120000Z\.verdict\.json$' <<<"$o" || exit 1; o="$(bash "$R" --sprint s308 --state-dir "$d/t" 2>&1)"; r=$?; [ "$r" -eq 1 ] || exit 1; grep -q '/story-20260913T044428Z\.verdict\.json$' <<<"$o" || exit 1; bash "$R" --sprint s309 --series planning-20260909T120000Z --apply --state-dir "$d/s" >/dev/null 2>&1 || exit 1; [ -f "$a/planning-20260909T120000Z.verdict.json" ] && [ -f "$g/planning-20260910T120000Z.verdict.json" ] || exit 1; bash "$R" --sprint s308 --state-dir "$d/s" >/dev/null 2>&1
 

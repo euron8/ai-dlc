@@ -22,47 +22,66 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 
 ## [UNRELEASED — b230-c5a-rotate]
 
-### `rotate-gate-adjudication.sh`: an empty sprint selection beside an unmatchable series id is refused, and `--series` is the escape (BL-523)
+### `rotate-gate-adjudication.sh`: an empty sprint selection beside a FAIL-carrying unmatchable series is refused, and `--series` is the escape (BL-523)
 
 `--sprint s<N>` selects verdicts by the `-s<N>-` token in `gate_series_id`, a field the schema leaves
 unpatterned. On the reference consumer's live directory, 52 of 239 verdicts carry an id with no such token,
 most of them `<gate>-<nonce>`. Such a sprint selected nothing and exited 0 with "nothing to move". Retro
 step 5b then passed while that sprint's verdicts stayed live for the gate-remediation guard.
 
-- **Refusal.** In `--sprint` mode, an empty selection beside any verdict whose NON-empty series id no
-  `--sprint` selector can name now exits 1. The refusal names every such file and prints one command per
-  distinct id. Legacy verdicts with no series id are not counted; `--legacy-through` owns them. The check
-  stands alone: it does not go through the survivor FAIL refusal, because the consumer's newest unmatchable
-  verdict PASSes.
+- **Refusal.** In `--sprint` mode, an empty selection now exits 1 when an unmatchable series (a non-empty
+  id no `--sprint` selector can name) has at least one member recording a FAIL. The refusal names every
+  file of every such series and prints one command per distinct id. A PASS-only unmatchable series gets a
+  WARN with the same commands and exit 0, because the guard reads a stale clean verdict as its allow state.
+  Legacy verdicts with no series id are not counted; `--legacy-through` owns them. The check stands alone
+  and does not go through the survivor FAIL refusal, which reads only the newest verdict.
 - **Escape.** `--sprint s<N> --series <exact-id> [--apply]` moves every verdict whose series id equals
   `<exact-id>`, with its sidecars. It is a dry run without `--apply`. It refuses (exit 2) an id that a
-  `--sprint` selector can already name. The printed commands carry no `--apply`. Their sprint is a
-  labelled HINT, taken from the id's own `s<digits>` field or the archived sprint nonce ranges, and never
-  applied automatically. They print oldest series first.
+  `--sprint` selector can already name, and `--series ''` is a usage error (exit 2). The printed commands
+  carry no `--apply`, quote an `'` in the id as `'\''`, and print oldest series first. They are spelled
+  `bash scripts/ai-dlc/...` from an installed layout and `bash core/scripts/...` from the distribution.
+- **Hint.** A command's sprint is a labelled HINT, printed only when exactly one sprint is possible: the
+  id's own `s<digits>` field, the archive whose nonce range holds the verdict, or a window between
+  archives (or above the newest one, up to the sprint being closed) that holds one sprint. Anything else
+  prints `NO HINT (s<a>..s<b>)` and a placeholder sprint that `--sprint` rejects.
 - **WARN.** On a NON-empty selection the tagged verdicts move, the unmatchable ones stay live, and a WARN line
   names them with the same commands. Exit 0.
+- **Apply.** A destination file that already exists is refused before anything is written. A verdict now
+  moves before its sidecars.
 - The survivor refusal's unselectable-series branch had said "no mechanical remedy". It now prescribes
   `--series` and still offers a re-stamp.
-- `retro.md` step 5b names the escape as the remedy for the refusal.
+- `retro.md` step 5b names the escape as the remedy. It says to confirm each hinted sprint against the
+  sprint-close commits, and to put a NO HINT or unconfirmed id to the operator as an `AskUserQuestion`. It
+  states that a retro HARD_BLOCKS on an empty selection beside a FAIL-carrying unmatchable series until the
+  writer half lands. `process-rule-pins` pins both clauses.
 
-Measured on a `git archive` copy of the consumer's `gate-adjudication` directory and sprint archives.
-`--sprint s318` and `--sprint s317` each exit 1, naming 52 files and printing 48 commands. `--sprint s307`
-exits 0, reports 15 tagged verdicts to move, and WARNs with the same 52. Applying all 48 printed commands in
-printed order returned exit 0 for each step, and `--sprint s318` then exits 0. Applying only the 10 hinted
-at s318 leaves 40 named and exit 1, because the other ids belong to earlier sprints. The writer half, which
-stamps `<gate_type>-s<N>-<nonce>` at mint time, is a follow-on.
+Measured on a `git archive` copy of the consumer's `gate-adjudication` directory and sprint archives at
+graph `2b6f952e7`. `--sprint s318` exits 1. It names 12 files in 8 FAIL-carrying series and WARNs 40 files
+in 40 PASS-only series. Scored against the consumer's sprint-close commits, the 48 printed commands carry
+39 correct hints, 0 wrong and 9 NO HINT. The rule that hinted the archive above the nonce named s313 for six
+s312 verdicts, because the s312 archive holds one verdict. Applying the 8 FAIL-series commands, with the one
+NO HINT id filed by its close commit, makes `--sprint s318 --apply` exit 0, and the real guard then ALLOWs.
+In a simulated s319 close, a new `<gate>-<nonce>` verdict prints `NO HINT (s318..s319)` rather than s318.
+The writer half, which stamps `<gate_type>-s<N>-<nonce>` at mint time, is a follow-on.
 
-Fixture `gate-adjudication-rotate` adds four worlds:
+Fixture `gate-adjudication-rotate` adds these worlds:
 
-- an empty selection beside a newest unmatchable PASS, where it executes the printed escape and asserts
-  convergence;
+- an empty selection beside an older FAIL-carrying unmatchable verdict and a newer PASS-only one, where it
+  executes the printed escape and asserts convergence;
+- the PASS-only near-miss, which WARNs and exits 0;
+- a FAIL-carrying `story-s311` id that is not nonce-tailed;
+- an id carrying an apostrophe, parsed by the shell and executed;
+- the hint window, hinted when it holds one sprint and NO HINT when it holds two;
+- both install layouts' command spelling;
+- the clobber refusal and `--series ''`;
 - tagged verdicts with no match;
 - a `--series` dry run and apply against an id and its prefixed twin;
 - a mixed selection that WARNs.
 
-Three mutants are killed: the restored early exit, the predicate keyed on FAIL, and `--series` matching by
-prefix. Mutation 1's arm is re-keyed on the s308 set not being selected, because under that mutant every
-`gate_type` reads as an unmatchable id.
+Mutants are killed for the restored early exit, the reverted FAIL narrowing (mutation 6, revised with the
+contract) and `--series` matching by prefix. A predicate counting only `<gate>-<nonce>` ids is killed by the
+`story-s311` world and by the BL-523 receipt. Mutation 1's arm is re-keyed on the s308 set not being
+selected, because under that mutant every `gate_type` reads as an unmatchable id.
 ## [0.787.0] - 2026-10-15
 
 Batch 231 (graph-ledger-full-drain), first release: BL-510's bookkeeping half, held on origin from batch 230. It went
