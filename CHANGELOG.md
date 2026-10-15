@@ -246,10 +246,13 @@ check runs at `gate-adjudicator` dispatch (operator ruling): it refuses when a c
 entry names no spawn of the sprint, or when a shardable `invalid-exception` ledger row is not remediated by a sharded
 re-dispatch or a cited exception (1)-(4). A refused dispatch writes no ledger row.
 
-**Consumer note.** The guard counts party seats as shardable, as the 0.783.0 spawn-ledger validator does. A consumer
-whose prior sprint passed Check 22 under an older validator without `party_seats` will see its next implementation-gate
-adjudicator refused for each party-seat `invalid-exception` row until that row is waived. Replayed over the reference
-consumer's S317 nonces: 20 refused, 19 of them recorded there as Check 22 PASSED.
+**Consumer note (corrected at the batch-230 close).** The guard counts party seats as shardable, as the 0.783.0
+spawn-ledger validator does, and judges only the rows of the snapshot's current `sprint_id`. A prior sprint's rows are
+never re-judged. What refuses a consumer's adjudicator is the CURRENT sprint's own shardable `invalid-exception` rows
+that carry no sharded re-dispatch and no cited exception: the reference consumer's ledger holds 3, 11 and 3 such rows in
+S316, S317 and S318. Replayed over its S317 nonces: 20 refused, 19 of them recorded there as Check 22 PASSED. The waiver
+shape that clears a row is action 7 of `docs/plans/graph-pull-0781-to-0787.md`. The note as first published said a
+prior sprint's rows would refuse the next sprint's adjudicator, which the guard never does.
 
 ### I125: the guard's shardable-role list is bound to `SHARD_ROLES`
 
