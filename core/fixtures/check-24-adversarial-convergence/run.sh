@@ -322,6 +322,18 @@ expect_silent adjudication-unlocked-badged "names a locked requirement" adjudica
   "locked_requirements_touched: none is the unlocked branch"
 expect_silent divergent-resolved "names a locked requirement" adjudication-locked-badged \
   "a record with no locked_requirements_touched line reads as none"
+# The field is read on its FIRST TOKEN. Each unlocked spelling below carries one badge and must
+# take the unlocked branch: exit 0 AND silent on the locked finding, against the badged control.
+for _sp in emdash changed nonedot na list dash; do
+  expect "adjudication-unlocked-$_sp" 0 "locked_requirements_touched spelled '$_sp' is unlocked, one badge -- PASS" s1-adversarial-p
+  expect_silent "adjudication-unlocked-$_sp" "names a locked requirement" adjudication-locked-badged \
+    "the first token of the '$_sp' spelling is in the unlocked set"
+done
+unset _sp
+# A real id with a parenthetical after it is LOCKED: its first token is `lr`, and the badge FAILS.
+expect adjudication-locked-lr-paren 1 "LR-S1-1 (...) is a locked entry, a badge recorded -- FAIL (F7b)" s1-adversarial-p
+expect_says adjudication-locked-lr-paren s1-adversarial-p "F7b-locked-lr-paren" \
+  "names a locked requirement" "mark NO option (Recommended)"
 
 # D4/G: the dead cycle's tail.
 expect restart-cycle 1 "restart left p4-p6 of the dead cycle on disk -- FAIL (G)" s1-adversarial-p
@@ -842,6 +854,8 @@ expect_state adjudication-one-option        s1-adversarial-p DIVERGENT 3 "a menu
 expect_state adjudication-no-recommendation s1-adversarial-p DIVERGENT 3 "a menu with no recommendation denies dispatch"
 expect_state adjudication-locked-badged     s1-adversarial-p DIVERGENT 3 "a badge on a locked requirement denies dispatch"
 expect_state adjudication-unlocked-none     s1-adversarial-p DIVERGENT 3 "recommended_option: none on an unlocked record denies dispatch"
+expect_state adjudication-locked-lr-paren   s1-adversarial-p DIVERGENT 3 "a badge on LR-S1-1 (...) denies dispatch"
+expect_state adjudication-unlocked-emdash   s1-adversarial-p CONVERGED 0 "'none — <prose>' is unlocked: one badge must not deny"
 expect_state reopen-same-bytes  s1-adversarial-p CONVERGED 0 "a same-bytes re-review must not be denied"
 expect_state reopen-moved-clean s1-adversarial-p REOPENED  3 "the hooks must deny on a re-open even when the successor pass found nothing"
 expect_state reopen-sha-absent  s1-adversarial-p CONVERGED 0 "an unevidenced re-open must not be denied"

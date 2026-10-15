@@ -327,15 +327,10 @@ in force** -- on the option itself, not only in the question: *"inherit
 the offramp leaves: swap skipped for balances <= 0.01 token0"*, not
 *"inherit and say so"*. **A question is UNBADGED -- options presented
 neutrally, none marked `(Recommended)` and none placed first as the
-pick -- when any option sets, relaxes, inherits or leaves in force:**
-
-- a config leaf;
-- a threshold or literal on a money path;
-- a byte-pin;
-- an `LR-` or `LRC-` id;
-- a `D-<n>` operator decision in the spine.
-
-Those values are the operator's to own, and a badge on one hands the
+pick -- when any option sets, relaxes, inherits or leaves in force a
+config leaf, a threshold or literal on a money path, a byte-pin, an `LR-`
+or `LRC-` id, or a `D-<n>` operator decision in the spine.** Those values
+are the operator's to own, and a badge on one hands the
 operator's decision back to the lead under the operator's name. A question typed as prose at the end
 of a reply, followed by ending the turn, reads as narration: the
 operator sees a paragraph of recap, not a decision that is theirs to

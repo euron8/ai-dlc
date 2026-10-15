@@ -190,11 +190,21 @@ first on every question. `_gate-procedures.md` step 2(c) required exactly one ba
 **The fix (batch 230).**
 - Rule 11(a): every option states its concrete effect, including the value it leaves in force. A question is
   unbadged when an option sets, relaxes, inherits or leaves in force a config leaf, a money-path threshold or
-  literal, a byte-pin, an `LR-`/`LRC-` id, or a `D-<n>` decision. The post-compact digest is re-rendered, with no
-  byte change.
-- The adversarial STOP branches on the record's `locked_requirements_touched:`. When that field is empty, absent
-  or `none`, the old rule holds. When it names an entry, the record must carry `recommended_option: none` or no
-  such line, and the new F7b finding fails a named badge. The remedy text in `ai-dlc-acknowledge.sh` and
+  literal, a byte-pin, an `LR-`/`LRC-` id, or a `D-<n>` decision.
+- Rule 11 grew 729 bytes (17877 to 18606 bytes to its end at base and tip). That pushed Rule 12's two `escalations.md`
+  disclosure pointers past the 20121-byte re-attach cut: "AC verification-category-change disclosure" now ends at
+  byte 20396 and "Authorization-premise invalidation disclosure" at byte 20589, against 19667 and 19860 at base.
+  The five-item unbadged list was folded into one sentence, which saved 10 bytes and did not bring either pointer
+  back. **The eviction is accepted.** The post-compact digest does not carry them either, because it renders only
+  Rule 12's first paragraph (0 hits for either pointer, against 1 for Rule 12's heading). What survives the cut is
+  Rule 12's "READ AND FOLLOW `escalations.md`" sentence, which ends at byte 20116, 5 bytes inside the cut. The two
+  disclosures are sections of that file. The digest re-rendered with no byte change.
+- The adversarial STOP branches on the record's `locked_requirements_touched:`, read on its first token. Backticks
+  and leading blanks are dropped, the value is cut at the first blank, `.`, `,`, `;` or dash, and the result is
+  lowercased. A token of `none`, `0`, `n/a`, `-` or `[]`, or no token at all, keeps the old rule, so `none — <prose>`,
+  `none changed; ...` and `None.` are unlocked. Any other token names an entry, and then the record must carry
+  `recommended_option: none` or no such line, and the new F7b finding fails a named badge.
+  `recommended_option:` is read the same way, so `none (Recommended)`, `None.` and `n/a` name no option. The remedy text in `ai-dlc-acknowledge.sh` and
   `ai-dlc-continue.sh` matches. `check-24-adversarial-convergence` adds five worlds, two silence controls and two
   `--cycle-state` rows.
 - `bug-investigation.md` §2b badges "apply now" only when the relief sets no operator-owned value.
@@ -219,4 +229,4 @@ updater's template is covered.
 with your recommendation") are outside this fix. That flow asked 11 of the 38 badged questions. Three of them
 (rows 33, 35, 37) would lose the badge under the rule and still carry it, and the other 8 keep it either way.
 
-verify: sh V=core/scripts/validate-adversarial-convergence.sh; S=core/fixtures/check-24-adversarial-convergence/seed.sh; P=core/fixtures/pause-question-in-prose/run.sh; [ -f "$V" ] && [ -f "$S" ] && [ -f "$P" ] || exit 9; R="$(bash "$S" | tail -1)"; D="$R/divergent-resolved"; [ -f "$D/s1-resolution-p2.md" ] || exit 9; T="$R/operator-transcript.jsonl"; run() { bash "$V" --series "$R/$1/s1-adversarial-p" --transcript "$T" --transcript-dir "$R" 2>&1; }; run divergent-resolved >/dev/null || exit 9; for k in lb ln; do mkdir "$R/$k" && cp "$D"/*.md "$R/$k/" || exit 9; done; awk '{print} /^adjudicated_by:/{print "locked_requirements_touched: LR-S1-3"}' "$D/s1-resolution-p2.md" > "$R/lb/s1-resolution-p2.md" || exit 9; awk '/^recommended_option:/{print "recommended_option: none"; next} {print} /^adjudicated_by:/{print "locked_requirements_touched: LR-S1-3"}' "$D/s1-resolution-p2.md" > "$R/ln/s1-resolution-p2.md" || exit 9; grep -q '^recommended_option: [A-Z]' "$R/lb/s1-resolution-p2.md" || exit 9; o="$(run lb)" && exit 1; grep -qF "names a locked requirement" <<<"$o" || exit 1; run ln >/dev/null || exit 1; bash "$P" >/dev/null 2>&1 || exit 1; grep -q '^(i) A Rule 11(a) AMBIGUITY QUESTION: .*then no option is badged' core/hooks/ai-dlc-continue.sh || exit 1; exit 0
+verify: sh V=core/scripts/validate-adversarial-convergence.sh; S=core/fixtures/check-24-adversarial-convergence/seed.sh; P=core/fixtures/pause-question-in-prose/run.sh; [ -f "$V" ] && [ -f "$S" ] && [ -f "$P" ] || exit 9; R="$(bash "$S" | tail -1)"; D="$R/divergent-resolved"; [ -f "$D/s1-resolution-p2.md" ] || exit 9; T="$R/operator-transcript.jsonl"; run() { bash "$V" --series "$R/$1/s1-adversarial-p" --transcript "$T" --transcript-dir "$R" 2>&1; }; run divergent-resolved >/dev/null || exit 9; for k in lb ln; do mkdir "$R/$k" && cp "$D"/*.md "$R/$k/" || exit 9; done; awk '{print} /^adjudicated_by:/{print "locked_requirements_touched: LR-S1-3"}' "$D/s1-resolution-p2.md" > "$R/lb/s1-resolution-p2.md" || exit 9; awk '/^recommended_option:/{print "recommended_option: none"; next} {print} /^adjudicated_by:/{print "locked_requirements_touched: LR-S1-3"}' "$D/s1-resolution-p2.md" > "$R/ln/s1-resolution-p2.md" || exit 9; grep -q '^recommended_option: [A-Z]' "$R/lb/s1-resolution-p2.md" || exit 9; o="$(run lb)" && exit 1; grep -qF "names a locked requirement" <<<"$o" || exit 1; run ln >/dev/null || exit 1; bash "$P" >/dev/null 2>&1 || exit 1; grep -q '^(i) A Rule 11(a) AMBIGUITY QUESTION: .*then no option is badged' core/hooks/ai-dlc-continue.sh || exit 1; grep -qF 'INCLUDING the value it leaves' core/skills/ai-dlc/SKILL.md || exit 1; exit 0

@@ -498,8 +498,8 @@ THE EXIT:  STOP -> ADJUDICATE -> RESOLVE -> VERIFY
    whether that repair weakened something LOAD-BEARING (an AC, a predicate, a guard, a
    LOCKED_REQUIREMENTS entry -- test: after the edit, can the check still FAIL?), and your
    recommended resolution KIND -- UNLESS an option touches a LOCKED_REQUIREMENTS entry. Then
-   recommend NONE: state each option's effect on that entry, including the value it leaves
-   in force, and record recommended_option: none.
+   recommend NONE: state each option's effect on that entry, including the
+   value it leaves in force, and record recommended_option: none.
 3. RESOLVE. A repair edits the artifact to close findings on UNCHANGED scope. That is what
    diverged; doing it again is not a resolution. A resolution changes WHAT IS UNDER REVIEW:
      REVERT_REPAIR    put the artifact back to a state an earlier pass actually reviewed

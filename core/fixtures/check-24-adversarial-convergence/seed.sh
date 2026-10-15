@@ -113,6 +113,23 @@ record() {
       unlocked-badged)   printf 'locked_requirements_touched: none\n'
                          printf 'options_presented: 3\n'
                          printf 'recommended_option: %s\n' "$kind" ;;
+      # The value is read on its FIRST TOKEN. Each of these is an unlocked record the consumer
+      # wrote with prose or punctuation after the word, carrying one badge: every one must PASS.
+      unlocked-emdash|unlocked-changed|unlocked-nonedot|unlocked-na|unlocked-list|unlocked-dash)
+                         case "$adj" in
+                           unlocked-emdash)  printf 'locked_requirements_touched: none — the edit was a non-load-bearing wording fix\n' ;;
+                           unlocked-changed) printf 'locked_requirements_touched: none changed; LR-S1-1 is bounded at step 4\n' ;;
+                           unlocked-nonedot) printf 'locked_requirements_touched: None.\n' ;;
+                           unlocked-na)      printf 'locked_requirements_touched: n/a\n' ;;
+                           unlocked-list)    printf 'locked_requirements_touched: []\n' ;;
+                           unlocked-dash)    printf 'locked_requirements_touched: -\n' ;;
+                         esac
+                         printf 'options_presented: 3\n'
+                         printf 'recommended_option: %s\n' "$kind" ;;
+      # A real id with a parenthetical after it: the first token is `lr`, so it is LOCKED.
+      locked-lr-paren)   printf 'locked_requirements_touched: LR-S1-1 (amended in place)\n'
+                         printf 'options_presented: 3\n'
+                         printf 'recommended_option: %s\n' "$kind" ;;
       *)                 printf 'options_presented: 3\n'
                          printf 'recommended_option: %s\n' "$kind" ;;
     esac
@@ -434,8 +451,11 @@ pass "$TARGET/divergent-resolved/s1-adversarial-p3.md" 3 0 0 2 EXIT_CONDITION_ME
 # the `no-options` shape spent four round-trips arriving at the same kind.
 # F7b adds the five locked-branch shapes on the same differential: each world differs from
 # `divergent-resolved` only in the record's adjudication fields.
+# The unlocked-<spelling> shapes and locked-lr-paren hold the first-token reading of the field.
 for _shape in no-options one-option no-recommendation \
-              locked-badged locked-none locked-absent unlocked-none unlocked-badged; do
+              locked-badged locked-none locked-absent unlocked-none unlocked-badged \
+              unlocked-emdash unlocked-changed unlocked-nonedot unlocked-na unlocked-list \
+              unlocked-dash locked-lr-paren; do
   mkdir -p "$TARGET/adjudication-$_shape"
   pass "$TARGET/adjudication-$_shape/s1-adversarial-p1.md" 1 2 1 1 EXIT_CONDITION_NOT_MET 2 aaa1
   pass "$TARGET/adjudication-$_shape/s1-adversarial-p2.md" 2 3 1 2 DIVERGENT_HARD_BLOCK   3 bbb2

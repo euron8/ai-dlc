@@ -300,6 +300,19 @@ record_field() {
   ' "$1"
 }
 
+# The first token of a record value, lowercased: backticks and leading blanks removed, then cut
+# at the first blank, `.`, `,`, `;` or dash (ASCII, em or en). `none. The sixth-file ...` and
+# `none (Recommended)` both read `none`; `LR-S1-1 (...)` reads `lr`; a bare `-` reads empty.
+first_token() {
+  local t
+  t="$(printf '%s' "$1" | tr -d '`')"
+  t="${t#"${t%%[![:space:]]*}"}"
+  t="${t%%[[:space:].,;-]*}"
+  t="${t%%—*}"
+  t="${t%%–*}"
+  printf '%s' "$t" | tr '[:upper:]' '[:lower:]'
+}
+
 # Severity count for one class. Prefers the structured field the v0.48.0 schema
 # mandates (findings_critical:); falls back to parsing the free-text `findings:`
 # summary line so a pre-v0.48.0 artifact is still adjudicable where it can be.
@@ -1264,15 +1277,21 @@ validate_record() { # $1 record, $2 divergent-pass, $3 index-of-divergent-pass -
   #     fields cannot disagree with what was presented.
   #
   # F7b -- A LOCKED VALUE IS PRESENTED UNBADGED. The record's own `locked_requirements_touched:`
-  # decides the branch. Empty, absent or `none` keeps the rule above: one recommendation, named.
-  # Any other value names a LOCKED_REQUIREMENTS entry the options touch; that value is the
-  # operator's, so the record must carry `recommended_option: none` or no such line, and a named
-  # badge FAILS. Absent reads as none because every record written before this field was
-  # branched on carries a badge and no field, and those records are the unlocked case.
-  local opts rec_opt lrt
+  # decides the branch, read on its FIRST TOKEN (first_token below). A token of `none`, `0`,
+  # `n/a`, `-`, `[]`, or no token at all keeps the rule above: one recommendation, named. Any
+  # other token names a LOCKED_REQUIREMENTS entry the options touch; that value is the operator's,
+  # so the record must carry `recommended_option: none` or no such line, and a named badge FAILS.
+  # Absent reads as none because every record written before this field was branched on carries
+  # a badge and no field, and those records are the unlocked case.
+  # The first token, not the whole value, because the consumer writes prose after the word:
+  # `none. The sixth-file decision ...`, `none -- the edit was ...`, `none changed; LR-...`.
+  # Read whole, each of those named a lock and failed a correct unlocked record.
+  local opts rec_opt lrt rec_tok
   opts="$(record_field "$rec" 'options_presented' | tr -cd '0-9')"
   rec_opt="$(record_field "$rec" 'recommended_option')"
-  lrt="$(record_field "$rec" 'locked_requirements_touched' | tr -d '[:space:]')"
+  lrt="$(first_token "$(record_field "$rec" 'locked_requirements_touched')")"
+  # The same reading for the badge: `none (Recommended)`, `None.` and `n/a` all name no option.
+  rec_tok="$(first_token "$rec_opt")"
   if [ -z "$opts" ] || [ "$opts" -lt 2 ]; then
     F_WHY="$rec declares options_presented=${opts:-<none>}. A resolution is adjudicated by the
       OPERATOR, and an operator adjudicates by CHOOSING -- which requires at least two worked-out
@@ -1282,22 +1301,22 @@ validate_record() { # $1 record, $2 divergent-pass, $3 index-of-divergent-pass -
     return 1
   fi
   case "$lrt" in
-    ""|none|None|NONE) ;;
+    ""|none|0|n/a|-|"[]") ;;
     *)
-      case "$(printf '%s' "$rec_opt" | tr -d '[:space:]')" in
-        ""|none|None|NONE) return 0 ;;
+      case "$rec_tok" in
+        ""|none|0|n/a|-|"[]") return 0 ;;
       esac
       F_WHY="$rec names a locked requirement in 'locked_requirements_touched:' and still records
       'recommended_option: ${rec_opt}'. AN OPTION THAT TOUCHES A LOCKED REQUIREMENT IS PRESENTED
       UNBADGED: state each option's effect on the locked entry, including the value it leaves in
-      force, and mark none (Recommended) -- _gate-procedures.md step 2(c). Record
+      force, and mark NO option (Recommended) -- _gate-procedures.md step 2(c). Record
       'recommended_option: none'."
       return 1 ;;
   esac
   # `none` is the locked branch's word. On an unlocked record it names no option, so it is the
   # missing recommendation spelled as a value and takes the same finding.
-  case "$(printf '%s' "$rec_opt" | tr -d '[:space:]')" in
-    none|None|NONE) rec_opt="" ;;
+  case "$rec_tok" in
+    none|0|n/a|-|"[]") rec_opt="" ;;
   esac
   if [ -z "$rec_opt" ]; then
     F_WHY="$rec presents $opts options and names no 'recommended_option:'. A menu with no
