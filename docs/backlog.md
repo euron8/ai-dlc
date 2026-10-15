@@ -59,7 +59,7 @@ never the word anywhere in prose, because an entry that merely discusses landing
 not a closed entry.
 
 
-## Pipeline-efficiency ranked set (BL-507 .. BL-520)
+## Pipeline-efficiency ranked set (efficiency ranks 1–14)
 
 Filed from [`docs/analysis/pipeline-efficiency-s317-s318.md`](analysis/pipeline-efficiency-s317-s318.md),
 section **"Ranked defects"**. The rank is that section's order and each entry names its row as
@@ -74,91 +74,5 @@ the sprints after the fix lands. graph is the reference, not the only population
 `magic-bonus-calc-engine` also runs ai-dlc (0.780.0) and has its own transcripts. Measure on every
 consumer that has run the fixed release, and name the population beside each figure.
 
-## BL-523 — the gate-adjudication rotator reports "nothing to move" while a sprint's verdicts carry a series id no `--sprint` can name
 
-**DEFECT.** **Provenance: `PC-S318-ROTATE-GATE-ADJUDICATION-SPRINT-FLAG-NEVER-MATCHES-NONCE-STYLE-SERIES-IDS`**,
-filed by the reference consumer at its s318 retro. `rotate-gate-adjudication.sh --sprint s<N>` selects by
-the `-s<N>-` token in `gate_series_id`, and the schema leaves that field unpatterned. On the consumer's
-live directory (239 verdicts), 52 carry an id with no such token, 42 of them exactly `<gate>-<nonce>`. An
-empty selection exited 0 with "nothing to move", so retro step 5b passed while the sprint's verdicts
-stayed live for the gate-remediation guard.
-
-**Reader half, this branch.** An empty `--sprint` selection is now exit 1 when an unmatchable series
-(a non-empty id no selector can name) has a NEWEST member recording a FAIL. The refusal is computed from
-the live directory on every run, re-runs included, and keys on no record of an earlier run: running only
-the first printed line fills this sprint's archive, and the re-run must still refuse while a newer FAIL
-series stays live. The refusal names every file of every such series and prints one dry-run
-`--sprint s<M> --series '<exact-id>'` command per id. Any other unmatchable series gets a WARN with the
-same commands and does not refuse. `--series` moves exactly that id. On a non-empty selection the rotator
-prints a WARN and exits 0, unless the survivor refusal fires. On the close (`--sprint` without `--series`)
-the survivor refusal fires whenever the close leaves an unmovable FAIL as the live pass, promoted or not. On
-a remedy step (`--series` or `--legacy-through`) it fires only when the move promotes a new live pass, so a
-walk that moves an older series first is not refused, and the two remedies cannot refuse each other. A
-moved verdict whose nonce TIES the survivor's counts as promotion, because the guard orders a tie by glob
-and the moved verdict may have been the live pass.
-
-**The scope was revised twice: from the id alone to FAIL-carrying series, then to each series' newest
-member.** The guard reads only the live directory, and a stale verdict with no FAIL is its allow state, so
-only a stale FAIL can deny. A series moves whole and its newest member sorts above its older ones, so an
-older FAIL can never become the live pass while its PASSing retry stays live; a sidecar does not exempt a
-series, because the guard reads one only for the live nonce. On the consumer's tree, `--sprint s318` keyed
-on any member named 12 files in 8 series. Keyed on the newest member it names 4 files in 4 series
-(`s311-stories-test-strategy-7`, `s311-sprint-review`, `sprint-review-20260919T193432Z`,
-`implementation-20261005T022120Z`) and WARNs 48 files under 44 commands. Mutation 6 reverts the FAIL
-narrowing and mutation 8 keys on any member; each flips a WARN world to exit 1.
-
-A hint is printed only when exactly one sprint is possible. Otherwise the line prints `NO HINT (s<a>..s<b>)`,
-`NO HINT (..s<N>)` when no sprint archive exists, or `NO HINT (backfill below s<L>)` when the sprint being
-closed is not above the newest archive. Scored against the consumer's sprint-close commits, the 48 printed
-commands give 39 correct hints, 0 wrong and 9 NO HINT. With every archive removed, the old rule hinted the
-closing sprint and scored 18 right and 30 wrong; it now gives 8 right, 0 wrong and 40 NO HINT. In a simulated s319 close with a new FAILing
-`<gate>-<nonce>` verdict, walking the printed commands in order finishes in one pass: 11 commands, 2
-operator questions, 0 refused applies, and `--sprint s319 --apply` exits 0. The PASS seed takes 10
-commands and 1 question.
-
-**Writer half, BL-526, ships in the same release.** It has the lead mint the series id in the form
-`gate-validation.md` "At gate entry" defines, so a new verdict carries the `-s<N>-` token.
-
-verify: sh R="$PWD/core/scripts/rotate-gate-adjudication.sh"; [ -f "$R" ] || exit 9; command -v jq >/dev/null || exit 9; d="$(mktemp -d)" || exit 9; g="$d/s/gate-adjudication"; a="$d/s/implementation-artifacts/s309/gate-adjudication"; h="$d/t/gate-adjudication"; mkdir -p "$g" "$h" || exit 9; printf '{"gate_nonce":"planning-20260909T120000Z","gate_series_id":"planning-20260909T120000Z","verdicts":[{"check_id":"1","verdict":"FAIL"}]}\n' > "$g/planning-20260909T120000Z.verdict.json"; printf '{"gate_nonce":"planning-20260910T120000Z","gate_series_id":"planning-20260909T120000Z-retry","verdicts":[{"check_id":"1","verdict":"PASS"}]}\n' > "$g/planning-20260910T120000Z.verdict.json"; printf '{"gate_nonce":"implementation-20260914T000000Z","gate_series_id":"implementation-20260914T000000Z","verdicts":[{"check_id":"4","verdict":"FAIL"}]}\n' > "$g/implementation-20260914T000000Z.verdict.json"; printf '{"gate_nonce":"story-20260913T044428Z","gate_series_id":"story-s311","verdicts":[{"check_id":"2","verdict":"FAIL"}]}\n' > "$h/story-20260913T044428Z.verdict.json"; o="$(bash "$R" --sprint s308 --state-dir "$d/s" 2>&1)"; r=$?; [ "$r" -eq 1 ] || exit 1; grep -q '/planning-20260909T120000Z\.verdict\.json$' <<<"$o" || exit 1; o="$(bash "$R" --sprint s308 --state-dir "$d/t" 2>&1)"; r=$?; [ "$r" -eq 1 ] || exit 1; grep -q '/story-20260913T044428Z\.verdict\.json$' <<<"$o" || exit 1; bash "$R" --sprint s309 --series planning-20260909T120000Z --apply --state-dir "$d/s" >/dev/null 2>&1 || exit 1; [ -f "$a/planning-20260909T120000Z.verdict.json" ] && [ -f "$g/planning-20260910T120000Z.verdict.json" ] || exit 1; o="$(bash "$R" --sprint s309 --state-dir "$d/s" 2>&1)"; r=$?; [ "$r" -eq 1 ] || exit 1; grep -q '/implementation-20260914T000000Z\.verdict\.json$' <<<"$o" || exit 1; bash "$R" --sprint s309 --series implementation-20260914T000000Z --apply --state-dir "$d/s" >/dev/null 2>&1 || exit 1; bash "$R" --sprint s309 --state-dir "$d/s" >/dev/null 2>&1 || exit 1; bash "$R" --sprint s308 --state-dir "$d/s" >/dev/null 2>&1 || exit 1; u="$d/u/gate-adjudication"; v="$d/v/gate-adjudication"; w="$d/w/gate-adjudication"; mkdir -p "$u" "$v" "$w" || exit 9; printf '{"gate_nonce":"planning-20260908T000000Z","gate_series_id":"planning-20260908T000000Z","verdicts":[{"check_id":"1","verdict":"PASS"}]}\n' > "$u/planning-20260908T000000Z.verdict.json"; printf '{"gate_nonce":"planning-20260909T120000Z","gate_series_id":"planning-20260909T120000Z","verdicts":[{"check_id":"1","verdict":"FAIL"}]}\n' > "$u/planning-20260909T120000Z.verdict.json"; bash "$R" --sprint s310 --series planning-20260908T000000Z --apply --state-dir "$d/u" >/dev/null 2>&1 || exit 1; o="$(bash "$R" --sprint s310 --state-dir "$d/u" 2>&1)"; r=$?; [ "$r" -eq 1 ] || exit 1; grep -q '/planning-20260909T120000Z\.verdict\.json$' <<<"$o" || exit 1; printf '{"gate_nonce":"planning-20260915T000000Z","gate_series_id":"planning-s310-20260915T000000Z","verdicts":[{"check_id":"1","verdict":"PASS"}]}\n' > "$v/planning-20260915T000000Z.verdict.json"; printf '{"gate_nonce":"implementation-20260916T000000Z","gate_series_id":"implementation-20260916T000000Z","verdicts":[{"check_id":"4","verdict":"FAIL"}]}\n' > "$v/implementation-20260916T000000Z.verdict.json"; o="$(bash "$R" --sprint s310 --state-dir "$d/v" 2>&1)"; r=$?; [ "$r" -eq 1 ] || exit 1; grep -q 'implementation-20260916T000000Z' <<<"$o" || exit 1; printf '{"gate_nonce":"legacy-20260701T000000Z","verdicts":[{"check_id":"7","verdict":"FAIL"}]}\n' > "$w/legacy-20260701T000000Z.verdict.json"; printf '{"gate_nonce":"planning-20260909T120000Z","gate_series_id":"planning-20260909T120000Z","verdicts":[{"check_id":"1","verdict":"FAIL"}]}\n' > "$w/planning-20260909T120000Z.verdict.json"; o="$(bash "$R" --sprint s310 --series planning-20260909T120000Z --state-dir "$d/w" 2>&1)"; r=$?; [ "$r" -eq 1 ] || exit 1; grep -q -- '--legacy-through 20260701T000000Z' <<<"$o" || exit 1; bash "$R" --legacy-through 20260701T000000Z --apply --state-dir "$d/w" >/dev/null 2>&1 || exit 1; bash "$R" --sprint s310 --series planning-20260909T120000Z --apply --state-dir "$d/w" >/dev/null 2>&1 || exit 1; bash "$R" --sprint s310 --state-dir "$d/w" >/dev/null 2>&1 || exit 1; x="$d/x/gate-adjudication"; y="$d/y/gate-adjudication"; mkdir -p "$x" "$y" || exit 9; printf '{"gate_nonce":"legacy-20260909T120000Z","verdicts":[{"check_id":"7","verdict":"FAIL"}]}\n' > "$x/legacy-20260909T120000Z.verdict.json"; printf '{"gate_nonce":"aplanning-20260909T120000Z","gate_series_id":"aplanning-20260909T120000Z","verdicts":[{"check_id":"1","verdict":"PASS"}]}\n' > "$x/aplanning-20260909T120000Z.verdict.json"; o="$(bash "$R" --sprint s310 --series aplanning-20260909T120000Z --state-dir "$d/x" 2>&1)"; r=$?; [ "$r" -eq 1 ] || exit 1; grep -q 'legacy-20260909T120000Z -- ' <<<"$o" || exit 1; printf '{"gate_nonce":"legacy-20260920T000000Z","verdicts":[{"check_id":"1","verdict":"PASS"}]}\n' > "$y/legacy-20260920T000000Z.verdict.json"; printf '{"gate_nonce":"planning-20260909T120000Z","gate_series_id":"planning-20260909T120000Z","verdicts":[{"check_id":"1","verdict":"FAIL"}]}\n' > "$y/planning-20260909T120000Z.verdict.json"; o="$(bash "$R" --legacy-through 20260920T000000Z --state-dir "$d/y" 2>&1)"; r=$?; [ "$r" -eq 1 ] || exit 1; grep -q 'planning-20260909T120000Z -- ' <<<"$o"
-
-## BL-526 — nothing prescribes `gate_series_id`, so the adjudicator invents one and the stall rung cannot group a gate
-
-**DEFECT.** Discharges `PC-S318-ROTATE-GATE-ADJUDICATION-SPRINT-FLAG-NEVER-MATCHES-NONCE-STYLE-SERIES-IDS`
-as its writer half. BL-523 is the reader half: the rotator's sprint flag.
-`_gate-procedures.md` named `gate_series_id` 0 times against 6 for `gate_nonce`, and the adjudicator
-brief passed no series id. The adjudicator invented one. In graph's committed corpus (239 verdicts),
-94 carry none, 42 carry the nonce-style `<gate>-<TS>` that the rotator's sprint flag cannot match, and
-34 more carry ad-hoc shapes.
-
-**The fix.** `gate-validation.md` "At gate entry" now prescribes exactly `<gate_type>-<slug>-s<N>-<TS>`
-for a gate dispatched for exactly one story and `<gate_type>-s<N>-<TS>` for every other gate. `<N>` is
-the snapshot's `sprint_id` with no leading zero. No step file wrote a `<story-index>` on a gate dispatch
-(graph's 432 gate-adjudicator spawn rows carry none), so the lead now writes one: a gate dispatched for
-exactly one story carries a `story: <story-index>` line on its adjudicator brief and every shard brief
-(`_gate-procedures.md` "Gate-adjudication dispatch"), and that line is the slug's only source. The index
-has any trailing punctuation stripped, is lowercased with each `.` or `-` written as `x` and is prefixed
-`story`, so graph's `4.2a`, `4.2a.`, `B6` and `B-1` are `story4x2a`, `story4x2a`, `storyb6` and `storybx1`.
-A gate over several stories or none carries no `story:` line and no slug, whatever its gate number. The slug sits BEFORE the sprint field
-so `<TS>` always directly follows `-s<N>-`, where the dispatch guard's unanchored nonce regex cannot
-match. A same-series rule decides the id at dispatch, never from `close`. The only reuse candidate is
-the newest stem of exactly that form for this gate_type, slug and sprint, with every part agreeing. A
-Gate Reset id wins. Otherwise a candidate that did not pass is reused. An unmerged part set is not
-passing; a ledger `.gate-checkpoint/<nonce>.tsv` with a `26` row decides by that row; a ledger that is
-absent or has no `26` row falls back to the verdict's own FAIL rows. Otherwise a new id is minted.
-Walked over graph's s316 and s317 implementation gates (38 stems), that gives 32 series and the arm
-refuses none of the ids. A Gate Reset is performed before gate entry, mints the new id keeping any
-slug, and records the retired one, or `legacy`. The adjudicator brief and shard briefs carry the series
-id, and it is exempt from "nothing carried forward". The validator's per-pass envelope arm requires the
-gate_type prefix, an optional `story[a-z0-9]+` slug, `-s<N>-` with N having no leading zero, and a
-`\Z`-anchored trailing timestamp no later than the nonce. It judges only a pass whose nonce is at or
-after `SERIES_FORM_FROM` (20261015T000000Z). That makes its FP set 0 of graph's 239; unscoped it fires
-on 77. The arm's header records the derivation. The C5(a) rotator's `--sprint s<N>` selector (`*-s<N>-*`)
-selects a slugged id.
-
-The receipt runs the `gate-adjudication` fixture and needs its fifteen series-form cases, including the
-three slugs from graph's real story indices. It also needs the 32 series-id rows of
-`process-rule-pins --report`. It exits 1 at origin/main, on a slug placed after the sprint field, on a
-slug restricted to a trailing digit, on a rule 2 that reuses a malformed id, counts a suppressed FAIL or
-ignores the dispatched story, and on the prose with no arm. It exits 0 at this tip.
-
-verify: sh F=core/fixtures/gate-adjudication/run.sh; P=core/fixtures/process-rule-pins/run.sh; [ -f "$F" ] && [ -f "$P" ] || exit 9; o="$(bash "$F" 2>&1)" || exit 1; n="$(grep -cE '^  ok    SF(0|0b|1|2|3|4|5|5b|5c|6|7|8|9|10|11): ' <<<"$o")" || n=0; [ "$n" -eq 15 ] || exit 1; r="$(bash "$P" --report 2>&1)" || exit 1; m="$(grep -cE '^  ok    (gv-series-[a-z]+|gv-fail-series|gv-reset-[a-z]+|gp-[a-z]+-series|gadj-[a-z]+-series): pinned inside ' <<<"$r")" || m=0; [ "$m" -eq 32 ]
+**EMPTY — every entry is closed and rotated to docs/backlog.archive.md.**

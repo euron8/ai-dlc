@@ -18454,3 +18454,37 @@ Net for the batch: closed 1 entry (BL-497), filed 0; net -1. The backlog has no 
 
 Batch 224's block below is history: batch 225's block replaces its owed list and its delivery gap.
 
+**BATCH 227 SHIPPED NO RELEASE. IT WROTE AND REHEARSED THE CONSUMER PULL RUNBOOK
+`docs/plans/graph-pull-0779-to-0780.md`, BECAUSE ACTION 7's SECOND TEST SAID THE PULL IS REQUIRED; THE OPERATOR RAN
+THE PULL, AND GRAPH'S LIVE LEDGER NOW READS 0.** Batch 226's block
+below is history: this block replaces its delivery gap. Handed the plan by ai-dlc-9d at `origin/main` `8d00b5b5`
+(`VERSION` 0.780.0); graph-f8 was live and never messaged.
+- **Opening sweep** (at `8d00b5b5`): live 1, unfiled 0, worklist 0, DISCHARGED 1 (`PC-S317-3.2-DERIVATION-HOOK-CWD`,
+  oldest naming release 0.773.0), invisible 0, TERMINAL 233, archive 356, 7 qualifying refs, every control passing;
+  backlog 0 live, 501 archived, one `DECLARED-EMPTY` row. Ledger md5 `87f3419f…` on graph's checked-out carry-over
+  branch. No branch of 150 ahead of graph `main` carries an id outside main's ledger and archive (impossible-id control
+  0, known-id control 19 refs), and graph's working-tree ledger diff is empty.
+- **Action 7**: one release behind (stamp 0.779.0 on graph's carry-over branch, 0.773.0 on its `main`); the range
+  carries `ledger-reverify.sh` and the update `SKILL.md`, 0 `core/scripts/` files, 0 mode-only changes. The
+  differential that discriminates is the reverify engine, not `validate-layer-entries.sh`: on a graph clone the 0.780.0
+  engine adds exactly `NAMED-UPSTREAM PC-S317-3.2-DERIVATION-HOOK-CWD`, 9 -> 10 raw rows (`cmp -s` 1 between engines).
+  `self-update-gate.sh` reads `SELF-UPDATE-OK`, so the re-invoked run reports with the new engine.
+- **Closing the candidate**: the `ADOPTED UPSTREAM (v0.773.0, …)` annotation alone archives it (four cells measured);
+  repointing its receipt is optional. It is the only live graph receipt pinned to a literal path and sha (one archived
+  receipt has the same shape).
+- **The runbook's contract adversary** (simulated self-update, re-invocation and step-8 rotation on a clone) returned
+  one BLOCKER (the pre-write preclassify histogram would have stopped a correct OK-path run: the re-invoked report
+  reads `ALREADY-AT-THEIRS` ×4), three DEFECTs (raw vs rendered row counts, no `apply` or branch named for the
+  annotation, a done-when control that agreed with its absence) and six NOTEs. All folded before the commit.
+- **graph boundary**: ledger md5 `87f3419f…` at the opening and the close; porcelain 93 at the opening, 94 at the
+  close, 0 under `_bmad-output/ai-dlc-update/`. Nothing was written there.
+- **The pull landed (2026-10-13), and this bullet replaces this block's earlier "ready, not authorized" delivery
+  gap.** The operator ran the runbook in a graph session. graph's PRs #1217 (self-update) and #1218 (reconcile)
+  merged onto its carry-over branch, and its stamp reads 0.780.0. `PC-S317-3.2-DERIVATION-HOOK-CWD` closed as
+  `ADOPTED UPSTREAM (v0.773.0)` and rotated: archive 1, ledger 0, 18 ledger headings. The runbook is discharged.
+  The derive block in a fresh worktree at `4e9e8329` reads live 0 across 9 qualifying refs, arch 357, floor 0,
+  DISCHARGED 0, worklist 0, installed = shipped = 0.780.0, and gap control `UNNAMED`. The ledger md5 moved
+  `87f3419f…` -> `e8af0344…` through graph's own #1218; this session wrote nothing there.
+
+Net for the batch: closed 1 (by graph's pull), filed 0. The backlog stays declared empty.
+

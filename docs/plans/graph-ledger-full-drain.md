@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 356..456. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 354..387. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,46 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 231 SHIPPED `v0.787.0` (`2dc7b58d`, #1140) AND `v0.788.0` (`c96ad358`, #1142), AND LANDED BATCH 230's HELD
+CLOSE (`8e5f1b2f`, #1141). THREE ENTRIES CLOSED; GRAPH'S LAST LIVE CANDIDATE CLOSED UPSTREAM; THE BACKLOG IS DECLARED
+EMPTY. THE OPERATOR STARTED THE GRAPH PULL TO 0.788.0 DURING THIS CLOSE.**
+Batch 230's block below is history: this block replaces its delivery gap. Started by peer ai-dlc-15's one-liner at
+`origin/main` `4aa734c4` (`VERSION` 0.786.0); graph-55 was live and was never messaged.
+- **Opening sweep** (at `aadd5c93`, the held close): live 5, unfiled 1, worklist 0, DISCHARGED 4 (the four 0.786.0
+  ids), invisible 0, TERMINAL 236, archive 359, 0 qualifying refs, every control passing. Ledger md5 `8261b9ab…` on
+  graph `main` `8f313c3c0`. The unfiled id was the rotate candidate (filed 2026-10-14, graph `03ff6a8af`). Scope: that
+  candidate, both halves, plus BL-510 held from batch 230.
+- **Operator rulings, batch 231**:
+  - Graph runs no ai-dlc pipeline until batch 231 is pulled, so no old-form gate verdict exists after the C5(b)
+    `SERIES_FORM_FROM` cutoff. Discharged when the operator ran the pull.
+  - The backlog's "Pipeline-efficiency ranked set" section was removed by the batch-230 close to pass the rotator's
+    declared-empty refusal; the operator had not asked. It is restored verbatim in 0.788.0, and at this close its
+    heading was reworded to `(efficiency ranks 1–14)` on the operator's choice, the only change to the section. **Do
+    not remove or reword operator-authored text to satisfy a gate; ask.**
+- **`v0.787.0`**: BL-510's bookkeeping half (five refusal kinds at the frozen sha; gate-1 FP 0 over 56 real passes).
+  Two tip adversaries.
+- **`v0.788.0`**: BL-523 (the rotator refuses an empty `--sprint` selection beside an unmatchable FAIL series;
+  `--series` is the escape) and BL-526 (`gate_series_id` prescribed as `<gate_type>-<slug>-s<N>-<TS>` for a
+  single-story gate, slug from the `story:` line the lead writes on its brief, else `<gate_type>-s<N>-<TS>`; checked
+  per pass from `SERIES_FORM_FROM`). The candidate id is named in that release's message only. C5(a) took four tip
+  adversaries and C5(b) five rounds; every round found a real defect. Shipping C5(a) alone was tried and abandoned:
+  BL-523 alone is the only live entry, its receipt is UNSCORABLE (it builds its own tree), and R2 then reads zero
+  scored receipts, the batch-230 shape the operator ruled against widening.
+- **Unfixed, recorded**: two unmovable FAIL verdicts sharing one nonce make the printed `--series`/`--legacy-through`
+  remedies refuse each other (0 in graph's corpus); nothing checks the `story:` line against the id's slug; two
+  unslugged gates over different story sets can share a series (0 of 8 real cases); "trailing punctuation" is not
+  enumerated; BL-510's gate 2 stays unwired (FP 2). Batch 230's unfixed list stands.
+- **Process facts**: 0.787.0's first gate failed S7 (an octal escape on a `gsub` line) and the pole at load 32.
+  0.788.0's first gate failed the pole: eleven new mutants doubled shards b and c, and both the builder and its
+  adversary had judged against the suite's 1100s pole where the guard judges each unit against its OWN history; it
+  shipped sharded five ways. The sandbox read-set tracer dropped reports under load twice and wrote the fixture as
+  `OMITTED`; one such map was committed and caught before push. Re-run at low load, and check `OMITTED` before commit.
+- **graph delivery**: graph pulled 0.785.0 and 0.786.0 itself (#1222, #1223) and closed the four 0.786.0 ids. The
+  runbook `docs/plans/graph-pull-0786-to-0788.md` lands with this close; the operator is running that pull now. The
+  0781-to-0787 runbook is discharged.
+- **Net for the batch**: closed 3 entries (BL-510, BL-523, BL-526), filed 2 (BL-523, BL-526); 1 candidate closed
+  upstream. Backlog 0 live, 525 archived.
 
 **BATCH 230 SHIPPED `v0.784.0` (`d4880724`, #1137), `v0.785.0` (`0f7e0e0c`, #1138) AND `v0.786.0` (`4aa734c4`,
 #1139): NINE ENTRIES CLOSED, FOUR OF GRAPH'S FIVE SPRINT-318 CANDIDATES CLOSED UPSTREAM. THIS CLOSE ITSELF IS HELD, NOT
@@ -310,40 +350,6 @@ Batch 227's block below is history: this block replaces its delivery gap. Starte
 
 Net for the batch: closed 2 candidates, which graph's pull closed on its side; filed 4 entries (BL-503..506) and
 closed all 4 in the release. The backlog stays declared empty.
-
-**BATCH 227 SHIPPED NO RELEASE. IT WROTE AND REHEARSED THE CONSUMER PULL RUNBOOK
-`docs/plans/graph-pull-0779-to-0780.md`, BECAUSE ACTION 7's SECOND TEST SAID THE PULL IS REQUIRED; THE OPERATOR RAN
-THE PULL, AND GRAPH'S LIVE LEDGER NOW READS 0.** Batch 226's block
-below is history: this block replaces its delivery gap. Handed the plan by ai-dlc-9d at `origin/main` `8d00b5b5`
-(`VERSION` 0.780.0); graph-f8 was live and never messaged.
-- **Opening sweep** (at `8d00b5b5`): live 1, unfiled 0, worklist 0, DISCHARGED 1 (`PC-S317-3.2-DERIVATION-HOOK-CWD`,
-  oldest naming release 0.773.0), invisible 0, TERMINAL 233, archive 356, 7 qualifying refs, every control passing;
-  backlog 0 live, 501 archived, one `DECLARED-EMPTY` row. Ledger md5 `87f3419f…` on graph's checked-out carry-over
-  branch. No branch of 150 ahead of graph `main` carries an id outside main's ledger and archive (impossible-id control
-  0, known-id control 19 refs), and graph's working-tree ledger diff is empty.
-- **Action 7**: one release behind (stamp 0.779.0 on graph's carry-over branch, 0.773.0 on its `main`); the range
-  carries `ledger-reverify.sh` and the update `SKILL.md`, 0 `core/scripts/` files, 0 mode-only changes. The
-  differential that discriminates is the reverify engine, not `validate-layer-entries.sh`: on a graph clone the 0.780.0
-  engine adds exactly `NAMED-UPSTREAM PC-S317-3.2-DERIVATION-HOOK-CWD`, 9 -> 10 raw rows (`cmp -s` 1 between engines).
-  `self-update-gate.sh` reads `SELF-UPDATE-OK`, so the re-invoked run reports with the new engine.
-- **Closing the candidate**: the `ADOPTED UPSTREAM (v0.773.0, …)` annotation alone archives it (four cells measured);
-  repointing its receipt is optional. It is the only live graph receipt pinned to a literal path and sha (one archived
-  receipt has the same shape).
-- **The runbook's contract adversary** (simulated self-update, re-invocation and step-8 rotation on a clone) returned
-  one BLOCKER (the pre-write preclassify histogram would have stopped a correct OK-path run: the re-invoked report
-  reads `ALREADY-AT-THEIRS` ×4), three DEFECTs (raw vs rendered row counts, no `apply` or branch named for the
-  annotation, a done-when control that agreed with its absence) and six NOTEs. All folded before the commit.
-- **graph boundary**: ledger md5 `87f3419f…` at the opening and the close; porcelain 93 at the opening, 94 at the
-  close, 0 under `_bmad-output/ai-dlc-update/`. Nothing was written there.
-- **The pull landed (2026-10-13), and this bullet replaces this block's earlier "ready, not authorized" delivery
-  gap.** The operator ran the runbook in a graph session. graph's PRs #1217 (self-update) and #1218 (reconcile)
-  merged onto its carry-over branch, and its stamp reads 0.780.0. `PC-S317-3.2-DERIVATION-HOOK-CWD` closed as
-  `ADOPTED UPSTREAM (v0.773.0)` and rotated: archive 1, ledger 0, 18 ledger headings. The runbook is discharged.
-  The derive block in a fresh worktree at `4e9e8329` reads live 0 across 9 qualifying refs, arch 357, floor 0,
-  DISCHARGED 0, worklist 0, installed = shipped = 0.780.0, and gap control `UNNAMED`. The ledger md5 moved
-  `87f3419f…` -> `e8af0344…` through graph's own #1218; this session wrote nothing there.
-
-Net for the batch: closed 1 (by graph's pull), filed 0. The backlog stays declared empty.
 
 ### Derive the state; do not trust the numbers below
 

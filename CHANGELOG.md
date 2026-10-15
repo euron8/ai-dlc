@@ -136,7 +136,9 @@ match, and 34 more carry ad-hoc shapes.
   SF6-SF11): accepted bare and reused ids, three slugs from the consumer's real story indices, and named
   offenders for each property, including a hyphenated or uppercase slug, a slug after the sprint field, a
   bare-digit or zero-padded sprint field, and a trailing newline. `gate-adjudication-mutants` gains m21-m31,
-  dealt across all three shards. `process-rule-pins` gains 32 series-id rows.
+  and the battery is sharded five ways (`-d` and `-e` are new), at most seven mutants per shard: dealt
+  across three, shards b and c doubled to 876s and 839s and failed the suite pole. `process-rule-pins`
+  gains 32 series-id rows.
 - The rotator's `--sprint s<N>` selector (`*-s<N>-*`) moves a slugged id.
 - `rotate-gate-adjudication.sh`'s refusal for a series no `--sprint` can name no longer says the schema
   leaves the field unpatterned. It cites `gate-validation.md` "At gate entry" and

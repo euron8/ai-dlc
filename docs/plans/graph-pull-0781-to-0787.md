@@ -1,6 +1,9 @@
-READ and FOLLOW docs/plans/graph-pull-0781-to-0787.md
+# DISCHARGED — DO NOT EXECUTE — pull the graph consumer from 0.781.0 to 0.787.0
 
-# Pull the graph consumer from 0.781.0 to 0.787.0
+**Superseded by `docs/plans/graph-pull-0786-to-0788.md`; this file never reached 0.787.0.** Graph
+ran its pulls as two reconciles, 0.781.0 to 0.785.0 and then 0.785.0 to 0.786.0, the second
+closing and rotating the four 0.786.0 ids. Its re-rehearsal was never written, and the remaining
+range is now covered by the 0786-to-0788 runbook.
 
 ## RESUME HERE
 
