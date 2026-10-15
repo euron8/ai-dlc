@@ -19,6 +19,16 @@
 #   in one directory). A shard's relative `artifact:` is resolved by walking UP from s<N>/ for
 #   the first directory it names a file under -- a walk, never a root.
 #
+# THE SERIES STEM IS NOT THE ARTIFACT. A shard dir whose <artifact> ends in `-adversarial`
+#   (`shards/coe-adversarial-p1/`) names the SERIAL file's stem, not the artifact, and was merged
+#   silently into `coe-adversarial-adversarial-p1.md`, a series no gate reads. It is REFUSED
+#   right after <artifact> is derived, in every mode, before anything is read or written.
+#   False-positive set: 0 of the 82 shard directories on disk in the reference consumer (75
+#   committed) end in `-adversarial-p<M>`, against 73 ending in `-p<M>` as the control. Narrowing: the test keys on the stem SUFFIX only, so a stem that merely
+#   contains the word (`adversarial-notes-p1`) stays legal. Limit: it does not catch the
+#   full-step-name shape (`carry-over-evaluation-p<M>`), which the generic `<artifact>` of
+#   `_gate-procedures.md` literally yields; the step file names the `coe` stem for that.
+#
 # SECTION MODE (--document)
 #   The unit is a SECTION of one document, not a story file. The ordinal set is the parts
 #   `partition-document.sh --map <path>` prints -- never a listing of the shard directory -- and a
@@ -195,6 +205,7 @@ ARTIFACT="$(printf '%s' "$SHARD_BASE" | sed -n 's/^\(.*[^-]\)-p\([0-9][0-9]*\)$/
 PASS="$(printf '%s' "$SHARD_BASE" | sed -n 's/^\(.*[^-]\)-p\([0-9][0-9]*\)$/\2/p')"
 [ -n "$ARTIFACT" ] && [ -n "$PASS" ] || refuse "shard directory name $SHARD_BASE is not <artifact>-p<M>"
 PASS=$((10#$PASS))
+case "$ARTIFACT" in *-adversarial) refuse "shard directory $SHARD_BASE names the series, not the artifact: the dir is s<N>/shards/<artifact>-p<M>/ and this would write ${ARTIFACT}-adversarial-p$PASS.md (carry-over-evaluation.md: s<N>/shards/coe-p<M>/)" ;; esac
 OUT="$SPRINT_DIR/$ARTIFACT-adversarial-p$PASS.md"
 fi
 STORIES_DIR="$SPRINT_DIR/$ARTIFACT"

@@ -151,8 +151,13 @@ floor, not a target, and Party Mode dispatches per §3.
 - **Repair passes:** `_gate-procedures.md`, "Adversarial repair dispatch" — section shards joined
   and assembled per its "Shard by section", or one remediator when the map reports the document
   SERIAL (exception 4). **The lead does not repair the artifact itself.**
-- The series is `_bmad-output/planning-artifacts/s<N>/coe-adversarial-p<M>.md`; the
-  terminating pass stamps `verdict: EXIT_CONDITION_MET`. **Gate Check 24 reads it.**
+
+- The series is `_bmad-output/planning-artifacts/s<N>/coe-adversarial-p<M>.md`, so in this
+  step `<artifact>` in `_gate-procedures.md`'s review and repair dispatch paths is `coe`, never
+  `carry-over-evaluation` and never `coe-adversarial`: the review shard dir is
+  `s<N>/shards/coe-p<M>/` and the repair record `s<N>/coe-repair-p<M>.md`. The terminating pass
+  stamps `verdict: EXIT_CONDITION_MET`. **Gate Check 24 reads it** with
+  `--series _bmad-output/planning-artifacts/s<N>/coe-adversarial-p`.
 
 *Catches:* Rule 8 has always bound this step — it says "per planning artifact," and the
 carry-over evaluation is one — but this file never said so, no step here referenced the

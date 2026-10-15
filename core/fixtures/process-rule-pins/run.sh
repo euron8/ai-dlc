@@ -68,6 +68,10 @@
 #     are named as the 64 hex characters after `- SHA256: `, so a lead does not copy the label in.
 #     route-cite-user and route-cite-scope are line-mode `contains` pins (the bullets are indented):
 #     keep each field name and its bare-hex phrase on ONE line.
+#   - the carry-over evaluation's review and repair stem is `coe` (shard dir `s<N>/shards/coe-p<M>/`),
+#     never the full step name and never the series stem `coe-adversarial` (carry-over-evaluation.md
+#     §3a). A blank line sets that bullet apart from the two above it, so `- The series is` is its
+#     own paragraph's lead for the coe-stem-* rows.
 #
 # LEADS ARE NOT ENOUGH. A bold lead left intact over a body rewritten to say the opposite
 # ("need NOT carry", "dropped only through a HARD_BLOCK", "an assertion is a sufficient
@@ -374,6 +378,8 @@ dp-git-c|S|steps/_dispatch-protocol.md|**Worktree-explicit dev dispatch.**|**Bou
 dp-one-story|S|steps/_dispatch-protocol.md|**Worktree-explicit dev dispatch.**|**Bounded-join dispatch mandate (Rule 29).**|0. Lead MUST commit all planning artifacts|para|The dev works only the story it was dispatched for, one story per dispatch, and never claims another from a task list
 dev-one-story|R|dev.md|## Responsibilities|## As a party seat|- Implement the story the lead dispatched you for|para|Implement the story the lead dispatched you for: one story per dispatch.
 dev-hardblock-idle|R|dev.md|## Escalation Protocol|## CI-vs-local divergence diagnostic order|- **HARD_BLOCK** (story contradicts architecture|para|and go idle; you do not pick up another story.
+coe-stem-token|S|steps/carry-over-evaluation.md|### 3a. Validation cycle (Rule 8)|### 4. Deferral Handling|- The series is|para|`<artifact>` in `_gate-procedures.md`'s review and repair dispatch paths is `coe`
+coe-stem-dir|S|steps/carry-over-evaluation.md|### 3a. Validation cycle (Rule 8)|### 4. Deferral Handling|- The series is|para|s<N>/shards/coe-p<M>/
 PINS
 }
 

@@ -243,3 +243,61 @@ doubled label and `SHA256:` alone must all still fail. A labelled pin against a 
 the asked id must still exit 1.
 
 verify: sh V=core/scripts/validate-scope-confirmation.sh; C=core/scripts/validate-request-coverage.sh; [ -f "$V" ] && [ -f "$C" ] && command -v shasum >/dev/null && command -v python3 >/dev/null || exit 9; T="$(mktemp -d)" || exit 9; H="$(printf Confirmed | shasum -a 256 | cut -d' ' -f1)"; F=0000000000000000000000000000000000000000000000000000000000000000; Q="$(printf '\140\140\140')"; [ "${#H}" -eq 64 ] || exit 9; printf '# answers\n\n## 2026-10-15T00:00:00Z -- AskUserQuestion\n- SHA256: %s\n%stext\nConfirmed\n%s\n' "$H" "$Q" "$Q" > "$T/a.md"; : > "$T/b.md"; grep -q "^- SHA256: $F\$" "$T/a.md" && exit 9; s() { printf -- '- user_request_verbatim: x\n- scope_confirmed: confirmed\n- scope_confirmed_cite: %s\n- scope_deferred_items: none\n' "$1" > "$T/s.md"; AI_DLC_PROJECT_ROOT="$T" bash "$V" --snapshot "$T/s.md" --answers "$T/a.md" --backlog "$T/b.md" >/dev/null 2>&1; echo $?; }; [ "$(s "$H")" = 0 ] || exit 9; printf '# requests\n\n## 2026-10-15T00:00:00Z -- (typed)\n- Session: s1\n- SHA256: %s\n%stext\nplease do CO-S1-X\n%s\n' "$H" "$Q" "$Q" > "$T/r.md"; printf '# Product Brief\n\n<!-- LOCKED_REQUIREMENTS — DO NOT MODIFY DURING VALIDATION -->\n### LOCKED block: S42\n- **LR-S42-0 (%sCO-S1-X%s):** do it.\n<!-- END LOCKED_REQUIREMENTS -->\n' '`' '`' > "$T/k.md"; sed 's/CO-S1-X/CO-S9-Y/' "$T/k.md" > "$T/d.md"; c() { AI_DLC_PROJECT_ROOT="$T" bash "$C" --requests "$T/r.md" --brief "$T/$2" --sprint 42 --cite-sha "$1" >/dev/null 2>&1; echo $?; }; [ "$(c "$H" k.md)" = 0 ] && [ "$(c "$H" d.md)" = 1 ] || exit 9; [ "$(s "SHA256:$H")" = 0 ] && [ "$(s "SHA256:$F")" = 1 ] && [ "$(s "foo:$H")" = 1 ] && [ "$(s "SHA256:SHA256:$H")" = 1 ] && [ "$(s "SHA256:")" = 1 ] && [ "$(c "SHA256:$H" k.md)" = 0 ] && [ "$(c "SHA256:$F" k.md)" = 2 ] && [ "$(c "foo:$H" k.md)" = 2 ] && [ "$(c "SHA256:" k.md)" = 2 ] && [ "$(c "SHA256:$H" d.md)" = 1 ] || exit 1; exit 0
+
+## BL-535 — the carry-over evaluation never stated its shard-dir stem, and the merge wrote a series-named dir silently
+
+**DEFECT.** Discharges `PC-S319-COE-ADVERSARIAL-SHARD-DIR-STEM-NEVER-STATED`.
+
+Filed by graph on 2026-10-15 from Sprint 319, uncommitted in its push-candidate ledger.
+`carry-over-evaluation.md` §3a named the series `s<N>/coe-adversarial-p<M>.md` and never said that
+`<artifact>` is `coe` in `_gate-procedures.md`'s `s<N>/shards/<artifact>-p<M>/`. The S319 lead
+derived `shards/coe-adversarial-p1/` from the series name. It noticed the error before any shard was
+written, and only because `ls s318/shards/` showed `coe-p1/`.
+
+**Measured on a scratch copy of graph's real `s319/shards/coe-p1/`** (12 shards: 1..6, cross-1..6),
+with origin/main's merge and convergence validator:
+
+- Under `shards/coe-p1/`, `--document` merges to `coe-adversarial-p1.md`. Check 24 (`--series
+  …/coe-adversarial-p`) exits 0.
+- The same shards under `shards/coe-adversarial-p1/` merge with exit 0. The merge silently writes
+  `coe-adversarial-adversarial-p1.md`. Check 24 on the declared series exits 1, because it found no
+  pass file.
+- **s316** ran the full-stem shape `shards/carry-over-evaluation-p1..p4/`, writing
+  `carry-over-evaluation-adversarial-p1..p4.md`. That series is not the one §3a declares. The planning
+  gate `planning-20261001T034846Z` still PASSED, and its row 1 reads the p4 terminal pass by that name.
+- **s314** names the repair record `coe-adversarial-repair-p1.md`, not the `coe-repair-p1.md` that
+  `_gate-procedures.md`'s `<artifact>-repair-p<M>.md` yields for the `coe` stem.
+- **s319**: the near-miss above. In graph today, 0 of 82 shard directories (75 committed) end in
+  `-adversarial-p<M>`, and 73 end in `-p<M>` (control).
+
+**Correction to the candidate.** It cites `_gate-procedures.md` lines 337, 417 and 563 alongside 584.
+Lines 337, 417 and 563 are the files axis (`stories/`, `merge-adversarial-shards.sh --map`), which a
+one-document carry-over evaluation never takes, so they do not bind this step. Only the
+sections-axis line 584 and the repair paths do.
+
+Fix, in two halves. First, §3a states that `<artifact>` is `coe` in this step's review and repair
+dispatch paths, never `carry-over-evaluation` and never `coe-adversarial`. It names the shard dir
+`s<N>/shards/coe-p<M>/`, the repair record `s<N>/coe-repair-p<M>.md`, and the Check 24 `--series`
+argument. `process-rule-pins` rows `coe-stem-token` and `coe-stem-dir` pin that text. Second,
+`merge-adversarial-shards.sh` refuses, in every mode and before anything is read or written, any
+`<artifact>` ending in `-adversarial`.
+
+**Limit.** The refusal keys on the stem suffix only, so `adversarial-notes-p1` stays legal. It does not
+catch the full-stem shape (`carry-over-evaluation-p<M>`, s316's), which `_gate-procedures.md:494`
+literally yields: "`<artifact>` is the stem of the artifact". The step text is the only thing that
+covers it.
+
+The receipt drives the REAL merge in fresh mktemp worlds with a two-section document:
+- (1) `--document` from `shards/doc-adversarial-p1/` must exit 2 with the "names the series" REFUSED
+  line, and leave no `*adversarial*` file in `s9/`;
+- (2) the same shards under `doc-p1/` and `coe-p1/` must each merge, writing
+  `<stem>-adversarial-p1.md`;
+- (3) `adversarial-notes-p1/` must merge;
+- (4) files mode and `--map` on `stories-adversarial-p1/` must each refuse, with the derived
+  artifact dir present.
+
+Scored under `set -uo pipefail`: origin/main 1, the fix 0. Four regressions each score 1: matching
+`adversarial` anywhere, the refusal placed after the write, the refusal in the `--document` branch
+only, and a refusal that also fires on `coe-p1`. With `partition-document.sh` absent, it exits 9.
+
+verify: sh M=core/scripts/merge-adversarial-shards.sh; [ -f "$M" ] && [ -f core/scripts/partition-document.sh ] || exit 9; w() { r="$(mktemp -d)" && r="$(cd "$r" && pwd -P)" || exit 9; d="$r/s9/shards/$1"; mkdir -p "$d" || exit 9; { printf "## A\n\n"; for i in $(seq 1 15); do printf "a line %d of the section, carrying enough prose to weigh something real.\n" "$i"; done; printf "## B\n\n"; for i in $(seq 1 15); do printf "b line %d of the section, carrying enough prose to weigh something real.\n" "$i"; done; } > "$r/s9/doc.md"; h="$(shasum -a 256 "$r/s9/doc.md" | cut -d" " -f1)"; n=0; for k in 1 2 cross; do n=$((n + 1)); printf "## Findings\n\nSKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\ninvoked_at: 2026-10-15T00:00:0%sZ\ntool_use_id: toolu_r%s\nmode: subagent\nlead_role: x\nartifact: %s\nartifact_sha: %s\nfindings_critical: 0\nfindings_major: 0\nverdict: EXIT_CONDITION_MET\nSKILL_INVOCATION_PROVENANCE_END\n" "$n" "$k" "$r/s9/doc.md" "$h" > "$d/$k.md"; done; }; m() { o="$(bash "$M" --document "$r/s9/doc.md" "$d" 2>&1)"; c=$?; }; w doc-adversarial-p1; m; [ "$c" -eq 2 ] && grep -qF "REFUSED: shard directory doc-adversarial-p1 names the series, not the artifact" <<<"$o" && [ -z "$(ls "$r/s9" | grep adversarial)" ] || exit 1; for s in doc coe; do w "$s-p1"; m; [ "$c" -eq 0 ] && grep -qF "MERGED: " <<<"$o" && [ -f "$r/s9/$s-adversarial-p1.md" ] || exit 1; done; w adversarial-notes-p1; m; [ "$c" -eq 0 ] && grep -qF "MERGED: " <<<"$o" && [ -f "$r/s9/adversarial-notes-adversarial-p1.md" ] || exit 1; w stories-adversarial-p1; mkdir -p "$r/s9/stories-adversarial" && echo a > "$r/s9/stories-adversarial/a.md" && echo b > "$r/s9/stories-adversarial/b.md" || exit 9; o="$(bash "$M" "$d" 2>&1)"; c=$?; [ "$c" -eq 2 ] && grep -qF "names the series" <<<"$o" || exit 1; o="$(bash "$M" --map "$d" 2>&1)"; c=$?; [ "$c" -eq 2 ] && grep -qF "names the series" <<<"$o" && [ -z "$(ls "$r/s9" | grep adversarial-p)" ] || exit 1; exit 0

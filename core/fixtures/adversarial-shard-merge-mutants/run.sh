@@ -296,6 +296,27 @@ mutant "XM5 unknown cross group accepted" "xfiles xdoc xunknown" \
 mutant "XM6 seat-complete refusal removed" "xcomplete" \
   "if grep -q '^Y' \"\$T/sc\" && grep -q '^N' \"\$T/sc\"; then" \
   'if false; then'
+# The series-stem refusal. SM1 widens the suffix to the word anywhere -- only S3's near-miss dies.
+SR_LINE='case "$ARTIFACT" in *-adversarial) refuse "shard directory $SHARD_BASE names the series'
+mutant "SM1 series refusal matches adversarial anywhere" "stem_near" \
+  "$SR_LINE" \
+  'case "$ARTIFACT" in *adversarial*) refuse "shard directory $SHARD_BASE names the series'
+# SM2: the refusal moved below the write. S1 sees the record written; S4's files cell is refused
+# by the stories-dir check first and its --map cell exits before the write, so neither names the series.
+mutant "SM2 series refusal placed after the write" "stem_series stem_files" \
+  "$SR_LINE" \
+  'case "$ARTIFACT" in *-adversarial-no-such-stem) refuse "shard directory $SHARD_BASE names the series' \
+  'cp "$T/out" "$OUT.merge-tmp.$$" && mv "$OUT.merge-tmp.$$" "$OUT" || refuse "writing $OUT failed"' \
+  'cp "$T/out" "$OUT.merge-tmp.$$" && mv "$OUT.merge-tmp.$$" "$OUT" || refuse "writing $OUT failed"
+case "$ARTIFACT" in *-adversarial) refuse "shard directory $SHARD_BASE names the series, not the artifact" ;; esac'
+# SM3: the refusal in the --document branch only -- files mode and --map then take another path.
+mutant "SM3 series refusal in --document mode only" "stem_files" \
+  "$SR_LINE" \
+  'case "$ARTIFACT" in *-adversarial) [ -n "$DOCUMENT" ] && refuse "shard directory $SHARD_BASE names the series'
+# SM4: a refusal that also fires on graph's real, correct coe-p1 -- only S2's coe cell sees it.
+mutant "SM4 series refusal also fires on coe-p1" "stem_control" \
+  "$SR_LINE" \
+  'case "$ARTIFACT" in *-adversarial|coe) refuse "shard directory $SHARD_BASE names the series'
 
 # ------------------------------------------------------------------------------ the reap
 wait

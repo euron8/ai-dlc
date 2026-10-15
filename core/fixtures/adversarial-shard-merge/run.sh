@@ -151,6 +151,18 @@ p_xunknown "$MERGE" && ok "X5: cross-7.md at K=3 -> REFUSED, the table does not 
 p_xcomplete "$MERGE" && ok "X6: one shard ending in seat-complete: makes an unmarked shard an unfinished REFUSAL; every shard marked with its findings=<n> merges with the markers dropped; findings=3 over 2 findings REFUSED as truncated" \
   || bad "X6: seat-complete (rc=$RC): $(cat "$MO")"
 
+# ---- the series stem is not the artifact. S1 is the defect graph s319 nearly shipped; S2 is its
+# ALLOW twin one property apart (the dir name), with graph's real coe-p1 beside it; S3 is the
+# near-miss that carries the word without ending in it; S4 is files mode and --map.
+p_stem_series "$MERGE" && ok "S1: --document from shards/doc-adversarial-p1/ -> REFUSED 'names the series, not the artifact' (exit 2), and s9/ holds no *adversarial* file" \
+  || bad "S1: a shard dir named for the series was not refused before any write (rc=$RC): $(cat "$MO")"
+p_stem_control "$MERGE" && ok "S2: the same shards under shards/doc-p1/ and shards/coe-p1/ -> MERGED, writing doc-adversarial-p1.md and coe-adversarial-p1.md" \
+  || bad "S2: the correctly named shard dir did not merge (rc=$RC): $(cat "$MO")"
+p_stem_near "$MERGE" && ok "S3: shards/adversarial-notes-p1/ (the word, not the -adversarial suffix) -> MERGED" \
+  || bad "S3: a stem containing 'adversarial' without ending in it was refused (rc=$RC): $(cat "$MO")"
+p_stem_files "$MERGE" && ok "S4: files mode and --map on shards/stories-adversarial-p1/ -> each REFUSED naming the series, nothing written" \
+  || bad "S4: files mode or --map accepted a series-named shard dir (rc=$RC): $(cat "$MO")"
+
 # R6: a finding heading EXACTLY as the real pass wrote it carries no severity word, so the heads
 # counted (0 MAJOR) disagree with findings_major -- refused, never counted as zero.
 d="$(b3_world)"

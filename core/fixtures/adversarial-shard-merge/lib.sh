@@ -666,5 +666,60 @@ p_b4doc_other() {
   bash "$1" --document "$w/$doc" "$w/$SUBJ_PA/s9/shards/test-strategy-p1" > "$MO" 2>&1; RC=$?
   [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && [ -f "$o" ]
 }
-P_ALL="b3 clean ceiling miss_ord miss_cross dup partition sha ms doc_b3 doc_axis doc_sha doc_path doc_serial files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit subj_b4 b4doc b4doc_nomf b4doc_other xfiles xdoc xelicit xmix xunknown xcomplete"
+# ------------------------------------------------------- the series stem is not the artifact
+# A shard dir whose <artifact> ends in `-adversarial` names the SERIES (graph s319 derived
+# `shards/coe-adversarial-p1/` from `coe-adversarial-p<M>.md`) and was merged silently into
+# `coe-adversarial-adversarial-p1.md`. Every world here is a sprint s9 holding the 3-part document
+# seed, with the shard set written into s9/shards/<base>/ -- the one property the cells vary.
+STEM_TOKEN="_bmad-output/planning-artifacts/s9/test-strategy.md"
+stem_world() { # <shard-dir basename> -> prints the shard dir of a fresh s9 document world, shards written
+  local w pa d x
+  w="$(mktemp -d "$WORK/sw.XXXXXX")" || return 1
+  pa="$w/_bmad-output/planning-artifacts"; d="$pa/s9/shards/$1"
+  mkdir -p "$d" || return 1
+  cp "$SEED_DIR/seed.doc-test-strategy.md" "$pa/s9/test-strategy.md" || return 1
+  dshard "$d" 1 0 EXIT_CONDITION_MET 1 "" "$STEM_TOKEN"
+  dshard "$d" 2 0 EXIT_CONDITION_MET 2 "" "$STEM_TOKEN"
+  dshard "$d" 3 0 EXIT_CONDITION_MET 3 "" "$STEM_TOKEN"
+  for x in $(xkeys 3); do dshard "$d" "$x" 0 EXIT_CONDITION_MET "1, 3" "" "$STEM_TOKEN"; done
+  printf '%s' "$d"
+}
+stem_s9() { printf '%s' "$(dirname "$(dirname "$1")")"; }
+stem_merge() { bash "$1" --document "$(stem_s9 "$2")/test-strategy.md" "$2" > "$MO" 2>&1; RC=$?; }
+stem_none() { # <s9 dir> -> 0 when no *adversarial* file and no merge temp sits in it
+  [ -z "$(find "$1" -maxdepth 1 -type f \( -name '*adversarial*' -o -name '*.merge-tmp.*' \) 2>/dev/null)" ]
+}
+p_stem_series() { # document mode, shards/doc-adversarial-p1/ -> REFUSED naming the series, nothing written
+  local d; d="$(stem_world doc-adversarial-p1)" || return 1
+  stem_merge "$1" "$d"
+  [ "$RC" -eq 2 ] && has "$MO" "REFUSED: shard directory doc-adversarial-p1 names the series, not the artifact" \
+    && has "$MO" "would write doc-adversarial-adversarial-p1.md" && stem_none "$(stem_s9 "$d")"
+}
+p_stem_control() { # the same shards under doc-p1/ and under graph's real coe-p1/ each MERGE
+  local d s
+  for s in doc coe; do
+    d="$(stem_world "$s-p1")" || return 1
+    stem_merge "$1" "$d"
+    [ "$RC" -eq 0 ] && has "$MO" "MERGED: " && [ -f "$(stem_s9 "$d")/$s-adversarial-p1.md" ] || return 1
+  done
+}
+p_stem_near() { # a stem CONTAINING the word, not ending in it, is legal: adversarial-notes-p1 MERGES
+  local d; d="$(stem_world adversarial-notes-p1)" || return 1
+  stem_merge "$1" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED: " && [ -f "$(stem_s9 "$d")/adversarial-notes-adversarial-p1.md" ]
+}
+p_stem_files() { # files mode and --map, shards/stories-adversarial-p1/ -> both REFUSED naming the series
+  local d s9; d="$(stem_world stories-adversarial-p1)" || return 1; s9="$(stem_s9 "$d")"
+  # The artifact dir the wrong name derives EXISTS with two stories, so without the refusal --map
+  # prints its ordinal map (exit 0) and files mode reads on: only the refusal stops either.
+  mkdir -p "$s9/stories-adversarial" && printf 'a\n' > "$s9/stories-adversarial/a.md" \
+    && printf 'b\n' > "$s9/stories-adversarial/b.md" || return 1
+  bash "$1" "$d" > "$MO" 2>&1; RC=$?
+  [ "$RC" -eq 2 ] && has "$MO" "REFUSED: shard directory stories-adversarial-p1 names the series" || return 1
+  bash "$1" --map "$d" > "$MO" 2>&1; RC=$?
+  [ "$RC" -eq 2 ] && has "$MO" "REFUSED: shard directory stories-adversarial-p1 names the series" \
+    && ! grep -q "$(printf '\t')a.md" "$MO" && stem_none "$s9"
+}
+
+P_ALL="b3 clean ceiling miss_ord miss_cross dup partition sha ms doc_b3 doc_axis doc_sha doc_path doc_serial files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit subj_b4 b4doc b4doc_nomf b4doc_other xfiles xdoc xelicit xmix xunknown xcomplete stem_series stem_control stem_near stem_files"
 
