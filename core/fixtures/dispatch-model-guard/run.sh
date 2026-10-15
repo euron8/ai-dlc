@@ -1349,6 +1349,14 @@ numid_world() { # numid_world <name> -> project dir
 }
 numid_last() { [ "$(tail -1 "$1/_bmad-output/spawn-ledger.jsonl" | jq -r '.tool_use_id | type' 2>/dev/null)" = number ]; }
 W11="$(numid_world numid)"
+# PRECONDITION: this host's jq must actually FAIL on the seed, or 15w's allow is unearned. The
+# expression is the guard's own key term; a jq that exits 0 here never reaches the fail-open path.
+if jq -Rr 'fromjson? | select(type == "object") | "K\t" + .tool_use_id' \
+     "$W11/_bmad-output/spawn-ledger.jsonl" >/dev/null 2>&1; then
+  bad "15w FIXTURE BROKEN: this jq exits 0 on a final numeric tool_use_id row, so the producer never fails and 15w asserts nothing"
+else
+  ok "15w precondition: the key term exits non-zero on the seeded ledger's final numeric row"
+fi
 if numid_last "$W11"; then
   expect_quiet "$(adj "$W11")" "15w the 15a waiver, the key producer failing on a numeric tool_use_id -> fail open"
 else bad "15w FIXTURE BROKEN: the numeric tool_use_id row is not the ledger's last row"; fi
