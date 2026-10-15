@@ -126,9 +126,9 @@ over scratch copies of them, flags 936 entries in 193 parts, with the same run's
 1 as its control. Those parts are never re-joined, though: 20 of their 23 dirs already hold a joined record, which a join
 refuses to overwrite; the other 3 belong to closed sprints; and no shipped program calls the join.
 The field is read in its four forms and no other: a presence reader passed `- siblings: checked`,
-and a reader keyed on the word passed any entry whose prose mentions a sibling. The fence is
-```` ```text ````, a point-in-time record that `validate-artifact-derivations.sh` and the capture hook
-never replay: as ```` ```derived ```` its control went STALE the first time a later pass rewrote the
+and a reader keyed on the word passed any entry whose prose mentions a sibling. The fence is a
+`text`-labelled one, a point-in-time record that `validate-artifact-derivations.sh` and the capture
+hook never replay: as a `derived` fence its control went STALE the first time a later pass rewrote the
 text it counts, and the slot-wide re-run exits 1, "send back to the remediator" (graph's s318 slot
 already reads 3316 stale of 4475). The join counts the control once, in parts mode, and refuses a
 fence whose text is not in the file it names.
@@ -142,7 +142,8 @@ and stories-elicitation-repair-p1 ran no serial remediator. The eighth round, s3
 the known sm-05 set-aside (BL-519), its one true positive; there are 0 false refusals.
 
 Residue (operator ruling: BL-508 closes on the after-join cite re-check, with this recorded): the
-`grep -rn -F` line's output is recorded at the edit and never re-run; whether the grepped text is
+`grep -rn -F` line's output is recorded at the edit, never checked at write time (the capture hook
+replays only `derived` fences) and never re-run; whether the grepped text is
 really the replaced text (the write ledger carries no old_string); a files-mode shard writing the
 section-shard form skips the fence, because the four forms are not gated by mode; a `--sources`
 record omitting the field everywhere reads PENDING; and a substantive mis-repair whose prose and
