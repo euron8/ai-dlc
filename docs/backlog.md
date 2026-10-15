@@ -83,11 +83,48 @@ asks for that: the s318 behaviour was the lead's own choice. Costed in the analy
 the 11 full-fan-out re-review passes over the median delta pass ($1.70), from
 `pipeline-efficiency-s317-s318/role-efficacy/impl/` (`rework-labels.tsv`).
 
-The receipt is scoped to the `**Gate-1 dispatch` paragraph (57 lines at filing). It reads 1 on this
-tree and 0 with one delta-review sentence added there. A selector keyed on a `# … Gate 1` heading
-matched nothing in this file and would have read STILL-LIVE forever.
+**The fix is a delta review that is still sharded, by operator ruling.** No partition change was
+needed: `partition-review-diff.sh`'s `<base>` argument already partitions the delta when it is given
+the prior pass's `reviewed-sha:`. That was measured by this batch's contract on 26 real graph pass
+pairs, and the probe below re-checks the mechanism on a seeded repository. Because the
+partition drops the scan roots, a delta review can miss defects in the story record. For example,
+s318 2.4 p2 found an Important on a DAR self-contradiction that no delta hunk touched. So the first
+cross shard is briefed with the whole story record and the full prior..frozen diff. Every prior
+Critical/Important is carried, and Check 1 checks the carry with `validate-carried-findings.sh`.
 
-verify: sh F=core/skills/ai-dlc/steps/implementation.md; [ -f "$F" ] || exit 9; S="$(awk '/^\*\*Gate-1 dispatch/{on=1} on&&/^\*\*[A-Z]/&&!/^\*\*Gate-1 dispatch/{exit} on' "$F")"; [ -n "$S" ] || exit 9; printf '%s\n' "$S" | grep -qiE 're-review[^.]{0,120}(delta|since the (last|prior) (pass|review))'
+**Stated residual.** A delta pass does not re-find a pre-existing defect that lies outside the
+delta (s317 2.6 p3, the AC9 Strategy row). Check 21(b) and BL-513's refusal catch it downstream.
+**Predicted cost.** At the default threshold, s318 1-1 p3, 2-3 p3, 2-4 p2 and 2-4 p3 would still
+shard, to about 10 seats each, because test-results captures count as reviewable files. The $282
+filed above will therefore not fully reproduce under the sharding ruling. The saving comes from the
+narrower range and the carried-finding brief, not from a single delta reviewer.
+
+**Pre-migration.** The validator reads the review's own repository and HEAD, never where its
+running copy sits, because a story is reviewed in its own worktree and checked by the main
+checkout's copy. A branch whose history never added the program reads PENDING, and so does a
+review committed before the earliest add. A program that sits in the checkout but was never
+committed there (gitignored or untracked) binds, with a NOTE. A shallow repository is refused.
+A prior is held to the `#### ` form only when it carries the template's column-0 `reviewed-sha:`
+line and was not committed before the add. graph's leads persist reviews late (one snapshot
+commit persisted s318 2.4 p1 and p2 together), so the commit alone cannot say a prior was written
+under the rule. Any other prior has its findings carried by heading or by an id-led bold label,
+and any other line in it prints a NOTE. In a held prior, lead-in prose before the first `#### `
+is a NOTE, and only a bullet or a bold finding-id line there fails. A label prior is also
+answered by its finding id alone, and trailing punctuation never decides a match.
+`validate-carried-findings.sh --list <prior>` prints the exact carry strings, and the Gate-1
+re-review brief carries them. The serial template in `code-reviewer.md` now writes `#### `
+findings and a column-0 `reviewed-sha:` line.
+
+The earlier prose receipt was closable by one sentence and is replaced by a probe. The probe runs
+the validator on seeded pass pairs, including an `open` carry under NEEDS_REWORK that must pass.
+It also runs a seeded worktree topology: a pre-pull story branch reads PENDING, a revert and
+re-add of the program still binds, and a story spanning the pull passes. After the pull, a marked
+bullet prior fails, a marked heading prior with lead-in prose passes, and a lazily persisted
+unmarked prior carried by id alone passes. `--list` must print the exact carry string. It runs `--map` on a
+seeded repository with the prior sha as the base (rc 0) and with the pair reversed (rc 2), and
+requires the step and Check 1 text.
+
+verify: sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-507-carried-findings.sh
 
 ## BL-508 — a repair pass writes the defects the next adversary pass finds
 

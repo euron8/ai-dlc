@@ -599,7 +599,7 @@ else
   printf '%s\n' "$m8b_out" | grep -E '^(FAIL|OK):' | sed 's/^/      /' | head -3; rc=1
 fi
 # ...and its mutant: the old condition restored, the same ledger must refuse as a zero.
-if mut "$TMP/m8b" 's|^if \[ "$SCORED" -eq 0 \] \&\& \[ "$N_PASS" -eq 0 \] \&\& \[ -z "$R2_ALLMANUAL" \] \&\& \[ -z "$R2_DECLEMPTY" \]; then|if [ "$SCORED" -eq 0 ]; then|'; then
+if mut "$TMP/m8b" 's|^if \[ "$SCORED" -eq 0 \] \&\& \[ "$N_PASS" -eq 0 \] \&\& \[ -z "$R2_ALLMANUAL" \] \&\& \[ -z "$R2_DECLEMPTY" \] \&\& \[ -z "$R2_ALLDRIVER" \]; then|if [ "$SCORED" -eq 0 ]; then|'; then
   # shellcheck disable=SC2086
   m8bm_out="$(run_v "" "$TMP/m8b" $M8B_ARGS)"; m8bm_rc=$?
   if [ "$m8bm_rc" -eq 1 ] && grep -qF "produced ZERO scored receipts" <<<"$m8bm_out"; then

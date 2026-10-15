@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+# BL-507 receipt probe: does a gate-1 re-review run as a delta against the prior pass, with every
+# prior Critical/Important finding carried and checked?
+#
+#   PRECONDITION  partition-review-diff.sh exists, and the s318 2.4 heading seeds parse (exit 9 else)
+#   SUBJECT 1     validate-carried-findings.sh, on seeded files:
+#                   two prior Importants, one answered            -> non-zero
+#                   both answered                                 -> 0
+#                   an `open` carried line under APPROVED          -> non-zero
+#                   the same `open` line under NEEDS_REWORK        -> 0
+#                 and on a seeded repository with linked worktrees, the main checkout's copy:
+#                   a story branch cut before the pull, its own worktree -> PENDING
+#                   a pair after the first add, program reverted and re-added -> binds (1)
+#                   a pre-rule bullet pass 1 carried by label after the pull  -> PASS
+#                   a post-rule (reviewed-sha:) bullet prior                  -> 1
+#                   a post-rule heading prior with lead-in prose, all carried -> 0
+#                   a lazily persisted unmarked prior carried by id alone     -> 0
+#                   --list prints the exact carry string
+#   SUBJECT 2     partition-review-diff.sh --map on a seeded two-commit repository, the prior sha as
+#                 <base>: the delta partitions (rc 0) and the reversed pair is refused (rc 2)
+#   SUBJECT 3     implementation.md's Gate-1 dispatch paragraph names the prior sha as the base and
+#                 the full-range fallback, and gate-validation.md names the validator
+#   -> exit 0 when every subject holds (fixed), 1 when any does not (live).
+#
+# Measured at 0.781.0: validate-carried-findings.sh does not exist -> probe exit 1. Run from the
+# repo root.
+set -u
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+P=core/scripts/partition-review-diff.sh
+V=core/scripts/validate-carried-findings.sh
+I=core/skills/ai-dlc/steps/implementation.md
+GV=core/skills/ai-dlc/steps/gate-validation.md
+[ -f "$P" ] && [ -f "$I" ] && [ -f "$GV" ] || exit 9
+[ -f "$V" ] || exit 1
+d=$(mktemp -d)
+EM="$(printf '\342\200\224')"
+H1='The full-suite capture records no command, seed or head sha'
+H2='AC6(c) discriminator depends on the process cwd'
+printf '# Code Review: 2-4\n\n## Verdict\nNEEDS_REWORK\n\n## Findings\n\n### Critical\n\n### Important\n\n#### %s\n\nbody\n\n#### %s\n\nbody\n\n### Suggestions\n' "$H1" "$H2" > "$d/p1.md"
+p2() { local f="$1" v="$2"; shift 2
+  { printf '# Code Review: 2.4 (pass 2)\n\n## Verdict\n%s\n\n' "$v"; for l in "$@"; do printf '%s\n' "$l"; done
+    printf '\n## Findings\n\n### Critical\n\n### Important\n\n### Suggestions\n'; } > "$f"; }
+p2 "$d/one.md" APPROVED "carried: $H1 $EM resolved"
+p2 "$d/both.md" APPROVED "carried: $H1 $EM resolved" "carried: $H2 $EM resolved"
+p2 "$d/open.md" APPROVED "carried: $H1 $EM resolved" "carried: $H2 $EM open"
+p2 "$d/open-nr.md" NEEDS_REWORK "carried: $H1 $EM resolved" "carried: $H2 $EM open"
+bash "$V" "$d/p1.md" "$d/one.md" >/dev/null 2>&1 && exit 1
+bash "$V" "$d/p1.md" "$d/both.md" >/dev/null 2>&1 || exit 1
+bash "$V" "$d/p1.md" "$d/open.md" >/dev/null 2>&1 && exit 1
+bash "$V" "$d/p1.md" "$d/open-nr.md" >/dev/null 2>&1 || exit 1
+
+# The consumer topology: a story reviewed in its own worktree, checked by the main checkout's copy.
+#   pre   a story branch cut BEFORE the pull drops a carry          -> PENDING (exit 0)
+#   rr    a pair committed after the first add, then the program reverted and re-added; the pass 2
+#         drops a carry                                             -> binds (exit 1)
+#   span  a pre-rule bullet pass 1, the pull, then a pass 2 carrying it by label -> exit 0
+w="$d/w"; mkdir -p "$w" || exit 9
+gw() { git -c user.name=p -c user.email=p@p.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
+gw init -q "$w/main" || exit 9
+printf 'x\n' > "$w/main/a"; gw -C "$w/main" add -A; gw -C "$w/main" commit -qm base || exit 9
+gw -C "$w/main" branch pre || exit 9
+gw -C "$w/main" branch span || exit 9
+mkdir -p "$w/main/scripts/ai-dlc"; cp "$V" "$w/main/scripts/ai-dlc/" || exit 9
+gw -C "$w/main" add -A; gw -C "$w/main" commit -qm pull || exit 9
+gw -C "$w/main" branch rr || exit 9
+VM="$w/main/scripts/ai-dlc/validate-carried-findings.sh"
+gw -C "$w/main" worktree add -q "$w/pre" pre || exit 9
+mkdir -p "$w/pre/r"; cp "$d/p1.md" "$w/pre/r/1.md"; cp "$d/one.md" "$w/pre/r/1-p2.md"
+gw -C "$w/pre" add -A; gw -C "$w/pre" commit -qm reviews || exit 9
+o="$(bash "$VM" "$w/pre/r/1.md" "$w/pre/r/1-p2.md" 2>&1)" || exit 1
+case "$o" in PENDING:*) ;; *) exit 1 ;; esac
+gw -C "$w/main" worktree add -q "$w/rr" rr || exit 9
+mkdir -p "$w/rr/r"; cp "$d/p1.md" "$w/rr/r/1.md"; cp "$d/one.md" "$w/rr/r/1-p2.md"
+gw -C "$w/rr" add -A; gw -C "$w/rr" commit -qm reviews || exit 9
+gw -C "$w/rr" rm -q scripts/ai-dlc/validate-carried-findings.sh; gw -C "$w/rr" commit -qm revert || exit 9
+mkdir -p "$w/rr/scripts/ai-dlc"; cp "$V" "$w/rr/scripts/ai-dlc/"; gw -C "$w/rr" add -A; gw -C "$w/rr" commit -qm repull || exit 9
+bash "$w/rr/scripts/ai-dlc/validate-carried-findings.sh" "$w/rr/r/1.md" "$w/rr/r/1-p2.md" >/dev/null 2>&1
+[ $? -eq 1 ] || exit 1
+gw -C "$w/main" worktree add -q "$w/span" span || exit 9
+mkdir -p "$w/span/r" "$w/span/scripts/ai-dlc"
+printf '# Code Review: 1\n\n## Verdict\nNEEDS_REWORK\n\n## Findings\n\n### Important\n- **I1. stale cache** body\n' > "$w/span/r/1.md"
+gw -C "$w/span" add -A; gw -C "$w/span" commit -qm "pre-rule pass 1" || exit 9
+cp "$V" "$w/span/scripts/ai-dlc/"; gw -C "$w/span" add -A; gw -C "$w/span" commit -qm pull || exit 9
+p2 "$w/span/r/1-p2.md" APPROVED "carried: I1. stale cache $EM resolved"
+gw -C "$w/span" add -A; gw -C "$w/span" commit -qm "pass 2" || exit 9
+o="$(bash "$w/span/scripts/ai-dlc/validate-carried-findings.sh" "$w/span/r/1.md" "$w/span/r/1-p2.md" 2>&1)" || exit 1
+case "$o" in PASS:\ 1\ prior*) ;; *) exit 1 ;; esac
+# Post-rule priors (they carry the template's reviewed-sha: line) committed after the pull:
+#   a bullet finding                                          -> exit 1 (held to the #### form)
+#   #### headings under lead-in prose, every heading carried  -> exit 0 (prose is not a finding)
+# A lazily persisted pre-rule prior (no marker, written before the pull, committed after it)
+# carried by id alone (`carried: I1 — resolved`)              -> exit 0
+VS="$w/span/scripts/ai-dlc/validate-carried-findings.sh"
+printf '# Code Review: 2\n\nreviewed-sha: 7d3889e9e0e07c9699891956be739cb5c9339430\n\n## Verdict\nNEEDS_REWORK\n\n## Findings\n\n### Important\n- **I1. stale cache** body\n' > "$w/span/r/2.md"
+p2 "$w/span/r/2-p2.md" APPROVED "carried: I1. stale cache $EM resolved"
+printf '# Code Review: 3\n\nreviewed-sha: 7d3889e9e0e07c9699891956be739cb5c9339430\n\n## Verdict\nNEEDS_REWORK\n\n## Findings\n\n### Important\n\nThese two are pass-1 Importants the fix list did not include.\n\n#### %s\n\nbody\n\n#### %s\n\nbody\n' "$H1" "$H2" > "$w/span/r/3.md"
+cp "$d/both.md" "$w/span/r/3-p2.md"
+printf '# Code Review: 4\n\n## Verdict\nNEEDS_REWORK\n\n## Findings\n\n### Important\n- **I1. Stale cache.** body\n' > "$w/span/r/4.md"
+p2 "$w/span/r/4-p2.md" APPROVED "carried: I1 $EM resolved"
+gw -C "$w/span" add -A; gw -C "$w/span" commit -qm "post-rule passes" || exit 9
+bash "$VS" "$w/span/r/2.md" "$w/span/r/2-p2.md" >/dev/null 2>&1
+[ $? -eq 1 ] || exit 1
+bash "$VS" "$w/span/r/3.md" "$w/span/r/3-p2.md" >/dev/null 2>&1 || exit 1
+bash "$VS" "$w/span/r/4.md" "$w/span/r/4-p2.md" >/dev/null 2>&1 || exit 1
+# --list prints the carry strings and nothing else on stdout.
+[ "$(bash "$VS" --list "$w/span/r/4.md" 2>/dev/null)" = "I1. Stale cache." ] || exit 1
+
+# The delta partition. The repository carries the artifact-path grammar the partition reads.
+r="$d/r"; mkdir -p "$r/core/skills/ai-dlc" "$r/app/a" "$r/app/b" || exit 9
+g() { git -C "$r" -c user.name=p -c user.email=p@p.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
+git init -q "$r" || exit 9
+cp core/skills/ai-dlc/artifact-path-grammar.md "$r/core/skills/ai-dlc/" || exit 9
+printf 'x\n' > "$r/app/a/one.py"; g add -A; g commit -qm base || exit 9
+printf 'y\n' >> "$r/app/a/one.py"; g commit -qam pass1 || exit 9
+prior="$(g rev-parse HEAD)"
+printf 'z\n' > "$r/app/b/two.py"; printf 'w\n' > "$r/app/a/three.py"; g add -A; g commit -qm fix || exit 9
+frozen="$(g rev-parse HEAD)"
+bash "$P" --map "$r" "$prior" "$frozen" --min-files 2 >/dev/null 2>&1 || exit 1
+bash "$P" --map "$r" "$frozen" "$prior" --min-files 2 >/dev/null 2>&1
+[ $? -eq 2 ] || exit 1
+
+# The step text that tells the lead to do it.
+para="$(awk '/^\*\*Gate-1 dispatch/{on=1} on&&/^\*\*[A-Z]/&&!/^\*\*Gate-1 dispatch/{exit} on' "$I" | tr '\n' ' ' | tr -s ' ')"
+case "$para" in *'run the partition with `<prior-sha>` in place of `<base>`'*) ;; *) exit 1 ;; esac
+case "$para" in *'run the full `<base>..<frozen-sha>` partition instead'*) ;; *) exit 1 ;; esac
+case "$para" in *'validate-carried-findings.sh --list <pass M-1 file>` and paste each line it prints'*) ;; *) exit 1 ;; esac
+grep -qF 'validate-carried-findings.sh <pass M-1 file> <pass M file>' "$GV" || exit 1
+exit 0

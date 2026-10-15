@@ -74,6 +74,29 @@
 # those are reported UNSCORABLE with a count -- they are UNSPELLED, never evidence of a bound
 # receipt.
 #
+# A RECEIPT THAT ONLY RUNS A TRACKED SCRIPT IS ITS OWN CLASS, `DRIVER`, AND IS NOT UNSCORABLE.
+# `bash <repo-rel>.sh [plain args]`, optionally chained with `&&`, greps nothing in the one-liner,
+# so there is no literal to seed and no comment that can satisfy it: the script is the subject.
+# That is the shape R2's own remedy text tells authors to write. MEASURED on the ledger that
+# exposed it -- 6 live entries, 4 `sh` receipts, 2 manual: three receipts were driver-shaped and
+# all three read UNSCORABLE (every one at base exit 0), the fourth was OUT-OF-POPULATION at base
+# 127 because its second `&&` segment names a script that is not in the tree, and R2 failed the
+# push as "ZERO scored receipts" -- the arm refusing the corpus its own remedy produces. On the
+# previous ledger it had passed only because one grep-literal receipt was left to score.
+# The class is decided by SHAPE whatever the base exit (0 or 1), because a driver whose fix has
+# landed is still a driver; the base exit rides in the detail. It requires EVERY script the chain
+# runs to be TRACKED at HEAD (`git ls-files --error-unmatch` in the checkout): a script that is
+# absent exits 127 and has already left as OUT-OF-POPULATION, and one present on disk but
+# untracked at base 1 falls through to UNSCORABLE -- the self-probe seeds exactly that file,
+# because an absent one is refused by an `[ -f ]` test too and could not tell the two apart.
+# R2 then accepts a zero only when every `sh` receipt is DRIVER, ALREADY-PASSING or
+# OUT-OF-POPULATION and at least one is DRIVER (` R2 all-driver`), so one driver cannot acquit an
+# unspelled receipt beside it. R3 DOES NOT COUNT DRIVER: R3 bounds the escapes from R2 (a pattern
+# hidden in a variable, an awk body, a `grep -f` file), and a driver is R2's remedy, not an escape.
+# Measured on the same ledger: unscorable 3 -> 0; `DEFAULT_MAX_UNSC` 28 and the hook's
+# `--max-unscorable 28` are both unchanged. WHAT THE CLASS CANNOT SEE: a tracked script that itself
+# only greps a literal is prose-closable one level down, and this arm does not open the script.
+#
 # A FLIP ON A .json/.yaml/.yml FILE IS AMBIGUOUS AND GETS A SECOND CONTROL. Appending a line
 # to a JSON document breaks the document as well as carrying the token, so a receipt that
 # parses its subject flips for a reason that is not prose-closability. Every flip whose seeded
@@ -354,6 +377,38 @@ if [ "${1:-}" = "--score-one" ]; then
       wr UNSTABLE "base-exit=$BASE_RC/$REREAD_RC" "paths=${PL:-none}" "tokens=${TL:-none}"; exit 0
     fi
     wr OUT-OF-POPULATION "base-exit=$BASE_RC" "paths=${PL:-none}" "tokens=${TL:-none}"; exit 0
+  fi
+
+  # --- the DRIVER class -----------------------------------------------------------------
+  # A one-liner that is nothing but `bash <repo-rel>.sh [plain args]`, optionally chained with
+  # `&&`, greps nothing in the one-liner, so no comment in any file it names can satisfy it: the
+  # SCRIPT is the subject. Classified by SHAPE, whatever the base exit (0 or 1 -- non-0/1 has
+  # already left above), and only when EVERY script it runs is TRACKED in the checkout. A path
+  # that is merely present on disk is not enough, and the self-probe seeds exactly that file.
+  DRV_PATHS="$(awk '{
+    n = split($0, S, /&&/)
+    out = ""
+    for (i = 1; i <= n; i++) {
+      s = S[i]; sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s)
+      if (s !~ /^bash[ \t]+[A-Za-z0-9_.\/-]+\.sh([ \t]+[A-Za-z0-9_.=\/,:+-]+)*$/) exit 1
+      p = s; sub(/^bash[ \t]+/, "", p); sub(/[ \t].*$/, "", p)
+      if (p ~ /^\// || p ~ /(^|\/)\.\.(\/|$)/) exit 1
+      out = out p "\n"
+    }
+    printf "%s", out
+  }' <<<"$REST")" || DRV_PATHS=""
+  if [ -n "$DRV_PATHS" ]; then
+    DRV_OK=1
+    while IFS= read -r _dp; do
+      [ -n "$_dp" ] || continue
+      git -C "$TA" ls-files --error-unmatch -- "$_dp" >/dev/null 2>&1 || { DRV_OK=0; break; }
+    done <<EOF
+$DRV_PATHS
+EOF
+    if [ "$DRV_OK" = "1" ]; then
+      DL="$(printf '%s\n' "$DRV_PATHS" | tr '\n' ',' | sed 's/,*$//')"
+      wr DRIVER "base-exit=$BASE_RC" "paths=$DL" "tokens=none"; exit 0
+    fi
   fi
 
   if [ "$NTOK" -eq 0 ] || [ "$NSEEDABLE" -eq 0 ]; then
@@ -812,6 +867,9 @@ read_counts() {
 #          first named path or reads the first grep and stops leaves it BOUND. Measured
 #          against the real ledger: those two shortcuts take a correct 9 findings to 6 and to
 #          3, silently, and every single-path single-grep probe above passes under both.
+#   BL-911 runs one TRACKED script that exits 1: DRIVER, and alone it passes R2 as all-driver
+#   BL-912 the same script `&&` one PRESENT in the checkout but UNTRACKED, at base 1: NOT a
+#          driver, so UNSCORABLE -- and BL-911 plus BL-904 must still FAIL R2's all-driver test
 # ---------------------------------------------------------------------------
 P="$WORK/probe"
 mkdir -p "$P/probe" "$P/docs"
@@ -830,6 +888,14 @@ BR_PROBE_COUNTER="$WORK/probe.counter"
 printf 0 > "$BR_PROBE_COUNTER"
 export BR_PROBE_COUNTER
 printf '#!/usr/bin/env bash\nprintf %%s\\\\n WAIT\n' > "$P/probe/tool.sh"
+# BL-911/BL-912's driven script. It exits 1, so both receipts reach the DRIVER test at base 1:
+# BL-912's absent second segment is then refused by the TRACKED check alone, never by a 127.
+printf '#!/usr/bin/env bash\nexit 1\n' > "$P/probe/drive.sh"
+# BL-912's second script is PRESENT in every checkout and UNTRACKED: the post-checkout hook below
+# writes it, and this ignore line keeps the checkout's porcelain clean so tree_complete accepts it.
+# Present-but-untracked is the input that separates a TRACKED check from an `[ -f ]` one; an
+# absent file would be refused by both and the probe could not tell them apart.
+printf 'probe/untracked-driver.sh\n' > "$P/.gitignore"
 {
   printf '# Probe ledger\n\n'
   printf '## BL-901\n\nverify: sh grep -q %s probe/subject.txt\n\n' "'PROBEMARKER'"
@@ -843,6 +909,8 @@ printf '#!/usr/bin/env bash\nprintf %%s\\\\n WAIT\n' > "$P/probe/tool.sh"
   printf '## BL-908\n\nverify: sh git rev-parse HEAD >/dev/null 2>&1 || exit 9; grep -q %s probe/subject.txt\n\n' "'GITMARK'"
   printf '## BL-909\n\nverify: sh grep -q %s probe/one.txt && grep -q %s probe/two.txt\n\n' "'MARKONE'" "'MARKTWO'"
   printf '## BL-910\n\nverify: sh C="$BR_PROBE_COUNTER"; n=$(cat "$C" 2>/dev/null || echo 0); printf %%s $((n+1)) > "$C"; [ "$n" = "0" ] && exit 9; exit 1\n\n'
+  printf '## BL-911\n\nverify: sh bash probe/drive.sh\n\n'
+  printf '## BL-912\n\nverify: sh bash probe/drive.sh && bash probe/untracked-driver.sh\n\n'
 } > "$P/docs/backlog.md"
 
 # A THROWAWAY REPOSITORY, and the git environment is scrubbed first: git exports GIT_DIR
@@ -866,6 +934,7 @@ printf '#!/usr/bin/env bash\nprintf %%s\\\\n WAIT\n' > "$P/probe/tool.sh"
 mkdir -p "$P/.probehooks"
 { echo '#!/usr/bin/env bash'
   echo '[ -f probe/locked.txt ] && chmod 444 probe/locked.txt'
+  echo 'printf "#!/usr/bin/env bash\nexit 1\n" > probe/untracked-driver.sh'
   echo 'exit 0'
 } > "$P/.probehooks/post-checkout"
 chmod +x "$P/.probehooks/post-checkout"
@@ -898,6 +967,16 @@ _probe_hp="$(git config --file "$P/.git/config" --get core.hooksPath 2>/dev/null
 [ "$_probe_hp" = "$P/.probehooks" ] || {
   echo "$(me): SELF-PROBE FAILED -- the probe repository's own .git/config does not carry core.hooksPath (read by path: '${_probe_hp:-<unset>}', expected '$P/.probehooks'). The write went somewhere else -- under an inherited GIT_DIR that somewhere is the CALLER'S repository, whose pre-push hook would then point at a directory this run deletes." >&2; exit 2; }
 
+# r2_alldriver <rows> <sh-count> -- exit 0 iff a ZERO-scored ledger is accounted for by drivers:
+# nothing scored, at least one DRIVER, and every `sh` receipt is DRIVER, ALREADY-PASSING or
+# OUT-OF-POPULATION. ONE implementation, called by R1 on seeded rows and by R2 on the corpus.
+r2_alldriver() {
+  printf '%s\n' "$1" | awk -F'\t' -v sh="$2" '
+    $1 == "PROSE-CLOSABLE" || $1 == "BOUND" || $1 == "FORMAT-SENSITIVE" { sc++ }
+    $1 == "DRIVER" { dr++ }
+    $1 == "DRIVER" || $1 == "ALREADY-PASSING" || $1 == "OUT-OF-POPULATION" { ok++ }
+    END { exit ((sc + 0) == 0 && (dr + 0) > 0 && (ok + 0) == sh + 0 ? 0 : 1) }'
+}
 probe_status() { printf '%s\n' "$1" | awk -F'\t' -v id="$2" '$2 == id { print $1 }'; }
 probe_detail() { printf '%s\n' "$1" | awk -F'\t' -v id="$2" '$2 == id { print $3 }'; }
 probe_count()  { printf '%s\n' "$1" | awk -F'\t' '$1 == "PROSE-CLOSABLE"' | grep -c . ; }
@@ -910,7 +989,7 @@ R1_SH="$SH_RECEIPTS"
 
 r1_fail() { echo "$(me): SELF-PROBE FAILED -- $1" >&2; printf '%s\n' "$R1_OUT" | sed 's/^/    /' >&2; exit 2; }
 
-[ "$R1_SH" -eq 10 ] || r1_fail "the probe ledger parsed to $R1_SH sh receipts, not 10, so the entry grammar did not read the probe and nothing below is about the scorer."
+[ "$R1_SH" -eq 12 ] || r1_fail "the probe ledger parsed to $R1_SH sh receipts, not 12, so the entry grammar did not read the probe and nothing below is about the scorer."
 [ "$(probe_status "$R1_OUT" BL-901)" = "PROSE-CLOSABLE" ] || r1_fail "the seeded prose-closable receipt did NOT flip under a seed carrying its own grep literal (got: $(probe_status "$R1_OUT" BL-901)). The scorer cannot produce a finding, so a clean corpus below would mean only that it ran."
 [ "$(probe_status "$R1_OUT" BL-902)" = "BOUND" ] || r1_fail "the receipt that DRIVES its subject was reported $(probe_status "$R1_OUT" BL-902), not BOUND. An arm that flags a bound receipt puts every honest receipt in the finding set."
 [ "$(probe_status "$R1_OUT" BL-903)" = "OUT-OF-POPULATION" ] || r1_fail "the base-exit-9 receipt was reported $(probe_status "$R1_OUT" BL-903), not OUT-OF-POPULATION. A receipt answering a question about its own preconditions is not reproducing, and seeding it scores a flip that is not about prose."
@@ -944,6 +1023,22 @@ esac
 # genuinely unmet and must stay out of population. Without this, an arm calling every non-0/1
 # exit unstable would empty the class the re-read exists to protect.
 [ "$(probe_status "$R1_OUT" BL-903)" = "OUT-OF-POPULATION" ] || r1_fail "the receipt that exits 9 on EVERY reading was reported $(probe_status "$R1_OUT" BL-903) after the re-read, not OUT-OF-POPULATION."
+# THE DRIVER CLASS, BOTH DIRECTIONS. BL-911 runs one TRACKED script and must be DRIVER. BL-912
+# runs the same script and then one that is PRESENT IN THE CHECKOUT BUT UNTRACKED, at base 1, so
+# only the tracked check can refuse it -- it must fall through to UNSCORABLE. BL-902 above still
+# reads BOUND: a one-liner that also greps is not a driver.
+[ "$(probe_status "$R1_OUT" BL-911)" = "DRIVER" ] || r1_fail "the receipt that only runs a TRACKED script was reported $(probe_status "$R1_OUT" BL-911), not DRIVER. Every receipt rewritten the way R2's own remedy says would then be unscorable, and a ledger of them fails R2 as a zero."
+[ "$(probe_status "$R1_OUT" BL-912)" = "UNSCORABLE" ] || r1_fail "the receipt whose second script is present but UNTRACKED was reported $(probe_status "$R1_OUT" BL-912), not UNSCORABLE. A driver whose subject is not in the tree is not a driver; this is an arm that reads the disk, not the index."
+# R2's ALL-DRIVER ESCAPE, BOTH DIRECTIONS, ON THE SCORER'S OWN ROWS. A ledger whose only `sh`
+# receipt is BL-911 must pass; the same ledger plus BL-904 (UNSCORABLE, not a driver) must refuse.
+# The two inputs are asserted to DIFFER first, or the pair is one measurement taken twice.
+R1_DRV_ONLY="$(printf '%s\n' "$R1_OUT" | awk -F'\t' '$2 == "BL-911"')"
+R1_DRV_MIX="$(printf '%s\n' "$R1_OUT" | awk -F'\t' '$2 == "BL-911" || $2 == "BL-904"')"
+[ -n "$R1_DRV_ONLY" ] && [ "$R1_DRV_ONLY" != "$R1_DRV_MIX" ] || r1_fail "the all-driver pair did not build two different row sets, so neither verdict below would discriminate."
+r2_alldriver "$R1_DRV_ONLY" 1 || r1_fail "R2's all-driver escape REFUSED a ledger whose only sh receipt is a DRIVER, so a ledger rewritten as R2's remedy says still fails as a zero."
+if r2_alldriver "$R1_DRV_MIX" 2; then
+  r1_fail "R2's all-driver escape ACCEPTED a ledger carrying an UNSCORABLE non-driver receipt beside a driver, so one driver acquits every unspelled receipt beside it."
+fi
 
 # THE SECOND DIRECTION. The generic seed carries no token, and the arm must go quiet on the
 # SAME ledger. Without it, an arm that flags everything and an arm that discriminates print
@@ -986,6 +1081,7 @@ N_OOP="$(n_of OUT-OF-POPULATION)" || N_OOP=0
 N_PASS="$(n_of ALREADY-PASSING)"  || N_PASS=0
 N_UNSTABLE="$(n_of UNSTABLE)"     || N_UNSTABLE=0
 N_BROKEN="$(n_of BROKEN)"         || N_BROKEN=0
+N_DRIVER="$(n_of DRIVER)"         || N_DRIVER=0
 SCORED=$(( N_PC + N_BOUND + N_FS ))
 UNSCORED=$(( N_UNSC + N_UNSEED ))
 
@@ -1028,8 +1124,13 @@ if [ "$ENTRIES" -eq 0 ]; then
     *) echo "$(me): FAIL -- backlog-reverify.sh --declared-empty exited $_de on $LEDGER, an environment failure; the zero could not be classified." >&2; exit 2 ;;
   esac
 fi
-if [ "$SCORED" -eq 0 ] && [ "$N_PASS" -eq 0 ] && [ -z "$R2_ALLMANUAL" ] && [ -z "$R2_DECLEMPTY" ]; then
-  echo "FAIL: R2: $LEDGER produced ZERO scored receipts (entries $ENTRIES, sh receipts ${SH_RECEIPTS:-0}, manual ${MANUAL_RECEIPTS:-0}, unscorable $N_UNSC, unseeded $N_UNSEED, out of population $N_OOP, already passing $N_PASS). Nothing was observed, and an arm that observed nothing is not a clean corpus." >&2
+# AND WHEN EVERY `sh` RECEIPT IS A DRIVER, ALREADY-PASSING OR OUT-OF-POPULATION, WITH AT LEAST ONE
+# DRIVER: each driver ran a tracked script and was read, which is an observation. The predicate is
+# r2_alldriver, the function R1 probed in both directions above.
+R2_ALLDRIVER=""
+[ "$SCORED" -eq 0 ] && r2_alldriver "$OUT" "$SH_RECEIPTS" && R2_ALLDRIVER=" R2 all-driver"
+if [ "$SCORED" -eq 0 ] && [ "$N_PASS" -eq 0 ] && [ -z "$R2_ALLMANUAL" ] && [ -z "$R2_DECLEMPTY" ] && [ -z "$R2_ALLDRIVER" ]; then
+  echo "FAIL: R2: $LEDGER produced ZERO scored receipts (entries $ENTRIES, sh receipts ${SH_RECEIPTS:-0}, manual ${MANUAL_RECEIPTS:-0}, unscorable $N_UNSC, unseeded $N_UNSEED, out of population $N_OOP, already passing $N_PASS, driver $N_DRIVER). Nothing was observed, and an arm that observed nothing is not a clean corpus." >&2
   exit 1
 fi
 
@@ -1043,9 +1144,9 @@ if [ "$QUIET" != "1" ]; then
   # paths, and the fixed four-column shape is preserved.
   printf '%s\n' "$OUT" | awk -F'\t' '
     $1 == "UNSTABLE" { printf "%s\t%s\t%s\t%s\n", $1, $2, $3, $5; next }
-    $1 == "PROSE-CLOSABLE" || $1 == "FORMAT-SENSITIVE" || $1 == "UNSCORABLE" || $1 == "UNSEEDED" || $1 == "OUT-OF-POPULATION" || $1 == "ALREADY-PASSING" { printf "%s\t%s\t%s\t%s\n", $1, $2, $4, $5 }
+    $1 == "PROSE-CLOSABLE" || $1 == "FORMAT-SENSITIVE" || $1 == "UNSCORABLE" || $1 == "UNSEEDED" || $1 == "OUT-OF-POPULATION" || $1 == "ALREADY-PASSING" || $1 == "DRIVER" { printf "%s\t%s\t%s\t%s\n", $1, $2, $4, $5 }
   ' | sort
-  echo "SUMMARY entries=$ENTRIES sh-receipts=$SH_RECEIPTS scored=$SCORED prose-closable=$N_PC/$MAX_PC format-sensitive=$N_FS bound=$N_BOUND unscorable=$N_UNSC+unseeded=$N_UNSEED/$MAX_UNSC out-of-population=$N_OOP/$MAX_OOP unstable=$N_UNSTABLE/$MAX_UNSTABLE already-passing=$N_PASS"
+  echo "SUMMARY entries=$ENTRIES sh-receipts=$SH_RECEIPTS scored=$SCORED prose-closable=$N_PC/$MAX_PC format-sensitive=$N_FS bound=$N_BOUND unscorable=$N_UNSC+unseeded=$N_UNSEED/$MAX_UNSC out-of-population=$N_OOP/$MAX_OOP unstable=$N_UNSTABLE/$MAX_UNSTABLE already-passing=$N_PASS driver=$N_DRIVER"
 fi
 
 RC=0
@@ -1092,7 +1193,7 @@ fi
 _where="$LEDGER"
 [ "$DEFAULTED" = "1" ] && _where="docs/backlog.md"
 if [ "$QUIET" != "1" ]; then
-  echo "OK: validate-backlog-receipts -- R2 ${N_PC}/${MAX_PC} prose-closable, R3 ${UNSCORED}/${MAX_UNSC} unscored, R4 ${N_OOP}/${MAX_OOP} out of population, R6 ${N_UNSTABLE}/${MAX_UNSTABLE} unstable, R5 ${SH_RECEIPTS} sh receipts over ${ENTRIES} live entries in ${_where} (${N_BOUND} bound, ${N_FS} format-sensitive, ${N_PASS} already passing; R0 bound the path-split class to ${CLASS_SOURCE}; R1 fired both directions over 10 seeded receipts; every receipt ran in its own ${PROVENANCE}, ${WT_OWN_AFTER} of this run's own checkouts still registered, caller porcelain ${PORC_BEFORE} unchanged).${R2_ALLPASS}${R2_ALLMANUAL}${R2_DECLEMPTY}"
+  echo "OK: validate-backlog-receipts -- R2 ${N_PC}/${MAX_PC} prose-closable, R3 ${UNSCORED}/${MAX_UNSC} unscored, R4 ${N_OOP}/${MAX_OOP} out of population, R6 ${N_UNSTABLE}/${MAX_UNSTABLE} unstable, R5 ${SH_RECEIPTS} sh receipts over ${ENTRIES} live entries in ${_where} (${N_BOUND} bound, ${N_FS} format-sensitive, ${N_PASS} already passing, ${N_DRIVER} driver; R0 bound the path-split class to ${CLASS_SOURCE}; R1 fired both directions over 12 seeded receipts; every receipt ran in its own ${PROVENANCE}, ${WT_OWN_AFTER} of this run's own checkouts still registered, caller porcelain ${PORC_BEFORE} unchanged).${R2_ALLPASS}${R2_ALLMANUAL}${R2_DECLEMPTY}${R2_ALLDRIVER}"
 else
   # `--quiet` SUPPRESSES THE FINDING ROWS, NEVER THE PROVENANCE. A caller that asks for quiet
   # still has to be able to tell this arm's silence from a stub's: a fifteen-line heuristic
@@ -1100,6 +1201,6 @@ else
   # output, and there would be nothing to distinguish them. This line reports what the run
   # actually DID -- how many receipts were checked out and scored -- which no implementation
   # that seeds nothing can emit truthfully.
-  echo "OK: validate-backlog-receipts -- ${SCORED} receipt(s) scored in ${_where}, each in its own ${PROVENANCE}; ${N_PC}/${MAX_PC} prose-closable.${R2_ALLPASS}${R2_ALLMANUAL}${R2_DECLEMPTY}"
+  echo "OK: validate-backlog-receipts -- ${SCORED} receipt(s) scored in ${_where}, each in its own ${PROVENANCE}; ${N_PC}/${MAX_PC} prose-closable.${R2_ALLPASS}${R2_ALLMANUAL}${R2_DECLEMPTY}${R2_ALLDRIVER}"
 fi
 exit 0

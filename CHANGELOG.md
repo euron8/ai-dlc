@@ -20,6 +20,36 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.785.0] - 2026-10-14
+
+Batch 230 (graph-ledger-full-drain), second release: BL-507, held from batch 229, rebased onto 0.784.0 and adversaried
+on the rebased tip. It ships alone because it edits `core/skills/ai-dlc-update/reconcile/setup-sites.md`; the reference
+consumer's installed 0.781.0 `preclassify.sh` classifies the range correctly (measured: the new validator lands
+`UPSTREAM-ONLY-ADD`, the fixture as an add). No `PC-` id is closed here. Net -1 backlog entry.
+
+### A gate-1 re-review after `NEEDS_REWORK` is a sharded delta review that carries every prior finding (BL-507)
+
+Every code-review pass after a `NEEDS_REWORK` re-ran the full gate-1 fan-out on the whole story; in the reference
+consumer's s317 that cost $20-43 a pass across eleven passes. By operator ruling the re-review stays sharded:
+`partition-review-diff.sh` is given the prior pass's `reviewed-sha:` as `<base>`, so it partitions the delta, and the
+first cross shard is briefed with the whole story record and the full prior..frozen diff. Every prior Critical and
+Important is carried, and Check 1 verifies the carry with the new `validate-carried-findings.sh` (`--list <prior>`
+prints the exact carry strings for the brief). A prior written before the rule is never failed on form; a prior that
+carries the template's `reviewed-sha:` and postdates the program is held to the `#### ` form, and a wrapped bold
+finding-id label in one is a form failure. Over the reference consumer's 58 real pass pairs: 0 form failures, 47 genuine
+missing carries in pre-rule reviews. Stated residual: a delta pass does not re-find a pre-existing defect outside the
+delta; Check 21(b) and BL-513's refusal catch it downstream. New fixture `carried-findings` (worlds, wrapped-label arms
+WR1-WR3, mutants `wrapoff`/`wrapany`), traced read set; `process-rule-pins` gains `impl-rr-*` rows.
+
+### `validate-backlog-receipts.sh`: a receipt that only runs a tracked script is `DRIVER`, and R2 accepts an all-driver ledger
+
+R2 failed a ledger whose every `sh` receipt drove a probe script, because a driver greps no literal and so landed in
+`UNSCORABLE`, while R2's own remedy text tells authors to write exactly such receipts. A one-liner made only of
+`bash <repo-rel>.sh [args]` segments joined by `&&`, every script tracked, is now its own status; R2 passes a zero only
+when at least one receipt is `DRIVER` and every `sh` receipt is `DRIVER`, `ALREADY-PASSING` or `OUT-OF-POPULATION`.
+`DRIVER` does not count toward R3. An untracked script is not a driver. R1 gains two seeded receipts (12 total) and
+asserts the escape both ways.
+
 ## [0.784.0] - 2026-10-14
 
 Batch 230 (graph-ledger-full-drain), first release: the dispatch guard's two arms held from batch 229, rebased onto
