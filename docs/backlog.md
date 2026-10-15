@@ -249,7 +249,11 @@ artifacts), s318 1.5 QA p1 (stale derived fences) and s318 2.6 CR p3 (a recipe a
 False-positive set, by population. Graph, a read-only clone at 2b6f952e7. Gate 1: every s317/s318
 code-review pass with a `reviewed-sha:` (56; the contract counted 49) plus, for the 7 that record
 none (s317 1-4, 1-6, 2-2 twice, 3-2, 4-2b, 4-3b), the first story-branch commit reading `review`:
-63 snapshots over 34 story files. 3 refusals, 0 false positives, as named above. 0 level-1 evidence
+63 snapshots over 34 story files. 3 bookkeeping refusals, 0 false positives, as named above. The
+evidence arms refuse 6 more there, all in the 0.783.0 class (a RED capture the reviewer could not
+read): s317 2.1 p1 and 2.3 p2 (APPROVED), the s317 2.2 proxy twice (APPROVED), s317 2.3 p1 and s318
+1.1 p1 (NEEDS_REWORK); 2.3 and 1.1 p1 are new to this population because their REDs were committed
+only after gate 1. 0 level-1 evidence
 headings (control: 63 `# Story` headings). Arm 2 refuses 0. The same run with the PLANNING view
 refuses 8 passes (s317 1.2 four times, 2.2 twice, s318 2.1 and 2.6), 2 of them APPROVED gates. The
 story-merge tips (35 merge second-parents over 34 stories, re-derived; the 0.783.0 header says 32):
