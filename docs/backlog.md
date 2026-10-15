@@ -132,10 +132,13 @@ brief passed no series id. The adjudicator invented one. In graph's committed co
 
 **The fix.** `gate-validation.md` "At gate entry" now prescribes exactly `<gate_type>-<slug>-s<N>-<TS>`
 for a gate dispatched for exactly one story and `<gate_type>-s<N>-<TS>` for every other gate. `<N>` is
-the snapshot's `sprint_id` with no leading zero. The slug's only source is the `<story-index>` on the
-dispatch's `shard: 1/1 <story-index>` line, lowercased with each `.` or `-` written as `x` and prefixed
-`story`, so graph's `4.2a`, `B6` and `2-17e2e` are `story4x2a`, `storyb6` and `story2x17e2e`. A gate over
-several stories or none carries no slug, whatever its gate number. The slug sits BEFORE the sprint field
+the snapshot's `sprint_id` with no leading zero. No step file wrote a `<story-index>` on a gate dispatch
+(graph's 432 gate-adjudicator spawn rows carry none), so the lead now writes one: a gate dispatched for
+exactly one story carries a `story: <story-index>` line on its adjudicator brief and every shard brief
+(`_gate-procedures.md` "Gate-adjudication dispatch"), and that line is the slug's only source. The index
+has any trailing punctuation stripped, is lowercased with each `.` or `-` written as `x` and is prefixed
+`story`, so graph's `4.2a`, `4.2a.`, `B6` and `B-1` are `story4x2a`, `story4x2a`, `storyb6` and `storybx1`.
+A gate over several stories or none carries no `story:` line and no slug, whatever its gate number. The slug sits BEFORE the sprint field
 so `<TS>` always directly follows `-s<N>-`, where the dispatch guard's unanchored nonce regex cannot
 match. A same-series rule decides the id at dispatch, never from `close`. The only reuse candidate is
 the newest stem of exactly that form for this gate_type, slug and sprint, with every part agreeing. A
@@ -153,9 +156,9 @@ on 77. The arm's header records the derivation. The C5(a) rotator's `--sprint s<
 selects a slugged id.
 
 The receipt runs the `gate-adjudication` fixture and needs its fifteen series-form cases, including the
-three slugs from graph's real story indices. It also needs the 29 series-id rows of
+three slugs from graph's real story indices. It also needs the 32 series-id rows of
 `process-rule-pins --report`. It exits 1 at origin/main, on a slug placed after the sprint field, on a
 slug restricted to a trailing digit, on a rule 2 that reuses a malformed id, counts a suppressed FAIL or
 ignores the dispatched story, and on the prose with no arm. It exits 0 at this tip.
 
-verify: sh F=core/fixtures/gate-adjudication/run.sh; P=core/fixtures/process-rule-pins/run.sh; [ -f "$F" ] && [ -f "$P" ] || exit 9; o="$(bash "$F" 2>&1)" || exit 1; n="$(grep -cE '^  ok    SF(0|0b|1|2|3|4|5|5b|5c|6|7|8|9|10|11): ' <<<"$o")" || n=0; [ "$n" -eq 15 ] || exit 1; r="$(bash "$P" --report 2>&1)" || exit 1; m="$(grep -cE '^  ok    (gv-series-[a-z]+|gv-fail-series|gv-reset-[a-z]+|gp-[a-z]+-series|gadj-[a-z]+-series): pinned inside ' <<<"$r")" || m=0; [ "$m" -eq 29 ]
+verify: sh F=core/fixtures/gate-adjudication/run.sh; P=core/fixtures/process-rule-pins/run.sh; [ -f "$F" ] && [ -f "$P" ] || exit 9; o="$(bash "$F" 2>&1)" || exit 1; n="$(grep -cE '^  ok    SF(0|0b|1|2|3|4|5|5b|5c|6|7|8|9|10|11): ' <<<"$o")" || n=0; [ "$n" -eq 15 ] || exit 1; r="$(bash "$P" --report 2>&1)" || exit 1; m="$(grep -cE '^  ok    (gv-series-[a-z]+|gv-fail-series|gv-reset-[a-z]+|gp-[a-z]+-series|gadj-[a-z]+-series): pinned inside ' <<<"$r")" || m=0; [ "$m" -eq 32 ]

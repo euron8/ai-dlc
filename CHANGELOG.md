@@ -101,10 +101,13 @@ match, and 34 more carry ad-hoc shapes.
 
 - **Form.** `gate-validation.md` "At gate entry" prescribes exactly `<gate_type>-<slug>-s<N>-<TS>` for a
   gate dispatched for exactly one story and `<gate_type>-s<N>-<TS>` for every other gate. `<N>` is the
-  `sprint_id` line of the pipeline snapshot, with no leading zero. The slug's only source is the
-  `<story-index>` on the dispatch's `shard: 1/1 <story-index>` line, lowercased with each `.` or `-` written
-  as `x` and prefixed `story`, so the consumer's `4.2a`, `B6` and `2-17e2e` become `story4x2a`, `storyb6` and
-  `story2x17e2e`. A gate over several stories or none carries no slug, whatever its gate number. The slug
+  `sprint_id` line of the pipeline snapshot, with no leading zero. No step file put a story index on a gate
+  dispatch (the consumer's 432 gate-adjudicator spawn rows carry none), so the lead now writes a
+  `story: <story-index>` line on the adjudicator brief and every shard brief of a gate dispatched for
+  exactly one story, and `_gate-procedures.md` lists it. That line is the slug's only source: trailing
+  punctuation stripped, lowercased with each `.` or `-` written as `x`, prefixed `story`, so the consumer's
+  `4.2a`, `4.2a.`, `B6` and `B-1` become `story4x2a`, `story4x2a`, `storyb6` and `storybx1`. A gate over
+  several stories or none carries no `story:` line and no slug, whatever its gate number. The slug
   sits before the sprint field so `<TS>` always directly follows `-s<N>-`, where the dispatch guard's
   unanchored nonce regex cannot match inside the id. `<TS>` is the series-entry time, never later than the
   nonce of a pass that carries it.
@@ -131,7 +134,7 @@ match, and 34 more carry ad-hoc shapes.
   SF6-SF11): accepted bare and reused ids, three slugs from the consumer's real story indices, and named
   offenders for each property, including a hyphenated or uppercase slug, a slug after the sprint field, a
   bare-digit or zero-padded sprint field, and a trailing newline. `gate-adjudication-mutants` gains m21-m31,
-  dealt across all three shards. `process-rule-pins` gains 29 series-id rows.
+  dealt across all three shards. `process-rule-pins` gains 32 series-id rows.
 - The rotator's `--sprint s<N>` selector (`*-s<N>-*`) moves a slugged id.
 - `rotate-gate-adjudication.sh`'s refusal for a series no `--sprint` can name no longer says the schema
   leaves the field unpatterned. It cites `gate-validation.md` "At gate entry" and

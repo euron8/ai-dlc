@@ -180,7 +180,7 @@ sf_case "implementation-s318-20261101T1200Z"
   || bad "SF4: a series id with no trailing timestamp after -s<N>- was not refused (rc=$RC): $SF_ERR"
 # SF5–SF11: the optional story slug, which sits BEFORE -s<N>-, and the sprint field's form. The
 # accepted slugs are the ones the reference consumer's real story indices produce (4.2a, B6,
-# 2-17e2e), each entered before its nonce so that only SF0 owns the at-the-nonce boundary. Each
+# B-1), each entered before its nonce so that only SF0 owns the at-the-nonce boundary. Each
 # offender breaks one property and must print the sentence only that property emits.
 sf_case "implementation-story4x2a-s318-20261101T090000Z"
 [ "$RC" -eq 0 ] && ok "SF5: the slug of story-index 4.2a (story4x2a) before -s<N>- → exit 0" \
@@ -188,9 +188,9 @@ sf_case "implementation-story4x2a-s318-20261101T090000Z"
 sf_case "implementation-storyb6-s318-20261101T090000Z"
 [ "$RC" -eq 0 ] && ok "SF5b: the slug of story-index B6 (storyb6, ends in a letter after lowercasing) → exit 0" \
   || bad "SF5b: a well-formed slug from index B6 was refused (rc=$RC): $SF_ERR"
-sf_case "implementation-story2x17e2e-s318-20261101T090000Z"
-[ "$RC" -eq 0 ] && ok "SF5c: the slug of story-index 2-17e2e (story2x17e2e) → exit 0" \
-  || bad "SF5c: a well-formed slug from index 2-17e2e was refused (rc=$RC): $SF_ERR"
+sf_case "implementation-storybx1-s318-20261101T090000Z"
+[ "$RC" -eq 0 ] && ok "SF5c: the slug of story-index B-1 (storybx1) → exit 0" \
+  || bad "SF5c: a well-formed slug from index B-1 was refused (rc=$RC): $SF_ERR"
 sf_case "implementation-story-4-s318-20261101T120000Z"
 { [ "$RC" -eq 1 ] && sf_says "carries story slug"; } \
   && ok "SF6: a slug holding a hyphen → exit 1, named" \
