@@ -836,8 +836,6 @@ def resolve_story_file(view_path, key, declared, sprint, exists=None, lister=Non
     than a second matcher."""
     if exists is None:
         exists = lambda p: p.is_file()
-    if lister is None:
-        lister = lambda d, pat: sorted(d.glob(pat)) if d.is_dir() else []
     stories = root / stories_dir(sprint)
     cands = []
     if declared:
@@ -856,7 +854,10 @@ def resolve_story_file(view_path, key, declared, sprint, exists=None, lister=Non
     for c in cands:
         if exists(c):
             return c
-    hits = lister(stories, stem + "-*.md")
+    if lister is None:
+        hits = sorted(stories.glob(stem + "-*.md")) if stories.is_dir() else []
+    else:
+        hits = lister(stories, stem + "-*.md")
     if len(hits) == 1:
         return hits[0]
     if len(hits) > 1:
