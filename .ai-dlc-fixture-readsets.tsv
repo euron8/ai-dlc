@@ -14,7 +14,7 @@
 # path<TAB>sha lines in the runner's universe as traced; the runner clears a stale key record when
 # it recomputes the same value over the tree it is pushing.
 #
-# fixtures mapped: 225    entries: 13174
+# fixtures mapped: 225    entries: 13247
 absorbed-specifics-survive	core/fixtures/absorbed-specifics-survive/run.sh
 absorbed-specifics-survive	core/skills/ai-dlc/SKILL.md
 absorbed-specifics-survive	core/skills/ai-dlc/rule-bodies/rule-13.md
@@ -12292,11 +12292,84 @@ story-corpus-sprint-slot	core/fixtures/story-corpus-sprint-slot/seed.sh
 story-corpus-sprint-slot	core/schemas/sprint-status.json
 story-corpus-sprint-slot	core/scripts/sprint-status.sh
 story-corpus-sprint-slot	core/scripts/validate-mandatory-rules.sh
+story-evidence-scaffold	.git
 story-evidence-scaffold	core
+story-evidence-scaffold	core/.claude
+story-evidence-scaffold	core/.git
+story-evidence-scaffold	core/core/skills/ai-dlc
 story-evidence-scaffold	core/fixtures
 story-evidence-scaffold	core/fixtures/story-evidence-scaffold
 story-evidence-scaffold	core/fixtures/story-evidence-scaffold/run.sh
+story-evidence-scaffold	core/schemas
+story-evidence-scaffold	core/schemas/sprint-status.json
+story-evidence-scaffold	core/scripts
+story-evidence-scaffold	core/scripts/.claude
+story-evidence-scaffold	core/scripts/.git
+story-evidence-scaffold	core/scripts/artifact-path-config.sh
+story-evidence-scaffold	core/scripts/audit-layer-debt.sh
+story-evidence-scaffold	core/scripts/audit-rule-files.sh
+story-evidence-scaffold	core/scripts/audit-upstream-routing.sh
+story-evidence-scaffold	core/scripts/core-paths.sh
+story-evidence-scaffold	core/scripts/core/skills/ai-dlc
+story-evidence-scaffold	core/scripts/derive-fixture-readsets.sh
+story-evidence-scaffold	core/scripts/gate-checkpoint.sh
+story-evidence-scaffold	core/scripts/gate-slice.sh
+story-evidence-scaffold	core/scripts/gen-architecture-index.js
+story-evidence-scaffold	core/scripts/hermetic-run.sh
+story-evidence-scaffold	core/scripts/join-remediator-shards.sh
+story-evidence-scaffold	core/scripts/merge-adversarial-shards.sh
+story-evidence-scaffold	core/scripts/merge-review-shards.sh
+story-evidence-scaffold	core/scripts/migrate-artifact-paths.sh
+story-evidence-scaffold	core/scripts/partition-document.sh
+story-evidence-scaffold	core/scripts/partition-review-diff.sh
+story-evidence-scaffold	core/scripts/partition-subject.sh
+story-evidence-scaffold	core/scripts/render-agent-definitions.sh
+story-evidence-scaffold	core/scripts/report-propagation-fanout.sh
+story-evidence-scaffold	core/scripts/rotate-gate-adjudication.sh
+story-evidence-scaffold	core/scripts/rotate-snapshot-archive.sh
+story-evidence-scaffold	core/scripts/sprint-status.sh
+story-evidence-scaffold	core/scripts/stamp-story-provenance.sh
+story-evidence-scaffold	core/scripts/sync-taught-schema.sh
+story-evidence-scaffold	core/scripts/sync-transient-ignore.sh
+story-evidence-scaffold	core/scripts/validate-ac-falsifiability.sh
+story-evidence-scaffold	core/scripts/validate-adversarial-convergence.sh
+story-evidence-scaffold	core/scripts/validate-artifact-budget.sh
+story-evidence-scaffold	core/scripts/validate-artifact-derivations.sh
+story-evidence-scaffold	core/scripts/validate-artifact-paths.sh
+story-evidence-scaffold	core/scripts/validate-audit-anchors.sh
+story-evidence-scaffold	core/scripts/validate-bmad-invocations.sh
+story-evidence-scaffold	core/scripts/validate-carried-findings.sh
+story-evidence-scaffold	core/scripts/validate-ci-gates.sh
+story-evidence-scaffold	core/scripts/validate-compact-window.sh
+story-evidence-scaffold	core/scripts/validate-cycle-commits.sh
+story-evidence-scaffold	core/scripts/validate-draft-stamps.sh
+story-evidence-scaffold	core/scripts/validate-escalation-resolution.sh
+story-evidence-scaffold	core/scripts/validate-escalation-status-vocabulary.sh
+story-evidence-scaffold	core/scripts/validate-fixture-drivability.sh
+story-evidence-scaffold	core/scripts/validate-gate-adjudication.sh
+story-evidence-scaffold	core/scripts/validate-gate-manifest.sh
+story-evidence-scaffold	core/scripts/validate-h2-attestation.sh
 story-evidence-scaffold	core/scripts/validate-handoff-evidence.sh
+story-evidence-scaffold	core/scripts/validate-hook-registration.sh
+story-evidence-scaffold	core/scripts/validate-layer-entries.sh
+story-evidence-scaffold	core/scripts/validate-locked-anchor.sh
+story-evidence-scaffold	core/scripts/validate-mandatory-rules.sh
+story-evidence-scaffold	core/scripts/validate-mutation-red.sh
+story-evidence-scaffold	core/scripts/validate-provenance-block.sh
+story-evidence-scaffold	core/scripts/validate-reattach-budget.sh
+story-evidence-scaffold	core/scripts/validate-request-coverage.sh
+story-evidence-scaffold	core/scripts/validate-retro-evidence.sh
+story-evidence-scaffold	core/scripts/validate-scope-confirmation.sh
+story-evidence-scaffold	core/scripts/validate-snapshot-conservation.sh
+story-evidence-scaffold	core/scripts/validate-spawn-ledger.sh
+story-evidence-scaffold	core/scripts/validate-spec-adoption.sh
+story-evidence-scaffold	core/scripts/validate-spec-join.sh
+story-evidence-scaffold	core/scripts/validate-steering-budget.sh
+story-evidence-scaffold	core/scripts/validate-stub-audit.sh
+story-evidence-scaffold	core/scripts/validate-suppression-lifetime.sh
+story-evidence-scaffold	core/scripts/validate-write-format-steering.sh
+story-evidence-scaffold	core/scripts/verdict.sh
+story-evidence-scaffold	core/scripts/wait-for-deliverable.sh
 story-evidence-scaffold	core/skills/ai-dlc/steps/gate-validation.md
 story-evidence-scaffold	core/skills/ai-dlc/steps/implementation.md
 story-evidence-scaffold	core/skills/ai-dlc/steps/sprint-review.md
@@ -13223,7 +13296,7 @@ write-format-steering-multiformat	core/skills/ai-dlc-update/reconcile/lib.sh
 # digest self-update-join-gate 1ebfed9e70229033fc77264c31a9adbe59f70973c41518bf13d14c6752c0b54f
 # digest settings-merge-documented-form c8749c59bf12d4e1027eefb344a6678683e3c8ff76ca2c89b13e1d5d6b53f05f
 # digest shipped-rule-version-floor 4e995134bd73306bc6bdf413f206b16f294208e5f825399458510a560ef3f6c7
-# digest story-evidence-scaffold 52cfdc66b8497b9f556abbc762a174d7db229a7ad1aec19fb083d350b9594dff
+# digest story-evidence-scaffold 3957963f998cff9cd6acc656f7fa7c24ffb72b36d72ffde2cc2c77a7171dc2df
 # digest subject-partition cfd281009538f5e7e01e43d982fa30941d49813af95a91808bef887bc04b5409
 # digest update-preflight-push e83485232f100b9fa9fb0af07c0acb8815b5b2e7a57773a1b4dd503678335f39
 # digest updater-session-signals f479cb58b22393c7341928ba146ad1b6c5395aa3ac44c1560ff5189a7b5b61c7
