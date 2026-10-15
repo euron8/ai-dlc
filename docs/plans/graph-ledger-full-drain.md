@@ -73,20 +73,10 @@ MERGED: IT SITS ON ORIGIN AS `b230-close` BY OPERATOR RULING, AND LANDS ONLY AFT
 Batch 229's block below is history: this block replaces its delivery gap. Started by peer ai-dlc-7d's one-liner at
 `origin/main` `11ae360d` (`VERSION` 0.783.0); graph-2e was live and was never messaged. The operator asked for a handoff
 to a fresh session because this one's context was deep.
-- **FIRST, BEFORE THE SWEEP: THE ORDER THE HELD WORK LANDS IN.** You are reading this block on branch `b230-close`, not on
-  `main`, unless the steps below are already done; check `git log origin/main --oneline -3` for a `batch 230 close`
-  subject. If it is absent:
-  1. Land `b230-bl510` as `0.787.0` (its owed tip adversary, then a rebase onto main; expect a conflict in
-     `core/skills/ai-dlc/steps/implementation.md`, where a §6 bullet was added). The C5(a) rotator may ride the same
-     release (below).
-  2. Rebase `b230-close` onto that main. It rotated nine entries out of `docs/backlog.md`, so resolve that file by
-     content. Add BL-510's `**LANDED (v0.787.0, verified <squash sha>).**` (and BL-523's if C5(a) rode along), re-run
-     `scripts/backlog-rotate.sh --check` then `--apply`, then `bash scripts/validate-backlog-receipts.sh`.
-  3. Push, merge, and verify the close; then continue from action 1.
-  **Why the close is held.** With the nine entries rotated, BL-510 is the only live entry. Its receipt chains to
-  `probes/bl-510-bookkeeping.sh`, which exists only on `b230-bl510`, so on main it exits 127, scores OUT-OF-POPULATION,
-  and R2 fails with `ZERO scored receipts (entries 1, sh receipts 1, … out of population 1 …)`. The operator ruled to
-  hold the close rather than switch BL-510 to a manual receipt. Do not widen R2 to pass this state.
+- **The held landing order is DONE (batch 231).** `b230-bl510` landed as `v0.787.0` (`2dc7b58d`, #1140) after two tip
+  adversaries; this close then landed on it, with BL-510 annotated and rotated, which left the backlog declared empty.
+  The close was held because BL-510's receipt chained to a probe only that branch carried, so R2 read zero scored
+  receipts on main; the operator ruled to hold rather than give it a manual receipt.
 - **Opening sweep** (at `11ae360d`): live 5, unfiled 5, worklist 0, TERMINAL 236, archive 359, 0 qualifying refs, every
   control passing. Backlog 6 live and 513 archived; ledger md5 `8261b9ab…`; graph porcelain 7, with 0 under
   `_bmad-output/ai-dlc-update/`. The five unfiled were graph's sprint-318 retro filings. Scope: those five plus the three
@@ -98,6 +88,8 @@ to a fresh session because this one's context was deep.
   - BL-525: the pause gate gets an Explore-only carve-out; `ops` stays denied.
   - BL-524 (Rule 11(a)): every option states its effects, and an option touching a locked value goes out unbadged.
   - The close: hold it rather than give BL-510 a manual receipt, and hand off with it parked.
+  - Batch 231: graph runs no ai-dlc pipeline until batch 231's releases are pulled, so no old-form gate verdict can
+    exist on graph after the C5(b) `SERIES_FORM_FROM` cutoff.
 - **`v0.784.0`**: BL-515 (a cap-rejected re-send is held until an agent of the session exits) and BL-512 (an
   implementation-gate adjudicator is refused over a waiver Check 22 rejects); I125 binds the guard's
   `_dg_shardable` to `SHARD_ROLES`. **Its CHANGELOG consumer note was wrong, and this close corrects it there and in
