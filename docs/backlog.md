@@ -59,6 +59,21 @@ never the word anywhere in prose, because an entry that merely discusses landing
 not a closed entry.
 
 
+## Pipeline-efficiency ranked set (BL-507 .. BL-520)
+
+Filed from [`docs/analysis/pipeline-efficiency-s317-s318.md`](analysis/pipeline-efficiency-s317-s318.md),
+section **"Ranked defects"**. The rank is that section's order and each entry names its row as
+`[efficiency rank N]`. Costs are API-list-equivalent over graph sprints 317 and 318, in-session
+only (handoff gaps are excluded by operator ruling). Shared cost is counted once, under the higher
+rank. Defects first exposed while the local `qwen38flash-mlx` model led are pipeline fixes toward
+the operator's local-lead goal, never findings against the model.
+
+**Measuring the change.** A receipt closes an entry on the tree. Whether the fix moved anything is
+measured afterwards on consumer transcripts, re-running `pipeline-efficiency-s317-s318/scripts/` over
+the sprints after the fix lands. graph is the reference, not the only population:
+`magic-bonus-calc-engine` also runs ai-dlc (0.780.0) and has its own transcripts. Measure on every
+consumer that has run the fixed release, and name the population beside each figure.
+
 ## BL-523 — the gate-adjudication rotator reports "nothing to move" while a sprint's verdicts carry a series id no `--sprint` can name
 
 **DEFECT.** **Provenance: `PC-S318-ROTATE-GATE-ADJUDICATION-SPRINT-FLAG-NEVER-MATCHES-NONCE-STYLE-SERIES-IDS`**,

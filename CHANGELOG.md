@@ -20,7 +20,10 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
-## [UNRELEASED — b230-c5a-rotate]
+## [UNRELEASED — b231-0788]
+
+Both halves of one consumer candidate ship together: the rotator's `--sprint` flag is the reader half
+(BL-523), and the gate's prescription of `gate_series_id` is the writer half (BL-526).
 
 ### `rotate-gate-adjudication.sh`: an empty sprint selection beside a FAIL-carrying unmatchable series is refused, and `--series` is the escape (BL-523)
 
@@ -85,7 +88,43 @@ holds one verdict. With every archive removed, the old rule hinted the closing s
 and 30 wrong; it now prints 8 right, 0 wrong and 40 NO HINT. In a simulated s319 close with a new FAILing `<gate>-<nonce>` verdict,
 walking the printed commands in order finishes in one pass with 11 commands, 2 operator questions and 0
 refused applies, and `--sprint s319 --apply` exits 0. The PASS seed takes 10 commands and 1 question.
-The writer half, which stamps `<gate_type>-s<N>-<nonce>` at mint time, is a follow-on.
+The writer half below ships in this same release. It makes a NEW verdict selectable by `--sprint`; the
+refusal and the `--series` escape stay the remedy for every verdict minted before it.
+
+### `gate_series_id` is prescribed by the lead and held to its form per pass (BL-526)
+
+`_gate-procedures.md` named `gate_series_id` 0 times against 6 for `gate_nonce`, and the adjudicator brief
+passed no series id, so the adjudicator invented one. In the reference consumer's committed corpus (239
+verdicts), 94 carry none, 42 carry the nonce-style `<gate>-<TS>` that the rotator's `--sprint` flag cannot
+match, and 34 more carry ad-hoc shapes.
+
+- **Form.** `gate-validation.md` "At gate entry" prescribes exactly `<gate_type>-s<N>-<TS>` for an unscoped
+  gate and `<gate_type>-s<N>-<slug>-<TS>` for a gate scoped to one story. `<N>` is the `sprint_id` line of
+  the pipeline snapshot. The slug is `story` plus the story index with each `.` or `-` written as `x`: one
+  lowercase `[a-z0-9]` segment ending in a digit. `<TS>` is the series-entry time, never later than the
+  nonce of a pass that carries it.
+- **Same-series rule.** The id is decided at dispatch, never from `close`. A Gate Reset id wins. Otherwise
+  the newest stem whose id has exactly that form for this `gate_type`, sprint and slug, with every part
+  agreeing, is reused byte-for-byte when it did not pass. Not passing is read from the `26` row of its
+  `.gate-checkpoint/<nonce>.tsv` ledger, never from the verdict's per-check rows, which still record a
+  suppressed check as FAIL. That ledger is local to the checkout that ran the gate, so where it is absent
+  the verdict is judged itself: any FAIL row is not passing. Otherwise a new id is minted, so a malformed id
+  is never reused and two stories' gates in flight together never share a series. Replayed on the
+  consumer's interleaved s304 story gates, the rule yields 4 series and reports both real check-22 STALLs.
+- **Gate Reset** is performed before gate entry. It mints the new id and records the retired one, or
+  `legacy`. The adjudicator brief and every shard brief carry the id; it is exempt from "nothing carried
+  forward" and is never passed to `gate-checkpoint.sh --nonce`. `gate-adjudicator.md` copies it
+  byte-for-byte and never invents one.
+- **Validator.** `validate-gate-adjudication.sh` gains a per-pass envelope arm requiring the `gate_type`
+  prefix, the `-s<digits>-` field, an optional well-formed slug, and a trailing timestamp no later than the
+  nonce. It judges only a pass whose nonce is at or after `SERIES_FORM_FROM` (`20261015T000000Z`), which
+  scores 0 of the consumer's 239 committed verdicts; unscoped it fires on 61. The arm's header records the
+  narrowing. The schema doc no longer calls the field deliberately unpatterned; it names the brief as the
+  source and the validator as the owner of the form.
+- **Fixtures.** `gate-adjudication` gains ten series-form cases (SF0, SF0b, SF1-SF8: two near-misses for
+  the bare form, one for the slug, and seven named offenders). `gate-adjudication-mutants` gains m21-m28,
+  one per property of the arm, dealt across all three shards. `process-rule-pins` gains 28 rows.
+- The rotator's `--sprint s<N>` selector (`*-s<N>-*`) moves a slugged id.
 
 Fixture `gate-adjudication-rotate` adds these worlds:
 
