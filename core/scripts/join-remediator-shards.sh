@@ -1169,6 +1169,7 @@ RREOF
           print "L\t" ln }
         print "N\t" ns + 0
       }')"
+    _rres_nk="$(printf '%s\n' "$_rres" | grep -v '^K	')"
     while IFS='	' read -r _k _a _b _c _d; do
       case "$_k" in
         OUT)  refuse "--rerun ${_a}: ${_b} is a superseded writer of ${_a} and also wrote ${_c} at ${_d}, outside the files ${_a} cites; it was not only ${_a}'s writer, so its earlier writes cannot be set aside" ;;
@@ -1184,7 +1185,7 @@ RREOF
         N) RR_SUPERSEDED="$_a" ;;
       esac
     done <<RROUT
-$(printf '%s\n' "$_rres" | grep -v '^K	')
+${_rres_nk}
 RROUT
     DROWS="$(printf '%s\n' "$_rres" | sed -n 's/^K	//p')"
     ROWS="$(printf '%s\n' "$DROWS" | awk -F'\t' 'NF >= 2 { print $1 "\t" $2 }' | sort -u)"
@@ -1324,12 +1325,13 @@ while IFS= read -r p; do
   for fld in disposition edit derivation; do
     repair_field "$fld" "$p" || refuse "$(basename "$p") has no '${fld}:' field as arm H reads it; the joined record would read structured on another part's labels"
   done
+  _pc="$(part_cites "$p")"
   while IFS= read -r _t; do
     [ -n "$_t" ] || continue
     CITES="${CITES}C	$(basename "$p")	${_t}
 "
   done <<TOKEOF
-$(part_cites "$p")
+${_pc}
 TOKEOF
 done <<PAREOF
 $PARTS

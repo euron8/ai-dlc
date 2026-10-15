@@ -490,7 +490,7 @@ record_verdict_write() { # $1 file_path -- silent no-op unless this is a verdict
          --arg tp "$_rev_tp" --argjson at "$_rev_at" \
      '{v: 1, ts: $ts, stem: $stem, agent_id: $agent, session: $session, tool: $tool,
        tool_use_id: (.tool_use_id // ""), transcript_path: $tp, agent_transcript: $at}' \
-     <<< "$INPUT" >> "$WRITE_LEDGER" 2>/dev/null || true
+     <<< "$INPUT" >> "$WRITE_LEDGER" 2>/dev/null || return 0
 }
 
 # THE PLANNING-ARTIFACT WRITE LEDGER -- which dispatched agent asked to write which artifact file.
