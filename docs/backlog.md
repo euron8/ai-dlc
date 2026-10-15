@@ -130,30 +130,32 @@ brief passed no series id. The adjudicator invented one. In graph's committed co
 94 carry none, 42 carry the nonce-style `<gate>-<TS>` that the rotator's sprint flag cannot match, and
 34 more carry ad-hoc shapes.
 
-**The fix.** `gate-validation.md` "At gate entry" now prescribes exactly `<gate_type>-s<N>-<TS>` for an
-unscoped gate and `<gate_type>-s<N>-<slug>-<TS>` for a gate scoped to one story. `<N>` is the snapshot's
-`sprint_id`. The slug is `story` plus the story's `<story-index>` with each `.` or `-` written as `x`:
-one lowercase `[a-z0-9]` segment ending in a digit. A same-series rule decides the id at dispatch,
-never from `close`. The only reuse candidate is the newest stem whose id has that exact form for this
-gate_type, sprint and slug, with every part agreeing. A Gate Reset id wins. Otherwise a candidate that
-did not pass is reused. Not passing is read from the `26` row of its `.gate-checkpoint/<nonce>.tsv` ledger
-when that ledger exists, never from the verdict's per-check rows, which still record a suppressed check as
-FAIL. The ledger is gitignored and local to the checkout that ran the gate, so when it is absent the
-verdict is judged itself: any FAIL row is not passing, which can only continue a series, never hide a stall.
-Otherwise a new id is minted, so a malformed id is never reused and two stories' gates never share a
-series. Replayed on graph's interleaved s304 story gates, that yields 4 series, and `--series` reports
-both real check-22 STALLs (story1, story4). A Gate Reset is performed before gate entry. It mints the new
-id and records the retired one, or `legacy`. The adjudicator brief and shard briefs carry the series id,
-and it is exempt from "nothing carried forward". The validator's per-pass envelope arm requires the
-gate_type prefix, the `-s<digits>-` field, an optional slug, and a trailing timestamp no later than the
-nonce. It judges only a pass whose nonce is at or after `SERIES_FORM_FROM` (20261015T000000Z). That makes
-its FP set 0 of graph's 239; unscoped it fires on 61. The arm's header records the derivation. The C5(a)
-rotator's `--sprint s<N>` selector (`*-s<N>-*`) moves a slugged id.
+**The fix.** `gate-validation.md` "At gate entry" now prescribes exactly `<gate_type>-<slug>-s<N>-<TS>`
+for a gate dispatched for exactly one story and `<gate_type>-s<N>-<TS>` for every other gate. `<N>` is
+the snapshot's `sprint_id` with no leading zero. The slug's only source is the `<story-index>` on the
+dispatch's `shard: 1/1 <story-index>` line, lowercased with each `.` or `-` written as `x` and prefixed
+`story`, so graph's `4.2a`, `B6` and `2-17e2e` are `story4x2a`, `storyb6` and `story2x17e2e`. A gate over
+several stories or none carries no slug, whatever its gate number. The slug sits BEFORE the sprint field
+so `<TS>` always directly follows `-s<N>-`, where the dispatch guard's unanchored nonce regex cannot
+match. A same-series rule decides the id at dispatch, never from `close`. The only reuse candidate is
+the newest stem of exactly that form for this gate_type, slug and sprint, with every part agreeing. A
+Gate Reset id wins. Otherwise a candidate that did not pass is reused. An unmerged part set is not
+passing; a ledger `.gate-checkpoint/<nonce>.tsv` with a `26` row decides by that row; a ledger that is
+absent or has no `26` row falls back to the verdict's own FAIL rows. Otherwise a new id is minted.
+Walked over graph's s316 and s317 implementation gates (38 stems), that gives 32 series and the arm
+refuses none of the ids. A Gate Reset is performed before gate entry, mints the new id keeping any
+slug, and records the retired one, or `legacy`. The adjudicator brief and shard briefs carry the series
+id, and it is exempt from "nothing carried forward". The validator's per-pass envelope arm requires the
+gate_type prefix, an optional `story[a-z0-9]+` slug, `-s<N>-` with N having no leading zero, and a
+`\Z`-anchored trailing timestamp no later than the nonce. It judges only a pass whose nonce is at or
+after `SERIES_FORM_FROM` (20261015T000000Z). That makes its FP set 0 of graph's 239; unscoped it fires
+on 77. The arm's header records the derivation. The C5(a) rotator's `--sprint s<N>` selector (`*-s<N>-*`)
+selects a slugged id.
 
-The receipt runs the `gate-adjudication` fixture and needs its ten series-form cases, including the
-slugged near-miss and the three malformed-slug offenders. It also needs the 28 series-id rows of
-`process-rule-pins --report`. It exits 1 at `4aa734c4`, on a rule 2 that reuses a malformed id, counts
-a suppressed FAIL or ignores the gate's story, on the arm without its slug, trailing-timestamp or
-series-time check, and on the prose with no arm. It exits 0 at this tip.
+The receipt runs the `gate-adjudication` fixture and needs its fifteen series-form cases, including the
+three slugs from graph's real story indices. It also needs the 29 series-id rows of
+`process-rule-pins --report`. It exits 1 at origin/main, on a slug placed after the sprint field, on a
+slug restricted to a trailing digit, on a rule 2 that reuses a malformed id, counts a suppressed FAIL or
+ignores the dispatched story, and on the prose with no arm. It exits 0 at this tip.
 
-verify: sh F=core/fixtures/gate-adjudication/run.sh; P=core/fixtures/process-rule-pins/run.sh; [ -f "$F" ] && [ -f "$P" ] || exit 9; o="$(bash "$F" 2>&1)" || exit 1; n="$(grep -cE '^  ok    SF(0|0b|1|2|3|4|5|6|7|8): ' <<<"$o")" || n=0; [ "$n" -eq 10 ] || exit 1; r="$(bash "$P" --report 2>&1)" || exit 1; m="$(grep -cE '^  ok    (gv-series-[a-z]+|gv-fail-series|gv-reset-[a-z]+|gp-[a-z]+-series|gadj-[a-z]+-series): pinned inside ' <<<"$r")" || m=0; [ "$m" -eq 28 ]
+verify: sh F=core/fixtures/gate-adjudication/run.sh; P=core/fixtures/process-rule-pins/run.sh; [ -f "$F" ] && [ -f "$P" ] || exit 9; o="$(bash "$F" 2>&1)" || exit 1; n="$(grep -cE '^  ok    SF(0|0b|1|2|3|4|5|5b|5c|6|7|8|9|10|11): ' <<<"$o")" || n=0; [ "$n" -eq 15 ] || exit 1; r="$(bash "$P" --report 2>&1)" || exit 1; m="$(grep -cE '^  ok    (gv-series-[a-z]+|gv-fail-series|gv-reset-[a-z]+|gp-[a-z]+-series|gadj-[a-z]+-series): pinned inside ' <<<"$r")" || m=0; [ "$m" -eq 29 ]

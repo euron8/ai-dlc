@@ -131,7 +131,7 @@ py_edit 'del doc["gate_series_id"]'
 run "$VERDICT"
 [ "$RC" -eq 1 ] && ok "deleting gate_series_id → exit 1 (the pass would be invisible to --series)" || bad "a verdict with no gate_series_id did NOT fail with exit 1 (rc=$RC) — it would drop out of the stall rung's count"
 
-# --- SF0–SF4: THE PRESCRIBED SERIES-ID FORM ----------------------------------
+# --- SF0–SF11: THE PRESCRIBED SERIES-ID FORM ----------------------------------
 # A pass minted at or after the validator's SERIES_FORM_FROM carries gate_series_id as
 # <gate_type>-s<N>-<TS> with <TS> no later than the nonce. Every case below sits at its OWN
 # post-cutoff nonce path (the pristine verdict is pre-cutoff and old-form, and its exit-0 above
@@ -178,25 +178,43 @@ sf_case "implementation-s318-20261101T1200Z"
 { [ "$RC" -eq 1 ] && sf_says "does not end in a <YYYYMMDDTHHMMSSZ>"; } \
   && ok "SF4: a trailing time with four digits, not six → exit 1, named" \
   || bad "SF4: a series id with no trailing timestamp after -s<N>- was not refused (rc=$RC): $SF_ERR"
-# SF5–SF8: the optional story slug. SF5 is the near-miss carrying every property the offenders
-# lack (lowercase, one segment, ends in a digit, the x for a dotted index); each offender breaks
-# exactly one of them and must be refused by the timestamp-form sentence, which is the only one
-# that sees the slug.
-sf_case "implementation-s318-story2x4-20261101T090000Z"
-[ "$RC" -eq 0 ] && ok "SF5: a story-scoped series id with a well-formed slug → exit 0" \
-  || bad "SF5: a well-formed slugged series id was refused (rc=$RC): $SF_ERR"
-sf_case "implementation-s318-story-4-20261101T120000Z"
-{ [ "$RC" -eq 1 ] && sf_says "does not end in a <YYYYMMDDTHHMMSSZ>"; } \
-  && ok "SF6: a slug holding a hyphen (two segments) → exit 1, named" \
-  || bad "SF6: a two-segment slug was not refused by the slug form (rc=$RC): $SF_ERR"
-sf_case "implementation-s318-Story4-20261101T120000Z"
-{ [ "$RC" -eq 1 ] && sf_says "does not end in a <YYYYMMDDTHHMMSSZ>"; } \
+# SF5–SF11: the optional story slug, which sits BEFORE -s<N>-, and the sprint field's form. The
+# accepted slugs are the ones the reference consumer's real story indices produce (4.2a, B6,
+# 2-17e2e), each entered before its nonce so that only SF0 owns the at-the-nonce boundary. Each
+# offender breaks one property and must print the sentence only that property emits.
+sf_case "implementation-story4x2a-s318-20261101T090000Z"
+[ "$RC" -eq 0 ] && ok "SF5: the slug of story-index 4.2a (story4x2a) before -s<N>- → exit 0" \
+  || bad "SF5: a well-formed slug from index 4.2a was refused (rc=$RC): $SF_ERR"
+sf_case "implementation-storyb6-s318-20261101T090000Z"
+[ "$RC" -eq 0 ] && ok "SF5b: the slug of story-index B6 (storyb6, ends in a letter after lowercasing) → exit 0" \
+  || bad "SF5b: a well-formed slug from index B6 was refused (rc=$RC): $SF_ERR"
+sf_case "implementation-story2x17e2e-s318-20261101T090000Z"
+[ "$RC" -eq 0 ] && ok "SF5c: the slug of story-index 2-17e2e (story2x17e2e) → exit 0" \
+  || bad "SF5c: a well-formed slug from index 2-17e2e was refused (rc=$RC): $SF_ERR"
+sf_case "implementation-story-4-s318-20261101T120000Z"
+{ [ "$RC" -eq 1 ] && sf_says "carries story slug"; } \
+  && ok "SF6: a slug holding a hyphen → exit 1, named" \
+  || bad "SF6: a hyphenated slug was not refused by the slug form (rc=$RC): $SF_ERR"
+sf_case "implementation-storyB6-s318-20261101T120000Z"
+{ [ "$RC" -eq 1 ] && sf_says "carries story slug"; } \
   && ok "SF7: a slug carrying an uppercase letter → exit 1, named" \
   || bad "SF7: an uppercase slug was not refused by the slug form (rc=$RC): $SF_ERR"
-sf_case "implementation-s318-xstory-20261101T120000Z"
+sf_case "implementation-s318-story4-20261101T120000Z"
 { [ "$RC" -eq 1 ] && sf_says "does not end in a <YYYYMMDDTHHMMSSZ>"; } \
-  && ok "SF8: a slug ending in a gate_type word (the guard's nonce regex would match inside it) → exit 1, named" \
-  || bad "SF8: a slug ending in a letter was not refused (rc=$RC): $SF_ERR"
+  && ok "SF8: a slug placed AFTER -s<N>- (the dispatch guard's nonce regex can match there) → exit 1, named" \
+  || bad "SF8: a slug after the sprint field was not refused (rc=$RC): $SF_ERR"
+sf_case "implementation-318-20261101T120000Z"
+{ [ "$RC" -eq 1 ] && sf_says "carries no -s<N>- sprint field"; } \
+  && ok "SF9: a bare-digit sprint field with no s → exit 1, named" \
+  || bad "SF9: a sprint field without its s was not refused (rc=$RC): $SF_ERR"
+sf_case "implementation-s0318-20261101T120000Z"
+{ [ "$RC" -eq 1 ] && sf_says "a positive integer with no leading zero"; } \
+  && ok "SF10: a zero-padded sprint field → exit 1, named" \
+  || bad "SF10: a zero-padded sprint was not refused (rc=$RC): $SF_ERR"
+sf_case $'implementation-s318-20261101T120000Z\n'
+{ [ "$RC" -eq 1 ] && sf_says "does not end in a <YYYYMMDDTHHMMSSZ>"; } \
+  && ok "SF11: a series id with a trailing newline → exit 1, named" \
+  || bad "SF11: a trailing newline was not refused by the anchored timestamp check (rc=$RC): $SF_ERR"
 rm -f "$SF_PATH"
 
 # --- Assertion 9: RESTORE (step c) → exit 0 ----------------------------------

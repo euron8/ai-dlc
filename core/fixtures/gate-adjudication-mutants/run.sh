@@ -16,7 +16,7 @@
 # reporting red for the wrong case is a mutant that killed nothing and reads identically to one
 # that worked, which is the defect this directory exists to catch one level up.
 #
-# SHARDED. The pre-push suite is POLE-BOUND, so this battery's 29 full runs of the shipped
+# SHARDED. The pre-push suite is POLE-BOUND, so this battery's 32 full runs of the shipped
 # fixture are dealt across three .dist-only drivers (`gate-adjudication-mutants-b`, `-c`) that
 # `exec bash <this file> --group <x>`. Every shard pays the M0 control and the coverage join;
 # the mutant partition below is declared HERE and joined (J0) against this file's own
@@ -24,8 +24,8 @@
 # without a driver. The shard arrives as an ARGUMENT, never the environment (scrubbed below).
 SHARDS="a b c"
 MUTANTS_a="m1 m4 m7 m10 m13 m16 m19"
-MUTANTS_b="m2 m5 m8 m11 m14 m17 m20 m22 m25 m26 m28"
-MUTANTS_c="m3 m6 m9 m12 m15 m18 m21 m23 m24 m27"
+MUTANTS_b="m2 m5 m8 m11 m14 m17 m20 m22 m25 m26 m28 m30"
+MUTANTS_c="m3 m6 m9 m12 m15 m18 m21 m23 m24 m27 m29 m31"
 set -u
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
@@ -670,39 +670,52 @@ score "m22 series arm refuses a series entered AT its nonce" validate-gate-adjud
   '    if _sts > _nonce_ts:' \
   '    if _sts >= _nonce_ts:' \
   "A comparison that refuses equality refuses pass 1 of every gate, and no case noticed."
-score "m23 series arm makes the -s<N>- field optional" validate-gate-adjudication.sh \
-  "SF1" \
-  '    _m = re.match(r"^s[0-9]+-(.*)$", _sid[len(_gt) + 1:])' \
-  '    _m = re.match(r"^(?:s[0-9]+-)?(.*)$", _sid[len(_gt) + 1:])' \
-  "The adjudicator-invented <gate>-<TS> id passed, which is the exact defect this arm exists for."
+score "m23 series arm admits a sprint field with no s" validate-gate-adjudication.sh \
+  "SF9" \
+  '(?:(.*?)-)?s([0-9]+)-(.*)' \
+  '(?:(.*?)-)?s?([0-9]+)-(.*)' \
+  "A bare-digit sprint field was accepted, so the rotator's -s<N>- selector cannot see it."
 score "m24 series arm never checks the gate_type prefix" validate-gate-adjudication.sh \
   "SF3" \
   '    if not _sid.startswith(_gt + "-"):' \
   '    if False:' \
   "A series id carrying another gate's prefix was not refused by the prefix check."
 score "m25 series arm never checks the trailing timestamp form" validate-gate-adjudication.sh \
-  "SF4 SF6 SF7 SF8" \
-  '    if not re.match(r"^[0-9]{8}T[0-9]{6}Z$", _sts):' \
+  "SF4 SF8 SF11" \
+  '    if not re.match(r"[0-9]{8}T[0-9]{6}Z\Z", _sts):' \
   '    if False:' \
-  "A series id whose trailing time is not YYYYMMDDTHHMMSSZ was accepted, and with it every
-  malformed story slug, since the slug is read off the same tail."
-score "m26 story slug admits a hyphen or an uppercase letter" validate-gate-adjudication.sh \
-  "SF6 SF7" \
-  '    _sl = re.match(r"^(?:([a-z0-9]*[0-9])-)?(.*)$", _m.group(1))' \
-  '    _sl = re.match(r"^(?:([A-Za-z0-9-]*[0-9])-)?(.*)$", _m.group(1))' \
-  "A slug of two segments or carrying uppercase was accepted, so two spellings of one story
-  would open two series."
-score "m27 story slug need not end in a digit" validate-gate-adjudication.sh \
-  "SF8" \
-  '    _sl = re.match(r"^(?:([a-z0-9]*[0-9])-)?(.*)$", _m.group(1))' \
-  '    _sl = re.match(r"^(?:([a-z0-9]+)-)?(.*)$", _m.group(1))' \
-  "A slug ending in a gate_type word was accepted, which puts a match for the dispatch guard's
-  unanchored nonce regex inside the series id."
+  "A malformed trailing time, a slug placed after -s<N>- and a trailing newline all reach the
+  tail check, and none was refused by it."
+score "m26 story slug admits a hyphen" validate-gate-adjudication.sh \
+  "SF6" \
+  'r"story[a-z0-9]+\Z"' \
+  'r"story[a-z0-9-]+\Z"' \
+  "A two-segment slug was accepted, so one story could be spelled two ways and open two series."
+score "m27 story slug admits uppercase" validate-gate-adjudication.sh \
+  "SF7" \
+  'r"story[a-z0-9]+\Z"' \
+  'r"(?i)story[a-z0-9]+\Z"' \
+  "An uppercase slug was accepted, so B6 and b6 would open two series."
 score "m28 series arm admits no story slug" validate-gate-adjudication.sh \
-  "SF5" \
-  '    _sl = re.match(r"^(?:([a-z0-9]*[0-9])-)?(.*)$", _m.group(1))' \
-  '    _sl = re.match(r"^(?:(NOSLUG)-)?(.*)$", _m.group(1))' \
-  "A story-scoped gate's slugged id was refused, so every per-story gate would wedge."
+  "SF5 SF5b SF5c" \
+  '    if _slug is not None and not re.match(r"story[a-z0-9]+\Z", _slug):' \
+  '    if _slug is not None:' \
+  "A single-story gate's slugged id was refused, so every per-story gate would wedge."
+score "m29 series arm never refuses a missing sprint field" validate-gate-adjudication.sh \
+  "SF1 SF9" \
+  '    if not _m:' \
+  '    if False:' \
+  "An id with no -s<N>- field was not refused by the sprint-field check."
+score "m30 trailing timestamp anchored with \$, not \\Z" validate-gate-adjudication.sh \
+  "SF11" \
+  'r"[0-9]{8}T[0-9]{6}Z\Z"' \
+  'r"[0-9]{8}T[0-9]{6}Z$"' \
+  "A series id ending in a newline passed the timestamp-form check, which \$ allows."
+score "m31 sprint field admits a leading zero" validate-gate-adjudication.sh \
+  "SF10" \
+  'r"[1-9][0-9]*\Z"' \
+  'r"[0-9]+\Z"' \
+  "A zero-padded sprint was accepted, so s318 and s0318 would name one sprint two ways."
 
 # --------------------------------------------------------------------------
 # The kill count itself. A battery whose mutants all applied and killed nothing reports zero
@@ -721,7 +734,7 @@ if [ "$FAILURES" -eq 0 ]; then
   echo "    the per-ENTRY exclusion, the sibling's stderr channel, the citation verifier's"
   echo "    ask, its fail-closed default, its answer, its corpus depth, its exit tiers, or"
   echo "    either script itself, or any of the series-id form arm's checks (prefix,"
-  echo "    -s<N>- field, story slug, trailing timestamp, no later than the nonce) each kills exactly"
+  echo "    -s<N>- field and its form, story slug, anchored trailing timestamp, no later than the nonce) each kills exactly"
   echo "    the case set that owns that property."
   exit 0
 fi

@@ -147,7 +147,7 @@ second copy to drift from it. `gate_nonce` MUST equal the one the lead handed yo
 verdict filename stem) — it is the freshness anchor: a verdict at the wrong nonce is a stale
 verdict, and the gate refuses it. Your verdict binds to this one dispatch (every shard of a sharded one shares its nonce); a later gate entry
 gets a new nonce and a fresh adjudication, never a reuse of this one.
-`gate_series_id` is copied byte-for-byte from your brief, never invented: the lead mints it as `<gate_type>-s<N>-<TS>`, or `<gate_type>-s<N>-<slug>-<TS>` for a gate scoped to one story, and the gate refuses a new pass whose series id lacks that form or carries a time later than its nonce.
+`gate_series_id` is copied byte-for-byte from your brief, never invented: the lead mints it as `<gate_type>-s<N>-<TS>`, or `<gate_type>-<slug>-s<N>-<TS>` for a gate dispatched for one story, and the gate refuses a new pass whose series id lacks that form or carries a time later than its nonce.
 `catalog` is `core` unless you were told a consumer extension
 catalog. The set of `check_id`s MUST equal the derived escalated set exactly — no omission, no
 extra, no duplicate.
