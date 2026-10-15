@@ -49,6 +49,15 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 
 - `validate-handoff-evidence.sh` runs its awk programs under `LC_ALL=C`. In a UTF-8 locale, BSD awk
   aborted on one non-UTF-8 byte in a story, and the capture and heading arms then read nothing.
+- `story-evidence-scaffold` now proves that the story line is parsed whatever `sprint-status.sh`
+  exits. Two copy trees wrap the sibling so that it runs the real `story-status` and then exits 3 in
+  one tree and 0 in the other. Over an `in-progress` story, both refuse `status-not-review`, and
+  only the exit-3 tree adds a `SKIP STATUS` line for the row. A mutant that gates arm (g) on the
+  exit survived the fixture before this world and is now killed.
+- `story-evidence-scaffold` drives a strategy-mode world under a UTF-8 locale, with a non-UTF-8
+  byte in a table row above an empty cell. A mutant that drops `LC_ALL=C` from strategy mode's awk
+  is now killed. The fixture runs under `env -i`, where no locale is set, so the world forces one.
+- The `bl-510-bookkeeping.sh` receipt probe is tracked as executable (I77).
 
 ## [0.786.0] - 2026-10-14
 
