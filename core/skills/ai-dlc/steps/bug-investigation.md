@@ -83,8 +83,11 @@ COMPLETE.
 
 **When the investigation found relief the operator can apply WITHOUT a
 deploy — a config value, a restart, an existing endpoint or admin action, a
-feature flag — put it to the operator with `AskUserQuestion` BEFORE section 3**,
-recommended option first: **apply now (recommended)** / **wait for the fix**.
+feature flag — put it to the operator with `AskUserQuestion` BEFORE section 3**:
+**apply now** / **wait for the fix**, each stating its effect and the value it
+leaves in force. Mark **apply now** `(recommended)` and put it first, UNLESS the
+relief sets or relaxes a config value or any other operator-owned value in
+SKILL.md Rule 11(a)'s list — then present both options unbadged.
 State the relief's limit in the question; a stopgap that only buys time is
 still asked. Ask it now: if another question is due in the same turn, send
 both as separate questions in one `AskUserQuestion` call, and never hold this

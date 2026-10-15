@@ -112,8 +112,8 @@ case "$(reason f2)" in
   *) bad "F2 the block reason does NOT name Rule 11(a). This is the motivating turn: the reason text told the lead to create the pause flag, it did, and the question stayed prose" ;;
 esac
 case "$(reason f2)" in
-  *"AskUserQuestion, recommended option first"*) ok "F2 the paragraph names the tool and the option order" ;;
-  *) bad "F2 the paragraph does not name AskUserQuestion with the recommended option first — the lead is told it is wrong and not what to do instead" ;;
+  *"AskUserQuestion, every option stating its effect and the value it leaves in force, recommended option first unless an option sets or leaves in force an operator-owned value"*"then no option is badged"*) ok "F2 the paragraph names the tool, the effects clause, the option order and the unbadged case" ;;
+  *) bad "F2 the paragraph does not name AskUserQuestion with each option's effect, the recommended option first, and no badge on an operator-owned value — the lead is told it is wrong and not what to do instead" ;;
 esac
 case "$(reason f2)" in
   *"PRODUCTION VALIDATION CHECKPOINT or the RETRO COMMENTARY PROMPT"*)

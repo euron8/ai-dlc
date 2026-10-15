@@ -651,12 +651,18 @@ PreToolUse hook denies every `Agent` / `Skill` / `Task` dispatch until step 3 ha
       harness enforces it are in `SKILL.md`'s Rule 3 pause-point section)**.** Each option carries its resolution KIND, the
       concrete edit it authorizes, and what it costs. An option the lead has not worked out well
       enough to state that way is not an option yet — work it out or drop it.
-   c. **Exactly one option marked `(Recommended)`, with the one reason.** A menu with no
-      recommendation hands the judgment back and is a defect of the presentation, not a display
-      of neutrality; the lead has read the artifact and the operator has not.
+   c. **When no option touches a `LOCKED_REQUIREMENTS` entry: exactly one option marked
+      `(Recommended)`, with the one reason.** A menu with no recommendation hands the judgment
+      back and is a defect of the presentation, not a display of neutrality; the lead has read
+      the artifact and the operator has not.
+      **When an option touches one** — the record's `locked_requirements_touched:` names an
+      entry — **mark NO option `(Recommended)`.** State each option's effect on that entry
+      instead, including the value it leaves in force (SKILL.md Rule 11(a)). The locked value is
+      the operator's, and a badge on it is the lead deciding it in the operator's name.
 
    Where a repair weakened something LOAD-BEARING — an AC, a predicate, a guard, a
-   `LOCKED_REQUIREMENTS` entry; test: *after the edit, can the check still FAIL?* — say so in (a).
+   `LOCKED_REQUIREMENTS` entry; test: *after the edit, can the check still FAIL?* — say so in (a),
+   and state per option what it does to that thing rather than which option you would take.
    That is the one fact that changes which kind is correct, so it belongs in the decision
    sentence rather than in the evidence the operator has to go looking for.
 
@@ -683,10 +689,10 @@ PreToolUse hook denies every `Agent` / `Skill` / `Task` dispatch until step 3 ha
    artifact_sha_after:  <sha256 after the resolution>
    artifact_bytes_before / artifact_bytes_after: <int>
    scope_delta: <what changed, concretely>
-   locked_requirements_touched: <none | entries + the operator's authorization>
+   locked_requirements_touched: <none | entries + the operator's authorization>   # absent reads as none
    operator_authorization: <ISO-8601 UTC ts of the operator's message> | "<verbatim quote of it, >=12 chars after whitespace is collapsed; a short message is quoted whole, numbering included>"
    options_presented: <int, >=2>   # how many resolution options step 2(b) put to the operator
-   recommended_option: <the one you marked (Recommended), named so the operator's reply identifies it>
+   recommended_option: <the one you marked (Recommended), named so the operator's reply identifies it | none when locked_requirements_touched names an entry>
    archive: <dir>            # RESTART_CYCLE only
    ADVERSARIAL_RESOLUTION_END -->
    ```

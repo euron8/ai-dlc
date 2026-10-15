@@ -98,6 +98,21 @@ record() {
       one-option)        printf 'options_presented: 1\n'
                          printf 'recommended_option: revert\n' ;;
       no-recommendation) printf 'options_presented: 3\n' ;;
+      # F7b: the locked branch. A record whose options touch a LOCKED_REQUIREMENTS entry.
+      locked-badged)     printf 'locked_requirements_touched: LR-S1-3 (operator authorized the revert)\n'
+                         printf 'options_presented: 3\n'
+                         printf 'recommended_option: %s\n' "$kind" ;;
+      locked-none)       printf 'locked_requirements_touched: LR-S1-3 (operator authorized the revert)\n'
+                         printf 'options_presented: 3\n'
+                         printf 'recommended_option: none\n' ;;
+      locked-absent)     printf 'locked_requirements_touched: LR-S1-3 (operator authorized the revert)\n'
+                         printf 'options_presented: 3\n' ;;
+      unlocked-none)     printf 'locked_requirements_touched: none\n'
+                         printf 'options_presented: 3\n'
+                         printf 'recommended_option: none\n' ;;
+      unlocked-badged)   printf 'locked_requirements_touched: none\n'
+                         printf 'options_presented: 3\n'
+                         printf 'recommended_option: %s\n' "$kind" ;;
       *)                 printf 'options_presented: 3\n'
                          printf 'recommended_option: %s\n' "$kind" ;;
     esac
@@ -417,7 +432,10 @@ pass "$TARGET/divergent-resolved/s1-adversarial-p3.md" 3 0 0 2 EXIT_CONDITION_ME
 #
 # The operator adjudicating `divergent-resolved` chose in 91 seconds. The operator handed
 # the `no-options` shape spent four round-trips arriving at the same kind.
-for _shape in no-options one-option no-recommendation; do
+# F7b adds the five locked-branch shapes on the same differential: each world differs from
+# `divergent-resolved` only in the record's adjudication fields.
+for _shape in no-options one-option no-recommendation \
+              locked-badged locked-none locked-absent unlocked-none unlocked-badged; do
   mkdir -p "$TARGET/adjudication-$_shape"
   pass "$TARGET/adjudication-$_shape/s1-adversarial-p1.md" 1 2 1 1 EXIT_CONDITION_NOT_MET 2 aaa1
   pass "$TARGET/adjudication-$_shape/s1-adversarial-p2.md" 2 3 1 2 DIVERGENT_HARD_BLOCK   3 bbb2

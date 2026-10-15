@@ -1262,9 +1262,17 @@ validate_record() { # $1 record, $2 divergent-pass, $3 index-of-divergent-pass -
   #     IN-FLIGHT records only, enumerated at pull time; migration is two lines each.
   #   Removed when: the escalation form is generated rather than hand-written, so the
   #     fields cannot disagree with what was presented.
-  local opts rec_opt
+  #
+  # F7b -- A LOCKED VALUE IS PRESENTED UNBADGED. The record's own `locked_requirements_touched:`
+  # decides the branch. Empty, absent or `none` keeps the rule above: one recommendation, named.
+  # Any other value names a LOCKED_REQUIREMENTS entry the options touch; that value is the
+  # operator's, so the record must carry `recommended_option: none` or no such line, and a named
+  # badge FAILS. Absent reads as none because every record written before this field was
+  # branched on carries a badge and no field, and those records are the unlocked case.
+  local opts rec_opt lrt
   opts="$(record_field "$rec" 'options_presented' | tr -cd '0-9')"
   rec_opt="$(record_field "$rec" 'recommended_option')"
+  lrt="$(record_field "$rec" 'locked_requirements_touched' | tr -d '[:space:]')"
   if [ -z "$opts" ] || [ "$opts" -lt 2 ]; then
     F_WHY="$rec declares options_presented=${opts:-<none>}. A resolution is adjudicated by the
       OPERATOR, and an operator adjudicates by CHOOSING -- which requires at least two worked-out
@@ -1273,6 +1281,24 @@ validate_record() { # $1 record, $2 divergent-pass, $3 index-of-divergent-pass -
       how many options it carried."
     return 1
   fi
+  case "$lrt" in
+    ""|none|None|NONE) ;;
+    *)
+      case "$(printf '%s' "$rec_opt" | tr -d '[:space:]')" in
+        ""|none|None|NONE) return 0 ;;
+      esac
+      F_WHY="$rec names a locked requirement in 'locked_requirements_touched:' and still records
+      'recommended_option: ${rec_opt}'. AN OPTION THAT TOUCHES A LOCKED REQUIREMENT IS PRESENTED
+      UNBADGED: state each option's effect on the locked entry, including the value it leaves in
+      force, and mark none (Recommended) -- _gate-procedures.md step 2(c). Record
+      'recommended_option: none'."
+      return 1 ;;
+  esac
+  # `none` is the locked branch's word. On an unlocked record it names no option, so it is the
+  # missing recommendation spelled as a value and takes the same finding.
+  case "$(printf '%s' "$rec_opt" | tr -d '[:space:]')" in
+    none|None|NONE) rec_opt="" ;;
+  esac
   if [ -z "$rec_opt" ]; then
     F_WHY="$rec presents $opts options and names no 'recommended_option:'. A menu with no
       recommendation hands the judgment back to the operator, who has not read the artifact.
