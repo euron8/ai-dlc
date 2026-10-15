@@ -1169,6 +1169,46 @@ cap_kill nonote 's/| if (\$r | agentnote) then .held = false else . end)/| if ($
 cap_kill noenqueue 's/        def agentnote: ((.type == "queue-operation" and .operation? == "enqueue")$/        def agentnote: (false/' \
   "$CAPDIR/c3.jsonl" "Party seat 7" "" "dropping the enqueue carrier holds past an exit not yet delivered (14c'')"
 
+# 14w. A FAILED TAIL WRITE FAILS OPEN. The write is made to fail PART-WAY with a file-size limit
+# (SIGXFSZ ignored, so `tail` gets EFBIG and exits non-zero) on a transcript that HOLDS when read
+# whole: the rejection sits in the first records and Bash padding, which releases nothing, pushes
+# the file past the limit. The partial file therefore still carries the rejection, so a guard
+# that greps after a failed write denies -- an EMPTY failed write could not tell the two apart.
+CAPPAD="$CAPDIR/pad.jsonl"
+{ cat "$CAPDIR/a.jsonl"; _i=0
+  while [ "$_i" -lt 40 ]; do t_use "p$_i" Bash "pad $_i" "true"; t_res "p$_i" "padding output line $_i" false; _i=$((_i+1)); done
+} > "$CAPPAD"
+CAP_LIM_KB=4
+cap_lim() { # cap_lim <script> <transcript> <description> -> decision or empty, under the size limit
+  ( trap '' XFSZ; ulimit -f "$CAP_LIM_KB" || exit 3
+    printf '%s' "$(capj "$2" "$3")" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" 2>/dev/null ) \
+    | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null
+}
+_lt="$WORK/cap-limtail.out"
+( trap '' XFSZ; ulimit -f "$CAP_LIM_KB" && tail -c 1048576 "$CAPPAD" > "$_lt" ) 2>/dev/null && _lt_rc=0 || _lt_rc=$?
+if [ "$_lt_rc" -ne 0 ] && [ -s "$_lt" ] && grep -qF 'Concurrent subagent limit reached' "$_lt" \
+   && [ "$(wc -c < "$_lt")" -lt "$(wc -c < "$CAPPAD")" ]; then
+  ok "14w precondition: under the limit \`tail\` exits $_lt_rc with a PARTIAL file that still holds the rejection"
+else
+  bad "14w FIXTURE BROKEN: the size limit did not produce a failed, partial, rejection-bearing tail (rc=$_lt_rc) -- 14w asserts nothing"
+fi
+[ "$(cap_lim "$CAPCTL" "$CAPDIR/a.jsonl" "Party seat 7")" = deny ] \
+  && ok "14w CONTROL: under the same limit an unmutated copy still denies 14a (its tail fits), so the limit disturbs nothing else" \
+  || bad "14w CONTROL is dead -- the limit itself changes the guard's answer, so 14w's allow is unearned"
+expect_deny "$(capout "$CAPPAD" "Party seat 7")" "14w' the padded transcript, written whole, HOLDS"
+_cl="$(cap_lim "$HOOK" "$CAPPAD" "Party seat 7")"
+[ -z "$_cl" ] && ok "14w the same transcript, its tail write failing part-way -> allowed (fail open)" \
+  || bad "14w a failed tail write -> expected NO decision, got '$_cl'"
+_m="$WORK/guard-cap-notailgate.sh"
+if sed 's/^    if tail -c \(.*\) 2>\/dev\/null \\$/    tail -c \1 2>\/dev\/null; if true \\/' "$HOOK" > "$_m" \
+   && ! cmp -s "$HOOK" "$_m" && bash -n "$_m" 2>/dev/null; then
+  [ "$(cap_lim "$_m" "$CAPPAD" "Party seat 7")" = deny ] \
+    && ok "CAP MUTANT notailgate killed: a grep after a failed tail write holds on the partial file (14w)" \
+    || bad "CAP MUTANT notailgate SURVIVED: dropping the write's && binding still fails open (14w)"
+else
+  bad "CAP MUTANT notailgate DID NOT APPLY (sed failed, matched nothing, or did not parse)"
+fi
+
 # --- 15. DENY ARM 2: A GATE-ADJUDICATOR DISPATCHED OVER A WAIVER CHECK 22 WILL REJECT ---------
 # FALSE-POSITIVE SET, measured by driving this guard over the reference consumer's live pending.md
 # and pending-archive.md (each alone and concatenated) with its real ledger, probe rows and
@@ -1292,6 +1332,31 @@ adj_kill anyexc 's/^        EXC = ".*"$/        EXC = "exception"/' \
   "a bare-word exception match accepts \"the four\" as a citation (15e')"
 adj_kill noshardable 's/^\(          (if .shard == "invalid-exception"\) and (\$sh | contains(" " + \$role + " "))$/\1/' \
   "$W7" deny "dropping the shardable-role filter refuses over a dev-escalated row Check 22 arm S3 does not judge (15g)"
+
+# 15w. A FAILED KEY PRODUCER FAILS OPEN. 15a's world plus one ledger row whose tool_use_id is a
+# NUMBER: the guard's `"K\t" + .tool_use_id` cannot add a string and a number. It is the LAST row
+# because jq 1.8.1 exits 5 only when the failing input is the last one -- mid-stream it exits 0 and
+# drops that row's keys silently, which no status can see. Every earlier row still keys, so the
+# file is non-empty and only the recorded status can make the arm stand down. 15a is the control:
+# the same world without the row denies.
+# An ALLOWED drive appends its own ledger row after this arm runs, which would push the numeric row
+# off the end, so every drive gets a FRESH world and asserts the row is last before it runs.
+numid_world() { # numid_world <name> -> project dir
+  local p; p="$(mkworld "$1" 317)"; cat "$WAIVER_SRC" >> "$p/docs/escalations/pending.md"
+  printf '%s\n' '{"v":1,"sprint":317,"name":"s317-numid","role":"dev","tool_use_id":42,"shard":null}' \
+    >> "$p/_bmad-output/spawn-ledger.jsonl"
+  printf '%s\n' "$p"
+}
+numid_last() { [ "$(tail -1 "$1/_bmad-output/spawn-ledger.jsonl" | jq -r '.tool_use_id | type' 2>/dev/null)" = number ]; }
+W11="$(numid_world numid)"
+if numid_last "$W11"; then
+  expect_quiet "$(adj "$W11")" "15w the 15a waiver, the key producer failing on a numeric tool_use_id -> fail open"
+else bad "15w FIXTURE BROKEN: the numeric tool_use_id row is not the ledger's last row"; fi
+W12="$(numid_world numid-mut)"
+if numid_last "$W12"; then
+  adj_kill nokok 's/^        if (rc < 0 || nk == 0 || kok != 1) dead = 1$/        if (rc < 0 || nk == 0) dead = 1/' \
+    "$W12" deny "dropping the producer status judges partial keys and denies (15w)"
+else bad "15w FIXTURE BROKEN: the mutant world's numeric row is not the ledger's last row"; fi
 
 # THE SHARDED-REMEDIATION ARM of clause 2: Check 22 clearing arm 4 accepts, for this class, "the
 # work was re-dispatched sharded" as well as a named exception. The three near-misses each carry
