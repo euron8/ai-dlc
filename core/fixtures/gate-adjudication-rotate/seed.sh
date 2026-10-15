@@ -169,6 +169,14 @@ seed_series_newest_fail() {
           "planning-20260912T000000Z" "planning-20260909T120000Z" "$LEGACY_FAIL"
 }
 
+# A SECOND FAIL-carrying `<gate>-<nonce>` series, NEWER than seed_unmatchable_fail's, so
+# a walk of the printed lines that runs only the first (older) one leaves this one live
+# as the guard's live pass.
+seed_unmatchable_fail_newer() {
+  verdict "$GA/implementation-20260914T000000Z.verdict.json" \
+          "implementation-20260914T000000Z" "implementation-20260914T000000Z" "$LEGACY_FAIL"
+}
+
 # A sprint-LAST id the reference consumer's writers stamped: `story-s311`, which is
 # NOT nonce-tailed (its stem is). It is the only unmatchable verdict in its world and
 # it records a FAIL, so a predicate counting only `<gate>-<nonce>` ids misses it.
@@ -292,10 +300,15 @@ case "$CASE" in
     seed_series_newest_fail; seed_legacy
     ;;
   # An s308 selection beside a FAIL-carrying unmatchable verdict NEWER than the s308
-  # verdict, so it is the live pass before the move and after it. The move promotes nothing and must not be refused; a second --apply is
-  # then an empty selection over an already-rotated sprint and must not be refused either.
+  # verdict, so it is the live pass before the move and after it. The move promotes
+  # nothing, and the close must still refuse: the FAIL stays the live pass.
   reapply)
     seed_s308; seed_unmatchable_fail; seed_legacy
+    ;;
+  # Two FAIL-carrying unmatchable series, older A and newer B, no tagged s308 verdict:
+  # the partial walk. Moving A alone into s308 fills s308's archive while B stays live.
+  partial-walk)
+    seed_unmatchable_fail; seed_unmatchable_fail_newer; seed_legacy
     ;;
   # Tagged verdicts only, none for s308: still "nothing to move", exit 0.
   tagged-nomatch)

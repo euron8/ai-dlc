@@ -69,13 +69,15 @@ empty selection exited 0 with "nothing to move", so retro step 5b passed while t
 stayed live for the gate-remediation guard.
 
 **Reader half, this branch.** An empty `--sprint` selection is now exit 1 when an unmatchable series
-(a non-empty id no selector can name) has a NEWEST member recording a FAIL, and this sprint's archive
-holds no verdict yet. The refusal names every file of every such series and prints one dry-run
+(a non-empty id no selector can name) has a NEWEST member recording a FAIL. The refusal is computed from
+the live directory on every run, re-runs included, and keys on no record of an earlier run: running only
+the first printed line fills this sprint's archive, and the re-run must still refuse while a newer FAIL
+series stays live. The refusal names every file of every such series and prints one dry-run
 `--sprint s<M> --series '<exact-id>'` command per id. Any other unmatchable series gets a WARN with the
-same commands and does not refuse, and so does an empty re-run over an already-rotated sprint. `--series`
-moves exactly that id. On a non-empty selection the rotator prints a WARN and exits 0. The survivor
-refusal fires only when the move promotes a new live pass, so moving a series older than a stranded FAIL
-is not refused.
+same commands and does not refuse. `--series` moves exactly that id. On a non-empty selection the rotator
+prints a WARN and exits 0, unless the survivor refusal fires. In `--sprint` mode the survivor refusal fires
+whenever the close leaves an unmovable FAIL as the live pass, promoted or not. In `--series` mode it fires
+only when the move promotes a new live pass, so a walk that moves an older series first is not refused.
 
 **The scope was revised twice: from the id alone to FAIL-carrying series, then to each series' newest
 member.** The guard reads only the live directory, and a stale verdict with no FAIL is its allow state, so
@@ -99,5 +101,5 @@ commands and 1 question.
 **Writer half, a follow-on in this batch.** It stamps `<gate_type>-s<N>-<nonce>` at mint time, so new
 verdicts carry the token. It is built after the two branches that edit the same files merge.
 
-verify: sh R="$PWD/core/scripts/rotate-gate-adjudication.sh"; [ -f "$R" ] || exit 9; command -v jq >/dev/null || exit 9; d="$(mktemp -d)" || exit 9; g="$d/s/gate-adjudication"; a="$d/s/implementation-artifacts/s309/gate-adjudication"; h="$d/t/gate-adjudication"; mkdir -p "$g" "$h" || exit 9; printf '{"gate_nonce":"planning-20260909T120000Z","gate_series_id":"planning-20260909T120000Z","verdicts":[{"check_id":"1","verdict":"FAIL"}]}\n' > "$g/planning-20260909T120000Z.verdict.json"; printf '{"gate_nonce":"planning-20260910T120000Z","gate_series_id":"planning-20260909T120000Z-retry","verdicts":[{"check_id":"1","verdict":"PASS"}]}\n' > "$g/planning-20260910T120000Z.verdict.json"; printf '{"gate_nonce":"story-20260913T044428Z","gate_series_id":"story-s311","verdicts":[{"check_id":"2","verdict":"FAIL"}]}\n' > "$h/story-20260913T044428Z.verdict.json"; o="$(bash "$R" --sprint s308 --state-dir "$d/s" 2>&1)"; r=$?; [ "$r" -eq 1 ] || exit 1; grep -q '/planning-20260909T120000Z\.verdict\.json$' <<<"$o" || exit 1; o="$(bash "$R" --sprint s308 --state-dir "$d/t" 2>&1)"; r=$?; [ "$r" -eq 1 ] || exit 1; grep -q '/story-20260913T044428Z\.verdict\.json$' <<<"$o" || exit 1; bash "$R" --sprint s309 --series planning-20260909T120000Z --apply --state-dir "$d/s" >/dev/null 2>&1 || exit 1; [ -f "$a/planning-20260909T120000Z.verdict.json" ] && [ -f "$g/planning-20260910T120000Z.verdict.json" ] || exit 1; bash "$R" --sprint s308 --state-dir "$d/s" >/dev/null 2>&1
+verify: sh R="$PWD/core/scripts/rotate-gate-adjudication.sh"; [ -f "$R" ] || exit 9; command -v jq >/dev/null || exit 9; d="$(mktemp -d)" || exit 9; g="$d/s/gate-adjudication"; a="$d/s/implementation-artifacts/s309/gate-adjudication"; h="$d/t/gate-adjudication"; mkdir -p "$g" "$h" || exit 9; printf '{"gate_nonce":"planning-20260909T120000Z","gate_series_id":"planning-20260909T120000Z","verdicts":[{"check_id":"1","verdict":"FAIL"}]}\n' > "$g/planning-20260909T120000Z.verdict.json"; printf '{"gate_nonce":"planning-20260910T120000Z","gate_series_id":"planning-20260909T120000Z-retry","verdicts":[{"check_id":"1","verdict":"PASS"}]}\n' > "$g/planning-20260910T120000Z.verdict.json"; printf '{"gate_nonce":"implementation-20260914T000000Z","gate_series_id":"implementation-20260914T000000Z","verdicts":[{"check_id":"4","verdict":"FAIL"}]}\n' > "$g/implementation-20260914T000000Z.verdict.json"; printf '{"gate_nonce":"story-20260913T044428Z","gate_series_id":"story-s311","verdicts":[{"check_id":"2","verdict":"FAIL"}]}\n' > "$h/story-20260913T044428Z.verdict.json"; o="$(bash "$R" --sprint s308 --state-dir "$d/s" 2>&1)"; r=$?; [ "$r" -eq 1 ] || exit 1; grep -q '/planning-20260909T120000Z\.verdict\.json$' <<<"$o" || exit 1; o="$(bash "$R" --sprint s308 --state-dir "$d/t" 2>&1)"; r=$?; [ "$r" -eq 1 ] || exit 1; grep -q '/story-20260913T044428Z\.verdict\.json$' <<<"$o" || exit 1; bash "$R" --sprint s309 --series planning-20260909T120000Z --apply --state-dir "$d/s" >/dev/null 2>&1 || exit 1; [ -f "$a/planning-20260909T120000Z.verdict.json" ] && [ -f "$g/planning-20260910T120000Z.verdict.json" ] || exit 1; o="$(bash "$R" --sprint s309 --state-dir "$d/s" 2>&1)"; r=$?; [ "$r" -eq 1 ] || exit 1; grep -q '/implementation-20260914T000000Z\.verdict\.json$' <<<"$o" || exit 1; bash "$R" --sprint s309 --series implementation-20260914T000000Z --apply --state-dir "$d/s" >/dev/null 2>&1 || exit 1; bash "$R" --sprint s309 --state-dir "$d/s" >/dev/null 2>&1 || exit 1; bash "$R" --sprint s308 --state-dir "$d/s" >/dev/null 2>&1
 

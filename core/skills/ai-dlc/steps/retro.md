@@ -1365,8 +1365,10 @@ follow their audit, these must follow the merge.
    A line printed `--sprint s<N>` with `NO HINT`, or a hint those commits do not confirm, is
    an `AskUserQuestion` to the operator naming the id, its nonces and the candidate sprints;
    never pick the sprint yourself. Until the writer half stamps `<gate_type>-s<N>-<nonce>` at
-   mint time, a retro HARD_BLOCKS here whenever this sprint's selection is empty, this sprint
-   has no archived verdicts yet, and an unmatchable series' newest member records a FAIL.
+   mint time, a retro HARD_BLOCKS here whenever this sprint's selection is empty and an
+   unmatchable series' newest member records a FAIL, re-runs included.
+   A sprint's close commit is its `chore(s<N>): rotate ... post-retro-merge` commit from
+   7a-post; where a sprint has none, it is the merge commit of that sprint's retro PR.
 
 6. **Verify no-loss per file:** each archive's byte count MUST equal that file's
    pre-rotation live byte count, and each new live log MUST contain only its

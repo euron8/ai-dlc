@@ -51,14 +51,21 @@
 #     --legacy-through owns those.
 #   - EMPTY selection and no such series: "nothing to move", a WARN naming the
 #     unmatchable ones with the same commands, exit 0.
-#   - EMPTY selection when this sprint's archive already holds verdicts: the same
-#     WARN, exit 0, never the refusal. The sprint has been rotated, so this is the
-#     re-run the exit contract below promises is exit 0.
 #   - NON-EMPTY selection: the selected verdicts move as before, the unmatchable
-#     ones stay live, and a WARN line names them with the same commands. Exit 0.
-#     The HARD_BLOCK fires only on an empty selection, because a sprint whose
-#     own verdicts were tagged has been rotated, and refusing that move over a
-#     different series would wedge the close for something it did not cause.
+#     ones stay live, and a WARN line names them with the same commands. Exit 0,
+#     unless the survivor refusal below fires because one of them is left as a
+#     FAILing live pass. The empty-selection HARD_BLOCK does not fire here, because
+#     a sprint whose own verdicts were tagged has been rotated, and refusing that
+#     move over a different series would wedge the close for something it did not cause.
+#
+# A RE-RUN IS RE-EVALUATED, NEVER EXEMPTED, AND AN EARLIER REVISION EXEMPTED IT. It
+# skipped the refusal whenever this sprint's archive already held a verdict, on the
+# grounds that the sprint "has been rotated". One `--series ... --apply` into s<N> --
+# the FIRST printed line, run alone -- also fills that archive, so the next
+# `--sprint s<N> --apply` WARNed and exited 0 while a newer FAIL series stayed live as
+# the guard's live pass. The refusal is now computed from the live directory on every
+# run and keyed on no record of earlier runs, so a re-run is exit 0 exactly when the
+# state it would refuse is gone.
 #
 # THE REFUSAL WAS NARROWED TO FAIL-CARRYING SERIES, AND AN EARLIER REVISION KEYED IT
 # ON THE ID ALONE. The guard reads only the live directory, and a stale verdict that
@@ -149,7 +156,7 @@
 #                  (--legacy-through)
 #
 # Exit: 0 = reported or rotated (nothing to rotate is a normal, affirmative
-#           result, and so is a second --apply for an already-rotated sprint)
+#           result, and so is a second --apply once nothing it refuses is live)
 #       1 = REFUSED or HARD_BLOCK: an integrity check failed and NOTHING more
 #           was written than had already landed before the failure
 #       2 = usage / cannot resolve a repo root
@@ -662,15 +669,10 @@ warn_pass_only() { # <rows-file> <count>
   print_series_commands "$1"
 }
 
-# Whether this sprint's archive already holds a verdict: an empty selection is then the
-# re-run of a rotated sprint, which WARNs and exits 0 rather than refusing.
-ALREADY_ROTATED=0
-for _ar_v in "$DEST"/*.verdict.json; do
-  [ -f "$_ar_v" ] && { ALREADY_ROTATED=1; break; }
-done
-
 if [ "$N_FILES" -eq 0 ]; then
-  if [ -z "$LEGACY_THROUGH" ] && [ -z "$SERIES" ] && [ "$N_UM_FAIL" -gt 0 ] && [ "$ALREADY_ROTATED" -eq 0 ]; then
+  # Keyed on the live directory alone, never on this sprint's archive: see the header's
+  # re-run paragraph.
+  if [ -z "$LEGACY_THROUGH" ] && [ -z "$SERIES" ] && [ "$N_UM_FAIL" -gt 0 ]; then
     echo "${SELF_NAME}: REFUSED -- no verdict names series '${SPRINT}', and ${N_UM_FAIL} verdict(s) carry a" >&2
     echo "  gate_series_id no --sprint selector can match, in a series whose newest member" >&2
     echo "  records a FAIL, so this sprint's verdicts may be among them:" >&2
@@ -689,16 +691,6 @@ if [ "$N_FILES" -eq 0 ]; then
       warn_pass_only "$TMPD/unmatchable_pass" "$N_UM_PASS"
     fi
     exit 1
-  fi
-  if [ -z "$LEGACY_THROUGH" ] && [ -z "$SERIES" ] && [ "$N_UM_FAIL" -gt 0 ]; then
-    # Reached only when this sprint is already rotated (see the refusal above).
-    echo "${SELF_NAME}: WARN -- ${SPRINT} is already rotated ('${DEST}' holds verdicts), so this empty" >&2
-    echo "  selection is a re-run and does not refuse. ${N_UM_FAIL} verdict(s) still carry a gate_series_id no" >&2
-    echo "  --sprint selector can match, in a series whose newest member records a FAIL:" >&2
-    cut -f2 "$TMPD/unmatchable_fail" | sed 's/^/    /' >&2
-    echo "  To move them, run each command below (a dry run), confirm its sprint, then add --apply," >&2
-    echo "  in the order printed:" >&2
-    print_series_commands "$TMPD/unmatchable_fail"
   fi
   if [ -z "$LEGACY_THROUGH" ] && [ -z "$SERIES" ] && [ "$N_UM_PASS" -gt 0 ]; then
     warn_pass_only "$TMPD/unmatchable_pass" "$N_UM_PASS"
@@ -736,11 +728,17 @@ for f in "$SRC"/*.verdict.json; do
   fi
 done
 
-# THE REFUSAL FIRES ONLY WHEN THE MOVE PROMOTES A NEW LIVE PASS: the newest moved nonce
-# is newer than the survivor's. When the survivor already outranks every moved verdict
-# it was the live pass before this run and stays it after, so refusing changes nothing
-# the guard reads -- and it wedged a --series walk that moved older series first.
-# Measured on the reference consumer's s319 FAIL walk: refused applies, a second pass.
+# IN --series MODE ONLY, THE REFUSAL FIRES ONLY WHEN THE MOVE PROMOTES A NEW LIVE PASS:
+# the newest moved nonce is newer than the survivor's. A --series run is one step of a
+# walk ordered oldest series first, and the survivor it leaves is a series a LATER line
+# of that walk moves; refusing that step wedged the walk. Measured on the reference
+# consumer's s319 FAIL walk: refused applies, a second pass.
+#
+# A --sprint OR --legacy-through RUN REFUSES WHENEVER IT LEAVES AN UNMOVABLE FAIL AS THE
+# LIVE PASS, PROMOTED OR NOT, AND AN EARLIER REVISION APPLIED THE PROMOTION CONJUNCT HERE
+# TOO. That run is the close, and nothing follows it to clear the survivor: an older
+# selected verdict below a newer unmatchable FAIL promoted nothing, so the close exited 0
+# and the FAIL stayed live, denying the next sprint's first edit. Base refused that world.
 MOVED_MAX_TS=""
 while IFS= read -r _mv_stem; do
   _mv_ts="$(conforming_nonce "$_mv_stem")" || continue
@@ -749,12 +747,12 @@ done < "$TMPD/move_stems"
 PROMOTES=0
 [ -n "$MOVED_MAX_TS" ] && [ "$MOVED_MAX_TS" \> "${SURVIVOR_TS:-}" ] && PROMOTES=1
 
-if [ "$PROMOTES" -eq 1 ] && [ "$SURVIVOR_UNMOVABLE" -eq 1 ] && [ -n "$SURVIVOR_FAILS" ]; then
+if [ "$SURVIVOR_UNMOVABLE" -eq 1 ] && [ -n "$SURVIVOR_FAILS" ] && { [ -z "$SERIES" ] || [ "$PROMOTES" -eq 1 ]; }; then
   echo "${SELF_NAME}: REFUSED -- this rotation would strand a FAILing verdict no mode can move." >&2
   echo "  Newest verdict left in '${SRC}' after this move:" >&2
   echo "    ${SURVIVOR_STEM} -- ${SURVIVOR_WHY}; FAILed check(s): ${SURVIVOR_FAILS}" >&2
   echo "  The gate-remediation guard picks its live pass by trailing nonce with no notion of" >&2
-  echo "  sprint, so that verdict would become the live pass and deny artifact edits, and the" >&2
+  echo "  sprint, so that verdict is or would become the live pass and deny artifact edits, and the" >&2
   echo "  deny would not clear on its own. Nothing written." >&2
   echo "" >&2
   # THE REMEDY DIFFERS BY CASE AND MUST NOT BE PRINTED UNCONDITIONALLY. A
