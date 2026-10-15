@@ -49,6 +49,35 @@
 #       refusal: a capture taken at the content head and committed in a records commit
 #       after it is the normal shape.
 #
+# HANDOFF MODE, BOOKKEEPING — three refusals and a SKIP line, every one read AT <frozen> via
+# `git show`, never the working tree.
+#
+#   (g) STATUS-NOT-REVIEW. The story's status is not `review`. The grammar is
+#       sprint-status.sh's (frontmatter `status:` first, `**Status:**` only for a file with no
+#       frontmatter; both regexes from schemas/sprint-status.json), reached through its
+#       `story-status --ref` mode, which must sit beside this script.
+#   (h) STATUS-YAML-MISMATCH. The story's status disagrees with its row in the IMPLEMENTATION
+#       view of the canonical sprint-status yaml. Never the planning view: it lagged at three
+#       APPROVED gate-1 shas on the reference consumer (s318 2.1, s317 2.2, s317 1.2).
+#   SKIP STATUS (<reason>). No story status, no yaml, no row, or the sibling missing or failing:
+#       printed on stdout, never a refusal, never silent.
+#   (i) HEADING-DEMOTED. One of the four evidence headings dev.md requires at `## ` appears only
+#       deeper (`### Smoke Test Updates`) or only at level 1. Code fences are stripped. The
+#       heading grammar is one awk function shared with strategy mode: `## <heading>` followed by
+#       whitespace and any text (`## Rename Verification (dev)`) is that heading at level 2.
+#   Not checked, deliberately: a missing Dev Agent Record (implementation.md folds it into the
+#   story AFTER gate 1 approves, so its absence at gate 1 is the documented flow) and an empty
+#   evidence heading (operator ruling, batch 230).
+#
+# MEASURED, bookkeeping arms. Reference consumer, read-only clone, at every gate-1 code-review
+# pass's `reviewed-sha:` over s317/s318 (56 passes) plus, for the 7 passes that record none, the
+# first story-branch commit where the story reads `review`: 63 snapshots, 34 story files. 3
+# refusals, all true positives: s317 4.2a p1 (status `ready-for-dev`, APPROVED anyway; its QA
+# validation records the lead flipping the sprint-branch copy instead), s317 4.3a p1
+# (`in-progress`), s318 1.5 p1 (three evidence headings at `###`). 0 status-yaml-mismatch; the
+# planning view would have refused 6 correct passes. 0 level-1 evidence headings. The shared
+# heading grammar changed no strategy or handoff verdict over the 32 story-merge tips.
+#
 # STRATEGY MODE — three refusals.
 #
 #   For every row of every named story's `## Strategy Test IDs` table:
@@ -106,6 +135,7 @@
 set -u
 
 ME=validate-handoff-evidence
+HE_SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO=.
 if [ "${1:-}" = "-C" ]; then
   [ $# -ge 2 ] || { echo "$ME: UNEVALUABLE — -C needs a directory" >&2; exit 2; }
@@ -132,6 +162,22 @@ story_text() { # <ref> <story> -> the story bytes on stdout; 1 if unreadable
   return 1
 }
 
+# The ONE heading grammar, shared by strategy mode and the heading-demoted arm. ev_level(line, h)
+# is the level of a markdown heading whose text is <h>, alone or followed by whitespace and
+# anything (`## Rename Verification (dev)` is that heading at level 2), else 0. A heading text
+# that runs on into more word characters (`## Strategy Test IDsX`) is a different heading.
+HEADING_AWK='
+function ev_level(line, h,   lvl, rest, after) {
+  if (!match(line, /^#+/)) return 0
+  lvl = RLENGTH; rest = substr(line, lvl + 1)
+  if (rest !~ /^[ \t]+/) return 0
+  sub(/^[ \t]+/, "", rest)
+  if (substr(rest, 1, length(h)) != h) return 0
+  after = substr(rest, length(h) + 1)
+  if (after == "" || after ~ /^[ \t]/) return lvl
+  return 0
+}'
+
 # ------------------------------------------------------------------------- strategy
 strategy_one() { # <ref> <story>
   local ref="$1" story="$2" text rows
@@ -140,8 +186,8 @@ strategy_one() { # <ref> <story>
   # separator row are dropped. A row with fewer than four cells is emitted as
   # `SHORT <TAB> id` when the table's header carries a `Resolves to` column (that row has no
   # cell to resolve and is refused), and dropped otherwise (a table this mode cannot read).
-  rows="$(awk '
-    /^## Strategy Test IDs[[:space:]]*$/ {on=1; next}
+  rows="$(awk "$HEADING_AWK"'
+    ev_level($0, "Strategy Test IDs") == 2 {on=1; next}
     on && /^## / {exit}
     on && /^[[:space:]]*\|/ {
       line=$0; sub(/^[[:space:]]*\|/, "", line); sub(/\|[[:space:]]*$/, "", line)
@@ -324,8 +370,77 @@ if [ -n "$GLOBS" ]; then
   done <<<"$GLOBS"
 fi
 
+# ------------------------------------------------------------------------- bookkeeping
+# Every bookkeeping arm reads <frozen> through git, never the working tree and never the disk
+# fallback the evidence arms use: the reviewer reads the commit, so an uncommitted fix to the
+# status or a heading is not a fix.
+#
+# Every absence that stops a status arm from deciding prints ONE `SKIP STATUS (<reason>)` line
+# through skip_status, on stdout, and never refuses. It must never pass silently: a tree with no
+# sprint-status yaml (the shipped clean worlds, a consumer before its envelope exists) reads
+# identically to a checked one otherwise.
+skip_status() { printf 'SKIP STATUS (%s)\n' "$1"; }
+SS="$HE_SELF/sprint-status.sh"
+if [ ! -f "$SS" ]; then
+  skip_status "sprint-status.sh is not beside this script at $HE_SELF"
+else
+  ss_out="$(bash "$SS" story-status --ref "$FROZEN" --root "$REPO" "$STORY" 2>&1)"; ss_rc=$?
+  if [ "$ss_rc" -ne 0 ]; then
+    skip_status "sprint-status.sh story-status exited $ss_rc: $(head -n 1 <<<"$ss_out")"
+  else
+    st_val="$(awk -F'\t' '$1 == "story" {print $2; exit}' <<<"$ss_out")"
+    st_why="$(awk -F'\t' '$1 == "story" {print $3; exit}' <<<"$ss_out")"
+    row_val="$(awk -F'\t' '$1 == "row" {print $2; exit}' <<<"$ss_out")"
+    row_why="$(awk -F'\t' '$1 == "row" {print $3; exit}' <<<"$ss_out")"
+    if [ -z "$st_val" ]; then
+      skip_status "story $STORY at ${FROZEN:0:12}: ${st_why:-no story line from sprint-status.sh}"
+    else
+      # STATUS-NOT-REVIEW. The dev flips the story to `review` in the commit gate 1 reads.
+      [ "$st_val" = "review" ] || refuse "status-not-review $STORY: status is '$st_val' ($st_why) at ${FROZEN:0:12}, not 'review'; flip it in the story file on the story branch and commit it before the handoff"
+      # STATUS-YAML-MISMATCH. The implementation view only: the planning view lags by design.
+      if [ -z "$row_val" ]; then
+        skip_status "implementation-view row for $STORY at ${FROZEN:0:12}: ${row_why:-no row line from sprint-status.sh}"
+      elif [ "$row_val" != "$st_val" ]; then
+        refuse "status-yaml-mismatch $STORY: the story says '$st_val' and its implementation-view row $row_why says '$row_val' at ${FROZEN:0:12}; make them agree in the commit"
+      fi
+    fi
+  fi
+fi
+
+# HEADING-DEMOTED. dev.md `## QA Handoff Evidence` requires the four evidence sections at `## `.
+# One that appears ONLY deeper (`### Smoke Test Updates`) or ONLY at level 1 is a heading no
+# `## `-keyed reader finds. Code fences are stripped first. Absent entirely is not this arm's.
+if tracked "$FROZEN" "$STORY"; then
+  demoted="$(G show "$FROZEN:$STORY" | awk "$HEADING_AWK"'
+    /^[ \t]*(```|~~~)/ {fence = !fence; next}
+    fence {next}
+    {
+      for (i = 1; i <= 4; i++) {
+        l = ev_level($0, H[i]); if (!l) continue
+        if (l == 2) two[i] = 1
+        else if (l > 2) deep[i] = 1
+        else one[i] = 1
+      }
+    }
+    BEGIN { H[1] = "Production Integrity Tests"; H[2] = "Smoke Test Updates"; H[3] = "Rename Verification"; H[4] = "Strategy Test IDs" }
+    END {
+      for (i = 1; i <= 4; i++) {
+        if (!two[i] && deep[i]) print "deeper\t" H[i]
+        if (!two[i] && one[i]) print "level1\t" H[i]
+      }
+    }')"
+  if [ -n "$demoted" ]; then
+    while IFS="$(printf '\t')" read -r how h; do
+      case "$how" in
+        deeper) refuse "heading-demoted $STORY: '## $h' appears only below level 2 at ${FROZEN:0:12}; promote it to '## $h'" ;;
+        level1) refuse "heading-demoted $STORY: '## $h' appears only at level 1 ('# $h') at ${FROZEN:0:12}; write it as '## $h'" ;;
+      esac
+    done <<<"$demoted"
+  fi
+fi
+
 if [ "$refused" -eq 1 ]; then
-  echo "$ME: REFUSED — $STORY handoff evidence at ${FROZEN:0:12} (range ${BASE:0:12}..${FROZEN:0:12}); fix the captures named above before gate 1." >&2
+  echo "$ME: REFUSED — $STORY handoff evidence at ${FROZEN:0:12} (range ${BASE:0:12}..${FROZEN:0:12}); fix the captures, status and headings named above before gate 1." >&2
   exit 1
 fi
 echo "$ME: OK — $STORY at ${FROZEN:0:12}"
