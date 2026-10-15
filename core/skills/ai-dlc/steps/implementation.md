@@ -282,6 +282,9 @@ Monitor task progress:
 - When code reviewer sends findings → ensure dev applies ALL fixes
   (simplification/removal findings included, per Rule 7 and Rule 26(d))
 - When QA sends failures → ensure dev fixes and QA re-validates
+- When a QA `NEEDS_REWORK` names a `requirement divergence` HARD_BLOCK
+  (`qa.md` Validation Checklist), ask the operator by `AskUserQuestion`
+  under Rule 3(a), with no flag, before dispatching any dev rework.
 - Track gate approvals (gate1: code review, gate2: QA, gate3: story validation)
 
 **Gate type for validation loading (Rule 21 / Lever 2).** The gates run

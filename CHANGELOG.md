@@ -81,6 +81,26 @@ and two architecture passes and a code review confirmed the branch order without
 bullets. Its first bullet (price every literal under the new binding) is now carried by core and can retire. The second
 (a distinct skip reason in the execution row) and the third (a threshold as a config leaf) are not covered by this change.
 
+### Added
+
+- **QA now treats an AC that omits an action a locked requirement requires as a deviation for
+  the operator (BL-521).** A new HARD GATE item in `team-roles/qa.md` Validation Checklist fires
+  when an AC's precondition falls inside a locked requirement's verbatim scope and its expected
+  outcome omits an action the text requires. QA files a Tier 1 `HARD_BLOCK` (`requirement
+  divergence`) and writes `Verdict: NEEDS_REWORK` with a finding naming it. Before dispatching
+  rework, the lead puts it to the operator by `AskUserQuestion` under Rule 3(a), with no flag. If
+  the operator accepts the degraded branch, QA re-validates to PASS citing the entry. A `do-now`
+  disposition proceeds as rework. Three cases are exempt: a degraded outcome the requirement's own
+  text prescribes; an existing requirement-divergence `HARD_BLOCK` that cites this LR and this
+  branch and carries a disposition; and an outcome that performs none of the requirement's actions
+  and reports a non-success to the caller, unless the requirement's text forbids that refusal. A
+  `trade-off` entry naming no LR does not exempt. `escalations.md`, `implementation.md` and the
+  Escalation Protocol in `qa.md` name the same filer (QA) and the same route.
+- `steps/deploy-validate.md` §5 records an operator-accepted degraded branch as a `descope` of the
+  omitted action alone, never `delivered`, quoting the `HARD_BLOCK`'s id and token.
+- `process-rule-pins` gains nine rows pinning both texts (eight line-mode rows in qa.md and one
+  para row spanning §5 of deploy-validate.md).
+
 ## [0.785.0] - 2026-10-14
 
 Batch 230 (graph-ledger-full-drain), second release: BL-507, held from batch 229, rebased onto 0.784.0 and adversaried

@@ -68,7 +68,11 @@ decision. A HARD_BLOCK on a locked requirement is the exception: it is
 resolved BEFORE the checkpoint, which is not presented while it lacks a
 recorded disposition — the lead files it, pauses per Rule 3 and stops,
 and the lead records the operator's disposition on the entry with its `Operator authorization:` citation
-(`steps/deploy-validate.md` §5). DECIDED_AUTONOMOUSLY reviewed by human
+(`steps/deploy-validate.md` §5). The `requirement divergence` HARD_BLOCK
+QA raises at gate 2 (`qa.md` Validation Checklist) is filed by QA, not the
+lead, and the lead puts it to the operator by `AskUserQuestion` under Rule
+3(a) with no flag and no stop, then records the disposition on the entry.
+DECIDED_AUTONOMOUSLY reviewed by human
 at the checkpoint; no action unless the decision was wrong, in which
 case status updates to OVERRIDDEN with corrective direction.
 
