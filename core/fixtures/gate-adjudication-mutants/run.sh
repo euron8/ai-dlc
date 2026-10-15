@@ -17,15 +17,18 @@
 # that worked, which is the defect this directory exists to catch one level up.
 #
 # SHARDED. The pre-push suite is POLE-BOUND, so this battery's 32 full runs of the shipped
-# fixture are dealt across three .dist-only drivers (`gate-adjudication-mutants-b`, `-c`) that
+# fixture are dealt across five shards — this file and four .dist-only drivers
+# (`gate-adjudication-mutants-b`, `-c`, `-d`, `-e`) that
 # `exec bash <this file> --group <x>`. Every shard pays the M0 control and the coverage join;
 # the mutant partition below is declared HERE and joined (J0) against this file's own
 # `score "m<n> ` lines, so no mutant can fall out of every shard and no shard can be declared
 # without a driver. The shard arrives as an ARGUMENT, never the environment (scrubbed below).
-SHARDS="a b c"
+SHARDS="a b c d e"
 MUTANTS_a="m1 m4 m7 m10 m13 m16 m19"
-MUTANTS_b="m2 m5 m8 m11 m14 m17 m20 m22 m25 m26 m28 m30"
-MUTANTS_c="m3 m6 m9 m12 m15 m18 m21 m23 m24 m27 m29 m31"
+MUTANTS_b="m2 m5 m8 m11 m14 m28"
+MUTANTS_c="m3 m6 m9 m12 m15 m18"
+MUTANTS_d="m17 m20 m22 m25 m26 m30"
+MUTANTS_e="m21 m23 m24 m27 m29 m31"
 set -u
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 

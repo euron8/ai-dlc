@@ -14,3 +14,5 @@ VERSION
 core/fixtures/gate-adjudication-mutants/run.sh
 core/fixtures/gate-adjudication-mutants-b/run.sh
 core/fixtures/gate-adjudication-mutants-c/run.sh
+core/fixtures/gate-adjudication-mutants-d/run.sh
+core/fixtures/gate-adjudication-mutants-e/run.sh
