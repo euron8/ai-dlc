@@ -1,6 +1,7 @@
-READ and FOLLOW docs/plans/graph-pull-0786-to-0788.md
+# DISCHARGED — DO NOT EXECUTE — pull the graph consumer to 0.788.0
 
-# Pull the graph consumer to 0.788.0
+**Discharged by graph's own run: `fa2444635`, "reconcile distribution 0.786.0 → 0.788.0" (#1225), stamp `version:
+0.788.0` on graph `main`, with the S318 rotate id archived.** The next pull is `docs/plans/graph-pull-0788-to-0789.md`.
 
 ## RESUME HERE
 
@@ -372,3 +373,8 @@ selectable id `planning-s303-20260814T152401Z` exited 2 with the refusal quoted 
 printed a `--legacy-through` remedy.
 
 ## Discharge
+
+Ran in a graph session on 2026-10-15 and merged as graph #1225 (`fa2444635`); stamp 0.788.0 on graph `main`.
+`PC-S318-ROTATE-GATE-ADJUDICATION-SPRINT-FLAG-NEVER-MATCHES-NONCE-STYLE-SERIES-IDS` is in graph's archive and absent from
+its live ledger, which then held only the S319 id that 0.789.0 closes. Recorded from graph's committed history by the
+batch-232 close; the run's own counts are in graph's reconcile report, not here.
