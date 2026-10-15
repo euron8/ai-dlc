@@ -67,6 +67,29 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
 
+**BATCH 233 SHIPPED NO RELEASE. GRAPH PULLED 0.789.0 (#1226) AND ITS LIVE LEDGER IS EMPTY: LIVE 0, DELIVERY GAP 0.
+THE BACKLOG IS STILL DECLARED EMPTY. THE PULL RUNBOOK IS DISCHARGED, AND THE §2 NARROWING PLAN IS WRITTEN FOR GRAPH.**
+Batch 232's block below is history: this block replaces its delivery gap. Started by peer ai-dlc-b8's one-liner at
+`origin/main` `7e8d62d7` (`VERSION` 0.789.0); graph-ab was live and was never messaged.
+- **Opening sweep** (at `7e8d62d7`, graph `main` `fa2444635`, installed 0.788.0): live 1 (PC-S319), unfiled 0,
+  worklist 0, DISCHARGED 1, invisible 0, TERMINAL 241, archive 364, 2 qualifying refs (both 0.786.0 reconcile branches,
+  their adds archived), every control passing. Nothing was buildable, so no release was cut.
+- **graph delivery**: graph ran the 0.788.0 -> 0.789.0 pull itself (#1226, `b3f2fe199`), matching the rehearsal per its
+  own reconcile log, and closed PC-S319 as `CLOSED AS REJECTED — BY DESIGN` through the refusal channel. The runbook
+  `docs/plans/graph-pull-0788-to-0789.md` is retitled spent with its `## Discharge` filled from graph's history; graph
+  cannot write it, because it sits outside the consumer.
+- **Close sweep** (at `e74eb478`, graph `main` `b3f2fe199`, installed = shipped = 0.789.0): live 0, unfiled 0,
+  worklist 0, DISCHARGED 0, invisible 0, TERMINAL 242, archive 365, ledger md5 `fce2ab88…`. Qualifying refs read
+  153, because main's live set is empty and any ref carrying an archived id now "adds" one; the union minus archives is
+  still 0. **The derive block's `live_main` presence control read 0 on this correct derivation**, so it is re-keyed on
+  `grep -c '^## '` over main's ledger file (19), with the id count kept beside it.
+- **§2 narrowing**: at graph's request, on the operator's ruling that it runs between sprints,
+  `docs/plans/graph-implementation-push-s2-narrow.md` (#1146) moves the graph-local residue of `implementation-push.md`
+  §2 into `implementation-domain.md` (`push_candidate: false`) and deletes the block whole, so the next drain reads 4
+  `PUSH-REFUSED` and 0 candidates. Rehearsed on a clone; graph executes it after operator approval.
+- **Net for the batch**: closed 0 entries, filed 0; 1 candidate closed upstream by graph's pull. Backlog 0 live, 526
+  archived.
+
 **BATCH 232 SHIPPED `v0.789.0` (`dc8efe43`, #1144): GRAPH'S ONE UNFILED CANDIDATE CLOSED UPSTREAM, AND CORE GAINED THE
 TWO WORKTREE-DISPATCH RULES ITS 0.713.0 "ABSORBED" RULING HAD MISSED. THE BACKLOG IS DECLARED EMPTY AGAIN. THE PULL
 0.788.0 -> 0.789.0 IS REQUIRED; ITS RUNBOOK LANDS WITH THIS CLOSE.**
@@ -586,7 +609,13 @@ lids /tmp/mainled.md > /tmp/live_main.txt
 # like one that passed; the discriminating controls are the two below it.
 comm -23 /tmp/live_main.txt /tmp/live.txt | comm -23 - /tmp/arch.txt | wc -l   # assertion: 0, or the derivation is broken
 comm -13 /tmp/live_main.txt /tmp/live.txt           # the filings ahead of main. THIS is the new work.
-wc -l < /tmp/live_main.txt                          # CONTROL: must be NON-ZERO. A zero here means
+grep -c '^## ' /tmp/mainled.md                      # CONTROL: must be NON-ZERO -- main's ledger file
+                                                    # resolved and carries sections. Keyed on the FILE,
+                                                    # not on ids: at batch 233 main's ledger held 0 live
+                                                    # ids, the program's goal state, and an id-keyed
+                                                    # control read 0 on a correct derivation (19 here).
+wc -l < /tmp/live_main.txt                          # main's live ids. 0 is LEGITIMATE when the control
+                                                    # above is non-zero. A zero in BOTH means
                                                     # the ref carried no ledger and `git show`
                                                     # answered empty -- which is what the "newest
                                                     # branch ahead of main" repair did at batch 89,
@@ -731,7 +760,7 @@ cat /tmp/pc_backed.tsv         # read it -- the ids are the batch's candidate se
 # controls, same invocation:
 wc -l < /tmp/live.txt                                            # 0 is LEGITIMATE here -- it is the program's goal
                                                                  # state, first read at batch 209's close -- PROVIDED
-                                                                 # the `live_main` presence control above is non-zero
+                                                                 # the `grep -c '^## '` presence control above is non-zero
                                                                  # and `arch.txt` holds main's ids. A 0 beside a 0
                                                                  # presence control is a broken derivation; do not
                                                                  # "fix" a correct 0 by widening the grammar.
