@@ -175,3 +175,29 @@ a decision nobody adjudicates.
 
 verify: manual -- close when the remediator contract forbids dispositioning a party MAJOR as out of shard scope (it escalates instead), and a fixture pins that clause.
 
+## BL-522 — a rebind passed three reviews with nobody pricing the literal it re-keyed
+
+**DEFECT.** Filed by the consumer as `PC-S318-ARCHITECT-ROLE-DOES-NOT-ASK-WHAT-A-LITERAL-IS-WORTH-AFTER-A-REBIND`.
+
+**What happened.** In graph s318, story 1.2's `if hodl:` block set `stable_token = "token1"` (graph main
+`rebalancer/execution.py:23351`), which changes which token counts as non-stable. `dust_raw` (main `:23459-23460`) is
+`Decimal("0.01")` units of the non-stable token and gates the swap, so the floor moved with no diff touching it; the
+retro (`_bmad-output/party-mode-transcripts/s318/retro.md:70`, not re-derived here) puts it at about $0.00002 before and
+about $24 after. A live press held 0.0091 WETH under that floor, skipped the swap and ended SUCCESS. The second keyed
+literal, the stable-side `Decimal("0.01")` at main `:25078`, was named only by the retro (`:76`, `:120`). The reviewer
+that passed the rebind was the adversary, not the architect: `architecture-adversarial-p2.md:83` confirmed the dust gate
+precedes the chain refusal and concluded a below-dust press "behaves as on the proven path"; p1 `:669` wrote "above the
+dust floor" as a fixture precondition; `docs/reviews/s318/1-2-code-review.md` mutation-tested every rebind line and priced
+nothing. `requirements-architect-05.md:8-13,20` came closest: it named the unit flip and wrote "0.01 units of token0"
+without a value under either binding.
+
+**The fix (batch 230).** One domain-neutral clause in three roles: a change that re-binds a name, role or unit that
+downstream literals or thresholds are keyed on prices every such literal under the old and the new binding, in the unit
+it is compared against, and records `old -> new`; a literal the diff does not touch is in scope for that reason. In
+`adversary.md` it is a Severity rung, a plain blocking MAJOR that never counts as underived, CRITICAL when the new price
+sends a covered case down a different branch. In `code-reviewer.md` it is a severity classification, Important minimum.
+In `architect.md` the evidence contract requires a `derived` fence with one command per keyed literal per binding.
+`core/fixtures/process-rule-pins` pins thirteen rows across the three files.
+
+verify: sh F=core/fixtures/process-rule-pins/run.sh; [ -f "$F" ] || exit 9; o="$(bash "$F" --report 2>&1)" || exit 1; n="$(grep -cE '^  ok    (adv-rebind-(rung|unit|untouched|oldnew|major)|cr-rebind-(head|unit|untouched|sev)|arch-rebind-(fence|unit|oldnew|untouched)): pinned inside ' <<<"$o")" || n=0; [ "$n" -eq 13 ]
+

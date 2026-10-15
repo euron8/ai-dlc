@@ -20,6 +20,29 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [UNRELEASED — b230-c3-rebind]
+
+### A rebind prices every literal keyed on it, under both bindings (BL-522)
+
+A change that re-binds a name, role or unit that downstream literals or thresholds are keyed on now has to price every
+such literal under the old and the new binding, in the unit the literal is compared against, and record `old -> new`. A
+literal the diff does not touch is in scope for exactly that reason. The reference consumer's sprint 318 rebound which
+token counted as non-stable; a hardcoded dust floor measured in that token's units moved from about $0.00002 to about $24
+with no diff touching it, and two architecture passes and a code review confirmed the branch order without pricing it.
+
+- `adversary.md`: a new Severity rung, "An unpriced rebind is a MAJOR". It is a plain blocking MAJOR and never counts in
+  `findings_major_underived`, because an omission has nothing to cut. It is CRITICAL when the new price sends a case a
+  locked requirement or AC covers down a different branch.
+- `code-reviewer.md`: a new severity classification, "A Rebind Without Priced Literals", Important at minimum, with the
+  same CRITICAL condition and one `derived` command per keyed literal per binding as evidence.
+- `architect.md`: the evidence contract requires a `derived` fence pricing each keyed literal under both bindings.
+- `core/fixtures/process-rule-pins` pins thirteen new rows across the three files.
+
+**Recorded for the reference consumer (a finding, not an instruction).** graph's `docs/coding-conventions.md` section
+"A hardcoded threshold on a money path MUST be priced under every binding and its skip MUST be observable" carries three
+bullets. Its first bullet (price every literal under the new binding) is now carried by core and can retire. The second
+(a distinct skip reason in the execution row) and the third (a threshold as a config leaf) are not covered by this change.
+
 ## [0.783.0] - 2026-10-14
 
 Batch 229 (graph-ledger-full-drain), second release: six entries from the s317-s318 efficiency analysis. No upstream
