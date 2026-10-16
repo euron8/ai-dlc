@@ -44,11 +44,12 @@
 #
 # THE SHARDS. The pre-push suite is POLE-BOUND: its makespan tracks its single longest DIRECTORY,
 # and this battery, 63 mutants in one unit, was that directory at 1051s loaded (404s solo). So the
-# mutant set is dealt across four units, this directory (shard a) and the one-line drivers
-# `remediator-shard-join-mutants-b`, `-c` and `-d`, each `exec bash "$IMPL" --group <x>`, the shape
+# mutant set is dealt across five units, this directory (shard a) and the one-line drivers
+# `remediator-shard-join-mutants-b`, `-c`, `-d` and `-e`, each `exec bash "$IMPL" --group <x>`, the shape
 # `review-shard-merge-mutants` carries. Every scorer runs every predicate, so the cost per mutant
-# is roughly uniform and an equal count balances: 18 each, in declaration order by family. Shard d
-# was added when 72 mutants over three shards measured 245-295s solo each.
+# is roughly uniform and an equal count balances: 18-20 each, in declaration order by family. Shard d
+# was added when 72 mutants over three shards measured 245-295s solo each, and shard e when the
+# declared set grew past 90.
 # Every shard pays the unmutated control JX0, the J1 join and the MJ probe itself, because a shard
 # that skipped them could report a kill against a harness that never ran.
 #
@@ -61,11 +62,12 @@
 # a driver directory naming it. The join proves it can fire, on a seeded duplicate and a seeded
 # omission, before it is trusted. After the reap, [J2] asserts this shard dispatched exactly the
 # mutants dealt to it.
-SHARDS="a b c d"
+SHARDS="a b c d e"
 MUTANTS_a="JX1 JX2 JX3 JX4 JX5 JX6 JX7 JX8 JX10 JX9 JX11 JX12 JX13 JX14 JX15 JX16 JX17 JX18"
-MUTANTS_b="JX19 JX20 JX21 JX22 JX23 JX24 JX25 JX26 JX27 JX28 JX29 JX30 JX36 JX37 JX38 JX42 JX43 JX44 JX75"
-MUTANTS_c="JX45 JX46 JX47 JX48 JX49 JX39 JX40 JX41 JX31 JX32 JX33 JX34 JX35 JX50 JX51 JX52 JX53 JX54"
-MUTANTS_d="JX55 JX56 JX57 JX58 JX59 JX60 JX61 JX62 JX63 JX64 JX65 JX66 JX67 JX68 JX69 JX70 JX71 JX72 JX73 JX74 JX75 JX76 JX77 JX78 JX79 JX80 JX81 JX82 JX83 JX84 JX85"
+MUTANTS_b="JX19 JX20 JX21 JX22 JX23 JX24 JX25 JX26 JX27 JX28 JX29 JX30 JX36 JX37 JX38 JX42 JX43 JX44 JX95"
+MUTANTS_c="JX45 JX46 JX47 JX48 JX49 JX39 JX40 JX41 JX31 JX32 JX33 JX34 JX35 JX50 JX51 JX52 JX53 JX54 JX93 JX94"
+MUTANTS_d="JX55 JX56 JX57 JX58 JX59 JX60 JX61 JX62 JX63 JX64 JX65 JX66 JX67 JX68 JX69 JX70 JX71 JX72 JX73"
+MUTANTS_e="JX74 JX75 JX76 JX77 JX78 JX79 JX80 JX81 JX82 JX83 JX84 JX85 JX86 JX87 JX88 JX89 JX90 JX91 JX92"
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
@@ -414,9 +416,11 @@ mutant "JX23 subject --pass party not a party repair" "sjpartysrc" \
 # srcsetaside and srcera die too: each refusal is reported and then acquitted by the same exit 0.
 mutant "JX24 --sources reports refusals and exits 0" "srcunres srcsetaside srcera dispkey dispvocab dispruling chkrec" \
   '  [ "$refuse_n" -eq 0 ] || exit 2
+  printf '"'"'%s\n'"'"' "$SPEC_LINE"
   exit 0
 }' \
   '  true || exit 2
+  printf '"'"'%s\n'"'"' "$SPEC_LINE"
   exit 0
 }'
 # ---- BL-464 seat-complete belt: removed, and widened from the CITED seat files to the whole dir.
@@ -778,8 +782,8 @@ mutant "JX93 --agent-writes with no agent filter" "agentwrites" \
 mutant "JX94 --agent-writes dedupes by path before the agent filter" "agentwrites" \
   'jq -r --arg a "$AGENT_ID" --arg s "$SINCE" '"'"'select(' \
   'jq -rs --arg a "$AGENT_ID" --arg s "$SINCE" '"'"'unique_by(.path)[] | select('
-# JX75 restores the piped, unchecked read: a malformed ledger line then prints the trailer alone, rc 0.
-mutant "JX75 --agent-writes read piped through sort with no parse check" "agentwrites" \
+# JX95 restores the piped, unchecked read: a malformed ledger line then prints the trailer alone, rc 0.
+mutant "JX95 --agent-writes read piped through sort with no parse check" "agentwrites" \
   '    _aw="$(jq -rn --arg a "$AGENT_ID" --arg s "$SINCE" '"'"'[inputs | select(type == "object") | select(.kind == "artifact-write" and .agent_id == $a and (.path | type) == "string" and ($s == "" or .ts >= $s)) | .path] | unique | .[]'"'"' "$LEDGER" 2>/dev/null)" \
       || die "the write ledger ${LEDGER} does not parse as JSON lines"' \
   '    _aw="$(jq -r --arg a "$AGENT_ID" --arg s "$SINCE" '"'"'select(.kind == "artifact-write" and .agent_id == $a and ($s == "" or .ts >= $s)) | .path'"'"' "$LEDGER" 2>/dev/null | sort -u)"'
