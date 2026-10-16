@@ -2311,31 +2311,13 @@ fixture_suite_step() {
     key_log MISS "$key"
   fi
 
-  # A DETACHED READ-SET TRACE STILL RUNNING FROM AN EARLIER PUSH SHARES THE MACHINE WITH THIS SUITE,
-  # and every unit's loaded cost then reads high for a reason no fixture owns. Recorded HERE, before
-  # the pool starts, because this run's own trace takes the same lock at the end of run_fixtures and
-  # a check sited after it would report an overlap on every green push. Read by pole_guard_step.
-  READSET_TRACE_OVERLAP=0
-  if [ -d "$READSET_LOCAL.lock" ] && ! readset_lock_stale "$READSET_LOCAL.lock"; then
-    READSET_TRACE_OVERLAP=1
-    printf '   (a read-set live trace from an earlier push is still running -- the suite pole will not be compared this run)\n'
-  fi
-
-  # THE WIDTH SIDECAR (BL-465). validate-suite-pole.sh appends this run's pole to a per-width history
-  # only when `<durations>.jobs` equals the --jobs it was given, so a durations file this push did
-  # not publish -- or one published at another width -- is never recorded under this width. It is
-  # emptied before the pool and written after a GREEN pool that published a non-empty durations
-  # file, which is exactly when the durations file itself is fresh. Sited HERE and not beside the
-  # durations truncate/publish inside run_fixtures, because that block is joined to
-  # core/git-hooks/pre-push by I66 and a consumer hook has no suite-pole step to read it.
-  # `-s` ALONE DECIDES: run_fixtures truncates the durations file at pool entry, before its
-  # read-set no-change return, and publishes it only from a green pool, so a non-empty file here
-  # is this push's green measurement and an empty one is every other outcome.
-  : > "$LASTRUN_RECORD.jobs" 2>/dev/null
+  # THE PRIOR COSTS, SNAPSHOT BEFORE THE POOL. run_fixtures folds this run's costs into
+  # DURATIONS_RECORD inside the I66 block, so after it returns the record already holds this run's
+  # figure for every unit it timed and cannot say what the pole cost LAST time. pole_info_step reads
+  # this copy for that. Sited here, outside the I66 block, because a consumer hook prints no pole.
+  rm -f "$DURATIONS_RECORD.prev" 2>/dev/null
+  [ -s "$DURATIONS_RECORD" ] && cp "$DURATIONS_RECORD" "$DURATIONS_RECORD.prev" 2>/dev/null
   run_fixtures || return 1
-  if [ -s "$LASTRUN_RECORD" ]; then
-    printf '%s\n' "$FIXTURE_JOBS" > "$LASTRUN_RECORD.jobs" 2>/dev/null
-  fi
 
   # Recorded only after a full green run. A partial or red suite leaves the prior
   # record in place rather than blessing the tree that just failed.
@@ -2413,70 +2395,34 @@ SUITE_SKIPPED=0
 SUITE_STOPPED_EARLY=0
 step "fixture suite (${FIXTURE_JOBS}-way)" fixture_suite_step
 
-# 3a. THE SUITE'S WALL CLOCK IS ONE NUMBER AND NOTHING WATCHED IT. This suite is POLE-BOUND:
-#     the time you wait tracks the single longest fixture DIRECTORY, not the sum over the
-#     pool. That figure grew 493 -> 573 across two releases with no mechanism able to see it,
-#     and three separate places went on citing a pole that had been displaced four releases
-#     earlier. The guard reads the record the block above publishes and compares it against the
-#     pole HISTORY recorded at this pool width (a tracked baseline row seeds a width with no
-#     history yet; a width with neither calibrates), failing only on growth beyond a band. A
-#     green pool RECORDS its pole there, keyed by the width sidecar fixture_suite_step writes,
-#     so every width the operator runs at is guarded without hand calibration (BL-465).
+# 3a. THE SUITE'S WALL CLOCK IS ONE NUMBER, AND IT IS PRINTED, NEVER JUDGED. This suite is
+#     POLE-BOUND: the time you wait tracks the single longest fixture DIRECTORY, not the sum over
+#     the pool. That figure once grew 493 -> 573 across two releases with nothing able to see it,
+#     so every push names the pole unit, its loaded wall clock, and its change against the same
+#     unit's figure before this run.
 #
-#     IT STANDS DOWN ON THE CONTENT-KEY SKIP RATHER THAN TRUSTING THE FILE'S AGE. A skip never
-#     enters the pool, so it neither truncates LASTRUN_RECORD nor writes it -- the PRIOR run's
-#     file survives intact and reads exactly like a fresh one. Nothing in the file says which
-#     run wrote it, so the only thing that knows is this shell, here, and that is why the
-#     stand-down is a hook-side condition and not something the guard can work out for itself.
-#
-#     NOT ADDED TO core/git-hooks/pre-push, and it sits OUTSIDE the I66 block for the same
-#     reason: the baseline lives under docs/, which a consumer tree does not have, so a
-#     consumer running this step would refuse on a file that can never exist there.
-#
-#     ON A CONTENT-KEY SKIP THE GUARD STILL RUNS, AGAINST AN EMPTY DURATIONS FILE. docs/ is
-#     in the content key's EXCLUDE set, so a push that edits ONLY the baseline hits the key,
-#     skips the suite, and -- if this step stood down with it -- would land a malformed or
-#     stale-pole baseline that nothing parsed. The guard parses the baseline BEFORE it looks
-#     at durations and refuses (exit 2) on a bad one, then SKIPs on the empty file. So the
-#     baseline is read by a shipping program on every push regardless of the key, which is
-#     the reader I55 arm 3 requires for a docs/ input: the fixture suite cannot be it.
-pole_guard_step() {
-  if [ "${SUITE_STOPPED_EARLY:-0}" = 1 ]; then
-    printf '   SKIPPED-on-earlier-red suite pole: the fixture suite did not run, so there is no loaded cost to compare. This step is FAIL, not a pass.\n'
-    return 1
+#     IT IS INFORMATION, NOT A VERDICT, AND THAT IS A RULING. It was a ratchet with a band, and
+#     a loaded wall clock moves several-fold with the box's load (one unit's recorded cost at pool
+#     12 spans 101-681s), so any band is a picked number that reddens a push for load. No recorded
+#     instance of it catching real growth exists. A growing pole is read by whoever reads the
+#     push; this step always returns 0, and a stopped or skipped suite prints that it has no pole.
+pole_info_step() {
+  if [ "${SUITE_STOPPED_EARLY:-0}" = 1 ] || [ "${SUITE_SKIPPED:-0}" = 1 ] || [ ! -s "$LASTRUN_RECORD" ]; then
+    printf '   (no suite run, no pole)\n'
+    return 0
   fi
-  if [ "${SUITE_SKIPPED:-0}" = 1 ]; then
-    printf '   (suite skipped on the content key -- parsing the baseline only; nothing was measured)\n'
-    bash scripts/validate-suite-pole.sh --durations /dev/null --jobs "$FIXTURE_JOBS"
-    return
-  fi
-  # A LIVE TRACE OVERLAPPED THE SUITE (recorded by fixture_suite_step before the pool started), so
-  # this run's costs were taken on a machine the trace was also loading. Comparing them could FAIL
-  # a push for the trace's load, and passing them would read as a clean measurement; neither is
-  # true. The baseline is still parsed, for the reason the skip branch above gives.
-  if [ "${READSET_TRACE_OVERLAP:-0}" = 1 ]; then
-    printf '   SKIP: a read-set live trace overlapped this run -- its loaded costs are not compared; parsing the baseline only\n'
-    bash scripts/validate-suite-pole.sh --durations /dev/null --jobs "$FIXTURE_JOBS"
-    return
-  fi
-  # --record IS THE MERGED CUMULATIVE FILE, already folded with this run by the pool above, and
-  # it is what the guard's coverage denominator is read from: the share of the suite's cost
-  # this run timed, not a row count one skipped fixture defeats.
-  #
-  # A POLE FAIL FORGETS THE CONTENT KEY. fixture_suite_step records the key of a green suite BEFORE
-  # this step runs, so a push red on the pole alone would otherwise leave a key that lets the next
-  # push of the same tree skip the suite -- and the skip branch above hands the guard /dev/null, so
-  # the re-push passes having measured nothing. Removing the record makes the next push measure again.
-  local prc
-  bash scripts/validate-suite-pole.sh --durations "$LASTRUN_RECORD" --record "$DURATIONS_RECORD" --jobs "$FIXTURE_JOBS"
-  prc=$?
-  if [ "$prc" -eq 1 ]; then
-    rm -f "$KEY_RECORD"
-    printf '   (content-key record removed: the next push re-runs the suite and re-measures the pole)\n'
-  fi
-  return "$prc"
+  # FILENAME, NEVER `NR == FNR`: with no prior record the first file is an empty /dev/null, and
+  # `NR == FNR` then holds through the whole second file, swallowing this run as the "prior" one.
+  awk 'FILENAME == ARGV[1] { if (NF == 2) prev[$1] = $2; next }
+       NF == 2 && $2 ~ /^[0-9]+$/ && ($2 + 0 > max + 0 || u == "") { u = $1; max = $2 }
+       END {
+         if (u == "") { print "   (no suite run, no pole)"; exit }
+         if (u in prev) printf "   pole %s %ss loaded (was %ss before this run, %+ds)\n", u, max, prev[u], max - prev[u]
+         else           printf "   pole %s %ss loaded (no prior figure for it)\n", u, max
+       }' "$( [ -s "$DURATIONS_RECORD.prev" ] && echo "$DURATIONS_RECORD.prev" || echo /dev/null )" "$LASTRUN_RECORD"
+  return 0
 }
-step "suite pole (this run's loaded cost of the longest fixture against the pole history at this pool width)" pole_guard_step
+step "suite pole (this run's longest fixture; information, not a verdict)" pole_info_step
 
 if [ "$fail" -ne 0 ]; then
   printf '\npre-push: BLOCKED. Fix the above, or `git push --no-verify` on the record.\n\n'

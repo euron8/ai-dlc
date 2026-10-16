@@ -20,6 +20,42 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.807.0] - 2026-10-16
+
+Batch 235 (combined release: the pole, and the self-update-join-gate seed). The suite-pole guard is removed and the
+pole is printed as information (BL-616, BL-632); `self-update-join-gate` builds its machinery-only consumer by
+construction instead of depending on how much history follows its anchor commit. Closes no `PC-` id.
+
+### The pole is information, never a verdict (BL-616 item 6; BL-632, by deletion)
+
+- `scripts/validate-suite-pole.sh`, `docs/suite-pole-baseline.tsv` and the `suite-pole-guard` fixture are deleted,
+  with the pre-push hook's `.jobs` sidecar and `READSET_TRACE_OVERLAP` that fed them. A loaded wall clock spans
+  several-fold with the box's load, every band was a picked number, and no recorded instance of the guard catching
+  growth exists.
+- `.githooks/pre-push` prints one line after the suite: `pole <unit> <N>s loaded (was <M>s before this run, <+/-D>s)`,
+  read from this run's durations against a copy of the prior record taken before the run, or `(no prior figure for
+  it)`. There is no pole on a red, stopped-early, skipped or empty run, which prints `(no suite run, no pole)`. The step
+  always returns 0.
+- New `.dist-only` fixture `suite-pole-info` extracts `pole_info_step` from the hook and drives 8 arms, exact line per
+  state; mutant m1 restores the first build's `NR == FNR` join, which with no prior record read this run's file as
+  the prior one, and is killed by the absent-file arm only. Hermetic: `required_missing=0`, `sandbox_files=5`.
+  Traced into `.ai-dlc-fixture-readsets.tsv` (5 rows).
+- `docs/plans/pre-push-wall-clock.md` marks action 2 superseded.
+
+### `self-update-join-gate`'s machinery-only consumer holds BASE's scripts by construction
+
+- Assertion 3 ("a pull with NO rulebook change does not defer") went red on this release's gate. Its consumer was
+  installed at THEIRS, so every `core/scripts/*.sh` the derived range changes was already at theirs, and the gate's
+  pre-written arm correctly refuses that state as `ALREADY at theirs` UNDECIDED. The range is bounded to the 4th
+  VERSION commit after the newest CHECK_LOADED anchor-adder; from 0.805.0 onward that commit is 0.805.0, which
+  changed `validate-layer-entries.sh`. The 0.805.0 and 0.806.0 gates skipped the fixture on its content key.
+- `seed.sh` now puts each script the range changes back at BASE in `CONS_CURRENT`, checked by blob, and removes one
+  the range adds. The consumer is then the state step 2 actually gates, rulebook at theirs and machinery incoming, at
+  any HEAD and whichever gating script a range moves.
+- New mutant P puts the restored scripts back at THEIRS and must DEFER with `ALREADY at theirs`. It is reported as
+  vacuous at a HEAD whose range moves no script the consumer's hook names. Run from the distribution checkout: 18 ok,
+  0 FAIL, mutant P killed on `validate-layer-entries.sh`.
+
 ## [0.806.0] - 2026-10-16
 
 Batch 235 (combined release: BL-584 and R-558). Closes BL-558. Advances BL-584, which stays OPEN (PARTIAL). Closes

@@ -117,6 +117,26 @@ else
   NOANCHOR_BUILD=missing
 fi
 
+# MUTANT P -- THE SEED'S OLD CONSUMER, every restored script put back at THEIRS. That is the state
+# an install at THEIRS left, which made assertion 3 read DEFER once the range crossed a release
+# changing a gating script. It must DEFER here, or the seed's restore is not what assertion 3
+# rests on. Vacuous at a HEAD whose range moves no script the consumer's hook names; reported so.
+PREW="$WORK/cons-prewritten"
+PREW_BUILD=vacuous
+PREW_HOOK="$CONS_CURRENT/.githooks/pre-push"
+[ -f "$PREW_HOOK" ] || PREW_HOOK="$DIST/core/git-hooks/pre-push"
+PREW_GATING=""
+for n in $SUJG_RESTORED; do
+  grep -qF "scripts/ai-dlc/$n" "$PREW_HOOK" 2>/dev/null && PREW_GATING="$PREW_GATING $n"
+done
+if [ -n "$PREW_GATING" ]; then
+  clone_tree "$CONS_CURRENT" "$PREW"
+  PREW_BUILD=ok
+  for n in $SUJG_RESTORED; do
+    git -C "$DIST" show "${THEIRS}:core/scripts/$n" > "$PREW/scripts/ai-dlc/$n" 2>/dev/null || PREW_BUILD=broken
+  done
+fi
+
 # ============================ PHASE 2: run the gates in a pool ============================
 # The registry is <label>\t<gate-script>\t<consumer-source>. Runs are declared here and
 # rendered in this order below, so the output is byte-comparable against the serial version
@@ -129,6 +149,7 @@ printf '%s\t%s\t%s\n' r_current  "$GATE"  "$CONS_CURRENT" >> "$RUNS"
 printf '%s\t%s\t%s\n' r_control  "$CTRL"  "$CONS_OLD"     >> "$RUNS"
 [ "$MUT_A_BUILD" = ok ] && printf '%s\t%s\t%s\n' r_muta "$MUT_A" "$CONS_OLD"     >> "$RUNS"
 [ "$MUT_B_BUILD" = ok ] && printf '%s\t%s\t%s\n' r_mutb "$MUT_B" "$CONS_CURRENT" >> "$RUNS"
+[ "$PREW_BUILD" = ok ] && printf '%s\t%s\t%s\n' r_prew "$GATE" "$PREW" >> "$RUNS"
 
 N_RUNS="$(grep -c . "$RUNS" || true)"
 if [ "$N_RUNS" -lt 4 ]; then
@@ -136,12 +157,12 @@ if [ "$N_RUNS" -lt 4 ]; then
   exit 2
 fi
 
-# SIX, and fixed rather than tunable for the reason the sibling pools state in place: this
+# SEVEN, and fixed rather than tunable for the reason the sibling pools state in place: this
 # pool nests inside the pre-push suite's own, so a knob here multiplies against the knob
-# there and the PRODUCT is what lands on the machine. Six is the run count — there is no
+# there and the PRODUCT is what lands on the machine. Seven is the run count — there is no
 # gain from a wider pool than there is work, and every slot beyond it is contention the
 # sibling fixtures pay for.
-SUJG_JOBS=6
+SUJG_JOBS=7
 AI_DLC_SUJG_OUT="$OUTD" AI_DLC_SUJG_RUNS="$RUNS" \
   AI_DLC_SUJG_DIST="$DIST" AI_DLC_SUJG_BASE="$BASE" AI_DLC_SUJG_THEIRS="$THEIRS" \
   xargs -P "$SUJG_JOBS" -I{} bash -c '
@@ -201,6 +222,19 @@ elif grep -q 'SELF-UPDATE-DEFER' <<<"$out_mo"; then
 else
   ok "a pull that changes no rulebook file does NOT defer — the arm is a differential"
 fi
+
+# --- MUTANT P: the seed's pre-fix consumer, gating scripts already at THEIRS ---
+case "$PREW_BUILD" in
+  vacuous) echo "  note  MUTANT P vacuous at this HEAD -- the range changes no script the consumer's hook names" ;;
+  broken)  bad "MUTANT P could not be built -- a restored script has no THEIRS blob" ;;
+  ok)
+    if ! have r_prew; then dropped r_prew
+    elif grep -q 'SELF-UPDATE-DEFER' <<<"$(verdict r_prew)" && grep -q 'ALREADY at theirs' <<<"$(verdict r_prew)"; then
+      ok "MUTANT P killed — with the range's gating script(s) [${PREW_GATING# }] left at THEIRS, assertion 3's consumer DEFERS: the seed's BASE restore is what holds it"
+    else
+      bad "MUTANT P DID NOT defer — the pre-written consumer passes, so the seed's restore is not what assertion 3 rests on"
+    fi ;;
+esac
 
 # --- Assertion 4: the fixture-coupling arm names its subjects ------------------
 if ! have r_old; then dropped r_old

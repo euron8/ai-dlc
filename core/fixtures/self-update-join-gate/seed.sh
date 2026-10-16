@@ -9,8 +9,9 @@
 # The two consumers are the fixture's whole discrimination:
 #   CONS_OLD      installed from a ref BEFORE a check was added -> its gate-validation.md
 #                 has no anchor for that check, so the map/anchor join is broken.
-#   CONS_CURRENT  installed from the SAME ref the pull targets on the rulebook side, so a
-#                 machinery-only pull against it must NOT defer.
+#   CONS_CURRENT  installed from the SAME ref the pull targets on the rulebook side, with every
+#                 script the range changes put back at BASE, so a machinery-only pull against it
+#                 must NOT defer.
 #
 # Idempotent.
 set -uo pipefail
@@ -172,12 +173,41 @@ for d in "$CONS_OLD" "$CONS_CURRENT"; do
     exit 2; }
 done
 
+# CONS_CURRENT'S SCRIPTS ARE PUT BACK AT BASE, SO "NO RULEBOOK CHANGE" HOLDS BY CONSTRUCTION.
+#
+# Assertion 3's consumer is "rulebook at theirs, machinery not yet pulled". An install at THEIRS
+# gets the rulebook half right and the machinery half wrong: every core/scripts/*.sh the range
+# changes is ALREADY at theirs, and the gate's pre-written arm (self-update-gate.sh, `ALREADY at
+# theirs`) refuses that state as UNDECIDED -- correctly, it is what a re-run after step 2's write
+# looks like. So assertion 3 went red the first time the derived range crossed a release that
+# changed a gating script (0.805.0, validate-layer-entries.sh), and would again at any HEAD whose
+# range moved one. Putting each such script back at its BASE bytes builds the state step 2 really
+# gates: the pull's machinery is incoming, its rulebook already held. A script the range ADDS is
+# removed. Each restore is checked by blob, and the list goes to env.sh for run.sh's mutant.
+SUJG_RESTORED=""
+sc_list="$(git -C "$DIST" -c core.quotePath=false diff --name-only "${BASE}..${THEIRS}" -- core/scripts/)" || {
+  echo "FIXTURE ERROR: could not list core/scripts/ changes in ${BASE}..${THEIRS}" >&2; exit 2; }
+while IFS= read -r sp; do
+  [ -n "$sp" ] || continue
+  cf="$CONS_CURRENT/scripts/ai-dlc/${sp#core/scripts/}"
+  [ -f "$cf" ] || continue
+  if bb="$(git -C "$DIST" rev-parse -q --verify "${BASE}:${sp}")"; then
+    git -C "$DIST" show "${BASE}:${sp}" > "$cf" || { echo "FIXTURE ERROR: could not restore $sp at BASE" >&2; exit 2; }
+    [ "$(git hash-object "$cf")" = "$bb" ] || { echo "FIXTURE ERROR: $cf is not BASE's blob after restore" >&2; exit 2; }
+  else
+    rm -f "$cf"
+  fi
+  SUJG_RESTORED="$SUJG_RESTORED ${sp#core/scripts/}"
+done <<<"$sc_list"
+SUJG_RESTORED="${SUJG_RESTORED# }"
+
 cat > "$WORK/env.sh" <<EOF
 DIST="$DIST"
 BASE="$BASE"
 THEIRS="$THEIRS"
 CONS_OLD="$CONS_OLD"
 CONS_CURRENT="$CONS_CURRENT"
+SUJG_RESTORED="$SUJG_RESTORED"
 EOF
 
 printf '%s\n' "$WORK"
