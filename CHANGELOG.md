@@ -20,6 +20,51 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.797.0] - 2026-10-16
+
+Batch 235 (hooks, release H-a). Closes BL-531, BL-545, BL-559 and BL-571; BL-537 partial. Closes no `PC-` id.
+
+### A prompt typed in another session no longer pauses the lead (BL-531)
+
+- `ai-dlc-pause.sh` reads the typing session's own transcript for its last ai-dlc marker: the typed `/ai-dlc`
+  record or a `Skill(ai-dlc)` call. Prose from a session with no marker, or whose last marker is `ai-dlc-update`,
+  is still captured in full to `operator-requests-history.md` and logged `PAUSE_SKIPPED` with a `- Reason:` line,
+  but raises no flag. A current `/ai-dlc` prompt pauses, including a resume in a new session. A missing or
+  unreadable transcript pauses as before. No state file.
+- `ai-dlc-continue.sh` applies the same test at Stop (Check 2a): a non-pipeline or updater session may end its
+  turn and is logged `ALLOWED_NOT_AIDLC_SESSION`; an unreadable transcript still blocks.
+- New invariant I126 binds the marker scan line byte-identical across the pause, acknowledge and continue hooks.
+  `ai-dlc-gate-remediation-guard.sh:756` holds an unbound copy, to be bound after BL-536.
+
+### Spawn-ledger rows name the agent that issued the spawn (BL-537, partial)
+
+- Every row carries `parent_agent_id`, which is `""` for the lead. A role-less spawn issued from inside a
+  subagent (`Explore`, or no `subagent_type`) is recorded with role `""` instead of dropped, and
+  `validate-spawn-ledger.sh` names it as out of Rule 19 scope rather than WARNing it as shardable.
+- The filed premise did not hold: the s319 call has a dispatch-time row. The join half and the second subject, a
+  writer with no transcript, stay open.
+
+### After a compaction the lead's dispatches wait for the advisor (BL-545)
+
+- `ai-dlc-recover-gate.sh` gains a lead-only stage. After the step-file Read satisfies recovery, the lead's
+  Agent, Task, TaskCreate, Write, Edit, MultiEdit and NotebookEdit are denied until an advisor attempt follows
+  the `postcompact-digest.md` Read. Bash is never refused.
+- It stands down with no grant or a withdrawn one, an `unavailable` result, for a teammate or another session,
+  and after 3 refusals per recovery. `ai-dlc-recover.sh` names touchpoint R in the injected block.
+
+### A paused teammate may finish a non-pipeline Skill (BL-559)
+
+- While paused, a teammate whose transcript started before the pause flag may call `Skill` unless the skill is
+  `ai-dlc`. A teammate dispatched during the pause, the lead's own Skill, and a teammate's Agent, Task and
+  TaskCreate stay denied.
+
+### A sprint before its first artifact is reported as pending (BL-571)
+
+- Inside the I81 block, both emitters log a pending-sprint form when `s<N-1>/` exists and `s<N>/` does not: Rule 8
+  is unarmed until the first artifact and no action is owed. A mis-declared sprint keeps the "Fix the declared
+  sprint" remedy. The `ADVERSARIAL_STATE_UNADJUDICABLE` token is unchanged.
+
+
 ## [0.796.0] - 2026-10-16
 
 Batch 235 (wait beat). Closes BL-547, BL-549 and BL-566; ships the script and rule-28 halves of

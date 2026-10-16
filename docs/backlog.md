@@ -135,34 +135,6 @@ record or snapshot under the sprint slot is either denied or recorded.
 
 verify: manual
 
-## BL-531 — a message typed in another session of the same project raises the lead's pause flag
-
-**DEFECT. Operator ruling 2026-10-15: a message typed in another session in the same project must
-not create the pause flag.** `core/hooks/ai-dlc-pause.sh:381-382` touches
-`_bmad-output/pipeline-paused.flag` for a typed prompt in any session once the pipeline is active.
-The typing session's id is logged (`:391`) and never compared with anything. No hook or snapshot
-field records which session is the lead, so there is no value to compare it against.
-
-Measured in graph s319: a message typed at 19:15:51Z in session `0efd887c-26f7-44e5-94aa-2147fa1496fd`
-paused lead session `62eadbbe-59c3-436d-bf7c-931ebc09ecba`. Six remediator dispatches were denied by
-Rule 29 (19:24:56-19:25:26); the lead then removed the flag at 19:25:43, read the message at 19:25:53,
-and re-dispatched all six (19:26:04-19:26:30) before telling the operator at 19:27:01. The archived
-entry about the same hook (`docs/backlog.archive.md:15400`, a missed opening prompt) is a different
-subject.
-
-Owed:
-1. The lead records its own session id when it routes (route.md Step 6, fresh start) and again on
-   every resume (Step 0, a new session). A compaction keeps the id.
-2. `ai-dlc-pause.sh` raises the flag only when the typing session matches that id. A prompt from any
-   other session is still captured to `operator-requests-history.md` (Check 33 and
-   `user_request_cite` depend on full capture) and logged as a distinct event, not a pause.
-3. With no recorded lead id (a pre-migration tree) the hook pauses as it does today, so a missing
-   binding never lets the lead's own operator message through unpaused.
-4. A probe in both directions: the bound session pauses; a different session captures and does not
-   pause; no binding pauses.
-
-verify: manual
-
 ## BL-537 — a spawn made by a teammate is recorded nowhere, so a second writer or reviewer has no provenance
 
 **DEFECT.** In graph s319 the `pm-escalated` requirements authoring agent (`a1c69096c184098d6`, dispatched by the lead at 22:01Z) spawned a `general-purpose` subagent itself, "PRD rubric walker S319" (`afe532cc5f05cad9d`, 22:14:55–22:16:40Z), which wrote `_bmad-output/planning-artifacts/s319/prd-validate/review-rubric.md`. That spawn is required by the skill the step invokes: `requirements.md:178` runs `/bmad-prd` validate, and `.claude/skills/bmad-prd/SKILL.md:73-75` tells it to dispatch its rubric walker and reviewers as parallel subagents. `_bmad-output/spawn-ledger.jsonl` has 0 rows for it, against 1 row in `subagent-context.jsonl` (the post-completion probe), so the dispatch-time record misses it while the completion record sees it. `ai-dlc-dispatch-guard.sh` writes the ledger row at dispatch (append at line 1120). Why this call left no row was not traced: it is a teammate-issued call (`agent_id` set) for a role with no `core/team-roles/` file.
@@ -170,6 +142,12 @@ verify: manual
 This is the same class as the consumer's `PC-S319-LEDGER-ATTRIBUTES-AN-EDIT-TO-AN-AGENT-ID-WITH-NO-TRANSCRIPT`: there, one `.artifact-writes.jsonl` row on `sections/2.md` carries agent id `ad67234a336bc2239`, which has no transcript, no spawn-ledger row and no tool call in its parent remediator's transcript, and the join refused the shard as two writers. Both cases leave a write by an agent the pipeline has no dispatch record for. Check 22 and every join that counts writers read the spawn ledger, so a nested spawn is invisible to them.
 
 Owed: either a teammate's `Agent`/`Task` call is recorded in the spawn ledger with its parent `agent_id`, so a join can attribute a nested writer to its dispatcher, or teammate spawns are refused and any skill that a step invokes and that dispatches subagents (`bmad-prd` validate is one) is told to run its reviewers sequentially, which `SKILL.md:75` already allows ("If subagents are unavailable, run sequentially"). A probe drives one teammate-issued spawn and asserts the record.
+
+**Partial, v0.797.0.** Every spawn-ledger row now carries `parent_agent_id` (`""` for the lead), and a role-less
+spawn issued from inside a subagent (`Explore`, or no `subagent_type`) is recorded with role `""` rather than
+dropped; `dispatch-model-guard` arms 16a-16e. The filed call already had its dispatch-time row (`toolu_01RRc1tN…`,
+graph `dbc4c057e`), so "recorded nowhere" did not hold. Open: no join reads `parent_agent_id` yet, and the second
+subject, the writer `ad67234a336bc2239` with no transcript, is untouched.
 
 verify: manual
 
@@ -239,12 +217,6 @@ verify: manual
 
 verify: manual
 
-## BL-545 — after a compaction the lead dispatched before its Rule 32 R advisor call
-
-**DEFECT.** SKILL.md Rule 32 touchpoint R: "after the `postcompact-digest.md` Read … call the advisor in the same turn, before your first dispatch or write." In s319 the lead compacted at 23:01Z, read the snapshot, `requirements.md` and the digest (23:01:07–23:01:18), dispatched 12 party-repair remediators from 23:02:18Z, and called the advisor at 23:03:19Z. Its own message: "I haven't made the post-recovery advisor call (touchpoint R) yet, so I'm making it now." `ai-dlc-advisor-gate.sh` denies a release push or merge without an advisor attempt, but no hook holds a post-compact dispatch behind R. The recover-gate forces the three reads and then lets the next `Agent` call through. Owed: the recover-gate, or the advisor gate, denies `Agent`/`Task` and writes after a compaction until an advisor attempt follows the digest Read. A probe shows a dispatch denied before R and allowed after.
-
-verify: manual
-
 ## BL-546 — a SPEC part remediator hand-edits `SPEC.md`, which core forbids and nothing refuses
 
 **DEFECT.** `_gate-procedures.md:925-929` and `requirements.md:233-236`: the SPEC part's shard "never edits `SPEC.md` by hand"; it appends a `(decision)` to `.memlog.md` and re-renders through `bmad-spec`. In s319 this was broken twice. The requirements party-repair part 04 remediator "first applied the edits to `SPEC.md` by hand, then redid the change through the memlog and re-rendered". The serial cross-part remediator disclosed "a direct edit of `SPEC.md` without re-rendering through `bmad-spec`" at 00:04Z. Both were caught only by the agents' own disclosure. No hook refuses an Edit/Write to `_bmad-output/specs/**/SPEC.md` from a remediator, and the join does not compare `SPEC.md` against a render of its memlog. Owed: a guard denying direct writes to `SPEC.md` outside the `bmad-spec` render path, or a join arm that re-renders from `.memlog.md` and refuses a byte difference.
@@ -311,14 +283,6 @@ verify: manual
 **DEFECT (efficiency).** Found at batch 234 while gating 0.790.0. Pushed from a linked worktree, the pre-push runner re-ran the same 10 fixtures every time (the 8 its read-set map leaves unmapped there, plus two), and `story-evidence-scaffold` was the pole of that set at 144s and 146s. The suite-pole guard judged it against its own pool-12 history, 8 rows with a maximum of 3s, and failed two gates on the regime ceiling (6s). Measured solo and interleaved, from detached worktrees of `origin/main` (`bfb5589e`) and the release tip (`1c2bf345`), at load 4-6: base 177s and 175s, tip 173s and 171s. So the cost is not the release. The 2-3s rows are not explained: a grep of `run.sh` (725 lines, one file in the fixture) for reads outside `core/` (`projects`, `graph`, `HOME`, `git log`, `find`) found none, and the fixture's own run log shows a full mutant battery over about 30 handoff and strategy cases. Its 8 pool-12 rows were dropped on the operator's choice with the guard's own printed remedy (backup kept), and the next gate read `CALIBRATING (1/3)` at 143s and passed.
 
 Owed: find what the 2-3s rows measured (a skipped battery, a different dispatch, a different tree) and whether 175s is the fixture's real cost. If it is, the fixture is a candidate for the same sharding the other batteries got, since a 175s unit can become a full-suite pole. Measure solo first, in a clean worktree, and name the tree beside the number.
-
-verify: manual
-
-## BL-559 — the pause gate denies `Skill` to an in-flight teammate, so a dispatched render cannot finish and the handoff waits on it
-
-**DEFECT.** `core/hooks/ai-dlc-acknowledge.sh:572-581`: while paused, a teammate's Write/Edit is allowed (`ACK_TEAMMATE_WRITE`), so an in-flight teammate is not left half-amended. But "Agent/Task/Skill/TaskCreate stay denied for a teammate too." In graph s319 at 01:50:21Z the lead dispatched a `pm-escalated` agent to re-render `SPEC.md` from `.memlog.md` through `bmad-spec`, which is the path core requires for the SPEC (`requirements.md:233-236`). Four seconds later, at 01:50:25Z, the operator typed "handoff", and the pause flag went up. The render agent read its inputs, then at 01:50:39Z invoked `Skill bmad-spec` and was denied: "AI/DLC Rule 29: the pipeline is PAUSED". The lead, following `handoff.md` step 1, armed one bounded-join beat over that agent's deliverable at 01:50:47Z. The only route to that deliverable is the Skill call the gate refuses. So the rule meant to let an in-flight teammate reach a consistent endpoint blocks exactly the call that reaches it, and the handoff's join can only time out. `SPEC.md` is left stale against the PRD, which the lead said at 01:50:16Z ("SPEC.md is stale against the PRD until `.memlog.md` is re-rendered"). Owed: a teammate dispatched before the flag was raised may invoke `Skill` (it spawns no agent and is the derive path, unlike Agent/Task/TaskCreate), or `handoff.md` step 1 names what to do when an in-flight teammate's only remaining work is a denied call (stop it as `stopped`, with the stale artifact recorded in Open Items). A probe raises the flag between a teammate's dispatch and its Skill call and asserts the outcome.
-
-**Outcome.** The render agent did not fail when the pause flag denied `Skill bmad-spec`. It hand-applied memlog lines 30 and 31 to `SPEC.md` and returned at 01:53:08Z, which is the BL-546 hand-edit path again. The handoff then committed that SPEC as `dbc4c057e`. So the pause gate turns a rendered SPEC into a hand-edited one, silently, rather than stranding it.
 
 verify: manual
 
@@ -421,14 +385,6 @@ verify: manual
 graph's extension Check 925 re-runs `--audit-trunk` at the gate (AUDIT-TRUNK rows appear in the s309, s314, s316 and s318 gate logs and are absent at s319), and graph's `OWED-S308-SKILL-PUSH-925-RETIRE` wants to retire it as EXTENSION-RESTATES-CORE, but core has no such check to restate. An arm keyed on artifact text would fire falsely on two or more sprints: 7 of 13 sprints since s303 carry the line, and s318 and s319 ran without it.
 
 Owed: a core Check in `gate-validation.md` that RE-RUNS `--audit-trunk`, failing on exit 1 or 2 and recording a WORKLIST at exit 0 as backlog. Probe both directions: a trunk with an audit finding fails the gate, and a clean trunk passes.
-
-verify: manual
-
-## BL-571 — `ADVERSARIAL_STATE_UNADJUDICABLE` fires on every sprint transition with a remedy that blames a correct declaration
-
-**DEFECT.** Filed from batch 235's read of graph's continuation-log archives (read-only) and the Group H contract adversary's correction. The emitters, `core/hooks/ai-dlc-acknowledge.sh:422` and `core/hooks/ai-dlc-continue.sh:1150`, sit inside the I81 byte-identical block and fire whenever the resolved sprint's `s<N>/` directory is absent, which is the normal state before a sprint's first artifact. graph's s318 `pipeline-continuation-log-archive-2.md` holds 67 such entries from 2026-10-14T21:47Z to 2026-10-15T18:49Z, every one `sprint-id resolved: '319'`; s319's archive adds 2 at 18:57Z; and the pattern recurs across s303..s318. No guard was lost: the 67-entry window holds 0 adversary spawn rows (ledger control 862), and every s318 series reached EXIT_CONDITION_MET. The defect is the remedy text only. "Fix the declared sprint" is wrong when the previous sprint's directory exists and the resolved one does not, because that is a pending sprint, not a mis-declared one.
-
-Owed: both emitters distinguish "previous sprint dir exists, resolved one does not" (pending sprint) from a mis-declared sprint, with remedy text matching each, changed together so the I81 block stays byte-identical. Probe both shapes.
 
 verify: manual
 

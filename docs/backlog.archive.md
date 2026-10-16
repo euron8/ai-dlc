@@ -33994,3 +33994,77 @@ Owed: the in-flight marker is per beat (or reference-counted), so one beat's exi
 
 verify: sh bash core/fixtures/wait-stale-deliverable/receipt.sh BL-566
 
+## BL-531 — a message typed in another session of the same project raises the lead's pause flag
+
+**LANDED (v0.797.0, verified d8fd0c57).** `ai-dlc-pause.sh` asks the typing session's own transcript for its
+last ai-dlc marker (the typed `/ai-dlc` record or a `Skill(ai-dlc)` call) instead of storing a lead id; route.md
+is frozen, and a stored id goes stale across a `/clear` resume. Prose from a session with no marker, or whose last
+marker is `ai-dlc-update`, is captured in full and logged `PAUSE_SKIPPED` with a `- Reason:` line, and raises no
+flag. A missing or unreadable transcript pauses as before. `ai-dlc-continue.sh` Check 2a lets such a session stop.
+Invariant I126 binds the marker scan line across the pause, acknowledge and continue hooks.
+
+**DEFECT. Operator ruling 2026-10-15: a message typed in another session in the same project must
+not create the pause flag.** `core/hooks/ai-dlc-pause.sh:381-382` touches
+`_bmad-output/pipeline-paused.flag` for a typed prompt in any session once the pipeline is active.
+The typing session's id is logged (`:391`) and never compared with anything. No hook or snapshot
+field records which session is the lead, so there is no value to compare it against.
+
+Measured in graph s319: a message typed at 19:15:51Z in session `0efd887c-26f7-44e5-94aa-2147fa1496fd`
+paused lead session `62eadbbe-59c3-436d-bf7c-931ebc09ecba`. Six remediator dispatches were denied by
+Rule 29 (19:24:56-19:25:26); the lead then removed the flag at 19:25:43, read the message at 19:25:53,
+and re-dispatched all six (19:26:04-19:26:30) before telling the operator at 19:27:01. The archived
+entry about the same hook (`docs/backlog.archive.md:15400`, a missed opening prompt) is a different
+subject.
+
+Owed:
+1. The lead records its own session id when it routes (route.md Step 6, fresh start) and again on
+   every resume (Step 0, a new session). A compaction keeps the id.
+2. `ai-dlc-pause.sh` raises the flag only when the typing session matches that id. A prompt from any
+   other session is still captured to `operator-requests-history.md` (Check 33 and
+   `user_request_cite` depend on full capture) and logged as a distinct event, not a pause.
+3. With no recorded lead id (a pre-migration tree) the hook pauses as it does today, so a missing
+   binding never lets the lead's own operator message through unpaused.
+4. A probe in both directions: the bound session pauses; a different session captures and does not
+   pause; no binding pauses.
+
+verify: sh bash core/fixtures/pause-hook-origin/run.sh
+
+## BL-545 — after a compaction the lead dispatched before its Rule 32 R advisor call
+
+**LANDED (v0.797.0, verified d8fd0c57).** `ai-dlc-recover-gate.sh` gains a lead-only stage: after the step-file
+Read satisfies recovery, the lead's Agent, Task, TaskCreate, Write, Edit, MultiEdit and NotebookEdit are denied
+until an advisor attempt follows the `postcompact-digest.md` Read. Bash is never refused. It stands down with no
+grant or a withdrawn one, an `unavailable` result, for a teammate or another session, and after 3 refusals per
+recovery. `ai-dlc-recover.sh` names touchpoint R. The Read stages' teammate exposure is BL-590.
+
+**DEFECT.** SKILL.md Rule 32 touchpoint R: "after the `postcompact-digest.md` Read … call the advisor in the same turn, before your first dispatch or write." In s319 the lead compacted at 23:01Z, read the snapshot, `requirements.md` and the digest (23:01:07–23:01:18), dispatched 12 party-repair remediators from 23:02:18Z, and called the advisor at 23:03:19Z. Its own message: "I haven't made the post-recovery advisor call (touchpoint R) yet, so I'm making it now." `ai-dlc-advisor-gate.sh` denies a release push or merge without an advisor attempt, but no hook holds a post-compact dispatch behind R. The recover-gate forces the three reads and then lets the next `Agent` call through. Owed: the recover-gate, or the advisor gate, denies `Agent`/`Task` and writes after a compaction until an advisor attempt follows the digest Read. A probe shows a dispatch denied before R and allowed after.
+
+verify: sh bash core/fixtures/postcompact-rulebook-recovery/run.sh
+
+## BL-559 — the pause gate denies `Skill` to an in-flight teammate, so a dispatched render cannot finish and the handoff waits on it
+
+**LANDED (v0.797.0, verified d8fd0c57).** While paused, a teammate whose transcript started before the pause
+flag's mtime may call `Skill` unless the skill is `ai-dlc`; `ai-dlc-update` stays allowed through the existing
+updater arm. A teammate dispatched during the pause, the lead's own Skill, and a teammate's Agent, Task and
+TaskCreate stay denied, and a pending Rule 8 STOP still denies.
+
+**DEFECT.** `core/hooks/ai-dlc-acknowledge.sh:572-581`: while paused, a teammate's Write/Edit is allowed (`ACK_TEAMMATE_WRITE`), so an in-flight teammate is not left half-amended. But "Agent/Task/Skill/TaskCreate stay denied for a teammate too." In graph s319 at 01:50:21Z the lead dispatched a `pm-escalated` agent to re-render `SPEC.md` from `.memlog.md` through `bmad-spec`, which is the path core requires for the SPEC (`requirements.md:233-236`). Four seconds later, at 01:50:25Z, the operator typed "handoff", and the pause flag went up. The render agent read its inputs, then at 01:50:39Z invoked `Skill bmad-spec` and was denied: "AI/DLC Rule 29: the pipeline is PAUSED". The lead, following `handoff.md` step 1, armed one bounded-join beat over that agent's deliverable at 01:50:47Z. The only route to that deliverable is the Skill call the gate refuses. So the rule meant to let an in-flight teammate reach a consistent endpoint blocks exactly the call that reaches it, and the handoff's join can only time out. `SPEC.md` is left stale against the PRD, which the lead said at 01:50:16Z ("SPEC.md is stale against the PRD until `.memlog.md` is re-rendered"). Owed: a teammate dispatched before the flag was raised may invoke `Skill` (it spawns no agent and is the derive path, unlike Agent/Task/TaskCreate), or `handoff.md` step 1 names what to do when an in-flight teammate's only remaining work is a denied call (stop it as `stopped`, with the stale artifact recorded in Open Items). A probe raises the flag between a teammate's dispatch and its Skill call and asserts the outcome.
+
+**Outcome.** The render agent did not fail when the pause flag denied `Skill bmad-spec`. It hand-applied memlog lines 30 and 31 to `SPEC.md` and returned at 01:53:08Z, which is the BL-546 hand-edit path again. The handoff then committed that SPEC as `dbc4c057e`. So the pause gate turns a rendered SPEC into a hand-edited one, silently, rather than stranding it.
+
+verify: sh bash core/fixtures/updater-session-signals/run.sh
+
+## BL-571 — `ADVERSARIAL_STATE_UNADJUDICABLE` fires on every sprint transition with a remedy that blames a correct declaration
+
+**LANDED (v0.797.0, verified d8fd0c57).** Inside the I81 block, still byte-identical in both hooks, the emitters
+log a pending-sprint form when `s<N-1>/` exists, `s<N>/` does not and no later `s<K>/` exists: Rule 8 is unarmed
+until the sprint's first artifact and no action is owed. Otherwise the "Fix the declared sprint" form is unchanged.
+The `ADVERSARIAL_STATE_UNADJUDICABLE` token stays in both forms. Over graph's 40 archives the predicate classes all
+712 such rows pending, and a +1-shifted control classes all 712 loud.
+
+**DEFECT.** Filed from batch 235's read of graph's continuation-log archives (read-only) and the Group H contract adversary's correction. The emitters, `core/hooks/ai-dlc-acknowledge.sh:422` and `core/hooks/ai-dlc-continue.sh:1150`, sit inside the I81 byte-identical block and fire whenever the resolved sprint's `s<N>/` directory is absent, which is the normal state before a sprint's first artifact. graph's s318 `pipeline-continuation-log-archive-2.md` holds 67 such entries from 2026-10-14T21:47Z to 2026-10-15T18:49Z, every one `sprint-id resolved: '319'`; s319's archive adds 2 at 18:57Z; and the pattern recurs across s303..s318. No guard was lost: the 67-entry window holds 0 adversary spawn rows (ledger control 862), and every s318 series reached EXIT_CONDITION_MET. The defect is the remedy text only. "Fix the declared sprint" is wrong when the previous sprint's directory exists and the resolved one does not, because that is a pending sprint, not a mis-declared one.
+
+Owed: both emitters distinguish "previous sprint dir exists, resolved one does not" (pending sprint) from a mis-declared sprint, with remedy text matching each, changed together so the I81 block stays byte-identical. Probe both shapes.
+
+verify: sh bash core/fixtures/divergence-hard-block/run.sh
+
