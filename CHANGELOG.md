@@ -20,6 +20,43 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.794.0] - 2026-10-16
+
+Batch 235 (ledger drain), role-file prose release. Closes BL-550, BL-551 and BL-552; ships the prose
+halves of BL-538, BL-541, BL-556, BL-557 and BL-565, which stay open. Closes no `PC-` id.
+
+### A teammate leaves the git index as it found it (BL-551)
+
+- pm, pm-escalated, architect, analyst and remediator each carry "Leave the git index as you found
+  it." `discovery.md` and `requirements.md` relocate the spec package with plain `mv`, never
+  `git mv`, and pm-escalated no longer relocates it; the lead does.
+
+### A party seat lists a path before reading it (BL-550)
+
+- The party-seat section of architect, dev, pm and tea tells a seat to resolve a code path with
+  `git ls-files <dir-or-glob>` before reading it, and says a grep that errored searched nothing. The
+  section stays byte-identical across the four (I124).
+
+### A notification a live beat covers gets no status line (BL-552; BL-538 prose)
+
+- rule-28: a notification for an agent whose deliverable a live beat covers gets no status line and
+  no re-check, and a `--complete` round is reported once, from the merge. A failed agent and a held
+  rejected set are not covered. BL-538's arming half ships with the wait release.
+
+### What a repair record states (BL-556, BL-557, BL-565, BL-541 prose)
+
+- BL-556: a fix extending a `D-`, `LR-` or `LRC-` decision to a case its words do not cover makes no
+  edit and is `escalated` with the options, never `repaired`.
+- BL-557: a repair record states `advisor:` and `derivations:`. Replay is the default; a section or
+  subject shard records derivations as deferred to the join only for a fence naming the section or
+  assembled document.
+- BL-565: a restating escalated entry carries `supersedes:` lines, not part tokens in `source:`.
+  pm-escalated appends the answer fold to the joined record, one `###` heading per entry, one
+  `closes:` per chain member, and an `edit:` line the join reads.
+- BL-541: the serial remediator, and the one unsharded remediator, end the record with
+  `repair-complete: serial <pass>` at column 0; a part or shard remediator writes no such line. The
+  rule-28 paragraph and the script that reads the line ship with the wait release.
+
 ## [0.793.0] - 2026-10-16
 
 Batch 235 (ledger drain), bootstrapping release; ships alone. Closes BL-572. Closes no `PC-` id.
