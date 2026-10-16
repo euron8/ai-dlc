@@ -143,7 +143,7 @@ The tree has already moved. At 18:06 EDT `6.md` was rewritten to `toolu_01JvXpff
 
 The new sub-shape: `merge-adversarial-shards.sh:585` (origin/main and graph's installed copy alike), `case "$tid" in toolu_?*)`, tests the id's SHAPE only, and `:586` refuses only a repeat. The merge never reads `spawn-ledger` (0 mentions). An invented `toolu_` id therefore merges as a valid independence id, as `cross-6.md`'s would today, unless the lead happens to catch it.
 
-Added to what this entry owes: the merge joins each shard's `tool_use_id` against `spawn-ledger.jsonl` instead of stopping at the shape check. Probe: a shard carrying an invented `toolu_X` that is absent from the ledger is refused, and a real ledger id merges (near-miss control).
+Added to what this entry owes, stated as a binary property per lead ai-dlc-71: **no merged independence id lacks a `spawn-ledger.jsonl` row.** The mechanism is not "refuse an invented self-id". A shard's self-reported id is a cosmetic field, and refusing on it would wedge live work. Instead the merged id is derived from the write, meta and probe ledgers and joined to `spawn-ledger.jsonl`, a derived id with no spawn row is refused, and a shard's invented self-id is ignored, so it never reaches the merged record. ai-dlc-6f's `b235-bl536-g1` does this (pinned by T8 `p_tuid_nospawn`) and can discharge this item. Receipt: seed a shard carrying an invented self-id and assert it is ABSENT from the merged record. Control: a real-shaped derived id with no spawn row is REFUSED.
 
 verify: manual
 
