@@ -973,3 +973,30 @@ Owed:
 Receipt: after the regeneration the guard reports 0, and a seeded row for a declared fixture makes it fail.
 
 verify: manual
+
+## BL-589 — `wait-stale-deliverable`'s lease-noclobber window is a fixed wall-clock quantum raced against a load-dependent sweep, so under load it fails a consumer's push gate
+
+**DEFECT.** Filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]); intake re-derived it read-only on graph and at origin/main `c07dc9d1`. Graph's 0.800.0 → 0.803.0 reconcile push (session `89a3adec`, started 12:49 PM EDT) ran graph's full pre-push. At about 1:20 PM the hook blocked the push on this one fixture. Graph's `.git/ai-dlc-fixture-failures` (17:20:18Z) reads "pool width 12, 1 of 118 units red" and "wait-stale-deliverable: 4 assertion(s) FAILED". The four are:
+- `:104` "lease-noclobber: delivered 30 of 30, A alive=0 — the window under test never ran".
+- `:106` "the marker read '1792170599 25473' mid-beat against A's '1792170591 25473' — a second beat clobbered a live lease".
+- `:107` "marker '' after the instant beat, expected A's '1792170591 25473'".
+- `:109` "MUTANT lease-always-put: delivered 30 of 30, A alive=0 — the window under test never ran".
+The session then ran the fixture twice standalone, and both passed. Graph's copy (`tests/fixtures/wait-stale-deliverable/run.sh`) is byte-identical to origin/main's (md5 `f7e19c11d2015cf16b4f941627446ba5` on both). The filer reports load averages of 55-58 during the suite and about 4 for the reruns; intake found no load figure in the transcript, so those numbers are the filer's.
+
+Mechanism, at `core/fixtures/wait-stale-deliverable/run.sh:1160-1206` on origin/main:
+- `run_noclobber` starts beat A with quantum 10 and POLL 8 (`:1172`).
+- It waits until A is asleep, sleeps 0.5 s, runs a `--status` call, and only then starts the second beat over 30 delivered targets (`:1182`).
+- It samples until that beat exits, and `noclobber_preconditions` (`:1204`) requires A still alive at the end.
+A's life is fixed at about 10 s, but the setup and the 30-target sweep scale with load. Under a loaded pool A exits first, and the control fails closed: correctly, not green. It still fails the whole gate, though, and the subject is innocent.
+
+The `:106` "clobbered a live lease" line is itself an artefact of the same race. Both markers carry A's own pid 25473 and differ only by epoch, so that is A's own re-stamp landing inside a window that ran late, which `:1166` says the quantum is chosen to prevent. The line accuses the subject of a clobber that A made itself.
+
+Cost: one consumer pull push, about 31 minutes of graph's suite, re-run in full on each red.
+
+Owed:
+1. Make A's window outlast the probe by construction, not by a fixed quantum. Candidates: A's life ends on a sentinel the probe writes after its last sample; or A gets a quantum far above any sweep, since `reap_tree "$pa"` at `:1199` kills A anyway, so the passing path pays nothing. Check either against `:1166`, which requires A's own re-stamp to stay outside the window.
+2. Receipt: force the slow sweep (for example, a delay injected into the second beat) and assert the control still holds. A pass at low load proves nothing here.
+
+Related: BL-616 (load-sensitive verdicts) and BL-632 (its census lists other elapsed-time asserts in this fixture, `:362`, `:400`, `:462` and `:479`).
+
+verify: manual
