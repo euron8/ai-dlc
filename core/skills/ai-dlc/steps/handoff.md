@@ -44,7 +44,12 @@ Execute this 5-step procedure in order:
    stopped teammate's **In-Flight Teammates** row `status` to `stopped`.
    **Rewrite the row; do not delete it** — at a handoff the successor
    needs to know what was running, and a deleted row is
-   indistinguishable from a teammate that never existed.
+   indistinguishable from a teammate that never existed. Record the
+   `TaskStop` task id in each stopped row's agent cell. For each stopped
+   row, run `scripts/ai-dlc/join-remediator-shards.sh --agent-writes
+   <task id>` and write its output into the snapshot's Open Items as
+   that agent's unrecorded partial edits, never inferring them from
+   `git status`.
    `ai-dlc-continue.sh` Check 0 defers while this step's beat holds a
    live `.beat-inflight` lease, so the turn ends on the beat; once the
    lease has expired it blocks the stop while any row still reads

@@ -1288,7 +1288,32 @@ p_sjspecnone() { # the SPEC part's memlog does not exist -> JOINED, SKIP naming 
     && ! has "$JO" "rendered through" && ! has "$JO" "REFUSED"
 }
 
-P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrargs rrfiles rrsubj alias alnokeys alresult alown alsecond alother alsess altwo altool dispkey dispvocab dispruling srcparts gapfill chkpart chkrec rulingedit rulingtab chkjoined partsilent specstale specfresh spechand specnone spectwo sjspecstale sjspecfresh sjspecnone specother specunread"
+# --agent-writes (BL-579): one agent's own ledger writes. A JOINED part writer (AG1) edited A, B and,
+# EARLIER, D; a post-join NON-subject agent (AG2) edited F; the SUBJECT (AG4, not the first row)
+# edited C and D. The output is exactly C and D plus the trailer. A, B and F are the controls, and
+# D is the discriminating row: a dedupe by path before the agent filter keeps AG1's D and loses AG4's.
+p_agentwrites() {
+  local w want got rc2 rc3
+  w="$(new_world)" || return 1
+  drive "$w" Edit "$w/$REL/$S21" "$AG1" "" "" 2026-10-15T19:20:00Z
+  drive "$w" Edit "$w/$REL/$S22" "$AG1" "" "" 2026-10-15T19:20:01Z
+  drive "$w" Edit "$w/$REL/$S31" "$AG1" "" "" 2026-10-15T19:20:02Z
+  drive "$w" Edit "$w/$REL/f-post-join.md" "$AG2" "" "" 2026-10-15T19:30:00Z
+  drive "$w" Edit "$w/$REL/c-partial.md" "$AG4" "" "" 2026-10-15T19:40:00Z
+  drive "$w" Edit "$w/$REL/$S31" "$AG4" "" "" 2026-10-15T19:40:01Z
+  want="$(printf '%s\n%s\n%s' "$REL/c-partial.md" "$REL/$S31" 'not covered: Bash writes, and writes outside planning-artifacts/ and specs/s<N>/')"
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --agent-writes "$AG4" > "$JO" 2>&1; RC=$?
+  got="$(cat "$JO")"
+  [ "$RC" -eq 0 ] && [ "$got" = "$want" ] || return 1
+  # An agent with no rows prints the trailer alone, rc 0.
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --agent-writes a00000000000000000 > "$JO" 2>&1; rc2=$?
+  [ "$rc2" -eq 0 ] && [ "$(cat "$JO")" = 'not covered: Bash writes, and writes outside planning-artifacts/ and specs/s<N>/' ] || return 1
+  # Another flag is refused.
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --agent-writes "$AG4" --sprint 1 > "$JO" 2>&1; rc3=$?
+  [ "$rc3" -eq 2 ] && has "$JO" "REFUSED:"
+}
+
+P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrargs rrfiles rrsubj alias alnokeys alresult alown alsecond alother alsess altwo altool dispkey dispvocab dispruling srcparts gapfill chkpart chkrec rulingedit rulingtab chkjoined partsilent specstale specfresh spechand specnone spectwo sjspecstale sjspecfresh sjspecnone specother specunread agentwrites"
 
 # ---- A PART'S DERIVATION SURVIVES THE JOIN. The part's ```derived fence is copied into the joined
 # record, and the gate re-runs `validate-artifact-derivations.sh` over the sprint dir AFTER the

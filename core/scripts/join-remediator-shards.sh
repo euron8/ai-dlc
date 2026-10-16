@@ -30,6 +30,16 @@
 #   --rerun <part>.md@<ISO>   (repeatable) judge that part's cited files from <ISO> on; see
 #                     "RE-RUN OF ONE PART" below.
 #
+#   join-remediator-shards.sh --agent-writes <agent_id> [--since <ISO>]
+#       An EXCLUSIVE mode, like --sources and --escalations: it takes no other flag and joins
+#       nothing. It prints, sorted and unique, each `path` that ONE agent wrote according to the
+#       write ledger (rows `kind: "artifact-write"`, `agent_id` equal to <agent_id>, and `ts` at or
+#       after --since when given), then one trailer line stating what the ledger cannot see: Bash
+#       writes, and writes outside planning-artifacts/ and specs/s<N>/. A handoff runs it for each
+#       stopped agent, with the `TaskStop` task_id as <agent_id>, so the agent's partial edits are
+#       read from the ledger and never inferred from `git status`. An agent with no rows, or a
+#       missing ledger, prints the trailer alone and exits 0; a malformed id exits 2.
+#
 # READS   <state>/planning-artifacts/.artifact-writes.jsonl
 #         <state>/planning-artifacts/s<N>/shards/<artifact>-repair-p<M>/*.md   (placement rule P1)
 #         NOT `shards/<artifact>-p<M>/`: that directory holds the ADVERSARY shards for the review
@@ -251,12 +261,13 @@ refuse() { echo "REFUSED: $*" >&2; refuse_n=$((refuse_n + 1)); }
 die() { echo "REFUSED: $*" >&2; exit 2; }
 
 SPRINT=""; ARTIFACT=""; PASS=""; APATH=""; SINCE=""; UNTIL=""; DOCUMENT=""; REPDIR=""; DOCMODE=0
-SUBJMODE=0; SUBJ_BASE=""; SRCMODE=0; SRC_REC=""; RERUN=""
+SUBJMODE=0; SUBJ_BASE=""; SRCMODE=0; SRC_REC=""; RERUN=""; AGENTMODE=0; AGENT_ID=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --rerun) [ $# -ge 2 ] || die "--rerun needs <part>.md@<ISO>"
              RERUN="${RERUN}${2}
 "; shift 2 ;;
+    --agent-writes) AGENT_ID="${2:-}"; AGENTMODE=1; SRCMODE=2; shift 2 ;;
     --sources) SRC_REC="${2:-}"; SRCMODE=1; shift 2 ;;
     --escalations) SRC_REC="${2:-}"; SRCMODE=2; shift 2 ;;
     --subject) SPRINT="${2:-}"; SUBJMODE=1; shift 2 ;;
@@ -276,7 +287,14 @@ while [ $# -gt 0 ]; do
 done
 # A party repair: its entries must each name the seat finding they apply.
 PARTY=0
-if [ "$SRCMODE" != 0 ]; then
+if [ "$AGENTMODE" = 1 ]; then
+  [ "$DOCMODE$SUBJMODE" = 00 ] && [ -z "$SPRINT$ARTIFACT$PASS$APATH$UNTIL$REPDIR$SRC_REC$SUBJ_BASE$RERUN$DOCUMENT" ] \
+    || die "--agent-writes prints one agent's ledger writes and takes only --since <ISO>"
+  case "$AGENT_ID" in ''|*[!A-Za-z0-9_-]*) die "--agent-writes needs an agent id of letters, digits, _ and - (got '${AGENT_ID}')" ;; esac
+  case "$SINCE" in ''|[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z) ;; *) die "--since must be YYYY-MM-DDTHH:MM:SSZ (got '${SINCE}')" ;; esac
+  command -v jq >/dev/null 2>&1 || die "jq is not on PATH; the ledger cannot be read"
+fi
+if [ "$SRCMODE" != 0 ] && [ "$AGENTMODE" = 0 ]; then
   [ "$DOCMODE$SUBJMODE" = 00 ] && [ -z "$ARTIFACT$PASS$APATH$SINCE$UNTIL$REPDIR" ] \
     || die "--sources and --escalations check one record and take only --sprint <N>"
   [ -z "$RERUN" ] || die "--rerun narrows a join's ledger window; --sources and --escalations read no ledger"
@@ -382,6 +400,11 @@ if _sl="$(cd "$STATE" 2>/dev/null && pwd)"; then STATE_PARENT="${_sl%/*}/"; fi
 if _sp="$(cd "$STATE" 2>/dev/null && pwd -P)"; then STATE_PARENT_P="${_sp%/*}/"; fi
 PA="${STATE}/planning-artifacts"
 LEDGER="${PA}/.artifact-writes.jsonl"
+if [ "$AGENTMODE" = 1 ]; then
+  [ -f "$LEDGER" ] && { jq -r --arg a "$AGENT_ID" --arg s "$SINCE" 'select(.kind == "artifact-write" and .agent_id == $a and ($s == "" or .ts >= $s)) | .path' "$LEDGER" | sort -u; }
+  echo "not covered: Bash writes, and writes outside planning-artifacts/ and specs/s<N>/"
+  exit 0
+fi
 
 # --- PARTY SOURCES (BL-462). Every applied entry names `source: <seat-file>#<finding-id>`, and the
 # pair resolves against the sprint's seat files -- never the id alone, which collides across seats.

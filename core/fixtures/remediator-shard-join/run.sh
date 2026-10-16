@@ -344,6 +344,9 @@ p_altwo "$JOIN" && ok "AL8: the id is held by TWO tool_use blocks -> REFUSED, '2
 p_altool "$JOIN" && ok "AL9: the one tool_use holding the id is a Read -> REFUSED" \
   || bad "AL9: an id held by a non-write tool_use was aliased (rc=$RC): $(cat "$JO")"
 
+p_agentwrites "$JOIN" && ok "AW1: --agent-writes <subject> over a ledger where a joined writer edited A, B and (earlier) D, a post-join non-subject edited F and the subject edited C and D -> exactly C, D and the not-covered trailer; an unknown agent -> the trailer alone, rc 0; an extra flag -> REFUSED rc 2" \
+  || bad "AW1: --agent-writes did not print exactly the subject's paths plus the trailer, or the zero-row and extra-flag cases failed (rc=$RC): $(cat "$JO")"
+
 # R1: the role file the remediator is bound to teaches the write tool and the citation form. Walked
 # up from this fixture in both layouts; install copies team-roles/ verbatim, so no render exists.
 ROLE=""

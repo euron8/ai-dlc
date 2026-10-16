@@ -769,6 +769,15 @@ mutant "JX91 the subject-mode SPEC render refusal discarded" "sjspecstale" \
 mutant "JX92 an unreadable spec memlog not refused" "specunread" \
   ' || { refuse "${m}: the memlog could not be read; no render verdict"; return 0; }' \
   ''
+# ---- --agent-writes (BL-579): the agent filter, and the order of dedupe against it.
+mutant "JX93 --agent-writes with no agent filter" "agentwrites" \
+  '.kind == "artifact-write" and .agent_id == $a and ($s' \
+  '.kind == "artifact-write" and ($s'
+# JX94 dedupes by path BEFORE the agent filter (slurp, then unique_by): the joined
+# writer's earlier row on D wins the path, so the subject's D is lost.
+mutant "JX94 --agent-writes dedupes by path before the agent filter" "agentwrites" \
+  'jq -r --arg a "$AGENT_ID" --arg s "$SINCE" '"'"'select(' \
+  'jq -rs --arg a "$AGENT_ID" --arg s "$SINCE" '"'"'unique_by(.path)[] | select('
 # ---- END JX MUTANTS.
 
 # ------------------------------------------------------------------------------ the reap
