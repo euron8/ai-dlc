@@ -460,14 +460,6 @@ Owed: both emitters distinguish "previous sprint dir exists, resolved one does n
 
 verify: manual
 
-## BL-572 — a fenced `git diff --stat` derivation goes STALE at any terminal width but 80, because the derivations checker never pins `COLUMNS`
-
-**DEFECT.** Filed from batch 235's read of graph s319 `planning-artifacts/s319/carry-over-evaluation-party-repair-p1.md:465`, which records the output unfenced and says "re-run it by hand", and the Group H contract adversary's correction. The checker does not mangle the graph glyphs: `norm()` in `core/scripts/validate-artifact-derivations.sh` (`:530`) trims trailing blanks only. `git diff --stat` sizes its graph to `COLUMNS`, which the script never pins (`COLUMNS` 0 hits), so the same derivation is STALE at 40, 60, 120 and 200 columns and OK at 80 or unset. In graph's corpus there are 48 fenced `--stat` derivations in 37 files, and 33 are already STALE identically under 80 and unset (22 with an empty actual, 11 with real drift).
-
-Owed: pin `COLUMNS` in `run_pair`'s eval subshell (`:702`), and state `--stat=N` as the width-stable fence form. Probe: one `--stat` derivation replays OK under two different `COLUMNS` values.
-
-verify: manual
-
 ## BL-573 — operator questions ask what the agent can derive, or what the operator already answered
 
 **DEFECT.** Filed from batch 235's read of graph's s319 `operator-requests-history` diff. Of D-1..D-15, five drew complaints: D-6 "No idea what the check 924 band is", D-13 "No idea what this means", D-11 "Pretty sure I supplied this already", D-12 "I assumed you'd be able to derive" (the Distributor address), and "why can't you add the contract_allowlist?". `requirements.md` and `SKILL.md` carry no derive-first or already-answered test (`operator-owned|derivable` 0; control: `route.md` = 1). BL-539 covers only the item-5 deferral and BL-524 only the `(Recommended)` badge.

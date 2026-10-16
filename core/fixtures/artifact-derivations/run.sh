@@ -839,7 +839,7 @@ mshim 'kill -9 $PPID'
 m_unrun "m-kill-sub            " "$WORK/m/v.sh"
 mshim 'echo "feedface  src/m-data.txt"'
 cp "$VALIDATOR" "$WORK/m/v-fork.sh"
-"${SED:-sed}" 's|( cd "\$AI_DLC_ROOT" && { eval "\$c"|( cd "$AI_DLC_ROOT" \&\& { case "$c" in shasum*) ulimit -Su 1 ;; esac; eval "$c"|' \
+"${SED:-sed}" 's|&& { eval "\$c" <&3|\&\& { case "$c" in shasum*) ulimit -Su 1 ;; esac; eval "$c" <\&3|' \
   "$VALIDATOR" > "$WORK/m/v-fork.sh" 2>/dev/null
 if cmp -s "$VALIDATOR" "$WORK/m/v-fork.sh"; then
   bad "m-fork DID NOT APPLY -- the fork-fault injection matched nothing, so no verdict was scored"
@@ -1159,6 +1159,75 @@ n_mutant n-m4 "n-find" \
   's/^    walk_rc=\$?$/    walk_rc=0/'
 n_mutant n-m5 "n-diff-names n-sed-act n-sed-names n-sed-rec" \
   's/"\$f" "\$ln" "\$cmp_why" "\$c" >&2$/"a derivation" "?" "$cmp_why" "$c" >\&2/'
+
+# --- O. A `--stat` GRAPH IS A FACT ABOUT THE TREE, NOT ABOUT THE INVOKER'S TERMINAL ---------------
+# `git diff --stat` scales its +/- graph to COLUMNS even with no tty. Before the pin, a block
+# recorded at one width read STALE whenever the validator ran at another: the same tree, the same
+# artifact, a verdict decided by the invoking shell. The world is its OWN repo, never $WORK, so no
+# other arm's `cd "$AI_DLC_ROOT"` meets a repository it was not seeded against. COLUMNS is set
+# explicitly on every invocation here: the preamble scrubs GIT_* and AI_DLC_*, not COLUMNS, so an
+# unset one would leak the operator's terminal into the verdict.
+O="$WORK/o"
+mkdir -p "$O/w"
+( cd "$O/w" && git init -q . && git config user.email o@o && git config user.name o \
+  && printf 'x\n' > big.txt && git add big.txt && git commit -qm one ) >/dev/null 2>&1
+awk 'BEGIN { for (i = 0; i < 200; i++) print "line " i }' >> "$O/w/big.txt"
+( cd "$O/w" && git add big.txt && git commit -qm two ) >/dev/null 2>&1
+o_stat() { ( cd "$O/w" && COLUMNS="$1" git diff --stat HEAD~1 HEAD ); }
+O80="$(o_stat 80)"; O200="$(o_stat 200)"; O60="$(o_stat 60)"
+# THE SEED MUST EXPRESS THE DEFECT: at 200 columns the graph must be a different text, or both
+# halves below pass against an unpinned validator and the arm proves nothing.
+if [ -n "$O80" ] && [ "$O80" != "$O200" ] && [ "$O80" != "$O60" ]; then
+  ok "o-seed                 the 200-line change draws a different --stat graph at 60, 80 and 200 columns"
+else
+  bad "o-seed the seeded diff does not scale with COLUMNS (80 agrees with 200 or 60, or is empty) -- O cannot discriminate"
+fi
+o_emit() { # $1 file  $2 recorded output
+  { printf '```derived\n$ git diff --stat HEAD~1 HEAD\n%s\n```\n' "$2"; } > "$1"
+}
+o_emit "$O/true.md" "$O80"
+o_emit "$O/at60.md" "$O60"
+o_emit "$O/stale.md" "$(printf '%s\n' "$O80" | sed 's/ \([0-9][0-9]*\) insertion/ 9\1 insertion/')"
+o_run() { # $1 validator  $2 artifact  $3 COLUMNS -- a width the block was NOT recorded at
+  out="$(COLUMNS="$3" AI_DLC_PROJECT_ROOT="$O/w" bash "$1" "$2" 2>&1)"; rc=$?
+}
+for _w in 200 40; do
+  o_run "$VALIDATOR" "$O/true.md" "$_w"
+  [ "$rc" -eq 0 ] && grep -q '^OK: 1 derivation' <<< "$out" \
+    && ok "o-width-$_w           exit=0  recorded at COLUMNS=80, validated at COLUMNS=$_w, reproduces" \
+    || bad "o-width-$_w a --stat block recorded at 80 columns must reproduce at COLUMNS=$_w (rc=$rc): $out"
+done
+# The twins: the same command with a record the pinned run cannot reproduce. Without them the arms
+# above pass against a validator that stopped comparing. One records a genuinely wrong insertion
+# count; the other was recorded at 60 columns, which the pin does not rescue -- the pin fixes the
+# width, it does not make the graph width-blind.
+if [ "$(cat "$O/stale.md")" != "$(cat "$O/true.md")" ]; then
+  o_run "$VALIDATOR" "$O/stale.md" 200
+  [ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" \
+    && ok "o-stale                exit=1  the same block with a wrong insertion count is still STALE" \
+    || bad "o-stale a --stat block with a wrong count must stay STALE under the pin (rc=$rc): $out"
+else
+  bad "o-stale the twin's count edit matched nothing -- no stale twin was seeded"
+fi
+o_run "$VALIDATOR" "$O/at60.md" 200
+[ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" \
+  && ok "o-at60                 exit=1  a block recorded at COLUMNS=60 stays STALE under the pin" \
+  || bad "o-at60 a --stat block recorded at 60 columns must read STALE (rc=$rc): $out"
+# THE MUTANT: the pin removed. It must turn o-width red and leave the twin red, so the kill is the
+# pin's and not a broken copy's.
+OM="$O/om-$VBASE"
+if mut_copy "$OM" 's/ && export COLUMNS=80 && { eval / \&\& { eval /'; then
+  o_run "$OM" "$O/true.md" 200
+  [ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" \
+    && ok "o-mutant KILLED        without the pin the 80-column block reads STALE at COLUMNS=200" \
+    || bad "o-mutant SURVIVED: removing the COLUMNS pin did not make the 80-column block STALE (rc=$rc): $out"
+  o_run "$OM" "$O/stale.md" 200
+  [ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" \
+    && ok "o-mutant control       the unpinned copy still runs and still reports the wrong count STALE" \
+    || bad "o-mutant control: the unpinned copy did not report the stale twin (rc=$rc) -- the copy is broken, not unpinned: $out"
+else
+  bad "o-mutant DID NOT APPLY -- the pin-removal mutation matched nothing, so no verdict was scored"
+fi
 
 echo
 if [ "$fails" -gt 0 ]; then

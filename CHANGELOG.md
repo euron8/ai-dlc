@@ -20,6 +20,23 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.793.0] - 2026-10-16
+
+Batch 235 (ledger drain), bootstrapping release; ships alone. Closes BL-572. Closes no `PC-` id.
+
+### A `git --stat` derivation is re-run at a pinned 80 columns (BL-572)
+
+- `validate-artifact-derivations.sh` runs each derivation's eval under `COLUMNS=80`. `git diff --stat`,
+  `log --stat`, `show --stat` and `--compact-summary` scale their bar to `COLUMNS` even with no tty, so a
+  block recorded at one width read STALE when the validator ran at another. Unset `COLUMNS` already reads
+  as 80, so a block recorded in a plain shell still matches.
+- The STALE message names `--stat=100` and `--numstat` as width-stable forms. The derivation-capture hook
+  delegates to this validator and evals nothing itself, so the one pin covers both.
+- Measured on the reference consumer: 55 width-sensitive blocks; at `COLUMNS=100` the base validator
+  flips 3 from OK to STALE and the fixed one flips none.
+- Bootstrapping: the reconcile engine runs this validator, so a consumer gets the pin on the pull AFTER
+  the one that delivers it.
+
 ## [0.792.0] - 2026-10-16
 
 Batch 235 (ledger drain), validators release. Closes BL-528; ships the `dispatched-at` half of
