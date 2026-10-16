@@ -882,3 +882,21 @@ OPEN QUESTIONS, not filed as defects. Each needs SOME prior state, so the questi
 Owed: scope each reader in items 1-7 to the current sprint (or to the current pull's own range), so a failing or absent historical artifact can neither block nor owe anything. No prose rule. Answer each open question with a reason. Receipt per reader: the verdict is the same with every past sprint's artifacts deleted and with a deliberately failing artifact seeded into a past sprint. Control: the same failing artifact in the CURRENT sprint still fails.
 
 verify: manual
+
+## BL-632 — shipped checks and fixtures pass or fail on an arbitrary number instead of a binary property of their subject
+
+**DEFECT.** Operator, relayed by lead ai-dlc-9c: "really need to stop forcing arbitrary goals that aren't based on binary attributes." Part of ai-dlc-4e [9b62de]'s load series (BL-616). Subject: assertions whose verdict turns on a number with no stated property behind it, such as wall-clock bounds (`$((SECONDS - t0)) -lt N`, timeouts that fail as HANG or FAIL), percentage windows, and repeat or rep counts. Under load such a bound turns a correct subject red, which is BL-616's consequence, and when tuned to pass it asserts nothing about the subject.
+
+Instances known today:
+1. `H4` in `adversarial-shard-merge`, on ai-dlc-c9's branch: a `-lt 8` timing proxy standing in for "never read stdin", being replaced there by a poison-token file. That replacement is this entry's remedy shape. Reported by 9c; intake could not locate it on any local or origin `b235`/`c9` ref (0 hits; control: 2 `adversarial-shard-merge*` fixture directories on main), so the cite stays the reporter's.
+2. 0.804.0's 120 s HANG watchdogs (`b235-load-a2`): `fold-architect-ledger-join` D6 raised from 15 s to 120 s, and `readset-stage1-verdict` `:582`, `:639` and `:660` raised to 120 s. That release raises the number; it does not remove it.
+3. The advisor-gate 10 s re-read ceiling, BL-630 (`core/hooks/ai-dlc-advisor-gate.sh:579`).
+4. The suite-pole wall-clock growth arm, `scripts/validate-suite-pole.sh:947-957` at origin/main `21facb0f`: a run FAILS past `A_MAX + A_MAX * REGIME_BAND / 100`, with `REGIME_BAND=100` at `:248`. Its own header calls that band "uncalibrated" (`:945`).
+
+Owed, per instance: convert it to a binary attribute (did X happen: a poison token read, a sentinel written, a line seen), or name the property the number stands for and justify the number from a measurement of that property. A census of the remaining instances goes with item 1 of BL-616's census.
+
+NOT IN SCOPE, listed for the OPERATOR to decide, not for the owner: budgets the operator set or approved. `FORK_BUDGET=3405` (`scripts/validate-enforcement-map.sh`), the A6 durable-channel ceiling (`DURABLE_MAX`, 69120 on main, 69376 on intake-7, `scripts/validate-claude-rules.sh`), and the backlog size cap (`MAX=104`, `scripts/validate-backlog-size.sh:129`, which `:72` records the operator raised).
+
+Owner: ai-dlc-4e [9b62de] (lead ai-dlc-9c).
+
+verify: manual
