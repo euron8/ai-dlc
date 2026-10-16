@@ -135,6 +135,16 @@ record or snapshot under the sprint slot is either denied or recorded.
 
 **Fifth instance, all 19 adversarial shards (graph s319 resumed lead `f65eae3b`, requirements-adversarial-p1, 02:42Z on 2026-10-16).** Filed by peer session ai-dlc-68. Every adversary wrote `tool_use_id: PENDING-LEAD`, and the lead patched all 19 with in-place `python3` `open(p,'w')` rewrites, 11 at 02:42:37Z and then one per notification. `PENDING-LEAD` occurs 0 times in graph's installed `_gate-procedures.md`, `adversary.md` and `merge-adversarial-shards.sh` (control: `tool_use_id` = 2 in `adversary.md`), so the placeholder the brief tells the shard to write is named in none of those installed files. Each patch is a Bash write to a gate input that no write ledger sees. Shard 8's chained `.replace` came out right (`toolu_01TkJ3V9RMQd4QVVrjepzAFb`), but nothing checked it.
 
+**Sixth instance, and an invented id shaped like a real one (graph s319 requirements-adversarial-p2, transcript `0e9a936b`, 2026-10-16 21:53-22:04Z).** Filed by graph watch ai-dlc-f7; intake re-derived it read-only. Graph's installed `_gate-procedures.md:554` asks each shard for "the `tool_use_id` of THIS Agent dispatch". The 19 shards under `planning-artifacts/s319/shards/requirements-p2/` came back with `NOT_ACCESSIBLE` or "not visible"/"not available" prose, one id repeated across shards 1 and 7 (per the lead at 21:56:33Z), and at least two ids the adversaries made up:
+- `6.md` carried `toolu_01S319P2Shard6AdversaryReq`, which its own text called "a placeholder". It appears once in the transcript and 0 times in `_bmad-output/spawn-ledger.jsonl`. Control: the real shard id `toolu_01QEcSBpQPURM8YxpJwz9GqD` appears once in the ledger.
+- `cross-6.md:6` still carries `toolu_s319_req_adv_p2_cross_6`, which appears 0 times in the ledger.
+
+The tree has already moved. At 18:06 EDT `6.md` was rewritten to `toolu_01JvXpffd3RTR8GDxEnugR25`, which IS in the ledger (count 1). That is the lead's hand-edit the transcript announced ("check the placeholders against the ledger and fix them before running merge"), which is this entry's original defect again. `NOT_ACCESSIBLE` now remains in 2 shards. The shards are uncommitted, so the invented `6.md` value survives only in the transcript.
+
+The new sub-shape: `merge-adversarial-shards.sh:585` (origin/main and graph's installed copy alike), `case "$tid" in toolu_?*)`, tests the id's SHAPE only, and `:586` refuses only a repeat. The merge never reads `spawn-ledger` (0 mentions). An invented `toolu_` id therefore merges as a valid independence id, as `cross-6.md`'s would today, unless the lead happens to catch it.
+
+Added to what this entry owes: the merge joins each shard's `tool_use_id` against `spawn-ledger.jsonl` instead of stopping at the shape check. Probe: a shard carrying an invented `toolu_X` that is absent from the ledger is refused, and a real ledger id merges (near-miss control).
+
 verify: manual
 
 ## BL-537 — a spawn made by a teammate is recorded nowhere, so a second writer or reviewer has no provenance
