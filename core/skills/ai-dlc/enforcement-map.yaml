@@ -1021,8 +1021,9 @@ non_catalog_units:
           to do it by hand.
     checks:
       - id: preamble-only-never-greenfield
-        asserts: a canonical with no `sprint:` key resolves from the frozen archives
-          (max + 1), never to 1
+        asserts: a canonical with no `sprint:` key REFUSES (exit 1), never resolves to 1
+          and never reads the frozen archives; the current sprint comes only from the
+          canonical's own `sprint:` + `status:`, so deleting every archive changes nothing
         protects: the prior sprint's drafts — Rule 24 stamps every analyst-draft write
           path with sprint_id, and an unstamped/restamped fallback silently destroys
           the previous sprint's work
