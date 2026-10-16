@@ -1013,3 +1013,18 @@ verify: manual
 
 verify: manual
 
+## BL-638 — `ai-dlc-subagent-probe.sh` takes `peak_tokens` as the max of the top-level `message.usage`, so any advisor turn inside a subagent inflates the recorded peak
+
+**DEFECT.** Found by ai-dlc-08 and relayed by lead ai-dlc-71; intake verified it by reading the code and measured it on real transcripts. It is BL-622's class with a separate reader. `core/hooks/ai-dlc-subagent-probe.sh:219-224` (origin/main) computes `peak` as the max, over a subagent's assistant turns, of the top-level `.message.usage` input + cache_creation + cache_read. The file never mentions `iterations` (0; control: `cache_read_input_tokens` 1). On an advisor turn that top level sums every API iteration (BL-622), so the turn reads roughly double the real context, and a max takes it. The result is written as `peak_tokens`, which the hook's own header (`:42-63`) says to read against the compaction threshold ("did a teammate approach the ceiling").
+
+Measured (python over `~/.claude/projects/*/<session>/subagents/agent-*.jsonl`, comparing the probe's peak with the max of each turn's last `message`-type iteration, or the top level where there is none):
+- graph: 3240 subagent transcripts, 1254 with an advisor turn, 1244 of those with an inflated peak.
+- ai-dlc: 1818 subagent transcripts, 699 with an advisor turn, 692 inflated.
+- The largest inflation: `agent-ab12255aca6bb34ba` (ai-dlc session `bbaa3aca`) reads 873695 against a true peak of 441012, with 4 advisor turns. The next four inflate by 384-428 thousand tokens.
+- Graph's live probe ledger `_bmad-output/subagent-context.jsonl` holds 7528 rows, 146 of them with `peak_tokens` above 420000, past the effective window. Some or all of those are likely inflated; intake did not join them row-by-row to their transcripts.
+
+So any ceiling or model decision read from `peak_tokens` over-states teammate context wherever an advisor ran. No shipped core reader of `peak_tokens` was found outside the probe itself (0 in the dispatch guard, the precompact and acknowledge hooks, and `steps/gate-validation.md`), so the cost today is in the analysis that reads the ledger, not in a gate.
+
+Owed: when `message.usage.iterations` is present, take each turn's figure from its LAST `type: "message"` iteration, otherwise the top level, and keep the max over turns. Share the extraction with BL-622's sensor fix so the two readers cannot drift. Receipt: a seeded subagent transcript with one advisor turn records the true peak, and a transcript without one records exactly what it records today (control).
+
+verify: manual
