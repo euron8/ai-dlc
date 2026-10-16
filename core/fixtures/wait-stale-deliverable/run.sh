@@ -1437,6 +1437,8 @@ missing=""
 for c in $codes; do printf '%s\n' "$listed" | grep -qx "$c" || missing="$missing $c"; done
 if [ -z "$missing" ]; then ok "exit-list: every code the beat can return ($(printf '%s' "$codes" | tr '\n' ' ')) is named in rule-29's exit list"
 else bad "exit-list: the beat can exit with$missing, which rule-29's exit list does not name — a lead reads an unnamed code as its nearest neighbour"; fi
+# Printed only after the comparison decided on rule-29's content, so it cannot vouch for a read that never happened.
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$R29")" && pwd)/$(basename "$R29")"
 }
 
 # --- 21. this fixture's verdict may not depend on the cwd it was launched from ---
