@@ -910,6 +910,6 @@ verify: manual
 
 The absence reads exactly like a real one. `.claude/rules/tool-hazards.md:181-184` covers the neighbouring `ls-tree` case only.
 
-Owed: one line beside `:181-184` saying a glob pathspec must not end in `/` (use the bare glob, the plain directory, or `:(glob)<dir>*/**`). It goes in the durable channel, which has 49 bytes free under A6 (69327/69376 on intake-7), so the line needs either A6 headroom (an operator decision) or an equal subtraction elsewhere in the channel.
+Owed: one line beside `:181-184` saying a glob pathspec must not end in `/` (use the bare glob, the plain directory, or `:(glob)<dir>*/**`). It goes in the durable channel, which has 49 bytes free under A6 (69327/69376 on intake-7). Lead ai-dlc-9c ruled: no subtraction to make room and no separate A6 question for one line. The entry stays OPEN, waiting on room in the durable channel, and goes to the operator together with the next A6 question.
 
 verify: manual
