@@ -34031,7 +34031,7 @@ verify: sh bash core/fixtures/pause-hook-origin/run.sh
 
 ## BL-545 — after a compaction the lead dispatched before its Rule 32 R advisor call
 
-**LANDED (v0.797.0, verified d8fd0c57).** `ai-dlc-recover-gate.sh` gains a lead-only stage: after the step-file
+**LANDED (v0.797.0, verified e07a3b04).** `ai-dlc-recover-gate.sh` gains a lead-only stage: after the step-file
 Read satisfies recovery, the lead's Agent, Task, TaskCreate, Write, Edit, MultiEdit and NotebookEdit are denied
 until an advisor attempt follows the `postcompact-digest.md` Read. Bash is never refused. It stands down with no
 grant or a withdrawn one, an `unavailable` result, for a teammate or another session, and after 3 refusals per
