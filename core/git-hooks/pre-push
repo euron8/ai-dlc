@@ -2166,7 +2166,7 @@ elif [ -d tests/fixtures ]; then
 fi
 
 if [ "$fail" -ne 0 ]; then
-  printf '\npre-push: BLOCKED. Fix the above. A pipeline agent does not bypass this hook: if it cannot be made green, report that to the operator in one line.\n\n'
+  printf '\npre-push: BLOCKED. Fix the above. A pipeline agent does not bypass this hook: at a handoff, follow steps/handoff.md step 3 (pre-push hook refused) -- report the failing gate to the operator in one line, touch _bmad-output/pipeline-paused.flag, and stop.\n\n'
   exit 1
 fi
 printf '\npre-push: all gates green.\n\n'
