@@ -129,6 +129,13 @@ digest_readable() {
   [ -r "${PROJECT_DIR}/.claude/skills/ai-dlc/postcompact-digest.md" ] \
     || [ -r "${PROJECT_DIR}/core/skills/ai-dlc/postcompact-digest.md" ]
 }
+# owed_put <session_id> <denies> -- the ONE writer of the owed file. A failed write warns on
+# stderr naming the hook and the file and never denies: an unwritten arm leaves the stage
+# disarmed (fail open), and an unwritten count leaves the next deny at the same count.
+owed_put() {
+  printf 'session_id=%s\ndenies=%s\n' "$1" "$2" > "$OWED" 2>/dev/null \
+    || echo "WARN: ai-dlc-recover-gate: could not write $OWED" >&2
+}
 
 # --- THE ADVISOR STAGE (header: THE ADVISOR STAGE) ---------------------------------------
 # Runs only once the read stages have disarmed (no marker) and left the owed file behind, so
@@ -199,7 +206,7 @@ if [ ! -f "$MARKER" ] && [ -f "$OWED" ]; then
   done
   if [ "$R_V" = clear ]; then rm -f "$OWED" 2>/dev/null || true; exit 0; fi
   [ "$R_V" = owed ] || exit 0
-  printf 'session_id=%s\ndenies=%s\n' "$R_OSID" "$((R_DENIES + 1))" > "$OWED" 2>/dev/null || true
+  owed_put "$R_OSID" "$((R_DENIES + 1))"
   jq -n --arg m "AI/DLC post-compact recovery: SKILL.md Rule 32 touchpoint R is owed. You read postcompact-digest.md after this compaction and have made no advisor call since, so this ${R_TOOL} call -- a dispatch or a write -- is refused ($((R_DENIES + 1)) of ${R_MAX_DENIES}). Call the advisor in a message of its own, read its answer, then retry the same call. Any advisor attempt clears this, including one that errors; if the advisor answers 'unavailable' this gate stands down. If you hold no advisor tool, say so in one line (RECOVERY-SKIP: advisor -- <why>) and retry: after ${R_MAX_DENIES} refusals this stage stands down. Arming a wait-beat (Bash) is not refused and belongs before the advisor call." \
     '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $m}}'
   exit 0
@@ -362,7 +369,7 @@ you on the next call; there is nothing here to weigh."
         # A teammate never arms it (the stage is lead-only), and neither does a tree with no
         # readable digest: R follows the digest Read, so without the file R is not owed.
         if [ -z "$(printf '%s' "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null)" ] && digest_readable; then
-          printf 'session_id=%s\ndenies=0\n' "$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)" > "$OWED" 2>/dev/null || true
+          owed_put "$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)" 0
         fi
         rm -f "$MARKER" "$PROGRESS" 2>/dev/null || true
         exit 0

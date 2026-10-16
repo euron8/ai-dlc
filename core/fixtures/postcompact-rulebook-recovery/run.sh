@@ -1498,14 +1498,12 @@ a_session() {
   printf 'PASS\n'
 }
 
-# A10. The injected block names touchpoint R, so the lead is told before the gate refuses it.
-#      Driven against the PRODUCER (arg 2), the gate held fixed; mutated by the producer arm below.
-a_text() {
-  _t="$(fire "${2:-$HOOK}")"
-  [ -n "$_t" ] || { printf 'FAIL:the producer emitted nothing\n'; return; }
-  grep -q 'Rule 32 R' <<<"$_t" || { printf 'FAIL:the injected block does not name touchpoint R\n'; return; }
-  printf 'PASS\n'
-}
+# NO ARM ASSERTS THAT THE INJECTED BLOCK NAMES R, because it does not. The block has no room:
+# gate-resume's worst gate-in-flight world emits 9980 of 10000 without it, and a 47-character R
+# clause pushed that world over the cliff under its sidecar-drop mutant. R reaches the lead
+# through SKILL.md's Rule 32 entry, which the digest the lead has just read carries verbatim,
+# and through the deny text, which names R and its remedy.
+#
 # A11. A NEW recovery clears a window the previous one left open (the producer, arg 1).
 a_reclear() {
   _p="$(a_world "$GATE" grant boundary digest)"
@@ -1525,19 +1523,6 @@ elif [ "$(a_reclear "$MR_RECLEAR")" = PASS ]; then
   bad "MUTANT KILLED NOTHING: a producer that does not clear the advisor window still passes"
 else
   ok "mutant: a producer that does not clear the advisor window fails the re-clear arm"
-fi
-
-r_text="$(a_text "$GATE")"
-if [ "$r_text" = PASS ]; then ok "R: the injected recovery block names touchpoint R before the first dispatch or write"
-else bad "R: the injected recovery block names touchpoint R — ${r_text#FAIL:}"; fi
-MR_RTEXT="$WORK/recover-no-r.sh"
-awk '!index($0,"before your first dispatch or write (Rule 32 R)")' "$HOOK" > "$MR_RTEXT"
-if cmp -s "$HOOK" "$MR_RTEXT" || ! bash -n "$MR_RTEXT" 2>/dev/null; then
-  bad "FIXTURE STALE: the touchpoint-R text mutant did not apply"
-elif [ "$(a_text "$GATE" "$MR_RTEXT")" = PASS ]; then
-  bad "MUTANT KILLED NOTHING: a producer with the touchpoint-R sentence removed still passes the R-text arm"
-else
-  ok "mutant: a producer with the touchpoint-R sentence removed fails the R-text arm"
 fi
 
 APREDS="deny after before unavail nogrant mate nodigest bound session"
@@ -1582,7 +1567,7 @@ amut() { # amut <name> <awk program> -> mutant path
   awk "$2" "$GATE" > "$WORK/gate-adv-$1.sh"; printf '%s\n' "$WORK/gate-adv-$1.sh"
 }
 amutant_arm "the stage never arms (the owed write removed)" \
-  "$(amut noarm 'index($0,"denies=0") && index($0,"printf"){print "          :"; next} 1')" "deny before bound"
+  "$(amut noarm 'index($0,"owed_put \"$(printf"){print "          :"; next} 1')" "deny before bound"
 amutant_arm "the teammate stand-down removed at the stage" \
   "$(amut mate 'index($0,"[ -z \"$R_AID\" ] || exit 0"){next} 1')" "mate"
 amutant_arm "an advisor attempt anywhere satisfies R" \
