@@ -836,7 +836,13 @@ fi
 # A6 WAS OBSERVED FAILING AT 69107/68864 BEFORE THE CEILING MOVED: the rule was written first and the
 # ceiling derived from the post-write measurement. 69120 is 67.5 KiB, leaving 13 bytes, so the next
 # rule fires this arm again. NO SUBTRACTION: the debt above is now seven raises old.
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-69120}"
+#
+# RAISED A NINETEENTH TIME, 69120 -> 69376, ON AN EXPLICIT OPERATOR RULING, FOR ONE AMENDMENT
+# COSTING 207 BYTES. `operator-rulings.md`'s wall-clock section now says dollars per token count
+# where nothing waits, quoting the operator verbatim. The operator approved this raise in the
+# intake session and confirmed it to the lead. A6 WAS OBSERVED FAILING AT 69327/69120 BEFORE THE
+# CEILING MOVED. 69376 is 67.75 KiB, leaving 49 bytes. NO SUBTRACTION: the debt is eight raises old.
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-69376}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done

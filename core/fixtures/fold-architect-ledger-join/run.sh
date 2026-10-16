@@ -448,15 +448,19 @@ expect D5-dot 0 "PASS: $ONE -> $RES" "" 0 "residue artifact: with a leading ./ -
 # --- D6: a value-taking flag given last with no value exits 2, under a watchdog -----------------
 # A background run plus a sentinel the run writes on exit; never a process-table grep. A timeout
 # reaps the tree (the subshell's children, then the subshell) and is a hang FAIL, never a SKIP.
+#
+# THE BOUND IS SIZED TO A HANG, NOT TO THE EXPECTED RUN. A correct run returns as soon as the parse
+# refuses; the watchdog only costs time when it fires, so a generous one costs a passing run nothing.
+# A tight one -- it was 15s -- turns a loaded box into a reported hang in a program that parsed fine.
 for flag in --ledger --sprint --settings --probe --variant --route --snapshot; do
   o="$WORK/d6${flag}.out"; s="$WORK/d6${flag}.rc"
   ( bash "$VSL" --fold-architect "$WORK/x/fold-architecture-z.md" "$WORK/x/bug-fix-oneshot-z.md" "$flag" \
       > "$o" 2>&1; echo $? > "$s" ) &
   wpid=$!; n=0
-  while [ ! -s "$s" ] && [ "$n" -lt 150 ]; do sleep 0.1; n=$((n+1)); done
+  while [ ! -s "$s" ] && [ "$n" -lt 1200 ]; do sleep 0.1; n=$((n+1)); done
   if [ ! -s "$s" ]; then
     pkill -P "$wpid" 2>/dev/null; kill "$wpid" 2>/dev/null; wait "$wpid" 2>/dev/null
-    bad "[D6$flag] HANG: $flag with no value did not exit within 15s"
+    bad "[D6$flag] HANG: $flag with no value did not exit within 120s"
     continue
   fi
   wait "$wpid" 2>/dev/null

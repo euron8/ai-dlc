@@ -49,10 +49,12 @@ When the process that produced an artifact turns out to be broken, the artifact 
 salvaged by inspection. Archive it and rerun. Do not disposition it green on the grounds that
 it looks fine — the whole point is that looking fine was never the signal.
 
-## Optimize the operator's wall clock, not tokens
+## Optimize wall clock where something waits, dollars where nothing does
 
-Spawn agents liberally and in parallel. Background anything long. Never justify a decision in
-terms of token cost. When ordering work, profile the SCHEDULE per unit first: measurement
+Spawn agents liberally and in parallel. Background anything long. Where something waits on the
+answer, wall clock rules; where nothing does, dollars per token count: "Haiku's tokens are
+considerbly cheaper, so even taking longer and using the same amount of tokens there is a benefit
+to me and my bank account." When ordering work, profile the SCHEDULE per unit first: measurement
 decides the ORDER, never the membership. A hand verifies ONLY its own change: `bash -n`, its discriminating
 probe, the one unit it edited. The gate runs everything else; a hand re-running it pays twice. Never message a
 `graph-*` session, not even a read-only question, without an explicit operator grant.
