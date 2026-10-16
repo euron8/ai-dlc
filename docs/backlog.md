@@ -225,6 +225,14 @@ verify: manual
 
 **The render path does not exist, even outside a pause (graph s319 resumed lead `f65eae3b`, fold teammate pm-escalated `a9dd4af333cca61de`, 02:17–02:30Z 2026-10-16).** With no pause flag set, the teammate invoked `Skill bmad-spec` at 02:25:08Z with args "headless update … re-derive SPEC.md from .memlog.md". The Skill loaded its instructions, ran `resolve_customization.py`, and then the teammate hand-edited `SPEC.md` with four `Edit` calls (02:25:23–02:25:31Z). Its returned JSON says `"rendered_by": "hand"` and "the package has no renderer (assets/ holds only the template and schema; _bmad/scripts/ holds only memlog.py and the resolvers)". That is true of graph's tree: `.claude/skills/bmad-spec/` holds SKILL.md, customize.toml and assets/{headless-schemas.md, spec-template.md}, and `_bmad/scripts/` holds memlog.py, resolve_config.py and resolve_customization.py. Meanwhile `bmad-spec/SKILL.md:46` says SPEC.md is "DERIVED from .memlog.md, never hand-edited". The "derivation" is the model distilling under the skill's instructions, so a teammate reading "no render script" concludes that a hand-applied Edit is the only path. The lead accepted this at 02:30:34Z ("That is the only path available, so I'm proceeding on it") and dispatched the 19-agent adversarial series on SPEC `d08b4b81`, although the V1 advisor at 02:14Z had said not to dispatch the adversarial series on a hand-edited SPEC, so the advisor's condition was satisfied by relabelling, not by a render. Correct one of the two: either ai-dlc's brief states that a bmad-spec update IS the agent re-deriving SPEC.md from the memlog under the skill's instructions (and how that differs from piecemeal Edits: a full rewrite from the memlog, plus the two-pass sweep recorded as memlog `event` entries, SKILL.md:117-123), or ship a render/verify script that checks SPEC.md against the memlog (BL-560). Today every SPEC change in s319 has been a piecemeal hand Edit (part 04, the 01:48Z pass, the 02:25Z fold), and nothing distinguishes them from a render.
 
+**Fourth instance, and the LEAD's brief licenses the edit (graph s319 lead `cf53b84f`, Sonnet, 2026-10-16 08:02-08:07 EDT).** Filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]); intake re-derived it read-only. At 08:02 EDT the lead dispatched `pm-escalated` ("Re-render SPEC for five pass-1 decisions"; subagent `ac0d364e710b0a482`) with a brief saying "A BMAD skill is its instructions: invoke `/bmad-spec` with the update intent, and the agent following those instructions IS the renderer" (that phrase occurs 3 times in the lead's transcript). The agent called `Skill bmad-spec` once, appended through `memlog.py append` (10 distinct calls), and then edited `SPEC.md` directly with `Edit` (7 distinct tool calls; the filer counted 6): the CAP-1/2/3/7 clauses, the S-22 qualifier, and deleting the Q18 line. `core/skills/ai-dlc/steps/requirements.md:233-236` (a0451c70) says "The SPEC is repaired through its own render path, never by a direct edit … re-renders `SPEC.md` through `bmad-spec`", and graph's `.claude/skills/bmad-spec/SKILL.md:46` says `SPEC.md` is "DERIVED from .memlog.md, never hand-edited".
+
+So the brief turns BL-546's third instance ("the render path doesn't exist") into "a hand-edit counts as a render". The agent's work itself was careful: it took shas before and after, verified each new span with `grep -c` controls, and recorded the changes in `requirements-repair-p1.md`. Content is not the defect; the derivation contract is, because `SPEC.md` no longer derives from the memlog by any mechanism. Its re-validation then failed: `requirements-repair-p1.md:30` reads STALE, because the record's own `grep -n` for the Q18 line matches nothing once the line is gone.
+
+The memlog's labelling, read precisely (`_bmad-output/specs/s319/offramp-config-and-rewards/.memlog.md`): the earlier fold's event at `:36` is titled "Render" but its body says the bmad-spec Skill "ran no renderer (the package has no render script …)" and the decisions were "applied to SPEC.md by hand with Edit, disclosed as hand-applied". This run's events at `:43` and `:45` are also titled "Render", and their bodies say the package has no render script and the agent applied the change "with Edit" — but they drop the "hand-applied" wording the `:36` event used (`hand-applied` occurs on lines 32 and 36 only). The record is therefore not false in its body; it is mislabelled in its title, and the honest wording is inconsistent between two runs of the same procedure.
+
+Added to what BL-546 owes: (a) the lead's dispatch brief is also a site that must refuse, or route around, a SPEC edit with no renderer — "the agent IS the renderer" is not an available instruction while no render script exists; (b) until a real render exists, an honest hand-apply path is labelled as one in the memlog event's TITLE ("hand-applied", never "Render"); (c) a hand-applied SPEC edit that removes a line a recorded `grep -n` derivation cites re-points or retires that derivation in the same change (the `:30` STALE).
+
 verify: manual
 
 ## BL-548 — a seat edits its own file after writing `seat-complete:`, against its contract, and nothing records that the findings changed
@@ -757,5 +765,48 @@ Owed:
 3. Prove it on this instance: the 8 rows above. (Per BL-581 each is a line-number re-point, not removed text.)
 
 Related: BL-581 (the false-zero "Verified" in the same 0.793.0 log), BL-579 (the snapshot misreporting the stopped remediator's writes).
+
+verify: manual
+
+## BL-612 — "takes effect on the pull AFTER the one that delivers it" is wrong for any change the update skill runs after its step-2 re-invoke
+
+**DEFECT.** Filed by peer session ai-dlc-60, found by the BL-587 contract adversary; intake re-derived it read-only. `core/skills/ai-dlc-update/SKILL.md` step 2 (origin/main, ~:248-256) self-updates the machinery slice (`core/skills/ai-dlc-update/**`, `core/scripts/*`, hooks, schemas) on its own commit-and-merge cycle, then (~:731-740) says "STOP this invocation and re-invoke `/ai-dlc-update` automatically … THIS invocation is still executing the PRE-update logic … do NOT proceed to step 3 on stale logic". So steps 3 onward run the NEW engine and the NEW skill text on the delivering pull, unless the self-update gate returns `SELF-UPDATE-DEFER` (9 mentions in SKILL.md). Only behaviour that executes in steps 1-2 of that invocation really runs the pre-update version.
+
+Measured on graph's 0.791.0 → 0.793.0 pull: `scripts/ai-dlc/validate-artifact-derivations.sh` is blob `deacd13c` at `3dd8a9fd4` (pre-pull), and `e3cdd564` at `41d2dbf91` (#1230, the self-update) and at `897dfdb32` (#1231, the reconcile). In this repo the same file is `deacd13c` at 952b9319 and `e3cdd564` at c16609ba, so the two blobs differ and the new validator was in place at the delivering pull's reconcile.
+
+So these release notes are wrong: 0.793.0's "the reconcile engine runs this validator, so a consumer gets the pin on the pull AFTER", and 0.799.0's "both files are read by the update session, so a consumer gets this on the pull AFTER the one that delivers it". The CHANGELOG has 35 lines matching "pull after" (control: 887 `## [` headings), and the live backlog carries the same claim in BL-563 and BL-582. Each needs classifying:
+- step-1/2 behaviour: really takes effect on the next pull.
+- anything read or run from step 3 on: live on the delivering pull, after the re-invoke.
+BL-582, for example, splits: its step-2 touchpoint is next-pull, and its step-8 touchpoint is live on delivery.
+
+Hooks may be live even earlier, per ai-dlc-60. This is REASONED from the step-2 text and NOT yet measured; ai-dlc-60 is measuring it in U-b's slot. Step 2 writes the new machinery into the working tree before its own commit, push and merge, and Claude Code runs the on-disk hook on every call. A changed hook would therefore already govern the delivering pull's own step-2 merge, while the session still follows the old SKILL.md. That makes a third class beside the two above.
+
+Owed:
+1. The delivery-phase rule written once where release authors read it.
+2. Correct the reconcile-phase claims, in the CHANGELOG's "Bootstrapping" lines and in BL-563 and BL-582, as a Corrections paragraph in BL-612's own release entry naming each misclassified "pull after" line plus the BL-563 and BL-582 items. That paragraph closes item 2 only. It is prose, so it cannot stand as the receipt for the mechanism; item 3 is that receipt.
+3. Receipt: a fixture or derivation that takes a reconcile-engine change, simulates step 2 and then a re-invoke, and shows the new engine running at step 3. A step-1 behaviour change is the control, which must NOT be live. Lead ai-dlc-9c ruled the fixture is the receipt; the CHANGELOG paragraph closes only the documentation item. Whoever builds the fixture checks that its simulated re-invoke matches step 2's real re-invoke mechanism, read from the skill text itself (SKILL.md ~:731-740), not from a summary of it.
+
+Items 2 and 3 ship together as BL-612's own release, after BL-587, and that one release closes the whole entry. Release U-b is built, so per the scope-boundary ruling nothing from this entry joins it; U-b adds only its own (a)/(b)/(c) outcome lines as part of its own verification. The hook-phase class above stays unmeasured until U-b's slot.
+
+Owner: ai-dlc-60 (lead ai-dlc-9c).
+
+verify: manual
+
+## BL-588 — an append-only repair record whose later blocks change a subject leaves the earlier blocks' derivations permanently STALE, and nothing lets a later block supersede them
+
+**DEFECT.** Filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]) from the graph s319 watch; intake re-derived it read-only (the validator itself was not re-run here; the filer re-ran it). At graph's handoff commit `e18724963` (08:21 EDT, lead `cf53b84f`), `_bmad-output/planning-artifacts/s319/requirements-repair-p1.md` (1697 lines) carries three blocks, closed by `repair-complete: serial 1` (:1261), `repair-complete: spec-render 1` (:1477) and `repair-complete: serial 2` (:1696). `scripts/ai-dlc/validate-artifact-derivations.sh` on it reports "FAIL: 9 stale or unrunnable derivation(s) of 105 checked", at lines 30, 536, 581, 646, 780, 793, 1409, 1426 and 1444.
+
+Each later block changed SPEC/PRD/brief text that an earlier block's fence quotes. Line 30's fence greps `SPEC.md` for "What does the Story 1.5 read score for a two-hop row" and records `85:`; at `e18724963` that phrase occurs 0 times in `_bmad-output/specs/s319/offramp-config-and-rewards/SPEC.md` (control `CAP-1`: 4), because the spec-render deleted the Q18 line on the operator's "Retire Q18" (BL-546's fourth instance). Serial 2 was dispatched at 08:13 EDT to fix 5 such fences, and the count went from 5 to 9 after it delivered. The record is append-only, so no block can re-point an earlier fence. `_bmad-output/pipeline-snapshot.md:38` hands this to the successor as pass-2 entry item (1): "decide the 9 stale old fences … never edit or delete an old fence".
+
+The validator has no way out: `core/scripts/validate-artifact-derivations.sh` on origin/main has 0 mentions of `supersede` and 0 of `artifact_sha_after` (control: 22 of `stale`, case-insensitive). The record already writes `supersedes:` lines (3, at :511, :1577 and :1578), but these are finding supersessions, which the validator does not read. The `supersedes:` convention for escalations lives in BL-565's PARTIAL note (`docs/backlog.md:319-325`, shipped in 0.794.0); BL-550 itself is archived.
+
+Owed (either 1 or 2, then 3):
+1. Let a later block of an append-only record supersede an earlier block's derivation with a `supersedes: <line>` field the validator honours, re-running the new fence in place of the old one.
+2. Or have the validator score a fence against the subject sha its block recorded in `artifact_sha_after:`, not against the current tree.
+3. Receipt: on this record at `e18724963`, the 9 lines above go to 0 without editing any old fence, and a fence whose subject drifted with no superseding block still reads STALE (control).
+
+Related: BL-587 (owed re-points with no channel), BL-546 (the Q18 deletion), BL-565 / BL-550 (`supersedes:` for escalations).
+
+Owner: ai-dlc-11 (lead ai-dlc-9c), as its own release after ai-dlc-11's combo release. It touches BL-587's reader.
 
 verify: manual
