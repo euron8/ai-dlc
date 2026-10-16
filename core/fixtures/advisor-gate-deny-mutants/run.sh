@@ -151,6 +151,9 @@ exit 0'
 mut warn-only "BASHC BMADONLY BODY CLOSE DENIED DETACHED FAILED GATELOG GHREPO HDRONLY MATE MATEPATH MATEREWRITE MCPNAME MERGE NOVERIFY ORDER PATHGIT PERKIND PUSH QUOTEDALT QUOTEDC QUOTEDENV REARM REASON REDISPATCH REREAD SELF SELFLAST STACK TWRITE UPDATE UPDATECUT UPDATEREF WINDOW WITHDRAWN WRAP" \
   -e 's/permissionDecision: "deny", permissionDecisionReason: \$m/additionalContext: $m/'
 # 3. no grant test: a hook with a knob-free default of ON.
+#    NOVERIFY is in the set because cell nv-updater carries NO advisor grant on purpose, so that only
+#    the updater stand-down can decide it. With the no-grant exit deleted, the ordinary advisor deny
+#    reaches that cell too. The kill there is real, not a side effect to tolerate.
 mut no-grant-test "NOGRANT NOVERIFY WITHDRAWN" -e '/^\[ "\${GRANT:-none}" = on \] || exit 0$/d'
 # 4. a withdrawn grant still counts as granted.
 mut withdrawn-ignored "WITHDRAWN" -e 's/\.grant = ((\$l\.attachment\.available != false) and (\$l\.attachment\.toolChange != "remove"))/.grant = true/'
@@ -344,8 +347,13 @@ mutc hdr-gated "HDRONLY" "HDRONLY:hdr-cr-head HDRONLY:hdr-cross HDRONLY:hdr-seq 
 # the header Write allowed but RECORDED: the write adding the first finding becomes a re-write and sails through.
 mutc hdr-recorded "HDRONLY" "HDRONLY:hdr-seq HDRONLY:hdr-seq-sc" -e 's/^            | sub("^hdrw\$"; "")) as \$k$/            | sub("^hdrw$"; "verdict")) as $k/'
 # a `### ` finding heading is header.
+#    hdr-h4 is NOT in this set or in hdr-h3-only's: its `#### F-1` is refused by the separate
+#    `F-<n>` heading test whatever the `#{3,6}` test says, so it cannot tell either mutant from the
+#    shipped hook. hdr-cr-h4 (`#### [MAJOR]`, no F-id: the code-review / QA shape) is the cell the
+#    pre-fold hook ALLOWED, and it is the one that has to die.
 mutc hdr-no-h3 "HDRONLY" "HDRONLY:hdr-cr-h4 HDRONLY:hdr-finding" -e 's/| (test("(^|\\\\n)#{3,6}\[ \\\\t\]") or /| (/'
 # DEFECT 3: only `### ` is a finding heading, so a code-review / QA `#### ` finding is header.
+#    Killed on hdr-cr-h4 alone, for the reason given at hdr-no-h3 above.
 mutc hdr-h3-only "HDRONLY" "HDRONLY:hdr-cr-h4" -e 's/| (test("(^|\\\\n)#{3,6}\[ \\\\t\]") or /| (test("(^|\\\\n)###[ \\\\t]") or /'
 # DEFECT 2: the deny sends the lead to the environmental fallback, a dead end for a refused hook.
 mutc nv-reason-deadend "NOVERIFY" "NOVERIFY:nv-reason" -e 's/hook-refused branch: report the failing gate/environmental fallback: report the push/'
