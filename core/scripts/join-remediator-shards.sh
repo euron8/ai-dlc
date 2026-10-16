@@ -1104,7 +1104,8 @@ CKEOF
 # WHERE: --sources and --escalations judge a record ONLY when it cites `specs/s<N>/` (it repaired the
 # SPEC), and then resolve the sprint memlog from --sprint, `specs/s<N>/*/.memlog.md`,
 # exactly one (requirements.md: the kernel is exactly one match); none or several SKIP. A refusal here
-# exits before the record's ESCALATED: lines print, as every other record_tail refusal does. Those modes run
+# still prints the record's ESCALATED: lines and count before its exit, as every record_tail refusal does
+# (only SPEC-RENDER: is withheld). Those modes run
 # AFTER the serial remediator appends, which is the case BL-560 was filed on. --subject reads it only
 # when the split gave the SPEC a part (SUBJ_SET carries its memlog), the part-remediator shape.
 SPEC_RENDER_PHRASE="re-derived from memlog through"

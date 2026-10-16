@@ -1248,7 +1248,7 @@ p_specunread() { # a cited, stale memlog made unreadable (chmod 000) -> rc 2, 't
   SPEC_CHMOD=1 spec_world "$1" "- (decision) a\n- (decision by pm) b\n- (event) Render p1: $SPEC_PH b\n- (decision) c\n" || return 1
   chmod 644 "$SW/_bmad-output/specs/s305/x/.memlog.md" 2>/dev/null
   [ "$RC" -eq 2 ] && has "$JO" "REFUSED: $SW/_bmad-output/specs/s305/x/.memlog.md: the memlog could not be read; no render verdict" \
-    && ! has "$JO" "rendered through" && ! has "$JO" "ESCALATED-COUNT"
+    && ! has "$JO" "rendered through" && has "$JO" "ESCALATED-COUNT: 0 (1 closed"
 }
 
 # ---- THE SPEC RENDER ARM, SUBJECT MODE (--subject 9): the SPEC is a WHOLE-FILE part, so the join's SUBJ_SET
