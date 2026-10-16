@@ -978,6 +978,17 @@ matches_pin() {
 # an S3 finding (architect is not shardable), and on a shardable role the same spelling FAILS
 # by design: the value is the short name or number, and the remedy is to write it.
 #
+# S3 IS NOT TIGHTENED TO CATCH A SINGLE-VOICE STORIES ELICITATION, because the ledger carries no
+# subject. Measured on the reference consumer ledger (5153 rows, read only): no row names the step
+# or the artifact it served -- `step` appears on 14 rows, from another writer -- so a stories
+# elicitation's `none (4)` cannot be told from a legitimate `none (4)` on a serial architecture or
+# carry-over document, and every `none (...)` row on that ledger is the second kind or a
+# remediator. Joining `tool_use_id` to the lead transcript's dispatch description was rejected as a
+# prose heuristic. And the case that motivated it, s318's single-voice stories elicitation, recorded
+# `shard: null`, not `none (4)`, so S3 could not see it anyway (S1 warns on it). The elicitation
+# RECORD carries the subject: arm L of validate-adversarial-convergence.sh (gate-validation.md
+# Check 24) judges the shape there.
+#
 # PRE-RELEASE ROWS ARE PENDING, KEYED ON THE STAMPED GUARD ITSELF. Only a guard at or after
 # the release that introduced the field writes the `shard` KEY (always, null or not), so a
 # guard-written row WITHOUT the key was written before the install stamp moved to that

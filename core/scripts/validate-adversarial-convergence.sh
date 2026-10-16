@@ -2050,13 +2050,29 @@ k2_pd_in_force() {  # $1 root ("" = none)  $2 terminal invoked_at  $3 terminal p
 # bound to K_RELEASE. Staged to a file so the second arm pays no second `git` fork. Sets STAMP_LOG
 # (an empty file when there is no git or no history). A git hook exports GIT_DIR/GIT_WORK_TREE,
 # which would redirect `git -C` to the hook's own repository -- unset, as arm K does.
+#
+# STAMP_WHY names why the history CANNOT be trusted to hold the first stamp, and is empty when it
+# can: `no git -- git is not on PATH` (K2's sentence), `no git -- <root> is not inside a git work
+# tree` (a copied tree), `shallow clone -- ...` (the graft hides every commit before it, and the
+# graft commit reads as ADDING the stamp, so the first stamp it yields is too late). Arm L reads it;
+# the other arms do not yet, so their verdicts are unchanged by it. One fork, cached with the log.
 STAMP_ROOT=""
 STAMP_LOG="$AC_T/stamp-log"
+STAMP_WHY=""
 stamp_log() {  # $1 root
   [ "$1" = "$STAMP_ROOT" ] && [ -f "$STAMP_LOG" ] && return 0
-  STAMP_ROOT="$1"
+  STAMP_ROOT="$1"; STAMP_WHY=""
   : > "$STAMP_LOG" || { echo "validate-adversarial-convergence.sh: the stamp history could not stage; no verdict" >&2; exit 2; }
-  command -v git >/dev/null 2>&1 || return 0
+  command -v git >/dev/null 2>&1 || { STAMP_WHY="no git -- git is not on PATH"; return 0; }
+  local sw
+  sw="$( ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+           git -C "$1" rev-parse --is-inside-work-tree --is-shallow-repository 2>/dev/null ) )" \
+    || { STAMP_WHY="no git -- $1 is not inside a git work tree, so no install history can be read"; return 0; }
+  case "$sw" in
+    *true*true*) STAMP_WHY="shallow clone -- $1 is a shallow repository, so the commits before its graft, and any stamp among them, are not in the history" ;;
+    true*) ;;
+    *) STAMP_WHY="no git -- $1 is not inside a git work tree, so no install history can be read"; return 0 ;;
+  esac
   ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
     TZ=UTC0 git -C "$1" log --no-color --no-ext-diff -p \
       --date=format-local:%Y-%m-%dT%H:%M:%SZ --format='C %cd' \
@@ -2549,6 +2565,608 @@ EOF
       shard line. Re-run the pass that way and write it as the NEXT pass number; this arm reads only
       the series' terminal pass."
     fi
+  fi
+fi
+
+# =============================================================================
+# L. ELICITATION -- the stories step's Advanced Elicitation ran in the SHARDED shape.
+# =============================================================================
+# GATE ONLY, like K: --cycle-state has exited above, and this arm reads git.
+#
+# `_gate-procedures.md` validation-cycle item 2 ("Elicitation takes the axis and the shape of the
+# step's adversarial pass"): a `stories/` of two or more files is elicited by one adversary per
+# story ordinal plus one cross-story adversary per cross group, each writing
+# `s<N>/shards/stories-elicitation/<ordinal>.md` (cross: `cross-<g>.md`, or `cross.md` at one
+# group), never one voice. A one-file `stories/` is ONE adversary at `shard: 1/1`, writing `01.md`.
+# No merge reads that directory, so before this arm nothing read which shape ran.
+#
+#   subject    the sprint of the series: the terminal pass is `stories-adversarial-p<M>.md` in an
+#              `s<N>/` directory. That string test is the whole cost for every other series.
+#   K          `*.md` in `s<N>/stories/`, counted as arm K counts (`k_count_md`, the merge's own
+#              set). K = 0 is silent: no stories, nothing elicited.
+#   intensity  `validation_intensity:` from the first of `s<N>/sprint-status.yaml`, the planning
+#              canonical, the implementation canonical whose `sprint:` is N. Only `full` owes
+#              Advanced Elicitation (SKILL.md Rule 8's table); the other three are NOT-OWED.
+#              Unresolved or off-table is PENDING, never a finding.
+#   record     `s<N>/stories-elicitation*.md` EXCEPT `*-repair*` (a remediator's record, not the
+#              elicitation's); the glob catches the renamed `stories-elicitation-p1.md`.
+#   want set   NAMES, never a count, derived by their owners: the ordinals
+#              `merge-adversarial-shards.sh --map` prints for this `stories/` (asked through a staged
+#              `s<N>/shards/stories-p1/` beside a link to the real `stories/`, because `--map` derives
+#              the stories dir from the shard-dir path and refuses the elicitation dir's name), plus
+#              the keys of `partition-document.sh --cross-groups <K>` (`k3_xkeys`). `--map` refuses
+#              K < 2, so K = 1's set {01} is item 2's prose. Ordinals compare numerically.
+#   verdicts   PASS -- the shard dir holds exactly the want set (a record beside it is the merged
+#              summary and is allowed); at K = 1 a record alone is NOT-OWED, one voice being the
+#              shape. FAIL, every cause listed together:
+#                (a) single voice -- a record and no shard dir, K >= 2;
+#                (b) ordinals missing, listed;
+#                (c) cross shards short -- "<n> cross shard(s) where G=<G> are owed", the owed names
+#                    listed and any off-shape cross file named; a legacy single `cross.md` at K > 2
+#                    is this cause, never a PASS;
+#                (d) wrong names present, listed (not `<digits>.md`/`cross*.md`, out of 1..K, or a
+#                    duplicate ordinal);
+#                (e) owed-absent -- `full`, no record and no shard dir.
+#
+# A RECORD IS JUDGED BY THE RULE OF THE RELEASE IT WAS PRODUCED UNDER. Item 2's sharded shape
+# shipped at L_RELEASE (0.782.0, 6fe903b6); a single voice over two or more stories was legal before
+# it. The cross groups shipped at 0.744.0 (60b467dc), so one bound gates both: anything elicited
+# after 0.782.0 was stamped is after 0.744.0 too. The record's DATE is the earliest ISO `invoked_at`
+# across the record and shard files; owed-absent has none and dates by the series' first pass,
+# because elicitation precedes the adversarial series. It is compared, as K/K2/K3 compare, against
+# the first commit stamping `.claude/.ai-dlc-version` at L_RELEASE or later. Earlier, or no stamp
+# at or after L_RELEASE anywhere in a readable history: PENDING, printed with the cause today's rule
+# would name, never counted. WHEN THE HISTORY CANNOT BE READ the era is UNKNOWN, which is not the
+# same as "before": the line reads `PENDING (L -- ELICITATION): era unknown -- <reason>: ...` with
+# today's cause on the same line, never FAIL and never a silent PASS. The reasons, tested in order:
+#   stamp absent  no directory above the sprint carries `.claude/.ai-dlc-version`;
+#   no git        `git` is not on PATH, or the root is not inside a git work tree (a copied tree)
+#                 -- `stamp_log`'s STAMP_WHY, the vocabulary K2's fallback already uses;
+#   shallow clone `rev-parse --is-shallow-repository` is true: the graft commit reads as ADDING the
+#                 stamp, so the first L_RELEASE stamp it yields is too LATE and a pre-release
+#                 record would read as post-release -- the one degradation that FAILed before;
+#   undated       no ISO `invoked_at` in any record or shard file (owed-absent: the first pass);
+#   stamp absent  no commit at or before the record's date carries `.claude/.ai-dlc-version`.
+#
+# THE ERA KEY IS THE STAMP, NOT A TOKEN IN THE RECORD, and the token form was measured and rejected.
+# The ledger's stamped-guard pattern works because a PROGRAM writes its key whether or not the row
+# complies; an elicitation record is written by the lead following prose, and the FAIL subject is a
+# record written in the WRONG shape, so a token only the era-correct brief writes is absent on
+# exactly the violations and every violation would read PENDING. Measured on the reference
+# consumer's s314-s318 records, read-only: 0.782.0 changed prose only, and s318's single-voice record
+# (invoked 2026-10-13, the day before 0.782.0 was committed) already carries both `seat-complete:`
+# and `shard:`, while s317's pre-0.782.0 cross shard carries `shard:`. False negative of the stamp
+# key: a post-release record with no ISO `invoked_at` reads PENDING. False positive: none found --
+# the stamp is the consumer's own install.
+#
+# FALSE-POSITIVE SET, and how it reached zero. The narrowings, in order: the subject is a stories
+# series in an `s<N>/` directory; `*-repair*` records are excluded (the reference consumer's s316,
+# s317 and s318 each carry an elicitation REPAIR record, and s317's only `stories-elicitation*` file
+# beside its 22-file shard dir is one -- counted as a record it would have read s317 as a voice);
+# intensity is read before shape, so a sprint that owed no elicitation is NOT-OWED under any era;
+# and the era bound above, which is what keeps a resumed or re-gated old sprint from wedging.
+# PREDICTION, to be REPLACED by the measured census of the reference consumer's s310-s319 (run the
+# validator per sprint over `s<N>/stories-adversarial-p`): under TODAY's rule -- s310 (e), s314 (a),
+# s315 (a, the `-p1` record), s316 (a), s317 (c: `cross.md` where G=6 owes cross-1..cross-6), s318
+# (a); s311 carry-over-single, s312 lightweight and s313 standard NOT-OWED; s319 no stories series.
+# Under each record's ERA: s310 and s314-s318 PENDING, s311-s313 NOT-OWED, FAIL set EMPTY.
+# THE FAIL PATH IS PROVEN ONLY BY THE SEEDED SELF-PROBE BELOW: no sprint on that corpus was elicited
+# after the consumer installed 0.782.0, so no real input reaches it. The real-corpus receipt is
+# OWED, not covered -- the reference consumer's NEXT stories elicitation, run through the
+# era-correct path, is the first input that can fire or pass this arm on its merits.
+#
+# THE SUBJECT CAN MOVE UNDER THE RECORD, and that was the second narrowing. The owed set is derived
+# from TODAY's `stories/` at gate time, but the elicitation ran earlier in the stories step: a sprint
+# shrunk under Rule 8, or a story split or renamed by a repair, changes K after a correctly sharded
+# elicitation, and judging that dir against today's K FAILed it. The narrowing is keyed on what the
+# shards THEMSELVES record -- the `shard: <i>/<K>` / `shard: cross/<K>` line the dispatch guard's
+# grammar gives every shard brief (core/hooks/ai-dlc-dispatch-guard.sh, "THE SHARD LINE"), taken as
+# the FIRST such line at column 0 of EACH shard file, anywhere in it (`l_kparse`):
+#   no file carries one        judged against today's K, exactly as before -- no acquittal;
+#   they disagree, or one records a K outside 1..999
+#                              FAIL (f), naming every file's K, through the era gate like any cause;
+#   one K, today's             judged against today's K, the plain judge: no verdict moves at equality;
+#   one K, SMALLER than today's  judged against today's K as usual (FAIL through the era gate), with
+#                              `shards record K=<x>` appended for the reader. NEVER a PENDING: a dir
+#                              complete for a smaller K is an elicitation that never reached the
+#                              stories added since, and `shard: 1/1` -- the line the spawn ledger
+#                              tells a single-voice dispatch to write -- records K=1, so honouring a
+#                              smaller K would acquit one voice over any number of stories;
+#   one K, LARGER than today's, and EVERY story file in today's stories/ named among the elicited
+#                              subjects (`l_cover`) -- the shrink direction, and the only one
+#                              honoured (`l_kuse`): the dir is judged against THAT K -- ordinals
+#                              1..K_rec plus the keys of
+#                              `partition-document.sh --cross-groups K_rec`. Complete for it:
+#                              PENDING, named `stories/ changed since the elicitation: shards record
+#                              K=<x>, stories/ holds <y>`. Short or misnamed for it: FAIL with the
+#                              causes judged against K_rec and a `judged against the K=<x> the shard
+#                              headers record` suffix, so a shrunk `stories/` never acquits an
+#                              under-sharded elicitation.
+#   a LARGER K whose subjects miss a current story
+#                              judged against today's K (FAIL through the era gate), with `shards
+#                              record K=<x>, but they never name the story file(s) stories/ holds:
+#                              <names>` (or `the shards name no subjects`) appended -- and a FAIL
+#                              even where that judge alone would PASS. A shrink WITH
+#                              REPLACEMENT -- stories deleted and a new one added -- leaves K_rec > K
+#                              and a dir complete for K_rec while the new story was never elicited.
+# THE SUBJECTS ARE READ BY NAME, NEVER BY MTIME (a clone or checkout rewrites every mtime): the
+# union of each shard's `artifact:` basename when it names one `.md` file under THIS sprint's
+# `s<N>/stories/` (an ordinal shard writes its story's path, absolute or relative: s317's 04, 13 and 18
+# are relative, the rest absolute) and every `<name>=` of `artifact_sha:` when that shard's `artifact:`
+# is this sprint's `s<N>/stories/` dir (a cross shard writes the dir and one `<name>=<sha>` per story);
+# another sprint's same-named file covers nothing (`l_insprint`). Both through `block_field`, the provenance-block reader this
+# file already owns. merge-adversarial-shards.sh's `field` reads the same keys but is not sourceable.
+# Lines inside a ``` or ~~~ fence are not read, as the dispatch guard's grammar does not read them.
+# That PENDING is NOT era-gated: it prints whatever the stamp says, because the shape was right for the
+# subject the shards reviewed. Its acquittal set, stated: a dir complete for a recorded K LARGER than
+# today's whose subjects name every current story. The grow direction was first honoured too and
+# acquitted the single-voice `shard: 1/1` dir this arm exists to fail; it is judged against today's K.
+# Measured on the reference consumer's s317 shard dir,
+# read-only: 2 of its 22 shard files carry the line (`03.md` as `shard: 03/21 ...`, `cross.md` as
+# `shard: cross/21 cross`, matching its 21 stories), so the signal is contract-backed and corpus-thin:
+# most real dirs fall to the first row and are judged exactly as before. A single-voice record (no
+# shard dir) records no K and is judged as today.
+L_RELEASE="0.782.0"
+
+l_records() {  # $1 sprint dir -> L_RECS, the elicitation record basenames (repair records excluded)
+  L_RECS=""
+  for l_r in "$1"/stories-elicitation*.md; do
+    [ -f "$l_r" ] || continue
+    case "${l_r##*/}" in *-repair*) continue ;; esac
+    L_RECS="${L_RECS}${L_RECS:+ }${l_r##*/}"
+  done
+}
+
+# $1 shard dir -> L_KREC, the one K its shard files' `shard:` lines record (empty when none carries
+# one), and L_KBAD, cause (f), when they disagree or one records K outside 1..999. Every file is
+# read, never the first alone: the reference consumer's own 01.md carries no shard line.
+l_kparse() {
+  L_KREC=""; L_KBAD=""
+  set -- "$1"/*.md
+  [ -e "$1" ] || return 0
+  l_kr="$(awk '
+    FNR == 1 { got = 0; inf = 0 }
+    /^[ \t]*(```|~~~)/ { inf = !inf; next }
+    !got && !inf && /^shard:[ \t]*(cross(-[0-9]+)?|[0-9]+)\/[0-9]/ {
+      v = $0; sub(/^shard:[ \t]*[^\/]*\//, "", v); r = v; sub(/^[0-9]+/, "", r)
+      if (r != "" && r !~ /^[ \t]/) next
+      sub(/[^0-9].*$/, "", v); n = FILENAME; sub(/.*\//, "", n); printf "%s=%d\n", n, v + 0; got = 1
+    }' "$@")" || { L_KBAD="(f) the shard files could not be read for their shard: lines"; return 0; }
+  l_kall=""; l_kv=""; l_kx=""
+  for l_kt in $l_kr; do
+    l_kall="$l_kall $l_kt"; l_kx="${l_kt##*=}"
+    { [ "${#l_kx}" -le 3 ] && [ "$l_kx" -ge 1 ]; } || L_KBAD=x
+    if [ -z "$l_kv" ]; then l_kv="$l_kx"; elif [ "$l_kx" != "$l_kv" ]; then L_KBAD=x; fi
+  done
+  if [ -n "$L_KBAD" ]; then L_KBAD="(f) the shard: lines do not record one K in 1..999:$l_kall"; else L_KREC="$l_kv"; fi
+}
+# $1 recorded K, $2 today's K -> 0 when the recorded K is honoured: ONLY when it is LARGER (a shrunk
+# stories/). Equal, smaller or absent -> 1, and the dir is judged against today's K by the plain judge.
+l_kuse() { [ -n "$1" ] && [ "$1" -gt "$2" ]; }
+# $1 path, $2 a sprint-rooted suffix (`s<N>/stories/...`) -> 0 when the path IS the suffix or ends in
+# `/` + the suffix. The leading `/` is the boundary: `s19/stories/` never satisfies `s9/stories/`.
+l_insprint() { case "$1" in "$2"|*/"$2") return 0 ;; esac; return 1; }
+# $1 shard dir, $2 stories dir, $3 sprint number -> L_UNCOV (today's story names the shards never
+# name, space-led) and L_NONAMES=1 when no shard names a subject of THIS sprint. Names, never mtimes;
+# read with block_field (header). A name counts only under this sprint's stories/: an ordinal's
+# `artifact:` file (absolute or relative) must lie at `s<N>/stories/<name>.md`, and a cross shard's
+# `<name>=` entries count only when its `artifact:` dir is `s<N>/stories/` -- another sprint's file of
+# the same basename covers nothing here.
+l_cover() {
+  L_UNCOV=""; L_NONAMES=""; l_cn=" "; l_csfx="s$3/stories/"
+  l_cglob=0; case "$-" in *f*) l_cglob=1 ;; esac
+  for l_cf in "$1"/*.md; do
+    [ -f "$l_cf" ] || continue
+    l_ca="$(block_field "$l_cf" artifact)"; l_ca="${l_ca%"${l_ca##*[![:space:]]}"}"
+    case "$l_ca" in
+      */) ;;
+      *.md) l_cb="${l_ca##*/}"; l_insprint "$l_ca" "$l_csfx$l_cb" && l_cn="$l_cn${l_cb%.md} " ;;
+    esac
+    l_insprint "$l_ca" "$l_csfx" || continue
+    set -f
+    for l_ct in $(block_field "$l_cf" artifact_sha); do
+      case "$l_ct" in ?*=*) l_cn="$l_cn${l_ct%%=*} " ;; esac
+    done
+    [ "$l_cglob" = 1 ] || set +f
+  done
+  [ "$l_cn" != " " ] || { L_NONAMES=1; return 0; }
+  for l_cs in "$2"/*.md; do
+    [ -e "$l_cs" ] || continue
+    l_cs="${l_cs##*/}"; l_cs="${l_cs%.md}"
+    case "$l_cn" in *" $l_cs "*) ;; *) L_UNCOV="$L_UNCOV $l_cs" ;; esac
+  done
+}
+
+# $1 intensity  $2 K  $3 want set (space-separated, ordinals de-padded)  $4 record present 0/1
+# $5 shard dir present 0/1  $6 shard dir entries, one basename per line -> L_V (PASS | FAIL |
+# NOT-OWED | UNJUDGED) and L_WHY. Fork-free: the self-probe calls it on staged inputs, not a corpus.
+l_judge() {
+  L_V=""; L_WHY=""
+  case "$1" in
+    full) ;;
+    standard|lightweight|carry-over-single)
+      L_V="NOT-OWED"; L_WHY="validation_intensity is $1, whose Rule 8 row runs no Advanced Elicitation"; return 0 ;;
+    *) L_V="UNJUDGED"; L_WHY="validation_intensity '${1}' is not a Rule 8 intensity"; return 0 ;;
+  esac
+  if [ "$4" -eq 0 ] && [ "$5" -eq 0 ]; then
+    L_V="FAIL"; L_WHY="(e) owed-absent: validation_intensity is full and there is no stories-elicitation record and no shards/stories-elicitation/ directory"
+    return 0
+  fi
+  if [ "$5" -eq 0 ]; then
+    if [ "$2" -eq 1 ]; then
+      L_V="NOT-OWED"; L_WHY="one story: a single elicitation voice is the shape (shard: 1/1)"; return 0
+    fi
+    L_V="FAIL"; L_WHY="(a) single voice: a stories-elicitation record and no shards/stories-elicitation/ directory over $2 stories"
+    return 0
+  fi
+  l_have=""; l_wrong=""; l_xoff=""
+  l_glob=0; case "$-" in *f*) l_glob=1 ;; esac
+  set -f
+  l_ifs="$IFS"; IFS='
+'
+  for l_e in $6; do
+    [ -n "$l_e" ] || continue
+    case "$l_e" in
+      cross.md) l_key="cross" ;;
+      cross-*.md)
+        l_g="${l_e#cross-}"; l_g="${l_g%.md}"
+        case "$l_g" in ""|*[!0-9]*) l_key="" ;; *) l_key="cross-$((10#$l_g))" ;; esac ;;
+      *.md)
+        l_o="${l_e%.md}"
+        case "$l_o" in ""|*[!0-9]*) l_key="" ;; *) l_key="$((10#$l_o))" ;; esac ;;
+      *) l_key="" ;;
+    esac
+    if [ -z "$l_key" ]; then l_wrong="$l_wrong $l_e"; continue; fi
+    case " $l_have " in *" $l_key "*) l_wrong="$l_wrong $l_e(duplicate)"; continue ;; esac
+    l_have="$l_have $l_key"
+    case " $3 " in
+      *" $l_key "*) ;;
+      *) case "$l_key" in cross*) l_xoff="$l_xoff $l_e" ;; *) l_wrong="$l_wrong $l_e" ;; esac ;;
+    esac
+  done
+  IFS="$l_ifs"
+  [ "$l_glob" = 1 ] || set +f
+  l_mo=""; l_mx=""; l_xo=0; l_xh=0; l_xnames=""
+  for l_w in $3; do
+    case "$l_w" in
+      cross*)
+        l_xo=$((l_xo + 1)); l_xnames="$l_xnames $l_w.md"
+        case " $l_have " in *" $l_w "*) l_xh=$((l_xh + 1)) ;; *) l_mx="$l_mx $l_w" ;; esac ;;
+      *)
+        # Printed at the merge's zero-pad width, the digit count of K.
+        case " $l_have " in *" $l_w "*) ;; *) l_p="00000$l_w"; l_p="${l_p:$((${#l_p} - ${#2}))}"; l_mo="$l_mo $l_p.md" ;; esac ;;
+    esac
+  done
+  if [ -n "$l_mo" ]; then L_WHY="(b) ordinals missing:${l_mo}"; fi
+  if [ -n "$l_mx" ]; then
+    L_WHY="${L_WHY}${L_WHY:+; }(c) cross shards short: ${l_xh} cross shard(s) where G=${l_xo} are owed (owed:${l_xnames})${l_xoff:+; found instead:${l_xoff}}"
+  else
+    l_wrong="${l_wrong}${l_xoff}"
+  fi
+  if [ -n "$l_wrong" ]; then L_WHY="${L_WHY}${L_WHY:+; }(d) wrong names present:${l_wrong}"; fi
+  if [ -n "$L_WHY" ]; then L_V="FAIL"; else L_V="PASS"; L_WHY="shards/stories-elicitation/ holds exactly the owed set"; fi
+  return 0
+}
+
+l_sd=""
+case "${LAST_FILE##*/}" in
+  stories-adversarial-p[0-9]*.md) l_sd="$(cd "$(dirname "$LAST_FILE")" 2>/dev/null && pwd -P)" ;;
+esac
+l_n="${l_sd##*/}"; l_n="${l_n#s}"
+case "${l_sd##*/}" in s[0-9]*) case "$l_n" in *[!0-9]*) l_sd="" ;; esac ;; *) l_sd="" ;; esac
+K_COUNT=0
+[ -z "$l_sd" ] || k_count_md "$l_sd/stories"
+if [ -n "$l_sd" ] && [ "$K_COUNT" -ge 1 ]; then
+  l_k="$K_COUNT"
+  # THE SELF-PROBE RUNS BEFORE THE CORPUS, both directions, fork-free for the judge and the record
+  # glob. Each row is `<want verdict> <cause letter or -> | intensity | K | want | rec | dir | entries`.
+  mkdir -p "$AC_T/l-probe/a" "$AC_T/l-probe/b" \
+    && : > "$AC_T/l-probe/a/stories-elicitation-p1.md" && : > "$AC_T/l-probe/a/stories-elicitation-repair-p1.md" \
+    && : > "$AC_T/l-probe/b/stories-elicitation-repair-p1.md" || {
+    echo "validate-adversarial-convergence.sh: arm L self-probe could not stage; no verdict" >&2; exit 2; }
+  l_records "$AC_T/l-probe/a"; lp_ra="$L_RECS"
+  l_records "$AC_T/l-probe/b"; lp_rb="$L_RECS"
+  l_W3="1 2 3 cross-1 cross-2 cross-3"
+  l_NL='
+'
+  lp_bad=""
+  while IFS='|' read -r lp_want lp_int lp_k lp_set lp_rec lp_dir lp_ent; do
+    [ -n "$lp_want" ] || continue
+    l_judge "$lp_int" "$lp_k" "$lp_set" "$lp_rec" "$lp_dir" "${lp_ent//,/$l_NL}"
+    lp_v="${lp_want% *}"; lp_c="${lp_want#* }"
+    if [ "$L_V" != "$lp_v" ]; then lp_bad="$lp_bad [$lp_want got $L_V]"; continue; fi
+    case "$lp_c" in -) ;; *) case "$L_WHY" in *"($lp_c)"*) ;; *) lp_bad="$lp_bad [$lp_want: '$L_WHY']" ;; esac ;; esac
+  done <<EOF
+FAIL a|full|3|$l_W3|1|0|
+PASS -|full|3|$l_W3|0|1|01.md,02.md,03.md,cross-1.md,cross-2.md,cross-3.md
+PASS -|full|3|$l_W3|1|1|01.md,02.md,03.md,cross-1.md,cross-2.md,cross-3.md
+FAIL b|full|3|$l_W3|0|1|01.md,02.md,04.md,cross-1.md,cross-2.md,cross-3.md
+FAIL d|full|3|$l_W3|0|1|01.md,02.md,04.md,cross-1.md,cross-2.md,cross-3.md
+FAIL c|full|3|$l_W3|0|1|01.md,02.md,03.md,cross.md
+FAIL c|full|3|$l_W3|1|1|01.md,02.md,03.md,cross-1.md,cross-2.md
+FAIL e|full|3|$l_W3|0|0|
+NOT-OWED -|standard|3|$l_W3|0|0|
+NOT-OWED -|carry-over-single|3|$l_W3|1|0|
+UNJUDGED -|ful|3|$l_W3|0|0|
+PASS -|full|1|1|0|1|01.md
+NOT-OWED -|full|1|1|1|0|
+FAIL b|full|1|1|0|1|02.md
+FAIL d|full|3|$l_W3|0|1|01.md,1.md,02.md,03.md,cross-1.md,cross-2.md,cross-3.md
+EOF
+  # The legacy `cross.md` at K=3 must be (c), naming the owed set and the file found, and NOT (d).
+  # A correct COUNT with wrong names must name both the missing ordinal and the stray: a judge
+  # that compared counts passes it. Ordinals print at the merge's width (K=3: `3.md`).
+  l_judge full 3 "$l_W3" 0 1 "01.md${l_NL}02.md${l_NL}03.md${l_NL}cross.md"
+  case "$L_WHY" in
+    *"(d)"*) lp_bad="$lp_bad [legacy cross.md read as (d): '$L_WHY']" ;;
+    *"(c) cross shards short: 0 cross shard(s) where G=3 are owed (owed: cross-1.md cross-2.md cross-3.md); found instead: cross.md"*) ;;
+    *) lp_bad="$lp_bad [legacy cross.md: '$L_WHY']" ;;
+  esac
+  l_judge full 3 "$l_W3" 0 1 "01.md${l_NL}02.md${l_NL}04.md${l_NL}cross-1.md${l_NL}cross-2.md${l_NL}cross-3.md"
+  case "$L_WHY" in *"(b) ordinals missing: 3.md"*"(d) wrong names present: 04.md"*) ;; *) lp_bad="$lp_bad [count-not-names: '$L_WHY']" ;; esac
+  # THE RECORDED K, both directions. c: 01.md bare (as the reference consumer's is), the K on a later
+  # file and on a cross shard after a body line -> 5. d: two files disagree -> (f), no K. e: a
+  # `shard: none` line and an INDENTED one -> no K and no (f). f: the K-matches near-miss -> 3.
+  # g: a fenced quote of the grammar (K=9) before the real line (K=4) -> 4. h: K=1000 -> (f).
+  # Then the two judgments against K_rec = 5 that separate a moved stories/ from under-sharding:
+  # complete for 5 PASSes; 01-03 plus three cross shards FAILs naming 4.md and 5.md, which only a
+  # judgment against K_rec can owe. Then the DIRECTION: l_kuse honours only a LARGER recorded K --
+  # 5 over 3 yes; 3 over 3 (equality), 1 over 3 (`shard: 1/1`, one voice) and 2 over 3 no -- and the
+  # equality and grow dirs are judged against today's K=3, failing (b) and (c).
+  mkdir -p "$AC_T/l-probe/c" "$AC_T/l-probe/d" "$AC_T/l-probe/e" "$AC_T/l-probe/f" "$AC_T/l-probe/g" "$AC_T/l-probe/h" \
+    && printf '```\nshard: 01/9 quoted\n```\nshard: 02/4 real\n' > "$AC_T/l-probe/g/02.md" \
+    && printf 'shard: 01/1000 x\n' > "$AC_T/l-probe/h/01.md" \
+    && : > "$AC_T/l-probe/c/01.md" && printf '# x\n\nshard: 02/5 story-2\n' > "$AC_T/l-probe/c/02.md" \
+    && printf 'body\nshard: cross/5 cross-1\n' > "$AC_T/l-probe/c/cross-1.md" \
+    && printf 'shard: 02/5 a\n' > "$AC_T/l-probe/d/02.md" && printf 'shard: 03/3 b\n' > "$AC_T/l-probe/d/03.md" \
+    && printf 'shard: none (serial-document)\n  shard: 01/4 indented\n' > "$AC_T/l-probe/e/01.md" \
+    && printf 'shard: 01/3 a\n' > "$AC_T/l-probe/f/01.md" || {
+    echo "validate-adversarial-convergence.sh: arm L self-probe could not stage; no verdict" >&2; exit 2; }
+  l_kparse "$AC_T/l-probe/c"; [ "$L_KREC/$L_KBAD" = "5/" ] || lp_bad="$lp_bad [recorded K, bare 01.md: '$L_KREC/$L_KBAD' want '5/']"
+  l_kparse "$AC_T/l-probe/d"
+  case "$L_KREC/$L_KBAD" in "/(f) the shard: lines do not record one K in 1..999: 02.md=5 03.md=3") ;; *) lp_bad="$lp_bad [recorded K disagreeing: '$L_KREC/$L_KBAD']" ;; esac
+  l_kparse "$AC_T/l-probe/g"; [ "$L_KREC/$L_KBAD" = "4/" ] || lp_bad="$lp_bad [recorded K, fenced quote: '$L_KREC/$L_KBAD' want '4/']"
+  l_kparse "$AC_T/l-probe/h"
+  case "$L_KREC/$L_KBAD" in "/(f) the shard: lines do not record one K in 1..999: 01.md=1000") ;; *) lp_bad="$lp_bad [recorded K over the cap: '$L_KREC/$L_KBAD']" ;; esac
+  lp_ku="$(l_kuse 5 3 && printf y)$(l_kuse 3 3 && printf y)$(l_kuse 1 3 && printf y)$(l_kuse 2 3 && printf y)$(l_kuse '' 3 && printf y)"
+  [ "$lp_ku" = "y" ] || lp_bad="$lp_bad [l_kuse 5/3 3/3 1/3 2/3 none/3: '$lp_ku' want 'y' (larger only)]"
+  l_judge full 3 "$l_W3" 0 1 "01.md${l_NL}02.md${l_NL}cross-1.md"
+  case "$L_V $L_WHY" in "FAIL (b) ordinals missing: 3.md; (c) cross shards short: 1 cross shard(s) where G=3 are owed (owed: cross-1.md cross-2.md cross-3.md)") ;; *) lp_bad="$lp_bad [equality under-sharded: $L_V '$L_WHY']" ;; esac
+  l_judge full 3 "$l_W3" 0 1 "01.md"
+  case "$L_V $L_WHY" in "FAIL (b) ordinals missing: 2.md 3.md; (c) cross shards short: 0 cross shard(s) where G=3 are owed"*) ;; *) lp_bad="$lp_bad [grow, one voice at shard: 1/1: $L_V '$L_WHY']" ;; esac
+  # THE SUBJECT COVER, in the forms a real elicitation writes (s317's 03.md, 04.md and cross.md): i,
+  # one ordinal naming its story by ABSOLUTE path and one by RELATIVE path -> covered; j, one cross
+  # shard naming the stories dir RELATIVELY with `<name>=<sha>` pairs -> covered; k, j's shard over a
+  # stories/ where one name differs by one character -> that name; n, a shard naming no subject -> no
+  # names. i is also the near-miss of o: the SAME basename under s9 covers. o: i's relative ordinal
+  # beside an s8 ordinal (one sprint off) of that basename -> uncovered. p: an s19 cross dir naming
+  # both, beside i's relative ordinal -> uncovered (`s19/stories/` ends in `s9/stories/` without the `/`
+  # boundary). q: an s19 ORDINAL `s19/stories/story-1-3-x.md` (relative, no leading dir) -> uncovered.
+  l_pz="$(printf '%064d' 0)"
+  mkdir -p "$AC_T/l-probe/i/sh" "$AC_T/l-probe/i/st" "$AC_T/l-probe/j/sh" "$AC_T/l-probe/j/st" \
+           "$AC_T/l-probe/k/st" "$AC_T/l-probe/n/sh" "$AC_T/l-probe/n/st" "$AC_T/l-probe/o/sh" "$AC_T/l-probe/p/sh" \
+           "$AC_T/l-probe/q/sh" \
+    && printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nartifact: /abs/s9/stories/story-1-3-x.md\nartifact_sha: %s\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$l_pz" > "$AC_T/l-probe/i/sh/01.md" \
+    && printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nartifact: out/area/s9/stories/story-2-1-x.md \nSKILL_INVOCATION_PROVENANCE_END -->\n' > "$AC_T/l-probe/i/sh/02.md" \
+    && printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nartifact: /abs/s8/stories/story-1-3-x.md\nartifact_sha: %s\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$l_pz" > "$AC_T/l-probe/o/sh/01.md" \
+    && printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nartifact: s19/stories/story-1-3-x.md\nartifact_sha: %s\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$l_pz" > "$AC_T/l-probe/q/sh/01.md" \
+    && cp "$AC_T/l-probe/i/sh/02.md" "$AC_T/l-probe/o/sh/02.md" && cp "$AC_T/l-probe/i/sh/02.md" "$AC_T/l-probe/p/sh/02.md" \
+    && cp "$AC_T/l-probe/i/sh/02.md" "$AC_T/l-probe/q/sh/02.md" \
+    && printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nartifact: out/area/s19/stories/\nartifact_sha: story-1-3-x=%s story-2-1-x=%s\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$l_pz" "$l_pz" > "$AC_T/l-probe/p/sh/cross.md" \
+    && printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nartifact: s9/stories/\nartifact_sha: story-1-3-x=%s story-2-1-x=%s\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$l_pz" "$l_pz" > "$AC_T/l-probe/j/sh/cross.md" \
+    && printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nartifact: s9/stories/\nartifact_sha: %s\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$l_pz" > "$AC_T/l-probe/n/sh/01.md" \
+    && : > "$AC_T/l-probe/i/st/story-1-3-x.md" && : > "$AC_T/l-probe/i/st/story-2-1-x.md" \
+    && : > "$AC_T/l-probe/j/st/story-1-3-x.md" && : > "$AC_T/l-probe/j/st/story-2-1-x.md" \
+    && : > "$AC_T/l-probe/k/st/story-1-3-y.md" && : > "$AC_T/l-probe/k/st/story-2-1-x.md" \
+    && : > "$AC_T/l-probe/n/st/story-1-3-x.md" || {
+    echo "validate-adversarial-convergence.sh: arm L self-probe could not stage; no verdict" >&2; exit 2; }
+  l_cover "$AC_T/l-probe/i/sh" "$AC_T/l-probe/i/st" 9; [ "$L_NONAMES/$L_UNCOV" = "/" ] || lp_bad="$lp_bad [cover, ordinal forms: '$L_NONAMES/$L_UNCOV' want '/']"
+  l_cover "$AC_T/l-probe/j/sh" "$AC_T/l-probe/j/st" 9; [ "$L_NONAMES/$L_UNCOV" = "/" ] || lp_bad="$lp_bad [cover, cross form: '$L_NONAMES/$L_UNCOV' want '/']"
+  l_cover "$AC_T/l-probe/j/sh" "$AC_T/l-probe/k/st" 9; [ "$L_NONAMES/$L_UNCOV" = "/ story-1-3-y" ] || lp_bad="$lp_bad [cover, one-char rename: '$L_NONAMES/$L_UNCOV' want '/ story-1-3-y']"
+  l_cover "$AC_T/l-probe/n/sh" "$AC_T/l-probe/n/st" 9; [ "$L_NONAMES/$L_UNCOV" = "1/" ] || lp_bad="$lp_bad [cover, no names: '$L_NONAMES/$L_UNCOV' want '1/']"
+  l_cover "$AC_T/l-probe/o/sh" "$AC_T/l-probe/i/st" 9; [ "$L_NONAMES/$L_UNCOV" = "/ story-1-3-x" ] || lp_bad="$lp_bad [cover, foreign-sprint ordinal: '$L_NONAMES/$L_UNCOV' want '/ story-1-3-x']"
+  l_cover "$AC_T/l-probe/p/sh" "$AC_T/l-probe/i/st" 9; [ "$L_NONAMES/$L_UNCOV" = "/ story-1-3-x" ] || lp_bad="$lp_bad [cover, foreign-sprint cross: '$L_NONAMES/$L_UNCOV' want '/ story-1-3-x']"
+  l_cover "$AC_T/l-probe/q/sh" "$AC_T/l-probe/i/st" 9; [ "$L_NONAMES/$L_UNCOV" = "/ story-1-3-x" ] || lp_bad="$lp_bad [cover, s19 ordinal suffix: '$L_NONAMES/$L_UNCOV' want '/ story-1-3-x']"
+  if ! l_insprint "a/s9/stories/x.md" "s9/stories/x.md" || ! l_insprint "s9/stories/x.md" "s9/stories/x.md" \
+     || l_insprint "a/s19/stories/x.md" "s9/stories/x.md" || l_insprint "s19/stories/x.md" "s9/stories/x.md" \
+     || l_insprint "a/s8/stories/x.md" "s9/stories/x.md"; then lp_bad="$lp_bad [l_insprint boundary: /s9/ and leading s9/ only]"; fi
+  l_kparse "$AC_T/l-probe/e"; [ "$L_KREC/$L_KBAD" = "/" ] || lp_bad="$lp_bad [recorded K, none/indented: '$L_KREC/$L_KBAD' want '/']"
+  l_kparse "$AC_T/l-probe/f"; [ "$L_KREC/$L_KBAD" = "3/" ] || lp_bad="$lp_bad [recorded K, near-miss: '$L_KREC/$L_KBAD' want '3/']"
+  l_W5="1 2 3 4 5 cross-1 cross-2 cross-3 cross-4 cross-5 cross-6"
+  l_judge full 5 "$l_W5" 0 1 "01.md${l_NL}02.md${l_NL}03.md${l_NL}04.md${l_NL}05.md${l_NL}cross-1.md${l_NL}cross-2.md${l_NL}cross-3.md${l_NL}cross-4.md${l_NL}cross-5.md${l_NL}cross-6.md"
+  [ "$L_V" = PASS ] || lp_bad="$lp_bad [complete for recorded K=5: $L_V '$L_WHY']"
+  l_judge full 5 "$l_W5" 0 1 "01.md${l_NL}02.md${l_NL}03.md${l_NL}cross-1.md${l_NL}cross-2.md${l_NL}cross-3.md"
+  case "$L_V $L_WHY" in "FAIL (b) ordinals missing: 4.md 5.md; (c) cross shards short: 3 cross shard(s) where G=6 are owed"*) ;; *) lp_bad="$lp_bad [under-sharded for recorded K=5: $L_V '$L_WHY']" ;; esac
+  if [ "$lp_ra" != "stories-elicitation-p1.md" ] || [ -n "$lp_rb" ] || [ -n "$lp_bad" ]; then
+    echo "validate-adversarial-convergence.sh: arm L self-probe failed (records '$lp_ra' / '$lp_rb' want 'stories-elicitation-p1.md' / '';$lp_bad); no verdict" >&2
+    exit 2
+  fi
+  l_sp="$(printf '%s\n' 'C 2026-01-02T00:00:00Z' "+version: $L_RELEASE" 'C 2026-01-01T00:00:00Z' '+version: 0.781.0' \
+           'C 2026-01-03T00:00:00Z' '+version: 9.0.0' | K_RELEASE="$L_RELEASE" k_stamp_parse)"
+  l_sp_none="$(printf '%s\n' 'C 2026-01-01T00:00:00Z' '+version: 0.781.0' | K_RELEASE="$L_RELEASE" k_stamp_parse)"
+  if [ "$l_sp" != "2026-01-02T00:00:00Z" ] || [ -n "$l_sp_none" ]; then
+    echo "validate-adversarial-convergence.sh: arm L stamp-parser self-probe failed (got '$l_sp', near-miss '$l_sp_none'); no verdict" >&2
+    exit 2
+  fi
+
+  l_term="${LAST_FILE##*/}"
+  l_int=""; l_int_src=""
+  for l_ss in "$l_sd/sprint-status.yaml" "${l_sd%/*}/sprint-status.yaml" "${l_sd%/*/*}/implementation-artifacts/sprint-status.yaml"; do
+    [ -f "$l_ss" ] || continue
+    l_row="$(awk '
+      function val(s) { sub(/^[^:]*:[ \t]*/, "", s); sub(/[ \t]+#.*$/, "", s); gsub(/"/, "", s); sub(/[ \t]+$/, "", s); return s }
+      /^sprint:/ && sp == "" { sp = val($0) }
+      /^validation_intensity:/ && vi == "" { vi = val($0) }
+      END { printf "%s %s", sp, vi }' "$l_ss")"
+    [ "${l_row%% *}" = "$l_n" ] || continue
+    l_int="${l_row#* }"; l_int_src="$l_ss"; break
+  done
+  l_records "$l_sd"
+  l_rec=0; [ -z "$L_RECS" ] || l_rec=1
+  l_xd="$l_sd/shards/stories-elicitation"
+  l_dir=0; l_ents=""
+  if [ -d "$l_xd" ]; then
+    l_dir=1
+    for l_f in "$l_xd"/*; do
+      [ -e "$l_f" ] || continue
+      l_ents="${l_ents}${l_f##*/}${l_NL}"
+    done
+  fi
+  l_pending=""; l_want=""
+  if [ -z "$l_int" ]; then
+    l_pending="no sprint-status.yaml beside ${l_sd} declares sprint ${l_n} with a validation_intensity"
+  elif [ "$l_int" = "full" ] && [ "$l_k" -ge 2 ] && [ "$l_dir" -eq 1 ]; then
+    # The want set, from its owners. Absence of either sibling is never a failure (K2's rule).
+    l_merge="$(cd "$(dirname "$0")" && pwd)/merge-adversarial-shards.sh"
+    l_pd="$K2_PD"   # the self-located sibling K2 and K3 resolve; never a walk up (I33)
+    if [ ! -f "$l_merge" ] || [ ! -f "$l_pd" ]; then
+      l_pending="merge-adversarial-shards.sh or partition-document.sh is not installed beside this validator"
+    else
+      mkdir -p "$AC_T/l/s$l_n/shards/stories-p1" && ln -s "$l_sd/stories" "$AC_T/l/s$l_n/stories" || {
+        echo "validate-adversarial-convergence.sh: arm L could not stage the ordinal map; no verdict" >&2; exit 2; }
+      bash "$l_merge" --map "$AC_T/l/s$l_n/shards/stories-p1" > "$AC_T/l-map" 2>&1; l_mrc=$?
+      l_ords="$(awk -F'\t' '$1 ~ /^[0-9]+$/ { printf "%s%d", s, $1 + 0; s = " " }' "$AC_T/l-map")"
+      l_nord="$(awk -F'\t' '$1 ~ /^[0-9]+$/ { n++ } END { print n + 0 }' "$AC_T/l-map")"
+      if [ "$l_mrc" -ne 0 ] || [ "$l_nord" != "$l_k" ]; then
+        l_pending="merge-adversarial-shards.sh --map answered rc ${l_mrc} with ${l_nord} ordinal(s) for ${l_k} stories: $(head -1 "$AC_T/l-map")"
+      elif ! bash "$l_pd" --cross-groups "$l_k" > "$AC_T/l-groups" 2>/dev/null; then
+        l_pending="partition-document.sh --cross-groups ${l_k} did not answer"
+      else
+        l_want="$l_ords $(k3_xkeys "$AC_T/l-groups")"
+      fi
+    fi
+  elif [ "$l_k" -eq 1 ]; then
+    l_want="1"
+  fi
+  # THE RECORDED K (see the header): a shard dir whose shard: lines record one K LARGER than today's is
+  # judged against that K. Complete for it -> the named PENDING; short for it -> FAIL, never acquitted.
+  # Equal or smaller: l_kuse refuses, and the plain today's-K judge below runs unchanged. Larger but a
+  # current story the shards never name (l_cover): refused too, and that judge FAILs naming it.
+  l_kmsg=""; l_kfail=""; l_kcov=""; L_KREC=""; L_KBAD=""
+  if [ -z "$l_pending" ] && [ "$l_int" = "full" ] && [ "$l_dir" -eq 1 ]; then
+    l_kparse "$l_xd"
+    if l_kuse "$L_KREC" "$l_k"; then
+      l_cover "$l_xd" "$l_sd/stories" "$l_n"
+      if [ -n "$L_NONAMES" ]; then l_kcov="the shards name no subjects"
+      elif [ -n "$L_UNCOV" ]; then l_kcov="they never name the story file(s) stories/ holds:$L_UNCOV"; fi
+    fi
+    if [ -z "$l_kcov" ] && l_kuse "$L_KREC" "$l_k"; then
+      l_kw=""; l_ki=0
+      while [ "$l_ki" -lt "$L_KREC" ]; do l_ki=$((l_ki + 1)); l_kw="$l_kw${l_kw:+ }$l_ki"; done
+      if [ "$L_KREC" -ge 2 ]; then
+        if [ ! -f "$K2_PD" ]; then
+          l_pending="partition-document.sh is not installed beside this validator, so the cross groups of the K=${L_KREC} the shard headers record cannot be derived"
+        elif ! bash "$K2_PD" --cross-groups "$L_KREC" > "$AC_T/l-kgroups" 2>/dev/null; then
+          l_pending="partition-document.sh --cross-groups ${L_KREC} did not answer"
+        else
+          l_kw="$l_kw $(k3_xkeys "$AC_T/l-kgroups")"
+        fi
+      fi
+      if [ -z "$l_pending" ]; then
+        l_judge full "$L_KREC" "$l_kw" "$l_rec" 1 "$l_ents"
+        if [ "$L_V" = PASS ]; then
+          l_kmsg="stories/ changed since the elicitation: shards record K=${L_KREC}, stories/ holds ${l_k}"
+        else
+          l_kfail="${L_WHY}; judged against the K=${L_KREC} the shard headers record (stories/ holds ${l_k})"
+        fi
+      fi
+    fi
+  fi
+  if [ -n "$l_pending" ]; then
+    echo "PENDING (L -- ELICITATION): ${l_term}: the stories elicitation of s${l_n} could not be judged: ${l_pending}."
+  elif [ -n "$l_kmsg" ]; then
+    echo "PENDING (L -- ELICITATION): ${l_term}: s${l_n}: ${l_kmsg};"
+    echo "      shards/stories-elicitation/ holds exactly the set owed at K=${L_KREC}, so it is not judged against today's stories/."
+  else
+    if [ -n "$l_kfail" ]; then
+      L_V="FAIL"; L_WHY="$l_kfail"
+    else
+      l_judge "$l_int" "$l_k" "$l_want" "$l_rec" "$l_dir" "$l_ents"
+      if [ "$L_V" = FAIL ] && [ -n "$L_KREC" ] && [ "$L_KREC" -lt "$l_k" ]; then
+        L_WHY="${L_WHY}; shards record K=${L_KREC}, fewer than the ${l_k} stories/ holds"
+      fi
+      # A larger K the subjects do not vouch for is never a pass: a dir that happens to fit today's K
+      # while its shards record a larger one, naming none of today's stories, FAILs on that alone.
+      if [ -n "$l_kcov" ]; then
+        if [ "$L_V" = FAIL ]; then L_WHY="${L_WHY}; shards record K=${L_KREC}, but ${l_kcov}"
+        else L_V="FAIL"; L_WHY="shards record K=${L_KREC}, but ${l_kcov}"; fi
+      fi
+      if [ -n "$L_KBAD" ]; then
+        if [ "$L_V" = PASS ]; then L_WHY="$L_KBAD"; else L_WHY="${L_WHY}; ${L_KBAD}"; fi
+        L_V="FAIL"
+      fi
+    fi
+    case "$L_V" in
+      PASS|NOT-OWED)
+        echo "OK (L -- ELICITATION): ${l_term}: s${l_n} ${L_V} -- ${L_WHY} (${l_k} stories, intensity ${l_int} from ${l_int_src})." ;;
+      UNJUDGED)
+        echo "PENDING (L -- ELICITATION): ${l_term}: the stories elicitation of s${l_n} could not be judged: ${L_WHY} (${l_int_src})." ;;
+      FAIL)
+        # The ERA. The earliest ISO invoked_at across the record(s) and shard files; owed-absent
+        # dates by the series' first pass.
+        l_at=""
+        l_files=""
+        for l_r in $L_RECS; do l_files="$l_files$l_sd/$l_r$l_NL"; done
+        if [ "$l_dir" -eq 1 ]; then
+          for l_f in "$l_xd"/*.md; do [ -f "$l_f" ] && l_files="$l_files$l_f$l_NL"; done
+        fi
+        if [ -n "$l_files" ]; then
+          : > "$AC_T/l-at"
+          while IFS= read -r l_f; do
+            [ -n "$l_f" ] && block_field "$l_f" invoked_at >> "$AC_T/l-at"
+          done <<< "$l_files"
+          l_at="$(awk '$1 ~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]/ { if (m == "" || $1 < m) m = $1 } END { print m }' "$AC_T/l-at")"
+          l_at_from="the elicitation's earliest invoked_at"
+        else
+          l_at="${P_AT[0]:-}"; l_at_from="the series' first pass ${P_FILE[0]##*/}"
+        fi
+        l_root=""; l_w="$l_sd"
+        while [ -n "$l_w" ]; do
+          if [ -f "$l_w/.claude/.ai-dlc-version" ]; then l_root="$l_w"; break; fi
+          l_w="${l_w%/*}"
+        done
+        l_stamp=""; l_era=""
+        case "$l_at" in
+          [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]*) l_atok=1 ;;
+          *) l_atok=0 ;;
+        esac
+        # THE ERA KEY DEGRADES TO PENDING, NAMED, never to FAIL and never to a silent PASS. In this
+        # order, because each later test needs what the earlier one established: a root to read,
+        # a history that can hold the first stamp (STAMP_WHY), a date to look the stamp up at,
+        # and a stamp present at that date.
+        if [ -z "$l_root" ]; then
+          l_era="stamp absent -- no directory above ${l_sd} carries .claude/.ai-dlc-version, so no install history can be read"
+        else
+          stamp_log "$l_root"
+          if [ -n "$STAMP_WHY" ]; then
+            l_era="$STAMP_WHY"
+          elif [ "$l_atok" -eq 0 ]; then
+            l_era="undated -- ${l_at_from} carries no ISO 8601 UTC invoked_at ('${l_at}')"
+          elif [ -z "$(awk -v at="$l_at" '/^C [0-9][0-9][0-9][0-9]-/ && $2 <= at { print "y"; exit }' "$STAMP_LOG")" ]; then
+            l_era="stamp absent -- no commit in ${l_root} at or before ${l_at} (${l_at_from}) carries .claude/.ai-dlc-version"
+          else
+            l_stamp="$(K_RELEASE="$L_RELEASE" k_stamp_parse < "$STAMP_LOG")"
+          fi
+        fi
+        if [ -n "$l_era" ]; then
+          echo "PENDING (L -- ELICITATION): era unknown -- ${l_era}: ${l_term}: s${l_n}: ${L_WHY};"
+          echo "      the record cannot be dated against the ${L_RELEASE} install, so today's rule is not applied to it."
+        elif [ -z "$l_stamp" ]; then
+          echo "PENDING (L -- ELICITATION): ${l_term}: s${l_n}: ${L_WHY};"
+          echo "      no commit in ${l_root} stamps .claude/.ai-dlc-version at ${L_RELEASE} or later -- not owed yet."
+        elif [[ "$l_at" < "$l_stamp" ]]; then
+          echo "PENDING (L -- ELICITATION): ${l_term}: s${l_n}: ${L_WHY};"
+          echo "      the elicitation is dated ${l_at} (${l_at_from}), before ${L_RELEASE} was stamped (${l_stamp}). Judged by its era's rule: legal then."
+        else
+          err "L -- ELICITATION" "s${l_n}'s stories elicitation over ${l_k} stories is not the sharded shape: ${L_WHY}.
+      It is dated ${l_at} (${l_at_from}), after ${L_RELEASE} was stamped (${l_stamp}), so
+      _gate-procedures.md validation-cycle item 2 binds it: one adversary per story ordinal
+      (scripts/ai-dlc/merge-adversarial-shards.sh --map) plus one cross-story adversary per group
+      (scripts/ai-dlc/partition-document.sh --cross-groups <K>; cross.md only at K=2), each writing
+      s${l_n}/shards/stories-elicitation/<ordinal>.md or cross-<g>.md; one story is ONE adversary at
+      shard: 1/1 writing 01.md. Re-run the elicitation in that shape before this gate."
+        fi ;;
+    esac
   fi
 fi
 

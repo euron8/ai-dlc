@@ -244,7 +244,11 @@ round's epoch -- which is what a beat armed with `--since <epoch>`
 reports as `DELIVERED`, and a previous sprint's file at the same path is
 older than the epoch -- and names expected minus delivered. That missing
 set, with the held rejected set, is what the next wave carries. A count
-of files in a directory is not a join.
+of files in a directory is not a join. When you state a record's time
+against a dispatch yourself, take it from
+`scripts/ai-dlc/file-mtime.sh <path>`, which prints the epoch and a UTC
+stamp, never from a hand-written format: `stat -f %Sm -t %FT%TZ` prints
+LOCAL time followed by a literal `Z`.
 
 **What stays serial, and only this:** (1) a true data dependency as
 `_dispatch-protocol.md` defines it, and the protected-path

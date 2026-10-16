@@ -100,13 +100,10 @@ disk.
 
 These rules apply to ALL agents across ALL phases.
 
-### Rule 1 -- Read CLAUDE.md and coding-conventions.md first
+### Rule 1 -- Retired
 
-CLAUDE.md provides project-specific configuration (deploy commands,
-operations protocol, key references). Coding conventions for
-implementation phases live in `docs/coding-conventions.md`. The
-pipeline rules live in this skill file and load automatically via
-`/ai-dlc`.
+No instruction. CLAUDE.md loads on its own; coding conventions are
+`docs/coding-conventions.md`.
 
 ### Rule 2 -- Single conversation is the default
 
@@ -179,7 +176,8 @@ the single statement of that constraint; `steps/route.md` and
 `steps/_gate-procedures.md` cite it rather than restating it.
 
 If you are not at one of these four pause points, you are not done.
-Keep working. Do not ask if you should continue -- that is about
+Keep working. A phase transition is not a pause point: run its gate
+(`gate-validation.md`) and proceed without waiting for approval. Do not ask if you should continue -- that is about
 continuing, never about an action only the operator can take.
 
 **Show your work.** Output sub-skill results so the human can
@@ -208,18 +206,18 @@ sequence MUST run. Skipping validation, Skill invocations, or gate
 checks to save time or tokens is a pipeline violation. Violation
 fails the next gate unconditionally.
 
-### Rule 5 -- Follow the routing, not your judgment
+The sequence is the step-file routing ("READ AND FOLLOW" directives
+and `nextStepFile` in frontmatter), not your judgment: do not reorder
+steps or jump ahead. Review every element of every artifact
+exhaustively; do not summarize.
 
-The pipeline sequence is defined by step file routing ("READ AND
-FOLLOW" directives and `nextStepFile` in frontmatter). Do not skip
-steps, reorder steps, or jump ahead because a step seems unnecessary.
-If a step determines it has nothing to do, it completes quickly --
-but it must still be loaded and its checks must still run.
+### Rule 5 -- Follow the routing
+
+Rule 4.
 
 ### Rule 6 -- Walk through everything
 
-Do not skip sections. Do not summarize. Review every element of every
-artifact exhaustively.
+Rule 4.
 
 ### Rule 7 -- Apply all recommended improvements
 
@@ -293,8 +291,7 @@ Intensity does NOT reduce the following (always required regardless):
 
 ### Rule 9 -- Autonomous gates
 
-At each phase transition, run the gate validation protocol
-(`gate-validation.md`). Do not wait for human approval.
+Rule 3.
 
 ### Rule 10 -- Production validation is the only human checkpoint
 

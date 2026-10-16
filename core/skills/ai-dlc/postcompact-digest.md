@@ -30,12 +30,9 @@ text, selected — never summarised, never rewritten.
 ## AUTONOMY RULES
 These rules apply to ALL agents across ALL phases.
 
-### Rule 1 -- Read CLAUDE.md and coding-conventions.md first
-CLAUDE.md provides project-specific configuration (deploy commands,
-operations protocol, key references). Coding conventions for
-implementation phases live in `docs/coding-conventions.md`. The
-pipeline rules live in this skill file and load automatically via
-`/ai-dlc`.
+### Rule 1 -- Retired
+No instruction. CLAUDE.md loads on its own; coding conventions are
+`docs/coding-conventions.md`.
 
 ### Rule 2 -- Single conversation is the default
 Run the entire pipeline in this conversation unless a sanctioned
@@ -71,16 +68,11 @@ numbered section sequentially. Do not skip sections. Do not jump to
 the next step file until the current step's execution sequence is
 complete and its gate validation has passed.
 
-### Rule 5 -- Follow the routing, not your judgment
-The pipeline sequence is defined by step file routing ("READ AND
-FOLLOW" directives and `nextStepFile` in frontmatter). Do not skip
-steps, reorder steps, or jump ahead because a step seems unnecessary.
-If a step determines it has nothing to do, it completes quickly --
-but it must still be loaded and its checks must still run.
+### Rule 5 -- Follow the routing
+Rule 4.
 
 ### Rule 6 -- Walk through everything
-Do not skip sections. Do not summarize. Review every element of every
-artifact exhaustively.
+Rule 4.
 
 ### Rule 7 -- Apply all recommended improvements
 When party mode, adversarial review, or advanced elicitation surface
@@ -100,8 +92,7 @@ phase. The lead MUST NOT run less than the declared minimum. Running
 more is always permitted.
 
 ### Rule 9 -- Autonomous gates
-At each phase transition, run the gate validation protocol
-(`gate-validation.md`). Do not wait for human approval.
+Rule 3.
 
 ### Rule 10 -- Production validation is the only human checkpoint
 After deployment and smoke tests, present the Production Validation

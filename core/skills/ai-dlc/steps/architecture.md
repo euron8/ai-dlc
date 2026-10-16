@@ -133,67 +133,6 @@ the blocker surfaces at design time rather than mid-implementation.
 Remove when: the workflow under test has no terminal operation distinct
 from its prerequisites.
 
-### 2a. Variant-Lock Evidence Requirement (when ADR offers multiple variants)
-
-When an ADR offers two or more implementation variants distinguished
-by a runtime hypothesis (latency cause, race window, ordering, retry
-shape, transport behavior), the ADR MUST require Day-1 implementation
-to commit a variant-lock artifact that includes BOTH:
-
-- **(a) Reproduction of the failure mode under controlled conditions.**
-  The hypothesis the variants address must be empirically observed,
-  not assumed. If the failure cannot be reproduced before Day-1, the
-  ADR must default to the variant with smallest blast radius and flag
-  the lock as "hypothesis-pending-evidence."
-- **(b) Measurement of each variant's behavior against the
-  reproduction.** Run each variant against the reproduced failure
-  mode and record observable result. The chosen variant is the one
-  the measurement supports.
-
-A variant-lock artifact that documents only the chosen path's
-rationale without comparison evidence fails this requirement at
-gate-validation Check 3 (architecture). Violation: revert variant
-lock and re-author with comparison data before continuing.
-
-### 2b. Framework Default Audit for Security-Relevant Properties
-
-When an ADR accepts a framework or cloud-construct default value
-(AWS CDK, Terraform module, library config) on any property that
-affects authentication, TLS, authorization, network exposure, or
-data retention, the ADR MUST record the default value explicitly
-and state WHY the default is acceptable for this project's threat
-model. "We used the default" is not sufficient — the default's
-literal value and its security implications must be in the ADR
-body, not left implicit. Gate FAILS at architecture gate if any
-security-relevant property is accepted as "default" without the
-literal value + acceptability rationale in the ADR.
-
-### 2c. Mitigation Proportionality Surfacing
-
-When a story's chosen mitigation introduces STANDING infrastructure — a
-long-running service, a scheduled alarm or monitor, a daemon, a
-persistent queue, an operational runbook with on-call obligations — to
-guard a change, the architect MUST assess whether the mitigation's
-blast radius exceeds the change it guards. Blast radius is the surface
-the mitigation itself adds: new deployable units, new secrets or
-parameters, new failure modes, new operator duties. The change guarded
-is the actual operation at risk (a one-time flag flip on a bounded
-table, a single idempotent migration). When the mitigation's blast
-radius is larger than the guarded change, the architect MUST surface
-the asymmetry in the ADR body under a `## Proportionality` heading —
-quantifying both sides (what the mitigation adds vs. what the change
-risks) and naming the smaller-footprint alternative — BEFORE the
-Solutioning Gate and architecture gate validate the design. The
-Solutioning Gate FAILS for any ADR introducing standing infrastructure
-that lacks a `## Proportionality` assessment. Surfacing is not a veto:
-the operator MAY still accept the heavier mitigation, but the asymmetry
-MUST be visible before gates ratify it, not discovered at deploy.
-Catches: a heavyweight standing mitigation ratified to guard a trivial
-one-shot change, adding permanent operational cost the operator never
-weighed. False-positive cost: one `## Proportionality` paragraph per
-ADR that adds standing infrastructure. Remove when: no ADR in scope
-introduces standing infrastructure as a mitigation.
-
 ### 2d. Absolute-Invariant Executable-Guard Mandate
 
 An architectural invariant stated as ABSOLUTE — "never", "MUST NOT

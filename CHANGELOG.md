@@ -20,6 +20,84 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.805.0] - 2026-10-16
+
+Batch 235 (combined release: Q, R2, R1, BL-602 and V1). Closes BL-595, BL-602 and BL-600. Advances BL-568 (R1 and R2
+land; its third release, R3, remains). Closes no `PC-` id.
+
+### Check 24 judges the stories elicitation's shape: one voice over several stories fails (BL-595)
+
+- New arm **L -- ELICITATION** in `validate-adversarial-convergence.sh` (Check 24, now fifteen arms). Where a sprint's
+  `validation_intensity` is `full` and `stories/` holds two or more stories, the stories elicitation must be sharded:
+  ordinals `01..K` plus the cross groups `partition-document.sh --cross-groups K` owes. The expected NAME set comes
+  from the programs that own it (`merge-adversarial-shards.sh --map` and `partition-document.sh`), never a count.
+- FAIL causes: (a) a single voice (a record with no shard directory), (b) ordinals missing, (c) cross shards short
+  (a legacy single `cross.md` where more than one group is owed lands here), (d) wrong names present, (e) owed and
+  absent at `full`, (f) the shards' `shard: <o>/<K>` lines disagree on K or record one outside 1..999.
+- NOT-OWED at `standard`, `lightweight` and `carry-over-single`, read first.
+- Era: the record's `invoked_at` is judged against the consumer's install-stamp history. Cross groups are owed from
+  0.744.0 and the sharded stories shape from 0.782.0; an earlier record reads PENDING ("legal then"). Where the
+  history cannot be read the arm names why and reads PENDING, never FAIL: no git, a shallow clone, no stamp at the
+  record's time, or an undated record.
+- A shard directory whose `shard:` lines record a LARGER K than `stories/` now holds is judged against that recorded
+  K, and reads PENDING ("stories/ changed since the elicitation") only when it is complete for it AND every current
+  story is named among the elicited subjects under this sprint's own `s<N>/stories/` (an ordinal shard's `artifact:`
+  file, or a cross shard's `artifact_sha: <name>=<sha>` entries). A smaller recorded K, a missing name, another
+  sprint's same-named file, or an equal K is judged against today's `stories/` exactly as before, and fails.
+  Stated limits: a same-numbered sprint under another tree would cover, and symlinks are not resolved.
+- Check 22's S3 is not tightened. The spawn ledger carries no subject field, so it cannot tell a stories
+  elicitation from a serial document; the reason is recorded beside S3.
+- The `check-24-adversarial-convergence` fixture drives the arm end to end in 21 seeded worlds, with its shard
+  headers in the layout a real elicitation writes, and nine mutants (LX0-LX8) that each flip a named world.
+- The arm fires on real data. Its receipt, the consumer's next stories elicitation, is owed.
+- Measured on one series, three interleaved reps under load: the validator took 0.64-0.65s against 0.36-0.37s before.
+
+### Rules 1, 5, 6 and 9 fold into the rules that already carry them (BL-568, R2)
+
+- Rule 1 is retired to a two-line stub. Rules 5 and 6 fold into Rule 4, and Rule 9 into Rule 3. No rule is
+  renumbered; each folded heading stays as a one-line pointer, so existing cites still resolve.
+- Measured in `docs/analysis/step-value-s317-s319.md`: none of the four states a failure case.
+- `postcompact-digest.md` is re-rendered. The re-attach budget passes with 3500 tokens of slack.
+
+### Architecture §2a, §2b and §2c are removed (BL-568, R1)
+
+- §2a (variant-lock evidence), §2b (framework-default audit) and §2c (proportionality) are removed, with
+  `implementation.md`'s "Day-1 Variant-Lock Evidence" paragraph. §2d and §2e keep their letters.
+- Re-measured across every consumer sprint from s155 onward: §2b about 17 substantive uses and §2c about 12, with 0
+  catches of their own; each decision-moving case was raised first by research, elicitation, party or the operator.
+  §2a's "fails at Check 3" named a check that does not test it.
+
+### The mutant battery checks set EQUALITY, as its header always claimed (BL-602)
+
+- `derivation-differential-mutants` now fails a mutant whose failed arms differ from its declared arms in either
+  direction (entangled or missed), through one comparison function with a self-probe that runs before the control.
+  A guard requires the count of FAIL lines to equal the count of parsed arm ids.
+- Every declared set is the measured one, each widened arm with its reason. The driver's `A18 seed` row is renamed
+  `A18d` so the battery can parse it.
+- The driver's default stamp carries `skill_commit: <base>`, and only WS3N's pre-pull commit carries a value the
+  walk rejects, so R8 ("newest match wins") no longer shares A15n with the absent-line case.
+- New mutants R13 (A15n alone) and R14 (A5b A17b).
+- All 15 mutants are killed by exactly their declared arms; on the unmutated subject the old and new drivers give
+  the same verdict on every arm.
+
+### A file's modification time is stated in UTC by a shipped helper, never by a hand-written stat format (BL-600)
+
+Built by ai-dlc-11 and its hands (batch 235 V1).
+
+- New `core/scripts/file-mtime.sh <path> [<path> ...]` (installed at `scripts/ai-dlc/file-mtime.sh`) prints
+  `<path>`, the epoch and an ISO UTC stamp per path, tab-separated. A path with no file prints `MISSING` and exits 1,
+  though every path is still reported; no arguments exits 2.
+- The epoch comes from `stat`, and `date` is handed only that number. BSD `date -r` reads an all-digit argument as
+  an epoch, so a record named after a timestamp would otherwise print the time its NAME spells. The stat flavour is
+  chosen by the shape of the answer and never by its exit code, the same rule as `fkey` in the gate-remediation
+  guard.
+- Rule 28's join paragraph, where the lead compares a record's time against a dispatch, now names the helper. It
+  also names the format that went wrong: `stat -f %Sm -t %FT%TZ` prints LOCAL time followed by a literal `Z`. On
+  the reference consumer, a lead on an EDT box stated a 04:59:42Z mtime as 00:59Z.
+- The new fixture `file-mtime` ships. It seeds with `TZ=UTC touch` and asserts the literal `2026-10-16T04:59:42Z`
+  under both `TZ=UTC` and `TZ=America/New_York`. Further arms cover the numeric basename, the stat shape, MISSING
+  and no arguments, each backed by a cmp-guarded mutant.
+
 ## [0.804.0] - 2026-10-16
 
 Batch 235 (release BL-616, first part). Closes nothing: BL-616 stays open with six census items owed. Closes no

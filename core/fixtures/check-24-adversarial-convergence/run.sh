@@ -57,12 +57,12 @@ fi
 # declared set exactly, so no unit can fall out of every shard, and every declared shard must have a
 # driver directory. The join proves it can fire first, on a seeded duplicate and a seeded omission.
 #   a  core corp pair   the v0.52-v0.103 cases, --cycle-state and the stall exit, the corpus third state, pairing
-#   b  hook k2          the live-series derivation, H-BIND, exit ceiling, arm K, arm K2 and its mutants
+#   b  hook k2 elic     the live-series derivation, H-BIND, exit ceiling, arm K, arm K2 and its mutants, arm L
 #   c  arms_ij pass1 j2h  arm J and I, the pass-1 guard, arm J2 and J's door, arm H by series
 #   d  k3               arm K3, K3 widened, J2 per stem, K3 cross groups (every world a git repository)
 SHARDS="a b c d"
 UNITS_a="core corp pair"
-UNITS_b="hook k2"
+UNITS_b="hook k2 elic"
 UNITS_c="arms_ij pass1 j2h"
 UNITS_d="k3"
 GROUP=a
@@ -2740,6 +2740,355 @@ PY
   k3c_mut "K3CX4 K3C stamp not rebound" "SILENT FAIL PENDING ${k3c_pc} SILENT" \
     "K3C_RELEASE=\"${K3C_REL}\"" 'K3C_RELEASE="99.0.0"' \
     'then k3_rel="$K3C_RELEASE"; k3_stamp_probe; fi' 'then :; fi'
+fi
+
+fi
+if sg elic; then
+echo
+# --- ARM L: the stories elicitation, driven END TO END ------------------------------------------
+# The validator's self-probe covers l_judge, l_records, l_kparse and the stamp parser on staged
+# inputs; nothing there runs the LIVE path -- the staged `merge-adversarial-shards.sh --map` call
+# (a shards/stories-p1/ beside a symlink to the real stories/), the `$1 + 0` de-padding, the
+# intensity lookup, the era branches and the err text. Every world below is a sprint s9 with a MET,
+# shard-merged `stories-adversarial-p1.md` (K is silent on it), run through the real validator.
+# Built under $ROOT/.l-worlds, a hidden dir, so the pairing loop's `$ROOT/*/` never walks it.
+# Stamp history, where a world has one: 0.781.0 at L_T0, 0.782.0 (L_RELEASE) at L_T1; every file is
+# in the second commit, so a shallow clone carries the sprint.
+#   l-pass     K=10, 01..10 + cross-1..6, post                      OK PASS, exit 0 (K=10, because
+#              --map pads to the digit count of K: only a two-digit K prints `01`, so only it
+#              can tell the `$1 + 0` de-padding from its absence)
+#   l-voice    K=3, one stories-elicitation.md record, post         FAIL (a), exit 1
+#   l-legacy   K=3, 01..03 + cross.md, post                         FAIL (c), never (d)
+#   l-absent   full, no record, no dir; dated by the first pass     FAIL (e)
+#   l-std      intensity standard, nothing elicited                 OK NOT-OWED
+#   l-pre      l-voice dated between the two stamps                 PENDING, legal in its era
+#   l-pred     l-voice, the repo stamped only at 0.781.0            PENDING, not owed yet
+#   l-nogit    l-voice copied out of git                            PENDING era unknown -- no git
+#   l-shallow  l-voice cloned --depth 1                             PENDING era unknown -- shallow clone
+#   l-undated  l-voice whose record carries no invoked_at           PENDING era unknown -- undated
+#   l-nostamp  l-voice with no .claude/.ai-dlc-version anywhere     PENDING era unknown -- stamp absent
+#   l-moved    shards record K=5 and hold the complete 5-set; stories/ now 3      PENDING, named
+#   l-under    shards record K=5 and hold 01..03 + cross-1..3; stories/ now 3     FAIL, 4.md 5.md
+#   l-match    shards record K=3, the complete 3-set (the near-miss of the two)   OK PASS
+#   l-kdis     shard headers record K=3 and K=4                                    FAIL (f)
+#   l-eqshort  shards record K=3 (equality) and hold 01, 02, cross-1; stories/ 3    FAIL (b)+(c), the
+#              plain today's-K text, no `shards record` suffix -- nothing moves at equality
+#   l-grow     ONE file, 01.md carrying `shard: 1/1 stories`; stories/ 3            FAIL (b)+(c), never PENDING
+#   l-grow2    shards record K=2, the complete 2-set (01, 02, cross.md); stories/ 3 FAIL, never PENDING
+#   l-replace  shards record K=5 over story-1..5, complete; stories/ now story-1..3 + story-new
+#              (shrink WITH replacement)                                             FAIL, names story-new
+#   l-replace1 l-moved's covering names, one current story renamed 3 -> 8           FAIL, names story-8
+#   l-foreign  K_rec 5 complete; today story-1, story-2, story-new; story-new named only under s8/
+#              (one sprint off, same basename), story-2 only by a RELATIVE s9 ordinal   FAIL, names story-new only
+# The recorded-K worlds' shard files are written in s317's real layout (l_rshards).
+# In every recorded-K world 01.md carries NO shard line, as the reference consumer's 01.md does
+# not: a reader of the first file alone reads no K and judges l-moved as today, which FAILs it.
+LW="$ROOT/.l-worlds"
+mkdir -p "$LW" || broken "cannot create $LW"
+LWP="$(cd "$LW" && pwd -P)"
+L_T0=2026-10-01T00:00:00Z; L_T1=2026-10-05T00:00:00Z
+L_POST=2026-10-06T00:00:00Z; L_PRE=2026-10-03T00:00:00Z
+LS="$(cd "$(dirname "$VALIDATOR")" && pwd)"
+lg() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$1" -c user.name=f -c user.email=f@example.invalid -c core.hooksPath=/dev/null -c commit.gpgsign=false "${@:2}"; }
+l_prov() { # <file> <invoked_at | ""> <shard line | ""> -- one elicitation record, the shipped block shape
+  { printf '# Stories elicitation\n\n'
+    if [ -n "$3" ]; then printf '%s\n\n' "$3"; fi
+    printf 'Findings: 0 critical, 0 major, 0 minor.\n\n<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: bmad-advanced-elicitation\n'
+    if [ -n "$2" ]; then printf 'invoked_at: %s\n' "$2"; fi
+    printf 'tool_use_id: NOT_ACCESSIBLE\nmode: subagent\nlead_role: stories\nartifact: s9/stories/\n'
+    printf 'findings_critical: 0\nfindings_major: 0\nfindings_minor: 0\nSKILL_INVOCATION_PROVENANCE_END -->\n'; } > "$1"
+}
+l_world() { # <name> <K> <intensity> -- stories, the status file and a MET shard-merged pass
+  local w="$LW/$1" i
+  mkdir -p "$w/.claude" "$w/s9/stories" || return 1
+  for i in $(seq 1 "$2"); do printf '# Story %s\n\nAs the operator, I want %s.\n' "$i" "$i" > "$w/s9/stories/story-$i.md" || return 1; done
+  printf 'sprint: 9\nvalidation_intensity: %s\n' "$3" > "$w/s9/sprint-status.yaml"
+  { printf '# stories -- adversarial pass 1\n\n<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\n'
+    printf 'invoked_at: 2026-10-07T00:00:00Z\ntool_use_id: toolu_fixture_l1\n'
+    printf 'shard_tool_use_ids: 1=toolu_fixture_l1a 2=toolu_fixture_l1b cross=toolu_fixture_l1x\n'
+    printf 'mode: subagent\nlead_role: architect\nartifact: stories/\nfindings_critical: 0\nfindings_critical_prior_scope: 0\n'
+    printf 'findings_major: 0\nfindings_major_underived: 0\nfindings_minor: 0\nverdict: EXIT_CONDITION_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n'
+  } > "$w/s9/stories-adversarial-p1.md"
+}
+l_shards() { # <name> <invoked_at> <recorded K | ""> <name.md>... -- the first file named is always bare
+  local d="$LW/$1/s9/shards/stories-elicitation" at="$2" k="$3" n s first=1; shift 3
+  mkdir -p "$d" || return 1
+  for n in "$@"; do
+    s=""
+    if [ -n "$k" ] && [ "$first" -eq 0 ]; then
+      case "$n" in cross*) s="shard: cross/$k ${n%.md}" ;; *) s="shard: ${n%.md}/$k story-${n%.md}" ;; esac
+    fi
+    first=0
+    l_prov "$d/$n" "$at" "$s" || return 1
+  done
+}
+# l_rshards <world> <invoked_at> <K> bare|all <"elicited names"> <name.md>... -- shard files in the
+# EXACT layout the reference consumer's s317 elicitation wrote (03.md and cross.md, read-only):
+# the block first, `invoked_at:` on line 3, `artifact:` on 7 and `artifact_sha:` on 8, then a title and
+# `shard:` at column 0 in the body. An ordinal shard names its story by ABSOLUTE file path and one sha;
+# a cross shard names the stories dir RELATIVELY and one `<name>=<sha>` per elicited story, on one
+# line. Ordinal NN reviews the NNth elicited name. `bare`: the first file carries no shard line, as
+# s317's 01.md carries none.
+l_rshards() {
+  local w="$1" at="$2" k="$3" mode="$4" names="$5" d n o nm sl i first=1 shas=""; shift 5
+  d="$LW/$w/s9/shards/stories-elicitation"
+  mkdir -p "$d" || return 1
+  i=0; for nm in $names; do i=$((i + 1)); shas="$shas${shas:+ }$nm=$(printf '%064d' "$i")"; done
+  for n in "$@"; do
+    sl="shard: cross/$k cross"
+    case "$n" in
+      cross*) { printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: bmad-advanced-elicitation\ninvoked_at: %s\n' "$at"
+                printf 'tool_use_id: NOT_ACCESSIBLE\nmode: subagent\nlead_role: stories-test-strategy.md\nartifact: s9/stories/\n'
+                printf 'artifact_sha: %s\nfindings_critical: 0\nfindings_major: 0\nfindings_minor: 0\nSKILL_INVOCATION_PROVENANCE_END -->\n\n' "$shas"
+                printf '# Sprint 9 stories: advanced elicitation, cross shard\n\n'; } > "$d/$n" || return 1 ;;
+      *) o="${n%.md}"; i=0; nm=""
+         for nm in $names; do i=$((i + 1)); [ "$i" -eq "$((10#$o))" ] && break; done
+         sl="shard: $o/$k $nm"
+         { printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: bmad-advanced-elicitation\ninvoked_at: %s\n' "$at"
+           printf 'tool_use_id: toolu_unknown_dispatch_id_not_visible_to_subagent\nmode: subagent\nlead_role: stories.md\n'
+           printf 'artifact: %s/%s/s9/stories/%s.md\nartifact_sha: %064d\n' "$LWP" "$w" "$nm" "$((10#$o))"
+           printf 'findings_critical: 0\nfindings_major: 0\nfindings_minor: 0\nSKILL_INVOCATION_PROVENANCE_END -->\n\n'
+           printf '# Stories elicitation, shard %s/%s: %s.md\n\n' "$o" "$k" "$nm"; } > "$d/$n" || return 1 ;;
+    esac
+    if [ "$mode" = all ] || [ "$first" -eq 0 ]; then printf '%s\n' "$sl" >> "$d/$n" || return 1; fi
+    printf '\nFindings: 0 critical, 0 major, 0 minor.\n' >> "$d/$n" || return 1
+    first=0
+  done
+}
+l_git() { # <name> two|pred|none|nostamp -- the stamp history, every file in the last commit
+  local w="$LW/$1"
+  case "$2" in
+    none) printf 'version: 0.782.0\n' > "$w/.claude/.ai-dlc-version" ;;
+    nostamp) rm -rf "$w/.claude" ;;
+    two|pred)
+      printf 'version: 0.781.0\n' > "$w/.claude/.ai-dlc-version" || return 1
+      ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+        lg "$w" init -q . && lg "$w" add -A \
+          && GIT_COMMITTER_DATE="$L_T0" GIT_AUTHOR_DATE="$L_T0" lg "$w" commit -q -m stamp-0.781.0 || exit 1
+        [ "$2" = pred ] && exit 0
+        printf 'version: 0.782.0\n' > "$w/.claude/.ai-dlc-version" && lg "$w" add -A \
+          && GIT_COMMITTER_DATE="$L_T1" GIT_AUTHOR_DATE="$L_T1" lg "$w" commit -q -m stamp-0.782.0 ) >/dev/null 2>&1 ;;
+    *) return 1 ;;
+  esac
+}
+L_SET3="01.md 02.md 03.md cross-1.md cross-2.md cross-3.md"
+L_SET10="01.md 02.md 03.md 04.md 05.md 06.md 07.md 08.md 09.md 10.md cross-1.md cross-2.md cross-3.md cross-4.md cross-5.md cross-6.md"
+L_SET5="01.md 02.md 03.md 04.md 05.md cross-1.md cross-2.md cross-3.md cross-4.md cross-5.md cross-6.md"
+L_BUILT=1; L_BAD=""
+l_bad() { L_BUILT=0; L_BAD="$L_BAD $1"; }
+# shellcheck disable=SC2086 -- the sets are word lists by design
+{ l_world l-pass 10 full && l_shards l-pass "$L_POST" "" $L_SET10 && l_git l-pass two; } || l_bad l-pass
+# `|`-separated: an ISO time carries colons.
+for v in "voice|$L_POST|two" "pre|$L_PRE|two" "pred|$L_POST|pred" "undated||two" "nostamp|$L_POST|nostamp"; do
+  n="${v%%|*}"; r="${v#*|}"; at="${r%%|*}"; gm="${r#*|}"
+  { l_world "l-$n" 3 full && l_prov "$LW/l-$n/s9/stories-elicitation.md" "$at" "" && l_git "l-$n" "$gm"; } || l_bad "l-$n"
+done
+{ l_world l-legacy 3 full && l_shards l-legacy "$L_POST" "" 01.md 02.md 03.md cross.md && l_git l-legacy two; } || l_bad l-legacy
+{ l_world l-absent 3 full && l_git l-absent two; } || l_bad l-absent
+{ l_world l-std 3 standard && l_git l-std none; } || l_bad l-std
+# l_reline <file> <exact old line> <new line> -- one whole-line rewrite, refused unless it applied.
+l_reline() {
+  awk -v o="$2" -v n="$3" '$0 == o { print n; c++; next } { print } END { exit (c == 1 ? 0 : 1) }' "$1" > "$1.n" \
+    && mv "$1.n" "$1" && grep -qxF -- "$3" "$1"
+}
+L_N5="story-1 story-2 story-3 story-4 story-5"
+L_ED=s9/shards/stories-elicitation
+# l-moved's 02.md takes the RELATIVE `artifact:` form s317's 04, 13 and 18 write.
+{ l_world l-moved 3 full && l_rshards l-moved "$L_POST" 5 bare "$L_N5" $L_SET5 \
+    && l_reline "$LW/l-moved/$L_ED/02.md" "artifact: $LWP/l-moved/s9/stories/story-2.md" \
+         "artifact: _bmad-output/planning-artifacts/s9/stories/story-2.md" && l_git l-moved two; } || l_bad l-moved
+# l-foreign: K_rec 5 complete over story-1, story-2, story-new, story-4, story-5; today story-1, story-2,
+# story-new. story-new is named ONLY by sprint s8 -- ONE off the world's s9, the SAME basename, so only
+# the sprint scope separates them: ordinal 03 by the ABSOLUTE `.../s8/stories/story-new.md`, every cross
+# shard by the RELATIVE `.../s8/stories/` dir. story-2 is named only by a RELATIVE s9 ordinal, so a
+# reader that refused the relative form names story-2 too.
+l_fx=1
+{ l_world l-foreign 2 full && printf '# Story new\n' > "$LW/l-foreign/s9/stories/story-new.md" \
+    && l_rshards l-foreign "$L_POST" 5 bare "story-1 story-2 story-new story-4 story-5" $L_SET5 \
+    && l_reline "$LW/l-foreign/$L_ED/03.md" "artifact: $LWP/l-foreign/s9/stories/story-new.md" \
+         "artifact: $LWP/l-foreign/s8/stories/story-new.md" \
+    && l_reline "$LW/l-foreign/$L_ED/02.md" "artifact: $LWP/l-foreign/s9/stories/story-2.md" \
+         "artifact: _bmad-output/planning-artifacts/s9/stories/story-2.md" && l_git l-foreign two; } || l_fx=0
+for x in 1 2 3 4 5 6; do
+  l_reline "$LW/l-foreign/$L_ED/cross-$x.md" "artifact: s9/stories/" "artifact: _bmad-output/planning-artifacts/s8/stories/" || l_fx=0
+done
+[ "$l_fx" -eq 1 ] || l_bad l-foreign
+{ l_world l-under 3 full && l_rshards l-under "$L_POST" 5 bare "$L_N5" $L_SET3 && l_git l-under two; } || l_bad l-under
+# l-replace: elicited story-1..5 complete at K=5; a repair deleted 4 and 5 and ADDED story-new (K=4).
+{ l_world l-replace 3 full && printf '# Story new\n' > "$LW/l-replace/s9/stories/story-new.md" \
+    && l_rshards l-replace "$L_POST" 5 bare "$L_N5" $L_SET5 && l_git l-replace two; } || l_bad l-replace
+# l-replace1: l-moved's covering world with one current story renamed by ONE character (3 -> 8).
+{ l_world l-replace1 3 full && mv "$LW/l-replace1/s9/stories/story-3.md" "$LW/l-replace1/s9/stories/story-8.md" \
+    && l_rshards l-replace1 "$L_POST" 5 bare "$L_N5" $L_SET5 && l_git l-replace1 two; } || l_bad l-replace1
+# l-match in s317's layout, naming story-1..3: its subjects COVER today's stories, so under an
+# equality-honouring mutant (LX7) nothing but the direction test keeps it from reading PENDING.
+{ l_world l-match 3 full && l_rshards l-match "$L_POST" 3 bare "story-1 story-2 story-3" $L_SET3 && l_git l-match none; } || l_bad l-match
+{ l_world l-kdis 3 full && l_shards l-kdis "$L_POST" 3 $L_SET3 \
+    && l_prov "$LW/l-kdis/s9/shards/stories-elicitation/03.md" "$L_POST" "shard: 03/4 story-03" && l_git l-kdis two; } || l_bad l-kdis
+L_N3="story-1 story-2 story-3"
+{ l_world l-eqshort 3 full && l_rshards l-eqshort "$L_POST" 3 bare "$L_N3" 01.md 02.md cross-1.md && l_git l-eqshort two; } || l_bad l-eqshort
+# l-grow: ONE voice over the whole stories dir, so it is written as the dir-naming (cross) form with
+# every story's name=sha -- its subjects COVER today's stories, and only the direction refuses it.
+{ l_world l-grow 3 full && l_rshards l-grow "$L_POST" 1 all "$L_N3" cross.md \
+    && mv "$LW/l-grow/s9/shards/stories-elicitation/cross.md" "$LW/l-grow/s9/shards/stories-elicitation/01.md" \
+    && sed 's#^shard: cross/1 cross$#shard: 1/1 stories#' "$LW/l-grow/s9/shards/stories-elicitation/01.md" > "$LW/l-grow/01.n" \
+    && mv "$LW/l-grow/01.n" "$LW/l-grow/s9/shards/stories-elicitation/01.md" \
+    && grep -qx 'shard: 1/1 stories' "$LW/l-grow/s9/shards/stories-elicitation/01.md" && l_git l-grow two; } || l_bad l-grow
+{ l_world l-grow2 3 full && l_rshards l-grow2 "$L_POST" 2 bare "story-1 story-2" 01.md 02.md cross.md && l_git l-grow2 two; } || l_bad l-grow2
+{ cp -R "$LW/l-voice" "$LW/l-nogit" && rm -rf "$LW/l-nogit/.git"; } || l_bad l-nogit
+( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+  GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git clone -q --depth 1 "file://$LWP/l-voice" "$LW/l-shallow" ) >/dev/null 2>&1 \
+  && [ -f "$LW/l-shallow/s9/stories-elicitation.md" ] || l_bad l-shallow
+# THE WORLDS ARE WHAT THEY CLAIM: the recorded-K worlds carry the K on every file but the first,
+# the first carries none, and the shallow clone is shallow and holds the sprint.
+if [ "$L_BUILT" -eq 1 ]; then
+  [ "$(grep -l '^shard: .*/5 ' "$LW/l-moved/s9/shards/stories-elicitation/"*.md | grep -c .)" = 10 ] \
+    && ! grep -q '^shard:' "$LW/l-moved/s9/shards/stories-elicitation/01.md" || l_bad l-moved-headers
+  [ "$( ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; git -C "$LW/l-shallow" rev-parse --is-shallow-repository ) 2>/dev/null)" = true ] || l_bad l-shallow-not-shallow
+fi
+L_OUT="$LW/out"
+l_run() { # <validator> <world> -> L_RC, $L_OUT. The ceiling keeps git from answering for an ancestor.
+  GIT_CEILING_DIRECTORIES="$LWP" bash "$1" --series "$LW/$2/s9/stories-adversarial-p" \
+    --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" > "$L_OUT" 2>&1; L_RC=$?
+}
+l_cell() { # <world> <want rc> <must-not-say | -> <must-say>...
+  local w="$1" want="$2" not="$3" s miss=""; shift 3
+  ASSERTIONS=$((ASSERTIONS + 1))
+  l_run "$VALIDATOR" "$w"
+  for s in "$@"; do grep -qF -- "$s" "$L_OUT" || miss="$miss [$s]"; done
+  if [ "$L_RC" -eq "$want" ] && [ -z "$miss" ] && { [ "$not" = - ] || ! grep -qF -- "$not" "$L_OUT"; }; then
+    printf '  ok    %-28s exit=%s %s\n' "$w" "$L_RC" "$1"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s exit=%s want=%s, missing:%s, must not say [%s]\n' "$w" "$L_RC" "$want" "${miss:- none}" "$not"
+    sed 's/^/          | /' "$L_OUT"
+  fi
+}
+echo "--- arm L (ELICITATION), end to end"
+if [ "$L_BUILT" -ne 1 ]; then
+  FAILURES=$((FAILURES + 1)); ASSERTIONS=$((ASSERTIONS + 1))
+  printf '  FAIL  %-28s FIXTURE BROKEN -- world(s)%s did not build (under %s)\n' "l-worlds" "$L_BAD" "$LW"
+else
+  L_FL="FAIL (L -- ELICITATION)"
+  l_cell l-pass    0 "$L_FL" "OK (L -- ELICITATION): stories-adversarial-p1.md: s9 PASS -- shards/stories-elicitation/ holds exactly the owed set (10 stories, intensity full from"
+  l_cell l-voice   1 - "FAIL (L -- ELICITATION): s9's stories elicitation over 3 stories is not the sharded shape: (a) single voice" \
+    "after 0.782.0 was stamped (2026-10-05T00:00:00Z)" "Re-run the elicitation in that shape before this gate."
+  l_cell l-legacy  1 "(d) wrong names" "$L_FL" \
+    "(c) cross shards short: 0 cross shard(s) where G=3 are owed (owed: cross-1.md cross-2.md cross-3.md); found instead: cross.md"
+  l_cell l-absent  1 - "$L_FL" "(e) owed-absent" "(the series' first pass stories-adversarial-p1.md)"
+  l_cell l-std     0 "$L_FL" "OK (L -- ELICITATION): stories-adversarial-p1.md: s9 NOT-OWED -- validation_intensity is standard"
+  l_cell l-pre     0 "$L_FL" "PENDING (L -- ELICITATION): stories-adversarial-p1.md: s9: (a) single voice" \
+    "before 0.782.0 was stamped (2026-10-05T00:00:00Z). Judged by its era's rule: legal then."
+  l_cell l-pred    0 "$L_FL" "stamps .claude/.ai-dlc-version at 0.782.0 or later -- not owed yet."
+  l_cell l-nogit   0 "$L_FL" "PENDING (L -- ELICITATION): era unknown -- no git -- " "is not inside a git work tree"
+  l_cell l-shallow 0 "$L_FL" "PENDING (L -- ELICITATION): era unknown -- shallow clone -- "
+  l_cell l-undated 0 "$L_FL" "PENDING (L -- ELICITATION): era unknown -- undated -- the elicitation's earliest invoked_at"
+  l_cell l-nostamp 0 "$L_FL" "PENDING (L -- ELICITATION): era unknown -- stamp absent -- no directory above"
+  l_cell l-moved   0 "$L_FL" "PENDING (L -- ELICITATION): stories-adversarial-p1.md: s9: stories/ changed since the elicitation: shards record K=5, stories/ holds 3;"
+  l_cell l-under   1 "stories/ changed since" "$L_FL" "(b) ordinals missing: 4.md 5.md; (c) cross shards short: 3 cross shard(s) where G=6 are owed" \
+    "judged against the K=5 the shard headers record (stories/ holds 3)"
+  l_cell l-match   0 "stories/ changed since" "OK (L -- ELICITATION): stories-adversarial-p1.md: s9 PASS"
+  l_cell l-kdis    1 - "$L_FL" "(f) the shard: lines do not record one K in 1..999: 02.md=3 03.md=4"
+  l_cell l-eqshort 1 "shards record K=" "$L_FL" \
+    "not the sharded shape: (b) ordinals missing: 3.md; (c) cross shards short: 1 cross shard(s) where G=3 are owed (owed: cross-1.md cross-2.md cross-3.md)."
+  l_cell l-grow    1 "stories/ changed since" "$L_FL" \
+    "(b) ordinals missing: 2.md 3.md; (c) cross shards short: 0 cross shard(s) where G=3 are owed" \
+    "shards record K=1, fewer than the 3 stories/ holds"
+  l_cell l-grow2   1 "stories/ changed since" "$L_FL" "(b) ordinals missing: 3.md" \
+    "found instead: cross.md" "shards record K=2, fewer than the 3 stories/ holds"
+  l_cell l-replace 1 "stories/ changed since" "$L_FL" "(d) wrong names present: 05.md" \
+    "shards record K=5, but they never name the story file(s) stories/ holds: story-new"
+  l_cell l-replace1 1 "stories/ changed since" "$L_FL" \
+    "shards record K=5, but they never name the story file(s) stories/ holds: story-8"
+  # `holds: story-new` is the WHOLE list: a reader that refused the relative s9 ordinal would print
+  # `holds: story-2 story-new`, which does not contain it.
+  l_cell l-foreign 1 "stories/ changed since" "$L_FL" \
+    "shards record K=5, but they never name the story file(s) stories/ holds: story-new"
+
+  # --- the mutants: a copy of the validator's directory (the merge and the partitioner beside it, or
+  # arm L reads no map at all), an unmutated control first. Each cell is the arm-L line's class.
+  # FAIL+K: a FAIL judged against the RECORDED K (its `the shard headers record` suffix), so a mutant
+  # that honours a K it should not, yet still FAILs, is told apart by its text (LX7 at equality).
+  l_class() { # <validator> <world> -> OK | FAIL | FAIL+K | PENDING | SILENT
+    l_run "$1" "$2"
+    if grep -qF "the shard headers record" "$L_OUT" && grep -qF "FAIL (L -- ELICITATION)" "$L_OUT"; then printf 'FAIL+K'
+    elif grep -qF "FAIL (L -- ELICITATION)" "$L_OUT"; then printf 'FAIL'
+    elif grep -qF "PENDING (L -- ELICITATION)" "$L_OUT"; then printf 'PENDING'
+    elif grep -qF "OK (L -- ELICITATION)" "$L_OUT"; then printf 'OK'
+    else printf 'SILENT'; fi
+  }
+  l_mut() { # <label> <expected row: pass legacy moved under grow replace eqshort match foreign> [<old> <new>]...
+    local label="$1" want="$2" d got c; shift 2
+    d="$(mktemp -d "$LW/mut.XXXXXX")"
+    cp "$LS/validate-adversarial-convergence.sh" "$LS/validate-steering-budget.sh" "$LS/partition-document.sh" \
+       "$LS/partition-subject.sh" "$LS/merge-adversarial-shards.sh" "$d/" 2>/dev/null
+    ASSERTIONS=$((ASSERTIONS + 1))
+    if [ ! -f "$d/merge-adversarial-shards.sh" ] || [ ! -f "$d/partition-document.sh" ]; then
+      FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s FIXTURE BROKEN -- the merge or the partitioner is not beside the copy\n' "$label"; return
+    fi
+    if [ $# -gt 0 ]; then
+      if ! python3 - "$d/validate-adversarial-convergence.sh" "$@" <<'PY'
+import sys
+p = sys.argv[1]; s = open(p, encoding="utf-8").read(); a = sys.argv[2:]
+for i in range(0, len(a), 2):
+    if s.count(a[i]) != 1: sys.exit(3)
+    s = s.replace(a[i], a[i + 1])
+open(p, "w", encoding="utf-8").write(s)
+PY
+      then FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s FIXTURE STALE -- an anchor is not in the validator exactly once\n' "$label"; return; fi
+      if cmp -s "$VALIDATOR" "$d/validate-adversarial-convergence.sh" || ! bash -n "$d/validate-adversarial-convergence.sh" 2>/dev/null; then
+        FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s FIXTURE STALE -- the mutation DID NOT APPLY or is not valid shell\n' "$label"; return
+      fi
+    fi
+    got=""; for c in l-pass l-legacy l-moved l-under l-grow l-replace l-eqshort l-match l-foreign; do got="$got $(l_class "$d/validate-adversarial-convergence.sh" "$c")"; done
+    got="${got# }"
+    if [ "$got" = "$want" ]; then printf '  ok    %-28s row [%s]\n' "$label" "$got"
+    else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s row [%s], want [%s]\n' "$label" "$got" "$want"; fi
+  }
+  #                                       pass legacy moved   under  grow replace eqshort match foreign
+  l_mut "LX0 control (unmutated)"        "OK FAIL PENDING FAIL+K FAIL FAIL FAIL OK FAIL"
+  # The staging symlink pointed at an empty dir: --map reads no stories and every judged world stops
+  # judging. The end-to-end FAIL depends on the staged map, not on a listing of the shard dir.
+  l_mut "LX1 --map staged on nothing"    "PENDING PENDING PENDING PENDING PENDING PENDING PENDING PENDING PENDING" \
+    'ln -s "$l_sd/stories" "$AC_T/l/s$l_n/stories"' 'mkdir -p "$AC_T/l/s$l_n/stories"'
+  # The de-padding gone: --map's `01` never meets the judge's `1`, so a complete dir FAILs. Only the
+  # two-digit K of l-pass pads; the recorded-K judgment builds its own unpadded set.
+  l_mut "LX2 ordinals not de-padded"     "FAIL FAIL PENDING FAIL+K FAIL FAIL FAIL OK FAIL" \
+    'printf "%s%d", s, $1 + 0' 'printf "%s%s", s, $1'
+  # The recorded K ignored: the moved stories/ FAILs a correct elicitation, and the under-sharded one
+  # PASSes against today's smaller K.
+  l_mut "LX3 recorded K ignored"         "OK FAIL FAIL OK FAIL FAIL FAIL OK FAIL" \
+    '    if [ -z "$l_kcov" ] && l_kuse "$L_KREC" "$l_k"; then' '    if false; then'
+  # The recorded-K branch as an EXEMPTION: any honoured recorded K reads PENDING, whether or not the
+  # dir is complete for it. The under-sharded world is acquitted -- the regression this binds.
+  l_mut "LX4 recorded K acquits all"     "OK FAIL PENDING PENDING FAIL FAIL FAIL OK FAIL" \
+    $'        if [ "$L_V" = PASS ]; then\n          l_kmsg=' $'        if true; then\n          l_kmsg='
+  # The GROW direction re-admitted (any K_rec other than today's honoured, the first cut of this
+  # branch): one voice at `shard: 1/1` over three stories is complete for K=1 and reads PENDING. The
+  # self-probe's direction conjunct goes with it, or the mutant exits 2 and reads SILENT everywhere.
+  l_mut "LX5 smaller recorded K honoured" "OK FAIL PENDING FAIL+K PENDING FAIL FAIL OK FAIL" \
+    'l_kuse() { [ -n "$1" ] && [ "$1" -gt "$2" ]; }' 'l_kuse() { [ -n "$1" ] && [ "$1" != "$2" ]; }' \
+    '[ "$lp_ku" = "y" ] || lp_bad=' 'true || lp_bad='
+  # The subject-cover test dropped: a shrink WITH replacement is complete for K_rec=5 and reads
+  # PENDING although story-new was never elicited -- in l-replace, and in l-foreign too.
+  l_mut "LX6 subject cover dropped"      "OK FAIL PENDING FAIL+K FAIL PENDING FAIL OK PENDING" \
+    '    if [ -z "$l_kcov" ] && l_kuse "$L_KREC" "$l_k"; then' '    if l_kuse "$L_KREC" "$l_k"; then'
+  # EQUALITY honoured (-gt to -ge): killed on a VERDICT by l-match, complete at K_rec == K == 3 with
+  # subjects covering today's stories, which flips OK -> PENDING. l-eqshort keeps its causes but is
+  # judged through the recorded-K branch, so its text gains `the shard headers record` (FAIL+K). The
+  # self-probe's direction conjunct (3 over 3 refused) goes with it.
+  l_mut "LX7 equality honoured"          "OK FAIL PENDING FAIL+K FAIL FAIL FAIL+K PENDING FAIL" \
+    'l_kuse() { [ -n "$1" ] && [ "$1" -gt "$2" ]; }' 'l_kuse() { [ -n "$1" ] && [ "$1" -ge "$2" ]; }' \
+    '[ "$lp_ku" = "y" ] || lp_bad=' 'true || lp_bad='
+  # The SPRINT SCOPE dropped (basename-only, the pre-fix reader): s8's same-named story-new covers s9's,
+  # so l-foreign reads PENDING; only it moves. The four self-probe conjuncts that seed a foreign sprint
+  # go with it, or the mutant exits 2 and reads SILENT everywhere.
+  l_mut "LX8 sprint scope dropped"       "OK FAIL PENDING FAIL+K FAIL FAIL FAIL OK PENDING" \
+    'l_insprint() { case "$1" in "$2"|*/"$2") return 0 ;; esac; return 1; }' 'l_insprint() { return 0; }' \
+    '|| lp_bad="$lp_bad [cover, foreign-sprint ordinal:' '|| : "$lp_bad [cover, foreign-sprint ordinal:' \
+    '|| lp_bad="$lp_bad [cover, foreign-sprint cross:' '|| : "$lp_bad [cover, foreign-sprint cross:' \
+    '|| lp_bad="$lp_bad [cover, s19 ordinal suffix:' '|| : "$lp_bad [cover, s19 ordinal suffix:' \
+    'then lp_bad="$lp_bad [l_insprint boundary' 'then : "$lp_bad [l_insprint boundary'
 fi
 
 fi

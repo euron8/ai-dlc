@@ -2106,10 +2106,31 @@ resolution record's `operator_authorization` against ground truth; the gate **fa
 if a resolution cites an operator message the corpus does not contain — and fails closed
 too if `--transcript` is omitted, so a forgotten flag cannot silently disarm the check. It
 reads the `findings_critical` / `findings_major` / `artifact_sha` / `verdict` fields of every
-pass in the series (mapping in `team-roles/adversary.md`) and enforces fourteen arms:
+pass in the series (mapping in `team-roles/adversary.md`) and enforces fifteen arms:
 **A** VOCABULARY, **B** CONSISTENCY, **C** DIVERGENCE (scope-relative), **D** TERMINAL,
 **E** STALL, **F** RESOLUTION, **G** CHRONOLOGY, **H** REPAIR-RECORD, **I** RESOLUTION
-CEILING, **J** RE-OPEN, **J2** TERMINAL DRIFT, **K** SHARD, **K2** SECTIONS, **K3** SUBJECT. (This list is
+CEILING, **J** RE-OPEN, **J2** TERMINAL DRIFT, **K** SHARD, **K2** SECTIONS, **K3** SUBJECT,
+**L** ELICITATION. Arm L runs on the stories series (`s<N>/stories-adversarial-p`) and judges
+the sprint's stories elicitation against `_gate-procedures.md` validation-cycle item 2: it
+reads `s<N>/stories/`, `s<N>/stories-elicitation*.md` (repair records excluded),
+`s<N>/shards/stories-elicitation/` and the sprint's `validation_intensity`, and takes the owed
+shard names from `merge-adversarial-shards.sh --map` and `partition-document.sh --cross-groups`.
+Only `full` owes elicitation: `standard`, `lightweight` and `carry-over-single` read NOT-OWED, and
+any other value PENDING. An elicitation dated before the release that shipped item 2's shape prints
+PENDING. When the install history cannot date it, the line reads `PENDING (L -- ELICITATION): era
+unknown -- <reason>` (no git, shallow clone, undated, stamp absent) with today's cause beside it,
+never FAIL. Only when the shard files' `shard: <i>/<K>` lines record a LARGER K than `stories/`
+holds today, AND every story file `stories/` holds today is named among the elicited subjects (an
+ordinal shard's `artifact:` file, a cross shard's `artifact_sha:` `<name>=` entries, each counted
+only under this sprint's `s<N>/stories/` and never by another sprint's same-named file), is the shard
+directory judged against the recorded K; a current story no shard names FAILs, named. Complete for
+the recorded K reads `PENDING
+... stories/ changed since the elicitation: shards record K=<x>, stories/ holds <y>`, and short for
+it FAILs. A recorded K equal to or smaller than today's is judged against today's `stories/` as
+usual, so a `shard: 1/1` single voice over several stories still FAILs. Shard lines recording two
+different values of K, or a K outside 1..999, FAIL. The arm's real-corpus receipt is OWED, not
+covered: no consumer sprint has yet been elicited under this shape, so its FAIL path is proven only
+by its self-probe and check-24's seeded worlds. (This list is
 hand-maintained and nothing joins it to the script's own `err` labels, so it can drift — and
 had: it read "eight arms: A–H" for several releases while the script also carried arm J, and
 "ten arms" after K and K2 shipped.)

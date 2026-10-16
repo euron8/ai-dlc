@@ -1,0 +1,16 @@
+bash
+env
+sed
+mktemp
+rm
+mkdir
+cat
+cp
+cmp
+grep
+chmod
+stat
+date
+touch
+dirname
+basename

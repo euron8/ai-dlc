@@ -828,7 +828,7 @@ same_title() { # same_title <normA> <normB>
 # What may satisfy a "Step N" reference. The rulebook spells step sections TWO ways:
 #
 #   route.md            `### Step 0a: Snapshot Integrity Validation`   (word + colon)
-#   every other step    `### 2a. Variant-lock evidence`                (number + dot)
+#   every other step    `### 2d. Absolute-invariant guard`             (number + dot)
 #
 # `defined_anchors` above only ever harvested the second form, so route.md contributed
 # ZERO definitions while its own headings were still scanned as REFERENCES. That made
@@ -2158,8 +2158,8 @@ fi
 # used to be a flat `grep -Fxq` of the bare id against ONE global anchor pool, so a citation
 # naming a hook was cleared by any numerically-equal heading anywhere in the rulebook. Measured
 # by construction: `steps/implementation.md` cites `ai-dlc-continue.sh` Check 2b and was
-# silenced by `steps/architecture.md`'s `### 2b. Framework Default Audit for Security-Relevant
-# Properties` — a different file about a different subject. Neutralising the unrelated `2b`
+# silenced by `steps/architecture.md`'s then-current `### 2b.` heading (Framework Default Audit,
+# since removed) — a different file about a different subject. Neutralising the unrelated `2b`
 # step anchors took the arm from 1 subject to 3 while the CITING file stayed byte-identical
 # (`cmp -s`), which is the control proving the extra rows came from the anchor pool and not
 # from the prose. FOUR of the FIVE in-corpus hook-check citations were silent that way, and a
