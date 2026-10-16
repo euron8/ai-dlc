@@ -14,7 +14,7 @@
 # path<TAB>sha lines in the runner's universe as traced; the runner clears a stale key record when
 # it recomputes the same value over the tree it is pushing.
 #
-# fixtures mapped: 229    entries: 14069
+# fixtures mapped: 228    entries: 14023
 # OMITTED by the last run (always run): derivation-differential
 absorbed-specifics-survive	core/fixtures/absorbed-specifics-survive/run.sh
 absorbed-specifics-survive	core/skills/ai-dlc/SKILL.md
@@ -4025,52 +4025,6 @@ fixture-drivability	core/scripts/.claude
 fixture-drivability	core/scripts/.git
 fixture-drivability	core/scripts/core/skills/ai-dlc
 fixture-drivability	core/scripts/validate-fixture-drivability.sh
-fold-architect-ledger-join	.git
-fold-architect-ledger-join	.git/HEAD
-fold-architect-ledger-join	.git/config
-fold-architect-ledger-join	.git/index
-fold-architect-ledger-join	.git/info/exclude
-fold-architect-ledger-join	.git/objects/79/6da89732357e53150a4e5c438363e45e7dd37b
-fold-architect-ledger-join	.git/objects/f5/30bc2ede4dba8bb4e66eb9d3470e5deda28d3d
-fold-architect-ledger-join	.git/objects/info/commit-graphs/commit-graph-chain
-fold-architect-ledger-join	.git/objects/info/commit-graphs/graph-7f995749f1f9f9610455fff3b31d8e4d11b046c8.graph
-fold-architect-ledger-join	.git/objects/info/commit-graphs/graph-93e6403e1d08d4a02b08f717afce6dcbebb27492.graph
-fold-architect-ledger-join	.git/objects/pack/multi-pack-index
-fold-architect-ledger-join	.git/packed-refs
-fold-architect-ledger-join	.git/refs/heads/release/0.644.0
-fold-architect-ledger-join	.gitignore
-fold-architect-ledger-join	core
-fold-architect-ledger-join	core/.claude
-fold-architect-ledger-join	core/.git
-fold-architect-ledger-join	core/core/scripts/validate-spawn-ledger.sh
-fold-architect-ledger-join	core/core/skills/ai-dlc
-fold-architect-ledger-join	core/fixtures
-fold-architect-ledger-join	core/fixtures/core/scripts/validate-spawn-ledger.sh
-fold-architect-ledger-join	core/fixtures/fold-architect-ledger-join
-fold-architect-ledger-join	core/fixtures/fold-architect-ledger-join/core/scripts/validate-spawn-ledger.sh
-fold-architect-ledger-join	core/fixtures/fold-architect-ledger-join/graph-ledger.jsonl
-fold-architect-ledger-join	core/fixtures/fold-architect-ledger-join/graph-oneshot-s313.block
-fold-architect-ledger-join	core/fixtures/fold-architect-ledger-join/run.sh
-fold-architect-ledger-join	core/fixtures/fold-architect-ledger-join/scripts/ai-dlc/validate-spawn-ledger.sh
-fold-architect-ledger-join	core/fixtures/scripts/ai-dlc/validate-spawn-ledger.sh
-fold-architect-ledger-join	core/schemas/provenance-block.json
-fold-architect-ledger-join	core/scripts
-fold-architect-ledger-join	core/scripts/.claude
-fold-architect-ledger-join	core/scripts/.git
-fold-architect-ledger-join	core/scripts/ai-dlc/validate-spawn-ledger.sh
-fold-architect-ledger-join	core/scripts/core/skills/ai-dlc
-fold-architect-ledger-join	core/scripts/gate-slice.sh
-fold-architect-ledger-join	core/scripts/lib/meta-gate.sh
-fold-architect-ledger-join	core/scripts/stamp-story-provenance.sh
-fold-architect-ledger-join	core/scripts/validate-provenance-block.sh
-fold-architect-ledger-join	core/scripts/validate-spawn-ledger.sh
-fold-architect-ledger-join	core/skills/ai-dlc/extensions
-fold-architect-ledger-join	core/skills/ai-dlc/extensions/known-skills.json
-fold-architect-ledger-join	core/skills/ai-dlc/overrides
-fold-architect-ledger-join	core/skills/ai-dlc/steps/bug-investigation.md
-fold-architect-ledger-join	core/skills/ai-dlc/steps/gate-validation.md
-fold-architect-ledger-join	core/skills/ai-dlc/steps/route.md
-fold-architect-ledger-join	skills/ai-dlc/extensions/known-skills.json
 fold-architect-ledger-join-mutants	core
 fold-architect-ledger-join-mutants	core/ci-templates
 fold-architect-ledger-join-mutants	core/ci-templates/validate-ci-gates.yml
