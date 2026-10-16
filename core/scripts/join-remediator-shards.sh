@@ -1052,12 +1052,92 @@ checks_refusals() {  # <checks_field output>
 $1
 CKEOF
 }
+# THE SPEC IS NOT STALE AGAINST ITS MEMLOG (BL-560, BL-546). A SPEC part appends a `(decision)` entry
+# to the spec's `.memlog.md` and re-derives `SPEC.md` whole from it, then appends one
+# `- (event) Render <pass>: re-derived from memlog through <last decision>` line; a change applied with
+# Edit is recorded `(event) Hand-edit`, never Render (requirements.md, "The SPEC is repaired through its
+# own render path"). A `(decision)` entry AFTER the last such Render line is a SPEC that does not carry
+# its own decisions, and the adversary and the gate would read it. Refused here, so the stale state
+# cannot pass the join that hands the subject on.
+# AN ORDER TEST, NEVER A DATE TEST. Memlog entries carry no timestamp (memlog.py writes the frontmatter
+# `updated` only), so "dated after the last render" is unimplementable; line order is the record.
+# THE KEY IS THE FULL PHRASE `re-derived from memlog through` ON AN `(event) Render` LINE. The reference
+# consumer carries exactly one `(event) Render` line across 19 memlogs, and it is the disclosure of a
+# hand edit ("loaded instructions only and ran no renderer ... applied to SPEC.md by hand"): a key on
+# the word Render alone acquits the very case this arm exists for. The tag grammar is the producer
+# grammar validate-spec-join.sh reads at its `(capability)` predicate: an optional qualifier after the
+# type word is legal.
+# A MEMLOG WITH NO SUCH LINE IS SKIPPED, VISIBLY. Measured over the reference consumer 19 committed
+# memlogs: 0 carry the phrase, so all 19 SKIP and 0 fire; the unskipped form (every decision is after a
+# render that never happened) fires on 18 of 19. So the firing arm has NO corpus instance; its receipt
+# is the seeded self-probe below and the fixture, never this zero. A memlog joins this arm from its
+# first phrased Render line onward. Stated residue: a piecemeal Edit to SPEC.md followed by a phrased
+# Render line passes -- whether the rewrite was whole has no checker.
+# WHERE: --sources and --escalations resolve the sprint memlog from --sprint, `specs/s<N>/*/.memlog.md`,
+# exactly one (requirements.md: the kernel is exactly one match); none or several SKIP. Those modes run
+# AFTER the serial remediator appends, which is the case BL-560 was filed on. --subject reads it only
+# when the split gave the SPEC a part (SUBJ_SET carries its memlog), the part-remediator shape.
+SPEC_RENDER_PHRASE="re-derived from memlog through"
+# spec_render_scan <memlog> -> "<last render line> <decisions after it> <first such line>", 0 0 0 with no render.
+spec_render_scan() {
+  awk -v ph="$SPEC_RENDER_PHRASE" '
+    /^[[:space:]]*[-*][[:space:]]*\(event([[:space:]][^)]*)?\)[[:space:]]+Render/ && index($0, ph) { r = NR; n = 0; f = 0; next }
+    /^[[:space:]]*[-*][[:space:]]*\(decision([[:space:]][^)]*)?\)/ { if (r) { n++; if (!f) f = NR } }
+    END { print r + 0, n + 0, f + 0 }' "$1"
+}
+# spec_render_check <memlog or empty> <why empty> -> SPEC_LINE (one SPEC-RENDER: line), or a refusal.
+# NEVER CALLED INSIDE $( ): refuse() counts in this shell, and a subshell would drop the count.
+spec_render_check() {
+  local m="$1" s r n f
+  SPEC_LINE=""
+  if [ -z "$m" ]; then SPEC_LINE="SPEC-RENDER: SKIP -- $2"; return 0; fi
+  s="$(spec_render_scan "$m")"
+  r="${s%% *}"; s="${s#* }"; n="${s%% *}"; f="${s#* }"
+  if [ "$r" = 0 ]; then
+    SPEC_LINE="SPEC-RENDER: SKIP -- ${m} carries no '(event) Render ... ${SPEC_RENDER_PHRASE}' line, so no render is recorded to compare against"
+  elif [ "$n" -gt 0 ]; then
+    refuse "${m}:${f}: ${n} (decision) entry(ies) after the last render (line ${r}), so SPEC.md does not carry them; re-derive SPEC.md whole from .memlog.md under bmad-spec and append '- (event) Render <pass>: ${SPEC_RENDER_PHRASE} <last decision>' (a change applied with Edit is '(event) Hand-edit', never Render)"
+  else
+    SPEC_LINE="SPEC-RENDER: ${m} -- rendered through its last decision (line ${r})"
+  fi
+}
+# spec_memlog_of_sprint -> sets SPEC_MEMLOG to the one specs/s<N>/*/.memlog.md, or empty with SPEC_WHY.
+spec_memlog_of_sprint() {
+  local g c=0 hit=""
+  SPEC_MEMLOG=""; SPEC_WHY=""
+  if [ -z "$SPRINT" ] || [ "$SPRINT" = 0 ]; then SPEC_WHY="no --sprint, so no spec memlog is named"; return 0; fi
+  for g in "${STATE}/specs/s${SPRINT}"/*/.memlog.md; do [ -f "$g" ] && { c=$((c + 1)); hit="$g"; }; done
+  case "$c" in
+    1) SPEC_MEMLOG="$hit" ;;
+    0) SPEC_WHY="no ${STATE}/specs/s${SPRINT}/*/.memlog.md" ;;
+    *) SPEC_WHY="${c} memlogs under ${STATE}/specs/s${SPRINT}/; the kernel is exactly one" ;;
+  esac
+}
+# The self-probe, before any corpus is read, in both directions: a phrased render then a decision fires;
+# a decision then a phrased render is quiet; no render skips; and THE ACQUITTAL GUARD -- an
+# `(event) Render` line WITHOUT the phrase, then a decision, skips rather than reading as rendered.
+spec_render_probe() {
+  local d o
+  d="$(mktemp -d "${TMPDIR:-/tmp}/join-specprobe.XXXXXX")" || die "mktemp failed; the SPEC render arm cannot be probed"
+  printf -- '- (decision) a\n- (event) Render p1: %s a\n- (decision by pm) b\n' "$SPEC_RENDER_PHRASE" > "$d/stale.md"
+  printf -- '- (decision) a\n- (event) Render p1: %s a\n' "$SPEC_RENDER_PHRASE" > "$d/fresh.md"
+  printf -- '- (decision) a\n- (decision) b\n' > "$d/none.md"
+  printf -- '- (event) Render (fold): ran no renderer; applied to SPEC.md by hand\n- (decision) a\n' > "$d/hand.md"
+  o="$(spec_render_scan "$d/stale.md")"; [ "$o" = "2 1 3" ] || { rm -rf "$d"; die "the SPEC render arm's self-probe failed: a decision after a render read '${o}'; no verdict"; }
+  o="$(spec_render_scan "$d/fresh.md")"; [ "$o" = "2 0 0" ] || { rm -rf "$d"; die "the SPEC render arm's self-probe failed: a render after its decision read '${o}'; no verdict"; }
+  o="$(spec_render_scan "$d/none.md")"; [ "$o" = "0 0 0" ] || { rm -rf "$d"; die "the SPEC render arm's self-probe failed: a memlog with no render read '${o}'; no verdict"; }
+  o="$(spec_render_scan "$d/hand.md")"; [ "$o" = "0 0 0" ] || { rm -rf "$d"; die "the SPEC render arm's self-probe failed: an unphrased Render line read '${o}', acquitting a hand edit; no verdict"; }
+  rm -rf "$d"
+}
 # record_tail <record> -- the entry contract over one record no join wrote, then its escalations:
 # shared by --sources and --escalations, so each line below exists once.
 record_tail() {
   contract_probe
   contract_refusals 1 "$(contract_check 1 "$1")"
   checks_refusals "$(checks_field 1 "$1")"
+  spec_render_probe
+  spec_memlog_of_sprint
+  spec_render_check "$SPEC_MEMLOG" "$SPEC_WHY"
   # The header lines assert that the record checked out, so they print only on a pass.
   if [ "$refuse_n" -eq 0 ]; then
     [ "$SRCMODE" = 1 ] && echo "SOURCES: ${1} -- ${SRC_E} entries, ${SRC_S} sources, every one resolved in ${SEAT_DIR}"
@@ -1081,6 +1161,7 @@ record_tail() {
   # The gap-fill tripwire (7) REPORTS: a NOTE-tier arm never gates the report above.
   printf '%s' "$GAP_LINES"
   [ "$refuse_n" -eq 0 ] || exit 2
+  printf '%s\n' "$SPEC_LINE"
   exit 0
 }
 # --sources ON A RECORD THAT IS NOT A PARTY REPAIR (BL-561). The seat dir's existence says only that
@@ -1685,6 +1766,16 @@ $PARTS
 CTPEOF
 contract_refusals 0 "$(contract_check 0 "$@")"
 
+# The SPEC render arm (above record_tail), subject mode: only when the split gave the SPEC a part, whose
+# memlog SUBJ_SET carries in the ledger spelling. Every other mode prints nothing for it.
+SPEC_LINE=""
+if [ "$SUBJMODE" = 1 ]; then
+  spec_render_probe
+  _sm="$(printf '%s\n' "$SUBJ_SET" | awk '/(^|\/)specs\/s[0-9]+\/[^\/]+\/\.memlog\.md$/ { print; exit }')"
+  if [ -n "$_sm" ]; then spec_render_check "${STATE_PARENT}${_sm}" ""
+  else SPEC_LINE="SPEC-RENDER: SKIP -- the split gave the SPEC no part, so no SPEC was repaired in this join"; fi
+fi
+
 [ -e "$OUT" ] && refuse "${OUT} already exists; a join never overwrites a repair record"
 
 [ "$refuse_n" -eq 0 ] || exit 2
@@ -1775,4 +1866,5 @@ printf '%s' "$ESC_LINES"
 echo "ESCALATED-COUNT: ${ESC_N}"
 printf '%s' "$GAP_LINES"
 echo "SERIAL-REQUIRED: ${SERIAL_N}"
+[ -z "$SPEC_LINE" ] || printf '%s\n' "$SPEC_LINE"
 exit 0

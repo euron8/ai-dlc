@@ -39,7 +39,9 @@
 #   (3) every `capabilities:` entry in a story frontmatter resolves to a CAP-N
 #       that SPEC.md defines
 #
-# ANCHOR ON THE MEMLOG, NOT SPEC.md. `bmad-spec` is the single writer of SPEC.md
+# ANCHOR ON THE MEMLOG, NOT SPEC.md. By bmad-spec's own contract (its SKILL.md; the
+# package ships no renderer, so the agent performs the derive and nothing enforces it),
+# `bmad-spec` is the single writer of SPEC.md
 # and re-derives it from `.memlog.md` on every run: "a hand-edit to SPEC.md from
 # outside is unsupported and is overwritten on the next derive." A byte anchor into
 # a re-rendered file holds until the next derive and then reports a drift that never
