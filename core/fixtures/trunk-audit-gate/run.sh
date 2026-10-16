@@ -133,7 +133,7 @@ mkworld "$W/anchors"   carry-over declared nowm
 AG="$(git -C "$W/anchors" rev-parse HEAD)"
 commit_under "$W/anchors" src
 AA="$W/anchors/_bmad-output/audit-anchors.md"
-AI_DLC_AUDIT_ANCHORS_SCHEMA="$SCHEMA" bash "$SUBJ_DIR/validate-audit-anchors.sh" --render > "$AA" 2>/dev/null \
+AI_DLC_PROJECT_ROOT="$W/anchors" AI_DLC_AUDIT_ANCHORS_SCHEMA="$SCHEMA" bash "$SUBJ_DIR/validate-audit-anchors.sh" --render > "$AA" 2>/dev/null \
   || { echo "FIXTURE BROKEN: validate-audit-anchors.sh --render failed" >&2; exit 2; }
 printf -- '\n## Entries\n\n- sprint: 5\n  sha: deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n  closed_at: 2026-10-07\n- sprint: 6\n  sha: %s\n  closed_at: 2026-10-14\n' \
   "$AG" >> "$AA"
@@ -176,8 +176,11 @@ done
 ! grep -q '^  sha: ' "$AA" && { echo "FIXTURE BROKEN: anchors seeds no sha entry field" >&2; exit 2; }
 grep -q '^  audit_window:' "$AA" \
   && { echo "FIXTURE BROKEN: anchors seeds an audit_window entry field, which step 5b never writes" >&2; exit 2; }
-AI_DLC_AUDIT_ANCHORS_SCHEMA="$SCHEMA" bash "$SUBJ_DIR/validate-audit-anchors.sh" "$AA" >/dev/null 2>&1 \
+AI_DLC_PROJECT_ROOT="$W/anchors" AI_DLC_AUDIT_ANCHORS_SCHEMA="$SCHEMA" bash "$SUBJ_DIR/validate-audit-anchors.sh" "$AA" >/dev/null 2>&1 \
   || { echo "FIXTURE BROKEN: the anchors seed fails the producer-side validate-audit-anchors.sh check" >&2; exit 2; }
+# Printed only past the check above, which ran the validator on the schema's rendered header.
+echo "HERMETIC-CONSUMED $SUBJ_DIR/validate-audit-anchors.sh"
+echo "HERMETIC-CONSUMED $SCHEMA"
 
 OUT=""; RC=""
 # Not a command substitution at the call site: OUT and RC must reach the caller.
@@ -201,6 +204,7 @@ expect() {
 echo "trunk-audit-gate:"
 
 expect "$SUBJ" clean 0 'verdict  : PASS' && has 'audit_rc : 0' && has 'AUDIT-TRUNK: audited=1 ' \
+  && echo "HERMETIC-CONSUMED $SUBJ_DIR/validate-cycle-commits.sh" \
   && ok "clean: the audit re-ran 1 commit at the gate -> PASS" || bad "clean: $LAST"
 expect "$SUBJ" finding 1 'reported findings' && has 'audit_rc : 1' && has 'findings=1' \
   && ok "finding: audit exit 1 -> gate FAIL exit 1, HARD_BLOCK named" || bad "finding: $LAST"
@@ -220,6 +224,7 @@ expect "$SUBJ" anchors 0 'verdict  : PASS' && has "audit-anchors.md prior-sprint
   || bad "anchors: $LAST"
 expect "$SUBJ" wedge-resolved 0 'verdict  : PASS' && has "exit     : ${BAD_R}" && has 'findings=1' \
   && has 'AUDIT-TRUNK: audited=1 ' \
+  && echo "HERMETIC-CONSUMED $SUBJ_DIR/validate-escalation-resolution.sh" \
   && ok "wedge-resolved: finding -> fix-forward -> operator-RESOLVED entry names the sha -> PASS" \
   || bad "wedge-resolved: $LAST"
 expect "$SUBJ" wedge-noexit 1 'reported findings' && has 'an escalation names' \
