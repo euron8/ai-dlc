@@ -14,7 +14,7 @@
 # path<TAB>sha lines in the runner's universe as traced; the runner clears a stale key record when
 # it recomputes the same value over the tree it is pushing.
 #
-# fixtures mapped: 228    entries: 14033
+# fixtures mapped: 227    entries: 14016
 # OMITTED by the last run (always run): derivation-differential
 absorbed-specifics-survive	core/fixtures/absorbed-specifics-survive/run.sh
 absorbed-specifics-survive	core/skills/ai-dlc/SKILL.md
@@ -4944,23 +4944,6 @@ handoff-resume-guard	core/hooks/ai-dlc-window.sh
 handoff-resume-guard	core/schemas/pause-routing.json
 handoff-resume-guard	core/skills/ai-dlc/steps/_gate-procedures.md
 handoff-resume-guard	core/skills/ai-dlc/steps/handoff.md
-hermetic-runner	.githooks/pre-push
-hermetic-runner	core
-hermetic-runner	core/core/scripts/hermetic-run.sh
-hermetic-runner	core/fixtures
-hermetic-runner	core/fixtures/core/scripts/hermetic-run.sh
-hermetic-runner	core/fixtures/hermetic-runner
-hermetic-runner	core/fixtures/hermetic-runner/core/scripts/hermetic-run.sh
-hermetic-runner	core/fixtures/hermetic-runner/run.sh
-hermetic-runner	core/fixtures/hermetic-runner/scripts/ai-dlc/hermetic-run.sh
-hermetic-runner	core/fixtures/lib
-hermetic-runner	core/fixtures/lib/preamble.sh
-hermetic-runner	core/fixtures/scripts/ai-dlc/hermetic-run.sh
-hermetic-runner	core/scripts
-hermetic-runner	core/scripts/ai-dlc/hermetic-run.sh
-hermetic-runner	core/scripts/core-paths.sh
-hermetic-runner	core/scripts/hermetic-run.sh
-hermetic-runner	scripts/suite-content-key.sh
 hook-registration-join	.git
 hook-registration-join	core
 hook-registration-join	core/.claude
@@ -14075,7 +14058,6 @@ story-evidence-scaffold-mutants-d	core/scripts/wait-for-deliverable.sh
 # digest gate-adjudication-rotate 8a116c818b0175bdeaee92e228780db2fc262858b1cedba8ceb4b1ed15ad22b8
 # digest gate-remediation-deny 9da8ce352e2ede18cbd4c635fff6a90ec6f77d9bc58d0431b27ac71344eaf430
 # digest gate-resume 2c88db5c6a84a8a263601432ff9773f98a70dc4ffff76349ac5ba1c502691ae8
-# digest hermetic-runner d2f56113e2d2b3d25015c7f88987c63c762a208d94c9f3aa60651b984822e2e5
 # digest hook-registration-join f64e606ca937dc96a1ccf5a936e88aece45cc864079f60224dbdaf83fb09932a
 # digest invariant-index c38877552a196895e4e9961dcef31590e3d2a3a729cdcd69fca52fefc54f5f23
 # digest ledger-reverify-shard-mutants 81140f0210e48ca6d629e8f3be8115975b2411ad36c26f08c7b98b5ec12f75c6
