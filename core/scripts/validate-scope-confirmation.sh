@@ -48,7 +48,9 @@
 #
 # USAGE
 #   validate-scope-confirmation.sh [--snapshot PATH] [--answers PATH]
-#       [--backlog PATH] [--repo DIR] [--quiet]
+#       [--backlog PATH] [--requests PATH] [--escalations PATH] [--repo DIR] [--quiet]
+#   --requests defaults to _bmad-output/operator-requests-history.md and --escalations to
+#   docs/escalations/pending.md; both feed the locked-scope deferral arm at the end.
 #   --backlog defaults to _bmad-output/planning-artifacts/carry-over-backlog.md; its
 #   archive is read from carry-over-backlog-archive.md beside it. --repo is the git work
 #   tree the scope_deferred_items legacy rule dates the release in (default: the root).
@@ -56,7 +58,8 @@
 # EXIT
 #   0  scope_confirmed present, well-formed, its cite resolves, and
 #      scope_deferred_items is `none` or lists only filed, not-CLOSED carry-over ids
-#   1  missing, malformed, or a cite / deferred id that resolves to nothing
+#   1  missing, malformed, or a cite / deferred id that resolves to nothing; or a live
+#      DEFERRAL_REQUEST, filed after the scope answer, naming a confirmed-scope item
 #   2  input unreadable -- no snapshot at the resolved path, or a scope_deferred_items
 #      list whose carry-over backlog or archive exists and cannot be read (or whose
 #      status lookup exits non-zero or returns no verdict). A FAIL, never a pass.
@@ -106,6 +109,8 @@ PROJECT_DIR="$AI_DLC_ROOT"
 SNAPSHOT="${PROJECT_DIR}/_bmad-output/pipeline-snapshot.md"
 ANSWERS="${PROJECT_DIR}/_bmad-output/operator-answers-history.md"
 BACKLOG="${PROJECT_DIR}/_bmad-output/planning-artifacts/carry-over-backlog.md"
+REQUESTS="${PROJECT_DIR}/_bmad-output/operator-requests-history.md"
+ESCALATIONS_PATH="${PROJECT_DIR}/docs/escalations/pending.md"
 REPO="$PROJECT_DIR"
 QUIET=0
 
@@ -114,6 +119,8 @@ while [ $# -gt 0 ]; do
     --snapshot) SNAPSHOT="$2"; shift 2 ;;
     --answers)  ANSWERS="$2";  shift 2 ;;
     --backlog)  BACKLOG="$2";  shift 2 ;;
+    --requests) REQUESTS="$2"; shift 2 ;;
+    --escalations) ESCALATIONS_PATH="$2"; shift 2 ;;
     --repo)     REPO="$2";     shift 2 ;;
     --quiet)    QUIET=1; shift ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
@@ -416,6 +423,12 @@ sdi_utc_epoch() {   # $1 = YYYY-MM-DDTHH:MM:SSZ, read as UTC whatever the caller
   fi
 }
 
+# The hook's timestamp on the NEWEST entry carrying the cited hash. Shared by the
+# deferred-items legacy join and the locked-scope window, so both date the answer alike.
+answer_ts() {
+  awk -v c="- SHA256: ${CITE}" '/^## / { h = $2 } $0 == c { t = h } END { print t }' "$ANSWERS"
+}
+
 ARCHIVE="$(dirname "$BACKLOG")/carry-over-backlog-archive.md"
 SDI_RC=0
 SDI_RAW="$(deferred_items_of "$SNAPSHOT")"
@@ -429,7 +442,7 @@ if [ -z "$SDI_RAW" ]; then
     # entries whose body is `Confirmed`, dated 08-22, 08-27 and 09-28. Taking the first
     # would date a post-release confirmation to a pre-release duplicate and read a skipped
     # write as legacy -- the fail-open direction.
-    ANS_TS="$(awk -v c="- SHA256: ${CITE}" '/^## / { h = $2 } $0 == c { t = h } END { print t }' "$ANSWERS")"
+    ANS_TS="$(answer_ts)"
   fi
   ANS_EPOCH=""
   case "$ANS_TS" in
@@ -546,4 +559,147 @@ else
   fi
 fi
 
+# =============================================================================
+# ARM: locked scope -- a live DEFERRAL_REQUEST may not name an item the operator
+# confirmed at Step 6.
+# =============================================================================
+# THE DEFECT. carry-over-evaluation.md section 4 lets the lead write a DEFERRAL_REQUEST,
+# proceed with everything else, and leave review to the production validation checkpoint.
+# Applied to an item the operator confirmed at route.md Step 6, that is a scope cut the
+# operator first sees after the sprint shipped without it. Measured on the reference
+# consumer's sprint 319: item 5 of a confirmed scope was deferred at 21:42Z, the next two
+# operator questions did not mention it, and the operator found it two hours later.
+#
+# THE LOCKED SET IS DERIVED, NEVER DECLARED. Its members are every carry-over id the
+# operator's own ask names (the hook-written entry `user_request_cite` resolves to) plus
+# every `CO-S<sprint_id>-` id -- the items this sprint filed for its ask. The sprint-319
+# item carried no id in the ask; it was filed as `CO-S319-...` by the evaluation that
+# deferred it, so an ask-only join scores the motivating case clean. Either leg that cannot
+# be read (no resolvable ask cite, no integer sprint_id) prints a SKIP line naming itself.
+#
+# THE ENTRIES ADJUDICATED. Every entry in the escalations file whose canonical status line
+# (one OPENING its line, last one wins, as validate-escalation-status-vocabulary.sh reads
+# it) is DEFERRAL_REQUEST, and whose header timestamp is at or after the hook's timestamp
+# on the cited scope answer. An entry whose header carries no parseable timestamp, or a
+# record with no answer timestamp (cite `none`), is adjudicated -- the fail-closed side.
+# A deferral the operator RESOLVED carries a terminal status and is not read: putting it
+# to the operator (a Rule 12 HARD_BLOCK, which Check 2 blocks on) is the permitted path.
+# An entry that names ANY id `scope_deferred_items` lists is a deferral the operator
+# ratified at Step 6, and is not refused whatever else it names.
+#
+# HOW THE FALSE-POSITIVE SET WAS MEASURED. Driven over all 78 commits of the reference
+# consumer whose snapshot carries `scope_confirmed` (sprints 305-319), each with that
+# commit's own snapshot, answers, requests, escalations and backlog. The first cut refused
+# 2 commits (both sprint 316, same two entries): the operator answered "Tiers 1-4, defer
+# stretch" at Step 6, the lead listed CARRIER ids `CO-S316-DEFER-...` in
+# scope_deferred_items, and each entry named both its carrier and the original
+# `CO-S315-...` id the ask named -- so a per-id exclusion missed the original. Narrowed to
+# the per-ENTRY ratification above: 0 refusals across the 78, and the s319 motivating entry
+# at its filed status still refused. Earlier narrowing, measured on the same corpus: the
+# time window opened at the NEWEST copy of the cited answer (opened at the earliest copy it
+# refused 10 commits, sprints 309 and 315, all live deferrals from sprints 301 and 314 that
+# predate the confirmation they were joined to) and the canonical-status read (prose quoting
+# `DEFERRAL_REQUEST` inside a RESOLVED entry is not a status).
+#
+# RESIDUE, NAMED. (1) A confirmed item that never received a carry-over id and is named in
+# a deferral only by prose ("item 5") is not joinable, and passes. (2) An entry that names
+# a ratified deferred id beside a separate locked id passes whole.
+ESC_FILE="$ESCALATIONS_PATH"
+LS_RC=0
+co_ids() { grep -o 'CO-S[0-9][0-9]*-[A-Z0-9-]*[A-Z0-9]' 2>/dev/null | awk '!seen[$0]++'; }
+if [ -e "$ESC_FILE" ] && { [ ! -f "$ESC_FILE" ] || [ ! -r "$ESC_FILE" ]; }; then
+  echo "FAIL: cannot read the escalations file -- not a readable regular file: $ESC_FILE" >&2
+  exit 2
+elif [ ! -f "$ESC_FILE" ]; then
+  say "locked_scope_deferrals_scanned: 0 (no escalations file at ${ESC_FILE}; nothing deferred)"
+else
+  LS_SPRINT="$(field_of sprint_id "$SNAPSHOT")"
+  case "$LS_SPRINT" in *[!0-9]* | "") LS_SPRINT="" ;; esac
+  LS_REQ_CITE="$(field_of user_request_cite "$SNAPSHOT")"; LS_REQ_CITE="${LS_REQ_CITE#SHA256:}"
+  LS_ASK_IDS=""
+  if [ -f "$REQUESTS" ] && [ -n "$LS_REQ_CITE" ] && [ "$LS_REQ_CITE" != "none" ]; then
+    LS_ASK_IDS="$(awk -v c="- SHA256: ${LS_REQ_CITE}" '
+        $0 == c { buf = ""; on = 1; next }
+        on && /^## / { on = 0; last = buf }
+        on { buf = buf $0 "\n" }
+        END { if (on) last = buf; printf "%s", last }' "$REQUESTS" | co_ids)"
+  fi
+  if [ -z "$LS_REQ_CITE" ] || [ "$LS_REQ_CITE" = "none" ] || [ ! -f "$REQUESTS" ]; then
+    say "SKIP  locked-scope ask leg: no resolvable user_request_cite (cite '${LS_REQ_CITE:-absent}', requests"
+    say "      ${REQUESTS}), so ids the operator's ask named are NOT joined; only CO-S<sprint_id>- ids are."
+  fi
+  [ -n "$LS_SPRINT" ] || say "SKIP  locked-scope sprint leg: the snapshot carries no integer sprint_id, so CO-S<N>- ids are NOT joined."
+  LS_DEFERRED=" $(printf '%s' "${SDI_LIST:-}" | tr ',' ' ') "
+  LS_FROM=""
+  if [ "$CITE" != "none" ]; then
+    # The NEWEST entry carrying the hash opens the window, as in the legacy join above. A
+    # short answer recurs across sprints (`Confirmed`), and the earliest copy dates the window
+    # months back: measured, that reading refused 10 of 78 commits on the reference consumer,
+    # every one a deferral from an earlier sprint whose answer body the operator later repeated.
+    LS_FROM="$(answer_ts)"
+    case "$LS_FROM" in
+      [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z) ;;
+      *) LS_FROM="" ;;
+    esac
+  fi
+  # ONE awk pass over the escalations file. Both timestamps are fixed-width ISO-8601 UTC, so
+  # they order lexically and no per-entry date fork is needed. The first version walked the
+  # entries in a shell loop with a fork per body line and cost 18s on the reference
+  # consumer's 5232-line pending.md against 0.1s for the rest of this validator.
+  LS_OUT="$(LC_ALL=C awk -v from="$LS_FROM" -v sprint="$LS_SPRINT" -v deferred="$LS_DEFERRED" \
+                         -v ask=" $(printf '%s' "$LS_ASK_IDS" | tr '\n' ' ') " '
+    function judge(   s, id, hit, seen, ratified) {
+      if (hdr == "" || st != "DEFERRAL_REQUEST") return
+      if (ts != "" && from != "" && ts < from) return
+      n++; s = hdr "\n" body; hit = ""; ratified = 0; split("", seen)
+      while (match(s, /CO-S[0-9]+-[A-Z0-9-]*[A-Z0-9]/)) {
+        id = substr(s, RSTART, RLENGTH); s = substr(s, RSTART + RLENGTH)
+        if (id in seen) continue
+        seen[id] = 1
+        if (index(deferred, " " id " ")) ratified = 1
+        if ((sprint != "" && index(id, "CO-S" sprint "-") == 1) || index(ask, " " id " ")) hit = hit " " id
+      }
+      if (hit != "" && !ratified) printf "HIT\t%s\t%s\n", hdr, hit
+    }
+    /^#{2,3} / {
+      judge(); hdr = $0; st = ""; body = ""; ts = ""
+      if (match($0, /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z/))
+        ts = substr($0, RSTART, RLENGTH)
+      next
+    }
+    hdr != "" && /^\*\*[Ss]tatus:\*\*/ {
+      v = $0; sub(/^\*\*[Ss]tatus:\*\*[[:space:]]*/, "", v)
+      if (match(v, /[A-Z_]+/)) st = substr(v, RSTART, RLENGTH)
+    }
+    hdr != "" { body = body $0 "\n" }
+    END { judge(); printf "N\t%d\n", n }' "$ESC_FILE")"
+  LS_AWK_RC=$?
+  LS_N="$(printf '%s\n' "$LS_OUT" | sed -n 's/^N	//p')"
+  if [ "$LS_AWK_RC" -ne 0 ] || [ -z "$LS_N" ]; then
+    echo "FAIL: cannot read the escalations file ${ESC_FILE} (awk exited ${LS_AWK_RC}, no count)." >&2
+    echo "      Exit 2 is a FAIL: a deferral scan that did not run is not a clean one." >&2
+    exit 2
+  fi
+  LS_BAD=0
+  while IFS='	' read -r k h ids; do
+    [ "$k" = HIT ] || continue
+    LS_BAD=$((LS_BAD + 1))
+    echo "FAIL: a live DEFERRAL_REQUEST defers an item the operator confirmed at Step 6:" >&2
+    echo "      entry: ${h}" >&2
+    echo "      locked id(s):${ids}" >&2
+    echo "      carry-over-evaluation.md section 4: a confirmed item is never deferred by the" >&2
+    echo "      lead. Put the deferral to the operator as a Rule 12 HARD_BLOCK and record the" >&2
+    echo "      answer on this entry (RESOLVED with its Operator authorization line)." >&2
+  done <<EOF
+$LS_OUT
+EOF
+  say "locked_scope_deferrals_scanned: ${LS_N} (sprint ${LS_SPRINT:-unknown}; ask ids $(printf '%s\n' "$LS_ASK_IDS" | grep -c .); window from ${LS_FROM:-the start of the file})"
+  if [ "$LS_BAD" -gt 0 ]; then
+    LS_RC=1
+  else
+    say "PASS  no live DEFERRAL_REQUEST names a confirmed-scope item."
+  fi
+fi
+
+[ "$LS_RC" -eq 1 ] && exit 1
 exit "$SDI_RC"
