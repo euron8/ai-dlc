@@ -5449,7 +5449,41 @@ else
 echo "HERMETIC-CONSUMED ${VS_RUN#"$ROOT"/}"
 VS_REAL_HOME="$(eval "printf '%s' ~$(id -un)")"
 # Scored on the entries THIS unit could write (its own fixture names), because a peer session running real fixtures writes real entries into the default store concurrently.
-vs_snap() { find "$1/.cache/ai-dlc/verdicts" -type f 2>/dev/null | LC_ALL=C sort | while IFS= read -r _f; do grep -lxE '#fixture (decl|bad|nosent|undecl)' "$_f" 2>/dev/null; done | while IFS= read -r _f; do printf '%s ' "$_f"; md5 -q "$_f"; done | md5 -q; }
+# The real store holds thousands of entries and grows with every recorded pass, so the selection is ONE
+# batched grep over the C-sorted list rather than a grep per file; `grep -l` prints its matches in
+# argument order, so the set, the order and the digest are the per-file loop's (the receipt below).
+vs_snap() { find "$1/.cache/ai-dlc/verdicts" -type f -print0 2>/dev/null | LC_ALL=C sort -z | xargs -0 grep -lxE '#fixture (decl|bad|nosent|undecl)' 2>/dev/null | while IFS= read -r _f; do printf '%s ' "$_f"; md5 -q "$_f"; done | md5 -q; }
+# THE RECEIPT: on a seeded store carrying an empty file, a name with a space, a nested directory and a
+# non-matching entry, vs_snap equals the per-file loop it replaced -- and a copy of vs_snap with its sort
+# removed does NOT, so the order is observed. The mutant is cut from vs_snap's OWN text and must apply once.
+# That arm can only discriminate where `find` returns the seed out of C order, so the seed is CREATED in a
+# fixed shuffle -- neither C order nor its reverse, which a creation-order or newest-first listing would
+# return sorted -- and the unsorted order is asserted to differ from the sorted one BEFORE the mutant is
+# scored. Where it does not, the arm FAILS: a mutant that cannot fire must never read as a pass.
+vs_snap_ref() { find "$1/.cache/ai-dlc/verdicts" -type f 2>/dev/null | LC_ALL=C sort | while IFS= read -r _f; do grep -lxE '#fixture (decl|bad|nosent|undecl)' "$_f" 2>/dev/null; done | while IFS= read -r _f; do printf '%s ' "$_f"; md5 -q "$_f"; done | md5 -q; }
+VS_SR="$WORK/vs.snaprcpt"; _v="$VS_SR/.cache/ai-dlc/verdicts"
+mkdir -p "$_v/sub dir" || broken "could not seed the vs_snap receipt store"
+for _i in 13 24 02 19 07 22 11 04 16 09 21 01 18 06 14 23 03 12 20 08 15 05 17 10; do printf '#fixture decl\nk %s\n' "$_i" > "$_v/k$_i"; done
+printf '#fixture bad\n' > "$_v/sub dir/with space"; : > "$_v/empty"; printf '#fixture other\n' > "$_v/nomatch"
+_sel="$(vs_snap_ref "$VS_SR")"; _nsel="$(find "$_v" -type f | LC_ALL=C sort | while IFS= read -r _f; do grep -lxE '#fixture (decl|bad|nosent|undecl)' "$_f" || :; done | grep -c .)" || _nsel=0
+VS_ARMS=$((VS_ARMS+1))
+if [ "$(vs_snap "$VS_SR")" = "$_sel" ] && [ "$_nsel" -eq 25 ]; then ok "vs_snap equals the per-file loop on a 27-entry store (25 selected; an empty file, a space, a subdirectory, a non-match)"
+else bad "vs_snap differs from the per-file loop on the seeded store (selected $_nsel, want 25)"; fi
+_raw="$(find "$_v" -type f)"
+VS_ARMS=$((VS_ARMS+1))
+if [ "$(printf '%s\n' "$_raw" | grep -c .)" -ne 27 ] || [ "$_raw" = "$(printf '%s\n' "$_raw" | LC_ALL=C sort)" ]; then
+  bad "VS MUTANT snap-nosort CANNOT FIRE: find returned the shuffled 27-entry seed in C order (or not all of it), so dropping the sort is unobservable here"
+else
+  ok "the seed's unsorted find order differs from C order, so the no-sort mutant below can fire"
+  VS_ARMS=$((VS_ARMS+1))
+  _mt="$(declare -f vs_snap | sed 's/^vs_snap ()/vs_snap_nosort ()/')"
+  _mn="$(printf '%s\n' "$_mt" | grep -c 'LC_ALL=C sort -z | ')" || _mn=0
+  _mt="$(printf '%s\n' "$_mt" | sed 's/LC_ALL=C sort -z | //')"
+  if [ "$_mn" -ne 1 ] || grep -q 'sort -z' <<< "$_mt"; then bad "VS MUTANT snap-nosort DID NOT APPLY (anchor matched $_mn time(s), want 1)"
+  elif ! eval "$_mt" 2>/dev/null; then bad "VS MUTANT snap-nosort does not parse"
+  elif [ "$(vs_snap_nosort "$VS_SR")" != "$_sel" ]; then ok "VS MUTANT snap-nosort is KILLED by the receipt: without the sort the digest moves"
+  else bad "VS MUTANT snap-nosort SURVIVED the receipt: the order is not observed"; fi
+fi
 VS_SNAP0="$(vs_snap "$VS_REAL_HOME")"; VS_SNAPH0="$(vs_snap "$HOME")"
 VS_DRV="$WORK/vs.drive.sh"
 printf '%s\n' 'cd "$2" || exit 1' '. "$1" 2>/dev/null' \
