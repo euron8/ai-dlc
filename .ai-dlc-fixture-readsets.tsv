@@ -14,7 +14,7 @@
 # path<TAB>sha lines in the runner's universe as traced; the runner clears a stale key record when
 # it recomputes the same value over the tree it is pushing.
 #
-# fixtures mapped: 228    entries: 14023
+# fixtures mapped: 228    entries: 14033
 # OMITTED by the last run (always run): derivation-differential
 absorbed-specifics-survive	core/fixtures/absorbed-specifics-survive/run.sh
 absorbed-specifics-survive	core/skills/ai-dlc/SKILL.md
@@ -13671,6 +13671,7 @@ story-evidence-scaffold	core/scripts/audit-upstream-routing.sh
 story-evidence-scaffold	core/scripts/core-paths.sh
 story-evidence-scaffold	core/scripts/core/skills/ai-dlc
 story-evidence-scaffold	core/scripts/derive-fixture-readsets.sh
+story-evidence-scaffold	core/scripts/file-mtime.sh
 story-evidence-scaffold	core/scripts/gate-checkpoint.sh
 story-evidence-scaffold	core/scripts/gate-slice.sh
 story-evidence-scaffold	core/scripts/gen-architecture-index.js
@@ -13726,6 +13727,7 @@ story-evidence-scaffold	core/scripts/validate-spec-join.sh
 story-evidence-scaffold	core/scripts/validate-steering-budget.sh
 story-evidence-scaffold	core/scripts/validate-stub-audit.sh
 story-evidence-scaffold	core/scripts/validate-suppression-lifetime.sh
+story-evidence-scaffold	core/scripts/validate-trunk-audit-gate.sh
 story-evidence-scaffold	core/scripts/validate-write-format-steering.sh
 story-evidence-scaffold	core/scripts/verdict.sh
 story-evidence-scaffold	core/scripts/wait-for-deliverable.sh
@@ -13753,6 +13755,7 @@ story-evidence-scaffold-mutants	core/scripts/audit-rule-files.sh
 story-evidence-scaffold-mutants	core/scripts/audit-upstream-routing.sh
 story-evidence-scaffold-mutants	core/scripts/core-paths.sh
 story-evidence-scaffold-mutants	core/scripts/derive-fixture-readsets.sh
+story-evidence-scaffold-mutants	core/scripts/file-mtime.sh
 story-evidence-scaffold-mutants	core/scripts/gate-checkpoint.sh
 story-evidence-scaffold-mutants	core/scripts/gate-slice.sh
 story-evidence-scaffold-mutants	core/scripts/gen-architecture-index.js
@@ -13808,6 +13811,7 @@ story-evidence-scaffold-mutants	core/scripts/validate-spec-join.sh
 story-evidence-scaffold-mutants	core/scripts/validate-steering-budget.sh
 story-evidence-scaffold-mutants	core/scripts/validate-stub-audit.sh
 story-evidence-scaffold-mutants	core/scripts/validate-suppression-lifetime.sh
+story-evidence-scaffold-mutants	core/scripts/validate-trunk-audit-gate.sh
 story-evidence-scaffold-mutants	core/scripts/validate-write-format-steering.sh
 story-evidence-scaffold-mutants	core/scripts/verdict.sh
 story-evidence-scaffold-mutants	core/scripts/wait-for-deliverable.sh
@@ -13829,6 +13833,7 @@ story-evidence-scaffold-mutants-b	core/scripts/audit-rule-files.sh
 story-evidence-scaffold-mutants-b	core/scripts/audit-upstream-routing.sh
 story-evidence-scaffold-mutants-b	core/scripts/core-paths.sh
 story-evidence-scaffold-mutants-b	core/scripts/derive-fixture-readsets.sh
+story-evidence-scaffold-mutants-b	core/scripts/file-mtime.sh
 story-evidence-scaffold-mutants-b	core/scripts/gate-checkpoint.sh
 story-evidence-scaffold-mutants-b	core/scripts/gate-slice.sh
 story-evidence-scaffold-mutants-b	core/scripts/gen-architecture-index.js
@@ -13884,6 +13889,7 @@ story-evidence-scaffold-mutants-b	core/scripts/validate-spec-join.sh
 story-evidence-scaffold-mutants-b	core/scripts/validate-steering-budget.sh
 story-evidence-scaffold-mutants-b	core/scripts/validate-stub-audit.sh
 story-evidence-scaffold-mutants-b	core/scripts/validate-suppression-lifetime.sh
+story-evidence-scaffold-mutants-b	core/scripts/validate-trunk-audit-gate.sh
 story-evidence-scaffold-mutants-b	core/scripts/validate-write-format-steering.sh
 story-evidence-scaffold-mutants-b	core/scripts/verdict.sh
 story-evidence-scaffold-mutants-b	core/scripts/wait-for-deliverable.sh
@@ -13905,6 +13911,7 @@ story-evidence-scaffold-mutants-c	core/scripts/audit-rule-files.sh
 story-evidence-scaffold-mutants-c	core/scripts/audit-upstream-routing.sh
 story-evidence-scaffold-mutants-c	core/scripts/core-paths.sh
 story-evidence-scaffold-mutants-c	core/scripts/derive-fixture-readsets.sh
+story-evidence-scaffold-mutants-c	core/scripts/file-mtime.sh
 story-evidence-scaffold-mutants-c	core/scripts/gate-checkpoint.sh
 story-evidence-scaffold-mutants-c	core/scripts/gate-slice.sh
 story-evidence-scaffold-mutants-c	core/scripts/gen-architecture-index.js
@@ -13960,6 +13967,7 @@ story-evidence-scaffold-mutants-c	core/scripts/validate-spec-join.sh
 story-evidence-scaffold-mutants-c	core/scripts/validate-steering-budget.sh
 story-evidence-scaffold-mutants-c	core/scripts/validate-stub-audit.sh
 story-evidence-scaffold-mutants-c	core/scripts/validate-suppression-lifetime.sh
+story-evidence-scaffold-mutants-c	core/scripts/validate-trunk-audit-gate.sh
 story-evidence-scaffold-mutants-c	core/scripts/validate-write-format-steering.sh
 story-evidence-scaffold-mutants-c	core/scripts/verdict.sh
 story-evidence-scaffold-mutants-c	core/scripts/wait-for-deliverable.sh
@@ -13981,6 +13989,7 @@ story-evidence-scaffold-mutants-d	core/scripts/audit-rule-files.sh
 story-evidence-scaffold-mutants-d	core/scripts/audit-upstream-routing.sh
 story-evidence-scaffold-mutants-d	core/scripts/core-paths.sh
 story-evidence-scaffold-mutants-d	core/scripts/derive-fixture-readsets.sh
+story-evidence-scaffold-mutants-d	core/scripts/file-mtime.sh
 story-evidence-scaffold-mutants-d	core/scripts/gate-checkpoint.sh
 story-evidence-scaffold-mutants-d	core/scripts/gate-slice.sh
 story-evidence-scaffold-mutants-d	core/scripts/gen-architecture-index.js
@@ -14036,6 +14045,7 @@ story-evidence-scaffold-mutants-d	core/scripts/validate-spec-join.sh
 story-evidence-scaffold-mutants-d	core/scripts/validate-steering-budget.sh
 story-evidence-scaffold-mutants-d	core/scripts/validate-stub-audit.sh
 story-evidence-scaffold-mutants-d	core/scripts/validate-suppression-lifetime.sh
+story-evidence-scaffold-mutants-d	core/scripts/validate-trunk-audit-gate.sh
 story-evidence-scaffold-mutants-d	core/scripts/validate-write-format-steering.sh
 story-evidence-scaffold-mutants-d	core/scripts/verdict.sh
 story-evidence-scaffold-mutants-d	core/scripts/wait-for-deliverable.sh
@@ -14086,11 +14096,11 @@ story-evidence-scaffold-mutants-d	core/scripts/wait-for-deliverable.sh
 # digest self-update-join-gate 1ebfed9e70229033fc77264c31a9adbe59f70973c41518bf13d14c6752c0b54f
 # digest settings-merge-documented-form c8749c59bf12d4e1027eefb344a6678683e3c8ff76ca2c89b13e1d5d6b53f05f
 # digest shipped-rule-version-floor 473369479a2f008a085044c8160ecd9616b80bba1d65098f6f16f612ba24b2e6
-# digest story-evidence-scaffold b5bf279ce41ce69bcd045eaeb6af15685f6b434a632adc1c49dd282548a33ba8
-# digest story-evidence-scaffold-mutants e3fc74c8b19e95b1b644d811f6a522c6281c0fc0dd2a3f587d27700f3e71ae0a
-# digest story-evidence-scaffold-mutants-b f7f9f8df8eb9df75779ae57ad665e5c6a2edda366856ed0bd31f6f60387fdbc5
-# digest story-evidence-scaffold-mutants-c 8e56fb81f281a36097b600dece3e3a2199eb422183903c923b169aeb5ce28901
-# digest story-evidence-scaffold-mutants-d 747727d51964e49f26d2216e49beba667acd8adaa640b15c3baaf765ff3cf378
+# digest story-evidence-scaffold 642a6a684902fc5a1e2c467621ba57ac446a1f504d7b3c254ff59fce65ebe1bb
+# digest story-evidence-scaffold-mutants 3127803030b2b7624ec23afe208b6a8ab2d528c9d7ae7c8edb6f387d840eee34
+# digest story-evidence-scaffold-mutants-b f5009e4d2155a5a2cc765dcf7136cc99308ce7b06fd5582990af675d87ebf003
+# digest story-evidence-scaffold-mutants-c 220a0c63b13d31da39c85c999fbd80d66ee89f2d24e26a839560c53485d63b6e
+# digest story-evidence-scaffold-mutants-d 5048ffd15590844e17797e76359f62f8964311c624f630d910d64cbd57efe832
 # digest subject-partition cfd281009538f5e7e01e43d982fa30941d49813af95a91808bef887bc04b5409
 # digest update-preflight-push e83485232f100b9fa9fb0af07c0acb8815b5b2e7a57773a1b4dd503678335f39
 # digest updater-session-signals f479cb58b22393c7341928ba146ad1b6c5395aa3ac44c1560ff5189a7b5b61c7
