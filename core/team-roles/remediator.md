@@ -106,15 +106,17 @@ per-stem lists), its before equal to the join's after.
 - artifact_sha_before: <sha256 of the file before your first edit>
 - artifact_sha_after: <sha256 of the file after your last edit>
 - advisor: called | unavailable
-- derivations: replayed <n> | not replayed
+- derivations: replayed <n> | not replayed | deferred to the join (section/subject shard)
 ```
 
 The two lines after each triple you write say which checks this dispatch ran. `advisor: called`
 when an `advisor` call returned a result; `advisor: unavailable` when the tool was absent or
 every call errored or was rate-limited. `derivations: replayed <n>`, `<n>` being the count
 `scripts/ai-dlc/validate-artifact-derivations.sh <your record>` printed after your last edit;
-`derivations: not replayed` when you did not run it. A check you skipped is stated here, in the
-record the join and the next pass read, never only in your final message.
+`derivations: not replayed` when you did not run it. A section or subject shard writes
+`derivations: deferred to the join (section/subject shard)`: its fences name the document,
+which reads stale until assembly, and the gate replays them after it. A check you skipped is
+stated here, in the record the join and the next pass read, never only in your final message.
 
 Then, per finding:
 
