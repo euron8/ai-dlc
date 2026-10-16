@@ -3,7 +3,7 @@
 #
 # Four working trees, because the hook reads the branch checked out in the hook input's `cwd`:
 #   SPRINT    a repository on `sprint/3`            -- a pipeline push, gated
-#   UPDATE    a repository on `ai-dlc-update/x`     -- the update skill's branch, excluded
+#   UPDATE    a repository on `ai-dlc-update/x`     -- the update skill's branch: push excluded, merge gated
 #   DETACHED  a repository with a detached HEAD     -- no branch, NOT excluded
 #   NOREPO    a plain directory                     -- git fails, NOT excluded
 # A projects directory `projects/p1/` holds the seeded transcripts; run.sh writes those per world.

@@ -29,7 +29,7 @@
 #        nothing, 1 = an assertion failed, 2 = fixture broken.
 SHARDS="a b c d e"
 # A ratchet, raised when a mutant is added: lowering it is a visible edit, a lost mutant is not.
-MIN_MUTANTS=95
+MIN_MUTANTS=97
 set -uo pipefail
 
 # The pre-push gate exports AI_DLC_* tunables; none is read here, but scrub them all the same.
@@ -171,14 +171,15 @@ mut error-does-not-clear "ERRCLEAR" \
 mut any-advisor-clears "DENIED FAILED ORDER PERKIND REARM REDISPATCH SELF SELFLAST UNAV WINDOW" -e 's/\[ "\${LAST_ADV:-0}" -gt "\${LAST_ACT:-0}" \]/[ "${LAST_ADV:-0}" -gt 0 ]/'
 # 9. a branch delete is gated.
 mut delete-gated "DELETE" -e 's/gitpush and (isdelete | not)/gitpush/'
-# 10. the MCP merge tool escapes. FAILED's f-merge-ok is an MCP merge deny too.
-mut no-mcp-merge "FAILED MCPNAME MERGE" -e 's/startswith("mcp__") and endswith("__merge_pull_request")/startswith("mcp__NEVER")/'
+# 10. the MCP merge tool escapes. FAILED's f-merge-ok is an MCP merge deny too, and so is UPDATE's
+#     u-mcp (BL-582: an MCP merge from the update cwd is gated).
+mut no-mcp-merge "FAILED MCPNAME MERGE UPDATE" -e 's/startswith("mcp__") and endswith("__merge_pull_request")/startswith("mcp__NEVER")/'
 # 11. `record` gated alongside `close`.
 mut record-gated "CLOSE" -e 's/\\\\sclose(\\\\s|\$)/\\\\s(close|record)(\\\\s|$)/'
 # 12. the push match loses its start anchor, so a mention is a push -- including the mentions
 #     that are the allow twins of BASHC and BODY.
 mut push-unanchored "BASHC BODY MENTION" -e 's/^def gitre: "^/def gitre: "/'
-# 13. the update skill's branch is gated.
+# 13. the update skill's branch is gated (its push: the merge is gated by the shipped hook too).
 mut update-gated "UPDATE" -e 's|ai-dlc-update/\*) exit 0 ;;|ai-dlc-update-NEVER/*) exit 0 ;;|'
 # 14. a detached HEAD or a git failure is read as the update branch.
 mut detached-excluded "DETACHED" -e 's|\|\| _br=""$|\|\| _br="ai-dlc-update/unknown"|'
@@ -375,6 +376,12 @@ mutc hdr-no-verdict "HDRONLY" "HDRONLY:hdr-shardverdict HDRONLY:hdr-verdict" -e 
 mutc hdr-edit-too "HDRONLY" "HDRONLY:hdr-edit-del" -e's/^def hdronly: \.name == "Write"$/def hdronly: (.name == "Write" or .name == "Edit")/' -e 's/^  and ((\.input\.content \/\/ "") | tostring$/  and ((.input.content \/\/ .input.new_string \/\/ "") | tostring/'
 # a repair shard's header-only write is exempt too.
 mutc hdr-repair-too "HDRONLY" "HDRONLY:hdr-repair" -e 's/ and (test("\/shards\/\[^\/\]\*repair\[^\/\]\*\/") | not))$/)/'
+# --- BL-582: the update branch's merge is gated ---
+# the pre-fix exclusion: a `merge` kind from an `ai-dlc-update/*` cwd is excluded again. The HASMERGE
+#    term is kept, so the chained push (kinded push) stays gated and u-chain is chained-merge-exempt's.
+mutc update-merge-exempt "UPDATE" "UPDATE:u-mcp UPDATE:u-merge UPDATE:u-wrap" -e 's/^if \[ "\$KIND" = push \] && \[ "\$HASMERGE" = 0 \]; then$/if { [ "$KIND" = push ] \&\& [ "$HASMERGE" = 0 ]; } || [ "$KIND" = merge ]; then/'
+# the HASMERGE term dropped: `git push ... && gh pr merge N` is kinded push and rides the push exclusion.
+mutc chained-merge-exempt "UPDATE" "UPDATE:u-chain" -e 's/^if \[ "\$KIND" = push \] && \[ "\$HASMERGE" = 0 \]; then$/if [ "$KIND" = push ]; then/'
 
 # Every mutant dealt to this shard must have RUN, and every one that ran must have died exactly.
 [ "$n_seen" -eq "$nmine" ] || bad "[J1] shard '$GROUP' reached $n_seen mutants, $nmine dealt -- a dealt mutant never ran"
