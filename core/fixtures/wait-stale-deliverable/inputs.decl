@@ -1,2 +1,4 @@
-# Subject under test; run.sh and every --run-one worker execute it, and it reads no other repo path.
+# Subject under test; run.sh and every --run-one worker execute it.
 !core/scripts/wait-for-deliverable.sh
+# C46 reads Rule 29's exit list and requires it to name every code the subject can return.
+!core/skills/ai-dlc/rule-bodies/rule-29.md

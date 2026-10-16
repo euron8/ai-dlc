@@ -75,7 +75,7 @@ beat_with() { # <subject> <work> [extra args...] -> writes $BEATOUT; sets RC and
                    AI_DLC_WAIT_POLL_SECS=1 \
                    AI_DLC_WAIT_MARGIN_SECS=1 \
                    AI_DLC_MAX_WAIT_BEATS=6 \
-    bash "$subj" "$@" deliv.md ) > "$BEATOUT" 2>&1
+    AI_DLC_PROJECT_ROOT="$PWD" bash "$subj" "$@" deliv.md ) > "$BEATOUT" 2>&1
   RC=$?
   OUT="$(cat "$BEATOUT")"
 }
@@ -127,7 +127,7 @@ chained_beat() { # <subject> <work> [args...] -> as beat_with, with a sibling be
                    AI_DLC_MAX_WAIT_BEATS=6 \
     bash -c 'printf "%s" "$(date +%s)" > "_bmad-output/.wait-beats/.shell-$$" || exit 3
              s="$1"; shift
-             bash "$s" "$@"
+             AI_DLC_PROJECT_ROOT="$PWD" bash "$s" "$@"
              exit $?' _ "$subj" "$@" deliv.md ) > "$BEATOUT" 2>&1
   RC=$?
   OUT="$(cat "$BEATOUT")"
@@ -329,7 +329,7 @@ C02_stale_marker() {
 W="$( bash "$SEED" stale-marker )"
 ( cd "$W" && env AI_DLC_WAIT_BEAT_SECS=4 AI_DLC_WAIT_POLL_SECS=1 \
                  AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 \
-    bash "$SUBJ" deliv.md >/dev/null 2>&1 ) & PID=$!
+    AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" deliv.md >/dev/null 2>&1 ) & PID=$!
 seen=0
 for _ in $(seq 1 80); do
   [ -f "$W/_bmad-output/.beat-inflight" ] && { seen=1; break; }
@@ -457,7 +457,7 @@ START="$(date +%s)"
 ( cd "$W" && env AI_DLC_WAIT_BEAT_SECS=3 AI_DLC_STEERING_BUDGET=30 \
                  AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 \
                  AI_DLC_MAX_WAIT_BEATS=6 \
-    bash "$SUBJ" deliv.md >/dev/null 2>&1 ) || true
+    AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" deliv.md >/dev/null 2>&1 ) || true
 ELAPSED=$(( $(date +%s) - START ))
 if [ "$ELAPSED" -le 10 ]; then
   ok "knob-split-forward: quantum 3s honoured (${ELAPSED}s) with STEERING_BUDGET=30 ignored"
@@ -474,7 +474,7 @@ START="$(date +%s)"
 ( cd "$W" && env AI_DLC_WAIT_BEAT_SECS=8 AI_DLC_STEERING_BUDGET=3 \
                  AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 \
                  AI_DLC_MAX_WAIT_BEATS=6 \
-    bash "$SUBJ" deliv.md >/dev/null 2>&1 ) || true
+    AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" deliv.md >/dev/null 2>&1 ) || true
 ELAPSED=$(( $(date +%s) - START ))
 if [ "$ELAPSED" -ge 6 ]; then
   ok "knob-split-reverse: quantum 8s honoured (${ELAPSED}s) with STEERING_BUDGET=3 ignored"
@@ -493,7 +493,7 @@ C10_marker_goes_stale() {
 W="$( bash "$SEED" marker-goes-stale )"
 ( cd "$W" && env AI_DLC_WAIT_BEAT_SECS=60 AI_DLC_WAIT_POLL_SECS=1 \
                  AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 \
-    bash "$SUBJ" deliv.md >/dev/null 2>&1 ) & PID=$!
+    AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" deliv.md >/dev/null 2>&1 ) & PID=$!
 MARKER="$W/_bmad-output/.beat-inflight"
 for _ in $(seq 1 100); do
   [ -s "$MARKER" ] && break
@@ -596,7 +596,7 @@ C14_progress_guards() {
 W="$( bash "$SEED" progress-guards )"
 guard() { ( cd "$W" && env AI_DLC_WAIT_BEAT_SECS=4 AI_DLC_WAIT_POLL_SECS=1 \
                            AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 \
-              bash "$SUBJ" --progress-path "$1" deliv.md ) >/dev/null 2>&1; echo $?; }
+              AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" --progress-path "$1" deliv.md ) >/dev/null 2>&1; echo $?; }
 if [ "$(guard _bmad-output)" = "64" ]; then
   ok "progress-guards: the state dir is refused — it is written by this beat every poll"
 else bad "progress-guards: --progress-path _bmad-output accepted; progress is then always true and NON-DELIVERY can never fire"; fi
@@ -992,7 +992,7 @@ bg_beat() {
   ( cd "$w" && own env AI_DLC_WAIT_BEAT_SECS="$q" AI_DLC_WAIT_POLL_SECS="$p" \
                        AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 \
                        AI_DLC_WAIT_SETTLE_SECS=2 \
-      bash "$subj" "$@" ) > "$o" 2>&1 &
+      AI_DLC_PROJECT_ROOT="$PWD" bash "$subj" "$@" ) > "$o" 2>&1 &
   BG=$!
 }
 until_true() { # <tenths> <command...> -- 0 once the command succeeds, 1 on timeout
@@ -1176,7 +1176,7 @@ run_noclobber() { # <subject> -> NC_* ; leaves W
   sleep 0.5
   NC_M0="$(marker_of "$W")"
   NC_A="$(marker_pid "$W")"
-  ( cd "$W" && bash "$1" --status other.md ) > "$W/st.out" 2>&1
+  ( cd "$W" && AI_DLC_PROJECT_ROOT="$PWD" bash "$1" --status other.md ) > "$W/st.out" 2>&1
   NC_STATUS="$(marker_of "$W")"
   # $args is a word list built above with no spaces inside a word, so it is left unquoted.
   bg_beat "$1" "$W" "$W/i.out" 4 1 --since "$(( $(date +%s) - 60 ))" $args; pi=$BG
@@ -1330,7 +1330,7 @@ run_memo_single() { # <subject> -> MS_* ; leaves W
   until_true 40 now_at_least "$(( mt + 2 ))" || true
   ( cd "$W" && own env AI_DLC_WAIT_BEAT_SECS=3 AI_DLC_WAIT_POLL_SECS=1 \
                        AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 \
-      bash "$1" x.md ) > "$W/2.out" 2>&1
+      AI_DLC_PROJECT_ROOT="$PWD" bash "$1" x.md ) > "$W/2.out" 2>&1
   MS_RC=$?
   separate_shells "$W" 2 "$W/1.out" "$W/2.out"
 }
@@ -1391,6 +1391,54 @@ say_shells "MUTANT preupgrade-taken"
 if [ -n "$BE_SEEN" ]; then ok "MUTANT preupgrade-taken: without the guard the beat takes the old lease (read '$BE_SEEN')"
 else bad "MUTANT preupgrade-taken: the marker never changed with the guard deleted; the guard is not what leaves it alone"; fi
 rm -rf "$W"
+}
+
+# --- 22. every exit code the beat can return is named in Rule 29's exit list ---
+# The lead decides what to do from Rule 29's list, not from the script. A code the script returns
+# and the list does not name is read by its nearest neighbour: a refused call (64) was read as
+# NON-DELIVERY (1), and a live teammate re-dispatched. Both sides are DERIVED: the script's codes
+# from its own `exit N` lines and the literal values of the RC it ends on; the list's from its
+# `    exit N --` lines. Self-probe first, both directions, on seeded text.
+exit_codes_of() {  # $1 = a shell script -> its distinct numeric exit codes, one per line
+  awk '
+    /^[[:space:]]*#/ { next }
+    { l = $0
+      while (match(l, /(^|[^A-Za-z_`-])exit [0-9]+/)) {
+        s = substr(l, RSTART, RLENGTH); sub(/.*exit /, "", s); seen[s] = 1; l = substr(l, RSTART + RLENGTH) }
+      l = $0; if (l ~ /exit "\$RC"/) userc = 1
+      while (match(l, /(^|[^A-Za-z_])RC=[0-9]+/)) {
+        s = substr(l, RSTART, RLENGTH); sub(/.*RC=/, "", s); rcv[s] = 1; l = substr(l, RSTART + RLENGTH) } }
+    END { if (userc) for (k in rcv) seen[k] = 1; for (k in seen) print k }' "$1" | sort -n
+}
+listed_codes_of() {  # $1 = a rule body -> the codes its beat exit list names
+  awk '/^    exit [0-9]+ --/ { print $2 }' "$1" | sort -n
+}
+C46_exit_codes_named() {
+R29="$(pick "$HERE/../../skills/ai-dlc/rule-bodies/rule-29.md" \
+            "$HERE/../../../.claude/skills/ai-dlc/rule-bodies/rule-29.md")"
+if [ -z "$R29" ]; then bad "exit-list: rule-29.md not found beside this fixture in either layout — nothing was compared"; return; fi
+P="$(mktemp -d)"
+printf '#!/bin/bash\n# exit 7 in a comment\n[ -n "$x" ] || exit 64\nRC=0\nfoo && RC=1\necho "exit code" ; exit 2\nexit "$RC"\n' > "$P/s.sh"
+got="$(exit_codes_of "$P/s.sh" | tr '\n' ' ')"
+if [ "$got" = "0 1 2 64 " ]; then ok "exit-list self-probe: a seeded script yields 0 1 2 64 (an RC value counted, a commented exit 7 and the word 'exit code' not)"
+else bad "exit-list self-probe: derived '$got' from the seeded script, expected '0 1 2 64 ' — the grammar cannot be trusted on the real script"; fi
+printf '    exit 0 -- A\n    exit 1 -- B\n  exit 9 -- not the list indent\n' > "$P/r.md"
+got="$(listed_codes_of "$P/r.md" | tr '\n' ' ')"
+if [ "$got" = "0 1 " ]; then ok "exit-list self-probe: a seeded list yields 0 1 (a mis-indented exit 9 is not a list line)"
+else bad "exit-list self-probe: derived '$got' from the seeded list, expected '0 1 '"; fi
+rm -rf "$P"
+codes="$(exit_codes_of "$SUBJ")"; listed="$(listed_codes_of "$R29")"
+n_c="$(printf '%s\n' "$codes" | grep -c .)" || n_c=0
+n_l="$(printf '%s\n' "$listed" | grep -c .)" || n_l=0
+if [ "$n_c" -lt 2 ] || [ "$n_l" -lt 2 ]; then
+  bad "exit-list: derived $n_c code(s) from the script and $n_l from rule-29 — one side read nothing, so agreement would be vacuous"; return
+fi
+missing=""
+for c in $codes; do grep -qx "$c" <<<"$listed" || missing="$missing $c"; done
+if [ -z "$missing" ]; then ok "exit-list: every code the beat can return ($(printf '%s' "$codes" | tr '\n' ' ')) is named in rule-29's exit list"
+else bad "exit-list: the beat can exit with$missing, which rule-29's exit list does not name — a lead reads an unnamed code as its nearest neighbour"; fi
+# Printed only after the comparison decided on rule-29's content, so it cannot vouch for a read that never happened.
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$R29")" && pwd)/$(basename "$R29")"
 }
 
 # --- 21. this fixture's verdict may not depend on the cwd it was launched from ---

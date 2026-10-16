@@ -133,7 +133,7 @@ beat() {  # $1=subject $2=workdir $3=idle_secs $4=teammate_dir ; rest = extra ar
         AI_DLC_MAX_WAIT_BEATS="${MAXB:-6}" \
         AI_DLC_TEAMMATE_IDLE_SECS="$b_idle" \
         AI_DLC_TEAMMATE_DIR="$b_td" \
-        bash "$b_subj" "$@" deliv.md ) > "$BEATOUT" 2>&1
+        AI_DLC_PROJECT_ROOT="$PWD" bash "$b_subj" "$@" deliv.md ) > "$BEATOUT" 2>&1
   RC=$?
   OUT="$(cat "$BEATOUT")"
 }
@@ -154,7 +154,7 @@ chained_beat() {  # $1=subject $2=workdir $3=idle_secs $4=teammate_dir
         AI_DLC_TEAMMATE_DIR="$c_td" \
     bash -c 'printf "%s" "$(date +%s)" > "_bmad-output/.wait-beats/.shell-$$" || exit 3
              s="$1"; shift
-             bash "$s" "$@"
+             AI_DLC_PROJECT_ROOT="$PWD" bash "$s" "$@"
              exit $?' _ "$c_subj" deliv.md ) > "$BEATOUT" 2>&1
   RC=$?
   OUT="$(cat "$BEATOUT")"
@@ -474,7 +474,7 @@ S9_auto_resolve() {
   ( cd "$W" && env HOME="$H" CLAUDE_CODE_SESSION_ID="$SID" \
         AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 \
         AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_IDLE_SECS=60 \
-    bash "$SUBJ" deliv.md ) > "$BEATOUT" 2>&1
+    AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" deliv.md ) > "$BEATOUT" 2>&1
   RC=$?; OUT="$(cat "$BEATOUT")"
   if has "$IDLE_BANNER"; then ok "auto-resolve: the sensor finds THIS session's subagents dir from CLAUDE_CODE_SESSION_ID alone, past a project holding a live decoy session"
   else bad "auto-resolve: no banner with only the session id set — the shipped resolution path does not work, and every other section here drives an override that hides that: $OUT"; fi
@@ -484,7 +484,7 @@ S9_auto_resolve() {
   ( cd "$W" && env HOME="$H" CLAUDE_CODE_SESSION_ID="99999999-0000-0000-0000-000000000000" \
         AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 \
         AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_IDLE_SECS=60 \
-    bash "$SUBJ" deliv.md ) > "$BEATOUT" 2>&1
+    AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" deliv.md ) > "$BEATOUT" 2>&1
   OUT="$(cat "$BEATOUT")"
   if has "$UNAVAIL_LINE"; then ok "auto-resolve: CONTROL — an unknown session id resolves to NO SIGNAL, not to whatever directory sorts first"
   else bad "auto-resolve: CONTROL FAILED — an unknown session id did not report no signal, so the resolver is matching something it should not: $OUT"; fi
@@ -637,7 +637,7 @@ M7_session_id_ignored() {
   ( cd "$W" && env HOME="$H" CLAUDE_CODE_SESSION_ID="$SID" \
         AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 \
         AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_IDLE_SECS=60 \
-    bash "$MUT" deliv.md ) > "$BEATOUT" 2>&1
+    AI_DLC_PROJECT_ROOT="$PWD" bash "$MUT" deliv.md ) > "$BEATOUT" 2>&1
   OUT="$(cat "$BEATOUT")"
   if has "$LIVE_LINE" && ! has "$IDLE_BANNER"; then
     ok "MUTANT session-id-ignored: a resolver that wildcards the session lands on another session's live decoy and reports it as this join's teammate — section 9 catches it"
@@ -710,7 +710,7 @@ cbeat() {  # $1=subject $2=workdir ; rest = argv (targets relative to the workdi
         AI_DLC_WAIT_MARGIN_SECS=0 \
         AI_DLC_MAX_WAIT_BEATS="${CB_MAXB:-1}" \
         AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
-        bash "$cb_subj" --since "$CBEAT_SINCE" "$@" ) > "$BEATOUT" 2>&1
+        AI_DLC_PROJECT_ROOT="$PWD" bash "$cb_subj" --since "$CBEAT_SINCE" "$@" ) > "$BEATOUT" 2>&1
   RC=$?
   OUT="$(cat "$BEATOUT")"
 }
@@ -835,7 +835,7 @@ S13c_complete_marker_must_settle() {
   fx_backdate "$W3/old.md" 3600 || broken "cannot backdate old.md"
   cb2() { ( cd "$W3" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_SETTLE_SECS=1 AI_DLC_WAIT_POLL_SECS=1 \
       AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_MAX_WAIT_BEATS=1 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
-      bash "$SUBJ" --complete old.md ) > "$BEATOUT" 2>&1; RC=$?; OUT="$(cat "$BEATOUT")"; }
+      AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" --complete old.md ) > "$BEATOUT" 2>&1; RC=$?; OUT="$(cat "$BEATOUT")"; }
   cb2; cb2
   if has "NON-DELIVERY old.md -- absent after" && ! has "UNSETTLED old.md" && [ "$RC" -eq 1 ]; then
     ok "complete: a marked file older than the join is 'absent' on exhaustion, never UNSETTLED"
@@ -966,7 +966,7 @@ M18_settle_is_poll() {
     ( cd "$W" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=12 AI_DLC_WAIT_SETTLE_SECS=10 \
         AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_MAX_WAIT_BEATS=3 \
         AI_DLC_STATE_DIR="_bmad-output/$(basename "$s")" AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
-        bash "$s" --since "$(( $(date +%s) - 30 ))" --complete slow.md ) > "$BEATOUT.$(basename "$s")" 2>&1 &
+        AI_DLC_PROJECT_ROOT="$PWD" bash "$s" --since "$(( $(date +%s) - 30 ))" --complete slow.md ) > "$BEATOUT.$(basename "$s")" 2>&1 &
   done
   wait
   OUT="$(cat "$BEATOUT.$(basename "$SUBJ")")"; o_s="$OUT"
@@ -1010,7 +1010,7 @@ S13g_no_flag_output_byte_identical() {
     # `bash` would sleep the 600s default.
     ( cd "$d" && export AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 \
         AI_DLC_MAX_WAIT_BEATS=1 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" && unset CLAUDE_CODE_SESSION_ID \
-        && { bash "$s" x.md y.md; bash "$s" x.md y.md; } ) > "$d.raw" 2>&1
+        && { AI_DLC_PROJECT_ROOT="$PWD" bash "$s" x.md y.md; AI_DLC_PROJECT_ROOT="$PWD" bash "$s" x.md y.md; } ) > "$d.raw" 2>&1
     sed -E 's/[0-9]+[smhd] (old|since|ago)/N \1/g' "$d.raw" > "$d.out"
   done
   a="$(cat "$W/$(basename "$SUBJ" .sh).out")"; b="$(cat "$W/old-subject.out")"
@@ -1205,7 +1205,7 @@ scall() {  # $1=subject $2=workdir ; rest = argv after --status. CB_SETTLE honou
         AI_DLC_WAIT_POLL_SECS=1 \
         AI_DLC_MAX_WAIT_BEATS="${CB_MAXB:-1}" \
         AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
-        bash "$sc_subj" --status "$@" ) > "$BEATOUT" 2>&1
+        AI_DLC_PROJECT_ROOT="$PWD" bash "$sc_subj" --status "$@" ) > "$BEATOUT" 2>&1
   RC=$?
   OUT="$(cat "$BEATOUT")"
 }
@@ -1217,7 +1217,7 @@ obeat() {  # $1=subject $2=workdir $3=outfile $4=beat secs $5=settle secs $6=sin
         AI_DLC_WAIT_BEAT_SECS="$ob_b" AI_DLC_WAIT_SETTLE_SECS="$ob_st" \
         AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_MAX_WAIT_BEATS=6 \
         AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
-    bash -c '"$@"; exit $?' _ bash "$ob_subj" --since "$ob_si" "$@" ) > "$ob_o" 2>&1
+    AI_DLC_PROJECT_ROOT="$PWD" bash -c '"$@"; exit $?' _ bash "$ob_subj" --since "$ob_si" "$@" ) > "$ob_o" 2>&1
 }
 SIBLING_NOTE='a sibling beat already ran in this same Bash call'
 PARITY_FILES="p-fenced.md p-crlf.md p-notlast.md p-trail.md p-closed.md"
@@ -1338,7 +1338,7 @@ status_after_delivery() {  # $1 = subject -> sets SAD_* from one world
   CB_SETTLE=60 scall "$1" "$W" --complete --since "$SI" later.md; SAD_CHANGED="$OUT"
   ( cd "$W" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=1 AI_DLC_WAIT_POLL_SECS=1 \
       AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
-      bash -c '"$@"; exit $?' _ bash "$1" --reset --complete done.md ) >/dev/null 2>&1
+      AI_DLC_PROJECT_ROOT="$PWD" bash -c '"$@"; exit $?' _ bash "$1" --reset --complete done.md ) >/dev/null 2>&1
   CB_SETTLE=60 scall "$1" "$W" --complete done.md; SAD_RESET="$OUT"
   rm -rf "$W"
 }
@@ -1375,7 +1375,7 @@ revised_survives() {  # $1 = subject -> RS_BEAT, RS_AFTER, RS_RESET
   RS_AFTER="$(cat "$W/_bmad-output/.wait-beats/$(fx_key rv.md).revised" 2>/dev/null || echo ABSENT)"
   ( cd "$W" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=1 AI_DLC_WAIT_POLL_SECS=1 \
       AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
-      bash -c '"$@"; exit $?' _ bash "$1" --reset --complete rv.md ) >/dev/null 2>&1
+      AI_DLC_PROJECT_ROOT="$PWD" bash -c '"$@"; exit $?' _ bash "$1" --reset --complete rv.md ) >/dev/null 2>&1
   RS_RESET="$( [ -e "$W/_bmad-output/.wait-beats/$(fx_key rv.md).revised" ] && echo PRESENT || echo ABSENT )"
   rm -rf "$W"
 }
@@ -1525,7 +1525,7 @@ S15c_status_read_only() {
   # `--progress-path .` names an ancestor of the state dir, so the subject refuses it (exit 64)
   # AFTER its mkdir and before any sleep: the control costs no beat.
   ( cd "$W2" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
-      bash "$SUBJ" --progress-path . f.md ) > "$BEATOUT" 2>&1
+      AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" --progress-path . f.md ) > "$BEATOUT" 2>&1
   if [ -d "$W2/_bmad-output" ]; then ok "status: CONTROL — the same tree without --status DOES get _bmad-output created"
   else bad "status: CONTROL FAILED — the subject never creates the state dir here, so its absence above proves nothing: $(cat "$BEATOUT")"; fi
   rm -rf "$W" "$W2"

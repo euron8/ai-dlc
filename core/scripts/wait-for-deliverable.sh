@@ -193,7 +193,7 @@
 #
 # USAGE
 #   scripts/ai-dlc/wait-for-deliverable.sh <path> [<path>...] [--reset] [--quiet]
-#                                   [--since <epoch|ISO8601>]
+#                                   [--since <epoch|ISO8601>] [--dispatch <agentId|toolu_id>]
 #                                   [--progress-path <dir|file>]...
 #                                   [--complete | --complete-repair] [--status]
 #
@@ -202,6 +202,9 @@
 #                      remediator's terminal line on a joined repair record.
 #   --status           print DELIVERED / UNFINISHED / UNSETTLED / WAITING per path
 #                      and return at once: no sleep, no beat charged, no file written.
+#   --dispatch <id>    the dispatch this join waits on: the `agentId` (or `agent_id`) the
+#                      Agent result returned, or its toolu_ id. Its spawn-ledger `ts` is the
+#                      join's --since, and a --since LATER than it is refused.
 #   (Each is documented in full below the `set -u` line.)
 #
 # EXIT CODES
@@ -236,7 +239,8 @@
 #                            also the cap on progress grants, so the worst-case
 #                            wait is 2 x quantum x this -- still finite)
 #   AI_DLC_WAIT_MARGIN_SECS  reserve held back from quantum (default 10)
-#   AI_DLC_STATE_DIR         state dir                      (default _bmad-output)
+#   AI_DLC_STATE_DIR         state dir; relative = under the project root   (default _bmad-output)
+#   AI_DLC_PROJECT_ROOT      project root override (else walk up from this script, CLAUDE_PROJECT_DIR, cwd)
 #   AI_DLC_TEAMMATE_IDLE_SECS  quiet seconds before the beat reports TEAMMATE IDLE
 #                            (default 2 x the beat quantum; see the measurement above)
 #   AI_DLC_TEAMMATE_DIR      override the teammate-transcript directory. Exists so
@@ -347,7 +351,6 @@ set -u
 BUDGET="${AI_DLC_WAIT_BEAT_SECS:-600}"
 POLL="${AI_DLC_WAIT_POLL_SECS:-10}"
 MAX_BEATS="${AI_DLC_MAX_WAIT_BEATS:-6}"
-STATE_DIR="${AI_DLC_STATE_DIR:-_bmad-output}"
 MARGIN="${AI_DLC_WAIT_MARGIN_SECS:-10}"
 SETTLE="${AI_DLC_WAIT_SETTLE_SECS:-180}"
 case "$SETTLE" in ''|*[!0-9]*) SETTLE=180 ;; esac
@@ -356,6 +359,7 @@ QUIET=0
 RESET=0
 TARGETS=""
 SINCE=""
+DISPATCH=""
 PROGRESS_PATHS=""
 COMPLETE=0
 STATUS=0
@@ -412,6 +416,10 @@ while [ $# -gt 0 ]; do
       SINCE="$(to_epoch "$1")" || {
         echo "FAIL: --since value '$1' is not an epoch or an ISO8601 stamp." >&2; exit 64; }
       shift ;;
+    --dispatch)
+      shift
+      [ $# -gt 0 ] && [ -n "$1" ] || { echo "FAIL: --dispatch needs the agentId the Agent result returned." >&2; exit 64; }
+      DISPATCH="${DISPATCH}${DISPATCH:+ }$1"; shift ;;
     --progress-path)
       shift
       [ $# -gt 0 ] || { echo "FAIL: --progress-path needs a path." >&2; exit 64; }
@@ -463,6 +471,51 @@ abs_of() {  # normalized absolute path; no realpath dependency (not on BSD by de
   ( cd "$d_" 2>/dev/null && printf '%s/%s' "$(pwd -P)" "$b_" )
 }
 
+# --- AI_DLC_ROOT ------------------------------------------------------------
+# Walk UP for a marker, never count `..` hops. The canonical block, precedence bound by I75:
+# override -> walk up from this script -> CLAUDE_PROJECT_DIR -> walk up from cwd -> refuse.
+# Inline on purpose: locating a shared lib is the same unsolved problem. The state dir hangs off
+# this root and not off the cwd, so a Bash cwd that drifted into a subdirectory still arms the
+# beat where the stop hook looks for its lease.
+ai_dlc_resolve_root() {
+  local d="$1"
+  while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "." ]; do
+    if [ -e "$d/.git" ] || [ -d "$d/.claude" ] || [ -d "$d/core/skills/ai-dlc" ]; then
+      printf '%s\n' "$d"; return 0
+    fi
+    d="$(dirname "$d")"
+  done
+  return 1
+}
+WD_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WD_ROOT="${AI_DLC_PROJECT_ROOT:-}"
+[ -n "$WD_ROOT" ] || WD_ROOT="$(ai_dlc_resolve_root "$WD_SCRIPT_DIR" || true)"
+[ -n "$WD_ROOT" ] || WD_ROOT="${CLAUDE_PROJECT_DIR:-}"
+[ -n "$WD_ROOT" ] || WD_ROOT="$(ai_dlc_resolve_root "$(pwd)" || true)"
+[ -n "$WD_ROOT" ] || {
+  echo "FAIL: wait-for-deliverable: cannot resolve the project root from ${WD_SCRIPT_DIR} (no .git or" >&2
+  echo "  .claude/ marker in any parent). NO beat ran and the join is NOT armed. Run it from inside the" >&2
+  echo "  project, or set AI_DLC_PROJECT_ROOT to the repo root." >&2
+  exit 64
+}
+# --- end AI_DLC_ROOT --------------------------------------------------------
+case "${AI_DLC_STATE_DIR:-}" in
+  /*) STATE_DIR="$AI_DLC_STATE_DIR" ;;
+  *)  STATE_DIR="${WD_ROOT}/${AI_DLC_STATE_DIR:-_bmad-output}" ;;
+esac
+# ONE STATE DIR FOR EVERY CWD MEANS A RELATIVE TARGET NEEDS THE CWD IN ITS KEY. Shard files are
+# named `<ordinal>.md` inside each shard directory, so `1.md` armed from shards/a and `1.md` armed
+# from shards/b are two deliverables; keyed on the bare string they would share one counter, one
+# join epoch and one settle record, and the second join would read the first one's epoch. A
+# relative target from a cwd below the root is keyed on its root-relative path, so a call from the
+# root -- the ordinary case, and every counter live today -- keys exactly as before.
+WD_CWD_P="$(pwd -P)"; WD_ROOT_P="$(cd "$WD_ROOT" 2>/dev/null && pwd -P)"
+case "$WD_CWD_P" in
+  "$WD_ROOT_P")   KEY_PFX="" ;;
+  "$WD_ROOT_P"/*) KEY_PFX="${WD_CWD_P#"$WD_ROOT_P"/}/" ;;
+  *)              KEY_PFX="${WD_CWD_P}/" ;;
+esac
+
 COUNTER_DIR="${STATE_DIR}/.wait-beats"
 if [ "$STATUS" -eq 0 ]; then   # --status creates nothing, not even the state dir
   mkdir -p "$STATE_DIR" 2>/dev/null || true
@@ -500,7 +553,10 @@ if [ -n "$PROGRESS_PATHS" ]; then
   IFS="$OLDIFS"
 fi
 
-key_of() { printf '%s' "$1" | cksum | tr -d ' \t' | cut -c1-16; }
+key_of() {  # an absolute target keys as itself; a relative one is prefixed with the cwd (KEY_PFX)
+  case "$1" in /*) ko_="$1" ;; *) ko_="${KEY_PFX}$1" ;; esac
+  printf '%s' "$ko_" | cksum | tr -d ' \t' | cut -c1-16
+}
 
 # ---------------------------------------------------------------------------
 # THE JOIN EPOCH. Recorded per target in a `.since` sidecar beside the counter, on
@@ -762,6 +818,96 @@ if [ -z "$TEAMMATE_DIR" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
 fi
 IDLE_SECS="${AI_DLC_TEAMMATE_IDLE_SECS:-$(( BUDGET * 2 ))}"
 case "$IDLE_SECS" in ''|*[!0-9]*) IDLE_SECS=$(( BUDGET * 2 )) ;; esac
+
+# ---------------------------------------------------------------------------
+# --dispatch: THE JOIN'S EPOCH IS THE DISPATCH, READ FROM THE RECORD THE DISPATCH WROTE.
+# A hand-typed --since LATER than the dispatch hides every write the teammate made in
+# between, and the beat reads a delivered file WAITING. Measured on the reference
+# consumer: a serial remediator dispatched 05:00:03Z was armed with `--since 05:00:30Z`
+# and re-armed with `--since 05:01:30Z`; the clamp to `now` does not help, because the
+# early write is already in the past. The BACKDATED arm cannot see this either: it judges
+# the snapshot row against the ledger and never reads a beat's argv.
+#
+# The id is what the lead HOLDS at arm time, never what arrives later. The Agent result
+# shows `agentId: <hex>` for a spawn and `agent_id: <name>@<team>` for a named teammate;
+# the toolu_ id first reaches the lead in the task-notification, when the agent ENDS.
+#   toolu_<...>      the ledger row whose `tool_use_id` is it
+#   <name>@<team>    a named teammate: the ONE ledger row whose `name` is <name>. Its
+#                    meta.json carries no toolUseId, so the name is the only key.
+#   <hex agentId>    this session's `agent-<id>.meta.json` gives `toolUseId`, which is the
+#                    ledger `tool_use_id` (ai-dlc-dispatch-guard.sh, measured 4 of 4)
+# Each step that finds nothing, or more than one row, REFUSES: a guessed dispatch time is
+# the defect this exists to remove. Keyed on the dispatch's own id because a deliverable
+# path is not one: the reference ledger records a path on 14 of 5153 rows, none current.
+# --dispatch REPEATS for a beat that joins several dispatches (a fan-out round): --since is
+# checked against the EARLIEST, and without --since the join starts there.
+# A --since without --dispatch still runs, with a WARN on stderr; refusing it would break
+# every caller written before the flag.
+# ---------------------------------------------------------------------------
+SPAWN_LEDGER="${STATE_DIR}/spawn-ledger.jsonl"
+dispatch_refuse() {  # $1 = what failed, $2 = the remedy; uses $dp_id_
+  echo "FAIL: --dispatch '$dp_id_': $1" >&2
+  echo "  No dispatch time is guessed. $2" >&2
+  exit 64
+}
+ledger_rows() {  # $1 = field, $2 = value -> the matching ledger lines (compact JSON, one per line)
+  grep -F "\"$1\":\"$2\"" "$SPAWN_LEDGER" 2>/dev/null
+}
+dispatch_epoch_of() {  # $1 = agentId, <name>@<team> or toolu_ id -> sets dp_ts_, dp_tui_, dp_e_; refuses
+  dp_id_="$1"
+  [ -r "$SPAWN_LEDGER" ] || dispatch_refuse "no spawn ledger at $SPAWN_LEDGER" \
+    "Arm from the project root, where the dispatch guard writes it."
+  case "$dp_id_" in *[!A-Za-z0-9_@.-]*) dispatch_refuse "not an agentId or a toolu_ id" \
+    "Pass the agentId the Agent result returned." ;; esac
+  case "$dp_id_" in
+    toolu_*) dp_tui_="$dp_id_" ;;
+    *@*)
+      dp_n_="${dp_id_%%@*}"
+      dp_rows_="$(ledger_rows name "$dp_n_")"
+      dp_c_="$(printf '%s' "$dp_rows_" | grep -c .)" || dp_c_=0
+      [ "$dp_c_" -eq 1 ] || dispatch_refuse "the ledger holds $dp_c_ dispatch(es) named '$dp_n_', not one" \
+        "No dispatch time is available for this named teammate: arm without --since."
+      dp_tui_="$(printf '%s' "$dp_rows_" | sed -n 's/.*"tool_use_id":"\([A-Za-z0-9_]*\)".*/\1/p')"
+      [ -n "$dp_tui_" ] || dispatch_refuse "its ledger row carries no tool_use_id" \
+        "No dispatch time is available for this named teammate: arm without --since." ;;
+    *)
+      dp_m_=""
+      [ -n "$TEAMMATE_DIR" ] && [ -f "$TEAMMATE_DIR/agent-${dp_id_}.meta.json" ] \
+        && dp_m_="$TEAMMATE_DIR/agent-${dp_id_}.meta.json"
+      [ -n "$dp_m_" ] || dispatch_refuse "no agent-${dp_id_}.meta.json in this session's subagents dir (${TEAMMATE_DIR:-unresolved: CLAUDE_CODE_SESSION_ID is unset})" \
+        "Pass the agentId from this session's own Agent result."
+      dp_tui_="$(sed -n 's/.*"toolUseId":"\([A-Za-z0-9_]*\)".*/\1/p' "$dp_m_" 2>/dev/null)"
+      [ -n "$dp_tui_" ] || dispatch_refuse "its meta.json carries no toolUseId (a named teammate)" \
+        "Pass the agent_id the Agent result returned, <name>@<team>." ;;
+  esac
+  dp_rows_="$(ledger_rows tool_use_id "$dp_tui_")"
+  dp_c_="$(printf '%s' "$dp_rows_" | grep -c .)" || dp_c_=0
+  [ "$dp_c_" -eq 1 ] || dispatch_refuse "the ledger holds $dp_c_ row(s) for tool_use_id $dp_tui_, not one" \
+    "The dispatch guard writes one row per dispatch; a re-sent spawn is a new agentId."
+  dp_ts_="$(printf '%s' "$dp_rows_" | sed -n 's/.*"ts":"\([^"]*\)".*/\1/p')"
+  dp_e_="$(to_epoch "$dp_ts_")" || dp_e_=""
+  [ -n "$dp_e_" ] || dispatch_refuse "its ledger row has no readable ts ('$dp_ts_')" \
+    "Arm without --since."
+}
+if [ -n "$DISPATCH" ]; then
+  DISPATCH_EPOCH=""; DISPATCH_TS=""; DISPATCH_TUI=""
+  set -f   # an id is validated inside the loop, after this split: no glob may expand first
+  for dp_one_ in $DISPATCH; do
+    dispatch_epoch_of "$dp_one_"
+    if [ -z "$DISPATCH_EPOCH" ] || [ "$dp_e_" -lt "$DISPATCH_EPOCH" ]; then
+      DISPATCH_EPOCH="$dp_e_"; DISPATCH_TS="$dp_ts_"; DISPATCH_TUI="$dp_tui_"
+    fi
+  done
+  if [ -n "$SINCE" ] && [ "$SINCE" -gt "$DISPATCH_EPOCH" ]; then
+    echo "FAIL: --since is $(( SINCE - DISPATCH_EPOCH )) s after the earliest dispatch it joins ($DISPATCH_TS, tool_use_id $DISPATCH_TUI)." >&2
+    echo "  Every write the teammate made in between would read as pre-existing. Drop --since;" >&2
+    echo "  --dispatch alone sets the join to the dispatch." >&2
+    exit 64
+  fi
+  [ -n "$SINCE" ] || SINCE="$DISPATCH_EPOCH"
+elif [ -n "$SINCE" ]; then
+  echo "WARN: wait-for-deliverable: --since without --dispatch -- nothing checks the stamp against the dispatch, and a stamp later than it misses the teammate's early writes. Pass --dispatch <agentId from the Agent result>." >&2
+fi
 
 teammate_quiet_for() {  # prints seconds since the most recent teammate turn in this
                         # session; returns 1 and prints nothing when there is no signal

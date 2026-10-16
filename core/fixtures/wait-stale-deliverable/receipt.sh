@@ -20,6 +20,10 @@
 #           lines is UNSETTLED, a finding after the marker is UNFINISHED, an absent path WAITING.
 #   BL-548  a seat file edited after its marker was seen delivers with REVISED-AFTER-MARKER 1; an
 #           untouched one prints none.
+#   BL-599  --dispatch <agentId> resolves through meta.json to the ledger ts; a --since 27 s after
+#           it is refused, the dispatch's own time delivers a write made between the two.
+#   BL-576  a beat armed from a subdirectory of the project writes its state under the project root,
+#           not under the subdirectory; the same beat from the root reaches the same place.
 #
 # Every concurrent beat starts in its own parent shell (`own`): two beats sharing a $PPID take the
 # subject's chained-sibling return and neither sleeps nor leases, which is not the case measured.
@@ -47,9 +51,9 @@ world() { local d; d="$(mktemp -d "$ROOT/w.XXXXXX")" || exit 9; mkdir -p "$d/_bm
 r549() {
   local d a b m e p alive holder_alive
   d="$(world)"; cd "$d" || exit 9
-  own "${ENVB[@]}" AI_DLC_WAIT_BEAT_SECS=10 AI_DLC_WAIT_POLL_SECS=4 bash "$SUBJ" never.md >/dev/null 2>&1 & a=$!
+  own "${ENVB[@]}" AI_DLC_WAIT_BEAT_SECS=10 AI_DLC_WAIT_POLL_SECS=4 AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" never.md >/dev/null 2>&1 & a=$!
   sleep 0.5
-  own "${ENVB[@]}" AI_DLC_WAIT_BEAT_SECS=10 AI_DLC_WAIT_POLL_SECS=1 bash "$SUBJ" y.md >/dev/null 2>&1 & b=$!
+  own "${ENVB[@]}" AI_DLC_WAIT_BEAT_SECS=10 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" y.md >/dev/null 2>&1 & b=$!
   sleep 1; printf 'done\n' > y.md; wait "$b"; sleep 0.5
   m="$(cat _bmad-output/.beat-inflight 2>/dev/null || echo '')"; e="${m%% *}"
   alive=0; kill -0 "$a" 2>/dev/null && alive=1
@@ -67,10 +71,10 @@ r566_one() {
   local d a b
   d="$(world)"; cd "$d" || exit 9
   own "${ENVB[@]}" AI_DLC_WAIT_BEAT_SECS=14 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_SETTLE_SECS=2 \
-    bash "$SUBJ" --complete x.md > a.out 2>&1 & a=$!
+    AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" --complete x.md > a.out 2>&1 & a=$!
   sleep 1.2
   own "${ENVB[@]}" AI_DLC_WAIT_BEAT_SECS=14 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_SETTLE_SECS=2 \
-    bash "$SUBJ" --complete x.md > b.out 2>&1 & b=$!
+    AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" --complete x.md > b.out 2>&1 & b=$!
   sleep 1.2
   printf '# h\n### F-1\nx\nseat-complete: s 1 findings=1\n' > x.md
   wait "$a"; wait "$b"
@@ -78,7 +82,7 @@ r566_one() {
   # The fix must not get there by keeping the join epoch alive past delivery: a later beat
   # re-armed WITHOUT --since still reads the consumed file as pre-existing (Rule 28).
   own "${ENVB[@]}" AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_SETTLE_SECS=2 \
-    bash "$SUBJ" --complete x.md > c.out 2>&1
+    AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" --complete x.md > c.out 2>&1
   ! grep -q '^DELIVERED x.md' c.out
 }
 r566() {
@@ -94,7 +98,7 @@ r541() {
   printf '### e\n- edit: x\nseat-complete: part 3\n' > part.md
   printf '### e\n- edit: x\nrepair-complete: done\n' > bare.md
   "${ENVB[@]}" AI_DLC_WAIT_BEAT_SECS=4 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_SETTLE_SECS=1 \
-    bash "$SUBJ" --complete-repair --since "$s0" rec.md part.md bare.md > o.txt 2>&1 || return 1
+    AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" --complete-repair --since "$s0" rec.md part.md bare.md > o.txt 2>&1 || return 1
   grep -q '^DELIVERED rec.md' o.txt || return 1
   ! grep -q '^DELIVERED part.md' o.txt && ! grep -q '^DELIVERED bare.md' o.txt
 }
@@ -105,7 +109,7 @@ r547() {
   printf 'h\nseat-complete: s\n\n  \n' > tb.md
   printf 'h\nseat-complete: s\n- finding after\n' > nl.md
   t0=$(date +%s)
-  env AI_DLC_WAIT_SETTLE_SECS=60 bash "$SUBJ" --status --complete --since "$s0" tb.md nl.md absent.md > o.txt 2>&1 || return 1
+  env AI_DLC_WAIT_SETTLE_SECS=60 AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" --status --complete --since "$s0" tb.md nl.md absent.md > o.txt 2>&1 || return 1
   [ $(( $(date +%s) - t0 )) -le 2 ] || return 1
   [ ! -e _bmad-output ] || return 1
   grep -q '^UNSETTLED tb.md' o.txt && grep -q '^UNFINISHED nl.md' o.txt && grep -q '^WAITING   absent.md' o.txt \
@@ -119,7 +123,7 @@ r547() {
   printf '%s' "$(( $(date +%s) + 60 ))" > _bmad-output/.wait-beats/.lease-1
   n0="$(find _bmad-output | wc -l | tr -d ' ')"
   : > ref.stamp; sleep 1
-  env AI_DLC_WAIT_SETTLE_SECS=60 bash "$SUBJ" --status --complete --since "$s0" tb.md nl.md absent.md > o2.txt 2>&1 || return 1
+  env AI_DLC_WAIT_SETTLE_SECS=60 AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" --status --complete --since "$s0" tb.md nl.md absent.md > o2.txt 2>&1 || return 1
   n1="$(find _bmad-output | wc -l | tr -d ' ')"
   [ "$n0" = "$n1" ] && [ -z "$(find _bmad-output -newer ref.stamp)" ] && [ "$(cat _bmad-output/.wait-beats/.bound)" = 99 ]
 }
@@ -130,16 +134,87 @@ r548() {
   printf 'h\nseat-complete: s\n' > rv.md; printf 'h\nseat-complete: s\n' > ok.md
   ( sleep 1.5; printf 'h\n- edit\nseat-complete: s\n' > rv.md ) &
   "${ENVB[@]}" AI_DLC_WAIT_BEAT_SECS=8 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_SETTLE_SECS=2 \
-    bash "$SUBJ" --complete --since "$s0" rv.md ok.md > o.txt 2>&1; wait
+    AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" --complete --since "$s0" rv.md ok.md > o.txt 2>&1; wait
   grep -q '^DELIVERED rv.md' o.txt && grep -q '^REVISED-AFTER-MARKER 1 rv.md' o.txt \
     && ! grep -q 'REVISED-AFTER-MARKER [0-9]* ok.md' o.txt
 }
 
+# A forward-dated --since is refused against the dispatch it names; the dispatch's own time is the
+# control, and a write between the two is DELIVERED when the join starts at the dispatch.
+r599() {
+  local d e tdir
+  d="$(world)"; cd "$d" || exit 9; e=$(( $(date +%s) - 90 ))
+  printf '{"v":1,"ts":"%s","name":"remediator","role":"remediator","tool_use_id":"toolu_R599"}\n' \
+    "$(date -u -r "$e" +%Y-%m-%dT%H:%M:%SZ)" > _bmad-output/spawn-ledger.jsonl
+  tdir="$d/sub"; mkdir -p "$tdir"
+  printf '{"agentType":"remediator","toolUseId":"toolu_R599"}' > "$tdir/agent-a599.meta.json"
+  printf 'x\n' > r.md; touch -t "$(date -r $(( e + 5 )) +%Y%m%d%H%M.%S)" r.md
+  env AI_DLC_TEAMMATE_DIR="$tdir" AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" --status --dispatch a599 --since $(( e + 27 )) r.md > f.txt 2>&1
+  [ $? -eq 64 ] && grep -q '27 s after' f.txt || return 1
+  env AI_DLC_TEAMMATE_DIR="$tdir" AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" --status --dispatch a599 --since "$e" r.md > c.txt 2>&1 || return 1
+  grep -q '^DELIVERED r.md' c.txt || return 1
+  env AI_DLC_TEAMMATE_DIR="$tdir" AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" --status --dispatch a599 r.md > n.txt 2>&1 || return 1
+  grep -q '^DELIVERED r.md' n.txt
+}
+
+# A beat armed from a subdirectory of the project lands its state under the PROJECT ROOT, not under
+# the subdirectory. The world has a `.git` marker and the subject is COPIED into it, so the walk
+# from the script's own directory resolves to the world and not to the real repository. No
+# AI_DLC_PROJECT_ROOT and no AI_DLC_STATE_DIR are set. The control is the same beat from the root.
+r576() {
+  local d p s lease m
+  d="$(mktemp -d "$ROOT/w.XXXXXX")" || exit 9
+  mkdir -p "$d/.git" "$d/scripts" "$d/shards/p1" || exit 9
+  cp "$SUBJ" "$d/scripts/wait-for-deliverable.sh" || exit 9
+  ( cd "$d/shards/p1" && own env AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 \
+      AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR=/nonexistent CLAUDE_PROJECT_DIR= \
+      bash "$d/scripts/wait-for-deliverable.sh" never.md ) >/dev/null 2>&1
+  [ ! -e "$d/shards/p1/_bmad-output" ] || return 1
+  [ -d "$d/_bmad-output/.wait-beats" ] || return 1
+  rm -rf "$d/_bmad-output"
+  ( cd "$d" && own env AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 \
+      AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR=/nonexistent CLAUDE_PROJECT_DIR= \
+      bash "$d/scripts/wait-for-deliverable.sh" never.md ) >/dev/null 2>&1
+  [ -d "$d/_bmad-output/.wait-beats" ] && [ ! -e "$d/shards/p1/_bmad-output" ] || return 1
+  # The LEASE is the owed property, and the EXIT trap releases it, so it is read while a beat from
+  # the subdirectory is still asleep: it must be at the root, where the stop hook reads it.
+  rm -rf "$d/_bmad-output"
+  ( cd "$d/shards/p1" && exec bash -c '"$@"; exit $?' _ env AI_DLC_WAIT_BEAT_SECS=8 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 \
+      AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR=/nonexistent CLAUDE_PROJECT_DIR= \
+      bash "$d/scripts/wait-for-deliverable.sh" never.md ) >/dev/null 2>&1 & p=$!
+  # Poll for the lease rather than sleeping a fixed time: under load a fixed sleep only reads red.
+  # The beat is a CHILD of the wrapper `$p` (the trailing `exit $?` keeps bash from exec-ing it),
+  # so it is stopped by the pid its own lease names, then the wrapper is reaped.
+  lease=0; m=""
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    [ -s "$d/_bmad-output/.beat-inflight" ] && { lease=1; m="$(cat "$d/_bmad-output/.beat-inflight")"; break; }
+    sleep 0.25
+  done
+  case "${m#* }" in ''|*[!0-9]*) : ;; *) kill "${m#* }" 2>/dev/null ;; esac
+  kill "$p" 2>/dev/null; wait "$p" 2>/dev/null
+  [ "$lease" = 1 ] || return 1
+  # Two shard dirs arm the same RELATIVE name: two deliverables, so two join records, not one.
+  rm -rf "$d/_bmad-output"; mkdir -p "$d/shards/p2" || exit 9
+  for s in p1 p2; do
+    ( cd "$d/shards/$s" && own env AI_DLC_WAIT_BEAT_SECS=1 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 \
+        AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR=/nonexistent CLAUDE_PROJECT_DIR= \
+        bash "$d/scripts/wait-for-deliverable.sh" 1.md ) >/dev/null 2>&1
+  done
+  [ "$(find "$d/_bmad-output/.wait-beats" -name '*.since' 2>/dev/null | wc -l | tr -d ' ')" = 2 ] || return 1
+  # An ABSOLUTE AI_DLC_STATE_DIR is used as given, never joined onto the root.
+  ( cd "$d/shards/p1" && own env AI_DLC_WAIT_BEAT_SECS=1 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 \
+      AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR=/nonexistent CLAUDE_PROJECT_DIR= \
+      AI_DLC_STATE_DIR="$d/abs-state" bash "$d/scripts/wait-for-deliverable.sh" never.md ) >/dev/null 2>&1
+  [ -d "$d/abs-state/.wait-beats" ]
+}
+
 case "$ID" in
+  BL-576) r576 ;;
+  BL-599) r599 ;;
   BL-549) r549 ;;
   BL-566) r566 ;;
   BL-541) r541 ;;
   BL-547) r547 ;;
   BL-548) r548 ;;
-  *) echo "receipt: unknown id '$ID' (BL-549 BL-566 BL-541 BL-547 BL-548)" >&2; exit 9 ;;
+  *) echo "receipt: unknown id '$ID' (BL-549 BL-566 BL-541 BL-547 BL-548 BL-599 BL-576)" >&2; exit 9 ;;
 esac
