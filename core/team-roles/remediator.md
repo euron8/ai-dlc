@@ -188,6 +188,15 @@ cite into each edited file. An entry of yours that resolves an escalated one car
 the join closes an escalation only by that line, never by a shared `source:` token, so a half
 repair of another conjunct leaves it open for the lead.
 
+An `escalated` entry of yours that restates a part's escalation, carrying the same open
+decision forward, names every escalation it restates. In a record with no party seat files it
+names them as `source:` tokens of the part and finding (`source: 07.md#F-1`); a party record's
+`source:` takes seat tokens only and refuses a part token, so there the claim names them. The
+join counts the restating entry and each restated one as separate escalations. So the entry that
+later resolves the decision, yours or the fold of the operator's answer, carries one `- closes:`
+line per member of the chain, the restating entry and every part escalation it names: an
+escalation with no `closes:` line of its own stays open however many of its links were closed.
+
 **A party repair names the seat finding behind every entry.** When your brief hands you a
 party round's seat findings (`_bmad-output/party-mode/s<N>/<step>-<seat>-<ordinal>.md`), every
 entry carries a `source:` line with one `<seat-file>#<finding-id>` token per seat finding the
