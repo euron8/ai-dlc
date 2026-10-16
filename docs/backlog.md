@@ -368,6 +368,8 @@ Owed: a PreToolUse deny on `git push … --no-verify` from the pipeline lead, or
 
 **Second instance, a different model (graph s319 handoff, lead `f65eae3b`, 03:05:42Z on 2026-10-16).** Filed by peer session ai-dlc-68. The lead (Sonnet 5.5) ran `git push --no-verify -u origin HEAD` at handoff step 3, justified as "The commit is bookkeeping-only, with all 38 paths under `_bmad-output/`", which is the same reasoning as `62eadbbe` (qwen) and contradicts `handoff.md:58-70` ("the whole command"). It ran after the Rule 32 advisor call at 03:05:30Z, and neither the advisor nor any hook stopped it. Two leads on two models took the same step the same way, so this is a pipeline affordance, not a model quirk.
 
+**Third instance, the third s319 lead in a row (graph s319 lead `949015a6`, Sonnet 5.5, 05:42:00Z on 2026-10-16).** Filed by peer session ai-dlc-4e. As handoff step 3 the lead ran `git push -u origin HEAD --no-verify`, which landed `285c67f5d..3dd8a9fd4 HEAD -> ai-dlc/carry-over/offramp-config-and-rewards` (intake: the lead transcript carries that push line once, among 4 `git push` calls; graph's remote-tracking ref reads `3dd8a9fd4`). Its justification at 05:41:57-05:42:00Z repeated the earlier shape: it checked `git diff --name-only HEAD~1 | grep -v '^_bmad-output/'` (none), then wrote "The commit touches only `_bmad-output/` … Pushing now in the foreground, as the whole command" — obeying handoff.md's "whole command" clause while adding a flag the step never prescribes. Three of three s319 handoffs now bypass the consumer pre-push hook on the lead's own reading that a bookkeeping-only commit does not need it: `62eadbbe` (qwen), `f65eae3b` (Sonnet), `949015a6` (Sonnet). Prose has not stopped it across models; the PreToolUse deny owed above is the fix.
+
 verify: manual
 
 ## BL-563 — the ai-dlc-update post-write gates passed on an exit code nobody observed
@@ -401,6 +403,8 @@ verify: manual
 **Concurrent beats also interfere through shared per-path state (02:40–02:51Z).** Beats `by8hw963y` (02:32:16Z, 19 paths), `bxb1k8u08` (02:37:47Z, 14 paths) and a third at 02:42:17Z (7 paths) waited over overlapping paths. At 02:42:10Z `by8hw963y` printed "0 delivered, 19 still out", listing `5.md` as WAITING although its last line was already `seat-complete: requirements adversary 5/13` (the agent returned at 02:34:23Z; the same held for 4, 6, 10 and 12). At 02:47:45Z `bxb1k8u08` printed "1 delivered, 13 still out" when 16 were closed. All beats share `COUNTER_DIR="${STATE_DIR}/.wait-beats"` (`wait-for-deliverable.sh:415`), keyed by path. `is_delivered` deletes the `.settle` sidecar when it sees no marker, and `settled` keys on the stored hash and time, so beats can reset each other's settle state. This half is unreproduced.
 
 Owed: the in-flight marker is per beat (or reference-counted), so one beat's exit leaves another's lease intact, and the per-path settle state is per beat or written so a second beat cannot reset it. Probes: two beats are live and one exits, and the hook still sees a live beat, with a single-beat exit clearing the marker as the control; and two beats over one completed path both report DELIVERED.
+
+**Stale beats never stopped, and each one cost an interruption (graph s319 lead `949015a6`, Sonnet 5.5, 05:03–05:10Z on 2026-10-16).** Filed by peer session ai-dlc-68. Between 05:03:00Z and 05:09:33Z the lead received five completion notifications from beats it had already consumed (the 13-shard verdict beat, the cross-1/cross-2 beat, the cross-2 beat, the 11-part repair join and the part-13 beat) and answered each "stale … already consumed". After the last, the stop hook fired at 05:09:36Z, and at 05:10:02Z the lead found "No live beat is registered" and re-armed — although its serial beat had been armed since 05:00:04Z. Half (a) again: consumed beats are not TaskStopped, so each exit both wakes the lead and removes the shared marker the live beat depends on.
 
 verify: manual
 
@@ -484,3 +488,151 @@ Owed: the recover gate's deny arms apply to the lead only (empty `agent_id`), an
 
 verify: manual
 
+## BL-575 — the lead's hand-written adversary brief omitted `verdict:`, 13 of 19 shards shipped without it, and nothing caught it before the merge
+
+**DEFECT.** Filed by peer session ai-dlc-68 from graph's s319. Resumed lead `949015a6` (`/ai-dlc resume` at 04:47:20Z on 2026-10-16, Sonnet 5.5) ran `merge-adversarial-shards.sh --subject 319 --base d82236ce… s319/shards/requirements-p1` at 04:47:39Z and got rc=2: `REFUSED: …/requirements-p1/1.md declares verdict '<none>', not one of EXIT_CONDITION_MET EXIT_CONDITION_NOT_MET DIVERGENT_HARD_BLOCK` (`core/scripts/merge-adversarial-shards.sh:575`). Intake re-derived on graph read-only: `_bmad-output/planning-artifacts/s319/shards/requirements-p1/` holds 19 shards; all 19 carry a `seat-complete: ` line and only 6 carry `^verdict:` (2, 5, 6, 9, 12, cross-5 per the filer). The previous lead `f65eae3b` dispatched each adversary at a hand-written `scratchpad/adversarial-p1-brief.md` (54 lines): `verdict` 0 times, against `seat-complete` 1 and `PENDING-LEAD` 2 in the same file. `core/team-roles/adversary.md:371` makes `verdict:` "required on every adversarial-review pass" and `:135` points at it; the shards whose adversaries followed the role file carry it, the rest followed the brief. At 04:49:17Z the lead asked the operator whether to hand-add the field to 13 shards, which is the BL-530 pattern of a lead editing agent-written gate inputs.
+
+Two halves, both LIVE at 952b9319:
+
+(a) **No shipped path renders the brief.** `core/skills/ai-dlc/steps/_gate-procedures.md:552-556` lists the record's required header (provenance block, `tool_use_id`, `artifact`/`artifact_sha`, four `findings_*` counts, `verdict:`) as prose for the lead to transcribe; the dispatch itself is model-authored, so any field the lead forgets drops out of every shard silently. Fix: render the shard header template from one source the merge's required-field set also reads, and dispatch with the rendered text.
+
+(b) **The delivery join does not check the header.** `core/scripts/wait-for-deliverable.sh --complete` (`:511-524`) takes a file as delivered when its last non-blank line opens `seat-complete: `; the script mentions `verdict:` 0 times against 8 for `seat-complete`. So a headerless shard reads DELIVERED and the gap surfaces only at the merge, after every adversary has exited and the cheap repair (re-prompt the live agent) is gone. Fix: the `--complete` join (or a shard-mode flag on it) checks the merge's required header fields and reports the shard UNFINISHED while its agent is alive.
+
+Related: BL-530 (lead hand-patching agent-written shards), BL-554 (shard-dir hygiene the merge refuses late).
+
+Owed: a probe shard dir where one shard lacks `verdict:` but ends in `seat-complete:`; the join must not report it DELIVERED, with a complete shard as the control. A brief rendered by the shipped path must contain every field the merge requires.
+
+**Cost of the repair, and the join could not track it (04:49–04:53Z).** Filed by peer session ai-dlc-68. On the operator's choice ("Re-dispatch adversaries (Recommended)", AskUserQuestion at 04:49:17Z) lead `949015a6` dispatched 13 fresh agents, 04:52:09–04:52:45Z, each to append one `verdict:` line to an existing shard; the last landed at 04:53:50Z — about 1.7 minutes and 13 spawns to restore one field the brief omitted. The shards already ended in `seat-complete:`, so at 04:52:57Z the lead noted "a file-wait would return immediately" and fell back to a back-dated `--since 04:50:00Z` with three hand-checked re-arms (04:53:03Z, 04:53:27Z, 04:53:38Z) and three stop-hook interruptions (see BL-576 for why the hook could not see those beats; BL-564 for back-dated `--since`). Half (b) would have reported the 13 shards UNFINISHED while their original adversaries were still alive, at no extra spawns.
+
+verify: manual
+
+## BL-576 — `wait-for-deliverable.sh` resolves its state dir from the cwd, so a beat run inside a shard dir plants `_bmad-output/` there and the stop hook cannot see the beat
+
+**DEFECT.** Filed by peer session ai-dlc-68 from graph's s319 lead `949015a6` (Sonnet 5.5). `core/scripts/wait-for-deliverable.sh:316` is `STATE_DIR="${AI_DLC_STATE_DIR:-_bmad-output}"` and `:415` `COUNTER_DIR="${STATE_DIR}/.wait-beats"` — both cwd-relative; the script carries no root resolution. At 04:53:03Z on 2026-10-16 the lead armed a beat from `…/s319/shards/requirements-p1` (a 04:51:49Z `cd` persisted in the Bash cwd), so the beat wrote `requirements-p1/_bmad-output/.beat-inflight` and `.wait-beats/*` into the shard dir. At 04:53:54Z `merge-adversarial-shards.sh` refused the stray `_bmad-output` entry, and at 04:54:05Z the lead moved it to its scratchpad (intake confirmed `…/949015a6-…/scratchpad/stray-beat-state/_bmad-output` on disk; the shard dir now carries 0 `_bmad` entries). The second consequence is mechanical, not presumed: the stop hook reads the lease at `${PROJECT_DIR}/_bmad-output/.beat-inflight` (`core/hooks/ai-dlc-continue.sh:120`, `LOG_DIR="${PROJECT_DIR}/_bmad-output"`), so a beat whose marker lands elsewhere is invisible to it, which matches the hook firing three times in 30s (04:52:58Z, 04:53:15Z, 04:53:31Z) while beats were armed.
+
+Siblings resolve correctly: `join-remediator-shards.sh:349-362` and `gate-checkpoint.sh:221` anchor the state dir on a root from `ai_dlc_resolve_root()` / `AI_DLC_PROJECT_ROOT`. `partition-subject.sh:171` has the same bare `${AI_DLC_STATE_DIR:-_bmad-output}` default and should be checked by the builder.
+
+Fix: resolve STATE_DIR against the project root (`AI_DLC_PROJECT_ROOT`, else walk up as `ai_dlc_resolve_root()` does, per verification-discipline.md "resolve the repo root by walking up for a marker"), so the beat and the hook agree on one marker path. Owed: run the beat from a subdirectory and assert no `_bmad-output/` is created under it and the `.beat-inflight` lease lands at the root; a repo-root run is the control.
+
+verify: manual
+
+## BL-577 — the merge counts every `### ` heading under `## Findings` as a finding, so a probes subsection inflates the count and the merge refuses the shard
+
+**DEFECT.** Filed by peer session ai-dlc-68 from graph's s319 lead `949015a6`. `core/scripts/merge-adversarial-shards.sh:480` is `infind && /^### / { flush(); fl = NR; …}`: any `### ` heading inside `## Findings` opens a finding, and `:707` then refuses a shard whose `seat-complete: … findings=<n>` differs from that count. graph shard `requirements-p1/2.md` (findings=0) carried a `### Probes run (no finding)` heading; at 04:54:15Z on 2026-10-16 the lead diagnosed exactly that and at 04:54:26Z dispatched an agent ("Demote probes heading in shard 2") to rewrite the heading level — another agent spawn to edit a gate input. The adversary role file invites the subsection and never reserves the form: `core/team-roles/adversary.md:97-103` asks for probes to be stated ("A probed \"this holds\" is a completed one"), `:110` defines `<n>` as "your `### ` findings", and the file contains `F-` 0 times (control: `###` 7 times, `probe` 3 times), so nothing tells the adversary that a `### ` under Findings is reserved for `### F-<n> (SEVERITY)`.
+
+Fix (one of, builder to weigh against the existing shard corpus): count only `### F-<n> (` headings and refuse any other `### ` under Findings with a message naming the reserved form; or state the reservation in `adversary.md` beside the probe instruction and at `:110`. Owed: a shard with a `### Probes run` subsection and findings=0 merges with count 0 (or is refused with the reserved-form message, per the chosen fix), with a `### F-1 (MAJOR)` shard as the control that counts 1.
+
+verify: manual
+
+
+## BL-591 — a red pre-push run's loaded timings are merged into the durations record the runner orders by
+
+**DEFECT.** Filed by peer session ai-dlc-bb (batch 235 gate throughput), routed by ai-dlc-b8. `.githooks/pre-push` (952b9319) folds `$out/.durations` into `$DURATIONS_RECORD` (`.git/ai-dlc-fixture-durations`) at `:2112-2118` with no `rc` gate, while `:2139` publishes `.last` only when `rc -eq 0`, and its own comment at `:2134-2138` gives the reason that applies equally to the merge: "a red run's timings belong to a suite that stopped early". Measured by the filer from `.git/ai-dlc-suite-pole.history` (clean gates only): `readset-skip-d` is recorded at 928s but ran 330-502s across 6 clean gates and 928 appears in no clean row; `gate-adjudication-mutants` a/c/e are recorded at 666/646/642, from the red run at 2026-10-16T00:16Z, against 216/196/195 at the last clean gate. Intake re-read the live record: `readset-skip-d 928`, `gate-adjudication-mutants 666`, `-c 646`, `-e 642`; the history carries 48 `readset-skip-d` and 18 `gate-adjudication-mutants` rows and 0 occurrences of `928` (control for the absence: the row counts are non-zero).
+
+Effect: the runner's longest-first dispatch order and any ranking a human reads off the record use inflated poles; this batch's throughput work started from a pole that does not exist. Remedy is the builder's: gate the merge on `rc` as `:2139` is, or merge only units whose own verdict was ok. Either edit sits inside the I66-joined region, so both pre-push hooks move together.
+
+Owed: a red run (one seeded failing unit) leaves `.git/ai-dlc-fixture-durations` unchanged for units it timed (or, under the per-verdict remedy, unchanged for the failing and unfinished units only); a green run as the control updates it.
+
+verify: manual
+
+## BL-592 — the shard-mutant batteries' per-scorer SCORER_BOUND=900 under POOL=8 times out under gate contention with no defect present
+
+**DEFECT.** Filed on ai-dlc-f5's report, routed by ai-dlc-b8. `core/fixtures/remediator-shard-join-mutants/run.sh:185-186`, `review-shard-merge-mutants/run.sh:177-178` and `adversarial-shard-merge-mutants/run.sh:103-104` each set `POOL=8` and `SCORER_BOUND=900`; a scorer still running past the bound is killed and scored `TIMEOUT -- the scorer ran past 900s and was killed; no verdict`, which fails the unit (`:213/:231`, `:205/:223`, `:131/:149`). The bound is wall clock, so under a loaded gate (pool of 12 fixtures each running 8 scorers) a scorer can exceed it with no defect in the subject; ai-dlc-f5 reports `adversarial-shard-merge-mutants` failing exactly this way in batch 235. The `-b/-c/-d` shards of the first two carry the same runner. A false red on a release gate costs a full re-push.
+
+Owed: a bound that separates "hung" from "slow under load" (e.g. CPU time, or progress-since-last-check, rather than wall clock), or a bound derived from the unit's recorded cost; a probe scorer that is slow but progressing under an artificially low bound must not be scored TIMEOUT, with a genuinely hung scorer as the control that still is.
+
+verify: manual
+
+## BL-593 — a serial remediator is RESUMED by SendMessage after a refusal, and nothing tells the lead to re-dispatch instead
+
+**DEFECT.** Filed by ai-dlc-b8 from ai-dlc-0b's read-only analysis of graph session `62eadbbe` (s319). At 00:07:23Z on 2026-10-16 the lead resumed a serial remediator by `SendMessage` after a refusal, and armed a sentinel beat to wait on it (that beat is BL-553's subject, which cites this instance).
+
+The conflict lands with train #3 (b235-prose-P, `03c36778`, unmerged at 952b9319): its `core/team-roles/remediator.md:205-208` makes `repair-complete: serial <pass>` the serial remediator's LAST write and says "once it is written, do not edit the record again". A remediator resumed after it wrote that line can therefore either not finish, or finish by violating the clause. On origin/main the clause does not exist yet (`repair-complete` 0 hits in `core/team-roles/remediator.md` at 952b9319; the same command finds it at `03c36778:205`), so the defect is armed by that release.
+
+Nothing routes the lead away from the resume. `core/skills/ai-dlc/rule-bodies/rule-28.md:267-282` permits `SendMessage` to a resident teammate for "a crash-recovery resolution … a gate verdict on its own work", which reads as covering a refusal, and forbids it only for narrowed scope and new work. `core/skills/ai-dlc/steps/_gate-procedures.md` mentions `SendMessage` 0 times (control: `remediator` 61 times in the same file), and its serial-remediator text (`:843-855`) covers dispatching after the join and adjudicating `ESCALATED:` lines, never repairing a refused serial record.
+
+Owed: one lead-side instruction, placed where the serial remediator is dispatched (`_gate-procedures.md` near `:843-855`) and cited from rule-28's `SendMessage` carve-outs: a serial remediator whose record already carries its `repair-complete:` line is re-dispatched fresh (`TaskStop` the resident, one new `Agent` dispatch that appends a new block), never resumed by `SendMessage`. Plus a guard if one fits an existing hook (`core/hooks/` already carries five `SendMessage` readers, e.g. `ai-dlc-acknowledge.sh`, `ai-dlc-escalation-delivery.sh`); the builder measures that hook's ability to identify the recipient as a serial remediator with a marked record before adding it, and records the false-positive set.
+
+verify: manual
+
+## BL-594 — requirements adversarial p1 has no standalone unique value; elicitation could be the first convergence pass
+
+**DEFECT.** Filed by ai-dlc-b8 from ai-dlc-de's `docs/analysis/step-value-s317-s319.md` (committed in b235-docs). Its round table (`:110`) records requirements adversarial p1 with 0 high-consequence unique catches in s317, s318 and s319, and 18 of 21 (s318) and 17 of 27 (s319) of its MAJORs repair-introduced; it keeps p1 only "as the convergence exit" Check 24 reads. Under the operator's step-value ruling a step stays only while it has unique surviving catches, so p1's cost is one full sharded round per planning step bought for the exit stamp alone.
+
+Today the two shapes cannot merge: at origin/main 952b9319 the merge refuses a `verdict:` on an elicitation shard (`core/scripts/merge-adversarial-shards.sh:569`, "an elicitation shard carries none"), and Check 24's subject arm K3 (`core/scripts/validate-adversarial-convergence.sh:2228`) reads the requirements adversarial series, not the elicitation record.
+
+Owed (deferred to the next batch): make elicitation the first convergence pass — its shards stamp `verdict:`, `merge-adversarial-shards.sh --elicitation` writes one, Check 24 arm K3 accepts it as the series' first pass — and drop the standalone p1 round; or state why p1 must stay. Interacts with BL-575's contract v2 (its `--check-header --axis elicitation` encodes today's "no verdict" rule, which this would invert). Receipt: on a seeded subject the elicitation merge emits a verdict K3 accepts, with today's verdict-less elicitation record as the control K3 does not.
+
+Cross-ref BL-569 (three validation rounds with no stated distinction) and archived BL-508 (repairs write the defects the next pass finds).
+
+verify: manual
+
+## BL-595 — the Check 22 arm refusing `none (serial-document)` on a `stories/` subject is still unbuilt
+
+**NOTE.** BL-509's close (archived, `docs/backlog.archive.md:32870ff`) built the sharded stories-elicitation rule (`_gate-procedures.md:413-420`, "never `shard: none (…)`", pinned by 8 `elic-shape-*`/`sts-elic-*` rows in `process-rule-pins`) but left Check 22 untightened: "an S3 arm refusing `none (serial-document)` on a `stories/` subject was not built because its false-positive set on graph's ledgers was not measured". `core/scripts/validate-spawn-ledger.sh:920-923` S3 still fails only an exception outside the four, and `:973` reads only the first parenthesised token, so a single serial-document voice over `stories/` passes. The yield evidence that the sharded shape is worth enforcing now exists: `docs/analysis/step-value-s317-s319.md:137` (s317 22 shards about 15 unique; s318 one voice at most 1). Owed: measure the arm's false-positive set on graph's ledgers (it fires on graph's closed s318 stories row, a true finding), then build it or record why not.
+
+verify: manual
+
+## BL-578 — a teammate wedged re-sending one API request reads as live to the beat, because the liveness sensor keys on transcript mtime and every retry line bumps it
+
+**DEFECT.** Filed by peer session ai-dlc-68 from graph's s319 lead `949015a6` (Sonnet 5.5). The pass-1 serial remediator `a7ffc8dcd555207b8` (dispatched 05:00:03Z on 2026-10-16) called `Skill bmad-spec` at 05:14:47Z ("update: append decision to .memlog.md then re-render SPEC.md …"); the skill body loaded at 05:14:50Z. Intake re-read its transcript read-only (`~/.claude/projects/-Users-n8-git-graph/949015a6-…/subagents/agent-a7ffc8dcd555207b8.jsonl`, 245 lines): the last `assistant` line is 05:14:47Z (control: 68 assistant lines in the file), and lines 239-245 are seven `api-request` records, 05:14:51Z → 05:34:24Z at ~195s intervals, all `shapeHash 7d7e1ada`, with nothing between them. The record `s319/requirements-repair-p1.md` gained nothing; the agent's only writes were 4 Edits at 05:08Z (locked-requirements.md, prd.md). The lead re-armed at 05:10:03Z, 05:20:12Z and 05:30:12Z and read it as "a long run is plausible" (05:20:15Z) and "still running at 30 minutes" (05:30:12Z); at 05:21:19Z the operator had ruled "when the remediator agent finishes, handoff", so the sprint waits on an agent that may never finish.
+
+**Why the beat cannot see it (mechanical, not inferred).** `core/scripts/wait-for-deliverable.sh:635-649` `teammate_quiet_for` measures quiet as `now - mtime` of the newest `subagents/*.jsonl`, and `:672` prints `LIVENESS a teammate in this session took a turn …`. Each retry appends an `api-request` line, so the file's mtime advanced to 05:34:24Z (local 01:34:24, matching the last line) and the sensor reported a fresh turn every ~3 minutes; the `TEAMMATE IDLE` arm at `:661-670` (threshold `IDLE_SECS`, default 2×budget) could never fire. So the one signal that exists errs in the direction that keeps the lead waiting, which the sensor's own header (`:612-617`) names as the hazard.
+
+Third failure beside BL-543 (serial pass untimed) and BL-541 (serial beat cannot detect completion): alive by every signal, no progress.
+
+**Cause established: the account ran out of usage (correction relayed by peer session ai-dlc-4e).** The operator stated on 2026-10-16: "The cause is that I hit usage limit on a subscription and had to login to another account." The seven unanswered `api-request` records are the client retrying requests the exhausted account refused; the `Skill bmad-spec` call at 05:14:47Z is only where the remediator was when the quota ran out. The filing's link to the `bmad-spec` path (BL-546, BL-559) was a guess and is refuted. The refusals are not recorded in the agent's transcript: lines 239-245 carry 0 occurrences of `rate limit`/`429`/`usage limit`/`overloaded`/`"error"` against 7 `api-request` lines in the same range — the same unrecorded-refusal shape as BL-557, where an advisor rate limit left no trace. A teammate that could not reach the model at all looked live to the mtime sensor, to `ListAgents`, and to the lead.
+
+Owed: (a) the liveness sensor keys on the last `assistant`/tool line's timestamp, not file mtime, and reports STALLED when none has landed for N minutes or when K consecutive `api-request` lines follow the last assistant line. Note the shapeHash alone does not discriminate: `7d7e1ada` appears 31 times in this transcript including before the wedge, so the arm keys on "no assistant line since", not on a repeated hash. The STALLED report names the likely cause: consecutive unanswered `api-request` lines after the last assistant line mean the model is unreachable (quota, auth or network), not that the agent is thinking. (b) The lead's procedure for STALLED: TaskStop, record the partial work, and — on the unanswered-request signature — tell the operator directly that the account may be out of usage, since only the operator can switch accounts and a re-dispatch on the same account wedges again; then re-dispatch or hand off with that state. Receipt: a probe transcript ending in 3+ `api-request` lines after its last assistant line, with a fresh mtime, reports STALLED; a transcript whose last line is a recent assistant line is the control and does not.
+
+Deferred to next batch (operator, batch 235).
+
+verify: manual
+
+## BL-579 — at a handoff the lead attributes every uncommitted subject edit to the agent it stopped, so the successor is told to redo joined work
+
+**DEFECT.** Filed by peer session ai-dlc-4e from graph's s319 handoff by lead `949015a6` (Sonnet 5.5), 05:35-05:41Z on 2026-10-16. At 05:40:05Z the operator typed "no, i mean handoff immediately"; the lead TaskStopped the serial remediator `a7ffc8dcd555207b8` at 05:40:11Z and committed `3dd8a9fd4` ("… sharded repair joined, serial repair stopped at handoff"). Its `pipeline-snapshot.md:36` lists prd.md, product-brief.md, s319/architecture-impact.md, s319/locked-requirements.md, SPEC.md and .memlog.md as the stopped agent's "UNRECORDED partial edits" and makes diffing them the successor's FIRST ACTION.
+
+Intake re-attributed every `Edit`/`Write` in the session's subagent transcripts read-only (graph `~/.claude/projects/-Users-n8-git-graph/949015a6-…/subagents/`). The serial remediator wrote only `locked-requirements.md` and `prd.md` (2 tool calls each, one dated phrase apiece). The other files were written by sharded part remediators whose records the join accepted at 04:59:51Z (11 parts, 22 repaired, 2 escalated): product-brief.md by "Repair part 01 brief scope" and "Repair part 03 brief locked reqs"; architecture-impact.md by "Repair part 13 architecture-impact"; SPEC.md and .memlog.md by "Repair part 04 SPEC". prd.md is MIXED, not unrecorded: "Repair part 07 PRD locked bullets" wrote it at 04:56:58Z and 04:58:46Z, joined, before the serial remediator's 05:08Z phrase. `git diff --numstat 285c67f5d 3dd8a9fd4` on graph: product-brief +50/-4, prd +20/-17, architecture-impact +2/-2, SPEC +1/-1, .memlog +1/-0, locked-requirements +1/-1. So only locked-requirements.md's one line and one phrase inside prd.md are unrecorded; the rest are joined repairs that were uncommitted only because nothing committed after the join.
+
+Consequence: the successor re-derives six files as unrecorded; at worst, "reverting unrecorded partial edits" undoes accepted pass-1 repairs.
+
+Cause: `core/skills/ai-dlc/steps/handoff.md:27-53` (at 952b9319) says to stop in-flight teammates, record the stop, and "Commit any in-flight work … including work teammates left in the working tree" (`:52-53`), but gives no means of separating a stopped agent's own writes from the tree, so the lead inferred ownership from `git status` after a join it never committed.
+
+Owed: (a) the handoff records each stopped agent's own writes from its transcript or from the write ledger that 0.790.0 made carry `tool_use_id` and transcript (CHANGELOG 0.790.0, BL-533), never from `git status`; (b) commit the subject after a join accepts a repair round, so a later stop cannot blur joined and in-flight edits. Receipt: a probe tree with a joined record whose parts edited A and B (and a shared file D also edited by the stopped agent), plus a stopped agent that edited C and D; the handoff's partial-edit list names C and D only, with A and B as the control that stays out.
+
+Deferred to next batch (operator scope ruling via lead ai-dlc-9c, batch 235).
+
+verify: manual
+
+## BL-596 — the planning-artifact write ledger drops which tree a write landed in, so a worktree or clone write credits the main tree's shard
+
+**DEFECT.** Filed by peer session ai-dlc-f5 from the BL-536 tip adversary run on `07dfcbfa` (b235-bl536 before its rebase onto 0.792.0), routed by lead ai-dlc-9c. `record_artifact_write` in `core/hooks/ai-dlc-gate-remediation-guard.sh` (`:519`, at origin/main 27467671) normalises its fallback spelling at `:528` — `*/${STATE_DIR_NAME}/planning-artifacts/*` → `_raw_rel="${STATE_DIR_NAME}/${1#*/${STATE_DIR_NAME}/}"` — stripping everything before the state-dir name. A write to `<repo>/.claude/worktrees/wt1/_bmad-output/planning-artifacts/s319/shards/stories-p1/2.md` is therefore recorded as `_bmad-output/planning-artifacts/s319/shards/stories-p1/2.md`, byte-identical to the main tree's shard path, with no trace of the worktree; the same holds for any scratch or rehearsal clone an agent of the session writes. BL-536's merge keys on that path.
+
+Measured by the filer in mktemp worlds driving the real tip merge and hook, every ledger row written by the real hook: shards 1, 3 and cross-1..3 written through the hook; shard 2 present in the main tree with no hook-seen write; adversary `agWT` writes the worktree path above through the hook; the merge on the main tree's shard dir returned rc=0 MERGED with `2=toolu_01RcptWT` (expected: refuse, 2.md has no row for this tree). Control, same harness without the worktree write: refuses with `2.md has no row`.
+
+Owed: the ledger row records which tree it was written in, or the merge refuses a row whose original spelling is not under this project root. This changes the row schema read by `join-remediator-shards.sh`, `merge-adversarial-shards.sh` and `validate-draft-stamps.sh`, which is why it was not folded into BL-536. Receipt: the filer's world above, refusing, with the no-worktree world as the control.
+
+Deferred to next batch (late-filing rule, lead ai-dlc-9c, batch 235).
+
+verify: manual
+
+## BL-597 — under a local-model lead the merge writes `call_…` dispatch ids that Check 24 reads as no ids
+
+**DEFECT.** Local-model lead goal (operator ruling: a defect a local lead exposes is a pipeline fix). Filed by peer session ai-dlc-f5 from the same BL-536 tip adversary run on `07dfcbfa`. The harness meta records `toolUseId` in a non-Anthropic shape under a local model: intake found exactly 1 subagent meta on this machine carrying `"toolUseId":"call_` (another project, a local-model session), against 5065 carrying `"toolUseId":"toolu_` in the same glob. With meta and spawn-ledger ids of shape `call_…`, the BL-536 merge returns rc=0 and writes `shard_tool_use_ids: 1=call_1abc …`. Check 24's `k_has_ids` (`core/scripts/validate-adversarial-convergence.sh:1763-1764`, `case " $1" in *=toolu_?*`) answers NO on that line, so arm K treats a correctly derived round as carrying no ids. The merge's own id vocabulary is `toolu_`-only too: `RE_REAL_TUID='^toolu_[0-9A-Za-z]{24}$'` (`07dfcbfa:core/scripts/merge-adversarial-shards.sh:677`), and on origin/main `:585` refuses any `tool_use_id` that is not `toolu_?*`. Before BL-536 a non-`toolu_` self-reported id was refused at the merge; after it, the id passes the merge and is mis-scored downstream.
+
+Measured by the filer: a receipt world whose every shard meta and spawn row carries `call_<k>abc`; the merge, then the `k_has_ids` predicate on its line → NO; control in the same run, the predicate on ` 1=toolu_01RcptX` → yes. Limit: the validator was not run, so the arm-K FAIL is predicted from its predicate, not measured.
+
+Owed: one id vocabulary across the merge, `RE_REAL_TUID` and Check 24 that admits the harness's real id shapes, derived from what metas actually carry. Receipt: the `call_` world passes arm K end to end (the validator run, not the predicate alone), with a malformed id as the control that still fails.
+
+Deferred to next batch (late-filing rule, lead ai-dlc-9c, batch 235).
+
+verify: manual
+
+## BL-598 — `merge-adversarial-shards.sh --rerun <shard>@<S>` never checks S against a dispatch time
+
+**NOTE.** Filed by peer session ai-dlc-f5 from the BL-536 tip adversary run on `07dfcbfa` (`--rerun` is documented at `core/scripts/merge-adversarial-shards.sh:68-80` there). S is taken as typed: a far-past S (`1999-01-01T00:00:00Z`) on a normal round merges; a future S (`2999-…`) refuses with `has no row`. Harmless today because the role check is the guard (that gap is BL-536 D1, folded there), but S binds nothing — the same hand-typed-time shape as BL-564's `--since`.
+
+Deferred to next batch (late-filing rule, lead ai-dlc-9c, batch 235).
+
+verify: manual
