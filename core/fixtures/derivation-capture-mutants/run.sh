@@ -2,8 +2,27 @@
 # derivation-capture-mutants — the mutation battery behind ai-dlc-derivation-capture.sh.
 # DISTRIBUTION-ONLY.
 #
-# Usage: run.sh
+# SHARDED. This file is shard 'a' and holds every mutant; derivation-capture-mutants-<x> are
+# one-line drivers that exec it with `--group <x>`. A scheduling boundary, not a subject boundary:
+# the battery was the suite's longest single unit and the pool is POLE-BOUND on it. THE DEAL IS
+# DERIVED, NEVER WRITTEN: the declared set is this file's own `mutate "<label>"` lines, in order,
+# and mutant i goes to shard ((i-1) mod |SHARDS|). Before any mutant runs, every shard checks the
+# deal is disjoint and its union is the declared set exactly (probed on a seeded duplicate and
+# omission first), that every other shard has a driver naming it, and that the declared set has
+# not shrunk below MIN_MUTANTS. After its mutants run, a shard asserts it ran exactly the ones
+# dealt to it.
+#
+# NO UNMUTATED CONTROL. The scoring in `mutate` already refuses a dead harness on every mutant: a
+# sibling that prints no `  FAIL  ` line (a broken harness, or a subject that never loaded) scores
+# n=0 and the mutant reports SURVIVED, and an unmutated hook that reddened arms would redden ones
+# no mutant declared. Every mutant in every shard would fail. The shipped derivation-capture unit
+# runs the sibling unmutated.
+#
+# Usage: run.sh [--group <shard>]
 # Exit:  0 = every arm is load-bearing and exclusively so, 1 = one is not, 2 = fixture broken.
+SHARDS="a b c d"
+# A ratchet, raised when a mutant is added: lowering it is a visible edit, a lost mutant is not.
+MIN_MUTANTS=33
 #
 # WHY IT EXISTS. Nine of the sibling's eighteen assertions are ABSENCE-shaped -- they require
 # the hook to exit 0 and print nothing -- and every one of them passes against a hook replaced
@@ -41,6 +60,18 @@
 # defends a consumer who registers this hook against a wider matcher than the template's.
 set -uo pipefail
 
+GROUP=a
+if [ "${1:-}" = "--group" ]; then
+  GROUP="${2:-}"
+  [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }
+fi
+case " $SHARDS " in
+  *" $GROUP "*) ;;
+  *) echo "FIXTURE ERROR: unknown shard '$GROUP' (known: $SHARDS)" >&2; exit 2 ;;
+esac
+NAME="derivation-capture-mutants"
+[ "$GROUP" = a ] || NAME="$NAME-$GROUP"
+
 # HERMETIC -- scrub the operator's tuning before invoking any hook (I10).
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
@@ -53,8 +84,58 @@ SIB="$HERE/../derivation-capture"
   || { echo "FIXTURE ERROR: sibling derivation-capture/ is missing its driver or seed" >&2; exit 2; }
 command -v jq >/dev/null 2>&1 || { echo "FIXTURE ERROR: jq is required" >&2; exit 2; }
 
+SELF="$HERE/run.sh"
+[ -f "$SELF" ] || { echo "FIXTURE ERROR: cannot read $SELF for the coverage join" >&2; exit 2; }
+
+# partition_ok <declared file> <dealt file> -> 0 when dealt is disjoint and covers declared exactly.
+partition_ok() {
+  local dup miss extra
+  dup="$(sort "$2" | uniq -d | tr '\n' ' ')"
+  miss="$(sort -u "$2" | comm -23 <(sort -u "$1") - | tr '\n' ' ')"
+  extra="$(sort -u "$2" | comm -13 <(sort -u "$1") - | tr '\n' ' ')"
+  [ -z "$dup$miss$extra" ] && return 0
+  echo "dealt twice: {${dup% }} dealt to no shard: {${miss% }} dealt but not declared: {${extra% }}"
+  return 1
+}
 WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
+JW="$WORK/join"; mkdir -p "$JW"
+printf '%s\n' m1 m2 m3 > "$JW/pd"; printf '%s\n' m1 m2 m2 m3 > "$JW/pdup"
+printf '%s\n' m1 m3 > "$JW/pmiss"; printf '%s\n' m3 m1 m2 > "$JW/pok"
+if partition_ok "$JW/pd" "$JW/pdup" >/dev/null || partition_ok "$JW/pd" "$JW/pmiss" >/dev/null \
+   || ! partition_ok "$JW/pd" "$JW/pok" >/dev/null; then
+  echo "FIXTURE BROKEN: the coverage join's self-probe did not discriminate (duplicate, omission, exact)" >&2; exit 2
+fi
+# The declared set: the label (first quoted string) of every line that BEGINS `mutate "`.
+awk -F'"' '$1 == "mutate " { print $2 }' "$SELF" > "$JW/declared"
+ndecl="$(grep -c . "$JW/declared")" || ndecl=0
+ndup="$(sort "$JW/declared" | uniq -d | grep -c .)" || ndup=0
+if [ "$ndecl" -lt "$MIN_MUTANTS" ] || [ "$ndup" -ne 0 ]; then
+  echo "FIXTURE BROKEN: $ndecl mutants declared in $SELF (floor $MIN_MUTANTS), $ndup declared twice" >&2; exit 2
+fi
+nsh=0; for _s in $SHARDS; do nsh=$((nsh+1)); done
+: > "$JW/dealt"; MINE_FILE="$JW/mine"; : > "$MINE_FILE"
+_k=0
+for _s in $SHARDS; do
+  awk -v k="$_k" -v n="$nsh" '(NR - 1) % n == k' "$JW/declared" > "$JW/shard.$_s"
+  [ -s "$JW/shard.$_s" ] || { echo "FIXTURE BROKEN: shard '$_s' is dealt no mutant; a shard dealt nothing passes everything it never checked" >&2; exit 2; }
+  cat "$JW/shard.$_s" >> "$JW/dealt"
+  [ "$_s" = "$GROUP" ] && cp "$JW/shard.$_s" "$MINE_FILE"
+  _k=$((_k+1))
+done
+for _s in $SHARDS; do
+  [ "$_s" = a ] && continue
+  drv="$HERE/../derivation-capture-mutants-$_s/run.sh"
+  if [ ! -f "$drv" ] || ! grep -qF -- "--group $_s" "$drv"; then
+    echo "FIXTURE BROKEN: shard '$_s' is declared but $drv does not drive it" >&2; exit 2
+  fi
+done
+if ! why="$(partition_ok "$JW/declared" "$JW/dealt")"; then
+  echo "FIXTURE BROKEN: the shard partition does not cover the declared mutants exactly -- $why" >&2; exit 2
+fi
+nmine="$(grep -c . "$MINE_FILE")" || nmine=0
+[ "$nmine" -gt 0 ] || { echo "FIXTURE BROKEN: shard '$GROUP' has no mutants" >&2; exit 2; }
+n_seen=0
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
@@ -88,21 +169,8 @@ run_sibling() {
 # failing_arms -> the sibling's FAIL lines, one per line, whitespace-collapsed
 failing_arms() { sed -n 's/^  FAIL  //p' "$WORK/out"; }
 
-echo "derivation-capture-mutants:"
-
-# --- 0. CONTROL: the unmutated copy passes, and passes for a reason ------------
-# Presence-shaped, not merely rc=0: a subject replaced by `exit 0` produces a sibling that
-# reports FAIL everywhere, but a BROKEN HARNESS produces no arm lines at all, and "no FAIL
-# lines" would otherwise score as a clean control.
-run_sibling
-CTL_OKS=$(grep -c '^  ok    ' "$WORK/out" || true)
-if [ "$SIB_RC" = 0 ] && [ "$CTL_OKS" -ge 16 ]; then
-  ok "control: the unmutated hook passes all $CTL_OKS sibling arms"
-else
-  bad "control: the unmutated hook exited $SIB_RC with $CTL_OKS ok lines — the harness is broken, so every kill below is unreadable"
-  printf '%s\n' "$(sed -n '1,25p' "$WORK/out")" >&2
-  exit 2
-fi
+echo "$NAME:"
+ok "[J0] coverage join: $ndecl mutants (floor $MIN_MUTANTS) derived from mutate lines, dealt disjointly across {$SHARDS}, union exact; this shard runs $nmine"
 
 # mutate <label> <owned-arm-substrings, `|`-separated> <sed-expr>
 # Applies the mutation to a fresh copy, guards with cmp -s so a sed that matched nothing
@@ -110,6 +178,8 @@ fi
 # EXACTLY the declared set -- every declared arm present, and no arm beyond them.
 mutate() {
   local label="$1" owned="$2" expr="$3" n other
+  grep -qxF -- "$label" "$MINE_FILE" || return 0
+  n_seen=$((n_seen+1))
   cp "$PRISTINE" "$MUT_HOOK"
   sed "$expr" "$PRISTINE" > "$WORK/mutated" 2>/dev/null
   if cmp -s "$PRISTINE" "$WORK/mutated"; then
@@ -347,6 +417,7 @@ mutate "section-copy refusal prefix without the slash" \
   "a reproducing part pair over sections.bak/" \
   's/^    case "\$c" in "\$SEC_PHYS"|"\$SEC_PHYS"\/\*) printf/    case "$c" in "$SEC_PHYS"*) printf/'
 
+[ "$n_seen" -eq "$nmine" ] || bad "[J1] shard '$GROUP' reached $n_seen mutants, $nmine dealt -- a dealt mutant never ran"
 if [ "$fails" -gt 0 ]; then
   printf '  %s mutation(s) did not behave\n' "$fails"
   exit 1
