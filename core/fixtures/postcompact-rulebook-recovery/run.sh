@@ -1461,14 +1461,21 @@ a_nogrant() {
   allowed "$d" || { printf 'FAIL:a lead with no advisor grant was held on R\n'; return; }
   printf 'PASS\n'
 }
-# A6. A teammate is not the lead: its dispatch is untouched, and its own step Read never arms.
+# A6. A teammate is not the lead: its dispatch is untouched, and the lead's owed R survives it.
+#     THE SEED IS SATISFIED BY THE LEAD'S READS, never a teammate's. The recovery is the lead's:
+#     a teammate reading the snapshot reloads nothing into the lead's context, so the read stages
+#     do not count it (BL-590), and whether a teammate's Read arms R is no longer a question this
+#     stage can be asked -- the read battery's `mate_reads` owns it. The twin is the lead's own
+#     Agent call in the same state, one property apart, still refused naming R.
 a_mate() {
   _p="$(a_world "$1" grant boundary digest)"
+  [ -e "$_p/$OW" ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the lead Reads did not arm the advisor stage\n'; return; }
   d="$(acall "$1" "$_p" Agent "$_p/t.jsonl" agent-x1)"
   allowed "$d" || { printf 'FAIL:a teammate Agent call was refused on the lead R touchpoint\n'; return; }
-  _q="$(aproj)"; areads "$1" "$_q" agent-x1
-  [ -e "$_q/$OW" ] && { printf 'FAIL:a teammate step Read armed the lead advisor stage\n'; return; }
-  [ -e "$_q/$mk" ] && { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the teammate Reads did not satisfy the read stages\n'; return; }
+  [ -e "$_p/$OW" ] || { printf 'FAIL:a teammate call discharged the lead owed R\n'; return; }
+  d="$(acall "$1" "$_p" Agent "$_p/t.jsonl")"
+  allowed "$d" && { printf 'FAIL:the lead Agent call after a teammate call was allowed with R still owed\n'; return; }
+  grep -q 'touchpoint R' <<<"${d#*|}" || { printf 'FAIL:the lead Agent call was denied for some reason other than R\n'; return; }
   printf 'PASS\n'
 }
 # A7. No readable digest: R is not owed, so the satisfying step Read does not arm the stage.
@@ -1538,7 +1545,7 @@ for _n in $APREDS; do
     before)   label="R: an advisor attempt BEFORE the digest Read does not satisfy it" ;;
     unavail)  label="R: an 'unavailable' advisor result stands the stage down" ;;
     nogrant)  label="R: a lead with no advisor grant line is never held" ;;
-    mate)     label="R: a teammate is untouched and its step Read never arms the stage" ;;
+    mate)     label="R: a teammate's dispatch is untouched while the lead owes R, and the lead is still held" ;;
     nodigest) label="R: no readable postcompact digest, no stage" ;;
     bound)    label="R: the escape bound -- three refusals, then the stage stands down" ;;
     session)  label="R: another session's call is not held on this lead's touchpoint" ;;
@@ -1567,7 +1574,7 @@ amut() { # amut <name> <awk program> -> mutant path
   awk "$2" "$GATE" > "$WORK/gate-adv-$1.sh"; printf '%s\n' "$WORK/gate-adv-$1.sh"
 }
 amutant_arm "the stage never arms (the owed write removed)" \
-  "$(amut noarm 'index($0,"owed_put \"$(printf"){print "          :"; next} 1')" "deny before bound"
+  "$(amut noarm 'index($0,"owed_put \"$(printf"){print "          :"; next} 1')" "deny before mate bound"
 amutant_arm "the teammate stand-down removed at the stage" \
   "$(amut mate 'index($0,"[ -z \"$R_AID\" ] || exit 0"){next} 1')" "mate"
 amutant_arm "an advisor attempt anywhere satisfies R" \
