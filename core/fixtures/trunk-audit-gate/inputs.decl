@@ -1,0 +1,6 @@
+# The subject under test: every world drives Check 36's wrapper against a scratch repo.
+!core/scripts/validate-trunk-audit-gate.sh
+# The audit the wrapper re-runs, resolved as its sibling; the worlds discriminate on its exits.
+core/scripts/validate-cycle-commits.sh
+# Sourced first by run.sh; non-discriminating (the sandbox env is already scrubbed), declared because it is read.
+core/fixtures/lib/

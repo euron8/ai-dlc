@@ -71,6 +71,7 @@ clean trunk. Exit 1 is one or more findings: file HARD_BLOCK at the
 carry-over-evaluation gate naming each reported SHA; silent skip is
 forbidden. Exit 2 is a setup error (no genesis, unreadable contract) —
 fix the invocation and re-run; it is NOT a clean result.
+Gate Check 36 re-runs this audit at the planning gate and reads only that re-run.
 
 **Backlog health check.** Before per-item evaluation, count OPEN
 items and flag any older than 10 sprints. When OPEN count exceeds 15,

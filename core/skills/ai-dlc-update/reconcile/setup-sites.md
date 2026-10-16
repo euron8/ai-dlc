@@ -96,6 +96,7 @@ core_manifest:
   - core/fixtures/scope-confirmation/**
   - core/fixtures/snapshot-archive-rotate/**
   - core/fixtures/snapshot-conservation/**
+  - core/fixtures/trunk-audit-gate/**
   - core/fixtures/suppression-lifetime/**
   - core/fixtures/self-update-fixture-log/**
   - core/fixtures/snapshot-supersession-marker/**

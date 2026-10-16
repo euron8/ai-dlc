@@ -180,6 +180,7 @@ core_manifest:
   - fixtures/scope-confirmation/**
   - fixtures/snapshot-archive-rotate/**
   - fixtures/snapshot-conservation/**
+  - fixtures/trunk-audit-gate/**
   - fixtures/suppression-lifetime/**
   - fixtures/self-update-fixture-log/**
   - fixtures/snapshot-supersession-marker/**
