@@ -18558,3 +18558,80 @@ Batch 227's block below is history: this block replaces its delivery gap. Starte
 Net for the batch: closed 2 candidates, which graph's pull closed on its side; filed 4 entries (BL-503..506) and
 closed all 4 in the release. The backlog stays declared empty.
 
+**BATCH 229 SHIPPED `v0.782.0` (`6fe903b6`, #1134) AND `v0.783.0` (`f621fd36`, #1135): EIGHT OF THE FOURTEEN
+s317-s318 EFFICIENCY ENTRIES CLOSED, BL-510's EVIDENCE HALF SHIPPED, AND THREE BUILT BRANCHES ARE HELD ON ORIGIN FOR THE
+NEXT SESSION. GRAPH FILED FIVE NEW SPRINT-318 CANDIDATES AT ITS RETRO MERGE AFTER THE RELEASES WERE BUILT; THEY ARE
+UNFILED AND THE NEXT SESSION'S SWEEP SCOPES THEM.**
+Batch 228's block below is history: this block replaces its delivery gap. Started by the operator's one-liner at
+`origin/main` `fe7d5ec2` (`VERSION` 0.781.0); graph-2e was live and busy, and was never messaged. The operator asked for
+a handoff to a fresh session because this one's context was deep; the batch closed with three branches held rather than
+shipped, which is that decision, not a stall.
+- **Opening sweep** (at `fe7d5ec2`): live 0, unfiled 0, worklist 0, DISCHARGED 0, invisible 0, TERMINAL 236, archive 359,
+  24 qualifying refs, every control passing; installed = shipped = 0.781.0. The worklist's `awk` half matched nothing
+  because the live backlog cited no `PC-` id at all (control: 243 rows over the archive). Graph's two sprint-318 ids sat
+  only on story branches and were already archived on its carry-over branch. So the batch's scope was the 14 entries
+  BL-507..520 filed from `docs/analysis/pipeline-efficiency-s317-s318.md`.
+- **Operator rulings, batch 229** (each binds its entry until the operator says otherwise):
+  - Scope: all 14.
+  - BL-511: consolidation stays operator-supervised, never automatic.
+  - BL-507: the re-review after `NEEDS_REWORK` is a SHARDED delta, per the batch-198 no-partial-sharding ruling.
+  - BL-509: measure findings per dollar now; build the shape rule from the result.
+  - BL-515: a re-sent spawn is held until an agent of the session has EXITED, not until a `DELIVERED` beat.
+  - BL-510: ship the evidence half and keep the entry open for the bookkeeping class; its receipt chains to a
+    `probes/bl-510-bookkeeping.sh` that does not exist yet, so it reads STILL-LIVE until that class is built.
+- **`v0.782.0`**: BL-514 (a subagent's foreground poll over the steering budget is denied: 198 of 1,599 over-budget
+  graph subagent calls, 17.0 h, 0 legitimate), BL-518 (`gate-checkpoint.sh open` keys on the schema's
+  `patterns.gate_nonce`: 94 of 94 real opens pass), BL-509 (elicitation takes the adversarial pass's axis and shape for
+  every subject; critical+major per dollar was flat across shapes, 0.50-0.77, and the cost question needs the
+  frozen-corpus run the entry records).
+- **`v0.783.0`**: BL-516 (gate-remediation-guard arm 3b denies a lead edit to product code in an `/ai-dlc` session: 18
+  denies over 4,412 graph lead edits, all product code), BL-520 (every teammate-to-lead send carries `to: "main"`:
+  167/167 delivered, `lead` 0/15), BL-517 (the snapshot refuses a stamp over 10 minutes ahead and the remedy reaches the
+  lead through `verdict.sh`), BL-511 (`--fail-on whole-read-pool` blocks retro until an OPEN carry-over item records the
+  breach), BL-513 (a Strategy Test ID cell naming a missing node is refused), BL-510's evidence half (10 refusals in 5 of
+  32 approved graph story tips, all real).
+- **Every entry went through a contract adversary, a builder, and at least one tip adversary; nine needed fix rounds.**
+  The defects tip adversaries found and the release fixed are recorded in each entry's body and the CHANGELOG. Two that
+  read as passing and were not: BL-518's receipt passed a loose regex, and BL-517's remedy never reached the lead because
+  `verdict.sh` dropped `FUTURE` rows.
+- **HELD on origin, built and twice adversaried, NOT shipped.** Each is cut from `fe7d5ec2` and needs a rebase onto
+  `f621fd36`. Derive the files that will conflict, never trust a list: `comm -12 <(git diff --name-only fe7d5ec2
+  f621fd36 | sort) <(git diff --name-only fe7d5ec2 <branch> | sort)`. Resolve by content, never by side. The read-set map conflicts too: keep the
+  base's and re-trace. Each needs one more tip adversary on its final tip before it ships:
+  - `b229-bl507` at `6072d37c`: `validate-carried-findings.sh` at Check 1, a sharded delta re-review through the existing
+    `<base>` argument, `--list`. Three rounds found real false FAILs on graph's history; the last fix clears all form
+    failures on graph's 58 real pairs (47 remaining FAILs are genuine missing carries in pre-rule reviews).
+  - `b229-bl508-519` at `8b5c2236`: the join's `siblings:` and set-aside arms, `SERIAL-REQUIRED`, explicit `closes:`.
+  - `b229-bl515-512` at `d97cebba`: the dispatch guard's re-send hold and the gate-adjudicator waiver check.
+- **Unfixed, recorded**:
+  - The read-set tracer's default sandbox root is per-user and deleted at each run's start, so two hand-run traces
+    collide and the second wipes the first mid-fixture; the deriver then exits 0 having recorded nothing. Set
+    `AI_DLC_READSET_TRACE_ROOT` per run. A unique default root and a non-zero exit on all-omitted are owed.
+  - Graph carries four unaddressed "message the lead" sites this distribution cannot reach:
+    `.claude/skills/ai-dlc/overrides/team-roles__dev__bug-class-sweep.md:40`, `extensions/roles/tea-consumer.md:24`,
+    `extensions/roles/qa-domain.md:203`, `.claude/skills/ai-dlc/extensions/steps-domain/implementation-push.md:51`. A
+    finding for graph, not an instruction.
+- **Process facts**: the first 0.782.0 gate failed only the suite pole (load ~100 from builders re-running fixtures that
+  pin their edited files); builder verification was narrowed to their own fixtures and the re-push passed. The first
+  0.783.0 gate failed only `fixture-git-env-seam`: `gate-remediation-deny` ran `git init` before scrubbing the inherited
+  git environment, fixed by sourcing the preamble on line 2. The docs close's first push failed only
+  `validator-fork-budget` (3340 against 3339): 0.783.0's new core script costs +4 forks and its own gate passed by the
+  one-fork jitter; the close raises `FORK_BUDGET` to 3346 with the measurement beside it. Every agent worktree was removed and every shipped batch
+  branch deleted by name.
+- **graph delivery**: stamp 0.781.0 against `VERSION` 0.783.0, two releases behind. No candidate is discharged, so
+  action 7's first test reads PENDING 0; the range carries no bootstrapping file. The pull is the operator's.
+- **Close sweep** (at `f621fd36`, backlog read before this close's rotation): live 5, unfiled 5, worklist 0, DISCHARGED
+  0, invisible 0, TERMINAL 236, archive 359, 0 qualifying refs (graph `main` alone), every control passing. The five are
+  graph's retro filings of 2026-10-14, all on graph `main` and none uncommitted: four in its retro merge `b04ee96a8`
+  (#1221) and one in its post-retro rotation commit `03ff6a8af`. Abbreviated: `PC-S318-ARCHITECT-ROLE-…-REBIND`,
+  `PC-S318-OPERATOR-QUESTION-TEMPLATE-…-RECOMMENDED`, `PC-S318-PAUSE-GATE-DENIES-READ-ONLY-OPS-DISPATCH-…`,
+  `PC-S318-QA-ROLE-…-LOCKED-REQUIREMENT-…`, `PC-S318-ROTATE-GATE-ADJUDICATION-SPRINT-FLAG-…`. They landed after this
+  batch's releases were built, so under the batch-183 ruling they are the next batch's scope, not this one's; derive the
+  full ids, do not copy these. Ledger md5 `6f733a18…` at the opening, `8261b9ab…` at the close, both through graph's own
+  commits.
+- **graph boundary**: porcelain 9 at the opening, 3 at the close, all graph's own pipeline logs, 0 under
+  `_bmad-output/ai-dlc-update/`. Nothing was written there.
+
+Net for the batch: closed 8 entries (BL-509, 511, 513, 514, 516, 517, 518, 520), filed 0; six stay live (BL-507, 508,
+510, 512, 515, 519), every one with a held branch or a shipped half.
+
