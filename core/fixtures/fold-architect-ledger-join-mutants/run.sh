@@ -33,20 +33,19 @@
 # for 20 runs of the shipped fixture (C0, C1 and 18 mutants, ~22s each) plus the M6 premise's
 # three I32 runs, and a loaded cost runs well above a solo one, so it would have been the pole.
 #
-# FOUR SHARDS, NOT THREE, AND THE FIXED COST IS WHY. Every shard pays the controls and the
-# premise itself (below), about 65s solo, because a shard that skipped them could report a
-# kill against a harness that never ran. [Superseded: C0 and the M6 premise now run in shard a
-# only, guarded together, since C1 -- every shard's diff base -- still proves the harness ran
-# and J2 joins their execution count to where M6 is dealt.] Two shards would be ~65 + 9 x 22 = ~260s each; three
-# were ~65 + 6 x 22 = ~200s solo. The last green gate's LOADED costs (12-way pool) were a 299s,
+# FOUR SHARDS, NOT THREE, AND THE FIXED COST IS WHY. Every shard runs J0, C1 and J1, so none can
+# report a kill against a harness that never ran; C1 is each mutant's diff base. C0 and the M6
+# premise run only in the shard M6 is dealt to (a), bound by J2, and that fixed cost (about 65s
+# solo when every shard paid it) now falls on a alone. Two shards would have been ~65 + 9 x 22 =
+# ~260s each; three were ~65 + 6 x 22 = ~200s solo. The last green gate's LOADED costs (12-way pool) were a 299s,
 # b 452s, c 291s -- b the second-longest unit on the push -- and re-dealing three shards cannot get
 # under ~347s each (1042 / 3). Four shards of seven mutants each are estimated at ~260s loaded
 # (1042 less three fixed-cost shares, over four); that is an estimate from the code, not a timing,
 # and the next green gate's recorded costs are the check on it.
 #
 # THE DEAL IS BY COST, AND NO MUTANT SHARES A PREREQUISITE WITH ANOTHER. Each mutant builds its
-# own tree and makes one full run of the fixture; the only shared prerequisites are the controls
-# and the premise, which every shard repeats. So the partition balances the two things that
+# own tree and makes one full run of the fixture; the only shared prerequisite is C1,
+# which every shard repeats (C0 and the premise run in shard a only). So the partition balances the two things that
 # vary: a validate-spawn-ledger.sh mutant also pays the un-bypassed self-probe, and M13 also pays
 # the D6 watchdog's 15-second timeout on the hang it re-creates. Round v3.3 dealt M19-M25 three,
 # two and two, and bypassed the probe in EVERY copy: re-measured solo, one after another on this
