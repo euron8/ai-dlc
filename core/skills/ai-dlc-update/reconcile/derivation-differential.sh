@@ -242,10 +242,9 @@ else
   [ "$(wc -l < "$TMP/chain" | tr -d ' ')" = "$(wc -l < "$TMP/blobs" | tr -d ' ')" ] \
     || refuse base-root "the stamp lookup over the first-parent chain returned a different number of rows than the chain has commits."
   paste "$TMP/chain" "$TMP/blobs" > "$TMP/pairs"
-  BASE_COMMIT=""; _good=" "; _bad=" "
+  BASE_COMMIT=""; _bad=" "
   while IFS="$(printf '\t')" read -r _c _b; do
     case "$_b" in *missing*|'') continue ;; esac
-    case "$_good" in *" $_b "*) BASE_COMMIT="$_c"; break ;; esac
     case "$_bad"  in *" $_b "*) continue ;; esac
     _st="$(git -C "$CONSUMER" cat-file -p "$_b" 2>/dev/null)"
     _sc="$(printf '%s\n' "$_st" | stamp_commit)"
