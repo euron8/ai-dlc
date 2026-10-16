@@ -1229,6 +1229,104 @@ else
   bad "o-mutant DID NOT APPLY -- the pin-removal mutation matched nothing, so no verdict was scored"
 fi
 
+# --- O. A DIRECTORY TARGET WALKS THE LIVE SET; FROZEN RECORDS ARE SKIPPED, VISIBLY ------------
+# `_gate-procedures.md` re-runs this validator over `s<N>/` after every repair join and sends
+# exit 1 back to the remediator. The slot also holds records no remediator may edit -- seats,
+# parts and section copies under `shards/`, review and repair records, the input digests -- and
+# a stale command in one of those kept the required run at exit 1 for the rest of the sprint
+# (the reference consumer's s319: 12 stale in 27 files, all in seat and part records). So a
+# directory target skips them by path and says how many; `--all` walks them; a FILE target is
+# never skipped, because the differential and the capture hook pass files.
+#
+# The slot below is s319's SHAPE: one live document and the carry-over evaluation, clean, plus a
+# stale fence in a member of every frozen class the walk names. The near-misses carry the record
+# grammar OUTSIDE a slot (the area root), and the slot's documents.
+O="$WORK/o"; mkdir -p "$O/.claude" "$O/src"
+printf 'x\nx\n' > "$O/src/two.txt"
+OS=_bmad-output/planning-artifacts/s319
+ofence() { mkdir -p "$(dirname "$O/$1")"; printf '# r\n\n```derived\n$ grep -c x src/two.txt\n%s\n```\n' "$2" > "$O/$1"; }
+ofence "$OS/architecture-impact.md" 2
+ofence "$OS/carry-over-evaluation.md" 2
+# A Rule 24 digest is LIVE: repairs edit digests, so the walk keeps it (near-miss to the records).
+ofence "$OS/requirements-context.md" 2
+O_FROZEN="shards/coe-p1/1.md shards/requirements-elicitation/cross-1.md shards/prd-repair-p1/sections/2.md
+  coe-adversarial-p1.md carry-over-evaluation-party-repair-p1.md gate-planning-repair-p2.md
+  requirements-party-repair.md requirements-elicitation-repair.md requirements-elicitation.md"
+for _f in $O_FROZEN; do ofence "$OS/$_f" 9; done
+O_NFROZEN="$(printf '%s\n' $O_FROZEN | grep -c .)"
+# Near-miss: the record grammar at the AREA root is not in a slot, so it is walked.
+ofence _bmad-output/planning-artifacts/prd-repair-p1.md 2
+
+orun() { # $1 validator  $2.. args -> out, rc
+  local v="$1"; shift
+  out="$(cd "$O" && AI_DLC_PROJECT_ROOT="$O" bash "$v" "$@" 2>&1)"; rc=$?
+}
+o_arms() { # <validator> <quiet> -> O_FAILED
+  local V="$1" q="$2" failed="" total seen exc
+  oarm() { if [ "$2" -eq 0 ]; then [ "$q" = 1 ] || ok "$1 $3"
+           else failed="$failed $1"; [ "$q" = 1 ] || bad "$1 $3 (rc=$rc): $out"; fi; }
+  # o-frozen: every stale fence is in a frozen record; the live set is clean -> exit 0, visibly.
+  orun "$V" "$OS/"
+  [ "$rc" -eq 0 ] && grep -q "^EXCLUDED: $O_NFROZEN frozen file(s) under $OS/ " <<< "$out" \
+    && grep -q '^OK: 3 derivation(s) in 3 block(s) across 3 file(s)' <<< "$out"
+  oarm o-frozen $? "        exit=0  stale only in shards/ and records: $O_NFROZEN EXCLUDED, the 3 live files (a digest among them) reproduce"
+  # o-count: what was excluded plus what was walked is every .md under the target.
+  total="$(find "$O/$OS" -type f -name '*.md' | grep -c .)" || total=0
+  exc="$(sed -n 's/^EXCLUDED: \([0-9]*\) .*/\1/p' <<< "$out")"; seen="$(sed -n 's/.* across \([0-9]*\) file(s).*/\1/p' <<< "$out")"
+  [ -n "$exc" ] && [ -n "$seen" ] && [ "$((exc + seen))" -eq "$total" ] && [ "$total" -gt 3 ]
+  oarm o-count $? "         EXCLUDED (${exc:-?}) + walked (${seen:-?}) = every .md under the slot ($total)"
+  # o-all: --all walks the frozen records too -> every one of them is stale.
+  orun "$V" --all "$OS/"
+  [ "$rc" -eq 1 ] && grep -q "^FAIL: $O_NFROZEN stale or unrunnable derivation(s) of $((O_NFROZEN + 3)) checked" <<< "$out" \
+    && ! grep -q '^EXCLUDED:' <<< "$out"
+  oarm o-all $? "           exit=1  --all walks all $((O_NFROZEN + 3)) files and fails the $O_NFROZEN frozen ones"
+  # o-file: a frozen record named as a FILE is never excluded.
+  orun "$V" "$OS/shards/coe-p1/1.md"
+  [ "$rc" -eq 1 ] && grep -q '^FAIL: 1 stale or unrunnable derivation(s) of 1 checked' <<< "$out"
+  oarm o-file $? "          exit=1  a shard part named as a FILE target is checked, never excluded"
+  # o-shardtarget: a target that IS a shard dir is walked; the component counts only BELOW it.
+  orun "$V" "$OS/shards/coe-p1/"
+  [ "$rc" -eq 1 ] && grep -q '^FAIL: 1 stale or unrunnable derivation(s) of 1 checked' <<< "$out"
+  oarm o-shardtarget $? "   exit=1  a shards/ dir named as the target is walked, never read as OK: 0"
+  # o-area: the AREA as target skips the same slot records and walks the area-root near-miss.
+  orun "$V" _bmad-output/planning-artifacts/
+  [ "$rc" -eq 0 ] && grep -q "^EXCLUDED: $O_NFROZEN frozen file(s)" <<< "$out" \
+    && grep -q '^OK: 4 derivation(s) in 4 block(s) across 4 file(s)' <<< "$out"
+  oarm o-area $? "          exit=0  the area target skips the same $O_NFROZEN and walks the area-root prd-repair-p1.md"
+  # o-live: the SAME tree with the live document stale -> exit 1. Restored after.
+  ofence "$OS/architecture-impact.md" 3
+  orun "$V" "$OS/"
+  [ "$rc" -eq 1 ] && grep -q '^FAIL: 1 stale or unrunnable derivation(s) of 3 checked' <<< "$out" \
+    && grep -q "FAIL (STALE): $OS/architecture-impact.md:4" <<< "$out"
+  oarm o-live $? "          exit=1  a stale LIVE document in the slot still fails, named"
+  ofence "$OS/architecture-impact.md" 2
+  O_FAILED="$(printf '%s\n' $failed | sed '/^$/d' | sort -u | tr '\n' ' ')"
+}
+o_arms "$VALIDATOR" 0
+[ -z "$O_FAILED" ] \
+  && ok "o-control              the unmutated validator fails no O arm, so a mutant's failed set is its own" \
+  || bad "o-control the unmutated validator failed O arm(s): $O_FAILED -- no mutant verdict below is readable"
+
+# O's mutants, each a copy guarded by cmp -s, each declared to fail EXACTLY its arm set.
+#   o-m1  the split excludes NOTHING           o-m2  the split excludes EVERYTHING
+#   o-m3  --all is a no-op                     o-m4  a FILE target under shards/ is skipped
+#   o-m5  the EXCLUDED count omits records     o-m6  shards/ matched on the whole path, not below the target
+o_mutant() { # $1 label  $2 declared failed arms (sorted)  $3.. sed expressions
+  local label="$1" want="$2"; shift 2
+  local M="$O/$label-$VBASE"
+  if ! mut_copy "$M" "$@"; then bad "$label DID NOT APPLY -- the mutation matched nothing, so no verdict was scored"; return; fi
+  o_arms "$M" 1
+  if [ -z "$O_FAILED" ]; then bad "$label SURVIVED -- no O arm failed against it"
+  elif [ "$O_FAILED" = "$want " ]; then ok "$label KILLED           by exactly its declared arm(s): $O_FAILED"
+  else bad "$label killed by the WRONG arm set: failed [$O_FAILED], declared [$want]"; fi
+}
+o_mutant o-m1 "o-area o-count o-frozen o-live" 's/^          if (why == "") print > keep; else D\[why\]++$/          print > keep/'
+o_mutant o-m2 "o-area o-frozen o-live o-shardtarget" 's/^          if (why == "") print > keep; else D\[why\]++$/          D[why == "" ? "shards" : why]++/'
+o_mutant o-m3 "o-all" 's/^    --all)  WALK_ALL=1; shift ;;$/    --all)  WALK_ALL=0; shift ;;/'
+o_mutant o-m4 "o-file" 's/^    check_file "\$target"$/    case "$target" in *\/shards\/*) continue ;; esac; check_file "$target"/'
+o_mutant o-m5 "o-area o-count o-frozen" 's/^          "\$((n_sh + n_rec))" "\$target" "\$n_sh" "\$n_rec"$/          "$n_sh" "$target" "$n_sh" "$n_rec"/'
+o_mutant o-m6 "o-shardtarget" 's/^        { rel = (index(\$0, pre) == 1) ? substr(\$0, length(pre) + 1) : \$0$/        { rel = $0/'
+
 echo
 if [ "$fails" -gt 0 ]; then
   echo "FAIL: $fails assertion(s) wrong."
