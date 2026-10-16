@@ -168,6 +168,17 @@ prose is itself generated rather than composed.
 
 ## Procedure
 
+**Run every long call in the background.** Step 1's push, `reconcile/self-update-gate.sh`,
+`reconcile/self-update-fixtures.sh`, `reconcile/apply.sh` and every later push (each push runs
+the consumer's pre-push suite) take minutes, so issue each with `run_in_background: true` and
+wait for its completion notice. Never declare a foreground `timeout` above the steering budget:
+`.claude/hooks/ai-dlc-foreground-budget.sh` owns that number (`AI_DLC_STEERING_BUDGET`) and
+denies the call. The steps below branch on these calls' exit statuses, and a backgrounded call
+still has to deliver one: send its output to a file under your session scratchpad and print the
+status last — `<call> > <file> 2>&1; echo "rc=$?" >> <file>` — then read `rc=` from that file.
+Never pipe the call into `tail`, which replaces its status with its own. Scratch files go under
+the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions share.
+
 1. **Resolve inputs.** Read the stamp: `base` = the `commit` field (rulebook
    merge-base), per the schema above; fall back to legacy single-line parsing if
    there is no `commit:` field. Resolve `theirs` (arg or upstream HEAD). Confirm
@@ -1067,8 +1078,13 @@ prose is itself generated rather than composed.
      **revert**, not an override, and telling the operator to refile it would be actively
      wrong advice. It still **blocks**: a revert DELETES consumer text, so the operator
      confirms the upstream version covers their delta first. Show them the diff, then run
-     the `git show "${theirs}:<core-path>" > <consumer-path>` command the status carries.
-     This is the core-drift twin of `EXTENSION-RETIRE-CANDIDATE`.
+     the `git -C <dist> show …` command the status carries, substituting the consumer root
+     for its literal `<consumer>` placeholder. This is the core-drift twin of
+     `EXTENSION-RETIRE-CANDIDATE`. **Any read of the distribution at a ref is
+     `git -C <dist> show "${ref}:core/…"`, naming the CORE path** (the Path mapping table
+     above, read backwards), never the consumer's `scripts/ai-dlc/…`. In the consumer a bare
+     `git show "${dist_sha}:…"` exits 128 because the consumer does not hold that commit, and
+     behind `2>/dev/null` that failure is an empty read that every count scores as 0.
 
    - `HARD-CORE-BEHIND` → **this copy is STALE, not forked.** It best-matches a historical
      blob of that path which is a strict ancestor of `base` and older than it, so the file

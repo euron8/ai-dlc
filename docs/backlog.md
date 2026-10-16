@@ -570,36 +570,6 @@ Scheduled in batch 235 for a later release (scope ruling: the boundary is the re
 
 verify: manual
 
-## BL-580 — the ai-dlc-update skill prescribes long runs but never says to background them, so every pull's first long call is denied and re-issued
-
-**DEFECT.** Filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]) from graph's ai-dlc-update sessions. The steering-budget deny ("this FOREGROUND Bash call declares timeout 600000 ms, over the 120s steering budget") appears exactly once in each of graph's last three update sessions (intake counted read-only: `3d1088df` 1, `38c562c5` 1, `1d7b4691` 1): the 0.790.0 pull at the self-update gate, the 0.791.0 pull, and the 0.792.0 self-update at 06:37:40Z on 2026-10-16 on `self-update-fixtures.sh` over 19 fixtures, re-issued in the background at 06:37:43Z. Three of three pulls lost a round trip, each after the session reached for `timeout: 600000` itself.
-
-The skill prescribes the long runs (the self-update gate, `self-update-fixtures.sh`, `apply.sh`, and the push with its pre-push suite) but never how to run them: `core/skills/ai-dlc-update/SKILL.md` at c16609ba mentions `run_in_background` 0 times (control: `self-update-fixtures` 6 times; graph's installed copy reads the same, 0 and 6).
-
-The filer's alternative fix is already shipped and is NOT the gap: the deny text the session received names the remedy ("Re-issue the same call with run_in_background: true and collect its result when it completes, or declare a timeout of at most 120000 ms"), and `core/hooks/ai-dlc-foreground-budget.sh:3` says the hook does so. The recovery works; the round trip is the cost of a skill that never states the form up front.
-
-Owed: SKILL.md states once, at the first long-running step, that every reconcile script and the push run with `run_in_background: true` and the session waits for the completion notice. Receipt: SKILL.md names `run_in_background` at the `self-update-fixtures` step (no behavioural replay for a prompt fix, batch 147 ruling).
-
-Not filed, noted: the same session wrote its fixture list to a bare `/tmp/x` (2 writes in `1d7b4691`) outside its scratchpad — a shared path concurrent sessions can collide on.
-
-Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
-
-verify: manual
-
-## BL-581 — the reconcile log records a false-zero as "Verified": a consumer-repo `git show <dist-sha>:` failed silently and every base count read 0
-
-**DEFECT.** Filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]) from graph's 0.791.0 → 0.793.0 apply, session `1d7b4691` (Sonnet), 2026-10-16 03:18-03:22 EDT. `derivation-differential.sh` reported 8 NEWLY-FAILING, all recorded `$ grep -n … scripts/ai-dlc/validate-artifact-budget.sh` derivations in s319 artifacts (carry-over-evaluation-architect-5.md:13 and :23, carry-over-evaluation-pm-5.md:13, prd.md:1289, carry-over-evaluation-party-repair-p1.md:632, requirements-party-repair.md:859, shards/carry-over-evaluation-party-repair-p1/5.md:15, shards/requirements-party-repair/08.md:102). To find why, the session ran `git show 952b9319:scripts/ai-dlc/validate-artifact-budget.sh 2>/dev/null | grep -c -F -e "$p"` in graph's tree (2 such commands in the transcript). 952b9319 is a distribution sha: intake confirmed `git -C graph cat-file -e 952b9319` fails (control: graph's own HEAD resolves), so the `git show` failed, `2>/dev/null` hid the error, and every base count read 0. Graph's `_bmad-output/ai-dlc-update/reconcile-log-20261016T0725Z.md:33` then records: "Verified: `330000 to 66000`, `66000 and an in-budget pool became a HARD_BLOCK`, `  ok  %-44s` and `--quiet)` each count 0 at base and 1 now", and demotes the real cause to "Inference, not verified: the recorded line numbers moved with the 0.792.0 …".
-
-Ground truth, intake re-derived on `core/scripts/validate-artifact-budget.sh`: each of the four needles counts 1 at 952b9319, 1 at 27467671 (0.792.0) and 1 at c16609ba, with a made-up needle at 0 at all three. The text was never added; 0.792.0 moved the line numbers the recorded `grep -n` derivations cite. The log has the cause backwards and labels the wrong half verified — the false-zero shape CLAUDE.md's "a zero is not a finding" names: an absence produced by a failed read, with no control in the invocation.
-
-Consequence: the disposition ("leave untouched, record as owed") was the operator's and holds either way, but the s319 session inheriting the 8 re-points is told the needles were added in 0.792.0, when each is a line-number re-point.
-
-Owed: (a) `derivation-differential.sh` prints, per NEWLY-FAILING row, the derivation's base and theirs output (or their diff), so the cause is measured by the shipped tool; (b) wherever ai-dlc-update's SKILL.md asks for a distribution path at base, it names `git -C <dist> show "${BASE}:core/…"` — a consumer-repo `git show <dist-sha>:` always fails. Receipt: a probe `grep -n` derivation whose needle stays but whose line shifts between base and theirs is reported NEWLY-FAILING with both outputs shown; an unchanged derivation is the control.
-
-Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
-
-verify: manual
-
 ## BL-582 — ai-dlc-update has no advisor touchpoint before its pushes and merges, and the advisor gate exempts them
 
 **DEFECT.** Raised by the operator's question ("should the graph session have called the advisor before the push? I thought that was a requirement?"); filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]). Rule 32 touchpoint I — "Before a push, a merge or a deploy" — is in the pipeline skill only (`core/skills/ai-dlc/SKILL.md`, 1 line). `core/skills/ai-dlc-update/SKILL.md` at ffef448b names no advisor touchpoint: `advisor` 0 times outside "advisory" (4), control `self-update-fixtures` 6. `core/hooks/ai-dlc-advisor-gate.sh:58-74` excludes a push or merge while the cwd branch is `ai-dlc-update/*` and a push whose every refspec destination is `ai-dlc-update/*`, giving as its reason that the update skill is "a bootstrapping file; its text carries no touchpoint and this release does not edit it". The exclusion shipped in 0.738.0 (`9bdbc311`); that release's CHANGELOG cites an operator ruling for the per-kind gate ("THE SAME KIND (operator ruling, batch 201)") and lists the update-branch exclusion as release text with no ruling attached.

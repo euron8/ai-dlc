@@ -20,6 +20,38 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.799.0] - 2026-10-16
+
+Batch 235 (release U-a), bootstrapping release; ships alone. Closes BL-580 and BL-581. Closes no `PC-` id.
+
+### The update skill says to run its long calls in the background (BL-580)
+
+- `ai-dlc-update/SKILL.md` opens `## Procedure` with one paragraph: step 1's push, the self-update gate,
+  `self-update-fixtures.sh`, `apply.sh` and every later push run with `run_in_background: true`, and the
+  session waits for the completion notice. A foreground `timeout` above the steering budget is denied by
+  `ai-dlc-foreground-budget.sh`, which owns that number.
+- The steps branch on these calls' exit statuses, so the paragraph gives the form that keeps one: output to
+  a scratchpad file, `echo "rc=$?"` last, read `rc=` from the file. Never pipe the call into `tail`, and never
+  write scratch files to a bare `/tmp/<name>`.
+- Measured on the reference consumer: each of its last three update sessions lost one round trip to the
+  steering-budget deny on a self-chosen `timeout: 600000`.
+
+### A NEWLY-FAILING derivation shows what it recorded and what it prints now (BL-581)
+
+- `derivation-differential.sh` appends `recorded: <…>  actual: <…>` to each NEWLY-FAILING row, taken from the
+  consumer validator's STALE block. The base side reproduced, so the recorded output is the base output and the
+  cause is read off the row. Other statuses are unchanged.
+- The `HARD-CORE-DRIFT-ABSORBED` remedy runs the status's `git -C <dist> show …` command with the consumer root
+  substituted for `<consumer>`. A new sentence says any read of the distribution at a ref is
+  `git -C <dist> show "<ref>:core/…"`: in the consumer a bare `git show <dist-sha>:` exits 128, and behind
+  `2>/dev/null` every count reads 0. That is how the reference consumer's 0.793.0 reconcile log recorded a
+  line-number re-point as text "added in 0.792.0" and labelled it verified.
+- Fixture `derivation-differential` gains world A18: a needle that stays while its line moves is NEWLY-FAILING
+  with both outputs; an unchanged derivation and a STALE-BOTH row carry no pair. Mutants R11 (no capture) and
+  R12 (pair on every status) are killed.
+- Bootstrapping: both files are read by the update session, so a consumer gets this on the pull AFTER the one
+  that delivers it.
+
 ## [0.798.0] - 2026-10-16
 
 Batch 235 (hooks, release H-b). Closes BL-562 and BL-567; BL-574 partial. Closes no `PC-` id.

@@ -224,6 +224,22 @@ mutate R10-kill-0-liveness \
   'ps -p "$_pid" >/dev/null 2>&1 && continue' \
   's/ps -p "\$_pid" >\/dev\/null 2>&1 \&\& continue/kill -0 "$_pid" 2>\/dev\/null \&\& continue/'
 
+# ---- R11: the recorded/actual output is never captured -------------------------------------
+# Location: the consumer-stream continuation reader. Behaviour: the recorded output lands under an
+# empty key, so a NEWLY-FAILING row names the command and never what it printed.
+mutate R11-no-capture \
+  "A18a" \
+  'REC[ck] = r; next }' \
+  's/REC\[ck\] = r; next }/REC[""] = r; next }/'
+
+# ---- R12: the output is appended to every status ---------------------------------------------
+# Location: the row printer. Behaviour: a STALE-BOTH row also carries recorded/actual, which reads
+# as this pull having moved a figure it did not.
+mutate R12-all-statuses \
+  "A18b" \
+  'if (status == "NEWLY-FAILING" && (k in REC))' \
+  's/if (status == "NEWLY-FAILING" \&\& (k in REC))/if ((k in REC))/'
+
 if [ "$fails" -gt 0 ]; then
   printf '  %s mutation check(s) did not behave\n' "$fails"
   exit 1
