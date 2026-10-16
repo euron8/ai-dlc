@@ -20,6 +20,43 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.800.0] - 2026-10-16
+
+Batch 235 (release BL-585). Closes BL-585. Closes no `PC-` id. Carries docs intake-3 (BL-594/607/611 and BL-587
+entries).
+
+### A builder runs the gate's cheap catchers on its own diff before asking for a slot, and a red step above the fixture pool stops the push before the pool (BL-585)
+
+- `scripts/pregate-self-check.sh [<base>]` (distribution-only; default base `origin/main`) runs (a)
+  `validate-enforcement-map.sh`, (b) `validate-shell-portability.sh`, (c) the `procsub-staged-refusal` spelling arm
+  r1-r4 over `git diff -U0 <base> -- 'core/*.sh' ':(exclude)core/fixtures/**'`, after the grammar's seeded
+  self-probe in both directions, and (d) `core/fixtures/validator-fork-budget/run.sh`. It prints each arm's seconds
+  and exits 0 clean, 1 on a finding (named `a:`..`d:` with its lines), 2 when it cannot run. Measured on its own
+  diff: a 26s, b 5s, d 31s.
+- The spelling grammar is single-sourced: `core/fixtures/procsub-staged-refusal/procsub-spell.awk` and its seeded
+  probe `procsub-spell-probe.diff` are read by the fixture and the self-check, never copied. They live in the
+  fixture's own directory, which every `procsub-staged-refusal` shard already declares.
+- `.githooks/pre-push` stops early: when a step above the pool is red, the fixture suite prints every fixture it
+  would have started as `SKIPPED-on-earlier-red <name>` (never `ok`), the pole step reports skipped, and the
+  verdict stays red, exit 1. Shell syntax now runs above the pool. Both edits sit outside the I66 pool block. Cost:
+  a push with a validator red AND a fixture red needs two runs to see both. Measured on this release's own first
+  gate: a red I127 refused the push in under 2 min, every fixture named `SKIPPED-on-earlier-red`, the pole skipped.
+- An opt-out env var (named only in the hook and that fixture) keeps the old carry-on for
+  `prepush-worktree-env-scrub`, whose sandboxed hook copy fails every validator by construction. **I127** confines
+  the token to the hook and that one fixture. Like I77 it reads git's index, so it stands down where there is no
+  work tree or the index does not track `.githooks/pre-push`: such a tree has no stop-early to bypass. Ten fixtures
+  that copy the validator into scratch trees went red before that scope was added.
+- Run the self-check on the FINAL tree, after VERSION, CHANGELOG and the rotate: this release's first gate went red
+  on a CHANGELOG bullet written at squash time, after the self-check had passed.
+- `FORK_BUDGET` 3370 -> 3374: base 3363, tip 3370 (+7), each `--stable` in a clean worktree at one path.
+- Receipts, against pinned red/fix commits of batch 235's own red gates: W (7ce8c6f9 / 47be6be6) arm c, six r3
+  lines; H-a (c833cde7, two r3 lines / merged 3d5f1e70 exit 0); vssnap (8915fa18 / 70f972fe) arm a, `I54 found`;
+  U-a (825eafe7 / 08ad746e) arm b, S8 at `ai-dlc-update/SKILL.md`. Stop-early, the single-source grammar and I127
+  each carry a mutant that changes the verdict.
+- Gate time per avoided red: vssnap 8m10s, W 639s, U-a 1018s (every fixture passed; one 5s validator was red).
+  $0 API spend, since the gate runs locally; the saving is operator wall clock. H-a's gate-resume red is caught only
+  by running that fixture (BL-609).
+
 ## [0.799.0] - 2026-10-16
 
 Batch 235 (release U-a), bootstrapping release; ships alone. Closes BL-580 and BL-581. Closes no `PC-` id.

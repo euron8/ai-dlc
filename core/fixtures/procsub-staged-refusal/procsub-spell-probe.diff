@@ -1,0 +1,14 @@
++++ b/core/scripts/x.sh
+@@ -1,0 +1,12 @@
++  done <<< "$(find . -type f)"
++  printf '%s\n' "$list" | while IFS= read -r f; do
++  find "$d" -type f > "$T/walk" || true
++  cat <<EOF
++$(git ls-files)
++  done < "$T/walk"
++  find "$d" -type f > "$T/walk" || rc=$?
++  hits="$(grep -c . "$T/hits" || true)"
++  sed -n 1p "$f" 2>/dev/null || true
++  # was: done < <(find ...) > f || true
++  cat <<'EOF'
++$(literal)
