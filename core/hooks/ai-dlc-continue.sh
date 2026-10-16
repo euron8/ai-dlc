@@ -1144,11 +1144,38 @@ case "$SPRINT_N" in ''|*[!0-9]*) SPRINT_N="" ;; esac
 SPRINT_DIR="${ART_DIR}/s${SPRINT_N:-.no-sprint-resolved}"
 SERIES_UNSCOPED=0
 [ -d "$SPRINT_DIR" ] || for _d in "${ART_DIR}"/s[0-9]*/; do [ -d "$_d" ] && SERIES_UNSCOPED=1; done
+SPRINT_PENDING=0
+_later=0
+if [ "$SERIES_UNSCOPED" -eq 1 ] && [ -n "$SPRINT_N" ]; then
+for _d in "${ART_DIR}"/s[0-9]*/; do _k="${_d%/}"; _k="${_k##*/s}"; case "$_k" in ''|*[!0-9]*) continue ;; esac; [ "$((10#$_k))" -gt "$((10#$SPRINT_N))" ] && _later=1; done
+[ "$((10#$SPRINT_N))" -gt 1 ] && [ -d "${ART_DIR}/s$((10#$SPRINT_N - 1))" ] && [ "$_later" -eq 0 ] && SPRINT_PENDING=1
+fi
 SERIES="$(ls -t "${SPRINT_DIR}"/*adversarial*p*.md 2>/dev/null | sed -E -n 's/(pass|p)[0-9]+\.md$//p' | head -1)"
 # <<< I81 LIVE-SERIES BLOCK <<<
+# PENDING vs MIS-DECLARED (BL-571). The scope directory is absent in two states, and only one of
+# them is a wrong declaration. SPRINT_PENDING (in the I81 block, so both hooks decide it alike) is
+# 1 when the sprint before the resolved one has its s<N-1>/ and no s<K>/ with K > N exists: the
+# sprint is new and has written no artifact yet, which is every sprint's first hours. Nothing can
+# be adjudicated then because no pass exists to adjudicate. Measured on the reference consumer:
+# 67 entries across one window, each resolving the next sprint correctly and each telling the lead
+# to "fix" it; 0 adversary dispatches ran in that window, and every prior-sprint series stood at
+# EXIT_CONDITION_MET. Anything else -- a skipped number, a sprint behind one that already wrote, no
+# resolution at all -- stays the loud form. Same event name in both: retro's audit counts it.
 if [ -z "$SPRINT_N" ] || [ "$SERIES_UNSCOPED" -eq 1 ]; then
   # LOUD, not silent. A reader that finds nothing and says nothing is the defect this whole
   # release removes; retro's Rule 25(c) audit reads this log.
+  if [ "$SPRINT_PENDING" -eq 1 ]; then
+  {
+    echo "## ${TIMESTAMP} -- ADVERSARIAL_STATE_UNADJUDICABLE"
+    echo "- Session: ${SESSION_ID}"
+    echo "- Sprint ${SPRINT_N} has no artifact directory yet: ${SPRINT_DIR} is not yet created,"
+    echo "  and the previous sprint's s$((10#$SPRINT_N - 1))/ exists with no later sprint directory."
+    echo "  The declared sprint is consistent; this is the state before its first artifact."
+    echo "  The Rule 8 divergence/stall hard block is unarmed until that directory exists --"
+    echo "  there is no adversarial pass in this sprint to adjudicate. No action is owed."
+    echo ""
+  } >> "$LOG_FILE"
+  else
   {
     echo "## ${TIMESTAMP} -- ADVERSARIAL_STATE_UNADJUDICABLE"
     echo "- Session: ${SESSION_ID}"
@@ -1162,6 +1189,7 @@ if [ -z "$SPRINT_N" ] || [ "$SERIES_UNSCOPED" -eq 1 ]; then
     echo "  an unscoped glob, which is the mtime-across-every-sprint defect this replaced."
     echo ""
   } >> "$LOG_FILE"
+  fi
 fi
 if [ -n "$SERIES" ]; then
   if [ ! -f "$CONVERGENCE_VALIDATOR" ]; then

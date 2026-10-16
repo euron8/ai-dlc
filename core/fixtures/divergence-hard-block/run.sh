@@ -425,7 +425,102 @@ if grep -q 'ADVERSARIAL_STATE_UNADJUDICABLE' "$W/_bmad-output/pipeline-continuat
 else
   bad "no sprint resolved, nothing scoped, nothing logged: the guard went quiet exactly where the old mtime pick did"
 fi
+# ...and that report is the LOUD, mis-declared form: sprint-id fell back to 1, which no s0/ precedes.
+if grep -q 'Fix the declared sprint' "$W/_bmad-output/pipeline-continuation-log.md" 2>/dev/null; then
+  ok "...in the mis-declared form (\"Fix the declared sprint\"), not the pending-sprint form"
+else
+  bad "an unresolvable sprint was reported WITHOUT the fix-the-sprint remedy — the pending form swallowed a real mis-declaration"
+fi
 rm -rf "$W"
+
+# =============================================================================
+# 9. A SPRINT BEFORE ITS FIRST ARTIFACT is not a mis-declared sprint (BL-571).
+# =============================================================================
+# The resolved sprint's s<N>/ is absent in TWO states: the declaration is wrong, or the sprint is
+# new and has written nothing yet -- the second is every sprint's first hours, and the reference
+# consumer logged 67 such entries in one window, each telling the lead to "Fix the declared sprint"
+# that was correct. The hooks now tell them apart inside the I81 block: PENDING when s<N-1>/ exists
+# and no s<K>/ with K > N does. Every world here is a minimal tree with a stub `sprint-id`, because
+# the s<N>/ directory being absent means no series exists to adjudicate -- seed.sh's validator and
+# envelope would buy nothing. Each hook is driven alone on a fresh tree and classified PRESENCE-
+# first: `none` = no UNADJUDICABLE row, `pending` = the pending form and no fix-the-sprint text,
+# `loud` = the fix-the-sprint form, `both` = a row carrying both (a broken emitter).
+pend_world() { # <sprint-id> <existing s<K> dirs...> -> work dir
+  local n="$1" w k; shift
+  w="$(mktemp -d "${TMPDIR:-/tmp}/divergence-pend-XXXXXX")"
+  mkdir -p "$w/_bmad-output/planning-artifacts" "$w/scripts/ai-dlc"
+  : > "$w/_bmad-output/pipeline-snapshot.md"
+  for k in "$@"; do mkdir -p "$w/_bmad-output/planning-artifacts/s$k"; done
+  printf '#!/bin/sh\necho %s\n' "$n" > "$w/scripts/ai-dlc/sprint-status.sh"
+  chmod +x "$w/scripts/ai-dlc/sprint-status.sh"
+  printf '%s' "$w"
+}
+unadj_class() { # <work> -> none | pending | loud | both
+  local log="$1/_bmad-output/pipeline-continuation-log.md" p=0 l=0
+  grep -q '^## .*-- ADVERSARIAL_STATE_UNADJUDICABLE$' "$log" 2>/dev/null || { echo none; return; }
+  grep -q 'not yet created' "$log" && p=1
+  grep -q 'Fix the declared sprint' "$log" && l=1
+  case "$p$l" in 10) echo pending ;; 01) echo loud ;; 11) echo both ;; *) echo none ;; esac
+}
+pend_cells() { # <ack-hook> <stop-hook> -> "<ack class>/<stop class>" for worlds pend skip later present
+  local a="$1" s="$2" spec w r="" ca cs
+  for spec in "8 7" "9 7" "8 7 9" "8 7 8"; do
+    # shellcheck disable=SC2086
+    w="$(pend_world $spec)"
+    printf '{"session_id":"t","transcript_path":"","tool_name":"Agent","tool_input":{}}' \
+      | CLAUDE_PROJECT_DIR="$w" bash "$a" >/dev/null 2>&1
+    ca="$(unadj_class "$w")"
+    rm -f "$w/_bmad-output/pipeline-continuation-log.md"
+    printf '{"session_id":"t","transcript_path":""}' | CLAUDE_PROJECT_DIR="$w" bash "$s" >/dev/null 2>&1
+    cs="$(unadj_class "$w")"
+    rm -rf "$w"
+    r="$r $ca/$cs"
+  done
+  printf '%s' "${r# }"
+}
+PEND_WANT="pending/pending loud/loud loud/loud none/none"
+PEND="$(pend_cells "$ACK_HOOK" "$STOP_HOOK")"
+set -- $PEND
+case "$1" in pending/pending) ok "PENDING: sprint-id 8 with s7/ present and no s8/ yet logs the pending form in BOTH hooks — no \"Fix the declared sprint\"" ;;
+  *) bad "PENDING: a sprint before its first artifact was not reported in the pending form by both hooks (ack/stop '$1')" ;; esac
+case "$2" in loud/loud) ok "SKIP: sprint-id 9 with only s7/ (no s8/) keeps the mis-declared form in BOTH hooks" ;;
+  *) bad "SKIP: a declaration that skips a sprint was not reported as mis-declared by both hooks (ack/stop '$2')" ;; esac
+case "$3" in loud/loud) ok "LATER: sprint-id 8 with s7/ AND s9/ keeps the mis-declared form in BOTH hooks — a later sprint already wrote" ;;
+  *) bad "LATER: a sprint behind an existing later sprint was reported as pending (ack/stop '$3')" ;; esac
+case "$4" in none/none) ok "PRESENT: sprint-id 8 with s8/ present logs no UNADJUDICABLE row in either hook (the control)" ;;
+  *) bad "PRESENT: the sprint's own directory exists and a hook still logged UNADJUDICABLE (ack/stop '$4')" ;; esac
+
+# MUTANTS, each in a copy of the WHOLE hooks dir. The I81 block is byte-identical in both hooks, so a
+# predicate mutant is applied to both; an emitter mutant to one. A copy that never ran classifies every
+# world `none`, which matches no wanted row.
+pend_mutant() { # <label> <want> <sed> <hook basenames...>
+  local label="$1" want="$2" prog="$3" d h got applied=1; shift 3
+  d="$(mktemp -d "${TMPDIR:-/tmp}/divergence-pmut-XXXXXX")"
+  cp -R "$(dirname "$ACK_HOOK")/." "$d/"
+  for h in "$@"; do
+    sed "$prog" "$d/$h" > "$d/$h.mut" && mv "$d/$h.mut" "$d/$h" || applied=0
+    cmp -s "$d/$h" "$(dirname "$ACK_HOOK")/$h" && applied=0
+  done
+  if [ "$applied" -ne 1 ]; then bad "FIXTURE BROKEN: pending mutant $label did not apply to $*"
+  else
+    got="$(pend_cells "$d/$(basename "$ACK_HOOK")" "$d/$(basename "$STOP_HOOK")")"
+    if [ "$got" = "$want" ]; then ok "mutant $label is KILLED ($got)"
+    else bad "mutant $label: got '$got', wanted '$want'"; fi
+  fi
+  rm -rf "$d"
+}
+AB="$(basename "$ACK_HOOK")"; SB="$(basename "$STOP_HOOK")"
+# The previous-dir test is what separates a NEW sprint from a SKIPPED number: without it sprint-id 9
+# over s7/ alone reads as pending. (Arm PENDING reading the loud form is the emitter mutants below.)
+pend_mutant previous-dir-test-deleted "pending/pending pending/pending loud/loud none/none" \
+  's#&& \[ -d "\${ART_DIR}/s\$((10\#\$SPRINT_N - 1))" \] ##' "$AB" "$SB"
+pend_mutant later-dir-test-deleted "pending/pending loud/loud pending/pending none/none" \
+  's#&& \[ "\$_later" -eq 0 \] ##' "$AB" "$SB"
+pend_mutant ack-emitter-swapped "loud/pending loud/loud loud/loud none/none" \
+  's/^    if \[ "\$SPRINT_PENDING" -eq 1 \]; then$/    if false; then/' "$AB"
+pend_mutant stop-emitter-swapped "pending/loud loud/loud loud/loud none/none" \
+  's/^  if \[ "\$SPRINT_PENDING" -eq 1 \]; then$/  if false; then/' "$SB"
+set --
 
 echo
 if [ "$fails" -eq 0 ]; then echo "divergence-hard-block: PASS"; exit 0; fi
