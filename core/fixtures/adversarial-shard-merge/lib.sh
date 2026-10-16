@@ -891,14 +891,14 @@ p_tuid_basename() { # rows are keyed on the FULL path under the shard dir: shard
   run_merge "$1" "$d"
   refused_clean "2.md has no row in" "$d"
 }
-p_tuid_probemeta() { # a row WITH transcript_path takes the meta file's id even when the probe ledger
-                     # names another adversary dispatch for the same agent (the header's hop 2)
+p_tuid_probemeta() { # the probe ledger carries TWO ids for shard 2's agent, the meta file's and another
+                     # adversary dispatch's -> REFUSED: every probe row must carry the meta's id (BL-536 D4)
   local d st; d="$(tw)"; s2 "$d"; hr_ids "$d/2.md"; st="$(hr_state "$d/2.md")"
   printf '{"v":3,"agent_id":"%s","role":"adversary","tool_use_id":"%s"}\n' "$HR_AGENT" "$REAL_OTHER" >> "$st/subagent-context.jsonl"
   printf '{"v":1,"role":"adversary","tool_use_id":"%s"}\n' "$REAL_OTHER" >> "$st/spawn-ledger.jsonl"
   run_merge "$1" "$d"
-  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && grep -q " 2=$HR_DID " "$(out_of "$d")" \
-    && ! grep -qF -- "$REAL_OTHER" "$(out_of "$d")"
+  refused_clean "whose meta file names dispatch $HR_DID but" "$d" \
+    && has "$MO" "for that agent; the meta file was rewritten after the agent stopped"
 }
 p_tuid_tworoles() { # ONE dispatch id carrying two spawn rows, adversary and remediator -> REFUSED
   local d st; d="$(tw)"; s2 "$d"; hr_ids "$d/2.md"; st="$(hr_state "$d/2.md")"
@@ -954,6 +954,99 @@ p_rerun_same() { # the superseded writer writes 2.md again after S, and nobody e
   bash "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
   refused_clean "--rerun 2.md: $HR_AGENT wrote" "$d" && has "$MO" "its writer must not be one of the writers it supersedes"
 }
+# ---------------------------------------------------------------- BL-536 D1, D2, D4
+# Each refusing cell sits beside its MERGED twin one property apart. The discriminating member is
+# seeded NOT first: D1's remediator sorts after the stalled adversary among the superseded writers,
+# D2's offending row follows the agent's own in-dir row and an unrelated agent's row in another -p
+# dir, and D4's shard 2 is the second ordinal the join reaches.
+p_rerun_role() { # D1: a REMEDIATOR among the writers --rerun supersedes -> REFUSED as a role violation;
+                 # the same world with that writer an adversary MERGES (superseded=2)
+  local d role
+  for role in remediator adversary; do
+    d="$(tw)"; WORLD_SHARD="$d/2.md"
+    HR_AGENT_O=a0000000000stall HR_DID_O=toolu_01StalledAdversary000002 hr_at 2026-10-15T20:00:00Z s2 "$d" || return 1
+    HR_ROLE="$role" HR_AGENT_O=a000000000zremed HR_DID_O=toolu_01SupersededWriter0000r1 hr_at 2026-10-15T20:05:00Z s2 "$d" || return 1
+    hr_at 2026-10-15T21:00:00Z s2 "$d" || return 1
+    hr_ids "$d/2.md"
+    bash "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
+    if [ "$role" = remediator ]; then
+      refused_clean "carries rows --rerun would supersede from agent a000000000zremed, dispatch toolu_01SupersededWriter0000r1, dispatched as role remediator" "$d" \
+        && has "$MO" "a non-adversary write on a shard is a role violation, not a stale dispatch" || return 1
+    else
+      [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && has "$MO" "superseded=2" && grep -q " 2=$HR_DID " "$(out_of "$d")" || return 1
+    fi
+  done
+}
+XP_A=a0000000000xpass; XP_D=toolu_01CrossPassAdversary000
+p_xdir() { # D2: shard 2's sole writer also wrote under ANOTHER shards/<x>-p<M>/ dir -> REFUSED, with and
+           # without --rerun, and stories-p10 is another dir than stories-p1. Twins: a .draft in this
+           # dir, and an UNRELATED agent's row in stories-p10, each MERGE; --rerun without the p2 row MERGES
+  local d sh o
+  for o in stories-p2/1.md stories-p10/1.md own-draft other-agent-p10; do
+    d="$(tw)"; sh="$(dirname "$d")"
+    mkdir -p "$sh/stories-p3" "$sh/stories-p2" "$sh/stories-p10" || return 1
+    harness_record "$sh/stories-p3/1.md"
+    HR_AGENT_O="$XP_A" HR_DID_O="$XP_D" s2 "$d"
+    case "$o" in
+      own-draft) HR_AGENT_O="$XP_A" HR_DID_O="$XP_D" harness_record "$d/2.md.draft" ;;
+      other-agent-p10) harness_record "$sh/stories-p10/1.md" ;;
+      *) HR_AGENT_O="$XP_A" HR_DID_O="$XP_D" harness_record "$sh/$o" ;;
+    esac
+    run_merge "$1" "$d"
+    case "$o" in
+      own-draft|other-agent-p10) [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && grep -q " 2=$XP_D " "$(out_of "$d")" || return 1 ;;
+      *) refused_clean "agent $XP_A wrote in _bmad-output/planning-artifacts/s1/shards/stories-p1/ and also wrote _bmad-output/planning-artifacts/s1/shards/$o at " "$d" \
+           && has "$MO" "under another shard dir; one dispatch delivers one shard of one pass" || return 1 ;;
+    esac
+  done
+  for o in refuse merge; do
+    d="$(tw)"; sh="$(dirname "$d")"; WORLD_SHARD="$d/2.md"; mkdir -p "$sh/stories-p2" || return 1
+    HR_AGENT_O="$XP_A" HR_DID_O="$XP_D" hr_at 2026-10-15T20:00:00Z s2 "$d" || return 1
+    [ "$o" = merge ] || { HR_AGENT_O="$XP_A" HR_DID_O="$XP_D" hr_at 2026-10-15T20:01:00Z harness_record "$sh/stories-p2/1.md" || return 1; }
+    hr_at 2026-10-15T21:00:00Z s2 "$d" || return 1
+    hr_ids "$d/2.md"
+    bash "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
+    if [ "$o" = refuse ]; then
+      refused_clean "agent $XP_A wrote in _bmad-output/planning-artifacts/s1/shards/stories-p1/ and also wrote _bmad-output/planning-artifacts/s1/shards/stories-p2/1.md at 2026-10-15T20:01:00Z, under another shard dir" "$d" || return 1
+    else
+      [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && has "$MO" "superseded=1" && grep -q " 2=$HR_DID " "$(out_of "$d")" || return 1
+    fi
+  done
+}
+forge_meta() { # <shard file> <agent id> <toolUseId> -- rewrite that agent's meta file, as a lead Write would
+  printf '{"agentType":"adversary","description":"rewritten","toolUseId":"%s","spawnDepth":1}\n' "$3" \
+    > "$(dirname "$(hr_state "$1")")/.harness/fx-session/subagents/agent-$2.meta.json"
+}
+other_spawn() { # <shard dir> -- REAL_OTHER recorded as an adversary dispatch, so a forged meta naming it resolves
+  printf '{"v":1,"role":"adversary","tool_use_id":"%s"}\n' "$REAL_OTHER" >> "$(hr_state "$1/2.md")/spawn-ledger.jsonl"
+}
+p_probe_disagree() { # D4: shard 2's meta file rewritten to another adversary dispatch after its writer
+                     # stopped -- the writer an adversary, then a remediator -> each REFUSED 'rewritten';
+                     # the unforged twin (same spawn rows) MERGES
+  local d role
+  d="$(tw)"; s2 "$d"; other_spawn "$d"; run_merge "$1" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && grep -q " 2=$(did_of "$d" 2) " "$(out_of "$d")" || return 1
+  for role in adversary remediator; do
+    d="$(tw)"; HR_ROLE="$role" s2 "$d"; other_spawn "$d"; hr_ids "$d/2.md"; forge_meta "$d/2.md" "$HR_AGENT" "$REAL_OTHER"
+    run_merge "$1" "$d"
+    refused_clean "agent $HR_AGENT, whose meta file names dispatch $REAL_OTHER but" "$d" \
+      && has "$MO" "records $HR_DID for that agent; the meta file was rewritten after the agent stopped" || return 1
+  done
+}
+p_probe_absent() { # D4: shard 2's writer has a meta file and NO probe row -- a legitimate adversary, and a
+                   # remediator whose meta is forged to an adversary dispatch -> each REFUSED 'has not
+                   # stopped'; the same legitimate world WITH its probe row MERGES
+  local d
+  d="$(tw)"; s2 "$d"; other_spawn "$d"; run_merge "$1" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && grep -q " 2=$(did_of "$d" 2) " "$(out_of "$d")" || return 1
+  d="$(tw)"; HR_NOPROBE=1 s2 "$d"; other_spawn "$d"; hr_ids "$d/2.md"; run_merge "$1" "$d"
+  refused_clean "agent $HR_AGENT, whose meta file names dispatch $HR_DID but" "$d" \
+    && has "$MO" "has no row for that agent; an adversary that has not stopped has not delivered" || return 1
+  d="$(tw)"; HR_ROLE=remediator HR_NOPROBE=1 s2 "$d"; other_spawn "$d"; hr_ids "$d/2.md"; forge_meta "$d/2.md" "$HR_AGENT" "$REAL_OTHER"
+  run_merge "$1" "$d"
+  refused_clean "agent $HR_AGENT, whose meta file names dispatch $REAL_OTHER but" "$d" \
+    && has "$MO" "has no row for that agent; an adversary that has not stopped has not delivered"
+}
 
-P_ALL="b3 clean ceiling miss_ord miss_cross dup partition sha ms doc_b3 doc_axis doc_sha doc_path doc_serial files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit subj_b4 b4doc b4doc_nomf b4doc_other xfiles xdoc xelicit xmix xunknown xcomplete stem_series stem_control stem_near stem_files tuid_main tuid_norow tuid_nometa tuid_selfdiff tuid_role tuid_twowriters tuid_oneagent tuid_nospawn tuid_session tuid_pre tuid_basename tuid_probemeta tuid_tworoles rerun_join rerun_other rerun_same"
+P_ALL="b3 clean ceiling miss_ord miss_cross dup partition sha ms doc_b3 doc_axis doc_sha doc_path doc_serial files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit subj_b4 b4doc b4doc_nomf b4doc_other xfiles xdoc xelicit xmix xunknown xcomplete stem_series stem_control stem_near stem_files tuid_main tuid_norow tuid_nometa tuid_selfdiff tuid_role tuid_twowriters tuid_oneagent tuid_nospawn tuid_session tuid_pre tuid_basename tuid_probemeta tuid_tworoles rerun_join rerun_other rerun_same rerun_role xdir probe_disagree probe_absent"
 

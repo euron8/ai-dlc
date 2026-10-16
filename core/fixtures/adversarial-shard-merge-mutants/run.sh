@@ -50,7 +50,13 @@
 # roughly uniform, and the pool is 8 wide: a shard of at most 7 mutants plus the control is ONE
 # wave of scorers, so the deal is 7, 7, 7, 6, 6, 5 in declaration order by family. Shard f carries
 # the basename, probe-over-meta, two-role and --rerun mutants (TM7-TM9, RM1-RM2), added with six
-# predicates that raised every scorer's cost, so they are a unit of their own, not a second wave. Every shard pays
+# predicates that raised every scorer's cost, so they are a unit of their own, not a second wave. The
+# BL-536 mutants (RM3, TM10-TM12) came with four predicates that raised every scorer's cost again, and
+# none went to f, the costliest per mutant. TM10 filled e to one wave (7 + control = 8); RM3, TM11 and
+# TM12 went to d (9 + control = 10), so d alone runs a second wave of two scorers. That is one shard
+# with a second wave, where any other split of the four makes two. The deal is now 7, 7, 7, 9, 7, 5,
+# and it is reasoned from scorer counts, not from timings: no per-shard duration was recorded for b-f
+# when it was made, so the owner re-times the deal along with POOL and SCORER_BOUND. Every shard pays
 # the unmutated control MX0, the J1 join and the MJ probe itself, because a shard that skipped them
 # could report a kill against a harness that never ran. MX6b, an assertion and not a scoring, runs
 # in shard a only.
@@ -68,8 +74,8 @@ SHARDS="a b c d e f"
 MUTANTS_a="MX1 MX2 MX3 MX4 MX5 MX6 MX7"
 MUTANTS_b="MX8 MX9 MX10 MX11 MX12 MX13 MX14"
 MUTANTS_c="MX15 XM1 XM2 XM7 XM8 XM3 XM4"
-MUTANTS_d="XM5 XM6 SM1 SM2 SM3 SM4"
-MUTANTS_e="TM1 TM2 TM3 TM4 TM5 TM6"
+MUTANTS_d="XM5 XM6 SM1 SM2 SM3 SM4 RM3 TM11 TM12"
+MUTANTS_e="TM1 TM2 TM3 TM4 TM5 TM6 TM10"
 MUTANTS_f="TM7 TM8 TM9 RM1 RM2"
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
@@ -357,7 +363,7 @@ mutant "MX15 B4-by-document refuses every document" "b4doc b4doc_other" \
 # The cross groups (BL-464). XM1: files and --subject left single-cross -- the groups are read only
 # in --document mode, the wrong build "merge sharded in one mode only". Every files and subject arm
 # that seeds cross-<g> dies; the --document arms hold.
-mutant "XM1 one mode left single-cross" "b3 clean ceiling miss_ord miss_cross partition sha ms files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit xfiles xelicit xmix xunknown xcomplete tuid_main tuid_norow tuid_nometa tuid_selfdiff tuid_role tuid_twowriters tuid_oneagent tuid_nospawn tuid_session tuid_pre tuid_basename tuid_probemeta tuid_tworoles rerun_join rerun_other rerun_same" \
+mutant "XM1 one mode left single-cross" "b3 clean ceiling miss_ord miss_cross partition sha ms files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit xfiles xelicit xmix xunknown xcomplete tuid_main tuid_norow tuid_nometa tuid_selfdiff tuid_role tuid_twowriters tuid_oneagent tuid_nospawn tuid_session tuid_pre tuid_basename tuid_probemeta tuid_tworoles rerun_join rerun_other rerun_same rerun_role xdir probe_disagree probe_absent" \
   'bash "$XPART" --cross-groups "$K" > "$T/groups" 2> "$T/groups.err"; grc=$?' \
   'bash "$XPART" --cross-groups "$( [ -n "$DOCUMENT" ] && echo "$K" || echo 2)" > "$T/groups" 2> "$T/groups.err"; grc=$?'
 # XM2: the owner rule off -- a finding two covering groups both report is summed twice. Only the
@@ -447,14 +453,19 @@ mutant "TM6 pre-upgrade refusal removed" "tuid_pre" \
   '      else no(sf " was written by agent " a " in a row that predates transcript_path' \
   '      else continue; if (0) no(sf " was written by agent " a " in a row that predates transcript_path'
 # TM7: write rows keyed by BASENAME over any shard dir -- T11's rows for 2.md under another shard dir
-# and another sprint then join to this shard, and it merges.
-mutant "TM7 write rows keyed by basename, any shard dir" "tuid_basename" \
+# and another sprint then join to this shard, and it merges. XD1 dies with it, genuinely: its worlds
+# carry rows under stories-p2/, -p3/ and -p10/, which then join this dir's shard 1 as second writers,
+# so the join refuses every cell (its MERGED twins included) before the cross-dir check is reached.
+mutant "TM7 write rows keyed by basename, any shard dir" "tuid_basename xdir" \
   '| select((.path // "") | type == "string" and startswith($p)) | select((.agent_id // "") != "")
       | [(.path | ltrimstr($p)), .agent_id,' \
   '| select((.path // "") | type == "string" and test("/shards/[^/]+/[^/]+$")) | select((.agent_id // "") != "")
       | [(.path | sub(".*/"; "")), .agent_id,'
-# TM8: the probe ledger preferred over the meta file -- T12's probe names another adversary dispatch.
-mutant "TM8 probe ledger preferred over the meta file" "tuid_probemeta" \
+# TM8: the probe ledger preferred over the meta file. The meta branch is then never entered, so the
+# BL-536 D4 corroboration goes with it: T12's two-id agent and PR2's forged meta each take the probe's
+# id and merge (PR2's remediator cell is refused by role instead). Both cells watch the meta/probe
+# agreement, so the overlap is genuine; PR1 holds, its no-row writers falling back to the meta branch.
+mutant "TM8 probe ledger preferred over the meta file" "tuid_probemeta probe_disagree" \
   '      if (a in am) {' \
   '      if (a in probe) id = probe[a]; else if (a in am) {'
 # TM9: the role checked only on a dispatch id with ONE spawn row -- T13's id carries two.
@@ -469,6 +480,27 @@ mutant "RM1 rerun superseded-other-row check removed" "rerun_other" \
 mutant "RM2 rerun new-dispatch rule removed" "rerun_same" \
   '          if (t[i] >= S[p]) { print "SAME' \
   '          if (0) { print "SAME'
+# BL-536. RM3 (D1): the role loop skipped for a SUPERSEDED writer (i > n) -- both of its no() lines,
+# since skipping only the --rerun-specific one leaves the generic role refusal firing on the same
+# writer. RR4's superseded remediator is then set aside and the set merges.
+mutant "RM3 superseded writer's role never checked" "rerun_role" \
+  '      r = split(role[id], R, "\t")' \
+  '      if (i > n) continue; r = split(role[id], R, "\t")'
+# TM10 (D2): the cross-dir select matches nothing. Every XD1 refusal (p2, p10, under --rerun) merges.
+mutant "TM10 cross-shard-dir check never fires" "xdir" \
+  '        | select($d != null and $d != $p)' \
+  '        | select($d != null and $d != $p and false)'
+# TM11 (D4 presence): an absent probe row is treated as one that AGREES -- not merely its no() removed,
+# which would leave the equality line refusing the same writer with the wrong message. PR1's
+# legitimate no-row writer merges; the meta-only forged remediator then resolves to an adversary too.
+mutant "TM11 probe-row presence not required" "probe_absent" \
+  '        if (!(a in probe)) no(' \
+  '        if (!(a in probe)) pall[a] = "\t" id; if (0) no('
+# TM12 (D4 equality): the probe ids never compared with the meta's. T12's two-id agent and PR2's forged
+# metas take the meta's id and merge; PR1 holds, its refusal is presence.
+mutant "TM12 probe ids never compared with the meta" "tuid_probemeta probe_disagree" \
+  '        if (pall[a] != "\t" id) {' \
+  '        if (0) {'
 # ---- END MX MUTANTS
 
 # ------------------------------------------------------------------------------ the reap

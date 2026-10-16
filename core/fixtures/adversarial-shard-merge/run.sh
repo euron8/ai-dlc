@@ -190,7 +190,7 @@ p_tuid_pre "$MERGE" && ok "T10: a row with no transcript_path takes the probe ro
   || bad "T10: (rc=$RC) $(cat "$MO")"
 p_tuid_basename "$MERGE" && ok "T11: shard 2's only rows sit under shards/stories-p2/ and under s2/shards/stories-p1/ -> REFUSED 'has no row' (rows keyed on the full path, never the basename)" \
   || bad "T11: (rc=$RC) $(cat "$MO")"
-p_tuid_probemeta "$MERGE" && ok "T12: the probe ledger names another adversary dispatch for shard 2's agent -> the meta file's id is written, the probe's absent" \
+p_tuid_probemeta "$MERGE" && ok "T12: the probe ledger names the meta's id AND another adversary dispatch for shard 2's agent -> REFUSED 'the meta file was rewritten after the agent stopped'" \
   || bad "T12: (rc=$RC) $(cat "$MO")"
 p_tuid_tworoles "$MERGE" && ok "T13: shard 2's dispatch id carries two spawn rows, adversary and remediator -> REFUSED naming the remediator role" \
   || bad "T13: (rc=$RC) $(cat "$MO")"
@@ -204,6 +204,17 @@ p_rerun_other "$MERGE" && ok "RR2: cross-1's own adversary edited 2.md before S 
   || bad "RR2: (rc=$RC) $(cat "$MO")"
 p_rerun_same "$MERGE" && ok "RR3: the superseded writer writes 2.md again after S -> REFUSED, the re-run is a NEW dispatch" \
   || bad "RR3: (rc=$RC) $(cat "$MO")"
+
+# ---- BL-536: a superseded writer is role-checked (D1), one dispatch writes one shard dir (D2), and
+# the meta file is corroborated by the probe ledger (D4). Each refusal beside its MERGED twin.
+p_rerun_role "$MERGE" && ok "RR4: --rerun superseding a stalled adversary AND a remediator -> REFUSED as a role violation; the same world with that writer an adversary MERGES superseded=2" \
+  || bad "RR4: (rc=$RC) $(cat "$MO")"
+p_xdir "$MERGE" && ok "XD1: shard 2's writer also wrote stories-p2/1.md, or stories-p10/1.md -> REFUSED 'under another shard dir', and under --rerun too; its own 2.md.draft, an unrelated agent in stories-p10, and --rerun without the p2 row each MERGE" \
+  || bad "XD1: (rc=$RC) $(cat "$MO")"
+p_probe_disagree "$MERGE" && ok "PR2: shard 2's meta file rewritten to another adversary dispatch after its adversary, or remediator, stopped -> each REFUSED 'the meta file was rewritten'; the unforged twin MERGES" \
+  || bad "PR2: (rc=$RC) $(cat "$MO")"
+p_probe_absent "$MERGE" && ok "PR1: a legitimate writer with no probe row, and a remediator with a forged meta and no probe row -> each REFUSED 'has not stopped'; the legitimate writer with its row MERGES" \
+  || bad "PR1: (rc=$RC) $(cat "$MO")"
 
 # R6: a finding heading EXACTLY as the real pass wrote it carries no severity word, so the heads
 # counted (0 MAJOR) disagree with findings_major -- refused, never counted as zero.
