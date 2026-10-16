@@ -1199,6 +1199,7 @@ the reason is not restated here:
 ```bash
 git push -u origin HEAD
 ```
+A directed handoff authorises this push; the lead does not ask the operator for a go-ahead again.
 
 **6c. Determine if a PR is warranted.**
 

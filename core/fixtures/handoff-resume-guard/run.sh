@@ -1170,6 +1170,11 @@ else
   fi
 fi
 
+# BL-574: the directed-handoff authorisation sentence sits beside the prescribed push in
+# steps/handoff.md step 3 and steps/retro.md 6b (proximity-keyed; push-authorised.sh owns why).
+if bash "$HERE/push-authorised.sh"; then ok "push-authorised: both push sites carry the authorisation sentence"
+else bad "push-authorised: a prescribed handoff push lacks the authorisation sentence beside it"; fi
+
 rm -rf "$ROOT"
 echo ""
 [ "$fails" -eq 0 ] && { echo "handoff-resume-guard: PASS"; exit 0; }
