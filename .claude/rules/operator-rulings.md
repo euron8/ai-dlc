@@ -51,6 +51,12 @@ decides the ORDER, never the membership. A hand verifies ONLY its own change: `b
 probe, the one unit it edited. The gate runs everything else; a hand re-running it pays twice. Never message a
 `graph-*` session, not even a read-only question, without an explicit operator grant.
 
+## The lead orchestrates the box's load
+
+Load from peer ai-dlc sessions on the lead's batch is the lead's to schedule, never a cause outside its
+control. No fixture, mutant battery or corpus sweep runs without the lead's slot; slotted runs are serial;
+between "GATE OPEN" and "GATE CLOSED" nothing heavy starts. Measure `uptime` before a gate.
+
 ## Read-set traces use the sandbox tracer, and the session runs them
 
 Every read-set trace runs as `bash core/scripts/derive-fixture-readsets.sh --list "<names>"
@@ -70,6 +76,15 @@ success is unknown.
 A fixture or gate that takes tens of minutes is a test doing more work than its checks need,
 not a scheduling detail. Report a cost that grew under your own change when you see it, with the
 before and after, and never quote a long wall clock as normal.
+
+## A step with no measured value goes
+
+"If a step is unnecessary, redundant, or just plain wasteful providing no real value to the outcome of the
+sprint then it needs to go." A pipeline step, round or sub-step is kept only on evidence: a named failure case it
+prevents, and findings no other round catches that survive to the shipped artifact. Without that the batch removes
+or merges it; it is never put to the operator as a choice. Judge a rare high-consequence catch on consequence, not
+frequency. Every efficiency ranking states hours removed AND dollars, and a finding with no dollar figure is still a
+filed row.
 
 ## Handoff gaps are out of scope for efficiency analysis
 

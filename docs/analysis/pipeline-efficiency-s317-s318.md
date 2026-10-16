@@ -471,6 +471,10 @@ Old DEFECT 11 (no capital-path routing criterion for dev escalation) is not rank
 BL-504 in v0.781.0, which graph has pulled. Ranks 4 and 7 recur after BL-397 and BL-398 closed the
 same classes at v0.674.0. Their entries say so, so a batch does not re-ship the earlier fix.
 
+The table ranks only the DEFECT list's rows. The rationale gaps in the findings summary (the
+"Rationale gaps" bullet under "Efficient vs inefficient — findings") carry no cost figure and are
+not rows. They are carried by BL-568 and BL-569.
+
 **Measuring a fix.** A receipt closes an entry on the tree. Whether the fix moved anything is
 measured on consumer transcripts after it lands, by re-running this directory's scripts over the
 sprints since. graph is the reference consumer, not the only one: `magic-bonus-calc-engine` also
