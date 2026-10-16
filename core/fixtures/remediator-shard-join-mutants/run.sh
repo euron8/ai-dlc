@@ -63,7 +63,7 @@
 # mutants dealt to it.
 SHARDS="a b c d"
 MUTANTS_a="JX1 JX2 JX3 JX4 JX5 JX6 JX7 JX8 JX10 JX9 JX11 JX12 JX13 JX14 JX15 JX16 JX17 JX18"
-MUTANTS_b="JX19 JX20 JX21 JX22 JX23 JX24 JX25 JX26 JX27 JX28 JX29 JX30 JX36 JX37 JX38 JX42 JX43 JX44"
+MUTANTS_b="JX19 JX20 JX21 JX22 JX23 JX24 JX25 JX26 JX27 JX28 JX29 JX30 JX36 JX37 JX38 JX42 JX43 JX44 JX75"
 MUTANTS_c="JX45 JX46 JX47 JX48 JX49 JX39 JX40 JX41 JX31 JX32 JX33 JX34 JX35 JX50 JX51 JX52 JX53 JX54"
 MUTANTS_d="JX55 JX56 JX57 JX58 JX59 JX60 JX61 JX62 JX63 JX64 JX65 JX66 JX67 JX68 JX69 JX70 JX71 JX72 JX73 JX74 JX75 JX76 JX77 JX78 JX79 JX80 JX81 JX82 JX83 JX84 JX85"
 set -uo pipefail
@@ -778,6 +778,11 @@ mutant "JX93 --agent-writes with no agent filter" "agentwrites" \
 mutant "JX94 --agent-writes dedupes by path before the agent filter" "agentwrites" \
   'jq -r --arg a "$AGENT_ID" --arg s "$SINCE" '"'"'select(' \
   'jq -rs --arg a "$AGENT_ID" --arg s "$SINCE" '"'"'unique_by(.path)[] | select('
+# JX75 restores the piped, unchecked read: a malformed ledger line then prints the trailer alone, rc 0.
+mutant "JX75 --agent-writes read piped through sort with no parse check" "agentwrites" \
+  '    _aw="$(jq -rn --arg a "$AGENT_ID" --arg s "$SINCE" '"'"'[inputs | select(type == "object") | select(.kind == "artifact-write" and .agent_id == $a and (.path | type) == "string" and ($s == "" or .ts >= $s)) | .path] | unique | .[]'"'"' "$LEDGER" 2>/dev/null)" \
+      || die "the write ledger ${LEDGER} does not parse as JSON lines"' \
+  '    _aw="$(jq -r --arg a "$AGENT_ID" --arg s "$SINCE" '"'"'select(.kind == "artifact-write" and .agent_id == $a and ($s == "" or .ts >= $s)) | .path'"'"' "$LEDGER" 2>/dev/null | sort -u)"'
 # ---- END JX MUTANTS.
 
 # ------------------------------------------------------------------------------ the reap

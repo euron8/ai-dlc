@@ -1301,6 +1301,7 @@ p_agentwrites() {
   drive "$w" Edit "$w/$REL/f-post-join.md" "$AG2" "" "" 2026-10-15T19:30:00Z
   drive "$w" Edit "$w/$REL/c-partial.md" "$AG4" "" "" 2026-10-15T19:40:00Z
   drive "$w" Edit "$w/$REL/$S31" "$AG4" "" "" 2026-10-15T19:40:01Z
+  drive "$w" Edit "$w/$REL/f-post-join.md" "$AG2" "" "" 2026-10-15T19:40:02Z
   want="$(printf '%s\n%s\n%s' "$REL/c-partial.md" "$REL/$S31" 'not covered: Bash writes, and writes outside planning-artifacts/ and specs/s<N>/')"
   AI_DLC_PROJECT_ROOT="$w" bash "$1" --agent-writes "$AG4" > "$JO" 2>&1; RC=$?
   got="$(cat "$JO")"
@@ -1310,7 +1311,11 @@ p_agentwrites() {
   [ "$rc2" -eq 0 ] && [ "$(cat "$JO")" = 'not covered: Bash writes, and writes outside planning-artifacts/ and specs/s<N>/' ] || return 1
   # Another flag is refused.
   AI_DLC_PROJECT_ROOT="$w" bash "$1" --agent-writes "$AG4" --sprint 1 > "$JO" 2>&1; rc3=$?
-  [ "$rc3" -eq 2 ] && has "$JO" "REFUSED:"
+  [ "$rc3" -eq 2 ] && has "$JO" "REFUSED:" || return 1
+  # A malformed ledger line is refused, never read as "this agent wrote nothing".
+  printf 'this is not json\n' >> "$w/_bmad-output/planning-artifacts/.artifact-writes.jsonl"
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --agent-writes "$AG4" > "$JO" 2>&1; RC=$?
+  [ "$RC" -eq 2 ] && has "$JO" "REFUSED:"
 }
 
 P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrargs rrfiles rrsubj alias alnokeys alresult alown alsecond alother alsess altwo altool dispkey dispvocab dispruling srcparts gapfill chkpart chkrec rulingedit rulingtab chkjoined partsilent specstale specfresh spechand specnone spectwo sjspecstale sjspecfresh sjspecnone specother specunread agentwrites"

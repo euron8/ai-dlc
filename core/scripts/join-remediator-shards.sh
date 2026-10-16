@@ -401,7 +401,12 @@ if _sp="$(cd "$STATE" 2>/dev/null && pwd -P)"; then STATE_PARENT_P="${_sp%/*}/";
 PA="${STATE}/planning-artifacts"
 LEDGER="${PA}/.artifact-writes.jsonl"
 if [ "$AGENTMODE" = 1 ]; then
-  [ -f "$LEDGER" ] && { jq -r --arg a "$AGENT_ID" --arg s "$SINCE" 'select(.kind == "artifact-write" and .agent_id == $a and ($s == "" or .ts >= $s)) | .path' "$LEDGER" | sort -u; }
+  if [ -f "$LEDGER" ]; then
+    [ -r "$LEDGER" ] || die "the write ledger ${LEDGER} is not readable"
+    _aw="$(jq -rn --arg a "$AGENT_ID" --arg s "$SINCE" '[inputs | select(type == "object") | select(.kind == "artifact-write" and .agent_id == $a and (.path | type) == "string" and ($s == "" or .ts >= $s)) | .path] | unique | .[]' "$LEDGER" 2>/dev/null)" \
+      || die "the write ledger ${LEDGER} does not parse as JSON lines"
+    [ -z "$_aw" ] || printf '%s\n' "$_aw"
+  fi
   echo "not covered: Bash writes, and writes outside planning-artifacts/ and specs/s<N>/"
   exit 0
 fi
