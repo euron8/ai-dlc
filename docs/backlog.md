@@ -579,3 +579,29 @@ Not filed, noted: the same session wrote its fixture list to a bare `/tmp/x` (2 
 Deferred to next batch (late-filing rule, lead ai-dlc-9c, batch 235).
 
 verify: manual
+
+## BL-581 — the reconcile log records a false-zero as "Verified": a consumer-repo `git show <dist-sha>:` failed silently and every base count read 0
+
+**DEFECT.** Filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]) from graph's 0.791.0 → 0.793.0 apply, session `1d7b4691` (Sonnet), 2026-10-16 03:18-03:22 EDT. `derivation-differential.sh` reported 8 NEWLY-FAILING, all recorded `$ grep -n … scripts/ai-dlc/validate-artifact-budget.sh` derivations in s319 artifacts (carry-over-evaluation-architect-5.md:13 and :23, carry-over-evaluation-pm-5.md:13, prd.md:1289, carry-over-evaluation-party-repair-p1.md:632, requirements-party-repair.md:859, shards/carry-over-evaluation-party-repair-p1/5.md:15, shards/requirements-party-repair/08.md:102). To find why, the session ran `git show 952b9319:scripts/ai-dlc/validate-artifact-budget.sh 2>/dev/null | grep -c -F -e "$p"` in graph's tree (2 such commands in the transcript). 952b9319 is a distribution sha: intake confirmed `git -C graph cat-file -e 952b9319` fails (control: graph's own HEAD resolves), so the `git show` failed, `2>/dev/null` hid the error, and every base count read 0. Graph's `_bmad-output/ai-dlc-update/reconcile-log-20261016T0725Z.md:33` then records: "Verified: `330000 to 66000`, `66000 and an in-budget pool became a HARD_BLOCK`, `  ok  %-44s` and `--quiet)` each count 0 at base and 1 now", and demotes the real cause to "Inference, not verified: the recorded line numbers moved with the 0.792.0 …".
+
+Ground truth, intake re-derived on `core/scripts/validate-artifact-budget.sh`: each of the four needles counts 1 at 952b9319, 1 at 27467671 (0.792.0) and 1 at c16609ba, with a made-up needle at 0 at all three. The text was never added; 0.792.0 moved the line numbers the recorded `grep -n` derivations cite. The log has the cause backwards and labels the wrong half verified — the false-zero shape CLAUDE.md's "a zero is not a finding" names: an absence produced by a failed read, with no control in the invocation.
+
+Consequence: the disposition ("leave untouched, record as owed") was the operator's and holds either way, but the s319 session inheriting the 8 re-points is told the needles were added in 0.792.0, when each is a line-number re-point.
+
+Owed: (a) `derivation-differential.sh` prints, per NEWLY-FAILING row, the derivation's base and theirs output (or their diff), so the cause is measured by the shipped tool; (b) wherever ai-dlc-update's SKILL.md asks for a distribution path at base, it names `git -C <dist> show "${BASE}:core/…"` — a consumer-repo `git show <dist-sha>:` always fails. Receipt: a probe `grep -n` derivation whose needle stays but whose line shifts between base and theirs is reported NEWLY-FAILING with both outputs shown; an unchanged derivation is the control.
+
+Deferred to next batch (late-filing rule, lead ai-dlc-9c, batch 235).
+
+verify: manual
+
+## BL-582 — ai-dlc-update has no advisor touchpoint before its pushes and merges, and the advisor gate exempts them
+
+**DEFECT.** Raised by the operator's question ("should the graph session have called the advisor before the push? I thought that was a requirement?"); filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]). Rule 32 touchpoint I — "Before a push, a merge or a deploy" — is in the pipeline skill only (`core/skills/ai-dlc/SKILL.md`, 1 line). `core/skills/ai-dlc-update/SKILL.md` at ffef448b names no advisor touchpoint: `advisor` 0 times outside "advisory" (4), control `self-update-fixtures` 6. `core/hooks/ai-dlc-advisor-gate.sh:58-74` excludes a push or merge while the cwd branch is `ai-dlc-update/*` and a push whose every refspec destination is `ai-dlc-update/*`, giving as its reason that the update skill is "a bootstrapping file; its text carries no touchpoint and this release does not edit it". The exclusion shipped in 0.738.0 (`9bdbc311`); that release's CHANGELOG cites an operator ruling for the per-kind gate ("THE SAME KIND (operator ruling, batch 201)") and lists the update-branch exclusion as release text with no ruling attached.
+
+Measured on update session `1d7b4691` (Sonnet 5.5, the 0.791.0 → 0.793.0 pull, 2026-10-16): it pushed the self-update branch twice (02:45 EDT, failed TRANSPORT; 03:03 EDT), ran `gh pr merge 1230` at 03:10 EDT into `ai-dlc/carry-over/offramp-config-and-rewards`, pushed the reconcile branch at 03:22 EDT and ran `gh pr merge 1231` at 03:26 EDT. Intake counted 0 `advisor_tool_result` in its transcript against 4 in pipeline lead `f65eae3b` on the same model, so the tool was very likely available. Every one of those calls was exempt, because each merge ran while the cwd was still on the update branch. Two merges landed machinery into the sprint branch with the operator's approval ("merge is approved when ready") and no second reading — touchpoint I's case.
+
+Owed: touchpoint I in ai-dlc-update/SKILL.md before step 2's self-update push and auto-merge and before step 8's delivery push and merge, and the hook's exclusion narrowed to the push of the update branch only, gating the `gh pr merge` into the original branch. Bootstrapping caveat: a fix to the update skill takes effect on the pull after the one that delivers it. Receipt: the hook denies a `gh pr merge` from an `ai-dlc-update/*` cwd with no advisor attempt; a push of `ai-dlc-update/x` stays allowed as the control; SKILL.md names the touchpoint at both steps.
+
+Deferred to next batch (late-filing rule, lead ai-dlc-9c, batch 235).
+
+verify: manual
