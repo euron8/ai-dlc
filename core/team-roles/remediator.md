@@ -197,6 +197,15 @@ later resolves the decision, yours or the fold of the operator's answer, carries
 line per member of the chain, the restating entry and every part escalation it names: an
 escalation with no `closes:` line of its own stays open however many of its links were closed.
 
+**As the serial remediator only**, your LAST write is one line closing the block you appended:
+`repair-complete: serial <pass>`, `<pass>` being the pass your brief names, as the record's last
+non-blank line and outside any fence. Never write it before your last entry and never append
+after it; once it is written, do not edit the record again. The lead's join beat takes the
+record as delivered only when that line is last and the file has stopped changing, so a record
+without it reads as unfinished however many entries it holds. A part or shard remediator writes
+no such line: the join concatenates the parts into the record you append to, so a part's line
+would end that record before your first entry and deliver it unfinished.
+
 **A party repair names the seat finding behind every entry.** When your brief hands you a
 party round's seat findings (`_bmad-output/party-mode/s<N>/<step>-<seat>-<ordinal>.md`), every
 entry carries a `source:` line with one `<seat-file>#<finding-id>` token per seat finding the
