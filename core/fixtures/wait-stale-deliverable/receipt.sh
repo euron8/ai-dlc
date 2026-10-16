@@ -162,20 +162,50 @@ r599() {
 # from the script's own directory resolves to the world and not to the real repository. No
 # AI_DLC_PROJECT_ROOT and no AI_DLC_STATE_DIR are set. The control is the same beat from the root.
 r576() {
-  local d
+  local d p s lease m
   d="$(mktemp -d "$ROOT/w.XXXXXX")" || exit 9
   mkdir -p "$d/.git" "$d/scripts" "$d/shards/p1" || exit 9
   cp "$SUBJ" "$d/scripts/wait-for-deliverable.sh" || exit 9
-  ( cd "$d/shards/p1" && env AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 \
+  ( cd "$d/shards/p1" && own env AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 \
       AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR=/nonexistent CLAUDE_PROJECT_DIR= \
       bash "$d/scripts/wait-for-deliverable.sh" never.md ) >/dev/null 2>&1
   [ ! -e "$d/shards/p1/_bmad-output" ] || return 1
   [ -d "$d/_bmad-output/.wait-beats" ] || return 1
   rm -rf "$d/_bmad-output"
-  ( cd "$d" && env AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 \
+  ( cd "$d" && own env AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 \
       AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR=/nonexistent CLAUDE_PROJECT_DIR= \
       bash "$d/scripts/wait-for-deliverable.sh" never.md ) >/dev/null 2>&1
-  [ -d "$d/_bmad-output/.wait-beats" ] && [ ! -e "$d/shards/p1/_bmad-output" ]
+  [ -d "$d/_bmad-output/.wait-beats" ] && [ ! -e "$d/shards/p1/_bmad-output" ] || return 1
+  # The LEASE is the owed property, and the EXIT trap releases it, so it is read while a beat from
+  # the subdirectory is still asleep: it must be at the root, where the stop hook reads it.
+  rm -rf "$d/_bmad-output"
+  ( cd "$d/shards/p1" && exec bash -c '"$@"; exit $?' _ env AI_DLC_WAIT_BEAT_SECS=8 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 \
+      AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR=/nonexistent CLAUDE_PROJECT_DIR= \
+      bash "$d/scripts/wait-for-deliverable.sh" never.md ) >/dev/null 2>&1 & p=$!
+  # Poll for the lease rather than sleeping a fixed time: under load a fixed sleep only reads red.
+  # The beat is a CHILD of the wrapper `$p` (the trailing `exit $?` keeps bash from exec-ing it),
+  # so it is stopped by the pid its own lease names, then the wrapper is reaped.
+  lease=0; m=""
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    [ -s "$d/_bmad-output/.beat-inflight" ] && { lease=1; m="$(cat "$d/_bmad-output/.beat-inflight")"; break; }
+    sleep 0.25
+  done
+  case "${m#* }" in ''|*[!0-9]*) : ;; *) kill "${m#* }" 2>/dev/null ;; esac
+  kill "$p" 2>/dev/null; wait "$p" 2>/dev/null
+  [ "$lease" = 1 ] || return 1
+  # Two shard dirs arm the same RELATIVE name: two deliverables, so two join records, not one.
+  rm -rf "$d/_bmad-output"; mkdir -p "$d/shards/p2" || exit 9
+  for s in p1 p2; do
+    ( cd "$d/shards/$s" && own env AI_DLC_WAIT_BEAT_SECS=1 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 \
+        AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR=/nonexistent CLAUDE_PROJECT_DIR= \
+        bash "$d/scripts/wait-for-deliverable.sh" 1.md ) >/dev/null 2>&1
+  done
+  [ "$(find "$d/_bmad-output/.wait-beats" -name '*.since' 2>/dev/null | wc -l | tr -d ' ')" = 2 ] || return 1
+  # An ABSOLUTE AI_DLC_STATE_DIR is used as given, never joined onto the root.
+  ( cd "$d/shards/p1" && own env AI_DLC_WAIT_BEAT_SECS=1 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 \
+      AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR=/nonexistent CLAUDE_PROJECT_DIR= \
+      AI_DLC_STATE_DIR="$d/abs-state" bash "$d/scripts/wait-for-deliverable.sh" never.md ) >/dev/null 2>&1
+  [ -d "$d/abs-state/.wait-beats" ]
 }
 
 case "$ID" in

@@ -503,6 +503,18 @@ case "${AI_DLC_STATE_DIR:-}" in
   /*) STATE_DIR="$AI_DLC_STATE_DIR" ;;
   *)  STATE_DIR="${WD_ROOT}/${AI_DLC_STATE_DIR:-_bmad-output}" ;;
 esac
+# ONE STATE DIR FOR EVERY CWD MEANS A RELATIVE TARGET NEEDS THE CWD IN ITS KEY. Shard files are
+# named `<ordinal>.md` inside each shard directory, so `1.md` armed from shards/a and `1.md` armed
+# from shards/b are two deliverables; keyed on the bare string they would share one counter, one
+# join epoch and one settle record, and the second join would read the first one's epoch. A
+# relative target from a cwd below the root is keyed on its root-relative path, so a call from the
+# root -- the ordinary case, and every counter live today -- keys exactly as before.
+WD_CWD_P="$(pwd -P)"; WD_ROOT_P="$(cd "$WD_ROOT" 2>/dev/null && pwd -P)"
+case "$WD_CWD_P" in
+  "$WD_ROOT_P")   KEY_PFX="" ;;
+  "$WD_ROOT_P"/*) KEY_PFX="${WD_CWD_P#"$WD_ROOT_P"/}/" ;;
+  *)              KEY_PFX="${WD_CWD_P}/" ;;
+esac
 
 COUNTER_DIR="${STATE_DIR}/.wait-beats"
 if [ "$STATUS" -eq 0 ]; then   # --status creates nothing, not even the state dir
@@ -541,7 +553,10 @@ if [ -n "$PROGRESS_PATHS" ]; then
   IFS="$OLDIFS"
 fi
 
-key_of() { printf '%s' "$1" | cksum | tr -d ' \t' | cut -c1-16; }
+key_of() {  # an absolute target keys as itself; a relative one is prefixed with the cwd (KEY_PFX)
+  case "$1" in /*) ko_="$1" ;; *) ko_="${KEY_PFX}$1" ;; esac
+  printf '%s' "$ko_" | cksum | tr -d ' \t' | cut -c1-16
+}
 
 # ---------------------------------------------------------------------------
 # THE JOIN EPOCH. Recorded per target in a `.since` sidecar beside the counter, on
