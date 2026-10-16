@@ -243,6 +243,7 @@ core_manifest:
   - fixtures/remediator-shard-join/**
   - fixtures/document-partition/**
   - fixtures/subject-partition/**
+  - fixtures/serial-remediation-worklist/**
   - fixtures/gate-series-rung/**
   - fixtures/gate-verdict-grep-shape/**
   - fixtures/h2-attest-scripts-dir/**

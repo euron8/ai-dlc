@@ -1,0 +1,6 @@
+# serial-remediation-worklist drives the worklist and the two splitters that keep its pre-repair copies,
+# all three resolved by name beside each other (run.sh walks up for serial-remediation-worklist.sh and
+# requires the other two in the same directory). Every world is built under mktemp; no live tree is read.
+!core/scripts/serial-remediation-worklist.sh
+!core/scripts/partition-document.sh
+!core/scripts/partition-subject.sh

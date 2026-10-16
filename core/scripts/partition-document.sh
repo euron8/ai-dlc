@@ -127,6 +127,7 @@
 #                                                   interleaved with the parts in line order, so
 #                                                   part and gap rows together tile the document
 #   assembled\t<hex of the document as assembled>   appended by a successful --assemble
+#   Beside it, `<dir>/sections/.before`: the document's bytes as split, never removed here.
 #
 # ASSEMBLY, IN THIS ORDER, AND EACH STEP IS WHY THE NEXT IS SAFE
 #   0. `assembled` present: disk sha equal to it prints UNCHANGED and exits 0 (a re-run is not
@@ -437,6 +438,11 @@ case "${1:-}" in
       END { if (nx <= L) print "gap\t" nx "\t" L }')"
     mkdir -p "$DIR/sections" || refuse "cannot create $DIR/sections"
     SEC="$(cd "$DIR/sections" && pwd -P)" || refuse "cannot resolve $DIR/sections"
+    # THE PRE-REPAIR COPY. `sections/.before` is the document as split, kept through --assemble
+    # (step 6 removes only `<ordinal>.md`) so serial-remediation-worklist.sh can diff it against
+    # the assembled bytes. A dotfile, so step 2's foreign-entry glob and every `*.md` walk skip it.
+    # Written first, so a failed copy refuses before any section or manifest exists.
+    cp -p "$DOC" "$SEC/.before" || { rmdir "$SEC" 2>/dev/null; refuse "cannot keep the pre-repair copy $SEC/.before"; }
     V="$SEC/.verify.$$"
     : > "$V" || refuse "cannot stage the split check in $SEC"
     G="$SEC/.gap.$$"
@@ -462,7 +468,7 @@ $ROWS
 EOF
     rm -f "$G"
     if [ "$(sha_of "$V")" != "$SHA" ]; then
-      rm -f "$V" "$MROWS"
+      rm -f "$V" "$MROWS" "$SEC/.before"
       while IFS="$TAB" read -r o a z h; do rm -f "$SEC/$o.md"; done <<EOF
 $M
 EOF
