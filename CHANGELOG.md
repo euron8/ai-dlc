@@ -20,6 +20,42 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.798.0] - 2026-10-16
+
+Batch 235 (hooks, release H-b). Closes BL-562 and BL-567; BL-574 partial. Closes no `PC-` id.
+
+### A pipeline push with `--no-verify` is denied, and a refused hook has a remedy (BL-562)
+
+- `ai-dlc-advisor-gate.sh` denies a ref-moving `git push` whose last `--verify`/`--no-verify` word is
+  `--no-verify`, or the abbreviations `--no-veri`/`--no-verif`. It is computed right after the parse, so no other
+  exit in the gate lets it through, and an advisor call does not license it. A branch delete and a dry run are
+  allowed. Uncovered, and named in the header: `-c core.hooksPath=…`, a push from inside a script, `--no-v`.
+- It applies only where `.claude/.ai-dlc-version` exists, so the distribution's own operator pushes are untouched,
+  and it stands down for a session whose last ai-dlc marker is `ai-dlc-update`. `ai-dlc-advisor-gate.sh` joins
+  invariant I126's session-marker scan.
+- `handoff.md` step 3 prohibits the flag and gains a "pre-push hook refused" branch: report the failing gate in
+  one line, raise the pause flag, stop. The deny reason and the consumer pre-push BLOCKED line point to it, and
+  `retro.md` 6b says the same.
+
+### A teammate's header-only first shard write is not gated (BL-567)
+
+- A header-only Write to a non-repair review shard is allowed and never recorded, so the write that adds the first
+  finding still owes the advisor call. Any `###`..`######` heading counts as a finding, which covers code-review
+  and QA `####` findings.
+
+### A directed handoff authorises its push (BL-574, partial)
+
+- `handoff.md` step 3 and `retro.md` 6b say, beside `git push -u origin HEAD`, that a directed handoff authorises
+  the push and the lead does not ask again. The `_gate-procedures.md` site waits on the BL-536 line.
+
+### Fixture fixes made in the re-verify slot
+
+- `advisor-gate-deny/lib.sh`: one cell's tag was glued to its payload, so the library aborted at load and every
+  advisor-gate-deny unit was red in under 3s.
+- `advisor-gate-deny-mutants`: three declared kill sets corrected, each with its reason beside it. Every mutant was
+  killed; only the declared cells were wrong.
+
+
 ## [0.797.0] - 2026-10-16
 
 Batch 235 (hooks, release H-a). Closes BL-531, BL-545, BL-559 and BL-571; BL-537 partial. Closes no `PC-` id.
