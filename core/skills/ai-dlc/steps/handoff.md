@@ -27,10 +27,15 @@ Execute this 5-step procedure in order:
 1. **Stop all in-flight teammates first.** Before calling `TaskStop`, run
    ONE bounded-join beat (`_gate-procedures.md` "Bounded-join beat") over
    every **In-Flight Teammates** row whose `status` is `in-flight` and that
-   names a deliverable path: one `scripts/ai-dlc/wait-for-deliverable.sh
-   <path> [<path> ...]` call over the whole set, `run_in_background: true`,
-   ending this turn on the armed beat and resuming this step on its result.
-   A row whose deliverable is DELIVERED in that beat is joined normally —
+   names a deliverable path: one call per kind of deliverable, each
+   `run_in_background: true` — `scripts/ai-dlc/wait-for-deliverable.sh <path>
+   [<path> ...]` for a plain deliverable, `scripts/ai-dlc/wait-for-deliverable.sh
+   --complete <path> [<path> ...]` for seat and cross files, and
+   `scripts/ai-dlc/wait-for-deliverable.sh --complete-repair <record>` for a
+   serial-remediator row. The flag is per call and a call mixing the two flags
+   is refused (exit 64), so a mixed set is up to three calls and a set of one
+   kind is one. End this turn on the armed beats and resume this step when
+   every one has returned. A row whose deliverable is DELIVERED in that beat is joined normally —
    apply the sub-step snapshot update's handling (`status:
    delivered-reachable`, or delete the row outright), never `stopped`. Only
    rows still absent after the beat get `TaskStop`. Measured: a handoff
