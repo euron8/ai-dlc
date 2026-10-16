@@ -135,7 +135,7 @@ mutate M11-writer-records-past writer "Sp3a Sp3b Wc Wd Wf" \
   's|^      PAST) printf .*$|      PAST) printf "%s\\n" "$_orow" >> "$TMP/owed.keep" ;;|'
 
 # M12: the classifier reads LIVING as PAST (a prd.md row stops being enforced, and the writer drops it).
-mutate M12-classifier-living-as-past reader "B1b B3a B7a Bt1b Gf Hc1 Hn Sc5 Sc7 Sc8 Sp4 Wc Wd We Wf Wg" \
+mutate M12-classifier-living-as-past reader "B1b B3a B7a Bt1b Gf Hc1 Hn Sc5 Sc7 Sc8 Sl1 Sl2 Sp4 Wc Wd We Wf Wg" \
   '  SCOPE_TOKEN=LIVING' \
   's/^  SCOPE_TOKEN=LIVING$/  SCOPE_TOKEN=PAST/'
 
@@ -146,22 +146,29 @@ mutate M13-classifier-substring-segment reader "Sc1 Sp7" \
 
 # M15: HISTORY is checked AFTER the sprint classification instead of first: a history file inside the
 # current sprint (s<current>/archive/) reads CURRENT again, and the writer records it.
-mutate M15-history-checked-after-current reader "Hr Hs Hw1 Hw2 Wc Wd Wf Wg" \
+mutate M15-history-checked-after-current reader "Hl3 Hr Hs Hw1 Hw2 Sl4 Wc Wd Wf Wg" \
   '  if is_history "$p"; then SCOPE_TOKEN=HISTORY; return 0; fi' \
   '/^  if is_history "\$p"; then SCOPE_TOKEN=HISTORY; return 0; fi$/d;s/^  SCOPE_TOKEN=LIVING$/  if is_history "$p"; then SCOPE_TOKEN=HISTORY; return 0; fi; SCOPE_TOKEN=LIVING/'
 
 # M16: the classifier never returns HISTORY.
-mutate M16-classifier-never-history reader "Bt1b Hl3 Hr Hs Hw1 Hw2 Wc Wd Wf Wg" \
+mutate M16-classifier-never-history reader "Hl3 Hr Hs Hw1 Hw2 Sl4 Wc Wd Wf Wg" \
   '  if is_history "$p"; then SCOPE_TOKEN=HISTORY; return 0; fi' \
   's/^  if is_history "\$p"; then SCOPE_TOKEN=HISTORY; return 0; fi$/  if false; then SCOPE_TOKEN=HISTORY; return 0; fi/'
 
-# M17: the LIVE gate-adjudication directory is classified HISTORY (it is unrotated, so it must block).
-mutate M17-live-gate-adjudication-history reader "Hl1 Hl2" \
-  'case "$p" in _bmad-output/gate-adjudication/*) SCOPE_TOKEN=CURRENT; return 0 ;; esac' \
-  's/_bmad-output\/gate-adjudication\/\*) SCOPE_TOKEN=CURRENT;/_bmad-output\/gate-adjudication\/*) SCOPE_TOKEN=HISTORY;/'
+# M17 (REPLACED): EVERY file in the live gate-adjudication directory is CURRENT, whatever its stem. The
+# older-stem and no-live-stem worlds read HISTORY, so only they can see it.
+mutate M17-every-live-dir-file-current reader "Hl4 Hl5 Hl8 Hl9" \
+  '          SCOPE_TOKEN=HISTORY' \
+  's/^          SCOPE_TOKEN=HISTORY$/          SCOPE_TOKEN=CURRENT/'
+
+# M20: the OLDER stem is picked as the live one (the comparison is reversed). Both the live-nonce world
+# (now HISTORY) and the older-stem world (now CURRENT) see it.
+mutate M20-older-stem-picked-as-live reader "Hl1 Hl1b Hl2 Hl4 Hl5" \
+  '    if [ "$_ts" \> "$LIVE_TS" ]; then LIVE_TS="$_ts"; LIVE_STEM="$_stem"; fi' \
+  's/if \[ "\$_ts" \\> "\$LIVE_TS" \]; then/if [ -z "$LIVE_TS" ] || [ "$_ts" \\< "$LIVE_TS" ]; then/'
 
 # M18: the batch classifier resolves and classifies nothing and defaults every path to LIVING.
-mutate M18-batch-defaults-living reader "Bt1b Hc2 Hl1 Hl3 Hs Hw1 Hw2 Sc1 Sc2 Sc3 Sc4 Sc6 Sc9 Sp3a Sp3b Wc Wd Wf Wg" \
+mutate M18-batch-defaults-living reader "Bt1b Hc2 Hl1 Hl1b Hl3 Hl4 Hl6 Hl7 Hl8 Hl9 Hs Hw1 Hw2 Sc1 Sc2 Sc3 Sc4 Sc6 Sc9 Sl Sl3 Sl4 Sp3a Sp3b Wc Wd Wf Wg" \
   '    classify "$_bp"' \
   's/^    classify "\$_bp"$/    SCOPE_TOKEN=LIVING/'
 
@@ -178,6 +185,37 @@ else
   b_dft="$(fn_body "$WORK/drift.sh")"
   if [ -n "$b_dft" ] && [ "$b_ref" != "$b_dft" ]; then ok "M19-is-archive-copy-drifts: KILLED by the binding arm (declared: Bd1 on the pristine pair, Bd2 on the drifted copy)"; else bad "M19-is-archive-copy-drifts: SURVIVED -- the binding arm cannot see a dropped arm"; fi
 fi
+
+# ---- Bs: the SLOT_RE copy is BOUND to what `artifact-path-config.sh --slot-re` prints ----------------
+# Both are asserted on the pristine reader (equal), and a drifted copy must differ, so the arm can fail.
+slot_of() { sed -n "s/^SLOT_RE='\(.*\)'\$/\1/p" "$1" | head -1; }
+slot_cfg="$(AI_DLC_PROJECT_ROOT="$ROOT" bash "$ROOT/core/scripts/artifact-path-config.sh" --slot-re 2>/dev/null)"
+if [ -n "$slot_cfg" ] && [ "$(slot_of "$READER")" = "$slot_cfg" ]; then ok "Bs1 the reader's SLOT_RE equals what artifact-path-config.sh --slot-re prints ($slot_cfg)"; else bad "Bs1 SLOT_RE copy ($(slot_of "$READER")) differs from --slot-re ($slot_cfg)"; fi
+sed "s/^SLOT_RE='\^s\[0-9\]+\$'/SLOT_RE='^s[0-9]*\$'/" "$READER" > "$WORK/slotdrift.sh"
+if cmp -s "$READER" "$WORK/slotdrift.sh"; then bad "Bs2 the slot drift mutation DID NOT APPLY"
+elif [ "$(slot_of "$WORK/slotdrift.sh")" != "$slot_cfg" ]; then ok "Bs2 M21-slot-re-copy-drifts: KILLED by the binding arm (declared: Bs1 on the pristine copy, Bs2 on the drifted one)"
+else bad "Bs2 M21-slot-re-copy-drifts: SURVIVED"; fi
+
+# ---- Bg: the live-stem rule is BOUND to the guard's own lines (core/hooks/ai-dlc-gate-remediation-guard.sh:790-804)
+# The guard is frozen and is not edited. The three lines that DEFINE the rule must appear byte-for-byte in
+# both files, and a drifted reader copy (a shorter timestamp pattern) must lose one.
+GUARD="$ROOT/core/hooks/ai-dlc-gate-remediation-guard.sh"
+bg_lines='  _ts="${_stem##*-}"
+    [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z) ;;
+if [ "$_ts" \> "$LIVE_TS" ]; then LIVE_TS="$_ts"'
+bg_miss() { # <file> -> names of the bound lines it lacks
+  local f="$1" l n=0 miss=""
+  while IFS= read -r l; do
+    l="${l#"${l%%[![:space:]]*}"}"; n=$((n + 1))
+    grep -qF -- "$l" "$f" || miss="$miss $n"
+  done <<<"$bg_lines"
+  printf '%s' "$miss"
+}
+if [ -z "$(bg_miss "$GUARD")" ] && [ -z "$(bg_miss "$READER")" ]; then ok "Bg1 the guard and the reader carry the same three live-stem rule lines"; else bad "Bg1 live-stem rule lines differ: guard lacks [$(bg_miss "$GUARD")] reader lacks [$(bg_miss "$READER")]"; fi
+sed 's/T\[0-9\]\[0-9\]\[0-9\]\[0-9\]\[0-9\]\[0-9\]Z) ;;/T[0-9]Z) ;;/' "$READER" > "$WORK/gdrift.sh"
+if cmp -s "$READER" "$WORK/gdrift.sh"; then bad "Bg2 the guard drift mutation DID NOT APPLY"
+elif [ -n "$(bg_miss "$WORK/gdrift.sh")" ]; then ok "Bg2 M22-live-stem-rule-copy-drifts: KILLED by the binding arm (declared: Bg1 on the pristine pair, Bg2 on the drifted copy)"
+else bad "Bg2 M22-live-stem-rule-copy-drifts: SURVIVED"; fi
 
 # M14: the reader trusts a REPOINTED row without re-deriving the new derivation.
 mutate M14-reader-trusts-repointed reader "Rp2 Rp3 Rp3b Rp4b" \
@@ -230,6 +268,11 @@ mutate M10-unassessed-reads-closed reader "B8b" \
 STEPS="$ROOT/core/skills/ai-dlc/steps"
 pk() { if grep -qF -- "$2" "$STEPS/$3" 2>/dev/null; then ok "$1"; else bad "$1 -- $STEPS/$3 lacks: $2"; fi; }
 pk "Pa route.md Step 0a runs the reader on resume" "check-owed-derivations.sh" route.md
+# The in-tree side of the implementation-readiness-report HISTORY shape. The writer (BMAD's own skill, whose
+# outputFile is `{planning_artifacts}/implementation-readiness-report-{{date}}.md`) is NOT in this repo and is
+# NOT checked here; only that ai-dlc still invokes the skill at its two call sites.
+pk "Pa2 architecture.md still invokes bmad-check-implementation-readiness" '/bmad-check-implementation-readiness' architecture.md
+pk "Pa3 stories-test-strategy.md still invokes bmad-check-implementation-readiness" '/bmad-check-implementation-readiness' stories-test-strategy.md
 pk "Pb gate-validation.md carries the owed-derivation check, keyed on any non-zero exit" "Any exit other than 0" gate-validation.md
 pk "Pb2 and its deny text names the REPOINTED remedy" "REPOINTED<TAB>" gate-validation.md
 pk "Pb3 and says exit 2 is refused and unassessed" "the rows are REFUSED and unassessed" gate-validation.md

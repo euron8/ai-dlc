@@ -282,8 +282,15 @@ _bmad-output/ai-dlc-update/push-candidate-ledger.archive.md
 _bmad-output/planning-artifacts/prd-history.md
 _bmad-output/planning-artifacts/product-brief-history.md
 _bmad-output/planning-artifacts/archive/x.md
-_bmad-output/planning-artifacts/s1/archive/cycle-1/x.md"
+_bmad-output/planning-artifacts/s1/archive/cycle-1/x.md
+_bmad-output/ai-dlc-update/reconcile-log-20261016T0725Z.md
+_bmad-output/planning-artifacts/implementation-readiness-report-2026-10-16.md"
 LIVEGA="_bmad-output/gate-adjudication/g.md"
+GA="_bmad-output/gate-adjudication"
+GA_LIVE="planning-20260301T000000Z"; GA_OLD="planning-20260101T000000Z"
+mkdir -p "$R/$GA"
+: > "$R/$GA/$GA_LIVE.verdict.json"; : > "$R/$GA/$GA_OLD.verdict.json"
+for gf in "$GA_LIVE.repair.md" "$GA_OLD.repair.md"; do { printf '# h\n\n'; fence 5; } > "$R/$GA/$gf"; done
 NEARS="_bmad-output/planning-artifacts/prd-history-notes.md
 _bmad-output/planning-artifacts/archived.md"
 : > "$WORK/hrows.tsv"
@@ -296,9 +303,29 @@ for hp in $HSHAPES; do
   rd "$R" "$WORK/h1.tsv"
   rc_is "Hr $hp stale row -> exit 0, one INFO history, no OPEN" 0 "$([ "$RC" = 0 ] && [ "$(awk -F'\t' '$1 == "INFO" && $2 == "history" { n++ } END { print n + 0 }' <<<"$OUT")" = 1 ] && [ "$(open_count)" = 0 ] && echo 0 || echo 1)"
 done
-scope_in "$R" "$LIVEGA"; rc_is "Hl1 the LIVE gate-adjudication directory --scope -> CURRENT (unrotated, so it blocks)" 0 "$([ "$SC" = CURRENT ] && echo 0 || echo 1)"
-row "$LIVEGA:3" "$CMD" > "$WORK/h2.tsv"; rd "$R" "$WORK/h2.tsv"
-rc_is "Hl2 a stale fence in the live gate-adjudication/ is OPEN and blocks (exit 1)" 0 "$([ "$RC" = 1 ] && [ "$(open_count)" = 1 ] && echo 0 || echo 1)"
+scope_in "$R" "$GA/$GA_LIVE.repair.md"; rc_is "Hl1 the LIVE-nonce sidecar in gate-adjudication/ (no slot component) --scope -> CURRENT" 0 "$([ "$SC" = CURRENT ] && echo 0 || echo 1)"
+scope_in "$R" "$GA/$GA_LIVE.verdict.json"; rc_is "Hl1b the live verdict file itself (basename equals the live stem plus .verdict.json) -> CURRENT" 0 "$([ "$SC" = CURRENT ] && echo 0 || echo 1)"
+row "$GA/$GA_LIVE.repair.md:3" "$CMD" > "$WORK/h2.tsv"; rd "$R" "$WORK/h2.tsv"
+rc_is "Hl2 a stale fence in the live-nonce sidecar is OPEN and blocks (exit 1)" 0 "$([ "$RC" = 1 ] && [ "$(open_count)" = 1 ] && echo 0 || echo 1)"
+scope_in "$R" "$GA/$GA_OLD.repair.md"; rc_is "Hl4 an OLDER stem in the live directory --scope -> HISTORY" 0 "$([ "$SC" = HISTORY ] && echo 0 || echo 1)"
+row "$GA/$GA_OLD.repair.md:3" "$CMD" > "$WORK/h2o.tsv"; rd "$R" "$WORK/h2o.tsv"
+rc_is "Hl5 a stale fence in the older stem is INFO history, not OPEN (exit 0)" 0 "$([ "$RC" = 0 ] && [ "$(awk -F'\t' '$1 == "INFO" && $2 == "history" { n++ } END { print n + 0 }' <<<"$OUT")" = 1 ] && [ "$(open_count)" = 0 ] && echo 0 || echo 1)"
+scope_in "$R" "$GA/s303/x.md"; rc_is "Hl6 gate-adjudication/s303/x.md with current 1 -> PAST (its slot, not the live-dir rule)" 0 "$([ "$SC" = PAST ] && echo 0 || echo 1)"
+scope_in "$R" "$GA/s1/x.md"; rc_is "Hl7 gate-adjudication/s<current>/x.md -> CURRENT" 0 "$([ "$SC" = CURRENT ] && echo 0 || echo 1)"
+R7="$WORK/rd7"; mkroot "$R7"; mkdir -p "$R7/$GA"; { printf '# h\n\n'; fence 5; } > "$R7/$GA/$GA_LIVE.repair.md"
+scope_in "$R7" "$GA/$GA_LIVE.repair.md"; rc_is "Hl8 NO verdict files in the live directory -> there is no live stem, every file is HISTORY" 0 "$([ "$SC" = HISTORY ] && echo 0 || echo 1)"
+# the nonconforming-ts near-miss: a verdict whose ts is not [0-9]{8}T[0-9]{6}Z is not orderable and is never live
+R8="$WORK/rd8"; mkroot "$R8"; mkdir -p "$R8/$GA"; : > "$R8/$GA/planning-arch.verdict.json"
+scope_in "$R8" "$GA/planning-arch.repair.md"; rc_is "Hl9 only a non-conforming verdict stem -> no live stem -> HISTORY" 0 "$([ "$SC" = HISTORY ] && echo 0 || echo 1)"
+# slots in every area under _bmad-output (past 3, current 1), and the near-misses
+for ar in analysis implementation-artifacts party-mode-transcripts retro-artifacts; do
+  scope_in "$R" "_bmad-output/$ar/s3/x.md"; rc_is "Sl $ar/s3/x.md with current 1 -> PAST" 0 "$([ "$SC" = PAST ] && echo 0 || echo 1)"
+  scope_in "$R" "_bmad-output/$ar/s1/x.md"; rc_is "Sl $ar/s1/x.md (current) -> CURRENT" 0 "$([ "$SC" = CURRENT ] && echo 0 || echo 1)"
+done
+scope_in "$R" "_bmad-output/s5-notes/x.md"; rc_is "Sl1 _bmad-output/s5-notes/x.md (not a whole component) -> LIVING" 0 "$([ "$SC" = LIVING ] && echo 0 || echo 1)"
+scope_in "$R" "_bmad-output/x/s5.md"; rc_is "Sl2 _bmad-output/x/s5.md (the FILENAME is never a slot) -> LIVING" 0 "$([ "$SC" = LIVING ] && echo 0 || echo 1)"
+scope_in "$R" "_bmad-output/analysis/s3/s1/x.md"; rc_is "Sl3 two slot components: the FIRST (s3) decides -> PAST" 0 "$([ "$SC" = PAST ] && echo 0 || echo 1)"
+scope_in "$R" "_bmad-output/analysis/s1/archive/x.md"; rc_is "Sl4 s<current>/archive/** in a new area -> HISTORY" 0 "$([ "$SC" = HISTORY ] && echo 0 || echo 1)"
 scope_in "$R" "_bmad-output/implementation-artifacts/s1/gate-adjudication/g.md"
 rc_is "Hl3 the same file rotated under s<N>/gate-adjudication/ is HISTORY" 0 "$([ "$SC" = HISTORY ] && echo 0 || echo 1)"
 for np in $NEARS; do

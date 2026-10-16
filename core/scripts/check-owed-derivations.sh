@@ -73,13 +73,14 @@ ROOT="${AI_DLC_PROJECT_ROOT:-}"
 [ -n "$ROOT" ] || { echo "REFUSED: cannot resolve the project root; set AI_DLC_PROJECT_ROOT." >&2; exit 2; }
 
 # ---- the scope classifier: ONE place ------------------------------------------------------------
-# A path is in a sprint ONLY through an anchored `s<digits>` directory segment directly under one of
-# these sprint areas. The precedent is core/scripts/join-remediator-shards.sh: line 182 says a subject
-# "spans `planning-artifacts/`, `planning-artifacts/s<N>/` and `specs/s<N>/`", and its party-mode seats
-# live at `<state>/party-mode/s<N>/` (lines 201 and 386). The whole segment is matched, never a
-# substring: `s19` is not `s1`, a file named `s319.md` and a directory `s319x/` are no segment, and a
-# path with no such segment (prd.md) is LIVING.
-SPRINT_AREAS="_bmad-output/planning-artifacts _bmad-output/party-mode _bmad-output/specs"
+# A SLOT is any whole `s<digits>` path COMPONENT anywhere under `_bmad-output/`, derived from the path
+# grammar: core/scripts/validate-artifact-paths.sh:167 and :241 match `s[0-9]+` against a whole path
+# COMPONENT, and its SLOT_RE (:125, from `artifact-path-config.sh --slot-re`) is `^s[0-9]+$`. This script
+# cannot obtain SLOT_RE from that config without walking from one core file to another (I33), so the
+# expression is copied here and BOUND to `--slot-re` by a dist-only battery arm. The FILENAME is never a
+# slot (the basename is dropped first), a directory `s319x/` or `s5-notes/` is no slot, and a path carrying
+# several slot components uses the FIRST one under `_bmad-output/`. A path with no slot is LIVING (prd.md).
+SLOT_RE='^s[0-9]+$'
 
 # The current sprint comes ONLY from sprint-status.sh sprint-id, a sibling of this script (installed at
 # scripts/ai-dlc/ beside it, in the distribution at core/scripts/). Unresolved is a refusal: a scope is
@@ -97,20 +98,22 @@ resolve_sprint() {
   CUR="$out"
 }
 
-# sprint_split <path>: sets SP_N (the sprint number) and SP_REST (the path below the sprint directory)
-# and returns 0 when <path> sits in an anchored sprint directory; returns 1 otherwise.
+# sprint_split <path>: sets SP_N (the sprint number) and SP_REST (the path below the slot directory) and
+# returns 0 when the directory part of <path> carries a slot component under `_bmad-output/`; else 1.
 SP_N=""; SP_REST=""
 sprint_split() {
-  local p="$1" a seg
+  local p="$1" d seg
   SP_N=""; SP_REST=""
-  for a in $SPRINT_AREAS; do
-    case "$p" in
-      "$a"/s*/*)
-        seg="${p#"$a"/}"; seg="${seg%%/*}"
-        case "${seg#s}" in ''|*[!0-9]*) continue ;; esac
-        SP_N="${seg#s}"; SP_REST="${p#"$a"/"$seg"/}"
-        return 0 ;;
+  case "$p" in _bmad-output/*/*) ;; *) return 1 ;; esac
+  d="${p%/*}"; d="${d#_bmad-output/}"
+  [ "$d" != "${p%/*}" ] || return 1
+  while :; do
+    seg="${d%%/*}"
+    # SLOT_RE `^s[0-9]+$` as a case, so no fork is paid per component (the battery binds the two).
+    case "$seg" in
+      s[0-9]*) case "${seg#s}" in *[!0-9]*) ;; *) SP_N="${seg#s}"; SP_REST="${p#*/"$seg"/}"; return 0 ;; esac ;;
     esac
+    case "$d" in */*) d="${d#*/}" ;; *) break ;; esac
   done
   return 1
 }
@@ -159,18 +162,69 @@ is_history() { # <root-relative path> -> 0 when HISTORY
   if sprint_split "$p"; then case "$SP_REST" in archive/*) return 0 ;; esac; fi
   is_archive "${p##*/}" && return 0
   case "${p##*/}" in push-candidate-ledger.archive.md) return 0 ;; esac
+  # Fresh-per-run dated reports. `reconcile-log-<ts>.md` under `_bmad-output/ai-dlc-update/` is written by
+  # the update session itself, one per run: core/skills/ai-dlc-update/SKILL.md:2492 ("YOU write
+  # `_bmad-output/ai-dlc-update/reconcile-log-<ts>.md`, and `apply.sh` does NOT"; apply.sh:2780 confirms
+  # it does not write it). `implementation-readiness-report-<date>.md` is written fresh per run by BMAD's
+  # own skill `bmad-check-implementation-readiness` (its outputFile is
+  # `{planning_artifacts}/implementation-readiness-report-{{date}}.md`); that writer is BMAD's, so it is
+  # NOT in this tree and the outputFile shape is NOT checked here. ai-dlc invokes the skill from
+  # core/skills/ai-dlc/steps/architecture.md:264 and core/skills/ai-dlc/steps/stories-test-strategy.md:18.
+  case "$p" in
+    _bmad-output/ai-dlc-update/reconcile-log-*.md) return 0 ;;
+    _bmad-output/planning-artifacts/implementation-readiness-report-*.md) return 0 ;;
+  esac
   return 1
+}
+
+# THE LIVE GATE-ADJUDICATION STEM, computed ONCE per call by the guard's own rule. This is a COPY of
+# core/hooks/ai-dlc-gate-remediation-guard.sh:790-804 (step 4, "Which pass is live? ... order by nonce, never
+# mtime"): over `<gate dir>/*.verdict.json`, stem = basename minus `.verdict.json`, ts = the part after the
+# last `-`, keep only ts matching [0-9]{8}T[0-9]{6}Z, and the live stem is the one with the greatest ts.
+# I33 forbids sourcing the hook, so the loop is copied and the dist-only battery binds the two. A file in the
+# live directory is live iff its basename EQUALS the live stem or starts with `<live-stem>.` (the rotator's
+# sidecar rule, rotate-gate-adjudication.sh:124-125: `<nonce-stem>.<anything>`). No conforming verdict: no
+# live stem, so every file there is HISTORY.
+LIVE_STEM=""
+compute_live_stem() {
+  local _f _stem _ts LIVE_TS=""
+  LIVE_STEM=""
+  for _f in "$ROOT/_bmad-output/gate-adjudication"/*.verdict.json; do
+    [ -f "$_f" ] || continue
+    _stem="${_f##*/}"; _stem="${_stem%.verdict.json}"
+    _ts="${_stem##*-}"
+    case "$_ts" in
+      [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z) ;;
+      *) continue ;;
+    esac
+    if [ "$_ts" \> "$LIVE_TS" ]; then LIVE_TS="$_ts"; LIVE_STEM="$_stem"; fi
+  done
 }
 
 # classify <root-relative path>: sets SCOPE_TOKEN to HISTORY | CURRENT | PAST | LIVING. THE ONE
 # CLASSIFICATION IMPLEMENTATION: --scope, --scope-batch and the reader's per-row scoping all call it,
-# in-process (no fork per path). HISTORY is decided first and beats the other three.
+# in-process (no fork per path). FINAL ORDER:
+#   1. is_history          -> HISTORY (beats everything, including s<current>/archive/**)
+#   2. live gate-adjudication with NO slot component: live-stem file -> CURRENT, any other -> HISTORY
+#   3. a slot component    -> CURRENT if it equals the current sprint, else PAST
+#   4. otherwise           -> LIVING
+# A gate-adjudication file WITH a slot (`gate-adjudication/s303/x.md`) skips step 2 and is judged by its slot.
 SCOPE_TOKEN=""
 classify() {
-  local p="$1"
+  local p="$1" b
   if is_history "$p"; then SCOPE_TOKEN=HISTORY; return 0; fi
-  # The LIVE gate-adjudication directory is unrotated, so it is the current sprint's and it blocks.
-  case "$p" in _bmad-output/gate-adjudication/*) SCOPE_TOKEN=CURRENT; return 0 ;; esac
+  case "$p" in
+    _bmad-output/gate-adjudication/*)
+      if ! sprint_split "$p"; then
+        b="${p##*/}"
+        if [ -n "$LIVE_STEM" ] && { [ "$b" = "$LIVE_STEM" ] || case "$b" in "$LIVE_STEM".*) true ;; *) false ;; esac; }; then
+          SCOPE_TOKEN=CURRENT
+        else
+          SCOPE_TOKEN=HISTORY
+        fi
+        return 0
+      fi ;;
+  esac
   if sprint_split "$p"; then
     if [ "$((10#$SP_N))" -eq "$CUR" ]; then SCOPE_TOKEN=CURRENT; else SCOPE_TOKEN=PAST; fi
     return 0
@@ -192,6 +246,7 @@ scope_batch() {
   cat > "$SB_DIR/in" || { echo "REFUSED: could not read stdin." >&2; exit 2; }
   [ -s "$SB_DIR/in" ] || exit 0
   resolve_sprint
+  compute_live_stem
   while IFS= read -r _bp || [ -n "$_bp" ]; do
     [ -n "$_bp" ] || { echo "REFUSED: a blank line in the --scope-batch input; no output was produced." >&2; exit 2; }
     classify "$_bp"
@@ -263,6 +318,7 @@ fi
 # Nothing owed: no scope to resolve and no validator to run.
 [ -s "$TMP/rows" ] || exit 0
 resolve_sprint
+compute_live_stem
 
 SEP="$(printf '\037')"
 
