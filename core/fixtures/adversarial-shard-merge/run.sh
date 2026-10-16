@@ -218,6 +218,17 @@ p_probe_absent "$MERGE" && ok "PR1: a legitimate writer with no probe row, and a
 p_rerun_residual "$MERGE" && ok "RR5: KNOWN GAP, stated in the merge header -- a superseded remediator with no probe row and its meta forged to an adversary dispatch MERGES under --rerun; the same remediator WITH its probe row is REFUSED 'the meta file was rewritten'" \
   || bad "RR5: (rc=$RC) $(cat "$MO")"
 
+# ---- BL-544 / BL-554 / BL-548 (merge half). Each world is seeded the BL-536 way (shard -> harness
+# record) because the dispatch-id derivation refuses a shard with no record before these checks run.
+p_hdr "$MERGE" && ok "H1: a shard with NO ## Findings section whose finding opens '## F-1 (MAJOR)' and declares 0 findings -> REFUSED naming the line and the FINDING GRAMMAR; '## Notes' and the same heading inside a fence MERGE" \
+  || bad "H1: (rc=$RC) $(cat "$MO")"
+p_draft "$MERGE" && ok "H2: 2.md.draft beside a complete shard -> MERGED with 'NOTE: ignored draft 2.md.draft' on stderr and its body absent from the pass; notes.md and notes.md.draft still REFUSED" \
+  || bad "H2: (rc=$RC) $(cat "$MO")"
+p_dry "$MERGE" && ok "H3: --dry-run over two shards citing another story prints all four REFUSED lines, exit 2, no pass file; the clean set prints DRY-RUN: clean (exit 0), writes nothing, then merges for real" \
+  || bad "H3: (rc=$RC) $(cat "$MO")"
+p_dry_barrier "$MERGE" && ok "H4: --dry-run with shard 1 missing AND a finding refusal in shard 2 prints exactly the missing-shard line, under an open stdin, within 8s" \
+  || bad "H4: (rc=$RC) $(cat "$MO")"
+
 # R6: a finding heading EXACTLY as the real pass wrote it carries no severity word, so the heads
 # counted (0 MAJOR) disagree with findings_major -- refused, never counted as zero.
 d="$(b3_world)"

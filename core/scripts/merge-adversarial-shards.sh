@@ -178,7 +178,12 @@
 #   table is read from that one speller, never restated here. Every `cross-<g>` the table prints
 #   is required; a `cross-<g>` it does not print, `cross.md` beside any `cross-<g>.md`, `cross.md`
 #   when G>1 and `cross-<g>.md` when G=1 are each REFUSED. Any other non-dot entry is REFUSED -- a
-#   re-dispatch written beside the original must not be silently ignored.
+#   re-dispatch written beside the original must not be silently ignored. The one exception is
+#   `<shard name>.draft` where `<shard name>` is itself a valid shard name (`2.md.draft`,
+#   `cross-1.md.draft`): the adversary's unfinished copy, which the write ledger already accepts
+#   beside its shard (RE-DISPATCH, and ONE DISPATCH, ONE SHARD DIR). It is skipped and reported on
+#   stderr as `NOTE: ignored draft <name>`, never read and never merged. `notes.md`, and a draft of a
+#   name that is no shard, still refuse.
 #
 # THE OWNER RULE. The cross groups overlap (every unordered pair of units is in at least one
 #   group, some pairs in several), so a finding two groups both see would be summed twice. Each
@@ -220,6 +225,13 @@
 #   Per shard, the CRITICAL-heading count must equal `findings_critical` and the MAJOR-heading
 #   count `findings_major` -- otherwise the partition is checked over findings that are not
 #   the ones the counts describe.
+#   The severity word is UPPERCASE: `sev()` is case-sensitive, so `### F-1 (major)` carries no
+#   severity and is counted as none.
+#   A finding is NEVER a `## ` heading. An unfenced `## ` heading outside the provenance block whose
+#   first token is a finding id (`F-1`, `M1`: capital letters, an optional `-`, digits) is REFUSED
+#   wherever it sits -- under `## Findings`, after it, or in a shard with no `## Findings` section at
+#   all. That is the seat-file style of "Validation cycle" item 1, which ends the section here and
+#   would otherwise merge the shard as zero findings.
 #
 # THE MERGE
 #   Sums findings_critical, findings_major, findings_minor, findings_critical_prior_scope and
@@ -242,12 +254,36 @@
 #   0  merged (stdout `MERGED: ...`), or the output already exists byte-identical (`UNCHANGED:`)
 #   2  REFUSED (stdout `REFUSED: <reason>`) -- nothing written. Includes an existing output that
 #      differs: a pass file a remediator may already have read is never silently overwritten.
+#
+# --dry-run (every merge mode, not --map): the same checks, nothing written, and the refusals of the
+#   FIRST FAILING PHASE all printed, one `REFUSED: <reason>` line each, instead of the first only. It
+#   does NOT print every refusal of the merge: the phases are barriers, and a later phase is not
+#   reached while an earlier one refuses. In order:
+#     1. arguments, placement, the map, the ceilings          exit at once, one line
+#     2. the shard-set walk (names, duplicates, cross shape, missing shards)   all collected
+#     3. the dispatch ids from the harness records (--rerun staging included)  exit at once, one line
+#     4. the seat-complete set check                          exit at once, one line
+#     5. per shard: a structural refusal (provenance block, counts, verdict, invoked_at, dispatch id,
+#        skill, sha, artifact) skips the rest of THAT shard; finding-level refusals and the count
+#        checks are all collected
+#     6. an existing output that differs                      exit at once, one line
+#   Exit 2 when any line was printed; 0 with `DRY-RUN: clean` otherwise. Without --dry-run the first
+#   refusal exits, as it always did.
 set -u
 export LC_ALL=C
 
 refuse() { printf 'REFUSED: %s\n' "$*"; exit 2; }
+# collect: a refusal inside a phase that --dry-run walks to its end. Without --dry-run it IS refuse,
+# so every merge without the flag exits at its first refusal, as before.
+DRY=0; DRY_N=0
+collect() {
+  [ "$DRY" -eq 1 ] || refuse "$@"
+  printf 'REFUSED: %s\n' "$*"; DRY_N=$((DRY_N + 1))
+}
+# phase_barrier: --dry-run stops here when the phase just walked collected anything.
+phase_barrier() { [ "$DRY_N" -eq 0 ] || exit 2; }
 
-USAGE="usage: merge-adversarial-shards.sh [--rerun <shard>.md@<ISO> ...] [--map | --document <path> | --subject <N> [--base <sha>] [--elicitation]] <planning>/s<N>/shards/<artifact>-p<M>"
+USAGE="usage: merge-adversarial-shards.sh [--dry-run] [--rerun <shard>.md@<ISO> ...] [--map | --document <path> | --subject <N> [--base <sha>] [--elicitation]] <planning>/s<N>/shards/<artifact>-p<M>"
 MAP_ONLY=0; DOCUMENT=""; SUBJECT=""; SUBJ_BASE=""; ELICIT=0
 # --rerun is taken out of the argument list wherever it sits, so the mode parse below is unchanged
 # for every call that carries none. Each value is checked once the shard set is known.
@@ -257,6 +293,7 @@ while [ $# -gt 0 ]; do
     --rerun) [ $# -ge 2 ] || refuse "--rerun needs <shard>.md@<ISO>"
              RERUN="${RERUN}${2}
 "; shift 2 ;;
+    --dry-run) DRY=1; shift ;;
     *) _rest[${#_rest[@]}]="$1"; shift ;;
   esac
 done
@@ -453,6 +490,7 @@ done < "$T/listing.sorted"
 fi
 if [ "$MAP_ONLY" -eq 1 ]; then
   [ -z "$RERUN" ] || refuse "--rerun supersedes write-ledger rows at a merge; --map reads no ledger"
+  [ "$DRY" -eq 0 ] || refuse "--dry-run checks a merge; --map reads no shard and writes nothing"
   cat "$T/map"; exit 0
 fi
 if [ -n "$SUBJECT" ]; then UNIT_COUNT="part count of the sprint $SUBJECT subject"
@@ -508,23 +546,31 @@ CRIT_CEIL="$(read_ceiling CRITICAL_EXIT_CEILING)"
 for f in "$SHARD_DIR"/*; do
   [ -e "$f" ] || continue
   b="$(basename "$f")"
-  [ -f "$f" ] || refuse "$f is not a regular file; the shard directory holds only <ordinal>.md and the cross shards ($CROSS_KEYS)"
-  case "$b" in
+  [ -f "$f" ] || { collect "$f is not a regular file; the shard directory holds only <ordinal>.md and the cross shards ($CROSS_KEYS)"; continue; }
+  # `<shard name>.draft` is the adversary's unfinished copy (the write ledger accepts it beside its
+  # shard): judged by the shard name it hangs off, skipped when that is valid, never merged.
+  bn="$b"; is_draft=0
+  case "$b" in *.md.draft) bn="${b%.draft}"; is_draft=1 ;; esac
+  case "$bn" in
     cross.md) key="cross" ;;
     cross-*.md)
-      gn="${b#cross-}"; gn="${gn%.md}"
-      case "$gn" in ""|*[!0-9]*) refuse "$f is not a shard name (<ordinal>.md, cross.md or cross-<g>.md)" ;; esac
+      gn="${bn#cross-}"; gn="${gn%.md}"
+      case "$gn" in ""|*[!0-9]*) collect "$f is not a shard name (<ordinal>.md, cross.md or cross-<g>.md)"; continue ;; esac
       key="cross-$((10#$gn))" ;;
     *.md)
-      case "${b%.md}" in ""|*[!0-9]*) refuse "$f is not a shard name (<ordinal>.md, cross.md or cross-<g>.md)" ;; esac
-      key="$(norm_ord "${b%.md}")"
-      [ -n "$key" ] || refuse "$f names ordinal ${b%.md}, outside 1..$K (the $UNIT_COUNT)" ;;
-    *) refuse "$f is not a shard name (<ordinal>.md, cross.md or cross-<g>.md)" ;;
+      case "${bn%.md}" in ""|*[!0-9]*) collect "$f is not a shard name (<ordinal>.md, cross.md or cross-<g>.md)"; continue ;; esac
+      key="$(norm_ord "${bn%.md}")"
+      [ -n "$key" ] || { collect "$f names ordinal ${bn%.md}, outside 1..$K (the $UNIT_COUNT)"; continue; } ;;
+    *) collect "$f is not a shard name (<ordinal>.md, cross.md or cross-<g>.md)"; continue ;;
   esac
+  if [ "$is_draft" -eq 1 ]; then printf 'NOTE: ignored draft %s\n' "$b" >&2; continue; fi
   printf '%s\t%s\n' "$key" "$f" >> "$T/shards" || refuse "cannot stage the shard set"
 done
-dup="$(cut -f1 "$T/shards" | sort | uniq -d | head -1)"
-[ -z "$dup" ] || refuse "shard $dup was delivered more than once in $SHARD_DIR"
+cut -f1 "$T/shards" | sort | uniq -d > "$T/dups" || refuse "cannot stage the duplicate check"
+while IFS= read -r dup; do
+  [ -n "$dup" ] || continue
+  collect "shard $dup was delivered more than once in $SHARD_DIR"
+done < "$T/dups"
 # The cross shards delivered must be EXACTLY the table's: a mix of `cross.md` and `cross-<g>.md`,
 # a `cross-<g>` the table does not print, or the wrong spelling for G are each refused by name.
 x_plain=0; x_num=0
@@ -532,16 +578,17 @@ while IFS="$(printf '\t')" read -r xk xf; do
   case "$xk" in
     cross) x_plain=1 ;;
     cross-*) x_num=1
-      case " $CROSS_KEYS " in *" $xk "*) ;; *) refuse "$xf is $xk, which partition-document.sh --cross-groups $K does not print (the cross shards for K=$K are: $CROSS_KEYS)" ;; esac ;;
+      case " $CROSS_KEYS " in *" $xk "*) ;; *) collect "$xf is $xk, which partition-document.sh --cross-groups $K does not print (the cross shards for K=$K are: $CROSS_KEYS)" ;; esac ;;
   esac
 done < "$T/shards"
 [ "$x_plain" -eq 1 ] && [ "$x_num" -eq 1 ] \
-  && refuse "$SHARD_DIR mixes cross.md with cross-<g>.md; a shard set is one cross shape or the other (for K=$K: $CROSS_KEYS)"
+  && collect "$SHARD_DIR mixes cross.md with cross-<g>.md; a shard set is one cross shape or the other (for K=$K: $CROSS_KEYS)"
 [ "$x_plain" -eq 1 ] && [ "$G" -gt 1 ] \
-  && refuse "$SHARD_DIR holds cross.md, but the $UNIT_COUNT is $K, whose cross groups are $CROSS_KEYS; a single cross shard is owed only at K=2"
+  && collect "$SHARD_DIR holds cross.md, but the $UNIT_COUNT is $K, whose cross groups are $CROSS_KEYS; a single cross shard is owed only at K=2"
 for idx in $ORDINALS $CROSS_KEYS; do
-  [ -n "$(awk -F'\t' -v k="$idx" '$1 == k { print; exit }' "$T/shards")" ] || refuse "shard $idx is missing from $SHARD_DIR (expected: $ORDINALS and $CROSS_KEYS)"
+  [ -n "$(awk -F'\t' -v k="$idx" '$1 == k { print; exit }' "$T/shards")" ] || collect "shard $idx is missing from $SHARD_DIR (expected: $ORDINALS and $CROSS_KEYS)"
 done
+phase_barrier
 
 # ---- the dispatch ids, DERIVED from the harness records (see THE DISPATCH ID in the header) ----
 # After the set-level refusals above, so a duplicate, unknown or missing shard keeps its own
@@ -774,6 +821,7 @@ fi
 
 # ---- per-shard parse ----------------------------------------------------------------------
 # One awk pass per shard. Emits:  B <starts> <ends>  /  F <key> <value>  /  X <line> <sev> <n-stories-lines> <stories>
+# /  Y <line of a wrong-axis citation, 0 none>  /  H <line of the first unfenced `## <ID>` heading outside the block, 0 none>
 parse_shard() {
   awk '
     function sev(h,   best, bp, i, w, p) {
@@ -801,13 +849,14 @@ parse_shard() {
     }
     /^[ \t]*(```|~~~)/ { fence = !fence; next }
     fence { next }
+    /^## [A-Z]+-?[0-9]+([^A-Za-z0-9]|$)/ { if (hline == 0) hline = NR }
     /^## / { flush(); infind = ($0 ~ /^## Findings[ \t]*$/); next }
     infind && /^### / { flush(); fl = NR; fs = sev($0); fn = 0; fst = ""; next }
     infind && fl > 0 && index($0, cite ":") == 1 {
       fn++; v = substr($0, length(cite) + 2); sub(/^[ \t]*/, "", v); gsub(/[ \t]+/, "", v); fst = v; next
     }
     infind && fl > 0 && other != "" && index($0, other ":") == 1 { if (wrong == 0) wrong = NR; next }
-    END { flush(); printf "B %d %d\n", starts + 0, ends + 0; printf "Y %d\n", wrong + 0 }
+    END { flush(); printf "B %d %d\n", starts + 0, ends + 0; printf "Y %d\n", wrong + 0; printf "H %d\n", hline + 0 }
   ' cite="$CITE" other="$OTHER" "$1"
 }
 
@@ -874,66 +923,66 @@ for key in $ORDINALS $CROSS_KEYS; do
   parse_shard "$sf" > "$P" || refuse "parsing $sf did not run"
   set -- $(awk '$1 == "B" { print $2, $3 }' "$P")
   [ "${1:-0}" = "1" ] && [ "${2:-0}" = "1" ] \
-    || refuse "$sf carries ${1:-0} provenance block opening(s) and ${2:-0} closing(s); a shard carries exactly one block"
+    || { collect "$sf carries ${1:-0} provenance block opening(s) and ${2:-0} closing(s); a shard carries exactly one block"; continue; }
 
   crit="$(digits "$(field "$P" findings_critical)")"
   major="$(digits "$(field "$P" findings_major)")"
   [ -n "$crit" ] && [ -n "$major" ] \
-    || refuse "$sf does not declare integer findings_critical and findings_major"
+    || { collect "$sf does not declare integer findings_critical and findings_major"; continue; }
   prior="$(digits "$(field "$P" findings_critical_prior_scope)")"
   [ -n "$prior" ] || prior="$crit"
-  [ "$prior" -le "$crit" ] || refuse "$sf declares findings_critical_prior_scope=$prior above findings_critical=$crit"
+  [ "$prior" -le "$crit" ] || { collect "$sf declares findings_critical_prior_scope=$prior above findings_critical=$crit"; continue; }
   under="$(digits "$(field "$P" findings_major_underived)")"
   [ -n "$under" ] || under=0
-  [ "$under" -le "$major" ] || refuse "$sf declares findings_major_underived=$under above findings_major=$major"
+  [ "$under" -le "$major" ] || { collect "$sf declares findings_major_underived=$under above findings_major=$major"; continue; }
   minor="$(digits "$(field "$P" findings_minor)")"
   [ -n "$minor" ] || minor=0
 
   if [ "$ELICIT" -eq 1 ]; then
     # Elicitation is not a convergence pass: a verdict here would be read as one by every gate.
-    [ -z "$(field "$P" verdict)" ] || refuse "$sf declares a verdict; an elicitation shard carries none"
+    [ -z "$(field "$P" verdict)" ] || { collect "$sf declares a verdict; an elicitation shard carries none"; continue; }
   else
   v="$(field "$P" verdict | tr '[:lower:]' '[:upper:]' | sed -e 's/[^A-Z]\{1,\}/_/g' -e 's/^_//' -e 's/_$//')"
   case "$v" in
     EXIT_CONDITION_MET|EXIT_CONDITION_NOT_MET) ;;
     DIVERGENT_HARD_BLOCK) ANY_DIVERGENT=1 ;;
-    *) refuse "$sf declares verdict '${v:-<none>}', not one of EXIT_CONDITION_MET EXIT_CONDITION_NOT_MET DIVERGENT_HARD_BLOCK" ;;
+    *) { collect "$sf declares verdict '${v:-<none>}', not one of EXIT_CONDITION_MET EXIT_CONDITION_NOT_MET DIVERGENT_HARD_BLOCK"; continue; } ;;
   esac
   fi
 
   at="$(field "$P" invoked_at)"
-  [[ $at =~ $RE_ISO ]] || refuse "$sf invoked_at '${at:-<none>}' is not ISO 8601 UTC to the second (an optional .<fraction> before Z is accepted)"
+  [[ $at =~ $RE_ISO ]] || { collect "$sf invoked_at '${at:-<none>}' is not ISO 8601 UTC to the second (an optional .<fraction> before Z is accepted)"; continue; }
   at_key "$at"
   if [ -z "$EARLIEST" ] || [[ "$AT_KEY" < "$EARLIEST_KEY" ]]; then EARLIEST="$at"; EARLIEST_KEY="$AT_KEY"; fi
 
   # The DERIVED id (the pre-pass above). The self-report is read only to be compared: a real-shaped
   # value that differs refuses; any other value is ignored and never written.
   tid="$(awk -F'\t' -v k="$key" '$1 == k { print $2; exit }' "$T/ids")"
-  [ -n "$tid" ] || refuse "$sf has no row in $REC_WRITES; a shard written with Bash (or by the lead) has no harness record of its writer, so its dispatch id cannot be derived -- the adversary writes its shard with Write or Edit"
+  [ -n "$tid" ] || { collect "$sf has no row in $REC_WRITES; a shard written with Bash (or by the lead) has no harness record of its writer, so its dispatch id cannot be derived -- the adversary writes its shard with Write or Edit"; continue; }
   self="$(field "$P" tool_use_id)"
   if [[ $self =~ $RE_REAL_TUID ]] && [ "$self" != "$tid" ]; then
-    refuse "$sf self-reports tool_use_id $self, but the harness records derive $tid for the dispatch that wrote it; the shard's id was written by someone else"
+    { collect "$sf self-reports tool_use_id $self, but the harness records derive $tid for the dispatch that wrote it; the shard's id was written by someone else"; continue; }
   fi
-  case " $ALL_IDS " in *" $tid "*) refuse "$sf repeats tool_use_id $tid of another shard; one dispatch delivered twice" ;; esac
+  case " $ALL_IDS " in *" $tid "*) { collect "$sf repeats tool_use_id $tid of another shard; one dispatch delivered twice"; continue; } ;; esac
   ALL_IDS="$ALL_IDS $tid"
   ID_LIST="$ID_LIST $key=$tid"
 
   # skill / mode / lead_role are batch-invariant: every shard ran the same evaluation.
-  val="$(field "$P" skill)"; [ -n "$val" ] || refuse "$sf declares no skill"
+  val="$(field "$P" skill)"; [ -n "$val" ] || { collect "$sf declares no skill"; continue; }
   if [ "$ELICIT" -eq 1 ] && [ "$val" != "bmad-advanced-elicitation" ]; then
-    refuse "$sf declares skill '$val'; an elicitation shard runs bmad-advanced-elicitation"
+    { collect "$sf declares skill '$val'; an elicitation shard runs bmad-advanced-elicitation"; continue; }
   fi
-  [ -z "$SKILL" ] || [ "$SKILL" = "$val" ] || refuse "$sf declares skill '$val' where another shard declares '$SKILL'"
+  [ -z "$SKILL" ] || [ "$SKILL" = "$val" ] || { collect "$sf declares skill '$val' where another shard declares '$SKILL'"; continue; }
   SKILL="$val"
-  val="$(field "$P" mode)"; [ -n "$val" ] || refuse "$sf declares no mode"
-  [ -z "$MODE" ] || [ "$MODE" = "$val" ] || refuse "$sf declares mode '$val' where another shard declares '$MODE'"
+  val="$(field "$P" mode)"; [ -n "$val" ] || { collect "$sf declares no mode"; continue; }
+  [ -z "$MODE" ] || [ "$MODE" = "$val" ] || { collect "$sf declares mode '$val' where another shard declares '$MODE'"; continue; }
   MODE="$val"
-  val="$(field "$P" lead_role)"; [ -n "$val" ] || refuse "$sf declares no lead_role"
-  [ -z "$LEAD_ROLE" ] || [ "$LEAD_ROLE" = "$val" ] || refuse "$sf declares lead_role '$val' where another shard declares '$LEAD_ROLE'"
+  val="$(field "$P" lead_role)"; [ -n "$val" ] || { collect "$sf declares no lead_role"; continue; }
+  [ -z "$LEAD_ROLE" ] || [ "$LEAD_ROLE" = "$val" ] || { collect "$sf declares lead_role '$val' where another shard declares '$LEAD_ROLE'"; continue; }
   LEAD_ROLE="$val"
   rd="$(field "$P" resolves_divergence)"
   if [ -n "$rd" ]; then
-    if [ "$RESOLVES_SET" -eq 1 ] && [ "$rd" != "$RESOLVES" ]; then refuse "$sf resolves_divergence disagrees with another shard"; fi
+    if [ "$RESOLVES_SET" -eq 1 ] && [ "$rd" != "$RESOLVES" ]; then { collect "$sf resolves_divergence disagrees with another shard"; continue; }; fi
     RESOLVES="$rd"; RESOLVES_SET=1
   fi
 
@@ -941,55 +990,60 @@ for key in $ORDINALS $CROSS_KEYS; do
   # carrying one `sections:` line AND a `stories:` line has exactly one line of this axis, so the
   # count passes it and only this line refuses it.
   wrong="$(awk '$1 == "Y" { print $2 }' "$P")"
-  [ "${wrong:-0}" = "0" ] || refuse "$sf:$wrong carries a '$OTHER:' line; a document merge cites sections only, and a finding citing both axes is never keyed on one of them"
+  [ "${wrong:-0}" = "0" ] || { collect "$sf:$wrong carries a '$OTHER:' line; a document merge cites sections only, and a finding citing both axes is never keyed on one of them"; continue; }
+
+  # A finding opened with `## ` (the seat-file style) ends the `## Findings` section for this parse, so
+  # the shard would merge as zero findings. It is refused wherever it sits, `## Findings` or not.
+  hl="$(awk '$1 == "H" { print $2 }' "$P")"
+  [ "${hl:-0}" = "0" ] || { collect "$sf:$hl opens a finding with \`## \`; findings are \`### \` headings inside \`## Findings\` (FINDING GRAMMAR in merge-adversarial-shards.sh), each severity word UPPERCASE"; continue; }
 
   if [ -n "$SUBJECT" ]; then
     # Every shard -- cross included -- notarizes ALL FOUR stems at their disk bytes, and names the
     # subject manifest. Order-free: the list is compared stem by stem.
     sha="$(field "$P" artifact_sha)"
-    [ -n "$sha" ] || refuse "$sf declares no artifact_sha; a subject shard notarizes <stem>=<sha> for every subject file"
+    [ -n "$sha" ] || { collect "$sf declares no artifact_sha; a subject shard notarizes <stem>=<sha> for every subject file"; continue; }
     nt=0
     for tok in $sha; do
       nt=$((nt + 1))
       st="${tok%%=*}"; sv="$(printf '%s' "${tok#*=}" | tr 'A-F' 'a-f')"
-      case "$tok" in *=*) ;; *) refuse "$sf artifact_sha token '$tok' is not <stem>=<sha>" ;; esac
+      case "$tok" in *=*) ;; *) { collect "$sf artifact_sha token '$tok' is not <stem>=<sha>"; continue 2; } ;; esac
       want="$(awk -F'\t' -v s="$st" '$1 == s { print $2 }' "$T/stems")"
-      [ -n "$want" ] || refuse "$sf artifact_sha names stem '$st', not a subject stem ($(cut -f1 "$T/stems" | tr '\n' ' '))"
-      [ "$sv" = "$want" ] || refuse "$sf notarizes $st=$sv but that file is $want on disk; the shard reviewed other bytes"
+      [ -n "$want" ] || { collect "$sf artifact_sha names stem '$st', not a subject stem ($(cut -f1 "$T/stems" | tr '\n' ' '))"; continue 2; }
+      [ "$sv" = "$want" ] || { collect "$sf notarizes $st=$sv but that file is $want on disk; the shard reviewed other bytes"; continue 2; }
     done
     [ "$nt" -eq 4 ] && [ "$(printf '%s\n' $sha | sed 's/=.*//' | sort -u | grep -c .)" -eq 4 ] \
-      || refuse "$sf artifact_sha carries $nt token(s); a subject shard notarizes each of the four stems once"
+      || { collect "$sf artifact_sha carries $nt token(s); a subject shard notarizes each of the four stems once"; continue; }
     art="$(field "$P" artifact)"
-    [ -n "$art" ] || refuse "$sf declares no artifact; a subject shard names the subject manifest"
+    [ -n "$art" ] || { collect "$sf declares no artifact; a subject shard names the subject manifest"; continue; }
     resolve_artifact "$art"
     [ "$ART_ABS" = "$SUBJ_MF" ] \
-      || refuse "$sf names artifact '$art', which resolves to ${ART_ABS:-nothing}, not the subject manifest $SUBJ_MF"
+      || { collect "$sf names artifact '$art', which resolves to ${ART_ABS:-nothing}, not the subject manifest $SUBJ_MF"; continue; }
     if [ "$key" = "$CROSS_FIRST" ]; then CROSS_ID="$tid"; CROSS_ARTIFACT="$art"; fi
   elif [ -n "$DOCUMENT" ]; then
     # Every shard -- cross included -- reviewed the WHOLE document's bytes, so every shard
     # notarizes the one whole-document sha and names the one document.
     sha="$(field "$P" artifact_sha)"
-    [ "$sha" = "$DOC_SHA" ] || refuse "$sf notarizes ${sha:-<none>} but $DOCUMENT is $DOC_SHA on disk; the shard reviewed other bytes"
+    [ "$sha" = "$DOC_SHA" ] || { collect "$sf notarizes ${sha:-<none>} but $DOCUMENT is $DOC_SHA on disk; the shard reviewed other bytes"; continue; }
     art="$(field "$P" artifact)"
-    [ -n "$art" ] || refuse "$sf declares no artifact; a section shard names the document it reviewed"
+    [ -n "$art" ] || { collect "$sf declares no artifact; a section shard names the document it reviewed"; continue; }
     resolve_artifact "$art"
     [ "$ART_ABS" = "$DOCUMENT" ] \
-      || refuse "$sf names artifact '$art', which resolves to ${ART_ABS:-nothing}, not --document $DOCUMENT; the shard reviewed another file"
+      || { collect "$sf names artifact '$art', which resolves to ${ART_ABS:-nothing}, not --document $DOCUMENT; the shard reviewed another file"; continue; }
     if [ "$key" = "$CROSS_FIRST" ]; then CROSS_ID="$tid"; CROSS_ARTIFACT="$art"; fi
     mt="$(date -u -r "$sf" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"
-    [[ $mt =~ $RE_ISO ]] || refuse "cannot read the modification time of $sf"
+    [[ $mt =~ $RE_ISO ]] || { collect "cannot read the modification time of $sf"; continue; }
     WALL_LIST="$WALL_LIST $key=$at/$mt"
   elif [ "$is_x" -eq 1 ]; then
     xa="$(field "$P" artifact)"
-    [ -n "$xa" ] || refuse "$sf (cross-story) declares no artifact"
+    [ -n "$xa" ] || { collect "$sf (cross-story) declares no artifact"; continue; }
     if [ "$key" = "$CROSS_FIRST" ]; then CROSS_ID="$tid"; CROSS_ARTIFACT="$xa"
-    else [ "$xa" = "$CROSS_ARTIFACT" ] || refuse "$sf (cross-story) names artifact '$xa' where $CROSS_FIRST names '$CROSS_ARTIFACT'"; fi
+    else [ "$xa" = "$CROSS_ARTIFACT" ] || { collect "$sf (cross-story) names artifact '$xa' where $CROSS_FIRST names '$CROSS_ARTIFACT'"; continue; }; fi
   else
     sha="$(field "$P" artifact_sha)"
-    [[ $sha =~ $RE_SHA ]] || refuse "$sf artifact_sha '${sha:-<none>}' is not one sha256"
+    [[ $sha =~ $RE_SHA ]] || { collect "$sf artifact_sha '${sha:-<none>}' is not one sha256"; continue; }
     sb="$(awk -F'\t' -v k="$key" '$1 == k { print $2; exit }' "$T/map")"
-    disk="$(sha_of "$STORIES_DIR/$sb")" || refuse "story file $STORIES_DIR/$sb is unreadable"
-    [ "$sha" = "$disk" ] || refuse "$sf notarizes $sha but $sb is $disk on disk; the shard reviewed other bytes"
+    disk="$(sha_of "$STORIES_DIR/$sb")" || { collect "story file $STORIES_DIR/$sb is unreadable"; continue; }
+    [ "$sha" = "$disk" ] || { collect "$sf notarizes $sha but $sb is $disk on disk; the shard reviewed other bytes"; continue; }
     SHA_LIST="$SHA_LIST ${sb%.md}=$sha"
   fi
 
@@ -999,20 +1053,20 @@ for key in $ORDINALS $CROSS_KEYS; do
     [ "$tag" = "X" ] || continue
     [ "$s" = "CRITICAL" ] && n_crit_h=$((n_crit_h + 1))
     [ "$s" = "MAJOR" ] && n_major_h=$((n_major_h + 1))
-    [ "$nlines" = "1" ] || refuse "$sf:$line finding carries $nlines $CITE: lines; each finding carries exactly one"
-    [[ $cited =~ $RE_CITED ]] || refuse "$sf:$line $CITE: '$cited' is not <ordinal>[, <ordinal>...]"
+    [ "$nlines" = "1" ] || { collect "$sf:$line finding carries $nlines $CITE: lines; each finding carries exactly one"; continue; }
+    [[ $cited =~ $RE_CITED ]] || { collect "$sf:$line $CITE: '$cited' is not <ordinal>[, <ordinal>...]"; continue; }
     distinct=""
     for c in $(printf '%s' "$cited" | tr ',' ' '); do
       o="$(norm_ord "$c")"
-      [ -n "$o" ] || refuse "$sf:$line cites ordinal $c, outside 1..$K"
+      [ -n "$o" ] || { collect "$sf:$line cites ordinal $c, outside 1..$K"; continue 2; }
       case " $distinct " in *" $o "*) ;; *) distinct="$distinct $o" ;; esac
     done
     set -- $distinct
     if [ "$is_x" -eq 1 ]; then
-      [ $# -ge 2 ] || refuse "$sf:$line (cross-$NOUN shard) cites only$distinct; a cross-$NOUN finding cites two or more ordinals, a single-$NOUN one belongs to that $NOUN shard"
+      [ $# -ge 2 ] || { collect "$sf:$line (cross-$NOUN shard) cites only$distinct; a cross-$NOUN finding cites two or more ordinals, a single-$NOUN one belongs to that $NOUN shard"; continue; }
       # THE OWNER RULE: the one group --cross-owner names, never any other that also covers it.
       own="$(bash "$XPART" --cross-owner "$K" "$(printf '%s' "${distinct# }" | tr ' ' ',')" 2> "$T/own.err")" \
-        || refuse "partition-document.sh --cross-owner $K on$distinct failed: $(head -1 "$T/own.err")"
+        || { collect "partition-document.sh --cross-owner $K on$distinct failed: $(head -1 "$T/own.err")"; continue; }
       [ "$G" -eq 1 ] && ownk="cross" || ownk="cross-$own"
       # A cross shard reads the whole document and may cite any ordinal, so a finding outside its
       # owner's shard is accepted -- unless the owner's shard carries the IDENTICAL cited set, the
@@ -1020,22 +1074,22 @@ for key in $ORDINALS $CROSS_KEYS; do
       if [ "$ownk" != "$key" ]; then
         osf="$(awk -F'\t' -v k="$ownk" '$1 == k { print $2; exit }' "$T/shards")"
         ! same_set "$osf" "$CITE" "$distinct" \
-          || refuse "$sf:$line ($key) cites$distinct, a finding owned by $ownk (partition-document.sh --cross-owner), whose shard carries the identical set; one finding is reported once, or the summed counts depend on the cover"
+          || { collect "$sf:$line ($key) cites$distinct, a finding owned by $ownk (partition-document.sh --cross-owner), whose shard carries the identical set; one finding is reported once, or the summed counts depend on the cover"; continue; }
       fi
     else
       [ $# -eq 1 ] && [ "$1" = "$key" ] \
-        || refuse "$sf:$line (shard $key) cites$distinct; a per-ordinal shard reports only findings citing its own ordinal alone"
+        || { collect "$sf:$line (shard $key) cites$distinct; a per-ordinal shard reports only findings citing its own ordinal alone"; continue; }
     fi
   done < "$P"
   [ "$n_crit_h" -eq "$crit" ] && [ "$n_major_h" -eq "$major" ] \
-    || refuse "$sf declares $crit CRITICAL / $major MAJOR but its ## Findings section heads $n_crit_h CRITICAL / $n_major_h MAJOR findings"
+    || collect "$sf declares $crit CRITICAL / $major MAJOR but its ## Findings section heads $n_crit_h CRITICAL / $n_major_h MAJOR findings"
   # The marker's count against the findings parsed here: a shard truncated after its marker, or
   # marked before its findings, disagrees.
   scn="$(awk -F'\t' -v k="$key" '$1 == "Y" && $2 == k { print $3; exit }' "$T/sc")"
   if [ -n "$scn" ]; then
     nfx="$(grep -c '^X ' "$P")" || nfx=0
     [ "$scn" = "$nfx" ] \
-      || refuse "$sf ends in 'seat-complete: ... findings=$scn' but its ## Findings section heads $nfx finding(s); the marker is written once, last, counting the shard's findings"
+      || collect "$sf ends in 'seat-complete: ... findings=$scn' but its ## Findings section heads $nfx finding(s); the marker is written once, last, counting the shard's findings"
   fi
 
   S_CRIT=$((S_CRIT + crit)); S_PRIOR=$((S_PRIOR + prior)); S_MAJOR=$((S_MAJOR + major))
@@ -1063,6 +1117,7 @@ for key in $ORDINALS $CROSS_KEYS; do
        !skip && !/^seat-complete: /' "$sf" >> "$T/body" || refuse "cannot stage the body of $sf"
 done
 
+phase_barrier
 if grep -q 'SKILL_INVOCATION_PROVENANCE' "$T/body"; then
   refuse "a shard body mentions SKILL_INVOCATION_PROVENANCE outside its block; the merged file must carry exactly one"
 fi
@@ -1111,6 +1166,13 @@ else VERDICT="EXIT_CONDITION_NOT_MET"; fi
   printf 'SKILL_INVOCATION_PROVENANCE_END -->\n'
 } > "$T/out" || refuse "cannot stage the merged pass file"
 
+if [ "$DRY" -eq 1 ]; then
+  # --dry-run writes nothing: an existing output that differs still refuses at once, as below.
+  if [ -e "$OUT" ] && ! cmp -s "$T/out" "$OUT"; then
+    refuse "$OUT already exists and differs from this merge; a pass file is never overwritten"
+  fi
+  printf 'DRY-RUN: clean\n'; exit 0
+fi
 if [ -e "$OUT" ]; then
   if cmp -s "$T/out" "$OUT"; then
     printf 'UNCHANGED: %s verdict=%s\n' "$OUT" "$VERDICT"; exit 0
