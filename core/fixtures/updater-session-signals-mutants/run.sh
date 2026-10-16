@@ -237,11 +237,11 @@ expect_set explore-why-dropped 6 "cell .UNEXPLAINED" \
 #
 # S1. THE ALLOW DROPPED: the teammate's non-pipeline Skill call is denied again, bare and qualified.
 expect_set teammate-skill-allow-dropped 2 'TEAMMATE SKILL ALLOW|TEAMMATE SKILL PLUGIN OTHER' \
-  's/^        \*) ADVANCING=0 ;;$/        *) : ;;/'
+  's/^          \*) ADVANCING=0 ;;$/          *) : ;;/'
 # S2. THE ai-dlc* EXCLUSION DROPPED: every teammate Skill passes, pipeline skill included. The
 #    updater cell does not move -- the payload arm allows it either way.
 expect_set teammate-skill-prefix-dropped 4 'TEAMMATE SKILL (AI-DLC|AI-DLC SIBLING|PLUGIN|UPPER): LEAK' \
-  's/^        ai-dlc\*) ;;$/        ai-dlc-never-a-skill-name) ;;/'
+  's/^          ai-dlc\*) ;;$/          ai-dlc-never-a-skill-name) ;;/'
 # S3. THE PLUGIN SEGMENT DROPPED: the whole name is compared, so `x:ai-dlc` passes.
 expect_set teammate-skill-segment-dropped 1 'TEAMMATE SKILL PLUGIN: LEAK' \
   's/TEAM_SKILL##\*:/TEAM_SKILL/'
@@ -250,10 +250,18 @@ expect_set teammate-skill-case-dropped 1 'TEAMMATE SKILL UPPER' \
   "s/ | tr '\\[:upper:\\]' '\\[:lower:\\]')\"\$/)\"/"
 # S5. THE EMPTY-NAME FAIL-CLOSED DROPPED: a Skill call with no name passes.
 expect_set teammate-skill-empty-open 1 'TEAMMATE SKILL NO NAME' \
-  "/^        '') ;;\$/d"
+  "/^          '') ;;\$/d"
 # S6. THE agent_id CONJUNCT DROPPED: the LEAD's own non-pipeline Skill passes the pause.
 expect_set teammate-skill-lead-leak 1 'TEAMMATE SKILL LEAD' \
   's/ = Skill \] \&\& \[ -n "\$AGENT_ID" \]; then$/ = Skill ]; then/'
+
+# S7. THE START-BEFORE-PAUSE COMPARISON DROPPED: a teammate dispatched DURING the pause (the lead's
+#    paused Explore) invokes a skill.
+expect_set teammate-skill-start-gate-dropped 1 'TEAMMATE SKILL AFTER PAUSE' \
+  's/ \&\& \[\[ "\$TEAM_START" < "\$PAUSED_AT" \]\]; then$/; then/'
+# S8. THE UNKNOWN-START FAIL-CLOSED INVERTED: a teammate with no readable transcript passes.
+expect_set teammate-skill-start-fail-open 1 'TEAMMATE SKILL NO TRANSCRIPT' \
+  's/^      if \[ -n "\$TEAM_START" \] \&\& /      if [ -z "$TEAM_START" ] || /'
 
 echo
 if [ "$fails" -eq 0 ]; then echo "updater-session-signals-mutants: PASS"; exit 0; fi

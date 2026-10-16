@@ -467,22 +467,36 @@ eexpect tin-team "DENY 1" Agent '"Explore"' "$EXPLORE_PROMPT_PLAIN" "" "" tin-te
 # STOP still denies it. `ai-dlc-update` is ALLOWED for every caller by the updater payload arm, and
 # its cell records that unchanged behaviour. Every cell is a fresh paused tree in a routed pipeline
 # session: "<ALLOW|DENY|STOP|OTHER> <ACK_DENIED rows>".
-scell() { # <label> <skill> <agent_id> [world]
-  local w out v
+# EACH CELL CARRIES ITS OWN LEAD TRANSCRIPT, and beside it the teammate's own
+# `subagents/agent-<id>.jsonl`, whose first record's `timestamp` is when the teammate STARTED. The
+# flag is touched now, so `before` (2026-01-01) started before the pause and `after` (2099) during
+# it; `none` writes no teammate file. The LEAD cell gets a `before` file at `agent-.jsonl`, the
+# path an empty agent_id resolves to, so only the `agent_id` conjunct stands between it and an
+# allow -- otherwise the missing file would deny it and that conjunct could never be seen.
+scell() { # <label> <skill> <agent_id> [world] [start: before|after|none]
+  local w out v tr start
   w="$(seed "s-$1")"
+  tr="$w/lead.jsonl"; cp "$TR_PIPE_ROUTED" "$tr"
+  start="${5:-before}"
+  if [ "$start" != none ]; then
+    mkdir -p "$w/lead/subagents"
+    case "$start" in before) start=2026-01-01T00:00:00.000Z ;; after) start=2099-01-01T00:00:00.000Z ;; esac
+    printf '{"type":"user","isSidechain":true,"agentId":"%s","timestamp":"%s","message":{"role":"user","content":"go"}}\n' \
+      "$3" "$start" > "$w/lead/subagents/agent-$3.jsonl"
+  fi
   if [ "${4:-}" = stop ]; then
     : > "$w/_bmad-output/planning-artifacts/s7/prd-adversarial-p1.md"
     printf '#!/bin/sh\nprintf "STALLED\\t%%s\\n" "$2"\nexit 3\n' > "$w/scripts/ai-dlc/validate-adversarial-convergence.sh"
     chmod +x "$w/scripts/ai-dlc/validate-adversarial-convergence.sh"
   fi
-  out="$(drive "$w" Skill "$TR_PIPE_ROUTED" "$2" "" "$3")"
+  out="$(drive "$w" Skill "$tr" "$2" "" "$3")"
   if paused_deny "$out"; then v=DENY
   elif denied "$out"; then case "$out" in *'AI/DLC Rule 8: THE ADVERSARIAL CYCLE HAS STOPPED'*) v=STOP ;; *) v=OTHER ;; esac
   else v=ALLOW; fi
   printf '%s %s' "$v" "$(rows "$w" ACK_DENIED)"
 }
-sexpect() { # <label> <expected> <skill> <agent_id> <world> <ok> <bad>
-  local got; got="$(scell "$1" "$3" "$4" "$5")"
+sexpect() { # <label> <expected> <skill> <agent_id> <world> <ok> <bad> [start]
+  local got; got="$(scell "$1" "$3" "$4" "$5" "${8:-before}")"
   if [ "$got" = "$2" ]; then ok "$6"; else bad "$7 (cell '$got', expected '$2')"; fi
 }
 sexpect lead-bmad "DENY 1" bmad-spec "" "" \
@@ -512,6 +526,12 @@ sexpect team-noname "DENY 1" "" ax "" \
 sexpect team-update "ALLOW 0" ai-dlc-update ax "" \
   "TEAMMATE SKILL: a teammate's Skill(ai-dlc-update) is ALLOWED — the updater payload arm, unchanged" \
   "TEAMMATE SKILL UPDATE: a teammate's Skill(ai-dlc-update) is no longer the updater carve-out"
+sexpect team-after "DENY 1" bmad-spec ax "" \
+  "TEAMMATE SKILL: a teammate that STARTED after the pause (an Explore dispatched while paused) is DENIED its Skill(bmad-spec)" \
+  "TEAMMATE SKILL AFTER PAUSE: LEAK — a teammate dispatched during the pause invoked a skill" after
+sexpect team-notr "DENY 1" bmad-spec ax "" \
+  "TEAMMATE SKILL: a teammate whose own transcript is absent is DENIED — an unknown start fails closed" \
+  "TEAMMATE SKILL NO TRANSCRIPT: LEAK — a teammate with no readable start time invoked a skill" none
 sexpect team-stop "STOP 0" bmad-spec ax stop \
   "TEAMMATE SKILL: a teammate's Skill(bmad-spec) under a pending Rule 8 STOP is DENIED by the STOP — the allow is sited after Check 2a" \
   "TEAMMATE SKILL STOP: LEAK — a teammate's Skill call escaped a pending Rule 8 STOP"

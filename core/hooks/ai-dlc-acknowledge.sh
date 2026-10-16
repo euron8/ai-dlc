@@ -651,13 +651,34 @@ case "$TOOL_NAME" in
     # teammate invoking one spawns work while paused. Its frontmatter cannot be read here without
     # resolving the skill's home, so it is not detected; that child's own calls carry an
     # `agent_id` and meet this same gate. Agent/Task/TaskCreate stay denied for a teammate.
+    # IN FLIGHT MEANS DISPATCHED BEFORE THE PAUSE. Any `agent_id` would also cover an Explore the
+    # lead dispatched DURING the pause (allowed below), whose own Skill call that Explore paragraph
+    # says stays denied. `agent_type` cannot separate them -- it names the subagent's type, which is
+    # the same before and after the flag. The teammate's own transcript can:
+    # `<lead transcript minus .jsonl>/subagents/agent-<agent_id>.jsonl`, whose FIRST record carries
+    # the ISO UTC `timestamp` of its start (measured: 5024 of 5025 local teammate transcripts; the
+    # one without is a `fork-context-ref` record). The flag is re-touched on every operator message
+    # (`ai-dlc-pause.sh`), so its mtime is the latest pause. Allowed only when the teammate STARTED
+    # STRICTLY BEFORE that second; a same-second start, an absent or unreadable transcript, or a
+    # first record with no timestamp all fail closed (denied, as before this arm).
     if [ "$ADVANCING" -eq 1 ] && [ "$TOOL_NAME" = Skill ] && [ -n "$AGENT_ID" ]; then
       TEAM_SKILL="$(jq -r '.tool_input["skill"] // empty' <<< "$INPUT" 2>/dev/null | tr '[:upper:]' '[:lower:]')"
-      case "${TEAM_SKILL##*:}" in
-        '') ;;
-        ai-dlc*) ;;
-        *) ADVANCING=0 ;;
+      TEAM_TR="${TRANSCRIPT%.jsonl}/subagents/agent-${AGENT_ID}.jsonl"
+      TEAM_START=""
+      [ -n "$TRANSCRIPT" ] && [ -f "$TEAM_TR" ] \
+        && TEAM_START="$(head -1 "$TEAM_TR" 2>/dev/null | jq -r '.timestamp // empty' 2>/dev/null | cut -c1-19)"
+      PAUSED_AT="$(date -u -r "$PAUSE_FLAG" +%Y-%m-%dT%H:%M:%S 2>/dev/null)"
+      case "$TEAM_START" in
+        20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]) ;;
+        *) TEAM_START="" ;;
       esac
+      if [ -n "$TEAM_START" ] && [ -n "$PAUSED_AT" ] && [[ "$TEAM_START" < "$PAUSED_AT" ]]; then
+        case "${TEAM_SKILL##*:}" in
+          '') ;;
+          ai-dlc*) ;;
+          *) ADVANCING=0 ;;
+        esac
+      fi
     fi
 
     # THE LEAD MAY DISPATCH THE BUILT-IN `Explore` SUBAGENT WHILE PAUSED, AND NOTHING ELSE.
