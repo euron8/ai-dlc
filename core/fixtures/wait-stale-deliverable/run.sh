@@ -483,6 +483,7 @@ done
 kill -9 -"$PID" 2>/dev/null || kill -9 "$PID" 2>/dev/null || true
 wait "$PID" 2>/dev/null || true
 LEASE="$(cat "$MARKER" 2>/dev/null || echo '')"
+LEASE="${LEASE%% *}"   # the marker is `<epoch> <pid>`; the lease is the first field
 case "$LEASE" in
   ''|*[!0-9]*) bad "marker-goes-stale: marker absent or non-numeric after SIGKILL — cannot tell a lease from a promise" ;;
   *)

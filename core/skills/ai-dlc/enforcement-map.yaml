@@ -552,7 +552,8 @@ checks:
           turned off
       - site: ai-dlc-continue.sh (Stop) Check 2b — the yield permission (v0.81.0)
         posture: ALLOWS the stop while a backgrounded wait-beat is live
-          (`.beat-inflight` epoch > now); every other marker state falls through to
+          (`.beat-inflight` first field, an epoch, > now; the marker is `<epoch> <pid>`
+          and a bare epoch reads the same); every other marker state falls through to
           the Rule 3 block
         why: >-
           the bounded join is a WAIT, and forcing a tool call on every beat made
@@ -568,7 +569,11 @@ checks:
           trap, and under the old shape this check kept authorizing the yield for
           the whole remaining quantum with nothing alive to re-invoke the lead.
           A lease expires ~30s after the beat dies whatever the quantum is, which
-          is what let the quantum grow from 120s to 600s
+          is what let the quantum grow from 120s to 600s. The marker is shared by
+          every beat in the project, so it names ONE holder pid: a beat removes it
+          only when it holds it, handing it first to another live registered beat
+          (`.wait-beats/.lease-<pid>`), and it is written before the pre-sleep work —
+          one beat exiting used to delete the lease of every beat still asleep
       - site: wait-for-deliverable.sh — the delivery predicate
         posture: a target counts as delivered only when it is non-empty AND written
           since the join armed; a file that predates the join is treated as pending
@@ -576,7 +581,7 @@ checks:
           a presence-only test reported the PREVIOUS sprint's file at a reused
           deliverable path as delivered in under a second, which is consumed as this
           sprint's input with nothing downstream to re-examine it. It also returned
-          before the sleep, so `.beat-inflight` was never written and the lead could
+          before the lease, so `.beat-inflight` was never written and the lead could
           not yield — the same defect starves Check 2b above. The join epoch is
           captured by the script, not taken from the caller: leads round
           `dispatched-at` UP, and a future threshold no write can satisfy walks the
