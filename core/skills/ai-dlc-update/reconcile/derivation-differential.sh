@@ -27,7 +27,12 @@
 # whose actual output this range moved again is still stale-before and stale-after, and keying
 # on output would hand the operator a clear no edit for this pull can close.
 #
-#   NEWLY-FAILING  reproduced at base, fails at the consumer -- THIS PULL'S WORK. Named.
+#   NEWLY-FAILING  reproduced at base, fails at the consumer -- THIS PULL'S WORK. Named, with the
+#                  output the fence recorded and the output it produces now (`recorded: … actual: …`
+#                  in the row's detail). The base side reproduced, so the recorded output IS the base
+#                  output; the cause is read off the row, never re-derived by hand. Each is the
+#                  validator's `/`-joined text cut at 160 characters, so two outputs that differ only
+#                  past that column print identically.
 #   NEWLY-PASSING  failed at base, reproduces now. Listed.
 #   STALE-BOTH     stale on both sides -- pre-existing debt, out of this row's scope. Listed.
 #   UNASSESSABLE   the validator REFUSED it (ALLOWLIST, READS-STDIN, GRAMMAR) on either side, so
@@ -322,21 +327,29 @@ awk -v C="$CONSUMER/" -v brc="$BRC" -v trc="$TRC" -v cf="$TMP/counts" -v of="$TM
     if (!(k in U)) { U[k] = 1; ord[++nu] = k; CMD[k] = substr(KL, 3) }
     next
   }
+  # Any other head line ends the block a recorded/actual pair belongs to.
+  (src == 3 || src == 4) && /^[A-Z][A-Z-]*( \([A-Z-]*\))?: / { ck = "" }
   (src == 3 || src == 4) && /^FAIL \((STALE|ALLOWLIST|READS-STDIN|GRAMMAR)\): / {
     v = $0; sub(/^FAIL \(/, "", v); sub(/\).*/, "", v)
     s = $0; sub(/^FAIL \([A-Z-]*\): /, "", s)
     k = keyof(s)
     if (k == "" || KL !~ /^ /) next
     if (src == 3) { heads_b++; if (brc == 1) B[k] = v } else { heads_t++; if (trc == 1) T[k] = v }
+    if (src == 4 && v == "STALE") ck = k
     if (!(k in U) && !(k in X)) { X[k] = 1; xord[++nx] = k }
     next
   }
+  # A STALE block on the consumer side carries what the command printed then and now, each `/`-joined
+  # and cut at 160 by the validator. Tabs become spaces so a --numstat output adds no row field.
+  src == 4 && ck != "" && substr($0, 1, 16) == "      recorded: " { r = substr($0, 17); gsub(/\t/, " ", r); REC[ck] = r; next }
+  src == 4 && ck != "" && substr($0, 1, 16) == "      actual:   " { r = substr($0, 17); gsub(/\t/, " ", r); ACT[ck] = r; next }
   function st(v) { return v == "" ? "PASS" : v }
   function refusal(v) { return v == "ALLOWLIST" || v == "READS-STDIN" || v == "GRAMMAR" }
   function rel(k) { return index(k, C) == 1 ? substr(k, length(C) + 1) : k }
   function row(status, k) {
     printf "%s\t%s\tbase=%s consumer=%s", status, rel(k), st(B[k]), st(T[k])
     if (k in CMD) printf "  $ %s", CMD[k]
+    if (status == "NEWLY-FAILING" && (k in REC)) printf "  recorded: %s  actual: %s", REC[k], ACT[k]
     printf "\n"
   }
   END {

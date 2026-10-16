@@ -572,6 +572,36 @@ ck "A17b and the refusal names the base side and its status" "$(printf 'REFUSED\
 nk "A17d the broken derivation is never scored STALE-BOTH" "$(printf 'STALE-BOTH\t%s\t' "$K_ALPHA")" "$OUT17"
 nk "A17e and no clear is printed" "zero NEWLY-FAILING" "$OUT17"
 
+# ---- A18: a NEWLY-FAILING row carries what the command printed then and now -------------------
+# The receipt shape: a `grep -n` whose needle survives the range but moves to another line. The
+# row must show both outputs, so the cause (a line re-point, not new text) is read off the shipped
+# tool. Its OWN world: W1 asserts exact counts. The control is the STALE-BOTH row in the same run,
+# which must exist and must NOT carry them -- a build appending to every status fails it.
+W18="$WORK/w18-shift"; build_consumer "$W18" "$THEIRS_BREAK" 1 real
+{
+  printf '# Story\n\n'
+  printf 'The line the gamma marker sits on.\n\n'
+  printf '```derived\n$ grep -n qqgamma scripts/ai-dlc/toy.sh\n2:qqgamma\n```\n\n'
+  printf 'A figure that was already wrong before this pull.\n\n'
+  printf '```derived\n$ grep -c qqbeta scripts/ai-dlc/toy.sh\n7\n```\n'
+} > "$W18/_bmad-output/story.md"
+g "$W18" add _bmad-output/story.md && g "$W18" commit -qm "story: line citation"
+K_SHIFT="$SF:$(grep -n -- 'grep -n qqgamma' "$W18/$SF" | head -1 | cut -d: -f1)"
+K_BETA18="$SF:$(grep -n -- 'grep -c qqbeta' "$W18/$SF" | head -1 | cut -d: -f1)"
+case "$K_SHIFT$K_BETA18" in *: | *::* ) echo "FIXTURE ERROR: a seeded A18 derivation line was not found" >&2; exit 2 ;; esac
+dd "$W18"; OUT18="$OUT"; RC18="$RC"
+rc_is "A18 seed: the line-moved derivation breaks this pull -> exit 1" 1 "$RC18"
+nf18="$(awk -F'\t' -v k="$K_SHIFT" '$1 == "NEWLY-FAILING" && $2 == k' <<<"$OUT18")"
+ck "A18a the NEWLY-FAILING row carries the recorded and the actual output" \
+  "recorded: 2:qqgamma  actual: 1:qqgamma" "$nf18"
+sb18="$(awk -F'\t' -v k="$K_BETA18" '$1 == "STALE-BOTH" && $2 == k' <<<"$OUT18")"
+if [ -n "$sb18" ] && ! grep -qF 'recorded:' <<<"$sb18"; then
+  ok "A18b control: the STALE-BOTH row is present and carries no recorded/actual output"
+else
+  bad "A18b control: the STALE-BOTH row is absent or carries recorded/actual output: [$sb18]"
+fi
+rc_is "A18c exactly one NEWLY-FAILING row" 1 "$(nrows NEWLY-FAILING "$OUT18")"
+
 # ---- A10: the default base root leaves no worktree and no scratch behind --------------------
 # CONTROL FIRST: the counter must see a worktree when one exists, or a 1 below is a counter that
 # cannot count.
@@ -585,7 +615,7 @@ else
   bad "A10a control: the counter read $c_ctl on a repository carrying one extra worktree, expected 2 -- A10b is unreadable"
 fi
 leaked=""
-for c in "$W1" "$W2" "$W3" "$W5" "$W5P" "$WSU" "$WSUN" "$W13" "$W13N" "$WS3" "$WS3N" "$W16" "$W16N" "$W17" "$W17N"; do
+for c in "$W1" "$W2" "$W3" "$W5" "$W5P" "$WSU" "$WSUN" "$W13" "$W13N" "$WS3" "$WS3N" "$W16" "$W16N" "$W17" "$W17N" "$W18"; do
   # W6 is left out on purpose: it carries the seeded LEAKED worktree A12c asserts is kept.
   n="$(wtcount "$c")"; [ "$n" = 1 ] || leaked="$leaked $(basename "$c")=$n"
 done
