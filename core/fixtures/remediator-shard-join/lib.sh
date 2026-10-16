@@ -905,6 +905,39 @@ p_chkpart() { # p_disjoint's world, ONE property apart: part 02 states `derivati
   run_join "$1" "$w"
   refused "$w" "02.md: derivations: not replayed" && has "$JO" "03.md: no derivations: line" && ! has "$JO" "01.md: no"
 }
+# ---- THE THIRD TIP ADVERSARY'S FOUR, each beside its near-miss.
+p_rulingedit() { # an operator-ruling entry with a REAL edit, in the siblings era, no siblings: -> rc 2, NOSIB
+  # named; the same entry with edit: n/a beside it is not (a ruling that edits owes what a repair owes)
+  ruling_world "$1" '### F-0 — MAJOR\n- disposition: repaired\n- edit: s305/a.md:1\n- siblings: n/a (insertion)\n\n### F-1 — MAJOR\n- disposition: operator-ruling\n- edit: s305/a.md:7\n- ruling: 2026-10-15T23:51:50Z\n\n### F-2 — MAJOR\n- disposition: operator-ruling\n- edit: n/a\n- ruling: 2026-10-15T23:51:50Z\n'
+  [ "$RC" -eq 2 ] && has "$JO" "the F-1 — MAJOR entry is repaired with an edit and carries no 'siblings:' field" \
+    && ! has "$JO" "the F-2 — MAJOR entry" && has "$JO" "ESCALATED-COUNT: 0"
+}
+p_rulingtab() { # a TAB inside a heading is a space: the heading's tail is never read as the cite -> the entry with
+  # no ruling: is refused for that, and the CRLF record's cite resolves (rc 0) -- both in one world each
+  ruling_world "$1" '### F-1\t2026-10-15T23:51:50Z\n- disposition: operator-ruling\n- edit: n/a\n'
+  local r1="$RC"; has "$JO" "the F-1 2026-10-15T23:51:50Z entry is dispositioned operator-ruling and carries no '- ruling:' cite" || return 1
+  ruling_world "$1" '### F-1 — MAJOR\r\n- disposition: operator-ruling\r\n- edit: n/a\r\n- ruling: 2026-10-15T23:51:50Z\r\n'
+  [ "$r1" -eq 2 ] && [ "$RC" -eq 0 ] && ! has "$JO" "REFUSED"
+}
+p_chkjoined() { # --escalations over a JOINED record: a shard with no repaired entry stating `not replayed` is
+  # exempt, as the parts-mode join exempted it (rc 0, its escalation printed); the same line in the shard
+  # holding the repaired entry is refused
+  esc_rec "$1" '<!-- shard: 01.md -->\n- advisor: called\n- derivations: replayed 2\n\n### F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\n<!-- shard: 02.md -->\n- advisor: called\n- derivations: not replayed\n\n### F-2 — MAJOR\n- disposition: escalated\n- edit: n/a\n'
+  local r0="$RC"; has "$JO" "ESCALATED: 02.md F-2 — MAJOR" && ! has "$JO" "REFUSED" || return 1
+  esc_rec "$1" '<!-- shard: 01.md -->\n- advisor: called\n- derivations: not replayed\n\n### F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\n<!-- shard: 02.md -->\n- advisor: called\n- derivations: replayed 1\n\n### F-2 — MAJOR\n- disposition: escalated\n- edit: n/a\n'
+  [ "$r0" -eq 0 ] && [ "$RC" -eq 2 ] && has "$JO" "stories-repair-p1.md: derivations: not replayed"
+}
+p_partsilent() { # a REFUSED parts join prints no escalation and no count, by design: nothing was joined, so a
+  # count from the parts could be wrong (record mode prints them through a refusal; parts mode does not).
+  # p_handoff's world with a second part whose repaired edit carries no siblings: -> refused, silent
+  local w; w="$(new_world)"
+  drive "$w" Edit "$w/$REL/$S21" "$AG1"; drive "$w" Edit "$REL/$S22" "$AG2"
+  cp "$HERE/seed.block-handoff.md" "$w/$SLOT/shards/stories-repair-p1/01.md"
+  printf '### F-9 — MINOR\n- disposition: repaired\n- edit: %s/%s:3\n' "$REL" "$S22" > "$w/$SLOT/shards/stories-repair-p1/02.md"
+  run_join "$1" "$w"
+  refused "$w" "02.md: the F-9 — MINOR entry is repaired with an edit and carries no 'siblings:' field" \
+    && ! has "$JO" "ESCALATED" && ! has "$JO" "SERIAL-REQUIRED"
+}
 p_chkrec() { # --escalations: a record with neither field is outside the era -> rc 0; the same record with an
   # advisor: line and no derivations: line -> rc 2, named
   esc_rec "$1" '### F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n'
@@ -1154,7 +1187,7 @@ p_altool() { # the one tool_use holding the id is a Read, not an Edit, Write or 
   refused "$w" "$AL_REF (tool_use_id toolu_ORPH;" && has "$JO" "the id is held by $w/projects/sess-1/subagents/agent-$AG1.jsonl (1 block(s)))"
 }
 
-P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrargs rrfiles rrsubj alias alnokeys alresult alown alsecond alother alsess altwo altool dispkey dispvocab dispruling srcparts gapfill chkpart chkrec"
+P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrargs rrfiles rrsubj alias alnokeys alresult alown alsecond alother alsess altwo altool dispkey dispvocab dispruling srcparts gapfill chkpart chkrec rulingedit rulingtab chkjoined partsilent"
 
 # ---- A PART'S DERIVATION SURVIVES THE JOIN. The part's ```derived fence is copied into the joined
 # record, and the gate re-runs `validate-artifact-derivations.sh` over the sprint dir AFTER the

@@ -65,7 +65,7 @@ SHARDS="a b c d"
 MUTANTS_a="JX1 JX2 JX3 JX4 JX5 JX6 JX7 JX8 JX10 JX9 JX11 JX12 JX13 JX14 JX15 JX16 JX17 JX18"
 MUTANTS_b="JX19 JX20 JX21 JX22 JX23 JX24 JX25 JX26 JX27 JX28 JX29 JX30 JX36 JX37 JX38 JX42 JX43 JX44"
 MUTANTS_c="JX45 JX46 JX47 JX48 JX49 JX39 JX40 JX41 JX31 JX32 JX33 JX34 JX35 JX50 JX51 JX52 JX53 JX54"
-MUTANTS_d="JX55 JX56 JX57 JX58 JX59 JX60 JX61 JX62 JX63 JX64 JX65 JX66 JX67 JX68 JX69 JX70 JX71 JX72 JX73 JX74 JX75 JX76 JX77 JX78 JX79 JX80"
+MUTANTS_d="JX55 JX56 JX57 JX58 JX59 JX60 JX61 JX62 JX63 JX64 JX65 JX66 JX67 JX68 JX69 JX70 JX71 JX72 JX73 JX74 JX75 JX76 JX77 JX78 JX79 JX80 JX81 JX82 JX83 JX84 JX85"
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
@@ -506,8 +506,8 @@ mutant "JX45 SERIAL-REQUIRED not printed" "docjoin sibok handoff" \
   ':'
 # JX46: counted over every repaired entry, `edit: n/a` included -- sibok reads 6, not 3.
 mutant2 "JX46 SERIAL-REQUIRED counts repaired entries with no edit, self-probe removed" "sibok" \
-  '        if (disp == "repaired" && edt) nrep++' \
-  '        if (disp == "repaired") nrep++' \
+  '        if (rp && edt) nrep++' \
+  '        if (rp) nrep++' \
   "$CTPROBE_OLD" "$CTPROBE_NEW"
 # ---- the NOSIB remedy and the siblings arm's reach.
 mutant "JX47 the pre-install re-dispatch remedy dropped" "sibtotal sibdoc" \
@@ -700,6 +700,28 @@ mutant2 "JX79 the record-mode era removed (a record with neither field binds), s
 mutant "JX80 the gap-fill report made a refusal again" "gapfill" \
   '      GAPFILL) GAP_N=$((GAP_N + 1)); GAP_LINES=' \
   '      GAPFILL) refuse "gap fill"; GAP_N=$((GAP_N + 1)); GAP_LINES='
+# ---- the third tip adversary's four. JX81: a ruling held to nothing again (keyed on repaired alone);
+# the self-probe sees no operator-ruling entry, so it stays in place.
+mutant "JX81 an operator-ruling edit escapes the repaired-edit checks" "rulingedit" \
+  '        rp = (disp == "repaired" || dfull == "operator-ruling")' \
+  '        rp = (disp == "repaired")'
+mutant "JX82 a TAB in a heading kept, so it splits the finding's fields" "rulingtab" \
+  'sub(/^#+[ \t]+/, "", cur); gsub(/[\t\r]/, " ", cur); cur = trim(cur)' \
+  'sub(/^#+[ \t]+/, "", cur); cur = trim(cur)'
+mutant "JX83 a CR kept on a ruling cite" "rulingtab" \
+  '    function vtrim(v) { gsub(/^[ \t*_`\r]+|[ \t*_`\r]+$/, "", v); return v }' \
+  '    function vtrim(v) { gsub(/^[ \t*_`]+|[ \t*_`]+$/, "", v); return v }'
+mutant "JX84 the check fields judged per file again, not per shard segment" "chkjoined" \
+  '    rec == 1 && /^<!-- shard: [^ ]+ -->[ \t]*$/ { commit(); seg = 1; next }' \
+  '    rec == 1 && /^<!-- shard: [^ ]+ -->[ \t]*$/ { next }'
+# JX85: a refused parts join prints the escalation report before its exit, as record mode does.
+mutant "JX85 a refused parts join prints the escalation report" "partsilent" \
+  '[ "$refuse_n" -eq 0 ] || exit 2
+
+# --- document mode' \
+  '[ "$refuse_n" -eq 0 ] || { printf '"'"'%s'"'"' "$ESC_LINES"; echo "ESCALATED-COUNT: ${ESC_N}"; exit 2; }
+
+# --- document mode'
 # ---- END JX MUTANTS.
 
 # ------------------------------------------------------------------------------ the reap

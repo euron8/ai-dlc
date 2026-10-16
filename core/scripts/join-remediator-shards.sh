@@ -738,23 +738,28 @@ contract_check() {
             VOC["repaired"] = 1; VOC["escalated"] = 1; VOC["skipped"] = 1; VOC["not-reproduced"] = 1
             VOC["operator-ruling"] = 1 }
     function trim(v) { gsub(/^[ \t`]+|[ \t`]+$/, "", v); return v }
-    function vtrim(v) { gsub(/^[ \t*_`]+|[ \t*_`]+$/, "", v); return v }
-    function flush(   i, k) {
+    function vtrim(v) { gsub(/^[ \t*_`\r]+|[ \t*_`\r]+$/, "", v); return v }
+    # AN OPERATOR-RULING ENTRY THAT EDITS IS HELD TO EVERY CHECK A REPAIRED EDIT IS: the siblings
+    # field, the serial count, the control and the set-aside. Keyed on `repaired` alone, a ruling
+    # with a real edit owed none of them (the third tip adversary). Closure and the gap-fill
+    # tripwire stay keyed on `repaired`: a ruling is a rule the operator gave, never a gap fill.
+    function flush(   i, k, rp) {
       if (disp != "") {
         ne++
+        rp = (disp == "repaired" || dfull == "operator-ruling")
         if (edt) nedt++
-        if (disp == "repaired" && edt) nrep++
+        if (rp && edt) nrep++
         if (sibf) { nsib++; era = 1 }
         if (disp ~ /^escalat/) { nesc++; ef[nesc] = part; en[nesc] = cur; ex[nesc] = 0 }
         if (disp == "repaired" && src == 1)
           for (k = 1; k <= ncl; k++) for (i = 1; i <= nesc; i++) if (cl[k] == ef[i] " " en[i]) ex[i] = 1
-        if (disp == "repaired" && edt && !sib) {
+        if (rp && edt && !sib) {
           if (sibf) print "BADSIB\t" cf "\t" cur
           else if (src == 0 || era) print "NOSIB\t" cf "\t" cur
           else npend++
         }
-        if (disp == "repaired" && edt && sib && src == 0 && sfile != "") print "CTL\t" cf "\t" cur "\t" sfile "\t" stext
-        if (disp == "repaired" && sev && claim ~ /outside (this|my|the) (shard|part|section)|not required/ \
+        if (rp && edt && sib && src == 0 && sfile != "") print "CTL\t" cf "\t" cur "\t" sfile "\t" stext
+        if (rp && sev && claim ~ /outside (this|my|the) (shard|part|section)|not required/ \
             && claim !~ /escalat|serial remediator/) print "SETASIDE\t" cf "\t" cur "\t" hl
         if (disp == "repaired" && claim ~ /gap[- ]?fill|veto/) print "GAPFILL\t" cf "\t" cur
         if ((src == 0 || era) && !(dfull in VOC)) print "BADDISP\t" cf "\t" cur "\t" draw
@@ -775,7 +780,7 @@ contract_check() {
       if (q != "\047" && q != "\"") return
       r = substr(r, 2); i = index(r, q)
       if (i < 2) return
-      ctext = substr(r, 1, i - 1); r = substr(r, i + 1); sub(/^[ \t]+/, "", r); sub(/[ \t]+$/, "", r)
+      ctext = substr(r, 1, i - 1); gsub(/\t/, " ", ctext); r = substr(r, i + 1); sub(/^[ \t]+/, "", r); sub(/[ \t]+$/, "", r)
       if (r != "" && r !~ /[ \t]/) cfile = r; else ctext = ""
     }
     FNR == 1 { flush(); cur = "(before any heading)"; sev = 0; hl = 0; cf = FILENAME; sub(/.*\//, "", cf); part = cf; fence = 0 }
@@ -794,17 +799,17 @@ contract_check() {
     sibw && !/^[ \t]*$/ { sibw = 0 }
     /^<!-- shard: [^ ]+ -->[ \t]*$/ { flush(); cur = "(before any heading)"; sev = 0
                  part = $0; sub(/^<!-- shard: /, "", part); sub(/ -->.*$/, "", part); next }
-    /^#+[ \t]/ { flush(); cur = $0; sub(/^#+[ \t]+/, "", cur); cur = trim(cur); h = toupper($0); hl = FNR
+    /^#+[ \t]/ { flush(); cur = $0; sub(/^#+[ \t]+/, "", cur); gsub(/[\t\r]/, " ", cur); cur = trim(cur); h = toupper($0); hl = FNR
                  sev = (h ~ /(^|[^A-Z])(CRITICAL|MAJOR)([^A-Z]|$)/); next }
     /^[ \t]*$/ { inclaim = 0; next }
     /^[[:space:]-]*[*_`]*disposition[*_`]*:/ {
       v = tolower($0); sub(/^[^:]*:/, "", v); gsub(/[*_`]/, "", v); sub(/^[ \t]+/, "", v)
-      split(v, a, /[^a-z]/); disp = a[1]; draw = v; sub(/[ \t]+$/, "", draw); dfull = v; sub(/[^a-z-].*$/, "", dfull); inclaim = 0; next }
+      split(v, a, /[^a-z]/); disp = a[1]; draw = v; gsub(/[\t\r]/, " ", draw); sub(/[ \t]+$/, "", draw); dfull = v; sub(/[^a-z-].*$/, "", dfull); inclaim = 0; next }
     /^[[:space:]-]*[*_`]*edit[*_`]*:/ {
       v = $0; sub(/^[^:]*:/, "", v); edf = 1
       if (match(v, /[A-Za-z0-9_.\/-]+[.](md|json|jsonl|yaml|yml|txt|csv)/)) edt = 1
       inclaim = 0; next }
-    /^[[:space:]-]*[*_`]*ruling[*_`]*:/ { v = $0; sub(/^[^:]*:/, "", v); rcite = vtrim(v); inclaim = 0; next }
+    /^[[:space:]-]*[*_`]*ruling[*_`]*:/ { v = $0; sub(/^[^:]*:/, "", v); rcite = vtrim(v); gsub(/\t/, " ", rcite); inclaim = 0; next }
     /^[[:space:]-]*[*_`]*siblings[*_`]*:/ { sibf = 1; v = $0; sub(/^[^:]*:/, "", v); v = vtrim(v); if (v == "") sibw = 1; else if (v in SIBNA) sib = 1; inclaim = 0; next }
     /^[[:space:]-]*[*_`]*closes[*_`]*:/ { v = $0; sub(/^[^:]*:/, "", v); sub(/^[*_`]+/, "", v); cl[++ncl] = trim(v); inclaim = 0; next }
     /^[[:space:]-]*[*_`]*claim now asserted[*_`]*:/ { claim = tolower($0); inclaim = 1; next }
@@ -1009,18 +1014,26 @@ checks_field() {
     function val(  v) { v = $0; sub(/^[^:]*:/, "", v); gsub(/[*_`\r]/, "", v); v = tolower(v)
                         gsub(/^[ \t]+|[ \t]+$/, "", v); return v }
     function kw(v, re) { return v ~ ("^(" re ")[ \t]*($|[(;,]|--)") }
+    # A JOINED RECORD IS JUDGED PART BY PART, as the join judged it: a shard segment holding no
+    # repaired entry charges neither its `not replayed` nor a value outside the grammar, because the
+    # parts-mode join exempted that part and the record it wrote must not fail its own reader (the
+    # third tip adversary). The serial block appended after the last part reads as that last
+    # segment, so a serial repair makes that segment chargeable -- the conservative direction.
+    function commit() { if (!seg || srep) { bad = bad sbad; if (snr) nr = 1 }; sbad = ""; snr = 0; srep = 0 }
     /^[ \t]*(```|~~~)/ { fence = !fence; next }
     fence { next }
+    rec == 1 && /^<!-- shard: [^ ]+ -->[ \t]*$/ { commit(); seg = 1; next }
     /^[[:space:]-]*[*_`]*advisor[*_`]*:/ { v = val()
-      if (kw(v, "called|unavailable")) na++; else bad = bad " advisor: " v; next }
+      if (kw(v, "called|unavailable")) na++; else sbad = sbad " advisor: " v; next }
     /^[[:space:]-]*[*_`]*derivations[*_`]*:/ { v = val()
-      if (kw(v, "not replayed")) { nd++; nr = 1 }
+      if (kw(v, "not replayed")) { nd++; snr = 1 }
       else if (kw(v, "replayed [0-9]+")) nd++
-      else if (kw(v, "deferred to the join")) { nd++; if (!dok) bad = bad " derivations: deferred in a files-mode part" }
-      else bad = bad " derivations: " v
+      else if (kw(v, "deferred to the join")) { nd++; if (!dok) sbad = sbad " derivations: deferred in a files-mode part" }
+      else sbad = sbad " derivations: " v
       next }
-    /^[[:space:]-]*[*_`]*disposition[*_`]*:/ { v = tolower(val()); sub(/[^a-z-].*$/, "", v); if (v == "repaired") nrep++ }
+    /^[[:space:]-]*[*_`]*disposition[*_`]*:/ { v = tolower(val()); sub(/[^a-z-].*$/, "", v); if (v == "repaired") { nrep++; srep++ } }
     END {
+      commit()
       b = FILENAME; sub(/.*\//, "", b)
       if (rec == 1 && na + nd == 0) exit
       if (rec == 0 && nrep == 0) exit
@@ -1053,7 +1066,11 @@ record_tail() {
   # THE ESCALATION REPORT PRINTS WHETHER OR NOT THE RECORD REFUSED. These are the LEAD's to
   # adjudicate, never a re-dispatch of the serial remediator: the record may be the serial
   # remediator's own, appended after the join, so no SERIAL-REQUIRED line is printed here. A refusal
-  # of any arm is a defect in the record, never a reason to stop reporting what is still open in it:
+  # of any arm is a defect in the record, never a reason to stop reporting what is still open in it.
+  # THIS HOLDS IN RECORD MODE ONLY. A refused PARTS join prints no ESCALATED: line and no count, by
+  # design: the refusal writes no record, so the parts it read are not a joined set and a count from
+  # them may be wrong; the escalations print on the re-run that joins (arm EC32 pins the silence).
+  # In record mode:
   # exiting first, as this mode once did, let one prose check line in a bound record hide every open
   # escalation from the lead (a joined record whose serial block wrote graph's own s317 prose
   # `- derivations: the validator reports OK ...` printed no count at all). The exit code still
