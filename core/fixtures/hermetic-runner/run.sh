@@ -216,6 +216,22 @@ for cand in "$ROOT/scripts/suite-content-key.sh"; do
   if [ -f "$cand" ] && grep -q '^# EXCLUDE_BEGIN$' "$cand"; then SCK_SRC="$cand"; fi
 done
 [ -n "$HOOK_SRC" ] && echo "hermetic-runner: universe hook: $HOOK_SRC" || echo "hermetic-runner: no hook with a READSET_UNIVERSE span here; arm G is skipped"
+# THE SUBJECT FILES ARE READ FROM COPIES TAKEN ONCE, HERE. A sandbox read-set trace reports every open under the
+# repo tree, and the runner, its core-paths.sh, the hook and the content-key script are otherwise opened at every
+# runner call and every mk_probe -- hundreds of reports per run, which the trace stream drops under the burst. Each
+# copy is held byte-identical to the file it stands for. RUN_TREE keeps the runner's real location for the arm
+# whose meaning is that location.
+RUN_TREE="$RUN"
+SUBJ="$WORK/subject"
+sub_copy() { # <source> <dest>
+  cp "$1" "$2" && cmp -s "$1" "$2" || { echo "FIXTURE BROKEN: could not copy $1 into $SUBJ byte-identical" >&2; exit 2; }
+}
+mkdir -p "$SUBJ" || exit 2
+sub_copy "$RUN" "$SUBJ/hermetic-run.sh"
+[ ! -f "$(dirname "$RUN")/core-paths.sh" ] || sub_copy "$(dirname "$RUN")/core-paths.sh" "$SUBJ/core-paths.sh"
+RUN="$SUBJ/hermetic-run.sh"; RUN_ORIG="$RUN"
+[ -z "$HOOK_SRC" ] || { sub_copy "$HOOK_SRC" "$SUBJ/pre-push"; HOOK_SRC="$SUBJ/pre-push"; }
+[ -z "$SCK_SRC" ] || { sub_copy "$SCK_SRC" "$SUBJ/suite-content-key.sh"; SCK_SRC="$SUBJ/suite-content-key.sh"; }
 # mk_probe <dir> <stub function> <inputs.decl text> [tools.decl text]
 mk_probe() {
   local p="$1" stub="$2" decl="$3" tools="${4:-}"
@@ -1341,7 +1357,7 @@ if [ "$NESTED" != 1 ] && [ -z "$STRAY" ]; then
   run_mutant M26 "Z4 Z3" 'TMPDIR cannot move a bare mktemp -d here; do not remove the marker. Run under an account whose system temp dir is outside $HOME.' 'Point TMPDIR outside $HOME; do not remove the marker.' &
   # cwd-invariance: two nested runs of this fixture from different working directories.
   ( cd "$ROOT" && HERMETIC_FX_NESTED=1 bash "$HERE/run.sh" > "$WORK/cwd1.out" 2>&1; echo $? > "$WORK/cwd1.rc" ) &
-  ( cd "$(dirname "$RUN")" && HERMETIC_FX_NESTED=1 bash "$HERE/run.sh" > "$WORK/cwd2.out" 2>&1; echo $? > "$WORK/cwd2.rc" ) &
+  ( cd "$(dirname "$RUN_TREE")" && HERMETIC_FX_NESTED=1 bash "$HERE/run.sh" > "$WORK/cwd2.out" 2>&1; echo $? > "$WORK/cwd2.rc" ) &
   wait
   CUR=M
   for pair in "M1:B" "M2:A C D L" "M3:F" "M4:L" "M5:K" "M6:F" "M7:P" "M8:Q W" "M9:R W" "M10:T" "M11:U" "M12:X" "M13:X" "M14:X" "M15:X" "M16:X" "M17:V" "M18:V" "M19:L" "M20:Y Y3" "M21:Y3" "M22:Y2" "M23:Z1 Z2" "M24:Z1" "M25:Z3" "M26:Z4"; do
