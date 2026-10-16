@@ -1786,6 +1786,8 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      not clean**, and no row it would have produced was emitted. The detail names the section and
      the remedy that clears it. Under `--finish` the same row is a `WORKLIST` and withholds.
 
+   **A `WORKLIST artifact-derivations` row the operator chooses to LEAVE** (by AskUserQuestion, without re-pointing) is recorded, not remembered: re-run the row's `derivation-differential.sh` command with `--record-owed _bmad-output/ai-dlc-update/owed-derivations.tsv --log-name <this pull's reconcile-log-<ts>.md>`. The record is append-only with no status cell; `scripts/ai-dlc/check-owed-derivations.sh` derives which rows are still open.
+
    Do NOT re-do a `RESOLVED` row by hand. Work only the `WORKLIST` and `DECISION` rows. **This is
    what makes the update end-to-end**: the operator runs it and it lands; you handle the semantic
    remainder, not the mechanical bulk.

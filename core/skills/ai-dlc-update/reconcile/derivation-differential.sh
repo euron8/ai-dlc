@@ -4,6 +4,18 @@
 # consumer's artifact corpus carrying stale ones already?
 #
 # Usage: derivation-differential.sh <dist> <base> <consumer> <theirs> [--base-root <dir>]
+#                                   [--record-owed <file> [--log-name <name>]]
+#
+# `--record-owed <file>` APPENDS every NEWLY-FAILING row this run prints to <file>, so a derivation the
+# operator chooses to LEAVE (disposing of the artifact-derivations WORKLIST row without re-pointing it)
+# stays owed instead of living only in the model's recollection. Each record row is rendered by the
+# classifier from the SAME variables as the printed row, never retyped, one tab-separated line:
+#   OWED <key = file:line, relative to the consumer> <recorded command> <recorded output>
+#        <actual output> <base>..<theirs> <reconcile log name>
+# There is NO status cell: the record is append-only and a row closes only when
+# `scripts/ai-dlc/check-owed-derivations.sh` re-runs the validator on that key and finds it reproducing.
+# Without the flag nothing is written. `--log-name` names the reconcile log the row belongs to; its
+# default is `reconcile-log-unnamed`, because the log is written after this runs.
 #
 # THE ROW THIS CHECKS. apply.sh emits `WORKLIST artifact-derivations` when a fenced ```derived
 # command in `_bmad-output/**/*.md` names a core path the range CHANGED. Its clear used to be the
@@ -118,6 +130,7 @@ say_row() { printf '%s\t%s\t%s\n' "$1" "$2" "$3"; }
 refuse()  { say_row REFUSED "$1" "$2"; exit 2; }
 
 BASE_ROOT_ARG=""; BASE_ROOT_SET=0
+OWED_FILE=""; OWED_SET=0; LOG_NAME="reconcile-log-unnamed"
 _n=0; DIST=""; BASE=""; CONSUMER=""; THEIRS=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -125,7 +138,13 @@ while [ "$#" -gt 0 ]; do
       [ "$#" -ge 2 ] || refuse usage "--base-root needs a directory argument."
       BASE_ROOT_ARG="$2"; BASE_ROOT_SET=1; shift 2 ;;
     --base-root=*) BASE_ROOT_ARG="${1#--base-root=}"; BASE_ROOT_SET=1; shift ;;
-    -*) refuse usage "unknown option $1. Usage: $PROG.sh <dist> <base> <consumer> <theirs> [--base-root <dir>]" ;;
+    --record-owed)
+      [ "$#" -ge 2 ] || refuse usage "--record-owed needs a file argument."
+      OWED_FILE="$2"; OWED_SET=1; shift 2 ;;
+    --log-name)
+      [ "$#" -ge 2 ] || refuse usage "--log-name needs a name argument."
+      LOG_NAME="$2"; shift 2 ;;
+    -*) refuse usage "unknown option $1. Usage: $PROG.sh <dist> <base> <consumer> <theirs> [--base-root <dir>] [--record-owed <file> [--log-name <name>]]" ;;
     *)
       _n=$((_n + 1))
       case "$_n" in
@@ -135,6 +154,10 @@ while [ "$#" -gt 0 ]; do
       shift ;;
   esac
 done
+if [ "$OWED_SET" -eq 1 ]; then
+  [ -n "$OWED_FILE" ] || refuse usage "--record-owed is EMPTY. An empty path records nowhere, which would read as a record that was written."
+  case "$LOG_NAME" in ''|*[!A-Za-z0-9._-]*) refuse usage "--log-name must be a plain file name ([A-Za-z0-9._-]+), not '$LOG_NAME'." ;; esac
+fi
 [ "$_n" -eq 4 ] || refuse usage "expected four arguments. Usage: $PROG.sh <dist> <base> <consumer> <theirs> [--base-root <dir>]"
 
 SELF="$(cd "$(dirname "$0")" && pwd)"
@@ -172,7 +195,7 @@ cleanup() {
   [ -n "$WT_PARENT" ] && { rm -f "$WT_PARENT/pid" 2>/dev/null; rmdir "$WT_PARENT" 2>/dev/null; }
   rm -f "$TMP/files" "$TMP/chain" "$TMP/blobs" "$TMP/pairs" "$TMP/list.out" "$TMP/list.err" \
         "$TMP/b.out" "$TMP/b.err" "$TMP/t.out" "$TMP/t.err" "$TMP/rows" "$TMP/counts" \
-        "$TMP/operands" "$TMP/moved" 2>/dev/null
+        "$TMP/operands" "$TMP/moved" "$TMP/owed" 2>/dev/null
   rmdir "$TMP" 2>/dev/null
 }
 trap cleanup EXIT
@@ -309,6 +332,7 @@ case "$TRC" in 0|1) ;; *) refuse validator "the consumer-side run exited ${TRC} 
 # stderr file, which has no first record, so a counter would shift the consumer side's lines into
 # the base side's slot and score every consumer failure as a base failure.
 awk -v C="$CONSUMER/" -v brc="$BRC" -v trc="$TRC" -v cf="$TMP/counts" -v of="$TMP/operands" \
+    -v ow="$OWED_SET" -v of2="$TMP/owed" -v rng="${BASE}..${THEIRS}" -v lg="$LOG_NAME" \
     -v fF="$TMP/files" -v fL="$TMP/list.out" -v fB="$TMP/b.err" -v fT="$TMP/t.err" '
   { src = (FILENAME == fF) ? 1 : (FILENAME == fL) ? 2 : (FILENAME == fB) ? 3 : (FILENAME == fT) ? 4 : 0 }
   src == 1 { F[$0] = 1; next }
@@ -360,6 +384,14 @@ awk -v C="$CONSUMER/" -v brc="$BRC" -v trc="$TRC" -v cf="$TMP/counts" -v of="$TM
     if (k in CMD) printf "  $ %s", CMD[k]
     if (status == "NEWLY-FAILING" && (k in REC)) printf "  recorded: %s  actual: %s", REC[k], ACT[k]
     printf "\n"
+    # THE OWED RECORD IS RENDERED HERE, FROM THE VARIABLES THE PRINTED ROW READ: the same rel(k), the
+    # same CMD[k], the same REC[k] and ACT[k]. A tab inside any of them was already made a space for
+    # REC and ACT; the command is cleaned the same way for the record only.
+    if (ow == 1 && status == "NEWLY-FAILING") {
+      c = (k in CMD) ? CMD[k] : ""; gsub(/\t/, " ", c)
+      rr = (k in REC) ? REC[k] : ""; aa = (k in ACT) ? ACT[k] : ""
+      printf "OWED\t%s\t%s\t%s\t%s\t%s\t%s\n", rel(k), c, rr, aa, rng, lg >> of2
+    }
   }
   END {
     nf = np = sb = un = pb = bp = tp = nsup = 0
@@ -392,6 +424,12 @@ read -r N_U N_NF N_NP N_SB N_UN N_PB N_BP N_TP H_B H_T N_SUP < "$TMP/counts" 2>/
 [ "$N_BP" -gt 0 ] || [ "$N_TP" -eq 0 ] \
   || refuse base-root "ZERO derivations reproduce at the base root while ${N_TP} reproduce at the consumer. The validator exits 1 all-STALE over a missing or broken root rather than refusing, so this is the signature of a root that is not the pre-apply tree, not of a pull that repaired everything."
 say_row INFO superseded "${N_SUP} of ${N_U} derivation(s) are superseded by a later byte-identical copy in the same record; the validator runs only the later copy, so they are in no count or row below."
+
+# The record is appended only after every refusal above has passed, so a refused run records nothing.
+if [ "$OWED_SET" -eq 1 ] && [ -f "$TMP/owed" ]; then
+  cat "$TMP/owed" >> "$OWED_FILE" 2>/dev/null \
+    || refuse record "could not append the NEWLY-FAILING rows to $OWED_FILE, so the debt this run found would be recorded nowhere. Nothing was cleared."
+fi
 
 cat "$TMP/rows"
 

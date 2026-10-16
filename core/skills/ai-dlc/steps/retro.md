@@ -671,7 +671,10 @@ gate.
    AI/DLC's own machinery, which `core-paths.sh --is-core <path>`
    answers with exit 0. That one is a push candidate in
    `push-candidate-ledger.md`, not a carry-over item; see
-   `.claude/rules/upstream-routing.md`.** Then **archive terminal entries
+   `.claude/rules/upstream-routing.md`.** Run `scripts/ai-dlc/check-owed-derivations.sh` here too, beside the
+   `push-candidate-ledger.md` reads: every `OPEN` line it prints is appended to `carry-over-backlog.md` as a
+   new OPEN item naming its key and reconcile log, never archived unread; exit 2 is surfaced, not skipped.
+   Then **archive terminal entries
    (Rule 25(a)/(c)):** move every RESOLVED and OVERRIDDEN entry
    (cut-and-paste, verbatim) out of `pending.md` into
    `docs/escalations/pending-archive.md`, leaving only OPEN escalations

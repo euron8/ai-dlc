@@ -1023,6 +1023,8 @@ slot, `shards/` or a record, and records it as its own entry with a `siblings:` 
 why SERIAL-REQUIRED dispatches it: a round whose every finding stayed inside one shard still
 owes this grep.
 
+**The gate is REFUSED while an owed derivation is open.** After the two validator lines above, run `scripts/ai-dlc/check-owed-derivations.sh`. Exit 1 (an `OPEN` line per row) or exit 2 (an unreadable or malformed record) refuses the gate: print the lines and do not pass it. Exit 0 passes. The script re-runs the validator on each row's own file, so a `prd.md` row is read as well as a `s<N>/` one.
+
 Exit 1 from `validate-artifact-derivations.sh` is a repair that falsified a
 derivation — most often not its own, but one
 elsewhere in the artifact set that was counting the thing this repair moved. Send it back to

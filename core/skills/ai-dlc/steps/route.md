@@ -247,6 +247,8 @@ Run these integrity checks in order:
    §7 all run after it — so `status: done` ALONE fires on every mid-retro
    resume, and on the terminal position retro §7a-post itself writes.
 
+**Owed derivations (shown on every resume; not one of the seven pass/fail checks).** Run `scripts/ai-dlc/check-owed-derivations.sh`. Exit 0 prints nothing; exit 1 prints one `OPEN` line per derivation an earlier pull left broken, and you show every line to the user with the resume summary. Exit 2 means the record is unreadable or malformed: surface that line as a failure. The record (`_bmad-output/ai-dlc-update/owed-derivations.tsv`) is the store; the snapshot carries only a pointer line to it, because Open Items is trimmed under budget.
+
 If all seven checks pass (budget within threshold, snapshot loaded,
 integrity verified, branch matches or user confirmed, recency
 acceptable, snapshot not stranded on a closed sprint), continue with the

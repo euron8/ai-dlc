@@ -219,6 +219,7 @@ core_manifest:
   - core/fixtures/preclassify-mode-bucket/**
   - core/fixtures/predicate-reclassification/**
   - core/fixtures/derivation-differential/**
+  - core/fixtures/owed-derivations/**
   - core/fixtures/deploy-validate-smoke-classification/**
   - core/fixtures/story-evidence-scaffold/**
   - core/fixtures/review-carry-over-clauses/**
