@@ -14,3 +14,9 @@ core/skills/ai-dlc/steps/route.md
 core/skills/ai-dlc/steps/_gate-procedures.md
 core/skills/ai-dlc/steps/retro.md
 scripts/install.sh
+core/scripts/artifact-path-config.sh
+core/skills/ai-dlc/artifact-path-grammar.md
+core/skills/ai-dlc/layer-contract.yaml
+core/hooks/ai-dlc-gate-remediation-guard.sh
+core/skills/ai-dlc/steps/architecture.md
+core/skills/ai-dlc/steps/stories-test-strategy.md
