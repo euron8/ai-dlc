@@ -1091,7 +1091,9 @@ spec_render_check() {
   local m="$1" s r n f
   SPEC_LINE=""
   if [ -z "$m" ]; then SPEC_LINE="SPEC-RENDER: SKIP -- $2"; return 0; fi
-  s="$(spec_render_scan "$m")"
+  # A SPEC part whose memlog does not exist yet has recorded no render and no decision to compare.
+  if [ ! -f "$m" ]; then SPEC_LINE="SPEC-RENDER: SKIP -- ${m} does not exist"; return 0; fi
+  s="$(spec_render_scan "$m")" || { refuse "${m}: the memlog could not be read; no render verdict"; return 0; }
   r="${s%% *}"; s="${s#* }"; n="${s%% *}"; f="${s#* }"
   if [ "$r" = 0 ]; then
     SPEC_LINE="SPEC-RENDER: SKIP -- ${m} carries no '(event) Render ... ${SPEC_RENDER_PHRASE}' line, so no render is recorded to compare against"
