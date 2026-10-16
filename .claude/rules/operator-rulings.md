@@ -51,6 +51,12 @@ decides the ORDER, never the membership. A hand verifies ONLY its own change: `b
 probe, the one unit it edited. The gate runs everything else; a hand re-running it pays twice. Never message a
 `graph-*` session, not even a read-only question, without an explicit operator grant.
 
+## The lead orchestrates the box's load
+
+Load from peer ai-dlc sessions on the lead's batch is the lead's to schedule, never a cause outside its
+control. No fixture, mutant battery or corpus sweep runs without the lead's slot; slotted runs are serial;
+between "GATE OPEN" and "GATE CLOSED" nothing heavy starts. Measure `uptime` before a gate.
+
 ## Read-set traces use the sandbox tracer, and the session runs them
 
 Every read-set trace runs as `bash core/scripts/derive-fixture-readsets.sh --list "<names>"

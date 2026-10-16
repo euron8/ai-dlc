@@ -818,7 +818,7 @@ fi
 #
 # A6 WAS OBSERVED FAILING AT 68154/67584 BEFORE THE CEILING MOVED. The rule was written into the
 # file FIRST and the ceiling derived from the channel afterwards, as the fifteenth raise requires;
-# the only figure used is the post-write measurement. 68864 is 67.25 KiB, leaving 710 bytes --
+# the only figure used is the post-write measurement. 68864 is 67.25 KiB, leaving 710 bytes at the step-value ruling (365 after the load-orchestration ruling it was co-sized with) --
 # deliberately less than one section at the current mean, so the next rule fires this arm again.
 #
 # IT CANNOT BE MECHANIZED OR SCOPED. It is a standing decision about what a batch does with a
