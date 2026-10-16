@@ -30,6 +30,12 @@
 #      the worklist reads the subject split: the SPEC's replaced sentence is a REPLACED text line.
 #   A8 --record attribution: the entry whose `edit:` range overlaps the hunk is named on it; an entry
 #      on the same section copy whose range does not overlap is not.
+#   A9 an emitted worklist (exit 0) REMOVES `sections/.before` it read; the manifest and d.md stay.
+#   A9s on a subject split it removes `.before/<stem>` and the then-empty `.before/`, and the
+#      sectioned stem's `<stem>/sections/.before`; `.subject` and the manifest stay.
+#   A10 --keep leaves every copy byte-equal, and a second --keep run still assesses (unassessable 0).
+#   A11 a failing run removes nothing: bad args (exit 2 before the reader), and a manifest naming no
+#      document (exit 2 from the reader, AFTER the copy is resolved -- the case M10 needs).
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR CLAUDE_PROJECT_DIR
@@ -124,7 +130,9 @@ p_a5() { local w; w="$(docworld "$SRC")" || return 1; rm -f "$w/r/sections/.befo
   [ "$RC" -eq 3 ] && grep -q '^UNASSESSABLE d\.md: no pre-repair copy' "$OUT"; }
 p_a6() { local w; w="$(docworld "$2")" || return 1
   [ -f "$w/r/sections/.before" ] && cmp -s "$w/r/sections/.before" "$w/d.orig" && grep -q '^ASSEMBLED:' "$w/asm.out"; }
-p_a7() {
+# subjworld <splitter dir> -> a world dir on stdout, split into $w/$SUBJ_D with SPEC rewritten.
+SUBJ_D="_bmad-output/planning-artifacts/s9/shards/requirements-repair-p1"
+subjworld() {
   local w pa d; w="$(mktemp -d "$WORK/s.XXXXXX")" || return 1
   pa="$w/_bmad-output/planning-artifacts"; mkdir -p "$pa/s9" "$w/_bmad-output/specs/s9/kernel" || return 1
   { g "$w" init -q . && g "$w" checkout -q -b main
@@ -136,10 +144,14 @@ p_a7() {
   printf '# SPEC\n\ncap-1: THE system SHALL review its whole subject at once.\n' > "$w/_bmad-output/specs/s9/kernel/SPEC.md"
   printf -- '- FR-S9-1: architecture_impact: none\n' > "$pa/s9/architecture-impact.md"
   cp "$w/_bmad-output/specs/s9/kernel/SPEC.md" "$w/spec.orig"
-  d="$pa/s9/shards/requirements-repair-p1"
-  ( cd "$w" && AI_DLC_PROJECT_ROOT="$w" bash "$2/partition-subject.sh" --map 9 && AI_DLC_PROJECT_ROOT="$w" bash "$2/partition-subject.sh" --split 9 "$d" ) > "$w/split.out" 2>&1 || return 1
+  d="$w/$SUBJ_D"
+  ( cd "$w" && AI_DLC_PROJECT_ROOT="$w" bash "$1/partition-subject.sh" --map 9 && AI_DLC_PROJECT_ROOT="$w" bash "$1/partition-subject.sh" --split 9 "$d" ) > "$w/split.out" 2>&1 || return 1
   [ -f "$d/.before/SPEC" ] && cmp -s "$d/.before/SPEC" "$w/spec.orig" || return 1
   printf '# SPEC\n\ncap-1: THE system SHALL review the four subject files as one.\n' > "$w/_bmad-output/specs/s9/kernel/SPEC.md"
+  printf '%s' "$w"
+}
+p_a7() {
+  local w d; w="$(subjworld "$2")" || return 1; d="$w/$SUBJ_D"
   ( cd "$w" && AI_DLC_PROJECT_ROOT="$w" bash "$1" "$d" ) > "$OUT" 2>&1; RC=$?
   # The SPEC's own lines only: the prd stem is sectioned through partition-document.sh, whose copy
   # A6 owns, so this arm does not read the exit code (P1 would otherwise kill both).
@@ -154,8 +166,35 @@ p_a8() { local w a rec; w="$(docworld "$SRC")" || return 1; a="$(sed -n 1p "$w/o
   runw "$1" "$w" --record "$rec"
   local line; line="$(grep '^REPLACED d\.md:7-7 -> 7-8' "$OUT")" || return 1
   grep -q '1\.md#F-1 — MAJOR' <<<"$line" && ! grep -q 'F-9' <<<"$line"; }
+# A9-A11: the copies are CONSUMED by an emitted worklist. Each arm first asserts the copy EXISTS
+# before the run, so a world that never had one cannot pass the "gone" half vacuously. The splitter
+# is always $SRC, so P1/P2 stay owned by A6/A7.
+p_a9() { local w; w="$(docworld "$SRC")" || return 1; [ -f "$w/r/sections/.before" ] || return 1
+  runw "$1" "$w"
+  [ "$RC" -eq 0 ] && [ ! -e "$w/r/sections/.before" ] && [ -f "$w/r/sections/.manifest" ] && [ -f "$w/d.md" ]; }
+p_a9s() { local w d; w="$(subjworld "$SRC")" || return 1; d="$w/$SUBJ_D"
+  [ -f "$d/.before/SPEC" ] && [ -f "$d/prd/sections/.before" ] || return 1
+  ( cd "$w" && AI_DLC_PROJECT_ROOT="$w" bash "$1" "$d" ) > "$OUT" 2>&1; RC=$?
+  { [ "$RC" -eq 0 ] || [ "$RC" -eq 3 ]; } && [ ! -e "$d/.before" ] && [ ! -e "$d/prd/sections/.before" ] \
+    && [ -f "$d/.subject" ] && [ -f "$d/prd/sections/.manifest" ]; }
+p_a10() { local w d; w="$(docworld "$SRC")" || return 1
+  runw "$1" "$w" --keep
+  [ "$RC" -eq 0 ] && cmp -s "$w/r/sections/.before" "$w/d.orig" || return 1
+  runw "$1" "$w" --keep
+  [ "$RC" -eq 0 ] && grep -q 'unassessable 0$' "$OUT" && [ -f "$w/r/sections/.before" ] || return 1
+  w="$(subjworld "$SRC")" || return 1; d="$w/$SUBJ_D"
+  ( cd "$w" && AI_DLC_PROJECT_ROOT="$w" bash "$1" "$d" --keep ) > "$OUT" 2>&1
+  [ -f "$d/.before/SPEC" ] && [ -f "$d/prd/sections/.before" ]; }
+p_a11() { local w
+  w="$(docworld "$SRC")" || return 1
+  runw "$1" "$w" --bogus
+  [ "$RC" -eq 2 ] && cmp -s "$w/r/sections/.before" "$w/d.orig" || return 1
+  # A refusal AFTER the copy is resolved: a manifest naming no document exits 2 from the reader.
+  grep -v '^document	' "$w/r/sections/.manifest" > "$w/m" && mv "$w/m" "$w/r/sections/.manifest" || return 1
+  runw "$1" "$w"
+  [ "$RC" -eq 2 ] && grep -q 'names no document' "$OUT" && cmp -s "$w/r/sections/.before" "$w/d.orig"; }
 
-ARMS="a0 a1 a2 a2b a3 a4 a5 a6 a7 a8"
+ARMS="a0 a1 a2 a2b a3 a4 a5 a6 a7 a8 a9 a9s a10 a11"
 score() { # <label> <worklist> <splitter dir> <expected kill set | NONE>
   local label="$1" a dead=""
   for a in $ARMS; do "p_$a" "$2" "$3" || dead="$dead $a"; done
@@ -209,6 +248,14 @@ mutant "M6 an unassessable file exits 0" serial-remediation-worklist.sh "a5" \
   'sys.exit(3 if unassessable else 0)' 'sys.exit(0)'
 mutant "M7 attribution never overlaps" serial-remediation-worklist.sh "a8" \
   '                    if hi >= j1 + 1 and lo <= max(j1 + 1, j2):' '                    if False:'
+mutant "M8 the worklist never removes a copy" serial-remediation-worklist.sh "a9 a9s" \
+  '        rm -f -- "$p"' '        :'
+mutant "M9 removal ignores --keep" serial-remediation-worklist.sh "a10" \
+  '    if [ "$KEEP" = 0 ] && [ -n "$DIR" ]' '    if [ -n "$DIR" ]'
+mutant "M10 removal on a failing exit" serial-remediation-worklist.sh "a11" \
+  '  0|3)
+    if [ "$KEEP"' '  *)
+    if [ "$KEEP"'
 mutant "P1 the split keeps no .before" partition-document.sh "a6" \
   '    cp -p "$DOC" "$SEC/.before" || {' '    : || {'
 mutant "P2 a whole-file part keeps no .before" partition-subject.sh "a7" \

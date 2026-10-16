@@ -5,7 +5,7 @@
 # it no longer derives it (_gate-procedures.md, "Moved cites are the serial remediator's").
 #
 # USAGE
-#   serial-remediation-worklist.sh <repair-dir> [--record <joined record>] [--also <file>]...
+#   serial-remediation-worklist.sh <repair-dir> [--record <joined record>] [--also <file>]... [--keep]
 #
 #   <repair-dir>  the shard dir the lead split into: a SUBJECT split (`<dir>/.subject`) or a
 #                 DOCUMENT split (`<dir>/sections/.manifest`).
@@ -13,6 +13,7 @@
 #                 `edit:` line cites an overlapping range. Optional: the worklist stands without it.
 #   --also        a further file to grep and to scan for cites (repeatable). The assembled files
 #                 the split names are always in the set.
+#   --keep        leave the pre-repair copies in place (for a re-run); see THE COPIES ARE CONSUMED.
 #
 # THE INPUT IS BYTES, NEVER THE LEDGER. Each split keeps the pre-repair copy of every file it
 #   hands out: partition-document.sh `<dir>/sections/.before` (a sectioned file) and
@@ -21,6 +22,14 @@
 #   are removed at assembly, and the write ledger carries no old_string -- reverse-applying a
 #   transcript's Edits cannot undo a Write, and graph's ledger rows written before 0.790.0 carry
 #   no tool_use_id to find the transcript by. A diff does not care which tool wrote the bytes.
+#
+# THE COPIES ARE CONSUMED. This script is the only reader of `.before`, and the lead runs it once,
+#   before dispatching the serial remediator; a copy left behind lands in the consumer's commit at
+#   PR time. So after the worklist is EMITTED (exit 0 or 3) it removes each pre-repair copy it
+#   resolved -- `<dir>/sections/.before`, `<dir>/.before/<stem>`, `<dir>/<stem>/sections/.before` --
+#   by exact path under <repair-dir>, then `<dir>/.before/` if that is left empty (rmdir, never a
+#   glob or a recursive delete). `--keep` skips the removal. Any other exit (usage, refusal, exit 2,
+#   a crash) removes nothing. A re-run without --keep therefore exits 3 UNASSESSABLE.
 #
 # MEASURED BEFORE BUILT (graph s319 requirements elicitation repair, pre-repair and join-after
 #   states reconstructed from the shard and serial transcripts and verified against the anchor
@@ -46,13 +55,15 @@
 set -uo pipefail
 export LC_ALL=C
 
-usage() { echo "usage: serial-remediation-worklist.sh <repair-dir> [--record <file>] [--also <file>]..." >&2; exit 2; }
-DIR=""; RECORD=""; ALSO_FILE="$(mktemp "${TMPDIR:-/tmp}/srw-also.XXXXXX")" || exit 2
-trap 'rm -f "$ALSO_FILE"' EXIT
+usage() { echo "usage: serial-remediation-worklist.sh <repair-dir> [--record <file>] [--also <file>]... [--keep]" >&2; exit 2; }
+DIR=""; RECORD=""; KEEP=0; ALSO_FILE="$(mktemp "${TMPDIR:-/tmp}/srw-also.XXXXXX")" || exit 2
+RM_FILE="$(mktemp "${TMPDIR:-/tmp}/srw-rm.XXXXXX")" || { rm -f "$ALSO_FILE"; exit 2; }
+trap 'rm -f "$ALSO_FILE" "$RM_FILE"' EXIT
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --record) [ "$#" -ge 2 ] || usage; RECORD="$2"; shift 2 ;;
     --also) [ "$#" -ge 2 ] || usage; printf '%s\n' "$2" >> "$ALSO_FILE"; shift 2 ;;
+    --keep) KEEP=1; shift ;;
     -h|--help) usage ;;
     -*) echo "ERROR: unknown option $1" >&2; usage ;;
     *) [ -z "$DIR" ] || usage; DIR="$1"; shift ;;
@@ -95,7 +106,9 @@ if [ -n "$RECORD" ]; then
   [ -f "$RECORD" ] || { echo "ERROR: no record at $RECORD" >&2; exit 2; }
 fi
 
-SRW_DIR="$DIR" SRW_ROOT="$ROOT" SRW_RECORD="$RECORD" SRW_ALSO="$ALSO_FILE" python3 - <<'PYEOF'
+DIR="${DIR%/}"
+[ -n "$DIR" ] || { echo "ERROR: the repair dir resolved to an empty path" >&2; exit 2; }
+SRW_DIR="$DIR" SRW_ROOT="$ROOT" SRW_RECORD="$RECORD" SRW_RM="$RM_FILE" SRW_ALSO="$ALSO_FILE" python3 - <<'PYEOF'
 import os, re, sys, difflib
 
 D = os.environ["SRW_DIR"].rstrip("/")
@@ -116,6 +129,13 @@ def rel(p):
 
 # --- the split: (current file, its pre-repair copy, [(ordinal, pre first, pre last, section copy)])
 pairs, unassessable = [], []
+
+def consumed(p):
+    # A pre-repair copy this run resolved, recorded for the shell to remove AFTER the exit code is
+    # known. Recorded as soon as it is resolved, so a run that fails later has named it too -- the
+    # shell, not this list, decides whether anything is removed.
+    with open(os.environ["SRW_RM"], "a") as fh:
+        fh.write(p + "\n")
 subj = os.path.join(D, ".subject")
 man = os.path.join(D, "sections", ".manifest")
 if os.path.isfile(subj):
@@ -127,11 +147,13 @@ if os.path.isfile(subj):
         ordn, stem, path, a, z, sec = f[1], f[2], f[3], int(f[4]), int(f[5]), f[6]
         cur = path if os.path.isabs(path) else os.path.join(ROOT, path)
         before = os.path.join(D, ".before", stem) if sec == "-" else os.path.join(D, stem, "sections", ".before")
+        consumed(before)
         e = byfile.setdefault(cur, [before, []])
         e[1].append((ordn, a, z, sec))
     for cur, (before, parts) in byfile.items():
         pairs.append((cur, before, parts))
 elif os.path.isfile(man):
+    consumed(os.path.join(D, "sections", ".before"))
     doc, parts = None, []
     for line in read(man).splitlines():
         f = line.split("\t")
@@ -264,3 +286,23 @@ out("SUMMARY files %d replaced %d hits %d moved-cites %d unassessable %d\n"
     % (len(assessed), nrep, nhit, nmov, len(unassessable)))
 sys.exit(3 if unassessable else 0)
 PYEOF
+rc=$?
+
+# --- consume the pre-repair copies: only on an EMITTED worklist (0 or 3), only without --keep, only
+# exact paths the run resolved, each re-checked as non-empty, strictly under the repair dir and free
+# of `..`, and a regular file. No glob, no recursive delete; `.before/` itself only by rmdir.
+case "$rc" in
+  0|3)
+    if [ "$KEEP" = 0 ] && [ -n "$DIR" ] && [ -s "$RM_FILE" ]; then
+      while IFS= read -r p; do
+        [ -n "$p" ] || continue
+        case "$p" in "$DIR"/*) ;; *) continue ;; esac
+        case "$p" in */../*|*/..) continue ;; esac
+        [ -f "$p" ] && [ ! -L "$p" ] || continue
+        rm -f -- "$p"
+      done < "$RM_FILE"
+      [ -d "$DIR/.before" ] && rmdir "$DIR/.before" 2>/dev/null
+    fi
+    ;;
+esac
+exit "$rc"

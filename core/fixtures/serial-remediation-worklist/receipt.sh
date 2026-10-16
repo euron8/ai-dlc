@@ -2,8 +2,8 @@
 # BL-543 receipt: a mixed EDIT + WRITE repair, the Write NOT first, read by the shipping splitter and
 # worklist. Exit 0 only when (1) the split keeps `sections/.before` through --assemble, (2) the
 # worklist lists the replaced text of BOTH hunks with a HIT in the sibling file, (3) a cite below the
-# moved line is a MOVED-CITE and one above it is not, and (4) a world with no pre-repair copy exits 3
-# with an UNASSESSABLE line, never a clean 0.
+# moved line is a MOVED-CITE and one above it is not, (5) that emitted run removes `sections/.before`,
+# and (4) the re-run, now with no pre-repair copy, exits 3 with an UNASSESSABLE line, never a clean 0.
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 R="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -34,7 +34,8 @@ out="$(cd "$W" && AI_DLC_PROJECT_ROOT="$W" bash "$S/serial-remediation-worklist.
 [ "$rc" -eq 0 ] || exit 1
 grep -qx '    HIT o.md:1' <<<"$out" && grep -qx '    HIT o.md:2' <<<"$out" || exit 1
 grep -q "^MOVED-CITE o.md:3  d.md:$bl -> " <<<"$out" && ! grep -q '^MOVED-CITE o.md:3  d.md:2 ' <<<"$out" || exit 1
-rm -f "$W/r/sections/.before"
+# (5) the emitted worklist consumed its pre-repair copy -- the re-run below then has none.
+[ ! -e "$W/r/sections/.before" ] || exit 1
 out="$(cd "$W" && AI_DLC_PROJECT_ROOT="$W" bash "$S/serial-remediation-worklist.sh" "$W/r" 2>&1)"; rc=$?
 [ "$rc" -eq 3 ] && grep -q '^UNASSESSABLE d\.md:' <<<"$out" || exit 1
 echo "BL-543 receipt: PASS"
