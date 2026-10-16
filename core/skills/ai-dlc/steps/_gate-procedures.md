@@ -138,8 +138,8 @@ live wait over a teammate that has not delivered.
 **A waiting beat exits 0 on purpose.** Waiting is what most beats report, and a
 nonzero exit from a backgrounded command is reported to you as `status: failed` —
 which would announce a failure every couple of minutes on every healthy join, and
-bury the one exit code that does need a decision. Nonzero means non-delivery, nothing
-else.
+bury the one exit code that does need a decision. Nonzero means non-delivery (1) or a
+refused call that armed nothing (64).
 
 **Delivered means non-empty AND written since the join armed** — not merely present.
 A deliverable path reused across sprints otherwise reports the PREVIOUS sprint's file
@@ -148,8 +148,10 @@ nothing downstream to catch it.
 
 **`--since` is optional and only ever needed when the teammate may have delivered
 BEFORE you armed the join** — normally only when resuming a join after a compaction.
-Pass the `dispatched-at` value from the row (defined above). It can only move the
-threshold earlier; a stamp later than now is clamped, so rounding it is harmless.
+Pass the `dispatched-at` value from the row (defined above), and with it `--dispatch <agentId>`, the `agentId` (or
+a named teammate's `agent_id`) the Agent result returned: the beat reads the dispatch's time from the spawn ledger
+and refuses a `--since` later than it, which a hand-stamped row can be. It can only move the
+threshold earlier; a stamp later than now is clamped, but a stamp after the dispatch is not: pass `--dispatch`.
 
 **Pass the whole wave to ONE call.** Never chain beats in a single `Bash` call.
 
@@ -930,6 +932,8 @@ document in place. Otherwise, in this order:
 4. **Cross-section.** The serial cross-section remediator then edits the ASSEMBLED document in
    place and APPENDS its entries to the joined record, opening them with its own `- artifact:` /
    `- artifact_sha_before:` / `- artifact_sha_after:` triple, its before equal to the join's after.
+   Before that dispatch the lead runs `scripts/ai-dlc/serial-remediation-worklist.sh <that dir>`
+   once, as the subject-axis step 4 below describes, and briefs the remediator with its output.
 
 **Shard the requirements subject's repair (Rule 28, "Split dispatch": subject axis).** When the
 artifact is the requirements subject (`steps/requirements.md` section 5), the repair is sharded
@@ -953,8 +957,11 @@ in this order:
    describes. A whole-file part's shard edits its file in place. The SPEC part's shard never
    edits `SPEC.md` by hand: it appends a `(decision)` entry to the spec's `.memlog.md` and
    re-renders `SPEC.md` through `bmad-spec` (the amendment procedure's item 2 path, "Divergence
-   resolution dispatch"), and its `edit:` lines cite both files by their project-relative
-   paths under `_bmad-output/specs/s<N>/<slug>/`.
+   resolution dispatch"). It then appends one
+   `- (event) Render <pass>: re-derived from memlog through <last decision>` line to `.memlog.md`;
+   a change applied with Edit is recorded as `- (event) Hand-edit <pass>`, never as Render. A
+   `(decision)` entry after the last such Render line is a stale SPEC. Its `edit:` lines cite
+   both files by their project-relative paths under `_bmad-output/specs/s<N>/<slug>/`.
 3. **Join and assemble.** Beat-join every part, then run
    `scripts/ai-dlc/join-remediator-shards.sh --subject <N> --base <base sha> --pass <M> <that dir> --since <ISO> --until <ISO>`.
    When one part's remediator was re-run, add `--rerun <part>.md@<S_P>` as "After a join
@@ -973,6 +980,14 @@ in this order:
    every stem on both sides, each before equal to the join's after. It owns every finding citing two or more
    parts AND every finding whose fix lies in PRD text outside the in-scope parts — a part shard
    never edits text outside its section file, so such a finding has no other owner.
+   After the join and before that dispatch, the lead runs
+   `scripts/ai-dlc/serial-remediation-worklist.sh <that dir> --record <the joined record>` ONCE
+   and puts its output in the serial remediator's brief. It lists the text each shard replaced
+   with every place that text still stands (`HIT`), and every cite into a repaired file whose
+   line moved (`MOVED-CITE`); the remediator adjudicates those lines rather than deriving them.
+   The run consumes the pre-repair copies it reads, so a second run without `--keep` exits 3
+   `UNASSESSABLE`; any re-run passes `--keep`. A files-mode repair has no split directory, so
+   the script exits 3 there and the remediator runs the grep itself.
 
 The party and elicitation repairs run this same procedure, under the shard dirs and record
 names "Validation cycle" items 1 and 2 give them. For the requirements subject they take
