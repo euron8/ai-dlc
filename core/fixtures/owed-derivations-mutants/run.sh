@@ -135,14 +135,49 @@ mutate M11-writer-records-past writer "Sp3a Sp3b Wc Wd Wf" \
   's|^      PAST) printf .*$|      PAST) printf "%s\\n" "$_orow" >> "$TMP/owed.keep" ;;|'
 
 # M12: the classifier reads LIVING as PAST (a prd.md row stops being enforced, and the writer drops it).
-mutate M12-classifier-living-as-past reader "B1b B3a B7a Gf Sc5 Sc7 Sc8 Sp3a Sp4 Wc Wd We Wf Wg" \
-  '  echo LIVING' \
-  's/^  echo LIVING$/  echo PAST/'
+mutate M12-classifier-living-as-past reader "B1b B3a B7a Bt1b Gf Hc1 Hn Sc5 Sc7 Sc8 Sp4 Wc Wd We Wf Wg" \
+  '  SCOPE_TOKEN=LIVING' \
+  's/^  SCOPE_TOKEN=LIVING$/  SCOPE_TOKEN=PAST/'
 
 # M13: the classifier matches the sprint segment as a SUBSTRING/prefix, so s19 reads as sprint 1.
 mutate M13-classifier-substring-segment reader "Sc1 Sp7" \
-  '        if [ "$((10#$n))" -eq "$CUR" ]; then echo CURRENT; else echo PAST; fi' \
-  's/^        if \[ "\$((10#\$n))" -eq "\$CUR" \]; then echo CURRENT; else echo PAST; fi$/        case "$n" in "$CUR"*) echo CURRENT ;; *) echo PAST ;; esac/'
+  '    if [ "$((10#$SP_N))" -eq "$CUR" ]; then SCOPE_TOKEN=CURRENT; else SCOPE_TOKEN=PAST; fi' \
+  's/^    if \[ "\$((10#\$SP_N))" -eq "\$CUR" \]; then SCOPE_TOKEN=CURRENT; else SCOPE_TOKEN=PAST; fi$/    case "$SP_N" in "$CUR"*) SCOPE_TOKEN=CURRENT ;; *) SCOPE_TOKEN=PAST ;; esac/'
+
+# M15: HISTORY is checked AFTER the sprint classification instead of first: a history file inside the
+# current sprint (s<current>/archive/) reads CURRENT again, and the writer records it.
+mutate M15-history-checked-after-current reader "Hr Hs Hw1 Hw2 Wc Wd Wf Wg" \
+  '  if is_history "$p"; then SCOPE_TOKEN=HISTORY; return 0; fi' \
+  '/^  if is_history "\$p"; then SCOPE_TOKEN=HISTORY; return 0; fi$/d;s/^  SCOPE_TOKEN=LIVING$/  if is_history "$p"; then SCOPE_TOKEN=HISTORY; return 0; fi; SCOPE_TOKEN=LIVING/'
+
+# M16: the classifier never returns HISTORY.
+mutate M16-classifier-never-history reader "Bt1b Hl3 Hr Hs Hw1 Hw2 Wc Wd Wf Wg" \
+  '  if is_history "$p"; then SCOPE_TOKEN=HISTORY; return 0; fi' \
+  's/^  if is_history "\$p"; then SCOPE_TOKEN=HISTORY; return 0; fi$/  if false; then SCOPE_TOKEN=HISTORY; return 0; fi/'
+
+# M17: the LIVE gate-adjudication directory is classified HISTORY (it is unrotated, so it must block).
+mutate M17-live-gate-adjudication-history reader "Hl1 Hl2" \
+  'case "$p" in _bmad-output/gate-adjudication/*) SCOPE_TOKEN=CURRENT; return 0 ;; esac' \
+  's/_bmad-output\/gate-adjudication\/\*) SCOPE_TOKEN=CURRENT;/_bmad-output\/gate-adjudication\/*) SCOPE_TOKEN=HISTORY;/'
+
+# M18: the batch classifier resolves and classifies nothing and defaults every path to LIVING.
+mutate M18-batch-defaults-living reader "Bt1b Hc2 Hl1 Hl3 Hs Hw1 Hw2 Sc1 Sc2 Sc3 Sc4 Sc6 Sc9 Sp3a Sp3b Wc Wd Wf Wg" \
+  '    classify "$_bp"' \
+  's/^    classify "\$_bp"$/    SCOPE_TOKEN=LIVING/'
+
+# ---- Bd: the is_archive copy is BOUND to the shipped predicate (I33 forbids sourcing it) --------------
+# The reader's copy and validate-artifact-budget.sh's is_archive() must have byte-equal bodies. The
+# comparison is run on the pristine pair (equal) and on a drifted copy (must differ), so it can fail.
+fn_body() { awk '/^is_archive\(\) \{/ { p = 1 } p { print } p && /^\}/ { exit }' "$1"; }
+BUDGET="$ROOT/core/scripts/validate-artifact-budget.sh"
+b_ref="$(fn_body "$BUDGET")"; b_cpy="$(fn_body "$READER")"
+if [ -n "$b_ref" ] && [ "$b_ref" = "$b_cpy" ]; then ok "Bd1 the reader's is_archive body is byte-equal to validate-artifact-budget.sh's"; else bad "Bd1 is_archive copy differs from the shipped predicate (or an extraction was empty)"; fi
+sed 's/|\*\.precompact\.md//' "$READER" > "$WORK/drift.sh"
+if cmp -s "$READER" "$WORK/drift.sh"; then bad "Bd2 the drift mutation DID NOT APPLY"
+else
+  b_dft="$(fn_body "$WORK/drift.sh")"
+  if [ -n "$b_dft" ] && [ "$b_ref" != "$b_dft" ]; then ok "M19-is-archive-copy-drifts: KILLED by the binding arm (declared: Bd1 on the pristine pair, Bd2 on the drifted copy)"; else bad "M19-is-archive-copy-drifts: SURVIVED -- the binding arm cannot see a dropped arm"; fi
+fi
 
 # M14: the reader trusts a REPOINTED row without re-deriving the new derivation.
 mutate M14-reader-trusts-repointed reader "Rp2 Rp3 Rp3b Rp4b" \
@@ -200,6 +235,8 @@ pk "Pb2 and its deny text names the REPOINTED remedy" "REPOINTED<TAB>" gate-vali
 pk "Pb3 and says exit 2 is refused and unassessed" "the rows are REFUSED and unassessed" gate-validation.md
 pk "Pb4 and the same-file UNRUN rule" "makes every owed row in it UNASSESSED" gate-validation.md
 pk "Pb5 and the disclosure that past-sprint rows stop blocking" "STOPS BLOCKING" gate-validation.md
+pk "Pb5b and the INFO history class" "INFO history" gate-validation.md
+pk "Pb5c and the live gate-adjudication remedy" "is cleared by rotating it" gate-validation.md
 pk "Pb6 the check is in the planning row of the gate manifest" "35, 36, 37" gate-validation.md
 pk "Pb7 _gate-procedures.md keeps only a pointer" "refused at gate-validation.md Check 37" _gate-procedures.md
 pk "Pc the sprint-close site carries open rows forward, one item per key" "ONE" retro.md

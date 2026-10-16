@@ -273,6 +273,65 @@ sc_is Sc7 LIVING  "_bmad-output/planning-artifacts/prd.md"
 sc_is Sc8 LIVING  "_bmad-output/planning-artifacts/s319x/y.md"
 sc_is Sc9 PAST    "_bmad-output/planning-artifacts/s0/past.md"
 
+# ---- H: the HISTORY class (checked first; INFO, never recorded, never OPEN) ------------------------
+# Each shape is seeded as a real file with a stale fence, so the row would be OPEN if it were not history.
+HSHAPES="_bmad-output/implementation-artifacts/s1/gate-adjudication/g.md
+_bmad-output/implementation-artifacts/pre-series/gate-adjudication/g.md
+_bmad-output/pipeline-history/pipeline-snapshot-archive.md
+_bmad-output/ai-dlc-update/push-candidate-ledger.archive.md
+_bmad-output/planning-artifacts/prd-history.md
+_bmad-output/planning-artifacts/product-brief-history.md
+_bmad-output/planning-artifacts/archive/x.md
+_bmad-output/planning-artifacts/s1/archive/cycle-1/x.md"
+LIVEGA="_bmad-output/gate-adjudication/g.md"
+NEARS="_bmad-output/planning-artifacts/prd-history-notes.md
+_bmad-output/planning-artifacts/archived.md"
+: > "$WORK/hrows.tsv"
+for hp in $HSHAPES $LIVEGA $NEARS; do
+  mkdir -p "$R/${hp%/*}"; { printf '# h\n\n'; fence 5; } > "$R/$hp"
+done
+for hp in $HSHAPES; do
+  scope_in "$R" "$hp"; rc_is "Hs $hp --scope -> HISTORY" 0 "$([ "$RC" = 0 ] && [ "$SC" = HISTORY ] && echo 0 || echo 1)"
+  row "$hp:3" "$CMD" > "$WORK/h1.tsv"
+  rd "$R" "$WORK/h1.tsv"
+  rc_is "Hr $hp stale row -> exit 0, one INFO history, no OPEN" 0 "$([ "$RC" = 0 ] && [ "$(awk -F'\t' '$1 == "INFO" && $2 == "history" { n++ } END { print n + 0 }' <<<"$OUT")" = 1 ] && [ "$(open_count)" = 0 ] && echo 0 || echo 1)"
+done
+scope_in "$R" "$LIVEGA"; rc_is "Hl1 the LIVE gate-adjudication directory --scope -> CURRENT (unrotated, so it blocks)" 0 "$([ "$SC" = CURRENT ] && echo 0 || echo 1)"
+row "$LIVEGA:3" "$CMD" > "$WORK/h2.tsv"; rd "$R" "$WORK/h2.tsv"
+rc_is "Hl2 a stale fence in the live gate-adjudication/ is OPEN and blocks (exit 1)" 0 "$([ "$RC" = 1 ] && [ "$(open_count)" = 1 ] && echo 0 || echo 1)"
+scope_in "$R" "_bmad-output/implementation-artifacts/s1/gate-adjudication/g.md"
+rc_is "Hl3 the same file rotated under s<N>/gate-adjudication/ is HISTORY" 0 "$([ "$SC" = HISTORY ] && echo 0 || echo 1)"
+for np in $NEARS; do
+  scope_in "$R" "$np"; rc_is "Hn $np (near-miss of is_archive) --scope -> LIVING" 0 "$([ "$SC" = LIVING ] && echo 0 || echo 1)"
+done
+scope_in "$R" "_bmad-output/planning-artifacts/prd.md"; rc_is "Hc1 control: prd.md -> LIVING" 0 "$([ "$SC" = LIVING ] && echo 0 || echo 1)"
+scope_in "$R" "_bmad-output/planning-artifacts/s1/x.md"; rc_is "Hc2 control: s<current>/x.md -> CURRENT" 0 "$([ "$SC" = CURRENT ] && echo 0 || echo 1)"
+# the writer records nothing for a history path: the writer calls --scope per row, so HISTORY is dropped
+# (the end-to-end writer world is Sp3 below, which uses a PAST path; the token is the shared definition)
+
+# ---- Bt: --scope-batch is the SAME classification, resolved once -------------------------------------
+BPATHS="$(printf '%s\n' $HSHAPES "$LIVEGA" $NEARS "$PASTDOC" "$S19DOC" "_bmad-output/specs/s317/x.md" "_bmad-output/specs/s1/x.md" "_bmad-output/party-mode/s1/seat.md" "_bmad-output/planning-artifacts/s319.md" "_bmad-output/planning-artifacts/s1/x.md" "_bmad-output/planning-artifacts/prd.md")"
+batch_in() { # <root> <stdin text> -> BOUT, BRC, BERR
+  BOUT="$( cd / && printf '%s' "$2" | AI_DLC_PROJECT_ROOT="$1" bash "$BIN/check-owed-derivations.sh" --scope-batch 2>"$WORK/b.err" )"; BRC=$?
+  BERR="$(cat "$WORK/b.err")"
+}
+batch_in "$R" "$BPATHS
+"
+PER=""; while IFS= read -r bp; do scope_in "$R" "$bp"; PER="$PER$SC	$bp
+"; done <<<"$BPATHS"
+if [ "$BRC" = 0 ] && [ "$BOUT
+" = "$PER" ]; then ok "Bt1 batch output over every --scope world's path equals the per-path --scope tokens (byte compare, input order)"; else bad "Bt1 batch output differs from per-path --scope"; printf '%s\n' "$BOUT" | head -5; fi
+rc_is "Bt1b the batch carries all four tokens (the compare is not over one class)" 4 "$(printf '%s\n' "$BOUT" | cut -f1 | sort -u | awk 'END { print NR + 0 }')"
+batch_in "$R" ""
+rc_is "Bt2 empty stdin -> exit 0 and no output" 0 "$([ "$BRC" = 0 ] && [ -z "$BOUT" ] && echo 0 || echo 1)"
+batch_in "$R" "$(printf '%s\n\n%s\n' "$PASTDOC" "$S19DOC")
+"
+rc_is "Bt3 a blank input line -> exit 2 and NO partial output" 0 "$([ "$BRC" = 2 ] && [ -z "$BOUT" ] && echo 0 || echo 1)"
+R6="$WORK/rd6"; mkroot "$R6"; rm -f "$R6/.sprint-id"
+batch_in "$R6" "$PASTDOC
+"
+rc_is "Bt4 sprint unresolvable -> exit 2 and NO partial output" 0 "$([ "$BRC" = 2 ] && [ -z "$BOUT" ] && echo 0 || echo 1)"
+
 # Sp1/Sp2: a past-sprint break reads INFO and blocks nothing; the SAME break in the current sprint is OPEN.
 row "$K_PAST" "$CMD" > "$WORK/sp1.tsv"
 rd "$R" "$WORK/sp1.tsv"
@@ -354,6 +413,10 @@ mkdir -p "$C/_bmad-output/planning-artifacts/s0"
 cp "$BIN/check-owed-derivations.sh" "$C/scripts/ai-dlc/check-owed-derivations.sh"; write_stub "$C/scripts/ai-dlc"
 printf '1\n' > "$C/.sprint-id"
 K_WPAST="_bmad-output/planning-artifacts/s0/old.md:4"
+# a HISTORY file INSIDE the current sprint (s1): HISTORY beats CURRENT, so the writer must drop it too
+mkdir -p "$C/_bmad-output/planning-artifacts/s1/archive"
+{ printf '# Archived\n\n```derived\n$ grep -c qqalpha scripts/ai-dlc/toy.sh\n1\n```\n'; } > "$C/_bmad-output/planning-artifacts/s1/archive/old.md"
+K_WHIST="_bmad-output/planning-artifacts/s1/archive/old.md:4"
 g "$C" add -A; g "$C" commit -qm "pull to 1.0.0"
 g "$DIST" show "${THEIRS}:core/scripts/toy.sh" > "$C/scripts/ai-dlc/toy.sh"
 dd() { OUTD="$(cd / && TMPDIR="$WORK" bash "$DIFFER" "$DIST" "$BASE" "$C" "$THEIRS" "$@" 2>&1)"; RCD=$?; }
@@ -365,11 +428,13 @@ dd --record-owed "$OWED" --log-name reconcile-log-t1.md
 rc_is "Wb with --record-owed the exit is unchanged (1)" 1 "$RCD"
 K_W="_bmad-output/story.md:4"
 printed="$(awk -F'\t' '$1 == "NEWLY-FAILING" { print }' <<<"$OUTD")"
-want_rec="$(awk -F'\t' -v rng="$BASE..$THEIRS" -v past="$K_WPAST" '$1 == "NEWLY-FAILING" && $2 != past {
+want_rec="$(awk -F'\t' -v rng="$BASE..$THEIRS" -v past="$K_WPAST" -v hist="$K_WHIST" '$1 == "NEWLY-FAILING" && $2 != past && $2 != hist {
   s = $3; i = index(s, "  $ "); j = index(s, "  recorded: "); k = index(s, "  actual: ")
   printf "OWED\t%s\t%s\t%s\t%s\t%s\treconcile-log-t1.md\n", $2, substr(s, i + 4, j - i - 4), substr(s, j + 12, k - j - 12), substr(s, k + 10), rng }' <<<"$OUTD")"
 rc_is "Wc the record has exactly one row (the LIVING one; the past-sprint break is not recorded)" 1 "$(awk 'END { print NR + 0 }' "$OWED" 2>/dev/null)"
 rc_is "Sp3a the record carries no row for the past-sprint key, though the helper printed it NEWLY-FAILING" 0 "$([ "$(awk -F'\t' -v k="$K_WPAST" '$2 == k { n++ } END { print n + 0 }' "$OWED" 2>/dev/null)" = 0 ] && [ -n "$(awk -F'\t' -v k="$K_WPAST" '$1 == "NEWLY-FAILING" && $2 == k' <<<"$OUTD")" ] && echo 0 || echo 1)"
+rc_is "Hw1 the record carries no row for a history key (s1/archive/, HISTORY beats CURRENT), though the helper printed it NEWLY-FAILING" 0 "$([ "$(awk -F'\t' -v k="$K_WHIST" '$2 == k { n++ } END { print n + 0 }' "$OWED" 2>/dev/null)" = 0 ] && [ -n "$(awk -F'\t' -v k="$K_WHIST" '$1 == "NEWLY-FAILING" && $2 == k' <<<"$OUTD")" ] && echo 0 || echo 1)"
+ck "Hw2 and the helper prints an INFO history row naming it" "$(printf 'INFO\thistory\t%s' "$K_WHIST")" "$OUTD"
 ck "Sp3b and the helper prints an INFO past-sprint row naming it" "$(printf 'INFO\tpast-sprint\t%s' "$K_WPAST")" "$OUTD"
 if [ -n "$want_rec" ] && [ "$(cat "$OWED" 2>/dev/null)" = "$want_rec" ]; then
   ok "Wd the record row is byte-equal to the row the helper PRINTED (key, command, recorded, actual, range, log)"

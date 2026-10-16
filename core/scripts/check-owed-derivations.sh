@@ -2,7 +2,8 @@
 # check-owed-derivations.sh — which derivations did an earlier pull LEAVE broken, and are they still?
 #
 # Usage: check-owed-derivations.sh [<record>]
-#        check-owed-derivations.sh --scope <rel-path>
+#        check-owed-derivations.sh --scope <rel-path>        (prints CURRENT | LIVING | PAST | HISTORY)
+#        check-owed-derivations.sh --scope-batch < paths     (one `<TOKEN><TAB><path>` per input line)
 #   <record> defaults to `_bmad-output/ai-dlc-update/owed-derivations.tsv` under the project root,
 #   which is the file `reconcile/derivation-differential.sh --record-owed` appends to.
 #
@@ -10,6 +11,8 @@
 #   OPEN <key file:line> <reason> <$ command> <base>..<theirs> <reconcile log name>
 #       <reason> is STALE | UNRUN | SUPERSEDED-STALE | MOVED | UNASSESSED, prefixed REPOINTED- when
 #       the row was re-pointed and the NEW derivation is the one judged (its command is shown).
+#   INFO history <key> <detail>
+#       a row whose file is a HISTORY file (see the set below). Same behaviour as past-sprint.
 #   INFO past-sprint <key> <detail>
 #       a row whose file is in a sprint that has since finished. Unrepaired debt that is no longer
 #       enforced. It is NOT closed, and it never counts toward exit 1.
@@ -94,26 +97,117 @@ resolve_sprint() {
   CUR="$out"
 }
 
-scope_of() { # <root-relative path> -> CURRENT | PAST | LIVING
-  local p="$1" a seg n
+# sprint_split <path>: sets SP_N (the sprint number) and SP_REST (the path below the sprint directory)
+# and returns 0 when <path> sits in an anchored sprint directory; returns 1 otherwise.
+SP_N=""; SP_REST=""
+sprint_split() {
+  local p="$1" a seg
+  SP_N=""; SP_REST=""
   for a in $SPRINT_AREAS; do
     case "$p" in
       "$a"/s*/*)
         seg="${p#"$a"/}"; seg="${seg%%/*}"
-        n="${seg#s}"
-        case "$n" in ''|*[!0-9]*) continue ;; esac
-        if [ "$((10#$n))" -eq "$CUR" ]; then echo CURRENT; else echo PAST; fi
+        case "${seg#s}" in ''|*[!0-9]*) continue ;; esac
+        SP_N="${seg#s}"; SP_REST="${p#"$a"/"$seg"/}"
         return 0 ;;
     esac
   done
-  echo LIVING
+  return 1
 }
 
+# THE HISTORY SET (lead ruling): any path an ai-dlc program WRITES as an archive or classes as one. A
+# history path is never enforced, never recorded and never carried, WHEREVER it sits, so it is checked
+# FIRST and a history file inside the current sprint's s<N>/ is still HISTORY. Citations at 21facb0f
+# (re-verified by grep when written; the files are unchanged at the tip):
+#   - core/scripts/rotate-gate-adjudication.sh:155-157 (header) and :272 (DEST): the rotator MOVES stale
+#     gate-adjudication records out of the live `_bmad-output/gate-adjudication/` (SRC, :271) into
+#     `_bmad-output/implementation-artifacts/s<N>/gate-adjudication/` and
+#     `_bmad-output/implementation-artifacts/pre-series/gate-adjudication/`. Those two are HISTORY by
+#     PATH. The live directory is NOT history: it is unrotated, so it belongs to the current sprint and
+#     classifies CURRENT (below). The nonce is deliberately NOT consulted; the rotator's own output
+#     directories are the derivation.
+#   - core/scripts/rotate-snapshot-archive.sh:149: `pipeline-history/pipeline-snapshot-archive.md`
+#     (covered by the basename predicate below, `*-archive.md`).
+#   - core/skills/ai-dlc-update/reconcile/ledger-rotate.sh:136: `push-candidate-ledger.archive.md`
+#     (a dot form, so `is_archive` does not match it and it is named explicitly).
+#   - core/skills/ai-dlc/steps/requirements.md:154 `prd-history.md` and
+#     core/skills/ai-dlc/steps/artifact-consolidation.md:128 `product-brief-history.md` (prose steps
+#     that tell the lead to write them; covered by the basename predicate, `*-history.md`).
+#   - core/scripts/migrate-artifact-paths.sh:18 `_bmad-output/planning-artifacts/archive/**`, and
+#     core/scripts/validate-artifact-budget.sh:1362-1368 (any `s<N>/archive/**`, current sprint included).
+# `is_archive` below is a COPY of core/scripts/validate-artifact-budget.sh:537 (`is_archive()`), the
+# shipped predicate. I33 forbids sourcing it across install layouts, so it is copied and BOUND: the
+# dist-only battery extracts both function bodies and compares them. Keep its case arms byte-equal.
+is_archive() {
+  case "$1" in
+    *-history.md|*-archive.md|*-archive-*.md|*.precompact.md) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+is_history() { # <root-relative path> -> 0 when HISTORY
+  local p="$1" rest seg after
+  case "$p" in
+    _bmad-output/planning-artifacts/archive/*) return 0 ;;
+    _bmad-output/implementation-artifacts/pre-series/gate-adjudication/*) return 0 ;;
+    _bmad-output/implementation-artifacts/s*/gate-adjudication/*)
+      rest="${p#_bmad-output/implementation-artifacts/}"; seg="${rest%%/*}"
+      case "${seg#s}" in
+        ''|*[!0-9]*) ;;
+        *) after="${rest#*/}"; case "$after" in gate-adjudication/*) return 0 ;; esac ;;
+      esac ;;
+  esac
+  if sprint_split "$p"; then case "$SP_REST" in archive/*) return 0 ;; esac; fi
+  is_archive "${p##*/}" && return 0
+  case "${p##*/}" in push-candidate-ledger.archive.md) return 0 ;; esac
+  return 1
+}
+
+# classify <root-relative path>: sets SCOPE_TOKEN to HISTORY | CURRENT | PAST | LIVING. THE ONE
+# CLASSIFICATION IMPLEMENTATION: --scope, --scope-batch and the reader's per-row scoping all call it,
+# in-process (no fork per path). HISTORY is decided first and beats the other three.
+SCOPE_TOKEN=""
+classify() {
+  local p="$1"
+  if is_history "$p"; then SCOPE_TOKEN=HISTORY; return 0; fi
+  # The LIVE gate-adjudication directory is unrotated, so it is the current sprint's and it blocks.
+  case "$p" in _bmad-output/gate-adjudication/*) SCOPE_TOKEN=CURRENT; return 0 ;; esac
+  if sprint_split "$p"; then
+    if [ "$((10#$SP_N))" -eq "$CUR" ]; then SCOPE_TOKEN=CURRENT; else SCOPE_TOKEN=PAST; fi
+    return 0
+  fi
+  SCOPE_TOKEN=LIVING
+}
+
+# scope_batch [tokens]: reads root-relative paths from stdin, one per line, and prints
+# `<TOKEN><TAB><path>` per line in input order (just `<TOKEN>` with an argument). The sprint is resolved
+# ONCE. Empty stdin: exit 0, no output. A blank line, or a resolver failure: exit 2 and NO partial
+# stdout, because the output is staged in a file and printed only after every line classified.
+SB_DIR=""
+sb_cleanup() { [ -n "$SB_DIR" ] && { rm -f "$SB_DIR/in" "$SB_DIR/out" 2>/dev/null; rmdir "$SB_DIR" 2>/dev/null; }; }
+scope_batch() {
+  local _bp
+  SB_DIR="$(mktemp -d "${TMPDIR:-/tmp}/check-owed-scope-XXXXXX")" \
+    || { echo "REFUSED: could not create a scratch directory." >&2; exit 2; }
+  trap sb_cleanup EXIT
+  cat > "$SB_DIR/in" || { echo "REFUSED: could not read stdin." >&2; exit 2; }
+  [ -s "$SB_DIR/in" ] || exit 0
+  resolve_sprint
+  while IFS= read -r _bp || [ -n "$_bp" ]; do
+    [ -n "$_bp" ] || { echo "REFUSED: a blank line in the --scope-batch input; no output was produced." >&2; exit 2; }
+    classify "$_bp"
+    if [ "${1:-}" = tokens ]; then printf '%s\n' "$SCOPE_TOKEN"; else printf '%s\t%s\n' "$SCOPE_TOKEN" "$_bp"; fi
+  done < "$SB_DIR/in" > "$SB_DIR/out"
+  cat "$SB_DIR/out"
+}
+
+if [ "${1:-}" = "--scope-batch" ]; then
+  [ "$#" -eq 1 ] || { echo "usage: check-owed-derivations.sh --scope-batch < paths" >&2; exit 2; }
+  scope_batch
+  exit 0
+fi
 if [ "${1:-}" = "--scope" ]; then
   [ "$#" -eq 2 ] && [ -n "$2" ] || { echo "usage: check-owed-derivations.sh --scope <rel-path>" >&2; exit 2; }
-  resolve_sprint
-  scope_of "$2"
-  exit 0
+  printf '%s\n' "$2" | scope_batch tokens; exit $?
 fi
 
 REC="${1:-$ROOT/_bmad-output/ai-dlc-update/owed-derivations.tsv}"
@@ -179,7 +273,7 @@ repoint_of() { # <key> -> "<new key><SEP><new command>" for the LATEST REPOINTED
 : > "$TMP/targets"; : > "$TMP/files.raw"
 while IFS="$SEP" read -r key cmd _recd _act range logn; do
   [ -n "$key" ] || continue
-  sc="$(scope_of "${key%:*}")"
+  classify "${key%:*}"; sc="$SCOPE_TOKEN"
   tkey="$key"; tcmd="$cmd"; hops=0; cyc=0
   while :; do
     nx="$(repoint_of "$tkey")"
@@ -189,7 +283,7 @@ while IFS="$SEP" read -r key cmd _recd _act range logn; do
     tkey="${nx%%"$SEP"*}"; tcmd="${nx#*"$SEP"}"
   done
   printf '%s\037%s\037%s\037%s\037%s\037%s\037%s\037%s\037%s\n' "$key" "$cmd" "$range" "$logn" "$sc" "$tkey" "$tcmd" "$hops" "$cyc" >> "$TMP/targets"
-  if [ "$sc" != PAST ] && [ "$cyc" = 0 ]; then printf '%s\n' "${tkey%:*}" >> "$TMP/files.raw"; fi
+  if [ "$sc" != PAST ] && [ "$sc" != HISTORY ] && [ "$cyc" = 0 ]; then printf '%s\n' "${tkey%:*}" >> "$TMP/files.raw"; fi
 done < "$TMP/rows"
 sort -u "$TMP/files.raw" > "$TMP/files"
 
@@ -243,6 +337,10 @@ derived_cmd_lines() {
 nopen=0
 while IFS="$SEP" read -r key cmd range logn sc tkey tcmd hops cyc; do
   [ -n "$key" ] || continue
+  if [ "$sc" = HISTORY ]; then
+    printf 'INFO\thistory\t%s is in a history file (an archive, or an ai-dlc rotation output): unrepaired debt that is no longer enforced, NOT closed ($ %s; %s; %s)\n' "$key" "$cmd" "$range" "$logn"
+    continue
+  fi
   if [ "$sc" = PAST ]; then
     printf 'INFO\tpast-sprint\t%s recorded in a sprint that has since finished: unrepaired debt that is no longer enforced, NOT closed ($ %s; %s; %s)\n' "$key" "$cmd" "$range" "$logn"
     continue

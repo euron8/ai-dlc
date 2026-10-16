@@ -195,7 +195,7 @@ cleanup() {
   [ -n "$WT_PARENT" ] && { rm -f "$WT_PARENT/pid" 2>/dev/null; rmdir "$WT_PARENT" 2>/dev/null; }
   rm -f "$TMP/files" "$TMP/chain" "$TMP/blobs" "$TMP/pairs" "$TMP/list.out" "$TMP/list.err" \
         "$TMP/b.out" "$TMP/b.err" "$TMP/t.out" "$TMP/t.err" "$TMP/rows" "$TMP/counts" \
-        "$TMP/operands" "$TMP/moved" "$TMP/owed" "$TMP/owed.keep" "$TMP/past" "$TMP/scope.err" 2>/dev/null
+        "$TMP/operands" "$TMP/moved" "$TMP/owed" "$TMP/owed.keep" "$TMP/past" "$TMP/hist" "$TMP/scope.err" 2>/dev/null
   rmdir "$TMP" 2>/dev/null
 }
 trap cleanup EXIT
@@ -431,7 +431,7 @@ say_row INFO superseded "${N_SUP} of ${N_U} derivation(s) are superseded by a la
 # CURRENT or LIVING rows are appended; a PAST row is not recorded and prints an INFO row instead. A
 # classifier that is absent or refuses (exit 2: the current sprint could not be resolved) refuses the
 # run, because recording or dropping a row on a guessed scope is the defect the ruling exists to prevent.
-: > "$TMP/past"
+: > "$TMP/past"; : > "$TMP/hist"
 if [ "$OWED_SET" -eq 1 ] && [ -s "$TMP/owed" ]; then
   _scope_tool="$CONSUMER/scripts/ai-dlc/check-owed-derivations.sh"
   [ -f "$_scope_tool" ] \
@@ -444,7 +444,8 @@ if [ "$OWED_SET" -eq 1 ] && [ -s "$TMP/owed" ]; then
     case "$_sc" in
       CURRENT|LIVING) printf '%s\n' "$_orow" >> "$TMP/owed.keep" ;;
       PAST) printf '%s\n' "$_okey" >> "$TMP/past" ;;
-      *) refuse record "the scope classifier printed '${_sc}' for ${_okey%:*}, not CURRENT, LIVING or PAST. Nothing was recorded." ;;
+      HISTORY) printf '%s\n' "$_okey" >> "$TMP/hist" ;;
+      *) refuse record "the scope classifier printed '${_sc}' for ${_okey%:*}, not CURRENT, LIVING, PAST or HISTORY. Nothing was recorded." ;;
     esac
   done < "$TMP/owed"
   if [ -s "$TMP/owed.keep" ]; then
@@ -458,6 +459,10 @@ while IFS= read -r _pkey; do
   [ -n "$_pkey" ] || continue
   say_row INFO past-sprint "$_pkey is NEWLY-FAILING in a sprint that has since finished: unrepaired debt that is no longer enforced. It is NOT recorded, NOT refused at the gate and NOT carried forward, and it is not closed."
 done < "$TMP/past"
+while IFS= read -r _hkey; do
+  [ -n "$_hkey" ] || continue
+  say_row INFO history "$_hkey is NEWLY-FAILING in a history file (an archive, or an ai-dlc rotation output): unrepaired debt that is no longer enforced. It is NOT recorded, NOT refused at the gate and NOT carried forward, and it is not closed."
+done < "$TMP/hist"
 
 # ---- NOTEs: what the differential cannot attribute -----------------------------------------
 # Operands are read as whitespace-split words of the recorded command with globbing OFF, so a
