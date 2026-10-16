@@ -20,9 +20,12 @@ state a rotate-at-close leaves behind. The likeliest reading of the prose in tha
 a live project restamps its drafts from sprint 1 and, in route.md's own words, "silently destroys
 the prior sprint's draft, which is the exact defect the stamp exists to prevent."
 
-Assertion 4 is that case. It asserts the resolved value is `max(frozen archives) + 1`, and asserts
-separately that it is **not** `1` — the second assertion exists so the failure names the defect
-rather than just a wrong number.
+Assertion 4 is that case, stated as a property: the answer with frozen archives present equals the
+answer with every archive deleted, for six canonical states, and each row also asserts its expected
+value so two agreeing wrong answers cannot pass. A canonical that exists with no `sprint:` key
+refuses (exit 1, empty stdout, stderr names the file) rather than resolving to `1` or to
+`max(frozen archives) + 1`. Assertion 4d is the control: a copy of the tool carrying the pre-change
+behaviour must fail the same table.
 
 ## The grammar collision (assertions 8 and 9)
 
@@ -51,7 +54,7 @@ A green fixture proves nothing on its own. Both mutants below drive it RED:
 
 | mutation | assertions that fire |
 |---|---|
-| preamble-only branch returns `1` instead of `max_frozen + 1` | 4 (both legs) |
+| degenerate (no `sprint:` key) branch returns `max_frozen + 1` / `1` instead of refusing (committed as control arm 4d) | 4 and 4d |
 | `sprint_re` widened to the reference tool's colliding pattern | 8 |
 
 ## Part 2 — Check 5, and the count that is part of its contract
@@ -94,7 +97,7 @@ had nothing to do with their mutation — while the A21 mutant itself came back 
 1. greenfield (no canonical) → `1`
 2. `status: done` → `N+1`
 3. in-flight → `N` (a re-plan, not a new sprint)
-4. **preamble-only → `max_frozen + 1`, never `1`** — the case the prose has no rule for
+4. **the property: the answer with archives equals the answer with every archive deleted**, for six canonical states; a canonical that exists with no `sprint:` key REFUSES (exit 1, nothing on stdout, stderr names the file), never `1` and never `max_frozen + 1` (4d is the control: the pre-change behaviour fails the same table)
 5. copies disagree → exit 3 HARD_BLOCK
 6. `roll` freezes byte-faithfully, writes the new envelope, and round-trips
 7. `roll` is idempotent — a re-run neither re-freezes nor destroys the archive
