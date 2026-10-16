@@ -215,6 +215,15 @@ rejected arms one beat over every still-outstanding path from earlier
 waves. If none is outstanding, the cap is held by agents this round does
 not own: HARD_BLOCK, naming them.
 
+**A notification the live beat already covers is not a turn's work.**
+When a task-notification arrives for an agent whose deliverable path a
+live `wait-for-deliverable.sh` beat names, the beat reports that path:
+post no status line for the agent, restate none of its findings or
+counts, re-check nothing, and end the turn. Inside a `--complete` join
+the round is reported once, from the merge, never per seat. The one
+exception is a held rejected set: that notification is an exit, and the
+rejected set is re-dispatched on it as above.
+
 **The join names what is missing, never what it counted.** It derives the
 expected part set from the same program as the dispatch, takes as
 delivered every expected path that is non-empty and written since the
