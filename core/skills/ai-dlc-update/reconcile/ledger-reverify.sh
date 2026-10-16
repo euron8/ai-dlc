@@ -523,54 +523,20 @@ absorbed_at() {
 #
 # THE NAIVE FIX IS WRONG AND THE MEASUREMENT SAYS SO. Matching the bare prefix would attribute one
 # commit to every entry the sprint filed: of the 20 cited prefixes, **11 are shared by two or more
-# ledger entries** and only **9 identify exactly one**. So the prefix is asked ONLY as a fallback,
-# and it attributes ONLY when it resolves to a single entry. When it does not, that is reported as
-# its own status rather than smeared across the batch -- a wrong attribution here tells an operator
-# to close an entry upstream never touched, which is strictly worse than the silence it replaces.
+# ledger entries** and only **9 identify exactly one**.
 #
-# Returns "<version> <short-sha> <how>" where <how> is `slug` or `prefix`.
-# HOW MANY LEDGER ENTRIES SHARE A `PC-S<n>` PREFIX. Counted over the CORPUS -- every entry line
-# in the live ledger AND the archive, open or closed -- by one parser (`corpus_labels` below).
-#
-# THE COUNT IS A PROPERTY OF THE CORPUS, NOT OF WHICH ENTRIES EMIT ROWS, AND THAT IS WHAT MAKES IT
-# STABLE ACROSS THE WORKFLOW STEP 8 PRESCRIBES. Annotating an entry moves nothing between the two
-# files; rotating it moves it from one to the other. A count taken over both files is therefore
-# invariant under both steps by construction -- there is no state in which an entry is on
-# neither side.
-#
-# THE PREVIOUS COUNT WAS OPEN-LIVE UNIONED WITH ARCHIVE, AND AN ENTRY ANNOTATED BUT NOT YET
-# ROTATED WAS ON NEITHER SIDE: the open extractor drops it (`closed` in `flush()` below) and the
-# archive does not hold it yet. So the count DIPPED at the annotate and RETURNED at the rotate,
-# and where a prefix had exactly two members with one of them annotated it crossed the one-vs-many
-# threshold -- `named_absorbed()`'s prefix fallback fired at the annotate and `named_ambiguous()`
-# at the rotate, and the row FLIPPED between `NAMED-UPSTREAM <slug>` and
-# `NAMED-UPSTREAM-AMBIGUOUS <prefix>`. That is a changed row set by status and subject on a
-# rotation that swept nothing -- exactly the reading step 8's acceptance test forbids. Reported by
-# the reference consumer as
-# PC-S337-ROTATE-ACCEPTANCE-TEST-FALSE-FAILS-WHEN-A-PREFIX-CROSSES-THE-ONE-VS-MANY-THRESHOLD, with
-# its own diff: `NAMED-UPSTREAM PC-S336-…` before the rotate, `NAMED-UPSTREAM-AMBIGUOUS PC-S336`
-# after, 89 rows either side, nothing swept.
-#
-# WHY THE ARCHIVE IS COUNTED AT ALL. The uniqueness test exists so the prefix fallback attributes
-# only when the prefix names exactly ONE entry. Counting the live ledger alone means ARCHIVING an
-# unrelated sibling can flip a prefix from ambiguous to unique -- a routine rotation silently
-# UNLOCKING an attribution that was correctly withheld. Measured on the reference consumer at the
-# Phase 0 pin: of 25 prefixes with a live entry, 7 had exactly one live entry AND at least one
-# archived sibling -- PC-S298 had 1 live against 9 archived -- and every one of the seven passed the
-# uniqueness test on a false premise. Counting closed live entries is the same move one step
-# further: strictly fewer attributions, never more, which is the correct direction because a wrong
-# attribution "tells an operator to close an entry upstream never touched", strictly worse than the
-# silence it replaces.
-#
-# The archive is OPTIONAL -- a consumer that has never rotated has no archive file, and that is a
-# normal state, not an error. `ledger-rotate.sh:67` fixes the name as
-# `<ledger-dir>/push-candidate-ledger.archive.md`, so it is derived from $LEDGER rather than
-# configured twice.
-prefix_entry_count() { # <PC-S<n>> -> integer
-  { printf '%s\n' "${LIVE_LABELS:-}"
-    printf '%s\n' "${ARCHIVE_LABELS:-}"
-  } | sort -u | grep -cE "^$1-" 2>/dev/null || true
-}
+# AND THE BARE PREFIX IS NEVER ATTRIBUTED TO AN ENTRY, NOT EVEN WHEN IT LOOKS UNIQUE. A fallback
+# used to attribute the short id when it "named exactly one entry", which made the row a function
+# of HOW MANY ENTRIES the consumer still holds -- and the count that made it honest had to reach
+# into the rotation archive, because counting the live ledger alone let a routine rotation UNLOCK
+# an attribution that was correctly withheld. A row that changes when sprint history is deleted is
+# the defect the operator ruled out: "if someone deleted all of graph consumer's sprint history,
+# it should not matter whatsoever." Without the archive the fallback is falsely confident, and
+# removing it gives the same answer either way. So `named_absorbed` asks the full slug only, and a
+# bare-prefix citation is reported by `named_ambiguous` as one prefix-keyed row attributed to NO
+# entry, whatever the count. The count it prints is of OPEN entries in the live ledger, the same
+# set the verdict loop reads: annotating an entry closes it and rotating it moves a closed entry,
+# so neither step, and no archive, can move that number or the row it sits in.
 
 # named_cited_filter <shas> <fixed-needle> <short-prefix> -> the RESIDUE: the shas, in input order,
 # whose message still names the id once every canonical NOT-DISCHARGED line is stripped.
@@ -590,8 +556,8 @@ prefix_entry_count() { # <PC-S<n>> -> integer
 # ALL canonical lines are stripped, every id's, not only this one's: a longer-slug sibling's form
 # line would otherwise keep a shorter id present as a substring. What survives is tested with the
 # SAME predicate as the query that produced the set -- a fixed substring for the slug walk, the
-# anchored short-id ERE for the prefix walks -- because a fixed-substring test at a prefix site
-# re-imports the `PC-S3021` defect the prefix fallback's own comment documents.
+# anchored short-id ERE for the prefix walk -- because a fixed-substring test at a prefix site
+# re-imports the `PC-S3021` defect the prefix walk's own comment in `named_ambiguous` documents.
 #
 # THE GRAMMAR IS PAIRED, BYTE FOR BYTE, WITH ARM F OF scripts/validate-release-version.sh, which
 # refuses a near-miss spelling in a release range. The engine ships to consumers and that validator
@@ -641,8 +607,8 @@ label_is_own_entry_id() { # <label> -> rc 0 iff the label equals ledger_entry_id
     END { exit !(ok && NR == 1) }'
 }
 
-named_absorbed() { # <label> -> "<how> <n> <sha>,<sha>,... <code|docs|cited>" if upstream's history names it, else ""
-  local _id="$1" _hits _all _list _n _pfx _how _h
+named_absorbed() { # <label> -> "<n> <sha>,<sha>,... <code|docs|cited>" if upstream's history names its full slug, else ""
+  local _id="$1" _hits _all _list _n
   case "$_id" in
     PC-*|BL-*) : ;;
     *) return 0 ;;                            # not id-shaped: prose label, nothing to ask
@@ -652,7 +618,6 @@ named_absorbed() { # <label> -> "<how> <n> <sha>,<sha>,... <code|docs|cited>" if
     *)   return 0 ;;                          # a single word is not an id
   esac
   label_is_own_entry_id "$_id" || return 0    # not the shared id rule: prose label, nothing to ask
-  _how=slug
   # THE WHOLE MATCH SET, NOT ONE COMMIT OF IT. This was `| tail -1` -- the OLDEST commit whose
   # MESSAGE names the id -- and the row then reported that commit's version as the absorbing
   # release. Naming is not absorbing: a commit naming an id to record a rejection, a split, a
@@ -696,70 +661,30 @@ named_absorbed() { # <label> -> "<how> <n> <sha>,<sha>,... <code|docs|cited>" if
   _hits="$(git -C "$DIST" log -F --grep="$_id" --format=%h "$THEIRS" 2>/dev/null)"
   # THE CITED-ONLY SPLIT, before anything is counted or reached. `_all` is every commit naming the
   # id; `_hits` becomes the residue -- the ones still naming it once canonical `Not-discharged:`
-  # lines are stripped (see `named_cited_filter`). The fallback below asks only when NOTHING names
-  # the slug, exactly as before: a slug named only in the form is a CITED-ONLY row, not a miss.
+  # lines are stripped (see `named_cited_filter`). A slug named only in the form is a CITED-ONLY
+  # row, not a miss. A slug named NOWHERE returns empty here, and the bare-prefix question goes to
+  # `named_ambiguous`, which never attributes it (see THE BARE PREFIX IS NEVER ATTRIBUTED above).
   _all="$_hits"
   _hits="$(named_cited_filter "$_all" "$_id" "")"
-  if [ -z "$_all" ]; then
-    # FALLBACK: the short id upstream actually writes. Only when it names ONE entry.
-    _pfx=""
-    case "$_id" in
-      PC-S[0-9]*-*)
-        _pfx="${_id#PC-}"; _pfx="${_pfx%%-*}"
-        case "${_pfx#S}" in ""|*[!0-9]*) _pfx="" ;; *) _pfx="PC-$_pfx" ;; esac ;;
-    esac
-    [ -n "$_pfx" ] || return 0
-    [ "$(prefix_entry_count "$_pfx")" = "1" ] || return 0
-    # ANCHORED, because `-F` is an unanchored FIXED-SUBSTRING search and that is not what the
-    # fallback means. The fallback's premise is that upstream cites the SHORT id; `-F --grep=PC-S302`
-    # instead matches any commit mentioning `PC-S302` as a substring, including one that names a
-    # DIFFERENT entry's full slug sharing the prefix, and including `PC-S3021`.
-    #
-    # Measured against this distribution's own history: the unanchored search matched 6 commits for
-    # PC-S302 and 6 for PC-S298, and the commit it attributed for each carries ZERO bare-prefix
-    # tokens -- it matched only through a longer slug. The anchored form matches 1 commit for each.
-    # So the old form did not narrow a wide answer; it produced a WRONG one, on both prefixes tested.
-    # This is the anchoring the consumer's own filing asked for and did not get.
-    #
-    # `-E` and `-F` are mutually exclusive in git, so this switches to ERE. The trailing class is a
-    # word boundary rather than `\b`, which BSD and GNU disagree about: the next character must not
-    # extend the id, so a digit, a letter or a dash all disqualify. The SLUG search above stays `-F`
-    # -- a full slug is already specific, and a fixed string is the right tool for it.
-    #
-    # THE BOUNDARY IS THE SHARED ID CLASS `[A-Za-z0-9_.-]` OF lib.sh `ledger_entry_id()`, not the
-    # narrower `[0-9A-Za-z-]` it was written with, which read `_` and `.` as boundaries: a commit
-    # mentioning only `<prefix>_X` or `<prefix>.3-X` -- a DIFFERENT, longer id -- was read as citing
-    # the bare prefix. ONE CARVE-OUT, MEASURED: a `.` that is followed by a non-id byte or the end
-    # of the line is SENTENCE PUNCTUATION, not part of an id. 8 commits on the distribution main
-    # (47d5fcae) cite a bare sprint prefix with a full stop after it and 0 with an id byte after the
-    # dot; making every `.` non-boundary would have silenced all 8. `[.]` rather than an escaped dot,
-    # so the same bytes mean the same thing in git ERE and in the awk string paired with it in
-    # `named_cited_filter` (an awk dynamic-regex string eats one backslash). Paired, byte for byte,
-    # with the copy in `named_ambiguous` and the awk copy; change all three or none.
-    _hits="$(git -C "$DIST" log -E --grep="${_pfx}([^0-9A-Za-z_.-]|[.]([^0-9A-Za-z_-]|\$)|\$)" --format=%h "$THEIRS" 2>/dev/null)"
-    _all="$_hits"
-    _hits="$(named_cited_filter "$_all" "" "$_pfx")"
-    _how=prefix
-  fi
   [ -n "$_all" ] || return 0
   # EVERY NAMING COMMIT CITES THE ID IN THE NOT-DISCHARGED FORM. Reported, with the full list, as
   # its own kind (`cited`), never as nothing: the citation is still a fact the operator may need --
   # it can record a rejection, a withdrawal or a split -- and dropping the row would delete it.
   if [ -z "$_hits" ]; then
     _n="$(printf '%s\n' "$_all" | grep -c . 2>/dev/null || true)"
-    printf '%s %s %s cited' "$_how" "${_n:-1}" "$(printf '%s\n' "$_all" | tr '\n' ',' | sed 's/,$//')"; return 0
+    printf '%s %s cited' "${_n:-1}" "$(printf '%s\n' "$_all" | tr '\n' ',' | sed 's/,$//')"; return 0
   fi
   _n="$(printf '%s\n' "$_hits" | grep -c . 2>/dev/null || true)"
   # Newest-first, which is `git log`'s own order and therefore the order the operator reads them
   # in. No end is privileged: the list is emitted whole and the caller elects nothing.
   #
-  # `tr`, NOT A SHELL LOOP OVER $_hits. Both queries above ask for `%h`, so the shas are already
+  # `tr`, NOT A SHELL LOOP OVER $_hits. The query above asks for `%h`, so the shas are already
   # abbreviated and joining them costs one fork instead of one PER NAMING COMMIT. The loop this
   # replaces also carried a latent trap: `for _h in $_hits` word-splits under bash and does NOT
   # under zsh, where it would iterate once over the whole newline-joined string, hand that to
   # `rev-parse`, and return an EMPTY list with no error.
   _list="$(printf '%s\n' "$_hits" | tr '\n' ',' | sed 's/,$//')"
-  printf '%s %s %s %s' "$_how" "${_n:-1}" "$_list" "$(named_reach "$_hits")"
+  printf '%s %s %s' "${_n:-1}" "$_list" "$(named_reach "$_hits")"
 }
 
 # named_reach <newline-separated shas> -> `code` when at least one of them changes a path under
@@ -1195,17 +1120,17 @@ named_sibling() {
   return 0
 }
 
-# The ambiguous half, reported rather than guessed. Upstream cites the sprint prefix, two or more
-# ledger entries carry it, and nothing in the commit says which -- so the operator reads the commit.
-named_ambiguous() { # <label> -> "<n-commits> <sha>,<sha>,... <n-entries> <code|docs>" when the prefix is shared
+# The bare-prefix half, reported rather than guessed. Upstream cites the sprint prefix, and nothing
+# in the commit says which entry it means -- so the operator reads the commit. Never attributed,
+# however many entries carry the prefix (see THE BARE PREFIX IS NEVER ATTRIBUTED above).
+named_ambiguous() { # <label> -> "<n-commits> <sha>,<sha>,... <n-entries> <code|docs>" when upstream cites the bare prefix
   local _id="$1" _pfx _n _c _hits
   case "$_id" in PC-*|BL-*) : ;; *) return 0 ;; esac
   # THE FORK-FREE GUARDS RUN FIRST, and that ordering is the whole cost of this function. All
   # four are pure predicates that return empty, so the order they are asked in cannot change the
   # answer -- only how many history walks are paid for an id that was never going to produce a
-  # row. The slug walk used to sit at the top, so an id carrying no `PC-S<n>-` prefix, or one
-  # whose prefix names a single entry, paid a full `git log` over THEIRS before a `sed` and a
-  # counter refused it.
+  # row. The slug walk used to sit at the top, so an id carrying no `PC-S<n>-` prefix paid a full
+  # `git log` over THEIRS before a `sed` refused it.
   #
   # AND THAT WALK IS THE ONE `named_absorbed` HAS ALREADY MADE. The only caller
   # (`[ -n "$na" ] || nam="$(named_ambiguous "$label")"`) reaches here exactly when
@@ -1220,17 +1145,25 @@ named_ambiguous() { # <label> -> "<n-commits> <sha>,<sha>,... <n-entries> <code|
       case "${_pfx#S}" in ""|*[!0-9]*) _pfx="" ;; *) _pfx="PC-$_pfx" ;; esac ;;
   esac
   [ -n "$_pfx" ] || return 0
-  # THE SHARED ID RULE, after the fork-free refusals and before `prefix_entry_count`, which forks.
+  # THE SHARED ID RULE, after the fork-free refusals and before the entry count, which forks.
   # Its own guard, not inherited from `named_absorbed`: this function receives the same label that
   # one just refused, and a prefix-shaped prose label would otherwise reach the prefix walk here.
   label_is_own_entry_id "$_id" || return 0
-  _n="$(prefix_entry_count "$_pfx")"
-  [ "$_n" -gt 1 ] 2>/dev/null || return 0
+  # THE ENTRY COUNT IS OVER THE OPEN LIVE ENTRIES THE VERDICT LOOP READS (`$LR_STAGE/entries`), one
+  # per distinct label, and it gates NOTHING. It used to be a corpus count over the live ledger AND
+  # the rotation archive, and a count of 1 handed the row to `named_absorbed` as an attribution;
+  # deleting the archive then turned this row into that one. Nothing attributes a bare prefix now,
+  # so this row is emitted for one carrier as for many, and the number is only the detail's "N
+  # entries in this ledger carry it" (ledger-rotate's fixture parses that phrase). Open live
+  # entries are invariant under the annotate-then-rotate step and blind to the archive by
+  # construction, so neither moves the row or its bytes.
+  _n="$(LR_P="$_pfx-" LC_ALL=C awk -F'\t' 'index($1, ENVIRON["LR_P"]) == 1 && !s[$1]++ { n++ } END { print n + 0 }' "$LR_STAGE/entries" 2>/dev/null)" || return 0
+  case "$_n" in ''|*[!0-9]*) return 0 ;; esac
   # READ INTO A VARIABLE, THEN TEST. `| grep -q .` leaves at its first match while git log is
   # still writing, so under `pipefail` the pipeline answers with the WRITER's EPIPE and this
   # reports "upstream does not name the slug" on a slug it DOES name (I54/I54b). The whole
-  # function then falls through to the prefix arm and mis-reports an unambiguous hit as
-  # ambiguous -- a wrong row rather than a missing one.
+  # function then falls through to the prefix walk and mis-reports a slug hit as a bare-prefix
+  # citation -- a wrong row rather than a missing one.
   local _slug_hit
   _slug_hit="$(git -C "$DIST" log -F --grep="$_id" --format=%H "$THEIRS" 2>/dev/null)"
   # THE SAME CITED-ONLY FILTER as `named_absorbed`, so the two cannot disagree about which commits
@@ -1238,11 +1171,28 @@ named_ambiguous() { # <label> -> "<n-commits> <sha>,<sha>,... <n-entries> <code|
   # nothing at all -- a form-only slug returned a CITED-ONLY answer there and never arrives here.
   _slug_hit="$(named_cited_filter "$_slug_hit" "$_id" "")"
   [ -z "$_slug_hit" ] || return 0
-  # ANCHORED, for the same reason as the sibling call in `named_absorbed`: `-F` is an unanchored
-  # fixed-substring search, so it claims a commit that mentions the prefix only inside a DIFFERENT
-  # entry's longer slug. Both arms ask the same question -- "does upstream cite this SHORT id" --
-  # and fixing one would leave the other reporting the same wrong commit, here as the sha an
-  # operator is told to go and read.
+  # ANCHORED, because `-F` is an unanchored FIXED-SUBSTRING search and that is not what this walk
+  # means. Its premise is that upstream cites the SHORT id; `-F --grep=PC-S302` instead matches any
+  # commit mentioning `PC-S302` as a substring, including one that names a DIFFERENT entry's full
+  # slug sharing the prefix, and including `PC-S3021` -- here as the sha an operator is told to go
+  # and read. Measured against this distribution's own history: the unanchored search matched 6
+  # commits for PC-S302 and 6 for PC-S298, and the commit it named for each carries ZERO
+  # bare-prefix tokens -- it matched only through a longer slug. The anchored form matches 1 each.
+  #
+  # `-E` and `-F` are mutually exclusive in git, so this is ERE. The trailing class is a word
+  # boundary rather than `\b`, which BSD and GNU disagree about: the next character must not extend
+  # the id. The SLUG searches stay `-F` -- a full slug is already specific.
+  #
+  # THE BOUNDARY IS THE SHARED ID CLASS `[A-Za-z0-9_.-]` OF lib.sh `ledger_entry_id()`, not the
+  # narrower `[0-9A-Za-z-]` it was written with, which read `_` and `.` as boundaries: a commit
+  # mentioning only `<prefix>_X` or `<prefix>.3-X` -- a DIFFERENT, longer id -- was read as citing
+  # the bare prefix. ONE CARVE-OUT, MEASURED: a `.` that is followed by a non-id byte or the end
+  # of the line is SENTENCE PUNCTUATION, not part of an id. 8 commits on the distribution main
+  # (47d5fcae) cite a bare sprint prefix with a full stop after it and 0 with an id byte after the
+  # dot; making every `.` non-boundary would have silenced all 8. `[.]` rather than an escaped dot,
+  # so the same bytes mean the same thing in git ERE and in the awk string paired with it in
+  # `named_cited_filter` (an awk dynamic-regex string eats one backslash). Paired, byte for byte,
+  # with that awk copy; change both or neither.
   # NO VERSION HERE EITHER, for the same reason as the sibling: the commit this names MENTIONS a
   # sprint prefix, and a version read off a mention is a claim about the wrong event. The row
   # already tells the operator to go and read the commit; that is what it can honestly say.
@@ -1254,7 +1204,6 @@ named_ambiguous() { # <label> -> "<n-commits> <sha>,<sha>,... <n-entries> <code|
   # sibling now: the commit count, then the whole newest-first list, `%h` so no per-sha
   # `rev-parse --short` is paid, then the entry count the row's "and N entries in this ledger carry
   # it" is built from (ledger-rotate's fixture parses that phrase), then the reach.
-  # THE SAME BOUNDARY as the prefix arm of `named_absorbed`, byte for byte -- see its comment.
   _hits="$(git -C "$DIST" log -E --grep="${_pfx}([^0-9A-Za-z_.-]|[.]([^0-9A-Za-z_-]|\$)|\$)" --format=%h "$THEIRS" 2>/dev/null)"
   # A prefix cited ONLY in the not-discharged form is SILENT here, not a row: this row attributes
   # nothing to any entry already, and a citation that disowns the discharge adds nothing to read.
@@ -2260,37 +2209,7 @@ LR_DIST_ONLY="$(git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "$
 # closing `**` there. That is complete and greppable and visibly not an id, which is the honest
 # output for a malformed entry. Narrowing the bullet predicate to "closing ** on this line" would
 # instead DROP such an entry, and the reference consumer has a live one.
-# THE CORPUS LABELS, for the prefix-uniqueness test only -- never for verdicts. Every entry line in
-# a ledger file, open or closed, by the same boundary rule and the same em-dash label truncation as
-# the verdict extraction below -- two parsers of the entry shape would be free to disagree about
-# which entries exist, which is the exact defect that extraction's own header warns about. A
-# closed entry emits no row; it is counted so that annotating or archiving a sibling cannot make an
-# ambiguous prefix look unique (see `prefix_entry_count`).
-#
-# A RETAINED COPY IS NOT AN ENTRY. When a withdrawn entry is superseded, its original text is kept
-# under a heading carrying `(original text, retained for the record)` -- a second heading for one
-# entry. Counted, it inflates "N entries in this ledger carry it" by one for a candidate that is
-# already counted under its own heading; measured on the reference consumer, one such copy took
-# PC-S300 from 10 to 11. The count answers how many ENTRIES carry the prefix, so the copy is skipped.
-corpus_labels() { # <ledger-file> -> one label per entry line
-  LC_ALL=C awk -v DASH=' — ' "$(ledger_entry_awk)"'
-    {
-      if (ledger_entry_shape($0) == "") next
-      if ($0 ~ /\(original text, retained for the record\)/) next
-      l=$0
-      sub(/^#+[ \t]*/, "", l); sub(/^(- )?\*\*/, "", l); sub(/\*\*.*/, "", l)
-      p=index(l, DASH); if (p > 0) l=substr(l, 1, p-1)
-      sub(/[[:space:]]+$/, "", l); gsub(/`/, "", l)
-      if (l != "") print l
-    }
-  ' "$1"
-}
-LIVE_LABELS="$(corpus_labels "$LEDGER")"
 ARCHIVE_PATH="$(dirname "$LEDGER")/push-candidate-ledger.archive.md"
-ARCHIVE_LABELS=""
-if [ -r "$ARCHIVE_PATH" ]; then
-  ARCHIVE_LABELS="$(corpus_labels "$ARCHIVE_PATH")"
-fi
 
 # ONE EXTRACTION, TWO CALLERS. The verdict loop reads it with KEEP=0 over the live ledger, which is
 # what it always read. `named_sibling` reads it with KEEP=1 over the live ledger AND the archive,
@@ -2572,10 +2491,9 @@ while IFS="$(printf '\t')" read -r label ord directive; do
   na=""; nam=""
   case "$ord" in 1/*|0/0|"") na="$(named_absorbed "$label")"; [ -n "$na" ] || nam="$(named_ambiguous "$label")" ;; esac
   if [ -n "$na" ]; then
-    na_h="$(printf '%s' "$na" | awk '{print $1}')"
-    na_n="$(printf '%s' "$na" | awk '{print $2}')"
-    na_c="$(printf '%s' "$na" | awk '{print $3}')"
-    na_r="$(printf '%s' "$na" | awk '{print $4}')"
+    na_n="$(printf '%s' "$na" | awk '{print $1}')"
+    na_c="$(printf '%s' "$na" | awk '{print $2}')"
+    na_r="$(printf '%s' "$na" | awk '{print $3}')"
     if [ "${na_n:-1}" -gt 1 ] 2>/dev/null; then
       # ALL OF THEM, newest first, none elected. Naming two ends told the operator to read two
       # commits and hid the rest; on the measured corpus the absorbing commit is usually neither.
@@ -2583,17 +2501,13 @@ while IFS="$(printf '\t')" read -r label ord directive; do
     else
       na_where="in one commit, $na_c"
     fi
-    case "$na_h" in
-      prefix) na_note=" Matched on the SHORT id \`$(printf '%s' "$label" | sed -n 's/^\(PC-S[0-9][0-9]*\)-.*/\1/p')\`, which is the form upstream writes, and that prefix names exactly ONE entry in this ledger -- so the attribution is unambiguous. The full-slug search found nothing, which is normal and is not evidence of anything." ;;
-      *)      na_note="" ;;
-    esac
     if [ "$na_r" = cited ]; then
       # EVERY NAMING COMMIT CITES THE ID ONLY ON A CANONICAL `Not-discharged:` LINE. Decided before
       # the reach split because it is a property of the naming set, not of the receipt or of what the
       # commits touched: a release that changes core/ and disowns the discharge is exactly the
       # third class `named_reach` cannot see. The row is kept, with every sha.
       NA_ENTRY_KIND=NAMED-UPSTREAM-CITED-ONLY
-      emit NAMED-UPSTREAM-CITED-ONLY "$label" "upstream's own history NAMES this entry's id ${na_where}, and EVERY one of those commits names it ONLY on a \`Not-discharged:\` line -- the form a distribution release uses to cite an entry it did NOT discharge. This row is NOT an absorption claim.${na_note} Read the commit(s): the citation may record a rejection, a withdrawal or a split, which IS something to act on. Then read the entry's own subject at theirs, because a fix that never names the id is invisible to this search. Annotate only what that reading establishes, and otherwise leave the entry open."
+      emit NAMED-UPSTREAM-CITED-ONLY "$label" "upstream's own history NAMES this entry's id ${na_where}, and EVERY one of those commits names it ONLY on a \`Not-discharged:\` line -- the form a distribution release uses to cite an entry it did NOT discharge. This row is NOT an absorption claim. Read the commit(s): the citation may record a rejection, a withdrawal or a split, which IS something to act on. Then read the entry's own subject at theirs, because a fix that never names the id is invisible to this search. Annotate only what that reading establishes, and otherwise leave the entry open."
     elif [ "$na_r" = docs ]; then
       # A NAMING SET THAT CHANGES NOTHING A CONSUMER INSTALLS AND CUTS NO RELEASE. See `named_reach`
       # for the predicate and what it does not decide. The row is kept, with every sha, and its kind
@@ -2602,7 +2516,7 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       # It does NOT say the entry is unabsorbed -- a fix that never names the id is invisible to the
       # message search -- so the text sends the operator to the subject, never forbids a close.
       NA_ENTRY_KIND=NAMED-UPSTREAM-DOCS-ONLY
-      emit NAMED-UPSTREAM-DOCS-ONLY "$label" "upstream's own history NAMES this entry's id ${na_where}, and NONE of those commits changes a path a consumer installs under core/ or templates/ (a path inside a distribution-only fixture, one carrying a .dist-only marker at theirs, is not installed and does not count) -- and none of them cuts a release (changes VERSION). A plan, a review or a ledger drain mentioning the id matches the same way a fix does, so this row is not evidence of an absorption.${na_note} It is NOT a close on its own. The fix can still have landed in a commit that does not name the id: read the commit(s) -- one may record a withdrawal or a split, which IS something to act on -- then read the entry's own subject at theirs. Annotate only what that reading establishes, and otherwise leave the entry open."
+      emit NAMED-UPSTREAM-DOCS-ONLY "$label" "upstream's own history NAMES this entry's id ${na_where}, and NONE of those commits changes a path a consumer installs under core/ or templates/ (a path inside a distribution-only fixture, one carrying a .dist-only marker at theirs, is not installed and does not count) -- and none of them cuts a release (changes VERSION). A plan, a review or a ledger drain mentioning the id matches the same way a fix does, so this row is not evidence of an absorption. It is NOT a close on its own. The fix can still have landed in a commit that does not name the id: read the commit(s) -- one may record a withdrawal or a split, which IS something to act on -- then read the entry's own subject at theirs. Annotate only what that reading establishes, and otherwise leave the entry open."
     elif named_subject "$label" "$na_c" && [ "$NS_STATE" = off ]; then
       # THE NAMING SET REACHES CODE AND CHANGES NONE OF THIS ENTRY'S RECEIPT PATHS, a release
       # evaluated over its whole span. Decided after `cited` and `docs`, which keep precedence, and
@@ -2610,27 +2524,27 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       # It is not "not absorbed": a fix can land on a path the receipt does not name, and the id
       # may have been dispositioned by an EARLIER release, the naming here being a later mention.
       NA_ENTRY_KIND=NAMED-UPSTREAM-OFF-SUBJECT
-      emit NAMED-UPSTREAM-OFF-SUBJECT "$label" "upstream's own history NAMES this entry's id ${na_where}, and those commits change a path a consumer installs under core/ or templates/, or cut a release (change VERSION) -- but NONE of them changes this entry's own receipt path(s): ${NS_PATHS} (a naming commit that cuts a release is judged over its whole release span, back to the previous VERSION change).${na_note} A release that cross-references an entry, or records that some other route discharged it, matches the message search the same way a fix does, so this row is NOT evidence of an absorption -- and it is not evidence against one either: the id may already have been dispositioned by an earlier release and this naming be a later mention, or the fix may have landed on a path the receipt does not name. It is NOT a close on its own. Read the commit(s), then read the entry's subject (${NS_PATHS}) at theirs. Annotate only what that reading establishes, with the release that contains the change, and otherwise leave the entry open."
+      emit NAMED-UPSTREAM-OFF-SUBJECT "$label" "upstream's own history NAMES this entry's id ${na_where}, and those commits change a path a consumer installs under core/ or templates/, or cut a release (change VERSION) -- but NONE of them changes this entry's own receipt path(s): ${NS_PATHS} (a naming commit that cuts a release is judged over its whole release span, back to the previous VERSION change). A release that cross-references an entry, or records that some other route discharged it, matches the message search the same way a fix does, so this row is NOT evidence of an absorption -- and it is not evidence against one either: the id may already have been dispositioned by an earlier release and this naming be a later mention, or the fix may have landed on a path the receipt does not name. It is NOT a close on its own. Read the commit(s), then read the entry's subject (${NS_PATHS}) at theirs. Annotate only what that reading establishes, with the release that contains the change, and otherwise leave the entry open."
     elif [ "$NS_STATE" = touched ] && named_sibling "$label" "$na_c" && [ "$NSB_STATE" = attributed ]; then
       # A NAMING COMMIT CHANGED THIS ENTRY'S RECEIPT FILE ONLY WHERE A SIBLING'S ANCHOR SITS. Reached
       # only from `touched` (the branch above called `named_subject` for this row, so NS_STATE is
       # this row's). See `named_sibling`. The row keeps every sha and is never a close.
       NA_ENTRY_KIND=NAMED-UPSTREAM-SIBLING-ATTRIBUTED
-      emit NAMED-UPSTREAM-SIBLING-ATTRIBUTED "$label" "upstream's own history NAMES this entry's id ${na_where}, and a naming commit changes this entry's receipt file (${NS_PATHS}) -- but on every changed block of that file NONE of this entry's own receipt substrings is on a changed line, while a sibling entry the same commit names in full has its receipt substring there: ${NSB_SIBS} (a naming commit that cuts a release is judged over its whole release span, back to the previous VERSION change; every naming commit is judged, not only the first).${na_note} A release that fixes one entry and cross-references another on the same file matches the message search for both, so this row is NOT evidence that THIS entry was absorbed -- and it is not evidence against it either: a fix can leave a stale anchor untouched. It is NOT a close on its own. Read the commit(s) and the sibling's entry, then read this entry's subject (${NS_PATHS}) at theirs. Annotate only what that reading establishes, with the release that contains the change, and otherwise leave the entry open."
+      emit NAMED-UPSTREAM-SIBLING-ATTRIBUTED "$label" "upstream's own history NAMES this entry's id ${na_where}, and a naming commit changes this entry's receipt file (${NS_PATHS}) -- but on every changed block of that file NONE of this entry's own receipt substrings is on a changed line, while a sibling entry the same commit names in full has its receipt substring there: ${NSB_SIBS} (a naming commit that cuts a release is judged over its whole release span, back to the previous VERSION change; every naming commit is judged, not only the first). A release that fixes one entry and cross-references another on the same file matches the message search for both, so this row is NOT evidence that THIS entry was absorbed -- and it is not evidence against it either: a fix can leave a stale anchor untouched. It is NOT a close on its own. Read the commit(s) and the sibling's entry, then read this entry's subject (${NS_PATHS}) at theirs. Annotate only what that reading establishes, with the release that contains the change, and otherwise leave the entry open."
     elif [ "$ord" = "0/0" ]; then
       # RECEIPT-LESS: there is no receipt to be blind to it and none to re-anchor, so the receipt
       # clauses of the sibling detail would be false here. The close is the annotation alone.
-      emit NAMED-UPSTREAM "$label" "upstream's own history NAMES this entry's id ${na_where}. This entry carries NO verify: receipt, so this row is the only mechanical signal it will ever get.${na_note} THIS ROW CARRIES NO VERSION, DELIBERATELY: naming is not absorbing. A commit naming an id to record a rejection, a split, a plan or a ledger drain is indistinguishable here from one that landed the fix, and a version read off the wrong commit goes into a permanent annotation. Read the commit(s) and decide whether the entry was ABSORBED; if it was, establish WHICH RELEASE contains the absorbing commit and close the entry BY ANNOTATION with THAT version -- **bolded, version immediately after the parenthesis** -- \`**ADOPTED UPSTREAM (v<version>, verified <date>)**\`. Do NOT delete the entry. Until it is annotated this row re-appears on every pull. THE FORM MATTERS: any occurrence of the phrase makes ledger-reverify SKIP this entry from here on, but only that exact form lets ledger-rotate.sh archive it, and an entry that is skipped without being archivable is invisible in every future report and never filed."
+      emit NAMED-UPSTREAM "$label" "upstream's own history NAMES this entry's id ${na_where}. This entry carries NO verify: receipt, so this row is the only mechanical signal it will ever get. THIS ROW CARRIES NO VERSION, DELIBERATELY: naming is not absorbing. A commit naming an id to record a rejection, a split, a plan or a ledger drain is indistinguishable here from one that landed the fix, and a version read off the wrong commit goes into a permanent annotation. Read the commit(s) and decide whether the entry was ABSORBED; if it was, establish WHICH RELEASE contains the absorbing commit and close the entry BY ANNOTATION with THAT version -- **bolded, version immediately after the parenthesis** -- \`**ADOPTED UPSTREAM (v<version>, verified <date>)**\`. Do NOT delete the entry. Until it is annotated this row re-appears on every pull. THE FORM MATTERS: any occurrence of the phrase makes ledger-reverify SKIP this entry from here on, but only that exact form lets ledger-rotate.sh archive it, and an entry that is skipped without being archivable is invisible in every future report and never filed."
     else
     # THE ONLY KIND WHOSE SHAS A LATER CLOSE DETAIL MAY HAND OVER AS CANDIDATE ABSORBING COMMITS.
     # CITED-ONLY, DOCS-ONLY, OFF-SUBJECT and SIBLING-ATTRIBUTED each state in their own detail that
     # they are NOT evidence of an absorption, so offering their shas as "the absorbing one" would
     # contradict the row beside it -- measured by an adversary probe: a CITED-ONLY row and a close
     # detail calling its `Not-discharged:` commit the absorbing one, in one run. Those kinds record
-    # only their name; AMBIGUOUS names a prefix shared by several entries, never this one, and
+    # only their name; AMBIGUOUS names a bare prefix, never this entry, and
     # records nothing.
     NA_ENTRY_SHAS="$na_c"
-    emit NAMED-UPSTREAM "$label" "upstream's own history NAMES this entry's id ${na_where}, which no receipt in this entry can see.${na_note} THIS ROW CARRIES NO VERSION, DELIBERATELY: naming is not absorbing. A commit naming an id to record a rejection, a split, a plan or a ledger drain is indistinguishable here from one that landed the fix, and a version read off the wrong commit goes into a permanent annotation. Read the commit(s) and decide whether the entry was ABSORBED; if it was, establish WHICH RELEASE contains the absorbing commit and annotate with THAT version -- **bolded, version immediately after the parenthesis** -- \`**ADOPTED UPSTREAM (v<version>, verified <date>)**\`, then re-anchor or drop the stale receipt. Do NOT delete the entry. THE FORM MATTERS: any occurrence of the phrase makes ledger-reverify SKIP this entry from here on, but only that exact form lets ledger-rotate.sh archive it, and an entry that is skipped without being archivable is invisible in every future report and never filed."
+    emit NAMED-UPSTREAM "$label" "upstream's own history NAMES this entry's id ${na_where}, which no receipt in this entry can see. THIS ROW CARRIES NO VERSION, DELIBERATELY: naming is not absorbing. A commit naming an id to record a rejection, a split, a plan or a ledger drain is indistinguishable here from one that landed the fix, and a version read off the wrong commit goes into a permanent annotation. Read the commit(s) and decide whether the entry was ABSORBED; if it was, establish WHICH RELEASE contains the absorbing commit and annotate with THAT version -- **bolded, version immediately after the parenthesis** -- \`**ADOPTED UPSTREAM (v<version>, verified <date>)**\`, then re-anchor or drop the stale receipt. Do NOT delete the entry. THE FORM MATTERS: any occurrence of the phrase makes ledger-reverify SKIP this entry from here on, but only that exact form lets ledger-rotate.sh archive it, and an entry that is skipped without being archivable is invisible in every future report and never filed."
     fi
   elif [ -n "$nam" ]; then
     nam_k="$(printf '%s' "$nam" | awk '{print $1}')"
@@ -2642,7 +2556,7 @@ while IFS="$(printf '\t')" read -r label ord directive; do
     # the operator reads first, not what they may do.
     #
     # THE SUBJECT PREDICATE (`named_subject`) IS NOT FOLDED IN, EVEN INTO THE DETAIL. This row is
-    # emitted ONCE PER PREFIX and stands for two or more entries whose receipts name different
+    # emitted ONCE PER PREFIX and stands for every entry carrying it, whose receipts name different
     # paths, so there is no single subject set to test the citing commits against; any union or
     # pick would be a claim about entries the row deliberately does not attribute.
     if [ "${nam_k:-1}" -gt 1 ] 2>/dev/null; then
@@ -2664,7 +2578,7 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       *"|$nam_p|"*) : ;;
       *)
         NAM_SEEN="${NAM_SEEN:-|}$nam_p|"
-        emit NAMED-UPSTREAM-AMBIGUOUS "$nam_p" "upstream's history cites this SPRINT prefix in $nam_where, and $nam_n entries in this ledger carry it. No version, for the sibling row's reason: a commit MENTIONS the prefix, and a version read off a mention is a claim about the wrong event. NOT attributed to any of them, deliberately: naming all $nam_n would tell you to close entries upstream never touched, which is worse than the silence it replaces. Read $nam_c and decide per entry. The full-slug search found nothing for them, which is normal -- upstream cites the short id, not the slug."
+        emit NAMED-UPSTREAM-AMBIGUOUS "$nam_p" "upstream's history cites this SPRINT prefix in $nam_where, and $nam_n entries in this ledger carry it (open entries in the live ledger only). No version, for the sibling row's reason: a commit MENTIONS the prefix, and a version read off a mention is a claim about the wrong event. NOT attributed to any entry, deliberately and whatever that count is: a bare prefix does not say which entry it means -- the sprint may have filed others since closed or rotated -- and naming an entry would tell you to close one upstream may never have touched, which is worse than the silence it replaces. Read $nam_c and decide per entry. The full-slug search found nothing for any open entry carrying this prefix, which is normal -- upstream cites the short id, not the slug."
         ;;
     esac
   fi
