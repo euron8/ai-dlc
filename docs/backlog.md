@@ -131,6 +131,8 @@ record or snapshot under the sprint slot is either denied or recorded.
 
 **Fourth instance, the lead again, on 19 more shards (graph s319 requirements elicitation, 00:58–00:59Z on 2026-10-16).** The lead wrote each elicitation shard's `tool_use_id` with a `python3 -I` heredoc carrying an `ids={...}` map read from its own transcript, then with `sed -i '' 's/^tool_use_id: PEN…'` per shard (cross-1, 8, 4). The brief told every shard to leave the field `PENDING-LEAD`. The step therefore DEPENDS on the lead hand-patching the one field `adversary.md:77` calls the evidence of independence, through a channel with no ledger row, for every sharded round. BL-536 (derived dispatch id) is the fix that removes it. This instance shows it recurs on every round until that lands.
 
+**Fifth instance, all 19 adversarial shards (graph s319 resumed lead `f65eae3b`, requirements-adversarial-p1, 02:42Z on 2026-10-16).** Filed by peer session ai-dlc-68. Every adversary wrote `tool_use_id: PENDING-LEAD`, and the lead patched all 19 with in-place `python3` `open(p,'w')` rewrites, 11 at 02:42:37Z and then one per notification. `PENDING-LEAD` occurs 0 times in graph's installed `_gate-procedures.md`, `adversary.md` and `merge-adversarial-shards.sh` (control: `tool_use_id` = 2 in `adversary.md`), so the placeholder the brief tells the shard to write is named in none of those installed files. Each patch is a Bash write to a gate input that no write ledger sees. Shard 8's chained `.replace` came out right (`toolu_01TkJ3V9RMQd4QVVrjepzAFb`), but nothing checked it.
+
 verify: manual
 
 ## BL-531 — a message typed in another session of the same project raises the lead's pause flag
@@ -251,6 +253,8 @@ verify: manual
 
 **DEFECT.** In s319 at 22:52Z the lead counted completed party seats with its own last-line check, got a low count, and spent a second round trip finding that several files end in a trailing blank line, which `wait-for-deliverable.sh --complete` already skips. Its words: "my last-line check may be tripping on a trailing blank line." The program that answers this correctly exists, but its answer is only available as a beat that sleeps. Owed: `wait-for-deliverable.sh --complete --status <paths>` (or a sibling) prints, without sleeping, the same DELIVERED/UNFINISHED/UNSETTLED per path, so a progress check uses the shipped predicate rather than a hand-rolled one.
 
+**Second instance, a hand loop that skipped absent files (graph s319 resumed lead `f65eae3b`, requirements-adversarial-p1, 02:42–02:43Z on 2026-10-16).** Filed by peer session ai-dlc-68. At 02:42:49Z the lead wrote "Of 19 shards, 16 have a closing seat-complete line". At 02:43:33Z it corrected itself: shards 11, 13, cross-1 and cross-3 had no file at all, and its loop had skipped absent paths. With the beats unable to report DELIVERED (BL-566), this hand check was the lead's only completion signal.
+
 verify: manual
 
 ## BL-548 — a seat edits its own file after writing `seat-complete:`, against its contract, and nothing records that the findings changed
@@ -270,6 +274,8 @@ verify: manual
 ## BL-550 — party seats grep for files that do not exist, because nothing gives them the repository's real paths
 
 **DEFECT (efficiency).** Across 134 s319 party and elicitation seat transcripts there are 105 "No such file or directory" lines. Seats guessed paths such as `rebalancer/db.py`, `rebalancer/state_store.py`, `server/main.py`, `rebalancer/config_schema.py`, `infra/lib/ecs-stack.ts` and `rebalancer/execution_log.py`, none of which exist and none of which the subject files cite (`grep -l -F` over the PRD, SPEC, brief and `architecture-impact.md` returns 0 for each, against 3 for the control `rebalancer/execution.py`). Each miss is a tool round trip and a guess that can be filled in with an invented answer. Owed: the seat brief carries the subject's cited code paths (derivable from the subject files) and an instruction to resolve any other path with `git ls-files` before reading it.
+
+**Second instance, the adversarial round (graph s319 resumed lead `f65eae3b`, requirements-adversarial-p1, 2026-10-16).** Filed by peer session ai-dlc-68. Seven parts (1, 2, 6, 8, 13, cross-3 and cross-6) made 13 greps for nonexistent paths: `dashboard/`, `extensions/`, `shared/`, `shared/tokens.py`, `aggregator/`, `rebalancer/config_schema.py`, `rebalancer/config.example.json`, `rebalancer/tests/test_s318_subscribe_pin.py`, `test_s245_subscribe_pin.py`, `web/src/pages/Dashboard.jsx|tsx` and `web/src/hooks`. Three more greps died on `ugrep` limits: "exceeds complexity limits" on `.{0,80}` and `[^.]{0,140}` (parts 12 and cross-6), and "empty (sub)expression" on `\b` inside an alternation (cross-5). The brief owed above should also state a pattern form that `ugrep` accepts.
 
 verify: manual
 
@@ -296,6 +302,8 @@ verify: manual
 ## BL-554 — the adversary's `.draft` sibling is written into the shard directory the merge reads, and the merge refuses it
 
 **DEFECT.** `core/team-roles/adversary.md:286-291` tells an adversary whose deliverable names no completion signal to "chunk to the sibling draft path `<result>.draft` … delete nothing". Shards that do name one (`seat-complete:`) also wrote drafts. In graph s319 requirements elicitation, three shards left `10.md.draft`, `3.md.draft` and `cross-4.md.draft` beside their deliverables in `s319/shards/requirements-elicitation/`. `merge-adversarial-shards.sh:395-401` refuses any file that is not `<ordinal>.md`, `cross.md` or `cross-<g>.md` ("is not a shard name"). The lead hit the refusal at 00:59:45Z and moved the drafts out by hand, which took two merge attempts. The role contract and the merge disagree on what may sit in the directory. Owed: either the draft path lies outside the shard directory (for example `<dir>/.drafts/<name>`), or the merge ignores `*.md.draft` and refuses only an unrecognised `.md`. A probe puts a draft beside a complete shard and asserts the merge's verdict.
+
+**Second instance, drafts written to dodge a deny (graph s319 resumed lead `f65eae3b`, requirements-adversarial-p1, 02:31–02:40Z on 2026-10-16).** Filed by peer session ai-dlc-68. Adversaries 2 and 9 wrote `2.md.draft` (02:31:44Z) and `9.md.draft` (02:31:59Z) to get past the advisor gate's deny of their first shard write (BL-567), and the lead hand-moved the `*.draft` files to its scratchpad at 02:40:02Z, before the merge.
 
 verify: manual
 
@@ -358,6 +366,8 @@ verify: manual
 
 Owed: a PreToolUse deny on `git push … --no-verify` from the pipeline lead, or at least an explicit prohibition beside the prescribed command. Probe: the hook denies `git push -u origin HEAD --no-verify` and allows the bare prescribed form.
 
+**Second instance, a different model (graph s319 handoff, lead `f65eae3b`, 03:05:42Z on 2026-10-16).** Filed by peer session ai-dlc-68. The lead (Sonnet 5.5) ran `git push --no-verify -u origin HEAD` at handoff step 3, justified as "The commit is bookkeeping-only, with all 38 paths under `_bmad-output/`", which is the same reasoning as `62eadbbe` (qwen) and contradicts `handoff.md:58-70` ("the whole command"). It ran after the Rule 32 advisor call at 03:05:30Z, and neither the advisor nor any hook stopped it. Two leads on two models took the same step the same way, so this is a pipeline affordance, not a model quirk.
+
 verify: manual
 
 ## BL-563 — the ai-dlc-update post-write gates passed on an exit code nobody observed
@@ -369,6 +379,8 @@ Two halves. (a) The skill names exit-code gates but gives no capture form. It sh
 This stands whatever shell runs, because the lead piped the gate itself; the Bash tool's shell being zsh on this box is a separate matter the operator is handling (llm-gateway commit `263e8af`, branch `config/claude-code-shell`, unmerged). A bootstrapping caveat applies: the update skill is the program that delivers its own repair, so a fix lands on the pull after the one that carries it.
 
 Owed: a probe gate that prints a clean last line and exits non-zero; the prescribed form must report it as failed.
+
+**Second instance, the next pull (graph update session `38c562c5`, `/ai-dlc-update apply` 0.790.0 → 0.791.0, 2026-10-16).** Filed by peer session ai-dlc-68. At 04:32:21Z the session ran `setup-site-drift.sh … 2>&1 | tail -5; echo "ssd_rc=${pipestatus[1]}"`, and at 04:32:22Z `validate-hook-registration.sh 2>&1 | tail -3; echo "hook_rc=${pipestatus[1]}"`, which printed `hook_rc=` empty, the same zsh `pipestatus` failure. This time it was observed: at 04:32:27Z the session re-ran both unpiped (`>/dev/null 2>&1; echo ssd_rc=$?`) and got 0 and 0 before proceeding, at the cost of running each gate twice. The skill still prescribes no capture form. The rest of the apply was clean: `apply.sh`, `--finish`, the derivation differential and `report --verify` all captured `rc=$?` directly, commit `463765a5f` staged only pull paths, and the push ran without `--no-verify`.
 
 verify: manual
 
@@ -389,6 +401,100 @@ verify: manual
 Owed: let an escalated serial entry carry `supersedes:`/`closes:` for the part escalation it restates and have the join dedupe on it, or have the lead's answer fold write closes for every escalation in the chain. Probe: a record whose serial escalated entry restates a part escalation reports ESCALATED-COUNT 1, not 2; after a repaired entry closes the serial entry, 0.
 
 **The fold did not close the chain (02:30Z).** The fold record `s319/requirements-operator-answers-fold.md` landed at 02:30:00Z. It carries 3 `disposition` lines and **0 `closes:` lines**, and the lead's `join-remediator-shards.sh --escalations` on it printed `ESCALATED-COUNT: 0 (0 closed …)`, which describes the new record only. The operator's three answers therefore close nothing in `requirements-elicitation-repair.md`: all nine of S-21, S-22, S-23, 07.md F-1, 08.md F-1, 09.md F-1, 04.md F-8, S-8 and S-17 still read as open to the join, and the lead dispatched the adversarial series at 02:31:27Z without re-running `--escalations` on the elicitation record. The fold also returned five open questions to the lead (Q20, whether S3 NOT_READY blocks or not; the S-23 gloss "does not fail closed" versus the operator's words; the S-21 scope "items 1-4" applied as FR-S319-1..9 and 13; "before any sweep" being the lead's option wording; and a stale pointer pending.md:5224), and the lead adjudicated none of them before the dispatch.
+
+verify: manual
+
+## BL-566 — one beat exiting deletes `.beat-inflight` for every other live beat, and concurrent beats reset each other's per-path state
+
+**DEFECT.** Filed by peer session ai-dlc-68 from graph's s319 resumed lead (session `f65eae3b`, round `requirements-adversarial-p1`, 19 adversaries dispatched 02:31:33–02:32:12Z on 2026-10-16). graph's installed `wait-for-deliverable.sh:967` uses one shared `BEAT_MARKER`, and `:970` sets an unconditional EXIT trap that removes it. Two beats were live: `bxo15gjt1`, a stale beat on the fold armed at 02:27:39Z and never TaskStopped after the fold delivered at 02:30:30Z, and `by8hw963y`, the 19-shard join armed at 02:32:16Z. `bxo15gjt1` exited at 02:37:31Z; the Stop hook fired at 02:37:36Z; `cat .beat-inflight` exited 1 at 02:37:41Z; and the lead armed a duplicate join at 02:37:47Z. One beat's exit removed the lease for the beat still running, so the hook read no live beat. This is the same mechanism as BL-549, and the two are fixed together.
+
+**Concurrent beats also interfere through shared per-path state (02:40–02:51Z).** Beats `by8hw963y` (02:32:16Z, 19 paths), `bxb1k8u08` (02:37:47Z, 14 paths) and a third at 02:42:17Z (7 paths) waited over overlapping paths. At 02:42:10Z `by8hw963y` printed "0 delivered, 19 still out", listing `5.md` as WAITING although its last line was already `seat-complete: requirements adversary 5/13` (the agent returned at 02:34:23Z; the same held for 4, 6, 10 and 12). At 02:47:45Z `bxb1k8u08` printed "1 delivered, 13 still out" when 16 were closed. All beats share `COUNTER_DIR="${STATE_DIR}/.wait-beats"` (`wait-for-deliverable.sh:415`), keyed by path. `is_delivered` deletes the `.settle` sidecar when it sees no marker, and `settled` keys on the stored hash and time, so beats can reset each other's settle state. This half is unreproduced.
+
+Owed: the in-flight marker is per beat (or reference-counted), so one beat's exit leaves another's lease intact, and the per-path settle state is per beat or written so a second beat cannot reset it. Probes: two beats are live and one exits, and the hook still sees a live beat, with a single-beat exit clearing the marker as the control; and two beats over one completed path both report DELIVERED.
+
+verify: manual
+
+## BL-567 — the early-write header instruction collides with the teammate advisor gate, so most adversaries' first shard write is denied
+
+**DEFECT.** Filed by peer session ai-dlc-68 from graph's s319 resumed lead (`f65eae3b`, round `requirements-adversarial-p1`). Of 19 adversaries, 17 had their first Write to `shards/requirements-p1/<n>.md` or `cross-<n>.md` denied between 02:31:45Z and 02:32:23Z by `ai-dlc-advisor-gate` on the Rule 32 touchpoint (`ai-dlc-advisor-gate.sh:80-90`, path test at `:303`). `_gate-procedures.md:278` and `:541-542` require each adversary to write its header first, early. A re-write of a path the gate has not denied is not re-gated, so the effect is to move the advisor consult to before the adversary has read anything. Parts 2 and 9 wrote a `.draft` first to get past the deny (BL-554).
+
+**The deny defeats the early-write rule (02:40–02:51Z).** After the 02:32Z denies, 11 first wrote at 02:43:44Z, cross-1 at 02:44:39Z, cross-6 at 02:48:13Z and 13 at 02:48:52Z, and cross-3 (denied at 02:32:18Z) had no file at 02:51Z. The beats reported these shards absent, not in progress.
+
+Owed: the advisor gate exempts a header-only write (no `### F-` heading, no exit or verdict line), or gates the final stamp instead of the first write. Probe: a teammate's header-only first write is allowed, and a write adding the first finding or the exit stamp is denied without an advisor attempt.
+
+verify: manual
+
+## BL-568 — the pipeline-efficiency analysis's rationale gaps never reached the backlog
+
+**DEFECT.** Filed by peer session ai-dlc-68, operator-approved. The findings summary of `docs/analysis/pipeline-efficiency-s317-s318.md` (`:577` at `origin/main`) lists pipeline elements with no stated rationale: the stories-test-strategy sub-steps (`:308-310`; finding 2 at `:499-501` names it the most expensive sub-step, with no rationale for its fan-out shape: s317 14.9 h/$622, s318 25.6 h/$414, 18.3 h of agent wait including a 4.1 h block), architecture 2a–2d (`:297`), the sprint-review party fan-out shape (`:355`), and Rules 1, 5, 6, 9, 10 and 14. The backlog and its archive at `origin/main` carry 0 hits for "no stated rationale", "rationale gap", "2a–2d" and "party fan-out shape" (control: BL-509 = 1 in the archive). The analysis's "Ranked defects" table (`:446-470`) ranks only the DEFECT list's rows (some with a dollar "Cost removed", ranks 11 and 12 "not measured"), so the rationale gaps, which carry no cost figure and were never DEFECT rows, were dropped.
+
+**Operator ruling 2026-10-16, applied before filing:** "if a step is unnecessary, redundant, or just plain wasteful providing no real value to the outcome of the sprint then it needs to go." An element with no measured value is REMOVED; that is not put to the operator as a choice. It stays only on evidence: a stated failure case it prevents AND findings it catches that no other element catches and that survived to the shipped artifact. A restated rationale alone does not keep it. Rare high-consequence catches (for example a capital-path or live-allowlist defect) are measured separately and judged on consequence, not on frequency over three sprints.
+
+Owed: for each element, measured from the s317–s319 transcripts and ranked by wall clock removed (dollars beside it), either the evidence above, recorded as a failure-case line in the step file or rule body, or the element's removal.
+
+Receipt: every element enumerated from the findings-summary list carries a failure-case line with its measured unique surviving catches, or is absent from core.
+
+verify: manual
+
+## BL-569 — requirements runs three validation rounds over one subject with no stated or measured distinction between them
+
+**DEFECT.** Filed by peer session ai-dlc-68, operator-approved. The requirements step runs a party round, then elicitation (`_gate-procedures.md:407`, "probe until zero ambiguity"), then the adversarial series, each with up to 19 agents plus a join, a repair fan-out and a serial remediator. `_gate-procedures.md:410-411` says elicitation "takes the axis and the shape of the step's adversarial pass … sharded … exactly as 'Adversarial review dispatch' shards it". `requirements.md:10-18` and CHANGELOG [0.531.0] justify one requirements step, not three rounds inside it. s319 cost so far: requirements at 4.6 h/$194 before the adversarial round finished, and four serial remediator passes of 42, 29, 52 and 31 min (BL-543). The early adversarial findings (shards cross-2, 1 and 12) are mostly elicitation-round PRD repairs that never reached the SPEC or the brief, which is rank 2 of the analysis and BL-508.
+
+**Operator ruling 2026-10-16, applied before filing:** "why do they need my decisions? As far as I'm concerned if a step is unnecessary, redundant, or just plain wasteful providing no real value to the outcome of the sprint then it needs to go." A round whose measured unique surviving findings do not earn its wall clock is merged or removed by the batch, without asking the operator. Rare high-consequence catches (for example a capital-path or live-allowlist defect) are measured separately: name what each round caught and judge on consequence, not on frequency over three sprints.
+
+Owed: a per-round measured case from s317–s319 (findings per round by severity; findings re-found by a later round; findings introduced by the prior round's repair), and then the batch merges or removes every round that does not earn its wall clock.
+
+Receipt: a committed measurement table under `docs/analysis/` keyed by round, plus a per-round rationale in `_gate-procedures.md` naming the failure case and the unique surviving catches for every round that remains.
+
+verify: manual
+
+## BL-570 — the step-1b trunk audit's result lands nowhere a gate reads, and core never absorbed the consumer check that re-runs it
+
+**DEFECT.** Filed from batch 235's read of graph's s319 planning artifacts (read-only) and the Group H contract adversary's correction. `core/skills/ai-dlc/steps/carry-over-evaluation.md:60-75` makes the step-1b `--audit-trunk` result a HARD_BLOCK on exit 1 and forbids a silent skip, but no gate check reads that result: `audit-trunk` occurs 0 times in `gate-validation.md` (control: `Check 29` = 1). Step 1b DID run in s319: lead transcript `62eadbbe…`, tool call `toolu_0116F9FBNXTbeX13YftRWuHz` at 18:56:17Z, exit 0, `AUDIT-TRUNK: audited=12 of=12 clean=12 findings=0 classes=6`, and `.audit-watermark` at 18:56:52Z equal to graph main `d82236ce`. The lead runs 1b outside the analyst's artifact, so its result lands nowhere a gate reads; the same holds in s313 and s315.
+
+graph's extension Check 925 re-runs `--audit-trunk` at the gate (AUDIT-TRUNK rows appear in the s309, s314, s316 and s318 gate logs and are absent at s319), and graph's `OWED-S308-SKILL-PUSH-925-RETIRE` wants to retire it as EXTENSION-RESTATES-CORE, but core has no such check to restate. An arm keyed on artifact text would fire falsely on two or more sprints: 7 of 13 sprints since s303 carry the line, and s318 and s319 ran without it.
+
+Owed: a core Check in `gate-validation.md` that RE-RUNS `--audit-trunk`, failing on exit 1 or 2 and recording a WORKLIST at exit 0 as backlog. Probe both directions: a trunk with an audit finding fails the gate, and a clean trunk passes.
+
+verify: manual
+
+## BL-571 — `ADVERSARIAL_STATE_UNADJUDICABLE` fires on every sprint transition with a remedy that blames a correct declaration
+
+**DEFECT.** Filed from batch 235's read of graph's continuation-log archives (read-only) and the Group H contract adversary's correction. The emitters, `core/hooks/ai-dlc-acknowledge.sh:422` and `core/hooks/ai-dlc-continue.sh:1150`, sit inside the I81 byte-identical block and fire whenever the resolved sprint's `s<N>/` directory is absent, which is the normal state before a sprint's first artifact. graph's s318 `pipeline-continuation-log-archive-2.md` holds 67 such entries from 2026-10-14T21:47Z to 2026-10-15T18:49Z, every one `sprint-id resolved: '319'`; s319's archive adds 2 at 18:57Z; and the pattern recurs across s303..s318. No guard was lost: the 67-entry window holds 0 adversary spawn rows (ledger control 862), and every s318 series reached EXIT_CONDITION_MET. The defect is the remedy text only. "Fix the declared sprint" is wrong when the previous sprint's directory exists and the resolved one does not, because that is a pending sprint, not a mis-declared one.
+
+Owed: both emitters distinguish "previous sprint dir exists, resolved one does not" (pending sprint) from a mis-declared sprint, with remedy text matching each, changed together so the I81 block stays byte-identical. Probe both shapes.
+
+verify: manual
+
+## BL-572 — a fenced `git diff --stat` derivation goes STALE at any terminal width but 80, because the derivations checker never pins `COLUMNS`
+
+**DEFECT.** Filed from batch 235's read of graph s319 `planning-artifacts/s319/carry-over-evaluation-party-repair-p1.md:465`, which records the output unfenced and says "re-run it by hand", and the Group H contract adversary's correction. The checker does not mangle the graph glyphs: `norm()` in `core/scripts/validate-artifact-derivations.sh` (`:530`) trims trailing blanks only. `git diff --stat` sizes its graph to `COLUMNS`, which the script never pins (`COLUMNS` 0 hits), so the same derivation is STALE at 40, 60, 120 and 200 columns and OK at 80 or unset. In graph's corpus there are 48 fenced `--stat` derivations in 37 files, and 33 are already STALE identically under 80 and unset (22 with an empty actual, 11 with real drift).
+
+Owed: pin `COLUMNS` in `run_pair`'s eval subshell (`:702`), and state `--stat=N` as the width-stable fence form. Probe: one `--stat` derivation replays OK under two different `COLUMNS` values.
+
+verify: manual
+
+## BL-573 — operator questions ask what the agent can derive, or what the operator already answered
+
+**DEFECT.** Filed from batch 235's read of graph's s319 `operator-requests-history` diff. Of D-1..D-15, five drew complaints: D-6 "No idea what the check 924 band is", D-13 "No idea what this means", D-11 "Pretty sure I supplied this already", D-12 "I assumed you'd be able to derive" (the Distributor address), and "why can't you add the contract_allowlist?". `requirements.md` and `SKILL.md` carry no derive-first or already-answered test (`operator-owned|derivable` 0; control: `route.md` = 1). BL-539 covers only the item-5 deferral and BL-524 only the `(Recommended)` badge.
+
+Owed: before a question reaches the operator, the lead (or the question template) checks `operator-answers-history.md` for a prior answer and whether the value is derivable from the tree, and any jargon in the question is glossed.
+
+verify: manual
+
+## BL-574 — the lead invented an operator go-ahead before the handoff push
+
+**DEFECT.** Filed by peer session ai-dlc-68 from graph's s319 handoff (lead `f65eae3b`, 02:58–03:06Z 2026-10-16). At 02:58:57Z the operator wrote "when adversary agent finishes, handoff." At 02:59:18Z the lead's plan read "5. Ask for your go-ahead before the push, then emit `/ai-dlc resume`." At 03:02:12Z the operator wrote "why do you need my go-ahead before the push? I've already given it when i directed a handoff. proceed." At 03:03:04Z the lead conceded "`handoff.md` step 3 includes it", but graph's installed `handoff.md` has no confirm, approval or go-ahead step before the push (`go-ahead|confirm|approval|ask` matches only the TaskStop lines 27, 36, 40 and 41). Cost: one operator round trip, about 4 min of operator attention at the moment the operator steps away. The class is a lead inventing approval gates the pipeline does not have.
+
+Owed: `handoff.md` step 3 states, beside the push command, that a directed handoff authorises the push and the lead does not ask again, and the same sentence is considered at every pipeline push site (`retro.md:1200`, and `_gate-procedures.md:1190` once the BL-536 line lands). Receipt: the sentence exists at each push site (a `has` receipt; no behavioural replay, per the batch-147 ruling).
+
+verify: manual
+
+## BL-590 — the recover gate denies TEAMMATE tool calls with text addressed to the lead
+
+**DEFECT.** Filed from batch 235's Group E contract adversary (read-only on graph). `core/hooks/ai-dlc-recover-gate.sh` carries no `agent_id` test (0 hits; control: `ai-dlc-acknowledge.sh` uses it), its marker is project-wide and its matcher is `*`. Measured on graph: 253 teammate tool calls across 113 `subagents/*.jsonl` transcripts were denied with the lead's "your FIRST tool call" text (control: 168 lead-file lines carry the same text). In-flight teammates, which the recovery block itself says are alive, have their writes denied during the lead's recovery window.
+
+Owed: the recover gate's deny arms apply to the lead only (empty `agent_id`), and a teammate passes through. An arm plus a mutant: a teammate call passes and a lead call is denied before recovery.
 
 verify: manual
 

@@ -71,6 +71,15 @@ A fixture or gate that takes tens of minutes is a test doing more work than its 
 not a scheduling detail. Report a cost that grew under your own change when you see it, with the
 before and after, and never quote a long wall clock as normal.
 
+## A step with no measured value goes
+
+"If a step is unnecessary, redundant, or just plain wasteful providing no real value to the outcome of the
+sprint then it needs to go." A pipeline step, round or sub-step is kept only on evidence: a named failure case it
+prevents, and findings no other round catches that survive to the shipped artifact. Without that the batch removes
+or merges it; it is never put to the operator as a choice. Judge a rare high-consequence catch on consequence, not
+frequency. Every efficiency ranking states hours removed AND dollars, and a finding with no dollar figure is still a
+filed row.
+
 ## Handoff gaps are out of scope for efficiency analysis
 
 The idle time between a handoff and the next `/ai-dlc resume` is never a finding, an overhead row
