@@ -346,7 +346,9 @@ words, the initial prompt included) and
 applied with its citation, not asked again. (2) Derive what the tree,
 the config or a read-only chain or API read can give -- an address, a
 band, a list of entries -- and put the derivation to the operator for
-veto instead of asking for the value. (3) Gloss every project-internal
+veto instead of asking for the value; when the derived value is a config
+leaf, a money threshold or literal, an address, or an `LR-` or `D-<n>`
+value, that veto question goes out UNBADGED, as above. (3) Gloss every project-internal
 term in the question text itself: a check number, a band, a gap or
 evaluation id, a `D-<n>`, `LR-` or `FR-` id gets a plain-language clause
 saying what it is, because the operator reads the question, not the
