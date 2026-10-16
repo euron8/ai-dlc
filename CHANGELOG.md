@@ -20,6 +20,24 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.795.0] - 2026-10-16
+
+Batch 235 (gate throughput). Closes no backlog entry and no `PC-` id.
+
+### The readset-skip verdict-store snapshot greps the real store once, not once per file
+
+- `vs_snap` in `core/fixtures/readset-skip/run.sh` (shard d's `vs` unit) snapshots the real default
+  verdict store before and after the unit. It ran one `grep` per store file. Measured on this box, the store
+  held 3636 files, so 7272 forks per run, and the count grows with every recorded pass. It now runs one
+  batched `xargs -0 grep -l` over the NUL-delimited, C-sorted list. `grep -l` prints matches in argument
+  order, so the selected set, their order and the digest are unchanged.
+- Receipt, in the same unit: on a seeded 27-entry store (an empty file, a name with a space, a subdirectory,
+  a non-match), `vs_snap` equals the per-file loop it replaced and selects 25 entries. The seed is created in
+  a fixed shuffle, and an arm asserts its unsorted `find` order differs from C order before a no-sort mutant
+  is scored. That arm FAILS, and never skips, where the order cannot discriminate. The no-sort mutant is cut
+  from `vs_snap`'s own text, must apply exactly once, and must move the digest.
+- CPU only. The unit is not the suite pole, so this release claims no wall-clock figure.
+
 ## [0.794.0] - 2026-10-16
 
 Batch 235 (ledger drain), role-file prose release. Closes BL-550, BL-551 and BL-552; ships the prose
