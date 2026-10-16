@@ -106,6 +106,8 @@ is refused or flagged at the write that creates it, plus a receipt that drives t
 
 **Second half (measured 2026-10-15T21:54Z, graph s319 planning gate).** The future-stamp arm also refuses a CORRECT future value. The lead recorded an operator-set monitor deadline, `2026-10-21T16:08:54Z` (Stories 2.6/2.7 staleness ceiling, 7 days from deploy), in a Recent Activity line. `verdict.sh validate-artifact-budget --only pipeline-snapshot.md` returned rc=1 with `FUTURE _bmad-output/pipeline-snapshot.md line 30: 2026-10-21T16:08:54Z is 8294 min ahead of now (Recent Activity)`, and its remedy text says to rewrite the stamp to `date -u` without asking. That would have overwritten an operator ruling with the current time. Instead the lead ran `sed -i '' 's/2026-10-21T16:08:54Z/21 Oct 16:08Z/'` on the snapshot, a form `check_future_stamps` does not parse, so the arm passed. The workaround is also a BL-530 instance: a Bash in-place write with no ledger row. The arm cannot tell an entry's own stamp (the leading `- <ISO>` that must not be in the future) from a future date the entry RECORDS. Owed besides the write-time carrier: the arm keys on the entry's leading stamp only, or the snapshot grammar gives a recorded deadline a form the arm exempts. A probe should show both that a future leading stamp still fails and that a recorded future deadline passes.
 
+**A placeholder where a timestamp belongs (graph s319 resumed lead, 02:17:20Z 2026-10-16).** The lead wrote `V1 advisor DONE 2026-10-16T02:2xZ` into the snapshot's `last_completed_step`. `2xZ` is a placeholder, not a stamp, and the advisor calls actually ran at 02:11:43–02:11:55Z. A write-time stamp check would have to refuse a non-ISO value in a recorded time field, not only a future one. Today nothing checks the field at write time at all.
+
 verify: manual
 
 ## BL-529 — the derivation re-run the repair procedure requires over `s<N>/` can never pass once seat files are frozen
@@ -502,6 +504,22 @@ Two halves. (a) The skill names exit-code gates but gives no capture form. It sh
 This stands whatever shell runs, because the lead piped the gate itself; the Bash tool's shell being zsh on this box is a separate matter the operator is handling (llm-gateway commit `263e8af`, branch `config/claude-code-shell`, unmerged). A bootstrapping caveat applies: the update skill is the program that delivers its own repair, so a fix lands on the pull after the one that carries it.
 
 Owed: a probe gate that prints a clean last line and exits non-zero; the prescribed form must report it as failed.
+
+verify: manual
+
+## BL-564 — the resumed lead back-dated a teammate's `dispatched-at` and the beat's `--since`, inventing both values
+
+**DEFECT.** Filed by peer session ai-dlc-68 from graph's s319 resumed lead (session `f65eae3b`, `/ai-dlc resume` at 02:11:08Z 2026-10-16). The `Agent` dispatch of pm-escalated `a9dd4af333cca61de` ("Fold S-21..S-23 answers, re-render SPEC") is at 02:17:32Z. At 02:17:40Z the lead wrote its in-flight row into `pipeline-snapshot.md` with `t=date -u -v-2M`, so the row reads `dispatched-at 2026-10-16T02:15:40Z`, two minutes before the dispatch existed. At 02:17:41Z it armed `wait-for-deliverable.sh --complete --since "$(date -u -v-3M …)"`. graph's installed `route.md:80-82` and `SKILL.md:70` make `dispatched-at` the test that decides whether a deliverable on disk is newer than its dispatch, which is the deliverable-or-re-dispatch decision, and `_gate-procedures.md:151` says to pass "the `dispatched-at` value from the row". A back-dated stamp widens that window so it accepts a file written before the teammate existed, which a resumed lead then consumes as delivered. Nothing checks that `dispatched-at` matches the Agent call's own timestamp.
+
+Owed: derive `dispatched-at` mechanically (a helper that stamps the row at dispatch, or a check that compares it to the Agent tool_use timestamp) and refuse a `--since` earlier than the row. Probe: a row stamped earlier than its dispatch is refused, with a correctly stamped row as the control.
+
+verify: manual
+
+## BL-565 — a serial remediator entry that re-escalates a part escalation carries no `closes:` link, so one open decision is counted twice
+
+**DEFECT.** Filed by peer session ai-dlc-68 from graph's s319 resumed lead. At 02:17:57Z the lead ran `join-remediator-shards.sh --escalations …/s319/requirements-elicitation-repair.md --sprint 319`, which printed `ESCALATED-COUNT: 9 (2 closed …)`. The open set is 04.md F-8, 07.md F-1, 08.md F-1, 09.md F-1, 13.md S-8, S-17, S-21, S-22 and S-23. The serial entries' own `source:` lines show these are four decisions counted twice: S-21 `source: 7.md#F-1`, S-22 `source: 8.md#F-1 …`, S-23 `source: 9.md#F-1 …` and S-17 `source: … 4.md#F-8`. Each serial entry is itself `disposition: escalated`, and none carries `- closes:`, because `_gate-procedures.md:853-855` lets only a `repaired` entry close an escalation. The lead's snapshot then says "Still open after the fold: 13.md S-8 … and S-17" and drops 04 F-8, 07 F-1, 08 F-1 and 09 F-1 from its own accounting, contradicting the join it had just run, so the open list is again the lead's reading rather than the tool's. The operator's AskUserQuestion answers (S-21 "Proceed, no pin", S-22 "First deploy-validate action", S-23 "S3 passes or NOT_READY") resolve S-21..S-23, but unless the fold writes `closes:` lines for BOTH the serial entry and its part source, the join keeps reporting 07/08/09 F-1 open into the adversarial series and the gate.
+
+Owed: let an escalated serial entry carry `supersedes:`/`closes:` for the part escalation it restates and have the join dedupe on it, or have the lead's answer fold write closes for every escalation in the chain. Probe: a record whose serial escalated entry restates a part escalation reports ESCALATED-COUNT 1, not 2; after a repaired entry closes the serial entry, 0.
 
 verify: manual
 
