@@ -1,0 +1,3 @@
+This fixture is DISTRIBUTION-ONLY. Its subject is pole_info_step in the distribution's
+.githooks/pre-push, which install.sh does not copy: a consumer runs core/git-hooks/pre-push,
+which prints no pole. On a consumer this fixture would find no subject.

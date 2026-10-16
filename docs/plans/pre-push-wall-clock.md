@@ -500,7 +500,14 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    overlap. No sweep script is tracked in this repo (`git log --all -- '**/sweep9.sh'` returns 0
    against a control of 1 for a tracked path), so the harness is written fresh.
 
-2. **The pole is STILL `ledger-reverify` and a guard watches it — but read action 1 first, because
+2. **SUPERSEDED (batch 235, 0.807.0):** `scripts/validate-suite-pole.sh`, `docs/suite-pole-baseline.tsv`
+   and the `suite-pole-guard` fixture are deleted. The pre-push hook now PRINTS the pole unit, its loaded
+   seconds and its change against the prior run, as information, and never fails on it. The reasons: a
+   loaded wall clock spans several-fold with the box's load, any band is a picked number, and no recorded
+   instance of the guard catching growth exists (BL-616 item 6, BL-632). The text below describes the
+   removed guard.
+
+   **The pole is STILL `ledger-reverify` and a guard watches it — but read action 1 first, because
    the guard has no vocabulary for the state the suite is now in.** `validate-suite-pole.sh`
    watches ONE row. It cannot say "the suite is work-bound, not pole-bound", it has no downward
    fail by design (`:30-34`), and a row pinned to a fixture that still exists but is no longer the

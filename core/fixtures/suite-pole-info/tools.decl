@@ -1,0 +1,10 @@
+# Tools run.sh and the extracted pole_info_step invoke.
+awk
+bash
+cmp
+dirname
+env
+grep
+mktemp
+rm
+sed
