@@ -123,10 +123,31 @@ mutate M1-reader-trusts-status-text reader "B2a B2b" \
   '  if [ -n "$reason" ]; then' \
   's/^  if \[ -n "\$reason" \]; then$/  if [ -n "$reason" ] \&\& ! grep -qi closed "$ROOT\/$rel" 2>\/dev\/null; then/'
 
-# M2: the reader filters to the step scan dir: rows outside s<N>/ are skipped unread.
-mutate M2-reader-filters-to-scan-dir reader "B1b B3a B7a Wg Gf" \
-  '  reason=""' \
-  's/^  reason=""$/  reason=""; case "$rel" in _bmad-output\/planning-artifacts\/s[0-9]*\/*) ;; *) continue ;; esac/'
+# M2 (REWRITTEN by the current-sprint-only ruling): the reader treats a PAST-sprint row as OPEN. The
+# earlier M2, "reader filters to the step scan dir", is reversed along with the contract's STAYS-OPEN seeds.
+mutate M2-reader-treats-past-as-open reader "Sp1 Sp5 Sp7" \
+  'if [ "$sc" = PAST ]; then' \
+  's/^  if \[ "\$sc" = PAST \]; then$/  if false; then/'
+
+# M11: the writer RECORDS a PAST row instead of printing INFO and dropping it.
+mutate M11-writer-records-past writer "Sp3a Sp3b Wc Wd Wf" \
+  'PAST) printf' \
+  's|^      PAST) printf .*$|      PAST) printf "%s\\n" "$_orow" >> "$TMP/owed.keep" ;;|'
+
+# M12: the classifier reads LIVING as PAST (a prd.md row stops being enforced, and the writer drops it).
+mutate M12-classifier-living-as-past reader "B1b B3a B7a Gf Sc5 Sc7 Sc8 Sp3a Sp4 Wc Wd We Wf Wg" \
+  '  echo LIVING' \
+  's/^  echo LIVING$/  echo PAST/'
+
+# M13: the classifier matches the sprint segment as a SUBSTRING/prefix, so s19 reads as sprint 1.
+mutate M13-classifier-substring-segment reader "Sc1 Sp7" \
+  '        if [ "$((10#$n))" -eq "$CUR" ]; then echo CURRENT; else echo PAST; fi' \
+  's/^        if \[ "\$((10#\$n))" -eq "\$CUR" \]; then echo CURRENT; else echo PAST; fi$/        case "$n" in "$CUR"*) echo CURRENT ;; *) echo PAST ;; esac/'
+
+# M14: the reader trusts a REPOINTED row without re-deriving the new derivation.
+mutate M14-reader-trusts-repointed reader "Rp2 Rp3 Rp3b Rp4b" \
+  '  pre=""; [ "$hops" -gt 0 ] && pre="REPOINTED-"' \
+  's/^  pre=""; \[ "\$hops" -gt 0 \] \&\& pre="REPOINTED-"$/  pre=""; [ "$hops" -gt 0 ] \&\& continue/'
 
 # M3: the writer drops the recorded and actual outputs from the record row.
 mutate M3-writer-drops-recorded-actual writer "Wd We" \
@@ -161,7 +182,7 @@ mutate M8-writer-writes-without-flag writer "Wa" \
   's|^OWED_FILE=""; OWED_SET=0;|OWED_FILE="${TMPDIR:-/tmp}/owed-default.tsv"; OWED_SET=1;|'
 
 # M9: a malformed row is accepted instead of refusing the record.
-mutate M9-malformed-row-accepted reader "B4g B4h B4i B4j" \
+mutate M9-malformed-row-accepted reader "B4g B4h B4i B4j Rp5" \
   '{ bad = NR; exit }' \
   's/{ bad = NR; exit }/{ }/'
 
@@ -174,9 +195,20 @@ mutate M10-unassessed-reads-closed reader "B8b" \
 STEPS="$ROOT/core/skills/ai-dlc/steps"
 pk() { if grep -qF -- "$2" "$STEPS/$3" 2>/dev/null; then ok "$1"; else bad "$1 -- $STEPS/$3 lacks: $2"; fi; }
 pk "Pa route.md Step 0a runs the reader on resume" "check-owed-derivations.sh" route.md
-pk "Pb the gate site REFUSES the gate on an open row" "The gate is REFUSED while an owed derivation is open" _gate-procedures.md
+pk "Pb gate-validation.md carries the owed-derivation check, keyed on any non-zero exit" "Any exit other than 0" gate-validation.md
+pk "Pb2 and its deny text names the REPOINTED remedy" "REPOINTED<TAB>" gate-validation.md
+pk "Pb3 and says exit 2 is refused and unassessed" "the rows are REFUSED and unassessed" gate-validation.md
+pk "Pb4 and the same-file UNRUN rule" "makes every owed row in it UNASSESSED" gate-validation.md
+pk "Pb5 and the disclosure that past-sprint rows stop blocking" "STOPS BLOCKING" gate-validation.md
+pk "Pb6 the check is in the planning row of the gate manifest" "35, 36, 37" gate-validation.md
+pk "Pb7 _gate-procedures.md keeps only a pointer" "refused at gate-validation.md Check 37" _gate-procedures.md
 pk "Pc the sprint-close site carries open rows forward, one item per key" "ONE" retro.md
 pk "Pd retro.md names the reader" "check-owed-derivations.sh" retro.md
+pk "Pf route.md 0a names the REPOINTED remedy" "REPOINTED<TAB>" route.md
+pk "Pg route.md 0a carries the disclosure that past-sprint rows stop blocking" "STOPS BLOCKING" route.md
+pk "Ph the update SKILL.md names the REPOINTED remedy" "REPOINTED<TAB>" "../../ai-dlc-update/SKILL.md"
+if grep -qF -- "carries only a pointer line" "$STEPS/route.md"; then bad "Pi route.md still claims a snapshot pointer line exists"; else ok "Pi route.md claims no snapshot pointer line"; fi
+if grep -qF -- "REPOINTED<TAB>" "$ROOT/core/skills/ai-dlc-update/reconcile/apply.sh"; then ok "Pj apply.sh row text names the REPOINTED remedy"; else bad "Pj apply.sh row text lacks the REPOINTED remedy"; fi
 if grep -qF -- "ZQXJ-no-such-string-in-the-rulebook" "$STEPS/route.md" 2>/dev/null; then bad "Pe control: an impossible string was found"; else ok "Pe control: an impossible string is absent from route.md"; fi
 
 if [ "$fails" -ne 0 ]; then

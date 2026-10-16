@@ -7,7 +7,9 @@ cp
 cut
 dirname
 env
+find
 git
+ln
 grep
 head
 mkdir

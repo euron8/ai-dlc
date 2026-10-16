@@ -195,7 +195,7 @@ cleanup() {
   [ -n "$WT_PARENT" ] && { rm -f "$WT_PARENT/pid" 2>/dev/null; rmdir "$WT_PARENT" 2>/dev/null; }
   rm -f "$TMP/files" "$TMP/chain" "$TMP/blobs" "$TMP/pairs" "$TMP/list.out" "$TMP/list.err" \
         "$TMP/b.out" "$TMP/b.err" "$TMP/t.out" "$TMP/t.err" "$TMP/rows" "$TMP/counts" \
-        "$TMP/operands" "$TMP/moved" "$TMP/owed" 2>/dev/null
+        "$TMP/operands" "$TMP/moved" "$TMP/owed" "$TMP/owed.keep" "$TMP/past" "$TMP/scope.err" 2>/dev/null
   rmdir "$TMP" 2>/dev/null
 }
 trap cleanup EXIT
@@ -426,12 +426,38 @@ read -r N_U N_NF N_NP N_SB N_UN N_PB N_BP N_TP H_B H_T N_SUP < "$TMP/counts" 2>/
 say_row INFO superseded "${N_SUP} of ${N_U} derivation(s) are superseded by a later byte-identical copy in the same record; the validator runs only the later copy, so they are in no count or row below."
 
 # The record is appended only after every refusal above has passed, so a refused run records nothing.
-if [ "$OWED_SET" -eq 1 ] && [ -f "$TMP/owed" ]; then
-  cat "$TMP/owed" >> "$OWED_FILE" 2>/dev/null \
-    || refuse record "could not append the NEWLY-FAILING rows to $OWED_FILE, so the debt this run found would be recorded nowhere. Nothing was cleared."
+# SCOPE IS CURRENT SPRINT ONLY (operator ruling), AND THE CLASSIFIER IS THE READER'S, NOT A COPY: each
+# NEWLY-FAILING row is classified by the consumer's installed `check-owed-derivations.sh --scope <path>`.
+# CURRENT or LIVING rows are appended; a PAST row is not recorded and prints an INFO row instead. A
+# classifier that is absent or refuses (exit 2: the current sprint could not be resolved) refuses the
+# run, because recording or dropping a row on a guessed scope is the defect the ruling exists to prevent.
+: > "$TMP/past"
+if [ "$OWED_SET" -eq 1 ] && [ -s "$TMP/owed" ]; then
+  _scope_tool="$CONSUMER/scripts/ai-dlc/check-owed-derivations.sh"
+  [ -f "$_scope_tool" ] \
+    || refuse record "$_scope_tool is not on this consumer, so a row's sprint scope cannot be classified and nothing was recorded. It is delivered by install.sh's copy loop over core/scripts/."
+  : > "$TMP/owed.keep"
+  while IFS= read -r _orow; do
+    _okey="$(printf '%s\n' "$_orow" | cut -f2)"
+    _sc="$(AI_DLC_PROJECT_ROOT="$CONSUMER" bash "$_scope_tool" --scope "${_okey%:*}" 2>"$TMP/scope.err")" \
+      || refuse record "the scope classifier exited non-zero for ${_okey%:*}: $(head -2 "$TMP/scope.err" | tr '\n' ' ')Nothing was recorded."
+    case "$_sc" in
+      CURRENT|LIVING) printf '%s\n' "$_orow" >> "$TMP/owed.keep" ;;
+      PAST) printf '%s\n' "$_okey" >> "$TMP/past" ;;
+      *) refuse record "the scope classifier printed '${_sc}' for ${_okey%:*}, not CURRENT, LIVING or PAST. Nothing was recorded." ;;
+    esac
+  done < "$TMP/owed"
+  if [ -s "$TMP/owed.keep" ]; then
+    cat "$TMP/owed.keep" >> "$OWED_FILE" 2>/dev/null \
+      || refuse record "could not append the NEWLY-FAILING rows to $OWED_FILE, so the debt this run found would be recorded nowhere. Nothing was cleared."
+  fi
 fi
 
 cat "$TMP/rows"
+while IFS= read -r _pkey; do
+  [ -n "$_pkey" ] || continue
+  say_row INFO past-sprint "$_pkey is NEWLY-FAILING in a sprint that has since finished: unrepaired debt that is no longer enforced. It is NOT recorded, NOT refused at the gate and NOT carried forward, and it is not closed."
+done < "$TMP/past"
 
 # ---- NOTEs: what the differential cannot attribute -----------------------------------------
 # Operands are read as whitespace-split words of the recorded command with globbing OFF, so a

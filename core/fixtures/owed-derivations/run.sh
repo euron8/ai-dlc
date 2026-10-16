@@ -39,9 +39,20 @@ fi
 READER="$(cd "$(dirname "$READER")" && pwd)/$(basename "$READER")"
 DIFFER="$(cd "$(dirname "$DIFFER")" && pwd)/$(basename "$DIFFER")"
 
-
 WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
+
+# THE READER RUNS FROM A COPY BESIDE A STUB sprint-status.sh. The reader resolves the current sprint only
+# through a sibling `sprint-status.sh sprint-id`, so the copy (which is the MUTATED reader when the
+# battery drives this file) sits in a directory that holds the stub. The stub answers from
+# `<root>/.sprint-id` and exits 1 when that file is absent, which is the unresolvable-sprint world.
+# The stub is generated here, so it is not an input to declare.
+BIN="$WORK/bin"; mkdir -p "$BIN"
+write_stub() { # <dir>
+  printf '#!/usr/bin/env bash\n[ "${1:-}" = sprint-id ] || exit 2\nshift; r=""; [ "${1:-}" = --root ] && r="${2:-}"\n[ -f "$r/.sprint-id" ] || exit 1\ncat "$r/.sprint-id"\n' > "$1/sprint-status.sh"
+}
+write_stub "$BIN"
+cp "$READER" "$BIN/check-owed-derivations.sh"
 
 echo "owed-derivations:"
 printf '  reader: %s\n' "$READER"
@@ -62,9 +73,16 @@ TAB="$(printf '\t')"
 # rd <root> <record> -> sets OUT (stdout), ERR (stderr), RC
 rd() {
   local o="$WORK/rd.out" e="$WORK/rd.err"
-  ( cd / && AI_DLC_PROJECT_ROOT="$1" bash "$READER" "$2" > "$o" 2> "$e" ); RC=$?
+  ( cd / && AI_DLC_PROJECT_ROOT="$1" bash "$BIN/check-owed-derivations.sh" "$2" > "$o" 2> "$e" ); RC=$?
   OUT="$(cat "$o")"; ERR="$(cat "$e")"
 }
+# scope_in <root> <rel path> -> sets SC (stdout) and RC for the reader's --scope mode
+scope_in() {
+  SC="$( cd / && AI_DLC_PROJECT_ROOT="$1" bash "$BIN/check-owed-derivations.sh" --scope "$2" 2>"$WORK/sc.err" )"; RC=$?
+}
+# info_count -> how many INFO past-sprint lines OUT carries
+info_count() { awk -F'\t' '$1 == "INFO" && $2 == "past-sprint" { n++ } END { print n + 0 }' <<<"$OUT"; }
+open_count() { awk -F'\t' '$1 == "OPEN" { n++ } END { print n + 0 }' <<<"$OUT"; }
 # open_keys -> the key column of every OPEN line in OUT, comma-joined
 open_keys() { awk -F'\t' '$1 == "OPEN" { printf "%s%s", (n++ ? "," : ""), $2 } END { print "" }' <<<"$OUT"; }
 reason_of() { awk -F'\t' -v k="$1" '$1 == "OPEN" && $2 == k { print $3 }' <<<"$OUT"; }
@@ -76,6 +94,7 @@ mkroot() { # <dir>
   mkdir -p "$1/scripts/ai-dlc" "$1/.claude" "$1/_bmad-output/planning-artifacts/s1" "$1/_bmad-output/party-mode"
   cp "$VALIDATOR" "$1/scripts/ai-dlc/validate-artifact-derivations.sh"
   printf 'qqalpha\n' > "$1/t.txt"
+  printf '1\n' > "$1/.sprint-id"
 }
 CMD='grep -c qqalpha t.txt'
 fence() { printf '```derived\n$ %s\n%s\n```\n' "$CMD" "$1"; }
@@ -230,6 +249,91 @@ row "$K_LIVE2" "$CMD" > "$WORK/b8.tsv"
 rd "$R4" "$WORK/b8.tsv"
 rc_is "B8b an exit-2 validator leaves the row OPEN as UNASSESSED, exit 1" 0 "$([ "$RC" = 1 ] && [ "$(reason_of "$K_LIVE2")" = UNASSESSED ] && echo 0 || echo 1)"
 
+# ---- S: SCOPE IS THE CURRENT SPRINT ONLY (operator ruling) ----------------------------------------
+# The classifier is one mode of the reader, `--scope <rel path>`. The current sprint is 1 in R. Every
+# near-miss below carries the property a feared regression would key on (a substring, a wrong area).
+PASTDOC="_bmad-output/planning-artifacts/s0/past.md"
+S19DOC="_bmad-output/planning-artifacts/s19/x.md"
+mkdir -p "$R/_bmad-output/planning-artifacts/s0" "$R/_bmad-output/planning-artifacts/s19"
+{ printf '# Past sprint\n\n'; fence 5; } > "$R/$PASTDOC"
+{ printf '# Sprint nineteen\n\n'; fence 5; } > "$R/$S19DOC"
+K_PAST="$PASTDOC:$(line_of "$R/$PASTDOC" '$ grep')"
+K_S19="$S19DOC:$(line_of "$R/$S19DOC" '$ grep')"
+sc_is() { # <arm> <expected> <path>
+  scope_in "$R" "$3"
+  rc_is "$1 --scope $3 (current sprint 1) -> $2" 0 "$([ "$RC" = 0 ] && [ "$SC" = "$2" ] && echo 0 || echo 1)"
+}
+sc_is Sc1 PAST    "_bmad-output/planning-artifacts/s19/x.md"
+sc_is Sc2 PAST    "_bmad-output/specs/s317/x.md"
+sc_is Sc3 CURRENT "_bmad-output/specs/s1/x.md"
+sc_is Sc4 CURRENT "_bmad-output/party-mode/s1/seat.md"
+sc_is Sc5 LIVING  "_bmad-output/planning-artifacts/s319.md"
+sc_is Sc6 CURRENT "_bmad-output/planning-artifacts/s1/x.md"
+sc_is Sc7 LIVING  "_bmad-output/planning-artifacts/prd.md"
+sc_is Sc8 LIVING  "_bmad-output/planning-artifacts/s319x/y.md"
+sc_is Sc9 PAST    "_bmad-output/planning-artifacts/s0/past.md"
+
+# Sp1/Sp2: a past-sprint break reads INFO and blocks nothing; the SAME break in the current sprint is OPEN.
+row "$K_PAST" "$CMD" > "$WORK/sp1.tsv"
+rd "$R" "$WORK/sp1.tsv"
+rc_is "Sp1 a past-sprint (s0) stale row -> exit 0, one INFO past-sprint line, no OPEN line" 0 "$([ "$RC" = 0 ] && [ "$(info_count)" = 1 ] && [ "$(open_count)" = 0 ] && echo 0 || echo 1)"
+row "$K_STORY" "$CMD" > "$WORK/sp2.tsv"
+rd "$R" "$WORK/sp2.tsv"
+rc_is "Sp2 control: the same break in the current sprint (s1) -> exit 1, one OPEN, no INFO" 0 "$([ "$RC" = 1 ] && [ "$(open_count)" = 1 ] && [ "$(info_count)" = 0 ] && echo 0 || echo 1)"
+# Sp4: a living document (prd.md) is OPEN
+row "$K_PRD" "$CMD" > "$WORK/sp4.tsv"
+rd "$R" "$WORK/sp4.tsv"
+rc_is "Sp4 a living-document (prd.md) stale row -> exit 1, OPEN" 0 "$([ "$RC" = 1 ] && [ "$(open_keys)" = "$K_PRD" ] && echo 0 || echo 1)"
+# Sp5: a row recorded while its sprint was current reads INFO after sprint-id moves to N+1
+printf '2\n' > "$R/.sprint-id"
+rd "$R" "$WORK/sp2.tsv"
+rc_is "Sp5 the s1 row after the current sprint moves to 2 -> exit 0, INFO, no OPEN" 0 "$([ "$RC" = 0 ] && [ "$(info_count)" = 1 ] && [ "$(open_count)" = 0 ] && echo 0 || echo 1)"
+printf '1\n' > "$R/.sprint-id"
+# Sp7: s19 is not s1 (a substring/prefix match would call it CURRENT)
+row "$K_S19" "$CMD" > "$WORK/sp7.tsv"
+rd "$R" "$WORK/sp7.tsv"
+rc_is "Sp7 an s19 stale row with current sprint 1 -> exit 0, INFO, no OPEN" 0 "$([ "$RC" = 0 ] && [ "$(info_count)" = 1 ] && [ "$(open_count)" = 0 ] && echo 0 || echo 1)"
+# Sn: an unresolvable sprint is a refusal, never a guess and never PAST
+R5="$WORK/rd5"; mkroot "$R5"; rm -f "$R5/.sprint-id"; mkdir -p "$R5/_bmad-output/planning-artifacts/s1"; cp "$R/$STORY" "$R5/$STORY"
+rd "$R5" "$WORK/sp2.tsv"
+rc_is "Sn1 sprint-id unresolvable with a row to judge -> exit 2" 2 "$RC"
+scope_in "$R5" "_bmad-output/planning-artifacts/s1/x.md"
+rc_is "Sn2 --scope with sprint-id unresolvable -> exit 2 and prints no scope" 0 "$([ "$RC" = 2 ] && [ -z "$SC" ] && echo 0 || echo 1)"
+
+# ---- Rp: REPOINTED closure is re-derived on every read ----------------------------------------------
+RPO="_bmad-output/planning-artifacts/s1/rp-old.md"
+RPF="_bmad-output/planning-artifacts/s1/rp-fresh.md"
+RPS="_bmad-output/planning-artifacts/s1/rp-stale.md"
+RPM="_bmad-output/planning-artifacts/s1/rp-mid.md"
+{ printf '# Old\n\n'; fence 5; } > "$R/$RPO"
+{ printf '# Fresh\n\n'; fence 1; } > "$R/$RPF"
+{ printf '# Stale\n\n'; fence 5; } > "$R/$RPS"
+{ printf '# Mid\n\n'; fence 5; } > "$R/$RPM"
+K_RPO="$RPO:$(line_of "$R/$RPO" '$ grep')"; K_RPF="$RPF:$(line_of "$R/$RPF" '$ grep')"
+K_RPS="$RPS:$(line_of "$R/$RPS" '$ grep')"; K_RPM="$RPM:$(line_of "$R/$RPM" '$ grep')"
+rp() { printf 'REPOINTED\t%s\t%s\t$ %s\n' "$1" "$2" "$3"; }
+{ row "$K_RPO" "$CMD"; rp "$K_RPO" "$K_RPF" "$CMD"; } > "$WORK/rp1.tsv"
+rd "$R" "$WORK/rp1.tsv"
+rc_is "Rp1 repointed to a derivation that reproduces -> closed, exit 0, nothing on stdout" 0 "$([ "$RC" = 0 ] && [ -z "$OUT" ] && echo 0 || echo 1)"
+{ row "$K_RPO" "$CMD"; rp "$K_RPO" "$K_RPS" "$CMD"; } > "$WORK/rp2.tsv"
+rd "$R" "$WORK/rp2.tsv"
+rc_is "Rp2 repointed to a derivation that is still stale -> OPEN as REPOINTED-STALE under the OLD key" 0 "$([ "$RC" = 1 ] && [ "$(reason_of "$K_RPO")" = REPOINTED-STALE ] && echo 0 || echo 1)"
+{ row "$K_RPO" "$CMD"; rp "$K_RPO" "_bmad-output/planning-artifacts/s1/no-such-file.md:4" "$CMD"; } > "$WORK/rp3.tsv"
+rd "$R" "$WORK/rp3.tsv"
+rc_is "Rp3 repointed at a file that does not exist -> OPEN as REPOINTED-MOVED" 0 "$([ "$RC" = 1 ] && [ "$(reason_of "$K_RPO")" = REPOINTED-MOVED ] && echo 0 || echo 1)"
+{ row "$K_RPO" "$CMD"; rp "$K_RPO" "$K_RPF" "grep -c qqnone t.txt"; } > "$WORK/rp3b.tsv"
+rd "$R" "$WORK/rp3b.tsv"
+rc_is "Rp3b repointed at an existing file whose derived fence does not hold that command -> OPEN as REPOINTED-MOVED" 0 "$([ "$RC" = 1 ] && [ "$(reason_of "$K_RPO")" = REPOINTED-MOVED ] && echo 0 || echo 1)"
+{ row "$K_RPO" "$CMD"; rp "$K_RPO" "$K_RPM" "$CMD"; rp "$K_RPM" "$K_RPF" "$CMD"; } > "$WORK/rp4a.tsv"
+rd "$R" "$WORK/rp4a.tsv"
+rc_is "Rp4a a chain OLD -> MID (stale) -> FRESH follows to the end and closes" 0 "$RC"
+{ row "$K_RPO" "$CMD"; rp "$K_RPO" "$K_RPF" "$CMD"; rp "$K_RPO" "$K_RPS" "$CMD"; } > "$WORK/rp4b.tsv"
+rd "$R" "$WORK/rp4b.tsv"
+rc_is "Rp4b two REPOINTED for one key: the LATEST (stale) wins -> OPEN" 0 "$([ "$RC" = 1 ] && [ "$(reason_of "$K_RPO")" = REPOINTED-STALE ] && echo 0 || echo 1)"
+printf 'REPOINTED\t%s\n' "$K_RPO" > "$WORK/rp5.tsv"
+rd "$R" "$WORK/rp5.tsv"
+rc_is "Rp5 a malformed REPOINTED row refuses the record -> exit 2" 2 "$RC"
+
 # ---- W: the WRITER over the real differential, then the reader over ITS record --------------------
 DIST="$WORK/dist"; mkdir -p "$DIST/core/scripts"; g "$DIST" init -q
 printf 'qqprev\n' > "$DIST/core/scripts/toy.sh"; g "$DIST" add -A; g "$DIST" commit -qm prev
@@ -243,6 +347,13 @@ cp "$VALIDATOR" "$C/scripts/ai-dlc/validate-artifact-derivations.sh"
 printf 'qqalpha\nqqgamma\n' > "$C/scripts/ai-dlc/toy.sh"
 printf 'version: 1.0.0\ncommit: %s\n' "$BASE" > "$C/.claude/.ai-dlc-version"
 { printf '# Story\n\n```derived\n$ grep -c qqalpha scripts/ai-dlc/toy.sh\n1\n```\n\n```derived\n$ grep -c qqgamma scripts/ai-dlc/toy.sh\n1\n```\n'; } > "$C/_bmad-output/story.md"
+# a PAST-sprint document (current sprint is 1) carrying the same break, and the scope classifier the
+# writer calls: the reader copy beside a stub sprint-status.sh, installed where the consumer has it
+mkdir -p "$C/_bmad-output/planning-artifacts/s0"
+{ printf '# Old sprint\n\n```derived\n$ grep -c qqalpha scripts/ai-dlc/toy.sh\n1\n```\n'; } > "$C/_bmad-output/planning-artifacts/s0/old.md"
+cp "$BIN/check-owed-derivations.sh" "$C/scripts/ai-dlc/check-owed-derivations.sh"; write_stub "$C/scripts/ai-dlc"
+printf '1\n' > "$C/.sprint-id"
+K_WPAST="_bmad-output/planning-artifacts/s0/old.md:4"
 g "$C" add -A; g "$C" commit -qm "pull to 1.0.0"
 g "$DIST" show "${THEIRS}:core/scripts/toy.sh" > "$C/scripts/ai-dlc/toy.sh"
 dd() { OUTD="$(cd / && TMPDIR="$WORK" bash "$DIFFER" "$DIST" "$BASE" "$C" "$THEIRS" "$@" 2>&1)"; RCD=$?; }
@@ -254,10 +365,12 @@ dd --record-owed "$OWED" --log-name reconcile-log-t1.md
 rc_is "Wb with --record-owed the exit is unchanged (1)" 1 "$RCD"
 K_W="_bmad-output/story.md:4"
 printed="$(awk -F'\t' '$1 == "NEWLY-FAILING" { print }' <<<"$OUTD")"
-want_rec="$(awk -F'\t' -v rng="$BASE..$THEIRS" '$1 == "NEWLY-FAILING" {
+want_rec="$(awk -F'\t' -v rng="$BASE..$THEIRS" -v past="$K_WPAST" '$1 == "NEWLY-FAILING" && $2 != past {
   s = $3; i = index(s, "  $ "); j = index(s, "  recorded: "); k = index(s, "  actual: ")
   printf "OWED\t%s\t%s\t%s\t%s\t%s\treconcile-log-t1.md\n", $2, substr(s, i + 4, j - i - 4), substr(s, j + 12, k - j - 12), substr(s, k + 10), rng }' <<<"$OUTD")"
-rc_is "Wc the record has exactly one row" 1 "$(awk 'END { print NR + 0 }' "$OWED" 2>/dev/null)"
+rc_is "Wc the record has exactly one row (the LIVING one; the past-sprint break is not recorded)" 1 "$(awk 'END { print NR + 0 }' "$OWED" 2>/dev/null)"
+rc_is "Sp3a the record carries no row for the past-sprint key, though the helper printed it NEWLY-FAILING" 0 "$([ "$(awk -F'\t' -v k="$K_WPAST" '$2 == k { n++ } END { print n + 0 }' "$OWED" 2>/dev/null)" = 0 ] && [ -n "$(awk -F'\t' -v k="$K_WPAST" '$1 == "NEWLY-FAILING" && $2 == k' <<<"$OUTD")" ] && echo 0 || echo 1)"
+ck "Sp3b and the helper prints an INFO past-sprint row naming it" "$(printf 'INFO\tpast-sprint\t%s' "$K_WPAST")" "$OUTD"
 if [ -n "$want_rec" ] && [ "$(cat "$OWED" 2>/dev/null)" = "$want_rec" ]; then
   ok "Wd the record row is byte-equal to the row the helper PRINTED (key, command, recorded, actual, range, log)"
 else
