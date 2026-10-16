@@ -675,6 +675,18 @@ Owed:
 
 Related: BL-585.
 
+**LANDED (v@VER@, verified @SHA@).** CLOSED AS MEASURED-NO-VALUE under Owed 2; nothing was built, and lead ai-dlc-9c accepted the close. For each of batch 235's red gates, the fixtures whose read-set (`.ai-dlc-fixture-readsets.tsv`, plus every `inputs.decl`) holds a path in the gate's own diff, excluding fixtures that diff edits, against that gate's red units:
+
+| Red gate (base..tip) | Fixtures listed | Red units in the list | Non-red units in the list |
+|---|---|---|---|
+| H-a (e3073787..c833cde7) | 48 | 3 of 3 (gate-resume, procsub-staged-refusal, validator-fork-budget) | 45 |
+| W (464ecbfe..7ce8c6f9) | 72 | 1 of 1 (procsub-staged-refusal) | 71 |
+| 0.800.0 push 2 (efcd5373..dcfe1f1c) | 56 | 10 of 10 | 46 |
+| vssnap (464ecbfe..8915fa18) | 28 | 0 of 1 (readset-skip, the fixture the diff edits) | 28 |
+| U-a (52555359..825eafe7) | 98 | no fixture was red (only validator S8) | 98 |
+
+The listing finds every fixture red that came from code outside the fixture, but it never separates red from green: 28 to 98 names a diff, at a red rate of 1 to 18 percent, and the recorded cost does not rank the red ones first (gate-resume 68s sits below many green units). It is the hook's own dispatch set, so it tells a builder what the gate will run, not what will fail; the only action it supports is running those fixtures, which is the gate as a hand-rolled loop. The two reds it cannot list or does not need to (vssnap's I54, U-a's S8) are validator reds that `scripts/pregate-self-check.sh` (BL-585, 0.800.0) already catches.
+
 verify: manual
 
 ## BL-610 — the read-set sandbox tracer omits any fixture that probes process liveness
