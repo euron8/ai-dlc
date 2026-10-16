@@ -757,6 +757,11 @@ mutant "JX76 the record_tail SPEC render refusal discarded" "specstale" \
 mutant "JX77 an absent or ambiguous spec memlog refused instead of skipped" "specnone spectwo" \
   '  if [ -z "$m" ]; then SPEC_LINE="SPEC-RENDER: SKIP -- $2"; return 0; fi' \
   '  if [ -z "$m" ]; then refuse "SKIP -- $2"; return 0; fi'
+# JX78: subject mode discards the SPEC render refusal. Only sjspecstale expects a refusal from the subject-mode
+# call; the SPEC-RENDER line is still set, so sjspecfresh and sjspecnone read the same.
+mutant "JX78 the subject-mode SPEC render refusal discarded" "sjspecstale" \
+  '  if [ -n "$_sm" ]; then spec_render_check "${STATE_PARENT}${_sm}" ""' \
+  '  if [ -n "$_sm" ]; then _rn0=$refuse_n; spec_render_check "${STATE_PARENT}${_sm}" ""; refuse_n=$_rn0'
 # ---- END JX MUTANTS.
 
 # ------------------------------------------------------------------------------ the reap

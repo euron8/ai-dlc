@@ -1234,7 +1234,44 @@ p_spectwo() { # two memlogs under specs/s305/, the first one stale -> rc 0, SKIP
     && ! has "$JO" "rendered through" && ! has "$JO" "REFUSED" && has "$JO" "ESCALATED-COUNT: 0 (1 closed"
 }
 
-P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrargs rrfiles rrsubj alias alnokeys alresult alown alsecond alother alsess altwo altool dispkey dispvocab dispruling srcparts gapfill chkpart chkrec rulingedit rulingtab chkjoined partsilent disjointoverlap specstale specfresh spechand specnone spectwo"
+# ---- THE SPEC RENDER ARM, SUBJECT MODE (--subject 9): the SPEC is a WHOLE-FILE part, so the join's SUBJ_SET
+# carries `.../specs/s9/kernel/.memlog.md` beside SPEC.md. The memlog is written by the SPEC part's own
+# writer (same agent as the SPEC edit), so the ledger half stays clean and only the render order is judged.
+# A refusal here leaves NO record, which is what sj_refused asserts.
+SJMEMLOG=_bmad-output/specs/s9/kernel/.memlog.md
+sj_spec_world() { # <memlog body, printf %b | "-" for none> -> prints the world; every part by its own agent, SPEC's agent also edits the memlog
+  local w o n=0 ag="" spo; w="$(subj_world)" || return 1
+  spo="$(sj_part_rows "$w" | awk -F'\t' '$3 == "SPEC" { print $2 }')"
+  [ -n "$spo" ] || return 1
+  for o in $(sj_part_rows "$w" | cut -f2); do
+    n=$((n + 1)); sj_edit "$w" "$o" "a$(printf '%016d' "$n")"; sj_part "$w" "$o" "$SJ_LAST"
+    [ "$o" = "$spo" ] && ag="a$(printf '%016d' "$n")"
+  done
+  [ -n "$ag" ] || return 1
+  if [ "$1" != "-" ]; then
+    printf '%b' "$1" > "$w/$SJMEMLOG" || return 1
+    drive "$w" Edit "$w/$SJMEMLOG" "$ag"
+  fi
+  printf '%s' "$w"
+}
+p_sjspecstale() { # decision, decision, phrased Render, decision -> rc 2, the memlog named, NO record written
+  local w; w="$(sj_spec_world "- (decision) a\n- (decision by pm) b\n- (event) Render p1: $SPEC_PH b\n- (decision) c\n")" || return 1
+  run_sjoin "$1" "$w"
+  sj_refused "$w" "specs/s9/kernel/.memlog.md:4: 1 (decision) entry(ies) after the last render (line 3)" && ! has "$JO" "rendered through"
+}
+p_sjspecfresh() { # the ALLOW twin: no decision after the render -> JOINED, the record written, rendered through
+  local w; w="$(sj_spec_world "- (decision) a\n- (decision by pm) b\n- (event) Render p1: $SPEC_PH b\n")" || return 1
+  run_sjoin "$1" "$w"
+  [ "$RC" -eq 0 ] && [ -f "$(sj_out "$w")" ] && has "$JO" "JOINED:" && has "$JO" "specs/s9/kernel/.memlog.md -- rendered through its last decision (line 3)" && ! has "$JO" "REFUSED"
+}
+p_sjspecnone() { # the SPEC part's memlog does not exist -> JOINED, SKIP naming that it does not exist
+  local w; w="$(sj_spec_world "-")" || return 1
+  run_sjoin "$1" "$w"
+  [ "$RC" -eq 0 ] && [ -f "$(sj_out "$w")" ] && has "$JO" "SPEC-RENDER: SKIP -- " && has "$JO" "specs/s9/kernel/.memlog.md does not exist" \
+    && ! has "$JO" "rendered through" && ! has "$JO" "REFUSED"
+}
+
+P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrargs rrfiles rrsubj alias alnokeys alresult alown alsecond alother alsess altwo altool dispkey dispvocab dispruling srcparts gapfill chkpart chkrec rulingedit rulingtab chkjoined partsilent specstale specfresh spechand specnone spectwo sjspecstale sjspecfresh sjspecnone"
 
 # ---- A PART'S DERIVATION SURVIVES THE JOIN. The part's ```derived fence is copied into the joined
 # record, and the gate re-runs `validate-artifact-derivations.sh` over the sprint dir AFTER the
