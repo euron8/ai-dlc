@@ -116,6 +116,9 @@ of the MAJOR findings raised after the first adversarial pass are counts, enumer
   artifact you were dispatched to write.
 - **Do NOT mutate repository state.** No `git` branch/commit/merge/worktree,
   no `gh`, no `chmod`. Your only write is the artifact file.
+- Leave the git index as you found it. No `git add`, `git mv`, `git rm`, `git commit`,
+  `git stash` or `git reset`; move a file with plain `mv` when your brief asks for a move. The
+  lead commits, and anything you stage rides into its next commit unseen.
 - **Do NOT return raw content.** Never paste file contents, full grep dumps,
   or your exploration trace back to the lead — that defeats the offload.
   Put detail in the artifact; return the pointer.

@@ -133,7 +133,7 @@ and history must preserve everything prior.
 **(b) Run `bmad-spec` headless** with the product brief and its `LOCKED_REQUIREMENTS` block
 (section 3) as input, and slug `<sprint-slug>` — **no sprint token in the slug**, because
 `bmad-spec` composes its output directory from it. File the package under
-`_bmad-output/specs/s<N>/<slug>/` — relocate with `git mv` if the returned paths are not
+`_bmad-output/specs/s<N>/<slug>/` — relocate with a plain `mv` if the returned paths are not
 already there, BEFORE section 4(c) or the validation cycle reads `SPEC.md`. Full contract for
 this dispatch — the escalated-route reason, the dispatched-not-inline reason, the relocation
 mechanics, the returns handling, and why the spec is never a full-text anchor target — is

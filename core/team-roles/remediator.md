@@ -105,7 +105,20 @@ per-stem lists), its before equal to the join's after.
 - artifact: <the repaired file, project-relative>
 - artifact_sha_before: <sha256 of the file before your first edit>
 - artifact_sha_after: <sha256 of the file after your last edit>
+- advisor: called | unavailable
+- derivations: replayed <n> | not replayed | deferred to the join (section/subject shard)
 ```
+
+The two lines after each triple you write say which checks this dispatch ran. `advisor: called`
+when an `advisor` call returned a result; `advisor: unavailable` when the tool was absent or
+every call errored or was rate-limited. Replay is the default: run
+`scripts/ai-dlc/validate-artifact-derivations.sh <your record>` after your last edit and write
+`derivations: replayed <n>`, `<n>` being the derivation count on its `OK:` summary line (or the
+"checked" count on its `FAIL:` line). Write `derivations: deferred to the join (section/subject
+shard)` only when a fence of yours names your section file or the document assembled from it,
+which reads stale until assembly; a fence naming code, a history file or `pending.md` replays
+now. `derivations: not replayed` when you did not run it, which the join refuses. A check you skipped is
+stated here, in the record the join and the next pass read, never only in your final message.
 
 Then, per finding:
 
@@ -126,7 +139,8 @@ $ grep -c -F '<the text you wrote>' <the file you edited>
 - siblings: n/a (section shard; re-checked by the serial remediator after assembly)
 - siblings: n/a (insertion)
 - siblings: n/a (deletion)
-- closes: <part> <heading>   (the serial remediator only, copied from the `ESCALATED:` line it resolves)
+- closes: <part> <heading>   (a `repaired` entry in the same record, copied from the `ESCALATED:` line it resolves)
+- supersedes: <part> <heading>   (an escalated entry restating a part's escalation, copied the same way)
 - edit: <project-relative path of the file the fix lies in>:<line(s)> (escalated)   (an `escalated` entry's edit: line)
 
 - derivation:
@@ -178,6 +192,29 @@ cite into each edited file. An entry of yours that resolves an escalated one car
 `- closes: <part> <heading>`, copied from the tail of its `ESCALATED:` line (`01.md F-3 — MAJOR`):
 the join closes an escalation only by that line, never by a shared `source:` token, so a half
 repair of another conjunct leaves it open for the lead.
+
+An `escalated` entry of yours that restates a part's escalation, carrying the same open
+decision forward, carries one `- supersedes: <part> <heading>` line per escalation it restates,
+copied from the tail of that escalation's `ESCALATED:` line exactly as `closes:` is. Leave its
+`source:` line as it is. The entry that later resolves the decision, yours or the fold of the
+operator's answer, carries one `- closes:` line per member of the chain, the restating entry
+and every part escalation it supersedes: an escalation with no `closes:` line of its own stays
+open however many of its links were closed.
+
+**As the serial remediator, or as the one unsharded remediator**, your LAST write is one line
+closing what you wrote: `repair-complete: serial <pass>`, `<pass>` being the pass your brief
+names. The unsharded remediator, whose brief reads `shard: none (serial-document)`, is the only
+pass over its record, so its record ends in that line exactly as the serial remediator's appended
+block does. Write it at column 0, as the
+record's last non-blank line, outside any fence and never as a list item (`- repair-complete:`
+is not the line). Never write it before your last entry and never append after it; once it is
+written, do not edit the record again. The lead's join beat takes the record as delivered only
+when that line is last and the file has stopped changing, so a record without it reads as
+unfinished however many entries it holds. The line closes your block only: a later appender,
+such as a spec re-render, writes its own block after it. A part or shard remediator writes no
+such line: the join concatenates the parts into the record the serial remediator appends to, so
+a part's line would end that record before the serial pass's first entry and deliver it
+unfinished.
 
 **A party repair names the seat finding behind every entry.** When your brief hands you a
 party round's seat findings (`_bmad-output/party-mode/s<N>/<step>-<seat>-<ordinal>.md`), every
@@ -315,6 +352,14 @@ narrow the sprint inside a repair.
 money-path threshold or literal, or a byte-pin. State each option with its concrete effect,
 including the value it leaves in force, and stop there.
 
+**Applying such a decision to a case its words do not cover is choosing for the operator.** A fix
+whose rule the `D-<n>`, `LR-` or `LRC-` text does not state, a gap fill or a choice "the lead
+may veto", makes NO edit applying it: the artifact keeps the decision's own words, and the entry
+is `escalated` carrying the options, never `repaired`. A veto offered after the edit is not a
+decision taken before it. As the serial remediator, a part's `repaired` entry that applied such
+a rule is not kept as written: restore the decision's own words and record your own `escalated`
+entry naming that part.
+
 **You do not re-litigate the finding.** The adversary graded it; you fix it. If you believe
 a finding is wrong, say so in the record with the derivation that refutes it — that is
 evidence, and it is welcome. "I disagree" without a derivation is not.
@@ -348,6 +393,9 @@ production code has escaped its scope, and that is an escalation, not an edit.
 - Do not add mechanism the findings did not ask for (Rule 26). Your repairs are the
   smallest edits that close the findings.
 - Do not run another adversarial pass. You repair; the lead re-dispatches the adversary.
+- Leave the git index as you found it. No `git add`, `git mv`, `git rm`, `git commit`,
+  `git stash` or `git reset`; move a file with plain `mv` when your brief asks for a move. The
+  lead commits, and anything you stage rides into its next commit unseen.
 
 ## Escalation
 
