@@ -109,6 +109,25 @@
 #   NOT gated anywhere: the lead's `join-remediator-shards.sh` or any merge script, a branch
 #   delete, a Bash write by a teammate (the pipeline instructs Edit/Write for every record).
 #
+# THE NO-VERIFY DENY (BL-562). A ref-moving `git push` segment whose last `--verify`/`--no-verify`
+# word is `--no-verify` (or its unambiguous abbreviations `--no-veri`, `--no-verif`) is DENIED
+# outright, whatever the advisor record says: an advisor call does not license skipping the
+# pre-push hook. Measured on graph twice (s319, 01:54Z and 03:05Z, two leads on two models), each
+# justified as an `_bmad-output/`-only change, the second right after an advisor call. So it runs
+# right after the parse, BEFORE every stand-down: empty KIND, the `ai-dlc-update/*` branch, no
+# transcript, a withdrawn or absent grant (a local-model lead), and L3.
+#   SCOPE: any agent, lead or teammate (graph's subagent transcripts carry 0 such pushes), and
+#   ONLY on a layered consumer -- `$CLAUDE_PROJECT_DIR/.claude/.ai-dlc-version` present, the stamp
+#   the core and dispatch guards key on. The distribution's operator registers this hook for
+#   ai-dlc itself, where hookless durability and release-branch pushes are standing practice
+#   (227 ref-moving `--no-verify` pushes in its lead transcripts), and is not a pipeline lead.
+#   ALLOWED: a branch delete (`--delete`, `-d`, `:ref`, the `isdelete` test), a quoted or
+#   heredoc mention (csegs), `--no-verify --verify`. Prescribed nowhere: no step, role or skill
+#   under core/ or templates/ issues an outer `git push --no-verify`; `self-update-push.sh` does
+#   so inside a script, after running the hook itself, which this hook never sees.
+#   NOT CAUGHT, known: `git -c core.hooksPath=<x> push`, `GIT_*` environment tricks, a push from a
+#   script, and a segment that both deletes and pushes (`git push --no-verify origin :a b`).
+#
 # THE TEST, PER KIND (operator ruling, batch 201). In the judged transcript, the line of the most
 # recent advisor attempt must come AFTER the line of the most recent gated action OF THE SAME
 # KIND as the incoming call. The kinds are push, PR merge (`gh pr merge` and the MCP merge), gate
@@ -265,6 +284,9 @@ def twrite($proj; $home):
   else false end;
 def gitre: "^(\\S*/)?git(\\s+(-C|-c|--git-dir|--work-tree|--namespace)\\s+(\"[^\"]*\"|\\x27[^\\x27]*\\x27|\\S+)|\\s+-\\S+)*\\s+";
 def gitpush: test(gitre + "push(\\s|$)");
+# BL-562: the segment skips the pre-push hook. git takes the LAST of `--verify` / `--no-verify`, and
+# accepts `--no-veri`, `--no-verif` as unambiguous abbreviations (`--no-ve`, `--no-ver` exit 129).
+def nvflag: words | map(select(test("^--(no-veri(f(y)?)?|verify)$"))) | (length > 0 and (last | startswith("--no-")));
 def isdelete: test("\\s(--delete|-d)(\\s|$)") or test("\\s\\+?:\\S");
 def pushrefs($v): sub("^.*?\\spush(\\s+|$)"; "") | gsub("[0-9&]?>>?\\|?\\s*\\S+"; "")
   | words | map(select((startswith("-") or test("^[&;|]*$")) | not)) | .[1:] | map(xv($v));
@@ -350,10 +372,19 @@ PARSED="$(printf '%s' "$IN" | jq -r --arg home "${HOME:-}" "$CLASSIFY"'
   | (if ((.agent_id // "") | tostring) == "" then "lead" else "mate" end) as $role
   | (if ($call | twrite($proj; $home)) then "twrite" else ($call | kind($role)) end) as $k
   | (if $k == "push" and $call.name == "Bash" then (($ti.command // "") | tostring | l3push) else "" end) as $l3
-  | @sh "TP=\($tp) AID=\((.agent_id // "") | tostring) CWD=\((.cwd // "") | tostring) PROJ=\($proj) ROLE=\($role) KIND=\($k) FP=\(($ti.file_path // "") | tostring) NEWN=\(($ti.content // "") | tostring | heads) TUID=\((.tool_use_id // "") | tostring) L3=\($l3)"' 2>/dev/null)" \
+  | (if $call.name == "Bash" then (($ti.command // "") | tostring | csegs | map(gitpush and nvflag and (isdelete | not)) | any) else false end) as $nv
+  | @sh "TP=\($tp) AID=\((.agent_id // "") | tostring) CWD=\((.cwd // "") | tostring) PROJ=\($proj) ROLE=\($role) KIND=\($k) FP=\(($ti.file_path // "") | tostring) NEWN=\(($ti.content // "") | tostring | heads) TUID=\((.tool_use_id // "") | tostring) L3=\($l3) NV=\($nv)"' 2>/dev/null)" \
   || { say "the tool call is not readable JSON; gate skipped"; exit 0; }
-TP=""; AID=""; CWD=""; PROJ=""; ROLE=""; KIND=""; FP=""; NEWN=0; TUID=""; L3=""
+TP=""; AID=""; CWD=""; PROJ=""; ROLE=""; KIND=""; FP=""; NEWN=0; TUID=""; L3=""; NV=false
 eval "$PARSED"
+
+# BL-562: a ref-moving push that skips the pre-push hook, from ANY agent on a layered consumer. It
+# sits before every stand-down below (empty KIND, the update branch, the transcript, the grant, L3).
+if [ "$NV" = true ] && [ -f "${CLAUDE_PROJECT_DIR:-.}/.claude/.ai-dlc-version" ]; then
+  jq -n --arg m "ai-dlc-advisor-gate: DENIED -- this git push skips the pre-push hook (--no-verify). A pipeline push runs the hook, always: no judgement that a change is artifact-only, and no advisor call, licenses skipping it. Run the prescribed push without the flag (steps/handoff.md step 3: git push -u origin HEAD, the whole command). If that push genuinely cannot succeed, report it to the operator in ONE line, as handoff.md step 3 says, and end the turn; the operator decides whether to bypass the hook." \
+    '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $m}}'
+  exit 0
+fi
 
 [ -n "$KIND" ] || exit 0
 

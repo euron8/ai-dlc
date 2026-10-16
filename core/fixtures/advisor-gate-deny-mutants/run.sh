@@ -29,7 +29,7 @@
 #        nothing, 1 = an assertion failed, 2 = fixture broken.
 SHARDS="a b c d e"
 # A ratchet, raised when a mutant is added: lowering it is a visible edit, a lost mutant is not.
-MIN_MUTANTS=70
+MIN_MUTANTS=81
 set -uo pipefail
 
 # The pre-push gate exports AI_DLC_* tunables; none is read here, but scrub them all the same.
@@ -144,11 +144,11 @@ CTL="$(score "$MUT/hook-control.sh" "$W/failed.control")"
 # Expected sets are C-locale sorted, which is what score() prints.
 # 1. the whole subject replaced by silence: every arm holding a DENY, WARN or stderr cell fails.
 #    ENVELOPE holds only SILENT cells since batch 208 and survives it; FAILED and REREAD hold DENY cells.
-mut silence "BASHC BMADONLY BODY CLOSE DENIED DETACHED FAILED FAILOPEN GATELOG GHREPO MATE MATEABSENT MATEPATH MATEREWRITE MCPNAME MERGE ORDER PATHGIT PERKIND PUSH QUOTEDALT QUOTEDC QUOTEDENV REARM REASON REDISPATCH REREAD SELF SELFLAST STACK TWRITE UNAV UPDATE UPDATECUT UPDATEREF WINDOW WITHDRAWN WRAP" -e '2i\
+mut silence "BASHC BMADONLY BODY CLOSE DENIED DETACHED FAILED FAILOPEN GATELOG GHREPO MATE MATEABSENT MATEPATH MATEREWRITE MCPNAME MERGE NOVERIFY ORDER PATHGIT PERKIND PUSH QUOTEDALT QUOTEDC QUOTEDENV REARM REASON REDISPATCH REREAD SELF SELFLAST STACK TWRITE UNAV UPDATE UPDATECUT UPDATEREF WINDOW WITHDRAWN WRAP" -e '2i\
 exit 0'
 # 2. warn-only: the rejected design, the same text as context with no decision.
 #    UNAV survives it by design: the warn path is its own emission and this mutant leaves it intact.
-mut warn-only "BASHC BMADONLY BODY CLOSE DENIED DETACHED FAILED GATELOG GHREPO MATE MATEPATH MATEREWRITE MCPNAME MERGE ORDER PATHGIT PERKIND PUSH QUOTEDALT QUOTEDC QUOTEDENV REARM REASON REDISPATCH REREAD SELF SELFLAST STACK TWRITE UPDATE UPDATECUT UPDATEREF WINDOW WITHDRAWN WRAP" \
+mut warn-only "BASHC BMADONLY BODY CLOSE DENIED DETACHED FAILED GATELOG GHREPO MATE MATEPATH MATEREWRITE MCPNAME MERGE NOVERIFY ORDER PATHGIT PERKIND PUSH QUOTEDALT QUOTEDC QUOTEDENV REARM REASON REDISPATCH REREAD SELF SELFLAST STACK TWRITE UPDATE UPDATECUT UPDATEREF WINDOW WITHDRAWN WRAP" \
   -e 's/permissionDecision: "deny", permissionDecisionReason: \$m/additionalContext: $m/'
 # 3. no grant test: a hook with a knob-free default of ON.
 mut no-grant-test "NOGRANT WITHDRAWN" -e '/^\[ "\${GRANT:-none}" = on \] || exit 0$/d'
@@ -229,7 +229,7 @@ mut cut-not-excluded "UPDATECUT" -e 's/(\$s | map(cutupd(\$v)) | any) as \$cut/f
 # 32. D3: a `$B` refspec is not resolved through its assignment.
 mut no-var-resolution "UPDATECUT" -e 's/(if (\$c | test("ai-dlc-update\/")) then (\$c | vars) else {} end) as \$v/{} as $v/'
 # 33. D5: no wrapper word is stripped. PUSH dies too: its `timeout 600 git push` cell is a wrapper.
-mut no-wrappers "PUSH STACK WRAP" -e 's/(nohup|exec|command|time|sudo|setsid|caffeinate|then/(then/' -e 's/|g?timeout(\\\\s+-\\\\S+)\*\\\\s+\[0-9.\]+\[smhd\]?|env(\\\\s+(-u|--unset)\\\\s+\\\\S+|\\\\s+-\\\\S+)\*)/)/'
+mut no-wrappers "NOVERIFY PUSH STACK WRAP" -e 's/(nohup|exec|command|time|sudo|setsid|caffeinate|then/(then/' -e 's/|g?timeout(\\\\s+-\\\\S+)\*\\\\s+\[0-9.\]+\[smhd\]?|env(\\\\s+(-u|--unset)\\\\s+\\\\S+|\\\\s+-\\\\S+)\*)/)/'
 # 34. D5: wrappers strip once, not in a loop.
 mut no-strip-loop "STACK" -e 's/then (\$n | strip) elif/then $n elif/'
 # 35. D5: the string argument of `bash -c` is not read.
@@ -297,7 +297,7 @@ mutc J-no-multiedit-gatelog "GATELOG" "GATELOG:j-multi" -e 's/(if (\[\.input\.ed
 
 # --- batch 218: the two root causes and the three operator-ruled loosenings ---
 # 60. F1: no quote mask, so a quoted alternation and a heredoc body split into push segments.
-mut qmask-identity "QUOTEDALT" -e 's/^def csegs: (qmask | segs) as \$s/def csegs: segs as $s/'
+mut qmask-identity "NOVERIFY QUOTEDALT" -e 's/^def csegs: (qmask | segs) as \$s/def csegs: segs as $s/'
 # 61. F2: the old fixed 2s re-read, so an advisor line landing at 3s is never judged.
 mutc fixed-2s-loop "REREAD" "REREAD:rr-late" -e 's/^case "\${ADVISOR_GATE_REREADS:-2}" in 0) _cap=0 ;; 1) _cap=2 ;; \*) _cap=10 ;; esac$/case "${ADVISOR_GATE_REREADS:-2}" in 0) _cap=0 ;; *) _cap=2 ;; esac/'
 # 69. L3 removed: a `_bmad-output/`-only push owes a consult.
@@ -316,6 +316,28 @@ mutc L3-no-upstream "BMADONLY" "BMADONLY:l3-upstream" -e 's/^  if \[ -n "\$urem"
 # 72. L3 on any refspec, so a push of another branch is judged by HEAD's change set.
 mutc L3-any-ref "BMADONLY" "BMADONLY:l3-otherref" -e 's/^  for r in \$refs; do \[ "\$r" = HEAD \] || \[ "\$r" = "\$br" \] || exit 1; done$/  :/'
 
+# --- BL-562: the no-verify deny, each wrong build dying on its own cell(s) ---
+mutc nv-off "NOVERIFY" "NOVERIFY:nv-abbr NOVERIFY:nv-chain NOVERIFY:nv-first NOVERIFY:nv-mate NOVERIFY:nv-offgrant NOVERIFY:nv-seed NOVERIFY:nv-update" -e 's/^if \[ "\$NV" = true \] && \[ -f /if false \&\& [ -f /'
+# no activation gate: the distribution operator's own hookless pushes are denied.
+mutc nv-no-stamp "NOVERIFY" "NOVERIFY:nv-noncons" -e 's/^if \[ "\$NV" = true \] && \[ -f "\${CLAUDE_PROJECT_DIR:-\.}\/\.claude\/\.ai-dlc-version" \]; then$/if [ "$NV" = true ]; then/'
+# a branch delete carrying the flag is denied.
+mutc nv-deletes "NOVERIFY" "NOVERIFY:nv-colon NOVERIFY:nv-delete NOVERIFY:nv-dshort" -e 's/map(gitpush and nvflag and (isdelete | not))/map(gitpush and nvflag)/'
+# any --no-verify word denies, even when a later --verify re-enables the hook.
+mutc nv-ignores-verify "NOVERIFY" "NOVERIFY:nv-reverify" -e 's/(length > 0 and (last | startswith("--no-")))/(map(startswith("--no-")) | any)/'
+# the ambiguous `--no-ver` (git exits 129, nothing pushed) is read as the flag.
+mutc nv-any-prefix "NOVERIFY" "NOVERIFY:nv-ambig" -e 's/test("^--(no-veri(f(y)?)?|verify)\$")/test("^--(no-ve[a-z]*|verify)$")/'
+# only the full spelling: git accepts `--no-verif`, so it escapes.
+mutc nv-exact-only "NOVERIFY" "NOVERIFY:nv-abbr" -e 's/test("^--(no-veri(f(y)?)?|verify)\$")/test("^--(no-verify|verify)$")/'
+# the raw split, not the quote mask: a quoted alternation reads as a push.
+mutc nv-raw-segs "NOVERIFY" "NOVERIFY:nv-mention" -e 's/| csegs | map(gitpush and nvflag/| segs | map(gitpush and nvflag/'
+# not keyed on a push: `git fetch --no-verify` is denied.
+mutc nv-not-push "NOVERIFY" "NOVERIFY:nv-fetch" -e 's/map(gitpush and nvflag and (isdelete | not))/map(nvflag and (isdelete | not))/'
+# the lead only: a teammate escapes.
+mutc nv-lead-only "NOVERIFY" "NOVERIFY:nv-mate" -e 's/^if \[ "\$NV" = true \] && \[ -f /if [ "$NV" = true ] \&\& [ -z "$AID" ] \&\& [ -f /'
+# behind the grant stand-down: a lead with no advisor grant (a local model) escapes.
+mutc nv-needs-grant "NOVERIFY" "NOVERIFY:nv-first" -e 's/^if \[ "\$NV" = true \] && \[ -f /if [ "$NV" = true ] \&\& grep -q advisor_tool "$TP" \&\& [ -f /'
+# an advisor call licenses the flag (the s319 03:05Z shape).
+mutc nv-advisor-licenses "NOVERIFY" "NOVERIFY:nv-abbr NOVERIFY:nv-chain NOVERIFY:nv-mate NOVERIFY:nv-seed NOVERIFY:nv-update" -e 's/^if \[ "\$NV" = true \] && \[ -f /if [ "$NV" = true ] \&\& ! grep -q server_tool_use "$TP" \&\& [ -f /'
 
 # Every mutant dealt to this shard must have RUN, and every one that ran must have died exactly.
 [ "$n_seen" -eq "$nmine" ] || bad "[J1] shard '$GROUP' reached $n_seen mutants, $nmine dealt -- a dealt mutant never ran"

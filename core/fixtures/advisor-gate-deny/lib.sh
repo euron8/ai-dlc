@@ -102,6 +102,12 @@
 #                carrying one, a MultiEdit adding one -> DENY; twins: header-only Write (the rotation),
 #                a Write keeping one heading, `tail` of the log, a `tee -a` and a MultiEdit adding no
 #                heading -> SILENT
+#   NOVERIFY     BL-562, on a stamped consumer: `git push --no-verify -u origin HEAD` (graph s319's
+#                command) after an advisor call, from an `_bmad-output/`-only branch -> DENY; also
+#                with no grant, a withdrawn grant, on `ai-dlc-update/*`, from a teammate, abbreviated
+#                `--no-verif`, chained and wrapped. Twins -> SILENT: no flag, a branch delete (`--delete`,
+#                `-d`, `:ref`), `--no-verify --verify`, the ambiguous `--no-ver` (git exits 129), a
+#                quoted mention, `git fetch --no-verify`, and the seed on a project with no stamp
 #   FAILOPEN     unparseable input, a missing transcript -> SILENT, and stderr says why
 #   EXIT         every call exits 0
 #
@@ -604,6 +610,32 @@ c GATELOG SILENT "$(write_in "$P1/g.jsonl" "$GL" '' "$(printf '# Gate Log\n')")"
 c GATELOG SILENT "$(write_in "$P1/g.jsonl" "$GL" '' "$(printf '# Gate Log\n\n## Gate Log: Sprint 2\nedited\n')")"
 B GATELOG SILENT 'tail -20 _bmad-output/implementation-artifacts/gate-log.md'
 
+# NO-VERIFY (BL-562). A `$CELLS/<n>.cpd` file runs the cell with CLAUDE_PROJECT_DIR at the stamped
+# consumer. par.jsonl holds an advisor call AFTER the grant, and $BMAD's outgoing set is
+# `_bmad-output/`-only, so the seed (graph s319 03:05:42Z, verbatim) would be ALLOWED by the
+# advisor record and by L3: only the no-verify deny can deny it.
+# nvc <tag> <want> <command> [transcript] [cwd] [agent_id] [consumer: 1|0]
+nvc() {
+  ct NOVERIFY "$2" "$1" "$(bash_in "${4:-$P1/par.jsonl}" "${5:-$BMAD}" "$3" "${6:-}")"
+  [ "${7:-1}" = 0 ] || : > "$CELLS/$nc.cpd"
+}
+nvc nv-seed DENY 'git push --no-verify -u origin HEAD'
+nvc nv-first DENY 'git push -u origin HEAD --no-verify' "$P1/none.jsonl" "$SPRINT"
+nvc nv-offgrant DENY 'git push -u origin HEAD --no-verify' "$P1/off.jsonl" "$SPRINT"
+nvc nv-update DENY 'git push --no-verify -u origin HEAD' "$P1/par.jsonl" "$UPDATE"
+nvc nv-mate DENY 'git push --no-verify -u origin HEAD' "$P1/par.jsonl" "$SPRINT" a2
+nvc nv-abbr DENY 'git push --no-verif origin HEAD'
+nvc nv-chain DENY 'git commit -qm x && nohup git push --no-verify origin HEAD > /tmp/p 2>&1'
+nvc nv-bare SILENT 'git push -u origin HEAD'
+nvc nv-delete SILENT 'git push --no-verify origin --delete b235-x'
+nvc nv-dshort SILENT 'git push --no-verify -d origin b235-x'
+nvc nv-colon SILENT 'git push --no-verify origin :b235-x'
+nvc nv-reverify SILENT 'git push --no-verify --verify -u origin HEAD'
+nvc nv-ambig SILENT 'git push --no-ver -u origin HEAD'
+nvc nv-mention SILENT "grep -n -E 'X|git push -u origin HEAD --no-verify|Y' f"
+nvc nv-fetch SILENT 'git fetch --no-verify origin'
+nvc nv-noncons SILENT 'git push --no-verify -u origin HEAD' "$P1/par.jsonl" "$BMAD" '' 0
+
 cell FAILOPEN SILENT 'E:not readable JSON' - '{"tool_name":"Bash","tool_input":{"command":"git push"'
 cell FAILOPEN SILENT 'E:gate skipped' - "$(bash_in "$P1/absent.jsonl" "$SPRINT" 'git push -u origin HEAD')"
 
@@ -628,8 +660,9 @@ DECIDE='.hookSpecificOutput as $h
 score() {
   local h="$1" log="$2" failed="" exitbad=0 n id check arm want V REASON_TXT ERR_TXT
   : > "$log"
-  local tgt add dly rrk apid
+  local tgt add dly rrk apid cpd
   while IFS=$'\t' read -r n id check arm want <&3; do
+    cpd="$CPD"; [ ! -f "$CELLS/$n.cpd" ] || cpd="$CONS"
     if [ -f "$CELLS/$n.app" ]; then
       apid=""
       IFS=$'\t' read -r tgt add dly rrk < "$CELLS/$n.app"
@@ -638,15 +671,15 @@ score() {
       fi
       if [ "$add" != - ]; then ( sleep "$dly"; cat "$add" >> "$tgt" ) & apid=$!; fi
       if [ "${rrk:--}" = - ]; then
-        env -u ADVISOR_GATE_REREADS ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$CPD" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
+        env -u ADVISOR_GATE_REREADS ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
       else
-        ADVISOR_GATE_REREADS="$rrk" ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$CPD" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
+        ADVISOR_GATE_REREADS="$rrk" ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
       fi
       [ -z "$apid" ] || wait "$apid"
     elif [ -f "$CELLS/$n.win" ]; then
-      env -u ADVISOR_GATE_WINDOW ADVISOR_GATE_REREADS=0 HOME="$W" CLAUDE_PROJECT_DIR="$CPD" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
+      env -u ADVISOR_GATE_WINDOW ADVISOR_GATE_REREADS=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
     else
-      ADVISOR_GATE_REREADS=0 ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$CPD" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
+      ADVISOR_GATE_REREADS=0 ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
     fi
     if [ ! -s "$OUTF" ]; then V=SILENT; REASON_TXT=""
     else

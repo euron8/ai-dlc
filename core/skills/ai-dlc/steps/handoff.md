@@ -58,6 +58,8 @@ Execute this 5-step procedure in order:
    (`git push -u origin HEAD`) so the Step 2 commit and the finalized
    state reach the remote and are not stranded on this machine.
    SKILL.md Rule 32 touchpoint I applies before the push.
+   **Never `--no-verify`**: the pre-push hook runs on every pipeline push, whatever the change
+   set, and `ai-dlc-advisor-gate.sh` denies the flag.
    **`-u origin HEAD`, never a bare `git push`.** A bare push cannot
    succeed on a branch that has never been pushed — which is every
    sprint's FIRST handoff wherever a branch is cut per sprint — and it
