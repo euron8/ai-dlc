@@ -151,7 +151,7 @@ exit 0'
 mut warn-only "BASHC BMADONLY BODY CLOSE DENIED DETACHED FAILED GATELOG GHREPO HDRONLY MATE MATEPATH MATEREWRITE MCPNAME MERGE NOVERIFY ORDER PATHGIT PERKIND PUSH QUOTEDALT QUOTEDC QUOTEDENV REARM REASON REDISPATCH REREAD SELF SELFLAST STACK TWRITE UPDATE UPDATECUT UPDATEREF WINDOW WITHDRAWN WRAP" \
   -e 's/permissionDecision: "deny", permissionDecisionReason: \$m/additionalContext: $m/'
 # 3. no grant test: a hook with a knob-free default of ON.
-mut no-grant-test "NOGRANT WITHDRAWN" -e '/^\[ "\${GRANT:-none}" = on \] || exit 0$/d'
+mut no-grant-test "NOGRANT NOVERIFY WITHDRAWN" -e '/^\[ "\${GRANT:-none}" = on \] || exit 0$/d'
 # 4. a withdrawn grant still counts as granted.
 mut withdrawn-ignored "WITHDRAWN" -e 's/\.grant = ((\$l\.attachment\.available != false) and (\$l\.attachment\.toolChange != "remove"))/.grant = true/'
 # 5. the unavailable carve-out removed: the deny nothing can clear.
@@ -344,9 +344,9 @@ mutc hdr-gated "HDRONLY" "HDRONLY:hdr-cr-head HDRONLY:hdr-cross HDRONLY:hdr-seq 
 # the header Write allowed but RECORDED: the write adding the first finding becomes a re-write and sails through.
 mutc hdr-recorded "HDRONLY" "HDRONLY:hdr-seq HDRONLY:hdr-seq-sc" -e 's/^            | sub("^hdrw\$"; "")) as \$k$/            | sub("^hdrw$"; "verdict")) as $k/'
 # a `### ` finding heading is header.
-mutc hdr-no-h3 "HDRONLY" "HDRONLY:hdr-cr-h4 HDRONLY:hdr-finding HDRONLY:hdr-h4" -e 's/| (test("(^|\\\\n)#{3,6}\[ \\\\t\]") or /| (/'
+mutc hdr-no-h3 "HDRONLY" "HDRONLY:hdr-cr-h4 HDRONLY:hdr-finding" -e 's/| (test("(^|\\\\n)#{3,6}\[ \\\\t\]") or /| (/'
 # DEFECT 3: only `### ` is a finding heading, so a code-review / QA `#### ` finding is header.
-mutc hdr-h3-only "HDRONLY" "HDRONLY:hdr-cr-h4 HDRONLY:hdr-h4" -e 's/| (test("(^|\\\\n)#{3,6}\[ \\\\t\]") or /| (test("(^|\\\\n)###[ \\\\t]") or /'
+mutc hdr-h3-only "HDRONLY" "HDRONLY:hdr-cr-h4" -e 's/| (test("(^|\\\\n)#{3,6}\[ \\\\t\]") or /| (test("(^|\\\\n)###[ \\\\t]") or /'
 # DEFECT 2: the deny sends the lead to the environmental fallback, a dead end for a refused hook.
 mutc nv-reason-deadend "NOVERIFY" "NOVERIFY:nv-reason" -e 's/hook-refused branch: report the failing gate/environmental fallback: report the push/'
 # DEFECT 1: no updater stand-down -- the updater's bookkeeping push is denied.
