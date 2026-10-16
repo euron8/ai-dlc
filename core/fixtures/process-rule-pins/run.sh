@@ -77,6 +77,10 @@
 #     "It writes findings to" paragraph; adversary.md Contract item 2, which item 1 runs into with no
 #     blank line, so its paragraph's lead is item 1). The derivation itself is owned by
 #     adversarial-shard-merge; these rows pin the prose that tells a shard not to self-report.
+#   - a shard refused as two adversary dispatches after a re-dispatch is merged with `--rerun
+#     <shard>.md@<dispatched-at>`, and a refusal naming another shard's writer is a finding
+#     (gp-shard-rerun*); the probe ledger is not rotated mid-round and a "predates transcript_path"
+#     refusal is re-run, never hand-filled (gp-probe-ledger*). Same section, each its own paragraph.
 #
 # LEADS ARE NOT ENOUGH. A bold lead left intact over a body rewritten to say the opposite
 # ("need NOT carry", "dropped only through a HARD_BLOCK", "an assertion is a sufficient
@@ -387,6 +391,10 @@ coe-stem-token|S|steps/carry-over-evaluation.md|### 3a. Validation cycle (Rule 8
 coe-stem-dir|S|steps/carry-over-evaluation.md|### 3a. Validation cycle (Rule 8)|### 4. Deferral Handling|- The series is|para|s<N>/shards/coe-p<M>/
 gp-shard-sentinel|S|steps/_gate-procedures.md|## Adversarial review dispatch (referenced by step files)|## Divergence resolution dispatch|It writes findings to|para|`tool_use_id: NOT_ACCESSIBLE`
 gp-shard-derived|S|steps/_gate-procedures.md|## Adversarial review dispatch (referenced by step files)|## Divergence resolution dispatch|It writes findings to|para|the merge derives each shard's dispatch id
+gp-shard-rerun|S|steps/_gate-procedures.md|## Adversarial review dispatch (referenced by step files)|## Divergence resolution dispatch|**A re-dispatched shard is merged with `--rerun`.**|para|run the same merge with `--rerun <shard>.md@<the re-dispatch's dispatched-at>`
+gp-shard-rerun-finding|S|steps/_gate-procedures.md|## Adversarial review dispatch (referenced by step files)|## Divergence resolution dispatch|**A re-dispatched shard is merged with `--rerun`.**|para|a refusal naming a writer of another shard is a finding, never a timestamp to move
+gp-probe-ledger|S|steps/_gate-procedures.md|## Adversarial review dispatch (referenced by step files)|## Divergence resolution dispatch|**The probe ledger is load-bearing until the consumer's hook writes `transcript_path`.**|para|Do not rotate or truncate `subagent-context.jsonl` mid-round
+gp-probe-ledger-rerun|S|steps/_gate-procedures.md|## Adversarial review dispatch (referenced by step files)|## Divergence resolution dispatch|**The probe ledger is load-bearing until the consumer's hook writes `transcript_path`.**|para|is re-run after the next dispatch writes the new keys, never hand-filled
 adv-shard-sentinel|R|adversary.md|## Contract|## Severity|1. **Run the evaluation you were dispatched for, in your own context.**|para|**A shard writes `tool_use_id: NOT_ACCESSIBLE`, never an id it was told or guessed.**
 PINS
 }

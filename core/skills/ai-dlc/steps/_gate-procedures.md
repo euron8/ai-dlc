@@ -561,6 +561,10 @@ Filename numbering is load-bearing: Check 24 orders the series by the `p<M>` tok
 
 **Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh --complete <findings_path>`, which takes a file as delivered only once it ends in its `seat-complete:` line.
 
+**A re-dispatched shard is merged with `--rerun`.** Write-ledger rows never expire, so after a stalled adversary is re-dispatched the merge refuses its shard as written by two adversary dispatches. When it does, run the same merge with `--rerun <shard>.md@<the re-dispatch's dispatched-at>` (repeatable, one per re-dispatched shard). The re-dispatch is a NEW dispatch, and a refusal naming a writer of another shard is a finding, never a timestamp to move.
+
+**The probe ledger is load-bearing until the consumer's hook writes `transcript_path`.** Do not rotate or truncate `subagent-context.jsonl` mid-round: a shard row without `transcript_path` takes its dispatch id from that ledger alone. A refusal naming a row that "predates transcript_path" is re-run after the next dispatch writes the new keys, never hand-filled.
+
 **Shard a multi-file artifact (Rule 28, "Split dispatch": files axis).** When the artifact under
 review is two or more files (`stories/`), dispatch one `adversary` shard per story plus one
 cross-story shard per cross group, in waves (Rule 28, "Split dispatch"). The part set is derived: create

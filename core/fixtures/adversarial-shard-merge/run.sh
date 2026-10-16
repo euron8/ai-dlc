@@ -188,6 +188,22 @@ p_tuid_session "$MERGE" && ok "T9: payload session_id differs from the transcrip
   || bad "T9: (rc=$RC) $(cat "$MO")"
 p_tuid_pre "$MERGE" && ok "T10: a row with no transcript_path takes the probe row's id and merges; without the probe row it is REFUSED naming the agent and 'predates transcript_path'" \
   || bad "T10: (rc=$RC) $(cat "$MO")"
+p_tuid_basename "$MERGE" && ok "T11: shard 2's only rows sit under shards/stories-p2/ and under s2/shards/stories-p1/ -> REFUSED 'has no row' (rows keyed on the full path, never the basename)" \
+  || bad "T11: (rc=$RC) $(cat "$MO")"
+p_tuid_probemeta "$MERGE" && ok "T12: the probe ledger names another adversary dispatch for shard 2's agent -> the meta file's id is written, the probe's absent" \
+  || bad "T12: (rc=$RC) $(cat "$MO")"
+p_tuid_tworoles "$MERGE" && ok "T13: shard 2's dispatch id carries two spawn rows, adversary and remediator -> REFUSED naming the remediator role" \
+  || bad "T13: (rc=$RC) $(cat "$MO")"
+
+# ---- the re-dispatch of one shard (--rerun <shard>.md@<ISO>). RR1 is the contracted path; RR2 is
+# graph s318 requirements-p1/cross-2, a genuine cross-shard write --rerun must never acquit; RR3 is
+# the superseded writer posing as its own re-run.
+p_rerun_join "$MERGE" && ok "RR1: a stalled adversary's 2.md and 2.md.draft before S, a NEW dispatch's 2.md after -> MERGED with --rerun 2.md@S, superseded=2, the rerun: line naming the stalled agent, 2= the new id" \
+  || bad "RR1: (rc=$RC) $(cat "$MO")"
+p_rerun_other "$MERGE" && ok "RR2: cross-1's own adversary edited 2.md before S -> REFUSED with --rerun, naming its cross-1.md row" \
+  || bad "RR2: (rc=$RC) $(cat "$MO")"
+p_rerun_same "$MERGE" && ok "RR3: the superseded writer writes 2.md again after S -> REFUSED, the re-run is a NEW dispatch" \
+  || bad "RR3: (rc=$RC) $(cat "$MO")"
 
 # R6: a finding heading EXACTLY as the real pass wrote it carries no severity word, so the heads
 # counted (0 MAJOR) disagree with findings_major -- refused, never counted as zero.
