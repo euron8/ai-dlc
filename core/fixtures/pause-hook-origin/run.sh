@@ -139,136 +139,123 @@ else
   fi
 fi
 
-# --- Assertion 10: the pause binds to the LEAD's session ----------------------
+# --- Assertion 10: only an /ai-dlc session's prose pauses ---------------------
 # THE DEFECT. Once the pipeline was active the hook raised the project-wide pause flag for
-# a prompt typed in ANY session of the project, so a message typed into a second session
-# paused the lead and Rule 29 then denied six of its dispatches. The hook now records the
-# session id of the last `/ai-dlc` prompt in _bmad-output/.lead-session and raises the flag
-# only for that session; any other session's prose is still captured and is logged
-# OTHER_SESSION_PROMPT. No binding pauses, as before.
+# operator prose typed in ANY session of the project, so a message typed into a second window
+# paused the lead and Rule 29 then denied six of its dispatches. The hook now asks the TYPING
+# session's own transcript whether it invoked /ai-dlc (acknowledge.sh's marker: the typed
+# command's user record or a structural Skill tool_use, last marker wins). Not an /ai-dlc
+# session -> captured, logged PAUSE_SKIPPED, no flag. No readable transcript -> pauses.
 #
-# One world per drive, each in a fresh project, read as six cells. Every cell is
-# PRESENCE-shaped on the side that matters (a flag, a file content, a row), so a subject that
-# emits nothing fails the cells that expect output. The unmutated COPY is driven too, from
-# the same directory the mutants sit in, so a mutant's kill is not a copy that cannot run.
-b_fire() { # <hook> <project> <session> <prompt>
-  jq -nc --arg s "$3" --arg p "$4" '{session_id:$s,prompt:$p}' \
-    | CLAUDE_PROJECT_DIR="$2" bash "$1" >/dev/null 2>&1
+# SEEDED FROM THE PRODUCER'S SHAPES: the harness writes a typed slash command as a user record
+# whose content opens `<command-message>X</command-message>\n<command-name>/X</command-name>`,
+# and a skill activation as an assistant tool_use `"name":"Skill","input":{"skill":"X"...`.
+# The OTHER transcript carries both strings only as a MENTION inside a tool_result, where JSON
+# escapes the quotes -- the shape that turned a session into an "updater" once before.
+#
+# One fresh project per cell, seven cells, each PRESENCE-shaped on the side that matters (a
+# flag, or a PAUSE_SKIPPED row plus a capture). The unmutated COPY is driven too, from the
+# directory the mutants sit in, so a kill is never a copy that cannot run.
+T_TYPED='{"type":"user","message":{"role":"user","content":"<command-message>ai-dlc</command-message>\n<command-name>/ai-dlc</command-name>\n<command-args>Sprint 9</command-args>"}}'
+T_TYPED_UPD='{"type":"user","message":{"role":"user","content":"<command-message>ai-dlc-update</command-message>\n<command-name>/ai-dlc-update</command-name>"}}'
+T_SKILL='{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"tu-1","name":"Skill","input":{"skill":"ai-dlc","args":"pasted brief"}}]}}'
+T_MENTION='{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"tu-9","content":"ledger says <command-message>ai-dlc</command-message>\\n<command-name>/ai-dlc</command-name> and \"name\":\"Skill\",\"input\":{\"skill\":\"ai-dlc\""}]}}'
+T_PLAIN='{"type":"user","message":{"role":"user","content":"READ the analysis doc"}}'
+b_fire() { # <hook> <project> <session> <transcript-path|""> <prompt>
+  if [ -n "$4" ]; then
+    jq -nc --arg s "$3" --arg t "$4" --arg p "$5" '{session_id:$s,transcript_path:$t,prompt:$p}'
+  else
+    jq -nc --arg s "$3" --arg p "$5" '{session_id:$s,prompt:$p}'
+  fi | CLAUDE_PROJECT_DIR="$2" bash "$1" >/dev/null 2>&1
 }
-b_world() { # <hook> -> "NB BIND BOUND OTHER REBIND SKILL" as y/n cells
-  local h="$1" p o nb bind bound other rebind skill
-  p="$(mktemp -d "$WORK/bind.XXXXXX")/project"; mkdir -p "$p/_bmad-output"
-  cp "$SNAPSHOT" "$p/_bmad-output/pipeline-snapshot.md"
-  o="$p/_bmad-output"
-  # NB: no binding yet -> a typed prompt from any session pauses (the default branch).
-  b_fire "$h" "$p" "sess-other" "Hold on, check the gate first."
-  [ -f "$o/pipeline-paused.flag" ] && [ ! -f "$o/.lead-session" ] && nb=y || nb=n
-  rm -f "$o/pipeline-paused.flag"
-  # BIND: `/ai-dlc` with arguments, from the lead session, records that session.
-  b_fire "$h" "$p" "sess-lead" "/ai-dlc Sprint 9: build the login flow"
-  [ "$(cat "$o/.lead-session" 2>/dev/null)" = "sess-lead" ] && bind=y || bind=n
-  rm -f "$o/pipeline-paused.flag"
-  # BOUND: the lead's own typed prose pauses.
-  b_fire "$h" "$p" "sess-lead" "Stop and re-check the gate before you continue."
-  [ -f "$o/pipeline-paused.flag" ] && bound=y || bound=n
-  rm -f "$o/pipeline-paused.flag"
-  # OTHER: another session's prose is captured in full, logged as its own event, and pauses nothing.
-  local up0 up1
-  up0="$(grep -c '^## .*-- USER_PAUSE' "$o/pipeline-continuation-log.md" 2>/dev/null)" || up0=0
-  b_fire "$h" "$p" "sess-other" "unrelated note from a second window"
-  up1="$(grep -c '^## .*-- USER_PAUSE' "$o/pipeline-continuation-log.md" 2>/dev/null)" || up1=0
-  if [ ! -f "$o/pipeline-paused.flag" ] \
-     && grep -q '^## .*-- OTHER_SESSION_PROMPT$' "$o/pipeline-continuation-log.md" 2>/dev/null \
-     && grep -q '^unrelated note from a second window$' "$o/operator-requests-history.md" 2>/dev/null \
-     && grep -q '^- Session: sess-other$' "$o/operator-requests-history.md" 2>/dev/null \
-     && [ "$up0" = "$up1" ]; then other=y; else other=n; fi
-  rm -f "$o/pipeline-paused.flag"
-  # REBIND: `/ai-dlc resume` from a NEW session rebinds; the old lead no longer pauses, the new one does.
-  b_fire "$h" "$p" "sess-new" "/ai-dlc resume"
-  rm -f "$o/pipeline-paused.flag"
-  b_fire "$h" "$p" "sess-lead" "a note from the old window"
-  local old_paused=n; [ -f "$o/pipeline-paused.flag" ] && old_paused=y
-  rm -f "$o/pipeline-paused.flag"
-  b_fire "$h" "$p" "sess-new" "pause here please"
-  if [ "$(cat "$o/.lead-session" 2>/dev/null)" = "sess-new" ] && [ "$old_paused" = n ] \
-     && [ -f "$o/pipeline-paused.flag" ]; then rebind=y; else rebind=n; fi
-  rm -f "$o/pipeline-paused.flag"
-  # SKILL: a different skill sharing the prefix (`/ai-dlc-update`) is not a lead start and does
-  # not rebind. Read as "unchanged across the fire", so this cell does not depend on REBIND's.
-  local before; before="$(cat "$o/.lead-session" 2>/dev/null)"
-  b_fire "$h" "$p" "sess-upd" "/ai-dlc-update"
-  [ "$(cat "$o/.lead-session" 2>/dev/null)" = "$before" ] && skill=y || skill=n
-  # FRESH: the FIRST /ai-dlc of a project, with no snapshot yet, binds too. Every cell above
-  # runs past the snapshot gate, so without this world a binding moved below that gate would
-  # pass them all and the fresh start -- the case the filing names first -- would never bind.
-  local f fresh
-  f="$(mktemp -d "$WORK/bind.XXXXXX")/project"; mkdir -p "$f"
-  b_fire "$h" "$f" "sess-first" "/ai-dlc Sprint 1: start the project"
-  if [ "$(cat "$f/_bmad-output/.lead-session" 2>/dev/null)" = "sess-first" ] \
-     && [ ! -f "$f/_bmad-output/pipeline-paused.flag" ]; then fresh=y; else fresh=n; fi
-  printf '%s %s %s %s %s %s %s\n' "$nb" "$bind" "$bound" "$other" "$rebind" "$skill" "$fresh"
+b_proj() { local p; p="$(mktemp -d "$WORK/bind.XXXXXX")/project"; mkdir -p "$p/_bmad-output"
+  cp "$SNAPSHOT" "$p/_bmad-output/pipeline-snapshot.md"; printf '%s' "$p"; }
+b_tx() { # <project> <line>... -> transcript path
+  local p="$1" t; shift; t="$p/../session.jsonl"; : > "$t"
+  for l in "$@"; do printf '%s\n' "$l" >> "$t"; done; printf '%s' "$t"; }
+b_paused() { [ -f "$1/_bmad-output/pipeline-paused.flag" ] && echo y || echo n; }
+b_world() { # <hook> -> "LEAD SKILLTU OTHER UPDATER RESUME NOTRANS UNREAD" as y/n (y = correct)
+  local h="$1" p t lead skilltu other updater resume notrans unread
+  # LEAD: the lead typed /ai-dlc earlier; its later prose pauses.
+  p="$(b_proj)"; t="$(b_tx "$p" "$T_PLAIN" "$T_TYPED" "$T_PLAIN")"
+  b_fire "$h" "$p" "sess-lead" "$t" "Stop and re-check the gate."
+  [ "$(b_paused "$p")" = y ] && lead=y || lead=n
+  # SKILLTU: activated through a Skill(ai-dlc) tool_use with no typed command (pasted brief).
+  p="$(b_proj)"; t="$(b_tx "$p" "$T_PLAIN" "$T_SKILL")"
+  b_fire "$h" "$p" "sess-lead2" "$t" "Hold on, revert that."
+  [ "$(b_paused "$p")" = y ] && skilltu=y || skilltu=n
+  # OTHER: no marker, only mentions -> captured in full, PAUSE_SKIPPED with reason, no flag,
+  # and no USER_PAUSE row (the heading ai-dlc-handoff-pending.sh reads).
+  p="$(b_proj)"; t="$(b_tx "$p" "$T_PLAIN" "$T_MENTION")"
+  b_fire "$h" "$p" "sess-other" "$t" "unrelated note from a second window"
+  if [ "$(b_paused "$p")" = n ] \
+     && grep -q '^- Reason: operator prose typed in a session that is not an /ai-dlc session' "$p/_bmad-output/pipeline-continuation-log.md" 2>/dev/null \
+     && ! grep -q '^## .*-- USER_PAUSE' "$p/_bmad-output/pipeline-continuation-log.md" 2>/dev/null \
+     && grep -q '^unrelated note from a second window$' "$p/_bmad-output/operator-requests-history.md" 2>/dev/null \
+     && grep -q '^- Session: sess-other$' "$p/_bmad-output/operator-requests-history.md" 2>/dev/null; then
+    other=y; else other=n; fi
+  # UPDATER: an /ai-dlc session that then ran /ai-dlc-update is the updater; no pause.
+  p="$(b_proj)"; t="$(b_tx "$p" "$T_TYPED" "$T_TYPED_UPD" "$T_PLAIN")"
+  b_fire "$h" "$p" "sess-upd" "$t" "what version are we on now"
+  [ "$(b_paused "$p")" = n ] && updater=y || updater=n
+  # RESUME: /clear then `/ai-dlc resume` in a NEW session -- its transcript holds no marker yet;
+  # the current prompt carries it and pauses (the lead's resume branch clears the flag).
+  p="$(b_proj)"; t="$(b_tx "$p")"
+  b_fire "$h" "$p" "sess-new" "$t" "/ai-dlc resume"
+  [ "$(b_paused "$p")" = y ] && resume=y || resume=n
+  # NOTRANS: no transcript_path at all -> the default branch pauses.
+  p="$(b_proj)"
+  b_fire "$h" "$p" "sess-x" "" "a steer with no transcript path"
+  [ "$(b_paused "$p")" = y ] && notrans=y || notrans=n
+  # UNREAD: a transcript_path naming no file -> the default branch pauses.
+  p="$(b_proj)"
+  b_fire "$h" "$p" "sess-y" "$p/../does-not-exist.jsonl" "a steer whose transcript cannot be read"
+  [ "$(b_paused "$p")" = y ] && unread=y || unread=n
+  printf '%s %s %s %s %s %s %s\n' "$lead" "$skilltu" "$other" "$updater" "$resume" "$notrans" "$unread"
 }
 B_EXPECT="y y y y y y y"
 B_REAL="$(b_world "$HOOK")"
 if [ "$B_REAL" = "$B_EXPECT" ]; then
-  ok "lead binding: no-binding pauses, /ai-dlc binds, bound session pauses, other session captures without pausing, resume rebinds, /ai-dlc-update does not, a fresh start binds [$B_REAL]"
+  ok "session test: typed /ai-dlc pauses, Skill(ai-dlc) pauses, a non-ai-dlc session captures without pausing, the updater does not pause, /ai-dlc resume in a new session pauses, no or unreadable transcript pauses [$B_REAL]"
 else
-  bad "LEAD BINDING WRONG — cells NB BIND BOUND OTHER REBIND SKILL FRESH read [$B_REAL], expected [$B_EXPECT]"
+  bad "SESSION TEST WRONG — cells LEAD SKILLTU OTHER UPDATER RESUME NOTRANS UNREAD read [$B_REAL], expected [$B_EXPECT]"
 fi
 
-# --- Assertion 11: MUTANTS — each binding cell can fail -----------------------
+# --- Assertion 11: MUTANTS — each cell can fail ------------------------------
 BM="$WORK/bind-mutants"; mkdir -p "$BM"
 cp "$HOOK" "$BM/control.sh"
 B_CTRL="$(b_world "$BM/control.sh")"
 if [ "$B_CTRL" = "$B_EXPECT" ]; then
-  ok "binding mutant control: an unmutated copy under $BM reads [$B_CTRL]"
+  ok "session-test mutant control: an unmutated copy under $BM reads [$B_CTRL]"
 else
-  bad "BINDING MUTANT HARNESS BROKEN — the unmutated copy reads [$B_CTRL], so no kill below is readable"
+  bad "SESSION-TEST MUTANT HARNESS BROKEN — the unmutated copy reads [$B_CTRL], so no kill below is readable"
 fi
-# <name> <cell-index 1..6> <sed-expr>: the mutant must flip exactly its own cell to n.
+# <name> <expected-vector> <sed-expr>
 b_mut() {
-  local name="$1" cell="$2" expr="$3" got want
-  sed "$expr" "$HOOK" > "$BM/$name.sh"
+  local name="$1" want="$2" expr="$3" got
+  sed "$expr" "$HOOK" > "$BM/$name.sh" || { bad "FIXTURE STALE: mutant $name: sed did not apply"; return; }
   if cmp -s "$HOOK" "$BM/$name.sh"; then
-    bad "FIXTURE STALE: binding mutant $name matched nothing in $HOOK"; return
+    bad "FIXTURE STALE: session-test mutant $name matched nothing in $HOOK"; return
   fi
   got="$(b_world "$BM/$name.sh")"
-  want="$(echo "$B_EXPECT" | awk -v c="$cell" '{ $c = "n"; print }')"
   if [ "$got" = "$want" ]; then
-    ok "binding mutant $name: [$got] — only its own cell flipped"
+    ok "session-test mutant $name: [$got]"
   else
-    bad "BINDING MUTANT $name read [$got], expected [$want] — the arm cannot fire, or the cells are entangled"
+    bad "SESSION-TEST MUTANT $name read [$got], expected [$want] — the arm cannot fire, or the cells are entangled"
   fi
 }
-# Binding never recorded: the command pattern matches nothing. BIND fails; with no binding
-# every later prompt pauses, so OTHER and REBIND fail too -- the cells they own read the
-# binding, so this mutant is scored on its whole expected vector rather than one cell.
-sed 's#^    /ai-dlc|/ai-dlc\[\[:space:\]\]\*)$#    /ai-dlc-NEVER-MATCHES)#' "$HOOK" > "$BM/nobind.sh"
-if cmp -s "$HOOK" "$BM/nobind.sh"; then
-  bad "FIXTURE STALE: binding mutant nobind matched nothing"
-else
-  g="$(b_world "$BM/nobind.sh")"
-  [ "$g" = "y n y n n y n" ] && ok "binding mutant nobind: [$g] — no binding recorded, so every session pauses" \
-    || bad "BINDING MUTANT nobind read [$g], expected [y n y n n y n]"
-fi
-# The comparison never consulted: every session pauses again -- the filed defect. OTHER and
-# REBIND (whose old-lead leg is the same comparison) both fail.
-sed 's#^if \[ -n "\$LEAD_SESSION" \] && \[ -n "\$SESSION_ID" \] && \[ "\$SESSION_ID" != "\$LEAD_SESSION" \]; then$#if false; then#' "$HOOK" > "$BM/nocompare.sh"
-if cmp -s "$HOOK" "$BM/nocompare.sh"; then
-  bad "FIXTURE STALE: binding mutant nocompare matched nothing"
-else
-  g="$(b_world "$BM/nocompare.sh")"
-  [ "$g" = "y y y n n y y" ] && ok "binding mutant nocompare: [$g] — the filed defect is back and OTHER/REBIND catch it" \
-    || bad "BINDING MUTANT nocompare read [$g], expected [y y y n n y y]"
-fi
-# No binding read as a MISMATCH: the default branch stops pausing. Only NB owns that.
-b_mut nodefault 1 's#^if \[ -n "\$LEAD_SESSION" \] && \[ -n "\$SESSION_ID" \]#if [ -n "$SESSION_ID" ]#'
-# Bind only once, never rebind: REBIND owns that.
-b_mut norebind 5 's#^if \[ -n "\$PROMPT_STRIPPED" \] && \[ -n "\$SESSION_ID" \]; then$#if [ -n "$PROMPT_STRIPPED" ] \&\& [ -n "$SESSION_ID" ] \&\& [ ! -s "$LEAD_SESSION_FILE" ]; then#'
-# Prefix match instead of the exact command token: `/ai-dlc-update` rebinds. SKILL owns that.
-b_mut prefix 6 's#^    /ai-dlc|/ai-dlc\[\[:space:\]\]\*)$#    /ai-dlc*)#'
-# Binding gated on an active pipeline: the fresh start never binds. FRESH owns that.
-b_mut gated 7 's#^if \[ -n "\$PROMPT_STRIPPED" \] && \[ -n "\$SESSION_ID" \]; then$#if [ -n "$PROMPT_STRIPPED" ] \&\& [ -n "$SESSION_ID" ] \&\& [ -f "$SNAPSHOT_FILE" ]; then#'
+# The skip never taken: every session pauses again -- the filed defect.
+b_mut noskip    "y y n n y y y" 's#^  none|ai-dlc-update)$#  NEVER-MATCHES)#'
+# The updater counted as a lead.
+b_mut updlead   "y y y n y y y" 's#^  none|ai-dlc-update)$#  none)#'
+# The Skill tool_use alternative dropped: a lead activated through Skill(ai-dlc) stops pausing.
+b_mut notooluse "y n y y y y y" 's#|"name":"Skill","input":\\{"skill":"ai-dlc(-update)?"##'
+# The typed marker un-anchored from the harness's user record: a MENTION makes a session a lead.
+b_mut bare      "y y n y y y y" 's#"role":"user","content":"<command-message>ai-dlc(-update)?</command-message>\\\\n##'
+# The current /ai-dlc prompt not consulted: a resume in a new session does not pause.
+b_mut nocurrent "y y y y n y y" 's#^  /ai-dlc|/ai-dlc\[\[:space:\]\]\*)  *SESSION_SKILL="ai-dlc" ;;$#  /ai-dlc-NEVER) SESSION_SKILL="ai-dlc" ;;#'
+# The default inverted: no readable transcript reads as "not a lead" and skips.
+b_mut nodefault "y y y y y n n" 's#^    SESSION_SKILL="unknown"$#    SESSION_SKILL="none"#'
 
 # --- Assertion 8: the THREE hooks seed the SAME legend -------------------------
 # WHY THIS LIVES HERE, AND WHY ASSERTION 6 IS NOT ENOUGH. Assertion 6 reads the log this

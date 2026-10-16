@@ -16,10 +16,10 @@
 #   are stripped is not an operator turn and is logged PAUSE_SKIPPED instead.
 #   See the predicate below for why it stops there and must not be broadened by
 #   copying another script's list of harness prefixes.
-# - Once a lead session is bound (_bmad-output/.lead-session, written by the
-#   prompt that invokes /ai-dlc), only prose typed in THAT session pauses; prose
-#   from another session is captured and logged OTHER_SESSION_PROMPT. No binding
-#   pauses on any session's prose, as before.
+# - Prose typed in a session that is not an /ai-dlc session -- its own transcript
+#   is readable and its last ai-dlc skill marker is absent or ai-dlc-update -- is
+#   captured but does not pause; it is logged PAUSE_SKIPPED with its reason. A
+#   missing or unreadable transcript pauses, as before.
 # - The lead deletes the flag to resume autonomous execution
 # - Flag deletion is the lead's responsibility, not this hook's
 #
@@ -33,7 +33,6 @@
 # OUTPUT
 # - Creates: _bmad-output/pipeline-paused.flag (empty file, acts as
 #   signal)
-# - Writes: _bmad-output/.lead-session (the session id of the last /ai-dlc prompt)
 # - Appends to: _bmad-output/pipeline-continuation-log.md
 # - stdout: JSON with additionalContext telling the lead what to do
 #
@@ -68,6 +67,7 @@ PAUSE_FLAG="${LOG_DIR}/pipeline-paused.flag"
 # -----------------------------------------------------------------------------
 INPUT=$(cat)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty')
+TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // empty')
 PROMPT_RAW=$(echo "$INPUT" | jq -r '.prompt // empty')
 PROMPT_PREVIEW=$(printf '%s' "$PROMPT_RAW" | head -c 120 | tr '\n' ' ')
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -263,35 +263,6 @@ EOF
 fi
 
 # -----------------------------------------------------------------------------
-# Which session is the lead -- recorded HERE, from the prompt that invokes /ai-dlc
-# -----------------------------------------------------------------------------
-# WHY. Once a pipeline is active this hook raised the pause flag for a typed prompt from ANY
-# session of the project, and the flag is project-wide: a message typed into a second session
-# paused the lead, whose next six dispatches were then denied by Rule 29 although nobody had
-# steered it. The typing session's id was logged and compared with nothing, because nothing
-# recorded which session the lead was.
-#
-# WHY THE HOOK BINDS ITSELF rather than the lead writing its id from a step file. The prompt
-# that starts or resumes the pipeline is `/ai-dlc ...`, and this hook is the one program that
-# sees that prompt together with its session_id, before any agent reads it. A step-file
-# instruction would be a second, model-mediated writer of a value the harness already hands
-# here. A compaction keeps the session id, so it keeps the binding; a resume in a new session
-# (`/ai-dlc resume`, which the session driver types after `/clear`) rebinds to that session.
-#
-# Exactly `/ai-dlc` as the command token, with or without arguments. `/ai-dlc-setup` and
-# `/ai-dlc-update` are other skills and do not start a lead. Bound only on operator prose (the
-# harness-origin predicate above), and never to an empty id, which could match nothing.
-LEAD_SESSION_FILE="${LOG_DIR}/.lead-session"
-if [ -n "$PROMPT_STRIPPED" ] && [ -n "$SESSION_ID" ]; then
-  case "$PROMPT_RAW" in
-    /ai-dlc|/ai-dlc[[:space:]]*)
-      mkdir -p "$LOG_DIR"
-      printf '%s\n' "$SESSION_ID" > "${LEAD_SESSION_FILE}.tmp.$$" \
-        && mv -f "${LEAD_SESSION_FILE}.tmp.$$" "$LEAD_SESSION_FILE" ;;
-  esac
-fi
-
-# -----------------------------------------------------------------------------
 # Skip if no active pipeline
 # -----------------------------------------------------------------------------
 if [ ! -f "$SNAPSHOT_FILE" ]; then
@@ -327,11 +298,6 @@ Event types:
   background task and for a human typing; this records the ones that were not
   a human, so a pause that never happened is distinguishable from one the lead
   already cleared
-- `OTHER_SESSION_PROMPT`: operator prose was typed in a session that is NOT the
-  lead's (`_bmad-output/.lead-session`, bound by the prompt that invoked
-  `/ai-dlc`), so no pause flag was created. The prompt is still captured in full
-  in operator-requests-history.md. No recorded lead session means every typed
-  prompt pauses, as before
 - `BLOCKED`: Stop event blocked; Rule 3 enforcement forced continue
 - `ALLOWED_BY_PAUSE`: Stop event allowed because pause flag exists
 - `PAUSE_QUESTION_IN_PROSE`: the pause flag was UP, the last line of the lead's
@@ -415,31 +381,61 @@ if [ -z "$PROMPT_STRIPPED" ]; then
 fi
 
 # -----------------------------------------------------------------------------
-# A prompt typed in ANOTHER session of this project does not pause the lead
+# A prompt typed in a session that is NOT an /ai-dlc session does not pause the lead
 # -----------------------------------------------------------------------------
-# The request is already captured above, in full, whatever session typed it -- Check 33 and
-# user_request_cite read that record and depend on it being complete. What changes is only
-# the flag. The event gets its own name so it is countable apart from USER_PAUSE and from
-# PAUSE_SKIPPED (a different cause and a different remedy), and so no USER_PAUSE reader --
-# ai-dlc-handoff-pending.sh keys a session's rows on that heading -- ever sees it.
+# WHY. The flag is project-wide, and this hook raised it for operator prose typed in ANY
+# session of the project once a snapshot existed. A message typed into a second window paused
+# the lead, whose next six dispatches Rule 29 then denied although nobody had steered it. The
+# typing session's id was logged and compared with nothing.
 #
-# NO BINDING PAUSES, AS BEFORE, and that default is the safe direction: a pre-migration tree,
-# or a pipeline whose binding prompt this hook never saw, keeps today's behaviour, so a missing
-# binding can never let the lead's own operator through unpaused. An empty session id on
-# either side is not a mismatch either -- it pauses.
-LEAD_SESSION=""
-[ -r "$LEAD_SESSION_FILE" ] && LEAD_SESSION="$(head -n 1 "$LEAD_SESSION_FILE" 2>/dev/null | tr -d '[:space:]')"
-if [ -n "$LEAD_SESSION" ] && [ -n "$SESSION_ID" ] && [ "$SESSION_ID" != "$LEAD_SESSION" ]; then
-  seed_log_header
-  {
-    echo "## ${TIMESTAMP} -- OTHER_SESSION_PROMPT"
-    echo "- Session: ${SESSION_ID}"
-    echo "- Lead session: ${LEAD_SESSION}"
-    echo "- Prompt (first 120 chars): ${PROMPT_PREVIEW}"
-    echo ""
-  } >> "$LOG_FILE"
-  exit 0
+# STATELESS, ON PURPOSE. The question is asked of the TYPING session's own transcript: did it
+# invoke /ai-dlc? A recorded "lead id" was built first and rejected -- it missed the lead that
+# activated through a `Skill(ai-dlc)` tool_use rather than a typed command, and a stale id
+# silently stopped a NEW lead from pausing. A test that stores nothing cannot go stale, and a
+# `/clear` + `/ai-dlc resume` in a new session carries its own marker.
+#
+# THE MARKER IS ai-dlc-acknowledge.sh's (its LAST_SKILL scan): the harness's typed-command user
+# record, or a structural Skill tool_use, never a mention. Last marker wins. A session whose
+# last marker is `ai-dlc-update` is the UPDATER, not a lead, and does not pause the pipeline
+# either -- acknowledge.sh already treats it as outside Rule 29. The CURRENT prompt is newer
+# than anything the transcript holds, so a typed `/ai-dlc` or `/ai-dlc-update` decides by
+# itself, exactly as acknowledge.sh lets the current Skill payload override its scan.
+#
+# THE DEFAULT PAUSES, and that is the safe direction: no transcript_path, or a transcript that
+# cannot be read, keeps today's behaviour, so a lost signal never lets the lead's own operator
+# through unpaused. The request is already captured above in full whatever session typed it --
+# Check 33 and user_request_cite depend on that record being complete; only the flag changes.
+# Logged as PAUSE_SKIPPED with its own Reason line, so no USER_PAUSE reader
+# (ai-dlc-handoff-pending.sh keys on that heading) sees it.
+SESSION_SKILL=""
+case "$PROMPT_RAW" in
+  /ai-dlc-update|/ai-dlc-update[[:space:]]*) SESSION_SKILL="ai-dlc-update" ;;
+  /ai-dlc|/ai-dlc[[:space:]]*)               SESSION_SKILL="ai-dlc" ;;
+esac
+if [ -z "$SESSION_SKILL" ]; then
+  if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ] && [ -r "$TRANSCRIPT" ]; then
+    LAST_SKILL=$(grep -oE '"role":"user","content":"<command-message>ai-dlc(-update)?</command-message>\\n<command-name>/ai-dlc(-update)?</command-name>|"name":"Skill","input":\{"skill":"ai-dlc(-update)?"' "$TRANSCRIPT" 2>/dev/null | tail -1)
+    case "$LAST_SKILL" in
+      *'/ai-dlc-update</command-name>'|*'"skill":"ai-dlc-update"') SESSION_SKILL="ai-dlc-update" ;;
+      *'/ai-dlc</command-name>'|*'"skill":"ai-dlc"')               SESSION_SKILL="ai-dlc" ;;
+      *)                                                           SESSION_SKILL="none" ;;
+    esac
+  else
+    SESSION_SKILL="unknown"
+  fi
 fi
+case "$SESSION_SKILL" in
+  none|ai-dlc-update)
+    seed_log_header
+    {
+      echo "## ${TIMESTAMP} -- PAUSE_SKIPPED"
+      echo "- Session: ${SESSION_ID}"
+      echo "- Reason: operator prose typed in a session that is not an /ai-dlc session (its transcript's last ai-dlc marker: ${SESSION_SKILL}); captured in operator-requests-history.md, no pause"
+      echo "- Preview: ${PROMPT_PREVIEW}"
+      echo ""
+    } >> "$LOG_FILE"
+    exit 0 ;;
+esac
 
 # -----------------------------------------------------------------------------
 # Pipeline is active. Create pause flag.
