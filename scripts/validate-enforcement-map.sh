@@ -7544,40 +7544,65 @@ fi
 # extractor (two empty strings compare equal) cannot report agreement.
 i126_hooks="core/hooks/ai-dlc-acknowledge.sh core/hooks/ai-dlc-pause.sh core/hooks/ai-dlc-continue.sh"
 i126_open='>>> I126 SESSION-MARKER SCAN: the next line, byte-identical in every bound hook >>>'
-i126_line_of() { awk -v m="$i126_open" 'f { sub(/^[[:space:]]+/, ""); print; exit } index($0, m) { f=1 }' "$1"; }
-i126_verdict() { # <file>... -> SAME | DIFFER | OPENERS:<file>:<n> | EMPTY:<file> | TOO-FEW
-  local f n first="" i=0
-  for f in "$@"; do
-    i=$((i+1))
-    n="$(grep -cF -- "$i126_open" "$f" 2>/dev/null)" || n=0
-    [ "$n" = 1 ] || { printf 'OPENERS:%s:%s\n' "$f" "$n"; return; }
-    l="$(i126_line_of "$f")"
-    case "$l" in LAST_SKILL=*) : ;; *) printf 'EMPTY:%s\n' "$f"; return ;; esac
-    if [ -z "$first" ]; then first="$l"
-    elif [ "$l" != "$first" ]; then printf 'DIFFER\n'; return; fi
-  done
-  [ "$i" -ge 2 ] || { printf 'TOO-FEW\n'; return; }
-  printf 'SAME\n'
+# ONE awk, ONE fork, FOR THE PROBE AND THE CORPUS TOGETHER. The first draft ran a grep and an awk
+# per file inside a per-call subshell, four calls, plus a mktemp/mkdir/rm probe directory -- about
+# 34 forks for a one-line comparison, and the suite's fork gate went red on it. The probe copies
+# are now a here-string on stdin, split into units by `@@UNIT <group> <name>` lines (no file, no
+# directory), and the bound hooks follow as ordinary file arguments; the program groups every unit
+# and prints one `<group> <verdict>` line per group. The probe groups are still judged FIRST below,
+# and the corpus verdict is read only once they pass. Every assignment and read here is a builtin.
+I126_AWK='
+function start(g, u) {
+  if (!(g in gn)) { gn[g] = 0; order[++ng] = g }
+  gn[g]++; gu[g, gn[g]] = u; cur = g SUBSEP u; cnt[cur] = 0; got[cur] = ""; want = 0
 }
-i126_pd="$(mktemp -d 2>/dev/null || echo "/tmp/i126probe.$$")"; mkdir -p "$i126_pd"
+NR == FNR && /^@@UNIT / { start($2, $3); next }
+NR != FNR && FNR == 1  { start("real", FILENAME) }
+want                   { l = $0; sub(/^[[:space:]]+/, "", l); got[cur] = l; want = 0 }
+index($0, m)           { cnt[cur]++; if (cnt[cur] == 1) want = 1 }
+END {
+  for (k = 1; k <= ng; k++) {
+    g = order[k]; v = ""; first = ""
+    for (i = 1; i <= gn[g]; i++) {
+      u = gu[g, i]; c = cnt[g SUBSEP u]
+      if (c != 1) { v = "OPENERS:" u ":" c; break }
+      l = got[g SUBSEP u]
+      if (substr(l, 1, 11) != "LAST_SKILL=") { v = "EMPTY:" u; break }
+      if (i == 1) first = l
+      else if (l != first) { v = "DIFFER"; break }
+    }
+    if (v == "") v = (gn[g] < 2) ? "TOO-FEW" : "SAME"
+    print g " " v
+  }
+}'
+i126_nl='
+'
 i126_seed='  LAST_SKILL=$(grep -oE '"'"'"name":"Skill","input":\{"skill":"ai-dlc(-update)?"'"'"' "$TRANSCRIPT" 2>/dev/null | tail -1)'
-for i126_k in a b c; do printf '# %s\n%s\n' "$i126_open" "$i126_seed" > "$i126_pd/$i126_k"; done
-printf '# %s\n%s\n' "$i126_open" "${i126_seed% | tail -1)} | tail -n 1)" > "$i126_pd/c"
-printf '# %s\n  echo unrelated\n' "$i126_open" > "$i126_pd/d"
-i126_p_same="$(i126_verdict "$i126_pd/a" "$i126_pd/b")"
-i126_p_diff="$(i126_verdict "$i126_pd/a" "$i126_pd/c")"
-i126_p_empty="$(i126_verdict "$i126_pd/a" "$i126_pd/d")"
-rm -rf "$i126_pd"
+i126_ua="# ${i126_open}${i126_nl}${i126_seed}"
+i126_uc="# ${i126_open}${i126_nl}${i126_seed% | tail -1)} | tail -n 1)"
+i126_ud="# ${i126_open}${i126_nl}  echo unrelated"
+i126_stream="@@UNIT same a${i126_nl}${i126_ua}${i126_nl}@@UNIT same b${i126_nl}${i126_ua}${i126_nl}@@UNIT diff a${i126_nl}${i126_ua}${i126_nl}@@UNIT diff c${i126_nl}${i126_uc}${i126_nl}@@UNIT empty a${i126_nl}${i126_ua}${i126_nl}@@UNIT empty d${i126_nl}${i126_ud}"
+i126_missing=""; i126_present=""
+for i126_h in $i126_hooks; do
+  if [ -f "$i126_h" ]; then i126_present="$i126_present $i126_h"; else i126_missing="$i126_missing $i126_h"; fi
+done
+# shellcheck disable=SC2086
+i126_out="$(awk -v m="$i126_open" "$I126_AWK" - $i126_present <<<"$i126_stream" 2>/dev/null)"
+i126_p_same=""; i126_p_diff=""; i126_p_empty=""; i126_v=""
+while IFS=' ' read -r i126_g i126_r; do
+  case "$i126_g" in
+    same)  i126_p_same="$i126_r" ;;
+    diff)  i126_p_diff="$i126_r" ;;
+    empty) i126_p_empty="$i126_r" ;;
+    real)  i126_v="$i126_r" ;;
+  esac
+done <<<"$i126_out"
 if [ "$i126_p_same" != SAME ] || [ "$i126_p_diff" != DIFFER ] || [ "${i126_p_empty%%:*}" != EMPTY ]; then
   err "I126's own probe failed: two identical seeded copies read '$i126_p_same' (want SAME), a one-token drift read '$i126_p_diff' (want DIFFER), and a marker over a non-scan line read '${i126_p_empty%%:*}' (want EMPTY). The extractor cannot tell agreement from drift, so no verdict it gives on the shipped hooks means anything."
 else
-  i126_missing=""
-  for i126_h in $i126_hooks; do [ -f "$i126_h" ] || i126_missing="$i126_missing $i126_h"; done
   if [ -n "$i126_missing" ]; then
     err "I126 cannot find bound hook(s):${i126_missing}. A missing hook leaves the others compared among themselves, which reads as agreement."
   else
-    # shellcheck disable=SC2086
-    i126_v="$(i126_verdict $i126_hooks)"
     case "$i126_v" in
       SAME) : ;;
       DIFFER) err "I126 the ai-dlc session-marker scan has FORKED between the bound hooks ($i126_hooks). Each answers 'is this an /ai-dlc session, the updater, or neither' for the same transcript; one copy drifting means one hook pauses or blocks a session another lets through. Make the line after each '$i126_open' marker byte-identical (leading whitespace aside)." ;;
