@@ -1434,7 +1434,7 @@ if [ "$n_c" -lt 2 ] || [ "$n_l" -lt 2 ]; then
   bad "exit-list: derived $n_c code(s) from the script and $n_l from rule-29 — one side read nothing, so agreement would be vacuous"; return
 fi
 missing=""
-for c in $codes; do printf '%s\n' "$listed" | grep -qx "$c" || missing="$missing $c"; done
+for c in $codes; do grep -qx "$c" <<<"$listed" || missing="$missing $c"; done
 if [ -z "$missing" ]; then ok "exit-list: every code the beat can return ($(printf '%s' "$codes" | tr '\n' ' ')) is named in rule-29's exit list"
 else bad "exit-list: the beat can exit with$missing, which rule-29's exit list does not name — a lead reads an unnamed code as its nearest neighbour"; fi
 # Printed only after the comparison decided on rule-29's content, so it cannot vouch for a read that never happened.
