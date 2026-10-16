@@ -342,6 +342,11 @@ narrow the sprint inside a repair.
 money-path threshold or literal, or a byte-pin. State each option with its concrete effect,
 including the value it leaves in force, and stop there.
 
+**Applying such a decision to a case its words do not cover is choosing for the operator.** A fix
+whose rule the `D-<n>` or `LR-` text does not state, a gap fill or a choice "the lead may veto",
+is an `escalated` entry carrying the options, never `repaired`. A veto offered after the edit is
+not a decision taken before it. As the serial remediator, a part's `repaired` entry that applied
+such a rule is not kept as written: record it as your own `escalated` entry naming that part.
 
 **You do not re-litigate the finding.** The adversary graded it; you fix it. If you believe
 a finding is wrong, say so in the record with the derivation that refutes it — that is
