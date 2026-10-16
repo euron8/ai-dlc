@@ -373,16 +373,6 @@ Owed: a probe shard dir where one shard lacks `verdict:` but ends in `seat-compl
 
 verify: manual
 
-## BL-576 — `wait-for-deliverable.sh` resolves its state dir from the cwd, so a beat run inside a shard dir plants `_bmad-output/` there and the stop hook cannot see the beat
-
-**DEFECT.** Filed by peer session ai-dlc-68 from graph's s319 lead `949015a6` (Sonnet 5.5). `core/scripts/wait-for-deliverable.sh:316` is `STATE_DIR="${AI_DLC_STATE_DIR:-_bmad-output}"` and `:415` `COUNTER_DIR="${STATE_DIR}/.wait-beats"` — both cwd-relative; the script carries no root resolution. At 04:53:03Z on 2026-10-16 the lead armed a beat from `…/s319/shards/requirements-p1` (a 04:51:49Z `cd` persisted in the Bash cwd), so the beat wrote `requirements-p1/_bmad-output/.beat-inflight` and `.wait-beats/*` into the shard dir. At 04:53:54Z `merge-adversarial-shards.sh` refused the stray `_bmad-output` entry, and at 04:54:05Z the lead moved it to its scratchpad (intake confirmed `…/949015a6-…/scratchpad/stray-beat-state/_bmad-output` on disk; the shard dir now carries 0 `_bmad` entries). The second consequence is mechanical, not presumed: the stop hook reads the lease at `${PROJECT_DIR}/_bmad-output/.beat-inflight` (`core/hooks/ai-dlc-continue.sh:120`, `LOG_DIR="${PROJECT_DIR}/_bmad-output"`), so a beat whose marker lands elsewhere is invisible to it, which matches the hook firing three times in 30s (04:52:58Z, 04:53:15Z, 04:53:31Z) while beats were armed.
-
-Siblings resolve correctly: `join-remediator-shards.sh:349-362` and `gate-checkpoint.sh:221` anchor the state dir on a root from `ai_dlc_resolve_root()` / `AI_DLC_PROJECT_ROOT`. `partition-subject.sh:171` has the same bare `${AI_DLC_STATE_DIR:-_bmad-output}` default and should be checked by the builder.
-
-Fix: resolve STATE_DIR against the project root (`AI_DLC_PROJECT_ROOT`, else walk up as `ai_dlc_resolve_root()` does, per verification-discipline.md "resolve the repo root by walking up for a marker"), so the beat and the hook agree on one marker path. Owed: run the beat from a subdirectory and assert no `_bmad-output/` is created under it and the `.beat-inflight` lease lands at the root; a repo-root run is the control.
-
-verify: manual
-
 ## BL-577 — the merge counts every `### ` heading under `## Findings` as a finding, so a probes subsection inflates the count and the merge refuses the shard
 
 **DEFECT.** Filed by peer session ai-dlc-68 from graph's s319 lead `949015a6`. `core/scripts/merge-adversarial-shards.sh:480` is `infind && /^### / { flush(); fl = NR; …}`: any `### ` heading inside `## Findings` opens a finding, and `:707` then refuses a shard whose `seat-complete: … findings=<n>` differs from that count. graph shard `requirements-p1/2.md` (findings=0) carried a `### Probes run (no finding)` heading; at 04:54:15Z on 2026-10-16 the lead diagnosed exactly that and at 04:54:26Z dispatched an agent ("Demote probes heading in shard 2") to rewrite the heading level — another agent spawn to edit a gate input. The adversary role file invites the subsection and never reserves the form: `core/team-roles/adversary.md:97-103` asks for probes to be stated ("A probed \"this holds\" is a completed one"), `:110` defines `<n>` as "your `### ` findings", and the file contains `F-` 0 times (control: `###` 7 times, `probe` 3 times), so nothing tells the adversary that a `### ` under Findings is reserved for `### F-<n> (SEVERITY)`.
@@ -517,6 +507,8 @@ verify: manual
 
 ## BL-599 — a FORWARD-dated `--since` is unmeasured against the BACKDATED arm, which judges only a row earlier than its dispatch
 
+**PARTIAL (v0.802.0, verified ab065361) — the script half and rule-28 shipped; the `_gate-procedures.md` sentence is OPEN.** `wait-for-deliverable.sh --dispatch <agentId|name@team|toolu_ id>` reads the dispatch time from the spawn ledger, starts the join there when `--since` is absent, and refuses with exit 64 a `--since` later than the dispatch; `--since` without `--dispatch` warns on stderr. rule-28 tells the lead to pass `--dispatch`. Receipt `core/fixtures/wait-stale-deliverable/receipt.sh BL-599`. The frozen `_gate-procedures.md` still carries the old wording until its own release.
+
 **DEFECT.** Carried from a BL-564 addendum that missed BL-564's close: b235-docs (4abbd6c3) archived BL-564 as landed in v0.792.0 with its `--since` half "CLOSED by operator ruling (batch 235, 2026-10-16) as covered by the BACKDATED arm: a back-dated `--since` follows from a back-dated row, which that arm refuses." That reasoning covers back-dating only. Filed by peer session ai-dlc-68 from graph s319 lead `949015a6` (Sonnet 5.5): the serial remediator was dispatched at 05:00:03Z on 2026-10-16, and at 05:00:04Z the lead armed `wait-for-deliverable.sh --since 2026-10-16T05:00:30Z …/s319/requirements-repair-p1.md`, 27s AFTER the dispatch, so any write in the remediator's first 27s was invisible to the beat. At 05:10:02Z it re-armed with `--since 2026-10-16T05:01:30Z` and called that "`--since` set to the dispatch time", false by 87s. The BACKDATED arm lives in `core/scripts/validate-artifact-budget.sh` (emitter `:1290`, "dispatched-at … is N s before its dispatch in the spawn ledger"), surfaced through `verdict.sh`, `validate-spawn-ledger.sh` and the write-time call in `core/hooks/ai-dlc-derivation-capture.sh` (all at 4abbd6c3). As written it judges an in-flight row's `dispatched-at` against the spawn ledger and fires only when the row is EARLIER than its dispatch; its header names the beat's `--since` (`:1203`) only as the window a back-dated row widens. Whether anything refuses a `--since` hand-typed LATER than a correctly stamped row is UNMEASURED: intake has not run the arm or the beat against a forward-dated `--since`. Back-dating accepts files older than the teammate; forward-dating misses the teammate's own early writes.
 
 This does not reopen the operator's close of the back-dated half; it files the direction that close did not address. Owed: first measure the forward-dated case against the shipped arm and the beat; if uncovered, `--since` is derived from the in-flight row's `dispatched-at` (or refused when later than it). Probe: a `--since` later than the row is refused, with `--since` equal to the row as the control.
@@ -612,14 +604,6 @@ Owed: delete the `_good` arm and its init (fix by subtraction), or append `_b` t
 
 verify: manual
 
-## BL-604 — a refused wait-for-deliverable.sh call (exit 64) reads as NON-DELIVERY by the lead's own instructions, so a live teammate is re-dispatched
-
-**DEFECT.** Filed by peer session ai-dlc-ad; closes with its BL-599 release (branch `b235-since-dispatch`). `core/scripts/wait-for-deliverable.sh` exits 64 at 12 usage-refusal sites at origin/main 3d5f1e70, all executable (`--since` with no or a bad value, an unknown arg, no paths, `--complete` with `--progress-path`, …). `core/skills/ai-dlc/rule-bodies/rule-29.md` (the beat's exit list, ~:96-108) names only `exit 0` (BEAT COMPLETE) and `exit 1` (NON-DELIVERY: re-dispatch ONCE, then HARD_BLOCK) — intake counted 64 mentioned 0 times there — and `core/skills/ai-dlc/steps/_gate-procedures.md:141` says "Nonzero means non-delivery, nothing else." So a backgrounded beat refused for a malformed call arrives as rc 64, reads as non-delivery, and the lead spends the Rule 20 re-dispatch on a live agent with no beat armed.
-
-Owed (in ad's BL-599 release): rule-29's list gains `exit 64 -- REFUSED` (no beat ran and the join is not armed: correct the call and arm again), and wait-stale-deliverable case C46 derives the script's exit codes and fails when rule-29's list does not name each one; the control (rule-29 without the 64 line, and origin/main's rule-29) reports 64 missing. ai-dlc-c9's release (a) carries the `_gate-procedures.md:141` wording as its A10.
-
-verify: manual
-
 ## BL-605 — an In-Flight row's `dispatched-at` can be stamped LATER than the real dispatch, and the BACKDATED arm is quiet on a late row by design
 
 **DEFECT.** Filed by peer session ai-dlc-ad, read-only on graph. Graph's `_bmad-output/pipeline-snapshot.md:68` (In-Flight Teammates) reads `remediator (serial, pass 1 cross-part, a7ffc8dcd555207b8) | remediator | s319/requirements-repair-p1.md (appended) | 2026-10-16T05:01:00Z | stopped` (intake confirmed). BL-599's filing puts that remediator's dispatch at 05:00:03Z, so the row is 57 s late. `core/scripts/validate-artifact-budget.sh` `check_backdated_dispatch` states at :1213 (origin/main 3d5f1e70) "A row stamped LATE (after its dispatch) stays quiet; this arm is about back-dating only." Measured by the filer on the extracted function with a one-row ledger at D: a row at D-112 fires BACKDATED (control), and rows at D, D+27 and D+87 are quiet.
@@ -660,32 +644,6 @@ verify: manual
 **DEFECT.** Filed by peer session ai-dlc-a6. `scripts/validate-enforcement-map.sh` FORK_BUDGET was set to 3363 in 0.786.0 as "HIGH reading 3357 plus the usual 6" (paragraph ~:825-831 then). Measured by the filer on 2026-10-16 with `fork-profile.sh --section by-arm --stable`, interleaved base/tip/base/tip in one detached worktree at one path, caller environment inherited: origin/main e3073787 (0.796.0) read 3362 and 3363 (STABLE 2, spread 3360-3362), equal to the budget — 0.792.0 through 0.796.0 spent the full +6 and no arm said so. `validator-fork-budget` fails only when the reading EXCEEDS the budget (its arm A3, "measured <= FORK_BUDGET"), so the window between "headroom gone" and "red" is invisible; at zero headroom the instrument's ±1-2 jitter makes any release adding one fork a ~1-in-4 red that reads as a flake. On 0.797.0 (+1 fork, I126 0 -> 1) the re-verify read 3362 with one rep at 3364 against 3363; 0.797.0 raised the budget to 3370 (+1 for its arm, +5 to restore headroom), which intake confirmed as `FORK_BUDGET=3370` at origin/main 3d5f1e70 (`:841`).
 
 Owed: a headroom arm in `validator-fork-budget` that FAILS when the STABLE reading + 2 > FORK_BUDGET, naming the remedy (re-measure and raise by the HIGH reading plus 6, per the file's own rule), so erosion reports while margin remains. It needs its own mutant (the arm with the +2 dropped must miss a seeded reading at budget - 1) and its FP set measured over the budget history in that file's paragraphs. Scope: a small later release.
-
-verify: manual
-
-## BL-609 — a pre-gate listing of the fixtures a builder's diff selects, so a red caught only by executing a fixture is foreseen before the slot request
-
-**DEFECT (efficiency).** Filed by peer session ai-dlc-4e [9b62de] on lead ai-dlc-9c's instruction; assigned to ai-dlc-4e [9b62de], to build after BL-585 (which gates first, by 9c's ruling).
-
-Premise, measured from H-a (0.797.0): the red capture `.git/ai-dlc-fixture-failures.20261016T094322Z.82523` (intake confirmed it exists) records `gate-resume: 1 of 63 assertion(s) FAILED`, the line being `BL-457 mutant (e) … expected [… WC=1 …], got [… WC=0 …]`. Per the filer that red was H-a's own code: `core/fixtures/gate-resume/seed.sh:26` reads `core/hooks/ai-dlc-recover.sh`, H-a's new sentence in that hook's injected block consumed the WC case's margin under its 10000-char ceiling, and H-a removed the sentence before merging. WC measures the hook's real emitted output on a seeded worst case, so no static check over the diff catches it (no grep, no validator, not BL-585's pre-gate self-check); only running the fixture does. The edge is already recorded: intake counted 17 fixtures whose row in `.ai-dlc-fixture-readsets.tsv` names `core/hooks/ai-dlc-recover.sh`, `gate-resume` among them. A reading of the fixture's own files misses it, because the dependency runs through what the seed reads.
-
-Owed:
-1. A report-only arm `e:readset-impact` in `scripts/pregate-self-check.sh` (that script is BL-585's, on local branch `b235-pregate`; not on origin/main at a0451c70). From the diff it lists each fixture whose read-set contains a changed path, with its recorded loaded cost from `.git/ai-dlc-fixture-durations`. The read-set reader is sourced from the hook (`readset_manifest` / the map reader, 3 mentions in `.githooks/pre-push`), never restated. It runs nothing and cannot turn red.
-2. Before it ships, measure its value under the step-value ruling: does the listing change a builder's slot request, or what the builder runs before asking? If it changes nothing, it does not ship.
-
-Related: BL-585.
-
-**LANDED (v@VER@, verified @SHA@).** CLOSED AS MEASURED-NO-VALUE under Owed 2; nothing was built, and lead ai-dlc-9c accepted the close. For each of batch 235's red gates, the fixtures whose read-set (`.ai-dlc-fixture-readsets.tsv`, plus every `inputs.decl`) holds a path in the gate's own diff, excluding fixtures that diff edits, against that gate's red units:
-
-| Red gate (base..tip) | Fixtures listed | Red units in the list | Non-red units in the list |
-|---|---|---|---|
-| H-a (e3073787..c833cde7) | 48 | 3 of 3 (gate-resume, procsub-staged-refusal, validator-fork-budget) | 45 |
-| W (464ecbfe..7ce8c6f9) | 72 | 1 of 1 (procsub-staged-refusal) | 71 |
-| 0.800.0 push 2 (efcd5373..dcfe1f1c) | 56 | 10 of 10 | 46 |
-| vssnap (464ecbfe..8915fa18) | 28 | 0 of 1 (readset-skip, the fixture the diff edits) | 28 |
-| U-a (52555359..825eafe7) | 98 | no fixture was red (only validator S8) | 98 |
-
-The listing finds every fixture red that came from code outside the fixture, but it never separates red from green: 28 to 98 names a diff, at a red rate of 1 to 18 percent, and the recorded cost does not rank the red ones first (gate-resume 68s sits below many green units). It is the hook's own dispatch set, so it tells a builder what the gate will run, not what will fail; the only action it supports is running those fixtures, which is the gate as a hand-rolled loop. The two reds it cannot list or does not need to (vssnap's I54, U-a's S8) are validator reds that `scripts/pregate-self-check.sh` (BL-585, 0.800.0) already catches.
 
 verify: manual
 

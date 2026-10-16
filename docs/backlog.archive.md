@@ -34236,3 +34236,51 @@ Owed: the recover gate's deny arms apply to the lead only (empty `agent_id`), an
 
 verify: manual
 
+## BL-576 — `wait-for-deliverable.sh` resolves its state dir from the cwd, so a beat run inside a shard dir plants `_bmad-output/` there and the stop hook cannot see the beat
+
+**LANDED (v0.802.0, verified ab065361).** `wait-for-deliverable.sh` resolves a relative or unset `AI_DLC_STATE_DIR` under the project root (`AI_DLC_PROJECT_ROOT`, else the marker walk), refuses with exit 64 when no root resolves, and keys a relative target from a cwd below the root on its root-relative path, so a beat armed from a shard directory leaves its lease where the stop hook reads it. An absolute `AI_DLC_STATE_DIR` is used as given. Receipt `core/fixtures/wait-stale-deliverable/receipt.sh BL-576`.
+
+**DEFECT.** Filed by peer session ai-dlc-68 from graph's s319 lead `949015a6` (Sonnet 5.5). `core/scripts/wait-for-deliverable.sh:316` is `STATE_DIR="${AI_DLC_STATE_DIR:-_bmad-output}"` and `:415` `COUNTER_DIR="${STATE_DIR}/.wait-beats"` — both cwd-relative; the script carries no root resolution. At 04:53:03Z on 2026-10-16 the lead armed a beat from `…/s319/shards/requirements-p1` (a 04:51:49Z `cd` persisted in the Bash cwd), so the beat wrote `requirements-p1/_bmad-output/.beat-inflight` and `.wait-beats/*` into the shard dir. At 04:53:54Z `merge-adversarial-shards.sh` refused the stray `_bmad-output` entry, and at 04:54:05Z the lead moved it to its scratchpad (intake confirmed `…/949015a6-…/scratchpad/stray-beat-state/_bmad-output` on disk; the shard dir now carries 0 `_bmad` entries). The second consequence is mechanical, not presumed: the stop hook reads the lease at `${PROJECT_DIR}/_bmad-output/.beat-inflight` (`core/hooks/ai-dlc-continue.sh:120`, `LOG_DIR="${PROJECT_DIR}/_bmad-output"`), so a beat whose marker lands elsewhere is invisible to it, which matches the hook firing three times in 30s (04:52:58Z, 04:53:15Z, 04:53:31Z) while beats were armed.
+
+Siblings resolve correctly: `join-remediator-shards.sh:349-362` and `gate-checkpoint.sh:221` anchor the state dir on a root from `ai_dlc_resolve_root()` / `AI_DLC_PROJECT_ROOT`. `partition-subject.sh:171` has the same bare `${AI_DLC_STATE_DIR:-_bmad-output}` default and should be checked by the builder.
+
+Fix: resolve STATE_DIR against the project root (`AI_DLC_PROJECT_ROOT`, else walk up as `ai_dlc_resolve_root()` does, per verification-discipline.md "resolve the repo root by walking up for a marker"), so the beat and the hook agree on one marker path. Owed: run the beat from a subdirectory and assert no `_bmad-output/` is created under it and the `.beat-inflight` lease lands at the root; a repo-root run is the control.
+
+verify: sh bash core/fixtures/wait-stale-deliverable/receipt.sh BL-576
+
+## BL-604 — a refused wait-for-deliverable.sh call (exit 64) reads as NON-DELIVERY by the lead's own instructions, so a live teammate is re-dispatched
+
+**LANDED (v0.802.0, verified ab065361).** rule-29's exit list names `exit 64 -- REFUSED`, and wait-stale-deliverable case C46 derives the script's exit codes and fails when rule-29's list omits one.
+
+**DEFECT.** Filed by peer session ai-dlc-ad; closes with its BL-599 release (branch `b235-since-dispatch`). `core/scripts/wait-for-deliverable.sh` exits 64 at 12 usage-refusal sites at origin/main 3d5f1e70, all executable (`--since` with no or a bad value, an unknown arg, no paths, `--complete` with `--progress-path`, …). `core/skills/ai-dlc/rule-bodies/rule-29.md` (the beat's exit list, ~:96-108) names only `exit 0` (BEAT COMPLETE) and `exit 1` (NON-DELIVERY: re-dispatch ONCE, then HARD_BLOCK) — intake counted 64 mentioned 0 times there — and `core/skills/ai-dlc/steps/_gate-procedures.md:141` says "Nonzero means non-delivery, nothing else." So a backgrounded beat refused for a malformed call arrives as rc 64, reads as non-delivery, and the lead spends the Rule 20 re-dispatch on a live agent with no beat armed.
+
+Owed (in ad's BL-599 release): rule-29's list gains `exit 64 -- REFUSED` (no beat ran and the join is not armed: correct the call and arm again), and wait-stale-deliverable case C46 derives the script's exit codes and fails when rule-29's list does not name each one; the control (rule-29 without the 64 line, and origin/main's rule-29) reports 64 missing. ai-dlc-c9's release (a) carries the `_gate-procedures.md:141` wording as its A10.
+
+verify: sh grep -q '^    exit 64 --' core/skills/ai-dlc/rule-bodies/rule-29.md
+
+## BL-609 — a pre-gate listing of the fixtures a builder's diff selects, so a red caught only by executing a fixture is foreseen before the slot request
+
+**DEFECT (efficiency).** Filed by peer session ai-dlc-4e [9b62de] on lead ai-dlc-9c's instruction; assigned to ai-dlc-4e [9b62de], to build after BL-585 (which gates first, by 9c's ruling).
+
+Premise, measured from H-a (0.797.0): the red capture `.git/ai-dlc-fixture-failures.20261016T094322Z.82523` (intake confirmed it exists) records `gate-resume: 1 of 63 assertion(s) FAILED`, the line being `BL-457 mutant (e) … expected [… WC=1 …], got [… WC=0 …]`. Per the filer that red was H-a's own code: `core/fixtures/gate-resume/seed.sh:26` reads `core/hooks/ai-dlc-recover.sh`, H-a's new sentence in that hook's injected block consumed the WC case's margin under its 10000-char ceiling, and H-a removed the sentence before merging. WC measures the hook's real emitted output on a seeded worst case, so no static check over the diff catches it (no grep, no validator, not BL-585's pre-gate self-check); only running the fixture does. The edge is already recorded: intake counted 17 fixtures whose row in `.ai-dlc-fixture-readsets.tsv` names `core/hooks/ai-dlc-recover.sh`, `gate-resume` among them. A reading of the fixture's own files misses it, because the dependency runs through what the seed reads.
+
+Owed:
+1. A report-only arm `e:readset-impact` in `scripts/pregate-self-check.sh` (that script is BL-585's, on local branch `b235-pregate`; not on origin/main at a0451c70). From the diff it lists each fixture whose read-set contains a changed path, with its recorded loaded cost from `.git/ai-dlc-fixture-durations`. The read-set reader is sourced from the hook (`readset_manifest` / the map reader, 3 mentions in `.githooks/pre-push`), never restated. It runs nothing and cannot turn red.
+2. Before it ships, measure its value under the step-value ruling: does the listing change a builder's slot request, or what the builder runs before asking? If it changes nothing, it does not ship.
+
+Related: BL-585.
+
+**LANDED (v0.802.0, verified c85549ca).** CLOSED AS MEASURED-NO-VALUE under Owed 2; nothing was built, and lead ai-dlc-9c accepted the close. For each of batch 235's red gates, the fixtures whose read-set (`.ai-dlc-fixture-readsets.tsv`, plus every `inputs.decl`) holds a path in the gate's own diff, excluding fixtures that diff edits, against that gate's red units:
+
+| Red gate (base..tip) | Fixtures listed | Red units in the list | Non-red units in the list |
+|---|---|---|---|
+| H-a (e3073787..c833cde7) | 48 | 3 of 3 (gate-resume, procsub-staged-refusal, validator-fork-budget) | 45 |
+| W (464ecbfe..7ce8c6f9) | 72 | 1 of 1 (procsub-staged-refusal) | 71 |
+| 0.800.0 push 2 (efcd5373..dcfe1f1c) | 56 | 10 of 10 | 46 |
+| vssnap (464ecbfe..8915fa18) | 28 | 0 of 1 (readset-skip, the fixture the diff edits) | 28 |
+| U-a (52555359..825eafe7) | 98 | no fixture was red (only validator S8) | 98 |
+
+The listing finds every fixture red that came from code outside the fixture, but it never separates red from green: 28 to 98 names a diff, at a red rate of 1 to 18 percent, and the recorded cost does not rank the red ones first (gate-resume 68s sits below many green units). It is the hook's own dispatch set, so it tells a builder what the gate will run, not what will fail; the only action it supports is running those fixtures, which is the gate as a hand-rolled loop. The two reds it cannot list or does not need to (vssnap's I54, U-a's S8) are validator reds that `scripts/pregate-self-check.sh` (BL-585, 0.800.0) already catches.
+
+verify: manual
+

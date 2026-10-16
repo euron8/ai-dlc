@@ -20,6 +20,57 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.802.0] - 2026-10-16
+
+Batch 235 (the state-root release). Closes BL-576, BL-604 and BL-609; BL-599 stays PARTIAL until its
+`_gate-procedures.md` sentence lands. Closes no `PC-` id. Carries docs intake-5 (the BL-613 and BL-614 entries).
+
+### The wait beat can be armed from the spawn ledger's dispatch time (BL-599)
+
+- `wait-for-deliverable.sh --dispatch <id>` accepts an agentId (resolved through the teammate dir's
+  `agent-<id>.meta.json` toolUseId), a `<name>@<team>` (the ledger's single row by that name) or a bare `toolu_` id,
+  looks the dispatch up in the spawn ledger's `tool_use_id` row and reads its `ts`. The flag repeats, and the check
+  runs against the earliest dispatch.
+- Without `--since` the join starts at the dispatch time. A `--since` later than the dispatch is refused with exit
+  64, naming the gap in seconds, because it would miss every write made between the two. A lookup that finds no
+  match or more than one is refused with exit 64 as well.
+- `--since` without `--dispatch` still runs and prints a WARN on stderr.
+- rule-28's round-epoch paragraph tells the lead to pass `--dispatch`. The `_gate-procedures.md` sentence is not in
+  this release, which is why BL-599 stays PARTIAL.
+
+### The beat's state dir hangs off the project root, not the caller's cwd (BL-576)
+
+- A relative or unset `AI_DLC_STATE_DIR` resolves under the project root (`AI_DLC_PROJECT_ROOT`, else the walk up
+  for a marker), and the beat refuses with exit 64 when no root resolves. An absolute `AI_DLC_STATE_DIR` is used as
+  given. Before this a beat armed inside a shard directory planted `_bmad-output/` there, and the stop hook, which
+  reads the root's, could not see the lease.
+- A relative target from a cwd below the root keys on its root-relative path, so two shard directories arming the
+  same relative name get two join records, not one.
+- The receipt reads the lease while a beat armed from a subdirectory is still alive, and scores the base and three
+  mutants (state dir on the cwd, key without the cwd prefix, the absolute branch collapsed) as failing.
+  `validator-path-resolution` gains a `wait-for-deliverable.sh` argv entry, and the wait fixtures pass
+  `AI_DLC_PROJECT_ROOT` at every beat call.
+
+### Rule 29's exit list names exit 64, and a fixture arm keeps it named (BL-604)
+
+- rule-29's exit list gains `exit 64 -- REFUSED`: no beat ran and the join is not armed, so correct the call and arm
+  again. A lead used to read a refused call as non-delivery and re-dispatch a live teammate.
+- wait-stale-deliverable case C46 derives every exit code the script can return and fails when rule-29's list does
+  not name one. Both derivations carry a self-probe, and a control with the line stripped reports 64 missing.
+- C46 prints `HERMETIC-CONSUMED` for rule-29 after its comparison, because `inputs.decl` requires the file and the
+  sandboxed run reported `required_missing=1` without it.
+
+### The validator fork budget rises by the one new I75 subject
+
+- BL-576's `AI_DLC_ROOT` block makes `wait-for-deliverable.sh` a subject of I75. Measured with
+  `fork-profile.sh --stable`, interleaved at one path: 3391 at 86d3a695, 3401 at the tip, so
+  `FORK_BUDGET` rises 3395 to 3405, exactly the delta. The enforcement map is byte-identical at both.
+
+### BL-609 is closed as measured-no-value
+
+- The pre-gate listing of the fixtures a diff selects was measured against five red gates of this batch. It names 28
+  to 98 fixtures per diff at a red rate of 1 to 18 percent, so nothing was built. The entry records the table.
+
 ## [0.801.0] - 2026-10-16
 
 Batch 235 (the combined release: R1-R4 and V2). Closes BL-573, BL-539, BL-570, BL-563 and BL-590; BL-529 stays
