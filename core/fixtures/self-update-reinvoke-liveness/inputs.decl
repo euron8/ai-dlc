@@ -5,3 +5,4 @@
 !core/skills/ai-dlc-update/SKILL.md
 !core/skills/ai-dlc-update/reconcile/preclassify.sh
 !core/skills/ai-dlc-update/reconcile/setup-sites.md
+core/fixtures/lib/

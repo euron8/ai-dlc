@@ -195,6 +195,12 @@ printf '{"type":"user","timestamp":"2026-01-01T00:00:00.000Z","message":{"role":
   > "$WORK/docs/vpr-steer/vpr-live.jsonl"
 printf '## 2026-01-01T00:00:00Z -- AskUserQuestion\n- Session: vpr-pruned-session\n\n```text\nvpr-steer-pruned-quote\n```\n\n' \
   > "$WORK/_bmad-output/operator-answers-history.md"
+# check-owed-derivations.sh reads its record at <root>/_bmad-output/ai-dlc-update/owed-derivations.tsv, and an
+# ABSENT record is a silent exit 0 from every root, which scored it INERT. Under the CORRECT root this one
+# malformed row exists, so the reader refuses (exit 2) naming the record; under <root>/scripts it is absent
+# and the reader exits 0. Same floor as the entries below: the root is CONSULTED.
+mkdir -p "$WORK/_bmad-output/ai-dlc-update" || exit 2
+printf 'not-a-record-row\n' > "$WORK/_bmad-output/ai-dlc-update/owed-derivations.tsv"
 for d in check-h1-recursion check-17-bypass check-manifest-bypass; do
   mkdir -p "$WORK/tests/fixtures/$d" || exit 2
   printf 'seed\n' > "$WORK/tests/fixtures/$d/README.md"

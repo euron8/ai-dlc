@@ -55,22 +55,30 @@
 #   (c) otherwise open iff a FAIL or UNRUN line exists for K.
 set -uo pipefail
 
+# --- AI_DLC_ROOT ------------------------------------------------------------
+# Resolve the project root by walking UP for a marker, never by a fixed number of `..` hops: this
+# script runs from core/scripts/ (distribution) and scripts/ai-dlc/ (consumer). Inline on purpose, as
+# in every sibling that needs it, because locating a shared lib is the same unsolved problem. Precedence:
+# override -> walk up from this script -> CLAUDE_PROJECT_DIR -> walk up from cwd -> exit 2.
 ai_dlc_resolve_root() {
-  local d="$1"
-  while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "." ]; do
-    if [ -e "$d/.git" ] || [ -d "$d/.claude" ] || [ -d "$d/core/skills/ai-dlc" ]; then
-      printf '%s\n' "$d"; return 0
-    fi
-    d="$(dirname "$d")"
-  done
-  return 1
+    local d="$1"
+    while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "." ]; do
+        if [ -e "$d/.git" ] || [ -d "$d/.claude" ] || [ -d "$d/core/skills/ai-dlc" ]; then
+            printf '%s\n' "$d"; return 0
+        fi
+        d="$(dirname "$d")"
+    done
+    return 1
 }
-SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="${AI_DLC_PROJECT_ROOT:-}"
-[ -n "$ROOT" ] || ROOT="$(ai_dlc_resolve_root "$SELF_DIR" || true)"
-[ -n "$ROOT" ] || ROOT="${CLAUDE_PROJECT_DIR:-}"
-[ -n "$ROOT" ] || ROOT="$(ai_dlc_resolve_root "$(pwd)" || true)"
-[ -n "$ROOT" ] || { echo "REFUSED: cannot resolve the project root; set AI_DLC_PROJECT_ROOT." >&2; exit 2; }
+CO_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CO_ROOT="${AI_DLC_PROJECT_ROOT:-}"
+[ -n "$CO_ROOT" ] || CO_ROOT="$(ai_dlc_resolve_root "$CO_SCRIPT_DIR" || true)"
+[ -n "$CO_ROOT" ] || CO_ROOT="${CLAUDE_PROJECT_DIR:-}"
+[ -n "$CO_ROOT" ] || CO_ROOT="$(ai_dlc_resolve_root "$(pwd)" || true)"
+[ -n "$CO_ROOT" ] || { echo "REFUSED: cannot resolve the project root; set AI_DLC_PROJECT_ROOT." >&2; exit 2; }
+# --- end AI_DLC_ROOT --------------------------------------------------------
+SELF_DIR="$CO_SCRIPT_DIR"
+ROOT="$CO_ROOT"
 
 # ---- the scope classifier: ONE place ------------------------------------------------------------
 # A SLOT is any whole `s<digits>` path COMPONENT anywhere under `_bmad-output/`, derived from the path
@@ -168,8 +176,11 @@ is_history() { # <root-relative path> -> 0 when HISTORY
     prd-history.md|product-brief-history.md|push-candidate-ledger.archive.md) return 0 ;;
     operator-answers-history.md|operator-requests-history.md|pipeline-snapshot-history.md) return 0 ;;
   esac
+  # rotate-snapshot-archive.sh:149 writes the archive beside the snapshot history, in its pipeline-history
+  # directory. Matched on the part below the pipeline root: this reader classifies that path and never
+  # creates it, and the state-path schema is the writer's to declare.
+  case "$p" in _bmad-output/*) case "${p#_bmad-output/}" in pipeline-history/pipeline-snapshot-archive.md) return 0 ;; esac ;; esac
   case "$p" in
-    _bmad-output/pipeline-history/pipeline-snapshot-archive.md) return 0 ;;
     _bmad-output/ai-dlc-update/reconcile-log-*.md)
       n="${b#reconcile-log-}"; n="${n%.md}"
       case "$n" in
@@ -422,7 +433,7 @@ while IFS="$SEP" read -r key cmd range logn sc tkey tcmd hops cyc; do
     [ -n "$found" ] && nfound="$(printf '%s\n' "$found" | awk 'END { print NR + 0 }')"
   fi
   if [ "$nfound" -gt 1 ]; then
-    if printf '%s\n' "$found" | grep -qxF -- "$ln"; then nfound=1; found="$ln"
+    if grep -qxF -- "$ln" <<<"$found"; then nfound=1; found="$ln"
     else echo "REFUSED: $rel carries $nfound derived-fence copies of the recorded command for $key and none is at the recorded line, so the row cannot be placed." >&2; exit 2; fi
   fi
   if [ "$nfound" -eq 0 ]; then

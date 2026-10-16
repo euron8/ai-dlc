@@ -20,10 +20,10 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
-## [@VER@] - 2026-10-16
+## [0.808.0] - 2026-10-16
 
-Batch 235 (release BL-587 + BL-612). Closes BL-612. BL-587 ships PARTIAL: its snapshot pointer line (contract D6)
-is not built and stays open, see below. Closes no `PC-` id.
+Batch 235 (release BL-587 + BL-612 + BL-633). Closes BL-612 and BL-633. BL-587 ships PARTIAL: its snapshot pointer
+line (contract D6) is not built and stays open, see below. Closes no `PC-` id.
 
 ### A reconcile's owed derivations are recorded where the sprint reads them, and the planning gate refuses while one is open (BL-587)
 
@@ -126,6 +126,14 @@ is not built and stays open, see below. Closes no `PC-` id.
   guard's window), `reconcile/ledger-reverify.sh` (the same guard), `reconcile/emit-report.sh` (what step 2 has
   written by step 5). `validate-layer-entries.sh`'s W10 message makes it in user-facing text and is filed as
   BL-617. Fixture comments in `apply-drift-refile` and `ledger-reverify` repeat it; no assertion depends on them.
+
+### A glob pathspec ending in `/` is a stated tool hazard (BL-633)
+
+- `.claude/rules/tool-hazards.md` gains one line beside the `ls-tree` pathspec entry: `'dir*/'` matches nothing,
+  exit 0, in `git grep` and `ls-files`; use the bare glob, the plain directory, or `:(glob)<dir>*/**`.
+- That line and BL-612's `consumer-boundary.md` bullet are both durable-channel bytes, so arm A6's ceiling
+  (`DURABLE_MAX`, `scripts/validate-claude-rules.sh`) rises 69376 -> 69584 by their measured total, on one
+  operator approval.
 
 ## [0.807.0] - 2026-10-16
 

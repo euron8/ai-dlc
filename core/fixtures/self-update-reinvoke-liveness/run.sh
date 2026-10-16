@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # self-update-reinvoke-liveness -- a change to what step 3 onward executes is LIVE on the pull that
 # delivers it, because step 2 STOPS and re-invokes /ai-dlc-update and the fresh invocation loads the
 # updated logic. Only what the FIRST invocation's step 1 executed ran the pre-update version.
@@ -95,7 +96,7 @@ slice() {
   local drv="$1" mset p
   mset="$(bash "$drv/mp.sh" "$D" "$A" "$B" 2>/dev/null)" || return 1
   git -C "$D" diff --name-only "$A" "$B" | while IFS= read -r p; do
-    if printf '%s\n' "$mset" | grep -qxF -- "$p"; then printf '%s\n' "$p"; fi
+    if grep -qxF -- "$p" <<<"$mset"; then printf '%s\n' "$p"; fi
   done
 }
 mkcons() { # <dir> : the consumer at A

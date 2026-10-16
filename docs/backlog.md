@@ -662,40 +662,7 @@ The question also rested on a false premise. The log's disposition says "these a
 
 Under the current-sprint scope ruling above, this instance is exactly the discriminating input. The three s319 rows must reach the lead, and the s303 and s308 rows must not. Receipt addition, as suggested by the filer: seed a closed-sprint row (s303) and a live-sprint row (s319) from one reconcile log, and assert that only the live one reaches the lead, whether or not the reconcile chose to edit.
 
-verify: manual
-
-## BL-612 — "takes effect on the pull AFTER the one that delivers it" is wrong for any change the update skill runs after its step-2 re-invoke
-
-**DEFECT.** Filed by peer session ai-dlc-60, found by the BL-587 contract adversary; intake re-derived it read-only. `core/skills/ai-dlc-update/SKILL.md` step 2 (origin/main, ~:248-256) self-updates the machinery slice (`core/skills/ai-dlc-update/**`, `core/scripts/*`, hooks, schemas) on its own commit-and-merge cycle, then (~:731-740) says "STOP this invocation and re-invoke `/ai-dlc-update` automatically … THIS invocation is still executing the PRE-update logic … do NOT proceed to step 3 on stale logic". So steps 3 onward run the NEW engine and the NEW skill text on the delivering pull, unless the self-update gate returns `SELF-UPDATE-DEFER` (9 mentions in SKILL.md). Only behaviour that executes in steps 1-2 of that invocation really runs the pre-update version.
-
-Measured on graph's 0.791.0 → 0.793.0 pull: `scripts/ai-dlc/validate-artifact-derivations.sh` is blob `deacd13c` at `3dd8a9fd4` (pre-pull), and `e3cdd564` at `41d2dbf91` (#1230, the self-update) and at `897dfdb32` (#1231, the reconcile). In this repo the same file is `deacd13c` at 952b9319 and `e3cdd564` at c16609ba, so the two blobs differ and the new validator was in place at the delivering pull's reconcile.
-
-So these release notes are wrong: 0.793.0's "the reconcile engine runs this validator, so a consumer gets the pin on the pull AFTER", and 0.799.0's "both files are read by the update session, so a consumer gets this on the pull AFTER the one that delivers it". The CHANGELOG has 35 lines matching "pull after" (control: 887 `## [` headings), and the live backlog carries the same claim in BL-563 and BL-582. Each needs classifying:
-- step-1/2 behaviour: really takes effect on the next pull.
-- anything read or run from step 3 on: live on the delivering pull, after the re-invoke.
-BL-582, for example, splits: its step-2 touchpoint is next-pull, and its step-8 touchpoint is live on delivery.
-
-Hooks may be live even earlier, per ai-dlc-60. This is REASONED from the step-2 text and NOT yet measured; ai-dlc-60 is measuring it in U-b's slot. Step 2 writes the new machinery into the working tree before its own commit, push and merge, and Claude Code runs the on-disk hook on every call. A changed hook would therefore already govern the delivering pull's own step-2 merge, while the session still follows the old SKILL.md. That makes a third class beside the two above.
-
-Owed:
-1. The delivery-phase rule written once where release authors read it.
-2. Correct the reconcile-phase claims, in the CHANGELOG's "Bootstrapping" lines and in BL-563 and BL-582, as a Corrections paragraph in BL-612's own release entry naming each misclassified "pull after" line plus the BL-563 and BL-582 items. That paragraph closes item 2 only. It is prose, so it cannot stand as the receipt for the mechanism; item 3 is that receipt.
-3. Receipt: a fixture or derivation that takes a reconcile-engine change, simulates step 2 and then a re-invoke, and shows the new engine running at step 3. A step-1 behaviour change is the control, which must NOT be live. Lead ai-dlc-9c ruled the fixture is the receipt; the CHANGELOG paragraph closes only the documentation item. Whoever builds the fixture checks that its simulated re-invoke matches step 2's real re-invoke mechanism, read from the skill text itself (SKILL.md ~:731-740), not from a summary of it.
-
-The same wrong delivery-timing claim appears in shipped text, all at `86d3a695`. Corrected in the BL-587+612 release:
-- `core/skills/ai-dlc-update/reconcile/apply.sh:762-764` and `:2483-2485`
-- `core/skills/ai-dlc-update/SKILL.md:2456-2460`, and `:1399-1404` (timing half)
-- `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:209-211`
-- `core/skills/ai-dlc-update/reconcile/emit-report.sh:591-593`
-Filed separately: `core/scripts/validate-layer-entries.sh:1329` (W10 message), BL-617.
-Known-stale fixture COMMENTS, left unchanged because no assertion depends on them:
-- `core/fixtures/apply-drift-refile/run.sh:758-759`
-- `core/fixtures/ledger-reverify/run.sh:2125-2130` and `:5257-5262`
-- `core/fixtures/ledger-reverify/seed.sh:816`
-
-Items 2 and 3 ship together and ride BL-587's release (lead ai-dlc-9c's ruling), and that release closes the whole entry. Release U-b is built, so per the scope-boundary ruling nothing from this entry joins it; U-b adds only its own (a)/(b)/(c) outcome lines as part of its own verification. The hook-phase class above stays unmeasured until U-b's slot.
-
-Owner: ai-dlc-60 (lead ai-dlc-9c).
+**PARTIAL (v0.808.0).** Delivered: items 1 (debt-row half) and 2. Withdrawn by operator ruling: item 3 (the 8 rows are prose in a reconcile log written before this release, never recorded, so no reader can pick them up; the receipt proves the shape on seeded rows). The 8 rows are live CURRENT/LIVING stale derivations in graph; the operator hands them to graph's own session to re-point, with the 3 s319 rows of the second instance. Open: item 1's snapshot half (D6: no writer can reach the working branch before the reconcile PR merges). Scoped by operator rulings: current sprint and living documents only; refused at the planning gate only.
 
 verify: manual
 
@@ -925,25 +892,6 @@ Owner: ai-dlc-4e [9b62de] (lead ai-dlc-9c).
 - `core/hooks/ai-dlc-continue.sh:363`: `RAPID_WINDOW_SECONDS`.
 
 *CLOSES with 4e's pole release now in preparation:* instance 4, `REGIME_BAND`. That release deletes `scripts/validate-suite-pole.sh` and makes the pole information-only. The file is still present at `8f1a9074`.
-
-verify: manual
-
-## BL-633 — a glob pathspec ending in `/` returns a clean zero in `git grep`, and `tool-hazards.md` does not say so
-
-**NOTE.** Found by intake ai-dlc-40 (two false absences in one session); reproduced with git 2.54.0 (Apple Git-156) at commit `c4834619` (on `b235-ra-g3`'s reflog), pattern `SECONDS`, which `core/fixtures/adversarial-shard-merge/lib.sh` there carries twice:
-- `'core/fixtures/adversarial-shard-merge*/'` → 0 files, exit 0, no stderr.
-- `'core/fixtures/adversarial-shard-merge*'`, `'core/fixtures/adversarial-shard-merge/'`, `'core/fixtures/adversarial-shard-merge'` and `':(glob)core/fixtures/adversarial-shard-merge*/**'` → 1 file each (the controls).
-- `git ls-files` behaves the same in the working tree: `'…merge*/'` 0 files, `'…merge*'` 16.
-
-The absence reads exactly like a real one. `.claude/rules/tool-hazards.md:181-184` covers the neighbouring `ls-tree` case only.
-
-Owed: one line beside `:181-184` saying a glob pathspec must not end in `/` (use the bare glob, the plain directory, or `:(glob)<dir>*/**`). It goes in the durable channel, which has 49 bytes free under A6 (69327/69376 on intake-7). Lead ai-dlc-9c ruled: no subtraction to make room and no separate A6 question for one line. The entry stays OPEN, waiting on room in the durable channel, and goes to the operator together with the next A6 question.
-
-**Ruling (operator, relayed by lead ai-dlc-9c):** A6 is raised by the measured need of this line. ai-dlc-60 writes the line in `tool-hazards.md`, beside the `ls-tree` pathspec entry, in its BL-587+612 release, using this entry's reproduction wording. BL-633 closes in that release.
-
-Owner: ai-dlc-60 (lead ai-dlc-9c), inside the BL-587+612 release.
-
-**A6 sizing (lead ai-dlc-9c, from the operator's single approval):** the operator approved one question covering two durable-channel additions in the BL-587+612 release, raised by their measured total: BL-612's `consumer-boundary.md` bullet (+70 bytes) and this entry's `tool-hazards.md` line (+187 bytes, against an earlier estimate of ~120). 69327 + 70 + 187 = 69584, which is the approved ceiling.
 
 verify: manual
 
