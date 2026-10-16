@@ -841,6 +841,17 @@ if [ -r "$CONSUMER/scripts/ai-dlc/validate-artifact-budget.sh" ]; then
   if [ "$RC" = 0 ] && [ ! -s "$ERR" ]; then ok "snapshot: a payload shorter than a stamp does not unmask old lines"
   else bad "snapshot: a short payload exited $RC, re-judging old text: $(head -2 "$ERR")"; fi
   ra_undo '(2026-10-15'
+  # S8 an Edit whose old_string carries the OLD placeholder line as context, and whose
+  # new_string keeps it and adds an honest line: only the added line is judged.
+  _old='- REPAIR JOIN BLOCKED (2026-10-15T19:3xZ): old text'
+  fire "$(jq -nc --arg f "$SNAP" --arg o "$_old" --arg n "$_old
+- 2026-10-16T01:59Z joined" '{tool_name:"Edit",tool_input:{file_path:$f,old_string:$o,new_string:$n}}')"
+  if [ "$RC" = 0 ] && [ ! -s "$ERR" ]; then ok "snapshot: an Edit keeping the old placeholder as context -> exit 0"
+  else bad "snapshot: an Edit with the old placeholder as context exited $RC: $(head -2 "$ERR")"; fi
+  # S9 a whole-file Write of the snapshot as it stands: the old placeholder is not re-judged.
+  fire "$(write_json "$SNAP")"
+  if [ "$RC" = 0 ] && [ ! -s "$ERR" ]; then ok "snapshot: a whole-file Write of unchanged text -> exit 0"
+  else bad "snapshot: an unchanged whole-file Write exited $RC: $(head -2 "$ERR")"; fi
   unset AI_DLC_SNAPSHOT_NOW_EPOCH
 else
   ok "snapshot carrier SKIPPED: no validate-artifact-budget.sh in this layout"

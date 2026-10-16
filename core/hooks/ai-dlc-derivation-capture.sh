@@ -132,10 +132,16 @@ case "$FILE" in
     BUDGET_VALIDATOR="${PROJECT_DIR}/scripts/ai-dlc/validate-artifact-budget.sh"
     if [ -r "$BUDGET_VALIDATOR" ]; then
       SNAP_PAY="$(mktemp "${TMPDIR:-/tmp}/ai-dlc-snapstamp.XXXXXX" 2>/dev/null)" || exit 0
-      jq -r '[ (.tool_input.content // empty), (.tool_input.new_string // empty),
-               ((.tool_input.edits // []) | map(.new_string // empty) | join("\n"))
-             ] | map(select(. != "")) | join("\n")' <<<"$INPUT" > "$SNAP_PAY" 2>/dev/null
-      SNAP_OUT="$(AI_DLC_PROJECT_ROOT="$PROJECT_DIR" bash "$BUDGET_VALIDATOR" --stamps-only "$FILE" --payload "$SNAP_PAY" 2>&1)"
+      # The lines this write ADDED: each new_string minus its own old_string, so a line kept
+      # as Edit context is not judged; a Write has no before-state, hence --whole-write.
+      jq -r 'def added($n; $o): ($n | split("\n")) - ($o | split("\n"));
+        .tool_input as $t
+        | [ ($t.content // empty | split("\n")[]),
+            (if $t.new_string then added($t.new_string; $t.old_string // "")[] else empty end),
+            (($t.edits // [])[] | added(.new_string // ""; .old_string // "")[])
+          ] | map(select(. != "")) | join("\n")' <<<"$INPUT" > "$SNAP_PAY" 2>/dev/null
+      SNAP_WHOLE=""; [ "$TOOL_NAME" = Write ] && SNAP_WHOLE="--whole-write"
+      SNAP_OUT="$(AI_DLC_PROJECT_ROOT="$PROJECT_DIR" bash "$BUDGET_VALIDATOR" --stamps-only "$FILE" --payload "$SNAP_PAY" $SNAP_WHOLE 2>&1)"
       SNAP_RC=$?
       rm -f "$SNAP_PAY"
       if [ "$SNAP_RC" = 1 ] && grep -qE '^(FUTURE|MALFORMED|BACKDATED) ' <<<"$SNAP_OUT"; then

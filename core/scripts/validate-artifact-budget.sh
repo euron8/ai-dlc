@@ -163,6 +163,7 @@ GATE_LOG=""
 FAIL_ON=""
 STAMPS_ONLY=""
 PAYLOAD_FILE=""
+WHOLE_WRITE=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -194,6 +195,7 @@ while [ $# -gt 0 ]; do
     # the lines this write carried; see "THE WRITE-TIME MODE" below.
     --stamps-only)    STAMPS_ONLY="${2:-}"; shift 2 ;;
     --payload)        PAYLOAD_FILE="${2:-}"; shift 2 ;;
+    --whole-write)    WHOLE_WRITE=1; shift ;;
     *) echo "unknown argument: $1" >&2; exit 1 ;;
   esac
 done
@@ -1209,6 +1211,14 @@ check_malformed_stamps() { # check_malformed_stamps <file> <rel>
 # dispatch at or before stamp+T and A the nearest after it. FIRE when A exists and is
 # nearer than B: the stamp sits before the dispatch it most plausibly records. A row stamped
 # LATE (after its dispatch) stays quiet; this arm is about back-dating only.
+#
+# A ROW WHOSE AGENT CELL IS A LEDGER `name` JOINS ON THAT NAME ONLY. The nearest-dispatch rule
+# alone reads an honest LATE row as back-dated when the NEXT same-role dispatch lands closer
+# than its own: `dev-a` stamped 01:22:00 for its 01:19:55 dispatch, with `dev-b` dispatched at
+# 01:23:30, read as 90 s early. Joined on `dev-a` it is 125 s late and quiet. A row whose agent
+# cell names no ledger row (the motivating `fold`) still falls to the role rule. Re-measured on
+# the corpus: the one in-flight fire is an exact-name join (`adversary-s301-prd-validate`,
+# whose only ledger row is 254 s after the stamp) and stays.
 # T is 60s for a stamp with seconds and 120s for minute-only, which rounds down by up to 59.
 #
 # ONLY ROWS WHOSE STATUS IS `in-flight`. A delivered row no longer decides anything.
@@ -1266,10 +1276,13 @@ check_backdated_dispatch() { # check_backdated_dispatch <file> <rel> <ledger>
       st = substr(cell[dcol], RSTART, RLENGTH); t = epoch(st)
       if (!match(cell[rcol], /[A-Za-z][A-Za-z-]*/)) next
       role = tolower(substr(cell[rcol], RSTART, RLENGTH))
+      ag = tolower(cell[1]); named = 0
+      for (k = 1; k <= n; k++) if (N[k] == ag) { named = 1; break }
       w = (length(st) == 20) ? tol : 2 * tol
       hb = 0; ha = 0
       for (k = 1; k <= n; k++) {
-        if (R[k] != role && N[k] != role) continue
+        if (named) { if (N[k] != ag) continue }
+        else if (R[k] != role && N[k] != role) continue
         if (T[k] <= t + w) { if (!hb || T[k] > B) { B = T[k]; hb = 1 } }
         else if (!ha || T[k] < A) { A = T[k]; ha = 1 }
       }
@@ -1721,6 +1734,8 @@ fi
 #   BACKDATED  OFFENDER  an in-flight pm-escalated row stamped 112 s before its ledger row
 #              NEAR-MISS the same role stamped 1 s AFTER (honest); a row stamped LATE (00:35,
 #                        nearest dispatch is 75 min BEFORE it); a delivered row stamped early;
+#                        a name-joined LATE row whose next same-role dispatch is nearer than
+#                        its own (dev-x, 01:22:00 for 01:19:55, dev-y at 01:23:30);
 #                        a minute-only stamp 50 s before its dispatch (rounding); a role with no
 #                        ledger row at all
 MPROBE="$TMPROOT/probe-malformed.md"
@@ -1740,6 +1755,8 @@ if command -v jq >/dev/null 2>&1; then
     '{"ts":"2026-01-01T01:50:21Z","name":"pm-escalated","role":"pm"}' \
     '{"ts":"2026-01-01T02:17:32Z","name":"pm-escalated","role":"pm"}' \
     '{"ts":"2026-01-01T03:00:50Z","name":"dev","role":"dev"}' \
+    '{"ts":"2026-01-01T01:19:55Z","name":"dev-x","role":"dev"}' \
+    '{"ts":"2026-01-01T01:23:30Z","name":"dev-y","role":"dev"}' \
     '{"dispatched_at":"2026-01-01T00:00:00Z","role":"qa"}' 'not json' > "$BLEDGER"
   {
     printf '## In-Flight Teammates\n'
@@ -1750,6 +1767,7 @@ if command -v jq >/dev/null 2>&1; then
     printf 'spec | pm-escalated | d4 | 2026-01-01T01:48:00Z | delivered\n'
     printf 'dev-a | dev | d5 | 2026-01-01T03:00Z | in-flight\n'
     printf 'arch | architect | d6 | 2026-01-01T00:10:00Z | in-flight\n'
+    printf 'dev-x | dev | d7 | 2026-01-01T01:22:00Z | in-flight\n'
   } > "$BPROBE"
   BPROBE_OUT="$(check_backdated_dispatch "$BPROBE" probe "$BLEDGER")"
   rm -f "$BPROBE" "$BLEDGER"
@@ -1789,6 +1807,14 @@ fi
 # touches one line must not be refused for another -- the malformed arm in particular fires
 # on 45 of the reference consumer committed revisions, newest included.
 #
+# THE PAYLOAD IS WHAT THE WRITE ADDED, NOT WHAT IT CARRIED. The hook subtracts each Edit's
+# old_string lines from its new_string, so a placeholder kept as context is not re-judged
+# (measured: 9 of 2961 real snapshot Edits on the reference consumer carried one). A full
+# Write has no before-state in its PostToolUse payload, so `--whole-write` skips MALFORMED
+# there -- RESIDUAL: a placeholder introduced by a whole-file Write is caught by nothing at
+# write time. FUTURE and BACKDATED still run on a Write: an old line they fire on is still a
+# live defect, where an old placeholder is only old text.
+#
 # NOT the full validator: budget, schema and marker findings stay at the gate, where their
 # remedies apply. Exit 1 on a finding, 0 clean, 2 on bad usage -- the hook fails OPEN on 2.
 #
@@ -1812,7 +1838,7 @@ if [ -n "$STAMPS_ONLY" ]; then
   _rel="${STAMPS_ONLY##*/}"
   {
     check_future_stamps "$_mask" "$_rel" "$SNAP_NOW"
-    check_malformed_stamps "$_mask" "$_rel"
+    [ "$WHOLE_WRITE" -eq 1 ] || check_malformed_stamps "$_mask" "$_rel"
     check_backdated_dispatch "$_mask" "$_rel" "$(dirname "$STAMPS_ONLY")/spawn-ledger.jsonl" | grep -v '^SKIP '
   } > "$TMPROOT/stamps-out"
   [ -s "$TMPROOT/stamps-out" ] || exit 0
