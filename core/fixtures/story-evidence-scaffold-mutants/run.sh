@@ -22,9 +22,11 @@
 #
 # The shard set, each shard's modes and the mutant partition are declared HERE and joined (J0) against
 # this file's own `he_mutant <id>` calls -- one grammar, indented or not, so the conditional
-# strat-no-lc-c is seen. A shard declared with no driver directory, a mutant dealt to a shard whose
-# modes do not cover its own, and a mutant dealt twice or to no shard each fail the build. Every shard
-# runs J0, so none can pass without it. The shard arrives as an ARGUMENT, never the environment.
+# strat-no-lc-c is seen. A shard declared with no driver directory and a mutant dealt twice or to no
+# shard each fail the build in J0. J0 does NOT check mode cover: he_mutant refuses, at run time, a
+# mutant dealt to a shard whose modes do not cover its own, and refuses any call whose id is dealt to
+# no shard whatever shape the call has. Every shard runs J0, so none can pass without it. The shard
+# arrives as an ARGUMENT, never the environment.
 #
 # Usage: run.sh [--group <a|b|c|d>]      (default a; b, c, d are the sibling driver directories)
 # Exit:  0 = every mutant dealt to this shard is killed by exactly its own cases, 1 = one is not,
@@ -41,7 +43,10 @@ MUTANTS_d="no-arm-a no-arm-b no-arm-c nm-glob-all-tracked awk-v-caps cmd-unancho
 set -u
 
 GROUP=a
-if [ "${1:-}" = "--group" ]; then
+if [ "$#" -gt 0 ]; then
+  if [ "$1" != "--group" ]; then
+    echo "FIXTURE ERROR: unknown argument '$1' (usage: run.sh [--group <shard>])" >&2; exit 2
+  fi
   GROUP="${2:-}"
   [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }
 fi
@@ -74,6 +79,8 @@ partition_ok() {
 # he_ids <file> -> the id of every `he_mutant <id> ...` CALL, indented or not. The definition line
 # `he_mutant() {` has no space after the word and a comment starts with `#`, so neither matches.
 he_ids() { sed -n 's/^[[:space:]]*he_mutant \([a-z0-9][a-z0-9-]*\) .*/\1/p' "$1"; }
+# in_union <name> <space-separated ids> -> 0 when the name is one of the ids.
+in_union() { case " $2 " in *" $1 "*) return 0 ;; esac; return 1; }
 # driver_ok <driver run.sh> <shard> -> 0 when that file exists and drives that shard.
 driver_ok() { [ -f "$1" ] && grep -qF -- "--group $2" "$1"; }
 # modes_cover <a mutant's modes> <a shard's modes> -> 0 when every mode letter of the first is in the second.
@@ -109,6 +116,10 @@ if ! driver_ok "$JW/drv-b" b || driver_ok "$JW/drv-c" b || driver_ok "$JW/no-suc
   echo "FIXTURE BROKEN: the driver join's self-probe did not discriminate (drives it, drives another shard, absent)" >&2
   rm -rf "$JW"; exit 2
 fi
+if ! in_union beta "alpha beta" || in_union gamma "alpha beta" || in_union alp "alpha beta"; then
+  echo "FIXTURE BROKEN: the undealt-id self-probe did not discriminate (dealt, undealt, prefix of a dealt id)" >&2
+  rm -rf "$JW"; exit 2
+fi
 if ! modes_cover k ks || ! modes_cover sk ks || modes_cover ks k || modes_cover h ks; then
   echo "FIXTURE BROKEN: the mode-cover self-probe did not discriminate (covered, mixed covered, mixed uncovered, foreign mode)" >&2
   rm -rf "$JW"; exit 2
@@ -133,6 +144,8 @@ for s in $SHARDS; do
   fi
 done
 rm -rf "$JW"
+ALLDEALT=""
+for s in $SHARDS; do eval "ALLDEALT=\"\$ALLDEALT \${MUTANTS_$s}\""; done
 NMINE="$(printf '%s\n' $MINE | grep -c .)" || NMINE=0
 echo "[J0] coverage join: $ndecl mutants derived from he_mutant calls, dealt disjointly across {$SHARDS}, union exact; this shard runs {$MINE} over modes {$SMODES}"
 
@@ -187,7 +200,11 @@ fi
 SCORED=0
 he_mutant() {
   local name="$1" from="$2" to="$3" want="$4" label="$5" m mv i=0 diffs="" wv wi mode="" x
-  case " $MINE " in *" $name "*) ;; *) return 0 ;; esac
+  # Bound to the CALL SITE, whatever shape the call has: an id dealt to no shard is scored by none.
+  if ! in_union "$name" "$ALLDEALT"; then
+    bad "FIXTURE BROKEN: he_mutant '$name' is dealt to no shard"; return
+  fi
+  in_union "$name" "$MINE" || return 0
   SCORED=$((SCORED+1))
   for x in $want; do
     case " $SCASES " in *" $x "*) mode="${mode}s" ;; esac
