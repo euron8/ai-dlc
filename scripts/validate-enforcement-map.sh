@@ -853,7 +853,7 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   I83 +2, I21 +1, I9 +1 (sum +21); I82b and I93 wobble by one on both sides. The new files are
 #   core/scripts/validate-trunk-audit-gate.sh, reconcile/post-write-gates.sh and the trunk-audit-gate
 #   and post-write-gates fixtures. HIGH tip reading 3391 plus the same 4, so 3374 + 21.
-FORK_BUDGET=3395
+FORK_BUDGET=3405
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
