@@ -412,7 +412,7 @@ mutant "JX23 subject --pass party not a party repair" "sjpartysrc" \
   '[ "$SUBJMODE" = 1 ] && [ "$PASS" = party ] && [ -z "$ARTIFACT" ] && PARTY=1' \
   'false && PARTY=1'
 # srcsetaside and srcera die too: each refusal is reported and then acquitted by the same exit 0.
-mutant "JX24 --sources reports refusals and exits 0" "srcunres srcsetaside srcera dispkey dispvocab dispruling gapfill chkrec" \
+mutant "JX24 --sources reports refusals and exits 0" "srcunres srcsetaside srcera dispkey dispvocab dispruling chkrec" \
   '  [ "$refuse_n" -eq 0 ] || exit 2
   [ "$SRCMODE" = 1 ] && echo "SOURCES:' \
   '  true || exit 2

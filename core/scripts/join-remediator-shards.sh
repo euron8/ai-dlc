@@ -246,6 +246,7 @@ set -u
 export LC_ALL=C
 
 refuse_n=0
+GAP_LINES=""; GAP_N=0
 refuse() { echo "REFUSED: $*" >&2; refuse_n=$((refuse_n + 1)); }
 die() { echo "REFUSED: $*" >&2; exit 2; }
 
@@ -647,8 +648,11 @@ src_probe() {
 #       needs no seat `source:` (src_check exempts it from NOSOURCE) and carries `- ruling: <cite>`
 #       instead, resolved by ruling_cite: an ISO stamp names an operator-requests-history.md heading
 #       `## <ISO> -- (typed)`; 64 hex characters name an operator-answers-history.md `- SHA256:` line,
-#       one `SHA256:` label stripped first. Never a line number; an absent history file resolves
-#       nothing.
+#       its `SHA256:` label and the blanks after it stripped first. Never a line number; an absent
+#       history file resolves nothing. RECALL, STATED: a ruling given as a slash command is logged
+#       `## <ISO> -- <command>`, and a typed request's `- SHA256:` line sits in the REQUESTS file;
+#       neither form resolves, so such a ruling cannot be cited. No operator-ruling entry exists in
+#       graph's corpus, so this refuses nothing today.
 #       FALSE-POSITIVE SET, MEASURED by running this join (--escalations) over graph's 60 s317-s319
 #       repair and fold records against 952b9319's, and this file's contract_check (parts mode) over
 #       251 shard parts: 1 new refusal, the true positive above (6 NODISP); 0 BADDISP and 0 RULING
@@ -678,16 +682,36 @@ src_probe() {
 #       one validator call, and a part that skipped it hands the lead that call. Parts mode refuses
 #       a part missing either line UNCONDITIONALLY, as the siblings arm does and for its reason; a
 #       part holding no `repaired` entry is exempt, because it edited nothing and replayed nothing.
-#       A record (--sources, --escalations) binds from the first line carrying either field: a
-#       record with neither is outside the era and passes. NOT the siblings era, which was the first
-#       choice and is wrong here: 4 of graph's 60 s317-s319 records carry a siblings field (the s319
-#       coe elicitation and party repairs, the requirements party and elicitation repairs) and 0
-#       carry these, so a siblings-keyed era would refuse every live s319 record on the pull. THE
-#       HOLE, STATED: a serial pass that writes neither line never enters the era.
-#       MEASURED over graph's 251 s317-s319 shard parts: 0 carry either field, which is the expected
-#       population before the role-file change; 21 parts hold no repaired entry and are exempt (3
-#       of them hold 3 non-repaired entries, the rest none). Every other part predates the rule and
-#       is refused in parts mode, the residual the siblings arm already states.
+#       A record (--sources, --escalations) binds from its first GRAMMAR line -- a value leading
+#       with `called`, `unavailable`, `replayed <n>`, `not replayed` or `deferred`, read after
+#       emphasis, carriage returns and case are dropped, so a trailer the template licenses falls
+#       away. A line whose value leads with no keyword is PROSE and opens nothing, because graph
+#       already writes these labels as prose: `- derivations: the validator reports OK on the PRD
+#       (148 derivations ...)` in s317 requirements-repair-adv-p1.md and -p2.md, and
+#       `- advisor: one attempt was made ...` in four s317 adversary files. A first cut opened the
+#       era on the LABEL; it refused both of those records, which the base passes, and a refusal
+#       exits before ESCALATED-COUNT, so their escalations went unreported -- the tip adversary
+#       found it. Inside a bound file a prose line is a value outside the grammar. NOT the siblings
+#       era, either: 4 of the 60 records carry a siblings field and 0 carry a grammar line, so a
+#       siblings-keyed era would refuse every live s319 record on the pull. THE LABEL IS
+#       CASE-SENSITIVE, as arm H's repair_field is. Graph writes `Advisor:` capitalised in 37 files
+#       beyond the 6 the lowercase label reaches; 18 of those lines lead with a keyword
+#       (`Advisor: unavailable (rate-limited) ...`), and read case-insensitively they would bind
+#       s317 stories-repair-p1.md and shards/stories-adversarial-repair-p1/20.md -- each carries a
+#       lone advisor line and no derivations line, so each would refuse where the base passes.
+#       HOLES, STATED: a serial pass writing neither line never enters the era; and the fields are
+#       read per FILE, so in a joined record the parts' own lines satisfy the check and a serial
+#       remediator that omits its own two is not caught.
+#       MEASURED with this join, serially, against 952b9319's over graph's 60 s317-s319 repair and
+#       fold records in both record modes: 0 runs refused by a check field; the base printed an
+#       escalation count and this join did not on 2 runs, both the BL-542 true positive (the
+#       d-answers fold, 6 NODISP); the 11 other differing runs are --sources on a non-party record,
+#       refused at the base and here, collapsed to the one --escalations line (BL-561). Over the 251
+#       shard parts with this contract_check and checks_field: 230 parts lack both lines, the
+#       pre-rule residual (251 minus the 21 holding no repaired entry, which are exempt); 0 values
+#       outside the grammar; 0 `not replayed`. A control: the labelled lines in the corpus number 57,
+#       in 43 files case-insensitively and 6 case-sensitively, and all 6 lowercase-labelled files are
+#       prose-only (0 grammar-led, 0 mixing a grammar line with a prose one).
 #   Not caught, by design: a set-aside reworded past the regex; a substantive mis-repair whose
 #   prose and pin agree; whether the grepped text in the siblings fence is really the replaced
 #   text (the write ledger carries no old_string); the `grep -rn -F` line's output is recorded,
@@ -733,7 +757,7 @@ contract_check() {
         if (disp == "repaired" && sev && claim ~ /outside (this|my|the) (shard|part|section)|not required/ \
             && claim !~ /escalat|serial remediator/) print "SETASIDE\t" cf "\t" cur "\t" hl
         if (disp == "repaired" && claim ~ /gap[- ]?fill|veto/) print "GAPFILL\t" cf "\t" cur
-        if ((src == 0 || era) && !(dfull in VOC)) print "BADDISP\t" cf "\t" cur "\t" dfull
+        if ((src == 0 || era) && !(dfull in VOC)) print "BADDISP\t" cf "\t" cur "\t" draw
         if (dfull == "operator-ruling") print "RULING\t" cf "\t" cur "\t" rcite
       }
       if (disp == "" && edf) print "NODISP\t" cf "\t" cur
@@ -775,7 +799,7 @@ contract_check() {
     /^[ \t]*$/ { inclaim = 0; next }
     /^[[:space:]-]*[*_`]*disposition[*_`]*:/ {
       v = tolower($0); sub(/^[^:]*:/, "", v); gsub(/[*_`]/, "", v); sub(/^[ \t]+/, "", v)
-      split(v, a, /[^a-z]/); disp = a[1]; dfull = v; sub(/[^a-z-].*$/, "", dfull); inclaim = 0; next }
+      split(v, a, /[^a-z]/); disp = a[1]; draw = v; sub(/[ \t]+$/, "", draw); dfull = v; sub(/[^a-z-].*$/, "", dfull); inclaim = 0; next }
     /^[[:space:]-]*[*_`]*edit[*_`]*:/ {
       v = $0; sub(/^[^:]*:/, "", v); edf = 1
       if (match(v, /[A-Za-z0-9_.\/-]+[.](md|json|jsonl|yaml|yml|txt|csv)/)) edt = 1
@@ -821,7 +845,7 @@ sib_control() {
 # is absent resolves nothing: an absent file is an unresolved cite, never nothing to check.
 ruling_cite() {
   local r="$1" d="$2" c="$3" h n
-  c="${c#SHA256:}"; c="${c# }"
+  c="${c#SHA256:}"; c="${c#"${c%%[![:blank:]]*}"}"
   if [ -z "$c" ]; then
     refuse "${r}: the ${d} entry is dispositioned operator-ruling and carries no '- ruling:' cite; name the operator's answer as '- ruling: <ISO>' (an operator-requests-history.md heading) or '- ruling: <sha256>' (an operator-answers-history.md SHA256 line)"
     return
@@ -953,20 +977,42 @@ N	2	0	0	0	0" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: th
   [ "$o" = "CHK	nochk.md	no advisor: line
 CHK	nochk.md	no derivations: line
 CHK	notrep.md	derivations: not replayed" ] || { rm -rf "$d"; die "the check-fields self-probe failed: read '${o}'; no verdict"; }
+  # Prose and trailers (the s317 shape): a record whose only labelled lines are prose never opens
+  # the era and passes; a keyword-led value with a trailer, in CRLF, reads; a prose line beside a
+  # grammar line in a bound file is the value outside the grammar.
+  printf -- '- derivations: the validator reports OK on the PRD\n- advisor: one attempt was made\n\n### F-1\n- disposition: repaired\n- edit: n/a\n' > "$d/prose.md"
+  printf -- '- advisor: called (no concerns)\r\n- derivations: replayed 3 -- validator OK\r\n\r\n### F-1\r\n- disposition: repaired\r\n- edit: n/a\r\n' > "$d/trail.md"
+  printf -- '- advisor: called\n- derivations: the validator reports OK\n\n### F-1\n- disposition: repaired\n- edit: n/a\n' > "$d/mixed.md"
+  o="$(checks_field 1 "$d/prose.md"; checks_field 1 "$d/trail.md"; checks_field 1 "$d/mixed.md")"
+  [ "$o" = "CHK	mixed.md	no derivations: line
+CHK	mixed.md	a value outside the grammar: derivations: the validator reports ok" ] || { rm -rf "$d"; die "the check-fields self-probe failed on prose and trailers: read '${o}'; no verdict"; }
   rm -rf "$d"
 }
 # checks_field <0 parts | 1 record> <file> -> one "CHK\t<file>\t<what>" line per defect (BL-557).
 # The two lines a remediator writes under its sha triple: `advisor: called|unavailable` and
 # `derivations: replayed <n>|not replayed|deferred to the join (section/subject shard)`.
+# A VALUE IS READ THE WAY THE DISPOSITION READER READS ITS OWN: emphasis, carriage returns and case
+# dropped, then judged by its LEADING keyword, so a trailer the template itself licenses
+# (`skipped (nit)` is the disposition's) falls away -- `called (no concerns)`, `replayed 3 --
+# validator OK` and `deferred to the join (section shard)` all read. A line whose value leads with no
+# keyword is PROSE: graph writes `- derivations: the validator reports OK on the PRD ...` and
+# `- advisor: one attempt was made ...`, and such a line neither opens a record's era nor counts as
+# the field. So a record binds only from its first GRAMMAR line, and inside a bound file a prose
+# line is a value outside the grammar. The LABEL stays case-sensitive, as arm H's repair_field is.
 checks_field() {
   awk -v rec="$1" '
-    function val(  v) { v = $0; sub(/^[^:]*:/, "", v); gsub(/[*_`]/, "", v); gsub(/^[ \t]+|[ \t]+$/, "", v); return v }
+    function val(  v) { v = $0; sub(/^[^:]*:/, "", v); gsub(/[*_`\r]/, "", v); v = tolower(v)
+                        gsub(/^[ \t]+|[ \t]+$/, "", v); return v }
+    function kw(v, re) { return v ~ ("^(" re ")([^a-z0-9]|$)") }
     /^[ \t]*(```|~~~)/ { fence = !fence; next }
     fence { next }
-    /^[[:space:]-]*[*_`]*advisor[*_`]*:/ { na++; v = val(); if (v != "called" && v != "unavailable") bad = bad " advisor: " v; next }
-    /^[[:space:]-]*[*_`]*derivations[*_`]*:/ { nd++; v = val()
-      if (v != "not replayed" && v != "deferred to the join (section/subject shard)" && v !~ /^replayed [0-9]+$/) bad = bad " derivations: " v
-      if (v == "not replayed") nr = 1; next }
+    /^[[:space:]-]*[*_`]*advisor[*_`]*:/ { v = val()
+      if (kw(v, "called|unavailable")) na++; else bad = bad " advisor: " v; next }
+    /^[[:space:]-]*[*_`]*derivations[*_`]*:/ { v = val()
+      if (kw(v, "not replayed")) { nd++; nr = 1 }
+      else if (kw(v, "replayed [0-9]+|deferred")) nd++
+      else bad = bad " derivations: " v
+      next }
     /^[[:space:]-]*[*_`]*disposition[*_`]*:/ { v = tolower(val()); sub(/[^a-z-].*$/, "", v); if (v == "repaired") nrep++ }
     END {
       b = FILENAME; sub(/.*\//, "", b)
