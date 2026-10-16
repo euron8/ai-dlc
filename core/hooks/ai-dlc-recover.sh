@@ -461,8 +461,9 @@ not reconstruct a rule, and do not ask the operator to re-invoke \`/ai-dlc\`.
 
 Before acting, emit a verification turn naming: the current step file, the last
 gate passed with its timestamp, any in-flight sub-step, the In-Flight Teammates
-state below, and the current git branch and last commit. Then proceed to the next
-pipeline action in the same response. Do not pause for user confirmation.
+state below, and the current git branch and last commit. If you hold an advisor
+tool, call it before your first dispatch or write (Rule 32 R). Then proceed to the
+next pipeline action in the same response. Do not pause for user confirmation.
 
 ## Your teammates did NOT die -- you lost their handles
 
@@ -662,6 +663,9 @@ mkdir -p "$STATE_DIR" 2>/dev/null || true
 # read it and fail to arm. Clearing it here bounds its lifetime to the recovery that wrote it,
 # which is the same guarantee `$MARKER` gets from being rewritten above.
 rm -f "${STATE_DIR}/.recover-satisfied" 2>/dev/null || true
+# The gate's advisor stage (touchpoint R) is per recovery for the same reason: a window left
+# open by a session that ended inside it must not hold the next recovery's calls.
+rm -f "${STATE_DIR}/.recover-advisor-owed" 2>/dev/null || true
 
 # The string measured above is the string emitted: the provenance wrap ran once, before the
 # budget, and EMITTED is its head and tail around the trimmed block.

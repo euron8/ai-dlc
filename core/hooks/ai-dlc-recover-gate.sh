@@ -46,6 +46,64 @@
 # SKILL.md the block asks for on top of that, which is CONDITIONAL by design: it is per-rule,
 # taken when the lead is about to act on something the digest only indexes, and a gate cannot
 # know from a tool call which rule the lead is about to lean on.
+#
+# THE ADVISOR STAGE (touchpoint R, BL-545). SKILL.md Rule 32 R: "After the
+# `postcompact-digest.md` Read ... call the advisor in the same turn, before your first
+# dispatch or write." Measured on the reference consumer: a lead read the snapshot, the step
+# file and the digest, dispatched 12 remediators, and called the advisor a minute later, in
+# its own words "I haven't made the post-recovery advisor call (touchpoint R) yet". The read
+# stages above let the first call after the step Read through, and nothing held the dispatch.
+#
+# So the call that satisfies the step mandate also writes `.recover-advisor-owed` (the
+# session id and a deny count), but only when that call is the LEAD's (empty `agent_id`) and a
+# `postcompact-digest.md` is readable in either layout; `.recover-satisfied` is still written
+# as before. While that file exists and the read marker does not, an `Agent`, `Task`,
+# `TaskCreate`, `Write`, `Edit`, `MultiEdit` or `NotebookEdit` call FROM THE LEAD is judged on the lead's
+# transcript: if a Read of `skills/ai-dlc/postcompact-digest.md` follows the last
+# `compact_boundary` and no advisor attempt follows that Read, it is DENIED. Every other tool
+# is untouched -- the wait-beat a teammate row requires is a Bash call, and R puts it BEFORE the
+# advisor call. An advisor attempt after the digest Read clears the stage and deletes the file.
+#
+# THE DETECTION IS THE ADVISOR GATE'S, restated in one jq pass: an attempt is a
+# `server_tool_use` named `advisor`, the grant is the latest `advisor_tool` attachment, and a
+# latest `advisor_tool_result` whose `error_code` is `unavailable` means the harness withdrew
+# the tool (`ai-dlc-advisor-gate.sh` header, DESIGN). NOT BYTE-BOUND to that copy: there it is
+# three arms inside a larger reduce, not a function both files could share, and a binding would
+# need that reduce split first. A divergence between the two is a residual no invariant sees.
+#
+# IT CANNOT WEDGE, by the same argument the read stages make: the action that clears it, an
+# advisor call, is available whenever it is enforced, and every state where it is not stands
+# the stage down. No grant line, or a withdrawn grant -> the file is deleted and the call
+# allowed (a lead on a local model owes no R). A latest result of `unavailable` -> allowed. No
+# digest Read since the compaction -> allowed (this stage does not police that Read, the
+# injected block does). A teammate (`agent_id` set) -> allowed; R binds the lead. A different
+# `session_id` from the one recorded -> the file is stale; deleted, allowed. No readable
+# transcript -> allowed. A LOCAL-MODEL LEAD WITH NO GRANT LINE IS NEVER HELD.
+#
+# THE BOUNDED ESCAPE, because one state is not covered by the grant line: a lead granted the
+# tool that then switches to a model without it, where the harness may write no withdrawal.
+# Measured on the reference consumer's 174 lead transcripts: 181 grant lines and 0 remove
+# lines; 6 transcripts change model, every one local -> Anthropic and none Anthropic -> local
+# after a live grant, so the wedge state has 0 recorded instances there -- which is a corpus
+# fact, not a guarantee (the advisor gate's header measured a remove line on a `--resume`
+# switch to a local model; a `/model` switch was not measured). So the stage refuses at most
+# R_MAX_DENIES (3) calls per recovery and then stands down; each deny says so and names the
+# `RECOVERY-SKIP: advisor -- <why>` disclosure for a lead that holds no advisor tool.
+#
+# REGISTRATION. The settings template registers this hook with matcher `*`, so every tool in
+# the deny set reaches it; no registration was added.
+#
+# NOT FIXED HERE, recorded: the two READ stages below carry no lead/teammate distinction. A
+# teammate's call during a lead's pending recovery is denied with text addressed to the lead
+# (measured on the reference consumer by the contract adversary: 253 such denials across 113
+# subagent transcripts). That is a separate filing.
+#
+# THE RACE. The incoming call's own message is usually not on disk when PreToolUse fires
+# (measured in the advisor gate's header, THE RACE), so an advisor call in the same message
+# may not be visible yet. A DENY is therefore re-judged every 0.25s until the incoming call's
+# own `tool_use` line lands or 10s pass; an ALLOW is final at once. The deny reason says to
+# call the advisor in a message of its own, which is the shape that never races.
+#
 # It does not read the lead's prose, so the RECOVERY-SKIP disclosure the block
 # requires is not verifiable here -- that disclosure covers exactly the cases where this gate
 # could not arm, and the block says so.
@@ -64,6 +122,88 @@ PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
 STATE_DIR="${PROJECT_DIR}/_bmad-output"
 MARKER="${STATE_DIR}/.recover-fired"
 PROGRESS="${STATE_DIR}/.recover-gate-progress"
+OWED="${STATE_DIR}/.recover-advisor-owed"
+R_MAX_DENIES=3
+# The digest the stage keys on, in either layout. Unreadable in both -> the stage never arms.
+digest_readable() {
+  [ -r "${PROJECT_DIR}/.claude/skills/ai-dlc/postcompact-digest.md" ] \
+    || [ -r "${PROJECT_DIR}/core/skills/ai-dlc/postcompact-digest.md" ]
+}
+
+# --- THE ADVISOR STAGE (header: THE ADVISOR STAGE) ---------------------------------------
+# Runs only once the read stages have disarmed (no marker) and left the owed file behind, so
+# it costs one `[ -f ]` on every ordinary call and never overlaps a read stage.
+if [ ! -f "$MARKER" ] && [ -f "$OWED" ]; then
+  command -v jq >/dev/null 2>&1 || exit 0
+  R_IN="$(cat 2>/dev/null || true)"
+  R_TOOL=""; R_AID=""; R_SID=""; R_TP=""; R_TUID=""
+  R_P="$(printf '%s' "$R_IN" | jq -r '@sh "R_TOOL=\((.tool_name // "") | tostring) R_AID=\((.agent_id // "") | tostring) R_SID=\((.session_id // "") | tostring) R_TP=\((.transcript_path // "") | tostring) R_TUID=\((.tool_use_id // "") | tostring)"' 2>/dev/null)" || exit 0
+  eval "$R_P"
+  case "$R_TOOL" in Agent|Task|TaskCreate|Write|Edit|MultiEdit|NotebookEdit) : ;; *) exit 0 ;; esac
+  [ -z "$R_AID" ] || exit 0
+  R_OSID="$(sed -n 's/^session_id=//p' "$OWED" 2>/dev/null | head -1)"
+  if [ -n "$R_OSID" ] && [ -n "$R_SID" ] && [ "$R_OSID" != "$R_SID" ]; then
+    rm -f "$OWED" 2>/dev/null || true
+    exit 0
+  fi
+  # THE BOUNDED ESCAPE (header: THE ADVISOR STAGE). After R_MAX_DENIES refusals the stage stands
+  # down for this recovery, whatever the transcript says.
+  R_DENIES="$(sed -n 's/^denies=//p' "$OWED" 2>/dev/null | head -1)"
+  case "$R_DENIES" in ''|*[!0-9]*) R_DENIES=0 ;; esac
+  if [ "$R_DENIES" -ge "$R_MAX_DENIES" ]; then
+    rm -f "$OWED" 2>/dev/null || true
+    exit 0
+  fi
+  [ -n "$R_TP" ] && [ -r "$R_TP" ] || exit 0
+  # One pass: grant (latest advisor_tool attachment), dig (line of the last digest Read after
+  # the last compact_boundary, 0 if none), adv (line of the last advisor attempt), res (U when
+  # the latest advisor result is `unavailable`), seen (the incoming call's own line is on disk).
+  r_scan() {
+    jq -n -R -r --arg tuid "$R_TUID" '
+      reduce (inputs | (fromjson? // empty) as $l | select(($l | type) == "object") | [input_line_number, $l]) as [$n, $l]
+        ({grant: null, dig: 0, adv: 0, res: "-", seen: 0};
+         if ($l.type == "attachment" and ($l.attachment | type) == "object" and $l.attachment.type == "advisor_tool") then
+           .grant = (($l.attachment.available != false) and ($l.attachment.toolChange != "remove"))
+         elif ($l.type == "system" and $l.subtype == "compact_boundary") then .dig = 0
+         else
+           reduce ((($l.message.content? // []) | if type == "array" then .[] else empty end | select(type == "object"))) as $b (.;
+             if ($b.type == "server_tool_use" and $b.name == "advisor") then .adv = $n
+             elif $b.type == "advisor_tool_result" then
+               .res = (if (($b.content | if type == "object" then .error_code else null end) // "") == "unavailable" then "U" else "R" end)
+             elif ($b.type == "tool_use" and $b.name == "Read"
+                   and ((($b.input.file_path // "") | tostring) | test("(^|/)skills/ai-dlc/postcompact-digest\\.md$"))) then .dig = $n
+             elif ($b.type == "tool_use" and $tuid != "" and (($b.id // "") | tostring) == $tuid) then .seen = 1
+             else . end)
+         end)
+      | "\(if .grant == null then "none" elif .grant then "on" else "off" end) \(.dig) \(.adv) \(.res) \(.seen)"' "$R_TP" 2>/dev/null
+  }
+  # r_judge: sets R_V to allow | clear | owed from R_STATE.
+  r_judge() {
+    read -r R_GRANT R_DIG R_ADV R_RES R_SEEN <<<"$R_STATE"
+    R_V=owed
+    [ "${R_DIG:-0}" -gt 0 ] 2>/dev/null || R_V=allow
+    if [ "$R_V" = owed ] && [ "${R_ADV:-0}" -gt "${R_DIG:-0}" ] 2>/dev/null; then R_V=clear; fi
+    if [ "$R_V" = owed ] && [ "${R_RES:--}" = U ]; then R_V=allow; fi
+    return 0
+  }
+  R_STATE="$(r_scan)" || exit 0
+  [ -n "$R_STATE" ] || exit 0
+  r_judge
+  if [ "${R_GRANT:-none}" != on ]; then rm -f "$OWED" 2>/dev/null || true; exit 0; fi
+  _rt0=$SECONDS
+  while [ "$R_V" = owed ] && [ "${R_SEEN:-0}" != 1 ] && [ $((SECONDS - _rt0)) -lt 10 ]; do
+    sleep 0.25
+    R_S2="$(r_scan)" || R_S2=""
+    [ -n "$R_S2" ] && R_STATE="$R_S2"
+    r_judge
+  done
+  if [ "$R_V" = clear ]; then rm -f "$OWED" 2>/dev/null || true; exit 0; fi
+  [ "$R_V" = owed ] || exit 0
+  printf 'session_id=%s\ndenies=%s\n' "$R_OSID" "$((R_DENIES + 1))" > "$OWED" 2>/dev/null || true
+  jq -n --arg m "AI/DLC post-compact recovery: SKILL.md Rule 32 touchpoint R is owed. You read postcompact-digest.md after this compaction and have made no advisor call since, so this ${R_TOOL} call -- a dispatch or a write -- is refused ($((R_DENIES + 1)) of ${R_MAX_DENIES}). Call the advisor in a message of its own, read its answer, then retry the same call. Any advisor attempt clears this, including one that errors; if the advisor answers 'unavailable' this gate stands down. If you hold no advisor tool, say so in one line (RECOVERY-SKIP: advisor -- <why>) and retry: after ${R_MAX_DENIES} refusals this stage stands down. Arming a wait-beat (Bash) is not refused and belongs before the advisor call." \
+    '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $m}}'
+  exit 0
+fi
 
 # Inert unless a compaction is actually pending recovery. This is the common case by a very
 # large margin and it must cost nothing.
@@ -217,6 +357,13 @@ you on the next call; there is nothing here to weigh."
         # same way the marker is: `ai-dlc-recover.sh` removes it when a NEW recovery starts,
         # so it can never outlive the recovery that wrote it.
         printf 'step_file=%s\n' "$STEP_REL" > "${STATE_DIR}/.recover-satisfied" 2>/dev/null || true
+        # THE ADVISOR STAGE ARMS HERE (header: THE ADVISOR STAGE). Keyed on the session that
+        # satisfied the reads, so another session's call in the same project stands it down.
+        # A teammate never arms it (the stage is lead-only), and neither does a tree with no
+        # readable digest: R follows the digest Read, so without the file R is not owed.
+        if [ -z "$(printf '%s' "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null)" ] && digest_readable; then
+          printf 'session_id=%s\ndenies=0\n' "$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)" > "$OWED" 2>/dev/null || true
+        fi
         rm -f "$MARKER" "$PROGRESS" 2>/dev/null || true
         exit 0
       fi
