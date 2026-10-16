@@ -460,6 +460,8 @@ Nothing routes the lead away from the resume. `core/skills/ai-dlc/rule-bodies/ru
 
 Owed: one lead-side instruction, placed where the serial remediator is dispatched (`_gate-procedures.md` near `:843-855`) and cited from rule-28's `SendMessage` carve-outs: a serial remediator whose record already carries its `repair-complete:` line is re-dispatched fresh (`TaskStop` the resident, one new `Agent` dispatch that appends a new block), never resumed by `SendMessage`. Plus a guard if one fits an existing hook (`core/hooks/` already carries five `SendMessage` readers, e.g. `ai-dlc-acknowledge.sh`, `ai-dlc-escalation-delivery.sh`); the builder measures that hook's ability to identify the recipient as a serial remediator with a marked record before adding it, and records the false-positive set.
 
+Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
+
 verify: manual
 
 ## BL-594 — requirements adversarial p1 has no standalone unique value; elicitation could be the first convergence pass
@@ -468,15 +470,19 @@ verify: manual
 
 Today the two shapes cannot merge: at origin/main 952b9319 the merge refuses a `verdict:` on an elicitation shard (`core/scripts/merge-adversarial-shards.sh:569`, "an elicitation shard carries none"), and Check 24's subject arm K3 (`core/scripts/validate-adversarial-convergence.sh:2228`) reads the requirements adversarial series, not the elicitation record.
 
-Owed (deferred to the next batch): make elicitation the first convergence pass — its shards stamp `verdict:`, `merge-adversarial-shards.sh --elicitation` writes one, Check 24 arm K3 accepts it as the series' first pass — and drop the standalone p1 round; or state why p1 must stay. Interacts with BL-575's contract v2 (its `--check-header --axis elicitation` encodes today's "no verdict" rule, which this would invert). Receipt: on a seeded subject the elicitation merge emits a verdict K3 accepts, with today's verdict-less elicitation record as the control K3 does not.
+Owed: make elicitation the first convergence pass — its shards stamp `verdict:`, `merge-adversarial-shards.sh --elicitation` writes one, Check 24 arm K3 accepts it as the series' first pass — and drop the standalone p1 round; or state why p1 must stay. Interacts with BL-575's contract v2 (its `--check-header --axis elicitation` encodes today's "no verdict" rule, which this would invert). Receipt: on a seeded subject the elicitation merge emits a verdict K3 accepts, with today's verdict-less elicitation record as the control K3 does not.
 
 Cross-ref BL-569 (three validation rounds with no stated distinction) and archived BL-508 (repairs write the defects the next pass finds).
+
+Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
 
 verify: manual
 
 ## BL-595 — the Check 22 arm refusing `none (serial-document)` on a `stories/` subject is still unbuilt
 
 **NOTE.** BL-509's close (archived, `docs/backlog.archive.md:32870ff`) built the sharded stories-elicitation rule (`_gate-procedures.md:413-420`, "never `shard: none (…)`", pinned by 8 `elic-shape-*`/`sts-elic-*` rows in `process-rule-pins`) but left Check 22 untightened: "an S3 arm refusing `none (serial-document)` on a `stories/` subject was not built because its false-positive set on graph's ledgers was not measured". `core/scripts/validate-spawn-ledger.sh:920-923` S3 still fails only an exception outside the four, and `:973` reads only the first parenthesised token, so a single serial-document voice over `stories/` passes. The yield evidence that the sharded shape is worth enforcing now exists: `docs/analysis/step-value-s317-s319.md:137` (s317 22 shards about 15 unique; s318 one voice at most 1). Owed: measure the arm's false-positive set on graph's ledgers (it fires on graph's closed s318 stories row, a true finding), then build it or record why not.
+
+Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
 
 verify: manual
 
@@ -508,7 +514,7 @@ Cause: `core/skills/ai-dlc/steps/handoff.md:27-53` (at 952b9319) says to stop in
 
 Owed: (a) the handoff records each stopped agent's own writes from its transcript or from the write ledger that 0.790.0 made carry `tool_use_id` and transcript (CHANGELOG 0.790.0, BL-533), never from `git status`; (b) commit the subject after a join accepts a repair round, so a later stop cannot blur joined and in-flight edits. Receipt: a probe tree with a joined record whose parts edited A and B (and a shared file D also edited by the stopped agent), plus a stopped agent that edited C and D; the handoff's partial-edit list names C and D only, with A and B as the control that stays out.
 
-Deferred to next batch (operator scope ruling via lead ai-dlc-9c, batch 235).
+Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
 
 verify: manual
 
@@ -520,7 +526,7 @@ Measured by the filer in mktemp worlds driving the real tip merge and hook, ever
 
 Owed: the ledger row records which tree it was written in, or the merge refuses a row whose original spelling is not under this project root. This changes the row schema read by `join-remediator-shards.sh`, `merge-adversarial-shards.sh` and `validate-draft-stamps.sh`, which is why it was not folded into BL-536. Receipt: the filer's world above, refusing, with the no-worktree world as the control.
 
-Deferred to next batch (late-filing rule, lead ai-dlc-9c, batch 235).
+Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
 
 verify: manual
 
@@ -532,7 +538,7 @@ Measured by the filer: a receipt world whose every shard meta and spawn row carr
 
 Owed: one id vocabulary across the merge, `RE_REAL_TUID` and Check 24 that admits the harness's real id shapes, derived from what metas actually carry. Receipt: the `call_` world passes arm K end to end (the validator run, not the predicate alone), with a malformed id as the control that still fails.
 
-Deferred to next batch (late-filing rule, lead ai-dlc-9c, batch 235).
+Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
 
 verify: manual
 
@@ -540,7 +546,7 @@ verify: manual
 
 **NOTE.** Filed by peer session ai-dlc-f5 from the BL-536 tip adversary run on `07dfcbfa` (`--rerun` is documented at `core/scripts/merge-adversarial-shards.sh:68-80` there). S is taken as typed: a far-past S (`1999-01-01T00:00:00Z`) on a normal round merges; a future S (`2999-…`) refuses with `has no row`. Harmless today because the role check is the guard (that gap is BL-536 D1, folded there), but S binds nothing — the same hand-typed-time shape as BL-564's `--since`.
 
-Deferred to next batch (late-filing rule, lead ai-dlc-9c, batch 235).
+Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
 
 verify: manual
 
@@ -550,7 +556,7 @@ verify: manual
 
 This does not reopen the operator's close of the back-dated half; it files the direction that close did not address. Owed: first measure the forward-dated case against the shipped arm and the beat; if uncovered, `--since` is derived from the in-flight row's `dispatched-at` (or refused when later than it). Probe: a `--since` later than the row is refused, with `--since` equal to the row as the control.
 
-Deferred to next batch (late-filing rule, lead ai-dlc-9c, batch 235).
+Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
 
 verify: manual
 
@@ -560,7 +566,7 @@ verify: manual
 
 Owed: any shipped helper that reports a file time emits it under `TZ=UTC` (or `date -u -r <epoch>`), and the step text that asks the lead whether a record changed since a dispatch names that helper instead of leaving the format to the lead. Probe: the helper's output for a file with a known epoch equals `date -u -r <epoch> +%FT%TZ` under a non-UTC `TZ`, with `TZ=UTC` as the control.
 
-Deferred to next batch (late-filing rule, lead ai-dlc-9c, batch 235).
+Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
 
 verify: manual
 
@@ -576,7 +582,7 @@ Owed: SKILL.md states once, at the first long-running step, that every reconcile
 
 Not filed, noted: the same session wrote its fixture list to a bare `/tmp/x` (2 writes in `1d7b4691`) outside its scratchpad — a shared path concurrent sessions can collide on.
 
-Deferred to next batch (late-filing rule, lead ai-dlc-9c, batch 235).
+Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
 
 verify: manual
 
@@ -590,7 +596,7 @@ Consequence: the disposition ("leave untouched, record as owed") was the operato
 
 Owed: (a) `derivation-differential.sh` prints, per NEWLY-FAILING row, the derivation's base and theirs output (or their diff), so the cause is measured by the shipped tool; (b) wherever ai-dlc-update's SKILL.md asks for a distribution path at base, it names `git -C <dist> show "${BASE}:core/…"` — a consumer-repo `git show <dist-sha>:` always fails. Receipt: a probe `grep -n` derivation whose needle stays but whose line shifts between base and theirs is reported NEWLY-FAILING with both outputs shown; an unchanged derivation is the control.
 
-Deferred to next batch (late-filing rule, lead ai-dlc-9c, batch 235).
+Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
 
 verify: manual
 
@@ -602,6 +608,6 @@ Measured on update session `1d7b4691` (Sonnet 5.5, the 0.791.0 → 0.793.0 pull,
 
 Owed: touchpoint I in ai-dlc-update/SKILL.md before step 2's self-update push and auto-merge and before step 8's delivery push and merge, and the hook's exclusion narrowed to the push of the update branch only, gating the `gh pr merge` into the original branch. Bootstrapping caveat: a fix to the update skill takes effect on the pull after the one that delivers it. Receipt: the hook denies a `gh pr merge` from an `ai-dlc-update/*` cwd with no advisor attempt; a push of `ai-dlc-update/x` stays allowed as the control; SKILL.md names the touchpoint at both steps.
 
-Deferred to next batch (late-filing rule, lead ai-dlc-9c, batch 235).
+Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
 
 verify: manual
