@@ -943,6 +943,8 @@ Owed: one line beside `:181-184` saying a glob pathspec must not end in `/` (use
 
 Owner: ai-dlc-60 (lead ai-dlc-9c), inside the BL-587+612 release.
 
+**A6 sizing (lead ai-dlc-9c, from the operator's single approval):** the operator approved one question covering two durable-channel additions in the BL-587+612 release, raised by their measured total: BL-612's `consumer-boundary.md` bullet (+70 bytes) and this entry's `tool-hazards.md` line (+187 bytes, against an earlier estimate of ~120). 69327 + 70 + 187 = 69584, which is the approved ceiling.
+
 verify: manual
 
 ## BL-634 — `enforcement-map.yaml` is not valid YAML: `yaml.safe_load` fails on an unquoted `: ` in a prose value
