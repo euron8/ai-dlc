@@ -1073,8 +1073,10 @@ CKEOF
 # is the seeded self-probe below and the fixture, never this zero. A memlog joins this arm from its
 # first phrased Render line onward. Stated residue: a piecemeal Edit to SPEC.md followed by a phrased
 # Render line passes -- whether the rewrite was whole has no checker.
-# WHERE: --sources and --escalations resolve the sprint memlog from --sprint, `specs/s<N>/*/.memlog.md`,
-# exactly one (requirements.md: the kernel is exactly one match); none or several SKIP. Those modes run
+# WHERE: --sources and --escalations judge a record ONLY when it cites `specs/s<N>/` (it repaired the
+# SPEC), and then resolve the sprint memlog from --sprint, `specs/s<N>/*/.memlog.md`,
+# exactly one (requirements.md: the kernel is exactly one match); none or several SKIP. A refusal here
+# exits before the record's ESCALATED: lines print, as every other record_tail refusal does. Those modes run
 # AFTER the serial remediator appends, which is the case BL-560 was filed on. --subject reads it only
 # when the split gave the SPEC a part (SUBJ_SET carries its memlog), the part-remediator shape.
 SPEC_RENDER_PHRASE="re-derived from memlog through"
@@ -1138,8 +1140,15 @@ record_tail() {
   contract_refusals 1 "$(contract_check 1 "$1")"
   checks_refusals "$(checks_field 1 "$1")"
   spec_render_probe
-  spec_memlog_of_sprint
-  spec_render_check "$SPEC_MEMLOG" "$SPEC_WHY"
+  # ONLY A RECORD THAT REPAIRED THE SPEC IS JUDGED. Without this, a stale SPEC refuses an architecture or
+  # stories record, which repaired no SPEC, and its refusal hides that record's escalation list. The test is
+  # the record citing the sprint's spec dir at all (its edit: lines name `.memlog.md` or `SPEC.md` there).
+  if grep -q -F "specs/s${SPRINT}/" "$1"; then
+    spec_memlog_of_sprint
+    spec_render_check "$SPEC_MEMLOG" "$SPEC_WHY"
+  else
+    SPEC_LINE="SPEC-RENDER: SKIP -- ${1} cites no specs/s${SPRINT}/ file, so it repaired no SPEC"
+  fi
   # The header lines assert that the record checked out, so they print only on a pass.
   if [ "$refuse_n" -eq 0 ]; then
     [ "$SRCMODE" = 1 ] && echo "SOURCES: ${1} -- ${SRC_E} entries, ${SRC_S} sources, every one resolved in ${SEAT_DIR}"
