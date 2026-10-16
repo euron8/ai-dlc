@@ -44,14 +44,17 @@
 #        `adversary`.
 #   THE META FILE IS CORROBORATED. The lead can Write `agent-<id>.meta.json`; it cannot Write the
 #   probe ledger, a guarded root that ai-dlc-subagent-probe.sh fills at SubagentStop with the
-#   `toolUseId` it read from that same meta file. So a writer resolved through its meta file must also
-#   have a probe row, and every probe row for it must carry the meta's id. Measured on the reference
+#   `toolUseId` it read from that same meta file. So a credited writer resolved through its meta file
+#   must also have a probe row, and every probe row for it must carry the meta's id (a writer --rerun
+#   supersedes is held to the second half only; see RE-DISPATCH). Measured on the reference
 #   consumer: 44 of 44 shard writers resolved through a meta file had a probe row carrying the same id,
 #   and 0 of the 732 agents with a row on an adversary shard lacked a probe row. The probe row
 #   lands after the agent's last write (p50 7s, p99 52s, max 150s on that corpus), inside the 180s
 #   settle `wait-for-deliverable.sh --complete` holds before the merge; the 2 merges that ran ahead of
 #   it predate the settle window. The hook has silent no-row paths (unreadable transcript, peak 0, no
-#   jq), so an absent row is refused, never trusted: re-run the merge once the adversary has stopped.
+#   jq), so an absent row on a CREDITED writer is refused, never trusted: merge once the adversary
+#   has stopped, and if it has stopped with no row, re-dispatch the shard and merge with --rerun,
+#   which makes the row-less writer a superseded one (RE-DISPATCH, below).
 #   REFUSED (exit 2, nothing written): a shard with no write-ledger row; a writer whose meta file
 #   or `toolUseId` is absent; a writer whose meta file names a dispatch the probe ledger has no row
 #   for, or names another dispatch than its probe rows; a pre-upgrade writer with no probe row; a
@@ -79,8 +82,8 @@
 #   dir's. False-positive set, measured on the reference consumer's ledger as it stood: 71 (agent,
 #   shard dir) pairs would refuse, every one a remediator the role hop already refuses, and 0 an
 #   adversary. The write ledger is transient, so that is one snapshot and a floor, not a census.
-#   The meta file wins over the probe ledger whenever the row carries `transcript_path`; the probe
-#   row is read only for a row without one. A dispatch id with two spawn rows is refused if ANY of
+#   The meta file supplies the id whenever the row carries `transcript_path`, and the probe ledger
+#   corroborates it (above); the probe row SUPPLIES the id only for a row without one. A dispatch id with two spawn rows is refused if ANY of
 #   them names a role other than `adversary`.
 #
 # RE-DISPATCH OF ONE SHARD -- `--rerun <shard>.md@<ISO>`, repeatable; every merge mode.
@@ -92,8 +95,15 @@
 #     narrowed rows, so P needs exactly one adversary dispatch writing it at or after S, and that
 #     dispatch must have written no other shard.
 #   - Every superseded writer is resolved through the same chain as a shard writer (meta file or
-#     probe row, the probe corroboration, the spawn ledger), and refused unless it is an `adversary`
-#     dispatch: a non-adversary write on a shard is a role violation, not a stale dispatch.
+#     probe row, the spawn ledger), and refused unless it is an `adversary` dispatch: a non-adversary
+#     write on a shard is a role violation, not a stale dispatch. Its probe corroboration is
+#     EQUALITY ONLY: a stalled adversary never reached SubagentStop, so it has no probe row, and
+#     requiring one would make a re-dispatched shard unmergeable. A probe row it does have must carry
+#     its meta file's id.
+#     RESIDUAL, ACQUITTED: a forged meta on a superseded writer that never stopped resolves to
+#     whatever dispatch id the lead typed into it, so a non-adversary that never reached SubagentStop
+#     can be passed off as an adversary and set aside. Narrower than before this check existed,
+#     which acquitted every superseded writer whatever its role.
 #   - Refused: <ISO> malformed; P not a shard in the dir; P named twice; a superseded writer with
 #     ANY row in the shard dir on a file other than P or `P.draft` (it was not only P's writer --
 #     another shard's adversary that edited P is a cross-shard write, never a stale dispatch); a
@@ -696,8 +706,14 @@ awk -F'\t' -v fm="$T/metas" -v fp="$T/probes" -v fs="$T/spawns" -v fw="$T/wrows"
         # THE META FILE IS CORROBORATED BY THE PROBE LEDGER. The lead can Write a meta file; it
         # cannot Write the probe ledger (a guarded root), which ai-dlc-subagent-probe.sh fills at
         # SubagentStop from that same meta. No row: the writer has not stopped, so it has not delivered.
-        if (!(a in probe)) no(sf " was written by agent " a ", whose meta file names dispatch " id " but " lp " has no row for that agent; an adversary that has not stopped has not delivered -- merge after it stops")
+        # A CREDITED writer (i <= n) needs the row AND its agreement. A SUPERSEDED writer (i > n, set
+        # aside by --rerun) is most often a stalled adversary that never reached SubagentStop, so it is
+        # held to agreement only: a row it has must carry the meta id, and with none the meta alone
+        # resolves its role, which the role loop below still requires to be adversary.
+        if (i <= n || (a in probe)) {
+        if (!(a in probe)) no(sf " was written by agent " a ", whose meta file names dispatch " id " but " lp " has no row for that agent; an adversary that has not stopped has not delivered -- if it has stopped, the probe hook recorded nothing for it: re-dispatch the shard and merge with --rerun " b "@<the re-dispatch dispatched-at>")
         if (pall[a] != "\t" id) { pl = pall[a]; gsub(/\t/, " ", pl); no(sf " was written by agent " a ", whose meta file names dispatch " id " but " lp " records" pl " for that agent; the meta file was rewritten after the agent stopped") }
+        }
       } else if (a in probe) id = probe[a]
       else no(sf " was written by agent " a " in a row that predates transcript_path, and " lp " has no tool_use_id row for that agent; its dispatch id cannot be derived")
       if (!(id in role)) no(sf " was written by agent " a ", dispatch " id ", which has no row in " ls "; a dispatch the guard never recorded is not an adversary")

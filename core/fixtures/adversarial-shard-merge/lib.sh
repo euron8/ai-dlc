@@ -925,10 +925,11 @@ p_rerun_join() { # a stalled adversary wrote 2.md and its draft before S; the re
                  # wrote 2.md after it -> MERGED with --rerun, the rerun: line naming the superseded agent
   local d o; d="$(tw)"; WORLD_SHARD="$d/2.md"
   # The draft row is the stalled writer's own and is allowed; it is not a row ON 2.md, so it is not
-  # among the superseded rows counted.
-  HR_AGENT_O=a0000000000stall HR_DID_O=toolu_01StalledAdversary000002 hr_at 2026-10-15T19:59:00Z harness_record "$d/2.md.draft" || return 1
-  HR_AGENT_O=a0000000000stall HR_DID_O=toolu_01StalledAdversary000002 hr_at 2026-10-15T20:00:00Z s2 "$d" || return 1
-  HR_AGENT_O=a0000000000stall HR_DID_O=toolu_01StalledAdversary000002 hr_at 2026-10-15T20:01:00Z s2 "$d" || return 1
+  # among the superseded rows counted. The stalled writer never reached SubagentStop, so it carries
+  # no probe row (HR_NOPROBE=1), which is what the real producer leaves behind.
+  HR_NOPROBE=1 HR_AGENT_O=a0000000000stall HR_DID_O=toolu_01StalledAdversary000002 hr_at 2026-10-15T19:59:00Z harness_record "$d/2.md.draft" || return 1
+  HR_NOPROBE=1 HR_AGENT_O=a0000000000stall HR_DID_O=toolu_01StalledAdversary000002 hr_at 2026-10-15T20:00:00Z s2 "$d" || return 1
+  HR_NOPROBE=1 HR_AGENT_O=a0000000000stall HR_DID_O=toolu_01StalledAdversary000002 hr_at 2026-10-15T20:01:00Z s2 "$d" || return 1
   hr_at 2026-10-15T21:00:00Z s2 "$d" || return 1
   hr_ids "$d/2.md"; o="$(out_of "$d")"
   bash "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
@@ -964,8 +965,8 @@ p_rerun_role() { # D1: a REMEDIATOR among the writers --rerun supersedes -> REFU
   local d role
   for role in remediator adversary; do
     d="$(tw)"; WORLD_SHARD="$d/2.md"
-    HR_AGENT_O=a0000000000stall HR_DID_O=toolu_01StalledAdversary000002 hr_at 2026-10-15T20:00:00Z s2 "$d" || return 1
-    HR_ROLE="$role" HR_AGENT_O=a000000000zremed HR_DID_O=toolu_01SupersededWriter0000r1 hr_at 2026-10-15T20:05:00Z s2 "$d" || return 1
+    HR_NOPROBE=1 HR_AGENT_O=a0000000000stall HR_DID_O=toolu_01StalledAdversary000002 hr_at 2026-10-15T20:00:00Z s2 "$d" || return 1
+    HR_NOPROBE=1 HR_ROLE="$role" HR_AGENT_O=a000000000zremed HR_DID_O=toolu_01SupersededWriter0000r1 hr_at 2026-10-15T20:05:00Z s2 "$d" || return 1
     hr_at 2026-10-15T21:00:00Z s2 "$d" || return 1
     hr_ids "$d/2.md"
     bash "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
