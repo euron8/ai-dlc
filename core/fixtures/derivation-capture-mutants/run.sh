@@ -126,7 +126,7 @@ done
 for _s in $SHARDS; do
   [ "$_s" = a ] && continue
   drv="$HERE/../derivation-capture-mutants-$_s/run.sh"
-  if [ ! -f "$drv" ] || ! grep -qF -- "--group $_s" "$drv"; then
+  if [ ! -f "$drv" ] || ! grep -qE -- "^exec bash .* --group $_s\$" "$drv"; then
     echo "FIXTURE BROKEN: shard '$_s' is declared but $drv does not drive it" >&2; exit 2
   fi
 done
@@ -135,7 +135,26 @@ if ! why="$(partition_ok "$JW/declared" "$JW/dealt")"; then
 fi
 nmine="$(grep -c . "$MINE_FILE")" || nmine=0
 [ "$nmine" -gt 0 ] || { echo "FIXTURE BROKEN: shard '$GROUP' has no mutants" >&2; exit 2; }
-n_seen=0
+n_seen=0; n_called=0
+# A call the awk spelling above cannot see (indented, double-spaced, single-quoted, label on a
+# continuation line) is never declared or dealt, so the partition and the floor stay green over it.
+# Two checks bind it: a static count of every line that CALLS mutate, and a runtime counter at the
+# top of mutate() asserted equal to ndecl after the run. The static check is first probed on a
+# MUTANT of this very file: its first call respelled with an indent, which the declared-set awk
+# misses and the call count does not, so the two must differ.
+calls_of() { grep -cE '^[[:space:]]*mutate[[:space:]]' "$1" || true; }
+decl_of() { awk -F'"' '$1 == "mutate " { print $2 }' "$1" | grep -c . || true; }
+awk '!d && /^mutate "/ { print "  " $0; d = 1; next } { print }' "$SELF" > "$JW/respelled.sh"
+if cmp -s "$SELF" "$JW/respelled.sh" \
+   || [ "$(calls_of "$JW/respelled.sh")" -ne "$(calls_of "$SELF")" ] \
+   || [ "$(decl_of "$JW/respelled.sh")" -ne $((ndecl - 1)) ]; then
+  echo "FIXTURE BROKEN: the respelled-call mutant did not separate the call count from the declared set" >&2; exit 2
+fi
+# The definition line is `mutate() {`, which the pattern above does not match.
+ncalls="$(calls_of "$SELF")"
+if [ "$ncalls" -ne "$ndecl" ]; then
+  echo "FIXTURE BROKEN: $ncalls mutate calls in $SELF but $ndecl declared -- a call is spelled so the deal cannot see it" >&2; exit 2
+fi
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
@@ -178,6 +197,7 @@ ok "[J0] coverage join: $ndecl mutants (floor $MIN_MUTANTS) derived from mutate 
 # EXACTLY the declared set -- every declared arm present, and no arm beyond them.
 mutate() {
   local label="$1" owned="$2" expr="$3" n other
+  n_called=$((n_called+1))
   grep -qxF -- "$label" "$MINE_FILE" || return 0
   n_seen=$((n_seen+1))
   cp "$PRISTINE" "$MUT_HOOK"
@@ -195,6 +215,10 @@ mutate() {
   local red; red="$(failing_arms)"
   n=$(printf '%s' "$red" | grep -c . || true)
   if [ "$n" = 0 ]; then
+    if [ -z "${DUMPED:-}" ]; then
+      DUMPED=1; echo "  (first scored mutant reddened nothing; sibling output follows once, in case the harness is dead)"
+      sed -n '1,25p' "$WORK/out"
+    fi
     bad "$label: SURVIVED — every sibling arm still passes with this behaviour removed"
     return
   fi
@@ -417,6 +441,7 @@ mutate "section-copy refusal prefix without the slash" \
   "a reproducing part pair over sections.bak/" \
   's/^    case "\$c" in "\$SEC_PHYS"|"\$SEC_PHYS"\/\*) printf/    case "$c" in "$SEC_PHYS"*) printf/'
 
+[ "$n_called" -eq "$ndecl" ] || bad "[J1b] shard '$GROUP' saw $n_called mutate calls at run time, $ndecl declared -- a call is hidden from the deal"
 [ "$n_seen" -eq "$nmine" ] || bad "[J1] shard '$GROUP' reached $n_seen mutants, $nmine dealt -- a dealt mutant never ran"
 if [ "$fails" -gt 0 ]; then
   printf '  %s mutation(s) did not behave\n' "$fails"

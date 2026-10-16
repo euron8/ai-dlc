@@ -6,6 +6,7 @@ bash
 cat
 chmod
 cmp
+comm
 cp
 cut
 diff
@@ -24,4 +25,5 @@ sed
 sort
 tail
 tr
+uniq
 wc
