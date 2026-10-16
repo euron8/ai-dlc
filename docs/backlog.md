@@ -657,9 +657,9 @@ Deferred to next batch (late-filing rule, lead ai-dlc-9c, batch 235).
 
 verify: manual
 
-## BL-601 — the ai-dlc-update skill prescribes long runs but never says to background them, so every pull's first long call is denied and re-issued
+## BL-580 — the ai-dlc-update skill prescribes long runs but never says to background them, so every pull's first long call is denied and re-issued
 
-**DEFECT.** Filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]) from graph's ai-dlc-update sessions; the filer's own BL-580 id is in its BL-575..589 range but this entry was assigned from intake's. The steering-budget deny ("this FOREGROUND Bash call declares timeout 600000 ms, over the 120s steering budget") appears exactly once in each of graph's last three update sessions (intake counted read-only: `3d1088df` 1, `38c562c5` 1, `1d7b4691` 1): the 0.790.0 pull at the self-update gate, the 0.791.0 pull, and the 0.792.0 self-update at 06:37:40Z on 2026-10-16 on `self-update-fixtures.sh` over 19 fixtures, re-issued in the background at 06:37:43Z. Three of three pulls lost a round trip, each after the session reached for `timeout: 600000` itself.
+**DEFECT.** Filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]) from graph's ai-dlc-update sessions. The steering-budget deny ("this FOREGROUND Bash call declares timeout 600000 ms, over the 120s steering budget") appears exactly once in each of graph's last three update sessions (intake counted read-only: `3d1088df` 1, `38c562c5` 1, `1d7b4691` 1): the 0.790.0 pull at the self-update gate, the 0.791.0 pull, and the 0.792.0 self-update at 06:37:40Z on 2026-10-16 on `self-update-fixtures.sh` over 19 fixtures, re-issued in the background at 06:37:43Z. Three of three pulls lost a round trip, each after the session reached for `timeout: 600000` itself.
 
 The skill prescribes the long runs (the self-update gate, `self-update-fixtures.sh`, `apply.sh`, and the push with its pre-push suite) but never how to run them: `core/skills/ai-dlc-update/SKILL.md` at c16609ba mentions `run_in_background` 0 times (control: `self-update-fixtures` 6 times; graph's installed copy reads the same, 0 and 6).
 
