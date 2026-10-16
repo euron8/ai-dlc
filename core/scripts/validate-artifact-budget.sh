@@ -2094,8 +2094,8 @@ rm -f "$FUTURE_FILE"
 # the future-stamp verdict -- hard unless --warn-only without --fail-on the snapshot. A SKIP
 # line (no ledger, no jq) is printed, never folded into a pass.
 SAW_BACKDATE=0
-if grep -q '^SKIP ' "$BACKDATE_FILE" 2>/dev/null; then
-  say ""; grep '^SKIP ' "$BACKDATE_FILE" | while IFS= read -r _l; do say "$_l"; done
+if [ "$QUIET" -eq 0 ] && grep -q '^SKIP ' "$BACKDATE_FILE" 2>/dev/null; then
+  echo ""; grep '^SKIP ' "$BACKDATE_FILE"
 fi
 if grep -q '^BACKDATED ' "$BACKDATE_FILE" 2>/dev/null; then
   SAW_BACKDATE=1
