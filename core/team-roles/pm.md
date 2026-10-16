@@ -152,6 +152,14 @@ That file is the only thing you write in the round; you edit nothing else, the s
    Never write it with the header, never inside a code fence, never followed by more findings.
    Once it is written, do not edit the file again.
 
+**Resolve a code path before you read or grep it.** The subject files cite the code paths they
+rest on; read those as cited. For any other path, list it first with `git ls-files <dir-or-glob>`
+and read only what that returns: a guessed path costs a round trip, and a miss invites an
+invented answer. A `grep` that exits with an error (`exceeds complexity limits`, `empty
+(sub)expression`) searched nothing, so its silence is not an absence: narrow the pattern, drop a
+long bounded repeat or a `\b` inside an alternation, or search a fixed string with `grep -F`, and
+run it again.
+
 The lead's join takes the file as delivered only when that line is last and the file has stopped
 changing; a file without it is reported UNFINISHED and read as unfinished work. The lead's brief
 carries the same instruction; this section is its standing copy.
