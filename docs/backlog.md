@@ -493,6 +493,18 @@ Owed: a PreToolUse deny on `git push … --no-verify` from the pipeline lead, or
 
 verify: manual
 
+## BL-563 — the ai-dlc-update post-write gates passed on an exit code nobody observed
+
+**DEFECT.** Filed by peer session ai-dlc-68. Graph session `3d1088df` ran `/ai-dlc-update apply` for 0.789.0 → 0.790.0 and merged it as PR #1228 at 02:09Z on 2026-10-16. At 02:02:29Z it ran the post-write gates as one compound command, piping `setup-site-drift.sh … | tail -3; echo "rc=${pipestatus[1]}"` and `validate-hook-registration.sh | tail -3; echo "rc=${pipestatus[1]}"`. Both printed `rc=` with nothing after it. At 02:02:33Z the session wrote "The exit codes printed empty because the shell is zsh, but each check's own output line reports clean", then proceeded to `apply.sh --finish`, the commit, the push and the merge. graph's installed `.claude/skills/ai-dlc-update/SKILL.md:2853` states the gate as "Run `reconcile/setup-site-drift.sh <dist> <consumer> <theirs>`; exit 0", and `:2255` names `validate-hook-registration.sh`, so the verdict the skill prescribes is the exit code, and the session never observed it. It substituted a reading of truncated output (`tail -3`). The output happened to be decisive this time (SETUP-SITE-OK ×2, SETUP-SITE-SCANNED; UNREGISTERED none, DANGLING none), but a refusal line above the last three would have been cut away and the gate would still have read clean. The same hazard hit hard-blockers: at 02:03:42Z the background `hard-blockers.sh --post-apply` "came back empty", and the session re-ran it in the foreground.
+
+Two halves. (a) The skill names exit-code gates but gives no capture form. It should state the command shape — unpiped, with `rc=$?` captured immediately after the gate command — or better, run all post-write gates through one script that prints a single verdict line per gate. (b) A gate whose exit code was not observed is UNDECIDED, never passed on prose; the session's own line shows it knew the code was missing and continued.
+
+This stands whatever shell runs, because the lead piped the gate itself; the Bash tool's shell being zsh on this box is a separate matter the operator is handling (llm-gateway commit `263e8af`, branch `config/claude-code-shell`, unmerged). A bootstrapping caveat applies: the update skill is the program that delivers its own repair, so a fix lands on the pull after the one that carries it.
+
+Owed: a probe gate that prints a clean last line and exits non-zero; the prescribed form must report it as failed.
+
+verify: manual
+
 ## BL-536 — an adversary shard cannot know its own dispatch id, and the merge took whatever was typed
 
 **DEFECT.** Discharges `PC-S319-CONVERGENCE-ADVERSARY-CANNOT-KNOW-ITS-OWN-TOOL-USE-ID`.
