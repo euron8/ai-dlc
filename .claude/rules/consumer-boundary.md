@@ -47,8 +47,9 @@ reaches the consumer, and cannot fail there because its subject is absent.
 Whatever is on `main` here is not what a consumer executes; the consumer executes what it
 last installed. Three consequences, each of which has shipped a broken pull:
 
-- **A fix to a bootstrapping step can never be delivered by that step.** The broken version
-  is the one that runs the delivery.
+- **Only steps 1-2 of the delivering pull run the old engine.** Step 2 self-updates and
+  re-invokes, so engine code is live from step 3 unless DEFERred; rulebook waits for the
+  reconcile PR merge.
 - **A core fixture ships ahead of its subject.** The fixture arrives in one pull and the code
   it guards in the next, so it must tolerate the subject being absent without reporting green
   as though it had checked something.

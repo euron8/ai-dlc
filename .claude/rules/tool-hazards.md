@@ -182,6 +182,8 @@ session's work, check the stash list before concluding anything.
   EMPTY, raises nothing, and refuses `:(glob)`. Use `git ls-files --with-tree=<ref> -- <glob>`,
   also the only way to resolve a glob at a ref where the path was DELETED. Resolved wrongly, a
   glob list collapses to the entries carrying no glob character — a silent partial answer.
+- **A glob pathspec ending in `/` matches nothing, silently.** `'dir*/'` returns 0 files, exit 0,
+  in `git grep` and `ls-files`; use the bare glob, the plain dir, or `:(glob)<dir>*/**`.
 - **`git grep -E` is not the `grep -E` beside it.** It implements neither `\b` nor `\s` and
   returns a CLEAN ZERO, never an error. Measured: `\bMODEL_MAX\b` answered 0 against a control
   of 11, while `/usr/bin/grep -E` matches both escapes happily — so the habit that works in one
