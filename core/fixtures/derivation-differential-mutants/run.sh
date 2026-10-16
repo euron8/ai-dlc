@@ -240,6 +240,15 @@ mutate R12-all-statuses \
   'if (status == "NEWLY-FAILING" && (k in REC))' \
   's/if (status == "NEWLY-FAILING" \&\& (k in REC))/if ((k in REC))/'
 
+# ---- diffnosup: the classifier stops skipping SUPERSEDED derivations ---------------------------
+# Location: the END loop's SUP skip. Behaviour: a record command the validator superseded has no
+# FAIL on either side, so it scores PASS at base, and over a broken root that one pass keeps the
+# zero-pass refusal from firing -- the run clears. The INFO row's count falls to 0 as well.
+mutate diffnosup \
+  "A19a A19b A19o" \
+  'if (k in SUP) { nsup++; continue }' \
+  '/if (k in SUP) { nsup++; continue }/d'
+
 if [ "$fails" -gt 0 ]; then
   printf '  %s mutation check(s) did not behave\n' "$fails"
   exit 1

@@ -328,6 +328,16 @@ awk -v C="$CONSUMER/" -v brc="$BRC" -v trc="$TRC" -v cf="$TMP/counts" -v of="$TM
   }
   # Any other head line ends the block a recorded/actual pair belongs to.
   (src == 3 || src == 4) && /^[A-Z][A-Z-]*( \([A-Z-]*\))?: / { ck = "" }
+  # A SUPERSEDED derivation -- a record command re-derived byte-identically later in the same file
+  # -- is neither run nor counted by the validator, so it has no FAIL on either side and would read
+  # as a PASS on both. Counted as a base-side pass, it keeps the broken-root refusal below from ever
+  # firing on a row holding a record with a repeat. Supersession depends only on the file`s bytes
+  # and path, so both sides name the same set; it is read from both and skipped from every count.
+  (src == 3 || src == 4) && /^SUPERSEDED: / {
+    k = keyof(substr($0, 13))
+    if (k != "" && KL ~ /^ by /) SUP[k] = 1
+    next
+  }
   (src == 3 || src == 4) && /^FAIL \((STALE|ALLOWLIST|READS-STDIN|GRAMMAR)\): / {
     v = $0; sub(/^FAIL \(/, "", v); sub(/\).*/, "", v)
     s = $0; sub(/^FAIL \([A-Z-]*\): /, "", s)
@@ -352,9 +362,10 @@ awk -v C="$CONSUMER/" -v brc="$BRC" -v trc="$TRC" -v cf="$TMP/counts" -v of="$TM
     printf "\n"
   }
   END {
-    nf = np = sb = un = pb = bp = tp = 0
+    nf = np = sb = un = pb = bp = tp = nsup = 0
     for (i = 1; i <= nu; i++) {
       k = ord[i]
+      if (k in SUP) { nsup++; continue }
       if (B[k] == "") bp++
       if (T[k] == "") tp++
       if (refusal(B[k]) || refusal(T[k]))       { un++; row("UNASSESSABLE", k) }
@@ -365,12 +376,13 @@ awk -v C="$CONSUMER/" -v brc="$BRC" -v trc="$TRC" -v cf="$TMP/counts" -v of="$TM
       if (B[k] != "" && (k in CMD)) print k "\t" CMD[k] > of
     }
     for (i = 1; i <= nx; i++) { k = xord[i]; un++; row("UNASSESSABLE", k) }
-    printf "%d %d %d %d %d %d %d %d %d %d\n", nu, nf, np, sb, un, pb, bp, tp, heads_b + 0, heads_t + 0 > cf
+    printf "%d %d %d %d %d %d %d %d %d %d %d\n", nu, nf, np, sb, un, pb, bp, tp, heads_b + 0, heads_t + 0, nsup > cf
   }
 ' "$TMP/files" "$TMP/list.out" "$TMP/b.err" "$TMP/t.err" > "$TMP/rows"
 : >> "$TMP/operands"
-read -r N_U N_NF N_NP N_SB N_UN N_PB N_BP N_TP H_B H_T < "$TMP/counts" 2>/dev/null \
+read -r N_U N_NF N_NP N_SB N_UN N_PB N_BP N_TP H_B H_T N_SUP < "$TMP/counts" 2>/dev/null \
   || refuse classify "the classifier produced no counts."
+[ -n "${N_SUP:-}" ] || refuse classify "the classifier produced no superseded count."
 
 [ "$N_U" -gt 0 ] || refuse validator "--list named ZERO derivations in the row's $# file(s), which the join says carry at least one. A universe the validator cannot spell compares nothing."
 # A side that exited 1 must have NAMED a failure; one that did not is a grammar this reader
@@ -379,6 +391,7 @@ read -r N_U N_NF N_NP N_SB N_UN N_PB N_BP N_TP H_B H_T < "$TMP/counts" 2>/dev/nu
 [ "$TRC" -eq 0 ] || [ "$H_T" -gt 0 ] || refuse validator "the consumer-side run exited 1 and named no FAIL line this reader parses."
 [ "$N_BP" -gt 0 ] || [ "$N_TP" -eq 0 ] \
   || refuse base-root "ZERO derivations reproduce at the base root while ${N_TP} reproduce at the consumer. The validator exits 1 all-STALE over a missing or broken root rather than refusing, so this is the signature of a root that is not the pre-apply tree, not of a pull that repaired everything."
+say_row INFO superseded "${N_SUP} of ${N_U} derivation(s) are superseded by a later byte-identical copy in the same record; the validator runs only the later copy, so they are in no count or row below."
 
 cat "$TMP/rows"
 
