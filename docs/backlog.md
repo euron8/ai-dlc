@@ -86,6 +86,8 @@ that builds an entry owes its behavioural `sh` receipt and the probe behind it.
 
 ## BL-529 — the derivation re-run the repair procedure requires over `s<N>/` can never pass once seat files are frozen
 
+**PARTIAL (v0.801.0, verified 40581bc2) — the validator half shipped; the join-time closure in `_gate-procedures.md` is OPEN.** A directory target skips `shards/` and the slot's record grammar, prints an `EXCLUDED:` count, and `--all` walks them. It reduces the run without making it pass: s316 297 of 650, s317 598 of 1224, s318 207 of 418 still stale, in live documents and record names outside the grammar.
+
 **DEFECT.** `_gate-procedures.md:981` requires
 `validate-artifact-derivations.sh _bmad-output/planning-artifacts/s<N>/` after every repair join, and
 `:1004` says exit 1 is sent back to the remediator. The validator walks every `.md` under its target
@@ -158,16 +160,6 @@ verify: manual
 **DEFECT (efficiency).** In graph s319 lead session `62eadbbe-59c3-436d-bf7c-931ebc09ecba`, measured at 22:47Z: 109 `<task-notification>` wakes, of which 61 ended with no tool call and only a restatement that the join was still armed ("X delivered … the join beat is still armed, so I'm waiting"). Each such turn re-reads the lead's whole context. That context ran 250–320K tokens (the sensor fired yellow at 252,985 and the snapshot records red readings of 317,305 and 324,185), and by 21:37Z the session had already spent 61 M tokens of lead cache read over 272 API calls. The waits it restates are `wait-for-deliverable.sh --complete` beats over the whole round, which return on their own. Core says what a notification MEANS for the cap-release rule (`rule-28.md:195`) but nowhere what the lead should DO with one that arrives while a beat covers that agent's deliverable. The analysis this backlog is filed from ranks lead waiting among the largest costs (`docs/analysis/pipeline-efficiency-s317-s318.md`, headline and "Relation to the v0.380.0 investigation").
 
 Owed: a stated lead response to a notification for an agent whose deliverable an armed beat covers: no per-agent status line, no re-check, end the turn. Optionally, a hook that injects that instruction when the notified agent's deliverable is inside `.beat-inflight`'s path set. Measure it by re-running the per-wake count on the next consumer sprint.
-
-verify: manual
-
-## BL-539 — the lead can defer an operator-locked scope item without asking, and the operator learns of it only after deploy
-
-**DEFECT.** In graph s319 the operator confirmed scope as items 1–5, 7 and the Sweep→HODL discharges (snapshot Locked Decisions, AskUserQuestion label "Confirmed as read", SHA256 `df46bb336a64e238caae509cf351631d1877f86086650077bbef49c9e172428e`). At 21:42Z the lead filed a `DEFERRAL_REQUEST` for item 5 (the Collect Rewards button) in `docs/escalations/pending.md`, because an operator decision on claim signing was open, and continued. It mentioned the deferral only in its own progress lines. Neither AskUserQuestion it put between 21:42Z and 23:32Z asked about it. The operator found it at 23:49Z by pushing on D-12 ("if the reason not to build it this sprint is the same reason that I'll be confronted with in a future sprint, then why would I defer?"), and the lead then said there was no remaining reason to defer and put item 5 back in.
-
-`carry-over-evaluation.md` §4 (lines 166-173) lets the lead write a `DEFERRAL_REQUEST`, "proceed with all non-deferred items", and leave review to the production validation checkpoint. Applied to a locked scope item, that is a scope cut the operator sees only after the sprint has shipped without it. `.claude/rules/operator-rulings.md` "Scope is the operator's to change, never yours" forbids exactly that. The open decision behind it was an operator question, which the same sprint handled correctly for D-1..D-15 as a Rule 12 HARD_BLOCK put to the operator.
-
-Owed: a `DEFERRAL_REQUEST` against an item named in `scope_confirmed` is either refused or put to the operator before the step proceeds (a Rule 12 HARD_BLOCK, not a checkpoint note), plus a gate arm comparing the sprint's `DEFERRAL_REQUEST` entries with the confirmed scope set. Probe both directions: a deferral of a locked item fails, and a deferral of an item outside the locked set passes.
 
 verify: manual
 
@@ -310,20 +302,6 @@ Owed: a probe running `--sources` on an elicitation record in a tree that also h
 
 verify: manual
 
-## BL-563 — the ai-dlc-update post-write gates passed on an exit code nobody observed
-
-**DEFECT.** Filed by peer session ai-dlc-68. Graph session `3d1088df` ran `/ai-dlc-update apply` for 0.789.0 → 0.790.0 and merged it as PR #1228 at 02:09Z on 2026-10-16. At 02:02:29Z it ran the post-write gates as one compound command, piping `setup-site-drift.sh … | tail -3; echo "rc=${pipestatus[1]}"` and `validate-hook-registration.sh | tail -3; echo "rc=${pipestatus[1]}"`. Both printed `rc=` with nothing after it. At 02:02:33Z the session wrote "The exit codes printed empty because the shell is zsh, but each check's own output line reports clean", then proceeded to `apply.sh --finish`, the commit, the push and the merge. graph's installed `.claude/skills/ai-dlc-update/SKILL.md:2853` states the gate as "Run `reconcile/setup-site-drift.sh <dist> <consumer> <theirs>`; exit 0", and `:2255` names `validate-hook-registration.sh`, so the verdict the skill prescribes is the exit code, and the session never observed it. It substituted a reading of truncated output (`tail -3`). The output happened to be decisive this time (SETUP-SITE-OK ×2, SETUP-SITE-SCANNED; UNREGISTERED none, DANGLING none), but a refusal line above the last three would have been cut away and the gate would still have read clean. The same hazard hit hard-blockers: at 02:03:42Z the background `hard-blockers.sh --post-apply` "came back empty", and the session re-ran it in the foreground.
-
-Two halves. (a) The skill names exit-code gates but gives no capture form. It should state the command shape — unpiped, with `rc=$?` captured immediately after the gate command — or better, run all post-write gates through one script that prints a single verdict line per gate. (b) A gate whose exit code was not observed is UNDECIDED, never passed on prose; the session's own line shows it knew the code was missing and continued.
-
-This stands whatever shell runs, because the lead piped the gate itself; the Bash tool's shell being zsh on this box is a separate matter the operator is handling (llm-gateway commit `263e8af`, branch `config/claude-code-shell`, unmerged). A bootstrapping caveat applies: the update skill is the program that delivers its own repair, so a fix lands on the pull after the one that carries it.
-
-Owed: a probe gate that prints a clean last line and exits non-zero; the prescribed form must report it as failed.
-
-**Second instance, the next pull (graph update session `38c562c5`, `/ai-dlc-update apply` 0.790.0 → 0.791.0, 2026-10-16).** Filed by peer session ai-dlc-68. At 04:32:21Z the session ran `setup-site-drift.sh … 2>&1 | tail -5; echo "ssd_rc=${pipestatus[1]}"`, and at 04:32:22Z `validate-hook-registration.sh 2>&1 | tail -3; echo "hook_rc=${pipestatus[1]}"`, which printed `hook_rc=` empty, the same zsh `pipestatus` failure. This time it was observed: at 04:32:27Z the session re-ran both unpiped (`>/dev/null 2>&1; echo ssd_rc=$?`) and got 0 and 0 before proceeding, at the cost of running each gate twice. The skill still prescribes no capture form. The rest of the apply was clean: `apply.sh`, `--finish`, the derivation differential and `report --verify` all captured `rc=$?` directly, commit `463765a5f` staged only pull paths, and the push ran without `--no-verify`.
-
-verify: manual
-
 ## BL-565 — a serial remediator entry that re-escalates a part escalation carries no `closes:` link, so one open decision is counted twice
 
 **PARTIAL (v0.794.0, branch commit 2f6d5199) — the prose half shipped; the join dedupe is OPEN.** remediator.md: a restating escalated entry carries `supersedes:` lines, not part tokens in `source:`; pm-escalated appends the answer fold to the joined record, one `###` heading per entry with one `closes:` per chain member and an `edit:` line the join reads.
@@ -364,24 +342,6 @@ Receipt: a committed measurement table under `docs/analysis/` keyed by round, pl
 
 verify: manual
 
-## BL-570 — the step-1b trunk audit's result lands nowhere a gate reads, and core never absorbed the consumer check that re-runs it
-
-**DEFECT.** Filed from batch 235's read of graph's s319 planning artifacts (read-only) and the Group H contract adversary's correction. `core/skills/ai-dlc/steps/carry-over-evaluation.md:60-75` makes the step-1b `--audit-trunk` result a HARD_BLOCK on exit 1 and forbids a silent skip, but no gate check reads that result: `audit-trunk` occurs 0 times in `gate-validation.md` (control: `Check 29` = 1). Step 1b DID run in s319: lead transcript `62eadbbe…`, tool call `toolu_0116F9FBNXTbeX13YftRWuHz` at 18:56:17Z, exit 0, `AUDIT-TRUNK: audited=12 of=12 clean=12 findings=0 classes=6`, and `.audit-watermark` at 18:56:52Z equal to graph main `d82236ce`. The lead runs 1b outside the analyst's artifact, so its result lands nowhere a gate reads; the same holds in s313 and s315.
-
-graph's extension Check 925 re-runs `--audit-trunk` at the gate (AUDIT-TRUNK rows appear in the s309, s314, s316 and s318 gate logs and are absent at s319), and graph's `OWED-S308-SKILL-PUSH-925-RETIRE` wants to retire it as EXTENSION-RESTATES-CORE, but core has no such check to restate. An arm keyed on artifact text would fire falsely on two or more sprints: 7 of 13 sprints since s303 carry the line, and s318 and s319 ran without it.
-
-Owed: a core Check in `gate-validation.md` that RE-RUNS `--audit-trunk`, failing on exit 1 or 2 and recording a WORKLIST at exit 0 as backlog. Probe both directions: a trunk with an audit finding fails the gate, and a clean trunk passes.
-
-verify: manual
-
-## BL-573 — operator questions ask what the agent can derive, or what the operator already answered
-
-**DEFECT.** Filed from batch 235's read of graph's s319 `operator-requests-history` diff. Of D-1..D-15, five drew complaints: D-6 "No idea what the check 924 band is", D-13 "No idea what this means", D-11 "Pretty sure I supplied this already", D-12 "I assumed you'd be able to derive" (the Distributor address), and "why can't you add the contract_allowlist?". `requirements.md` and `SKILL.md` carry no derive-first or already-answered test (`operator-owned|derivable` 0; control: `route.md` = 1). BL-539 covers only the item-5 deferral and BL-524 only the `(Recommended)` badge.
-
-Owed: before a question reaches the operator, the lead (or the question template) checks `operator-answers-history.md` for a prior answer and whether the value is derivable from the tree, and any jargon in the question is glossed.
-
-verify: manual
-
 ## BL-574 — the lead invented an operator go-ahead before the handoff push
 
 **DEFECT.** Filed by peer session ai-dlc-68 from graph's s319 handoff (lead `f65eae3b`, 02:58–03:06Z 2026-10-16). At 02:58:57Z the operator wrote "when adversary agent finishes, handoff." At 02:59:18Z the lead's plan read "5. Ask for your go-ahead before the push, then emit `/ai-dlc resume`." At 03:02:12Z the operator wrote "why do you need my go-ahead before the push? I've already given it when i directed a handoff. proceed." At 03:03:04Z the lead conceded "`handoff.md` step 3 includes it", but graph's installed `handoff.md` has no confirm, approval or go-ahead step before the push (`go-ahead|confirm|approval|ask` matches only the TaskStop lines 27, 36, 40 and 41). Cost: one operator round trip, about 4 min of operator attention at the moment the operator steps away. The class is a lead inventing approval gates the pipeline does not have.
@@ -392,14 +352,6 @@ Owed: `handoff.md` step 3 states, beside the push command, that a directed hando
 `git push -u origin HEAD` (`core/fixtures/handoff-resume-guard/push-authorised.sh`, wired into that fixture). Open:
 the `_gate-procedures.md` auto-handoff push site, frozen until the BL-536 line lands; queued for the frozen-file
 follow-up with BL-562's prohibition at the same site.
-
-verify: manual
-
-## BL-590 — the recover gate denies TEAMMATE tool calls with text addressed to the lead
-
-**DEFECT.** Filed from batch 235's Group E contract adversary (read-only on graph). `core/hooks/ai-dlc-recover-gate.sh` carries no `agent_id` test (0 hits; control: `ai-dlc-acknowledge.sh` uses it), its marker is project-wide and its matcher is `*`. Measured on graph: 253 teammate tool calls across 113 `subagents/*.jsonl` transcripts were denied with the lead's "your FIRST tool call" text (control: 168 lead-file lines carry the same text). In-flight teammates, which the recovery block itself says are alive, have their writes denied during the lead's recovery window.
-
-Owed: the recover gate's deny arms apply to the lead only (empty `agent_id`), and a teammate passes through. An arm plus a mutant: a teammate call passes and a lead call is denied before recovery.
 
 verify: manual
 

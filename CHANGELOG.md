@@ -20,6 +20,87 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.801.0] - 2026-10-16
+
+Batch 235 (the combined release: R1-R4 and V2). Closes BL-573, BL-539, BL-570, BL-563 and BL-590; BL-529 stays
+PARTIAL. Closes no `PC-` id. Carries docs intake-4 (the BL-546 addendum, BL-612 and BL-588 entries).
+
+### An operator question is searched, derived and glossed before it is asked (BL-573)
+
+- Rule 11(a) puts three steps on every operator question: apply a prior answer from `operator-answers-history.md`
+  with its citation, derive what the tree can give and offer it for veto, and gloss every internal id in the
+  question. Graph s319 put fifteen decisions to the operator, and five drew complaints that the value was already
+  answered, derivable, or written in unexplained jargon.
+- `route.md`'s scope-confirmation question takes the same three steps.
+- A derived value that is operator-owned (a config leaf, a money threshold or literal, an address, or an `LR-` or
+  `D-<n>` value) goes out for veto UNBADGED, as the existing Rule 11(a) UNBADGED paragraph requires.
+
+### The lead cannot defer an operator-confirmed scope item without asking (BL-539)
+
+- `carry-over-evaluation.md` section 4: a deferral of an item the operator confirmed at `route.md` Step 6 is a
+  Rule 12 HARD_BLOCK, put to the operator with AskUserQuestion before the step proceeds, and the item stays in the
+  sprint until the answer is recorded.
+- `validate-scope-confirmation.sh` gains a locked-scope arm. The locked set comes from records the lead does not
+  author: every carry-over id the operator's ask names, plus every `CO-S<sprint_id>-` id. A `DEFERRAL_REQUEST`
+  filed after the scope answer that names a locked id is refused, unless `scope_deferred_items` lists it (a
+  deferral the operator ratified). False-positive set: 0 across 78 graph snapshots.
+- The arm's closing line names the legs that ran: PASS only when both did, PARTIAL naming the one that ran, SKIP
+  when neither did. An ask cite matching no requests entry is a skipped leg, held by the `badhash` cell and the
+  `resolve` mutant.
+
+### Gate Check 36 re-runs the step-1b trunk audit at carry-over planning gates (BL-570)
+
+- Step 1b made `validate-cycle-commits.sh --audit-trunk` exit 1 a HARD_BLOCK, and no gate read its result. On the
+  reference consumer, 7 of 13 carry-over evaluations since sprint 303 carry the audit's summary line. Check 36 now
+  re-runs the audit itself: an arm keyed on artifact text would fail sprints that did nothing wrong, and the
+  watermark is gitignored. This absorbs the consumer's extension check 925 into core.
+- A trunk finding has an exit: an operator-RESOLVED escalation naming the first failing sha (a hex prefix of 7 or
+  more characters). Before this, a fix-forward commit re-walked the same range, stopped on the same sha and
+  hard-blocked every later gate.
+- The genesis is read through `validate-audit-anchors.sh --prior-sprint-sha`, and a shallow clone is named in the
+  message rather than read as a finding.
+
+### The ai-dlc-update post-write gates read their own exit codes (BL-563)
+
+- A consumer session ran the post-write gates as `gate | tail -3; echo "rc=${pipestatus[1]}"`, read an empty rc,
+  and passed the gates on truncated prose.
+- `reconcile/post-write-gates.sh` runs the four gates the skill prescribes (the leftover-token grep,
+  `setup-site-drift.sh`, `validate-hook-registration.sh` and `hard-blockers.sh --post-apply`). Each gate's output
+  goes to a kept file, and its rc is captured on the next statement. The script prints one
+  `GATE <name> PASS|FAIL|UNDECIDED rc=<n>` line per gate and a summary. An exit code nobody observed is UNDECIDED,
+  never PASS.
+- The `post-write-gates` fixture drives every real gate against a built world, one arm per gate, and clears
+  ambient `AI_DLC_*` first, as I10 requires of a hook-driving fixture.
+
+### The repair-join derivation re-run skips frozen records (BL-529, PARTIAL)
+
+- `validate-artifact-derivations.sh` on a DIRECTORY target skips, by path, anything under a `shards/` directory
+  below the target. Inside an `s<digits>` slot it also skips the record grammar core writes:
+  `*-adversarial-p<M>.md`, `*-repair-p<M>.md`, `requirements-party-repair.md`, `requirements-elicitation-repair.md`
+  and `requirements-elicitation.md`. It prints an `EXCLUDED:` count, and `--all` walks everything. A FILE target is
+  never excluded.
+- This REDUCES the required run and does not make it pass. Measured on the reference consumer: s316 297 stale of
+  650, s317 598 of 1224, s318 207 of 418. The residue is in live documents and in record-like names outside the
+  grammar, and the grammar is not widened to them. The join-time closure in `_gate-procedures.md` is still owed.
+
+### The recover gate's read stages bind the lead only (BL-590)
+
+- `ai-dlc-recover-gate.sh` denied every tool call while `.recover-fired` existed, with no `agent_id` test. On the
+  reference consumer, 253 teammate calls across 113 subagent transcripts were refused with the lead's text, and a
+  teammate's full step-file Read cleared the lead's marker.
+- A teammate now leaves the read path before the marker is read, and its Reads no longer advance the lead's
+  stages. The vacuous `agent_id` conjunct at the owed write and its mutant are deleted.
+- **A6 changed.** It now arms the advisor stage with the lead's own Reads instead of a teammate's. It asserts that
+  a teammate's Agent call is allowed without clearing the owed R, while the lead's own Agent call is still refused
+  naming touchpoint R.
+
+### FORK_BUDGET 3374 -> 3395
+
+- `scripts/fork-profile.sh --section all`, in one clean detached worktree at one path, interleaved: base d19a4d9f
+  read 3370, 3369 and 3370; tip read 3390, 3389 and 3391, a delta of +20 to +21 against a spread of 1 to 2.
+- By arm: I75 +10, I84 +4, I105 +3, I83 +2, I21 +1 and I9 +1. These are the per-file walks over this release's two
+  new scripts and two new fixture directories. The budget rose by the measured delta only.
+
 ## [0.800.0] - 2026-10-16
 
 Batch 235 (release BL-585). Closes BL-585. Closes no `PC-` id. Carries docs intake-3 (BL-594/607/611 and BL-587
