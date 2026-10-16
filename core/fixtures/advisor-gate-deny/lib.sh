@@ -107,8 +107,9 @@
 #                with no grant, a withdrawn grant, on `ai-dlc-update/*`, from a teammate, abbreviated
 #                `--no-verif`, chained and wrapped. Twins -> SILENT: no flag, a branch delete (`--delete`,
 #                `-d`, `:ref`), `--no-verify --verify`, the ambiguous `--no-ver` (git exits 129), a
-#                quoted mention, `git fetch --no-verify`, a dry run (`-n`, `--dry-run`), and the
-#                seed on a project with no stamp
+#                quoted mention, `git fetch --no-verify`, a dry run (`-n`, `--dry-run`), the seed on
+#                a project with no stamp, and an /ai-dlc-update session (its last marker). A session
+#                whose last marker is /ai-dlc, one with no marker, and an absent transcript -> DENY
 #   HDRONLY      BL-567, a teammate with a grant and no advisor call: a header-only first Write to an
 #                adversary shard (`<n>.md`, `cross-<n>.md`; s319's own header shape) -> SILENT;
 #                twins -> DENY: the header plus a `### ` finding, plus a `## F-1` finding, plus a
@@ -648,6 +649,19 @@ nvc nv-fetch SILENT 'git fetch --no-verify origin'
 # environmental fallback, which excludes this case.
 cell NOVERIFY DENY 'R:hook-refused branch: report the failing gate' nv-reason "$(bash_in "$P1/par.jsonl" "$BMAD" 'git push --no-verify -u origin HEAD')"
 : > "$CELLS/$nc.cpd"
+# THE UPDATER STANDS DOWN (the I126 marker scan). upd.jsonl: last marker /ai-dlc-update, no grant,
+# so only NOVERIFY can deny it. updlead.jsonl: the updater marker, THEN /ai-dlc (the last one wins),
+# with a grant and an advisor call so only NOVERIFY can deny it. An absent transcript fails CLOSED.
+# nv-first (none.jsonl, no marker at all) is the marker-less deny.
+SKUPD="$(tu k1 Skill '{"skill":"ai-dlc-update"}')"
+SKLEAD="$(tu k2 Skill '{"skill":"ai-dlc"}')"
+mk "$P1/upd.jsonl"     "$USER" "$SKUPD"
+mk "$P1/updlead.jsonl" "$USER" "$GRANT" "$SKUPD" "$SKLEAD" "$ADV" "$OKRES"
+nvc nv-updater SILENT 'git push --no-verify -u origin HEAD' "$P1/upd.jsonl" "$SPRINT"
+nvc nv-lead-last DENY 'git push --no-verify -u origin HEAD' "$P1/updlead.jsonl" "$SPRINT"
+nvc nv-absent DENY 'git push --no-verify -u origin HEAD' "$P1/absent-nv.jsonl" "$SPRINT"
+[ -s "$P1/upd.jsonl" ] && [ -s "$P1/updlead.jsonl" ] && [ ! -e "$P1/absent-nv.jsonl" ] \
+  || { echo "FIXTURE BROKEN: the updater worlds were not written as seeded" >&2; exit 2; }
 # A dry run moves no ref and runs no hook (par.jsonl holds an advisor call, so only NOVERIFY decides).
 nvc nv-dry SILENT 'git push -n --no-verify -u origin HEAD'
 nvc nv-dryrun SILENT 'git push --dry-run --no-verify origin HEAD'

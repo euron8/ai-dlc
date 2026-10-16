@@ -131,6 +131,8 @@
 # justified as an `_bmad-output/`-only change, the second right after an advisor call. So it runs
 # right after the parse, BEFORE every stand-down: empty KIND, the `ai-dlc-update/*` branch, no
 # transcript, a withdrawn or absent grant (a local-model lead), and L3.
+#   UPDATER: an /ai-dlc-update session (last ai-dlc marker in the handed transcript, the I126 scan)
+#   stands down; no transcript, no marker, or an /ai-dlc marker still DENIES (fail closed).
 #   SCOPE: any agent, lead or teammate (graph's subagent transcripts carry 0 such pushes), and
 #   ONLY on a layered consumer -- `$CLAUDE_PROJECT_DIR/.claude/.ai-dlc-version` present, the stamp
 #   the core and dispatch guards key on. The distribution's operator registers this hook for
@@ -414,9 +416,29 @@ eval "$PARSED"
 # BL-562: a ref-moving push that skips the pre-push hook, from ANY agent on a layered consumer. It
 # sits before every stand-down below (empty KIND, the update branch, the transcript, the grant, L3).
 if [ "$NV" = true ] && [ -f "${CLAUDE_PROJECT_DIR:-.}/.claude/.ai-dlc-version" ]; then
+  # THE UPDATER STANDS DOWN. The deny is owed by the PIPELINE LEAD; an /ai-dlc-update session pushes
+  # its own bookkeeping with --no-verify under the consumer operator's standing rule (the batch-235
+  # tip adversary measured 28 of 140 graph denials in such sessions). The question "is this session
+  # the updater" is asked exactly as pause.sh, acknowledge.sh and continue.sh ask it, through the
+  # I126-bound scan of the session's LAST ai-dlc marker. A teammate is judged on the handed
+  # transcript, which is its lead's, so a teammate of the updater stands down with it.
+  # FAIL CLOSED, THE OPPOSITE OF THE STOP HOOK. continue.sh lets an unreadable or marker-less
+  # session stop, because a wrong block wedges it; here a wrong ALLOW skips the pre-push hook, so a
+  # missing, unreadable or marker-less transcript, or a last marker of /ai-dlc, still DENIES.
+  NV_UPDATER=0
+  TRANSCRIPT="$TP"
+  if [ -n "$TRANSCRIPT" ] && [ -r "$TRANSCRIPT" ]; then
+    # >>> I126 SESSION-MARKER SCAN: the next line, byte-identical in every bound hook >>>
+    LAST_SKILL=$(grep -oE '"role":"user","content":"<command-message>ai-dlc(-update)?</command-message>\\n<command-name>/ai-dlc(-update)?</command-name>|"name":"Skill","input":\{"skill":"ai-dlc(-update)?"' "$TRANSCRIPT" 2>/dev/null | tail -1)
+    case "$LAST_SKILL" in
+      *'/ai-dlc-update</command-name>'|*'"skill":"ai-dlc-update"') NV_UPDATER=1 ;;
+    esac
+  fi
+  if [ "$NV_UPDATER" != 1 ]; then
   jq -n --arg m "ai-dlc-advisor-gate: DENIED -- this git push skips the pre-push hook (--no-verify). A pipeline push runs the hook, always: no judgement that a change is artifact-only, and no advisor call, licenses skipping it. Run the prescribed push without the flag (steps/handoff.md step 3: git push -u origin HEAD, the whole command). If the pre-push hook refuses that push (pre-push: BLOCKED.), follow handoff.md step 3's hook-refused branch: report the failing gate to the operator in ONE line, touch _bmad-output/pipeline-paused.flag, and stop there; the operator decides whether the hook is fixed or bypassed." \
     '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $m}}'
   exit 0
+  fi
 fi
 
 [ -n "$KIND" ] || exit 0
