@@ -739,7 +739,7 @@ files: a.py:10
 ct HDRONLY DENY hdr-h4 "$(write_in "$P1/par.jsonl" "$SHD/3.md" a1 "$HDR
 #### F-1 (MAJOR) the locked range cites a removed requirement
 ")"
-ct HDRONLY DENY hdr-edit-del"$(edit_in "$P1/par.jsonl" "$SHD/3.md" '### F-1 (MAJOR) the locked range cites a removed requirement
+ct HDRONLY DENY hdr-edit-del "$(edit_in "$P1/par.jsonl" "$SHD/3.md" '### F-1 (MAJOR) the locked range cites a removed requirement
 sections: 3
 ' '' a1)"
 ct HDRONLY DENY hdr-repair "$(write_in "$P1/par.jsonl" "$SHREP" a1 '# Repair shard 1
