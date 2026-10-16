@@ -139,6 +139,14 @@ else bad "--cite-sha SHA256: alone exited $RC instead of 2 — an empty pin fell
 OUT="$(bash "$VALIDATOR" --requests "$REQ" --brief "$DROPPED" --sprint 42 --cite-sha "SHA256:$SHA" 2>&1)"; RC=$?
 if [ "$RC" = "1" ]; then ok "--cite-sha SHA256:<hex> against the dropped brief still FAILS (exit 1) — the labelled pin reaches the coverage verdict"
 else bad "--cite-sha SHA256:<hex> against the dropped brief exited $RC instead of 1"; fi
+# Exactly ONE label, and only the uppercase literal: a `while` strip and a case-folded strip both
+# resolve these two, and each passed every cell above.
+OUT="$(bash "$VALIDATOR" --requests "$REQ" --brief "$COVERED" --sprint 42 --cite-sha "SHA256:SHA256:$SHA" 2>&1)"; RC=$?
+if [ "$RC" = "2" ]; then ok "--cite-sha SHA256:SHA256:<hex> exits 2 — the label is stripped once, not repeatedly"
+else bad "--cite-sha SHA256:SHA256:<hex> exited $RC instead of 2 — the strip repeats"; fi
+OUT="$(bash "$VALIDATOR" --requests "$REQ" --brief "$COVERED" --sprint 42 --cite-sha "sha256:$SHA" 2>&1)"; RC=$?
+if [ "$RC" = "2" ]; then ok "--cite-sha sha256:<hex> exits 2 — the label match does not fold case"
+else bad "--cite-sha sha256:<hex> exited $RC instead of 2 — the strip folds case"; fi
 
 # --- Assertion 10: UNMUTATED CONTROL -----------------------------------------
 # The mutants are copies. This validator resolves a sibling script by $0's directory and shells

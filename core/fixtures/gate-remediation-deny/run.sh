@@ -536,6 +536,64 @@ if denied "$OUT"; then bad "7a: a DISPATCHED agent's edit of the spawn ledger wa
 else ok "7a: ...and a dispatched agent's edit of the same file is allowed (arm 2 precedes the guarded roots)"; fi
 rm -rf "$W"
 
+# THE SUBAGENT PROBE LEDGER IS A GUARDED ROOT, for the spawn ledger's reason one join over: on a
+# consumer whose write rows carry no transcript_path, `merge-adversarial-shards.sh` derives every
+# adversary dispatch id from this file, so one lead-written row maps a remediator's shard onto a
+# real adversary dispatch — measured, it turned a REFUSED merge into MERGED. Write and Edit are
+# both denied; the ALLOW twins are one property apart each: a dispatched agent's Write of the same
+# file (arm 2), and the same lead Write with no FAIL on the live pass.
+seed open-fail
+PROBE_LEDGER="$W/_bmad-output/subagent-context.jsonl"
+OUT="$(drive "$W" Write "$PROBE_LEDGER")"
+if denied "$OUT"; then ok "7a: a denied LEAD may not Write subagent-context.jsonl — the probe ledger a shard merge joins through is under the guard"
+else bad "7a: the lead Wrote subagent-context.jsonl while denied — one row maps a remediator's shard onto an adversary dispatch"; fi
+OUT="$(drive "$W" Edit "$PROBE_LEDGER")"
+if denied "$OUT"; then ok "7a: ...and may not Edit it either"
+else bad "7a: the lead Edited subagent-context.jsonl while denied — the Write deny is bypassed by the other tool"; fi
+OUT="$(drive "$W" Write "$PROBE_LEDGER" "agate-x-0123456789abcdef")"
+if denied "$OUT"; then bad "7a: a DISPATCHED agent's Write of subagent-context.jsonl was denied — arm 2 no longer precedes the guarded roots"
+else ok "7a: ...and a dispatched agent's Write of the same file is allowed (arm 2 precedes the guarded roots)"; fi
+rm -rf "$W"
+seed pass
+OUT="$(drive "$W" Write "$W/_bmad-output/subagent-context.jsonl")"
+if denied "$OUT"; then bad "7a: a lead Write of subagent-context.jsonl under an all-PASS gate was DENIED — the probe-ledger root fires with no failure to guard"
+else ok "7a: ...and the same lead Write with no FAIL on the live pass is allowed"; fi
+rm -rf "$W"
+
+# --- the mutant: the probe-ledger root removed ----------------------------------------------
+# The DENY cells above are presence-shaped, but the docs/ and planning roots are not what they
+# exercise, so only a mutant shows the new case is the line that fires. Anchored on the full case
+# line (the file's comments also name the file), asserted to match exactly once, built as a copy
+# and preceded by an unmutated control. The spawn-ledger cell is the "nothing else moves" arm.
+MWORK="$(mktemp -d)"
+cp "$HOOK" "$MWORK/control.sh"
+PL_ANCHOR='  */${STATE_DIR_NAME}/subagent-context.jsonl|${STATE_DIR_NAME}/subagent-context.jsonl) GUARDED=1 ;;'
+PL_N="$(grep -cxF "$PL_ANCHOR" "$HOOK")" || PL_N=0
+PL_IMPOSSIBLE="$(grep -cxF "${PL_ANCHOR}#never-a-line" "$HOOK")" || PL_IMPOSSIBLE=0
+grep -vxF "$PL_ANCHOR" "$HOOK" > "$MWORK/m-no-probe-root.sh"
+if [ "$PL_N" != 1 ] || [ "$PL_IMPOSSIBLE" != 0 ]; then
+  bad "MUTANT: the probe-ledger anchor matched ${PL_N} line(s) (want 1; impossible-anchor control ${PL_IMPOSSIBLE}, want 0)"
+elif cmp -s "$HOOK" "$MWORK/m-no-probe-root.sh"; then
+  bad "MUTANT: removing the probe-ledger root changed no bytes — it would score as a kill"
+elif ! bash -n "$MWORK/m-no-probe-root.sh"; then
+  bad "MUTANT: the no-probe-root copy does not parse; its silence would score as a kill"
+else
+  seed open-fail
+  OUT="$(drive "$W" Write "$W/_bmad-output/subagent-context.jsonl" "" "" "$MWORK/control.sh")"
+  if denied "$OUT"; then ok "CONTROL: an unmutated copy of the hook DENIES the lead's probe-ledger Write"
+  else bad "CONTROL: an unmutated copy did not deny the probe-ledger Write — every verdict below is about the copy"; fi
+  rm -rf "$W"
+  seed open-fail
+  OUT="$(drive "$W" Write "$W/_bmad-output/subagent-context.jsonl" "" "" "$MWORK/m-no-probe-root.sh")"
+  if denied "$OUT"; then bad "MUTANT: with the probe-ledger root removed the lead's Write is still denied — the cell does not key on that line"
+  else ok "MUTANT: the probe-ledger root removed ALLOWS the lead's Write — the new cell is killed by its own line"; fi
+  OUT="$(drive "$W" Edit "$W/_bmad-output/spawn-ledger.jsonl" "" "" "$MWORK/m-no-probe-root.sh")"
+  if denied "$OUT"; then ok "MUTANT: the spawn-ledger cell is UNCHANGED — the mutant kills only its own arm"
+  else bad "MUTANT: the spawn-ledger cell also went green — the two ledger roots are entangled"; fi
+  rm -rf "$W"
+fi
+rm -rf "$MWORK"
+
 # =============================================================================
 # FAILURE POSTURE — unreadable gate state fails OPEN, and says so.
 # =============================================================================

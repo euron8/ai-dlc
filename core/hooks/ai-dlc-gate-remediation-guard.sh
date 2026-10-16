@@ -157,7 +157,10 @@
 #
 # THE GUARDED ROOTS (deliberately narrow -- Rule 26 minimum mechanism)
 #   `_bmad-output/planning-artifacts/**`, `_bmad-output/implementation-artifacts/**`,
-#   `docs/**`. That is where all four measured top edit targets live, plus the
+#   `docs/**`. Three gate records sit beside them for arm 7a's reason, not as edit
+#   targets: `gate-adjudication/**`, `spawn-ledger.jsonl` and `subagent-context.jsonl`
+#   (the records a verdict or a shard merge binds by; hooks append to the two ledgers
+#   directly, never through this matcher). That is where all four measured top edit targets live, plus the
 #   `docs/architecture.md` insertion pass 11 named as the root cause. These roots
 #   bound the GATE arms (4-10) only. Product code is not a gate-remediation
 #   subject at all -- an `[implementation]` gate's repairs run through the dev/qa
@@ -401,8 +404,9 @@ STEER_SCRIPT="${PROJECT_DIR}/scripts/ai-dlc/validate-steering-budget.sh"
 # The spawn ledger's `role`, though, is what `ai-dlc-dispatch-guard.sh` reads out of the
 # lead's OWN dispatch prompt, so a dispatch naming the adjudicator role is a genuine
 # `gate-adjudicator` row whatever that dispatch then does. Both files are guarded roots below
-# (the write ledger by its directory, the spawn ledger by name), so a denied lead cannot
-# rewrite either through Write or Edit; through Bash it can rewrite both, as it can every
+# (the write ledger by its directory, the spawn ledger by name), and so is the subagent probe
+# ledger the shard merge joins through, so a denied lead cannot
+# rewrite any of them through Write or Edit; through Bash it can rewrite all three, as it can every
 # artifact this guard reads, and that limit is the guard's, not this arm's.
 WRITE_LEDGER="${GATE_DIR}/.verdict-writes.jsonl"
 SPAWN_LEDGER="${LOG_DIR}/spawn-ledger.jsonl"
@@ -855,6 +859,15 @@ case "$FP" in
   # Hooks append to it directly and never pass through this matcher, so nothing legitimate
   # is lost; a dispatched agent's edit still exits at arm 2.
   */${STATE_DIR_NAME}/spawn-ledger.jsonl|${STATE_DIR_NAME}/spawn-ledger.jsonl) GUARDED=1 ;;
+  # THE SUBAGENT PROBE LEDGER, for the spawn ledger's reason one join over. On a consumer whose
+  # write rows carry no `transcript_path` (graph: 0 of 8084), every adversary dispatch id
+  # `merge-adversarial-shards.sh` derives comes from this file's agent_id -> tool_use_id rows,
+  # so one prepended row maps a remediator's shard onto a real adversary dispatch. Measured
+  # before this line: a denied lead's Write on it was ALLOWED, and that one row turned a
+  # REFUSED merge into MERGED. `ai-dlc-subagent-probe.sh` appends with a shell redirect and
+  # never passes through this matcher, so nothing legitimate is lost; a dispatched agent's
+  # edit still exits at arm 2.
+  */${STATE_DIR_NAME}/subagent-context.jsonl|${STATE_DIR_NAME}/subagent-context.jsonl) GUARDED=1 ;;
   */docs/*|docs/*) GUARDED=1 ;;
 esac
 [ "$GUARDED" -eq 1 ] || exit 0
