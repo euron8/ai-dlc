@@ -61,8 +61,9 @@ is not built and stays open, see below. Closes no `PC-` id.
   that history deleted it can answer 1. Current-sprint rows then read PAST, so they turn INFO and do not block.
   That is the open direction, never a false refusal; BL-631 fixes the resolver.
 - What is enforced, and when: Check 37 runs at the planning gate only. A current-sprint row recorded after that
-  gate (a pull mid-implementation) is shown at the next resume and carried at retro, and is refused at the next
-  sprint's planning gate only if its file is then still current or living.
+  gate (a pull mid-implementation) is shown at every resume and carried at retro, but no gate ever refuses it:
+  by the next planning gate its sprint has finished and it reads INFO. A living-document row (`prd.md`) stays
+  OPEN across sprints and is refused at every later planning gate.
 - **Not built (D6, open):** the contract's snapshot pointer naming the pending reconcile PR. At step 8 the update
   session is on the reconcile branch and never touches the working branch, so a pointer there lands at the PR
   merge, the same moment as the record. Until the operator merges the reconcile PR, the working branch carries

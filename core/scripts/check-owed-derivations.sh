@@ -127,8 +127,8 @@ sprint_split() {
 #     `_bmad-output/implementation-artifacts/s<N>/gate-adjudication/` and
 #     `_bmad-output/implementation-artifacts/pre-series/gate-adjudication/`. Those two are HISTORY by
 #     PATH. The live directory is NOT history: it is unrotated, so it belongs to the current sprint and
-#     classifies CURRENT (below). The nonce is deliberately NOT consulted; the rotator's own output
-#     directories are the derivation.
+#     classifies by the guard's live-nonce rule (below): the live stem and its sidecars are CURRENT,
+#     every other stem there is HISTORY. The rotator's own output directories are HISTORY by path.
 #   - core/scripts/rotate-snapshot-archive.sh:149: `pipeline-history/pipeline-snapshot-archive.md`
 #     (covered by the basename predicate below, `*-archive.md`).
 #   - core/skills/ai-dlc-update/reconcile/ledger-rotate.sh:136: `push-candidate-ledger.archive.md`
