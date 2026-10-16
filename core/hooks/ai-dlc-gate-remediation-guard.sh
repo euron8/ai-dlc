@@ -199,8 +199,8 @@
 # helper fails open, which is I92's reason for its own four copies. The fixture
 # `gate-remediation-deny` greps the probe's expression out of the probe and asserts it occurs in
 # this file, and seeds a drift that fails. THE PRODUCER WRITES THE ROLE IN `agentType`:
-# `customAgentType` is in 0 of 3216 graph metas and 0 of 1797 ai-dlc metas, against 3237 carrying
-# `agentType`, measured on 2026-10-16. It is read first only because the probe's expression reads
+# `customAgentType` is in 0 of 3216 graph metas and 0 of 1797 ai-dlc metas, and `agentType` is in
+# all 3216 graph metas, measured on 2026-10-16. It is read first only because the probe's expression reads
 # it first; nothing the harness emits exercises it.
 #
 # THIS ARM DEPENDS ON `ai-dlc-dispatch-guard.sh:1186`, the `del(.name)` in its role-bound rewrite.
@@ -212,8 +212,8 @@
 # meta ALLOWS, as the known gap this dependency holds shut.
 #
 # THE ROLE SET HAS NO VARIANTS: `core/team-roles/` holds `remediator.md` and no `remediator-*`.
-# Measured over the reference consumer's 3224 subagent metas: 530 resolve to `remediator`, 0 to any
-# other spelling containing it (control: 263 `gate-adjudicator` in the same pass). So the match is
+# Measured over the reference consumer's 3216 subagent metas on 2026-10-16: 539 resolve to `remediator`, 0 to any
+# other spelling containing it (control: 262 `gate-adjudicator` in the same pass). So the match is
 # the exact string.
 #
 # FAILS OPEN, SILENTLY, when the meta cannot be read: no `transcript_path`, no meta file, a meta
