@@ -999,4 +999,6 @@ Owed:
 
 Related: BL-616 (load-sensitive verdicts) and BL-632 (its census lists other elapsed-time asserts in this fixture, `:362`, `:400`, `:462` and `:479`).
 
+Owner: ai-dlc-4e [9b62de] (lead ai-dlc-9c), in its load series with BL-616 and BL-632.
+
 verify: manual
