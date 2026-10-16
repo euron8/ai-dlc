@@ -639,14 +639,16 @@ except Exception:
 allowed() { case "$1" in "|"*) return 0 ;; *) return 1 ;; esac; }
 
 jcall() { # jcall <tool> <file_path|-> — `-` is a tool that carries no file_path at all
-  if [ "$2" = "-" ]; then printf '{"tool_name":"%s","tool_input":{"command":"ls -la"}}' "$1"
-  else printf '{"tool_name":"%s","tool_input":{"file_path":"%s"}}' "$1" "$2"; fi
+  # session_id is the marker's owner (arm_marker writes sess-A), so the ladder below runs the
+  # owner-equal path, which is the one production takes; with no id it ran only the no-id branch.
+  if [ "$2" = "-" ]; then printf '{"tool_name":"%s","session_id":"sess-A","tool_input":{"command":"ls -la"}}' "$1"
+  else printf '{"tool_name":"%s","session_id":"sess-A","tool_input":{"file_path":"%s"}}' "$1" "$2"; fi
 }
 
 # A BOUNDED Read, which is the shape the third filed skip took. `-` omits the field entirely, so
 # `jbounded <p> - -` and `jcall Read <p>` are the same call and the two spellings cannot drift.
 jbounded() { # jbounded <file_path> <limit|-> <offset|->
-  _j="{\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"$1\""
+  _j="{\"tool_name\":\"Read\",\"session_id\":\"sess-A\",\"tool_input\":{\"file_path\":\"$1\""
   [ "$2" != "-" ] && _j="$_j,\"limit\":$2"
   [ "$3" != "-" ] && _j="$_j,\"offset\":$3"
   printf '%s}}' "$_j"
@@ -1765,7 +1767,41 @@ sp_legacy_upd() {
   printf 'PASS\n'
 }
 
-SPREDS="upd_compact pipe_compact stale_upd stale_pipe same_sess legacy_pipe legacy_upd"
+# C8/C9. ORDER: the stand-downs sit ABOVE the readability block, which DELETES the marker. A call
+# that is not owed the recovery must not be the one to clear it, and with the snapshot present the
+# readability block is never reached, so no case above can see the order. Each predicate deletes the
+# snapshot, asserts the stand-down is silent AND the marker survives, and carries a control in a
+# second project proving the seed reaches the readability block (the same-owner / pipeline call
+# there stands down AND clears the marker).
+sp_ord_pipe() {
+  _p="$(newproj architecture.md consumer)"; stx pipe "$_p/tA.jsonl"; stx pipe "$_p/tB.jsonl"
+  sarm "$1" "$_p" S-A "$_p/tA.jsonl"
+  grep -qx 'session_id=S-A' "$_p/$mk" 2>/dev/null || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — no marker owned by session A\n'; return; }
+  rm -f "$_p/_bmad-output/pipeline-snapshot.md"
+  [ -e "$_p/_bmad-output/pipeline-snapshot.md" ] && { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — the snapshot did not vanish\n'; return; }
+  [ "$(sdec "$2" "$_p" S-B "$_p/tB.jsonl")" = silent ] || { printf 'FAIL:session B was denied on a recovery owed to session A\n'; return; }
+  [ -e "$_p/$mk" ] || { printf 'FAIL:a non-owner call cleared the lead'"'"'s pending recovery through the readability block\n'; return; }
+  _q="$(newproj architecture.md consumer)"; stx pipe "$_q/tA.jsonl"
+  sarm "$1" "$_q" S-A "$_q/tA.jsonl"; rm -f "$_q/_bmad-output/pipeline-snapshot.md"
+  sdec "$2" "$_q" S-A "$_q/tA.jsonl" >/dev/null
+  [ -e "$_q/$mk" ] && { printf 'FAIL:CONTROL — the owner'"'"'s call on a vanished snapshot left the marker, so the seed never reaches the readability block\n'; return; }
+  printf 'PASS\n'
+}
+sp_ord_upd() {
+  _p="$(newproj architecture.md consumer)"; stx pipe "$_p/tA.jsonl"; stx upd "$_p/tU.jsonl"
+  sarm "$1" "$_p" S-A "$_p/tA.jsonl"; sunowned "$_p"
+  grep -q '^session_id=' "$_p/$mk" 2>/dev/null && { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — the marker still carries an owner\n'; return; }
+  rm -f "$_p/_bmad-output/pipeline-snapshot.md"
+  [ "$(sdec "$2" "$_p" S-U "$_p/tU.jsonl")" = silent ] || { printf 'FAIL:an update session was denied on an ownerless marker\n'; return; }
+  [ -e "$_p/$mk" ] || { printf 'FAIL:an update session'"'"'s call cleared a lead'"'"'s pending recovery through the readability block\n'; return; }
+  _q="$(newproj architecture.md consumer)"; stx pipe "$_q/tA.jsonl"
+  sarm "$1" "$_q" S-A "$_q/tA.jsonl"; sunowned "$_q"; rm -f "$_q/_bmad-output/pipeline-snapshot.md"
+  sdec "$2" "$_q" S-B "$_q/tA.jsonl" >/dev/null
+  [ -e "$_q/$mk" ] && { printf 'FAIL:CONTROL — a pipeline call on a vanished snapshot left the marker, so the seed never reaches the readability block\n'; return; }
+  printf 'PASS\n'
+}
+
+SPREDS="upd_compact pipe_compact stale_upd stale_pipe same_sess legacy_pipe legacy_upd ord_pipe ord_upd"
 sflips() { # sflips <hook> <gate> -> the predicates that FAIL, space separated
   for _n in $SPREDS; do
     r="$("sp_$_n" "$1" "$2")"
@@ -1783,6 +1819,8 @@ for _n in $SPREDS; do
     same_sess) label="whose: CONTROL — the session that owns the marker is denied" ;;
     legacy_pipe) label="whose: BACK-COMPAT — a marker with no session_id still gates a pipeline session" ;;
     legacy_upd) label="whose: an update session is silent on an ownerless marker, and the marker survives" ;;
+    ord_pipe) label="whose: ORDER — a non-owner call on a vanished snapshot is silent and does NOT clear the owner's marker" ;;
+    ord_upd) label="whose: ORDER — an update session's call on a vanished snapshot is silent and does NOT clear an ownerless marker" ;;
   esac
   if [ "$r" = PASS ]; then ok "$label"; else bad "$label — ${r#FAIL:}"; fi
 done
@@ -1791,7 +1829,7 @@ SCTRL_H="$WORK/recover-control-whose.sh"; SCTRL_G="$WORK/gate-control-whose.sh"
 cp "$HOOK" "$SCTRL_H"; cp "$GATE" "$SCTRL_G"
 scf="$(sflips "$SCTRL_H" "$SCTRL_G")"
 if [ -z "${scf// /}" ]; then
-  ok "control: unmutated copies of the producer and the gate reproduce all 7 whose-recovery verdicts, deny cells included"
+  ok "control: unmutated copies of the producer and the gate reproduce all 9 whose-recovery verdicts, deny cells included"
 else
   bad "CONTROL FAILED — unmutated copies already flip {${scf}}, so every whose-recovery mutant verdict below is uninterpretable"
 fi
@@ -1832,14 +1870,14 @@ else bad "FIXTURE STALE: the producer's updater stand-down is not exactly one wh
 # green because the owner test covers it, which is exactly why legacy_upd exists.
 SM_B="$WORK/gate-whose-b.sh"
 if smut "$GATE" "$UPD_CASE" "$SM_B" "$UPD_NEVER"; then
-  smutant_arm "the gate has no updater stand-down" "$HOOK" "$SM_B" "legacy_upd"
+  smutant_arm "the gate has no updater stand-down" "$HOOK" "$SM_B" "legacy_upd ord_upd"
 else bad "FIXTURE STALE: the gate's updater stand-down is not exactly one whole line, so mutant (b) has no subject"; fi
 
 # (c) The owner test removed. Killed by stale_pipe ALONE: a pipeline session has no updater test to
 # fall back on. stale_upd stays green because the updater test covers it.
 SM_C="$WORK/gate-whose-c.sh"
 if smut "$GATE" "$KEY_LINE" "$SM_C" "if false; then"; then
-  smutant_arm "the gate does not compare the marker's session_id with the call's" "$HOOK" "$SM_C" "stale_pipe"
+  smutant_arm "the gate does not compare the marker's session_id with the call's" "$HOOK" "$SM_C" "stale_pipe ord_pipe"
 else bad "FIXTURE STALE: the owner test is not exactly one whole line, so mutant (c) has no subject"; fi
 
 # (d) Both stand-downs delete the marker before exiting. Killed by the three cells that assert the
@@ -1847,8 +1885,27 @@ else bad "FIXTURE STALE: the owner test is not exactly one whole line, so mutant
 # the updater branch. No deny cell flips: the denied calls never reach either branch.
 SM_D="$WORK/gate-whose-d.sh"; SM_D1="$WORK/gate-whose-d1.sh"
 if smut "$GATE" "$KEY_LINE" "$SM_D1" "$KEY_LINE" "$KEY_RM" && smut "$SM_D1" "$UPD_CASE" "$SM_D" "$UPD_RM"; then
-  smutant_arm "a stand-down deletes the marker it stood down on" "$HOOK" "$SM_D" "stale_upd stale_pipe legacy_upd"
+  smutant_arm "a stand-down deletes the marker it stood down on" "$HOOK" "$SM_D" "stale_upd stale_pipe legacy_upd ord_pipe ord_upd"
 else bad "FIXTURE STALE: mutant (d) could not be built from exactly one owner-test line and one updater-case line"; fi
+
+# (e) BOTH stand-downs moved BELOW the readability block, before the tool-name parse that follows it.
+# Nothing else changes, so every case where the snapshot is present behaves identically (the
+# readability block is not entered). Killed by exactly ord_pipe and ord_upd: with the snapshot gone
+# the readability block deletes the marker and exits silent first, so the call is silent but the
+# marker is not kept. The block is relocated whole, so the order is the only difference.
+SM_E="$WORK/gate-whose-e.sh"
+awk '
+  index($0, "G_SID=\"\"; G_TP=\"\"") == 1 { cap = 1 }
+  cap { buf = buf $0 "\n"; if ($0 == "  esac") e = 1; if (e && $0 == "fi") { cap = 0; e = 0; held = 1 } next }
+  index($0, "TOOL=\"$(printf '"'"'%s'"'"' \"$INPUT\" | jq -r '"'"'.tool_name // empty'"'"'") == 1 && held && !done { printf "%s", buf; done = 1 }
+  1' "$GATE" > "$SM_E"
+_e_at="$(grep -n 'G_SID=""; G_TP=""' "$SM_E" | head -1 | cut -d: -f1)"
+_e_rd="$(grep -n 'if \[ ! -r "\$SNAP_ABS" \]' "$SM_E" | head -1 | cut -d: -f1)"
+if [ -z "$_e_at" ] || [ -z "$_e_rd" ] || [ "$_e_at" -le "$_e_rd" ] || [ "$(wc -l < "$SM_E")" -ne "$(wc -l < "$GATE")" ]; then
+  bad "FIXTURE STALE: mutant (e) did not relocate the stand-downs below the readability block (stand-down at line '${_e_at}', readability at '${_e_rd}')"
+else
+  smutant_arm "both stand-downs sit BELOW the readability block that deletes the marker" "$HOOK" "$SM_E" "ord_pipe ord_upd"
+fi
 
 fi  # whose-recovery arms present
 
@@ -2277,7 +2334,7 @@ p_sequence() { # p_sequence <postcompact-hook> -> PASS | FAIL:<what it saw>
   _p="$(newproj route.md consumer)"
   arm_marker "$HOOK" "$_p"
   [ -f "$_p/$mk" ] || { printf 'FAIL:SEED — the producer wrote no marker, so the sequence has nothing to lose\n'; return; }
-  printf '{"trigger":"auto","session_id":"fixture","compact_summary":"seeded"}' \
+  printf '{"trigger":"auto","session_id":"sess-A","compact_summary":"seeded"}' \
     | CLAUDE_PROJECT_DIR="$_p" bash "$1" >/dev/null 2>&1
   grep -q 'recovery_injected: yes' "$_p/_bmad-output/compaction-log.md" 2>/dev/null \
     || { printf 'FAIL:postcompact did not log the injection, so it never read the marker and this arm measured nothing\n'; return; }
@@ -2310,6 +2367,94 @@ else
     PASS) bad "MUTANT KILLED NOTHING: a postcompact.sh that deletes the marker still passes the sequence arm, so the arm cannot see the shipped defect" ;;
     *) bad "MUTANT FLIP WRONG: expected the deletion finding, measured '${rm_#FAIL:}'" ;;
   esac
+fi
+
+# --- postcompact.sh: WHOSE COMPACTION IT LOGS ---------------------------------------------------
+# This hook decided "recovery injected?" from whether `.recover-fired` EXISTS. With the producer
+# standing down for /ai-dlc-update that read an update session's compaction as `no` (the retro's
+# failure signal for a lead resuming from the summary alone), and a lead's marker still on disk
+# read as `yes` with the lead's byte count. Every case asserts the logged VALUE, or that nothing
+# was logged and nothing printed. Transcripts and the marker use the whose-recovery helpers, so
+# this block runs only where they are defined.
+if grep -qF 'mval session_id' "$GATE" && grep -qF 'printf '"'"'session_id=%s' "$HOOK"; then
+
+pcall() { # pcall <postcompact> <project> <session> <transcript> -> its stdout
+  jq -n --arg s "$3" --arg t "$4" '{trigger:"auto",session_id:$s,transcript_path:$t,compact_summary:"seeded"}' \
+    | CLAUDE_PROJECT_DIR="$2" bash "$1" 2>/dev/null
+}
+plog() { cat "$1/_bmad-output/compaction-log.md" 2>/dev/null || true; }
+
+# P7. An update session compacts with NO marker on disk: nothing logged, nothing printed.
+pc_upd_nomark() {
+  _p="$(newproj architecture.md consumer)"; stx upd "$_p/tU.jsonl"
+  [ -e "$_p/$mk" ] && { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — a marker exists\n'; return; }
+  _o="$(pcall "$1" "$_p" S-U "$_p/tU.jsonl")"
+  [ -z "$_o" ] || { printf 'FAIL:printed into an update session: %s\n' "$_o"; return; }
+  [ -z "$(plog "$_p")" ] || { printf 'FAIL:wrote a compaction-log entry for an update session\n'; return; }
+  printf 'PASS\n'
+}
+# P6. A lead's marker for session A is on disk and an update session compacts: still nothing.
+pc_upd_foreign() {
+  _p="$(newproj architecture.md consumer)"; stx pipe "$_p/tA.jsonl"; stx upd "$_p/tU.jsonl"
+  sarm "$HOOK" "$_p" S-A "$_p/tA.jsonl"
+  [ -e "$_p/$mk" ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — no marker\n'; return; }
+  _o="$(pcall "$1" "$_p" S-U "$_p/tU.jsonl")"
+  [ -z "$_o" ] || { printf 'FAIL:printed into an update session: %s\n' "$_o"; return; }
+  [ -z "$(plog "$_p")" ] || { printf 'FAIL:logged an update session'"'"'s compaction against the lead'"'"'s marker\n'; return; }
+  printf 'PASS\n'
+}
+# P6b. A PIPELINE session compacts and the marker is another session's: the report is `no`, with
+# no byte count -- never `yes` for a recovery that was not this session's.
+pc_foreign() {
+  _p="$(newproj architecture.md consumer)"; stx pipe "$_p/tA.jsonl"; stx pipe "$_p/tB.jsonl"
+  sarm "$HOOK" "$_p" S-A "$_p/tA.jsonl"
+  _o="$(pcall "$1" "$_p" S-B "$_p/tB.jsonl")"
+  plog "$_p" | grep -qx -- '- recovery_injected: no' || { printf 'FAIL:did not log `no` for a marker owned by another session\n'; return; }
+  plog "$_p" | grep -q '^- injected_bytes:' && { printf 'FAIL:logged another session'"'"'s byte count\n'; return; }
+  printf 'PASS\n'
+}
+# P6c. CONTROL / BACK-COMPAT: an ownerless marker and a pipeline session still log `yes` with bytes.
+pc_legacy() {
+  _p="$(newproj architecture.md consumer)"; stx pipe "$_p/tB.jsonl"
+  sarm "$HOOK" "$_p" S-A "$_p/tB.jsonl"; sunowned "$_p"
+  pcall "$1" "$_p" S-B "$_p/tB.jsonl" >/dev/null
+  plog "$_p" | grep -qx -- '- recovery_injected: yes' || { printf 'FAIL:an ownerless marker stopped reading as an injection\n'; return; }
+  plog "$_p" | grep -q '^- injected_bytes: [0-9]' || { printf 'FAIL:the byte count was not logged for an ownerless marker\n'; return; }
+  printf 'PASS\n'
+}
+PCPREDS="upd_nomark upd_foreign foreign legacy"
+pcflips() { for _n in $PCPREDS; do r="$("pc_$_n" "$1")"; [ "${r%%:*}" = PASS ] || printf '%s ' "$_n"; done; }
+for _n in $PCPREDS; do
+  r="$("pc_$_n" "$POSTCOMPACT")"
+  case "$_n" in
+    upd_nomark)  label="postcompact: an update session's compaction with no marker logs nothing and prints nothing" ;;
+    upd_foreign) label="postcompact: an update session's compaction beside a lead's marker logs nothing and prints nothing" ;;
+    foreign)     label="postcompact: a marker owned by another session is logged as \`no\` with no byte count, never \`yes\`" ;;
+    legacy)      label="postcompact: CONTROL — an ownerless marker still reads \`yes\` with its byte count" ;;
+  esac
+  if [ "$r" = PASS ]; then ok "$label"; else bad "$label — ${r#FAIL:}"; fi
+done
+pcf="$(pcflips "$POSTCOMPACT")"
+[ -z "${pcf// /}" ] && ok "control: the unmutated postcompact hook reproduces all 4 verdicts" || bad "CONTROL FAILED — postcompact already flips {${pcf}}"
+
+pcmutant() { # pcmutant <label> <src-anchor-line> <replacement> <expected flips>
+  _m="$WORK/postcompact-whose-$$-$RANDOM.sh"
+  if ! smut "$POSTCOMPACT" "$2" "$_m" "$3"; then bad "FIXTURE STALE: $1 — the anchor is not exactly one whole line"; return; fi
+  cmp -s "$POSTCOMPACT" "$_m" && { bad "FIXTURE STALE: $1 — byte-identical"; return; }
+  bash -n "$_m" 2>/dev/null || { bad "FIXTURE STALE: $1 — not valid shell"; return; }
+  got="$(pcflips "$_m")"
+  if [ "$got" = "$4 " ]; then ok "mutant: $1 — flips exactly {$4}"
+  elif [ -z "${got// /}" ]; then bad "MUTANT KILLED NOTHING: $1 — {$4} cannot fire"
+  else bad "MUTANT FLIP SET WRONG: $1 — expected {$4}, measured {$got}"; fi
+}
+# (f) updater stand-down removed. Killed by upd_nomark (no marker -> logs `no` and prints the
+# warning) and upd_foreign (foreign marker -> logs `no`); foreign and legacy are pipeline sessions.
+pcmutant "postcompact has no updater stand-down" "$UPD_CASE" "$UPD_NEVER" "upd_nomark upd_foreign"
+# (g) owner test neutralised. Killed by foreign ALONE: upd_foreign still stands down on the
+# updater test, and legacy has no owner to compare.
+pcmutant "postcompact reads another session's marker as its own" \
+  'if [ -n "$_MK_SID" ] && [ -n "$_EV_SID" ] && [ "$_MK_SID" != "$_EV_SID" ]; then _MK_FOREIGN=1; fi' ':' "foreign"
+
 fi
 
 fi

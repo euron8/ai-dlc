@@ -108,9 +108,10 @@
 # call whose own transcript's last ai-dlc marker is the updater (the I126 scan). A marker with
 # no session_id, or a call with none, keeps the old behaviour. The advisor stage needs neither:
 # it is armed only by the call that satisfied the reads, is keyed on that session_id and
-# deletes its file for any other, and an update session never satisfies the step Read. A
-# teammate is the same session as its lead to the session_id key (a subagent's calls carry the
-# parent's sessionId), so the teammate exit above, not this key, is what separates them.
+# deletes its file for any other, and an update session never satisfies the step Read. The
+# teammate exit above (BL-590, `agent_id`) runs first, so the owner key never has to separate a
+# teammate from its lead -- which it could not be relied on to do: subagent transcript files record
+# the PARENT's sessionId, and what a teammate's PreToolUse stdin carries was never measured.
 #
 # THE RACE. The incoming call's own message is usually not on disk when PreToolUse fires
 # (measured in the advisor gate's header, THE RACE), so an advisor call in the same message
