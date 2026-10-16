@@ -7516,6 +7516,78 @@ The PreToolUse hook is the one that DENIES a dispatch; if it resolves a differen
   fi
 fi
 
+# --- I126: the ai-dlc session-marker scan is ONE line, in every hook that asks the question ---
+# WHY. "Is this session an /ai-dlc session, the updater, or neither?" is answered by scanning the
+# session's own transcript for the LAST ai-dlc marker: the harness's typed-command user record, or
+# a structural Skill tool_use -- never a mention. ai-dlc-acknowledge.sh asks it to gate Rule 29,
+# ai-dlc-pause.sh asks it so a prompt typed in a side session does not raise the project-wide pause
+# flag, and ai-dlc-continue.sh asks it so a side session's Stop is not forced to continue (and told
+# to touch that flag, which pauses the real lead). Three copies of a regex whose every alternative
+# was measured against the reference consumer's corpus drift one edit at a time, and a hook whose
+# copy drifts answers the SAME session differently from the other two -- one hook pausing a session
+# another hook lets stop.
+#
+# THE SPAN IS ONE OPENER AND THE SINGLE LINE AFTER IT, deliberately not an opener/closer pair. In
+# acknowledge.sh the scan line opens a statement block that gate-remediation-deny's 3b-bind arm
+# byte-compares against the frozen guard from `LAST_SKILL=` through `esac`; a closing marker inside
+# that range would fork the two. A one-line span sits outside it.
+#
+# ADDING A HOOK: put the opener comment on the line above that hook's scan and append the path to
+# i126_hooks. Nothing else in this arm names a hook.
+#
+# OWED, NOT BOUND: core/hooks/ai-dlc-gate-remediation-guard.sh:756 carries a fourth copy. That file is
+# frozen for this release; bind it here once BL-536 lands. Until then gate-remediation-deny's 3b-bind
+# arm is the only thing holding it to acknowledge.sh.
+#
+# BOTH DIRECTIONS, and the probe runs FIRST. A seeded pair of identical copies must read SAME and a
+# seeded pair one byte apart must read DIFFER, before the shipped hooks are compared, so a broken
+# extractor (two empty strings compare equal) cannot report agreement.
+i126_hooks="core/hooks/ai-dlc-acknowledge.sh core/hooks/ai-dlc-pause.sh core/hooks/ai-dlc-continue.sh"
+i126_open='>>> I126 SESSION-MARKER SCAN: the next line, byte-identical in every bound hook >>>'
+i126_line_of() { awk -v m="$i126_open" 'f { sub(/^[[:space:]]+/, ""); print; exit } index($0, m) { f=1 }' "$1"; }
+i126_verdict() { # <file>... -> SAME | DIFFER | OPENERS:<file>:<n> | EMPTY:<file> | TOO-FEW
+  local f n first="" i=0
+  for f in "$@"; do
+    i=$((i+1))
+    n="$(grep -cF -- "$i126_open" "$f" 2>/dev/null)" || n=0
+    [ "$n" = 1 ] || { printf 'OPENERS:%s:%s\n' "$f" "$n"; return; }
+    l="$(i126_line_of "$f")"
+    case "$l" in LAST_SKILL=*) : ;; *) printf 'EMPTY:%s\n' "$f"; return ;; esac
+    if [ -z "$first" ]; then first="$l"
+    elif [ "$l" != "$first" ]; then printf 'DIFFER\n'; return; fi
+  done
+  [ "$i" -ge 2 ] || { printf 'TOO-FEW\n'; return; }
+  printf 'SAME\n'
+}
+i126_pd="$(mktemp -d 2>/dev/null || echo "/tmp/i126probe.$$")"; mkdir -p "$i126_pd"
+i126_seed='  LAST_SKILL=$(grep -oE '"'"'"name":"Skill","input":\{"skill":"ai-dlc(-update)?"'"'"' "$TRANSCRIPT" 2>/dev/null | tail -1)'
+for i126_k in a b c; do printf '# %s\n%s\n' "$i126_open" "$i126_seed" > "$i126_pd/$i126_k"; done
+printf '# %s\n%s\n' "$i126_open" "${i126_seed% | tail -1)} | tail -n 1)" > "$i126_pd/c"
+printf '# %s\n  echo unrelated\n' "$i126_open" > "$i126_pd/d"
+i126_p_same="$(i126_verdict "$i126_pd/a" "$i126_pd/b")"
+i126_p_diff="$(i126_verdict "$i126_pd/a" "$i126_pd/c")"
+i126_p_empty="$(i126_verdict "$i126_pd/a" "$i126_pd/d")"
+rm -rf "$i126_pd"
+if [ "$i126_p_same" != SAME ] || [ "$i126_p_diff" != DIFFER ] || [ "${i126_p_empty%%:*}" != EMPTY ]; then
+  err "I126's own probe failed: two identical seeded copies read '$i126_p_same' (want SAME), a one-token drift read '$i126_p_diff' (want DIFFER), and a marker over a non-scan line read '${i126_p_empty%%:*}' (want EMPTY). The extractor cannot tell agreement from drift, so no verdict it gives on the shipped hooks means anything."
+else
+  i126_missing=""
+  for i126_h in $i126_hooks; do [ -f "$i126_h" ] || i126_missing="$i126_missing $i126_h"; done
+  if [ -n "$i126_missing" ]; then
+    err "I126 cannot find bound hook(s):${i126_missing}. A missing hook leaves the others compared among themselves, which reads as agreement."
+  else
+    # shellcheck disable=SC2086
+    i126_v="$(i126_verdict $i126_hooks)"
+    case "$i126_v" in
+      SAME) : ;;
+      DIFFER) err "I126 the ai-dlc session-marker scan has FORKED between the bound hooks ($i126_hooks). Each answers 'is this an /ai-dlc session, the updater, or neither' for the same transcript; one copy drifting means one hook pauses or blocks a session another lets through. Make the line after each '$i126_open' marker byte-identical (leading whitespace aside)." ;;
+      OPENERS:*) err "I126 expected exactly ONE '$i126_open' marker per bound hook; got ${i126_v#OPENERS:}. Zero means the marker moved and this arm scans nothing; more than one means the hook asks the question in two places." ;;
+      EMPTY:*) err "I126 the line after the marker in ${i126_v#EMPTY:} is not a LAST_SKILL= scan. The marker sits on the line ABOVE the scan; anything else between them makes this arm compare the wrong line." ;;
+      *) err "I126 unexpected verdict '$i126_v'." ;;
+    esac
+  fi
+fi
+
 # --- I82: core's own artifact-path prescriptions obey core's own grammar --------
 # artifact-path-grammar.md declares that the DIRECTORY is the only sprint slot: `s<N>/`, and no
 # basename may carry a sprint token. Core prescribed FIVE spellings across four positions before
