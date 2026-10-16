@@ -166,6 +166,13 @@
       "reason": "Progress marker for the recovery gate, read once and discarded."
     },
     {
+      "name": ".recover-advisor-owed",
+      "transient": true,
+      "producer": "core/hooks/ai-dlc-recover-gate.sh",
+      "ignore": "_bmad-output/.recover-advisor-owed",
+      "reason": "Written by the recovery gate on the lead's call that satisfies the second mandated Read, holding the session id and a deny count; while it exists the gate refuses the lead's dispatches and writes until an advisor attempt follows the postcompact-digest Read (Rule 32 touchpoint R). Deleted on that attempt, on any stand-down, and by ai-dlc-recover.sh when a new recovery starts. A tracked copy would hold a fresh checkout's lead on a touchpoint it never owed."
+    },
+    {
       "name": ".wait-beats",
       "transient": true,
       "producer": "core/scripts/wait-for-deliverable.sh",

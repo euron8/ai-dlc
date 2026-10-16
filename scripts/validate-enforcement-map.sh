@@ -828,7 +828,17 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   3351-3353), tip 3357 (STABLE 2, spread 3356-3357), so +4. I79 113 -> 118 counts the rules below
 #   the re-attach cut, which Rule 11's +729 bytes moved; I93 32 <-> 31 is the instrument's usual
 #   one-fork jitter. The gate read 3358 at the old budget. HIGH reading 3357 plus the usual 6.
-FORK_BUDGET=3363
+#
+#   RAISED TO 3370 FOR ONE NEW ARM, I126, AND FOR HEADROOM MAIN HAD ALREADY SPENT. `fork-profile.sh
+#   --section by-arm --stable`, base e3073787 (0.796.0) and tip fa7656b5 (0.797.0), interleaved
+#   base/tip/base/tip in ONE detached worktree at the same path, caller environment inherited: base
+#   3362 and 3363 (STABLE 2, spread 3360-3362), tip 3362 and 3364. By arm, 127 arms base against 128
+#   tip, the ONLY arm that moved is I126 0 -> 1, its single awk over the probe and the bound hooks; the
+#   sum of arm deltas is +1. So 0.797.0 costs ONE fork. The other +6 is headroom: BASE already read
+#   3363 = the old budget, because 0.792.0..0.796.0 spent the "+6" set at 3363 without moving it, and
+#   a release adding even one fork then gated at about a 1-in-4 red (this release's first gate read
+#   3384 before I126 was reduced from ~22 forks to 1). HIGH reading 3364 plus the usual 6.
+FORK_BUDGET=3370
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
@@ -7513,6 +7523,103 @@ The PreToolUse hook is the one that DENIES a dispatch; if it resolves a differen
           err "I81's sprint-scope test MATCHED a probe carrying the old UNSCOPED glob. The test cannot tell a scoped glob from an unscoped one, so it would pass over the mtime-across-56-sprints defect it exists to catch." ;;
       esac
     fi
+  fi
+fi
+
+# --- I126: the ai-dlc session-marker scan is ONE line, in every hook that asks the question ---
+# WHY. "Is this session an /ai-dlc session, the updater, or neither?" is answered by scanning the
+# session's own transcript for the LAST ai-dlc marker: the harness's typed-command user record, or
+# a structural Skill tool_use -- never a mention. ai-dlc-acknowledge.sh asks it to gate Rule 29,
+# ai-dlc-pause.sh asks it so a prompt typed in a side session does not raise the project-wide pause
+# flag, and ai-dlc-continue.sh asks it so a side session's Stop is not forced to continue (and told
+# to touch that flag, which pauses the real lead). Three copies of a regex whose every alternative
+# was measured against the reference consumer's corpus drift one edit at a time, and a hook whose
+# copy drifts answers the SAME session differently from the other two -- one hook pausing a session
+# another hook lets stop.
+#
+# THE SPAN IS ONE OPENER AND THE SINGLE LINE AFTER IT, deliberately not an opener/closer pair. In
+# acknowledge.sh the scan line opens a statement block that gate-remediation-deny's 3b-bind arm
+# byte-compares against the frozen guard from `LAST_SKILL=` through `esac`; a closing marker inside
+# that range would fork the two. A one-line span sits outside it.
+#
+# ADDING A HOOK: put the opener comment on the line above that hook's scan and append the path to
+# i126_hooks. Nothing else in this arm names a hook.
+#
+# OWED, NOT BOUND: core/hooks/ai-dlc-gate-remediation-guard.sh:756 carries a fourth copy. That file is
+# frozen for this release; bind it here once BL-536 lands. Until then gate-remediation-deny's 3b-bind
+# arm is the only thing holding it to acknowledge.sh.
+#
+# BOTH DIRECTIONS, and the probe runs FIRST. A seeded pair of identical copies must read SAME and a
+# seeded pair one byte apart must read DIFFER, before the shipped hooks are compared, so a broken
+# extractor (two empty strings compare equal) cannot report agreement.
+i126_hooks="core/hooks/ai-dlc-acknowledge.sh core/hooks/ai-dlc-pause.sh core/hooks/ai-dlc-continue.sh"
+i126_open='>>> I126 SESSION-MARKER SCAN: the next line, byte-identical in every bound hook >>>'
+# ONE awk, ONE fork, FOR THE PROBE AND THE CORPUS TOGETHER. The first draft ran a grep and an awk
+# per file inside a per-call subshell, four calls, plus a mktemp/mkdir/rm probe directory -- about
+# 34 forks for a one-line comparison, and the suite's fork gate went red on it. The probe copies
+# are now a here-string on stdin, split into units by `@@UNIT <group> <name>` lines (no file, no
+# directory), and the bound hooks follow as ordinary file arguments; the program groups every unit
+# and prints one `<group> <verdict>` line per group. The probe groups are still judged FIRST below,
+# and the corpus verdict is read only once they pass. Every assignment and read here is a builtin.
+I126_AWK='
+function start(g, u) {
+  if (!(g in gn)) { gn[g] = 0; order[++ng] = g }
+  gn[g]++; gu[g, gn[g]] = u; cur = g SUBSEP u; cnt[cur] = 0; got[cur] = ""; want = 0
+}
+NR == FNR && /^@@UNIT / { start($2, $3); next }
+NR != FNR && FNR == 1  { start("real", FILENAME) }
+want                   { l = $0; sub(/^[[:space:]]+/, "", l); got[cur] = l; want = 0 }
+index($0, m)           { cnt[cur]++; if (cnt[cur] == 1) want = 1 }
+END {
+  for (k = 1; k <= ng; k++) {
+    g = order[k]; v = ""; first = ""
+    for (i = 1; i <= gn[g]; i++) {
+      u = gu[g, i]; c = cnt[g SUBSEP u]
+      if (c != 1) { v = "OPENERS:" u ":" c; break }
+      l = got[g SUBSEP u]
+      if (substr(l, 1, 11) != "LAST_SKILL=") { v = "EMPTY:" u; break }
+      if (i == 1) first = l
+      else if (l != first) { v = "DIFFER"; break }
+    }
+    if (v == "") v = (gn[g] < 2) ? "TOO-FEW" : "SAME"
+    print g " " v
+  }
+}'
+i126_nl='
+'
+i126_seed='  LAST_SKILL=$(grep -oE '"'"'"name":"Skill","input":\{"skill":"ai-dlc(-update)?"'"'"' "$TRANSCRIPT" 2>/dev/null | tail -1)'
+i126_ua="# ${i126_open}${i126_nl}${i126_seed}"
+i126_uc="# ${i126_open}${i126_nl}${i126_seed% | tail -1)} | tail -n 1)"
+i126_ud="# ${i126_open}${i126_nl}  echo unrelated"
+i126_stream="@@UNIT same a${i126_nl}${i126_ua}${i126_nl}@@UNIT same b${i126_nl}${i126_ua}${i126_nl}@@UNIT diff a${i126_nl}${i126_ua}${i126_nl}@@UNIT diff c${i126_nl}${i126_uc}${i126_nl}@@UNIT empty a${i126_nl}${i126_ua}${i126_nl}@@UNIT empty d${i126_nl}${i126_ud}"
+i126_missing=""; i126_present=""
+for i126_h in $i126_hooks; do
+  if [ -f "$i126_h" ]; then i126_present="$i126_present $i126_h"; else i126_missing="$i126_missing $i126_h"; fi
+done
+# shellcheck disable=SC2086
+i126_out="$(awk -v m="$i126_open" "$I126_AWK" - $i126_present <<<"$i126_stream" 2>/dev/null)"
+i126_p_same=""; i126_p_diff=""; i126_p_empty=""; i126_v=""
+while IFS=' ' read -r i126_g i126_r; do
+  case "$i126_g" in
+    same)  i126_p_same="$i126_r" ;;
+    diff)  i126_p_diff="$i126_r" ;;
+    empty) i126_p_empty="$i126_r" ;;
+    real)  i126_v="$i126_r" ;;
+  esac
+done <<<"$i126_out"
+if [ "$i126_p_same" != SAME ] || [ "$i126_p_diff" != DIFFER ] || [ "${i126_p_empty%%:*}" != EMPTY ]; then
+  err "I126's own probe failed: two identical seeded copies read '$i126_p_same' (want SAME), a one-token drift read '$i126_p_diff' (want DIFFER), and a marker over a non-scan line read '${i126_p_empty%%:*}' (want EMPTY). The extractor cannot tell agreement from drift, so no verdict it gives on the shipped hooks means anything."
+else
+  if [ -n "$i126_missing" ]; then
+    err "I126 cannot find bound hook(s):${i126_missing}. A missing hook leaves the others compared among themselves, which reads as agreement."
+  else
+    case "$i126_v" in
+      SAME) : ;;
+      DIFFER) err "I126 the ai-dlc session-marker scan has FORKED between the bound hooks ($i126_hooks). Each answers 'is this an /ai-dlc session, the updater, or neither' for the same transcript; one copy drifting means one hook pauses or blocks a session another lets through. Make the line after each '$i126_open' marker byte-identical (leading whitespace aside)." ;;
+      OPENERS:*) err "I126 expected exactly ONE '$i126_open' marker per bound hook; got ${i126_v#OPENERS:}. Zero means the marker moved and this arm scans nothing; more than one means the hook asks the question in two places." ;;
+      EMPTY:*) err "I126 the line after the marker in ${i126_v#EMPTY:} is not a LAST_SKILL= scan. The marker sits on the line ABOVE the scan; anything else between them makes this arm compare the wrong line." ;;
+      *) err "I126 unexpected verdict '$i126_v'." ;;
+    esac
   fi
 fi
 

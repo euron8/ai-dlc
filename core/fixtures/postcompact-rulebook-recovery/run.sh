@@ -1337,6 +1337,254 @@ else
   rmutant_arm "a producer that promises the gate armed whether or not it could" "$MR_ASSURE" "assurance"
 fi
 
+# =============================================================================
+# THE ADVISOR STAGE — touchpoint R (BL-545)
+#
+# After both mandated Reads the gate holds the LEAD's Agent/Task/TaskCreate/Write/Edit/
+# MultiEdit/NotebookEdit until its transcript shows an advisor attempt after the
+# postcompact-digest.md Read. A third battery with its own predicates, control and mutants,
+# holding the producer at the real one and mutating the gate. Every DENY cell has its ALLOW twin
+# in the same predicate (a Bash call in the same state), so a stage that refuses everything
+# fails as surely as one that refuses nothing. The transcript is seeded in the harness's own
+# line shapes, and the incoming call's own `tool_use` line is ON DISK with its id in the
+# payload, which is the state where the stage's re-read stops at once.
+# =============================================================================
+
+OW="_bmad-output/.recover-advisor-owed"
+# aproj [nodigest] -> a consumer-layout project, recovery armed by the REAL producer and both
+# mandated Reads issued by the lead in session `sess-A`; the digest exists unless `nodigest`.
+aproj() {
+  _p="$(newproj architecture.md consumer)"
+  [ "${1:-}" = nodigest ] || { mkdir -p "$_p/.claude/skills/ai-dlc"; printf 'digest\n' > "$_p/.claude/skills/ai-dlc/postcompact-digest.md"; }
+  arm_marker "$HOOK" "$_p"
+  printf '%s\n' "$_p"
+}
+# areads <gate> <project> [agent_id] -- the two mandated Reads, full, from the lead or a mate.
+areads() {
+  _sf="$(marker_step "$2")"
+  for _f in "$2/_bmad-output/pipeline-snapshot.md" "$2/$_sf"; do
+    jq -n --arg f "$_f" --arg a "${3:-}" '{tool_name:"Read",session_id:"sess-A",tool_input:{file_path:$f}} + (if $a == "" then {} else {agent_id:$a} end)' \
+      | CLAUDE_PROJECT_DIR="$2" bash "$1" >/dev/null 2>&1
+  done
+}
+# tline <kind> <project> -> one transcript line in the harness's shape
+tline() {
+  case "$1" in
+    grant)    printf '{"type":"attachment","attachment":{"type":"advisor_tool","available":true,"model":"m","toolChange":"add"}}\n' ;;
+    boundary) printf '{"type":"system","subtype":"compact_boundary"}\n' ;;
+    digest)   printf '{"type":"assistant","message":{"id":"m-dig","content":[{"type":"tool_use","id":"t-dig","name":"Read","input":{"file_path":"%s/.claude/skills/ai-dlc/postcompact-digest.md"}}]}}\n' "$2" ;;
+    adv)      printf '{"type":"assistant","message":{"id":"m-adv%s","content":[{"type":"server_tool_use","id":"s-adv","name":"advisor","input":{}}]}}\n' "$RANDOM" ;;
+    advok)    printf '{"type":"assistant","message":{"id":"m-res","content":[{"type":"advisor_tool_result","tool_use_id":"s-adv","content":{"type":"advisor_result","text":"ok"}}]}}\n' ;;
+    advunav)  printf '{"type":"assistant","message":{"id":"m-res","content":[{"type":"advisor_tool_result","tool_use_id":"s-adv","content":{"type":"advisor_tool_result_error","error_code":"unavailable"}}]}}\n' ;;
+  esac
+}
+# acall <gate> <project> <tool> <transcript> [agent_id] [session] -> "<decision>|<reason>"
+# Appends the incoming call's own tool_use line first, so it is on disk as the harness would
+# have it after the race.
+acall() {
+  _id="tin-$RANDOM$RANDOM"
+  printf '{"type":"assistant","message":{"id":"m-%s","content":[{"type":"tool_use","id":"%s","name":"%s","input":{}}]}}\n' "$_id" "$_id" "$3" >> "$4"
+  jq -n --arg t "$3" --arg tp "$4" --arg id "$_id" --arg a "${5:-}" --arg s "${6:-sess-A}" \
+    '{tool_name:$t,session_id:$s,transcript_path:$tp,tool_use_id:$id,tool_input:{file_path:"x.md",command:"ls"}} + (if $a == "" then {} else {agent_id:$a} end)' \
+    | CLAUDE_PROJECT_DIR="$2" bash "$1" 2>/dev/null \
+    | python3 -c 'import sys,json
+try:
+    o = json.load(sys.stdin)["hookSpecificOutput"]
+    print(o.get("permissionDecision","") + "|" + o.get("permissionDecisionReason","").replace("\n"," "))
+except Exception:
+    print("|")'
+}
+# ONE SEEDED WORLD PER GATE PER PASS, COPIED PER PREDICATE. Seeding a world costs a producer run
+# and two gate Reads (~0.6s at load 60) against ~0.02s for a copy, and the battery builds 17 worlds
+# per pass over 11 passes, so seeding each one inline cost the fixture ~70s. The template is still
+# armed BY THE GATE UNDER TEST (its two Reads), so a mutant of the arming path is scored on its own
+# template. `A_TPL_GATE` records which gate built it; a mismatch rebuilds, never reuses.
+A_TPL=""; A_TPL_GATE=""
+a_tpl() { # a_tpl <gate> -- (re)build the template for this gate
+  [ "$A_TPL_GATE" = "$1" ] && [ -d "$A_TPL" ] && return 0
+  A_TPL="$(aproj)"; areads "$1" "$A_TPL"; A_TPL_GATE="$1"
+}
+# a_world <gate> <transcript-kinds...> -> project; the transcript is <project>/t.jsonl
+a_world() {
+  _g="$1"; shift
+  a_tpl "$_g"
+  _p="$(mktemp -d "$WORK/aw.XXXXXX")" || return 1
+  cp -R "$A_TPL/." "$_p/"
+  : > "$_p/t.jsonl"
+  for _k in "$@"; do tline "$_k" "$_p" >> "$_p/t.jsonl"; done
+  printf '%s\n' "$_p"
+}
+
+# A1. Digest read, no advisor since: every dispatch/write tool refused, naming R; Bash allowed.
+a_deny() {
+  _p="$(a_world "$1" grant boundary digest)"
+  [ -e "$_p/$OW" ] || { printf 'FAIL:the satisfying step Read did not arm the advisor stage\n'; return; }
+  d="$(acall "$1" "$_p" Bash "$_p/t.jsonl")"
+  allowed "$d" || { printf 'FAIL:a Bash call (the wait-beat R puts first) was refused\n'; return; }
+  # One refusal per tool, so the count resets between them (a second world per pair keeps the
+  # escape bound of 3 from becoming this arm's subject).
+  for _t in Agent Task TaskCreate Write Edit MultiEdit NotebookEdit; do
+    _p="$(a_world "$1" grant boundary digest)"
+    d="$(acall "$1" "$_p" "$_t" "$_p/t.jsonl")"
+    allowed "$d" && { printf 'FAIL:%s was allowed with touchpoint R owed\n' "$_t"; return; }
+    grep -q 'touchpoint R' <<<"${d#*|}" || { printf 'FAIL:%s was denied for some reason other than R\n' "$_t"; return; }
+  done
+  printf 'PASS\n'
+}
+# A2. An advisor attempt AFTER the digest Read clears the stage and removes its file.
+a_after() {
+  _p="$(a_world "$1" grant boundary digest adv advok)"
+  d="$(acall "$1" "$_p" Agent "$_p/t.jsonl")"
+  allowed "$d" || { printf 'FAIL:an Agent call after the R advisor attempt was denied\n'; return; }
+  [ -e "$_p/$OW" ] && { printf 'FAIL:the stage cleared but left its file\n'; return; }
+  printf 'PASS\n'
+}
+# A3. An advisor attempt BEFORE the digest Read does not satisfy R.
+a_before() {
+  _p="$(a_world "$1" grant boundary adv advok digest)"
+  d="$(acall "$1" "$_p" Agent "$_p/t.jsonl")"
+  allowed "$d" && { printf 'FAIL:an advisor attempt before the digest Read satisfied R\n'; return; }
+  printf 'PASS\n'
+}
+# A4. The latest advisor result is `unavailable`: no call can clear it, so the stage stands down.
+#     Same shape as A3 save the result kind, so only the unavailable test separates them.
+a_unavail() {
+  _p="$(a_world "$1" grant boundary adv advunav digest)"
+  d="$(acall "$1" "$_p" Agent "$_p/t.jsonl")"
+  allowed "$d" || { printf 'FAIL:an Agent call was refused while the advisor answers unavailable\n'; return; }
+  printf 'PASS\n'
+}
+# A5. No grant line (a lead on a local model): never held.
+a_nogrant() {
+  _p="$(a_world "$1" boundary digest)"
+  d="$(acall "$1" "$_p" Agent "$_p/t.jsonl")"
+  allowed "$d" || { printf 'FAIL:a lead with no advisor grant was held on R\n'; return; }
+  printf 'PASS\n'
+}
+# A6. A teammate is not the lead: its dispatch is untouched, and its own step Read never arms.
+a_mate() {
+  _p="$(a_world "$1" grant boundary digest)"
+  d="$(acall "$1" "$_p" Agent "$_p/t.jsonl" agent-x1)"
+  allowed "$d" || { printf 'FAIL:a teammate Agent call was refused on the lead R touchpoint\n'; return; }
+  _q="$(aproj)"; areads "$1" "$_q" agent-x1
+  [ -e "$_q/$OW" ] && { printf 'FAIL:a teammate step Read armed the lead advisor stage\n'; return; }
+  [ -e "$_q/$mk" ] && { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the teammate Reads did not satisfy the read stages\n'; return; }
+  printf 'PASS\n'
+}
+# A7. No readable digest: R is not owed, so the satisfying step Read does not arm the stage.
+a_nodigest() {
+  _p="$(aproj nodigest)"; areads "$1" "$_p"
+  [ -e "$_p/$mk" ] && { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the read stages did not disarm\n'; return; }
+  [ -e "$_p/$OW" ] && { printf 'FAIL:the stage armed in a tree with no postcompact digest\n'; return; }
+  printf 'PASS\n'
+}
+# A8. The bounded escape: three refusals, then the stage stands down and removes its file.
+a_bound() {
+  _p="$(a_world "$1" grant boundary digest)"
+  for _i in 1 2 3; do
+    d="$(acall "$1" "$_p" Agent "$_p/t.jsonl")"
+    allowed "$d" && { printf 'FAIL:refusal %s of 3 was an allow\n' "$_i"; return; }
+  done
+  d="$(acall "$1" "$_p" Agent "$_p/t.jsonl")"
+  allowed "$d" || { printf 'FAIL:a fourth refusal -- the escape bound does not hold\n'; return; }
+  [ -e "$_p/$OW" ] && { printf 'FAIL:stood down but kept its file\n'; return; }
+  printf 'PASS\n'
+}
+# A9. A call from another session in the same project: the owed file is stale, not this lead's.
+a_session() {
+  _p="$(a_world "$1" grant boundary digest)"
+  d="$(acall "$1" "$_p" Agent "$_p/t.jsonl" "" sess-B)"
+  allowed "$d" || { printf 'FAIL:another session was held on this lead R touchpoint\n'; return; }
+  printf 'PASS\n'
+}
+
+# NO ARM ASSERTS THAT THE INJECTED BLOCK NAMES R, because it does not. The block has no room:
+# gate-resume's worst gate-in-flight world emits 9980 of 10000 without it, and a 47-character R
+# clause pushed that world over the cliff under its sidecar-drop mutant. R reaches the lead
+# through SKILL.md's Rule 32 entry, which the digest the lead has just read carries verbatim,
+# and through the deny text, which names R and its remedy.
+#
+# A11. A NEW recovery clears a window the previous one left open (the producer, arg 1).
+a_reclear() {
+  _p="$(a_world "$GATE" grant boundary digest)"
+  [ -e "$_p/$OW" ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: no open window to clear\n'; return; }
+  arm_marker "$1" "$_p"
+  [ -e "$_p/$OW" ] && { printf 'FAIL:a new recovery left the previous advisor window open\n'; return; }
+  printf 'PASS\n'
+}
+r_re="$(a_reclear "$HOOK")"
+if [ "$r_re" = PASS ]; then ok "R: a new recovery clears the advisor window the previous one left"
+else bad "R: a new recovery clears the advisor window the previous one left — ${r_re#FAIL:}"; fi
+MR_RECLEAR="$WORK/recover-no-reclear.sh"
+awk '!index($0,"rm -f \"${STATE_DIR}/.recover-advisor-owed\"")' "$HOOK" > "$MR_RECLEAR"
+if cmp -s "$HOOK" "$MR_RECLEAR" || ! bash -n "$MR_RECLEAR" 2>/dev/null; then
+  bad "FIXTURE STALE: the window-clear mutant did not apply"
+elif [ "$(a_reclear "$MR_RECLEAR")" = PASS ]; then
+  bad "MUTANT KILLED NOTHING: a producer that does not clear the advisor window still passes"
+else
+  ok "mutant: a producer that does not clear the advisor window fails the re-clear arm"
+fi
+
+APREDS="deny after before unavail nogrant mate nodigest bound session"
+averdicts() { a_tpl "$1"; for _n in $APREDS; do r="$("a_$_n" "$1")"; printf '%s=%s\n' "$_n" "${r%%:*}"; done; }
+aflips() { printf '%s ' $(averdicts "$1" | sed -n 's/=FAIL$//p'); }
+
+a_tpl "$GATE"
+for _n in $APREDS; do
+  r="$("a_$_n" "$GATE")"
+  case "$_n" in
+    deny)     label="R: after the digest Read with no advisor attempt, Agent and Write are refused naming R, Bash is allowed" ;;
+    after)    label="R: an advisor attempt after the digest Read clears the stage" ;;
+    before)   label="R: an advisor attempt BEFORE the digest Read does not satisfy it" ;;
+    unavail)  label="R: an 'unavailable' advisor result stands the stage down" ;;
+    nogrant)  label="R: a lead with no advisor grant line is never held" ;;
+    mate)     label="R: a teammate is untouched and its step Read never arms the stage" ;;
+    nodigest) label="R: no readable postcompact digest, no stage" ;;
+    bound)    label="R: the escape bound -- three refusals, then the stage stands down" ;;
+    session)  label="R: another session's call is not held on this lead's touchpoint" ;;
+  esac
+  if [ "$r" = PASS ]; then ok "$label"; else bad "$label — ${r#FAIL:}"; fi
+done
+
+CTRL_A="$WORK/gate-control-adv.sh"
+cp "$GATE" "$CTRL_A"
+acf="$(aflips "$CTRL_A")"
+if [ -z "${acf// /}" ]; then
+  ok "control: an unmutated copy of the gate reproduces every advisor-stage verdict"
+else
+  bad "CONTROL FAILED — an unmutated copy already flips {${acf}}, so every advisor-stage mutant below is uninterpretable"
+fi
+
+amutant_arm() { # amutant_arm <label> <mutant> <expected flip set, in APREDS order>
+  if cmp -s "$GATE" "$2"; then bad "FIXTURE STALE: $1 — the mutant is byte-identical to the gate"; return; fi
+  if ! bash -n "$2" 2>/dev/null; then bad "FIXTURE STALE: $1 — the mutant is not valid shell"; return; fi
+  got="$(aflips "$2")"
+  if [ "$got" = "$3 " ]; then ok "mutant: $1 — flips exactly {$3}"
+  elif [ -z "${got// /}" ]; then bad "MUTANT KILLED NOTHING: $1 — {$3} cannot fire"
+  else bad "MUTANT FLIP SET WRONG: $1 — expected {$3}, measured {$got}"; fi
+}
+amut() { # amut <name> <awk program> -> mutant path
+  awk "$2" "$GATE" > "$WORK/gate-adv-$1.sh"; printf '%s\n' "$WORK/gate-adv-$1.sh"
+}
+amutant_arm "the stage never arms (the owed write removed)" \
+  "$(amut noarm 'index($0,"owed_put \"$(printf"){print "          :"; next} 1')" "deny before bound"
+amutant_arm "the teammate stand-down removed at the stage" \
+  "$(amut mate 'index($0,"[ -z \"$R_AID\" ] || exit 0"){next} 1')" "mate"
+amutant_arm "an advisor attempt anywhere satisfies R" \
+  "$(amut order '{gsub(/"\$\{R_ADV:-0\}" -gt "\$\{R_DIG:-0\}"/,"\"${R_ADV:-0}\" -gt 0")} 1')" "before"
+amutant_arm "the unavailable stand-down removed" \
+  "$(amut unavail 'index($0,"[ \"${R_RES:--}\" = U ]; then R_V=allow"){next} 1')" "unavail"
+amutant_arm "the no-grant stand-down removed" \
+  "$(amut grant 'index($0,"if [ \"${R_GRANT:-none}\" != on ]; then"){next} 1')" "nogrant"
+amutant_arm "the digest-readability arming precondition removed" \
+  "$(amut digest '{sub(/ && digest_readable; then$/,"; then")} 1')" "nodigest"
+amutant_arm "the escape bound removed" \
+  "$(amut bound '{sub(/R_MAX_DENIES=3/,"R_MAX_DENIES=999")} 1')" "bound"
+amutant_arm "the session stand-down removed" \
+  "$(amut session 'index($0,"if [ -n \"$R_OSID\" ] && [ -n \"$R_SID\" ] && [ \"$R_OSID\" != \"$R_SID\" ]; then"){print "  if false; then"; next} 1')" "session"
+amutant_arm "the arming step Read keyed off agent_id (a teammate arms)" \
+  "$(amut matearm '{sub(/if \[ -z "\$\(printf .%s. "\$INPUT" \| jq -r .\.agent_id \/\/ empty. 2>\/dev\/null\)" \] && /,"if ")} 1')" "mate"
+
 fi  # GATE present
 
 # --- Assertion 23: the SECOND mandate never renders prose where a path goes --

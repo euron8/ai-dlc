@@ -662,6 +662,9 @@ mkdir -p "$STATE_DIR" 2>/dev/null || true
 # read it and fail to arm. Clearing it here bounds its lifetime to the recovery that wrote it,
 # which is the same guarantee `$MARKER` gets from being rewritten above.
 rm -f "${STATE_DIR}/.recover-satisfied" 2>/dev/null || true
+# The gate's advisor stage (touchpoint R) is per recovery for the same reason: a window left
+# open by a session that ended inside it must not hold the next recovery's calls.
+rm -f "${STATE_DIR}/.recover-advisor-owed" 2>/dev/null || true
 
 # The string measured above is the string emitted: the provenance wrap ran once, before the
 # budget, and EMITTED is its head and tail around the trimmed block.

@@ -287,7 +287,17 @@ if [ -z "$ROLE" ]; then
   ROLE="$(printf '%s' "$INPUT" | jq -r '.tool_input.subagent_type // empty' 2>/dev/null \
     | grep -oE '^[a-z][a-z-]*$' || true)"
 fi
-[ -n "$ROLE" ] || exit 0            # not a role-bound dispatch — not ours
+# A ROLE-LESS DISPATCH FROM THE LEAD is not ours and leaves no row. A role-less dispatch FROM
+# INSIDE A SUBAGENT (`agent_id` set: an `Explore`, or no `subagent_type` at all, which the
+# pattern above rejects) is still a spawn some teammate made, and a join counting writers needs
+# it attributed to that teammate, so it falls through and is RECORDED with `role: ""`. Nothing
+# below binds or denies it: the role file and definition resolve to nothing, `pin_key` finds no
+# pin, both deny arms key on an empty `agent_id` or a named role, and the readable-file exit
+# below the append ends it with no decision. Check 22 counts it out of scope, an empty role
+# being no declared one (validate-spawn-ledger.sh `row_in_scope`).
+if [ -z "$ROLE" ]; then
+  [ -n "$(printf '%s' "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null || true)" ] || exit 0
+fi
 
 ROLE_FILE="$ROLES_DIR/$ROLE.md"
 
@@ -299,7 +309,7 @@ ROLE_FILE="$ROLES_DIR/$ROLE.md"
 # the flag is recorded and the fail-OPEN (no correction, never a deny) happens
 # after the row is written.
 ROLE_FILE_READABLE=true
-[ -r "$ROLE_FILE" ] || ROLE_FILE_READABLE=false
+[ -n "$ROLE" ] && [ -r "$ROLE_FILE" ] || ROLE_FILE_READABLE=false
 
 # The role's model and effort come from `aiDlcRoles.<role>` in the consumer's
 # settings.json. The ROLE FILE declares neither: a project changing which model a
@@ -410,6 +420,7 @@ DEFINITION_BOUND=false
 DEFINITION_STALE=false
 DEF_MODEL=""
 DEF_EFFORT=""
+[ -n "$ROLE" ] || DEF_FILE=/dev/null/no-role   # a role-less spawn selects no definition
 if [ -r "$DEF_FILE" ] && grep -qF "$DEF_MARKER" "$DEF_FILE" 2>/dev/null; then
   # BOUNDED TO THE FRONTMATTER BLOCK, not read file-wide. The body below the closing
   # `---` is prose that names the role and could name a model in a sentence; a file-wide
@@ -1084,6 +1095,7 @@ jq -nc \
    --arg via "${CONTRACT_VIA:-}" \
    --arg shard "${SPAWN_SHARD:-}" \
    --arg shardraw "${SPAWN_SHARD_RAW:-}" \
+   --arg parent "${DG_AGENT_ID:-}" \
    --argjson cited "$ROLE_CONTRACT_CITED" \
    --argjson readable "$ROLE_FILE_READABLE" \
    --argjson defbound "$DEFINITION_BOUND" \
@@ -1111,6 +1123,12 @@ jq -nc \
      definition_stale: $defstale,
      name_stripped: (if $stripped == "" then null else $stripped end),
      tool_use_id: (if $tui == "" then null else $tui end),
+     # WHO ISSUED THE CALL: the payload agent_id, which the harness sets only on a call made
+     # from inside a subagent, so the EMPTY STRING is the lead and is never null. A join that
+     # counts writers attributes a nested spawn to the agent that dispatched it through this
+     # key. A row with no such KEY was written by an older guard and says nothing about its
+     # issuer. NO APOSTROPHE HERE either.
+     parent_agent_id: $parent,
      # The brief shard line, canonicalised; null when absent, repeated or unparseable. The KEY
      # is always written, because its absence is how Check 22 recognises an older guard row.
      shard: (if $shard == "" then null else $shard end)

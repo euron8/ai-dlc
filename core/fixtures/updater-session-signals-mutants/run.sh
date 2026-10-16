@@ -91,14 +91,17 @@ grep '^HERMETIC-CONSUMED .*/ai-dlc-dispatch-guard\.sh$' "$WORK/control.out"
 # 1. THE PAYLOAD ARM, removed whole. It is the only signal that exists at the dispatch
 #    itself, and it is also what lets a resume override a stale transcript. The other-order
 #    dispatch reds with it: its transcript's last skill is the typed `/ai-dlc`.
-expect_set payload-arm-deleted 3 'PC-S331 is back|stays exempt forever|DISPATCH \(other order\)' \
+#    A teammate's Skill(ai-dlc-update) in that routed pipeline session reds for the same reason.
+expect_set payload-arm-deleted 4 'PC-S331 is back|stays exempt forever|DISPATCH \(other order\)|TEAMMATE SKILL UPDATE' \
   "/jq -r '\.tool_input\.skill/,/^esac\$/d"
 
 # 1b. THE PAYLOAD DEFERRING TO THE TRANSCRIPT (BL-404). The updater payload grants only where the
 #    transcript named no `/ai-dlc`, so the current call no longer outranks the transcript's last
 #    skill. Only the other-order DISPATCH can see it: every other Skill(ai-dlc-update) drive has a
 #    transcript that names no pipeline skill, and every later call reads the flushed tool_use line.
-expect_set payload-defers-to-transcript 1 'DISPATCH \(other order\)' \
+#    The teammate's Skill(ai-dlc-update) cell reds with it: its transcript is the same routed
+#    `/ai-dlc` session, and only the payload outranking it keeps that call an updater call.
+expect_set payload-defers-to-transcript 2 'DISPATCH \(other order\)|TEAMMATE SKILL UPDATE' \
   's/^  ai-dlc-update) UPDATER_SESSION=1 ;;$/  ai-dlc-update) [ "$AIDLC_SESSION" -eq 1 ] || UPDATER_SESSION=1 ;;/'
 
 # 2. THE TOOL_USE CASE ARM. Covers everything AFTER the dispatch — the updater's own
@@ -153,7 +156,8 @@ expect_set last-skill-reversed-to-first 4 'order-blind|WRITE \(iii\): LEAK|WRITE
 
 # 4. THE PAYLOAD ARM WIDENED to any ai-dlc* skill — the leak that turns the Rule 29 pause
 #    off for the pipeline skill it exists to stop.
-expect_set payload-arm-widened 2 'exempts ANY Skill call|stays exempt forever' \
+#    A teammate's Skill(ai-dlc) and Skill(ai-dlc-resume) then read as updater calls and pass too.
+expect_set payload-arm-widened 4 'exempts ANY Skill call|stays exempt forever|TEAMMATE SKILL AI-DLC(: | SIBLING)' \
   's/ai-dlc-update) UPDATER_SESSION=1/ai-dlc*) UPDATER_SESSION=1/'
 
 # 5. THE PAYLOAD'S NEGATIVE HALF. Granting on `ai-dlc-update` without revoking on `ai-dlc`
@@ -228,6 +232,36 @@ expect_set explore-ere-drift 1 'EXPLORE ERE DRIFT' \
 #    refuses is denied without saying why, beside a paragraph that reads as offering it.
 expect_set explore-why-dropped 6 "cell .UNEXPLAINED" \
   's/^\[ -z "\$EXPLORE_WHY" \] || EXPLORE_TEXT=/: || EXPLORE_TEXT=/'
+
+# S. THE TEAMMATE SKILL ALLOW, one conjunct at a time (BL-559).
+#
+# S1. THE ALLOW DROPPED: the teammate's non-pipeline Skill call is denied again, bare and qualified.
+expect_set teammate-skill-allow-dropped 2 'TEAMMATE SKILL ALLOW|TEAMMATE SKILL PLUGIN OTHER' \
+  's/^          \*) ADVANCING=0 ;;$/          *) : ;;/'
+# S2. THE ai-dlc* EXCLUSION DROPPED: every teammate Skill passes, pipeline skill included. The
+#    updater cell does not move -- the payload arm allows it either way.
+expect_set teammate-skill-prefix-dropped 4 'TEAMMATE SKILL (AI-DLC|AI-DLC SIBLING|PLUGIN|UPPER): LEAK' \
+  's/^          ai-dlc\*) ;;$/          ai-dlc-never-a-skill-name) ;;/'
+# S3. THE PLUGIN SEGMENT DROPPED: the whole name is compared, so `x:ai-dlc` passes.
+expect_set teammate-skill-segment-dropped 1 'TEAMMATE SKILL PLUGIN: LEAK' \
+  's/TEAM_SKILL##\*:/TEAM_SKILL/'
+# S4. THE LOWERCASING DROPPED: `AI-DLC` passes.
+expect_set teammate-skill-case-dropped 1 'TEAMMATE SKILL UPPER' \
+  "s/ | tr '\\[:upper:\\]' '\\[:lower:\\]')\"\$/)\"/"
+# S5. THE EMPTY-NAME FAIL-CLOSED DROPPED: a Skill call with no name passes.
+expect_set teammate-skill-empty-open 1 'TEAMMATE SKILL NO NAME' \
+  "/^          '') ;;\$/d"
+# S6. THE agent_id CONJUNCT DROPPED: the LEAD's own non-pipeline Skill passes the pause.
+expect_set teammate-skill-lead-leak 1 'TEAMMATE SKILL LEAD' \
+  's/ = Skill \] \&\& \[ -n "\$AGENT_ID" \]; then$/ = Skill ]; then/'
+
+# S7. THE START-BEFORE-PAUSE COMPARISON DROPPED: a teammate dispatched DURING the pause (the lead's
+#    paused Explore) invokes a skill.
+expect_set teammate-skill-start-gate-dropped 1 'TEAMMATE SKILL AFTER PAUSE' \
+  's/ \&\& \[\[ "\$TEAM_START" < "\$PAUSED_AT" \]\]; then$/; then/'
+# S8. THE UNKNOWN-START FAIL-CLOSED INVERTED: a teammate with no readable transcript passes.
+expect_set teammate-skill-start-fail-open 1 'TEAMMATE SKILL NO TRANSCRIPT' \
+  's/^      if \[ -n "\$TEAM_START" \] \&\& /      if [ -z "$TEAM_START" ] || /'
 
 echo
 if [ "$fails" -eq 0 ]; then echo "updater-session-signals-mutants: PASS"; exit 0; fi

@@ -26,8 +26,9 @@
 # Denied:  Agent, Skill, TaskCreate, and Write/Edit under _bmad-output/.
 #          Per Rule 28 delegation is the default, so the lead cannot advance
 #          the pipeline without one of these. This is the whole surface.
-#          Three exceptions, all in Check 3: a dispatched teammate's (agent_id)
-#          Write/Edit under _bmad-output/ is allowed and logged; in an
+#          Four exceptions, all in Check 3: a dispatched teammate's (agent_id)
+#          Write/Edit under _bmad-output/ is allowed and logged; its `Skill`
+#          call is allowed (not logged) unless the skill is `ai-dlc*`; in an
 #          /ai-dlc-update session the whole surface is allowed and NOT logged --
 #          its dispatches and its writes alike, since the updater advances no sprint;
 #          and the LEAD's own Agent/Task dispatch of the built-in `Explore` subagent
@@ -36,8 +37,8 @@
 #          whose frontmatter `name:` is Explore under `.claude/agents/` or
 #          `$HOME/.claude/agents/`) is allowed and NOT logged. Explore carries no
 #          Agent, Edit, Write or NotebookEdit, so it adds nothing the lead's own
-#          allowed Bash lacks. Its own Skill calls stay denied, except
-#          `ai-dlc-update`, which the lead may call too. Every other dispatch,
+#          allowed Bash lacks. Its own Skill calls follow the teammate rule
+#          (denied when `ai-dlc*`, except `ai-dlc-update`). Every other dispatch,
 #          `ops` included, is denied. A Rule 8 STOP (Check 2a) denies Explore too.
 # Allowed: Read, Grep, Glob, Bash, and everything else -- so the lead can
 #          investigate the operator's question, AND so it can always run
@@ -202,6 +203,7 @@ if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
   # actually scans -- top-level session files, since `transcript_path` is the LEAD's file even
   # on a teammate's call (Check 2z) -- 0 of 225 marker-carrying reference-consumer transcripts
   # change class. The only 2 that do are both `subagents/` files, which this hook never reads.
+  # >>> I126 SESSION-MARKER SCAN: the next line, byte-identical in every bound hook >>>
   LAST_SKILL=$(grep -oE '"role":"user","content":"<command-message>ai-dlc(-update)?</command-message>\\n<command-name>/ai-dlc(-update)?</command-name>|"name":"Skill","input":\{"skill":"ai-dlc(-update)?"' "$TRANSCRIPT" 2>/dev/null | tail -1)
   case "$LAST_SKILL" in
     *'/ai-dlc-update</command-name>') UPDATER_SESSION=1 ;;
@@ -412,12 +414,33 @@ if [ "$ADVANCING_TOOL" -eq 1 ] && [ "$UPDATER_SESSION" -eq 0 ]; then
   SPRINT_DIR="${ART_DIR}/s${SPRINT_N:-.no-sprint-resolved}"
   SERIES_UNSCOPED=0
   [ -d "$SPRINT_DIR" ] || for _d in "${ART_DIR}"/s[0-9]*/; do [ -d "$_d" ] && SERIES_UNSCOPED=1; done
+  SPRINT_PENDING=0
+  _later=0
+  if [ "$SERIES_UNSCOPED" -eq 1 ] && [ -n "$SPRINT_N" ]; then
+  for _d in "${ART_DIR}"/s[0-9]*/; do _k="${_d%/}"; _k="${_k##*/s}"; case "$_k" in ''|*[!0-9]*) continue ;; esac; [ "$((10#$_k))" -gt "$((10#$SPRINT_N))" ] && _later=1; done
+  [ "$((10#$SPRINT_N))" -gt 1 ] && [ -d "${ART_DIR}/s$((10#$SPRINT_N - 1))" ] && [ "$_later" -eq 0 ] && SPRINT_PENDING=1
+  fi
   SERIES="$(ls -t "${SPRINT_DIR}"/*adversarial*p*.md 2>/dev/null | sed -E -n 's/(pass|p)[0-9]+\.md$//p' | head -1)"
   # <<< I81 LIVE-SERIES BLOCK <<<
+  # PENDING vs MIS-DECLARED (BL-571): `ai-dlc-continue.sh` Check 0b states the rule and its
+  # measurement beside the same block. SPRINT_PENDING=1 is a new sprint before its first artifact,
+  # with no pass to adjudicate; every other absent-directory state keeps the loud form below.
   if [ -z "$SPRINT_N" ] || [ "$SERIES_UNSCOPED" -eq 1 ]; then
     # LOUD, not silent. This hook owns the DENY, so an unscoped state it cannot adjudicate is
     # exactly what must not pass unremarked; retro's Rule 25(c) audit reads this log.
     mkdir -p "$LOG_DIR"
+    if [ "$SPRINT_PENDING" -eq 1 ]; then
+    {
+      echo "## ${TIMESTAMP} -- ADVERSARIAL_STATE_UNADJUDICABLE"
+      echo "- Session: ${SESSION_ID}"
+      echo "- Sprint ${SPRINT_N} has no artifact directory yet: ${SPRINT_DIR} is not yet created,"
+      echo "  and the previous sprint's s$((10#$SPRINT_N - 1))/ exists with no later sprint directory."
+      echo "  The declared sprint is consistent; this is the state before its first artifact."
+      echo "  The Rule 8 divergence/stall DENY is unarmed until that directory exists --"
+      echo "  there is no adversarial pass in this sprint to adjudicate. No action is owed."
+      echo ""
+    } >> "$LOG_FILE"
+    else
     {
       echo "## ${TIMESTAMP} -- ADVERSARIAL_STATE_UNADJUDICABLE"
       echo "- Session: ${SESSION_ID}"
@@ -431,6 +454,7 @@ if [ "$ADVANCING_TOOL" -eq 1 ] && [ "$UPDATER_SESSION" -eq 0 ]; then
       echo "  an unscoped glob, which is the mtime-across-every-sprint defect this replaced."
       echo ""
     } >> "$LOG_FILE"
+    fi
   fi
 
   if [ -n "$SERIES" ] && [ -f "$CONVERGENCE_VALIDATOR" ]; then
@@ -576,8 +600,9 @@ fi
 # sections already rewritten beside the sections their rewrite contradicts -- which is less
 # consistent than either endpoint. So a Write/Edit/MultiEdit/NotebookEdit carrying an `agent_id`
 # (set by the harness only on a call made inside a dispatched teammate; see Check 2z) is allowed
-# and LOGGED as `ACK_TEAMMATE_WRITE`. Agent/Task/Skill/TaskCreate stay denied for a teammate too:
-# a teammate may not spawn more work or advance the pipeline while the operator is waiting.
+# and LOGGED as `ACK_TEAMMATE_WRITE`. Agent/Task/TaskCreate stay denied for a teammate too: a
+# teammate may not spawn more work or advance the pipeline while the operator is waiting. Its
+# `Skill` call is allowed unless the skill is `ai-dlc*` (the arm below says why).
 #
 # THIS IS AN APPROXIMATION OF QUIESCE, NOT QUIESCE. True quiesce would let only the writes that
 # were IN FLIGHT when the flag was raised complete. This hook has no record of what was in flight,
@@ -632,15 +657,63 @@ case "$TOOL_NAME" in
     # the Write arm below, beside the updater's.
     [ "$UPDATER_SESSION" -eq 1 ] || ADVANCING=1
 
+    # A DISPATCHED TEAMMATE MAY INVOKE A NON-PIPELINE `Skill` WHILE PAUSED. The flag lands while a
+    # teammate the lead already dispatched is mid-derive, and for an artifact whose required path
+    # IS a skill (`bmad-spec` re-rendering SPEC.md from `.memlog.md`, `requirements.md`) denying
+    # the Skill call does not stop the work: the teammate hand-edits the artifact instead, and the
+    # pause has turned a rendered artifact into a hand-edited one. A Skill call spawns no agent
+    # and writes nothing itself; every write it leads to reaches the Write arm below and is
+    # logged as `ACK_TEAMMATE_WRITE`, so this call is not logged on its own.
+    # CONJUNCTS: the tool is `Skill`; `agent_id` is set (the LEAD's Skill stays denied); the skill
+    # name is non-empty (a missing name fails closed); and its lowercased last `:`-segment does
+    # not start with `ai-dlc` -- the pipeline skill and every `ai-dlc-*` sibling, bare or
+    # plugin-qualified (`x:ai-dlc`; plugin skills arrive as `<plugin>:<skill>`, and a bare name
+    # is its own last segment), stay denied. `Skill(ai-dlc-update)` never reaches this arm
+    # denied: the payload arm above makes that session an updater session.
+    # WHAT THIS ACQUITS, stated: a skill declaring `context: fork` runs in a forked subagent, so a
+    # teammate invoking one spawns work while paused. Its frontmatter cannot be read here without
+    # resolving the skill's home, so it is not detected; that child's own calls carry an
+    # `agent_id` and meet this same gate. Agent/Task/TaskCreate stay denied for a teammate.
+    # IN FLIGHT MEANS DISPATCHED BEFORE THE PAUSE. Any `agent_id` would also cover an Explore the
+    # lead dispatched DURING the pause (allowed below), whose own Skill call that Explore paragraph
+    # says stays denied. `agent_type` cannot separate them -- it names the subagent's type, which is
+    # the same before and after the flag. The teammate's own transcript can:
+    # `<lead transcript minus .jsonl>/subagents/agent-<agent_id>.jsonl`, whose FIRST record carries
+    # the ISO UTC `timestamp` of its start (measured: 5024 of 5025 local teammate transcripts; the
+    # one without is a `fork-context-ref` record). The flag is re-touched on every operator message
+    # (`ai-dlc-pause.sh`), so its mtime is the latest pause. Allowed only when the teammate STARTED
+    # STRICTLY BEFORE that second; a same-second start, an absent or unreadable transcript, or a
+    # first record with no timestamp all fail closed (denied, as before this arm).
+    if [ "$ADVANCING" -eq 1 ] && [ "$TOOL_NAME" = Skill ] && [ -n "$AGENT_ID" ]; then
+      TEAM_SKILL="$(jq -r '.tool_input["skill"] // empty' <<< "$INPUT" 2>/dev/null | tr '[:upper:]' '[:lower:]')"
+      TEAM_TR="${TRANSCRIPT%.jsonl}/subagents/agent-${AGENT_ID}.jsonl"
+      TEAM_START=""
+      [ -n "$TRANSCRIPT" ] && [ -f "$TEAM_TR" ] \
+        && TEAM_START="$(head -1 "$TEAM_TR" 2>/dev/null | jq -r '.timestamp // empty' 2>/dev/null | cut -c1-19)"
+      PAUSED_AT="$(date -u -r "$PAUSE_FLAG" +%Y-%m-%dT%H:%M:%S 2>/dev/null)"
+      case "$TEAM_START" in
+        20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]) ;;
+        *) TEAM_START="" ;;
+      esac
+      if [ -n "$TEAM_START" ] && [ -n "$PAUSED_AT" ] && [[ "$TEAM_START" < "$PAUSED_AT" ]]; then
+        case "${TEAM_SKILL##*:}" in
+          '') ;;
+          ai-dlc*) ;;
+          *) ADVANCING=0 ;;
+        esac
+      fi
+    fi
+
     # THE LEAD MAY DISPATCH THE BUILT-IN `Explore` SUBAGENT WHILE PAUSED, AND NOTHING ELSE.
     # Answering the operator usually needs a search, and a search is exactly what this deny
     # pushed inline into the lead's own context. Explore's tool set is Bash, Skill, TaskCreate,
     # MCP and the read tools -- it has NO Agent, Edit, Write or NotebookEdit. It is NOT
     # read-only: its Bash can write anything. But the lead's own Bash is allowed while paused
     # (it is the escape hatch, above), so an Explore dispatch adds no capability the lead lacks.
-    # Its own Skill and TaskCreate calls carry an `agent_id` and stay denied by this arm, except
-    # `Skill(ai-dlc-update)`, which the lead may call too: the payload arm makes that session an
-    # updater session, and the whole surface is then allowed for every caller.
+    # Its own Skill and TaskCreate calls carry an `agent_id`: its TaskCreate stays denied, and its
+    # Skill call is held to the teammate Skill rule above (allowed unless `ai-dlc*`), while
+    # `Skill(ai-dlc-update)` is allowed for every caller: the payload arm makes that session an
+    # updater session, and the whole surface is then allowed.
     #
     # EVERY CONJUNCT IS A WAY THE NAME "Explore" CAN ARRIVE WITHOUT THE BUILT-IN BEHIND IT:
     #   - `agent_id` empty: the lead only. A teammate may not spawn work while paused.

@@ -139,6 +139,124 @@ else
   fi
 fi
 
+# --- Assertion 10: only an /ai-dlc session's prose pauses ---------------------
+# THE DEFECT. Once the pipeline was active the hook raised the project-wide pause flag for
+# operator prose typed in ANY session of the project, so a message typed into a second window
+# paused the lead and Rule 29 then denied six of its dispatches. The hook now asks the TYPING
+# session's own transcript whether it invoked /ai-dlc (acknowledge.sh's marker: the typed
+# command's user record or a structural Skill tool_use, last marker wins). Not an /ai-dlc
+# session -> captured, logged PAUSE_SKIPPED, no flag. No readable transcript -> pauses.
+#
+# SEEDED FROM THE PRODUCER'S SHAPES: the harness writes a typed slash command as a user record
+# whose content opens `<command-message>X</command-message>\n<command-name>/X</command-name>`,
+# and a skill activation as an assistant tool_use `"name":"Skill","input":{"skill":"X"...`.
+# The OTHER transcript carries both strings only as a MENTION inside a tool_result, where JSON
+# escapes the quotes -- the shape that turned a session into an "updater" once before.
+#
+# One fresh project per cell, seven cells, each PRESENCE-shaped on the side that matters (a
+# flag, or a PAUSE_SKIPPED row plus a capture). The unmutated COPY is driven too, from the
+# directory the mutants sit in, so a kill is never a copy that cannot run.
+T_TYPED='{"type":"user","message":{"role":"user","content":"<command-message>ai-dlc</command-message>\n<command-name>/ai-dlc</command-name>\n<command-args>Sprint 9</command-args>"}}'
+T_TYPED_UPD='{"type":"user","message":{"role":"user","content":"<command-message>ai-dlc-update</command-message>\n<command-name>/ai-dlc-update</command-name>"}}'
+T_SKILL='{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"tu-1","name":"Skill","input":{"skill":"ai-dlc","args":"pasted brief"}}]}}'
+T_MENTION='{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"tu-9","content":"ledger says <command-message>ai-dlc</command-message>\\n<command-name>/ai-dlc</command-name> and \"name\":\"Skill\",\"input\":{\"skill\":\"ai-dlc\""}]}}'
+T_PLAIN='{"type":"user","message":{"role":"user","content":"READ the analysis doc"}}'
+b_fire() { # <hook> <project> <session> <transcript-path|""> <prompt>
+  if [ -n "$4" ]; then
+    jq -nc --arg s "$3" --arg t "$4" --arg p "$5" '{session_id:$s,transcript_path:$t,prompt:$p}'
+  else
+    jq -nc --arg s "$3" --arg p "$5" '{session_id:$s,prompt:$p}'
+  fi | CLAUDE_PROJECT_DIR="$2" bash "$1" >/dev/null 2>&1
+}
+b_proj() { local p; p="$(mktemp -d "$WORK/bind.XXXXXX")/project"; mkdir -p "$p/_bmad-output"
+  cp "$SNAPSHOT" "$p/_bmad-output/pipeline-snapshot.md"; printf '%s' "$p"; }
+b_tx() { # <project> <line>... -> transcript path
+  local p="$1" t; shift; t="$p/../session.jsonl"; : > "$t"
+  for l in "$@"; do printf '%s\n' "$l" >> "$t"; done; printf '%s' "$t"; }
+b_paused() { [ -f "$1/_bmad-output/pipeline-paused.flag" ] && echo y || echo n; }
+b_world() { # <hook> -> "LEAD SKILLTU OTHER UPDATER RESUME NOTRANS UNREAD" as y/n (y = correct)
+  local h="$1" p t lead skilltu other updater resume notrans unread
+  # LEAD: the lead typed /ai-dlc earlier; its later prose pauses.
+  p="$(b_proj)"; t="$(b_tx "$p" "$T_PLAIN" "$T_TYPED" "$T_PLAIN")"
+  b_fire "$h" "$p" "sess-lead" "$t" "Stop and re-check the gate."
+  [ "$(b_paused "$p")" = y ] && lead=y || lead=n
+  # SKILLTU: activated through a Skill(ai-dlc) tool_use with no typed command (pasted brief).
+  p="$(b_proj)"; t="$(b_tx "$p" "$T_PLAIN" "$T_SKILL")"
+  b_fire "$h" "$p" "sess-lead2" "$t" "Hold on, revert that."
+  [ "$(b_paused "$p")" = y ] && skilltu=y || skilltu=n
+  # OTHER: no marker, only mentions -> captured in full, PAUSE_SKIPPED with reason, no flag,
+  # and no USER_PAUSE row (the heading ai-dlc-handoff-pending.sh reads).
+  p="$(b_proj)"; t="$(b_tx "$p" "$T_PLAIN" "$T_MENTION")"
+  b_fire "$h" "$p" "sess-other" "$t" "unrelated note from a second window"
+  if [ "$(b_paused "$p")" = n ] \
+     && grep -q '^- Reason: operator prose typed in a session that is not an /ai-dlc session' "$p/_bmad-output/pipeline-continuation-log.md" 2>/dev/null \
+     && ! grep -q '^## .*-- USER_PAUSE' "$p/_bmad-output/pipeline-continuation-log.md" 2>/dev/null \
+     && grep -q '^unrelated note from a second window$' "$p/_bmad-output/operator-requests-history.md" 2>/dev/null \
+     && grep -q '^- Session: sess-other$' "$p/_bmad-output/operator-requests-history.md" 2>/dev/null; then
+    other=y; else other=n; fi
+  # UPDATER: an /ai-dlc session that then ran /ai-dlc-update is the updater; no pause.
+  p="$(b_proj)"; t="$(b_tx "$p" "$T_TYPED" "$T_TYPED_UPD" "$T_PLAIN")"
+  b_fire "$h" "$p" "sess-upd" "$t" "what version are we on now"
+  [ "$(b_paused "$p")" = n ] && updater=y || updater=n
+  # RESUME: /clear then `/ai-dlc resume` in a NEW session -- its transcript holds no marker yet;
+  # the current prompt carries it and pauses (the lead's resume branch clears the flag).
+  p="$(b_proj)"; t="$(b_tx "$p")"
+  b_fire "$h" "$p" "sess-new" "$t" "/ai-dlc resume"
+  [ "$(b_paused "$p")" = y ] && resume=y || resume=n
+  # NOTRANS: no transcript_path at all -> the default branch pauses.
+  p="$(b_proj)"
+  b_fire "$h" "$p" "sess-x" "" "a steer with no transcript path"
+  [ "$(b_paused "$p")" = y ] && notrans=y || notrans=n
+  # UNREAD: a transcript_path naming no file -> the default branch pauses.
+  p="$(b_proj)"
+  b_fire "$h" "$p" "sess-y" "$p/../does-not-exist.jsonl" "a steer whose transcript cannot be read"
+  [ "$(b_paused "$p")" = y ] && unread=y || unread=n
+  printf '%s %s %s %s %s %s %s\n' "$lead" "$skilltu" "$other" "$updater" "$resume" "$notrans" "$unread"
+}
+B_EXPECT="y y y y y y y"
+B_REAL="$(b_world "$HOOK")"
+if [ "$B_REAL" = "$B_EXPECT" ]; then
+  ok "session test: typed /ai-dlc pauses, Skill(ai-dlc) pauses, a non-ai-dlc session captures without pausing, the updater does not pause, /ai-dlc resume in a new session pauses, no or unreadable transcript pauses [$B_REAL]"
+else
+  bad "SESSION TEST WRONG — cells LEAD SKILLTU OTHER UPDATER RESUME NOTRANS UNREAD read [$B_REAL], expected [$B_EXPECT]"
+fi
+
+# --- Assertion 11: MUTANTS — each cell can fail ------------------------------
+BM="$WORK/bind-mutants"; mkdir -p "$BM"
+cp "$HOOK" "$BM/control.sh"
+B_CTRL="$(b_world "$BM/control.sh")"
+if [ "$B_CTRL" = "$B_EXPECT" ]; then
+  ok "session-test mutant control: an unmutated copy under $BM reads [$B_CTRL]"
+else
+  bad "SESSION-TEST MUTANT HARNESS BROKEN — the unmutated copy reads [$B_CTRL], so no kill below is readable"
+fi
+# <name> <expected-vector> <sed-expr>
+b_mut() {
+  local name="$1" want="$2" expr="$3" got
+  sed "$expr" "$HOOK" > "$BM/$name.sh" || { bad "FIXTURE STALE: mutant $name: sed did not apply"; return; }
+  if cmp -s "$HOOK" "$BM/$name.sh"; then
+    bad "FIXTURE STALE: session-test mutant $name matched nothing in $HOOK"; return
+  fi
+  got="$(b_world "$BM/$name.sh")"
+  if [ "$got" = "$want" ]; then
+    ok "session-test mutant $name: [$got]"
+  else
+    bad "SESSION-TEST MUTANT $name read [$got], expected [$want] — the arm cannot fire, or the cells are entangled"
+  fi
+}
+# The skip never taken: every session pauses again -- the filed defect.
+b_mut noskip    "y y n n y y y" 's#^  none|ai-dlc-update)$#  NEVER-MATCHES)#'
+# The updater counted as a lead.
+b_mut updlead   "y y y n y y y" 's#^  none|ai-dlc-update)$#  none)#'
+# The Skill tool_use alternative dropped: a lead activated through Skill(ai-dlc) stops pausing.
+b_mut notooluse "y n y y y y y" 's#|"name":"Skill","input":\\{"skill":"ai-dlc(-update)?"##'
+# The typed marker un-anchored from the harness's user record: a MENTION makes a session a lead.
+b_mut bare      "y y n y y y y" 's#"role":"user","content":"<command-message>ai-dlc(-update)?</command-message>\\\\n##'
+# The current /ai-dlc prompt not consulted: a resume in a new session does not pause.
+b_mut nocurrent "y y y y n y y" 's#^  /ai-dlc|/ai-dlc\[\[:space:\]\]\*)  *SESSION_SKILL="ai-dlc" ;;$#  /ai-dlc-NEVER) SESSION_SKILL="ai-dlc" ;;#'
+# The default inverted: no readable transcript reads as "not a lead" and skips.
+b_mut nodefault "y y y y y n n" 's#^    SESSION_SKILL="unknown"$#    SESSION_SKILL="none"#'
+
 # --- Assertion 8: the THREE hooks seed the SAME legend -------------------------
 # WHY THIS LIVES HERE, AND WHY ASSERTION 6 IS NOT ENOUGH. Assertion 6 reads the log this
 # fixture's own run produced, so it sees whichever legend `ai-dlc-pause.sh` happens to carry.

@@ -456,6 +456,86 @@ eexpect tin-team "DENY 1" Agent '"Explore"' "$EXPLORE_PROMPT_PLAIN" "" "" tin-te
   "EXPLORE: an Explore dispatch carrying team_name is DENIED — it runs in the in-process teammate runner" \
   "EXPLORE TOOL_INPUT TEAM_NAME: LEAK — an Explore dispatch with a team_name passed, and it runs as a teammate"
 
+# =============================================================================
+# S. A TEAMMATE's Skill call — allowed while paused unless the skill is `ai-dlc*`.
+# =============================================================================
+# The flag lands while a teammate the lead already dispatched is mid-derive. Where the artifact's
+# required path is a skill (`bmad-spec` re-rendering SPEC.md), denying the Skill call made the
+# teammate hand-edit the artifact instead. So a teammate's non-pipeline Skill passes; the pipeline
+# skill and every `ai-dlc-*` sibling, bare or plugin-qualified, stay denied; the LEAD's Skill stays
+# denied (the control, one property -- `agent_id` -- from the first ALLOW cell); and a pending Rule 8
+# STOP still denies it. `ai-dlc-update` is ALLOWED for every caller by the updater payload arm, and
+# its cell records that unchanged behaviour. Every cell is a fresh paused tree in a routed pipeline
+# session: "<ALLOW|DENY|STOP|OTHER> <ACK_DENIED rows>".
+# EACH CELL CARRIES ITS OWN LEAD TRANSCRIPT, and beside it the teammate's own
+# `subagents/agent-<id>.jsonl`, whose first record's `timestamp` is when the teammate STARTED. The
+# flag is touched now, so `before` (2026-01-01) started before the pause and `after` (2099) during
+# it; `none` writes no teammate file. The LEAD cell gets a `before` file at `agent-.jsonl`, the
+# path an empty agent_id resolves to, so only the `agent_id` conjunct stands between it and an
+# allow -- otherwise the missing file would deny it and that conjunct could never be seen.
+scell() { # <label> <skill> <agent_id> [world] [start: before|after|none]
+  local w out v tr start
+  w="$(seed "s-$1")"
+  tr="$w/lead.jsonl"; cp "$TR_PIPE_ROUTED" "$tr"
+  start="${5:-before}"
+  if [ "$start" != none ]; then
+    mkdir -p "$w/lead/subagents"
+    case "$start" in before) start=2026-01-01T00:00:00.000Z ;; after) start=2099-01-01T00:00:00.000Z ;; esac
+    printf '{"type":"user","isSidechain":true,"agentId":"%s","timestamp":"%s","message":{"role":"user","content":"go"}}\n' \
+      "$3" "$start" > "$w/lead/subagents/agent-$3.jsonl"
+  fi
+  if [ "${4:-}" = stop ]; then
+    : > "$w/_bmad-output/planning-artifacts/s7/prd-adversarial-p1.md"
+    printf '#!/bin/sh\nprintf "STALLED\\t%%s\\n" "$2"\nexit 3\n' > "$w/scripts/ai-dlc/validate-adversarial-convergence.sh"
+    chmod +x "$w/scripts/ai-dlc/validate-adversarial-convergence.sh"
+  fi
+  out="$(drive "$w" Skill "$tr" "$2" "" "$3")"
+  if paused_deny "$out"; then v=DENY
+  elif denied "$out"; then case "$out" in *'AI/DLC Rule 8: THE ADVERSARIAL CYCLE HAS STOPPED'*) v=STOP ;; *) v=OTHER ;; esac
+  else v=ALLOW; fi
+  printf '%s %s' "$v" "$(rows "$w" ACK_DENIED)"
+}
+sexpect() { # <label> <expected> <skill> <agent_id> <world> <ok> <bad> [start]
+  local got; got="$(scell "$1" "$3" "$4" "$5" "${8:-before}")"
+  if [ "$got" = "$2" ]; then ok "$6"; else bad "$7 (cell '$got', expected '$2')"; fi
+}
+sexpect lead-bmad "DENY 1" bmad-spec "" "" \
+  "TEAMMATE SKILL control: the LEAD's paused Skill(bmad-spec) is DENIED with one ACK_DENIED row" \
+  "TEAMMATE SKILL LEAD: LEAK — the lead's own Skill(bmad-spec) passed the pause"
+sexpect team-bmad "ALLOW 0" bmad-spec ax "" \
+  "TEAMMATE SKILL: a dispatched teammate's Skill(bmad-spec) is ALLOWED while paused, and logs no denial" \
+  "TEAMMATE SKILL ALLOW: a dispatched teammate's Skill(bmad-spec) is not allowed while paused — its render is forced into a hand edit"
+sexpect team-aidlc "DENY 1" ai-dlc ax "" \
+  "TEAMMATE SKILL: a teammate's Skill(ai-dlc) is DENIED — the pipeline skill stays behind the pause" \
+  "TEAMMATE SKILL AI-DLC: LEAK — a teammate invoked the pipeline skill while paused"
+sexpect team-aidlc-sib "DENY 1" ai-dlc-resume ax "" \
+  "TEAMMATE SKILL: a teammate's Skill(ai-dlc-resume) is DENIED — every ai-dlc-* sibling stays behind the pause" \
+  "TEAMMATE SKILL AI-DLC SIBLING: LEAK — an ai-dlc-* sibling skill passed the pause"
+sexpect team-aidlc-plugin "DENY 1" x:ai-dlc ax "" \
+  "TEAMMATE SKILL: a teammate's plugin-qualified Skill(x:ai-dlc) is DENIED — the last segment is what names the skill" \
+  "TEAMMATE SKILL PLUGIN: LEAK — a plugin-qualified ai-dlc skill passed the pause"
+sexpect team-plugin-other "ALLOW 0" x:bmad-spec ax "" \
+  "TEAMMATE SKILL: a teammate's plugin-qualified Skill(x:bmad-spec) is ALLOWED — the segment check keys on ai-dlc only" \
+  "TEAMMATE SKILL PLUGIN OTHER: a plugin-qualified non-pipeline skill is denied to a teammate"
+sexpect team-upper "DENY 1" AI-DLC ax "" \
+  "TEAMMATE SKILL: a teammate's Skill(AI-DLC) is DENIED — the name is compared lowercased" \
+  "TEAMMATE SKILL UPPER: LEAK — an upper-case ai-dlc skill name passed the pause"
+sexpect team-noname "DENY 1" "" ax "" \
+  "TEAMMATE SKILL: a teammate's Skill call carrying no skill name is DENIED — a missing name fails closed" \
+  "TEAMMATE SKILL NO NAME: LEAK — a teammate's Skill call with no skill name passed the pause"
+sexpect team-update "ALLOW 0" ai-dlc-update ax "" \
+  "TEAMMATE SKILL: a teammate's Skill(ai-dlc-update) is ALLOWED — the updater payload arm, unchanged" \
+  "TEAMMATE SKILL UPDATE: a teammate's Skill(ai-dlc-update) is no longer the updater carve-out"
+sexpect team-after "DENY 1" bmad-spec ax "" \
+  "TEAMMATE SKILL: a teammate that STARTED after the pause (an Explore dispatched while paused) is DENIED its Skill(bmad-spec)" \
+  "TEAMMATE SKILL AFTER PAUSE: LEAK — a teammate dispatched during the pause invoked a skill" after
+sexpect team-notr "DENY 1" bmad-spec ax "" \
+  "TEAMMATE SKILL: a teammate whose own transcript is absent is DENIED — an unknown start fails closed" \
+  "TEAMMATE SKILL NO TRANSCRIPT: LEAK — a teammate with no readable start time invoked a skill" none
+sexpect team-stop "STOP 0" bmad-spec ax stop \
+  "TEAMMATE SKILL: a teammate's Skill(bmad-spec) under a pending Rule 8 STOP is DENIED by the STOP — the allow is sited after Check 2a" \
+  "TEAMMATE SKILL STOP: LEAK — a teammate's Skill call escaped a pending Rule 8 STOP"
+
 # THE ROLE-CITATION ERE IS WRITTEN TWICE, and the carve-out is only as wide as the dispatch guard's
 # copy. If the guard's ERE widens (say to upper case) and this hook's does not, a prompt the guard
 # rewrites to a role reads here as no citation, and the carve-out passes it. Byte-compare the two.

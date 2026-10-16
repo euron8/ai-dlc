@@ -134,6 +134,18 @@ score M6 "$(mut M6 's#^if pq_fire; then$#if false; then#')" "F2 "
 # F3; it is the wrong fix that looks most like the right one.
 score M7 "$(mut M7 's#select(.type=="tool_use" and .name=="AskUserQuestion")#select(.type=="tool_use")#')" "F3 "
 
+# MS1-MS4 -- Check 2a, the not-an-/ai-dlc-session allow. Each mutant moves one cell.
+# MS1: a session with NO marker is treated as the lead again -> S1 blocks.
+score MS1 "$(mut MS1 's#^  none|ai-dlc-update)$#  ai-dlc-update)#')" "S1 "
+# MS2: the updater is treated as the lead -> S2 blocks.
+score MS2 "$(mut MS2 's#^  none|ai-dlc-update)$#  none)#')" "S2 "
+# MS3: the /ai-dlc lead is classified as "none" -> the lead's flag-down Stop is allowed. Every
+# flag-down arm seeded on a lead transcript owns that observable and is meant to: F2 and A7 read
+# the default block, S3 reads it by name. The overlap is the property, so the expectation names it.
+score MS3 "$(mut MS3 's#STOP_SESSION_SKILL="ai-dlc" ;;#STOP_SESSION_SKILL="none" ;;#')" "A7 F2 S3 "
+# MS4: the default inverted -- an unreadable transcript reads as "not a lead" -> S4 allows.
+score MS4 "$(mut MS4 's#^STOP_SESSION_SKILL="unknown"$#STOP_SESSION_SKILL="none"#')" "S4 "
+
 # --- THE NO-PREPEND BASELINE, byte-compared ------------------------------------------------
 # A7 in the shipped fixture asserts the standing block reason is unshortened and carries no
 # Rule 11(a) paragraph. Those are two substring tests, and a substring test cannot see a byte
