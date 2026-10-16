@@ -37,6 +37,12 @@ Never narrow a goal, drop an item, or scale work down on your own authority — 
 whole scope and say clearly what was blocked and why. Partial delivery reported as completion
 is the failure mode this exists to prevent.
 
+## The scope boundary is a release, not a batch
+
+A filing that lands after a release is built rides a later, separately gated release; it never
+joins a release that is built or gating, and no ready release waits for one. While releases flow,
+the batch keeps taking scope and assigns new entries to free builders.
+
 ## The output of a flawed process is UNTRUSTED
 
 When the process that produced an artifact turns out to be broken, the artifact is not

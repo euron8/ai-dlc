@@ -827,7 +827,16 @@ fi
 #
 # THIS RAISE CARRIED NO SUBTRACTION, like the fourth: the subtraction pool was not scanned, and
 # the judgement-per-passage vestigial debt above is now six raises old.
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-68864}"
+#
+# RAISED AN EIGHTEENTH TIME, 68864 -> 69120, ON AN EXPLICIT OPERATOR RULING, FOR ONE RULE COSTING
+# 314 BYTES. `operator-rulings.md` gained "The scope boundary is a release, not a batch", which the
+# operator confirmed in the lead's session and again in the session that wrote it. The closable-session
+# ruling before it fitted inside the 71 bytes the seventeenth raise left, so it moved nothing here.
+#
+# A6 WAS OBSERVED FAILING AT 69107/68864 BEFORE THE CEILING MOVED: the rule was written first and the
+# ceiling derived from the post-write measurement. 69120 is 67.5 KiB, leaving 13 bytes, so the next
+# rule fires this arm again. NO SUBTRACTION: the debt above is now seven raises old.
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-69120}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done
