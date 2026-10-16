@@ -2244,7 +2244,30 @@ KEY_LOG="$GITDIR/ai-dlc-suite-key.log"
 key_log() { printf '%s %s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "${2:-none}" >> "$KEY_LOG" 2>/dev/null || true; }
 
 fixture_suite_step() {
-  local key cached_key cached_n cached_when n_now record
+  local key cached_key cached_n cached_when n_now record sk_d sk_n
+
+  # STOP EARLY ON A RED ABOVE. step() records fail=1 and carries on, so before this guard a red
+  # validator still paid for the whole pool (minutes) before the verdict could say so. Every
+  # fixture that would have been dispatched is named `SKIPPED-on-earlier-red`, never `ok`, and the
+  # step returns non-zero so the final verdict stays red. The population is the pool's own
+  # (a directory under $FXROOT carrying run.sh, run_fixtures' first filter); the read-set skip
+  # that narrows it further runs inside the pool and is not applied here, so this names the
+  # superset. Sited OUTSIDE FIXTURE_POOL_BEGIN/END, which I66 byte-compares with the consumer hook.
+  # AI_DLC_PREPUSH_NO_STOP_EARLY=1 restores the carry-on for a sandboxed COPY of this hook whose
+  # validator steps fail only for want of scripts; the final verdict still reads $fail. Its token
+  # may appear in no other tracked file than this hook and its one caller (I127).
+  if [ "$fail" -ne 0 ] && [ "${AI_DLC_PREPUSH_NO_STOP_EARLY:-}" != 1 ]; then
+    SUITE_STOPPED_EARLY=1
+    sk_n=0
+    for sk_d in "$FXROOT"*/; do
+      [ -f "$sk_d/run.sh" ] || continue
+      sk_d="${sk_d%/}"
+      printf '   SKIPPED-on-earlier-red %s\n' "${sk_d##*/}"
+      sk_n=$((sk_n + 1))
+    done
+    printf '   SKIPPED-on-earlier-red: %s fixture(s) not run because a step above is red. Fix it and re-push; this step is FAIL, not a pass.\n' "$sk_n"
+    return 1
+  fi
 
   # Counted the way run_fixtures counts, so the number in the announce is the
   # number the last green run actually reported. `ls -d core/fixtures/*/` would be
@@ -2366,7 +2389,28 @@ fixture_suite_step() {
 # here, in the parent shell, immediately before the dispatch.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
 
+# 2e. A shipped script with a syntax error is a gate that cannot run at all.
+#    validate-enforcement-map.sh maps this glob set through map_consumer() and
+#    asserts it equals the set in core/git-hooks/pre-push. Add a class here and the
+#    consumer hook fails until it carries the class too.
+#    SITED ABOVE THE FIXTURE POOL, not after it: it costs a second, and a syntax red found only
+#    after the whole pool is a red the pool's minutes could not have changed. A red here now
+#    stops the pool the same way any earlier step does (fixture_suite_step reads $fail).
+# SYNTAX_GLOB_BEGIN
+syntax_all() {
+  local rc=0 f
+  for f in scripts/*.sh core/scripts/*.sh core/hooks/*.sh \
+           core/skills/ai-dlc-update/reconcile/*.sh .githooks/*; do
+    [ -f "$f" ] || continue
+    bash -n "$f" 2>/dev/null || { printf '   syntax error: %s\n' "$f"; rc=1; }
+  done
+  return $rc
+}
+# SYNTAX_GLOB_END
+step "shell syntax (every shipped script and hook)" syntax_all
+
 SUITE_SKIPPED=0
+SUITE_STOPPED_EARLY=0
 step "fixture suite (${FIXTURE_JOBS}-way)" fixture_suite_step
 
 # 3a. THE SUITE'S WALL CLOCK IS ONE NUMBER AND NOTHING WATCHED IT. This suite is POLE-BOUND:
@@ -2397,6 +2441,10 @@ step "fixture suite (${FIXTURE_JOBS}-way)" fixture_suite_step
 #     baseline is read by a shipping program on every push regardless of the key, which is
 #     the reader I55 arm 3 requires for a docs/ input: the fixture suite cannot be it.
 pole_guard_step() {
+  if [ "${SUITE_STOPPED_EARLY:-0}" = 1 ]; then
+    printf '   SKIPPED-on-earlier-red suite pole: the fixture suite did not run, so there is no loaded cost to compare. This step is FAIL, not a pass.\n'
+    return 1
+  fi
   if [ "${SUITE_SKIPPED:-0}" = 1 ]; then
     printf '   (suite skipped on the content key -- parsing the baseline only; nothing was measured)\n'
     bash scripts/validate-suite-pole.sh --durations /dev/null --jobs "$FIXTURE_JOBS"
@@ -2429,23 +2477,6 @@ pole_guard_step() {
   return "$prc"
 }
 step "suite pole (this run's loaded cost of the longest fixture against the pole history at this pool width)" pole_guard_step
-
-# 4. A shipped script with a syntax error is a gate that cannot run at all.
-#    validate-enforcement-map.sh maps this glob set through map_consumer() and
-#    asserts it equals the set in core/git-hooks/pre-push. Add a class here and the
-#    consumer hook fails until it carries the class too.
-# SYNTAX_GLOB_BEGIN
-syntax_all() {
-  local rc=0 f
-  for f in scripts/*.sh core/scripts/*.sh core/hooks/*.sh \
-           core/skills/ai-dlc-update/reconcile/*.sh .githooks/*; do
-    [ -f "$f" ] || continue
-    bash -n "$f" 2>/dev/null || { printf '   syntax error: %s\n' "$f"; rc=1; }
-  done
-  return $rc
-}
-# SYNTAX_GLOB_END
-step "shell syntax (every shipped script and hook)" syntax_all
 
 if [ "$fail" -ne 0 ]; then
   printf '\npre-push: BLOCKED. Fix the above, or `git push --no-verify` on the record.\n\n'

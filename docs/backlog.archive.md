@@ -34143,3 +34143,36 @@ Scheduled in batch 235 for a later release (scope ruling: the boundary is the re
 
 verify: manual
 
+## BL-585 — release gates go red on the release's own shell defects, and each red costs a full re-push
+
+**DEFECT (efficiency).** Filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]) from lead ai-dlc-9c's batch 235 reports and the failure records in the main checkout.
+- 0.795.0 (vssnap): the first gate went red on a pipe into `grep -q`, caught by I54. Re-pushed, about +10 min.
+- 0.796.0 (W): the first gate went red on six silent-failure redirects, caught by `procsub-staged-refusal` (`.git/ai-dlc-fixture-failures.20261016T085900Z.80433`, 1 of 73 units red). Re-pushed, about +15-20 min.
+- The 08:29Z run (`.git/ai-dlc-fixture-failures.20261016T082952Z.45977`) had 11 of 43 units red, mostly enforcement-map fixtures reporting FIXTURE BROKEN.
+- 0.797.0 (H-a), per lead ai-dlc-9c's report and NOT verified by intake (the main checkout was in a quiet window): the third release in a row whose first gate went red on its own code — 3 red units, at least two from H-a's own code; the fix plus a fresh gate cost about 35-50 min. Which check caught them is not yet established.
+- The `procsub-staged-refusal` family's recorded loaded costs, per the filer: 138, 183, 101 and 256 s.
+Intake confirmed both cited failure records exist (21 `ai-dlc-fixture-failures.*` files in `.git/`).
+
+The cheapest checks that catch these classes run only inside the full gate, so a red there throws away the whole run, including mutant batteries that had already passed.
+
+Owed:
+1. For each red gate in batch 235, establish which check caught it and how long that check takes alone on the changed files only (H-a's red is a discriminating input to add once its cause is known).
+2. A single pre-gate command that runs those checks on a builder's own diff in seconds, within the rule that a hand verifies only its own change.
+3. Fail fast: when a cheap phase goes red, stop before dispatching the mutant batteries, or dispatch the cheap catchers first.
+4. State the gate minutes saved per avoided red, with the dollar figure beside them.
+Related: BL-583, BL-584.
+
+Assigned to ai-dlc-4e [9b62de] by lead ai-dlc-9c, to build after H-b, with the two confirmed red commits (vssnap, caught by I54; W, caught by `procsub-staged-refusal`) as its discriminating inputs.
+
+Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
+
+**LANDED (v0.800.0, verified 0b342210).** Owed 1: the catchers of batch 235's reds are named, and each is timed alone
+by `scripts/pregate-self-check.sh`, which prints per-arm seconds: vssnap I54 (enforcement map, 26s); W and H-a
+procsub r3 (spelling arm, under 1s); U-a S8 (shell portability, 5s). H-a's fork-budget red is arm d (31s). H-a's
+gate-resume red is caught only by running the fixture; that is BL-609. Owed 2: the self-check, receipts C1-C2b at
+each pinned red/fix pair. Owed 3: `.githooks/pre-push` names every skipped fixture `SKIPPED-on-earlier-red` and
+stays red when a step above the pool is red (C3, with a mutant). Owed 4: gate time per avoided red is vssnap 8m10s,
+W 639s, U-a 1018s, at $0 API spend (the gate runs locally); the saving is operator wall clock.
+
+verify: manual
+

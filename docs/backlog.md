@@ -464,13 +464,18 @@ Scheduled in batch 235 for a later release (scope ruling: the boundary is the re
 
 verify: manual
 
-## BL-594 — requirements adversarial p1 has no standalone unique value; elicitation could be the first convergence pass
+## BL-594 — requirements adversarial p1 re-reads the whole subject after elicitation; brief it as a pass-2+ review of the elicitation repair
 
-**DEFECT.** Filed by ai-dlc-b8 from ai-dlc-de's `docs/analysis/step-value-s317-s319.md` (committed in b235-docs). Its round table (`:110`) records requirements adversarial p1 with 0 high-consequence unique catches in s317, s318 and s319, and 18 of 21 (s318) and 17 of 27 (s319) of its MAJORs repair-introduced; it keeps p1 only "as the convergence exit" Check 24 reads. Under the operator's step-value ruling a step stays only while it has unique surviving catches, so p1's cost is one full sharded round per planning step bought for the exit stamp alone.
+**DEFECT, RE-SCOPED BY OPERATOR RULING (batch 235, 2026-10-16, relayed by lead ai-dlc-9c).** Filed by ai-dlc-b8 from ai-dlc-de's `docs/analysis/step-value-s317-s319.md`, as "make elicitation the first convergence pass and drop p1's round". That design is OUT.
 
-Today the two shapes cannot merge: at origin/main 952b9319 the merge refuses a `verdict:` on an elicitation shard (`core/scripts/merge-adversarial-shards.sh:569`, "an elicitation shard carries none"), and Check 24's subject arm K3 (`core/scripts/validate-adversarial-convergence.sh:2228`) reads the requirements adversarial series, not the elicitation record.
+**The finding that re-scoped it** (batch 235 intake's opus contract adversary, read at origin/main a0451c70):
+- Premise NOT SUPPORTED. The analysis BL-594 cited gives p1 "Keep as the convergence exit" (`:111`) and "Measured, no round is removable on the ruling's terms" (`:114`); p1 also has unique surviving findings (0/1 s317, 0/3 s318, `:57`, `:61`), none high-consequence. Its MAJORs are mostly repair-introduced (18/21 s318, 17/27 s319), a cost archived BL-508 owns (`:116-118`).
+- Round counts under the original design's only safe form (elicitation stamps a verdict but can never be terminal; p2 always runs): s317 elicitation, p1, p2 -> p1, p2, p3; s318 four review rounds -> four. **Rounds removed per sprint: 0** — p1 survives under the name p2.
+- The original design also contradicted Rule 8 and arm J (MET honoured at pass 1, a freeze point), broke arm H (the elicitation repair record is not `*-repair-p1.md`), loosened arm C (s319 elicitation's 14 CRITICALs would become the prior-scope baseline), and forked `skill:` between `ai-dlc-adversary-review` and `bmad-advanced-elicitation`.
 
-Owed: make elicitation the first convergence pass — its shards stamp `verdict:`, `merge-adversarial-shards.sh --elicitation` writes one, Check 24 arm K3 accepts it as the series' first pass — and drop the standalone p1 round; or state why p1 must stay. Interacts with BL-575's contract v2 (its `--check-header --axis elicitation` encodes today's "no verdict" rule, which this would invert). Receipt: on a seeded subject the elicitation merge emits a verdict K3 accepts, with today's verdict-less elicitation record as the control K3 does not.
+**The re-scope (operator-ruled):** the one real difference is that the round after the elicitation repair re-reads the whole subject instead of reviewing the repair. Brief requirements adversarial p1 under the pass-2+ contract, handing it the merged `s<N>/requirements-elicitation.md` and `s<N>/requirements-elicitation-repair.md` as "the prior pass's findings and the repair record" (`_gate-procedures.md` ~:539-541). One prose carve-out in `core/team-roles/adversary.md` (~:509-512) and `_gate-procedures.md` "Validation cycle" item 3. No names, verdicts, merge flags or arms K3, J or H change, and BL-575's elicitation axis stays "no verdict".
+
+Owed: FIRST measure the saving on graph's sprints (the p1 round's wall clock and dollars against a pass-2+ round's, s317-s319, read-only; a transcript sweep, so it needs a slot). **If the measured saving is 0, it does not ship.** Then the carve-out, with a fixture row pinning the p1 brief's prior-pass inputs. Ships on the shared BL-575/BL-577 branch.
 
 Cross-ref BL-569 (three validation rounds with no stated distinction) and archived BL-508 (repairs write the defects the next pass finds).
 
@@ -619,31 +624,6 @@ Scheduled in batch 235 for a later release (scope ruling: the boundary is the re
 
 verify: manual
 
-## BL-585 — release gates go red on the release's own shell defects, and each red costs a full re-push
-
-**DEFECT (efficiency).** Filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]) from lead ai-dlc-9c's batch 235 reports and the failure records in the main checkout.
-- 0.795.0 (vssnap): the first gate went red on a pipe into `grep -q`, caught by I54. Re-pushed, about +10 min.
-- 0.796.0 (W): the first gate went red on six silent-failure redirects, caught by `procsub-staged-refusal` (`.git/ai-dlc-fixture-failures.20261016T085900Z.80433`, 1 of 73 units red). Re-pushed, about +15-20 min.
-- The 08:29Z run (`.git/ai-dlc-fixture-failures.20261016T082952Z.45977`) had 11 of 43 units red, mostly enforcement-map fixtures reporting FIXTURE BROKEN.
-- 0.797.0 (H-a), per lead ai-dlc-9c's report and NOT verified by intake (the main checkout was in a quiet window): the third release in a row whose first gate went red on its own code — 3 red units, at least two from H-a's own code; the fix plus a fresh gate cost about 35-50 min. Which check caught them is not yet established.
-- The `procsub-staged-refusal` family's recorded loaded costs, per the filer: 138, 183, 101 and 256 s.
-Intake confirmed both cited failure records exist (21 `ai-dlc-fixture-failures.*` files in `.git/`).
-
-The cheapest checks that catch these classes run only inside the full gate, so a red there throws away the whole run, including mutant batteries that had already passed.
-
-Owed:
-1. For each red gate in batch 235, establish which check caught it and how long that check takes alone on the changed files only (H-a's red is a discriminating input to add once its cause is known).
-2. A single pre-gate command that runs those checks on a builder's own diff in seconds, within the rule that a hand verifies only its own change.
-3. Fail fast: when a cheap phase goes red, stop before dispatching the mutant batteries, or dispatch the cheap catchers first.
-4. State the gate minutes saved per avoided red, with the dollar figure beside them.
-Related: BL-583, BL-584.
-
-Assigned to ai-dlc-4e [9b62de] by lead ai-dlc-9c, to build after H-b, with the two confirmed red commits (vssnap, caught by I54; W, caught by `procsub-staged-refusal`) as its discriminating inputs.
-
-Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
-
-verify: manual
-
 ## BL-601 — the handoff-entry hook arms the lead's handoff marker on a TEAMMATE's Read of steps/handoff.md
 
 **DEFECT (latent; 0 measured occurrences).** Filed by peer session ai-dlc-11, found by the batch 235 release V contract adversary while it sized BL-590. `core/hooks/ai-dlc-handoff-entry.sh` (PostToolUse on Read) writes the project-wide `.handoff-in-progress` whenever `steps/handoff.md` is read, with no `agent_id` test: intake counted `agent_id` 0 times in it at origin/main 3d5f1e70, against 4 in `core/hooks/ai-dlc-recover-gate.sh` (the control, which BL-590 bound). So a dispatched teammate's Read of that file arms the lead's marker — BL-590's shape (graph measured 253 denied teammate calls there).
@@ -704,6 +684,15 @@ Graph carries `_bmad-output/pipeline-snapshot.md` (intake confirmed), so an `/ai
 
 Owed: both hooks get the session-skill stand-down that acknowledge, continue and pause use (last ai-dlc skill marker `ai-dlc-update` → silent), single-sourced in a shared helper rather than a fourth copy. Receipt: a seeded update-session transcript with a `compact` SessionStart — recover.sh writes no `.recover-fired` and injects nothing, and recover-gate allows a Write; control: the same seed with an `/ai-dlc` marker is still injected and gated.
 
+**Widened: the hazard predates 0.797.0, and a session that never compacted is denied too (measured by ai-dlc-60).** A grep-only census over graph's 179 transcripts (28 s): graph's installed `ai-dlc-recover.sh` and `ai-dlc-recover-gate.sh` (the c16609ba blobs) already carry it — the gate's read stages date to 0.372.0, and 0.797.0 added only the advisor stage. Of 78 transcripts whose last ai-dlc marker is `ai-dlc-update`, 2 received the recover-gate deny "your FIRST tool call must be `Read _bmad-output/pipeline-snapshot.md`" (control: 30 transcripts corpus-wide).
+- `70eefff8` (2026-09-23): auto compactions at 06:01:39Z and 11:10:23Z, then the denies. Intake counted 2 `compact_boundary`; the 5 denies are 4 FIRST-call lines and 1 SECOND-call line (the filer's breakdown).
+- `70871959` (2026-10-15, 10:33Z): ZERO `compact_boundary` (intake confirmed 0), yet its first Bash call, the stamp read, was denied 11 s after `/ai-dlc-update` (1 deny line).
+Cause of case 2, measured at a0451c70 by the filer and re-derived by intake: `ai-dlc-recover-gate.sh` uses `session_id` only in its advisor stage (`:136` writes it to `.recover-advisor-owed`, `:151` compares it, `:372` is the `owed_put`). The read stages read only `.recover-fired`, whose keys `ai-dlc-recover.sh` writes as `fired_at`, `injected_bytes`, `context_limit`, `degraded`, `snapshot_path`, `step_file` and `step_file_resolved` — none of them a `session_id`. So the read stages cannot tell one session's marker from another's, and a `.recover-fired` left by another session's compaction denies an update session that never compacted. That a stale marker was the cause in `70871959` specifically is still inference.
+
+Consequence: a stand-down in `recover.sh` alone does not cover case 2 — the update-session stand-down must sit in `recover-gate.sh` as well. The receipt gains a case: a pre-existing `.recover-fired` with no compaction leaves an update-session Bash call silent, and the same seed with an `/ai-dlc` marker still denies. DEFECT stands.
+
+Owner: ai-dlc-60, as a release behind U-b (lead ai-dlc-9c's assignment): an update-session stand-down in both hooks through the shared session-marker scan, the gate's read stages keyed on `session_id`, a 5-case receipt, and an FP set measured against graph's 179 transcripts.
+
 verify: manual
 
 ## BL-608 — the validator fork budget's headroom eroded from +6 to 0 across five releases, and nothing warned
@@ -738,5 +727,35 @@ Measured by the filer on 2026-10-16 in a trace of 14 fixtures at a0451c70 (rc 0,
 Outside the sandbox the fixture is green: per the filer, `ok derivation-differential` appears in all three 2026-10-16 gate logs (an impossible token reads 0), with 7 loaded runs that day at 15-31 s each.
 
 Cost: it stays unmapped and runs on every push, about 20 s, not the gate pole. It ran on every push before too (its rows were stale), so this is a permanent read-set gap, not a regression. Two candidate fixes, neither chosen: grant process-info in the profile (broadens what a trace records, to be weighed), or skip the liveness arms under the sandbox (weakens the fixture exactly where the trace looks; not recommended). Not to be fixed now.
+
+verify: manual
+
+## BL-611 — two fixtures whose verdict depends on the real `docs/backlog.md` are never re-run when only the backlog changes
+
+**DEFECT.** Found by batch 235 intake on the intake-2 docs gate (2026-10-16), adjudicated with lead ai-dlc-9c. That push changed `docs/backlog.md`; the content-key skip passed over `backlog-receipt-binding` and `backlog-size-ceiling` although both `inputs.decl` list `docs/backlog.md` (a non-`!` line). By design: `core/scripts/hermetic-run.sh:374-375` (origin/main) states a dist sandbox "declares VERSION and docs/backlog*.md, which sit under EXCLUDED tops and so are in no population", so a declared `docs/` file is copied into the sandbox but never keyed. Their recorded keys (`.git/ai-dlc-fixture-keys/<fx>.key`) carry no `docs/backlog.md` row (0), against `scripts/backlog-reverify.sh` and the fixture's own files (1 each).
+
+It is a GAP, not a correct skip, because both verdicts can change when only the backlog changes:
+- `backlog-receipt-binding` arm j1 (`run.sh:785-824`) copies the real ledger (`:105-106` resolves `docs/backlog.md`; `:788` `cp "$REAL_LEDGER"`) and joins the validator's `sh` population against `backlog-reverify.sh`'s resolved set. It FAILs when either side is 0, when the arm's population is smaller than the classifier's (`:820`), when `--declared-empty` misbehaves on the real file (`:796`), or when the real ledger already carries the anchor `BL-899` (`:798-800`). Each of those is a property of the ledger's content.
+- `backlog-size-ceiling` arm b16 (`run.sh:400ff`) does the same join for the size ceiling (`:408` `cp "$REAL_LEDGER"`), branching on the real ledger's declared-empty state. Its own comment says it is "the one that catches a drift filed after this fixture was written".
+So a backlog commit that introduces exactly the drift these arms exist to catch is skipped on the push that carries it; it surfaces only on the next push that happens to change the validator, the classifier or the fixture. Cost if keyed: `backlog-receipt-binding` 139 s, `backlog-size-ceiling` 4 s recorded (loaded), on every push that edits the backlog — most docs releases.
+
+Owed: decide, with the cost stated, whether a declared EXCLUDED-top file is keyed for the fixtures that declare it (a per-fixture opt-in, not a population change), or whether the real-ledger arms move to a cheaper, separately keyed unit. Receipt: a push that changes only `docs/backlog.md` re-runs a fixture whose arm reads it, with a push changing an unrelated file as the control that still skips it.
+
+verify: manual
+
+## BL-587 — a reconcile that records derivations "owed to the sprint's derivation-validator step" has no channel to the sprint lead, so the debt is silently dropped
+
+**DEFECT.** Filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]) from the graph s319 watch; intake re-derived every figure read-only on graph.
+- The 0.793.0 reconcile log `_bmad-output/ai-dlc-update/reconcile-log-20261016T0725Z.md:35-43` records the operator's AskUserQuestion disposition "**leave untouched, record as owed**" and lists 8 newly-failing `grep -n` derivations "Owed to the S319 session's derivation-validator step": carry-over-evaluation-architect-5.md:13 and :23, carry-over-evaluation-pm-5.md:13, prd.md:1289, carry-over-evaluation-party-repair-p1.md:632, requirements-party-repair.md:859, shards/carry-over-evaluation-party-repair-p1/5.md:15 and shards/requirements-party-repair/08.md:102 (the BL-581 set). `prd.md:1289` and `s319/requirements-party-repair.md:859` still hold their old `$ grep -n -F -e "  ok  %-44s" … scripts/ai-dlc/validate-artifact-budget.sh` commands in the working tree.
+- The 0.798.0 pull's log (`reconcile-log-20261016T105433Z.md`, 51 lines) carries no owed list: its 3 `owed` mentions are a path list, an `audit-layer-debt` count and a ledger re-verify line, and "record as owed" occurs 0 times. That is correct for its own differential — those 8 were already failing at its base, so it cannot report them as NEWLY-FAILING — and it means the only record stays the 0.793.0 log.
+- The resumed s319 lead `cf53b84f` (resumed 07:26 EDT) ran `validate-artifact-derivations.sh` (17 mentions) at 07:59 EDT on `requirements-repair-p1.md` only. Its transcript mentions `reconcile-log-20261016T0725Z` 0 times, `prd.md:1289` 0 times and "record as owed" 0 times, against `requirements-repair-p1` 60 times. `_bmad-output/pipeline-snapshot.md` carries `reconcile-log` 0, `prd.md:1289` 0 and an owed-derivation line 0, against `requirements` 12.
+So the debt lives only in a file no step of the resumed sprint reads.
+
+Owed:
+1. When a reconcile records items owed to a sprint, write them where the sprint reads them — the snapshot's owed/watch section, or a debt row a lead-side check refuses to pass while it is open.
+2. The step-0a resume integrity check, or the step's own derivation-validator run, reads that record and re-points each derivation or shows it as open.
+3. Prove it on this instance: the 8 rows above. (Per BL-581 each is a line-number re-point, not removed text.)
+
+Related: BL-581 (the false-zero "Verified" in the same 0.793.0 log), BL-579 (the snapshot misreporting the stopped remediator's writes).
 
 verify: manual

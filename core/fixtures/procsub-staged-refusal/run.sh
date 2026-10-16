@@ -1913,46 +1913,21 @@ if sg spell; then
 # NO EXEMPTION LIST: a correct site that matches is respelled, never listed.
 # ================================================================================================
 PIN=e4934e6571b6819c4762d7b9eae56d0d16ca5c55
-SPELL_AWK='
-  /^\+\+\+ / { next }
-  /^@@/ { prev = ""; next }
-  /^\+/ {
-    l = substr($0, 2)
-    if (l ~ /^[[:blank:]]*#/) { prev = ""; next }
-    hit = ""
-    if (l ~ /done[[:blank:]]*<<<[[:blank:]]*"?\$\(/) hit = "r1"
-    else if (l ~ /(^|[^|])\|[[:blank:]]*while[[:blank:]]/) hit = "r2"
-    else {
-      s = l
-      gsub(/[0-9]*>[[:blank:]]*\/dev\/null/, "", s)
-      gsub(/>&[0-9]/, "", s)
-      if (s ~ />[^|]*\|\|[[:blank:]]*(true|:)([[:blank:]]|;|\)|$)/) hit = "r3"
-      else if (l ~ /^\$\(/ && prev ~ /<<-?[A-Za-z_]+[[:blank:]]*$/) hit = "r4"
-    }
-    if (hit != "") print hit ": " l
-    prev = l
-    next
-  }
-  { prev = "" }'
-# SELF-PROBE FIRST, both directions, on seeded diff text.
-PROBE="$W/spell-probe.diff"
-cat > "$PROBE" <<'PROBE_EOF'
-+++ b/core/scripts/x.sh
-@@ -1,0 +1,12 @@
-+  done <<< "$(find . -type f)"
-+  printf '%s\n' "$list" | while IFS= read -r f; do
-+  find "$d" -type f > "$T/walk" || true
-+  cat <<EOF
-+$(git ls-files)
-+  done < "$T/walk"
-+  find "$d" -type f > "$T/walk" || rc=$?
-+  hits="$(grep -c . "$T/hits" || true)"
-+  sed -n 1p "$f" 2>/dev/null || true
-+  # was: done < <(find ...) > f || true
-+  cat <<'EOF'
-+$(literal)
-PROBE_EOF
-PROBE_GOT="$(awk "$SPELL_AWK" "$PROBE" | cut -d: -f1 | tr '\n' ' ')"
+# THE GRAMMAR LIVES IN ONE FILE, procsub-spell.awk beside this run.sh, which scripts/pregate-self-check.sh loads too. It is
+# never restated here: a copy in either reader is the drift that file exists to prevent. This fixture is
+# .dist-only, so a distribution-only path is safe to read.
+SPELL_AWK_FILE="$HERE/procsub-spell.awk"
+if [ ! -s "$SPELL_AWK_FILE" ]; then
+  bad "spelling arm: the shared grammar $SPELL_AWK_FILE is missing or empty -- nothing can be scanned"
+fi
+SPELL_PROBE_FILE="$HERE/procsub-spell-probe.diff"
+if [ ! -s "$SPELL_PROBE_FILE" ]; then
+  bad "spelling arm: the shared seeded probe $SPELL_PROBE_FILE is missing or empty"
+fi
+# SELF-PROBE FIRST, both directions, on the shared seeded diff text (grammar and probe are both
+# single-sourced in this directory, beside the self-check that reads them).
+PROBE="$SPELL_PROBE_FILE"
+PROBE_GOT="$(awk -f "$SPELL_AWK_FILE" "$PROBE" | cut -d: -f1 | tr '\n' ' ')"
 if [ "$PROBE_GOT" = "r1 r2 r3 r4 " ]; then
   ok "spelling arm self-probe: r1-r4 each flagged once, the six correct spellings not flagged"
 else
@@ -1966,7 +1941,7 @@ else
   DIFF="$W/spell.diff"
   if git -C "$OWN" diff -U0 "$PIN" -- 'core/*.sh' ':(exclude)core/fixtures/**' > "$DIFF" 2>"$ERR"; then
     n_added="$(grep -c '^+[^+]' "$DIFF")" || n_added=0
-    hits="$(awk "$SPELL_AWK" "$DIFF")"
+    hits="$(awk -f "$SPELL_AWK_FILE" "$DIFF")"
     if [ "$n_added" -eq 0 ]; then
       bad "spelling arm: the diff against the pin added ZERO lines to core/*.sh -- the scan read nothing, so its zero is not a result"
     elif [ -z "$hits" ]; then
