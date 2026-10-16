@@ -65,7 +65,7 @@ SHARDS="a b c d"
 MUTANTS_a="JX1 JX2 JX3 JX4 JX5 JX6 JX7 JX8 JX10 JX9 JX11 JX12 JX13 JX14 JX15 JX16 JX17 JX18"
 MUTANTS_b="JX19 JX20 JX21 JX22 JX23 JX24 JX25 JX26 JX27 JX28 JX29 JX30 JX36 JX37 JX38 JX42 JX43 JX44"
 MUTANTS_c="JX45 JX46 JX47 JX48 JX49 JX39 JX40 JX41 JX31 JX32 JX33 JX34 JX35 JX50 JX51 JX52 JX53 JX54"
-MUTANTS_d="JX55 JX56 JX57 JX58 JX59 JX60 JX61 JX62 JX63 JX64 JX65 JX66 JX67 JX68 JX69 JX70 JX71 JX72"
+MUTANTS_d="JX55 JX56 JX57 JX58 JX59 JX60 JX61 JX62 JX63 JX64 JX65 JX66 JX67 JX68 JX69 JX70 JX71 JX72 JX73 JX74 JX75 JX76 JX77 JX78 JX79"
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
@@ -393,7 +393,7 @@ src_probe_disabled() {'
 # so every party run stops at it: the arms that expect a party join or a NAMED refusal all die.
 # srcsetaside, srcpending, srcera and srcclosed (BL-508/519) die too: each is a --sources run, and the
 # probe stops every one before its arm.
-mutant "JX18 source keyed on the id alone (self-probe in place)" "sjnames party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 srcsetaside srcpending srcera srcclosed srchalf srccross" \
+mutant "JX18 source keyed on the id alone (self-probe in place)" "sjnames party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 srcsetaside srcpending srcera srcclosed srchalf srccross srcparts" \
   "$IDONLY_OLD" "$IDONLY_NEW"
 # JX19: the same key AND the probe removed -- now only the arms that seed an id another seat carries see it.
 mutant2 "JX19 source keyed on the id alone, self-probe removed" "partyunres srcunres" \
@@ -412,7 +412,7 @@ mutant "JX23 subject --pass party not a party repair" "sjpartysrc" \
   '[ "$SUBJMODE" = 1 ] && [ "$PASS" = party ] && [ -z "$ARTIFACT" ] && PARTY=1' \
   'false && PARTY=1'
 # srcsetaside and srcera die too: each refusal is reported and then acquitted by the same exit 0.
-mutant "JX24 --sources reports refusals and exits 0" "srcunres srcsetaside srcera" \
+mutant "JX24 --sources reports refusals and exits 0" "srcunres srcsetaside srcera dispkey dispvocab dispruling gapfill chkrec" \
   '  [ "$refuse_n" -eq 0 ] || exit 2
   [ "$SRCMODE" = 1 ] && echo "SOURCES:' \
   '  true || exit 2
@@ -549,13 +549,13 @@ printf '"'"'%s'"'"' "$ESC_LINES"' \
   '# "Adversarial repair dispatch").
 :'
 # escopen and escclosed die too: --escalations runs the same record_tail.
-mutant "JX35 --sources does not apply the entry contract" "srcsetaside srcpending srcera srcclosed srchalf srccross escopen escclosed" \
+mutant "JX35 --sources does not apply the entry contract" "srcsetaside srcpending srcera srcclosed srchalf srccross escopen escclosed dispkey dispvocab dispruling gapfill" \
   '  contract_refusals 1 "$(contract_check 1 "$1")"' \
   '  ESC_LINES=""; ESC_CLOSED=""; ESC_N=0; ESC_X=0'
 # ---- the four siblings forms, the point-in-time fence, escalated citations, --escalations.
 SIBREAD='    /^[[:space:]-]*[*_`]*siblings[*_`]*:/ { sibf = 1; v = $0; sub(/^[^:]*:/, "", v); v = vtrim(v); if (v == "") sibw = 1; else if (v in SIBNA) sib = 1; inclaim = 0; next }'
 # JX50: the tip adversary's m508 -- the siblings reader loosened to any line mentioning the word.
-mutant2 "JX50 siblings read off any line mentioning the word, self-probe removed" "srcera sibforms sibprose sibnever" \
+mutant2 "JX50 siblings read off any line mentioning the word, self-probe removed" "srcera sibforms sibprose sibnever dispvocab" \
   "$SIBREAD" \
   '    /[Ss]iblings?/ { sib = 1 }' \
   "$CTPROBE_OLD" "$CTPROBE_NEW"
@@ -574,7 +574,7 @@ mutant "JX53 the siblings control not counted at the join" "sibnever" \
 mutant "JX54 an escalated entry's edit: path counted as a shard citation" "escpath" \
   '    function emit(   i) { if (disp !~ /^escalat/) for (i = 1; i <= nt; i++) print tk[i]; nt = 0; disp = "" }' \
   '    function emit(   i) { for (i = 1; i <= nt; i++) print tk[i]; nt = 0; disp = "" }'
-mutant "JX55 --escalations runs as --sources (needs a seat dir)" "escopen escclosed" \
+mutant "JX55 --escalations runs as --sources (needs a seat dir)" "escopen escclosed dispkey dispvocab dispruling gapfill chkrec" \
   '    --escalations) SRC_REC="${2:-}"; SRCMODE=2; shift 2 ;;' \
   '    --escalations) SRC_REC="${2:-}"; SRCMODE=1; shift 2 ;;'
 # ---- the re-run window (--rerun <part>.md@<ISO>). Expected sets are the measured kills; the
@@ -658,6 +658,40 @@ mutant "JX71 a re-run writer with rows outside its part not refused" "rrreuse" \
 mutant "JX72 a re-run writer's row on another part's record not refused" "rrreuse" \
   '            if (((p, a) in rw) && b != p && !((p, a, b, "R") in pq)) {' \
   '            if (0) {'
+# ---- BL-542: the renamed key, the vocabulary, the operator-ruling cite. The self-probe sees each, so
+# each is paired with the probe removed (mutant2), as JX36 is.
+mutant2 "JX73 an edit: entry with no disposition: not refused, self-probe removed" "dispkey" \
+  '      if (disp == "" && edf) print "NODISP\t" cf "\t" cur' \
+  '      if (0) print "NODISP\t" cf "\t" cur' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
+mutant2 "JX74 a value outside the vocabulary not refused, self-probe removed" "dispvocab" \
+  '        if ((src == 0 || era) && !(dfull in VOC)) print "BADDISP\t" cf "\t" cur "\t" dfull' \
+  '        if (0) print "BADDISP\t" cf "\t" cur "\t" dfull' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
+mutant "JX75 an operator-ruling cite not resolved" "dispruling" \
+  '  [ "$n" -ge 1 ] || refuse "${r}: the ${d} entry'"'"'s ruling cite' \
+  '  true || refuse "${r}: the ${d} entry'"'"'s ruling cite'
+# ---- BL-561: the part-token refusal removed; BL-556: the gap-fill tripwire removed (probe paired off).
+mutant "JX76 --sources on a part-token record not refused" "srcparts" \
+  '  [ "$(src_kind "$SRC_REC")" = PART ] \' \
+  '  [ "$(src_kind "$SRC_REC")" = NEVER ] \'
+mutant2 "JX77 the gap-fill tripwire removed, self-probe removed" "gapfill" \
+  '        if (disp == "repaired" && claim ~ /gap[- ]?fill|veto/) print "GAPFILL\t" cf "\t" cur' \
+  '        if (0) print "GAPFILL\t" cf "\t" cur' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
+# ---- BL-557: the parts-mode call removed; the record-mode era removed (every record binds). The
+# self-probe sees the second, so it is paired off. JX79's set is WIDE BY CONSTRUCTION: the era is the
+# only line letting a record that writes neither field pass, and every --sources and --escalations
+# world here writes neither, so removing it refuses each of them. That breadth is the property --
+# one predicate's death would mean the era guarded one world -- and chkrec is the arm that owns it
+# (its first half is a field-less record that must pass).
+mutant "JX78 the check fields not read in parts mode" "chkpart" \
+  '  checks_refusals "$(checks_field 0 "$p")"' \
+  '  :'
+mutant2 "JX79 the record-mode era removed (a record with neither field binds), self-probe removed" "srcok srcpending srcclosed srchalf srccross escopen escclosed dispruling srcparts chkrec" \
+  '      if (rec == 1 && na + nd == 0) exit' \
+  '      if (0) exit' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
 # ---- END JX MUTANTS.
 
 # ------------------------------------------------------------------------------ the reap

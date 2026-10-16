@@ -247,6 +247,20 @@ p_escopen "$JOIN" && ok "EC20: --escalations, no seat dir, one escalation open a
   || bad "EC20: --escalations did not report an open escalation on a non-party record (rc=$RC): $(cat "$JO")"
 p_escclosed "$JOIN" && ok "EC21: --escalations, every escalation closed and a shard fence whose text the serial pass rewrote -> rc 0, ESCALATED-COUNT: 0" \
   || bad "EC21: --escalations did not pass a fully closed record (rc=$RC): $(cat "$JO")"
+p_dispkey "$JOIN" && ok "EC22: an entry carrying edit: under a renamed key (outcome:) -> REFUSED, NODISP named; the dispositioned entry beside it is not" \
+  || bad "EC22: an entry with edit: and no disposition: was not refused (rc=$RC): $(cat "$JO")"
+p_dispvocab "$JOIN" && ok "EC23: a disposition outside the vocabulary in era -> REFUSED; not-reproduced and the pre-era value accepted" \
+  || bad "EC23: the disposition vocabulary did not discriminate (rc=$RC): $(cat "$JO")"
+p_dispruling "$JOIN" && ok "EC24: operator-ruling resolves by ISO heading and by SHA256 line with no source:; an unresolved and a missing cite REFUSED" \
+  || bad "EC24: the operator-ruling cite did not discriminate (rc=$RC): $(cat "$JO")"
+p_srcparts "$JOIN" && ok "EC25: --sources on a record citing only part tokens, seats present -> ONE refusal naming --escalations; a seat-token record resolves" \
+  || bad "EC25: --sources did not refuse a part-token record by name, or refused the party control (rc=$RC): $(cat "$JO")"
+p_gapfill "$JOIN" && ok "EC26: a repaired claim calling the fix a gap fill for veto -> REFUSED; the escalated entry in the same words is not" \
+  || bad "EC26: the gap-fill tripwire did not discriminate (rc=$RC): $(cat "$JO")"
+p_chkpart "$JOIN" && ok "EC27: parts mode -- a part stating derivations not replayed and a part with no derivations: line -> REFUSED by name; the stamped part beside them is not" \
+  || bad "EC27: the check-fields arm did not discriminate in parts mode (rc=$RC): $(cat "$JO")"
+p_chkrec "$JOIN" && ok "EC28: --escalations -- a record with neither field is outside the era (rc 0); one that opened it without derivations: is REFUSED" \
+  || bad "EC28: the check-fields era did not discriminate in record mode (rc=$RC): $(cat "$JO")"
 p_setasideshard "$JOIN" && ok "EC10: a repaired MAJOR set aside only as 'outside this shard' -> REFUSED (the regex's first half)" \
   || bad "EC10: an 'outside this shard' set-aside was not refused (rc=$RC): $(cat "$JO")"
 p_setasidenr "$JOIN" && ok "EC11: a repaired MAJOR set aside only as 'not required' -> REFUSED (the regex's second half)" \
