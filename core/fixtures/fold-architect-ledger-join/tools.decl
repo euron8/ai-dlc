@@ -1,0 +1,27 @@
+# Every tool run.sh and the four programs it drives invoke, read off their code.
+awk
+basename
+bash
+cat
+chmod
+cmp
+cp
+dirname
+env
+grep
+head
+id
+jq
+kill
+mkdir
+mktemp
+mv
+pkill
+python3
+rm
+rmdir
+sed
+sh
+sleep
+sort
+tr
