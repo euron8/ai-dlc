@@ -1050,3 +1050,19 @@ verify: manual
 **NOTE.** Filed by ai-dlc-4e [9b62de], same header pass; a mechanism read, cites confirmed at `9f8e7691`. `core/hooks/ai-dlc-continue.sh:123` sets `RAPID_WINDOW_SECONDS=30`, and `stall_run()` (`:348`) sets `RUN_TOOL=unknown` (`:357`) when there is no transcript, no jq, or an old two-line state file. On that path the time test alone decides whether a run continues. Load stretches a genuinely stalled session's gaps past 30 s, which resets the counter to 1, so `EFF_MAX` (`:131-134`) is never reached and release falls to the harness cap. Owed: measure how often `RUN_TOOL=unknown` actually occurs; if it is non-zero, decide whether the unknown path should hold the run rather than reset it. Receipt: `stall_run` driven with an unreadable transcript at 31 s spacing reaches `EFF_MAX`, where today it resets to 1 on every block.
 
 verify: manual
+
+## BL-642 — `pregate-self-check.sh` reported clean on two release tips that `validate-enforcement-map.sh` fails, though it runs that validator whole
+
+**DEFECT.** Measured twice by lead ai-dlc-71 in batch 235:
+- (a) ai-dlc-c9's 0.806.0 went red at the gate on I77 (`core/fixtures/story-evidence-scaffold/world.sh` tracked 100644; it is 100755 on main now).
+- (b) ai-dlc-c2's 0.808.0 tip passed `pregate-self-check` with rc 0, yet `validate-enforcement-map.sh` exits 1 on that tip with 7 FAILs, all from c2's diff: I77, I75 ×2, I54/I54b ×2, I95, and the check-manifest-bypass seed. The same validator at `9f8e7691` exits 0.
+Each miss costs a gate cycle.
+
+**Premise corrected at intake** (read at origin/main; nothing run, gate window). The self-check is not missing these arms. Its arm (a) runs the WHOLE validator, `bash scripts/validate-enforcement-map.sh` from the tree root (`scripts/pregate-self-check.sh:84-100`), with no diff scoping, and it fails on any non-zero exit. c2's branch carries the same script (md5 `c80f7dd2` on main and on `b235-bl587`). So a clean rc 0 from the self-check and a red rc 1 from the validator on the same tip cannot both describe the same tree and index. I77 reads modes from the INDEX (`git ls-files -s`, `validate-enforcement-map.sh:1512` and `:1523`), so a run before the last commit or stage, a run with `AI_DLC_PREGATE_ROOT` naming another checkout (`:46-51`), or a run against an earlier commit would each read clean. Which of these happened is not established.
+
+Owed:
+1. Reproduce on c2's 0.808.0 tip: run the self-check and the validator in the same checkout at the same commit and compare. If they disagree there, the self-check has a real defect to find. If they agree, the miss was a procedural one: the self-check was not run on the tree that was pushed.
+2. Close whichever gap the reproduction shows. For a procedural miss, the self-check should record the commit and index state it judged (HEAD sha and a clean `git status`, refusing on a dirty tree), so "clean" names the tree it was clean for, and the push can be checked against it.
+Do NOT add a diff-scoped re-run of the validator, which arm (a) already supersedes. Measure any added cost; this is the validator the suite pole invokes. Receipt: a self-check run on a tree whose index differs from HEAD refuses or names the mismatch, and on c2's tip it reports the 7 FAILs.
+
+verify: manual
