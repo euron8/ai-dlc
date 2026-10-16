@@ -684,11 +684,12 @@ mutant2 "JX77 the gap-fill tripwire removed, self-probe removed" "gapfill" \
 # only line letting a record that writes neither field pass, and every --sources and --escalations
 # world here writes neither, so removing it refuses each of them. That breadth is the property --
 # one predicate's death would mean the era guarded one world -- and chkrec is the arm that owns it
-# (its first half is a field-less record that must pass).
+# (its first half is a field-less record that must pass). gapfill dies too: since the gap-fill
+# tripwire reports instead of refusing, its record must exit 0, and it writes neither field.
 mutant "JX78 the check fields not read in parts mode" "chkpart" \
   '  checks_refusals "$(checks_field 0 "$p")"' \
   '  :'
-mutant2 "JX79 the record-mode era removed (a record with neither field binds), self-probe removed" "srcok srcpending srcclosed srchalf srccross escopen escclosed dispruling srcparts chkrec" \
+mutant2 "JX79 the record-mode era removed (a record with neither field binds), self-probe removed" "srcok srcpending srcclosed srchalf srccross escopen escclosed dispruling srcparts gapfill chkrec" \
   '      if (rec == 1 && na + nd == 0) exit' \
   '      if (0) exit' \
   "$CTPROBE_OLD" "$CTPROBE_NEW"
