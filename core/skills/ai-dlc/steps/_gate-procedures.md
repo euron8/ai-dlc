@@ -1058,7 +1058,8 @@ escalated sibling line, the serial remediator runs `grep -rn -F '<the text that 
 replaced>'` over the ASSEMBLED files (`s<N>/stories` and `s<N>/epics`, or the document), never the
 slot, `shards/` or a record, and records it as its own entry with a `siblings:` fence. That is
 why SERIAL-REQUIRED dispatches it: a round whose every finding stayed inside one shard still
-owes this grep.
+owes this grep. After a sections or subject join the lead's `serial-remediation-worklist.sh`
+output (the subject-axis step 4 above) is the starting list for both the grep and the cites.
 
 Owed derivations are refused at gate-validation.md Check 37, not here.
 
