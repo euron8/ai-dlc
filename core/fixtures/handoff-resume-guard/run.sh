@@ -637,9 +637,15 @@ expired_lease() { printf '%s' "$(( $(date +%s) - 1 ))"; }
 
 # Each scorer drives one world through the given hook and returns 0 when the arm's property
 # holds, so the mutant battery below scores the SAME predicate the arm does. LA_MSG is evidence.
-la_a1() { # live lease + in-flight row -> ALLOW, token, counter byte-identical, record kept
-  local p o; p="$(lease_world "$(live_lease)" "$(cat "$ROOT/.s_running")" up)"
-  o="$(lease_drive "$p" "$SWEEP" "${1:-}")"
+#
+# TWO LEASE FORMS. `wait-for-deliverable.sh` writes the marker as `<epoch> <pid>`, one holder,
+# and the hook's `beat_lease_live` reads its first field. A1-A6 seed the BARE `<epoch>` a beat
+# from before that format writes, and stay as the backward-compatibility proof: a consumer
+# mid-pull runs the new hook against an old beat's marker. A1p/A2p seed the producer's form.
+la_a1() { la_defer_on "$(live_lease)" "${1:-}"; }
+la_defer_on() { # la_defer_on <lease> [hook] -> live lease + in-flight row -> ALLOW, token, counter byte-identical, record kept
+  local p o; p="$(lease_world "$1" "$(cat "$ROOT/.s_running")" up)"; LA_P="$p"
+  o="$(lease_drive "$p" "$SWEEP" "${2:-}")"
   LA_MSG="[block=$(is_block "$o" && echo y || echo n) deferred=$(lease_ev "$p" HANDOFF_GUARD_DEFERRED_BY_LIVE_BEAT) state=$(cmp -s "$LEASE_STATE_SEED" "$p/_bmad-output/handoff-guard-state.txt" && echo same || echo changed) armed=$([ -f "$p/_bmad-output/.handoff-guard-armed" ] && echo y || echo n)]"
   ! is_block "$o" && [ "$(lease_ev "$p" HANDOFF_GUARD_DEFERRED_BY_LIVE_BEAT)" = 1 ] \
     && cmp -s "$LEASE_STATE_SEED" "$p/_bmad-output/handoff-guard-state.txt" \
@@ -653,6 +659,17 @@ la_block_on() { # la_block_on <lease> [hook] -> 0 when the guard BLOCKS with its
     && [ "$(lease_ev "$p" 'HANDOFF_GUARD_BLOCK ([0-9]*/[0-9]*)')" = 1 ]
 }
 la_a2() { la_block_on "$(expired_lease)" "${1:-}"; }
+# A1p -- THE PRODUCER'S FORM, live: it defers exactly as A1 does, and the logged row names the
+# EPOCH alone. A row carrying "N 12345" would put a pid where a reader expects a deadline.
+la_a1p() {
+  local row
+  la_defer_on "$(live_lease) 12345" "${1:-}" || return 1
+  row="$(sed -n 's/^- Wait-beat lease live until epoch //p' "$LA_P/$LEASE_LOG" 2>/dev/null)"
+  LA_MSG="$LA_MSG [row=$row]"
+  grep -qE '^[0-9]+ \(now [0-9]+\); guard deferred, not cleared$' <<< "$row"
+}
+# A2p -- THE PRODUCER'S FORM, expired: blocks exactly as A2 does.
+la_a2p() { la_block_on "$(expired_lease) 12345" "${1:-}"; }
 la_a3() { la_block_on "not-an-epoch" "${1:-}"; }
 la_a4() { # NO handoff requested, flag DOWN, live lease -> Check 2b's allow, no guard row at all
   local p o; p="$(lease_world "$(live_lease)" "$(cat "$ROOT/.s_running")" down)"
@@ -706,6 +723,10 @@ la_a1 && ok "A1: handoff with an 'in-flight' row and a LIVE beat lease -> ALLOW,
       || bad "A1: the step-1 beat's Stop was not deferred cleanly $LA_MSG — the lead is told to TaskStop the teammates the beat is waiting on"
 la_a2 && ok "A2: the same world with an EXPIRED lease -> BLOCK with the HANDOFF GUARD reason and a HANDOFF_GUARD_BLOCK row (keyed on the lease, not the file)" \
       || bad "A2: an expired lease did not block $LA_MSG — a dead beat's marker defers the guard forever"
+la_a1p && ok "A1p: the producer's '<epoch> <pid>' lease, live -> deferred like A1, and the logged row names the epoch alone" \
+       || bad "A1p: a live '<epoch> <pid>' lease was not deferred cleanly, or its row carries more than the epoch $LA_MSG — the hook does not read the marker wait-for-deliverable.sh writes"
+la_a2p && ok "A2p: the producer's '<epoch> <pid>' lease, expired -> BLOCK like A2" \
+       || bad "A2p: an expired '<epoch> <pid>' lease did not block $LA_MSG — a dead beat's marker defers the guard"
 la_a3 && ok "A3: the same world with a NON-INTEGER lease -> BLOCK with the HANDOFF GUARD reason" \
       || bad "A3: a garbage lease did not block $LA_MSG — the deferral reads the file's existence, not its epoch"
 la_a4 && ok "A4: NO handoff requested, flag down, live lease -> ALLOWED_BY_LIVE_BEAT and no deferral row (the change is confined to the handoff path)" \
@@ -764,6 +785,16 @@ if lmut m4-disarms 's/^          echo "## \${TIMESTAMP} -- HANDOFF_GUARD_DEFERRE
 fi
 if lmut placement-before-arm-test 's/^    if \[ "\$RESUME_OK" != "1" \] || \[ "\$TEAMMATES_OK" != "1" \] || \[ "\$INFLIGHT_OK" != "1" \] \\$/    if beat_lease_live || [ "$RESUME_OK" != "1" ] || [ "$TEAMMATES_OK" != "1" ] || [ "$INFLIGHT_OK" != "1" ] \\/'; then
   lscore placement "$M" a6 a1 "the deferral taken before the arm test"
+fi
+# m6: the first-field line deleted, so the lease regex sees "N 12345" and rejects it. The control
+# is the BARE-epoch A1 on the same copy: the kill is the producer form's, not the deferral's.
+if lmut m6-no-first-field '/^  BEAT_DEADLINE="\${BEAT_DEADLINE%% \*}"$/d'; then
+  lscore m6 "$M" a1p a1 "the marker read whole, not by its first field"
+fi
+# m7: the first field taken inside the TEST only, so the deferral holds and the row logs the
+# whole marker. Owned by A1p's row conjunct; A1 (bare epoch) logs the same either way.
+if lmut m7-row-logs-pid '/^  BEAT_DEADLINE="\${BEAT_DEADLINE%% \*}"$/d; s/^  \[\[ "\$BEAT_DEADLINE" =~ \^\[0-9\]+\$ \]\] && \[ "\$BEAT_DEADLINE" -gt "\$NOW" \]$/  [[ "${BEAT_DEADLINE%% *}" =~ ^[0-9]+$ ]] \&\& [ "${BEAT_DEADLINE%% *}" -gt "$NOW" ]/'; then
+  lscore m7 "$M" a1p a1 "the lease tested by its first field but logged whole"
 fi
 
 # --- Beat-before-stop arm -----------------------------------------------------------

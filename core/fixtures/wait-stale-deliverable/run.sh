@@ -236,6 +236,28 @@ mutant_expr() { # <name> -> sets $MUT_EXPR to the sed program that removes that 
     # which would leave the `printf` writing to stdout and corrupt the output the
     # assertions read.
     grant-no-counter-rewrite) MUT_EXPR='s@^      printf .%s. "\$(( MAX_BEATS - 1 ))" > "\$c" 2>/dev/null || true$@      printf "%s" "$(( MAX_BEATS - 1 ))" > /dev/null 2>\&1 || true@' ;;
+    # ---- the lease and per-process-memo mutations (cases 33-45) ----------------------
+    # The pre-lease EXIT trap: every beat deletes the shared marker on exit, holder or not.
+    lease-trap-unconditional) MUT_EXPR="s#^trap 'lease_release' EXIT\$#trap 'rm -f \"\$BEAT_MARKER\" 2>/dev/null || true' EXIT#" ;;
+    # The holder releases without looking for an heir: it deletes the marker whenever it holds
+    # it. Anchored on the heir branch's own line; the `else rm` line beneath it stays.
+    lease-no-heir)            MUT_EXPR='s/^    if \[ -n "\$lr_heir_" \]; then lease_put .*$/    if false; then :/' ;;
+    # Every beat takes the marker on every beat_alive, live holder or not.
+    lease-always-put)         MUT_EXPR='s/^  if \[ "\$ba_pid_" = "\$\$" \] || lease_holder_dead "\$ba_pid_"; then lease_put "\$ba_e_" "\$\$"; fi$/  lease_put "$ba_e_" "$$"/' ;;
+    # The early lease, deleted: the bare `beat_alive` directly beneath the trap line. The
+    # in-loop call before the sleep is ALSO a bare column-0 `beat_alive`, so the delete is
+    # keyed on the line after the trap rather than on the text, which matches both.
+    lease-no-early)           MUT_EXPR="/^trap 'lease_release' EXIT\$/{n;/^beat_alive\$/d;}" ;;
+    # The per-process join-epoch memo, removed: every join_of re-reads the shared sidecar.
+    no-join-memo)             MUT_EXPR='s/^  if \[ -n "\$jm_" \]; then printf .%s. "\$jm_"; return 0; fi$/  :/' ;;
+    # Keeping `.since` when a path delivers, the shape a fix for two beats on one path could
+    # take instead of the memo. Case 42 owns it: a later beat armed without --since then reads
+    # a delivered file as this join's answer. Aimed at the post-sleep report's cleanup (four-space indent
+    # and `${c}.progress`), not the pre-sweep's (`$pg`), because that is where a mid-beat
+    # delivery is consumed.
+    since-kept-on-delivery)   MUT_EXPR='s/^    rm -f "\$c" "\$s" "\${c}\.progress"/    rm -f "$c" "${c}.progress"/' ;;
+    # A live pid-less (pre-upgrade) lease is taken instead of left alone.
+    preupgrade-taken)         MUT_EXPR='/^  \[ -n "\$ba_pid_" \] || return 0  *# a live pre-upgrade lease/d' ;;
     *) echo "FIXTURE ERROR: no mutation registered for '$1'" >&2; exit 2 ;;
   esac
 }
@@ -483,6 +505,7 @@ done
 kill -9 -"$PID" 2>/dev/null || kill -9 "$PID" 2>/dev/null || true
 wait "$PID" 2>/dev/null || true
 LEASE="$(cat "$MARKER" 2>/dev/null || echo '')"
+LEASE="${LEASE%% *}"   # the marker is `<epoch> <pid>`; the lease is the first field
 case "$LEASE" in
   ''|*[!0-9]*) bad "marker-goes-stale: marker absent or non-numeric after SIGKILL — cannot tell a lease from a promise" ;;
   *)
@@ -679,7 +702,9 @@ C21_mut_flagless_path() {
 for mname in grant-cap unprune-wait-beats unexclude-beat-inflight state-dir-guard \
              path-exists-check progress-sampling \
              resample-gate restamp-ungated no-restamp grant-unconditional \
-             grant-no-counter-rewrite; do
+             grant-no-counter-rewrite \
+             lease-trap-unconditional lease-no-heir lease-always-put lease-no-early \
+             no-join-memo since-kept-on-delivery preupgrade-taken; do
   mutant "$mname"
   W="$( bash "$SEED" exhausted )"
   beat_with "$MUT" "$W"
@@ -941,6 +966,430 @@ chained_beat "$M" "$W" --progress-path wt
 if [ "$(cat "$W/_bmad-output/.wait-beats/${KEY}" 2>/dev/null)" = "6" ]; then
   ok "MUTANT grant-no-counter-rewrite: the counter stays at the bound, so the next sibling in this call grants again"
 else bad "MUTANT grant-no-counter-rewrite: counter is not at the bound with the rewrite removed; something else is holding it down"; fi
+rm -rf "$W"
+}
+
+# ===========================================================================
+# CONCURRENT BEATS: THE LEASE, AND THE PER-PROCESS JOIN MEMO (cases 33-45)
+# ===========================================================================
+# EVERY BEAT HERE RUNS IN ITS OWN PARENT SHELL, AND THAT IS THE HARNESS, NOT TIDINESS. Two
+# beats started from one shell share $PPID, so the second sees the first's `.shell-$PPID`
+# marker, takes the chained-sibling return, and neither sleeps nor holds a lease -- every
+# assertion below would then be about the chained path. `own` gives each beat a fresh `bash -c`
+# parent; the trailing `exit $?` stops bash exec-ing the last command, which would hand the
+# subject the WRAPPER's parent instead (see `chained_beat` for the measurement). Every runner
+# asserts the result through `separate_shells`: one `.shell-*` marker per beat started, and no
+# beat printing the sibling NOTE.
+own() { bash -c '"$@"; exit $?' _ "$@"; }
+
+# bg_beat <subject> <work> <out> <quantum> <poll> [args...] -> starts one beat in its own
+# shell, in the background; sets BG to the pid `wait` takes. The subject's OWN pid is read
+# from what it writes (the marker, its `.lease-<pid>`), never from `$!`, which names the
+# subshell. SETTLE=2 matters only under --complete and keeps those cases inside a quantum.
+BG=""
+bg_beat() {
+  local subj="$1" w="$2" o="$3" q="$4" p="$5"; shift 5
+  ( cd "$w" && own env AI_DLC_WAIT_BEAT_SECS="$q" AI_DLC_WAIT_POLL_SECS="$p" \
+                       AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 \
+                       AI_DLC_WAIT_SETTLE_SECS=2 \
+      bash "$subj" "$@" ) > "$o" 2>&1 &
+  BG=$!
+}
+until_true() { # <tenths> <command...> -- 0 once the command succeeds, 1 on timeout
+  local n="$1"; shift
+  while [ "$n" -gt 0 ]; do "$@" && return 0; sleep 0.1; n=$((n - 1)); done
+  return 1
+}
+now_at_least() { [ "$(date +%s)" -ge "$1" ]; }   # re-reads the clock on every call
+marker_of() { # <work> -> the marker's bytes, empty when absent. `read`, not `cat`: a builtin,
+              # so a 50ms sampling loop does not fork. The marker carries no newline, so read
+              # returns 1 at EOF having assigned the line -- hence the `|| true`.
+  local l=""
+  IFS= read -r l 2>/dev/null < "$1/_bmad-output/.beat-inflight" || true
+  printf '%s' "$l"
+}
+marker_pid() { local c; c="$(marker_of "$1")"; case "$c" in *' '*) printf '%s' "${c#* }" ;; esac; }
+count_glob() { [ -e "$1" ] || { echo 0; return; }; echo "$#"; }   # call as: count_glob <glob>
+lease_n() { count_glob "$1"/_bmad-output/.wait-beats/.lease-*; }
+leases_are() { [ "$(lease_n "$1")" = "$2" ]; }
+fx_key() { printf '%s' "$1" | cksum | tr -d ' \t' | cut -c1-16; }
+counter_is() { [ "$(cat "$1/_bmad-output/.wait-beats/$(fx_key "$2")" 2>/dev/null)" = "$3" ]; }
+other_lease_pid() { # <work> <pid> -> the registered beat pid that is not <pid>
+  local f p
+  for f in "$1"/_bmad-output/.wait-beats/.lease-*; do
+    [ -e "$f" ] || continue
+    p="${f##*/.lease-}"; [ "$p" = "$2" ] || { printf '%s' "$p"; return; }
+  done
+}
+# SIGKILL a backgrounded beat's whole tree, collected top-down before any kill. A bare kill of
+# `$!` leaves the subject reparented to init and still sweeping.
+reap_tree() {
+  local all="$1" frontier="$1" next p
+  while [ -n "$frontier" ]; do
+    next=""
+    for p in $frontier; do next="$next $(pgrep -P "$p" 2>/dev/null | tr '\n' ' ')"; done
+    frontier="$(echo $next)"; all="$all $frontier"
+  done
+  kill -9 $all 2>/dev/null || true
+  wait "$1" 2>/dev/null || true
+}
+# 0 when a `sleep` runs anywhere under the given pid -- the beat has passed every lease write that
+# precedes its poll loop. Walks children top-down, as reap_tree does.
+tree_has_sleep() { # <pid>
+  local frontier="$1" next p
+  while [ -n "$frontier" ]; do
+    next=""
+    for p in $frontier; do
+      [ "$(ps -o comm= -p "$p" 2>/dev/null)" = "sleep" ] && return 0
+      next="$next $(pgrep -P "$p" 2>/dev/null | tr '\n' ' ')"
+    done
+    frontier="$(echo $next)"
+  done
+  return 1
+}
+tree_signal() { # <pid> <STOP|CONT> -- every process under pid, collected top-down first
+  local all="$1" frontier="$1" next p
+  while [ -n "$frontier" ]; do
+    next=""
+    for p in $frontier; do next="$next $(pgrep -P "$p" 2>/dev/null | tr '\n' ' ')"; done
+    frontier="$(echo $next)"; all="$all $frontier"
+  done
+  kill -"$2" $all 2>/dev/null || true
+}
+SHELLS_OK=0
+separate_shells() { # <work> <beats started> <out>... -> sets SHELLS_OK
+  local w="$1" n="$2" f; shift 2
+  SHELLS_OK=1
+  [ "$(count_glob "$w"/_bmad-output/.wait-beats/.shell-*)" = "$n" ] || SHELLS_OK=0
+  for f in "$@"; do grep -q 'a sibling beat already ran' "$f" && SHELLS_OK=0; done
+}
+say_shells() { # <label>
+  if [ "$SHELLS_OK" -eq 1 ]; then ok "$1: CONTROL — each beat ran in its own parent shell (one .shell marker per beat, no sibling NOTE)"
+  else bad "$1: beats shared a parent shell or took the chained-sibling return — this case did not test concurrent sleeping beats"; fi
+}
+
+# --- the lease handoff --------------------------------------------------------------------
+# B starts FIRST so B is the HOLDER: the heir branch in lease_release runs only in the beat that
+# holds the marker when it exits, so with A holding, B's exit touches nothing and a subject with
+# no handoff passes. A's quantum is POLL + 2, so A wakes exactly once, at +POLL: from B's exit to
+# that wake nothing of A's can re-take the marker, and the read 0.3s after B exits is inside
+# that window by seconds, not milliseconds. A's POLL is 12 rather than the 3-vs-1 the receipt
+# named, for exactly that read; A's lease is 3 x POLL, so the epoch is well clear of `now`. It was
+# 6, and at load ~75 that window closed before the read; the read's timing is now a control.
+HO_POLL=12
+run_handoff() { # <subject> -> HO_* ; leaves W for the caller
+  W="$( bash "$SEED" lease-handoff )"
+  local pb pa
+  bg_beat "$1" "$W" "$W/b.out" 20 1 b.md; pb=$BG
+  until_true 100 test -s "$W/_bmad-output/.beat-inflight" || true
+  HO_B="$(marker_pid "$W")"
+  HO_A_T0="$(date +%s)"
+  bg_beat "$1" "$W" "$W/a.out" "$(( HO_POLL + 2 ))" "$HO_POLL" a.md; pa=$BG
+  until_true 100 leases_are "$W" 2 || true
+  # A writes the lease twice before it sleeps: early, and again just before the poll loop. If B
+  # exits between the two, A's second write takes the free marker and EVERY subject -- the trap
+  # mutant included -- leaves a marker naming A. Measured: 4 of 4 trap-mutant survivors at load
+  # ~60 passed every other control. So B's target lands only once A is in its `sleep`.
+  HO_A_ASLEEP=0; until_true 150 tree_has_sleep "$pa" && HO_A_ASLEEP=1
+  HO_A="$(other_lease_pid "$W" "$HO_B")"
+  HO_HOLDER0="$(marker_pid "$W")"
+  # A IS FROZEN from before B's target lands until after the read, so no write of A's can fall
+  # between B's exit and the read: the marker read is exactly what B's exit left, whatever the
+  # load. `kill -0` still answers for a stopped process, which is what lease_release asks.
+  tree_signal "$pa" STOP
+  printf 'the answer B was waiting for\n' > "$W/b.md"
+  wait "$pb" 2>/dev/null || true
+  HO_AFTER="$(marker_of "$W")"
+  HO_NOW="$(date +%s)"
+  tree_signal "$pa" CONT
+  # A re-stamps (and so re-takes) the marker at its first wake, HO_POLL after it started. A read
+  # taken after that wake cannot see what B's exit left, so it voids the case rather than scoring
+  # it: measured at load ~75, B's delivery slid past a 6s wake and the trap mutant SURVIVED.
+  HO_READ_EARLY=0; [ $(( HO_NOW - HO_A_T0 )) -lt "$HO_POLL" ] && HO_READ_EARLY=1
+  HO_A_ALIVE=0; [ -n "$HO_A" ] && kill -0 "$HO_A" 2>/dev/null && HO_A_ALIVE=1
+  printf 'the answer A was waiting for\n' > "$W/a.md"
+  wait "$pa" 2>/dev/null || true
+  HO_GONE=1; [ -e "$W/_bmad-output/.beat-inflight" ] && HO_GONE=0
+  separate_shells "$W" 2 "$W/a.out" "$W/b.out"
+}
+handoff_preconditions() { # <label> -- the harness facts both the case and its mutants rest on
+  say_shells "$1"
+  if [ -n "$HO_B" ] && [ "$HO_HOLDER0" = "$HO_B" ] && [ -n "$HO_A" ] && [ "$HO_A" != "$HO_B" ]; then
+    ok "$1: CONTROL — B held the marker and A was registered before B's target landed"
+  else bad "$1: B=$HO_B A=$HO_A holder=$HO_HOLDER0 — B was not the holder, so its exit cannot exercise the handoff"; fi
+  if [ "$HO_A_ALIVE" -eq 1 ]; then ok "$1: CONTROL — A was still asleep when the marker was read"
+  else bad "$1: A was not alive at the read; the marker's state then says nothing about a live sibling"; fi
+  if [ "$HO_A_ASLEEP" -eq 1 ]; then ok "$1: CONTROL — A was in its sleep, past both pre-loop lease writes, before B's target landed"
+  else bad "$1: A never reached its sleep before B's target landed — A's pre-loop lease write could take the marker B freed"; fi
+  if [ "$HO_READ_EARLY" -eq 1 ]; then ok "$1: CONTROL — the marker was read before A's first wake could re-take it"
+  else bad "$1: the read came $(( HO_NOW - HO_A_T0 ))s after A started, past its ${HO_POLL}s wake — A had already re-stamped, so this read cannot see B's exit (box too loaded; timing void)"; fi
+}
+C33_lease_handoff() {
+run_handoff "$SUBJ"
+handoff_preconditions "lease-handoff"
+if grep -q '^DELIVERED b.md' "$W/b.out"; then ok "lease-handoff: B delivered and exited"
+else bad "lease-handoff: B did not deliver b.md — the exit under test never happened"; fi
+ep="${HO_AFTER%% *}"; case "$ep" in ''|*[!0-9]*) ep=0 ;; esac
+ap=""; case "$HO_AFTER" in *' '*) ap="${HO_AFTER#* }" ;; esac
+if [ -n "$HO_A" ] && [ "$ap" = "$HO_A" ] && [ "$ep" -gt "$HO_NOW" ]; then
+  ok "lease-handoff: after B exits the marker names A with a live lease — the sleeping beat keeps the yield"
+else bad "lease-handoff: marker '$HO_AFTER' after B exited (A=$HO_A, now=$HO_NOW) — the first beat out took the lease from a beat still asleep"; fi
+if grep -q '^DELIVERED a.md' "$W/a.out" && [ "$HO_GONE" -eq 1 ]; then
+  ok "lease-handoff: CONTROL — A delivered, and the marker is gone once the last beat exits"
+else bad "lease-handoff: the marker survived the last beat (or A never delivered) — a dead join would authorize a silent stall"; fi
+rm -rf "$W"
+}
+C34_mut_lease_trap_unconditional() {
+mutant lease-trap-unconditional
+run_handoff "$MUT"
+handoff_preconditions "MUTANT lease-trap-unconditional"
+if [ -z "$HO_AFTER" ]; then
+  ok "MUTANT lease-trap-unconditional: an unconditional EXIT trap deletes the marker while A sleeps"
+else bad "MUTANT lease-trap-unconditional: marker '$HO_AFTER' survived B's exit with the old trap; the trap is not what the arm measures"; fi
+rm -rf "$W"
+}
+C35_mut_lease_no_heir() {
+mutant lease-no-heir
+run_handoff "$MUT"
+handoff_preconditions "MUTANT lease-no-heir"
+if [ -z "$HO_AFTER" ]; then
+  ok "MUTANT lease-no-heir: a holder that releases without an heir leaves A unleased until its next poll"
+else bad "MUTANT lease-no-heir: marker '$HO_AFTER' survived B's exit with no handoff; the read is outside A's poll window"; fi
+rm -rf "$W"
+}
+
+# --- no clobber ---------------------------------------------------------------------------
+# An after-exit byte comparison cannot see a beat that takes a live holder's marker: on exit it
+# holds it, hands it to the heir, and writes A's own epoch and pid back -- byte-identical. So the
+# marker is SAMPLED while the second beat runs, and that beat is given 30 delivered targets so
+# its sweep is wide enough to sample. A is the single-wake shape from the handoff arm (POLL 8,
+# quantum 10), so A's own re-stamp cannot land inside the window.
+run_noclobber() { # <subject> -> NC_* ; leaves W
+  W="$( bash "$SEED" lease-noclobber )"
+  local pa pi i cur args
+  args=""
+  for i in $(seq 1 30); do printf 'delivered\n' > "$W/d$i.md"; args="$args d$i.md"; done
+  bg_beat "$1" "$W" "$W/a.out" 10 8 a.md; pa=$BG
+  # A ASLEEP, not merely started: A re-stamps once more after charging its beat and before the
+  # sleep, and a baseline read before that re-stamp would score A's own write as a clobber.
+  until_true 100 counter_is "$W" a.md 1 || true
+  sleep 0.5
+  NC_M0="$(marker_of "$W")"
+  NC_A="$(marker_pid "$W")"
+  ( cd "$W" && bash "$1" --status other.md ) > "$W/st.out" 2>&1
+  NC_STATUS="$(marker_of "$W")"
+  # $args is a word list built above with no spaces inside a word, so it is left unquoted.
+  bg_beat "$1" "$W" "$W/i.out" 4 1 --since "$(( $(date +%s) - 60 ))" $args; pi=$BG
+  # NC_SEEN: the first sample differing from A's baseline. NC_FOREIGN: the first naming a pid
+  # other than A's -- the clobber itself. The LAST differing sample would be the wrong one to
+  # keep: a clobbering beat hands the marker back to A at exit, with A's latest registration.
+  NC_SEEN=""; NC_FOREIGN=""
+  while kill -0 "$pi" 2>/dev/null; do
+    cur="$(marker_of "$W")"
+    if [ "$cur" != "$NC_M0" ]; then
+      [ -n "$NC_SEEN" ] || NC_SEEN="${cur:-<absent>}"
+      case "$cur" in *" $NC_A") : ;; *) [ -n "$NC_FOREIGN" ] || NC_FOREIGN="${cur:-<absent>}" ;; esac
+    fi
+    sleep 0.05
+  done
+  wait "$pi" 2>/dev/null || true
+  NC_AFTER="$(marker_of "$W")"
+  NC_DELIV="$(grep -c '^DELIVERED d' "$W/i.out" || true)"
+  NC_A_ALIVE=0; [ -n "$NC_A" ] && kill -0 "$NC_A" 2>/dev/null && NC_A_ALIVE=1
+  reap_tree "$pa"
+  separate_shells "$W" 2 "$W/a.out" "$W/i.out"
+}
+noclobber_preconditions() { # <label>
+  say_shells "$1"
+  if [ "$NC_DELIV" = "30" ] && [ "$NC_A_ALIVE" -eq 1 ]; then
+    ok "$1: CONTROL — the second beat delivered all 30 targets while A ($NC_A) stayed alive"
+  else bad "$1: delivered $NC_DELIV of 30, A alive=$NC_A_ALIVE — the window under test never ran"; fi
+}
+C36_lease_noclobber() {
+run_noclobber "$SUBJ"
+noclobber_preconditions "lease-noclobber"
+if grep -q '^STATUS --' "$W/st.out" && [ "$NC_STATUS" = "$NC_M0" ]; then
+  ok "lease-noclobber: --status on another path leaves A's marker byte-identical"
+else bad "lease-noclobber: --status rewrote the marker ('$NC_M0' -> '$NC_STATUS') or did not run"; fi
+if [ -z "$NC_SEEN" ]; then
+  ok "lease-noclobber: an instantaneous beat never takes a live holder's marker, sampled throughout"
+else bad "lease-noclobber: the marker read '$NC_SEEN' mid-beat against A's '$NC_M0' — a second beat clobbered a live lease"; fi
+if [ "$NC_AFTER" = "$NC_M0" ]; then ok "lease-noclobber: CONTROL — A's marker is unchanged after that beat exits"
+else bad "lease-noclobber: marker '$NC_AFTER' after the instant beat, expected A's '$NC_M0'"; fi
+rm -rf "$W"
+}
+C37_mut_lease_always_put() {
+mutant lease-always-put
+run_noclobber "$MUT"
+noclobber_preconditions "MUTANT lease-always-put"
+if [ -n "$NC_FOREIGN" ]; then
+  ok "MUTANT lease-always-put: a beat that always takes the marker names itself over a live holder mid-beat ('$NC_FOREIGN')"
+else bad "MUTANT lease-always-put: no mid-beat sample named a pid other than A's; the guard is not what keeps the marker"; fi
+rm -rf "$W"
+}
+
+# --- the lease is written before the sweep --------------------------------------------------
+# The subject writes the marker strictly before it writes any `.since`, and never deletes it
+# mid-run, so the predicate is deterministic in both directions: AT THE FIRST OBSERVATION of a
+# sidecar, the marker exists. The sidecar count at that instant must be below N -- an
+# observation taken after the sweep would see a late marker too, and the fix and the mutant
+# would then score alike. The beat is reaped once observed: run out, a large wave costs a
+# multi-second sweep plus a report that re-forks per target (measured at load ~60: 200 targets
+# swept in 9.3s, the marker at 0.08s, the first sidecar at 0.12s).
+EARLY_N=150
+run_early() { # <subject> -> EA_* ; leaves W
+  W="$( bash "$SEED" lease-early )"
+  local p i args d
+  args=""
+  for i in $(seq 1 "$EARLY_N"); do args="$args t$i.md"; done
+  bg_beat "$1" "$W" "$W/e.out" 30 1 $args; p=$BG
+  d="$W/_bmad-output/.wait-beats"
+  EA_SEEN=0; EA_MARK=0; EA_CNT=0
+  for i in $(seq 1 600); do
+    EA_CNT="$(count_glob "$d"/*.since)"
+    if [ "$EA_CNT" -gt 0 ]; then
+      EA_SEEN=1; [ -e "$W/_bmad-output/.beat-inflight" ] && EA_MARK=1
+      break
+    fi
+    kill -0 "$p" 2>/dev/null || break
+    sleep 0.02
+  done
+  reap_tree "$p"
+}
+early_preconditions() { # <label>
+  if [ "$EA_SEEN" -eq 1 ] && [ "$EA_CNT" -lt "$EARLY_N" ]; then
+    ok "$1: CONTROL — the first sidecar was observed mid-sweep ($EA_CNT of $EARLY_N)"
+  else bad "$1: observed=$EA_SEEN at $EA_CNT of $EARLY_N sidecars — the observation was not inside the sweep"; fi
+}
+C38_lease_early() {
+run_early "$SUBJ"
+early_preconditions "lease-early"
+if [ "$EA_MARK" -eq 1 ]; then ok "lease-early: .beat-inflight exists before the sweep writes its first sidecar"
+else bad "lease-early: no marker when the first sidecar appeared — a large wave leaves the hook seeing no beat while it sweeps"; fi
+rm -rf "$W"
+}
+C39_mut_lease_no_early() {
+mutant lease-no-early
+run_early "$MUT"
+early_preconditions "MUTANT lease-no-early"
+if [ "$EA_MARK" -eq 0 ]; then ok "MUTANT lease-no-early: without the early lease the sweep runs with no marker"
+else bad "MUTANT lease-no-early: the marker existed mid-sweep with the early call deleted; something else writes it first"; fi
+rm -rf "$W"
+}
+
+# --- two beats, one path --------------------------------------------------------------------
+# Both armed over a seat file before it exists, from two shells 1.5s apart -- half a POLL out
+# of phase, so the first to deliver has deleted the shared `.since` well before the other's
+# next poll; in phase, both could pass the predicate before either deletes it and the memo
+# would go untested. The second beat then must still deliver from its memoised epoch.
+run_two_beats() { # <subject> -> TB_* ; leaves W
+  W="$( bash "$SEED" two-beats-one-path )"
+  local p1 p2
+  bg_beat "$1" "$W" "$W/1.out" 12 1 --complete x.md; p1=$BG
+  sleep 1.5
+  bg_beat "$1" "$W" "$W/2.out" 12 1 --complete x.md; p2=$BG
+  # Both past the sweep: each sleeping beat charges the one shared counter.
+  until_true 100 counter_is "$W" x.md 2 || true
+  printf 'a finding\nseat-complete: s 1 findings=1\n' > "$W/x.md"
+  wait "$p1" 2>/dev/null || true
+  wait "$p2" 2>/dev/null || true
+  TB_N=0
+  grep -q '^DELIVERED x.md' "$W/1.out" && TB_N=$((TB_N + 1))
+  grep -q '^DELIVERED x.md' "$W/2.out" && TB_N=$((TB_N + 1))
+  separate_shells "$W" 2 "$W/1.out" "$W/2.out"
+}
+C40_two_beats_one_path() {
+run_two_beats "$SUBJ"
+say_shells "two-beats-one-path"
+if [ "$TB_N" -eq 2 ]; then ok "two-beats-one-path: both beats deliver one sealed file"
+else bad "two-beats-one-path: $TB_N of 2 beats delivered — the second re-armed after the first deleted the shared .since"; fi
+rm -rf "$W"
+}
+C41_mut_no_join_memo() {
+mutant no-join-memo
+run_two_beats "$MUT"
+say_shells "MUTANT no-join-memo"
+if [ "$TB_N" -eq 1 ]; then ok "MUTANT no-join-memo: without the memo one beat reports a sealed file WAITING"
+else bad "MUTANT no-join-memo: $TB_N of 2 delivered with the memo removed; the memo is not what carries the second beat"; fi
+rm -rf "$W"
+}
+
+# --- ...and a LATER beat still reads a delivered file as pre-existing (Rule 28) -------------
+# The memo lives in one process and never re-creates a sidecar, so a NEW beat without --since
+# arms at `now` and does not accept the file. It is armed two whole seconds after the write:
+# `is_delivered` compares whole seconds with `>=`, so a beat armed in the write's own second
+# would accept it on that alone.
+run_memo_single() { # <subject> -> MS_* ; leaves W
+  W="$( bash "$SEED" memo-single )"
+  local p mt
+  bg_beat "$1" "$W" "$W/1.out" 6 1 x.md; p=$BG
+  until_true 100 counter_is "$W" x.md 1 || true   # past the sweep, so it delivers mid-beat
+  printf 'the answer\n' > "$W/x.md"
+  wait "$p" 2>/dev/null || true
+  mt="$(fx_mtime "$W/x.md")"
+  until_true 40 now_at_least "$(( mt + 2 ))" || true
+  ( cd "$W" && own env AI_DLC_WAIT_BEAT_SECS=3 AI_DLC_WAIT_POLL_SECS=1 \
+                       AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 \
+      bash "$1" x.md ) > "$W/2.out" 2>&1
+  MS_RC=$?
+  separate_shells "$W" 2 "$W/1.out" "$W/2.out"
+}
+C42_memo_single() {
+run_memo_single "$SUBJ"
+say_shells "memo-single"
+if grep -q '^DELIVERED x.md' "$W/1.out"; then ok "memo-single: CONTROL — the first beat delivered x.md mid-beat"
+else bad "memo-single: the first beat did not deliver; the later beat is not reading a delivered file"; fi
+if [ "$MS_RC" -eq 0 ] && ! grep -q '^DELIVERED' "$W/2.out" && grep -q 'already had content when this join armed' "$W/2.out"; then
+  ok "memo-single: a later beat without --since reads the delivered file as pre-existing, as Rule 28 documents"
+else bad "memo-single: rc $MS_RC — a later beat accepted a file delivered to an earlier join, or gave no NOTE"; fi
+rm -rf "$W"
+}
+C43_mut_since_kept_on_delivery() {
+mutant since-kept-on-delivery
+run_memo_single "$MUT"
+say_shells "MUTANT since-kept-on-delivery"
+if grep -q '^DELIVERED x.md' "$W/2.out"; then
+  ok "MUTANT since-kept-on-delivery: keeping .since on delivery makes a later beat accept the earlier join's file"
+else bad "MUTANT since-kept-on-delivery: the later beat did not deliver with .since kept; the arm cannot tell this fix from the memo"; fi
+rm -rf "$W"
+}
+
+# --- a live pre-upgrade lease is left alone -------------------------------------------------
+run_bare_epoch() { # <subject> -> BE_* ; leaves W
+  W="$( bash "$SEED" bare-epoch )"
+  local p cur
+  BE_M0="$(marker_of "$W")"
+  bg_beat "$1" "$W" "$W/o.out" 4 1 x.md; p=$BG
+  BE_SEEN=""
+  while kill -0 "$p" 2>/dev/null; do
+    cur="$(marker_of "$W")"
+    [ "$cur" = "$BE_M0" ] || BE_SEEN="${cur:-<absent>}"
+    sleep 0.1
+  done
+  wait "$p"; BE_RC=$?
+  BE_AFTER="$(marker_of "$W")"
+  separate_shells "$W" 1 "$W/o.out"
+}
+C44_bare_epoch() {
+run_bare_epoch "$SUBJ"
+say_shells "bare-epoch"
+case "$BE_M0" in
+  ''|*' '*|*[!0-9]*) bad "bare-epoch: seeded marker '$BE_M0' is not a bare epoch — the case cannot test a pre-upgrade lease" ;;
+  *) ok "bare-epoch: CONTROL — the seeded marker is a bare future epoch" ;;
+esac
+if [ -z "$BE_SEEN" ] && [ "$BE_AFTER" = "$BE_M0" ]; then
+  ok "bare-epoch: a live pid-less lease is never taken, during the beat or at its exit"
+else bad "bare-epoch: marker went to '${BE_SEEN:-$BE_AFTER}' — a new beat took a live pre-upgrade lease that beat will delete on its own exit"; fi
+if [ "$BE_RC" -eq 0 ] && grep -q '^WAITING' "$W/o.out"; then ok "bare-epoch: the beat still ran to a normal WAITING exit"
+else bad "bare-epoch: rc $BE_RC and no WAITING line — the beat did not run normally beside an old lease"; fi
+rm -rf "$W"
+}
+C45_mut_preupgrade_taken() {
+mutant preupgrade-taken
+run_bare_epoch "$MUT"
+say_shells "MUTANT preupgrade-taken"
+if [ -n "$BE_SEEN" ]; then ok "MUTANT preupgrade-taken: without the guard the beat takes the old lease (read '$BE_SEEN')"
+else bad "MUTANT preupgrade-taken: the marker never changed with the guard deleted; the guard is not what leaves it alone"; fi
 rm -rf "$W"
 }
 

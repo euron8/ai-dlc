@@ -891,7 +891,7 @@ join_scan() {
       if (c == "<" || c == "[" || c == "-") {
         k = index(rest, "`"); args = (k ? substr(rest, 1, k - 1) : rest)
         ln = 0; for (q = 1; q <= nl; q++) if (st[q] <= base + i) ln = lno[q]
-        printf "%s:%d:%d\tP=%d\t%s\n", pf, pl, ln, (tolower(p) ~ /seat|cross/), (args ~ /--complete/ ? "COMPLETE" : "BARE")
+        printf "%s:%d:%d\tP=%d\t%s\n", pf, pl, ln, (tolower(p) ~ /seat|cross/), (args ~ /--complete([^A-Za-z-]|$)/ ? "COMPLETE" : "BARE")
       }
       base += i + 23; s = rest
     }
@@ -961,7 +961,7 @@ join_battery() {
   for f in "$@"; do
     rows="$(join_scan "$f")"
     done_p=" "
-    for l in $(grep -n 'wait-for-deliverable\.sh --complete' "$f" | cut -d: -f1); do
+    for l in $(grep -nE 'wait-for-deliverable\.sh --complete([^A-Za-z-]|$)' "$f" | cut -d: -f1); do
       jb_sites=$((jb_sites + 1))
       para="$(awk -F'\t' -v L="$l" '{ n = split($1, a, ":"); if (a[n] == L && $3 == "COMPLETE") { print a[n - 1]; exit } }' <<<"$rows")"
       if [ -z "$para" ]; then jb_surv="$jb_surv ${f#"$ROOT/"}:$l(no-paragraph)"; continue; fi
@@ -969,7 +969,11 @@ join_battery() {
       done_p="$done_p$para "
       jb_paras=$((jb_paras + 1))
       clines=" $(awk -F'\t' -v P="$para" '{ n = split($1, a, ":"); if (a[n - 1] == P && $3 == "COMPLETE") printf "%s ", a[n] }' <<<"$rows")"
-      awk -v C="$clines" 'index(C, " " NR " ") { gsub(/wait-for-deliverable\.sh --complete/, "wait-for-deliverable.sh") } { print }' "$f" > "$jm/m.md"
+      awk -v C="$clines" 'index(C, " " NR " ") { s = $0; o = ""; k = "wait-for-deliverable.sh --complete"
+        while ((i = index(s, k)) > 0) { c = substr(s, i + length(k), 1)
+          if (c == "" || c !~ /[A-Za-z-]/) { o = o substr(s, 1, i - 1) "wait-for-deliverable.sh"; s = substr(s, i + length(k)) }
+          else { o = o substr(s, 1, i + length(k) - 1); s = substr(s, i + length(k)) } }
+        $0 = o s } { print }' "$f" > "$jm/m.md"
       if cmp -s "$f" "$jm/m.md"; then jb_surv="$jb_surv ${f#"$ROOT/"}:$para(no-apply)"; continue; fi
       jb_found="$(join_findings "$jm/m.md")"
       if grep -qF -- "$jm/m.md:$para:" <<<"$jb_found"; then jb_killed=$((jb_killed + 1))
@@ -1002,6 +1006,21 @@ if [ "$c_two0" = 0 ] && [ "$c_line" = 0 ] && [ "$c_two" = "2 1 1" ] && [ "$c_mx0
   ok "join/mutant-control: two seat joins in one paragraph -- a one-line strip is not flagged (0), the paragraph mutant is (sites/paras/kills $c_two); a bare non-seat call beside a seat --complete call is exempt (0 of $c_mxc calls) and its paragraph mutant is flagged ($c_mx); a non-seat --complete paragraph survives and is named ($c_ns, ${c_nss##*/})"
 else
   bad "join/mutant-control: FIXTURE BROKEN -- two: unmutated=$c_two0 one-line=$c_line battery=[$c_two] want 0 0 [2 1 1]; mixed: unmutated=$c_mx0 calls=$c_mxc battery=[$c_mx] want 0 2 [1 1 1]; nonseat: battery=[$c_ns] survivor='$c_nss' want [1 1 0] '...nonseat.md:1'"
+fi
+# THE FLAG IS MATCHED WHOLE. `--complete-repair` (the serial remediator's beat) begins with the
+# seat flag's text, and a prefix match took it for one: the site grep counted a non-seat call, the
+# strip turned it into `wait-for-deliverable.sh-repair`, which the scanner no longer reads as a
+# call, and the mutant survived. Both directions are held here: a seat paragraph whose only call is
+# `--complete-repair` is a BARE seat join (flagged, 1), and a file whose only call is
+# `--complete-repair` offers the battery no site (0 0 0) while the same file with `--complete` does.
+printf 'Each seat file joins with `scripts/ai-dlc/wait-for-deliverable.sh --complete-repair <path>`.\n' > "$JS/prefix.md"
+printf 'Arm `scripts/ai-dlc/wait-for-deliverable.sh --complete-repair <record>` on the record.\n' > "$JS/prefixns.md"
+c_pf="$(join_findings "$JS/prefix.md" | grep -c .)" || c_pf=0
+join_battery "$JS/prefixns.md"; c_pfb="$jb_sites $jb_paras $jb_killed"
+if [ "$c_pf" = 1 ] && [ "$c_pfb" = "0 0 0" ]; then
+  ok "join/flag-whole: a seat paragraph whose only call is --complete-repair is a bare seat join (1); --complete-repair alone offers the battery no site ($c_pfb)"
+else
+  bad "join/flag-whole: --complete matched as a prefix -- seat paragraph with --complete-repair flagged $c_pf (want 1), battery on a --complete-repair-only file [$c_pfb] (want 0 0 0)"
 fi
 # shellcheck disable=SC2086 # the scope globs are expanded on purpose; no path carries a blank
 join_battery $JSCOPE

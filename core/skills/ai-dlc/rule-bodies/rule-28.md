@@ -227,6 +227,12 @@ arrive, so it is handled now. And the first exit since a spawn was
 rejected while that rejected set is held: it releases the set, which is
 re-dispatched on it as above.
 
+**The serial remediator's join is armed on the record it appends to.**
+Arm `scripts/ai-dlc/wait-for-deliverable.sh --complete-repair <record>`,
+never the plain completion flag: the remediator ends its block with a
+`repair-complete: serial <pass>` line, which only `--complete-repair`
+reads as complete, so a plain beat reads that record unfinished forever.
+
 **The join names what is missing, never what it counted.** It derives the
 expected part set from the same program as the dispatch, takes as
 delivered every expected path that is non-empty and written since the

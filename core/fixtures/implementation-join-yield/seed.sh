@@ -54,10 +54,16 @@ case "$CASE" in
   no-marker)      write_snapshot ;;
 
   # A live backgrounded beat is sleeping. MUST allow (Check 2b).
-  live-marker)    write_snapshot; printf '%s' "$(( NOW + 100 ))" > "$MARK" ;;
+  # TWO FORMS. wait-for-deliverable.sh writes `<epoch> <pid>` (one holder) and the hook reads the
+  # first field: live-marker-pid is that PRODUCER form. live-marker, and every other bare-epoch
+  # seed in this file and in run.sh, is the BACKWARD-COMPATIBILITY form a pre-upgrade beat
+  # writes, which a consumer mid-pull runs the new hook against.
+  live-marker)     write_snapshot; printf '%s' "$(( NOW + 100 ))" > "$MARK" ;;
+  live-marker-pid) write_snapshot; printf '%s %s' "$(( NOW + 100 ))" 12345 > "$MARK" ;;
 
   # Fail-safe: every non-live marker state MUST fall through to block.
   expired-marker) write_snapshot; printf '%s' "$(( NOW - 5 ))"   > "$MARK" ;;   # SIGKILLed beat's stale marker
+  expired-marker-pid) write_snapshot; printf '%s %s' "$(( NOW - 5 ))" 12345 > "$MARK" ;;   # the same, producer form
   garbage-marker) write_snapshot; printf 'not-a-number'          > "$MARK" ;;   # non-numeric epoch
   empty-marker)   write_snapshot; : > "$MARK" ;;                                # zero-byte marker
   marker-is-dir)  write_snapshot; mkdir -p "$MARK" ;;                           # unreadable -> -f is false

@@ -195,6 +195,14 @@
 #   scripts/ai-dlc/wait-for-deliverable.sh <path> [<path>...] [--reset] [--quiet]
 #                                   [--since <epoch|ISO8601>]
 #                                   [--progress-path <dir|file>]...
+#                                   [--complete | --complete-repair] [--status]
+#
+#   --complete         DELIVERED also needs a settled last line `seat-complete: `.
+#   --complete-repair  the same, keyed on `repair-complete: serial ` -- the serial
+#                      remediator's terminal line on a joined repair record.
+#   --status           print DELIVERED / UNFINISHED / UNSETTLED / WAITING per path
+#                      and return at once: no sleep, no beat charged, no file written.
+#   (Each is documented in full below the `set -u` line.)
 #
 # EXIT CODES
 #   0  BEAT COMPLETE  the beat ran and returned. Read stdout for per-path status:
@@ -251,9 +259,8 @@
 set -u
 
 # ---------------------------------------------------------------------------
-# --complete: THE EARLY-WRITING SHARD. (Documented here, below line 250, so that
-# `--help`, which prints lines 2-250, stays byte-identical for every caller that
-# does not pass the flag.)
+# --complete: THE EARLY-WRITING SHARD. (Documented here, below the `set -u` line, which
+# is where `--help` stops printing; the USAGE block above names every flag in one line.)
 #
 # A seat or shard brief that writes its header FIRST and appends each finding as it
 # is verified makes the deliverable non-empty minutes before it is finished, so the
@@ -308,6 +315,33 @@ set -u
 #   exhaustion, for the same reason: it is not absent either.
 #
 # Without --complete every line this script prints is byte-identical to before.
+#
+# --complete-repair: THE SERIAL REMEDIATOR'S JOINED RECORD. That record exists before the
+# serial remediator is dispatched and is APPENDED to, so the plain predicate returns on its
+# first append and on every one after it, and `seat-complete:` is not a line a repair record
+# carries. This flag is --complete in every respect except the marker, which is
+# `repair-complete: serial ` and ONLY that. The token is keyed per CALL, never per target and
+# never as an either-token: the join that builds the record concatenates PART remediators'
+# records, so a joined record can end in a part's own marker before the serial pass has
+# started, and a beat that accepted any marker would consume it. A lead never joins seat files
+# and a repair record in one beat, so one token per call costs nothing. The two flags are
+# refused together.
+#
+# --status: THE SAME PREDICATE, WITHOUT THE BEAT. A progress check ("how many seats are
+# done?") needs the shipped answer, not a hand-rolled last-line test that a trailing blank
+# line miscounts. Each path prints exactly one line:
+#   DELIVERED <path>     what a beat would consume now, or what a beat already consumed and
+#                        is unchanged since (its hash is kept in `<key>.delivered`, because a
+#                        delivering beat drops the join state --status otherwise reads)
+#   UNFINISHED <path>    present and written since the join armed, no marker last
+#   UNSETTLED <path>     marker present, settle pending -- the settle window needs a hash a
+#                        BEAT recorded more than SETTLE seconds ago, and --status records none
+#   WAITING   <path>     absent, empty, older than the join, or no join armed on it
+# It is STRICTLY read-only: it exits before the state dir is created, before the bound check
+# that can wipe every live join's counters, and before any `.since`, `.settle`, `.progress`,
+# shell marker or lease is written. It reads a path's stored join epoch and never arms one;
+# with neither a stored epoch nor --since there is no instant to compare a write against, so
+# the path reads WAITING. --reset is refused with it, because a reset is a write.
 # ---------------------------------------------------------------------------
 
 BUDGET="${AI_DLC_WAIT_BEAT_SECS:-600}"
@@ -324,6 +358,11 @@ TARGETS=""
 SINCE=""
 PROGRESS_PATHS=""
 COMPLETE=0
+STATUS=0
+COMPLETE_REPAIR=0
+SEAT_FLAG=0
+# The marker a --complete beat keys on. One token per call (see --complete-repair above).
+MARK_TOKEN="seat-complete: "
 
 # ---------------------------------------------------------------------------
 # Platform probes, done ONCE. `stat` and `date` split BSD/GNU on exactly the two
@@ -364,7 +403,9 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --reset) RESET=1; shift ;;
     --quiet) QUIET=1; shift ;;
-    --complete) COMPLETE=1; shift ;;
+    --complete) COMPLETE=1; SEAT_FLAG=1; shift ;;
+    --complete-repair) COMPLETE=1; COMPLETE_REPAIR=1; MARK_TOKEN="repair-complete: serial "; shift ;;
+    --status) STATUS=1; shift ;;
     --since)
       shift
       [ $# -gt 0 ] || { echo "FAIL: --since needs a value (epoch or ISO8601)." >&2; exit 64; }
@@ -384,7 +425,7 @@ while [ $# -gt 0 ]; do
         exit 64; }
       PROGRESS_PATHS="${PROGRESS_PATHS}${PROGRESS_PATHS:+|}$1"
       shift ;;
-    -h|--help) sed -n '2,250p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,/^set -u$/p' "$0" | sed '$d'; exit 0 ;;
     -*) echo "unknown arg: $1" >&2; exit 64 ;;
     *) TARGETS="${TARGETS}${TARGETS:+|}$1"; shift ;;
   esac
@@ -403,6 +444,17 @@ if [ "$COMPLETE" -eq 1 ] && [ -n "$PROGRESS_PATHS" ]; then
   exit 64
 fi
 
+if [ "$SEAT_FLAG" -eq 1 ] && [ "$COMPLETE_REPAIR" -eq 1 ]; then
+  echo "FAIL: --complete and --complete-repair cannot be combined. A repair record and a seat" >&2
+  echo "  file are joined by different beats; each call keys on exactly one marker." >&2
+  exit 64
+fi
+
+if [ "$STATUS" -eq 1 ] && [ "$RESET" -eq 1 ]; then
+  echo "FAIL: --status and --reset cannot be combined. --status writes nothing; a reset is a write." >&2
+  exit 64
+fi
+
 say() { [ "$QUIET" -eq 1 ] || echo "$@"; }
 
 abs_of() {  # normalized absolute path; no realpath dependency (not on BSD by default)
@@ -411,9 +463,11 @@ abs_of() {  # normalized absolute path; no realpath dependency (not on BSD by de
   ( cd "$d_" 2>/dev/null && printf '%s/%s' "$(pwd -P)" "$b_" )
 }
 
-mkdir -p "$STATE_DIR" 2>/dev/null || true
 COUNTER_DIR="${STATE_DIR}/.wait-beats"
-mkdir -p "$COUNTER_DIR" 2>/dev/null || true
+if [ "$STATUS" -eq 0 ]; then   # --status creates nothing, not even the state dir
+  mkdir -p "$STATE_DIR" 2>/dev/null || true
+  mkdir -p "$COUNTER_DIR" 2>/dev/null || true
+fi
 
 # ---------------------------------------------------------------------------
 # THE PROGRESS PATH MAY NOT BE THE STATE DIR, OR ANY ANCESTOR OF IT.
@@ -446,23 +500,6 @@ if [ -n "$PROGRESS_PATHS" ]; then
   IFS="$OLDIFS"
 fi
 
-# ---------------------------------------------------------------------------
-# COUNTERS ARE SCOPED TO THE BOUND THEY WERE COUNTED AGAINST.
-# The counters survive a pull, and a live join carrying a count of 7 against an
-# old bound of 10 would exhaust on its FIRST beat under a new bound of 6 -- a
-# false NON-DELIVERY that re-dispatches a live teammate, which is the exact
-# failure this whole script exists to prevent. So record the active bound and
-# wipe the counters once whenever it changes. Self-heals for this retune and any
-# future one; the `.since` sidecars go with them, which is correct, because a
-# re-armed join must re-capture its epoch anyway.
-BOUND_FILE="${COUNTER_DIR}/.bound"
-PREV_BOUND="$(cat "$BOUND_FILE" 2>/dev/null || echo '')"
-if [ "$PREV_BOUND" != "$MAX_BEATS" ]; then
-  rm -rf "$COUNTER_DIR" 2>/dev/null || true
-  mkdir -p "$COUNTER_DIR" 2>/dev/null || true
-  printf '%s' "$MAX_BEATS" > "$BOUND_FILE" 2>/dev/null || true
-fi
-
 key_of() { printf '%s' "$1" | cksum | tr -d ' \t' | cut -c1-16; }
 
 # ---------------------------------------------------------------------------
@@ -477,10 +514,24 @@ key_of() { printf '%s' "$1" | cksum | tr -d ' \t' | cut -c1-16; }
 # (a teammate that delivered before this join armed, which is the normal shape
 # after a compaction). Later is the direction that produces a threshold no write
 # can ever satisfy.
+#
+# THE EPOCH IS SETTLED ONCE PER PROCESS, AND THE SIDECAR IS NOT RE-READ AFTER THAT. Every beat
+# over a path shares its `.since` (the sidecars are keyed by path, not by beat), and a beat
+# that DELIVERS a path deletes it. Measured with two beats armed over one seat file before it
+# was written, each from its own shell: the first to see the marker settle delivered and
+# deleted `.since`; the second's next read found no sidecar, re-armed the epoch at `now` --
+# after the file's last write -- and reported a sealed file WAITING for the rest of its
+# quantum, 3 runs of 3. So the pre-sweep's answer is memoised in `JM_<key>` in this shell,
+# and every later call in the same process returns it and writes nothing. The memo never
+# re-creates a sidecar another beat deleted: a LATER beat re-armed without --since still reads
+# a delivered file as pre-existing, as Rule 28 documents.
 # ---------------------------------------------------------------------------
 join_of() {
   t_="$1"
-  f_="${COUNTER_DIR}/$(key_of "$t_").since"
+  jk_="$(key_of "$t_")"
+  eval "jm_=\${JM_${jk_}:-}"
+  if [ -n "$jm_" ]; then printf '%s' "$jm_"; return 0; fi
+  f_="${COUNTER_DIR}/${jk_}.since"
   now_="$(date +%s)"
   stored_=""
   [ -f "$f_" ] && stored_="$(cat "$f_" 2>/dev/null || echo '')"
@@ -504,15 +555,23 @@ is_delivered() {  # $1 = path, $2 = join epoch
   [ "$(mtime_of "$1")" -ge "$2" ] || return 1
   [ "$COMPLETE" -eq 1 ] || return 0
   id_st_="${COUNTER_DIR}/$(key_of "$1").settle"
-  if ! has_marker "$1"; then rm -f "$id_st_" 2>/dev/null; return 1; fi
+  if ! has_marker "$1"; then
+    # A marker this beat had seen settling is gone: the seat reopened a file it had declared
+    # final. That is a revision (BL-548), counted before the settle record is dropped.
+    if settle_record "$id_st_" >/dev/null; then revised_bump "$id_st_"; fi
+    rm -f "$id_st_" 2>/dev/null; settle_memo "$id_st_" ""
+    return 1
+  fi
   settled "$1" "$id_st_"
 }
 
-# --complete: the LAST NON-BLANK line begins `seat-complete: `, carries no carriage
-# return, and is not inside an unclosed fence. A whitespace-only line is blank
-# (NF == 0), so trailing blank lines cannot hide the marker.
+# --complete: the LAST NON-BLANK line begins with this call's marker token (`seat-complete: `,
+# or `repair-complete: serial ` under --complete-repair), carries no carriage return, and is
+# not inside an unclosed fence. A whitespace-only line is blank (NF == 0), so trailing blank
+# lines cannot hide the marker. The token reaches awk through the environment, never `-v`,
+# which would strip a level of escaping.
 has_marker() {  # $1 = path
-  awk '
+  MT_="$MARK_TOKEN" awk '
     # A fence opens on a run of 3+ backticks or tildes; it closes only on a run of the SAME
     # character at least as long, with nothing but blanks after it.
     match($0, /^[ \t]*(```+|~~~+)/) {
@@ -521,8 +580,11 @@ has_marker() {  # $1 = path
       else if (substr(r, 1, 1) == fc && length(r) >= fl && substr($0, RSTART + RLENGTH) ~ /^[ \t\r]*$/) { fc = ""; fl = 0 }
     }
     NF { l = $0 }
-    END { exit ((fc == "" && l !~ /\r/ && index(l, "seat-complete: ") == 1) ? 0 : 1) }' "$1" 2>/dev/null
+    END { exit ((fc == "" && l !~ /\r/ && index(l, ENVIRON["MT_"]) == 1) ? 0 : 1) }' "$1" 2>/dev/null
 }
+# The token as the report lines name it: `seat-complete:` byte-identical to every earlier
+# release, or `repair-complete: serial`.
+MARK_NAME="${MARK_TOKEN% }"
 
 content_hash() {  # $1 = path -> a content hash, empty when unreadable
   if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1
@@ -530,21 +592,90 @@ content_hash() {  # $1 = path -> a content hash, empty when unreadable
   else cksum < "$1" 2>/dev/null | tr -d ' \t'; fi
 }
 
-# The marked file has SETTLED: its hash equals the one its sidecar recorded more than SETTLE
-# seconds ago (the measured window in the --complete header). Any other hash (or no sidecar) re-records `<hash> <now>` and waits.
+# THE SETTLE RECORD IS MEMOISED PER PROCESS for the reason the join epoch is (join_of): a
+# concurrent beat over the same path deletes the shared `.settle` when it delivers or loses
+# the marker, and a beat that then re-recorded from `now` would restart its own window on a
+# file that never changed. The sidecar is authoritative while present; the memo stands in when
+# it is absent; a record is WRITTEN only on a new observation. `settle_memo <sidecar> <rec>`
+# sets it, and an empty record clears it.
+settle_memo() {  # $1 = sidecar, $2 = record ('' clears)
+  sm_k_="${1##*/}"; sm_k_="${sm_k_%.settle}"
+  eval "SM_${sm_k_}=\$2"
+}
+settle_record() {  # $1 = sidecar -> prints `<hash> <epoch>`; 1 when there is none
+  sr_r_=""
+  [ -f "$1" ] && sr_r_="$(cat "$1" 2>/dev/null || echo '')"
+  if [ -z "$sr_r_" ]; then
+    sr_k_="${1##*/}"; sr_k_="${sr_k_%.settle}"
+    eval "sr_r_=\${SM_${sr_k_}:-}"
+  fi
+  [ -n "$sr_r_" ] || return 1
+  printf '%s' "$sr_r_"
+}
+
+# BL-548: how often a marked file's content changed after its marker was first seen. Kept in
+# its OWN `.revised` sidecar, not as a third `.settle` field: settled() and every live
+# two-field `.settle` on a consumer's disk parse `<hash> <epoch>`, and a marker loss deletes
+# `.settle` -- which is itself a revision and must not take the count with it. Two concurrent
+# beats over one file may each count the same change; the count can read high, never zero.
+# IT SURVIVES DELIVERY: the printed line is echoed (--quiet cannot hide it) but a beat's output is
+# read once and gone, so the sidecar is the record a repair brief reads, through --status. It is
+# cleared by --reset, a bound
+# wipe, or a beat armed with a join epoch later than its last write (a new round; see
+# "ROUND-SCOPED RECORDS").
+# A sidecar write whose loss costs a record, never the beat: the beat goes on, and the failure
+# is said on stderr rather than folded into success.
+sidecar_put() {  # $1 = file, $2 = content
+  printf '%s' "$2" > "$1" 2>/dev/null || echo "WARN: wait-for-deliverable: could not write $1" >&2
+}
+revised_bump() {  # $1 = the .settle sidecar path; bumps its sibling .revised
+  rb_f_="${1%.settle}.revised"
+  rb_n_=0; [ -f "$rb_f_" ] && rb_n_="$(cat "$rb_f_" 2>/dev/null || echo 0)"
+  case "$rb_n_" in ''|*[!0-9]*) rb_n_=0 ;; esac
+  sidecar_put "$rb_f_" "$(( rb_n_ + 1 ))"
+}
+# Printed beneath a DELIVERED line, at both places a path is delivered, and only when n >= 1,
+# so a seat that kept its contract prints exactly what it always did.
+say_revised() {  # $1 = target, $2 = counter path (without suffix)
+  sv_n_=0; [ -f "${2}.revised" ] && sv_n_="$(cat "${2}.revised" 2>/dev/null || echo 0)"
+  case "$sv_n_" in ''|*[!0-9]*) sv_n_=0 ;; esac
+  [ "$sv_n_" -ge 1 ] || return 0
+  echo "REVISED-AFTER-MARKER ${sv_n_} $1 -- its content changed ${sv_n_} time(s) after its ${MARK_NAME} line"
+  echo "  was first seen. The seat edited a file it had declared final: re-read its findings."
+}
+
+# What a beat consumed, for --status: the hash of the file at delivery, in `<key>.delivered`. It
+# outlives the join state the delivery drops; --reset and a bound wipe remove it with the rest.
+record_delivered() {  # $1 = target, $2 = counter path (without suffix)
+  rd_h_="$(content_hash "$1")"
+  if [ -n "$rd_h_" ]; then sidecar_put "${2}.delivered" "$rd_h_"; fi
+}
+
+# The marked file has SETTLED: its hash equals the one its record holds from more than SETTLE
+# seconds ago (the measured window in the --complete header). Any other hash (or no record)
+# re-records `<hash> <now>` and waits; a different hash under an existing record is a revision.
 settled() {  # $1 = path, $2 = its .settle sidecar
   st_h_="$(content_hash "$1")"; [ -n "$st_h_" ] || return 1
-  st_now_="$(date +%s)"; st_rec_=""
-  [ -f "$2" ] && st_rec_="$(cat "$2" 2>/dev/null || echo '')"
+  st_now_="$(date +%s)"
+  st_rec_="$(settle_record "$2")" || st_rec_=""
+  st_rh_="${st_rec_%% *}"
   st_t_="${st_rec_#* }"
   case "$st_t_" in ''|*[!0-9]*) st_t_="" ;; esac
-  if [ "${st_rec_%% *}" = "$st_h_" ] && [ -n "$st_t_" ]; then
+  if [ "$st_rh_" = "$st_h_" ] && [ -n "$st_t_" ]; then
+    # Memoise a record another beat wrote, too: measured, a beat that only ever READ its
+    # sibling's record had no memo when that sibling delivered and deleted it, re-recorded from
+    # `now`, and ran out its quantum (1 run of 8 under load). Another beat may also have deleted
+    # the sidecar; restore it so the next beat in the join reads the window already opened.
+    settle_memo "$2" "$st_rec_"
+    [ -f "$2" ] || sidecar_put "$2" "$st_rec_"
     # STRICTLY greater: both stamps are whole seconds, so a difference of exactly POLL can be
     # a few milliseconds of real time across a second boundary. POLL + 1 whole seconds is at
     # least POLL real ones.
     [ $(( st_now_ - st_t_ )) -gt "$SETTLE" ] && return 0
     return 1
   fi
+  [ -n "$st_rh_" ] && revised_bump "$2"
+  settle_memo "$2" "$st_h_ $st_now_"
   printf '%s %s' "$st_h_" "$st_now_" > "$2" 2>/dev/null || return 1
   return 1
 }
@@ -554,7 +685,7 @@ is_unfinished() {  # $1 = path, $2 = join epoch
   [ "$COMPLETE" -eq 1 ] && [ -s "$1" ] && [ "$(mtime_of "$1")" -ge "$2" ] && ! has_marker "$1"
 }
 say_unfinished() {  # $1 = path, $2 = join epoch -- the line beneath a WAITING line
-  is_unfinished "$1" "$2" && echo "UNFINISHED $1 -- present, last non-blank line is not seat-complete:"
+  is_unfinished "$1" "$2" && echo "UNFINISHED $1 -- present, last non-blank line is not ${MARK_NAME}"
   return 0
 }
 
@@ -674,6 +805,170 @@ say_liveness() {
 }
 
 # ---------------------------------------------------------------------------
+# --status: the read-only answer (header: "--status"). Everything above this line reads; this
+# block exits before anything below it writes. The verdict functions are the beat's own --
+# has_marker through status_marked, the same mtime and join-epoch comparison -- so a progress
+# check cannot disagree with the beat that will later consume the file.
+# ---------------------------------------------------------------------------
+status_marked() { has_marker "$1"; }
+status_join() {  # $1 = target -> the stored join epoch (clamped as join_of does); 1 if none
+  sj_f_="${COUNTER_DIR}/$(key_of "$1").since"; sj_s_=""
+  [ -f "$sj_f_" ] && sj_s_="$(cat "$sj_f_" 2>/dev/null || echo '')"
+  case "$sj_s_" in ''|*[!0-9]*) sj_s_="" ;; esac
+  [ -n "$SINCE" ] && { [ -z "$sj_s_" ] || [ "$SINCE" -lt "$sj_s_" ]; } && sj_s_="$SINCE"
+  [ -n "$sj_s_" ] || return 1
+  sj_now_="$(date +%s)"; [ "$sj_s_" -gt "$sj_now_" ] && sj_s_="$sj_now_"
+  printf '%s' "$sj_s_"
+}
+if [ "$STATUS" -eq 1 ]; then
+  S_DONE=0; S_OUT=0
+  OLDIFS="$IFS"; IFS='|'
+  for t in $TARGETS; do
+    IFS="$OLDIFS"
+    case "$t" in
+      *[![:space:]]*) : ;;
+      *) echo "FAIL: empty/blank deliverable path in target list." >&2; exit 64 ;;
+    esac
+    S_V="WAITING"
+    # A beat that DELIVERED a path drops its join state, so without this record --status would
+    # call every consumed seat unarmed -- the undercount it exists to prevent. The record holds the
+    # hash the beat consumed; a file changed since is judged afresh below.
+    # A record older than a known join epoch is an earlier round's consumption of a reused path,
+    # not this round's (the beat also clears one when it arms -- see "ROUND-SCOPED RECORDS").
+    sd_c="${COUNTER_DIR}/$(key_of "$t")"
+    sd_rec="$(cat "${sd_c}.delivered" 2>/dev/null || echo '')"
+    if [ -n "$sd_rec" ] && sj_e="$(status_join "$t")" && [ "$(mtime_of "${sd_c}.delivered")" -lt "$sj_e" ]; then sd_rec=""; fi
+    if [ -n "$sd_rec" ] && [ -s "$t" ] && [ "$sd_rec" = "$(content_hash "$t")" ]; then
+      S_V="DELIVERED"; echo "DELIVERED $t -- consumed by a beat, unchanged since"
+    elif ! sj="$(status_join "$t")"; then
+      echo "WAITING   $t -- no join armed on this path (no stored epoch and no --since)"
+    elif [ ! -s "$t" ]; then
+      echo "WAITING   $t -- absent or empty"
+    elif [ "$(mtime_of "$t")" -lt "$sj" ]; then
+      echo "WAITING   $t -- last written before this join armed"
+    elif [ "$COMPLETE" -eq 0 ]; then
+      S_V="DELIVERED"; echo "DELIVERED $t"
+    elif ! status_marked "$t"; then
+      S_V="UNFINISHED"; echo "UNFINISHED $t -- present, last non-blank line is not ${MARK_NAME}"
+    else
+      ss_rec="$(cat "${COUNTER_DIR}/$(key_of "$t").settle" 2>/dev/null || echo '')"
+      ss_t="${ss_rec#* }"; case "$ss_t" in ''|*[!0-9]*) ss_t="" ;; esac
+      if [ -n "$ss_t" ] && [ "${ss_rec%% *}" = "$(content_hash "$t")" ] \
+         && [ $(( $(date +%s) - ss_t )) -gt "$SETTLE" ]; then
+        S_V="DELIVERED"; echo "DELIVERED $t"
+      else
+        S_V="UNSETTLED"
+        echo "UNSETTLED $t -- marker present, settle pending (a beat must see its content unchanged for ${SETTLE}s)"
+      fi
+    fi
+    # The revision count, so a repair brief reads it here and never computes a sidecar key by
+    # hand. Withheld when it predates a known join epoch: that count belongs to an earlier round.
+    if ! { sr_e="$(status_join "$t")" && [ "$(mtime_of "${sd_c}.revised")" -lt "$sr_e" ]; }; then
+      say_revised "$t" "$sd_c"
+    fi
+    if [ "$S_V" = "DELIVERED" ]; then S_DONE=$(( S_DONE + 1 )); else S_OUT=$(( S_OUT + 1 )); fi
+    IFS='|'
+  done
+  IFS="$OLDIFS"
+  echo "STATUS -- ${S_DONE} delivered, ${S_OUT} not. Nothing slept, nothing was written, no beat was charged."
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# THE BEAT-LIVENESS LEASE, AND WHO MAY REMOVE IT.
+#
+# `.beat-inflight` is the ONE marker Stop-hook Check 2b reads, and every beat in a project
+# shares it. Until this release each beat wrote a bare epoch and its EXIT trap deleted the file
+# unconditionally, so the first beat to exit took the lease from every other beat still asleep.
+# Measured, two beats from two shells: B delivered and exited, A stayed alive, and the marker was
+# ABSENT, 3 runs of 3 -- the Stop hook then reports "no live wait-beat" with one sleeping.
+#
+# So the marker is `<epoch> <pid>` and has ONE holder. Every live beat also registers its own
+# `.wait-beats/.lease-<pid>` (its epoch), re-stamped every poll. A beat takes the marker only
+# when it is absent, unparseable, expired, or names a holder that is dead -- no registration,
+# an expired one, or a pid `kill -0` cannot signal; the registration is what makes a recycled
+# pid read dead. On exit a beat removes the marker only if it holds it, and first hands it to
+# any other live registered beat. A pid-less live marker is a beat from before this release,
+# mid-pull: it is left alone, because that beat re-stamps it and deletes it on its own exit,
+# after which the next poll here re-takes it.
+#
+# THE WINDOW THAT REMAINS. A SIGKILLed holder skips its trap, so a live sibling takes the
+# marker when the dead holder's registration expires, up to one lease length (3 x POLL) -- the
+# same window a single SIGKILLed beat leaves today, worth at most one Rule 3 block.
+#
+# WRITTEN BEFORE THE PRE-SLEEP WORK, not after it. The bound check, the shell-marker prune and
+# the sweep run first and can take seconds over a large wave; a lease written only at the sleep
+# left that window uncovered, which is the "armed seconds ago, hook saw no beat" the s319 lead
+# reported. A call that turns out not to sleep releases what it took, through the same trap.
+# ---------------------------------------------------------------------------
+BEAT_MARKER="${STATE_DIR}/.beat-inflight"
+LEASE_SELF="${COUNTER_DIR}/.lease-$$"
+lease_holder_dead() {  # $1 = holder pid -> 0 when no live beat stands behind it
+  ld_r_="$(cat "${COUNTER_DIR}/.lease-$1" 2>/dev/null || echo '')"
+  case "$ld_r_" in ''|*[!0-9]*) return 0 ;; esac
+  [ "$ld_r_" -gt "$(date +%s)" ] || return 0
+  kill -0 "$1" 2>/dev/null && return 1
+  return 0
+}
+LEASE_TMP="${COUNTER_DIR}/.beat-inflight.$$"   # inside the ignored .wait-beats/, same filesystem
+lease_put() {  # $1 = epoch, $2 = pid -- whole-file replace, never a partial line for the hook to read
+  { printf '%s %s' "$1" "$2" > "$LEASE_TMP" 2>/dev/null && mv -f "$LEASE_TMP" "$BEAT_MARKER" 2>/dev/null; } \
+    || echo "WARN: wait-for-deliverable: could not write the lease $BEAT_MARKER; the stop hook will not see this beat" >&2
+}
+beat_alive() {
+  ba_e_=$(( $(date +%s) + 3 * POLL ))
+  sidecar_put "$LEASE_SELF" "$ba_e_"
+  ba_cur_="$(cat "$BEAT_MARKER" 2>/dev/null || echo '')"
+  ba_ep_="${ba_cur_%% *}"
+  case "$ba_cur_" in *' '*) ba_pid_="${ba_cur_#* }" ;; *) ba_pid_="" ;; esac
+  case "$ba_ep_" in ''|*[!0-9]*) lease_put "$ba_e_" "$$"; return 0 ;; esac
+  case "$ba_pid_" in *[!0-9]*) lease_put "$ba_e_" "$$"; return 0 ;; esac
+  if [ "$ba_ep_" -le "$(date +%s)" ]; then lease_put "$ba_e_" "$$"; return 0; fi
+  [ -n "$ba_pid_" ] || return 0                     # a live pre-upgrade lease: not ours to take
+  if [ "$ba_pid_" = "$$" ] || lease_holder_dead "$ba_pid_"; then lease_put "$ba_e_" "$$"; fi
+  return 0
+}
+lease_release() {
+  lr_cur_="$(cat "$BEAT_MARKER" 2>/dev/null || echo '')"
+  case "$lr_cur_" in *' '*) lr_pid_="${lr_cur_#* }" ;; *) lr_pid_="" ;; esac
+  if [ "$lr_pid_" = "$$" ]; then
+    lr_now_="$(date +%s)"; lr_heir_=""
+    for lr_f_ in "$COUNTER_DIR"/.lease-*; do
+      [ -f "$lr_f_" ] || continue
+      lr_p_="${lr_f_##*/.lease-}"
+      [ "$lr_p_" = "$$" ] && continue
+      lr_e_="$(cat "$lr_f_" 2>/dev/null || echo '')"
+      case "$lr_p_$lr_e_" in *[!0-9]*|'') rm -f "$lr_f_" 2>/dev/null; continue ;; esac
+      if [ "$lr_e_" -gt "$lr_now_" ] && kill -0 "$lr_p_" 2>/dev/null; then lr_heir_="$lr_e_ $lr_p_"; break; fi
+      rm -f "$lr_f_" 2>/dev/null
+    done
+    if [ -n "$lr_heir_" ]; then lease_put "${lr_heir_%% *}" "${lr_heir_#* }"
+    else rm -f "$BEAT_MARKER" 2>/dev/null; fi
+  fi
+  rm -f "$LEASE_SELF" "$LEASE_TMP" 2>/dev/null || true
+}
+trap 'lease_release' EXIT
+beat_alive
+
+# ---------------------------------------------------------------------------
+# COUNTERS ARE SCOPED TO THE BOUND THEY WERE COUNTED AGAINST.
+# The counters survive a pull, and a live join carrying a count of 7 against an
+# old bound of 10 would exhaust on its FIRST beat under a new bound of 6 -- a
+# false NON-DELIVERY that re-dispatches a live teammate, which is the exact
+# failure this whole script exists to prevent. So record the active bound and
+# wipe the counters once whenever it changes. Self-heals for this retune and any
+# future one; the `.since` sidecars go with them, which is correct, because a
+# re-armed join must re-capture its epoch anyway. The `.lease-<pid>` registrations
+# are kept: they belong to beats asleep right now, not to the bound.
+BOUND_FILE="${COUNTER_DIR}/.bound"
+PREV_BOUND="$(cat "$BOUND_FILE" 2>/dev/null || echo '')"
+if [ "$PREV_BOUND" != "$MAX_BEATS" ]; then
+  find "$COUNTER_DIR" -mindepth 1 -maxdepth 1 ! -name '.lease-*' -exec rm -rf {} + 2>/dev/null || true
+  mkdir -p "$COUNTER_DIR" 2>/dev/null || true
+  sidecar_put "$BOUND_FILE" "$MAX_BEATS"
+fi
+
+# ---------------------------------------------------------------------------
 # CHAINED-BEAT GUARD. Two invocations chained in one Bash call (`wait a; wait b`)
 # share a parent shell, so they share $PPID. The first consumes the call's whole
 # quantum; the second then serializes a second one behind it, so the wave waits
@@ -724,16 +1019,30 @@ for t in $TARGETS; do
   s="${c}.since"
   pg="${c}.progress"
   gr="${c}.grants"
-  [ "$RESET" -eq 1 ] && rm -f "$c" "$s" "$pg" "$gr" "${c}.settle" 2>/dev/null
+  [ "$RESET" -eq 1 ] && rm -f "$c" "$s" "$pg" "$gr" "${c}.settle" "${c}.revised" "${c}.delivered" 2>/dev/null
 
   # Whether THIS beat armed the join must be read before join_of, which creates
   # the sidecar as a side effect.
   FIRST=0; [ -f "$s" ] || FIRST=1
   j="$(join_of "$t")"
+  # join_of ran in a subshell; memoise its answer HERE so every later call in this process
+  # returns it instead of re-reading a sidecar another beat may delete (see join_of).
+  eval "JM_$(key_of "$t")=\$j"
+
+  # ROUND-SCOPED RECORDS. `.revised` and `.delivered` survive delivery on purpose (a repair brief
+  # and --status read them), so a path REUSED by a later round would inherit the earlier round's
+  # count and consumption. Rounds re-arm with `--since <round epoch>`, never --reset, so the join
+  # epoch is the round boundary: a record last written before it belongs to an earlier round and
+  # is dropped here, by the one writer, instead of adding a --reset duty to every step file.
+  for rr_ in "${c}.revised" "${c}.delivered"; do
+    [ -f "$rr_" ] && [ "$(mtime_of "$rr_")" -lt "$j" ] && rm -f "$rr_" 2>/dev/null
+  done
 
   if is_delivered "$t" "$j"; then
-    rm -f "$c" "$s" "$pg" "$gr" "${c}.settle" 2>/dev/null || true
     say "DELIVERED $t"
+    say_revised "$t" "$c"
+    record_delivered "$t" "$c"
+    rm -f "$c" "$s" "$pg" "$gr" "${c}.settle" 2>/dev/null || true
     continue
   fi
 
@@ -837,10 +1146,10 @@ if [ -n "$EXHAUSTED" ]; then
     # findings discards them. UNFINISHED and UNSETTLED say read the file, then decide.
     if is_unfinished "$t" "$(join_of "$t")"; then
       echo "NON-DELIVERY $t -- after $MAX_BEATS beats."
-      echo "UNFINISHED $t -- present, last non-blank line is not seat-complete:"
+      echo "UNFINISHED $t -- present, last non-blank line is not ${MARK_NAME}"
     elif [ "$COMPLETE" -eq 1 ] && [ -s "$t" ] && [ "$(mtime_of "$t")" -ge "$(join_of "$t")" ] && has_marker "$t"; then
       echo "NON-DELIVERY $t -- after $MAX_BEATS beats."
-      echo "UNSETTLED $t -- present and ends in seat-complete:, but its content was still changing"
+      echo "UNSETTLED $t -- present and ends in ${MARK_NAME}, but its content was still changing"
     else
       echo "NON-DELIVERY $t -- absent after $MAX_BEATS beats."
     fi
@@ -944,10 +1253,10 @@ DEADLINE=$(( $(date +%s) + BUDGET - RESERVE ))
 # Beat-liveness marker (v0.81.0). A live, backgrounded beat is the ONLY state in
 # which the lead may end its turn: the Stop hook (ai-dlc-continue.sh Check 2b)
 # allows the yield iff this marker exists and is unexpired, because THIS process
-# will exit and re-invoke the idle lead. We write it only here, on the genuine-
-# sleep path (a non-sleeping return above never reaches this line), so a
-# foreground beat clears it on exit via the trap and post-beat prose still
-# BLOCKS -- unchanged behavior.
+# will exit and re-invoke the idle lead. It is first written before the pre-sleep
+# work and released by the EXIT trap (both at "THE BEAT-LIVENESS LEASE" above), so a
+# call that returns without sleeping holds it only while it runs, a foreground beat
+# clears it on exit, and post-beat prose still BLOCKS -- unchanged behavior.
 #
 # IT IS A HEARTBEAT, NOT A PROMISE. The marker once held the beat's worst-case
 # END epoch, written once. A SIGKILLed beat skips the EXIT trap, so the lead was
@@ -964,10 +1273,7 @@ DEADLINE=$(( $(date +%s) + BUDGET - RESERVE ))
 # loaded machine. Too SHORT costs a spurious Rule 3 block on a healthy join;
 # too LONG costs idle time after a kill. 30s of lease for 10s of polling puts
 # the slack where the cheaper mistake is.
-BEAT_MARKER="${STATE_DIR}/.beat-inflight"
-beat_alive() { printf '%s' "$(( $(date +%s) + 3 * POLL ))" > "$BEAT_MARKER" 2>/dev/null || true; }
 beat_alive
-trap 'rm -f "$BEAT_MARKER" 2>/dev/null || true' EXIT
 
 all_present() {
   IFS='|'
@@ -993,8 +1299,10 @@ for t in $PENDING; do
   c="${COUNTER_DIR}/$(key_of "$t")"
   s="${c}.since"
   if is_delivered "$t" "$(join_of "$t")"; then
-    rm -f "$c" "$s" "${c}.progress" "${c}.grants" "${c}.settle" 2>/dev/null || true
     say "DELIVERED $t"
+    say_revised "$t" "$c"
+    record_delivered "$t" "$c"
+    rm -f "$c" "$s" "${c}.progress" "${c}.grants" "${c}.settle" 2>/dev/null || true
     N_DELIVERED=$(( N_DELIVERED + 1 ))
   else
     b="$(cat "$c" 2>/dev/null || echo '?')"

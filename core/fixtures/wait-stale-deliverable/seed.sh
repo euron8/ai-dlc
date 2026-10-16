@@ -153,6 +153,22 @@ case "$CASE" in
     esac
     ;;
 
+  # ---- the lease and per-process-memo cases -----------------------------------
+  # Concurrent beats over ONE state dir. Nothing on disk but the bound, which MATCHES
+  # the bound the run uses: the first beat would otherwise wipe `.wait-beats/` (sparing
+  # only `.lease-*`) while a second beat is mid-sweep, and a case about who holds the
+  # lease would then also be a case about the bound wipe.
+  lease-handoff|lease-noclobber|lease-early|two-beats-one-path|memo-single|bare-epoch)
+    mkdir -p "$WORK/_bmad-output/.wait-beats"
+    printf '6' > "$WORK/_bmad-output/.wait-beats/.bound"
+    case "$CASE" in
+      # A LIVE PRE-UPGRADE LEASE, written the way a beat from before the `<epoch> <pid>`
+      # marker wrote it: a bare future epoch, no pid, no newline. That beat re-stamps it
+      # and deletes it on its own exit, so a new beat must leave it alone.
+      bare-epoch) printf '%s' "$(( $(date +%s) + 120 ))" > "$WORK/_bmad-output/.beat-inflight" ;;
+    esac
+    ;;
+
   # Argument-guard cases need no state beyond one legitimate progress path, which
   # is the CONTROL: without it, a subject that rejected every --progress-path
   # would satisfy all three rejection assertions.

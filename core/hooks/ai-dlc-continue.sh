@@ -145,10 +145,13 @@ NOW=$(date +%s)
 # second copy of this test beside Check 0 is two readers of one file that drift, the cost the
 # stall-run helper below already records. Sets BEAT_DEADLINE for the caller's log row. Every
 # non-live state -- missing, a directory, empty, non-numeric, expired -- returns 1.
+# The marker is `<epoch> <pid>` (the pid names the one beat that may remove it); only the first
+# field is the lease. A bare `<epoch>`, written by a beat from before that format, reads the same.
 beat_lease_live() {
   BEAT_DEADLINE=""
   [ -f "$BEAT_MARKER" ] || return 1
   BEAT_DEADLINE=$(cat "$BEAT_MARKER" 2>/dev/null || echo "")
+  BEAT_DEADLINE="${BEAT_DEADLINE%% *}"
   [[ "$BEAT_DEADLINE" =~ ^[0-9]+$ ]] && [ "$BEAT_DEADLINE" -gt "$NOW" ]
 }
 

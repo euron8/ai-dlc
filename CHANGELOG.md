@@ -20,6 +20,68 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.796.0] - 2026-10-16
+
+Batch 235 (wait beat). Closes BL-547, BL-549 and BL-566; ships the script and rule-28 halves of
+BL-541 and the beat half of BL-548, which stay open. Closes no `PC-` id.
+
+### One beat's exit no longer removes another live beat's lease (BL-549, BL-566)
+
+- `.beat-inflight` is a one-holder lease, `<epoch> <pid>`, and every beat registers
+  `.wait-beats/.lease-<pid>`. A beat takes the marker only when it is absent, garbage, expired or
+  held by a dead pid. On exit it removes the marker only if it holds it, handing it first to a live
+  registered beat. A live lease with no pid, written by a pre-upgrade beat, is never taken.
+- The lease is written before the beat's pre-sleep work, so a Stop that lands between arming and
+  sleeping sees a live beat.
+- `ai-dlc-continue.sh`'s `beat_lease_live` reads the first field, so the bare-epoch form still reads
+  live. The hook and the script ship together; an installed hook from an earlier release reads the
+  new two-field lease as not live.
+- A lease or sidecar write that fails now prints a `WARN: wait-for-deliverable:` line on stderr and
+  the beat goes on; stdout and the exit status are unchanged. A read-only `.wait-beats/` used to be
+  silent.
+
+### Concurrent beats over one path both deliver (BL-566)
+
+- Each beat settles a path's join epoch and settle record once per process and does not re-read
+  the shared sidecars after that, so a beat that delivers and deletes them no longer resets another
+  beat over the same path. Two beats from two shells over one seat file sealed after both armed:
+  both deliver, 16 of 16 on this release and 0 of 4 on the base.
+
+### `--status` answers "is this seat file finished" without sleeping (BL-547)
+
+- `wait-for-deliverable.sh --status <paths>` prints DELIVERED, UNFINISHED, UNSETTLED or WAITING per
+  path from the beat's own predicate, returns at once and writes nothing. An absent path reads
+  WAITING, a path with no armed join says so, and a path a beat already consumed reads DELIVERED.
+  It is refused together with `--reset`.
+
+### The serial remediator's join has a completion signal (BL-541, script and rule-28 halves)
+
+- `--complete-repair` delivers a record whose last line, at column 0 outside any fence and not a
+  list item, begins `repair-complete: serial `; a part remediator's `seat-complete:` record reads
+  unfinished. It is refused together with `--complete`, whose output is unchanged.
+- rule-28 tells the lead to arm the serial remediator's join with `--complete-repair`.
+  `process-rule-pins` now matches `--complete` as a whole flag, with a `join/flag-whole` control.
+- Still open: the `_gate-procedures.md` repair-join step.
+
+### A seat revised after its marker is reported (BL-548, beat half)
+
+- A seat file whose content changes, or whose marker is lost, after the beat first saw the marker
+  is counted in a `<key>.revised` sidecar, and the beat prints `REVISED-AFTER-MARKER <n>` beside
+  DELIVERED; `--status` prints it too. The count survives delivery and is cleared by `--reset`, a
+  bound wipe or a new round's join epoch.
+- Still open: the repair brief marking a revised seat's findings for re-read, and
+  `merge-adversarial-shards.sh --dry-run`.
+
+### Receipts
+
+- `bash core/fixtures/wait-stale-deliverable/receipt.sh BL-<id>` for 541, 547, 548, 549 and 566:
+  each exits 0 on this release, and 1 on the base and on a mutant built from it.
+
+### Correction
+
+- 0.794.0 said BL-538's arming half ships with this release. This release's rule-28 paragraph is
+  BL-541's subject and carries nothing for BL-538, which stays open.
+
 ## [0.795.0] - 2026-10-16
 
 Batch 235 (gate throughput). Closes no backlog entry and no `PC-` id.
