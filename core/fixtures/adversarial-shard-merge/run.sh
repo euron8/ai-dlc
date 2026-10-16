@@ -215,6 +215,8 @@ p_probe_disagree "$MERGE" && ok "PR2: shard 2's meta file rewritten to another a
   || bad "PR2: (rc=$RC) $(cat "$MO")"
 p_probe_absent "$MERGE" && ok "PR1: a legitimate writer with no probe row, and a remediator with a forged meta and no probe row -> each REFUSED 'has not stopped'; the legitimate writer with its row MERGES" \
   || bad "PR1: (rc=$RC) $(cat "$MO")"
+p_rerun_residual "$MERGE" && ok "RR5: KNOWN GAP, stated in the merge header -- a superseded remediator with no probe row and its meta forged to an adversary dispatch MERGES under --rerun; the same remediator WITH its probe row is REFUSED 'the meta file was rewritten'" \
+  || bad "RR5: (rc=$RC) $(cat "$MO")"
 
 # R6: a finding heading EXACTLY as the real pass wrote it carries no severity word, so the heads
 # counted (0 MAJOR) disagree with findings_major -- refused, never counted as zero.

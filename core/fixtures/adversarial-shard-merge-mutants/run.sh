@@ -51,12 +51,14 @@
 # wave of scorers, so the deal is 7, 7, 7, 6, 6, 5 in declaration order by family. Shard f carries
 # the basename, probe-over-meta, two-role and --rerun mutants (TM7-TM9, RM1-RM2), added with six
 # predicates that raised every scorer's cost, so they are a unit of their own, not a second wave. The
-# BL-536 mutants (RM3, TM10-TM12) came with four predicates that raised every scorer's cost again, and
-# none went to f, the costliest per mutant. TM10 filled e to one wave (7 + control = 8); RM3, TM11 and
-# TM12 went to d (9 + control = 10), so d alone runs a second wave of two scorers. That is one shard
-# with a second wave, where any other split of the four makes two. The deal is now 7, 7, 7, 9, 7, 5,
-# and it is reasoned from scorer counts, not from timings: no per-shard duration was recorded for b-f
-# when it was made, so the owner re-times the deal along with POOL and SCORER_BOUND. Every shard pays
+# BL-536 mutants (RM3, TM10-TM13) are dealt by measured COST, not count. Per-shard CPU at 07dfcbfa
+# (loaded, load ~30-37), divided by that shard's scorers (mutants + control) gives a per-scorer
+# cost: a 1320/8=165, b 1329/8=166, c 1165/8=146, d 1130/7=161, e 1158/7=165, f 1046/6=174. Each new
+# mutant goes to the shard whose projected CPU (its CPU plus its per-scorer cost per added mutant) is
+# lowest, never to f, whose wall clock was the longest (359s against 180-231s) despite the lowest CPU.
+# That gives c+2 (TM11 TM12) -> 1456, d+2 (RM3 TM13) -> 1453, e+1 (TM10) -> 1323, a 1320, b 1329,
+# f 1046. c (10 scorers) and d (9) exceed the pool of 8 and so run a second wave. The deal is
+# 7, 7, 9, 8, 7, 5. The owner re-times it along with POOL and SCORER_BOUND. Every shard pays
 # the unmutated control MX0, the J1 join and the MJ probe itself, because a shard that skipped them
 # could report a kill against a harness that never ran. MX6b, an assertion and not a scoring, runs
 # in shard a only.
@@ -73,8 +75,8 @@
 SHARDS="a b c d e f"
 MUTANTS_a="MX1 MX2 MX3 MX4 MX5 MX6 MX7"
 MUTANTS_b="MX8 MX9 MX10 MX11 MX12 MX13 MX14"
-MUTANTS_c="MX15 XM1 XM2 XM7 XM8 XM3 XM4"
-MUTANTS_d="XM5 XM6 SM1 SM2 SM3 SM4 RM3 TM11 TM12"
+MUTANTS_c="MX15 XM1 XM2 XM7 XM8 XM3 XM4 TM11 TM12"
+MUTANTS_d="XM5 XM6 SM1 SM2 SM3 SM4 RM3 TM13"
 MUTANTS_e="TM1 TM2 TM3 TM4 TM5 TM6 TM10"
 MUTANTS_f="TM7 TM8 TM9 RM1 RM2"
 set -uo pipefail
@@ -363,7 +365,7 @@ mutant "MX15 B4-by-document refuses every document" "b4doc b4doc_other" \
 # The cross groups (BL-464). XM1: files and --subject left single-cross -- the groups are read only
 # in --document mode, the wrong build "merge sharded in one mode only". Every files and subject arm
 # that seeds cross-<g> dies; the --document arms hold.
-mutant "XM1 one mode left single-cross" "b3 clean ceiling miss_ord miss_cross partition sha ms files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit xfiles xelicit xmix xunknown xcomplete tuid_main tuid_norow tuid_nometa tuid_selfdiff tuid_role tuid_twowriters tuid_oneagent tuid_nospawn tuid_session tuid_pre tuid_basename tuid_probemeta tuid_tworoles rerun_join rerun_other rerun_same rerun_role xdir probe_disagree probe_absent" \
+mutant "XM1 one mode left single-cross" "b3 clean ceiling miss_ord miss_cross partition sha ms files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit xfiles xelicit xmix xunknown xcomplete tuid_main tuid_norow tuid_nometa tuid_selfdiff tuid_role tuid_twowriters tuid_oneagent tuid_nospawn tuid_session tuid_pre tuid_basename tuid_probemeta tuid_tworoles rerun_join rerun_other rerun_same rerun_role xdir probe_disagree probe_absent rerun_residual" \
   'bash "$XPART" --cross-groups "$K" > "$T/groups" 2> "$T/groups.err"; grc=$?' \
   'bash "$XPART" --cross-groups "$( [ -n "$DOCUMENT" ] && echo "$K" || echo 2)" > "$T/groups" 2> "$T/groups.err"; grc=$?'
 # XM2: the owner rule off -- a finding two covering groups both report is summed twice. Only the
@@ -465,7 +467,9 @@ mutant "TM7 write rows keyed by basename, any shard dir" "tuid_basename xdir" \
 # BL-536 D4 corroboration goes with it: T12's two-id agent and PR2's forged meta each take the probe's
 # id and merge (PR2's remediator cell is refused by role instead). Both cells watch the meta/probe
 # agreement, so the overlap is genuine; PR1 holds, its no-row writers falling back to the meta branch.
-mutant "TM8 probe ledger preferred over the meta file" "tuid_probemeta probe_disagree" \
+# RR5's refusing twin (a superseded remediator WITH its probe row, meta forged) is refused only by
+# that agreement too, so with the probe id taken it is set aside as an adversary and merges.
+mutant "TM8 probe ledger preferred over the meta file" "tuid_probemeta probe_disagree rerun_residual" \
   '      if (a in am) {' \
   '      if (a in probe) id = probe[a]; else if (a in am) {'
 # TM9: the role checked only on a dispatch id with ONE spawn row -- T13's id carries two.
@@ -497,10 +501,19 @@ mutant "TM11 probe-row presence not required" "probe_absent" \
   '        if (!(a in probe)) no(' \
   '        if (!(a in probe)) pall[a] = "\t" id; if (0) no('
 # TM12 (D4 equality): the probe ids never compared with the meta's. T12's two-id agent and PR2's forged
-# metas take the meta's id and merge; PR1 holds, its refusal is presence.
-mutant "TM12 probe ids never compared with the meta" "tuid_probemeta probe_disagree" \
+# metas take the meta's id and merge, and so does RR5's refusing twin, the superseded remediator whose
+# probe row is the only thing that contradicts its forged meta; PR1 holds, its refusal is presence.
+mutant "TM12 probe ids never compared with the meta" "tuid_probemeta probe_disagree rerun_residual" \
   '        if (pall[a] != "\t" id) {' \
   '        if (0) {'
+# TM13: probe-row presence re-applied to SUPERSEDED writers -- the fold's defect. A stalled adversary
+# never reached SubagentStop, so every --rerun world whose superseded writer has no probe row refuses
+# 'has not stopped': RR1's contracted path, RR4's adversary twin (and its remediator cell, refused on
+# presence before the role is read), and RR5's acquitted residual, which this closes. All three seed
+# the real producer's no-row stall, so the overlap is genuine; no credited-writer cell moves.
+mutant "TM13 probe-row presence required of superseded writers" "rerun_join rerun_role rerun_residual" \
+  '        if (i <= n || (a in probe)) {' \
+  '        if (1) {'
 # ---- END MX MUTANTS
 
 # ------------------------------------------------------------------------------ the reap

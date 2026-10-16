@@ -1034,6 +1034,30 @@ p_probe_disagree() { # D4: shard 2's meta file rewritten to another adversary di
       && has "$MO" "records $HR_DID for that agent; the meta file was rewritten after the agent stopped" || return 1
   done
 }
+p_rerun_residual() { # THE STATED KNOWN GAP (merge header RE-DISPATCH, "RESIDUAL, ACQUITTED"): a writer
+                     # --rerun supersedes is held to probe EQUALITY only, so a remediator that never
+                     # stopped (no probe row) with its meta rewritten to an adversary dispatch is set
+                     # aside and the set MERGES. This cell is the exemption's own probe: it pins exactly
+                     # what is acquitted, so a change that widens or closes the gap moves it. Its twin,
+                     # one property apart, is the same remediator WITH its probe row (it stopped) ->
+                     # REFUSED by the equality the superseded writer is still held to.
+  local d probe
+  for probe in 0 1; do
+    d="$(tw)"; WORLD_SHARD="$d/2.md"; other_spawn "$d"
+    HR_NOPROBE="$([ "$probe" = 1 ] && echo 0 || echo 1)" HR_ROLE=remediator HR_AGENT_O=a000000000zremed HR_DID_O=toolu_01SupersededWriter0000r1 \
+      hr_at 2026-10-15T20:05:00Z s2 "$d" || return 1
+    forge_meta "$d/2.md" a000000000zremed "$REAL_OTHER"
+    hr_at 2026-10-15T21:00:00Z s2 "$d" || return 1
+    hr_ids "$d/2.md"
+    bash "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
+    if [ "$probe" = 0 ]; then
+      [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && has "$MO" "superseded=1" && grep -q " 2=$HR_DID " "$(out_of "$d")" || return 1
+    else
+      refused_clean "agent a000000000zremed, whose meta file names dispatch $REAL_OTHER but" "$d" \
+        && has "$MO" "records toolu_01SupersededWriter0000r1 for that agent; the meta file was rewritten after the agent stopped" || return 1
+    fi
+  done
+}
 p_probe_absent() { # D4: shard 2's writer has a meta file and NO probe row -- a legitimate adversary, and a
                    # remediator whose meta is forged to an adversary dispatch -> each REFUSED 'has not
                    # stopped'; the same legitimate world WITH its probe row MERGES
@@ -1049,5 +1073,5 @@ p_probe_absent() { # D4: shard 2's writer has a meta file and NO probe row -- a 
     && has "$MO" "has no row for that agent; an adversary that has not stopped has not delivered"
 }
 
-P_ALL="b3 clean ceiling miss_ord miss_cross dup partition sha ms doc_b3 doc_axis doc_sha doc_path doc_serial files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit subj_b4 b4doc b4doc_nomf b4doc_other xfiles xdoc xelicit xmix xunknown xcomplete stem_series stem_control stem_near stem_files tuid_main tuid_norow tuid_nometa tuid_selfdiff tuid_role tuid_twowriters tuid_oneagent tuid_nospawn tuid_session tuid_pre tuid_basename tuid_probemeta tuid_tworoles rerun_join rerun_other rerun_same rerun_role xdir probe_disagree probe_absent"
+P_ALL="b3 clean ceiling miss_ord miss_cross dup partition sha ms doc_b3 doc_axis doc_sha doc_path doc_serial files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit subj_b4 b4doc b4doc_nomf b4doc_other xfiles xdoc xelicit xmix xunknown xcomplete stem_series stem_control stem_near stem_files tuid_main tuid_norow tuid_nometa tuid_selfdiff tuid_role tuid_twowriters tuid_oneagent tuid_nospawn tuid_session tuid_pre tuid_basename tuid_probemeta tuid_tworoles rerun_join rerun_other rerun_same rerun_role xdir probe_disagree probe_absent rerun_residual"
 
