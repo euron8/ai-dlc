@@ -43,7 +43,7 @@ echo "owed-derivations-mutants:"
 printf 'HERMETIC-CONSUMED core/scripts/check-owed-derivations.sh\n'
 printf 'HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/derivation-differential.sh\n'
 
-anchor_count() { awk -v a="$2" 'index($0, a) { n++ } END { print n + 0 }' "$1"; }
+anchor_count() { ANCHOR="$2" awk 'index($0, ENVIRON["ANCHOR"]) { n++ } END { print n + 0 }' "$1"; }
 if [ "$(anchor_count "$READER" 'ZQXJ-no-such-anchor-in-this-reader')" = 0 ] && [ "$(anchor_count "$READER" 'set -uo pipefail')" = 1 ]; then
   ok "anchor control: an impossible anchor counts 0 and a known line counts 1"
 else
