@@ -114,3 +114,9 @@ the operator to ask.
 **BLOCKER**, **DEFECT**, **NOTE**. A NOTE gets no lineage sentence and no paragraph of
 justification. Keep locked decisions to BLOCKER and DEFECT. The failure here is elevation:
 presenting a dozen findings in one register makes the two that matter unfindable.
+
+## A closable session is stated plainly
+
+When a peer session holds no further work (its releases merged and verified, its branches and
+worktrees cleaned up, and no slot, filing, relay or close duty owed), the lead says so plainly to
+the operator AND messages that session that it is CLOSABLE.
