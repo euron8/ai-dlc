@@ -147,6 +147,14 @@ flow() {
   echo "slice.has_engine=$(printf '%s\n' "$sl" | grep -cxF core/skills/ai-dlc-update/reconcile/engine-probe.sh || true)" >> "$out"
   echo "slice.has_step1=$(printf '%s\n' "$sl" | grep -cxF core/scripts/step1-probe.sh || true)" >> "$out"
   echo "slice.has_rulebook=$(printf '%s\n' "$sl" | grep -cxF core/skills/ai-dlc/steps/x.md || true)" >> "$out"
+  if [ "$defer" = 2 ]; then
+    # UN-SYNCED (SKILL.md step 2): no gate, no branch, no slice write, no re-invoke; step 6 refuses apply, so nothing lands.
+    echo "tree_after_step2.engine=$(run_probe "$c/$ENGINE_C")" >> "$out"
+    echo "inv1.step3=$(run_probe "$s1/$ENGINE_C")" >> "$out"
+    echo "branches=$(git -C "$c" branch --list | cnt)" >> "$out"
+    echo "slice_left_unwritten=$(not_at_theirs "$c" "$sl" | cnt)" >> "$out"
+    return 0
+  fi
   if [ "$defer" = 1 ]; then
     # SELF-UPDATE-DEFER: step 2 cuts no branch, writes nothing; invocation 1 CONTINUES to step 3 on A.
     echo "tree_after_step2.engine=$(run_probe "$c/$ENGINE_C")" >> "$out"
@@ -181,6 +189,21 @@ flow defer "$RECON/setup-sites.md" 1 live
 eq "DEFER: step 2 wrote nothing, the tree still holds the old engine"             "$(val defer tree_after_step2.engine)" "ENGINE-MARKER A"
 eq "DEFER: step 3 of the delivering invocation runs the OLD engine"                "$(val defer inv1.step3)" "ENGINE-MARKER A"
 eq "DEFER: the carried slice is live once step 7 has landed it"                   "$(val defer after7.step3)" "ENGINE-MARKER B"
+
+# UN-SYNCED world, one property apart from DEFER (neither writes in step 2; DEFER lands at step 7, UN-SYNCED never does).
+# Modelled (SKILL.md step 2): "On a branch step 1 left UN-SYNCED, step 2 DEFERS a non-empty slice, before the gate.
+# Do not run `reconcile/self-update-gate.sh`, do not cut the self-update branch, do not write the slice ... then
+# continue to step 3." / "step 6 refuses that apply on this state, so nothing records the slice for later" /
+# "No self-update landed, so the re-invoke rule below does not fire and steps 3-5 run on this invocation's logic."
+n="$(grep -cF -- "On a branch step 1 left UN-SYNCED, step 2 DEFERS a non-empty slice" "$SKILL")" || n=0
+eq "SKILL.md carries the UN-SYNCED passage" "$n" "1"
+flow unsynced "$RECON/setup-sites.md" 2 live
+eq "UN-SYNCED: slice is non-empty (2) yet nothing is written" "$(val unsynced slice.n) $(val unsynced tree_after_step2.engine)" "2 ENGINE-MARKER A"
+eq "UN-SYNCED: step 3 of the delivering invocation runs the OLD engine, no re-invoke" "$(val unsynced inv1.step3)" "ENGINE-MARKER A"
+eq "UN-SYNCED: no self-update branch cut (main only) and both slice paths still unwritten" "$(val unsynced branches) $(val unsynced slice_left_unwritten)" "1 2"
+eq "self-probe: UN-SYNCED step 3 (A) and OK re-invoke step 3 (B) differ" \
+   "$( [ "$(val unsynced inv1.step3)" != "$(val base inv2.step3)" ] && echo differ || echo same )" "differ"
+eq "UN-SYNCED vs DEFER: same step 3 value, but only DEFER lands at step 7" "$(val unsynced inv1.step3)/$(val defer inv1.step3)/$(val defer after7.step3)" "ENGINE-MARKER A/ENGINE-MARKER A/ENGINE-MARKER B"
 
 # ---- mutants: each must change a value the cases assert, and is proven to apply --------------------
 # M1: the simulated re-invoke reads the engine from the PRE-step-2 tree.
