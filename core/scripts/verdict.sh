@@ -125,14 +125,17 @@ run_one() {
     # Absent from the alternation, the lead saw a FAIL line naming no stamp, and cleared it
     # by trimming the future lines into the history file. Only that validator prints the
     # token, so every other caller's output is unchanged.
-    ok_hits="$(grep -nE '^[[:space:]]*(ok|warn|OK:|PASS|WARN|OVER|FUTURE)' "$out" 2>/dev/null | head -n "$LINES")"
+    #
+    # `BACKDATED` IS IN BOTH SETS FOR THE SAME REASON: its FAIL line says "re-stamp each row
+    # below", and without the token the rows it names never reach the lead.
+    ok_hits="$(grep -nE '^[[:space:]]*(ok|warn|OK:|PASS|WARN|OVER|FUTURE|BACKDATED)' "$out" 2>/dev/null | head -n "$LINES")"
     [ -z "$ok_hits" ] || printf '%s\n' "$ok_hits" | sed 's/^/      /'
   else
     echo "FAIL  ${name}  (rc=${rc})"
     # Surface the lines that carry the failure, not the whole transcript. If the
     # validator names no FAIL line, show the tail rather than nothing -- a
     # non-zero status with no explanation must never render as silence.
-    hits="$(grep -nE '^[[:space:]]*(FAIL|ERROR|OVER|WARN|warn|FUTURE)' "$out" 2>/dev/null | head -n "$LINES")"
+    hits="$(grep -nE '^[[:space:]]*(FAIL|ERROR|OVER|WARN|warn|FUTURE|BACKDATED)' "$out" 2>/dev/null | head -n "$LINES")"
     if [ -n "$hits" ]; then
       printf '%s\n' "$hits" | sed 's/^/      /'
     else

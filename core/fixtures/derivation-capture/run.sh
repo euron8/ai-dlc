@@ -827,6 +827,20 @@ if [ -r "$CONSUMER/scripts/ai-dlc/validate-artifact-budget.sh" ]; then
   ra_edit '- 2026-10-16T01:59Z operator set the monitor deadline 2026-10-21T16:08:54Z'
   if [ "$_s5" = 0 ] && [ "$RC" = 0 ] && [ ! -s "$ERR" ]; then ok "snapshot: an honest row and a body deadline -> exit 0"
   else bad "snapshot: honest row exited $_s5, body deadline exited $RC (both expected 0)"; fi
+  sed -i.bak '$d' "$SNAP" && rm -f "$SNAP.bak"
+  # S6 a CELL-level Edit: new_string is the bare stamp alone. It reaches its row only through
+  # the mask's fragment match.
+  printf '%s\n' 'fold | pm-escalated | d1 | 2026-10-16T01:56:40Z | in-flight' >> "$SNAP"
+  fire "$(edit_json "$SNAP" '2026-10-16T01:56:40Z')"
+  if [ "$RC" = 2 ] && grep -q '^BACKDATED .*112 s' "$ERR"; then ok "snapshot: a bare back-dated stamp written into one cell -> exit 2 BACKDATED"
+  else bad "snapshot: a cell-level back-dated stamp exited $RC (expected 2 BACKDATED): $(head -2 "$ERR")"; fi
+  sed -i.bak '$d' "$SNAP" && rm -f "$SNAP.bak"
+  # S7 a payload line shorter than a stamp that the OLD placeholder line contains (`(2026-10-15`,
+  # 11 bytes) must not unmask it: the fragment floor is a full stamp.
+  ra_edit '(2026-10-15'
+  if [ "$RC" = 0 ] && [ ! -s "$ERR" ]; then ok "snapshot: a payload shorter than a stamp does not unmask old lines"
+  else bad "snapshot: a short payload exited $RC, re-judging old text: $(head -2 "$ERR")"; fi
+  ra_undo '(2026-10-15'
   unset AI_DLC_SNAPSHOT_NOW_EPOCH
 else
   ok "snapshot carrier SKIPPED: no validate-artifact-budget.sh in this layout"

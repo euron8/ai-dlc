@@ -835,7 +835,7 @@ fi
 # wrapper lives in MUT_BIN, so AI_DLC_SCRIPTS_DIR points it back at the real validator; the
 # positive conjunct (the stamp FAIL line is there) proves the copy ran.
 MW1="$MUT_BIN/mw1-verdict.sh"
-sed 's/|FUTURE)/)/g' "$VW" > "$MW1" || { echo "FIXTURE ERROR: sed died building $MW1" >&2; exit 2; }
+sed 's/|FUTURE|/|/g' "$VW" > "$MW1" || { echo "FIXTURE ERROR: sed died building $MW1" >&2; exit 2; }
 if cmp -s "$VW" "$MW1"; then echo "FIXTURE ERROR: mutant $MW1 matched nothing" >&2; exit 2; fi
 wdrive mw1 "$MW1" "$(dirname "$V")"
 if grep -q 'FAIL: pipeline-snapshot.md carries stamp(s) later' "$WORK/runs/mw1.out" && ! wcheck mw1; then
@@ -843,6 +843,44 @@ if grep -q 'FAIL: pipeline-snapshot.md carries stamp(s) later' "$WORK/runs/mw1.o
 else
   bad "MUTANT MW1 (verdict.sh drops FUTURE) SURVIVED or did not run"
   sed 's/^/      /' "$WORK/runs/mw1.out" >&2
+fi
+
+# F9 BACKDATED THROUGH verdict.sh. The FAIL line says "re-stamp each row below"; the wrapper
+# must surface the row it names, alongside a co-firing FUTURE row, within its 6-line cap.
+AB="$(arm_dir backdated)"; seed_clean "$AB"
+seed_stamped "$AB" '- 2026-10-14T12:00Z DEPLOY DONE' "$IF_HDR
+fold | pm-escalated | d1 | 2026-10-14T10:15:40Z | in-flight"
+printf '{"ts":"2026-10-14T10:17:32Z","name":"pm-escalated","role":"pm"}\n' > "$AB/_bmad-output/spawn-ledger.jsonl"
+bdrive() { # bdrive <label> <wrapper>
+  OUT="$WORK/runs/$1.out"
+  ( cd "$AB" && AI_DLC_SNAPSHOT_NOW_EPOCH="$NOW_PIN" AI_DLC_SCRIPTS_DIR="$(dirname "$V")" \
+      bash "$2" validate-artifact-budget --root "$AB" ) > "$OUT" 2>&1
+  printf '%s\t%s\t0\t0\n' "$1" "$?" >> "$LEDGER"
+}
+bcheck() { # bcheck <label> -> 0 when the wrapper shows the BACKDATED headline AND its row
+  _o="$WORK/runs/$1.out"
+  [ "$(status_of "$1")" = "1" ] || return 1
+  grep -q 'FAIL: pipeline-snapshot.md carries an in-flight dispatched-at earlier than its dispatch' "$_o" || return 1
+  grep -q 'BACKDATED .*pm-escalated dispatched-at 2026-10-14T10:15:40Z is 112 s' "$_o" || return 1
+  grep -q 'FUTURE .*2026-10-14T12:00Z' "$_o"
+}
+bdrive backdated "$VW"
+if bcheck backdated; then
+  ok "F9 a back-dated in-flight row is refused through verdict.sh, its row and a co-firing FUTURE row both shown"
+else
+  bad "F9 back-dated row through verdict.sh: exit $(status_of backdated), headline, row or FUTURE row missing"
+  sed 's/^/      /' "$WORK/runs/backdated.out" >&2
+fi
+# MW2 verdict.sh WITHOUT `BACKDATED`: F9 must lose the row while the headline survives.
+MW2="$MUT_BIN/mw2-verdict.sh"
+sed 's/|BACKDATED)/)/g' "$VW" > "$MW2" || { echo "FIXTURE ERROR: sed died building $MW2" >&2; exit 2; }
+if cmp -s "$VW" "$MW2"; then echo "FIXTURE ERROR: mutant $MW2 matched nothing" >&2; exit 2; fi
+bdrive mw2 "$MW2"
+if grep -q 'earlier than its dispatch' "$WORK/runs/mw2.out" && ! bcheck mw2; then
+  ok "MUTANT MW2 (verdict.sh drops BACKDATED) killed by F9"
+else
+  bad "MUTANT MW2 (verdict.sh drops BACKDATED) SURVIVED or did not run"
+  sed 's/^/      /' "$WORK/runs/mw2.out" >&2
 fi
 
 echo ""

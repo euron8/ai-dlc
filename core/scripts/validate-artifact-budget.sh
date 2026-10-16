@@ -1728,8 +1728,8 @@ printf -- '- 2026-01-01T02:17Z advisor DONE 2026-01-01T02:2xZ\n- 2026-01-01T23:5
 MPROBE_OUT="$(check_malformed_stamps "$MPROBE" probe)"
 rm -f "$MPROBE"
 if [ "$(printf '%s\n' "$MPROBE_OUT" | grep -c '^MALFORMED ')" != 2 ] \
-   || ! printf '%s\n' "$MPROBE_OUT" | grep -q 'line 1: 2026-01-01T02:2xZ' \
-   || ! printf '%s\n' "$MPROBE_OUT" | grep -q 'line 2: 2026-01-01T23:5Z'; then
+   || ! grep -q 'line 1: 2026-01-01T02:2xZ' <<<"$MPROBE_OUT" \
+   || ! grep -q 'line 2: 2026-01-01T23:5Z' <<<"$MPROBE_OUT"; then
   echo "FAIL: the malformed-stamp self-probe expected exactly T02:2xZ (line 1) and T23:5Z (line 2), got:" >&2
   printf '%s\n' "$MPROBE_OUT" | sed 's/^/    /' >&2
   exit 1
@@ -1754,7 +1754,7 @@ if command -v jq >/dev/null 2>&1; then
   BPROBE_OUT="$(check_backdated_dispatch "$BPROBE" probe "$BLEDGER")"
   rm -f "$BPROBE" "$BLEDGER"
   if [ "$(printf '%s\n' "$BPROBE_OUT" | grep -c '^BACKDATED ')" != 1 ] \
-     || ! printf '%s\n' "$BPROBE_OUT" | grep -q 'line 4: pm-escalated dispatched-at 2026-01-01T02:15:40Z is 112 s'; then
+     || ! grep -q 'line 4: pm-escalated dispatched-at 2026-01-01T02:15:40Z is 112 s' <<<"$BPROBE_OUT"; then
     echo "FAIL: the back-dated-dispatch self-probe expected exactly the line 4 row, 112 s early, got:" >&2
     printf '%s\n' "$BPROBE_OUT" | sed 's/^/    /' >&2
     echo "  A missing offender means the arm cannot fire; an extra one means an honest, late," >&2
@@ -1800,10 +1800,13 @@ if [ -n "$STAMPS_ONLY" ]; then
   [ -f "$STAMPS_ONLY" ] && [ -f "$PAYLOAD_FILE" ] || {
     echo "usage: --stamps-only <pipeline-snapshot.md> --payload <file-of-written-text>" >&2; exit 2; }
   _mask="$TMPROOT/stamps-mask.md"
-  # A payload line also matches a file line that CONTAINS it, when it is 10+ bytes: an Edit
-  # new_string may begin or end mid-line, and its first and last lines are then fragments.
-  LC_ALL=C awk 'FNR == NR { if ($0 != "") { P[$0] = 1; if (length($0) >= 10) F[++nf] = $0 } next }
-    /^## / || /dispatched-at/ || ($0 in P) { print; next }
+  # A payload line also matches a file line that CONTAINS it: an Edit new_string may begin
+  # or end mid-line, and its first and last lines are then fragments.
+  # The floor is 17 bytes, the shortest full stamp (`YYYY-MM-DDTHH:MMZ`): a bare stamp written
+  # into one cell still reaches its row, and a shorter common prefix (`- 2026-10-16T0`)
+  # cannot unmask every old line of that day.
+  LC_ALL=C awk 'FNR == NR { if ($0 != "") { P[$0] = 1; if (length($0) >= 17) F[++nf] = $0 } next }
+    /^## / || (/\|/ && /dispatched-at/) || ($0 in P) { print; next }
     { for (i = 1; i <= nf; i++) if (index($0, F[i])) { print; next } print "" }' \
     "$PAYLOAD_FILE" "$STAMPS_ONLY" > "$_mask" || exit 2
   _rel="${STAMPS_ONLY##*/}"
