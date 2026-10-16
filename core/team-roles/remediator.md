@@ -138,6 +138,7 @@ $ grep -c -F '<the text you wrote>' <the file you edited>
 - siblings: n/a (insertion)
 - siblings: n/a (deletion)
 - closes: <part> <heading>   (the serial remediator only, copied from the `ESCALATED:` line it resolves)
+- supersedes: <part> <heading>   (an escalated entry restating a part's escalation, copied the same way)
 - edit: <project-relative path of the file the fix lies in>:<line(s)> (escalated)   (an `escalated` entry's edit: line)
 
 - derivation:
@@ -191,13 +192,12 @@ the join closes an escalation only by that line, never by a shared `source:` tok
 repair of another conjunct leaves it open for the lead.
 
 An `escalated` entry of yours that restates a part's escalation, carrying the same open
-decision forward, names every escalation it restates. In a record with no party seat files it
-names them as `source:` tokens of the part and finding (`source: 07.md#F-1`); a party record's
-`source:` takes seat tokens only and refuses a part token, so there the claim names them. The
-join counts the restating entry and each restated one as separate escalations. So the entry that
-later resolves the decision, yours or the fold of the operator's answer, carries one `- closes:`
-line per member of the chain, the restating entry and every part escalation it names: an
-escalation with no `closes:` line of its own stays open however many of its links were closed.
+decision forward, carries one `- supersedes: <part> <heading>` line per escalation it restates,
+copied from the tail of that escalation's `ESCALATED:` line exactly as `closes:` is. Leave its
+`source:` line as it is. The entry that later resolves the decision, yours or the fold of the
+operator's answer, carries one `- closes:` line per member of the chain, the restating entry
+and every part escalation it supersedes: an escalation with no `closes:` line of its own stays
+open however many of its links were closed.
 
 **As the serial remediator only**, your LAST write is one line closing the block you appended:
 `repair-complete: serial <pass>`, `<pass>` being the pass your brief names, as the record's last
