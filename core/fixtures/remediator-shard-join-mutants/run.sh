@@ -527,7 +527,7 @@ mutant "JX39 set-aside regex cut to 'not required' only" "setasideshard" \
 mutant "JX40 set-aside regex cut to the shard phrase only" "setasidenr" \
   'claim ~ /outside (this|my|the) (shard|part|section)|not required/' \
   'claim ~ /outside (this|my|the) (shard|part|section)/'
-mutant "JX41 --sources prints no ESCALATED-COUNT line" "srcclosed srchalf srccross escopen escclosed" \
+mutant "JX41 --sources prints no ESCALATED-COUNT line" "srcclosed srchalf srccross escopen escclosed gapfill" \
   '  echo "ESCALATED-COUNT: ${ESC_N} (${ESC_X} closed' \
   '  : "ESCALATED-COUNT: ${ESC_N} (${ESC_X} closed'
 mutant2 "JX31 the set-aside hand-off exemption removed, self-probe removed" "handoff" \
@@ -665,8 +665,8 @@ mutant2 "JX73 an edit: entry with no disposition: not refused, self-probe remove
   '      if (0) print "NODISP\t" cf "\t" cur' \
   "$CTPROBE_OLD" "$CTPROBE_NEW"
 mutant2 "JX74 a value outside the vocabulary not refused, self-probe removed" "dispvocab" \
-  '        if ((src == 0 || era) && !(dfull in VOC)) print "BADDISP\t" cf "\t" cur "\t" dfull' \
-  '        if (0) print "BADDISP\t" cf "\t" cur "\t" dfull' \
+  '        if ((src == 0 || era) && !(dfull in VOC)) print "BADDISP\t" cf "\t" cur "\t" draw' \
+  '        if (0) print "BADDISP\t" cf "\t" cur "\t" draw' \
   "$CTPROBE_OLD" "$CTPROBE_NEW"
 mutant "JX75 an operator-ruling cite not resolved" "dispruling" \
   '  [ "$n" -ge 1 ] || refuse "${r}: the ${d} entry'"'"'s ruling cite' \
