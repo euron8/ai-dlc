@@ -900,3 +900,16 @@ NOT IN SCOPE, listed for the OPERATOR to decide, not for the owner: budgets the 
 Owner: ai-dlc-4e [9b62de] (lead ai-dlc-9c).
 
 verify: manual
+
+## BL-633 — a glob pathspec ending in `/` returns a clean zero in `git grep`, and `tool-hazards.md` does not say so
+
+**NOTE.** Found by intake ai-dlc-40 (two false absences in one session); reproduced with git 2.54.0 (Apple Git-156) at commit `c4834619` (on `b235-ra-g3`'s reflog), pattern `SECONDS`, which `core/fixtures/adversarial-shard-merge/lib.sh` there carries twice:
+- `'core/fixtures/adversarial-shard-merge*/'` → 0 files, exit 0, no stderr.
+- `'core/fixtures/adversarial-shard-merge*'`, `'core/fixtures/adversarial-shard-merge/'`, `'core/fixtures/adversarial-shard-merge'` and `':(glob)core/fixtures/adversarial-shard-merge*/**'` → 1 file each (the controls).
+- `git ls-files` behaves the same in the working tree: `'…merge*/'` 0 files, `'…merge*'` 16.
+
+The absence reads exactly like a real one. `.claude/rules/tool-hazards.md:181-184` covers the neighbouring `ls-tree` case only.
+
+Owed: one line beside `:181-184` saying a glob pathspec must not end in `/` (use the bare glob, the plain directory, or `:(glob)<dir>*/**`). It goes in the durable channel, which has 49 bytes free under A6 (69327/69376 on intake-7), so the line needs either A6 headroom (an operator decision) or an equal subtraction elsewhere in the channel.
+
+verify: manual
