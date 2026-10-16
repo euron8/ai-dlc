@@ -51,6 +51,15 @@ is not built and stays open, see below. Closes no `PC-` id.
   including 126 and 127. The deny names the REPOINTED remedy and states that one UNRUN derivation anywhere in a
   file makes every owed row in that file UNASSESSED. Step 0a (`route.md`) shows open rows on resume, and the retro
   carries each open key forward once.
+- HISTORY files are INFO too: a path an ai-dlc program writes or classes as an archive is classified HISTORY
+  and is never recorded, refused or carried, wherever it sits. That is the rotators' outputs (rotated
+  gate-adjudication records, `pipeline-history/pipeline-snapshot-archive.md`, `push-candidate-ledger.archive.md`),
+  the prose steps' `prd-history.md` and `product-brief-history.md`, and `planning-artifacts/archive/**` and
+  `s<N>/archive/**`, each cited at its source beside the set. One classifier,
+  `check-owed-derivations.sh --scope`, answers CURRENT, LIVING, PAST or HISTORY for every caller.
+- **Limit, fails open:** in the preamble-only window `sprint-status.sh sprint-id` reads frozen archives, and with
+  that history deleted it can answer 1. Current-sprint rows then read PAST, so they turn INFO and do not block.
+  That is the open direction, never a false refusal; BL-631 fixes the resolver.
 - What is enforced, and when: Check 37 runs at the planning gate only. A current-sprint row recorded after that
   gate (a pull mid-implementation) is shown at the next resume and carried at retro, and is refused at the next
   sprint's planning gate only if its file is then still current or living.
