@@ -172,19 +172,19 @@ mutate M18-batch-defaults-living reader "Bt1b Hc2 Hl1 Hl1b Hl3 Hl4 Hl6 Hl7 Hl8 H
   '    classify "$_bp"' \
   's/^    classify "\$_bp"$/    SCOPE_TOKEN=LIVING/'
 
-# ---- Bd: the is_archive copy is BOUND to the shipped predicate (I33 forbids sourcing it) --------------
-# The reader's copy and validate-artifact-budget.sh's is_archive() must have byte-equal bodies. The
-# comparison is run on the pristine pair (equal) and on a drifted copy (must differ), so it can fail.
-fn_body() { awk '/^is_archive\(\) \{/ { p = 1 } p { print } p && /^\}/ { exit }' "$1"; }
-BUDGET="$ROOT/core/scripts/validate-artifact-budget.sh"
-b_ref="$(fn_body "$BUDGET")"; b_cpy="$(fn_body "$READER")"
-if [ -n "$b_ref" ] && [ "$b_ref" = "$b_cpy" ]; then ok "Bd1 the reader's is_archive body is byte-equal to validate-artifact-budget.sh's"; else bad "Bd1 is_archive copy differs from the shipped predicate (or an extraction was empty)"; fi
-sed 's/|\*\.precompact\.md//' "$READER" > "$WORK/drift.sh"
-if cmp -s "$READER" "$WORK/drift.sh"; then bad "Bd2 the drift mutation DID NOT APPLY"
-else
-  b_dft="$(fn_body "$WORK/drift.sh")"
-  if [ -n "$b_dft" ] && [ "$b_ref" != "$b_dft" ]; then ok "M19-is-archive-copy-drifts: KILLED by the binding arm (declared: Bd1 on the pristine pair, Bd2 on the drifted copy)"; else bad "M19-is-archive-copy-drifts: SURVIVED -- the binding arm cannot see a dropped arm"; fi
-fi
+# (M19 and the Bd binding arms are REMOVED: HISTORY no longer copies is_archive, it matches exact names.)
+
+# M23: HISTORY matches a basename by SUBSTRING/suffix (`*-history.md`, `*-archive*.md`), as the old is_archive
+# copy did. The three live look-alikes then read HISTORY.
+mutate M23-substring-archive-match reader "Ha1 Ha2 Ha3 Hn" \
+  '    prd-history.md|product-brief-history.md|push-candidate-ledger.archive.md) return 0 ;;' \
+  's/^    prd-history\.md|product-brief-history\.md|push-candidate-ledger\.archive\.md) return 0 ;;$/    *-history.md|*-archive*.md|prd-history.md|product-brief-history.md|push-candidate-ledger.archive.md) return 0 ;;/'
+
+# M24: the `archive` directory is matched as a SUBSTRING of a component, so `archived/` and `archive-notes/`
+# read HISTORY.
+mutate M24-archive-dir-substring reader "Ha4 Ha5 Hn" \
+  '  case "$p" in _bmad-output/*) case "/${p%/*}/" in */archive/*) return 0 ;; esac ;; esac' \
+  's|\*/archive/\*) return 0|*/archive*/*) return 0|'
 
 # ---- Bs: the SLOT_RE copy is BOUND to what `artifact-path-config.sh --slot-re` prints ----------------
 # Both are asserted on the pristine reader (equal), and a drifted copy must differ, so the arm can fail.
@@ -218,7 +218,7 @@ elif [ -n "$(bg_miss "$WORK/gdrift.sh")" ]; then ok "Bg2 M22-live-stem-rule-copy
 else bad "Bg2 M22-live-stem-rule-copy-drifts: SURVIVED"; fi
 
 # M14: the reader trusts a REPOINTED row without re-deriving the new derivation.
-mutate M14-reader-trusts-repointed reader "Rp2 Rp3 Rp3b Rp4b" \
+mutate M14-reader-trusts-repointed reader "Rp2 Rp3 Rp3b Rp4b Rp7 Rp9" \
   '  pre=""; [ "$hops" -gt 0 ] && pre="REPOINTED-"' \
   's/^  pre=""; \[ "\$hops" -gt 0 \] \&\& pre="REPOINTED-"$/  pre=""; [ "$hops" -gt 0 ] \&\& continue/'
 
@@ -271,6 +271,11 @@ pk "Pa route.md Step 0a runs the reader on resume" "check-owed-derivations.sh" r
 # The in-tree side of the implementation-readiness-report HISTORY shape. The writer (BMAD's own skill, whose
 # outputFile is `{planning_artifacts}/implementation-readiness-report-{{date}}.md`) is NOT in this repo and is
 # NOT checked here; only that ai-dlc still invokes the skill at its two call sites.
+pk "Pk1 route.md 0a says exit 0 can print INFO lines" "Exit 0 can still print INFO lines" route.md
+pk "Pk2 route.md 0a names the history INFO kind" "INFO history" route.md
+pk "Pk3 route.md 0a states the planning-gate-only sentence" "shown and carried but never refused" route.md
+pk "Pk4 Check 37 states the planning-gate-only sentence" "shown and carried but never refused" gate-validation.md
+pk "Pk5 retro.md discloses both INFO kinds as not closed" "INFO history" retro.md
 pk "Pa2 architecture.md still invokes bmad-check-implementation-readiness" '/bmad-check-implementation-readiness' architecture.md
 pk "Pa3 stories-test-strategy.md still invokes bmad-check-implementation-readiness" '/bmad-check-implementation-readiness' stories-test-strategy.md
 pk "Pb gate-validation.md carries the owed-derivation check, keyed on any non-zero exit" "Any exit other than 0" gate-validation.md

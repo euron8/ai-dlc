@@ -3314,6 +3314,7 @@ The deny text states, in this order:
    `INFO past-sprint` row is unrepaired debt that is no longer enforced. It is not closed. Show those
    lines in the gate output; they never deny. An `INFO history` row (a row in an archive or an
    ai-dlc rotation output) is treated the same way.
+   This check runs at the PLANNING gate only. A row recorded after the planning gate is shown and carried but never refused — that is deliberate, so a sprint can always close; it is NOT closed.
 5. A row in the live `_bmad-output/gate-adjudication/` is cleared by rotating it
    (`rotate-gate-adjudication.sh`) or re-pointing it.
 

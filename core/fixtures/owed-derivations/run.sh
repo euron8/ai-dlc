@@ -284,7 +284,10 @@ _bmad-output/planning-artifacts/product-brief-history.md
 _bmad-output/planning-artifacts/archive/x.md
 _bmad-output/planning-artifacts/s1/archive/cycle-1/x.md
 _bmad-output/ai-dlc-update/reconcile-log-20261016T0725Z.md
-_bmad-output/planning-artifacts/implementation-readiness-report-2026-10-16.md"
+_bmad-output/planning-artifacts/implementation-readiness-report-2026-10-16.md
+_bmad-output/operator-answers-history.md
+_bmad-output/operator-requests-history.md
+_bmad-output/pipeline-snapshot-history.md"
 LIVEGA="_bmad-output/gate-adjudication/g.md"
 GA="_bmad-output/gate-adjudication"
 GA_LIVE="planning-20260301T000000Z"; GA_OLD="planning-20260101T000000Z"
@@ -292,7 +295,12 @@ mkdir -p "$R/$GA"
 : > "$R/$GA/$GA_LIVE.verdict.json"; : > "$R/$GA/$GA_OLD.verdict.json"
 for gf in "$GA_LIVE.repair.md" "$GA_OLD.repair.md"; do { printf '# h\n\n'; fence 5; } > "$R/$GA/$gf"; done
 NEARS="_bmad-output/planning-artifacts/prd-history-notes.md
-_bmad-output/planning-artifacts/archived.md"
+_bmad-output/planning-artifacts/archived.md
+_bmad-output/planning-artifacts/data-archive-policy.md
+_bmad-output/planning-artifacts/s1/requirements-history.md
+_bmad-output/planning-artifacts/s1/stories/story-3-archive-cleanup.md
+_bmad-output/planning-artifacts/archived/x.md
+_bmad-output/planning-artifacts/archive-notes/x.md"
 : > "$WORK/hrows.tsv"
 for hp in $HSHAPES $LIVEGA $NEARS; do
   mkdir -p "$R/${hp%/*}"; { printf '# h\n\n'; fence 5; } > "$R/$hp"
@@ -329,8 +337,18 @@ scope_in "$R" "_bmad-output/analysis/s1/archive/x.md"; rc_is "Sl4 s<current>/arc
 scope_in "$R" "_bmad-output/implementation-artifacts/s1/gate-adjudication/g.md"
 rc_is "Hl3 the same file rotated under s<N>/gate-adjudication/ is HISTORY" 0 "$([ "$SC" = HISTORY ] && echo 0 || echo 1)"
 for np in $NEARS; do
-  scope_in "$R" "$np"; rc_is "Hn $np (near-miss of is_archive) --scope -> LIVING" 0 "$([ "$SC" = LIVING ] && echo 0 || echo 1)"
+  case "$np" in
+    */s1/*) want=CURRENT ;;
+    *) want=LIVING ;;
+  esac
+  scope_in "$R" "$np"; rc_is "Hn $np (a name that only CONTAINS archive/history, no exact match) --scope -> $want" 0 "$([ "$SC" = "$want" ] && echo 0 || echo 1)"
 done
+scope_in "$R" "_bmad-output/planning-artifacts/s1/stories/story-3-archive-cleanup.md"; rc_is "Ha1 s<current>/stories/story-3-archive-cleanup.md -> CURRENT" 0 "$([ "$SC" = CURRENT ] && echo 0 || echo 1)"
+scope_in "$R" "_bmad-output/planning-artifacts/s1/requirements-history.md"; rc_is "Ha2 s<current>/requirements-history.md -> CURRENT" 0 "$([ "$SC" = CURRENT ] && echo 0 || echo 1)"
+scope_in "$R" "_bmad-output/planning-artifacts/data-archive-policy.md"; rc_is "Ha3 planning-artifacts/data-archive-policy.md -> LIVING" 0 "$([ "$SC" = LIVING ] && echo 0 || echo 1)"
+scope_in "$R" "_bmad-output/planning-artifacts/archived/x.md"; rc_is "Ha4 archived/x.md (contains archive, is not the component) -> LIVING" 0 "$([ "$SC" = LIVING ] && echo 0 || echo 1)"
+scope_in "$R" "_bmad-output/planning-artifacts/archive-notes/x.md"; rc_is "Ha5 archive-notes/x.md -> LIVING" 0 "$([ "$SC" = LIVING ] && echo 0 || echo 1)"
+scope_in "$R" "_bmad-output/planning-artifacts/s1/archive/x.md"; rc_is "Ha6 near-miss control: s<current>/archive/x.md -> HISTORY" 0 "$([ "$SC" = HISTORY ] && echo 0 || echo 1)"
 scope_in "$R" "_bmad-output/planning-artifacts/prd.md"; rc_is "Hc1 control: prd.md -> LIVING" 0 "$([ "$SC" = LIVING ] && echo 0 || echo 1)"
 scope_in "$R" "_bmad-output/planning-artifacts/s1/x.md"; rc_is "Hc2 control: s<current>/x.md -> CURRENT" 0 "$([ "$SC" = CURRENT ] && echo 0 || echo 1)"
 # the writer records nothing for a history path: the writer calls --scope per row, so HISTORY is dropped
@@ -416,6 +434,31 @@ rc_is "Rp4a a chain OLD -> MID (stale) -> FRESH follows to the end and closes" 0
 { row "$K_RPO" "$CMD"; rp "$K_RPO" "$K_RPF" "$CMD"; rp "$K_RPO" "$K_RPS" "$CMD"; } > "$WORK/rp4b.tsv"
 rd "$R" "$WORK/rp4b.tsv"
 rc_is "Rp4b two REPOINTED for one key: the LATEST (stale) wins -> OPEN" 0 "$([ "$RC" = 1 ] && [ "$(reason_of "$K_RPO")" = REPOINTED-STALE ] && echo 0 || echo 1)"
+# Rp6-Rp9: a REPOINTED whose target KEY equals the key being resolved (a command fixed in place) is judged
+# ONCE, by content-location of the NEW command; cycles across DISTINCT keys judge the latest distinct target.
+CMD2='grep -c qqzzzfixed t.txt'
+SK="_bmad-output/planning-artifacts/s1/rp-same.md"
+{ printf '# Same\n\n'; printf '```derived\n$ %s\n0\n```\n' "$CMD2"; } > "$R/$SK"
+K_SK="$SK:$(line_of "$R/$SK" '$ grep')"
+{ row "$K_SK" "$CMD"; rp "$K_SK" "$K_SK" "$CMD2"; } > "$WORK/rp6.tsv"
+rd "$R" "$WORK/rp6.tsv"
+rc_is "Rp6 same-key re-point, command fixed in place, fresh -> closed (exit 0)" 0 "$RC"
+{ printf '# Same\n\n'; printf '```derived\n$ %s\n5\n```\n' "$CMD"; } > "$R/$SK"
+{ row "$K_SK" "$CMD"; rp "$K_SK" "$K_SK" "$CMD"; } > "$WORK/rp7.tsv"
+rd "$R" "$WORK/rp7.tsv"
+rc_is "Rp7 same-key re-point, still stale -> OPEN as REPOINTED-STALE (never MOVED)" 0 "$([ "$RC" = 1 ] && [ "$(reason_of "$K_SK")" = REPOINTED-STALE ] && echo 0 || echo 1)"
+{ row "$K_RPO" "$CMD"; rp "$K_RPO" "$K_RPM" "$CMD"; rp "$K_RPM" "$K_RPO" "$CMD"; } > "$WORK/rp8.tsv"
+{ printf '# Old\n\n'; fence 1; } > "$R/$RPO"
+rd "$R" "$WORK/rp8.tsv"
+rc_is "Rp8 cycle A -> B -> A with the final A fresh -> closed (exit 0)" 0 "$RC"
+{ printf '# Old\n\n'; fence 5; } > "$R/$RPO"
+rd "$R" "$WORK/rp8.tsv"
+rc_is "Rp9 cycle A -> B -> A with A stale -> OPEN" 0 "$([ "$RC" = 1 ] && [ "$(open_count)" = 1 ] && echo 0 || echo 1)"
+{ row "$K_RPO" "$CMD"; rp "$K_RPO" "${K_RPO%:*}:999" "$CMD"; } > "$WORK/rp10.tsv"
+{ printf '# Old\n\n'; fence 1; printf '\n'; } > "$R/$RPO"
+rd "$R" "$WORK/rp10.tsv"
+rc_is "Rp10 control: A:N -> A:999 (a different key) fresh by content still closes" 0 "$RC"
+{ printf '# Old\n\n'; fence 5; } > "$R/$RPO"
 printf 'REPOINTED\t%s\n' "$K_RPO" > "$WORK/rp5.tsv"
 rd "$R" "$WORK/rp5.tsv"
 rc_is "Rp5 a malformed REPOINTED row refuses the record -> exit 2" 2 "$RC"

@@ -118,39 +118,41 @@ sprint_split() {
   return 1
 }
 
-# THE HISTORY SET (lead ruling): any path an ai-dlc program WRITES as an archive or classes as one. A
-# history path is never enforced, never recorded and never carried, WHEREVER it sits, so it is checked
-# FIRST and a history file inside the current sprint's s<N>/ is still HISTORY. Citations at 21facb0f
-# (re-verified by grep when written; the files are unchanged at the tip):
-#   - core/scripts/rotate-gate-adjudication.sh:155-157 (header) and :272 (DEST): the rotator MOVES stale
-#     gate-adjudication records out of the live `_bmad-output/gate-adjudication/` (SRC, :271) into
-#     `_bmad-output/implementation-artifacts/s<N>/gate-adjudication/` and
-#     `_bmad-output/implementation-artifacts/pre-series/gate-adjudication/`. Those two are HISTORY by
-#     PATH. The live directory is NOT history: it is unrotated, so it belongs to the current sprint and
-#     classifies by the guard's live-nonce rule (below): the live stem and its sidecars are CURRENT,
-#     every other stem there is HISTORY. The rotator's own output directories are HISTORY by path.
-#   - core/scripts/rotate-snapshot-archive.sh:149: `pipeline-history/pipeline-snapshot-archive.md`
-#     (covered by the basename predicate below, `*-archive.md`).
-#   - core/skills/ai-dlc-update/reconcile/ledger-rotate.sh:136: `push-candidate-ledger.archive.md`
-#     (a dot form, so `is_archive` does not match it and it is named explicitly).
-#   - core/skills/ai-dlc/steps/requirements.md:154 `prd-history.md` and
-#     core/skills/ai-dlc/steps/artifact-consolidation.md:128 `product-brief-history.md` (prose steps
-#     that tell the lead to write them; covered by the basename predicate, `*-history.md`).
-#   - core/scripts/migrate-artifact-paths.sh:18 `_bmad-output/planning-artifacts/archive/**`, and
-#     core/scripts/validate-artifact-budget.sh:1362-1368 (any `s<N>/archive/**`, current sprint included).
-# `is_archive` below is a COPY of core/scripts/validate-artifact-budget.sh:537 (`is_archive()`), the
-# shipped predicate. I33 forbids sourcing it across install layouts, so it is copied and BOUND: the
-# dist-only battery extracts both function bodies and compares them. Keep its case arms byte-equal.
-is_archive() {
-  case "$1" in
-    *-history.md|*-archive.md|*-archive-*.md|*.precompact.md) return 0 ;;
-    *) return 1 ;;
-  esac
-}
+# THE HISTORY SET (lead ruling): paths an ai-dlc program WRITES as history, plus every `archive` directory.
+# EXACT matches only: no substring and no suffix matching (a `*-history.md` or `*-archive*.md` glob also
+# caught `s<N>/requirements-history.md`, `stories/story-3-archive-cleanup.md` and `data-archive-policy.md`,
+# which are live). A history path is never enforced, never recorded and never carried, WHEREVER it sits, so
+# it is checked FIRST and a history file inside the current sprint's s<N>/ is still HISTORY. Citations,
+# re-verified by grep at the tip:
+#   (i) any directory component named exactly `archive` under `_bmad-output/`: `planning-artifacts/archive/**`
+#       (core/scripts/migrate-artifact-paths.sh:18) and `s<N>/archive/**` (core/scripts/validate-artifact-budget.sh
+#       :1362-1368). `archived/` and `archive-notes/` are no `archive` component.
+#   (ii) exact writer-produced names:
+#   - `prd-history.md`, `product-brief-history.md`: core/skills/ai-dlc/steps/requirements.md:154 and
+#     core/skills/ai-dlc/steps/artifact-consolidation.md:128.
+#   - `push-candidate-ledger.archive.md`: core/skills/ai-dlc-update/reconcile/ledger-rotate.sh:136.
+#   - `pipeline-history/pipeline-snapshot-archive.md`: core/scripts/rotate-snapshot-archive.sh:149.
+#   - `operator-answers-history.md`: core/hooks/ai-dlc-answer-capture.sh:105 (path) and :242 (append).
+#   - `operator-requests-history.md`: core/hooks/ai-dlc-pause.sh:210 (path) and :261 (append).
+#   - `pipeline-snapshot-history.md`: fed by the `trim` remedy that core/scripts/validate-artifact-budget.sh:2148,
+#     core/skills/ai-dlc/steps/_gate-procedures.md:71,:82 and steps/route.md:327 tell the lead to write; its path
+#     is named in core/schemas/pipeline-state-paths.json, and rotate-snapshot-archive.sh:5 rotates it.
+#   - the rotated gate-adjudication directories, core/scripts/rotate-gate-adjudication.sh:155-157 (header) and
+#     :272 (DEST): `_bmad-output/implementation-artifacts/s<N>/gate-adjudication/**` and
+#     `_bmad-output/implementation-artifacts/pre-series/gate-adjudication/**`. The LIVE
+#     `_bmad-output/gate-adjudication/` (SRC, :271) is NOT history as a directory: it classifies by the
+#     guard's live-nonce rule below (live stem and sidecars CURRENT, every other stem HISTORY).
+#   - `_bmad-output/ai-dlc-update/reconcile-log-<ts>.md`, ts shaped `[0-9]{8}T[0-9]{4,6}Z`: written by the
+#     update session itself, one per run (core/skills/ai-dlc-update/SKILL.md:2497, "YOU write ... and
+#     `apply.sh` does NOT"; apply.sh:2780 confirms).
+#   - `_bmad-output/planning-artifacts/implementation-readiness-report-<YYYY-MM-DD>.md`: written fresh per run by
+#     BMAD's own skill `bmad-check-implementation-readiness` (outputFile
+#     `{planning_artifacts}/implementation-readiness-report-{{date}}.md`). That writer is BMAD's, so it is NOT in
+#     this tree and the outputFile shape is NOT checked here. ai-dlc invokes the skill from
+#     core/skills/ai-dlc/steps/architecture.md:264 and core/skills/ai-dlc/steps/stories-test-strategy.md:18.
 is_history() { # <root-relative path> -> 0 when HISTORY
-  local p="$1" rest seg after
+  local p="$1" rest seg after b n
   case "$p" in
-    _bmad-output/planning-artifacts/archive/*) return 0 ;;
     _bmad-output/implementation-artifacts/pre-series/gate-adjudication/*) return 0 ;;
     _bmad-output/implementation-artifacts/s*/gate-adjudication/*)
       rest="${p#_bmad-output/implementation-artifacts/}"; seg="${rest%%/*}"
@@ -159,20 +161,23 @@ is_history() { # <root-relative path> -> 0 when HISTORY
         *) after="${rest#*/}"; case "$after" in gate-adjudication/*) return 0 ;; esac ;;
       esac ;;
   esac
-  if sprint_split "$p"; then case "$SP_REST" in archive/*) return 0 ;; esac; fi
-  is_archive "${p##*/}" && return 0
-  case "${p##*/}" in push-candidate-ledger.archive.md) return 0 ;; esac
-  # Fresh-per-run dated reports. `reconcile-log-<ts>.md` under `_bmad-output/ai-dlc-update/` is written by
-  # the update session itself, one per run: core/skills/ai-dlc-update/SKILL.md:2492 ("YOU write
-  # `_bmad-output/ai-dlc-update/reconcile-log-<ts>.md`, and `apply.sh` does NOT"; apply.sh:2780 confirms
-  # it does not write it). `implementation-readiness-report-<date>.md` is written fresh per run by BMAD's
-  # own skill `bmad-check-implementation-readiness` (its outputFile is
-  # `{planning_artifacts}/implementation-readiness-report-{{date}}.md`); that writer is BMAD's, so it is
-  # NOT in this tree and the outputFile shape is NOT checked here. ai-dlc invokes the skill from
-  # core/skills/ai-dlc/steps/architecture.md:264 and core/skills/ai-dlc/steps/stories-test-strategy.md:18.
+  # (i) a WHOLE directory component named `archive` (the directory part is wrapped in slashes)
+  case "$p" in _bmad-output/*) case "/${p%/*}/" in */archive/*) return 0 ;; esac ;; esac
+  b="${p##*/}"
+  case "$b" in
+    prd-history.md|product-brief-history.md|push-candidate-ledger.archive.md) return 0 ;;
+    operator-answers-history.md|operator-requests-history.md|pipeline-snapshot-history.md) return 0 ;;
+  esac
   case "$p" in
-    _bmad-output/ai-dlc-update/reconcile-log-*.md) return 0 ;;
-    _bmad-output/planning-artifacts/implementation-readiness-report-*.md) return 0 ;;
+    _bmad-output/pipeline-history/pipeline-snapshot-archive.md) return 0 ;;
+    _bmad-output/ai-dlc-update/reconcile-log-*.md)
+      n="${b#reconcile-log-}"; n="${n%.md}"
+      case "$n" in
+        [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9]Z) return 0 ;;
+        [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9]Z) return 0 ;;
+        [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z) return 0 ;;
+      esac ;;
+    _bmad-output/planning-artifacts/implementation-readiness-report-[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].md) return 0 ;;
   esac
   return 1
 }
@@ -330,13 +335,17 @@ repoint_of() { # <key> -> "<new key><SEP><new command>" for the LATEST REPOINTED
 while IFS="$SEP" read -r key cmd _recd _act range logn; do
   [ -n "$key" ] || continue
   classify "${key%:*}"; sc="$SCOPE_TOKEN"
-  tkey="$key"; tcmd="$cmd"; hops=0; cyc=0
+  tkey="$key"; tcmd="$cmd"; hops=0; cyc=0; seen="$SEP$key$SEP"
   while :; do
     nx="$(repoint_of "$tkey")"
     [ -n "$nx" ] || break
     hops=$((hops + 1))
-    [ "$hops" -le 20 ] || { cyc=1; break; }
+    [ "$hops" -le 20 ] || { echo "REFUSED: the REPOINTED chain from $key runs past 20 hops without reaching a derivation, so it is unbounded and the row cannot be placed." >&2; exit 2; }
     tkey="${nx%%"$SEP"*}"; tcmd="${nx#*"$SEP"}"
+    # A target already visited (the SAME key, a command fixed in place, or a cycle across DISTINCT keys)
+    # ends the walk: the latest target is judged ONCE, by content-location of its own new command.
+    case "$seen" in *"$SEP$tkey$SEP"*) break ;; esac
+    seen="$seen$tkey$SEP"
   done
   printf '%s\037%s\037%s\037%s\037%s\037%s\037%s\037%s\037%s\n' "$key" "$cmd" "$range" "$logn" "$sc" "$tkey" "$tcmd" "$hops" "$cyc" >> "$TMP/targets"
   if [ "$sc" != PAST ] && [ "$sc" != HISTORY ] && [ "$cyc" = 0 ]; then printf '%s\n' "${tkey%:*}" >> "$TMP/files.raw"; fi
