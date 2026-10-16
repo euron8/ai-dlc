@@ -810,7 +810,24 @@ fi
 #
 # WHAT IS STILL NOT COVERED. The judgement-per-passage vestigial form is STILL not exhaustively
 # enumerated. That debt is now five raises old and is stated rather than quietly carried forward.
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-67584}"
+#
+# RAISED A SEVENTEENTH TIME, 67584 -> 68864, ON AN EXPLICIT OPERATOR RULING ("operator ruling,
+# batch 235: the step-value section"), FOR ONE RULE COSTING 619 BYTES. `operator-rulings.md`
+# gained "A step with no measured value goes", which the operator confirmed before it was drafted
+# into the file.
+#
+# A6 WAS OBSERVED FAILING AT 68154/67584 BEFORE THE CEILING MOVED. The rule was written into the
+# file FIRST and the ceiling derived from the channel afterwards, as the fifteenth raise requires;
+# the only figure used is the post-write measurement. 68864 is 67.25 KiB, leaving 710 bytes --
+# deliberately less than one section at the current mean, so the next rule fires this arm again.
+#
+# IT CANNOT BE MECHANIZED OR SCOPED. It is a standing decision about what a batch does with a
+# pipeline step that has no measured value -- a judgement over a population, which no tracked
+# file expresses and no arm can scan. It is prose-only, so `resident-context.md` bars scoping it.
+#
+# THIS RAISE CARRIED NO SUBTRACTION, like the fourth: the subtraction pool was not scanned, and
+# the judgement-per-passage vestigial debt above is now six raises old.
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-68864}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done
