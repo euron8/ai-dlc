@@ -77,9 +77,11 @@ is not built and stays open, see below. Closes no `PC-` id.
 - Fixtures: `owed-derivations` (ships) drives the writer and reader over seeded trees; `owed-derivations-mutants`
   (distribution-only) carries 14 mutants, each required to fail exactly its declared arms, and the rulebook-text
   checks, which do not ship because a consumer's rulebook at step 2 is still the old one.
-- On graph: its 8 owed rows from the 0.793.0 pull are all in s319 or `prd.md`, so they are in scope. They are
-  recorded only in prose, in a reconcile log, so this release does not pick them up; they are reported to the
-  operator as a finding.
+- A current-sprint NEWLY-FAILING row, written by `--record-owed`, reads OPEN on every later read until its
+  derivation is re-pointed and reproduces, and Check 37 refuses the planning gate while it does. Rows a
+  reconcile left only in its log's prose, before this release, are not in the record and are not picked up.
+  The receipt seeds the reference consumer's shape: three line-number moves in a live `s<N>/` (one under
+  `party-mode/`) read OPEN, and two in closed sprints read INFO.
 
 ### "The pull AFTER" is wrong for anything the update runs after its step-2 re-invoke (BL-612)
 
