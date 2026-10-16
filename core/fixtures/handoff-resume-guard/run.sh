@@ -671,16 +671,24 @@ la_a1p() {
 # A2p -- THE PRODUCER'S FORM, expired: blocks exactly as A2 does.
 la_a2p() { la_block_on "$(expired_lease) 12345" "${1:-}"; }
 la_a3() { la_block_on "not-an-epoch" "${1:-}"; }
+# THE FLAG-DOWN CELLS DRIVE A LEAD TRANSCRIPT: `.p_noun` with the harness's typed `/ai-dlc` record
+# in front. Check 2a lets a session with no ai-dlc marker stop before Check 2b or the default block,
+# so the bare `.p_noun` would reach neither the lease allow nor Rule 3's block it is controlled by.
+lead_noun() { # lead_noun <proj> -> path of `.p_noun` prefixed with a typed /ai-dlc record
+  local t="$1/lead-noun.jsonl"
+  printf '%s\n' '{"type":"user","message":{"role":"user","content":"<command-message>ai-dlc</command-message>\n<command-name>/ai-dlc</command-name>"}}' > "$t"
+  cat "$(cat "$ROOT/.p_noun")" >> "$t"; printf '%s' "$t"
+}
 la_a4() { # NO handoff requested, flag DOWN, live lease -> Check 2b's allow, no guard row at all
   local p o; p="$(lease_world "$(live_lease)" "$(cat "$ROOT/.s_running")" down)"
-  o="$(lease_drive "$p" "$(cat "$ROOT/.p_noun")" "${1:-}")"
+  o="$(lease_drive "$p" "$(lead_noun "$p")" "${1:-}")"
   LA_MSG="[block=$(is_block "$o" && echo y || echo n) live=$(lease_ev "$p" ALLOWED_BY_LIVE_BEAT) deferred=$(lease_ev "$p" HANDOFF_GUARD_DEFERRED_BY_LIVE_BEAT)]"
   ! is_block "$o" && [ "$(lease_ev "$p" ALLOWED_BY_LIVE_BEAT)" = 1 ] \
     && [ "$(lease_ev "$p" HANDOFF_GUARD_DEFERRED_BY_LIVE_BEAT)" = 0 ]
 }
 la_a4_ctl() { # the same world with NO lease -> Rule 3's ordinary block, so A4's allow is the lease's
   local p o; p="$(lease_world NONE "$(cat "$ROOT/.s_running")" down)"
-  o="$(lease_drive "$p" "$(cat "$ROOT/.p_noun")" "${1:-}")"
+  o="$(lease_drive "$p" "$(lead_noun "$p")" "${1:-}")"
   is_block "$o" && ! is_guard "$o"
 }
 # A5 -- STICKY ARMING SURVIVES THE DEFERRAL. No `.handoff-in-progress`, no `HANDOFF POINT` line and

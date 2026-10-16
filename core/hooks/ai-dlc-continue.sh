@@ -1473,6 +1473,51 @@ if [ ! -f "$SNAPSHOT_FILE" ]; then
 fi
 
 # -----------------------------------------------------------------------------
+# Check 2a: This session is not an /ai-dlc session
+# -----------------------------------------------------------------------------
+# The snapshot is project-wide, so every session in the project reaches the default block
+# below once a pipeline exists. That was masked while ai-dlc-pause.sh raised the (equally
+# project-wide) pause flag for prose typed in ANY session: a side session's own message let
+# its stop through at Check 1. Since the pause hook asks the typing session's transcript
+# whether it is an /ai-dlc session, a plain session or an /ai-dlc-update session gets no flag
+# -- and here it would then be forced to continue three times per turn end, by a block whose
+# remedy text tells it to touch the flag, which pauses the REAL lead.
+#
+# SAME QUESTION, SAME SCAN as the pause hook and ai-dlc-acknowledge.sh: the LAST ai-dlc marker
+# in this session's own transcript. Absent or `ai-dlc-update` -> not a lead, ALLOW the stop.
+# The scan line is bound byte-identical across those hooks by I126 (scripts/validate-enforcement-map.sh).
+#
+# AN UNREADABLE OR MISSING TRANSCRIPT BLOCKS, AS BEFORE -- the opposite default from the pause
+# hook, and for the same reason: each keeps the direction that cannot silently drop the
+# lead's obligation. A false allow here is a stalled lead ending its turn with work
+# outstanding, which is what Rule 3 and this whole hook exist to stop; a false block is the
+# behaviour every session had before this check. A lead always has a transcript, so a lost
+# path is an anomaly, and the anomaly gets the old answer.
+#
+# SITED AFTER Check 2, not before it: with no snapshot the stop is allowed anyway, and the
+# scan reads the whole transcript, so a project with no pipeline must not pay for it.
+STOP_SESSION_SKILL="unknown"
+if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ] && [ -r "$TRANSCRIPT" ]; then
+  # >>> I126 SESSION-MARKER SCAN: the next line, byte-identical in every bound hook >>>
+  LAST_SKILL=$(grep -oE '"role":"user","content":"<command-message>ai-dlc(-update)?</command-message>\\n<command-name>/ai-dlc(-update)?</command-name>|"name":"Skill","input":\{"skill":"ai-dlc(-update)?"' "$TRANSCRIPT" 2>/dev/null | tail -1)
+  case "$LAST_SKILL" in
+    *'/ai-dlc-update</command-name>'|*'"skill":"ai-dlc-update"') STOP_SESSION_SKILL="ai-dlc-update" ;;
+    *'/ai-dlc</command-name>'|*'"skill":"ai-dlc"')               STOP_SESSION_SKILL="ai-dlc" ;;
+    *)                                                           STOP_SESSION_SKILL="none" ;;
+  esac
+fi
+case "$STOP_SESSION_SKILL" in
+  none|ai-dlc-update)
+    {
+      echo "## ${TIMESTAMP} -- ALLOWED_NOT_AIDLC_SESSION"
+      echo "- Session: ${SESSION_ID}"
+      echo "- This session's transcript's last ai-dlc marker: ${STOP_SESSION_SKILL}; stop allowed"
+      echo ""
+    } >> "$LOG_FILE"
+    exit 0 ;;
+esac
+
+# -----------------------------------------------------------------------------
 # Check 2b: A backgrounded wait-beat is live (Rule 29 yield-during-join, v0.81.0)
 # -----------------------------------------------------------------------------
 # The lead is permitted to END ITS TURN while a teammate join is outstanding, on

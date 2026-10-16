@@ -216,6 +216,40 @@ logged a7 '^## .*-- BLOCKED' \
   && ok "A7 control: a BLOCKED row was written (the hook reached the default path)" \
   || bad "A7 HARNESS BROKEN — no BLOCKED row, so the two absences above prove nothing"
 
+# --- S1-S4: Check 2a -- a session that is not an /ai-dlc session may STOP ---------------------
+# THE DEFECT. The snapshot is project-wide, so once a pipeline exists every session in the
+# project reaches the default block. That was masked while ai-dlc-pause.sh raised the pause flag
+# for prose typed in ANY session; once it stopped doing so for side sessions, a plain session and
+# an /ai-dlc-update session were each forced to continue three times per turn end, by a reason
+# that tells them to touch the project-wide flag -- which pauses the real lead. All four cells
+# below are flag DOWN with a snapshot present, the configuration where Check 2a is the only
+# difference between an allow and the default block. Each is presence-shaped on its own side.
+blocked() { jq -e '.decision=="block"' < "$ROOT/out-$1.json" >/dev/null 2>&1; }
+drive s1 "$ROOT/plain.jsonl" 0 1
+if ! blocked s1 && logged s1 '^- This session.s transcript.s last ai-dlc marker: none; stop allowed$'; then
+  ok "S1 a plain session (no ai-dlc marker) may stop, and ALLOWED_NOT_AIDLC_SESSION names why"
+else
+  bad "S1 a session that never invoked /ai-dlc was BLOCKED (or allowed with no record): $(cat "$ROOT/out-s1.json") — every side session in a project with a live pipeline is forced to continue and told to pause the lead"
+fi
+drive s2 "$ROOT/updater.jsonl" 0 1
+if ! blocked s2 && logged s2 '^- This session.s transcript.s last ai-dlc marker: ai-dlc-update; stop allowed$'; then
+  ok "S2 an /ai-dlc-update session (last marker) may stop"
+else
+  bad "S2 the updater session was BLOCKED (or allowed with no record): $(cat "$ROOT/out-s2.json") — a pull is forced to continue as though it were the lead"
+fi
+drive s3 "$ROOT/noq.jsonl" 0 1
+if blocked s3 && ! logged s3 'ALLOWED_NOT_AIDLC_SESSION'; then
+  ok "S3 the /ai-dlc lead, flag down, is still BLOCKED (Rule 3 holds for the lead)"
+else
+  bad "S3 the /ai-dlc lead was allowed to stop with the flag down: $(cat "$ROOT/out-s3.json") — Check 2a is acquitting the session it exists to leave alone"
+fi
+drive s4 "$ROOT/no-such-transcript.jsonl" 0 1
+if blocked s4 && ! logged s4 'ALLOWED_NOT_AIDLC_SESSION'; then
+  ok "S4 an unreadable transcript keeps today's answer: BLOCKED"
+else
+  bad "S4 a Stop whose transcript cannot be read was ALLOWED: $(cat "$ROOT/out-s4.json") — a lost transcript path now lets a stalled lead end its turn"
+fi
+
 rm -rf "$ROOT"
 echo ""
 [ "$fails" -eq 0 ] && { echo "pause-question-in-prose: PASS"; exit 0; }

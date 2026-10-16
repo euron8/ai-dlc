@@ -90,7 +90,11 @@ case "$CASE" in
   # turn per Stop, including records that have NO top-level `type` (the shape the
   # handoff fixtures seed), because the hook must key on `.message.role`.
   transcript)     write_snapshot
+                  # The first record is the harness's typed `/ai-dlc` command: this world is the
+                  # LEAD's session. Without it the Stop hook's Check 2a reads a session that never
+                  # invoked /ai-dlc and lets it stop before any section-8 arm is reached.
                   printf '%s\n' \
+                    '{"type":"user","message":{"role":"user","content":"<command-message>ai-dlc</command-message>\n<command-name>/ai-dlc</command-name>"}}' \
                     '{"type":"user","message":{"role":"user","content":"go"}}' \
                     '{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_seed","name":"Agent","input":{}}]}}' \
                     '{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_seed"}]}}' \

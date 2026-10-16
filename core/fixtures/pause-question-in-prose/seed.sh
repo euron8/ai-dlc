@@ -84,6 +84,23 @@ ASK="gate 3 is showing an injection pattern in two checks"
 # (A7) the non-firing flag-down baseline: same reply, no terminal question mark.
 { u_text "$ASK"; a_text "$NOQTEXT"; } > "$ROOT/noq.jsonl"
 
+# EVERY CASE ABOVE IS AN /ai-dlc SESSION. The Stop hook's Check 2a lets a session that is NOT an
+# /ai-dlc session stop (its transcript's last ai-dlc marker absent or ai-dlc-update), so a flag-DOWN
+# case seeded without one reaches an ALLOW before the default block and F2/A7 would test nothing.
+# The marker is the harness's typed-command user record, written as the harness writes it, and it
+# opens the transcript as an earlier turn -- a genuine-text user record, so it is a turn boundary
+# and never inside the turn the pause-question predicate reads.
+u_cmd() { jq -nc --arg n "$1" '{type:"user",message:{role:"user",content:("<command-message>"+$n+"</command-message>\n<command-name>/"+$n+"</command-name>")}}'; }
+for _c in fire asked midq prevturn answered othertool noq; do
+  { u_cmd ai-dlc; cat "$ROOT/$_c.jsonl"; } > "$ROOT/$_c.jsonl.tmp"
+  cat "$ROOT/$_c.jsonl.tmp" > "$ROOT/$_c.jsonl"; rm -f "$ROOT/$_c.jsonl.tmp"
+done
+
+# (S1) a PLAIN session -- no ai-dlc marker at all -- with the flag down and a snapshot present.
+{ u_text "$ASK"; a_text "$NOQTEXT"; } > "$ROOT/plain.jsonl"
+# (S2) an /ai-dlc session that then ran /ai-dlc-update: the LAST marker decides, so it is the updater.
+{ u_cmd ai-dlc; u_cmd ai-dlc-update; u_text "$ASK"; a_text "$NOQTEXT"; } > "$ROOT/updater.jsonl"
+
 # A snapshot, so the flag-DOWN cases reach the DEFAULT BLOCK rather than Check 2's allow.
 # Written from route.md's section shape, not from anything the hook parses for this arm.
 cat > "$ROOT/snapshot.md" <<'EOF'

@@ -203,6 +203,7 @@ if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
   # actually scans -- top-level session files, since `transcript_path` is the LEAD's file even
   # on a teammate's call (Check 2z) -- 0 of 225 marker-carrying reference-consumer transcripts
   # change class. The only 2 that do are both `subagents/` files, which this hook never reads.
+  # >>> I126 SESSION-MARKER SCAN: the next line, byte-identical in every bound hook >>>
   LAST_SKILL=$(grep -oE '"role":"user","content":"<command-message>ai-dlc(-update)?</command-message>\\n<command-name>/ai-dlc(-update)?</command-name>|"name":"Skill","input":\{"skill":"ai-dlc(-update)?"' "$TRANSCRIPT" 2>/dev/null | tail -1)
   case "$LAST_SKILL" in
     *'/ai-dlc-update</command-name>') UPDATER_SESSION=1 ;;
