@@ -775,13 +775,13 @@ mutant "JX92 an unreadable spec memlog not refused" "specunread" \
   ''
 # ---- --agent-writes (BL-579): the agent filter, and the order of dedupe against it.
 mutant "JX93 --agent-writes with no agent filter" "agentwrites" \
-  '.kind == "artifact-write" and .agent_id == $a and ($s' \
-  '.kind == "artifact-write" and ($s'
+  '.kind == "artifact-write" and .agent_id == $a and (.path | type)' \
+  '.kind == "artifact-write" and (.path | type)'
 # JX94 dedupes by path BEFORE the agent filter (slurp, then unique_by): the joined
 # writer's earlier row on D wins the path, so the subject's D is lost.
 mutant "JX94 --agent-writes dedupes by path before the agent filter" "agentwrites" \
-  'jq -r --arg a "$AGENT_ID" --arg s "$SINCE" '"'"'select(' \
-  'jq -rs --arg a "$AGENT_ID" --arg s "$SINCE" '"'"'unique_by(.path)[] | select('
+  '[inputs | select(type == "object") | select(.kind == "artifact-write" and .agent_id' \
+  '[[inputs | select(type == "object")] | unique_by(.path)[] | select(.kind == "artifact-write" and .agent_id'
 # JX95 restores the piped, unchecked read: a malformed ledger line then prints the trailer alone, rc 0.
 mutant "JX95 --agent-writes read piped through sort with no parse check" "agentwrites" \
   '    _aw="$(jq -rn --arg a "$AGENT_ID" --arg s "$SINCE" '"'"'[inputs | select(type == "object") | select(.kind == "artifact-write" and .agent_id == $a and (.path | type) == "string" and ($s == "" or .ts >= $s)) | .path] | unique | .[]'"'"' "$LEDGER" 2>/dev/null)" \
