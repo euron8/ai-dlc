@@ -81,6 +81,7 @@ empty_subject_verdict:
     - core/scripts/validate-bmad-invocations.sh
     - core/scripts/validate-spec-join.sh
     - core/scripts/validate-snapshot-conservation.sh
+    - core/scripts/validate-trunk-audit-gate.sh
     - core/scripts/core-paths.sh
     - core/scripts/sprint-status.sh
     - core/scripts/validate-audit-anchors.sh
@@ -834,6 +835,30 @@ checks:
           deletion rather than flagging large diffs.
     ci_workflow: ~
     fixtures: [tests/fixtures/snapshot-conservation]
+
+  - id: "36"
+    title: The post-merge trunk audit re-runs at the gate
+    gate_types: [planning]
+    adjudication: script
+    hard_block: true
+    enforcer:
+      - core/scripts/validate-trunk-audit-gate.sh
+    call_sites:
+      - site: gate-validation.md Check 36
+        posture: FAILS the gate (exit 0 required; exit 1 is findings, exit 2 a setup error
+          and also a FAIL; exit 0 with a WORKLIST verdict is a backlog item, and exit 0 with
+          `NOT-APPLICABLE` and `EXAMINED NOTHING` means the variant is not carry-over)
+        why: >-
+          carry-over-evaluation.md step 1b makes the audit's exit 1 a HARD_BLOCK, and no
+          gate check read its result. Measured on the reference consumer: 7 of 13 carry-over
+          evaluations since its sprint 303 carry the audit's summary line, and two sprints
+          that ran the audit at exit 0 carry none, so the result landed nowhere a gate reads
+          and an artifact-text check would fail sprints that did nothing wrong. The gitignored
+          watermark is not a record either, so the check re-runs the audit. A finding is
+          exited only by the operator resolving the step-1b escalation that names its sha;
+          a fix-forward alone still FAILS, because the audit stops at the finding.
+    ci_workflow: ~
+    fixtures: [tests/fixtures/trunk-audit-gate]
 
 
   - id: "H1"

@@ -175,6 +175,20 @@ kernel. Gate-validation Check 30 FAILS on a capability no FR cites. Full FR-gram
 adds new requirements derived from research, add those to the block only if they originated
 from the user's input, never from research findings or agent analysis.
 
+**Every operator decision the PRD lists is written in this form, every field filled**, before
+the lead puts any of them to the operator (SKILL.md Rule 11(a)):
+
+```
+- **D-<n> (<LR-id>) — <plain-language title>.** Question: <the question, every check number, band, gap or requirement id glossed in plain words where it appears>.
+  Prior answer searched: <the LOCKED_REQUIREMENTS block, operator-requests-history.md and operator-answers-history.md — what each held for this item, or none>.
+  Not derivable because: <why no read of the tree, the config, a chain or an API gives this value>.
+```
+
+A search that finds the value closes the item: apply it with its citation and list it under
+the answered decisions. A value the tree, the config, a chain or an API gives is derived in this
+dispatch and written into the PRD with its derivation, and the entry asks the operator to veto
+that derivation rather than to supply the value.
+
 **PRD validation.** Invoke `/bmad-prd` with the **validate** intent — structured completeness
 check against its own rubric. Fix the gaps it reports as part of this same dispatch (rather
 than a separate `pm` dispatch, since the authoring dispatch already holds the pen). It detects

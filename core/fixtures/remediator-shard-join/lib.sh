@@ -1088,6 +1088,9 @@ deriv_world() { # -> a doc_world carrying the validator where the hook resolves 
   local w; w="$(doc_world)" || return 1
   mkdir -p "$w/scripts/ai-dlc" && cp "$DVAL" "$w/scripts/ai-dlc/" || return 1
   sec_edit "$w" 2 "$AG2"
+  # A LIVE slot document, so the slot run has something it walks: the part under shards/ and the
+  # joined record are frozen records the default walk skips (validate-artifact-derivations.sh).
+  printf '# Impact\n\n```derived\n$ grep -c Goals %s\n1\n```\n' "$DOCREL" > "$w/$SLOT/architecture-impact.md"
   printf '%s' "$w"
 }
 fence_part() { # <world> <path the fence reads> -- the part, its fence's output derived from the section copy
@@ -1100,8 +1103,8 @@ capture() { # <hook> <world> <file> -> CAP_RC; a Write of the file's whole conte
     | CLAUDE_PROJECT_DIR="$2" bash "$1" >/dev/null 2>"$CAP_ERR"
   CAP_RC=$?
 }
-gate_deriv() { # <world> -> DV_RC: the gate's derivations re-run over the sprint dir
-  ( cd "$1" && AI_DLC_PROJECT_ROOT="$1" bash "$1/scripts/ai-dlc/validate-artifact-derivations.sh" "$SLOT" ) > "$DV_OUT" 2>&1
+gate_deriv() { # <world> [target, default the sprint dir] [--all] -> DV_RC: the gate's derivations re-run
+  ( cd "$1" && AI_DLC_PROJECT_ROOT="$1" bash "$1/scripts/ai-dlc/validate-artifact-derivations.sh" ${3:+"$3"} "${2:-$SLOT}" ) > "$DV_OUT" 2>&1
   DV_RC=$?
 }
 p_derivdoc() { # <hook> -- a part whose fence names the DOCUMENT: accepted at write time, green at the gate after the join
@@ -1114,8 +1117,12 @@ p_derivdoc() { # <hook> -- a part whose fence names the DOCUMENT: accepted at wr
   fence_part "$w" "$DOCREL"
   capture "$1" "$w" "$w/$RDREL/2.md"; [ "$CAP_RC" -eq 0 ] && [ ! -s "$CAP_ERR" ] || return 1
   run_docjoin "$JOIN" "$w"; [ "$RC" -eq 0 ] || return 1
+  # The slot run walks the live document and skips the part and the joined record (2 frozen) ...
   gate_deriv "$w"
-  [ "$DV_RC" -eq 0 ] && has "$DV_OUT" "OK: 2 derivation(s)"
+  [ "$DV_RC" -eq 0 ] && has "$DV_OUT" "EXCLUDED: 2 frozen file(s)" && has "$DV_OUT" "OK: 1 derivation(s)" || return 1
+  # ... and the joined record, named as a FILE, is never excluded and reproduces.
+  gate_deriv "$w" "$SLOT/prd-repair-p1.md"
+  [ "$DV_RC" -eq 0 ] && has "$DV_OUT" "OK: 1 derivation(s)" && ! has "$DV_OUT" "EXCLUDED:"
 }
 p_derivsec() { # <hook> -- a part whose fence names the SECTION FILE: refused at write time; written past
   # the hook anyway, the gate fails it after the join (the defect's own shape, so rc 0 above discriminates)
@@ -1123,6 +1130,12 @@ p_derivsec() { # <hook> -- a part whose fence names the SECTION FILE: refused at
   fence_part "$w" "$RDREL/sections/2.md"
   capture "$1" "$w" "$w/$RDREL/2.md"; [ "$CAP_RC" -eq 2 ] && has "$CAP_ERR" "reads the section copy" || return 1
   run_docjoin "$JOIN" "$w"; [ "$RC" -eq 0 ] || return 1
+  # The stale part and record are frozen records: the slot run skips them and passes on the live
+  # document. The net for a record written past the hook is a FILE run of it, or --all.
   gate_deriv "$w"
-  [ "$DV_RC" -eq 1 ] && has "$DV_OUT" "FAIL: 2 stale or unrunnable derivation(s) of 2 checked"
+  [ "$DV_RC" -eq 0 ] && has "$DV_OUT" "EXCLUDED: 2 frozen file(s)" && has "$DV_OUT" "OK: 1 derivation(s)" || return 1
+  gate_deriv "$w" "$SLOT/prd-repair-p1.md"
+  [ "$DV_RC" -eq 1 ] && has "$DV_OUT" "FAIL: 1 stale or unrunnable derivation(s) of 1 checked" || return 1
+  gate_deriv "$w" "$SLOT" --all
+  [ "$DV_RC" -eq 1 ] && has "$DV_OUT" "FAIL: 2 stale or unrunnable derivation(s) of 3 checked"
 }

@@ -1,0 +1,7 @@
+# post-write-gates drives the runner and, in its R arms, the four REAL gates it invokes: hard-blockers.sh
+# and the detectors and lib it delegates to, setup-site-drift.sh with setup-sites.md and preclassify.sh,
+# and settings-merge.sh (copied into the seeded consumer, where the validator binds its pattern). Its
+# mutants symlink every sibling of the runner, so the whole directory is enumerated.
+!core/skills/ai-dlc-update/reconcile/
+core/scripts/validate-hook-registration.sh
+core/fixtures/lib/

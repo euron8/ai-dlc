@@ -623,6 +623,14 @@ misresolved the scope will label the misreading `(Recommended)`, and the
 badge does its most damage in exactly the case this pause point exists to
 catch. Present the options flat and let the operator choose.
 
+**Search, derive and gloss before asking.** This question takes the three
+steps `SKILL.md` Rule 11(a) puts on every operator question: a value already
+answered in `operator-answers-history.md`, the requests history or the
+LOCKED block is applied with its citation; a value the tree or config can
+give is derived and offered for veto, UNBADGED when it is a config leaf, a
+money threshold or literal, an address, or an `LR-` or `D-<n>` value; every check number, band or `LR-`,
+`D-<n>` id in the question carries a plain-language gloss.
+
 **No pause flag here.** Rule 3 tells you to `touch
 _bmad-output/pipeline-paused.flag` at a pause point; pause point (d) is one
 of the two exceptions Rule 3 names, and this is deliberate rather than an

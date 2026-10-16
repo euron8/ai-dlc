@@ -96,6 +96,7 @@ core_manifest:
   - core/fixtures/scope-confirmation/**
   - core/fixtures/snapshot-archive-rotate/**
   - core/fixtures/snapshot-conservation/**
+  - core/fixtures/trunk-audit-gate/**
   - core/fixtures/suppression-lifetime/**
   - core/fixtures/self-update-fixture-log/**
   - core/fixtures/snapshot-supersession-marker/**
@@ -274,6 +275,7 @@ core_manifest:
   - core/fixtures/architecture-index-cell-escaping/**
   - core/fixtures/prepush-worktree-env-scrub/**
   - core/fixtures/retro-compliance-workflow/**
+  - core/fixtures/post-write-gates/**
 
 machinery:
   - core/skills/ai-dlc/core-manifest.md

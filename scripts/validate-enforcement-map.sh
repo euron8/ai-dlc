@@ -845,7 +845,15 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   check (`rev-parse`, `ls-files`; its probe classifies path lists and forks nothing; the repo-backed
 #   probe it replaced read 3376); the other ~4 are scripts/pregate-self-check.sh joining the per-file
 #   walks over scripts/ (I83, I84, I115). HIGH reading 3370 plus 4, kept at 3374.
-FORK_BUDGET=3374
+#
+#   RAISED TO 3395 FOR TWO NEW SCRIPTS AND TWO NEW FIXTURE DIRECTORIES, which the per-file arms
+#   walk. `fork-profile.sh --section all`, base d19a4d9f (0.800.0) and tip a2af5816, in ONE clean
+#   detached worktree at one path, interleaved B T B T B T: base 3370 3369 3370, tip 3390 3389 3391,
+#   so spread 1 and 2 against a delta of +20..+21. By arm, 129 arms: I75 +10, I84 +4, I105 +3,
+#   I83 +2, I21 +1, I9 +1 (sum +21); I82b and I93 wobble by one on both sides. The new files are
+#   core/scripts/validate-trunk-audit-gate.sh, reconcile/post-write-gates.sh and the trunk-audit-gate
+#   and post-write-gates fixtures. HIGH tip reading 3391 plus the same 4, so 3374 + 21.
+FORK_BUDGET=3395
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

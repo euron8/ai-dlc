@@ -60,7 +60,7 @@ planning gate that edits `scripts/*.sh`.
 | Gate type      | Required checks                                                 |
 |----------------|-----------------------------------------------------------------|
 | universal      | 1, 2, 2a, 3, 4, 7, 12, 13, 14, 15, 16, 25, 26, H1, H2, failure  |
-| planning       | 1c, 17, 20, 23, 24, 27, 28, 29, 32, 33, 34, 35                      |
+| planning       | 1c, 17, 20, 23, 24, 27, 28, 29, 32, 33, 34, 35, 36                  |
 | story          | 3a, 3b, 5, 17, 24, 30, 31                                       |
 | implementation | 5, 6, 8, 9, 10, 11, 11a, 17, 19, 22                             |
 | sprint-review  | 18, 20, 21                                                      |
@@ -3084,6 +3084,19 @@ is well-formed and resolves to a `### <id>` item, not CLOSED, in the carry-over
 backlog or its archive — the part of the ask Step 6 deferred, filed where the
 next sprint's carry-over evaluation will read it.
 
+**The locked-scope arm refuses a lead-deferred confirmed item.** The check also reads
+`_bmad-output/operator-requests-history.md` and `docs/escalations/pending.md`, and exits 1
+on any entry whose canonical status is `DEFERRAL_REQUEST`, filed at or after the hook's
+timestamp on the cited scope answer, that names a confirmed item: a carry-over id the
+operator's ask named (the entry `user_request_cite` resolves to) or a `CO-S<sprint_id>-`
+id. Put that deferral to the operator as a Rule 12 HARD_BLOCK instead
+(`carry-over-evaluation.md` §4). A leg that cannot be read — no resolvable ask cite, no
+integer `sprint_id` — prints `SKIP` naming itself, and the closing line names the legs that
+ran: `PASS` only when both did, `PARTIAL` when one did, `SKIP` when neither did. Read that
+line, not the exit; a `PARTIAL` or `SKIP` is exit 0 and has checked less than the whole
+confirmed scope. Two shapes pass this arm and are not caught: a confirmed item deferred
+with no `CO-` id, and an entry naming an approved deferred id beside a locked one.
+
 **What this catches.** A sprint that planned against a scope no operator ever saw.
 Rule 3(d) makes the sprint-scope pause point mandatory at `route.md` Step 6, and
 until this check existed that mandate had no enforcer — a prohibition with no
@@ -3196,6 +3209,67 @@ corpus shows happening in 3 of 9 gate intervals, all three of them genuine
 destruction. Removal condition: retire when snapshot trimming is performed by a
 script that writes both files in one operation, making the lead unable to delete
 without moving.
+
+### 36. The post-merge trunk audit re-runs at the gate (carry-over planning gates).
+<!-- CHECK_LOADED: 36 -->
+
+**Check.** Run `scripts/ai-dlc/validate-trunk-audit-gate.sh --sprint <sprint_id>`. It reads
+`pipeline_variant` from the snapshot and, on `carry-over`, re-runs
+`scripts/ai-dlc/validate-cycle-commits.sh --audit-trunk` — the invocation
+`carry-over-evaluation.md` step 1b makes — and maps its exit:
+
+- Exit 0, verdict `PASS` — the audit re-ran and found nothing.
+- Exit 0, verdict `WORKLIST` — the project declares no PR classes and nothing was
+  audited. Record it as a backlog item in the gate log; it is not a clean trunk
+  and not a gate failure.
+- Exit 0, verdict `NOT-APPLICABLE -- EXAMINED NOTHING` — the variant is not
+  carry-over. Record the line.
+- Exit 1 — findings or a malformed taxonomy. The gate FAILS; file the step-1b
+  HARD_BLOCK naming each `FAIL` sha.
+- Exit 2 — the audit could not run (no genesis, no contract), or no snapshot
+  variant. The gate FAILS: a setup error is not a clean result.
+
+**The exit from a finding is the operator's.** The audit stops at the first
+finding and the watermark holds before it, so a fix-forward commit cannot clear
+it: every re-run walks the same range and stops on the same sha. When an entry
+in `docs/escalations/pending.md` or `pending-archive.md` names the first `FAIL`
+sha (a hex prefix of 7 or more characters) and is `**Status:** RESOLVED` or
+`OVERRIDDEN` with an `**Operator authorization:**` citation, as `escalations.md`
+defines one, the script re-audits from that sha forward and maps that run. The
+citation's shape is decided by `validate-escalation-resolution.sh`, and Check 2a
+verifies it against the transcript. Without that entry the gate keeps FAILING
+after a fix-forward. That is the guard holding, not a wedge to work around. Never
+hand-edit `.audit-watermark`: the escalation is the tracked trace of the exit.
+
+**Genesis.** The audit starts at `_bmad-output/.audit-watermark` when it exists.
+A fresh clone carries none, because the file is gitignored, so the script falls
+back to the required `sha` of the prior sprint's `audit-anchors.md` entry (the
+entry step 1a reads), resolved by `validate-audit-anchors.sh --prior-sprint-sha`.
+It does not read `audit_window:`. The schema marks that field optional and
+documentary, and step 5b never writes it. With neither source the run exits 2,
+and the remedy is to fix the anchor entry. On a shallow clone the exit-2 message
+names the shallow history instead, and the remedy is `git fetch --unshallow`.
+
+**The verdict comes from the re-run, never from a record of an earlier run.**
+Step 1b's result had no reader, and a record of it is not where one can look:
+measured on the reference consumer, 7 of 13 carry-over evaluations since its
+sprint 303 carry the audit's summary line, and two sprints that ran the audit at
+exit 0 carry none — so a check reading the artifact fails sprints that did nothing
+wrong. `_bmad-output/.audit-watermark` is not a record either: it is gitignored,
+unwritten on WORKLIST, and absent from a fresh clone.
+
+**The audit advances the watermark**, so a later planning gate of the same sprint
+audits only what reached the trunk since. Cost: one audit run over the window
+since the watermark. When step 1b ran, that window is empty and the run checks
+nothing out, though it still prints its control line.
+
+Fixture: `tests/fixtures/trunk-audit-gate/`.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: a carry-over planning gate
+passing with the trunk audit's result recorded nowhere — or never run — so a merge
+that bypassed every hook reaches planning unaudited. False-positive cost: one
+audit run per carry-over planning gate. Removal condition: retire when step 1b's
+result is written by the audit itself to a tracked record a script check reads.
 
 ## Gate Failure
 <!-- CHECK_LOADED: failure -->

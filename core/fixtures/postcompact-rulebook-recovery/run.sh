@@ -913,7 +913,52 @@ p_full_step() {
   printf 'PASS\n'
 }
 
-PREDS="inert deny_first ladder_abs ladder_rel ladder_consumer standdown_r0 standdown_missing legacy fastpath full_snapshot full_step"
+# 11/12. THE READ STAGES BIND THE LEAD ONLY (BL-590). The marker is project-wide, so before the
+#    gate's teammate exit a teammate's call in the lead's recovery window was refused with the
+#    lead's text (253 such denials measured on the reference consumer), and a teammate's two
+#    Reads disarmed the LEAD's gate (graph session d5ba4ec4: the lead then edited the snapshot
+#    unrefused and read its step file two minutes later). `jmate` is `jcall` plus `agent_id`, so
+#    each teammate cell and its lead twin are one property apart and cannot drift.
+jmate() { # jmate <tool> <file_path|-> <agent_id> -- jcall's call, made inside a teammate
+  jcall "$1" "$2" | jq -c --arg a "$3" '. + {agent_id:$a}'
+}
+#    11. A teammate's Write/Bash/Agent while armed is allowed, and the LEAD's identical call in
+#        the same state is still refused naming the first Read -- the twin that a gate exiting
+#        for every caller fails.
+p_mate_calls() {
+  _p="$(newproj architecture.md flat)"; arm_marker "$HOOK" "$_p"
+  for _c in "Write:$_p/decoy.md" "Bash:-" "Agent:-"; do
+    d="$(gate_call "$1" "$_p" "$(jmate "${_c%%:*}" "${_c#*:}" agent-m1)")"
+    allowed "$d" || { printf 'FAIL:a teammate %s was refused during the lead recovery window\n' "${_c%%:*}"; return; }
+    [ -e "$_p/$mk" ] || { printf 'FAIL:a teammate %s disarmed the lead gate\n' "${_c%%:*}"; return; }
+    d="$(gate_call "$1" "$_p" "$(jcall "${_c%%:*}" "${_c#*:}")")"
+    allowed "$d" && { printf 'FAIL:the lead %s was allowed before recovery\n' "${_c%%:*}"; return; }
+    grep -q 'FIRST tool call must be' <<<"${d#*|}" || { printf 'FAIL:the lead %s was denied without naming the mandated first Read\n' "${_c%%:*}"; return; }
+  done
+  [ -e "$_p/$pg" ] && { printf 'FAIL:a teammate call or a denied lead call advanced the gate\n'; return; }
+  printf 'PASS\n'
+}
+#    12. A teammate's two mandated Reads, full, leave the lead's gate armed at stage one; the
+#        lead's same two Reads then advance and disarm it (the near-miss, one property apart).
+p_mate_reads() {
+  _p="$(newproj architecture.md flat)"; arm_marker "$HOOK" "$_p"
+  s="$_p/_bmad-output/pipeline-snapshot.md"; f="$_p/architecture.md"
+  d="$(gate_call "$1" "$_p" "$(jmate Read "$s" agent-m1)")"
+  allowed "$d" || { printf 'FAIL:a teammate Read of the snapshot was refused\n'; return; }
+  [ -e "$_p/$pg" ] && { printf 'FAIL:a teammate snapshot Read advanced the lead recovery\n'; return; }
+  d="$(gate_call "$1" "$_p" "$(jmate Read "$f" agent-m1)")"
+  allowed "$d" || { printf 'FAIL:a teammate Read of the step file was refused\n'; return; }
+  [ -e "$_p/$mk" ] || { printf 'FAIL:a teammate two Reads disarmed the lead gate\n'; return; }
+  d="$(gate_call "$1" "$_p" "$(jcall Read "$s")")"
+  allowed "$d" || { printf 'FAIL:the lead snapshot Read was denied after the teammate Reads\n'; return; }
+  [ "$(cat "$_p/$pg" 2>/dev/null)" = step ] || { printf 'FAIL:the lead snapshot Read did not advance the gate\n'; return; }
+  d="$(gate_call "$1" "$_p" "$(jcall Read "$f")")"
+  allowed "$d" || { printf 'FAIL:the lead step Read was denied\n'; return; }
+  [ -e "$_p/$mk" ] && { printf 'FAIL:the lead two Reads did not disarm the gate\n'; return; }
+  printf 'PASS\n'
+}
+
+PREDS="inert deny_first ladder_abs ladder_rel ladder_consumer standdown_r0 standdown_missing legacy fastpath full_snapshot full_step mate_calls mate_reads"
 verdicts() { # verdicts <gate> -> "name=PASS" lines, in PREDS order
   for _n in $PREDS; do
     case "$_n" in
@@ -954,6 +999,8 @@ for _n in $PREDS; do
     standdown_missing)  r="$(p_standdown_missing "$GATE")";  label="stands down when a mandated path is missing, and CLEARS the marker so it cannot re-arm" ;;
     legacy)             r="$(p_legacy "$GATE")";             label="a marker predating these keys leaves the gate inert" ;;
     fastpath)           r="$(p_fastpath "$GATE")";           label="the marker fast-path does no work on an ordinary call, and DOES when armed (its subject is cost — it flips no verdict)" ;;
+    mate_calls)         r="$(p_mate_calls "$GATE")";         label="armed: a teammate's Write, Bash and Agent are allowed, and the lead's identical calls are still denied" ;;
+    mate_reads)         r="$(p_mate_reads "$GATE")";         label="armed: a teammate's two mandated Reads leave the lead's gate armed, and the lead's same Reads disarm it" ;;
   esac
   if [ "$r" = PASS ]; then ok "gate: $label"; else bad "gate: $label — ${r#FAIL:}"; fi
 done
@@ -999,7 +1046,8 @@ mutant_arm() { # mutant_arm <label> <mutant> <expected flip set, in PREDS order>
 # refuses stands down by accident everywhere.
 MG_ALLOW="$WORK/gate-allow-all.sh"
 awk '/^deny\(\) \{$/{print; print "  exit 0"; next} 1' "$GATE" > "$MG_ALLOW"
-mutant_arm "a gate that never refuses" "$MG_ALLOW" "deny_first full_snapshot full_step"
+# `mate_calls` is the fourth: its lead twin is a refusal.
+mutant_arm "a gate that never refuses" "$MG_ALLOW" "deny_first full_snapshot full_step mate_calls"
 
 # --- Assertion 19: MUTANT — the gate arms on an unresolvable mandate ---------
 # BOTH layers of the precondition, because they are one guard: with only the flag check gone
@@ -1084,7 +1132,7 @@ mutant_arm "the marker fast-path deleted — the gate still works but parses on 
 # only watched for a refusal would score this silence as a pass.
 MG_DEAD="$WORK/gate-dead.sh"
 printf '#!/usr/bin/env bash\nexit 0\n' > "$MG_DEAD"
-mutant_arm "the gate replaced by exit 0" "$MG_DEAD" "deny_first ladder_abs ladder_rel ladder_consumer standdown_missing fastpath full_snapshot full_step"
+mutant_arm "the gate replaced by exit 0" "$MG_DEAD" "deny_first ladder_abs ladder_rel ladder_consumer standdown_missing fastpath full_snapshot full_step mate_calls mate_reads"
 
 # --- MUTANT — "in full" unenforced, ALL THREE LAYERS reverted ----------------
 # THE PRE-FIX GATE, reconstructed rather than asserted: the two `jq` field extractions gone, the
@@ -1138,6 +1186,24 @@ for _site in snapshot step; do
   fi
   _i=$((_i+1))
 done
+
+# --- MUTANTS — the BL-590 teammate exit, removed and widened -----------------
+# Anchored on the exit's own line, asserted unique first, so a reworded exit reports STALE rather
+# than a no-op scoring as a survivor. REMOVED is the pre-fix gate: a teammate's calls are refused
+# and its Reads advance the lead's stages, so both teammate arms flip and nothing else does.
+# WIDENED to every caller, the read path is dead for the lead too, so its set is exactly the dead
+# gate's: `mate_calls` dies on its lead twin, which is the control this mutant exists to prove.
+MG_EXIT_LINE='[ -z "$RG_AGENT" ] || exit 0'
+if [ "$(grep -cxF -- "$MG_EXIT_LINE" "$GATE")" -ne 1 ]; then
+  bad "FIXTURE STALE: the BL-590 teammate exit is not exactly one line in the gate, so neither of its mutants can be anchored"
+else
+  MG_NOMATE="$WORK/gate-no-teammate-exit.sh"
+  awk -v l="$MG_EXIT_LINE" '$0==l{next} 1' "$GATE" > "$MG_NOMATE"
+  mutant_arm "the teammate exit removed — a teammate is refused and its Reads disarm the lead" "$MG_NOMATE" "mate_calls mate_reads"
+  MG_ALLMATE="$WORK/gate-exit-every-caller.sh"
+  awk -v l="$MG_EXIT_LINE" '$0==l{print "exit 0"; next} 1' "$GATE" > "$MG_ALLMATE"
+  mutant_arm "the teammate exit widened to every caller" "$MG_ALLMATE" "deny_first ladder_abs ladder_rel ladder_consumer standdown_missing fastpath full_snapshot full_step mate_calls mate_reads"
+fi
 
 # =============================================================================
 # THE PRODUCER — ai-dlc-recover.sh, on the layout the protocol actually specifies
@@ -1461,14 +1527,21 @@ a_nogrant() {
   allowed "$d" || { printf 'FAIL:a lead with no advisor grant was held on R\n'; return; }
   printf 'PASS\n'
 }
-# A6. A teammate is not the lead: its dispatch is untouched, and its own step Read never arms.
+# A6. A teammate is not the lead: its dispatch is untouched, and the lead's owed R survives it.
+#     THE SEED IS SATISFIED BY THE LEAD'S READS, never a teammate's. The recovery is the lead's:
+#     a teammate reading the snapshot reloads nothing into the lead's context, so the read stages
+#     do not count it (BL-590), and whether a teammate's Read arms R is no longer a question this
+#     stage can be asked -- the read battery's `mate_reads` owns it. The twin is the lead's own
+#     Agent call in the same state, one property apart, still refused naming R.
 a_mate() {
   _p="$(a_world "$1" grant boundary digest)"
+  [ -e "$_p/$OW" ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the lead Reads did not arm the advisor stage\n'; return; }
   d="$(acall "$1" "$_p" Agent "$_p/t.jsonl" agent-x1)"
   allowed "$d" || { printf 'FAIL:a teammate Agent call was refused on the lead R touchpoint\n'; return; }
-  _q="$(aproj)"; areads "$1" "$_q" agent-x1
-  [ -e "$_q/$OW" ] && { printf 'FAIL:a teammate step Read armed the lead advisor stage\n'; return; }
-  [ -e "$_q/$mk" ] && { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the teammate Reads did not satisfy the read stages\n'; return; }
+  [ -e "$_p/$OW" ] || { printf 'FAIL:a teammate call discharged the lead owed R\n'; return; }
+  d="$(acall "$1" "$_p" Agent "$_p/t.jsonl")"
+  allowed "$d" && { printf 'FAIL:the lead Agent call after a teammate call was allowed with R still owed\n'; return; }
+  grep -q 'touchpoint R' <<<"${d#*|}" || { printf 'FAIL:the lead Agent call was denied for some reason other than R\n'; return; }
   printf 'PASS\n'
 }
 # A7. No readable digest: R is not owed, so the satisfying step Read does not arm the stage.
@@ -1538,7 +1611,7 @@ for _n in $APREDS; do
     before)   label="R: an advisor attempt BEFORE the digest Read does not satisfy it" ;;
     unavail)  label="R: an 'unavailable' advisor result stands the stage down" ;;
     nogrant)  label="R: a lead with no advisor grant line is never held" ;;
-    mate)     label="R: a teammate is untouched and its step Read never arms the stage" ;;
+    mate)     label="R: a teammate's dispatch is untouched while the lead owes R, and the lead is still held" ;;
     nodigest) label="R: no readable postcompact digest, no stage" ;;
     bound)    label="R: the escape bound -- three refusals, then the stage stands down" ;;
     session)  label="R: another session's call is not held on this lead's touchpoint" ;;
@@ -1567,7 +1640,7 @@ amut() { # amut <name> <awk program> -> mutant path
   awk "$2" "$GATE" > "$WORK/gate-adv-$1.sh"; printf '%s\n' "$WORK/gate-adv-$1.sh"
 }
 amutant_arm "the stage never arms (the owed write removed)" \
-  "$(amut noarm 'index($0,"owed_put \"$(printf"){print "          :"; next} 1')" "deny before bound"
+  "$(amut noarm 'index($0,"owed_put \"$(printf"){print "          :"; next} 1')" "deny before mate bound"
 amutant_arm "the teammate stand-down removed at the stage" \
   "$(amut mate 'index($0,"[ -z \"$R_AID\" ] || exit 0"){next} 1')" "mate"
 amutant_arm "an advisor attempt anywhere satisfies R" \
@@ -1577,13 +1650,11 @@ amutant_arm "the unavailable stand-down removed" \
 amutant_arm "the no-grant stand-down removed" \
   "$(amut grant 'index($0,"if [ \"${R_GRANT:-none}\" != on ]; then"){next} 1')" "nogrant"
 amutant_arm "the digest-readability arming precondition removed" \
-  "$(amut digest '{sub(/ && digest_readable; then$/,"; then")} 1')" "nodigest"
+  "$(amut digest '{sub(/^        if digest_readable; then$/,"        if true; then")} 1')" "nodigest"
 amutant_arm "the escape bound removed" \
   "$(amut bound '{sub(/R_MAX_DENIES=3/,"R_MAX_DENIES=999")} 1')" "bound"
 amutant_arm "the session stand-down removed" \
   "$(amut session 'index($0,"if [ -n \"$R_OSID\" ] && [ -n \"$R_SID\" ] && [ \"$R_OSID\" != \"$R_SID\" ]; then"){print "  if false; then"; next} 1')" "session"
-amutant_arm "the arming step Read keyed off agent_id (a teammate arms)" \
-  "$(amut matearm '{sub(/if \[ -z "\$\(printf .%s. "\$INPUT" \| jq -r .\.agent_id \/\/ empty. 2>\/dev\/null\)" \] && /,"if ")} 1')" "mate"
 
 fi  # GATE present
 

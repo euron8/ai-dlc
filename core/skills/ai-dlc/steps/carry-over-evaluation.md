@@ -71,6 +71,7 @@ clean trunk. Exit 1 is one or more findings: file HARD_BLOCK at the
 carry-over-evaluation gate naming each reported SHA; silent skip is
 forbidden. Exit 2 is a setup error (no genesis, unreadable contract) —
 fix the invocation and re-run; it is NOT a clean result.
+Gate Check 36 re-runs this audit at the planning gate and reads only that re-run.
 
 **Backlog health check.** Before per-item evaluation, count OPEN
 items and flag any older than 10 sprints. When OPEN count exceeds 15,
@@ -176,6 +177,20 @@ this sprint, not closed):
 - Include: which item, why deferral is recommended, impact of deferral
 - **Proceed with all non-deferred items** — do not block the pipeline
 - The human will review deferrals at the production validation checkpoint
+
+**An item in the confirmed scope is never deferred by the lead.** When the item is one
+the operator confirmed at `route.md` Step 6 — named in the scope that `scope_confirmed`
+and `scope_confirmed_cite` record, and not listed in `scope_deferred_items` — the deferral
+is a Rule 12 HARD_BLOCK, not a `DEFERRAL_REQUEST`. File it with `**Status:** HARD_BLOCK`,
+put it to the operator with `AskUserQuestion` before this step proceeds, and record the
+answer on the entry with its `Operator authorization:` line. The item stays in the sprint
+until that answer exists.
+*Catches:* a confirmed item deferred mid-sprint and surfaced only after deploy — a scope
+cut the operator learns of after the sprint shipped without it.
+*Removed when:* a gate can key every deferral on an item id — Check 34's locked-scope arm
+refuses only a deferral naming a `CO-` id, so a confirmed item deferred with no `CO-` id, or
+named beside an approved deferred id, still passes. Closing that needs a structured
+scope-items line in the snapshot and an `**Item:**` field on a deferral entry.
 
 **A rare-and-maybe-never monitor carries `rare_event: true`.** When the
 healthy expected state of a carry-over's monitored event is non-firing,

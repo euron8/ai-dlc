@@ -1498,6 +1498,154 @@ else
   bad "CONTROL FAILED: assertion 14's unmutated copy returned [$PC_CTL_GOT], expected [$PC_EXPECT] — every labelled-cite mutant verdict would be uninterpretable"
 fi
 
+# =============================================================================
+# LOCKED-SCOPE DEFERRAL ARM: a live DEFERRAL_REQUEST may not name a confirmed item.
+# =============================================================================
+# The worlds are shaped on the reference consumer's sprint 319 (the motivating case: a
+# `CO-S319-` item the evaluation filed and deferred 3h after the scope answer) and sprint 316
+# (the measured false positive: the operator deferred the stretch tier at Step 6, the lead
+# listed CARRIER ids in scope_deferred_items, and each entry named its carrier AND the
+# original id the ask named). Escalation entries use that consumer's header grammar
+# `## [ID] lead - <ISO>Z`; the request entry uses the capture hook's `- SHA256:` grammar.
+LS="$WORK/lsd"; mkdir -p "$LS"
+LS_RQ="$(printf 'e%.0s' $(seq 1 64))"
+sd_answers lsans 2026-10-15T18:55:29Z
+LS_ANS="$SD/answers-lsans.md"
+# The recurring-answer world: the same answer body (so the same hash) given once long before
+# and again at this sprint's Step 6. The reference consumer's `Confirmed` recurs exactly so.
+sd_answers lsold 2026-08-01T00:00:00Z
+{ cat "$SD/answers-lsold.md"; echo; sed -n '/^## /,$p' "$LS_ANS"; } > "$SD/answers-lsdup.md"
+{ printf '# Operator Requests\n\n## 2026-10-15T18:49:36Z -- (typed)\n- Session: s1\n- Bytes: 99\n'
+  printf -- '- SHA256: %s\n\n```text\n' "$LS_RQ"
+  printf '1. CO-S318-ASKED-ITEM: take it.\n5. Add a Collect Rewards button.\n```\n'
+  printf '\n## 2026-10-15T19:00:00Z -- (typed)\n- SHA256: %s\n\n```text\nCO-S300-UNRELATED later\n```\n' "$(printf 'f%.0s' $(seq 1 64))"
+} > "$LS/requests.md"
+{ printf '# Carry-over Backlog\n\n### CO-S319-RATIFIED-DEFER\n**Status:** OPEN\n'; } > "$LS/backlog.md"
+ls_snap() {   # $1 name, $2 user_request_cite
+  { echo "# Pipeline Snapshot"; echo; echo "## Pipeline Position"
+    echo "- user_request_verbatim: see operator-requests-history.md"
+    echo "- user_request_cite: $2"
+    echo "- scope_confirmed: confirmed"
+    echo "- scope_confirmed_cite: $SHA"
+    echo "- scope_deferred_items: [CO-S319-RATIFIED-DEFER]"
+    echo; echo "## Sprint Context"; echo "- sprint_id: 319"
+  } > "$LS/snap-$1.md"
+}
+ls_snap cited "$LS_RQ"
+ls_snap noask none
+# A cite that is a hash but matches no entry in the requests file: the ask leg did not run.
+ls_snap badhash "$(printf 'a%.0s' $(seq 1 64))"
+ls_esc() {    # $1 world, $2 header timestamp, $3 status, $4 body line naming the ids
+  { printf '# Escalations\n\n## [S319-EARLIER-NOTE] lead - 2026-10-15T20:00:00Z\n'
+    printf '**Status:** DECIDED_AUTONOMOUSLY\n**Context:** names CO-S319-OTHER-ITEM in an informational entry.\n\n'
+    printf '## [S319-THE-DEFERRAL] lead - %s\n**Status:** %s\n**Blocker type:** deferral\n' "$2" "$3"
+    printf '**Context:** %s\n' "$4"
+    printf '**Resolution note:** this entry was filed as `DEFERRAL_REQUEST` (prose, not a status).\n'
+  } > "$LS/esc-$1.md"
+}
+ls_esc fire     2026-10-15T21:42:08Z DEFERRAL_REQUEST "defer CO-S319-COLLECT-REWARDS-X to a later sprint."
+ls_esc fireask  2026-10-15T21:42:08Z DEFERRAL_REQUEST "defer CO-S318-ASKED-ITEM to a later sprint."
+ls_esc resolved 2026-10-15T21:42:08Z RESOLVED         "defer CO-S319-COLLECT-REWARDS-X to a later sprint."
+ls_esc before   2026-10-15T18:00:00Z DEFERRAL_REQUEST "defer CO-S319-COLLECT-REWARDS-X to a later sprint."
+ls_esc recur    2026-09-01T00:00:00Z DEFERRAL_REQUEST "defer CO-S319-COLLECT-REWARDS-X to a later sprint."
+ls_esc ratified 2026-10-15T21:42:08Z DEFERRAL_REQUEST "carrier CO-S319-RATIFIED-DEFER; the item CO-S318-ASKED-ITEM is the operator-deferred stretch."
+ls_esc outside  2026-10-15T21:42:08Z DEFERRAL_REQUEST "defer CO-S300-UNRELATED to a later sprint."
+ls_esc noask    2026-10-15T21:42:08Z DEFERRAL_REQUEST "defer CO-S318-ASKED-ITEM to a later sprint."
+LS_OUT=""; LS_RC=0
+ls_run() {    # $1 validator, $2 snapshot, $3 escalations world, [$4 answers path]
+  LS_OUT="$(TZ=UTC bash "$1" --snapshot "$LS/snap-$2.md" --answers "${4:-$LS_ANS}" --backlog "$LS/backlog.md" \
+            --repo "$REPO_STD" --requests "$LS/requests.md" --escalations "$LS/esc-$3.md" 2>&1)"; LS_RC=$?
+}
+ls_has() { grep -qF -- "$1" <<<"$LS_OUT"; }
+# Every cell is PRESENCE-shaped: a refusal must name its id, and a quiet cell must print its
+# scanned count (and the SKIP line where one is owed), so a subject that emits nothing fails.
+LS_CELLS="fire fireask resolved before recur ratified outside noask badhash"
+ls_verdicts() {
+  local v="$1" out=""
+  ls_cell() { out="$out $1=$LS_RC"; }
+  ls_run "$v" cited fire;     ls_has "locked id(s): CO-S319-COLLECT-REWARDS-X" || LS_RC="${LS_RC}x"; ls_cell fire
+  ls_run "$v" cited fireask;  ls_has "locked id(s): CO-S318-ASKED-ITEM" || LS_RC="${LS_RC}x"; ls_cell fireask
+  ls_run "$v" cited resolved; ls_has "locked_scope_deferrals_scanned: 0 " || LS_RC="${LS_RC}x"; ls_cell resolved
+  ls_run "$v" cited before;   ls_has "locked_scope_deferrals_scanned: 0 " || LS_RC="${LS_RC}x"; ls_cell before
+  ls_run "$v" cited recur "$SD/answers-lsdup.md"
+  ls_has "locked_scope_deferrals_scanned: 0 " || LS_RC="${LS_RC}x"; ls_cell recur
+  ls_run "$v" cited ratified; ls_has "locked_scope_deferrals_scanned: 1 " || LS_RC="${LS_RC}x"; ls_cell ratified
+  ls_run "$v" cited outside;  ls_has "locked_scope_deferrals_scanned: 1 " || LS_RC="${LS_RC}x"; ls_cell outside
+  ls_run "$v" noask noask
+  # The closing line must name the leg that ran and must NOT claim the whole property.
+  { ls_has "SKIP  locked-scope ask leg" && ls_has "locked_scope_deferrals_scanned: 1 " \
+    && ls_has "PARTIAL  locked-scope arm: only the sprint leg ran (CO-S319- ids)" \
+    && ! ls_has "PASS  no live DEFERRAL_REQUEST"; } || LS_RC="${LS_RC}x"; ls_cell noask
+  ls_run "$v" badhash noask
+  { ls_has "SKIP  locked-scope ask leg" && ls_has "PARTIAL  locked-scope arm: only the sprint leg ran" \
+    && ! ls_has "PASS  no live DEFERRAL_REQUEST"; } || LS_RC="${LS_RC}x"; ls_cell badhash
+  printf '%s\n' "${out# }"
+}
+LS_EXPECT="fire=1 fireask=1 resolved=0 before=0 recur=0 ratified=0 outside=0 noask=0 badhash=0"
+ls_why() {
+  case "$1" in
+    fire)     echo "a live DEFERRAL_REQUEST naming a CO-S<sprint>- item filed after the scope answer must be refused (the s319 shape)" ;;
+    fireask)  echo "a live DEFERRAL_REQUEST naming an id the operator's ask named must be refused" ;;
+    resolved) echo "a RESOLVED deferral (prose still quoting DEFERRAL_REQUEST) was put to the operator and must be silent" ;;
+    before)   echo "a deferral filed BEFORE the scope answer predates the confirmation and must be silent" ;;
+    recur)    echo "a recurring answer body dates the window by its NEWEST copy; an older deferral must be silent" ;;
+    ratified) echo "an entry naming an id scope_deferred_items lists was ratified at Step 6 and must be silent (the s316 shape)" ;;
+    outside)  echo "a deferral of an id outside the locked set must be silent" ;;
+    noask)    echo "no ask cite must print a VISIBLE SKIP for the ask leg and a PARTIAL line naming the sprint leg, never the full PASS claim" ;;
+    badhash)  echo "an ask cite matching no requests entry is a SKIPPED ask leg, never one that ran and found nothing" ;;
+  esac
+}
+LS_GOT="$(ls_verdicts "$VALIDATOR")"
+for c in $LS_CELLS; do
+  want="$(sd_cell_of "$LS_EXPECT" "$c")"; got="$(sd_cell_of "$LS_GOT" "$c")"
+  if [ "$want" = "$got" ]; then ok "locked-scope cell '$c': rc=$got as required"
+  else bad "locked-scope cell '$c': got '$got', expected '$want' — $(ls_why "$c")"; fi
+done
+LS_MUT_KILLS=0; LS_MUT_WANT=0
+ls_mut() {   # $1 label, $2 owned cells, $3 anchor (must occur once), $4 replacement
+  local label="$1" owned="$2" out n got moved="" stray="" c w g
+  LS_MUT_WANT=$((LS_MUT_WANT + 1))
+  out="$LS/mutant-$label.sh"
+  n="$(grep -cF -- "$3" "$VALIDATOR")" || n=0
+  [ "$n" = "1" ] || { bad "FIXTURE STALE: locked-scope mutant $label's anchor occurs $n times, not 1"; return; }
+  awk -v a="$3" -v r="$4" '{ i = index($0, a); if (i) { $0 = substr($0, 1, i - 1) r substr($0, i + length(a)) } print }' "$VALIDATOR" > "$out"
+  cmp -s "$VALIDATOR" "$out" && { bad "FIXTURE STALE: locked-scope mutant $label matched nothing"; return; }
+  bash -n "$out" 2>/dev/null || { bad "FIXTURE BROKEN: locked-scope mutant $label is not a valid shell script"; return; }
+  got="$(ls_verdicts "$out")"
+  for c in $LS_CELLS; do
+    w="$(sd_cell_of "$LS_EXPECT" "$c")"; g="$(sd_cell_of "$got" "$c")"
+    case " $owned " in
+      *" $c "*) [ "$w" != "$g" ] && moved="$moved $c" ;;
+      *)        [ "$w" != "$g" ] && stray="$stray $c=$g" ;;
+    esac
+  done
+  if [ -n "$stray" ]; then bad "locked-scope mutant $label moved cells it does not own:$stray"
+  elif [ "$(echo $moved | wc -w)" -ne "$(echo $owned | wc -w)" ]; then
+    bad "LOCKED-SCOPE MUTANT $label SURVIVED on some of its own cells (moved:${moved:- none}; owned: $owned)"
+  else LS_MUT_KILLS=$((LS_MUT_KILLS + 1)); ok "locked-scope mutant $label killed on exactly its own cells:$moved"; fi
+}
+LS_CTL_GOT="$(ls_verdicts "$CTL")"
+if [ "$LS_CTL_GOT" = "$LS_EXPECT" ]; then
+  ok "control: assertion 14's unmutated copy reproduces all $(echo $LS_CELLS | wc -w) locked-scope cells"
+  ls_mut sprintleg "fire"      '(sprint != "" && index(id, "CO-S" sprint "-") == 1) || ' ''
+  ls_mut askleg    "fireask"   ' || index(ask, " " id " ")' ''
+  ls_mut status    "resolved"  'st != "DEFERRAL_REQUEST") return' 'st != "DEFERRAL_REQUEST" && st != "RESOLVED") return'
+  ls_mut window    "before recur" 'if (ts != "" && from != "" && ts < from) return' ''
+  ls_mut oldest    "recur"     '$0 == c { t = h } END { print t }' '$0 == c && t == "" { t = h } END { print t }'
+  ls_mut ratified  "ratified"  'if (hit != "" && !ratified)' 'if (hit != "")'
+  ls_mut noskip    "noask badhash" 'say "SKIP  locked-scope ask leg' ': "SKIP  locked-scope ask leg'
+  ls_mut noexit    "fire fireask" '[ "$LS_RC" -eq 1 ] && exit 1' 'true'
+  ls_mut fullpass  "noask badhash" 'elif [ "$LS_ASK_LEG" = ran ] && [ -n "$LS_SPRINT" ]; then' 'elif true; then'
+  ls_mut resolve   "badhash"   'grep -qxF -- "- SHA256: ${LS_REQ_CITE}" "$REQUESTS" 2>/dev/null' 'true'
+  if [ "$LS_MUT_KILLS" -eq "$LS_MUT_WANT" ] && [ "$LS_MUT_WANT" -eq 10 ]; then
+    ok "all 10 locked-scope mutants killed against the resolved validator $VALIDATOR"
+  else
+    bad "only $LS_MUT_KILLS of $LS_MUT_WANT locked-scope mutants were killed (10 expected)"
+  fi
+else
+  bad "CONTROL FAILED: assertion 14's unmutated copy returned [$LS_CTL_GOT], expected [$LS_EXPECT] — every locked-scope mutant verdict would be uninterpretable"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "scope-confirmation: PASS"; exit 0; fi
 echo "scope-confirmation: $fails assertion(s) FAILED" >&2

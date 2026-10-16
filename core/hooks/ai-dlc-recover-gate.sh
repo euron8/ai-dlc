@@ -55,8 +55,8 @@
 # stages above let the first call after the step Read through, and nothing held the dispatch.
 #
 # So the call that satisfies the step mandate also writes `.recover-advisor-owed` (the
-# session id and a deny count), but only when that call is the LEAD's (empty `agent_id`) and a
-# `postcompact-digest.md` is readable in either layout; `.recover-satisfied` is still written
+# session id and a deny count), but only when a `postcompact-digest.md` is readable in either
+# layout -- that call is always the LEAD's, because a teammate never reaches the read stages; `.recover-satisfied` is still written
 # as before. While that file exists and the read marker does not, an `Agent`, `Task`,
 # `TaskCreate`, `Write`, `Edit`, `MultiEdit` or `NotebookEdit` call FROM THE LEAD is judged on the lead's
 # transcript: if a Read of `skills/ai-dlc/postcompact-digest.md` follows the last
@@ -93,10 +93,10 @@
 # REGISTRATION. The settings template registers this hook with matcher `*`, so every tool in
 # the deny set reaches it; no registration was added.
 #
-# NOT FIXED HERE, recorded: the two READ stages below carry no lead/teammate distinction. A
-# teammate's call during a lead's pending recovery is denied with text addressed to the lead
-# (measured on the reference consumer by the contract adversary: 253 such denials across 113
-# subagent transcripts). That is a separate filing.
+# THE LEAD AND ITS TEAMMATES (BL-590). Both stages bind the lead only. A teammate (`agent_id`
+# set) leaves the read path before any stage is read, so it is never refused and its Reads
+# never advance or disarm the lead's recovery; the advisor stage has its own stand-down. The
+# measurement and the case are at the exit, after the INPUT read.
 #
 # THE RACE. The incoming call's own message is usually not on disk when PreToolUse fires
 # (measured in the advisor gate's header, THE RACE), so an advisor call in the same message
@@ -229,6 +229,21 @@ command -v jq >/dev/null 2>&1 || exit 0
 
 INPUT="$(cat 2>/dev/null || true)"
 [ -n "$INPUT" ] || exit 0
+
+# THE READ STAGES BIND THE LEAD ONLY (BL-590). The marker is project-wide and the matcher is
+# `*`, so before this line a TEAMMATE's call during the lead's pending recovery was refused with
+# text addressed to the lead -- measured on the reference consumer: 253 such denials across 113
+# subagent transcripts. And a teammate's Reads ADVANCED the lead's stages: in graph session
+# d5ba4ec4 a teammate's full Read of the step file cleared the marker, the lead's first
+# post-compact calls included an Edit of pipeline-snapshot.md with no deny, and the lead read
+# its step file two minutes later. A teammate reading the snapshot reloads nothing into the
+# lead's context, so it neither is refused nor counts toward the recovery: it leaves here, before
+# any stage is read, advanced or denied. `.agent_id` is set only on a call made inside a
+# dispatched teammate, as `ai-dlc-acknowledge.sh` reads it. Below the marker fast-path on
+# purpose, so an ordinary call still forks nothing, and below the advisor stage, which carries
+# its own teammate stand-down.
+RG_AGENT="$(printf '%s' "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null)"
+[ -z "$RG_AGENT" ] || exit 0
 
 # --- what the injector recorded ----------------------------------------------------------
 # Read as key=value lines, never sourced: `.` on a file in the project directory would execute
@@ -366,9 +381,10 @@ you on the next call; there is nothing here to weigh."
         printf 'step_file=%s\n' "$STEP_REL" > "${STATE_DIR}/.recover-satisfied" 2>/dev/null || true
         # THE ADVISOR STAGE ARMS HERE (header: THE ADVISOR STAGE). Keyed on the session that
         # satisfied the reads, so another session's call in the same project stands it down.
-        # A teammate never arms it (the stage is lead-only), and neither does a tree with no
-        # readable digest: R follows the digest Read, so without the file R is not owed.
-        if [ -z "$(printf '%s' "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null)" ] && digest_readable; then
+        # Only the lead reaches this line (a teammate left at the BL-590 exit above), and a tree
+        # with no readable digest does not arm it: R follows the digest Read, so without the
+        # file R is not owed.
+        if digest_readable; then
           owed_put "$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)" 0
         fi
         rm -f "$MARKER" "$PROGRESS" 2>/dev/null || true

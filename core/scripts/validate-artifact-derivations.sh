@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 # validate-artifact-derivations.sh — re-run the derivations a planning artifact carries
 #
-# Usage: ./scripts/ai-dlc/validate-artifact-derivations.sh <file-or-dir> [<file-or-dir>...]
-#        ./scripts/ai-dlc/validate-artifact-derivations.sh --list <file-or-dir>...
+# Usage: ./scripts/ai-dlc/validate-artifact-derivations.sh [--all] <file-or-dir> [<file-or-dir>...]
+#        ./scripts/ai-dlc/validate-artifact-derivations.sh --list [--all] <file-or-dir>...
+#
+# A DIRECTORY target skips frozen records (under `shards/`, and a sprint slot's review/repair
+# records) and prints an `EXCLUDED:` count; `--all` walks them. A FILE target
+# is always checked. The walk below says what is frozen and why.
 #
 # WHAT IT GUARDS, AND WHY IT IS NOT A LINT.
 #
@@ -105,12 +109,17 @@ AI_DLC_ROOT="${AI_DLC_PROJECT_ROOT:-}"
 ALLOWED_CMDS="grep rg awk sed wc comm sort uniq cut head tail nl find ls cat diff shasum sha256sum basename dirname printf echo test git"
 ALLOWED_GIT_SUB="grep log show diff ls-files rev-parse cat-file describe status"
 
-LIST_ONLY=0
-case "${1:-}" in
-  --list) LIST_ONLY=1; shift ;;
-  -h|--help|"") echo "usage: $0 [--list] <file-or-dir>..." >&2; exit 2 ;;
-esac
-[ "$#" -ge 1 ] || { echo "usage: $0 [--list] <file-or-dir>..." >&2; exit 2; }
+LIST_ONLY=0; WALK_ALL=0
+USAGE="usage: $0 [--list] [--all] <file-or-dir>..."
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --list) LIST_ONLY=1; shift ;;
+    --all)  WALK_ALL=1; shift ;;
+    -h|--help) echo "$USAGE" >&2; exit 2 ;;
+    *) break ;;
+  esac
+done
+[ "$#" -ge 1 ] || { echo "$USAGE" >&2; exit 2; }
 
 fails=0; checked=0; blocks=0; files_seen=0; unrun=0
 
@@ -520,7 +529,7 @@ cmd_is_safe() { # $1 command -> 0 safe, 1 refused (reason in REFUSED)
 
 TMP_SAFE="$(mktemp)"; TMP_OUT="$(mktemp)"; TMP_EXP="$(mktemp)"; TMP_SENT="$(mktemp)"; TMP_RAN="$(mktemp)"
 TMP_NEXP="$(mktemp)"; TMP_NOUT="$(mktemp)"; TMP_LIST="$(mktemp)"
-trap 'rm -f "$TMP_SAFE" "$TMP_OUT" "$TMP_EXP" "$TMP_SENT" "$TMP_RAN" "$TMP_NEXP" "$TMP_NOUT" "$TMP_LIST"' EXIT
+trap 'rm -f "$TMP_SAFE" "$TMP_OUT" "$TMP_EXP" "$TMP_SENT" "$TMP_RAN" "$TMP_NEXP" "$TMP_NOUT" "$TMP_LIST" "$TMP_LIST.keep"' EXIT
 # The one-line stdin every derivation runs on -- run_pair's READS-STDIN arm says why.
 STDIN_SENTINEL="AI-DLC-DERIVATION-STDIN-SENTINEL"
 printf '%s\n' "$STDIN_SENTINEL" > "$TMP_SENT"
@@ -800,6 +809,87 @@ for target in "$@"; do
       printf 'REFUSED: could not list the markdown files under %s (the walk exited %s), so its derivations were never read; no verdict. Re-run once the fault is gone.\n' \
         "$target" "$walk_rc" >&2
       exit 2
+    fi
+    # A DIRECTORY TARGET WALKS THE DOCUMENTS A REPAIR CAN EDIT, NOT THE RECORDS NO REPAIR MAY.
+    # `_gate-procedures.md` runs this over `s<N>/` after every repair join and sends exit 1
+    # back to the remediator. The slot also holds records that are frozen once written: every
+    # part, seat and section copy under `shards/`, every review and repair record, and the
+    # earlier rounds' review and repair records. A command in one of those that a LATER edit moved stays stale
+    # for the rest of the sprint, and no remediator may touch it, so the required run could
+    # never pass. Measured on the reference consumer's s319 at the elicitation repair join:
+    # 12 stale in 27 files, every one in a seat or part record, while the joined record and
+    # the document were clean -- a check that always fails and is always waived.
+    #
+    # So the default walk skips, by PATH and never by content:
+    #   - anything under a `shards/` directory BELOW the target (`s<N>/shards/<dir>/...`:
+    #     adversarial and elicitation seats, repair parts and their section copies);
+    #   - in a sprint slot (a directory named `s<digits>`), the record grammar core writes:
+    #     `<artifact>-adversarial-p<M>.md`, `<artifact>-repair-p<M>.md` (which spells the
+    #     gate, party and elicitation repair records too), `requirements-party-repair.md`,
+    #     `requirements-elicitation-repair.md` and `requirements-elicitation.md`.
+    # Everything else -- the documents, stories, epics, `carry-over-evaluation.md`, the Rule 24
+    # input digests -- is walked. The digests are NOT frozen: measured on the reference
+    # consumer, repair records in four sprints carry `edit:` lines into `discovery-context.md`,
+    # `requirements-context.md` and `architecture-context.md`, two of them repairs of the
+    # digest's own stale derivations.
+    # A target that is itself under `shards/` is walked whole: the component is matched only
+    # BELOW the target, so naming a shard dir never reads as "OK: 0". `--all` walks everything.
+    # A FILE target is never excluded: `derivation-differential.sh` and the capture hook pass
+    # files, and an excluded file there would empty the universe they count.
+    #
+    # THIS REDUCES THE SLOT RUN; IT DOES NOT MAKE IT PASS. Measured on the reference consumer's
+    # s316/s317/s318 with this walk: 297 of 650, 598 of 1224 and 207 of 418 still stale, in two
+    # places -- live documents (`carry-over-evaluation.md`, `architecture-context.md`, stories),
+    # and record names outside the grammar above.
+    #
+    # THE GRAMMAR IS NOT WIDENED TO THOSE NAMES, and each was decided from core's step files, not
+    # from the consumer's listing. A name is skipped only when core itself writes it as a review
+    # or repair record AND no repair edits it. `requirements-repair-el.md`,
+    # `requirements-repair-adv-p<M>.md`, `-cross-repair`, `-authoring`, `-repair-readiness-p<M>`
+    # and the rest are written by no core step file (they appear in core only as quotations of
+    # the consumer), so nothing establishes them as records. `changelog-<artifact>.md` IS core's
+    # -- `_gate-procedures.md` "Where a changelog is written" -- but it is APPENDED to on every
+    # pass, so it is live. `<artifact>-elicitation.md` (`stories-elicitation.md`,
+    # `architecture-elicitation.md`) is not core's: core writes elicitation outside the
+    # requirements subject to `shards/<artifact>-elicitation/`, and the consumer's repair parts
+    # carry `edit:` lines INTO `stories-elicitation.md`, `stories-cross-repair.md` and
+    # `architecture-authoring.md`, so those are documents a repair edits. Skipping them would
+    # hide exactly what a repair is required to fix.
+    #
+    # NOT COVERED: frozenness is a property of WHEN the run happens, and a path cannot say it.
+    # The record a repair has just joined is excluded with the rest; its fences were re-run by
+    # the capture hook as they were written, and `--all` or a file target re-runs them here.
+    # Worse, an excluded record CAN be a repair's subject: the consumer's s316
+    # `shards/stories-fences-p<M>/` parts edit `stories-adversarial-p1.md`/`-p2.md`, and its
+    # derivation-staleness repairs edit `gate-planning-repair-p<M>.md`. A slot run does not see
+    # whether such a repair fixed them. The owed closure is a FILE-target run, after each join,
+    # over the joined record plus every file its `edit:` lines name -- a `_gate-procedures.md`
+    # step, not a change to this walk.
+    # A legacy record name outside the grammar (`coe-adversarial-pass1.md`) is walked.
+    if [ "$WALK_ALL" -eq 0 ]; then
+      t_abs="$(cd "$target" && pwd)" || t_abs="$target"
+      : > "$TMP_LIST.keep"
+      split_counts="$(awk -v pre="${target%/}/" -v tbase="$(basename "$t_abs")" -v keep="$TMP_LIST.keep" '
+        { rel = (index($0, pre) == 1) ? substr($0, length(pre) + 1) : $0
+          n = split(rel, C, "/"); base = C[n]
+          parent = (n > 1) ? C[n - 1] : tbase
+          why = ""
+          for (i = 1; i < n; i++) if (C[i] == "shards") { why = "shards" }
+          if (why == "" && parent ~ /^s[0-9]+$/) {
+            if (base ~ /-adversarial-p[0-9]+\.md$/ || base ~ /-repair-p[0-9]+\.md$/ ||
+                base == "requirements-party-repair.md" || base == "requirements-elicitation-repair.md" ||
+                base == "requirements-elicitation.md") why = "record"
+          }
+          if (why == "") print > keep; else D[why]++
+        }
+        END { printf "%d %d\n", D["shards"], D["record"] }' "$TMP_LIST")" \
+        || { printf 'REFUSED: could not split the walk of %s, so its derivations were never read; no verdict.\n' "$target" >&2; exit 2; }
+      n_sh="${split_counts%% *}"; n_rec="${split_counts##* }"
+      if [ "$((n_sh + n_rec))" -gt 0 ]; then
+        printf 'EXCLUDED: %s frozen file(s) under %s not walked (%s under shards/, %s review/repair record(s)); pass --all to walk them.\n' \
+          "$((n_sh + n_rec))" "$target" "$n_sh" "$n_rec"
+      fi
+      mv "$TMP_LIST.keep" "$TMP_LIST"
     fi
     while IFS= read -r f; do check_file "$f"; done < "$TMP_LIST"
   elif [ -f "$target" ]; then

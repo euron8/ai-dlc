@@ -86,6 +86,8 @@ that builds an entry owes its behavioural `sh` receipt and the probe behind it.
 
 ## BL-529 — the derivation re-run the repair procedure requires over `s<N>/` can never pass once seat files are frozen
 
+**PARTIAL (v0.801.0, verified 40581bc2) — the validator half shipped; the join-time closure in `_gate-procedures.md` is OPEN.** A directory target skips `shards/` and the slot's record grammar, prints an `EXCLUDED:` count, and `--all` walks them. It reduces the run without making it pass: s316 297 of 650, s317 598 of 1224, s318 207 of 418 still stale, in live documents and record names outside the grammar.
+
 **DEFECT.** `_gate-procedures.md:981` requires
 `validate-artifact-derivations.sh _bmad-output/planning-artifacts/s<N>/` after every repair join, and
 `:1004` says exit 1 is sent back to the remediator. The validator walks every `.md` under its target
@@ -161,16 +163,6 @@ Owed: a stated lead response to a notification for an agent whose deliverable an
 
 verify: manual
 
-## BL-539 — the lead can defer an operator-locked scope item without asking, and the operator learns of it only after deploy
-
-**DEFECT.** In graph s319 the operator confirmed scope as items 1–5, 7 and the Sweep→HODL discharges (snapshot Locked Decisions, AskUserQuestion label "Confirmed as read", SHA256 `df46bb336a64e238caae509cf351631d1877f86086650077bbef49c9e172428e`). At 21:42Z the lead filed a `DEFERRAL_REQUEST` for item 5 (the Collect Rewards button) in `docs/escalations/pending.md`, because an operator decision on claim signing was open, and continued. It mentioned the deferral only in its own progress lines. Neither AskUserQuestion it put between 21:42Z and 23:32Z asked about it. The operator found it at 23:49Z by pushing on D-12 ("if the reason not to build it this sprint is the same reason that I'll be confronted with in a future sprint, then why would I defer?"), and the lead then said there was no remaining reason to defer and put item 5 back in.
-
-`carry-over-evaluation.md` §4 (lines 166-173) lets the lead write a `DEFERRAL_REQUEST`, "proceed with all non-deferred items", and leave review to the production validation checkpoint. Applied to a locked scope item, that is a scope cut the operator sees only after the sprint has shipped without it. `.claude/rules/operator-rulings.md` "Scope is the operator's to change, never yours" forbids exactly that. The open decision behind it was an operator question, which the same sprint handled correctly for D-1..D-15 as a Rule 12 HARD_BLOCK put to the operator.
-
-Owed: a `DEFERRAL_REQUEST` against an item named in `scope_confirmed` is either refused or put to the operator before the step proceeds (a Rule 12 HARD_BLOCK, not a checkpoint note), plus a gate arm comparing the sprint's `DEFERRAL_REQUEST` entries with the confirmed scope set. Probe both directions: a deferral of a locked item fails, and a deferral of an item outside the locked set passes.
-
-verify: manual
-
 ## BL-540 — a remediator edits the escalation record, outside its brief and past a protected-path list that names the file
 
 **DEFECT.** In graph s319 the serial cross-part requirements remediator (dispatched at 23:11:31Z) made four successful Edits to `docs/escalations/pending.md`, starting at 23:37:11Z. One appended `**CORRECTION (serial remediator, 2026-10-15):**` to an existing escalation entry's evidence line, changing the premise the operator would rule on. `_gate-procedures.md:940-945` gives the serial remediator the ASSEMBLED subject files and PRD text outside the in-scope parts. Its brief names the four subject files and the spec `.memlog.md`. Neither names `pending.md`, which is the escalation record the lead and the operator adjudicate (`gate-remediation-guard.sh:1407` tells a remediator to ESCALATE there, by way of the lead, not to rewrite it).
@@ -224,6 +216,14 @@ verify: manual
 **Third instance, with a cause (graph s319 requirements elicitation repair, part 04, 01:04–01:18Z on 2026-10-16).** The SPEC part remediator appended its `(decision)` entry to `.memlog.md`, invoked the `bmad-spec` Skill to re-render, and then hand-wrote the `SPEC.md` edits. In its own words: "The `bmad-spec` Skill only loaded its instructions, so I hand-wrote the SPEC.md edits. The record says this." So the earlier two instances may not be agents ignoring the rule. In a teammate, invoking the Skill delivers the skill's instructions into the agent's context and renders nothing, and the agent then has to perform the render itself by editing `SPEC.md`. That is the hand edit the rule forbids. `join-remediator-shards.sh --pass elicitation` then joined all 13 parts with no refusal (01:18:39Z), confirming that no arm compares `SPEC.md` with a render of its memlog. The lead noted the breach ("That breaks the rule against editing the SPEC by hand") and deferred handling it. Owed, in addition to the guard: a render path a teammate can actually execute (a script that renders `SPEC.md` from `.memlog.md` deterministically, or a stated procedure the Skill's instructions resolve to). Until one exists, a guard denying `SPEC.md` writes would block the SPEC part outright. Measure first by driving `bmad-spec` headless from a teammate context and recording whether `SPEC.md` changes.
 
 **The render path does not exist, even outside a pause (graph s319 resumed lead `f65eae3b`, fold teammate pm-escalated `a9dd4af333cca61de`, 02:17–02:30Z 2026-10-16).** With no pause flag set, the teammate invoked `Skill bmad-spec` at 02:25:08Z with args "headless update … re-derive SPEC.md from .memlog.md". The Skill loaded its instructions, ran `resolve_customization.py`, and then the teammate hand-edited `SPEC.md` with four `Edit` calls (02:25:23–02:25:31Z). Its returned JSON says `"rendered_by": "hand"` and "the package has no renderer (assets/ holds only the template and schema; _bmad/scripts/ holds only memlog.py and the resolvers)". That is true of graph's tree: `.claude/skills/bmad-spec/` holds SKILL.md, customize.toml and assets/{headless-schemas.md, spec-template.md}, and `_bmad/scripts/` holds memlog.py, resolve_config.py and resolve_customization.py. Meanwhile `bmad-spec/SKILL.md:46` says SPEC.md is "DERIVED from .memlog.md, never hand-edited". The "derivation" is the model distilling under the skill's instructions, so a teammate reading "no render script" concludes that a hand-applied Edit is the only path. The lead accepted this at 02:30:34Z ("That is the only path available, so I'm proceeding on it") and dispatched the 19-agent adversarial series on SPEC `d08b4b81`, although the V1 advisor at 02:14Z had said not to dispatch the adversarial series on a hand-edited SPEC, so the advisor's condition was satisfied by relabelling, not by a render. Correct one of the two: either ai-dlc's brief states that a bmad-spec update IS the agent re-deriving SPEC.md from the memlog under the skill's instructions (and how that differs from piecemeal Edits: a full rewrite from the memlog, plus the two-pass sweep recorded as memlog `event` entries, SKILL.md:117-123), or ship a render/verify script that checks SPEC.md against the memlog (BL-560). Today every SPEC change in s319 has been a piecemeal hand Edit (part 04, the 01:48Z pass, the 02:25Z fold), and nothing distinguishes them from a render.
+
+**Fourth instance, and the LEAD's brief licenses the edit (graph s319 lead `cf53b84f`, Sonnet, 2026-10-16 08:02-08:07 EDT).** Filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]); intake re-derived it read-only. At 08:02 EDT the lead dispatched `pm-escalated` ("Re-render SPEC for five pass-1 decisions"; subagent `ac0d364e710b0a482`) with a brief saying "A BMAD skill is its instructions: invoke `/bmad-spec` with the update intent, and the agent following those instructions IS the renderer" (that phrase occurs 3 times in the lead's transcript). The agent called `Skill bmad-spec` once, appended through `memlog.py append` (10 distinct calls), and then edited `SPEC.md` directly with `Edit` (7 distinct tool calls; the filer counted 6): the CAP-1/2/3/7 clauses, the S-22 qualifier, and deleting the Q18 line. `core/skills/ai-dlc/steps/requirements.md:233-236` (a0451c70) says "The SPEC is repaired through its own render path, never by a direct edit … re-renders `SPEC.md` through `bmad-spec`", and graph's `.claude/skills/bmad-spec/SKILL.md:46` says `SPEC.md` is "DERIVED from .memlog.md, never hand-edited".
+
+So the brief turns BL-546's third instance ("the render path doesn't exist") into "a hand-edit counts as a render". The agent's work itself was careful: it took shas before and after, verified each new span with `grep -c` controls, and recorded the changes in `requirements-repair-p1.md`. Content is not the defect; the derivation contract is, because `SPEC.md` no longer derives from the memlog by any mechanism. Its re-validation then failed: `requirements-repair-p1.md:30` reads STALE, because the record's own `grep -n` for the Q18 line matches nothing once the line is gone.
+
+The memlog's labelling, read precisely (`_bmad-output/specs/s319/offramp-config-and-rewards/.memlog.md`): the earlier fold's event at `:36` is titled "Render" but its body says the bmad-spec Skill "ran no renderer (the package has no render script …)" and the decisions were "applied to SPEC.md by hand with Edit, disclosed as hand-applied". This run's events at `:43` and `:45` are also titled "Render", and their bodies say the package has no render script and the agent applied the change "with Edit" — but they drop the "hand-applied" wording the `:36` event used (`hand-applied` occurs on lines 32 and 36 only). The record is therefore not false in its body; it is mislabelled in its title, and the honest wording is inconsistent between two runs of the same procedure.
+
+Added to what BL-546 owes: (a) the lead's dispatch brief is also a site that must refuse, or route around, a SPEC edit with no renderer — "the agent IS the renderer" is not an available instruction while no render script exists; (b) until a real render exists, an honest hand-apply path is labelled as one in the memlog event's TITLE ("hand-applied", never "Render"); (c) a hand-applied SPEC edit that removes a line a recorded `grep -n` derivation cites re-points or retires that derivation in the same change (the `:30` STALE).
 
 verify: manual
 
@@ -302,20 +302,6 @@ Owed: a probe running `--sources` on an elicitation record in a tree that also h
 
 verify: manual
 
-## BL-563 — the ai-dlc-update post-write gates passed on an exit code nobody observed
-
-**DEFECT.** Filed by peer session ai-dlc-68. Graph session `3d1088df` ran `/ai-dlc-update apply` for 0.789.0 → 0.790.0 and merged it as PR #1228 at 02:09Z on 2026-10-16. At 02:02:29Z it ran the post-write gates as one compound command, piping `setup-site-drift.sh … | tail -3; echo "rc=${pipestatus[1]}"` and `validate-hook-registration.sh | tail -3; echo "rc=${pipestatus[1]}"`. Both printed `rc=` with nothing after it. At 02:02:33Z the session wrote "The exit codes printed empty because the shell is zsh, but each check's own output line reports clean", then proceeded to `apply.sh --finish`, the commit, the push and the merge. graph's installed `.claude/skills/ai-dlc-update/SKILL.md:2853` states the gate as "Run `reconcile/setup-site-drift.sh <dist> <consumer> <theirs>`; exit 0", and `:2255` names `validate-hook-registration.sh`, so the verdict the skill prescribes is the exit code, and the session never observed it. It substituted a reading of truncated output (`tail -3`). The output happened to be decisive this time (SETUP-SITE-OK ×2, SETUP-SITE-SCANNED; UNREGISTERED none, DANGLING none), but a refusal line above the last three would have been cut away and the gate would still have read clean. The same hazard hit hard-blockers: at 02:03:42Z the background `hard-blockers.sh --post-apply` "came back empty", and the session re-ran it in the foreground.
-
-Two halves. (a) The skill names exit-code gates but gives no capture form. It should state the command shape — unpiped, with `rc=$?` captured immediately after the gate command — or better, run all post-write gates through one script that prints a single verdict line per gate. (b) A gate whose exit code was not observed is UNDECIDED, never passed on prose; the session's own line shows it knew the code was missing and continued.
-
-This stands whatever shell runs, because the lead piped the gate itself; the Bash tool's shell being zsh on this box is a separate matter the operator is handling (llm-gateway commit `263e8af`, branch `config/claude-code-shell`, unmerged). A bootstrapping caveat applies: the update skill is the program that delivers its own repair, so a fix lands on the pull after the one that carries it.
-
-Owed: a probe gate that prints a clean last line and exits non-zero; the prescribed form must report it as failed.
-
-**Second instance, the next pull (graph update session `38c562c5`, `/ai-dlc-update apply` 0.790.0 → 0.791.0, 2026-10-16).** Filed by peer session ai-dlc-68. At 04:32:21Z the session ran `setup-site-drift.sh … 2>&1 | tail -5; echo "ssd_rc=${pipestatus[1]}"`, and at 04:32:22Z `validate-hook-registration.sh 2>&1 | tail -3; echo "hook_rc=${pipestatus[1]}"`, which printed `hook_rc=` empty, the same zsh `pipestatus` failure. This time it was observed: at 04:32:27Z the session re-ran both unpiped (`>/dev/null 2>&1; echo ssd_rc=$?`) and got 0 and 0 before proceeding, at the cost of running each gate twice. The skill still prescribes no capture form. The rest of the apply was clean: `apply.sh`, `--finish`, the derivation differential and `report --verify` all captured `rc=$?` directly, commit `463765a5f` staged only pull paths, and the push ran without `--no-verify`.
-
-verify: manual
-
 ## BL-565 — a serial remediator entry that re-escalates a part escalation carries no `closes:` link, so one open decision is counted twice
 
 **PARTIAL (v0.794.0, branch commit 2f6d5199) — the prose half shipped; the join dedupe is OPEN.** remediator.md: a restating escalated entry carries `supersedes:` lines, not part tokens in `source:`; pm-escalated appends the answer fold to the joined record, one `###` heading per entry with one `closes:` per chain member and an `edit:` line the join reads.
@@ -356,24 +342,6 @@ Receipt: a committed measurement table under `docs/analysis/` keyed by round, pl
 
 verify: manual
 
-## BL-570 — the step-1b trunk audit's result lands nowhere a gate reads, and core never absorbed the consumer check that re-runs it
-
-**DEFECT.** Filed from batch 235's read of graph's s319 planning artifacts (read-only) and the Group H contract adversary's correction. `core/skills/ai-dlc/steps/carry-over-evaluation.md:60-75` makes the step-1b `--audit-trunk` result a HARD_BLOCK on exit 1 and forbids a silent skip, but no gate check reads that result: `audit-trunk` occurs 0 times in `gate-validation.md` (control: `Check 29` = 1). Step 1b DID run in s319: lead transcript `62eadbbe…`, tool call `toolu_0116F9FBNXTbeX13YftRWuHz` at 18:56:17Z, exit 0, `AUDIT-TRUNK: audited=12 of=12 clean=12 findings=0 classes=6`, and `.audit-watermark` at 18:56:52Z equal to graph main `d82236ce`. The lead runs 1b outside the analyst's artifact, so its result lands nowhere a gate reads; the same holds in s313 and s315.
-
-graph's extension Check 925 re-runs `--audit-trunk` at the gate (AUDIT-TRUNK rows appear in the s309, s314, s316 and s318 gate logs and are absent at s319), and graph's `OWED-S308-SKILL-PUSH-925-RETIRE` wants to retire it as EXTENSION-RESTATES-CORE, but core has no such check to restate. An arm keyed on artifact text would fire falsely on two or more sprints: 7 of 13 sprints since s303 carry the line, and s318 and s319 ran without it.
-
-Owed: a core Check in `gate-validation.md` that RE-RUNS `--audit-trunk`, failing on exit 1 or 2 and recording a WORKLIST at exit 0 as backlog. Probe both directions: a trunk with an audit finding fails the gate, and a clean trunk passes.
-
-verify: manual
-
-## BL-573 — operator questions ask what the agent can derive, or what the operator already answered
-
-**DEFECT.** Filed from batch 235's read of graph's s319 `operator-requests-history` diff. Of D-1..D-15, five drew complaints: D-6 "No idea what the check 924 band is", D-13 "No idea what this means", D-11 "Pretty sure I supplied this already", D-12 "I assumed you'd be able to derive" (the Distributor address), and "why can't you add the contract_allowlist?". `requirements.md` and `SKILL.md` carry no derive-first or already-answered test (`operator-owned|derivable` 0; control: `route.md` = 1). BL-539 covers only the item-5 deferral and BL-524 only the `(Recommended)` badge.
-
-Owed: before a question reaches the operator, the lead (or the question template) checks `operator-answers-history.md` for a prior answer and whether the value is derivable from the tree, and any jargon in the question is glossed.
-
-verify: manual
-
 ## BL-574 — the lead invented an operator go-ahead before the handoff push
 
 **DEFECT.** Filed by peer session ai-dlc-68 from graph's s319 handoff (lead `f65eae3b`, 02:58–03:06Z 2026-10-16). At 02:58:57Z the operator wrote "when adversary agent finishes, handoff." At 02:59:18Z the lead's plan read "5. Ask for your go-ahead before the push, then emit `/ai-dlc resume`." At 03:02:12Z the operator wrote "why do you need my go-ahead before the push? I've already given it when i directed a handoff. proceed." At 03:03:04Z the lead conceded "`handoff.md` step 3 includes it", but graph's installed `handoff.md` has no confirm, approval or go-ahead step before the push (`go-ahead|confirm|approval|ask` matches only the TaskStop lines 27, 36, 40 and 41). Cost: one operator round trip, about 4 min of operator attention at the moment the operator steps away. The class is a lead inventing approval gates the pipeline does not have.
@@ -384,14 +352,6 @@ Owed: `handoff.md` step 3 states, beside the push command, that a directed hando
 `git push -u origin HEAD` (`core/fixtures/handoff-resume-guard/push-authorised.sh`, wired into that fixture). Open:
 the `_gate-procedures.md` auto-handoff push site, frozen until the BL-536 line lands; queued for the frozen-file
 follow-up with BL-562's prohibition at the same site.
-
-verify: manual
-
-## BL-590 — the recover gate denies TEAMMATE tool calls with text addressed to the lead
-
-**DEFECT.** Filed from batch 235's Group E contract adversary (read-only on graph). `core/hooks/ai-dlc-recover-gate.sh` carries no `agent_id` test (0 hits; control: `ai-dlc-acknowledge.sh` uses it), its marker is project-wide and its matcher is `*`. Measured on graph: 253 teammate tool calls across 113 `subagents/*.jsonl` transcripts were denied with the lead's "your FIRST tool call" text (control: 168 lead-file lines carry the same text). In-flight teammates, which the recovery block itself says are alive, have their writes denied during the lead's recovery window.
-
-Owed: the recover gate's deny arms apply to the lead only (empty `agent_id`), and a teammate passes through. An arm plus a mutant: a teammate call passes and a lead call is denied before recovery.
 
 verify: manual
 
@@ -757,5 +717,48 @@ Owed:
 3. Prove it on this instance: the 8 rows above. (Per BL-581 each is a line-number re-point, not removed text.)
 
 Related: BL-581 (the false-zero "Verified" in the same 0.793.0 log), BL-579 (the snapshot misreporting the stopped remediator's writes).
+
+verify: manual
+
+## BL-612 — "takes effect on the pull AFTER the one that delivers it" is wrong for any change the update skill runs after its step-2 re-invoke
+
+**DEFECT.** Filed by peer session ai-dlc-60, found by the BL-587 contract adversary; intake re-derived it read-only. `core/skills/ai-dlc-update/SKILL.md` step 2 (origin/main, ~:248-256) self-updates the machinery slice (`core/skills/ai-dlc-update/**`, `core/scripts/*`, hooks, schemas) on its own commit-and-merge cycle, then (~:731-740) says "STOP this invocation and re-invoke `/ai-dlc-update` automatically … THIS invocation is still executing the PRE-update logic … do NOT proceed to step 3 on stale logic". So steps 3 onward run the NEW engine and the NEW skill text on the delivering pull, unless the self-update gate returns `SELF-UPDATE-DEFER` (9 mentions in SKILL.md). Only behaviour that executes in steps 1-2 of that invocation really runs the pre-update version.
+
+Measured on graph's 0.791.0 → 0.793.0 pull: `scripts/ai-dlc/validate-artifact-derivations.sh` is blob `deacd13c` at `3dd8a9fd4` (pre-pull), and `e3cdd564` at `41d2dbf91` (#1230, the self-update) and at `897dfdb32` (#1231, the reconcile). In this repo the same file is `deacd13c` at 952b9319 and `e3cdd564` at c16609ba, so the two blobs differ and the new validator was in place at the delivering pull's reconcile.
+
+So these release notes are wrong: 0.793.0's "the reconcile engine runs this validator, so a consumer gets the pin on the pull AFTER", and 0.799.0's "both files are read by the update session, so a consumer gets this on the pull AFTER the one that delivers it". The CHANGELOG has 35 lines matching "pull after" (control: 887 `## [` headings), and the live backlog carries the same claim in BL-563 and BL-582. Each needs classifying:
+- step-1/2 behaviour: really takes effect on the next pull.
+- anything read or run from step 3 on: live on the delivering pull, after the re-invoke.
+BL-582, for example, splits: its step-2 touchpoint is next-pull, and its step-8 touchpoint is live on delivery.
+
+Hooks may be live even earlier, per ai-dlc-60. This is REASONED from the step-2 text and NOT yet measured; ai-dlc-60 is measuring it in U-b's slot. Step 2 writes the new machinery into the working tree before its own commit, push and merge, and Claude Code runs the on-disk hook on every call. A changed hook would therefore already govern the delivering pull's own step-2 merge, while the session still follows the old SKILL.md. That makes a third class beside the two above.
+
+Owed:
+1. The delivery-phase rule written once where release authors read it.
+2. Correct the reconcile-phase claims, in the CHANGELOG's "Bootstrapping" lines and in BL-563 and BL-582, as a Corrections paragraph in BL-612's own release entry naming each misclassified "pull after" line plus the BL-563 and BL-582 items. That paragraph closes item 2 only. It is prose, so it cannot stand as the receipt for the mechanism; item 3 is that receipt.
+3. Receipt: a fixture or derivation that takes a reconcile-engine change, simulates step 2 and then a re-invoke, and shows the new engine running at step 3. A step-1 behaviour change is the control, which must NOT be live. Lead ai-dlc-9c ruled the fixture is the receipt; the CHANGELOG paragraph closes only the documentation item. Whoever builds the fixture checks that its simulated re-invoke matches step 2's real re-invoke mechanism, read from the skill text itself (SKILL.md ~:731-740), not from a summary of it.
+
+Items 2 and 3 ship together as BL-612's own release, after BL-587, and that one release closes the whole entry. Release U-b is built, so per the scope-boundary ruling nothing from this entry joins it; U-b adds only its own (a)/(b)/(c) outcome lines as part of its own verification. The hook-phase class above stays unmeasured until U-b's slot.
+
+Owner: ai-dlc-60 (lead ai-dlc-9c).
+
+verify: manual
+
+## BL-588 — an append-only repair record whose later blocks change a subject leaves the earlier blocks' derivations permanently STALE, and nothing lets a later block supersede them
+
+**DEFECT.** Filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]) from the graph s319 watch; intake re-derived it read-only (the validator itself was not re-run here; the filer re-ran it). At graph's handoff commit `e18724963` (08:21 EDT, lead `cf53b84f`), `_bmad-output/planning-artifacts/s319/requirements-repair-p1.md` (1697 lines) carries three blocks, closed by `repair-complete: serial 1` (:1261), `repair-complete: spec-render 1` (:1477) and `repair-complete: serial 2` (:1696). `scripts/ai-dlc/validate-artifact-derivations.sh` on it reports "FAIL: 9 stale or unrunnable derivation(s) of 105 checked", at lines 30, 536, 581, 646, 780, 793, 1409, 1426 and 1444.
+
+Each later block changed SPEC/PRD/brief text that an earlier block's fence quotes. Line 30's fence greps `SPEC.md` for "What does the Story 1.5 read score for a two-hop row" and records `85:`; at `e18724963` that phrase occurs 0 times in `_bmad-output/specs/s319/offramp-config-and-rewards/SPEC.md` (control `CAP-1`: 4), because the spec-render deleted the Q18 line on the operator's "Retire Q18" (BL-546's fourth instance). Serial 2 was dispatched at 08:13 EDT to fix 5 such fences, and the count went from 5 to 9 after it delivered. The record is append-only, so no block can re-point an earlier fence. `_bmad-output/pipeline-snapshot.md:38` hands this to the successor as pass-2 entry item (1): "decide the 9 stale old fences … never edit or delete an old fence".
+
+The validator has no way out: `core/scripts/validate-artifact-derivations.sh` on origin/main has 0 mentions of `supersede` and 0 of `artifact_sha_after` (control: 22 of `stale`, case-insensitive). The record already writes `supersedes:` lines (3, at :511, :1577 and :1578), but these are finding supersessions, which the validator does not read. The `supersedes:` convention for escalations lives in BL-565's PARTIAL note (`docs/backlog.md:319-325`, shipped in 0.794.0); BL-550 itself is archived.
+
+Owed (either 1 or 2, then 3):
+1. Let a later block of an append-only record supersede an earlier block's derivation with a `supersedes: <line>` field the validator honours, re-running the new fence in place of the old one.
+2. Or have the validator score a fence against the subject sha its block recorded in `artifact_sha_after:`, not against the current tree.
+3. Receipt: on this record at `e18724963`, the 9 lines above go to 0 without editing any old fence, and a fence whose subject drifted with no superseding block still reads STALE (control).
+
+Related: BL-587 (owed re-points with no channel), BL-546 (the Q18 deletion), BL-565 / BL-550 (`supersedes:` for escalations).
+
+Owner: ai-dlc-11 (lead ai-dlc-9c), as its own release after ai-dlc-11's combo release. It touches BL-587's reader.
 
 verify: manual

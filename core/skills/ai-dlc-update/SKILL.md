@@ -1975,7 +1975,8 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    `HARD-UNREGISTERED-CORE-DRIFT` against text `apply` itself just wrote, and `theirs` disarms
    the arm above. Post-apply, call it as
    `reconcile/hard-blockers.sh --post-apply <dist> <pull-base> <consumer> <theirs>` — it passes
-   `theirs` to `unregistered-drift.sh` and keeps the pull's base for `layer-drift.sh`. It also
+   `theirs` to `unregistered-drift.sh` and keeps the pull's base for `layer-drift.sh`.
+   `reconcile/post-write-gates.sh` runs exactly this call as its `hard-blockers` gate. It also
    renders the `DRIFT-RANGE-DEGENERATE` row now, which its `HARD-`-only filter used to discard;
    a `0 HARD blockers.` line with that row beneath it is not a clean sheet.
 
@@ -2194,6 +2195,38 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    - (The skill's OWN files are NOT touched here — they were already refreshed by
      the autonomous self-update cycle in step 2.)
 
+   **RUN THE POST-WRITE GATES THROUGH ONE SCRIPT, AND READ ITS VERDICT LINES — NEVER A GATE'S
+   PROSE.** The four gates below (leftover tokens, setup-site drift, hook registration, and the
+   `hard-blockers.sh --post-apply` re-run) are exit-code gates. After the last write, run them
+   together, unpiped:
+
+   ```
+   reconcile/post-write-gates.sh <dist> <base> <consumer> <theirs>
+   ```
+
+   It runs each gate with its output redirected to a file and its exit code captured on the next
+   statement, and prints one line per gate — `GATE <name> PASS|FAIL|UNDECIDED rc=<n> … out=<file>`
+   — then one `POST-WRITE-GATES PASS|FAIL|UNDECIDED …` summary. Exit 0 only when every gate
+   passed AND the summary says `overridden=0`. `--stub` is the fixture's hook: a run with any
+   override exits 1 even when every verdict reads PASS, and its summary says
+   `overrides-in-force`. Never pass `--stub` on a pull. On a non-zero exit, open the `out=` file the failing line names; that is the gate's
+   whole output. The `hard-blockers` line carries `hard=<n>`: those are the HARD rows still
+   standing, and each must be one the operator accepted per path before apply.
+
+   **A gate whose exit code was not observed is UNDECIDED, and UNDECIDED is never a pass.** Not on
+   a clean-looking last line, not on "each check's own output reports clean", not on an empty
+   `rc=`. A pipe (`| tail -3`, `| head`, `| grep`) makes the status you read the status of the last
+   stage and cuts away the lines a refusal is printed on; a consumer session passed two gates
+   exactly that way, on `rc=` with nothing after it.
+
+   **If `reconcile/post-write-gates.sh` is absent**, run each gate below on its own line, UNPIPED,
+   with its output sent to a file, and capture the code on the very next statement:
+   `<gate> > <file> 2>&1` then `rc=$?`. Read `rc` before anything else; then read the whole file.
+   On a pull whose step 2 self-update landed, the re-invocation step 2 prescribes already runs
+   this text and this script, so it is present. It is absent only when step 2 returned
+   `SELF-UPDATE-DEFER` or the skill's branch was not synced — the pull then runs the skill copy
+   that predates it, and this fallback form is the capture.
+
    **Leftover-token gate — hard, runs after the last write, blocks delivery.**
    After every overwrite above and BEFORE the re-stamp, grep the consumer's core
    for a template token that survived on a LIVE line:
@@ -2201,6 +2234,10 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    ```
    grep -rn '{[a-z_]*}' <consumer>/.claude/team-roles/ | grep -v '<!--'
    ```
+
+   `post-write-gates.sh` runs this as `post-write-gates.sh --leftover-tokens <consumer>`, which
+   stages the first grep's output to a file so that its own exit 2 (unreadable) is a refusal: in
+   the two-stage pipe above the status is the second grep's and says nothing about the first.
 
    A hit is a FAIL. STOP before the re-stamp and name the file and the token — then
    tell the two causes APART, because they have opposite remedies:
@@ -2230,8 +2267,9 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    reconcile/setup-site-drift.sh <dist> <consumer> <theirs>
    ```
 
-   Exit 0 required, same place in the sequence — after the last write, before the
-   re-stamp. It asserts that every file declaring a setup site equals `theirs`
+   Exit 0 required — observed as `post-write-gates.sh`'s `GATE setup-site-drift PASS` line, or
+   by the unpiped fallback form above; never read off the tail of its output. Same place in the
+   sequence — after the last write, before the re-stamp. It asserts that every file declaring a setup site equals `theirs`
    byte-for-byte outside that file's declared spans, and names the file and line
    where it does not.
 
@@ -2271,8 +2309,9 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    scripts/ai-dlc/validate-hook-registration.sh
    ```
 
-   Exit 0 required, same place in the sequence as the two gates above — after the
-   last write, before delivery. It asserts that every `.claude/hooks/ai-dlc-*.sh`
+   Exit 0 required — observed as `post-write-gates.sh`'s `GATE hook-registration PASS` line, or
+   by the unpiped fallback form above. Same place in the sequence as the two gates above — after
+   the last write, before delivery. It asserts that every `.claude/hooks/ai-dlc-*.sh`
    on disk is registered in `.claude/settings.json`, and that every registration
    names a hook that is there. Both sides are derived; nothing is hand-listed.
 
@@ -2867,7 +2906,11 @@ is exactly what the reverted attempt got wrong). Before delivery:
    concrete proof teammate dispatch will not break, the exact failure the
    reverted attempt caused.
 5. **Run `reconcile/setup-site-drift.sh <dist> <consumer> <theirs>`; exit 0
-   required.** It diffs every file declaring a setup site against `theirs` over
+   required** — observed, not inferred: run it unpiped with its output sent to a file and
+   `rc=$?` on the very next statement, then read the whole file. Do not run
+   `reconcile/post-write-gates.sh` here: that is the ordinary pull's step 7 runner, and its
+   `hard-blockers --post-apply` gate needs the pull's base, which untangle does not have. A run
+   whose exit code was not observed is UNDECIDED and fails this criterion. It diffs every file declaring a setup site against `theirs` over
    the WHOLE file and confirms every differing line falls INSIDE a span declared
    for that file in `reconcile/setup-sites.md` (a single-line site's matched
    line, or a heading-block site's span). A difference at ANY line outside a
