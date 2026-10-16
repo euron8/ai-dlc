@@ -696,10 +696,16 @@ run_pair() { # $1 file  $2 line  $3 command   (expected output is in $TMP_EXP)
   # Either shape makes the whole run exit 2 with the derivation named: no verdict, never a
   # STALE. The status used below is the MARKER's, because the subshell now ends on the marker
   # write and its own status is that write's.
+  # THE WIDTH IS PINNED, so the verdict is a function of the tree and not of the invoker's
+  # terminal: `git diff/log/show --stat` and `--compact-summary` scale their +/- graph to
+  # COLUMNS even with no tty, so a block recorded at one width read STALE at another (measured:
+  # a 200-line change recorded at COLUMNS=120 was STALE with COLUMNS unset). 80 is git's own
+  # width when COLUMNS is unset, so a block recorded in a plain non-tty shell still matches. An
+  # author recording at another width writes `--stat=<n>` or `--numstat`, which ignore COLUMNS.
   exec 3< "$TMP_SENT"
   : > "$TMP_RAN"
   set +u
-  ( cd "$AI_DLC_ROOT" && { eval "$c" <&3 3<&-; printf '%s\n' "$?" > "$TMP_RAN"; } ) > "$TMP_OUT" 2>/dev/null
+  ( cd "$AI_DLC_ROOT" && export COLUMNS=80 && { eval "$c" <&3 3<&-; printf '%s\n' "$?" > "$TMP_RAN"; } ) > "$TMP_OUT" 2>/dev/null
   set -u
   rc=""
   IFS= read -r rc < "$TMP_RAN" || rc=""
@@ -777,7 +783,8 @@ run_pair() { # $1 file  $2 line  $3 command   (expected output is in $TMP_EXP)
       The claim this derivation supports is asserting a fact about the tree that is no
       longer true. Re-derive it and rewrite the sentence it supports -- a derivation is
       true about the tree at the moment it ran, and the usual way one goes stale is a
-      later edit that moved what it was counting."
+      later edit that moved what it was counting. A \`--stat\` graph is re-run at COLUMNS=80;
+      record it at that width, or use a width-stable form: \`--stat=100\` or \`--numstat\`."
   fi
 }
 
