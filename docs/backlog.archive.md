@@ -34035,7 +34035,9 @@ verify: sh bash core/fixtures/pause-hook-origin/run.sh
 Read satisfies recovery, the lead's Agent, Task, TaskCreate, Write, Edit, MultiEdit and NotebookEdit are denied
 until an advisor attempt follows the `postcompact-digest.md` Read. Bash is never refused. It stands down with no
 grant or a withdrawn one, an `unavailable` result, for a teammate or another session, and after 3 refusals per
-recovery. `ai-dlc-recover.sh` names touchpoint R. The Read stages' teammate exposure is BL-590.
+recovery; the deny names touchpoint R. `ai-dlc-recover.sh` clears the window when a new recovery starts, and its
+injected block is unchanged (the gate-in-flight worst case has 19 bytes under the cliff). The Read stages' teammate
+exposure is BL-590.
 
 **DEFECT.** SKILL.md Rule 32 touchpoint R: "after the `postcompact-digest.md` Read … call the advisor in the same turn, before your first dispatch or write." In s319 the lead compacted at 23:01Z, read the snapshot, `requirements.md` and the digest (23:01:07–23:01:18), dispatched 12 party-repair remediators from 23:02:18Z, and called the advisor at 23:03:19Z. Its own message: "I haven't made the post-recovery advisor call (touchpoint R) yet, so I'm making it now." `ai-dlc-advisor-gate.sh` denies a release push or merge without an advisor attempt, but no hook holds a post-compact dispatch behind R. The recover-gate forces the three reads and then lets the next `Agent` call through. Owed: the recover-gate, or the advisor gate, denies `Agent`/`Task` and writes after a compaction until an advisor attempt follows the digest Read. A probe shows a dispatch denied before R and allowed after.
 

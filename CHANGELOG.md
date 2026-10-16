@@ -50,7 +50,9 @@ Batch 235 (hooks, release H-a). Closes BL-531, BL-545, BL-559 and BL-571; BL-537
   Agent, Task, TaskCreate, Write, Edit, MultiEdit and NotebookEdit are denied until an advisor attempt follows
   the `postcompact-digest.md` Read. Bash is never refused.
 - It stands down with no grant or a withdrawn one, an `unavailable` result, for a teammate or another session,
-  and after 3 refusals per recovery. `ai-dlc-recover.sh` names touchpoint R in the injected block.
+  and after 3 refusals per recovery. The deny names touchpoint R. `ai-dlc-recover.sh` clears the window when a
+  new recovery starts; its injected block is unchanged, because the gate-in-flight worst case has 19 bytes of
+  room under the 10000-character cliff and no useful R sentence fits.
 
 ### A paused teammate may finish a non-pipeline Skill (BL-559)
 
