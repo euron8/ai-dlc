@@ -1411,13 +1411,34 @@ lpe allow "3b: src/../docs/x.md (a .. that lands in docs/) is ALLOWED"          
 # A resolver that HANGS must not hang the edit: the bounded wait gives up and adds no roots.
 mkdir -p "$W.hang/scripts/ai-dlc"
 cp -R "$W/." "$W.hang/" 2>/dev/null
-# `exec`, so the pid the hook kills IS the sleeper and nothing is left running for 30s.
-printf '#!/bin/bash\nexec sleep 30\n' > "$W.hang/scripts/ai-dlc/artifact-path-config.sh"
+# `exec`, so the pid the hook kills IS the sleeper; it records that pid first, so this arm can
+# prove the sleeper was reaped rather than assume it.
+#
+# THE VERDICT IS BINARY, NEVER A WALL-CLOCK FIGURE. The hook gives up after 50 ticks of `sleep 0.1`,
+# and a tick is slower than 0.1s on a loaded box, so any elapsed-time threshold is a property of the
+# load. The proof that the bound fired is two attributes: the edit is DENIED, and the sleeper's
+# recorded pid is DEAD when `drive` returns. A hook with no bound would still be waiting on a live
+# 600s sleeper, so a dead pid cannot be reached without abandoning it. Elapsed is printed, not judged.
+_hpid="$W.hang.sleeper.pid"
+rm -f "$_hpid"
+printf '#!/bin/bash\necho "$$" > "%s"\nexec sleep 600\n' "$_hpid" > "$W.hang/scripts/ai-dlc/artifact-path-config.sh"
 _h0=$(date +%s)
 OUT="$(drive "$W.hang" Edit "$W.hang/src/app.py" "" "$TA")"
 _h1=$(date +%s)
-if denied "$OUT" && [ $((_h1 - _h0)) -lt 15 ]; then ok "3b: a hung scan-roots resolver is abandoned within the bound ($((_h1 - _h0))s) and the product edit is still DENIED"
-else bad "3b: a hung scan-roots resolver: elapsed $((_h1 - _h0))s, denied=$(denied "$OUT" && echo y || echo n) — the bound did not hold"; fi
+if denied "$OUT"; then ok "3b: a hung scan-roots resolver is abandoned and the product edit is still DENIED (elapsed $((_h1 - _h0))s, not judged)"
+else bad "3b: a hung scan-roots resolver: the product edit was not DENIED (elapsed $((_h1 - _h0))s)"; fi
+# THE SLEEPER IS GONE, by the pid it recorded -- never by a process-table grep. The hook `wait`s the
+# pid it killed before returning, so it is dead by the time `drive` returns. A missing pid file means
+# the resolver never ran, and then the bound above was never exercised.
+_hs="$(cat "$_hpid" 2>/dev/null)"
+case "$_hs" in
+  ''|*[!0-9]*) bad "3b: the hung resolver never recorded its pid, so the bound above was never exercised" ;;
+  *) if kill -0 "$_hs" 2>/dev/null; then
+       kill "$_hs" 2>/dev/null
+       bad "3b: the hung resolver (pid $_hs) was still alive after the hook returned -- abandoned but not reaped"
+     else ok "3b: the hung resolver (pid $_hs) was reaped, not left running"
+     fi ;;
+esac
 
 # (iv) IS ONE RULE: the `LAST_SKILL=` statement and its `case` are byte-identical in this hook
 # and `ai-dlc-acknowledge.sh`. Both directions: the two shipped blocks agree, and a one-byte

@@ -30,24 +30,21 @@
 #
 # Usage: fork-profile.sh [--target <script>] [--section total|by-line|by-arm|all]
 #                        [--stable] [--dump <dir>] [--probe-only]
-#        --stable   re-profile until a total repeats and report the largest such reading.
-#                   Use it for anything that GATES; see the corpus section for the measurement
-#                   that makes a single reading occasionally one fork low.
-# Exit:  0 = profiled, 1 = a self-probe failed, 2 = usage or environment,
-#        3 = --stable could not get the instrument to repeat itself.
+#        --stable   accepted and ignored. It once re-profiled until a total repeated; one reading
+#                   is now exact, and MARKERS beside TRACELINES is the check (see THE CORPUS).
+# Exit:  0 = profiled, 1 = a self-probe failed, 2 = usage or environment.
 set -uo pipefail
 
 TARGET=""
 SECTION=all
 DUMP=""
-STABLE=0
 USAGE="usage: $(basename "$0") [--target <script>] [--section total|by-line|by-arm|all] [--stable] [--dump <dir>] [--probe-only]"
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --target)  TARGET="${2:-}"; shift 2 || exit 2 ;;
     --section) SECTION="${2:-}"; shift 2 || exit 2 ;;
     --dump)    DUMP="${2:-}"; shift 2 || exit 2 ;;
-    --stable)  STABLE=1; shift ;;
+    --stable)  shift ;;
     --probe-only) SECTION=probe-only; shift ;;
     *) echo "$USAGE" >&2; exit 2 ;;
   esac
@@ -113,7 +110,7 @@ trap 'rm -rf "$WORK"' EXIT
 # traces as `:` and `cmd > f` traces as `cmd`. A guard for them would have no subject.
 # ---------------------------------------------------------------------------------------
 CLASSIFY_AWK='
-BEGIN { total = 0; ntrace = 0; maxline = 0 }
+BEGIN { total = 0; ntrace = 0; maxline = 0; displaced = 0 }
 # A NAME, then an optional subscript whose brackets balance, then = or +=. An unbalanced
 # subscript walks i past the end of the word, where both tail tests read the empty string.
 function is_assign(w,   n, i, d, c) {
@@ -133,31 +130,61 @@ function is_assign(w,   n, i, d, c) {
   return 0
 }
 NR == FNR { known[$1] = 1; next }
+# EVERY MARKER ON A LINE IS A RECORD, NOT ONLY ONE IN FIELD 1. The stages of one pipeline share
+# fd 2, and bash writes a long trace line in more than one write, so a sibling stage`s whole
+# record can land INSIDE it: `++@7766@ grep -rhoE ... <args>++@7766@ sed ...` on one physical line,
+# the rest of the grep line on the next one with no marker. A field-1 reader skips the spliced
+# record and reads one fork low. Measured on six profiles of one unchanged tree, two at a time:
+# every trace the same byte size and every one carrying 90452 markers, but 90450-90452 of them at
+# the START of a line, and totals 3399-3401 tracking that count exactly. Scanned anywhere, all six
+# read one total. MARKERS, counted by a second reader in `profile`, is what proves no record was
+# skipped.
+#
+# BUT ONE SPLICE SHAPE BOTH READERS AGREE ON, and it is counted separately rather than assumed
+# away. bash writes the marker and each word in separate writes, so a sibling record can land
+# BETWEEN the host`s marker and its first word: `++@7@ ++@7@ sed ...` on one line, `grep ...` on the
+# next with no marker. Both markers are records, so TRACELINES still equals MARKERS, and the host`s
+# command is displaced onto a line nothing reads -- one fork low, silently. Its signature is a
+# record with NO command word, which no well-formed record has; DISPLACED counts those, and the
+# caller reads any as BROKEN. Measured: 0 bare-marker or marker-then-marker lines in the six
+# saved traces, against 59840 marker-then-word lines in one of them.
+#
+# KNOWN LIMIT: AN ARGUMENT CARRYING `+@<n>@ ` IS READ AS A RECORD. A spliced marker follows any
+# byte, so nothing here can tell it from a traced word that happens to spell one. Measured: no
+# line of the default target emits that shape (the unspliced trace scores identically under the
+# field-1 reader and this one). A subject that adopts it reads high, never low -- the error
+# direction a budget ceiling can see.
 {
-  if ($1 !~ /^\++@[0-9]+@$/) next
-  ln = $1
-  sub(/^\++@/, "", ln)
-  sub(/@$/, "", ln)
-  ln = ln + 0
-  ntrace++
-  if (ln > maxline) maxline = ln
-  if (NF < 2) next
-  cmd = $2
-  sub(/^\$?\047/, "", cmd)
-  sub(/\047$/, "", cmd)
-  if (is_assign(cmd)) next
-  if (cmd in known) next
-  # KEYED ON (line, command), NOT ON LINE. A pipeline`s stages are separate processes and
-  # bash emits their trace lines in whatever order they start, so `grep ... | sort` on one
-  # source line writes `grep` and `sort` in a nondeterministic order. Recording one label per
-  # line made the COUNTS stable and the LABELS flap -- which is precisely the shape that turns
-  # a gate into the flaky thing people push past. One row per pair, and the sort key is total.
-  forks[ln SUBSEP cmd]++
-  total++
+  s = $0
+  while (match(s, /\++@[0-9]+@([ \t]|$)/)) {
+    ln = substr(s, RSTART, RLENGTH)
+    s = substr(s, RSTART + RLENGTH)
+    sub(/^\++@/, "", ln)
+    sub(/@[ \t]*$/, "", ln)
+    ln = ln + 0
+    ntrace++
+    if (ln > maxline) maxline = ln
+    cmd = s
+    sub(/^[ \t]+/, "", cmd)
+    sub(/\++@[0-9]+@([ \t].*)?$/, "", cmd)
+    sub(/[ \t].*$/, "", cmd)
+    if (cmd == "") { displaced++; continue }
+    sub(/^\$?\047/, "", cmd)
+    sub(/\047$/, "", cmd)
+    if (is_assign(cmd)) continue
+    if (cmd in known) continue
+    # KEYED ON (line, command), NOT ON LINE. A pipeline`s stages are separate processes and
+    # bash emits their trace lines in whatever order they start, so `grep ... | sort` on one
+    # source line writes `grep` and `sort` in a nondeterministic order. Recording one label per
+    # line made the COUNTS stable and the LABELS flap -- which is precisely the shape that turns
+    # a gate into the flaky thing people push past. One row per pair, and the sort key is total.
+    forks[ln SUBSEP cmd]++
+    total++
+  }
 }
 END {
   for (k in forks) { split(k, p, SUBSEP); printf "%d %d %s\n", forks[k], p[1], p[2] }
-  printf "META %d %d %d\n", total, ntrace, maxline > metafile
+  printf "META %d %d %d %d\n", total, ntrace, maxline, displaced > metafile
 }
 '
 
@@ -217,12 +244,18 @@ profile() { # <script> <outdir> -> outdir/{trace,by-line,meta}; echoes nothing
   # A trace file with no META line means awk never reached END -- fail closed rather than
   # letting a missing file read as zero.
   [ -s "$out/meta" ] || { echo "fork-profile: classifier produced no META for $src" >&2; return 2; }
+  marker_count "$out/trace" > "$out/markers"
   awk "$AMBIG_AWK" "$src" "$out/by-line.raw" > "$out/by-line" \
     || { echo "fork-profile: the ambiguity marker failed on $src" >&2; return 2; }
   return 0
 }
 
 meta_field() { awk -v f="$2" '$1 == "META" { print $(f + 1) }' "$1/meta"; }
+
+# THE SECOND READER. Every `+@<n>@` in the trace, wherever it sits on a line, counted by grep rather
+# than by the classifier -- so a record the classifier skipped is a difference between two numbers
+# from ONE reading, not a disagreement between two readings that could both miss it the same way.
+marker_count() { grep -oE '\++@[0-9]+@' "$1" | wc -l | tr -d ' '; }
 
 # ---------------------------------------------------------------------------------------
 # SELF-PROBE, BEFORE THE CORPUS, IN BOTH DIRECTIONS. A profiler reporting "10,400 forks"
@@ -310,92 +343,65 @@ asg_set="$(awk '{ print $3 }' "$WORK/probe/asg/by-line" | LC_ALL=C sort | tr '\n
 [ "$asg_n" = "3" ] && [ "$asg_set" = "a[1]x a[1]x=3 grep " ] \
   || probe_fail "the assignment probe must score exactly its three near-misses (a[1]x, a[1]x=3, grep) and none of its assignments, got $asg_n fork(s): '$asg_set'. is_assign has stopped admitting a balanced nested subscript or a += tail, or has widened to a word that is not an assignment."
 
+# SPLICE: a trace whose sibling record landed INSIDE a long host line must count both, and the
+# two readers must agree on it. It is a hand-built TRACE, not a script under `bash -x`, because a
+# splice cannot be forced: it is how the kernel interleaves two writers, which is the point.
+#   line 1  host `grep` with a spliced `sed` record in mid-argument -- 2 forks
+#   line 2  the host's argument tail, carrying no marker -- 0 records
+#   line 3  NEAR-MISS: `@9@` with no `+` run is an argument, not a record -- 1 fork (`cat`), 1 record
+#   line 4  DISPLACED: a sibling record between the host's marker and its first word -- 2 records,
+#           1 fork (`sed`), 1 displaced
+#   line 5  the displaced host's command, carrying no marker -- 0 records
+# Expected: 4 forks (cat grep sed sed), 5 records, MARKERS 5, DISPLACED 1. A field-1 reader loses
+# line 1's sed; a widened marker scores `bar`; a reader that drops the empty record misses line 4.
+mkdir -p "$WORK/probe/spl"
+# NEVER EMPTY: with an empty first file `NR == FNR` holds for the trace too, and every record is
+# swallowed as a known name -- a probe reading 0 for a reason that is not the classifier.
+printf '%s\n' ':' > "$WORK/probe/spl/known"
+{
+  printf '%s\n' '++@7@ grep -rhoE x /a/very/long/argu++@7@ sed -e s/x/y/'
+  printf '%s\n' 'ment/tail /b/c'
+  printf '%s\n' '+@8@ cat foo@9@ bar'
+  printf '%s\n' '++@6@ ++@6@ sed x'
+  printf '%s\n' 'grep y'
+} > "$WORK/probe/spl/trace"
+awk -v metafile="$WORK/probe/spl/meta" "$CLASSIFY_AWK" "$WORK/probe/spl/known" "$WORK/probe/spl/trace" \
+  | awk '{ print $3 }' | LC_ALL=C sort | tr '\n' ' ' > "$WORK/probe/spl/set"
+spl_n="$(meta_field "$WORK/probe/spl" 1)"
+spl_t="$(meta_field "$WORK/probe/spl" 2)"
+spl_m="$(marker_count "$WORK/probe/spl/trace")"
+spl_set="$(cat "$WORK/probe/spl/set")"
+spl_d="$(meta_field "$WORK/probe/spl" 4)"
+[ "$spl_n" = "4" ] && [ "$spl_t" = "5" ] && [ "$spl_m" = "5" ] && [ "$spl_d" = "1" ] && [ "$spl_set" = "cat grep sed sed " ] \
+  || probe_fail "the splice probe must score cat, grep, sed and sed (4 forks, 5 records, 1 displaced) with MARKERS 5, got $spl_n fork(s) '$spl_set', $spl_t record(s), ${spl_d:-?} displaced, $spl_m marker(s). A classifier reading only field 1 skips the spliced sed; one reading \`@<n>@\` without its \`+\` run scores the near-miss argument as a record; one that drops a record with no command word cannot report a displaced host."
+
 # EVERY PROBE READING IS REPORTED FROM THE SAME INVOCATION that reports TOTAL, so a caller
 # cannot end up asserting a probe from one run against a corpus number from another.
 printf 'PROBEPOS %s\n' "$pos_n"
 printf 'PROBENEG %s\n' "$neg_n"
 printf 'PROBENEGTRACE %s\n' "$neg_t"
 printf 'PROBEASG %s\n' "$asg_n"
+printf 'PROBESPLICE %s\n' "$spl_n"
 if [ "$SECTION" = probe-only ]; then exit 0; fi
 
 # ---------------------------------------------------------------------------------------
 # THE CORPUS.
 #
-# XTRACE LOSES A LINE UNDER LOAD, AND THE LOSS IS SUBTRACTIVE. MEASURED, five profiles of one
-# unchanged tree on a box at load ~55: three reported 6553 forks / 38266 trace lines and two
-# reported 6552 / 38265. Diffed, the low reading's rows are a STRICT SUBSET of the high one's
-# -- zero rows present only in the low reading, exactly one present only in the high, and that
-# one was `sed`, a single stage of a FOUR-stage pipeline whose other three stages were all
-# traced. The three writers of one pipeline share fd 2, and occasionally one of their lines
-# does not reach the file.
+# ONE READING, CHECKED INSIDE ITSELF. Readings of one unchanged tree used to disagree by a few
+# forks, and the remedy was to re-read until a total repeated. MEASURED, the disagreement was never
+# a lost line: six profiles of one tree, two at a time, every trace the same byte size and every one
+# carrying 90452 `+@<n>@` markers, while the classifier -- which then read only field 1 -- saw
+# 90450-90452 of them, because a pipeline sibling's record lands INSIDE a long host line on the
+# shared fd 2. Totals 3399-3401 tracked that count exactly; the by-line rows only in the high
+# reading were the spliced stages (I82's `sed`, I93's `tr`). Re-classified offline with every marker
+# read, all six give 3401, and the unspliced trace gives the same by-line file under either reader.
 #
-# A lost line can only ever REMOVE a fork; nothing about it can invent one. So the true count
-# is the LARGEST reading, and a lower one is instrument loss rather than a program that forked
-# less. `--stable` profiles until some total has been seen TWICE and reports the largest such
-# value, which makes a spuriously high answer unconstructible (loss cannot add) and a
-# spuriously low one require the same line to be lost twice at the same site.
-#
-# THIS IS NOT A TOLERANCE, and the difference is the whole point. A tolerance would accept a
-# real regression smaller than its width. This accepts nothing: it re-reads until the
-# instrument repeats itself, and refuses to answer at all if it cannot.
-REPS_MAX=1
-[ "$STABLE" = 1 ] && REPS_MAX=4
-
-# THE READINGS ARE TAKEN TWO AT A TIME, AND THAT CHANGES THE ORDER, NOT THE EVIDENCE. The
-# claim is that a total was REPRODUCED -- two independent profiles of one unchanged target
-# agreeing. Nothing in that claim is about when the second profile starts. The number of
-# readings, the rule for picking the answer (the largest total seen twice), and the refusal to
-# answer at all when nothing repeats are all untouched below.
-#
-# THE OBJECTION IS THAT CONCURRENCY IS WHAT LOSES TRACE LINES, and it was measured rather than
-# argued. 48 profiles of one unchanged tree, 24 each way, interleaved -- 16 each on an idle box
-# and 8 each against a herd of twelve concurrent validator runs holding the box at load 17-25,
-# which is where the pre-push pool puts it. Every one of the 48 read the same total and every
-# SPREAD was a single value: zero losses either way. Wall clock, same runs:
-#
-#     idle     serial 32-35s   two at a time 17-19s
-#     loaded   serial 63-64s   two at a time 34-36s
-#
-# AND A LOSS CANNOT PRODUCE A WRONG ANSWER HERE, which is why the batch is safe even where the
-# measurement above does not reach. A dropped line only ever subtracts, so the readings come
-# from {n, n-1} and four of them always contain a repeat -- exit 3 is unconstructible for a
-# single-line loss under either order. What a loss costs is one more batch, and two batches of
-# two is strictly cheaper than four readings taken one after another.
-BATCH=2
-rep=0; best=""
-: > "$WORK/totals"
-while [ "$rep" -lt "$REPS_MAX" ]; do
-  # THE FAILURE OF A BACKGROUNDED `profile` CANNOT BE READ FROM ITS EXIT STATUS -- a subshell's
-  # status is lost -- so it is recorded as a file and asserted, never assumed.
-  batch0=$rep; nb=0
-  while [ "$nb" -lt "$BATCH" ] && [ "$rep" -lt "$REPS_MAX" ]; do
-    rep=$(( rep + 1 )); nb=$(( nb + 1 ))
-    ( profile "$TARGET" "$WORK/run$rep" || : > "$WORK/fail$rep" ) &
-  done
-  wait
-  i=$batch0
-  while [ "$i" -lt "$rep" ]; do
-    i=$(( i + 1 ))
-    [ -f "$WORK/fail$i" ] && exit 2
-    printf '%s %s\n' "$(meta_field "$WORK/run$i" 1)" "$i" >> "$WORK/totals"
-  done
-  best="$(awk '{ c[$1]++; if (c[$1] >= 2 && $1 + 0 > m + 0) m = $1 } END { if (m != "") print m }' "$WORK/totals")"
-  [ -n "$best" ] && break
-done
-
-if [ "$REPS_MAX" -eq 1 ]; then
-  BESTREP=1; N_STABLE=1
-else
-  if [ -z "$best" ]; then
-    echo "fork-profile: $REPS_MAX profiles of an unchanged tree produced no repeated total ($(awk '{printf "%s ", $1}' "$WORK/totals"))." >&2
-    echo "  A single dropped xtrace line is expected under load and is subtractive; this is something else." >&2
-    exit 3
-  fi
-  BESTREP="$(awk -v t="$best" '$1 == t { print $2; exit }' "$WORK/totals")"
-  N_STABLE="$(awk -v t="$best" '$1 == t { n++ } END { print n + 0 }' "$WORK/totals")"
-fi
-RUN="$WORK/run$BESTREP"
-SPREAD="$(awk '{ if (lo == "" || $1 + 0 < lo + 0) lo = $1; if ($1 + 0 > hi + 0) hi = $1 } END { print lo "-" hi }' "$WORK/totals")"
+# So the reading is exact, and a second one buys nothing. What replaces the comparison is stronger:
+# MARKERS is a second reader over the SAME trace, and TRACELINES must equal it. Two readings could
+# miss the same shape the same way and agree; a record skipped here is a gap between two numbers
+# from one file. The caller asserts the equality; this program reports both.
+RUN="$WORK/run1"
+profile "$TARGET" "$RUN" || exit 2
 
 TOTAL="$(meta_field "$RUN" 1)"
 NTRACE="$(meta_field "$RUN" 2)"
@@ -457,9 +463,8 @@ printf 'TRACELINES %s\n' "$NTRACE"
 printf 'MAXLINE %s\n' "$MAXLINE"
 printf 'LASTARM %s\n' "$LASTARM"
 printf 'KNOWN %s\n' "$NFUNC"
-printf 'REPS %s\n' "$rep"
-printf 'STABLE %s\n' "$N_STABLE"
-printf 'SPREAD %s\n' "$SPREAD"
+printf 'MARKERS %s\n' "$(cat "$RUN/markers")"
+printf 'DISPLACED %s\n' "$(meta_field "$RUN" 4)"
 printf 'TARGET %s\n' "$TARGET"
 # rows, then forks, whose reported line is a bare closer -- see AMBIG_AWK.
 printf 'AMBIGUOUS %s\n' "$(awk '$4 == "AMBIGUOUS" { r++; f += $1 } END { print r + 0, f + 0 }' "$RUN/by-line")"

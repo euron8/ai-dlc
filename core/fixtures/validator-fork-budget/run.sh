@@ -19,7 +19,8 @@
 #
 #   A0  self-probe   the profiler counts a known-50 script as 50, a fork-free one as 0, and
 #                    an assignment probe as exactly its 3 near-misses
-#   A2  determinism  the reading was REPRODUCED; an unreproduced one is BROKEN, never a red
+#   A2  wholeness    the classifier read every trace record: TRACELINES equals MARKERS, a second
+#                    reader over the same trace; a gap is BROKEN, never a red
 #   A1  floor        a measurement at or below what a BROKEN subject measures, profiled live
 #   A5  wholeness    the traced run exited 0 and reached past the LAST arm header's line
 #   A3  ceiling      measured <= FORK_BUDGET
@@ -29,26 +30,26 @@
 # forks almost nothing and sails under any ceiling; an unbounded-below gate reads that as an
 # infinitely fast validator and prints the same green line it prints for a healthy one.
 #
-# THE VERDICT IS TWO FUNCTIONS, `judge` and `stable_verdict`, and the mutants below drive those
+# THE VERDICT IS TWO FUNCTIONS, `judge` and `marker_verdict`, and the mutants below drive those
 # same functions rather than a second copy of their logic. m0 and m1 drive the WHOLE pipeline,
 # because neither function can see a tracer that stopped tracing: m0 profiles a subject that
 # runs almost nothing, which is the "would this arm pass against a program that emits nothing"
 # question this repository's mutant rule asks of every absence-shaped arm, and m1 profiles with
 # the PS4 marker neutered. m2-m6 drive `judge`, one per arm, each with exactly one field moved
 # and its own budget derived from the live reading, so no mutant can fail on another's arm.
-# m7 drives `stable_verdict` with a profiler that accepts `--stable` and ignores it. m8 and m9
+# m7 drives `marker_verdict` with a profiler whose classifier reads field 1 only. m8 and m9
 # drive `judge` at the COMMITTED budget: m8 inside A4's window, m9 one fork above the floor.
 # m10-m12 drive the profiler's own assignment probe with its classifier mutated three ways --
-# reverted, `+=` dropped, widened -- so the classifier fix cannot be undone without a red.
+# reverted, `+=` dropped, widened -- so the classifier fix cannot be undone without a red. m13
+# widens the trace marker to drop its `+` run, the near-miss direction of m7.
 #
 # WHERE THIS FIXTURE'S TIME GOES, because it became the suite's second-longest unit and the
-# obvious guess is wrong. Instrumented solo, 32.2s wall / 36.0 CPU-seconds: the `--stable`
-# corpus reading is 31 of the 32, and everything else -- the self-probe, all six arms, and all
-# eight mutants together -- is the remaining second. m1 costs nothing because the profiler's
-# own self-probe refuses before it ever reaches the validator, and m0/m7 profile a three-line
-# script. So there is no mutant to trim and no arm to shard: the unit IS one reading, and the
-# only lever on it is how the reading is taken. That lever lives in scripts/fork-profile.sh,
-# which now takes its reps two at a time.
+# obvious guess is wrong. Instrumented solo, 32.2s wall / 36.0 CPU-seconds: the corpus reading
+# was 31 of the 32, and everything else -- the self-probe, all six arms, and all eight mutants
+# together -- is the remaining second. m1 costs nothing because the profiler's own self-probe
+# refuses before it ever reaches the validator, and m0 profiles a three-line script. So there
+# is no mutant to trim and no arm to shard: the unit IS the corpus reading, which is now ONE
+# profile rather than a batch of re-reads, because a single reading is exact.
 #
 # Exit 0 iff the live verdict is PASS and every mutant is killed by its own arm.
 set -u
@@ -192,14 +193,24 @@ judge() {
 field() { awk -v k="$2" '$1 == k { print $2; exit }' "$1"; }
 
 # --- A2's predicate, factored out so its mutant can drive the same code -------------------
-# stable_verdict <n-stable> -> "OK" | "BROKEN <why>"
-stable_verdict() {
+# marker_verdict <tracelines> <markers> <displaced> -> "OK" | "BROKEN <why>"
+marker_verdict() {
+  case "${3:-}" in ''|*[!0-9]*)
+    echo "BROKEN the profiler reported no numeric DISPLACED ('${3:-}')"; return ;;
+  esac
+  if [ "$3" -gt 0 ]; then
+    echo "BROKEN $3 trace record(s) carry no command word: a sibling record landed between a host's marker and its first word, so the host's command sits on a line with no marker and was not counted. Both readers agree on that shape, which is why it is counted on its own. Fix the classifier in scripts/fork-profile.sh, never the budget."
+    return
+  fi
   case "${1:-}" in ''|*[!0-9]*)
-    echo "BROKEN the profiler reported no STABLE count ('${1:-}'). A build that accepts --stable and ignores it returns ONE unreproduced reading, which is exactly what this arm exists to refuse."
+    echo "BROKEN the profiler reported no numeric TRACELINES ('${1:-}')"; return ;;
+  esac
+  case "${2:-}" in ''|*[!0-9]*)
+    echo "BROKEN the profiler reported no numeric MARKERS ('${2:-}'). Without the second reader a skipped trace record reads as a validator that forked less."
     return ;;
   esac
-  if [ "$1" -lt 2 ]; then
-    echo "BROKEN the reading was reproduced only $1 time(s); a reading nobody can take twice is not a measurement"
+  if [ "$1" -ne "$2" ]; then
+    echo "BROKEN the classifier read $1 trace record(s) but the trace carries $2 marker(s) -- a gap of $(( $2 - $1 )). A record the classifier skipped is a fork it did not count, so the total is a floor of unknown depth. A new splice or marker shape has appeared; fix the classifier in scripts/fork-profile.sh, never the budget."
     return
   fi
   echo OK
@@ -257,10 +268,10 @@ done
 cp "$TMP/floor-tiny.out" "$TMP/m0.out"
 
 # ==========================================================================================
-# THE CORPUS -- `--stable`, which re-profiles the real validator until a total repeats.
+# THE CORPUS -- ONE reading of the real validator, checked against itself by A2.
 # ==========================================================================================
-if ! bash "$PROFILER" --section total --stable > "$TMP/r1.out" 2>"$TMP/r1.err"; then
-  note "FIXTURE BROKEN: the profiler could not produce a repeated reading of the real validator."
+if ! bash "$PROFILER" --section total > "$TMP/r1.out" 2>"$TMP/r1.err"; then
+  note "FIXTURE BROKEN: the profiler could not produce a reading of the real validator."
   sed 's/^/      /' "$TMP/r1.err" | head -5
   exit 1
 fi
@@ -269,28 +280,27 @@ T1="$(field "$TMP/r1.out" TOTAL)"
 EX="$(field "$TMP/r1.out" EXIT)"
 MX="$(field "$TMP/r1.out" MAXLINE)"
 LA="$(field "$TMP/r1.out" LASTARM)"
-N_REPS="$(field "$TMP/r1.out" REPS)"
-N_STABLE="$(field "$TMP/r1.out" STABLE)"
-SPREAD="$(field "$TMP/r1.out" SPREAD)"
+N_TRACE="$(field "$TMP/r1.out" TRACELINES)"
+N_MARK="$(field "$TMP/r1.out" MARKERS)"
+N_DISP="$(field "$TMP/r1.out" DISPLACED)"
 
-# --- A2 determinism -----------------------------------------------------------------------
-# A DISAGREEMENT IS BROKEN, NEVER RED. Fork count is a property of the program, not of the box;
-# a reading nobody can take twice must never be reported as a regression in the change under
+# --- A2 wholeness of the READING ----------------------------------------------------------
+# A GAP IS BROKEN, NEVER RED. Fork count is a property of the program, not of the box; an
+# instrument that skipped a record must never be reported as a regression in the change under
 # test, because that is how a gate earns a reputation for lying and gets pushed past.
 #
-# THE ARM ASSERTS A REPRODUCED READING, NOT TWO EQUAL ONES, and the difference is measured
-# rather than conceded. Five profiles of one unchanged tree on a loaded box split 3/2 between
-# 6553 and 6552 forks, and the low reading's rows were a strict SUBSET of the high one's -- one
-# dropped xtrace line from one stage of a four-stage pipeline. Requiring two RAW runs to be
-# equal therefore fails on an unchanged tree roughly half the time on a busy box. The profiler
-# re-reads until a value repeats and reports the largest repeated one; a dropped line can only
-# subtract, so a spuriously HIGH answer is unconstructible and this is not a tolerance.
-A2V="$(stable_verdict "${N_STABLE:-}")"
+# IT REPLACES A REPEAT REQUIREMENT, AND IS STRICTER. Readings of one tree used to differ by up to
+# five forks under load, and this arm demanded a total seen twice -- which failed as FIXTURE
+# BROKEN at the gate's own pool load. Measured: nothing was lost; pipeline siblings' records were
+# SPLICED into long host lines on the shared fd 2 and the classifier read only field 1. Every
+# marker is now read, so one reading is exact, and the equality of two readers over that ONE trace
+# is what proves it. Two readings could miss one shape identically and agree; this cannot.
+A2V="$(marker_verdict "${N_TRACE:-}" "${N_MARK:-}" "${N_DISP:-}")"
 if [ "$A2V" != "OK" ]; then
-  note "FIXTURE BROKEN: ${A2V#BROKEN } (REPS=$N_REPS, spread $SPREAD)"
+  note "FIXTURE BROKEN: ${A2V#BROKEN }"
   exit 1
 fi
-note "ok    A2 determinism  -- $T1 fork(s) reproduced ${N_STABLE}x over $N_REPS rep(s), spread $SPREAD"
+note "ok    A2 wholeness    -- the classifier read all $N_MARK trace record(s) of one reading, $N_DISP displaced"
 
 VERDICT="$(judge "$T1" "$EX" "$MX" "$LA" "$BUDGET")"
 case "$VERDICT" in
@@ -420,30 +430,61 @@ fi
 kill_j "m9 floor-tight  one fork above the measured floor" RED "stale-high" \
        "$((FLOOR + 1))" "$EX" "$MX" "$LA" "$BUDGET"
 
-# m7 -- A PROFILER THAT ACCEPTS `--stable` AND IGNORES IT. Without this, A2 is a guard with no
-# subject: on exit 0 the profiler's own contract already guarantees a repeated reading, so the
-# only way the arm can ever fire is a build whose `--stable` does nothing -- an older copy, a
-# bad merge, a flag renamed on one side of the join. Driven against the trivial target so the
-# mutant costs a second rather than another full profile; the arm's predicate is the STABLE
-# field, not the total.
+# m7 -- THE CLASSIFIER REVERTED TO FIELD 1, the reader that produced the spread. Without this, A2
+# is a guard with no subject on an unspliced trace, where both readers agree by construction. The
+# copy's own splice self-probe must refuse it before any corpus reading -- that is the kill. A2's
+# predicate is ALSO driven directly with the counts the field-1 reader produced on the measured
+# lossy trace (90450 of 90452), so the arm itself is proven to discriminate, not only the probe.
+M7_ANCHOR='  while (match(s, /\++@[0-9]+@([ \t]|$)/)) {'
 mkdir -p "$TMP/fake2/scripts"
 echo "0.0.0" > "$TMP/fake2/VERSION"
-if sed 's/--stable)  STABLE=1; shift ;;/--stable)  shift ;;/' "$PROFILER" > "$TMP/fake2/scripts/fp-nostable.sh" \
-   && ! cmp -s "$PROFILER" "$TMP/fake2/scripts/fp-nostable.sh"; then
-  if bash "$TMP/fake2/scripts/fp-nostable.sh" --target "$TMP/tiny.sh" --section total --stable \
-       > "$TMP/m7.out" 2>"$TMP/m7.err"; then
-    m7_v="$(stable_verdict "$(field "$TMP/m7.out" STABLE)")"
+if [ "$(grep -cxF -- "$M7_ANCHOR" "$PROFILER")" != "1" ]; then
+  note "FAIL  m7 field-1 -- the classifier's record loop is not exactly one line in $PROFILER; no mutation can be trusted"; rc=1
+elif sed 's|^  while (match(s, /\\++@\[0-9\]+@(\[ \\t\]\|\$)/)) {$|  while (match(s, /^\\++@[0-9]+@([ \\t]\|$)/)) {|' "$PROFILER" > "$TMP/fake2/scripts/fp-field1.sh" \
+   && ! cmp -s "$PROFILER" "$TMP/fake2/scripts/fp-field1.sh"; then
+  if bash "$TMP/fake2/scripts/fp-field1.sh" --target "$TMP/tiny.sh" --probe-only > "$TMP/m7.out" 2>"$TMP/m7.err"; then
+    note "FAIL  m7 field-1 -- a field-1 classifier passed the self-probe (PROBESPLICE=$(field "$TMP/m7.out" PROBESPLICE))"; rc=1
+  elif grep -q 'the splice probe must score' "$TMP/m7.err" \
+       && ! grep -q 'positive probe\|fork-free probe\|assignment probe' "$TMP/m7.err"; then
+    m7_v="$(marker_verdict 90450 90452 0)"
     case "$m7_v" in
-      BROKEN*) note "ok    m7 stable-ignored -- an unreproduced reading is BROKEN, not a pass" ;;
-      *) note "FAIL  m7 stable-ignored -- a profiler that ignores --stable produced: $m7_v"; rc=1 ;;
+      BROKEN*"gap of 2"*) note "ok    m7 field-1  -- killed by the splice probe, and A2 reads the measured 90450/90452 gap as BROKEN" ;;
+      *) note "FAIL  m7 field-1 -- the splice probe refused, but A2 read the measured gap as: $m7_v"; rc=1 ;;
     esac
   else
-    note "FAIL  m7 stable-ignored -- the mutated profiler did not run at all"
+    note "FAIL  m7 field-1 -- the profiler refused, but not on the splice probe:"
     sed 's/^/      /' "$TMP/m7.err" | head -3; rc=1
   fi
 else
-  note "SKIP  m7 -- the --stable sed matched nothing; no mutation occurred, so nothing was proven"; rc=1
+  note "SKIP  m7 -- the field-1 sed matched nothing; no mutation occurred, so nothing was proven"; rc=1
 fi
+
+# m13 -- THE MARKER WIDENED to `@<n>@` with the `+` run optional: the near-miss direction. It reads
+# an argument carrying `@9@` as a record and scores it a fork, so it reads HIGH; the splice probe's
+# near-miss line must refuse it, by that probe and no other.
+if [ "$(grep -cxF -- "$M7_ANCHOR" "$PROFILER")" = "1" ] \
+   && sed 's|^  while (match(s, /\\++@\[0-9\]+@(\[ \\t\]\|\$)/)) {$|  while (match(s, /\\+*@[0-9]+@([ \\t]\|$)/)) {|' "$PROFILER" > "$TMP/fake2/scripts/fp-wide.sh" \
+   && ! cmp -s "$PROFILER" "$TMP/fake2/scripts/fp-wide.sh"; then
+  if bash "$TMP/fake2/scripts/fp-wide.sh" --target "$TMP/tiny.sh" --probe-only > "$TMP/m13.out" 2>"$TMP/m13.err"; then
+    note "FAIL  m13 marker-widened -- a classifier reading \`@<n>@\` without its \`+\` run passed the self-probe"; rc=1
+  elif grep -q 'the splice probe must score' "$TMP/m13.err" \
+       && ! grep -q 'positive probe\|fork-free probe\|assignment probe' "$TMP/m13.err"; then
+    note "ok    m13 marker-widened -- killed by the splice probe's near-miss"
+  else
+    note "FAIL  m13 marker-widened -- the profiler refused, but not on the splice probe:"
+    sed 's/^/      /' "$TMP/m13.err" | head -3; rc=1
+  fi
+else
+  note "SKIP  m13 -- the widening sed matched nothing; no mutation occurred, so nothing was proven"; rc=1
+fi
+
+# m14 -- A DISPLACED HOST WITH THE READERS IN AGREEMENT. The one splice shape TRACELINES == MARKERS
+# cannot see; A2 must still read it as BROKEN, on its DISPLACED clause and not on a count gap.
+m14_v="$(marker_verdict 90452 90452 1)"
+case "$m14_v" in
+  BROKEN*"carry no command word"*) note "ok    m14 displaced -- equal readers with one displaced host read BROKEN" ;;
+  *) note "FAIL  m14 displaced -- equal readers with one displaced host produced: $m14_v"; rc=1 ;;
+esac
 
 # m10-m12 -- THE ASSIGNMENT CLASSIFIER IS LOAD-BEARING, IN BOTH DIRECTIONS. Each is a copy of
 # the profiler with `is_assign` changed one way, run `--probe-only` from a root that carries a
@@ -461,7 +502,7 @@ cp "$PROFILER" "$TMP/fake3/scripts/fp-ctl.sh"
 # `--target` names a file that exists: the profiler refuses a missing target before any probe.
 if bash "$TMP/fake3/scripts/fp-ctl.sh" --target "$TMP/tiny.sh" --probe-only > "$TMP/asgctl.out" 2>"$TMP/asgctl.err" \
    && [ "$(field "$TMP/asgctl.out" PROBEASG)" = "3" ]; then
-  ASG_LINE='  if (is_assign(cmd)) next'
+  ASG_LINE='    if (is_assign(cmd)) continue'
   if [ "$(grep -cxF -- "$ASG_LINE" "$PROFILER")" != "1" ] \
      || [ "$(grep -cxF -- '  if (substr(w, i, 2) == "+=") return 1' "$PROFILER")" != "1" ]; then
     note "FAIL  m10-m12 -- an anchor line is not unique in $PROFILER; no mutation can be trusted"; rc=1
@@ -484,9 +525,9 @@ if bash "$TMP/fake3/scripts/fp-ctl.sh" --target "$TMP/tiny.sh" --probe-only > "$
         sed 's/^/      /' "$TMP/$n.err" | head -3; rc=1
       fi
     }
-    asg_mut "m10 asg-preBL417" 's|^  if (is_assign(cmd)) next$|  if (cmd ~ /^[A-Za-z_][A-Za-z0-9_]*(\\[[^]]*\\])?=/) next|'
+    asg_mut "m10 asg-preBL417" 's|^    if (is_assign(cmd)) continue$|    if (cmd ~ /^[A-Za-z_][A-Za-z0-9_]*(\\[[^]]*\\])?=/) continue|'
     asg_mut "m11 asg-no-plus"  '/^  if (substr(w, i, 2) == "+=") return 1$/d'
-    asg_mut "m12 asg-widened"  's|^  if (is_assign(cmd)) next$|  if (cmd ~ /^[A-Za-z_][A-Za-z0-9_]*(\\[.*)?=/) next|'
+    asg_mut "m12 asg-widened"  's|^    if (is_assign(cmd)) continue$|    if (cmd ~ /^[A-Za-z_][A-Za-z0-9_]*(\\[.*)?=/) continue|'
   fi
 else
   note "FAIL  m10-m12 -- the UNMUTATED profiler copy did not pass --probe-only with PROBEASG 3 from its sandbox root, so no mutant verdict means anything"
@@ -497,7 +538,7 @@ fi
 # reads when a refactor deletes the mutants -- two inert runs compare equal. The floor is the
 # count this file is known to carry; it rises with a new mutant and refuses a run that
 # silently lost one.
-EXPECTED_MUTANTS=13
+EXPECTED_MUTANTS=15
 if [ "$rc" -eq 0 ] && [ "$N_KILLED" -lt "$EXPECTED_MUTANTS" ]; then
   note "FAIL  validator-fork-budget -- only $N_KILLED of $EXPECTED_MUTANTS mutants were killed. A battery that lost a mutant reports the same green line as one that killed them all."
   rc=1

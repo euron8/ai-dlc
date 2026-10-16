@@ -605,15 +605,23 @@ check "a MISSING window file falls back to the settings layers" "$(field effecti
 # times; under the pre-push pool that is more than a second, so a seed stamped `NOW - 59` was
 # 60 or more seconds old when the hook read it and the fresh CONTROL below read 300000.
 # Measured: two of seven gate runs in one day failed exactly that arm, every solo run passed.
+#
+# AND STAMPING AT THE WRITE WAS NOT ENOUGH: the hook still reads the seed some time after it is
+# written, and at `now - 59` that is a one-second margin the pool's load can spend. The two arms
+# bound the 60s window from opposite sides and only ONE of them can be load-safe at the edge. The
+# STALE arm is: age only grows, so a seed written 61s old is at least 61s old when read. The CONTROL
+# sits at `now - 30`, half the window, so it holds unless the hook is 30s late -- and it still
+# separates a reader that honours the bound from one that refuses every window file, which reads
+# 300000 here exactly as the STALE arm does.
 reset1m
 seedwin "$SID" "$(( $(date +%s) - 61 ))" 420000 1000000
 sidfire "$(at 100000)" "$SID" >/dev/null
 check "a STALE window file (ts 61s old) falls back" "$(field effective_window)" "300000"
 
 reset1m
-seedwin "$SID" "$(( $(date +%s) - 59 ))" 420000 1000000
+seedwin "$SID" "$(( $(date +%s) - 30 ))" 420000 1000000
 sidfire "$(at 100000)" "$SID" >/dev/null
-check "  CONTROL: 59s old is still fresh and IS taken" "$(field effective_window)" "420000"
+check "  CONTROL: 30s old is still fresh and IS taken" "$(field effective_window)" "420000"
 
 reset1m
 seedwin "00000000-9999-9999-9999-999999999999" "$NOW" 420000 1000000

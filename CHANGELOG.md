@@ -20,6 +20,52 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.804.0] - 2026-10-16
+
+Batch 235 (release BL-616, first part). Closes nothing: BL-616 stays open with six census items owed. Closes no
+`PC-` id. Carries docs intake-7 (BL-616 addendum, BL-617..619, BL-630, BL-631, BL-587 rescoped).
+
+### A fork count is read once and checked against itself, not re-read until it repeats (BL-616)
+
+- The cause of `validator-fork-budget`'s FIXTURE BROKEN under the gate's pool was the instrument. Six profiles of
+  one unchanged tree, two at a time, read 3399-3401. Every trace was the same byte size and carried 90452 trace
+  markers, but only 90450-90452 of them opened a line. The stages of a pipeline share fd 2, so a sibling's trace
+  record lands inside a long host line, and `scripts/fork-profile.sh` read only field 1. The readings came from
+  {n..n-k}, not the {n, n-1} the old comment assumed, so the "repeat within four" rule could fail on a correct
+  tree.
+- The classifier now reads every marker on a line. One reading replaces the re-read loop and its exit 3.
+  `--stable` is accepted and ignored. The profiler prints `MARKERS`, a second reader (`grep -o`) over the same
+  trace, and arm A2 asserts `TRACELINES == MARKERS`. A gap is FIXTURE BROKEN naming its size, never a red. Two
+  readings could miss one shape the same way and agree; two readers over one trace cannot hide a skipped record.
+- A new self-probe, `PROBESPLICE`, is a hand-built trace with a spliced record. It must score `grep`, `sed` and
+  `cat` (three forks and three records). A near-miss `foo@9@` argument must not count. Mutants: m7 reverts to the
+  field-1 reader, m13 widens the marker to drop its `+` run. The splice probe alone kills each, and A2 reads the
+  measured 90450/90452 as "gap of 2". There are 14 mutants.
+- One splice shape both readers agree on is counted on its own. A sibling record that lands between a host's
+  marker and its first word leaves a record with no command word, and the host's command on a line with no
+  marker. The profiler prints it as `DISPLACED`, and A2 reads any as BROKEN. The splice probe carries that shape
+  (DISPLACED 1), and m14 drives A2 with equal readers and one displaced host. There are 15 mutants.
+- Offline over the six saved traces: 3401 on all six, ntrace == MARKERS == 90452, DISPLACED 0. The unspliced
+  trace's by-line file is byte-identical under the old and new reader. `FORK_BUDGET` is unchanged, at 3405.
+
+### Fixtures whose verdict moved with the box's load (BL-616 census items 2-4)
+
+- `context-sensor`: the fresh CONTROL is seeded at `now - 30`, not `now - 59`, against the hook's 60 s bound. It
+  had failed 2 of 7 gate runs. The STALE arm at `now - 61` is unchanged: age only grows, so it is already safe.
+- `gate-remediation-deny` 3b is binary: the edit is DENIED, and the hung resolver's recorded pid is dead when the
+  hook returns. The old under-15 s assertion sat beside a bound whose wall clock grows with load, and elapsed is
+  now printed, not judged. The 600 s sleeper cannot be dead unless the hook abandoned it. The arm kills a live
+  one so nothing leaks, and fails if no pid was ever recorded, since then the bound was never exercised.
+- Watchdogs are sized to a hang, not to the expected run: `fold-architect-ledger-join` D6 goes from 15 s to 120 s,
+  and `readset-stage1-verdict` `:582` and `:639` (ready) and `:660` (group exit) go to 120 s. A bound costs a
+  passing run nothing.
+- Slot, at load 3.6-4.6: gate-remediation-deny and readset-stage1-verdict through `hermetic-run.sh`, rc 0,
+  `required_missing=0`; context-sensor 164 passed and fold-architect-ledger-join 72 ok, run as the hook runs them.
+- Moved out, not dropped: the advisor-gate re-read ceiling is a hardcoded 10 s of the shipped hook's wall clock
+  (BL-630). The suite pole on CPU-seconds, the backlog-receipt flap, the sandbox-log loss rate and `readset-skip`'s
+  unread polls are still owed under BL-616.
+
+
 ## [0.803.0] - 2026-10-16
 
 Batch 235 (release BL-603 + BL-588). Closes BL-603 and BL-588. Closes no `PC-` id. Carries docs intake-6 (BL-615).

@@ -680,6 +680,8 @@ Owed:
 
 Related: BL-581 (the false-zero "Verified" in the same 0.793.0 log), BL-579 (the snapshot misreporting the stopped remediator's writes).
 
+**Scope ruling (operator, relayed by lead ai-dlc-9c): CURRENT SPRINT only.** The owed record, its channel, and its check carry derivations owed to the sprint that is current when the reconcile runs. A derivation in a past sprint's artifact is owed to nobody, and must neither block that sprint's lead nor show as open there. The ruling is BL-631's: "I'm stating that I don't care if a fixture or check fails against a historical sprint artifact", and "if someone deleted all of graph consumer's sprint history, it should not matter whatsoever". Item 3's proof is therefore over those of the 8 rows whose artifacts belong to the current sprint. A control row in a past sprint must NOT appear in the record.
+
 verify: manual
 
 ## BL-612 — "takes effect on the pull AFTER the one that delivers it" is wrong for any change the update skill runs after its step-2 re-invoke
@@ -700,7 +702,18 @@ Owed:
 2. Correct the reconcile-phase claims, in the CHANGELOG's "Bootstrapping" lines and in BL-563 and BL-582, as a Corrections paragraph in BL-612's own release entry naming each misclassified "pull after" line plus the BL-563 and BL-582 items. That paragraph closes item 2 only. It is prose, so it cannot stand as the receipt for the mechanism; item 3 is that receipt.
 3. Receipt: a fixture or derivation that takes a reconcile-engine change, simulates step 2 and then a re-invoke, and shows the new engine running at step 3. A step-1 behaviour change is the control, which must NOT be live. Lead ai-dlc-9c ruled the fixture is the receipt; the CHANGELOG paragraph closes only the documentation item. Whoever builds the fixture checks that its simulated re-invoke matches step 2's real re-invoke mechanism, read from the skill text itself (SKILL.md ~:731-740), not from a summary of it.
 
-Items 2 and 3 ship together as BL-612's own release, after BL-587, and that one release closes the whole entry. Release U-b is built, so per the scope-boundary ruling nothing from this entry joins it; U-b adds only its own (a)/(b)/(c) outcome lines as part of its own verification. The hook-phase class above stays unmeasured until U-b's slot.
+The same wrong delivery-timing claim appears in shipped text, all at `86d3a695`. Corrected in the BL-587+612 release:
+- `core/skills/ai-dlc-update/reconcile/apply.sh:762-764` and `:2483-2485`
+- `core/skills/ai-dlc-update/SKILL.md:2456-2460`, and `:1399-1404` (timing half)
+- `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:209-211`
+- `core/skills/ai-dlc-update/reconcile/emit-report.sh:591-593`
+Filed separately: `core/scripts/validate-layer-entries.sh:1329` (W10 message), BL-617.
+Known-stale fixture COMMENTS, left unchanged because no assertion depends on them:
+- `core/fixtures/apply-drift-refile/run.sh:758-759`
+- `core/fixtures/ledger-reverify/run.sh:2125-2130` and `:5257-5262`
+- `core/fixtures/ledger-reverify/seed.sh:816`
+
+Items 2 and 3 ship together and ride BL-587's release (lead ai-dlc-9c's ruling), and that release closes the whole entry. Release U-b is built, so per the scope-boundary ruling nothing from this entry joins it; U-b adds only its own (a)/(b)/(c) outcome lines as part of its own verification. The hook-phase class above stays unmeasured until U-b's slot.
 
 Owner: ai-dlc-60 (lead ai-dlc-9c).
 
@@ -724,7 +737,15 @@ Measured on origin/main: 20 units are keyed on the validator, 15 by an `inputs.d
 
 Premise corrected at intake: the 1300-1400 s batteries in that push (adversarial-shard-merge-mutants, derivation-capture-mutants, ledger-reverify(-b), review-shard-merge-mutants(-b,-c)) are NOT keyed on the validator. Neither their `inputs.decl` nor the read-set map names it (control: `validator-fork-budget` keyed both ways). They ran because the combo's own diff touched files they declare: `partition-document.sh`, `steps/gate-validation.md`, `validate-artifact-derivations.sh` and `reconcile/post-write-gates.sh`.
 
-Owed: move the budget to a data file that only `validator-fork-budget` reads, keeping its column-0 single-line anchor (`run.sh:92-101`) and its A4 reachability arm. Receipt: a budget-only change re-keys `validator-fork-budget` and no other unit. Show it with the hook's own key computation on a probe commit, and use a one-character edit to the validator as the control, which must re-key all 20.
+**Correction (lead ai-dlc-9c, from ai-dlc-ad's 0.802.0 gate log; re-derived at intake on origin/main `f4ca6764`).** The two sentences above about which units are keyed, and how, were wrong. Two mutation batteries ARE keyed on the validator, and the first count missed them because it matched only `inputs.decl` lines naming the file exactly. An `inputs.decl` line ending in `/` declares a whole directory (`readset_decl_parse`, `.githooks/pre-push:1413-1436`), so `scripts/` keys every file under it, this validator included. A declared fixture is keyed on its declaration and never on its read-set row (`.githooks/pre-push:1507-1515`). Re-derived from both sources:
+- `inputs.decl`: 21 fixtures, 15 naming the file and 6 through a `scripts/` entry: `fold-architect-ledger-join-mutants` and its `-b`, `-c` and `-d` shards, `suite-content-key` and `vocabulary-index`. Control: a line equal to `scripts/ZQX-none.sh` matches 0, and 20 `inputs.decl` lines are exactly `scripts/` or `!scripts/`.
+- `.ai-dlc-fixture-readsets.tsv`: 7 rows name the file, among them `fold-architect-ledger-join-mutants` at row 4328 and `-c` at row 4591. All 7 belong to fixtures that also carry an `inputs.decl` (248 do), so the declaration decides and the rows add no unit.
+- So the effective set is 21 units. They cost 2922 s summed in the loaded record as it stood at `f4ca6764`, and the four fold-architect shards lead at 281, 265, 265 and 264 s. That record is rewritten on every push, and the 438 s and 414 s above were older readings of the same two shards.
+- `-b` and `-d` carry 0 read-set rows, but they are keyed through `scripts/` like the other two, so they do NOT run on every push. They run whenever any file under `scripts/` changes, which is a far wider trigger than this validator.
+- The statement above that `validator-fork-budget` is "keyed both ways" was also wrong: it has 0 read-set rows and is keyed by its declaration alone.
+The wall-clock reading stands in shape: a budget-only change costs about the largest shard (~281 s loaded at `f4ca6764`), not the sum.
+
+Owed: move the budget to a data file that only `validator-fork-budget` reads, keeping its column-0 single-line anchor (`run.sh:92-101`) and its A4 reachability arm. The data file must sit outside `scripts/`, or the four fold-architect shards' directory entry re-keys them anyway. Receipt: a budget-only change re-keys `validator-fork-budget` and no other unit. Show it with the hook's own key computation on a probe commit, and use a one-character edit to the validator as the control, which must re-key all 21.
 
 Owner: ai-dlc-40 (lead ai-dlc-9c). It changes a script and a fixture, so it rides the next unbuilt release with BL-613, never a built or gating one.
 
@@ -752,5 +773,144 @@ Owed:
 2. Receipt: run the shipping code, not a grep of the role file. For example, a shard brief rendered for a subject naming a non-existent path shows the resolved/absent split; or, for prose, a receipt over the dispatched brief and not over BL-550's four files. Control: the four party-seat roles still pass I124.
 
 Related: BL-550 (archived; both instances), I124, I123.
+
+verify: manual
+
+## BL-616 — fixture verdicts depend on box load: `validator-fork-budget` reads FIXTURE BROKEN under the gate's pool, and a red costs a full re-push
+
+**DEFECT (efficiency).** Operator directive, relayed by lead ai-dlc-9c: "we need to not be so sensitive to load, it's a self-inflicted issue that fixtures are marked as failed because of it and/or aren't considered successful." The scope is every load-sensitive verdict in the suite, not only the one instance below.
+
+The measured instance is `core/fixtures/validator-fork-budget`. Its arm A2 (determinism, `run.sh:22`, driven at `:262` via `scripts/fork-profile.sh --section total --stable`) requires a repeated total among the `--stable` profiles of an unchanged tree (`fork-profile.sh:33`, `:334`).
+- 0.802.0's gate, 10:45-10:54 EDT: `.git/ai-dlc-fixture-failures.20261016T145420Z.9311` reads "1 of 59 units red", then "FIXTURE BROKEN: the profiler could not produce a repeated reading of the real validator. fork-profile: 4 profiles of an unchanged tree produced no repeated total (3400 3399 3401 3397 ). A single dropped xtrace line is expected under load and is subtractive; this is something else." The gate went red and the push was lost.
+- ai-dlc-11's slot for 0.801.0: 3388, 3390, 3391 and 3389, the same FIXTURE BROKEN (reported by 9c; intake has no record file for that run).
+- Run solo at low load, ai-dlc-11 and ai-dlc-ad each got a clean repeat (reported by 9c; not re-measured at intake, gate window).
+
+A fork COUNT of a fixed tree should not move with load, so the readings drifting both above and below each other means something forks a timing-dependent number of times, or the instrument loses and gains trace lines under load. The record's own text says a dropped line is "subtractive", and readings that rise as well do not fit that alone. The cause is NOT established here: ai-dlc-4e [9b62de] is running the by-line census (`scripts/fork-profile.sh --section by-line` at two loads, differenced) and will add it.
+
+Owed:
+1. Find the cause in the measured instance and remove the load dependence at its source (a verdict that holds at any load), rather than retrying until a repeat appears.
+2. Census every other verdict in the suite that can change with load (timeouts, wall-clock bounds, poll counts, repeat-until-stable arms), and list each with its mechanism.
+3. Receipt per fixed unit: its verdict is identical solo and under the gate's pool at the recorded load. Control: one unit known to be load-free agrees both ways too.
+
+Each instance costs a full re-push of the release, which is the consequence this entry is tiered on.
+
+Owner: ai-dlc-4e [9b62de] (lead ai-dlc-9c).
+
+**Cause and census (ai-dlc-4e [9b62de], 2026-10-16 11:13-11:15 EDT; intake spot-checked the cited lines at origin/main `f4ca6764`).**
+
+*A2's cause is the instrument, not the validator: trace records are spliced, not lost.* Six profiles of `f4ca6764`, taken two at a time at load 2.8, read 3400, 3401, 3401, 3399, 3401 and 3399. Every trace was 39877021 bytes and carried exactly 90452 `+@N@` markers somewhere in its text, but only 90450-90452 of them at line START. Pipeline stages share fd 2, so a sibling stage's trace record can land in the middle of a long host line. The classifier at `scripts/fork-profile.sh:137` (`if ($1 !~ /^\++@[0-9]+@$/) next`) reads field 1 only, so a spliced record is skipped. Diffing the high reading (r2) against the low one (r4) finds two rows only in r2: `scripts/validate-enforcement-map.sh:7766` `sed` (I82) and `:10105` `tr` (I93); the other 981 rows are common. A reading can therefore fall anywhere from n down to n-k, so the arm's premise that only {n, n-1} occur, and that its exit 3 can never be reached, is false. `--stable`'s repeat-until-equal loop does not fix this; it only shrinks the odds.
+
+Proposed fix, built as WIP `06e4d186` on `b235-load-a2`:
+- The classifier reads every marker on a line.
+- One reading replaces the repeat loop.
+- A2 asserts TRACELINES == MARKERS with a second reader over the same trace, and any gap is FIXTURE BROKEN.
+- A new splice self-probe checks both directions, with mutants m7 (field-1 reader) and m13 (widened marker).
+Offline over the six saved traces, the new classifier reads 3401 on all six with ntrace == MARKERS == 90452. On an unspliced trace the old and new by-line outputs are byte-identical, which is the control.
+
+*Census of load-red candidates, each with 4e's proposed fix:*
+1. `validator-fork-budget` A2: the fix above.
+2. `core/fixtures/context-sensor/run.sh:614`: the CONTROL window is seeded at `now - 59` against a 60 s freshness bound, and the comment at `:605-607` already records "two of seven gate runs in one day failed exactly that arm". Proposed: seed it at `now - 30`.
+3. `core/fixtures/gate-remediation-deny/run.sh:1416-1419`: arm 3b asserts a hung resolver is abandoned in under 15 s of wall clock. Proposed: the stub sleeps 600 s and the bound becomes 300 s.
+4. Short HANG watchdogs: `fold-architect-ledger-join/run.sh:456` (150 polls of 0.1 s, so 15 s), `readset-stage1-verdict` `:582`, `:639` and `:660` (10-30 s), and `readset-skip`'s polls. Proposed: size each one to a hang (120 s), not to the expected time.
+5. `advisor-gate-deny` `lib.sh:546`, the rr-late cell: a 3 s append against a 10 s default ceiling. Proposed: give that cell an explicit 60 s ceiling.
+6. The suite-pole FAIL in `scripts/validate-suite-pole.sh:947-957` and `:997-1008` compares loaded wall clock against loaded history. Proposed: gate on per-unit CPU-seconds and keep wall clock as information.
+7. Backlog receipts `--max-unstable 0` (`.githooks/pre-push:269`): a receipt that flaps under contention fails the push. Proposed: diagnose the flap at its source (read still owed).
+8. `readset-sandbox-root-clause` `:136-158`: BROKEN when all 10 `log stream` windows drop notices. The rate under pool load must be measured before any fix.
+
+Not load-reds: the pole SKIPs (exit 0), SKIPPED-on-earlier-red, and the trace-TIMED-OUT WARN. Already fixed at source: `agent-definition-render` and `artifact-section-heading-level`.
+
+Coverage limit: the census was curated, not exhaustive (raw hits A 117, B 113, C 123). Items 4 and 7 still owe reads, and `readset-skip` is only partly read. The release order is lead ai-dlc-9c's to set; 4e proposes A2 first, as its own release.
+
+**Progress (0.804.0; entry stays OPEN).** Shipped: census items 1-4.
+- Item 1, A2: one reading, every trace marker classified, A2 asserting TRACELINES == MARKERS.
+- Item 2: context-sensor's CONTROL moved to `now - 30`.
+- Item 3: gate-remediation-deny 3b is binary. The edit is DENIED, and the 600 s sleeper's recorded pid is dead when the hook returns. Elapsed time is printed, not judged.
+- Item 4: the `fold-architect-ledger-join` D6 watchdog and `readset-stage1-verdict` `:582`, `:639` and `:660` were raised to 120 s.
+
+Slot, 2026-10-16, 12:04-12:10 PM EDT at load 3.6-4.6:
+- validator-fork-budget, solo: 3401 forks, TRACELINES == MARKERS == 90452, 14/14 mutants killed.
+- gate-remediation-deny and readset-stage1-verdict through `hermetic-run.sh`: rc 0, `required_missing=0`.
+- context-sensor (164 passed) and fold-architect-ledger-join (72 ok), run from the repo root as the hook runs them; neither declares inputs.
+
+Still owed, in the order lead ai-dlc-9c set:
+- (6) the suite pole gated on per-unit CPU-seconds;
+- (7) the backlog-receipt flap, diagnosed at its source;
+- (5) the advisor-gate ceiling, now BL-630;
+- (8) the `readset-sandbox-root-clause` all-lossy rate, measured at pool load;
+- item 4's unread `readset-skip` polls: `:981`, `:985`, `:1305`, `:1307`, `:1316`, `:1369`, `:1386`, `:1395`, `:1453-1458`, `:1680` and `:4104`;
+- every time or numeric threshold in an assertion, each converted to a binary attribute or justified by a named, measured property (operator: "really need to stop forcing arbitrary goals that aren't based on binary attributes"). This release's 120 s watchdogs are harness safety nets for a hang, not verdicts, and are on that list too (BL-632).
+
+Each fixed unit still owes its solo-against-pool receipt, with a load-free control.
+
+verify: manual
+
+## BL-617 — `validate-layer-entries.sh` W10 tells the operator "The next pull creates it" when it fires on the pull that creates it
+
+**DEFECT.** Found by ai-dlc-60's BL-612 shipped-text sweep (opus, read-only); intake re-derived it read-only at origin/main `f4ca6764`. W10 at `core/scripts/validate-layer-entries.sh:1329` warns: "$MACHINERY_REL: the ai-dlc machinery inventory has not been scaffolded, so this project has not declared which of its scripts are ai-dlc machinery. The next pull creates it from core's template; until then nothing states the inventory and nothing can check it. …"
+
+The consumer pre-push runs this validator (`core/git-hooks/pre-push:77-79`). On the delivering pull, step 2 writes the new machinery declaration (`core/skills/ai-dlc-update/reconcile/setup-sites.md:280`, `machinery:`), so W10 can fire on that pull's own step-2 push. Step 7 of the same pull then creates the file: `core/skills/ai-dlc-update/reconcile/apply.sh:2145` (`elif [ ! -f "$CONSUMER/$MC_REL" ]`) copies `core/skills/ai-dlc/templates/<name>` into place and reports `RESOLVED machinery-scaffold` (`:2151`). So "the next pull" is wrong in that case, where "this pull's step 7" is right. It stays right only when W10 fires between pulls. This is BL-612's delivery-phase error appearing in a user-facing message, and it is filed apart from BL-612 because it changes another subsystem's output. The open backlog does not mention W10 (0 matches).
+
+Owed: W10 says which case it is in, or words its timing so that it holds in both. Receipt: drive the validator in a scaffold-absent tree on both a mid-pull push and a between-pulls push, and read the message in each.
+
+verify: manual
+
+## BL-618 — implementation.md tells the first cross QA its beat state directory goes "outside the shard directory", which no longer says where it lands
+
+**NOTE.** Found by ai-dlc-ad during 0.802.0, relayed by lead ai-dlc-9c; intake re-derived it read-only at origin/main `f4ca6764`. `core/skills/ai-dlc/steps/implementation.md:449` gives the first cross QA "a beat state directory of its own, outside the shard directory and never the lead's", used at `:456` as `AI_DLC_STATE_DIR=<that directory> wait-for-deliverable.sh --complete …`. Since BL-576 (0.802.0), `wait-for-deliverable.sh:502-504` resolves `AI_DLC_STATE_DIR` as absolute when it starts with `/`, and otherwise relative to the project root `WD_ROOT` (`:242`: "relative = under the project root"), not to the cwd. "Outside the shard directory" does not say which. A relative name now lands under the project root wherever the QA runs, so the wording no longer tells the QA what it gets. The open backlog does not cover it: the only other "outside the shard directory" match is BL-554's `.draft` entry.
+
+Owed: the step says "an absolute path, or a path relative to the project root", matching `:242`. Receipt: the rendered step names both forms. Control: the `--since` instruction at `:456-458` is unchanged.
+
+verify: manual
+
+## BL-619 — `ai-dlc-continue.sh` ignores `AI_DLC_STATE_DIR`, so the stop hook cannot see a beat whose state dir was set
+
+**DEFECT.** Found by ai-dlc-ad during 0.802.0, relayed by lead ai-dlc-9c; intake re-derived it read-only at origin/main `f4ca6764`. The defect predates 0.802.0. The stop hook hardcodes the marker at `core/hooks/ai-dlc-continue.sh:113` and `:120`: `LOG_DIR="${PROJECT_DIR}/_bmad-output"`, then `BEAT_MARKER="${LOG_DIR}/.beat-inflight"`. Check 2b reads it at `:152-153`. Its own comment at `:118-119` claims the "same dir and default as the script's AI_DLC_STATE_DIR (_bmad-output)", but the script writes the marker to `BEAT_MARKER="${STATE_DIR}/.beat-inflight"` (`core/scripts/wait-for-deliverable.sh:1050`), where `STATE_DIR` honours `AI_DLC_STATE_DIR` (`:502-504`). `ai-dlc-continue.sh` mentions `AI_DLC_STATE_DIR` once, in that comment (control: `PROJECT_DIR` 14). Sibling hooks do read it, for example `core/hooks/ai-dlc-dispatch-guard.sh:546`: `SPAWN_STATE_DIR="${PROJECT_DIR}/${AI_DLC_STATE_DIR:-_bmad-output}"`.
+
+So any beat run with `AI_DLC_STATE_DIR` set writes its liveness marker where Check 2b never looks, and `implementation.md:456` prescribes exactly that for the first cross QA. This is BL-576's failure (the stop hook cannot see the beat) reached through a different door. A hook's environment can also differ from the beat's, so the fix has to say which value of `AI_DLC_STATE_DIR` the hook can actually observe.
+
+Owed: Check 2b finds the marker wherever `wait-for-deliverable.sh` wrote it, resolved the same way (`:502-504`). Receipt: drive the hook against a live beat started with a non-default `AI_DLC_STATE_DIR`, and show Check 2b sees it. Control: the default-dir beat is still seen.
+
+verify: manual
+
+## BL-630 — advisor-gate's re-read ceiling is a hardcoded 10 s of wall clock, so a correct advisor line that lands late on a loaded box is denied, in consumers as well as the fixture
+
+**DEFECT.** Filed by ai-dlc-4e [9b62de] under the operator's load directive (BL-616), assigned by lead ai-dlc-9c; intake re-derived it read-only at origin/main `f4ca6764`.
+- `core/hooks/ai-dlc-advisor-gate.sh:579` sets the ceiling: `case "${ADVISOR_GATE_REREADS:-2}" in 0) _cap=0 ;; 1) _cap=2 ;; *) _cap=10 ;; esac`.
+- `:581` loops `while [ "$V" != allow ] && [ "${SEEN:-0}" != 1 ] && [ $((SECONDS - _t0)) -lt "$_cap" ]`, re-scanning every 0.25 s until the incoming call's own line is seen or 10 s pass.
+- The only knob is stricter-only (`:17`, `:157`), so neither a fixture nor a consumer can widen it.
+- The hook's own comment (`:577-578`) says a scan's cost "grows with the transcript and the load" (0.35 s solo on a 4432-line graph prefix; 4.73 s for 2 re-reads on graph's 815-line deny). Under load, fewer re-reads fit in the 10 s, and the transcript write being waited for lands later too.
+- The hook ships to consumers: `templates/` registers it (1 file).
+
+The fixture that carries it is `core/fixtures/advisor-gate-deny/lib.sh:547-549`, cell `rr-late`: it appends 3 s after the hook starts (`APPEND_DELAY=3`) and expects SILENT against the 10 s ceiling. This is BL-616's census item 5. It was moved here because a fixture-side change would hide a property of the hook.
+
+Rejected starting points:
+- (a) A re-read COUNT (for example 40 × 0.25 s) instead of `SECONDS`. It is not load-free on its own: per-scan cost grows with load, so the hook's worst-case stall grows with load without bound, and the wait still races the harness's transcript write instead of observing it.
+- (b) A fixture-only change, where the appender waits for the hook to start. The hook emits no start signal, so this needs a hook edit anyway, and it would turn the fixture green while consumers keep the wall-clock ceiling.
+
+Owed: a ceiling that does not deny a correct advisor line because of load, with a bounded worst-case stall. Receipt: per BL-616, `rr-late` and `rr-none` give the same verdict solo and under the gate's pool, with a load-free control.
+
+Owner: ai-dlc-4e [9b62de] (lead ai-dlc-9c), the fourth release of its load series, after the CPU-seconds pole and the receipt flap.
+
+verify: manual
+
+## BL-631 — shipped mechanisms read past sprints' artifacts, so a pull or gate can fail, or owe work, because of a historical artifact
+
+**DEFECT.** Operator ruling, relayed by lead ai-dlc-9c: "I'm stating that I don't care if a fixture or check fails against a historical sprint artifact." Earlier: "if someone deleted all of graph consumer's sprint history, it should not matter whatsoever" and "it's a nice to have, not a need." The candidates come from a read-only Sonnet census; intake checked each cite at origin/main `f4ca6764`. The open backlog has no entry on it (0 matches for "historical sprint" or "past sprint").
+
+Readers that take in past sprints, each confirmed at the cited lines:
+1. `core/skills/ai-dlc-update/reconcile/apply.sh:1350-1407`, `vd_join`: lists every `*.md` under the consumer's `_bmad-output/` (`find "$4" -type f -name '*.md'`) and turns the result into the pull's `WORKLIST artifact-derivations` / `artifact-derivations-unreadable` / `-unchecked` rows. A past sprint's artifact can drive the pull's row.
+2. `core/scripts/validate-artifact-derivations.sh:800-806`: given a directory, it walks every `*.md` under it.
+3. `core/skills/ai-dlc-update/reconcile/derivation-differential.sh`: its NEWLY-FAILING set (`:30`, "THIS PULL'S WORK"; exit 1 at `:41`) is taken over `_bmad-output/**/*.md` (`:9`), the same corpus.
+4. `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:2287-2291` and `:2524-2525`: reads `push-candidate-ledger.archive.md` into `ARCHIVE_LABELS` (via `corpus_labels`) and into the sibling entries.
+5. `core/scripts/validate-mandatory-rules.sh:574-581` and `:689-692`: Check 6 counts story files under every `stories/` directory in the area, and the FAIL at `:689` reports that count. Whether a past sprint's story can change the verdict, and not only the message, is for the owner to read at `:683-692`.
+6. `core/hooks/ai-dlc-gate-remediation-guard.sh:1315`: globs `planning-artifacts/s*/gate-*repair*.md` across every sprint, though `:1317` keeps only a record carrying the live nonce, so a historical record is used only if it carries that nonce.
+7. `core/scripts/validate-artifact-budget.sh:1376-1379`: with no canonical live log, it falls back to `find … -name gate-log.md | head -1`, which can return an archived sprint's log. The order of `find` is unspecified, so which log it gets is not stable either.
+
+OPEN QUESTIONS, not filed as defects. Each needs SOME prior state, so the question is whether that state comes from a history read or from a current-state record:
+- `core/scripts/sprint-status.sh:296-381`, `max_frozen` / `frozen_sprints`: derives the current sprint number from the frozen archives, in both spellings.
+- I81 SPRINT_PENDING, `core/hooks/ai-dlc-continue.sh:1146-1152` and `core/hooks/ai-dlc-acknowledge.sh:416-421`: tests for `s(N-1)/` and for any later `s*/`.
+- `core/scripts/validate-trunk-audit-gate.sh`: takes its genesis from the prior sprint's `audit-anchors.md` entry when there is no watermark (`:73`).
+
+Owed: scope each reader in items 1-7 to the current sprint (or to the current pull's own range), so a failing or absent historical artifact can neither block nor owe anything. No prose rule. Answer each open question with a reason. Receipt per reader: the verdict is the same with every past sprint's artifacts deleted and with a deliberately failing artifact seeded into a past sprint. Control: the same failing artifact in the CURRENT sprint still fails.
 
 verify: manual

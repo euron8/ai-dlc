@@ -579,7 +579,9 @@ wrap_term() {
   AI_DLC_READSET_STAGE1_LEDGER="$L" STUB_MODE=hang STUB_PIDS="$R/pids" STUB_READY="$R/ready" \
     bash "$R/repo/scripts/readset-stage1-run.sh" "$rd" > "$R/out" 2>&1 &
   wp=$!
-  n=0; while [ ! -f "$R/ready" ] && [ "$n" -lt 300 ]; do sleep 0.1; n=$((n + 1)); done
+  # 120s: a bound sized to a HANG, not to the expected start. It costs a passing run nothing and a
+  # tight one reports a loaded box as a stub that never started.
+  n=0; while [ ! -f "$R/ready" ] && [ "$n" -lt 1200 ]; do sleep 0.1; n=$((n + 1)); done
   [ -f "$R/ready" ] || { kill "$wp" 2>/dev/null; cat "$R/pids" >> "$ORPHANS"; broken "[$t] the stub never signalled ready"; }
   cat "$R/pids" >> "$ORPHANS"
   kill -TERM "$wp"; wait "$wp"; rc=$?
@@ -636,7 +638,7 @@ wrap_kill9() {
   AI_DLC_READSET_STAGE1_LEDGER="$L" STUB_MODE=hang-late STUB_PIDS="$R/pids" STUB_READY="$R/ready" \
     bash "$R/repo/scripts/readset-stage1-run.sh" "$rd" > "$R/out" 2>&1 &
   wp=$!
-  n=0; while { [ ! -f "$R/ready" ] || [ ! -s "$rd/pgid" ]; } && [ "$n" -lt 300 ]; do sleep 0.1; n=$((n + 1)); done
+  n=0; while { [ ! -f "$R/ready" ] || [ ! -s "$rd/pgid" ]; } && [ "$n" -lt 1200 ]; do sleep 0.1; n=$((n + 1)); done
   [ -f "$R/ready" ] && [ -s "$rd/pgid" ] || { kill "$wp" 2>/dev/null; cat "$R/pids" >> "$ORPHANS"; broken "[$t] the stub never signalled ready, or the wrapper wrote no pgid"; }
   cat "$R/pids" >> "$ORPHANS"; cat "$rd/sampler.pid" >> "$ORPHANS" 2>/dev/null
   # CONTROL: RUN_DIR/pgid is the stub's own pid, which leads its process group (third STUB_PIDS line).
@@ -657,7 +659,7 @@ wrap_kill9() {
   [ ! -e "$R/run2" ] || { echo "    [$t] (a) the refused run beside the orphan created its RUN_DIR"; f=1; }
   # (b) end the orphan's two children: its `wait` returns, it writes the map LAST and exits.
   sed -n '1,2p' "$R/pids" | while IFS= read -r p; do kill "$p" 2>/dev/null; done
-  n=0; while kill -0 -- "-$pg" 2>/dev/null && [ "$n" -lt 100 ]; do sleep 0.1; n=$((n + 1)); done
+  n=0; while kill -0 -- "-$pg" 2>/dev/null && [ "$n" -lt 1200 ]; do sleep 0.1; n=$((n + 1)); done
   kill -0 -- "-$pg" 2>/dev/null && broken "[$t] the orphaned process group $pg did not exit after its children were ended"
   grep -qx 'stub-wrote' "$rd/root/w/map.written" 2>/dev/null || { echo "    [$t] (b) the orphan never reached its final map write"; f=1; }
   cmp -s "$R/repo.map.orig" "$R/repo/.ai-dlc-fixture-readsets.tsv" && { echo "    [$t] (b) the map is clean after the orphan exited, so the dirty-tree refusal proves nothing"; f=1; }
