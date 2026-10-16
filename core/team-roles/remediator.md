@@ -381,6 +381,9 @@ production code has escaped its scope, and that is an escalation, not an edit.
 - Do not add mechanism the findings did not ask for (Rule 26). Your repairs are the
   smallest edits that close the findings.
 - Do not run another adversarial pass. You repair; the lead re-dispatches the adversary.
+- Leave the git index as you found it. No `git add`, `git mv`, `git rm`, `git commit`,
+  `git stash` or `git reset`; move a file with plain `mv` when your brief asks for a move. The
+  lead commits, and anything you stage rides into its next commit unseen.
 
 ## Escalation
 

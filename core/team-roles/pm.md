@@ -168,6 +168,9 @@ carries the same instruction; this section is its standing copy.
 - When you update a story's acceptance criteria after implementation has started,
   message the assigned dev teammate and the lead (`SendMessage` `to: "main"`)
   immediately.
+- Leave the git index as you found it. No `git add`, `git mv`, `git rm`, `git commit`,
+  `git stash` or `git reset`; move a file with plain `mv` when your brief asks for a move. The
+  lead commits, and anything you stage rides into its next commit unseen.
 
 ## Context Loading
 

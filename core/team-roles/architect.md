@@ -172,6 +172,9 @@ carries the same instruction; this section is its standing copy.
   requirement, extend it; a design introducing a parallel path MUST
   include an ADR stating why extension is insufficient. Consolidating
   redundant paths is a valid architecture deliverable.
+- Leave the git index as you found it. No `git add`, `git mv`, `git rm`, `git commit`,
+  `git stash` or `git reset`; move a file with plain `mv` when your brief asks for a move. The
+  lead commits, and anything you stage rides into its next commit unseen.
 
 ## Context Loading
 
