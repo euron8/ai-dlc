@@ -853,7 +853,15 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   I83 +2, I21 +1, I9 +1 (sum +21); I82b and I93 wobble by one on both sides. The new files are
 #   core/scripts/validate-trunk-audit-gate.sh, reconcile/post-write-gates.sh and the trunk-audit-gate
 #   and post-write-gates fixtures. HIGH tip reading 3391 plus the same 4, so 3374 + 21.
-FORK_BUDGET=3405
+#
+#   RAISED TO 3412 FOR FOUR NEW FIXTURE DIRECTORIES, which I8's `.dist-only` walk over
+#   core/fixtures/*/ tests one each. `fork-profile.sh --stable --section by-arm`, base c07dc9d1
+#   (0.805.0) and tip d38817a8 (0.806.0), in ONE clean detached worktree at one path, interleaved
+#   B T B T B T: base 3404 3404 3404, tip 3408 3408 3408, spread 0 against a delta of +4. By arm,
+#   128 arms: I8 104 -> 108 and no other arm moved, in all three pairs. The new directories are
+#   story-evidence-scaffold-mutants and its shards -b, -c and -d, each `.dist-only`. HIGH tip
+#   reading 3408 plus the same 4.
+FORK_BUDGET=3412
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

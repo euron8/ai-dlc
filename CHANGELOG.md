@@ -20,7 +20,60 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
-## [0.805.0] - 2026-10-16
+## [0.806.0] - 2026-10-16
+
+Batch 235 (combined release: BL-584 and R-558). Closes BL-558. Advances BL-584, which stays OPEN (PARTIAL). Closes
+no `PC-` id.
+
+### `fold-architect-ledger-join` is a declared fixture (BL-584, owed 1, one of its two fixtures)
+
+- `fold-architect-ledger-join` carries `inputs.decl` and `tools.decl`, so the pre-push hook keys it on its declaration
+  and runs it under `hermetic-run.sh`. In the release slot it read 72 ok, 0 FAIL, 0 stood down, `sandbox_files=15`,
+  `required_missing=0`. `validate-hermetic-consumption.sh` flags nothing and `validate-decl-reasons.sh` passes.
+- Its 46 traced rows are removed from `.ai-dlc-fixture-readsets.tsv`, regenerated through the deriver's own
+  `readset_merge_map` with every other row byte-identical. Driving the hook's own spans afterwards, fold has 0 map rows,
+  is in the declared set and carries 43 declared keys; `hermetic-runner`, undeclared, is not in the declared set.
+
+### `hermetic-runner` still cannot be traced, and now runs on every push (BL-584, owed 3, OPEN)
+
+- `hermetic-runner` reads its subject files (the runner, `core-paths.sh` and the two hook copies) from copies made once
+  at startup, each checked with `cmp -s` (`FIXTURE BROKEN`, exit 2, on a mismatch).
+- That cut its sandbox trace window about 6x, from 17691 lines to 2902 (loaded), but did NOT stop the dropped reports.
+  At this release's tip, a 6-fixture `--tracer sandbox` call dropped 3 reports in its window, and three
+  `--local-map` reps dropped 1, 2 and 7, at load 27-43: 0 of 3 clean. The premise this change was built on, that the
+  drops come from re-opening four tree files hundreds of times, is REFUTED. The drop cause is undiagnosed.
+- **`hermetic-runner` now always runs (fail-closed) until the drops are fixed.** Its 17 traced rows predate the copy and
+  its digest no longer matched, so nothing could trust them; they and the digest are removed with `readset_merge_map`,
+  the deriver's own handling of an OMITTED fixture. Run alone in the slot it took 43s (loaded).
+- A correction: the count of held fixtures earlier stated as 27 is 5. Measured over
+  `.git/ai-dlc-fixture-readsets.local`, 27 fixtures carry `#discards` at n≥3, and only 5 of them are keyed on the
+  current runner and deriver (`fixture-git-env-seam`, `fold-architect-ledger-join`, `hermetic-runner`,
+  `ledger-status-vocabulary`, `validator-fork-budget`).
+
+### `story-evidence-scaffold`'s mutation battery leaves consumers, in four `.dist-only` shards (BL-558)
+
+- What the 2-3s rows measured: dispatched, passing runs of the 232-line fixture from before 0.783.0. Durations are
+  written only in the pool worker and the history only on PASS or CALIBRATING, so they were not skips. 0.783.0 took it
+  to about 16s (13 worlds, 20 validator mutants); 0.787.0 took it to about 175s (33 worlds, 37 validator mutants, and
+  handoff-mode verdicts that fork `python3` through `sprint-status.sh`). So 175s was the fixture's real cost.
+- The battery shipped to every consumer, because the fixture had no `.dist-only`. The validator battery now lives in
+  `story-evidence-scaffold-mutants` and shards `-b`, `-c` and `-d`, each `.dist-only` with its reason (a mutation battery
+  behind a shipped fixture) and named in no uninstall or manifest list. **Consumers stop running the battery.**
+- The shipped `story-evidence-scaffold` still asserts the prose arms, CWD, CONTROL, the 22 prose mutants,
+  HANDOFF/STRATEGY, IN PLACE, RANGE and SIBLING EXIT. The battery's dealt check is bound to the `he_mutant` call site
+  and refuses unknown arguments.
+- Solo, in a clean worktree: the shipped fixture 26s, the shards 53s, 50s, 58s and 46s, all PASS.
+- All five units are traced with the sandbox tracer at this release's tip and their rows and digests committed
+  (88, 77, 78, 78 and 78 rows); the hook's `readset_committed_digests` reads `match` for all five.
+
+### The validator fork budget rises by the four new fixture directories
+
+- `validate-enforcement-map.sh`'s I8 arm tests every fixture directory for a `.dist-only` marker, so the four new
+  shard directories add one fork each. `fork-profile.sh --stable --section by-arm`, interleaved at one path: 3404 at
+  c07dc9d1 and 3408 at the tip in all three pairs, with I8 104 to 108 the only arm that moved. `FORK_BUDGET` rises
+  3405 to 3412, the tip reading plus the same 4 the last two raises kept.
+
+
 
 Batch 235 (combined release: Q, R2, R1, BL-602 and V1). Closes BL-595, BL-602 and BL-600. Advances BL-568 (R1 and R2
 land; its third release, R3, remains). Closes no `PC-` id.
