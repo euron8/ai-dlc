@@ -74,6 +74,7 @@ no `PC-` id.
   3405 to 3412, the tip reading plus the same 4 the last two raises kept.
 
 
+## [0.805.0] - 2026-10-16
 
 Batch 235 (combined release: Q, R2, R1, BL-602 and V1). Closes BL-595, BL-602 and BL-600. Advances BL-568 (R1 and R2
 land; its third release, R3, remains). Closes no `PC-` id.
