@@ -668,6 +668,8 @@ Owed:
 4. State the gate minutes saved per avoided red, with the dollar figure beside them.
 Related: BL-583, BL-584.
 
+Assigned to ai-dlc-4e [9b62de] by lead ai-dlc-9c, to build after H-b, with the two confirmed red commits (vssnap, caught by I54; W, caught by `procsub-staged-refusal`) as its discriminating inputs.
+
 Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
 
 verify: manual
