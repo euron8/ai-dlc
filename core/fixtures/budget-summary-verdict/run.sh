@@ -634,13 +634,16 @@ five|- 2026-10-14T11:05Z five minutes ahead
 past|- 2026-10-14T10:59Z just now
 spaced|- 2026-10-14T12:00Z - 12:45Z, 2026-10-14T12:00Z to 12:45Z, 2026-10-14T12:00Z → 12:45Z, 2026-10-14T12:00Z – 12:45Z planned
 correction|- 2026-10-14T10:58Z CLOCK CORRECTION: rewrote 2 future stamp(s) to date -u: 12:00Z, 12:45Z
+fulliso|- 2026-10-14T10:58Z CLOCK CORRECTION: rewrote 1 future stamp(s) to date -u: 2026-10-14T12:00Z
+deadline|- 2026-10-14T10:59Z operator set the monitor deadline 2026-10-21T16:08:54Z
 NEAR
-[ "$nm_ok" -eq 1 ] && ok "F2-F6 range, spaced range, date-only, x/~ placeholder, 5-min-ahead, past and bare-HH:MMZ CLOCK CORRECTION stamps are all accepted"
+[ "$nm_ok" -eq 1 ] && ok "F2-F6 range, spaced range, date-only, x/~ placeholder, 5-min-ahead, past, bare-HH:MMZ and full-ISO CLOCK CORRECTION, and a body deadline on a stamp-led line are all accepted"
 
-# F1c OFFENDER TWINS of two near-misses above, each one property apart: a single stamp followed
-# by ` - ` and TEXT (the spaced-range skip needs a digit), a stamp MID-LINE, and a CLOCK
-# CORRECTION line naming the old stamps in FULL ISO form -- which the remedy forbids, because
-# it is itself a future stamp and re-fires this check.
+# F1c OFFENDER TWINS of near-misses above, each one property apart: a single stamp followed
+# by ` - ` and TEXT (the spaced-range skip needs a digit); a stamp MID-LINE in a line with no
+# leading stamp, which is read whole because the legacy `gate PASSED -- <stamp>` form puts the
+# entry stamp last; a full-ISO CLOCK CORRECTION body with NO leading stamp of its own (twin of
+# `fulliso`); and a FUTURE leading stamp beside a body deadline (twin of `deadline`).
 f1c_ok=1
 while IFS='|' read -r olabel oline; do
   [ -n "$olabel" ] || continue
@@ -652,9 +655,10 @@ while IFS='|' read -r olabel oline; do
 done <<'OFF'
 dashtext|- 2026-10-14T12:00Z - DEPLOY DONE
 midline|- DEPLOY DONE at 2026-10-14T12:00Z
-fulliso|- 2026-10-14T10:58Z CLOCK CORRECTION: rewrote 1 future stamp(s) to date -u: 2026-10-14T12:00Z
+fullisonolead|- CLOCK CORRECTION: rewrote 1 future stamp(s) to date -u: 2026-10-14T12:00Z
+leaddeadline|- 2026-10-14T12:00Z DONE, operator deadline 2026-10-21T16:08:54Z
 OFF
-[ "$f1c_ok" -eq 1 ] && ok "F1c ' - text', a mid-line stamp, and a full-ISO CLOCK CORRECTION line are each refused"
+[ "$f1c_ok" -eq 1 ] && ok "F1c ' - text', a mid-line stamp, a full-ISO CLOCK CORRECTION line with no leading stamp, and a future leading stamp beside a body deadline are each refused"
 
 # F8 THROUGH verdict.sh, WITH A CO-OCCURRING BUDGET OVER. Every lead-facing call site reads this
 # validator through the wrapper, which shows at most 6 matching lines. Five future stamps plus a

@@ -1065,6 +1065,17 @@ check_inflight_status() {
 # same 163 revisions: 69 fire, 214 findings, 0 inside the slack -- identical, because the
 # corpus carries one spaced range (` to `), and its stamps are past. The digit requirement is
 # what keeps ` - DEPLOY DONE` read; the self-probe seeds both sides of it.
+#
+# A RECENT ACTIVITY LINE THAT LEADS WITH A STAMP HAS ONLY THAT STAMP READ. The whole-line scan
+# refused a CORRECT future value: an operator-set monitor deadline recorded in an entry body
+# (`2026-10-21T16:08:54Z`, 8294 min ahead), whose remedy told the lead to overwrite the ruling
+# with `date -u`. Re-measured over the reference consumer's full committed history, 546
+# revisions, now = each commit time: the whole-line scan 344 findings, this rule 342, 0 new.
+# The 2 it acquits are ONE stamp named twice in one line, `recheck not before <stamp>` -- a
+# recorded deadline, the case this narrowing exists for. LEADING-ONLY WAS MEASURED AND
+# REJECTED: it acquitted 18, and 16 were true positives in the legacy form
+# `gate PASSED -- <stamp>`, which puts the entry stamp LAST. So a line with no leading stamp
+# is still read whole; that is where a future entry stamp lives when it is not first.
 FUTURE_SLACK_S=600
 check_future_stamps() { # check_future_stamps <file> <rel> <now-epoch>
   LC_ALL=C awk -v now="$3" -v slack="$FUTURE_SLACK_S" -v ART="$2" '
@@ -1119,7 +1130,21 @@ check_future_stamps() { # check_future_stamps <file> <rel> <now-epoch>
       col = 0; ncols = 0
       next
     }
-    ra { scan($0, "Recent Activity"); next }
+    # A LINE THAT LEADS WITH A STAMP HAS ONLY THAT STAMP READ: the first token after an
+    # optional list marker (`- `, `* `, `+ `, `N. `) and an optional `**`. That stamp is
+    # when the entry happened; a later one in the same line is a date it RECORDS -- an
+    # operator-set deadline, a planned window. The 8 bytes after the stamp are kept so the
+    # range skips still see a range end. A line with NO leading stamp is read whole, as
+    # before: the legacy form `gate PASSED -- <stamp>` puts the entry stamp at the END.
+    ra {
+      ld = $0
+      if (match(ld, /^[[:space:]]*([-*+]|[0-9]+\.)?[[:space:]]*(\*\*)?/)) ld = substr(ld, RLENGTH + 1)
+      if (match(ld, /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9](:[0-9][0-9])?Z/))
+        scan(substr(ld, 1, RLENGTH + 8), "Recent Activity")
+      else
+        scan($0, "Recent Activity")
+      next
+    }
     inf && /\|/ {
       row = $0
       piped = ($0 ~ /^[[:space:]]*\|/)
@@ -1538,7 +1563,8 @@ fi
 #   NEAR-MISS  a range with an offset-shaped suffix, spaced ranges (` - `, ` to `, arrow), a
 #              stamp 5 min ahead, a date-only stamp, an `x` placeholder, a `~` approximation,
 #              a CLOCK CORRECTION line naming the old stamps as bare HH:MMZ (the remedy's own
-#              form, which must not re-fire), and a future `since` in the STATUS cell
+#              form, which must not re-fire), a future deadline in the body of a line that
+#              leads with a past stamp, and a future `since` in the STATUS cell
 FPROBE="$TMPROOT/probe-future.md"
 {
   printf '## Recent Activity\n'
@@ -1547,6 +1573,7 @@ FPROBE="$TMPROOT/probe-future.md"
   printf -- '- 2026-01-01Txx:xxZ placeholder, ~2026-01-01T05:00Z approx, 2026-01-01T03:00Z - 04:00Z, 2026-01-01T03:00Z to 04:00Z, 2026-01-01T03:00Z \342\206\222 04:00Z spaced\n'
   printf -- '- 2026-01-01T02:00Z - OFFENDER-DASH\n'
   printf -- '- 2025-12-31T23:59Z CLOCK CORRECTION: rewrote 2 future stamp(s) to date -u: 01:00Z, 02:45Z\n'
+  printf -- '- 2025-12-31T23:58Z operator set the monitor deadline 2026-01-07T16:08:54Z\n'
   printf '## In-Flight Teammates\n'
   printf 'agent | role | deliverable | dispatched-at | status\n'
   printf -- '--- | --- | --- | --- | ---\n'
@@ -1557,15 +1584,15 @@ FPROBE_OUT="$(check_future_stamps "$FPROBE" probe 1767225600)"
 FPROBE_N="$(printf '%s\n' "$FPROBE_OUT" | grep -c '^FUTURE ')" || FPROBE_N=0
 case "$FPROBE_OUT" in *'line 2:'*'(Recent Activity)'*) FP_RA=1 ;; *) FP_RA=0 ;; esac
 case "$FPROBE_OUT" in *'line 5:'*'(Recent Activity)'*) FP_DASH=1 ;; *) FP_DASH=0 ;; esac
-case "$FPROBE_OUT" in *'line 10:'*'dispatched-at)'*) FP_IF=1 ;; *) FP_IF=0 ;; esac
+case "$FPROBE_OUT" in *'line 11:'*'dispatched-at)'*) FP_IF=1 ;; *) FP_IF=0 ;; esac
 rm -f "$FPROBE"
 if [ "$FP_RA" -ne 1 ] || [ "$FP_DASH" -ne 1 ] || [ "$FP_IF" -ne 1 ] || [ "$FPROBE_N" -ne 3 ]; then
   echo "FAIL: the future-stamp self-probe expected exactly its three OFFENDERS (Recent Activity" >&2
-  echo "  lines 2 and 5, dispatched-at line 10) and got ${FPROBE_N} finding(s):" >&2
+  echo "  lines 2 and 5, dispatched-at line 11) and got ${FPROBE_N} finding(s):" >&2
   printf '%s\n' "$FPROBE_OUT" | sed 's/^/    /' >&2
   echo "  A missing offender means the arm cannot fire; an extra one means a skipped form" >&2
   echo "  (range, spaced range, 5-min slack, date-only, x, ~, a CLOCK CORRECTION line naming" >&2
-  echo "  bare HH:MMZ, status-cell since) is being read." >&2
+  echo "  bare HH:MMZ, a deadline in the body of a stamp-led line, status-cell since) is being read." >&2
   exit 1
 fi
 
@@ -1769,9 +1796,10 @@ SAW_FUTURE=0
 # lines into the history file, which is the one outcome the remedy exists to prevent. So
 # this verdict leads, and the one line verdict.sh is certain to show says what to do.
 #
-# THE OLD STAMPS ARE NAMED AS BARE `HH:MMZ`. A correction line naming them in full ISO form
-# is itself a future-stamped Recent Activity line and re-fires this arm; the bare form is
-# what the grammar above never reads (the self-probe seeds it as a near-miss).
+# THE OLD STAMPS ARE NAMED AS BARE `HH:MMZ`. A correction line that leads with its own stamp
+# has only that stamp read, so a full-ISO old stamp in its body no longer re-fires; but a
+# correction line written WITHOUT a leading stamp is read whole, and there the full form
+# does. The bare form is safe under both, which is why the remedy keeps asking for it.
 report_future_stamps() {
   [ -s "$FUTURE_FILE" ] || return 0
   SAW_FUTURE=1
@@ -1796,9 +1824,9 @@ report_future_stamps() {
            trimming a future stamp away hides it instead of correcting it.
         2. Add ONE Recent Activity line, stamped from `date -u`, that reads
            `CLOCK CORRECTION: rewrote <n> future stamp(s) to date -u: <old>` and
-           names each old stamp as a bare `HH:MMZ` (e.g. `02:30Z, 02:45Z`). Do NOT
-           name them in full `YYYY-MM-DDTHH:MMZ` form: that is a future stamp too,
-           and this check refuses the correction line itself.
+           names each old stamp as a bare `HH:MMZ` (e.g. `02:30Z, 02:45Z`). Lead
+           the line with its own stamp: a line that does has only that stamp read,
+           and one that does not is read whole, old stamps included.
         3. Re-run this check.
 
       Never take a stamp from memory or from another line -- `date -u` is the only
