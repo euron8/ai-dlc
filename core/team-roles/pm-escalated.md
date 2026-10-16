@@ -97,9 +97,15 @@ the change as input.
 When your brief folds the operator's answers into a repair whose record the join reported
 `ESCALATED:` lines for, APPEND to that joined repair record, never a separate one: the join
 closes an escalation only by a `repaired` entry in the same record. Append one entry per answer,
-`- disposition: repaired`, carrying one `- closes: <part> <heading>` line per escalation the
-answer resolves, each copied byte-exact from the tail of its `ESCALATED:` line, and every member
-of the chain gets its own line: a restating entry and each part escalation it supersedes.
+each opening with its own `### <heading>` line, which ends the entry before it: an entry with no
+heading of its own is read as part of the one above it. Under the heading write
+`- disposition: repaired`, then one `- closes: <part> <heading>` line per escalation the answer
+resolves, each copied byte-exact from the tail of its `ESCALATED:` line, and every member of the
+chain gets its own line: a restating entry and each part escalation it supersedes. Then its
+`edit:` line: `- edit: n/a (operator answer folded)` when the answer changed no subject file;
+when it did, `- edit: <project-relative path>:<line(s)>` followed by one `- siblings:` line in a
+form `remediator.md` lists ("Re-check every sibling of the text you replaced"), or the join
+refuses the record before it reports any escalation.
 
 Leave the git index as you found it. No `git add`, `git mv`, `git rm`, `git commit`,
 `git stash` or `git reset`; move a file with plain `mv` when your brief asks for a move. The
