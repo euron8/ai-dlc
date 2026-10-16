@@ -1393,6 +1393,52 @@ else bad "MUTANT preupgrade-taken: the marker never changed with the guard delet
 rm -rf "$W"
 }
 
+# --- 22. every exit code the beat can return is named in Rule 29's exit list ---
+# The lead decides what to do from Rule 29's list, not from the script. A code the script returns
+# and the list does not name is read by its nearest neighbour: a refused call (64) was read as
+# NON-DELIVERY (1), and a live teammate re-dispatched. Both sides are DERIVED: the script's codes
+# from its own `exit N` lines and the literal values of the RC it ends on; the list's from its
+# `    exit N --` lines. Self-probe first, both directions, on seeded text.
+exit_codes_of() {  # $1 = a shell script -> its distinct numeric exit codes, one per line
+  awk '
+    /^[[:space:]]*#/ { next }
+    { l = $0
+      while (match(l, /(^|[^A-Za-z_`-])exit [0-9]+/)) {
+        s = substr(l, RSTART, RLENGTH); sub(/.*exit /, "", s); seen[s] = 1; l = substr(l, RSTART + RLENGTH) }
+      l = $0; if (l ~ /exit "\$RC"/) userc = 1
+      while (match(l, /(^|[^A-Za-z_])RC=[0-9]+/)) {
+        s = substr(l, RSTART, RLENGTH); sub(/.*RC=/, "", s); rcv[s] = 1; l = substr(l, RSTART + RLENGTH) } }
+    END { if (userc) for (k in rcv) seen[k] = 1; for (k in seen) print k }' "$1" | sort -n
+}
+listed_codes_of() {  # $1 = a rule body -> the codes its beat exit list names
+  awk '/^    exit [0-9]+ --/ { print $2 }' "$1" | sort -n
+}
+C46_exit_codes_named() {
+R29="$(pick "$HERE/../../skills/ai-dlc/rule-bodies/rule-29.md" \
+            "$HERE/../../../.claude/skills/ai-dlc/rule-bodies/rule-29.md")"
+if [ -z "$R29" ]; then bad "exit-list: rule-29.md not found beside this fixture in either layout — nothing was compared"; return; fi
+P="$(mktemp -d)"
+printf '#!/bin/bash\n# exit 7 in a comment\n[ -n "$x" ] || exit 64\nRC=0\nfoo && RC=1\necho "exit code" ; exit 2\nexit "$RC"\n' > "$P/s.sh"
+got="$(exit_codes_of "$P/s.sh" | tr '\n' ' ')"
+if [ "$got" = "0 1 2 64 " ]; then ok "exit-list self-probe: a seeded script yields 0 1 2 64 (an RC value counted, a commented exit 7 and the word 'exit code' not)"
+else bad "exit-list self-probe: derived '$got' from the seeded script, expected '0 1 2 64 ' — the grammar cannot be trusted on the real script"; fi
+printf '    exit 0 -- A\n    exit 1 -- B\n  exit 9 -- not the list indent\n' > "$P/r.md"
+got="$(listed_codes_of "$P/r.md" | tr '\n' ' ')"
+if [ "$got" = "0 1 " ]; then ok "exit-list self-probe: a seeded list yields 0 1 (a mis-indented exit 9 is not a list line)"
+else bad "exit-list self-probe: derived '$got' from the seeded list, expected '0 1 '"; fi
+rm -rf "$P"
+codes="$(exit_codes_of "$SUBJ")"; listed="$(listed_codes_of "$R29")"
+n_c="$(printf '%s\n' "$codes" | grep -c .)" || n_c=0
+n_l="$(printf '%s\n' "$listed" | grep -c .)" || n_l=0
+if [ "$n_c" -lt 2 ] || [ "$n_l" -lt 2 ]; then
+  bad "exit-list: derived $n_c code(s) from the script and $n_l from rule-29 — one side read nothing, so agreement would be vacuous"; return
+fi
+missing=""
+for c in $codes; do printf '%s\n' "$listed" | grep -qx "$c" || missing="$missing $c"; done
+if [ -z "$missing" ]; then ok "exit-list: every code the beat can return ($(printf '%s' "$codes" | tr '\n' ' ')) is named in rule-29's exit list"
+else bad "exit-list: the beat can exit with$missing, which rule-29's exit list does not name — a lead reads an unnamed code as its nearest neighbour"; fi
+}
+
 # --- 21. this fixture's verdict may not depend on the cwd it was launched from ---
 # The suite runs `bash core/fixtures/<name>/run.sh` FROM THE REPO ROOT, so every
 # case above has only ever been observed at one cwd. That cuts both ways in this
