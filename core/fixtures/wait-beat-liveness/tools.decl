@@ -18,5 +18,6 @@ sed
 shasum
 sleep
 stat
+tail
 touch
 tr

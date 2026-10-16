@@ -705,10 +705,10 @@ cbeat() {  # $1=subject $2=workdir ; rest = argv (targets relative to the workdi
   cb_subj="$1" cb_w="$2"; shift 2
   ( cd "$cb_w" && env -u CLAUDE_CODE_SESSION_ID \
         AI_DLC_WAIT_BEAT_SECS="$CB_BEAT" \
-        AI_DLC_WAIT_SETTLE_SECS=1 \
+        AI_DLC_WAIT_SETTLE_SECS="${CB_SETTLE:-1}" \
         AI_DLC_WAIT_POLL_SECS=1 \
         AI_DLC_WAIT_MARGIN_SECS=0 \
-        AI_DLC_MAX_WAIT_BEATS=1 \
+        AI_DLC_MAX_WAIT_BEATS="${CB_MAXB:-1}" \
         AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
         bash "$cb_subj" --since "$CBEAT_SINCE" "$@" ) > "$BEATOUT" 2>&1
   RC=$?
@@ -1073,6 +1073,473 @@ M12_trailing_blank_hides_marker() {
     ok "MUTANT trailing-blank-hides: blank lines after the marker block delivery — section 13a catches it"
   else bad "MUTANT trailing-blank-hides: section 13a survives blank lines being read as the last line: $OUT"; fi
   rm -rf "$W"
+}
+
+# ===========================================================================
+# 14. --complete-repair: THE SERIAL REMEDIATOR'S RECORD IS KEYED ON `repair-complete: serial `,
+#     AND ONLY THAT, PER CALL.
+#     A joined repair record concatenates PART remediators' records, so it can end in a part's
+#     own `seat-complete:` marker before the serial pass has started. A beat that accepted either
+#     token would consume it. Every arm pairs the token with a near-miss one property away: the
+#     part marker, the bare prefix with no `serial `, the same line as a list item, and the repair
+#     token offered to a plain --complete call.
+# ===========================================================================
+REPAIR_MARKER='repair-complete: serial requirements'
+S14a_complete_repair_token() {
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '%s\n%s\n' "$SKELETON" "$REPAIR_MARKER" > "$W/r1.md"
+  printf '%s\nseat-complete: part 3\n' "$SKELETON" > "$W/r2.md"
+  printf '%s\nrepair-complete: done\n' "$SKELETON" > "$W/r3.md"
+  printf '%s\n- %s\n' "$SKELETON" "$REPAIR_MARKER" > "$W/r4.md"
+  CB_BEAT=3 cbeat "$SUBJ" "$W" --complete-repair r1.md r2.md r3.md r4.md
+  if has "DELIVERED r1.md"; then ok "repair: a record ending 'repair-complete: serial requirements' DELIVERS under --complete-repair"
+  else bad "repair: a record ending in the serial repair marker was not delivered: $OUT"; fi
+  if has "WAITING   r2.md" && ! has "DELIVERED r2.md"; then
+    ok "repair: a record ending in a PART remediator's 'seat-complete: part 3' does not deliver under --complete-repair"
+  else bad "repair: a part remediator's seat-complete marker was taken as the serial repair marker: $OUT"; fi
+  if has "WAITING   r3.md" && ! has "DELIVERED r3.md"; then ok "repair: NEAR-MISS — bare 'repair-complete: done' does not deliver"
+  else bad "repair: 'repair-complete: done' (no 'serial ') delivered: $OUT"; fi
+  if has "WAITING   r4.md" && ! has "DELIVERED r4.md"; then ok "repair: NEAR-MISS — the marker as a list item ('- repair-complete: serial ...') does not deliver"
+  else bad "repair: a list-item repair marker delivered — the token is not keyed at column 0: $OUT"; fi
+  if grep -qxF 'UNFINISHED r2.md -- present, last non-blank line is not repair-complete: serial' "$BEATOUT"; then
+    ok "repair: the UNFINISHED line under --complete-repair names 'repair-complete: serial'"
+  else bad "repair: the UNFINISHED line under --complete-repair does not read '... is not repair-complete: serial': $OUT"; fi
+
+  # The token is keyed per CALL: the repair line offered to a plain --complete beat is not a
+  # marker. The seat file beside it is the same-beat control that --complete still delivers.
+  printf '%s\nrepair-complete: serial x\n' "$SKELETON" > "$W/s1.md"
+  printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W/s2.md"
+  CB_BEAT=3 cbeat "$SUBJ" "$W" --complete s1.md s2.md
+  if has "DELIVERED s2.md"; then ok "repair: CONTROL — the same --complete beat delivers a seat file ending seat-complete:"
+  else bad "repair: CONTROL FAILED — the --complete beat delivered nothing, so the WAITING below means nothing: $OUT"; fi
+  if has "WAITING   s1.md" && ! has "DELIVERED s1.md"; then ok "repair: a seat file ending 'repair-complete: serial x' does NOT deliver under plain --complete"
+  else bad "repair: the repair token delivered a plain --complete call — the token is not keyed per call: $OUT"; fi
+  if grep -qxF 'UNFINISHED s1.md -- present, last non-blank line is not seat-complete:' "$BEATOUT"; then
+    ok "repair: under --complete the UNFINISHED line is byte-identical '... is not seat-complete:'"
+  else bad "repair: the --complete UNFINISHED line moved: $OUT"; fi
+
+  cbeat "$SUBJ" "$W" --complete --complete-repair r1.md
+  r1=$RC
+  cbeat "$SUBJ" "$W" --complete-repair --complete r1.md
+  if [ "$r1" -eq 64 ] && [ "$RC" -eq 64 ]; then ok "repair: --complete with --complete-repair is refused (exit 64), in either order"
+  else bad "repair: --complete with --complete-repair was accepted (rc=$r1 / $RC): $OUT"; fi
+  rm -rf "$W"
+}
+
+M20_repair_token_is_seat() {
+  mutant repair-token-is-seat -e 's@MARK_TOKEN="repair-complete: serial "@MARK_TOKEN="seat-complete: "@' || return
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '%s\nseat-complete: part 3\n' "$SKELETON" > "$W/r2.md"
+  CB_BEAT=3 cbeat "$MUT" "$W" --complete-repair r2.md
+  if has "DELIVERED r2.md"; then ok "MUTANT repair-token-is-seat: --complete-repair keyed on seat-complete: consumes a part's record — section 14a catches it"
+  else bad "MUTANT repair-token-is-seat: section 14a survives --complete-repair accepting the part marker: $OUT"; fi
+  rm -rf "$W"
+}
+
+M21_repair_either_token() {
+  mutant repair-either-token \
+    -e 's@index(l, ENVIRON\["MT_"\]) == 1)@(index(l, ENVIRON["MT_"]) == 1 || index(l, "seat-complete: ") == 1 || index(l, "repair-complete: serial ") == 1))@' || return
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '%s\nseat-complete: part 3\n' "$SKELETON" > "$W/r2.md"
+  printf '%s\nrepair-complete: serial x\n' "$SKELETON" > "$W/s1.md"
+  CB_BEAT=3 cbeat "$MUT" "$W" --complete-repair r2.md; o1="$OUT"
+  CB_BEAT=3 cbeat "$MUT" "$W" --complete s1.md
+  if has "DELIVERED s1.md" && case "$o1" in *"DELIVERED r2.md"*) true ;; *) false ;; esac; then
+    ok "MUTANT repair-either-token: a marker test accepting either token delivers the part record AND the repair line under --complete — section 14a catches both"
+  else bad "MUTANT repair-either-token: section 14a survives an either-token marker test (repair beat: $o1) (complete beat: $OUT)"; fi
+  rm -rf "$W"
+}
+
+M22_repair_token_no_space() {
+  mutant repair-token-no-serial -e 's@MARK_TOKEN="repair-complete: serial "@MARK_TOKEN="repair-complete: "@' || return
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '%s\nrepair-complete: done\n' "$SKELETON" > "$W/r3.md"
+  CB_BEAT=3 cbeat "$MUT" "$W" --complete-repair r3.md
+  if has "DELIVERED r3.md"; then ok "MUTANT repair-token-no-serial: the token without 'serial ' delivers 'repair-complete: done' — section 14a's near-miss catches it"
+  else bad "MUTANT repair-token-no-serial: section 14a's bare-prefix near-miss survives: $OUT"; fi
+  rm -rf "$W"
+}
+
+M23_repair_marker_not_col0() {
+  mutant marker-not-col0 -e 's@index(l, ENVIRON\["MT_"\]) == 1@index(l, ENVIRON["MT_"]) > 0@' || return
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '%s\n- %s\n' "$SKELETON" "$REPAIR_MARKER" > "$W/r4.md"
+  CB_BEAT=3 cbeat "$MUT" "$W" --complete-repair r4.md
+  if has "DELIVERED r4.md"; then ok "MUTANT marker-not-col0: a marker matched anywhere in the line delivers a list item — section 14a's near-miss catches it"
+  else bad "MUTANT marker-not-col0: section 14a's list-item near-miss survives: $OUT"; fi
+  rm -rf "$W"
+}
+
+M24_repair_both_flags_accepted() {
+  mutant repair-both-flags -e 's@^if \[ "\$SEAT_FLAG" -eq 1 \] && \[ "\$COMPLETE_REPAIR" -eq 1 \]; then$@if false; then@' || return
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  cbeat "$MUT" "$W" --complete --complete-repair r1.md
+  if [ "$RC" -ne 64 ] && has "WAITING   r1.md"; then ok "MUTANT repair-both-flags: the refusal removed, both flags run a beat — section 14a's exit-64 arm catches it"
+  else bad "MUTANT repair-both-flags: section 14a's exit-64 arm survives the refusal being removed (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+}
+
+M25_mark_name_fixed() {
+  mutant mark-name-fixed -e 's@^MARK_NAME="\${MARK_TOKEN% }"$@MARK_NAME="seat-complete:"@' || return
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '%s\nseat-complete: part 3\n' "$SKELETON" > "$W/r2.md"
+  cbeat "$MUT" "$W" --complete-repair r2.md
+  if has "UNFINISHED r2.md -- present, last non-blank line is not seat-complete:" \
+     && ! grep -qxF 'UNFINISHED r2.md -- present, last non-blank line is not repair-complete: serial' "$BEATOUT"; then
+    ok "MUTANT mark-name-fixed: the UNFINISHED line naming seat-complete: under --complete-repair — section 14a catches it"
+  else bad "MUTANT mark-name-fixed: section 14a survives the repair UNFINISHED line naming the wrong token: $OUT"; fi
+  rm -rf "$W"
+}
+
+# ===========================================================================
+# 15. --status: THE BEAT'S OWN VERDICT, WITHOUT THE BEAT, AND IT WRITES NOTHING.
+#     A progress check that disagrees with the beat that later consumes the file is worse than
+#     none, and the inputs that separate a shipped predicate from a hand-rolled `tail -1` test
+#     are exactly the ones a seat produces: a fenced marker, a CRLF line, a finding after the
+#     marker, trailing blank lines, a closed fence before the marker.
+# ===========================================================================
+scall() {  # $1=subject $2=workdir ; rest = argv after --status. CB_SETTLE honoured.
+  sc_subj="$1" sc_w="$2"; shift 2
+  ( cd "$sc_w" && env -u CLAUDE_CODE_SESSION_ID \
+        AI_DLC_WAIT_SETTLE_SECS="${CB_SETTLE:-1}" \
+        AI_DLC_WAIT_POLL_SECS=1 \
+        AI_DLC_MAX_WAIT_BEATS="${CB_MAXB:-1}" \
+        AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+        bash "$sc_subj" --status "$@" ) > "$BEATOUT" 2>&1
+  RC=$?
+  OUT="$(cat "$BEATOUT")"
+}
+# A beat in its OWN parent shell, so a second beat in one case sleeps instead of returning as a
+# chained sibling. The trailing `exit $?` stops bash exec-ing the subject in place of the wrapper.
+obeat() {  # $1=subject $2=workdir $3=outfile $4=beat secs $5=settle secs $6=since ; rest = argv
+  ob_subj="$1" ob_w="$2" ob_o="$3" ob_b="$4" ob_st="$5" ob_si="$6"; shift 6
+  ( cd "$ob_w" && env -u CLAUDE_CODE_SESSION_ID \
+        AI_DLC_WAIT_BEAT_SECS="$ob_b" AI_DLC_WAIT_SETTLE_SECS="$ob_st" \
+        AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_MAX_WAIT_BEATS=6 \
+        AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+    bash -c '"$@"; exit $?' _ bash "$ob_subj" --since "$ob_si" "$@" ) > "$ob_o" 2>&1
+}
+SIBLING_NOTE='a sibling beat already ran in this same Bash call'
+PARITY_FILES="p-fenced.md p-crlf.md p-notlast.md p-trail.md p-closed.md"
+mk_parity_world() {  # $1 = workdir
+  printf '%s\n```text\n%s\n' "$SKELETON" "$MARKER" > "$1/p-fenced.md"
+  printf '%s\r\n%s\r\n' "$SKELETON" "$MARKER" > "$1/p-crlf.md"
+  printf '%s\n%s\n- a finding after the marker\n' "$SKELETON" "$MARKER" > "$1/p-notlast.md"
+  printf '%s\n%s\n\n   \n\n' "$SKELETON" "$MARKER" > "$1/p-trail.md"
+  printf '%s\n```text\nquoted\n```\n%s\n' "$SKELETON" "$MARKER" > "$1/p-closed.md"
+}
+# The beat's verdict for one file, in --status's vocabulary. A beat names no UNSETTLED state
+# before exhaustion: a present, post-arm file it reports WAITING with no UNFINISHED line beneath
+# is one whose marker it accepted and whose settle window has not closed -- UNSETTLED. Every
+# parity file is written after the join's --since, so "present" is "post-arm" here.
+beat_class() {  # $1 = name, $2 = workdir; reads OUT; sets PC
+  if has "DELIVERED $1"; then PC=DELIVERED
+  elif has "UNFINISHED $1 --"; then PC=UNFINISHED
+  elif has "WAITING   $1"; then if [ -s "$2/$1" ]; then PC=UNSETTLED; else PC=WAITING; fi
+  else PC=NONE; fi
+}
+status_class() {  # $1 = name; reads OUT; sets PC
+  if has "DELIVERED $1"; then PC=DELIVERED
+  elif has "UNFINISHED $1 --"; then PC=UNFINISHED
+  elif has "UNSETTLED $1 --"; then PC=UNSETTLED
+  elif has "WAITING   $1 --"; then PC=WAITING
+  else PC=NONE; fi
+}
+parity() {  # $1 = beat output, $2 = status output, $3 = workdir; sets MISMATCH and CLASSES
+  MISMATCH=""; CLASSES=""
+  for pf in $PARITY_FILES; do
+    OUT="$1"; beat_class "$pf" "$3"; pb="$PC"
+    OUT="$2"; status_class "$pf"; ps="$PC"
+    CLASSES="$CLASSES $pf=$pb"
+    [ "$pb" = "$ps" ] && [ "$pb" != NONE ] || MISMATCH="$MISMATCH $pf:beat=$pb,status=$ps"
+  done
+}
+
+S15a_status_matches_beat() {
+  W="$(mk_work)"; SI=$(( $(date +%s) - 30 ))
+  mk_parity_world "$W"
+  # INSTANT 0 -- no beat has recorded a settle. The beat that follows runs SETTLE=60, so it
+  # records each marked file's hash and cannot close the window: its verdict is the UNSETTLED
+  # case. --status before it must say UNSETTLED, never DELIVERED.
+  CB_SETTLE=60 scall "$SUBJ" "$W" --complete --since "$SI" $PARITY_FILES; st0="$OUT"
+  obeat "$SUBJ" "$W" "$BEATOUT" 2 60 "$SI" --complete $PARITY_FILES; bt1="$(cat "$BEATOUT")"
+  sleep 2
+  # INSTANT 1 -- under SETTLE=1 those recorded hashes are now past the window. --status must say
+  # DELIVERED for exactly the files the next beat delivers, UNFINISHED where it says UNFINISHED.
+  CB_SETTLE=1 scall "$SUBJ" "$W" --complete --since "$SI" $PARITY_FILES; st1="$OUT"
+  obeat "$SUBJ" "$W" "$BEATOUT" 2 1 "$SI" --complete $PARITY_FILES; bt2="$(cat "$BEATOUT")"
+
+  OUT="$bt1$bt2"
+  if has "$SIBLING_NOTE"; then bad "status parity: a beat ran as a chained sibling, so its verdict is not the sleeping beat's: $OUT"
+  else ok "status parity: CONTROL — both beats slept in their own shell (no sibling NOTE)"; fi
+  # The control that the five inputs DISCRIMINATE: the beat must deliver some and refuse others.
+  OUT="$bt2"
+  if has "DELIVERED p-trail.md" && has "DELIVERED p-closed.md" && has "UNFINISHED p-fenced.md --" \
+     && has "UNFINISHED p-crlf.md --" && has "UNFINISHED p-notlast.md --"; then
+    ok "status parity: CONTROL — the beat delivers trailing-blank and closed-fence, and calls fenced, CRLF and marker-not-last UNFINISHED"
+  else bad "status parity: CONTROL FAILED — the beat's verdicts are not the expected split, so parity would mean nothing: $OUT"; fi
+  parity "$bt1" "$st0" "$W"
+  if [ -z "$MISMATCH" ]; then ok "status parity: before any settle --status equals the beat on all five inputs (marked files UNSETTLED, never DELIVERED)"
+  else bad "status parity: --status disagrees with the beat before settle:$MISMATCH (beat:$CLASSES) -- status: $st0"; fi
+  OUT="$st0"
+  if has "UNSETTLED p-trail.md --" && ! has "DELIVERED p-trail.md"; then ok "status parity: a marked file with no beat-recorded settle reads UNSETTLED"
+  else bad "status parity: a marked file with no recorded settle did not read UNSETTLED: $st0"; fi
+  parity "$bt2" "$st1" "$W"
+  if [ -z "$MISMATCH" ]; then ok "status parity: after the settle window --status equals the consuming beat on all five inputs (DELIVERED where it delivers)"
+  else bad "status parity: --status disagrees with the consuming beat:$MISMATCH (beat:$CLASSES) -- status: $st1"; fi
+  rm -rf "$W"
+}
+
+M26_status_last_line_tail() {
+  mutant status-last-line-tail \
+    -e 's@^status_marked() { has_marker "\$1"; }$@status_marked() { tail -1 "$1" | grep -q '\''^seat-complete'\''; }@' || return
+  W="$(mk_work)"; SI=$(( $(date +%s) - 30 ))
+  mk_parity_world "$W"
+  obeat "$SUBJ" "$W" "$BEATOUT" 2 60 "$SI" --complete $PARITY_FILES; bt="$(cat "$BEATOUT")"
+  CB_SETTLE=60 scall "$SUBJ" "$W" --complete --since "$SI" $PARITY_FILES; parity "$bt" "$OUT" "$W"; m_ctl="$MISMATCH"
+  CB_SETTLE=60 scall "$MUT" "$W" --complete --since "$SI" $PARITY_FILES; parity "$bt" "$OUT" "$W"; m_mut="$MISMATCH"
+  case "$m_mut" in *p-trail.md:*p-crlf.md:*|*p-crlf.md:*p-trail.md:*) km=1 ;; *) km=0 ;; esac
+  if [ -z "$m_ctl" ] && [ "$km" -eq 1 ]; then
+    ok "MUTANT status-last-line-tail: a hand-rolled tail -1 marker test disagrees with the beat on trailing-blank and CRLF — section 15a catches it"
+  else bad "MUTANT status-last-line-tail: section 15a survives (control mismatches:${m_ctl:- none}) (mutant mismatches:${m_mut:- none})"; fi
+  rm -rf "$W"
+}
+
+S15b_status_absent_and_unsettled() {
+  W="$(mk_work)"; SI=$(( $(date +%s) - 30 ))
+  printf 'answer\n' > "$W/present.md"
+  scall "$SUBJ" "$W" --since "$SI" present.md gone.md
+  if has "DELIVERED present.md" && has "WAITING   gone.md -- absent or empty" && has "STATUS -- 1 delivered, 1 not."; then
+    ok "status: an ABSENT path reads WAITING and the summary counts it as not delivered"
+  else bad "status: an absent path was not WAITING, or was counted as delivered: $OUT"; fi
+  printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W/sealed.md"
+  scall "$SUBJ" "$W" --complete --since "$SI" sealed.md
+  if has "UNSETTLED sealed.md --" && ! has "DELIVERED sealed.md"; then
+    ok "status: one --status call on a marked file with no beat-recorded settle prints UNSETTLED, never DELIVERED"
+  else bad "status: a marked file with no recorded settle was not UNSETTLED: $OUT"; fi
+  scall "$SUBJ" "$W" --reset --since "$SI" present.md
+  if [ "$RC" -eq 64 ]; then ok "status: --status with --reset is refused (exit 64)"
+  else bad "status: --status --reset was accepted (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+}
+
+M27_status_absent_delivered() {
+  mutant status-absent-delivered \
+    -e 's@^      echo "WAITING   \$t -- absent or empty"$@      S_V="DELIVERED"; echo "DELIVERED $t"@' || return
+  W="$(mk_work)"; SI=$(( $(date +%s) - 30 ))
+  printf 'answer\n' > "$W/present.md"
+  scall "$MUT" "$W" --since "$SI" present.md gone.md
+  if has "DELIVERED gone.md" && has "STATUS -- 2 delivered, 0 not."; then
+    ok "MUTANT status-absent-delivered: an absent seat counted as closed (graph s319) — section 15b catches it"
+  else bad "MUTANT status-absent-delivered: section 15b survives the absent branch printing DELIVERED: $OUT"; fi
+  rm -rf "$W"
+}
+
+M28_status_missing_record_ancient() {
+  mutant status-missing-record-ancient \
+    -e 's@\.settle" 2>/dev/null || echo '\'''\'')"$@.settle" 2>/dev/null || echo "$(content_hash "$t") 0")"@' || return
+  W="$(mk_work)"; SI=$(( $(date +%s) - 30 ))
+  printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W/sealed.md"
+  scall "$MUT" "$W" --complete --since "$SI" sealed.md
+  if has "DELIVERED sealed.md"; then ok "MUTANT status-missing-record-ancient: a missing settle record read as an ancient one says DELIVERED — section 15b catches it"
+  else bad "MUTANT status-missing-record-ancient: section 15b survives a missing record reading as settled: $OUT"; fi
+  rm -rf "$W"
+}
+
+M29_status_reset_accepted() {
+  mutant status-reset-accepted -e 's@^if \[ "\$STATUS" -eq 1 \] && \[ "\$RESET" -eq 1 \]; then$@if false; then@' || return
+  W="$(mk_work)"; SI=$(( $(date +%s) - 30 ))
+  printf 'answer\n' > "$W/present.md"
+  scall "$MUT" "$W" --reset --since "$SI" present.md
+  if [ "$RC" -ne 64 ] && has "STATUS --"; then ok "MUTANT status-reset-accepted: --status --reset runs — section 15b's exit-64 arm catches it"
+  else bad "MUTANT status-reset-accepted: section 15b's exit-64 arm survives (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+}
+
+fx_snap() {  # $1 = tree, $2 = out file: the listing and every file's hash, in find order
+  { find "$1" -print; find "$1" -type f -exec shasum {} +; } > "$2" 2>&1
+}
+fx_key() { printf '%s' "$1" | cksum | tr -d ' \t' | cut -c1-16; }
+
+S15c_status_read_only() {
+  W="$(mk_work)"; SI=$(( $(date +%s) - 30 )); CBEAT_SINCE="$SI"
+  printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W/a.md"
+  printf '%s\n' "$SKELETON" > "$W/u.md"
+  printf 'x\n' > "$W/nojoin.md"
+  CB_SETTLE=60 cbeat "$SUBJ" "$W" --complete a.md u.md     # arms a.md and u.md: .since, .settle, .progress, .bound
+  CD="$W/_bmad-output/.wait-beats"
+  # A STALE BOUND: the beat wipes every counter when .bound disagrees with its own bound.
+  printf '99' > "$CD/.bound"
+  rm -f "$CD"/.shell-*
+  [ -f "$CD/$(fx_key a.md).since" ] && [ -f "$CD/$(fx_key a.md).settle" ] \
+    || broken "the arming beat left no .since/.settle for a.md — the read-only world is not the one this arm names"
+  fx_snap "$W" "$TMPROOT/snap1"
+  CB_SETTLE=60 scall "$SUBJ" "$W" --complete a.md u.md nojoin.md gone.md; o_a="$OUT"
+  CB_SETTLE=60 scall "$SUBJ" "$W" --complete --since "$SI" a.md u.md nojoin.md gone.md; o_b="$OUT"
+  fx_snap "$W" "$TMPROOT/snap2"
+  if grep -q '/\.bound$' "$TMPROOT/snap1" && cmp -s "$TMPROOT/snap1" "$TMPROOT/snap2"; then
+    ok "status: read-only — two --status calls over joined, unjoined and absent paths leave every file and listing byte-identical, stale .bound included"
+  else bad "status: --status changed the state tree (or the snapshot is empty)"; fi
+  n_shell=0; for f in "$CD"/.shell-*; do [ -e "$f" ] && n_shell=$((n_shell+1)); done
+  if [ "$n_shell" -eq 0 ] && [ ! -e "$W/_bmad-output/.beat-inflight" ] && [ ! -e "$CD/$(fx_key nojoin.md).since" ] \
+     && [ "$(cat "$CD/.bound")" = 99 ]; then
+    ok "status: no .shell-* marker, no .beat-inflight, no .since for the unjoined path, and the stale .bound is untouched"
+  else bad "status: --status wrote a marker (shell=$n_shell inflight=$([ -e "$W/_bmad-output/.beat-inflight" ] && echo y) nojoin.since=$([ -e "$CD/$(fx_key nojoin.md).since" ] && echo y) bound=$(cat "$CD/.bound"))"; fi
+  OUT="$o_a"
+  if has "WAITING   nojoin.md -- no join armed" && has "WAITING   gone.md -- no join armed" \
+     && has "UNSETTLED a.md --" && has "UNFINISHED u.md --"; then
+    ok "status: with no join armed and no --since a path reads WAITING 'no join armed'; joined paths read their stored epoch"
+  else bad "status: the no-join / stored-epoch reading is wrong: $OUT"; fi
+  OUT="$o_b"
+  if has "UNFINISHED nojoin.md --" && has "WAITING   gone.md -- absent or empty"; then
+    ok "status: CONTROL — with --since the same unjoined path is read, so 'no join armed' above was the missing epoch"
+  else bad "status: CONTROL FAILED — --since did not give the unjoined path an epoch: $OUT"; fi
+  # THE CONTROL that the stale bound was a live hazard: a real beat over the same tree wipes it.
+  cbeat "$SUBJ" "$W" nojoin.md
+  if [ "$(cat "$CD/.bound" 2>/dev/null)" = 1 ] && [ ! -e "$CD/$(fx_key u.md).since" ]; then
+    ok "status: CONTROL — a real beat over the same tree rewrites the stale .bound and wipes the counters --status left alone"
+  else bad "status: CONTROL FAILED — a beat did not wipe on the stale bound, so its survival above proves nothing: $OUT"; fi
+
+  # NO STATE DIR: --status in a tree with none must not create it.
+  W2="$(mktemp -d)" || broken "mktemp failed"
+  printf 'x\n' > "$W2/f.md"
+  scall "$SUBJ" "$W2" --since "$SI" f.md
+  if has "DELIVERED f.md" && [ ! -e "$W2/_bmad-output" ]; then ok "status: in a tree with no _bmad-output, --status answers and does not create it"
+  else bad "status: --status created _bmad-output or did not answer: $OUT"; fi
+  # `--progress-path .` names an ancestor of the state dir, so the subject refuses it (exit 64)
+  # AFTER its mkdir and before any sleep: the control costs no beat.
+  ( cd "$W2" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+      bash "$SUBJ" --progress-path . f.md ) > "$BEATOUT" 2>&1
+  if [ -d "$W2/_bmad-output" ]; then ok "status: CONTROL — the same tree without --status DOES get _bmad-output created"
+  else bad "status: CONTROL FAILED — the subject never creates the state dir here, so its absence above proves nothing: $(cat "$BEATOUT")"; fi
+  rm -rf "$W" "$W2"
+}
+
+M30_status_creates_state_dir() {
+  mutant status-creates-state-dir -e 's@^if \[ "\$STATUS" -eq 0 \]; then   # --status creates nothing@if :; then   # --status creates nothing@' || return
+  W2="$(mktemp -d)" || broken "mktemp failed"
+  printf 'x\n' > "$W2/f.md"
+  scall "$MUT" "$W2" --since "$(( $(date +%s) - 30 ))" f.md
+  if [ -d "$W2/_bmad-output" ]; then ok "MUTANT status-creates-state-dir: the guard disabled, --status creates _bmad-output — section 15c catches it"
+  else bad "MUTANT status-creates-state-dir: section 15c survives the mkdir guard being disabled: $OUT"; fi
+  rm -rf "$W2"
+}
+
+M31_status_arms_join() {
+  mutant status-arms-join \
+    -e 's@^  \[ -n "\$sj_s_" \] || return 1$@  [ -n "$sj_s_" ] || return 1; printf "%s" "$sj_s_" > "$sj_f_" 2>/dev/null@' || return
+  W="$(mk_work)"; mkdir -p "$W/_bmad-output/.wait-beats"
+  printf 'x\n' > "$W/nojoin.md"
+  fx_snap "$W" "$TMPROOT/snap-m1"
+  scall "$MUT" "$W" --since "$(( $(date +%s) - 30 ))" nojoin.md
+  fx_snap "$W" "$TMPROOT/snap-m2"
+  if ! cmp -s "$TMPROOT/snap-m1" "$TMPROOT/snap-m2"; then ok "MUTANT status-arms-join: --status writing a .since changes the tree — section 15c's snapshot catches it"
+  else bad "MUTANT status-arms-join: section 15c's snapshot survives --status arming a join"; fi
+  rm -rf "$W"
+}
+
+M32_status_nojoin_epoch_zero() {
+  mutant status-nojoin-epoch-zero -e 's@^  \[ -n "\$sj_s_" \] || return 1$@  [ -n "$sj_s_" ] || sj_s_=0@' || return
+  W="$(mk_work)"
+  printf 'x\n' > "$W/nojoin.md"
+  scall "$MUT" "$W" nojoin.md
+  if has "DELIVERED nojoin.md" && ! has "no join armed"; then ok "MUTANT status-nojoin-epoch-zero: an unjoined path given epoch 0 reads DELIVERED — section 15c's 'no join armed' arm catches it"
+  else bad "MUTANT status-nojoin-epoch-zero: section 15c survives an unjoined path getting an epoch: $OUT"; fi
+  rm -rf "$W"
+}
+
+# ===========================================================================
+# 16. REVISED-AFTER-MARKER: A SEAT THAT EDITS A FILE IT DECLARED FINAL IS NAMED, AT BOTH PLACES
+#     A PATH IS DELIVERED.
+#     One world, four files, five beats, each beat in its own shell so it sleeps:
+#       f1    (i)   seen marked, edited above the marker, delivered at the POST-POLL site
+#       f2    (ii)  seen marked, marker withdrawn, restored byte-identical, delivered post-poll
+#       still (iii) seen marked, never touched -- no REVISED line
+#       f4    (iv)  revised during a beat that times out (.revised left on disk), delivered at
+#                   the PRE-SWEEP site of the next beat (a pre-sweep delivery prints no BEAT
+#                   COMPLETE line; a post-poll one does -- that is the site discriminator)
+#     The world writes its outputs to files so the mutant battery can run four copies at once.
+# ===========================================================================
+revised_world() {  # $1 = subject, $2 = fresh workdir
+  rw_s="$1" rw_w="$2"; rw_si=$(( $(date +%s) - 30 ))
+  mkdir -p "$rw_w/_bmad-output"
+  for rw_f in f1 f2 f4 still; do printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$rw_w/$rw_f.md"; done
+  obeat "$rw_s" "$rw_w" "$rw_w/o.a1" 2 60 "$rw_si" --complete f1.md f2.md f4.md still.md
+  printf '%s\n- an edit above the marker\n%s\n' "$SKELETON" "$MARKER" > "$rw_w/f1.md"
+  printf '%s\n- an edit above the marker\n%s\n' "$SKELETON" "$MARKER" > "$rw_w/f4.md"
+  printf '%s\n- the marker withdrawn\n' "$SKELETON" > "$rw_w/f2.md"
+  obeat "$rw_s" "$rw_w" "$rw_w/o.b2" 3 1  "$rw_si" --complete f1.md still.md
+  obeat "$rw_s" "$rw_w" "$rw_w/o.b3" 2 60 "$rw_si" --complete f4.md f2.md
+  cat "$rw_w/_bmad-output/.wait-beats/$(fx_key f4.md).revised" > "$rw_w/o.rv4" 2>/dev/null
+  printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$rw_w/f2.md"
+  sleep 2   # f4's settle record must be more than SETTLE=1 whole seconds old at b4's pre-sweep
+  obeat "$rw_s" "$rw_w" "$rw_w/o.b4" 3 1  "$rw_si" --complete f4.md
+  obeat "$rw_s" "$rw_w" "$rw_w/o.b5" 3 1  "$rw_si" --complete f2.md
+}
+rw_out() { OUT="$(cat "$1/o.$2" 2>/dev/null)"; }
+
+S16_revised_after_marker() {
+  W="$(mktemp -d)" || broken "mktemp failed"
+  revised_world "$SUBJ" "$W"
+  OUT="$(cat "$W"/o.*)"
+  if has "$SIBLING_NOTE"; then bad "revised: a beat ran as a chained sibling — the world is not the one this section names: $OUT"
+  else ok "revised: CONTROL — every beat slept in its own shell (no sibling NOTE)"; fi
+  rw_out "$W" a1
+  if has "WAITING   f1.md" && has "0 delivered, 4 still out" && ! has "DELIVERED f"; then ok "revised: CONTROL — the first beat saw every marked file and delivered none"
+  else bad "revised: CONTROL FAILED — the first beat delivered, so no file was seen before its edit: $OUT"; fi
+  rw_out "$W" b2
+  if has "DELIVERED f1.md" && has "REVISED-AFTER-MARKER 1 f1.md" && has "BEAT COMPLETE"; then
+    ok "revised (i): a marked file edited before it settled is DELIVERED then REVISED-AFTER-MARKER 1, at the post-poll site"
+  else bad "revised (i): no REVISED-AFTER-MARKER 1 beneath the post-poll DELIVERED: $OUT"; fi
+  if has "DELIVERED still.md" && ! has " still.md -- its content changed"; then
+    ok "revised (iii): CONTROL — an unrevised sealed file delivers with NO REVISED line"
+  else bad "revised (iii): the untouched file was not delivered, or was named revised: $OUT"; fi
+  rw_out "$W" b3
+  if has "WAITING   f4.md" && has "UNFINISHED f2.md --" && [ "$(cat "$W/o.rv4" 2>/dev/null)" = 1 ]; then
+    ok "revised (iv): the beat that saw f4 revised timed out with .revised=1 left on disk; f2's withdrawn marker reads UNFINISHED"
+  else bad "revised (iv): the timing-out beat did not leave .revised=1 (got '$(cat "$W/o.rv4" 2>/dev/null)'): $OUT"; fi
+  rw_out "$W" b4
+  if has "DELIVERED f4.md" && has "REVISED-AFTER-MARKER 1 f4.md" && ! has "BEAT COMPLETE"; then
+    ok "revised (iv): the next beat delivers f4 at the PRE-SWEEP site and prints REVISED-AFTER-MARKER 1 there too"
+  else bad "revised (iv): no REVISED line at the pre-sweep delivery, or it was not a pre-sweep delivery: $OUT"; fi
+  rw_out "$W" b5
+  if has "DELIVERED f2.md" && has " f2.md -- its content changed" && ! has "REVISED-AFTER-MARKER 0"; then
+    ok "revised (ii): a marker removed then restored byte-identical still prints REVISED-AFTER-MARKER n>=1"
+  else bad "revised (ii): a withdrawn-and-restored marker printed no REVISED line: $OUT"; fi
+  rm -rf "$W"
+}
+
+# FOUR MUTANTS, ONE WORLD EACH, RUN CONCURRENTLY. Each must kill its own arm and leave the arm
+# it does not touch standing -- the marker-loss mutant in particular must kill (ii) and NOT (i),
+# or the two counting sites are not separately observed.
+M33_revised_mutants() {
+  rv_lines="$(grep -n '^    say_revised "\$t" "\$c"$' "$SUBJ" | cut -d: -f1)"
+  rv_pre="$(printf '%s\n' "$rv_lines" | sed -n 1p)"; rv_post="$(printf '%s\n' "$rv_lines" | sed -n 2p)"
+  [ -n "$rv_pre" ] && [ -n "$rv_post" ] && [ -z "$(printf '%s\n' "$rv_lines" | sed -n 3p)" ] \
+    || { bad "MUTANT revised-*: expected exactly two say_revised delivery sites, found: $rv_lines"; return; }
+  mutant revised-bump-dropped -e 's@^  rb_f_="\${1%\.settle}\.revised"$@  return 0@' || return; M_BUMP="$MUT"
+  mutant revised-loss-uncounted -e 's@^    if settle_record "\$id_st_" >/dev/null; then revised_bump "\$id_st_"; fi$@    :@' || return; M_LOSS="$MUT"
+  mutant revised-presweep-silent -e "${rv_pre}s@.*@    :@" || return; M_PRE="$MUT"
+  mutant revised-postpoll-silent -e "${rv_post}s@.*@    :@" || return; M_POST="$MUT"
+  for mn in BUMP LOSS PRE POST; do
+    eval "ms=\$M_$mn"
+    mkdir -p "$TMPROOT/rv-$mn"; revised_world "$ms" "$TMPROOT/rv-$mn" &
+  done
+  wait
+  r_has() { rw_out "$TMPROOT/rv-$1" "$2"; has "$3"; }
+  if ! r_has BUMP b2 "REVISED-AFTER-MARKER 1 f1.md" && ! r_has BUMP b5 " f2.md -- its content changed" && r_has BUMP b2 "DELIVERED f1.md"; then
+    ok "MUTANT revised-bump-dropped: no counter, no REVISED line for (i) or (ii) — section 16 catches it"
+  else bad "MUTANT revised-bump-dropped: section 16 (i)/(ii) survive the counter being dropped"; fi
+  if ! r_has LOSS b5 " f2.md -- its content changed" && r_has LOSS b5 "DELIVERED f2.md" && r_has LOSS b2 "REVISED-AFTER-MARKER 1 f1.md"; then
+    ok "MUTANT revised-loss-uncounted: a marker loss not counted kills (ii) and leaves (i) standing — the two counting sites are separately observed"
+  else bad "MUTANT revised-loss-uncounted: expected (ii) killed and (i) standing — b2: $(cat "$TMPROOT/rv-LOSS/o.b2") b5: $(cat "$TMPROOT/rv-LOSS/o.b5")"; fi
+  if ! r_has PRE b4 "REVISED-AFTER-MARKER 1 f4.md" && r_has PRE b4 "DELIVERED f4.md" && r_has PRE b2 "REVISED-AFTER-MARKER 1 f1.md"; then
+    ok "MUTANT revised-presweep-silent: the pre-sweep site printing no REVISED line kills (iv) and leaves (i) — section 16 catches it"
+  else bad "MUTANT revised-presweep-silent: expected (iv) killed and (i) standing — b2: $(cat "$TMPROOT/rv-PRE/o.b2") b4: $(cat "$TMPROOT/rv-PRE/o.b4")"; fi
+  if ! r_has POST b2 "REVISED-AFTER-MARKER 1 f1.md" && r_has POST b2 "DELIVERED f1.md" && r_has POST b4 "REVISED-AFTER-MARKER 1 f4.md"; then
+    ok "MUTANT revised-postpoll-silent: the post-poll site printing no REVISED line kills (i) and leaves (iv) — section 16 catches it"
+  else bad "MUTANT revised-postpoll-silent: expected (i) killed and (iv) standing — b2: $(cat "$TMPROOT/rv-POST/o.b2") b4: $(cat "$TMPROOT/rv-POST/o.b4")"; fi
+  rm -rf "$TMPROOT"/rv-*
 }
 
 # ---------------------------------------------------------------------------
