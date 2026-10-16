@@ -1033,6 +1033,29 @@ reap_tree() {
   kill -9 $all 2>/dev/null || true
   wait "$1" 2>/dev/null || true
 }
+# 0 when a `sleep` runs anywhere under the given pid -- the beat has passed every lease write that
+# precedes its poll loop. Walks children top-down, as reap_tree does.
+tree_has_sleep() { # <pid>
+  local frontier="$1" next p
+  while [ -n "$frontier" ]; do
+    next=""
+    for p in $frontier; do
+      [ "$(ps -o comm= -p "$p" 2>/dev/null)" = "sleep" ] && return 0
+      next="$next $(pgrep -P "$p" 2>/dev/null | tr '\n' ' ')"
+    done
+    frontier="$(echo $next)"
+  done
+  return 1
+}
+tree_signal() { # <pid> <STOP|CONT> -- every process under pid, collected top-down first
+  local all="$1" frontier="$1" next p
+  while [ -n "$frontier" ]; do
+    next=""
+    for p in $frontier; do next="$next $(pgrep -P "$p" 2>/dev/null | tr '\n' ' ')"; done
+    frontier="$(echo $next)"; all="$all $frontier"
+  done
+  kill -"$2" $all 2>/dev/null || true
+}
 SHELLS_OK=0
 separate_shells() { # <work> <beats started> <out>... -> sets SHELLS_OK
   local w="$1" n="$2" f; shift 2
@@ -1050,23 +1073,39 @@ say_shells() { # <label>
 # holds the marker when it exits, so with A holding, B's exit touches nothing and a subject with
 # no handoff passes. A's quantum is POLL + 2, so A wakes exactly once, at +POLL: from B's exit to
 # that wake nothing of A's can re-take the marker, and the read 0.3s after B exits is inside
-# that window by seconds, not milliseconds. A's POLL is 6 rather than the 3-vs-1 the receipt
-# named, for exactly that read; A's lease is 3 x POLL, so the epoch is well clear of `now`.
+# that window by seconds, not milliseconds. A's POLL is 12 rather than the 3-vs-1 the receipt
+# named, for exactly that read; A's lease is 3 x POLL, so the epoch is well clear of `now`. It was
+# 6, and at load ~75 that window closed before the read; the read's timing is now a control.
+HO_POLL=12
 run_handoff() { # <subject> -> HO_* ; leaves W for the caller
   W="$( bash "$SEED" lease-handoff )"
   local pb pa
   bg_beat "$1" "$W" "$W/b.out" 20 1 b.md; pb=$BG
   until_true 100 test -s "$W/_bmad-output/.beat-inflight" || true
   HO_B="$(marker_pid "$W")"
-  bg_beat "$1" "$W" "$W/a.out" 8 6 a.md; pa=$BG
+  HO_A_T0="$(date +%s)"
+  bg_beat "$1" "$W" "$W/a.out" "$(( HO_POLL + 2 ))" "$HO_POLL" a.md; pa=$BG
   until_true 100 leases_are "$W" 2 || true
+  # A writes the lease twice before it sleeps: early, and again just before the poll loop. If B
+  # exits between the two, A's second write takes the free marker and EVERY subject -- the trap
+  # mutant included -- leaves a marker naming A. Measured: 4 of 4 trap-mutant survivors at load
+  # ~60 passed every other control. So B's target lands only once A is in its `sleep`.
+  HO_A_ASLEEP=0; until_true 150 tree_has_sleep "$pa" && HO_A_ASLEEP=1
   HO_A="$(other_lease_pid "$W" "$HO_B")"
   HO_HOLDER0="$(marker_pid "$W")"
+  # A IS FROZEN from before B's target lands until after the read, so no write of A's can fall
+  # between B's exit and the read: the marker read is exactly what B's exit left, whatever the
+  # load. `kill -0` still answers for a stopped process, which is what lease_release asks.
+  tree_signal "$pa" STOP
   printf 'the answer B was waiting for\n' > "$W/b.md"
   wait "$pb" 2>/dev/null || true
-  sleep 0.3
   HO_AFTER="$(marker_of "$W")"
   HO_NOW="$(date +%s)"
+  tree_signal "$pa" CONT
+  # A re-stamps (and so re-takes) the marker at its first wake, HO_POLL after it started. A read
+  # taken after that wake cannot see what B's exit left, so it voids the case rather than scoring
+  # it: measured at load ~75, B's delivery slid past a 6s wake and the trap mutant SURVIVED.
+  HO_READ_EARLY=0; [ $(( HO_NOW - HO_A_T0 )) -lt "$HO_POLL" ] && HO_READ_EARLY=1
   HO_A_ALIVE=0; [ -n "$HO_A" ] && kill -0 "$HO_A" 2>/dev/null && HO_A_ALIVE=1
   printf 'the answer A was waiting for\n' > "$W/a.md"
   wait "$pa" 2>/dev/null || true
@@ -1080,6 +1119,10 @@ handoff_preconditions() { # <label> -- the harness facts both the case and its m
   else bad "$1: B=$HO_B A=$HO_A holder=$HO_HOLDER0 — B was not the holder, so its exit cannot exercise the handoff"; fi
   if [ "$HO_A_ALIVE" -eq 1 ]; then ok "$1: CONTROL — A was still asleep when the marker was read"
   else bad "$1: A was not alive at the read; the marker's state then says nothing about a live sibling"; fi
+  if [ "$HO_A_ASLEEP" -eq 1 ]; then ok "$1: CONTROL — A was in its sleep, past both pre-loop lease writes, before B's target landed"
+  else bad "$1: A never reached its sleep before B's target landed — A's pre-loop lease write could take the marker B freed"; fi
+  if [ "$HO_READ_EARLY" -eq 1 ]; then ok "$1: CONTROL — the marker was read before A's first wake could re-take it"
+  else bad "$1: the read came $(( HO_NOW - HO_A_T0 ))s after A started, past its ${HO_POLL}s wake — A had already re-stamped, so this read cannot see B's exit (box too loaded; timing void)"; fi
 }
 C33_lease_handoff() {
 run_handoff "$SUBJ"

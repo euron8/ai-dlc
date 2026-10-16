@@ -21,3 +21,5 @@ sleep
 xargs
 cmp
 mkdir
+ps
+pgrep

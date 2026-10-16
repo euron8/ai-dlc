@@ -1292,7 +1292,7 @@ S15a_status_matches_beat() {
 
 M26_status_last_line_tail() {
   mutant status-last-line-tail \
-    -e 's@^status_marked() { has_marker "\$1"; }$@status_marked() { tail -1 "$1" | grep -q '\''^seat-complete'\''; }@' || return
+    -e 's@^status_marked() { has_marker "\$1"; }$@status_marked() { grep -q '\''^seat-complete'\'' <<<"$(tail -1 "$1")"; }@' || return
   W="$(mk_work)"; SI=$(( $(date +%s) - 30 ))
   mk_parity_world "$W"
   obeat "$SUBJ" "$W" "$BEATOUT" 2 60 "$SI" --complete $PARITY_FILES; bt="$(cat "$BEATOUT")"
