@@ -774,3 +774,27 @@ Related: BL-587 (owed re-points with no channel), BL-546 (the Q18 deletion), BL-
 Owner: ai-dlc-11 (lead ai-dlc-9c), as its own release after ai-dlc-11's combo release. It touches BL-587's reader.
 
 verify: manual
+
+## BL-613 — `validate-backlog-receipts.sh` run bare fails R5 on a clean main, because its default floor is stale
+
+**NOTE.** Found by intake ai-dlc-40 and independently by ai-dlc-11, both on clean origin/main `d19a4d9f`. `scripts/validate-backlog-receipts.sh:190` sets `DEFAULT_MIN_SH=76`, and `:565` uses it when `--min-sh-receipts` is absent. The live ledger holds 0 `sh` receipts, so a bare run exits 1 with "R5: the sh receipt population fell by 76 (from 76 to 0)". The gate passes `--min-sh-receipts 0` (`.githooks/pre-push:266-268`, since 0.746.0 `011cd83e`), so pre-push is green while every hand that runs the script by name sees a red unrelated to its change. Two sessions in batch 235 hit it and each had to re-run on main to rule out their own commit.
+
+Owed: one source for the floor that both the script's default and the gate read, so the bare run and the gate answer alike. Receipt: a probe showing a bare run and a gate-flag run agree on the live ledger, and that a seeded drop below the floor fails both.
+
+Owner: ai-dlc-40 (lead ai-dlc-9c). It changes a script, so it rides whichever release is still unbuilt when the fix is ready (most likely the BL-575/577/594 branch), never a built or gating one.
+
+verify: manual
+
+## BL-614 — a one-line `FORK_BUDGET` raise re-runs every unit keyed on `validate-enforcement-map.sh`, though only one fixture reads the number
+
+**NOTE (efficiency).** Found by intake ai-dlc-40 while checking lead ai-dlc-9c's filing on ai-dlc-11's 0.801.0 push. `FORK_BUDGET=3374` sits at `scripts/validate-enforcement-map.sh:848` (origin/main `d19a4d9f`). The validator never reads it: its other 8 mentions are comments (control: `I75` appears 18 times in the same file). Its only reader is `core/fixtures/validator-fork-budget/run.sh:96-101`. The content key is per-file, so a budget raise (3374→3395 on `b235-combo`) changes the validator's key, which invalidates every unit that depends on it.
+
+Measured on origin/main: 20 units are keyed on the validator, 15 by an `inputs.decl` line and the rest by `.ai-dlc-fixture-readsets.tsv` rows. Together they cost 2906 s in `.git/ai-dlc-fixture-durations`, a loaded record. The largest are `fold-architect-ledger-join-mutants-c` at 438 s, `fold-architect-ledger-join-mutants` at 414 s and `readset-skip` at 322 s. The suite is pole-bound, so a budget-only change costs roughly that 438 s pole in wall clock, not the 2906 s sum. A raise that ships alongside a real validator edit costs nothing extra.
+
+Premise corrected at intake: the 1300-1400 s batteries in that push (adversarial-shard-merge-mutants, derivation-capture-mutants, ledger-reverify(-b), review-shard-merge-mutants(-b,-c)) are NOT keyed on the validator. Neither their `inputs.decl` nor the read-set map names it (control: `validator-fork-budget` keyed both ways). They ran because the combo's own diff touched files they declare: `partition-document.sh`, `steps/gate-validation.md`, `validate-artifact-derivations.sh` and `reconcile/post-write-gates.sh`.
+
+Owed: move the budget to a data file that only `validator-fork-budget` reads, keeping its column-0 single-line anchor (`run.sh:92-101`) and its A4 reachability arm. Receipt: a budget-only change re-keys `validator-fork-budget` and no other unit. Show it with the hook's own key computation on a probe commit, and use a one-character edit to the validator as the control, which must re-key all 20.
+
+Owner: ai-dlc-40 (lead ai-dlc-9c). It changes a script and a fixture, so it rides the next unbuilt release with BL-613, never a built or gating one.
+
+verify: manual
