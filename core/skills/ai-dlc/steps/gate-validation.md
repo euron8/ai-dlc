@@ -3084,6 +3084,19 @@ is well-formed and resolves to a `### <id>` item, not CLOSED, in the carry-over
 backlog or its archive — the part of the ask Step 6 deferred, filed where the
 next sprint's carry-over evaluation will read it.
 
+**The locked-scope arm refuses a lead-deferred confirmed item.** The check also reads
+`_bmad-output/operator-requests-history.md` and `docs/escalations/pending.md`, and exits 1
+on any entry whose canonical status is `DEFERRAL_REQUEST`, filed at or after the hook's
+timestamp on the cited scope answer, that names a confirmed item: a carry-over id the
+operator's ask named (the entry `user_request_cite` resolves to) or a `CO-S<sprint_id>-`
+id. Put that deferral to the operator as a Rule 12 HARD_BLOCK instead
+(`carry-over-evaluation.md` §4). A leg that cannot be read — no resolvable ask cite, no
+integer `sprint_id` — prints `SKIP` naming itself, and the closing line names the legs that
+ran: `PASS` only when both did, `PARTIAL` when one did, `SKIP` when neither did. Read that
+line, not the exit; a `PARTIAL` or `SKIP` is exit 0 and has checked less than the whole
+confirmed scope. Two shapes pass this arm and are not caught: a confirmed item deferred
+with no `CO-` id, and an entry naming an approved deferred id beside a locked one.
+
 **What this catches.** A sprint that planned against a scope no operator ever saw.
 Rule 3(d) makes the sprint-scope pause point mandatory at `route.md` Step 6, and
 until this check existed that mandate had no enforcer — a prohibition with no

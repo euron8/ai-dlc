@@ -1570,7 +1570,10 @@ ls_verdicts() {
   ls_run "$v" cited ratified; ls_has "locked_scope_deferrals_scanned: 1 " || LS_RC="${LS_RC}x"; ls_cell ratified
   ls_run "$v" cited outside;  ls_has "locked_scope_deferrals_scanned: 1 " || LS_RC="${LS_RC}x"; ls_cell outside
   ls_run "$v" noask noask
-  { ls_has "SKIP  locked-scope ask leg" && ls_has "locked_scope_deferrals_scanned: 1 "; } || LS_RC="${LS_RC}x"; ls_cell noask
+  # The closing line must name the leg that ran and must NOT claim the whole property.
+  { ls_has "SKIP  locked-scope ask leg" && ls_has "locked_scope_deferrals_scanned: 1 " \
+    && ls_has "PARTIAL  locked-scope arm: only the sprint leg ran (CO-S319- ids)" \
+    && ! ls_has "PASS  no live DEFERRAL_REQUEST"; } || LS_RC="${LS_RC}x"; ls_cell noask
   printf '%s\n' "${out# }"
 }
 LS_EXPECT="fire=1 fireask=1 resolved=0 before=0 recur=0 ratified=0 outside=0 noask=0"
@@ -1583,7 +1586,7 @@ ls_why() {
     recur)    echo "a recurring answer body dates the window by its NEWEST copy; an older deferral must be silent" ;;
     ratified) echo "an entry naming an id scope_deferred_items lists was ratified at Step 6 and must be silent (the s316 shape)" ;;
     outside)  echo "a deferral of an id outside the locked set must be silent" ;;
-    noask)    echo "no ask cite must print a VISIBLE SKIP for the ask leg, never pass silently" ;;
+    noask)    echo "no ask cite must print a VISIBLE SKIP for the ask leg and a PARTIAL line naming the sprint leg, never the full PASS claim" ;;
   esac
 }
 LS_GOT="$(ls_verdicts "$VALIDATOR")"
@@ -1626,10 +1629,11 @@ if [ "$LS_CTL_GOT" = "$LS_EXPECT" ]; then
   ls_mut ratified  "ratified"  'if (hit != "" && !ratified)' 'if (hit != "")'
   ls_mut noskip    "noask"     'say "SKIP  locked-scope ask leg' ': "SKIP  locked-scope ask leg'
   ls_mut noexit    "fire fireask" '[ "$LS_RC" -eq 1 ] && exit 1' 'true'
-  if [ "$LS_MUT_KILLS" -eq "$LS_MUT_WANT" ] && [ "$LS_MUT_WANT" -eq 8 ]; then
-    ok "all 8 locked-scope mutants killed against the resolved validator $VALIDATOR"
+  ls_mut fullpass  "noask"     'elif [ "$LS_ASK_LEG" = ran ] && [ -n "$LS_SPRINT" ]; then' 'elif true; then'
+  if [ "$LS_MUT_KILLS" -eq "$LS_MUT_WANT" ] && [ "$LS_MUT_WANT" -eq 9 ]; then
+    ok "all 9 locked-scope mutants killed against the resolved validator $VALIDATOR"
   else
-    bad "only $LS_MUT_KILLS of $LS_MUT_WANT locked-scope mutants were killed (8 expected)"
+    bad "only $LS_MUT_KILLS of $LS_MUT_WANT locked-scope mutants were killed (9 expected)"
   fi
 else
   bad "CONTROL FAILED: assertion 14's unmutated copy returned [$LS_CTL_GOT], expected [$LS_EXPECT] — every locked-scope mutant verdict would be uninterpretable"

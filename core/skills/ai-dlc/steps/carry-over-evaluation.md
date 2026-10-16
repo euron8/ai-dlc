@@ -186,8 +186,10 @@ answer on the entry with its `Operator authorization:` line. The item stays in t
 until that answer exists.
 *Catches:* a confirmed item deferred mid-sprint and surfaced only after deploy — a scope
 cut the operator learns of after the sprint shipped without it.
-*Removed when:* a gate arm joins each deferral entry's item to a structured confirmed-scope
-set and refuses the deferral.
+*Removed when:* a gate can key every deferral on an item id — Check 34's locked-scope arm
+refuses only a deferral naming a `CO-` id, so a confirmed item deferred with no `CO-` id, or
+named beside an approved deferred id, still passes. Closing that needs a structured
+scope-items line in the snapshot and an `**Item:**` field on a deferral entry.
 
 **A rare-and-maybe-never monitor carries `rare_event: true`.** When the
 healthy expected state of a carry-over's monitored event is non-firing,

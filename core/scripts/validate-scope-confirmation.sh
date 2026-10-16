@@ -617,14 +617,21 @@ else
   case "$LS_SPRINT" in *[!0-9]* | "") LS_SPRINT="" ;; esac
   LS_REQ_CITE="$(field_of user_request_cite "$SNAPSHOT")"; LS_REQ_CITE="${LS_REQ_CITE#SHA256:}"
   LS_ASK_IDS=""
-  if [ -f "$REQUESTS" ] && [ -n "$LS_REQ_CITE" ] && [ "$LS_REQ_CITE" != "none" ]; then
+  # Each leg records whether it RAN, at the site that decides it, so the closing line can
+  # name the legs that contributed and never claim the whole property after a SKIP. A cite
+  # that is a hash but matches no entry in the requests file is a skipped leg, not a leg that
+  # ran and found nothing; an entry that resolves and names no id (the sprint-319 ask) ran.
+  LS_ASK_LEG=skip
+  if [ -f "$REQUESTS" ] && [ -n "$LS_REQ_CITE" ] && [ "$LS_REQ_CITE" != "none" ] \
+     && grep -qxF -- "- SHA256: ${LS_REQ_CITE}" "$REQUESTS" 2>/dev/null; then
+    LS_ASK_LEG=ran
     LS_ASK_IDS="$(awk -v c="- SHA256: ${LS_REQ_CITE}" '
         $0 == c { buf = ""; on = 1; next }
         on && /^## / { on = 0; last = buf }
         on { buf = buf $0 "\n" }
         END { if (on) last = buf; printf "%s", last }' "$REQUESTS" | co_ids)"
   fi
-  if [ -z "$LS_REQ_CITE" ] || [ "$LS_REQ_CITE" = "none" ] || [ ! -f "$REQUESTS" ]; then
+  if [ "$LS_ASK_LEG" = skip ]; then
     say "SKIP  locked-scope ask leg: no resolvable user_request_cite (cite '${LS_REQ_CITE:-absent}', requests"
     say "      ${REQUESTS}), so ids the operator's ask named are NOT joined; only CO-S<sprint_id>- ids are."
   fi
@@ -694,10 +701,20 @@ else
 $LS_OUT
 EOF
   say "locked_scope_deferrals_scanned: ${LS_N} (sprint ${LS_SPRINT:-unknown}; ask ids $(printf '%s\n' "$LS_ASK_IDS" | grep -c .); window from ${LS_FROM:-the start of the file})"
+  # The closing line names the legs that ran. Only both legs running earns the full claim; a
+  # skipped leg leaves part of the confirmed scope unjoined, and the line says which part.
+  # The exit is the same in every branch: a SKIP is visible, never a refusal.
+  LS_ASK_N="$(printf '%s\n' "$LS_ASK_IDS" | grep -c .)" || LS_ASK_N=0
   if [ "$LS_BAD" -gt 0 ]; then
     LS_RC=1
+  elif [ "$LS_ASK_LEG" = ran ] && [ -n "$LS_SPRINT" ]; then
+    say "PASS  no live DEFERRAL_REQUEST names a confirmed-scope item (ask leg: ${LS_ASK_N} id(s); sprint leg: CO-S${LS_SPRINT}- ids)."
+  elif [ "$LS_ASK_LEG" = ran ]; then
+    say "PARTIAL  locked-scope arm: only the ask leg ran (${LS_ASK_N} id(s)); the sprint leg was SKIPPED, so CO-S<N>- items are NOT checked."
+  elif [ -n "$LS_SPRINT" ]; then
+    say "PARTIAL  locked-scope arm: only the sprint leg ran (CO-S${LS_SPRINT}- ids); the ask leg was SKIPPED, so ids the operator's ask named are NOT checked."
   else
-    say "PASS  no live DEFERRAL_REQUEST names a confirmed-scope item."
+    say "SKIP  locked-scope arm: both legs SKIPPED; the locked set is empty and ${LS_N} live deferral(s) were scanned against nothing."
   fi
 fi
 
