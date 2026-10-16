@@ -1104,7 +1104,9 @@ p_draft() { # BL-554: `<valid shard name>.draft` beside its shard is skipped wit
   d="$(b3_world)"; printf 'x\n' > "$d/notes.md"; run_merge "$m" "$d"
   refused_clean "notes.md is not a shard name" "$d" || return 1
   d="$(b3_world)"; printf 'x\n' > "$d/notes.md.draft"; run_merge "$m" "$d"
-  refused_clean "notes.md.draft is not a shard name" "$d"
+  refused_clean "notes.md.draft is not a shard name" "$d" || return 1
+  d="$(b3_world)"; printf 'x\n' > "$d/cross-9.md.draft"; run_merge "$m" "$d"
+  refused_clean "cross-9.md.draft is a draft of cross-9, which is no shard of this set" "$d"
 }
 dry_merge() { # <merge> <shard dir> -> RC, $MO (stdout and stderr)
   bash "$1" --dry-run "$2" > "$MO" 2>&1; RC=$?
@@ -1126,17 +1128,20 @@ p_dry() { # BL-548: --dry-run prints every refusal of the first failing phase, w
   [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && [ -f "$o" ]
 }
 p_dry_barrier() { # BL-548: the phases are barriers. Shard 1 missing (phase 2) beside a finding refusal in shard 2
-                  # (phase 5) prints exactly the missing-shard line, and does not read stdin: it runs with a
-                  # fifo as stdin whose writer holds it open, so a stage that waited on stdin (an awk handed the
-                  # absent shard's empty path reads stdin) would stall until the writer exits and print more.
-  local m="$1" d f hp t0
+                  # (phase 5) prints exactly the missing-shard line, and reads no stdin. Stdin is a regular FILE
+                  # of POISON in the shard grammar (a provenance block whose verdict is the token): a stage that
+                  # was handed the absent shard's empty path and fell back to stdin would parse it and print the
+                  # token in its verdict refusal. No clock, no fifo: the arm turns on output, never on timing.
+  local m="$1" d pz tok=ZZQPOISON
+  pz="$(mktemp "$WORK/poison.XXXXXX")" || return 1
+  printf '## Findings\n\n### F-1 (MAJOR) %s\n\nstories: 1\n\n<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: %s\nverdict: %s\nfindings_critical: 0\nfindings_major: 0\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$tok" "$tok" "$tok" > "$pz"
+  # CONTROL, in the same predicate: the poison, delivered as shard 1 with a harness record, is parsed by the
+  # very stage under test and its verdict refusal prints the token -- so the poison is in that stage's grammar.
+  d="$(b3_world)"; cp "$pz" "$d/1.md"; harness_record "$d/1.md"; run_merge "$m" "$d"
+  [ "$RC" -eq 2 ] && has "$MO" "declares verdict '$tok'" || return 1
   d="$(b3_world)"; rm -f "$d/1.md"; shard "$d" 2 2 EXIT_CONDITION_MET 1
-  f="$(mktemp -u "$WORK/stdin.XXXXXX")" && mkfifo "$f" || return 1
-  sleep 10 4>"$f" & hp=$!
-  t0=$SECONDS
-  bash "$m" --dry-run "$d" > "$MO" 2>&1 < "$f"; RC=$?
-  kill "$hp" 2>/dev/null; wait "$hp" 2>/dev/null
-  [ "$((SECONDS - t0))" -lt 8 ] && [ "$RC" -eq 2 ] && [ "$(grep -c . "$MO")" -eq 1 ] && has "$MO" "REFUSED: shard 1 is missing from" && ! has "$MO" "cites"
+  bash "$m" --dry-run "$d" > "$MO" 2>&1 < "$pz"; RC=$?
+  [ "$RC" -eq 2 ] && [ "$(grep -c . "$MO")" -eq 1 ] && has "$MO" "REFUSED: shard 1 is missing from" && ! has "$MO" "cites" && ! has "$MO" "$tok"
 }
 
 P_ALL="b3 clean ceiling miss_ord miss_cross dup partition sha ms doc_b3 doc_axis doc_sha doc_path doc_serial files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit subj_b4 b4doc b4doc_nomf b4doc_other xfiles xdoc xelicit xmix xunknown xcomplete stem_series stem_control stem_near stem_files tuid_main tuid_norow tuid_nometa tuid_selfdiff tuid_role tuid_twowriters tuid_oneagent tuid_nospawn tuid_session tuid_pre tuid_basename tuid_probemeta tuid_tworoles rerun_join rerun_other rerun_same rerun_role xdir probe_disagree probe_absent rerun_residual hdr draft dry dry_barrier"

@@ -336,12 +336,12 @@ mutant "MX5 invoked_at fraction refused" "ms" \
 # Section mode. D2's seed carries exactly one sections: line, so with the guard gone the finding
 # passes the one-citation count and the merge SUCCEEDS -- the kill is D2's alone.
 mutant "MX6 wrong-axis guard removed" "doc_axis" \
-  '[ "${wrong:-0}" = "0" ] || refuse' \
-  '[ "${wrong:-0}" = "0" ] || true'
+  '[ "${wrong:-0}" = "0" ] || { collect' \
+  '[ "${wrong:-0}" = "0" ] || true || { collect'
 # MX6b: the kill above would ALSO be scored if some other rule refused D2's seed, so assert what
 # separates them: with the guard gone the same seed MERGES (exit 0), i.e. nothing else refuses it.
 if [ "$GROUP" != a ]; then :
-elif M6="$(mutdir m6b)" && apply "$M6/merge-adversarial-shards.sh" '[ "${wrong:-0}" = "0" ] || refuse' '[ "${wrong:-0}" = "0" ] || true' 2>/dev/null \
+elif M6="$(mutdir m6b)" && apply "$M6/merge-adversarial-shards.sh" '[ "${wrong:-0}" = "0" ] || { collect' '[ "${wrong:-0}" = "0" ] || true || { collect' 2>/dev/null \
    && ! cmp -s "$MERGE" "$M6/merge-adversarial-shards.sh"; then
   d="$(doc_b3_world)"; dshard "$d" 2 2 EXIT_CONDITION_MET 2 "" "" "stories: 2"
   run_doc_merge "$M6/merge-adversarial-shards.sh" "$d"
@@ -352,15 +352,15 @@ else
   bad "MX6b: FIXTURE STALE -- the axis-guard anchor is not in the merge exactly once"
 fi
 mutant "MX7 whole-document sha check removed" "doc_sha" \
-  '[ "$sha" = "$DOC_SHA" ] || refuse' \
-  '[ "$sha" = "$DOC_SHA" ] || true'
+  '[ "$sha" = "$DOC_SHA" ] || { collect' \
+  '[ "$sha" = "$DOC_SHA" ] || true || { collect'
 mutant "MX8 artifact-path check removed" "doc_path" \
   '[ "$ART_ABS" = "$DOCUMENT" ] \' \
   'true || [ "$ART_ABS" = "$DOCUMENT" ] \'
 # Subject mode.
 mutant "MX9 per-stem sha check removed" "subj_sha" \
-  '[ "$sv" = "$want" ] || refuse' \
-  '[ "$sv" = "$want" ] || true'
+  '[ "$sv" = "$want" ] || { collect' \
+  '[ "$sv" = "$want" ] || true || { collect'
 mutant "MX10 four-stem count check removed" "subj_stems" \
   '[ "$nt" -eq 4 ] && [' \
   'true || ['
@@ -424,8 +424,8 @@ mutant "XM4 cross.md/cross-<g>.md mix accepted" "xmix" \
 # XM5: a cross-<g> the table does not print accepted. X5 sees cross-7 merge silently; X1 and X2's
 # K=2 cell sees `cross-1.md` refused as missing `cross` rather than named as unprinted -- both true.
 mutant "XM5 unknown cross group accepted" "xfiles xdoc xunknown" \
-  '      case " $CROSS_KEYS " in *" $xk "*) ;; *) refuse' \
-  '      case " $CROSS_KEYS " in *) ;; *" $xk "*) refuse'
+  '      case " $CROSS_KEYS " in *" $xk "*) ;; *) collect' \
+  '      case " $CROSS_KEYS " in *) ;; *" $xk "*) collect'
 # XM6: the seat-complete belt gone -- an unfinished shard beside a finished one merges.
 mutant "XM6 seat-complete refusal removed" "xcomplete" \
   "if grep -q '^Y' \"\$T/sc\" && grep -q '^N' \"\$T/sc\"; then" \
@@ -456,8 +456,8 @@ mutant "SM4 series refusal also fires on coe-p1" "stem_control" \
 # TM1: the self-report used when the ledger has no row -- T2's shard carries a toolu_-prefixed
 # forged id, so with the fallback it MERGES; a NOT_ACCESSIBLE self id would refuse either way.
 mutant "TM1 no-row shard falls back to the self-report" "tuid_norow" \
-  '  [ -n "$tid" ] || refuse "$sf has no row in $REC_WRITES;' \
-  '  [ -n "$tid" ] || tid="$(field "$P" tool_use_id)"; [ -n "$tid" ] || refuse "$sf has no row in $REC_WRITES;'
+  '  [ -n "$tid" ] || { collect "$sf has no row in $REC_WRITES;' \
+  '  [ -n "$tid" ] || tid="$(field "$P" tool_use_id)"; [ -n "$tid" ] || { collect "$sf has no row in $REC_WRITES;'
 # TM2: the role hop skipped. T5's remediator-only shard merges; its adversary+remediator shard is
 # then refused as two adversaries, which is the wrong reason, so the cell's token dies with it.
 mutant "TM2 writer role not checked" "tuid_role tuid_tworoles" \

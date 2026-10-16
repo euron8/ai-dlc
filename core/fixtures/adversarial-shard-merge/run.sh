@@ -226,7 +226,7 @@ p_draft "$MERGE" && ok "H2: 2.md.draft beside a complete shard -> MERGED with 'N
   || bad "H2: (rc=$RC) $(cat "$MO")"
 p_dry "$MERGE" && ok "H3: --dry-run over two shards citing another story prints all four REFUSED lines, exit 2, no pass file; the clean set prints DRY-RUN: clean (exit 0), writes nothing, then merges for real" \
   || bad "H3: (rc=$RC) $(cat "$MO")"
-p_dry_barrier "$MERGE" && ok "H4: --dry-run with shard 1 missing AND a finding refusal in shard 2 prints exactly the missing-shard line, under an open stdin, within 8s" \
+p_dry_barrier "$MERGE" && ok "H4: --dry-run with shard 1 missing AND a finding refusal in shard 2 prints exactly the missing-shard line and reads no stdin (stdin is a file of poison in the shard grammar)" \
   || bad "H4: (rc=$RC) $(cat "$MO")"
 
 # R6: a finding heading EXACTLY as the real pass wrote it carries no severity word, so the heads

@@ -563,7 +563,14 @@ for f in "$SHARD_DIR"/*; do
       [ -n "$key" ] || { collect "$f names ordinal ${bn%.md}, outside 1..$K (the $UNIT_COUNT)"; continue; } ;;
     *) collect "$f is not a shard name (<ordinal>.md, cross.md or cross-<g>.md)"; continue ;;
   esac
-  if [ "$is_draft" -eq 1 ]; then printf 'NOTE: ignored draft %s\n' "$b" >&2; continue; fi
+  if [ "$is_draft" -eq 1 ]; then
+    # Only a draft of a shard this set OWES is skipped: `cross-9.md.draft` hangs off no shard.
+    case " $ORDINALS $CROSS_KEYS " in
+      *" $key "*) printf 'NOTE: ignored draft %s\n' "$b" >&2 ;;
+      *) collect "$f is a draft of $key, which is no shard of this set (the shards are: $ORDINALS and $CROSS_KEYS)" ;;
+    esac
+    continue
+  fi
   printf '%s\t%s\n' "$key" "$f" >> "$T/shards" || refuse "cannot stage the shard set"
 done
 cut -f1 "$T/shards" | sort | uniq -d > "$T/dups" || refuse "cannot stage the duplicate check"
