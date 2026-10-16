@@ -198,8 +198,18 @@
 # scripts, I33 forbids locating one core file from another, and a hook that sources a missing
 # helper fails open, which is I92's reason for its own four copies. The fixture
 # `gate-remediation-deny` greps the probe's expression out of the probe and asserts it occurs in
-# this file, and seeds a drift that fails. `customAgentType` first, because on a named teammate
-# `agentType` is the generic harness type.
+# this file, and seeds a drift that fails. THE PRODUCER WRITES THE ROLE IN `agentType`:
+# `customAgentType` is in 0 of 3216 graph metas and 0 of 1797 ai-dlc metas, against 3237 carrying
+# `agentType`, measured on 2026-10-16. It is read first only because the probe's expression reads
+# it first; nothing the harness emits exercises it.
+#
+# THIS ARM DEPENDS ON `ai-dlc-dispatch-guard.sh:1186`, the `del(.name)` in its role-bound rewrite.
+# On a NAMED teammate the harness writes the spawn NAME into `agentType` --
+# `{"agentType":"remediator-serial-cross","name":...,"teamName":...}` -- and this arm then ALLOWS a
+# real remediator. The dispatch guard deletes `name` on every role-bound dispatch, so the meta
+# carries `agentType: remediator`; all 9 named remediator spawns in graph do. The fixture's
+# `1b-name-strip` arm fails if that deletion goes, and its named-shape cell asserts the unstripped
+# meta ALLOWS, as the known gap this dependency holds shut.
 #
 # THE ROLE SET HAS NO VARIANTS: `core/team-roles/` holds `remediator.md` and no `remediator-*`.
 # Measured over the reference consumer's 3224 subagent metas: 530 resolve to `remediator`, 0 to any
@@ -208,10 +218,17 @@
 #
 # FAILS OPEN, SILENTLY, when the meta cannot be read: no `transcript_path`, no meta file, a meta
 # that does not parse, or one carrying neither key. The call then reaches arm 2 exactly as before.
-# Silent, because the absent meta is the COMMON gap rather than a broken state: the harness writes
-# the meta late for some spawns (an adversary pass over the reference consumer reported 207 metas
-# born more than 5s after the agent's first tool call; NOT re-derived in this change), so a remediator whose FIRST call is the `pending.md` Edit
-# can precede its own meta and is allowed. That is a stated gap of this arm.
+# Silent, because the absent meta is the COMMON gap rather than a broken state. Measured on graph
+# on 2026-10-16: 235 metas were born more than 5s after their agent transcript, and 194 of those
+# have a probe row OLDER than the meta's birth, so they are rewrites of a meta that already
+# existed; real late creation is at most 41. A remediator whose FIRST call is the `pending.md`
+# Edit can precede its own meta and is allowed. That is a stated gap of this arm. On the
+# motivating s319 Edit the arm's outcome is undetermined: that meta's birth time is a rewrite, so
+# it is not a known miss.
+# STATED GAP: a case-folded spelling (`Pending.md`, `Docs/Escalations/`) or one reached through a
+# symlinked directory ALLOWS, because the collapse is lexical and case-exact.
+# STATED GAP: a remediator can force the fail-open itself, by making its own meta unreadable or
+# unparseable, and the arm then ALLOWS.
 # What it does NOT cover: a remediator's Bash write to the file (not on this matcher); any other
 # role's write (dev and architect have sanctioned writes there); the lead (no `agent_id`).
 #
@@ -585,6 +602,8 @@ record_verdict_write() { # $1 file_path -- silent no-op unless this is a verdict
 # `<state>/planning-artifacts/s<N>/shards/<artifact>-p<M>/`; `validate-draft-stamps.sh` names the
 # file only to exempt it and reads no row. None derives a sprint slot from a path it did not
 # select by prefix first, so a `gate-adjudication/` row reaches none of them.
+# STATED GAP: in `--subject` mode `join-remediator-shards.sh` drops these rows by its subject-set
+# filter, not by a prefix, so "by prefix first" does not describe that mode.
 record_artifact_write() { # $1 file_path -- silent no-op unless this is a planning-artifact, spec or part-file write
   case "$TOOL_NAME" in Edit|Write|MultiEdit) ;; *) return 0 ;; esac
   # The LOG_DIR prefix first, so a directory under planning-artifacts that happens to share the

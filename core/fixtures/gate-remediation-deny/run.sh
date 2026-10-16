@@ -1424,17 +1424,27 @@ printf '%s\n' '{"type":"user","message":{"content":"dispatching"}}' > "$E1_TR"
 e1_meta() { printf '%s\n' "$2" > "$E1_SUB/agent-$1.meta.json"; }
 # SEVERAL METAS, AND THE REMEDIATOR'S IS NOT THE FIRST MEMBER: an arm that read the first meta in
 # the directory instead of the one named by agent_id would read `dev` here and allow.
-e1_meta a0dev    '{"agentType":"dev","toolUseId":"toolu_e1dev"}'
-e1_meta b0arch   '{"agentType":"architect","toolUseId":"toolu_e1arch"}'
+# SEEDED FROM WHAT THE PRODUCER EMITS. The harness writes the role in `agentType` and never writes
+# `customAgentType` (0 of 3216 graph metas, 0 of 1797 ai-dlc metas); the keys below are a real
+# graph remediator meta's, ids replaced. Every DENY cell rests on these producer-shaped metas.
+e1_meta a0dev    '{"agentType":"dev","description":"Dev seat","toolUseId":"toolu_e1dev","spawnDepth":1,"requestShape":"background","requestNonInteractive":true}'
+e1_meta b0arch   '{"agentType":"architect","description":"Architect seat","toolUseId":"toolu_e1arch","spawnDepth":1,"requestShape":"background","requestNonInteractive":true}'
+# READER ACCEPT-SET ONLY: c0named and d0swap carry `customAgentType`, which no producer emits. They
+# are kept, with cells E4 and A8 and mutant m1b-key-order, solely to cover the reader's key order,
+# which the `1b-bind` arm binds to the subagent probe's copy. No deny verdict depends on them.
 e1_meta c0named  '{"agentType":"general-purpose","customAgentType":"remediator","teamName":"t"}'
 e1_meta d0swap   '{"agentType":"remediator","customAgentType":"dev","teamName":"t"}'
 e1_meta e0bad    '{"agentType":"remediator",'
-e1_meta remediator-x '{"agentType":"dev","toolUseId":"toolu_e1named"}'
-e1_meta z9rem    '{"agentType":"remediator","toolUseId":"toolu_e1rem"}'
-E1_FIRST=""
-for _e1m in "$E1_SUB"/*.meta.json; do E1_FIRST="${_e1m##*/}"; break; done
+# THE PRODUCER'S NAMED SHAPE, NOT STRIPPED: a named teammate's meta carries its spawn NAME in
+# `agentType`. Cell A13 asserts this ALLOWS. It is the KNOWN GAP, held shut by
+# `ai-dlc-dispatch-guard.sh` deleting `name` on role-bound dispatches; `1b-name-strip` binds that.
+e1_meta f0named  '{"agentType":"remediator-serial-cross","description":"Serial cross-section repair","name":"x","spawnDepth":0,"requestShape":"background","requestNonInteractive":true,"taskKind":"in_process_teammate","teamName":"t"}'
+e1_meta remediator-x '{"agentType":"dev","description":"Dev seat","toolUseId":"toolu_e1named","spawnDepth":1,"requestShape":"background","requestNonInteractive":true}'
+e1_meta z9rem    '{"agentType":"remediator","description":"Serial cross-section repair","toolUseId":"toolu_e1rem","spawnDepth":1,"requestShape":"background","requestNonInteractive":true}'
+E1_FIRST=""; E1_NMETA=0
+for _e1m in "$E1_SUB"/*.meta.json; do [ -n "$E1_FIRST" ] || E1_FIRST="${_e1m##*/}"; E1_NMETA=$((E1_NMETA+1)); done
 case "$E1_FIRST" in
-  agent-a0dev.meta.json) ok "1b-pre: the remediator's meta is not the first of the 7 in subagents/ (first: $E1_FIRST)" ;;
+  agent-a0dev.meta.json) ok "1b-pre: the remediator's meta is not the first of the $E1_NMETA in subagents/ (first: $E1_FIRST)" ;;
   *) bad "1b-pre: FIXTURE BROKEN — the first meta is '$E1_FIRST', so the not-first property is not seeded" ;;
 esac
 [ ! -e "$E1_SUB/agent-y9rem.meta.json" ] || bad "1b-pre: FIXTURE BROKEN — y9rem must have NO meta"
@@ -1452,7 +1462,7 @@ e1() { # <expect deny|allow> <label> <tool> <file_path> <agent> <transcript> [ho
 E1_CELLS="E1|deny|Edit|$E1_PEND|z9rem|$E1_TR|a remediator's Edit to pending.md (PROJECT_DIR spelling) is DENIED
 E2|deny|Write|docs/escalations/pending.md|z9rem|$E1_TR|a remediator's Write to the RELATIVE docs/escalations/pending.md is DENIED
 E3|deny|MultiEdit|$W/src/../docs/escalations/pending.md|z9rem|$E1_TR|a remediator's MultiEdit to an absolute spelling through src/.. is DENIED
-E4|deny|Edit|$E1_PEND|c0named|$E1_TR|a NAMED teammate whose customAgentType is remediator (agentType general-purpose) is DENIED
+E4|deny|Edit|$E1_PEND|c0named|$E1_TR|READER ACCEPT-SET ONLY: customAgentType remediator over agentType general-purpose is DENIED (no producer emits customAgentType)
 A1|allow|Edit|$E1_PEND|a0dev|$E1_TR|a dev's identical Edit to pending.md is ALLOWED (role, not tool or path, decides)
 A2|allow|Edit|$E1_PEND|b0arch|$E1_TR|an architect's identical Edit to pending.md is ALLOWED
 A3|allow|Edit|$E1_PEND||$E1_TR|the LEAD's identical Edit (no agent_id) to pending.md is ALLOWED
@@ -1460,8 +1470,12 @@ A4|allow|Edit|$W/docs/escalations/resolved.md|z9rem|$E1_TR|the remediator's Edit
 A5|allow|Edit|$E1_PEND|y9rem|$E1_TR|FAIL-OPEN: a dispatch with NO meta file is ALLOWED
 A6|allow|Edit|$E1_PEND|e0bad|$E1_TR|FAIL-OPEN: a meta that does not parse is ALLOWED
 A7|allow|Edit|$E1_PEND|z9rem|-|FAIL-OPEN: the remediator with no transcript_path (so no meta path) is ALLOWED
-A8|allow|Edit|$E1_PEND|d0swap|$E1_TR|agentType remediator under customAgentType dev is ALLOWED (the definition is read first)
-A9|allow|Edit|$E1_PEND|remediator-x|$E1_TR|an agent_id spelling 'remediator' whose meta says dev is ALLOWED (the id is opaque)"
+A8|allow|Edit|$E1_PEND|d0swap|$E1_TR|READER ACCEPT-SET ONLY: agentType remediator under customAgentType dev is ALLOWED (customAgentType is read first)
+A9|allow|Edit|$E1_PEND|remediator-x|$E1_TR|an agent_id spelling 'remediator' whose meta says dev is ALLOWED (the id is opaque)
+A10|allow|Edit|$W/docs/notes/pending.md|z9rem|$E1_TR|NEAR-MISS past the prefilter: the remediator's Edit to docs/notes/pending.md is ALLOWED
+A11|allow|Write|$W/docs/escalations/pending.md.draft|z9rem|$E1_TR|NEAR-MISS past the prefilter: the remediator's Write to docs/escalations/pending.md.draft is ALLOWED
+A12|allow|Edit|$W/_bmad-output/planning-artifacts/s1/pending.md|z9rem|$E1_TR|NEAR-MISS past the prefilter: the remediator's Edit to a planning-artifacts pending.md is ALLOWED
+A13|allow|Edit|$E1_PEND|f0named|$E1_TR|KNOWN GAP, held shut by the dispatch guard's name deletion: an UNSTRIPPED named remediator meta (agentType = spawn name) is ALLOWED"
 e1_drive_all() { # [hook] -> one ok/bad per cell
   while IFS='|' read -r _id _want _tool _fp _ag _tr _lab; do
     [ -n "$_id" ] || continue
@@ -1506,6 +1520,40 @@ case "$E1_EXPR" in
   *) bad "1b-bind: no role expression extracted from the subagent probe ('$E1_EXPR') — the binding is vacuous" ;;
 esac
 
+# 1b-name-strip -- ARM 1b DEPENDS ON THE DISPATCH GUARD DELETING `name`. A JOIN to the emission that
+# `dispatch-model-guard` asserts behaviourally ("`name` is DELETED"), not a second copy of that
+# assertion: this arm only proves the emission this fixture's A13 gap relies on is still THERE.
+# Keyed on the role-bound rewrite's whole jq program, the line that emits the stripped payload.
+DGUARD="$(pick "$HERE/../../hooks/ai-dlc-dispatch-guard.sh" \
+               "$HERE/../../../.claude/hooks/ai-dlc-dispatch-guard.sh" \
+               "$HERE/../../../core/hooks/ai-dlc-dispatch-guard.sh")"
+E1_STRIP="'. + {subagent_type: \$t} | del(.name) | del(.model)'"
+E1_NONE="'. + {subagent_type: \$t} | del(.nameZq7Never) | del(.model)'"
+e1_strip_count() { local n; n="$(grep -cF -- "$2" "$1")" || n=0; printf '%s' "$n"; }
+if [ -z "$DGUARD" ]; then
+  bad "1b-name-strip: cannot locate ai-dlc-dispatch-guard.sh — the dependency arm 1b rests on is unchecked"
+else
+  _e1s="$(e1_strip_count "$DGUARD" "$E1_STRIP")"
+  _e1z="$(e1_strip_count "$DGUARD" "$E1_NONE")"
+  if [ "$_e1s" = 1 ] && [ "$_e1z" = 0 ]; then
+    ok "1b-name-strip: the dispatch guard's role-bound rewrite deletes \`name\` (emission count 1; impossible-anchor control 0)"
+  else
+    bad "1b-name-strip: the dispatch guard's \`del(.name)\` emission count is $_e1s (want 1; control $_e1z, want 0) — a named remediator's meta then carries its spawn name in agentType, and arm 1b ALLOWS it"
+  fi
+  # The arm can fire: a copy with `del(.name) | ` removed must score 0.
+  cp "$DGUARD" "$MW/dguard-nostrip.sh"
+  sed -i.bak 's@del(\.name) | @@' "$MW/dguard-nostrip.sh"; rm -f "$MW/dguard-nostrip.sh.bak"
+  if cmp -s "$DGUARD" "$MW/dguard-nostrip.sh"; then
+    bad "MUTANT dguard-nostrip: the sed changed NO bytes — it matched nothing, and its silence would score as a kill"
+  elif ! bash -n "$MW/dguard-nostrip.sh" 2>/dev/null; then
+    bad "MUTANT dguard-nostrip: the copy does not parse"
+  else
+    _e1m="$(e1_strip_count "$MW/dguard-nostrip.sh" "$E1_STRIP")"
+    if [ "$_e1m" = 0 ]; then ok "1b-name-strip: a dispatch guard with \`del(.name)\` removed is reported (emission count 0) — the binding can fire"
+    else bad "1b-name-strip: the stripped copy still carries the emission ($_e1m) — the binding cannot fire"; fi
+  fi
+fi
+
 # --- arm 1b's mutants. Each moves only its own cells; every other cell must hold.
 e1_mut_score() { # <mutant> <space-separated ids that must FLIP> <label>
   local m="$1" flips=" $2 " got="" o w
@@ -1525,7 +1573,13 @@ if mut m1b-role-nothing 's@^                remediator)$@                remedia
   e1_mut_score m1b-role-nothing "E1 E2 E3 E4" "M1b-role: a role test that matches nothing ALLOWS every deny cell and moves no allow cell"
 fi
 if mut m1b-path-widened 's@^        \*pending\.md\*)$@        *)@;s@^            \*/docs/escalations/pending\.md)$@            *)@'; then
-  e1_mut_score m1b-path-widened "A4" "M1b-path: a path test widened to every path DENIES the remediator's other-docs Edit and moves nothing else"
+  e1_mut_score m1b-path-widened "A4 A10 A11 A12" "M1b-path: both path tests widened to every path DENY the remediator's other-docs Edit and every near-miss, and move nothing else"
+fi
+# THE INNER EXACT TEST ALONE. A4 fails the `*pending.md*` prefilter, so only A10-A12 -- which pass
+# it -- can see a widening of the exact test. Anchored on the 12-space indent the inner line has
+# and the prefilter's 8-space line does not; A4 staying put is what separates it from m1b-path.
+if mut m1b-inner-widened 's@^            \*/docs/escalations/pending\.md)$@            *)@'; then
+  e1_mut_score m1b-inner-widened "A10 A11 A12" "M1b-inner: the exact test widened alone DENIES every pending.md past the prefilter and moves nothing else"
 fi
 if mut m1b-absent-denies 's@^              DEFINITION=""$@              DEFINITION="remediator"@'; then
   e1_mut_score m1b-absent-denies "A5 A7" "M1b-open: reading an UNREADABLE meta as remediator DENIES both no-meta cells — fail-open is asserted"
