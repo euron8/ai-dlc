@@ -29,7 +29,7 @@
 #        nothing, 1 = an assertion failed, 2 = fixture broken.
 SHARDS="a b c d e"
 # A ratchet, raised when a mutant is added: lowering it is a visible edit, a lost mutant is not.
-MIN_MUTANTS=89
+MIN_MUTANTS=92
 set -uo pipefail
 
 # The pre-push gate exports AI_DLC_* tunables; none is read here, but scrub them all the same.
@@ -317,11 +317,11 @@ mutc L3-no-upstream "BMADONLY" "BMADONLY:l3-upstream" -e 's/^  if \[ -n "\$urem"
 mutc L3-any-ref "BMADONLY" "BMADONLY:l3-otherref" -e 's/^  for r in \$refs; do \[ "\$r" = HEAD \] || \[ "\$r" = "\$br" \] || exit 1; done$/  :/'
 
 # --- BL-562: the no-verify deny, each wrong build dying on its own cell(s) ---
-mutc nv-off "NOVERIFY" "NOVERIFY:nv-abbr NOVERIFY:nv-chain NOVERIFY:nv-first NOVERIFY:nv-mate NOVERIFY:nv-offgrant NOVERIFY:nv-seed NOVERIFY:nv-update" -e 's/^if \[ "\$NV" = true \] && \[ -f /if false \&\& [ -f /'
+mutc nv-off "NOVERIFY" "NOVERIFY:nv-abbr NOVERIFY:nv-chain NOVERIFY:nv-first NOVERIFY:nv-mate NOVERIFY:nv-offgrant NOVERIFY:nv-reason NOVERIFY:nv-seed NOVERIFY:nv-update" -e 's/^if \[ "\$NV" = true \] && \[ -f /if false \&\& [ -f /'
 # no activation gate: the distribution operator's own hookless pushes are denied.
 mutc nv-no-stamp "NOVERIFY" "NOVERIFY:nv-noncons" -e 's/^if \[ "\$NV" = true \] && \[ -f "\${CLAUDE_PROJECT_DIR:-\.}\/\.claude\/\.ai-dlc-version" \]; then$/if [ "$NV" = true ]; then/'
 # a branch delete carrying the flag is denied.
-mutc nv-deletes "NOVERIFY" "NOVERIFY:nv-colon NOVERIFY:nv-delete NOVERIFY:nv-dshort" -e 's/map(gitpush and nvflag and (isdelete | not))/map(gitpush and nvflag)/'
+mutc nv-deletes "NOVERIFY" "NOVERIFY:nv-colon NOVERIFY:nv-delete NOVERIFY:nv-dshort" -e 's/map(gitpush and nvflag and (isdelete | not) and/map(gitpush and nvflag and/'
 # any --no-verify word denies, even when a later --verify re-enables the hook.
 mutc nv-ignores-verify "NOVERIFY" "NOVERIFY:nv-reverify" -e 's/(length > 0 and (last | startswith("--no-")))/(map(startswith("--no-")) | any)/'
 # the ambiguous `--no-ver` (git exits 129, nothing pushed) is read as the flag.
@@ -331,20 +331,26 @@ mutc nv-exact-only "NOVERIFY" "NOVERIFY:nv-abbr" -e 's/test("^--(no-veri(f(y)?)?
 # the raw split, not the quote mask: a quoted alternation reads as a push.
 mutc nv-raw-segs "NOVERIFY" "NOVERIFY:nv-mention" -e 's/| csegs | map(gitpush and nvflag/| segs | map(gitpush and nvflag/'
 # not keyed on a push: `git fetch --no-verify` is denied.
-mutc nv-not-push "NOVERIFY" "NOVERIFY:nv-fetch" -e 's/map(gitpush and nvflag and (isdelete | not))/map(nvflag and (isdelete | not))/'
+mutc nv-not-push "NOVERIFY" "NOVERIFY:nv-fetch" -e 's/map(gitpush and nvflag and (isdelete | not) and/map(nvflag and (isdelete | not) and/'
 # the lead only: a teammate escapes.
 mutc nv-lead-only "NOVERIFY" "NOVERIFY:nv-mate" -e 's/^if \[ "\$NV" = true \] && \[ -f /if [ "$NV" = true ] \&\& [ -z "$AID" ] \&\& [ -f /'
 # behind the grant stand-down: a lead with no advisor grant (a local model) escapes.
 mutc nv-needs-grant "NOVERIFY" "NOVERIFY:nv-first" -e 's/^if \[ "\$NV" = true \] && \[ -f /if [ "$NV" = true ] \&\& grep -q advisor_tool "$TP" \&\& [ -f /'
 # an advisor call licenses the flag (the s319 03:05Z shape).
-mutc nv-advisor-licenses "NOVERIFY" "NOVERIFY:nv-abbr NOVERIFY:nv-chain NOVERIFY:nv-mate NOVERIFY:nv-seed NOVERIFY:nv-update" -e 's/^if \[ "\$NV" = true \] && \[ -f /if [ "$NV" = true ] \&\& ! grep -q server_tool_use "$TP" \&\& [ -f /'
+mutc nv-advisor-licenses "NOVERIFY" "NOVERIFY:nv-abbr NOVERIFY:nv-chain NOVERIFY:nv-mate NOVERIFY:nv-reason NOVERIFY:nv-seed NOVERIFY:nv-update" -e 's/^if \[ "\$NV" = true \] && \[ -f /if [ "$NV" = true ] \&\& ! grep -q server_tool_use "$TP" \&\& [ -f /'
 # --- BL-567: the header-only first write ---
 # the header Write gated after all (the pre-fix hook): step 1 is denied, so the sequence reads DENY>DENY.
-mutc hdr-gated "HDRONLY" "HDRONLY:hdr-cross HDRONLY:hdr-seq HDRONLY:hdr-seq-sc HDRONLY:hdr-write" -e 's/^     | sub("^hdrw\$"; "")) as \$k$/     | sub("^hdrw$"; "verdict")) as $k/'
+mutc hdr-gated "HDRONLY" "HDRONLY:hdr-cr-head HDRONLY:hdr-cross HDRONLY:hdr-seq HDRONLY:hdr-seq-sc HDRONLY:hdr-write" -e 's/^     | sub("^hdrw\$"; "")) as \$k$/     | sub("^hdrw$"; "verdict")) as $k/'
 # the header Write allowed but RECORDED: the write adding the first finding becomes a re-write and sails through.
 mutc hdr-recorded "HDRONLY" "HDRONLY:hdr-seq HDRONLY:hdr-seq-sc" -e 's/^            | sub("^hdrw\$"; "")) as \$k$/            | sub("^hdrw$"; "verdict")) as $k/'
 # a `### ` finding heading is header.
-mutc hdr-no-h3 "HDRONLY" "HDRONLY:hdr-finding" -e 's/| (test("(^|\\\\n)###\[ \\\\t\]") or /| (/'
+mutc hdr-no-h3 "HDRONLY" "HDRONLY:hdr-cr-h4 HDRONLY:hdr-finding HDRONLY:hdr-h4" -e 's/| (test("(^|\\\\n)#{3,6}\[ \\\\t\]") or /| (/'
+# DEFECT 3: only `### ` is a finding heading, so a code-review / QA `#### ` finding is header.
+mutc hdr-h3-only "HDRONLY" "HDRONLY:hdr-cr-h4 HDRONLY:hdr-h4" -e 's/| (test("(^|\\\\n)#{3,6}\[ \\\\t\]") or /| (test("(^|\\\\n)###[ \\\\t]") or /'
+# DEFECT 2: the deny sends the lead to the environmental fallback, a dead end for a refused hook.
+mutc nv-reason-deadend "NOVERIFY" "NOVERIFY:nv-reason" -e 's/hook-refused branch: report the failing gate/environmental fallback: report the push/'
+# a dry run is not exempt from the no-verify deny.
+mutc nv-dry-denied "NOVERIFY" "NOVERIFY:nv-dry NOVERIFY:nv-dryrun" -e 's/ and (isdelete | not) and (isdry | not)) | any)/ and (isdelete | not)) | any)/'
 # a party seat's `## F-1` heading is header.
 mutc hdr-no-fid "HDRONLY" "HDRONLY:hdr-fid" -e 's/ or test("(^|\\\\n)#{1,6}\[ \\\\t\]+F-\[0-9\]") or / or /'
 # a completion line is header.

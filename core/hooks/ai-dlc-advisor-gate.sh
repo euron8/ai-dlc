@@ -108,7 +108,8 @@
 #     Write its header FIRST, before verifying anything; measured on graph s319, 17 of 19 adversary
 #     shards were denied on exactly that write, and several then wrote nothing until finished, so
 #     their beats scored them ABSENT. A teammate Write to `/shards/<x>-p<N>/<f>.md` (not a repair
-#     shard) carrying no `### ` heading, no `F-<n>` heading (party seats use `## F-1`), no
+#     shard) carrying no `###`-to-`######` heading (code-review and QA shards head findings with
+#     `#### `, merge-review-shards.sh), no `F-<n>` heading (party seats use `## F-1`), no
 #     `seat-complete:` and no `<x>verdict:` line is allowed AND NEVER RECORDED -- recording it would
 #     make the write that adds the first finding a "re-write" and acquit it. A provenance block
 #     with counts and no verdict is header (the s319 shards' own first writes). Write only: an
@@ -136,10 +137,13 @@
 #   ai-dlc itself, where hookless durability and release-branch pushes are standing practice
 #   (227 ref-moving `--no-verify` pushes in its lead transcripts), and is not a pipeline lead.
 #   ALLOWED: a branch delete (`--delete`, `-d`, `:ref`, the `isdelete` test), a quoted or
-#   heredoc mention (csegs), `--no-verify --verify`. Prescribed nowhere: no step, role or skill
+#   heredoc mention (csegs), `--no-verify --verify`, a dry run (`-n`, `--dry-run`, a short-flag
+#   cluster carrying `n`), which moves no ref. Prescribed nowhere: no step, role or skill
 #   under core/ or templates/ issues an outer `git push --no-verify`; `self-update-push.sh` does
 #   so inside a script, after running the hook itself, which this hook never sees.
-#   NOT CAUGHT, known: `git -c core.hooksPath=<x> push`, `GIT_*` environment tricks, a push from a
+#   NOT CAUGHT, known: `git -c core.hooksPath=<x> push`, the abbreviation `--no-v` (git accepts
+#   it where `--no-verify` is the only `--no-v*` option; `--no-ve`/`--no-ver` are ambiguous and exit
+#   129, so the match starts at `--no-veri`), `GIT_*` environment tricks, a push from a
 #   script, and a segment that both deletes and pushes (`git push --no-verify origin :a b`).
 #
 # THE TEST, PER KIND (operator ruling, batch 201). In the judged transcript, the line of the most
@@ -302,6 +306,8 @@ def gitpush: test(gitre + "push(\\s|$)");
 # accepts `--no-veri`, `--no-verif` as unambiguous abbreviations (`--no-ve`, `--no-ver` exit 129).
 def nvflag: words | map(select(test("^--(no-veri(f(y)?)?|verify)$"))) | (length > 0 and (last | startswith("--no-")));
 def isdelete: test("\\s(--delete|-d)(\\s|$)") or test("\\s\\+?:\\S");
+# A dry run moves no ref and runs no hook, so skipping the hook skips nothing.
+def isdry: words | map(select(test("^(-n|--dry-run|-[A-Za-z]*n[A-Za-z]*)$") and (startswith("--no-") | not))) | length > 0;
 def pushrefs($v): sub("^.*?\\spush(\\s+|$)"; "") | gsub("[0-9&]?>>?\\|?\\s*\\S+"; "")
   | words | map(select((startswith("-") or test("^[&;|]*$")) | not)) | .[1:] | map(xv($v));
 def pushupd($v; $cut): pushrefs($v) as $r
@@ -352,7 +358,7 @@ def kind($role): if $role == "lead" then leadkind else matekind end;
 def hdronly: .name == "Write"
   and ((.input.file_path // "") | tostring | test("/shards/[^/]+-p[0-9]+/[^/]+\\.md$") and (test("/shards/[^/]*repair[^/]*/") | not))
   and ((.input.content // "") | tostring
-       | (test("(^|\\n)###[ \\t]") or test("(^|\\n)#{1,6}[ \\t]+F-[0-9]") or test("(^|\\n)[ \\t]*seat-complete:")
+       | (test("(^|\\n)#{3,6}[ \\t]") or test("(^|\\n)#{1,6}[ \\t]+F-[0-9]") or test("(^|\\n)[ \\t]*seat-complete:")
           or test("(^|\\n)[ \\t]*[A-Za-z_-]*verdict:")) | not);
 def kindx($role): if $role == "mate" and hdronly then "hdrw" else kind($role) end;
 # A background-task event the harness delivers as a user line is not a re-dispatch. Keyed on the
@@ -399,7 +405,7 @@ PARSED="$(printf '%s' "$IN" | jq -r --arg home "${HOME:-}" "$CLASSIFY"'
   | ((if ($call | twrite($proj; $home)) then "twrite" else ($call | kindx($role)) end)
      | sub("^hdrw$"; "")) as $k
   | (if $k == "push" and $call.name == "Bash" then (($ti.command // "") | tostring | l3push) else "" end) as $l3
-  | (if $call.name == "Bash" then (($ti.command // "") | tostring | csegs | map(gitpush and nvflag and (isdelete | not)) | any) else false end) as $nv
+  | (if $call.name == "Bash" then (($ti.command // "") | tostring | csegs | map(gitpush and nvflag and (isdelete | not) and (isdry | not)) | any) else false end) as $nv
   | @sh "TP=\($tp) AID=\((.agent_id // "") | tostring) CWD=\((.cwd // "") | tostring) PROJ=\($proj) ROLE=\($role) KIND=\($k) FP=\(($ti.file_path // "") | tostring) NEWN=\(($ti.content // "") | tostring | heads) TUID=\((.tool_use_id // "") | tostring) L3=\($l3) NV=\($nv)"' 2>/dev/null)" \
   || { say "the tool call is not readable JSON; gate skipped"; exit 0; }
 TP=""; AID=""; CWD=""; PROJ=""; ROLE=""; KIND=""; FP=""; NEWN=0; TUID=""; L3=""; NV=false
@@ -408,7 +414,7 @@ eval "$PARSED"
 # BL-562: a ref-moving push that skips the pre-push hook, from ANY agent on a layered consumer. It
 # sits before every stand-down below (empty KIND, the update branch, the transcript, the grant, L3).
 if [ "$NV" = true ] && [ -f "${CLAUDE_PROJECT_DIR:-.}/.claude/.ai-dlc-version" ]; then
-  jq -n --arg m "ai-dlc-advisor-gate: DENIED -- this git push skips the pre-push hook (--no-verify). A pipeline push runs the hook, always: no judgement that a change is artifact-only, and no advisor call, licenses skipping it. Run the prescribed push without the flag (steps/handoff.md step 3: git push -u origin HEAD, the whole command). If that push genuinely cannot succeed, report it to the operator in ONE line, as handoff.md step 3 says, and end the turn; the operator decides whether to bypass the hook." \
+  jq -n --arg m "ai-dlc-advisor-gate: DENIED -- this git push skips the pre-push hook (--no-verify). A pipeline push runs the hook, always: no judgement that a change is artifact-only, and no advisor call, licenses skipping it. Run the prescribed push without the flag (steps/handoff.md step 3: git push -u origin HEAD, the whole command). If the pre-push hook refuses that push (pre-push: BLOCKED.), follow handoff.md step 3's hook-refused branch: report the failing gate to the operator in ONE line, touch _bmad-output/pipeline-paused.flag, and stop there; the operator decides whether the hook is fixed or bypassed." \
     '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $m}}'
   exit 0
 fi

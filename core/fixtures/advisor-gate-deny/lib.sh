@@ -107,12 +107,15 @@
 #                with no grant, a withdrawn grant, on `ai-dlc-update/*`, from a teammate, abbreviated
 #                `--no-verif`, chained and wrapped. Twins -> SILENT: no flag, a branch delete (`--delete`,
 #                `-d`, `:ref`), `--no-verify --verify`, the ambiguous `--no-ver` (git exits 129), a
-#                quoted mention, `git fetch --no-verify`, and the seed on a project with no stamp
+#                quoted mention, `git fetch --no-verify`, a dry run (`-n`, `--dry-run`), and the
+#                seed on a project with no stamp
 #   HDRONLY      BL-567, a teammate with a grant and no advisor call: a header-only first Write to an
 #                adversary shard (`<n>.md`, `cross-<n>.md`; s319's own header shape) -> SILENT;
 #                twins -> DENY: the header plus a `### ` finding, plus a `## F-1` finding, plus a
 #                `verdict:` line, a `shard-verdict:` header, plus `seat-complete:`, an Edit adding a
-#                finding, and a header-only Write to a REPAIR shard. SEQUENCE cells on one path in
+#                finding, and a header-only Write to a REPAIR shard. A code-review shard: header-only
+#                -> SILENT, a `#### ` finding (its grammar) -> DENY; an adversary `#### F-1` -> DENY.
+#                SEQUENCE cells on one path in
 #                one transcript: the header Write, then the Edit adding `### F-1` (or the Write
 #                adding `seat-complete:`) -> `SILENT>DENY`, exactly one deny and on step 2
 #   FAILOPEN     unparseable input, a missing transcript -> SILENT, and stderr says why
@@ -641,6 +644,13 @@ nvc nv-reverify SILENT 'git push --no-verify --verify -u origin HEAD'
 nvc nv-ambig SILENT 'git push --no-ver -u origin HEAD'
 nvc nv-mention SILENT "grep -n -E 'X|git push -u origin HEAD --no-verify|Y' f"
 nvc nv-fetch SILENT 'git fetch --no-verify origin'
+# The deny names a remedy that exists: handoff.md step 3's hook-refused branch, not the
+# environmental fallback, which excludes this case.
+cell NOVERIFY DENY 'R:hook-refused branch: report the failing gate' nv-reason "$(bash_in "$P1/par.jsonl" "$BMAD" 'git push --no-verify -u origin HEAD')"
+: > "$CELLS/$nc.cpd"
+# A dry run moves no ref and runs no hook (par.jsonl holds an advisor call, so only NOVERIFY decides).
+nvc nv-dry SILENT 'git push -n --no-verify -u origin HEAD'
+nvc nv-dryrun SILENT 'git push --dry-run --no-verify origin HEAD'
 nvc nv-noncons SILENT 'git push --no-verify -u origin HEAD' "$P1/par.jsonl" "$BMAD" '' 0
 
 # HDRONLY (BL-567). The early-write instruction (_gate-procedures.md "Validation cycle" item 1,
@@ -698,7 +708,24 @@ ct HDRONLY DENY hdr-edit "$(edit_in "$P1/par.jsonl" "$SHD/3.md" '## Findings
 sections: 3
 ' a1)"
 # An Edit carrying no heading of its own still owes the consult: this one DELETES a finding.
-ct HDRONLY DENY hdr-edit-del "$(edit_in "$P1/par.jsonl" "$SHD/3.md" '### F-1 (MAJOR) the locked range cites a removed requirement
+# Code-review and QA shards head findings with `#### ` (merge-review-shards.sh), and their shard dirs
+# carry `-p<N>`: a header-only first Write is SILENT, one carrying a `#### ` finding is DENY.
+SHCR="$SPRINT/docs/reviews/s3/shards/3-code-review-abcdef123456-p1/2.md"
+ct HDRONLY SILENT hdr-cr-head "$(write_in "$P1/par.jsonl" "$SHCR" a1 '# Code review part 2
+
+## Findings
+')"
+ct HDRONLY DENY hdr-cr-h4 "$(write_in "$P1/par.jsonl" "$SHCR" a1 '# Code review part 2
+
+## Findings
+
+#### [MAJOR] null deref in foo
+files: a.py:10
+')"
+ct HDRONLY DENY hdr-h4 "$(write_in "$P1/par.jsonl" "$SHD/3.md" a1 "$HDR
+#### F-1 (MAJOR) the locked range cites a removed requirement
+")"
+ct HDRONLY DENY hdr-edit-del"$(edit_in "$P1/par.jsonl" "$SHD/3.md" '### F-1 (MAJOR) the locked range cites a removed requirement
 sections: 3
 ' '' a1)"
 ct HDRONLY DENY hdr-repair "$(write_in "$P1/par.jsonl" "$SHREP" a1 '# Repair shard 1
