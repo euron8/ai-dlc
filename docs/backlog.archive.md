@@ -33926,3 +33926,13 @@ Owed: derive `dispatched-at` mechanically (a helper that stamps the row at dispa
 
 verify: manual
 
+## BL-572 — a fenced `git diff --stat` derivation goes STALE at any terminal width but 80, because the derivations checker never pins `COLUMNS`
+
+**LANDED (v0.793.0, verified c6790471).** `validate-artifact-derivations.sh` runs each derivation's eval under `COLUMNS=80`, so a `git --stat` graph is checked at a fixed width rather than the invoker's terminal width; the STALE message names `--stat=100` and `--numstat` as width-stable forms. Arm O of `artifact-derivations` holds 80→200 and 80→40 OK, wrong-count and recorded-at-60 STALE, and kills a pin-removal mutant. Graph: 3 of 55 width-sensitive blocks no longer flip at `COLUMNS=100`.
+
+**DEFECT.** Filed from batch 235's read of graph s319 `planning-artifacts/s319/carry-over-evaluation-party-repair-p1.md:465`, which records the output unfenced and says "re-run it by hand", and the Group H contract adversary's correction. The checker does not mangle the graph glyphs: `norm()` in `core/scripts/validate-artifact-derivations.sh` (`:530`) trims trailing blanks only. `git diff --stat` sizes its graph to `COLUMNS`, which the script never pins (`COLUMNS` 0 hits), so the same derivation is STALE at 40, 60, 120 and 200 columns and OK at 80 or unset. In graph's corpus there are 48 fenced `--stat` derivations in 37 files, and 33 are already STALE identically under 80 and unset (22 with an empty actual, 11 with real drift).
+
+Owed: pin `COLUMNS` in `run_pair`'s eval subshell (`:702`), and state `--stat=N` as the width-stable fence form. Probe: one `--stat` derivation replays OK under two different `COLUMNS` values.
+
+verify: sh V=core/scripts/validate-artifact-derivations.sh; W=$(mktemp -d) || exit 9; (cd "$W" && git init -q . && git config user.email r@r && git config user.name r && printf 'x\n' > b && git add b && git commit -qm 1 && awk 'BEGIN{for(i=0;i<200;i++)print i}' >> b && git add b && git commit -qm 2) >/dev/null 2>&1 || { rm -rf "$W"; exit 9; }; s=$(cd "$W" && COLUMNS=80 git diff --stat HEAD~1 HEAD); [ "$s" != "$(cd "$W" && COLUMNS=200 git diff --stat HEAD~1 HEAD)" ] || { rm -rf "$W"; exit 9; }; printf '```derived\n$ git diff --stat HEAD~1 HEAD\n%s\n```\n' "$s" > "$W/t.md"; printf '```derived\n$ git diff --stat HEAD~1 HEAD\n%s\n```\n' "$(printf '%s\n' "$s" | sed 's/ \([0-9][0-9]*\) insertion/ 9\1 insertion/')" > "$W/s.md"; COLUMNS=200 AI_DLC_PROJECT_ROOT="$W" bash "$V" "$W/t.md" >/dev/null 2>&1; a=$?; COLUMNS=200 AI_DLC_PROJECT_ROOT="$W" bash "$V" "$W/s.md" >/dev/null 2>&1; b=$?; rm -rf "$W"; echo "true=$a stale=$b"; [ "$b" -eq 1 ] || exit 2; [ "$a" -eq 0 ]
+
