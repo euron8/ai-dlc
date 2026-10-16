@@ -255,7 +255,7 @@ p_dispruling "$JOIN" && ok "EC24: operator-ruling resolves by ISO heading and by
   || bad "EC24: the operator-ruling cite did not discriminate (rc=$RC): $(cat "$JO")"
 p_srcparts "$JOIN" && ok "EC25: --sources on a record citing only part tokens, seats present -> ONE refusal naming --escalations; a seat-token record resolves" \
   || bad "EC25: --sources did not refuse a part-token record by name, or refused the party control (rc=$RC): $(cat "$JO")"
-p_gapfill "$JOIN" && ok "EC26: a repaired claim calling the fix a gap fill for veto -> REFUSED; the escalated entry in the same words is not" \
+p_gapfill "$JOIN" && ok "EC26: a repaired claim calling the fix a gap fill for veto -> REPORTED after the escalation count, rc 0; the escalated entry in the same words is counted open, not reported" \
   || bad "EC26: the gap-fill tripwire did not discriminate (rc=$RC): $(cat "$JO")"
 p_chkpart "$JOIN" && ok "EC27: parts mode -- a part stating derivations not replayed and a part with no derivations: line -> REFUSED by name; the stamped part beside them is not" \
   || bad "EC27: the check-fields arm did not discriminate in parts mode (rc=$RC): $(cat "$JO")"

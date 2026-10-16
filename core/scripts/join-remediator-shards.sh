@@ -655,8 +655,13 @@ src_probe() {
 #       anywhere; parts mode 0. The adversary's parts-mode figure of 1 (s318
 #       architecture-party-repair-p1/6.md) was a first-token read of its `not-reproduced`. Controls:
 #       the same run read 1161 repaired lines in the parts, and a seeded `done` fires BADDISP.
-#   (7) THE GAP-FILL TRIPWIRE (BL-556), A NOTE-TIER ARM. A `repaired` entry whose `claim now
-#       asserted:` text says `gap fill` (`gap-fill`, `gapfill`) or `veto` is refused: an agent that
+#   (7) THE GAP-FILL TRIPWIRE (BL-556), A NOTE-TIER ARM, AND IT REPORTS, NEVER REFUSES. A `repaired`
+#       entry whose `claim now asserted:` text says `gap fill` (`gap-fill`, `gapfill`) or `veto` is
+#       printed as one `GAPFILL: <record> <entry> -- ...` line after the escalation count, in every
+#       mode, and changes no exit code. It was a refusal first, and on graph's live s319 elicitation
+#       repair record that refusal -- on the two true positives -- made --escalations exit 2 before
+#       ESCALATED-COUNT, hiding all nine open escalations from the lead: a NOTE-tier arm must not
+#       gate the report the lead adjudicates from. An agent that
 #       applied a rule an operator decision does not state, and offered it for the lead's veto, wrote
 #       an operator choice into the subject. Nothing in the record separates EXTENDING a D-/LR-/LRC-
 #       decision from APPLYING one, so the arm keys on the words, carries no decision-token test, and
@@ -665,7 +670,7 @@ src_probe() {
 #       shard parts and record mode over its 60 repair and fold records: s319 requirements
 #       elicitation repair 09.md F-4 and F-7, and the same two entries in the joined record, which is
 #       the s319 gap-fill pair the entry was filed on; 0 others. An escalated entry saying the same
-#       words is not refused (the self-probe's near-miss).
+#       words is not reported (the self-probe's near-miss).
 #   (8) THE CHECK FIELDS (BL-557). A remediator states under its sha triple whether the advisor ran,
 #       `- advisor: called|unavailable`, and whether its derivations were replayed,
 #       `- derivations: replayed <n>|not replayed|deferred to the join (section/subject shard)`;
@@ -841,7 +846,7 @@ ruling_cite() {
 contract_refusals() {
   local srcm="$1" k r d l m q ne nedt nsib npend nosib="" remedy=""
   shift
-  ESC_LINES=""; ESC_CLOSED=""; ESC_N=0; ESC_X=0; SERIAL_N=0; ne=0; nedt=0; nsib=0; npend=0
+  ESC_LINES=""; ESC_CLOSED=""; ESC_N=0; ESC_X=0; SERIAL_N=0; GAP_LINES=""; GAP_N=0; ne=0; nedt=0; nsib=0; npend=0
   # A parts-mode refusal of a missing field is, for a round whose parts predate the install, the
   # pre-rule shape: the remedy is the re-dispatch, never a hand-added field.
   [ "$srcm" = 0 ] && remedy="; parts written before the install: re-dispatch the shards"
@@ -860,7 +865,8 @@ contract_refusals() {
       NODISP) refuse "${r}: the ${d} entry carries an 'edit:' line and no 'disposition:' line, so no check reads it; every entry that edits is dispositioned (team-roles/remediator.md), and a renamed key ('outcome:', 'status:') is not the field" ;;
       BADDISP) refuse "${r}: the ${d} entry is dispositioned '${l}', which is none of repaired|escalated|skipped|not-reproduced|operator-ruling; any other value is read by no check" ;;
       RULING) ruling_cite "$r" "$d" "$l" ;;
-      GAPFILL) refuse "${r}: the ${d} entry is dispositioned repaired while its claim calls the fix a gap fill or offers it for veto; a rule the decision's own words do not state is the operator's, so the entry is escalated with options and the artifact keeps the decision's words (team-roles/remediator.md, \"Applying such a decision\")" ;;
+      GAPFILL) GAP_N=$((GAP_N + 1)); GAP_LINES="${GAP_LINES}GAPFILL: ${r} ${d} -- repaired while its claim calls the fix a gap fill or offers it for veto; a rule the decision's own words do not state is the operator's, so this entry should be escalated with options and the artifact keep the decision's words (team-roles/remediator.md, \"Applying such a decision\")
+" ;;
     esac
   done <<CTEOF
 $1
@@ -996,6 +1002,8 @@ record_tail() {
   printf '%s' "$ESC_LINES"
   printf '%s' "$ESC_CLOSED"
   echo "ESCALATED-COUNT: ${ESC_N} (${ESC_X} closed by a later repaired entry's closes: line)"
+  # The gap-fill tripwire (7) REPORTS: a NOTE-tier arm must never hide the open escalations above.
+  printf '%s' "$GAP_LINES"
   exit 0
 }
 # --sources ON A RECORD THAT IS NOT A PARTY REPAIR (BL-561). The seat dir's existence says only that
@@ -1687,5 +1695,6 @@ echo "JOINED: ${OUT} ($(printf '%s\n' "$PARTS" | grep -c .) parts, $(printf '%s\
 # "Adversarial repair dispatch").
 printf '%s' "$ESC_LINES"
 echo "ESCALATED-COUNT: ${ESC_N}"
+printf '%s' "$GAP_LINES"
 echo "SERIAL-REQUIRED: ${SERIAL_N}"
 exit 0

@@ -885,11 +885,13 @@ p_srcparts() { # --sources on a record citing only PART tokens, in a sprint that
   src_rec "$w" '### F-1\n- disposition: repaired\n- source: architecture-dev-1.md#F-1\n' "$1"
   [ "$r1" -eq 2 ] && [ "$n1" -eq 1 ] && [ "$RC" -eq 0 ]
 }
-p_gapfill() { # a repaired entry whose claim calls it a gap fill for the lead to veto -> rc 2, named; the
-  # escalated entry saying the same words beside it is not
+p_gapfill() { # a repaired entry whose claim calls it a gap fill for the lead to veto -> REPORTED on a
+  # GAPFILL: line AFTER the escalation count, rc 0 (a NOTE-tier arm hides no open escalation); the
+  # escalated entry saying the same words beside it is not reported, and is still counted open
   esc_rec "$1" '### F-4 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n- claim now asserted: one unavailable pool makes the total unavailable. The multi-pool rule is a gap fill; the lead may veto it.\n\n### F-1 — CRITICAL\n- disposition: escalated\n- edit: n/a\n- claim now asserted: S3 pass-or-block is a gap fill the operator decides.\n'
-  [ "$RC" -eq 2 ] && has "$JO" "the F-4 — MAJOR entry is dispositioned repaired while its claim calls the fix a gap fill" \
-    && ! has "$JO" "the F-1 — CRITICAL entry is dispositioned repaired"
+  [ "$RC" -eq 0 ] && has "$JO" "GAPFILL: stories-repair-p1.md F-4 — MAJOR -- repaired while its claim calls the fix a gap fill" \
+    && ! has "$JO" "GAPFILL: stories-repair-p1.md F-1" && has "$JO" "ESCALATED-COUNT: 1 (0 closed" && ! has "$JO" "REFUSED" \
+    && [ "$(grep -n 'ESCALATED-COUNT' "$JO" | cut -d: -f1)" -lt "$(grep -n '^GAPFILL:' "$JO" | cut -d: -f1)" ]
 }
 # ---- THE CHECK FIELDS (BL-557).
 p_chkpart() { # p_disjoint's world, ONE property apart: part 02 states `derivations: not replayed`, part 03
