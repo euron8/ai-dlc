@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 315..384. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 305..381. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,50 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 234 SHIPPED `v0.790.0` (`8cf9d116`, #1149) AND `v0.791.0` (`d71b0a50`, #1150): FOUR OF GRAPH'S FIVE SPRINT-319
+CANDIDATES DISCHARGED HERE, TWO OF THEM CLOSED UPSTREAM BY GRAPH'S 0.790.0 PULL; THE OTHER TWO AWAIT ITS PULL OF
+0.791.0. THE FIFTH (BL-536) IS BUILT AND HELD, WITH A BLOCKER, AND HANDED TO ai-dlc-b8, WHICH IS
+ALREADY RUNNING BATCH 235.**
+Batch 233's block below is history: this block replaces its delivery gap. Started by the operator's one-liner at
+`origin/main` `bfb5589e` (`VERSION` 0.789.0). graph-09 and graph-47 were live and were never messaged.
+- **Opening sweep**: every committed ref read live 0, unfiled 0, worklist 0, every control passing. The batch's scope
+  was invisible to it: graph held the filings UNCOMMITTED in its working-tree ledger, found by a consumer-history hand
+  diffing that file. The derive block now carries a command for that (under the union block), with a control.
+- **`v0.790.0`**: BL-532 (`join-remediator-shards.sh --rerun <part>.md@<ISO>`, one-part re-run joins; part-record
+  authorship enforced) and BL-533 (both write ledgers record `tool_use_id`, `transcript_path`, `agent_transcript`;
+  the join reads an alias only on four clauses). `remediator-shard-join-mutants` sharded four ways. Closes
+  `PC-S319-JOIN-REFUSES-A-SINGLE-SECTION-RERUN-IN-DOCUMENT-MODE` and
+  `PC-S319-LEDGER-ATTRIBUTES-AN-EDIT-TO-AN-AGENT-ID-WITH-NO-TRANSCRIPT`. Its gate failed four times before green: a
+  real `procsub-staged-refusal` spelling-arm hit (respelled), a load-driven pole on `enforcement-map-sites`, and twice
+  the regime pole on `story-evidence-scaffold` (173-177s solo on base and tip alike against a 2-3s history). The
+  operator chose to drop that unit's 8 pool-12 rows; BL-558 records it as unexplained.
+- **`v0.791.0`**: BL-534 (routing cites copied with their `SHA256:` label resolve; both validators strip one literal
+  label) and BL-535 (`carry-over-evaluation.md` states the `coe` stem; the merge refuses a `-adversarial` shard dir).
+  Closes `PC-S319-ROUTING-RECORD-CITE-PREFIX-REJECTED-BY-SCOPE-VALIDATOR` and
+  `PC-S319-COE-ADVERSARIAL-SHARD-DIR-STEM-NEVER-STATED`. Gate green on the first push.
+- **HELD, NOT SHIPPED: BL-536** (`PC-S319-CONVERGENCE-ADVERSARY-CANNOT-KNOW-ITS-OWN-TOOL-USE-ID`, the merge derives
+  each shard's dispatch id from harness records; `adversarial-shard-merge-mutants` sharded five ways). Built on
+  local branch `b234-r2`; two fix rounds after its tip adversary: hand B `adb7af6a` (hook guards
+  `subagent-context.jsonl` against a lead Write/Edit, which forged the join; BL-534 receipt cells) and hand A (merge
+  `--rerun <shard>.md@<ISO>` for a re-dispatched adversary, which the merge otherwise refuses with no remedy; receipt
+  arms for basename keying, probe-over-meta and multi-role ids). Owes one tip adversary on its final tip and a gate.
+  The final branch and sha go to ai-dlc-b8 by message; b8 ships or re-cuts it as 0.792.0 or later.
+- **Operator rulings, batch 234**: drop `story-evidence-scaffold`'s pool-12 rows (taken); start the next batch now in
+  a fresh session, running alongside this one (ai-dlc-b8 accepted); ship the two ready fixes and hold the third. The
+  operator also ruled that this batch pulling in the three S319 candidates graph filed after 0.790.0 was built was
+  the error that tripled its length. The standing rule it broke is the batch-183 ruling: a filing that lands after a
+  batch's releases are built is a resume-block fact for the next session.
+- **Peer filings**: ai-dlc-a6 and ai-dlc-68 filed BL-528..BL-531 and BL-537..BL-565 (with addenda) on the operator's
+  instruction from graph's s319 lead-session review, all `verify: manual`. BL-566 onward go to ai-dlc-b8.
+- **graph delivery**: graph pulled 0.790.0 itself (#1228). Installed 0.790.0 against `VERSION` 0.791.0, one release
+  behind, no bootstrapping file in the range. Action 7: graph's live routing record is bare hex and its shard dir is
+  `coe-p1`, so installed and shipped engines agree on today's inputs: BANK IT. No runbook.
+- **Untraced**: a linked-worktree push re-runs 8 fixtures every time (their read-set rows need the main checkout),
+  plus the new JX and adversarial-shard-merge-mutants shard dirs; trace them from the main checkout detached at the
+  commit.
+- **Net for the batch**: closed 4 entries and 4 candidates; filed 37 (32 operator-instructed peer filings, BL-532..
+  BL-535, BL-558; BL-536 is held). Backlog 33 live, 530 archived.
 
 **BATCH 233 SHIPPED NO RELEASE. GRAPH PULLED 0.789.0 (#1226) AND ITS LIVE LEDGER IS EMPTY: LIVE 0, DELIVERY GAP 0.
 THE BACKLOG IS STILL DECLARED EMPTY. THE PULL RUNBOOK IS DISCHARGED, AND THE §2 NARROWING PLAN IS WRITTEN FOR GRAPH.**
@@ -259,83 +303,6 @@ to a fresh session because this one's context was deep.
   3357; I79 grew 113 -> 118 with Rule 11).
 - **Net for the batch**: 9 entries closed (BL-507, 508, 512, 515, 519, 521, 522, 524, 525); 4 filed (BL-521, 522, 524,
   525); net -5 once the close lands; 9 entries move to `docs/backlog.archive.md`. BL-510 stays live. BL-523 is filed on `b230-c5a-rotate` only.
-
-**BATCH 229 SHIPPED `v0.782.0` (`6fe903b6`, #1134) AND `v0.783.0` (`f621fd36`, #1135): EIGHT OF THE FOURTEEN
-s317-s318 EFFICIENCY ENTRIES CLOSED, BL-510's EVIDENCE HALF SHIPPED, AND THREE BUILT BRANCHES ARE HELD ON ORIGIN FOR THE
-NEXT SESSION. GRAPH FILED FIVE NEW SPRINT-318 CANDIDATES AT ITS RETRO MERGE AFTER THE RELEASES WERE BUILT; THEY ARE
-UNFILED AND THE NEXT SESSION'S SWEEP SCOPES THEM.**
-Batch 228's block below is history: this block replaces its delivery gap. Started by the operator's one-liner at
-`origin/main` `fe7d5ec2` (`VERSION` 0.781.0); graph-2e was live and busy, and was never messaged. The operator asked for
-a handoff to a fresh session because this one's context was deep; the batch closed with three branches held rather than
-shipped, which is that decision, not a stall.
-- **Opening sweep** (at `fe7d5ec2`): live 0, unfiled 0, worklist 0, DISCHARGED 0, invisible 0, TERMINAL 236, archive 359,
-  24 qualifying refs, every control passing; installed = shipped = 0.781.0. The worklist's `awk` half matched nothing
-  because the live backlog cited no `PC-` id at all (control: 243 rows over the archive). Graph's two sprint-318 ids sat
-  only on story branches and were already archived on its carry-over branch. So the batch's scope was the 14 entries
-  BL-507..520 filed from `docs/analysis/pipeline-efficiency-s317-s318.md`.
-- **Operator rulings, batch 229** (each binds its entry until the operator says otherwise):
-  - Scope: all 14.
-  - BL-511: consolidation stays operator-supervised, never automatic.
-  - BL-507: the re-review after `NEEDS_REWORK` is a SHARDED delta, per the batch-198 no-partial-sharding ruling.
-  - BL-509: measure findings per dollar now; build the shape rule from the result.
-  - BL-515: a re-sent spawn is held until an agent of the session has EXITED, not until a `DELIVERED` beat.
-  - BL-510: ship the evidence half and keep the entry open for the bookkeeping class; its receipt chains to a
-    `probes/bl-510-bookkeeping.sh` that does not exist yet, so it reads STILL-LIVE until that class is built.
-- **`v0.782.0`**: BL-514 (a subagent's foreground poll over the steering budget is denied: 198 of 1,599 over-budget
-  graph subagent calls, 17.0 h, 0 legitimate), BL-518 (`gate-checkpoint.sh open` keys on the schema's
-  `patterns.gate_nonce`: 94 of 94 real opens pass), BL-509 (elicitation takes the adversarial pass's axis and shape for
-  every subject; critical+major per dollar was flat across shapes, 0.50-0.77, and the cost question needs the
-  frozen-corpus run the entry records).
-- **`v0.783.0`**: BL-516 (gate-remediation-guard arm 3b denies a lead edit to product code in an `/ai-dlc` session: 18
-  denies over 4,412 graph lead edits, all product code), BL-520 (every teammate-to-lead send carries `to: "main"`:
-  167/167 delivered, `lead` 0/15), BL-517 (the snapshot refuses a stamp over 10 minutes ahead and the remedy reaches the
-  lead through `verdict.sh`), BL-511 (`--fail-on whole-read-pool` blocks retro until an OPEN carry-over item records the
-  breach), BL-513 (a Strategy Test ID cell naming a missing node is refused), BL-510's evidence half (10 refusals in 5 of
-  32 approved graph story tips, all real).
-- **Every entry went through a contract adversary, a builder, and at least one tip adversary; nine needed fix rounds.**
-  The defects tip adversaries found and the release fixed are recorded in each entry's body and the CHANGELOG. Two that
-  read as passing and were not: BL-518's receipt passed a loose regex, and BL-517's remedy never reached the lead because
-  `verdict.sh` dropped `FUTURE` rows.
-- **HELD on origin, built and twice adversaried, NOT shipped.** Each is cut from `fe7d5ec2` and needs a rebase onto
-  `f621fd36`. Derive the files that will conflict, never trust a list: `comm -12 <(git diff --name-only fe7d5ec2
-  f621fd36 | sort) <(git diff --name-only fe7d5ec2 <branch> | sort)`. Resolve by content, never by side. The read-set map conflicts too: keep the
-  base's and re-trace. Each needs one more tip adversary on its final tip before it ships:
-  - `b229-bl507` at `6072d37c`: `validate-carried-findings.sh` at Check 1, a sharded delta re-review through the existing
-    `<base>` argument, `--list`. Three rounds found real false FAILs on graph's history; the last fix clears all form
-    failures on graph's 58 real pairs (47 remaining FAILs are genuine missing carries in pre-rule reviews).
-  - `b229-bl508-519` at `8b5c2236`: the join's `siblings:` and set-aside arms, `SERIAL-REQUIRED`, explicit `closes:`.
-  - `b229-bl515-512` at `d97cebba`: the dispatch guard's re-send hold and the gate-adjudicator waiver check.
-- **Unfixed, recorded**:
-  - The read-set tracer's default sandbox root is per-user and deleted at each run's start, so two hand-run traces
-    collide and the second wipes the first mid-fixture; the deriver then exits 0 having recorded nothing. Set
-    `AI_DLC_READSET_TRACE_ROOT` per run. A unique default root and a non-zero exit on all-omitted are owed.
-  - Graph carries four unaddressed "message the lead" sites this distribution cannot reach:
-    `.claude/skills/ai-dlc/overrides/team-roles__dev__bug-class-sweep.md:40`, `extensions/roles/tea-consumer.md:24`,
-    `extensions/roles/qa-domain.md:203`, `.claude/skills/ai-dlc/extensions/steps-domain/implementation-push.md:51`. A
-    finding for graph, not an instruction.
-- **Process facts**: the first 0.782.0 gate failed only the suite pole (load ~100 from builders re-running fixtures that
-  pin their edited files); builder verification was narrowed to their own fixtures and the re-push passed. The first
-  0.783.0 gate failed only `fixture-git-env-seam`: `gate-remediation-deny` ran `git init` before scrubbing the inherited
-  git environment, fixed by sourcing the preamble on line 2. The docs close's first push failed only
-  `validator-fork-budget` (3340 against 3339): 0.783.0's new core script costs +4 forks and its own gate passed by the
-  one-fork jitter; the close raises `FORK_BUDGET` to 3346 with the measurement beside it. Every agent worktree was removed and every shipped batch
-  branch deleted by name.
-- **graph delivery**: stamp 0.781.0 against `VERSION` 0.783.0, two releases behind. No candidate is discharged, so
-  action 7's first test reads PENDING 0; the range carries no bootstrapping file. The pull is the operator's.
-- **Close sweep** (at `f621fd36`, backlog read before this close's rotation): live 5, unfiled 5, worklist 0, DISCHARGED
-  0, invisible 0, TERMINAL 236, archive 359, 0 qualifying refs (graph `main` alone), every control passing. The five are
-  graph's retro filings of 2026-10-14, all on graph `main` and none uncommitted: four in its retro merge `b04ee96a8`
-  (#1221) and one in its post-retro rotation commit `03ff6a8af`. Abbreviated: `PC-S318-ARCHITECT-ROLE-…-REBIND`,
-  `PC-S318-OPERATOR-QUESTION-TEMPLATE-…-RECOMMENDED`, `PC-S318-PAUSE-GATE-DENIES-READ-ONLY-OPS-DISPATCH-…`,
-  `PC-S318-QA-ROLE-…-LOCKED-REQUIREMENT-…`, `PC-S318-ROTATE-GATE-ADJUDICATION-SPRINT-FLAG-…`. They landed after this
-  batch's releases were built, so under the batch-183 ruling they are the next batch's scope, not this one's; derive the
-  full ids, do not copy these. Ledger md5 `6f733a18…` at the opening, `8261b9ab…` at the close, both through graph's own
-  commits.
-- **graph boundary**: porcelain 9 at the opening, 3 at the close, all graph's own pipeline logs, 0 under
-  `_bmad-output/ai-dlc-update/`. Nothing was written there.
-
-Net for the batch: closed 8 entries (BL-509, 511, 513, 514, 516, 517, 518, 520), filed 0; six stay live (BL-507, 508,
-510, 512, 515, 519), every one with a held branch or a shipped half.
 
 ### Derive the state; do not trust the numbers below
 
@@ -611,6 +578,13 @@ lids /tmp/mainled.md > /tmp/live_main.txt
 # like one that passed; the discriminating controls are the two below it.
 comm -23 /tmp/live_main.txt /tmp/live.txt | comm -23 - /tmp/arch.txt | wc -l   # assertion: 0, or the derivation is broken
 comm -13 /tmp/live_main.txt /tmp/live.txt           # the filings ahead of main. THIS is the new work.
+# AND THE CONSUMER'S UNCOMMITTED WORKING-TREE LEDGER, WHICH NO REF ABOVE CAN SEE. Batches 188 and 234
+# both read live 0 / unfiled 0 over committed refs while graph held real filings uncommitted in its
+# working tree -- batch 234's whole scope was five of them. An id printed here is an uncommitted filing
+# no committed ref carries; check each against /tmp/filed.txt (built below) before calling it unfiled.
+git -C /Users/n8/git/graph diff -- _bmad-output/ai-dlc-update/push-candidate-ledger.md | grep '^+' | sed 's/^+//' > /tmp/wt_added.md
+lids /tmp/wt_added.md | comm -23 - /tmp/live.txt | comm -23 - /tmp/arch.txt   # uncommitted filings
+grep -cx 'PC-S999-NEVER-A-REAL-ID' /tmp/wt_added.md                            # control: 0
 grep -c '^## ' /tmp/mainled.md                      # CONTROL: must be NON-ZERO -- main's ledger file
                                                     # resolved and carries sections. Keyed on the FILE,
                                                     # not on ids: at batch 233 main's ledger held 0 live
