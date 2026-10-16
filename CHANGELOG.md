@@ -20,6 +20,39 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.803.0] - 2026-10-16
+
+Batch 235 (release BL-603 + BL-588). Closes BL-603 and BL-588. Closes no `PC-` id. Carries docs intake-6 (BL-615).
+
+### An append-only record's later byte-identical re-derivation supersedes its earlier fence (BL-588)
+
+- Inside a RECORD only, `validate-artifact-derivations.sh` skips a `$ ` command when a later `$ ` line in the same
+  file is byte-identical. The later copy runs and carries the verdict. A record is the directory walk's own record
+  grammar (parent `s<digits>`, and `*-adversarial-p<M>.md`, `*-repair-p<M>.md`, `requirements-party-repair.md`,
+  `requirements-elicitation-repair.md` or `requirements-elicitation.md`), now one shared predicate. A live document
+  supersedes nothing.
+- Each skip is reported on stderr, beside the FAIL lines and keyed the same way:
+  `SUPERSEDED: <file>:<skipped-line> by <file>:<later-line>`. A skipped command is not counted in the OK line's
+  total, and `--list` still lists every command.
+- The pre-pass reads the validator's own block grammar, so a command repeated in a text fence, in prose or as a
+  deeper-indented output line never counts as a later copy.
+- Measured on graph's s319 `requirements-repair-p1.md` (105 commands): all 9 fences the record re-derived later are
+  superseded, 13 commands are skipped in all, and the 9 no longer read STALE. Across graph's 366 records, 54 carry a
+  repeat and 15 earlier/later pairs record different output, each marked as history by its author.
+- `reconcile/derivation-differential.sh` reads the SUPERSEDED lines from both sides and drops those keys from its
+  counts. Without this, a superseded key counted as a base-side pass, and the broken-base-root refusal could never
+  fire on a row holding a record with a repeat.
+- **The verdict change reaches a consumer in the pull that delivers it.** That pull's reconcile phase runs the
+  differential with the delivered validator on both sides, so on graph's s319 a record whose stale fences were all
+  re-derived later now reads clean there. Steps 1 and 2 of the update run neither script.
+- Not covered: the capture hook validates a temporary copy outside any `s<N>/` slot, so it never supersedes.
+
+### The base-commit walk's vacuous `_good` cache is deleted (BL-603)
+
+- In `reconcile/derivation-differential.sh`, every path that accepts a blob sets `BASE_COMMIT` and breaks in the same
+  iteration, so `_good` was never appended and its `case` could never match. Its init and its read are removed;
+  `_bad`, which has a real append and read, stays.
+
 ## [0.802.0] - 2026-10-16
 
 Batch 235 (the state-root release). Closes BL-576, BL-604 and BL-609; BL-599 stays PARTIAL until its

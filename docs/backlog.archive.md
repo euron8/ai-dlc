@@ -34284,3 +34284,34 @@ The listing finds every fixture red that came from code outside the fixture, but
 
 verify: manual
 
+## BL-603 — derivation-differential.sh's `_good` cache is never written, so its early-break arm can never fire
+
+**LANDED (v0.803.0, verified b170a712).** The `_good` init and its `case` read are deleted from `reconcile/derivation-differential.sh`'s base-commit walk; `_bad` stays. The differential fixture and its mutant battery pass on the tip.
+
+**DEFECT.** Filed by peer session ai-dlc-c3, measured read-only. In `core/skills/ai-dlc-update/reconcile/derivation-differential.sh` at origin/main 3d5f1e70, :240 initialises `_good=" "` and :243 reads it (`case "$_good" in *" $_b "*) BASE_COMMIT="$_c"; break ;; esac`); intake found `_good` on those two lines only, while `_bad` has 1 append in the same file. Per the filer the same holds at U-a head d524616d (:245, :248). A matching blob is handled by the `resolves_to_base && skill_commit_ok` branch, which sets BASE_COMMIT and breaks, so the `_good` arm is a guard whose removal changes nothing (`mechanism-design.md`, "A vacuous guard is a loaded gun").
+
+Owed: delete the `_good` arm and its init (fix by subtraction), or append `_b` to `_good` in the success branch if a later blob can repeat. Receipt: a mutant removing the arm changes no verdict before the delete. It is in the subject, not in c3's battery release, so it ships in a later release.
+
+verify: manual
+
+## BL-588 — an append-only repair record whose later blocks change a subject leaves the earlier blocks' derivations permanently STALE, and nothing lets a later block supersede them
+
+**LANDED (v0.803.0, verified b170a712).** Option 1, keyed on the command itself: inside a record, a byte-identical later `$ ` command supersedes the earlier one, reported as `SUPERSEDED: <file>:<line> by <file>:<later>`. On graph's s319 record at `e18724963` the 9 named lines read 0 STALE, each superseded by its serial-2 re-derivation. A stale record fence with no later copy still fails (the fixture's stays-open arm). The differential drops superseded keys, so its broken-base-root refusal still fires.
+
+**DEFECT.** Filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]) from the graph s319 watch; intake re-derived it read-only (the validator itself was not re-run here; the filer re-ran it). At graph's handoff commit `e18724963` (08:21 EDT, lead `cf53b84f`), `_bmad-output/planning-artifacts/s319/requirements-repair-p1.md` (1697 lines) carries three blocks, closed by `repair-complete: serial 1` (:1261), `repair-complete: spec-render 1` (:1477) and `repair-complete: serial 2` (:1696). `scripts/ai-dlc/validate-artifact-derivations.sh` on it reports "FAIL: 9 stale or unrunnable derivation(s) of 105 checked", at lines 30, 536, 581, 646, 780, 793, 1409, 1426 and 1444.
+
+Each later block changed SPEC/PRD/brief text that an earlier block's fence quotes. Line 30's fence greps `SPEC.md` for "What does the Story 1.5 read score for a two-hop row" and records `85:`; at `e18724963` that phrase occurs 0 times in `_bmad-output/specs/s319/offramp-config-and-rewards/SPEC.md` (control `CAP-1`: 4), because the spec-render deleted the Q18 line on the operator's "Retire Q18" (BL-546's fourth instance). Serial 2 was dispatched at 08:13 EDT to fix 5 such fences, and the count went from 5 to 9 after it delivered. The record is append-only, so no block can re-point an earlier fence. `_bmad-output/pipeline-snapshot.md:38` hands this to the successor as pass-2 entry item (1): "decide the 9 stale old fences … never edit or delete an old fence".
+
+The validator has no way out: `core/scripts/validate-artifact-derivations.sh` on origin/main has 0 mentions of `supersede` and 0 of `artifact_sha_after` (control: 22 of `stale`, case-insensitive). The record already writes `supersedes:` lines (3, at :511, :1577 and :1578), but these are finding supersessions, which the validator does not read. The `supersedes:` convention for escalations lives in BL-565's PARTIAL note (`docs/backlog.md:319-325`, shipped in 0.794.0); BL-550 itself is archived.
+
+Owed (either 1 or 2, then 3):
+1. Let a later block of an append-only record supersede an earlier block's derivation with a `supersedes: <line>` field the validator honours, re-running the new fence in place of the old one.
+2. Or have the validator score a fence against the subject sha its block recorded in `artifact_sha_after:`, not against the current tree.
+3. Receipt: on this record at `e18724963`, the 9 lines above go to 0 without editing any old fence, and a fence whose subject drifted with no superseding block still reads STALE (control).
+
+Related: BL-587 (owed re-points with no channel), BL-546 (the Q18 deletion), BL-565 / BL-550 (`supersedes:` for escalations).
+
+Owner: ai-dlc-11 (lead ai-dlc-9c), as its own release after ai-dlc-11's combo release. It touches BL-587's reader.
+
+verify: manual
+
