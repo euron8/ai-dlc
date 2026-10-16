@@ -672,8 +672,9 @@ gate.
    answers with exit 0. That one is a push candidate in
    `push-candidate-ledger.md`, not a carry-over item; see
    `.claude/rules/upstream-routing.md`.** Run `scripts/ai-dlc/check-owed-derivations.sh` here too, beside the
-   `push-candidate-ledger.md` reads: every `OPEN` line it prints is appended to `carry-over-backlog.md` as a
-   new OPEN item naming its key and reconcile log, never archived unread; exit 2 is surfaced, not skipped.
+   `push-candidate-ledger.md` reads: every `OPEN` line it prints is carried to `carry-over-backlog.md` as ONE
+   OPEN item per key naming its reconcile log (when an item for that key is already OPEN there, leave it; do not
+   add a second), never archived unread; exit 2 is surfaced, not skipped.
    Then **archive terminal entries
    (Rule 25(a)/(c)):** move every RESOLVED and OVERRIDDEN entry
    (cut-and-paste, verbatim) out of `pending.md` into

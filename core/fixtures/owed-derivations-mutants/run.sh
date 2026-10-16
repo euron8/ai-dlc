@@ -110,11 +110,11 @@ mutate() {
     return
   fi
   missed="$(comm -13 "$WORK/$label.moved" "$WORK/$label.declared" | tr '\n' ' ')"
-  if [ -z "$missed" ]; then
-    ok "$label: KILLED -- its owning arm(s) $(tr '\n' ' ' < "$WORK/$label.declared")all fail (full failed set: $(tr '\n' ' ' < "$WORK/$label.moved"))"
+  extra="$(comm -23 "$WORK/$label.moved" "$WORK/$label.declared" | tr '\n' ' ')"
+  if [ -z "$missed" ] && [ -z "$extra" ]; then
+    ok "$label: KILLED -- the failing set EQUALS its declared arms: $(tr '\n' ' ' < "$WORK/$label.declared")"
   else
-    bad "$label: killed, but NOT by the arm(s) that own this behaviour: ${missed}stayed green
-        failed: $(tr '\n' ' ' < "$WORK/$label.moved")"
+    bad "$label: failing set differs from the declared arms. declared-but-green: [${missed}] failed-but-undeclared: [${extra}]"
   fi
 }
 
@@ -124,7 +124,7 @@ mutate M1-reader-trusts-status-text reader "B2a B2b" \
   's/^  if \[ -n "\$reason" \]; then$/  if [ -n "$reason" ] \&\& ! grep -qi closed "$ROOT\/$rel" 2>\/dev\/null; then/'
 
 # M2: the reader filters to the step scan dir: rows outside s<N>/ are skipped unread.
-mutate M2-reader-filters-to-scan-dir reader "B3a B7a" \
+mutate M2-reader-filters-to-scan-dir reader "B1b B3a B7a Wg Gf" \
   '  reason=""' \
   's/^  reason=""$/  reason=""; case "$rel" in _bmad-output\/planning-artifacts\/s[0-9]*\/*) ;; *) continue ;; esac/'
 
@@ -133,25 +133,51 @@ mutate M3-writer-drops-recorded-actual writer "Wd We" \
   'rr = (k in REC) ? REC[k] : ""; aa = (k in ACT) ? ACT[k] : ""' \
   's/rr = (k in REC) ? REC\[k\] : ""; aa = (k in ACT) ? ACT\[k\] : ""/rr = ""; aa = ""/'
 
-# M4: an absent record is treated as a refusal (exit 2) instead of silence.
+# M4: an absent record is treated as a refusal, and it PRINTS one (a silent exit 2 would leave B4b green).
 mutate M4-absent-treated-as-refusal reader "B4a B4b" \
   '[ -e "$REC" ] || [ -L "$REC" ] || exit 0' \
-  's/^\[ -e "\$REC" \] || \[ -L "\$REC" \] || exit 0$/[ -e "$REC" ] || [ -L "$REC" ] || exit 2/'
+  's/^\[ -e "\$REC" \] || \[ -L "\$REC" \] || exit 0$/[ -e "$REC" ] || [ -L "$REC" ] || { echo "REFUSED: absent" >\&2; exit 2; }/'
 
-# M5: an unreadable record is treated as absent (exit 0) instead of a refusal.
-mutate M5-unreadable-treated-as-absent reader "B4d B4e" \
+# M5: an unreadable record is treated as absent (exit 0). It still prints REFUSED, so only the EXIT-CODE arms see it.
+mutate M5-unreadable-treated-as-absent reader "B4d B4e B4f" \
   'exists and cannot be read as a file' \
   '/exists and cannot be read as a file/s/exit 2; }/exit 0; }/'
 
-# M6: the reader trusts a MISSING line as OK: the false-zero guard is removed.
-mutate M6-reader-trusts-missing-line reader "B5a B5b B5c" \
-  'if [ ! -f "$ROOT/$rel" ] || [ "${stripped#\$ }" = "$stripped" ] || [ "${stripped#\$ }" != "$cmd" ]; then' \
-  's/^  if \[ ! -f "\$ROOT\/\$rel" \] .*; then$/  if false; then/'
+# M6: the command-equality conjunct of the false-zero guard is removed: a `$ ` line in a derived fence
+# is accepted whatever command it holds. B5c has the file present and the recorded line holding a
+# DIFFERENT `$ ` command that reproduces, so the validator is silent and the row would read closed.
+mutate M6-reader-trusts-any-command-line reader "B5c" \
+  'st == 2 && substr(t, 1, 2) == "$ " && substr(t, 3) == want { print NR }' \
+  's/ \&\& substr(t, 3) == want//'
 
 # M7: supersession is ignored: a superseded key is judged by its own (silent) verdict, not its later copy's.
 mutate M7-reader-ignores-supersession reader "B6a" \
   '      if [ -n "$sup" ]; then' \
   's/^      if \[ -n "\$sup" \]; then$/      if false; then/'
+
+# M8: the writer writes WITHOUT the flag (a default record under TMPDIR). Only the no-flag control sees it.
+mutate M8-writer-writes-without-flag writer "Wa" \
+  'OWED_FILE=""; OWED_SET=0; LOG_NAME="reconcile-log-unnamed"' \
+  's|^OWED_FILE=""; OWED_SET=0;|OWED_FILE="${TMPDIR:-/tmp}/owed-default.tsv"; OWED_SET=1;|'
+
+# M9: a malformed row is accepted instead of refusing the record.
+mutate M9-malformed-row-accepted reader "B4g B4h B4i B4j" \
+  '{ bad = NR; exit }' \
+  's/{ bad = NR; exit }/{ }/'
+
+# M10: a row the validator could not assess (exit 2) reads closed instead of UNASSESSED.
+mutate M10-unassessed-reads-closed reader "B8b" \
+  'reason="UNASSESSED"' \
+  's/reason="UNASSESSED"/reason=""/'
+
+# ---- P: the caller prose (dist-only: a consumer at update step 2 still holds the OLD rulebook) ------
+STEPS="$ROOT/core/skills/ai-dlc/steps"
+pk() { if grep -qF -- "$2" "$STEPS/$3" 2>/dev/null; then ok "$1"; else bad "$1 -- $STEPS/$3 lacks: $2"; fi; }
+pk "Pa route.md Step 0a runs the reader on resume" "check-owed-derivations.sh" route.md
+pk "Pb the gate site REFUSES the gate on an open row" "The gate is REFUSED while an owed derivation is open" _gate-procedures.md
+pk "Pc the sprint-close site carries open rows forward, one item per key" "ONE" retro.md
+pk "Pd retro.md names the reader" "check-owed-derivations.sh" retro.md
+if grep -qF -- "ZQXJ-no-such-string-in-the-rulebook" "$STEPS/route.md" 2>/dev/null; then bad "Pe control: an impossible string was found"; else ok "Pe control: an impossible string is absent from route.md"; fi
 
 if [ "$fails" -ne 0 ]; then
   printf '  %s assertion(s) FAILED\n' "$fails"; exit 1

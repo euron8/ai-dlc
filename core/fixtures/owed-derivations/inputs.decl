@@ -6,7 +6,4 @@
 !core/skills/ai-dlc-update/reconcile/derivation-differential.sh
 core/skills/ai-dlc-update/reconcile/
 !core/scripts/validate-artifact-derivations.sh
-core/skills/ai-dlc/steps/route.md
-core/skills/ai-dlc/steps/_gate-procedures.md
-core/skills/ai-dlc/steps/retro.md
 core/fixtures/lib/

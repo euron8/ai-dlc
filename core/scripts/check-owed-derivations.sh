@@ -118,19 +118,55 @@ idx_of() { # <rel file> -> index, empty when none
   done
 }
 
+# FIXED-STRING MATCHING, NEVER A REGEX BUILT FROM A PATH. A path carrying ( ) + ? { } | made the old
+# grep -E exit 2, which reads as "no match" and CLOSED the row. awk index() compares bytes, and the
+# prefix travels by ENVIRON because awk -v strips one level of backslash escaping.
+verdict_has() { # <stderr file> <fail|unrun|any> <prefix after the head>
+  P="$3" awk -v kind="$2" 'BEGIN { p = ENVIRON["P"] }
+    kind != "unrun" && match($0, /^FAIL \([A-Z-]+\): /) && index(substr($0, RLENGTH + 1), p) == 1 { f = 1 }
+    kind != "fail" && substr($0, 1, 7) == "UNRUN: " && index(substr($0, 8), p) == 1 { f = 1 }
+    END { exit f ? 0 : 1 }' "$1"
+}
+superseded_by() { # <stderr file> <abs:ln> -> the later line number, empty when not superseded
+  P="SUPERSEDED: $2 by ${2%:*}:" awk 'BEGIN { p = ENVIRON["P"] }
+    index($0, p) == 1 { r = substr($0, length(p) + 1); if (r ~ /^[0-9]+$/) { print r; exit } }' "$1"
+}
+# derived_cmd_lines <file> <command> -> the line number of every `$ ` line that sits inside a derived
+# fence and whose text equals <command>. A command in any other fence (a text fence) is one the
+# validator never reads, so it has no verdict at all and is not a match. The command travels by
+# ENVIRON (awk -v strips a level of backslash escaping) and is compared with ==, never as a regex.
+derived_cmd_lines() {
+  C="$2" awk 'BEGIN { st = 0; fc = sprintf("%c%c%c", 96, 96, 96); want = ENVIRON["C"] }
+    { t = $0; sub(/^[ \t]+/, "", t); sub(/[ \t\r]+$/, "", t) }
+    st == 0 && substr(t, 1, 3) == fc { st = (t == fc "derived") ? 2 : 1; next }
+    st != 0 && substr(t, 1, 3) == fc { st = 0; next }
+    st == 2 && substr(t, 1, 2) == "$ " && substr(t, 3) == want { print NR }' "$1"
+}
+
 nopen=0
 while IFS="$SEP" read -r key cmd _recd _act range logn; do
   [ -n "$key" ] || continue
   rel="${key%:*}"; ln="${key##*:}"
   reason=""
-  line=""
-  [ -f "$ROOT/$rel" ] && line="$(sed -n "${ln}p" "$ROOT/$rel" 2>/dev/null)"
-  # FALSE-ZERO GUARD: the line must be a `$ ` command equal to the recorded one.
-  stripped="${line#"${line%%[![:blank:]]*}"}"
-  stripped="$(printf '%s' "$stripped" | tr '\t' ' ')"
-  if [ ! -f "$ROOT/$rel" ] || [ "${stripped#\$ }" = "$stripped" ] || [ "${stripped#\$ }" != "$cmd" ]; then
+  # THE ROW IS LOCATED BY CONTENT, NOT BY LINE NUMBER. The matches are the `$ ` lines inside a derived
+  # fence whose text equals the recorded command. Zero: MOVED (open, never closed on silence). One:
+  # that line is judged, so a shifted line is tolerated. Several: the recorded line number breaks the
+  # tie when it is one of them (a record repeats a command and the validator supersedes the earlier
+  # copy); otherwise the row cannot be placed and the whole run refuses with exit 2.
+  found=""; nfound=0
+  if [ -f "$ROOT/$rel" ]; then
+    found="$(derived_cmd_lines "$ROOT/$rel" "$cmd")" \
+      || { echo "REFUSED: could not scan $rel for the recorded command, so the row $key cannot be placed." >&2; exit 2; }
+    [ -n "$found" ] && nfound="$(printf '%s\n' "$found" | awk 'END { print NR + 0 }')"
+  fi
+  if [ "$nfound" -gt 1 ]; then
+    if printf '%s\n' "$found" | grep -qxF -- "$ln"; then nfound=1; found="$ln"
+    else echo "REFUSED: $rel carries $nfound derived-fence copies of the recorded command for $key and none is at the recorded line, so the row cannot be placed." >&2; exit 2; fi
+  fi
+  if [ "$nfound" -eq 0 ]; then
     reason="MOVED"
   else
+    ln="$found"
     j="$(idx_of "$rel")"
     err="$TMP/f.$j.err"; abs="$ROOT/$rel"
     rc="$(cat "$TMP/f.$j.rc" 2>/dev/null)"
@@ -138,13 +174,13 @@ while IFS="$SEP" read -r key cmd _recd _act range logn; do
       reason="UNASSESSED"
     else
       target="$ln"
-      sup="$(sed -n "s|^SUPERSEDED: ${abs}:${ln} by ${abs}:\([0-9][0-9]*\)\$|\1|p" "$err" 2>/dev/null | head -1)"
+      sup="$(superseded_by "$err" "${abs}:${ln}")"
       if [ -n "$sup" ]; then
         target="$sup"
-        if grep -qE "^(FAIL \([A-Z-]+\)|UNRUN): $(printf '%s' "${abs}:${target} " | sed 's/[][\.*^$/]/\\&/g')" "$err"; then reason="SUPERSEDED-STALE"; fi
+        verdict_has "$err" any "${abs}:${target} " && reason="SUPERSEDED-STALE"
       else
-        if grep -qE "^FAIL \([A-Z-]+\): $(printf '%s' "${abs}:${target} " | sed 's/[][\.*^$/]/\\&/g')" "$err"; then reason="STALE"
-        elif grep -qE "^UNRUN: $(printf '%s' "${abs}:${target} " | sed 's/[][\.*^$/]/\\&/g')" "$err"; then reason="UNRUN"; fi
+        if verdict_has "$err" fail "${abs}:${target} "; then reason="STALE"
+        elif verdict_has "$err" unrun "${abs}:${target} "; then reason="UNRUN"; fi
       fi
     fi
   fi

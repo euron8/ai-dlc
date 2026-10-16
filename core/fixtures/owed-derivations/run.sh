@@ -39,11 +39,6 @@ fi
 READER="$(cd "$(dirname "$READER")" && pwd)/$(basename "$READER")"
 DIFFER="$(cd "$(dirname "$DIFFER")" && pwd)/$(basename "$DIFFER")"
 
-# Candidate paths for the rulebook prose the callers live in (both layouts).
-STEPS=""
-for d in "$HERE/../../skills/ai-dlc/steps" "$HERE/../../../.claude/skills/ai-dlc/steps" "$HERE/../../../core/skills/ai-dlc/steps"; do
-  [ -f "$d/route.md" ] && { STEPS="$(cd "$d" && pwd)"; break; }
-done
 
 WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
@@ -93,7 +88,16 @@ REC2="_bmad-output/planning-artifacts/s1/story-adversarial-p1.md"
 REC3="_bmad-output/planning-artifacts/s1/requirements-elicitation-repair.md"
 PM="_bmad-output/party-mode/session.md"
 { printf '# PRD\n\n'; fence 5; } > "$R/$PRD"
-{ printf '# Story\n\nThis row is CLOSED and re-pointed, the debt is closed.\n\n'; fence 5; } > "$R/$STORY"
+{ printf '# Story\n\n'; fence 5; } > "$R/$STORY"
+# the prose-looks-closed document is its OWN file, used by B2 only, so a mutant trusting status text
+# moves B2 and nothing else
+CLOSEDDOC="_bmad-output/planning-artifacts/s1/closed.md"
+{ printf '# Closed\n\nThis row is CLOSED and re-pointed, the debt is closed.\n\n'; fence 5; } > "$R/$CLOSEDDOC"
+LIVE2="_bmad-output/planning-artifacts/s1/story2.md"
+{ printf '# Story two\n\n'; fence 5; } > "$R/$LIVE2"
+# a path carrying ( ) + | : the old regex built from the path exited 2 on it, which read as no match
+ODD="_bmad-output/planning-artifacts/s1/a(b)+c|d.md"
+{ printf '# Odd path\n\n'; fence 5; } > "$R/$ODD"
 { printf '# Record, no later copy\n\n'; fence 5; } > "$R/$REC1"
 # a record whose stale copy is re-derived LATER, once stale and once fresh
 { printf '# Record, later copy stale\n\n'; fence 5; printf '\nre-derived:\n\n'; fence 6; } > "$R/$REC2"
@@ -105,7 +109,10 @@ K_REC1="$REC1:$(line_of "$R/$REC1" '$ grep')"
 K_REC2E="$REC2:$(line_of "$R/$REC2" '$ grep' 1)"; K_REC2L="$REC2:$(line_of "$R/$REC2" '$ grep' 2)"
 K_REC3E="$REC3:$(line_of "$R/$REC3" '$ grep' 1)"; K_REC3L="$REC3:$(line_of "$R/$REC3" '$ grep' 2)"
 K_PM="$PM:$(line_of "$R/$PM" '$ grep')"
-for k in "$K_PRD" "$K_STORY" "$K_REC1" "$K_REC2E" "$K_REC2L" "$K_REC3E" "$K_REC3L" "$K_PM"; do
+K_CLOSED="$CLOSEDDOC:$(line_of "$R/$CLOSEDDOC" '$ grep')"
+K_LIVE2="$LIVE2:$(line_of "$R/$LIVE2" '$ grep')"
+K_ODD="$ODD:$(line_of "$R/$ODD" '$ grep')"
+for k in "$K_CLOSED" "$K_LIVE2" "$K_ODD" "$K_PRD" "$K_STORY" "$K_REC1" "$K_REC2E" "$K_REC2L" "$K_REC3E" "$K_REC3L" "$K_PM"; do
   case "$k" in *:|*::*) echo "FIXTURE ERROR: a seeded derivation line was not found ($k)" >&2; exit 2 ;; esac
 done
 
@@ -134,10 +141,13 @@ rc_is "B1e every row re-pointed -> exit 0" 0 "$RC"
 rc_is "B1f and nothing is printed on stdout" 0 "$(printf '%s' "$OUT" | wc -c | tr -d ' ')"
 
 # ---- B2: prose that LOOKS closed beside a still-failing derivation stays OPEN ----------------------
-row "$K_STORY" "$CMD" > "$WORK/b2.tsv"
+row "$K_CLOSED" "$CMD" > "$WORK/b2.tsv"
 rd "$R" "$WORK/b2.tsv"
 rc_is "B2a the doc says CLOSED in prose, the derivation still fails -> exit 1" 1 "$RC"
-rc_is "B2b and the row is OPEN with reason STALE" 0 "$([ "$(reason_of "$K_STORY")" = STALE ] && echo 0 || echo 1)"
+rc_is "B2b and the row is OPEN with reason STALE" 0 "$([ "$(reason_of "$K_CLOSED")" = STALE ] && echo 0 || echo 1)"
+row "$K_ODD" "$CMD" > "$WORK/b2o.tsv"
+rd "$R" "$WORK/b2o.tsv"
+rc_is "B2c a path carrying ( ) + | with a stale fence is OPEN (a regex built from it would have closed it)" 0 "$([ "$RC" = 1 ] && [ "$(reason_of "$K_ODD")" = STALE ] && echo 0 || echo 1)"
 
 # ---- B3: rows OUTSIDE s<N>/ (prd.md, party-mode) are read from their own file ----------------------
 { row "$K_PRD" "$CMD"; row "$K_PM" "$CMD"; } > "$WORK/b3.tsv"
@@ -154,15 +164,10 @@ rc_is "B4c control: an EMPTY record exists, owes nothing -> exit 0" 0 "$RC"
 mkdir "$WORK/dir.tsv"
 rd "$R" "$WORK/dir.tsv"
 rc_is "B4d a record that exists as a DIRECTORY (unreadable as a file) -> exit 2" 2 "$RC"
-ck "B4e and the refusal names the record as unreadable" "cannot be read" "$ERR"
-row "$K_PRD" "$CMD" > "$WORK/unread.tsv"; chmod 000 "$WORK/unread.tsv"
-if [ -r "$WORK/unread.tsv" ]; then
-  ok "B4f (skipped: this account reads a mode-000 file, so that shape cannot be built; B4d carries the unreadable case)"
-else
-  rd "$R" "$WORK/unread.tsv"
-  rc_is "B4f a mode-000 record -> exit 2" 2 "$RC"
-fi
-chmod 600 "$WORK/unread.tsv" 2>/dev/null
+rc_is "B4e the exit is 2 AND the refusal names the record as unreadable" 0 "$([ "$RC" = 2 ] && grep -qF 'cannot be read' <<<"$ERR" && echo 0 || echo 1)"
+ln -s "$WORK/no-such-target.tsv" "$WORK/dangling.tsv"
+rd "$R" "$WORK/dangling.tsv"
+rc_is "B4f a DANGLING symlink record (present, unreadable as a file, any uid) -> exit 2" 2 "$RC"
 printf 'not a record\n' > "$WORK/mal1.tsv"
 rd "$R" "$WORK/mal1.tsv"
 rc_is "B4g a malformed row -> exit 2" 2 "$RC"
@@ -174,14 +179,31 @@ nk "B4j and no OPEN line is printed for the valid row beside it" "OPEN" "$OUT"
 
 # ---- B5: MOVED -- the recorded line no longer holds the recorded command -------------------------
 R3="$WORK/rd3"; mkroot "$R3"
-{ printf '# PRD\n\nA paragraph added above, so the recorded line shifted.\n\nmore prose\n\n'; fence 1; } > "$R3/$PRD"
-row "$K_PRD" "$CMD" > "$WORK/b5.tsv"
+SHIFT='A paragraph added above, so the recorded line shifted.'
+# B5a-d: the row is located by CONTENT, so a shifted line is judged where it now sits
+{ printf '# PRD\n\n%s\n\nmore prose\n\n' "$SHIFT"; fence 5; } > "$R3/$LIVE2"
+row "$K_LIVE2" "$CMD" > "$WORK/b5.tsv"
 rd "$R3" "$WORK/b5.tsv"
-rc_is "B5a the recorded line now holds other text and the fence below reproduces -> exit 1" 1 "$RC"
-rc_is "B5b the row is OPEN with reason MOVED, never closed on silence" 0 "$([ "$(reason_of "$K_PRD")" = MOVED ] && echo 0 || echo 1)"
+rc_is "B5a a shifted line whose derivation is still stale -> exit 1, OPEN as STALE" 0 "$([ "$RC" = 1 ] && [ "$(reason_of "$K_LIVE2")" = STALE ] && echo 0 || echo 1)"
+{ printf '# PRD\n\n%s\n\nmore prose\n\n' "$SHIFT"; fence 1; } > "$R3/$LIVE2"
+rd "$R3" "$WORK/b5.tsv"
+rc_is "B5b a shifted line whose derivation now reproduces -> closed, exit 0" 0 "$RC"
+# B5c: the recorded command is no longer in the file at all (the line holds a DIFFERENT $ command)
+{ printf '# PRD\n\n'; printf '```derived\n$ grep -c qqzzz t.txt\n0\n```\n'; } > "$R3/$LIVE2"
+rd "$R3" "$WORK/b5.tsv"
+rc_is "B5c the file exists and the line holds a different command -> MOVED, exit 1" 0 "$([ "$RC" = 1 ] && [ "$(reason_of "$K_LIVE2")" = MOVED ] && echo 0 || echo 1)"
 row "nope/missing.md:3" "$CMD" > "$WORK/b5m.tsv"
 rd "$R3" "$WORK/b5m.tsv"
-rc_is "B5c a row whose FILE is gone is MOVED too -> exit 1" 1 "$RC"
+rc_is "B5d a row whose FILE is gone is MOVED too -> exit 1" 1 "$RC"
+# B5e: the command is present but its opener was changed to a text fence the validator never reads
+{ printf '# PRD\n\n'; printf '```text\n$ %s\n5\n```\n' "$CMD"; } > "$R3/$LIVE2"
+rd "$R3" "$WORK/b5.tsv"
+rc_is "B5e an UNFENCED line (text opener) is MOVED, never closed on the validator's silence" 0 "$([ "$RC" = 1 ] && [ "$(reason_of "$K_LIVE2")" = MOVED ] && echo 0 || echo 1)"
+# B5f: two derived-fence copies, neither at the recorded line, cannot be placed -> refusal
+{ printf '# PRD\n\nprose\n\nmore\n\n'; fence 5; printf '\n'; fence 5; } > "$R3/$LIVE2"
+rd "$R3" "$WORK/b5.tsv"
+rc_is "B5f a duplicate command that the recorded line cannot break -> exit 2" 2 "$RC"
+ck "B5g and the refusal says the row cannot be placed" "cannot be placed" "$ERR"
 
 # ---- B6: supersession -----------------------------------------------------------------------------
 row "$K_REC2E" "$CMD" > "$WORK/b6a.tsv"
@@ -199,14 +221,14 @@ rc_is "B7a a record with NO later identical copy, a live s<N> doc and a file out
 
 # ---- B8: validator exit 2 over a row's file -> unassessed, never closed ---------------------------
 R4="$WORK/rd4"; mkroot "$R4"
-cp "$R/$PRD" "$R4/$PRD"
+cp "$R/$LIVE2" "$R4/$LIVE2"
 # a validator that REFUSES (exit 2) with no verdict line, as the real one does on UNRUN/REFUSED
 printf '#!/usr/bin/env bash\necho "REFUSED: seeded" >&2\nexit 2\n' > "$R4/scripts/ai-dlc/validate-artifact-derivations.sh"
-v8="$(cd "$R4" && bash scripts/ai-dlc/validate-artifact-derivations.sh "$R4/$PRD" >/dev/null 2>&1; echo $?)"
+v8="$(cd "$R4" && bash scripts/ai-dlc/validate-artifact-derivations.sh "$R4/$LIVE2" >/dev/null 2>&1; echo $?)"
 rc_is "B8a control: the seeded validator exits 2" 2 "$v8"
-row "$K_PRD" "$CMD" > "$WORK/b8.tsv"
+row "$K_LIVE2" "$CMD" > "$WORK/b8.tsv"
 rd "$R4" "$WORK/b8.tsv"
-rc_is "B8b an exit-2 validator leaves the row OPEN as UNASSESSED, exit 1" 0 "$([ "$RC" = 1 ] && [ "$(reason_of "$K_PRD")" = UNASSESSED ] && echo 0 || echo 1)"
+rc_is "B8b an exit-2 validator leaves the row OPEN as UNASSESSED, exit 1" 0 "$([ "$RC" = 1 ] && [ "$(reason_of "$K_LIVE2")" = UNASSESSED ] && echo 0 || echo 1)"
 
 # ---- W: the WRITER over the real differential, then the reader over ITS record --------------------
 DIST="$WORK/dist"; mkdir -p "$DIST/core/scripts"; g "$DIST" init -q
@@ -227,7 +249,7 @@ dd() { OUTD="$(cd / && TMPDIR="$WORK" bash "$DIFFER" "$DIST" "$BASE" "$C" "$THEI
 OWED="$WORK/owed.tsv"
 dd; PRINTED_PLAIN="$OUTD"
 rc_is "W0 control: the differential finds the broken derivation -> exit 1" 1 "$RCD"
-rc_is "Wa without --record-owed NOTHING is written" 0 "$([ -e "$OWED" ] && echo 1 || echo 0)"
+rc_is "Wa without --record-owed NOTHING is written (no file named *owed* appears under the helper's TMPDIR)" 0 "$(find "$WORK" -maxdepth 1 -name '*owed*' | awk 'END { print NR + 0 }')"
 dd --record-owed "$OWED" --log-name reconcile-log-t1.md
 rc_is "Wb with --record-owed the exit is unchanged (1)" 1 "$RCD"
 K_W="_bmad-output/story.md:4"
@@ -251,16 +273,11 @@ rd "$C" "$OWED"
 rc_is "Wh once the tree reproduces the derivation again the writer's rows read closed -> exit 0" 0 "$RC"
 
 # ---- G: the callers (rulebook prose) --------------------------------------------------------------
-if [ -z "$STEPS" ]; then
-  echo "  note  the steps directory is not in this tree; the caller arms are skipped (a consumer without the rulebook)"
-else
-  ck "Ga route.md Step 0a runs the reader on resume" "check-owed-derivations.sh" "$(cat "$STEPS/route.md")"
-  ck "Gb the gate site REFUSES the gate on an open row" "The gate is REFUSED while an owed derivation is open" "$(cat "$STEPS/_gate-procedures.md")"
-  ck "Gc the sprint-close site carries open rows forward" "check-owed-derivations.sh" "$(cat "$STEPS/retro.md")"
-fi
+# The prose-presence arms for the three callers live in owed-derivations-mutants (dist-only): on a
+# consumer at update step 2 the rulebook is still the old one, so a shipping arm grepping it would go red.
 # GATE ARM, executed: the gate site passes iff the reader exits 0. Open row -> refuse; control -> pass.
 gate_site() { rd "$1" "$2"; [ "$RC" = 0 ] && echo PASS || echo REFUSE; }
-rc_is "Gd gate arm: an open row REFUSES the gate" REFUSE "$(gate_site "$R" "$WORK/b2.tsv")"
+rc_is "Gd gate arm: an open row REFUSES the gate" REFUSE "$(gate_site "$R" "$WORK/b1.tsv")"
 rc_is "Ge gate arm control: no open row PASSES the gate" PASS "$(gate_site "$R2" "$WORK/b1e.tsv")"
 # SPRINT-CLOSE ARM, executed: every OPEN line becomes a carry-over item; the count must equal the open rows.
 co="$(gate_site "$R" "$WORK/b7.tsv" >/dev/null; rd "$R" "$WORK/b7.tsv"; awk -F'\t' '$1 == "OPEN" { n++ } END { print n + 0 }' <<<"$OUT")"
