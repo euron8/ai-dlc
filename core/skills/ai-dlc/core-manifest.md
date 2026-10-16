@@ -359,6 +359,7 @@ core_manifest:
   - fixtures/architecture-index-cell-escaping/**
   - fixtures/prepush-worktree-env-scrub/**
   - fixtures/retro-compliance-workflow/**
+  - fixtures/post-write-gates/**
 
 machinery:
   - core-manifest.md

@@ -1,0 +1,4 @@
+# post-write-gates reads the runner under test only. Every gate it drives is a stub this fixture
+# writes under mktemp, and the leftover-token trees are seeded there too.
+!core/skills/ai-dlc-update/reconcile/post-write-gates.sh
+core/fixtures/lib/

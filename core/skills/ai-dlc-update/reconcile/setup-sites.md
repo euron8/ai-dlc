@@ -275,6 +275,7 @@ core_manifest:
   - core/fixtures/architecture-index-cell-escaping/**
   - core/fixtures/prepush-worktree-env-scrub/**
   - core/fixtures/retro-compliance-workflow/**
+  - core/fixtures/post-write-gates/**
 
 machinery:
   - core/skills/ai-dlc/core-manifest.md

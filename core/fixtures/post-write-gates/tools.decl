@@ -1,0 +1,13 @@
+# Tools run.sh and post-write-gates.sh invoke. No node.
+awk
+bash
+cat
+cmp
+dirname
+grep
+mkdir
+mktemp
+mv
+rm
+sed
+tail
