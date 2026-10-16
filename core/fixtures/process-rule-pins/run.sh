@@ -64,6 +64,14 @@
 #     re-dispatch (_gate-procedures.md "After a join refusal" item 1b, and the document and subject
 #     "Join and assemble" steps). Those steps' items carry no blank line between them, so para mode
 #     reads each list as ONE paragraph whose lead is item 1 ("Split."); gp-rerun-doc/subj pin inside it.
+#   - the routing record's two cites (route.md Step 6, `user_request_cite` and `scope_confirmed_cite`)
+#     are named as the 64 hex characters after `- SHA256: `, so a lead does not copy the label in.
+#     route-cite-user and route-cite-scope are line-mode `contains` pins (the bullets are indented):
+#     keep each field name and its bare-hex phrase on ONE line.
+#   - the carry-over evaluation's review and repair stem is `coe` (shard dir `s<N>/shards/coe-p<M>/`),
+#     never the full step name and never the series stem `coe-adversarial` (carry-over-evaluation.md
+#     §3a). A blank line sets that bullet apart from the two above it, so `- The series is` is its
+#     own paragraph's lead for the coe-stem-* rows.
 #
 # LEADS ARE NOT ENOUGH. A bold lead left intact over a body rewritten to say the opposite
 # ("need NOT carry", "dropped only through a HARD_BLOCK", "an assertion is a sufficient
@@ -244,6 +252,8 @@ adv-attr-lead|R|adversary.md|## Severity|## |**An operator attribution missing i
 adv-prem-rung|R|adversary.md|## Severity|## |### A premise a later event contradicted is a MAJOR|prefix
 adv-prem-lead|R|adversary.md|## Severity|## |**An authorization whose named outcome a later event contradicted is a MAJOR.**|prefix
 route-range|S|steps/route.md|### Step 4:|### Step 5:|sections 0–2c|contains
+route-cite-user|S|steps/route.md|### Step 6:|## FAILURE MODES|`user_request_cite` — the 64 hex characters after `- SHA256: `|contains
+route-cite-scope|S|steps/route.md|### Step 6:|## FAILURE MODES|`scope_confirmed_cite` — the 64 hex characters after `- SHA256: `|contains
 sts-range|S|steps/stories-test-strategy.md|### 3a.|### 4.|sections 0–2c|contains
 sts-names-2c|S|steps/stories-test-strategy.md|### 3a.|### 4.|§2c's adversarial verification of the root-cause|contains
 party-seats-record|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**The seats edit nothing, in every case below.**|para|Each seat writes one findings file per (seat, shard)
@@ -368,6 +378,8 @@ dp-git-c|S|steps/_dispatch-protocol.md|**Worktree-explicit dev dispatch.**|**Bou
 dp-one-story|S|steps/_dispatch-protocol.md|**Worktree-explicit dev dispatch.**|**Bounded-join dispatch mandate (Rule 29).**|0. Lead MUST commit all planning artifacts|para|The dev works only the story it was dispatched for, one story per dispatch, and never claims another from a task list
 dev-one-story|R|dev.md|## Responsibilities|## As a party seat|- Implement the story the lead dispatched you for|para|Implement the story the lead dispatched you for: one story per dispatch.
 dev-hardblock-idle|R|dev.md|## Escalation Protocol|## CI-vs-local divergence diagnostic order|- **HARD_BLOCK** (story contradicts architecture|para|and go idle; you do not pick up another story.
+coe-stem-token|S|steps/carry-over-evaluation.md|### 3a. Validation cycle (Rule 8)|### 4. Deferral Handling|- The series is|para|`<artifact>` in `_gate-procedures.md`'s review and repair dispatch paths is `coe`
+coe-stem-dir|S|steps/carry-over-evaluation.md|### 3a. Validation cycle (Rule 8)|### 4. Deferral Handling|- The series is|para|s<N>/shards/coe-p<M>/
 PINS
 }
 

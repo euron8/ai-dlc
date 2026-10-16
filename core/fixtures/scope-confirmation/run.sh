@@ -1368,6 +1368,136 @@ else
   fi
 fi
 
+# =============================================================================
+# THE LABELLED CITE -- `scope_confirmed_cite: SHA256:<hex>` resolves as the bare hex does.
+# =============================================================================
+# THE DEFECT. route.md Step 6 named the cite as "the `SHA256:` value" of the hook's
+# `- SHA256: <hex>` line, and a lead copied the label in. The hex arm then refused a cite whose
+# bare hex resolves. The fix strips exactly ONE literal `SHA256:` at the assignment, before the
+# `-z` arm, so the resolve grep AND the deferred-items timestamp join both read the bare hex.
+#
+# Each cell names the ARM that must decide it, as a message conjunct (`x` suffix when absent),
+# so an rc reached through the wrong arm does not score as the right one. `SHA256:` alone
+# reaches the validator as `SHA256` -- field_of strips trailing punctuation -- so the hex arm
+# refuses it, not the empty-cite arm. `pc-bare-absent` is the bare-hex twin of `pc-absent`.
+#
+# STRIP-DELETED KILLS THREE CELLS AND THE OVERLAP IS DECLARED. Every prefixed cell whose
+# deciding arm lies PAST the hex arm depends on the strip: pc-real (resolve), pc-fab (resolve,
+# by its message) and pc-absent (the timestamp join). No seed can separate them, because a cite
+# the strip did not reach is refused by the hex arm before any later arm reads it. What the
+# OTHER mutants need is that each owns a cell nothing else moves: `widened` owns pc-foo,
+# `repeated` owns pc-dbl, and `moved` (the strip scoped to the resolve branch, leaving the
+# global prefixed for the deferred-items join) owns pc-absent alone.
+sd_snap pc-real   none "SHA256:$SHA"
+sd_snap pc-fab    none "SHA256:$(printf 'd%.0s' $(seq 1 64))"
+sd_snap pc-foo    none "foo:$SHA"
+sd_snap pc-dbl    none "SHA256:SHA256:$SHA"
+sd_snap pc-empty  none "SHA256:"
+sd_snap pc-absent "-"  "SHA256:$SHA"
+PC_CELLS="pc-real pc-fab pc-foo pc-dbl pc-empty pc-absent pc-bare-absent"
+pc_verdicts() {
+  local v="$1" out=""
+  pc_cell() { out="$out $1=$SD_RC"; }
+  sd_run "$v" pc-real "$ANSWERS" "$REPO_STD"
+  sd_has "cite resolves to a hook-written answer record" || SD_RC="${SD_RC}x"; pc_cell pc-real
+  sd_run "$v" pc-fab "$ANSWERS" "$REPO_STD"
+  sd_has "resolves to no entry" || SD_RC="${SD_RC}x"; pc_cell pc-fab
+  sd_run "$v" pc-foo "$ANSWERS" "$REPO_STD"
+  sd_has "is not a hex SHA256" || SD_RC="${SD_RC}x"; pc_cell pc-foo
+  sd_run "$v" pc-dbl "$ANSWERS" "$REPO_STD"
+  sd_has "is not a hex SHA256" || SD_RC="${SD_RC}x"; pc_cell pc-dbl
+  sd_run "$v" pc-empty "$ANSWERS" "$REPO_STD"
+  sd_has "is not a hex SHA256" || SD_RC="${SD_RC}x"; pc_cell pc-empty
+  sd_run "$v" pc-absent "$SD/answers-late.md" "$REPO_STD"
+  sd_has "no 'scope_deferred_items' field" || SD_RC="${SD_RC}x"; pc_cell pc-absent
+  sd_run "$v" absent "$SD/answers-late.md" "$REPO_STD"
+  sd_has "no 'scope_deferred_items' field" || SD_RC="${SD_RC}x"; pc_cell pc-bare-absent
+  printf '%s\n' "${out# }"
+}
+PC_EXPECT="pc-real=0 pc-fab=1 pc-foo=1 pc-dbl=1 pc-empty=1 pc-absent=1 pc-bare-absent=1"
+pc_why() {
+  case "$1" in
+    pc-real)   echo "a cite copied with its SHA256: label must resolve as its bare hex does" ;;
+    pc-fab)    echo "a labelled fabricated hash must still resolve to nothing and FAIL" ;;
+    pc-foo)    echo "only the literal SHA256: label is stripped; any other label stays refused" ;;
+    pc-dbl)    echo "the label is stripped ONCE; a doubled label stays refused" ;;
+    pc-empty)  echo "a label with no digest is refused by the hex arm" ;;
+    pc-absent) echo "a labelled cite beside an absent deferred-items field is dated like the bare cite (FAIL, not PENDING)" ;;
+    pc-bare-absent) echo "control: the bare-hex twin of pc-absent" ;;
+  esac
+}
+
+# --- Assertions 64-70: every labelled-cite cell against the shipping validator ---
+PC_GOT="$(pc_verdicts "$VALIDATOR")"
+for c in $PC_CELLS; do
+  want="$(sd_cell_of "$PC_EXPECT" "$c")"; got="$(sd_cell_of "$PC_GOT" "$c")"
+  if [ "$want" = "$got" ]; then
+    ok "labelled-cite cell '$c': rc=$got as required"
+  else
+    bad "labelled-cite cell '$c': got '$got', expected '$want' — $(pc_why "$c")"
+  fi
+done
+
+# --- Assertion 71: assertion 14's unmutated copy reproduces the labelled-cite vector ---
+PC_CTL_GOT="$(pc_verdicts "$CTL")"
+PC_MUT_KILLS=0; PC_MUT_WANT=0
+pc_mut() {   # $1 label, $2 owned cells, then anchor/replacement pairs; every anchor occurs exactly once
+  local label="$1" owned="$2" out prev n got moved stray c w g
+  shift 2
+  PC_MUT_WANT=$((PC_MUT_WANT + 1))
+  out="$SD/pc-mutant-$label.sh"; cp "$VALIDATOR" "$out"
+  while [ $# -ge 2 ]; do
+    n="$(grep -cF -- "$1" "$out")" || n=0
+    if [ "$n" != "1" ]; then
+      bad "FIXTURE STALE: labelled-cite mutant $label's anchor '$1' occurs $n times, not 1"; return
+    fi
+    prev="$out.prev"; cp "$out" "$prev"
+    awk -v a="$1" -v r="$2" '{ i = index($0, a); if (i) { $0 = substr($0, 1, i - 1) r substr($0, i + length(a)) } print }' "$prev" > "$out"
+    if cmp -s "$prev" "$out"; then
+      bad "FIXTURE STALE: labelled-cite mutant $label's substitution for '$1' matched nothing"; return
+    fi
+    shift 2
+  done
+  if ! bash -n "$out" 2>/dev/null; then
+    bad "FIXTURE BROKEN: labelled-cite mutant $label is not a valid shell script"; return
+  fi
+  got="$(pc_verdicts "$out")"
+  moved=""; stray=""
+  for c in $PC_CELLS; do
+    w="$(sd_cell_of "$PC_EXPECT" "$c")"; g="$(sd_cell_of "$got" "$c")"
+    case " $owned " in
+      *" $c "*) [ "$w" != "$g" ] && moved="$moved $c" ;;
+      *)        [ "$w" != "$g" ] && stray="$stray $c=$g" ;;
+    esac
+  done
+  if [ -n "$stray" ]; then
+    bad "labelled-cite mutant $label moved cells it does not own:$stray — the arms are entangled"
+  elif [ "$(echo $moved | wc -w)" -ne "$(echo $owned | wc -w)" ]; then
+    bad "LABELLED-CITE MUTANT $label SURVIVED on some of its own cells (moved:${moved:- none}; owned: $owned)"
+  else
+    PC_MUT_KILLS=$((PC_MUT_KILLS + 1))
+    ok "labelled-cite mutant $label killed on exactly its own cells:$moved"
+  fi
+}
+if [ "$PC_CTL_GOT" = "$PC_EXPECT" ]; then
+  ok "control: assertion 14's unmutated copy reproduces all $(echo $PC_CELLS | wc -w) labelled-cite cells"
+  PC_A='CITE="${CITE#SHA256:}"'
+  # --- Assertions 72-75: the four mutants ------------------------------------
+  pc_mut stripdeleted "pc-real pc-fab pc-absent" "$PC_A" 'CITE="$CITE"'
+  pc_mut widened "pc-foo" "$PC_A" 'CITE="${CITE#*:}"'
+  pc_mut repeated "pc-dbl" "$PC_A" 'while case "$CITE" in SHA256:*) true ;; *) false ;; esac; do CITE="${CITE#SHA256:}"; done'
+  pc_mut moved "pc-absent" "$PC_A" 'CITE="$CITE"' \
+    '  case "$CITE" in' '  case "${CITE#SHA256:}" in' \
+    'grep -q "^- SHA256: ${CITE}' 'grep -q "^- SHA256: ${CITE#SHA256:}'
+  if [ "$PC_MUT_KILLS" -eq "$PC_MUT_WANT" ] && [ "$PC_MUT_WANT" -eq 4 ]; then
+    ok "all 4 labelled-cite mutants killed against the resolved validator $VALIDATOR"
+  else
+    bad "only $PC_MUT_KILLS of $PC_MUT_WANT labelled-cite mutants were killed (4 expected)"
+  fi
+else
+  bad "CONTROL FAILED: assertion 14's unmutated copy returned [$PC_CTL_GOT], expected [$PC_EXPECT] — every labelled-cite mutant verdict would be uninterpretable"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "scope-confirmation: PASS"; exit 0; fi
 echo "scope-confirmation: $fails assertion(s) FAILED" >&2

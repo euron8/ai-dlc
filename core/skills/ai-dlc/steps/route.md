@@ -672,9 +672,10 @@ the pipeline snapshot at `_bmad-output/pipeline-snapshot.md`:
       place**. Persist it because a fresh gate-adjudicator has no access to
       this routing conversation and cannot re-classify what was never written
       to disk. `user_input` (Step 2) otherwise lives only in context.
-    - `user_request_cite` — the `SHA256:` value of that same entry, copied.
-      This is what makes the field above checkable: the hash resolves to a
-      hook-written record, and that record's body is independently citable
+    - `user_request_cite` — the 64 hex characters after `- SHA256: ` on that
+      same entry, copied without the `SHA256:` label. This is what makes the
+      field above checkable: the hash resolves to a hook-written record, and
+      that record's body is independently citable
       against the session transcript with
       `validate-steering-budget.sh --cite`. Until this existed,
       `user_request_verbatim` was prose the lead wrote about the request
@@ -691,8 +692,9 @@ the pipeline snapshot at `_bmad-output/pipeline-snapshot.md`:
       put to them at the pause point above, `corrected` if they changed it.
       There is no third value: this pause point is unconditional, so `n-a`
       would be a claim that it did not happen.
-    - `scope_confirmed_cite` — the `SHA256:` value of the matching entry in
-      `_bmad-output/operator-answers-history.md`, copied. That file is written
+    - `scope_confirmed_cite` — the 64 hex characters after `- SHA256: ` on the
+      matching entry in `_bmad-output/operator-answers-history.md`, copied
+      without the `SHA256:` label. That file is written
       by the PostToolUse hook from the hook's own payload, before you write
       anything, and its hash covers the ANSWER alone — never the question you
       authored. This is what makes `scope_confirmed` checkable rather than a

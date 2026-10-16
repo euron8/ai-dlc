@@ -235,6 +235,18 @@ requests_path = os.environ["REQUESTS"]
 blocks_raw = os.environ["BLOCKS"]
 sprint = os.environ["SPRINT"]
 cite_sha = os.environ["CITE_SHA"]
+# The capture line is `- SHA256: <hex>`, and a routing record copied off it can carry the label:
+# graph's user_request_cite read `SHA256:<hex>` in 22 snapshot commits, every one resolving bare.
+# Strip exactly ONE literal `SHA256:` -- never any `<label>:`, never case-folded, never repeated.
+# An EMPTY remainder is refused here: `if cite_sha:` below would otherwise read `SHA256:` alone as
+# "no pin" and fall through to the newest entry, a fail-open path the strip itself would open.
+if cite_sha.startswith("SHA256:"):
+    cite_sha = cite_sha[len("SHA256:"):]
+    if not cite_sha:
+        sys.stderr.write(
+            "ERROR: --cite-sha is 'SHA256:' with no digest after the label.\n"
+            "       The routing record cites a hash that resolves to nothing.\n")
+        sys.exit(2)
 
 text = open(requests_path, encoding="utf-8", errors="replace").read()
 

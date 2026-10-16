@@ -20,6 +20,40 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.791.0] - 2026-10-16
+
+Batch 234 (graph-ledger-full-drain), second release. Closes
+`PC-S319-ROUTING-RECORD-CITE-PREFIX-REJECTED-BY-SCOPE-VALIDATOR` (BL-534) and
+`PC-S319-COE-ADVERSARIAL-SHARD-DIR-STEM-NEVER-STATED` (BL-535). Files BL-539..BL-565 and BL-558 (peer filings on the
+operator's instruction, and one from this batch's gate).
+
+### Routing-record cites copied with their `SHA256:` label resolve (BL-534)
+
+- `route.md` Step 6 names `user_request_cite` and `scope_confirmed_cite` as the 64 hex characters after `- SHA256: `,
+  copied without the label.
+- `validate-scope-confirmation.sh` strips exactly one literal `SHA256:` from the cite at its assignment, so the
+  resolve check and the deferred-items timestamp join both read the bare hex. Any other label, a doubled label and a
+  lone `SHA256:` stay refused.
+- `validate-request-coverage.sh --cite-sha` strips the same single label, and refuses `SHA256:` with no digest
+  (exit 2) rather than falling through to the newest entry.
+- Over the consumer's 545 snapshot commits, 5 distinct labelled values exist and all resolve bare; the
+  false-positive set is 0. Pins `route-cite-user` / `route-cite-scope`; seven labelled-cite cells and four mutants
+  in scope-confirmation; five `--cite-sha` cells in request-coverage.
+
+### Carry-over evaluation states the `coe` shard-dir stem, and a series-named shard dir is refused (BL-535)
+
+- `carry-over-evaluation.md` §3a says `<artifact>` in `_gate-procedures.md`'s review and repair dispatch paths is
+  `coe` in this step, never `carry-over-evaluation` and never `coe-adversarial`, and names the shard dir
+  `s<N>/shards/coe-p<M>/`, the repair record and Check 24's `--series`. Pinned by `coe-stem-token`, `coe-stem-dir`.
+- `merge-adversarial-shards.sh` refuses an `<artifact>` ending in `-adversarial` in every mode, before anything is
+  read or written. Previously the consumer's real s319 shards under `coe-adversarial-p1/` merged with exit 0 into
+  `coe-adversarial-adversarial-p1.md`, and Check 24 then failed on the declared series. False-positive set: 0 of 82
+  consumer shard dirs. Limit: the full-stem `carry-over-evaluation-p<M>` is not refused; the step text covers it.
+- `adversarial-shard-merge` gains arms S1-S4 and its mutant battery SM1-SM4.
+
+**Consumer:** on the next pull, a labelled routing cite resolves, and a series-named review shard dir is refused at
+the merge instead of producing a misnamed record.
+
 ## [0.790.0] - 2026-10-15
 
 Batch 234 (graph-ledger-full-drain). Closes
