@@ -618,8 +618,10 @@ settle_record() {  # $1 = sidecar -> prints `<hash> <epoch>`; 1 when there is no
 # two-field `.settle` on a consumer's disk parse `<hash> <epoch>`, and a marker loss deletes
 # `.settle` -- which is itself a revision and must not take the count with it. Two concurrent
 # beats over one file may each count the same change; the count can read high, never zero.
-# IT SURVIVES DELIVERY and is cleared only by --reset (or a bound wipe): the printed line goes
-# through `say`, which --quiet silences, so the sidecar is the record a repair brief reads.
+# IT SURVIVES DELIVERY: the printed line goes through `say`, which --quiet silences, so the
+# sidecar is the record a repair brief reads, through --status. It is cleared by --reset, a bound
+# wipe, or a beat armed with a join epoch later than its last write (a new round; see
+# "ROUND-SCOPED RECORDS").
 revised_bump() {  # $1 = the .settle sidecar path; bumps its sibling .revised
   rb_f_="${1%.settle}.revised"
   rb_n_=0; [ -f "$rb_f_" ] && rb_n_="$(cat "$rb_f_" 2>/dev/null || echo 0)"
@@ -825,7 +827,11 @@ if [ "$STATUS" -eq 1 ]; then
     # A beat that DELIVERED a path drops its join state, so without this record --status would
     # call every consumed seat unarmed -- the undercount it exists to prevent. The record holds the
     # hash the beat consumed; a file changed since is judged afresh below.
-    sd_rec="$(cat "${COUNTER_DIR}/$(key_of "$t").delivered" 2>/dev/null || echo '')"
+    # A record older than a known join epoch is an earlier round's consumption of a reused path,
+    # not this round's (the beat also clears one when it arms -- see "ROUND-SCOPED RECORDS").
+    sd_c="${COUNTER_DIR}/$(key_of "$t")"
+    sd_rec="$(cat "${sd_c}.delivered" 2>/dev/null || echo '')"
+    if [ -n "$sd_rec" ] && sj_e="$(status_join "$t")" && [ "$(mtime_of "${sd_c}.delivered")" -lt "$sj_e" ]; then sd_rec=""; fi
     if [ -n "$sd_rec" ] && [ -s "$t" ] && [ "$sd_rec" = "$(content_hash "$t")" ]; then
       S_V="DELIVERED"; echo "DELIVERED $t -- consumed by a beat, unchanged since"
     elif ! sj="$(status_join "$t")"; then
@@ -848,6 +854,11 @@ if [ "$STATUS" -eq 1 ]; then
         S_V="UNSETTLED"
         echo "UNSETTLED $t -- marker present, settle pending (a beat must see its content unchanged for ${SETTLE}s)"
       fi
+    fi
+    # The revision count, so a repair brief reads it here and never computes a sidecar key by
+    # hand. Withheld when it predates a known join epoch: that count belongs to an earlier round.
+    if ! { sr_e="$(status_join "$t")" && [ "$(mtime_of "${sd_c}.revised")" -lt "$sr_e" ]; }; then
+      say_revised "$t" "$sd_c"
     fi
     if [ "$S_V" = "DELIVERED" ]; then S_DONE=$(( S_DONE + 1 )); else S_OUT=$(( S_OUT + 1 )); fi
     IFS='|'
@@ -1010,6 +1021,15 @@ for t in $TARGETS; do
   # join_of ran in a subshell; memoise its answer HERE so every later call in this process
   # returns it instead of re-reading a sidecar another beat may delete (see join_of).
   eval "JM_$(key_of "$t")=\$j"
+
+  # ROUND-SCOPED RECORDS. `.revised` and `.delivered` survive delivery on purpose (a repair brief
+  # and --status read them), so a path REUSED by a later round would inherit the earlier round's
+  # count and consumption. Rounds re-arm with `--since <round epoch>`, never --reset, so the join
+  # epoch is the round boundary: a record last written before it belongs to an earlier round and
+  # is dropped here, by the one writer, instead of adding a --reset duty to every step file.
+  for rr_ in "${c}.revised" "${c}.delivered"; do
+    [ -f "$rr_" ] && [ "$(mtime_of "$rr_")" -lt "$j" ] && rm -f "$rr_" 2>/dev/null
+  done
 
   if is_delivered "$t" "$j"; then
     say "DELIVERED $t"

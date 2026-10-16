@@ -1399,6 +1399,44 @@ M35_revised_deleted_on_delivery() {
   else bad "MUTANT revised-deleted-on-delivery: .revised ('$RS_AFTER') survived the restored rm — something else rewrites it"; fi
 }
 
+# --status SURFACES the persisted count, so a repair brief never computes a cksum key by hand; and
+# the count is ROUND-SCOPED: a later round re-arms with `--since <round epoch>` (never --reset), so
+# a reused seat path must not inherit the earlier round's revision -- not in --status, not on disk.
+revised_rounds() {  # $1 = subject -> RR_* from one world
+  W="$(mk_work)"; SI=$(( $(date +%s) - 30 ))
+  printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W/rv.md"
+  ( sleep 1.5; printf '%s\n- an edit above the marker\n%s\n' "$SKELETON" "$MARKER" > "$W/rv.md" ) & rr_w_=$!
+  obeat "$1" "$W" "$BEATOUT" 8 2 "$SI" --complete rv.md; wait "$rr_w_"
+  RR_BEAT="$(cat "$BEATOUT")"
+  CB_SETTLE=60 scall "$1" "$W" --complete --since "$SI" rv.md; RR_STATUS1="$OUT"
+  sleep 1; R2=$(( $(date +%s) + 1 )); sleep 1
+  CB_SETTLE=60 scall "$1" "$W" --complete --since "$R2" rv.md; RR_STATUS2="$OUT"
+  obeat "$1" "$W" "$BEATOUT" 1 2 "$R2" --complete rv.md
+  RR_DISK="$( [ -e "$W/_bmad-output/.wait-beats/$(fx_key rv.md).revised" ] && echo PRESENT || echo ABSENT )"
+  rm -rf "$W"
+}
+S16c_revised_status_and_rounds() {
+  revised_rounds "$SUBJ"
+  case "$RR_BEAT" in *"REVISED-AFTER-MARKER 1 rv.md"*) ok "revised-rounds: CONTROL — round one delivered rv.md revised once" ;;
+    *) bad "revised-rounds: round one did not report rv.md revised, so nothing below has a count to read: $RR_BEAT" ;; esac
+  case "$RR_STATUS1" in *"REVISED-AFTER-MARKER 1 rv.md"*) ok "revised-rounds: --status in the same round prints the persisted count" ;;
+    *) bad "revised-rounds: --status did not surface the count — a brief would hand-compute the sidecar key: $RR_STATUS1" ;; esac
+  case "$RR_STATUS2" in *"REVISED-AFTER-MARKER"*) bad "revised-rounds: --status for a LATER round still printed round one's count: $RR_STATUS2" ;;
+    *) ok "revised-rounds: --status for a later round withholds the earlier round's count" ;; esac
+  if [ "$RR_DISK" = ABSENT ]; then ok "revised-rounds: a beat armed for the later round drops round one's .revised"
+  else bad "revised-rounds: round one's .revised survived a beat armed with a later --since — it leaks into the next round"; fi
+}
+M36_revised_rounds_mutants() {
+  mutant revised-status-silent -e 's@^      say_revised "\$t" "\$sd_c"$@      :@' || return; M_RS="$MUT"
+  mutant revised-round-kept -e 's@^    \[ -f "\$rr_" \] && \[ "\$(mtime_of "\$rr_")" -lt "\$j" \] && rm -f "\$rr_" 2>/dev/null$@    :@' || return; M_RK="$MUT"
+  revised_rounds "$M_RS"
+  case "$RR_STATUS1" in *"REVISED-AFTER-MARKER"*) bad "MUTANT revised-status-silent: --status still printed the count — something else carries it" ;;
+    *) ok "MUTANT revised-status-silent: --status no longer surfaces the count — section 16c catches it" ;; esac
+  revised_rounds "$M_RK"
+  if [ "$RR_DISK" = PRESENT ]; then ok "MUTANT revised-round-kept: round one's .revised leaks past a later --since — section 16c catches it"
+  else bad "MUTANT revised-round-kept: .revised was dropped without the round clear — something else removes it"; fi
+}
+
 M27_status_absent_delivered() {
   mutant status-absent-delivered \
     -e 's@^      echo "WAITING   \$t -- absent or empty"$@      S_V="DELIVERED"; echo "DELIVERED $t"@' || return
