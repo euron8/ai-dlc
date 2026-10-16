@@ -1323,6 +1323,82 @@ S15b_status_absent_and_unsettled() {
   rm -rf "$W"
 }
 
+# A beat that DELIVERS drops the path's join state, so --status taken AFTER the consuming beat once
+# read every consumed seat as unarmed (WAITING) or, given --since, UNSETTLED: the s319 undercount
+# by another route. The beat now keeps the consumed hash; --status reads it while the file is
+# unchanged, judges a changed file afresh, and a --reset clears it.
+status_after_delivery() {  # $1 = subject -> sets SAD_* from one world
+  W="$(mk_work)"; SI=$(( $(date +%s) - 30 ))
+  printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W/done.md"
+  printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W/later.md"
+  obeat "$1" "$W" "$BEATOUT" 3 1 "$SI" --complete done.md later.md; SAD_BEAT="$(cat "$BEATOUT")"
+  CB_SETTLE=60 scall "$1" "$W" --complete done.md; SAD_PLAIN="$OUT"
+  CB_SETTLE=60 scall "$1" "$W" --complete --since "$SI" done.md; SAD_SINCE="$OUT"
+  printf '%s\n- edited after consumption\n%s\n' "$SKELETON" "$MARKER" > "$W/later.md"
+  CB_SETTLE=60 scall "$1" "$W" --complete --since "$SI" later.md; SAD_CHANGED="$OUT"
+  ( cd "$W" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=1 AI_DLC_WAIT_POLL_SECS=1 \
+      AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+      bash -c '"$@"; exit $?' _ bash "$1" --reset --complete done.md ) >/dev/null 2>&1
+  CB_SETTLE=60 scall "$1" "$W" --complete done.md; SAD_RESET="$OUT"
+  rm -rf "$W"
+}
+S15d_status_after_delivery() {
+  status_after_delivery "$SUBJ"
+  case "$SAD_BEAT" in *"DELIVERED done.md"*"DELIVERED later.md"*|*"DELIVERED later.md"*"DELIVERED done.md"*)
+    ok "status-after-delivery: CONTROL — the consuming beat delivered both seats" ;;
+    *) bad "status-after-delivery: the consuming beat did not deliver both, so nothing below was consumed: $SAD_BEAT" ;; esac
+  case "$SAD_PLAIN$SAD_SINCE" in *"DELIVERED done.md"*"DELIVERED done.md"*)
+    ok "status-after-delivery: a seat a beat consumed reads DELIVERED, with and without --since" ;;
+    *) bad "status-after-delivery: a consumed seat was not DELIVERED (plain: $SAD_PLAIN | since: $SAD_SINCE)" ;; esac
+  case "$SAD_CHANGED" in *"DELIVERED later.md"*) bad "status-after-delivery: a seat edited after consumption still read DELIVERED: $SAD_CHANGED" ;;
+    *"UNSETTLED later.md"*) ok "status-after-delivery: a seat edited after consumption is judged afresh (UNSETTLED), not DELIVERED" ;;
+    *) bad "status-after-delivery: an edited consumed seat read neither: $SAD_CHANGED" ;; esac
+  case "$SAD_RESET" in *"DELIVERED done.md"*) bad "status-after-delivery: --reset left the consumed record behind: $SAD_RESET" ;;
+    *"WAITING   done.md"*) ok "status-after-delivery: --reset clears the consumed record" ;;
+    *) bad "status-after-delivery: after --reset the seat read neither: $SAD_RESET" ;; esac
+}
+M34_status_no_delivered_record() {
+  mutant status-no-delivered-record -e 's@^    record_delivered "\$t" "\$c"$@    :@' || return
+  status_after_delivery "$MUT"
+  case "$SAD_PLAIN$SAD_SINCE" in *"DELIVERED done.md"*) bad "MUTANT status-no-delivered-record: a consumed seat still read DELIVERED without the record — something else carries it" ;;
+    *) ok "MUTANT status-no-delivered-record: without the record a consumed seat reads unarmed or UNSETTLED — section 15d catches it" ;; esac
+}
+
+# The REVISED-AFTER-MARKER count must outlive DELIVERED: the printed line goes through `say`, which
+# --quiet silences, so `<key>.revised` is the record a repair brief reads. Only --reset clears it.
+revised_survives() {  # $1 = subject -> RS_BEAT, RS_AFTER, RS_RESET
+  W="$(mk_work)"; SI=$(( $(date +%s) - 30 ))
+  printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W/rv.md"
+  ( sleep 1.5; printf '%s\n- an edit above the marker\n%s\n' "$SKELETON" "$MARKER" > "$W/rv.md" ) & rs_w_=$!
+  obeat "$1" "$W" "$BEATOUT" 8 2 "$SI" --quiet --complete rv.md; wait "$rs_w_"
+  RS_BEAT="$(cat "$BEATOUT")"
+  RS_AFTER="$(cat "$W/_bmad-output/.wait-beats/$(fx_key rv.md).revised" 2>/dev/null || echo ABSENT)"
+  ( cd "$W" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=1 AI_DLC_WAIT_POLL_SECS=1 \
+      AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+      bash -c '"$@"; exit $?' _ bash "$1" --reset --complete rv.md ) >/dev/null 2>&1
+  RS_RESET="$( [ -e "$W/_bmad-output/.wait-beats/$(fx_key rv.md).revised" ] && echo PRESENT || echo ABSENT )"
+  rm -rf "$W"
+}
+S16b_revised_survives_delivery() {
+  revised_survives "$SUBJ"
+  if [ -z "$RS_BEAT" ] && [ "$RS_AFTER" != ABSENT ]; then
+    ok "revised-survives: CONTROL — under --quiet the beat printed nothing, so the sidecar is the only record"
+  else bad "revised-survives: --quiet still printed, or no sidecar was left to read (beat: '$RS_BEAT', sidecar: $RS_AFTER)"; fi
+  case "$RS_AFTER" in ''|*[!0-9]*) bad "revised-survives: after DELIVERED .revised is '$RS_AFTER', not a count" ;;
+    *) if [ "$RS_AFTER" -ge 1 ]; then ok "revised-survives: after DELIVERED .revised still holds $RS_AFTER"
+       else bad "revised-survives: after DELIVERED .revised holds 0"; fi ;; esac
+  if [ "$RS_RESET" = ABSENT ]; then ok "revised-survives: --reset clears .revised"
+  else bad "revised-survives: .revised survived --reset"; fi
+}
+M35_revised_deleted_on_delivery() {
+  mutant revised-deleted-on-delivery \
+    -e 's@^    rm -f "\$c" "\$s" "\$pg" "\$gr" "\${c}\.settle" 2>/dev/null || true$@    rm -f "$c" "$s" "$pg" "$gr" "${c}.settle" "${c}.revised" 2>/dev/null || true@' \
+    -e 's@^    rm -f "\$c" "\$s" "\${c}\.progress" "\${c}\.grants" "\${c}\.settle" 2>/dev/null || true$@    rm -f "$c" "$s" "${c}.progress" "${c}.grants" "${c}.settle" "${c}.revised" 2>/dev/null || true@' || return
+  revised_survives "$MUT"
+  if [ "$RS_AFTER" = ABSENT ]; then ok "MUTANT revised-deleted-on-delivery: DELIVERED takes the count with it — section 16b catches it"
+  else bad "MUTANT revised-deleted-on-delivery: .revised ('$RS_AFTER') survived the restored rm — something else rewrites it"; fi
+}
+
 M27_status_absent_delivered() {
   mutant status-absent-delivered \
     -e 's@^      echo "WAITING   \$t -- absent or empty"$@      S_V="DELIVERED"; echo "DELIVERED $t"@' || return

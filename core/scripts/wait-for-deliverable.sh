@@ -330,7 +330,9 @@ set -u
 # --status: THE SAME PREDICATE, WITHOUT THE BEAT. A progress check ("how many seats are
 # done?") needs the shipped answer, not a hand-rolled last-line test that a trailing blank
 # line miscounts. Each path prints exactly one line:
-#   DELIVERED <path>     what a beat would consume now
+#   DELIVERED <path>     what a beat would consume now, or what a beat already consumed and
+#                        is unchanged since (its hash is kept in `<key>.delivered`, because a
+#                        delivering beat drops the join state --status otherwise reads)
 #   UNFINISHED <path>    present and written since the join armed, no marker last
 #   UNSETTLED <path>     marker present, settle pending -- the settle window needs a hash a
 #                        BEAT recorded more than SETTLE seconds ago, and --status records none
@@ -616,6 +618,8 @@ settle_record() {  # $1 = sidecar -> prints `<hash> <epoch>`; 1 when there is no
 # two-field `.settle` on a consumer's disk parse `<hash> <epoch>`, and a marker loss deletes
 # `.settle` -- which is itself a revision and must not take the count with it. Two concurrent
 # beats over one file may each count the same change; the count can read high, never zero.
+# IT SURVIVES DELIVERY and is cleared only by --reset (or a bound wipe): the printed line goes
+# through `say`, which --quiet silences, so the sidecar is the record a repair brief reads.
 revised_bump() {  # $1 = the .settle sidecar path; bumps its sibling .revised
   rb_f_="${1%.settle}.revised"
   rb_n_=0; [ -f "$rb_f_" ] && rb_n_="$(cat "$rb_f_" 2>/dev/null || echo 0)"
@@ -630,6 +634,13 @@ say_revised() {  # $1 = target, $2 = counter path (without suffix)
   [ "$sv_n_" -ge 1 ] || return 0
   echo "REVISED-AFTER-MARKER ${sv_n_} $1 -- its content changed ${sv_n_} time(s) after its ${MARK_NAME} line"
   echo "  was first seen. The seat edited a file it had declared final: re-read its findings."
+}
+
+# What a beat consumed, for --status: the hash of the file at delivery, in `<key>.delivered`. It
+# outlives the join state the delivery drops; --reset and a bound wipe remove it with the rest.
+record_delivered() {  # $1 = target, $2 = counter path (without suffix)
+  rd_h_="$(content_hash "$1")"
+  [ -n "$rd_h_" ] && printf '%s' "$rd_h_" > "${2}.delivered" 2>/dev/null || true
 }
 
 # The marked file has SETTLED: its hash equals the one its record holds from more than SETTLE
@@ -811,7 +822,13 @@ if [ "$STATUS" -eq 1 ]; then
       *) echo "FAIL: empty/blank deliverable path in target list." >&2; exit 64 ;;
     esac
     S_V="WAITING"
-    if ! sj="$(status_join "$t")"; then
+    # A beat that DELIVERED a path drops its join state, so without this record --status would
+    # call every consumed seat unarmed -- the undercount it exists to prevent. The record holds the
+    # hash the beat consumed; a file changed since is judged afresh below.
+    sd_rec="$(cat "${COUNTER_DIR}/$(key_of "$t").delivered" 2>/dev/null || echo '')"
+    if [ -n "$sd_rec" ] && [ -s "$t" ] && [ "$sd_rec" = "$(content_hash "$t")" ]; then
+      S_V="DELIVERED"; echo "DELIVERED $t -- consumed by a beat, unchanged since"
+    elif ! sj="$(status_join "$t")"; then
       echo "WAITING   $t -- no join armed on this path (no stored epoch and no --since)"
     elif [ ! -s "$t" ]; then
       echo "WAITING   $t -- absent or empty"
@@ -984,7 +1001,7 @@ for t in $TARGETS; do
   s="${c}.since"
   pg="${c}.progress"
   gr="${c}.grants"
-  [ "$RESET" -eq 1 ] && rm -f "$c" "$s" "$pg" "$gr" "${c}.settle" "${c}.revised" 2>/dev/null
+  [ "$RESET" -eq 1 ] && rm -f "$c" "$s" "$pg" "$gr" "${c}.settle" "${c}.revised" "${c}.delivered" 2>/dev/null
 
   # Whether THIS beat armed the join must be read before join_of, which creates
   # the sidecar as a side effect.
@@ -997,7 +1014,8 @@ for t in $TARGETS; do
   if is_delivered "$t" "$j"; then
     say "DELIVERED $t"
     say_revised "$t" "$c"
-    rm -f "$c" "$s" "$pg" "$gr" "${c}.settle" "${c}.revised" 2>/dev/null || true
+    record_delivered "$t" "$c"
+    rm -f "$c" "$s" "$pg" "$gr" "${c}.settle" 2>/dev/null || true
     continue
   fi
 
@@ -1256,7 +1274,8 @@ for t in $PENDING; do
   if is_delivered "$t" "$(join_of "$t")"; then
     say "DELIVERED $t"
     say_revised "$t" "$c"
-    rm -f "$c" "$s" "${c}.progress" "${c}.grants" "${c}.settle" "${c}.revised" 2>/dev/null || true
+    record_delivered "$t" "$c"
+    rm -f "$c" "$s" "${c}.progress" "${c}.grants" "${c}.settle" 2>/dev/null || true
     N_DELIVERED=$(( N_DELIVERED + 1 ))
   else
     b="$(cat "$c" 2>/dev/null || echo '?')"

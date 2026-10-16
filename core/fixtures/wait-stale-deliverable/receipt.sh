@@ -45,7 +45,7 @@ ENVB=(env AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR=
 world() { local d; d="$(mktemp -d "$ROOT/w.XXXXXX")" || exit 9; mkdir -p "$d/_bmad-output"; printf '%s' "$d"; }
 
 r549() {
-  local d a b m e alive
+  local d a b m e p alive holder_alive
   d="$(world)"; cd "$d" || exit 9
   own "${ENVB[@]}" AI_DLC_WAIT_BEAT_SECS=10 AI_DLC_WAIT_POLL_SECS=4 bash "$SUBJ" never.md >/dev/null 2>&1 & a=$!
   sleep 0.5
@@ -53,10 +53,14 @@ r549() {
   sleep 1; printf 'done\n' > y.md; wait "$b"; sleep 0.5
   m="$(cat _bmad-output/.beat-inflight 2>/dev/null || echo '')"; e="${m%% *}"
   alive=0; kill -0 "$a" 2>/dev/null && alive=1
+  p="${m#* }"; [ "$p" = "$m" ] && p=""
+  holder_alive=0; case "$p" in ''|*[!0-9]*) : ;; *) kill -0 "$p" 2>/dev/null && holder_alive=1 ;; esac
   kill "$a" 2>/dev/null; wait "$a" 2>/dev/null
   [ "$alive" = 1 ] || exit 9
   case "$e" in ''|*[!0-9]*) return 1 ;; esac
-  [ "$e" -gt "$(date +%s)" ]
+  # A live lease that names the beat which just exited is the same failure in another form: no
+  # live beat stands behind it. The marker must name a holder that is still running.
+  [ "$e" -gt "$(date +%s)" ] && [ "$holder_alive" = 1 ]
 }
 
 r566_one() {
@@ -70,7 +74,12 @@ r566_one() {
   sleep 1.2
   printf '# h\n### F-1\nx\nseat-complete: s 1 findings=1\n' > x.md
   wait "$a"; wait "$b"
-  grep -q '^DELIVERED x.md' a.out && grep -q '^DELIVERED x.md' b.out
+  grep -q '^DELIVERED x.md' a.out && grep -q '^DELIVERED x.md' b.out || return 1
+  # The fix must not get there by keeping the join epoch alive past delivery: a later beat
+  # re-armed WITHOUT --since still reads the consumed file as pre-existing (Rule 28).
+  own "${ENVB[@]}" AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_SETTLE_SECS=2 \
+    bash "$SUBJ" --complete x.md > c.out 2>&1
+  ! grep -q '^DELIVERED x.md' c.out
 }
 r566() {
   local p1 p2 p3
@@ -83,14 +92,15 @@ r541() {
   d="$(world)"; cd "$d" || exit 9; s0=$(( $(date +%s) - 30 ))
   printf '### e\n- edit: x\nrepair-complete: serial requirements\n' > rec.md
   printf '### e\n- edit: x\nseat-complete: part 3\n' > part.md
+  printf '### e\n- edit: x\nrepair-complete: done\n' > bare.md
   "${ENVB[@]}" AI_DLC_WAIT_BEAT_SECS=4 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_SETTLE_SECS=1 \
-    bash "$SUBJ" --complete-repair --since "$s0" rec.md part.md > o.txt 2>&1 || return 1
+    bash "$SUBJ" --complete-repair --since "$s0" rec.md part.md bare.md > o.txt 2>&1 || return 1
   grep -q '^DELIVERED rec.md' o.txt || return 1
-  ! grep -q '^DELIVERED part.md' o.txt
+  ! grep -q '^DELIVERED part.md' o.txt && ! grep -q '^DELIVERED bare.md' o.txt
 }
 
 r547() {
-  local d s0 t0
+  local d s0 t0 n0 n1
   d="$(mktemp -d "$ROOT/w.XXXXXX")" || exit 9; cd "$d" || exit 9; s0=$(( $(date +%s) - 30 ))
   printf 'h\nseat-complete: s\n\n  \n' > tb.md
   printf 'h\nseat-complete: s\n- finding after\n' > nl.md
@@ -99,7 +109,19 @@ r547() {
   [ $(( $(date +%s) - t0 )) -le 2 ] || return 1
   [ ! -e _bmad-output ] || return 1
   grep -q '^UNSETTLED tb.md' o.txt && grep -q '^UNFINISHED nl.md' o.txt && grep -q '^WAITING   absent.md' o.txt \
-    && ! grep -q '^DELIVERED' o.txt
+    && ! grep -q '^DELIVERED' o.txt || return 1
+  # The same call inside a LIVE state dir: a join epoch, a settle record, a bound the beat would
+  # wipe on sight, and another beat's lease registration. Nothing in it may be written or added.
+  mkdir -p _bmad-output/.wait-beats || exit 9
+  printf '%s' "$s0" > _bmad-output/.wait-beats/0000000000000001.since
+  printf 'abc %s' "$s0" > _bmad-output/.wait-beats/0000000000000001.settle
+  printf '99' > _bmad-output/.wait-beats/.bound
+  printf '%s' "$(( $(date +%s) + 60 ))" > _bmad-output/.wait-beats/.lease-1
+  n0="$(find _bmad-output | wc -l | tr -d ' ')"
+  : > ref.stamp; sleep 1
+  env AI_DLC_WAIT_SETTLE_SECS=60 bash "$SUBJ" --status --complete --since "$s0" tb.md nl.md absent.md > o2.txt 2>&1 || return 1
+  n1="$(find _bmad-output | wc -l | tr -d ' ')"
+  [ "$n0" = "$n1" ] && [ -z "$(find _bmad-output -newer ref.stamp)" ] && [ "$(cat _bmad-output/.wait-beats/.bound)" = 99 ]
 }
 
 r548() {
