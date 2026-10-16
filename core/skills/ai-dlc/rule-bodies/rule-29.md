@@ -106,6 +106,9 @@ on in beats:
               is NOT absent: the seat wrote a file. Read it before you decide;
               a re-dispatch over it discards its findings. Only `absent` is
               non-delivery.
+    exit 64 -- REFUSED. The call was malformed and NO beat ran, so the join
+              is NOT armed: read its `FAIL:` line, correct the call, and
+              arm again. It is never non-delivery and never waiting.
 
 **One Bash call, one beat -- however many deliverables.** All paths poll inside
 the same beat. Never chain beats (`wait a.md; wait b.md`) into one `Bash` call:
