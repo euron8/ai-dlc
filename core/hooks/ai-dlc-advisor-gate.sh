@@ -103,6 +103,20 @@
 #     gated action does not move. RESIDUAL COST: 2 of those 14 lines were the harness's
 #     "Your response above was cut off mid-stream" continuation, not a re-dispatch; such a
 #     resumed write now costs one more advisor call. It never wedges.
+#     THE HEADER-ONLY FIRST WRITE (BL-567) is NOT a gated action. The early-write instruction
+#     (_gate-procedures.md "Validation cycle" item 1; adversary.md item 5) has every review shard
+#     Write its header FIRST, before verifying anything; measured on graph s319, 17 of 19 adversary
+#     shards were denied on exactly that write, and several then wrote nothing until finished, so
+#     their beats scored them ABSENT. A teammate Write to `/shards/<x>-p<N>/<f>.md` (not a repair
+#     shard) carrying no `### ` heading, no `F-<n>` heading (party seats use `## F-1`), no
+#     `seat-complete:` and no `<x>verdict:` line is allowed AND NEVER RECORDED -- recording it would
+#     make the write that adds the first finding a "re-write" and acquit it. A provenance block
+#     with counts and no verdict is header (the s319 shards' own first writes). Write only: an
+#     Edit is judged as before, so the Edit adding the first finding owes the consult. Measured
+#     over graph's 461 subagent first-writes to a planning-artifacts review shard (repair shards
+#     excluded): 104 header-only, 90 of them denied.
+#     KNOWN: a header-only Write over a file already holding findings is not gated (it deletes
+#     them; the merge's seat-complete count still refuses the shard).
 #   UNMEASURED: agent teams. A top-level teammate (not a subagent) carries no `agent_id`, so it is
 #   judged as a LEAD on its own `transcript_path`: its pushes are gated and its verdict writes are
 #   not. No team transcript was available to measure which file that path names.
@@ -329,6 +343,18 @@ def matekind:
       then "verdict" else "" end
   else "" end;
 def kind($role): if $role == "lead" then leadkind else matekind end;
+# BL-567: a teammate HEADER-ONLY Write to a review shard (`/shards/<x>-p<N>/<f>.md`, not a repair
+# shard) -- no `### ` heading, no `F-<n>` heading, no `seat-complete:` and no `*verdict:` line --
+# is the early write the brief prescribes, and is `hdrw`. Each site maps it to "" on its own line:
+# the incoming call is allowed, and scan never records it, so the write adding the first finding
+# is still the gated action of this deliverable. A Write replaces the file, so its content IS the file.
+# No apostrophe anywhere in this literal: one would close it.
+def hdronly: .name == "Write"
+  and ((.input.file_path // "") | tostring | test("/shards/[^/]+-p[0-9]+/[^/]+\\.md$") and (test("/shards/[^/]*repair[^/]*/") | not))
+  and ((.input.content // "") | tostring
+       | (test("(^|\\n)###[ \\t]") or test("(^|\\n)#{1,6}[ \\t]+F-[0-9]") or test("(^|\\n)[ \\t]*seat-complete:")
+          or test("(^|\\n)[ \\t]*[A-Za-z_-]*verdict:")) | not);
+def kindx($role): if $role == "mate" and hdronly then "hdrw" else kind($role) end;
 # A background-task event the harness delivers as a user line is not a re-dispatch. Keyed on the
 # `origin.kind` field of the line, never on its text: the text openings are harness-origin prefixes,
 # which core/schemas/harness-origin.json declares once and invariant I91 forbids restating.
@@ -370,7 +396,8 @@ PARSED="$(printf '%s' "$IN" | jq -r --arg home "${HOME:-}" "$CLASSIFY"'
   | ((.transcript_path // "") | tostring) as $tp
   | ($tp | if test("^.+/[^/]+/[^/]+\\.jsonl$") then sub("/[^/]+/[^/]+$"; "") else "" end) as $proj
   | (if ((.agent_id // "") | tostring) == "" then "lead" else "mate" end) as $role
-  | (if ($call | twrite($proj; $home)) then "twrite" else ($call | kind($role)) end) as $k
+  | ((if ($call | twrite($proj; $home)) then "twrite" else ($call | kindx($role)) end)
+     | sub("^hdrw$"; "")) as $k
   | (if $k == "push" and $call.name == "Bash" then (($ti.command // "") | tostring | l3push) else "" end) as $l3
   | (if $call.name == "Bash" then (($ti.command // "") | tostring | csegs | map(gitpush and nvflag and (isdelete | not)) | any) else false end) as $nv
   | @sh "TP=\($tp) AID=\((.agent_id // "") | tostring) CWD=\((.cwd // "") | tostring) PROJ=\($proj) ROLE=\($role) KIND=\($k) FP=\(($ti.file_path // "") | tostring) NEWN=\(($ti.content // "") | tostring | heads) TUID=\((.tool_use_id // "") | tostring) L3=\($l3) NV=\($nv)"' 2>/dev/null)" \
@@ -449,7 +476,8 @@ jq -n -R -r --arg home "${HOME:-}" --arg proj "$PROJ" --arg role "$ROLE" --arg t
          elif $b.type == "advisor_tool_result" then
            .res = (if (($b.content | if type == "object" then .error_code else null end) // "") == "unavailable" then "U" else "R" end)
          elif ($b.type == "tool_use" and (($b.id // "") | tostring) != "" and (($b.id | tostring) != $tuid)) then
-           ({name: $b.name, input: ($b.input // {})} | kind($role) | sub("^gatelogw$"; "gatelog")) as $k
+           ({name: $b.name, input: ($b.input // {})} | kindx($role) | sub("^gatelogw$"; "gatelog")
+            | sub("^hdrw$"; "")) as $k
            | if $k != "" then .g[$b.id | tostring] = [$n, (($b.input.file_path // "") | tostring), $k] else . end
          elif ($b.type == "tool_use" and $tuid != "" and (($b.id // "") | tostring) == $tuid) then .seen = 1 | .cur = $mk
          elif ($b.type == "tool_result" and $b.is_error == true

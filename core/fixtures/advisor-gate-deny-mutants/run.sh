@@ -29,7 +29,7 @@
 #        nothing, 1 = an assertion failed, 2 = fixture broken.
 SHARDS="a b c d e"
 # A ratchet, raised when a mutant is added: lowering it is a visible edit, a lost mutant is not.
-MIN_MUTANTS=81
+MIN_MUTANTS=89
 set -uo pipefail
 
 # The pre-push gate exports AI_DLC_* tunables; none is read here, but scrub them all the same.
@@ -144,11 +144,11 @@ CTL="$(score "$MUT/hook-control.sh" "$W/failed.control")"
 # Expected sets are C-locale sorted, which is what score() prints.
 # 1. the whole subject replaced by silence: every arm holding a DENY, WARN or stderr cell fails.
 #    ENVELOPE holds only SILENT cells since batch 208 and survives it; FAILED and REREAD hold DENY cells.
-mut silence "BASHC BMADONLY BODY CLOSE DENIED DETACHED FAILED FAILOPEN GATELOG GHREPO MATE MATEABSENT MATEPATH MATEREWRITE MCPNAME MERGE NOVERIFY ORDER PATHGIT PERKIND PUSH QUOTEDALT QUOTEDC QUOTEDENV REARM REASON REDISPATCH REREAD SELF SELFLAST STACK TWRITE UNAV UPDATE UPDATECUT UPDATEREF WINDOW WITHDRAWN WRAP" -e '2i\
+mut silence "BASHC BMADONLY BODY CLOSE DENIED DETACHED FAILED FAILOPEN GATELOG GHREPO HDRONLY MATE MATEABSENT MATEPATH MATEREWRITE MCPNAME MERGE NOVERIFY ORDER PATHGIT PERKIND PUSH QUOTEDALT QUOTEDC QUOTEDENV REARM REASON REDISPATCH REREAD SELF SELFLAST STACK TWRITE UNAV UPDATE UPDATECUT UPDATEREF WINDOW WITHDRAWN WRAP" -e '2i\
 exit 0'
 # 2. warn-only: the rejected design, the same text as context with no decision.
 #    UNAV survives it by design: the warn path is its own emission and this mutant leaves it intact.
-mut warn-only "BASHC BMADONLY BODY CLOSE DENIED DETACHED FAILED GATELOG GHREPO MATE MATEPATH MATEREWRITE MCPNAME MERGE NOVERIFY ORDER PATHGIT PERKIND PUSH QUOTEDALT QUOTEDC QUOTEDENV REARM REASON REDISPATCH REREAD SELF SELFLAST STACK TWRITE UPDATE UPDATECUT UPDATEREF WINDOW WITHDRAWN WRAP" \
+mut warn-only "BASHC BMADONLY BODY CLOSE DENIED DETACHED FAILED GATELOG GHREPO HDRONLY MATE MATEPATH MATEREWRITE MCPNAME MERGE NOVERIFY ORDER PATHGIT PERKIND PUSH QUOTEDALT QUOTEDC QUOTEDENV REARM REASON REDISPATCH REREAD SELF SELFLAST STACK TWRITE UPDATE UPDATECUT UPDATEREF WINDOW WITHDRAWN WRAP" \
   -e 's/permissionDecision: "deny", permissionDecisionReason: \$m/additionalContext: $m/'
 # 3. no grant test: a hook with a knob-free default of ON.
 mut no-grant-test "NOGRANT WITHDRAWN" -e '/^\[ "\${GRANT:-none}" = on \] || exit 0$/d'
@@ -181,7 +181,7 @@ mut update-gated "UPDATE" -e 's|ai-dlc-update/\*) exit 0 ;;|ai-dlc-update-NEVER/
 mut detached-excluded "DETACHED" -e 's|\|\| _br=""$|\|\| _br="ai-dlc-update/unknown"|'
 # 15. a teammate is judged on the handed (parent) transcript. Every teammate world whose parent
 #     holds an advisor call dies, which is the point: the parent's call clears the teammate.
-mut mate-on-parent "MATE MATEABSENT MATEPATH MATEREWRITE REDISPATCH" -e 's|^\[ -z "\$AID" \] \|\| JUDGED=.*$|:|'
+mut mate-on-parent "HDRONLY MATE MATEABSENT MATEPATH MATEREWRITE REDISPATCH" -e 's|^\[ -z "\$AID" \] \|\| JUDGED=.*$|:|'
 # 16. an absent teammate file falls back to the handed path (the operator's local hook).
 mut mate-fallback "MATEABSENT" -e 's/^\[ -r "\$JUDGED" \] || {/[ -r "$JUDGED" ] || JUDGED="$TP"; [ -r "$JUDGED" ] || {/'
 # 17. a teammate's push is gated like the lead's.
@@ -338,6 +338,23 @@ mutc nv-lead-only "NOVERIFY" "NOVERIFY:nv-mate" -e 's/^if \[ "\$NV" = true \] &&
 mutc nv-needs-grant "NOVERIFY" "NOVERIFY:nv-first" -e 's/^if \[ "\$NV" = true \] && \[ -f /if [ "$NV" = true ] \&\& grep -q advisor_tool "$TP" \&\& [ -f /'
 # an advisor call licenses the flag (the s319 03:05Z shape).
 mutc nv-advisor-licenses "NOVERIFY" "NOVERIFY:nv-abbr NOVERIFY:nv-chain NOVERIFY:nv-mate NOVERIFY:nv-seed NOVERIFY:nv-update" -e 's/^if \[ "\$NV" = true \] && \[ -f /if [ "$NV" = true ] \&\& ! grep -q server_tool_use "$TP" \&\& [ -f /'
+# --- BL-567: the header-only first write ---
+# the header Write gated after all (the pre-fix hook): step 1 is denied, so the sequence reads DENY>DENY.
+mutc hdr-gated "HDRONLY" "HDRONLY:hdr-cross HDRONLY:hdr-seq HDRONLY:hdr-seq-sc HDRONLY:hdr-write" -e 's/^     | sub("^hdrw\$"; "")) as \$k$/     | sub("^hdrw$"; "verdict")) as $k/'
+# the header Write allowed but RECORDED: the write adding the first finding becomes a re-write and sails through.
+mutc hdr-recorded "HDRONLY" "HDRONLY:hdr-seq HDRONLY:hdr-seq-sc" -e 's/^            | sub("^hdrw\$"; "")) as \$k$/            | sub("^hdrw$"; "verdict")) as $k/'
+# a `### ` finding heading is header.
+mutc hdr-no-h3 "HDRONLY" "HDRONLY:hdr-finding" -e 's/| (test("(^|\\\\n)###\[ \\\\t\]") or /| (/'
+# a party seat's `## F-1` heading is header.
+mutc hdr-no-fid "HDRONLY" "HDRONLY:hdr-fid" -e 's/ or test("(^|\\\\n)#{1,6}\[ \\\\t\]+F-\[0-9\]") or / or /'
+# a completion line is header.
+mutc hdr-no-seatc "HDRONLY" "HDRONLY:hdr-seatc HDRONLY:hdr-seq-sc" -e 's/ or test("(^|\\\\n)\[ \\\\t\]\*seat-complete:")$//'
+# a verdict line is header.
+mutc hdr-no-verdict "HDRONLY" "HDRONLY:hdr-shardverdict HDRONLY:hdr-verdict" -e 's/^          or test("(^|\\\\n)\[ \\\\t\]\*\[A-Za-z_-\]\*verdict:")) | not);$/          ) | not);/'
+# an Edit is judged by its new text: the Edit adding the first finding to a header-only file escapes.
+mutc hdr-edit-too "HDRONLY" "HDRONLY:hdr-edit-del" -e's/^def hdronly: \.name == "Write"$/def hdronly: (.name == "Write" or .name == "Edit")/' -e 's/^  and ((\.input\.content \/\/ "") | tostring$/  and ((.input.content \/\/ .input.new_string \/\/ "") | tostring/'
+# a repair shard's header-only write is exempt too.
+mutc hdr-repair-too "HDRONLY" "HDRONLY:hdr-repair" -e 's/ and (test("\/shards\/\[^\/\]\*repair\[^\/\]\*\/") | not))$/)/'
 
 # Every mutant dealt to this shard must have RUN, and every one that ran must have died exactly.
 [ "$n_seen" -eq "$nmine" ] || bad "[J1] shard '$GROUP' reached $n_seen mutants, $nmine dealt -- a dealt mutant never ran"
