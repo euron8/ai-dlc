@@ -960,7 +960,7 @@ in this order:
    resolution dispatch"). It then appends one
    `- (event) Render <pass>: re-derived from memlog through <last decision>` line to `.memlog.md`;
    a change applied with Edit is recorded as `- (event) Hand-edit <pass>`, never as Render. A
-   `(decision)` entry after the last such Render line is a stale SPEC. Its `edit:` lines cite
+   `(decision)` entry after the last such Render line is a stale SPEC, and the join refuses it. Its `edit:` lines cite
    both files by their project-relative paths under `_bmad-output/specs/s<N>/<slug>/`.
 3. **Join and assemble.** Beat-join every part, then run
    `scripts/ai-dlc/join-remediator-shards.sh --subject <N> --base <base sha> --pass <M> <that dir> --since <ISO> --until <ISO>`.
