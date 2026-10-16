@@ -401,7 +401,7 @@ gp-probe-ledger|S|steps/_gate-procedures.md|## Adversarial review dispatch (refe
 gp-probe-ledger-rerun|S|steps/_gate-procedures.md|## Adversarial review dispatch (referenced by step files)|## Divergence resolution dispatch|**The probe ledger is load-bearing until the consumer's hook writes `transcript_path`.**|para|is re-run after the next dispatch writes the new keys, never hand-filled
 adv-shard-sentinel|R|adversary.md|## Contract|## Severity|1. **Run the evaluation you were dispatched for, in your own context.**|para|**A shard writes `tool_use_id: NOT_ACCESSIBLE`, never an id it was told or guessed.**
 gp-derive-file|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|Every re-run names a FILE and never the slot directory.|para|`validate-artifact-derivations.sh <the joined repair record>`
-gp-join-serial|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh --complete-repair|para|--complete-repair --since <dispatch epoch> --dispatch <agentId> <repair_record_path>
+gp-join-serial|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh --complete-repair|para|--complete-repair --dispatch <agentId> <repair_record_path>
 PINS
 }
 

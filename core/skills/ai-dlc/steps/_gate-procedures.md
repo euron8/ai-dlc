@@ -1001,8 +1001,8 @@ in this order:
    and puts its output in the serial remediator's brief. It lists the text each shard replaced
    with every place that text still stands (`HIT`), and every cite into a repaired file whose
    line moved (`MOVED-CITE`); the remediator adjudicates those lines rather than deriving them.
-   The run consumes the pre-repair copies it reads, so a second run without `--keep` exits 3
-   `UNASSESSABLE`; any re-run passes `--keep`. A files-mode repair has no split directory, so
+   The run consumes the pre-repair copies it reads, so a later run exits 3 `UNASSESSABLE`
+   unless the run before it passed `--keep`. A files-mode repair has no split directory, so
    the script exits 3 there and the remediator runs the grep itself.
 
 The party and elicitation repairs run this same procedure, under the shard dirs and record
@@ -1034,7 +1034,7 @@ that derives every factual claim the repair asserts, with its output. The next a
 verifies against that record; so does the gate's re-run of the failed checks.
 
 **Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh --complete-repair
---since <dispatch epoch> --dispatch <agentId> <repair_record_path>`. The serial remediator and the
+--dispatch <agentId> <repair_record_path>`. The serial remediator and the
 unsharded `shard: none (serial-document)` remediator both end their record with `repair-complete:
 serial <pass>`, which only `--complete-repair` waits for; the part records a shard join writes are
 written by that join, synchronously, and need no beat.
