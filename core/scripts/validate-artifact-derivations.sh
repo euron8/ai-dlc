@@ -60,6 +60,31 @@
 # skip would let an author move a claim out of reach of the checker by writing it in a
 # language the checker does not run.
 #
+# A RECORD'S LATER RE-DERIVATION SUPERSEDES ITS EARLIER FENCE. In a review or repair record --
+# the walk's own record grammar below, `is_record` -- a `$ ` command is SUPERSEDED when a LATER
+# `$ ` command line in the same file is byte-identical. It is not run and not counted; the LAST
+# copy runs and its verdict stands, and each skip is printed on stderr beside the FAIL lines:
+#
+#     SUPERSEDED: <file>:<skipped-line> by <file>:<later-line>
+#
+# A record is append-only, so re-deriving a stale figure means writing the command again further
+# down, and until this rule the earlier fence kept the record red for good. Measured on the
+# reference consumer's s319 `requirements-repair-p1.md`: 9 of 105 commands stale, every one
+# re-derived in a later block, and the file still failed. Under this rule all 9 are superseded,
+# 13 of the 105 in all, and the 4 reproducing ones each have a later identical copy that runs.
+# WHAT IT ACQUITS, measured over the reference consumer's records: 54 of 366 fence-carrying
+# records repeat a command; 15 earlier copies record an output different from the later one's,
+# and every one of the 15 is marked by its author as history (s319 and s317). The key is the
+# command alone: a key of command plus recorded output could only supersede copies that pass.
+# A live document (prd, stories, digests) supersedes nothing -- an earlier sentence there is
+# still asserted -- and neither does a record-named file outside `s<digits>/`. Only a `$ ` line
+# the block grammar reads as a COMMAND counts as a later copy; the same text in a `text` fence,
+# in prose, or as a recorded output line indented deeper than its fence never does. `--list`
+# still lists every command.
+# NOT COVERED: `ai-dlc-derivation-capture.sh` validates a masked copy under a `mktemp -d`
+# parent, never under `s<digits>/`, so supersession never fires there -- a Write that re-carries
+# an earlier stale fence is still blocked by the hook.
+#
 # Exit: 0 all derivations reproduce | 1 a derivation is stale or malformed | 2 usage, a
 # derivation that did not run to completion or whose output could not be COMPARED (an
 # `UNRUN:` line names each; run_pair says why), or a directory target that could not be
@@ -528,8 +553,21 @@ cmd_is_safe() { # $1 command -> 0 safe, 1 refused (reason in REFUSED)
 }
 
 TMP_SAFE="$(mktemp)"; TMP_OUT="$(mktemp)"; TMP_EXP="$(mktemp)"; TMP_SENT="$(mktemp)"; TMP_RAN="$(mktemp)"
-TMP_NEXP="$(mktemp)"; TMP_NOUT="$(mktemp)"; TMP_LIST="$(mktemp)"
-trap 'rm -f "$TMP_SAFE" "$TMP_OUT" "$TMP_EXP" "$TMP_SENT" "$TMP_RAN" "$TMP_NEXP" "$TMP_NOUT" "$TMP_LIST" "$TMP_LIST.keep"' EXIT
+TMP_NEXP="$(mktemp)"; TMP_NOUT="$(mktemp)"; TMP_LIST="$(mktemp)"; TMP_EV="$(mktemp)"
+trap 'rm -f "$TMP_SAFE" "$TMP_OUT" "$TMP_EXP" "$TMP_SENT" "$TMP_RAN" "$TMP_NEXP" "$TMP_NOUT" "$TMP_LIST" "$TMP_LIST.keep" "$TMP_EV" "$TMP_EV.sup"' EXIT
+
+# THE RECORD GRAMMAR, ONCE. The directory walk skips a record and check_file lets a record's
+# later copy supersede an earlier one; both call this one awk function, so the two cannot
+# disagree about what a record is. A record is a file whose parent directory is `s<digits>` and
+# whose basename is one core writes as a review or repair record -- the walk's comment says why
+# the grammar is exactly these names.
+REC_AWK='
+function is_record(parent, base) {
+  if (parent !~ /^s[0-9]+$/) return 0
+  return (base ~ /-adversarial-p[0-9]+\.md$/ || base ~ /-repair-p[0-9]+\.md$/ ||
+          base == "requirements-party-repair.md" || base == "requirements-elicitation-repair.md" ||
+          base == "requirements-elicitation.md")
+}'
 # The one-line stdin every derivation runs on -- run_pair's READS-STDIN arm says why.
 STDIN_SENTINEL="AI-DLC-DERIVATION-STDIN-SENTINEL"
 printf '%s\n' "$STDIN_SENTINEL" > "$TMP_SENT"
@@ -578,7 +616,7 @@ norm() { sed 's/[[:space:]]*$//' | sed '/^$/d'; }
 # not read as a closer, where CommonMark would accept it, so the block runs to end of file and
 # is reported unclosed -- loud, not silent. Zero instances of either in the reference corpus.
 #
-# THE INDENT AND SHED RULES ARE INLINE IN check_file, NOT HELPER FUNCTIONS, because a helper
+# THE INDENT AND SHED RULES ARE INLINE IN walk_blocks, NOT HELPER FUNCTIONS, because a helper
 # reached through `$( )` forks once per line of every markdown file. Measured on a 2855-line
 # consumer artifact, `--list` only: 0.05s before the rules existed, 2.61s with the rules in
 # forked helpers, 0.10s inline -- and `ai-dlc-derivation-capture.sh` pays this on every Write
@@ -589,18 +627,24 @@ is_opener() { # $1 line with its indent already shed -> 0 when it opens a ```der
   [ "$b" = '```derived' ]
 }
 
-check_file() { # $1 artifact path
-  local f="$1" in_block=0 line body indent cmd expected_started
-  local blockline=0 cmdline=0
-  files_seen=$((files_seen + 1))
-  cmd=""; : > "$TMP_EXP"; expected_started=0; indent=""
-  local lineno=0
+# THE BLOCK GRAMMAR IS WALKED ONCE, AND EVERYTHING ELSE READS THE WALK. walk_blocks turns a file
+# into one event per line it means something to:
+#   O <line>               a ```derived opener          X <line>   its closer
+#   C <line> - <command>   a `$ ` command line          E <line> <body>   a line of recorded output
+#   U <line>               the opener of a block that is never closed (end of file)
+# check_file collects the walk first and runs second, so the supersession pre-pass and the run
+# read ONE parse: a `$ ` line is a "later copy" only when this walk calls it a command. A raw `$ `
+# scan would also count one in a `text` fence, in prose, or as an output line indented deeper
+# than its fence, and acquit a stale fence on a copy that never runs.
+walk_blocks() { # $1 artifact path -> events on stdout; sets NCMD to the number of C events
+  local f="$1" in_block=0 line body indent="" lineno=0 blockline=0
+  NCMD=0
   while IFS= read -r line || [ -n "$line" ]; do
     lineno=$((lineno + 1))
     if [ "$in_block" -eq 0 ]; then
       indent="${line%%[![:blank:]]*}"          # the line's leading blanks, possibly empty
       if is_opener "${line#"$indent"}"; then
-        in_block=1; blockline=$lineno; blocks=$((blocks + 1)); cmd=""; : > "$TMP_EXP"
+        in_block=1; blockline=$lineno; printf 'O %s \n' "$lineno"
       else
         indent=""
       fi
@@ -613,31 +657,70 @@ check_file() { # $1 artifact path
       *)          body="${line#"${line%%[![:blank:]]*}"}" ;;
     esac
     case "$body" in
-      '```'*)
-        [ -n "$cmd" ] && run_pair "$f" "$cmdline" "$cmd"
-        in_block=0; cmd=""; : > "$TMP_EXP"; indent=""
-        continue ;;
+      '```'*) printf 'X %s \n' "$lineno"; in_block=0; indent=""; continue ;;
     esac
     case "$body" in
-      '$ '*)
-        [ -n "$cmd" ] && run_pair "$f" "$cmdline" "$cmd"
-        cmd="${body#\$ }"; cmdline=$lineno; : > "$TMP_EXP"
-        continue ;;
+      '$ '*) printf 'C %s - %s\n' "$lineno" "${body#\$ }"; NCMD=$((NCMD + 1)); continue ;;
     esac
-    [ -n "$cmd" ] && printf '%s\n' "$body" >> "$TMP_EXP"
+    printf 'E %s %s\n' "$lineno" "$body"
   done < "$f"
-  if [ "$in_block" -eq 1 ]; then
-    fail "GRAMMAR" "$f:$blockline opens a \`\`\`derived block that is never closed."
-  fi
+  [ "$in_block" -eq 0 ] || printf 'U %s \n' "$blockline"
+  return 0
 }
 
-run_pair() { # $1 file  $2 line  $3 command   (expected output is in $TMP_EXP)
-  local f="$1" ln="$2" c="$3" rc
-  checked=$((checked + 1))
+check_file() { # $1 artifact path
+  local f="$1" ev kind rest ln text cmd="" cmdline=0 csup="" d
+  files_seen=$((files_seen + 1))
+  : > "$TMP_EXP"
+  walk_blocks "$f" > "$TMP_EV"
+  # THE SUPERSESSION PRE-PASS (the header's rule). Only a file with two commands can hold a
+  # repeat, so a one-command file costs no fork; `is_record` decides inside the awk, so a live
+  # document passes through unchanged. A record's command whose LAST copy is a later line is
+  # rewritten `C <line> <that later line> <command>`, and run_pair skips it.
+  if [ "$NCMD" -ge 2 ]; then
+    d="${f%/*}"; [ "$d" = "$f" ] && d="."
+    case "$d" in .|'') d="$PWD" ;; esac
+    # LC_ALL=C: the key is the command's BYTES, and a record carrying a byte its locale cannot
+    # decode must not abort the pre-pass.
+    LC_ALL=C awk -v par="${d##*/}" -v bn="${f##*/}" "$REC_AWK"'
+      BEGIN { rec = is_record(par, bn) }
+      FNR == NR { if (substr($0, 1, 2) == "C ") { r = substr($0, 3); i = index(r, " "); ln = substr(r, 1, i - 1); c = substr(r, i + 3); last[c] = ln }; next }
+      rec && substr($0, 1, 2) == "C " {
+        r = substr($0, 3); i = index(r, " "); ln = substr(r, 1, i - 1); c = substr(r, i + 3)
+        if (last[c] != ln) { print "C " ln " " last[c] " " c; next }
+      }
+      { print }' "$TMP_EV" "$TMP_EV" > "$TMP_EV.sup" && mv "$TMP_EV.sup" "$TMP_EV" \
+      || { printf 'REFUSED: could not read which commands in %s are re-derived later, so its derivations were never run; no verdict. Re-run once the fault is gone.\n' "$f" >&2; exit 2; }
+  fi
+  while IFS= read -r ev; do
+    kind="${ev%% *}"; rest="${ev#* }"; ln="${rest%% *}"; text="${rest#* }"
+    case "$kind" in
+      O) blocks=$((blocks + 1)); cmd=""; : > "$TMP_EXP" ;;
+      C) [ -n "$cmd" ] && run_pair "$f" "$cmdline" "$cmd" "$csup"
+         csup="${text%% *}"; [ "$csup" = "-" ] && csup=""
+         cmd="${text#* }"; cmdline=$ln; : > "$TMP_EXP" ;;
+      E) [ -n "$cmd" ] && printf '%s\n' "$text" >> "$TMP_EXP" ;;
+      X) [ -n "$cmd" ] && run_pair "$f" "$cmdline" "$cmd" "$csup"
+         cmd=""; : > "$TMP_EXP" ;;
+      U) fail "GRAMMAR" "$f:$ln opens a \`\`\`derived block that is never closed." ;;
+    esac
+  done < "$TMP_EV"
+}
+
+run_pair() { # $1 file  $2 line  $3 command  $4 the later line that supersedes it, or empty
+  #            (expected output is in $TMP_EXP)
+  local f="$1" ln="$2" c="$3" sup="${4:-}" rc
   if [ "$LIST_ONLY" -eq 1 ]; then
+    checked=$((checked + 1))
     printf '  %s:%s  %s\n' "$f" "$ln" "$c"
     return
   fi
+  # A SUPERSEDED command is neither run nor counted: the OK line's count is of commands that ran.
+  if [ -n "$sup" ]; then
+    printf 'SUPERSEDED: %s:%s by %s:%s\n' "$f" "$ln" "$f" "$sup" >&2
+    return
+  fi
+  checked=$((checked + 1))
   if ! cmd_is_safe "$c"; then
     fail "ALLOWLIST" "$f:$ln runs a command this checker refuses to execute:
       \$ $c
@@ -649,8 +732,9 @@ run_pair() { # $1 file  $2 line  $3 command   (expected output is in $TMP_EXP)
   fi
   # A DERIVATION NEVER RUNS ON THIS SCRIPT'S STDIN, AND ONE THAT READS STDIN IS REFUSED.
   #
-  # run_pair is called from inside check_file's `while read … done < "$f"`, so an inherited
-  # stdin is THE REST OF THE ARTIFACT. Measured: a first derivation `grep -c WRONG` (no file
+  # run_pair is called from inside check_file's `while read … done < "$TMP_EV"`, so an inherited
+  # stdin is THE REST OF THE ARTIFACT'S PARSE (it was the artifact itself until check_file
+  # collected first and ran second). Measured: a first derivation `grep -c WRONG` (no file
   # operand, recorded `1`) read the remaining text, matched its own recorded output, and
   # every later block went unchecked -- a file with a stale second derivation exited 0 with
   # `OK: 1 derivation(s)`, where `echo 1` in the same position gave exit 1, 1 stale of 2.
@@ -869,17 +953,13 @@ for target in "$@"; do
     if [ "$WALK_ALL" -eq 0 ]; then
       t_abs="$(cd "$target" && pwd)" || t_abs="$target"
       : > "$TMP_LIST.keep"
-      split_counts="$(awk -v pre="${target%/}/" -v tbase="$(basename "$t_abs")" -v keep="$TMP_LIST.keep" '
+      split_counts="$(awk -v pre="${target%/}/" -v tbase="$(basename "$t_abs")" -v keep="$TMP_LIST.keep" "$REC_AWK"'
         { rel = (index($0, pre) == 1) ? substr($0, length(pre) + 1) : $0
           n = split(rel, C, "/"); base = C[n]
           parent = (n > 1) ? C[n - 1] : tbase
           why = ""
           for (i = 1; i < n; i++) if (C[i] == "shards") { why = "shards" }
-          if (why == "" && parent ~ /^s[0-9]+$/) {
-            if (base ~ /-adversarial-p[0-9]+\.md$/ || base ~ /-repair-p[0-9]+\.md$/ ||
-                base == "requirements-party-repair.md" || base == "requirements-elicitation-repair.md" ||
-                base == "requirements-elicitation.md") why = "record"
-          }
+          if (why == "" && is_record(parent, base)) why = "record"
           if (why == "") print > keep; else D[why]++
         }
         END { printf "%d %d\n", D["shards"], D["record"] }' "$TMP_LIST")" \

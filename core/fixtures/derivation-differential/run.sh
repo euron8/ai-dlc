@@ -602,6 +602,38 @@ else
 fi
 rc_is "A18c exactly one NEWLY-FAILING row" 1 "$(nrows NEWLY-FAILING "$OUT18")"
 
+# ---- A19: a record's SUPERSEDED derivation is in no count, so the broken-root refusal still fires --
+# The validator skips a record command that a LATER byte-identical command in the same file
+# re-derives, and prints `SUPERSEDED:` instead of a verdict. `--list` still names it, so without
+# reading those lines this helper scores it PASS on both sides -- and one base-side "pass" is all it
+# takes for the zero-pass refusal (A9) never to fire. The world is a slot RECORD holding one repeated
+# command and a second command, and NOTHING else in the corpus, so the superseded key is the only
+# derivation that could read as a base-side pass. Against A9's broken root it must REFUSE. The
+# near-miss is the same world from the real pre-apply tree: it reaches a verdict, names the LATER
+# copy NEWLY-FAILING, gives the superseded one no row, and counts it on the INFO row.
+W19="$WORK/w19-superseded"; build_consumer "$W19" "$THEIRS_BREAK" 1 real
+rm -f "$W19/$SF"
+R19="_bmad-output/planning-artifacts/s1/story-repair-p1.md"
+mkdir -p "$W19/${R19%/*}"
+{
+  printf '# Story repair p1\n\n'
+  printf '```derived\n$ grep -c qqalpha scripts/ai-dlc/toy.sh\n1\n```\n\n'
+  printf 'Re-derived after the edit.\n\n'
+  printf '```derived\n$ grep -c qqalpha scripts/ai-dlc/toy.sh\n1\n$ grep -c qqgamma scripts/ai-dlc/toy.sh\n1\n```\n'
+} > "$W19/$R19"
+K19_EARLY="$R19:$(grep -n -- 'grep -c qqalpha' "$W19/$R19" | head -1 | cut -d: -f1)"
+K19_LATE="$R19:$(grep -n -- 'grep -c qqalpha' "$W19/$R19" | sed -n 2p | cut -d: -f1)"
+case "$K19_EARLY$K19_LATE" in *: | *::* ) echo "FIXTURE ERROR: a seeded A19 derivation line was not found" >&2; exit 2 ;; esac
+[ "$K19_EARLY" != "$K19_LATE" ] || { echo "FIXTURE ERROR: the A19 record does not repeat its command" >&2; exit 2; }
+dd "$W19" --base-root "$BROKEN"; OUT19="$OUT"; RC19="$RC"
+rc_is "A19a a record with a superseded derivation over a broken base root -> exit 2" 2 "$RC19"
+ck "A19b and the refusal is the broken-root signature" "$(printf 'REFUSED\tbase-root\tZERO derivations reproduce at the base root')" "$OUT19"
+dd "$W19"; OUT19N="$OUT"; RC19N="$RC"
+rc_is "A19n near-miss: the same record from the real pre-apply tree -> exit 1" 1 "$RC19N"
+ck "A19o the superseded derivation is counted on the INFO row" "$(printf 'INFO\tsuperseded\t1 of 3 derivation(s)')" "$OUT19N"
+ck "A19p the LATER copy carries the verdict" "$(printf 'NEWLY-FAILING\t%s\t' "$K19_LATE")" "$OUT19N"
+nk "A19q and the superseded copy gets no row" "$(printf '\t%s\t' "$K19_EARLY")" "$OUT19N"
+
 # ---- A10: the default base root leaves no worktree and no scratch behind --------------------
 # CONTROL FIRST: the counter must see a worktree when one exists, or a 1 below is a counter that
 # cannot count.
@@ -615,7 +647,7 @@ else
   bad "A10a control: the counter read $c_ctl on a repository carrying one extra worktree, expected 2 -- A10b is unreadable"
 fi
 leaked=""
-for c in "$W1" "$W2" "$W3" "$W5" "$W5P" "$WSU" "$WSUN" "$W13" "$W13N" "$WS3" "$WS3N" "$W16" "$W16N" "$W17" "$W17N" "$W18"; do
+for c in "$W1" "$W2" "$W3" "$W5" "$W5P" "$WSU" "$WSUN" "$W13" "$W13N" "$WS3" "$WS3N" "$W16" "$W16N" "$W17" "$W17N" "$W18" "$W19"; do
   # W6 is left out on purpose: it carries the seeded LEAKED worktree A12c asserts is kept.
   n="$(wtcount "$c")"; [ "$n" = 1 ] || leaked="$leaked $(basename "$c")=$n"
 done

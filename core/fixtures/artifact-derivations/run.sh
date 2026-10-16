@@ -1329,6 +1329,137 @@ p_mutant p-m4 "p-file" 's/^    check_file "\$target"$/    case "$target" in *\/s
 p_mutant p-m5 "p-area p-count p-frozen" 's/^          "\$((n_sh + n_rec))" "\$target" "\$n_sh" "\$n_rec"$/          "$n_sh" "$target" "$n_sh" "$n_rec"/'
 p_mutant p-m6 "p-shardtarget" 's/^        { rel = (index(\$0, pre) == 1) ? substr(\$0, length(pre) + 1) : \$0$/        { rel = $0/'
 
+# --- Q. A RECORD'S LATER BYTE-IDENTICAL RE-DERIVATION SUPERSEDES ITS EARLIER FENCE --------------
+# A review or repair record is append-only, so a stale figure is re-derived by writing the same
+# command again further down. Measured on the reference consumer's s319 `requirements-repair-p1.md`:
+# 9 stale of 105, every one re-derived in a later block, and the record still failed. So inside a
+# record (the walk's own record grammar) an earlier `$ ` command is skipped when a LATER command
+# line in the same file is byte-identical, and the skip is printed as `SUPERSEDED: <f>:<n> by
+# <f>:<m>`. The later copy runs and its verdict stands.
+#
+# WHAT IT MUST NOT ACQUIT, each its own world and each held at exit 1 with its FAIL named: a later
+# copy that is itself stale, the same text in a LIVE document, a record-named file OUTSIDE
+# `s<digits>/`, a later command that differs by one byte, a stale fence with no later copy at all,
+# and a stale fence whose only "later copies" sit in a `text` fence, in prose, or as an output line
+# indented deeper than its fence -- the block grammar reads none of those as a command.
+#
+# Its own tree, so the P arms' slot counts are not moved.
+Q="$WORK/q"; mkdir -p "$Q/.claude" "$Q/src"
+printf 'x\nx\n' > "$Q/src/two.txt"
+printf 'x\nx\n' > "$Q/src/tw0.txt"
+QS=_bmad-output/planning-artifacts/s320
+qtwo() { # $1 path  $2 early recorded  $3 later command  $4 later recorded -- the s319 shape, lines 4 and 11
+  mkdir -p "$(dirname "$Q/$1")"
+  printf '# r\n\n```derived\n$ grep -c x src/two.txt\n%s\n```\n\nRe-derived after the edit.\n\n```derived\n$ %s\n%s\n```\n' \
+    "$2" "$3" "$4" > "$Q/$1"
+}
+qtwo "$QS/prd-repair-p1.md" 9 'grep -c x src/two.txt' 2                       # supersedes
+qtwo "$QS/coe-adversarial-p1.md" 9 'grep -c x src/two.txt' 7                  # the later copy is stale too
+qtwo "$QS/prd.md" 9 'grep -c x src/two.txt' 2                                 # a LIVE document
+qtwo _bmad-output/planning-artifacts/prd-repair-p1.md 9 'grep -c x src/two.txt' 2   # a record name outside a slot
+qtwo "$QS/architecture-repair-p1.md" 9 'grep -c x src/tw0.txt' 2              # one byte different
+mkdir -p "$Q/$QS"
+printf '# r\n\n```derived\n$ grep -c x src/two.txt\n9\n```\n' > "$Q/$QS/stories-repair-p1.md"   # no later copy
+cat > "$Q/$QS/epics-repair-p1.md" <<'QTEXT'
+# r
+
+```derived
+$ grep -c x src/two.txt
+9
+```
+
+```text
+$ grep -c x src/two.txt
+```
+
+$ grep -c x src/two.txt
+
+- item
+
+  ```derived
+  $ printf '    $ grep -c x src/two.txt\n'
+      $ grep -c x src/two.txt
+  ```
+QTEXT
+
+qrun() { # $1 validator  $2.. args -> out, rc
+  local v="$1"; shift
+  out="$(cd "$Q" && AI_DLC_PROJECT_ROOT="$Q" bash "$v" "$@" 2>&1)"; rc=$?
+}
+q_arms() { # <validator> <quiet> -> Q_FAILED
+  local V="$1" q="$2" failed="" f nsup
+  qarm() { if [ "$2" -eq 0 ]; then [ "$q" = 1 ] || ok "$1 $3"
+           else failed="$failed $1"; [ "$q" = 1 ] || bad "$1 $3 (rc=$rc): $out"; fi; }
+  # q-sup: the earlier stale copy is superseded by the later reproducing one -> exit 0, ONE
+  # SUPERSEDED line keyed exactly as a FAIL line is, and only the later copy counted.
+  f="$QS/prd-repair-p1.md"; qrun "$V" "$f"
+  nsup="$(grep -c '^SUPERSEDED: ' <<< "$out")" || nsup=0
+  [ "$rc" -eq 0 ] && [ "$nsup" -eq 1 ] && grep -qxF "SUPERSEDED: $f:4 by $f:11" <<< "$out" \
+    && grep -q '^OK: 1 derivation(s) in 2 block(s) across 1 file(s)' <<< "$out"
+  qarm q-sup $? "           exit=0  the earlier stale copy is SUPERSEDED by its later byte-identical copy, which runs"
+  # q-laterstale: the later copy is stale too -> its FAIL stands; supersession hides no failure.
+  f="$QS/coe-adversarial-p1.md"; qrun "$V" "$f"
+  [ "$rc" -eq 1 ] && grep -qxF "SUPERSEDED: $f:4 by $f:11" <<< "$out" \
+    && grep -q "^FAIL (STALE): $f:11 " <<< "$out" && ! grep -q "^FAIL (STALE): $f:4 " <<< "$out" \
+    && grep -q '^FAIL: 1 stale or unrunnable derivation(s) of 1 checked' <<< "$out"
+  qarm q-laterstale $? "    exit=1  a stale LATER copy keeps its FAIL; the superseded one is named, not run"
+  # q-live: the identical text in a live document supersedes nothing.
+  f="$QS/prd.md"; qrun "$V" "$f"
+  [ "$rc" -eq 1 ] && grep -q "^FAIL (STALE): $f:4 " <<< "$out" && ! grep -q '^SUPERSEDED:' <<< "$out" \
+    && grep -q '^FAIL: 1 stale or unrunnable derivation(s) of 2 checked' <<< "$out"
+  qarm q-live $? "          exit=1  the same repeat in a LIVE document supersedes nothing"
+  # q-outside: a record name outside s<digits>/ is not a record, matching the walk.
+  f=_bmad-output/planning-artifacts/prd-repair-p1.md; qrun "$V" "$f"
+  [ "$rc" -eq 1 ] && grep -q "^FAIL (STALE): $f:4 " <<< "$out" && ! grep -q '^SUPERSEDED:' <<< "$out"
+  qarm q-outside $? "       exit=1  a record-named file outside a sprint slot supersedes nothing"
+  # q-byte: a later command one byte different (its file operand) is not a copy.
+  f="$QS/architecture-repair-p1.md"; qrun "$V" "$f"
+  [ "$rc" -eq 1 ] && grep -q "^FAIL (STALE): $f:4 " <<< "$out" && ! grep -q '^SUPERSEDED:' <<< "$out" \
+    && grep -q '^FAIL: 1 stale or unrunnable derivation(s) of 2 checked' <<< "$out"
+  qarm q-byte $? "          exit=1  a later command differing by one byte supersedes nothing"
+  # q-open: STAYS OPEN -- a stale record fence with no later copy still fails, named.
+  f="$QS/stories-repair-p1.md"; qrun "$V" "$f"
+  [ "$rc" -eq 1 ] && grep -q "^FAIL (STALE): $f:4 " <<< "$out" && ! grep -q '^SUPERSEDED:' <<< "$out"
+  qarm q-open $? "          exit=1  a stale record fence with no later copy stays open"
+  # q-text: the only later copies are in a text fence, in prose and as a deeper-indented output
+  # line, none of which the block grammar reads as a command -> no supersession.
+  f="$QS/epics-repair-p1.md"; qrun "$V" "$f"
+  [ "$rc" -eq 1 ] && grep -q "^FAIL (STALE): $f:4 " <<< "$out" && ! grep -q '^SUPERSEDED:' <<< "$out" \
+    && grep -q '^FAIL: 1 stale or unrunnable derivation(s) of 2 checked' <<< "$out"
+  qarm q-text $? "          exit=1  a later \`\$ \` line in a text fence, in prose or as indented output is no copy"
+  # q-list: --list still lists every command, the superseded one included.
+  f="$QS/prd-repair-p1.md"; qrun "$V" --list "$f"
+  [ "$rc" -eq 0 ] && grep -q '^2 derivation(s) in 2 block(s) across 1 file(s)' <<< "$out" \
+    && grep -qF "  $f:4  grep -c x src/two.txt" <<< "$out" && ! grep -q '^SUPERSEDED:' <<< "$out"
+  qarm q-list $? "          exit=0  --list lists the superseded command too"
+  Q_FAILED="$(printf '%s\n' $failed | sed '/^$/d' | sort -u | tr '\n' ' ')"
+}
+q_arms "$VALIDATOR" 0
+[ -z "$Q_FAILED" ] \
+  && ok "q-control              the unmutated validator fails no Q arm, so a mutant's failed set is its own" \
+  || bad "q-control the unmutated validator failed Q arm(s): $Q_FAILED -- no mutant verdict below is readable"
+
+# Q's mutants, each a copy guarded by cmp -s, each declared to fail EXACTLY its arm set.
+#   nosup      the skip disabled                     anyfile  the record scope dropped
+#   firstwins  the FIRST copy kept, not the last     quiet    the SUPERSEDED line removed
+#   rawscan    the pre-pass keyed on a raw `$ ` scan of the file instead of the block grammar
+q_mutant() { # $1 label  $2 declared failed arms (sorted)  $3.. sed expressions
+  local label="$1" want="$2"; shift 2
+  local M="$Q/$label-$VBASE"
+  if ! mut_copy "$M" "$@"; then bad "$label DID NOT APPLY -- the mutation matched nothing, so no verdict was scored"; return; fi
+  q_arms "$M" 1
+  if [ -z "$Q_FAILED" ]; then bad "$label SURVIVED -- no Q arm failed against it"
+  elif [ "$Q_FAILED" = "$want " ]; then ok "$label KILLED        by exactly its declared arm(s): $Q_FAILED"
+  else bad "$label killed by the WRONG arm set: failed [$Q_FAILED], declared [$want]"; fi
+}
+q_mutant q-nosup "q-laterstale q-sup" 's|^  if \[ -n "\$sup" \]; then$|  if false; then|'
+q_mutant q-anyfile "q-live q-outside" 's|BEGIN { rec = is_record(par, bn) }|BEGIN { rec = 1 }|'
+q_mutant q-firstwins "q-laterstale q-sup" 's|c = substr(r, i + 3); last\[c\] = ln }; next }|c = substr(r, i + 3); if (!(c in last)) last[c] = ln }; next }|'
+q_mutant q-quiet "q-laterstale q-sup" '/printf .SUPERSEDED: %s:%s by /d'
+q_mutant q-rawscan "q-text" \
+  's|c = substr(r, i + 3); last\[c\] = ln }; next }|} if (match($0, /[$] /)) last[substr($0, RSTART + 2)] = FNR; next }|' \
+  's|"\$TMP_EV" "\$TMP_EV" > "\$TMP_EV.sup"|"$f" "$TMP_EV" > "$TMP_EV.sup"|'
+
 echo
 if [ "$fails" -gt 0 ]; then
   echo "FAIL: $fails assertion(s) wrong."

@@ -596,14 +596,6 @@ Owed: decide which side is right. If the header is right and the check too weak 
 
 verify: manual
 
-## BL-603 — derivation-differential.sh's `_good` cache is never written, so its early-break arm can never fire
-
-**DEFECT.** Filed by peer session ai-dlc-c3, measured read-only. In `core/skills/ai-dlc-update/reconcile/derivation-differential.sh` at origin/main 3d5f1e70, :240 initialises `_good=" "` and :243 reads it (`case "$_good" in *" $_b "*) BASE_COMMIT="$_c"; break ;; esac`); intake found `_good` on those two lines only, while `_bad` has 1 append in the same file. Per the filer the same holds at U-a head d524616d (:245, :248). A matching blob is handled by the `resolves_to_base && skill_commit_ok` branch, which sets BASE_COMMIT and breaks, so the `_good` arm is a guard whose removal changes nothing (`mechanism-design.md`, "A vacuous guard is a loaded gun").
-
-Owed: delete the `_good` arm and its init (fix by subtraction), or append `_b` to `_good` in the success branch if a later blob can repeat. Receipt: a mutant removing the arm changes no verdict before the delete. It is in the subject, not in c3's battery release, so it ships in a later release.
-
-verify: manual
-
 ## BL-605 — an In-Flight row's `dispatched-at` can be stamped LATER than the real dispatch, and the BACKDATED arm is quiet on a late row by design
 
 **DEFECT.** Filed by peer session ai-dlc-ad, read-only on graph. Graph's `_bmad-output/pipeline-snapshot.md:68` (In-Flight Teammates) reads `remediator (serial, pass 1 cross-part, a7ffc8dcd555207b8) | remediator | s319/requirements-repair-p1.md (appended) | 2026-10-16T05:01:00Z | stopped` (intake confirmed). BL-599's filing puts that remediator's dispatch at 05:00:03Z, so the row is 57 s late. `core/scripts/validate-artifact-budget.sh` `check_backdated_dispatch` states at :1213 (origin/main 3d5f1e70) "A row stamped LATE (after its dispatch) stays quiet; this arm is about back-dating only." Measured by the filer on the extracted function with a one-row ledger at D: a row at D-112 fires BACKDATED (control), and rows at D, D+27 and D+87 are quiet.
@@ -714,25 +706,6 @@ Owner: ai-dlc-60 (lead ai-dlc-9c).
 
 verify: manual
 
-## BL-588 — an append-only repair record whose later blocks change a subject leaves the earlier blocks' derivations permanently STALE, and nothing lets a later block supersede them
-
-**DEFECT.** Filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]) from the graph s319 watch; intake re-derived it read-only (the validator itself was not re-run here; the filer re-ran it). At graph's handoff commit `e18724963` (08:21 EDT, lead `cf53b84f`), `_bmad-output/planning-artifacts/s319/requirements-repair-p1.md` (1697 lines) carries three blocks, closed by `repair-complete: serial 1` (:1261), `repair-complete: spec-render 1` (:1477) and `repair-complete: serial 2` (:1696). `scripts/ai-dlc/validate-artifact-derivations.sh` on it reports "FAIL: 9 stale or unrunnable derivation(s) of 105 checked", at lines 30, 536, 581, 646, 780, 793, 1409, 1426 and 1444.
-
-Each later block changed SPEC/PRD/brief text that an earlier block's fence quotes. Line 30's fence greps `SPEC.md` for "What does the Story 1.5 read score for a two-hop row" and records `85:`; at `e18724963` that phrase occurs 0 times in `_bmad-output/specs/s319/offramp-config-and-rewards/SPEC.md` (control `CAP-1`: 4), because the spec-render deleted the Q18 line on the operator's "Retire Q18" (BL-546's fourth instance). Serial 2 was dispatched at 08:13 EDT to fix 5 such fences, and the count went from 5 to 9 after it delivered. The record is append-only, so no block can re-point an earlier fence. `_bmad-output/pipeline-snapshot.md:38` hands this to the successor as pass-2 entry item (1): "decide the 9 stale old fences … never edit or delete an old fence".
-
-The validator has no way out: `core/scripts/validate-artifact-derivations.sh` on origin/main has 0 mentions of `supersede` and 0 of `artifact_sha_after` (control: 22 of `stale`, case-insensitive). The record already writes `supersedes:` lines (3, at :511, :1577 and :1578), but these are finding supersessions, which the validator does not read. The `supersedes:` convention for escalations lives in BL-565's PARTIAL note (`docs/backlog.md:319-325`, shipped in 0.794.0); BL-550 itself is archived.
-
-Owed (either 1 or 2, then 3):
-1. Let a later block of an append-only record supersede an earlier block's derivation with a `supersedes: <line>` field the validator honours, re-running the new fence in place of the old one.
-2. Or have the validator score a fence against the subject sha its block recorded in `artifact_sha_after:`, not against the current tree.
-3. Receipt: on this record at `e18724963`, the 9 lines above go to 0 without editing any old fence, and a fence whose subject drifted with no superseding block still reads STALE (control).
-
-Related: BL-587 (owed re-points with no channel), BL-546 (the Q18 deletion), BL-565 / BL-550 (`supersedes:` for escalations).
-
-Owner: ai-dlc-11 (lead ai-dlc-9c), as its own release after ai-dlc-11's combo release. It touches BL-587's reader.
-
-verify: manual
-
 ## BL-613 — `validate-backlog-receipts.sh` run bare fails R5 on a clean main, because its default floor is stale
 
 **NOTE.** Found by intake ai-dlc-40 and independently by ai-dlc-11, both on clean origin/main `d19a4d9f`. `scripts/validate-backlog-receipts.sh:190` sets `DEFAULT_MIN_SH=76`, and `:565` uses it when `--min-sh-receipts` is absent. The live ledger holds 0 `sh` receipts, so a bare run exits 1 with "R5: the sh receipt population fell by 76 (from 76 to 0)". The gate passes `--min-sh-receipts 0` (`.githooks/pre-push:266-268`, since 0.746.0 `011cd83e`), so pre-push is green while every hand that runs the script by name sees a red unrelated to its change. Two sessions in batch 235 hit it and each had to re-run on main to rule out their own commit.
@@ -754,5 +727,30 @@ Premise corrected at intake: the 1300-1400 s batteries in that push (adversarial
 Owed: move the budget to a data file that only `validator-fork-budget` reads, keeping its column-0 single-line anchor (`run.sh:92-101`) and its A4 reachability arm. Receipt: a budget-only change re-keys `validator-fork-budget` and no other unit. Show it with the hook's own key computation on a probe commit, and use a one-character edit to the validator as the control, which must re-key all 20.
 
 Owner: ai-dlc-40 (lead ai-dlc-9c). It changes a script and a fixture, so it rides the next unbuilt release with BL-613, never a built or gating one.
+
+verify: manual
+
+## BL-615 — adversary seats and shards are never told to resolve a code path with `git ls-files`, so BL-550's second instance is uncovered
+
+**DEFECT (efficiency).** Filed by peer session ai-dlc-c9 at lead ai-dlc-9c's direction, out of c9's release (a), where it was item A6 and was taken out because BL-550 is closed and A6 would have closed nothing. Intake re-derived it read-only at origin/main `86d3a695`.
+
+BL-550 is archived LANDED (v0.794.0, verified `2f6d5199`) on its role-file half: the party-seat section of `architect`, `dev`, `pm` and `tea`, byte-identical across the four under I124, tells a seat to list a code path with `git ls-files <dir-or-glob>` before reading it. Its receipt loops over `architect dev pm tea` only. The archived entry also records a **second instance, in the adversarial round** (graph s319 resumed lead `f65eae3b`, requirements-adversarial-p1): seven parts (1, 2, 6, 8, 13, cross-3 and cross-6) made 13 greps for paths that do not exist, such as `dashboard/`, `shared/tokens.py` and `rebalancer/config_schema.py`.
+
+Those shards run the `adversary` role. `_gate-procedures.md:413`, `:422`, `:444`, `:585` and `:609` dispatch "one `adversary` per story ordinal", "one `adversary` per part plus one cross-part `adversary`", and so on. The adversary side has no instruction:
+- `git ls-files` counts over `core/team-roles/*.md`: `adversary.md` 0, against `dev` 2 and `architect`, `pm` and `tea` 1 each (the control).
+- `_gate-procedures.md` has 0 mentions of `ls-files` (control: 28 mentions of `adversary`).
+- `adversary.md` (552 lines, 9 `##` headings) never says "code path" and has no `## As a party seat` section.
+
+So the LANDED close never reached the role that produced the second instance. The open backlog does not cover it either (0 `ls-files` mentions).
+
+Constraint on the fix: I124 (`scripts/validate-enforcement-map.sh:13573`, `i124_names='architect dev pm tea'`) binds the party-seat section to exactly those four roles. Its half B fails the push on any other role file carrying a heading opening "As a party seat". The instruction therefore cannot reach `adversary.md` by copying that section. It needs its own text in `adversary.md`, or in the shard brief `_gate-procedures.md` dispatches, or I124's list must widen deliberately. The I123 chunking paragraph is the other binding a role-file edit has to respect.
+
+Rejected at contract time: release (a)'s A6 candidate derived a `code paths:` block for the brief with a hand-written regex in prose (`git ls-files | grep -F -x -f <(grep -ohE '[A-Za-z0-9_./-]+\.[a-z]{1,4}' …)`). The contract adversary flagged it as verification-discipline's hand-regex class (a second implementation of a path grammar). Whether the fix is prose or a mechanism is this entry's decision.
+
+Owed:
+1. Decide prose (an `adversary.md` or shard-brief instruction) or a mechanism (a path list derived by shipping code, not a prose regex), and record why.
+2. Receipt: run the shipping code, not a grep of the role file. For example, a shard brief rendered for a subject naming a non-existent path shows the resolved/absent split; or, for prose, a receipt over the dispatched brief and not over BL-550's four files. Control: the four party-seat roles still pass I124.
+
+Related: BL-550 (archived; both instances), I124, I123.
 
 verify: manual
