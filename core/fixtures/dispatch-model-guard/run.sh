@@ -1531,6 +1531,61 @@ elif [ -z "$(cap_mut "$ERM" "$CAPDIR/he.jsonl" "Party seat 7")" ] && [ "$(cap_mu
   ok "CAP MUTANT errorreleases killed: releasing on any non-cap error result allows 14i (and still denies 14a)"
 else bad "CAP MUTANT errorreleases SURVIVED: 14i still denied, or the mutant stopped denying 14a"; fi
 
+# --- 16. WHO ISSUED THE SPAWN: parent_agent_id --------------------------------------------------
+# A spawn made from inside a teammate carries the payload `agent_id`; the lead's carries none. The
+# row records it as `parent_agent_id`, the EMPTY STRING for the lead and never null, so a join that
+# counts writers can attribute a nested writer to the agent that dispatched it. The subject shape is
+# the reference consumer's own nested call: `subagent_type: general-purpose`, no `name`, no role
+# citation, a role with no team-roles file, issued by a requirements teammate.
+#   16a a teammate-issued spawn writes a row at all, and is not denied
+#   16b that row carries the teammate's agent_id
+#   16c the same call from the lead writes `parent_agent_id: ""` -- the key present, a string, empty
+PA_ID="a1c69096c184098d6"
+PA_LEAD="$(jq -nc '{tool_name:"Agent",tool_use_id:"toolu_pa_lead",transcript_path:"/nonexistent",
+  tool_input:{description:"PRD rubric walker",subagent_type:"general-purpose",prompt:"Walk the PRD rubric.",run_in_background:true}}')"
+PA_MATE="$(printf '%s' "$PA_LEAD" | jq -c --arg a "$PA_ID" '.agent_id = $a | .tool_use_id = "toolu_pa_mate"')"
+# pa_cell <guard> <json> -> "<rows>|<decision>|<parent_agent_id as JSON>" for one drive on an empty ledger.
+pa_cell() {
+  local out n p
+  rm -f "$LEDGER"
+  out="$(printf '%s' "$2" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" 2>/dev/null \
+    | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null)"
+  n="$(wc -l < "$LEDGER" 2>/dev/null | tr -d ' ')"
+  p="$(tail -1 "$LEDGER" 2>/dev/null | jq -c 'if has("parent_agent_id") then .parent_agent_id else "ABSENT" end' 2>/dev/null)"
+  printf '%s|%s|%s' "${n:-0}" "${out:-none}" "${p:-NOROW}"
+}
+pa_vec() { printf '%s %s' "$(pa_cell "$1" "$PA_MATE")" "$(pa_cell "$1" "$PA_LEAD")"; }
+PA_WANT="1|none|\"$PA_ID\" 1|none|\"\""
+PA_GOT="$(pa_vec "$HOOK")"
+PA_M="${PA_GOT%% *}"; PA_L="${PA_GOT#* }"
+case "$PA_M" in 1\|none\|*) ok "16a a teammate-issued general-purpose spawn writes exactly one row and is not denied" ;;
+  *) bad "16a a teammate-issued spawn produced '$PA_M' (rows|decision|parent), expected one row and no decision" ;; esac
+[ "${PA_M##*|}" = "\"$PA_ID\"" ] && ok "16b the teammate row carries parent_agent_id = the payload agent_id" \
+  || bad "16b the teammate row carries parent_agent_id ${PA_M##*|}, expected \"$PA_ID\""
+[ "$PA_L" = '1|none|""' ] && ok "16c the lead row carries parent_agent_id \"\" (present, a string, empty)" \
+  || bad "16c the lead row produced '$PA_L', expected '1|none|\"\"'"
+# Each mutant is scored on the EXACT two-cell vector, so one that moves a cell it does not own shows.
+# pa_mut <tag> <sed-expr> <expected-vector> <label>
+pa_mut() {
+  local m="$WORK/guard-pa-$1.sh" got
+  sed "$2" "$HOOK" > "$m"
+  if cmp -s "$HOOK" "$m"; then bad "PA MUTANT $1 matched nothing (cmp -s guard)"; return; fi
+  bash -n "$m" 2>/dev/null || { bad "PA MUTANT $1 does not parse -- its silence would not be the mutation"; return; }
+  got="$(pa_vec "$m")"
+  if [ "$got" = "$3" ]; then ok "PA MUTANT $1 killed: $4"
+  else bad "PA MUTANT $1 scored '$got', expected '$3' ($4)"; fi
+}
+# 16a: the guard returns before the append for a call made from inside a subagent.
+pa_mut earlyexit 's/^mkdir -p "\$SPAWN_STATE_DIR" 2>\/dev\/null || true$/[ -n "$DG_AGENT_ID" ] \&\& exit 0; &/' \
+  "0|none|NOROW 1|none|\"\"" "an exit before the append for an agent_id caller leaves the nested spawn unrecorded"
+# 16b: the field is written but never from the payload.
+pa_mut noparent 's/--arg parent "\${DG_AGENT_ID:-}"/--arg parent ""/' \
+  "1|none|\"\" 1|none|\"\"" "a field that never reads agent_id reads every nested spawn as the lead's"
+# 16c: the lead is written as null, which is how a row from an older guard would read.
+pa_mut leadnull 's/^     parent_agent_id: \$parent,$/     parent_agent_id: (if $parent == "" then null else $parent end),/' \
+  "1|none|\"$PA_ID\" 1|none|null" "a null lead value is indistinguishable from a row that never asked"
+[ "$PA_GOT" = "$PA_WANT" ] || bad "16 FIXTURE BROKEN: the unmutated vector '$PA_GOT' is not '$PA_WANT', so every PA mutant above was scored against the wrong baseline"
+
 echo
 if [ "$fails" -eq 0 ]; then echo "dispatch-model-guard: PASS"; exit 0; fi
 echo "dispatch-model-guard: $fails assertion(s) FAILED" >&2

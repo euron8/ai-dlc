@@ -1084,6 +1084,7 @@ jq -nc \
    --arg via "${CONTRACT_VIA:-}" \
    --arg shard "${SPAWN_SHARD:-}" \
    --arg shardraw "${SPAWN_SHARD_RAW:-}" \
+   --arg parent "${DG_AGENT_ID:-}" \
    --argjson cited "$ROLE_CONTRACT_CITED" \
    --argjson readable "$ROLE_FILE_READABLE" \
    --argjson defbound "$DEFINITION_BOUND" \
@@ -1111,6 +1112,12 @@ jq -nc \
      definition_stale: $defstale,
      name_stripped: (if $stripped == "" then null else $stripped end),
      tool_use_id: (if $tui == "" then null else $tui end),
+     # WHO ISSUED THE CALL: the payload agent_id, which the harness sets only on a call made
+     # from inside a subagent, so the EMPTY STRING is the lead and is never null. A join that
+     # counts writers attributes a nested spawn to the agent that dispatched it through this
+     # key. A row with no such KEY was written by an older guard and says nothing about its
+     # issuer. NO APOSTROPHE HERE either.
+     parent_agent_id: $parent,
      # The brief shard line, canonicalised; null when absent, repeated or unparseable. The KEY
      # is always written, because its absence is how Check 22 recognises an older guard row.
      shard: (if $shard == "" then null else $shard end)
