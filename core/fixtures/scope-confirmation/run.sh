@@ -1533,6 +1533,8 @@ ls_snap() {   # $1 name, $2 user_request_cite
 }
 ls_snap cited "$LS_RQ"
 ls_snap noask none
+# A cite that is a hash but matches no entry in the requests file: the ask leg did not run.
+ls_snap badhash "$(printf 'a%.0s' $(seq 1 64))"
 ls_esc() {    # $1 world, $2 header timestamp, $3 status, $4 body line naming the ids
   { printf '# Escalations\n\n## [S319-EARLIER-NOTE] lead - 2026-10-15T20:00:00Z\n'
     printf '**Status:** DECIDED_AUTONOMOUSLY\n**Context:** names CO-S319-OTHER-ITEM in an informational entry.\n\n'
@@ -1557,7 +1559,7 @@ ls_run() {    # $1 validator, $2 snapshot, $3 escalations world, [$4 answers pat
 ls_has() { grep -qF -- "$1" <<<"$LS_OUT"; }
 # Every cell is PRESENCE-shaped: a refusal must name its id, and a quiet cell must print its
 # scanned count (and the SKIP line where one is owed), so a subject that emits nothing fails.
-LS_CELLS="fire fireask resolved before recur ratified outside noask"
+LS_CELLS="fire fireask resolved before recur ratified outside noask badhash"
 ls_verdicts() {
   local v="$1" out=""
   ls_cell() { out="$out $1=$LS_RC"; }
@@ -1574,9 +1576,12 @@ ls_verdicts() {
   { ls_has "SKIP  locked-scope ask leg" && ls_has "locked_scope_deferrals_scanned: 1 " \
     && ls_has "PARTIAL  locked-scope arm: only the sprint leg ran (CO-S319- ids)" \
     && ! ls_has "PASS  no live DEFERRAL_REQUEST"; } || LS_RC="${LS_RC}x"; ls_cell noask
+  ls_run "$v" badhash noask
+  { ls_has "SKIP  locked-scope ask leg" && ls_has "PARTIAL  locked-scope arm: only the sprint leg ran" \
+    && ! ls_has "PASS  no live DEFERRAL_REQUEST"; } || LS_RC="${LS_RC}x"; ls_cell badhash
   printf '%s\n' "${out# }"
 }
-LS_EXPECT="fire=1 fireask=1 resolved=0 before=0 recur=0 ratified=0 outside=0 noask=0"
+LS_EXPECT="fire=1 fireask=1 resolved=0 before=0 recur=0 ratified=0 outside=0 noask=0 badhash=0"
 ls_why() {
   case "$1" in
     fire)     echo "a live DEFERRAL_REQUEST naming a CO-S<sprint>- item filed after the scope answer must be refused (the s319 shape)" ;;
@@ -1587,6 +1592,7 @@ ls_why() {
     ratified) echo "an entry naming an id scope_deferred_items lists was ratified at Step 6 and must be silent (the s316 shape)" ;;
     outside)  echo "a deferral of an id outside the locked set must be silent" ;;
     noask)    echo "no ask cite must print a VISIBLE SKIP for the ask leg and a PARTIAL line naming the sprint leg, never the full PASS claim" ;;
+    badhash)  echo "an ask cite matching no requests entry is a SKIPPED ask leg, never one that ran and found nothing" ;;
   esac
 }
 LS_GOT="$(ls_verdicts "$VALIDATOR")"
@@ -1627,13 +1633,14 @@ if [ "$LS_CTL_GOT" = "$LS_EXPECT" ]; then
   ls_mut window    "before recur" 'if (ts != "" && from != "" && ts < from) return' ''
   ls_mut oldest    "recur"     '$0 == c { t = h } END { print t }' '$0 == c && t == "" { t = h } END { print t }'
   ls_mut ratified  "ratified"  'if (hit != "" && !ratified)' 'if (hit != "")'
-  ls_mut noskip    "noask"     'say "SKIP  locked-scope ask leg' ': "SKIP  locked-scope ask leg'
+  ls_mut noskip    "noask badhash" 'say "SKIP  locked-scope ask leg' ': "SKIP  locked-scope ask leg'
   ls_mut noexit    "fire fireask" '[ "$LS_RC" -eq 1 ] && exit 1' 'true'
-  ls_mut fullpass  "noask"     'elif [ "$LS_ASK_LEG" = ran ] && [ -n "$LS_SPRINT" ]; then' 'elif true; then'
-  if [ "$LS_MUT_KILLS" -eq "$LS_MUT_WANT" ] && [ "$LS_MUT_WANT" -eq 9 ]; then
-    ok "all 9 locked-scope mutants killed against the resolved validator $VALIDATOR"
+  ls_mut fullpass  "noask badhash" 'elif [ "$LS_ASK_LEG" = ran ] && [ -n "$LS_SPRINT" ]; then' 'elif true; then'
+  ls_mut resolve   "badhash"   'grep -qxF -- "- SHA256: ${LS_REQ_CITE}" "$REQUESTS" 2>/dev/null' 'true'
+  if [ "$LS_MUT_KILLS" -eq "$LS_MUT_WANT" ] && [ "$LS_MUT_WANT" -eq 10 ]; then
+    ok "all 10 locked-scope mutants killed against the resolved validator $VALIDATOR"
   else
-    bad "only $LS_MUT_KILLS of $LS_MUT_WANT locked-scope mutants were killed (9 expected)"
+    bad "only $LS_MUT_KILLS of $LS_MUT_WANT locked-scope mutants were killed (10 expected)"
   fi
 else
   bad "CONTROL FAILED: assertion 14's unmutated copy returned [$LS_CTL_GOT], expected [$LS_EXPECT] — every locked-scope mutant verdict would be uninterpretable"
