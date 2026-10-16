@@ -860,6 +860,29 @@ checks:
     ci_workflow: ~
     fixtures: [tests/fixtures/trunk-audit-gate]
 
+  - id: "37"
+    title: An owed derivation of the current sprint or a living document refuses the gate
+    gate_types: [planning]
+    adjudication: script
+    hard_block: true
+    enforcer:
+      - core/scripts/check-owed-derivations.sh
+    call_sites:
+      - site: gate-validation.md Check 37
+        posture: FAILS the gate on any reader exit other than 0 (1 is an OPEN row, 2 a
+          refused or unassessed record, 126/127 an unexecutable reader); INFO rows from a
+          finished sprint never count and are unrepaired debt, not closed
+        why: >-
+          A reconcile that left a NEWLY-FAILING derivation "owed to the sprint's
+          derivation-validator step" recorded it only in prose, and no sprint step read
+          that log: measured on the reference consumer, 8 owed rows from its 0.793.0 pull
+          sat in a reconcile log the resumed sprint lead never saw. The record is written
+          by the differential's --record-owed and its openness is re-derived on every
+          read, so a row closes only by re-pointing the derivation. Scoped to the current
+          sprint and living documents by operator ruling.
+    ci_workflow: ~
+    fixtures: [tests/fixtures/owed-derivations]
+
 
   - id: "H1"
     title: Harness meta-check — self-test fixtures + manifest completeness
