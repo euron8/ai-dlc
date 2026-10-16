@@ -325,17 +325,24 @@ fi
 stories_dir() { printf '%s' "${STORIES_DIR_T//"$STORIES_SLOT"/$1}"; }
 
 STORIES_DIR=""
-STORIES_DIR_ALL=""
 STORIES_AREA=""
+STORIES_SLOT_PFX=""
+STORIES_SLOT_SFX=""
 if [ -n "$STORIES_DIR_T" ] && [ -n "$STORIES_SLOT" ]; then
   STORIES_DIR="$(stories_dir "$SPRINT_N")"
-  STORIES_DIR_ALL="$(stories_dir '*')"
   # The AREA the slot sits under -- everything before the component carrying the slot. Derived by
   # cutting the template at its own placeholder, so it cannot disagree with the template it came
   # from. Check 6's control needs it: a corpus counted only under the DECLARED location is blind
   # to a corpus that has not moved there yet, and blind is spelled SKIP.
   STORIES_AREA="${STORIES_DIR_T%%"$STORIES_SLOT"*}"
   STORIES_AREA="${STORIES_AREA%/*}"
+  # The SLOT COMPONENT's fixed text either side of the placeholder (`s{sprint}` -> `s` and empty),
+  # cut from the same template, so Check 6 can recognise ANY sprint's slot directory without
+  # spelling the `s` itself.
+  _slot_comp="${STORIES_DIR_T#"$STORIES_AREA"/}"
+  _slot_comp="${_slot_comp%%/*}"
+  STORIES_SLOT_PFX="${_slot_comp%%"$STORIES_SLOT"*}"
+  STORIES_SLOT_SFX="${_slot_comp#*"$STORIES_SLOT"}"
 fi
 
 # Diff base. This runs at retro time, on a retro branch cut from main AFTER the sprint merged
@@ -555,14 +562,24 @@ CHECK6_FAILURES=0
 # measurement rather than chosen. Counted only under the declared `s*/stories/` location, the
 # control is BLIND to a tree that still holds its corpus in one flat directory -- so an
 # unmigrated consumer with 988 story files reported `corpus is empty` and SKIPped, which is this
-# check's own historical defect wearing the fix's clothes. Counting every `stories/` directory
-# under the area sees both layouts, and the gap between the two numbers is what names the cause.
+# check's own historical defect wearing the fix's clothes.
 #
-# So: no stories anywhere under the area is a project before its first story -- a SKIP. Stories
-# under the area but none in THIS sprint's directory is either the 298/299 shape or an unmigrated
-# tree, and both fail.
+# AND IT COUNTS NO OTHER SPRINT'S SLOT. The control is THIS sprint's corpus as the area holds it:
+# the flat, unmigrated layout -- a `stories/` directory with no sprint-slot component on its path,
+# shared across sprints and so possibly holding this one's -- plus this sprint's own directory. It
+# used to count every `stories/` directory under the area, past sprints' `s<N>/stories/` included,
+# so the verdict was a function of sprint HISTORY: a past sprint's stories and none in this one
+# read FAIL, and the same tree with that history deleted read SKIP. The operator ruled that out
+# ("if someone deleted all of graph consumer's sprint history, it should not matter whatsoever").
+# A past sprint's slot holds that sprint's stories, never this one's, so it cannot be evidence
+# that this sprint wrote its stories elsewhere. The slot is recognised by the template's own text
+# either side of its placeholder, so a declaration that renames the slot moves this with it.
+#
+# So: no story in the flat layout and none in this sprint's directory is a project before its
+# first story here -- a SKIP. Stories in the flat layout but none in THIS sprint's directory is an
+# unmigrated tree, and it fails.
 CHECK6_MATCHED=0
-CHECK6_CORPUS=0
+CHECK6_FLAT_CORPUS=0
 CHECK6_AREA_CORPUS=0
 CHECK6_SKIPPED=0
 CHECK6_UNRESOLVED=0
@@ -571,14 +588,30 @@ if [ -z "$STORIES_DIR" ]; then
   # check that cannot fire reads exactly like one that passed.
   CHECK6_UNRESOLVED=1
 else
-  for _d in $STORIES_DIR_ALL; do
-    [ -d "$_d" ] || continue
-    for _s in "$_d"/*.md; do
-      [ -f "$_s" ] && CHECK6_CORPUS=$((CHECK6_CORPUS + 1))
-    done
-  done
   if [ -d "$STORIES_AREA" ]; then
-    CHECK6_AREA_CORPUS="$(find "$STORIES_AREA" -type d -name stories -exec find {} -maxdepth 1 -type f -name '*.md' \; 2>/dev/null | grep -c . || true)"
+    # Every `*.md` whose PARENT directory is `stories`, kept only when no directory component
+    # between the area and that file is a sprint slot (prefix, one or more digits, suffix).
+    # Literal comparisons through ENVIRON, never a regex built from the template.
+    CHECK6_FLAT_CORPUS="$(find "$STORIES_AREA" -type f -name '*.md' 2>/dev/null \
+      | VMR_AREA="$STORIES_AREA" VMR_PFX="$STORIES_SLOT_PFX" VMR_SFX="$STORIES_SLOT_SFX" LC_ALL=C awk '
+        function is_slot(c,   lp, ls, mid) {
+          lp = length(ENVIRON["VMR_PFX"]); ls = length(ENVIRON["VMR_SFX"])
+          if (length(c) <= lp + ls) return 0
+          if (substr(c, 1, lp) != ENVIRON["VMR_PFX"]) return 0
+          if (substr(c, length(c) - ls + 1) != ENVIRON["VMR_SFX"]) return 0
+          mid = substr(c, lp + 1, length(c) - lp - ls)
+          return mid !~ /[^0-9]/
+        }
+        {
+          a = ENVIRON["VMR_AREA"] "/"
+          if (substr($0, 1, length(a)) != a) next
+          n = split(substr($0, length(a) + 1), part, "/")
+          if (n < 2 || part[n - 1] != "stories") next
+          for (i = 1; i < n; i++) if (is_slot(part[i])) next
+          k++
+        }
+        END { print k + 0 }')" || CHECK6_FLAT_CORPUS=0
+    case "$CHECK6_FLAT_CORPUS" in ''|*[!0-9]*) CHECK6_FLAT_CORPUS=0 ;; esac
   fi
   for story_file in "${STORIES_DIR}"/*.md; do
     if [ ! -f "$story_file" ]; then
@@ -674,6 +707,7 @@ else
       fi
     fi
   done
+  CHECK6_AREA_CORPUS=$((CHECK6_FLAT_CORPUS + CHECK6_MATCHED))
   if [ "$CHECK6_AREA_CORPUS" -eq 0 ]; then
     CHECK6_SKIPPED=1
   fi
@@ -684,10 +718,10 @@ if [ "$CHECK6_UNRESOLVED" -eq 1 ]; then
   CHECK6_FAILURES=$((CHECK6_FAILURES + 1))
   echo "  CHECK 6: FAIL — the corpus location did not resolve"
 elif [ "$CHECK6_SKIPPED" -eq 1 ]; then
-  echo "  CHECK 6: SKIP — the story corpus is empty (0 story files under any stories/ directory in ${STORIES_AREA})"
+  echo "  CHECK 6: SKIP — the story corpus is empty (0 story files in '${STORIES_DIR}', and 0 in any stories/ directory under ${STORIES_AREA} outside a sprint slot; other sprints' slots are not counted)"
   SKIPPED_CHECKS="$SKIPPED_CHECKS 6"
 elif [ "$CHECK6_MATCHED" -eq 0 ]; then
-  fail "Check6_GLOB_MATCHED_NOTHING" "no story file sits in '${STORIES_DIR}', but ${CHECK6_AREA_CORPUS} story file(s) sit under a stories/ directory in '${STORIES_AREA}' (${CHECK6_CORPUS} of them under the declared '${STORIES_DIR_ALL}'). Check 6 would have verified NOTHING and printed PASS. Either this sprint wrote its stories somewhere else, or the tree still holds the corpus in ONE flat directory shared across sprints and has not been migrated — run 'scripts/ai-dlc/migrate-artifact-paths.sh' (dry run), then '--apply'. Until then the sprint's Dev Agent Record compliance is unverified."
+  fail "Check6_GLOB_MATCHED_NOTHING" "no story file sits in '${STORIES_DIR}' (0 counted there), but ${CHECK6_FLAT_CORPUS} story file(s) sit in a stories/ directory under '${STORIES_AREA}' that is in NO sprint slot -- the flat layout, shared across sprints. Other sprints' slot directories are not counted: their stories are not this sprint's. Check 6 would have verified NOTHING and printed PASS. The tree still holds the corpus in ONE flat directory shared across sprints and has not been migrated — run 'scripts/ai-dlc/migrate-artifact-paths.sh' (dry run), then '--apply'. Until then the sprint's Dev Agent Record compliance is unverified."
   CHECK6_FAILURES=$((CHECK6_FAILURES + 1))
   echo "  CHECK 6: FAIL — 0 of ${CHECK6_AREA_CORPUS} story file(s) sit in this sprint's directory"
 elif [ $CHECK6_FAILURES -eq 0 ]; then
