@@ -46,9 +46,10 @@ verify: theirs_has core/scripts/thing.sh "MARKER_D"
 
 ## PC-S900-ALPHA — open, and shares a SPRINT PREFIX with the two entries below it
 
-A `PC-S<n>` prefix carried by two or more entries is what makes ledger-reverify emit a
-NAMED-UPSTREAM-AMBIGUOUS row, and that row's detail carries `prefix_entry_count()`. Without a
-prefix in this ledger the acceptance assertion in run.sh has no subject at all.
+An upstream citation of a bare `PC-S<n>` prefix is what makes ledger-reverify emit a
+NAMED-UPSTREAM-AMBIGUOUS row, and that row's detail carries the count of OPEN live entries
+carrying the prefix. Without a prefix in this ledger the acceptance assertion in run.sh has no
+subject at all.
 
 verify: theirs_has core/scripts/thing.sh "MARKER_A"
 
@@ -56,9 +57,9 @@ verify: theirs_has core/scripts/thing.sh "MARKER_A"
 
 ## PC-S900-BETA — open, and carries the same sprint prefix
 
-The second live member. Two live members keep the prefix ambiguous on BOTH sides of the
-rotation, so the row survives the move and only its COUNT changes — which is the whole
-distinction between the row set and the bytes.
+The second live member. Two open members keep the row's count at 2 on BOTH sides of the
+rotation, which is the value run.sh asserts: the count is over open entries, so the closed
+GAMMA below is counted on neither side.
 
 verify: theirs_has core/scripts/thing.sh "MARKER_B"
 
@@ -66,13 +67,12 @@ verify: theirs_has core/scripts/thing.sh "MARKER_B"
 
 ## PC-S900-GAMMA — closed in the same pass that rotates it, and the third member of the prefix
 
-THIS ENTRY IS THE POINT OF THE TRIO. `prefix_entry_count()` counts the prefix over the CORPUS —
-every entry line in both files, open or closed — so this entry is counted while it sits
-annotated in the LIVE file and counted once it is on the archive side: 3 -> 3 across the move.
-It used to count OPEN entries unioned with ARCHIVED labels, which put this entry on neither side
-until the rotate and made the count dip 2 -> 3 across a move that can only shrink the live set.
-Annotate-then-rotate in one pass is what SKILL.md step 8 prescribes, so this is the ordinary
-case and not a constructed one.
+THIS ENTRY IS THE POINT OF THE TRIO. ledger-reverify counts the prefix over OPEN live entries
+only and never reads the archive, so this entry is counted neither while it sits annotated in
+the LIVE file nor once it is on the archive side: 2 -> 2 across the move. A count that read the
+archive put this entry on neither side until the rotate and then on the archive side, and moved
+2 -> 3 across a move that can only shrink the live set. Annotate-then-rotate in one pass is what
+SKILL.md step 8 prescribes, so this is the ordinary case and not a constructed one.
 
 <br>**ADOPTED UPSTREAM (v0.97.0, verified 2026-01-01).** Upstream took it.
 
@@ -145,16 +145,16 @@ BASE="$(git -C "$WORK/dist" rev-parse HEAD)"
 # set that reaches code but changes none of the entry's receipt paths reads
 # NAMED-UPSTREAM-OFF-SUBJECT, so run.sh's PC-S901-ALPHA and PC-S910-ALPHA ledgers anchor on
 # `s900-landed.sh` / `s910-landed.sh`, not on `thing.sh`. Pointing them back at `thing.sh` turns
-# both prefix-counter mutants red for a reason unrelated to the counter.
+# both history-count mutants red for a reason unrelated to the count.
 printf 's900\n' > core/scripts/s900-landed.sh
 git -C "$WORK/dist" -c user.email=f@f -c user.name=f -c commit.gpgsign=false add -A
 git -C "$WORK/dist" -c user.email=f@f -c user.name=f -c commit.gpgsign=false commit -q \
   -m 'upstream sprint work landed: PC-S900 and PC-S901 absorbed'
 # PC-S910 GETS ITS OWN COMMIT, and that is not cosmetic. `named_ambiguous()` prints the sha it
-# found and `named_absorbed()` prints how many commits named the id, so folding a third prefix
-# into the message above would move the DETAIL column of every PC-S900 and PC-S901 row. The
-# assertion that reads those details (`pfx_n`, the 3 -> 3 arm) would then be reading a string
-# this addition changed rather than one the rotation changed.
+# found and how many commits cite the prefix, so folding a third prefix into the message above
+# would move the DETAIL column of every PC-S900 and PC-S901 row. The assertion that reads those
+# details (`pfx_n`, the 2 -> 2 arm) would then be reading a string this addition changed rather
+# than one the rotation changed.
 printf 's910\n' > core/scripts/s910-landed.sh
 git -C "$WORK/dist" -c user.email=f@f -c user.name=f -c commit.gpgsign=false add -A
 git -C "$WORK/dist" -c user.email=f@f -c user.name=f -c commit.gpgsign=false commit -q \
