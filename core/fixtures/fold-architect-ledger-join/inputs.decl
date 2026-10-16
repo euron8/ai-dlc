@@ -1,0 +1,24 @@
+# fold-architect-ledger-join drives four shipped programs and reads three step files. The fixture's OWN directory
+# (run.sh, graph-ledger.jsonl, graph-oneshot-s313.block) is copied by the runner, so it is not declared.
+# The subject: run.sh exits at its SUBJECT ABSENT guard before driving anything when the layout is a consumer's
+# and the mode is missing. REQUIRED, and its HERMETIC-CONSUMED line is printed after that guard.
+!core/scripts/validate-spawn-ledger.sh
+# The subject's sibling: --fold-architect runs it on the residue (FA_VPB), and run.sh drives it directly.
+core/scripts/validate-provenance-block.sh
+# The shipped stamp writer, run from each world root by stamp().
+core/scripts/stamp-story-provenance.sh
+# The manifest reader, driven by gs_planned() with --file naming gate-validation.md.
+core/scripts/gate-slice.sh
+# The schema both provenance programs refuse to run without (validate-provenance-block.sh and
+# stamp-story-provenance.sh resolve it from the root's core/schemas/ first).
+core/schemas/provenance-block.json
+# The three step files run.sh parses (GV, BI, ROUTE): Check 17's bullets, section 4's paragraphs, the variant table.
+core/skills/ai-dlc/steps/gate-validation.md
+core/skills/ai-dlc/steps/bug-investigation.md
+core/skills/ai-dlc/steps/route.md
+# reason: gate-slice.sh lists these two directories (overrides/ for a shadowing GATE_MANIFEST, extensions/ for the
+# additive layer, gate-slice.sh:313-314) and validate-provenance-block.sh looks for extensions/known-skills.json
+# (:194-196). G1 stands down when an overrides/ entry carries a GATE_MANIFEST, so the sandbox must hold exactly
+# what the tree holds there. Each is a README.md today.
+core/skills/ai-dlc/overrides/
+core/skills/ai-dlc/extensions/

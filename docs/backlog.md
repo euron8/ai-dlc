@@ -280,6 +280,8 @@ verify: manual
 
 ## BL-558 — `story-evidence-scaffold` costs 173-177s solo against a recorded pool-12 history of 2-3s, and the cause is not found
 
+**LANDED (v0.806.0, verified 4a6773ae).** The 2-3s rows were passing runs of the 232-line fixture from before 0.783.0; 0.787.0's battery took it to about 175s, its real cost. The validator battery moved to four `.dist-only` shards (`story-evidence-scaffold-mutants`, `-b`, `-c`, `-d`), so consumers stop running it; solo in a clean worktree the shipped fixture is 26s and the shards 53s, 50s, 58s and 46s.
+
 **DEFECT (efficiency).** Found at batch 234 while gating 0.790.0. Pushed from a linked worktree, the pre-push runner re-ran the same 10 fixtures every time (the 8 its read-set map leaves unmapped there, plus two), and `story-evidence-scaffold` was the pole of that set at 144s and 146s. The suite-pole guard judged it against its own pool-12 history, 8 rows with a maximum of 3s, and failed two gates on the regime ceiling (6s). Measured solo and interleaved, from detached worktrees of `origin/main` (`bfb5589e`) and the release tip (`1c2bf345`), at load 4-6: base 177s and 175s, tip 173s and 171s. So the cost is not the release. The 2-3s rows are not explained: a grep of `run.sh` (725 lines, one file in the fixture) for reads outside `core/` (`projects`, `graph`, `HOME`, `git log`, `find`) found none, and the fixture's own run log shows a full mutant battery over about 30 handoff and strategy cases. Its 8 pool-12 rows were dropped on the operator's choice with the guard's own printed remedy (backup kept), and the next gate read `CALIBRATING (1/3)` at 143s and passed.
 
 Owed: find what the 2-3s rows measured (a skipped battery, a different dispatch, a different tree) and whether 175s is the fixture's real cost. If it is, the fixture is a candidate for the same sharding the other batteries got, since a 175s unit can become a full-suite pole. Measure solo first, in a clean worktree, and name the tree beside the number.
@@ -566,6 +568,8 @@ Scheduled in batch 235 for a later release (scope ruling: the boundary is the re
 verify: manual
 
 ## BL-584 — two fixtures cannot be traced and have no `inputs.decl`, so they run on every push
+
+**PARTIAL (v0.806.0, verified 4a6773ae) — owed (1) shipped for `fold-architect-ledger-join` only; owed (1) for `hermetic-runner` and owed (3) are OPEN.** `fold-architect-ledger-join` carries `inputs.decl` and `tools.decl` and runs under `hermetic-run.sh` (72 ok, `required_missing=0`); its 46 traced rows are removed. `hermetic-runner` reads its subject files from copies made once at startup. That cut its trace window about 6x (17691 lines to 2902, loaded) but did NOT stop the drops: one 6-fixture `--tracer sandbox` call dropped 3 reports in its window, and three `--local-map` reps dropped 1, 2 and 7, at load 27-43 (0 of 3 clean). The premise that the drops come from re-opening four tree files hundreds of times is REFUTED; the drop cause is undiagnosed. `hermetic-runner`'s 17 rows and digest are removed, so it runs on every push (fail-closed) until the drops are fixed. The earlier count of 27 held fixtures is 5: 27 have `#discards` at n≥3 in `.git/ai-dlc-fixture-readsets.local`, and only 5 are keyed on the current runner and deriver.
 
 **DEFECT (efficiency).** Operator-raised, 2026-10-16 ~04:40 EDT: "what about the fixtures whose readsets cant be mapped? i do not believe you cant figure out a way to refactor those so they dont need to be run every time." Filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]).
 

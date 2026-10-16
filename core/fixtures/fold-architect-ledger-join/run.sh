@@ -71,6 +71,9 @@ if ! grep -q -- '--fold-architect)' "$VSL"; then
   echo "FIXTURE BROKEN: core/scripts/validate-spawn-ledger.sh has no --fold-architect mode" >&2
   exit 1
 fi
+# Reached only when the subject is present AND carries the mode, so the degenerate exits above cannot satisfy the
+# REQUIRED input `!core/scripts/validate-spawn-ledger.sh` in inputs.decl.
+echo "HERMETIC-CONSUMED core/scripts/validate-spawn-ledger.sh"
 
 WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd)"
