@@ -1248,7 +1248,9 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      but on every changed block of that file **none** of the entry's own receipt substrings is
      on a changed line, while a **sibling** entry the same commit names by its full slug has its
      receipt substring there. The row names the sibling(s). Every naming commit is judged, a
-     release over its span, and the sibling may be a closed or archived entry. **Not a close
+     release over its span, and the sibling must be an OPEN entry in the live ledger — a closed
+     or archived sibling attributes nothing, so this row reads the plain kind once the sibling
+     is annotated, and never depends on the archive. **Not a close
      and not a refusal**: a release that fixed the sibling and cross-referenced this entry reads
      this way, but so does a fix that left this entry's anchor stale. Read the commits and the
      sibling's entry, then this entry's subject at `theirs`.
@@ -1260,13 +1262,16 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      at `theirs`. A commit carrying both that line and an ordinary mention of the id still
      reads `NAMED-UPSTREAM`; commits older than the form read as they always did.
    - `NAMED-UPSTREAM-AMBIGUOUS` → upstream's history cites this entry's SPRINT prefix
-     (`PC-S<n>`), but two or more ledger entries share that prefix and the commit does not say
-     which it absorbed. The row names EVERY citing commit, newest first, and says when none of
-     them changes `core/` or `templates/`. **Deliberately NOT attributed.** Upstream writes the short id, not the
-     full slug — measured against it at 0.328.0, the slug search found 20 of 128 entries while
-     20 of 29 prefixes appeared, and of those 20 prefixes only 9 named a single entry. Matching
-     the prefix regardless would tell you to close entries upstream never touched, which is
-     worse than the silence it replaces. Read the named commit and decide per entry. Like
+     (`PC-S<n>`), and the commit does not say which entry it means. One row per prefix, keyed on
+     the prefix, emitted however many OPEN live entries carry it — one included; the count in
+     its detail is of those open entries. The row names EVERY citing commit, newest first, and says when none of
+     them changes `core/` or `templates/`. **Deliberately NOT attributed, not even to a lone
+     carrier.** Upstream writes the short id, not the full slug — measured against it at
+     0.328.0, the slug search found 20 of 128 entries while 20 of 29 prefixes appeared, and of
+     those 20 prefixes 11 were shared. A lone carrier is a fact about what this ledger still
+     holds, not about what the commit meant: the sprint may have filed others since closed or
+     rotated, and attributing on that count made the row change when sprint history was
+     deleted. Read the named commit and decide per entry. Like
      `NAMED-UPSTREAM`, **not closable** — it is a pointer to a reading, not a verdict.
    - `HAND-REVIEW` → the entry declares `verify: manual`. No mechanical predicate exists for
      it BY DESIGN; adjudicate the body against theirs. This is NOT an entry with no `verify:`
@@ -2657,9 +2662,9 @@ declared sites, not everywhere unconditionally.
        — a fix that lands before its bump reads one release early there. The row deliberately
        stopped guessing it, because a version read off a commit that merely NAMES the id is a
        claim about the wrong event and the annotation it lands in is permanent.
-     - `NAMED-UPSTREAM-AMBIGUOUS` — the commits cite the sprint prefix and two or more entries
-       share it. Deliberately NOT attributed: read the named commit and decide per entry.
-       Annotate nothing on the strength of the row alone.
+     - `NAMED-UPSTREAM-AMBIGUOUS` — the commits cite the bare sprint prefix, however many open
+       entries carry it (one included). Deliberately NOT attributed: read the named commit and
+       decide per entry. Annotate nothing on the strength of the row alone.
      - `NAMED-UPSTREAM-DOCS-ONLY` — upstream's history names the id but no naming commit
        changes `core/` or `templates/` or cuts a release. Read the commits for a withdrawal or a
        split and act on that if there is one. Then read the entry's own subject against
@@ -2701,8 +2706,9 @@ declared sites, not everywhere unconditionally.
      the re-verification honours as a close is archivable and the two cannot drift apart.
      **Acceptance test:** `ledger-reverify.sh` must emit the same ROW SET before and after
      the `--apply` — by status and subject, `cut -f1,2 | sort` either side. Rotation moves
-     exactly the entries it already skips, and every number it prints is counted over BOTH
-     ledger files, so a rotation that swept nothing changes no row and no detail. **Compare the
+     exactly the entries it already skips, and `ledger-reverify.sh` never reads the archive —
+     every number it prints is counted over the OPEN entries of the live ledger — so a rotation
+     that swept nothing changes no row and no detail. **Compare the
      row set, never a row COUNT** — a count is a property of the ledger's size on the day, and
      a swept entry can hide behind a duplicate. If a row appears, disappears, or changes status
      — including `NAMED-UPSTREAM <slug>` becoming `NAMED-UPSTREAM-AMBIGUOUS <prefix>` or the
@@ -2710,8 +2716,8 @@ declared sites, not everywhere unconditionally.
      The one benign difference that used to exist here is gone: the sprint-prefix count inside
      `NAMED-UPSTREAM-AMBIGUOUS` details once dipped while an entry sat annotated-but-unrotated
      and rose back at the rotate, which on a two-member prefix flipped the surviving sibling's
-     row between the two statuses above and read exactly like a sweep. The count is taken over
-     the corpus, so that flip cannot occur.
+     row between the two statuses above and read exactly like a sweep. A bare prefix is now
+     never attributed to an entry and the count reads no history, so that flip cannot occur.
    - **Commit** all step-7 writes and the step-8 ledger writes above (the ledger and
      `push-candidate-ledger.archive.md`), each staged by explicit pathspec and never with
      `git add -A` or `git add .`, on the step-6 reconcile branch, with a subject

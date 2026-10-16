@@ -62,33 +62,27 @@
 # before and after and compare that projection — that is the acceptance test, and the fixture
 # asserts it. The default (no --apply) writes nothing, so the comparison is free.
 #
-# THE ROW SET, NOT A ROW COUNT, AND NOT THE BYTES EITHER. A count lets a swept entry hide behind a
-# duplicate. The bytes are a stricter test than the invariant needs, and until the counter below
-# was corrected they false-failed on the very workflow this script is the second half of.
+# THE ROW SET, NOT A ROW COUNT. A count lets a swept entry hide behind a duplicate. The bytes hold
+# across a rotation too, but the projection is what the acceptance test compares, because a correct
+# ANNOTATE (the step before this one) does move a detail: an annotated entry is no longer open.
 #
-# THE COUNTER IS COUNTED OVER THE CORPUS, AND THAT IS WHAT MAKES THE ROW SET INVARIANT.
-# `prefix_entry_count()` in ledger-reverify.sh counts a sprint prefix over every entry line in
-# BOTH files, open or closed. Annotating an entry moves nothing between the files and rotating it
-# moves it from one to the other, so the count cannot change at either step. It used to be OPEN
-# entries unioned with ARCHIVED labels: an entry annotated in the same pass — which is exactly what
-# the annotate-then-rotate step prescribes — was on NEITHER side while it sat in the live file and
-# on the archive side once moved, so the count DIPPED at the annotate and RETURNED at the rotate.
-# On a prefix with more than two members that surfaced as a changed count on an identical row; on a
-# prefix with exactly two, one annotated, the dip reached ONE and the surviving sibling's row
-# crossed between `NAMED-UPSTREAM <slug>` and `NAMED-UPSTREAM-AMBIGUOUS <prefix>` — a changed row
-# SET, by status and subject, on a rotation that swept nothing. The reference consumer reported the
-# second shape from its own ledger with 89 rows either side
+# LEDGER-REVERIFY READS NO ARCHIVE, AND THAT IS WHAT MAKES THE ROW SET INVARIANT. It reads the OPEN
+# entries of the live ledger and nothing else: a closed entry emits no row and is counted nowhere,
+# a bare sprint-prefix citation gets one `NAMED-UPSTREAM-AMBIGUOUS <prefix>` row attributed to no
+# entry whatever the count, and a sibling attributes only while it is an open live entry. This
+# script moves only closed entries, and only into a file reverify never opens, so the rotation can
+# move neither a row nor a byte. The archive written here is a record for the operator; no reader
+# in this skill takes it as input, and every reader's rows are the same with it deleted.
+#
+# IT USED TO READ HISTORY, AND THE ROTATION FLIPPED ROWS. A sprint prefix was counted over open
+# entries unioned with archived labels, and a count of one attributed the bare prefix to that one
+# entry. An entry annotated in the same pass sat on neither side until the move landed, so on a
+# two-member prefix the surviving sibling's row crossed between `NAMED-UPSTREAM <slug>` and
+# `NAMED-UPSTREAM-AMBIGUOUS <prefix>` on a rotation that swept nothing — reported by the reference
+# consumer from its own ledger with 89 rows either side
 # (PC-S337-ROTATE-ACCEPTANCE-TEST-FALSE-FAILS-WHEN-A-PREFIX-CROSSES-THE-ONE-VS-MANY-THRESHOLD).
-#
-# THE ARCHIVE ARM STAYS, AND DELETING IT WOULD BE A REGRESSION. Without it the count was
-# ANTI-MONOTONIC, every rotation lowering it and converting a correct AMBIGUOUS into a confidently
-# wrong single attribution. The corpus count is that fix carried one step further, in the same
-# direction: strictly fewer attributions, never more.
-#
-# A WIDENING OF THIS COUNTER WAS ONCE MEASURED ON THE REFERENCE CONSUMER AT REST AND REJECTED FOR
-# FLIPPING ZERO VERDICTS. The defect is a TRANSIENT — it exists only between the annotate and the
-# rotate — and a ledger at rest has no annotated-but-unrotated entry to show it. The consumer's own
-# diff, taken across a live rotation, is what a rest-state census could not see.
+# Counting the archive was what stopped a rotation UNLOCKING a withheld attribution, which is why
+# the fix is to attribute nothing on a bare prefix rather than to stop counting the archive.
 #
 # Usage:
 #   ledger-rotate.sh <ledger-path> [--archive <path>] [--apply]
