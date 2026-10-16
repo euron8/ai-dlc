@@ -876,8 +876,9 @@ lease_holder_dead() {  # $1 = holder pid -> 0 when no live beat stands behind it
   kill -0 "$1" 2>/dev/null && return 1
   return 0
 }
+LEASE_TMP="${COUNTER_DIR}/.beat-inflight.$$"   # inside the ignored .wait-beats/, same filesystem
 lease_put() {  # $1 = epoch, $2 = pid -- whole-file replace, never a partial line for the hook to read
-  printf '%s %s' "$1" "$2" > "${BEAT_MARKER}.$$" 2>/dev/null && mv -f "${BEAT_MARKER}.$$" "$BEAT_MARKER" 2>/dev/null || true
+  printf '%s %s' "$1" "$2" > "$LEASE_TMP" 2>/dev/null && mv -f "$LEASE_TMP" "$BEAT_MARKER" 2>/dev/null || true
 }
 beat_alive() {
   ba_e_=$(( $(date +%s) + 3 * POLL ))
@@ -909,7 +910,7 @@ lease_release() {
     if [ -n "$lr_heir_" ]; then lease_put "${lr_heir_%% *}" "${lr_heir_#* }"
     else rm -f "$BEAT_MARKER" 2>/dev/null; fi
   fi
-  rm -f "$LEASE_SELF" "${BEAT_MARKER}.$$" 2>/dev/null || true
+  rm -f "$LEASE_SELF" "$LEASE_TMP" 2>/dev/null || true
 }
 trap 'lease_release' EXIT
 beat_alive
