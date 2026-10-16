@@ -24,7 +24,7 @@
 #   be named `planning-artifacts`, and the state directory is its parent.
 #     write ledger    <planning>/.artifact-writes.jsonl
 #     spawn ledger    <state>/spawn-ledger.jsonl
-#     probe ledger    <state>/subagent-context.jsonl     (pre-upgrade rows only)
+#     probe ledger    <state>/subagent-context.jsonl     (corroborates every meta file; sole source for a pre-upgrade row)
 #
 # THE DISPATCH ID IS DERIVED, NEVER SELF-REPORTED. A dispatched model cannot know the
 #   `tool_use_id` of the Agent call that spawned it, so a shard's own `tool_use_id:` is whatever
@@ -42,10 +42,22 @@
 #        tool_use_id` row, and to nothing else.
 #     3. dispatch id -> role: every spawn-ledger row carrying that `tool_use_id` names role
 #        `adversary`.
+#   THE META FILE IS CORROBORATED. The lead can Write `agent-<id>.meta.json`; it cannot Write the
+#   probe ledger, a guarded root that ai-dlc-subagent-probe.sh fills at SubagentStop with the
+#   `toolUseId` it read from that same meta file. So a writer resolved through its meta file must also
+#   have a probe row, and every probe row for it must carry the meta's id. Measured on the reference
+#   consumer: 44 of 44 shard writers resolved through a meta file had a probe row carrying the same id,
+#   and 0 of the 732 agents with a row on an adversary shard lacked a probe row. The probe row
+#   lands after the agent's last write (p50 7s, p99 52s, max 150s on that corpus), inside the 180s
+#   settle `wait-for-deliverable.sh --complete` holds before the merge; the 2 merges that ran ahead of
+#   it predate the settle window. The hook has silent no-row paths (unreadable transcript, peak 0, no
+#   jq), so an absent row is refused, never trusted: re-run the merge once the adversary has stopped.
 #   REFUSED (exit 2, nothing written): a shard with no write-ledger row; a writer whose meta file
-#   or `toolUseId` is absent; a pre-upgrade writer with no probe row; a dispatch id with no spawn
-#   row; a writer of any role other than `adversary` (a remediator, an sm, ...); two or more
-#   adversary dispatches writing one shard; one dispatch deriving for two shards; and a self-
+#   or `toolUseId` is absent; a writer whose meta file names a dispatch the probe ledger has no row
+#   for, or names another dispatch than its probe rows; a pre-upgrade writer with no probe row; a
+#   dispatch id with no spawn row; a writer of any role other than `adversary` (a remediator, an sm,
+#   ...); two or more adversary dispatches writing one shard; one dispatch deriving for two shards;
+#   one dispatch writing in this shard dir and under any OTHER `shards/<x>-p<M>/` dir; and a self-
 #   reported id that is REAL-SHAPED (`toolu_` and 24 base62 characters, the shape every harness id
 #   on the reference consumer carries) and differs from the derived one. Any other self value --
 #   `NOT_ACCESSIBLE`, `unavailable`, absent, or a fabricated `toolu_cross1_g1_dispatch` -- is
@@ -61,6 +73,12 @@
 #   four, and BL-530's second half owns the Bash floor. No second ledger is kept here.
 #   Rows are keyed on the FULL path under this shard dir (the prefix above), never on a basename:
 #   a row for `2.md` under another shard dir or another sprint is not a row for this shard.
+#   ONE DISPATCH, ONE SHARD DIR: the agents with a row in this dir, superseded writers included, are
+#   then looked up across the whole write ledger, and a row of theirs under another `shards/*-p<M>/`
+#   dir refuses. Rows outside every `-p<M>` dir are not read, so a `.draft` beside its shard is this
+#   dir's. False-positive set, measured on the reference consumer's ledger as it stood: 71 (agent,
+#   shard dir) pairs would refuse, every one a remediator the role hop already refuses, and 0 an
+#   adversary. The write ledger is transient, so that is one snapshot and a floor, not a census.
 #   The meta file wins over the probe ledger whenever the row carries `transcript_path`; the probe
 #   row is read only for a row without one. A dispatch id with two spawn rows is refused if ANY of
 #   them names a role other than `adversary`.
@@ -73,6 +91,9 @@
 #     writers are P's SUPERSEDED writers. Every refusal of the join then runs unchanged on the
 #     narrowed rows, so P needs exactly one adversary dispatch writing it at or after S, and that
 #     dispatch must have written no other shard.
+#   - Every superseded writer is resolved through the same chain as a shard writer (meta file or
+#     probe row, the probe corroboration, the spawn ledger), and refused unless it is an `adversary`
+#     dispatch: a non-adversary write on a shard is a role violation, not a stale dispatch.
 #   - Refused: <ISO> malformed; P not a shard in the dir; P named twice; a superseded writer with
 #     ANY row in the shard dir on a file other than P or `P.draft` (it was not only P's writer --
 #     another shard's adversary that edited P is a cross-shard write, never a stale dispatch); a
@@ -539,6 +560,9 @@ if [ -f "$REC_WRITES" ]; then
     | unique | .[] | @tsv' "$REC_WRITES" > "$T/wrows" 2>/dev/null \
     || refuse "the write ledger $REC_WRITES does not parse as JSON lines"
 fi
+# Every agent with a row in this shard dir, taken BEFORE --rerun narrows the rows, so a superseded
+# writer is still one of them for the cross-dir check (ONE DISPATCH, ONE SHARD DIR, below).
+cut -f2 "$T/wrows" | sort -u > "$T/wagents" || refuse "cannot stage the shard dir's writers"
 if [ -f "$REC_SPAWNS" ]; then
   jq -rn '[inputs | select(type == "object") | select((.tool_use_id // "") | type == "string" and . != "")
       | [.tool_use_id, (.role // "" | tostring)]] | unique | .[] | @tsv' "$REC_SPAWNS" > "$T/spawns" 2>/dev/null \
@@ -608,6 +632,7 @@ if [ -n "$RERUN" ]; then
       }
       print "N\t" ns + 0
       for (i = 1; i <= n; i++) if (!(i in drop)) print "K\t" f[i] "\t" a[i] "\t" m[i]
+      for (i = 1; i <= n; i++) if (i in drop) print "S\t" f[i] "\t" a[i] "\t" m[i]
     }' "$T/rspec" "$T/drows" > "$T/rres" || refuse "the re-run narrowing over $REC_WRITES did not run"
   IFS="$(printf '\t')" read -r _k _a _b _c _d < "$T/rres"
   case "$_k" in
@@ -616,7 +641,9 @@ if [ -n "$RERUN" ]; then
   esac
   RR_LINES="$(awk -F'\t' '$1 == "L" { print $2 }' "$T/rres")"
   RR_SUPERSEDED="$(awk -F'\t' '$1 == "N" { print $2 }' "$T/rres")"
-  awk -F'\t' 'BEGIN { OFS = "\t" } $1 == "K" { print $2, $3, $4 }' "$T/rres" | sort -u > "$T/wrows" \
+  # A superseded row stays in $T/wrows tagged `S` in a fourth column: the join resolves its writer's
+  # dispatch and role like any other (a non-adversary is refused), and only then sets it aside.
+  awk -F'\t' 'BEGIN { OFS = "\t" } $1 == "K" { print $2, $3, $4 } $1 == "S" { print $2, $3, $4, "S" }' "$T/rres" | sort -u > "$T/wrows" \
     || refuse "cannot stage the narrowed write rows"
 fi
 # The meta files the rows name, read in one jq over those that exist; one that does not is absent
@@ -635,18 +662,28 @@ awk -F'\t' -v fm="$T/metas" -v fp="$T/probes" -v fs="$T/spawns" -v fw="$T/wrows"
     -v lw="$REC_WRITES" -v ls="$REC_SPAWNS" -v lp="$REC_PROBES" '
   function no(m) { print "REFUSE\t" m; bad = 1; exit 3 }
   FILENAME == fm { meta[$1] = $2; next }
-  FILENAME == fp { if (!($1 in probe)) probe[$1] = $2; next }
+  FILENAME == fp {
+    if (!($1 in probe)) probe[$1] = $2
+    if (!(($1, $2) in sp)) { sp[$1, $2] = 1; pall[$1] = pall[$1] "\t" $2 }
+    next
+  }
   FILENAME == fs { role[$1] = (($1 in role) ? role[$1] "\t" : "") $2; next }
   FILENAME == fw {
-    if (!(($1, $2) in sw)) { sw[$1, $2] = 1; wr[$1] = wr[$1] " " $2 }
+    # A fourth column `S` marks a row --rerun superseded: its writer is resolved below like any
+    # other, and is then set aside rather than counted as the shard dispatch.
+    if ($4 == "S") { if (!(($1, $2) in ss)) { ss[$1, $2] = 1; sup[$1] = sup[$1] " " $2 } }
+    else if (!(($1, $2) in sw)) { sw[$1, $2] = 1; wr[$1] = wr[$1] " " $2 }
     if ($3 != "" && !(($2, $3) in sm)) { sm[$2, $3] = 1; am[$2] = am[$2] "\t" $3 }
     next
   }
   {
     key = $1; sf = $2; b = sf; sub(/.*\//, "", b)
-    if (!(b in wr)) { print key "\t"; next }
-    n = split(substr(wr[b], 2), A, " "); did = ""
-    for (i = 1; i <= n; i++) {
+    nsup = (b in sup) ? split(substr(sup[b], 2), SA, " ") : 0
+    if (!(b in wr) && nsup == 0) { print key "\t"; next }
+    n = (b in wr) ? split(substr(wr[b], 2), A, " ") : 0
+    for (i = 1; i <= nsup; i++) A[n + i] = SA[i]
+    did = ""
+    for (i = 1; i <= n + nsup; i++) {
       a = A[i]; id = ""
       if (a in am) {
         m = split(substr(am[a], 2), M, "\t")
@@ -656,15 +693,24 @@ awk -F'\t' -v fm="$T/metas" -v fp="$T/probes" -v fs="$T/spawns" -v fw="$T/wrows"
           if (id != "" && id != meta[M[j]]) no(sf " was written by agent " a ", whose meta files name two dispatch ids (" id ", " meta[M[j]] ")")
           id = meta[M[j]]
         }
+        # THE META FILE IS CORROBORATED BY THE PROBE LEDGER. The lead can Write a meta file; it
+        # cannot Write the probe ledger (a guarded root), which ai-dlc-subagent-probe.sh fills at
+        # SubagentStop from that same meta. No row: the writer has not stopped, so it has not delivered.
+        if (!(a in probe)) no(sf " was written by agent " a ", whose meta file names dispatch " id " but " lp " has no row for that agent; an adversary that has not stopped has not delivered -- merge after it stops")
+        if (pall[a] != "\t" id) { pl = pall[a]; gsub(/\t/, " ", pl); no(sf " was written by agent " a ", whose meta file names dispatch " id " but " lp " records" pl " for that agent; the meta file was rewritten after the agent stopped") }
       } else if (a in probe) id = probe[a]
       else no(sf " was written by agent " a " in a row that predates transcript_path, and " lp " has no tool_use_id row for that agent; its dispatch id cannot be derived")
       if (!(id in role)) no(sf " was written by agent " a ", dispatch " id ", which has no row in " ls "; a dispatch the guard never recorded is not an adversary")
       r = split(role[id], R, "\t")
-      for (j = 1; j <= r; j++)
+      for (j = 1; j <= r; j++) {
+        if (i > n && R[j] != "adversary") no(sf " carries rows --rerun would supersede from agent " a ", dispatch " id ", dispatched as role " (R[j] == "" ? "<none>" : R[j]) "; a non-adversary write on a shard is a role violation, not a stale dispatch, and --rerun never sets it aside")
         if (R[j] != "adversary") no(sf " was written by agent " a ", dispatch " id ", dispatched as role " (R[j] == "" ? "<none>" : R[j]) "; only an adversary writes an adversary shard")
+      }
+      if (i > n) continue
       if (did != "") no(sf " was written by more than one adversary dispatch (" did ", " id "); one shard is one adversary -- after a re-dispatch, merge with --rerun <shard>.md@<the re-dispatch dispatched-at>")
       did = id
     }
+    if (did == "") { print key "\t"; next }
     if (did in used) no(sf " derives dispatch " did ", which also wrote shard " used[did] "; one dispatch delivered two shards")
     used[did] = key; print key "\t" did
   }' "$T/metas" "$T/probes" "$T/spawns" "$T/wrows" "$T/shards" > "$T/ids"
@@ -673,6 +719,26 @@ JOIN_RC=$?
 JOIN_LAST="$(tail -1 "$T/ids")"
 case "$JOIN_LAST" in REFUSE*) refuse "${JOIN_LAST#REFUSE	}" ;; esac
 [ "$JOIN_RC" -eq 0 ] || refuse "the dispatch-id join over $REC_WRITES did not run (awk exit $JOIN_RC)"
+# ONE DISPATCH, ONE SHARD DIR. Every row of every agent that wrote in this dir -- a superseded
+# writer included -- must sit under this dir: a row under ANOTHER `shards/<x>-p<M>/` (another pass,
+# another artifact, another sprint) means one dispatch delivered for two merges, which the per-shard
+# join above cannot see because it reads this dir's prefix only. Rows outside every `-p<M>` shard
+# dir are not read, and a `.draft` sibling in this dir is this dir.
+if [ -s "$T/wagents" ] && [ -f "$REC_WRITES" ]; then
+  XD="$(jq -rn --rawfile ag "$T/wagents" --arg p "$REC_PREFIX" '
+      ($ag | split("\n") | map(select(. != "")) | map({key: ., value: 1}) | from_entries) as $A
+      | first(inputs | select(type == "object") | select(.kind == "artifact-write")
+        | select((.agent_id // "") | type == "string" and $A[.] == 1)
+        | (.path // "") as $q | select($q | type == "string")
+        | ($q | capture("^(?<d>.*/shards/[^/]+-p[0-9]+/)")? | .d) as $d
+        | select($d != null and $d != $p)
+        | [.agent_id, $q, (.ts // "" | tostring)] | @tsv)' "$REC_WRITES" 2>/dev/null)" \
+    || refuse "the write ledger $REC_WRITES does not parse as JSON lines"
+  if [ -n "$XD" ]; then
+    IFS="$(printf '\t')" read -r _xa _xp _xt <<< "$XD"
+    refuse "agent ${_xa} wrote in ${REC_PREFIX} and also wrote ${_xp} at ${_xt}, under another shard dir; one dispatch delivers one shard of one pass, never shards for two merges"
+  fi
+fi
 # A REAL-SHAPED self id: `toolu_` and 24 base62 characters. Only such a value is compared.
 RE_REAL_TUID='^toolu_[0-9A-Za-z]{24}$'
 

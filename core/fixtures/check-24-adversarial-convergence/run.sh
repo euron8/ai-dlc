@@ -2206,7 +2206,8 @@ K3PA=_bmad-output/planning-artifacts
 # The merge derives each shard's dispatch id from the harness records (merge-adversarial-shards.sh,
 # THE DISPATCH ID), so every k3 shard written under shards/ is recorded the way a dispatched
 # adversary's Write is: the REAL remediation-guard hook appends the write-ledger row, and the meta
-# file and the adversary spawn row are seeded beside it. None of the three is read by the validator.
+# file, the adversary spawn row and the SubagentStop probe row are seeded beside it. None is read by
+# the validator.
 K3_HOOK=""
 _k3d="$K3S"
 while [ -n "$_k3d" ] && [ "$_k3d" != "/" ]; do
@@ -2225,6 +2226,7 @@ k3_rec() { # <shard file under <state>/planning-artifacts/s<N>/shards/<dir>/>
   [ -f "$st/pipeline-snapshot.md" ] || : > "$st/pipeline-snapshot.md"
   printf '{"toolUseId":"%s","agentType":"adversary"}\n' "$id" > "${tp%.jsonl}/subagents/agent-$ag.meta.json"
   printf '{"v":1,"ts":"2026-10-01T09:00:00Z","role":"adversary","tool_use_id":"%s"}\n' "$id" >> "$st/spawn-ledger.jsonl"
+  printf '{"v":3,"ts":"2026-10-01T09:30:00Z","agent_id":"%s","role":"adversary","tool_use_id":"%s"}\n' "$ag" "$id" >> "$st/subagent-context.jsonl"
   jq -nc --arg f "$f" --arg a "$ag" --arg t "$tp" '{session_id:"k3-session",transcript_path:$t,hook_event_name:"PreToolUse",tool_name:"Write",tool_use_id:"toolu_01K3WriteCall",agent_id:$a,tool_input:{file_path:$f,content:"shard"}}' \
     | AI_DLC_STATE_DIR=_bmad-output CLAUDE_PROJECT_DIR="$root" bash "$K3_HOOK" >/dev/null 2>&1
   return 0

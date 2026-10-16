@@ -39,7 +39,8 @@ for c in "$TREE/core/scripts" "$TREE/scripts/ai-dlc"; do [ -f "$c/merge-adversar
 miss() { echo "receipt: STILL LIVE -- $*"; exit 1; }
 # The merge derives each shard's dispatch id from the harness records, so every shard written here
 # is recorded the way a dispatched adversary's Write is: <tree>'s own remediation-guard hook
-# appends the write-ledger row, and the meta file and the adversary spawn row are seeded beside it.
+# appends the write-ledger row, and the meta file, the adversary spawn row and the SubagentStop probe
+# row are seeded beside it.
 # A tree whose merge predates the derivation ignores all three.
 H=""
 for c in "$TREE/core/hooks" "$TREE/.claude/hooks"; do [ -f "$c/ai-dlc-gate-remediation-guard.sh" ] && { H="$c/ai-dlc-gate-remediation-guard.sh"; break; }; done
@@ -51,6 +52,7 @@ rec() { # <shard file under $P/_bmad-output/planning-artifacts/s9/shards/<dir>/>
   [ -f "$P/_bmad-output/pipeline-snapshot.md" ] || : > "$P/_bmad-output/pipeline-snapshot.md"
   printf '{"toolUseId":"%s","agentType":"adversary"}\n' "$id" > "${tp%.jsonl}/subagents/agent-$ag.meta.json"
   printf '{"v":1,"ts":"2026-10-01T09:00:00Z","role":"adversary","tool_use_id":"%s"}\n' "$id" >> "$P/_bmad-output/spawn-ledger.jsonl"
+  printf '{"v":3,"ts":"2026-10-01T09:30:00Z","agent_id":"%s","role":"adversary","tool_use_id":"%s"}\n' "$ag" "$id" >> "$P/_bmad-output/subagent-context.jsonl"
   jq -nc --arg f "$1" --arg a "$ag" --arg t "$tp" '{session_id:"rc-session",transcript_path:$t,hook_event_name:"PreToolUse",tool_name:"Write",tool_use_id:"toolu_01RcWriteCall",agent_id:$a,tool_input:{file_path:$f,content:"shard"}}' \
     | CLAUDE_PROJECT_DIR="$P" bash "$H" >/dev/null 2>&1
 }

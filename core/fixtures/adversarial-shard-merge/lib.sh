@@ -127,7 +127,8 @@ is_cross() { case "$1" in cross|cross-*) return 0 ;; esac; return 1; }
 #   HR_AGENT_O / HR_DID_O   override the derived agent id / dispatch id
 #   HR_NOMETA=1   no meta file     HR_NOSPAWN=1  no spawn row
 #   HR_PRE=1      the row carries no transcript_path (written before the hook recorded one)
-#   HR_PROBE=1    also a subagent-context.jsonl probe row agent_id -> dispatch id
+#   HR_NOPROBE=1  no subagent-context.jsonl probe row (the writer has not stopped); by default one
+#                 is written, agent_id -> dispatch id, except with HR_NOMETA=1 unless HR_PROBE=1
 #   HR_SESSION=<s>  the payload's session_id (default fx-session, the transcript's own stem)
 #   SELF_ID=<v>   the shard's self-reported tool_use_id (default NOT_ACCESSIBLE; ABSENT omits the line)
 hr_ids() { # <shard file> -> HR_AGENT, HR_DID
@@ -152,7 +153,9 @@ harness_record() { # <shard file>
     "$role" "$HR_DID" > "${tp%.jsonl}/subagents/agent-$HR_AGENT.meta.json"
   [ "${HR_NOSPAWN:-0}" = 1 ] || printf '{"v":1,"ts":"2026-10-15T20:00:00Z","sprint":1,"name":null,"role":"%s","model_pinned":"opus","tier_pinned":null,"model_requested":"opus","model_bound":"definition","effort_bound":null,"role_contract_cited":true,"contract_via":"definition","role_file_readable":true,"definition_bound":true,"definition_stale":false,"name_stripped":null,"tool_use_id":"%s","shard":null}\n' \
     "$role" "$HR_DID" >> "$st/spawn-ledger.jsonl"
-  [ "${HR_PROBE:-0}" = 1 ] && printf '{"v":3,"ts":"2026-10-15T20:30:00Z","sprint":1,"agent_id":"%s","model":"opus","role":"%s","turns":9,"peak_tokens":1000,"compactions":0,"duration_s":60,"effort":null,"definition":null,"tool_use_id":"%s","transcript_version":null}\n' \
+  # The probe row ai-dlc-subagent-probe.sh writes when the writer STOPS, carrying the toolUseId it
+  # read from the meta file -- so none without a meta file (the hook then records a null id).
+  [ "${HR_NOPROBE:-0}" = 1 ] || { [ "${HR_NOMETA:-0}" = 1 ] && [ "${HR_PROBE:-0}" != 1 ]; } || printf '{"v":3,"ts":"2026-10-15T20:30:00Z","sprint":1,"agent_id":"%s","model":"opus","role":"%s","turns":9,"peak_tokens":1000,"compactions":0,"duration_s":60,"effort":null,"definition":null,"tool_use_id":"%s","transcript_version":null}\n' \
     "$HR_AGENT" "$role" "$HR_DID" >> "$st/subagent-context.jsonl"
   tpr="$tp"; [ "${HR_PRE:-0}" = 1 ] && tpr=""
   printf '{"session_id":"%s","transcript_path":"%s","cwd":"%s","hook_event_name":"PreToolUse","tool_name":"Write","tool_use_id":"toolu_01FxWriteCall%s","agent_id":"%s","agent_type":"%s","tool_input":{"file_path":"%s","content":"shard"}}' \
@@ -872,7 +875,7 @@ p_tuid_pre() { # R9: a row with no transcript_path takes the probe row's id (mer
                # it is REFUSED naming the agent and "predates transcript_path"
   local d; d="$(tw)"; HR_PRE=1 HR_PROBE=1 s2 "$d"; run_merge "$1" "$d"
   [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && grep -q " 2=$(did_of "$d" 2) " "$(out_of "$d")" || return 1
-  d="$(tw)"; HR_PRE=1 s2 "$d"; hr_ids "$d/2.md"; run_merge "$1" "$d"
+  d="$(tw)"; HR_PRE=1 HR_NOPROBE=1 s2 "$d"; hr_ids "$d/2.md"; run_merge "$1" "$d"
   refused_clean "agent $HR_AGENT in a row that predates transcript_path" "$d"
 }
 p_tuid_basename() { # rows are keyed on the FULL path under the shard dir: shard 2's only rows sit under
