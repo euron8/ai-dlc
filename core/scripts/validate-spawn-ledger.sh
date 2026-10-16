@@ -1026,7 +1026,8 @@ shard_scan() {
                else (.shard | tostring) end)
             + "\t" + ((.shard_raw // "") | tostring | gsub("[\t\n]"; " ")
                       | if . == "" then "__NONE__" else . end)
-            + "\t" + ((.tool_use_id // "") | tostring | if . == "" then "__NONE__" else . end) ),
+            + "\t" + ((.tool_use_id // "") | tostring | if . == "" then "__NONE__" else . end)
+            + "\t" + ((.parent_agent_id // "") | tostring | if . == "" then "__NONE__" else . end) ),
         ( $all[] | select((.v | type) == "number") | select((.tool_use_id // "") != "")
           | "I\t" + (.tool_use_id | tostring) )
     ' "$1" 2>/dev/null)" || return 2
@@ -1040,6 +1041,10 @@ shard_scan() {
     $1 == "I" { id[$2] = 1; next }
     $1 == "F" { fl[++nf] = $2; next }
     $1 == "R" {
+      # A ROLE-LESS ROW IS NO ROLE, so never a shardable one. Tested BEFORE the membership
+      # lookup, whose needle is two blanks for an empty role and matches any set carrying a
+      # double blank -- which " adversary ... qa  " is whenever no party seat was derived.
+      if ($3 == "") { print "L\t" $2 "\t" $7; next }
       if (index(roles, " " $3 " ") == 0) next
       if ($4 == "__NOKEY__") print "P\t" $2
       else if ($4 == "__NULL__") print "U\t" $2 "\t" $3
@@ -1085,6 +1090,7 @@ shard_self_probe() {
     '{"v":1,"sprint":7,"name":"dev-a","role":"dev","tool_use_id":"toolu_E","shard":null}' \
     '{"sprint":7,"name":"hand","role":"adversary","tool_use_id":"toolu_F","shard":null}' \
     '{"v":1,"sprint":null,"name":"adv-x","role":"adversary","tool_use_id":"toolu_X","shard":"2/2 02"}' \
+    '{"v":1,"sprint":7,"name":"Explore","role":"","tool_use_id":"toolu_L","parent_agent_id":"a0123456789abcdef","shard":null}' \
     > "$sp_d/l.jsonl" || { rm -rf "$sp_d"; return 1; }
   printf '%s\n' '<!-- SKILL_INVOCATION_PROVENANCE v1' \
     'shard_tool_use_ids: 01=toolu_B 02=toolu_X 03=toolu_F cross=toolu_GONE' \
@@ -1126,6 +1132,8 @@ shard_self_probe() {
   sp_want "J${TAB}toolu_B" "a merged id with a ledger row to join"
   sp_want "J${TAB}toolu_X" "a merged id whose row has a null sprint to join (the id set is the whole ledger)"
   sp_not "adv-c${TAB}adversary" "a pre-field row was WARNED -- the PENDING key is not being read"
+  sp_want "L${TAB}Explore${TAB}a0123456789abcdef" "a role-less row to be named with its issuer, never judged shardable"
+  sp_not "U${TAB}Explore" "a role-less row was WARNED as shardable -- the empty role matched a double blank in the set"
   sp_not "dev-a" "a non-shardable role was judged"
   sp_not "hand" "a row the guard did not write was judged"
   sp_not "toolu_OUTSIDE" "an id outside the provenance block was joined"
@@ -1754,6 +1762,9 @@ else
              echo "      prints), or 'shard: none (<1-4>)' naming the serial exception -- 4 is a document the map"
              echo "      reports SERIAL (grammar: ai-dlc-dispatch-guard.sh, THE SHARD LINE). Not a failure." ;;
          esac ;;
+      # Informational, counted nowhere: the scope arm above already counts the row out of scope.
+      L) [ "${sh_b:-__NONE__}" = "__NONE__" ] && sh_b="the lead (no parent_agent_id recorded)"
+         echo "NOTE: [${sh_a}] role-less spawn by ${sh_b}, out of Rule 19 scope and not shardable; no 'shard:' line is owed." ;;
       P) SH_PENDING=$((SH_PENDING + 1)) ;;
       S) SH_OK=$((SH_OK + 1)) ;;
       J) SH_JOINED=$((SH_JOINED + 1)) ;;
