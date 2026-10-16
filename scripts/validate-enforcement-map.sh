@@ -828,7 +828,17 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   3351-3353), tip 3357 (STABLE 2, spread 3356-3357), so +4. I79 113 -> 118 counts the rules below
 #   the re-attach cut, which Rule 11's +729 bytes moved; I93 32 <-> 31 is the instrument's usual
 #   one-fork jitter. The gate read 3358 at the old budget. HIGH reading 3357 plus the usual 6.
-FORK_BUDGET=3363
+#
+#   RAISED TO 3370 FOR ONE NEW ARM, I126, AND FOR HEADROOM MAIN HAD ALREADY SPENT. `fork-profile.sh
+#   --section by-arm --stable`, base e3073787 (0.796.0) and tip fa7656b5 (0.797.0), interleaved
+#   base/tip/base/tip in ONE detached worktree at the same path, caller environment inherited: base
+#   3362 and 3363 (STABLE 2, spread 3360-3362), tip 3362 and 3364. By arm, 127 arms base against 128
+#   tip, the ONLY arm that moved is I126 0 -> 1, its single awk over the probe and the bound hooks; the
+#   sum of arm deltas is +1. So 0.797.0 costs ONE fork. The other +6 is headroom: BASE already read
+#   3363 = the old budget, because 0.792.0..0.796.0 spent the "+6" set at 3363 without moving it, and
+#   a release adding even one fork then gated at about a 1-in-4 red (this release's first gate read
+#   3384 before I126 was reduced from ~22 forks to 1). HIGH reading 3364 plus the usual 6.
+FORK_BUDGET=3370
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
