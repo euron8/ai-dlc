@@ -74,7 +74,7 @@ defer() { printf '  ----  %s -- stands down; %s owns this finding\n' "$1" "$2"; 
 # seeded project; `fire_at` is any project, and `fire` is written in terms of it so the two
 # cannot come to drive the hook differently.
 fire_at() { # fire_at <hook-path> <project> -> prints additionalContext
-  printf '{"source":"compact","session_id":"fixture"}' \
+  printf '{"source":"compact","session_id":"sess-A"}' \
     | CLAUDE_PROJECT_DIR="$2" bash "$1" 2>/dev/null \
     | python3 -c 'import sys,json
 try: print(json.load(sys.stdin)["hookSpecificOutput"]["additionalContext"])
@@ -1865,7 +1865,7 @@ if smut "$HOOK" "$UPD_CASE" "$SM_A" "$UPD_NEVER"; then
   smutant_arm "the producer writes a marker for an update session" "$SM_A" "$GATE" "upd_compact"
 else bad "FIXTURE STALE: the producer's updater stand-down is not exactly one whole line, so mutant (a) has no subject"; fi
 
-# (b) The gate's updater stand-down removed. Killed by legacy_upd ALONE: an ownerless marker leaves
+# (b) The gate's updater stand-down removed. Killed by legacy_upd and ord_upd: an ownerless marker leaves
 # the owner test nothing to compare, so only the updater test can stand down there. stale_upd stays
 # green because the owner test covers it, which is exactly why legacy_upd exists.
 SM_B="$WORK/gate-whose-b.sh"
@@ -1873,16 +1873,17 @@ if smut "$GATE" "$UPD_CASE" "$SM_B" "$UPD_NEVER"; then
   smutant_arm "the gate has no updater stand-down" "$HOOK" "$SM_B" "legacy_upd ord_upd"
 else bad "FIXTURE STALE: the gate's updater stand-down is not exactly one whole line, so mutant (b) has no subject"; fi
 
-# (c) The owner test removed. Killed by stale_pipe ALONE: a pipeline session has no updater test to
+# (c) The owner test removed. Killed by stale_pipe and ord_pipe: a pipeline session has no updater test to
 # fall back on. stale_upd stays green because the updater test covers it.
 SM_C="$WORK/gate-whose-c.sh"
 if smut "$GATE" "$KEY_LINE" "$SM_C" "if false; then"; then
   smutant_arm "the gate does not compare the marker's session_id with the call's" "$HOOK" "$SM_C" "stale_pipe ord_pipe"
 else bad "FIXTURE STALE: the owner test is not exactly one whole line, so mutant (c) has no subject"; fi
 
-# (d) Both stand-downs delete the marker before exiting. Killed by the three cells that assert the
+# (d) Both stand-downs delete the marker before exiting. Killed by the five cells that assert the
 # marker SURVIVES a stand-down: stale_upd and stale_pipe through the owner branch, legacy_upd through
-# the updater branch. No deny cell flips: the denied calls never reach either branch.
+# the updater branch, and ord_pipe and ord_upd the same two ways with the snapshot gone. No deny cell
+# flips: the denied calls never reach either branch.
 SM_D="$WORK/gate-whose-d.sh"; SM_D1="$WORK/gate-whose-d1.sh"
 if smut "$GATE" "$KEY_LINE" "$SM_D1" "$KEY_LINE" "$KEY_RM" && smut "$SM_D1" "$UPD_CASE" "$SM_D" "$UPD_RM"; then
   smutant_arm "a stand-down deletes the marker it stood down on" "$HOOK" "$SM_D" "stale_upd stale_pipe legacy_upd ord_pipe ord_upd"
