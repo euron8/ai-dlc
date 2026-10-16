@@ -55,6 +55,9 @@ cp "$SRC_HOOK" "$CONSUMER/.claude/hooks/ai-dlc-derivation-capture.sh"
 cp "$SRC_VALIDATOR" "$CONSUMER/scripts/ai-dlc/validate-artifact-derivations.sh"
 chmod +x "$CONSUMER/.claude/hooks/ai-dlc-derivation-capture.sh" \
          "$CONSUMER/scripts/ai-dlc/validate-artifact-derivations.sh"
+# The snapshot stamp carrier delegates to the REAL budget validator, from the same layout.
+SRC_BUDGET="$(dirname "$SRC_VALIDATOR")/validate-artifact-budget.sh"
+[ -r "$SRC_BUDGET" ] && cp "$SRC_BUDGET" "$CONSUMER/scripts/ai-dlc/validate-artifact-budget.sh"
 
 ART="$CONSUMER/_bmad-output/planning-artifacts/s1/stories-repair-p1.md"
 cat > "$ART" <<'ARTIFACT'

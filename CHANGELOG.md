@@ -20,6 +20,40 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.792.0] - 2026-10-16
+
+Batch 235 (ledger drain), validators release. Closes BL-528; ships the `dispatched-at` half of
+BL-564, whose `--since` half stays open. Closes no `PC-` id.
+
+### Snapshot stamps are judged at the write that creates them (BL-528)
+
+- A Recent Activity line that LEADS with a stamp has only that stamp read, so a deadline the entry
+  records in its body passes. A line with no leading stamp is still read whole: the legacy
+  `gate PASSED — <stamp>` form puts the entry stamp last. Over the reference consumer's 546
+  committed snapshot revisions: 342 of 344 findings kept, 0 new; the 2 dropped are one recorded
+  deadline named twice.
+- `validate-artifact-budget.sh --stamps-only <snapshot> --payload <file>` judges only the lines a
+  write added, over the snapshot masked to them. `ai-dlc-derivation-capture.sh` — the one
+  registered `Write|Edit|MultiEdit` PostToolUse hook — calls it on every write to
+  `pipeline-snapshot.md`, above its fence reject. Each Edit's `old_string` lines are subtracted,
+  so text kept as context is not re-judged. Exit 2 returns the verdict to the model; every
+  infrastructure failure fails open; a Bash `sed -i` reaches no hook.
+- MALFORMED: `YYYY-MM-DDTHH:` not followed by two digits (`T02:2xZ`), with `Txx:` and a leading
+  `~` exempt. Write payload only, never the gate scan — over the same history the grammar fires in
+  45 revisions, every one a real placeholder, the newest included — and skipped on a whole-file
+  Write, which carries no before-state.
+- Replayed per write over 545 consecutive revision pairs: 85 draw feedback, all on added text.
+
+### An in-flight `dispatched-at` earlier than its dispatch is refused (BL-564, partial)
+
+- BACKDATED: an in-flight row joins its spawn-ledger row by agent name, or the nearest same-role
+  dispatch when the name matches none, and fires when that dispatch comes more than 60 s after
+  the stamp (120 s for a minute-only stamp). Refused at the snapshot write, FAIL at the gate scan,
+  shown through `verdict.sh`, whose alternations now carry `BACKDATED`. No ledger or no jq prints
+  a visible SKIP. Over the same history: 1 in-flight fire, a true 254 s back-date, 0 false
+  positives.
+- Not shipped: refusing a `wait-for-deliverable.sh --since` earlier than the row.
+
 ## [0.791.0] - 2026-10-16
 
 Batch 234 (graph-ledger-full-drain), second release. Closes

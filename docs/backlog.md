@@ -84,32 +84,6 @@ These are in addition to the four `PC-S319-*` candidates already in graph's unco
 push-candidate ledger, and none of them restates one. Every receipt is `manual` at filing: the batch
 that builds an entry owes its behavioural `sh` receipt and the probe behind it.
 
-## BL-528 — the snapshot future-stamp check does not run when a step writes the snapshot
-
-**DEFECT.** Reopens the delivery half of BL-517 (landed v0.783.0). On 0.789.0 the s319 lead wrote
-Recent Activity entries stamped `21:50Z`, `21:55Z` and `22:10Z` starting at about 21:28Z. Lead
-snapshot Edits carrying those stamps were sent at 21:28:01, 21:30:14, 21:33:49 and 21:38:37, and
-none was refused or warned. The stamps were found only when the lead ran
-`validate-artifact-budget.sh` by hand at 21:39:57, and corrected by a `CLOCK CORRECTION` line
-(graph `_bmad-output/pipeline-snapshot.md:30`).
-
-BL-517's close text says the arm runs at every write. It runs where `check_future_stamps`
-is called (`core/scripts/validate-artifact-budget.sh:1709`): gate Check 14 and route Step 0a. The
-step-level procedure that writes the snapshot most often, `_gate-procedures.md` "Sub-step snapshot
-update" (lines 16-45), never names the validator. None of graph's `Edit|Write|MultiEdit` hooks
-(`derivation-capture`, `core-guard`, `gate-remediation-guard`, `artifact-path-guard`,
-`advisor-gate`, `acknowledge`) runs it. The BL-517 probe drives the validator through `verdict.sh`
-over a seeded root (`probes/bl-517-future-stamp.sh:77`), so it proves the check and not any trigger.
-
-Owed: a write-time carrier for the future-stamp verdict on `pipeline-snapshot.md`, so a future stamp
-is refused or flagged at the write that creates it, plus a receipt that drives that trigger.
-
-**Second half (measured 2026-10-15T21:54Z, graph s319 planning gate).** The future-stamp arm also refuses a CORRECT future value. The lead recorded an operator-set monitor deadline, `2026-10-21T16:08:54Z` (Stories 2.6/2.7 staleness ceiling, 7 days from deploy), in a Recent Activity line. `verdict.sh validate-artifact-budget --only pipeline-snapshot.md` returned rc=1 with `FUTURE _bmad-output/pipeline-snapshot.md line 30: 2026-10-21T16:08:54Z is 8294 min ahead of now (Recent Activity)`, and its remedy text says to rewrite the stamp to `date -u` without asking. That would have overwritten an operator ruling with the current time. Instead the lead ran `sed -i '' 's/2026-10-21T16:08:54Z/21 Oct 16:08Z/'` on the snapshot, a form `check_future_stamps` does not parse, so the arm passed. The workaround is also a BL-530 instance: a Bash in-place write with no ledger row. The arm cannot tell an entry's own stamp (the leading `- <ISO>` that must not be in the future) from a future date the entry RECORDS. Owed besides the write-time carrier: the arm keys on the entry's leading stamp only, or the snapshot grammar gives a recorded deadline a form the arm exempts. A probe should show both that a future leading stamp still fails and that a recorded future deadline passes.
-
-**A placeholder where a timestamp belongs (graph s319 resumed lead, 02:17:20Z 2026-10-16).** The lead wrote `V1 advisor DONE 2026-10-16T02:2xZ` into the snapshot's `last_completed_step`. `2xZ` is a placeholder, not a stamp, and the advisor calls actually ran at 02:11:43–02:11:55Z. A write-time stamp check would have to refuse a non-ISO value in a recorded time field, not only a future one. Today nothing checks the field at write time at all.
-
-verify: manual
-
 ## BL-529 — the derivation re-run the repair procedure requires over `s<N>/` can never pass once seat files are frozen
 
 **DEFECT.** `_gate-procedures.md:981` requires
@@ -399,6 +373,8 @@ Owed: a probe gate that prints a clean last line and exits non-zero; the prescri
 verify: manual
 
 ## BL-564 — the resumed lead back-dated a teammate's `dispatched-at` and the beat's `--since`, inventing both values
+
+**PARTIAL (v0.792.0, branch commit 9f05ffbb) — the `dispatched-at` half shipped; the `--since` half is OPEN.** An in-flight `dispatched-at` earlier than its dispatch is BACKDATED: refused at the snapshot write, FAIL at the gate scan, and shown through `verdict.sh`. A row joins its spawn-ledger row by agent name, or by the nearest same-role dispatch when the name matches no row; tolerance 60 s (120 s for a minute-only stamp). No ledger or no jq prints a visible SKIP. Over graph's 546 snapshot revisions: 1 in-flight fire, a true 254 s back-date, 0 false positives. STILL OWED: refuse a `wait-for-deliverable.sh --since` earlier than the row it names.
 
 **DEFECT.** Filed by peer session ai-dlc-68 from graph's s319 resumed lead (session `f65eae3b`, `/ai-dlc resume` at 02:11:08Z 2026-10-16). The `Agent` dispatch of pm-escalated `a9dd4af333cca61de` ("Fold S-21..S-23 answers, re-render SPEC") is at 02:17:32Z. At 02:17:40Z the lead wrote its in-flight row into `pipeline-snapshot.md` with `t=date -u -v-2M`, so the row reads `dispatched-at 2026-10-16T02:15:40Z`, two minutes before the dispatch existed. At 02:17:41Z it armed `wait-for-deliverable.sh --complete --since "$(date -u -v-3M …)"`. graph's installed `route.md:80-82` and `SKILL.md:70` make `dispatched-at` the test that decides whether a deliverable on disk is newer than its dispatch, which is the deliverable-or-re-dispatch decision, and `_gate-procedures.md:151` says to pass "the `dispatched-at` value from the row". A back-dated stamp widens that window so it accepts a file written before the teammate existed, which a resumed lead then consumes as delivered. Nothing checks that `dispatched-at` matches the Agent call's own timestamp.
 

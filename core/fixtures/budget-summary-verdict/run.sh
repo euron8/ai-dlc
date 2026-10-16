@@ -634,13 +634,16 @@ five|- 2026-10-14T11:05Z five minutes ahead
 past|- 2026-10-14T10:59Z just now
 spaced|- 2026-10-14T12:00Z - 12:45Z, 2026-10-14T12:00Z to 12:45Z, 2026-10-14T12:00Z → 12:45Z, 2026-10-14T12:00Z – 12:45Z planned
 correction|- 2026-10-14T10:58Z CLOCK CORRECTION: rewrote 2 future stamp(s) to date -u: 12:00Z, 12:45Z
+fulliso|- 2026-10-14T10:58Z CLOCK CORRECTION: rewrote 1 future stamp(s) to date -u: 2026-10-14T12:00Z
+deadline|- 2026-10-14T10:59Z operator set the monitor deadline 2026-10-21T16:08:54Z
 NEAR
-[ "$nm_ok" -eq 1 ] && ok "F2-F6 range, spaced range, date-only, x/~ placeholder, 5-min-ahead, past and bare-HH:MMZ CLOCK CORRECTION stamps are all accepted"
+[ "$nm_ok" -eq 1 ] && ok "F2-F6 range, spaced range, date-only, x/~ placeholder, 5-min-ahead, past, bare-HH:MMZ and full-ISO CLOCK CORRECTION, and a body deadline on a stamp-led line are all accepted"
 
-# F1c OFFENDER TWINS of two near-misses above, each one property apart: a single stamp followed
-# by ` - ` and TEXT (the spaced-range skip needs a digit), a stamp MID-LINE, and a CLOCK
-# CORRECTION line naming the old stamps in FULL ISO form -- which the remedy forbids, because
-# it is itself a future stamp and re-fires this check.
+# F1c OFFENDER TWINS of near-misses above, each one property apart: a single stamp followed
+# by ` - ` and TEXT (the spaced-range skip needs a digit); a stamp MID-LINE in a line with no
+# leading stamp, which is read whole because the legacy `gate PASSED -- <stamp>` form puts the
+# entry stamp last; a full-ISO CLOCK CORRECTION body with NO leading stamp of its own (twin of
+# `fulliso`); and a FUTURE leading stamp beside a body deadline (twin of `deadline`).
 f1c_ok=1
 while IFS='|' read -r olabel oline; do
   [ -n "$olabel" ] || continue
@@ -652,9 +655,10 @@ while IFS='|' read -r olabel oline; do
 done <<'OFF'
 dashtext|- 2026-10-14T12:00Z - DEPLOY DONE
 midline|- DEPLOY DONE at 2026-10-14T12:00Z
-fulliso|- 2026-10-14T10:58Z CLOCK CORRECTION: rewrote 1 future stamp(s) to date -u: 2026-10-14T12:00Z
+fullisonolead|- CLOCK CORRECTION: rewrote 1 future stamp(s) to date -u: 2026-10-14T12:00Z
+leaddeadline|- 2026-10-14T12:00Z DONE, operator deadline 2026-10-21T16:08:54Z
 OFF
-[ "$f1c_ok" -eq 1 ] && ok "F1c ' - text', a mid-line stamp, and a full-ISO CLOCK CORRECTION line are each refused"
+[ "$f1c_ok" -eq 1 ] && ok "F1c ' - text', a mid-line stamp, a full-ISO CLOCK CORRECTION line with no leading stamp, and a future leading stamp beside a body deadline are each refused"
 
 # F8 THROUGH verdict.sh, WITH A CO-OCCURRING BUDGET OVER. Every lead-facing call site reads this
 # validator through the wrapper, which shows at most 6 matching lines. Five future stamps plus a
@@ -831,7 +835,7 @@ fi
 # wrapper lives in MUT_BIN, so AI_DLC_SCRIPTS_DIR points it back at the real validator; the
 # positive conjunct (the stamp FAIL line is there) proves the copy ran.
 MW1="$MUT_BIN/mw1-verdict.sh"
-sed 's/|FUTURE)/)/g' "$VW" > "$MW1" || { echo "FIXTURE ERROR: sed died building $MW1" >&2; exit 2; }
+sed 's/|FUTURE|/|/g' "$VW" > "$MW1" || { echo "FIXTURE ERROR: sed died building $MW1" >&2; exit 2; }
 if cmp -s "$VW" "$MW1"; then echo "FIXTURE ERROR: mutant $MW1 matched nothing" >&2; exit 2; fi
 wdrive mw1 "$MW1" "$(dirname "$V")"
 if grep -q 'FAIL: pipeline-snapshot.md carries stamp(s) later' "$WORK/runs/mw1.out" && ! wcheck mw1; then
@@ -839,6 +843,44 @@ if grep -q 'FAIL: pipeline-snapshot.md carries stamp(s) later' "$WORK/runs/mw1.o
 else
   bad "MUTANT MW1 (verdict.sh drops FUTURE) SURVIVED or did not run"
   sed 's/^/      /' "$WORK/runs/mw1.out" >&2
+fi
+
+# F9 BACKDATED THROUGH verdict.sh. The FAIL line says "re-stamp each row below"; the wrapper
+# must surface the row it names, alongside a co-firing FUTURE row, within its 6-line cap.
+AB="$(arm_dir backdated)"; seed_clean "$AB"
+seed_stamped "$AB" '- 2026-10-14T12:00Z DEPLOY DONE' "$IF_HDR
+fold | pm-escalated | d1 | 2026-10-14T10:15:40Z | in-flight"
+printf '{"ts":"2026-10-14T10:17:32Z","name":"pm-escalated","role":"pm"}\n' > "$AB/_bmad-output/spawn-ledger.jsonl"
+bdrive() { # bdrive <label> <wrapper>
+  OUT="$WORK/runs/$1.out"
+  ( cd "$AB" && AI_DLC_SNAPSHOT_NOW_EPOCH="$NOW_PIN" AI_DLC_SCRIPTS_DIR="$(dirname "$V")" \
+      bash "$2" validate-artifact-budget --root "$AB" ) > "$OUT" 2>&1
+  printf '%s\t%s\t0\t0\n' "$1" "$?" >> "$LEDGER"
+}
+bcheck() { # bcheck <label> -> 0 when the wrapper shows the BACKDATED headline AND its row
+  _o="$WORK/runs/$1.out"
+  [ "$(status_of "$1")" = "1" ] || return 1
+  grep -q 'FAIL: pipeline-snapshot.md carries an in-flight dispatched-at earlier than its dispatch' "$_o" || return 1
+  grep -q 'BACKDATED .*pm-escalated dispatched-at 2026-10-14T10:15:40Z is 112 s' "$_o" || return 1
+  grep -q 'FUTURE .*2026-10-14T12:00Z' "$_o"
+}
+bdrive backdated "$VW"
+if bcheck backdated; then
+  ok "F9 a back-dated in-flight row is refused through verdict.sh, its row and a co-firing FUTURE row both shown"
+else
+  bad "F9 back-dated row through verdict.sh: exit $(status_of backdated), headline, row or FUTURE row missing"
+  sed 's/^/      /' "$WORK/runs/backdated.out" >&2
+fi
+# MW2 verdict.sh WITHOUT `BACKDATED`: F9 must lose the row while the headline survives.
+MW2="$MUT_BIN/mw2-verdict.sh"
+sed 's/|BACKDATED)/)/g' "$VW" > "$MW2" || { echo "FIXTURE ERROR: sed died building $MW2" >&2; exit 2; }
+if cmp -s "$VW" "$MW2"; then echo "FIXTURE ERROR: mutant $MW2 matched nothing" >&2; exit 2; fi
+bdrive mw2 "$MW2"
+if grep -q 'earlier than its dispatch' "$WORK/runs/mw2.out" && ! bcheck mw2; then
+  ok "MUTANT MW2 (verdict.sh drops BACKDATED) killed by F9"
+else
+  bad "MUTANT MW2 (verdict.sh drops BACKDATED) SURVIVED or did not run"
+  sed 's/^/      /' "$WORK/runs/mw2.out" >&2
 fi
 
 echo ""
