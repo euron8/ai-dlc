@@ -1012,3 +1012,20 @@ verify: manual
 **NOTE.** Measured by lead ai-dlc-71. Arm C counts release headings added over a range (`scripts/validate-release-version.sh:293`, "this range adds N release headings to CHANGELOG.md"). ai-dlc-c8's 0.807.0, carrying `ed0fa33d`, failed with `this range adds 2 release headings to CHANGELOG.md: 0.805.0 0.807.0`: the restored `[0.805.0]` reads as a second new release. If BL-636 adds a "base headings survive" arm, arm C could exempt headings present before the range's own parent. The builder judges that.
 
 verify: manual
+
+## BL-622 — `ai-dlc-context-sensor.sh` sums the top-level `message.usage`, which on an advisor turn adds every API iteration, so one advisor call roughly doubles the reading and fires a false IMMINENT
+
+**DEFECT.** Filed by graph watch ai-dlc-f7; intake re-derived it read-only from graph's s319 lead transcript `0e9a936b`. At 22:09:48Z on 2026-10-16 the lead made a Rule 32 touchpoint-I advisor call before its handoff push. That assistant line (transcript line 866) carries three `usage.iterations`:
+- `message`: cache_read 276514, sum 276904.
+- `advisor_message`: input 277772.
+- `message`: input 2, cache_creation 1174, cache_read 276873, sum 278049.
+
+The top-level `cache_read_input_tokens` is 553387, the sum of the two message iterations' cache reads, and the top-level total is 554953. The real context is the LAST message iteration, 278049. Control: the next assistant line (887, 22:11:47Z) has one iteration and reads 279085, consistent with about 278k.
+
+`core/hooks/ai-dlc-context-sensor.sh:420-423` computes `.message.usage | input + cache_creation + cache_read` from the TOP level. It never mentions `iterations` (0; control: `cache_read_input_tokens` 2). Graph's installed copy is byte-identical to origin/main's (md5 `da2d0a2c…`). So the sensor read 554953, which f7 reports the sensor rendered as about 132% of the 420000-token effective window, IMMINENT, "roughly 1 more turns". The true figure is about 66%: past YELLOW (252000) and short of RED.
+
+Effect: SKILL.md's IMMINENT path has the lead refresh its snapshot for a compaction that is not coming. Every advisor call a Rule-32 touchpoint requires then produces a false IMMINENT at about twice the real figure, which invites a premature handoff or snapshot churn and teaches the lead to ignore the one threshold it must believe. f7 counts 1251 multi-iteration assistant usages across graph's transcripts on this machine, out of 96216 usages that carry `iterations` (not re-counted at intake).
+
+Owed: when `message.usage.iterations` is present, the sensor takes the context figure from the LAST `type: "message"` iteration (input + cache_creation + cache_read), and otherwise falls back to the top level. Receipt: a seeded usage line with iterations [message 276k, advisor_message 277k, message 278k] reads about 278k, and a single-iteration line reads exactly as today (near-miss control).
+
+verify: manual
