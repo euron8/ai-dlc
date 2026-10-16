@@ -161,6 +161,8 @@ QUIET=0
 CHECK_EVIDENCE=0
 GATE_LOG=""
 FAIL_ON=""
+STAMPS_ONLY=""
+PAYLOAD_FILE=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -187,6 +189,11 @@ while [ $# -gt 0 ]; do
     --quiet)          QUIET=1; shift ;;
     --check-evidence) CHECK_EVIDENCE=1; shift ;;
     --gate-log)       GATE_LOG="${2:-}"; shift 2 ;;
+    # --stamps-only <snapshot> --payload <file>: the WRITE-TIME mode, called by the
+    # derivation-capture PostToolUse hook on a write to pipeline-snapshot.md. It judges only
+    # the lines this write carried; see "THE WRITE-TIME MODE" below.
+    --stamps-only)    STAMPS_ONLY="${2:-}"; shift 2 ;;
+    --payload)        PAYLOAD_FILE="${2:-}"; shift 2 ;;
     *) echo "unknown argument: $1" >&2; exit 1 ;;
   esac
 done
@@ -1161,6 +1168,117 @@ check_future_stamps() { # check_future_stamps <file> <rel> <now-epoch>
   ' "$1" 2>/dev/null
 }
 
+# -----------------------------------------------------------------------------
+# A PLACEHOLDER WHERE A STAMP BELONGS. `YYYY-MM-DDTHH:` followed by anything but two digits
+# (`T02:2xZ`, `T23:5Z`, `T11:2x EDT`) is an attempted stamp the author did not take from the
+# clock. The future-stamp grammar above does not match it at all, so it reads as no stamp.
+#
+# EXEMPT: an `HH` that is not two digits (`Txx:xxZ`, the declared placeholder form), and a
+# stamp preceded by `~` (an explicit approximation). Both are what the remedy asks for.
+#
+# WRITE-TIME ONLY, NEVER IN THE GATE SCAN. Measured over the reference consumer's 546
+# committed snapshot revisions: this grammar fires in 45 revisions, 79 findings, 35 distinct
+# texts, and every one is a real placeholder -- including the NEWEST revision's Open Items
+# line `(2026-10-15T19:3xZ)`. In the gate scan that is text written before this rule existed
+# blocking the next gate; at write time it is feedback on the line being written now. So the
+# only caller is --stamps-only, whose input is the write payload.
+check_malformed_stamps() { # check_malformed_stamps <file> <rel>
+  LC_ALL=C awk -v ART="$2" '{
+    rest = $0; pos = 0
+    while (match(rest, /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:/)) {
+      a = pos + RSTART; b = a + RLENGTH
+      rest = substr(rest, RSTART + RLENGTH); pos = b - 1
+      if (substr($0, b, 2) ~ /^[0-9][0-9]$/) continue
+      if (a > 1 && substr($0, a - 1, 1) == "~") continue
+      printf "MALFORMED  %s line %d: %s is not a stamp\n", ART, NR, substr($0, a, 17)
+    }
+  }' "$1" 2>/dev/null
+}
+
+# -----------------------------------------------------------------------------
+# A BACK-DATED dispatched-at. The In-Flight `dispatched-at` cell decides whether a
+# deliverable on disk is newer than its dispatch (`_gate-procedures.md` passes it as the
+# beat's `--since`). A stamp EARLIER than the dispatch widens that window to accept a file
+# written before the teammate existed. Measured on the reference consumer: a resumed lead
+# wrote `dispatched-at 02:15:40Z` for an Agent call at 02:17:32Z, with `date -u -v-2M`.
+#
+# THE JOIN: each row is judged against the spawn ledger (`spawn-ledger.jsonl`, written by
+# ai-dlc-dispatch-guard.sh AT the dispatch). Same-role rows are those whose ledger `role`
+# OR `name` equals the leading word of the row role cell, lowercased (`pm-escalated` is
+# `name` on a `role: pm` row; `dev (sonnet)` is `dev`). Let B be the nearest same-role
+# dispatch at or before stamp+T and A the nearest after it. FIRE when A exists and is
+# nearer than B: the stamp sits before the dispatch it most plausibly records. A row stamped
+# LATE (after its dispatch) stays quiet; this arm is about back-dating only.
+# T is 60s for a stamp with seconds and 120s for minute-only, which rounds down by up to 59.
+#
+# ONLY ROWS WHOSE STATUS IS `in-flight`. A delivered row no longer decides anything.
+#
+# THE FALSE-POSITIVE SET IS ZERO, AND HERE IS THE POPULATION. The reference consumer's 546
+# committed snapshot revisions, each against the ledger committed in the same revision:
+# 40 carry a ledger and a dated row, 85 row-judgements. All statuses: 4 distinct rows fire,
+# 141-680 s early, each with NO same-role dispatch before it and the next one after it --
+# true back-dates (two match by exact agent name). In-flight only: 1 fires, 0 in the newest
+# revision. The worst honest row in that corpus is 41 s early. The motivating row was never
+# committed, so the receipt is the seeded probe, not this zero.
+#
+# SKIPPED, each visibly or by construction: no ledger file or no jq (one SKIP line, never a
+# silent pass); ledger rows with no `ts` (14 historical rows carry a hand-written
+# `dispatched_at` instead); a header with no `role` column; a role with no ledger row at all
+# (not evidence). A row that PREDATES every ledger row is NOT skipped: it has no dispatch
+# before it, so it fires only when a same-role dispatch follows -- and a skip keyed on the
+# ledger first `ts` would hide exactly a back-date on a fresh ledger. Measured without that
+# skip over the same corpus: 1 in-flight fire, unchanged.
+# KNOWN BLIND SPOT: a DENIED dispatch writes no ledger row (dispatch-guard.sh, the deny
+# path), so a row stamped honestly at a refused attempt and then re-sent reads as back-dated
+# by the gap between the two calls. Re-stamp the row from the dispatch that went through.
+BACKDATE_TOL_S=60
+check_backdated_dispatch() { # check_backdated_dispatch <file> <rel> <ledger>
+  [ -s "$3" ] || { printf 'SKIP  %s: no spawn ledger at %s, dispatched-at not compared\n' "$2" "$3"; return 0; }
+  command -v jq >/dev/null 2>&1 || { printf 'SKIP  %s: no jq, dispatched-at not compared\n' "$2"; return 0; }
+  jq -R -r 'fromjson? | select(type == "object" and (.ts | type) == "string")
+    | (.ts | fromdateiso8601? ) as $e | select($e != null)
+    | [$e, ((.role // "") | ascii_downcase), ((.name // "") | ascii_downcase)] | @tsv' "$3" 2>/dev/null \
+  | LC_ALL=C awk -F'\t' -v ART="$2" -v tol="$BACKDATE_TOL_S" -v snap="$1" '
+    function epoch(t,   y, mo, d, h, mi, s, yy, mm) {
+      y = substr(t, 1, 4) + 0; mo = substr(t, 6, 2) + 0; d = substr(t, 9, 2) + 0
+      h = substr(t, 12, 2) + 0; mi = substr(t, 15, 2) + 0
+      s = (substr(t, 17, 1) == ":") ? substr(t, 18, 2) + 0 : 0
+      yy = (mo <= 2) ? y - 1 : y; mm = (mo > 2) ? mo - 3 : mo + 9
+      return ((365 * yy + int(yy / 4) - int(yy / 100) + int(yy / 400) \
+               + int((153 * mm + 2) / 5) + d - 1 - 719468) * 86400) + h * 3600 + mi * 60 + s
+    }
+    FILENAME != snap { n++; T[n] = $1 + 0; R[n] = $2; N[n] = $3; next }
+    /^## / { sec = $0; sub(/^##[[:space:]]*/, "", sec)
+             inf = (substr(sec, 1, 19) == "In-Flight Teammates"); dcol = rcol = scol = 0; next }
+    !inf || !/\|/ { next }
+    {
+      row = $0; sub(/^[[:space:]]*\|/, "", row); sub(/\|[[:space:]]*$/, "", row)
+      m = split(row, cell, "|")
+      for (i = 1; i <= m; i++) { c = cell[i]; gsub(/`/, "", c); gsub(/^[[:space:]]+|[[:space:]]+$/, "", c); cell[i] = c }
+      for (i = 1; i <= m; i++) if (cell[i] == "dispatched-at") {
+        dcol = i; rcol = scol = 0
+        for (j = 1; j <= m; j++) { if (cell[j] == "role") rcol = j; if (cell[j] == "status" || cell[j] == "state") scol = j }
+        next
+      }
+      if (!dcol || !rcol || !scol || dcol > m || rcol > m || scol > m) next
+      if (tolower(cell[scol]) !~ /^in-flight/) next
+      if (!match(cell[dcol], /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9](:[0-9][0-9])?Z/)) next
+      st = substr(cell[dcol], RSTART, RLENGTH); t = epoch(st)
+      if (!match(cell[rcol], /[A-Za-z][A-Za-z-]*/)) next
+      role = tolower(substr(cell[rcol], RSTART, RLENGTH))
+      w = (length(st) == 20) ? tol : 2 * tol
+      hb = 0; ha = 0
+      for (k = 1; k <= n; k++) {
+        if (R[k] != role && N[k] != role) continue
+        if (T[k] <= t + w) { if (!hb || T[k] > B) { B = T[k]; hb = 1 } }
+        else if (!ha || T[k] < A) { A = T[k]; ha = 1 }
+      }
+      if (ha && (!hb || A - t < t - B))
+        printf "BACKDATED  %s line %d: %s dispatched-at %s is %d s before its dispatch in the spawn ledger\n", ART, FNR, role, st, A - t
+    }
+  ' - "$1"
+}
+
 env_override() {
   # prd.md -> AI_DLC_BUDGET_PRD_MD
   local key
@@ -1464,6 +1582,7 @@ MARKER_FILE="$TMPROOT/marker"
 INFLIGHT_FILE="$TMPROOT/inflight"
 STATUS_FILE="$TMPROOT/inflight-status"
 FUTURE_FILE="$TMPROOT/future-stamp"
+BACKDATE_FILE="$TMPROOT/backdated"
 
 # THE CLOCK THE FUTURE-STAMP ARM COMPARES AGAINST. `date -u +%s` is the only portable
 # spelling; AI_DLC_SNAPSHOT_NOW_EPOCH replaces it so a fixture can pin "now" and a
@@ -1596,6 +1715,54 @@ if [ "$FP_RA" -ne 1 ] || [ "$FP_DASH" -ne 1 ] || [ "$FP_IF" -ne 1 ] || [ "$FPROB
   exit 1
 fi
 
+# THE MALFORMED-STAMP AND BACK-DATED-DISPATCH SELF-PROBES, same posture: fatal, both directions.
+#   MALFORMED  OFFENDER  `T02:2xZ` and `T23:5Z`
+#              NEAR-MISS `Txx:xxZ`, `~...T19:3xZ` (an explicit approximation), a full stamp
+#   BACKDATED  OFFENDER  an in-flight pm-escalated row stamped 112 s before its ledger row
+#              NEAR-MISS the same role stamped 1 s AFTER (honest); a row stamped LATE (00:35,
+#                        nearest dispatch is 75 min BEFORE it); a delivered row stamped early;
+#                        a minute-only stamp 50 s before its dispatch (rounding); a role with no
+#                        ledger row at all
+MPROBE="$TMPROOT/probe-malformed.md"
+printf -- '- 2026-01-01T02:17Z advisor DONE 2026-01-01T02:2xZ\n- 2026-01-01T23:5Z late\n- 2026-01-01Txx:xxZ declared placeholder, ~2026-01-01T19:3xZ approx, 2026-01-01T19:30Z full\n' > "$MPROBE"
+MPROBE_OUT="$(check_malformed_stamps "$MPROBE" probe)"
+rm -f "$MPROBE"
+if [ "$(printf '%s\n' "$MPROBE_OUT" | grep -c '^MALFORMED ')" != 2 ] \
+   || ! printf '%s\n' "$MPROBE_OUT" | grep -q 'line 1: 2026-01-01T02:2xZ' \
+   || ! printf '%s\n' "$MPROBE_OUT" | grep -q 'line 2: 2026-01-01T23:5Z'; then
+  echo "FAIL: the malformed-stamp self-probe expected exactly T02:2xZ (line 1) and T23:5Z (line 2), got:" >&2
+  printf '%s\n' "$MPROBE_OUT" | sed 's/^/    /' >&2
+  exit 1
+fi
+if command -v jq >/dev/null 2>&1; then
+  BPROBE="$TMPROOT/probe-backdate.md"; BLEDGER="$TMPROOT/probe-ledger.jsonl"
+  printf '%s\n' '{"ts":"2026-01-01T00:17:08Z","name":"pm-escalated","role":"pm-escalated"}' \
+    '{"ts":"2026-01-01T01:50:21Z","name":"pm-escalated","role":"pm"}' \
+    '{"ts":"2026-01-01T02:17:32Z","name":"pm-escalated","role":"pm"}' \
+    '{"ts":"2026-01-01T03:00:50Z","name":"dev","role":"dev"}' \
+    '{"dispatched_at":"2026-01-01T00:00:00Z","role":"qa"}' 'not json' > "$BLEDGER"
+  {
+    printf '## In-Flight Teammates\n'
+    printf 'agent | role | deliverable | dispatched-at | status\n--- | --- | --- | --- | ---\n'
+    printf 'fold | pm-escalated | d1 | 2026-01-01T02:15:40Z | in-flight\n'
+    printf 'fold2 | pm-escalated | d2 | 2026-01-01T02:17:33Z | in-flight\n'
+    printf 'late | pm-escalated (a57) | d3 | 2026-01-01T00:35:00Z | in-flight, since 01:00Z\n'
+    printf 'spec | pm-escalated | d4 | 2026-01-01T01:48:00Z | delivered\n'
+    printf 'dev-a | dev | d5 | 2026-01-01T03:00Z | in-flight\n'
+    printf 'arch | architect | d6 | 2026-01-01T00:10:00Z | in-flight\n'
+  } > "$BPROBE"
+  BPROBE_OUT="$(check_backdated_dispatch "$BPROBE" probe "$BLEDGER")"
+  rm -f "$BPROBE" "$BLEDGER"
+  if [ "$(printf '%s\n' "$BPROBE_OUT" | grep -c '^BACKDATED ')" != 1 ] \
+     || ! printf '%s\n' "$BPROBE_OUT" | grep -q 'line 4: pm-escalated dispatched-at 2026-01-01T02:15:40Z is 112 s'; then
+    echo "FAIL: the back-dated-dispatch self-probe expected exactly the line 4 row, 112 s early, got:" >&2
+    printf '%s\n' "$BPROBE_OUT" | sed 's/^/    /' >&2
+    echo "  A missing offender means the arm cannot fire; an extra one means an honest, late," >&2
+    echo "  delivered, minute-rounded or unledgered row is being refused." >&2
+    exit 1
+  fi
+fi
+
 PPROBE="$TMPROOT/probe-backlog.md"
 printf '### CO-S1-A WHOLE-READ-POOL closed\n**Status:** CLOSED\n### CO-S1-B unrelated\n**Status:** OPEN\n### CO-S1-C\n**Filed:** s1. **Status:** OPEN.\nthe WHOLE-READ-POOL is over\n' > "$PPROBE"
 PPROBE_HIT="$(pool_open_item "$PPROBE")"
@@ -1605,6 +1772,62 @@ rm -f "$PPROBE"
 if [ "$PPROBE_HIT" != "### CO-S1-C" ] || [ -n "$PPROBE_MISS" ]; then
   echo "FAIL: the pool-item self-probe: found '${PPROBE_HIT}' (want '### CO-S1-C') and, with no" >&2
   echo "  OPEN item citing WHOLE-READ-POOL, found '${PPROBE_MISS}' (want nothing)." >&2
+  exit 1
+fi
+
+# -----------------------------------------------------------------------------
+# THE WRITE-TIME MODE. `--stamps-only <snapshot> --payload <file>`: the derivation-capture
+# PostToolUse hook calls this on every Write|Edit|MultiEdit of pipeline-snapshot.md, so a
+# future stamp, a placeholder stamp or a back-dated dispatched-at is named at the write that
+# creates it, not at the next gate. Before this the arm ran only at Check 14 and Step 0a,
+# and a lead wrote three future stamps in four Edits with nothing said.
+#
+# ONLY THE LINES THIS WRITE CARRIED ARE JUDGED. The snapshot is masked: a line equal to a
+# payload line is kept, every `## ` heading and every row naming `dispatched-at` is kept so
+# the section and column locators still work, and everything else is blanked with its line
+# number preserved. Text already in the snapshot is the gate scan job, and a write that
+# touches one line must not be refused for another -- the malformed arm in particular fires
+# on 45 of the reference consumer committed revisions, newest included.
+#
+# NOT the full validator: budget, schema and marker findings stay at the gate, where their
+# remedies apply. Exit 1 on a finding, 0 clean, 2 on bad usage -- the hook fails OPEN on 2.
+#
+# IT IS ADVISORY BY CONSTRUCTION. PostToolUse runs after the write landed; the hook exit 2
+# only returns this text to the model. And a Bash `sed -i` on the snapshot is not a
+# Write|Edit|MultiEdit, so it reaches no PostToolUse hook at all -- the gate scan is the
+# only check that sees it.
+if [ -n "$STAMPS_ONLY" ]; then
+  [ -f "$STAMPS_ONLY" ] && [ -f "$PAYLOAD_FILE" ] || {
+    echo "usage: --stamps-only <pipeline-snapshot.md> --payload <file-of-written-text>" >&2; exit 2; }
+  _mask="$TMPROOT/stamps-mask.md"
+  # A payload line also matches a file line that CONTAINS it, when it is 10+ bytes: an Edit
+  # new_string may begin or end mid-line, and its first and last lines are then fragments.
+  LC_ALL=C awk 'FNR == NR { if ($0 != "") { P[$0] = 1; if (length($0) >= 10) F[++nf] = $0 } next }
+    /^## / || /dispatched-at/ || ($0 in P) { print; next }
+    { for (i = 1; i <= nf; i++) if (index($0, F[i])) { print; next } print "" }' \
+    "$PAYLOAD_FILE" "$STAMPS_ONLY" > "$_mask" || exit 2
+  _rel="${STAMPS_ONLY##*/}"
+  {
+    check_future_stamps "$_mask" "$_rel" "$SNAP_NOW"
+    check_malformed_stamps "$_mask" "$_rel"
+    check_backdated_dispatch "$_mask" "$_rel" "$(dirname "$STAMPS_ONLY")/spawn-ledger.jsonl" | grep -v '^SKIP '
+  } > "$TMPROOT/stamps-out"
+  [ -s "$TMPROOT/stamps-out" ] || exit 0
+  echo "FAIL: this write to ${_rel} carries a stamp the snapshot must not hold:" >&2
+  cat "$TMPROOT/stamps-out" >&2
+  cat >&2 <<'EOF'
+
+      Fix it now, in the line you just wrote:
+        FUTURE     rewrite the stamp to the current time from `date -u`. A date the entry
+                   RECORDS (a deadline) belongs in the body of a line that leads with its
+                   own past stamp; only the leading stamp is read there.
+        MALFORMED  write the real stamp from the record that holds it (a transcript, a
+                   ledger row, a commit). If none does, write an explicit approximation
+                   with full digits and a leading `~` (`~2026-10-15T19:30Z`).
+        BACKDATED  stamp dispatched-at from the dispatch itself: the spawn-ledger row for
+                   this teammate (`ts`), or `date -u` taken right after the Agent call.
+                   Never subtract minutes to make an older deliverable count.
+EOF
   exit 1
 fi
 
@@ -1734,6 +1957,7 @@ printf '%s\n' "$BUDGETS" | while IFS='|' read -r name budget remedy; do
       check_inflight_status "$f" "$rel"
       check_supersession_markers "$f" "$rel"
       check_future_stamps "$f" "$rel" "$SNAP_NOW" >> "$FUTURE_FILE"
+      check_backdated_dispatch "$f" "$rel" "$(dirname "$f")/spawn-ledger.jsonl" >> "$BACKDATE_FILE"
     fi
 
     if [ "$tokens" -gt "$ceiling" ]; then
@@ -1836,6 +2060,26 @@ EOF
 }
 report_future_stamps
 rm -f "$FUTURE_FILE"
+
+# A SIXTH VERDICT: an in-flight dispatched-at earlier than its own dispatch. Same posture as
+# the future-stamp verdict -- hard unless --warn-only without --fail-on the snapshot. A SKIP
+# line (no ledger, no jq) is printed, never folded into a pass.
+SAW_BACKDATE=0
+if grep -q '^SKIP ' "$BACKDATE_FILE" 2>/dev/null; then
+  say ""; grep '^SKIP ' "$BACKDATE_FILE" | while IFS= read -r _l; do say "$_l"; done
+fi
+if grep -q '^BACKDATED ' "$BACKDATE_FILE" 2>/dev/null; then
+  SAW_BACKDATE=1
+  say ""
+  if [ "$WARN_ONLY" -eq 1 ] && ! is_fail_on "pipeline-snapshot.md"; then
+    echo "WARN: pipeline-snapshot.md carries an in-flight dispatched-at earlier than its dispatch -- re-stamp each row below from its spawn-ledger \`ts\`; never back-date a row to make an older deliverable count."
+  else
+    echo "FAIL: pipeline-snapshot.md carries an in-flight dispatched-at earlier than its dispatch -- re-stamp each row below from its spawn-ledger \`ts\`; never back-date a row to make an older deliverable count." >&2
+    RC=1
+  fi
+  grep '^BACKDATED ' "$BACKDATE_FILE" >&2
+fi
+rm -f "$BACKDATE_FILE"
 
 if [ -s "$BREACH_FILE" ]; then
   SAW_BREACH=1
@@ -2241,7 +2485,8 @@ fi
 if [ "$RC" -eq 0 ]; then
   say ""
   if [ "$SAW_BREACH" -eq 1 ] || [ "$SAW_SCHEMA" -eq 1 ] || [ "$SAW_MARKER" -eq 1 ] \
-     || [ "$SAW_INFLIGHT" -eq 1 ] || [ "$SAW_STATUS" -eq 1 ] || [ "$SAW_FUTURE" -eq 1 ]; then
+     || [ "$SAW_INFLIGHT" -eq 1 ] || [ "$SAW_STATUS" -eq 1 ] || [ "$SAW_FUTURE" -eq 1 ] \
+     || [ "$SAW_BACKDATE" -eq 1 ]; then
     _what=""
     [ "$SAW_BREACH" -eq 1 ] && _what="${_what}, over-budget artifact(s)"
     [ "$SAW_SCHEMA" -eq 1 ] && _what="${_what}, off-schema section(s)"
@@ -2249,6 +2494,7 @@ if [ "$RC" -eq 0 ]; then
     [ "$SAW_INFLIGHT" -eq 1 ] && _what="${_what}, struck-through In-Flight row(s)"
     [ "$SAW_STATUS" -eq 1 ] && _what="${_what}, unrecognised In-Flight status row(s)"
     [ "$SAW_FUTURE" -eq 1 ] && _what="${_what}, future-stamped snapshot entr(ies)"
+    [ "$SAW_BACKDATE" -eq 1 ] && _what="${_what}, back-dated In-Flight dispatched-at row(s)"
     _what="${_what#, }"
     say "WARN  this run reported ${_what} and is NOT a clean result."
     say "      Exit status is 0 because --warn-only was passed and no reported artifact was"

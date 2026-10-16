@@ -116,6 +116,36 @@ FILE=$(jq -r '.tool_input.file_path // empty' <<<"$INPUT" 2>/dev/null)
 case "$FILE" in *.md) ;; *) exit 0 ;; esac
 [ -f "$FILE" ] || exit 0
 
+# THE SNAPSHOT STAMP CARRIER. A write to pipeline-snapshot.md has its written lines judged by
+# `validate-artifact-budget.sh --stamps-only`: a future stamp, a placeholder stamp
+# (`T02:2xZ`) or an in-flight dispatched-at earlier than its spawn-ledger row. Before this
+# that check ran only at the gate, and a lead wrote three future stamps in four snapshot
+# Edits with nothing said. It rides this hook because this is the one registered
+# Write|Edit|MultiEdit PostToolUse hook, and it sits ABOVE the fence reject below because a
+# snapshot carries no ```derived fence. The validator's own header carries the grammar.
+#
+# Exit 2 returns the validator's text to the model; the write has already landed. Fails
+# OPEN on everything that is not a finding (validator absent, usage, no temp dir), exactly
+# like the derivation path. A Bash `sed -i` on the snapshot reaches no PostToolUse hook.
+case "$FILE" in
+  */pipeline-snapshot.md)
+    BUDGET_VALIDATOR="${PROJECT_DIR}/scripts/ai-dlc/validate-artifact-budget.sh"
+    if [ -r "$BUDGET_VALIDATOR" ]; then
+      SNAP_PAY="$(mktemp "${TMPDIR:-/tmp}/ai-dlc-snapstamp.XXXXXX" 2>/dev/null)" || exit 0
+      jq -r '[ (.tool_input.content // empty), (.tool_input.new_string // empty),
+               ((.tool_input.edits // []) | map(.new_string // empty) | join("\n"))
+             ] | map(select(. != "")) | join("\n")' <<<"$INPUT" > "$SNAP_PAY" 2>/dev/null
+      SNAP_OUT="$(AI_DLC_PROJECT_ROOT="$PROJECT_DIR" bash "$BUDGET_VALIDATOR" --stamps-only "$FILE" --payload "$SNAP_PAY" 2>&1)"
+      SNAP_RC=$?
+      rm -f "$SNAP_PAY"
+      if [ "$SNAP_RC" = 1 ] && grep -qE '^(FUTURE|MALFORMED|BACKDATED) ' <<<"$SNAP_OUT"; then
+        printf '%s\n' "$SNAP_OUT" >&2
+        exit 2
+      fi
+    fi
+    exit 0 ;;
+esac
+
 # THE FENCE IS THE SCOPE, not a path list. `validate-artifact-derivations.sh` checks
 # whatever file it is handed; keying this hook on a directory declaration instead
 # would give the two programs different populations and one of them would be wrong

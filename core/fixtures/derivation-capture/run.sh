@@ -781,6 +781,57 @@ else
   bad "the artifact's recorded output changed under the hook — overwrite is the rejected design"
 fi
 
+# --- S1-S5: THE SNAPSHOT STAMP CARRIER --------------------------------------------------
+# A write to pipeline-snapshot.md is judged by validate-artifact-budget.sh --stamps-only over
+# the lines it wrote. Now is pinned to 2026-10-16T02:00:00Z. The seeded snapshot already
+# carries an OLD placeholder (`T19:3xZ`) that no arm here writes, so every silent arm also
+# proves untouched text is not re-judged. Skipped, and said so, where the layout lacks the
+# budget validator (a consumer that has not pulled it).
+SNAP="$CONSUMER/_bmad-output/pipeline-snapshot.md"
+if [ -r "$CONSUMER/scripts/ai-dlc/validate-artifact-budget.sh" ]; then
+  export AI_DLC_SNAPSHOT_NOW_EPOCH=1792116000
+  printf '%s\n' '## Recent Activity' '- 2026-10-16T01:00Z start' \
+    '## Open Items' '- REPAIR JOIN BLOCKED (2026-10-15T19:3xZ): old text' \
+    '## In-Flight Teammates' 'agent | role | deliverable | dispatched-at | status' '--- | --- | --- | --- | ---' > "$SNAP"
+  printf '%s\n' '{"ts":"2026-10-16T01:58:32Z","name":"pm-escalated","role":"pm"}' > "$CONSUMER/_bmad-output/spawn-ledger.jsonl"
+  snap_edit() { # <line> -> append it to the snapshot and fire the Edit that wrote it
+    printf '%s\n' "$1" >> "$SNAP"; fire "$(edit_json "$SNAP" "$1")"
+  }
+  ra_edit() { # <line> -> insert it as the last Recent Activity line and fire the Edit
+    awk -v l="$1" '/^## Open Items/ { print l } { print }' "$SNAP" > "$SNAP.new" && mv "$SNAP.new" "$SNAP"
+    fire "$(edit_json "$SNAP" "$1")"
+  }
+  ra_undo() { awk -v l="$1" '$0 != l' "$SNAP" > "$SNAP.new" && mv "$SNAP.new" "$SNAP"; }
+  # S1 control: an honest line is silent, and the old placeholder is not re-judged.
+  ra_edit '- 2026-10-16T01:59Z RESUMED'
+  if [ "$RC" = 0 ] && [ ! -s "$ERR" ]; then ok "snapshot: an honest written line -> exit 0, the untouched placeholder not re-judged"
+  else bad "snapshot: an honest line exited $RC: $(head -2 "$ERR")"; fi
+  # S2 a future leading stamp in the written Recent Activity line.
+  ra_edit '- 2026-10-16T02:30Z DEPLOY DONE'
+  if [ "$RC" = 2 ] && grep -q '^FUTURE .*2026-10-16T02:30Z' "$ERR"; then ok "snapshot: a future stamp written -> exit 2 FUTURE"
+  else bad "snapshot: a future stamp exited $RC (expected 2 FUTURE): $(head -2 "$ERR")"; fi
+  ra_undo '- 2026-10-16T02:30Z DEPLOY DONE'
+  # S3 a placeholder stamp written.
+  ra_edit '- 2026-10-16T01:59Z V1 advisor DONE 2026-10-16T02:2xZ'
+  if [ "$RC" = 2 ] && grep -q '^MALFORMED .*2026-10-16T02:2x' "$ERR" && ! grep -q '19:3x' "$ERR"; then ok "snapshot: a placeholder stamp written -> exit 2 MALFORMED, the old one not named"
+  else bad "snapshot: a placeholder stamp exited $RC (expected 2 MALFORMED on 02:2x only): $(head -3 "$ERR")"; fi
+  ra_undo '- 2026-10-16T01:59Z V1 advisor DONE 2026-10-16T02:2xZ'
+  # S4 a back-dated in-flight row (dispatch 01:58:32, stamped 01:56:40) -- the BL-564 shape.
+  snap_edit 'fold | pm-escalated | d1 | 2026-10-16T01:56:40Z | in-flight'
+  if [ "$RC" = 2 ] && grep -q '^BACKDATED .*112 s' "$ERR"; then ok "snapshot: a back-dated dispatched-at written -> exit 2 BACKDATED"
+  else bad "snapshot: a back-dated row exited $RC (expected 2 BACKDATED 112 s): $(head -2 "$ERR")"; fi
+  sed -i.bak '$d' "$SNAP" && rm -f "$SNAP.bak"
+  # S5 the near-miss twin of S4: stamped 1 s after the dispatch, and a recorded future deadline.
+  snap_edit 'fold | pm-escalated | d1 | 2026-10-16T01:58:33Z | in-flight'
+  _s5=$RC
+  ra_edit '- 2026-10-16T01:59Z operator set the monitor deadline 2026-10-21T16:08:54Z'
+  if [ "$_s5" = 0 ] && [ "$RC" = 0 ] && [ ! -s "$ERR" ]; then ok "snapshot: an honest row and a body deadline -> exit 0"
+  else bad "snapshot: honest row exited $_s5, body deadline exited $RC (both expected 0)"; fi
+  unset AI_DLC_SNAPSHOT_NOW_EPOCH
+else
+  ok "snapshot carrier SKIPPED: no validate-artifact-budget.sh in this layout"
+fi
+
 if [ "$fails" -gt 0 ]; then
   printf '  %s assertion(s) failed\n' "$fails"
   exit 1
