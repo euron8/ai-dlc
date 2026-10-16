@@ -157,11 +157,12 @@
 #
 # THE GUARDED ROOTS (deliberately narrow -- Rule 26 minimum mechanism)
 #   `_bmad-output/planning-artifacts/**`, `_bmad-output/implementation-artifacts/**`,
-#   `docs/**`. Three gate records sit beside them for arm 7a's reason, not as edit
-#   targets: `gate-adjudication/**`, `spawn-ledger.jsonl` and `subagent-context.jsonl`
-#   (the records a verdict or a shard merge binds by; hooks append to the two ledgers
-#   directly, never through this matcher). That is where all four measured top edit targets live, plus the
-#   `docs/architecture.md` insertion pass 11 named as the root cause. These roots
+#   `docs/**`. That is where all four measured top edit targets live, plus the
+#   `docs/architecture.md` insertion pass 11 named as the root cause. Three gate
+#   records sit beside them for arm 7a's reason, not as edit targets:
+#   `gate-adjudication/**`, `spawn-ledger.jsonl` and `subagent-context.jsonl` (the
+#   records a verdict or a shard merge binds by; hooks append to the two ledgers
+#   directly, never through this matcher). These roots
 #   bound the GATE arms (4-10) only. Product code is not a gate-remediation
 #   subject at all -- an `[implementation]` gate's repairs run through the dev/qa
 #   loop -- and it is denied to the lead by arm 3b, which reads no gate state.
