@@ -1192,10 +1192,13 @@ p_altool() { # the one tool_use holding the id is a Read, not an Edit, Write or 
 # `- (decision by pm) <text>`, `- (event) <text>`. The discriminating decision is never the first line, and
 # stale has TWO decisions before the render and ONE after, so an order test run backwards counts 2 and
 # the REFUSED line's `1 (decision) entry(ies)` text separates it from the real one.
-SPEC_REC='<!-- shard: 01.md -->\n### F-1 — MAJOR\n- disposition: escalated\n- edit: _bmad-output/planning-artifacts/s305/stories/b.md:4\n\n### serial F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n- closes: 01.md F-1 — MAJOR\n'
+# The record CITES the sprint spec dir (its escalated entry's edit: names the memlog), or the join judges nothing:
+# a record that cites no specs/s305/ file repaired no SPEC and takes the SKIP p_specother pins.
+SPEC_REC_OTHER='<!-- shard: 01.md -->\n### F-1 — MAJOR\n- disposition: escalated\n- edit: _bmad-output/planning-artifacts/s305/stories/b.md:4\n\n### serial F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n- closes: 01.md F-1 — MAJOR\n'
+SPEC_REC='<!-- shard: 01.md -->\n### F-1 — MAJOR\n- disposition: escalated\n- edit: _bmad-output/specs/s305/x/.memlog.md:4\n\n### serial F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n- closes: 01.md F-1 — MAJOR\n'
 spec_world() { # <join> <memlog body, printf %b> [<second memlog body>] -> RC, $JO, $SW (the world); no memlog dir when the body is "-"
   local w; w="$(mktemp -d "$WORK/spec.XXXXXX")" && mkdir -p "$w/.claude" || return 1
-  printf '%b' "$SPEC_REC" > "$w/stories-repair-p1.md"
+  if [ "${SPEC_RECSEL:-}" = other ]; then printf '%b' "$SPEC_REC_OTHER"; else printf '%b' "$SPEC_REC"; fi > "$w/stories-repair-p1.md"
   if [ "$2" != "-" ]; then
     mkdir -p "$w/_bmad-output/specs/s305/x" || return 1
     printf '%b' "$2" > "$w/_bmad-output/specs/s305/x/.memlog.md"
@@ -1205,6 +1208,7 @@ spec_world() { # <join> <memlog body, printf %b> [<second memlog body>] -> RC, $
     printf '%b' "$3" > "$w/_bmad-output/specs/s305/y/.memlog.md"
   fi
   SW="$w"
+  [ -z "${SPEC_CHMOD:-}" ] || chmod 000 "$w/_bmad-output/specs/s305/x/.memlog.md" || return 1
   AI_DLC_PROJECT_ROOT="$w" bash "$1" --escalations "$w/stories-repair-p1.md" --sprint 305 > "$JO" 2>&1; RC=$?
 }
 SPEC_PH='re-derived from memlog through'
@@ -1232,6 +1236,19 @@ p_spectwo() { # two memlogs under specs/s305/, the first one stale -> rc 0, SKIP
   spec_world "$1" "- (decision) a\n- (event) Render p1: $SPEC_PH a\n- (decision) b\n" "- (decision) a\n" || return 1
   [ "$RC" -eq 0 ] && has "$JO" "SPEC-RENDER: SKIP -- 2 memlogs under $SW/_bmad-output/specs/s305/" \
     && ! has "$JO" "rendered through" && ! has "$JO" "REFUSED" && has "$JO" "ESCALATED-COUNT: 0 (1 closed"
+}
+
+p_specother() { # a STALE memlog in the world, but a record citing no specs/s305/ path -> rc 0, the cites-no-specs SKIP, the count line there
+  SPEC_RECSEL=other spec_world "$1" "- (decision) a\n- (decision by pm) b\n- (event) Render p1: $SPEC_PH b\n- (decision) c\n" || return 1
+  [ "$RC" -eq 0 ] && has "$JO" "SPEC-RENDER: SKIP -- $SW/stories-repair-p1.md cites no specs/s305/ file, so it repaired no SPEC" \
+    && ! has "$JO" "rendered through" && ! has "$JO" "REFUSED" && has "$JO" "ESCALATED-COUNT: 0 (1 closed"
+}
+p_specunread() { # a cited, stale memlog made unreadable (chmod 000) -> rc 2, 'the memlog could not be read'; root reads it anyway, so SKIP
+  if [ "$(id -u)" -eq 0 ]; then echo "SKIP SP10 (root)"; return 0; fi
+  SPEC_CHMOD=1 spec_world "$1" "- (decision) a\n- (decision by pm) b\n- (event) Render p1: $SPEC_PH b\n- (decision) c\n" || return 1
+  chmod 644 "$SW/_bmad-output/specs/s305/x/.memlog.md" 2>/dev/null
+  [ "$RC" -eq 2 ] && has "$JO" "REFUSED: $SW/_bmad-output/specs/s305/x/.memlog.md: the memlog could not be read; no render verdict" \
+    && ! has "$JO" "rendered through" && ! has "$JO" "ESCALATED-COUNT"
 }
 
 # ---- THE SPEC RENDER ARM, SUBJECT MODE (--subject 9): the SPEC is a WHOLE-FILE part, so the join's SUBJ_SET
@@ -1271,7 +1288,7 @@ p_sjspecnone() { # the SPEC part's memlog does not exist -> JOINED, SKIP naming 
     && ! has "$JO" "rendered through" && ! has "$JO" "REFUSED"
 }
 
-P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrargs rrfiles rrsubj alias alnokeys alresult alown alsecond alother alsess altwo altool dispkey dispvocab dispruling srcparts gapfill chkpart chkrec rulingedit rulingtab chkjoined partsilent specstale specfresh spechand specnone spectwo sjspecstale sjspecfresh sjspecnone"
+P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrargs rrfiles rrsubj alias alnokeys alresult alown alsecond alother alsess altwo altool dispkey dispvocab dispruling srcparts gapfill chkpart chkrec rulingedit rulingtab chkjoined partsilent specstale specfresh spechand specnone spectwo sjspecstale sjspecfresh sjspecnone specother specunread"
 
 # ---- A PART'S DERIVATION SURVIVES THE JOIN. The part's ```derived fence is copied into the joined
 # record, and the gate re-runs `validate-artifact-derivations.sh` over the sprint dir AFTER the
