@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+# Ambient AI_DLC_* cleared, as the suite does: the R arms drive the real hook-registration gate, and
+# an inherited tunable would test the operator's config, not the runner. AI_DLC_PROJECT_ROOT is set
+# per invocation below, never inherited, so clearing it here loses nothing.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 # post-write-gates — reconcile/post-write-gates.sh keys every post-write gate's verdict on the gate's
 # OWN exit code, never on its text, and a gate whose exit code was not observed is UNDECIDED.
 #
