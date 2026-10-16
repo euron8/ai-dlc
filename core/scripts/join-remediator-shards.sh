@@ -992,25 +992,31 @@ CHK	mixed.md	a value outside the grammar: derivations: the validator reports ok"
 # The two lines a remediator writes under its sha triple: `advisor: called|unavailable` and
 # `derivations: replayed <n>|not replayed|deferred to the join (section/subject shard)`.
 # A VALUE IS READ THE WAY THE DISPOSITION READER READS ITS OWN: emphasis, carriage returns and case
-# dropped, then judged by its LEADING keyword, so a trailer the template itself licenses
-# (`skipped (nit)` is the disposition's) falls away -- `called (no concerns)`, `replayed 3 --
-# validator OK` and `deferred to the join (section shard)` all read. A line whose value leads with no
+# dropped, then judged by its LEADING keyword in a CLOSED form: the keyword, then nothing, or a
+# trailer opened by `(`, `;`, `,` or `--` -- `called (no concerns)`, `unavailable (rate-limited);
+# the repair proceeded`, `replayed 3 -- validator OK` and `deferred to the join (section shard)`
+# all read. A keyword followed by a WORD is prose that happens to start with it: graph writes
+# `called before the first write ...` sixteen times, and `called the advisor but every call
+# errored` or `replayed 3 of 5, two STALE` must not read as the keyword (the second tip adversary
+# found the open form accepting both). `deferred to the join` is read only where a part may defer:
+# a files-mode part may not, so there it is a value outside the grammar. A line whose value leads with no
 # keyword is PROSE: graph writes `- derivations: the validator reports OK on the PRD ...` and
 # `- advisor: one attempt was made ...`, and such a line neither opens a record's era nor counts as
 # the field. So a record binds only from its first GRAMMAR line, and inside a bound file a prose
 # line is a value outside the grammar. The LABEL stays case-sensitive, as arm H's repair_field is.
 checks_field() {
-  awk -v rec="$1" '
+  awk -v rec="$1" -v dok="${CF_DEFER:-1}" '
     function val(  v) { v = $0; sub(/^[^:]*:/, "", v); gsub(/[*_`\r]/, "", v); v = tolower(v)
                         gsub(/^[ \t]+|[ \t]+$/, "", v); return v }
-    function kw(v, re) { return v ~ ("^(" re ")([^a-z0-9]|$)") }
+    function kw(v, re) { return v ~ ("^(" re ")[ \t]*($|[(;,]|--)") }
     /^[ \t]*(```|~~~)/ { fence = !fence; next }
     fence { next }
     /^[[:space:]-]*[*_`]*advisor[*_`]*:/ { v = val()
       if (kw(v, "called|unavailable")) na++; else bad = bad " advisor: " v; next }
     /^[[:space:]-]*[*_`]*derivations[*_`]*:/ { v = val()
       if (kw(v, "not replayed")) { nd++; nr = 1 }
-      else if (kw(v, "replayed [0-9]+|deferred")) nd++
+      else if (kw(v, "replayed [0-9]+")) nd++
+      else if (kw(v, "deferred to the join")) { nd++; if (!dok) bad = bad " derivations: deferred in a files-mode part" }
       else bad = bad " derivations: " v
       next }
     /^[[:space:]-]*[*_`]*disposition[*_`]*:/ { v = tolower(val()); sub(/[^a-z-].*$/, "", v); if (v == "repaired") nrep++ }
@@ -1039,17 +1045,25 @@ record_tail() {
   contract_probe
   contract_refusals 1 "$(contract_check 1 "$1")"
   checks_refusals "$(checks_field 1 "$1")"
-  [ "$refuse_n" -eq 0 ] || exit 2
-  [ "$SRCMODE" = 1 ] && echo "SOURCES: ${1} -- ${SRC_E} entries, ${SRC_S} sources, every one resolved in ${SEAT_DIR}"
-  [ "$SRCMODE" = 2 ] && echo "ESCALATIONS: ${1} -- every escalated entry, open or closed by a closes: line"
-  # These are the LEAD's to adjudicate, never a re-dispatch of the serial remediator: the record may
-  # be the serial remediator's own, appended after the join. So no SERIAL-REQUIRED line is printed
-  # here; the closed entries stay visible to the lead.
+  # The header lines assert that the record checked out, so they print only on a pass.
+  if [ "$refuse_n" -eq 0 ]; then
+    [ "$SRCMODE" = 1 ] && echo "SOURCES: ${1} -- ${SRC_E} entries, ${SRC_S} sources, every one resolved in ${SEAT_DIR}"
+    [ "$SRCMODE" = 2 ] && echo "ESCALATIONS: ${1} -- every escalated entry, open or closed by a closes: line"
+  fi
+  # THE ESCALATION REPORT PRINTS WHETHER OR NOT THE RECORD REFUSED. These are the LEAD's to
+  # adjudicate, never a re-dispatch of the serial remediator: the record may be the serial
+  # remediator's own, appended after the join, so no SERIAL-REQUIRED line is printed here. A refusal
+  # of any arm is a defect in the record, never a reason to stop reporting what is still open in it:
+  # exiting first, as this mode once did, let one prose check line in a bound record hide every open
+  # escalation from the lead (a joined record whose serial block wrote graph's own s317 prose
+  # `- derivations: the validator reports OK ...` printed no count at all). The exit code still
+  # carries the refusal.
   printf '%s' "$ESC_LINES"
   printf '%s' "$ESC_CLOSED"
   echo "ESCALATED-COUNT: ${ESC_N} (${ESC_X} closed by a later repaired entry's closes: line)"
-  # The gap-fill tripwire (7) REPORTS: a NOTE-tier arm must never hide the open escalations above.
+  # The gap-fill tripwire (7) REPORTS: a NOTE-tier arm never gates the report above.
   printf '%s' "$GAP_LINES"
+  [ "$refuse_n" -eq 0 ] || exit 2
   exit 0
 }
 # --sources ON A RECORD THAT IS NOT A PARTY REPAIR (BL-561). The seat dir's existence says only that
@@ -1559,6 +1573,7 @@ WRITERS="$(printf '%s\n' "$ROWS" | awk -F'\t' '{print $2}' | sort -u)"
 # A cited token is a path-shaped run ending in a document extension; a `:<line>` suffix, prose
 # and backticks around it fall away because the token grammar cannot spell them.
 CITES=""
+CF_DEFER=1; [ "$DOCMODE$SUBJMODE" = 00 ] && CF_DEFER=0
 while IFS= read -r p; do
   [ -n "$p" ] || continue
   for fld in disposition edit derivation; do

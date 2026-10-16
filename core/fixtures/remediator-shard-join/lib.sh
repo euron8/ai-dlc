@@ -123,7 +123,7 @@ part() { # <world> <name> <block...> -- a remediator part: real repair blocks, n
 # reached. A part that already carries one is left alone, so a predicate seeds the offender by
 # writing the field itself.
 CHK_LINES='- advisor: called
-- derivations: deferred to the join (section/subject shard)'
+- derivations: replayed 1'
 stamp() { # <world>
   local f
   for f in $(find "$1" -path '*/shards/*repair*' -name '*.md' -not -path '*/sections/*' 2>/dev/null); do

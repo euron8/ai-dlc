@@ -414,9 +414,11 @@ mutant "JX23 subject --pass party not a party repair" "sjpartysrc" \
 # srcsetaside and srcera die too: each refusal is reported and then acquitted by the same exit 0.
 mutant "JX24 --sources reports refusals and exits 0" "srcunres srcsetaside srcera dispkey dispvocab dispruling chkrec" \
   '  [ "$refuse_n" -eq 0 ] || exit 2
-  [ "$SRCMODE" = 1 ] && echo "SOURCES:' \
+  exit 0
+}' \
   '  true || exit 2
-  [ "$SRCMODE" = 1 ] && echo "SOURCES:'
+  exit 0
+}'
 # ---- BL-464 seat-complete belt: removed, and widened from the CITED seat files to the whole dir.
 mutant "JX25 the seat-complete belt removed" "partyunmarked partyx1" \
   '  [ -n "$steps" ] || return 0' \
