@@ -837,9 +837,34 @@ for target in "$@"; do
     # A FILE target is never excluded: `derivation-differential.sh` and the capture hook pass
     # files, and an excluded file there would empty the universe they count.
     #
+    # THIS REDUCES THE SLOT RUN; IT DOES NOT MAKE IT PASS. Measured on the reference consumer's
+    # s316/s317/s318 with this walk: 297 of 650, 598 of 1224 and 207 of 418 still stale, in two
+    # places -- live documents (`carry-over-evaluation.md`, `architecture-context.md`, stories),
+    # and record names outside the grammar above.
+    #
+    # THE GRAMMAR IS NOT WIDENED TO THOSE NAMES, and each was decided from core's step files, not
+    # from the consumer's listing. A name is skipped only when core itself writes it as a review
+    # or repair record AND no repair edits it. `requirements-repair-el.md`,
+    # `requirements-repair-adv-p<M>.md`, `-cross-repair`, `-authoring`, `-repair-readiness-p<M>`
+    # and the rest are written by no core step file (they appear in core only as quotations of
+    # the consumer), so nothing establishes them as records. `changelog-<artifact>.md` IS core's
+    # -- `_gate-procedures.md` "Where a changelog is written" -- but it is APPENDED to on every
+    # pass, so it is live. `<artifact>-elicitation.md` (`stories-elicitation.md`,
+    # `architecture-elicitation.md`) is not core's: core writes elicitation outside the
+    # requirements subject to `shards/<artifact>-elicitation/`, and the consumer's repair parts
+    # carry `edit:` lines INTO `stories-elicitation.md`, `stories-cross-repair.md` and
+    # `architecture-authoring.md`, so those are documents a repair edits. Skipping them would
+    # hide exactly what a repair is required to fix.
+    #
     # NOT COVERED: frozenness is a property of WHEN the run happens, and a path cannot say it.
     # The record a repair has just joined is excluded with the rest; its fences were re-run by
     # the capture hook as they were written, and `--all` or a file target re-runs them here.
+    # Worse, an excluded record CAN be a repair's subject: the consumer's s316
+    # `shards/stories-fences-p<M>/` parts edit `stories-adversarial-p1.md`/`-p2.md`, and its
+    # derivation-staleness repairs edit `gate-planning-repair-p<M>.md`. A slot run does not see
+    # whether such a repair fixed them. The owed closure is a FILE-target run, after each join,
+    # over the joined record plus every file its `edit:` lines name -- a `_gate-procedures.md`
+    # step, not a change to this walk.
     # A legacy record name outside the grammar (`coe-adversarial-pass1.md`) is walked.
     if [ "$WALK_ALL" -eq 0 ]; then
       t_abs="$(cd "$target" && pwd)" || t_abs="$target"

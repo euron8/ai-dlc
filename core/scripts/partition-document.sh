@@ -149,7 +149,10 @@
 #      document's sha is re-checked immediately before the `mv`.
 #   5. Append `assembled\t<sha>` to the manifest.
 #   6. Remove `sections/<ordinal>.md`. Measured: leftover copies under s<N>/ added seven
-#      `FAIL (STALE)` lines to validate-artifact-derivations.sh's recursive walk.
+#      `FAIL (STALE)` lines to validate-artifact-derivations.sh's recursive walk. That walk
+#      now skips everything under `shards/` for a directory target, so a slot run no longer
+#      sees a leftover copy; only a FILE target or an `--all` run does. Removing them here is
+#      what keeps them out of those runs.
 #
 # A SPLIT VERIFIES ITSELF. After writing the sections it concatenates them and compares the sha
 #   to the document's; a mismatch refuses and removes the manifest-less sections it wrote. A
