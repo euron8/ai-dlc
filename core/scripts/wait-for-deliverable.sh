@@ -623,11 +623,16 @@ settle_record() {  # $1 = sidecar -> prints `<hash> <epoch>`; 1 when there is no
 # cleared by --reset, a bound
 # wipe, or a beat armed with a join epoch later than its last write (a new round; see
 # "ROUND-SCOPED RECORDS").
+# A sidecar write whose loss costs a record, never the beat: the beat goes on, and the failure
+# is said on stderr rather than folded into success.
+sidecar_put() {  # $1 = file, $2 = content
+  printf '%s' "$2" > "$1" 2>/dev/null || echo "WARN: wait-for-deliverable: could not write $1" >&2
+}
 revised_bump() {  # $1 = the .settle sidecar path; bumps its sibling .revised
   rb_f_="${1%.settle}.revised"
   rb_n_=0; [ -f "$rb_f_" ] && rb_n_="$(cat "$rb_f_" 2>/dev/null || echo 0)"
   case "$rb_n_" in ''|*[!0-9]*) rb_n_=0 ;; esac
-  printf '%s' "$(( rb_n_ + 1 ))" > "$rb_f_" 2>/dev/null || true
+  sidecar_put "$rb_f_" "$(( rb_n_ + 1 ))"
 }
 # Printed beneath a DELIVERED line, at both places a path is delivered, and only when n >= 1,
 # so a seat that kept its contract prints exactly what it always did.
@@ -643,7 +648,7 @@ say_revised() {  # $1 = target, $2 = counter path (without suffix)
 # outlives the join state the delivery drops; --reset and a bound wipe remove it with the rest.
 record_delivered() {  # $1 = target, $2 = counter path (without suffix)
   rd_h_="$(content_hash "$1")"
-  [ -n "$rd_h_" ] && printf '%s' "$rd_h_" > "${2}.delivered" 2>/dev/null || true
+  if [ -n "$rd_h_" ]; then sidecar_put "${2}.delivered" "$rd_h_"; fi
 }
 
 # The marked file has SETTLED: its hash equals the one its record holds from more than SETTLE
@@ -662,7 +667,7 @@ settled() {  # $1 = path, $2 = its .settle sidecar
     # `now`, and ran out its quantum (1 run of 8 under load). Another beat may also have deleted
     # the sidecar; restore it so the next beat in the join reads the window already opened.
     settle_memo "$2" "$st_rec_"
-    [ -f "$2" ] || printf '%s' "$st_rec_" > "$2" 2>/dev/null || true
+    [ -f "$2" ] || sidecar_put "$2" "$st_rec_"
     # STRICTLY greater: both stamps are whole seconds, so a difference of exactly POLL can be
     # a few milliseconds of real time across a second boundary. POLL + 1 whole seconds is at
     # least POLL real ones.
@@ -907,11 +912,12 @@ lease_holder_dead() {  # $1 = holder pid -> 0 when no live beat stands behind it
 }
 LEASE_TMP="${COUNTER_DIR}/.beat-inflight.$$"   # inside the ignored .wait-beats/, same filesystem
 lease_put() {  # $1 = epoch, $2 = pid -- whole-file replace, never a partial line for the hook to read
-  printf '%s %s' "$1" "$2" > "$LEASE_TMP" 2>/dev/null && mv -f "$LEASE_TMP" "$BEAT_MARKER" 2>/dev/null || true
+  { printf '%s %s' "$1" "$2" > "$LEASE_TMP" 2>/dev/null && mv -f "$LEASE_TMP" "$BEAT_MARKER" 2>/dev/null; } \
+    || echo "WARN: wait-for-deliverable: could not write the lease $BEAT_MARKER; the stop hook will not see this beat" >&2
 }
 beat_alive() {
   ba_e_=$(( $(date +%s) + 3 * POLL ))
-  printf '%s' "$ba_e_" > "$LEASE_SELF" 2>/dev/null || true
+  sidecar_put "$LEASE_SELF" "$ba_e_"
   ba_cur_="$(cat "$BEAT_MARKER" 2>/dev/null || echo '')"
   ba_ep_="${ba_cur_%% *}"
   case "$ba_cur_" in *' '*) ba_pid_="${ba_cur_#* }" ;; *) ba_pid_="" ;; esac
@@ -959,7 +965,7 @@ PREV_BOUND="$(cat "$BOUND_FILE" 2>/dev/null || echo '')"
 if [ "$PREV_BOUND" != "$MAX_BEATS" ]; then
   find "$COUNTER_DIR" -mindepth 1 -maxdepth 1 ! -name '.lease-*' -exec rm -rf {} + 2>/dev/null || true
   mkdir -p "$COUNTER_DIR" 2>/dev/null || true
-  printf '%s' "$MAX_BEATS" > "$BOUND_FILE" 2>/dev/null || true
+  sidecar_put "$BOUND_FILE" "$MAX_BEATS"
 fi
 
 # ---------------------------------------------------------------------------
