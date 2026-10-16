@@ -139,6 +139,137 @@ else
   fi
 fi
 
+# --- Assertion 10: the pause binds to the LEAD's session ----------------------
+# THE DEFECT. Once the pipeline was active the hook raised the project-wide pause flag for
+# a prompt typed in ANY session of the project, so a message typed into a second session
+# paused the lead and Rule 29 then denied six of its dispatches. The hook now records the
+# session id of the last `/ai-dlc` prompt in _bmad-output/.lead-session and raises the flag
+# only for that session; any other session's prose is still captured and is logged
+# OTHER_SESSION_PROMPT. No binding pauses, as before.
+#
+# One world per drive, each in a fresh project, read as six cells. Every cell is
+# PRESENCE-shaped on the side that matters (a flag, a file content, a row), so a subject that
+# emits nothing fails the cells that expect output. The unmutated COPY is driven too, from
+# the same directory the mutants sit in, so a mutant's kill is not a copy that cannot run.
+b_fire() { # <hook> <project> <session> <prompt>
+  jq -nc --arg s "$3" --arg p "$4" '{session_id:$s,prompt:$p}' \
+    | CLAUDE_PROJECT_DIR="$2" bash "$1" >/dev/null 2>&1
+}
+b_world() { # <hook> -> "NB BIND BOUND OTHER REBIND SKILL" as y/n cells
+  local h="$1" p o nb bind bound other rebind skill
+  p="$(mktemp -d "$WORK/bind.XXXXXX")/project"; mkdir -p "$p/_bmad-output"
+  cp "$SNAPSHOT" "$p/_bmad-output/pipeline-snapshot.md"
+  o="$p/_bmad-output"
+  # NB: no binding yet -> a typed prompt from any session pauses (the default branch).
+  b_fire "$h" "$p" "sess-other" "Hold on, check the gate first."
+  [ -f "$o/pipeline-paused.flag" ] && [ ! -f "$o/.lead-session" ] && nb=y || nb=n
+  rm -f "$o/pipeline-paused.flag"
+  # BIND: `/ai-dlc` with arguments, from the lead session, records that session.
+  b_fire "$h" "$p" "sess-lead" "/ai-dlc Sprint 9: build the login flow"
+  [ "$(cat "$o/.lead-session" 2>/dev/null)" = "sess-lead" ] && bind=y || bind=n
+  rm -f "$o/pipeline-paused.flag"
+  # BOUND: the lead's own typed prose pauses.
+  b_fire "$h" "$p" "sess-lead" "Stop and re-check the gate before you continue."
+  [ -f "$o/pipeline-paused.flag" ] && bound=y || bound=n
+  rm -f "$o/pipeline-paused.flag"
+  # OTHER: another session's prose is captured in full, logged as its own event, and pauses nothing.
+  local up0 up1
+  up0="$(grep -c '^## .*-- USER_PAUSE' "$o/pipeline-continuation-log.md" 2>/dev/null)" || up0=0
+  b_fire "$h" "$p" "sess-other" "unrelated note from a second window"
+  up1="$(grep -c '^## .*-- USER_PAUSE' "$o/pipeline-continuation-log.md" 2>/dev/null)" || up1=0
+  if [ ! -f "$o/pipeline-paused.flag" ] \
+     && grep -q '^## .*-- OTHER_SESSION_PROMPT$' "$o/pipeline-continuation-log.md" 2>/dev/null \
+     && grep -q '^unrelated note from a second window$' "$o/operator-requests-history.md" 2>/dev/null \
+     && grep -q '^- Session: sess-other$' "$o/operator-requests-history.md" 2>/dev/null \
+     && [ "$up0" = "$up1" ]; then other=y; else other=n; fi
+  rm -f "$o/pipeline-paused.flag"
+  # REBIND: `/ai-dlc resume` from a NEW session rebinds; the old lead no longer pauses, the new one does.
+  b_fire "$h" "$p" "sess-new" "/ai-dlc resume"
+  rm -f "$o/pipeline-paused.flag"
+  b_fire "$h" "$p" "sess-lead" "a note from the old window"
+  local old_paused=n; [ -f "$o/pipeline-paused.flag" ] && old_paused=y
+  rm -f "$o/pipeline-paused.flag"
+  b_fire "$h" "$p" "sess-new" "pause here please"
+  if [ "$(cat "$o/.lead-session" 2>/dev/null)" = "sess-new" ] && [ "$old_paused" = n ] \
+     && [ -f "$o/pipeline-paused.flag" ]; then rebind=y; else rebind=n; fi
+  rm -f "$o/pipeline-paused.flag"
+  # SKILL: a different skill sharing the prefix (`/ai-dlc-update`) is not a lead start and does
+  # not rebind. Read as "unchanged across the fire", so this cell does not depend on REBIND's.
+  local before; before="$(cat "$o/.lead-session" 2>/dev/null)"
+  b_fire "$h" "$p" "sess-upd" "/ai-dlc-update"
+  [ "$(cat "$o/.lead-session" 2>/dev/null)" = "$before" ] && skill=y || skill=n
+  # FRESH: the FIRST /ai-dlc of a project, with no snapshot yet, binds too. Every cell above
+  # runs past the snapshot gate, so without this world a binding moved below that gate would
+  # pass them all and the fresh start -- the case the filing names first -- would never bind.
+  local f fresh
+  f="$(mktemp -d "$WORK/bind.XXXXXX")/project"; mkdir -p "$f"
+  b_fire "$h" "$f" "sess-first" "/ai-dlc Sprint 1: start the project"
+  if [ "$(cat "$f/_bmad-output/.lead-session" 2>/dev/null)" = "sess-first" ] \
+     && [ ! -f "$f/_bmad-output/pipeline-paused.flag" ]; then fresh=y; else fresh=n; fi
+  printf '%s %s %s %s %s %s %s\n' "$nb" "$bind" "$bound" "$other" "$rebind" "$skill" "$fresh"
+}
+B_EXPECT="y y y y y y y"
+B_REAL="$(b_world "$HOOK")"
+if [ "$B_REAL" = "$B_EXPECT" ]; then
+  ok "lead binding: no-binding pauses, /ai-dlc binds, bound session pauses, other session captures without pausing, resume rebinds, /ai-dlc-update does not, a fresh start binds [$B_REAL]"
+else
+  bad "LEAD BINDING WRONG — cells NB BIND BOUND OTHER REBIND SKILL FRESH read [$B_REAL], expected [$B_EXPECT]"
+fi
+
+# --- Assertion 11: MUTANTS — each binding cell can fail -----------------------
+BM="$WORK/bind-mutants"; mkdir -p "$BM"
+cp "$HOOK" "$BM/control.sh"
+B_CTRL="$(b_world "$BM/control.sh")"
+if [ "$B_CTRL" = "$B_EXPECT" ]; then
+  ok "binding mutant control: an unmutated copy under $BM reads [$B_CTRL]"
+else
+  bad "BINDING MUTANT HARNESS BROKEN — the unmutated copy reads [$B_CTRL], so no kill below is readable"
+fi
+# <name> <cell-index 1..6> <sed-expr>: the mutant must flip exactly its own cell to n.
+b_mut() {
+  local name="$1" cell="$2" expr="$3" got want
+  sed "$expr" "$HOOK" > "$BM/$name.sh"
+  if cmp -s "$HOOK" "$BM/$name.sh"; then
+    bad "FIXTURE STALE: binding mutant $name matched nothing in $HOOK"; return
+  fi
+  got="$(b_world "$BM/$name.sh")"
+  want="$(echo "$B_EXPECT" | awk -v c="$cell" '{ $c = "n"; print }')"
+  if [ "$got" = "$want" ]; then
+    ok "binding mutant $name: [$got] — only its own cell flipped"
+  else
+    bad "BINDING MUTANT $name read [$got], expected [$want] — the arm cannot fire, or the cells are entangled"
+  fi
+}
+# Binding never recorded: the command pattern matches nothing. BIND fails; with no binding
+# every later prompt pauses, so OTHER and REBIND fail too -- the cells they own read the
+# binding, so this mutant is scored on its whole expected vector rather than one cell.
+sed 's#^    /ai-dlc|/ai-dlc\[\[:space:\]\]\*)$#    /ai-dlc-NEVER-MATCHES)#' "$HOOK" > "$BM/nobind.sh"
+if cmp -s "$HOOK" "$BM/nobind.sh"; then
+  bad "FIXTURE STALE: binding mutant nobind matched nothing"
+else
+  g="$(b_world "$BM/nobind.sh")"
+  [ "$g" = "y n y n n y n" ] && ok "binding mutant nobind: [$g] — no binding recorded, so every session pauses" \
+    || bad "BINDING MUTANT nobind read [$g], expected [y n y n n y n]"
+fi
+# The comparison never consulted: every session pauses again -- the filed defect. OTHER and
+# REBIND (whose old-lead leg is the same comparison) both fail.
+sed 's#^if \[ -n "\$LEAD_SESSION" \] && \[ -n "\$SESSION_ID" \] && \[ "\$SESSION_ID" != "\$LEAD_SESSION" \]; then$#if false; then#' "$HOOK" > "$BM/nocompare.sh"
+if cmp -s "$HOOK" "$BM/nocompare.sh"; then
+  bad "FIXTURE STALE: binding mutant nocompare matched nothing"
+else
+  g="$(b_world "$BM/nocompare.sh")"
+  [ "$g" = "y y y n n y y" ] && ok "binding mutant nocompare: [$g] — the filed defect is back and OTHER/REBIND catch it" \
+    || bad "BINDING MUTANT nocompare read [$g], expected [y y y n n y y]"
+fi
+# No binding read as a MISMATCH: the default branch stops pausing. Only NB owns that.
+b_mut nodefault 1 's#^if \[ -n "\$LEAD_SESSION" \] && \[ -n "\$SESSION_ID" \]#if [ -n "$SESSION_ID" ]#'
+# Bind only once, never rebind: REBIND owns that.
+b_mut norebind 5 's#^if \[ -n "\$PROMPT_STRIPPED" \] && \[ -n "\$SESSION_ID" \]; then$#if [ -n "$PROMPT_STRIPPED" ] \&\& [ -n "$SESSION_ID" ] \&\& [ ! -s "$LEAD_SESSION_FILE" ]; then#'
+# Prefix match instead of the exact command token: `/ai-dlc-update` rebinds. SKILL owns that.
+b_mut prefix 6 's#^    /ai-dlc|/ai-dlc\[\[:space:\]\]\*)$#    /ai-dlc*)#'
+# Binding gated on an active pipeline: the fresh start never binds. FRESH owns that.
+b_mut gated 7 's#^if \[ -n "\$PROMPT_STRIPPED" \] && \[ -n "\$SESSION_ID" \]; then$#if [ -n "$PROMPT_STRIPPED" ] \&\& [ -n "$SESSION_ID" ] \&\& [ -f "$SNAPSHOT_FILE" ]; then#'
+
 # --- Assertion 8: the THREE hooks seed the SAME legend -------------------------
 # WHY THIS LIVES HERE, AND WHY ASSERTION 6 IS NOT ENOUGH. Assertion 6 reads the log this
 # fixture's own run produced, so it sees whichever legend `ai-dlc-pause.sh` happens to carry.

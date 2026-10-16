@@ -201,6 +201,13 @@
       "reason": "Pause flag, deleted by the lead on resume. A tracked copy pauses every checkout."
     },
     {
+      "name": ".lead-session",
+      "transient": true,
+      "producer": "core/hooks/ai-dlc-pause.sh",
+      "ignore": "_bmad-output/.lead-session",
+      "reason": "The session id of the last UserPromptSubmit that invoked /ai-dlc, so the pause hook raises the flag only for a prompt typed in the lead's own session; a prompt from any other session of the project is captured and logged OTHER_SESSION_PROMPT instead. Rebound by every /ai-dlc prompt, including a resume in a new session. A tracked copy binds every checkout to a session that never ran there."
+    },
+    {
       "name": ".handoff-in-progress",
       "transient": true,
       "producer": "core/hooks/ai-dlc-handoff-entry.sh",
