@@ -962,10 +962,18 @@ lr_sib_split() {
 # file read with a checked `getline`, never `awk -v` and never a regex. Receipts are split by the
 # dispatch's own sed (`lr_sib_split`).
 #
-# Y IS DRAWN FROM THE LIVE LEDGER AND THE ARCHIVE, CLOSED ENTRIES INCLUDED (`$LR_STAGE/sibs`, staged
-# once with `lr_entries ... 1`), because the sibling has usually been closed and rotated by the time
-# the pull asks. A Y named only on a `Not-discharged:` line still counts: the message is read whole,
-# and that is harmless here because this kind is never a close.
+# Y IS DRAWN FROM THE OPEN LIVE ENTRIES ONLY -- the same `$LR_STAGE/xrcpt` X's own receipts come
+# from, which is the set the verdict loop reads. It used to be the live ledger AND the rotation
+# archive, closed entries kept, because the sibling has usually been closed and rotated by the time
+# the pull asks (measured on the reference consumer: the in-commit sibling of PC-S308 had been
+# rotated the day before PC-S308 was closed). That made this row a function of sprint history:
+# deleting the archive turned SIBLING-ATTRIBUTED into NAMED-UPSTREAM, which the operator ruled out
+# ("if someone deleted all of graph consumer's sprint history, it should not matter whatsoever").
+# Closed live entries are excluded for the same reason one step earlier: rotation moves exactly
+# them, so counting them would flip the row at the rotate. THE COST IS STATED, NOT HIDDEN: once Y
+# is annotated, X reads NAMED-UPSTREAM rather than SIBLING-ATTRIBUTED -- the more conservative of
+# the two, since neither is a close. A Y named only on a `Not-discharged:` line still counts: the
+# message is read whole, and that is harmless here because this kind is never a close.
 #
 # FAILS TOWARDS `touched` -- the row stays NAMED-UPSTREAM -- on an X anchor carrying a backslash (the
 # dispatch refuses such an anchor, so its literal is not known), an X path that does not resolve, a
@@ -976,7 +984,6 @@ named_sibling() {
   local -a _ps
   local _sb_blk=0 _sb_bad=0 _sibs=""
   NSB_STATE=touched; NSB_SIBS=""
-  [ "${LR_SIB_OK:-0}" = 1 ] || return 0
   [ -n "$2" ] || return 0
   # X's own receipts, from the SAME staged entries the verdict loop reads.
   LR_L="$_label" LC_ALL=C awk -F'\t' '$1 == ENVIRON["LR_L"] { print }' "$LR_STAGE/xrcpt" \
@@ -1020,7 +1027,7 @@ named_sibling() {
         }
         return 0
       }
-      ($1 != ENVIRON["LR_X"]) && named(ENVIRON["LR_M"], $1) { print }' "$LR_STAGE/sibs" \
+      ($1 != ENVIRON["LR_X"]) && named(ENVIRON["LR_M"], $1) { print }' "$LR_STAGE/xrcpt" \
       > "$LR_STAGE/nsb-y" 2>/dev/null || return 0
     cp "$LR_STAGE/nsb-xneedles" "$LR_STAGE/nsb-needles" 2>/dev/null || return 0
     cp "$LR_STAGE/nsb-xpaths" "$LR_STAGE/nsb-paths" 2>/dev/null || return 0
@@ -2209,16 +2216,13 @@ LR_DIST_ONLY="$(git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "$
 # closing `**` there. That is complete and greppable and visibly not an id, which is the honest
 # output for a malformed entry. Narrowing the bullet predicate to "closing ** on this line" would
 # instead DROP such an entry, and the reference consumer has a live one.
-ARCHIVE_PATH="$(dirname "$LEDGER")/push-candidate-ledger.archive.md"
-
-# ONE EXTRACTION, TWO CALLERS. The verdict loop reads it with KEEP=0 over the live ledger, which is
-# what it always read. `named_sibling` reads it with KEEP=1 over the live ledger AND the archive,
-# because a sibling entry is usually CLOSED by the time a pull asks: measured on the reference
-# consumer, the in-commit sibling of PC-S308 had been rotated to the archive the day before
-# PC-S308 was closed. KEEP changes only whether a closed entry is printed; the close rule itself
-# stays on its one line below, the line `lib.sh` lifts and requires to be unique.
-lr_entries() { # <ledger-file> <keep-closed 0|1> -> label TAB ord TAB directive, one row per receipt
-  awk -v DASH=' — ' -v KEEP="$2" "$(ledger_entry_awk)"'
+#
+# OPEN ENTRIES OF THE LIVE LEDGER ONLY, and this is the one extraction every reader shares. The
+# rotation archive is read by NO reader here, so no row depends on whether it exists (see
+# `named_sibling` for the reader that used to). The close rule stays on its one line below, the
+# line `lib.sh` lifts and requires to be unique.
+lr_entries() { # <ledger-file> -> label TAB ord TAB directive, one row per receipt
+  awk -v DASH=' — ' "$(ledger_entry_awk)"'
   # An ENTRY LINE closes its own entry two ways. A marker anywhere on it is one: the withdrawal
   # lives in the heading (`## PC-FOO — **WITHDRAWN …**`) and the fork-retirement records are
   # bullets whose title ends `→ ADOPTED UPSTREAM (v…)`. The retained-copy parenthetical is the
@@ -2259,7 +2263,7 @@ lr_entries() { # <ledger-file> <keep-closed 0|1> -> label TAB ord TAB directive,
   # only the receipt-less 0/0 row -- is refused there too. Kept so a 0/0 row is never emitted for
   # a label no naming query would ask about.
   function flush(){
-    if (has_verify && (!closed || KEEP) && label != "")
+    if (has_verify && !closed && label != "")
       for (di = 1; di <= dn; di++)
         printf "%s\t%s\t%s\n", label, di "/" dn, dv[di]
     if (!has_verify && !closed && label != "" && ledger_entry_id(label) != "")
@@ -2370,7 +2374,7 @@ lr_entries() { # <ledger-file> <keep-closed 0|1> -> label TAB ord TAB directive,
   END { flush() }
 ' "$1"
 }
-ENTRIES="$(lr_entries "$LEDGER" 0)"
+ENTRIES="$(lr_entries "$LEDGER")"
 
 # A HERESTRING, NOT A PIPE, AND THE REASON IS THE TALLY BELOW. `awk … | while read` runs the
 # loop body in a SUBSHELL, so a counter incremented inside it is discarded at the closing
@@ -2408,9 +2412,12 @@ printf '%s\n' "$ENTRIES" > "$LR_STAGE/entries" \
 # the run: it only means no row can reach the new kind, so every row keeps the kind it had before
 # the subject datum existed, and the one stderr line says why.
 #
-# THE SAME PASS WRITES `xrcpt` (label TAB the whole receipt remainder) for `named_sibling`: one
-# reader of the staged entries, not two, so the split is applied once and cannot diverge between
-# the subject set and the sibling set. `close()` makes a failed write of either file fail the awk.
+# THE SAME PASS WRITES `xrcpt` (label TAB the whole receipt remainder) for `named_sibling`, which
+# reads it for X's own receipts AND for every candidate sibling Y: one reader of the staged
+# entries, so the split is applied once and cannot diverge between the subject set and the sibling
+# set. `close()` makes a failed write of either file fail the awk. A failure here leaves every
+# naming row at the kind it had before either datum existed: `named_sibling` is reached only from
+# a `touched` answer, and `named_subject` cannot give one without this stage.
 LR_SUBJ_OK=0
 if LR_XR="$LR_STAGE/xrcpt" LC_ALL=C awk -F'\t' '
   BEGIN { x = ENVIRON["LR_XR"]; printf "" > x }
@@ -2423,31 +2430,8 @@ if LR_XR="$LR_STAGE/xrcpt" LC_ALL=C awk -F'\t' '
   END { if (close(x) != 0) exit 2 }' "$LR_STAGE/entries" > "$LR_STAGE/subjects" 2>/dev/null; then
   LR_SUBJ_OK=1
 else
-  echo "ledger-reverify: the receipt subject set could not be staged, so no row is classified NAMED-UPSTREAM-OFF-SUBJECT this run; every naming row keeps its prior kind" >&2
+  echo "ledger-reverify: the receipt subject set could not be staged, so no row is classified NAMED-UPSTREAM-OFF-SUBJECT or NAMED-UPSTREAM-SIBLING-ATTRIBUTED this run; every naming row keeps its prior kind" >&2
 fi
-# THE SIBLING STAGES, for `named_sibling`: label TAB receipt-remainder (path, then the quoted
-# substring(s), split later by the dispatch's own sed) for every `theirs_has|theirs_lacks` receipt.
-# `xrcpt` (written by the subject pass above) is the open live entries the verdict loop reads;
-# `sibs` is a SEPARATE extraction with closed entries kept, over the live ledger and the archive.
-# `sibs` is never fed to the verdict loop. Any failure, including the subject pass failing, leaves
-# LR_SIB_OK=0, so no row reaches the new kind and every row keeps its old one.
-lr_rcpt_rows() { # <entries file> -> label TAB remainder, theirs_has|theirs_lacks only
-  LC_ALL=C awk -F'\t' '
-    $2 == "0/0" { next }
-    { d = $0; sub(/^[^\t]*\t[^\t]*\t/, "", d); v = d; sub(/ .*/, "", v); r = substr(d, length(v) + 1); sub(/^ /, "", r)
-      gsub(/^[^A-Za-z_]+/, "", v); gsub(/[^A-Za-z_]+$/, "", v)
-      if (v != "theirs_has" && v != "theirs_lacks") next
-      printf "%s\t%s\n", $1, r }' "$1"
-}
-LR_SIB_OK=0
-if [ "$LR_SUBJ_OK" = 1 ] && lr_entries "$LEDGER" 1 > "$LR_STAGE/sib-entries" 2>/dev/null; then
-  LR_SIB_OK=1
-  if [ -r "$ARCHIVE_PATH" ]; then
-    lr_entries "$ARCHIVE_PATH" 1 >> "$LR_STAGE/sib-entries" 2>/dev/null || LR_SIB_OK=0
-  fi
-  [ "$LR_SIB_OK" = 1 ] && { lr_rcpt_rows "$LR_STAGE/sib-entries" > "$LR_STAGE/sibs" 2>/dev/null || LR_SIB_OK=0; }
-fi
-[ "$LR_SIB_OK" = 1 ] || echo "ledger-reverify: the sibling receipt set could not be staged, so no row is classified NAMED-UPSTREAM-SIBLING-ATTRIBUTED this run; every naming row keeps its prior kind" >&2
 while IFS="$(printf '\t')" read -r label ord directive; do
   # THE PER-ENTRY NAMING STATE RESETS HERE, ABOVE THE EMPTY-DIRECTIVE SKIP. It sat in the naming
   # `case` below, which the skip pre-empts: an entry whose FIRST receipt was an empty `verify:` line
