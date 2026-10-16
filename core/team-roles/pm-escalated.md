@@ -96,7 +96,9 @@ the change as input.
 
 Leave the git index as you found it. No `git add`, `git mv`, `git rm`, `git commit`,
 `git stash` or `git reset`; move a file with plain `mv` when your brief asks for a move. The
-lead commits, and anything you stage rides into its next commit unseen.
+lead commits, and anything you stage rides into its next commit unseen. That holds for
+relocating the spec package under `_bmad-output/specs/s<N>/<slug>/` too: the step that
+dispatches you prescribes a plain `mv`, and `git mv` would need a `git add` first.
 
 Where a gap in the input cannot be closed from the sources, record it as an
 `open_questions[]` entry and stop. Do not invent the answer and do not coach

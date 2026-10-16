@@ -230,7 +230,7 @@ paths are not already under `_bmad-output/specs/s<N>/<slug>/`, relocate the
 whole package there in one move and cite the new paths from here on:
 
     mkdir -p _bmad-output/specs/s<N>
-    git mv <returned-package-dir> _bmad-output/specs/s<N>/<slug>
+    mv <returned-package-dir> _bmad-output/specs/s<N>/<slug>
 
 Relocate BEFORE the PRD step reads `SPEC.md` (`research-requirements.md`
 §2) — a citation written against the pre-move path is a citation that stops
