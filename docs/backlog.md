@@ -912,6 +912,10 @@ The absence reads exactly like a real one. `.claude/rules/tool-hazards.md:181-18
 
 Owed: one line beside `:181-184` saying a glob pathspec must not end in `/` (use the bare glob, the plain directory, or `:(glob)<dir>*/**`). It goes in the durable channel, which has 49 bytes free under A6 (69327/69376 on intake-7). Lead ai-dlc-9c ruled: no subtraction to make room and no separate A6 question for one line. The entry stays OPEN, waiting on room in the durable channel, and goes to the operator together with the next A6 question.
 
+**Ruling (operator, relayed by lead ai-dlc-9c):** A6 is raised by the measured need of this line. ai-dlc-60 writes the line in `tool-hazards.md`, beside the `ls-tree` pathspec entry, in its BL-587+612 release, using this entry's reproduction wording. BL-633 closes in that release.
+
+Owner: ai-dlc-60 (lead ai-dlc-9c), inside the BL-587+612 release.
+
 verify: manual
 
 ## BL-634 — `enforcement-map.yaml` is not valid YAML: `yaml.safe_load` fails on an unquoted `: ` in a prose value
