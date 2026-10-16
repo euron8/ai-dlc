@@ -278,16 +278,6 @@ verify: manual
 
 verify: manual
 
-## BL-558 — `story-evidence-scaffold` costs 173-177s solo against a recorded pool-12 history of 2-3s, and the cause is not found
-
-**LANDED (v0.806.0, verified 4a6773ae).** The 2-3s rows were passing runs of the 232-line fixture from before 0.783.0; 0.787.0's battery took it to about 175s, its real cost. The validator battery moved to four `.dist-only` shards (`story-evidence-scaffold-mutants`, `-b`, `-c`, `-d`), so consumers stop running it; solo in a clean worktree the shipped fixture is 26s and the shards 53s, 50s, 58s and 46s.
-
-**DEFECT (efficiency).** Found at batch 234 while gating 0.790.0. Pushed from a linked worktree, the pre-push runner re-ran the same 10 fixtures every time (the 8 its read-set map leaves unmapped there, plus two), and `story-evidence-scaffold` was the pole of that set at 144s and 146s. The suite-pole guard judged it against its own pool-12 history, 8 rows with a maximum of 3s, and failed two gates on the regime ceiling (6s). Measured solo and interleaved, from detached worktrees of `origin/main` (`bfb5589e`) and the release tip (`1c2bf345`), at load 4-6: base 177s and 175s, tip 173s and 171s. So the cost is not the release. The 2-3s rows are not explained: a grep of `run.sh` (725 lines, one file in the fixture) for reads outside `core/` (`projects`, `graph`, `HOME`, `git log`, `find`) found none, and the fixture's own run log shows a full mutant battery over about 30 handoff and strategy cases. Its 8 pool-12 rows were dropped on the operator's choice with the guard's own printed remedy (backup kept), and the next gate read `CALIBRATING (1/3)` at 143s and passed.
-
-Owed: find what the 2-3s rows measured (a skipped battery, a different dispatch, a different tree) and whether 175s is the fixture's real cost. If it is, the fixture is a candidate for the same sharding the other batteries got, since a 175s unit can become a full-suite pole. Measure solo first, in a clean worktree, and name the tree beside the number.
-
-verify: manual
-
 ## BL-560 — the SPEC re-render is a separate dispatch the lead must remember, and the subject is left stale between them
 
 **DEFECT.** In graph s319 the serial cross-part remediator appended 4 `(decision)` entries to the spec's `.memlog.md` and edited none of `SPEC.md` (its writes: prd 28, architecture-impact 8, product-brief 8, memlog 4). That is correct under `requirements.md:233-236`. But it left `SPEC.md` behind its memlog when the pass delivered, and the join accepted the record. The lead then had to dispatch a separate render agent (01:50:21Z), which the pause then stranded (BL-559). The earlier SPEC remediators (BL-546) did the opposite, rendering by hand. Between the two, nothing ties "the memlog has entries newer than `SPEC.md`" to any check, so the subject that the next adversarial pass and the gate read can carry a SPEC that does not reflect its own decisions. Owed: the join (or `validate-artifact-derivations.sh` over the subject) refuses when `.memlog.md` holds a `(decision)` entry dated after `SPEC.md`'s last render stamp, so the stale state cannot reach the adversary. BL-546's render path is what lets the serial remediator close it itself.
@@ -437,16 +427,6 @@ Scheduled in batch 235 for a later release (scope ruling: the boundary is the re
 
 verify: manual
 
-## BL-595 — the Check 22 arm refusing `none (serial-document)` on a `stories/` subject is still unbuilt
-
-**LANDED (v0.805.0, verified 26e51dcd).** Check 24's new arm L judges the stories elicitation's shape against the name set `merge-adversarial-shards.sh --map` and `partition-document.sh --cross-groups` owe: a single voice, missing ordinals, short cross groups, wrong names or an owed-absent elicitation at `full` FAIL, with era and unreadable-history cases PENDING. Check 22's S3 is not tightened (the ledger carries no subject). The check-24 fixture drives it end to end in 21 worlds and 9 mutants. The receipt, the consumer's next stories elicitation, is owed.
-
-**NOTE.** BL-509's close (archived, `docs/backlog.archive.md:32870ff`) built the sharded stories-elicitation rule (`_gate-procedures.md:413-420`, "never `shard: none (…)`", pinned by 8 `elic-shape-*`/`sts-elic-*` rows in `process-rule-pins`) but left Check 22 untightened: "an S3 arm refusing `none (serial-document)` on a `stories/` subject was not built because its false-positive set on graph's ledgers was not measured". `core/scripts/validate-spawn-ledger.sh:920-923` S3 still fails only an exception outside the four, and `:973` reads only the first parenthesised token, so a single serial-document voice over `stories/` passes. The yield evidence that the sharded shape is worth enforcing now exists: `docs/analysis/step-value-s317-s319.md:137` (s317 22 shards about 15 unique; s318 one voice at most 1). Owed: measure the arm's false-positive set on graph's ledgers (it fires on graph's closed s318 stories row, a true finding), then build it or record why not.
-
-Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
-
-verify: manual
-
 ## BL-578 — a teammate wedged re-sending one API request reads as live to the beat, because the liveness sensor keys on transcript mtime and every retry line bumps it
 
 **DEFECT.** Filed by peer session ai-dlc-68 from graph's s319 lead `949015a6` (Sonnet 5.5). The pass-1 serial remediator `a7ffc8dcd555207b8` (dispatched 05:00:03Z on 2026-10-16) called `Skill bmad-spec` at 05:14:47Z ("update: append decision to .memlog.md then re-render SPEC.md …"); the skill body loaded at 05:14:50Z. Intake re-read its transcript read-only (`~/.claude/projects/-Users-n8-git-graph/949015a6-…/subagents/agent-a7ffc8dcd555207b8.jsonl`, 245 lines): the last `assistant` line is 05:14:47Z (control: 68 assistant lines in the file), and lines 239-245 are seven `api-request` records, 05:14:51Z → 05:34:24Z at ~195s intervals, all `shapeHash 7d7e1ada`, with nothing between them. The record `s319/requirements-repair-p1.md` gained nothing; the agent's only writes were 4 Edits at 05:08Z (locked-requirements.md, prd.md). The lead re-armed at 05:10:03Z, 05:20:12Z and 05:30:12Z and read it as "a long run is plausible" (05:20:15Z) and "still running at 30 minutes" (05:30:12Z); at 05:21:19Z the operator had ruled "when the remediator agent finishes, handoff", so the sprint waits on an agent that may never finish.
@@ -523,18 +503,6 @@ Scheduled in batch 235 for a later release (scope ruling: the boundary is the re
 
 verify: manual
 
-## BL-600 — the lead hand-rolls file times with `stat -f %Sm -t %FT%TZ`, which prints LOCAL time with a literal `Z`
-
-**LANDED (v0.805.0, verified 26e51dcd).** `core/scripts/file-mtime.sh` states each path's mtime as an epoch and a UTC stamp, taking the epoch from `stat` so that a numeric basename is never read as a time. Rule 28's join paragraph names it for a record's time against a dispatch, along with the format that went wrong. The probe: under `TZ=America/New_York` the helper prints `2026-10-16T04:59:42Z`, equal to the `TZ=UTC` control, while the hand-written `stat -f %Sm -t %FT%TZ` prints `2026-10-16T00:59:42Z`.
-
-**DEFECT.** Carried from a BL-528 addendum that missed BL-528's close: b235-docs (4abbd6c3) archived BL-528 as landed in v0.792.0, whose write-time stamp check judges lines ADDED to `pipeline-snapshot.md` (FUTURE, MALFORMED, BACKDATED). That check does not reach a time the lead derives in its own reasoning. Filed by peer session ai-dlc-68 from graph s319 lead `949015a6` (Sonnet 5.5): at 05:10:12Z on 2026-10-16 the lead ran `stat -f '%Sm' -t %FT%TZ <record>`, which prints local time followed by a literal `Z`. The box is EDT; the record's mtime was 2026-10-16T00:59:42 local (04:59:42Z), and the lead wrote "last modified at 00:59Z", four hours wrong and reading as authoritative. Its conclusion held only because 04:59Z preceded the 05:00:03Z dispatch. No shipped script or hook formats a file time this way (`%Sm` 0 hits in `core/scripts` and `core/hooks` at 4abbd6c3; control: `stat -f` 2 hits, both epoch `%m`/`%z:%m`), so the time is the lead's own hand-roll.
-
-Owed: any shipped helper that reports a file time emits it under `TZ=UTC` (or `date -u -r <epoch>`), and the step text that asks the lead whether a record changed since a dispatch names that helper instead of leaving the format to the lead. Probe: the helper's output for a file with a known epoch equals `date -u -r <epoch> +%FT%TZ` under a non-UTC `TZ`, with `TZ=UTC` as the control.
-
-Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
-
-verify: manual
-
 ## BL-582 — ai-dlc-update has no advisor touchpoint before its pushes and merges, and the advisor gate exempts them
 
 **DEFECT.** Raised by the operator's question ("should the graph session have called the advisor before the push? I thought that was a requirement?"); filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]). Rule 32 touchpoint I — "Before a push, a merge or a deploy" — is in the pipeline skill only (`core/skills/ai-dlc/SKILL.md`, 1 line). `core/skills/ai-dlc-update/SKILL.md` at ffef448b names no advisor touchpoint: `advisor` 0 times outside "advisory" (4), control `self-update-fixtures` 6. `core/hooks/ai-dlc-advisor-gate.sh:58-74` excludes a push or merge while the cwd branch is `ai-dlc-update/*` and a push whose every refspec destination is `ai-dlc-update/*`, giving as its reason that the update skill is "a bootstrapping file; its text carries no touchpoint and this release does not edit it". The exclusion shipped in 0.738.0 (`9bdbc311`); that release's CHANGELOG cites an operator ruling for the per-kind gate ("THE SAME KIND (operator ruling, batch 201)") and lists the update-branch exclusion as release text with no ruling attached.
@@ -593,18 +561,6 @@ verify: manual
 Measured by the filer on graph's transcripts, 2026-10-16: 0 of 3237 subagent transcripts hold a `Read` of a path ending `steps/handoff.md`; control: 69 of 178 lead transcripts do; grammar control: the same pattern over any `steps/*.md` matched 357 subagent transcripts; negative control: an impossible path matched 0. The hazard has never fired on the reference consumer.
 
 Owed: the hook's write applies to the lead only (empty `agent_id`), as BL-590 binds the recover gate, with an arm and a mutant: a teammate's Read leaves no `.handoff-in-progress`, and the lead's Read still writes it. ai-dlc-11 builds it as a small release after V2 (BL-590) merges.
-
-verify: manual
-
-## BL-602 — derivation-differential-mutants claims each mutant is killed by EXACTLY its declared arms, but checks only that the declared arms are a SUBSET of the failed ones
-
-**LANDED (v0.805.0, verified 26e51dcd).** The battery checks set EQUALITY through one self-probed comparison function, with a FAIL-line-count guard; every declared set is the measured one with its reason; R8 and A15n are disentangled by the WS3N re-seed, and R13 and R14 are added. All 15 mutants are killed by exactly their declared arms (R8, R13 and R14 measured equal to their declarations).
-
-**DEFECT.** Filed by peer session ai-dlc-60 while building release U-a; the fix is assigned to ai-dlc-c3. `core/fixtures/derivation-differential-mutants/run.sh` states an equality contract at :6 ("killed by exactly its declared arms"), :7 (exit 1 includes a mutant that "moved an arm it does not own"), :14-15 ("the set of arms that FAIL must EQUAL the set the mutant declares … one that fails an arm it does not own means two arms are entangled") and :231. The check at :127 is `missed="$(comm -13 "$WORK/$label.moved" "$WORK/$label.declared" …)"`, which prints only declared arms that did not fail: declared ⊆ failed. Intake confirmed all five lines at origin/main 3d5f1e70. A mutant that also fails an arm it does not own prints `KILLED`; the extra arms appear only in the "full failed set" text, which nothing asserts. That is the entanglement the header promises to catch and `.claude/rules/fixture-mutants.md` ("A mutant must fail **only** its own assertion") requires. Per the filer, of the 23 fixture `run.sh` files that use `comm -`, only this one carries the `comm -13 "$WORK/$label.moved"` form; other batteries need their own read before generalising.
-
-Measured by ai-dlc-60 on U-a head d524616d (based on e3073787), battery exit 0 in 150 s: 5 of 12 mutants fail a strict SUPERSET of their declared arms, 7 match exactly. R1 adds A16n A18b A18c A1c A1d A2c A3b A3d A9a A9b; R2 adds 35 arms; R3 adds 23; R4 adds A9c; R8 adds A15n. The equality form would therefore turn 5 current kills red. The A18 arms and R11/R12 come from U-a; on origin/main the battery has R1-R10 only.
-
-Owed: decide which side is right. If the header is right and the check too weak (which the rule file argues for), add `comm -23` and fail any mutant whose failed set exceeds its declared set, widening the 5 superset mutants' declared sets each with a reason. If the check is right, rewrite :6-7, :14-15 and :231 to say "at least". Receipt: a seeded mutant whose failed set is {declared} plus one extra arm is refused under the equality form; a mutant whose failed set equals its declared set is still KILLED, as the control.
 
 verify: manual
 
