@@ -13,3 +13,4 @@ core/fixtures/adversarial-shard-merge-mutants/run.sh
 core/fixtures/adversarial-shard-merge-mutants-b/run.sh
 core/fixtures/adversarial-shard-merge-mutants-d/run.sh
 core/fixtures/adversarial-shard-merge-mutants-e/run.sh
+core/fixtures/adversarial-shard-merge-mutants-f/run.sh

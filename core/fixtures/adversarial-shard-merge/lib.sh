@@ -875,6 +875,82 @@ p_tuid_pre() { # R9: a row with no transcript_path takes the probe row's id (mer
   d="$(tw)"; HR_PRE=1 s2 "$d"; hr_ids "$d/2.md"; run_merge "$1" "$d"
   refused_clean "agent $HR_AGENT in a row that predates transcript_path" "$d"
 }
+p_tuid_basename() { # rows are keyed on the FULL path under the shard dir: shard 2's only rows sit under
+                    # ANOTHER shard dir of the same sprint and under the same dir name in ANOTHER sprint
+  local d pa o; d="$(tw)"; pa="$(dirname "$(dirname "$(dirname "$d")")")"
+  # ABSENT self id: a no-row shard then has nothing a self-report fallback (TM1) could take, so the
+  # refusal is this cell's alone.
+  SELF_ID=ABSENT HR_OFF=1 s2 "$d"
+  for o in "$pa/s1/shards/stories-p2" "$pa/s2/shards/stories-p1"; do
+    mkdir -p "$o" && harness_record "$o/2.md" || return 1
+  done
+  [ "$(grep -c '"path":"[^"]*/shards/stories-p[12]/2.md"' "$pa/.artifact-writes.jsonl")" -eq 2 ] || return 1
+  run_merge "$1" "$d"
+  refused_clean "2.md has no row in" "$d"
+}
+p_tuid_probemeta() { # a row WITH transcript_path takes the meta file's id even when the probe ledger
+                     # names another adversary dispatch for the same agent (the header's hop 2)
+  local d st; d="$(tw)"; s2 "$d"; hr_ids "$d/2.md"; st="$(hr_state "$d/2.md")"
+  printf '{"v":3,"agent_id":"%s","role":"adversary","tool_use_id":"%s"}\n' "$HR_AGENT" "$REAL_OTHER" >> "$st/subagent-context.jsonl"
+  printf '{"v":1,"role":"adversary","tool_use_id":"%s"}\n' "$REAL_OTHER" >> "$st/spawn-ledger.jsonl"
+  run_merge "$1" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && grep -q " 2=$HR_DID " "$(out_of "$d")" \
+    && ! grep -qF -- "$REAL_OTHER" "$(out_of "$d")"
+}
+p_tuid_tworoles() { # ONE dispatch id carrying two spawn rows, adversary and remediator -> REFUSED
+  local d st; d="$(tw)"; s2 "$d"; hr_ids "$d/2.md"; st="$(hr_state "$d/2.md")"
+  printf '{"v":1,"role":"remediator","tool_use_id":"%s"}\n' "$HR_DID" >> "$st/spawn-ledger.jsonl"
+  run_merge "$1" "$d"
+  refused_clean "dispatch $HR_DID, dispatched as role remediator" "$d"
+}
+# ------------------------------------------------- the re-dispatch of one shard (--rerun)
+# The hook stamps each row with the wall clock, so a cell that must place rows on either side of a
+# re-run start re-stamps the rows ONE harness_record call appended, by line number, after the hook
+# wrote them: hr_at <ts> <command...>. Nothing else in the row moves.
+hr_at() {
+  local ts="$1" led n0 n1; shift
+  led="$(hr_state "$WORLD_SHARD")/planning-artifacts/.artifact-writes.jsonl"
+  n0="$(grep -c . "$led" 2>/dev/null)" || n0=0
+  "$@" || return 1
+  n1="$(grep -c . "$led")" || n1=0
+  [ "$n1" -gt "$n0" ] || return 1
+  awk -v n0="$n0" -v ts="$ts" 'NR > n0 { sub(/"ts":"[^"]*"/, "\"ts\":\"" ts "\"") } { print }' "$led" > "$led.tmp" \
+    && mv "$led.tmp" "$led"
+}
+RR_S=2026-10-15T20:30:00Z
+p_rerun_join() { # a stalled adversary wrote 2.md and its draft before S; the re-dispatch, a NEW dispatch,
+                 # wrote 2.md after it -> MERGED with --rerun, the rerun: line naming the superseded agent
+  local d o; d="$(tw)"; WORLD_SHARD="$d/2.md"
+  # The draft row is the stalled writer's own and is allowed; it is not a row ON 2.md, so it is not
+  # among the superseded rows counted.
+  HR_AGENT_O=a0000000000stall HR_DID_O=toolu_01StalledAdversary000002 hr_at 2026-10-15T19:59:00Z harness_record "$d/2.md.draft" || return 1
+  HR_AGENT_O=a0000000000stall HR_DID_O=toolu_01StalledAdversary000002 hr_at 2026-10-15T20:00:00Z s2 "$d" || return 1
+  HR_AGENT_O=a0000000000stall HR_DID_O=toolu_01StalledAdversary000002 hr_at 2026-10-15T20:01:00Z s2 "$d" || return 1
+  hr_at 2026-10-15T21:00:00Z s2 "$d" || return 1
+  hr_ids "$d/2.md"; o="$(out_of "$d")"
+  bash "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && has "$MO" "superseded=2" && grep -q " 2=$HR_DID " "$o" \
+    && grep -qx "rerun: 2.md since $RR_S; superseded: a0000000000stall (2 rows, 2026-10-15T20:00:00Z..2026-10-15T20:01:00Z)" "$o"
+}
+p_rerun_other() { # graph s318 requirements-p1/cross-2's shape: cross-1's OWN adversary edited shard 2
+                  # before S, and a new dispatch wrote it after -> REFUSED; --rerun never acquits a
+                  # cross-shard write
+  local d c1a c1d; d="$(tw)"; WORLD_SHARD="$d/2.md"
+  hr_ids "$d/cross-1.md"; c1a="$HR_AGENT"; c1d="$HR_DID"
+  HR_AGENT_O="$c1a" HR_DID_O="$c1d" hr_at 2026-10-15T20:00:00Z s2 "$d" || return 1
+  hr_at 2026-10-15T21:00:00Z s2 "$d" || return 1
+  bash "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
+  refused_clean "--rerun 2.md: $c1a is a superseded writer of 2.md and also wrote" "$d" && has "$MO" "cross-1.md at"
+}
+p_rerun_same() { # the superseded writer writes 2.md again after S, and nobody else does -> REFUSED: the
+                 # re-run is a NEW dispatch
+  local d; d="$(tw)"; WORLD_SHARD="$d/2.md"
+  hr_at 2026-10-15T20:00:00Z s2 "$d" || return 1
+  hr_at 2026-10-15T21:00:00Z s2 "$d" || return 1
+  hr_ids "$d/2.md"
+  bash "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
+  refused_clean "--rerun 2.md: $HR_AGENT wrote" "$d" && has "$MO" "its writer must not be one of the writers it supersedes"
+}
 
-P_ALL="b3 clean ceiling miss_ord miss_cross dup partition sha ms doc_b3 doc_axis doc_sha doc_path doc_serial files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit subj_b4 b4doc b4doc_nomf b4doc_other xfiles xdoc xelicit xmix xunknown xcomplete stem_series stem_control stem_near stem_files tuid_main tuid_norow tuid_nometa tuid_selfdiff tuid_role tuid_twowriters tuid_oneagent tuid_nospawn tuid_session tuid_pre"
+P_ALL="b3 clean ceiling miss_ord miss_cross dup partition sha ms doc_b3 doc_axis doc_sha doc_path doc_serial files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit subj_b4 b4doc b4doc_nomf b4doc_other xfiles xdoc xelicit xmix xunknown xcomplete stem_series stem_control stem_near stem_files tuid_main tuid_norow tuid_nometa tuid_selfdiff tuid_role tuid_twowriters tuid_oneagent tuid_nospawn tuid_session tuid_pre tuid_basename tuid_probemeta tuid_tworoles rerun_join rerun_other rerun_same"
 

@@ -44,11 +44,13 @@
 # THE SHARDS. The pre-push suite is POLE-BOUND: its makespan tracks its single longest DIRECTORY.
 # Unsharded, this battery ran 326s solo and 1043s loaded, the suite's second-highest pole, before
 # the derived-dispatch-id mutants (TM1-TM6) and their ten predicates were added. So the mutant set
-# is dealt across five units, this directory (shard a) and the one-line drivers
-# `adversarial-shard-merge-mutants-b` .. `-e`, each `exec bash "$IMPL" --group <x>`, the shape
+# is dealt across six units, this directory (shard a) and the one-line drivers
+# `adversarial-shard-merge-mutants-b` .. `-f`, each `exec bash "$IMPL" --group <x>`, the shape
 # `remediator-shard-join-mutants` carries. Every scorer runs every predicate, so a mutant's cost is
 # roughly uniform, and the pool is 8 wide: a shard of at most 7 mutants plus the control is ONE
-# wave of scorers, so the deal is 7, 7, 7, 6, 6 in declaration order by family. Every shard pays
+# wave of scorers, so the deal is 7, 7, 7, 6, 6, 5 in declaration order by family. Shard f carries
+# the basename, probe-over-meta, two-role and --rerun mutants (TM7-TM9, RM1-RM2), added with six
+# predicates that raised every scorer's cost, so they are a unit of their own, not a second wave. Every shard pays
 # the unmutated control MX0, the J1 join and the MJ probe itself, because a shard that skipped them
 # could report a kill against a harness that never ran. MX6b, an assertion and not a scoring, runs
 # in shard a only.
@@ -62,12 +64,13 @@
 # directory naming it. The join proves it can fire, on a seeded duplicate and a seeded omission,
 # before it is trusted. After the reap, [J2] asserts this shard dispatched exactly the mutants dealt
 # to it.
-SHARDS="a b c d e"
+SHARDS="a b c d e f"
 MUTANTS_a="MX1 MX2 MX3 MX4 MX5 MX6 MX7"
 MUTANTS_b="MX8 MX9 MX10 MX11 MX12 MX13 MX14"
 MUTANTS_c="MX15 XM1 XM2 XM7 XM8 XM3 XM4"
 MUTANTS_d="XM5 XM6 SM1 SM2 SM3 SM4"
 MUTANTS_e="TM1 TM2 TM3 TM4 TM5 TM6"
+MUTANTS_f="TM7 TM8 TM9 RM1 RM2"
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
@@ -354,7 +357,7 @@ mutant "MX15 B4-by-document refuses every document" "b4doc b4doc_other" \
 # The cross groups (BL-464). XM1: files and --subject left single-cross -- the groups are read only
 # in --document mode, the wrong build "merge sharded in one mode only". Every files and subject arm
 # that seeds cross-<g> dies; the --document arms hold.
-mutant "XM1 one mode left single-cross" "b3 clean ceiling miss_ord miss_cross partition sha ms files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit xfiles xelicit xmix xunknown xcomplete tuid_main tuid_norow tuid_nometa tuid_selfdiff tuid_role tuid_twowriters tuid_oneagent tuid_nospawn tuid_session tuid_pre" \
+mutant "XM1 one mode left single-cross" "b3 clean ceiling miss_ord miss_cross partition sha ms files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit xfiles xelicit xmix xunknown xcomplete tuid_main tuid_norow tuid_nometa tuid_selfdiff tuid_role tuid_twowriters tuid_oneagent tuid_nospawn tuid_session tuid_pre tuid_basename tuid_probemeta tuid_tworoles rerun_join rerun_other rerun_same" \
   'bash "$XPART" --cross-groups "$K" > "$T/groups" 2> "$T/groups.err"; grc=$?' \
   'bash "$XPART" --cross-groups "$( [ -n "$DOCUMENT" ] && echo "$K" || echo 2)" > "$T/groups" 2> "$T/groups.err"; grc=$?'
 # XM2: the owner rule off -- a finding two covering groups both report is summed twice. Only the
@@ -421,7 +424,7 @@ mutant "TM1 no-row shard falls back to the self-report" "tuid_norow" \
   '  [ -n "$tid" ] || tid="$(field "$P" tool_use_id)"; [ -n "$tid" ] || refuse "$sf has no row in $REC_WRITES;'
 # TM2: the role hop skipped. T5's remediator-only shard merges; its adversary+remediator shard is
 # then refused as two adversaries, which is the wrong reason, so the cell's token dies with it.
-mutant "TM2 writer role not checked" "tuid_role" \
+mutant "TM2 writer role not checked" "tuid_role tuid_tworoles" \
   '        if (R[j] != "adversary") no(' \
   '        if (0) no('
 # TM3: the real-shaped self id never compared. Only T4 seeds one that differs.
@@ -443,6 +446,29 @@ mutant "TM5 meta file keyed by session, not by the row" "tuid_session" \
 mutant "TM6 pre-upgrade refusal removed" "tuid_pre" \
   '      else no(sf " was written by agent " a " in a row that predates transcript_path' \
   '      else continue; if (0) no(sf " was written by agent " a " in a row that predates transcript_path'
+# TM7: write rows keyed by BASENAME over any shard dir -- T11's rows for 2.md under another shard dir
+# and another sprint then join to this shard, and it merges.
+mutant "TM7 write rows keyed by basename, any shard dir" "tuid_basename" \
+  '| select((.path // "") | type == "string" and startswith($p)) | select((.agent_id // "") != "")
+      | [(.path | ltrimstr($p)), .agent_id,' \
+  '| select((.path // "") | type == "string" and test("/shards/[^/]+/[^/]+$")) | select((.agent_id // "") != "")
+      | [(.path | sub(".*/"; "")), .agent_id,'
+# TM8: the probe ledger preferred over the meta file -- T12's probe names another adversary dispatch.
+mutant "TM8 probe ledger preferred over the meta file" "tuid_probemeta" \
+  '      if (a in am) {' \
+  '      if (a in probe) id = probe[a]; else if (a in am) {'
+# TM9: the role checked only on a dispatch id with ONE spawn row -- T13's id carries two.
+mutant "TM9 role checked only on single-row ids" "tuid_tworoles" \
+  '        if (R[j] != "adversary") no(' \
+  '        if (R[j] != "adversary" && r == 1) no('
+# RM1: --rerun without the superseded-writer-wrote-elsewhere refusal -- RR2's cross-shard write merges.
+mutant "RM1 rerun superseded-other-row check removed" "rerun_other" \
+  '          if (f[i] != p && f[i] != p ".draft") { print "OUT' \
+  '          if (0) { print "OUT'
+# RM2: --rerun without the new-dispatch rule -- RR3's superseded writer re-runs itself and merges.
+mutant "RM2 rerun new-dispatch rule removed" "rerun_same" \
+  '          if (t[i] >= S[p]) { print "SAME' \
+  '          if (0) { print "SAME'
 # ---- END MX MUTANTS
 
 # ------------------------------------------------------------------------------ the reap
