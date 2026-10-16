@@ -177,6 +177,18 @@ this sprint, not closed):
 - **Proceed with all non-deferred items** — do not block the pipeline
 - The human will review deferrals at the production validation checkpoint
 
+**An item in the confirmed scope is never deferred by the lead.** When the item is one
+the operator confirmed at `route.md` Step 6 — named in the scope that `scope_confirmed`
+and `scope_confirmed_cite` record, and not listed in `scope_deferred_items` — the deferral
+is a Rule 12 HARD_BLOCK, not a `DEFERRAL_REQUEST`. File it with `**Status:** HARD_BLOCK`,
+put it to the operator with `AskUserQuestion` before this step proceeds, and record the
+answer on the entry with its `Operator authorization:` line. The item stays in the sprint
+until that answer exists.
+*Catches:* a confirmed item deferred mid-sprint and surfaced only after deploy — a scope
+cut the operator learns of after the sprint shipped without it.
+*Removed when:* a gate arm joins each deferral entry's item to a structured confirmed-scope
+set and refuses the deferral.
+
 **A rare-and-maybe-never monitor carries `rare_event: true`.** When the
 healthy expected state of a carry-over's monitored event is non-firing,
 the item MUST carry that field, MUST name a staleness ceiling, and MUST
