@@ -460,6 +460,8 @@ Nothing routes the lead away from the resume. `core/skills/ai-dlc/rule-bodies/ru
 
 Owed: one lead-side instruction, placed where the serial remediator is dispatched (`_gate-procedures.md` near `:843-855`) and cited from rule-28's `SendMessage` carve-outs: a serial remediator whose record already carries its `repair-complete:` line is re-dispatched fresh (`TaskStop` the resident, one new `Agent` dispatch that appends a new block), never resumed by `SendMessage`. Plus a guard if one fits an existing hook (`core/hooks/` already carries five `SendMessage` readers, e.g. `ai-dlc-acknowledge.sh`, `ai-dlc-escalation-delivery.sh`); the builder measures that hook's ability to identify the recipient as a serial remediator with a marked record before adding it, and records the false-positive set.
 
+Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
+
 verify: manual
 
 ## BL-594 — requirements adversarial p1 has no standalone unique value; elicitation could be the first convergence pass
@@ -468,15 +470,19 @@ verify: manual
 
 Today the two shapes cannot merge: at origin/main 952b9319 the merge refuses a `verdict:` on an elicitation shard (`core/scripts/merge-adversarial-shards.sh:569`, "an elicitation shard carries none"), and Check 24's subject arm K3 (`core/scripts/validate-adversarial-convergence.sh:2228`) reads the requirements adversarial series, not the elicitation record.
 
-Owed (deferred to the next batch): make elicitation the first convergence pass — its shards stamp `verdict:`, `merge-adversarial-shards.sh --elicitation` writes one, Check 24 arm K3 accepts it as the series' first pass — and drop the standalone p1 round; or state why p1 must stay. Interacts with BL-575's contract v2 (its `--check-header --axis elicitation` encodes today's "no verdict" rule, which this would invert). Receipt: on a seeded subject the elicitation merge emits a verdict K3 accepts, with today's verdict-less elicitation record as the control K3 does not.
+Owed: make elicitation the first convergence pass — its shards stamp `verdict:`, `merge-adversarial-shards.sh --elicitation` writes one, Check 24 arm K3 accepts it as the series' first pass — and drop the standalone p1 round; or state why p1 must stay. Interacts with BL-575's contract v2 (its `--check-header --axis elicitation` encodes today's "no verdict" rule, which this would invert). Receipt: on a seeded subject the elicitation merge emits a verdict K3 accepts, with today's verdict-less elicitation record as the control K3 does not.
 
 Cross-ref BL-569 (three validation rounds with no stated distinction) and archived BL-508 (repairs write the defects the next pass finds).
+
+Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
 
 verify: manual
 
 ## BL-595 — the Check 22 arm refusing `none (serial-document)` on a `stories/` subject is still unbuilt
 
 **NOTE.** BL-509's close (archived, `docs/backlog.archive.md:32870ff`) built the sharded stories-elicitation rule (`_gate-procedures.md:413-420`, "never `shard: none (…)`", pinned by 8 `elic-shape-*`/`sts-elic-*` rows in `process-rule-pins`) but left Check 22 untightened: "an S3 arm refusing `none (serial-document)` on a `stories/` subject was not built because its false-positive set on graph's ledgers was not measured". `core/scripts/validate-spawn-ledger.sh:920-923` S3 still fails only an exception outside the four, and `:973` reads only the first parenthesised token, so a single serial-document voice over `stories/` passes. The yield evidence that the sharded shape is worth enforcing now exists: `docs/analysis/step-value-s317-s319.md:137` (s317 22 shards about 15 unique; s318 one voice at most 1). Owed: measure the arm's false-positive set on graph's ledgers (it fires on graph's closed s318 stories row, a true finding), then build it or record why not.
+
+Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
 
 verify: manual
 
@@ -508,7 +514,7 @@ Cause: `core/skills/ai-dlc/steps/handoff.md:27-53` (at 952b9319) says to stop in
 
 Owed: (a) the handoff records each stopped agent's own writes from its transcript or from the write ledger that 0.790.0 made carry `tool_use_id` and transcript (CHANGELOG 0.790.0, BL-533), never from `git status`; (b) commit the subject after a join accepts a repair round, so a later stop cannot blur joined and in-flight edits. Receipt: a probe tree with a joined record whose parts edited A and B (and a shared file D also edited by the stopped agent), plus a stopped agent that edited C and D; the handoff's partial-edit list names C and D only, with A and B as the control that stays out.
 
-Deferred to next batch (operator scope ruling via lead ai-dlc-9c, batch 235).
+Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
 
 verify: manual
 
@@ -520,7 +526,7 @@ Measured by the filer in mktemp worlds driving the real tip merge and hook, ever
 
 Owed: the ledger row records which tree it was written in, or the merge refuses a row whose original spelling is not under this project root. This changes the row schema read by `join-remediator-shards.sh`, `merge-adversarial-shards.sh` and `validate-draft-stamps.sh`, which is why it was not folded into BL-536. Receipt: the filer's world above, refusing, with the no-worktree world as the control.
 
-Deferred to next batch (late-filing rule, lead ai-dlc-9c, batch 235).
+Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
 
 verify: manual
 
@@ -532,7 +538,7 @@ Measured by the filer: a receipt world whose every shard meta and spawn row carr
 
 Owed: one id vocabulary across the merge, `RE_REAL_TUID` and Check 24 that admits the harness's real id shapes, derived from what metas actually carry. Receipt: the `call_` world passes arm K end to end (the validator run, not the predicate alone), with a malformed id as the control that still fails.
 
-Deferred to next batch (late-filing rule, lead ai-dlc-9c, batch 235).
+Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
 
 verify: manual
 
@@ -540,7 +546,7 @@ verify: manual
 
 **NOTE.** Filed by peer session ai-dlc-f5 from the BL-536 tip adversary run on `07dfcbfa` (`--rerun` is documented at `core/scripts/merge-adversarial-shards.sh:68-80` there). S is taken as typed: a far-past S (`1999-01-01T00:00:00Z`) on a normal round merges; a future S (`2999-…`) refuses with `has no row`. Harmless today because the role check is the guard (that gap is BL-536 D1, folded there), but S binds nothing — the same hand-typed-time shape as BL-564's `--since`.
 
-Deferred to next batch (late-filing rule, lead ai-dlc-9c, batch 235).
+Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
 
 verify: manual
 
@@ -550,7 +556,7 @@ verify: manual
 
 This does not reopen the operator's close of the back-dated half; it files the direction that close did not address. Owed: first measure the forward-dated case against the shipped arm and the beat; if uncovered, `--since` is derived from the in-flight row's `dispatched-at` (or refused when later than it). Probe: a `--since` later than the row is refused, with `--since` equal to the row as the control.
 
-Deferred to next batch (late-filing rule, lead ai-dlc-9c, batch 235).
+Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
 
 verify: manual
 
@@ -560,7 +566,7 @@ verify: manual
 
 Owed: any shipped helper that reports a file time emits it under `TZ=UTC` (or `date -u -r <epoch>`), and the step text that asks the lead whether a record changed since a dispatch names that helper instead of leaving the format to the lead. Probe: the helper's output for a file with a known epoch equals `date -u -r <epoch> +%FT%TZ` under a non-UTC `TZ`, with `TZ=UTC` as the control.
 
-Deferred to next batch (late-filing rule, lead ai-dlc-9c, batch 235).
+Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
 
 verify: manual
 
@@ -576,6 +582,191 @@ Owed: SKILL.md states once, at the first long-running step, that every reconcile
 
 Not filed, noted: the same session wrote its fixture list to a bare `/tmp/x` (2 writes in `1d7b4691`) outside its scratchpad — a shared path concurrent sessions can collide on.
 
-Deferred to next batch (late-filing rule, lead ai-dlc-9c, batch 235).
+Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
+
+verify: manual
+
+## BL-581 — the reconcile log records a false-zero as "Verified": a consumer-repo `git show <dist-sha>:` failed silently and every base count read 0
+
+**DEFECT.** Filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]) from graph's 0.791.0 → 0.793.0 apply, session `1d7b4691` (Sonnet), 2026-10-16 03:18-03:22 EDT. `derivation-differential.sh` reported 8 NEWLY-FAILING, all recorded `$ grep -n … scripts/ai-dlc/validate-artifact-budget.sh` derivations in s319 artifacts (carry-over-evaluation-architect-5.md:13 and :23, carry-over-evaluation-pm-5.md:13, prd.md:1289, carry-over-evaluation-party-repair-p1.md:632, requirements-party-repair.md:859, shards/carry-over-evaluation-party-repair-p1/5.md:15, shards/requirements-party-repair/08.md:102). To find why, the session ran `git show 952b9319:scripts/ai-dlc/validate-artifact-budget.sh 2>/dev/null | grep -c -F -e "$p"` in graph's tree (2 such commands in the transcript). 952b9319 is a distribution sha: intake confirmed `git -C graph cat-file -e 952b9319` fails (control: graph's own HEAD resolves), so the `git show` failed, `2>/dev/null` hid the error, and every base count read 0. Graph's `_bmad-output/ai-dlc-update/reconcile-log-20261016T0725Z.md:33` then records: "Verified: `330000 to 66000`, `66000 and an in-budget pool became a HARD_BLOCK`, `  ok  %-44s` and `--quiet)` each count 0 at base and 1 now", and demotes the real cause to "Inference, not verified: the recorded line numbers moved with the 0.792.0 …".
+
+Ground truth, intake re-derived on `core/scripts/validate-artifact-budget.sh`: each of the four needles counts 1 at 952b9319, 1 at 27467671 (0.792.0) and 1 at c16609ba, with a made-up needle at 0 at all three. The text was never added; 0.792.0 moved the line numbers the recorded `grep -n` derivations cite. The log has the cause backwards and labels the wrong half verified — the false-zero shape CLAUDE.md's "a zero is not a finding" names: an absence produced by a failed read, with no control in the invocation.
+
+Consequence: the disposition ("leave untouched, record as owed") was the operator's and holds either way, but the s319 session inheriting the 8 re-points is told the needles were added in 0.792.0, when each is a line-number re-point.
+
+Owed: (a) `derivation-differential.sh` prints, per NEWLY-FAILING row, the derivation's base and theirs output (or their diff), so the cause is measured by the shipped tool; (b) wherever ai-dlc-update's SKILL.md asks for a distribution path at base, it names `git -C <dist> show "${BASE}:core/…"` — a consumer-repo `git show <dist-sha>:` always fails. Receipt: a probe `grep -n` derivation whose needle stays but whose line shifts between base and theirs is reported NEWLY-FAILING with both outputs shown; an unchanged derivation is the control.
+
+Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
+
+verify: manual
+
+## BL-582 — ai-dlc-update has no advisor touchpoint before its pushes and merges, and the advisor gate exempts them
+
+**DEFECT.** Raised by the operator's question ("should the graph session have called the advisor before the push? I thought that was a requirement?"); filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]). Rule 32 touchpoint I — "Before a push, a merge or a deploy" — is in the pipeline skill only (`core/skills/ai-dlc/SKILL.md`, 1 line). `core/skills/ai-dlc-update/SKILL.md` at ffef448b names no advisor touchpoint: `advisor` 0 times outside "advisory" (4), control `self-update-fixtures` 6. `core/hooks/ai-dlc-advisor-gate.sh:58-74` excludes a push or merge while the cwd branch is `ai-dlc-update/*` and a push whose every refspec destination is `ai-dlc-update/*`, giving as its reason that the update skill is "a bootstrapping file; its text carries no touchpoint and this release does not edit it". The exclusion shipped in 0.738.0 (`9bdbc311`); that release's CHANGELOG cites an operator ruling for the per-kind gate ("THE SAME KIND (operator ruling, batch 201)") and lists the update-branch exclusion as release text with no ruling attached.
+
+Measured on update session `1d7b4691` (Sonnet 5.5, the 0.791.0 → 0.793.0 pull, 2026-10-16): it pushed the self-update branch twice (02:45 EDT, failed TRANSPORT; 03:03 EDT), ran `gh pr merge 1230` at 03:10 EDT into `ai-dlc/carry-over/offramp-config-and-rewards`, pushed the reconcile branch at 03:22 EDT and ran `gh pr merge 1231` at 03:26 EDT. Intake counted 0 `advisor_tool_result` in its transcript against 4 in pipeline lead `f65eae3b` on the same model, so the tool was very likely available. Every one of those calls was exempt, because each merge ran while the cwd was still on the update branch. Two merges landed machinery into the sprint branch with the operator's approval ("merge is approved when ready") and no second reading — touchpoint I's case.
+
+Owed: touchpoint I in ai-dlc-update/SKILL.md before step 2's self-update push and auto-merge and before step 8's delivery push and merge, and the hook's exclusion narrowed to the push of the update branch only, gating the `gh pr merge` into the original branch. Bootstrapping caveat: a fix to the update skill takes effect on the pull after the one that delivers it. Receipt: the hook denies a `gh pr merge` from an `ai-dlc-update/*` cwd with no advisor attempt; a push of `ai-dlc-update/x` stays allowed as the control; SKILL.md names the touchpoint at both steps.
+
+Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
+
+verify: manual
+
+## BL-583 — the push suite costs about 8 fixture-hours per full run, over 40% in mutant batteries, and no fixture has been judged on value
+
+**DEFECT (efficiency).** Operator-raised, 2026-10-16 ~04:30 EDT: "gating a release is so expensive, like stupidly expensive to run the push suite". Filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]). Assigned to ai-dlc-a6: phase 1 is a read-only census of where kill sets overlap, phase 2 is confirmation in the lead's slots after H-b. ai-dlc-bb's world-cache release already targets the `review-shard-merge-mutants` pole, so this entry does not count that saving twice.
+
+Measured from `.git/ai-dlc-fixture-durations` in the main checkout, a LOADED-cost record that each push rewrites:
+- Filer, at 04:29 EDT (288 rows): sum 28783 s (~8.0 h; ~40 min per full run on a pool of 12); 41 mutant rows at 12398 s, 43%; 12 of the top 15 rows mutant batteries at 583-737 s, the three non-mutant rows `snapshot-archive-rotate` 717 s, `suite-pole-guard` 493 s and `readset-skip-d` 410 s (corrected from 13 after lead ai-dlc-9c re-derived it); 130 rows at 60 s or more, 71 at 120 s or more, 82 under 10 s.
+- Intake, re-derived at 06:18 EDT (288 rows, the record rewritten since): sum 27473 s; 41 mutant rows at 11346 s, 41%; 10 of the top 15 are mutant batteries (`derivation-capture-mutants` 737, `review-shard-merge-mutants` and `-b`/`-c` 728-729, `adversarial-shard-merge-mutants` 694, `remediator-shard-join-mutants` and `-b`/`-c`/`-d` 583-589, `updater-session-signals-mutants` 367), and the five non-mutant rows are `suite-pole-guard` 493, `readset-skip-d` 453, `ledger-reverify` 409, `-b` 392 and `-d` 362. Fixture directories: 290 (`/usr/bin/find core/fixtures -mindepth 1 -maxdepth 1 -type d`).
+The two readings differ because the record moves with every push. The shape holds across both: the mutant batteries dominate the top of the rank.
+
+Owed, under the step-value ruling in `operator-rulings.md` ("A step with no measured value goes") applied to fixtures — a fixture or mutant shard stays only on evidence, a named defect class it catches that no other unit catches; without that the batch retires or merges it, and it is not put to the operator as a choice:
+1. Rank by cost first: the mutant batteries, then the non-mutant poles.
+2. For each sharded battery, measure whether its mutants kill anything the base fixture's arms do not; shards of one battery that kill the same set are redundant.
+3. State the gate wall clock removed per release and the dollars beside it.
+
+Caveat: the record is a loaded-cost set from recent runs, not a solo timing, and a content-keyed push runs only part of it. The per-gate figure needs the gate log of a real release push (0.794.0 onward). Related: BL-558, BL-592, CLAUDE.md "A wall clock is a defect until it is justified".
+
+Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
+
+verify: manual
+
+## BL-584 — two fixtures cannot be traced and have no `inputs.decl`, so they run on every push
+
+**DEFECT (efficiency).** Operator-raised, 2026-10-16 ~04:40 EDT: "what about the fixtures whose readsets cant be mapped? i do not believe you cant figure out a way to refactor those so they dont need to be run every time." Filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]).
+
+Measured by the filer in the main checkout: 65 fixture directories have no row in `.ai-dlc-fixture-readsets.tsv`; 62 carry `inputs.decl`, so the hook counts them MAPPED (`.githooks/pre-push:866-871`) and keys them on the declaration; the other 3 (`lib`, `check-h1-recursion`, `check-manifest-bypass`) have no `run.sh` and are not units. `.git/ai-dlc-fixture-readsets.local` marks fixtures with `#discards` 3 or more when the live trace has thrown their result away three times and stopped retrying (`:954-956`, `:1304`). Intake re-derived: 86 `#discards` rows, 27 of them at 3 or more; `fold-architect-ledger-join` and `hermetic-runner` both have a `run.sh` and no `inputs.decl`. Per the filer those two are the only units that truly run on every push (173 s and 53 s recorded). Discard reasons across all rows, per the filer: 72 "the stream dropped reports", 9 "VERDICT: the sandboxed run's verdict lines differ", 2 "LOSS CANARY", 2 "TRIP".
+
+Owed:
+1. `fold-architect-ledger-join` and `hermetic-runner` get an `inputs.decl` and `tools.decl`, so `hermetic-run.sh` runs them hermetically and the hook keys them like the other 62; the sandbox proves the declaration complete.
+2. A fixture that cannot be declared because it reads the whole tree by design says so in one README sentence, and is scored under BL-583's value test.
+3. Find and fix why the trace stream drops reports (72 rows); while it does, every new undeclared fixture lands in the run-every-push set.
+
+Caveat: in a linked worktree the local map is a different file (the BL-558 symptom); the fixtures unmapped there are re-measured once (1) lands. Related: BL-558, BL-583.
+
+Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
+
+verify: manual
+
+## BL-585 — release gates go red on the release's own shell defects, and each red costs a full re-push
+
+**DEFECT (efficiency).** Filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]) from lead ai-dlc-9c's batch 235 reports and the failure records in the main checkout.
+- 0.795.0 (vssnap): the first gate went red on a pipe into `grep -q`, caught by I54. Re-pushed, about +10 min.
+- 0.796.0 (W): the first gate went red on six silent-failure redirects, caught by `procsub-staged-refusal` (`.git/ai-dlc-fixture-failures.20261016T085900Z.80433`, 1 of 73 units red). Re-pushed, about +15-20 min.
+- The 08:29Z run (`.git/ai-dlc-fixture-failures.20261016T082952Z.45977`) had 11 of 43 units red, mostly enforcement-map fixtures reporting FIXTURE BROKEN.
+- 0.797.0 (H-a), per lead ai-dlc-9c's report and NOT verified by intake (the main checkout was in a quiet window): the third release in a row whose first gate went red on its own code — 3 red units, at least two from H-a's own code; the fix plus a fresh gate cost about 35-50 min. Which check caught them is not yet established.
+- The `procsub-staged-refusal` family's recorded loaded costs, per the filer: 138, 183, 101 and 256 s.
+Intake confirmed both cited failure records exist (21 `ai-dlc-fixture-failures.*` files in `.git/`).
+
+The cheapest checks that catch these classes run only inside the full gate, so a red there throws away the whole run, including mutant batteries that had already passed.
+
+Owed:
+1. For each red gate in batch 235, establish which check caught it and how long that check takes alone on the changed files only (H-a's red is a discriminating input to add once its cause is known).
+2. A single pre-gate command that runs those checks on a builder's own diff in seconds, within the rule that a hand verifies only its own change.
+3. Fail fast: when a cheap phase goes red, stop before dispatching the mutant batteries, or dispatch the cheap catchers first.
+4. State the gate minutes saved per avoided red, with the dollar figure beside them.
+Related: BL-583, BL-584.
+
+Assigned to ai-dlc-4e [9b62de] by lead ai-dlc-9c, to build after H-b, with the two confirmed red commits (vssnap, caught by I54; W, caught by `procsub-staged-refusal`) as its discriminating inputs.
+
+Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
+
+verify: manual
+
+## BL-601 — the handoff-entry hook arms the lead's handoff marker on a TEAMMATE's Read of steps/handoff.md
+
+**DEFECT (latent; 0 measured occurrences).** Filed by peer session ai-dlc-11, found by the batch 235 release V contract adversary while it sized BL-590. `core/hooks/ai-dlc-handoff-entry.sh` (PostToolUse on Read) writes the project-wide `.handoff-in-progress` whenever `steps/handoff.md` is read, with no `agent_id` test: intake counted `agent_id` 0 times in it at origin/main 3d5f1e70, against 4 in `core/hooks/ai-dlc-recover-gate.sh` (the control, which BL-590 bound). So a dispatched teammate's Read of that file arms the lead's marker — BL-590's shape (graph measured 253 denied teammate calls there).
+
+Measured by the filer on graph's transcripts, 2026-10-16: 0 of 3237 subagent transcripts hold a `Read` of a path ending `steps/handoff.md`; control: 69 of 178 lead transcripts do; grammar control: the same pattern over any `steps/*.md` matched 357 subagent transcripts; negative control: an impossible path matched 0. The hazard has never fired on the reference consumer.
+
+Owed: the hook's write applies to the lead only (empty `agent_id`), as BL-590 binds the recover gate, with an arm and a mutant: a teammate's Read leaves no `.handoff-in-progress`, and the lead's Read still writes it. ai-dlc-11 builds it as a small release after V2 (BL-590) merges.
+
+verify: manual
+
+## BL-602 — derivation-differential-mutants claims each mutant is killed by EXACTLY its declared arms, but checks only that the declared arms are a SUBSET of the failed ones
+
+**DEFECT.** Filed by peer session ai-dlc-60 while building release U-a; the fix is assigned to ai-dlc-c3. `core/fixtures/derivation-differential-mutants/run.sh` states an equality contract at :6 ("killed by exactly its declared arms"), :7 (exit 1 includes a mutant that "moved an arm it does not own"), :14-15 ("the set of arms that FAIL must EQUAL the set the mutant declares … one that fails an arm it does not own means two arms are entangled") and :231. The check at :127 is `missed="$(comm -13 "$WORK/$label.moved" "$WORK/$label.declared" …)"`, which prints only declared arms that did not fail: declared ⊆ failed. Intake confirmed all five lines at origin/main 3d5f1e70. A mutant that also fails an arm it does not own prints `KILLED`; the extra arms appear only in the "full failed set" text, which nothing asserts. That is the entanglement the header promises to catch and `.claude/rules/fixture-mutants.md` ("A mutant must fail **only** its own assertion") requires. Per the filer, of the 23 fixture `run.sh` files that use `comm -`, only this one carries the `comm -13 "$WORK/$label.moved"` form; other batteries need their own read before generalising.
+
+Measured by ai-dlc-60 on U-a head d524616d (based on e3073787), battery exit 0 in 150 s: 5 of 12 mutants fail a strict SUPERSET of their declared arms, 7 match exactly. R1 adds A16n A18b A18c A1c A1d A2c A3b A3d A9a A9b; R2 adds 35 arms; R3 adds 23; R4 adds A9c; R8 adds A15n. The equality form would therefore turn 5 current kills red. The A18 arms and R11/R12 come from U-a; on origin/main the battery has R1-R10 only.
+
+Owed: decide which side is right. If the header is right and the check too weak (which the rule file argues for), add `comm -23` and fail any mutant whose failed set exceeds its declared set, widening the 5 superset mutants' declared sets each with a reason. If the check is right, rewrite :6-7, :14-15 and :231 to say "at least". Receipt: a seeded mutant whose failed set is {declared} plus one extra arm is refused under the equality form; a mutant whose failed set equals its declared set is still KILLED, as the control.
+
+verify: manual
+
+## BL-603 — derivation-differential.sh's `_good` cache is never written, so its early-break arm can never fire
+
+**DEFECT.** Filed by peer session ai-dlc-c3, measured read-only. In `core/skills/ai-dlc-update/reconcile/derivation-differential.sh` at origin/main 3d5f1e70, :240 initialises `_good=" "` and :243 reads it (`case "$_good" in *" $_b "*) BASE_COMMIT="$_c"; break ;; esac`); intake found `_good` on those two lines only, while `_bad` has 1 append in the same file. Per the filer the same holds at U-a head d524616d (:245, :248). A matching blob is handled by the `resolves_to_base && skill_commit_ok` branch, which sets BASE_COMMIT and breaks, so the `_good` arm is a guard whose removal changes nothing (`mechanism-design.md`, "A vacuous guard is a loaded gun").
+
+Owed: delete the `_good` arm and its init (fix by subtraction), or append `_b` to `_good` in the success branch if a later blob can repeat. Receipt: a mutant removing the arm changes no verdict before the delete. It is in the subject, not in c3's battery release, so it ships in a later release.
+
+verify: manual
+
+## BL-604 — a refused wait-for-deliverable.sh call (exit 64) reads as NON-DELIVERY by the lead's own instructions, so a live teammate is re-dispatched
+
+**DEFECT.** Filed by peer session ai-dlc-ad; closes with its BL-599 release (branch `b235-since-dispatch`). `core/scripts/wait-for-deliverable.sh` exits 64 at 12 usage-refusal sites at origin/main 3d5f1e70, all executable (`--since` with no or a bad value, an unknown arg, no paths, `--complete` with `--progress-path`, …). `core/skills/ai-dlc/rule-bodies/rule-29.md` (the beat's exit list, ~:96-108) names only `exit 0` (BEAT COMPLETE) and `exit 1` (NON-DELIVERY: re-dispatch ONCE, then HARD_BLOCK) — intake counted 64 mentioned 0 times there — and `core/skills/ai-dlc/steps/_gate-procedures.md:141` says "Nonzero means non-delivery, nothing else." So a backgrounded beat refused for a malformed call arrives as rc 64, reads as non-delivery, and the lead spends the Rule 20 re-dispatch on a live agent with no beat armed.
+
+Owed (in ad's BL-599 release): rule-29's list gains `exit 64 -- REFUSED` (no beat ran and the join is not armed: correct the call and arm again), and wait-stale-deliverable case C46 derives the script's exit codes and fails when rule-29's list does not name each one; the control (rule-29 without the 64 line, and origin/main's rule-29) reports 64 missing. ai-dlc-c9's release (a) carries the `_gate-procedures.md:141` wording as its A10.
+
+verify: manual
+
+## BL-605 — an In-Flight row's `dispatched-at` can be stamped LATER than the real dispatch, and the BACKDATED arm is quiet on a late row by design
+
+**DEFECT.** Filed by peer session ai-dlc-ad, read-only on graph. Graph's `_bmad-output/pipeline-snapshot.md:68` (In-Flight Teammates) reads `remediator (serial, pass 1 cross-part, a7ffc8dcd555207b8) | remediator | s319/requirements-repair-p1.md (appended) | 2026-10-16T05:01:00Z | stopped` (intake confirmed). BL-599's filing puts that remediator's dispatch at 05:00:03Z, so the row is 57 s late. `core/scripts/validate-artifact-budget.sh` `check_backdated_dispatch` states at :1213 (origin/main 3d5f1e70) "A row stamped LATE (after its dispatch) stays quiet; this arm is about back-dating only." Measured by the filer on the extracted function with a one-row ledger at D: a row at D-112 fires BACKDATED (control), and rows at D, D+27 and D+87 are quiet.
+
+Effect: `_gate-procedures.md:149` tells the lead to pass the row's `dispatched-at` as the beat's `--since`, so a late row is a forward-dated `--since`, which (BL-599) misses every write the teammate made between the dispatch and the stamp: the beat reads WAITING on a delivered file. BL-599's release adds `wait-for-deliverable.sh --dispatch <tool_use_id>`, which reads the spawn-ledger `ts` and refuses a `--since` later than it; that guards the beat but not the row, which other readers use.
+
+Owed: the row is stamped from the ledger `ts`, or a write-time arm fires on a row later than its dispatch by more than a stated tolerance. Probe: a row 57 s late fires; a row at the dispatch is quiet.
+
+verify: manual
+
+## BL-606 — the pre-push fixture pool runs every unit with no per-unit timeout
+
+**NOTE.** Filed by peer session ai-dlc-bb (batch 235 gate throughput), derived by the BL-592 contract adversary and re-derived by the filer. At origin/main 3d5f1e70 the pool worker runs each unit unbounded: `.githooks/pre-push:2027` (`bash "$hr" --root "$PWD" "$b"`) and `:2035`, `:2039` (`bash "$d/run.sh"`), intake confirmed; `core/git-hooks/pre-push` carries the same lines (I66 binds the pair). Per the filer the hook's 13 timeout/watchdog/`ulimit -t` matches all belong to the detached read-set trace's watchdog (:992-1054, :1194, :1217, :1315) plus a tool-key comment at :1339. `core/scripts/hermetic-run.sh` has 0 timeout/watchdog/`ulimit -t` matches against 6 `inputs.decl` (intake confirmed). The only hang bounds in the suite are the five mutant batteries' per-scorer watchdogs (BL-592's subject). A unit that hangs anywhere else hangs the push indefinitely, and a slow unit is indistinguishable from a hung one except by the operator watching the clock. No hang has been observed. Remedy left to the builder; one option is a per-unit bound derived from the unit's recorded clean cost.
+
+verify: manual
+
+## BL-607 — `ai-dlc-recover.sh` and `ai-dlc-recover-gate.sh` lack the ai-dlc-update stand-down, so a consumer's pull session that compacts gets the pipeline's recovery mandate and its deny
+
+**DEFECT.** Filed by peer session ai-dlc-60 from batch 235's delivery read of 0.797.0 (3d5f1e70), confirmed by lead ai-dlc-9c by reading. `core/hooks/ai-dlc-recover.sh` (SessionStart) injects the pipeline's post-compact recovery block and writes `.recover-fired`; `core/hooks/ai-dlc-recover-gate.sh` (PreToolUse on Agent, Task, Write, Edit, MultiEdit, NotebookEdit; widened in 0.797.0) then denies those tools until `_bmad-output/pipeline-snapshot.md` and the step file are Read. Neither is scoped to the update skill: intake counted `ai-dlc-update` 0 times in each at 3d5f1e70, against 24 in `ai-dlc-acknowledge.sh`, 6 in `ai-dlc-pause.sh` and 4 in `ai-dlc-continue.sh` (continue allows the stop when the session skill is `none|ai-dlc-update`). Per the filer, recover.sh's only guards are the snapshot existing (~:53), a `jq` check and `[ "$SOURCE" = "compact" ] || exit 0` (:60).
+
+Graph carries `_bmad-output/pipeline-snapshot.md` (intake confirmed), so an `/ai-dlc-update` session that compacts after step 2 has installed the 0.797.0 hooks is told to Read the pipeline snapshot and step file and denied its next Write or Edit until it does — the pipeline lead's recovery rule applied to the updater. Cost: one turn plus two irrelevant Reads per compaction; never a wedge, because the Reads clear it. Bootstrapping: the hooks arrive in step 2, so first exposure is the pull that delivers 0.797.0.
+
+Owed: both hooks get the session-skill stand-down that acknowledge, continue and pause use (last ai-dlc skill marker `ai-dlc-update` → silent), single-sourced in a shared helper rather than a fourth copy. Receipt: a seeded update-session transcript with a `compact` SessionStart — recover.sh writes no `.recover-fired` and injects nothing, and recover-gate allows a Write; control: the same seed with an `/ai-dlc` marker is still injected and gated.
+
+verify: manual
+
+## BL-608 — the validator fork budget's headroom eroded from +6 to 0 across five releases, and nothing warned
+
+**DEFECT.** Filed by peer session ai-dlc-a6. `scripts/validate-enforcement-map.sh` FORK_BUDGET was set to 3363 in 0.786.0 as "HIGH reading 3357 plus the usual 6" (paragraph ~:825-831 then). Measured by the filer on 2026-10-16 with `fork-profile.sh --section by-arm --stable`, interleaved base/tip/base/tip in one detached worktree at one path, caller environment inherited: origin/main e3073787 (0.796.0) read 3362 and 3363 (STABLE 2, spread 3360-3362), equal to the budget — 0.792.0 through 0.796.0 spent the full +6 and no arm said so. `validator-fork-budget` fails only when the reading EXCEEDS the budget (its arm A3, "measured <= FORK_BUDGET"), so the window between "headroom gone" and "red" is invisible; at zero headroom the instrument's ±1-2 jitter makes any release adding one fork a ~1-in-4 red that reads as a flake. On 0.797.0 (+1 fork, I126 0 -> 1) the re-verify read 3362 with one rep at 3364 against 3363; 0.797.0 raised the budget to 3370 (+1 for its arm, +5 to restore headroom), which intake confirmed as `FORK_BUDGET=3370` at origin/main 3d5f1e70 (`:841`).
+
+Owed: a headroom arm in `validator-fork-budget` that FAILS when the STABLE reading + 2 > FORK_BUDGET, naming the remedy (re-measure and raise by the HIGH reading plus 6, per the file's own rule), so erosion reports while margin remains. It needs its own mutant (the arm with the +2 dropped must miss a seeded reading at budget - 1) and its FP set measured over the budget history in that file's paragraphs. Scope: a small later release.
+
+verify: manual
+
+## BL-609 — a pre-gate listing of the fixtures a builder's diff selects, so a red caught only by executing a fixture is foreseen before the slot request
+
+**DEFECT (efficiency).** Filed by peer session ai-dlc-4e [9b62de] on lead ai-dlc-9c's instruction; assigned to ai-dlc-4e [9b62de], to build after BL-585 (which gates first, by 9c's ruling).
+
+Premise, measured from H-a (0.797.0): the red capture `.git/ai-dlc-fixture-failures.20261016T094322Z.82523` (intake confirmed it exists) records `gate-resume: 1 of 63 assertion(s) FAILED`, the line being `BL-457 mutant (e) … expected [… WC=1 …], got [… WC=0 …]`. Per the filer that red was H-a's own code: `core/fixtures/gate-resume/seed.sh:26` reads `core/hooks/ai-dlc-recover.sh`, H-a's new sentence in that hook's injected block consumed the WC case's margin under its 10000-char ceiling, and H-a removed the sentence before merging. WC measures the hook's real emitted output on a seeded worst case, so no static check over the diff catches it (no grep, no validator, not BL-585's pre-gate self-check); only running the fixture does. The edge is already recorded: intake counted 17 fixtures whose row in `.ai-dlc-fixture-readsets.tsv` names `core/hooks/ai-dlc-recover.sh`, `gate-resume` among them. A reading of the fixture's own files misses it, because the dependency runs through what the seed reads.
+
+Owed:
+1. A report-only arm `e:readset-impact` in `scripts/pregate-self-check.sh` (that script is BL-585's, on local branch `b235-pregate`; not on origin/main at a0451c70). From the diff it lists each fixture whose read-set contains a changed path, with its recorded loaded cost from `.git/ai-dlc-fixture-durations`. The read-set reader is sourced from the hook (`readset_manifest` / the map reader, 3 mentions in `.githooks/pre-push`), never restated. It runs nothing and cannot turn red.
+2. Before it ships, measure its value under the step-value ruling: does the listing change a builder's slot request, or what the builder runs before asking? If it changes nothing, it does not ship.
+
+Related: BL-585.
+
+verify: manual
+
+## BL-610 — the read-set sandbox tracer omits any fixture that probes process liveness
+
+**NOTE.** Filed by peer session ai-dlc-a6 on lead ai-dlc-9c's instruction. `core/scripts/derive-fixture-readsets.sh --tracer sandbox` runs each fixture under `sandbox-exec` with a profile that grants file and process-exec rights but no process-info rights (intake: `process-info` 0 times in the script, against 16 `sandbox-exec`). Inside it `ps -p` sees no other process, not even its own shell, so a fixture whose premise is process liveness fails its own controls and the deriver omits it ("OMITTED (fixture exited 1) -- will always run", 1 occurrence in the script).
+
+Measured by the filer on 2026-10-16 in a trace of 14 fixtures at a0451c70 (rc 0, 173 s, 13 mapped): `derivation-differential` was omitted (its `run.sh` uses `ps -p` 7 times). Its sandboxed log `/private/tmp/ai-dlc-readset-sandbox-501/w/derivation-differential.log:47-48` carries 4 FAIL verdicts, all in A12: the two liveness controls (:47, :48) and the two near-misses they gate (:51 A12l, :52 A12e). No arm outside A12 failed. Of the 13 lines containing `FAIL`, the other 9 are 8 `ok` lines reporting NEWLY-FAILING and the `4 assertion(s) FAILED` summary (intake confirmed the breakdown). The two controls:
+  `FAIL  A12 control: ps -p does not separate the seeded dead PID (52683) from the live one (46059) -- A12b and A12l are unreadable`
+  `FAIL  A12 control: PID 1 does not separate ps -p from kill -0 here (running as root?) -- A12e is unreadable`
+Outside the sandbox the fixture is green: per the filer, `ok derivation-differential` appears in all three 2026-10-16 gate logs (an impossible token reads 0), with 7 loaded runs that day at 15-31 s each.
+
+Cost: it stays unmapped and runs on every push, about 20 s, not the gate pole. It ran on every push before too (its rows were stale), so this is a permanent read-set gap, not a regression. Two candidate fixes, neither chosen: grant process-info in the profile (broadens what a trace records, to be weighed), or skip the liveness arms under the sandbox (weakens the fixture exactly where the trace looks; not recommended). Not to be fixed now.
 
 verify: manual

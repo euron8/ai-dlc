@@ -14,7 +14,8 @@
 # path<TAB>sha lines in the runner's universe as traced; the runner clears a stale key record when
 # it recomputes the same value over the tree it is pushing.
 #
-# fixtures mapped: 226    entries: 13865
+# fixtures mapped: 225    entries: 13765
+# OMITTED by the last run (always run): derivation-differential
 absorbed-specifics-survive	core/fixtures/absorbed-specifics-survive/run.sh
 absorbed-specifics-survive	core/skills/ai-dlc/SKILL.md
 absorbed-specifics-survive	core/skills/ai-dlc/rule-bodies/rule-13.md
@@ -888,23 +889,13 @@ apply-worklist-rows	core/skills/ai-dlc-update/reconcile/setup-sites.md
 apply-worklist-rows	core/skills/ai-dlc-update/reconcile/template-sites.md
 apply-worklist-rows	core/skills/ai-dlc-update/reconcile/unregistered-drift.sh
 apply-worklist-rows	core/skills/ai-dlc-update/reconcile/warn-shadowed-local-validators.sh
-architecture-fast-track	.git/HEAD
-architecture-fast-track	.git/config
-architecture-fast-track	.git/index
-architecture-fast-track	.git/info/exclude
-architecture-fast-track	.git/objects/33/a4425c0ed05dea70f881660ffdf01c7c86da33
-architecture-fast-track	.git/objects/7f/1479d0f091b8393b8613744a84c3c8229a65a3
-architecture-fast-track	.git/objects/info/commit-graphs/commit-graph-chain
-architecture-fast-track	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
-architecture-fast-track	.git/objects/info/commit-graphs/graph-61ac52da05ee113a5a22871cdc3010f8f63bd5f1.graph
-architecture-fast-track	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
-architecture-fast-track	.git/objects/info/commit-graphs/graph-fa7bbe6bcd67e84c678384cfb84f17a16d6fa8fa.graph
-architecture-fast-track	.git/objects/pack/multi-pack-index
-architecture-fast-track	.git/packed-refs
-architecture-fast-track	.git/refs/heads/main
-architecture-fast-track	.gitignore
+architecture-fast-track	core
+architecture-fast-track	core/fixtures
+architecture-fast-track	core/fixtures/architecture-fast-track
 architecture-fast-track	core/fixtures/architecture-fast-track/run.sh
+architecture-fast-track	core/fixtures/lib
 architecture-fast-track	core/fixtures/lib/preamble.sh
+architecture-fast-track	core/skills/ai-dlc/steps
 architecture-fast-track	core/skills/ai-dlc/steps/architecture.md
 architecture-fast-track	core/skills/ai-dlc/steps/gate-validation.md
 architecture-fast-track	core/skills/ai-dlc/steps/requirements.md
@@ -1279,27 +1270,13 @@ carried-findings	file:/private/var/folders/qr/v63hkc2n6s16yk44l131v9700000gn/T/c
 carried-findings	file:/private/var/folders/qr/v63hkc2n6s16yk44l131v9700000gn/T/carried-findings.5Ve5Gr/main.git
 carried-findings	file:/private/var/folders/qr/v63hkc2n6s16yk44l131v9700000gn/T/carried-findings.5Ve5Gr/main.git/.git
 carried-findings	file:/private/var/folders/qr/v63hkc2n6s16yk44l131v9700000gn/T/carried-findings.5Ve5Gr/main/.git
-changelog-sprint-slot	.git/HEAD
-changelog-sprint-slot	.git/config
-changelog-sprint-slot	.git/index
-changelog-sprint-slot	.git/info/exclude
-changelog-sprint-slot	.git/objects/33/a4425c0ed05dea70f881660ffdf01c7c86da33
-changelog-sprint-slot	.git/objects/7f/1479d0f091b8393b8613744a84c3c8229a65a3
-changelog-sprint-slot	.git/objects/info/commit-graphs/commit-graph-chain
-changelog-sprint-slot	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
-changelog-sprint-slot	.git/objects/info/commit-graphs/graph-61ac52da05ee113a5a22871cdc3010f8f63bd5f1.graph
-changelog-sprint-slot	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
-changelog-sprint-slot	.git/objects/info/commit-graphs/graph-fa7bbe6bcd67e84c678384cfb84f17a16d6fa8fa.graph
-changelog-sprint-slot	.git/objects/pack/multi-pack-index
-changelog-sprint-slot	.git/packed-refs
-changelog-sprint-slot	.git/refs/heads/main
-changelog-sprint-slot	.gitignore
 changelog-sprint-slot	core
 changelog-sprint-slot	core/fixtures
 changelog-sprint-slot	core/fixtures/changelog-sprint-slot
 changelog-sprint-slot	core/fixtures/changelog-sprint-slot/run.sh
 changelog-sprint-slot	core/skills/ai-dlc/SKILL.md
 changelog-sprint-slot	core/skills/ai-dlc/steps
+changelog-sprint-slot	core/skills/ai-dlc/steps/_dispatch-protocol.md
 changelog-sprint-slot	core/skills/ai-dlc/steps/_gate-procedures.md
 changelog-sprint-slot	core/skills/ai-dlc/steps/architecture.md
 changelog-sprint-slot	core/skills/ai-dlc/steps/artifact-consolidation.md
@@ -1907,6 +1884,7 @@ derivation-capture	core/fixtures/derivation-capture/run.sh
 derivation-capture	core/fixtures/derivation-capture/seed.sh
 derivation-capture	core/hooks/ai-dlc-derivation-capture.sh
 derivation-capture	core/scripts/partition-document.sh
+derivation-capture	core/scripts/validate-artifact-budget.sh
 derivation-capture	core/scripts/validate-artifact-derivations.sh
 derivation-capture-mutants	core
 derivation-capture-mutants	core/fixtures
@@ -1917,32 +1895,6 @@ derivation-capture-mutants	core/fixtures/derivation-capture/seed.sh
 derivation-capture-mutants	core/hooks/ai-dlc-derivation-capture.sh
 derivation-capture-mutants	core/scripts/partition-document.sh
 derivation-capture-mutants	core/scripts/validate-artifact-derivations.sh
-derivation-differential	.git/HEAD
-derivation-differential	.git/config
-derivation-differential	.git/index
-derivation-differential	.git/info/exclude
-derivation-differential	.git/objects/6a/3664e5b79b8cdab423d243bd0b23fda46ebb71
-derivation-differential	.git/objects/b0/dee628405eaef9c8bf58f03d15ebb8df9fe757
-derivation-differential	.git/objects/info/commit-graphs/commit-graph-chain
-derivation-differential	.git/objects/info/commit-graphs/graph-7f995749f1f9f9610455fff3b31d8e4d11b046c8.graph
-derivation-differential	.git/objects/info/commit-graphs/graph-93e6403e1d08d4a02b08f717afce6dcbebb27492.graph
-derivation-differential	.git/objects/pack/multi-pack-index
-derivation-differential	.git/packed-refs
-derivation-differential	.git/refs/heads/release/0.643.0
-derivation-differential	.gitignore
-derivation-differential	core
-derivation-differential	core/fixtures
-derivation-differential	core/fixtures/derivation-differential
-derivation-differential	core/fixtures/derivation-differential/run.sh
-derivation-differential	core/fixtures/lib
-derivation-differential	core/fixtures/lib/preamble.sh
-derivation-differential	core/scripts/validate-artifact-derivations.sh
-derivation-differential	core/skills
-derivation-differential	core/skills/ai-dlc-update
-derivation-differential	core/skills/ai-dlc-update/reconcile
-derivation-differential	core/skills/ai-dlc-update/reconcile/apply.sh
-derivation-differential	core/skills/ai-dlc-update/reconcile/derivation-differential.sh
-derivation-differential	core/skills/ai-dlc-update/reconcile/preclassify.sh
 derivation-differential-mutants	.git/HEAD
 derivation-differential-mutants	.git/config
 derivation-differential-mutants	.git/index
@@ -2003,6 +1955,7 @@ dispatch-model-guard	core
 dispatch-model-guard	core/fixtures
 dispatch-model-guard	core/fixtures/dispatch-model-guard
 dispatch-model-guard	core/fixtures/dispatch-model-guard/run.sh
+dispatch-model-guard	core/fixtures/dispatch-model-guard/s317-tier-pin-waiver.md
 dispatch-model-guard	core/fixtures/dispatch-model-guard/seed.sh
 dispatch-model-guard	core/hooks
 dispatch-model-guard	core/hooks/ai-dlc-acknowledge.sh
@@ -2040,6 +1993,7 @@ divergence-hard-block	core/fixtures/divergence-hard-block/run.sh
 divergence-hard-block	core/fixtures/divergence-hard-block/seed.sh
 divergence-hard-block	core/hooks
 divergence-hard-block	core/hooks/ai-dlc-acknowledge.sh
+divergence-hard-block	core/hooks/ai-dlc-advisor-gate.sh
 divergence-hard-block	core/hooks/ai-dlc-answer-capture.sh
 divergence-hard-block	core/hooks/ai-dlc-artifact-path-guard.sh
 divergence-hard-block	core/hooks/ai-dlc-context-provenance.sh
@@ -3977,21 +3931,6 @@ escalation-status-vocabulary	core/skills/ai-dlc/enforcement-map.yaml
 escalation-status-vocabulary	core/skills/ai-dlc/escalations.md
 escalation-status-vocabulary	core/skills/ai-dlc/steps/gate-validation.md
 extension-check-adoption	.git
-extension-check-adoption	.git/HEAD
-extension-check-adoption	.git/config
-extension-check-adoption	.git/index
-extension-check-adoption	.git/info/exclude
-extension-check-adoption	.git/objects/33/a4425c0ed05dea70f881660ffdf01c7c86da33
-extension-check-adoption	.git/objects/7f/1479d0f091b8393b8613744a84c3c8229a65a3
-extension-check-adoption	.git/objects/info/commit-graphs/commit-graph-chain
-extension-check-adoption	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
-extension-check-adoption	.git/objects/info/commit-graphs/graph-61ac52da05ee113a5a22871cdc3010f8f63bd5f1.graph
-extension-check-adoption	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
-extension-check-adoption	.git/objects/info/commit-graphs/graph-fa7bbe6bcd67e84c678384cfb84f17a16d6fa8fa.graph
-extension-check-adoption	.git/objects/pack/multi-pack-index
-extension-check-adoption	.git/packed-refs
-extension-check-adoption	.git/refs/heads/main
-extension-check-adoption	.gitignore
 extension-check-adoption	core
 extension-check-adoption	core/.claude
 extension-check-adoption	core/.git
@@ -5069,21 +5008,6 @@ hermetic-runner	core/scripts/core-paths.sh
 hermetic-runner	core/scripts/hermetic-run.sh
 hermetic-runner	scripts/suite-content-key.sh
 hook-registration-join	.git
-hook-registration-join	.git/HEAD
-hook-registration-join	.git/config
-hook-registration-join	.git/index
-hook-registration-join	.git/info/exclude
-hook-registration-join	.git/objects/33/a4425c0ed05dea70f881660ffdf01c7c86da33
-hook-registration-join	.git/objects/7f/1479d0f091b8393b8613744a84c3c8229a65a3
-hook-registration-join	.git/objects/info/commit-graphs/commit-graph-chain
-hook-registration-join	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
-hook-registration-join	.git/objects/info/commit-graphs/graph-61ac52da05ee113a5a22871cdc3010f8f63bd5f1.graph
-hook-registration-join	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
-hook-registration-join	.git/objects/info/commit-graphs/graph-fa7bbe6bcd67e84c678384cfb84f17a16d6fa8fa.graph
-hook-registration-join	.git/objects/pack/multi-pack-index
-hook-registration-join	.git/packed-refs
-hook-registration-join	.git/refs/heads/main
-hook-registration-join	.gitignore
 hook-registration-join	core
 hook-registration-join	core/.claude
 hook-registration-join	core/.git
@@ -5093,7 +5017,9 @@ hook-registration-join	core/fixtures/hook-registration-join
 hook-registration-join	core/fixtures/hook-registration-join/run.sh
 hook-registration-join	core/hooks
 hook-registration-join	core/hooks/ai-dlc-acknowledge.sh
+hook-registration-join	core/hooks/ai-dlc-advisor-gate.sh
 hook-registration-join	core/hooks/ai-dlc-answer-capture.sh
+hook-registration-join	core/hooks/ai-dlc-artifact-path-guard.sh
 hook-registration-join	core/hooks/ai-dlc-context-provenance.sh
 hook-registration-join	core/hooks/ai-dlc-context-sensor.sh
 hook-registration-join	core/hooks/ai-dlc-continue.sh
@@ -5102,10 +5028,10 @@ hook-registration-join	core/hooks/ai-dlc-derivation-capture.sh
 hook-registration-join	core/hooks/ai-dlc-dispatch-guard.sh
 hook-registration-join	core/hooks/ai-dlc-driver-signal.sh
 hook-registration-join	core/hooks/ai-dlc-escalation-delivery.sh
+hook-registration-join	core/hooks/ai-dlc-foreground-budget.sh
 hook-registration-join	core/hooks/ai-dlc-gate-remediation-guard.sh
 hook-registration-join	core/hooks/ai-dlc-handoff-entry.sh
 hook-registration-join	core/hooks/ai-dlc-handoff-pending.sh
-hook-registration-join	core/hooks/ai-dlc-notify.sh
 hook-registration-join	core/hooks/ai-dlc-pause.sh
 hook-registration-join	core/hooks/ai-dlc-postcompact.sh
 hook-registration-join	core/hooks/ai-dlc-precompact.sh
@@ -9235,21 +9161,6 @@ requirements-step	core/skills/ai-dlc/steps/sprint-review-next.md
 requirements-step	core/skills/ai-dlc/steps/sprint-review.md
 requirements-step	core/skills/ai-dlc/steps/stories-test-strategy.md
 requirements-step	core/skills/ai-dlc/steps/ui-direction.md
-resume-whole-read	.git/HEAD
-resume-whole-read	.git/config
-resume-whole-read	.git/index
-resume-whole-read	.git/info/exclude
-resume-whole-read	.git/objects/33/a4425c0ed05dea70f881660ffdf01c7c86da33
-resume-whole-read	.git/objects/7f/1479d0f091b8393b8613744a84c3c8229a65a3
-resume-whole-read	.git/objects/info/commit-graphs/commit-graph-chain
-resume-whole-read	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
-resume-whole-read	.git/objects/info/commit-graphs/graph-61ac52da05ee113a5a22871cdc3010f8f63bd5f1.graph
-resume-whole-read	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
-resume-whole-read	.git/objects/info/commit-graphs/graph-fa7bbe6bcd67e84c678384cfb84f17a16d6fa8fa.graph
-resume-whole-read	.git/objects/pack/multi-pack-index
-resume-whole-read	.git/packed-refs
-resume-whole-read	.git/refs/heads/main
-resume-whole-read	.gitignore
 resume-whole-read	core
 resume-whole-read	core/.claude/skills/ai-dlc/steps/route.md
 resume-whole-read	core/core/skills/ai-dlc/steps/route.md
@@ -9629,19 +9540,9 @@ retro-compliance-workflow	core/fixtures/retro-compliance-workflow/run.sh
 retro-compliance-workflow	core/fixtures/retro-compliance-workflow/seed.sh
 retro-compliance-workflow	core/schemas/provenance-block.json
 retro-compliance-workflow	core/scripts/validate-provenance-block.sh
-review-carry-over-clauses	.git/HEAD
-review-carry-over-clauses	.git/config
-review-carry-over-clauses	.git/index
-review-carry-over-clauses	.git/info/exclude
-review-carry-over-clauses	.git/objects/d4/1d47d08c509b150151e2e5d35a6e20d3d50784
-review-carry-over-clauses	.git/objects/e1/88ddb49c16b327807da7672807fbf217c81fdf
-review-carry-over-clauses	.git/objects/info/commit-graphs/commit-graph-chain
-review-carry-over-clauses	.git/objects/info/commit-graphs/graph-93e6403e1d08d4a02b08f717afce6dcbebb27492.graph
-review-carry-over-clauses	.git/objects/info/commit-graphs/graph-b0ba07b870ac79b8e1331e471cd123f35a2e28a6.graph
-review-carry-over-clauses	.git/objects/pack/multi-pack-index
-review-carry-over-clauses	.git/packed-refs
-review-carry-over-clauses	.git/refs/heads/main
-review-carry-over-clauses	.gitignore
+review-carry-over-clauses	core
+review-carry-over-clauses	core/fixtures
+review-carry-over-clauses	core/fixtures/review-carry-over-clauses
 review-carry-over-clauses	core/fixtures/review-carry-over-clauses/run.sh
 review-carry-over-clauses	core/skills/ai-dlc/steps/sprint-review.md
 review-carry-over-clauses	core/team-roles/dev.md
@@ -13883,16 +13784,21 @@ write-format-steering-multiformat	core/skills/ai-dlc-update/reconcile/lib.sh
 # digest adversarial-shard-merge 31682dc40a65c951cec79c8444c78de338d91d074be8bcd78104e983e7424846
 # digest advisor-gate-deny 7aae9015403f15e6cb40fa5de43b2f93726b6ae0d3be9236f466c98d1483b123
 # digest advisor-gate-deny-mutants 9fd24773eb4caa10e92d74e9f3de0c329e5de75ec5d88e1770953c14434b781f
+# digest architecture-fast-track 8347f216bc7fa03eb0ecfc49743a904092ab8a9fecea304b8043cfa804a0f008
 # digest blocker-adjudication-record 99314f2a1c6cc2fcca6d94d77cd3a5f29a9ea8d5f0598e00be2da52fe4ad932b
 # digest budget-summary-verdict 5af57cc2c8a71d2bdfbb1bd11931bf0d008a001799f1c7ef586ffdafb80ac5c7
 # digest carried-findings 354c66978da7d1744f0b6eb5c10a8e0da6c8427cd881bd2d8475092023d97372
-# digest check-22-spawn-ledger 0e5ff3a1b1ff961bc4148329da4248438069df6f46e35ebe20f59b0602c33ece
+# digest changelog-sprint-slot 70229a198d1b9a3abe5ae61483d7beb926b6908add6aadcdb78147ef01dcee62
+# digest check-22-spawn-ledger 70c842fa5bbe4dd53306fe4b5f7acd2e8bd91119aaf277642390c76df054fbaf
 # digest consumer-machinery-inventory d20cc399988d538e902de541916f7059332110ef170506b5a03ec3b34e0f7a07
 # digest consumer-suite-pool 7911a7e39a32ca5d34bd6ee397045a8fb6ffeb97334b9df9810a12980534db79
-# digest context-sensor 4faee78c607735a26a9c4304975d8aca9370bcc0d2c5e529ddc639350136bf58
+# digest context-sensor 13c447a5c9355c4b296738329ea41930b6a1b970e54579d727fb31e8d2595d91
 # digest core-write-guard eb1bee086635b85fec4e29a8caa87203db0f1ab513ac5ab3282ee0289cc25a59
-# digest dispatch-model-guard e94ae7aca4fcc96a3254a750fbbfa6bb912ebc099ca5a7330591410f65265426
+# digest derivation-capture 0a8155feef61a90cf7225ffbb5f38a852e557958f2acc595e06521c8d1d28504
+# digest dispatch-model-guard 79f59ceffc7d8197c36180477e0ca061734520ecfe964c63f9f21222d2b13f28
+# digest divergence-hard-block a7bd70baa65f4911cd26584e28525ee5cc2928d79146c813e2590644eff571c0
 # digest enforcement-map-sites-c 4b8f45fcf04c6e09ef1eeb7e26dc9270db70eb95bfcf904c1def9277361372a8
+# digest extension-check-adoption f861b0af9251cbbcae0f1e3cfdae4e34195fe398c67dca2c4300eeb8f704c6a0
 # digest extract-push-flag-decision 59752e7e8ea6b269678c0a8d5f6ac4313b812f3edda95bad22c6994fc9a430f4
 # digest fold-architect-ledger-join-mutants 1939d7bea4f2daeaf00b22feeaff732d8af339b8ac25703c909ecdd40dc1cd81
 # digest fold-architect-ledger-join-mutants-c a5350d4e34302d4dd8e106b5f532ca3c3bba129167e29618c7ac2bd3f4bf020a
@@ -13900,8 +13806,9 @@ write-format-steering-multiformat	core/skills/ai-dlc-update/reconcile/lib.sh
 # digest gate-adjudication-mutants 4dc6f59ca3d43527c38a7b1aa62414f766c6680c0311040be054f84a794a7fe8
 # digest gate-adjudication-rotate 8a116c818b0175bdeaee92e228780db2fc262858b1cedba8ceb4b1ed15ad22b8
 # digest gate-remediation-deny 9da8ce352e2ede18cbd4c635fff6a90ec6f77d9bc58d0431b27ac71344eaf430
-# digest gate-resume b768b19aa352273daf0f5072f964857d7b51d933ad3cdc3bf6c2ff73f57e870a
+# digest gate-resume 2c88db5c6a84a8a263601432ff9773f98a70dc4ffff76349ac5ba1c502691ae8
 # digest hermetic-runner d2f56113e2d2b3d25015c7f88987c63c762a208d94c9f3aa60651b984822e2e5
+# digest hook-registration-join f64e606ca937dc96a1ccf5a936e88aece45cc864079f60224dbdaf83fb09932a
 # digest invariant-index c38877552a196895e4e9961dcef31590e3d2a3a729cdcd69fca52fefc54f5f23
 # digest ledger-reverify-shard-mutants 81140f0210e48ca6d629e8f3be8115975b2411ad36c26f08c7b98b5ec12f75c6
 # digest path-mapping-render cab212453b6267f052a7c1903450483187b5e84da14ab4dd3b327b401da4473e
@@ -13914,7 +13821,10 @@ write-format-steering-multiformat	core/skills/ai-dlc-update/reconcile/lib.sh
 # digest readset-sandbox-root-clause ee0d710c52ad7703c45a7ca1a54a86b8c5494d5c281684341cb76f09adf5a648
 # digest readset-skip c6a2be46cfd16847bc01971e9f5a49c9028a87a4146d5829690d5c5f5bffac46
 # digest readset-stage1-verdict b93137ba76a80cfe4f6f2e8b13cd89e89173e86f34533444641bd3df97da5c46
+# digest requirements-step 2289822877479bc1e9540a38027a86e1a34bc3913ee88ab7a5397f82ae979ef9
+# digest resume-whole-read c6dc1f11575252a427e27bf3d1393f48bde571c39a7dba9f660308e9b08c857c
 # digest retired-layer-contract e88a4774d6c4fd9472d48db3dc99d92dcec0886aa56f85cf29ac7da14d609a10
+# digest review-carry-over-clauses 0ae517d79ff27678be324e55489651ee3a462ef354aead4909cdd0ea14534c45
 # digest self-update-join-gate 1ebfed9e70229033fc77264c31a9adbe59f70973c41518bf13d14c6752c0b54f
 # digest settings-merge-documented-form c8749c59bf12d4e1027eefb344a6678683e3c8ff76ca2c89b13e1d5d6b53f05f
 # digest shipped-rule-version-floor 473369479a2f008a085044c8160ecd9616b80bba1d65098f6f16f612ba24b2e6
