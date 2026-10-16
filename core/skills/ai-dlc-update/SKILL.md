@@ -1397,8 +1397,9 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    and the question does not arise.
 
    **A `$THEIRS_TREE` receipt opens with `[ -n "${THEIRS_TREE:-}" ] || exit 127;`.** Re-verify
-   runs on the engine the consumer LAST INSTALLED, so for one pull after `$THEIRS_TREE` ships the
-   running engine does not export it: unguarded, the receipt reads `/…`, exits non-zero, and that
+   runs on the engine the consumer LAST INSTALLED, so until the consumer pulls the release that
+   ships `$THEIRS_TREE` — and on that pull itself under `SELF-UPDATE-DEFER`, an un-synced step 2,
+   or a failed step-2 push — the running engine does not export it: unguarded, the receipt reads `/…`, exits non-zero, and that
    engine scores it `CLOSE-CANDIDATE`. `exit 127` is the "subject renamed or deleted" status every
    shipped engine already turns into `NEEDS-REVIEW`, so the guard degrades the receipt to a review
    instead of a false close.
@@ -2459,7 +2460,9 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
         line, and a later run from the same base leaves it that way (the tree may already hold
         your merges, so nothing read then is the copy the apply found). `--finish` then says so on
         a `NOTE finish-classify-unrecorded` and does not withhold, so this check cannot fire on
-        the pull that delivers it. A path carrying a TAB or a `"` reaches the record C-quoted by
+        that marker. On the pull that delivers the record that happens only under
+        `SELF-UPDATE-DEFER` or a leftover same-base marker; when step 2's self-update lands, step 7
+        runs the new apply and the check is live. A path carrying a TAB or a `"` reaches the record C-quoted by
         `preclassify.sh` and is not recorded either; confirm such a file's merge by hand.
      5. **The two remedies only a fresh ordinary run performs are done.** A known_skills entry
         the consumer added in place and never refiled is `WORKLIST finish-refile-owed`; a refile

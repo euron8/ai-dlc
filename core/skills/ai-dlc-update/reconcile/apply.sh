@@ -760,8 +760,11 @@ ap_stage_or_refuse() {
 # marker from another base is started fresh.
 #
 # A SAME-BASE MARKER WITH NO `classify-hashes:` LINE STAYS UNRECORDED. That is a marker an engine
-# without this record wrote -- on the pull that DELIVERS this engine, the first ordinary run is the old
-# one -- and the tree may already carry the operator's merges, so any blob read now could be a merged
+# without this record wrote -- under SELF-UPDATE-DEFER, where the installed apply.sh runs step 7 of the
+# pull that delivers this engine, or left in flight by an earlier unfinished attempt from the same base
+# (a marker outlives its run only while the stamp is withheld, so a leftover is always same-base); on a
+# pull whose step-2 self-update landed, step 7 runs THIS engine after the re-invoke and the record is
+# written -- and the tree may already carry the operator's merges, so any blob read now could be a merged
 # copy. This run writes no hash lines and no `classify-hashes:` line, and `--finish` says so on a NOTE.
 #
 # `classify-hashes: <n>` IS OTHERWISE ALWAYS WRITTEN, zero included. Without it a marker from this
@@ -2482,7 +2485,9 @@ finish_verify_tree() {
 #
 # A MARKER WITH NO `classify-hashes:` LINE WAS WRITTEN BY AN ENGINE THAT RECORDED NOTHING, or by this
 # one over a same-base marker that engine wrote (see ap_write_marker). It gets a NOTE and the
-# behaviour that engine had: this check cannot fire on the pull that delivers it.
+# behaviour that engine had: this check cannot fire on such a marker. On the pull that delivers this
+# engine that happens only under SELF-UPDATE-DEFER or a leftover same-base marker; when the step-2
+# self-update lands, step 7 runs this engine, the record is written, and the check is live.
 finish_classify_unmerged() {
   local _ml _l _h _m _c _now _nm _tab
   [ -f "$APPLYING" ] || return 0
