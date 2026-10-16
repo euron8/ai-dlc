@@ -201,16 +201,20 @@ operator's answer, carries one `- closes:` line per member of the chain, the res
 and every part escalation it supersedes: an escalation with no `closes:` line of its own stays
 open however many of its links were closed.
 
-**As the serial remediator only**, your LAST write is one line closing the block you appended:
-`repair-complete: serial <pass>`, `<pass>` being the pass your brief names, at column 0, as the
+**As the serial remediator, or as the one unsharded remediator**, your LAST write is one line
+closing what you wrote: `repair-complete: serial <pass>`, `<pass>` being the pass your brief
+names. The unsharded remediator, whose brief reads `shard: none (serial-document)`, is the only
+pass over its record, so its record ends in that line exactly as the serial remediator's appended
+block does. Write it at column 0, as the
 record's last non-blank line, outside any fence and never as a list item (`- repair-complete:`
 is not the line). Never write it before your last entry and never append after it; once it is
 written, do not edit the record again. The lead's join beat takes the record as delivered only
 when that line is last and the file has stopped changing, so a record without it reads as
 unfinished however many entries it holds. The line closes your block only: a later appender,
 such as a spec re-render, writes its own block after it. A part or shard remediator writes no
-such line: the join concatenates the parts into the record you append to, so a part's line
-would end that record before your first entry and deliver it unfinished.
+such line: the join concatenates the parts into the record the serial remediator appends to, so
+a part's line would end that record before the serial pass's first entry and deliver it
+unfinished.
 
 **A party repair names the seat finding behind every entry.** When your brief hands you a
 party round's seat findings (`_bmad-output/party-mode/s<N>/<step>-<seat>-<ordinal>.md`), every
