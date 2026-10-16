@@ -1028,3 +1028,25 @@ So any ceiling or model decision read from `peak_tokens` over-states teammate co
 Owed: when `message.usage.iterations` is present, take each turn's figure from its LAST `type: "message"` iteration, otherwise the top level, and keep the max over turns. Share the extraction with BL-622's sensor fix so the two readers cannot drift. Receipt: a seeded subagent transcript with one advisor turn records the true peak, and a transcript without one records exactly what it records today (control).
 
 verify: manual
+
+## BL-639 — `wait-for-deliverable.sh`'s SETTLE window delivers a correct seat mid-edit when load or a slow local model stretches its write gaps
+
+**DEFECT.** Filed by ai-dlc-4e [9b62de] from BL-632's product-code header pass, on lead ai-dlc-71's ruling that a load-sensitive consumer deadline found there is its own filing. It is a mechanism read from the code, not a measurement; intake confirmed the cites at origin/main `9f8e7691`. `core/scripts/wait-for-deliverable.sh:355` sets `SETTLE="${AI_DLC_WAIT_SETTLE_SECS:-180}"`, and `settled()` (`:713`, test at `:730`, and again at `:1003`) delivers a marked file once its hash has been unchanged for more than SETTLE seconds. The header's own measurement (`:302`) is a series of gaps of 1.6, 5.1, 146.6, 2.4 and 1.4 s on an unloaded harness. A seat that writes its marker and keeps editing can have its gaps stretched past 180 s by pool load or by a slow local model, and the lead then consumes a half-edited deliverable. `say_revised` (`:695`) reports the later edit but cannot undo the delivery. A local-model lead is an operator goal, so this is in its path.
+
+Owed: measure the inter-write gaps of marked-then-edited seats under pool load and under a local model. Then either derive SETTLE from that distribution, or observe completion directly (an explicit completion write) instead of quiet time; under BL-632 the second is the binary attribute. Receipt: a seeded marked file edited at gaps above SETTLE is NOT delivered mid-sequence. Control: the same sequence delivers early under today's SETTLE.
+
+Related: BL-632 (lists SETTLE in its product-code class), BL-616.
+
+verify: manual
+
+## BL-640 — `wait-for-deliverable.sh`'s chained-beat guard fails open under load and serialises two quanta
+
+**NOTE.** Filed by ai-dlc-4e [9b62de], same header pass; a mechanism read, cites confirmed at `9f8e7691`. `:1138` (`[ $(( $(date +%s) - LAST )) -lt "$BUDGET" ]`, setting `MAY_SLEEP=0` at `:1139`) separates a chained call from a fresh one by elapsed time alone, with only `RESERVE` slack (`:1394-1395`, the larger of `MARGIN` and `POLL`). If load delays the chained call past that slack, the beat sleeps a second quantum: the 2x BUDGET serialisation the guard exists to prevent. The cost is wall clock and one beat charged, with no wrong delivery. Owed: decide from the sibling's lease liveness or its recorded end epoch instead of a bare BUDGET. Receipt: `.shell-$PPID` stamped at BUDGET-5s gives `MAY_SLEEP=0`. Control: at BUDGET+1s it sleeps today.
+
+verify: manual
+
+## BL-641 — `ai-dlc-continue.sh`'s RAPID_WINDOW_SECONDS can defeat the stall backoff on the unknown-tool path
+
+**NOTE.** Filed by ai-dlc-4e [9b62de], same header pass; a mechanism read, cites confirmed at `9f8e7691`. `core/hooks/ai-dlc-continue.sh:123` sets `RAPID_WINDOW_SECONDS=30`, and `stall_run()` (`:348`) sets `RUN_TOOL=unknown` (`:357`) when there is no transcript, no jq, or an old two-line state file. On that path the time test alone decides whether a run continues. Load stretches a genuinely stalled session's gaps past 30 s, which resets the counter to 1, so `EFF_MAX` (`:131-134`) is never reached and release falls to the harness cap. Owed: measure how often `RUN_TOOL=unknown` actually occurs; if it is non-zero, decide whether the unknown path should hold the run rather than reset it. Receipt: `stall_run` driven with an unreadable transcript at 31 s spacing reaches `EFF_MAX`, where today it resets to 1 on every block.
+
+verify: manual
