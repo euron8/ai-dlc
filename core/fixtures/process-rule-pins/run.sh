@@ -396,6 +396,8 @@ gp-shard-rerun-finding|S|steps/_gate-procedures.md|## Adversarial review dispatc
 gp-probe-ledger|S|steps/_gate-procedures.md|## Adversarial review dispatch (referenced by step files)|## Divergence resolution dispatch|**The probe ledger is load-bearing until the consumer's hook writes `transcript_path`.**|para|Do not rotate or truncate `subagent-context.jsonl` mid-round
 gp-probe-ledger-rerun|S|steps/_gate-procedures.md|## Adversarial review dispatch (referenced by step files)|## Divergence resolution dispatch|**The probe ledger is load-bearing until the consumer's hook writes `transcript_path`.**|para|is re-run after the next dispatch writes the new keys, never hand-filled
 adv-shard-sentinel|R|adversary.md|## Contract|## Severity|1. **Run the evaluation you were dispatched for, in your own context.**|para|**A shard writes `tool_use_id: NOT_ACCESSIBLE`, never an id it was told or guessed.**
+gp-derive-file|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|Every re-run names a FILE and never the slot directory.|para|`validate-artifact-derivations.sh <the joined repair record>`
+gp-join-serial|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh --complete-repair|para|--complete-repair --since <dispatch epoch> --dispatch <agentId> <repair_record_path>
 PINS
 }
 
@@ -1115,6 +1117,38 @@ lead_mut p4-dropped 's/hand(s|ed|ing)? +/hand@@never@@ +/' 1 "$LA" "$LP/o8.md" "
 # A rule and a site agreeing on the address that failed: the measured-address check owns it.
 printf -- '- Message **lead** (`SendMessage` `to: "lead"`) if a PR is BLOCKED.\n' > "$LP/wrong.md"
 lead_mut measured-dropped 's/^  \[ "\$a" = "\$LEAD_ADDR_MEASURED" \] ||/  true ||/' 1 'to: "lead"' "$LP/wrong.md"
+
+# --- 4d. BL-529 (G1): the derivation re-run never names the slot directory ---------------------
+# `_gate-procedures.md` re-runs `validate-artifact-derivations.sh` after a repair join. A SLOT target
+# (`.../s<N>/`) is a directory walk that skips the frozen records a repair edits, so it can never reach
+# the cites the repair moved; the re-run names FILE targets. The gp-derive-file pin above holds the
+# PRESENT half (prose, outside the fence, which pin_scan does not read); this arm holds the ABSENT half
+# over the fence too. slot_hits counts invocations whose target ends in `s<digits-or-N>/`; file_hits
+# counts invocations naming a placeholder file, the positive conjunct a silent subject cannot satisfy.
+# FP set: the real file carries 0 slot targets after the edit and 2 file targets in the fence.
+slot_hits() { grep -cE 'validate-artifact-derivations\.sh +[^ ]*/s(<N>|[0-9]+)/?( |`|$)' "$1" || true; }
+file_hits() { grep -cE 'validate-artifact-derivations\.sh +<' "$1" || true; }
+SD="$WORK/slot"; mkdir -p "$SD" || exit 2
+printf '```\nscripts/ai-dlc/validate-artifact-derivations.sh _bmad-output/planning-artifacts/s<N>/\n```\n' > "$SD/off.md"
+printf '```\nscripts/ai-dlc/validate-artifact-derivations.sh _bmad-output/planning-artifacts/s319/\n```\n' > "$SD/off2.md"
+printf '```\nscripts/ai-dlc/validate-artifact-derivations.sh <the joined repair record>\nscripts/ai-dlc/validate-artifact-derivations.sh <assembled document path>\n```\nA directory target such as s<N>/ skips frozen records.\n' > "$SD/near.md"
+GPF="$SKILL_DIR/steps/_gate-procedures.md"
+sd_off="$(slot_hits "$SD/off.md")"; sd_off2="$(slot_hits "$SD/off2.md")"; sd_near="$(slot_hits "$SD/near.md")"; sd_nf="$(file_hits "$SD/near.md")"
+if [ "$sd_off" = 1 ] && [ "$sd_off2" = 1 ] && [ "$sd_near" = 0 ] && [ "$sd_nf" = 2 ]; then
+  sd_real_slot="$(slot_hits "$GPF")"; sd_real_file="$(file_hits "$GPF")"
+  if [ "$sd_real_slot" = 0 ] && [ "$sd_real_file" -ge 2 ]; then
+    ok "slot-target: the derivation re-run names $sd_real_file file target(s) and no slot directory (probe: s<N>/ and s319/ read 1 each, file targets and prose read 0)"
+  else
+    bad "slot-target: _gate-procedures.md carries $sd_real_slot slot target(s) (want 0) and $sd_real_file file target(s) (want >= 2)"
+  fi
+  # MUTANT: restore the slot line in a copy; the arm must read it. cmp -s guards a sed that matched nothing.
+  sed 's|^scripts/ai-dlc/validate-artifact-derivations.sh <the joined repair record>$|scripts/ai-dlc/validate-artifact-derivations.sh _bmad-output/planning-artifacts/s<N>/|' "$GPF" > "$SD/gp-mut.md"
+  if cmp -s "$GPF" "$SD/gp-mut.md"; then bad "MUTANT slot-target: DID NOT APPLY"
+  elif [ "$(slot_hits "$SD/gp-mut.md")" = 1 ]; then ok "MUTANT slot-target: the restored slot line is read (1) where the real file reads 0"
+  else bad "MUTANT slot-target: SURVIVED (read $(slot_hits "$SD/gp-mut.md"))"; fi
+else
+  bad "slot-target: FIXTURE BROKEN -- offenders $sd_off/$sd_off2 (want 1/1), near-miss $sd_near (want 0), near-miss file targets $sd_nf (want 2)"
+fi
 
 # --- 5. the real corpus ---------------------------------------------------------
 echo ""

@@ -1002,16 +1002,30 @@ Per finding — or per failed check — the disposition, the edit site, and the 
 that derives every factual claim the repair asserts, with its output. The next adversarial pass
 verifies against that record; so does the gate's re-run of the failed checks.
 
-**Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh <repair_record_path>`.
+**Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh --complete-repair
+--since <dispatch epoch> --dispatch <agentId> <repair_record_path>`. The serial remediator and the
+unsharded `shard: none (serial-document)` remediator both end their record with `repair-complete:
+serial <pass>`, which only `--complete-repair` waits for; the part records a shard join writes are
+written by that join, synchronously, and need no beat.
 SKILL.md Rule 32 touchpoint V1 applies once the repair record is joined, before the next pass.
+Once the join is accepted, commit the repaired subject files (`git add` and `git commit`) before
+the next pass dispatches, so a later stop cannot blur joined edits with in-flight ones.
 
 **Then re-run the derivations, BEFORE dispatching the next pass:**
 
 ```
-scripts/ai-dlc/validate-artifact-derivations.sh _bmad-output/planning-artifacts/s<N>/
+scripts/ai-dlc/validate-artifact-derivations.sh <the joined repair record>
 scripts/ai-dlc/validate-artifact-derivations.sh <assembled document path>
 scripts/ai-dlc/report-propagation-fanout.sh <base-ref>
 ```
+
+Every re-run names a FILE and never the slot directory. Run
+`validate-artifact-derivations.sh <the joined repair record>` on the joined record itself,
+then on the assembled document (for the requirements subject, each of the manifest's four files:
+`prd.md`, `product-brief.md`, `architecture-impact.md` and `SPEC.md`), and on the spec's
+`.memlog.md`; a repair that edited another record names that record as a file target too. A
+directory target skips the frozen shard and seat records no remediator may edit, so it cannot
+reach the cites a repair moved.
 
 The second line applies to a section-sharded repair and names the ASSEMBLED document: a fenced
 command that reads its own file measured a section copy while the shard ran, so only the
@@ -1033,7 +1047,7 @@ owes this grep.
 
 Owed derivations are refused at gate-validation.md Check 37, not here.
 
-Exit 1 from `validate-artifact-derivations.sh` is a repair that falsified a
+Exit 1 from `validate-artifact-derivations.sh` on one of those file targets is a repair that falsified a
 derivation — most often not its own, but one
 elsewhere in the artifact set that was counting the thing this repair moved. Send it back to
 the remediator now. Exit 2 is NOT a finding: an `UNRUN:` or `REFUSED:` line names a
@@ -1196,9 +1210,15 @@ carry the no-human-present additions:
 1. **Stop all in-flight teammates first.** Before calling `TaskStop`, run
    ONE bounded-join beat ("Bounded-join beat" above) over every
    **In-Flight Teammates** row whose `status` is `in-flight` and that names
-   a deliverable path: one `scripts/ai-dlc/wait-for-deliverable.sh <path>
-   [<path> ...]` call over the whole set, `run_in_background: true`, ending
-   this turn on the armed beat and resuming this step on its result. A row
+   a deliverable path: one call per kind of deliverable, each
+   `run_in_background: true` — `scripts/ai-dlc/wait-for-deliverable.sh <path>
+   [<path> ...]` for a plain deliverable, `scripts/ai-dlc/wait-for-deliverable.sh
+   --complete <path> [<path> ...]` for seat and cross files, and
+   `scripts/ai-dlc/wait-for-deliverable.sh --complete-repair <record>` for a
+   serial-remediator row. The flag is per call and a call mixing the two flags
+   is refused (exit 64), so a mixed set is up to three calls and a set of one
+   kind is one. End this turn on the armed beats and resume this step when
+   every one has returned. A row
    whose deliverable is DELIVERED in that beat is joined normally — apply
    the sub-step snapshot update's handling (`status: delivered-reachable`,
    or delete the row outright), never `stopped`. Only rows still absent
@@ -1209,8 +1229,12 @@ carry the no-human-present additions:
    teammate has returned before proceeding. Record stopped teammates and
    in-flight artifacts in the snapshot's Open Items in Step 3, and set each
    stopped teammate's **In-Flight Teammates** row `status` to `stopped` —
-   rewrite the row, never delete it. `steps/handoff.md` step 1 owns
-   why. Where `ai-dlc-continue.sh` Check 0 is armed it blocks the stop
+   rewrite the row, never delete it. Record the `TaskStop` task id in each
+   stopped row's agent cell. For each stopped row, run
+   `scripts/ai-dlc/join-remediator-shards.sh --agent-writes <task id>` and
+   write its output into the snapshot's Open Items as that agent's
+   unrecorded partial edits, never inferring them from `git status`.
+   `steps/handoff.md` step 1 owns why. Where `ai-dlc-continue.sh` Check 0 is armed it blocks the stop
    while any row still reads `in-flight`, deferring only while a beat's
    `.beat-inflight` lease is live.
 2. `git add` and `git commit` any in-flight work, including work
@@ -1222,6 +1246,11 @@ carry the no-human-present additions:
    (`git push -u origin HEAD`) so the Step 2 commit and the finalized
    state reach the remote and are not stranded on this machine.
    SKILL.md Rule 32 touchpoint I applies before the push.
+   A directed handoff authorises this push; the lead does not ask the operator for a go-ahead again.
+   **Never `--no-verify`**: the pre-push hook runs on every pipeline push, whatever the change
+   set, and `ai-dlc-advisor-gate.sh` denies the flag.
+   For an auto-handoff no operator directed the push: the seven preconditions above authorise
+   it, and there is no operator to ask.
    **`-u origin HEAD`, never a bare `git push`** — a bare push cannot
    succeed on a branch that has never been pushed, which is every
    sprint's FIRST auto-handoff wherever a branch is cut per sprint.
