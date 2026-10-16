@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # serial-remediation-worklist.sh -- the serial remediator's mechanical worklist after a sharded
 # repair is joined: the text each shard REPLACED, grepped over the assembled files, and every
-# cite into a repaired file whose cited line MOVED. The serial remediator adjudicates the list;
-# it no longer derives it (_gate-procedures.md, "Moved cites are the serial remediator's").
+# cite into a repaired file whose cited line MOVED, for the serial remediator to adjudicate rather
+# than derive. NOT YET CALLED: no step file or join invokes this script. _gate-procedures.md's
+# serial-remediator duty ("Moved cites are the serial remediator's") still has the remediator
+# derive both by hand until that step names this script.
 #
 # USAGE
 #   serial-remediation-worklist.sh <repair-dir> [--record <joined record>] [--also <file>]... [--keep]
