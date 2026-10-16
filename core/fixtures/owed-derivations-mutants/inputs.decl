@@ -20,3 +20,4 @@ core/skills/ai-dlc/layer-contract.yaml
 core/hooks/ai-dlc-gate-remediation-guard.sh
 core/skills/ai-dlc/steps/architecture.md
 core/skills/ai-dlc/steps/stories-test-strategy.md
+!core/skills/ai-dlc-update/SKILL.md

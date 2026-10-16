@@ -135,7 +135,7 @@ mutate M11-writer-records-past writer "Sp3a Sp3b Wc Wd Wf" \
   's|^      PAST) printf .*$|      PAST) printf "%s\\n" "$_orow" >> "$TMP/owed.keep" ;;|'
 
 # M12: the classifier reads LIVING as PAST (a prd.md row stops being enforced, and the writer drops it).
-mutate M12-classifier-living-as-past reader "B1b B3a B7a Bt1b Gf Hc1 Hn Sc5 Sc7 Sc8 Sl1 Sl2 Sp4 Wc Wd We Wf Wg" \
+mutate M12-classifier-living-as-past reader "B1b B1f B3a B5d B7a Bt1b Gf Ha3 Ha4 Ha5 Hc1 Hn Hw1 Sc5 Sc7 Sc8 Sl1 Sl2 Sp3a Sp4 Wc Wd We Wf Wg" \
   '  SCOPE_TOKEN=LIVING' \
   's/^  SCOPE_TOKEN=LIVING$/  SCOPE_TOKEN=PAST/'
 
@@ -146,12 +146,12 @@ mutate M13-classifier-substring-segment reader "Sc1 Sp7" \
 
 # M15: HISTORY is checked AFTER the sprint classification instead of first: a history file inside the
 # current sprint (s<current>/archive/) reads CURRENT again, and the writer records it.
-mutate M15-history-checked-after-current reader "Hl3 Hr Hs Hw1 Hw2 Sl4 Wc Wd Wf Wg" \
+mutate M15-history-checked-after-current reader "Ha6 Hl3 Hr Hs Hw1 Hw2 Sl4 Wc Wd Wf Wg" \
   '  if is_history "$p"; then SCOPE_TOKEN=HISTORY; return 0; fi' \
   '/^  if is_history "\$p"; then SCOPE_TOKEN=HISTORY; return 0; fi$/d;s/^  SCOPE_TOKEN=LIVING$/  if is_history "$p"; then SCOPE_TOKEN=HISTORY; return 0; fi; SCOPE_TOKEN=LIVING/'
 
 # M16: the classifier never returns HISTORY.
-mutate M16-classifier-never-history reader "Hl3 Hr Hs Hw1 Hw2 Sl4 Wc Wd Wf Wg" \
+mutate M16-classifier-never-history reader "Ha6 Hl3 Hr Hs Hw1 Hw2 Sl4 Wc Wd Wf Wg" \
   '  if is_history "$p"; then SCOPE_TOKEN=HISTORY; return 0; fi' \
   's/^  if is_history "\$p"; then SCOPE_TOKEN=HISTORY; return 0; fi$/  if false; then SCOPE_TOKEN=HISTORY; return 0; fi/'
 
@@ -167,8 +167,10 @@ mutate M20-older-stem-picked-as-live reader "Hl1 Hl1b Hl2 Hl4 Hl5" \
   '    if [ "$_ts" \> "$LIVE_TS" ]; then LIVE_TS="$_ts"; LIVE_STEM="$_stem"; fi' \
   's/if \[ "\$_ts" \\> "\$LIVE_TS" \]; then/if [ -z "$LIVE_TS" ] || [ "$_ts" \\< "$LIVE_TS" ]; then/'
 
-# M18: the batch classifier resolves and classifies nothing and defaults every path to LIVING.
-mutate M18-batch-defaults-living reader "Bt1b Hc2 Hl1 Hl1b Hl3 Hl4 Hl6 Hl7 Hl8 Hl9 Hs Hw1 Hw2 Sc1 Sc2 Sc3 Sc4 Sc6 Sc9 Sl Sl3 Sl4 Sp3a Sp3b Wc Wd Wf Wg" \
+# M18: the batch classifier resolves and classifies nothing and defaults every path to LIVING. --scope runs
+# through scope_batch too, so every --scope arm moves; the reader's per-row scoping calls classify directly,
+# so Wg (the reader over the writer's over-recorded rows) stays green and is not declared.
+mutate M18-batch-defaults-living reader "Bt1b Ha1 Ha2 Ha6 Hc2 Hl1 Hl1b Hl3 Hl4 Hl6 Hl7 Hl8 Hl9 Hn Hs Hw1 Hw2 Sc1 Sc2 Sc3 Sc4 Sc6 Sc9 Sl Sl3 Sl4 Sp3a Sp3b Wc Wd Wf" \
   '    classify "$_bp"' \
   's/^    classify "\$_bp"$/    SCOPE_TOKEN=LIVING/'
 
@@ -240,7 +242,7 @@ mutate M5-unreadable-treated-as-absent reader "B4d B4e B4f" \
 # M6: the command-equality conjunct of the false-zero guard is removed: a `$ ` line in a derived fence
 # is accepted whatever command it holds. B5c has the file present and the recorded line holding a
 # DIFFERENT `$ ` command that reproduces, so the validator is silent and the row would read closed.
-mutate M6-reader-trusts-any-command-line reader "B5c" \
+mutate M6-reader-trusts-any-command-line reader "B5c Rp3b" \
   'st == 2 && substr(t, 1, 2) == "$ " && substr(t, 3) == want { print NR }' \
   's/ \&\& substr(t, 3) == want//'
 
@@ -280,7 +282,7 @@ pk "Pa2 architecture.md still invokes bmad-check-implementation-readiness" '/bma
 pk "Pa3 stories-test-strategy.md still invokes bmad-check-implementation-readiness" '/bmad-check-implementation-readiness' stories-test-strategy.md
 pk "Pb gate-validation.md carries the owed-derivation check, keyed on any non-zero exit" "Any exit other than 0" gate-validation.md
 pk "Pb2 and its deny text names the REPOINTED remedy" "REPOINTED<TAB>" gate-validation.md
-pk "Pb3 and says exit 2 is refused and unassessed" "the rows are REFUSED and unassessed" gate-validation.md
+pk "Pb3 and says exit 2 is refused and unassessed" "rows are REFUSED and unassessed, never closed" gate-validation.md
 pk "Pb4 and the same-file UNRUN rule" "makes every owed row in it UNASSESSED" gate-validation.md
 pk "Pb5 and the disclosure that past-sprint rows stop blocking" "STOPS BLOCKING" gate-validation.md
 pk "Pb5b and the INFO history class" "INFO history" gate-validation.md
@@ -291,6 +293,7 @@ pk "Pc the sprint-close site carries open rows forward, one item per key" "ONE" 
 pk "Pd retro.md names the reader" "check-owed-derivations.sh" retro.md
 pk "Pf route.md 0a names the REPOINTED remedy" "REPOINTED<TAB>" route.md
 pk "Pg route.md 0a carries the disclosure that past-sprint rows stop blocking" "STOPS BLOCKING" route.md
+printf 'HERMETIC-CONSUMED core/skills/ai-dlc-update/SKILL.md\n'
 pk "Ph the update SKILL.md names the REPOINTED remedy" "REPOINTED<TAB>" "../../ai-dlc-update/SKILL.md"
 if grep -qF -- "carries only a pointer line" "$STEPS/route.md"; then bad "Pi route.md still claims a snapshot pointer line exists"; else ok "Pi route.md claims no snapshot pointer line"; fi
 if grep -qF -- "REPOINTED<TAB>" "$ROOT/core/skills/ai-dlc-update/reconcile/apply.sh"; then ok "Pj apply.sh row text names the REPOINTED remedy"; else bad "Pj apply.sh row text lacks the REPOINTED remedy"; fi
