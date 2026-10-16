@@ -1441,6 +1441,25 @@ else bad "exit-list: the beat can exit with$missing, which rule-29's exit list d
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$R29")" && pwd)/$(basename "$R29")"
 }
 
+# --- 23. the line the repair brief copies from is a line the beat EMITS ---
+# `_gate-procedures.md` tells the lead to copy every `REVISED-AFTER-MARKER <n> <path> --` line the
+# `--complete --status` call prints into the remediator brief as `revised-seats:`. A rename of the
+# token in the subject would leave the prose naming a line nothing prints. Bound to the EMISSION
+# site (an `echo` of the token), not to a comment that mentions it. Self-probe first, both ways.
+emits_revised() {  # $1 = a shell script -> 0 when an uncommented echo prints the token
+  awk '/^[[:space:]]*#/ { next } /echo "REVISED-AFTER-MARKER \$\{[a-z_]+\} / { hit = 1 } END { exit !hit }' "$1"
+}
+C47_revised_token_emitted() {
+P="$(mktemp -d)"
+printf '#!/bin/bash\n# echo "REVISED-AFTER-MARKER ${n_} x"\ntrue\n' > "$P/comment.sh"
+printf '#!/bin/bash\necho "REVISED-AFTER-MARKER ${n_} $1 -- changed"\n' > "$P/emit.sh"
+if emits_revised "$P/emit.sh" && ! emits_revised "$P/comment.sh"; then ok "revised-token self-probe: an echo of the token matches, a commented mention does not"
+else bad "revised-token self-probe: the emission grammar cannot tell an echo from a comment — it cannot be trusted on the real script"; fi
+rm -rf "$P"
+if emits_revised "$SUBJ"; then ok "revised-token: the beat echoes REVISED-AFTER-MARKER <n> <path> -- , the line the repair brief's revised-seats: is copied from"
+else bad "revised-token: the beat no longer echoes REVISED-AFTER-MARKER <n> — _gate-procedures.md still tells the lead to copy that line"; fi
+}
+
 # --- 21. this fixture's verdict may not depend on the cwd it was launched from ---
 # The suite runs `bash core/fixtures/<name>/run.sh` FROM THE REPO ROOT, so every
 # case above has only ever been observed at one cwd. That cuts both ways in this

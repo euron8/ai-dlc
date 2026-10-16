@@ -82,6 +82,10 @@ source; do not infer either value from anywhere else.
    it. Rule 20: the file IS the deliverable.
 4. **Return `{artifact_path, repair_record_path, repaired, escalated}`** — counts, not prose.
 
+   **A brief that carries `revised-seats: <path>…`** names seat files that changed after their
+   `seat-complete:` line was first seen. Re-read each named seat's findings from the file on disk
+   before you repair from it, and never from a summary the brief or an earlier turn gave you.
+
 ## The evidence contract — assert nothing you did not run
 
 **Every factual claim about the code that you write into the artifact carries the command

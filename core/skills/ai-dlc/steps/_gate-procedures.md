@@ -274,7 +274,10 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    — its deliverable, named below — and every finding in it opens a `##` heading whose first
    token is the finding's id (`## F-1 (major) sections: 2`), carrying one `sections:` line
    citing the map ordinals it rests on. Ids collide across seats, so a finding is named by its
-   file and its id together.
+   file and its id together. That `##` form is the SEAT grammar only: an adversary or
+   elicitation shard writes each finding as a `### ` heading inside `## Findings` with an
+   UPPERCASE severity word (FINDING GRAMMAR, `merge-adversarial-shards.sh`'s header), and the
+   merge refuses a shard whose finding opens with `## `.
 
    **Every seat writes its file early and closes it with a completion line.** Its brief tells
    it to Write the file's header first, append each finding as soon as it is verified, and,
@@ -314,7 +317,12 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    `join-remediator-shards.sh --document <doc> <that dir>`. The requirements subject case is
    below. A finding citing two or more parts goes to the serial remediator after the join, and
    the lead then runs `scripts/ai-dlc/join-remediator-shards.sh --sources <the joined record> --sprint <N>`
-   over the record with its appended entries. The cross seats reviewed the bytes from before
+   over the record with its appended entries. The remediator brief also carries `revised-seats:`:
+   after the round's join the lead runs `scripts/ai-dlc/wait-for-deliverable.sh --complete --status
+   --since <the round epoch> --dispatch <agentId>… <the seat paths>` (one `--dispatch` per agent the
+   round joined) and copies the path of every `REVISED-AFTER-MARKER <n> <path> --` line it prints
+   into the brief as `revised-seats: <path>…`; the remediator re-reads those seats' findings from
+   disk, never from an earlier summary. The cross seats reviewed the bytes from before
    the part repairs, so before it applies any cross finding the serial remediator runs
    `scripts/ai-dlc/validate-artifact-derivations.sh` on the cross files, from the project root
    against the assembled document, and re-derives every finding that reports STALE before
@@ -356,7 +364,11 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    wall clock tracks the tokens a cross agent writes, not the bytes it reads, so the whole read
    costs little and the focus is what shortens it. Each cross finding has one owner,
    `partition-document.sh --cross-owner`; the merge refuses a finding reported outside its owner
-   only when the owner's shard carries the identical cited set, and accepts any other.
+   only when the owner's shard carries the identical cited set, and accepts any other. The cross
+   agent's brief therefore tells it to run `scripts/ai-dlc/partition-document.sh --cross-owner <K>
+   <its cited ordinals>` before it records a cross finding, and, when the printed group is not its
+   own, to record the finding only if the owner's focus pairs would not surface it and otherwise
+   to name it under `## Cross-references`, which is not a finding.
    **When the subject is the requirements subject** (`steps/requirements.md` section 5: the
    brief, `SPEC.md`, `prd.md` and `architecture-impact.md` under one base), the round is
    sharded (Rule 28, "Split dispatch": seats x subject-parts axis) over the parts
@@ -430,7 +442,9 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    `_bmad-output/planning-artifacts/s<N>/shards/<artifact>-elicitation/<ordinal>.md` (a cross
    shard: `cross-<g>.md`, or `cross.md` when there is one group) with
    `skill: bmad-advanced-elicitation`, the `artifact:` and `artifact_sha:` an adversarial shard on
-   its axis notarizes, and no `verdict:` line. Beat-join every shard path with
+   its axis notarizes, and no `verdict:` line. Each finding in it is a `### ` heading inside
+   `## Findings` with an UPPERCASE severity word (FINDING GRAMMAR, `merge-adversarial-shards.sh`'s
+   header), not item 1's `##` seat form. Beat-join every shard path with
    `--complete`. No merge reads that directory (`merge-adversarial-shards.sh --elicitation` merges
    only the requirements subject), so the shard records ARE the elicitation record, and the
    elicitation repair reads them shard by shard, dispatched on the same axis by "Adversarial
@@ -458,7 +472,9 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    `_bmad-output/planning-artifacts/s<N>/requirements-elicitation.md` with no verdict. The
    elicitation repair is dispatched as the party repair is, with `--pass elicitation`, the shard
    dir `s<N>/shards/requirements-elicitation-repair/`, and the merged record's per-stem
-   `artifact_sha` values as the expected bytes; its joined record is
+   `artifact_sha` values as the expected bytes; its brief carries `revised-seats:` as item 1's
+   "One repair writer applies them" states, read from the same `--complete --status` call over the
+   shard paths; its joined record is
    `_bmad-output/planning-artifacts/s<N>/requirements-elicitation-repair.md`.
    Every elicitation shard notarizes exactly what an adversarial subject shard does ("Shard the
    requirements subject" below): `artifact:` = the subject manifest
@@ -544,7 +560,7 @@ again. Every adversary brief, sharded or not, also carries the early-write instr
 "Validation cycle" item 1: header first, each finding appended as verified, and ONE final
 write once it has finished, never with the header: `seat-complete: <step> adversary <shard>
 findings=<n>`, `<shard>` being the brief's `shard:` value (`none` when it carries none) and
-`<n>` its `### ` findings. On every axis, once ANY shard in the directory carries a
+`<n>` its `### ` findings, each a `### ` heading inside `## Findings` with an UPPERCASE severity word (FINDING GRAMMAR in `merge-adversarial-shards.sh`'s header; item 1's `##` seat example does not apply to a shard). On every axis, once ANY shard in the directory carries a
 `seat-complete:` line anywhere, the merge refuses every shard in it that does not end in
 exactly one, or whose `findings=<n>` differs from the findings it parses there. Its limit: a directory where no shard carries the marker merges
 unchecked, exactly as before. That is a directory written before this instruction, and also a
