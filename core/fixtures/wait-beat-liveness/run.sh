@@ -1364,8 +1364,8 @@ M34_status_no_delivered_record() {
     *) ok "MUTANT status-no-delivered-record: without the record a consumed seat reads unarmed or UNSETTLED — section 15d catches it" ;; esac
 }
 
-# The REVISED-AFTER-MARKER count must outlive DELIVERED: the printed line goes through `say`, which
-# --quiet silences, so `<key>.revised` is the record a repair brief reads. Only --reset clears it.
+# The REVISED-AFTER-MARKER count must outlive DELIVERED: a beat's printed line is read once and
+# gone, so `<key>.revised` is the record a repair brief reads. Only --reset (or a new round) clears it.
 revised_survives() {  # $1 = subject -> RS_BEAT, RS_AFTER, RS_RESET
   W="$(mk_work)"; SI=$(( $(date +%s) - 30 ))
   printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W/rv.md"
@@ -1381,9 +1381,11 @@ revised_survives() {  # $1 = subject -> RS_BEAT, RS_AFTER, RS_RESET
 }
 S16b_revised_survives_delivery() {
   revised_survives "$SUBJ"
-  if [ -z "$RS_BEAT" ] && [ "$RS_AFTER" != ABSENT ]; then
-    ok "revised-survives: CONTROL — under --quiet the beat printed nothing, so the sidecar is the only record"
-  else bad "revised-survives: --quiet still printed, or no sidecar was left to read (beat: '$RS_BEAT', sidecar: $RS_AFTER)"; fi
+  # The REVISED line is echoed, not `say`d, so --quiet cannot hide it -- and a beat's stdout is
+  # still read once and gone, which is why the sidecar must outlive delivery as the record.
+  case "$RS_BEAT" in *"REVISED-AFTER-MARKER 1 rv.md"*)
+    ok "revised-survives: CONTROL — the beat saw rv.md revised and reported it, even under --quiet" ;;
+    *) bad "revised-survives: CONTROL FAILED — the beat did not report rv.md revised, so there is no count to keep: '$RS_BEAT'" ;; esac
   case "$RS_AFTER" in ''|*[!0-9]*) bad "revised-survives: after DELIVERED .revised is '$RS_AFTER', not a count" ;;
     *) if [ "$RS_AFTER" -ge 1 ]; then ok "revised-survives: after DELIVERED .revised still holds $RS_AFTER"
        else bad "revised-survives: after DELIVERED .revised holds 0"; fi ;; esac

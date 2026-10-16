@@ -618,8 +618,9 @@ settle_record() {  # $1 = sidecar -> prints `<hash> <epoch>`; 1 when there is no
 # two-field `.settle` on a consumer's disk parse `<hash> <epoch>`, and a marker loss deletes
 # `.settle` -- which is itself a revision and must not take the count with it. Two concurrent
 # beats over one file may each count the same change; the count can read high, never zero.
-# IT SURVIVES DELIVERY: the printed line goes through `say`, which --quiet silences, so the
-# sidecar is the record a repair brief reads, through --status. It is cleared by --reset, a bound
+# IT SURVIVES DELIVERY: the printed line is echoed (--quiet cannot hide it) but a beat's output is
+# read once and gone, so the sidecar is the record a repair brief reads, through --status. It is
+# cleared by --reset, a bound
 # wipe, or a beat armed with a join epoch later than its last write (a new round; see
 # "ROUND-SCOPED RECORDS").
 revised_bump() {  # $1 = the .settle sidecar path; bumps its sibling .revised
