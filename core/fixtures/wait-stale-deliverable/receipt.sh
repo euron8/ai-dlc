@@ -20,6 +20,8 @@
 #           lines is UNSETTLED, a finding after the marker is UNFINISHED, an absent path WAITING.
 #   BL-548  a seat file edited after its marker was seen delivers with REVISED-AFTER-MARKER 1; an
 #           untouched one prints none.
+#   BL-599  --dispatch <agentId> resolves through meta.json to the ledger ts; a --since 27 s after
+#           it is refused, the dispatch's own time delivers a write made between the two.
 #
 # Every concurrent beat starts in its own parent shell (`own`): two beats sharing a $PPID take the
 # subject's chained-sibling return and neither sleeps nor leases, which is not the case measured.
@@ -135,11 +137,30 @@ r548() {
     && ! grep -q 'REVISED-AFTER-MARKER [0-9]* ok.md' o.txt
 }
 
+# A forward-dated --since is refused against the dispatch it names; the dispatch's own time is the
+# control, and a write between the two is DELIVERED when the join starts at the dispatch.
+r599() {
+  local d e tdir
+  d="$(world)"; cd "$d" || exit 9; e=$(( $(date +%s) - 90 ))
+  printf '{"v":1,"ts":"%s","name":"remediator","role":"remediator","tool_use_id":"toolu_R599"}\n' \
+    "$(date -u -r "$e" +%Y-%m-%dT%H:%M:%SZ)" > _bmad-output/spawn-ledger.jsonl
+  tdir="$d/sub"; mkdir -p "$tdir"
+  printf '{"agentType":"remediator","toolUseId":"toolu_R599"}' > "$tdir/agent-a599.meta.json"
+  printf 'x\n' > r.md; touch -t "$(date -r $(( e + 5 )) +%Y%m%d%H%M.%S)" r.md
+  env AI_DLC_TEAMMATE_DIR="$tdir" bash "$SUBJ" --status --dispatch a599 --since $(( e + 27 )) r.md > f.txt 2>&1
+  [ $? -eq 64 ] && grep -q '27 s after' f.txt || return 1
+  env AI_DLC_TEAMMATE_DIR="$tdir" bash "$SUBJ" --status --dispatch a599 --since "$e" r.md > c.txt 2>&1 || return 1
+  grep -q '^DELIVERED r.md' c.txt || return 1
+  env AI_DLC_TEAMMATE_DIR="$tdir" bash "$SUBJ" --status --dispatch a599 r.md > n.txt 2>&1 || return 1
+  grep -q '^DELIVERED r.md' n.txt
+}
+
 case "$ID" in
+  BL-599) r599 ;;
   BL-549) r549 ;;
   BL-566) r566 ;;
   BL-541) r541 ;;
   BL-547) r547 ;;
   BL-548) r548 ;;
-  *) echo "receipt: unknown id '$ID' (BL-549 BL-566 BL-541 BL-547 BL-548)" >&2; exit 9 ;;
+  *) echo "receipt: unknown id '$ID' (BL-549 BL-566 BL-541 BL-547 BL-548 BL-599)" >&2; exit 9 ;;
 esac

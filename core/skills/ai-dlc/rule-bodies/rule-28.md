@@ -173,6 +173,10 @@ site that fans out cites this paragraph and does not restate it.
 wave spawns, the lead records the round's start as an epoch in the
 snapshot's Open Items -- one line, `fan-out round <subject> since
 <epoch>` -- and passes `--since <epoch>` on every beat of the round.
+Every beat that passes `--since` also passes `--dispatch <agentId>` for
+each agent it joins, the `agentId` (or a named teammate's `agent_id`) its
+Agent result returned: the beat reads that dispatch's time from the spawn
+ledger and refuses a `--since` later than it.
 That line stays through every Open Items refresh until the round's join
 has completed, and is deleted then. The In-Flight Teammates row cannot
 carry it: a row is deleted when its deliverable is consumed, so it is
