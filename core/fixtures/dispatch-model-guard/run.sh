@@ -1584,6 +1584,47 @@ pa_mut noparent 's/--arg parent "\${DG_AGENT_ID:-}"/--arg parent ""/' \
 # 16c: the lead is written as null, which is how a row from an older guard would read.
 pa_mut leadnull 's/^     parent_agent_id: \$parent,$/     parent_agent_id: (if $parent == "" then null else $parent end),/' \
   "1|none|\"$PA_ID\" 1|none|null" "a null lead value is indistinguishable from a row that never asked"
+# 16d/16e A ROLE-LESS spawn: `subagent_type: Explore` (the role pattern rejects a capital) and one
+# carrying no `subagent_type`. From inside a teammate each is RECORDED with `role: ""` and its
+# issuer; from the lead neither writes a row, which is the state the role-less arm above asserts.
+# rl_cell <guard> <json> -> "<rows>|<decision>|<role>|<parent>" on an empty ledger.
+rl_cell() {
+  local out n r
+  rm -f "$LEDGER"
+  out="$(printf '%s' "$2" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" 2>/dev/null \
+    | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null)"
+  n="$(wc -l < "$LEDGER" 2>/dev/null | tr -d ' ')"
+  r="$(tail -1 "$LEDGER" 2>/dev/null | jq -r '"\(.role | tojson)|\(.parent_agent_id | tojson)"' 2>/dev/null)"
+  printf '%s|%s|%s' "${n:-0}" "${out:-none}" "${r:-NOROW}"
+}
+RL_EXL="$(printf '%s' "$PA_LEAD" | jq -c '.tool_input.subagent_type = "Explore"')"
+RL_EXM="$(printf '%s' "$RL_EXL" | jq -c --arg a "$PA_ID" '.agent_id = $a')"
+RL_NTM="$(printf '%s' "$PA_MATE" | jq -c 'del(.tool_input.subagent_type)')"
+rl_vec() { printf '%s %s %s' "$(rl_cell "$1" "$RL_EXM")" "$(rl_cell "$1" "$RL_NTM")" "$(rl_cell "$1" "$RL_EXL")"; }
+RL_WANT="1|none|\"\"|\"$PA_ID\" 1|none|\"\"|\"$PA_ID\" 0|none|NOROW"
+RL_GOT="$(rl_vec "$HOOK")"
+case "$RL_GOT" in "1|none|\"\"|\"$PA_ID\" 1|none|\"\"|\"$PA_ID\" "*)
+  ok "16d a teammate's Explore and type-less spawns are each recorded, role \"\", issuer named, no decision" ;;
+  *) bad "16d role-less teammate spawns produced '$RL_GOT', expected the first two cells of '$RL_WANT'" ;; esac
+[ "${RL_GOT##* }" = "0|none|NOROW" ] && ok "16e the lead's Explore spawn writes no row and gets no decision" \
+  || bad "16e the lead's Explore spawn produced '${RL_GOT##* }', expected '0|none|NOROW'"
+# rl_mut <tag> <sed-expr> <expected-vector> <label>
+rl_mut() {
+  local m="$WORK/guard-rl-$1.sh" got
+  sed "$2" "$HOOK" > "$m"
+  if cmp -s "$HOOK" "$m"; then bad "RL MUTANT $1 matched nothing (cmp -s guard)"; return; fi
+  bash -n "$m" 2>/dev/null || { bad "RL MUTANT $1 does not parse"; return; }
+  got="$(rl_vec "$m")"
+  if [ "$got" = "$3" ]; then ok "RL MUTANT $1 killed: $4"
+  else bad "RL MUTANT $1 scored '$got', expected '$3' ($4)"; fi
+}
+# 16d: the pre-fix exit -- every role-less dispatch leaves, the teammate's too.
+rl_mut roleexit "s/^  \[ -n \"\$(printf '%s' \"\$INPUT\" | jq -r '.agent_id \/\/ empty' 2>\/dev\/null || true)\" \] || exit 0$/  exit 0/" \
+  "0|none|NOROW 0|none|NOROW 0|none|NOROW" "exiting on an empty role drops a teammate's role-less spawn"
+# 16e: the issuer test gone -- the lead's role-less dispatch is recorded too.
+rl_mut leadrow "s/^  \[ -n \"\$(printf '%s' \"\$INPUT\" | jq -r '.agent_id \/\/ empty' 2>\/dev\/null || true)\" \] || exit 0$/  :/" \
+  "1|none|\"\"|\"$PA_ID\" 1|none|\"\"|\"$PA_ID\" 1|none|\"\"|\"\"" "recording every role-less dispatch writes rows for the lead's utility agents"
+[ "$RL_GOT" = "$RL_WANT" ] || bad "16d/e FIXTURE BROKEN: unmutated vector '$RL_GOT' is not '$RL_WANT'"
 [ "$PA_GOT" = "$PA_WANT" ] || bad "16 FIXTURE BROKEN: the unmutated vector '$PA_GOT' is not '$PA_WANT', so every PA mutant above was scored against the wrong baseline"
 
 echo
