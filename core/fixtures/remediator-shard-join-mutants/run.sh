@@ -722,6 +722,41 @@ mutant "JX85 a refused parts join prints the escalation report" "partsilent" \
   '[ "$refuse_n" -eq 0 ] || { printf '"'"'%s'"'"' "$ESC_LINES"; echo "ESCALATED-COUNT: ${ESC_N}"; exit 2; }
 
 # --- document mode'
+# ---- the SPEC render arm (BL-546/560). SELF-PROBE CONVENTION: a mutant the spec_render_probe sees dies
+# `die`-ing in every join, so every predicate would fail and the kill would be the probe's, not the
+# arm's. Following JX19/JX36/JX37, such a mutant (JX73, JX75) is mutant2 with the probe removed, so the
+# named arm owns the property on its own; JX74 and JX76 sit below the probe and need no pairing.
+SPROBE_OLD='spec_render_probe() {'
+SPROBE_NEW='spec_render_probe() { return 0; }
+spec_render_probe_disabled() {'
+# JX73: the Render key loses its phrase test, so a hand edit's unphrased Render reads as a render and
+# the decision after it is refused. Only spechand holds an unphrased Render.
+mutant2 "JX73 an unphrased Render line counted as a render, self-probe removed" "spechand" \
+  '(event([[:space:]][^)]*)?\)[[:space:]]+Render/ && index($0, ph) {' \
+  '(event([[:space:]][^)]*)?\)[[:space:]]+Render/ {' \
+  "$SPROBE_OLD" "$SPROBE_NEW"
+# JX74: the no-render SKIP refuses. Only the unphrased-Render world reaches that branch with a memlog
+# (specnone and spectwo take the empty-memlog branch above it, which this leaves alone).
+mutant "JX74 a memlog with no phrased Render refused instead of skipped" "spechand" \
+  '    SPEC_LINE="SPEC-RENDER: SKIP -- ${m} carries no' \
+  '    refuse "SKIP -- ${m} carries no'
+# JX75: the order test inverted -- decisions BEFORE the render are counted and a render no longer resets
+# them. stale reports 2 at line 1, fresh is refused outright; a non-empty-set pair, one per direction.
+mutant2 "JX75 the order test inverted (decisions before the render counted), self-probe removed" "specstale specfresh" \
+  '{ r = NR; n = 0; f = 0; next }' \
+  '{ r = NR; next }' \
+  '/^[[:space:]]*[-*][[:space:]]*\(decision([[:space:]][^)]*)?\)/ { if (r) {' \
+  '/^[[:space:]]*[-*][[:space:]]*\(decision([[:space:]][^)]*)?\)/ { if (!r) {'
+# JX76: record_tail runs the render check and then discards its refusal, so a stale memlog exits 0.
+# Only specstale expects a refusal from a clean record; the SPEC-RENDER line is still printed for the rest.
+mutant "JX76 the record_tail SPEC render refusal discarded" "specstale" \
+  '  spec_render_check "$SPEC_MEMLOG" "$SPEC_WHY"' \
+  '  spec_render_check "$SPEC_MEMLOG" "$SPEC_WHY"; refuse_n=0'
+# JX77: the empty-memlog SKIP (no memlog, or several) refuses instead. specnone and spectwo reach that
+# branch; spechand has a memlog and takes the no-render branch JX74 owns.
+mutant "JX77 an absent or ambiguous spec memlog refused instead of skipped" "specnone spectwo" \
+  '  if [ -z "$m" ]; then SPEC_LINE="SPEC-RENDER: SKIP -- $2"; return 0; fi' \
+  '  if [ -z "$m" ]; then refuse "SKIP -- $2"; return 0; fi'
 # ---- END JX MUTANTS.
 
 # ------------------------------------------------------------------------------ the reap

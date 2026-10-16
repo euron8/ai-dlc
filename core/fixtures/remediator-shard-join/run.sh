@@ -269,6 +269,16 @@ p_chkjoined "$JOIN" && ok "EC31: --escalations over a joined record -- an unrepa
   || bad "EC31: the check fields were not judged per shard segment (rc=$RC): $(cat "$JO")"
 p_partsilent "$JOIN" && ok "EC32: a REFUSED parts join prints no ESCALATED: line and no count -- nothing was joined (record mode prints through a refusal; parts mode by design does not)" \
   || bad "EC32: a refused parts join printed an escalation report, or did not refuse (rc=$RC): $(cat "$JO")"
+p_specstale "$JOIN" && ok "SP1: --escalations, a spec memlog with a decision AFTER its last phrased Render -> rc 2, REFUSED naming the memlog and '1 (decision) entry(ies) after the last render'" \
+  || bad "SP1: a decision after the last re-derived render was not refused (rc=$RC): $(cat "$JO")"
+p_specfresh "$JOIN" && ok "SP2: the same memlog with its last decision before the phrased Render -> rc 0, 'rendered through its last decision', ESCALATED-COUNT still printed" \
+  || bad "SP2: a rendered-through memlog was refused or its line was not printed (rc=$RC): $(cat "$JO")"
+p_spechand "$JOIN" && ok "SP3: an unphrased '(event) Render' (a hand edit's disclosure) then a decision -> rc 0, SPEC-RENDER: SKIP, never read as rendered" \
+  || bad "SP3: an unphrased Render line was read as a render (rc=$RC): $(cat "$JO")"
+p_specnone "$JOIN" && ok "SP4: no specs directory in the world -> rc 0, SPEC-RENDER: SKIP naming the absent memlog glob" \
+  || bad "SP4: an absent spec memlog was refused or not skipped visibly (rc=$RC): $(cat "$JO")"
+p_spectwo "$JOIN" && ok "SP5: two memlogs under specs/s305/, one stale -> rc 0, SPEC-RENDER: SKIP naming 2 memlogs (the kernel is exactly one)" \
+  || bad "SP5: two spec memlogs were not skipped as ambiguous (rc=$RC): $(cat "$JO")"
 p_setasideshard "$JOIN" && ok "EC10: a repaired MAJOR set aside only as 'outside this shard' -> REFUSED (the regex's first half)" \
   || bad "EC10: an 'outside this shard' set-aside was not refused (rc=$RC): $(cat "$JO")"
 p_setasidenr "$JOIN" && ok "EC11: a repaired MAJOR set aside only as 'not required' -> REFUSED (the regex's second half)" \

@@ -1187,7 +1187,54 @@ p_altool() { # the one tool_use holding the id is a Read, not an Edit, Write or 
   refused "$w" "$AL_REF (tool_use_id toolu_ORPH;" && has "$JO" "the id is held by $w/projects/sess-1/subagents/agent-$AG1.jsonl (1 block(s)))"
 }
 
-P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrargs rrfiles rrsubj alias alnokeys alresult alown alsecond alother alsess altwo altool dispkey dispvocab dispruling srcparts gapfill chkpart chkrec rulingedit rulingtab chkjoined partsilent"
+# ---- THE SPEC RENDER ARM (BL-546/560): --escalations --sprint 305 over a clean record, in a world whose
+# `_bmad-output/specs/s305/<dir>/.memlog.md` is seeded in the shape memlog.py emits: `- (decision) <text>`,
+# `- (decision by pm) <text>`, `- (event) <text>`. The discriminating decision is never the first line, and
+# stale has TWO decisions before the render and ONE after, so an order test run backwards counts 2 and
+# the REFUSED line's `1 (decision) entry(ies)` text separates it from the real one.
+SPEC_REC='<!-- shard: 01.md -->\n### F-1 — MAJOR\n- disposition: escalated\n- edit: _bmad-output/planning-artifacts/s305/stories/b.md:4\n\n### serial F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n- closes: 01.md F-1 — MAJOR\n'
+spec_world() { # <join> <memlog body, printf %b> [<second memlog body>] -> RC, $JO, $SW (the world); no memlog dir when the body is "-"
+  local w; w="$(mktemp -d "$WORK/spec.XXXXXX")" && mkdir -p "$w/.claude" || return 1
+  printf '%b' "$SPEC_REC" > "$w/stories-repair-p1.md"
+  if [ "$2" != "-" ]; then
+    mkdir -p "$w/_bmad-output/specs/s305/x" || return 1
+    printf '%b' "$2" > "$w/_bmad-output/specs/s305/x/.memlog.md"
+  fi
+  if [ -n "${3:-}" ]; then
+    mkdir -p "$w/_bmad-output/specs/s305/y" || return 1
+    printf '%b' "$3" > "$w/_bmad-output/specs/s305/y/.memlog.md"
+  fi
+  SW="$w"
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --escalations "$w/stories-repair-p1.md" --sprint 305 > "$JO" 2>&1; RC=$?
+}
+SPEC_PH='re-derived from memlog through'
+p_specstale() { # decision, decision, phrased Render, decision -> rc 2, the memlog and ONE entry after the render named
+  spec_world "$1" "- (decision) a\n- (decision by pm) b\n- (event) Render p1: $SPEC_PH b\n- (decision) c\n" || return 1
+  [ "$RC" -eq 2 ] && has "$JO" "REFUSED: $SW/_bmad-output/specs/s305/x/.memlog.md:4: 1 (decision) entry(ies) after the last render (line 3)" \
+    && ! has "$JO" "rendered through its last decision"
+}
+p_specfresh() { # the ALLOW twin: the same memlog without the trailing decision -> rc 0, rendered through, the count line still there
+  spec_world "$1" "- (decision) a\n- (decision by pm) b\n- (event) Render p1: $SPEC_PH b\n" || return 1
+  [ "$RC" -eq 0 ] && has "$JO" "SPEC-RENDER: $SW/_bmad-output/specs/s305/x/.memlog.md -- rendered through its last decision (line 3)" \
+    && has "$JO" "ESCALATED-COUNT: 0 (1 closed" && ! has "$JO" "REFUSED"
+}
+p_spechand() { # an unphrased Render (a hand edit's disclosure), then a decision -> rc 0, SKIP, never read as rendered
+  spec_world "$1" "- (event) Render (fold): ran no renderer; applied to SPEC.md by hand\n- (decision) a\n- (decision by pm) b\n" || return 1
+  [ "$RC" -eq 0 ] && has "$JO" "SPEC-RENDER: SKIP -- $SW/_bmad-output/specs/s305/x/.memlog.md carries no" \
+    && ! has "$JO" "rendered through" && ! has "$JO" "REFUSED" && has "$JO" "ESCALATED-COUNT: 0 (1 closed"
+}
+p_specnone() { # no specs dir at all -> rc 0, SKIP naming the absent glob
+  spec_world "$1" "-" || return 1
+  [ "$RC" -eq 0 ] && has "$JO" "SPEC-RENDER: SKIP -- no $SW/_bmad-output/specs/s305/*/.memlog.md" \
+    && ! has "$JO" "rendered through" && ! has "$JO" "REFUSED" && has "$JO" "ESCALATED-COUNT: 0 (1 closed"
+}
+p_spectwo() { # two memlogs under specs/s305/, the first one stale -> rc 0, SKIP naming 2 memlogs (the kernel is exactly one)
+  spec_world "$1" "- (decision) a\n- (event) Render p1: $SPEC_PH a\n- (decision) b\n" "- (decision) a\n" || return 1
+  [ "$RC" -eq 0 ] && has "$JO" "SPEC-RENDER: SKIP -- 2 memlogs under $SW/_bmad-output/specs/s305/" \
+    && ! has "$JO" "rendered through" && ! has "$JO" "REFUSED" && has "$JO" "ESCALATED-COUNT: 0 (1 closed"
+}
+
+P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrargs rrfiles rrsubj alias alnokeys alresult alown alsecond alother alsess altwo altool dispkey dispvocab dispruling srcparts gapfill chkpart chkrec rulingedit rulingtab chkjoined partsilent disjointoverlap specstale specfresh spechand specnone spectwo"
 
 # ---- A PART'S DERIVATION SURVIVES THE JOIN. The part's ```derived fence is copied into the joined
 # record, and the gate re-runs `validate-artifact-derivations.sh` over the sprint dir AFTER the
