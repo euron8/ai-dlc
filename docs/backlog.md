@@ -636,3 +636,23 @@ verify: manual
 Deferred to next batch (late-filing rule, lead ai-dlc-9c, batch 235).
 
 verify: manual
+
+## BL-599 — a FORWARD-dated `--since` is not covered by the BACKDATED arm, and the beat never compares `--since` to the row
+
+**DEFECT.** Carried from a BL-564 addendum that missed BL-564's close: b235-docs (4abbd6c3) archived BL-564 as landed in v0.792.0 with its `--since` half "CLOSED by operator ruling (batch 235, 2026-10-16) as covered by the BACKDATED arm: a back-dated `--since` follows from a back-dated row, which that arm refuses." That reasoning covers back-dating only. Filed by peer session ai-dlc-68 from graph s319 lead `949015a6` (Sonnet 5.5): the serial remediator was dispatched at 05:00:03Z on 2026-10-16, and at 05:00:04Z the lead armed `wait-for-deliverable.sh --since 2026-10-16T05:00:30Z …/s319/requirements-repair-p1.md`, 27s AFTER the dispatch, so any write in the remediator's first 27s was invisible to the beat. At 05:10:02Z it re-armed with `--since 2026-10-16T05:01:30Z` and called that "`--since` set to the dispatch time", false by 87s. The row can be stamped correctly while `--since` is still hand-typed later than it, so the BACKDATED arm (which judges the row) cannot see it. At 4abbd6c3 `core/scripts/wait-for-deliverable.sh` mentions `dispatched-at` once and `BACKDATED` 0 times, against 7 for `--since`: the beat takes `--since` as typed. Back-dating accepts files older than the teammate; forward-dating misses the teammate's own early writes.
+
+This does not reopen the operator's close of the back-dated half; it files the direction that close did not address. Owed: `--since` derived from the in-flight row's `dispatched-at` (or refused when later than it). Probe: a `--since` later than the row is refused, with `--since` equal to the row as the control.
+
+Deferred to next batch (late-filing rule, lead ai-dlc-9c, batch 235).
+
+verify: manual
+
+## BL-600 — the lead hand-rolls file times with `stat -f %Sm -t %FT%TZ`, which prints LOCAL time with a literal `Z`
+
+**DEFECT.** Carried from a BL-528 addendum that missed BL-528's close: b235-docs (4abbd6c3) archived BL-528 as landed in v0.792.0, whose write-time stamp check judges lines ADDED to `pipeline-snapshot.md` (FUTURE, MALFORMED, BACKDATED). That check does not reach a time the lead derives in its own reasoning. Filed by peer session ai-dlc-68 from graph s319 lead `949015a6` (Sonnet 5.5): at 05:10:12Z on 2026-10-16 the lead ran `stat -f '%Sm' -t %FT%TZ <record>`, which prints local time followed by a literal `Z`. The box is EDT; the record's mtime was 2026-10-16T00:59:42 local (04:59:42Z), and the lead wrote "last modified at 00:59Z", four hours wrong and reading as authoritative. Its conclusion held only because 04:59Z preceded the 05:00:03Z dispatch. No shipped script or hook formats a file time this way (`%Sm` 0 hits in `core/scripts` and `core/hooks` at 4abbd6c3; control: `stat -f` 2 hits, both epoch `%m`/`%z:%m`), so the time is the lead's own hand-roll.
+
+Owed: any shipped helper that reports a file time emits it under `TZ=UTC` (or `date -u -r <epoch>`), and the step text that asks the lead whether a record changed since a dispatch names that helper instead of leaving the format to the lead. Probe: the helper's output for a file with a known epoch equals `date -u -r <epoch> +%FT%TZ` under a non-UTC `TZ`, with `TZ=UTC` as the control.
+
+Deferred to next batch (late-filing rule, lead ai-dlc-9c, batch 235).
+
+verify: manual
