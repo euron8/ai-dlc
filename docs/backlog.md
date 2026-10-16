@@ -743,3 +743,30 @@ verify: manual
 Owed: a headroom arm in `validator-fork-budget` that FAILS when the STABLE reading + 2 > FORK_BUDGET, naming the remedy (re-measure and raise by the HIGH reading plus 6, per the file's own rule), so erosion reports while margin remains. It needs its own mutant (the arm with the +2 dropped must miss a seeded reading at budget - 1) and its FP set measured over the budget history in that file's paragraphs. Scope: a small later release.
 
 verify: manual
+
+## BL-609 — a pre-gate listing of the fixtures a builder's diff selects, so a red caught only by executing a fixture is foreseen before the slot request
+
+**DEFECT (efficiency).** Filed by peer session ai-dlc-4e [9b62de] on lead ai-dlc-9c's instruction; assigned to ai-dlc-4e [9b62de], to build after BL-585 (which gates first, by 9c's ruling).
+
+Premise, measured from H-a (0.797.0): the red capture `.git/ai-dlc-fixture-failures.20261016T094322Z.82523` (intake confirmed it exists) records `gate-resume: 1 of 63 assertion(s) FAILED`, the line being `BL-457 mutant (e) … expected [… WC=1 …], got [… WC=0 …]`. Per the filer that red was H-a's own code: `core/fixtures/gate-resume/seed.sh:26` reads `core/hooks/ai-dlc-recover.sh`, H-a's new sentence in that hook's injected block consumed the WC case's margin under its 10000-char ceiling, and H-a removed the sentence before merging. WC measures the hook's real emitted output on a seeded worst case, so no static check over the diff catches it (no grep, no validator, not BL-585's pre-gate self-check); only running the fixture does. The edge is already recorded: intake counted 17 fixtures whose row in `.ai-dlc-fixture-readsets.tsv` names `core/hooks/ai-dlc-recover.sh` (the filer said 18), `gate-resume` among them. A reading of the fixture's own files misses it, because the dependency runs through what the seed reads.
+
+Owed:
+1. A report-only arm `e:readset-impact` in `scripts/pregate-self-check.sh` (that script is BL-585's, on local branch `b235-pregate`; not on origin/main at a0451c70). From the diff it lists each fixture whose read-set contains a changed path, with its recorded loaded cost from `.git/ai-dlc-fixture-durations`. The read-set reader is sourced from the hook (`readset_manifest` / the map reader, 3 mentions in `.githooks/pre-push`), never restated. It runs nothing and cannot turn red.
+2. Before it ships, measure its value under the step-value ruling: does the listing change a builder's slot request, or what the builder runs before asking? If it changes nothing, it does not ship.
+
+Related: BL-585.
+
+verify: manual
+
+## BL-610 — the read-set sandbox tracer omits any fixture that probes process liveness
+
+**NOTE.** Filed by peer session ai-dlc-a6 on lead ai-dlc-9c's instruction. `core/scripts/derive-fixture-readsets.sh --tracer sandbox` runs each fixture under `sandbox-exec` with a profile that grants file and process-exec rights but no process-info rights (intake: `process-info` 0 times in the script, against 16 `sandbox-exec`). Inside it `ps -p` sees no other process, not even its own shell, so a fixture whose premise is process liveness fails its own controls and the deriver omits it ("OMITTED (fixture exited 1) -- will always run", 1 occurrence in the script).
+
+Measured by the filer on 2026-10-16 in a trace of 14 fixtures at a0451c70 (rc 0, 173 s, 13 mapped): `derivation-differential` was omitted (its `run.sh` uses `ps -p` 7 times). Its sandboxed log `/private/tmp/ai-dlc-readset-sandbox-501/w/derivation-differential.log:47-48` carries the two A12 control failures (intake confirmed both lines verbatim; the log holds 13 lines containing `FAIL` in all, which the filer's "exactly two FAILs" does not account for):
+  `FAIL  A12 control: ps -p does not separate the seeded dead PID (52683) from the live one (46059) -- A12b and A12l are unreadable`
+  `FAIL  A12 control: PID 1 does not separate ps -p from kill -0 here (running as root?) -- A12e is unreadable`
+Outside the sandbox the fixture is green: per the filer, `ok derivation-differential` appears in all three 2026-10-16 gate logs (an impossible token reads 0), with 7 loaded runs that day at 15-31 s each.
+
+Cost: it stays unmapped and runs on every push, about 20 s, not the gate pole. It ran on every push before too (its rows were stale), so this is a permanent read-set gap, not a regression. Two candidate fixes, neither chosen: grant process-info in the profile (broadens what a trace records, to be weighed), or skip the liveness arms under the sandbox (weakens the fixture exactly where the trace looks; not recommended). Not to be fixed now.
+
+verify: manual
