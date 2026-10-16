@@ -326,6 +326,8 @@ Receipt: every element enumerated from the findings-summary list carries a failu
 
 **Measured (batch 235, `docs/analysis/step-value-s317-s319.md`):** remove architecture 2a and 2b and Rule 1; merge 2c into the adversary's Rule 26 focus, Rules 5 and 6 into Rule 4, Rule 9 into Rule 3, stories 5.1a into 5.1; keep 2d, Rules 10 and 14, the sprint-review party round, stories step-4 party and sharded elicitation, each with a failure-case line. The `:577` list was wrong on 2c and 2d, which already carry Catches: lines. Built as three releases by ai-dlc-de.
 
+**Progress (v0.805.0):** R1 (architecture §2a-§2c removed) and R2 (Rules 1, 5, 6 and 9 folded) landed; R3 (the failure-case lines for the elements kept) remains.
+
 verify: manual
 
 ## BL-569 — requirements runs three validation rounds over one subject with no stated or measured distinction between them
@@ -435,6 +437,8 @@ verify: manual
 
 ## BL-595 — the Check 22 arm refusing `none (serial-document)` on a `stories/` subject is still unbuilt
 
+**LANDED (v0.805.0, verified 26e51dcd).** Check 24's new arm L judges the stories elicitation's shape against the name set `merge-adversarial-shards.sh --map` and `partition-document.sh --cross-groups` owe: a single voice, missing ordinals, short cross groups, wrong names or an owed-absent elicitation at `full` FAIL, with era and unreadable-history cases PENDING. Check 22's S3 is not tightened (the ledger carries no subject). The check-24 fixture drives it end to end in 21 worlds and 9 mutants. The receipt, the consumer's next stories elicitation, is owed.
+
 **NOTE.** BL-509's close (archived, `docs/backlog.archive.md:32870ff`) built the sharded stories-elicitation rule (`_gate-procedures.md:413-420`, "never `shard: none (…)`", pinned by 8 `elic-shape-*`/`sts-elic-*` rows in `process-rule-pins`) but left Check 22 untightened: "an S3 arm refusing `none (serial-document)` on a `stories/` subject was not built because its false-positive set on graph's ledgers was not measured". `core/scripts/validate-spawn-ledger.sh:920-923` S3 still fails only an exception outside the four, and `:973` reads only the first parenthesised token, so a single serial-document voice over `stories/` passes. The yield evidence that the sharded shape is worth enforcing now exists: `docs/analysis/step-value-s317-s319.md:137` (s317 22 shards about 15 unique; s318 one voice at most 1). Owed: measure the arm's false-positive set on graph's ledgers (it fires on graph's closed s318 stories row, a true finding), then build it or record why not.
 
 Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
@@ -519,6 +523,8 @@ verify: manual
 
 ## BL-600 — the lead hand-rolls file times with `stat -f %Sm -t %FT%TZ`, which prints LOCAL time with a literal `Z`
 
+**LANDED (v0.805.0, verified 26e51dcd).** `core/scripts/file-mtime.sh` states each path's mtime as an epoch and a UTC stamp, taking the epoch from `stat` so that a numeric basename is never read as a time. Rule 28's join paragraph names it for a record's time against a dispatch, along with the format that went wrong. The probe: under `TZ=America/New_York` the helper prints `2026-10-16T04:59:42Z`, equal to the `TZ=UTC` control, while the hand-written `stat -f %Sm -t %FT%TZ` prints `2026-10-16T00:59:42Z`.
+
 **DEFECT.** Carried from a BL-528 addendum that missed BL-528's close: b235-docs (4abbd6c3) archived BL-528 as landed in v0.792.0, whose write-time stamp check judges lines ADDED to `pipeline-snapshot.md` (FUTURE, MALFORMED, BACKDATED). That check does not reach a time the lead derives in its own reasoning. Filed by peer session ai-dlc-68 from graph s319 lead `949015a6` (Sonnet 5.5): at 05:10:12Z on 2026-10-16 the lead ran `stat -f '%Sm' -t %FT%TZ <record>`, which prints local time followed by a literal `Z`. The box is EDT; the record's mtime was 2026-10-16T00:59:42 local (04:59:42Z), and the lead wrote "last modified at 00:59Z", four hours wrong and reading as authoritative. Its conclusion held only because 04:59Z preceded the 05:00:03Z dispatch. No shipped script or hook formats a file time this way (`%Sm` 0 hits in `core/scripts` and `core/hooks` at 4abbd6c3; control: `stat -f` 2 hits, both epoch `%m`/`%z:%m`), so the time is the lead's own hand-roll.
 
 Owed: any shipped helper that reports a file time emits it under `TZ=UTC` (or `date -u -r <epoch>`), and the step text that asks the lead whether a record changed since a dispatch names that helper instead of leaving the format to the lead. Probe: the helper's output for a file with a known epoch equals `date -u -r <epoch> +%FT%TZ` under a non-UTC `TZ`, with `TZ=UTC` as the control.
@@ -587,6 +593,8 @@ Owed: the hook's write applies to the lead only (empty `agent_id`), as BL-590 bi
 verify: manual
 
 ## BL-602 — derivation-differential-mutants claims each mutant is killed by EXACTLY its declared arms, but checks only that the declared arms are a SUBSET of the failed ones
+
+**LANDED (v0.805.0, verified 26e51dcd).** The battery checks set EQUALITY through one self-probed comparison function, with a FAIL-line-count guard; every declared set is the measured one with its reason; R8 and A15n are disentangled by the WS3N re-seed, and R13 and R14 are added. All 15 mutants are killed by exactly their declared arms (R8, R13 and R14 measured equal to their declarations).
 
 **DEFECT.** Filed by peer session ai-dlc-60 while building release U-a; the fix is assigned to ai-dlc-c3. `core/fixtures/derivation-differential-mutants/run.sh` states an equality contract at :6 ("killed by exactly its declared arms"), :7 (exit 1 includes a mutant that "moved an arm it does not own"), :14-15 ("the set of arms that FAIL must EQUAL the set the mutant declares … one that fails an arm it does not own means two arms are entangled") and :231. The check at :127 is `missed="$(comm -13 "$WORK/$label.moved" "$WORK/$label.declared" …)"`, which prints only declared arms that did not fail: declared ⊆ failed. Intake confirmed all five lines at origin/main 3d5f1e70. A mutant that also fails an arm it does not own prints `KILLED`; the extra arms appear only in the "full failed set" text, which nothing asserts. That is the entanglement the header promises to catch and `.claude/rules/fixture-mutants.md` ("A mutant must fail **only** its own assertion") requires. Per the filer, of the 23 fixture `run.sh` files that use `comm -`, only this one carries the `comm -13 "$WORK/$label.moved"` form; other batteries need their own read before generalising.
 

@@ -262,15 +262,6 @@ Instruct all teammates:
     story's LOCKED_REQUIREMENTS block and the `Source:` / provenance
     fields written at story creation.
 
-**Day-1 Variant-Lock Evidence.** For any story whose plan calls for a
-runtime-variant lock (per `.claude/skills/ai-dlc/steps/architecture.md`
-section 2a), the dev teammate MUST commit a variant-lock artifact on Day 1
-of the story containing BOTH (a) reproduction of the failure mode that
-motivates the lock AND (b) measurement of each candidate variant's observed
-behavior under the same conditions. Declaration-only variant-lock entries
-(pick a winner without captured reproduction + measurement) are rejected at
-Gate 2.
-
 **Code reviewer — mandatory severity rules (see code-reviewer.md).**
 **QA — validate every AC, send failures to dev, re-validate.**
 

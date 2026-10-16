@@ -118,11 +118,11 @@ g "$DIST" merge-base --is-ancestor "$PREV" "$BASE" && ! g "$DIST" merge-base --i
 
 # ---- a consumer at hand-back shape -----------------------------------------------------------
 # build_consumer <dir> <theirs-ref> <applied: 1|0> <validator: real|stub2|stubpass> [<skill_commit>]
-# Writes <dir>/.T so every helper call drives this world with THIS world's theirs ref. With a fifth
-# argument the pre-apply stamp also carries `skill_commit: <that value>`; without one it has no
-# such line at all, which is the ABSENT case the walk accepts.
+# Writes <dir>/.T so every helper call drives this world with THIS world's theirs ref. The pre-apply
+# stamp always carries `skill_commit:`, <base> by default as a completed reconcile writes it, or the
+# fifth argument when given. The ABSENT-line case is exercised ONLY by the WS3N world (build_su).
 build_consumer() {
-  local c="$1" t="$2" applied="$3" vkind="$4" sk="${5:-}"
+  local c="$1" t="$2" applied="$3" vkind="$4" sk="${5:-$BASE}"
   mkdir -p "$c/scripts/ai-dlc" "$c/.claude" "$c/_bmad-output"
   g "$c" init -q
   cp "$VALIDATOR" "$c/scripts/ai-dlc/validate-artifact-derivations.sh"
@@ -144,7 +144,7 @@ build_consumer() {
   # the PRE-APPLY tree: the stamp reads <base>, and it is HEAD
   printf 'qqalpha\nqqgamma\n' > "$c/scripts/ai-dlc/toy.sh"
   printf 'version: 1.0.0\ncommit: %s\n' "$BASE" > "$c/.claude/.ai-dlc-version"
-  [ -n "$sk" ] && printf 'skill_commit: %s\n' "$sk" >> "$c/.claude/.ai-dlc-version"
+  printf 'skill_commit: %s\n' "$sk" >> "$c/.claude/.ai-dlc-version"
   g "$c" add -A && g "$c" commit -qm "pull to 1.0.0"
   # the APPLY, uncommitted, stamp withheld
   if [ "$applied" = 1 ]; then
@@ -277,7 +277,7 @@ ck "A8n near-miss: with the apply in the tree the control passes and says so" "$
 BROKEN="$WORK/broken-root"
 mkdir -p "$BROKEN/.claude"
 g "$BROKEN" init -q
-printf 'version: 1.0.0\ncommit: %s\n' "$BASE" > "$BROKEN/.claude/.ai-dlc-version"
+printf 'version: 1.0.0\ncommit: %s\nskill_commit: %s\n' "$BASE" "$BASE" > "$BROKEN/.claude/.ai-dlc-version"
 g "$BROKEN" add -A && g "$BROKEN" commit -qm stamp-only
 dd "$W1" --base-root "$BROKEN"; OUT9="$OUT"; RC9="$RC"
 rc_is "A9a a base root on which zero derivations reproduce -> exit 2" 2 "$RC9"
@@ -307,9 +307,11 @@ THEIRS2="$(g "$DIST2" rev-parse HEAD)"
 [ -n "$BASE2" ] && [ -n "$THEIRS2" ] && [ "$BASE2" != "$THEIRS2" ] \
   || { echo "FIXTURE ERROR: seeded dist2 refs unresolvable or equal" >&2; exit 2; }
 
-# build_su <dir> <derivation-over-machinery: broken|unchanged> [<self-update skill_commit: theirs|empty|absent>]
+# build_su <dir> <derivation-over-machinery: broken|unchanged> [<self-update skill_commit: theirs|empty|absent>] [<pre-pull skill_commit:>]
+# The fourth argument is used ONLY by WS3N: it sets the pre-pull commit's `skill_commit:` to a value
+# skill_commit_ok rejects, so the commit below the absent-line self-update commit cannot match.
 build_su() {
-  local c="$1" kind="$2" suk="${3:-theirs}"
+  local c="$1" kind="$2" suk="${3:-theirs}" presk="${4:-$BASE2}"
   mkdir -p "$c/scripts/ai-dlc" "$c/.claude/rules" "$c/_bmad-output"
   g "$c" init -q
   cp "$VALIDATOR" "$c/scripts/ai-dlc/validate-artifact-derivations.sh"
@@ -317,7 +319,8 @@ build_su() {
   g "$DIST2" show "${BASE2}:core/scripts/keep.sh" > "$c/scripts/ai-dlc/keep.sh"
   g "$DIST2" show "${BASE2}:core/rules/su.md" > "$c/.claude/rules/su.md"
   # the PRE-PULL tree: skill_commit: present and equal to commit:, as a completed reconcile writes it
-  printf 'version: 1.0.0\ncommit: %s\nskill_version: 1.0.0\nskill_commit: %s\n' "$BASE2" "$BASE2" > "$c/.claude/.ai-dlc-version"
+  # (except under WS3N's fourth argument, which writes a value the walk rejects)
+  printf 'version: 1.0.0\ncommit: %s\nskill_version: 1.0.0\nskill_commit: %s\n' "$BASE2" "$presk" > "$c/.claude/.ai-dlc-version"
   {
     printf '# Story\n\n'
     printf 'A rule figure that holds on both sides; it puts this file in the row.\n\n'
@@ -470,14 +473,17 @@ ck "A14o and it names the machinery derivation" "$(printf 'NEWLY-FAILING\t%s\t' 
 # A self-update that wrote `skill_commit:` with no value says nothing about its machinery, so it is
 # not shown to be pre-pull and the walk goes on down to the commit below it. The near-miss is the
 # same self-update commit with NO skill_commit: line at all, the pre-migration stamp shape, which
-# the walk accepts -- the two differ in exactly one property, the presence of the line.
+# the walk accepts. The self-update commits differ in exactly one property, the presence of the line;
+# WS3N's pre-pull commit also carries a skill_commit: the walk rejects, so the absent-line commit is
+# the ONLY one it can accept (that keeps "newest match wins", A16, from sharing A15n's observable).
 WS3="$WORK/w15-empty-sk";   build_su "$WS3"  broken empty
-WS3N="$WORK/w15-absent-sk"; build_su "$WS3N" broken absent
+WS3N="$WORK/w15-absent-sk"; build_su "$WS3N" broken absent "$THEIRS2"
 if grep -qx 'skill_commit: ' <<<"$(g "$WS3" show "HEAD:.claude/.ai-dlc-version")" \
-   && ! grep -q '^skill_commit:' <<<"$(g "$WS3N" show "HEAD:.claude/.ai-dlc-version")"; then
-  ok "A15 seed: one self-update commit carries an empty skill_commit: line, the other none"
+   && ! grep -q '^skill_commit:' <<<"$(g "$WS3N" show "HEAD:.claude/.ai-dlc-version")" \
+   && grep -qx "skill_commit: $THEIRS2" <<<"$(g "$WS3N" show "HEAD~1:.claude/.ai-dlc-version")"; then
+  ok "A15 seed: one self-update commit carries an empty skill_commit: line, the other none, and the absent one's pre-pull commit is rejectable"
 else
-  bad "A15 seed: the empty/absent skill_commit: shapes were not written -- A15 is unreadable"
+  bad "A15 seed: the empty/absent skill_commit: shapes, or WS3N's rejectable pre-pull stamp, were not written -- A15 is unreadable"
 fi
 dd "$WS3"; OUT15="$OUT"; RC15="$RC"
 rc_is "A15a an empty skill_commit: on the self-update commit -> it is skipped, exit 1" 1 "$RC15"
@@ -590,7 +596,7 @@ K_SHIFT="$SF:$(grep -n -- 'grep -n qqgamma' "$W18/$SF" | head -1 | cut -d: -f1)"
 K_BETA18="$SF:$(grep -n -- 'grep -c qqbeta' "$W18/$SF" | head -1 | cut -d: -f1)"
 case "$K_SHIFT$K_BETA18" in *: | *::* ) echo "FIXTURE ERROR: a seeded A18 derivation line was not found" >&2; exit 2 ;; esac
 dd "$W18"; OUT18="$OUT"; RC18="$RC"
-rc_is "A18 seed: the line-moved derivation breaks this pull -> exit 1" 1 "$RC18"
+rc_is "A18d the line-moved derivation breaks this pull -> exit 1" 1 "$RC18"
 nf18="$(awk -F'\t' -v k="$K_SHIFT" '$1 == "NEWLY-FAILING" && $2 == k' <<<"$OUT18")"
 ck "A18a the NEWLY-FAILING row carries the recorded and the actual output" \
   "recorded: 2:qqgamma  actual: 1:qqgamma" "$nf18"

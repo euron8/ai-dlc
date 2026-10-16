@@ -281,6 +281,7 @@ core_manifest:
   - fixtures/story-fields-derive/**
   - fixtures/transient-ignore-block/**
   - fixtures/trunk-push-bound/**
+  - fixtures/file-mtime/**
   - fixtures/pause-hook-origin/**
   - fixtures/pause-question-in-prose/**
   - fixtures/postcompact-rulebook-recovery/**
