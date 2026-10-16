@@ -687,7 +687,10 @@ marker_step() { # marker_step <project> -> the recorded step_file, or empty
 # The marker is written by the REAL producer, never by hand. A hand-written marker would prove
 # the gate accepts the grammar this fixture invented for it.
 arm_marker() { # arm_marker <recover-hook> <project>
-  printf '{"source":"compact","session_id":"fixture"}' \
+  # The session id is `sess-A`, the one the advisor battery's calls carry: the gate's read stages
+  # stand down for a call from a session other than the one the marker records, so a marker owned
+  # by a different id would be invisible to every call below that names its session.
+  printf '{"source":"compact","session_id":"sess-A"}' \
     | CLAUDE_PROJECT_DIR="$2" bash "$1" >/dev/null 2>&1
 }
 mk="_bmad-output/.recover-fired"
@@ -1655,6 +1658,199 @@ amutant_arm "the escape bound removed" \
   "$(amut bound '{sub(/R_MAX_DENIES=3/,"R_MAX_DENIES=999")} 1')" "bound"
 amutant_arm "the session stand-down removed" \
   "$(amut session 'index($0,"if [ -n \"$R_OSID\" ] && [ -n \"$R_SID\" ] && [ \"$R_OSID\" != \"$R_SID\" ]; then"){print "  if false; then"; next} 1')" "session"
+
+# =============================================================================
+# WHOSE RECOVERY — an update session is not the lead, and a marker has an owner
+#
+# A fourth battery with its own predicates, control and mutants. ai-dlc-recover.sh used to write
+# the marker for ANY session that compacted and the gate denied ANY session's calls on it, so a
+# consumer-pull session (/ai-dlc-update) was handed the lead's recovery mandate -- 2 of the 78
+# updater transcripts on the reference consumer, one of them with no compaction in it at all,
+# denied 11 seconds in by a marker another session left. Two stand-downs close that, and they
+# are SEPARATE subjects: the producer writes nothing for an updater, and the gate stands down
+# (marker kept) for an updater and for a marker owned by another session.
+#
+# THE TWO GATE STAND-DOWNS COVER EACH OTHER on the obvious seed (a stale marker, an updater
+# calling): disabling either leaves the other doing the work and the mutant comes back green.
+# So each has a case only it can reach. `legacy_upd` carries no owner, so only the updater test
+# can stand down; `stale_pipe` is a pipeline session, so only the owner test can. The stale
+# marker is always written by the REAL producer, never by hand; the legacy marker is that same
+# output with its `session_id=` line removed, which is what the previous revision emitted.
+#
+# TRANSCRIPT SEEDS ARE THE HARNESS'S RECORD SHAPE for the typed command, the first alternative of
+# the I126 regex, with the JSON-escaped newline between the two tags as the real files carry it.
+# =============================================================================
+
+if ! grep -qF 'mval session_id' "$GATE" || ! grep -qF 'printf '"'"'session_id=%s' "$HOOK"; then
+  skip "whose-recovery arms" "the installed recovery hooks predate the session_id key; this fixture ships one pull ahead of its subject"
+else
+
+stx() { # stx <upd|pipe> <path> -- a transcript whose LAST ai-dlc marker is the updater / the pipeline
+  _sk="ai-dlc"; [ "$1" = upd ] && _sk="ai-dlc-update"
+  { printf '%s\n' '{"type":"user","message":{"role":"user","content":"an earlier prompt"}}'
+    printf '%s\n' '{"type":"user","message":{"role":"user","content":"<command-message>'"$_sk"'</command-message>\n<command-name>/'"$_sk"'</command-name>"}}'
+  } > "$2"
+}
+sarm() { # sarm <recover-hook> <project> <session> <transcript> -- the producer, driven as SessionStart:compact
+  jq -n --arg s "$3" --arg t "$4" '{source:"compact",session_id:$s,transcript_path:$t}' \
+    | CLAUDE_PROJECT_DIR="$2" bash "$1" >/dev/null 2>&1
+}
+sdec() { # sdec <gate> <project> <session> <transcript> -> deny | silent, for a Bash call
+  _o="$(jq -n --arg s "$3" --arg t "$4" '{tool_name:"Bash",session_id:$s,transcript_path:$t,tool_input:{command:"ls"}}' \
+    | CLAUDE_PROJECT_DIR="$2" bash "$1" 2>/dev/null | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null)"
+  if [ "$_o" = deny ]; then printf 'deny\n'; else printf 'silent\n'; fi
+}
+sunowned() { # sunowned <project> -- the marker as the previous revision wrote it: no owner
+  grep -v '^session_id=' "$1/$mk" > "$1/$mk.n" 2>/dev/null; mv "$1/$mk.n" "$1/$mk"
+}
+
+# C1. An update session compacts: the producer writes NO marker, and the gate is silent.
+sp_upd_compact() { # <hook> <gate>
+  _p="$(newproj architecture.md consumer)"; stx upd "$_p/t.jsonl"
+  sarm "$1" "$_p" S-U "$_p/t.jsonl"
+  [ -e "$_p/$mk" ] && { printf 'FAIL:the producer wrote a recovery marker for an update session\n'; return; }
+  [ "$(sdec "$2" "$_p" S-U "$_p/t.jsonl")" = silent ] || { printf 'FAIL:the gate denied a Bash call in an update session\n'; return; }
+  printf 'PASS\n'
+}
+# C2. THE CONTROL THAT THE STAND-DOWN IS NOT A BLANKET DISABLE: the same shape with a pipeline marker.
+sp_pipe_compact() {
+  _p="$(newproj architecture.md consumer)"; stx pipe "$_p/t.jsonl"
+  sarm "$1" "$_p" S-P "$_p/t.jsonl"
+  [ -e "$_p/$mk" ] || { printf 'FAIL:the producer wrote no marker for a pipeline session that compacted\n'; return; }
+  grep -qx 'session_id=S-P' "$_p/$mk" || { printf 'FAIL:the marker does not record the session that compacted\n'; return; }
+  [ "$(sdec "$2" "$_p" S-P "$_p/t.jsonl")" = deny ] || { printf 'FAIL:the gate let a pipeline session'"'"'s first post-compact Bash call through\n'; return; }
+  printf 'PASS\n'
+}
+# C3. A stale marker from session A, no compaction in B, and B is an update session: silent, marker kept.
+sp_stale_upd() {
+  _p="$(newproj architecture.md consumer)"; stx pipe "$_p/tA.jsonl"; stx upd "$_p/tB.jsonl"
+  sarm "$1" "$_p" S-A "$_p/tA.jsonl"
+  grep -qx 'session_id=S-A' "$_p/$mk" 2>/dev/null || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — no marker owned by session A\n'; return; }
+  [ "$(sdec "$2" "$_p" S-B "$_p/tB.jsonl")" = silent ] || { printf 'FAIL:an update session was denied on a marker another session left\n'; return; }
+  [ -e "$_p/$mk" ] || { printf 'FAIL:the stand-down deleted a marker that is another session'"'"'s pending recovery\n'; return; }
+  printf 'PASS\n'
+}
+# C4. A stale marker from session A, B is a PIPELINE session: only the owner test can stand down.
+sp_stale_pipe() {
+  _p="$(newproj architecture.md consumer)"; stx pipe "$_p/tA.jsonl"; stx pipe "$_p/tB.jsonl"
+  sarm "$1" "$_p" S-A "$_p/tA.jsonl"
+  grep -qx 'session_id=S-A' "$_p/$mk" 2>/dev/null || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — no marker owned by session A\n'; return; }
+  [ "$(sdec "$2" "$_p" S-B "$_p/tB.jsonl")" = silent ] || { printf 'FAIL:session B was denied on a recovery owed to session A\n'; return; }
+  [ -e "$_p/$mk" ] || { printf 'FAIL:the stand-down deleted session A'"'"'s marker\n'; return; }
+  printf 'PASS\n'
+}
+# C5. THE SAME-SESSION CONTROL for C3/C4: the owner, a pipeline session, is denied.
+sp_same_sess() {
+  _p="$(newproj architecture.md consumer)"; stx pipe "$_p/tA.jsonl"
+  sarm "$1" "$_p" S-A "$_p/tA.jsonl"
+  [ "$(sdec "$2" "$_p" S-A "$_p/tA.jsonl")" = deny ] || { printf 'FAIL:the session that owns the marker was let through\n'; return; }
+  printf 'PASS\n'
+}
+# C6. BACK-COMPAT: a marker with no session_id (an older hook wrote it) still gates a pipeline session.
+sp_legacy_pipe() {
+  _p="$(newproj architecture.md consumer)"; stx pipe "$_p/tA.jsonl"; stx pipe "$_p/tB.jsonl"
+  sarm "$1" "$_p" S-A "$_p/tA.jsonl"; sunowned "$_p"
+  grep -q '^session_id=' "$_p/$mk" 2>/dev/null && { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — the marker still carries an owner\n'; return; }
+  grep -q '^step_file_resolved=1$' "$_p/$mk" 2>/dev/null || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — the marker is not armable\n'; return; }
+  [ "$(sdec "$2" "$_p" S-B "$_p/tB.jsonl")" = deny ] || { printf 'FAIL:an ownerless marker stopped gating a pipeline session\n'; return; }
+  printf 'PASS\n'
+}
+# C7. An ownerless marker and an UPDATE session: only the updater test can stand down. Marker kept.
+sp_legacy_upd() {
+  _p="$(newproj architecture.md consumer)"; stx pipe "$_p/tA.jsonl"; stx upd "$_p/tB.jsonl"
+  sarm "$1" "$_p" S-A "$_p/tA.jsonl"; sunowned "$_p"
+  grep -q '^session_id=' "$_p/$mk" 2>/dev/null && { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — the marker still carries an owner\n'; return; }
+  [ "$(sdec "$2" "$_p" S-B "$_p/tB.jsonl")" = silent ] || { printf 'FAIL:an update session was denied on an ownerless marker\n'; return; }
+  [ -e "$_p/$mk" ] || { printf 'FAIL:the updater stand-down deleted a marker that may be a real lead'"'"'s pending recovery\n'; return; }
+  printf 'PASS\n'
+}
+
+SPREDS="upd_compact pipe_compact stale_upd stale_pipe same_sess legacy_pipe legacy_upd"
+sflips() { # sflips <hook> <gate> -> the predicates that FAIL, space separated
+  for _n in $SPREDS; do
+    r="$("sp_$_n" "$1" "$2")"
+    [ "${r%%:*}" = PASS ] || printf '%s ' "$_n"
+  done
+}
+
+for _n in $SPREDS; do
+  r="$("sp_$_n" "$HOOK" "$GATE")"
+  case "$_n" in
+    upd_compact) label="whose: an update session that compacts gets NO marker and a silent gate" ;;
+    pipe_compact) label="whose: CONTROL — a pipeline session that compacts gets a marker naming it, and its first Bash call is DENIED" ;;
+    stale_upd) label="whose: an update session is silent on another session's stale marker, and the marker survives" ;;
+    stale_pipe) label="whose: a pipeline session is silent on a marker owned by ANOTHER session, and the marker survives" ;;
+    same_sess) label="whose: CONTROL — the session that owns the marker is denied" ;;
+    legacy_pipe) label="whose: BACK-COMPAT — a marker with no session_id still gates a pipeline session" ;;
+    legacy_upd) label="whose: an update session is silent on an ownerless marker, and the marker survives" ;;
+  esac
+  if [ "$r" = PASS ]; then ok "$label"; else bad "$label — ${r#FAIL:}"; fi
+done
+
+SCTRL_H="$WORK/recover-control-whose.sh"; SCTRL_G="$WORK/gate-control-whose.sh"
+cp "$HOOK" "$SCTRL_H"; cp "$GATE" "$SCTRL_G"
+scf="$(sflips "$SCTRL_H" "$SCTRL_G")"
+if [ -z "${scf// /}" ]; then
+  ok "control: unmutated copies of the producer and the gate reproduce all 7 whose-recovery verdicts, deny cells included"
+else
+  bad "CONTROL FAILED — unmutated copies already flip {${scf}}, so every whose-recovery mutant verdict below is uninterpretable"
+fi
+
+# smut <src> <anchor line, whole> <out> <replacement line> [second replacement line]
+# The anchor must occur exactly once as a WHOLE LINE, or the mutation is a lost subject.
+smut() {
+  [ "$(grep -cxF -- "$2" "$1")" -eq 1 ] || return 1
+  A="$2" R1="$4" R2="${5:-}" awk '$0==ENVIRON["A"]{print ENVIRON["R1"]; if (ENVIRON["R2"]!="") print ENVIRON["R2"]; next} 1' "$1" > "$3"
+  grep -qxF -- "$4" "$3"
+}
+smutant_arm() { # smutant_arm <label> <hook> <gate> <expected flips in SPREDS order>
+  if [ "$2" = "$HOOK" ] && [ "$3" = "$GATE" ]; then bad "FIXTURE STALE: $1 — neither file was mutated"; return; fi
+  if [ "$2" != "$HOOK" ] && cmp -s "$HOOK" "$2"; then bad "FIXTURE STALE: $1 — the producer mutant is byte-identical"; return; fi
+  if [ "$3" != "$GATE" ] && cmp -s "$GATE" "$3"; then bad "FIXTURE STALE: $1 — the gate mutant is byte-identical"; return; fi
+  if ! bash -n "$2" 2>/dev/null || ! bash -n "$3" 2>/dev/null; then bad "FIXTURE STALE: $1 — a mutant is not valid shell, and its silence would score as a kill"; return; fi
+  got="$(sflips "$2" "$3")"
+  if [ "$got" = "$4 " ]; then ok "mutant: $1 — flips exactly {$4}"
+  elif [ -z "${got// /}" ]; then bad "MUTANT KILLED NOTHING: $1 — every whose-recovery arm stays green, so {$4} cannot fire"
+  else bad "MUTANT FLIP SET WRONG: $1 — expected {$4}, measured {$got}; the arms are entangled or one of them is vacuous"; fi
+}
+UPD_CASE='    *'"'"'/ai-dlc-update</command-name>'"'"'|*'"'"'"skill":"ai-dlc-update"'"'"') exit 0 ;;'
+UPD_NEVER='    *'"'"'NEVER-MATCHES-X'"'"') exit 0 ;;'
+UPD_RM='    *'"'"'/ai-dlc-update</command-name>'"'"'|*'"'"'"skill":"ai-dlc-update"'"'"') rm -f "$MARKER" "$PROGRESS" 2>/dev/null; exit 0 ;;'
+KEY_LINE='if [ -n "$M_SID" ] && [ -n "$G_SID" ] && [ "$M_SID" != "$G_SID" ]; then'
+KEY_RM='  rm -f "$MARKER" "$PROGRESS" 2>/dev/null || true'
+
+# (a) The producer's updater stand-down removed. Killed by upd_compact ALONE: the marker appears.
+# The gate's own updater test still stands down on that update session, so the Bash call stays
+# silent -- the only observable is the marker, which is why C1 asserts it before the call.
+SM_A="$WORK/recover-whose-a.sh"
+if smut "$HOOK" "$UPD_CASE" "$SM_A" "$UPD_NEVER"; then
+  smutant_arm "the producer writes a marker for an update session" "$SM_A" "$GATE" "upd_compact"
+else bad "FIXTURE STALE: the producer's updater stand-down is not exactly one whole line, so mutant (a) has no subject"; fi
+
+# (b) The gate's updater stand-down removed. Killed by legacy_upd ALONE: an ownerless marker leaves
+# the owner test nothing to compare, so only the updater test can stand down there. stale_upd stays
+# green because the owner test covers it, which is exactly why legacy_upd exists.
+SM_B="$WORK/gate-whose-b.sh"
+if smut "$GATE" "$UPD_CASE" "$SM_B" "$UPD_NEVER"; then
+  smutant_arm "the gate has no updater stand-down" "$HOOK" "$SM_B" "legacy_upd"
+else bad "FIXTURE STALE: the gate's updater stand-down is not exactly one whole line, so mutant (b) has no subject"; fi
+
+# (c) The owner test removed. Killed by stale_pipe ALONE: a pipeline session has no updater test to
+# fall back on. stale_upd stays green because the updater test covers it.
+SM_C="$WORK/gate-whose-c.sh"
+if smut "$GATE" "$KEY_LINE" "$SM_C" "if false; then"; then
+  smutant_arm "the gate does not compare the marker's session_id with the call's" "$HOOK" "$SM_C" "stale_pipe"
+else bad "FIXTURE STALE: the owner test is not exactly one whole line, so mutant (c) has no subject"; fi
+
+# (d) Both stand-downs delete the marker before exiting. Killed by the three cells that assert the
+# marker SURVIVES a stand-down: stale_upd and stale_pipe through the owner branch, legacy_upd through
+# the updater branch. No deny cell flips: the denied calls never reach either branch.
+SM_D="$WORK/gate-whose-d.sh"; SM_D1="$WORK/gate-whose-d1.sh"
+if smut "$GATE" "$KEY_LINE" "$SM_D1" "$KEY_LINE" "$KEY_RM" && smut "$SM_D1" "$UPD_CASE" "$SM_D" "$UPD_RM"; then
+  smutant_arm "a stand-down deletes the marker it stood down on" "$HOOK" "$SM_D" "stale_upd stale_pipe legacy_upd"
+else bad "FIXTURE STALE: mutant (d) could not be built from exactly one owner-test line and one updater-case line"; fi
+
+fi  # whose-recovery arms present
 
 fi  # GATE present
 

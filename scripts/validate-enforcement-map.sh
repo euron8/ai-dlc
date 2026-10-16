@@ -7597,7 +7597,7 @@ fi
 # BOTH DIRECTIONS, and the probe runs FIRST. A seeded pair of identical copies must read SAME and a
 # seeded pair one byte apart must read DIFFER, before the shipped hooks are compared, so a broken
 # extractor (two empty strings compare equal) cannot report agreement.
-i126_hooks="core/hooks/ai-dlc-acknowledge.sh core/hooks/ai-dlc-pause.sh core/hooks/ai-dlc-continue.sh core/hooks/ai-dlc-advisor-gate.sh"
+i126_hooks="core/hooks/ai-dlc-acknowledge.sh core/hooks/ai-dlc-pause.sh core/hooks/ai-dlc-continue.sh core/hooks/ai-dlc-advisor-gate.sh core/hooks/ai-dlc-recover.sh core/hooks/ai-dlc-recover-gate.sh"
 i126_open='>>> I126 SESSION-MARKER SCAN: the next line, byte-identical in every bound hook >>>'
 # ONE awk, ONE fork, FOR THE PROBE AND THE CORPUS TOGETHER. The first draft ran a grep and an awk
 # per file inside a per-call subshell, four calls, plus a mktemp/mkdir/rm probe directory -- about
