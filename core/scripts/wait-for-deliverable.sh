@@ -239,7 +239,8 @@
 #                            also the cap on progress grants, so the worst-case
 #                            wait is 2 x quantum x this -- still finite)
 #   AI_DLC_WAIT_MARGIN_SECS  reserve held back from quantum (default 10)
-#   AI_DLC_STATE_DIR         state dir                      (default _bmad-output)
+#   AI_DLC_STATE_DIR         state dir; relative = under the project root   (default _bmad-output)
+#   AI_DLC_PROJECT_ROOT      project root override (else walk up from this script, CLAUDE_PROJECT_DIR, cwd)
 #   AI_DLC_TEAMMATE_IDLE_SECS  quiet seconds before the beat reports TEAMMATE IDLE
 #                            (default 2 x the beat quantum; see the measurement above)
 #   AI_DLC_TEAMMATE_DIR      override the teammate-transcript directory. Exists so
@@ -350,7 +351,6 @@ set -u
 BUDGET="${AI_DLC_WAIT_BEAT_SECS:-600}"
 POLL="${AI_DLC_WAIT_POLL_SECS:-10}"
 MAX_BEATS="${AI_DLC_MAX_WAIT_BEATS:-6}"
-STATE_DIR="${AI_DLC_STATE_DIR:-_bmad-output}"
 MARGIN="${AI_DLC_WAIT_MARGIN_SECS:-10}"
 SETTLE="${AI_DLC_WAIT_SETTLE_SECS:-180}"
 case "$SETTLE" in ''|*[!0-9]*) SETTLE=180 ;; esac
@@ -470,6 +470,39 @@ abs_of() {  # normalized absolute path; no realpath dependency (not on BSD by de
   d_="$(dirname "$1")"; b_="$(basename "$1")"
   ( cd "$d_" 2>/dev/null && printf '%s/%s' "$(pwd -P)" "$b_" )
 }
+
+# --- AI_DLC_ROOT ------------------------------------------------------------
+# Walk UP for a marker, never count `..` hops. The canonical block, precedence bound by I75:
+# override -> walk up from this script -> CLAUDE_PROJECT_DIR -> walk up from cwd -> refuse.
+# Inline on purpose: locating a shared lib is the same unsolved problem. The state dir hangs off
+# this root and not off the cwd, so a Bash cwd that drifted into a subdirectory still arms the
+# beat where the stop hook looks for its lease.
+ai_dlc_resolve_root() {
+  local d="$1"
+  while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "." ]; do
+    if [ -e "$d/.git" ] || [ -d "$d/.claude" ] || [ -d "$d/core/skills/ai-dlc" ]; then
+      printf '%s\n' "$d"; return 0
+    fi
+    d="$(dirname "$d")"
+  done
+  return 1
+}
+WD_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WD_ROOT="${AI_DLC_PROJECT_ROOT:-}"
+[ -n "$WD_ROOT" ] || WD_ROOT="$(ai_dlc_resolve_root "$WD_SCRIPT_DIR" || true)"
+[ -n "$WD_ROOT" ] || WD_ROOT="${CLAUDE_PROJECT_DIR:-}"
+[ -n "$WD_ROOT" ] || WD_ROOT="$(ai_dlc_resolve_root "$(pwd)" || true)"
+[ -n "$WD_ROOT" ] || {
+  echo "FAIL: wait-for-deliverable: cannot resolve the project root from ${WD_SCRIPT_DIR} (no .git or" >&2
+  echo "  .claude/ marker in any parent). NO beat ran and the join is NOT armed. Run it from inside the" >&2
+  echo "  project, or set AI_DLC_PROJECT_ROOT to the repo root." >&2
+  exit 64
+}
+# --- end AI_DLC_ROOT --------------------------------------------------------
+case "${AI_DLC_STATE_DIR:-}" in
+  /*) STATE_DIR="$AI_DLC_STATE_DIR" ;;
+  *)  STATE_DIR="${WD_ROOT}/${AI_DLC_STATE_DIR:-_bmad-output}" ;;
+esac
 
 COUNTER_DIR="${STATE_DIR}/.wait-beats"
 if [ "$STATUS" -eq 0 ]; then   # --status creates nothing, not even the state dir

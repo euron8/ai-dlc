@@ -75,7 +75,7 @@ beat_with() { # <subject> <work> [extra args...] -> writes $BEATOUT; sets RC and
                    AI_DLC_WAIT_POLL_SECS=1 \
                    AI_DLC_WAIT_MARGIN_SECS=1 \
                    AI_DLC_MAX_WAIT_BEATS=6 \
-    bash "$subj" "$@" deliv.md ) > "$BEATOUT" 2>&1
+    AI_DLC_PROJECT_ROOT="$PWD" bash "$subj" "$@" deliv.md ) > "$BEATOUT" 2>&1
   RC=$?
   OUT="$(cat "$BEATOUT")"
 }
@@ -127,7 +127,7 @@ chained_beat() { # <subject> <work> [args...] -> as beat_with, with a sibling be
                    AI_DLC_MAX_WAIT_BEATS=6 \
     bash -c 'printf "%s" "$(date +%s)" > "_bmad-output/.wait-beats/.shell-$$" || exit 3
              s="$1"; shift
-             bash "$s" "$@"
+             AI_DLC_PROJECT_ROOT="$PWD" bash "$s" "$@"
              exit $?' _ "$subj" "$@" deliv.md ) > "$BEATOUT" 2>&1
   RC=$?
   OUT="$(cat "$BEATOUT")"
@@ -329,7 +329,7 @@ C02_stale_marker() {
 W="$( bash "$SEED" stale-marker )"
 ( cd "$W" && env AI_DLC_WAIT_BEAT_SECS=4 AI_DLC_WAIT_POLL_SECS=1 \
                  AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 \
-    bash "$SUBJ" deliv.md >/dev/null 2>&1 ) & PID=$!
+    AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" deliv.md >/dev/null 2>&1 ) & PID=$!
 seen=0
 for _ in $(seq 1 80); do
   [ -f "$W/_bmad-output/.beat-inflight" ] && { seen=1; break; }
@@ -457,7 +457,7 @@ START="$(date +%s)"
 ( cd "$W" && env AI_DLC_WAIT_BEAT_SECS=3 AI_DLC_STEERING_BUDGET=30 \
                  AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 \
                  AI_DLC_MAX_WAIT_BEATS=6 \
-    bash "$SUBJ" deliv.md >/dev/null 2>&1 ) || true
+    AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" deliv.md >/dev/null 2>&1 ) || true
 ELAPSED=$(( $(date +%s) - START ))
 if [ "$ELAPSED" -le 10 ]; then
   ok "knob-split-forward: quantum 3s honoured (${ELAPSED}s) with STEERING_BUDGET=30 ignored"
@@ -474,7 +474,7 @@ START="$(date +%s)"
 ( cd "$W" && env AI_DLC_WAIT_BEAT_SECS=8 AI_DLC_STEERING_BUDGET=3 \
                  AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 \
                  AI_DLC_MAX_WAIT_BEATS=6 \
-    bash "$SUBJ" deliv.md >/dev/null 2>&1 ) || true
+    AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" deliv.md >/dev/null 2>&1 ) || true
 ELAPSED=$(( $(date +%s) - START ))
 if [ "$ELAPSED" -ge 6 ]; then
   ok "knob-split-reverse: quantum 8s honoured (${ELAPSED}s) with STEERING_BUDGET=3 ignored"
@@ -493,7 +493,7 @@ C10_marker_goes_stale() {
 W="$( bash "$SEED" marker-goes-stale )"
 ( cd "$W" && env AI_DLC_WAIT_BEAT_SECS=60 AI_DLC_WAIT_POLL_SECS=1 \
                  AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 \
-    bash "$SUBJ" deliv.md >/dev/null 2>&1 ) & PID=$!
+    AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" deliv.md >/dev/null 2>&1 ) & PID=$!
 MARKER="$W/_bmad-output/.beat-inflight"
 for _ in $(seq 1 100); do
   [ -s "$MARKER" ] && break
@@ -596,7 +596,7 @@ C14_progress_guards() {
 W="$( bash "$SEED" progress-guards )"
 guard() { ( cd "$W" && env AI_DLC_WAIT_BEAT_SECS=4 AI_DLC_WAIT_POLL_SECS=1 \
                            AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 \
-              bash "$SUBJ" --progress-path "$1" deliv.md ) >/dev/null 2>&1; echo $?; }
+              AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" --progress-path "$1" deliv.md ) >/dev/null 2>&1; echo $?; }
 if [ "$(guard _bmad-output)" = "64" ]; then
   ok "progress-guards: the state dir is refused — it is written by this beat every poll"
 else bad "progress-guards: --progress-path _bmad-output accepted; progress is then always true and NON-DELIVERY can never fire"; fi
@@ -992,7 +992,7 @@ bg_beat() {
   ( cd "$w" && own env AI_DLC_WAIT_BEAT_SECS="$q" AI_DLC_WAIT_POLL_SECS="$p" \
                        AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 \
                        AI_DLC_WAIT_SETTLE_SECS=2 \
-      bash "$subj" "$@" ) > "$o" 2>&1 &
+      AI_DLC_PROJECT_ROOT="$PWD" bash "$subj" "$@" ) > "$o" 2>&1 &
   BG=$!
 }
 until_true() { # <tenths> <command...> -- 0 once the command succeeds, 1 on timeout
@@ -1176,7 +1176,7 @@ run_noclobber() { # <subject> -> NC_* ; leaves W
   sleep 0.5
   NC_M0="$(marker_of "$W")"
   NC_A="$(marker_pid "$W")"
-  ( cd "$W" && bash "$1" --status other.md ) > "$W/st.out" 2>&1
+  ( cd "$W" && AI_DLC_PROJECT_ROOT="$PWD" bash "$1" --status other.md ) > "$W/st.out" 2>&1
   NC_STATUS="$(marker_of "$W")"
   # $args is a word list built above with no spaces inside a word, so it is left unquoted.
   bg_beat "$1" "$W" "$W/i.out" 4 1 --since "$(( $(date +%s) - 60 ))" $args; pi=$BG
@@ -1330,7 +1330,7 @@ run_memo_single() { # <subject> -> MS_* ; leaves W
   until_true 40 now_at_least "$(( mt + 2 ))" || true
   ( cd "$W" && own env AI_DLC_WAIT_BEAT_SECS=3 AI_DLC_WAIT_POLL_SECS=1 \
                        AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 \
-      bash "$1" x.md ) > "$W/2.out" 2>&1
+      AI_DLC_PROJECT_ROOT="$PWD" bash "$1" x.md ) > "$W/2.out" 2>&1
   MS_RC=$?
   separate_shells "$W" 2 "$W/1.out" "$W/2.out"
 }
