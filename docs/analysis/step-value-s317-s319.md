@@ -41,18 +41,19 @@ elicitation without party first.
 | Party | 1.9 / $25.08 | 1.4 / $70.23 | 1.6 / $57.99 |
 | Elicitation | 1.7 / $15.65 | 2.0 / $68.03 | 1.2 / $62.88 |
 | Adversarial p1 | 2.2 / $33.06 | ≥1.9 / $88.90 | 0.6 / $42.28 (repair still running) |
-| Adversarial p2 | 0.6 / $14.42 + 5 unlabelled shards $9.46 | ≤0.75 / $34.85 | not run |
+| Adversarial p2 | ~1.5 (archived shards 28 min, plus repair and verify) / $14.42 + 5 unlabelled shards $9.46 | ≤0.75 / $34.85 | not run |
 | Adversarial p3 | — | ≤0.4 / $21.96 | not run |
 
 Hours are lead wall clock. Dollars are API-list-equivalent subagent spend. Authoring and folds
-(analyst, pm) are excluded: s317 $9.34, s318 $5.65, s319 $19.14.
+(analyst, pm) are excluded: s317 $9.34, s318 $5.65, s319 $19.14. s318 adversarial p1's $88.90
+includes 19 adversary shards whose descriptions carry no pass number; they were assigned to p1 by their span.
 
 ### Yield (MAJOR+, distinct after reading)
 
 | Sprint | Round | Shape | C/M | REFOUND | MISSED-BY-PRIOR | REPAIR-INTRODUCED | UNIQUE-SURVIVED C/M |
 |---|---|---|---|---|---|---|---|
 | s317 | Party | 2 seats | 2/11 | — | — | 0 | **2/10** |
-| s317 | Elicitation | 1 voice | 0/6 | 0 | 2 | 3 | **0/3** |
+| s317 | Elicitation | 1 voice | 0/6 | 0 | 3 (M-4, M-5, M-6) | 3 | **0/3** |
 | s317 | Adv p1 | 1 reviewer | 0/3 (first write 0/4, rewritten by the lead) | 0 | 1 | 2 | **0/1** |
 | s317 | Adv p2 | 5 shards, run twice | 0/2 | 1 partial | 0 | 2 | **0/0** |
 | s318 | Party | 36 seats | 1/27 | 3 | — | 0 | **1/23** |
@@ -134,7 +135,7 @@ below corrects it.
 | architecture 2d executable invariant guard | `Catches:` `:219` | s317 a unique MAJOR (p1 S1-F1); s318 guards on 5 ADRs, advisory shipped at `docs/architecture.md:800, 814` | 1702 B | **Keep** |
 | stories-test-strategy step 4 party, per story | none | s317 3 C / 94 M and s318 53 M, unique to party and token-verified in shipped text | s317+s318 $262 / 35.8 agent-h | **Keep; write the failure case** |
 | stories step 4 party, cross-story | none | s318 HODL funds destination (`sm-cross-1#F-1`), now asserted at `test_s318_1_2_offramp_hodl_sweep.py:223`; no other round raised it | $138 / 22.7 agent-h | **Keep; write the failure case** |
-| stories step 4 elicitation, sharded | none | s317 22 shards: about 15 unique, including E-4 (uncapped mint through a raised wallet read); s318 one voice: at most 1 | $84 / 7.2 agent-h | **Keep sharded.** This contradicts BL-509 (rank 3), which measured cost and not yield. |
+| stories step 4 elicitation, sharded | none | s317 22 shards: about 15 unique, including E-4 (uncapped mint through a raised wallet read); s318 one voice: at most 1 | $84 / 7.2 agent-h | **Keep sharded.** Consistent with 0.782.0 (BL-509), which made stories elicitation sharded; this adds the yield evidence BL-509 lacked. |
 | stories step 4 adversarial p2, p3 | Rule 8 | s317 10 of 11 and s318 15 of 21 MAJORs repair-introduced | in $317 / 23.7 agent-h | Keep as the convergence exit; BL-508 owns the cost |
 | stories 1 readiness reference subsections | `:293` only | readiness s317 1 C / 2 M, repaired | $10.9 | Keep (not separated) |
 | stories 5.1a trace | `:633` says its gate leg is disarmed by construction | none | lead-inline | **Merge into 5.1** |
@@ -197,7 +198,7 @@ reference found by `git grep` at `origin/main` 952b9319.
 
 **Backlog notes (the docs release, not a code release)**
 - BL-508 cites this document as its three-sprint evidence.
-- BL-509 is contradicted for stories: sharded elicitation's unique yield exceeds the single voice's.
+- BL-509 is supported for stories: 0.782.0 made elicitation sharded, and sharded elicitation's unique yield exceeds the pre-0.782.0 single voice's.
   Re-scope it or close it on this evidence.
 - BL-568 and BL-569 close on R1 to R3.
 
