@@ -111,11 +111,13 @@ per-stem lists), its before equal to the join's after.
 
 The two lines after each triple you write say which checks this dispatch ran. `advisor: called`
 when an `advisor` call returned a result; `advisor: unavailable` when the tool was absent or
-every call errored or was rate-limited. `derivations: replayed <n>`, `<n>` being the count
-`scripts/ai-dlc/validate-artifact-derivations.sh <your record>` printed after your last edit;
-`derivations: not replayed` when you did not run it. A section or subject shard writes
-`derivations: deferred to the join (section/subject shard)`: its fences name the document,
-which reads stale until assembly, and the gate replays them after it. A check you skipped is
+every call errored or was rate-limited. Replay is the default: run
+`scripts/ai-dlc/validate-artifact-derivations.sh <your record>` after your last edit and write
+`derivations: replayed <n>`, `<n>` being the derivation count on its `OK:` summary line (or the
+"checked" count on its `FAIL:` line). Write `derivations: deferred to the join (section/subject
+shard)` only when a fence of yours names your section file or the document assembled from it,
+which reads stale until assembly; a fence naming code, a history file or `pending.md` replays
+now. `derivations: not replayed` when you did not run it, which the join refuses. A check you skipped is
 stated here, in the record the join and the next pass read, never only in your final message.
 
 Then, per finding:
