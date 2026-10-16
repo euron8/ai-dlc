@@ -139,7 +139,7 @@ $ grep -c -F '<the text you wrote>' <the file you edited>
 - siblings: n/a (section shard; re-checked by the serial remediator after assembly)
 - siblings: n/a (insertion)
 - siblings: n/a (deletion)
-- closes: <part> <heading>   (the serial remediator only, copied from the `ESCALATED:` line it resolves)
+- closes: <part> <heading>   (a `repaired` entry in the same record, copied from the `ESCALATED:` line it resolves)
 - supersedes: <part> <heading>   (an escalated entry restating a part's escalation, copied the same way)
 - edit: <project-relative path of the file the fix lies in>:<line(s)> (escalated)   (an `escalated` entry's edit: line)
 

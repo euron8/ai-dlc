@@ -94,6 +94,13 @@ and this role is that same teammate on the key this file names.
 overwritten on the next derive. Change the spec by re-running `bmad-spec` with
 the change as input.
 
+When your brief folds the operator's answers into a repair whose record the join reported
+`ESCALATED:` lines for, APPEND to that joined repair record, never a separate one: the join
+closes an escalation only by a `repaired` entry in the same record. Append one entry per answer,
+`- disposition: repaired`, carrying one `- closes: <part> <heading>` line per escalation the
+answer resolves, each copied byte-exact from the tail of its `ESCALATED:` line, and every member
+of the chain gets its own line: a restating entry and each part escalation it supersedes.
+
 Leave the git index as you found it. No `git add`, `git mv`, `git rm`, `git commit`,
 `git stash` or `git reset`; move a file with plain `mv` when your brief asks for a move. The
 lead commits, and anything you stage rides into its next commit unseen. That holds for
