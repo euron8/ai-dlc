@@ -68,9 +68,9 @@ fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 
-drive_stop() { # <work> -> stdout (block JSON, or empty on allow)
+drive_stop() { # <work> [hook] -> stdout (block JSON, or empty on allow)
   printf '{"session_id":"t","transcript_path":""}' \
-    | CLAUDE_PROJECT_DIR="$1" bash "$STOP_HOOK" 2>/dev/null
+    | CLAUDE_PROJECT_DIR="$1" bash "${2:-$STOP_HOOK}" 2>/dev/null
 }
 blocked()     { case "$1" in *'"decision":"block"'*|*'"decision": "block"'*) return 0 ;; esac; return 1; }
 LOG='_bmad-output/pipeline-continuation-log.md'
@@ -101,6 +101,16 @@ else
   bad "fixture snapshot lacks the In-Flight section — the ignore-the-row-wording property is untested"
 fi
 rm -rf "$W"
+# 2p. THE PRODUCER'S FORM. wait-for-deliverable.sh writes `<epoch> <pid>`; the bare-epoch arm above
+#     is the backward-compatibility proof, this one is the marker the shipping beat writes. Scored
+#     by the same predicate so section 9's first-field mutant can drive it (yield_live).
+yield_live() { # yield_live <seed-case> [hook] -> 0 when the Stop is ALLOWED by Check 2b
+  _yw="$(bash "$HERE/seed.sh" "$1")"; _yo="$(drive_stop "$_yw" "${2:-}")"
+  if blocked "$_yo"; then YL_MSG=blocked; elif fired_live "$_yw"; then YL_MSG=live; else YL_MSG=allow-not-live; fi
+  rm -rf "$_yw"; [ "$YL_MSG" = live ]
+}
+if yield_live live-marker-pid; then ok "live beat, producer form '<epoch> <pid>': the yield is ALLOWED via Check 2b (ALLOWED_BY_LIVE_BEAT logged)"
+else bad "live beat, producer form '<epoch> <pid>': $YL_MSG — the hook does not read the marker wait-for-deliverable.sh writes"; fi
 
 # =============================================================================
 # 3. FAIL-SAFE — every non-live marker state falls through to BLOCK.
@@ -108,7 +118,7 @@ rm -rf "$W"
 # missing (case 1 above), expired, non-numeric, empty, unreadable. If ANY of
 # these allowed, a dead beat would open a yield into a silent stall — strictly
 # worse than the churn it replaces.
-for c in expired-marker garbage-marker empty-marker marker-is-dir; do
+for c in expired-marker expired-marker-pid garbage-marker empty-marker marker-is-dir; do
   W="$(bash "$HERE/seed.sh" "$c")"; OUT="$(drive_stop "$W")"
   if blocked "$OUT" && ! fired_live "$W"; then ok "$c: falls through to BLOCK (fail-safe, no false allow)"
   else bad "$c: did NOT block — a non-live marker opened the yield into a silent stall"; fi
@@ -526,6 +536,20 @@ else
   # A control arm that fails reads `FAIL  mutant control (unmutated hooks-dir copy): 8x ...`:
   # a copy that cannot pass cannot score a kill, so every mutant verdict is then unreadable.
   for _a in $ARMS_8; do job arm_job "$_a" "$CTRL" "mutant control (unmutated hooks-dir copy): "; done
+  # ARM 2p's MUTANT, synchronous and outside the job count. The first-field line deleted: the lease
+  # regex then sees "N 12345" and rejects it, so the producer form must BLOCK while the bare-epoch
+  # live-marker on the SAME copy still yields (the control that the copy runs and still defers).
+  _m2p="$(mk_copy no-first-field)"
+  if [ -z "$_m2p" ]; then bad "MUTANT no-first-field: could not copy the hooks dir"
+  elif ! sed '/^  BEAT_DEADLINE="\${BEAT_DEADLINE%% \*}"$/d' "$CTRL" > "$_m2p"; then bad "MUTANT no-first-field: sed DIED -- the mutation never existed"
+  elif cmp -s "$CTRL" "$_m2p"; then bad "FIXTURE STALE: mutation no-first-field matched nothing in $STOP_HOOK -- re-anchor it on the real line"
+  elif ! bash -n "$_m2p" 2>/dev/null; then bad "FIXTURE STALE: mutant no-first-field does not parse"
+  else
+    if yield_live live-marker-pid "$_m2p"; then bad "MUTANT SURVIVED (no-first-field: the marker read whole) -- arm 2p still yields ($YL_MSG)"
+    else ok "mutant (no-first-field: the marker read whole) fails arm 2p ($YL_MSG)"; fi
+    if yield_live live-marker "$_m2p"; then ok "...and the same copy still yields on the bare-epoch live-marker (it runs; the kill is the mutation's)"
+    else bad "MUTANT HARNESS BROKEN (no-first-field): the copy also fails the bare-epoch live-marker ($YL_MSG)"; fi
+  fi
 fi
 
 # mut <name> <owning-arm> <sed-program> <what it implements>
