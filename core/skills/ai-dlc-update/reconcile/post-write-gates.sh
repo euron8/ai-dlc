@@ -40,14 +40,16 @@
 # `--stub <gate>=<script>` REPLACES the command of one NAMED gate with `bash <script>`, so a fixture
 # can drive the verdict logic with a gate whose output and status it controls. It cannot add or
 # remove a gate: an unknown name is a usage error, every override is printed on its own line, and
-# the summary counts them. A run whose summary says `overridden=0` ran the real gates.
+# the summary counts them. A run whose summary says `overridden=0` ran the real gates. A run with
+# any override exits 1 even when every verdict is PASS, and its summary carries
+# `overrides-in-force`: a stubbed run is never a production pass.
 #
 # Usage:
 #   post-write-gates.sh [--stub <gate>=<script>]... [--out <dir>] <dist> <base> <consumer> <theirs>
 #   post-write-gates.sh --leftover-tokens <consumer>      # the leftover-token gate on its own
 # Exit:
-#   0  every gate PASS
-#   1  at least one gate FAIL or UNDECIDED, or fewer verdicts than gates
+#   0  every gate PASS and no gate overridden (`overridden=0`)
+#   1  at least one gate FAIL or UNDECIDED, fewer verdicts than gates, or any `--stub` in force
 #   2  usage
 set -uo pipefail
 
@@ -66,6 +68,8 @@ if [ "${1:-}" = "--leftover-tokens" ]; then
   [ -d "$lt_dir" ] || { echo "LEFTOVER-TOKENS REFUSED — no team-roles directory at $lt_dir; nothing was scanned" >&2; exit 2; }
   lt_t="$(mktemp -d "${TMPDIR:-/tmp}/pwg-lt.XXXXXX")" || { echo "LEFTOVER-TOKENS REFUSED — mktemp failed" >&2; exit 2; }
   trap 'rm -rf "$lt_t"' EXIT
+  # grep's 2 is reachable with the directory present: one unreadable file under it is enough, and
+  # the scan's other files are then a partial answer that would read as clean.
   grep -rn '{[a-z_]*}' "$lt_dir" > "$lt_t/all"
   lt_rc=$?
   [ "$lt_rc" -le 1 ] || { echo "LEFTOVER-TOKENS REFUSED — grep exited $lt_rc reading $lt_dir" >&2; exit 2; }
@@ -147,6 +151,10 @@ for gate in $GATES; do
   fi
 
   extra=""
+  # 126/127 IS REACHABLE PAST THE `-f` TEST ABOVE: that test is about the gate's OWN file, and a
+  # gate whose file exists still exits 127 when a program IT runs is missing — the hook-
+  # registration validator's body is `python3`, so a box without it exits 127 having checked
+  # nothing. That is a check that never ran, so UNDECIDED, not a FAIL of the tree.
   case "$rc" in
     ''|*[!0-9]*) verdict=UNDECIDED ;;
     126|127)     verdict=UNDECIDED ;;
@@ -183,6 +191,14 @@ elif [ "$n_pass" -eq "$N_GATES" ]; then
 else
   overall=UNDECIDED
 fi
-echo "POST-WRITE-GATES $overall gates=$n_seen/$N_GATES pass=$n_pass fail=$n_fail undecided=$n_undecided overridden=$n_over out=$OUT"
-[ "$overall" = PASS ] && exit 0
+# A RUN WITH ANY OVERRIDE IS NEVER A PRODUCTION PASS, AND ITS EXIT SAYS SO. `--stub` exists for the
+# fixture, but nothing stops a caller passing it, and a gate replaced by `exit 0` reads PASS. Before
+# this, two gates stubbed that way printed `PASS … overridden=2` at exit 0, the code SKILL.md tells
+# the reader means "every gate passed" — so a production verdict was one flag away from forgery.
+# The verdict word still reports what the gates said (the fixture reads it); the EXIT is 0 only
+# when every gate ran as this file defines it, and the summary names the overrides in words.
+ovr=""
+[ "$n_over" -eq 0 ] || ovr=" overrides-in-force"
+echo "POST-WRITE-GATES $overall gates=$n_seen/$N_GATES pass=$n_pass fail=$n_fail undecided=$n_undecided overridden=$n_over${ovr} out=$OUT"
+[ "$overall" = PASS ] && [ "$n_over" -eq 0 ] && exit 0
 exit 1

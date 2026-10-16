@@ -2207,7 +2207,9 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    It runs each gate with its output redirected to a file and its exit code captured on the next
    statement, and prints one line per gate — `GATE <name> PASS|FAIL|UNDECIDED rc=<n> … out=<file>`
    — then one `POST-WRITE-GATES PASS|FAIL|UNDECIDED …` summary. Exit 0 only when every gate
-   passed. On a non-zero exit, open the `out=` file the failing line names; that is the gate's
+   passed AND the summary says `overridden=0`. `--stub` is the fixture's hook: a run with any
+   override exits 1 even when every verdict reads PASS, and its summary says
+   `overrides-in-force`. Never pass `--stub` on a pull. On a non-zero exit, open the `out=` file the failing line names; that is the gate's
    whole output. The `hard-blockers` line carries `hard=<n>`: those are the HARD rows still
    standing, and each must be one the operator accepted per path before apply.
 
