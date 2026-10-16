@@ -17,10 +17,14 @@
 # at Check 6.
 #
 # ARM 4 IS THE ONE THAT WAS ACTUALLY WRONG DURING DEVELOPMENT, and it is why the corpus control
-# spans the whole area instead of the declared slot. Written the obvious way — count stories under
-# `s*/stories/` — the control is BLIND to a tree that has not migrated yet, so an unmigrated
+# counts the flat layout and not only the declared slot. Written the obvious way — count stories
+# under `s*/stories/` — the control is BLIND to a tree that has not migrated yet, so an unmigrated
 # consumer holding 988 story files reported "the corpus is empty" and SKIPped. The fix's own
 # blind spot had the same shape as the defect it was fixing.
+#
+# ARM 7 IS ITS OPPOSITE BOUND. The control counts the flat layout plus THIS sprint's slot and no
+# other sprint's, because a verdict must be the same with all sprint history deleted: a past
+# sprint's stories beside an empty current slot SKIP, byte-identically to the tree without them.
 set -uo pipefail
 
 # HERMETIC -- scrub the operator's tuning before invoking anything (I10). The tools under test
@@ -153,11 +157,20 @@ battery() { # $1 = the directory holding the two tools under test
   if [[ "$(check6 "$t")" == *"FAIL — the corpus location did not resolve"* ]]; then
     echo "A6 PASS"; else echo "A6 FAIL"; fi
 
-  # --- A7: ANOTHER sprint's stories are not this sprint's. The directory is the selector, so a
-  # populated s301 cannot make s302 look verified — and it must not read as empty either.
+  # --- A7: ANOTHER sprint's stories are not this sprint's, and the verdict is not a function of
+  # sprint HISTORY. A populated s301 beside an empty s302 SKIPs, exactly as the same tree with
+  # s301 deleted does: a past sprint's slot holds that sprint's stories, never this one's, so it
+  # is no evidence this sprint wrote its stories elsewhere. Asserted as byte-equality of the two
+  # verdict lines plus the SKIP itself, so a history-counting control (which reads FAIL with s301
+  # present and SKIP without it) fails here. A4 is the near-miss that must still FAIL: the flat
+  # layout carries no sprint slot and may hold this sprint's stories.
   t="$(fresh "$TOOLS")"
   story "$t/_bmad-output/planning-artifacts/s301/stories" story-1-old done
-  if [[ "$(check6 "$t")" == *"FAIL — 0 of 1 story file(s)"* ]]; then
+  local a7_hist a7_del
+  a7_hist="$(check6 "$t")"
+  rm -rf "$t/_bmad-output/planning-artifacts/s301"
+  a7_del="$(check6 "$t")"
+  if [ "$a7_hist" = "$a7_del" ] && [[ "$a7_hist" == *"SKIP — the story corpus is empty"* ]]; then
     echo "A7 PASS"; else echo "A7 FAIL"; fi
 
   # --- A8: the KEY still spells the sprint and the FILE does not, so the join strips the DECLARED
@@ -308,7 +321,13 @@ mutant() { # <expected-assertion> <label> <target: ss|vmr> <sed expr>
 # A4: narrow Check 6's corpus control back to the declared slot — the blind spot the arm exists
 # for. The unmigrated tree then reports an empty corpus and SKIPs.
 mutant A4 "corpus control narrowed to the declared slot" vmr \
-  's/^  if \[ "\$CHECK6_AREA_CORPUS" -eq 0 \]; then$/  if [ "$CHECK6_CORPUS" -eq 0 ]; then/'
+  's/^  CHECK6_AREA_CORPUS=\$((CHECK6_FLAT_CORPUS + CHECK6_MATCHED))$/  CHECK6_AREA_CORPUS=$((CHECK6_MATCHED))/'
+# A7: drop the sprint-slot exclusion from the flat count, so every sprint's slot is counted again
+# -- the history-dependent control this arm exists for. A past s301 then reads FAIL while the
+# same tree with s301 deleted reads SKIP. A2 stays green (its s302 stories are both matched and
+# counted), and A4 and A5 do not move, so the kill is A7's alone.
+mutant A7 "the flat count counts other sprints' slots again" vmr \
+  '/if (is_slot(part\[i]))  *next$/d'
 # A6: turn the unresolvable-location failure into a skip, which is what it used to be.
 mutant A6 "unresolved corpus location skips instead of failing" vmr \
   's/^if \[ "\$CHECK6_UNRESOLVED" -eq 1 \]; then$/if [ "$CHECK6_UNRESOLVED" -eq 2 ]; then/'
