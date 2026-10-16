@@ -80,6 +80,10 @@ g -C "$WORK/upstream" config branch.sprint/4.merge refs/heads/sprint/4 || exit 2
 mkdir -p "$WORK/upstream/_bmad-output" && printf 'p\n' > "$WORK/upstream/_bmad-output/pipeline-snapshot.md" || exit 2
 g -C "$WORK/upstream" add _bmad-output && g -C "$WORK/upstream" commit -q -m snapshot || exit 2
 
+# CONS: a layered consumer's project dir (the `.claude/.ai-dlc-version` stamp) -- the NO-VERIFY
+# deny is active only there. CPD, every other cell's project dir, carries no stamp.
+mkdir -p "$WORK/consumer/.claude" && printf '0.0.0\n' > "$WORK/consumer/.claude/.ai-dlc-version" || exit 2
+
 GL="$WORK/sprint/_bmad-output/implementation-artifacts/gate-log.md"
 mkdir -p "$(dirname "$GL")" || exit 2
 printf '# Gate Log\n\n## Gate Log: Sprint 2\nTimestamp: 2026-10-01T00:00Z\n| check | verdict |\n' > "$GL" || exit 2
@@ -99,6 +103,7 @@ UPSTREAM="$WORK/upstream"
 P1="$WORK/projects/p1"
 MUT="$WORK/mut"
 CPD="$WORK/cpd"
+CONS="$WORK/consumer"
 GL="$GL"
 ENV
 

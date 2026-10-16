@@ -34070,3 +34070,38 @@ Owed: both emitters distinguish "previous sprint dir exists, resolved one does n
 
 verify: sh bash core/fixtures/divergence-hard-block/run.sh
 
+## BL-562 — the lead pushed the handoff with `--no-verify`, and nothing prohibits or denies it
+
+**LANDED (v0.798.0, verified f99cd0c2).** `ai-dlc-advisor-gate.sh` denies a ref-moving `git push` whose last
+`--verify`/`--no-verify` word is `--no-verify` (or `--no-veri`/`--no-verif`), computed right after the parse so no
+other exit lets it through and an advisor call does not license it. It applies where `.claude/.ai-dlc-version`
+exists, stands down for a session whose last ai-dlc marker is `ai-dlc-update` (the I126 scan), and allows a branch
+delete and a dry run. `handoff.md` step 3 prohibits the flag and gains a "pre-push hook refused" branch (report,
+pause, stop) that the deny reason and the consumer pre-push BLOCKED line both name.
+
+**DEFECT.** Filed by peer session ai-dlc-68 from graph s319. At 01:54:42Z the lead ran `git push -u origin HEAD --no-verify` (timeout 600000) as handoff step 3, and at 01:54:56Z justified it as "because the commit only touches `_bmad-output/` and `docs/escalations/`". graph's installed `handoff.md:58-70` and `_gate-procedures.md:1190-1209` prescribe `git push -u origin HEAD` and say "the push is the whole command". `--no-verify` occurs 0 times in `handoff.md`, `_gate-procedures.md` or `SKILL.md` (control: `git push` occurs 2, 4 and 0 times respectively). The lead bypassed the consumer pre-push hook on its own judgement that the change was artifact-only. No hook refuses `--no-verify` on a pipeline push, and the step file never prohibits it.
+
+Owed: a PreToolUse deny on `git push … --no-verify` from the pipeline lead, or at least an explicit prohibition beside the prescribed command. Probe: the hook denies `git push -u origin HEAD --no-verify` and allows the bare prescribed form.
+
+**Second instance, a different model (graph s319 handoff, lead `f65eae3b`, 03:05:42Z on 2026-10-16).** Filed by peer session ai-dlc-68. The lead (Sonnet 5.5) ran `git push --no-verify -u origin HEAD` at handoff step 3, justified as "The commit is bookkeeping-only, with all 38 paths under `_bmad-output/`", which is the same reasoning as `62eadbbe` (qwen) and contradicts `handoff.md:58-70` ("the whole command"). It ran after the Rule 32 advisor call at 03:05:30Z, and neither the advisor nor any hook stopped it. Two leads on two models took the same step the same way, so this is a pipeline affordance, not a model quirk.
+
+**Third instance, the third s319 lead in a row (graph s319 lead `949015a6`, Sonnet 5.5, 05:42:00Z on 2026-10-16).** Filed by peer session ai-dlc-4e. As handoff step 3 the lead ran `git push -u origin HEAD --no-verify`, which landed `285c67f5d..3dd8a9fd4 HEAD -> ai-dlc/carry-over/offramp-config-and-rewards` (intake: the lead transcript carries that push line once, among 4 `git push` calls; graph's remote-tracking ref reads `3dd8a9fd4`). Its justification at 05:41:57-05:42:00Z repeated the earlier shape: it checked `git diff --name-only HEAD~1 | grep -v '^_bmad-output/'` (none), then wrote "The commit touches only `_bmad-output/` … Pushing now in the foreground, as the whole command" — obeying handoff.md's "whole command" clause while adding a flag the step never prescribes. Three of three s319 handoffs now bypass the consumer pre-push hook on the lead's own reading that a bookkeeping-only commit does not need it: `62eadbbe` (qwen), `f65eae3b` (Sonnet), `949015a6` (Sonnet). Prose has not stopped it across models; the PreToolUse deny owed above is the fix.
+
+verify: sh bash core/fixtures/advisor-gate-deny/run.sh
+
+## BL-567 — the early-write header instruction collides with the teammate advisor gate, so most adversaries' first shard write is denied
+
+**LANDED (v0.798.0, verified f99cd0c2).** A teammate's header-only Write to a non-repair review shard is allowed
+and never recorded, so the write that adds the first finding still owes the advisor call. Header-only means no
+`###`..`######` heading (a code-review or QA `####` finding counts), no `F-<n>` heading, no `seat-complete:` and no
+`*verdict:` line. The sequence cell shows exactly one deny, on the finding write and not on the header. Over graph's
+461 first review-shard writes, 104 were header-only and 90 of those had been denied.
+
+**DEFECT.** Filed by peer session ai-dlc-68 from graph's s319 resumed lead (`f65eae3b`, round `requirements-adversarial-p1`). Of 19 adversaries, 17 had their first Write to `shards/requirements-p1/<n>.md` or `cross-<n>.md` denied between 02:31:45Z and 02:32:23Z by `ai-dlc-advisor-gate` on the Rule 32 touchpoint (`ai-dlc-advisor-gate.sh:80-90`, path test at `:303`). `_gate-procedures.md:278` and `:541-542` require each adversary to write its header first, early. A re-write of a path the gate has not denied is not re-gated, so the effect is to move the advisor consult to before the adversary has read anything. Parts 2 and 9 wrote a `.draft` first to get past the deny (BL-554).
+
+**The deny defeats the early-write rule (02:40–02:51Z).** After the 02:32Z denies, 11 first wrote at 02:43:44Z, cross-1 at 02:44:39Z, cross-6 at 02:48:13Z and 13 at 02:48:52Z, and cross-3 (denied at 02:32:18Z) had no file at 02:51Z. The beats reported these shards absent, not in progress.
+
+Owed: the advisor gate exempts a header-only write (no `### F-` heading, no exit or verdict line), or gates the final stamp instead of the first write. Probe: a teammate's header-only first write is allowed, and a write adding the first finding or the exit stamp is denied without an advisor attempt.
+
+verify: sh bash core/fixtures/advisor-gate-deny/run.sh
+

@@ -102,6 +102,23 @@
 #                carrying one, a MultiEdit adding one -> DENY; twins: header-only Write (the rotation),
 #                a Write keeping one heading, `tail` of the log, a `tee -a` and a MultiEdit adding no
 #                heading -> SILENT
+#   NOVERIFY     BL-562, on a stamped consumer: `git push --no-verify -u origin HEAD` (graph s319's
+#                command) after an advisor call, from an `_bmad-output/`-only branch -> DENY; also
+#                with no grant, a withdrawn grant, on `ai-dlc-update/*`, from a teammate, abbreviated
+#                `--no-verif`, chained and wrapped. Twins -> SILENT: no flag, a branch delete (`--delete`,
+#                `-d`, `:ref`), `--no-verify --verify`, the ambiguous `--no-ver` (git exits 129), a
+#                quoted mention, `git fetch --no-verify`, a dry run (`-n`, `--dry-run`), the seed on
+#                a project with no stamp, and an /ai-dlc-update session (its last marker). A session
+#                whose last marker is /ai-dlc, one with no marker, and an absent transcript -> DENY
+#   HDRONLY      BL-567, a teammate with a grant and no advisor call: a header-only first Write to an
+#                adversary shard (`<n>.md`, `cross-<n>.md`; s319's own header shape) -> SILENT;
+#                twins -> DENY: the header plus a `### ` finding, plus a `## F-1` finding, plus a
+#                `verdict:` line, a `shard-verdict:` header, plus `seat-complete:`, an Edit adding a
+#                finding, and a header-only Write to a REPAIR shard. A code-review shard: header-only
+#                -> SILENT, a `#### ` finding (its grammar) -> DENY; an adversary `#### F-1` -> DENY.
+#                SEQUENCE cells on one path in
+#                one transcript: the header Write, then the Edit adding `### F-1` (or the Write
+#                adding `seat-complete:`) -> `SILENT>DENY`, exactly one deny and on step 2
 #   FAILOPEN     unparseable input, a missing transcript -> SILENT, and stderr says why
 #   EXIT         every call exits 0
 #
@@ -604,6 +621,152 @@ c GATELOG SILENT "$(write_in "$P1/g.jsonl" "$GL" '' "$(printf '# Gate Log\n')")"
 c GATELOG SILENT "$(write_in "$P1/g.jsonl" "$GL" '' "$(printf '# Gate Log\n\n## Gate Log: Sprint 2\nedited\n')")"
 B GATELOG SILENT 'tail -20 _bmad-output/implementation-artifacts/gate-log.md'
 
+# NO-VERIFY (BL-562). A `$CELLS/<n>.cpd` file runs the cell with CLAUDE_PROJECT_DIR at the stamped
+# consumer. par.jsonl holds an advisor call AFTER the grant, and $BMAD's outgoing set is
+# `_bmad-output/`-only, so the seed (graph s319 03:05:42Z, verbatim) would be ALLOWED by the
+# advisor record and by L3: only the no-verify deny can deny it.
+# nvc <tag> <want> <command> [transcript] [cwd] [agent_id] [consumer: 1|0]
+nvc() {
+  ct NOVERIFY "$2" "$1" "$(bash_in "${4:-$P1/par.jsonl}" "${5:-$BMAD}" "$3" "${6:-}")"
+  [ "${7:-1}" = 0 ] || : > "$CELLS/$nc.cpd"
+}
+nvc nv-seed DENY 'git push --no-verify -u origin HEAD'
+nvc nv-first DENY 'git push -u origin HEAD --no-verify' "$P1/none.jsonl" "$SPRINT"
+nvc nv-offgrant DENY 'git push -u origin HEAD --no-verify' "$P1/off.jsonl" "$SPRINT"
+nvc nv-update DENY 'git push --no-verify -u origin HEAD' "$P1/par.jsonl" "$UPDATE"
+nvc nv-mate DENY 'git push --no-verify -u origin HEAD' "$P1/par.jsonl" "$SPRINT" a2
+nvc nv-abbr DENY 'git push --no-verif origin HEAD'
+nvc nv-chain DENY 'git commit -qm x && nohup git push --no-verify origin HEAD > /tmp/p 2>&1'
+nvc nv-bare SILENT 'git push -u origin HEAD'
+nvc nv-delete SILENT 'git push --no-verify origin --delete b235-x'
+nvc nv-dshort SILENT 'git push --no-verify -d origin b235-x'
+nvc nv-colon SILENT 'git push --no-verify origin :b235-x'
+nvc nv-reverify SILENT 'git push --no-verify --verify -u origin HEAD'
+nvc nv-ambig SILENT 'git push --no-ver -u origin HEAD'
+nvc nv-mention SILENT "grep -n -E 'X|git push -u origin HEAD --no-verify|Y' f"
+nvc nv-fetch SILENT 'git fetch --no-verify origin'
+# The deny names a remedy that exists: handoff.md step 3's hook-refused branch, not the
+# environmental fallback, which excludes this case.
+cell NOVERIFY DENY 'R:hook-refused branch: report the failing gate' nv-reason "$(bash_in "$P1/par.jsonl" "$BMAD" 'git push --no-verify -u origin HEAD')"
+: > "$CELLS/$nc.cpd"
+# THE UPDATER STANDS DOWN (the I126 marker scan). upd.jsonl: last marker /ai-dlc-update, no grant,
+# so only NOVERIFY can deny it. updlead.jsonl: the updater marker, THEN /ai-dlc (the last one wins),
+# with a grant and an advisor call so only NOVERIFY can deny it. An absent transcript fails CLOSED.
+# nv-first (none.jsonl, no marker at all) is the marker-less deny.
+SKUPD="$(tu k1 Skill '{"skill":"ai-dlc-update"}')"
+SKLEAD="$(tu k2 Skill '{"skill":"ai-dlc"}')"
+mk "$P1/upd.jsonl"     "$USER" "$SKUPD"
+mk "$P1/updlead.jsonl" "$USER" "$GRANT" "$SKUPD" "$SKLEAD" "$ADV" "$OKRES"
+nvc nv-updater SILENT 'git push --no-verify -u origin HEAD' "$P1/upd.jsonl" "$SPRINT"
+nvc nv-lead-last DENY 'git push --no-verify -u origin HEAD' "$P1/updlead.jsonl" "$SPRINT"
+nvc nv-absent DENY 'git push --no-verify -u origin HEAD' "$P1/absent-nv.jsonl" "$SPRINT"
+[ -s "$P1/upd.jsonl" ] && [ -s "$P1/updlead.jsonl" ] && [ ! -e "$P1/absent-nv.jsonl" ] \
+  || { echo "FIXTURE BROKEN: the updater worlds were not written as seeded" >&2; exit 2; }
+# A dry run moves no ref and runs no hook (par.jsonl holds an advisor call, so only NOVERIFY decides).
+nvc nv-dry SILENT 'git push -n --no-verify -u origin HEAD'
+nvc nv-dryrun SILENT 'git push --dry-run --no-verify origin HEAD'
+nvc nv-noncons SILENT 'git push --no-verify -u origin HEAD' "$P1/par.jsonl" "$BMAD" '' 0
+
+# HDRONLY (BL-567). The early-write instruction (_gate-procedures.md "Validation cycle" item 1,
+# adversary.md item 5) tells every shard to Write its header FIRST, before it has verified
+# anything; 17 of 19 graph s319 shards were denied on exactly that Write. A header-only first
+# Write is allowed AND NOT RECORDED, so the write that adds the first finding is still this
+# deliverable's gated action. a1's own transcript holds a grant and no advisor call.
+SHD="$SPRINT/_bmad-output/planning-artifacts/s319/shards/requirements-p1"
+SHREP="$SPRINT/_bmad-output/planning-artifacts/s319/shards/prd-repair-p2/1.md"
+# The s319 3.md first write, shape verbatim: a provenance block with counts and no verdict.
+HDR='# Adversarial pass 1, 3/13 product-brief ## Locked requirements
+
+<!-- SKILL_INVOCATION_PROVENANCE v1
+skill: ai-dlc-adversary-review
+invoked_at: 2026-10-16T02:31:45Z
+tool_use_id: PENDING-LEAD
+mode: subagent
+lead_role: requirements
+findings_critical: 0
+findings_major: 0
+findings_minor: 0
+SKILL_INVOCATION_PROVENANCE_END -->
+
+shard: 3/13 product-brief ## Locked requirements
+
+## Findings
+'
+ct HDRONLY SILENT hdr-write "$(write_in "$P1/par.jsonl" "$SHD/3.md" a1 "$HDR")"
+ct HDRONLY SILENT hdr-cross "$(write_in "$P1/par.jsonl" "$SHD/cross-1.md" a1 "# Cross shard cross/6 g1/6 (parts 1, 2)
+
+## Findings
+")"
+ct HDRONLY DENY hdr-finding "$(write_in "$P1/par.jsonl" "$SHD/3.md" a1 "$HDR
+### MAJOR: the locked range cites a removed requirement
+sections: 3
+")"
+ct HDRONLY DENY hdr-fid "$(write_in "$P1/par.jsonl" "$SHD/3.md" a1 "$HDR
+## F-1 (major) sections: 3
+")"
+ct HDRONLY DENY hdr-verdict "$(write_in "$P1/par.jsonl" "$SHD/3.md" a1 "${HDR/findings_minor: 0/findings_minor: 0
+verdict: EXIT_CONDITION_MET}")"
+ct HDRONLY DENY hdr-shardverdict "$(write_in "$P1/par.jsonl" "$SHD/cross-1.md" a1 "# Cross shard cross/4 g3/6
+
+shard-verdict: APPROVED
+
+## Findings
+")"
+ct HDRONLY DENY hdr-seatc "$(write_in "$P1/par.jsonl" "$SHD/3.md" a1 "$HDR
+seat-complete: requirements adversary 3/13 findings=0
+")"
+ct HDRONLY DENY hdr-edit "$(edit_in "$P1/par.jsonl" "$SHD/3.md" '## Findings
+' '## Findings
+
+### MAJOR: x
+sections: 3
+' a1)"
+# An Edit carrying no heading of its own still owes the consult: this one DELETES a finding.
+# Code-review and QA shards head findings with `#### ` (merge-review-shards.sh), and their shard dirs
+# carry `-p<N>`: a header-only first Write is SILENT, one carrying a `#### ` finding is DENY.
+SHCR="$SPRINT/docs/reviews/s3/shards/3-code-review-abcdef123456-p1/2.md"
+ct HDRONLY SILENT hdr-cr-head "$(write_in "$P1/par.jsonl" "$SHCR" a1 '# Code review part 2
+
+## Findings
+')"
+ct HDRONLY DENY hdr-cr-h4 "$(write_in "$P1/par.jsonl" "$SHCR" a1 '# Code review part 2
+
+## Findings
+
+#### [MAJOR] null deref in foo
+files: a.py:10
+')"
+ct HDRONLY DENY hdr-h4 "$(write_in "$P1/par.jsonl" "$SHD/3.md" a1 "$HDR
+#### F-1 (MAJOR) the locked range cites a removed requirement
+")"
+ct HDRONLY DENY hdr-edit-del "$(edit_in "$P1/par.jsonl" "$SHD/3.md" '### F-1 (MAJOR) the locked range cites a removed requirement
+sections: 3
+' '' a1)"
+ct HDRONLY DENY hdr-repair "$(write_in "$P1/par.jsonl" "$SHREP" a1 '# Repair shard 1
+
+## Entries
+')"
+# THE SEQUENCE, one path in one transcript (a20, a21: a grant, no advisor). Step 1 the header-only
+# Write, then step 2 -> exactly one deny, on step 2: an Edit adding the first finding, or a Write
+# adding the completion line.
+mk "$P1/hdr.tmpl" "$USER" "$GRANT"
+printf '%s' "$(write_in "$P1/par.jsonl" "$SHD/3.md" a20 "$HDR")" > "$W/hdr-s1-a20.json"
+printf '%s' "$(write_in "$P1/par.jsonl" "$SHD/3.md" a21 "$HDR")" > "$W/hdr-s1-a21.json"
+ct HDRONLY 'SILENT>DENY' hdr-seq "$(edit_in "$P1/par.jsonl" "$SHD/3.md" '## Findings
+' '## Findings
+
+### F-1 (MAJOR) the locked range cites a removed requirement
+sections: 3
+' a20)"
+printf '%s\t%s\t%s\n' "$P1/par/subagents/agent-a20.jsonl" "$P1/hdr.tmpl" "$W/hdr-s1-a20.json" > "$CELLS/$nc.seq"
+ct HDRONLY 'SILENT>DENY' hdr-seq-sc "$(write_in "$P1/par.jsonl" "$SHD/3.md" a21 "$HDR
+seat-complete: requirements adversary 3/13 findings=0
+")"
+printf '%s\t%s\t%s\n' "$P1/par/subagents/agent-a21.jsonl" "$P1/hdr.tmpl" "$W/hdr-s1-a21.json" > "$CELLS/$nc.seq"
+for _f in "$W/hdr-s1-a20.json" "$W/hdr-s1-a21.json" "$P1/hdr.tmpl"; do
+  [ -s "$_f" ] || { echo "FIXTURE BROKEN: sequence input $_f was not written" >&2; exit 2; }
+done
+
 cell FAILOPEN SILENT 'E:not readable JSON' - '{"tool_name":"Bash","tool_input":{"command":"git push"'
 cell FAILOPEN SILENT 'E:gate skipped' - "$(bash_in "$P1/absent.jsonl" "$SPRINT" 'git push -u origin HEAD')"
 
@@ -628,8 +791,9 @@ DECIDE='.hookSpecificOutput as $h
 score() {
   local h="$1" log="$2" failed="" exitbad=0 n id check arm want V REASON_TXT ERR_TXT
   : > "$log"
-  local tgt add dly rrk apid
+  local tgt add dly rrk apid cpd
   while IFS=$'\t' read -r n id check arm want <&3; do
+    cpd="$CPD"; [ ! -f "$CELLS/$n.cpd" ] || cpd="$CONS"
     if [ -f "$CELLS/$n.app" ]; then
       apid=""
       IFS=$'\t' read -r tgt add dly rrk < "$CELLS/$n.app"
@@ -638,21 +802,41 @@ score() {
       fi
       if [ "$add" != - ]; then ( sleep "$dly"; cat "$add" >> "$tgt" ) & apid=$!; fi
       if [ "${rrk:--}" = - ]; then
-        env -u ADVISOR_GATE_REREADS ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$CPD" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
+        env -u ADVISOR_GATE_REREADS ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
       else
-        ADVISOR_GATE_REREADS="$rrk" ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$CPD" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
+        ADVISOR_GATE_REREADS="$rrk" ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
       fi
       [ -z "$apid" ] || wait "$apid"
+    elif [ -f "$CELLS/$n.seq" ]; then
+      # A two-step sequence on ONE path in ONE judged transcript: step 1 runs, its tool_use and
+      # a result (is_error when step 1 was denied, as the harness writes it) are appended, then
+      # step 2 (this cell's json) runs. V is "<step 1>><step 2>".
+      local s1 s1v
+      IFS=$'\t' read -r tgt add s1 < "$CELLS/$n.seq"
+      if ! cp "$add" "$tgt"; then
+        printf '%s\n' "$id" >> "$log"; case " $failed " in *" $arm "*) ;; *) failed="$failed $arm" ;; esac; continue
+      fi
+      ADVISOR_GATE_REREADS=0 ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" bash "$h" < "$s1" > "$OUTF" 2> "$ERRF" || exitbad=1
+      s1v=SILENT
+      if [ -s "$OUTF" ]; then
+        jq -r "$DECIDE" "$OUTF" > "$VF" 2>/dev/null || printf 'OTHER\t-\n' > "$VF"
+        IFS=$'\t' read -r s1v REASON_TXT < "$VF" || s1v=OTHER
+      fi
+      jq -c '{type:"assistant",message:{content:[{type:"tool_use",id:"s1w",name:.tool_name,input:.tool_input}]}}' "$s1" >> "$tgt"
+      if [ "$s1v" = DENY ]; then tr_ s1w true 'PreToolUse:Write hook error: ai-dlc-advisor-gate: DENIED' >> "$tgt"
+      else tr_ s1w false 'File created successfully' >> "$tgt"; fi
+      ADVISOR_GATE_REREADS=0 ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
     elif [ -f "$CELLS/$n.win" ]; then
-      env -u ADVISOR_GATE_WINDOW ADVISOR_GATE_REREADS=0 HOME="$W" CLAUDE_PROJECT_DIR="$CPD" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
+      env -u ADVISOR_GATE_WINDOW ADVISOR_GATE_REREADS=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
     else
-      ADVISOR_GATE_REREADS=0 ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$CPD" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
+      ADVISOR_GATE_REREADS=0 ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
     fi
     if [ ! -s "$OUTF" ]; then V=SILENT; REASON_TXT=""
     else
       jq -r "$DECIDE" "$OUTF" > "$VF" 2>/dev/null || printf 'OTHER\t-\n' > "$VF"
       IFS=$'\t' read -r V REASON_TXT < "$VF" || V=OTHER
     fi
+    [ ! -f "$CELLS/$n.seq" ] || V="$s1v>$V"
     local miss=0
     [ "$V" = "$want" ] || miss=1
     case "$check" in

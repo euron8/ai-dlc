@@ -103,11 +103,50 @@
 #     gated action does not move. RESIDUAL COST: 2 of those 14 lines were the harness's
 #     "Your response above was cut off mid-stream" continuation, not a re-dispatch; such a
 #     resumed write now costs one more advisor call. It never wedges.
+#     THE HEADER-ONLY FIRST WRITE (BL-567) is NOT a gated action. The early-write instruction
+#     (_gate-procedures.md "Validation cycle" item 1; adversary.md item 5) has every review shard
+#     Write its header FIRST, before verifying anything; measured on graph s319, 17 of 19 adversary
+#     shards were denied on exactly that write, and several then wrote nothing until finished, so
+#     their beats scored them ABSENT. A teammate Write to `/shards/<x>-p<N>/<f>.md` (not a repair
+#     shard) carrying no `###`-to-`######` heading (code-review and QA shards head findings with
+#     `#### `, merge-review-shards.sh), no `F-<n>` heading (party seats use `## F-1`), no
+#     `seat-complete:` and no `<x>verdict:` line is allowed AND NEVER RECORDED -- recording it would
+#     make the write that adds the first finding a "re-write" and acquit it. A provenance block
+#     with counts and no verdict is header (the s319 shards' own first writes). Write only: an
+#     Edit is judged as before, so the Edit adding the first finding owes the consult. Measured
+#     over graph's 461 subagent first-writes to a planning-artifacts review shard (repair shards
+#     excluded): 104 header-only, 90 of them denied.
+#     KNOWN: a header-only Write over a file already holding findings is not gated (it deletes
+#     them; the merge's seat-complete count still refuses the shard).
 #   UNMEASURED: agent teams. A top-level teammate (not a subagent) carries no `agent_id`, so it is
 #   judged as a LEAD on its own `transcript_path`: its pushes are gated and its verdict writes are
 #   not. No team transcript was available to measure which file that path names.
 #   NOT gated anywhere: the lead's `join-remediator-shards.sh` or any merge script, a branch
 #   delete, a Bash write by a teammate (the pipeline instructs Edit/Write for every record).
+#
+# THE NO-VERIFY DENY (BL-562). A ref-moving `git push` segment whose last `--verify`/`--no-verify`
+# word is `--no-verify` (or its unambiguous abbreviations `--no-veri`, `--no-verif`) is DENIED
+# outright, whatever the advisor record says: an advisor call does not license skipping the
+# pre-push hook. Measured on graph twice (s319, 01:54Z and 03:05Z, two leads on two models), each
+# justified as an `_bmad-output/`-only change, the second right after an advisor call. So it runs
+# right after the parse, BEFORE every stand-down: empty KIND, the `ai-dlc-update/*` branch, no
+# transcript, a withdrawn or absent grant (a local-model lead), and L3.
+#   UPDATER: an /ai-dlc-update session (last ai-dlc marker in the handed transcript, the I126 scan)
+#   stands down; no transcript, no marker, or an /ai-dlc marker still DENIES (fail closed).
+#   SCOPE: any agent, lead or teammate (graph's subagent transcripts carry 0 such pushes), and
+#   ONLY on a layered consumer -- `$CLAUDE_PROJECT_DIR/.claude/.ai-dlc-version` present, the stamp
+#   the core and dispatch guards key on. The distribution's operator registers this hook for
+#   ai-dlc itself, where hookless durability and release-branch pushes are standing practice
+#   (227 ref-moving `--no-verify` pushes in its lead transcripts), and is not a pipeline lead.
+#   ALLOWED: a branch delete (`--delete`, `-d`, `:ref`, the `isdelete` test), a quoted or
+#   heredoc mention (csegs), `--no-verify --verify`, a dry run (`-n`, `--dry-run`, a short-flag
+#   cluster carrying `n`), which moves no ref. Prescribed nowhere: no step, role or skill
+#   under core/ or templates/ issues an outer `git push --no-verify`; `self-update-push.sh` does
+#   so inside a script, after running the hook itself, which this hook never sees.
+#   NOT CAUGHT, known: `git -c core.hooksPath=<x> push`, the abbreviation `--no-v` (git accepts
+#   it where `--no-verify` is the only `--no-v*` option; `--no-ve`/`--no-ver` are ambiguous and exit
+#   129, so the match starts at `--no-veri`), `GIT_*` environment tricks, a push from a
+#   script, and a segment that both deletes and pushes (`git push --no-verify origin :a b`).
 #
 # THE TEST, PER KIND (operator ruling, batch 201). In the judged transcript, the line of the most
 # recent advisor attempt must come AFTER the line of the most recent gated action OF THE SAME
@@ -265,7 +304,12 @@ def twrite($proj; $home):
   else false end;
 def gitre: "^(\\S*/)?git(\\s+(-C|-c|--git-dir|--work-tree|--namespace)\\s+(\"[^\"]*\"|\\x27[^\\x27]*\\x27|\\S+)|\\s+-\\S+)*\\s+";
 def gitpush: test(gitre + "push(\\s|$)");
+# BL-562: the segment skips the pre-push hook. git takes the LAST of `--verify` / `--no-verify`, and
+# accepts `--no-veri`, `--no-verif` as unambiguous abbreviations (`--no-ve`, `--no-ver` exit 129).
+def nvflag: words | map(select(test("^--(no-veri(f(y)?)?|verify)$"))) | (length > 0 and (last | startswith("--no-")));
 def isdelete: test("\\s(--delete|-d)(\\s|$)") or test("\\s\\+?:\\S");
+# A dry run moves no ref and runs no hook, so skipping the hook skips nothing.
+def isdry: words | map(select(test("^(-n|--dry-run|-[A-Za-z]*n[A-Za-z]*)$") and (startswith("--no-") | not))) | length > 0;
 def pushrefs($v): sub("^.*?\\spush(\\s+|$)"; "") | gsub("[0-9&]?>>?\\|?\\s*\\S+"; "")
   | words | map(select((startswith("-") or test("^[&;|]*$")) | not)) | .[1:] | map(xv($v));
 def pushupd($v; $cut): pushrefs($v) as $r
@@ -307,6 +351,18 @@ def matekind:
       then "verdict" else "" end
   else "" end;
 def kind($role): if $role == "lead" then leadkind else matekind end;
+# BL-567: a teammate HEADER-ONLY Write to a review shard (`/shards/<x>-p<N>/<f>.md`, not a repair
+# shard) -- no `### ` heading, no `F-<n>` heading, no `seat-complete:` and no `*verdict:` line --
+# is the early write the brief prescribes, and is `hdrw`. Each site maps it to "" on its own line:
+# the incoming call is allowed, and scan never records it, so the write adding the first finding
+# is still the gated action of this deliverable. A Write replaces the file, so its content IS the file.
+# No apostrophe anywhere in this literal: one would close it.
+def hdronly: .name == "Write"
+  and ((.input.file_path // "") | tostring | test("/shards/[^/]+-p[0-9]+/[^/]+\\.md$") and (test("/shards/[^/]*repair[^/]*/") | not))
+  and ((.input.content // "") | tostring
+       | (test("(^|\\n)#{3,6}[ \\t]") or test("(^|\\n)#{1,6}[ \\t]+F-[0-9]") or test("(^|\\n)[ \\t]*seat-complete:")
+          or test("(^|\\n)[ \\t]*[A-Za-z_-]*verdict:")) | not);
+def kindx($role): if $role == "mate" and hdronly then "hdrw" else kind($role) end;
 # A background-task event the harness delivers as a user line is not a re-dispatch. Keyed on the
 # `origin.kind` field of the line, never on its text: the text openings are harness-origin prefixes,
 # which core/schemas/harness-origin.json declares once and invariant I91 forbids restating.
@@ -348,12 +404,42 @@ PARSED="$(printf '%s' "$IN" | jq -r --arg home "${HOME:-}" "$CLASSIFY"'
   | ((.transcript_path // "") | tostring) as $tp
   | ($tp | if test("^.+/[^/]+/[^/]+\\.jsonl$") then sub("/[^/]+/[^/]+$"; "") else "" end) as $proj
   | (if ((.agent_id // "") | tostring) == "" then "lead" else "mate" end) as $role
-  | (if ($call | twrite($proj; $home)) then "twrite" else ($call | kind($role)) end) as $k
+  | ((if ($call | twrite($proj; $home)) then "twrite" else ($call | kindx($role)) end)
+     | sub("^hdrw$"; "")) as $k
   | (if $k == "push" and $call.name == "Bash" then (($ti.command // "") | tostring | l3push) else "" end) as $l3
-  | @sh "TP=\($tp) AID=\((.agent_id // "") | tostring) CWD=\((.cwd // "") | tostring) PROJ=\($proj) ROLE=\($role) KIND=\($k) FP=\(($ti.file_path // "") | tostring) NEWN=\(($ti.content // "") | tostring | heads) TUID=\((.tool_use_id // "") | tostring) L3=\($l3)"' 2>/dev/null)" \
+  | (if $call.name == "Bash" then (($ti.command // "") | tostring | csegs | map(gitpush and nvflag and (isdelete | not) and (isdry | not)) | any) else false end) as $nv
+  | @sh "TP=\($tp) AID=\((.agent_id // "") | tostring) CWD=\((.cwd // "") | tostring) PROJ=\($proj) ROLE=\($role) KIND=\($k) FP=\(($ti.file_path // "") | tostring) NEWN=\(($ti.content // "") | tostring | heads) TUID=\((.tool_use_id // "") | tostring) L3=\($l3) NV=\($nv)"' 2>/dev/null)" \
   || { say "the tool call is not readable JSON; gate skipped"; exit 0; }
-TP=""; AID=""; CWD=""; PROJ=""; ROLE=""; KIND=""; FP=""; NEWN=0; TUID=""; L3=""
+TP=""; AID=""; CWD=""; PROJ=""; ROLE=""; KIND=""; FP=""; NEWN=0; TUID=""; L3=""; NV=false
 eval "$PARSED"
+
+# BL-562: a ref-moving push that skips the pre-push hook, from ANY agent on a layered consumer. It
+# sits before every stand-down below (empty KIND, the update branch, the transcript, the grant, L3).
+if [ "$NV" = true ] && [ -f "${CLAUDE_PROJECT_DIR:-.}/.claude/.ai-dlc-version" ]; then
+  # THE UPDATER STANDS DOWN. The deny is owed by the PIPELINE LEAD; an /ai-dlc-update session pushes
+  # its own bookkeeping with --no-verify under the consumer operator's standing rule (the batch-235
+  # tip adversary measured 28 of 140 graph denials in such sessions). The question "is this session
+  # the updater" is asked exactly as pause.sh, acknowledge.sh and continue.sh ask it, through the
+  # I126-bound scan of the session's LAST ai-dlc marker. A teammate is judged on the handed
+  # transcript, which is its lead's, so a teammate of the updater stands down with it.
+  # FAIL CLOSED, THE OPPOSITE OF THE STOP HOOK. continue.sh lets an unreadable or marker-less
+  # session stop, because a wrong block wedges it; here a wrong ALLOW skips the pre-push hook, so a
+  # missing, unreadable or marker-less transcript, or a last marker of /ai-dlc, still DENIES.
+  NV_UPDATER=0
+  TRANSCRIPT="$TP"
+  if [ -n "$TRANSCRIPT" ] && [ -r "$TRANSCRIPT" ]; then
+    # >>> I126 SESSION-MARKER SCAN: the next line, byte-identical in every bound hook >>>
+    LAST_SKILL=$(grep -oE '"role":"user","content":"<command-message>ai-dlc(-update)?</command-message>\\n<command-name>/ai-dlc(-update)?</command-name>|"name":"Skill","input":\{"skill":"ai-dlc(-update)?"' "$TRANSCRIPT" 2>/dev/null | tail -1)
+    case "$LAST_SKILL" in
+      *'/ai-dlc-update</command-name>'|*'"skill":"ai-dlc-update"') NV_UPDATER=1 ;;
+    esac
+  fi
+  if [ "$NV_UPDATER" != 1 ]; then
+  jq -n --arg m "ai-dlc-advisor-gate: DENIED -- this git push skips the pre-push hook (--no-verify). A pipeline push runs the hook, always: no judgement that a change is artifact-only, and no advisor call, licenses skipping it. Run the prescribed push without the flag (steps/handoff.md step 3: git push -u origin HEAD, the whole command). If the pre-push hook refuses that push (pre-push: BLOCKED.), follow handoff.md step 3's hook-refused branch: report the failing gate to the operator in ONE line, touch _bmad-output/pipeline-paused.flag, and stop there; the operator decides whether the hook is fixed or bypassed." \
+    '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $m}}'
+  exit 0
+  fi
+fi
 
 [ -n "$KIND" ] || exit 0
 
@@ -418,7 +504,8 @@ jq -n -R -r --arg home "${HOME:-}" --arg proj "$PROJ" --arg role "$ROLE" --arg t
          elif $b.type == "advisor_tool_result" then
            .res = (if (($b.content | if type == "object" then .error_code else null end) // "") == "unavailable" then "U" else "R" end)
          elif ($b.type == "tool_use" and (($b.id // "") | tostring) != "" and (($b.id | tostring) != $tuid)) then
-           ({name: $b.name, input: ($b.input // {})} | kind($role) | sub("^gatelogw$"; "gatelog")) as $k
+           ({name: $b.name, input: ($b.input // {})} | kindx($role) | sub("^gatelogw$"; "gatelog")
+            | sub("^hdrw$"; "")) as $k
            | if $k != "" then .g[$b.id | tostring] = [$n, (($b.input.file_path // "") | tostring), $k] else . end
          elif ($b.type == "tool_use" and $tuid != "" and (($b.id // "") | tostring) == $tuid) then .seen = 1 | .cur = $mk
          elif ($b.type == "tool_result" and $b.is_error == true

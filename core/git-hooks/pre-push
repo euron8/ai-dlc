@@ -30,8 +30,8 @@
 #
 #     bash scripts/ai-dlc/validate-layer-entries.sh
 #
-# `git push --no-verify` bypasses the hook. That is a decision made on the record,
-# not a default fallen into.
+# `git push --no-verify` bypasses the hook. That is the OPERATOR's decision, made on the
+# record; a pipeline agent never makes it (`ai-dlc-advisor-gate.sh` denies the flag).
 #
 # AI_DLC_READSET_LIVE_TRACE=0 stops the detached read-set trace a green suite starts for its
 # unmapped fixtures (readset_live_trace); default on. It needs sandbox-exec, /usr/bin/log and
@@ -2166,7 +2166,7 @@ elif [ -d tests/fixtures ]; then
 fi
 
 if [ "$fail" -ne 0 ]; then
-  printf '\npre-push: BLOCKED. Fix the above, or `git push --no-verify` on the record.\n\n'
+  printf '\npre-push: BLOCKED. Fix the above. A pipeline agent does not bypass this hook: at a handoff, follow steps/handoff.md step 3 (pre-push hook refused) -- report the failing gate to the operator in one line, touch _bmad-output/pipeline-paused.flag, and stop.\n\n'
   exit 1
 fi
 printf '\npre-push: all gates green.\n\n'

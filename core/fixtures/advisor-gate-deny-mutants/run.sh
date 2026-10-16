@@ -29,7 +29,7 @@
 #        nothing, 1 = an assertion failed, 2 = fixture broken.
 SHARDS="a b c d e"
 # A ratchet, raised when a mutant is added: lowering it is a visible edit, a lost mutant is not.
-MIN_MUTANTS=70
+MIN_MUTANTS=95
 set -uo pipefail
 
 # The pre-push gate exports AI_DLC_* tunables; none is read here, but scrub them all the same.
@@ -144,14 +144,17 @@ CTL="$(score "$MUT/hook-control.sh" "$W/failed.control")"
 # Expected sets are C-locale sorted, which is what score() prints.
 # 1. the whole subject replaced by silence: every arm holding a DENY, WARN or stderr cell fails.
 #    ENVELOPE holds only SILENT cells since batch 208 and survives it; FAILED and REREAD hold DENY cells.
-mut silence "BASHC BMADONLY BODY CLOSE DENIED DETACHED FAILED FAILOPEN GATELOG GHREPO MATE MATEABSENT MATEPATH MATEREWRITE MCPNAME MERGE ORDER PATHGIT PERKIND PUSH QUOTEDALT QUOTEDC QUOTEDENV REARM REASON REDISPATCH REREAD SELF SELFLAST STACK TWRITE UNAV UPDATE UPDATECUT UPDATEREF WINDOW WITHDRAWN WRAP" -e '2i\
+mut silence "BASHC BMADONLY BODY CLOSE DENIED DETACHED FAILED FAILOPEN GATELOG GHREPO HDRONLY MATE MATEABSENT MATEPATH MATEREWRITE MCPNAME MERGE NOVERIFY ORDER PATHGIT PERKIND PUSH QUOTEDALT QUOTEDC QUOTEDENV REARM REASON REDISPATCH REREAD SELF SELFLAST STACK TWRITE UNAV UPDATE UPDATECUT UPDATEREF WINDOW WITHDRAWN WRAP" -e '2i\
 exit 0'
 # 2. warn-only: the rejected design, the same text as context with no decision.
 #    UNAV survives it by design: the warn path is its own emission and this mutant leaves it intact.
-mut warn-only "BASHC BMADONLY BODY CLOSE DENIED DETACHED FAILED GATELOG GHREPO MATE MATEPATH MATEREWRITE MCPNAME MERGE ORDER PATHGIT PERKIND PUSH QUOTEDALT QUOTEDC QUOTEDENV REARM REASON REDISPATCH REREAD SELF SELFLAST STACK TWRITE UPDATE UPDATECUT UPDATEREF WINDOW WITHDRAWN WRAP" \
+mut warn-only "BASHC BMADONLY BODY CLOSE DENIED DETACHED FAILED GATELOG GHREPO HDRONLY MATE MATEPATH MATEREWRITE MCPNAME MERGE NOVERIFY ORDER PATHGIT PERKIND PUSH QUOTEDALT QUOTEDC QUOTEDENV REARM REASON REDISPATCH REREAD SELF SELFLAST STACK TWRITE UPDATE UPDATECUT UPDATEREF WINDOW WITHDRAWN WRAP" \
   -e 's/permissionDecision: "deny", permissionDecisionReason: \$m/additionalContext: $m/'
 # 3. no grant test: a hook with a knob-free default of ON.
-mut no-grant-test "NOGRANT WITHDRAWN" -e '/^\[ "\${GRANT:-none}" = on \] || exit 0$/d'
+#    NOVERIFY is in the set because cell nv-updater carries NO advisor grant on purpose, so that only
+#    the updater stand-down can decide it. With the no-grant exit deleted, the ordinary advisor deny
+#    reaches that cell too. The kill there is real, not a side effect to tolerate.
+mut no-grant-test "NOGRANT NOVERIFY WITHDRAWN" -e '/^\[ "\${GRANT:-none}" = on \] || exit 0$/d'
 # 4. a withdrawn grant still counts as granted.
 mut withdrawn-ignored "WITHDRAWN" -e 's/\.grant = ((\$l\.attachment\.available != false) and (\$l\.attachment\.toolChange != "remove"))/.grant = true/'
 # 5. the unavailable carve-out removed: the deny nothing can clear.
@@ -181,7 +184,7 @@ mut update-gated "UPDATE" -e 's|ai-dlc-update/\*) exit 0 ;;|ai-dlc-update-NEVER/
 mut detached-excluded "DETACHED" -e 's|\|\| _br=""$|\|\| _br="ai-dlc-update/unknown"|'
 # 15. a teammate is judged on the handed (parent) transcript. Every teammate world whose parent
 #     holds an advisor call dies, which is the point: the parent's call clears the teammate.
-mut mate-on-parent "MATE MATEABSENT MATEPATH MATEREWRITE REDISPATCH" -e 's|^\[ -z "\$AID" \] \|\| JUDGED=.*$|:|'
+mut mate-on-parent "HDRONLY MATE MATEABSENT MATEPATH MATEREWRITE REDISPATCH" -e 's|^\[ -z "\$AID" \] \|\| JUDGED=.*$|:|'
 # 16. an absent teammate file falls back to the handed path (the operator's local hook).
 mut mate-fallback "MATEABSENT" -e 's/^\[ -r "\$JUDGED" \] || {/[ -r "$JUDGED" ] || JUDGED="$TP"; [ -r "$JUDGED" ] || {/'
 # 17. a teammate's push is gated like the lead's.
@@ -229,7 +232,7 @@ mut cut-not-excluded "UPDATECUT" -e 's/(\$s | map(cutupd(\$v)) | any) as \$cut/f
 # 32. D3: a `$B` refspec is not resolved through its assignment.
 mut no-var-resolution "UPDATECUT" -e 's/(if (\$c | test("ai-dlc-update\/")) then (\$c | vars) else {} end) as \$v/{} as $v/'
 # 33. D5: no wrapper word is stripped. PUSH dies too: its `timeout 600 git push` cell is a wrapper.
-mut no-wrappers "PUSH STACK WRAP" -e 's/(nohup|exec|command|time|sudo|setsid|caffeinate|then/(then/' -e 's/|g?timeout(\\\\s+-\\\\S+)\*\\\\s+\[0-9.\]+\[smhd\]?|env(\\\\s+(-u|--unset)\\\\s+\\\\S+|\\\\s+-\\\\S+)\*)/)/'
+mut no-wrappers "NOVERIFY PUSH STACK WRAP" -e 's/(nohup|exec|command|time|sudo|setsid|caffeinate|then/(then/' -e 's/|g?timeout(\\\\s+-\\\\S+)\*\\\\s+\[0-9.\]+\[smhd\]?|env(\\\\s+(-u|--unset)\\\\s+\\\\S+|\\\\s+-\\\\S+)\*)/)/'
 # 34. D5: wrappers strip once, not in a loop.
 mut no-strip-loop "STACK" -e 's/then (\$n | strip) elif/then $n elif/'
 # 35. D5: the string argument of `bash -c` is not read.
@@ -297,7 +300,7 @@ mutc J-no-multiedit-gatelog "GATELOG" "GATELOG:j-multi" -e 's/(if (\[\.input\.ed
 
 # --- batch 218: the two root causes and the three operator-ruled loosenings ---
 # 60. F1: no quote mask, so a quoted alternation and a heredoc body split into push segments.
-mut qmask-identity "QUOTEDALT" -e 's/^def csegs: (qmask | segs) as \$s/def csegs: segs as $s/'
+mut qmask-identity "NOVERIFY QUOTEDALT" -e 's/^def csegs: (qmask | segs) as \$s/def csegs: segs as $s/'
 # 61. F2: the old fixed 2s re-read, so an advisor line landing at 3s is never judged.
 mutc fixed-2s-loop "REREAD" "REREAD:rr-late" -e 's/^case "\${ADVISOR_GATE_REREADS:-2}" in 0) _cap=0 ;; 1) _cap=2 ;; \*) _cap=10 ;; esac$/case "${ADVISOR_GATE_REREADS:-2}" in 0) _cap=0 ;; *) _cap=2 ;; esac/'
 # 69. L3 removed: a `_bmad-output/`-only push owes a consult.
@@ -316,6 +319,62 @@ mutc L3-no-upstream "BMADONLY" "BMADONLY:l3-upstream" -e 's/^  if \[ -n "\$urem"
 # 72. L3 on any refspec, so a push of another branch is judged by HEAD's change set.
 mutc L3-any-ref "BMADONLY" "BMADONLY:l3-otherref" -e 's/^  for r in \$refs; do \[ "\$r" = HEAD \] || \[ "\$r" = "\$br" \] || exit 1; done$/  :/'
 
+# --- BL-562: the no-verify deny, each wrong build dying on its own cell(s) ---
+mutc nv-off "NOVERIFY" "NOVERIFY:nv-abbr NOVERIFY:nv-absent NOVERIFY:nv-chain NOVERIFY:nv-first NOVERIFY:nv-lead-last NOVERIFY:nv-mate NOVERIFY:nv-offgrant NOVERIFY:nv-reason NOVERIFY:nv-seed NOVERIFY:nv-update" -e 's/^if \[ "\$NV" = true \] && \[ -f /if false \&\& [ -f /'
+# no activation gate: the distribution operator's own hookless pushes are denied.
+mutc nv-no-stamp "NOVERIFY" "NOVERIFY:nv-noncons" -e 's/^if \[ "\$NV" = true \] && \[ -f "\${CLAUDE_PROJECT_DIR:-\.}\/\.claude\/\.ai-dlc-version" \]; then$/if [ "$NV" = true ]; then/'
+# a branch delete carrying the flag is denied.
+mutc nv-deletes "NOVERIFY" "NOVERIFY:nv-colon NOVERIFY:nv-delete NOVERIFY:nv-dshort" -e 's/map(gitpush and nvflag and (isdelete | not) and/map(gitpush and nvflag and/'
+# any --no-verify word denies, even when a later --verify re-enables the hook.
+mutc nv-ignores-verify "NOVERIFY" "NOVERIFY:nv-reverify" -e 's/(length > 0 and (last | startswith("--no-")))/(map(startswith("--no-")) | any)/'
+# the ambiguous `--no-ver` (git exits 129, nothing pushed) is read as the flag.
+mutc nv-any-prefix "NOVERIFY" "NOVERIFY:nv-ambig" -e 's/test("^--(no-veri(f(y)?)?|verify)\$")/test("^--(no-ve[a-z]*|verify)$")/'
+# only the full spelling: git accepts `--no-verif`, so it escapes.
+mutc nv-exact-only "NOVERIFY" "NOVERIFY:nv-abbr" -e 's/test("^--(no-veri(f(y)?)?|verify)\$")/test("^--(no-verify|verify)$")/'
+# the raw split, not the quote mask: a quoted alternation reads as a push.
+mutc nv-raw-segs "NOVERIFY" "NOVERIFY:nv-mention" -e 's/| csegs | map(gitpush and nvflag/| segs | map(gitpush and nvflag/'
+# not keyed on a push: `git fetch --no-verify` is denied.
+mutc nv-not-push "NOVERIFY" "NOVERIFY:nv-fetch" -e 's/map(gitpush and nvflag and (isdelete | not) and/map(nvflag and (isdelete | not) and/'
+# the lead only: a teammate escapes.
+mutc nv-lead-only "NOVERIFY" "NOVERIFY:nv-mate" -e 's/^if \[ "\$NV" = true \] && \[ -f /if [ "$NV" = true ] \&\& [ -z "$AID" ] \&\& [ -f /'
+# behind the grant stand-down: a lead with no advisor grant (a local model) escapes.
+mutc nv-needs-grant "NOVERIFY" "NOVERIFY:nv-absent NOVERIFY:nv-first" -e 's/^if \[ "\$NV" = true \] && \[ -f /if [ "$NV" = true ] \&\& grep -q advisor_tool "$TP" \&\& [ -f /'
+# an advisor call licenses the flag (the s319 03:05Z shape).
+mutc nv-advisor-licenses "NOVERIFY" "NOVERIFY:nv-abbr NOVERIFY:nv-chain NOVERIFY:nv-lead-last NOVERIFY:nv-mate NOVERIFY:nv-reason NOVERIFY:nv-seed NOVERIFY:nv-update" -e 's/^if \[ "\$NV" = true \] && \[ -f /if [ "$NV" = true ] \&\& ! grep -q server_tool_use "$TP" \&\& [ -f /'
+# --- BL-567: the header-only first write ---
+# the header Write gated after all (the pre-fix hook): step 1 is denied, so the sequence reads DENY>DENY.
+mutc hdr-gated "HDRONLY" "HDRONLY:hdr-cr-head HDRONLY:hdr-cross HDRONLY:hdr-seq HDRONLY:hdr-seq-sc HDRONLY:hdr-write" -e 's/^     | sub("^hdrw\$"; "")) as \$k$/     | sub("^hdrw$"; "verdict")) as $k/'
+# the header Write allowed but RECORDED: the write adding the first finding becomes a re-write and sails through.
+mutc hdr-recorded "HDRONLY" "HDRONLY:hdr-seq HDRONLY:hdr-seq-sc" -e 's/^            | sub("^hdrw\$"; "")) as \$k$/            | sub("^hdrw$"; "verdict")) as $k/'
+# a `### ` finding heading is header.
+#    hdr-h4 is NOT in this set or in hdr-h3-only's: its `#### F-1` is refused by the separate
+#    `F-<n>` heading test whatever the `#{3,6}` test says, so it cannot tell either mutant from the
+#    shipped hook. hdr-cr-h4 (`#### [MAJOR]`, no F-id: the code-review / QA shape) is the cell the
+#    pre-fold hook ALLOWED, and it is the one that has to die.
+mutc hdr-no-h3 "HDRONLY" "HDRONLY:hdr-cr-h4 HDRONLY:hdr-finding" -e 's/| (test("(^|\\\\n)#{3,6}\[ \\\\t\]") or /| (/'
+# DEFECT 3: only `### ` is a finding heading, so a code-review / QA `#### ` finding is header.
+#    Killed on hdr-cr-h4 alone, for the reason given at hdr-no-h3 above.
+mutc hdr-h3-only "HDRONLY" "HDRONLY:hdr-cr-h4" -e 's/| (test("(^|\\\\n)#{3,6}\[ \\\\t\]") or /| (test("(^|\\\\n)###[ \\\\t]") or /'
+# DEFECT 2: the deny sends the lead to the environmental fallback, a dead end for a refused hook.
+mutc nv-reason-deadend "NOVERIFY" "NOVERIFY:nv-reason" -e 's/hook-refused branch: report the failing gate/environmental fallback: report the push/'
+# DEFECT 1: no updater stand-down -- the updater's bookkeeping push is denied.
+mutc nv-no-updater "NOVERIFY" "NOVERIFY:nv-updater" -e 's/ NV_UPDATER=1 ;;$/ NV_UPDATER=0 ;;/'
+# any ai-dlc marker reads as the updater, so a lead stands down too.
+mutc nv-updater-any-marker "NOVERIFY" "NOVERIFY:nv-lead-last" -e 's/^      \*.\/ai-dlc-update<\/command-name>.|/      *ai-dlc*|/'
+# fail OPEN: an unreadable transcript stands down, as the Stop hook would.
+mutc nv-fail-open "NOVERIFY" "NOVERIFY:nv-absent" -e 's/^  if \[ -n "\$TRANSCRIPT" \] && \[ -r "\$TRANSCRIPT" \]; then$/  [ -r "$TRANSCRIPT" ] || NV_UPDATER=1; if [ -n "$TRANSCRIPT" ] \&\& [ -r "$TRANSCRIPT" ]; then/'
+# a dry run is not exempt from the no-verify deny.
+mutc nv-dry-denied "NOVERIFY" "NOVERIFY:nv-dry NOVERIFY:nv-dryrun" -e 's/ and (isdelete | not) and (isdry | not)) | any)/ and (isdelete | not)) | any)/'
+# a party seat's `## F-1` heading is header.
+mutc hdr-no-fid "HDRONLY" "HDRONLY:hdr-fid" -e 's/ or test("(^|\\\\n)#{1,6}\[ \\\\t\]+F-\[0-9\]") or / or /'
+# a completion line is header.
+mutc hdr-no-seatc "HDRONLY" "HDRONLY:hdr-seatc HDRONLY:hdr-seq-sc" -e 's/ or test("(^|\\\\n)\[ \\\\t\]\*seat-complete:")$//'
+# a verdict line is header.
+mutc hdr-no-verdict "HDRONLY" "HDRONLY:hdr-shardverdict HDRONLY:hdr-verdict" -e 's/^          or test("(^|\\\\n)\[ \\\\t\]\*\[A-Za-z_-\]\*verdict:")) | not);$/          ) | not);/'
+# an Edit is judged by its new text: the Edit adding the first finding to a header-only file escapes.
+mutc hdr-edit-too "HDRONLY" "HDRONLY:hdr-edit-del" -e's/^def hdronly: \.name == "Write"$/def hdronly: (.name == "Write" or .name == "Edit")/' -e 's/^  and ((\.input\.content \/\/ "") | tostring$/  and ((.input.content \/\/ .input.new_string \/\/ "") | tostring/'
+# a repair shard's header-only write is exempt too.
+mutc hdr-repair-too "HDRONLY" "HDRONLY:hdr-repair" -e 's/ and (test("\/shards\/\[^\/\]\*repair\[^\/\]\*\/") | not))$/)/'
 
 # Every mutant dealt to this shard must have RUN, and every one that ran must have died exactly.
 [ "$n_seen" -eq "$nmine" ] || bad "[J1] shard '$GROUP' reached $n_seen mutants, $nmine dealt -- a dealt mutant never ran"

@@ -58,6 +58,9 @@ Execute this 5-step procedure in order:
    (`git push -u origin HEAD`) so the Step 2 commit and the finalized
    state reach the remote and are not stranded on this machine.
    SKILL.md Rule 32 touchpoint I applies before the push.
+   A directed handoff authorises this push; the lead does not ask the operator for a go-ahead again.
+   **Never `--no-verify`**: the pre-push hook runs on every pipeline push, whatever the change
+   set, and `ai-dlc-advisor-gate.sh` denies the flag.
    **`-u origin HEAD`, never a bare `git push`.** A bare push cannot
    succeed on a branch that has never been pushed — which is every
    sprint's FIRST handoff wherever a branch is cut per sprint — and it
@@ -80,6 +83,14 @@ Execute this 5-step procedure in order:
    resume line for a successor with nothing durable behind it. And
    "the local commits still stand" is false whenever Step 2 was also
    skipped, so verify Step 2 landed before relying on this sentence.
+   **If the PRE-PUSH HOOK REFUSED the push** (its output ends
+   `pre-push: BLOCKED.`), do not retry, do not pass `--no-verify`, and do
+   not fix the hook's findings inside the handoff: report it to the
+   operator in ONE line naming the failing gate, then
+   `touch _bmad-output/pipeline-paused.flag` and stop there, leaving
+   steps 4 and 5 undone. The operator decides whether the hook is fixed
+   or bypassed; the entry marker stays, so the next session finishes
+   this procedure.
 4. Emit the successor's entry line — exactly `/ai-dlc resume`, wrapped in
    `----` delimiter lines (one before, one after) for copy-paste. Nothing
    else: no narrated body. Then
