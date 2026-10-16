@@ -105,7 +105,16 @@ per-stem lists), its before equal to the join's after.
 - artifact: <the repaired file, project-relative>
 - artifact_sha_before: <sha256 of the file before your first edit>
 - artifact_sha_after: <sha256 of the file after your last edit>
+- advisor: called | unavailable
+- derivations: replayed <n> | not replayed
 ```
+
+The two lines after each triple you write say which checks this dispatch ran. `advisor: called`
+when an `advisor` call returned a result; `advisor: unavailable` when the tool was absent or
+every call errored or was rate-limited. `derivations: replayed <n>`, `<n>` being the count
+`scripts/ai-dlc/validate-artifact-derivations.sh <your record>` printed after your last edit;
+`derivations: not replayed` when you did not run it. A check you skipped is stated here, in the
+record the join and the next pass read, never only in your final message.
 
 Then, per finding:
 
@@ -314,6 +323,7 @@ narrow the sprint inside a repair.
 `LOCKED_REQUIREMENTS` entry, an `LR-`/`LRC-` id, a `D-<n>` decision, a config leaf, a
 money-path threshold or literal, or a byte-pin. State each option with its concrete effect,
 including the value it leaves in force, and stop there.
+
 
 **You do not re-litigate the finding.** The adversary graded it; you fix it. If you believe
 a finding is wrong, say so in the record with the derivation that refutes it — that is
