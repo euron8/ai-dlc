@@ -58,6 +58,12 @@
 #     claimed from a task list (_dispatch-protocol.md "Worktree-explicit dev dispatch" point 3,
 #     dev.md Responsibilities, and dev.md's HARD_BLOCK bullet going idle). Points 0-7 carry no blank line between them, so para mode reads
 #     the whole list as ONE paragraph whose lead is point 0; the dp-* tokens pin point 3 inside it.
+#   - a join refusal confined to one part is recovered by re-running that part as a NEW dispatch and
+#     joining with `--rerun <part>.md@<S_P>`; the re-run's brief accounts for the whole section diff
+#     against the split slice, and the lead reads S_P after the refused writer stopped and before the
+#     re-dispatch (_gate-procedures.md "After a join refusal" item 1b, and the document and subject
+#     "Join and assemble" steps). Those steps' items carry no blank line between them, so para mode
+#     reads each list as ONE paragraph whose lead is item 1 ("Split."); gp-rerun-doc/subj pin inside it.
 #
 # LEADS ARE NOT ENOUGH. A bold lead left intact over a body rewritten to say the opposite
 # ("need NOT carry", "dropped only through a HARD_BLOCK", "an assertion is a sufficient
@@ -276,6 +282,15 @@ rem-serial-scope|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A R
 rem-serial-closes|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**As the serial remediator after a join**|para|carries `- closes: <part> <heading>`, copied from the tail of its `ESCALATED:` line
 gp-esc-brief|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Every escalated entry reaches the serial remediator.**|para|its brief carries every `ESCALATED:` line
 gp-moved-cites|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Moved cites are the serial remediator's, after the join.**|para|re-reads every cite into each edited file AFTER the join or assembly
+gp-rerun-trigger|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|After a join refusal naming a file|para|or a file `written by more than one agent in the window`
+gp-rerun-flag|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|1b. **Re-run one part with `--rerun`.**|para|Keep the refused join's `--since <ISO>`, take a NEW `--until <ISO>` after the re-run part reports, and add `--rerun <part>.md@<S_P>`
+gp-rerun-window|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|1b. **Re-run one part with `--rerun`.**|para|S_P falls inside that window
+gp-rerun-record|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|1b. **Re-run one part with `--rerun`.**|para|the join refuses that record written after S_P by anyone else, or not at all by the re-run writer
+gp-rerun-new|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|1b. **Re-run one part with `--rerun`.**|para|The re-run is a NEW dispatch with a new agent id, never a continuation of the refused part's agent
+gp-rerun-diff|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|1b. **Re-run one part with `--rerun`.**|para|Its brief requires the re-run remediator to account for the whole section diff against the split slice
+gp-rerun-sp|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|1b. **Re-run one part with `--rerun`.**|para|The lead picks S_P by reading `date -u +%Y-%m-%dT%H:%M:%SZ` after the refused part's writer has stopped and immediately before sending the re-dispatch
+gp-rerun-doc|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|1. **Split.** `scripts/ai-dlc/partition-document.sh --split|para|When one section's remediator was re-run, add `--rerun <part>.md@<S_P>`
+gp-rerun-subj|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|1. **Split.** `scripts/ai-dlc/partition-subject.sh --split|para|When one part's remediator was re-run, add `--rerun <part>.md@<S_P>`
 pm-adr-probe|R|pm.md|## Responsibilities|## The evidence contract|in the story implementing the decision the ADR records|contains
 pm-adr-trigger|R|pm.md|## Responsibilities|## The evidence contract|carries as an unrun probe|contains
 pm-adr-tag|R|pm.md|## Responsibilities|## The evidence contract|`probabilistic/passive-monitoring` AC, written at creation|contains

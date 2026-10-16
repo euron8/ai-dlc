@@ -20,6 +20,70 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.790.0] - 2026-10-15
+
+Batch 234 (graph-ledger-full-drain). Closes
+`PC-S319-JOIN-REFUSES-A-SINGLE-SECTION-RERUN-IN-DOCUMENT-MODE` (BL-532) and
+`PC-S319-LEDGER-ATTRIBUTES-AN-EDIT-TO-AN-AGENT-ID-WITH-NO-TRANSCRIPT` (BL-533). Files BL-528..BL-531, BL-537 and
+BL-538 from peer sessions on the operator's instruction, so the release's net is +6 entries filed against 2 closed.
+
+### A party repair can re-run one part and still join: `--rerun <part>.md@<ISO>` (BL-532)
+
+The reference consumer's Sprint 319 carry-over-evaluation party repair re-ran section 2's remediator after the
+other five sections had finished, and no single `--since/--until` window could join it. A window starting at the
+re-run read sections 1 and 3-6 as written by no dispatched agent; a window covering everything gave
+`sections/2.md` three writers (the original remediator, a transcript-less id, and the re-run). The consumer
+hand-assembled the record.
+
+`join-remediator-shards.sh` takes `--rerun <part>.md@<S_P>`, repeatable, in files, `--document` and `--subject`
+modes. It drops only the rows on that part's cited files that are older than S_P, and every existing arm then
+runs unchanged. New refusals keep the narrowing honest: a superseded writer that also wrote elsewhere, or is still
+writing at or after S_P; a re-run writer that is one of the writers it supersedes, or that touches another part's
+files or part record; and the part's own record, which must be written after S_P by the re-run writer and by no
+one else. The record keeps the outer window and adds a `rerun:` line naming the superseded writers. `--help` now
+prints the whole header block.
+
+`_gate-procedures.md` "After a join refusal" also triggers on a file written by more than one agent, and gains
+item 1b: the re-run is a NEW dispatch whose brief accounts for the whole section diff against the split slice; the
+lead keeps the refused join's `--since`, reads S_P before the re-dispatch, and takes a new `--until` after the
+re-run part reports. The document and subject join steps name the flag. `process-rule-pins` pins nine sentences,
+and deleting any one fails only its own row.
+
+On a reconstruction of the consumer's real S319 corpus (ledger, parts and seat files real; document, section
+slices and manifest shas synthetic), the shipped join refuses and `--rerun 2.md@2026-10-15T19:47:25Z` joins with
+11 superseded rows. Over 11 real s316-s319 repairs run without the flag, the output is byte-identical to the
+installed join. `--rerun` was driven on real consumer shapes in document mode (S319) and files mode (s318
+`stories-repair-p1`, one synthetic re-run row); subject mode is covered only by a synthetic fixture world. A
+real-shape subject-mode run was available, by rebuilding an assembled `.subject` dir's section copies, and was not
+taken. Residual: bytes an earlier writer put in the re-run part's file before S_P stay there, covered by
+the re-run part's own account, whose author is enforced and whose content is not.
+
+### The write ledgers record each write's `tool_use_id` and transcript, and the join recognises an alias only on that evidence (BL-533)
+
+In the same repair, one `sections/2.md` row carried an agent id with no transcript and no spawn record, sitting
+between the section remediator's own edits. The join counted it as a second writer, and that refusal is what
+forced the re-run above.
+
+`ai-dlc-gate-remediation-guard.sh` now writes `tool_use_id`, `transcript_path` (the parent session's, so never an
+identity on its own) and `agent_transcript` on every artifact-write and verdict-write row. These are record-only:
+no allow or deny moves, `v` stays 1, and the hook forks no more than before. The join reads a row as another
+writer's alias only when all of these hold: the sessions match; the row's agent has no transcript, at write time
+and at join time; the other writer's transcript holds exactly one assistant Edit, Write or MultiEdit `tool_use`
+with that id, parsed structurally, editing the same file; and the agent has no other row. A shared transcript path
+is never evidence. An unresolved row still refuses and names its evidence.
+
+Efficacy on the consumer's real row is UNPROVEN, because that row predates the new keys. Of 18 transcript-less ids
+in the consumer's ledger since 2026-10-01, 13 have no same-file neighbour that any alias rule could match.
+
+### The `remediator-shard-join` mutant battery runs in four shards
+
+The battery grew to 72 mutants with this release and is dealt 18 per shard across
+`remediator-shard-join-mutants{,-b,-c,-d}`, each about 170-190s solo. Each shard asserts the deal is exhaustive and
+disjoint before dispatch and that every dealt mutant was judged after the reap.
+
+**Consumer:** on the next pull, a single-part re-run joins with `--rerun`, and new ledger rows carry the evidence
+keys. Rows already on disk are judged as before.
+
 ## [0.789.0] - 2026-10-15
 
 Batch 232 (graph-ledger-full-drain). Closes

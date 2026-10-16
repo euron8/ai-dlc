@@ -76,11 +76,25 @@ new_world() { # -> a fresh project root (own mktemp: a counter bumped inside $( 
   for s in "$S21" "$S22" "$S31"; do cp "$HERE/seed.$s" "$pa/s305/stories/$s"; done
   printf '%s' "$w"
 }
-drive() { # <world> <tool> <file_path> <agent_id or ""> -- the REAL hook, a PreToolUse payload
-  jq -nc --arg t "$2" --arg f "$3" --arg a "$4" \
-    '{session_id:"t", tool_name:$t, transcript_path:"", tool_input:{file_path:$f}}
-     + (if $a == "" then {} else {agent_id:$a} end)' \
-    | CLAUDE_PROJECT_DIR="$1" bash "$HOOK" >/dev/null 2>&1
+# THE HOOK'S CLOCK. Its one `date` call stamps the row's ts; a re-run arm needs rows on both sides of
+# a re-run start, so drive() can put a `date` shim first on PATH that prints a pinned ts. The ROW is
+# still the real hook's -- only the clock is fixed. Without a ts the shim is not on PATH at all.
+DSHIM="$WORK/dshim"; mkdir -p "$DSHIM" || exit 2
+printf '#!/bin/sh\nprintf "%%s\\n" "$FIX_DRIVE_TS"\n' > "$DSHIM/date" && chmod +x "$DSHIM/date" || exit 2
+drive() { # <world> <tool> <file_path> <agent_id or ""> [tool_use_id] [transcript_path] [ts] [session]
+  # -- the REAL hook, a PreToolUse payload. With no optional argument the payload is the one every
+  # older arm drove: transcript_path "" and no tool_use_id key. ts defaults to $DTS when that is set;
+  # the session defaults to "t", the one every older arm drove.
+  local ts="${7:-${DTS:-}}"
+  jq -nc --arg t "$2" --arg f "$3" --arg a "$4" --arg u "${5:-}" --arg tp "${6:-}" --arg s "${8:-t}" \
+    '{session_id:$s, tool_name:$t, transcript_path:$tp, tool_input:{file_path:$f}}
+     + (if $a == "" then {} else {agent_id:$a} end)
+     + (if $u == "" then {} else {tool_use_id:$u} end)' > "$WORK/drive.payload"
+  if [ -n "$ts" ]; then
+    FIX_DRIVE_TS="$ts" PATH="$DSHIM:$PATH" CLAUDE_PROJECT_DIR="$1" bash "$HOOK" < "$WORK/drive.payload" >/dev/null 2>&1
+  else
+    CLAUDE_PROJECT_DIR="$1" bash "$HOOK" < "$WORK/drive.payload" >/dev/null 2>&1
+  fi
 }
 # THE SIBLINGS FIELD (BL-508). The join refuses, in every parts mode, a repaired entry with an edit
 # and no `siblings:` line, so every part writer below carries one: the seed blocks are graph's real
@@ -109,9 +123,9 @@ bind_scratch() { # <dir> -> JO under <dir>
   JO="$1/join.out"
 }
 bind_scratch "$WORK"
-run_join() { # <join-script> <world> -> RC, $JO
+run_join() { # <join-script> <world> [extra args] -> RC, $JO
   AI_DLC_PROJECT_ROOT="$2" bash "$1" --sprint 305 --artifact stories --pass 1 --artifact-path "$SLOT" \
-    --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1
+    --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z "${@:3}" > "$JO" 2>&1
   RC=$?
 }
 out_of() { printf '%s' "$1/_bmad-output/planning-artifacts/s305/stories-repair-p1.md"; }
@@ -206,9 +220,9 @@ docpart() { # <world> <ordinal> -- the part beside sections/, citing its section
     "$RDREL" "$2" "$SIB_SEC" "$2" > "$1/$RDREL/$2.md"
 }
 doc_out() { printf '%s' "$1/$SLOT/prd-repair-p1.md"; }
-run_docjoin() { # <join-script> <world>
+run_docjoin() { # <join-script> <world> [extra args]
   AI_DLC_PROJECT_ROOT="$2" bash "$1" --document "$DOCREL" "$2/$RDREL" \
-    --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1
+    --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z "${@:3}" > "$JO" 2>&1
   RC=$?
 }
 doc_refused() { # <world> <token> -- exit 2, the token, no record, no staging file
@@ -373,9 +387,9 @@ sj_all() { # <world> -- one distinct agent per part, each part citing what it wr
   done
 }
 sj_out() { printf '%s' "$1/$SJPA/s9/requirements-repair-p1.md"; }
-run_sjoin() { # <join> <world> [pass]
+run_sjoin() { # <join> <world> [pass] [extra args]
   AI_DLC_PROJECT_ROOT="$2" bash "$1" --subject 9 --pass "${3:-1}" \
-    --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1
+    --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z "${@:4}" > "$JO" 2>&1
   RC=$?
 }
 sj_refused() { [ "$RC" -eq 2 ] && has "$JO" "$2" && [ ! -e "$(sj_out "$1")" ]; }
@@ -810,7 +824,249 @@ p_escclosed() { # every escalation closed by the serial pass, and a shard entry 
     && ! has "$JO" "ESCALATED: 01.md" && ! has "$JO" "REFUSED"
 }
 
-P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed"
+
+# ---- RE-RUN OF ONE PART (--rerun <part>.md@<ISO>) AND THE ALIAS RULE. Every row is still the REAL
+# hook's; only its clock is pinned, by the `date` shim drive() puts on PATH when it is handed a ts.
+# Rows are driven in chronological order, because the record lists superseded ids in ledger order.
+G_SP=2026-10-15T19:47:25Z
+G_ORIG=a51ac04becc00c152; G_ORPH=ad67234a336bc2239; G_NEW=a2f8df9804face91e
+G_A5=a0f3b2c1d4e5f6a7b; G_A6=a9e8d7c6b5a4f3e2d
+gts() { printf '2026-10-15T%sZ' "$1"; }
+gsec() { # <world> <ordinal> <agent> <hh:mm:ss> -- that section copy edited, the row stamped at that time
+  printf 'Repaired at %s by %s.\n' "$4" "$3" >> "$1/$RDREL/sections/$2.md"
+  drive "$1" Edit "$1/$RDREL/sections/$2.md" "$3" "" "" "$(gts "$4")"
+}
+grec() { # <world> <ordinal> <agent> <hh:mm:ss> -- that part RECORD written (a Write the hook records), at that time
+  drive "$1" Write "$1/$RDREL/$2.md" "$3" "" "" "$(gts "$4")"
+}
+gnew() { # <world> -- the section-2 re-run: a NEW agent edits section 2 after S_P, then writes its part record
+  gsec "$1" 2 "$G_NEW" 19:50:00; grec "$1" 2 "$G_NEW" 19:51:00
+}
+g6_world() { # -> graph's S319 shape: six sections, 1 and 3-6 one writer each; section 2 by the original
+  # remediator, an orphan id between two of its edits, and the original again -- all before S_P
+  local w o; w="$(new_world)" || return 1
+  { printf '# Carry-over evaluation\n\n'
+    for o in 1 2 3 4 5 6; do printf '## Section %s\nThe first line of section %s, in prose.\nThe second line of section %s, in prose.\n\n' "$o" "$o" "$o"; done; } > "$w/$DOCREL"
+  bash "$PARTITION" --split "$w/$DOCREL" "$w/$RDREL" >/dev/null 2>&1 && [ -f "$w/$RDREL/sections/6.md" ] \
+    && [ ! -e "$w/$RDREL/sections/7.md" ] || return 1
+  gsec "$w" 1 "$AG1" 19:25:00
+  gsec "$w" 2 "$G_ORIG" 19:27:42; gsec "$w" 2 "$G_ORPH" 19:27:46; gsec "$w" 2 "$G_ORIG" 19:27:48
+  gsec "$w" 3 "$AG3" 19:28:00; gsec "$w" 4 "$AG4" 19:28:10; gsec "$w" 5 "$G_A5" 19:28:20; gsec "$w" 6 "$G_A6" 19:28:30
+  for o in 1 2 3 4 5 6; do docpart "$w" "$o"; done
+  # Each part's record, written by its section's writer before S_P (graph's 1.md..6.md rows).
+  grec "$w" 1 "$AG1" 19:29:01; grec "$w" 2 "$G_ORIG" 19:29:02; grec "$w" 3 "$AG3" 19:29:03
+  grec "$w" 4 "$AG4" 19:29:04; grec "$w" 5 "$G_A5" 19:29:05; grec "$w" 6 "$G_A6" 19:29:06
+  printf '%s' "$w"
+}
+p_rrgraph() { # the graph shape, section 2 re-run by a NEW agent after S_P: without --rerun -> REFUSED (three
+  # writers on sections/2.md), the document untouched; with it -> JOINED, the rerun: line naming both
+  # superseded ids and their three rows, the outer window kept, the in-its-window sentence, the count
+  local w o; w="$(g6_world)" || return 1
+  gnew "$w"
+  cp "$w/$DOCREL" "$w/doc.before"
+  run_docjoin "$1" "$w"
+  doc_refused "$w" "$RDREL/sections/2.md was written by more than one agent in the window" \
+    && cmp -s "$w/$DOCREL" "$w/doc.before" || return 1
+  run_docjoin "$1" "$w" --rerun "2.md@$G_SP"
+  o="$(doc_out "$w")"
+  [ "$RC" -eq 0 ] && has "$JO" "(6 parts, 6 writers, 3 superseded rows)" && [ -f "$o" ] \
+    && grep -qx -- "rerun: 2.md since $G_SP; superseded on $RDREL/sections/2.md: $G_ORIG $G_ORPH (3 rows, $(gts 19:27:42)..$(gts 19:27:48))" "$o" \
+    && grep -qx -- "every section under $RDREL/sections was written by exactly one agent in its window;" "$o" \
+    && has "$o" "; window 2000-01-01T00:00:00Z .. 2999-12-31T23:59:59Z;" \
+    && has "$w/$DOCREL" "Repaired at 19:50:00 by $G_NEW."
+}
+rr_refused() { # <join> <world> <token> -- the --rerun 2.md join refused naming the token, nothing assembled or written
+  run_docjoin "$1" "$2" --rerun "2.md@$G_SP"
+  doc_refused "$2" "$3"
+}
+p_rrout() { # the section-3 OWNER also wrote section 2 before S_P (a superseded writer of 2.md with a row
+  # outside it) -> REFUSED. Without this refusal the narrowing sets its row aside and the join acquits it.
+  local w; w="$(g6_world)" || return 1
+  gsec "$w" 2 "$AG3" 19:30:00; gnew "$w"
+  rr_refused "$1" "$w" "--rerun 2.md: $AG3 is a superseded writer of 2.md and also wrote $RDREL/sections/3.md at $(gts 19:28:00), outside the files 2.md cites"
+}
+p_rrlate() { # the original still writing after S_P OUTSIDE F_P (section 3) -> REFUSED in BOTH spellings:
+  # the still-writing line and the outside-F_P line
+  local w; w="$(g6_world)" || return 1
+  gnew "$w"; gsec "$w" 3 "$G_ORIG" 19:55:00
+  rr_refused "$1" "$w" "--rerun 2.md: $G_ORIG is a superseded writer of 2.md and wrote $RDREL/sections/3.md at $(gts 19:55:00), at or after the re-run start; the original is still writing" \
+    && has "$JO" "--rerun 2.md: $G_ORIG is a superseded writer of 2.md and also wrote $RDREL/sections/3.md at $(gts 19:55:00), outside the files 2.md cites"
+}
+p_rrlatein() { # the original still writing after S_P INSIDE F_P, beside the new writer -> REFUSED with the new-id line
+  local w; w="$(g6_world)" || return 1
+  gnew "$w"; gsec "$w" 2 "$G_ORIG" 19:55:00
+  rr_refused "$1" "$w" "--rerun 2.md: $G_ORIG wrote $RDREL/sections/2.md both before the re-run start and at $(gts 19:55:00), after it; the re-run is a NEW dispatch"
+}
+p_rrsame() { # the SAME id both sides of S_P, the orphan before, no new writer -> REFUSED. Narrowed, the
+  # section has one writer, so without the new-id rule this joins.
+  local w; w="$(g6_world)" || return 1
+  gsec "$w" 2 "$G_ORIG" 19:50:00
+  rr_refused "$1" "$w" "--rerun 2.md: $G_ORIG wrote $RDREL/sections/2.md both before the re-run start and at $(gts 19:50:00), after it; the re-run is a NEW dispatch"
+}
+p_rrspan() { # the re-run writer also writes section 4 -> REFUSED: section 4 has two writers in the window
+  local w; w="$(g6_world)" || return 1
+  gnew "$w"; gsec "$w" 4 "$G_NEW" 19:52:00
+  rr_refused "$1" "$w" "$RDREL/sections/4.md was written by more than one agent in the window: "
+}
+# THE PART RECORDS. Each world below is g6_world plus the re-run, one property apart, and each
+# refusal is asserted by its own text: two of them co-fire on some worlds, as LATE does beside OUT.
+p_rrprlate() { # the original writes the re-run part's own record AFTER S_P -> REFUSED: a superseded writer writes no account
+  local w; w="$(g6_world)" || return 1
+  gnew "$w"; grec "$w" 2 "$G_ORIG" 19:52:00
+  rr_refused "$1" "$w" "--rerun 2.md: $G_ORIG is a superseded writer of 2.md and wrote the part record $RDREL/2.md at $(gts 19:52:00), at or after the re-run start"
+}
+p_rrprout() { # the original wrote ANOTHER part's record, before S_P -> REFUSED: it was not only 2.md's writer
+  local w; w="$(g6_world)" || return 1
+  grec "$w" 3 "$G_ORIG" 19:29:30; gnew "$w"
+  rr_refused "$1" "$w" "--rerun 2.md: $G_ORIG is a superseded writer of 2.md and also wrote $RDREL/3.md at $(gts 19:29:30), another part's record"
+}
+p_rrprforeign() { # section 3's owner writes 2.md's record after S_P, beside the re-run's -> REFUSED: the account is the re-run's alone
+  local w; w="$(g6_world)" || return 1
+  gnew "$w"; grec "$w" 2 "$AG3" 19:52:00
+  rr_refused "$1" "$w" "--rerun 2.md: $AG3 wrote 2.md's own part record $RDREL/2.md at $(gts 19:52:00), at or after the re-run start, and is not its re-run writer"
+}
+p_rrprnone() { # the re-run edits section 2 and never writes 2.md's record -> REFUSED: the covering account is not the re-run's
+  local w; w="$(g6_world)" || return 1
+  gsec "$w" 2 "$G_NEW" 19:50:00
+  rr_refused "$1" "$w" "--rerun 2.md: no row on 2.md's own part record $RDREL/2.md at or after the re-run start was written by its re-run writer"
+}
+p_rrreuse() { # section 3's FINISHED owner does the section-2 re-run -> REFUSED (it joined as "6 parts, 5 writers")
+  local w; w="$(g6_world)" || return 1
+  gsec "$w" 2 "$AG3" 19:50:00; grec "$w" 2 "$AG3" 19:51:00
+  rr_refused "$1" "$w" "--rerun 2.md: $AG3, the re-run writer of 2.md, also wrote $RDREL/sections/3.md at $(gts 19:28:00), which belongs to no file 2.md cites" \
+    && has "$JO" "--rerun 2.md: $AG3, the re-run writer of 2.md, also wrote $RDREL/3.md at $(gts 19:29:03), which belongs to no file 2.md cites"
+}
+p_rrargs() { # the argument refusals, each its own run -> exit 2 naming the reason, nothing written
+  local w r; w="$(g6_world)" || return 1
+  gnew "$w"
+  printf -- '- **disposition:** escalated\n- **edit:** n/a\n- **derivation:** n/a (escalated)\n' > "$w/$RDREL/7.md"
+  run_docjoin "$1" "$w" --rerun "9.md@$G_SP"; doc_refused "$w" "--rerun 9.md@$G_SP: 9.md is not a part under" || return 1
+  run_docjoin "$1" "$w" --rerun "2.md@$G_SP" --rerun "2.md@$G_SP"; doc_refused "$w" "--rerun names 2.md twice" || return 1
+  run_docjoin "$1" "$w" --rerun "2.md@3000-01-01T00:00:00Z"; doc_refused "$w" "the re-run start 3000-01-01T00:00:00Z is outside the window" || return 1
+  run_docjoin "$1" "$w" --rerun "2.md@yesterday"; doc_refused "$w" "the re-run start must be YYYY-MM-DDTHH:MM:SSZ (got 'yesterday')" || return 1
+  run_docjoin "$1" "$w" --rerun "2.md"; doc_refused "$w" "--rerun 2.md is not <part>.md@<ISO>" || return 1
+  run_docjoin "$1" "$w" --rerun "7.md@$G_SP"; doc_refused "$w" "7.md cites no file written in the window, so it has nothing to re-run" || return 1
+  printf -- '### F-1 — MAJOR\n- disposition: escalated\n- edit: n/a\n' > "$w/rec.md"
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --escalations "$w/rec.md" --rerun "2.md@$G_SP" > "$JO" 2>&1; r=$?
+  [ "$r" -eq 2 ] && has "$JO" "--rerun narrows a join's ledger window; --sources and --escalations read no ledger"
+}
+p_rrfiles() { # FILES mode: story 2.1 re-run by a new agent after S_P -> without --rerun REFUSED, with it JOINED
+  local w o; w="$(new_world)"
+  drive "$w" Edit "$w/$REL/$S21" "$AG1" "" "" "$(gts 19:25:00)"
+  drive "$w" Edit "$w/$REL/$S22" "$AG2" "" "" "$(gts 19:26:00)"
+  drive "$w" Edit "$w/$REL/$S31" "$AG3" "" "" "$(gts 19:27:00)"
+  drive "$w" Edit "$w/$REL/$S21" "$G_NEW" "" "" "$(gts 19:50:00)"
+  part "$w" 01 2.1; part "$w" 02 2.2; part "$w" 03 3.1
+  drive "$w" Write "$w/$SLOT/shards/stories-repair-p1/01.md" "$G_NEW" "" "" "$(gts 19:51:00)"
+  run_join "$1" "$w"
+  refused "$w" "$REL/$S21 was written by more than one agent in the window" || return 1
+  run_join "$1" "$w" --rerun "01.md@$G_SP"
+  o="$(out_of "$w")"
+  [ "$RC" -eq 0 ] && has "$JO" "(3 parts, 3 writers, 1 superseded rows)" && [ -f "$o" ] \
+    && grep -qx -- "rerun: 01.md since $G_SP; superseded on $REL/$S21: $AG1 (1 rows, $(gts 19:25:00)..$(gts 19:25:00))" "$o" \
+    && grep -qx -- "every file under $SLOT outside _bmad-output/planning-artifacts/s305/shards/ was written by exactly one agent in its window." "$o"
+}
+p_rrsubj() { # SUBJECT mode: one SECTIONED part re-run by a new agent after S_P -> JOINED with --rerun, the
+  # in-place classification untouched (the re-run writes the section copy, not the file)
+  local w k o f; w="$(subj_world)" || return 1
+  k="$(sj_part_rows "$w" | grep -c .)"
+  DTS="$(gts 19:25:00)"; sj_all "$w"; DTS=""
+  o="$(sj_part_rows "$w" | awk -F'\t' '$7 != "-" { print $2; exit }')"
+  f="$(sj_part_rows "$w" | awk -F'\t' -v o="$o" '$2 == o { print $7 }')"
+  [ -n "$o" ] && [ -n "$f" ] || return 1
+  printf 'Re-run.\n' >> "$w/$f"; drive "$w" Edit "$w/$f" "$G_NEW" "" "" "$(gts 19:50:00)"
+  drive "$w" Write "$w/$SJRD/$o.md" "$G_NEW" "" "" "$(gts 19:51:00)"
+  run_sjoin "$1" "$w" 1
+  sj_refused "$w" "was written by more than one agent in the window" || return 1
+  run_sjoin "$1" "$w" 1 --rerun "$o.md@$G_SP"
+  [ "$RC" -eq 0 ] && has "$JO" "($k parts, $k writers, 1 superseded rows)" && [ -f "$(sj_out "$w")" ] \
+    && grep -q -- "^rerun: $o.md since $G_SP; superseded on " "$(sj_out "$w")" \
+    && grep -qx -- "every subject file and section copy was written by exactly one agent in its window;" "$(sj_out "$w")"
+}
+# THE ALIAS RULE. A row by an agent with no transcript of its own, whose tool_use_id is ONE assistant
+# tool_use in another writer's transcript, is that writer's. The transcripts are seeded in a projects
+# dir inside the world; transcript_path is the PARENT session's, carried by every row alike.
+al_world() { # <variant> -> world; variants: good result own second other nokeys sess two tool
+  local w sd tp a bs=t; w="$(new_world)" || return 1
+  tp="$w/projects/sess-1.jsonl"; sd="$w/projects/sess-1"; mkdir -p "$sd/subagents" || return 1
+  a="$sd/subagents/agent-$AG1.jsonl"
+  jq -nc --arg f "$w/$REL/$S21" '{type:"assistant",message:{content:[{type:"tool_use",id:"toolu_B1",name:"Edit",input:{file_path:$f}}]}}' > "$a"
+  case "$1" in
+    result) jq -nc --arg f "$w/$REL/$S21" '{type:"user",message:{content:[{type:"tool_result",tool_use_id:"toolu_ORPH",content:("toolu_ORPH Edit " + $f)}]}}' >> "$a" ;;
+    second) ;;
+    tool) jq -nc --arg f "$w/$REL/$S21" '{type:"assistant",message:{content:[{type:"tool_use",id:"toolu_ORPH",name:"Read",input:{file_path:$f}}]}}' >> "$a" ;;
+    two) jq -nc --arg f "$w/$REL/$S21" '{type:"assistant",message:{content:[{type:"tool_use",id:"toolu_ORPH",name:"Edit",input:{file_path:$f}}]}}' >> "$a"
+         jq -nc --arg f "$w/$REL/$S21" '{type:"assistant",message:{content:[{type:"tool_use",id:"toolu_ORPH",name:"Edit",input:{file_path:$f}}]}}' >> "$a" ;;
+    *) jq -nc --arg f "$w/$REL/$S21" '{type:"assistant",message:{content:[{type:"tool_use",id:"toolu_ORPH",name:"Edit",input:{file_path:$f}}]}}' >> "$a" ;;
+  esac
+  [ "$1" = other ] && jq -nc --arg f "$w/$REL/$S21" '{type:"assistant",message:{content:[{type:"tool_use",id:"toolu_ORPH2",name:"Edit",input:{file_path:$f}}]}}' >> "$a"
+  jq -nc --arg f "$w/$REL/$S21" '{type:"assistant",message:{content:[{type:"tool_use",id:"toolu_B2",name:"Edit",input:{file_path:$f}}]}}' >> "$a"
+  [ "$1" = own ] && : > "$sd/subagents/agent-$G_ORPH.jsonl"
+  # sess: B's rows carry ANOTHER session than the orphan row; B's transcript still holds the id.
+  [ "$1" = sess ] && bs=u
+  drive "$w" Edit "$w/$REL/$S21" "$AG1" toolu_B1 "$tp" "$(gts 19:25:00)" "$bs"
+  if [ "$1" = second ]; then drive "$w" Edit "$w/$REL/$S21" "$G_ORPH" toolu_SECOND "$tp" "$(gts 19:25:04)"
+  else drive "$w" Edit "$w/$REL/$S21" "$G_ORPH" toolu_ORPH "$tp" "$(gts 19:25:04)"; fi
+  drive "$w" Edit "$w/$REL/$S21" "$AG1" toolu_B2 "$tp" "$(gts 19:25:06)" "$bs"
+  [ "$1" = other ] && drive "$w" Edit "$w/$REL/$S21" "$G_ORPH" toolu_ORPH2 "$tp" "$(gts 19:25:08)"
+  drive "$w" Edit "$w/$REL/$S22" "$AG2" toolu_C1 "$tp" "$(gts 19:26:00)"
+  drive "$w" Edit "$w/$REL/$S31" "$AG3" toolu_D1 "$tp" "$(gts 19:27:00)"
+  if [ "$1" = nokeys ]; then
+    jq -c 'del(.tool_use_id, .transcript_path, .agent_transcript)' "$w/$SJPA/.artifact-writes.jsonl" > "$w/l.n" \
+      && mv "$w/l.n" "$w/$SJPA/.artifact-writes.jsonl" || return 1
+  fi
+  part "$w" 01 2.1; part "$w" 02 2.2; part "$w" 03 3.1
+  printf '%s' "$w"
+}
+AL_REF="$REL/$S21: $G_ORPH's row at 2026-10-15T19:25:04Z is not an alias of another writer"
+p_alias() { # the orphan row's id is ONE assistant tool_use in AG1's transcript, the orphan has none -> JOINED, one alias row
+  local w; w="$(al_world good)" || return 1
+  run_join "$1" "$w"
+  [ "$RC" -eq 0 ] && has "$JO" "(3 parts, 3 writers, 1 alias rows)" \
+    && grep -qx -- "alias: $G_ORPH's row on $REL/$S21 ($(gts 19:25:04), tool_use_id toolu_ORPH) is $AG1's write; its one tool_use with that id is in $w/projects/sess-1/subagents/agent-$AG1.jsonl and $G_ORPH has no transcript" "$(out_of "$w")"
+}
+p_alnokeys() { # the same rows with the hook's three keys stripped (a pre-upgrade ledger) -> REFUSED as before, no evidence line
+  local w; w="$(al_world nokeys)" || return 1
+  run_join "$1" "$w"
+  refused "$w" "$REL/$S21 was written by more than one agent in the window" && ! has "$JO" "is not an alias"
+}
+p_alresult() { # the id appears in AG1's transcript only inside a tool_result -> REFUSED, no transcript holds it
+  local w; w="$(al_world result)" || return 1
+  run_join "$1" "$w"
+  refused "$w" "$AL_REF (tool_use_id toolu_ORPH;" && has "$JO" "the id is held by no writer's transcript)"
+}
+p_alown() { # the orphan HAS its own transcript (recorded true at write time, present at the join) -> REFUSED
+  local w; w="$(al_world own)" || return 1
+  run_join "$1" "$w"
+  refused "$w" "$AL_REF (tool_use_id toolu_ORPH; $G_ORPH's transcript exists ("
+}
+p_alsecond() { # a genuine second remediator: same parent transcript_path, its id in nobody's transcript -> REFUSED
+  local w; w="$(al_world second)" || return 1
+  run_join "$1" "$w"
+  refused "$w" "$AL_REF (tool_use_id toolu_SECOND;" && has "$JO" "the id is held by no writer's transcript)"
+}
+p_alother() { # the orphan id has a second row in the file set -> REFUSED, its row count named
+  local w; w="$(al_world other)" || return 1
+  run_join "$1" "$w"
+  refused "$w" "$AL_REF (tool_use_id toolu_ORPH;" && has "$JO" "$G_ORPH has 2 row(s) in the file set"
+}
+p_alsess() { # B's rows on the file are in ANOTHER session than the orphan row -> REFUSED, B's transcript named as holding it
+  local w; w="$(al_world sess)" || return 1
+  run_join "$1" "$w"
+  refused "$w" "$AL_REF (tool_use_id toolu_ORPH;" && has "$JO" "the id is held by $w/projects/sess-1/subagents/agent-$AG1.jsonl (1 block(s)))"
+}
+p_altwo() { # the id is held by TWO assistant tool_use blocks in B's transcript -> REFUSED, both counted
+  local w; w="$(al_world two)" || return 1
+  run_join "$1" "$w"
+  refused "$w" "$AL_REF (tool_use_id toolu_ORPH;" && has "$JO" "the id is held by $w/projects/sess-1/subagents/agent-$AG1.jsonl (2 block(s)))"
+}
+p_altool() { # the one tool_use holding the id is a Read, not an Edit, Write or MultiEdit -> REFUSED
+  local w; w="$(al_world tool)" || return 1
+  run_join "$1" "$w"
+  refused "$w" "$AL_REF (tool_use_id toolu_ORPH;" && has "$JO" "the id is held by $w/projects/sess-1/subagents/agent-$AG1.jsonl (1 block(s)))"
+}
+
+P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrargs rrfiles rrsubj alias alnokeys alresult alown alsecond alother alsess altwo altool"
 
 # ---- A PART'S DERIVATION SURVIVES THE JOIN. The part's ```derived fence is copied into the joined
 # record, and the gate re-runs `validate-artifact-derivations.sh` over the sprint dir AFTER the

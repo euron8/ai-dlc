@@ -1,5 +1,6 @@
 # The JX battery mutates copies of the join and scores the sibling fixture's predicates (lib.sh,
-# seeds, run.sh arm lines). The join and the remediation-guard hook are the subjects.
+# seeds, run.sh arm lines). The join and the remediation-guard hook are the subjects. The shard
+# drivers are re-read by the coverage join (J0); a fixture's own directory is copied by the runner.
 !core/scripts/join-remediator-shards.sh
 !core/hooks/ai-dlc-gate-remediation-guard.sh
 core/hooks/ai-dlc-derivation-capture.sh
@@ -9,3 +10,6 @@ core/scripts/partition-subject.sh
 core/scripts/validate-artifact-derivations.sh
 core/fixtures/remediator-shard-join/
 core/fixtures/lib/
+core/fixtures/remediator-shard-join-mutants-b/run.sh
+core/fixtures/remediator-shard-join-mutants-c/run.sh
+core/fixtures/remediator-shard-join-mutants-d/run.sh

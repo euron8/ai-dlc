@@ -3,7 +3,8 @@
 # remediator-shard-join-mutants/run.sh -- the JX mutation battery behind `remediator-shard-join`.
 # DISTRIBUTION-ONLY (see .dist-only).
 #
-# Usage: run.sh [--rows <file>]
+# Usage: run.sh [--group <shard>] [--rows <file>]
+#        --group run only the mutants dealt to <shard> (default a); see THE SHARDS below.
 #        --rows  append one `<label>TAB<killed set>` row per scored mutant, in dispatch order, the
 #                killed set in P_ALL order and space-joined (empty for a mutant that killed nothing).
 # Exit:  0 = every mutant killed exactly its expected set and the control killed nothing,
@@ -27,8 +28,9 @@
 #   - it writes ONE verdict file, temp-then-mv, carrying the number of predicates it evaluated;
 #   - the parent counts verdicts against dispatches, and judges each with `judge`, which treats a
 #     missing verdict, a TIMEOUT, or an evaluated count other than |P_ALL| as a FAIL;
-#   - the number of mutants JUDGED must equal the number DECLARED in this file, and be > 0, so a
-#     battery whose mutant calls were deleted fails rather than reporting a clean control;
+#   - the mutants DECLARED in this file are dealt across the shards and joined before dispatch
+#     ([J0], below), and the number this shard dispatches must equal the number dealt to it ([J2]),
+#     so a battery whose mutant calls were deleted fails rather than reporting a clean control;
 #   - `judge` itself is probed every run, on a real verdict file, in both directions.
 # The pool is a FIXED width of 8 (no knob); completion is read from sentinel files the scorers
 # write, never from the process table.
@@ -39,21 +41,99 @@
 # The unsplit fixture measured 528 CPU-s solo for 25 scorings plus the arms, about 20s a scoring;
 # a unit under the gate's pool has measured 4x its solo time. 900s is roughly 45x the per-scoring
 # figure.
+#
+# THE SHARDS. The pre-push suite is POLE-BOUND: its makespan tracks its single longest DIRECTORY,
+# and this battery, 63 mutants in one unit, was that directory at 1051s loaded (404s solo). So the
+# mutant set is dealt across four units, this directory (shard a) and the one-line drivers
+# `remediator-shard-join-mutants-b`, `-c` and `-d`, each `exec bash "$IMPL" --group <x>`, the shape
+# `review-shard-merge-mutants` carries. Every scorer runs every predicate, so the cost per mutant
+# is roughly uniform and an equal count balances: 18 each, in declaration order by family. Shard d
+# was added when 72 mutants over three shards measured 245-295s solo each.
+# Every shard pays the unmutated control JX0, the J1 join and the MJ probe itself, because a shard
+# that skipped them could report a kill against a harness that never ran.
+#
+# THE SHARD ARRIVES AS AN ARGUMENT, never from the environment: the scrub below unsets AI_DLC_*,
+# and a fallback-to-'a' design would run shard a three times and report three green fixtures.
+#
+# THE COVERAGE JOIN [J0] runs in every shard before any mutant is dispatched: the declared set is
+# DERIVED from this file's own `mutant`/`mutant2`/`mutant3` lines between the JX markers, the dealt
+# lists must be disjoint and their union must equal it exactly, and every declared shard must have
+# a driver directory naming it. The join proves it can fire, on a seeded duplicate and a seeded
+# omission, before it is trusted. After the reap, [J2] asserts this shard dispatched exactly the
+# mutants dealt to it.
+SHARDS="a b c d"
+MUTANTS_a="JX1 JX2 JX3 JX4 JX5 JX6 JX7 JX8 JX10 JX9 JX11 JX12 JX13 JX14 JX15 JX16 JX17 JX18"
+MUTANTS_b="JX19 JX20 JX21 JX22 JX23 JX24 JX25 JX26 JX27 JX28 JX29 JX30 JX36 JX37 JX38 JX42 JX43 JX44"
+MUTANTS_c="JX45 JX46 JX47 JX48 JX49 JX39 JX40 JX41 JX31 JX32 JX33 JX34 JX35 JX50 JX51 JX52 JX53 JX54"
+MUTANTS_d="JX55 JX56 JX57 JX58 JX59 JX60 JX61 JX62 JX63 JX64 JX65 JX66 JX67 JX68 JX69 JX70 JX71 JX72"
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # lib.sh rebinds HERE to ITS directory (it reads the seeds from there), so this file's own path is
-# captured now: the reap reads the DECLARED mutant set from it.
+# captured now: the coverage join reads the DECLARED mutant set from it.
 SELF="$HERE/run.sh"
-NAME="remediator-shard-join-mutants"
-ROWS=""
+ROWS=""; GROUP=a
+USAGE="usage: run.sh [--group <shard>] [--rows <file>]"
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --rows) ROWS="${2:-}"; [ -n "$ROWS" ] || { echo "usage: run.sh [--rows <file>]" >&2; exit 2; }; shift 2 ;;
-    *) echo "usage: run.sh [--rows <file>]" >&2; exit 2 ;;
+    --group) GROUP="${2:-}"; [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }; shift 2 ;;
+    --rows) ROWS="${2:-}"; [ -n "$ROWS" ] || { echo "$USAGE" >&2; exit 2; }; shift 2 ;;
+    *) echo "$USAGE" >&2; exit 2 ;;
   esac
 done
+case " $SHARDS " in
+  *" $GROUP "*) ;;
+  *) echo "FIXTURE ERROR: unknown shard '$GROUP' (known: $SHARDS)" >&2; exit 2 ;;
+esac
+eval "MINE=\"\${MUTANTS_$GROUP:-}\""
+[ -n "$MINE" ] || { echo "FIXTURE ERROR: shard '$GROUP' has no MUTANTS_$GROUP list; a shard dealt nothing passes everything it never checked" >&2; exit 2; }
+NAME="remediator-shard-join-mutants"
+[ "$GROUP" = a ] || NAME="$NAME-$GROUP"
+[ -f "$SELF" ] || { echo "FIXTURE ERROR: cannot read $SELF for the coverage join" >&2; exit 2; }
+
+# partition_ok <declared ids file> <dealt ids file> -> 0 when dealt is disjoint and covers declared
+# exactly; prints the offending ids otherwise.
+partition_ok() {
+  local dup miss extra
+  dup="$(sort "$2" | uniq -d | tr '\n' ' ')"
+  miss="$(sort -u "$2" | comm -23 <(sort -u "$1") - | tr '\n' ' ')"
+  extra="$(sort -u "$2" | comm -13 <(sort -u "$1") - | tr '\n' ' ')"
+  [ -z "$dup$miss$extra" ] && return 0
+  echo "dealt twice: {${dup% }} dealt to no shard: {${miss% }} dealt but not declared: {${extra% }}"
+  return 1
+}
+JW="$(mktemp -d "${TMPDIR:-/tmp}/rsj-join.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
+printf '%s\n' JX1 JX2 JX3 > "$JW/pd"; printf '%s\n' JX1 JX2 JX2 JX3 > "$JW/pdup"
+printf '%s\n' JX1 JX3 > "$JW/pmiss"; printf '%s\n' JX3 JX1 JX2 > "$JW/pok"
+if partition_ok "$JW/pd" "$JW/pdup" >/dev/null || partition_ok "$JW/pd" "$JW/pmiss" >/dev/null \
+   || ! partition_ok "$JW/pd" "$JW/pok" >/dev/null; then
+  echo "FIXTURE BROKEN: the coverage join's self-probe did not discriminate (duplicate, omission, exact)" >&2; exit 2
+fi
+# The declared set: every `mutant`, `mutant2` or `mutant3` call between the JX markers, its id the
+# label's first word. All three spellings, or a multi-layer mutant dealt to no shard is invisible.
+awk '/^# ---- BEGIN JX MUTANTS/ { on = 1; next } /^# ---- END JX MUTANTS/ { on = 0 }
+     on && /^mutant[23]? "/ { sub(/^mutant[23]? "/, ""); sub(/ .*/, ""); print }' "$SELF" > "$JW/declared"
+for s in $SHARDS; do eval "printf '%s\n' \${MUTANTS_$s}"; done | grep . > "$JW/dealt"
+ndecl="$(grep -c . "$JW/declared")" || ndecl=0
+ndupdecl="$(sort "$JW/declared" | uniq -d | grep -c .)" || ndupdecl=0
+if [ "$ndecl" -eq 0 ] || [ "$ndupdecl" -ne 0 ]; then
+  echo "FIXTURE BROKEN: $ndecl mutant ids derived from $SELF ($ndupdecl declared twice)" >&2; exit 2
+fi
+if ! why="$(partition_ok "$JW/declared" "$JW/dealt")"; then
+  echo "FIXTURE BROKEN: the shard partition does not cover the declared mutants exactly -- $why" >&2; exit 2
+fi
+for s in $SHARDS; do
+  [ "$s" = a ] && continue
+  drv="$HERE/../remediator-shard-join-mutants-$s/run.sh"
+  # Anchored on the whole exec line, `^exec bash "$IMPL" --group <s>$`: a comment or any other
+  # line merely mentioning `--group <s>` does not drive the shard.
+  if [ ! -f "$drv" ] || ! grep -qxF -- "exec bash \"\$IMPL\" --group $s" "$drv"; then
+    echo "FIXTURE BROKEN: shard '$s' is declared but $drv does not drive it" >&2; exit 2
+  fi
+done
+nmine=0; for _m in $MINE; do nmine=$((nmine+1)); done
+JOIN_LINE="[J0] coverage join: $ndecl mutants derived from mutant lines, dealt disjointly across {$SHARDS}, union exact; this shard runs $nmine: {$MINE}"
 command -v python3 >/dev/null 2>&1 || { echo "FIXTURE ERROR: python3 not on PATH (the mutation helper)" >&2; exit 2; }
 SIB="$HERE/../remediator-shard-join"
 [ -f "$SIB/lib.sh" ] || { echo "FIXTURE BROKEN: $SIB/lib.sh is absent; no predicate exists to score a mutant against" >&2; exit 2; }
@@ -65,6 +145,7 @@ echo "HERMETIC-CONSUMED $HOOK"
 if [ -n "$ROWS" ]; then : >> "$ROWS" || { echo "FIXTURE ERROR: cannot write --rows $ROWS" >&2; exit 2; }; fi
 
 echo "$NAME:"
+ok "$JOIN_LINE"
 
 # THE JOIN: every predicate the shipped fixture calls as an arm is scored here, and every predicate
 # scored here is one the shipped fixture runs. Read from the shipped run.sh's own arm lines, so
@@ -160,7 +241,15 @@ judge() { # <verdict-stem> <label> <expected dead set | NONE>
   if [ "$dead" = "$want" ]; then printf '%s: KILLED by [%s] and nothing else\n' "$label" "$want"; return 0; fi
   printf '%s killed [%s], expected exactly [%s] -- an arm is entangled or does not own this property\n' "$label" "$dead" "$want"; return 1
 }
+# mine <label>: 0 when the mutant is dealt to this shard (and counts it as reached), 1 otherwise.
+# Called by all three spellings, so a multi-layer mutant is filtered and counted like any other.
+NSEEN=0
+mine() {
+  case " $MINE " in *" ${1%% *} "*) NSEEN=$((NSEEN + 1)); return 0 ;; esac
+  return 1
+}
 mutant() { # <label> <expected> <old> <new>
+  mine "$1" || return 0
   local d; d="$(mutdir "${1%% *}")" || { bad "$1: FIXTURE BROKEN -- the sandbox could not be built"; return; }
   if ! apply "$d/join-remediator-shards.sh" "$3" "$4"; then
     bad "$1: FIXTURE STALE -- the mutation anchor is not in the join exactly once; re-anchor it, never relax the assertion"; return
@@ -170,6 +259,7 @@ mutant() { # <label> <expected> <old> <new>
   dispatch "$1" "$d/join-remediator-shards.sh" "$2"
 }
 mutant2() { # <label> <expected> <old1> <new1> <old2> <new2> -- two layers reverted together
+  mine "$1" || return 0
   local d; d="$(mutdir "${1%% *}")" || { bad "$1: FIXTURE BROKEN -- the sandbox could not be built"; return; }
   if ! apply "$d/join-remediator-shards.sh" "$3" "$4" || ! apply "$d/join-remediator-shards.sh" "$5" "$6"; then
     bad "$1: FIXTURE STALE -- a mutation anchor is not in the join exactly once; re-anchor it, never relax the assertion"; return
@@ -179,6 +269,7 @@ mutant2() { # <label> <expected> <old1> <new1> <old2> <new2> -- two layers rever
   dispatch "$1" "$d/join-remediator-shards.sh" "$2"
 }
 mutant3() { # <label> <expected> <old1> <new1> <old2> <new2> <old3> <new3> -- three layers reverted together
+  mine "$1" || return 0
   local d; d="$(mutdir "${1%% *}")" || { bad "$1: FIXTURE BROKEN -- the sandbox could not be built"; return; }
   if ! apply "$d/join-remediator-shards.sh" "$3" "$4" || ! apply "$d/join-remediator-shards.sh" "$5" "$6" \
      || ! apply "$d/join-remediator-shards.sh" "$7" "$8"; then
@@ -198,28 +289,50 @@ else
   bad "JX-pre: FIXTURE BROKEN -- the sandbox lacks the join or a sibling"
 fi
 
-# ---- BEGIN JX MUTANTS. The reap counts the `mutant`/`mutant2` calls between these two markers in
-# this file as the DECLARED set, and requires every one of them judged.
+# ---- BEGIN JX MUTANTS. The coverage join [J0] reads the `mutant`/`mutant2`/`mutant3` calls between
+# these two markers in this file as the DECLARED set, and requires each dealt to exactly one shard.
 # J2's world ALSO trips other refusals, so this mutant still exits 2 there; the kill is the
 # missing overlap SENTENCE, which is the only thing that names the defect to the lead.
-mutant "JX1 the >1-writer refusal removed" "overlap docoverlap sjspec2" \
+# rrgraph, rrfiles and rrsubj assert the overlap sentence on their no-rerun half, rrspan on the
+# re-run writer's second section, alnokeys on a keyless ledger.
+mutant "JX1 the >1-writer refusal removed" "overlap docoverlap sjspec2 rrgraph rrspan rrfiles rrsubj alnokeys" \
   'if [ -n "$OVERLAPS" ]; then' \
   'if false; then'
 mutant "JX2 the uncited-file refusal removed" "missing" \
   '      if (!(p in cov)) print "UNCITED\t" p "\t" wr[p]' \
   '      if (0) print "UNCITED\t" p "\t" wr[p]'
-mutant "JX3 the shards/ exclusion removed" "shardrow" \
-  '   | select($doc == "1" or ((.path | startswith($sh + "/")) | not))' \
-  '   | select(true)'
+# The shards/ filter is spelled twice since the re-run join: in ROWS and in the detailed DROWS read.
+# JX3 and JX4 revert BOTH, each anchored on the line after it that tells the two apart.
+SHF='| select($doc == "1" or ((.path | startswith($sh + "/")) | not))'
+SHF_ROWS='   | [.path, .agent_id]] | unique | .[] | @tsv'
+SHF_DROWS='     | [.path, .agent_id, .ts, (.session | d), (.tool_use_id | d), (.transcript_path | d),'
+# rrfiles dies too: its re-run writer's part-record Write becomes a written file no part cites.
+mutant2 "JX3 the shards/ exclusion removed" "shardrow rrfiles" \
+  "   $SHF
+$SHF_ROWS" \
+  "   | select(true)
+$SHF_ROWS" \
+  "     $SHF
+$SHF_DROWS" \
+  "     | select(true)
+$SHF_DROWS"
 # JX4 is the defect this mode exists to close: the files-mode filter applied in document mode drops
 # every section row, so the join sees no write at all.
 # partydoc is a document join too, and dies with the others. sjpartysrc does NOT: its subject keeps
 # whole-file part rows outside shards/, so the join still reaches the source check and refuses by name.
 # sibdoc (BL-508) dies too: with no section rows the join refuses on the empty ledger before its siblings arm.
-mutant "JX4 section rows dropped in document mode (the pre-BL-372 file set)" "docjoin docoverlap asmrefuse sjoin sjnames sjgate sjnest partydoc sibdoc" \
-  '   | select($doc == "1" or ((.path | startswith($sh + "/")) | not))' \
-  '   | select((.path | startswith($sh + "/")) | not)'
-mutant "JX5 the assembly skipped" "docjoin asmrefuse partydoc" \
+# The document- and subject-mode re-run arms die too: with no section rows nothing is re-run.
+mutant2 "JX4 section rows dropped in document mode (the pre-BL-372 file set)" "docjoin docoverlap asmrefuse sjoin sjnames sjgate sjnest partydoc sibdoc rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrsubj" \
+  "   $SHF
+$SHF_ROWS" \
+  "   | select((.path | startswith(\$sh + \"/\")) | not)
+$SHF_ROWS" \
+  "     $SHF
+$SHF_DROWS" \
+  "     | select((.path | startswith(\$sh + \"/\")) | not)
+$SHF_DROWS"
+# rrgraph asserts the re-run writer's edit reached the assembled document.
+mutant "JX5 the assembly skipped" "docjoin asmrefuse partydoc rrgraph" \
   '  ASM_LINE="$(bash "$PARTITION" --assemble "$SHARD_DIR" 2>&1)" || {' \
   '  ASM_LINE="skipped" || {'
 mutant "JX6 the assembler's refusal ignored" "asmrefuse" \
@@ -464,21 +577,101 @@ mutant "JX54 an escalated entry's edit: path counted as a shard citation" "escpa
 mutant "JX55 --escalations runs as --sources (needs a seat dir)" "escopen escclosed" \
   '    --escalations) SRC_REC="${2:-}"; SRCMODE=2; shift 2 ;;' \
   '    --escalations) SRC_REC="${2:-}"; SRCMODE=1; shift 2 ;;'
+# ---- the re-run window (--rerun <part>.md@<ISO>). Expected sets are the measured kills; the
+# re-run predicates' ALLOW twins (rrgraph, rrfiles, rrsubj) run in the same battery. JX59 is killed
+# only by rrlate's second spelling: outside F_P the OUT line fires beside LATE, so no verdict moves.
+# JX58 kills rrlate too, for the same reason. JX60 kills rrsame on VERDICT: narrowed, the same id
+# leaves one writer and the mutant joins. JX63 kills alresult too: a shared path aliases it.
+RR_DROP='          if ((f in fp) && t < S[fp[f]]) {
+            p = fp[f]; drop[i] = 1; sw[p, a] = 1'
+# JX56: no narrowing -- nothing is superseded, so the re-run part keeps every writer.
+# rrprlate and rrprout die too: with nothing superseded the original is no superseded writer.
+mutant "JX56 --rerun narrows nothing" "rrgraph rrout rrlate rrlatein rrsame rrprlate rrprout rrfiles rrsubj" \
+  "$RR_DROP" \
+  '          if (0) {
+            p = fp[f]; drop[i] = 1; sw[p, a] = 1'
+# JX57: S_P applied to every part's files, not only to the re-run part's.
+mutant "JX57 the re-run start applied to every part" "rrgraph rrspan rrfiles rrsubj" \
+  "$RR_DROP" \
+  '          if (t < S[PP[1]]) {
+            p = PP[1]; drop[i] = 1; sw[p, a] = 1'
+mutant "JX58 refusal 3 removed (a superseded writer outside F_P)" "rrout rrlate" \
+  '        OUT)  refuse' \
+  '        OUT)  :'
+mutant "JX59 refusal 4 removed (a superseded writer still writing)" "rrlate" \
+  '        LATE) refuse' \
+  '        LATE) :'
+mutant "JX60 the new-id rule removed" "rrlatein rrsame" \
+  '        SAME) refuse' \
+  '        SAME) :'
+# ---- the alias rule. Clause 2 is two layers -- the recorded agent_transcript and the join-time
+# file test -- and both are reverted.
+mutant2 "JX61 alias clause 2 dropped (A may have a transcript)" "alown" \
+  '[ "$_tuid" != "-" ] && [ "$_atr" = false ] && [ "$_tpath" != "-" ]' \
+  '[ "$_tuid" != "-" ] && [ "$_tpath" != "-" ]' \
+  '      [ -e "${_sd}/subagents/agent-${_A}.jsonl" ] && continue' \
+  '      :'
+# JX62: clause 3 by grep -- any line of B's transcript carrying the id, a tool_result included,
+# read as one Edit of the file, so the later name and path checks still pass.
+# altwo and altool die too: the grep stand-in reads one Edit whatever the count or the tool name.
+mutant "JX62 alias clause 3 by grep, not a parsed tool_use" "alresult altwo altool" \
+  '        _blk="$(tu_blocks "${_sd}/subagents/agent-${_B}.jsonl" "$_tuid")"' \
+  '        _blk="$(grep -qF -- "$_tuid" "${_sd}/subagents/agent-${_B}.jsonl" 2>/dev/null && printf "Edit\t%s\n" "$_f")"'
+# JX63: a shared transcript_path read as one writer -- clause 3 and its name/path checks replaced.
+# Single-quoted literals, never a quoted heredoc inside $( ): bash 3.2 expands that body.
+_T="$(printf '\t')"; _Q="'"
+AL_C3='        _blk="$(tu_blocks "${_sd}/subagents/agent-${_B}.jsonl" "$_tuid")"
+        [ "$(printf '"$_Q"'%s\n'"$_Q"' "$_blk" | grep -c .)" = 1 ] || continue
+        _bn="${_blk%%'"$_T"'*}"; _bfp="${_blk#*'"$_T"'}"
+        case "$_bn" in Edit|Write|MultiEdit) ;; *) continue ;; esac
+        [ "$(hook_norm "$_bfp")" = "$_f" ] || continue'
+AL_TP='        _btp="$(printf '"$_Q"'%s\n'"$_Q"' "$DROWS" | awk -F'"$_Q"'\t'"$_Q"' -v f="$_f" -v b="$_B" '"$_Q"'$1 == f && $2 == b { print $6; exit }'"$_Q"')"
+        [ "$_btp" = "$_tpath" ] || continue'
+mutant "JX63 alias on a shared transcript_path" "alresult alsecond altwo altool" "$AL_C3" "$AL_TP"
+# The three clauses the tip adversary found untestable (its W6, W7, W9), each now owned by one arm.
+mutant "JX64 alias clause 1 session match dropped" "alsess" \
+  '        [ "$_bs" = "$_sess" ] || continue' \
+  '        :'
+mutant "JX65 alias clause 3 exactly-one relaxed to at-least-one" "altwo" \
+  '        [ "$(printf '"$_Q"'%s\n'"$_Q"' "$_blk" | grep -c .)" = 1 ] || continue' \
+  '        [ -n "$_blk" ] || continue; _blk="$(printf '"$_Q"'%s\n'"$_Q"' "$_blk" | head -1)"'
+mutant "JX66 alias clause 3 tool-name check dropped" "altool" \
+  '        case "$_bn" in Edit|Write|MultiEdit) ;; *) continue ;; esac' \
+  '        :'
+# ---- the part-record refusals: the account's author, read off rows under the repair dir.
+mutant "JX67 a superseded writer's part-record row after S_P not refused" "rrprlate" \
+  '        PRLATE) refuse' \
+  '        PRLATE) :'
+mutant "JX68 a superseded writer's row on another part's record not refused" "rrprout" \
+  '        PROUT) refuse' \
+  '        PROUT) :'
+mutant "JX69 a foreign row on the re-run part's own record after S_P not refused" "rrprforeign" \
+  '        PRFOREIGN) refuse' \
+  '        PRFOREIGN) :'
+mutant "JX70 a re-run with no row on its own part record not refused" "rrprnone" \
+  '        PRNONE) refuse' \
+  '        PRNONE) :'
+mutant "JX71 a re-run writer with rows outside its part not refused" "rrreuse" \
+  '        RWOUT) refuse' \
+  '        RWOUT) :'
+# JX72: only the part-record half of the re-run writer's reach removed; rrreuse asserts both spellings.
+mutant "JX72 a re-run writer's row on another part's record not refused" "rrreuse" \
+  '            if (((p, a) in rw) && b != p && !((p, a, b, "R") in pq)) {' \
+  '            if (0) {'
 # ---- END JX MUTANTS.
 
 # ------------------------------------------------------------------------------ the reap
 wait
 nidx="$(grep -c . "$IDX")" || nidx=0
 nd="$(ndone)"
-# DECLARED is read off this file's own source, between the markers; JUDGED is counted below as the
-# reap walks the index. A control alone is NOT a battery: with every mutant call deleted the
-# control still dispatches, still holds, and the run would otherwise read PASS.
-ndecl="$(awk '/^# ---- BEGIN JX MUTANTS/ { on = 1; next } /^# ---- END JX MUTANTS/ { on = 0 } on && /^mutant[23]? "/' "$SELF" | grep -c .)" || ndecl=0
 if [ "$NDISP" -ge 2 ] && [ "$nidx" -eq "$NDISP" ] && [ "$nd" -eq "$NDISP" ]; then
   ok "MR: $NDISP scorers dispatched, $nidx recorded, $nd completed"
 else
   bad "MR: $NDISP scorers dispatched, $nidx recorded, $nd completed -- a scorer was lost or never started"
 fi
+# The control is one dispatch; every other dispatch is a mutant dealt to this shard. JUDGED is
+# counted as the reap walks the index. A control alone is NOT a battery: with every mutant call
+# deleted the control still dispatches, still holds, and the run would otherwise read PASS.
 njudged=0
 while IFS='	' read -r id label want; do
   [ "$want" = "NONE" ] || njudged=$((njudged + 1))
@@ -487,32 +680,34 @@ while IFS='	' read -r id label want; do
     IFS='	' read -r _l _n _d < "$VD/$id.v"; printf '%s\t%s\n' "$label" "$_d" >> "$ROWS"
   fi
 done < "$IDX"
-if [ "$ndecl" -gt 0 ] && [ "$njudged" -eq "$ndecl" ]; then
-  ok "MC: $ndecl mutant(s) declared in this file, $njudged judged"
+if [ "$NSEEN" -eq "$nmine" ] && [ "$((NDISP - 1))" -eq "$nmine" ] && [ "$njudged" -eq "$nmine" ]; then
+  ok "[J2] shard '$GROUP' reached $NSEEN mutants, dispatched $((NDISP - 1)) and judged $njudged, of $nmine dealt ($ndecl declared across {$SHARDS})"
 else
-  bad "MC: $ndecl mutant(s) declared in this file, $njudged judged -- an emptied battery or a mutant that never reached the judge is never a pass"
+  bad "[J2] shard '$GROUP' reached $NSEEN mutants, dispatched $((NDISP - 1)) and judged $njudged, of $nmine dealt -- a dealt mutant never ran"
 fi
 
-# THE JUDGMENT, PROBED ON A REAL VERDICT. JX1's verdict file is copied aside and judged four ways
-# against a scratch counter: its own expected set must PASS (else the probe proves nothing about a
-# judge that always fails), a deliberately wrong set must FAIL, a TIMEOUT marker beside it must
-# FAIL, and the same stem with the verdict file deleted must FAIL.
-pv="$(awk -F'\t' 'index($2, "JX1 ") == 1 { print $1; exit }' "$IDX")"
-pw="$(awk -F'\t' 'index($2, "JX1 ") == 1 { print $3; exit }' "$IDX")"
-pl="$(awk -F'\t' 'index($2, "JX1 ") == 1 { print $2; exit }' "$IDX")"
+# THE JUDGMENT, PROBED ON A REAL VERDICT. The first MUTANT verdict this shard dispatched (the first
+# row whose expected set is not the control's NONE) is copied aside and judged four ways against a
+# scratch counter: its own expected set must PASS (else the probe proves nothing about a judge that
+# always fails), a deliberately wrong set must FAIL, a TIMEOUT marker beside it must FAIL, and the
+# same stem with the verdict file deleted must FAIL. The wrong set is a predicate name no P_ALL
+# member carries, so it can equal no mutant's.
+pv="$(awk -F'\t' '$3 != "NONE" { print $1; exit }' "$IDX")"
+pw="$(awk -F'\t' '$3 != "NONE" { print $3; exit }' "$IDX")"
+pl="$(awk -F'\t' '$3 != "NONE" { print $2; exit }' "$IDX")"
 if [ -z "$pv" ] || [ ! -f "$VD/$pv.v" ]; then
-  bad "MJ: FIXTURE BROKEN -- no JX1 verdict file to probe the judgment with"
+  bad "MJ: FIXTURE BROKEN -- no mutant verdict file to probe the judgment with"
 else
   pd="$(mktemp -d "$WORK/judge-probe.XXXXXX")" && cp "$VD/$pv.v" "$pd/p.v"
   red=0
   judge "$pd/p" "$pl" "$pw" > /dev/null || red=$((red + 100))
-  judge "$pd/p" "$pl" "overlap" > /dev/null || red=$((red + 1))
+  judge "$pd/p" "$pl" "no_such_predicate" > /dev/null || red=$((red + 1))
   : > "$pd/p.timeout"
   judge "$pd/p" "$pl" "$pw" > /dev/null || red=$((red + 1))
   rm -f "$pd/p.timeout" "$pd/p.v"
   judge "$pd/p" "$pl" "$pw" > /dev/null || red=$((red + 1))
   if [ "$red" -eq 3 ]; then
-    ok "MJ: the judgment passes JX1's real verdict against its own set, and FAILS it against a wrong set, beside a TIMEOUT marker, and with the verdict file deleted"
+    ok "MJ: the judgment passes ${pl%% *}'s real verdict against its own set, and FAILS it against a wrong set, beside a TIMEOUT marker, and with the verdict file deleted"
   else
     bad "MJ: the judgment probe scored $red (want 3: real+right ok, real+wrong red, real+timeout red, deleted red; +100 means the right set failed)"
   fi
