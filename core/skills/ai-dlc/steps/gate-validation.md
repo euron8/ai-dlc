@@ -3229,11 +3229,26 @@ without moving.
 - Exit 2 — the audit could not run (no genesis, no contract), or no snapshot
   variant. The gate FAILS: a setup error is not a clean result.
 
+**The exit from a finding is the operator's.** The audit stops at the first
+finding and the watermark holds before it, so a fix-forward commit cannot clear
+it: every re-run walks the same range and stops on the same sha. When an entry
+in `docs/escalations/pending.md` or `pending-archive.md` names the first `FAIL`
+sha (a hex prefix of 7 or more characters) and is `**Status:** RESOLVED` or
+`OVERRIDDEN` with an `**Operator authorization:**` citation, as `escalations.md`
+defines one, the script re-audits from that sha forward and maps that run. The
+citation's shape is decided by `validate-escalation-resolution.sh`, and Check 2a
+verifies it against the transcript. Without that entry the gate keeps FAILING
+after a fix-forward. That is the guard holding, not a wedge to work around. Never
+hand-edit `.audit-watermark`: the escalation is the tracked trace of the exit.
+
 **Genesis.** The audit starts at `_bmad-output/.audit-watermark` when it exists.
 A fresh clone carries none, because the file is gitignored, so the script falls
-back to the `audit_window:` end of the prior sprint's `audit-anchors.md` entry,
-which is the entry step 1a reads. With neither source the run exits 2, and the
-remedy is to fix the anchor entry.
+back to the required `sha` of the prior sprint's `audit-anchors.md` entry (the
+entry step 1a reads), resolved by `validate-audit-anchors.sh --prior-sprint-sha`.
+It does not read `audit_window:`. The schema marks that field optional and
+documentary, and step 5b never writes it. With neither source the run exits 2,
+and the remedy is to fix the anchor entry. On a shallow clone the exit-2 message
+names the shallow history instead, and the remedy is `git fetch --unshallow`.
 
 **The verdict comes from the re-run, never from a record of an earlier run.**
 Step 1b's result had no reader, and a record of it is not where one can look:

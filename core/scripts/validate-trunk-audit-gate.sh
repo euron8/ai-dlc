@@ -15,8 +15,7 @@
 # check keyed on artifact text fails six of thirteen sprints that did nothing wrong, and
 # one keyed on the gitignored `_bmad-output/.audit-watermark` reads a file that is not
 # written on WORKLIST and absent from a fresh clone. Re-running is the only source that
-# is neither. The consumer had already built exactly this as its own extension check;
-# this is core absorbing it.
+# is neither.
 #
 # SCOPE. Carry-over variant only, read from the snapshot's `pipeline_variant:`. Step 1b
 # lives in `carry-over-evaluation.md` alone, and a project on another variant may never
@@ -29,9 +28,15 @@
 #                                 because the project declares no
 #                                 PR classes; a backlog item, not
 #                                 a gate failure and not a pass   exit 0
+#   1, first FAIL sha named by an operator-resolved escalation
+#                                 re-audit from that sha forward,
+#                                 then map THAT run's exit        (loop)
 #   1                             FAIL -- findings (file the step-1b
 #                                 HARD_BLOCK naming each SHA) or a
 #                                 malformed taxonomy              exit 1
+#   2, shallow clone              FAIL -- the history the genesis
+#                                 needs was never fetched; remedy
+#                                 is `git fetch --unshallow`       exit 2
 #   2                             FAIL -- setup error (no genesis,
 #                                 no contract); not a clean result exit 2
 #   0 with neither line, or any other exit
@@ -41,6 +46,27 @@
 # THE AUDIT IS NOT READ-ONLY. It advances `_bmad-output/.audit-watermark` to the last
 # clean commit, so a re-run at a later gate audits only what reached the trunk since.
 # That is the intended interim behaviour, not a side effect to suppress.
+#
+# THE EXIT FROM A FINDING. The audit stops at the first finding and the watermark holds
+# at the last clean commit BEFORE it, so a fix-forward commit can never clear it: every
+# later re-run walks the same range and stops on the same sha. Without an exit, one
+# finding hard-blocked every later carry-over planning gate. The exit is the one core
+# already uses for a HARD_BLOCK: the step-1b escalation naming that sha, resolved by the
+# operator (`**Status:** RESOLVED` or `OVERRIDDEN` with an `**Operator authorization:**`
+# citation, escalations.md). When the first FAIL sha is named -- as a hex prefix of 7 or
+# more characters -- by such an entry in `docs/escalations/pending.md` or in
+# `pending-archive.md` (where retro close moves terminal entries), this script re-runs the
+# audit with that sha as its genesis, so the range starts AFTER it, and maps that run.
+# The trace is the tracked escalation entry; the watermark is written by the audit, never
+# by hand. Whether an entry is resolved and carries a well-formed citation is decided by
+# `validate-escalation-resolution.sh --any-authorized`, which owns that grammar; this
+# script only selects the entries that name the sha. That mode is SHAPE-only. Check 2a
+# verifies a current-sprint citation against the transcript. An entry that names the sha
+# for an unrelated reason is accepted too: the key is the sha, as the step-1b HARD_BLOCK
+# is filed naming it.
+#
+# REQUIRES python3 on a carry-over gate with no watermark: the genesis fallback asks
+# `validate-audit-anchors.sh`, which is python3, the same dependency Check 18 carries.
 #
 # USAGE
 #   validate-trunk-audit-gate.sh --sprint <sprint_id> [--snapshot PATH]
@@ -124,36 +150,101 @@ fi
 # GENESIS. The audit's range starts at the gitignored `_bmad-output/.audit-watermark`, which
 # a fresh clone does not carry. Without a fallback a carry-over sprint on a fresh clone would
 # exit 2 here with no remedy but hand-writing an untracked file. The tracked source is the one
-# step 1a already reads: the prior sprint's `audit-anchors.md` entry, whose `audit_window:`
-# end is where the prior sprint's audit window closed. The watermark, when present, wins --
-# it is the audit's own record of how far it got.
-GENESIS_ARGS=()
+# step 1a already reads: the prior sprint's `audit-anchors.md` entry, and its REQUIRED `sha`
+# field, resolved by `validate-audit-anchors.sh --prior-sprint-sha` -- the program Check 18
+# already asks, so this script restates no entry grammar. Not `audit_window:`: the schema marks
+# it optional and documentary, retro.md step 5b writes only sprint and closed_at, and the
+# schema defines its upper bound as that same sprint's sha, so where it is present it can only
+# agree with `sha` or be wrong. The watermark, when present, wins -- it is the audit's own
+# record of how far it got.
+RUN_GENESIS=""
 WM="${AI_DLC_ROOT}/_bmad-output/.audit-watermark"
 ANCHORS="${AI_DLC_ROOT}/_bmad-output/audit-anchors.md"
+ANCHOR_TOOL="${AI_DLC_SELF_DIR}/validate-audit-anchors.sh"
+G_WHY=""
 if [ -s "$WM" ]; then
   echo "genesis  : watermark ($(head -1 "$WM" | tr -d '[:space:]'))"
 elif [ -n "$SPRINT" ] && [ -r "$ANCHORS" ]; then
-  PRIOR=$((10#$SPRINT - 1))
-  G_END="$(awk -v p="$PRIOR" '
-    /^- sprint:[[:space:]]*/ { s=$0; sub(/^- sprint:[[:space:]]*/, "", s); sub(/[[:space:]].*$/, "", s); in_e=(s==p); next }
-    in_e && /^[[:space:]]+audit_window:[[:space:]]*/ {
-      w=$0; sub(/^[[:space:]]+audit_window:[[:space:]]*/, "", w); sub(/[[:space:]].*$/, "", w)
-      n=index(w, ".."); if (n>0) { print substr(w, n+2); exit } }' "$ANCHORS")"
-  if [ -n "$G_END" ]; then
-    GENESIS_ARGS=("$G_END")
-    echo "genesis  : audit-anchors.md sprint ${PRIOR} audit_window end (${G_END}); no watermark"
+  if [ ! -f "$ANCHOR_TOOL" ]; then
+    echo "genesis  : none (no watermark, and ${ANCHOR_TOOL} is not installed beside this script to resolve the anchor)"
   else
-    echo "genesis  : none (no watermark, and audit-anchors.md has no sprint ${PRIOR} audit_window)"
+    G_ERR="$(mktemp 2>/dev/null || echo "/tmp/trunk-audit-gate.$$")"
+    G_SHA="$(cd "$AI_DLC_ROOT" && bash "$ANCHOR_TOOL" --prior-sprint-sha "$ANCHORS" "$SPRINT" 2>"$G_ERR")"
+    G_RC=$?
+    G_WHY="$(grep -E 'FAIL' "$G_ERR" | head -1)"
+    rm -f "$G_ERR"
+    if [ "$G_RC" -eq 0 ] && [ -n "$G_SHA" ]; then
+      RUN_GENESIS="$G_SHA"
+      echo "genesis  : audit-anchors.md prior-sprint sha (${G_SHA}); no watermark"
+    else
+      echo "genesis  : none (no watermark, and the prior sprint's audit-anchors.md sha did not resolve)"
+      [ -z "$G_WHY" ] || printf '  | %s\n' "$G_WHY"
+    fi
   fi
 else
   echo "genesis  : none (no watermark, and no audit-anchors.md or no --sprint)"
 fi
 
-OUT="$(cd "$AI_DLC_ROOT" && bash "$AUDIT" --audit-trunk ${GENESIS_ARGS[@]+"${GENESIS_ARGS[@]}"} 2>&1)"
-RC=$?
-LINE="$(printf '%s\n' "$OUT" | grep -E '^AUDIT-TRUNK: ' | tail -1)"
-echo "audit_rc : ${RC}"
-echo "recorded : ${LINE:-<no AUDIT-TRUNK line>}"
+# The first `FAIL` sha the audit printed, or empty. The audit stops at the first finding, so
+# there is at most one.
+first_fail_sha() { printf '%s\n' "$1" | sed -n 's/^  FAIL[[:space:]]*\([0-9a-f]\{7,40\}\)[[:space:]].*/\1/p' | head -1; }
+
+# The escalation entries (a `##`/`###` header and its body) that name $1 by a hex token of 7+
+# characters that is a prefix of it. Selection only; resolution is decided by the owner.
+entries_naming() { # $1 sha, $2.. files
+  local sha="$1"; shift
+  awk -v sha="$sha" '
+    function flush() { if (hdr != "" && hit) printf "%s", buf; buf = ""; hit = 0 }
+    /^#{2,3} / { flush(); hdr = $0 }
+    hdr != "" {
+      buf = buf $0 "\n"
+      s = $0
+      while (match(s, /[0-9a-f]+/)) {
+        t = substr(s, RSTART, RLENGTH); s = substr(s, RSTART + RLENGTH)
+        if (length(t) >= 7 && index(sha, t) == 1) hit = 1
+      }
+    }
+    END { flush() }' "$@" 2>/dev/null
+}
+
+ESC_DIR="${AI_DLC_ROOT}/docs/escalations"
+ESC_TOOL="${AI_DLC_SELF_DIR}/validate-escalation-resolution.sh"
+ROUND=0
+while :; do
+  ROUND=$((ROUND + 1))
+  OUT="$(cd "$AI_DLC_ROOT" && bash "$AUDIT" --audit-trunk ${RUN_GENESIS:+"$RUN_GENESIS"} 2>&1)"
+  RC=$?
+  LINE="$(printf '%s\n' "$OUT" | grep -E '^AUDIT-TRUNK: ' | tail -1)"
+  echo "audit_rc : ${RC}"
+  echo "recorded : ${LINE:-<no AUDIT-TRUNK line>}"
+  [ "$RC" -eq 1 ] || break
+  F_SHA="$(first_fail_sha "$OUT")"
+  [ -n "$F_SHA" ] || break
+  [ "$ROUND" -le 200 ] || break
+  ESC_FILES=()
+  for f in "$ESC_DIR/pending.md" "$ESC_DIR/pending-archive.md"; do
+    [ -f "$f" ] && ESC_FILES+=("$f")
+  done
+  [ "${#ESC_FILES[@]}" -gt 0 ] || { echo "exit     : none -- no docs/escalations/pending.md or pending-archive.md names ${F_SHA}"; break; }
+  [ -f "$ESC_TOOL" ] || { echo "exit     : none -- ${ESC_TOOL} is not installed beside this script, so no resolution can be read"; break; }
+  SEL="$(mktemp 2>/dev/null || echo "/tmp/trunk-audit-gate-esc.$$")"
+  entries_naming "$F_SHA" "${ESC_FILES[@]}" > "$SEL"
+  if [ ! -s "$SEL" ]; then
+    rm -f "$SEL"
+    echo "exit     : none -- no escalation entry names ${F_SHA}"
+    break
+  fi
+  AUTH_OUT="$(bash "$ESC_TOOL" --any-authorized "$SEL" 2>&1)"
+  AUTH_RC=$?
+  rm -f "$SEL"
+  if [ "$AUTH_RC" -ne 0 ]; then
+    echo "exit     : none -- an escalation names ${F_SHA}, but none is RESOLVED/OVERRIDDEN with a well-formed Operator authorization:"
+    printf '%s\n' "$AUTH_OUT" | head -2 | sed 's/^/  | /'
+    break
+  fi
+  echo "exit     : ${F_SHA} -- $(printf '%s\n' "$AUTH_OUT" | sed -n 's/.*First: //p' | head -1); re-auditing from it"
+  RUN_GENESIS="$F_SHA"
+done
 
 case "$RC" in
   0)
@@ -170,11 +261,15 @@ case "$RC" in
     exit 2 ;;
   1)
     printf '%s\n' "$OUT" | grep -E '^  FAIL |^ERROR ' | head -20 | sed 's/^/  | /'
-    echo "verdict  : FAIL -- the trunk audit reported findings or a malformed taxonomy. File the step-1b HARD_BLOCK naming each FAIL sha; the watermark holds at the last clean commit."
+    echo "verdict  : FAIL -- the trunk audit reported findings or a malformed taxonomy. File the step-1b HARD_BLOCK naming each FAIL sha in docs/escalations/pending.md. A fix-forward does not clear it: the audit stops at the finding, so the watermark holds before it. The exit is the operator's: once that entry is **Status:** RESOLVED (or OVERRIDDEN) with an **Operator authorization:** citation, re-run this check and it re-audits from that sha forward."
     exit 1 ;;
   2)
     printf '%s\n' "$OUT" | grep -E '^audit-trunk: ' | head -3 | sed 's/^/  | /'
-    echo "verdict  : FAIL -- the trunk audit could not run (setup error). The genesis comes from _bmad-output/.audit-watermark, else from the prior sprint's audit_window end in _bmad-output/audit-anchors.md (step 1a's entry). Fix that source and re-run; this is not a clean result."
+    if [ "$(git -C "$AI_DLC_ROOT" rev-parse --is-shallow-repository 2>/dev/null)" = "true" ]; then
+      echo "verdict  : FAIL -- the trunk audit could not run, and this is a SHALLOW clone: the genesis commit is outside the fetched history, so it cannot resolve whatever the anchor says. Run 'git fetch --unshallow' and re-run; the anchor entry is not the cause. This is not a clean result."
+      exit 2
+    fi
+    echo "verdict  : FAIL -- the trunk audit could not run (setup error). The genesis comes from _bmad-output/.audit-watermark, else from the prior sprint's sha in _bmad-output/audit-anchors.md (step 1a's entry). Fix that source and re-run; this is not a clean result."
     exit 2 ;;
   *)
     printf '%s\n' "$OUT" | tail -5 | sed 's/^/  | /'

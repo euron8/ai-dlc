@@ -1,6 +1,12 @@
 # The subject under test: every world drives Check 36's wrapper against a scratch repo.
 !core/scripts/validate-trunk-audit-gate.sh
 # The audit the wrapper re-runs, resolved as its sibling; the worlds discriminate on its exits.
-core/scripts/validate-cycle-commits.sh
+!core/scripts/validate-cycle-commits.sh
+# The genesis fallback asks it for the prior sprint's sha; the anchors world discriminates on it.
+!core/scripts/validate-audit-anchors.sh
+# Its schema: the anchors world renders its header from it and the resolver loads it.
+!core/schemas/audit-anchors.json
+# The exit route asks it whether the entry naming the FAIL sha is operator-resolved; wedge-* discriminate on it.
+!core/scripts/validate-escalation-resolution.sh
 # Sourced first by run.sh; non-discriminating (the sandbox env is already scrubbed), declared because it is read.
 core/fixtures/lib/

@@ -854,8 +854,9 @@ checks:
           evaluations since its sprint 303 carry the audit's summary line, and two sprints
           that ran the audit at exit 0 carry none, so the result landed nowhere a gate reads
           and an artifact-text check would fail sprints that did nothing wrong. The gitignored
-          watermark is not a record either. The check re-runs the audit, which is what the
-          consumer's own extension check 925 already did.
+          watermark is not a record either, so the check re-runs the audit. A finding is
+          exited only by the operator resolving the step-1b escalation that names its sha;
+          a fix-forward alone still FAILS, because the audit stops at the finding.
     ci_workflow: ~
     fixtures: [tests/fixtures/trunk-audit-gate]
 
