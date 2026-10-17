@@ -18635,3 +18635,100 @@ shipped, which is that decision, not a stall.
 Net for the batch: closed 8 entries (BL-509, 511, 513, 514, 516, 517, 518, 520), filed 0; six stay live (BL-507, 508,
 510, 512, 515, 519), every one with a held branch or a shipped half.
 
+**BATCH 230 SHIPPED `v0.784.0` (`d4880724`, #1137), `v0.785.0` (`0f7e0e0c`, #1138) AND `v0.786.0` (`4aa734c4`,
+#1139): NINE ENTRIES CLOSED, FOUR OF GRAPH'S FIVE SPRINT-318 CANDIDATES CLOSED UPSTREAM. THIS CLOSE ITSELF IS HELD, NOT
+MERGED: IT SITS ON ORIGIN AS `b230-close` BY OPERATOR RULING, AND LANDS ONLY AFTER `b230-bl510` HAS LANDED.**
+Batch 229's block below is history: this block replaces its delivery gap. Started by peer ai-dlc-7d's one-liner at
+`origin/main` `11ae360d` (`VERSION` 0.783.0); graph-2e was live and was never messaged. The operator asked for a handoff
+to a fresh session because this one's context was deep.
+- **The held landing order is DONE (batch 231).** `b230-bl510` landed as `v0.787.0` (`2dc7b58d`, #1140) after two tip
+  adversaries; this close then landed on it, with BL-510 annotated and rotated, which left the backlog declared empty.
+  The close was held because BL-510's receipt chained to a probe only that branch carried, so R2 read zero scored
+  receipts on main; the operator ruled to hold rather than give it a manual receipt.
+- **Opening sweep** (at `11ae360d`): live 5, unfiled 5, worklist 0, TERMINAL 236, archive 359, 0 qualifying refs, every
+  control passing. Backlog 6 live and 513 archived; ledger md5 `8261b9ab…`; graph porcelain 7, with 0 under
+  `_bmad-output/ai-dlc-update/`. The five unfiled were graph's sprint-318 retro filings. Scope: those five plus the three
+  branches held by batch 229.
+- **Operator rulings, batch 230** (each binds its entry until the operator says otherwise):
+  - BL-508: ship and close as is.
+  - BL-512: the waiver check stays at adjudicator dispatch time.
+  - BL-510: the empty-heading arm is left out.
+  - BL-525: the pause gate gets an Explore-only carve-out; `ops` stays denied.
+  - BL-524 (Rule 11(a)): every option states its effects, and an option touching a locked value goes out unbadged.
+  - The close: hold it rather than give BL-510 a manual receipt, and hand off with it parked.
+  - Batch 231: graph runs no ai-dlc pipeline until batch 231's releases are pulled, so no old-form gate verdict can
+    exist on graph after the C5(b) `SERIES_FORM_FROM` cutoff.
+- **`v0.784.0`**: BL-515 (a cap-rejected re-send is held until an agent of the session exits) and BL-512 (an
+  implementation-gate adjudicator is refused over a waiver Check 22 rejects); I125 binds the guard's
+  `_dg_shardable` to `SHARD_ROLES`. **Its CHANGELOG consumer note was wrong, and this close corrects it there and in
+  BL-512's archived body**: the guard judges only the snapshot's current `sprint_id` (`core/hooks/ai-dlc-dispatch-guard.sh`
+  ~695), so a prior sprint's rows never refuse a later adjudicator. The trigger is the current sprint's own shardable
+  `invalid-exception` rows: graph holds 3, 11 and 3 in S316, S317 and S318.
+- **`v0.785.0`**: BL-507 (a gate-1 re-review after rework is a sharded delta review that carries every prior finding;
+  `validate-carried-findings.sh`). The receipts validator gained a `DRIVER` class, and R2 now accepts an all-driver
+  ledger.
+- **`v0.786.0`**: BL-522, BL-524, BL-525 and BL-521 (`PC-S318-ARCHITECT-ROLE-…`, `PC-S318-OPERATOR-QUESTION-TEMPLATE-…`,
+  `PC-S318-PAUSE-GATE-…`, `PC-S318-QA-ROLE-…`; derive the full ids from the merge message), plus BL-508 and BL-519.
+  Rule 12 moved out of the resident block to make room for Rule 11's +729 bytes: two `escalations.md` pointers now sit
+  past the 20121-byte cut, at 20396 and 20589. That eviction was reviewed and accepted.
+- **HELD on origin, NOT shipped.** Each owes one tip adversary on its FINAL tip, then a rebase onto main. Derive
+  conflicting files with `comm -12`, never a list; resolve by content; for the read-set map keep the base side and
+  re-trace.
+  - `b230-bl510` at `d80af0c5`: BL-510's bookkeeping half. Arms: status-not-review, status-yaml-mismatch (implementation
+    view), status-missing, story-untracked and heading-demoted; plus `sprint-status.sh story-status --ref`. Gate-1's
+    false-positive set is 0 over 63 snapshots, with 3 true-positive refusals. Gate-2 is NOT wired: its false-positive
+    set is 2.
+  - `b230-c5a-rotate` at `f36fcd8c`: BL-523, the reader half of
+    `PC-S318-ROTATE-GATE-ADJUDICATION-SPRINT-FLAG-NEVER-MATCHES-NONCE-STYLE-SERIES-IDS`. The refusal keys on each series'
+    newest member and on promotion. Its scope narrowed when measured: on graph, `--sprint s318` names 4 files in 4
+    series, not the 12 first estimated. Hints with archives: 39 right, 0 wrong, 9 none; with no archive: 8, 0, 40.
+    Re-runs are idempotent. retro.md 5b pins a UTC confirm command. Expect a conflict in `process-rule-pins`. The release
+    carrying it names that PC id and says the writer half follows; the id is NOT closed by this half.
+- **C5(b), the writer half: contracted and adversaried, NOT built.** This is the contract, adversary findings folded in.
+  Cut it from `b230-c5a-rotate`, or from main after C5(a) lands. BL-523 exists only on that branch.
+  - Defect: nothing upstream prescribes `gate_series_id`. `_gate-procedures.md` names it 0 times against 6 for
+    `gate_nonce`. The adjudicator brief (~188-189) passes no series id, so the adjudicator invents one. Graph's s318
+    verdicts are all `<gate>-<TS>`, and s317 has 25 of 26 untagged. Every untagged series needs a hand `--series` move at
+    retro.
+  - Mint the id once per gate SERIES as `<gate_type>-s<N>-<TS>`. **Field order is load-bearing**, because the dispatch
+    guard's nonce regex is unanchored (~897). `<N>` comes from the `sprint_id` line of
+    `_bmad-output/pipeline-snapshot.md`, NOT from `sprint-status.sh sprint-id`, which returns N+1 once retro step 4a
+    closes the sprint, before the retro gate at 5c. `<TS>` is the series-entry time: the first nonce normally, the
+    reset time on a reset. Nothing parses it back out.
+  - Same-series rule: a re-dispatch while `gate-checkpoint.sh current` names a nonce of this gate type reuses that
+    nonce's verdict's `gate_series_id`, read BEFORE `open`; after `close`, the next dispatch starts a new series. Exempt
+    the id from "nothing carried forward". Pin four sites: `gate-validation.md` ~190, ~194-197 and ~3204-3208, and
+    `_gate-procedures.md` ~214-216. Gate Reset (~3230) is a third writer.
+  - Add `gate_series_id` to the adjudicator brief list and to shard briefs, because `--merge` refuses parts that
+    disagree. Say once that it is never passed to `gate-checkpoint.sh --nonce`.
+  - The schema example in `core/schemas/gate-adjudication-verdict.json` stays a placeholder naming the brief as the
+    source; add no `pattern:`. Add one hand-written sentence in `gate-adjudicator.md` prose (~145-151), and run
+    `core/scripts/sync-taught-schema.sh --check`. Point the rotator header at the owner sentence (the old ~420 is now
+    ~709).
+  - Carrier: a per-pass arm in `validate-gate-adjudication.sh` beside ~1516, with a mutant. It requires a `<gate_type>-`
+    prefix, an `-s<digits>-` field, and a trailing timestamp no later than the nonce. Add `process-rule-pins` rows.
+  - Before building, the contract walk is owed on graph's real sprints, read only: s318 story 2.4 implementation p1 to
+    p2, one s317 planning gate, and one reset gate if any exists.
+- **The consumer pull runbook** `docs/plans/graph-pull-0781-to-0787.md` lands with this close. It was rehearsed from the
+  installed 0.781.0 against the 0.786.0 range: SELF-UPDATE-DEFER, 72 rows, 3 BOTH-CHANGED (`dev.md`, `qa.md`,
+  `deploy-validate.md`), 27 HARD-* rows to adjudicate, and 0 of 129 series changed under the convergence validator. It
+  STOPs pending a re-rehearsal after 0.787.0. Action 7 holds the Check 22 waiver shape and action 8 the rotator
+  `--series` steps. The four 0.786.0 ids close as `ADOPTED UPSTREAM (v0.786.0, verified <date>)`. It is ready, not
+  authorized: the pull is the operator's.
+- **graph delivery**: installed 0.781.0 against `VERSION` 0.786.0, five releases behind. Action 7's second test reads
+  YES (the rotator refusal, the guard's sprint rows, and a live but STOPped runbook).
+- **Unfixed, recorded**:
+  - The DAR text in `dev.md` ~166 contradicts `implementation.md` ~377-390.
+  - The derivations validator does not enforce the BEGIN-only `awk` ban.
+  - A pin cannot see text appended after an opt-in sentence.
+  - The updater's reconcile questions are out of BL-524's scope and still carry the badge.
+  - BL-510's gate-2 false-positive set is 2, which is why gate-2 is unwired.
+  - R2's all-already-passing arm (`R2_ALLPASS`) is looser than its all-manual sibling.
+- **Process facts**: 0.785.0's merge shared a parallel block with a `--no-verify` branch delete. The advisor gate denied
+  the merge, the delete ran anyway, and the PR closed; it was recovered by re-pushing the branch and reopening.
+  `tool-hazards.md` now says so beside the parallel-block rule. 0.786.0's gate went green on its fourth push: an I118
+  read-set gap, the mutants harness's undeclared dispatch guard, and `FORK_BUDGET` 3355 -> 3363 (measured base 3353, tip
+  3357; I79 grew 113 -> 118 with Rule 11).
+- **Net for the batch**: 9 entries closed (BL-507, 508, 512, 515, 519, 521, 522, 524, 525); 4 filed (BL-521, 522, 524,
+  525); net -5 once the close lands; 9 entries move to `docs/backlog.archive.md`. BL-510 stays live. BL-523 is filed on `b230-c5a-rotate` only.
+

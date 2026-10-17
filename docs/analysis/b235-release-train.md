@@ -1051,3 +1051,6 @@ c9 GATE ASK: b235-c9-build at 5c44cc48 (9 commits) covers BL-575, 577, 594, 613 
 
 ## 3:48 PM
 0.822.0 LANDED as edcae8aa (PR #1187). Verified by content: the diff against 10d90c9e is rc 0, VERSION is 0.822.0, the parent is 06ae8b85, and the control diff against 06ae8b85 is rc 1. The real push skipped on the content key. The main checkout is restored to local main 4e6670c1 and clean. GATE CLOSED was sent to c9 and f7. BL-575/577/594/613/614 are archived. Their LANDED anchors sit on b235-c9-build-pre2 (5c44cc48) and get re-anchored at the close. Batch 235's code work is DONE. Next is the batch-close docs commit, with c9's intake-27 (BL-657, BL-658, BL-659) riding it if it arrives before the cut.
+
+## 3:54 PM (built 3:52 PM)
+Batch-close docs commit built on b235-train: intake-27 (BL-657/658/659), the 0.822.0 re-anchor (5 clauses to edcae8aa; batch 235 now has 0 off-main clauses and 68 older remain), the batch-235 resume block, the delivery-gap command reading both graph refs, and the plan rotated 150813 -> 141664 bytes (plan-shape rc 0). Instrument: live 50, archive 600 headings, reverify 50 HAND-REVIEW, rotate --check rc 0. Intake-28 (BL-660) arrived after the cut and is held for batch 236. Action 7 is BANK IT. Next: gate, merge, actions 6b and 9.
