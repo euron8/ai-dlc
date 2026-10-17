@@ -1045,3 +1045,6 @@ c9 GATE ASK: b235-c9-build at 5c44cc48 (9 commits) covers BL-575, 577, 594, 613 
 
 ## 3:08 PM
 0.822.0 CUT by c9 at 10d90c9e (6 past 06ae8b85: the 5 train-log commits plus 1 release commit). The diff against 5c44cc48 is exactly CHANGELOG, VERSION, the train log and backlog(.archive), and the ids appear only in the release commit. BL-575/577/594/613/614 are rotated, with LANDED anchors on the backup ref b235-c9-build-pre2 (re-anchor at close). It edits .githooks/pre-push, so the runner, the rehearsal and the push all run from the main checkout detached at 10d90c9e, which I granted. GATE OPEN 3:08 PM, load 2.43, sent to c9 and f7.
+
+## 3:45 PM
+0.822.0 dress rehearsal GREEN, run from the main checkout detached at 10d90c9e with the new hook. Runner: 20/20, failing 0; self-check rc 0. The rehearsal ran 15:14-15:44 with 22 phase PASS and 0 FAIL. 87 of 307 fixtures ran and all were ok, every changed fixture read by name (including mutants shards a-f). Pole: adversarial-shard-merge-mutants at 1681 s loaded (was 2122 s). zz-dress deleted (0, main 1). GO for the real push at load 18.22, the rehearsal tail; it is expected to skip on the content key.
