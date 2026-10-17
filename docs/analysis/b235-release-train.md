@@ -1054,3 +1054,6 @@ c9 GATE ASK: b235-c9-build at 5c44cc48 (9 commits) covers BL-575, 577, 594, 613 
 
 ## 3:54 PM (built 3:52 PM)
 Batch-close docs commit built on b235-train: intake-27 (BL-657/658/659), the 0.822.0 re-anchor (5 clauses to edcae8aa; batch 235 now has 0 off-main clauses and 68 older remain), the batch-235 resume block, the delivery-gap command reading both graph refs, and the plan rotated 150813 -> 141664 bytes (plan-shape rc 0). Instrument: live 50, archive 600 headings, reverify 50 HAND-REVIEW, rotate --check rc 0. Intake-28 (BL-660) arrived after the cut and is held for batch 236. Action 7 is BANK IT. Next: gate, merge, actions 6b and 9.
+
+## 4:02 PM
+The batch-close docs commit LANDED as 23a69fc3 (PR #1188). Verified by content: the diff against 501d0e1d is rc 0, VERSION is 0.822.0, and the parent is edcae8aa. The remote b235-train was deleted. Action 6 follow-up: the resume block gains the close-sweep figures (live 1 / unfiled 0 / worklist 1 / DISCHARGED 0 / TERMINAL 246 / archive 369, all controls passed; the S319 id shipped in v0.813.0 and is held in-flight by BL-530). It also gets the next free id corrected to BL-661 (BL-660 is the held intake-28) and the archive 600-vs-599 difference explained (BL-084 has two headings). c9 holds only b235-intake-28 (584882bd) for batch 236.
