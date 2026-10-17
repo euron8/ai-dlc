@@ -20,6 +20,99 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.819.0] - 2026-10-17
+
+Batch 235 (release BL-631). Closes BL-631 and BL-645. Closes no `PC-` id. Carries intake 17 (the BL-647 form (c)
+amendment, docs only).
+
+### A reader's verdict no longer changes when a past sprint's artifacts are deleted (BL-631)
+
+Operator ruling: "I don't care if a fixture or check fails against a historical sprint artifact." Each reader in
+the entry is scoped to the current sprint and the living documents, or closed by a receipt.
+
+- **BEHAVIOUR CHANGE, item 1.** `apply.sh`'s `artifact-derivations` row (WORKLIST, `-unreadable`, `-unchecked`)
+  counts only the artifacts `check-owed-derivations.sh --scope-batch` calls CURRENT or LIVING. The classifier, its
+  sibling `sprint-status.sh` and that script's schema are read out of the distribution at `<theirs>`, so the pull
+  that first delivers the classifier is scoped by it. The consumer's installed copy is used only where `<theirs>`
+  has none. NEW ROW: `DECISION artifact-derivations-unscoped` when no classifier can run, never a guessed row; its
+  remedy is to restore the canonical's `sprint: <N>` and `status:` lines. The classifier is consulted only when a
+  row is possible, so a corpus with no hit is unchanged. The `-unreadable` and `-unchecked` advice now names the
+  current sprint.
+- **Item 2** closes by receipt: Check 37 already passes `validate-artifact-derivations.sh` the `s<N>/` directory.
+  Its only defect was item 1's advice text.
+- **Item 3.** `derivation-differential.sh` inherits the scoped set through the `vd_join` lift and refuses (`scope`)
+  when no classifier can run. A past sprint's or a history file's break is no longer run, no longer makes the helper
+  exit 1 and is no longer recorded. Each such hit-bearing file is named by one `INFO out-of-scope <PAST|HISTORY>
+  <file>` row. DELETED by subtraction: the writer's PAST and HISTORY arms, its `INFO past-sprint` and `INFO history`
+  loops, and their temp files, which no caller could reach (`$TMP/owed` is filled only from `VD_FILES`). KEPT: the
+  per-row `--scope` re-check, whose fallback now refuses "the scope moved between the two reads (did the sprint
+  roll?)". The reader's own `INFO past-sprint` and `INFO history` rows are unchanged. `ai-dlc-update/SKILL.md`
+  names the out-of-scope row.
+- **Item 4, LESS SPECIFIC ATTRIBUTION.** `ledger-reverify.sh` reads no rotation archive and counts no closed entry.
+  A bare-prefix citation always gets the unattributed `NAMED-UPSTREAM-AMBIGUOUS <prefix>` row, whatever its count.
+  `prefix_entry_count`, `corpus_labels`, `LIVE_LABELS`, `ARCHIVE_LABELS` and `ARCHIVE_PATH` are deleted. Sibling
+  attribution reads OPEN live siblings only, so an entry whose sibling was rotated the day before now reads
+  NAMED-UPSTREAM where it read SIBLING-ATTRIBUTED. Neither kind is a close, and the row still lands. The sibling
+  change is its own commit, so it can be reverted alone. `ledger-rotate.sh`'s header and the update SKILL.md say
+  that reverify reads no archive.
+- **Item 5.** `validate-mandatory-rules.sh` Check 6 counts the flat `stories/` layout plus this sprint's own slot,
+  so another sprint's stories no longer turn SKIP into FAIL `GLOB_MATCHED_NOTHING`. The sprint argument is kept
+  (retro runs `close` before Check 6, so `sprint-id` would read N+1 there).
+- **Item 6** closes by receipt on the shipped, frozen guard: a past sprint's repair record carrying a different
+  nonce does not lift the deny, deleting every past sprint gives the same verdict, and the control (a current-sprint
+  record carrying the live nonce) lifts it.
+- **TIGHTENING, item 7.** `validate-artifact-budget.sh --check-evidence`, with no canonical live gate log, takes the
+  first (sorted) `gate-log.md` the sibling classifier calls CURRENT or LIVING (`gl_current_first`). A tree whose
+  only log is a past sprint's or a history file's now FAILS "no gate-log.md found ... for the current sprint". It
+  used to PASS on that copy, and the order of `find` decided which copy.
+- **BEHAVIOUR CHANGE, open question 1.** `sprint-status.sh sprint-id` reads only the canonical's own `sprint:` and
+  `status:` lines, which `close` keeps and `roll` replaces. A preamble-only or empty canonical now REFUSES (exit 1,
+  naming the file), where it used to guess max(frozen archives)+1, or 1 with no archive; deleting the archives
+  flipped that answer. REMEDY for a consumer: restore the canonical's `sprint: <N>` and `status:` lines, and never
+  prune the canonical at retro-close. No canonical at all still returns 1 (greenfield). `frozen_sprints` and
+  `max_frozen` are deleted. Both I81 hooks already map an empty answer to `ADVERSARIAL_STATE_UNADJUDICABLE`, and
+  route.md Step 6 already stops on exit 1.
+- Open question 2 (I81 `SPRINT_PENDING`) is a NOTE: message text only, no verdict reads history. Open question 3
+  (the trunk-audit genesis) is a NOTE: its watermark is already the current-state record.
+
+### The scope classifier names all four history companions, bound to the writer's list (BL-645)
+
+- `check-owed-derivations.sh` `is_history` adds `carry-over-backlog-archive.md` and `architecture-history.md`,
+  exact names, on their own case line. `push-candidate-ledger.archive.md` reads HISTORY too. The live sides
+  (`carry-over-backlog.md`, `architecture.md`) stay LIVING, as does `carry-over-backlog-archive-notes.md`.
+- New arm Bh in `owed-derivations-mutants` derives the live -> history pairs from `core/skills/ai-dlc/SKILL.md`'s
+  "Current-state live, history archive" paragraph (floor 4). It fails on a companion missing from the reader's line
+  or on a live side listed there, and its self-probe M25 (a deleted companion) is killed.
+
+### Fixtures
+
+- `owed-derivations`: Sp3b and Hw2 assert the `INFO out-of-scope` rows, Sp3a, Hw1, Sp3c and Hw3 that nothing
+  out-of-scope is run, Ha7-Ha9 the new companions, and three near-miss names join Hn as LIVING.
+- `owed-derivations-mutants`: M11 is re-anchored on the scope gate inside the `vd_join` lift, M23 on the respelled
+  companion line. Measured kill sets, declared only after the lead's ruling, each added member commented with the
+  arm it comes from: M11 [Hw1 Hw2 Sp3a Sp3b Wb Wc Wd We Wf Wg]; M12 gains Hw2, Sp3b, W0 and Wb; M15 gains Hw3; M16
+  gains Ha7, Ha8, Ha9 and Hw3; M18 gains Ha7, Ha8, Ha9, Hw3 and Sp3c. Wd leaves M15, M16 and M18, because the
+  writer records only what the join keeps; M3 still kills Wd. M23 is unchanged at [Ha1 Ha2 Ha3 Hn].
+- `derivation-differential`: every distribution carries the real classifier. New arms S1, S1c, S2 and S3.
+- `snapshot-evidence-cell`: W2 and W-K now refuse; W2c, W2h and W10 are new columns. `tail` is killed at
+  [W2 W2h W9], and `uncond` at [W2c W3b W5 W9]. New world W-K2 (the W-K log under the current sprint) passes on the
+  shipped validator and is `xcanon`'s only killer, since W-K is refused before the branch `xcanon` mutates.
+- `apply-restamp-worklist` gains BL-6a..BL-6c (scoped row, unscoped DECISION, past-only hit), and
+  `apply-drift-refile` seeds the classifier into its world C.
+- `ledger-reverify`, `ledger-rotate`, `story-corpus-sprint-slot` and `sprint-status-lifecycle` assert the
+  history-deleted twin of each changed row. `sprint-status-lifecycle` 4d runs the same table against the
+  pre-change branch and requires it to fail.
+- Every new required input is announced with `HERMETIC-CONSUMED`. All 14 edited fixtures exit 0 through
+  `hermetic-run.sh` with `required_missing=0`.
+
+### Measured
+
+- Graph, read only, at graph HEAD `d40810f39` (sprint 319) through the tip's classifier: 1947 fenced files read
+  196 CURRENT, 4 LIVING, 26 HISTORY and 1721 PAST. Out of slot: 24 HISTORY and 4 LIVING, with
+  `carry-over-backlog-archive.md` (2 derived fences, one naming a core path) now HISTORY. The 23 formerly-LIVING
+  in-slot directories read 23 PAST and 2 HISTORY, and `gate-adjudication/s303` reads 6 PAST.
+
+
 ## [0.818.0] - 2026-10-17
 
 Batch 235 (release BL-607). Closes BL-607. Closes no `PC-` id.
