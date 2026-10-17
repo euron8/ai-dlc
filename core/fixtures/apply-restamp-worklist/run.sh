@@ -1659,6 +1659,32 @@ if [ "$BL_OK" = 1 ]; then
   # manifest-unreadable when `core/scripts/` expands empty at THEIRS. Without this the finish
   # arm below would pass for a reason that has nothing to do with the rows.
   printf '#!/usr/bin/env bash\necho v\n' > "$PD/core/scripts/validate-synthetic.sh"
+  # THE SCOPE CLASSIFIER IS IN THE DIST AT BASE AND THEREFORE AT THEIRS, UNCHANGED. vd_join reads
+  # check-owed-derivations.sh, sprint-status.sh and sprint-status.json out of the distribution at
+  # THEIRS to decide which artifact files belong to the current sprint; a dist carrying none draws
+  # DECISION artifact-derivations-unscoped instead of the row BL-1 asserts. Seeded in the BASE
+  # commit so the three stay out of the moved set (BL-S1 still sees only SKILL.md change). The real
+  # files are copied, never a stand-in: a stub classifier would score nothing about the scoping.
+  BL_REPO="$(cd "$(dirname "$APPLY")/../../../.." && pwd)"
+  BL_CLS_SH=""; BL_CLS_SS=""; BL_CLS_SCH=""
+  for cand in "$BL_REPO/core/scripts/check-owed-derivations.sh" "$BL_REPO/scripts/ai-dlc/check-owed-derivations.sh"; do
+    [ -f "$cand" ] && BL_CLS_SH="$cand" && break
+  done
+  for cand in "$BL_REPO/core/scripts/sprint-status.sh" "$BL_REPO/scripts/ai-dlc/sprint-status.sh"; do
+    [ -f "$cand" ] && BL_CLS_SS="$cand" && break
+  done
+  for cand in "$BL_REPO/core/schemas/sprint-status.json" "$BL_REPO/.claude/schemas/sprint-status.json"; do
+    [ -f "$cand" ] && BL_CLS_SCH="$cand" && break
+  done
+  if [ -n "$BL_CLS_SH" ] && [ -n "$BL_CLS_SS" ] && [ -n "$BL_CLS_SCH" ]; then
+    echo "HERMETIC-CONSUMED $BL_CLS_SH"
+    echo "HERMETIC-CONSUMED $BL_CLS_SS"
+    echo "HERMETIC-CONSUMED $BL_CLS_SCH"
+    mkdir -p "$PD/core/schemas" || BL_OK=0
+    cp -p "$BL_CLS_SH" "$PD/core/scripts/check-owed-derivations.sh" || BL_OK=0
+    cp -p "$BL_CLS_SS" "$PD/core/scripts/sprint-status.sh" || BL_OK=0
+    cp -p "$BL_CLS_SCH" "$PD/core/schemas/sprint-status.json" || BL_OK=0
+  fi
   pgitc add -A >/dev/null 2>&1 && pgitc commit -q -m bl276-base >/dev/null 2>&1 || BL_OK=0
 fi
 BL_BASE=""; BL_THEIRS=""; BL_THEIRS_VER=""
@@ -1679,7 +1705,7 @@ fi
 BL_CHANGED_CONS=".claude/skills/ai-dlc/SKILL.md"
 BL_UNCHANGED_CONS="scripts/ai-dlc/validate-synthetic.sh"
 
-# bl_consumer <dir> <layer:hit|miss|none> <deriv:hit|miss|empty|none> <validator:yes|no>
+# bl_consumer <dir> <layer:hit|miss|none> <deriv:hit|miss|empty|hitzero|past|cur|none> <validator:yes|no>
 #
 # EVERY WORLD IS DEFINED WHOLE, INCLUDING WHAT IT DOES NOT WRITE. A builder that leaves the
 # previous world's layer file or artifact behind hands the next arm a shape nobody seeded, and
@@ -1726,6 +1752,15 @@ bl_consumer() {
           printf '# plan\n\n```derived\n$ grep -c shadow %s\n3\n```\n' "$BL_CHANGED_CONS" \
             > "$c/_bmad-output/planning/plan.md"
           : > "$c/_bmad-output/empty-log.md" ;;
+    # BL-631: the SAME firing fence, in a slotted directory, beside a canonical sprint-status.yaml
+    # reading `sprint: 1` / `status: in_progress`. `past` is s0/ (a past sprint's artifact: the
+    # classifier calls it PAST and the row must not exist at all); `cur` is s1/ (the current sprint:
+    # CURRENT, and the WORKLIST row must be drawn), so the two differ in the slot and nothing else.
+    past|cur) { [ "$deriv" = past ] && _bs=s0 || _bs=s1
+          mkdir -p "$c/_bmad-output/planning-artifacts/$_bs" "$c/_bmad-output/implementation-artifacts" || return 1
+          printf 'sprint: 1\nstatus: in_progress\n' > "$c/_bmad-output/implementation-artifacts/sprint-status.yaml"
+          printf '# old\n\n```derived\n$ grep -c shadow %s\n3\n```\n' "$BL_CHANGED_CONS" \
+            > "$c/_bmad-output/planning-artifacts/$_bs/old.md"; } ;;
     none)  : ;;
   esac
   if [ "$val" = yes ]; then
@@ -1736,9 +1771,10 @@ bl_consumer() {
   rm -f "$c/.claude/.ai-dlc-applying"
 }
 
+# BL_DRIVE_THEIRS, when set, replaces the THEIRS ref (BL-6b drives a commit that has lost the classifier).
 bl_drive() { # bl_drive <apply-path> <consumer> [flag...]
   local a="$1" c="$2"; shift 2
-  bash "$a" "$@" "$PD" "$BL_BASE" "$c" "$BL_THEIRS" 2>/dev/null
+  bash "$a" "$@" "$PD" "$BL_BASE" "$c" "${BL_DRIVE_THEIRS:-$BL_THEIRS}" 2>/dev/null
 }
 bl_n() { awk -F'\t' -v a="$2" -v b="$3" '$1==a && $2==b {n++} END {print n+0}' <<< "$1"; }
 # The four observables every world below is read through, as one string. WORKLIST-vs-DECISION is
@@ -1961,6 +1997,86 @@ if bl_run finish hit hit yes --finish; then
   fi
 else
   bad "BL-5 setup: could not build the finish consumer"
+fi
+
+# --- BL-6: THE ROW IS SCOPED BY THE CLASSIFIER THE DISTRIBUTION CARRIES AT THEIRS (BL-631) -------
+#
+# vd_join keeps only the artifact files `check-owed-derivations.sh --scope-batch` calls CURRENT or
+# LIVING, and reads that classifier (with sprint-status.sh and its schema) out of the DIST at
+# THEIRS. A classifier that cannot be found anywhere is a loud DECISION, never a guessed row. The
+# worlds below differ from BL-1 in one property each: BL-6a has the classifier, BL-6b has lost it
+# at THEIRS with no consumer copy, BL-6c's only hit lives under a past sprint's slot.
+if [ -z "${BL_CLS_SH:-}" ] || [ -z "${BL_CLS_SS:-}" ] || [ -z "${BL_CLS_SCH:-}" ]; then
+  if [ "$IS_DIST" = 1 ]; then
+    bad "BL-6 setup: the scope classifier (check-owed-derivations.sh, sprint-status.sh, sprint-status.json) is not in this tree, so the dist could not carry it — HARD in the distribution"
+  else
+    printf '  SKIP  %s\n' "BL-6a..BL-6c — the scope classifier is not in this tree; they land with the pull that carries it"
+  fi
+elif ! command -v python3 >/dev/null 2>&1; then
+  printf '  SKIP  %s\n' "BL-6a..BL-6c — python3 is absent, so sprint-status.sh sprint-id cannot run (this is not a pass)"
+else
+  # BL-6a: classifier at THEIRS, consumer has a LIVING hit -> the WORKLIST row, no unscoped row.
+  if bl_run six-a none hit yes; then
+    BL6A_U="$(bl_n "$BL_OUT" DECISION artifact-derivations-unscoped)"
+    if [ "$BL_VEC" = "0|1|0|0" ] && [ "$BL6A_U" = 0 ]; then
+      ok "BL-6a a dist carrying the classifier at THEIRS draws the WORKLIST artifact-derivations row and no artifact-derivations-unscoped row"
+    else
+      bad "BL-6a drew $BL_VEC with $BL6A_U unscoped row(s), not 0|1|0|0 with 0 — the classifier at THEIRS did not scope the consumer's hit"
+    fi
+  else
+    bad "BL-6a setup: could not build the consumer"
+  fi
+  # BL-6b: the same consumer, a THEIRS that has lost check-owed-derivations.sh, no consumer copy.
+  BL_NOCLS=""
+  if pgitc rm -q core/scripts/check-owed-derivations.sh >/dev/null 2>&1 \
+     && pgitc commit -q -m bl276-nocls >/dev/null 2>&1; then
+    BL_NOCLS="$(git -C "$PD" rev-parse HEAD)"
+  fi
+  if [ -n "$BL_NOCLS" ] && [ "$BL_NOCLS" != "$BL_THEIRS" ] \
+     && ! git -C "$PD" cat-file -e "${BL_NOCLS}:core/scripts/check-owed-derivations.sh" 2>/dev/null; then
+    BL_DRIVE_THEIRS="$BL_NOCLS"
+    if bl_run six-b none hit yes; then
+      BL6B_U="$(bl_n "$BL_OUT" DECISION artifact-derivations-unscoped)"
+      BL6B_CTL="$(bl_n "$BL_OUT" DECISION restamp-withheld)"
+      BL6B_HAS="$([ -e "$BL_LAST_CONS/scripts/ai-dlc/check-owed-derivations.sh" ] && echo PRESENT || echo ABSENT)"
+      if [ "$BL6B_U" = 1 ] && [ "$BL_VEC" = "0|0|0|0" ] && [ "$BL6B_HAS" = ABSENT ]; then
+        ok "BL-6b the same consumer against a THEIRS without check-owed-derivations.sh and with no consumer copy draws exactly one DECISION artifact-derivations-unscoped and no WORKLIST artifact-derivations row"
+      else
+        bad "BL-6b drew $BL_VEC with $BL6B_U unscoped row(s) (consumer copy $BL6B_HAS), not 0|0|0|0 with exactly 1 and ABSENT — a classifier that cannot be found must be loud, never a guessed row"
+      fi
+      if [ "$BL6B_CTL" -ge 1 ]; then
+        ok "BL-6b and the same run reaches DECISION restamp-withheld, so the unscoped row is a verdict of a run that completed"
+      else
+        bad "BL-6b the run emitted no DECISION restamp-withheld — it stopped early, so the row counts above are about a run that did not finish"
+      fi
+    else
+      bad "BL-6b setup: could not build the consumer"
+    fi
+    BL_DRIVE_THEIRS=""
+  else
+    bad "BL-6b setup: could not build a THEIRS commit that has lost check-owed-derivations.sh (got '${BL_NOCLS:-<none>}')"
+  fi
+  # BL-6c: the only hit is a past sprint's artifact -> no artifact-derivations row of ANY kind.
+  # Its control is the identical artifact under the current sprint's slot, which MUST draw the row.
+  if bl_run six-c none past yes; then
+    BL6C_U="$(bl_n "$BL_OUT" DECISION artifact-derivations-unscoped)"
+    if [ "$BL_VEC" = "0|0|0|0" ] && [ "$BL6C_U" = 0 ]; then
+      ok "BL-6c a consumer whose only hit-bearing artifact is a past sprint's (planning-artifacts/s0/old.md, canonical sprint 1) draws no artifact-derivations row of any kind"
+    else
+      bad "BL-6c a past sprint's artifact drew $BL_VEC with $BL6C_U unscoped row(s), not 0|0|0|0 with 0 — a past sprint owes nothing to this pull"
+    fi
+  else
+    bad "BL-6c setup: could not build the past-sprint consumer"
+  fi
+  if bl_run six-cc none cur yes; then
+    if [ "$BL_VEC" = "0|1|0|0" ]; then
+      ok "BL-6c control: the identical artifact under the current sprint's slot (planning-artifacts/s1/old.md) DOES draw the WORKLIST row, so the zero above is the scope and not the shape"
+    else
+      bad "BL-6c control: the current sprint's artifact drew $BL_VEC, not 0|1|0|0 — the past-sprint zero above proves nothing"
+    fi
+  else
+    bad "BL-6c control setup: could not build the current-sprint consumer"
+  fi
 fi
 
 # ==============================================================================================

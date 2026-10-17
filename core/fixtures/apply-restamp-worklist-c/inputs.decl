@@ -6,6 +6,9 @@ core/skills/ai-dlc-update/reconcile/
 !core/git-hooks/pre-push
 core/scripts/sync-transient-ignore.sh
 core/schemas/pipeline-state-paths.json
+core/scripts/check-owed-derivations.sh
+core/scripts/sprint-status.sh
+core/schemas/sprint-status.json
 core/scripts/validate-hook-registration.sh
 # The shard drivers exec the parent run.sh, and the parent's coverage join reads every driver. A fixture's OWN
 # run.sh is not declared by itself, but the siblings' are, so each shard sandbox holds all three.
