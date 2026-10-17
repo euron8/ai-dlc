@@ -909,6 +909,7 @@ LPEEOF
     UPDATER_SESSION=0
     AIDLC_SESSION=0
     if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
+  # >>> I126 SESSION-MARKER SCAN: the next line, byte-identical in every bound hook >>>
   LAST_SKILL=$(grep -oE '"role":"user","content":"<command-message>ai-dlc(-update)?</command-message>\\n<command-name>/ai-dlc(-update)?</command-name>|"name":"Skill","input":\{"skill":"ai-dlc(-update)?"' "$TRANSCRIPT" 2>/dev/null | tail -1)
   case "$LAST_SKILL" in
     *'/ai-dlc-update</command-name>') UPDATER_SESSION=1 ;;
