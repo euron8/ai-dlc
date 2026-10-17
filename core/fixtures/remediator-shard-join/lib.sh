@@ -116,6 +116,21 @@ part() { # <world> <name> <block...> -- a remediator part: real repair blocks, n
   for b in "$@"; do sibinject "$HERE/seed.block-$b.md"; printf '  (continued in the consumer record)\n\n'; done \
     > "$w/_bmad-output/planning-artifacts/s305/shards/stories-repair-p1/$n.md"
 }
+# THE CHECK FIELDS (BL-557). The join refuses, in every parts mode, a part holding a repaired entry
+# and no `advisor:`/`derivations:` line under its triple, so every parts-mode invocation below is
+# preceded by `stamp <world>`, which APPENDS both lines to each part lacking them -- appended, so no
+# line number a predicate asserts moves, and found under the whole world, so a nested state dir is
+# reached. A part that already carries one is left alone, so a predicate seeds the offender by
+# writing the field itself.
+CHK_LINES='- advisor: called
+- derivations: replayed 1'
+stamp() { # <world>
+  local f
+  for f in $(find "$1" -path '*/shards/*repair*' -name '*.md' -not -path '*/sections/*' 2>/dev/null); do
+    grep -qE '^[[:space:]-]*[*_`]*(advisor|derivations)[*_`]*:' "$f" && continue
+    printf '\n%s\n' "$CHK_LINES" >> "$f"
+  done
+}
 # THE FIXED SCRATCH PATHS. Every predicate writes the join's output to $JO and builds its worlds
 # under $WORK; a scorer of the mutation battery running CONCURRENTLY rebinds both by name
 # (bind_scratch <own dir>) and shares nothing else that is written.
@@ -124,6 +139,7 @@ bind_scratch() { # <dir> -> JO under <dir>
 }
 bind_scratch "$WORK"
 run_join() { # <join-script> <world> [extra args] -> RC, $JO
+  stamp "$2"
   AI_DLC_PROJECT_ROOT="$2" bash "$1" --sprint 305 --artifact stories --pass 1 --artifact-path "$SLOT" \
     --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z "${@:3}" > "$JO" 2>&1
   RC=$?
@@ -221,6 +237,7 @@ docpart() { # <world> <ordinal> -- the part beside sections/, citing its section
 }
 doc_out() { printf '%s' "$1/$SLOT/prd-repair-p1.md"; }
 run_docjoin() { # <join-script> <world> [extra args]
+  stamp "$2"
   AI_DLC_PROJECT_ROOT="$2" bash "$1" --document "$DOCREL" "$2/$RDREL" \
     --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z "${@:3}" > "$JO" 2>&1
   RC=$?
@@ -271,6 +288,7 @@ p_filesguard() { # the SAME split dir joined in FILES mode -> refused: its secti
   # shards/, files mode drops them, and the document would never be assembled
   local w; w="$(doc_world)" || return 1
   sec_edit "$w" 1 "$AG1"; docpart "$w" 1
+  stamp "$w"
   AI_DLC_PROJECT_ROOT="$w" bash "$1" --sprint 305 --artifact prd --pass 1 --artifact-path "$SLOT" \
     --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1
   RC=$?
@@ -388,6 +406,7 @@ sj_all() { # <world> -- one distinct agent per part, each part citing what it wr
 }
 sj_out() { printf '%s' "$1/$SJPA/s9/requirements-repair-p1.md"; }
 run_sjoin() { # <join> <world> [pass] [extra args]
+  stamp "$2"
   AI_DLC_PROJECT_ROOT="$2" bash "$1" --subject 9 --pass "${3:-1}" \
     --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z "${@:4}" > "$JO" 2>&1
   RC=$?
@@ -439,6 +458,7 @@ sj_party() { # <join> <source token> -> RC, $JO, SJP_W: a --pass party join, eve
     printf 'party %s\n' "$o" >> "$w/$f"; drive "$w" Edit "$w/$f" "b$(printf '%016d' "$n")"
     printf -- '- **disposition:** repaired\n- **edit:** `%s:2`\n%s\n- **derivation:** party %s\n- **source:** %s\n' "$f" "$SIB_SEC" "$o" "$2" > "$rd/$o.md"
   done
+  stamp "$w"
   AI_DLC_PROJECT_ROOT="$w" bash "$1" --subject 9 --pass party --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1; RC=$?
 }
 p_sjnames() { # --pass party / elicitation read and write their own names; a party record is not *-repair-p<M>
@@ -465,6 +485,7 @@ ppart() { # <world> <name> <block> <source tokens> -- a real repair block, its s
   sibinject "$HERE/seed.block-$3.md" | awk -v s="$4" 'NR == 1 { print; print "- **source:** " s; next } { print }' > "$1/$PRD/$2.md"
 }
 run_pjoin() { # <join> <world>
+  stamp "$2"
   AI_DLC_PROJECT_ROOT="$2" bash "$1" --sprint 305 --artifact stories-party --pass 1 --artifact-path "$SLOT" \
     --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1
   RC=$?
@@ -574,6 +595,7 @@ p_partydoc() { # seats x sections: a document split into <doc>-party-repair-p1, 
     printf -- '### F-%s\n- **source:** architecture-tea-1.md#F-%s\n- **disposition:** repaired\n- **edit:** `%s/sections/%s.md:2`\n%s\n- **derivation:** the section %s finding\n' \
       "$o" "$o" "$rd" "$o" "$SIB_SEC" "$o" > "$w/$rd/$o.md"
   done
+  stamp "$w"
   AI_DLC_PROJECT_ROOT="$w" bash "$1" --document "$DOCREL" "$w/$rd" \
     --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1; RC=$?
   o="$(grep -c 'Repaired by the section' "$w/$DOCREL")" || o=0
@@ -598,6 +620,7 @@ p_sjbase() { # --base other than the manifest's -> REFUSED before anything is re
   local w; w="$(subj_world)" || return 1
   sj_all "$w"
   SJG "$w" commit -q --allow-empty -m other >/dev/null 2>&1 || return 1   # HEAD is now NOT the base
+  stamp "$w"
   AI_DLC_PROJECT_ROOT="$w" bash "$1" --subject 9 --pass 1 --base HEAD --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1; RC=$?
   sj_refused "$w" "is not the subject manifest's base"
 }
@@ -605,6 +628,7 @@ p_sjgate() { # the requirements gate's FAILURE repair: --artifact gate-<type> ->
   ( SJRD=$SJPA/s9/shards/gate-planning-repair-p1
     w="$(subj_world)" || exit 1
     sj_all "$w"
+    stamp "$w"
     AI_DLC_PROJECT_ROOT="$w" bash "$1" --subject 9 --artifact gate-planning --pass 1 \
       --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1 || exit 1
     [ -f "$w/$SJPA/s9/gate-planning-repair-p1.md" ] && [ ! -e "$w/$SJPA/s9/requirements-repair-p1.md" ] \
@@ -613,9 +637,11 @@ p_sjgate() { # the requirements gate's FAILURE repair: --artifact gate-<type> ->
 p_sjgatenear() { # near-misses of the gate form: a non-gate --artifact, and a gate form with a non-numeric pass, both REFUSED writing nothing
   local w ra rb; w="$(subj_world)" || return 1
   sj_all "$w"
+  stamp "$w"
   AI_DLC_PROJECT_ROOT="$w" bash "$1" --subject 9 --artifact stories --pass 1 \
     --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1; ra=$?
   has "$JO" "applies with --subject only as gate-<type>" || return 1
+  stamp "$w"
   AI_DLC_PROJECT_ROOT="$w" bash "$1" --subject 9 --artifact gate-planning --pass party \
     --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1; rb=$?
   has "$JO" "needs a numeric --pass" || return 1
@@ -824,6 +850,101 @@ p_escclosed() { # every escalation closed by the serial pass, and a shard entry 
     && ! has "$JO" "ESCALATED: 01.md" && ! has "$JO" "REFUSED"
 }
 
+# ---- THE DISPOSITION KEY AND ITS VOCABULARY (BL-542). ruling_world seeds the two operator histories.
+ruling_world() { # <join> <body> -> RC, $JO: --escalations over a record, both operator histories present
+  local w; w="$(mktemp -d "$WORK/rul.XXXXXX")" && mkdir -p "$w/.claude" "$w/_bmad-output" || return 1
+  printf '# log\n\n## 2026-10-15T23:51:50Z -- (typed)\n- SHA256: 1111111111111111111111111111111111111111111111111111111111111111\n' > "$w/_bmad-output/operator-requests-history.md"
+  printf '# answers\n\n## Q1\n- SHA256: 2222222222222222222222222222222222222222222222222222222222222222\n' > "$w/_bmad-output/operator-answers-history.md"
+  printf '%b' "$2" > "$w/rec.md"
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --escalations "$w/rec.md" --sprint 305 > "$JO" 2>&1; RC=$?
+}
+p_dispkey() { # graph's fold shape: an entry with edit: and `outcome:` in place of disposition: -> rc 2, NODISP named
+  esc_rec "$1" '### F-0 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\n### F-1 Brief: narrative moved\n- outcome: done\n- edit: n/a (history moved)\n'
+  [ "$RC" -eq 2 ] && has "$JO" "the F-1 Brief: narrative moved entry carries an 'edit:' line and no 'disposition:' line" \
+    && ! has "$JO" "the F-0 — MAJOR entry"
+}
+p_dispvocab() { # in era, `done` refused; `not-reproduced` and a pre-era `done` accepted -> rc 2, only the in-era one named
+  esc_rec "$1" '### F-0 — MINOR\n- disposition: done\n- edit: n/a\n\n### F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n- siblings: n/a (insertion)\n\n### F-2 — MINOR\n- disposition: not-reproduced\n- edit: n/a\n\n### F-3 — MINOR\n- disposition: done\n- edit: n/a\n'
+  [ "$RC" -eq 2 ] && has "$JO" "the F-3 — MINOR entry is dispositioned 'done'" \
+    && ! has "$JO" "the F-0 — MINOR entry" && ! has "$JO" "the F-2 — MINOR entry"
+}
+p_dispruling() { # operator-ruling: both cite forms resolve and need no source:; an unresolved and a missing cite refuse
+  ruling_world "$1" '### F-1 — MAJOR\n- disposition: operator-ruling\n- edit: n/a\n- ruling: 2026-10-15T23:51:50Z\n\n### F-2 — MAJOR\n- disposition: operator-ruling\n- edit: n/a\n- ruling: SHA256:2222222222222222222222222222222222222222222222222222222222222222\n'
+  local ok1=0; [ "$RC" -eq 0 ] && ! has "$JO" "REFUSED" && ok1=1
+  ruling_world "$1" '### F-1 — MAJOR\n- disposition: operator-ruling\n- edit: n/a\n- ruling: 2026-10-15T23:59:59Z\n\n### F-2 — MAJOR\n- disposition: operator-ruling\n- edit: n/a\n'
+  [ "$ok1" = 1 ] && [ "$RC" -eq 2 ] && has "$JO" "ruling cite '2026-10-15T23:59:59Z' resolves to nothing" \
+    && has "$JO" "the F-2 — MAJOR entry is dispositioned operator-ruling and carries no '- ruling:' cite"
+}
+# ---- --sources ON A NON-PARTY RECORD (BL-561), and the gap-fill tripwire (BL-556).
+p_srcparts() { # --sources on a record citing only PART tokens, in a sprint that HAS seats -> rc 2, one line naming
+  # --escalations, no per-token refusal; the party record beside it (seat tokens) still resolves (p_srcok's world)
+  local w; w="$(mktemp -d "$WORK/src.XXXXXX")" && mkdir -p "$w/.claude" && seat_seed "$w" 305 || return 1
+  src_rec "$w" '### S-21 — MAJOR\n- disposition: escalated\n- source: 07.md#F-1\n- edit: n/a\n\n### S-22 — MAJOR\n- disposition: escalated\n- source: cross-2.md#F-3\n- edit: n/a\n' "$1"
+  local r1="$RC" n1; n1="$(grep -c '^REFUSED' "$JO")" || n1=0
+  has "$JO" "names only part tokens" && has "$JO" "read with --escalations" && ! has "$JO" "names no seat file" || return 1
+  src_rec "$w" '### F-1\n- disposition: repaired\n- source: architecture-dev-1.md#F-1\n' "$1"
+  [ "$r1" -eq 2 ] && [ "$n1" -eq 1 ] && [ "$RC" -eq 0 ]
+}
+p_gapfill() { # a repaired entry whose claim calls it a gap fill for the lead to veto -> REPORTED on a
+  # GAPFILL: line AFTER the escalation count, rc 0 (a NOTE-tier arm hides no open escalation); the
+  # escalated entry saying the same words beside it is not reported, and is still counted open
+  esc_rec "$1" '### F-4 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n- claim now asserted: one unavailable pool makes the total unavailable. The multi-pool rule is a gap fill; the lead may veto it.\n\n### F-1 — CRITICAL\n- disposition: escalated\n- edit: n/a\n- claim now asserted: S3 pass-or-block is a gap fill the operator decides.\n'
+  [ "$RC" -eq 0 ] && has "$JO" "GAPFILL: stories-repair-p1.md F-4 — MAJOR -- repaired while its claim calls the fix a gap fill" \
+    && ! has "$JO" "GAPFILL: stories-repair-p1.md F-1" && has "$JO" "ESCALATED-COUNT: 1 (0 closed" && ! has "$JO" "REFUSED" \
+    && [ "$(grep -n 'ESCALATED-COUNT' "$JO" | cut -d: -f1)" -lt "$(grep -n '^GAPFILL:' "$JO" | cut -d: -f1)" ]
+}
+# ---- THE CHECK FIELDS (BL-557).
+p_chkpart() { # p_disjoint's world, ONE property apart: part 02 states `derivations: not replayed`, part 03
+  # carries neither field (written before stamp, which then leaves 02 alone and stamps 03 -- so 03 is
+  # stripped after) -> rc 2, both named, part 01 not, nothing written
+  local w; w="$(new_world)" || return 1
+  three_writers "$w"; part "$w" 01 2.1; part "$w" 02 2.2; part "$w" 03 3.1
+  local d="$w/_bmad-output/planning-artifacts/s305/shards/stories-repair-p1"
+  { printf -- '- advisor: called\n- derivations: not replayed\n\n'; cat "$d/02.md"; } > "$d/02.x" && mv "$d/02.x" "$d/02.md"
+  printf -- '- advisor: unavailable\n\n' > "$d/03.x"; cat "$d/03.md" >> "$d/03.x"; mv "$d/03.x" "$d/03.md"
+  run_join "$1" "$w"
+  refused "$w" "02.md: derivations: not replayed" && has "$JO" "03.md: no derivations: line" && ! has "$JO" "01.md: no"
+}
+# ---- THE THIRD TIP ADVERSARY'S FOUR, each beside its near-miss.
+p_rulingedit() { # an operator-ruling entry with a REAL edit, in the siblings era, no siblings: -> rc 2, NOSIB
+  # named; the same entry with edit: n/a beside it is not (a ruling that edits owes what a repair owes)
+  ruling_world "$1" '### F-0 — MAJOR\n- disposition: repaired\n- edit: s305/a.md:1\n- siblings: n/a (insertion)\n\n### F-1 — MAJOR\n- disposition: operator-ruling\n- edit: s305/a.md:7\n- ruling: 2026-10-15T23:51:50Z\n\n### F-2 — MAJOR\n- disposition: operator-ruling\n- edit: n/a\n- ruling: 2026-10-15T23:51:50Z\n'
+  [ "$RC" -eq 2 ] && has "$JO" "the F-1 — MAJOR entry is repaired with an edit and carries no 'siblings:' field" \
+    && ! has "$JO" "the F-2 — MAJOR entry" && has "$JO" "ESCALATED-COUNT: 0"
+}
+p_rulingtab() { # a TAB inside a heading is a space: the heading's tail is never read as the cite -> the entry with
+  # no ruling: is refused for that, and the CRLF record's cite resolves (rc 0) -- both in one world each
+  ruling_world "$1" '### F-1\t2026-10-15T23:51:50Z\n- disposition: operator-ruling\n- edit: n/a\n'
+  local r1="$RC"; has "$JO" "the F-1 2026-10-15T23:51:50Z entry is dispositioned operator-ruling and carries no '- ruling:' cite" || return 1
+  ruling_world "$1" '### F-1 — MAJOR\r\n- disposition: operator-ruling\r\n- edit: n/a\r\n- ruling: 2026-10-15T23:51:50Z\r\n'
+  [ "$r1" -eq 2 ] && [ "$RC" -eq 0 ] && ! has "$JO" "REFUSED"
+}
+p_chkjoined() { # --escalations over a JOINED record: a shard with no repaired entry stating `not replayed` is
+  # exempt, as the parts-mode join exempted it (rc 0, its escalation printed); the same line in the shard
+  # holding the repaired entry is refused
+  esc_rec "$1" '<!-- shard: 01.md -->\n- advisor: called\n- derivations: replayed 2\n\n### F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\n<!-- shard: 02.md -->\n- advisor: called\n- derivations: not replayed\n\n### F-2 — MAJOR\n- disposition: escalated\n- edit: n/a\n'
+  local r0="$RC"; has "$JO" "ESCALATED: 02.md F-2 — MAJOR" && ! has "$JO" "REFUSED" || return 1
+  esc_rec "$1" '<!-- shard: 01.md -->\n- advisor: called\n- derivations: not replayed\n\n### F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\n<!-- shard: 02.md -->\n- advisor: called\n- derivations: replayed 1\n\n### F-2 — MAJOR\n- disposition: escalated\n- edit: n/a\n'
+  [ "$r0" -eq 0 ] && [ "$RC" -eq 2 ] && has "$JO" "stories-repair-p1.md: derivations: not replayed"
+}
+p_partsilent() { # a REFUSED parts join prints no escalation and no count, by design: nothing was joined, so a
+  # count from the parts could be wrong (record mode prints them through a refusal; parts mode does not).
+  # p_handoff's world with a second part whose repaired edit carries no siblings: -> refused, silent
+  local w; w="$(new_world)"
+  drive "$w" Edit "$w/$REL/$S21" "$AG1"; drive "$w" Edit "$REL/$S22" "$AG2"
+  cp "$HERE/seed.block-handoff.md" "$w/$SLOT/shards/stories-repair-p1/01.md"
+  printf '### F-9 — MINOR\n- disposition: repaired\n- edit: %s/%s:3\n' "$REL" "$S22" > "$w/$SLOT/shards/stories-repair-p1/02.md"
+  run_join "$1" "$w"
+  refused "$w" "02.md: the F-9 — MINOR entry is repaired with an edit and carries no 'siblings:' field" \
+    && ! has "$JO" "ESCALATED" && ! has "$JO" "SERIAL-REQUIRED"
+}
+p_chkrec() { # --escalations: a record with neither field is outside the era -> rc 0; the same record with an
+  # advisor: line and no derivations: line -> rc 2, named
+  esc_rec "$1" '### F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n'
+  local r0="$RC"
+  esc_rec "$1" '- advisor: called\n\n### F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n'
+  [ "$r0" -eq 0 ] && [ "$RC" -eq 2 ] && has "$JO" "stories-repair-p1.md: no derivations: line"
+}
 
 # ---- RE-RUN OF ONE PART (--rerun <part>.md@<ISO>) AND THE ALIAS RULE. Every row is still the REAL
 # hook's; only its clock is pinned, by the `date` shim drive() puts on PATH when it is handed a ts.
@@ -1066,7 +1187,148 @@ p_altool() { # the one tool_use holding the id is a Read, not an Edit, Write or 
   refused "$w" "$AL_REF (tool_use_id toolu_ORPH;" && has "$JO" "the id is held by $w/projects/sess-1/subagents/agent-$AG1.jsonl (1 block(s)))"
 }
 
-P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrargs rrfiles rrsubj alias alnokeys alresult alown alsecond alother alsess altwo altool"
+# ---- THE SPEC RENDER ARM (BL-546/560): --escalations --sprint 305 over a clean record, in a world whose
+# `_bmad-output/specs/s305/<dir>/.memlog.md` is seeded in the shape memlog.py emits: `- (decision) <text>`,
+# `- (decision by pm) <text>`, `- (event) <text>`. The discriminating decision is never the first line, and
+# stale has TWO decisions before the render and ONE after, so an order test run backwards counts 2 and
+# the REFUSED line's `1 (decision) entry(ies)` text separates it from the real one.
+# The record CITES the sprint spec dir (its escalated entry's edit: names the memlog), or the join judges nothing:
+# a record that cites no specs/s305/ file repaired no SPEC and takes the SKIP p_specother pins.
+SPEC_REC_OTHER='<!-- shard: 01.md -->\n### F-1 — MAJOR\n- disposition: escalated\n- edit: _bmad-output/planning-artifacts/s305/stories/b.md:4\n\n### serial F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n- closes: 01.md F-1 — MAJOR\n'
+SPEC_REC='<!-- shard: 01.md -->\n### F-1 — MAJOR\n- disposition: escalated\n- edit: _bmad-output/specs/s305/x/.memlog.md:4\n\n### serial F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n- closes: 01.md F-1 — MAJOR\n'
+spec_world() { # <join> <memlog body, printf %b> [<second memlog body>] -> RC, $JO, $SW (the world); no memlog dir when the body is "-"
+  local w; w="$(mktemp -d "$WORK/spec.XXXXXX")" && mkdir -p "$w/.claude" || return 1
+  if [ "${SPEC_RECSEL:-}" = other ]; then printf '%b' "$SPEC_REC_OTHER"; else printf '%b' "$SPEC_REC"; fi > "$w/stories-repair-p1.md"
+  if [ "$2" != "-" ]; then
+    mkdir -p "$w/_bmad-output/specs/s305/x" || return 1
+    printf '%b' "$2" > "$w/_bmad-output/specs/s305/x/.memlog.md"
+  fi
+  if [ -n "${3:-}" ]; then
+    mkdir -p "$w/_bmad-output/specs/s305/y" || return 1
+    printf '%b' "$3" > "$w/_bmad-output/specs/s305/y/.memlog.md"
+  fi
+  SW="$w"
+  [ -z "${SPEC_CHMOD:-}" ] || chmod 000 "$w/_bmad-output/specs/s305/x/.memlog.md" || return 1
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --escalations "$w/stories-repair-p1.md" --sprint 305 > "$JO" 2>&1; RC=$?
+}
+SPEC_PH='re-derived from memlog through'
+p_specstale() { # decision, decision, phrased Render, decision -> rc 2, the memlog and ONE entry after the render named
+  spec_world "$1" "- (decision) a\n- (decision by pm) b\n- (event) Render p1: $SPEC_PH b\n- (decision) c\n" || return 1
+  [ "$RC" -eq 2 ] && has "$JO" "REFUSED: $SW/_bmad-output/specs/s305/x/.memlog.md:4: 1 (decision) entry(ies) after the last render (line 3)" \
+    && ! has "$JO" "rendered through its last decision"
+}
+p_specfresh() { # the ALLOW twin: the same memlog without the trailing decision -> rc 0, rendered through, the count line still there
+  spec_world "$1" "- (decision) a\n- (decision by pm) b\n- (event) Render p1: $SPEC_PH b\n" || return 1
+  [ "$RC" -eq 0 ] && has "$JO" "SPEC-RENDER: $SW/_bmad-output/specs/s305/x/.memlog.md -- rendered through its last decision (line 3)" \
+    && has "$JO" "ESCALATED-COUNT: 0 (1 closed" && ! has "$JO" "REFUSED"
+}
+p_spechand() { # an unphrased Render (a hand edit's disclosure), then a decision -> rc 0, SKIP, never read as rendered
+  spec_world "$1" "- (event) Render (fold): ran no renderer; applied to SPEC.md by hand\n- (decision) a\n- (decision by pm) b\n" || return 1
+  [ "$RC" -eq 0 ] && has "$JO" "SPEC-RENDER: SKIP -- $SW/_bmad-output/specs/s305/x/.memlog.md carries no" \
+    && ! has "$JO" "rendered through" && ! has "$JO" "REFUSED" && has "$JO" "ESCALATED-COUNT: 0 (1 closed"
+}
+p_specnone() { # no specs dir at all -> rc 0, SKIP naming the absent glob
+  spec_world "$1" "-" || return 1
+  [ "$RC" -eq 0 ] && has "$JO" "SPEC-RENDER: SKIP -- no $SW/_bmad-output/specs/s305/*/.memlog.md" \
+    && ! has "$JO" "rendered through" && ! has "$JO" "REFUSED" && has "$JO" "ESCALATED-COUNT: 0 (1 closed"
+}
+p_spectwo() { # two memlogs under specs/s305/, the first one stale -> rc 0, SKIP naming 2 memlogs (the kernel is exactly one)
+  spec_world "$1" "- (decision) a\n- (event) Render p1: $SPEC_PH a\n- (decision) b\n" "- (decision) a\n" || return 1
+  [ "$RC" -eq 0 ] && has "$JO" "SPEC-RENDER: SKIP -- 2 memlogs under $SW/_bmad-output/specs/s305/" \
+    && ! has "$JO" "rendered through" && ! has "$JO" "REFUSED" && has "$JO" "ESCALATED-COUNT: 0 (1 closed"
+}
+
+p_specother() { # a STALE memlog in the world, but a record citing no specs/s305/ path -> rc 0, the cites-no-specs SKIP, the count line there
+  SPEC_RECSEL=other spec_world "$1" "- (decision) a\n- (decision by pm) b\n- (event) Render p1: $SPEC_PH b\n- (decision) c\n" || return 1
+  [ "$RC" -eq 0 ] && has "$JO" "SPEC-RENDER: SKIP -- $SW/stories-repair-p1.md cites no specs/s305/ file, so it repaired no SPEC" \
+    && ! has "$JO" "rendered through" && ! has "$JO" "REFUSED" && has "$JO" "ESCALATED-COUNT: 0 (1 closed"
+}
+p_specunread() { # a cited, stale memlog made unreadable (chmod 000) -> rc 2, 'the memlog could not be read'; root reads it anyway, so SKIP
+  if [ "$(id -u)" -eq 0 ]; then echo "SKIP SP10 (root)"; return 0; fi
+  SPEC_CHMOD=1 spec_world "$1" "- (decision) a\n- (decision by pm) b\n- (event) Render p1: $SPEC_PH b\n- (decision) c\n" || return 1
+  chmod 644 "$SW/_bmad-output/specs/s305/x/.memlog.md" 2>/dev/null
+  [ "$RC" -eq 2 ] && has "$JO" "REFUSED: $SW/_bmad-output/specs/s305/x/.memlog.md: the memlog could not be read; no render verdict" \
+    && ! has "$JO" "SPEC-RENDER:" && has "$JO" "ESCALATED-COUNT: 0 (1 closed"
+}
+
+# ---- THE SPEC RENDER ARM, SUBJECT MODE (--subject 9): the SPEC is a WHOLE-FILE part, so the join's SUBJ_SET
+# carries `.../specs/s9/kernel/.memlog.md` beside SPEC.md. The memlog is written by the SPEC part's own
+# writer (same agent as the SPEC edit), and that part's record CITES IT on a second `edit:` line, as
+# `_gate-procedures.md` "Parts" item 2 requires ("its `edit:` lines cite both files"). Without that cite
+# the join's coverage arm refuses the memlog write as UNCITED -- a missing shard -- before the render arm
+# reports, so the ALLOW twin (SP7) could never pass; the join was right and this world was not. With
+# no memlog ("-") nothing is written and nothing extra is cited, since a cite of an unwritten file is
+# UNWRITTEN. So the ledger half stays clean and only the render order is judged.
+# A refusal here leaves NO record, which is what sj_refused asserts.
+SJMEMLOG=_bmad-output/specs/s9/kernel/.memlog.md
+sj_spec_world() { # <memlog body, printf %b | "-" for none> -> prints the world; every part by its own agent, SPEC's agent also edits the memlog
+  local w o n=0 ag="" spo spc=""; w="$(subj_world)" || return 1
+  spo="$(sj_part_rows "$w" | awk -F'\t' '$3 == "SPEC" { print $2 }')"
+  [ -n "$spo" ] || return 1
+  for o in $(sj_part_rows "$w" | cut -f2); do
+    n=$((n + 1)); sj_edit "$w" "$o" "a$(printf '%016d' "$n")"; sj_part "$w" "$o" "$SJ_LAST"
+    [ "$o" = "$spo" ] && { ag="a$(printf '%016d' "$n")"; spc="$SJ_LAST"; }
+  done
+  [ -n "$ag" ] || return 1
+  if [ "$1" != "-" ]; then
+    # The memlog is cited in the spelling the part's SPEC.md cite uses, so both resolve the same way,
+    # on a second `edit:` line placed directly under the first, inside the same entry.
+    [ "${spc%SPEC.md}" != "$spc" ] || return 1
+    printf '%b' "$1" > "$w/$SJMEMLOG" || return 1
+    drive "$w" Edit "$w/$SJMEMLOG" "$ag"
+    awk -v m="${spc%SPEC.md}.memlog.md" '{ print } !d && /^- \*\*edit:\*\*/ { printf "- **edit:** `%s:1`\n", m; d = 1 }
+      END { exit !d }' "$w/$SJRD/$spo.md" > "$w/$SJRD/$spo.md.t" && mv "$w/$SJRD/$spo.md.t" "$w/$SJRD/$spo.md" || return 1
+  fi
+  printf '%s' "$w"
+}
+p_sjspecstale() { # decision, decision, phrased Render, decision -> rc 2, the memlog named, NO record written
+  local w; w="$(sj_spec_world "- (decision) a\n- (decision by pm) b\n- (event) Render p1: $SPEC_PH b\n- (decision) c\n")" || return 1
+  run_sjoin "$1" "$w"
+  sj_refused "$w" "specs/s9/kernel/.memlog.md:4: 1 (decision) entry(ies) after the last render (line 3)" && ! has "$JO" "rendered through"
+}
+p_sjspecfresh() { # the ALLOW twin: no decision after the render -> JOINED, the record written, rendered through
+  local w; w="$(sj_spec_world "- (decision) a\n- (decision by pm) b\n- (event) Render p1: $SPEC_PH b\n")" || return 1
+  run_sjoin "$1" "$w"
+  [ "$RC" -eq 0 ] && [ -f "$(sj_out "$w")" ] && has "$JO" "JOINED:" && has "$JO" "specs/s9/kernel/.memlog.md -- rendered through its last decision (line 3)" && ! has "$JO" "REFUSED"
+}
+p_sjspecnone() { # the SPEC part's memlog does not exist -> JOINED, SKIP naming that it does not exist
+  local w; w="$(sj_spec_world "-")" || return 1
+  run_sjoin "$1" "$w"
+  [ "$RC" -eq 0 ] && [ -f "$(sj_out "$w")" ] && has "$JO" "SPEC-RENDER: SKIP -- " && has "$JO" "specs/s9/kernel/.memlog.md does not exist" \
+    && ! has "$JO" "rendered through" && ! has "$JO" "REFUSED"
+}
+
+# --agent-writes (BL-579): one agent's own ledger writes. A JOINED part writer (AG1) edited A, B and,
+# EARLIER, D; a post-join NON-subject agent (AG2) edited F; the SUBJECT (AG4, not the first row)
+# edited C and D. The output is exactly C and D plus the trailer. A, B and F are the controls, and
+# D is the discriminating row: a dedupe by path before the agent filter keeps AG1's D and loses AG4's.
+p_agentwrites() {
+  local w want got rc2 rc3
+  w="$(new_world)" || return 1
+  drive "$w" Edit "$w/$REL/$S21" "$AG1" "" "" 2026-10-15T19:20:00Z
+  drive "$w" Edit "$w/$REL/$S22" "$AG1" "" "" 2026-10-15T19:20:01Z
+  drive "$w" Edit "$w/$REL/$S31" "$AG1" "" "" 2026-10-15T19:20:02Z
+  drive "$w" Edit "$w/$REL/f-post-join.md" "$AG2" "" "" 2026-10-15T19:30:00Z
+  drive "$w" Edit "$w/$REL/c-partial.md" "$AG4" "" "" 2026-10-15T19:40:00Z
+  drive "$w" Edit "$w/$REL/$S31" "$AG4" "" "" 2026-10-15T19:40:01Z
+  drive "$w" Edit "$w/$REL/f-post-join.md" "$AG2" "" "" 2026-10-15T19:40:02Z
+  want="$(printf '%s\n%s\n%s' "$REL/c-partial.md" "$REL/$S31" 'not covered: Bash writes, and writes outside planning-artifacts/ and specs/s<N>/')"
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --agent-writes "$AG4" > "$JO" 2>&1; RC=$?
+  got="$(cat "$JO")"
+  [ "$RC" -eq 0 ] && [ "$got" = "$want" ] || return 1
+  # An agent with no rows prints the trailer alone, rc 0.
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --agent-writes a00000000000000000 > "$JO" 2>&1; rc2=$?
+  [ "$rc2" -eq 0 ] && [ "$(cat "$JO")" = 'not covered: Bash writes, and writes outside planning-artifacts/ and specs/s<N>/' ] || return 1
+  # Another flag is refused.
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --agent-writes "$AG4" --sprint 1 > "$JO" 2>&1; rc3=$?
+  [ "$rc3" -eq 2 ] && has "$JO" "REFUSED:" || return 1
+  # A malformed ledger line is refused, never read as "this agent wrote nothing".
+  printf 'this is not json\n' >> "$w/_bmad-output/planning-artifacts/.artifact-writes.jsonl"
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --agent-writes "$AG4" > "$JO" 2>&1; RC=$?
+  [ "$RC" -eq 2 ] && has "$JO" "REFUSED:"
+}
+
+P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrargs rrfiles rrsubj alias alnokeys alresult alown alsecond alother alsess altwo altool dispkey dispvocab dispruling srcparts gapfill chkpart chkrec rulingedit rulingtab chkjoined partsilent specstale specfresh spechand specnone spectwo sjspecstale sjspecfresh sjspecnone specother specunread agentwrites"
 
 # ---- A PART'S DERIVATION SURVIVES THE JOIN. The part's ```derived fence is copied into the joined
 # record, and the gate re-runs `validate-artifact-derivations.sh` over the sprint dir AFTER the

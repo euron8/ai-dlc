@@ -247,6 +247,48 @@ p_escopen "$JOIN" && ok "EC20: --escalations, no seat dir, one escalation open a
   || bad "EC20: --escalations did not report an open escalation on a non-party record (rc=$RC): $(cat "$JO")"
 p_escclosed "$JOIN" && ok "EC21: --escalations, every escalation closed and a shard fence whose text the serial pass rewrote -> rc 0, ESCALATED-COUNT: 0" \
   || bad "EC21: --escalations did not pass a fully closed record (rc=$RC): $(cat "$JO")"
+p_dispkey "$JOIN" && ok "EC22: an entry carrying edit: under a renamed key (outcome:) -> REFUSED, NODISP named; the dispositioned entry beside it is not" \
+  || bad "EC22: an entry with edit: and no disposition: was not refused (rc=$RC): $(cat "$JO")"
+p_dispvocab "$JOIN" && ok "EC23: a disposition outside the vocabulary in era -> REFUSED; not-reproduced and the pre-era value accepted" \
+  || bad "EC23: the disposition vocabulary did not discriminate (rc=$RC): $(cat "$JO")"
+p_dispruling "$JOIN" && ok "EC24: operator-ruling resolves by ISO heading and by SHA256 line with no source:; an unresolved and a missing cite REFUSED" \
+  || bad "EC24: the operator-ruling cite did not discriminate (rc=$RC): $(cat "$JO")"
+p_srcparts "$JOIN" && ok "EC25: --sources on a record citing only part tokens, seats present -> ONE refusal naming --escalations; a seat-token record resolves" \
+  || bad "EC25: --sources did not refuse a part-token record by name, or refused the party control (rc=$RC): $(cat "$JO")"
+p_gapfill "$JOIN" && ok "EC26: a repaired claim calling the fix a gap fill for veto -> REPORTED after the escalation count, rc 0; the escalated entry in the same words is counted open, not reported" \
+  || bad "EC26: the gap-fill tripwire did not discriminate (rc=$RC): $(cat "$JO")"
+p_chkpart "$JOIN" && ok "EC27: parts mode -- a part stating derivations not replayed and a part with no derivations: line -> REFUSED by name; the stamped part beside them is not" \
+  || bad "EC27: the check-fields arm did not discriminate in parts mode (rc=$RC): $(cat "$JO")"
+p_chkrec "$JOIN" && ok "EC28: --escalations -- a record with neither field is outside the era (rc 0); one that opened it without derivations: is REFUSED" \
+  || bad "EC28: the check-fields era did not discriminate in record mode (rc=$RC): $(cat "$JO")"
+p_rulingedit "$JOIN" && ok "EC29: an operator-ruling entry with a real edit and no siblings: in the era -> REFUSED as a repaired edit is; the ruling with edit: n/a beside it is not" \
+  || bad "EC29: an operator-ruling edit escaped the repaired-edit checks (rc=$RC): $(cat "$JO")"
+p_rulingtab "$JOIN" && ok "EC30: a TAB in a heading is not read as the ruling cite (the cite-less entry refused for that); a CRLF cite resolves" \
+  || bad "EC30: a tab-split heading or a CRLF cite was misread (rc=$RC): $(cat "$JO")"
+p_chkjoined "$JOIN" && ok "EC31: --escalations over a joined record -- an unrepaired shard's not replayed is exempt as the join exempted it; the repaired shard's is REFUSED" \
+  || bad "EC31: the check fields were not judged per shard segment (rc=$RC): $(cat "$JO")"
+p_partsilent "$JOIN" && ok "EC32: a REFUSED parts join prints no ESCALATED: line and no count -- nothing was joined (record mode prints through a refusal; parts mode by design does not)" \
+  || bad "EC32: a refused parts join printed an escalation report, or did not refuse (rc=$RC): $(cat "$JO")"
+p_specstale "$JOIN" && ok "SP1: --escalations, a spec memlog with a decision AFTER its last phrased Render -> rc 2, REFUSED naming the memlog and '1 (decision) entry(ies) after the last render'" \
+  || bad "SP1: a decision after the last re-derived render was not refused (rc=$RC): $(cat "$JO")"
+p_specfresh "$JOIN" && ok "SP2: the same memlog with its last decision before the phrased Render -> rc 0, 'rendered through its last decision', ESCALATED-COUNT still printed" \
+  || bad "SP2: a rendered-through memlog was refused or its line was not printed (rc=$RC): $(cat "$JO")"
+p_spechand "$JOIN" && ok "SP3: an unphrased '(event) Render' (a hand edit's disclosure) then a decision -> rc 0, SPEC-RENDER: SKIP, never read as rendered" \
+  || bad "SP3: an unphrased Render line was read as a render (rc=$RC): $(cat "$JO")"
+p_specnone "$JOIN" && ok "SP4: no specs directory in the world -> rc 0, SPEC-RENDER: SKIP naming the absent memlog glob" \
+  || bad "SP4: an absent spec memlog was refused or not skipped visibly (rc=$RC): $(cat "$JO")"
+p_spectwo "$JOIN" && ok "SP5: two memlogs under specs/s305/, one stale -> rc 0, SPEC-RENDER: SKIP naming 2 memlogs (the kernel is exactly one)" \
+  || bad "SP5: two spec memlogs were not skipped as ambiguous (rc=$RC): $(cat "$JO")"
+p_specother "$JOIN" && ok "SP9: --escalations, a stale memlog in the world but a record citing no specs/s305/ path -> rc 0, the 'cites no specs/s305/ file' SKIP, ESCALATED-COUNT printed" \
+  || bad "SP9: a record that repaired no SPEC was judged against the sprint memlog (rc=$RC): $(cat "$JO")"
+p_specunread "$JOIN" && ok "SP10: --escalations, a cited stale memlog made unreadable -> rc 2, 'the memlog could not be read' (SKIP SP10 (root) when uid 0)" \
+  || bad "SP10: an unreadable memlog was not refused (rc=$RC): $(cat "$JO")"
+p_sjspecstale "$JOIN" && ok "SP6: --subject, the SPEC part's memlog holds a decision after its last phrased Render -> rc 2, REFUSED naming the memlog, no record written" \
+  || bad "SP6: subject mode did not refuse a stale SPEC memlog (rc=$RC): $(cat "$JO")"
+p_sjspecfresh "$JOIN" && ok "SP7: --subject, the same memlog rendered through its last decision -> JOINED, the record written, SPEC-RENDER: rendered through its last decision" \
+  || bad "SP7: subject mode refused or did not report a rendered-through SPEC memlog (rc=$RC): $(cat "$JO")"
+p_sjspecnone "$JOIN" && ok "SP8: --subject, the SPEC part's memlog does not exist -> JOINED, SPEC-RENDER: SKIP naming that it does not exist" \
+  || bad "SP8: subject mode did not skip a missing SPEC memlog visibly (rc=$RC): $(cat "$JO")"
 p_setasideshard "$JOIN" && ok "EC10: a repaired MAJOR set aside only as 'outside this shard' -> REFUSED (the regex's first half)" \
   || bad "EC10: an 'outside this shard' set-aside was not refused (rc=$RC): $(cat "$JO")"
 p_setasidenr "$JOIN" && ok "EC11: a repaired MAJOR set aside only as 'not required' -> REFUSED (the regex's second half)" \
@@ -301,6 +343,9 @@ p_altwo "$JOIN" && ok "AL8: the id is held by TWO tool_use blocks -> REFUSED, '2
   || bad "AL8: an id held by two tool_use blocks was aliased (rc=$RC): $(cat "$JO")"
 p_altool "$JOIN" && ok "AL9: the one tool_use holding the id is a Read -> REFUSED" \
   || bad "AL9: an id held by a non-write tool_use was aliased (rc=$RC): $(cat "$JO")"
+
+p_agentwrites "$JOIN" && ok "AW1: --agent-writes <subject> over a ledger where a joined writer edited A, B and (earlier) D, a post-join non-subject edited F and the subject edited C and D -> exactly C, D and the not-covered trailer; an unknown agent -> the trailer alone, rc 0; an extra flag -> REFUSED rc 2" \
+  || bad "AW1: --agent-writes did not print exactly the subject's paths plus the trailer, or the zero-row and extra-flag cases failed (rc=$RC): $(cat "$JO")"
 
 # R1: the role file the remediator is bound to teaches the write tool and the citation form. Walked
 # up from this fixture in both layouts; install copies team-roles/ verbatim, so no render exists.

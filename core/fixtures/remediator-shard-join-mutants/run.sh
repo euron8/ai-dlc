@@ -44,11 +44,12 @@
 #
 # THE SHARDS. The pre-push suite is POLE-BOUND: its makespan tracks its single longest DIRECTORY,
 # and this battery, 63 mutants in one unit, was that directory at 1051s loaded (404s solo). So the
-# mutant set is dealt across four units, this directory (shard a) and the one-line drivers
-# `remediator-shard-join-mutants-b`, `-c` and `-d`, each `exec bash "$IMPL" --group <x>`, the shape
+# mutant set is dealt across five units, this directory (shard a) and the one-line drivers
+# `remediator-shard-join-mutants-b`, `-c`, `-d` and `-e`, each `exec bash "$IMPL" --group <x>`, the shape
 # `review-shard-merge-mutants` carries. Every scorer runs every predicate, so the cost per mutant
-# is roughly uniform and an equal count balances: 18 each, in declaration order by family. Shard d
-# was added when 72 mutants over three shards measured 245-295s solo each.
+# is roughly uniform and an equal count balances: 18-20 each, in declaration order by family. Shard d
+# was added when 72 mutants over three shards measured 245-295s solo each, and shard e when the
+# declared set grew past 90.
 # Every shard pays the unmutated control JX0, the J1 join and the MJ probe itself, because a shard
 # that skipped them could report a kill against a harness that never ran.
 #
@@ -61,11 +62,12 @@
 # a driver directory naming it. The join proves it can fire, on a seeded duplicate and a seeded
 # omission, before it is trusted. After the reap, [J2] asserts this shard dispatched exactly the
 # mutants dealt to it.
-SHARDS="a b c d"
+SHARDS="a b c d e"
 MUTANTS_a="JX1 JX2 JX3 JX4 JX5 JX6 JX7 JX8 JX10 JX9 JX11 JX12 JX13 JX14 JX15 JX16 JX17 JX18"
-MUTANTS_b="JX19 JX20 JX21 JX22 JX23 JX24 JX25 JX26 JX27 JX28 JX29 JX30 JX36 JX37 JX38 JX42 JX43 JX44"
-MUTANTS_c="JX45 JX46 JX47 JX48 JX49 JX39 JX40 JX41 JX31 JX32 JX33 JX34 JX35 JX50 JX51 JX52 JX53 JX54"
-MUTANTS_d="JX55 JX56 JX57 JX58 JX59 JX60 JX61 JX62 JX63 JX64 JX65 JX66 JX67 JX68 JX69 JX70 JX71 JX72"
+MUTANTS_b="JX19 JX20 JX21 JX22 JX23 JX24 JX25 JX26 JX27 JX28 JX29 JX30 JX36 JX37 JX38 JX42 JX43 JX44 JX95"
+MUTANTS_c="JX45 JX46 JX47 JX48 JX49 JX39 JX40 JX41 JX31 JX32 JX33 JX34 JX35 JX50 JX51 JX52 JX53 JX54 JX93 JX94"
+MUTANTS_d="JX55 JX56 JX57 JX58 JX59 JX60 JX61 JX62 JX63 JX64 JX65 JX66 JX67 JX68 JX69 JX70 JX71 JX72 JX73"
+MUTANTS_e="JX74 JX75 JX76 JX77 JX78 JX79 JX80 JX81 JX82 JX83 JX84 JX85 JX86 JX87 JX88 JX89 JX90 JX91 JX92"
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
@@ -322,7 +324,10 @@ $SHF_DROWS"
 # whole-file part rows outside shards/, so the join still reaches the source check and refuses by name.
 # sibdoc (BL-508) dies too: with no section rows the join refuses on the empty ledger before its siblings arm.
 # The document- and subject-mode re-run arms die too: with no section rows nothing is re-run.
-mutant2 "JX4 section rows dropped in document mode (the pre-BL-372 file set)" "docjoin docoverlap asmrefuse sjoin sjnames sjgate sjnest partydoc sibdoc rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrsubj" \
+# sjspecfresh and sjspecnone die for sjoin's reason: each is a subject join that must JOIN, and its prd
+# section parts cite copies under shards/ whose rows are now dropped, so they read UNWRITTEN. sjspecstale
+# does NOT: the join still reaches the SPEC render arm and refuses the stale memlog by name, as it expects.
+mutant2 "JX4 section rows dropped in document mode (the pre-BL-372 file set)" "docjoin docoverlap asmrefuse sjoin sjnames sjgate sjnest partydoc sibdoc rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrsubj sjspecfresh sjspecnone" \
   "   $SHF
 $SHF_ROWS" \
   "   | select((.path | startswith(\$sh + \"/\")) | not)
@@ -393,7 +398,7 @@ src_probe_disabled() {'
 # so every party run stops at it: the arms that expect a party join or a NAMED refusal all die.
 # srcsetaside, srcpending, srcera and srcclosed (BL-508/519) die too: each is a --sources run, and the
 # probe stops every one before its arm.
-mutant "JX18 source keyed on the id alone (self-probe in place)" "sjnames party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 srcsetaside srcpending srcera srcclosed srchalf srccross" \
+mutant "JX18 source keyed on the id alone (self-probe in place)" "sjnames party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 srcsetaside srcpending srcera srcclosed srchalf srccross srcparts" \
   "$IDONLY_OLD" "$IDONLY_NEW"
 # JX19: the same key AND the probe removed -- now only the arms that seed an id another seat carries see it.
 mutant2 "JX19 source keyed on the id alone, self-probe removed" "partyunres srcunres" \
@@ -412,11 +417,15 @@ mutant "JX23 subject --pass party not a party repair" "sjpartysrc" \
   '[ "$SUBJMODE" = 1 ] && [ "$PASS" = party ] && [ -z "$ARTIFACT" ] && PARTY=1' \
   'false && PARTY=1'
 # srcsetaside and srcera die too: each refusal is reported and then acquitted by the same exit 0.
-mutant "JX24 --sources reports refusals and exits 0" "srcunres srcsetaside srcera" \
+mutant "JX24 --sources reports refusals and exits 0" "srcunres srcsetaside srcera dispkey dispvocab dispruling chkrec rulingedit rulingtab chkjoined specstale specunread" \
   '  [ "$refuse_n" -eq 0 ] || exit 2
-  [ "$SRCMODE" = 1 ] && echo "SOURCES:' \
+  printf '"'"'%s\n'"'"' "$SPEC_LINE"
+  exit 0
+}' \
   '  true || exit 2
-  [ "$SRCMODE" = 1 ] && echo "SOURCES:'
+  printf '"'"'%s\n'"'"' "$SPEC_LINE"
+  exit 0
+}'
 # ---- BL-464 seat-complete belt: removed, and widened from the CITED seat files to the whole dir.
 mutant "JX25 the seat-complete belt removed" "partyunmarked partyx1" \
   '  [ -n "$steps" ] || return 0' \
@@ -439,7 +448,7 @@ mutant "JX28 the --sources siblings PENDING line not printed" "srcpending" \
   '    echo "PENDING: ${npend} repaired edit(s)' \
   '    : "PENDING: ${npend} repaired edit(s)'
 # sibprose dies too: the word in prose, no field, is the same missing field.
-mutant "JX29 a repaired edit with no siblings: not refused" "sibtotal sibmissing srcera sibdoc sibprose" \
+mutant "JX29 a repaired edit with no siblings: not refused" "sibtotal sibmissing srcera sibdoc sibprose rulingedit partsilent" \
   '    refuse "${r}: the ${d} entry is repaired with an edit and carries no' \
   '    : "${r}: the ${d} entry is repaired with an edit and carries no'
 mutant "JX30 the set-aside refusal removed" "setaside srcsetaside setasideshard setasidenr" \
@@ -456,7 +465,7 @@ mutant2 "JX36 parts mode era-gated on a carrier, self-probe removed" "sibtotal s
 # JX37 (D3): no escalated entry is ever closed in --sources mode.
 CLOSE_LINE='          for (k = 1; k <= ncl; k++) for (i = 1; i <= nesc; i++) if (cl[k] == ef[i] " " en[i]) ex[i] = 1'
 # escopen and escclosed (--escalations) die too: one closure, two modes.
-mutant2 "JX37 --sources closure removed, self-probe removed" "srcclosed srccross escopen escclosed" \
+mutant2 "JX37 --sources closure removed, self-probe removed" "srcclosed srccross escopen escclosed specfresh spechand specnone spectwo specother specunread" \
   "$CLOSE_LINE" \
   '          for (k = 1; k <= ncl; k++) for (i = 1; i <= nesc; i++) if (0) ex[i] = 1' \
   "$CTPROBE_OLD" "$CTPROBE_NEW"
@@ -477,7 +486,7 @@ mutant3 "JX38 closure not order-keyed (an earlier closes: line closes), self-pro
 # again -- any LATER repaired entry carrying the escalation's token, cut to its basename as the
 # f0d0af91 join cut it, closes it. srchalf is graph's dev-05#F-3 shape; srccross dies too, because
 # the serial entry shares the token of BOTH parts' escalations.
-mutant3 "JX42 closure keyed on the source: token, self-probe removed" "srchalf srccross escopen escclosed" \
+mutant3 "JX42 closure keyed on the source: token, self-probe removed" "srchalf srccross escopen escclosed specfresh spechand specnone spectwo specother specunread" \
   '        if (disp ~ /^escalat/) { nesc++; ef[nesc] = part; en[nesc] = cur; ex[nesc] = 0 }
         if (disp == "repaired" && src == 1)
 '"$CLOSE_LINE" \
@@ -504,8 +513,8 @@ mutant "JX45 SERIAL-REQUIRED not printed" "docjoin sibok handoff" \
   ':'
 # JX46: counted over every repaired entry, `edit: n/a` included -- sibok reads 6, not 3.
 mutant2 "JX46 SERIAL-REQUIRED counts repaired entries with no edit, self-probe removed" "sibok" \
-  '        if (disp == "repaired" && edt) nrep++' \
-  '        if (disp == "repaired") nrep++' \
+  '        if (rp && edt) nrep++' \
+  '        if (rp) nrep++' \
   "$CTPROBE_OLD" "$CTPROBE_NEW"
 # ---- the NOSIB remedy and the siblings arm's reach.
 mutant "JX47 the pre-install re-dispatch remedy dropped" "sibtotal sibdoc" \
@@ -527,7 +536,7 @@ mutant "JX39 set-aside regex cut to 'not required' only" "setasideshard" \
 mutant "JX40 set-aside regex cut to the shard phrase only" "setasidenr" \
   'claim ~ /outside (this|my|the) (shard|part|section)|not required/' \
   'claim ~ /outside (this|my|the) (shard|part|section)/'
-mutant "JX41 --sources prints no ESCALATED-COUNT line" "srcclosed srchalf srccross escopen escclosed" \
+mutant "JX41 --sources prints no ESCALATED-COUNT line" "srcclosed srchalf srccross escopen escclosed gapfill rulingedit specfresh spechand specnone spectwo specother specunread" \
   '  echo "ESCALATED-COUNT: ${ESC_N} (${ESC_X} closed' \
   '  : "ESCALATED-COUNT: ${ESC_N} (${ESC_X} closed'
 mutant2 "JX31 the set-aside hand-off exemption removed, self-probe removed" "handoff" \
@@ -535,7 +544,7 @@ mutant2 "JX31 the set-aside hand-off exemption removed, self-probe removed" "han
   '            ) print "SETASIDE' \
   "$CTPROBE_OLD" "$CTPROBE_NEW"
 # escclosed dies too: its serial entry, edit: n/a, then reads as a repaired edit with no siblings: after a carrier.
-mutant2 "JX32 an n/a edit read as a real edit, self-probe removed" "sibok escclosed" \
+mutant2 "JX32 an n/a edit read as a real edit, self-probe removed" "sibok escclosed rulingedit" \
   '      if (match(v, /[A-Za-z0-9_.\/-]+[.](md|json|jsonl|yaml|yml|txt|csv)/)) edt = 1' \
   '      edt = 1' \
   "$CTPROBE_OLD" "$CTPROBE_NEW"
@@ -549,13 +558,13 @@ printf '"'"'%s'"'"' "$ESC_LINES"' \
   '# "Adversarial repair dispatch").
 :'
 # escopen and escclosed die too: --escalations runs the same record_tail.
-mutant "JX35 --sources does not apply the entry contract" "srcsetaside srcpending srcera srcclosed srchalf srccross escopen escclosed" \
+mutant "JX35 --sources does not apply the entry contract" "srcsetaside srcpending srcera srcclosed srchalf srccross escopen escclosed dispkey dispvocab dispruling gapfill rulingedit rulingtab chkjoined specfresh spechand specnone spectwo specother specunread" \
   '  contract_refusals 1 "$(contract_check 1 "$1")"' \
   '  ESC_LINES=""; ESC_CLOSED=""; ESC_N=0; ESC_X=0'
 # ---- the four siblings forms, the point-in-time fence, escalated citations, --escalations.
 SIBREAD='    /^[[:space:]-]*[*_`]*siblings[*_`]*:/ { sibf = 1; v = $0; sub(/^[^:]*:/, "", v); v = vtrim(v); if (v == "") sibw = 1; else if (v in SIBNA) sib = 1; inclaim = 0; next }'
 # JX50: the tip adversary's m508 -- the siblings reader loosened to any line mentioning the word.
-mutant2 "JX50 siblings read off any line mentioning the word, self-probe removed" "srcera sibforms sibprose sibnever" \
+mutant2 "JX50 siblings read off any line mentioning the word, self-probe removed" "srcera sibforms sibprose sibnever dispvocab rulingedit" \
   "$SIBREAD" \
   '    /[Ss]iblings?/ { sib = 1 }' \
   "$CTPROBE_OLD" "$CTPROBE_NEW"
@@ -574,7 +583,7 @@ mutant "JX53 the siblings control not counted at the join" "sibnever" \
 mutant "JX54 an escalated entry's edit: path counted as a shard citation" "escpath" \
   '    function emit(   i) { if (disp !~ /^escalat/) for (i = 1; i <= nt; i++) print tk[i]; nt = 0; disp = "" }' \
   '    function emit(   i) { for (i = 1; i <= nt; i++) print tk[i]; nt = 0; disp = "" }'
-mutant "JX55 --escalations runs as --sources (needs a seat dir)" "escopen escclosed" \
+mutant "JX55 --escalations runs as --sources (needs a seat dir)" "escopen escclosed dispkey dispvocab dispruling gapfill chkrec rulingedit rulingtab chkjoined specstale specfresh spechand specnone spectwo specother specunread" \
   '    --escalations) SRC_REC="${2:-}"; SRCMODE=2; shift 2 ;;' \
   '    --escalations) SRC_REC="${2:-}"; SRCMODE=1; shift 2 ;;'
 # ---- the re-run window (--rerun <part>.md@<ISO>). Expected sets are the measured kills; the
@@ -658,6 +667,133 @@ mutant "JX71 a re-run writer with rows outside its part not refused" "rrreuse" \
 mutant "JX72 a re-run writer's row on another part's record not refused" "rrreuse" \
   '            if (((p, a) in rw) && b != p && !((p, a, b, "R") in pq)) {' \
   '            if (0) {'
+# ---- BL-542: the renamed key, the vocabulary, the operator-ruling cite. The self-probe sees each, so
+# each is paired with the probe removed (mutant2), as JX36 is.
+mutant2 "JX73 an edit: entry with no disposition: not refused, self-probe removed" "dispkey" \
+  '      if (disp == "" && edf) print "NODISP\t" cf "\t" cur' \
+  '      if (0) print "NODISP\t" cf "\t" cur' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
+mutant2 "JX74 a value outside the vocabulary not refused, self-probe removed" "dispvocab" \
+  '        if ((src == 0 || era) && !(dfull in VOC)) print "BADDISP\t" cf "\t" cur "\t" draw' \
+  '        if (0) print "BADDISP\t" cf "\t" cur "\t" draw' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
+mutant "JX75 an operator-ruling cite not resolved" "dispruling" \
+  '  [ "$n" -ge 1 ] || refuse "${r}: the ${d} entry'"'"'s ruling cite' \
+  '  true || refuse "${r}: the ${d} entry'"'"'s ruling cite'
+# ---- BL-561: the part-token refusal removed; BL-556: the gap-fill tripwire removed (probe paired off).
+mutant "JX76 --sources on a part-token record not refused" "srcparts" \
+  '  [ "$(src_kind "$SRC_REC")" = PART ] \' \
+  '  [ "$(src_kind "$SRC_REC")" = NEVER ] \'
+mutant2 "JX77 the gap-fill tripwire removed, self-probe removed" "gapfill" \
+  '        if (disp == "repaired" && claim ~ /gap[- ]?fill|veto/) print "GAPFILL\t" cf "\t" cur' \
+  '        if (0) print "GAPFILL\t" cf "\t" cur' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
+# ---- BL-557: the parts-mode call removed; the record-mode era removed (every record binds). The
+# self-probe sees the second, so it is paired off. JX79's set is WIDE BY CONSTRUCTION: the era is the
+# only line letting a record that writes neither field pass, and every --sources and --escalations
+# world here writes neither, so removing it refuses each of them. That breadth is the property --
+# one predicate's death would mean the era guarded one world -- and chkrec is the arm that owns it
+# (its first half is a field-less record that must pass). gapfill dies too: since the gap-fill
+# tripwire reports instead of refusing, its record must exit 0, and it writes neither field.
+mutant "JX78 the check fields not read in parts mode" "chkpart" \
+  '  checks_refusals "$(checks_field 0 "$p")"' \
+  '  :'
+mutant2 "JX79 the record-mode era removed (a record with neither field binds), self-probe removed" "srcok srcpending srcclosed srchalf srccross escopen escclosed dispruling srcparts gapfill chkrec rulingtab specfresh spechand specnone spectwo specother" \
+  '      if (rec == 1 && na + nd == 0) exit' \
+  '      if (0) exit' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
+# JX80: the gap-fill report turned back into a refusal (the shape that hid s319's escalations): the
+# record exits 2 before its count, which p_gapfill's rc 0 and ESCALATED-COUNT assertions see.
+mutant "JX80 the gap-fill report made a refusal again" "gapfill" \
+  '      GAPFILL) GAP_N=$((GAP_N + 1)); GAP_LINES=' \
+  '      GAPFILL) refuse "gap fill"; GAP_N=$((GAP_N + 1)); GAP_LINES='
+# ---- the third tip adversary's four. JX81: a ruling held to nothing again (keyed on repaired alone);
+# the self-probe sees no operator-ruling entry, so it stays in place.
+mutant "JX81 an operator-ruling edit escapes the repaired-edit checks" "rulingedit" \
+  '        rp = (disp == "repaired" || dfull == "operator-ruling")' \
+  '        rp = (disp == "repaired")'
+mutant "JX82 a TAB in a heading kept, so it splits the finding's fields" "rulingtab" \
+  'sub(/^#+[ \t]+/, "", cur); gsub(/[\t\r]/, " ", cur); cur = trim(cur)' \
+  'sub(/^#+[ \t]+/, "", cur); cur = trim(cur)'
+mutant "JX83 a CR kept on a ruling cite" "rulingtab" \
+  '    function vtrim(v) { gsub(/^[ \t*_`\r]+|[ \t*_`\r]+$/, "", v); return v }' \
+  '    function vtrim(v) { gsub(/^[ \t*_`]+|[ \t*_`]+$/, "", v); return v }'
+mutant "JX84 the check fields judged per file again, not per shard segment" "chkjoined" \
+  '    rec == 1 && /^<!-- shard: [^ ]+ -->[ \t]*$/ { commit(); seg = 1; next }' \
+  '    rec == 1 && /^<!-- shard: [^ ]+ -->[ \t]*$/ { next }'
+# JX85: a refused parts join prints the escalation report before its exit, as record mode does.
+mutant "JX85 a refused parts join prints the escalation report" "partsilent" \
+  '[ "$refuse_n" -eq 0 ] || exit 2
+
+# --- document mode' \
+  '[ "$refuse_n" -eq 0 ] || { printf '"'"'%s'"'"' "$ESC_LINES"; echo "ESCALATED-COUNT: ${ESC_N}"; exit 2; }
+
+# --- document mode'
+# ---- the SPEC render arm (BL-546/560). SELF-PROBE CONVENTION: a mutant the spec_render_probe sees dies
+# `die`-ing in every join, so every predicate would fail and the kill would be the probe's, not the
+# arm's. Following JX19/JX36/JX37, such a mutant (JX86, JX88) is mutant2 with the probe removed, so the
+# named arm owns the property on its own; JX87 and JX89 sit below the probe and need no pairing.
+SPROBE_OLD='spec_render_probe() {'
+SPROBE_NEW='spec_render_probe() { return 0; }
+spec_render_probe_disabled() {'
+# JX86: the Render key loses its phrase test, so a hand edit's unphrased Render reads as a render and
+# the decision after it is refused. Only spechand holds an unphrased Render.
+mutant2 "JX86 an unphrased Render line counted as a render, self-probe removed" "spechand" \
+  '(event([[:space:]][^)]*)?\)[[:space:]]+Render/ && index($0, ph) {' \
+  '(event([[:space:]][^)]*)?\)[[:space:]]+Render/ {' \
+  "$SPROBE_OLD" "$SPROBE_NEW"
+# JX87: the no-render SKIP refuses. Only the unphrased-Render world reaches that branch with a memlog
+# (specnone and spectwo take the empty-memlog branch above it, which this leaves alone).
+mutant "JX87 a memlog with no phrased Render refused instead of skipped" "spechand" \
+  '    SPEC_LINE="SPEC-RENDER: SKIP -- ${m} carries no' \
+  '    refuse "SKIP -- ${m} carries no'
+# JX88: the order test inverted -- decisions BEFORE the render are counted and a render no longer resets
+# them. stale reports 2 at line 1, fresh is refused outright; a non-empty-set pair, one per direction.
+# THREE layers, so mutant3: the two order anchors AND the self-probe. As mutant2 it carried only the two
+# anchors, its label's "self-probe removed" was false, the probe read the inverted scan and `die`d in
+# every join that reached it, and the mutant killed every predicate there (25 beyond its set).
+mutant3 "JX88 the order test inverted (decisions before the render counted), self-probe removed" "specstale specfresh sjspecstale sjspecfresh" \
+  '{ r = NR; n = 0; f = 0; next }' \
+  '{ r = NR; next }' \
+  '/^[[:space:]]*[-*][[:space:]]*\(decision([[:space:]][^)]*)?\)/ { if (r) {' \
+  '/^[[:space:]]*[-*][[:space:]]*\(decision([[:space:]][^)]*)?\)/ { if (!r) {' \
+  "$SPROBE_OLD" "$SPROBE_NEW"
+# JX89: record_tail runs the render check and then restores refuse_n, discarding whatever the call refused (the JX91 shape,
+# so an earlier refusal stands). specstale and specunread both expect a refusal FROM THAT CALL, so both die: one call
+# site, two refusals. The SPEC-RENDER line is still printed for the rest.
+mutant "JX89 the record_tail SPEC render refusal discarded" "specstale specunread" \
+  '    spec_render_check "$SPEC_MEMLOG" "$SPEC_WHY"' \
+  '    _rn0=$refuse_n; spec_render_check "$SPEC_MEMLOG" "$SPEC_WHY"; refuse_n=$_rn0'
+# JX90: the empty-memlog SKIP (no memlog, or several) refuses instead. specnone and spectwo reach that
+# branch; spechand has a memlog and takes the no-render branch JX87 owns.
+mutant "JX90 an absent or ambiguous spec memlog refused instead of skipped" "specnone spectwo" \
+  '  if [ -z "$m" ]; then SPEC_LINE="SPEC-RENDER: SKIP -- $2"; return 0; fi' \
+  '  if [ -z "$m" ]; then refuse "SKIP -- $2"; return 0; fi'
+# JX91: subject mode discards the SPEC render refusal. Only sjspecstale expects a refusal from the subject-mode
+# call; the SPEC-RENDER line is still set, so sjspecfresh and sjspecnone read the same.
+mutant "JX91 the subject-mode SPEC render refusal discarded" "sjspecstale" \
+  '  if [ -n "$_sm" ]; then spec_render_check "${STATE_PARENT}${_sm}" ""' \
+  '  if [ -n "$_sm" ]; then _rn0=$refuse_n; spec_render_check "${STATE_PARENT}${_sm}" ""; refuse_n=$_rn0'
+# JX92: spec_render_check's unreadable-memlog refusal deleted, so a memlog awk cannot open reads as no render and SKIPs.
+# Only specunread seeds an unreadable memlog. Under uid 0 its chmod has no effect and the arm passes on SKIP, so this
+# mutant SURVIVES for a root runner (the fixture is not meant to run there).
+mutant "JX92 an unreadable spec memlog not refused" "specunread" \
+  ' || { refuse "${m}: the memlog could not be read; no render verdict"; return 0; }' \
+  ''
+# ---- --agent-writes (BL-579): the agent filter, and the order of dedupe against it.
+mutant "JX93 --agent-writes with no agent filter" "agentwrites" \
+  '.kind == "artifact-write" and .agent_id == $a and (.path | type)' \
+  '.kind == "artifact-write" and (.path | type)'
+# JX94 dedupes by path BEFORE the agent filter (slurp, then unique_by): the joined
+# writer's earlier row on D wins the path, so the subject's D is lost.
+mutant "JX94 --agent-writes dedupes by path before the agent filter" "agentwrites" \
+  '[inputs | select(type == "object") | select(.kind == "artifact-write" and .agent_id' \
+  '[[inputs | select(type == "object")] | unique_by(.path)[] | select(.kind == "artifact-write" and .agent_id'
+# JX95 restores the piped, unchecked read: a malformed ledger line then prints the trailer alone, rc 0.
+mutant "JX95 --agent-writes read piped through sort with no parse check" "agentwrites" \
+  '    _aw="$(jq -rn --arg a "$AGENT_ID" --arg s "$SINCE" '"'"'[inputs | select(type == "object") | select(.kind == "artifact-write" and .agent_id == $a and (.path | type) == "string" and ($s == "" or .ts >= $s)) | .path] | unique | .[]'"'"' "$LEDGER" 2>/dev/null)" \
+      || die "the write ledger ${LEDGER} does not parse as JSON lines"' \
+  '    _aw="$(jq -r --arg a "$AGENT_ID" --arg s "$SINCE" '"'"'select(.kind == "artifact-write" and .agent_id == $a and ($s == "" or .ts >= $s)) | .path'"'"' "$LEDGER" 2>/dev/null | sort -u)"'
 # ---- END JX MUTANTS.
 
 # ------------------------------------------------------------------------------ the reap

@@ -247,7 +247,13 @@ every repair. `_gate-procedures.md` carries the subject case at each of those si
 - **The SPEC is repaired through its own render path, never by a direct edit.** A finding
   whose fix lies in `SPEC.md` goes to that part's one remediator, which appends a `(decision)`
   entry to the spec's `.memlog.md` and re-renders `SPEC.md` through `bmad-spec` — the amendment
-  procedure's item 2 path in `_gate-procedures.md`, "Divergence resolution dispatch".
+  procedure's item 2 path in `_gate-procedures.md`, "Divergence resolution dispatch". Invoking
+  the `bmad-spec` Skill loads its instructions and renders nothing, and no render script exists,
+  so the render IS the remediator re-deriving `SPEC.md` WHOLE from `.memlog.md` under those
+  instructions, never by Edits to the affected lines. It then appends one
+  `- (event) Render <pass>: re-derived from memlog through <last decision>` line to `.memlog.md`;
+  a change applied with Edit is recorded as `- (event) Hand-edit <pass>`, never as Render. A
+  `(decision)` entry after the last such Render line is a stale SPEC, and the join refuses it.
 - **The adversarial series is named `s<N>/requirements-adversarial-p<M>`.** A sharded pass is
   written by `merge-adversarial-shards.sh --subject`, never by `--document`; a one-part subject's
   single adversary writes it directly, notarizing the subject manifest. Check 24 arm K3 holds
