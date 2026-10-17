@@ -869,7 +869,13 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   root-consulting subject, the same +10 per script 0.800.0 measured), I84 +2, I83 +1, I9 +1 (the
 #   per-file walks), I8 +1 (owed-derivations-mutants is `.dist-only`); no other arm moved. The new
 #   script is core/scripts/check-owed-derivations.sh. HIGH tip reading 3420 plus the same 4.
-FORK_BUDGET=3424
+#
+#   RAISED TO 3433 FOR FIVE NEW .dist-only FIXTURE DIRECTORIES. `fork-profile.sh --section by-arm`,
+#   ONE base reading at 33361d56 (0.812.0) and ONE tip reading at 7cfe66ad (BL-536 and BL-540), in ONE
+#   clean detached worktree at one path: base 3424, tip 3429, so +5. By arm, 129 arms on both sides:
+#   I8 113 -> 118 and no other arm moved. The new directories are adversarial-shard-merge-mutants-b,
+#   -c, -d, -e and -f, each `.dist-only`. Tip reading 3429 plus the same 4.
+FORK_BUDGET=3433
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
