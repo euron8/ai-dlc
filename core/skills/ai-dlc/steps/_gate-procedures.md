@@ -514,7 +514,10 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    follow "Divergence resolution dispatch" below.
 
    **Minimum mechanism (Rule 26(c)).** Failure caught: a defect a repair or a fold wrote into
-   the subject. Most MAJORs at every adversarial pass sit in text the previous repair wrote, and
+   the subject, such as a subscription broadcast from a burn hash, a destination rebind placed
+   before the assignment that overwrites it, or a config key a repair left in place so the loader
+   raises at start. This round's catches are all of that kind: no first-authored defect is unique
+   to it. Most MAJORs at every adversarial pass sit in text the previous repair wrote, and
    the next pass is the only reader of that text; the terminal pass is also the counted exit
    Check 24 reads (Rule 8). False-positive cost: one pass and its repair per round until the
    exit. Removal condition: repairs that measurably stop writing defects, and a Rule 8 that no
