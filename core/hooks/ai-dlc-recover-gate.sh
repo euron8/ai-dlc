@@ -116,7 +116,9 @@
 # THE RACE. The incoming call's own message is usually not on disk when PreToolUse fires
 # (measured in the advisor gate's header, THE RACE), so an advisor call in the same message
 # may not be visible yet. A DENY is therefore re-judged every 0.25s until the incoming call's
-# own `tool_use` line lands or 10s pass; an ALLOW is final at once. The deny reason says to
+# own `tool_use` line lands or a 10s safety net passes; an ALLOW is final at once. A deny needs
+# that line on disk: the net's expiry without it stands the stage down for that call, uncounted
+# (BL-630), so load cannot deny a correct same-message advisor call. The deny reason says to
 # call the advisor in a message of its own, which is the shape that never races.
 #
 # It does not read the lead's prose, so the RECOVERY-SKIP disclosure the block
@@ -212,6 +214,13 @@ if [ ! -f "$MARKER" ] && [ -f "$OWED" ]; then
   [ -n "$R_STATE" ] || exit 0
   r_judge
   if [ "${R_GRANT:-none}" != on ]; then rm -f "$OWED" 2>/dev/null || true; exit 0; fi
+  # THE DENY IS DECIDED BY R_SEEN, NEVER BY THE CLOCK (BL-630). The 10s is a safety net bounding
+  # the stall, not a ceiling whose expiry denies: under load fewer re-reads fit and the line being
+  # waited for lands later, so a timed deny refused a correct same-message advisor call. Expiry
+  # with the incoming call's own line still absent is a transcript this stage cannot read, and it
+  # stands down for that call -- no deny, no count (owed_put is not reached), the file kept, so the
+  # next dispatch is judged again. The advisor gate's header, THE RACE, carries the same rule.
+  # An input with no `tool_use_id` can never be seen, so on such a harness this stage never denies.
   _rt0=$SECONDS
   while [ "$R_V" = owed ] && [ "${R_SEEN:-0}" != 1 ] && [ $((SECONDS - _rt0)) -lt 10 ]; do
     sleep 0.25
@@ -221,6 +230,10 @@ if [ ! -f "$MARKER" ] && [ -f "$OWED" ]; then
   done
   if [ "$R_V" = clear ]; then rm -f "$OWED" 2>/dev/null || true; exit 0; fi
   [ "$R_V" = owed ] || exit 0
+  if [ "${R_SEEN:-0}" != 1 ]; then
+    echo "ai-dlc-recover-gate: the incoming call's own transcript line did not land within the 10s safety net ($R_TP); its message may still hold the advisor attempt, so touchpoint R is not enforced on this call" >&2
+    exit 0
+  fi
   owed_put "$R_OSID" "$((R_DENIES + 1))"
   jq -n --arg m "AI/DLC post-compact recovery: SKILL.md Rule 32 touchpoint R is owed. You read postcompact-digest.md after this compaction and have made no advisor call since, so this ${R_TOOL} call -- a dispatch or a write -- is refused ($((R_DENIES + 1)) of ${R_MAX_DENIES}). Call the advisor in a message of its own, read its answer, then retry the same call. Any advisor attempt clears this, including one that errors; if the advisor answers 'unavailable' this gate stands down. If you hold no advisor tool, say so in one line (RECOVERY-SKIP: advisor -- <why>) and retry: after ${R_MAX_DENIES} refusals this stage stands down. Arming a wait-beat (Bash) is not refused and belongs before the advisor call." \
     '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $m}}'

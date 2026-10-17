@@ -120,6 +120,25 @@ STATE_FILE="${LOG_DIR}/pipeline-block-state.txt"
 BEAT_MARKER="${LOG_DIR}/.beat-inflight"
 
 # Rapid-fire thresholds
+#
+# RAPID_WINDOW_SECONDS (30) BOUNDS ONE PROPERTY: HOW CLOSE TOGETHER TWO STOP BLOCKS MUST FALL
+# FOR THE SECOND TO COUNT AS "THE SAME STALLED TURN LOOP, RETRIED". The event it infers is a
+# session that is not making progress, and that is observable directly only when the
+# transcript can answer "was there a tool call since the last block" (RUN_TOOL, see
+# stall_run). The window is the fallback for when it cannot (RUN_TOOL=unknown: no
+# transcript, no jq, an older two-line state file) and a second continue-signal when it can.
+# A stalled session re-blocks within one model turn; a session doing real work takes longer
+# than 30s between Stop attempts, so the number is a turn-length separator, not a derived
+# value.
+# WHEN HIT (delta under the window and no tool call proven): the run counter climbs, and
+# past EFF_MAX the hook ALLOWS the stop (Check 3, BACKOFF). WHEN NOT HIT and a tool call is
+# not disproven: the counter resets to 1 and the hook keeps blocking.
+# LOAD: the gap is a model turn plus the hook, so a loaded box (or a slow local model)
+# LENGTHENS it, which moves the outcome only in the BLOCKING direction -- a correct
+# subject is never released early by load. The cost lands on a genuinely stalled subject
+# on the RUN_TOOL=unknown path: a gap stretched past 30s resets the run, the hook never
+# reaches EFF_MAX, and release falls to the harness's own cap, which is the override this
+# hook exists to precede. The tool-call test is not time-based and is unaffected.
 RAPID_WINDOW_SECONDS=30
 MAX_RAPID_BLOCKS=3
 

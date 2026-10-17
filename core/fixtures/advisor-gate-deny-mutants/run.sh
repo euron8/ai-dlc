@@ -29,7 +29,7 @@
 #        nothing, 1 = an assertion failed, 2 = fixture broken.
 SHARDS="a b c d e"
 # A ratchet, raised when a mutant is added: lowering it is a visible edit, a lost mutant is not.
-MIN_MUTANTS=97
+MIN_MUTANTS=99
 set -uo pipefail
 
 # The pre-push gate exports AI_DLC_* tunables; none is read here, but scrub them all the same.
@@ -199,8 +199,10 @@ mut no-rewrite-exemption "MATEREWRITE REDISPATCH" -e 's/\[ "\${SAME:-0}" -gt 0 \
 #     failed call dies (DENIED, ENVELOPE, and FAILED's six).
 mut denied-counted "DENIED ENVELOPE FAILED" -e 's/\.g |= del(\.\[(\$b\.tool_use_id \/\/ "") | tostring\])/./'
 # 21. the incoming call, already on disk, is counted against itself.
-#     REREAD dies too, and both findings are true: rr-late's appended line IS the incoming call, so
-#     once a re-read sees it the mutant counts it as a gated action after the advisor and denies.
+#     REREAD dies too, and both findings are true: under this mutant the incoming call's line is
+#     swallowed as a recorded gated action, so `.seen` is never set. rr-late still reads SILENT (the
+#     net expires unseen, BL-630), but rr-seen, whose only appended line IS the incoming call, runs
+#     to the net and is SILENT where it must DENY.
 mut self-counted "REREAD SELF" -e 's/and ((\$b\.id | tostring) != \$tuid)/and true/'
 # 22. the transcript-write deny is conditioned on the grant (deleting the grant line disables it).
 mut twrite-needs-grant "TWRITE" -e 's/^if \[ "\$KIND" = twrite \]; then$/if [ "$KIND" = twrite ] \&\& grep -q advisor_tool "$TP" 2>\/dev\/null; then/'
@@ -275,9 +277,11 @@ mutc K-no-reviews-path "MATEPATH" "MATEPATH:k-cr MATEPATH:k-qa" -e 's/test("\/do
 mutc K-no-review-shards "MATEPATH" "MATEPATH:k-sh-cr MATEPATH:k-sh-qa" -e 's/test("\/docs\/reviews\/(\.+\/)?shards\/\[^\/\]\*(qa-validation|code-review)\[^\/\]\*\/\[^\/\]+\\\\.md\$")/false/'
 # 50. L: a verdict shard part is not gated.
 mutc L-no-part-jsonl "MATEPATH" "MATEPATH:l-part" -e 's/verdict\\\\.json|part-\[^\/\]+\\\\.jsonl|repair/verdict\\\\.json|repair/'
-# 51. (r) THE RACE: the re-read reuses the first STATE, so the advisor line that lands after the
-#     hook's first scan is never judged. Replaces `A-envelope-unanchored-regex` (subsumed, as 26).
-mutc r-reread-reuses-state "REREAD" "REREAD:rr-late" -e 's/^  STATE2="\$(scan)" || STATE2="\$STATE"$/  STATE2="$STATE"/'
+# 51. (r) THE RACE: the re-read reuses the first STATE, so no line that lands after the hook's
+#     first scan is ever judged. Replaces `A-envelope-unanchored-regex` (subsumed, as 26). Since
+#     BL-630 an unseen call is SILENT at the net, so rr-late (advisor + call at 3s) passes by the net
+#     and the kill is rr-seen: the call's own line lands alone, never seen, and is not denied.
+mutc r-reread-reuses-state "REREAD" "REREAD:rr-seen" -e 's/^  STATE2="\$(scan)" || STATE2="\$STATE"$/  STATE2="$STATE"/'
 # 52-55. B and C: one lead-kind pair collapsed into one kind.
 mutc B-collapse-gatelog-push "PERKIND" "PERKIND:pk-push-gatelog" -e 's/(\[\.g\[\] | select(\.\[2\] == \$kind) | \.\[0\]\] | max \/\/ 0) as \$act/([.g[] | select(.[2] == $kind or ((.[2] == "gatelog" or .[2] == "push") and ($kind == "gatelog" or $kind == "push"))) | .[0]] | max \/\/ 0) as $act/'
 mutc B-collapse-close-push "PERKIND" "PERKIND:pk-push-close" -e 's/(\[\.g\[\] | select(\.\[2\] == \$kind) | \.\[0\]\] | max \/\/ 0) as \$act/([.g[] | select(.[2] == $kind or ((.[2] == "close" or .[2] == "push") and ($kind == "close" or $kind == "push"))) | .[0]] | max \/\/ 0) as $act/'
@@ -303,7 +307,9 @@ mutc J-no-multiedit-gatelog "GATELOG" "GATELOG:j-multi" -e 's/(if (\[\.input\.ed
 # 60. F1: no quote mask, so a quoted alternation and a heredoc body split into push segments.
 mut qmask-identity "NOVERIFY QUOTEDALT" -e 's/^def csegs: (qmask | segs) as \$s/def csegs: segs as $s/'
 # 61. F2: the old fixed 2s re-read, so an advisor line landing at 3s is never judged.
-mutc fixed-2s-loop "REREAD" "REREAD:rr-late" -e 's/^case "\${ADVISOR_GATE_REREADS:-2}" in 0) _cap=0 ;; 1) _cap=2 ;; \*) _cap=10 ;; esac$/case "${ADVISOR_GATE_REREADS:-2}" in 0) _cap=0 ;; *) _cap=2 ;; esac/'
+#     The wrong build is a 2s bound that DENIES at expiry, so the knob arm's no-net semantics (`_net=0`)
+#     is kept: a 2s bound that failed open would allow rr-late and survive it for the wrong reason.
+mutc fixed-2s-loop "REREAD" "REREAD:rr-late" -e 's/^case "\${ADVISOR_GATE_REREADS:-2}" in 0) _cap=0; _net=0 ;; 1) _cap=2; _net=0 ;; \*) _cap=10; _net=1 ;; esac$/case "${ADVISOR_GATE_REREADS:-2}" in 0) _cap=0; _net=0 ;; *) _cap=2; _net=0 ;; esac/'
 # 69. L3 removed: a `_bmad-output/`-only push owes a consult.
 # 62. THE WINDOW ignored: an advisor 3 turns back with pushes shipped since does not acquit.
 mutc window-ignored "WINDOW" "WINDOW:win-in" -e 's/^  if \[ "\${INWIN:-0}" = 1 \]; then V=allow; fi$/  :/'
@@ -382,6 +388,16 @@ mutc hdr-repair-too "HDRONLY" "HDRONLY:hdr-repair" -e 's/ and (test("\/shards\/\
 mutc update-merge-exempt "UPDATE" "UPDATE:u-mcp UPDATE:u-merge UPDATE:u-wrap" -e 's/^if \[ "\$KIND" = push \] && \[ "\$HASMERGE" = 0 \]; then$/if { [ "$KIND" = push ] \&\& [ "$HASMERGE" = 0 ]; } || [ "$KIND" = merge ]; then/'
 # the HASMERGE term dropped: `git push ... && gh pr merge N` is kinded push and rides the push exclusion.
 mutc chained-merge-exempt "UPDATE" "UPDATE:u-chain" -e 's/^if \[ "\$KIND" = push \] && \[ "\$HASMERGE" = 0 \]; then$/if [ "$KIND" = push ]; then/'
+# --- BL-630: the deny is decided by the transcript, not the clock ---
+# the time-only ceiling restored: the net's expiry with the call's line unseen DENIES (the pre-BL-630
+# hook). Killed only on the NET cell rr-never, so it is scored with NET_CELLS=1 and pays the 10s once.
+# The flag is set on its own line, never as a prefix: the coverage join reads `$1 == "mutc"`.
+NET_CELLS=1
+mutc net-expiry-denies "REREAD" "REREAD:rr-never" -e 's/^if \[ "\$_net" = 1 \] && \[ "\${SEEN:-0}" != 1 \]; then$/if false; then/'
+NET_CELLS=0
+# the net fails open on the default knob even when the call IS seen: a default that never denies an
+# unseen-then-seen race. Killed on rr-seen, the one default-knob DENY cell.
+mutc net-ignores-seen "REREAD" "REREAD:rr-seen" -e 's/^if \[ "\$_net" = 1 \] && \[ "\${SEEN:-0}" != 1 \]; then$/if [ "$_net" = 1 ] \&\& [ "${SEEN:-0}" = 1 ]; then/'
 
 # Every mutant dealt to this shard must have RUN, and every one that ran must have died exactly.
 [ "$n_seen" -eq "$nmine" ] || bad "[J1] shard '$GROUP' reached $n_seen mutants, $nmine dealt -- a dealt mutant never ran"

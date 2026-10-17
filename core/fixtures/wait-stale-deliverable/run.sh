@@ -61,23 +61,83 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 #
 # A SLEEPING CASE IS NOT A BUSY CASE, which is what makes this safe to nest inside the
 # suite's own pool: these workers are waiting on a clock, not competing for a core.
-# The wall-clock ASSERTIONS are the risk instead -- `ELAPSED -le 1` for "returned without
-# sleeping", `-ge 6` for a quantum honoured -- so this cannot be proven by a differential
-# alone. It needs repeated runs at the shipping pool size, and that evidence is the release.
+#
+# NO ASSERTION HERE READS A WALL CLOCK, AND THAT IS THE OPERATOR'S RULING, NOT A STYLE. The
+# cases that ask "did the beat sleep" used to answer it with `ELAPSED -ge 2`, `-le 1`, `-le 10`,
+# `-ge 6`: a number of seconds standing in for a yes/no fact, and a number the box's load moves.
+# Under a loaded pool a beat that returned at once could read 2s, and one that slept could be
+# scheduled late enough to read anything at all. The fact is binary and the subject has exactly
+# ONE place it can be observed -- its poll loop's `sleep "$POLL"` is the only `sleep` it runs --
+# so `sleep_stub` puts a recording `sleep` first on the beat's PATH and the arm reads the record:
+# the beat entered its poll sleep, or it did not. Every arm that asserts NO record also proves
+# the stub records, on the same PATH in the same case, so a stub that silently stopped logging
+# cannot pass as a beat that never slept.
 setup_tmp() {
   BEATOUT="$(mktemp)"
   MUTDIR="$(mktemp -d 2>/dev/null || mktemp -d -t wait-mutants)"
   trap 'rm -f "$BEATOUT"; rm -rf "$MUTDIR"' EXIT
 }
+# BW_Q / BW_PATH: the quantum and the PATH one beat runs with. Unset, a beat runs exactly as it
+# always has (quantum 4, the fixture's own PATH); a case that needs the sleep record or a
+# quantum no scheduling delay can cross sets them for its own beat and unsets them after.
+BW_Q=""; BW_PATH=""
 beat_with() { # <subject> <work> [extra args...] -> writes $BEATOUT; sets RC and OUT
   local subj="$1" w="$2"; shift 2
-  ( cd "$w" && env AI_DLC_WAIT_BEAT_SECS=4 \
+  ( cd "$w" && env PATH="${BW_PATH:-$PATH}" \
+                   AI_DLC_WAIT_BEAT_SECS="${BW_Q:-4}" \
                    AI_DLC_WAIT_POLL_SECS=1 \
                    AI_DLC_WAIT_MARGIN_SECS=1 \
                    AI_DLC_MAX_WAIT_BEATS=6 \
     AI_DLC_PROJECT_ROOT="$PWD" bash "$subj" "$@" deliv.md ) > "$BEATOUT" 2>&1
   RC=$?
   OUT="$(cat "$BEATOUT")"
+}
+
+# ---------------------------------------------------------------------------
+# THE SLEEP RECORD. `sleep_stub <dir>` writes `<dir>/bin/sleep`, which appends its argument to
+# `<dir>/sleep.log` and then EXECS the real sleep, so a beat under it behaves exactly as it does
+# without it and leaves a line per poll sleep it entered. It sets STUB_PATH (the PATH to hand a
+# beat) and STUB_LOG. The real `sleep` and `bash` are resolved HERE, before anything is
+# prepended, and baked in as absolute paths: under the hermetic runner PATH is a tool farm and
+# `env -i`, so nothing about the stub may depend on a lookup it would make itself.
+#
+# THE STUB'S OWN CONTROL IS `stub_works`: one `sleep 0` through STUB_PATH must add exactly one
+# line. An arm that asserts "no record" runs it first, in the same case, on the same PATH --
+# otherwise a stub that was never on the beat's PATH (or never executable) reads exactly like a
+# beat that never slept.
+STUB_PATH=""; STUB_LOG=""
+sleep_stub() { # <dir>
+  local real_sleep real_bash
+  real_sleep="$(command -v sleep)"; real_bash="$(command -v bash)"
+  [ -n "$real_sleep" ] && [ -n "$real_bash" ] || { echo "FIXTURE ERROR: cannot resolve sleep/bash for the sleep stub" >&2; exit 2; }
+  mkdir -p "$1/bin" || { echo "FIXTURE ERROR: cannot create the sleep stub dir" >&2; exit 2; }
+  STUB_LOG="$1/sleep.log"; : > "$STUB_LOG"
+  printf '#!%s\nprintf "%%s\\n" "$*" >> "%s"\nexec "%s" "$@"\n' "$real_bash" "$STUB_LOG" "$real_sleep" > "$1/bin/sleep"
+  chmod +x "$1/bin/sleep" || { echo "FIXTURE ERROR: cannot make the sleep stub executable" >&2; exit 2; }
+  STUB_PATH="$1/bin:$PATH"
+}
+stub_lines() { [ -f "$STUB_LOG" ] || { echo 0; return; }; awk 'END { print NR }' "$STUB_LOG"; }
+stub_works() { # -> 0 when one `sleep 0` through STUB_PATH adds exactly one record
+  local n0 n1
+  n0="$(stub_lines)"
+  env PATH="$STUB_PATH" sleep 0 || return 1
+  n1="$(stub_lines)"
+  [ "$n1" = "$(( n0 + 1 ))" ]
+}
+# DELIVERY GATED ON THE SLEEP, NOT ON A CLOCK. `( sleep 2; write ) &` raced the beat's deadline:
+# under load the write could land after the beat gave up, or before it had armed. This writer
+# waits until the stub has recorded the beat's first poll sleep, then writes -- so the write is
+# strictly inside the beat's poll loop, whatever the load. It also stops when `<stop>` appears,
+# which the case creates once the beat has returned, so a beat that never slept cannot leave
+# the writer looping. Sets DW to the writer's pid.
+DW=""
+deliver_on_sleep() { # <file> <stop>
+  ( while [ ! -s "$STUB_LOG" ] && [ ! -e "$2" ]; do sleep 0.1; done
+    [ -s "$STUB_LOG" ] && printf 'the actual answer for this sprint\n' > "$1" ) &
+  DW=$!
+}
+end_writer() { # <stop>
+  : > "$1"; wait "$DW" 2>/dev/null || true
 }
 beat() { local w="$1"; shift; beat_with "$SUBJ" "$w" "$@"; }
 
@@ -258,6 +318,11 @@ mutant_expr() { # <name> -> sets $MUT_EXPR to the sed program that removes that 
     since-kept-on-delivery)   MUT_EXPR='s/^    rm -f "\$c" "\$s" "\${c}\.progress"/    rm -f "$c" "${c}.progress"/' ;;
     # A live pid-less (pre-upgrade) lease is taken instead of left alone.
     preupgrade-taken)         MUT_EXPR='/^  \[ -n "\$ba_pid_" \] || return 0  *# a live pre-upgrade lease/d' ;;
+    # The pre-v0.81 marker: the lease is the beat's END time, fixed at its first write and
+    # re-written unchanged at every poll. `${BA_T0_:=...}` captures the first call's clock and
+    # every later call reuses it, so re-stamping still happens and only the VALUE is wrong --
+    # the defect case 10 exists for, and the one its old seconds-of-slack bound stood in for.
+    lease-end-time)           MUT_EXPR='s/^  ba_e_=\$(( \$(date +%s) + 3 \* POLL ))$/  ba_e_=$(( ${BA_T0_:=$(date +%s)} + BUDGET ))/' ;;
     *) echo "FIXTURE ERROR: no mutation registered for '$1'" >&2; exit 2 ;;
   esac
 }
@@ -346,21 +411,25 @@ rm -rf "$W"
 }
 
 # --- 3. the teammate's real write, landing mid-beat -----------------------------
+# QUANTUM 60, AND THE PASSING PATH NEVER SPENDS IT. The write is gated on the beat's first poll
+# sleep (deliver_on_sleep), so a correct beat wakes once, sees the write, and returns. The large
+# quantum only means no scheduling delay between the stub's record and the write can push the
+# write past the beat's deadline -- which at quantum 4 it could, and read as a missed delivery.
 C03_arrives_mid_beat() {
 W="$( bash "$SEED" arrives-mid-beat )"
-( sleep 2; printf 'the actual answer for this sprint\n' > "$W/deliv.md" ) &
-WRITER=$!
-START="$(date +%s)"
+sleep_stub "$W/.stub"
+deliver_on_sleep "$W/deliv.md" "$W/.stub/stop"
+BW_Q=60; BW_PATH="$STUB_PATH"
 beat "$W"
-ELAPSED=$(( $(date +%s) - START ))
-wait "$WRITER" 2>/dev/null || true
+BW_Q=""; BW_PATH=""
+end_writer "$W/.stub/stop"
 if [ "$RC" -eq 0 ] && grep -q '^DELIVERED' "$BEATOUT"; then
   ok "arrives-mid-beat: DELIVERED once the real write lands"
 else bad "arrives-mid-beat: rc $RC, no DELIVERED line — a genuine delivery was missed"; fi
-# Zero elapsed means the poll loop broke on the stale file's mere presence while
+# No sleep record means the poll loop broke on the stale file's mere presence while
 # the sweep applied the fresh predicate: a beat charged, none slept.
-if [ "$ELAPSED" -ge 2 ]; then ok "arrives-mid-beat: beat actually slept (${ELAPSED}s) — predicates agree"
-else bad "arrives-mid-beat: returned in ${ELAPSED}s — poll loop and sweep disagree on delivery"; fi
+if [ "$(stub_lines)" -ge 1 ]; then ok "arrives-mid-beat: beat entered its poll sleep ($(stub_lines) record(s)) — predicates agree"
+else bad "arrives-mid-beat: the beat never entered its poll sleep — poll loop and sweep disagree on delivery"; fi
 rm -rf "$W"
 }
 
@@ -384,21 +453,29 @@ rm -rf "$W"
 }
 
 # --- 5. --since may pull the threshold EARLIER (the post-compaction join) -------
+# THE STUB'S CONTROL IS `stub_works`, NOT THE BARE BEAT. The bare beat does sleep, but whether it
+# reaches its sleep before a 3s deadline is itself a load bound; the stub's own `sleep 0` through
+# the same PATH proves the record channel with no clock in it. The --since beat's empty record
+# then means that beat really did not sleep.
 C05_since_earlier() {
 W="$( bash "$SEED" since-earlier )"
+sleep_stub "$W/.stub"
 beat "$W"
 if [ "$RC" -eq 0 ] && grep -q '^WAITING' "$BEATOUT" && ! grep -q '^DELIVERED' "$BEATOUT"; then
   ok "since-earlier: bare call waits — a pre-join file is not proof, and waiting is not a failure"
 else bad "since-earlier: rc $RC — expected a WAITING beat with no DELIVERED line"; fi
-START="$(date +%s)"
+if stub_works; then ok "since-earlier: CONTROL — the sleep stub records a sleep run through its PATH"
+else bad "since-earlier: the sleep stub recorded nothing — 'did not sleep' below would be unmeasured"; fi
+: > "$STUB_LOG"
+BW_PATH="$STUB_PATH"
 beat "$W" --since "$(( $(date +%s) - 60 ))"
-ELAPSED=$(( $(date +%s) - START ))
+BW_PATH=""
 if [ "$RC" -eq 0 ] && grep -q '^DELIVERED' "$BEATOUT"; then
   ok "since-earlier: --since in the past recovers the early delivery"
 else bad "since-earlier: no DELIVERED line — --since could not move the threshold earlier"; fi
 # Also proves the fix did not turn every join into a mandatory sleep.
-if [ "$ELAPSED" -le 1 ]; then ok "since-earlier: returned without sleeping"
-else bad "since-earlier: slept ${ELAPSED}s on an already-satisfied join"; fi
+if [ "$(stub_lines)" = "0" ]; then ok "since-earlier: returned without entering its poll sleep"
+else bad "since-earlier: entered its poll sleep $(stub_lines) time(s) on an already-satisfied join"; fi
 rm -rf "$W"
 }
 
@@ -451,17 +528,35 @@ rm -rf "$W"
 # (validate-steering-budget.sh Check A) and this BACKGROUNDED beat's sleep. The
 # merge is invisible in normal operation — both are just "a number of seconds" —
 # so it is asserted from both sides. Forward: the quantum alone decides the sleep.
+#
+# THE KNOBS ARE CHOSEN SO THE TWO READINGS DIFFER IN A YES/NO FACT, NOT IN A DURATION. The beat's
+# deadline is `now + BUDGET - max(MARGIN, POLL)`, and the loop checks the deadline BEFORE it
+# sleeps. With MARGIN 3, a quantum of 3 puts the deadline at `now` exactly, so the beat honouring
+# its quantum breaks out of the loop without entering its poll sleep, by construction and at any
+# load. A quantum of 60 puts it 57s out, so a beat that read that number enters the sleep. The
+# forward case honours 3 against a steering budget of 60; the reverse case honours 60 against
+# a steering budget of 3. Each reading the WRONG knob lands on the other side of that line. The
+# target is written on the first recorded sleep, so a beat on the sleeping side returns at its
+# first wake instead of running its quantum out -- the passing reverse case pays one POLL.
+knob_beat() { # <work> <quantum> <steering budget>
+  ( cd "$1" && env PATH="$STUB_PATH" AI_DLC_WAIT_BEAT_SECS="$2" AI_DLC_STEERING_BUDGET="$3" \
+                   AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=3 \
+                   AI_DLC_MAX_WAIT_BEATS=6 \
+      AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" deliv.md ) > "$BEATOUT" 2>&1 || true
+}
 C08_knob_split_forward() {
 W="$( bash "$SEED" knob-split-forward )"
-START="$(date +%s)"
-( cd "$W" && env AI_DLC_WAIT_BEAT_SECS=3 AI_DLC_STEERING_BUDGET=30 \
-                 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 \
-                 AI_DLC_MAX_WAIT_BEATS=6 \
-    AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" deliv.md >/dev/null 2>&1 ) || true
-ELAPSED=$(( $(date +%s) - START ))
-if [ "$ELAPSED" -le 10 ]; then
-  ok "knob-split-forward: quantum 3s honoured (${ELAPSED}s) with STEERING_BUDGET=30 ignored"
-else bad "knob-split-forward: slept ${ELAPSED}s — the beat is reading AI_DLC_STEERING_BUDGET again"; fi
+sleep_stub "$W/.stub"
+# The control runs first and its record is cleared: the beat's own record must start empty.
+if stub_works; then ok "knob-split-forward: CONTROL — the sleep stub records a sleep run through its PATH"
+else bad "knob-split-forward: the sleep stub recorded nothing — 'the beat did not sleep' below would be unmeasured"; fi
+: > "$STUB_LOG"
+deliver_on_sleep "$W/deliv.md" "$W/.stub/stop"
+knob_beat "$W" 3 60
+end_writer "$W/.stub/stop"
+if grep -q '^BEAT COMPLETE' "$BEATOUT" && [ "$(stub_lines)" = "0" ]; then
+  ok "knob-split-forward: quantum 3s honoured (deadline reached before any poll sleep) with STEERING_BUDGET=60 ignored"
+else bad "knob-split-forward: $(stub_lines) poll sleep(s) recorded, or no BEAT COMPLETE — the beat is reading AI_DLC_STEERING_BUDGET again"; fi
 rm -rf "$W"
 }
 
@@ -470,15 +565,13 @@ rm -rf "$W"
 # passes the forward case whenever the budget happens to be the smaller number.
 C09_knob_split_reverse() {
 W="$( bash "$SEED" knob-split-reverse )"
-START="$(date +%s)"
-( cd "$W" && env AI_DLC_WAIT_BEAT_SECS=8 AI_DLC_STEERING_BUDGET=3 \
-                 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 \
-                 AI_DLC_MAX_WAIT_BEATS=6 \
-    AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" deliv.md >/dev/null 2>&1 ) || true
-ELAPSED=$(( $(date +%s) - START ))
-if [ "$ELAPSED" -ge 6 ]; then
-  ok "knob-split-reverse: quantum 8s honoured (${ELAPSED}s) with STEERING_BUDGET=3 ignored"
-else bad "knob-split-reverse: returned in ${ELAPSED}s — AI_DLC_STEERING_BUDGET is truncating the beat"; fi
+sleep_stub "$W/.stub"
+deliver_on_sleep "$W/deliv.md" "$W/.stub/stop"
+knob_beat "$W" 60 3
+end_writer "$W/.stub/stop"
+if [ "$(stub_lines)" -ge 1 ] && grep -q '^DELIVERED' "$BEATOUT"; then
+  ok "knob-split-reverse: quantum 60s honoured (the beat entered its poll sleep) with STEERING_BUDGET=3 ignored"
+else bad "knob-split-reverse: $(stub_lines) poll sleep(s) recorded — AI_DLC_STEERING_BUDGET is truncating the beat"; fi
 rm -rf "$W"
 }
 
@@ -489,32 +582,82 @@ rm -rf "$W"
 # quantum with nothing alive to re-invoke the lead — a dead window that grows with
 # the quantum, which is exactly what raising it to 600s would have multiplied.
 # Re-stamped every poll, the lease expires ~3 polls after the beat dies.
+#
+# THE BOUND IS AGAINST AN EVENT THE CASE RECORDS, NOT AGAINST "NOW". It once read `LEASE - now
+# <= 10`: a slack in seconds, which a late read moves. Now the case stamps KILL_T AFTER the
+# beat's whole tree is dead. Stamped before the kill, it left a window -- reap_tree forks pgrep
+# per level before any SIGKILL lands -- in which a POLL-1 re-stamp could cross a second boundary
+# and write `(KILL_T + 1) + 3`, a false red that grows with load. After the kill, every write the
+# subject made strictly precedes the stamp; every lease is `now + 3 x POLL` at its write, and a
+# whole-second clock is monotone, so a per-poll lease satisfies `LEASE <= KILL_T + 3 x POLL` at
+# ANY load. The END-time defect writes `T0 + QUANTUM - RESERVE`, which is above that bound
+# whenever the kill lands earlier than QUANTUM - RESERVE - 3 x POLL after the beat started.
+#
+# THE ONE STATE WHERE THE TWO MEET IS A REFUSAL, NOT A PASS. A kill that came that late -- the
+# box stalled for most of a minute between start and kill -- leaves a bound the END-time lease
+# also satisfies, so a green there would be green for the defect too. MS_DISCRIM says whether
+# the defect's lease (measured from MS_T0, taken BEFORE the beat started, so it can only
+# understate the defect's epoch) lies strictly above the bound; when it does not, the case says
+# the run could not discriminate and fails rather than scoring it. MS_Q is 60 so that state needs
+# a ~56s stall; the passing path pays only the wait for the first marker.
+#
+# THE BEAT'S WHOLE TREE IS REAPED, NOT ITS WRAPPER. `kill -9 -$PID` names a process group a
+# background job in a non-interactive shell need not lead, and its fallback kills only `$PID`; if
+# that is a wrapper rather than the subject, the subject would keep re-stamping after KILL_T and
+# this bound would score it as a defect. reap_tree collects the tree top-down and SIGKILLs all of
+# it, so no EXIT trap runs and nothing writes after KILL_T.
+MS_Q=60; MS_POLL=1; MS_MARGIN=1
+run_stale() { # <subject> -> MS_LEASE MS_KILL_T MS_DISCRIM ; leaves W
+  local pid i reserve
+  W="$( bash "$SEED" marker-goes-stale )"
+  MS_T0="$(date +%s)"
+  ( cd "$W" && env AI_DLC_WAIT_BEAT_SECS="$MS_Q" AI_DLC_WAIT_POLL_SECS="$MS_POLL" \
+                   AI_DLC_WAIT_MARGIN_SECS="$MS_MARGIN" AI_DLC_MAX_WAIT_BEATS=6 \
+      AI_DLC_PROJECT_ROOT="$PWD" bash "$1" deliv.md >/dev/null 2>&1 ) & pid=$!
+  for i in $(seq 1 600); do
+    [ -s "$W/_bmad-output/.beat-inflight" ] && break
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.1
+  done
+  reap_tree "$pid"
+  MS_KILL_T="$(date +%s)"
+  MS_LEASE="$(marker_of "$W")"
+  MS_LEASE="${MS_LEASE%% *}"   # the marker is `<epoch> <pid>`; the lease is the first field
+  reserve="$MS_MARGIN"; [ "$MS_POLL" -gt "$reserve" ] && reserve="$MS_POLL"
+  MS_DISCRIM=0
+  [ $(( MS_T0 + MS_Q - reserve )) -gt $(( MS_KILL_T + 3 * MS_POLL )) ] && MS_DISCRIM=1
+}
+stale_preconditions() { # <label>
+  if [ "$MS_DISCRIM" -eq 1 ]; then
+    ok "$1: CONTROL — the kill came early enough that an END-time lease would lie above the per-poll bound"
+  else bad "$1: the kill came $(( MS_KILL_T - MS_T0 ))s after the start, so an END-time lease also fits under the bound — this run cannot tell the two apart (refused, not scored)"; fi
+}
 C10_marker_goes_stale() {
-W="$( bash "$SEED" marker-goes-stale )"
-( cd "$W" && env AI_DLC_WAIT_BEAT_SECS=60 AI_DLC_WAIT_POLL_SECS=1 \
-                 AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 \
-    AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" deliv.md >/dev/null 2>&1 ) & PID=$!
-MARKER="$W/_bmad-output/.beat-inflight"
-for _ in $(seq 1 100); do
-  [ -s "$MARKER" ] && break
-  kill -0 "$PID" 2>/dev/null || break
-  sleep 0.1
-done
-# SIGKILL the whole process group the subshell heads, so the trap cannot run --
-# the point is to leave the marker exactly as a crashed beat would.
-kill -9 -"$PID" 2>/dev/null || kill -9 "$PID" 2>/dev/null || true
-wait "$PID" 2>/dev/null || true
-LEASE="$(cat "$MARKER" 2>/dev/null || echo '')"
-LEASE="${LEASE%% *}"   # the marker is `<epoch> <pid>`; the lease is the first field
-case "$LEASE" in
+run_stale "$SUBJ"
+stale_preconditions "marker-goes-stale"
+case "$MS_LEASE" in
   ''|*[!0-9]*) bad "marker-goes-stale: marker absent or non-numeric after SIGKILL — cannot tell a lease from a promise" ;;
   *)
-    SLACK=$(( LEASE - $(date +%s) ))
-    if [ "$SLACK" -le 10 ]; then
-      ok "marker-goes-stale: dead beat's lease expires in ${SLACK}s, not the rest of the quantum"
+    if [ "$MS_LEASE" -le $(( MS_KILL_T + 3 * MS_POLL )) ]; then
+      ok "marker-goes-stale: dead beat's lease ($MS_LEASE) is no later than 3 polls past the kill ($MS_KILL_T), not the rest of the quantum"
     else
-      bad "marker-goes-stale: lease still ${SLACK}s out — the marker holds the beat's END time, so a crashed beat authorizes a silent stall for the whole quantum"
+      bad "marker-goes-stale: lease $MS_LEASE is past the kill ($MS_KILL_T) + 3 polls — the marker holds the beat's END time, so a crashed beat authorizes a silent stall for the whole quantum"
     fi ;;
+esac
+rm -rf "$W"
+}
+# The END-time marker must be what this bound catches. Presence-shaped: the lease must be a number
+# AND lie above the bound, so a mutant that wrote no marker cannot score the kill.
+C47_mut_lease_end_time() {
+mutant lease-end-time
+run_stale "$MUT"
+stale_preconditions "MUTANT lease-end-time"
+case "$MS_LEASE" in
+  ''|*[!0-9]*) bad "MUTANT lease-end-time: no numeric marker after SIGKILL — the mutant did not write the lease it was built to write" ;;
+  *)
+    if [ "$MS_LEASE" -gt $(( MS_KILL_T + 3 * MS_POLL )) ]; then
+      ok "MUTANT lease-end-time: an END-time lease ($MS_LEASE) lies past the kill ($MS_KILL_T) + 3 polls and is caught"
+    else bad "MUTANT lease-end-time: END-time lease $MS_LEASE fits under the per-poll bound; the bound is not what separates them"; fi ;;
 esac
 rm -rf "$W"
 }
@@ -704,7 +847,7 @@ for mname in grant-cap unprune-wait-beats unexclude-beat-inflight state-dir-guar
              resample-gate restamp-ungated no-restamp grant-unconditional \
              grant-no-counter-rewrite \
              lease-trap-unconditional lease-no-heir lease-always-put lease-no-early \
-             no-join-memo since-kept-on-delivery preupgrade-taken; do
+             no-join-memo since-kept-on-delivery preupgrade-taken lease-end-time; do
   mutant "$mname"
   W="$( bash "$SEED" exhausted )"
   beat_with "$MUT" "$W"
@@ -986,10 +1129,11 @@ own() { bash -c '"$@"; exit $?' _ "$@"; }
 # shell, in the background; sets BG to the pid `wait` takes. The subject's OWN pid is read
 # from what it writes (the marker, its `.lease-<pid>`), never from `$!`, which names the
 # subshell. SETTLE=2 matters only under --complete and keeps those cases inside a quantum.
-BG=""
+# BG_PATH, when set, is the PATH that one beat runs with (the sleep stub's); unset, the fixture's.
+BG=""; BG_PATH=""
 bg_beat() {
   local subj="$1" w="$2" o="$3" q="$4" p="$5"; shift 5
-  ( cd "$w" && own env AI_DLC_WAIT_BEAT_SECS="$q" AI_DLC_WAIT_POLL_SECS="$p" \
+  ( cd "$w" && own env PATH="${BG_PATH:-$PATH}" AI_DLC_WAIT_BEAT_SECS="$q" AI_DLC_WAIT_POLL_SECS="$p" \
                        AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 \
                        AI_DLC_WAIT_SETTLE_SECS=2 \
       AI_DLC_PROJECT_ROOT="$PWD" bash "$subj" "$@" ) > "$o" 2>&1 &
@@ -1035,17 +1179,36 @@ reap_tree() {
 }
 # 0 when a `sleep` runs anywhere under the given pid -- the beat has passed every lease write that
 # precedes its poll loop. Walks children top-down, as reap_tree does.
+# BASENAME, NOT EXACT NAME: `ps -o comm=` reports what the process was exec'd as, so the sleep
+# stub's `exec /bin/sleep` reads `/bin/sleep`. Matching `= sleep` alone never saw a stubbed beat
+# asleep -- measured: the handoff arm waited out A's whole 600s POLL because neither this nor
+# tree_kill_sleep could find A's sleep.
 tree_has_sleep() { # <pid>
   local frontier="$1" next p
   while [ -n "$frontier" ]; do
     next=""
     for p in $frontier; do
-      [ "$(ps -o comm= -p "$p" 2>/dev/null)" = "sleep" ] && return 0
+      case "$(ps -o comm= -p "$p" 2>/dev/null)" in sleep|*/sleep) return 0 ;; esac
       next="$next $(pgrep -P "$p" 2>/dev/null | tr '\n' ' ')"
     done
     frontier="$(echo $next)"
   done
   return 1
+}
+# SIGTERM every `sleep` under the given pid -- ends a beat's poll sleep early, so it wakes NOW.
+# A beat's `sleep` is a foreground child; the subject does not run under `set -e`, so a sleep
+# that exits by signal returns to the loop exactly as one that ran out.
+tree_kill_sleep() { # <pid>
+  local frontier="$1" next p
+  while [ -n "$frontier" ]; do
+    next=""
+    for p in $frontier; do
+      case "$(ps -o comm= -p "$p" 2>/dev/null)" in sleep|*/sleep) kill -TERM "$p" 2>/dev/null ;; esac
+      next="$next $(pgrep -P "$p" 2>/dev/null | tr '\n' ' ')"
+    done
+    frontier="$(echo $next)"
+  done
+  return 0
 }
 tree_signal() { # <pid> <STOP|CONT> -- every process under pid, collected top-down first
   local all="$1" frontier="$1" next p
@@ -1071,20 +1234,31 @@ say_shells() { # <label>
 # --- the lease handoff --------------------------------------------------------------------
 # B starts FIRST so B is the HOLDER: the heir branch in lease_release runs only in the beat that
 # holds the marker when it exits, so with A holding, B's exit touches nothing and a subject with
-# no handoff passes. A's quantum is POLL + 2, so A wakes exactly once, at +POLL: from B's exit to
-# that wake nothing of A's can re-take the marker, and the read 0.3s after B exits is inside
-# that window by seconds, not milliseconds. A's POLL is 12 rather than the 3-vs-1 the receipt
-# named, for exactly that read; A's lease is 3 x POLL, so the epoch is well clear of `now`. It was
-# 6, and at load ~75 that window closed before the read; the read's timing is now a control.
-HO_POLL=12
+# no handoff passes.
+#
+# A'S WAKE IS NOT A CLOCK THE READ RACES; IT IS AN EVENT THE HARNESS CAUSES AND THE STUB RECORDS.
+# This arm once gave A a quantum of POLL + 2 with POLL 12 and voided the case when the read came
+# 12s or more after A started (`HO_READ_EARLY`, a wall bound). Measured at load ~75: B's delivery
+# slid past a 6s wake and the trap mutant SURVIVED. The read itself is bracketed by A's freeze, so
+# the only way to read late is that A woke and re-stamped BEFORE the freeze. Now:
+#   - A runs under the recording `sleep` stub (sleep_stub), with POLL 600 and quantum 2 x POLL:
+#     no setup can reach its natural wake, and its deadline is POLL out when the loop checks it.
+#   - The control is binary: at the freeze A has recorded EXACTLY ONE poll sleep and that sleep
+#     process is still in A's tree. A has entered its loop and has not woken, so every marker
+#     write of A's lies before the freeze, and the read after B's exit sees what B's exit left.
+#   - After the read A is woken ON PURPOSE: CONT, then its stub `sleep` child is killed. A's
+#     `sleep` returns, A re-stamps, sees a.md and delivers, so the C33 controls still hold and the
+#     passing path never waits out the long POLL.
+# A's lease is 3 x POLL, so the epoch is well clear of `now` at the read.
+HO_POLL=600
 run_handoff() { # <subject> -> HO_* ; leaves W for the caller
   W="$( bash "$SEED" lease-handoff )"
-  local pb pa
+  local pb pa sp
+  sleep_stub "$W/.stub"
   bg_beat "$1" "$W" "$W/b.out" 20 1 b.md; pb=$BG
   until_true 100 test -s "$W/_bmad-output/.beat-inflight" || true
   HO_B="$(marker_pid "$W")"
-  HO_A_T0="$(date +%s)"
-  bg_beat "$1" "$W" "$W/a.out" "$(( HO_POLL + 2 ))" "$HO_POLL" a.md; pa=$BG
+  BG_PATH="$STUB_PATH"; bg_beat "$1" "$W" "$W/a.out" "$(( 2 * HO_POLL ))" "$HO_POLL" a.md; pa=$BG; BG_PATH=""
   until_true 100 leases_are "$W" 2 || true
   # A writes the lease twice before it sleeps: early, and again just before the poll loop. If B
   # exits between the two, A's second write takes the free marker and EVERY subject -- the trap
@@ -1097,17 +1271,27 @@ run_handoff() { # <subject> -> HO_* ; leaves W for the caller
   # between B's exit and the read: the marker read is exactly what B's exit left, whatever the
   # load. `kill -0` still answers for a stopped process, which is what lease_release asks.
   tree_signal "$pa" STOP
+  # A re-stamps (and so re-takes) the marker when its first sleep returns. The control: at the
+  # freeze A has recorded EXACTLY ONE sleep and that sleep is still running in A's tree -- A is
+  # inside its first poll sleep and has not woken. Anything else voids the case: measured at load
+  # ~75 under the old clock-bounded shape, A woke first and the trap mutant SURVIVED.
+  HO_SLEEPS="$(stub_lines)"
+  HO_UNWOKEN=0; [ "$HO_SLEEPS" = "1" ] && tree_has_sleep "$pa" && HO_UNWOKEN=1
   printf 'the answer B was waiting for\n' > "$W/b.md"
   wait "$pb" 2>/dev/null || true
   HO_AFTER="$(marker_of "$W")"
   HO_NOW="$(date +%s)"
-  tree_signal "$pa" CONT
-  # A re-stamps (and so re-takes) the marker at its first wake, HO_POLL after it started. A read
-  # taken after that wake cannot see what B's exit left, so it voids the case rather than scoring
-  # it: measured at load ~75, B's delivery slid past a 6s wake and the trap mutant SURVIVED.
-  HO_READ_EARLY=0; [ $(( HO_NOW - HO_A_T0 )) -lt "$HO_POLL" ] && HO_READ_EARLY=1
   HO_A_ALIVE=0; [ -n "$HO_A" ] && kill -0 "$HO_A" 2>/dev/null && HO_A_ALIVE=1
   printf 'the answer A was waiting for\n' > "$W/a.md"
+  # WAKE A ON PURPOSE: resume it, then end its stub sleep. A's loop re-stamps, finds a.md and
+  # delivers, so the passing path never waits out POLL 600.
+  tree_signal "$pa" CONT
+  tree_kill_sleep "$pa"
+  # A WAKE THAT DID NOT HAPPEN IS A RED, NOT A 600s STALL. A woken beat delivers in well under a
+  # second; if it is still running after this bound its tree is reaped, a.out carries no
+  # DELIVERED line, and the C33 control below fails loudly. The bound decides no verdict -- it
+  # only stops a broken wake from holding the pool for ten minutes.
+  until_true 300 eval '! kill -0 "$pa" 2>/dev/null' || reap_tree "$pa"
   wait "$pa" 2>/dev/null || true
   HO_GONE=1; [ -e "$W/_bmad-output/.beat-inflight" ] && HO_GONE=0
   separate_shells "$W" 2 "$W/a.out" "$W/b.out"
@@ -1121,8 +1305,8 @@ handoff_preconditions() { # <label> -- the harness facts both the case and its m
   else bad "$1: A was not alive at the read; the marker's state then says nothing about a live sibling"; fi
   if [ "$HO_A_ASLEEP" -eq 1 ]; then ok "$1: CONTROL — A was in its sleep, past both pre-loop lease writes, before B's target landed"
   else bad "$1: A never reached its sleep before B's target landed — A's pre-loop lease write could take the marker B freed"; fi
-  if [ "$HO_READ_EARLY" -eq 1 ]; then ok "$1: CONTROL — the marker was read before A's first wake could re-take it"
-  else bad "$1: the read came $(( HO_NOW - HO_A_T0 ))s after A started, past its ${HO_POLL}s wake — A had already re-stamped, so this read cannot see B's exit (box too loaded; timing void)"; fi
+  if [ "$HO_UNWOKEN" -eq 1 ]; then ok "$1: CONTROL — at the freeze A had entered exactly one poll sleep and was still in it, so no wake of A's re-took the marker before the read"
+  else bad "$1: at the freeze A had recorded $HO_SLEEPS poll sleep(s), or its sleep had already returned — A may have re-stamped before the read, so this read cannot see B's exit (void)"; fi
 }
 C33_lease_handoff() {
 run_handoff "$SUBJ"
@@ -1162,18 +1346,40 @@ rm -rf "$W"
 # An after-exit byte comparison cannot see a beat that takes a live holder's marker: on exit it
 # holds it, hands it to the heir, and writes A's own epoch and pid back -- byte-identical. So the
 # marker is SAMPLED while the second beat runs, and that beat is given 30 delivered targets so
-# its sweep is wide enough to sample. A is the single-wake shape from the handoff arm (POLL 8,
-# quantum 10), so A's own re-stamp cannot land inside the window.
+# its sweep is wide enough to sample.
+#
+# A'S WINDOW OUTLASTS THE PROBE BY CONSTRUCTION, NOT BY A QUANTUM. A was once the single-wake
+# shape from the handoff arm (POLL 8, quantum 10): a ~10s life against a setup plus a 30-target
+# sweep that both scale with the box's load. Under a loaded pool A exited first -- measured on a
+# consumer push: "delivered 30 of 30, A alive=0 -- the window under test never ran", beside a
+# false "clobbered a live lease" whose two markers carried A's OWN pid and differed only by
+# epoch: A's own re-stamp, at its +8s wake, inside a window that had run late. So now:
+#   - A is FROZEN (SIGSTOP, its whole tree) once it is in its poll `sleep` -- past both pre-loop
+#     lease writes -- and stays frozen until it is reaped. A stopped process writes nothing, so
+#     A's own re-stamp cannot land in the window at ANY load, and `kill -0` still answers for it,
+#     which is all the second beat's `lease_holder_dead` asks of A's pid.
+#   - A's POLL is 600, so its registration (`.lease-<A>`, `now + 3 x POLL`) stays live for half
+#     an hour: the second beat cannot LEGITIMATELY take a marker whose holder's lease ran out,
+#     which a long sweep against POLL 8's 24s lease could have let it do on a correct subject.
+#   - Both are CONTROLS read at the end of the window: A is still stopped (`ps` state T) and its
+#     registration is still in the future. Either one false voids the case rather than scoring
+#     it. reap_tree SIGKILLs A anyway, so the passing path never pays for the long POLL.
+#   - A's quantum is 2 x POLL, so its deadline (`now + quantum - POLL`) is POLL seconds out when
+#     its loop first checks it. At quantum POLL + 2 a two-second stall between computing the
+#     deadline and checking it would send A out of the loop without ever sleeping -- a load
+#     bound reintroduced one level down.
+NC_POLL=600
 run_noclobber() { # <subject> -> NC_* ; leaves W
   W="$( bash "$SEED" lease-noclobber )"
-  local pa pi i cur args
+  local pa pi i cur args le
   args=""
   for i in $(seq 1 30); do printf 'delivered\n' > "$W/d$i.md"; args="$args d$i.md"; done
-  bg_beat "$1" "$W" "$W/a.out" 10 8 a.md; pa=$BG
+  bg_beat "$1" "$W" "$W/a.out" "$(( 2 * NC_POLL ))" "$NC_POLL" a.md; pa=$BG
   # A ASLEEP, not merely started: A re-stamps once more after charging its beat and before the
-  # sleep, and a baseline read before that re-stamp would score A's own write as a clobber.
-  until_true 100 counter_is "$W" a.md 1 || true
-  sleep 0.5
+  # sleep, and a baseline read before that re-stamp would score A's own write as a clobber. The
+  # sleep child is the proof A is past every pre-loop write; then A is frozen where it stands.
+  NC_A_ASLEEP=0; until_true 600 tree_has_sleep "$pa" && NC_A_ASLEEP=1
+  tree_signal "$pa" STOP
   NC_M0="$(marker_of "$W")"
   NC_A="$(marker_pid "$W")"
   ( cd "$W" && AI_DLC_PROJECT_ROOT="$PWD" bash "$1" --status other.md ) > "$W/st.out" 2>&1
@@ -1196,6 +1402,11 @@ run_noclobber() { # <subject> -> NC_* ; leaves W
   NC_AFTER="$(marker_of "$W")"
   NC_DELIV="$(grep -c '^DELIVERED d' "$W/i.out" || true)"
   NC_A_ALIVE=0; [ -n "$NC_A" ] && kill -0 "$NC_A" 2>/dev/null && NC_A_ALIVE=1
+  NC_A_STOPPED=0
+  case "$NC_A" in ''|*[!0-9]*) : ;; *) case "$(ps -o stat= -p "$NC_A" 2>/dev/null)" in *T*) NC_A_STOPPED=1 ;; esac ;; esac
+  NC_A_LEASED=0; le=""
+  [ -n "$NC_A" ] && le="$(cat "$W/_bmad-output/.wait-beats/.lease-$NC_A" 2>/dev/null || echo '')"
+  case "$le" in ''|*[!0-9]*) : ;; *) [ "$le" -gt "$(date +%s)" ] && NC_A_LEASED=1 ;; esac
   reap_tree "$pa"
   separate_shells "$W" 2 "$W/a.out" "$W/i.out"
 }
@@ -1204,6 +1415,25 @@ noclobber_preconditions() { # <label>
   if [ "$NC_DELIV" = "30" ] && [ "$NC_A_ALIVE" -eq 1 ]; then
     ok "$1: CONTROL — the second beat delivered all 30 targets while A ($NC_A) stayed alive"
   else bad "$1: delivered $NC_DELIV of 30, A alive=$NC_A_ALIVE — the window under test never ran"; fi
+  if [ "$NC_A_ASLEEP" -eq 1 ] && [ "$NC_A_STOPPED" -eq 1 ]; then
+    ok "$1: CONTROL — A was in its poll sleep when frozen and still frozen at the window's end, so no marker write in the window is A's"
+  else bad "$1: A asleep=$NC_A_ASLEEP stopped=$NC_A_STOPPED — A could write the marker inside the window, so a change there is not attributable to the second beat"; fi
+  if [ "$NC_A_LEASED" -eq 1 ]; then
+    ok "$1: CONTROL — A's registration was still in the future at the window's end; no beat could take the marker legitimately"
+  else bad "$1: A's .lease-$NC_A was expired or absent at the window's end — a correct beat may take a dead holder's marker, so a change there is not a clobber"; fi
+}
+# What a sampled change MEANS, once the controls above hold. A is frozen, so A wrote nothing in
+# the window: a marker naming another pid is the second beat holding it, and a marker naming A's
+# own pid with a different epoch is the second beat's exit handing A's registration BACK -- it
+# took and returned the lease between two samples. Both are the clobber; they are worded apart so
+# a red says which, and so A's own re-stamp (impossible while frozen, and voided by the control
+# if A was not frozen) can never again be read as one.
+nc_clobber_reason() {
+  if [ -n "$NC_FOREIGN" ]; then
+    printf "the marker read '%s' mid-beat against A's '%s' — a second beat took a live holder's lease" "$NC_FOREIGN" "$NC_M0"
+  else
+    printf "the marker read '%s' mid-beat against A's '%s' — rewritten naming A's own pid with a new epoch while A was frozen, so another beat took the lease and handed it back between samples" "$NC_SEEN" "$NC_M0"
+  fi
 }
 C36_lease_noclobber() {
 run_noclobber "$SUBJ"
@@ -1213,7 +1443,7 @@ if grep -q '^STATUS --' "$W/st.out" && [ "$NC_STATUS" = "$NC_M0" ]; then
 else bad "lease-noclobber: --status rewrote the marker ('$NC_M0' -> '$NC_STATUS') or did not run"; fi
 if [ -z "$NC_SEEN" ]; then
   ok "lease-noclobber: an instantaneous beat never takes a live holder's marker, sampled throughout"
-else bad "lease-noclobber: the marker read '$NC_SEEN' mid-beat against A's '$NC_M0' — a second beat clobbered a live lease"; fi
+else bad "lease-noclobber: $(nc_clobber_reason)"; fi
 if [ "$NC_AFTER" = "$NC_M0" ]; then ok "lease-noclobber: CONTROL — A's marker is unchanged after that beat exits"
 else bad "lease-noclobber: marker '$NC_AFTER' after the instant beat, expected A's '$NC_M0'"; fi
 rm -rf "$W"

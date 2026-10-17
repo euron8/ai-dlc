@@ -27,17 +27,27 @@
 #     scratch path (`bind_scratch`: MO, PO, PE, RERUN_KEEP) rebound there, and RC/PRC its own;
 #   - it writes ONE verdict file, temp-then-mv, carrying the number of predicates it evaluated;
 #   - the parent counts verdicts against dispatches, and judges each with `judge`, which treats a
-#     missing verdict, a TIMEOUT, or an evaluated count other than |P_ALL| as a FAIL;
+#     missing verdict, a STALL record, or an evaluated count other than |P_ALL| as a FAIL;
 #   - `judge` itself is probed every run, on a real verdict file, in both directions.
 # The pool is a FIXED width of 8 (no knob); completion is read from sentinel files the scorers
 # write, never from the process table.
 #
-# THE WATCHDOG. bash 3.2 has no `wait -n`, so each scorer runs under a slot that polls it and,
-# past SCORER_BOUND seconds, writes a TIMEOUT marker and kills the scorer's whole process tree
-# (stopped first, then children before parents, so nothing reparents to init and keeps spinning).
-# The bound is sized against the LOADED cost, not the solo one: the unsplit fixture's loaded cost
-# was 1738s for 52 scorings plus the arms, about 33s a scoring, and a unit under the gate's pool
-# has measured 4x its solo time. 900s is roughly 27x that per-scoring figure.
+# THE WATCHDOG IS KEYED ON NO PROGRESS, NEVER ON ELAPSED TIME. bash 3.2 has no `wait -n`, so each
+# scorer runs under a slot that polls it. Every SCORER_POLL seconds the slot asks whether the
+# scorer has ADVANCED since its last advance -- rewritten its stage file `$VD/<id>.at` (one write
+# per predicate) or written any file under its own scratch `$WORK/mut-<id>/` (every partition and
+# merge run writes PO/PE/MO there) -- with `find -newer` against a mark the slot rotates on every
+# advance. Only a scorer that has neither exited nor advanced for SCORER_IDLE seconds is stopped:
+# the slot writes a `.stalled` record and kills the scorer's whole process tree (stopped first,
+# then children before parents, so nothing reparents to init and keeps spinning), and the reap
+# REFUSES the fixture, exit 2, naming the scorer and the marker. A stall is a harness that wedged,
+# not a verdict about a mutant, so it is never a FAIL row. A slow scorer on a loaded box keeps
+# writing and is never touched, however long it runs: the fixed 900s wall bound this replaced,
+# sized against a loaded cost, turned more load into a red row, which is self-inflicted.
+# SCORER_IDLE is sized to the longest single step that writes nothing -- one partition or merge
+# run -- and that is seconds; the 300s window is deliberately two orders of magnitude over it: a margin over one observed step, not a measurement; a refusal costs a re-run, never a verdict. THE TRADE: a scorer that writes forever never stalls, and the pool's
+# dispatch wait then waits on it; the bound on that wait is that every slot ends, by exit or by
+# this refusal.
 #
 # THE SHARDS (BL-485). The pre-push suite is POLE-BOUND: its makespan tracks its single longest
 # DIRECTORY, and this battery, 66 mutants in one unit, was that directory at 1481s loaded. So the
@@ -178,7 +188,8 @@ PY
 }
 
 POOL=8
-SCORER_BOUND=900
+SCORER_POLL=5
+SCORER_IDLE=300
 VD="$WORK/verdicts"; mkdir -p "$VD" || { echo "FIXTURE ERROR: cannot create $VD" >&2; exit 2; }
 IDX="$WORK/dispatch.tsv"; : > "$IDX"
 NDISP=0
@@ -191,7 +202,7 @@ scorer() { # <id> <label> <script-dir>
   WORK="$sw"; bind_scratch "$sw"; RC=""; PRC=""
   if tpl_eligible "$sd"; then RSM_TPL_HITS="$sw/tpl.hits"; : > "$RSM_TPL_HITS"; echo yes > "$sw/tpl.elig"
   else RSM_TPL=""; echo no > "$sw/tpl.elig"; fi
-  for p in $P_ALL; do n=$((n + 1)); "p_$p" "$sd" || dead="$dead $p"; done
+  for p in $P_ALL; do n=$((n + 1)); printf '%s\n' "$p" > "$VD/$id.at"; "p_$p" "$sd" || dead="$dead $p"; done
   dead="${dead# }"
   printf '%s\t%s\t%s\n' "$label" "$n" "$dead" > "$VD/$id.tmp" && mv "$VD/$id.tmp" "$VD/$id.v"
 }
@@ -201,14 +212,26 @@ killtree() { # <pid>: stop it, take its children down first, then it
   for c in $(pgrep -P "$1" 2>/dev/null); do killtree "$c"; done
   kill -9 "$1" 2>/dev/null
 }
-slot() { # <id> <label> <script-dir>: the scorer under its watchdog, then the completion sentinel
+slot() { # <id> <label> <script-dir>: the scorer under its no-progress watchdog, then the completion sentinel
   trap - EXIT
-  local id="$1" s t=0
+  local id="$1" s t=0 idle=0 mk="$VD/$1.mark" sc="$WORK/mut-$1"
+  : > "$mk"
   ( scorer "$@" ) &
   s=$!
   while kill -0 "$s" 2>/dev/null; do
-    if [ "$t" -ge "$SCORER_BOUND" ]; then : > "$VD/$id.timeout"; killtree "$s"; break; fi
     sleep 1; t=$((t + 1))
+    [ "$((t % SCORER_POLL))" -eq 0 ] || continue
+    : > "$mk.next"
+    if [ -n "$(find "$VD/$id.at" "$sc" -newer "$mk" -print -quit 2>/dev/null)" ]; then
+      mv "$mk.next" "$mk"; idle=0
+    else
+      idle=$((idle + SCORER_POLL))
+      if [ "$idle" -ge "$SCORER_IDLE" ]; then
+        printf '%s: the scorer neither exited nor advanced its progress marker (%s, or any file under %s) for %ss; its tree was killed\n' \
+          "$2" "$VD/$id.at" "$sc" "$SCORER_IDLE" > "$VD/$id.stalled"
+        killtree "$s"; break
+      fi
+    fi
   done
   wait "$s" 2>/dev/null
   : > "$VD/$id.done"
@@ -225,7 +248,7 @@ dispatch() { # <label> <script-dir> <expected dead set | NONE>
 # the three constants; it prints its one line and returns 0 (ok) or 1 (FAIL).
 judge() { # <verdict-stem> <label> <expected dead set | NONE>
   local stem="$1" label="$2" want="$3" lab n dead
-  if [ -e "$stem.timeout" ]; then printf '%s: TIMEOUT -- the scorer ran past %ss and was killed; no verdict\n' "$label" "$SCORER_BOUND"; return 1; fi
+  if [ -e "$stem.stalled" ]; then printf '%s: STALLED -- the scorer made no progress for %ss and was killed; no verdict\n' "$label" "$SCORER_IDLE"; return 1; fi
   if [ ! -f "$stem.v" ]; then printf '%s: NO VERDICT -- the scorer wrote nothing; a lost scorer is never a pass\n' "$label"; return 1; fi
   IFS='	' read -r lab n dead < "$stem.v"
   if [ "$lab" != "$label" ]; then printf '%s: the verdict file carries the label [%s]\n' "$label" "$lab"; return 1; fi
@@ -546,6 +569,14 @@ mutant "MC10 the single cross shard is named cross-1" merge-review-shards.sh "x_
 
 # ------------------------------------------------------------------------------ the reap
 wait
+# THE STALL IS A REFUSAL, read before any verdict: a scorer the watchdog stopped produced no
+# verdict about its mutant, and scoring the rest beside it would report a battery with a hole.
+nstall=0
+for _st in "$VD"/*.stalled; do
+  [ -e "$_st" ] || continue
+  nstall=$((nstall + 1)); printf '%s: FIXTURE BROKEN: %s\n' "$NAME" "$(cat "$_st")" >&2
+done
+[ "$nstall" -eq 0 ] || { echo "$NAME: FIXTURE BROKEN: $nstall scorer(s) stalled; no verdict is readable" >&2; exit 2; }
 nidx="$(grep -c . "$IDX")" || nidx=0
 nd="$(ndone)"
 if [ "$NDISP" -ge 2 ] && [ "$nidx" -eq "$NDISP" ] && [ "$nd" -eq "$NDISP" ]; then
@@ -589,10 +620,10 @@ while IFS='	' read -r id label want; do
 done < "$IDX"
 
 # THE JUDGMENT, PROBED ON A REAL VERDICT. The first MUTANT verdict this shard dispatched (the first
-# row whose expected set is not the control's NONE) is copied aside and judged three ways against a
+# row whose expected set is not the control's NONE) is copied aside and judged four ways against a
 # scratch counter: its own expected set must PASS (else the probe proves nothing about a judge that
-# always fails), a deliberately wrong set must FAIL, and the same stem with the verdict file deleted
-# must FAIL. The wrong set is a predicate name no P_ALL member carries, so it can equal no mutant's.
+# always fails), a deliberately wrong set must FAIL, a STALL record beside it must FAIL, and the
+# same stem with the verdict file deleted must FAIL. The wrong set is a predicate name no P_ALL member carries, so it can equal no mutant's.
 pv="$(awk -F'\t' '$3 != "NONE" { print $1; exit }' "$IDX")"
 pw="$(awk -F'\t' '$3 != "NONE" { print $3; exit }' "$IDX")"
 pl="$(awk -F'\t' '$3 != "NONE" { print $2; exit }' "$IDX")"
@@ -603,14 +634,55 @@ else
   red=0
   judge "$pd/p" "$pl" "$pw" > /dev/null || red=$((red + 100))
   judge "$pd/p" "$pl" "no_such_predicate" > /dev/null || red=$((red + 1))
-  : > "$pd/p.timeout"
+  : > "$pd/p.stalled"
   judge "$pd/p" "$pl" "$pw" > /dev/null || red=$((red + 1))
-  rm -f "$pd/p.timeout" "$pd/p.v"
+  rm -f "$pd/p.stalled" "$pd/p.v"
   judge "$pd/p" "$pl" "$pw" > /dev/null || red=$((red + 1))
   if [ "$red" -eq 3 ]; then
-    ok "MJ: the judgment passes ${pl%% *}'s real verdict against its own set, and FAILS it against a wrong set, beside a TIMEOUT marker, and with the verdict file deleted"
+    ok "MJ: the judgment passes ${pl%% *}'s real verdict against its own set, and FAILS it against a wrong set, beside a STALL record, and with the verdict file deleted"
   else
-    bad "MJ: the judgment probe scored $red (want 3: real+right ok, real+wrong red, real+timeout red, deleted red; +100 means the right set failed)"
+    bad "MJ: the judgment probe scored $red (want 3: real+right ok, real+wrong red, real+stalled red, deleted red; +100 means the right set failed)"
+  fi
+fi
+
+# THE WATCHDOG, PROBED. The real slot() runs, unmodified, over two stub scorers in a private verdict
+# directory and scratch tree (ids MW-*, so no join above reads them): one advances its progress marker
+# for about twice the idle bound and must finish unstalled, one writes nothing and must be stalled and
+# killed. SCORER_POLL=1 and SCORER_IDLE=4 are set in the probe subshell only. A watchdog that stalls
+# slow-but-advancing work, or one that never fires, fails here on every push.
+if [ "$GROUP" = a ]; then
+  mwd="$(mktemp -d "$WORK/mw-probe.XXXXXX")" || { echo "FIXTURE ERROR: cannot create the [MW] scratch directory" >&2; exit 2; }
+  mwr="$(
+    VD="$mwd/verdicts"; WORK="$mwd"; mkdir -p "$VD"
+    SCORER_POLL=1; SCORER_IDLE=4
+    scorer() { local i; for i in 1 2 3 4 5 6 7 8 9; do printf '%s\n' "$i" > "$VD/$1.at"; sleep 1; done; : > "$VD/$1.v"; }
+    SECONDS=0; slot MW-prog MW-prog x > /dev/null 2>&1; pe=$SECONDS
+    # The recorded pid is the own subshell of the scorer (the PPID that bash -c reads), the process
+    # slot() waits on and so reaps: a killed background child would sit as a zombie until launchd reaps it, and kill -0
+    # succeeds on a zombie, which would make this reading depend on load.
+    scorer() { bash -c 'echo "$PPID"' > "$VD/$1.pid"; sleep 30; }
+    SECONDS=0; slot MW-hung MW-hung x > /dev/null 2>&1; he=$SECONDS
+    pdn=0; pst=0; hdn=0; hst=0
+    [ -e "$VD/MW-prog.done" ] && pdn=1; [ -e "$VD/MW-prog.stalled" ] && pst=1
+    [ -e "$VD/MW-hung.done" ] && hdn=1; [ -e "$VD/MW-hung.stalled" ] && hst=1
+    hpid="$(cat "$VD/MW-hung.pid" 2>/dev/null)"; hkd=0
+    case "$hpid" in (''|*[!0-9]*) hkd=x ;; (*) kill -0 "$hpid" 2>/dev/null || hkd=1 ;; esac
+    echo "$pdn $pst $pe $hdn $hst $he $hkd"
+  )"
+  rm -rf "$mwd"
+  read -r mpd mps mpe mhd mhs mhe mhk <<< "$mwr"
+  [ -n "${mhk:-}" ] && [ "$mhk" != x ] || { echo "$NAME: FIXTURE BROKEN: the [MW] probe reported no result line or no hung-stub pid, so its slot() drive is unreadable; a refusal is re-run, never scored" >&2; exit 2; }
+  mwbad=""
+  # The progressing run must outlast the 4s idle bound (else it proves nothing), finish, and carry no stall record.
+  [ "${mpe:-0}" -ge 5 ] 2>/dev/null || mwbad="$mwbad the progressing stub ran ${mpe:-?}s, not past the 4s bound, so the probe cannot discriminate;"
+  [ "${mpd:-0}" = 1 ] && [ "${mps:-1}" = 0 ] || mwbad="$mwbad a scorer that advanced for ${mpe:-?}s past a 4s idle bound was stalled or never finished (done=${mpd:-?} stalled=${mps:-?});"
+  # The hung run must be stalled, and the stub's recorded pid dead once slot() returns -- binary facts,
+  # never a wall-clock bound, which under a loaded pool reds with no defect (the bug BL-592 removes).
+  [ "${mhs:-0}" = 1 ] && [ "${mhd:-0}" = 1 ] && [ "${mhk:-0}" = 1 ] || mwbad="$mwbad a scorer that made no progress was not stalled with its process dead (done=${mhd:-?} stalled=${mhs:-?} pid-dead=${mhk:-?});"
+  if [ -z "$mwbad" ]; then
+    ok "[MW] the watchdog lets a scorer that advanced for ${mpe}s past a 4s idle bound finish, and stalls one that made no progress (stalled, its process dead; ${mhe}s, information only)"
+  else
+    bad "[MW] the scorer watchdog probe failed:$mwbad"
   fi
 fi
 

@@ -492,20 +492,73 @@ discriminates() { # <label> <quiet-spec-dir> <offender-spec-dir> <prd>
   else bad "$lab (pin exited $a and offender exited $b — expected 0 and 2 in the same run)"; fi
 }
 
-run_bounded() { # <seconds> <script> <args...>  -- rc 0 completed, 1 killed at the bound
-  local secs="$1" prog="$2"; shift 2
-  bash "$prog" "$@" >/dev/null 2>&1 &
-  local pid=$! deadline
-  deadline=$(( $(date +%s) + secs ))
+# THE TERMINATION ARM READS A KERNEL FACT, NEVER A WALL CLOCK. It used to run the fold under a
+# 5s wall bound and score "killed at the bound" as the hang -- so a correct fold on a box at
+# load ~100 read as an accumulator that never returns, and the bound WAS the verdict. Now every
+# process the subject starts runs under `ulimit -t` (a CPU-SECONDS budget, inherited per
+# process), and every `awk` it starts is reached through a shim on PATH that logs `start <pid>`
+# and then `end <pid> <status>` when the real awk returns. A fold that loops is killed BY THE
+# KERNEL with SIGXCPU once it has burnt the budget, and its shim logs `end <pid> 152`
+# (128 + SIGXCPU). Load stretches the wall time a spinning awk needs to burn the budget; it
+# cannot make a terminating awk burn more CPU than it does, so a correct fold is never killed.
+# Measured on the fold-heavy kernel: the whole validator costs 0.03s of CPU, against a budget
+# of SJ_CPU_BUDGET seconds per process.
+#
+# THE KILL CANNOT BE READ OFF THE VERDICT LINE. The validator is `set -u` only, so an awk killed
+# inside `$( )` leaves the script running, and CAPS comes from `sed` over the prose, not from
+# the fold: measured, the hang mutant under the budget still exits 0 and prints PASS. The
+# shim's `end` record is the observable, and it is binary: every awk that started ended 0, or
+# one ended 152.
+#
+# THE NET IS A NO-PROGRESS REFUSAL, NEVER A VERDICT. A hang that burns no CPU (a blocked read)
+# would never reach the budget. While the subject is alive, its progress signature is the
+# shim log's line count plus the CPU time of every process in its tree; any change resets the
+# count, so a spinning awk advances it every tick and only a tree that is alive, logging
+# nothing and burning nothing for SJ_STALL_TICKS ticks is refused -- `FIXTURE BROKEN`, exit 2.
+# UNDER sandbox-exec THE SETUID /bin/ps IS REFUSED, so there the signature degrades to the log count
+# alone. The verdicts do not move: the SIGXCPU kill is the kernel's and the real fold exits by itself;
+# only the net watching for a CPU-free hang is coarser.
+# SJ_STALL_TICKS=300 IS a margin over one observed step, not a measurement; a refusal costs a re-run,
+# never a verdict.
+SJ_CPU_BUDGET="${SJ_CPU_BUDGET:-2}"
+SJ_STALL_TICKS="${SJ_STALL_TICKS:-300}"
+SJ_REAL_AWK="$(command -v awk)"
+SJ_SHIM="$R/awk-shim"
+mkdir -p "$SJ_SHIM" || { echo "spec-join-integrity: FIXTURE BROKEN: could not create the awk shim dir" >&2; exit 2; }
+printf '#!/bin/bash\nprintf "start %%s\\n" "$$" >> "$SJ_SHIM_LOG"\n"%s" "$@"; r=$?\nprintf "end %%s %%s\\n" "$$" "$r" >> "$SJ_SHIM_LOG"\nexit "$r"\n' \
+  "$SJ_REAL_AWK" > "$SJ_SHIM/awk" && chmod +x "$SJ_SHIM/awk" \
+  || { echo "spec-join-integrity: FIXTURE BROKEN: could not write the awk shim" >&2; exit 2; }
+broken() { printf '  FAIL  %s\n' "$1" >&2; echo "spec-join-integrity: FIXTURE BROKEN: $1" >&2; exit 2; }
+_tree_pids() { # <pid>: the pid and every descendant, one per line
+  local kid
+  printf '%s\n' "$1"
+  for kid in $(pgrep -P "$1" 2>/dev/null); do _tree_pids "$kid"; done
+}
+run_metered() { # <log> <script> <args...> -- 0 the subject exited; 2 it neither exited nor advanced
+  # stdout+stderr land in <log>.out; the shim's records in <log>.
+  local log="$1" prog="$2"; shift 2
+  : > "$log"
+  ( ulimit -t "$SJ_CPU_BUDGET"; SJ_SHIM_LOG="$log" PATH="$SJ_SHIM:$PATH" exec bash "$prog" "$@" ) > "$log.out" 2>&1 &
+  local pid=$! sig last="" still=0 pl
   while kill -0 "$pid" 2>/dev/null; do
-    if [ "$(date +%s)" -ge "$deadline" ]; then
+    pl="$(_tree_pids "$pid" | tr '\n' ',')"; pl="${pl%,}"
+    sig="$(grep -c '' "$log" 2>/dev/null)|$(ps -o time= -p "$pl" 2>/dev/null | tr -d ' \n')"
+    if [ "$sig" = "$last" ]; then still=$((still+1)); else still=0; last="$sig"; fi
+    if [ "$still" -ge "$SJ_STALL_TICKS" ]; then
       _kill_tree "$pid"; wait "$pid" 2>/dev/null
-      return 1
+      return 2
     fi
-    sleep 1
+    sleep 0.1
   done
   wait "$pid" 2>/dev/null
   return 0
+}
+meter_read() { # <log> -> "<awk starts>|<ended 0>|<killed by SIGXCPU>"
+  local s z k
+  s="$(grep -c '^start ' "$1")" || s=0
+  z="$(grep -c '^end [0-9]* 0$' "$1")" || z=0
+  k="$(grep -c '^end [0-9]* 152$' "$1")" || k=0
+  printf '%s|%s|%s' "$s" "$z" "$k"
 }
 
 mut2_says() { # <name> <from1> <to1> <from2> <to2> <must-contain> <label> <args...>
@@ -1383,17 +1436,27 @@ n_discrim "FOLD BOUND DISCRIMINATES: and so is an unclosed bold inside a descrip
 
 # --- (T) the fold TERMINATES --------------------------------------------------
 # A HANG IS NOT A FAILURE. Every other arm here reads an exit code or a message, and an
-# accumulator that never returns produces neither.
+# accumulator that never returns produces neither. The run is metered (run_metered, above):
+# terminating is "the subject exited, every awk it started logged `end ... 0`, and none was
+# killed for its CPU budget" -- three binary facts, none of them a wall time.
 NEW_ARMS=$((NEW_ARMS+1))
-if ! run_bounded 5 "$V" --spec "$R/fold-heavy" --prd "$R/prd-ok.md"; then
-  bad "TERMINATION: the fold did NOT complete within 5s on a fold-heavy kernel — an accumulator that never returns"
-elif ! bash "$V" --spec "$R/fold-heavy" --prd "$R/prd-ok.md" 2>&1 | grep -qF "PASS (2 locked requirement(s), 2 capability(ies)"; then
+run_metered "$R/meter.real" "$V" --spec "$R/fold-heavy" --prd "$R/prd-ok.md" \
+  || broken "validate-spec-join.sh neither exited nor advanced its awk log or its CPU time over $SJ_STALL_TICKS ticks"
+SJ_M="$(meter_read "$R/meter.real")"
+case "$SJ_M" in
+  0\|*) broken "the awk shim recorded no invocation on the real fold ('$SJ_M') -- the meter is not on the subject's PATH" ;;
+esac
+SJ_MZ="${SJ_M#*|}"; SJ_MZ="${SJ_MZ%%|*}"
+if [ "${SJ_M%%|*}" != "$SJ_MZ" ] || [ "${SJ_M##*|}" != 0 ]; then
+  bad "TERMINATION: on a fold-heavy kernel an awk did not end cleanly (starts|ended 0|killed by SIGXCPU = '$SJ_M') — an accumulator that never returns"
+elif ! grep -qF "PASS (2 locked requirement(s), 2 capability(ies)" "$R/meter.real.out"; then
   bad "TERMINATION: it completed but produced no verdict — completing is what a subject that emits nothing also does"
 else
-  ok "TERMINATION: the fold completes on a 600-line fold-heavy kernel within 5s AND reports its verdict"
+  ok "TERMINATION: the fold exits on a 600-line fold-heavy kernel, every awk it started ended 0 inside its ${SJ_CPU_BUDGET}s CPU budget, AND it reports its verdict"
 fi
-# THE ARM NEEDS A SUBJECT. A non-terminating fold must be killed by the bound, or this
-# assertion is one that cannot fire — the exact shape it exists to catch.
+# THE ARM NEEDS A SUBJECT. A non-terminating fold must be killed by the CPU budget, and the
+# kill must be READ from the shim log, or this assertion is one that cannot fire — the exact
+# shape it exists to catch.
 NEW_ARMS=$((NEW_ARMS+1))
 HANG_M="$R/mutant-fold-hang.sh"
 cp "$V" "$HANG_M"
@@ -1403,10 +1466,15 @@ if cmp -s "$V" "$HANG_M"; then
   bad "FIXTURE ERROR: the fold-hang mutation matched nothing — the termination arm proves nothing"
 elif ! bash -n "$HANG_M" 2>/dev/null; then
   bad "FIXTURE ERROR: the fold-hang mutant is not a valid shell script"
-elif run_bounded 5 "$HANG_M" --spec "$R/fold-heavy" --prd "$R/prd-ok.md"; then
-  bad "MUTATION: a non-terminating fold COMPLETED — the termination arm cannot fire"
+elif ! run_metered "$R/meter.hang" "$HANG_M" --spec "$R/fold-heavy" --prd "$R/prd-ok.md"; then
+  broken "the fold-hang mutant neither exited nor advanced its awk log or its CPU time over $SJ_STALL_TICKS ticks -- a spinning awk must advance its CPU time"
 else
-  ok "MUTATION: a non-terminating fold is caught by the bound, so the arm above has a subject"
+  SJ_MH="$(meter_read "$R/meter.hang")"
+  case "$SJ_MH" in
+    0\|*) broken "the awk shim recorded no invocation on the fold-hang mutant ('$SJ_MH') -- the meter is not on its PATH" ;;
+    *\|0) bad "MUTATION: a non-terminating fold logged no SIGXCPU kill (starts|ended 0|killed = '$SJ_MH') — the termination arm cannot fire" ;;
+    *) ok "MUTATION: a non-terminating fold is killed by its CPU budget and its awk logs exit 152 (SIGXCPU), so the arm above has a subject" ;;
+  esac
 fi
 
 # --- (33) after the first run, an item is PROSE -------------------------------

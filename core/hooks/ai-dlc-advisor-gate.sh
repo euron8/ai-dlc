@@ -14,7 +14,8 @@
 #     harness withdraws the tool, no call can clear a deny, and the gate only WARNS. A later
 #     result that is not `unavailable` re-arms the deny.
 #   - NO CONFIG KNOB AND NO DEFAULT on whether the gate applies (THE RE-READ's
-#     `ADVISOR_GATE_REREADS` can only make it stricter; THE WINDOW's `ADVISOR_GATE_WINDOW` sizes
+#     `ADVISOR_GATE_REREADS` can only make it stricter, by judging before the incoming call's line
+#     lands; THE WINDOW's `ADVISOR_GATE_WINDOW` sizes
 #     the recency window and never turns the gate off). That is decided PER AGENT from that
 #     agent's own transcript: the harness writes an `attachment` line of type `advisor_tool`
 #     (`available`, `toolChange`, `model`) when it grants the tool. No such line -> silent.
@@ -209,6 +210,9 @@
 #     `tool_use_id` in the input, a gated call on the transcript's LAST line is taken to be the
 #     incoming one; an attachment landing after the call (measured: a `hook_additional_context`
 #     line right after a `tool_use`) defeats that fallback, which is why it is only the fallback.
+#     With no `tool_use_id` the incoming line can never be SEEN, so at the default knob an owed
+#     call waits out THE RACE's 10s net and is SILENT (BL-630): the gate does not deny on a
+#     harness that sends no id. Measured above, the harness sends one.
 #
 # THE RACE, AND THE RE-READ. The current assistant message is usually NOT on disk when
 # PreToolUse fires. Measured (`claude -p` 2.1.294, 13 runs): the incoming call's own `tool_use`
@@ -217,13 +221,16 @@
 # of 13, the advisor's `server_tool_use` included. Measured on graph: 6 of 7 pushes issued in
 # the same message as their advisor call were denied. So a verdict of DENY or WARN is not final
 # on the first read: the hook re-scans every 0.25s until the incoming call's own line lands or a
-# wall-clock ceiling passes, and judges the LAST scan. An ALLOW is final at once and pays nothing.
+# 10s safety net passes. An ALLOW is final at once and pays nothing.
 # When the incoming call's own line is already on disk, every line of its message before it is
 # too, so nothing that could acquit is still in flight and the re-read stops. A re-read that
-# cannot be scanned keeps the verdict of the read that could. `ADVISOR_GATE_REREADS` (0 -> no
-# re-read, 1 -> a 2s ceiling, default -> 10s) can only LOWER the ceiling, so it can make the gate
-# stricter and never acquit; it exists so a fixture's deny cells do not each pay the ceiling. The
-# deny reason says to call the advisor in a message of its own, which is the shape that never races.
+# cannot be scanned keeps the verdict of the read that could. A DENY needs that line on disk
+# (BL-630): the net's expiry with the line still absent is SILENT, never a deny, so load cannot
+# turn a correct same-message advisor call into a deny. `ADVISOR_GATE_REREADS` (0 -> no re-read,
+# 1 -> a 2s bound, default -> the 10s net) can only make the gate stricter: `0` and `1` judge the
+# last scan at their bound and deny if owed, never acquitting; they exist so a fixture's deny cells
+# do not each pay the net. The deny reason says to call the advisor in a message of its own, which
+# is the shape that never races.
 #
 # THE LOOSENINGS (operator ruling, batch 218: "the push hook must loosen its advisor requirement").
 # Filed by the consumer after graph's lead was denied a push whose own message carried the advisor
@@ -601,11 +608,25 @@ judge
 if [ "$V" != allow ] && [ "$KIND" = push ] && l3_exempt; then exit 0; fi
 # The re-read: an owed verdict (DENY or WARN) on a read that did not yet hold the incoming call's
 # own line is re-judged every 0.25s until that line lands (SEEN=1: nothing of its message is still
-# in flight) or a 10s ceiling passes. A re-read that fails keeps the last good STATE. Measured on
+# in flight) or a 10s safety net passes. A re-read that fails keeps the last good STATE. Measured on
 # graph (CC 2.1.295): 3 of 4 same-message pushes were denied under the old fixed 2 x 1s.
-# The ceiling is wall clock, not a count: a scan's cost grows with the transcript and the load
-# (0.35s solo on a 4432-line graph prefix; graph's 815-line deny took 4.73s for 2 re-reads).
-case "${ADVISOR_GATE_REREADS:-2}" in 0) _cap=0 ;; 1) _cap=2 ;; *) _cap=10 ;; esac
+# The net is wall clock, not a count: a scan's cost grows with the transcript and the load
+# (0.35s solo on a 4432-line graph prefix; graph's 815-line deny took 4.73s for 2 re-reads), so a
+# count would stall without bound under load.
+# THE DENY IS DECIDED BY SEEN, NEVER BY THE CLOCK (BL-630, operator: "we need to not be so
+# sensitive to load"). Until batch 235 the 10s was a CEILING whose expiry denied, so under load --
+# fewer re-reads fit, and the write being waited for lands later -- a correct same-message advisor
+# call could be denied because time ran out. Now a deny needs SEEN=1: the transcript has advanced
+# past the incoming call and the advisor line is absent before it. The net only bounds the stall;
+# its expiry with SEEN still 0 is a state this hook cannot read and is SILENT with the reason on
+# stderr (PROTOCOL). Worst case is today's 10s; the settings template sets no hook timeout, so the
+# harness's own 60s default is the next ceiling above it.
+# THE KNOB STAYS STRICTER-ONLY, AND THAT IS WHY ONLY THE DEFAULT FAILS OPEN. `0` (no re-read) and
+# `1` (2s) judge the LAST scan at their bound and deny if owed, as before; a fail-open expiry there
+# would make a lower bound allow MORE. Per landing time of the incoming call's line: within 2s, both
+# judge the same scan; at 2-10s or never, `1` denies whenever the 2s scan is owed while the default
+# denies only an owed SEEN scan or stands down. So `1` denies a superset of what the default denies.
+case "${ADVISOR_GATE_REREADS:-2}" in 0) _cap=0; _net=0 ;; 1) _cap=2; _net=0 ;; *) _cap=10; _net=1 ;; esac
 _t0=$SECONDS
 while [ "$V" != allow ] && [ "${SEEN:-0}" != 1 ] && [ $((SECONDS - _t0)) -lt "$_cap" ]; do
   sleep 0.25
@@ -614,6 +635,10 @@ while [ "$V" != allow ] && [ "${SEEN:-0}" != 1 ] && [ $((SECONDS - _t0)) -lt "$_
   judge
 done
 [ "$V" = allow ] && exit 0
+if [ "$_net" = 1 ] && [ "${SEEN:-0}" != 1 ]; then
+  say "the incoming call's own transcript line did not land within the ${_cap}s safety net ($JUDGED); its message may still hold an advisor attempt, so the gate is silent"
+  exit 0
+fi
 
 # warn <text>: the WARNING emission, `additionalContext` with no decision.
 warn() {

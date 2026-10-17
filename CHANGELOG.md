@@ -20,6 +20,118 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.820.0] - 2026-10-17
+
+Batch 235 (combined release: the load series). Closes BL-589, BL-592 and BL-630. Advances BL-632 and BL-616, which
+stay OPEN. Carries c9's intakes 18 to 22, all docs only: BL-650 (a NOTE correcting 0.818.0's Limits, below), a BL-621
+addendum (a second instance of a session stating it skipped the re-approval), BL-651 (a DEFECT: I84 accepts a
+`stories_dir` reader whose only mention of the slot is a comment), a BL-587 addendum (Check 37 passes graph's planning
+gate with `prd.md:1289` still failing) and BL-652 (a DEFECT: `check-owed-derivations.sh` reads an absent record as 0
+findings). Those five are filings; none is fixed here and each stays OPEN. Closes no `PC-` id.
+
+### `wait-stale-deliverable` judges what the beat did, never how long it took (BL-589; BL-632)
+
+- lease-noclobber freezes beat A with SIGSTOP once it is in its poll sleep, and A runs at POLL 600 with a 2×POLL
+  quantum. A stopped process writes nothing, so A's own re-stamp cannot land in the window, and its lease cannot
+  expire under a long sweep, at any load. Two new controls void the case: A is still stopped (`ps` state T) and its
+  lease is still in the future at the end of the window. The clobber diagnostic separates a foreign pid from A's own.
+  A forced 15 s pre-sweep reproduces graph's red on the old fixture, including the same-pid false clobber; the new
+  fixture is green and its mutant still dies.
+- arrives-mid-beat, since-earlier, knob-split-forward, knob-split-reverse and receipt BL-547 asserted `ELAPSED`
+  bounds. They now read a recording `sleep` stub on the beat's PATH (one record per poll sleep); the stub is shown
+  to record (`stub_works`, or one `sleep 0` in the receipt) before an empty log is read as an absence.
+- marker-goes-stale bounds the dead beat's lease against a clock read AFTER the tree is reaped
+  (`LEASE <= KILL_T + 3*POLL`), and refuses when a late kill makes the END-time defect fit the bound too. New mutant
+  lease-end-time writes the END-time lease.
+- lease-handoff's read-early control is a sleep record: at the freeze A has recorded exactly one poll sleep and it
+  has not returned. A runs at POLL 600 and is woken on purpose after the read.
+
+### The advisor and recover gates deny on what they saw, never on the clock (BL-630)
+
+- A deny requires the incoming call's own `tool_use` line on disk (SEEN). The 10 s re-read is a safety net only.
+- OPERATOR RULING: at net expiry with SEEN=0 the hook exits silent with a stderr reason (fail-open). Knobs 0 and 1
+  (stricter-only) keep the time-only deny. A call with no `tool_use_id` is an unreadable state and is silent.
+- recover-gate's advisor stage takes the same rule; on expiry it allows, counts no refusal and keeps the owed file.
+- New cells `rr-seen` and `rr-never`; new mutants `net-expiry-denies` and `net-ignores-seen` (MIN_MUTANTS 99);
+  postcompact-rulebook-recovery arm A10 and its mutant. The net cell pays the full 10 s by construction, once per
+  scoring that reaches it.
+
+### A hang net refuses on no progress; it never fails a verdict (BL-632)
+
+- The scorer watchdogs of apply-self-overwrite-, remediator-shard-join-, review-shard-merge- and
+  self-update-fixture-log-mutants refuse (FIXTURE BROKEN, exit 2) after SCORER_IDLE=300 s with no fresh file under
+  the scorer's progress marker or work dir, instead of FAILing a row at 600/900 s of wall clock. This closes BL-592;
+  adversarial-shard-merge-mutants took the same watchdog in 0.813.0. New arm [MW] (shard a only in the sharded
+  batteries) drives the real `slot()` at SCORER_POLL=1 and SCORER_IDLE=4: a stub that keeps writing its progress
+  marker for about 9 s finishes with no `.stalled`, and a stub that writes nothing is stalled with its recorded pid
+  dead. Its `case` patterns are parenthesised, because bash 3.2 ends a multi-line `$( )` at a bare pattern `)` and
+  `bash -n` accepts it. self-update-fixture-log-mutants' progressing stub writes the `.lines` marker its `slot()`
+  watches, not `.at`.
+- fold-architect-ledger-join D6: a spin dies on `ulimit -t 10` CPU-seconds (a FAIL owned by D6); a blocked subject
+  is refused after 30 s with neither output growth nor CPU movement. The fold battery passes a refusal through as a
+  refusal; arm [MS] proves it in both directions.
+- readset-stage1-verdict's waits refuse at once if the producer exited, or after 30 s with no file change.
+- spec-join-integrity's termination arm reads a CPU-budget kill from an awk shim, not a 5 s wall bound; its hang
+  mutant was invisible to the old output check.
+- readset-skip's eleven live-trace waits end on their event, on owner death, or on a no-progress refusal; a leak is
+  a member alive after its leader with state and CPU unchanged, not a 2 s wall read.
+- Each window is stated as "a margin over one observed step, not a measurement; a refusal costs a re-run, never a
+  verdict".
+
+### Product deadlines named, not retuned (BL-632)
+
+- `wait-for-deliverable.sh` (IDLE_SECS, SETTLE, the chained-beat BUDGET guard, DEADLINE), `ai-dlc-continue.sh`
+  (RAPID_WINDOW_SECONDS) and `derive-fixture-readsets.sh` (:1088, :1510, :1568) carry comments naming the property
+  each bound stands for. Comment-only. The three load-sensitive ones are filed as BL-639, BL-640 and BL-641.
+
+### Correction to 0.818.0 (BL-650)
+
+- Correction to `[0.818.0]` Limits (BL-650): it said the delivering pull's step-1 stamp read "can still meet a stale
+  marker and be denied once". graph transcript `1556f1eb` (pull 0.812.0 to 0.818.0) was denied twice, at the
+  snapshot Read (line 34) and at the step-file Read (line 70), and its self-update DEFERred. On a DEFER the 0.818.0
+  hooks are written at the apply, not at step 2. Corrected: until the 0.818.0 hooks are written (at step 2, or at the
+  apply on a DEFER), an update session can be denied once per read stage the old gate holds, up to two. Neither deny
+  is a new defect; a deny after the apply would be a finding.
+
+### BL-616 item 7 closed as diagnosed; item 8 read once
+
+- Item 7: no reachable receipt flap, with 0 live `verify: sh` receipts against 55 `verify: manual`. UNSTABLE is a
+  correct refusal of a racing receipt.
+- Item 8, one reading at pool load (operator: one reading, not repeated runs): readset-sandbox-root-clause, run
+  inside the 30-unit wave, judged its stream window on attempt 1 of 10 with no drop notices. A single reading; it
+  bounds nothing.
+
+### Verification
+
+- One concurrent wave of the 30 units this release changes, plus their shard siblings, through `hermetic-run.sh`
+  the way the hook dispatches them (`xargs -P 12`, a private verdict store): 30 dispatched, 30 verdicts, 0 failing,
+  every unit `rc=0 required_missing=0`. Load 3.41 at the start and 31.08 at the end; the wave's wall clock was 1387 s,
+  information only.
+- postcompact-rulebook-recovery, read from its ANSI-stripped log against a skip: 0 `bad substitution`, 0
+  `command not found`, 52 mutant ok lines (0.819.0's 51 plus A10's one), all 9 `whose:` arms ok, 4 `postcompact:`
+  arms ok, and the A10 arm ok.
+- [MW] ok in shard a of all four batteries and absent from every other shard.
+- readset-skip's leak arm (t4, shard b) gives the same verdict under the sandbox tracer and plain: ok both ways, with
+  its mutant killed both ways.
+- wait-stale-deliverable: 142 ok, 0 failing; receipt BL-547 exits 0, with BL-549 from the same receipt as a control.
+
+### Limits
+
+- COST GREW UNDER THIS SERIES AND ITS CAUSE IS NOT ESTABLISHED. Loaded costs from the hooked dress rehearsal (the
+  hook's own pool), recorded before and after: advisor-gate-deny-mutants a-e 328/339/326/320/321 s to
+  379/438/396/373/354 s; review-shard-merge-mutants a/b/c 654/549/604 s to 1207/1193/1192 s;
+  self-update-fixture-log-mutants 51 s to 83 s; readset-skip, -b and -d 478/480/710 s to 984/1038/1261 s
+  (readset-skip-d, +551 s, was the rehearsal's longest unit; the record's longest are adversarial-shard-merge-mutants
+  shards, which that run did not dispatch). Load control from the same run: the 27 changed rows of units this
+  series touches have a median ratio of 1.25, the 35 of units it does not touch 0.96, and one untouched unit
+  (readset-skip-digest-mutants, 407 s to 893 s) also doubled, so contention alone can double a unit. Series commits
+  touching the inputs: review-shard-merge-mutants and self-update-fixture-log-mutants, the no-progress watchdog
+  (9312a79a, 2f758767, 8ad4c2de) and the [MW] arm (0305d8af, 3c6b2ec2, 14eec28c, 05f9d17b; shard a only, about 15 s);
+  readset-skip, 29752f78, c12e5d15 and e5b49b5a; advisor-gate-deny-mutants, f5876dc4 (two mutants added, and the net
+  cell pays its 10 s per scoring that reaches it). Filed as BL-655 (DEFECT); a base-against-tip CPU-seconds pair per
+  subject is owed.
+- No solo-against-pool receipt pair was taken for BL-616; the lead replaced the serial runs with the one wave.
+
 ## [0.819.0] - 2026-10-17
 
 Batch 235 (release BL-631). Closes BL-631 and BL-645. Closes no `PC-` id. Carries intake 17 (the BL-647 form (c)
