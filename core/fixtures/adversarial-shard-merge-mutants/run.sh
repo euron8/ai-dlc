@@ -617,7 +617,7 @@ if [ "$GROUP" = a ]; then
     SCORER_POLL=1; SCORER_IDLE=4
     scorer() { local i; for i in 1 2 3 4 5 6 7 8 9; do printf '%s\n' "$i" > "$VD/$1.at"; sleep 1; done; : > "$VD/$1.v"; }
     SECONDS=0; slot MW-prog MW-prog x > /dev/null 2>&1; pe=$SECONDS
-    # The recorded pid is the scorer's own subshell (bash -c's PPID), the process slot() waits on and
+    # The recorded pid is the scorer subshell itself (the PPID of bash -c), the process slot() waits on and
     # so reaps: a killed background child would sit as a zombie until launchd reaps it, and kill -0
     # succeeds on a zombie, which would make this reading depend on load.
     scorer() { bash -c 'echo "$PPID"' > "$VD/$1.pid"; sleep 30; }
@@ -626,7 +626,9 @@ if [ "$GROUP" = a ]; then
     [ -e "$VD/MW-prog.done" ] && pdn=1; [ -e "$VD/MW-prog.stalled" ] && pst=1
     [ -e "$VD/MW-hung.done" ] && hdn=1; [ -e "$VD/MW-hung.stalled" ] && hst=1
     hpid="$(cat "$VD/MW-hung.pid" 2>/dev/null)"; hkd=0
-    case "$hpid" in ''|*[!0-9]*) hkd=x ;; *) kill -0 "$hpid" 2>/dev/null || hkd=1 ;; esac
+    # Parenthesised patterns: inside a multi-line $( ), bash 3.2 ends the substitution at a bare
+    # pattern close paren, and an apostrophe in a comment here unbalances it the same way.
+    case "$hpid" in (''|*[!0-9]*) hkd=x ;; (*) kill -0 "$hpid" 2>/dev/null || hkd=1 ;; esac
     echo "$pdn $pst $pe $hdn $hst $he $hkd"
   )"
   rm -rf "$mwd"
