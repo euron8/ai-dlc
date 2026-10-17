@@ -1,0 +1,26 @@
+# Tools run.sh and the scripts it drives invoke; python3 is sprint-status.sh, which the scope classifier calls for the current sprint.
+awk
+basename
+bash
+cat
+cp
+cut
+dirname
+env
+find
+git
+grep
+head
+mkdir
+mktemp
+mv
+paste
+printf
+python3
+rm
+rmdir
+sed
+sort
+tr
+wc
+xargs
