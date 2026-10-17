@@ -611,17 +611,25 @@ record_artifact_write() { # $1 file_path -- silent no-op unless this is a planni
   # spelled from somewhere else.
   # `specs/s<N>/**` too: the requirements subject's SPEC kernel (and its `.memlog.md`) is one
   # whole-file part of a subject repair, and the subject join proves its one owner from these rows.
+  # `_raw_root` is the TREE the write landed in, the directory holding the state dir as the payload
+  # spelled it: this project's for the LOG_DIR and relative spellings, the spelled prefix for the
+  # fallback. `_raw_rel` alone drops it, so a worktree's or a clone's shard reads byte-identical to
+  # this tree's (BL-596).
+  _raw_root="${LOG_DIR%/*}"
   case "$1" in
     "$LOG_DIR"/planning-artifacts/*|"$LOG_DIR"/specs/s[0-9]*/*) _raw_rel="${STATE_DIR_NAME}/${1#"$LOG_DIR"/}" ;;
-    */${STATE_DIR_NAME}/planning-artifacts/*|*/${STATE_DIR_NAME}/specs/s[0-9]*/*) _raw_rel="${STATE_DIR_NAME}/${1#*/${STATE_DIR_NAME}/}" ;;
+    */${STATE_DIR_NAME}/planning-artifacts/*|*/${STATE_DIR_NAME}/specs/s[0-9]*/*) _raw_rel="${STATE_DIR_NAME}/${1#*/${STATE_DIR_NAME}/}"; _raw_root="${1%%/${STATE_DIR_NAME}/*}" ;;
     ${STATE_DIR_NAME}/planning-artifacts/*|${STATE_DIR_NAME}/specs/s[0-9]*/*) _raw_rel="$1" ;;
     # A gate adjudicator's PART FILE, `<nonce>.part-<i>of<N>.jsonl` beside the verdict. Its own
     # lines, so a mutation anchored on them cannot touch the two subjects above.
     "$LOG_DIR"/gate-adjudication/*.part-*.jsonl) _raw_rel="${STATE_DIR_NAME}/${1#"$LOG_DIR"/}" ;;
-    */${STATE_DIR_NAME}/gate-adjudication/*.part-*.jsonl) _raw_rel="${STATE_DIR_NAME}/${1#*/${STATE_DIR_NAME}/}" ;;
+    */${STATE_DIR_NAME}/gate-adjudication/*.part-*.jsonl) _raw_rel="${STATE_DIR_NAME}/${1#*/${STATE_DIR_NAME}/}"; _raw_root="${1%%/${STATE_DIR_NAME}/*}" ;;
     ${STATE_DIR_NAME}/gate-adjudication/*.part-*.jsonl) _raw_rel="$1" ;;
     *) return 0 ;;
   esac
+  # PHYSICAL, so `/tmp` and `/private/tmp` are one tree and a reader canonicalising its own root the
+  # same way compares bytes. A root that does not resolve is recorded as spelled.
+  _root_p="$(cd "$_raw_root" 2>/dev/null && pwd -P)" || _root_p="$_raw_root"
   mkdir -p "$ARTIFACT_LEDGER_DIR" 2>/dev/null || return 0
   # The three evidence fields are `record_verdict_write`'s, with the same meaning and the same
   # limit: `transcript_path` is the parent's and never an identity alone. They come AFTER the
@@ -632,9 +640,9 @@ record_artifact_write() { # $1 file_path -- silent no-op unless this is a planni
   # The payload is fed by here-string for the reason `record_verdict_write` gives: no fork.
   if ! jq -c --arg ts "$TIMESTAMP" --arg path "$_raw_rel" --arg agent "$AGENT_ID" \
          --arg session "${SESSION_ID:-}" --arg tool "$TOOL_NAME" \
-         --arg tp "$_rev_tp" --argjson at "$_rev_at" \
+         --arg tp "$_rev_tp" --argjson at "$_rev_at" --arg root "$_root_p" \
      '{v: 1, kind: "artifact-write", ts: $ts, path: $path, agent_id: $agent, session: $session, tool: $tool,
-       tool_use_id: (.tool_use_id // ""), transcript_path: $tp, agent_transcript: $at}' \
+       tool_use_id: (.tool_use_id // ""), transcript_path: $tp, agent_transcript: $at, root: $root}' \
      <<< "$INPUT" >> "$ARTIFACT_LEDGER" 2>/dev/null; then
     return 0
   fi

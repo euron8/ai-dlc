@@ -1622,8 +1622,13 @@ r_drive() { # [hook] -> drives the three spellings and the near-miss as adjudica
   drive "$W" Edit "/elsewhere/$R_REL" g7adj "" "$h" >/dev/null
   drive "$W" Write "$W/_bmad-output/gate-adjudication/${R_NONCE}.repair.md" g7adj "" "$h" >/dev/null
 }
-r_score() { # <label prefix> -> sets R_PRESENT R_KIND R_AGENT R_TWIN R_VN
+R_WP="$(cd "$W" && pwd -P)"
+r_score() { # <label prefix> -> sets R_PRESENT R_KIND R_AGENT R_TWIN R_VN R_RH R_RE
   R_PRESENT="$(r_count "$R_AL" ".path == \"$R_REL\"")"
+  # BL-596: the tree each write landed in -- this workspace for the LOG_DIR and relative spellings,
+  # the spelled prefix for the foreign-absolute one, which does not resolve and is kept as spelled.
+  R_RH="$(r_count "$R_AL" ".path == \"$R_REL\" and .root == \"$R_WP\"")"
+  R_RE="$(r_count "$R_AL" ".path == \"$R_REL\" and .root == \"/elsewhere\"")"
   R_KIND="$(r_count "$R_AL" ".path == \"$R_REL\" and .kind == \"artifact-write\"")"
   R_AGENT="$(r_count "$R_AL" ".path == \"$R_REL\" and .agent_id == \"g7adj\"")"
   R_TWIN="$(r_count "$R_AL" "(.path // \"\") | endswith(\".repair.md\")")"
@@ -1640,6 +1645,8 @@ if [ "$R_PRESENT" != 0 ]; then
     || bad "R: $R_KIND of $R_PRESENT part-file rows carry kind artifact-write — every reader filters on kind"
   [ "$R_AGENT" = "$R_PRESENT" ] && ok "R: every part-file row names the adjudicator's agent_id g7adj" \
     || bad "R: $R_AGENT of $R_PRESENT part-file rows name g7adj"
+  [ "$R_RH" = 2 ] && [ "$R_RE" = 1 ] && ok "R: root names the tree each write landed in: 2 rows this workspace, 1 /elsewhere (BL-596)" \
+    || bad "R: root rows this workspace=$R_RH /elsewhere=$R_RE (want 2, 1)"
 fi
 [ "$R_TWIN" = 0 ] && ok "R: the same adjudicator's Write to <nonce>.repair.md (not a part file) records NO artifact row" \
   || bad "R: a non-part gate-adjudication write recorded $R_TWIN artifact row(s)"
@@ -1659,6 +1666,14 @@ if mut mr-no-kind 's@{v: 1, kind: "artifact-write", ts: \$ts, path: \$path@{v: 1
   [ "$R_PRESENT" = 3 ] && [ "$R_KIND" = 0 ] && [ "$R_AGENT" = 3 ] && [ "$R_VN" = "$R_V0" ] \
     && ok "MR-kind: rows without kind are present (3) and the kind arm alone reads 0" \
     || bad "MR-kind: present=$R_PRESENT kind=$R_KIND agent=$R_AGENT verdict=$R_VN (want 3, 0, 3, $R_V0)"
+fi
+# (iii) the fallback spelling's root dropped, so a foreign-absolute write takes this tree's root: the
+# root arm alone moves, 3 rows this workspace and none /elsewhere.
+if mut mr-root-fallback 's@; _raw_root="\${1%%/\${STATE_DIR_NAME}/\*}" ;;@ ;;@g'; then
+  r_world; r_drive "$MW/mr-root-fallback.sh"; r_score
+  [ "$R_PRESENT" = 3 ] && [ "$R_KIND" = 3 ] && [ "$R_RH" = 3 ] && [ "$R_RE" = 0 ] \
+    && ok "MR-root: without the fallback's root every row names this workspace (3) and none /elsewhere" \
+    || bad "MR-root: present=$R_PRESENT kind=$R_KIND here=$R_RH elsewhere=$R_RE (want 3, 3, 3, 0)"
 fi
 rm -rf "$W"
 

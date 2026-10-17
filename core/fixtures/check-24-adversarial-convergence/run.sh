@@ -1280,6 +1280,12 @@ expect_silent ceiling-plateau-below "B -- CONSISTENCY" ceiling-above-limit \
 # because arm K's exit is shared with every other arm.
 expect shard-recovered 0 \
   "unsharded p1, then the sharded MET p2 the remedy prescribes: the series CLEARS" stories-adversarial-p
+expect shard-recovered-call 0 \
+  "the same recovery with every shard id in a local-model lead's call_ shape: the series CLEARS (BL-597)" stories-adversarial-p
+expect shard-recovered-xyz 1 \
+  "the same recovery with ids in no declared shape -- FAIL (K), the control the call_ cell is read against" stories-adversarial-p
+expect_says shard-recovered-xyz stories-adversarial-p "K-xyz-names-terminal" \
+  "FAIL (K -- SHARD): stories-adversarial-p2.md reviews"
 expect shard-terminal-unsharded 1 \
   "sharded p1, whole-subject TERMINAL p2 after the stamp -- FAIL (K)" stories-adversarial-p
 expect_says shard-terminal-unsharded stories-adversarial-p "K-names-terminal" \

@@ -228,6 +228,13 @@ p_dry "$MERGE" && ok "H3: --dry-run over two shards citing another story prints 
   || bad "H3: (rc=$RC) $(cat "$MO")"
 p_dry_barrier "$MERGE" && ok "H4: --dry-run with shard 1 missing AND a finding refusal in shard 2 prints exactly the missing-shard line and reads no stdin (stdin is a file of poison in the shard grammar)" \
   || bad "H4: (rc=$RC) $(cat "$MO")"
+# ---- BL-596: one tree. BL-597: a local-model lead's call_ ids. BL-598: the re-run start is bound.
+p_tree "$MERGE" && ok "TR1: shard 2's only row is a write to a worktree's copy -> REFUSED 'not this tree'; the same write through a symlink alias of this tree, and a ledger with no root field, each MERGE" \
+  || bad "TR1: (rc=$RC) $(cat "$MO")"
+p_tuid_call "$MERGE" && ok "TC1: every dispatch id in the call_ shape -> MERGED with the derived call_ ids; a real-shaped call_ self id that differs -> REFUSED" \
+  || bad "TC1: (rc=$RC) $(cat "$MO")"
+p_rerun_bind "$MERGE" && ok "RB1: --rerun 2.md@1999-01-01T00:00:00Z on a normal round -> REFUSED past BACKDATE_TOL_S; 45 s after the recorded dispatch time -> MERGED, superseded: none" \
+  || bad "RB1: (rc=$RC) $(cat "$MO")"
 
 # R6: a finding heading EXACTLY as the real pass wrote it carries no severity word, so the heads
 # counted (0 MAJOR) disagree with findings_major -- refused, never counted as zero.

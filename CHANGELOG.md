@@ -20,6 +20,41 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.816.0] - 2026-10-17
+
+Batch 235 (one release: BL-596, BL-597 and BL-598, the three filings BL-536 left open in the adversary merge).
+Closes BL-596, BL-597 and BL-598. Closes no `PC-` id.
+
+### The adversary merge credits only this tree's writes, admits a local-model lead's dispatch ids, and binds a re-run's start to its dispatch (BL-596, BL-597, BL-598)
+
+- **One tree (BL-596).** `record_artifact_write` in `ai-dlc-gate-remediation-guard.sh` records `root`, the physical
+  directory holding the state dir the write landed in. For the fallback spelling that is the spelled prefix, where
+  before the prefix was stripped; it is canonicalised with `cd && pwd -P`. The key goes after every existing one, so
+  the `"path":` spelling every reader matches is unchanged. `merge-adversarial-shards.sh` refuses by name a row under
+  its shard dir whose root is not this tree: "written under <root>, not this tree"; a worktree's or a clone's write is
+  not this tree's shard. A row with no `root` predates the field and reads as this tree's.
+  `join-remediator-shards.sh` and `validate-draft-stamps.sh` read the same ledger and are unchanged.
+- **One dispatch-id grammar (BL-597).** It is declared once, in `validate-adversarial-convergence.sh` beside the exit
+  ceilings: `DISPATCH_ID_PREFIXES` (`toolu_ call_`) for arm K's `k_has_ids` and K3's `k3_keys`, and `DISPATCH_ID_ERE`
+  for a real harness id, which the merge reads as it reads the ceilings and refuses to run without. The ERE admits
+  the three shapes subagent metas carry on the operator's machine (`toolu_` + 24 base62, `toolu_` + 13 digits + `_n`,
+  `call_` + 32 hex) and still rejects `toolu_cross1_g1_dispatch`. Arm K's self-probe holds the two declarations
+  together and gains a `call_` positive and an `xyz_` control. A local-model lead's `call_` round now passes arm K;
+  before, the merge wrote the ids and arm K read the line as carrying none.
+- **A bound re-run start (BL-598).** `--rerun <shard>.md@<S>` binds S to the credited dispatch's spawn-ledger `ts`
+  within `BACKDATE_TOL_S`, read from `validate-artifact-budget.sh` (the BACKDATED arm's tolerance), and refuses a start
+  past it: the re-run start is that dispatch's dispatched-at, never a typed time. An unreadable tolerance refuses.
+- Fixtures: `adversarial-shard-merge` gains TR1 (a worktree write refused; a symlink alias of this tree and a ledger
+  with no root field each merge), TC1 (the all-`call_` round merges with the derived ids; a real-shaped `call_` self id
+  that differs refuses) and RB1 (a 1999 start refuses; 45 s after the recorded dispatch merges, superseded: none). Its
+  merging `--rerun` cells record their new dispatch at S. Three mutants, each killed by its own predicate: TM14 to
+  shard a, TM15 to b and RM4 to e, the lowest-CPU shards, never f. `gate-remediation-deny` gains the root arm and a
+  mutant that drops the fallback spelling's root. `check-24-adversarial-convergence` gains `shard-recovered-call`
+  (PASS) and `shard-recovered-xyz` (FAIL), arm K run end to end. Every `adversarial-shard-merge` unit declares
+  `validate-artifact-budget.sh`.
+- Cost, as information: three predicates join a battery whose every scorer runs every predicate, so each of the
+  battery's scorers costs about 5% more, in a battery already under BL-646.
+
 ## [0.815.0] - 2026-10-17
 
 Batch 235 (releases (a) and (b), rebuilt on main: the repair procedure's wiring and the adversary merge's
