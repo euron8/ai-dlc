@@ -35031,7 +35031,7 @@ Built: (C3, step prose, branch b235-c9-h3) every adversarial-shard `--complete` 
 
 Built (C2/C4, H2, branch b235-c9-h2): `wait-for-deliverable.sh --complete --shard-header convergence|elicitation` delivers a marked shard only if the sibling `merge-adversarial-shards.sh --check-header <path> --axis <axis>` exits 0; otherwise every beat, the exhaustion path and `--status` print `UNFINISHED <path> -- ends in seat-complete: but the merge would refuse it: <refusal>`, routed ahead of UNSETTLED and checked before the settle window. The flag is refused (exit 64) without `--complete`, under `--complete-repair`, and when the sibling is missing at arming; a sibling that vanishes mid-join or exits other than 0/1 is a refusal, never an acquittal. Without the flag the output is byte-identical to 5e045cd4 (probe: two beats plus `--status` over headerless-marked, unmarked and absent targets, `cmp -s` identical). Fixture `wait-beat-liveness` section 17 (arms 1-7) and mutant M37. Owed: a read-set retrace of `wait-beat-liveness`, which now reads the merge.
 
-**LANDED (v0.822.0, verified 13ca153f).** merge-adversarial-shards.sh --check-header runs the merge's one header check on a shard; wait-for-deliverable.sh --complete --shard-header reads a marked shard the merge would refuse as UNFINISHED with the merge's refusal text; every adversarial-shard join arms it.
+**LANDED (v0.822.0, verified edcae8aa).** merge-adversarial-shards.sh --check-header runs the merge's one header check on a shard; wait-for-deliverable.sh --complete --shard-header reads a marked shard the merge would refuse as UNFINISHED with the merge's refusal text; every adversarial-shard join arms it.
 
 verify: manual
 
@@ -35045,7 +35045,7 @@ Fix (one of, builder to weigh against the existing shard corpus): count only `##
 
 Built: (C2, prose fix, branch b235-c9-h3) `adversary.md` states the reservation beside the probe instruction (item 4) and at the `findings=<n>` definition (item 5), citing FINDING GRAMMAR; the merge's counting is unchanged.
 
-**LANDED (v0.822.0, verified 349fb5f0).** Under ## Findings a ### heading opens a finding only if it carries CRITICAL/MAJOR/MINOR/NIT in UPPERCASE; any other is refused by name with the move-or-demote remedy; adversary.md cites the reservation.
+**LANDED (v0.822.0, verified edcae8aa).** Under ## Findings a ### heading opens a finding only if it carries CRITICAL/MAJOR/MINOR/NIT in UPPERCASE; any other is refused by name with the move-or-demote remedy; adversary.md cites the reservation.
 
 verify: manual
 
@@ -35069,7 +35069,7 @@ Scheduled in batch 235 for a later release (scope ruling: the boundary is the re
 
 Built: (C1/C2, branch b235-c9-h3) `_gate-procedures.md` "Validation cycle" item 3 and the "Adversarial review dispatch" pass-2+ sentence hand every requirements p1 shard, and the one-part serial adversary, `s<N>/requirements-elicitation.md` as the prior pass and `s<N>/requirements-elicitation-repair.md` as its repair; `adversary.md` "Later passes review the REPAIR" carries the carve-out. No name, verdict, merge flag or arm changes. Pin `gp-req-p1-prior` in `process-rule-pins` is a presence pin only. Measured saving, and its preconditions: graph sprint s318 only (the one sprint with p1, p2 and p3 all present); per shard, p1 102.6k output tokens and 1562 s summed wall, p2 18.5k and 290 s; tokens, not dollars; span is per-shard wall summed. Graph's next sprint must show the same sweep's p1 per-shard figure falling toward p2's, not near p1's.
 
-**LANDED (v0.822.0, verified 349fb5f0).** Requirements adversarial p1 is briefed under the pass-2+ contract with requirements-elicitation.md and requirements-elicitation-repair.md as its prior pass and repair; pinned by process-rule-pins gp-req-p1-prior.
+**LANDED (v0.822.0, verified edcae8aa).** Requirements adversarial p1 is briefed under the pass-2+ contract with requirements-elicitation.md and requirements-elicitation-repair.md as its prior pass and repair; pinned by process-rule-pins gp-req-p1-prior.
 
 verify: manual
 
@@ -35083,7 +35083,7 @@ Owner: ai-dlc-40 (lead ai-dlc-9c). It changes a script, so it rides whichever re
 
 Built (b235-c9-h4): `DEFAULT_MIN_SH` in `scripts/validate-backlog-receipts.sh` is now 0 and is the ONE source; `.githooks/pre-push` no longer passes `--min-sh-receipts`, and the R5 remedy text names `DEFAULT_MIN_SH`. A bare run and a run with the gate's flags both exit 0 on the live ledger.
 
-**LANDED (v0.822.0, verified 0374967d).** DEFAULT_MIN_SH is 0, the gate's value, and the gate no longer passes --min-sh-receipts: a bare run and the gate answer alike.
+**LANDED (v0.822.0, verified edcae8aa).** DEFAULT_MIN_SH is 0, the gate's value, and the gate no longer passes --min-sh-receipts: a bare run and the gate answer alike.
 
 verify: manual
 
@@ -35109,7 +35109,7 @@ Owner: ai-dlc-40 (lead ai-dlc-9c). It changes a script and a fixture, so it ride
 
 Built (b235-c9-h4): the budget now lives in `fork-budget.txt` at the repo root, outside `scripts/` and `core/`, declared only by `validator-fork-budget/inputs.decl`. Through the runner's own `hermetic-run.sh --key-only` over all 264 declared fixtures, a budget-only change re-keyed `validator-fork-budget` alone and a one-line validator edit re-keyed 21.
 
-**LANDED (v0.822.0, verified 9369fe17).** FORK_BUDGET lives in fork-budget.txt at the repo root, read only by validator-fork-budget; a budget-only change re-keys that one fixture.
+**LANDED (v0.822.0, verified edcae8aa).** FORK_BUDGET lives in fork-budget.txt at the repo root, read only by validator-fork-budget; a budget-only change re-keys that one fixture.
 
 verify: manual
 
