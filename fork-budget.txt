@@ -1,0 +1,13 @@
+# The fork budget for scripts/validate-enforcement-map.sh, and the ONE place it is declared.
+# Its only reader is core/fixtures/validator-fork-budget/run.sh, which holds the validator to it
+# (A3 ceiling, A4 stale-high). The validator never reads it, so a raise here re-keys that one
+# fixture and no unit keyed on the validator. This file sits at the repo root, outside scripts/
+# and core/, because a directory declared in another fixture's inputs.decl keys every file under
+# it. Do not move it under either.
+#
+# Raise it as a one-line diff to the assignment below, and put the measurement for the raise in a
+# comment here, above the line. The history of earlier raises is in the paragraph above the
+# pointer in scripts/validate-enforcement-map.sh. There is deliberately NO environment override.
+#
+# The reader anchors at column 0 and requires exactly ONE line matching ^FORK_BUDGET=<digits>$.
+FORK_BUDGET=3446

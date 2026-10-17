@@ -236,6 +236,135 @@ p_tuid_call "$MERGE" && ok "TC1: every dispatch id in the call_ shape -> MERGED 
 p_rerun_bind "$MERGE" && ok "RB1: --rerun 2.md@1999-01-01T00:00:00Z on a normal round -> REFUSED past BACKDATE_TOL_S; 45 s after the recorded dispatch time -> MERGED, superseded: none" \
   || bad "RB1: (rc=$RC) $(cat "$MO")"
 
+# ---- BL-577: `### ` under `## Findings` is reserved for a finding (FINDING GRAMMAR). BL-575: one
+# header check, owned by the merge, callable on one file as --check-header. These arms are INLINE,
+# not `p_<name> "$MERGE"` predicates: a predicate joins P_ALL and the mutant battery's J1 and XM1
+# sets, which live in adversarial-shard-merge-mutants/run.sh. RM-A and RM-B below are this
+# fixture's own mutants, built PM1's way in a copy of the merge's whole sibling set.
+mk_markers() { # <shard dir>: every shard ends in its seat-complete marker, n = its `### M<n>` findings
+  local f n
+  for f in "$1"/*.md; do
+    n="$(grep -c '^### M[0-9]' "$f")" || n=0
+    printf '\nseat-complete: stories adversary %s findings=%s\n' "$(basename "$f" .md)" "$n" >> "$f"
+  done
+}
+set_major() { sed "s/^findings_major: .*/findings_major: $2/" "$1" > "$1.tmp" && mv "$1.tmp" "$1"; } # <shard file> <n>
+PROBES='### Probes run (no finding)\n\nProbed the ordinal citation of every AC; each holds.'
+RESERVED='is a `### ` heading under `## Findings` with no severity word'
+# RS1: the filed incident -- graph s319 requirements-p1/2.md, findings=0, a probes subsection.
+d="$(hdr_world "## Findings\n\n$PROBES")"; mk_markers "$d"; run_merge "$MERGE" "$d"
+refused_clean "$RESERVED" "$d" && has "$MO" "move it under its own \`## \` section, or demote it to \`#### \`" && has "$MO" "2.md:5 is" \
+  && ok "RS1: '### Probes run (no finding)' under ## Findings, findings=0 -> REFUSED naming the reserved form and the fix (line 5), nothing written" \
+  || bad "RS1: a severity-less ### under ## Findings was not refused with the reserved-form message (rc=$RC): $(cat "$MO")"
+d="$(hdr_world "## Findings\n\n## Probes\n\n$PROBES")"; mk_markers "$d"; run_merge "$MERGE" "$d"
+[ "$RC" -eq 0 ] && has "$MO" "MERGED:" && has "$MO" "major=4" \
+  && ok "RS1c: the same probes under their own ## Probes section -> MERGED, shard 2 counting 0 (major=4 = shards 1 and 3)" \
+  || bad "RS1c: the probes moved to ## Probes did not merge with shard 2 at 0 (rc=$RC): $(cat "$MO")"
+# RS2 / RS3: the F-form and the bare severity form each open ONE finding (s315-s317 write the second).
+for cell in 'RS2|### F-1 (MAJOR) the ordinal map omits story 2' 'RS3|### MAJOR: the ordinal map omits story 2'; do
+  id="${cell%%|*}"; h="${cell#*|}"
+  d="$(hdr_world "## Findings\n\n$h\n\nstories: 2\n")"; set_major "$d/2.md" 1; mk_markers "$d"
+  printf '\n' >> "$d/2.md"; sed 's/^seat-complete: stories adversary 2 findings=0$/seat-complete: stories adversary 2 findings=1/' "$d/2.md" > "$d/2.tmp" && mv "$d/2.tmp" "$d/2.md"
+  run_merge "$MERGE" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "major=5" \
+    && ok "$id: '$h' counts as 1 MAJOR finding (findings=1 marker agrees; merged major=5)" \
+    || bad "$id: '$h' was not counted as one MAJOR finding (rc=$RC): $(cat "$MO")"
+done
+# RS4: a non-finding ### inside a fence under ## Findings is ignored.
+d="$(hdr_world "## Findings\n\n\`\`\`text\n$PROBES\n\`\`\`")"; mk_markers "$d"; run_merge "$MERGE" "$d"
+[ "$RC" -eq 0 ] && has "$MO" "major=4" \
+  && ok "RS4: the probes heading inside a fence under ## Findings -> ignored, MERGED at shard 2 = 0" \
+  || bad "RS4: a fenced ### under ## Findings was not ignored (rc=$RC): $(cat "$MO")"
+
+# CH1-CH8: --check-header on one file. The base is a real B3 shard, which passes; each cell varies ONE field.
+ch() { bash "$MERGE" --check-header "$1" --axis "$2" > "$MO" 2>&1; RC=$?; } # <shard file> <axis>
+chv() { sed "$2" "$1" > "$3"; } # <src> <sed script> <dst>
+d="$(b3_world)"; c="$WORK/ch"; mkdir -p "$c"
+ch "$d/1.md" convergence
+[ "$RC" -eq 0 ] && [ ! -s "$MO" ] && ok "CH1: --check-header on a complete shard (verdict: EXIT_CONDITION_MET) -> exit 0, nothing printed" \
+  || bad "CH1: a complete shard did not pass --check-header silently (rc=$RC): $(cat "$MO")"
+chv "$d/1.md" '/^verdict:/d' "$c/nov.md"; ch "$c/nov.md" convergence; ch_out="$(cat "$MO")"; ch_rc=$RC
+# The merge's own refusal of the SAME bytes, in a world where that shard is the only defect.
+dm="$(b3_world)"; sed '/^verdict:/d' "$dm/1.md" > "$dm/1.tmp" && mv "$dm/1.tmp" "$dm/1.md"; run_merge "$MERGE" "$dm"
+m_line="$(grep '^REFUSED:' "$MO")"
+ch_tail="${ch_out#* declares }"; m_tail="${m_line#* declares }"
+if [ "$ch_rc" -eq 1 ] && [ "$RC" -eq 2 ] && [ "$ch_tail" != "$ch_out" ] && [ "$ch_tail" = "$m_tail" ] \
+   && has "$WORK/ch/nov.md" "findings_major:" && [ "${ch_out#REFUSED: }" != "$ch_out" ] \
+   && case "$ch_tail" in "verdict '<none>', not one of"*) true ;; *) false ;; esac; then
+  ok "CH2: no verdict: line -> --check-header exit 1 with the merge's own refusal text (the same line the merge prints for that shard, path aside)"
+else
+  bad "CH2: no-verdict shard: --check-header rc=$ch_rc [$ch_out], merge rc=$RC [$m_line]"
+fi
+for cell in "CH3|s/^verdict: .*/verdict: PENDING-LEAD/|declares verdict 'PENDING_LEAD'" \
+            "CH4|/^lead_role:/d|declares no lead_role" \
+            "CH5|s/^lead_role: .*/lead_role: <the step file that invoked or dispatched the evaluation>/|an unfilled template placeholder" \
+            "CH6|s/^verdict: .*/verdict: <EXIT_CONDITION_MET|EXIT_CONDITION_NOT_MET|DIVERGENT_HARD_BLOCK>/|declares verdict 'EXIT_CONDITION_MET_EXIT_CONDITION_NOT_MET_DIVERGENT_HARD_BLOCK'" \
+            "CH7|s/^verdict: .*/verdict: EXIT_CONDITION_MET # stamped by the adversary/|declares verdict 'EXIT_CONDITION_MET_STAMPED_BY_THE_ADVERSARY'"; do
+  id="${cell%%|*}"; rest="${cell#*|}"; tok="${rest##*|}"; scr="${rest%|*}"
+  chv "$d/1.md" "$scr" "$c/$id.md"; ch "$c/$id.md" convergence
+  [ "$RC" -eq 1 ] && has "$MO" "REFUSED: $c/$id.md" && has "$MO" "$tok" \
+    && ok "$id: [$scr] -> --check-header exit 1, '$tok'" || bad "$id: [$scr] gave rc=$RC: $(cat "$MO")"
+done
+# CH7 pins the comment decision: a trailing ` #` comment is NOT stripped (the merge never stripped it).
+cp "$d/1.md" "$c/m.md"; printf '\nseat-complete: stories adversary 1 findings=3\n' >> "$c/m.md"; ch "$c/m.md" convergence
+[ "$RC" -eq 1 ] && has "$MO" "findings=3' but its ## Findings section heads 2 finding(s)" \
+  && ok "CH8: a marker declaring findings=3 over 2 findings -> --check-header exit 1 with the merge's truncation refusal" \
+  || bad "CH8: (rc=$RC) $(cat "$MO")"
+cp "$d/1.md" "$c/m2.md"; printf '\nseat-complete: stories adversary 1 findings=2\n' >> "$c/m2.md"; ch "$c/m2.md" convergence
+[ "$RC" -eq 0 ] && ok "CH8c: the same shard with findings=2 -> exit 0" || bad "CH8c: (rc=$RC) $(cat "$MO")"
+chv "$d/1.md" 's/^skill: .*/skill: bmad-advanced-elicitation/;/^verdict:/d' "$c/el0.md"; ch "$c/el0.md" elicitation; r0=$RC
+chv "$d/1.md" 's/^skill: .*/skill: bmad-advanced-elicitation/' "$c/el1.md"; ch "$c/el1.md" elicitation; r1=$RC
+[ "$r0" -eq 0 ] && [ "$r1" -eq 1 ] && has "$MO" "declares a verdict; an elicitation shard carries none" \
+  && ok "CH9: --axis elicitation: no verdict -> exit 0; with a verdict -> exit 1 'an elicitation shard carries none'" \
+  || bad "CH9: elicitation axis gave no-verdict rc=$r0, with-verdict rc=$r1: $(cat "$MO")"
+chv "$d/1.md" "s/^## Findings$/## Findings\\
+\\
+### Probes run (no finding)\\
+/" "$c/rs.md"; ch "$c/rs.md" convergence
+[ "$RC" -eq 1 ] && has "$MO" "$RESERVED" && ok "CH10: --check-header refuses the reserved-form heading the merge refuses" \
+  || bad "CH10: (rc=$RC) $(cat "$MO")"
+
+# RM-A / RM-B: mutants of the merge, each in a copy of its whole sibling set, the anchor applied exactly once.
+mut_merge() { # <old> <new> -> prints the mutated merge's path; empty when the anchor is not there once
+  local md s
+  md="$(mktemp -d "$WORK/rm.XXXXXX")" || return 1
+  for s in merge-adversarial-shards.sh validate-adversarial-convergence.sh validate-steering-budget.sh partition-document.sh partition-subject.sh validate-artifact-budget.sh; do
+    [ -f "$SRCDIR/$s" ] && cp "$SRCDIR/$s" "$md/"
+  done
+  M_OLD="$1" M_NEW="$2" python3 - "$md/merge-adversarial-shards.sh" <<'PY' || return 0
+import os, sys
+p = sys.argv[1]; t = open(p, encoding="utf-8").read(); o = os.environ["M_OLD"]
+if t.count(o) != 1: sys.exit(3)
+open(p, "w", encoding="utf-8").write(t.replace(o, os.environ["M_NEW"]))
+PY
+  cmp -s "$MERGE" "$md/merge-adversarial-shards.sh" && return 0
+  [ -f "$md/partition-document.sh" ] && [ -f "$md/validate-adversarial-convergence.sh" ] && bash -n "$md/merge-adversarial-shards.sh" || return 0
+  printf '%s' "$md/merge-adversarial-shards.sh"
+}
+# RM-A: "any ### opens a finding" restored. RS1's world then reads the probes heading as a finding, so
+# the reserved-form refusal is gone and the count it inflates is what refuses (--dry-run prints every
+# refusal of that phase, so the marker-count mismatch is visible beside the citation refusal).
+ma="$(mut_merge 'if (sev($0) == "NONE") { if (rline == 0) rline = NR; next } ' '')"
+if [ -z "$ma" ]; then bad "RM-A: FIXTURE STALE -- the reservation anchor is not in the merge exactly once; re-anchor it, never relax RS1"
+else
+  d="$(hdr_world "## Findings\n\n$PROBES")"; mk_markers "$d"
+  bash "$ma" --dry-run "$d" > "$MO" 2>&1; RC=$?
+  [ "$RC" -eq 2 ] && has "$MO" "findings=0' but its ## Findings section heads 1 finding(s)" && ! has "$MO" "$RESERVED" \
+    && ok "RM-A: with every ### opening a finding, RS1's world reports the marker-count mismatch (findings=0 vs 1) and no reserved-form refusal -- RS1 watches the reservation" \
+    || bad "RM-A: the restored any-### parse gave rc=$RC: $(cat "$MO")"
+fi
+# RM-B: the verdict enum weakened in THE ONE header check. Both --check-header AND a full merge then
+# accept the verdict-less shard, which proves they read one source.
+mb="$(mut_merge '    EXIT_CONDITION_MET|EXIT_CONDITION_NOT_MET) ;;' '    EXIT_CONDITION_MET|EXIT_CONDITION_NOT_MET|"") ;;')"
+if [ -z "$mb" ]; then bad "RM-B: FIXTURE STALE -- the verdict-enum anchor is not in the merge exactly once; re-anchor it, never relax CH2"
+else
+  bash "$mb" --check-header "$c/nov.md" --axis convergence > "$MO" 2>&1; r_ch=$?
+  dm="$(b3_world)"; sed '/^verdict:/d' "$dm/1.md" > "$dm/1.tmp" && mv "$dm/1.tmp" "$dm/1.md"; run_merge "$mb" "$dm"
+  [ "$r_ch" -eq 0 ] && [ "$RC" -eq 0 ] && has "$MO" "MERGED:" \
+    && ok "RM-B: with the verdict enum weakened in check_header_core, --check-header (exit 0) AND the full merge (MERGED) both accept the verdict-less shard -- one source" \
+    || bad "RM-B: weakened enum gave --check-header rc=$r_ch and merge rc=$RC: $(cat "$MO")"
+fi
+
 # R6: a finding heading EXACTLY as the real pass wrote it carries no severity word, so the heads
 # counted (0 MAJOR) disagree with findings_major -- refused, never counted as zero.
 d="$(b3_world)"

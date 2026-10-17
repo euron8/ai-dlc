@@ -883,7 +883,7 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   I75 +10 (one more root-consulting subject, core/scripts/serial-remediation-worklist.sh), I84 +2,
 #   I83 +1; no other arm moved. The new directory is serial-remediation-worklist, which ships.
 #   HIGH tip reading 3442 plus the same 4.
-FORK_BUDGET=3446
+# The assignment moved to fork-budget.txt at the repo root; this script never read it. New raises are recorded there.
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

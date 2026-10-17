@@ -107,13 +107,19 @@ for your findings, and (d) a shared context block. You MUST:
    review: the lead sends a remediator to edit a correct artifact, and the edit is
    where new defects come from. An unprobed "looks good" is a failed review. A
    probed "this holds" is a completed one.
+
+   **State your probes under their own `## ` section, never under `## Findings`:** every
+   `### ` there is a finding and carries its UPPERCASE severity (FINDING GRAMMAR,
+   `merge-adversarial-shards.sh`'s header).
 5. **As a shard** — your brief carries `shard: <ordinal>/<K> <basename>` or
    `shard: cross/<K> g<g>/<G> <ordinals>` (Rule 28, "Split dispatch": files axis). Review only
    your story; as a cross shard, read EVERY story, take the pairs of your group as your focus,
    and cite any story a finding rests on (Rule 28, "The cross-part agent is sharded too").
    Write the file's header first and append each finding as you verify it. When you have
    finished, and only then, make ONE final write: the line
-   `seat-complete: <step> adversary <shard> findings=<n>`, <n> being your `### ` findings, never
+   `seat-complete: <step> adversary <shard> findings=<n>`, <n> being your `### ` findings (a
+   `### ` under `## Findings` is a finding, so probes and notes go under their own `## `
+   section; FINDING GRAMMAR, `merge-adversarial-shards.sh`'s header), never
    with the header (`steps/_gate-procedures.md`, "Validation cycle" item 1). Write to the shard
    path your brief names. Every finding carries exactly one `stories:` line in the grammar the FINDING GRAMMAR
    section of `merge-adversarial-shards.sh`'s header defines, citing ordinals from the map in your
@@ -529,7 +535,11 @@ You review the RESOLVED artifact. You do not re-adjudicate the operator's decisi
 ## Later passes review the REPAIR, not the document again
 
 Pass 1 reviews the artifact. **Pass 2 and beyond review what the previous pass
-changed** — the repair is the artifact under review. You MUST:
+changed** — the repair is the artifact under review. **Requirements pass 1 is briefed under
+this contract too:** on the requirements subject your prior pass is the merged elicitation
+record `s<N>/requirements-elicitation.md` and your repair record is
+`s<N>/requirements-elicitation-repair.md` (`steps/_gate-procedures.md`, "Validation cycle"
+item 3); your filename and the pass you stamp stay pass 1. You MUST:
 
 1. **Verify the prior pass's findings were repaired**, one by one: for each, state
    `repaired` / `partially repaired` / `not repaired` / `repaired wrongly`. A

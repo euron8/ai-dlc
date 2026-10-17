@@ -17,3 +17,5 @@ patterns/
 .claude/rules/
 CLAUDE.md
 .ai-dlc-fixture-readsets.tsv
+# The fork budget, declared in its own file at the repo root. Only this fixture reads it; nothing else may declare it or a directory covering it (repo root files are not under scripts/ or core/).
+!fork-budget.txt

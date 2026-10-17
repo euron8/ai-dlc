@@ -14,7 +14,7 @@
 #
 # WHY NOT AN ARM IN validate-enforcement-map.sh. Measured 20.2s per run, referenced from 36
 # fixture directories, and the two mutation batteries at #2/#3 of the duration table drive it
-# through ~20 and ~17 mutants each. It is also the only file carrying FORK_BUDGET. This is the
+# through ~20 and ~17 mutants each. This is the
 # same reasoning .githooks/pre-push already records for validate-shell-portability.sh.
 #
 # WHY NOT AN ARM IN validate-claude-rules.sh, which owns the repo's other ceiling. A6 sums BYTES
