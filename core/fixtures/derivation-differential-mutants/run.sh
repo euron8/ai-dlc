@@ -74,10 +74,13 @@ else
   exit 2
 fi
 
-# failed_arms <log> -> sorted arm ids (A1a, A3b, ...) the driver reported FAIL on
-failed_arms() { sed -n 's/^  FAIL  \(A[0-9]*[a-z]\) .*/\1/p' "$1" | sort -u; }
+# failed_arms <log> -> sorted arm ids (A1a, A3b, S1c, ...) the driver reported FAIL on. The driver
+# carries TWO arm families: A (the differential itself) and S (BL-631's scoped-join worlds, S1-S3).
+# Both are accepted, and nothing else: a third prefix, or a seed row such as "S0 seed:" with no
+# letter, still fails to parse, so the line-versus-id count below still catches it.
+failed_arms() { sed -n 's/^  FAIL  \([AS][0-9]*[a-z]\) .*/\1/p' "$1" | sort -u; }
 # parsed_ids <log> -> how many ids the parse above yields, DUPLICATES COUNTED
-parsed_ids() { sed -n 's/^  FAIL  \(A[0-9]*[a-z]\) .*/\1/p' "$1" | awk 'END { print NR + 0 }'; }
+parsed_ids() { sed -n 's/^  FAIL  \([AS][0-9]*[a-z]\) .*/\1/p' "$1" | awk 'END { print NR + 0 }'; }
 
 # compare_sets <moved-file> <declared-file> -> one line `<verdict>|<declared but green>|<failed but undeclared>`
 # verdict: killed (equal sets), entangled (extras only), missed (a declared arm stayed green; any
@@ -191,8 +194,10 @@ mutate() {
 #   A9a A9b           the zero-pass guard cannot fire when every base value is empty.
 #   A16n              the W16N corpus carries beta, so it breaks the same way.
 #   A19a A19b         the same zero-pass guard, over W19's broken root (measured at the BL-588 tip).
+#   S3c               BL-631's two-break world: with the base side unread, the PAST file's stale
+#                     derivation joins the CURRENT one, so "exactly one NEWLY-FAILING row" moves.
 mutate R1-ignore-base-side \
-  "A1c A1d A2a A2b A2c A3a A3b A3c A3d A9a A9b A16n A18b A18c A19a A19b" \
+  "A1c A1d A2a A2b A2c A3a A3b A3c A3d A9a A9b A16n A18b A18c A19a A19b S3c" \
   'if (brc == 1) B[k] = v' \
   's/if (brc == 1) B\[k\] = v/if (0) B[k] = v/'
 
@@ -208,8 +213,11 @@ mutate R1-ignore-base-side \
 # That is 38 arms plus A18d, and A19b A19n A19o A19p from W19/W19N (A19a already expects exit 2).
 # Measured at the BL-588 tip: the 42 ids that run could parse match exactly; A18d is the renamed seed
 # row it could not parse.
+#   S1c S1d S2n S2o S3a S3b S3c S3d  BL-631's scoped-join worlds: each expects a verdict over the
+#                     CURRENT break (S1c/S1d, S3a-S3d) or over a kept classifier (S2n/S2o), and the
+#                     restored gate refuses first. S1a/S1b/S1e and S2a-S2c already expect a refusal.
 mutate R2-stamp-equality-refusal \
-  "A1a A1b A1c A1d A2a A2c A3a A3c A3d A4a A5b A5n A5o A6n A6p A8b A8n A9b A11a A11b A11n A12a A12b A13a A13b A14n A14o A15a A16a A16b A16n A17b A17c A17n A17o A18a A18b A18c A18d A19b A19n A19o A19p" \
+  "A1a A1b A1c A1d A2a A2c A3a A3c A3d A4a A5b A5n A5o A6n A6p A8b A8n A9b A11a A11b A11n A12a A12b A13a A13b A14n A14o A15a A16a A16b A16n A17b A17c A17n A17o A18a A18b A18c A18d A19b A19n A19o A19p S1c S1d S2n S2o S3a S3b S3c S3d" \
   'Information only -- at hand-back both read <base>."' \
   '/Information only -- at hand-back both read <base>\."$/a\
 [ "$(stamp_commit < "$BR/.claude/.ai-dlc-version" 2>/dev/null)" != "$(stamp_commit < "$CONSUMER/.claude/.ai-dlc-version" 2>/dev/null)" ] || refuse stamps "both roots carry the same stamp commit, so the apply has not been run."
@@ -228,8 +236,11 @@ mutate R2-stamp-equality-refusal \
 # reader parses), and one awk serves every world, so A18d moves too. A9c stays green: on the broken
 # root the swap scores the base side's lone stale-only-at-base derivation (gamma) NEWLY-FAILING, so
 # the run exits 1 without the refusal and never prints the clear. The derivation yields 25 arms plus A18d.
+#   S1c S1d S2n S2o S3a S3b S3c  BL-631's scoped-join worlds: the CURRENT break reads repaired once
+#                     the sides swap, so each arm expecting it NEWLY-FAILING (or an exit 1) moves. S3d
+#                     (the dropped file's out-of-scope row) is printed before the comparison and holds.
 mutate R3-side-swap \
-  "A1a A1b A1c A1d A2c A5n A5o A6n A6p A9a A9b A11a A11b A12a A13a A13b A14n A14o A15a A16a A16b A17n A17o A18a A18b A18c A18d A19a A19b A19n A19o A19p" \
+  "A1a A1b A1c A1d A2c A5n A5o A6n A6p A9a A9b A11a A11b A12a A13a A13b A14n A14o A15a A16a A16b A17n A17o A18a A18b A18c A18d A19a A19b A19n A19o A19p S1c S1d S2n S2o S3a S3b S3c" \
   '-v fB="$TMP/b.err" -v fT="$TMP/t.err"' \
   's|-v fB="$TMP/b.err" -v fT="$TMP/t.err"|-v fB="$TMP/t.err" -v fT="$TMP/b.err"|'
 

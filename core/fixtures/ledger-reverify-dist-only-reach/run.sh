@@ -512,16 +512,23 @@ awk '
   END { exit (n1 == 1 && n2 == 1 && n3 == 1) ? 0 : 3 }' "$RV" > "$MB/ledger-reverify.sh"
 mb_rc=$?
 # The residue check reads CODE lines only: the engine's comments name the staged file too.
-# ONE LEGITIMATE SECOND READER IS EXCLUDED, BY NAME AND BY COUNT: the subject-set staging awk reads
-# the staged entries into `$LR_STAGE/subjects`. It is not a layer of the here-string conversion --
-# with the staging write gone it reads a missing file, its own `else` arm keeps every row at its
-# prior kind, and the run continues. The exclusion keys on the line that writes `subjects`, and
-# the unmutated engine must carry EXACTLY ONE such line, so the exclusion cannot widen silently.
-mb_subj="$(grep -v '^[[:blank:]]*#' "$RV" | grep -F '"$LR_STAGE/entries"' | grep -cF '"$LR_STAGE/subjects"')" || mb_subj=0
-mb_left="$(grep -v '^[[:blank:]]*#' "$MB/ledger-reverify.sh" | grep -F '"$LR_STAGE/entries"' | grep -cvF '"$LR_STAGE/subjects"')" || mb_left=0
+# TWO LEGITIMATE OTHER READERS ARE EXCLUDED, BY NAME AND BY COUNT. Neither is a layer of the
+# here-string conversion, and with the staging write gone each reads a missing file and keeps every
+# row at its prior kind:
+#   - the subject-set staging awk, which reads the staged entries into `$LR_STAGE/subjects` (its own
+#     `else` arm), keyed on the line that writes `subjects`;
+#   - the bare-prefix detail count in named_ambiguous, which counts open live entries out of the same
+#     staged file (its `|| return 0`), keyed on its own `ENVIRON["LR_P"]` program text.
+# The unmutated engine must carry EXACTLY TWO such lines between them, so the exclusion cannot widen
+# silently: a third reader of the staged file is residue, and is reported.
+MB_X1='"$LR_STAGE/subjects"'
+MB_X2='index($1, ENVIRON["LR_P"]) == 1 && !s[$1]++ { n++ }'
+mb_excl() { grep -v '^[[:blank:]]*#' "$1" | grep -F '"$LR_STAGE/entries"' | grep -F -e "$MB_X1" -e "$MB_X2"; }
+mb_subj="$(mb_excl "$RV" | grep -c .)" || mb_subj=0
+mb_left="$(grep -v '^[[:blank:]]*#' "$MB/ledger-reverify.sh" | grep -F '"$LR_STAGE/entries"' | grep -cvF -e "$MB_X1" -e "$MB_X2")" || mb_left=0
 mb_here="$(grep -c '^done <<< "\$ENTRIES"$' "$MB/ledger-reverify.sh")" || mb_here=0
-if [ "$mb_rc" -ne 0 ] || cmp -s "$RV" "$MB/ledger-reverify.sh" || [ "$mb_left" -ne 0 ] || [ "$mb_here" -ne 1 ] || [ "$mb_subj" -ne 1 ]; then
-  bad "B mutant M-B1 DID NOT APPLY in full (awk rc $mb_rc, staged-file code lines left $mb_left, here-string lines $mb_here, subject-staging readers in the engine $mb_subj want 1), so the refusal arm is unproven"
+if [ "$mb_rc" -ne 0 ] || cmp -s "$RV" "$MB/ledger-reverify.sh" || [ "$mb_left" -ne 0 ] || [ "$mb_here" -ne 1 ] || [ "$mb_subj" -ne 2 ]; then
+  bad "B mutant M-B1 DID NOT APPLY in full (awk rc $mb_rc, staged-file code lines left $mb_left, here-string lines $mb_here, excluded staged-file readers in the engine $mb_subj want 2), so the refusal arm is unproven"
 else
   rc="$(run_b "$MB/ledger-reverify.sh" "")"; n="$(hand_rows)"
   if [ "$rc" != 0 ] || [ "$n" != 3 ]; then

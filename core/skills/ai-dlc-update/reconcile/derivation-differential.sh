@@ -197,7 +197,7 @@ cleanup() {
   [ -n "$WT_PARENT" ] && { rm -f "$WT_PARENT/pid" 2>/dev/null; rmdir "$WT_PARENT" 2>/dev/null; }
   rm -f "$TMP/files" "$TMP/chain" "$TMP/blobs" "$TMP/pairs" "$TMP/list.out" "$TMP/list.err" \
         "$TMP/b.out" "$TMP/b.err" "$TMP/t.out" "$TMP/t.err" "$TMP/rows" "$TMP/counts" \
-        "$TMP/operands" "$TMP/moved" "$TMP/owed" "$TMP/owed.keep" "$TMP/scope.err" 2>/dev/null
+        "$TMP/operands" "$TMP/moved" "$TMP/owed" "$TMP/owed.keep" "$TMP/scope.err" "$TMP/dropped" 2>/dev/null
   rmdir "$TMP" 2>/dev/null
 }
 trap cleanup EXIT
@@ -464,6 +464,8 @@ fi
 cat "$TMP/rows"
 # A file the scope dropped is named, never silently absent: one row per hit-bearing PAST or HISTORY file.
 # It is not run, not recorded, not refused and not closed.
+printf '%s\n' "$VD_DROPPED" > "$TMP/dropped" \
+  || refuse tmp "could not stage the out-of-scope file list, so a dropped file would go unnamed."
 while IFS="$(printf '\t')" read -r _dt _dp; do
   [ -n "$_dp" ] || continue
   case "$_dt" in
@@ -471,7 +473,7 @@ while IFS="$(printf '\t')" read -r _dt _dp; do
     *)    _dw="a history file (an archive, or an ai-dlc rotation output)" ;;
   esac
   say_row INFO out-of-scope "${_dt}	${_dp} carries a recorded derivation naming a path this range changed, and is ${_dw}: it is not this pull's to repair, so it is NOT run, NOT recorded, NOT refused at the gate and NOT carried forward, and it is not closed."
-done <<<"$VD_DROPPED"
+done < "$TMP/dropped"
 
 # ---- NOTEs: what the differential cannot attribute -----------------------------------------
 # Operands are read as whitespace-split words of the recorded command with globbing OFF, so a

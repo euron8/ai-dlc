@@ -336,7 +336,7 @@ if [ -n "$STORIES_DIR_T" ] && [ -n "$STORIES_SLOT" ]; then
   # to a corpus that has not moved there yet, and blind is spelled SKIP.
   STORIES_AREA="${STORIES_DIR_T%%"$STORIES_SLOT"*}"
   STORIES_AREA="${STORIES_AREA%/*}"
-  # The SLOT COMPONENT's fixed text either side of the placeholder (`s{sprint}` -> `s` and empty),
+  # The SLOT COMPONENT's fixed text either side of the placeholder (`s` and empty, today),
   # cut from the same template, so Check 6 can recognise ANY sprint's slot directory without
   # spelling the `s` itself.
   _slot_comp="${STORIES_DIR_T#"$STORIES_AREA"/}"

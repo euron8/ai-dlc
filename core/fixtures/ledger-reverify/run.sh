@@ -5571,7 +5571,7 @@ dp_kill mutation-bare-bold-no-shape "$bb_m1" \
 # shape still opens the entry, so the neighbour keeps one row, but the label is "" and the entry
 # and its receipt vanish together — the half of the fix a shape-only change leaves broken.
 bb_m2="$(rl_dir bb-narrow-strip)" \
-  && rl_mutant "$bb_m2" ledger-reverify.sh 'sub(/^(- )?\*\*/' 'sub(/^- \*\*/' 4 \
+  && rl_mutant "$bb_m2" ledger-reverify.sh 'sub(/^(- )?\*\*/' 'sub(/^- \*\*/' 3 \
   && rl_mutant "$bb_m2" lib.sh 'sub(/^(- )?\*\*/' 'sub(/^- \*\*/' 2 || bb_m2=""
 dp_kill mutation-bare-bold-narrow-strip "$bb_m2" \
   '$2 ~ /PC-FIXTURE-BARE-BOLD-RECORD/ {g=1} $2 ~ /PC-FIXTURE-DASHED-ABOVE-BARE-BOLD/ {n++} END{exit !(!g && n == 1)}' \
