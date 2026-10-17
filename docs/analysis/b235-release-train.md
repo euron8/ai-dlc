@@ -1028,3 +1028,11 @@ c9 verified intake-26 on main (BL-605/656 byte-equal to 7bc0bd40; verify: 56) an
 
 ## 2:36 PM
 SLOT GO (b) to c9 at load 2.94. c9 has collected all four hands at 13ca153f (local, base 06ae8b85, 7 commits, 19 files, +749/-129). The slot runs serially: (1) the four changed fixtures solo through hermetic-run with a private store; (2) adversarial-shard-merge base vs tip, CPU, BTBTBT; (3) the wait-beat-liveness read-set retrace in the main checkout detached at 13ca153f, which I granted. The main checkout must go back to main and clean afterwards. VERSION 0.822.0 is reserved for c9 at the gate SLOT GO.
+
+## 2:53 PM
+slot (b) item 1 GREEN at 13ca153f, run solo in a clean worktree with a private store:
+- adversarial-shard-merge: rc 0, 149 s. RS1-4, CH1-10 and RM-A/B printed ok.
+- wait-beat-liveness: rc 0, 196 s. S17 (19 arms) and M37 printed ok.
+- process-rule-pins: rc 0, 19 s. gp-req-p1-prior mutants killed.
+- validator-fork-budget: rc 0, 35 s. 3442 of FORK_BUDGET 3446; 15/15 mutants killed.
+required_missing=0 on all four. Item 2 (BTBTBT timing, about 15 min) is running; item 3 (trace) comes after.
