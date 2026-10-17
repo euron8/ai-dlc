@@ -1018,3 +1018,27 @@ c9 has collected H1, H3 and H4 on b235-c9-build at 9191b5fd (local, base 5e045cd
 
 ## 2:23 PM
 The train log is now TRACKED at docs/analysis/b235-release-train.md, on the operator ruling that it must be durable and in the repo. The scratchpad copy is retired, and every entry from here on goes to this file and rides the next docs commit. Intake-26 (5e045cd4..7bc0bd40: the BL-605 addendum and BL-656) rides the same commit, with 71 as the sole carrier. Its verify: count goes from 55 to 56.
+
+## 2:31 PM
+The train-log docs commit LANDED as 06ae8b85 (PR #1186). Verified by content: the diff against a7281089 is rc 0, VERSION is 0.821.0, the parent is 5e045cd4, and the control diff against 5e045cd4 is rc 1. The push ran the suite rather than skipping it, since the new file had no recorded pass: 22 PASS, 0 FAIL. GATE CLOSED was sent to c9 and f7.
+Carrier for later appends: this worktree (/Users/n8/git/ai-dlc-wt-train, branch b235-train based on origin/main) is the lead docs tree for the rest of the batch. Appends are committed here and ride c9's release as a docs-only range under the standing intake rule. Then the batch close carries the final entries. On main the log runs one landing behind by design.
+
+## 2:31 PM
+c9 verified intake-26 on main (BL-605/656 byte-equal to 7bc0bd40; verify: 56) and deleted it. c9 now holds no intake branches. b235-c9-build is rebased onto 06ae8b85 at 9369fe17 (6 commits, range-diff 6/6 identical; backup b235-c9-build-pre at c5350be5). H2 is still running, and slot (b) is next. c9 will ask for the train-log range before cutting its release commit.
+
+## 2:36 PM
+SLOT GO (b) to c9 at load 2.94. c9 has collected all four hands at 13ca153f (local, base 06ae8b85, 7 commits, 19 files, +749/-129). The slot runs serially: (1) the four changed fixtures solo through hermetic-run with a private store; (2) adversarial-shard-merge base vs tip, CPU, BTBTBT; (3) the wait-beat-liveness read-set retrace in the main checkout detached at 13ca153f, which I granted. The main checkout must go back to main and clean afterwards. VERSION 0.822.0 is reserved for c9 at the gate SLOT GO.
+
+## 2:53 PM
+slot (b) item 1 GREEN at 13ca153f, run solo in a clean worktree with a private store:
+- adversarial-shard-merge: rc 0, 149 s. RS1-4, CH1-10 and RM-A/B printed ok.
+- wait-beat-liveness: rc 0, 196 s. S17 (19 arms) and M37 printed ok.
+- process-rule-pins: rc 0, 19 s. gp-req-p1-prior mutants killed.
+- validator-fork-budget: rc 0, 35 s. 3442 of FORK_BUDGET 3446; 15/15 mutants killed.
+required_missing=0 on all four. Item 2 (BTBTBT timing, about 15 min) is running; item 3 (trace) comes after.
+
+## 3:03 PM
+slot (b) DONE, and the slot is free.
+Timing, adversarial-shard-merge in CPU-s, BTBTBT, HEAD asserted before each rep: base 115.02 / 115.90 / 114.37, tip 124.14 / 125.75 / 124.36. The delta is +9.3 CPU-s (+8.1%), about 6x the spread (~1.6). Wall is +11 s. The growth comes from 18 new arms at about 0.5 s each, so the mutants stay inline.
+Trace: wait-beat-liveness, sandbox, rc 0, 229/229 proper-subset control. The map is +4/-2 with only that fixture's rows moving (5c44cc48). The main checkout is restored to local main 4e6670c1 with 0 dirty files.
+c9 GATE ASK: b235-c9-build at 5c44cc48 (9 commits) covers BL-575, 577, 594, 613 and 614. SLOT GO (c) goes to c9 with VERSION 0.822.0. This train-log range rides it as a docs-only range.

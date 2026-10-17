@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# Hold scripts/validate-enforcement-map.sh to the FORK_BUDGET it declares about itself.
+# Hold scripts/validate-enforcement-map.sh to the FORK_BUDGET declared for it in fork-budget.txt.
 #
 # WHY THIS FIXTURE EXISTS. That script stated its own cost in a comment -- a fork count, a
 # per-fork cost, and the CPU-seconds the suite pays for it. Every figure was true when
 # written, nothing read the sentence, and by the time anyone re-measured it was several times
 # low while reading exactly like a fresh measurement. The budget is now a line of code
-# (`FORK_BUDGET=` in that file) and this is its reader. A prose number decays silently; a
+# (`FORK_BUDGET=` in fork-budget.txt at the repo root) and this is its reader. A prose number decays silently; a
 # gated one decays into a failed push.
 #
-# WHY FORK COUNT AND NOT WALL CLOCK. The rejection is recorded beside `FORK_BUDGET` itself and
+# WHY FORK COUNT AND NOT WALL CLOCK. The rejection is recorded in scripts/validate-enforcement-map.sh,
+# in the raise history above the fork-budget.txt pointer, and
 # is not restated here: it is about pool contention and about the resolution a loaded-box
 # threshold can reach. What matters at this end is that fork count is deterministic and
 # load-independent, which is what lets arm A2 assert EQUALITY across two runs rather than a
@@ -94,12 +95,15 @@ note() {
 # paragraph above the assignment, and a paragraph is not a value. Exactly one declaring line
 # must exist: zero means the declaration moved and this fixture would be judging against an
 # empty string, two means a reader elsewhere could take the other one.
-BUDGET_LINES="$(grep -cE '^FORK_BUDGET=[0-9]+$' "$VAL")"
+BUDGET_FILE="$REPO/fork-budget.txt"
+[ -f "$BUDGET_FILE" ] || { echo "FIXTURE ERROR: missing $BUDGET_FILE" >&2; exit 2; }
+echo "HERMETIC-CONSUMED fork-budget.txt"
+BUDGET_LINES="$(grep -cE '^FORK_BUDGET=[0-9]+$' "$BUDGET_FILE")"
 if [ "$BUDGET_LINES" -ne 1 ]; then
-  note "FIXTURE BROKEN: $VAL declares $BUDGET_LINES line(s) matching '^FORK_BUDGET=<n>$'; exactly 1 is required."
+  note "FIXTURE BROKEN: $BUDGET_FILE declares $BUDGET_LINES line(s) matching '^FORK_BUDGET=<n>$'; exactly 1 is required."
   exit 1
 fi
-BUDGET="$(sed -n 's/^FORK_BUDGET=\([0-9][0-9]*\)$/\1/p' "$VAL")"
+BUDGET="$(sed -n 's/^FORK_BUDGET=\([0-9][0-9]*\)$/\1/p' "$BUDGET_FILE")"
 
 # Corpus size, reported alongside the absolute number so that a future reading can tell
 # CORPUS GROWTH from an algorithmic regression. It is deliberately NOT a divisor: a
@@ -179,7 +183,7 @@ judge() {
   fi
   # A3 ceiling
   if [ "$t" -gt "$b" ]; then
-    echo "RED measured $t fork(s) against FORK_BUDGET=$b ($((t - b)) over). Across $NFX fixture directories that is $((t / (NFX > 0 ? NFX : 1))) fork(s) per fixture. The suite runs this validator well over a hundred times per full push, so this is a change to the suite's wall clock. Either remove the forks (scripts/fork-profile.sh --section by-line names the sites) or raise FORK_BUDGET in $VAL as a deliberate one-line diff."
+    echo "RED measured $t fork(s) against FORK_BUDGET=$b ($((t - b)) over). Across $NFX fixture directories that is $((t / (NFX > 0 ? NFX : 1))) fork(s) per fixture. The suite runs this validator well over a hundred times per full push, so this is a change to the suite's wall clock. Either remove the forks (scripts/fork-profile.sh --section by-line names the sites) or raise FORK_BUDGET in $BUDGET_FILE as a deliberate one-line diff."
     return
   fi
   # A4 stale-high

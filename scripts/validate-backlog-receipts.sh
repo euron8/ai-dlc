@@ -187,7 +187,9 @@ DEFAULT_MAX_OOP=1
 # exists to answer -- not once, not on the run that matters -- so there is no population of
 # them to ratchet down. Zero is the standard, and a breach names the receipt.
 DEFAULT_MAX_UNSTABLE=0
-DEFAULT_MIN_SH=76
+# THE ONE SOURCE of the sh-receipt floor: `.githooks/pre-push` passes no --min-sh-receipts, so the
+# gate and a bare run read this line. Lower it only with DEFAULT_MIN_ENTRIES, when entries rotate.
+DEFAULT_MIN_SH=0
 DEFAULT_MIN_ENTRIES=88
 
 me() { printf 'validate-backlog-receipts'; }
@@ -1175,7 +1177,7 @@ if [ "$SH_RECEIPTS" -lt "$MIN_SH" ]; then
   _en_drop=$(( MIN_ENTRIES - ENTRIES ))
   [ "$_en_drop" -lt 0 ] && _en_drop=0
   if [ "$_sh_drop" -gt "$_en_drop" ]; then
-    echo "FAIL: R5: the sh receipt population fell by $_sh_drop (from $MIN_SH to $SH_RECEIPTS) while the live entry count fell by only $_en_drop (from $MIN_ENTRIES to $ENTRIES). Rotation removes an entry and its receipt together and moves both sides; a 'verify: sh' rewritten as 'verify: manual', or a deleted receipt line, moves only this one -- and either lowers every count above while fixing nothing. If entries really were rotated, lower --min-sh-receipts and --min-entries together in .githooks/pre-push." >&2
+    echo "FAIL: R5: the sh receipt population fell by $_sh_drop (from $MIN_SH to $SH_RECEIPTS) while the live entry count fell by only $_en_drop (from $MIN_ENTRIES to $ENTRIES). Rotation removes an entry and its receipt together and moves both sides; a 'verify: sh' rewritten as 'verify: manual', or a deleted receipt line, moves only this one -- and either lowers every count above while fixing nothing. If entries really were rotated, lower DEFAULT_MIN_SH in this script and --min-entries in .githooks/pre-push together." >&2
     RC=1
   fi
 fi

@@ -14,7 +14,7 @@
 # path<TAB>sha lines in the runner's universe as traced; the runner clears a stale key record when
 # it recomputes the same value over the tree it is pushing.
 #
-# fixtures mapped: 229    entries: 14558
+# fixtures mapped: 229    entries: 14560
 absorbed-specifics-survive	core/fixtures/absorbed-specifics-survive/run.sh
 absorbed-specifics-survive	core/skills/ai-dlc/SKILL.md
 absorbed-specifics-survive	core/skills/ai-dlc/rule-bodies/rule-13.md
@@ -14491,6 +14491,8 @@ wait-beat-liveness	core
 wait-beat-liveness	core/fixtures
 wait-beat-liveness	core/fixtures/wait-beat-liveness
 wait-beat-liveness	core/fixtures/wait-beat-liveness/run.sh
+wait-beat-liveness	core/scripts
+wait-beat-liveness	core/scripts/merge-adversarial-shards.sh
 wait-beat-liveness	core/scripts/wait-for-deliverable.sh
 wait-stale-deliverable	.git/HEAD
 wait-stale-deliverable	.git/config
@@ -14632,5 +14634,5 @@ write-format-steering-multiformat	core/skills/ai-dlc-update/reconcile/lib.sh
 # digest updater-session-signals-mutants f4f99122323cfaa4b72dff5a398d5f56f2136d4e0af0d7edaa0477c6814c836d
 # digest upstream-routing 1295d153d2989df414b4fd4afa9d054638a2f0c5002677c31e37238edeb780e2
 # digest vocabulary-index 285594f5acafe647f40c216cc477e52449741b209987713e5b02b8737e09c9a3
-# digest wait-beat-liveness b3831569f7ca7baf4eddeb40c255b41c5354519085722e343f308ab01dfa5685
+# digest wait-beat-liveness 8e978b31f8bd2c2b3d6669575bf65628e45c53ad60947be3abe17f49051f68da
 # digest whole-read-pool ad55a901b3a0454fe5b11d93f598c5bdf83c46b0b8278d6e9f469e1bdc3fe5a4

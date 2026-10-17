@@ -210,52 +210,6 @@ Owed: let an escalated serial entry carry `supersedes:`/`closes:` for the part e
 
 verify: manual
 
-## BL-575 — the lead's hand-written adversary brief omitted `verdict:`, 13 of 19 shards shipped without it, and nothing caught it before the merge
-
-**DEFECT.** Filed by peer session ai-dlc-68 from graph's s319. Resumed lead `949015a6` (`/ai-dlc resume` at 04:47:20Z on 2026-10-16, Sonnet 5.5) ran `merge-adversarial-shards.sh --subject 319 --base d82236ce… s319/shards/requirements-p1` at 04:47:39Z and got rc=2: `REFUSED: …/requirements-p1/1.md declares verdict '<none>', not one of EXIT_CONDITION_MET EXIT_CONDITION_NOT_MET DIVERGENT_HARD_BLOCK` (`core/scripts/merge-adversarial-shards.sh:575`). Intake re-derived on graph read-only: `_bmad-output/planning-artifacts/s319/shards/requirements-p1/` holds 19 shards; all 19 carry a `seat-complete: ` line and only 6 carry `^verdict:` (2, 5, 6, 9, 12, cross-5 per the filer). The previous lead `f65eae3b` dispatched each adversary at a hand-written `scratchpad/adversarial-p1-brief.md` (54 lines): `verdict` 0 times, against `seat-complete` 1 and `PENDING-LEAD` 2 in the same file. `core/team-roles/adversary.md:371` makes `verdict:` "required on every adversarial-review pass" and `:135` points at it; the shards whose adversaries followed the role file carry it, the rest followed the brief. At 04:49:17Z the lead asked the operator whether to hand-add the field to 13 shards, which is the BL-530 pattern of a lead editing agent-written gate inputs.
-
-Two halves, both LIVE at 952b9319:
-
-(a) **No shipped path renders the brief.** `core/skills/ai-dlc/steps/_gate-procedures.md:552-556` lists the record's required header (provenance block, `tool_use_id`, `artifact`/`artifact_sha`, four `findings_*` counts, `verdict:`) as prose for the lead to transcribe; the dispatch itself is model-authored, so any field the lead forgets drops out of every shard silently. Fix: render the shard header template from one source the merge's required-field set also reads, and dispatch with the rendered text.
-
-(b) **The delivery join does not check the header.** `core/scripts/wait-for-deliverable.sh --complete` (`:511-524`) takes a file as delivered when its last non-blank line opens `seat-complete: `; the script mentions `verdict:` 0 times against 8 for `seat-complete`. So a headerless shard reads DELIVERED and the gap surfaces only at the merge, after every adversary has exited and the cheap repair (re-prompt the live agent) is gone. Fix: the `--complete` join (or a shard-mode flag on it) checks the merge's required header fields and reports the shard UNFINISHED while its agent is alive.
-
-Related: BL-530 (lead hand-patching agent-written shards), BL-554 (shard-dir hygiene the merge refuses late).
-
-Owed: a probe shard dir where one shard lacks `verdict:` but ends in `seat-complete:`; the join must not report it DELIVERED, with a complete shard as the control. A brief rendered by the shipped path must contain every field the merge requires.
-
-**Cost of the repair, and the join could not track it (04:49–04:53Z).** Filed by peer session ai-dlc-68. On the operator's choice ("Re-dispatch adversaries (Recommended)", AskUserQuestion at 04:49:17Z) lead `949015a6` dispatched 13 fresh agents, 04:52:09–04:52:45Z, each to append one `verdict:` line to an existing shard; the last landed at 04:53:50Z — about 1.7 minutes and 13 spawns to restore one field the brief omitted. The shards already ended in `seat-complete:`, so at 04:52:57Z the lead noted "a file-wait would return immediately" and fell back to a back-dated `--since 04:50:00Z` with three hand-checked re-arms (04:53:03Z, 04:53:27Z, 04:53:38Z) and three stop-hook interruptions (see BL-576 for why the hook could not see those beats; BL-564 for back-dated `--since`). Half (b) would have reported the 13 shards UNFINISHED while their original adversaries were still alive, at no extra spawns.
-
-verify: manual
-
-## BL-577 — the merge counts every `### ` heading under `## Findings` as a finding, so a probes subsection inflates the count and the merge refuses the shard
-
-**DEFECT.** Filed by peer session ai-dlc-68 from graph's s319 lead `949015a6`. `core/scripts/merge-adversarial-shards.sh:480` is `infind && /^### / { flush(); fl = NR; …}`: any `### ` heading inside `## Findings` opens a finding, and `:707` then refuses a shard whose `seat-complete: … findings=<n>` differs from that count. graph shard `requirements-p1/2.md` (findings=0) carried a `### Probes run (no finding)` heading; at 04:54:15Z on 2026-10-16 the lead diagnosed exactly that and at 04:54:26Z dispatched an agent ("Demote probes heading in shard 2") to rewrite the heading level — another agent spawn to edit a gate input. The adversary role file invites the subsection and never reserves the form: `core/team-roles/adversary.md:97-103` asks for probes to be stated ("A probed \"this holds\" is a completed one"), `:110` defines `<n>` as "your `### ` findings", and the file contains `F-` 0 times (control: `###` 7 times, `probe` 3 times), so nothing tells the adversary that a `### ` under Findings is reserved for `### F-<n> (SEVERITY)`.
-
-Fix (one of, builder to weigh against the existing shard corpus): count only `### F-<n> (` headings and refuse any other `### ` under Findings with a message naming the reserved form; or state the reservation in `adversary.md` beside the probe instruction and at `:110`. Owed: a shard with a `### Probes run` subsection and findings=0 merges with count 0 (or is refused with the reserved-form message, per the chosen fix), with a `### F-1 (MAJOR)` shard as the control that counts 1.
-
-verify: manual
-
-
-## BL-594 — requirements adversarial p1 re-reads the whole subject after elicitation; brief it as a pass-2+ review of the elicitation repair
-
-**DEFECT, RE-SCOPED BY OPERATOR RULING (batch 235, 2026-10-16, relayed by lead ai-dlc-9c).** Filed by ai-dlc-b8 from ai-dlc-de's `docs/analysis/step-value-s317-s319.md`, as "make elicitation the first convergence pass and drop p1's round". That design is OUT.
-
-**The finding that re-scoped it** (batch 235 intake's opus contract adversary, read at origin/main a0451c70):
-- Premise NOT SUPPORTED. The analysis BL-594 cited gives p1 "Keep as the convergence exit" (`:111`) and "Measured, no round is removable on the ruling's terms" (`:114`); p1 also has unique surviving findings (0/1 s317, 0/3 s318, `:57`, `:61`), none high-consequence. Its MAJORs are mostly repair-introduced (18/21 s318, 17/27 s319), a cost archived BL-508 owns (`:116-118`).
-- Round counts under the original design's only safe form (elicitation stamps a verdict but can never be terminal; p2 always runs): s317 elicitation, p1, p2 -> p1, p2, p3; s318 four review rounds -> four. **Rounds removed per sprint: 0** — p1 survives under the name p2.
-- The original design also contradicted Rule 8 and arm J (MET honoured at pass 1, a freeze point), broke arm H (the elicitation repair record is not `*-repair-p1.md`), loosened arm C (s319 elicitation's 14 CRITICALs would become the prior-scope baseline), and forked `skill:` between `ai-dlc-adversary-review` and `bmad-advanced-elicitation`.
-
-**The re-scope (operator-ruled):** the one real difference is that the round after the elicitation repair re-reads the whole subject instead of reviewing the repair. Brief requirements adversarial p1 under the pass-2+ contract, handing it the merged `s<N>/requirements-elicitation.md` and `s<N>/requirements-elicitation-repair.md` as "the prior pass's findings and the repair record" (`_gate-procedures.md` ~:539-541). One prose carve-out in `core/team-roles/adversary.md` (~:509-512) and `_gate-procedures.md` "Validation cycle" item 3. No names, verdicts, merge flags or arms K3, J or H change, and BL-575's elicitation axis stays "no verdict".
-
-Owed: FIRST measure the saving on graph's sprints (the p1 round's wall clock and dollars against a pass-2+ round's, s317-s319, read-only; a transcript sweep, so it needs a slot). **If the measured saving is 0, it does not ship.** Then the carve-out, with a fixture row pinning the p1 brief's prior-pass inputs. Ships on the shared BL-575/BL-577 branch.
-
-Cross-ref BL-569 (three validation rounds with no stated distinction) and archived BL-508 (repairs write the defects the next pass finds).
-
-Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
-
-verify: manual
-
 ## BL-578 — a teammate wedged re-sending one API request reads as live to the beat, because the liveness sensor keys on transcript mtime and every retry line bumps it
 
 **DEFECT.** Filed by peer session ai-dlc-68 from graph's s319 lead `949015a6` (Sonnet 5.5). The pass-1 serial remediator `a7ffc8dcd555207b8` (dispatched 05:00:03Z on 2026-10-16) called `Skill bmad-spec` at 05:14:47Z ("update: append decision to .memlog.md then re-render SPEC.md …"); the skill body loaded at 05:14:50Z. Intake re-read its transcript read-only (`~/.claude/projects/-Users-n8-git-graph/949015a6-…/subagents/agent-a7ffc8dcd555207b8.jsonl`, 245 lines): the last `assistant` line is 05:14:47Z (control: 68 assistant lines in the file), and lines 239-245 are seven `api-request` records, 05:14:51Z → 05:34:24Z at ~195s intervals, all `shapeHash 7d7e1ada`, with nothing between them. The record `s319/requirements-repair-p1.md` gained nothing; the agent's only writes were 4 Edits at 05:08Z (locked-requirements.md, prd.md). The lead re-armed at 05:10:03Z, 05:20:12Z and 05:30:12Z and read it as "a long run is plausible" (05:20:15Z) and "still running at 30 minutes" (05:30:12Z); at 05:21:19Z the operator had ruled "when the remediator agent finishes, handoff", so the sprint waits on an agent that may never finish.
@@ -414,38 +368,6 @@ That snapshot line also names a sub-case the channel has to handle. `core/skills
 **Check 37 passes graph's planning gate with the first instance's fence still failing (graph watch ai-dlc-f7; intake re-read it read-only on graph).** The s319 lead's [planning] gate, transcript `74de15ba` at 0.818.0, shows two things on 2026-10-17. At 14:10:12Z the validator printed "FAIL (STALE): _bmad-output/planning-artifacts/prd.md:1289 … recorded: 1676 … actual: 1955" (1 hit). At 14:15:56Z the lead wrote "Check 37 reads an owed-derivations record that doesn't exist" (1 hit; negative control 0). `_bmad-output/ai-dlc-update/owed-derivations.tsv` is absent in graph, while that directory holds 590 entries. Graph's installed `scripts/ai-dlc/check-owed-derivations.sh` says "absent is silent 0" at `:286-289`, and so does main's at `:291-293`. `steps/gate-validation.md:3300` says "an absent record is exit 0". The only writer is `derivation-differential.sh --record-owed`, which appends NEWLY-FAILING rows only (`:9`). prd.md:1289 broke at the 0.793.0 pull, before the record existed, so every later pull reads it as STALE-BOTH (`:49`), which is never recorded. Of graph's 256 reconcile logs, only `reconcile-log-20261016T0725Z.md` names it. The lead is carrying it by hand, as a MINOR finding into architecture.md.
 
 This is the consequence of the PARTIAL note's withdrawal of item 3: no reader picks up the 8 rows, and Check 37 is not the channel for them. f7 proposes either a one-time back-fill of the record from the reconcile logs' owed lists, or Check 37 also running `validate-artifact-derivations.sh` over the documents it scopes as LIVING. Both would re-open what the operator withdrew, so intake files them as a proposal for the lead to rule on, not as owed. f7's probe, if adopted: a LIVING-document fence broken before the record existed must DENY, and the same fence in a closed sprint stays silent.
-
-verify: manual
-
-## BL-613 — `validate-backlog-receipts.sh` run bare fails R5 on a clean main, because its default floor is stale
-
-**NOTE.** Found by intake ai-dlc-40 and independently by ai-dlc-11, both on clean origin/main `d19a4d9f`. `scripts/validate-backlog-receipts.sh:190` sets `DEFAULT_MIN_SH=76`, and `:565` uses it when `--min-sh-receipts` is absent. The live ledger holds 0 `sh` receipts, so a bare run exits 1 with "R5: the sh receipt population fell by 76 (from 76 to 0)". The gate passes `--min-sh-receipts 0` (`.githooks/pre-push:266-268`, since 0.746.0 `011cd83e`), so pre-push is green while every hand that runs the script by name sees a red unrelated to its change. Two sessions in batch 235 hit it and each had to re-run on main to rule out their own commit.
-
-Owed: one source for the floor that both the script's default and the gate read, so the bare run and the gate answer alike. Receipt: a probe showing a bare run and a gate-flag run agree on the live ledger, and that a seeded drop below the floor fails both.
-
-Owner: ai-dlc-40 (lead ai-dlc-9c). It changes a script, so it rides whichever release is still unbuilt when the fix is ready (most likely the BL-575/577/594 branch), never a built or gating one.
-
-verify: manual
-
-## BL-614 — a one-line `FORK_BUDGET` raise re-runs every unit keyed on `validate-enforcement-map.sh`, though only one fixture reads the number
-
-**NOTE (efficiency).** Found by intake ai-dlc-40 while checking lead ai-dlc-9c's filing on ai-dlc-11's 0.801.0 push. `FORK_BUDGET=3374` sits at `scripts/validate-enforcement-map.sh:848` (origin/main `d19a4d9f`). The validator never reads it: its other 8 mentions are comments (control: `I75` appears 18 times in the same file). Its only reader is `core/fixtures/validator-fork-budget/run.sh:96-101`. The content key is per-file, so a budget raise (3374→3395 on `b235-combo`) changes the validator's key, which invalidates every unit that depends on it.
-
-Measured on origin/main: 20 units are keyed on the validator, 15 by an `inputs.decl` line and the rest by `.ai-dlc-fixture-readsets.tsv` rows. Together they cost 2906 s in `.git/ai-dlc-fixture-durations`, a loaded record. The largest are `fold-architect-ledger-join-mutants-c` at 438 s, `fold-architect-ledger-join-mutants` at 414 s and `readset-skip` at 322 s. The suite is pole-bound, so a budget-only change costs roughly that 438 s pole in wall clock, not the 2906 s sum. A raise that ships alongside a real validator edit costs nothing extra.
-
-Premise corrected at intake: the 1300-1400 s batteries in that push (adversarial-shard-merge-mutants, derivation-capture-mutants, ledger-reverify(-b), review-shard-merge-mutants(-b,-c)) are NOT keyed on the validator. Neither their `inputs.decl` nor the read-set map names it (control: `validator-fork-budget` keyed both ways). They ran because the combo's own diff touched files they declare: `partition-document.sh`, `steps/gate-validation.md`, `validate-artifact-derivations.sh` and `reconcile/post-write-gates.sh`.
-
-**Correction (lead ai-dlc-9c, from ai-dlc-ad's 0.802.0 gate log; re-derived at intake on origin/main `f4ca6764`).** The two sentences above about which units are keyed, and how, were wrong. Two mutation batteries ARE keyed on the validator, and the first count missed them because it matched only `inputs.decl` lines naming the file exactly. An `inputs.decl` line ending in `/` declares a whole directory (`readset_decl_parse`, `.githooks/pre-push:1413-1436`), so `scripts/` keys every file under it, this validator included. A declared fixture is keyed on its declaration and never on its read-set row (`.githooks/pre-push:1507-1515`). Re-derived from both sources:
-- `inputs.decl`: 21 fixtures, 15 naming the file and 6 through a `scripts/` entry: `fold-architect-ledger-join-mutants` and its `-b`, `-c` and `-d` shards, `suite-content-key` and `vocabulary-index`. Control: a line equal to `scripts/ZQX-none.sh` matches 0, and 20 `inputs.decl` lines are exactly `scripts/` or `!scripts/`.
-- `.ai-dlc-fixture-readsets.tsv`: 7 rows name the file, among them `fold-architect-ledger-join-mutants` at row 4328 and `-c` at row 4591. All 7 belong to fixtures that also carry an `inputs.decl` (248 do), so the declaration decides and the rows add no unit.
-- So the effective set is 21 units. They cost 2922 s summed in the loaded record as it stood at `f4ca6764`, and the four fold-architect shards lead at 281, 265, 265 and 264 s. That record is rewritten on every push, and the 438 s and 414 s above were older readings of the same two shards.
-- `-b` and `-d` carry 0 read-set rows, but they are keyed through `scripts/` like the other two, so they do NOT run on every push. They run whenever any file under `scripts/` changes, which is a far wider trigger than this validator.
-- The statement above that `validator-fork-budget` is "keyed both ways" was also wrong: it has 0 read-set rows and is keyed by its declaration alone.
-The wall-clock reading stands in shape: a budget-only change costs about the largest shard (~281 s loaded at `f4ca6764`), not the sum.
-
-Owed: move the budget to a data file that only `validator-fork-budget` reads, keeping its column-0 single-line anchor (`run.sh:92-101`) and its A4 reachability arm. The data file must sit outside `scripts/`, or the four fold-architect shards' directory entry re-keys them anyway. Receipt: a budget-only change re-keys `validator-fork-budget` and no other unit. Show it with the hook's own key computation on a probe commit, and use a one-character edit to the validator as the control, which must re-key all 21.
-
-Owner: ai-dlc-40 (lead ai-dlc-9c). It changes a script and a fixture, so it rides the next unbuilt release with BL-613, never a built or gating one.
 
 verify: manual
 

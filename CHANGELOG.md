@@ -20,6 +20,96 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.822.0] - 2026-10-17
+
+Batch 235 (c9's build). Closes BL-575, BL-577, BL-594, BL-613 and BL-614. Carries the lead's release-train log appends
+(`docs/analysis/b235-release-train.md`, docs only). Closes no `PC-` id.
+
+### An adversary shard the merge would refuse is never DELIVERED (BL-575)
+
+- `merge-adversarial-shards.sh` owns one shard header check (`check_header`), and the merge loop calls it at its
+  original sites, so refusal text and refusal order are byte-identical on every existing input. A new mode,
+  `--check-header <shard> --axis convergence|elicitation`, runs that check on one file and exits 1 with the merge's
+  own refusal text, or 0. It also checks the closing marker's `findings=<n>` against the parsed count. `verdict:
+  PENDING-LEAD` and unfilled `<...>` placeholders fail on value, not presence. Cross-shard properties stay merge-only.
+- `wait-for-deliverable.sh --complete --shard-header convergence|elicitation`: a target ending in `seat-complete:`
+  is DELIVERED only if the sibling merge's `--check-header` exits 0. Otherwise it reads `UNFINISHED <path> -- ends in
+  seat-complete: but the merge would refuse it: <refusal text>` on every beat, at exhaustion and in `--status`,
+  checked before the settle window so it is never UNSETTLED. A missing sibling is refused at arming (exit 64). A merge
+  exit other than 0 or 1 is reported as refused, never delivered. Without the flag, output is byte-identical.
+- Step prose arms the flag at every adversarial-shard `--complete` join in `_gate-procedures.md` and states the
+  conditional in `route.md`'s resume re-arm. The lead copies the rendered `adversary-pass` header region into each
+  brief instead of retyping a field list. Residual: the `shard: none` serial pass writing `-adversarial-p<M>.md` is
+  not armed, because the merge never reads it.
+
+### Under `## Findings`, a `### ` heading is a finding and carries its severity (BL-577)
+
+- A `### ` heading under `## Findings` opens a finding only if it carries CRITICAL, MAJOR, MINOR or NIT, in
+  UPPERCASE. Any other `### ` heading there is refused by name, with the remedy "move it under its own `## `
+  section, or demote it to `#### `". It is never silently skipped. `adversary.md` cites the reservation beside the
+  probes instruction and at the `findings=<n>` definition.
+- The form came from a census over graph's 934 committed shard files at graph `47f53212`: 465 F-form headings, 422
+  non-F headings carrying a severity, and 14 without one. F-form is s318/s319 practice and not universal, so the
+  severity word, not `F-<n>`, is the rule.
+- False-positive set: 0 in convergence `<step>-pN` directories. The 16 hits elsewhere (14 lowercase severities, 2
+  `F-n — INFO`) sit in party-repair and elicitation directories the merge never reads. That holds by procedure, not
+  by mechanism, as the arm's narrowing note says. Severity stays case-sensitive, because reading it
+  case-insensitively would move `findings_critical`/`findings_major` counts on shards that merge today.
+
+### Requirements p1 reviews the elicitation repair (BL-594)
+
+- Requirements adversarial p1 is briefed under the pass-2+ contract. Its prior pass is the merged
+  `s<N>/requirements-elicitation.md` and its repair record is `s<N>/requirements-elicitation-repair.md`, in
+  `adversary.md` and in `_gate-procedures.md`'s Validation cycle item 3 and the p1 dispatch text. That covers the
+  sharded and one-part cases. Names, verdicts, merge flags and validator arms are unchanged, and elicitation still
+  carries no verdict. A `process-rule-pins` row (`gp-req-p1-prior`) pins the wording, as a presence pin only.
+- Measured, read-only over graph's subagent transcripts: 132 review shards. Graph sprint s318 is the only one with
+  p1, p2 and p3 all present. Per shard there, p1 cost 102.6k output tokens and 1562 s of summed wall, and p2 18.5k
+  and 290 s. Graph's next sprint should show the same sweep's p1 per-shard figure falling toward p2's.
+
+### One source for the sh-receipt floor (BL-613)
+
+- `validate-backlog-receipts.sh`'s `DEFAULT_MIN_SH` is 0, the value the gate used. `.githooks/pre-push` no longer
+  passes `--min-sh-receipts`, so a bare run and the gate answer alike. The flag and its environment variable still
+  override it.
+
+### The fork budget re-keys only its reader (BL-614)
+
+- `FORK_BUDGET` moved from `scripts/validate-enforcement-map.sh` to `fork-budget.txt` at the repo root, read only by
+  `validator-fork-budget`, which keeps its column-0 single-line anchor and its A4 arm. The file sits outside
+  `scripts/` and `core/` because those directories are declared whole in other fixtures' `inputs.decl`. The fixture
+  is `.dist-only`, so nothing ships and no install line moved. Using the runner's own `hermetic-run.sh --key-only`
+  over all 264 declared fixtures, a budget-only change re-keyed 1 fixture, and a change to the validator still
+  re-keyed 21.
+
+### Verification
+
+- The four changed fixtures ran serially in the lead's slot, each via `hermetic-run.sh` in a clean worktree at the
+  build tip with a private verdict store. All were rc 0 with `required_missing=0`:
+  - adversarial-shard-merge, 149 s: RS1-RS4, CH1-CH10 and mutants RM-A/RM-B, each "ok".
+  - wait-beat-liveness, 196 s: the 19 shard-header arms and mutant `shard-check-exit-ignored`, each "ok".
+  - process-rule-pins, 19 s: `gp-req-p1-prior` plus 4 mutants killed.
+  - validator-fork-budget, 35 s: reads `fork-budget.txt`, 3442 of 3446, 15/15 mutants killed.
+- Cost of adversarial-shard-merge, base `06ae8b85` against tip, interleaved B T B T B T in one worktree path, in
+  CPU-seconds (user+sys):
+  - Base: 115.02, 115.90, 114.37.
+  - Tip: 124.14, 125.75, 124.36.
+  - That is +9.3 CPU-s (+8.1%) against a spread of about 1.6 per side, and wall rose from about 137 s to about 148 s.
+  - The tip adds 18 arms, so about 0.5 s per arm. The two new mutants stay inline in the fixture rather than moving
+    to the `-mutants` battery.
+- `wait-beat-liveness` now reads the merge, so it was re-traced with `derive-fixture-readsets.sh --tracer sandbox`.
+  It shows 7 paths and passes the proper-subset control. The map gains two of its rows, and no other fixture moved.
+
+### Limits
+
+- The BL-613 and BL-614 receipts were run by hand by the builder and are not committed as fixture arms.
+- The BL-577 census reads only what graph committed. BL-577's own motivating shard was hand-repaired before commit,
+  so the census floor cannot see it. The fixture pins that shape directly instead.
+- The BL-594 measurement covers one sprint, in tokens, not dollars.
+- Three header-schema/merge disagreements found while building BL-575 are not fixed here and will be filed as a NOTE:
+  `provenance-block.json` has no elicitation profile, its `tool_use_id` instruction disagrees with the
+  `NOT_ACCESSIBLE` prose, and its `artifact_sha` comment is wrong for the subject and sections axes.
+
 ## [0.821.0] - 2026-10-17
 
 Batch 235 (docs release). Docs only: no engine, hook, fixture or consumer-visible file changes. Closes no `BL-` id

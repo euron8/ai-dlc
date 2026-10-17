@@ -9,6 +9,14 @@
 #   merge-adversarial-shards.sh --document <path> <shard-dir>
 #                                                   SECTION mode: one single-file artifact, sharded
 #                                                   by the parts partition-document.sh --map prints
+#   merge-adversarial-shards.sh --check-header <shard-file> --axis convergence|elicitation
+#                                                   ONE shard's header, by the merge's own checks
+#                                                   (THE HEADER CHECK, below): exit 0 and nothing
+#                                                   printed on pass; exit 1 and the merge's own
+#                                                   `REFUSED: <reason>` line on the first failure;
+#                                                   exit 2 on bad arguments. Reads no sibling, no
+#                                                   harness record and no shard dir, so a delivery
+#                                                   join can call it on one file while its agent lives.
 #   Every merge mode (not --map) also reads the three harness records named under THE DISPATCH ID,
 #   and refuses a shard set they do not cover: a caller seeding shards by hand seeds the records too.
 #
@@ -225,8 +233,28 @@
 #   sharded), a cross shard the group table does not name, and a shard-directory entry that is
 #   none of `<digits>.md`, `cross.md`, `cross-<digits>.md`.
 #
+# THE HEADER CHECK (check_header; `--check-header` runs it on one file, the merge loop calls the
+#   same functions at their own sites, so one source decides both and a shard defective twice prints
+#   the refusal it always printed). Per shard: exactly one provenance block; integer
+#   findings_critical and findings_major, prior_scope and underived within them; on the convergence
+#   axis a verdict of EXIT_CONDITION_MET / EXIT_CONDITION_NOT_MET / DIVERGENT_HARD_BLOCK (so
+#   `PENDING-LEAD`, absent, or the template's `<EXIT_CONDITION_MET|...>` placeholder fails), on the
+#   elicitation axis no verdict and `skill: bmad-advanced-elicitation`; invoked_at per RE_ISO;
+#   skill, mode and lead_role each present and not an unfilled `<...>` placeholder; the
+#   CRITICAL/MAJOR heading counts; the `### ` reservation (FINDING GRAMMAR); and, when the shard
+#   ends in `seat-complete: ... findings=<n>`, that <n> equals the findings parsed.
+#   MERGE-ONLY, never in --check-header: the derived dispatch id and the self-reported tool_use_id
+#   (they need the harness records), the same skill/mode/lead_role across shards, a unique id per
+#   shard, the mode-dependent artifact/artifact_sha checks (they need the map, the stories or the
+#   document), citations against the ordinal set, and the seat-complete set rule.
+#   COMMENTS ARE NOT STRIPPED. `provenance-block.json` `parser.comments` strips a trailing ` #`
+#   comment from a value; this merge never has, and still does not: `verdict: EXIT_CONDITION_MET # x`
+#   normalises to `EXIT_CONDITION_MET_X` and is refused, and `findings_major: 2 # x` is not an
+#   integer. Kept so that no input changes outcome here; a shard copying the adversary template's
+#   inline comments verbatim is refused by this merge while the schema reader accepts it.
+#
 # FINDING GRAMMAR (the partition this script checks; `adversary.md` cites it, not restates it)
-#   A finding is a `### ` heading inside the shard `## Findings` section (up to the next
+#   A finding is a `### ` heading carrying a severity word inside the shard `## Findings` section (up to the next
 #   `## ` heading); lines inside ``` or ~~~ fences are not headings. Its severity is the FIRST
 #   of CRITICAL / MAJOR / MINOR / NIT in the heading. Each finding carries EXACTLY ONE line
 #       stories: <ordinal>[, <ordinal>...]          e.g. `stories: 03` or `stories: 01, 04`
@@ -237,7 +265,30 @@
 #   count `findings_major` -- otherwise the partition is checked over findings that are not
 #   the ones the counts describe.
 #   The severity word is UPPERCASE: `sev()` is case-sensitive, so `### F-1 (major)` carries no
-#   severity and is counted as none.
+#   severity.
+#   `### ` UNDER `## Findings` IS RESERVED FOR A FINDING. A `### ` heading there opens a finding
+#   ONLY if it carries one of CRITICAL / MAJOR / MINOR / NIT (the `sev()` rule above); the `F-<n>`
+#   prefix is not required (`### F-1 (MAJOR)` and `### MAJOR: x` each count 1). Any other unfenced
+#   `### ` heading there -- `### Probes run (no finding)`, `### F-7 — INFO`, `### F-1 (major)` -- is
+#   REFUSED, never skipped and never counted, with a message naming the reserved form and the fix:
+#   move it under its own `## ` section, or demote it to `#### `. Fenced lines stay ignored. The
+#   refusal runs AFTER the CRITICAL/MAJOR count check, so a severity-less heading whose declared
+#   counts disagree is still refused on the count, and BEFORE the seat-complete count.
+#   Narrowing, and how the false-positive set reached zero: a census over the reference consumer's
+#   934 committed shard files found 0 offenders in convergence `<artifact>-p<M>` dirs (the only
+#   dirs this merge reads) and 16 elsewhere -- 9 lowercase `— major` headings in
+#   `carry-over-evaluation-party-repair-p1/4.md`, 5 lowercase `E-<n> (major)` in
+#   `stories-elicitation/05.md`, and 2 `F-7/F-8 — INFO`. The first 14 are outside this merge's
+#   population by PROCEDURE: party-repair shards are joined by join-remediator-shards.sh
+#   (`_gate-procedures.md`, "Shard by file" for the party round), and `<artifact>-elicitation/` is
+#   read by no merge (`--map` refuses it, and `--elicitation` merges only the requirements
+#   subject). Nothing MECHANICAL keeps them out: `carry-over-evaluation-party-repair-p1` parses as
+#   `<artifact>-p<M>`, and only the absent `s<N>/<artifact>/` dir refuses it in files mode. Matching
+#   severity case-insensitively was weighed and NOT taken: a lowercase heading would then count
+#   toward findings_critical/findings_major, refusing on the count shards that merge today, and the
+#   step files teach the UPPERCASE word. So the refusal names the UPPERCASE requirement instead.
+#   `INFO` is not a severity: an INFO note is a non-finding the shard moves out of `## Findings` or
+#   demotes, and the remedy text says so.
 #   A finding is NEVER a `## ` heading. An unfenced `## ` heading outside the provenance block whose
 #   first token is a finding id (`F-1`, `M1`: capital letters, an optional `-`, digits) is REFUSED
 #   wherever it sits -- under `## Findings`, after it, or in a shard with no `## Findings` section at
@@ -294,6 +345,156 @@ collect() {
 # phase_barrier: --dry-run stops here when the phase just walked collected anything.
 phase_barrier() { [ "$DRY_N" -eq 0 ] || exit 2; }
 
+# ---- THE HEADER CHECK: the shard grammar, shared by the merge loop and --check-header -----------
+# One awk pass per shard. Emits:  B <starts> <ends>  /  F <key> <value>  /  X <line> <sev> <n-stories-lines> <stories>
+# /  Y <line of a wrong-axis citation, 0 none>  /  H <line of the first unfenced `## <ID>` heading outside the block, 0 none>
+# /  R <line of the first unfenced `### ` heading under `## Findings` with no severity word, 0 none>
+# Reads $CITE and $OTHER, which every caller sets first.
+parse_shard() {
+  awk '
+    function sev(h,   best, bp, i, w, p) {
+      best = ""; bp = 0
+      split("CRITICAL MAJOR MINOR NIT", w, " ")
+      for (i = 1; i <= 4; i++) {
+        p = index(h, w[i])
+        if (p > 0 && (bp == 0 || p < bp)) { bp = p; best = w[i] }
+      }
+      return best == "" ? "NONE" : best
+    }
+    function flush() {
+      if (fl > 0) printf "X %d %s %d %s\n", fl, fs, fn, (fst == "" ? "-" : fst)
+      fl = 0
+    }
+    /SKILL_INVOCATION_PROVENANCE v1/ { starts++; inblk = 1; next }
+    /SKILL_INVOCATION_PROVENANCE_END/ { ends++; inblk = 0; next }
+    inblk {
+      if (match($0, /^[a-z_]+:/)) {
+        k = substr($0, 1, RLENGTH - 1); v = substr($0, RLENGTH + 1)
+        sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v)
+        if (!(k in seen)) { seen[k] = 1; printf "F %s %s\n", k, v }
+      }
+      next
+    }
+    /^[ \t]*(```|~~~)/ { fence = !fence; next }
+    fence { next }
+    /^## [A-Z]+-?[0-9]+([^A-Za-z0-9]|$)/ { if (hline == 0) hline = NR }
+    /^## / { flush(); infind = ($0 ~ /^## Findings[ \t]*$/); next }
+    infind && /^### / { flush(); if (sev($0) == "NONE") { if (rline == 0) rline = NR; next } fl = NR; fs = sev($0); fn = 0; fst = ""; next }
+    infind && fl > 0 && index($0, cite ":") == 1 {
+      fn++; v = substr($0, length(cite) + 2); sub(/^[ \t]*/, "", v); gsub(/[ \t]+/, "", v); fst = v; next
+    }
+    infind && fl > 0 && other != "" && index($0, other ":") == 1 { if (wrong == 0) wrong = NR; next }
+    END { flush(); printf "B %d %d\n", starts + 0, ends + 0; printf "Y %d\n", wrong + 0; printf "H %d\n", hline + 0; printf "R %d\n", rline + 0 }
+  ' cite="$CITE" other="$OTHER" "$1"
+}
+
+field() { # $1 parse file, $2 key
+  awk -v k="$2" '$1 == "F" && $2 == k { sub(/^F [^ ]+ ?/, ""); print; exit }' "$1"
+}
+digits() { case "$1" in ""|*[!0-9]*) ;; *) printf '%s' "$1" ;; esac; }
+# Held in variables: bash 3.2 reads an unquoted `[[ =~ $var ]]` regex as ERE, fork-free.
+# invoked_at: to the second, optionally with a fraction -- the reference consumer stamps both.
+RE_ISO='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,9})?Z$'
+
+# Each check below returns 0 on pass, or sets HDR_MSG (the refusal text, without `REFUSED: `) and
+# returns 1. They are called in the MAIN shell, never inside `$( )`: check_header_core sets the
+# shard's crit/major/prior/under/minor/v/at for the merge to sum, and ANY_DIVERGENT.
+# check_header_core <parse file> <shard file> <axis: convergence|elicitation>
+#   the block count, the integer counts and their bounds, the verdict (or its absence), invoked_at.
+check_header_core() {
+  local P="$1" sf="$2" ax="$3"
+  set -- $(awk '$1 == "B" { print $2, $3 }' "$P")
+  [ "${1:-0}" = "1" ] && [ "${2:-0}" = "1" ] \
+    || { HDR_MSG="$sf carries ${1:-0} provenance block opening(s) and ${2:-0} closing(s); a shard carries exactly one block"; return 1; }
+  crit="$(digits "$(field "$P" findings_critical)")"
+  major="$(digits "$(field "$P" findings_major)")"
+  [ -n "$crit" ] && [ -n "$major" ] \
+    || { HDR_MSG="$sf does not declare integer findings_critical and findings_major"; return 1; }
+  prior="$(digits "$(field "$P" findings_critical_prior_scope)")"
+  [ -n "$prior" ] || prior="$crit"
+  [ "$prior" -le "$crit" ] || { HDR_MSG="$sf declares findings_critical_prior_scope=$prior above findings_critical=$crit"; return 1; }
+  under="$(digits "$(field "$P" findings_major_underived)")"
+  [ -n "$under" ] || under=0
+  [ "$under" -le "$major" ] || { HDR_MSG="$sf declares findings_major_underived=$under above findings_major=$major"; return 1; }
+  minor="$(digits "$(field "$P" findings_minor)")"
+  [ -n "$minor" ] || minor=0
+
+  if [ "$ax" = elicitation ]; then
+    # Elicitation is not a convergence pass: a verdict here would be read as one by every gate.
+    [ -z "$(field "$P" verdict)" ] || { HDR_MSG="$sf declares a verdict; an elicitation shard carries none"; return 1; }
+  else
+  v="$(field "$P" verdict | tr '[:lower:]' '[:upper:]' | sed -e 's/[^A-Z]\{1,\}/_/g' -e 's/^_//' -e 's/_$//')"
+  case "$v" in
+    EXIT_CONDITION_MET|EXIT_CONDITION_NOT_MET) ;;
+    DIVERGENT_HARD_BLOCK) ANY_DIVERGENT=1 ;;
+    *) HDR_MSG="$sf declares verdict '${v:-<none>}', not one of EXIT_CONDITION_MET EXIT_CONDITION_NOT_MET DIVERGENT_HARD_BLOCK"; return 1 ;;
+  esac
+  fi
+
+  at="$(field "$P" invoked_at)"
+  [[ $at =~ $RE_ISO ]] || { HDR_MSG="$sf invoked_at '${at:-<none>}' is not ISO 8601 UTC to the second (an optional .<fraction> before Z is accepted)"; return 1; }
+  return 0
+}
+# hdr_role <parse file> <shard file> <skill|mode|lead_role> <axis> -> HDR_VAL
+#   present, not an unfilled `<...>` template placeholder, and on the elicitation axis skill is
+#   bmad-advanced-elicitation. Agreement ACROSS shards is the merge's, never this check's.
+hdr_role() {
+  HDR_VAL="$(field "$1" "$3")"
+  [ -n "$HDR_VAL" ] || { HDR_MSG="$2 declares no $3"; return 1; }
+  case "$HDR_VAL" in
+    "<"*) HDR_MSG="$2 declares $3 '$HDR_VAL', an unfilled template placeholder; the shard states the value it ran with"; return 1 ;;
+  esac
+  if [ "$3" = skill ] && [ "$4" = elicitation ] && [ "$HDR_VAL" != "bmad-advanced-elicitation" ]; then
+    HDR_MSG="$2 declares skill '$HDR_VAL'; an elicitation shard runs bmad-advanced-elicitation"; return 1
+  fi
+  return 0
+}
+# check_reserved <parse file> <shard file>: no `### ` heading under `## Findings` without a severity
+#   word (FINDING GRAMMAR, the reservation).
+check_reserved() {
+  local rl; rl="$(awk '$1 == "R" { print $2 }' "$1")"
+  [ "${rl:-0}" = "0" ] || { HDR_MSG="$2:$rl is a \`### \` heading under \`## Findings\` with no severity word; there a \`### \` heading is reserved for a finding and carries one of CRITICAL / MAJOR / MINOR / NIT, UPPERCASE (FINDING GRAMMAR in merge-adversarial-shards.sh) -- move it under its own \`## \` section, or demote it to \`#### \`"; return 1; }
+  return 0
+}
+# check_counts <parse file> <shard file>: the CRITICAL-heading count equals findings_critical and the
+#   MAJOR-heading count findings_major (crit and major as check_header_core set them).
+check_counts() {
+  local nc nm
+  nc="$(awk '$1 == "X" && $3 == "CRITICAL"' "$1" | grep -c .)" || nc=0
+  nm="$(awk '$1 == "X" && $3 == "MAJOR"' "$1" | grep -c .)" || nm=0
+  [ "$nc" -eq "$crit" ] && [ "$nm" -eq "$major" ] \
+    || { HDR_MSG="$2 declares $crit CRITICAL / $major MAJOR but its ## Findings section heads $nc CRITICAL / $nm MAJOR findings"; return 1; }
+  return 0
+}
+# ends_in_marker <shard file>: its last non-blank line opens `seat-complete: `.
+ends_in_marker() { awk 'NF { l = $0 } END { exit !(l ~ /^seat-complete: /) }' "$1"; }
+# marker_n <shard file>: the marker's declared `findings=<n>`, `-` when the marker carries none.
+marker_n() { awk 'NF { l = $0 } END { if (match(l, /findings=[0-9]+[ \t]*$/)) { v = substr(l, RSTART + 9); sub(/[ \t]+$/, "", v); print v } else print "-" }' "$1"; }
+# check_marker <parse file> <shard file> <declared n, empty when the shard ends in no marker>
+#   the marker's count against the findings parsed here: a shard truncated after its marker, or
+#   marked before its findings, disagrees.
+check_marker() {
+  local scn="$3" nfx
+  if [ -n "$scn" ]; then
+    nfx="$(grep -c '^X ' "$1")" || nfx=0
+    [ "$scn" = "$nfx" ] \
+      || { HDR_MSG="$2 ends in 'seat-complete: ... findings=$scn' but its ## Findings section heads $nfx finding(s); the marker is written once, last, counting the shard's findings"; return 1; }
+  fi
+  return 0
+}
+# check_header <parse file> <shard file> <axis>: every single-shard check, in the merge's order.
+#   --check-header runs exactly this. The merge loop calls the same pieces at their own sites, so a
+#   shard failing two of them prints the refusal it printed before this function existed.
+check_header() {
+  local k
+  check_header_core "$1" "$2" "$3" || return 1
+  for k in skill mode lead_role; do hdr_role "$1" "$2" "$k" "$3" || return 1; done
+  check_counts "$1" "$2" || return 1
+  check_reserved "$1" "$2" || return 1
+  if ends_in_marker "$2"; then check_marker "$1" "$2" "$(marker_n "$2")" || return 1; fi
+  return 0
+}
+
 USAGE="usage: merge-adversarial-shards.sh [--dry-run] [--rerun <shard>.md@<ISO> ...] [--map | --document <path> | --subject <N> [--base <sha>] [--elicitation]] <planning>/s<N>/shards/<artifact>-p<M>"
 MAP_ONLY=0; DOCUMENT=""; SUBJECT=""; SUBJ_BASE=""; ELICIT=0
 # --rerun is taken out of the argument list wherever it sits, so the mode parse below is unchanged
@@ -311,6 +512,17 @@ done
 set -- ${_rest[@]+"${_rest[@]}"}
 case "${1:-}" in
   -h|--help) awk 'NR > 1 && /^set -u/ { exit } NR > 1' "$0"; exit 0 ;;
+  --check-header)
+    # One shard, one header; exits here, before any sibling, VALIDATOR, subject or base is read.
+    [ $# -eq 4 ] && [ "$3" = "--axis" ] || { printf '%s\n' "usage: merge-adversarial-shards.sh --check-header <shard-file> --axis convergence|elicitation"; exit 2; }
+    [ -z "$RERUN" ] && [ "$DRY" -eq 0 ] || { printf '%s\n' "REFUSED: --check-header reads one shard; --rerun and --dry-run belong to a merge"; exit 2; }
+    case "$4" in convergence|elicitation) ;; *) printf 'REFUSED: --axis takes convergence or elicitation (got %s)\n' "$4"; exit 2 ;; esac
+    [ -f "$2" ] && [ -r "$2" ] || { printf 'REFUSED: %s is not a readable file\n' "$2"; exit 2; }
+    CITE=stories; OTHER=""; ANY_DIVERGENT=0
+    CH_P="$(mktemp "${TMPDIR:-/tmp}/merge-adversarial-shards.ch.XXXXXX")" || { printf '%s\n' "REFUSED: mktemp failed"; exit 2; }
+    parse_shard "$2" > "$CH_P" || { rm -f "$CH_P"; printf 'REFUSED: parsing %s did not run\n' "$2"; exit 2; }
+    if check_header "$CH_P" "$2" "$4"; then rm -f "$CH_P"; exit 0; fi
+    rm -f "$CH_P"; printf 'REFUSED: %s\n' "$HDR_MSG"; exit 1 ;;
   --map) MAP_ONLY=1; shift ;;
   --subject)
     [ $# -ge 2 ] || refuse "$USAGE"
@@ -336,6 +548,8 @@ esac
 # Files mode keeps no second axis, so its behaviour on every input is what it was before sections.
 if [ -n "$DOCUMENT" ] || [ -n "$SUBJECT" ]; then CITE=sections; OTHER=stories; NOUN=section; else CITE=stories; OTHER=""; NOUN=story; fi
 if [ -n "$SUBJECT" ]; then NOUN=part; fi
+# The header axis check_header reads: elicitation carries no verdict, every other merge one.
+if [ "$ELICIT" -eq 1 ]; then AXIS=elicitation; else AXIS=convergence; fi
 
 SHARD_DIR="${1%/}"
 [ -d "$SHARD_DIR" ] || refuse "shard directory $SHARD_DIR does not exist"
@@ -889,8 +1103,8 @@ RE_REAL_TUID="$(read_grammar DISPATCH_ID_ERE)"
 : > "$T/sc" || refuse "cannot stage the completion check"
 while IFS="$(printf '\t')" read -r sk sf_; do
   # Y carries the marker's declared count (`findings=<n>`, `-` when absent), checked per shard below.
-  if awk 'NF { l = $0 } END { exit !(l ~ /^seat-complete: /) }' "$sf_"; then
-    printf 'Y\t%s\t%s\n' "$sk" "$(awk 'NF { l = $0 } END { if (match(l, /findings=[0-9]+[ \t]*$/)) { v = substr(l, RSTART + 9); sub(/[ \t]+$/, "", v); print v } else print "-" }' "$sf_")" >> "$T/sc"
+  if ends_in_marker "$sf_"; then
+    printf 'Y\t%s\t%s\n' "$sk" "$(marker_n "$sf_")" >> "$T/sc"
   else printf 'N\t%s\t%s\n' "$sk" "$sf_" >> "$T/sc"; fi
 done < "$T/shards"
 if grep -q '^Y' "$T/sc" && grep -q '^N' "$T/sc"; then
@@ -899,53 +1113,8 @@ if grep -q '^Y' "$T/sc" && grep -q '^N' "$T/sc"; then
 fi
 
 # ---- per-shard parse ----------------------------------------------------------------------
-# One awk pass per shard. Emits:  B <starts> <ends>  /  F <key> <value>  /  X <line> <sev> <n-stories-lines> <stories>
-# /  Y <line of a wrong-axis citation, 0 none>  /  H <line of the first unfenced `## <ID>` heading outside the block, 0 none>
-parse_shard() {
-  awk '
-    function sev(h,   best, bp, i, w, p) {
-      best = ""; bp = 0
-      split("CRITICAL MAJOR MINOR NIT", w, " ")
-      for (i = 1; i <= 4; i++) {
-        p = index(h, w[i])
-        if (p > 0 && (bp == 0 || p < bp)) { bp = p; best = w[i] }
-      }
-      return best == "" ? "NONE" : best
-    }
-    function flush() {
-      if (fl > 0) printf "X %d %s %d %s\n", fl, fs, fn, (fst == "" ? "-" : fst)
-      fl = 0
-    }
-    /SKILL_INVOCATION_PROVENANCE v1/ { starts++; inblk = 1; next }
-    /SKILL_INVOCATION_PROVENANCE_END/ { ends++; inblk = 0; next }
-    inblk {
-      if (match($0, /^[a-z_]+:/)) {
-        k = substr($0, 1, RLENGTH - 1); v = substr($0, RLENGTH + 1)
-        sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v)
-        if (!(k in seen)) { seen[k] = 1; printf "F %s %s\n", k, v }
-      }
-      next
-    }
-    /^[ \t]*(```|~~~)/ { fence = !fence; next }
-    fence { next }
-    /^## [A-Z]+-?[0-9]+([^A-Za-z0-9]|$)/ { if (hline == 0) hline = NR }
-    /^## / { flush(); infind = ($0 ~ /^## Findings[ \t]*$/); next }
-    infind && /^### / { flush(); fl = NR; fs = sev($0); fn = 0; fst = ""; next }
-    infind && fl > 0 && index($0, cite ":") == 1 {
-      fn++; v = substr($0, length(cite) + 2); sub(/^[ \t]*/, "", v); gsub(/[ \t]+/, "", v); fst = v; next
-    }
-    infind && fl > 0 && other != "" && index($0, other ":") == 1 { if (wrong == 0) wrong = NR; next }
-    END { flush(); printf "B %d %d\n", starts + 0, ends + 0; printf "Y %d\n", wrong + 0; printf "H %d\n", hline + 0 }
-  ' cite="$CITE" other="$OTHER" "$1"
-}
-
-field() { # $1 parse file, $2 key
-  awk -v k="$2" '$1 == "F" && $2 == k { sub(/^F [^ ]+ ?/, ""); print; exit }' "$1"
-}
-digits() { case "$1" in ""|*[!0-9]*) ;; *) printf '%s' "$1" ;; esac; }
-# Held in variables: bash 3.2 reads an unquoted `[[ =~ $var ]]` regex as ERE, fork-free.
-# invoked_at: to the second, optionally with a fraction -- the reference consumer stamps both.
-RE_ISO='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,9})?Z$'
+# parse_shard, field, digits, RE_ISO and the header checks are defined above the argument parse
+# (THE HEADER CHECK), because --check-header uses them and exits before anything below runs.
 # The ordering KEY for an invoked_at RE_ISO accepted (sets AT_KEY). It is OWNED by the convergence
 # validator, whose arm G orders passes by the same key, and taken from it here as its one-line
 # definition -- never restated, so the merge's earliest-shard pick and arm G cannot disagree.
@@ -1000,37 +1169,8 @@ for key in $ORDINALS $CROSS_KEYS; do
   sf="$(awk -F'\t' -v k="$key" '$1 == k { print $2; exit }' "$T/shards")"
   P="$T/parse.$key"
   parse_shard "$sf" > "$P" || refuse "parsing $sf did not run"
-  set -- $(awk '$1 == "B" { print $2, $3 }' "$P")
-  [ "${1:-0}" = "1" ] && [ "${2:-0}" = "1" ] \
-    || { collect "$sf carries ${1:-0} provenance block opening(s) and ${2:-0} closing(s); a shard carries exactly one block"; continue; }
-
-  crit="$(digits "$(field "$P" findings_critical)")"
-  major="$(digits "$(field "$P" findings_major)")"
-  [ -n "$crit" ] && [ -n "$major" ] \
-    || { collect "$sf does not declare integer findings_critical and findings_major"; continue; }
-  prior="$(digits "$(field "$P" findings_critical_prior_scope)")"
-  [ -n "$prior" ] || prior="$crit"
-  [ "$prior" -le "$crit" ] || { collect "$sf declares findings_critical_prior_scope=$prior above findings_critical=$crit"; continue; }
-  under="$(digits "$(field "$P" findings_major_underived)")"
-  [ -n "$under" ] || under=0
-  [ "$under" -le "$major" ] || { collect "$sf declares findings_major_underived=$under above findings_major=$major"; continue; }
-  minor="$(digits "$(field "$P" findings_minor)")"
-  [ -n "$minor" ] || minor=0
-
-  if [ "$ELICIT" -eq 1 ]; then
-    # Elicitation is not a convergence pass: a verdict here would be read as one by every gate.
-    [ -z "$(field "$P" verdict)" ] || { collect "$sf declares a verdict; an elicitation shard carries none"; continue; }
-  else
-  v="$(field "$P" verdict | tr '[:lower:]' '[:upper:]' | sed -e 's/[^A-Z]\{1,\}/_/g' -e 's/^_//' -e 's/_$//')"
-  case "$v" in
-    EXIT_CONDITION_MET|EXIT_CONDITION_NOT_MET) ;;
-    DIVERGENT_HARD_BLOCK) ANY_DIVERGENT=1 ;;
-    *) { collect "$sf declares verdict '${v:-<none>}', not one of EXIT_CONDITION_MET EXIT_CONDITION_NOT_MET DIVERGENT_HARD_BLOCK"; continue; } ;;
-  esac
-  fi
-
-  at="$(field "$P" invoked_at)"
-  [[ $at =~ $RE_ISO ]] || { collect "$sf invoked_at '${at:-<none>}' is not ISO 8601 UTC to the second (an optional .<fraction> before Z is accepted)"; continue; }
+  # THE HEADER CHECK (defined above the argument parse; --check-header runs the same functions).
+  check_header_core "$P" "$sf" "$AXIS" || { collect "$HDR_MSG"; continue; }
   at_key "$at"
   if [ -z "$EARLIEST" ] || [[ "$AT_KEY" < "$EARLIEST_KEY" ]]; then EARLIEST="$at"; EARLIEST_KEY="$AT_KEY"; fi
 
@@ -1047,16 +1187,14 @@ for key in $ORDINALS $CROSS_KEYS; do
   ID_LIST="$ID_LIST $key=$tid"
 
   # skill / mode / lead_role are batch-invariant: every shard ran the same evaluation.
-  val="$(field "$P" skill)"; [ -n "$val" ] || { collect "$sf declares no skill"; continue; }
-  if [ "$ELICIT" -eq 1 ] && [ "$val" != "bmad-advanced-elicitation" ]; then
-    { collect "$sf declares skill '$val'; an elicitation shard runs bmad-advanced-elicitation"; continue; }
-  fi
+  # Presence and value per shard are the header check's (hdr_role); agreement ACROSS shards is here.
+  hdr_role "$P" "$sf" skill "$AXIS" || { collect "$HDR_MSG"; continue; }; val="$HDR_VAL"
   [ -z "$SKILL" ] || [ "$SKILL" = "$val" ] || { collect "$sf declares skill '$val' where another shard declares '$SKILL'"; continue; }
   SKILL="$val"
-  val="$(field "$P" mode)"; [ -n "$val" ] || { collect "$sf declares no mode"; continue; }
+  hdr_role "$P" "$sf" mode "$AXIS" || { collect "$HDR_MSG"; continue; }; val="$HDR_VAL"
   [ -z "$MODE" ] || [ "$MODE" = "$val" ] || { collect "$sf declares mode '$val' where another shard declares '$MODE'"; continue; }
   MODE="$val"
-  val="$(field "$P" lead_role)"; [ -n "$val" ] || { collect "$sf declares no lead_role"; continue; }
+  hdr_role "$P" "$sf" lead_role "$AXIS" || { collect "$HDR_MSG"; continue; }; val="$HDR_VAL"
   [ -z "$LEAD_ROLE" ] || [ "$LEAD_ROLE" = "$val" ] || { collect "$sf declares lead_role '$val' where another shard declares '$LEAD_ROLE'"; continue; }
   LEAD_ROLE="$val"
   rd="$(field "$P" resolves_divergence)"
@@ -1127,11 +1265,8 @@ for key in $ORDINALS $CROSS_KEYS; do
   fi
 
   # --- the partition ---
-  n_crit_h=0; n_major_h=0
   while read -r tag line s nlines cited; do
     [ "$tag" = "X" ] || continue
-    [ "$s" = "CRITICAL" ] && n_crit_h=$((n_crit_h + 1))
-    [ "$s" = "MAJOR" ] && n_major_h=$((n_major_h + 1))
     [ "$nlines" = "1" ] || { collect "$sf:$line finding carries $nlines $CITE: lines; each finding carries exactly one"; continue; }
     [[ $cited =~ $RE_CITED ]] || { collect "$sf:$line $CITE: '$cited' is not <ordinal>[, <ordinal>...]"; continue; }
     distinct=""
@@ -1160,16 +1295,12 @@ for key in $ORDINALS $CROSS_KEYS; do
         || { collect "$sf:$line (shard $key) cites$distinct; a per-ordinal shard reports only findings citing its own ordinal alone"; continue; }
     fi
   done < "$P"
-  [ "$n_crit_h" -eq "$crit" ] && [ "$n_major_h" -eq "$major" ] \
-    || collect "$sf declares $crit CRITICAL / $major MAJOR but its ## Findings section heads $n_crit_h CRITICAL / $n_major_h MAJOR findings"
-  # The marker's count against the findings parsed here: a shard truncated after its marker, or
-  # marked before its findings, disagrees.
+  check_counts "$P" "$sf" || collect "$HDR_MSG"
+  # The reservation, after the count check (a severity-less heading whose counts disagree is
+  # refused on the count, as before) and before the marker count.
+  check_reserved "$P" "$sf" || collect "$HDR_MSG"
   scn="$(awk -F'\t' -v k="$key" '$1 == "Y" && $2 == k { print $3; exit }' "$T/sc")"
-  if [ -n "$scn" ]; then
-    nfx="$(grep -c '^X ' "$P")" || nfx=0
-    [ "$scn" = "$nfx" ] \
-      || collect "$sf ends in 'seat-complete: ... findings=$scn' but its ## Findings section heads $nfx finding(s); the marker is written once, last, counting the shard's findings"
-  fi
+  check_marker "$P" "$sf" "$scn" || collect "$HDR_MSG"
 
   S_CRIT=$((S_CRIT + crit)); S_PRIOR=$((S_PRIOR + prior)); S_MAJOR=$((S_MAJOR + major))
   S_UNDER=$((S_UNDER + under)); S_MINOR=$((S_MINOR + minor))

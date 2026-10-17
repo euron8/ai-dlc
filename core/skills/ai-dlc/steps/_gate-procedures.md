@@ -459,8 +459,11 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    `skill: bmad-advanced-elicitation`, the `artifact:` and `artifact_sha:` an adversarial shard on
    its axis notarizes, and no `verdict:` line. Each finding in it is a `### ` heading inside
    `## Findings` with an UPPERCASE severity word (FINDING GRAMMAR, `merge-adversarial-shards.sh`'s
-   header), not item 1's `##` seat form. Beat-join every shard path with
-   `--complete`. No merge reads that directory (`merge-adversarial-shards.sh --elicitation` merges
+   header), not item 1's `##` seat form. The brief carries the shard header as the generated
+   `provenance-block/adversary-pass` region of `team-roles/adversary.md` copied verbatim, with
+   `skill: bmad-advanced-elicitation` in place of its pinned skill and its `verdict:` line
+   removed, never as a field list the lead retypes. Beat-join every shard path with
+   `--complete --shard-header elicitation`. No merge reads that directory (`merge-adversarial-shards.sh --elicitation` merges
    only the requirements subject), so the shard records ARE the elicitation record, and the
    elicitation repair reads them shard by shard, dispatched on the same axis by "Adversarial
    repair dispatch": files are repaired as "Shard by file" does, with
@@ -479,7 +482,9 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    writes early and closes with its `seat-complete:` line as item 1 states. Each writes to
    `_bmad-output/planning-artifacts/s<N>/shards/requirements-elicitation/<ordinal>.md` (a
    cross shard: `cross-<g>.md`, or `cross.md` when there is one group) with `skill: bmad-advanced-elicitation` and no `verdict:` line,
-   since elicitation is not a convergence pass. Beat-join every shard path with `--complete`, then run
+   since elicitation is not a convergence pass; its brief carries the shard header exactly as
+   the files and sections axes above state. Beat-join every shard path with
+   `--complete --shard-header elicitation`, then run
    `scripts/ai-dlc/merge-adversarial-shards.sh --subject <N> --base <base sha from the manifest> --elicitation <that dir>`.
    It refuses unless every ordinal and every cross group delivered exactly once, every finding
    cites ordinals within the partition, and no cross finding outside its owner's shard repeats
@@ -522,6 +527,13 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    Check 24 reads (Rule 8). False-positive cost: one pass and its repair per round until the
    exit. Removal condition: repairs that measurably stop writing defects, and a Rule 8 that no
    longer counts an exit.
+
+   **Requirements pass 1 reviews the elicitation repair.** On the requirements subject the
+   lead briefs every pass-1 shard, and the one adversary of a subject that maps to one part,
+   under the pass-2+ contract (`team-roles/adversary.md`, "Later passes review the REPAIR"),
+   handing it `_bmad-output/planning-artifacts/s<N>/requirements-elicitation.md` as the prior
+   pass's findings and `_bmad-output/planning-artifacts/s<N>/requirements-elicitation-repair.md`
+   as the repair record. It is still pass 1 of the series, and elicitation still carries no verdict.
 4. Append the step's changelog ("Where a changelog is written" below), then proceed to
    the step's next action.
 
@@ -581,7 +593,8 @@ Agent tool, bound to `.claude/team-roles/adversary.md` per
 SKILL.md Rule 19 (both bindings: `model` and the standing role-contract Read line). Give it: the
 artifact path under review, the canonical output path, the pass number, and — on pass 2+ — the
 PRIOR pass's findings and the repair record, because pass 2+ reviews the REPAIR, not the document
-again. Every adversary brief, sharded or not, also carries the early-write instruction of
+again. On pass 1 of the requirements subject, sharded or one-part, that pair is the elicitation
+record: `_bmad-output/planning-artifacts/s<N>/requirements-elicitation.md` as the prior pass's findings and `_bmad-output/planning-artifacts/s<N>/requirements-elicitation-repair.md` as the repair record ("Validation cycle" item 3). Every adversary brief, sharded or not, also carries the early-write instruction of
 "Validation cycle" item 1: header first, each finding appended as verified, and ONE final
 write once it has finished, never with the header: `seat-complete: <step> adversary <shard>
 findings=<n>`, `<shard>` being the brief's `shard:` value (`none` when it carries none) and
@@ -593,9 +606,11 @@ round where no shard has finished — which the join's `--complete` beat, not th
 from reaching the merge. The merged record's `tool_use_id` is the derived id of cross-1 (of `cross` when there is one cross shard).
 
 It writes findings to `_bmad-output/planning-artifacts/s<N>/<artifact>-adversarial-p<M>.md`
-carrying a `SKILL_INVOCATION_PROVENANCE v1` block with `skill: ai-dlc-adversary-review`,
-`mode: subagent`, the `tool_use_id` of THIS Agent dispatch, `artifact` + `artifact_sha`, the four
-`findings_*` counts, and the `verdict:`. A SHARD writes `tool_use_id: NOT_ACCESSIBLE`, because a
+carrying a `SKILL_INVOCATION_PROVENANCE v1` block. Every adversary brief, sharded or not, carries
+that block as the generated `provenance-block/adversary-pass` region of `team-roles/adversary.md`
+copied verbatim (`sync-taught-schema.sh` renders it from `.claude/schemas/provenance-block.json`),
+never as a field list the lead retypes; an unsharded pass fills `tool_use_id` with THIS Agent
+dispatch's id. A SHARD writes `tool_use_id: NOT_ACCESSIBLE`, because a
 dispatched adversary cannot know its own dispatch id, and the merge derives each shard's dispatch id
 from the harness records: the write ledger names the agent that wrote the shard, its meta file names
 the dispatch, and the spawn ledger must record that dispatch as an `adversary`. Write your shard
@@ -618,7 +633,8 @@ cross-story shard per cross group, in waves (Rule 28, "Split dispatch"). The par
 shard gets `shard: cross/<K> g<g>/<G> <ordinals>`, the whole map, the whole group table, every
 story to read, its group's pairs as its focus ("Validation cycle" item 1, "The cross groups"),
 and `<that dir>/cross-<g>.md` (`<that dir>/cross.md` when G is 1). Every finding carries one `stories:` line in the grammar
-`merge-adversarial-shards.sh` defines. Beat-join every shard path with `--complete`, then run the join
+`merge-adversarial-shards.sh` defines. Beat-join every shard path with
+`--complete --shard-header convergence`, then run the join
 `scripts/ai-dlc/merge-adversarial-shards.sh <that dir>`. It refuses (exit 2, `REFUSED:`, nothing
 written) unless every ordinal and every cross group delivered exactly once, every finding
 respects the partition, no cross finding outside its owner's shard repeats the owner's identical
@@ -641,7 +657,7 @@ group table, the whole document to read and its group's pairs as its focus,
 and `<that dir>/cross-<g>.md` (`<that dir>/cross.md` when G is 1). Every finding carries one `sections:`
 line citing map ordinals (a part shard only its own, a cross shard two or more, any of them), and every
 shard notarizes the WHOLE document's `artifact_sha` with `artifact:` naming the document. Beat-join
-every shard path with `--complete`, then run the join
+every shard path with `--complete --shard-header convergence`, then run the join
 `scripts/ai-dlc/merge-adversarial-shards.sh --document <artifact path> <that dir>`. It re-derives
 the ordinal set from `--map` and the groups from `--cross-groups`, refuses (exit 2, `REFUSED:`, nothing written) unless every ordinal
 and every cross group delivered exactly once, every finding cites `sections:` within the partition,
@@ -666,8 +682,8 @@ to read — across files as well as within one — with its group's pairs as its
 and `<that dir>/cross-<g>.md` (`<that dir>/cross.md` when G is 1). Every finding carries one
 `sections:` line citing map ordinals (a part shard only its own, a cross shard two or more, any of them).
 Every shard notarizes `artifact:` = the subject manifest and `artifact_sha:` as one
-`<stem>=<sha>` entry per subject file, as the files are on disk. Beat-join every shard path with `--complete`,
-then run `scripts/ai-dlc/merge-adversarial-shards.sh --subject <N> --base <base sha> <that dir>`.
+`<stem>=<sha>` entry per subject file, as the files are on disk. Beat-join every shard path with
+`--complete --shard-header convergence`, then run `scripts/ai-dlc/merge-adversarial-shards.sh --subject <N> --base <base sha> <that dir>`.
 It re-derives the ordinal set from `partition-subject.sh --map` and the groups from `--cross-groups`, refuses (exit 2, `REFUSED:`,
 nothing written) unless every ordinal and every cross group delivered exactly once, every
 finding cites ordinals within the partition, no cross finding outside its owner's shard repeats the owner's identical cited set, and every per-stem sha matches the disk, then

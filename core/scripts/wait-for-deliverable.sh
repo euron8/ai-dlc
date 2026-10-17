@@ -196,12 +196,16 @@
 #                                   [--since <epoch|ISO8601>] [--dispatch <agentId|toolu_id>]
 #                                   [--progress-path <dir|file>]...
 #                                   [--complete | --complete-repair] [--status]
+#                                   [--shard-header convergence|elicitation]
 #
 #   --complete         DELIVERED also needs a settled last line `seat-complete: `.
 #   --complete-repair  the same, keyed on `repair-complete: serial ` -- the serial
 #                      remediator's terminal line on a joined repair record.
 #   --status           print DELIVERED / UNFINISHED / UNSETTLED / WAITING per path
 #                      and return at once: no sleep, no beat charged, no file written.
+#   --shard-header <axis>  with --complete only: a marked adversarial shard DELIVERS only
+#                      if `merge-adversarial-shards.sh --check-header <path> --axis <axis>`
+#                      passes; otherwise it is UNFINISHED with the merge's refusal text.
 #   --dispatch <id>    the dispatch this join waits on: the `agentId` (or `agent_id`) the
 #                      Agent result returned, or its toolu_ id. Its spawn-ledger `ts` is the
 #                      join's --since, and a --since LATER than it is refused.
@@ -346,6 +350,26 @@ set -u
 # shell marker or lease is written. It reads a path's stored join epoch and never arms one;
 # with neither a stored epoch nor --since there is no instant to compare a write against, so
 # the path reads WAITING. --reset is refused with it, because a reset is a write.
+#
+# --shard-header convergence|elicitation: THE HEADER IS PART OF DELIVERY FOR AN ADVERSARIAL SHARD.
+# A shard can end in `seat-complete:` and still be one the merge refuses -- measured on the
+# reference consumer, 13 of 19 shards in one pass carried the marker and no `verdict:`, and the
+# refusal surfaced only at the merge, after every adversary had exited. With this flag (valid only
+# with --complete; refused otherwise, and under --complete-repair) a target whose last non-blank
+# line is the marker is DELIVERED only if the SIBLING `merge-adversarial-shards.sh --check-header
+# <path> --axis <axis>` exits 0. Header parsing is the merge's and is never re-implemented here.
+# A marked target the check refuses is reported, on every beat, at exhaustion and by --status, as
+#   UNFINISHED <path> -- ends in seat-complete: but the merge would refuse it: <refusal text>
+# (the merge's line with its `REFUSED: ` prefix removed). It is UNFINISHED, never UNSETTLED: the
+# check runs before the settle window, so a header-failing shard opens no settle record and its
+# repair is not counted as a revision. Its OWN writes still grant PROGRESS while its agent fixes it.
+# THE SIBLING IS RESOLVED BESIDE THIS SCRIPT, never by walking up: both layouts put the two in one
+# directory (core/scripts/, scripts/ai-dlc/). A MISSING SIBLING IS REFUSED AT ARMING (exit 64,
+# nothing armed), the precedent --progress-path sets for a check that would otherwise never fire.
+# If it vanishes mid-join, or exits anything other than 0 or 1 (2 is the merge's bad-input exit),
+# the target is REFUSED with that output as the text -- a check that could not run never acquits.
+# The verdict is memoised per process on the file's content hash, so a poll re-runs the check
+# only when the file changed.
 # ---------------------------------------------------------------------------
 
 BUDGET="${AI_DLC_WAIT_BEAT_SECS:-600}"
@@ -379,6 +403,7 @@ COMPLETE=0
 STATUS=0
 COMPLETE_REPAIR=0
 SEAT_FLAG=0
+SHARD_AXIS=""
 # The marker a --complete beat keys on. One token per call (see --complete-repair above).
 MARK_TOKEN="seat-complete: "
 
@@ -424,6 +449,12 @@ while [ $# -gt 0 ]; do
     --complete) COMPLETE=1; SEAT_FLAG=1; shift ;;
     --complete-repair) COMPLETE=1; COMPLETE_REPAIR=1; MARK_TOKEN="repair-complete: serial "; shift ;;
     --status) STATUS=1; shift ;;
+    --shard-header)
+      shift
+      case "${1:-}" in
+        convergence|elicitation) SHARD_AXIS="$1"; shift ;;
+        *) echo "FAIL: --shard-header takes convergence or elicitation (got '${1:-}')." >&2; exit 64 ;;
+      esac ;;
     --since)
       shift
       [ $# -gt 0 ] || { echo "FAIL: --since needs a value (epoch or ISO8601)." >&2; exit 64; }
@@ -472,6 +503,12 @@ if [ "$SEAT_FLAG" -eq 1 ] && [ "$COMPLETE_REPAIR" -eq 1 ]; then
   exit 64
 fi
 
+if [ -n "$SHARD_AXIS" ] && [ "$SEAT_FLAG" -ne 1 ]; then
+  echo "FAIL: --shard-header is valid only with --complete. It checks the header of an adversarial" >&2
+  echo "  shard whose last line is seat-complete:, which only a --complete join reads." >&2
+  exit 64
+fi
+
 if [ "$STATUS" -eq 1 ] && [ "$RESET" -eq 1 ]; then
   echo "FAIL: --status and --reset cannot be combined. --status writes nothing; a reset is a write." >&2
   exit 64
@@ -513,6 +550,14 @@ WD_ROOT="${AI_DLC_PROJECT_ROOT:-}"
   exit 64
 }
 # --- end AI_DLC_ROOT --------------------------------------------------------
+# --shard-header's checker: the sibling beside this script (header: "--shard-header"), never a walk.
+SHARD_CHECK="${WD_SCRIPT_DIR}/merge-adversarial-shards.sh"
+if [ -n "$SHARD_AXIS" ] && [ ! -f "$SHARD_CHECK" ]; then
+  echo "FAIL: --shard-header needs merge-adversarial-shards.sh beside this script ($SHARD_CHECK)." >&2
+  echo "  Without it no shard header can be checked, so every marked shard would be refused." >&2
+  echo "  NO beat ran and the join is NOT armed." >&2
+  exit 64
+fi
 case "${AI_DLC_STATE_DIR:-}" in
   /*) STATE_DIR="$AI_DLC_STATE_DIR" ;;
   *)  STATE_DIR="${WD_ROOT}/${AI_DLC_STATE_DIR:-_bmad-output}" ;;
@@ -632,6 +677,9 @@ is_delivered() {  # $1 = path, $2 = join epoch
     rm -f "$id_st_" 2>/dev/null; settle_memo "$id_st_" ""
     return 1
   fi
+  # --shard-header: a header the merge refuses is UNFINISHED, checked BEFORE the settle window so
+  # it opens no settle record and its repair is not counted as a revision.
+  if [ -n "$SHARD_AXIS" ] && header_refused "$1"; then return 1; fi
   settled "$1" "$id_st_"
 }
 
@@ -660,6 +708,32 @@ content_hash() {  # $1 = path -> a content hash, empty when unreadable
   if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1
   elif command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" 2>/dev/null | cut -d' ' -f1
   else cksum < "$1" 2>/dev/null | tr -d ' \t'; fi
+}
+
+# --shard-header: 0 when the sibling merge's --check-header REFUSES $1's header, with HC_MSG set to
+# its refusal (the `REFUSED: ` prefix removed); 1 when it passes. A missing sibling, or any exit but
+# 0 and 1, is a refusal (header: "--shard-header"). Memoised per process on the content hash, in
+# HCH_<key> / HCM_<key>, so the poll loop re-runs the merge only when the file changed.
+header_refused() {  # $1 = path
+  hr_h_="$(content_hash "$1")"; hr_k_="$(key_of "$1")"
+  eval "hr_mh_=\${HCH_${hr_k_}:-}"
+  if [ -n "$hr_h_" ] && [ "$hr_mh_" = "$hr_h_" ]; then
+    eval "HC_MSG=\${HCM_${hr_k_}:-}"
+    [ -n "$HC_MSG" ]; return
+  fi
+  if [ ! -f "$SHARD_CHECK" ]; then
+    HC_MSG="no header check ran: merge-adversarial-shards.sh is missing beside this script ($SHARD_CHECK)"
+  else
+    hr_o_="$(bash "$SHARD_CHECK" --check-header "$1" --axis "$SHARD_AXIS" 2>&1)"; hr_rc_=$?
+    hr_o_="$(printf '%s' "$hr_o_" | tr '\n' ' ')"; hr_o_="${hr_o_% }"; hr_o_="${hr_o_#REFUSED: }"
+    case "$hr_rc_" in
+      0) HC_MSG="" ;;
+      1) HC_MSG="${hr_o_:-the header check exited 1 and printed nothing}" ;;
+      *) HC_MSG="the header check could not run (exit $hr_rc_): ${hr_o_:-no output}" ;;
+    esac
+  fi
+  if [ -n "$hr_h_" ]; then eval "HCH_${hr_k_}=\$hr_h_; HCM_${hr_k_}=\$HC_MSG"; fi
+  [ -n "$HC_MSG" ]
 }
 
 # THE SETTLE RECORD IS MEMOISED PER PROCESS for the reason the join epoch is (join_of): a
@@ -754,8 +828,16 @@ settled() {  # $1 = path, $2 = its .settle sidecar
 is_unfinished() {  # $1 = path, $2 = join epoch
   [ "$COMPLETE" -eq 1 ] && [ -s "$1" ] && [ "$(mtime_of "$1")" -ge "$2" ] && ! has_marker "$1"
 }
+# --shard-header: present, written since the join armed, marked, and its header REFUSED by the merge.
+is_header_unfinished() {  # $1 = path, $2 = join epoch; sets HC_MSG
+  [ -n "$SHARD_AXIS" ] && [ -s "$1" ] && [ "$(mtime_of "$1")" -ge "$2" ] && has_marker "$1" && header_refused "$1"
+}
+say_header_unfinished() {  # $1 = path; reads HC_MSG. The one emitter of this line, at every site.
+  echo "UNFINISHED $1 -- ends in ${MARK_NAME} but the merge would refuse it: $HC_MSG"
+}
 say_unfinished() {  # $1 = path, $2 = join epoch -- the line beneath a WAITING line
   is_unfinished "$1" "$2" && echo "UNFINISHED $1 -- present, last non-blank line is not ${MARK_NAME}"
+  is_header_unfinished "$1" "$2" && say_header_unfinished "$1"
   return 0
 }
 
@@ -1025,6 +1107,8 @@ if [ "$STATUS" -eq 1 ]; then
       S_V="DELIVERED"; echo "DELIVERED $t"
     elif ! status_marked "$t"; then
       S_V="UNFINISHED"; echo "UNFINISHED $t -- present, last non-blank line is not ${MARK_NAME}"
+    elif [ -n "$SHARD_AXIS" ] && header_refused "$t"; then
+      S_V="UNFINISHED"; say_header_unfinished "$t"
     else
       ss_rec="$(cat "${COUNTER_DIR}/$(key_of "$t").settle" 2>/dev/null || echo '')"
       ss_t="${ss_rec#* }"; case "$ss_t" in ''|*[!0-9]*) ss_t="" ;; esac
@@ -1337,6 +1421,9 @@ if [ -n "$EXHAUSTED" ]; then
     if is_unfinished "$t" "$(join_of "$t")"; then
       echo "NON-DELIVERY $t -- after $MAX_BEATS beats."
       echo "UNFINISHED $t -- present, last non-blank line is not ${MARK_NAME}"
+    elif is_header_unfinished "$t" "$(join_of "$t")"; then
+      echo "NON-DELIVERY $t -- after $MAX_BEATS beats."
+      say_header_unfinished "$t"
     elif [ "$COMPLETE" -eq 1 ] && [ -s "$t" ] && [ "$(mtime_of "$t")" -ge "$(join_of "$t")" ] && has_marker "$t"; then
       echo "NON-DELIVERY $t -- after $MAX_BEATS beats."
       echo "UNSETTLED $t -- present and ends in ${MARK_NAME}, but its content was still changing"

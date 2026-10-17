@@ -43,6 +43,11 @@ SUBJ="$(pick "$HERE/../../scripts/wait-for-deliverable.sh" \
              "$HERE/../../../core/scripts/wait-for-deliverable.sh")"
 [ -n "$SUBJ" ] || { echo "FIXTURE ERROR: cannot locate wait-for-deliverable.sh" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/scripts/wait-for-deliverable.sh"
+# --shard-header's checker is the subject's SIBLING in both layouts, so it is found beside the
+# resolved subject -- the same directory, no walk (I33).
+MERGE="$(dirname "$SUBJ")/merge-adversarial-shards.sh"
+[ -f "$MERGE" ] || { echo "FIXTURE ERROR: merge-adversarial-shards.sh is not beside $SUBJ" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/scripts/merge-adversarial-shards.sh"
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
@@ -62,6 +67,8 @@ BEATOUT="$TMPROOT/beat.out"
 IDLE_BANNER='TEAMMATE IDLE, DELIVERABLE ABSENT'
 LIVE_LINE='LIVENESS  a teammate in this session took a turn'
 UNAVAIL_LINE='LIVENESS  unavailable (no teammate transcripts for this session)'
+HDR_REFUSE='-- ends in seat-complete: but the merge would refuse it: '
+NOMARK_LINE='-- present, last non-blank line is not seat-complete:'
 
 # Pure shell pattern match, no pipe and no grep. `grep -q` fed from a pipe reports
 # NOT-FOUND on input that contains the pattern once the writer fills the pipe buffer
@@ -199,6 +206,15 @@ tail"
   OUT="x LIVENESS  unavailable (no teammate transcripts for this project) y"
   if has "$UNAVAIL_LINE"; then bad "probe: the unavailable detector fires on a near-miss"
   else ok "probe: the unavailable detector stays quiet on a seeded near-miss"; fi
+
+  # The --shard-header line and the marker-missing line are each other's near-miss: both open
+  # `UNFINISHED <path> -- `, and a detector keyed on that prefix scores either as the other.
+  OUT="x UNFINISHED s.md -- ends in seat-complete: but the merge would refuse it: why y"
+  if has "$HDR_REFUSE" && ! has "$NOMARK_LINE"; then ok "probe: the header-refusal detector reports a seeded offender, and the marker-missing detector does not"
+  else bad "probe: the header-refusal detector cannot spell its subject, or the marker-missing one fires on it"; fi
+  OUT="x UNFINISHED s.md -- present, last non-blank line is not seat-complete: y"
+  if has "$NOMARK_LINE" && ! has "$HDR_REFUSE"; then ok "probe: the header-refusal detector stays quiet on the marker-missing near-miss, which its own detector reports"
+  else bad "probe: the header-refusal detector fires on the marker-missing line, or that line's detector is blind"; fi
 
   OUT=""
 }
@@ -1656,6 +1672,187 @@ M33_revised_mutants() {
     ok "MUTANT revised-postpoll-silent: the post-poll site printing no REVISED line kills (i) and leaves (iv) — section 16 catches it"
   else bad "MUTANT revised-postpoll-silent: expected (i) killed and (iv) standing — b2: $(cat "$TMPROOT/rv-POST/o.b2") b4: $(cat "$TMPROOT/rv-POST/o.b4")"; fi
   rm -rf "$TMPROOT"/rv-*
+}
+
+# ===========================================================================
+# 17. --shard-header: A MARKED ADVERSARIAL SHARD IS DELIVERED ONLY IF THE MERGE WOULD TAKE ITS HEADER.
+#     The motivating case is a shard that ends in `seat-complete:` and carries no `verdict:` -- it
+#     read DELIVERED and surfaced only at the merge, after its adversary had exited. Every arm
+#     reads the expected refusal FROM THE MERGE ITSELF (--check-header, run here from the same
+#     cwd so the path in its text is the beat's), asserts the merge discriminates the pair first
+#     (exit 1 for the failing shard, 0 for its control), then demands that exact text in the beat.
+#     The shards are built here, minimally, not with adversarial-shard-merge/lib.sh: that lib
+#     resolves the merge by walking up and requires the write-ledger hook and jq, none of which
+#     --check-header reads. Each is the reference shard grammar (lib.sh `shard()`): a provenance
+#     block, zero findings, and a `seat-complete: ... findings=0` marker, so the valid one passes
+#     the marker-count check. Written via temp + mv, so a concurrent read never sees half a file.
+# ===========================================================================
+mk_shard() {  # $1 = file, $2 = skill, $3 = verdict ('' = no verdict line), $4 = field to drop, $5 = body line
+  ms_t="$1.tmp"
+  {
+    printf '# requirements -- adversarial shard\n\n## Findings\n\n## Probed and found sound\n\n- %s\n\n' "${5:-nothing further}"
+    printf '<!-- SKILL_INVOCATION_PROVENANCE v1\n'
+    printf 'skill: %s\ninvoked_at: 2026-10-01T10:00:00Z\ntool_use_id: NOT_ACCESSIBLE\nmode: subagent\n' "$2"
+    [ "$4" = lead_role ] || printf 'lead_role: .claude/skills/ai-dlc/steps/requirements.md\n'
+    printf 'artifact: _bmad-output/planning-artifacts/s1/requirements.md\n'
+    printf 'findings_critical: 0\nfindings_critical_prior_scope: 0\nfindings_major: 0\nfindings_major_underived: 0\nfindings_minor: 0\n'
+    if [ -n "$3" ]; then printf 'verdict: %s\n' "$3"; fi
+    printf 'SKILL_INVOCATION_PROVENANCE_END -->\n\nseat-complete: requirements p1 1 findings=0\n'
+  } > "$ms_t" && mv -f "$ms_t" "$1" || broken "cannot write shard $1"
+}
+hdr_msg() {  # $1 = workdir, $2 = shard (relative), $3 = axis -> HM (the merge's text, no `REFUSED: `), HRC
+  HM="$( cd "$1" && bash "$MERGE" --check-header "$2" --axis "$3" 2>&1 )"; HRC=$?
+  HM="${HM#REFUSED: }"
+}
+hdr_line() {  # $1 = shard, $2 = refusal text: is the beat's exact UNFINISHED line in BEATOUT?
+  grep -qxF "UNFINISHED $1 ${HDR_REFUSE}$2" "$BEATOUT"
+}
+CV=ai-dlc-adversary-review
+EL=bmad-advanced-elicitation
+
+S17a_shard_header_convergence() {
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  mk_shard "$W/s-ok.md"   "$CV" EXIT_CONDITION_MET ""
+  mk_shard "$W/s-nov.md"  "$CV" ""                 ""
+  mk_shard "$W/s-pend.md" "$CV" PENDING-LEAD       ""
+  mk_shard "$W/s-nolr.md" "$CV" EXIT_CONDITION_MET lead_role
+  hdr_msg "$W" s-ok.md convergence;   c_ok=$HRC
+  hdr_msg "$W" s-nov.md convergence;  c_nov=$HRC;  m_nov="$HM"
+  hdr_msg "$W" s-pend.md convergence; c_pend=$HRC; m_pend="$HM"
+  hdr_msg "$W" s-nolr.md convergence; c_nolr=$HRC; m_nolr="$HM"
+  if [ "$c_ok" -eq 0 ] && [ "$c_nov" -eq 1 ] && [ "$c_pend" -eq 1 ] && [ "$c_nolr" -eq 1 ]; then
+    ok "shard-header: CONTROL — the merge itself passes the MET shard and refuses no-verdict, PENDING-LEAD and no-lead_role"
+  else bad "shard-header: CONTROL FAILED — the merge does not discriminate the seeds (ok=$c_ok nov=$c_nov pend=$c_pend nolr=$c_nolr), so the beat arms below mean nothing"; fi
+
+  CB_BEAT=3 cbeat "$SUBJ" "$W" --complete --shard-header convergence s-ok.md s-nov.md s-pend.md s-nolr.md
+  if has "DELIVERED s-ok.md" && [ "$RC" -eq 0 ]; then ok "shard-header: CONTROL — the same shard WITH verdict: EXIT_CONDITION_MET is DELIVERED (rc 0)"
+  else bad "shard-header: CONTROL FAILED — a valid marked shard was not delivered under --shard-header (rc=$RC): $OUT"; fi
+  if hdr_line s-nov.md "$m_nov" && ! has "DELIVERED s-nov.md"; then
+    ok "shard-header (1): a marked shard with no verdict: is UNFINISHED, carrying the merge's own refusal text"
+  else bad "shard-header (1): a marked no-verdict shard was not UNFINISHED with the merge's text '$m_nov': $OUT"; fi
+  if hdr_line s-pend.md "$m_pend" && ! has "DELIVERED s-pend.md"; then ok "shard-header (2): verdict: PENDING-LEAD is UNFINISHED"
+  else bad "shard-header (2): a PENDING-LEAD shard was not UNFINISHED with '$m_pend': $OUT"; fi
+  if hdr_line s-nolr.md "$m_nolr" && ! has "DELIVERED s-nolr.md"; then ok "shard-header (3): a marked shard missing lead_role is UNFINISHED"
+  else bad "shard-header (3): a no-lead_role shard was not UNFINISHED with '$m_nolr': $OUT"; fi
+
+  # --status is the beat's verdict without the beat, so it must say the same.
+  CB_SETTLE=60 scall "$SUBJ" "$W" --complete --shard-header convergence --since "$CBEAT_SINCE" s-nov.md
+  if hdr_line s-nov.md "$m_nov"; then ok "shard-header: --status reports the same UNFINISHED line as the beat"
+  else bad "shard-header: --status disagrees with the beat on a header-failing shard: $OUT"; fi
+  rm -rf "$W"
+}
+
+S17b_shard_header_elicitation() {
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  # One property apart: both declare the elicitation skill; only the verdict: line differs.
+  mk_shard "$W/e-nov.md" "$EL" ""                 ""
+  mk_shard "$W/e-v.md"   "$EL" EXIT_CONDITION_MET ""
+  hdr_msg "$W" e-nov.md elicitation; c_nov=$HRC
+  hdr_msg "$W" e-v.md elicitation;   c_v=$HRC; m_v="$HM"
+  CB_BEAT=3 cbeat "$SUBJ" "$W" --complete --shard-header elicitation e-nov.md e-v.md
+  if [ "$c_nov" -eq 0 ] && [ "$c_v" -eq 1 ] && has "DELIVERED e-nov.md"; then
+    ok "shard-header (4): on the elicitation axis a shard with NO verdict is DELIVERED"
+  else bad "shard-header (4): an elicitation shard without verdict was not delivered (merge nov=$c_nov v=$c_v): $OUT"; fi
+  if hdr_line e-v.md "$m_v" && ! has "DELIVERED e-v.md"; then ok "shard-header (4): on the elicitation axis a shard WITH a verdict is UNFINISHED"
+  else bad "shard-header (4): an elicitation shard carrying a verdict was not UNFINISHED with '$m_v': $OUT"; fi
+  rm -rf "$W"
+}
+
+S17c_shard_header_absent_changes_nothing() {
+  # A headerless marked shard WITHOUT the flag delivers exactly as a valid one does: the two worlds
+  # print the same output (timing words masked). WITH the flag the headerless one is UNFINISHED, so
+  # the comparison is shown able to differ. Byte identity against the pre-flag script is the
+  # build's probe; this arm holds the no-flag path blind to the header.
+  WA="$(mk_work)"; WB="$(mk_work)"; WC="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '# requirements -- adversarial shard\n\n## Findings\n\nseat-complete: requirements p1 1 findings=0\n' > "$WA/h.md"
+  cp "$WA/h.md" "$WC/h.md"
+  mk_shard "$WB/h.md" "$CV" EXIT_CONDITION_MET ""
+  hdr_msg "$WA" h.md convergence; c_h=$HRC; m_h="$HM"
+  CB_BEAT=3 cbeat "$SUBJ" "$WA" --complete h.md; oa="$(sed -E 's/[0-9]+[smhd] (old|since|ago)/N \1/g' "$BEATOUT")"
+  CB_BEAT=3 cbeat "$SUBJ" "$WB" --complete h.md; ob="$(sed -E 's/[0-9]+[smhd] (old|since|ago)/N \1/g' "$BEATOUT")"
+  OUT="$oa"
+  if [ "$c_h" -eq 1 ] && has "DELIVERED h.md" && [ "$oa" = "$ob" ]; then
+    ok "shard-header (5): without the flag a headerless marked shard is DELIVERED, output identical to a valid shard's"
+  else bad "shard-header (5): without the flag the header changed the outcome (merge rc=$c_h): [$oa] vs [$ob]"; fi
+  CB_BEAT=3 cbeat "$SUBJ" "$WC" --complete --shard-header convergence h.md
+  if hdr_line h.md "$m_h" && ! has "DELIVERED h.md"; then ok "shard-header (5): CONTROL — the same headerless shard WITH the flag is UNFINISHED"
+  else bad "shard-header (5): CONTROL FAILED — the flag did not change the headerless outcome, so the identity above proves nothing: $OUT"; fi
+  rm -rf "$WA" "$WB" "$WC"
+}
+
+# Both shards rewritten together every 0.3s until the sentinel exists, each revision distinct
+# bytes outside ## Findings; stopped by churn_stop (shared with section 13c), never killed.
+shard_churn() {  # $1 = workdir
+  CHURN_STOP="$1/churn.stop"; rm -f "$CHURN_STOP"
+  ( i=0; end=$(( $(date +%s) + 60 ))
+    while [ ! -e "$CHURN_STOP" ] && [ "$(date +%s)" -lt "$end" ]; do
+      i=$((i + 1))
+      mk_shard "$1/c-bad.md" "$CV" ""                 "" "revision $i"
+      mk_shard "$1/c-ok.md"  "$CV" EXIT_CONDITION_MET "" "revision $i"
+      sleep 0.3
+    done ) &
+  CHURN_PID=$!
+}
+
+S17d_shard_header_unfinished_not_unsettled() {
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  mk_shard "$W/c-bad.md" "$CV" ""                 ""
+  mk_shard "$W/c-ok.md"  "$CV" EXIT_CONDITION_MET ""
+  shard_churn "$W"
+  cbeat "$SUBJ" "$W" --complete --shard-header convergence c-bad.md c-ok.md; o1="$OUT"   # charges the beat
+  cbeat "$SUBJ" "$W" --complete --shard-header convergence c-bad.md c-ok.md               # own-progress grant
+  cbeat "$SUBJ" "$W" --complete --shard-header convergence c-bad.md c-ok.md; o3="$OUT"; r3=$RC   # spent
+  churn_stop
+  OUT="$o1"
+  if has "UNFINISHED c-bad.md $HDR_REFUSE"; then ok "shard-header (6): a changing header-failing shard is UNFINISHED beneath its WAITING line"
+  else bad "shard-header (6): the WAITING beat did not name the changing header-failing shard UNFINISHED: $OUT"; fi
+  OUT="$o3"
+  if has "UNSETTLED c-ok.md" && [ "$r3" -eq 1 ]; then ok "shard-header (6): CONTROL — the valid shard churning beside it IS UNSETTLED on exhaustion (rc 1)"
+  else bad "shard-header (6): CONTROL FAILED — the churning valid shard was not UNSETTLED (rc=$r3), so the exhaustion path was not reached: $OUT"; fi
+  if has "NON-DELIVERY c-bad.md -- after" && has "UNFINISHED c-bad.md $HDR_REFUSE" && ! has "UNSETTLED c-bad.md" \
+     && ! has "NON-DELIVERY c-bad.md -- absent"; then
+    ok "shard-header (6): on exhaustion a changing header-failing shard is UNFINISHED, never UNSETTLED or absent"
+  else bad "shard-header (6): an exhausted changing header-failing shard was not routed to UNFINISHED: $OUT"; fi
+  rm -rf "$W"
+}
+
+S17e_shard_header_refusals() {
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  cbeat "$SUBJ" "$W" --shard-header convergence x.md
+  if [ "$RC" -eq 64 ] && has "valid only with --complete"; then ok "shard-header (7): --shard-header without --complete is refused (exit 64)"
+  else bad "shard-header (7): --shard-header without --complete was accepted (rc=$RC): $OUT"; fi
+  cbeat "$SUBJ" "$W" --complete-repair --shard-header convergence x.md
+  if [ "$RC" -eq 64 ] && has "valid only with --complete"; then ok "shard-header (7): --shard-header with --complete-repair is refused (exit 64)"
+  else bad "shard-header (7): --shard-header with --complete-repair was accepted (rc=$RC): $OUT"; fi
+  cbeat "$SUBJ" "$W" --complete --shard-header bogus x.md
+  if [ "$RC" -eq 64 ] && has "takes convergence or elicitation"; then ok "shard-header (7): an axis other than convergence or elicitation is refused (exit 64)"
+  else bad "shard-header (7): an unknown axis was accepted (rc=$RC): $OUT"; fi
+  # THE MISSING SIBLING IS REFUSED AT ARMING, never an acquittal. Control: the same lone copy
+  # without the flag runs a beat, so the refusal is the flag's and not a broken copy.
+  LONE="$TMPROOT/lone"; mkdir -p "$LONE"; cp "$SUBJ" "$LONE/wait-for-deliverable.sh" || broken "cannot copy the subject"
+  [ ! -e "$LONE/merge-adversarial-shards.sh" ] || broken "the lone copy has a merge beside it"
+  cbeat "$LONE/wait-for-deliverable.sh" "$W" --complete --shard-header convergence x.md
+  if [ "$RC" -eq 64 ] && has "needs merge-adversarial-shards.sh beside this script"; then
+    ok "shard-header: a subject with no merge beside it refuses --shard-header at arming (exit 64)"
+  else bad "shard-header: a missing sibling merge did not refuse at arming (rc=$RC): $OUT"; fi
+  cbeat "$LONE/wait-for-deliverable.sh" "$W" --complete x.md
+  if [ "$RC" -eq 0 ] && has "WAITING   x.md"; then ok "shard-header: CONTROL — the same lone copy without the flag runs a beat"
+  else bad "shard-header: CONTROL FAILED — the lone copy does not run at all (rc=$RC): $OUT"; fi
+  rm -rf "$W" "$LONE"
+}
+
+M37_shard_check_exit_ignored() {
+  mutant shard-check-exit-ignored \
+    -e 's@^  if \[ -n "\$SHARD_AXIS" \] && header_refused "\$1"; then return 1; fi$@  if [ -n "$SHARD_AXIS" ]; then header_refused "$1"; fi@' || return
+  cp "$MERGE" "$MUTDIR/merge-adversarial-shards.sh" || broken "cannot copy the merge beside the mutant"
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  mk_shard "$W/s-nov.md" "$CV" ""                 ""
+  mk_shard "$W/s-ok.md"  "$CV" EXIT_CONDITION_MET ""
+  CB_BEAT=3 cbeat "$MUT" "$W" --complete --shard-header convergence s-nov.md s-ok.md
+  if has "DELIVERED s-nov.md" && has "DELIVERED s-ok.md"; then
+    ok "MUTANT shard-check-exit-ignored: a join ignoring the check's exit delivers the no-verdict shard — section 17a (1) catches it"
+  else bad "MUTANT shard-check-exit-ignored: section 17a (1) survives the check's exit being ignored (or the mutant never ran): $OUT"; fi
+  rm -rf "$W"
 }
 
 # ---------------------------------------------------------------------------
