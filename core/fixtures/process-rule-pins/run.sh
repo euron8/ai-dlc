@@ -415,6 +415,7 @@ r28-no-reopen|S|rule-bodies/rule-28.md||**A dispatched teammate reaches the lead
 r28-epoch-outside-round|S|rule-bodies/rule-28.md|**Waves: the harness caps concurrent subagents.**|**A rejected spawn is undelivered, and holding it is not a retry.**|**The round's epoch is written down before wave 1.**|para|A beat outside a fan-out round has no round epoch and passes `--dispatch` alone
 r28-epoch-recorded|S|rule-bodies/rule-28.md|**Waves: the harness caps concurrent subagents.**|**A rejected spawn is undelivered, and holding it is not a retry.**|**The round's epoch is written down before wave 1.**|para|The `<epoch>` is the one recorded before wave 1, never one minted at the beat.
 r28-serial-join|S|rule-bodies/rule-28.md|**A notification the live beat already covers is not a turn's work.**|**The join names what is missing, never what it counted.**|**The serial remediator's join is armed on the record it appends to.**|para|`**Join**`, with `--complete-repair` and `--dispatch` alone
+impl-cross-statedir|S|steps/implementation.md|### 6. Orchestrate|### 7.|**Gate-2 dispatch: the validation partitions by changed-file group too.**|para|a beat state directory of its own, given as an absolute path, and never the lead's.
 arch-lint-invoke|S|steps/architecture.md|### 2. Architecture Creation or Update|### 3.|`bmad-architecture` ships `scripts/lint_spine.py`|para|lint_spine.py --workspace <the run folder holding ARCHITECTURE-SPINE.md> -o <lint json>
 PINS
 }

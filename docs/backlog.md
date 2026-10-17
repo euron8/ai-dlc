@@ -433,7 +433,7 @@ verify: manual
 
 Owed: the step says "an absolute path, or a path relative to the project root", matching `:242`. Receipt: the rendered step names both forms. Control: the `--since` instruction at `:456-458` is unchanged.
 
-verify: manual
+verify: sh t="$(awk 'index($0,"**Gate-2 dispatch: the validation partitions by changed-file group too.**")==1{p=1} p&&/^$/{exit} p' core/skills/ai-dlc/steps/implementation.md | tr '\n' ' ' | tr -s ' ')"; [ -n "$t" ] || exit 9; grep -qiE 'beat state directory of its own, (given |named )?(as )?an absolute path' <<<"$t" && ! grep -qF 'outside the shard directory' <<<"$t" && grep -qF 'AI_DLC_STATE_DIR=<that directory> wait-for-deliverable.sh --complete --since <epoch> <part paths>' <<<"$t"
 
 ## BL-619 — `ai-dlc-continue.sh` ignores `AI_DLC_STATE_DIR`, so the stop hook cannot see a beat whose state dir was set
 
