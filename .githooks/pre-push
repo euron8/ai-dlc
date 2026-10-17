@@ -457,7 +457,7 @@ GITDIR="$(git rev-parse --git-common-dir 2>/dev/null)" || GITDIR=".git"
 [ -n "$GITDIR" ] || GITDIR=".git"
 DURATIONS_RECORD="$GITDIR/ai-dlc-fixture-durations"
 # THIS RUN'S COSTS, UNMERGED, AND THAT IS THE WHOLE DIFFERENCE FROM THE RECORD ABOVE.
-# DURATIONS_RECORD merges each run over the last one so a SKIPPED unit keeps the cost it had --
+# DURATIONS_RECORD merges each GREEN run over the last one so a SKIPPED unit keeps the cost it had --
 # correct for scheduling, useless for measurement. Its rows are of mixed vintage and nothing in
 # it says which run wrote which, so reading a pole figure off it compares two different days.
 # This file holds only what THIS pool actually timed.
@@ -1975,7 +1975,7 @@ run_fixtures() {
   # measured too and lost to plain longest-first, so nothing here carries a tuning
   # constant that §7's gate item 3 would have to expire.
   #
-  # THE RECORD IS WRITTEN BY THE PREVIOUS RUN AND LIVES UNDER .git, for I55 arm 4's
+  # THE RECORD IS WRITTEN BY THE LAST GREEN RUN AND LIVES UNDER .git, for I55 arm 4's
   # reason exactly: the content key hashes the working tree, so a cost record inside it
   # would change the key that decides whether this suite runs at all.
   #
@@ -2109,8 +2109,16 @@ run_fixtures() {
   # literal `ghost` line and asserts the suite still runs complete. Pruning against the
   # on-disk set would need a pre-skip copy of the list, i.e. another executable line in
   # this I66-joined region, to buy a defect nobody has measured.
+  # A RED POOL MERGES NOTHING, and the gate is on the RUN, not on each unit. A unit that came back
+  # ok inside a red run was still timed under that run's load, and those are exactly the rows that
+  # poisoned this record: readset-skip-d at 928s against 330-502s in every clean gate, and three
+  # gate-adjudication-mutants shards at ~650s against ~200s, all ok units of runs red elsewhere
+  # (BL-591). A per-unit gate would have kept every one of them. The price is that a unit timed
+  # only inside red runs keeps its older row, or none, until a green run times it; a misplaced
+  # dispatch costs a little schedule, while an inflated pole misdirects the runner and every
+  # ranking read off this file. `.last` below is gated the same way for the same reason.
   cat "$out"/.dur/* > "$out/.durations" 2>/dev/null
-  if [ -s "$out/.durations" ]; then
+  if [ "$rc" -eq 0 ] && [ -s "$out/.durations" ]; then
     { [ -s "$DURATIONS_RECORD" ] && cat "$DURATIONS_RECORD"; cat "$out/.durations"; } 2>/dev/null \
       | awk 'NF == 2 { c[$1] = $2 } END { for (k in c) print k, c[k] }' \
       | sort > "$out/.merged"

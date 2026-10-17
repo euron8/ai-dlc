@@ -293,6 +293,37 @@ else
 fi
 unset SDO_TRACE
 
+# ---------------------- 5. a RED pool leaves the record exactly as it found it -----
+# BL-591. The merge folded every DISPATCHED unit's cost in whatever the run's verdict, so an ok
+# unit of a run that went red elsewhere was recorded at that run's load -- readset-skip-d at 928s
+# against 330-502s in every clean gate. The gate is on the RUN: those were ok units, so a per-unit
+# gate would have kept them.
+#
+# BOTH UNITS ARE SEEDED AT 900, a cost no unit here can record (they sleep 0), so a merge that
+# happened cannot leave the file byte-identical by coincidence -- with a seed the run could
+# reproduce, M5 below would survive on equal values. The RED run is cmp'd whole; the GREEN control
+# then asserts a SPECIFIC value, ok's row no longer 900, because the merge re-sorts and normalises
+# and "the file changed" is satisfiable by formatting alone.
+T="$WORK/red"; seed "$T" "$HOOK" || broken "seed failed"
+mkfx "$T" good 0; mkfx "$T" sick 1
+printf 'good 900\nsick 900\n' > "$T/.git/ai-dlc-fixture-durations" || broken "could not seed the red-run record"
+cp "$T/.git/ai-dlc-fixture-durations" "$WORK/red.before" || broken "could not keep the red-run record's before copy"
+rc="$(drive "$T" "$WORK/red.out")"
+if [ "$rc" != 0 ] && grep -q 'FAIL  sick' "$WORK/red.out" && grep -q 'ok    good' "$WORK/red.out" \
+   && cmp -s "$WORK/red.before" "$T/.git/ai-dlc-fixture-durations"; then
+  ok "a pool red on one unit leaves the durations record byte-identical, the ok unit it timed included"
+else
+  bad "a red pool (rc=$rc) changed the durations record, or did not run as seeded: an ok unit of a red run is recorded at that run's load and becomes a phantom pole"
+fi
+mkfx "$T" sick 0
+rc="$(drive "$T" "$WORK/green.out")"
+g_good="$(awk '$1 == "good" { print $2 }' "$T/.git/ai-dlc-fixture-durations" 2>/dev/null)"
+if [ "$rc" = 0 ] && [ -n "$g_good" ] && [ "$g_good" != 900 ]; then
+  ok "the same tree made green records this run's cost (good: 900 -> $g_good), so the red arm above is the gate and not a writer that never runs"
+else
+  bad "the green control (rc=$rc) left good at '${g_good:-gone}', not this run's cost -- the red arm cannot tell a gated merge from no merge at all"
+fi
+
 # ================================================================== MUTANTS ========
 # Each is a COPY of the hook with one arm removed, guarded by `cmp -s` so a sed that
 # matched nothing cannot pass as a mutation. `mut` SETS `MUT` rather than printing it:
@@ -423,11 +454,38 @@ if mut m4 's|\[ -s "\$DURATIONS_RECORD" \] && cat "\$DURATIONS_RECORD"|false|'; 
   unset SDO_TRACE
 fi
 
+# M5 -- THE RUN-VERDICT GATE REMOVED FROM THE MERGE, and only from the merge. The `.last` publish
+# opens with the same `if [ "$rc" -eq 0 ] && [ -s "$out/.durations" ]` text, so the edit is keyed
+# on what separates them: the merge line ENDS at `then`, while `.last` continues `; then cp`. awk
+# rather than sed, because the replacement carries `&&` and sed would re-insert the match. Exactly
+# one line must change, or the mutant would also lift the `.last` gate and be entangled.
+M5="$WORK/hook.m5"
+M5_OLD='  if [ "$rc" -eq 0 ] && [ -s "$out/.durations" ]; then'
+M5_NEW='  if [ -s "$out/.durations" ]; then'
+MO="$M5_OLD" MN="$M5_NEW" awk '$0 == ENVIRON["MO"] { print ENVIRON["MN"]; next } { print }' "$HOOK" > "$M5" \
+  || broken "could not write the M5 mutant"
+m5_diff="$(diff "$HOOK" "$M5")"
+n_m5="$(grep -c '^>' <<<"$m5_diff")" || n_m5=0
+if [ "$n_m5" -ne 1 ]; then
+  bad "MUTANT m5 changed $n_m5 line(s), not 1 -- the merge gate's anchor is not unique, so the mutant proves nothing"
+else
+  T="$WORK/m5"; seed "$T" "$M5" || broken "seed failed"
+  mkfx "$T" good 0; mkfx "$T" sick 1
+  printf 'good 900\nsick 900\n' > "$T/.git/ai-dlc-fixture-durations" || broken "could not seed the M5 record"
+  cp "$T/.git/ai-dlc-fixture-durations" "$WORK/m5.before" || broken "could not keep the M5 before copy"
+  rc="$(drive "$T" "$WORK/m5.out")"
+  if [ "$rc" != 0 ] && ! cmp -s "$WORK/m5.before" "$T/.git/ai-dlc-fixture-durations"; then
+    ok "M5 with the run-verdict gate removed from the merge, the same red pool rewrites the record -- arm 5 is measuring the gate"
+  else
+    bad "M5 the ungated merge left the record unchanged after a red pool (rc=$rc) -- arm 5 would pass against the defect BL-591 fixed"
+  fi
+fi
+
 # ------------------------------------------------------------------- floor ---------
 # EXPECTED_ASSERTIONS, mandatory since v0.217.0 for any fixture whose arms are emitted
 # from inside a conditional: an assertion that never executed prints nothing, and a short
 # green report reads exactly like a complete one.
-EXPECTED_ASSERTIONS=12
+EXPECTED_ASSERTIONS=15
 if [ "$asserts" -ne "$EXPECTED_ASSERTIONS" ]; then
   printf '  FAIL  %s assertions ran, %s expected — an arm did not execute, and a short green report reads exactly like a complete one\n' \
     "$asserts" "$EXPECTED_ASSERTIONS"

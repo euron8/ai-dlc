@@ -34445,3 +34445,15 @@ The miss was procedural. The lead fixed it on the lead's side, not in this repo:
 
 verify: manual
 
+## BL-591 — a red pre-push run's loaded timings are merged into the durations record the runner orders by
+
+**LANDED (v0.811.0, verified fea68e33).** Both pre-push hooks merge `$out/.durations` into the record, and copy it to `.last`, only when the pool exited 0 (`[ "$rc" -eq 0 ] && [ -s "$out/.durations" ]`, two sites per hook). `suite-dispatch-order` arm 5 asserts a red pool leaves the record byte-identical while a green control updates it, and M5 (the gate removed from the merge line only) reddens arm 5.
+
+**DEFECT.** Filed by peer session ai-dlc-bb (batch 235 gate throughput), routed by ai-dlc-b8. `.githooks/pre-push` (952b9319) folds `$out/.durations` into `$DURATIONS_RECORD` (`.git/ai-dlc-fixture-durations`) at `:2112-2118` with no `rc` gate, while `:2139` publishes `.last` only when `rc -eq 0`, and its own comment at `:2134-2138` gives the reason that applies equally to the merge: "a red run's timings belong to a suite that stopped early". Measured by the filer from `.git/ai-dlc-suite-pole.history` (clean gates only): `readset-skip-d` is recorded at 928s but ran 330-502s across 6 clean gates and 928 appears in no clean row; `gate-adjudication-mutants` a/c/e are recorded at 666/646/642, from the red run at 2026-10-16T00:16Z, against 216/196/195 at the last clean gate. Intake re-read the live record: `readset-skip-d 928`, `gate-adjudication-mutants 666`, `-c 646`, `-e 642`; the history carries 48 `readset-skip-d` and 18 `gate-adjudication-mutants` rows and 0 occurrences of `928` (control for the absence: the row counts are non-zero).
+
+Effect: the runner's longest-first dispatch order and any ranking a human reads off the record use inflated poles; this batch's throughput work started from a pole that does not exist. Remedy is the builder's: gate the merge on `rc` as `:2139` is, or merge only units whose own verdict was ok. Either edit sits inside the I66-joined region, so both pre-push hooks move together.
+
+Owed: a red run (one seeded failing unit) leaves `.git/ai-dlc-fixture-durations` unchanged for units it timed (or, under the per-verdict remedy, unchanged for the failing and unfinished units only); a green run as the control updates it.
+
+verify: manual
+

@@ -361,7 +361,7 @@ fi
 GITDIR="$(git rev-parse --git-common-dir 2>/dev/null)" || GITDIR=".git"
 [ -n "$GITDIR" ] || GITDIR=".git"
 DURATIONS_RECORD="$GITDIR/ai-dlc-fixture-durations"
-# THIS RUN'S COSTS, UNMERGED. The record above merges each run over the last so a fixture that
+# THIS RUN'S COSTS, UNMERGED. The record above merges each green run over the last so a fixture that
 # was SKIPPED keeps the cost it had -- which is what the longest-first dispatch wants, and which
 # makes every row in it a floor of unknown age. If you want to know what your suite cost THIS
 # push, read this file: it holds only the units this pool actually timed.
@@ -1880,7 +1880,7 @@ run_fixtures() {
   # trade comes out level. On the distribution's own suite it does exactly that and wins
   # nothing measurable; it is shipped for the schedule shape a consumer suite has.
   #
-  # THE RECORD LIVES UNDER .git ON PURPOSE. It is written once per run and it is not
+  # THE RECORD LIVES UNDER .git ON PURPOSE. It is written once per green run and it is not
   # part of your project's tree, so it never shows up in a diff, a status, or a commit.
   #
   # IF ANYTHING ABOUT IT IS MISSING OR ODD, THE SUITE RUNS IN PLAIN GLOB ORDER: no
@@ -1997,8 +1997,13 @@ run_fixtures() {
   # ordering step above applies, so what is written and what is read cannot drift apart.
   # A cost left behind for a fixture you have deleted is harmless -- nothing looks up a
   # name with no directory -- and is not worth the code to remove.
+  # A RUN WITH ANY RED FIXTURE RECORDS NO COSTS. Even the fixtures that passed in it were timed
+  # under that run's conditions, and a cost recorded from a run that went wrong elsewhere can be
+  # several times the fixture's real cost -- which then puts it at the front of every later run.
+  # The trade: a fixture that has only ever run inside red runs keeps its old cost, or none,
+  # until a green run times it.
   cat "$out"/.dur/* > "$out/.durations" 2>/dev/null
-  if [ -s "$out/.durations" ]; then
+  if [ "$rc" -eq 0 ] && [ -s "$out/.durations" ]; then
     { [ -s "$DURATIONS_RECORD" ] && cat "$DURATIONS_RECORD"; cat "$out/.durations"; } 2>/dev/null \
       | awk 'NF == 2 { c[$1] = $2 } END { for (k in c) print k, c[k] }' \
       | sort > "$out/.merged"
