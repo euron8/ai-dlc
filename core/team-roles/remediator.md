@@ -82,6 +82,10 @@ source; do not infer either value from anywhere else.
    it. Rule 20: the file IS the deliverable.
 4. **Return `{artifact_path, repair_record_path, repaired, escalated}`** — counts, not prose.
 
+   **A brief that carries `revised-seats: <path>…`** names seat files that changed after their
+   `seat-complete:` line was first seen. Re-read each named seat's findings from the file on disk
+   before you repair from it, and never from a summary the brief or an earlier turn gave you.
+
 ## The evidence contract — assert nothing you did not run
 
 **Every factual claim about the code that you write into the artifact carries the command
@@ -186,7 +190,11 @@ its `SERIAL-REQUIRED:` count. For every shard entry `repaired` with an edit, and
 sibling, run `grep -rn -F '<the text that entry replaced>'` over the artifact's own files: after
 a files-mode join that is `_bmad-output/planning-artifacts/s<N>/stories
 _bmad-output/planning-artifacts/s<N>/epics`; after a section or subject join it is the assembled
-document or subject files. Never grep the sprint slot `s<N>/` itself, `shards/` or any repair
+document or subject files. After a section or subject join the brief also carries the lead's
+`serial-remediation-worklist.sh` output (`REPLACED`, `HIT` and `MOVED-CITE` lines): adjudicate
+those hits and moved cites rather than deriving them, and still run the grep for any replaced
+text the worklist did not list. A files-mode join has no worklist, so there you run the grep
+yourself. Never grep the sprint slot `s<N>/` itself, `shards/` or any repair
 record. Record each as its own entry with a `siblings:` fence, and re-read every `<file>:<n>`
 cite into each edited file. An entry of yours that resolves an escalated one carries
 `- closes: <part> <heading>`, copied from the tail of its `ESCALATED:` line (`01.md F-3 — MAJOR`):

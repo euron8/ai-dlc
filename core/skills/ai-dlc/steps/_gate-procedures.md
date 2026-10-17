@@ -138,8 +138,8 @@ live wait over a teammate that has not delivered.
 **A waiting beat exits 0 on purpose.** Waiting is what most beats report, and a
 nonzero exit from a backgrounded command is reported to you as `status: failed` —
 which would announce a failure every couple of minutes on every healthy join, and
-bury the one exit code that does need a decision. Nonzero means non-delivery, nothing
-else.
+bury the one exit code that does need a decision. Nonzero means non-delivery (1) or a
+refused call that armed nothing (64).
 
 **Delivered means non-empty AND written since the join armed** — not merely present.
 A deliverable path reused across sprints otherwise reports the PREVIOUS sprint's file
@@ -148,8 +148,10 @@ nothing downstream to catch it.
 
 **`--since` is optional and only ever needed when the teammate may have delivered
 BEFORE you armed the join** — normally only when resuming a join after a compaction.
-Pass the `dispatched-at` value from the row (defined above). It can only move the
-threshold earlier; a stamp later than now is clamped, so rounding it is harmless.
+Pass the `dispatched-at` value from the row (defined above), and with it `--dispatch <agentId>`, the `agentId` (or
+a named teammate's `agent_id`) the Agent result returned: the beat reads the dispatch's time from the spawn ledger
+and refuses a `--since` later than it, which a hand-stamped row can be. It can only move the
+threshold earlier; a stamp later than now is clamped, but a stamp after the dispatch is not: pass `--dispatch`.
 
 **Pass the whole wave to ONE call.** Never chain beats in a single `Bash` call.
 
@@ -272,7 +274,10 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    — its deliverable, named below — and every finding in it opens a `##` heading whose first
    token is the finding's id (`## F-1 (major) sections: 2`), carrying one `sections:` line
    citing the map ordinals it rests on. Ids collide across seats, so a finding is named by its
-   file and its id together.
+   file and its id together. That `##` form is the SEAT grammar only: an adversary or
+   elicitation shard writes each finding as a `### ` heading inside `## Findings` with an
+   UPPERCASE severity word (FINDING GRAMMAR, `merge-adversarial-shards.sh`'s header), and the
+   merge refuses a shard whose finding opens with `## `.
 
    **Every seat writes its file early and closes it with a completion line.** Its brief tells
    it to Write the file's header first, append each finding as soon as it is verified, and,
@@ -312,7 +317,12 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    `join-remediator-shards.sh --document <doc> <that dir>`. The requirements subject case is
    below. A finding citing two or more parts goes to the serial remediator after the join, and
    the lead then runs `scripts/ai-dlc/join-remediator-shards.sh --sources <the joined record> --sprint <N>`
-   over the record with its appended entries. The cross seats reviewed the bytes from before
+   over the record with its appended entries. The remediator brief also carries `revised-seats:`:
+   after the round's join the lead runs `scripts/ai-dlc/wait-for-deliverable.sh --complete --status
+   --since <the round epoch> --dispatch <agentId>… <the seat paths>` (one `--dispatch` per agent the
+   round joined) and copies the path of every `REVISED-AFTER-MARKER <n> <path> --` line it prints
+   into the brief as `revised-seats: <path>…`; the remediator re-reads those seats' findings from
+   disk, never from an earlier summary. The cross seats reviewed the bytes from before
    the part repairs, so before it applies any cross finding the serial remediator runs
    `scripts/ai-dlc/validate-artifact-derivations.sh` on the cross files, from the project root
    against the assembled document, and re-derives every finding that reports STALE before
@@ -354,7 +364,11 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    wall clock tracks the tokens a cross agent writes, not the bytes it reads, so the whole read
    costs little and the focus is what shortens it. Each cross finding has one owner,
    `partition-document.sh --cross-owner`; the merge refuses a finding reported outside its owner
-   only when the owner's shard carries the identical cited set, and accepts any other.
+   only when the owner's shard carries the identical cited set, and accepts any other. The cross
+   agent's brief therefore tells it to run `scripts/ai-dlc/partition-document.sh --cross-owner <K>
+   <its cited ordinals>` before it records a cross finding, and, when the printed group is not its
+   own, to record the finding only if the owner's focus pairs would not surface it and otherwise
+   to name it under `## Cross-references`, which is not a finding.
    **When the subject is the requirements subject** (`steps/requirements.md` section 5: the
    brief, `SPEC.md`, `prd.md` and `architecture-impact.md` under one base), the round is
    sharded (Rule 28, "Split dispatch": seats x subject-parts axis) over the parts
@@ -428,7 +442,9 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    `_bmad-output/planning-artifacts/s<N>/shards/<artifact>-elicitation/<ordinal>.md` (a cross
    shard: `cross-<g>.md`, or `cross.md` when there is one group) with
    `skill: bmad-advanced-elicitation`, the `artifact:` and `artifact_sha:` an adversarial shard on
-   its axis notarizes, and no `verdict:` line. Beat-join every shard path with
+   its axis notarizes, and no `verdict:` line. Each finding in it is a `### ` heading inside
+   `## Findings` with an UPPERCASE severity word (FINDING GRAMMAR, `merge-adversarial-shards.sh`'s
+   header), not item 1's `##` seat form. Beat-join every shard path with
    `--complete`. No merge reads that directory (`merge-adversarial-shards.sh --elicitation` merges
    only the requirements subject), so the shard records ARE the elicitation record, and the
    elicitation repair reads them shard by shard, dispatched on the same axis by "Adversarial
@@ -456,7 +472,9 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    `_bmad-output/planning-artifacts/s<N>/requirements-elicitation.md` with no verdict. The
    elicitation repair is dispatched as the party repair is, with `--pass elicitation`, the shard
    dir `s<N>/shards/requirements-elicitation-repair/`, and the merged record's per-stem
-   `artifact_sha` values as the expected bytes; its joined record is
+   `artifact_sha` values as the expected bytes; its brief carries `revised-seats:` as item 1's
+   "One repair writer applies them" states, read from the same `--complete --status` call over the
+   shard paths; its joined record is
    `_bmad-output/planning-artifacts/s<N>/requirements-elicitation-repair.md`.
    Every elicitation shard notarizes exactly what an adversarial subject shard does ("Shard the
    requirements subject" below): `artifact:` = the subject manifest
@@ -542,7 +560,7 @@ again. Every adversary brief, sharded or not, also carries the early-write instr
 "Validation cycle" item 1: header first, each finding appended as verified, and ONE final
 write once it has finished, never with the header: `seat-complete: <step> adversary <shard>
 findings=<n>`, `<shard>` being the brief's `shard:` value (`none` when it carries none) and
-`<n>` its `### ` findings. On every axis, once ANY shard in the directory carries a
+`<n>` its `### ` findings, each a `### ` heading inside `## Findings` with an UPPERCASE severity word (FINDING GRAMMAR in `merge-adversarial-shards.sh`'s header; item 1's `##` seat example does not apply to a shard). On every axis, once ANY shard in the directory carries a
 `seat-complete:` line anywhere, the merge refuses every shard in it that does not end in
 exactly one, or whose `findings=<n>` differs from the findings it parses there. Its limit: a directory where no shard carries the marker merges
 unchecked, exactly as before. That is a directory written before this instruction, and also a
@@ -930,6 +948,8 @@ document in place. Otherwise, in this order:
 4. **Cross-section.** The serial cross-section remediator then edits the ASSEMBLED document in
    place and APPENDS its entries to the joined record, opening them with its own `- artifact:` /
    `- artifact_sha_before:` / `- artifact_sha_after:` triple, its before equal to the join's after.
+   Before that dispatch the lead runs `scripts/ai-dlc/serial-remediation-worklist.sh <that dir>`
+   once, as the subject-axis step 4 below describes, and briefs the remediator with its output.
 
 **Shard the requirements subject's repair (Rule 28, "Split dispatch": subject axis).** When the
 artifact is the requirements subject (`steps/requirements.md` section 5), the repair is sharded
@@ -953,8 +973,11 @@ in this order:
    describes. A whole-file part's shard edits its file in place. The SPEC part's shard never
    edits `SPEC.md` by hand: it appends a `(decision)` entry to the spec's `.memlog.md` and
    re-renders `SPEC.md` through `bmad-spec` (the amendment procedure's item 2 path, "Divergence
-   resolution dispatch"), and its `edit:` lines cite both files by their project-relative
-   paths under `_bmad-output/specs/s<N>/<slug>/`.
+   resolution dispatch"). It then appends one
+   `- (event) Render <pass>: re-derived from memlog through <last decision>` line to `.memlog.md`;
+   a change applied with Edit is recorded as `- (event) Hand-edit <pass>`, never as Render. A
+   `(decision)` entry after the last such Render line is a stale SPEC, and the join refuses it. Its `edit:` lines cite
+   both files by their project-relative paths under `_bmad-output/specs/s<N>/<slug>/`.
 3. **Join and assemble.** Beat-join every part, then run
    `scripts/ai-dlc/join-remediator-shards.sh --subject <N> --base <base sha> --pass <M> <that dir> --since <ISO> --until <ISO>`.
    When one part's remediator was re-run, add `--rerun <part>.md@<S_P>` as "After a join
@@ -973,6 +996,14 @@ in this order:
    every stem on both sides, each before equal to the join's after. It owns every finding citing two or more
    parts AND every finding whose fix lies in PRD text outside the in-scope parts — a part shard
    never edits text outside its section file, so such a finding has no other owner.
+   After the join and before that dispatch, the lead runs
+   `scripts/ai-dlc/serial-remediation-worklist.sh <that dir> --record <the joined record>` ONCE
+   and puts its output in the serial remediator's brief. It lists the text each shard replaced
+   with every place that text still stands (`HIT`), and every cite into a repaired file whose
+   line moved (`MOVED-CITE`); the remediator adjudicates those lines rather than deriving them.
+   The run consumes the pre-repair copies it reads, so a later run exits 3 `UNASSESSABLE`
+   unless the run before it passed `--keep`. A files-mode repair has no split directory, so
+   the script exits 3 there and the remediator runs the grep itself.
 
 The party and elicitation repairs run this same procedure, under the shard dirs and record
 names "Validation cycle" items 1 and 2 give them. For the requirements subject they take
@@ -1002,16 +1033,30 @@ Per finding — or per failed check — the disposition, the edit site, and the 
 that derives every factual claim the repair asserts, with its output. The next adversarial pass
 verifies against that record; so does the gate's re-run of the failed checks.
 
-**Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh <repair_record_path>`.
+**Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh --complete-repair
+--dispatch <agentId> <repair_record_path>`. The serial remediator and the
+unsharded `shard: none (serial-document)` remediator both end their record with `repair-complete:
+serial <pass>`, which only `--complete-repair` waits for; the part records a shard join writes are
+written by that join, synchronously, and need no beat.
 SKILL.md Rule 32 touchpoint V1 applies once the repair record is joined, before the next pass.
+Once the join is accepted, commit the repaired subject files (`git add` and `git commit`) before
+the next pass dispatches, so a later stop cannot blur joined edits with in-flight ones.
 
 **Then re-run the derivations, BEFORE dispatching the next pass:**
 
 ```
-scripts/ai-dlc/validate-artifact-derivations.sh _bmad-output/planning-artifacts/s<N>/
+scripts/ai-dlc/validate-artifact-derivations.sh <the joined repair record>
 scripts/ai-dlc/validate-artifact-derivations.sh <assembled document path>
 scripts/ai-dlc/report-propagation-fanout.sh <base-ref>
 ```
+
+Every re-run names a FILE and never the slot directory. Run
+`validate-artifact-derivations.sh <the joined repair record>` on the joined record itself,
+then on the assembled document (for the requirements subject, each of the manifest's four files:
+`prd.md`, `product-brief.md`, `architecture-impact.md` and `SPEC.md`), and on the spec's
+`.memlog.md`; a repair that edited another record names that record as a file target too. A
+directory target skips the frozen shard and seat records no remediator may edit, so it cannot
+reach the cites a repair moved.
 
 The second line applies to a section-sharded repair and names the ASSEMBLED document: a fenced
 command that reads its own file measured a section copy while the shard ran, so only the
@@ -1029,11 +1074,12 @@ escalated sibling line, the serial remediator runs `grep -rn -F '<the text that 
 replaced>'` over the ASSEMBLED files (`s<N>/stories` and `s<N>/epics`, or the document), never the
 slot, `shards/` or a record, and records it as its own entry with a `siblings:` fence. That is
 why SERIAL-REQUIRED dispatches it: a round whose every finding stayed inside one shard still
-owes this grep.
+owes this grep. After a sections or subject join the lead's `serial-remediation-worklist.sh`
+output (the subject-axis step 4 above) is the starting list for both the grep and the cites.
 
 Owed derivations are refused at gate-validation.md Check 37, not here.
 
-Exit 1 from `validate-artifact-derivations.sh` is a repair that falsified a
+Exit 1 from `validate-artifact-derivations.sh` on one of those file targets is a repair that falsified a
 derivation — most often not its own, but one
 elsewhere in the artifact set that was counting the thing this repair moved. Send it back to
 the remediator now. Exit 2 is NOT a finding: an `UNRUN:` or `REFUSED:` line names a
@@ -1196,9 +1242,15 @@ carry the no-human-present additions:
 1. **Stop all in-flight teammates first.** Before calling `TaskStop`, run
    ONE bounded-join beat ("Bounded-join beat" above) over every
    **In-Flight Teammates** row whose `status` is `in-flight` and that names
-   a deliverable path: one `scripts/ai-dlc/wait-for-deliverable.sh <path>
-   [<path> ...]` call over the whole set, `run_in_background: true`, ending
-   this turn on the armed beat and resuming this step on its result. A row
+   a deliverable path: one call per kind of deliverable, each
+   `run_in_background: true` — `scripts/ai-dlc/wait-for-deliverable.sh <path>
+   [<path> ...]` for a plain deliverable, `scripts/ai-dlc/wait-for-deliverable.sh
+   --complete <path> [<path> ...]` for seat and cross files, and
+   `scripts/ai-dlc/wait-for-deliverable.sh --complete-repair <record>` for a
+   serial-remediator row. The flag is per call and a call mixing the two flags
+   is refused (exit 64), so a mixed set is up to three calls and a set of one
+   kind is one. End this turn on the armed beats and resume this step when
+   every one has returned. A row
    whose deliverable is DELIVERED in that beat is joined normally — apply
    the sub-step snapshot update's handling (`status: delivered-reachable`,
    or delete the row outright), never `stopped`. Only rows still absent
@@ -1209,8 +1261,12 @@ carry the no-human-present additions:
    teammate has returned before proceeding. Record stopped teammates and
    in-flight artifacts in the snapshot's Open Items in Step 3, and set each
    stopped teammate's **In-Flight Teammates** row `status` to `stopped` —
-   rewrite the row, never delete it. `steps/handoff.md` step 1 owns
-   why. Where `ai-dlc-continue.sh` Check 0 is armed it blocks the stop
+   rewrite the row, never delete it. Record the `TaskStop` task id in each
+   stopped row's agent cell. For each stopped row, run
+   `scripts/ai-dlc/join-remediator-shards.sh --agent-writes <task id>` and
+   write its output into the snapshot's Open Items as that agent's
+   unrecorded partial edits, never inferring them from `git status`.
+   `steps/handoff.md` step 1 owns why. Where `ai-dlc-continue.sh` Check 0 is armed it blocks the stop
    while any row still reads `in-flight`, deferring only while a beat's
    `.beat-inflight` lease is live.
 2. `git add` and `git commit` any in-flight work, including work
@@ -1222,6 +1278,11 @@ carry the no-human-present additions:
    (`git push -u origin HEAD`) so the Step 2 commit and the finalized
    state reach the remote and are not stranded on this machine.
    SKILL.md Rule 32 touchpoint I applies before the push.
+   A directed handoff authorises this push; the lead does not ask the operator for a go-ahead again.
+   **Never `--no-verify`**: the pre-push hook runs on every pipeline push, whatever the change
+   set, and `ai-dlc-advisor-gate.sh` denies the flag.
+   For an auto-handoff no operator directed the push: the seven preconditions above authorise
+   it, and there is no operator to ask.
    **`-u origin HEAD`, never a bare `git push`** — a bare push cannot
    succeed on a branch that has never been pushed, which is every
    sprint's FIRST auto-handoff wherever a branch is cut per sprint.

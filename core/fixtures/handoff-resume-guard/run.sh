@@ -1170,9 +1170,10 @@ else
   fi
 fi
 
-# BL-574: the directed-handoff authorisation sentence sits beside the prescribed push in
-# steps/handoff.md step 3 and steps/retro.md 6b (proximity-keyed; push-authorised.sh owns why).
-if bash "$HERE/push-authorised.sh"; then ok "push-authorised: both push sites carry the authorisation sentence"
+# BL-574/BL-562: the directed-handoff authorisation sentence sits beside the prescribed push in
+# steps/handoff.md step 3, steps/_gate-procedures.md auto-handoff step 3 and steps/retro.md 6b, and
+# the --no-verify prohibition beside the first two (proximity-keyed; push-authorised.sh owns why).
+if bash "$HERE/push-authorised.sh"; then ok "push-authorised: all three push sites carry the authorisation sentence, and two carry the --no-verify prohibition"
 else bad "push-authorised: a prescribed handoff push lacks the authorisation sentence beside it"; fi
 
 rm -rf "$ROOT"

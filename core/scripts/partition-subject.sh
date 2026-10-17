@@ -289,9 +289,10 @@ SPLIT_DONE=""
 undo() {
   local s
   for s in $SPLIT_DONE; do
-    rm -f "$DIRP/$s/sections"/*.md "$DIRP/$s/sections/.manifest"
+    rm -f "$DIRP/$s/sections"/*.md "$DIRP/$s/sections/.manifest" "$DIRP/$s/sections/.before"
     rmdir "$DIRP/$s/sections" "$DIRP/$s" 2>/dev/null
   done
+  rm -f "$DIRP/.before"/*; rmdir "$DIRP/.before" 2>/dev/null
 }
 for st in $(awk -F'\t' '$5 == "sec" { print $1 }' "$T/rows" | awk '!seen[$0]++'); do
   rel="$(awk -v s="$st" '$1 == s { print $2 }' "$T/files")"
@@ -302,6 +303,15 @@ for st in $(awk -F'\t' '$5 == "sec" { print $1 }' "$T/rows" | awk '!seen[$0]++')
   awk -F'\t' '$1 == "part" { print $3 "\t" $4 }' "$DIRP/$st/sections/.manifest" > "$T/got"
   awk -F'\t' -v s="$st" '$1 == s && $5 == "sec" { print $3 "\t" $4 }' "$T/rows" > "$T/want"
   cmp -s "$T/got" "$T/want" || { undo; refuse "the split of $rel does not reproduce its map rows; the file moved during the split"; }
+done
+# THE PRE-REPAIR COPY of every WHOLE-FILE part's file, `<repair-dir>/.before/<stem>`: its owner
+# edits the file in place, so after the round nothing else holds the bytes it replaced. A
+# sectioned stem's copy is partition-document.sh's `<stem>/sections/.before`. Read by
+# serial-remediation-worklist.sh; a dot dir, so no part glob (`<repair-dir>/*.md`) sees it.
+for st in $(awk -F'\t' '$5 == "whole" { print $1 }' "$T/rows" | awk '!seen[$0]++'); do
+  rel="$(awk -v s="$st" '$1 == s { print $2 }' "$T/files")"
+  mkdir -p "$DIRP/.before" && cp -p "$ROOT/$rel" "$DIRP/.before/$st" \
+    || { undo; refuse "cannot keep the pre-repair copy of $rel in $DIRP/.before"; }
 done
 ST="$DIRP/.subject.tmp.$$"
 { printf 'sprint\t%s\n' "$SPRINT"

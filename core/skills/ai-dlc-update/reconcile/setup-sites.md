@@ -171,6 +171,7 @@ core_manifest:
   - core/fixtures/remediator-shard-join/**
   - core/fixtures/document-partition/**
   - core/fixtures/subject-partition/**
+  - core/fixtures/serial-remediation-worklist/**
   - core/fixtures/gate-series-rung/**
   - core/fixtures/gate-verdict-grep-shape/**
   - core/fixtures/h2-attest-scripts-dir/**

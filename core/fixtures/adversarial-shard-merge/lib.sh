@@ -1073,5 +1073,76 @@ p_probe_absent() { # D4: shard 2's writer has a meta file and NO probe row -- a 
     && has "$MO" "has no row for that agent; an adversary that has not stopped has not delivered"
 }
 
-P_ALL="b3 clean ceiling miss_ord miss_cross dup partition sha ms doc_b3 doc_axis doc_sha doc_path doc_serial files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit subj_b4 b4doc b4doc_nomf b4doc_other xfiles xdoc xelicit xmix xunknown xcomplete stem_series stem_control stem_near stem_files tuid_main tuid_norow tuid_nometa tuid_selfdiff tuid_role tuid_twowriters tuid_oneagent tuid_nospawn tuid_session tuid_pre tuid_basename tuid_probemeta tuid_tworoles rerun_join rerun_other rerun_same rerun_role xdir probe_disagree probe_absent rerun_residual"
+# ------------------------------------------------ BL-544, BL-554, BL-548 (merge half)
+# Every world below is the B3 world seeded the bl536 way (shard -> harness_record), because the
+# dispatch-id derivation refuses a shard with no harness record before any of these checks runs.
+hdr_world() { # <replacement for the `## Findings` line of shard 2> -> a B3 shard dir, shard 2 holding 0 findings
+  local d; d="$(b3_world)" || return 1
+  shard "$d" 2 0 EXIT_CONDITION_MET 2
+  awk -v r="$1" '$0 == "## Findings" { print r; next } { print }' "$d/2.md" > "$d/2.tmp" && mv "$d/2.tmp" "$d/2.md" || return 1
+  printf '%s' "$d"
+}
+p_hdr() { # BL-544: a finding opened with `## ` is REFUSED wherever it sits -- here in a shard with NO
+          # `## Findings` section at all, declaring 0 findings, with no marker (the shape that merged as
+          # zero findings). Twins one property apart: `## Notes` merges, and so does the same heading
+          # inside a fence.
+  local m="$1" d
+  d="$(hdr_world '## F-1 (MAJOR) stories: 2')" || return 1; run_merge "$m" "$d"
+  refused_clean 'opens a finding with `## `; findings are `### ` headings inside `## Findings`' "$d" && has "$MO" '2.md:3 opens' || return 1
+  d="$(hdr_world '## Notes')" || return 1; run_merge "$m" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" || return 1
+  d="$(hdr_world '```\n## F-1 (MAJOR) stories: 2\n```')" || return 1; run_merge "$m" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:"
+}
+p_draft() { # BL-554: `<valid shard name>.draft` beside its shard is skipped with a NOTE on stderr and never
+            # merged; `notes.md` and a draft of a name that is no shard still REFUSE
+  local m="$1" d o
+  d="$(b3_world)"; o="$(out_of "$d")"; printf 'UNFINISHED-DRAFT-BODY\n' > "$d/2.md.draft"
+  bash "$m" "$d" > "$MO" 2> "$MO.err"; RC=$?
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && has "$MO.err" "NOTE: ignored draft 2.md.draft" \
+    && [ -f "$o" ] && ! has "$o" "UNFINISHED-DRAFT-BODY" || return 1
+  d="$(b3_world)"; printf 'x\n' > "$d/notes.md"; run_merge "$m" "$d"
+  refused_clean "notes.md is not a shard name" "$d" || return 1
+  d="$(b3_world)"; printf 'x\n' > "$d/notes.md.draft"; run_merge "$m" "$d"
+  refused_clean "notes.md.draft is not a shard name" "$d" || return 1
+  d="$(b3_world)"; printf 'x\n' > "$d/cross-9.md.draft"; run_merge "$m" "$d"
+  refused_clean "cross-9.md.draft is a draft of cross-9, which is no shard of this set" "$d"
+}
+dry_merge() { # <merge> <shard dir> -> RC, $MO (stdout and stderr)
+  bash "$1" --dry-run "$2" > "$MO" 2>&1; RC=$?
+}
+p_dry() { # BL-548: --dry-run prints every refusal of the first failing phase, writes nothing. Two shards each
+          # cite another story (4 findings, 4 refusals): all four printed, exit 2, no output file. The clean
+          # twin prints DRY-RUN: clean, exits 0, writes nothing -- and the same set then merges for real.
+  local m="$1" d o n
+  d="$(b3_world)"; o="$(out_of "$d")"
+  shard "$d" 2 2 EXIT_CONDITION_MET 1; shard "$d" 3 2 EXIT_CONDITION_MET 1
+  dry_merge "$m" "$d"
+  n="$(grep -c '^REFUSED: ' "$MO")" || n=0
+  [ "$RC" -eq 2 ] && [ "$n" -eq 4 ] && has "$MO" "(shard 2) cites 1; a per-ordinal shard" && has "$MO" "(shard 3) cites 1; a per-ordinal shard" \
+    && [ ! -e "$o" ] || return 1
+  d="$(b3_world)"; o="$(out_of "$d")"
+  dry_merge "$m" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "DRY-RUN: clean" && [ ! -e "$o" ] || return 1
+  run_merge "$m" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && [ -f "$o" ]
+}
+p_dry_barrier() { # BL-548: the phases are barriers. Shard 1 missing (phase 2) beside a finding refusal in shard 2
+                  # (phase 5) prints exactly the missing-shard line, and reads no stdin. Stdin is a regular FILE
+                  # of POISON in the shard grammar (a provenance block whose verdict is the token): a stage that
+                  # was handed the absent shard's empty path and fell back to stdin would parse it and print the
+                  # token in its verdict refusal. No clock, no fifo: the arm turns on output, never on timing.
+  local m="$1" d pz tok=ZZQPOISON
+  pz="$(mktemp "$WORK/poison.XXXXXX")" || return 1
+  printf '## Findings\n\n### F-1 (MAJOR) %s\n\nstories: 1\n\n<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: %s\nverdict: %s\nfindings_critical: 0\nfindings_major: 0\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$tok" "$tok" "$tok" > "$pz"
+  # CONTROL, in the same predicate: the poison, delivered as shard 1 with a harness record, is parsed by the
+  # very stage under test and its verdict refusal prints the token -- so the poison is in that stage's grammar.
+  d="$(b3_world)"; cp "$pz" "$d/1.md"; harness_record "$d/1.md"; run_merge "$m" "$d"
+  [ "$RC" -eq 2 ] && has "$MO" "declares verdict '$tok'" || return 1
+  d="$(b3_world)"; rm -f "$d/1.md"; shard "$d" 2 2 EXIT_CONDITION_MET 1
+  bash "$m" --dry-run "$d" > "$MO" 2>&1 < "$pz"; RC=$?
+  [ "$RC" -eq 2 ] && [ "$(grep -c . "$MO")" -eq 1 ] && has "$MO" "REFUSED: shard 1 is missing from" && ! has "$MO" "cites" && ! has "$MO" "$tok"
+}
+
+P_ALL="b3 clean ceiling miss_ord miss_cross dup partition sha ms doc_b3 doc_axis doc_sha doc_path doc_serial files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit subj_b4 b4doc b4doc_nomf b4doc_other xfiles xdoc xelicit xmix xunknown xcomplete stem_series stem_control stem_near stem_files tuid_main tuid_norow tuid_nometa tuid_selfdiff tuid_role tuid_twowriters tuid_oneagent tuid_nospawn tuid_session tuid_pre tuid_basename tuid_probemeta tuid_tworoles rerun_join rerun_other rerun_same rerun_role xdir probe_disagree probe_absent rerun_residual hdr draft dry dry_barrier"
 

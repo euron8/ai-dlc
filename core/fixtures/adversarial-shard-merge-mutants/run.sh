@@ -91,9 +91,9 @@ SHARDS="a b c d e f"
 MUTANTS_a="MX1 MX2 MX3 MX4 MX5 MX6 MX7"
 MUTANTS_b="MX8 MX9 MX10 MX11 MX12 MX13 MX14"
 MUTANTS_c="MX15 XM1 XM2 XM7 XM8 XM3 XM4 TM11 TM12"
-MUTANTS_d="XM5 XM6 SM1 SM2 SM3 SM4 RM3 TM13"
-MUTANTS_e="TM1 TM2 TM3 TM4 TM5 TM6 TM10"
-MUTANTS_f="TM7 TM8 TM9 RM1 RM2"
+MUTANTS_d="XM5 XM6 SM1 SM2 SM3 SM4 RM3 TM13 DM1"
+MUTANTS_e="TM1 TM2 TM3 TM4 TM5 TM6 TM10 BM1"
+MUTANTS_f="TM7 TM8 TM9 RM1 RM2 HM1 CM1"
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
@@ -324,7 +324,7 @@ mutant "MX1 verdict = worst shard verdict, not recomputed" "b3 clean doc_b3 file
 mutant "MX2 ceiling hard-coded, not read" "ceiling" \
   'MAJOR_CEIL="$(read_ceiling MAJOR_EXIT_CEILING)"' \
   'MAJOR_CEIL=3'
-mutant "MX3 missing-shard check removed" "miss_ord miss_cross subj_miss_cross" \
+mutant "MX3 missing-shard check removed" "miss_ord miss_cross subj_miss_cross dry_barrier" \
   'for idx in $ORDINALS $CROSS_KEYS; do' \
   'for idx in ; do'
 mutant "MX4 earliest shard by raw string, not by time" "ms" \
@@ -336,12 +336,12 @@ mutant "MX5 invoked_at fraction refused" "ms" \
 # Section mode. D2's seed carries exactly one sections: line, so with the guard gone the finding
 # passes the one-citation count and the merge SUCCEEDS -- the kill is D2's alone.
 mutant "MX6 wrong-axis guard removed" "doc_axis" \
-  '[ "${wrong:-0}" = "0" ] || refuse' \
-  '[ "${wrong:-0}" = "0" ] || true'
+  '[ "${wrong:-0}" = "0" ] || { collect' \
+  '[ "${wrong:-0}" = "0" ] || true || { collect'
 # MX6b: the kill above would ALSO be scored if some other rule refused D2's seed, so assert what
 # separates them: with the guard gone the same seed MERGES (exit 0), i.e. nothing else refuses it.
 if [ "$GROUP" != a ]; then :
-elif M6="$(mutdir m6b)" && apply "$M6/merge-adversarial-shards.sh" '[ "${wrong:-0}" = "0" ] || refuse' '[ "${wrong:-0}" = "0" ] || true' 2>/dev/null \
+elif M6="$(mutdir m6b)" && apply "$M6/merge-adversarial-shards.sh" '[ "${wrong:-0}" = "0" ] || { collect' '[ "${wrong:-0}" = "0" ] || true || { collect' 2>/dev/null \
    && ! cmp -s "$MERGE" "$M6/merge-adversarial-shards.sh"; then
   d="$(doc_b3_world)"; dshard "$d" 2 2 EXIT_CONDITION_MET 2 "" "" "stories: 2"
   run_doc_merge "$M6/merge-adversarial-shards.sh" "$d"
@@ -352,15 +352,15 @@ else
   bad "MX6b: FIXTURE STALE -- the axis-guard anchor is not in the merge exactly once"
 fi
 mutant "MX7 whole-document sha check removed" "doc_sha" \
-  '[ "$sha" = "$DOC_SHA" ] || refuse' \
-  '[ "$sha" = "$DOC_SHA" ] || true'
+  '[ "$sha" = "$DOC_SHA" ] || { collect' \
+  '[ "$sha" = "$DOC_SHA" ] || true || { collect'
 mutant "MX8 artifact-path check removed" "doc_path" \
   '[ "$ART_ABS" = "$DOCUMENT" ] \' \
   'true || [ "$ART_ABS" = "$DOCUMENT" ] \'
 # Subject mode.
 mutant "MX9 per-stem sha check removed" "subj_sha" \
-  '[ "$sv" = "$want" ] || refuse' \
-  '[ "$sv" = "$want" ] || true'
+  '[ "$sv" = "$want" ] || { collect' \
+  '[ "$sv" = "$want" ] || true || { collect'
 mutant "MX10 four-stem count check removed" "subj_stems" \
   '[ "$nt" -eq 4 ] && [' \
   'true || ['
@@ -393,7 +393,7 @@ mutant "MX15 B4-by-document refuses every document" "b4doc b4doc_other" \
 # The cross groups (BL-464). XM1: files and --subject left single-cross -- the groups are read only
 # in --document mode, the wrong build "merge sharded in one mode only". Every files and subject arm
 # that seeds cross-<g> dies; the --document arms hold.
-mutant "XM1 one mode left single-cross" "b3 clean ceiling miss_ord miss_cross partition sha ms files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit xfiles xelicit xmix xunknown xcomplete tuid_main tuid_norow tuid_nometa tuid_selfdiff tuid_role tuid_twowriters tuid_oneagent tuid_nospawn tuid_session tuid_pre tuid_basename tuid_probemeta tuid_tworoles rerun_join rerun_other rerun_same rerun_role xdir probe_disagree probe_absent rerun_residual" \
+mutant "XM1 one mode left single-cross" "b3 clean ceiling miss_ord miss_cross partition sha ms files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit xfiles xelicit xmix xunknown xcomplete tuid_main tuid_norow tuid_nometa tuid_selfdiff tuid_role tuid_twowriters tuid_oneagent tuid_nospawn tuid_session tuid_pre tuid_basename tuid_probemeta tuid_tworoles rerun_join rerun_other rerun_same rerun_role xdir probe_disagree probe_absent rerun_residual hdr draft dry dry_barrier" \
   'bash "$XPART" --cross-groups "$K" > "$T/groups" 2> "$T/groups.err"; grc=$?' \
   'bash "$XPART" --cross-groups "$( [ -n "$DOCUMENT" ] && echo "$K" || echo 2)" > "$T/groups" 2> "$T/groups.err"; grc=$?'
 # XM2: the owner rule off -- a finding two covering groups both report is summed twice. Only the
@@ -424,8 +424,8 @@ mutant "XM4 cross.md/cross-<g>.md mix accepted" "xmix" \
 # XM5: a cross-<g> the table does not print accepted. X5 sees cross-7 merge silently; X1 and X2's
 # K=2 cell sees `cross-1.md` refused as missing `cross` rather than named as unprinted -- both true.
 mutant "XM5 unknown cross group accepted" "xfiles xdoc xunknown" \
-  '      case " $CROSS_KEYS " in *" $xk "*) ;; *) refuse' \
-  '      case " $CROSS_KEYS " in *) ;; *" $xk "*) refuse'
+  '      case " $CROSS_KEYS " in *" $xk "*) ;; *) collect' \
+  '      case " $CROSS_KEYS " in *) ;; *" $xk "*) collect'
 # XM6: the seat-complete belt gone -- an unfinished shard beside a finished one merges.
 mutant "XM6 seat-complete refusal removed" "xcomplete" \
   "if grep -q '^Y' \"\$T/sc\" && grep -q '^N' \"\$T/sc\"; then" \
@@ -456,8 +456,8 @@ mutant "SM4 series refusal also fires on coe-p1" "stem_control" \
 # TM1: the self-report used when the ledger has no row -- T2's shard carries a toolu_-prefixed
 # forged id, so with the fallback it MERGES; a NOT_ACCESSIBLE self id would refuse either way.
 mutant "TM1 no-row shard falls back to the self-report" "tuid_norow" \
-  '  [ -n "$tid" ] || refuse "$sf has no row in $REC_WRITES;' \
-  '  [ -n "$tid" ] || tid="$(field "$P" tool_use_id)"; [ -n "$tid" ] || refuse "$sf has no row in $REC_WRITES;'
+  '  [ -n "$tid" ] || { collect "$sf has no row in $REC_WRITES;' \
+  '  [ -n "$tid" ] || tid="$(field "$P" tool_use_id)"; [ -n "$tid" ] || { collect "$sf has no row in $REC_WRITES;'
 # TM2: the role hop skipped. T5's remediator-only shard merges; its adversary+remediator shard is
 # then refused as two adversaries, which is the wrong reason, so the cell's token dies with it.
 mutant "TM2 writer role not checked" "tuid_role tuid_tworoles" \
@@ -542,6 +542,32 @@ mutant "TM12 probe ids never compared with the meta" "tuid_probemeta probe_disag
 mutant "TM13 probe-row presence required of superseded writers" "rerun_join rerun_role rerun_residual" \
   '        if (i <= n || (a in probe)) {' \
   '        if (1) {'
+# BL-544 / BL-554 / BL-548 (merge half). Each mutant is killed by the one predicate built for it.
+# HM1: the `## <ID>` heading guard never fires; the zero-finding shard merges (hdr's first cell).
+mutant "HM1 ## finding heading guard removed" "hdr" \
+  '  [ "${hl:-0}" = "0" ] || {' \
+  '  [ "${hl:-0}" = "0" ] || true || {'
+# CM1: the finding-level and phase refusals exit at the first, as before --dry-run existed. dry_barrier
+# holds (its one refusal is the first), so only dry, which seeds four refusals in two shards, dies.
+mutant "CM1 --dry-run exits at the first refusal" "dry" \
+  '  [ "$DRY" -eq 1 ] || refuse "$@"' \
+  '  refuse "$@"'
+# DM1: the `.draft` skip never matches, so a draft beside its shard refuses as before.
+mutant "DM1 draft beside a shard refused" "draft" \
+  '  case "$b" in *.md.draft) bn="${b%.draft}"; is_draft=1 ;; esac' \
+  '  case "$b" in *.md.nodraft) bn="${b%.draft}"; is_draft=1 ;; esac'
+# BM1: the barrier after the shard-set walk is gone, so --dry-run walks past a missing shard into the
+# per-shard phase. Only that call site is removed: the barrier ending the per-shard phase is the
+# exit-2 itself, and removing the function would also kill the `dry` arm (an entangled mutant).
+mutant "BM1 shard-set barrier removed" "dry_barrier" \
+  'done
+phase_barrier
+
+' \
+  'done
+true
+
+'
 # ---- END MX MUTANTS
 
 # ------------------------------------------------------------------------------ the reap

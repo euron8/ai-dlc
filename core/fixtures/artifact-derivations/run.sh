@@ -1230,8 +1230,9 @@ else
 fi
 
 # --- P. A DIRECTORY TARGET WALKS THE LIVE SET; FROZEN RECORDS ARE SKIPPED, VISIBLY ------------
-# `_gate-procedures.md` re-runs this validator over `s<N>/` after every repair join and sends
-# exit 1 back to the remediator. The slot also holds records no remediator may edit -- seats,
+# `_gate-procedures.md` used to re-run this validator over `s<N>/` after every repair join; it now
+# names FILE targets (the joined repair record, the assembled document, `.memlog.md`), and a
+# directory target is for a human or a sweep. The slot also holds records no remediator may edit -- seats,
 # parts and section copies under `shards/`, review and repair records -- and a stale command in
 # one of those kept the required run at exit 1 for the rest of the sprint (the reference
 # consumer's s319: 12 stale in 27 files, all in seat and part records). So a directory target

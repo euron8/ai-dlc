@@ -297,6 +297,9 @@ argv_for() {
     # --status sleeps and writes nothing. The progress path IS the state dir under the right root,
     # so the guard refuses naming it; under a wrong root the state dir moves and the guard passes.
     wait-for-deliverable.sh)        printf '%s' "--status --progress-path $WORK/_bmad-output x.md" ;;
+    # A relative <repair-dir> resolves under the project root and the refusal names the path it
+    # resolved, so the two roots answer differently. Same floor: the root is CONSULTED.
+    serial-remediation-worklist.sh) printf '%s' "_bmad-output/planning-artifacts/s1/shards/vpr-repair" ;;
     *)                              printf '%s' "" ;;
   esac
 }

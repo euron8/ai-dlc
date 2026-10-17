@@ -34668,3 +34668,126 @@ Scheduled in batch 235 for a later release (scope ruling: the boundary is the re
 
 verify: manual
 
+## BL-529 — the derivation re-run the repair procedure requires over `s<N>/` can never pass once seat files are frozen
+
+**LANDED (v0.815.0, verified 35569940).** The repair procedure's derivation re-run names FILE targets and never the slot directory: the joined repair record, the assembled document (for the requirements subject each of `prd.md`, `product-brief.md`, `architecture-impact.md` and `SPEC.md`) and the spec's `.memlog.md`, plus any other record a repair edited. The validator half shipped in 0.801.0; this is the join-time closure in `_gate-procedures.md`, pinned as `gp-derive-file`, with the slot-target absence as its own `artifact-derivations` arm.
+
+**PARTIAL (v0.801.0, verified 40581bc2) — the validator half shipped; the join-time closure in `_gate-procedures.md` is OPEN.** A directory target skips `shards/` and the slot's record grammar, prints an `EXCLUDED:` count, and `--all` walks them. It reduces the run without making it pass: s316 297 of 650, s317 598 of 1224, s318 207 of 418 still stale, in live documents and record names outside the grammar.
+
+**DEFECT.** `_gate-procedures.md:981` requires
+`validate-artifact-derivations.sh _bmad-output/planning-artifacts/s<N>/` after every repair join, and
+`:1004` says exit 1 is sent back to the remediator. The validator walks every `.md` under its target
+(`core/scripts/validate-artifact-derivations.sh:790`, `find "$target" -type f -name '*.md'`). That
+includes `shards/` and any frozen record no remediator may edit, so moved cites in those
+files keep the run at exit 1 for the rest of the sprint.
+
+Measured in graph s319: the whole-directory run reported 12 stale derivations in 27 files (4 in
+frozen elicitation seat files, 8 in elicitation-repair part records), while the joined record (67 OK)
+and the document (34 OK) were clean. The lead's control over the closed s318 slot read FAIL, 1905
+stale of 4608 in 382 files. The lead passed the step by tolerating the failures against that
+baseline, so the required check is one that always fails and is always waived.
+
+Owed: a derivation scope at `:981` that names only the live artifacts a repair can edit, or a
+validator mode that excludes frozen shard and seat records, with a probe showing a stale live
+artifact still fails.
+
+verify: manual
+
+## BL-543 — the serial remediator discovers its sibling and moved-cite worklist by hand, making it the longest single wait in the planning steps
+
+**LANDED (v0.815.0, verified 35569940).** `core/scripts/serial-remediation-worklist.sh` derives the serial remediator's replaced-text HITs and MOVED-CITEs from the pre-repair copies the splitters now keep (`sections/.before`, `.before/<stem>`), and removes each copy it resolved unless `--keep` is passed. A file with no copy is UNASSESSABLE, exit 3. The sections and subject repair dispatch runs it once after the join and before the serial dispatch, and the remediator adjudicates its hits instead of deriving them. Fixture `serial-remediation-worklist`.
+
+**DEFECT (efficiency).** In s319 carry-over-evaluation (2.8 h), the two serial cross-section remediators took 42 min (party repair, 19:54–20:36Z) and 29 min (elicitation repair, 20:53–21:22Z), about 42% of the step. Every parallel fan-out in the same step finished in 5–15 min. In requirements, the serial cross-part remediator ran 52 min (23:11Z–00:04Z). Most of that work is mechanical. For every `repaired` entry it runs `grep -rn -F '<replaced text>'` over the assembled files, and it re-reads every cite into an edited file (`_gate-procedures.md:991-1002`). BL-508 (v0.786.0) made the serial remediator run whenever `SERIAL-REQUIRED` is above 0, so this cost now lands on every sharded repair. Owed: the join emits that worklist itself, meaning each repaired entry's replaced text with its grep hits over the assembled files, and each cite into an edited file whose line moved. The serial remediator is then briefed to adjudicate the hits rather than find them. Measure by re-timing the serial remediator on the next consumer sprint.
+
+**Fourth timing (graph s319 requirements elicitation repair).** The serial cross-part remediator ran 31 min, 01:19:04Z to 01:50:12Z. It spent 14 min reading before its first write at 01:33:02Z, then made 28 record appends and 48 subject edits (prd.md 28, architecture-impact.md 8, product-brief.md 8, .memlog.md 4) for 20 repaired, 5 escalated and 1 skipped. That makes four serial passes in one sprint, at 42, 29, 52 and 31 min, every one longer than the parallel fan-out it follows.
+
+verify: manual
+
+## BL-544 — the elicitation brief's finding format contradicts what the merge counts, and core states the format only inside the script
+
+**LANDED (v0.815.0, verified 35569940).** `merge-adversarial-shards.sh` refuses a `## ` finding heading (the elicitation silent-zero shape), and the finding grammar is stated in `adversary.md` item 5 and `_gate-procedures.md`, not only inside the script. Measured on graph: 20 of 177 adversarial and elicitation shard files carry `## E-n` headings (74 lines; control `^### ` 143).
+
+**DEFECT.** In s319 the lead's requirements elicitation brief told 19 adversaries "Every finding opens a `##` heading whose first token is the id (`## F-1 (major)`)". `merge-adversarial-shards.sh:468-469` counts only `### ` headings inside a `## Findings` section, so a shard that followed the brief would merge as zero findings. Shard 12 noticed and used `### F-n (MAJOR)`, and the lead began auditing every shard's heading shape before the merge. This is the same root as `PC-S319-COE-ADVERSARIAL-SHARD-DIR-STEM-NEVER-STATED`: a format the lead must restate in a brief appears only in a script, not in the step file the brief is written from. Owed: the elicitation and adversarial shard format is rendered from the merge script's grammar into `_gate-procedures.md` (or the adversary role file), and the merge refuses a shard whose `## Findings` holds `## F-` headings rather than reporting it as zero.
+
+verify: manual
+
+## BL-548 — a seat edits its own file after writing `seat-complete:`, against its contract, and nothing records that the findings changed
+
+**LANDED (v0.815.0, verified 35569940).** The merge-side half: `merge-adversarial-shards.sh --dry-run` prints the first failing phase's refusals and writes nothing (files mode; no `--document`/`--subject` arm), and `_gate-procedures.md` names `REVISED-AFTER-MARKER` and `remediator.md` the `revised-seats:` line. The beat half shipped in 0.796.0.
+
+**PARTIAL (v0.796.0, verified 47be6be6) — the beat half shipped; the merge `--dry-run` half is OPEN.** A seat file whose content hash changes, or whose marker is lost, after the beat first saw its marker is counted in a `<key>.revised` sidecar, and the beat prints `REVISED-AFTER-MARKER <n>` beside DELIVERED; `--status` prints it too. The count survives delivery and is cleared by `--reset`, a bound wipe or a new round's join epoch. Receipt: `bash core/fixtures/wait-stale-deliverable/receipt.sh BL-548` (fix 0, base 1, mutant 1). Still owed: the repair brief marking a revised seat's findings for re-read, and `merge-adversarial-shards.sh --dry-run` printing every refusal at once (that file is frozen in batch 235).
+
+**DEFECT.** In s319 three seats edited their sealed file after the marker. Requirements dev part 01 ("I edited the file once after writing `seat-complete` … The seat contract says not to edit after that line") and dev cross g4 did so in the party round, and dev cross g2 reported its sealed "Checked and not raised" section unreliable. `--complete`'s settle window only delays delivery until the edits stop. It does not record that a finding set changed after the seat declared it final, so the repair cannot tell a revised seat from an original one. Owed: the beat or the merge reports any seat whose content hash changed after its marker was first seen (it already holds that hash in the `.settle` sidecar), and the lead's repair brief marks those seats' findings for re-read.
+
+**A rescan by the lead missed a duplicate because it hand-rolled the heading grammar (01:01:50Z).** While clearing the cross-owner refusal (BL-555), the lead scanned every cross shard for owner-duplicate section sets with its own pattern, which missed `### F-6 (MAJOR) <title>`, a heading with a title after the severity. It had to rescan "with a looser pattern". This is the same root as BL-547: the program that parses a shard is `merge-adversarial-shards.sh`, and the lead rewrote its grammar by hand instead of asking it. Owed alongside BL-547's status mode: a `merge-adversarial-shards.sh --dry-run` that prints every refusal at once rather than stopping at the first, so the lead clears a round's duplicates in one pass.
+
+verify: manual
+
+## BL-554 — the adversary's `.draft` sibling is written into the shard directory the merge reads, and the merge refuses it
+
+**LANDED (v0.815.0, verified 35569940).** The merge skips a `.draft` beside a shard it owes, and only then; a `.draft` of a shard the set does not owe is still refused.
+
+**DEFECT.** `core/team-roles/adversary.md:286-291` tells an adversary whose deliverable names no completion signal to "chunk to the sibling draft path `<result>.draft` … delete nothing". Shards that do name one (`seat-complete:`) also wrote drafts. In graph s319 requirements elicitation, three shards left `10.md.draft`, `3.md.draft` and `cross-4.md.draft` beside their deliverables in `s319/shards/requirements-elicitation/`. `merge-adversarial-shards.sh:395-401` refuses any file that is not `<ordinal>.md`, `cross.md` or `cross-<g>.md` ("is not a shard name"). The lead hit the refusal at 00:59:45Z and moved the drafts out by hand, which took two merge attempts. The role contract and the merge disagree on what may sit in the directory. Owed: either the draft path lies outside the shard directory (for example `<dir>/.drafts/<name>`), or the merge ignores `*.md.draft` and refuses only an unrecognised `.md`. A probe puts a draft beside a complete shard and asserts the merge's verdict.
+
+**Second instance, drafts written to dodge a deny (graph s319 resumed lead `f65eae3b`, requirements-adversarial-p1, 02:31–02:40Z on 2026-10-16).** Filed by peer session ai-dlc-68. Adversaries 2 and 9 wrote `2.md.draft` (02:31:44Z) and `9.md.draft` (02:31:59Z) to get past the advisor gate's deny of their first shard write (BL-567), and the lead hand-moved the `*.draft` files to its scratchpad at 02:40:02Z, before the merge.
+
+verify: manual
+
+## BL-555 — the cross-group brief omits the owner rule, so two cross shards report the same finding and the merge refuses
+
+**LANDED (v0.815.0, verified 35569940).** The cross-group brief states the owner rule and `--cross-owner`, so two cross shards no longer report one finding and trip the merge's refusal.
+
+**DEFECT.** `_gate-procedures.md:355-357`: "Each cross finding has one owner, `partition-document.sh --cross-owner`; the merge refuses a finding reported outside its owner only when the owner's shard carries the identical cited set." `merge-adversarial-shards.sh:671-681` enforces it. The lead's s319 elicitation brief (`scratchpad/elicitation-brief.md`) contains no mention of an owner (`grep -c -i owner` = 0), so cross agents, who are told to read the whole subject and "may cite any ordinal" (`:351-352`), have no way to know a finding they found belongs to another group. At 01:00:01Z the merge refused: cross-3 repeated a finding that cross-1 owns (sections 1,4). The lead read both, checked every cross finding's section set against its owner, and resumed cross-1 and cross-3 to resolve it, costing another beat round. Owed: the cross brief carries each group's owned section sets (`--cross-owner` output for the round), plus the instruction to report a finding only from its owner group, or to name it as a cross-reference. Alternatively the merge collapses an identical duplicate rather than refusing it. A probe seeds two cross shards with the same cited set and asserts the result.
+
+verify: manual
+
+
+## BL-574 — the lead invented an operator go-ahead before the handoff push
+
+**LANDED (v0.815.0, verified 35569940).** The auto-handoff push site in `_gate-procedures.md` carries the directed-handoff authorisation sentence and the never-`--no-verify` prohibition, byte-identical in wrap to `handoff.md`, so all three push sites (`handoff.md`, `retro.md`, `_gate-procedures.md`) now carry it. `push-authorised.sh` binds the three.
+
+**DEFECT.** Filed by peer session ai-dlc-68 from graph's s319 handoff (lead `f65eae3b`, 02:58–03:06Z 2026-10-16). At 02:58:57Z the operator wrote "when adversary agent finishes, handoff." At 02:59:18Z the lead's plan read "5. Ask for your go-ahead before the push, then emit `/ai-dlc resume`." At 03:02:12Z the operator wrote "why do you need my go-ahead before the push? I've already given it when i directed a handoff. proceed." At 03:03:04Z the lead conceded "`handoff.md` step 3 includes it", but graph's installed `handoff.md` has no confirm, approval or go-ahead step before the push (`go-ahead|confirm|approval|ask` matches only the TaskStop lines 27, 36, 40 and 41). Cost: one operator round trip, about 4 min of operator attention at the moment the operator steps away. The class is a lead inventing approval gates the pipeline does not have.
+
+Owed: `handoff.md` step 3 states, beside the push command, that a directed handoff authorises the push and the lead does not ask again, and the same sentence is considered at every pipeline push site (`retro.md:1200`, and `_gate-procedures.md:1190` once the BL-536 line lands). Receipt: the sentence exists at each push site (a `has` receipt; no behavioural replay, per the batch-147 ruling).
+
+**Partial, v0.798.0.** `handoff.md` step 3 and `retro.md` 6b carry the sentence within 6 lines of
+`git push -u origin HEAD` (`core/fixtures/handoff-resume-guard/push-authorised.sh`, wired into that fixture). Open:
+the `_gate-procedures.md` auto-handoff push site, frozen until the BL-536 line lands; queued for the frozen-file
+follow-up with BL-562's prohibition at the same site.
+
+verify: manual
+
+## BL-579 — at a handoff the lead attributes every uncommitted subject edit to the agent it stopped, so the successor is told to redo joined work
+
+**LANDED (v0.815.0, verified 35569940).** Half b and the auto-handoff twin: once a repair round's join is accepted the lead commits the repaired subject files before the next pass, and the auto-handoff's stop step runs `join-remediator-shards.sh --agent-writes <task id>` per stopped row, as `handoff.md` step 1 does. `--agent-writes` itself shipped in 0.812.0.
+
+**PARTIAL (v0.812.0, verified d853b8fc) — `--agent-writes` and the handoff step-1 recording shipped; half b and the auto-handoff twin are OPEN.** `join-remediator-shards.sh --agent-writes` lists a stopped agent's writes from the ledger, and `handoff.md` step 1 records them. Still owed: committing after the join accepts a repair round, and the same step-1 recording in the auto-handoff path.
+
+**DEFECT.** Filed by peer session ai-dlc-4e from graph's s319 handoff by lead `949015a6` (Sonnet 5.5), 05:35-05:41Z on 2026-10-16. At 05:40:05Z the operator typed "no, i mean handoff immediately"; the lead TaskStopped the serial remediator `a7ffc8dcd555207b8` at 05:40:11Z and committed `3dd8a9fd4` ("… sharded repair joined, serial repair stopped at handoff"). Its `pipeline-snapshot.md:36` lists prd.md, product-brief.md, s319/architecture-impact.md, s319/locked-requirements.md, SPEC.md and .memlog.md as the stopped agent's "UNRECORDED partial edits" and makes diffing them the successor's FIRST ACTION.
+
+Intake re-attributed every `Edit`/`Write` in the session's subagent transcripts read-only (graph `~/.claude/projects/-Users-n8-git-graph/949015a6-…/subagents/`). The serial remediator wrote only `locked-requirements.md` and `prd.md` (2 tool calls each, one dated phrase apiece). The other files were written by sharded part remediators whose records the join accepted at 04:59:51Z (11 parts, 22 repaired, 2 escalated): product-brief.md by "Repair part 01 brief scope" and "Repair part 03 brief locked reqs"; architecture-impact.md by "Repair part 13 architecture-impact"; SPEC.md and .memlog.md by "Repair part 04 SPEC". prd.md is MIXED, not unrecorded: "Repair part 07 PRD locked bullets" wrote it at 04:56:58Z and 04:58:46Z, joined, before the serial remediator's 05:08Z phrase. `git diff --numstat 285c67f5d 3dd8a9fd4` on graph: product-brief +50/-4, prd +20/-17, architecture-impact +2/-2, SPEC +1/-1, .memlog +1/-0, locked-requirements +1/-1. So only locked-requirements.md's one line and one phrase inside prd.md are unrecorded; the rest are joined repairs that were uncommitted only because nothing committed after the join.
+
+Consequence: the successor re-derives six files as unrecorded; at worst, "reverting unrecorded partial edits" undoes accepted pass-1 repairs.
+
+Cause: `core/skills/ai-dlc/steps/handoff.md:27-53` (at 952b9319) says to stop in-flight teammates, record the stop, and "Commit any in-flight work … including work teammates left in the working tree" (`:52-53`), but gives no means of separating a stopped agent's own writes from the tree, so the lead inferred ownership from `git status` after a join it never committed.
+
+Owed: (a) the handoff records each stopped agent's own writes from its transcript or from the write ledger that 0.790.0 made carry `tool_use_id` and transcript (CHANGELOG 0.790.0, BL-533), never from `git status`; (b) commit the subject after a join accepts a repair round, so a later stop cannot blur joined and in-flight edits. Receipt: a probe tree with a joined record whose parts edited A and B (and a shared file D also edited by the stopped agent), plus a stopped agent that edited C and D; the handoff's partial-edit list names C and D only, with A and B as the control that stays out.
+
+Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
+
+verify: manual
+
+## BL-599 — a FORWARD-dated `--since` is unmeasured against the BACKDATED arm, which judges only a row earlier than its dispatch
+
+**LANDED (v0.815.0, verified 35569940).** The bounded-join beat's dispatch row passes `--dispatch <agentId>` with `dispatched-at`, so the beat reads the dispatch time from the spawn ledger and refuses a later `--since`; "so rounding it is harmless" is replaced with "but a stamp after the dispatch is not". The beat's exit sentence names exit 64, a refused call that armed nothing.
+
+**PARTIAL (v0.802.0, verified ab065361) — the script half and rule-28 shipped; the `_gate-procedures.md` sentence is OPEN.** `wait-for-deliverable.sh --dispatch <agentId|name@team|toolu_ id>` reads the dispatch time from the spawn ledger, starts the join there when `--since` is absent, and refuses with exit 64 a `--since` later than the dispatch; `--since` without `--dispatch` warns on stderr. rule-28 tells the lead to pass `--dispatch`. Receipt `core/fixtures/wait-stale-deliverable/receipt.sh BL-599`. The frozen `_gate-procedures.md` still carries the old wording until its own release.
+
+**DEFECT.** Carried from a BL-564 addendum that missed BL-564's close: b235-docs (4abbd6c3) archived BL-564 as landed in v0.792.0 with its `--since` half "CLOSED by operator ruling (batch 235, 2026-10-16) as covered by the BACKDATED arm: a back-dated `--since` follows from a back-dated row, which that arm refuses." That reasoning covers back-dating only. Filed by peer session ai-dlc-68 from graph s319 lead `949015a6` (Sonnet 5.5): the serial remediator was dispatched at 05:00:03Z on 2026-10-16, and at 05:00:04Z the lead armed `wait-for-deliverable.sh --since 2026-10-16T05:00:30Z …/s319/requirements-repair-p1.md`, 27s AFTER the dispatch, so any write in the remediator's first 27s was invisible to the beat. At 05:10:02Z it re-armed with `--since 2026-10-16T05:01:30Z` and called that "`--since` set to the dispatch time", false by 87s. The BACKDATED arm lives in `core/scripts/validate-artifact-budget.sh` (emitter `:1290`, "dispatched-at … is N s before its dispatch in the spawn ledger"), surfaced through `verdict.sh`, `validate-spawn-ledger.sh` and the write-time call in `core/hooks/ai-dlc-derivation-capture.sh` (all at 4abbd6c3). As written it judges an in-flight row's `dispatched-at` against the spawn ledger and fires only when the row is EARLIER than its dispatch; its header names the beat's `--since` (`:1203`) only as the window a back-dated row widens. Whether anything refuses a `--since` hand-typed LATER than a correctly stamped row is UNMEASURED: intake has not run the arm or the beat against a forward-dated `--since`. Back-dating accepts files older than the teammate; forward-dating misses the teammate's own early writes.
+
+This does not reopen the operator's close of the back-dated half; it files the direction that close did not address. Owed: first measure the forward-dated case against the shipped arm and the beat; if uncovered, `--since` is derived from the in-flight row's `dispatched-at` (or refused when later than it). Probe: a `--since` later than the row is refused, with `--since` equal to the row as the control.
+
+Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
+
+verify: manual
+
