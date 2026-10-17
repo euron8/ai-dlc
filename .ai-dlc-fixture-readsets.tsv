@@ -14,7 +14,7 @@
 # path<TAB>sha lines in the runner's universe as traced; the runner clears a stale key record when
 # it recomputes the same value over the tree it is pushing.
 #
-# fixtures mapped: 230    entries: 14569
+# fixtures mapped: 229    entries: 14556
 # OMITTED by the last run (always run): self-update-join-gate
 absorbed-specifics-survive	core/fixtures/absorbed-specifics-survive/run.sh
 absorbed-specifics-survive	core/skills/ai-dlc/SKILL.md
@@ -9673,19 +9673,6 @@ self-update-fixture-log	file:/var/folders/qr/v63hkc2n6s16yk44l131v9700000gn/T/tm
 self-update-fixture-log	file:/var/folders/qr/v63hkc2n6s16yk44l131v9700000gn/T/tmp.a4d670SE8Y/src.git.git
 self-update-fixture-log	file:/var/folders/qr/v63hkc2n6s16yk44l131v9700000gn/T/tmp.a4d670SE8Y/src.git.git/.git
 self-update-fixture-log	file:/var/folders/qr/v63hkc2n6s16yk44l131v9700000gn/T/tmp.a4d670SE8Y/src.git/.git
-self-update-reinvoke-liveness	core
-self-update-reinvoke-liveness	core/.claude/skills/ai-dlc-update/reconcile/preclassify.sh
-self-update-reinvoke-liveness	core/core/skills/ai-dlc-update/reconcile/preclassify.sh
-self-update-reinvoke-liveness	core/fixtures
-self-update-reinvoke-liveness	core/fixtures/.claude/skills/ai-dlc-update/reconcile/preclassify.sh
-self-update-reinvoke-liveness	core/fixtures/core/skills/ai-dlc-update/reconcile/preclassify.sh
-self-update-reinvoke-liveness	core/fixtures/self-update-reinvoke-liveness
-self-update-reinvoke-liveness	core/fixtures/self-update-reinvoke-liveness/.claude/skills/ai-dlc-update/reconcile/preclassify.sh
-self-update-reinvoke-liveness	core/fixtures/self-update-reinvoke-liveness/core/skills/ai-dlc-update/reconcile/preclassify.sh
-self-update-reinvoke-liveness	core/fixtures/self-update-reinvoke-liveness/run.sh
-self-update-reinvoke-liveness	core/skills/ai-dlc-update/SKILL.md
-self-update-reinvoke-liveness	core/skills/ai-dlc-update/reconcile/preclassify.sh
-self-update-reinvoke-liveness	core/skills/ai-dlc-update/reconcile/setup-sites.md
 settings-merge-documented-form	core
 settings-merge-documented-form	core/fixtures
 settings-merge-documented-form	core/fixtures/settings-merge-documented-form
@@ -14630,7 +14617,6 @@ self-update-join-gate	core/skills/ai-dlc-update/reconcile/setup-sites.md
 # digest retired-layer-contract e88a4774d6c4fd9472d48db3dc99d92dcec0886aa56f85cf29ac7da14d609a10
 # digest review-carry-over-clauses 0ae517d79ff27678be324e55489651ee3a462ef354aead4909cdd0ea14534c45
 # digest self-update-join-gate d3cc1f78c208b20362ed4896860d181bded017fb037dbf351c86f7c4d75e206b
-# digest self-update-reinvoke-liveness 9e16fe4e7dc60438b25f34547db8ac1297cab6ceac168046d93622b5ed16b032
 # digest settings-merge-documented-form c8749c59bf12d4e1027eefb344a6678683e3c8ff76ca2c89b13e1d5d6b53f05f
 # digest shipped-rule-version-floor 473369479a2f008a085044c8160ecd9616b80bba1d65098f6f16f612ba24b2e6
 # digest story-evidence-scaffold 642a6a684902fc5a1e2c467621ba57ac446a1f504d7b3c254ff59fce65ebe1bb
