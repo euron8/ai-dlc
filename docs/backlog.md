@@ -709,7 +709,7 @@ verify: sh t="$(awk '/^### 2\./{p=1} /^### 3\./{p=0} p' core/skills/ai-dlc/steps
 
 Owed, one of two: `architecture.md` gives the architect's deliverable a completion marker and its join `--complete`, or it names the last file in the write chain as the join target and forbids joining on the spine. Receipt: a header-only spine does not satisfy the step's join (a seeded probe on `wait-for-deliverable.sh`); the full write chain does (control).
 
-verify: manual
+verify: sh f=core/skills/ai-dlc/steps/architecture.md; t="$(awk '/^### 2\./{p=1} /^### 3\./{p=0} p' "$f" | tr '\n' ' ' | tr -s ' ')"; [ -n "$t" ] || exit 9; j="$(grep -oE 'wait-for-deliverable\.sh[^`]*architecture-chain\.md' <<<"$t")" || exit 1; grep -qE ' --complete( |$)' <<<"$j" && grep -qF -- '--dispatch <' <<<"$j" && grep -qF 'seat-complete: architecture architect none findings=0' <<<"$t" && ! grep -qE 'wait-for-deliverable\.sh[^`]*(ARCHITECTURE-SPINE|docs/architecture)' <<<"$t" && ! grep -qF 'are never offloaded' "$f"
 
 ## BL-655 — the load series (0.820.0) roughly doubled review-shard-merge-mutants and readset-skip under the hook's pool, and the cause is not established
 

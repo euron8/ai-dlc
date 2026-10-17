@@ -87,6 +87,10 @@
 #     It proves the brief names both records, never that a lead hands them over or that a p1 shard
 #     reviews the repair rather than re-reading the subject; no program reads a brief's inputs.
 #     Its token spans both file names, so keep them in ONE sentence of that paragraph.
+#   - the architecture step's section 2-3 architect chain joins on its chain record with
+#     `--complete`, never on the spine (architecture.md section 2; arch-chain-join). The spine is
+#     seeded header-first, so a plain join on it delivers a header. The marker predicate itself is
+#     wait-for-deliverable.sh's and its fixtures'; this row pins the join line the lead copies.
 #
 # LEADS ARE NOT ENOUGH. A bold lead left intact over a body rewritten to say the opposite
 # ("need NOT carry", "dropped only through a HARD_BLOCK", "an assertion is a sufficient
@@ -419,6 +423,7 @@ impl-cross-statedir|S|steps/implementation.md|### 6. Orchestrate|### 7.|**Gate-2
 adv-ls-files|R|adversary.md|## Constraints|## Escalation|- **List a code path your brief does not cite before you open it.**|para|list it with `git ls-files <dir-or-glob>` and read only what that returns.
 elic-header-region|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|The brief carries the shard header as the generated `provenance-block/elicitation` region below: copy this region verbatim
 arch-lint-invoke|S|steps/architecture.md|### 2. Architecture Creation or Update|### 3.|`bmad-architecture` ships `scripts/lint_spine.py`|para|lint_spine.py --workspace <the run folder holding ARCHITECTURE-SPINE.md> -o <lint json>
+arch-chain-join|S|steps/architecture.md|### 2. Architecture Creation or Update|### 3.|**Sections 2 and 3 run as ONE dispatched `architect` chain**|para|`scripts/ai-dlc/wait-for-deliverable.sh --complete --dispatch <agentId> _bmad-output/planning-artifacts/s<N>/architecture-chain.md`
 PINS
 }
 
