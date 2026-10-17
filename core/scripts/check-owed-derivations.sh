@@ -136,8 +136,12 @@ sprint_split() {
 #       (core/scripts/migrate-artifact-paths.sh:18) and `s<N>/archive/**` (core/scripts/validate-artifact-budget.sh
 #       :1362-1368). `archived/` and `archive-notes/` are no `archive` component.
 #   (ii) exact writer-produced names:
-#   - `prd-history.md`, `product-brief-history.md`: core/skills/ai-dlc/steps/requirements.md:154 and
-#     core/skills/ai-dlc/steps/artifact-consolidation.md:128.
+#   - THE FOUR HISTORY COMPANIONS, on their own line of the case below: `prd-history.md`,
+#     `product-brief-history.md`, `carry-over-backlog-archive.md` and `architecture-history.md`. The writer
+#     names them at core/skills/ai-dlc/SKILL.md (the `<live> -> <history>` pairs under "Current-state live,
+#     history archive") and core/skills/ai-dlc/steps/artifact-consolidation.md:128; retro.md:651 cuts carry-over
+#     items into the third. The dist-only battery derives that pair list from SKILL.md and fails when a
+#     companion is missing here. Each LIVE side (`prd.md`, `carry-over-backlog.md`, ...) is NOT history.
 #   - `push-candidate-ledger.archive.md`: core/skills/ai-dlc-update/reconcile/ledger-rotate.sh:136.
 #   - `pipeline-history/pipeline-snapshot-archive.md`: core/scripts/rotate-snapshot-archive.sh:149.
 #   - `operator-answers-history.md`: core/hooks/ai-dlc-answer-capture.sh:105 (path) and :242 (append).
@@ -173,7 +177,8 @@ is_history() { # <root-relative path> -> 0 when HISTORY
   case "$p" in _bmad-output/*) case "/${p%/*}/" in */archive/*) return 0 ;; esac ;; esac
   b="${p##*/}"
   case "$b" in
-    prd-history.md|product-brief-history.md|push-candidate-ledger.archive.md) return 0 ;;
+    prd-history.md|product-brief-history.md|carry-over-backlog-archive.md|architecture-history.md) return 0 ;;
+    push-candidate-ledger.archive.md) return 0 ;;
     operator-answers-history.md|operator-requests-history.md|pipeline-snapshot-history.md) return 0 ;;
   esac
   # rotate-snapshot-archive.sh:149 writes the archive beside the snapshot history, in its pipeline-history
