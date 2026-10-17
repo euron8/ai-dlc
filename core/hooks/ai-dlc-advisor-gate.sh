@@ -57,8 +57,9 @@
 #     and the in-sprint rotation (gate-validation.md:900, which REMOVES entries) are not gated.
 #   THE UPDATE SKILL, measured against core/skills/ai-dlc-update/SKILL.md (a bootstrapping file:
 #   the delivering pull runs its steps 1-2 on the old text and steps 3-8 on the new, after the
-#   step-2 re-invoke; this hook is live from step 2's working-tree write, so the delivering pull's
-#   step-2 merge meets the gate before its text names the touchpoint). Its PUSH of an update branch
+#   step-2 re-invoke; hooks are live from step 2's working-tree write -- reasoned from the step-2
+#   text, not measured -- so the delivering pull's step-2 merge would meet the gate before its text
+#   names the touchpoint). Its PUSH of an update branch
 #   lands only on an `ai-dlc-update/*` ref and is excluded below. Its MERGE is GATED (BL-582): a
 #   merge lands machinery into the consumer's working branch, which is touchpoint I's case, and the
 #   skill names the touchpoint itself at step 2's auto-merge and at step 8's merge.
