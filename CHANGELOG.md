@@ -20,6 +20,86 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.812.0] - 2026-10-17
+
+Batch 235 (the repair join, the SPEC render arm, and a handoff's writes from the ledger). Closes BL-542, BL-546,
+BL-560 and BL-561. BL-556, BL-557 and BL-579 are PARTIAL. Also carries intake 13 (BL-646, docs only). Closes no `PC-` id.
+
+### The repair join refuses a renamed disposition key and an off-vocabulary value, and names --escalations (BL-542, BL-561)
+
+- An entry with an `edit:` line and no `disposition:` is refused (graph's s319 d-answers fold, accepted at the base,
+  now refuses with 6 lines). A disposition outside repaired|escalated|skipped|not-reproduced|operator-ruling is
+  refused from the record's era onward. An `operator-ruling` entry needs no seat `source:` and resolves its
+  `ruling:` cite against the operator's history. Stated limit: a ruling given as a slash command, or cited by a
+  request's SHA256 line, does not resolve; 0 operator-ruling entries exist, so it refuses nothing today.
+- `--sources` on a record whose source tokens are all part-shaped refuses once and names `--escalations` (graph's
+  s319 elicitation repair: 138 refusals become 1). Token-less and own-artifact-token records keep their earlier
+  refusals.
+
+### The join half of BL-556 and BL-557
+
+- BL-556 (NOTE tier): a repaired entry whose claim says gap fill or veto is REPORTED on a `GAPFILL:` line after the
+  escalation count, and changes no exit code. Its recall depends on the words.
+- BL-557: a part holding a repaired entry must state `advisor:` and `derivations:`, and `not replayed` is refused; a
+  record binds from its first keyword-led line. Stated holes: a serial pass writing neither line never enters the
+  era, and per-file reading lets a joined record's part lines satisfy the check for a serial remediator that omits
+  its own.
+- Record mode (`--sources`, `--escalations`) prints every `ESCALATED:` line and the count BEFORE a refusal exit, so
+  no refusal hides an open escalation from the lead. Parts mode does not, by design: a refused parts join writes no
+  record, so the parts it read are not a joined set and a count from them could be wrong; the escalations print on
+  the re-run that joins. Arm EC32 pins that silence.
+- An operator-ruling entry with a real edit owes what a repaired edit owes (siblings, serial count, control,
+  set-aside). A tab in a heading is read as a space, a CR is stripped from a ruling cite, and a joined record's check
+  fields are judged per shard segment, as the join judged the parts (the third tip adversary's four DEFECTs; 0
+  corpus records reach any of them).
+
+### The join refuses a SPEC whose memlog carries a decision after its last render (BL-546, BL-560; from ai-dlc-4e)
+
+- The SPEC render arm judges a record that cites the sprint spec dir, skips a SPEC part whose memlog does not exist,
+  and refuses an unreadable one; `requirements.md` states what a SPEC repair owes. Stated limits: the receipt is the
+  seeded probe alone (graph: 19 memlogs SKIP, 0 fire), and graph's first memlog carrying the Render phrase is the
+  real-corpus test still owed.
+
+### A handoff lists a stopped agent's writes from the ledger, not from git status (BL-579 PARTIAL; from ai-dlc-c9)
+
+- `--agent-writes` and the handoff step-1 recording landed. Half b (commit after the join accepts a repair round)
+  and the auto-handoff step-1 twin are owed in a later release's `_gate-procedures.md` work.
+
+### The mutation battery
+
+- Five shards (a-e), 95 mutants over 105 predicates. R-579's mutants JX73-75 at its tip are JX93-95 here.
+
+### Corrections, recorded because each was wrong when stated
+
+- The header first said 0 of graph's 60 repair records carry `advisor:`/`derivations:`. That was measured over the
+  251 shard parts only, never over the records. Two s317 records carry those labels as prose; the first cut refused
+  both and hid their escalation counts. The tip adversary found it. Values are now read by their leading keyword,
+  and over the 60 records in both modes no record is refused by a check field.
+- The builder reported that making GAPFILL a report touched only one mutant shard. It changed the kill set of every
+  mutant naming that predicate, and JX24 was left expecting a kill it cannot make.
+- Combining three branches exposed three defects no single branch showed. R-579's JX73/JX74 were DEAD at its own
+  tip: its fail-closed jq rewrite left their anchors on the old read; they are re-anchored as JX93/JX94.
+  spec-render's SP10 asserted no `ESCALATED-COUNT` line, but combined record mode prints the count before exit 2; SP10
+  now asserts `ESCALATED-COUNT: 0 (1 closed` and that no `SPEC-RENDER:` line prints. The builder's own EC29-EC32 arms
+  were never scored against the older mutants, so ten expected kill sets (JX24 JX29 JX32 JX35 JX37 JX41 JX42 JX50
+  JX55 JX79) were stale; they were widened by prediction and the slot measured them: all ten killed exactly their widened set.
+- spec-render's SP7 arm was red when its branch was taken whole: its subject world had the SPEC part's agent write
+  `.memlog.md` without citing it, so the join refused the write as uncited (JX0 red in every shard, MJ 103). The
+  join was right; `_gate-procedures.md` requires the SPEC part's `edit:` lines to cite both files. ai-dlc-c8 fixed
+  the world (the record now cites the memlog). In the same change JX88 removes the self-probe its label names (it
+  had not, killing 25 extra predicates), and JX4's set gains `sjspecfresh` and `sjspecnone`. All three sets were
+  derived by reading and then measured in the slot: each killed exactly its derived set.
+
+### Verification
+
+- Records sweep (60 records x 2 modes, base vs tip): 13 differing runs, 0 refused by a check field, 0 where base
+  printed a count and tip did not. Parts sweep (251): 0 values outside the grammar, 0 `not replayed`, 2 GAPFILL
+  rows (s319 part 09 F-4, F-7).
+- hermetic-run.sh, each fixture this release edits: remediator-shard-join and remediator-shard-join-mutants{,-b..-e}
+  rc 0, required_missing 0. SP7 ok by name; JX0 clean and MJ ok in all five shards; 95 of 95 mutants killed
+  exactly their declared set.
+- Receipts BL-542, BL-561, BL-556, BL-557: fix 0, base 1, mutant 1.
+
 ## [0.811.0] - 2026-10-16
 
 Batch 235 (BL-591, and gate throughput on the review-shard-merge battery). Closes BL-591. Closes no `PC-` id.
