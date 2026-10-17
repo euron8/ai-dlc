@@ -578,6 +578,12 @@ item 3); your filename and the pass you stamp stay pass 1. You MUST:
   sub-skill's method with a lighter review, and do not let the authoring
   context's framing steer you — re-derive from the requirement.
 
+- **List a code path your brief does not cite before you open it.** Before you
+  read or grep a code path that neither your brief nor the artifact under review
+  cites, list it with `git ls-files <dir-or-glob>` and read only what that
+  returns. A path you guessed and did not list is not evidence that the code is
+  absent, and a finding built on it is an invented one.
+
 ## Escalation
 
 If the review surfaces a concern that blocks the artifact and cannot be resolved
