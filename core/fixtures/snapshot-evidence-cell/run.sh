@@ -41,6 +41,34 @@ else
 fi
 echo "HERMETIC-CONSUMED $VALIDATOR"
 
+# The validator's gate-log fallback runs its SIBLING scope classifier (check-owed-derivations.sh), which
+# runs ITS sibling sprint-status.sh (python3), which loads schemas/sprint-status.json from <script
+# dir>/../schemas/. A driven COPY must therefore be a complete program: every copy this fixture builds
+# lives in a scripts/ directory beside a schemas/ directory, both copied once from the resolved tree.
+VAL_DIR="$(dirname "$VALIDATOR")"
+SIB_SCRIPTS="check-owed-derivations.sh sprint-status.sh"
+if [ -f "$VAL_DIR/../schemas/sprint-status.json" ]; then
+  SIB_SCHEMA="$VAL_DIR/../schemas/sprint-status.json"
+elif [ -f "$ROOT/.claude/schemas/sprint-status.json" ]; then
+  SIB_SCHEMA="$ROOT/.claude/schemas/sprint-status.json"
+else
+  echo "FIXTURE ERROR: schemas/sprint-status.json not found in either layout" >&2
+  exit 2
+fi
+for sib in $SIB_SCRIPTS; do
+  [ -f "$VAL_DIR/$sib" ] || { echo "FIXTURE ERROR: $VAL_DIR/$sib not found" >&2; exit 2; }
+  echo "HERMETIC-CONSUMED $VAL_DIR/$sib"
+done
+echo "HERMETIC-CONSUMED $SIB_SCHEMA"
+
+# build_prog <dir>: make <dir>/scripts a complete host (the siblings) with <dir>/schemas beside it.
+build_prog() {
+  local sib
+  mkdir -p "$1/scripts" "$1/schemas" || return 1
+  for sib in $SIB_SCRIPTS; do cp "$VAL_DIR/$sib" "$1/scripts/$sib" || return 1; done
+  cp "$SIB_SCHEMA" "$1/schemas/sprint-status.json" || return 1
+}
+
 WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
@@ -205,6 +233,8 @@ fi
 
 D="$WORK/discovery"
 mkdir -p "$D" || exit 2
+build_prog "$D" || exit 2
+D_BIN="$D/scripts"
 
 # The SUBJECT calls bare `find`; so does this fixture, resolved the same way, so
 # a measurement here is a measurement of what the subject will see.
@@ -326,10 +356,26 @@ echo "  -- discovery (find: $D_FIND) --"
 W1="$(mktemp -d "$WORK/w1XXXXXX")" || exit 2
 mkdir -p "$W1/_bmad-output/implementation-artifacts" || exit 2
 
-# W2  ARCHIVED COPY ONLY, no canonical copy. This is the world an `archive/`
-#     exclusion regresses: it passes today and must keep passing.
+# W2  A PAST SPRINT'S ARCHIVED COPY ONLY, no canonical copy. With no canonical
+#     log the fallback reads the current sprint only (sprint 1 here, greenfield),
+#     so s300/archive is neither current nor living and the loud failure is reached.
 W2="$(mktemp -d "$WORK/w2oXXXXXX")" || exit 2
 d_seed_log "$W2/_bmad-output/planning-artifacts/s300/archive/cycle-1/gate-log.md" "$CELL_4385" || exit 2
+
+# W2c the same shape under the CURRENT sprint (s1): the fallback still reads it.
+W2C="$(mktemp -d "$WORK/w2cXXXXXX")" || exit 2
+d_seed_log "$W2C/_bmad-output/planning-artifacts/s1/cycle-1/gate-log.md" "$CELL_4385" || exit 2
+
+# W2h an archive/ copy under the CURRENT sprint: HISTORY beats CURRENT, so it is refused.
+W2H="$(mktemp -d "$WORK/w2hXXXXXX")" || exit 2
+d_seed_log "$W2H/_bmad-output/planning-artifacts/s1/archive/cycle-1/gate-log.md" "$CELL_4385" || exit 2
+
+# W10 canonical cites 5881 + a CURRENT-sprint decoy (s1, not archive) readdir-first
+#     and lexically first. The classifier calls both CURRENT or LIVING, so only the
+#     canonical preference separates the live copy from a find-then-classify fallback.
+R10="$(d_world_two "$CELL_5881" "$CELL_4385" 's1/cycle-1')" || {
+  echo "FIXTURE BROKEN: no candidate name landed readdir-BEFORE implementation-artifacts (W10)" >&2; exit 2; }
+W10="$(d_field "$R10" 1)"; W10_DECOY="$(d_field "$R10" 2)"; W10_ORDER="$(d_from "$R10" 4)"
 
 # W3  live cites 5881 + archived decoy readdir-first.
 R3="$(d_world_two "$CELL_5881" "$CELL_4385" 's300/archive/cycle-1')" || {
@@ -394,6 +440,7 @@ d_assert_before "W3b" "$W3B_ORDER" "$W3B_DECOY"
 d_assert_before "W5 " "$W5_ORDER"  "$W5_DECOY"
 d_assert_before "W7 " "$W7_ORDER"  "$W7_DECOY"
 d_assert_before "W8 " "$W8_ORDER"  "$W8_DECOY"
+d_assert_before "W10" "$W10_ORDER" "$W10_DECOY"
 
 w9_pc="$(d_pos "$W9_ORDER" implementation-artifacts)"
 w9_pe="$(d_pos "$W9_ORDER" "$W9_EARLY")"
@@ -422,15 +469,21 @@ V_W5="$(d_verdict "$VALIDATOR" "$W5")"
 V_W7="$(d_verdict "$VALIDATOR" "$W7" --gate-log "$W7/_bmad-output/implementation-artifacts/gate-log.md")"
 V_W8="$(d_verdict "$VALIDATOR" "$W8")"
 V_W9="$(d_verdict "$VALIDATOR" "$W9")"
+V_W2C="$(d_verdict "$VALIDATOR" "$W2C")"
+V_W2H="$(d_verdict "$VALIDATOR" "$W2H")"
+V_W10="$(d_verdict "$VALIDATOR" "$W10")"
 
 d_expect "W1  zero gate logs fail loudly           " "FAIL1/-"    "$V_W1"
-d_expect "W2  an archived-only tree still PASSES   " "PASS/4385"  "$V_W2"
+d_expect "W2  a past sprint's archived log is no longer this gate's" "FAIL1/-"  "$V_W2"
+d_expect "W2c the same shape under the current sprint PASSES" "PASS/4385"  "$V_W2C"
+d_expect "W2h an archive/ log under the current sprint FAILS" "FAIL1/-"    "$V_W2H"
 d_expect "W3  the live copy is read, not the decoy " "PASS/5881"  "$V_W3"
 d_expect "W3b a live number that is not 5881       " "PASS/5120"  "$V_W3B"
 d_expect "W5  a live row citing nothing now FAILS  " "FAIL1/-"    "$V_W5"
 d_expect "W7  --gate-log short-circuits discovery  " "PASS/5881"  "$V_W7"
 d_expect "W8  a decoy outside archive/ loses too   " "PASS/5881"  "$V_W8"
 d_expect "W9  decoys on both sides, live still won " "PASS/5120"  "$V_W9"
+d_expect "W10 a current-sprint decoy loses to live " "PASS/5881"  "$V_W10"
 
 if grep -q 'no gate-log.md found' "$D/out.txt" 2>/dev/null; then :; fi
 bash "$VALIDATOR" --root "$W1" --check-evidence >"$D/w1.txt" 2>&1
@@ -447,9 +500,12 @@ fi
 # exactly like "mutant was killed", and a mutant that dies on a syntax error
 # reads like one that was killed too.
 #
-# The validator sources no siblings and resolves nothing beside itself (measured:
-# zero `source`/`.` lines, zero SCRIPT_DIR references), so a lone script copy is
-# a complete program. It takes its root from --root, so it never reads this repo.
+# The validator's gate-log fallback runs the sibling check-owed-derivations.sh from
+# its own directory (AI_DLC_SELF_DIR), which runs sprint-status.sh and loads
+# ../schemas/sprint-status.json, so a LONE script copy is NOT a complete program: its
+# fallback worlds would reach "no gate-log.md found" for a reason that is no mutation.
+# Every copy is therefore built in $D_BIN / $E_BIN (build_prog), beside the siblings
+# and the schema. It takes its root from --root, so it never reads this repo.
 
 d_pre_canon="$(grep -cE '^[^#]*implementation-artifacts/gate-log\.md' "$VALIDATOR")" || d_pre_canon=0
 d_pre_find="$(grep -cE '^[^#]*GATE_LOG="\$\(find ' "$VALIDATOR")" || d_pre_find=0
@@ -512,7 +568,7 @@ d_mut() { # d_mut <name> <outfile> ; builds by transforming $VALIDATOR
 # be refused for it. Treating the control as a failed mutation is a false red on
 # the one arm whose whole job is to say the harness did not move.
 d_build() { # d_build <name> <want-applied:1|0|same> <post-canon> <post-find>
-  local name="$1" want="$2" wc="$3" wf="$4" out="$D/$1.sh" pc pf
+  local name="$1" want="$2" wc="$3" wf="$4" out="$D_BIN/$1.sh" pc pf
   d_mut "$name" "$out" || { bad "MUTANT $name: builder FAILED -- no mutant was scored"; return 1; }
   if cmp -s "$VALIDATOR" "$out"; then
     if [ "$want" = "0" ]; then
@@ -579,18 +635,21 @@ fi
 # never ran cannot score as agreement.
 
 d_vector() { # d_vector <script>
-  printf '%s %s %s %s %s %s %s %s\n' \
+  printf '%s %s %s %s %s %s %s %s %s %s %s\n' \
     "$(d_verdict "$1" "$W1")" \
     "$(d_verdict "$1" "$W2")" \
+    "$(d_verdict "$1" "$W2C")" \
+    "$(d_verdict "$1" "$W2H")" \
     "$(d_verdict "$1" "$W3")" \
     "$(d_verdict "$1" "$W3B")" \
     "$(d_verdict "$1" "$W5")" \
     "$(d_verdict "$1" "$W7" --gate-log "$W7/_bmad-output/implementation-artifacts/gate-log.md")" \
     "$(d_verdict "$1" "$W8")" \
-    "$(d_verdict "$1" "$W9")"
+    "$(d_verdict "$1" "$W9")" \
+    "$(d_verdict "$1" "$W10")"
 }
 
-D_WORLDS="W1 W2 W3 W3b W5 W7 W8 W9"
+D_WORLDS="W1 W2 W2c W2h W3 W3b W5 W7 W8 W9 W10"
 SHIPPED_VEC="$(d_vector "$VALIDATOR")"
 printf '  %-8s %s\n' "SHIPPED" "$SHIPPED_VEC"
 
@@ -612,8 +671,8 @@ d_diff_worlds() { # d_diff_worlds <vec-a> <vec-b>  -> space-separated world name
 
 d_score() { # d_score <name> <must-differ:1|0> [sole-killing-world]
   local name="$1" must="$2" sole="${3:-}" vec diff
-  [ -f "$D/$name.sh" ] || { bad "KILL $name: no mutant on disk to score"; return; }
-  vec="$(d_vector "$D/$name.sh")"
+  [ -f "$D_BIN/$name.sh" ] || { bad "KILL $name: no mutant on disk to score"; return; }
+  vec="$(d_vector "$D_BIN/$name.sh")"
   printf '  %-8s %s\n' "$name" "$vec"
   diff="$(d_diff_worlds "$SHIPPED_VEC" "$vec")"
   if [ "$must" = "1" ]; then
@@ -694,6 +753,8 @@ fi
 
 E="$WORK/selection"
 mkdir -p "$E" || exit 2
+build_prog "$E" || exit 2
+E_BIN="$E/scripts"
 E_LIVE="_bmad-output/implementation-artifacts/gate-log.md"
 T1="2026-08-10T09:00:00Z"; T2="2026-08-11T09:00:00Z"; T3="2026-08-12T09:00:00Z"
 
@@ -871,9 +932,9 @@ e_new WJ
 } > "$WJ/$E_LIVE"
 e_snap "$WJ" "- last_gate_passed: planning (architecture) $T2"
 
-# W-K  ARCHIVED-ONLY log beside a live snapshot whose key matches no section.
-#      The snapshot describes a different gate than this log's, so there is
-#      nothing to cross-check and the tree must keep passing.
+# W-K  ARCHIVED-ONLY log (a past sprint's) beside a live snapshot. The fallback
+#      reads the current sprint only, so there is no log to audit and the arm
+#      refuses loudly instead of passing on the archived copy.
 e_new WK
 mkdir -p "$WK/_bmad-output/planning-artifacts/s300/archive/cycle-1" || exit 2
 { printf '# Gate Log\n\n'
@@ -923,7 +984,7 @@ e_snap "$WO" "- last_gate_passed: planning (stories) 2026-08-14"
 
 E_NAMES="W-A W-B W-C W-D W-D2 W-E W-E2 W-F W-F2 W-F3 W-G W-H W-I W-J W-K W-L W-M W-N W-O"
 E_ROOTS="$WA $WB $WC $WD $WD2 $WE $WE2 $WF $WF2 $WF3 $WG $WH $WI $WJ $WK $WL $WM $WN $WO"
-E_WANT="PASS/5076/- PASS/5076/- PASS/5492/- FAIL1/-/STALE FAIL1/-/STALE FAIL1/-/STALE PASS/5076/- FAIL1/-/STALE PASS/5076/- PASS/5076/- PASS/5076/- PASS/5076/- FAIL1/-/TIE FAIL1/-/NOTS PASS/5076/- FAIL1/-/NOROW@$(e_line "$WL/$E_LIVE" gate-3) FAIL1/-/NOROW@$(e_line "$WM/$E_LIVE" gate-3b) FAIL1/-/STALE PASS/5076/-"
+E_WANT="PASS/5076/- PASS/5076/- PASS/5492/- FAIL1/-/STALE FAIL1/-/STALE FAIL1/-/STALE PASS/5076/- FAIL1/-/STALE PASS/5076/- PASS/5076/- PASS/5076/- PASS/5076/- FAIL1/-/TIE FAIL1/-/NOTS FAIL1/-/- FAIL1/-/NOROW@$(e_line "$WL/$E_LIVE" gate-3) FAIL1/-/NOROW@$(e_line "$WM/$E_LIVE" gate-3b) FAIL1/-/STALE PASS/5076/-"
 
 # EXIT/CITED/CLASS. The class is read from the refusal text, most specific first.
 e_verdict() { # e_verdict <script> <root>
@@ -1004,8 +1065,8 @@ e_has "W-C selects the middle section" "$WC" \
 e_has "W-E refusal names the heading-timestamp section, not the body that quotes the key" "$WE" \
   "(line $(e_line "$WE/$E_LIVE" stories), ${T3%Z})"
 e_has "W-H reports the snapshot key as absent" "$WH" "snapshot key absent)"
-e_has "W-K reports the cross-check as not applied off the canonical log" "$WK" \
-  "snapshot key not checked: not the canonical live gate log)"
+e_has "W-K refuses: a past sprint's archived log is not the current sprint's" "$WK" \
+  "for the current sprint"
 e_has "W-L names the gate-3 section that logged no Check 14 row" "$WL" \
   "the gate whose section heads line $(e_line "$WL/$E_LIVE" gate-3):"
 e_has "W-M names the NEWEST row-less section carrying the date, not the last" "$WM" \
@@ -1019,7 +1080,7 @@ e_has "W-M names the NEWEST row-less section carrying the date, not the last" "$
 # because several carry a literal `\t` that `-v` would turn into a tab.
 e_applied=0
 e_mut() { # e_mut <name> <line|sub> <anchor> <replacement> <want-hits>
-  local name="$1" mode="$2" out="$E/$1.sh" hits
+  local name="$1" mode="$2" out="$E_BIN/$1.sh" hits
   hits="$(A="$3" R="$4" M="$mode" LC_ALL=C awk -v out="$out" '
     BEGIN { a = ENVIRON["A"]; r = ENVIRON["R"]; m = ENVIRON["M"]; h = 0 }
     {
@@ -1052,7 +1113,7 @@ e_mut() { # e_mut <name> <line|sub> <anchor> <replacement> <want-hits>
 }
 
 e_mut enoop line 'ZZZ-THIS-LINE-CANNOT-EXIST-IN-THE-SUBJECT' 'x' 0 || true
-cat "$VALIDATOR" > "$E/ectl.sh" || exit 2
+cat "$VALIDATOR" > "$E_BIN/ectl.sh" || exit 2
 # Positional selection, both directions: the fast path taken for ANY row count,
 # auditing the first (head) or the last (tail) row-bearing section.
 e_mut pfirst line \
@@ -1113,8 +1174,8 @@ e_diff() { # e_diff <vec-a> <vec-b> -> names of the worlds where they differ
 }
 e_score() { # e_score <name> <world-that-must-kill>...
   local name="$1" vec diff w; shift
-  [ -f "$E/$name.sh" ] || { bad "KILL $name: no mutant on disk to score"; return; }
-  vec="$(e_vector "$E/$name.sh")"
+  [ -f "$E_BIN/$name.sh" ] || { bad "KILL $name: no mutant on disk to score"; return; }
+  vec="$(e_vector "$E_BIN/$name.sh")"
   printf '  %-10s %s\n' "$name" "$vec"
   diff="$(e_diff "$E_SHIPPED" "$vec")"
   if [ "$name" = "ectl" ]; then
