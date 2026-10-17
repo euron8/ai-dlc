@@ -1195,6 +1195,18 @@ x_world() { # x_world <A|B|C> -> path of a fresh world, refs in .B/.T
   done
   printf '#!/usr/bin/env bash\n# driver v1\n' > "$_d/core/session-driver/d.sh"
   printf '9.9.9\n' > "$_d/VERSION"
+  # BL-631: world C carries `derived` fences, so vd_join consults the scope classifier, read out of
+  # the DIST at THEIRS. The three real files are committed in the BASE commit and never change, so
+  # they stay out of the moved set and the XC hit count still reads 2. Worlds A and B draw no
+  # derivation row and are left exactly as they were. This function's stdout is captured by its
+  # caller, so nothing is printed here; X_CLS_* are announced where the arm runs.
+  if [ "$1" = C ]; then
+    [ -n "${X_CLS_SH:-}" ] && [ -n "${X_CLS_SS:-}" ] && [ -n "${X_CLS_SCH:-}" ] || return 1
+    mkdir -p "$_d/core/schemas" || return 1
+    cp -p "$X_CLS_SH" "$_d/core/scripts/check-owed-derivations.sh" || return 1
+    cp -p "$X_CLS_SS" "$_d/core/scripts/sprint-status.sh" || return 1
+    cp -p "$X_CLS_SCH" "$_d/core/schemas/sprint-status.json" || return 1
+  fi
   git -C "$_d" init -q && git -C "$_d" -c user.email=f@f -c user.name=fixture add -A \
     && git -C "$_d" -c user.email=f@f -c user.name=fixture commit -qm base || return 1
   git -C "$_d" rev-parse HEAD > "$_w/.B"
@@ -1249,6 +1261,27 @@ x_score() { # x_score <reconcile-dir> -> the cell above, or BROKEN
 }
 X_WANT='N|D|2|PLACED|PLACED|2|X|T'
 X_RUN=1
+# The real scope classifier, resolved from this fixture's own repo root in either layout; world C
+# commits it into the DIST (see x_world). Absent in a tree that predates it: the arm then cannot
+# draw the row it counts, so it is skipped in a consumer and hard in the distribution.
+X_REPO="$(cd "$(dirname "$APPLY")/../../../.." && pwd)"
+X_CLS_SH=""; X_CLS_SS=""; X_CLS_SCH=""
+for _c in "$X_REPO/core/scripts/check-owed-derivations.sh" "$X_REPO/scripts/ai-dlc/check-owed-derivations.sh"; do
+  [ -f "$_c" ] && X_CLS_SH="$_c" && break
+done
+for _c in "$X_REPO/core/scripts/sprint-status.sh" "$X_REPO/scripts/ai-dlc/sprint-status.sh"; do
+  [ -f "$_c" ] && X_CLS_SS="$_c" && break
+done
+for _c in "$X_REPO/core/schemas/sprint-status.json" "$X_REPO/.claude/schemas/sprint-status.json"; do
+  [ -f "$_c" ] && X_CLS_SCH="$_c" && break
+done
+if [ -n "$X_CLS_SH" ] && [ -n "$X_CLS_SS" ] && [ -n "$X_CLS_SCH" ]; then
+  echo "HERMETIC-CONSUMED $X_CLS_SH"; echo "HERMETIC-CONSUMED $X_CLS_SS"; echo "HERMETIC-CONSUMED $X_CLS_SCH"
+elif [ -d "$X_REPO/core/skills/ai-dlc" ]; then
+  :   # the distribution: world C then fails to seed and the arm goes red (BROKEN), never silent
+else
+  X_RUN=0; printf '  SKIP  BL-631 arm x -- the scope classifier is not in this tree, so world C cannot draw the derivation row it counts\n'
+fi
 if ! grep -qF -- '-c core.quotePath=false ls-tree -r "$THEIRS" -- core/' "$APPLY"; then
   case "$APPLY" in
     */core/skills/ai-dlc-update/reconcile/apply.sh) printf '  --    (BL-364: this apply.sh lists paths under the default core.quotePath; in the distribution arm x runs anyway and must go red)\n' ;;
