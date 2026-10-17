@@ -1057,3 +1057,9 @@ Batch-close docs commit built on b235-train: intake-27 (BL-657/658/659), the 0.8
 
 ## 4:02 PM
 The batch-close docs commit LANDED as 23a69fc3 (PR #1188). Verified by content: the diff against 501d0e1d is rc 0, VERSION is 0.822.0, and the parent is edcae8aa. The remote b235-train was deleted. Action 6 follow-up: the resume block gains the close-sweep figures (live 1 / unfiled 0 / worklist 1 / DISCHARGED 0 / TERMINAL 246 / archive 369, all controls passed; the S319 id shipped in v0.813.0 and is held in-flight by BL-530). It also gets the next free id corrected to BL-661 (BL-660 is the held intake-28) and the archive 600-vs-599 difference explained (BL-084 has two headings). c9 holds only b235-intake-28 (584882bd) for batch 236.
+
+## 4:10 PM
+The action-6 commit LANDED as a39aa52a (PR #1189). Verified by content: the diff against 8470b87e is rc 0, VERSION is 0.822.0, and the parent is 23a69fc3. The remote b235-train was deleted.
+Action 6b PASSED: resumable from origin/main at a39aa52a, with 17 figures compared and all matching. The stranger agent read the plan from a fresh worktree. It found that the one shipped PC id has its oldest VERSION commit at 2ca609f1 = 0.813.0, that no PC id is offered as NEXT work, and that plan-shape exits 0. Four stranger-context NOTEs, none blocking: the f7 and c9 handles are not introduced; ## Done when sits at the foot of the file and acts as an unnamed sixth live section; graph's sprint branch moved 47f53212b -> 666d48e82 with the live set unchanged.
+Action 9 next, after this commit lands: ListAgents shows c8, 6f and c9 idle, and f7 busy, holding the operator's graph watch, so it is excluded. The handoff goes to the first idle session listed, then to the next one on an explicit REFUSED.
+Operator questions still open: the 10 local bl585-* tags (lead recommends keeping them).
