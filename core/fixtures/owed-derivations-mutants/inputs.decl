@@ -2,7 +2,9 @@
 # reconcile directory, because it lifts functions out of apply.sh and preclassify.sh), the sibling driver
 # owed-derivations/run.sh (re-executed against each copy; declared whole), the shared preamble that driver
 # sources, and the real validator both programs run. scripts/install.sh is the marker run.sh walks up for.
+# Arm Bh reads the live -> history pair list out of the ai-dlc SKILL.md.
 !core/scripts/check-owed-derivations.sh
+!core/skills/ai-dlc/SKILL.md
 !core/skills/ai-dlc-update/reconcile/derivation-differential.sh
 core/skills/ai-dlc-update/reconcile/
 core/fixtures/owed-derivations/

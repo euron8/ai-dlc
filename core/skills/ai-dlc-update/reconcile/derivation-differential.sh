@@ -114,7 +114,9 @@
 # THE ROW'S FILE SET IS NOT RE-STATED HERE. `vd_join()` is lifted out of apply.sh, and
 # `map_consumer()` out of preclassify.sh, by the same awk-range + eval this directory already uses
 # for map_consumer. If either lift fails the run refuses; a private copy of the join would let the
-# operator clear a set the row never named.
+# operator clear a set the row never named. The join is SCOPED: it keeps only the files the scope
+# classifier calls CURRENT or LIVING, so the NEWLY-FAILING set and the exit are the same with every
+# past sprint's artifacts deleted, and a classifier that cannot run refuses here (`scope`).
 #
 # OUT OF SCOPE, stated so a clear is not over-read: a derivation whose operand exists only as an
 # untracked or ignored file in the consumer fails at base and shows as NEWLY-PASSING (counted in a
@@ -195,13 +197,18 @@ cleanup() {
   [ -n "$WT_PARENT" ] && { rm -f "$WT_PARENT/pid" 2>/dev/null; rmdir "$WT_PARENT" 2>/dev/null; }
   rm -f "$TMP/files" "$TMP/chain" "$TMP/blobs" "$TMP/pairs" "$TMP/list.out" "$TMP/list.err" \
         "$TMP/b.out" "$TMP/b.err" "$TMP/t.out" "$TMP/t.err" "$TMP/rows" "$TMP/counts" \
-        "$TMP/operands" "$TMP/moved" "$TMP/owed" "$TMP/owed.keep" "$TMP/past" "$TMP/hist" "$TMP/scope.err" 2>/dev/null
+        "$TMP/operands" "$TMP/moved" "$TMP/owed" "$TMP/owed.keep" "$TMP/scope.err" "$TMP/dropped" 2>/dev/null
   rmdir "$TMP" 2>/dev/null
 }
 trap cleanup EXIT
 
 # ---- the row's file set, by the row's own join --------------------------------------------
 vd_join "$DIST" "$BASE" "$THEIRS" "$ART"
+# The join keeps only the current sprint's artifacts and the living documents, so a past sprint's
+# derivation can neither make this exit 1 nor be recorded. A classifier that could not run leaves
+# the set unknown, and a clear over an unknown set is the guess the scope ruling forbids.
+[ -z "${VD_SCOPE_ERR:-}" ] \
+  || refuse scope "which artifacts belong to the current sprint is unknown: ${VD_SCOPE_ERR}. Restore the current sprint's canonical sprint-status.yaml (its \`sprint: <N>\` and \`status:\` lines) so \`sprint-status.sh sprint-id\` answers, then re-run."
 [ -n "${VD_MOVED:-}" ] \
   || refuse join "the range ${BASE}..${THEIRS} changes no core path (or the diff could not be read), so the artifact-derivations row cannot have been emitted for it. Check the refs against the row."
 [ "$VD_LISTED" -gt 0 ] || refuse join "$ART lists no markdown file."
@@ -426,12 +433,14 @@ read -r N_U N_NF N_NP N_SB N_UN N_PB N_BP N_TP H_B H_T N_SUP < "$TMP/counts" 2>/
 say_row INFO superseded "${N_SUP} of ${N_U} derivation(s) are superseded by a later byte-identical copy in the same record; the validator runs only the later copy, so they are in no count or row below."
 
 # The record is appended only after every refusal above has passed, so a refused run records nothing.
-# SCOPE IS CURRENT SPRINT ONLY (operator ruling), AND THE CLASSIFIER IS THE READER'S, NOT A COPY: each
-# NEWLY-FAILING row is classified by the consumer's installed `check-owed-derivations.sh --scope <path>`.
-# CURRENT or LIVING rows are appended; a PAST row is not recorded and prints an INFO row instead. A
-# classifier that is absent or refuses (exit 2: the current sprint could not be resolved) refuses the
-# run, because recording or dropping a row on a guessed scope is the defect the ruling exists to prevent.
-: > "$TMP/past"; : > "$TMP/hist"
+# SCOPE IS CURRENT SPRINT ONLY (operator ruling), AND THE CLASSIFIER IS THE READER'S, NOT A COPY. The
+# join above already kept only CURRENT and LIVING files, so every NEWLY-FAILING row here is in scope by
+# construction, and a past sprint's or a history file's break never reaches this loop (it is named by the
+# `INFO out-of-scope` rows below instead). Each row is still re-classified by the consumer's installed
+# `check-owed-derivations.sh --scope <path>` before it is appended, and anything but CURRENT or LIVING
+# refuses: the sprint can roll between the join and this write, and recording or dropping a row on a
+# scope that moved is the guess the ruling forbids. A classifier that is absent or refuses (exit 2: the
+# current sprint could not be resolved) refuses the run for the same reason.
 if [ "$OWED_SET" -eq 1 ] && [ -s "$TMP/owed" ]; then
   _scope_tool="$CONSUMER/scripts/ai-dlc/check-owed-derivations.sh"
   [ -f "$_scope_tool" ] \
@@ -443,9 +452,7 @@ if [ "$OWED_SET" -eq 1 ] && [ -s "$TMP/owed" ]; then
       || refuse record "the scope classifier exited non-zero for ${_okey%:*}: $(head -2 "$TMP/scope.err" | tr '\n' ' ')Nothing was recorded."
     case "$_sc" in
       CURRENT|LIVING) printf '%s\n' "$_orow" >> "$TMP/owed.keep" ;;
-      PAST) printf '%s\n' "$_okey" >> "$TMP/past" ;;
-      HISTORY) printf '%s\n' "$_okey" >> "$TMP/hist" ;;
-      *) refuse record "the scope classifier printed '${_sc}' for ${_okey%:*}, not CURRENT, LIVING, PAST or HISTORY. Nothing was recorded." ;;
+      *) refuse record "the scope classifier printed '${_sc}' for ${_okey%:*}, which the join had kept as the current sprint's or a living document's. The scope moved between the two reads (did the sprint roll?), so nothing was recorded; re-run." ;;
     esac
   done < "$TMP/owed"
   if [ -s "$TMP/owed.keep" ]; then
@@ -455,14 +462,18 @@ if [ "$OWED_SET" -eq 1 ] && [ -s "$TMP/owed" ]; then
 fi
 
 cat "$TMP/rows"
-while IFS= read -r _pkey; do
-  [ -n "$_pkey" ] || continue
-  say_row INFO past-sprint "$_pkey is NEWLY-FAILING in a sprint that has since finished: unrepaired debt that is no longer enforced. It is NOT recorded, NOT refused at the gate and NOT carried forward, and it is not closed."
-done < "$TMP/past"
-while IFS= read -r _hkey; do
-  [ -n "$_hkey" ] || continue
-  say_row INFO history "$_hkey is NEWLY-FAILING in a history file (an archive, or an ai-dlc rotation output): unrepaired debt that is no longer enforced. It is NOT recorded, NOT refused at the gate and NOT carried forward, and it is not closed."
-done < "$TMP/hist"
+# A file the scope dropped is named, never silently absent: one row per hit-bearing PAST or HISTORY file.
+# It is not run, not recorded, not refused and not closed.
+printf '%s\n' "$VD_DROPPED" > "$TMP/dropped" \
+  || refuse tmp "could not stage the out-of-scope file list, so a dropped file would go unnamed."
+while IFS="$(printf '\t')" read -r _dt _dp; do
+  [ -n "$_dp" ] || continue
+  case "$_dt" in
+    PAST) _dw="a sprint that has since finished" ;;
+    *)    _dw="a history file (an archive, or an ai-dlc rotation output)" ;;
+  esac
+  say_row INFO out-of-scope "${_dt}	${_dp} carries a recorded derivation naming a path this range changed, and is ${_dw}: it is not this pull's to repair, so it is NOT run, NOT recorded, NOT refused at the gate and NOT carried forward, and it is not closed."
+done < "$TMP/dropped"
 
 # ---- NOTEs: what the differential cannot attribute -----------------------------------------
 # Operands are read as whitespace-split words of the recorded command with globbing OFF, so a

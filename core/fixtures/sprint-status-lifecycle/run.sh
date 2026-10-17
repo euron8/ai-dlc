@@ -62,51 +62,118 @@ status: in_progress'
 [ "$(sid)" = "291" ] && ok "in-flight -> N (rule 4, a re-plan not a new sprint)" \
   || bad "in-flight sprint did not resolve to N"
 
-# --- Assertion 4: THE CORE DEFECT — preamble-only -> max_frozen+1, never 1 ---
-# The state route.md Step 6 has NO rule for. This assertion is the whole point of the change:
-# it must NOT resolve to 1, because 1 destroys the prior sprint's drafts.
-reset_tree
-put "$IMPL/sprint-status.yaml" '# Sprint Status
-# (preamble-only: what a rotate-at-close leaves behind)'
-put "$IMPL/sprint-status/sprint-289.yaml" 'sprint: 289
-status: done'
-put "$IMPL/sprint-status/sprint-290.yaml" 'sprint: 290
-status: done'
-GOT="$(sid)"
-[ "$GOT" = "291" ] && ok "preamble-only -> max_frozen+1 (291), the case the prose has no rule for" \
-  || bad "preamble-only resolved to '$GOT', expected 291 (1 would destroy the prior sprint's drafts)"
-[ "$GOT" != "1" ] || bad "preamble-only resolved to 1 — the exact silent-destruction defect"
-
-# --- Assertion 4b: the SAME derivation off the MIGRATED spelling -------------
-# `migrate-artifact-paths.sh` maps `sprint-status/sprint-<N>.yaml` onto `s<N>/sprint-status.yaml`,
-# so on a migrated consumer the legacy directory holds only `_preamble.yaml` and the reader above
-# finds NOTHING — falling back to 1, "which would silently re-stamp a live project as greenfield".
-# 4a proves the old spelling still reads; this proves the new one does. Both, or the fix is a
-# writer-only fix that blinds the fallback it was supposed to leave alone.
-reset_tree
-mkdir -p "$IMPL/s289" "$IMPL/s290"
-put "$IMPL/sprint-status.yaml" '# Sprint Status
-# (preamble-only: what a rotate-at-close leaves behind)'
-put "$IMPL/s289/sprint-status.yaml" 'sprint: 289
-status: done'
-put "$IMPL/s290/sprint-status.yaml" 'sprint: 290
-status: done'
-GOT="$(sid)"
-[ "$GOT" = "291" ] && ok "preamble-only -> max_frozen+1 off the MIGRATED spelling (s<N>/ slot)" \
-  || bad "migrated archive resolved to '$GOT', expected 291 — the reader cannot see the slot, and 1 is the silent-greenfield defect"
-
-# --- Assertion 4c: CONTROL — the reader is not matching on the slot alone ----
-# `s<N>/` directories are the grammar's slot for EVERY artifact, so a slot with no
-# `sprint-status.yaml` in it must contribute nothing. Without this arm 4b would pass on a tree
-# whose only evidence is an empty directory, and the reader would report a freeze that is not there.
-reset_tree
-mkdir -p "$IMPL/s289"
-put "$IMPL/sprint-status.yaml" '# Sprint Status
+# --- Assertions 4/4b/4c: THE PROPERTY — the answer with archives EQUALS the answer with none ----
+# The current sprint is read ONLY from the canonical's own `sprint:` + `status:` record. Frozen
+# archives (legacy `sprint-status/sprint-<N>.yaml` AND the grammar's `s<N>/sprint-status.yaml`) are
+# history, and deleting history must change nothing. Each canonical state is seeded WITH both archive
+# spellings and again with every archive deleted; stdout AND exit code must match across the pair AND
+# equal the stated expectation, so two wrong answers that agree cannot pass. A canonical that exists
+# with no `sprint:` key REFUSES (exit 1, empty stdout, stderr names the file) — never 1, never max+1.
+seed_state() { # <state> <archives 0|1>
+  reset_tree
+  case "$1" in
+    preamble)  put "$IMPL/sprint-status.yaml" '# Sprint Status
+# (preamble-only: what a rotate-at-close leaves behind)' ;;
+    empty)     : > "$IMPL/sprint-status.yaml" ;;
+    done6)     put "$IMPL/sprint-status.yaml" 'sprint: 6
+status: done' ;;
+    inprog7)   put "$IMPL/sprint-status.yaml" 'sprint: 7
+status: in_progress' ;;
+    none)      : ;;
+    implpre)   put "$IMPL/sprint-status.yaml" '# Sprint Status
 # (preamble-only)'
-put "$IMPL/s289/architecture.md" 'not a sprint-status envelope'
-GOT="$(sid)"
-[ "$GOT" = "1" ] && ok "control: an s<N>/ slot with no sprint-status.yaml is NOT a freeze" \
-  || bad "an empty s<N>/ slot was counted as a frozen sprint (got '$GOT', expected 1)"
+               put "$PLAN/sprint-status.yaml" 'sprint: 6
+status: in_progress' ;;
+  esac
+  if [ "$2" = 1 ]; then
+    mkdir -p "$IMPL/s289" "$IMPL/s290"
+    put "$IMPL/sprint-status/sprint-289.yaml" 'sprint: 289
+status: done'
+    put "$IMPL/sprint-status/sprint-290.yaml" 'sprint: 290
+status: done'
+    put "$IMPL/s289/sprint-status.yaml" 'sprint: 289
+status: done'
+    put "$IMPL/s290/sprint-status.yaml" 'sprint: 290
+status: done'
+  else
+    rm -rf "$IMPL/s289" "$IMPL/s290" "$IMPL/sprint-status" "$PLAN/sprint-status" "$PLAN/s289" "$PLAN/s290"
+  fi
+}
+# prints "<stdout>|<rc>"; stderr is left in $WORK/err
+sid_rc() { # <tool>
+  local o rc
+  o="$(AI_DLC_SPRINT_STATUS_SCHEMA="$SCHEMA" bash "$1" sprint-id --root "$P" 2>"$WORK/err")"; rc=$?
+  printf '%s|%s' "$o" "$rc"
+}
+check_table() { # <tool> -> sets TBL_FAILS, TBL_MSG
+  TBL_FAILS=0; TBL_MSG=""
+  local st exp withA noA errA errN
+  for st in preamble empty done6 inprog7 none implpre; do
+    case "$st" in
+      preamble|empty|implpre) exp="|1" ;;
+      done6|inprog7)          exp="7|0" ;;
+      none)                   exp="1|0" ;;
+    esac
+    seed_state "$st" 1; withA="$(sid_rc "$1")"; errA="$(cat "$WORK/err")"
+    seed_state "$st" 0; noA="$(sid_rc "$1")";   errN="$(cat "$WORK/err")"
+    if [ "$withA" != "$noA" ]; then TBL_FAILS=$((TBL_FAILS+1)); TBL_MSG="$TBL_MSG [$st: archives='$withA' none='$noA']"; fi
+    if [ "$withA" != "$exp" ] || [ "$noA" != "$exp" ]; then
+      TBL_FAILS=$((TBL_FAILS+1)); TBL_MSG="$TBL_MSG [$st: expected '$exp' got archives='$withA' none='$noA']"
+    fi
+    if [ "$exp" = "|1" ]; then
+      case "$errA" in *sprint-status.yaml*) : ;; *) TBL_FAILS=$((TBL_FAILS+1)); TBL_MSG="$TBL_MSG [$st: stderr (archives) does not name the file]" ;; esac
+      case "$errN" in *sprint-status.yaml*) : ;; *) TBL_FAILS=$((TBL_FAILS+1)); TBL_MSG="$TBL_MSG [$st: stderr (none) does not name the file]" ;; esac
+    fi
+  done
+}
+check_table "$TOOL"
+if [ "$TBL_FAILS" -eq 0 ]; then
+  ok "sprint-id is identical with and without archives, and equals the stated answer, for all 6 canonical states (preamble-only, empty and implementation-preamble refuse exit 1)"
+else
+  bad "sprint-id property broken on the real tool:$TBL_MSG"
+fi
+
+# --- Assertion 4d: CONTROL — the table can FAIL ------------------------------
+# A table that cannot fail reads like one that passed. The MUTANT is a copy of the real tool whose
+# degenerate branch is replaced by the PRE-CHANGE behaviour (max frozen archive + 1, else 1). It is
+# built as a copy and guarded with cmp -s so an anchor that matched nothing cannot pass as a mutation
+# (a sandbox has no history, so this does not depend on `git show`). It must break the same table, and
+# on the preamble-only row specifically: 291 with archives, 1 without.
+MUT_DIR="$(mktemp -d)"
+cp "$TOOL" "$MUT_DIR/sprint-status.sh"
+python3 - "$MUT_DIR/sprint-status.sh" <<'PYEOF'
+import sys
+p = sys.argv[1]
+t = open(p).read()
+anchor = "    degenerate = sorted(v for v, r in seen.items() if r[0] is None)\n"
+ins = anchor + (
+    "    if degenerate:\n"
+    "        import re as _re\n"
+    "        ns = []\n"
+    "        for _v in VIEWS:\n"
+    "            _b = VIEWS[_v].parent\n"
+    "            for _p in list(_b.glob('s*/sprint-status.yaml')) + list(_b.glob('sprint-status/sprint-*.yaml')):\n"
+    "                _m = _re.search(r'(\\d+)', _p.parent.name if _p.name == 'sprint-status.yaml' else _p.stem)\n"
+    "                if _m:\n"
+    "                    ns.append(int(_m.group(1)))\n"
+    "        return (max(ns) + 1) if ns else 1\n")
+if t.count(anchor) == 1:
+    open(p, "w").write(t.replace(anchor, ins))
+PYEOF
+if cmp -s "$TOOL" "$MUT_DIR/sprint-status.sh"; then
+  bad "control: the pre-change mutant is byte-identical to the real tool — the edit did not apply"
+else
+  check_table "$MUT_DIR/sprint-status.sh"
+  MUT_FAILS="$TBL_FAILS"
+  seed_state preamble 1; MA="$(sid_rc "$MUT_DIR/sprint-status.sh")"
+  seed_state preamble 0; MN="$(sid_rc "$MUT_DIR/sprint-status.sh")"
+  if [ "$MUT_FAILS" -gt 0 ] && [ "$MA" = "291|0" ] && [ "$MN" = "1|0" ]; then
+    ok "control: the pre-change behaviour (preamble-only + archives -> 291, none -> 1) FAILS the same table"
+  else
+    bad "control: the table did not catch the pre-change behaviour (fails=$MUT_FAILS archives='$MA' none='$MN')"
+  fi
+fi
+rm -rf "$MUT_DIR"
 
 # --- Assertion 5: copies disagree -> HARD_BLOCK exit 3 (route rule 5) --------
 reset_tree

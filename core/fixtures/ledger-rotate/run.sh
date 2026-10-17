@@ -9,25 +9,29 @@
 # skips, so a row that appears or disappears means the split took a live entry — the only
 # failure mode that actually costs anything.
 #
-# THE ROW SET IS THE PROJECTION, AND THE COUNTER IS COUNTED SO THAT THE BYTES HOLD TOO.
-# `prefix_entry_count()` in ledger-reverify.sh counts a sprint prefix over the CORPUS — every
-# entry line in both files, open or closed — so annotating moves nothing and rotating moves one
-# entry between the files, and the number printed inside NAMED-UPSTREAM-AMBIGUOUS details is the
-# same on both sides of either step. It used to count OPEN entries unioned with ARCHIVED labels,
-# and an entry annotated in the same pass — exactly what annotate-then-rotate prescribes — sat on
-# NEITHER side until the move landed, so the count dipped at the annotate and returned at the
-# rotate: a changed LINE on an identical ROW SET where the prefix had three members, and a
-# changed ROW where it had two, because a dip to ONE crosses from `named_ambiguous()` into
-# `named_absorbed()`'s single attribution. Assertion 4 asserts the row set and the stable count
-# on the three-member trio, 4b proves the comparison still FAILS on a genuine sweep, and 4c
-# walks the two-member pair through annotate and rotate and asserts the row set holds across
-# the crossing.
+# THE ROW SET IS THE PROJECTION, AND THE BYTES HOLD TOO, BECAUSE REVERIFY READS NO HISTORY.
+# ledger-reverify.sh reads the OPEN entries of the live ledger and nothing else: it never opens
+# the rotation archive, and a closed entry emits no row and is counted nowhere. A bare sprint
+# prefix gets one NAMED-UPSTREAM-AMBIGUOUS row attributed to no entry, whatever the count, and
+# the "N entries in this ledger carry it" number in its detail is over open live entries. Rotation
+# moves only closed entries, so it can move neither the row nor its bytes. That is the operator's
+# rule: a reader's rows must be the same with all sprint history deleted.
+#
+# IT USED TO READ THE ARCHIVE, AND THE CROSSING WAS REAL. The count ran over open entries unioned
+# with archived labels, and a count of ONE handed the row to a prefix fallback in
+# `named_absorbed()` as a single attribution. An entry annotated in the same pass sat on neither
+# side until the move landed, so the count dipped at the annotate and returned at the rotate,
+# and on a two-member prefix the survivor's row FLIPPED between `NAMED-UPSTREAM <slug>` and
+# `NAMED-UPSTREAM-AMBIGUOUS <prefix>`. Assertion 4 asserts the row set and the open-live count on
+# the three-member trio, 4b proves the comparison still FAILS on a genuine sweep, 4c walks the
+# two-member pair through annotate and rotate, and its mutant puts the archive-reading count
+# back to show the flip returns.
 #
 # THE OLD ARM COULD NOT FAIL ON THIS, AND ITS SUBJECT WAS UNCONSTRUCTIBLE RATHER THAN UNSEEDED.
-# `named_ambiguous()` gates on a `PC-S[0-9]+` prefix shared by two or more entries; seed.sh
-# carried no id of that shape at all, so no NAMED-UPSTREAM-AMBIGUOUS row could be produced no
-# matter what the code under test did, and the assertion would have stayed green through any
-# rewrite of the invariant it existed to guard. The PC-S900 trio in seed.sh is what gives it one.
+# seed.sh once carried no `PC-S[0-9]+` id at all, so no NAMED-UPSTREAM-AMBIGUOUS row could be
+# produced no matter what the code under test did, and the assertion would have stayed green
+# through any rewrite of the invariant it existed to guard. The PC-S900 trio in seed.sh is what
+# gives it one.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -185,9 +189,10 @@ after_total=$(( $(wc -l < "$LEDGER" | tr -d ' ') + $(grep -c '' "$ARCH" 2>/dev/n
 # `emit()` in ledger-reverify.sh writes `<status>\t<subject>\t<detail>`. The projection this
 # asserts over is the first two fields — what the classifier SAYS about which work — sorted,
 # with multiplicity kept, so a swept entry cannot hide behind a duplicate. The DETAIL column is
-# dropped deliberately: it is where `prefix_entry_count()` prints a number that MOVES on a
-# correct rotation. Dropping it is the whole correction; it is not a loosening, because every
-# row this fixture cares about losing is identified by its status and subject.
+# dropped deliberately: it carries an entry count, and a correct ANNOTATE moves that number (an
+# annotated entry is no longer open). It is not a loosening, because every row this fixture
+# cares about losing is identified by its status and subject; the bytes are asserted separately
+# below, across the rotation alone, where nothing may move.
 after_verdicts="$(bash "$RV" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" "$LEDGER" 2>/dev/null)"
 rowset() { cut -f1,2 | sort; }   # status + subject, multiplicity kept
 before_rows="$(printf '%s\n' "$before_verdicts" | rowset)"
@@ -216,36 +221,35 @@ else
   diff <(printf '%s\n' "$before_rows") <(printf '%s\n' "$after_rows") | sed 's/^/      /' | head -8
 fi
 
-# ...AND THE BYTES ARE IDENTICAL TOO, BECAUSE THE COUNT NO LONGER MOVES. This arm used to assert
+# ...AND THE BYTES ARE IDENTICAL TOO, BECAUSE NOTHING REVERIFY READS MOVES. This arm once asserted
 # the opposite — that the bytes DIFFERED on a correct rotation, with the differing lines carrying
 # a prefix count that rose 2 -> 3 — and that was a true description of a defect, not of the
-# invariant: `prefix_entry_count()` counted open-live UNION archive, so the closed-but-unrotated
-# GAMMA sat on neither side until the move landed. It now counts the ledger CORPUS, both files,
-# open or closed, so annotate and rotate both leave it where it was. The dip that arm recorded
-# is the same mechanism that, one member fewer, crosses the one-vs-many threshold and flips a
-# ROW — assertion 4c below — which is why "the bytes differ" could never have been the property.
+# invariant: the count read open-live UNION archive, so the closed-but-unrotated GAMMA sat on
+# neither side until the move landed. Reverify now reads no archive and counts open live entries
+# only, so the rotation, which moves only closed entries, leaves every byte where it was.
 #
 # STILL PRESENCE-SHAPED: a report with no prefix count at all would satisfy "identical" on
 # silence, so the count is read out and asserted at its value on BOTH sides.
 if [ "$n_linediff" -eq 0 ]; then
-  ok "  and the BYTES are identical across the move on all ${n_rows} rows — the prefix count printed in the AMBIGUOUS detail no longer dips while GAMMA is annotated-but-unrotated"
+  ok "  and the BYTES are identical across the move on all ${n_rows} rows — the entry count printed in the AMBIGUOUS detail is over open live entries, which a rotation does not move"
 else
-  bad "  the two outputs differ on ${n_linediff} of ${n_rows} lines with an identical row set, so a DETAIL moved across a rotation that moved nothing the classifier reads — prefix_entry_count() is counting a set that changes at annotate or at rotate"
+  bad "  the two outputs differ on ${n_linediff} of ${n_rows} lines with an identical row set, so a DETAIL moved across a rotation that moved nothing the classifier reads — ledger-reverify is reading a set that changes at the rotate (the archive, or closed entries)"
   diff "$WORK/rv-before.txt" "$WORK/rv-after.txt" | sed 's/^/      /' | head -6
 fi
 
-# THE NUMBER THAT USED TO MOVE, NAMED AT ITS VALUE. Asserting the specific 3 -> 3 rather than
-# "nothing changed" ties the arm to `prefix_entry_count()` counting all three trio members on
-# both sides — the closed GAMMA before the move and the archived GAMMA after it. A stub returning
-# a constant, or a count that dropped GAMMA on one side, reads differently here. The archive-arm
-# mutant at the foot of this file kills the after-side reading; the crossing mutant in 4c kills
-# the before-side one.
+# THE NUMBER THAT USED TO MOVE, NAMED AT ITS VALUE. Asserting the specific 2 -> 2 rather than
+# "nothing changed" ties the arm to the count being over the OPEN live members: ALPHA and BETA,
+# never the closed GAMMA — not while it sits annotated in the live file, and not once it is
+# archived. A count that took closed entries reads 3 on the left; one that read the archive reads
+# 3 on the right; a stub returning a constant other than 2 reads differently on both. The
+# crossing mutant in 4c and the history-deleted twin at the foot of this file kill the
+# archive-reading form by its verdict.
 pfx_n() { sed -n 's/.*and \([0-9][0-9]*\) entries in this ledger carry it.*/\1/p' <<<"$1"; }
 b_n="$(pfx_n "$before_verdicts")"; a_n="$(pfx_n "$after_verdicts")"
-if [ "$b_n" = "3" ] && [ "$a_n" = "3" ]; then
-  ok "  and the PC-S900 prefix count holds 3 -> 3 across the move: the closed sibling is counted while it sits annotated in the live file AND once it is archived"
+if [ "$b_n" = "2" ] && [ "$a_n" = "2" ]; then
+  ok "  and the PC-S900 prefix count holds 2 -> 2 across the move: the two OPEN members are counted, and the closed sibling is counted on neither side"
 else
-  bad "  the PC-S900 prefix count went '${b_n:-<none>}' -> '${a_n:-<none>}', expected 3 -> 3. A dip on the left means prefix_entry_count() dropped the annotated-but-unrotated sibling; a change on the right means it stopped counting one of the two files"
+  bad "  the PC-S900 prefix count went '${b_n:-<none>}' -> '${a_n:-<none>}', expected 2 -> 2. A 3 on the left means a closed entry was counted; a 3 on the right means the archive was read"
 fi
 
 # --- Assertion 4b: MUTATION — A GENUINE SWEEP MUST STILL FAIL THE ROW-SET TEST ----------
@@ -363,20 +367,20 @@ fi
 # THE SEQUENCE HAS THREE STATES AND THE ACCEPTANCE TEST COMPARES THE LAST TWO. Annotate-then-
 # rotate walks a ledger through (1) pre-annotation, (2) annotated but not yet rotated, and
 # (3) rotated. `flush()` in ledger-reverify.sh prints a row only `if (has_verify && !closed …)`,
-# so an entry annotated `**ADOPTED UPSTREAM (v…)**` leaves `$ENTRIES` at step 2 and does not
-# join `$ARCHIVE_LABELS` until step 3. Between those two it is in NEITHER set, and
-# `prefix_entry_count()` counts the union of exactly those two — so the count DIPS at the
-# annotate and RISES back at the rotate.
+# so an entry annotated `**ADOPTED UPSTREAM (v…)**` leaves the open set at step 2 and reaches the
+# archive at step 3. A count over open entries UNIONED with the archive therefore has the entry
+# in NEITHER set between the two, so it DIPS at the annotate and RISES back at the rotate — and
+# a count over the archive at all moves at the rotate. Reverify now counts open live entries
+# only and gates nothing on the count, so neither step can move the row.
 #
 # THE PC-S900 TRIO ABOVE CANNOT SEE THAT, WHICH IS WHY THIS IS A SECOND SUBJECT AND NOT A
-# SECOND ARM ON THE FIRST. PC-S900 has THREE members, two of them open, so its dip runs 3 -> 2
-# and never leaves the `> 1` branch: only the NUMBER inside the detail moves, and assertion 4
-# drops the detail column by design. PC-S910 has TWO members, one of them annotated, so the same
-# dip runs 2 -> 1 and CROSSES the threshold that separates `named_ambiguous()` from
-# `named_absorbed()`'s prefix fallback. The row then changes STATUS AND SUBJECT --
-# `NAMED-UPSTREAM <full-slug>` becomes `NAMED-UPSTREAM-AMBIGUOUS <prefix>` -- which is exactly
-# what assertion 4's projection KEEPS, and exactly what SKILL.md's acceptance test tells the
-# operator means a live entry was swept.
+# SECOND ARM ON THE FIRST. PC-S900 keeps two open members, so under any count it stays above
+# one: only the NUMBER inside the detail could move, and assertion 4 drops the detail column by
+# design. PC-S910 has TWO members, one of them annotated, so a history-reading count runs 2 -> 1
+# -> 2 and CROSSES one-vs-many. Wherever a count gates the row — the old prefix fallback, or a
+# `> 1` gate on the AMBIGUOUS row — the row then changes STATUS OR SUBJECT between steps 2 and 3,
+# which is exactly what assertion 4's projection KEEPS, and exactly what SKILL.md's acceptance
+# test tells the operator means a live entry was swept.
 #
 # NOTHING IS SWEPT HERE, AND THE ARM ESTABLISHES THAT SEPARATELY RATHER THAN ASSUMING IT. The
 # rotation control below requires the annotated sibling to have REACHED the archive and the
@@ -385,8 +389,8 @@ fi
 #
 # THE ARM IS WRITTEN AGAINST THE OBSERVABLE, NOT AGAINST ANY LINE OF THE COUNTER. What must hold
 # is a property of the REPORT: the row set at step 2 and the row set at step 3 are the same, by
-# status and subject. Any implementation that makes an annotated-but-unrotated entry countable
-# satisfies it, and no spelling of that fix is named in the assertion.
+# status and subject. Any implementation whose row does not depend on the closed or archived
+# members satisfies it, and no spelling of that fix is named in the assertion.
 XC="$WORK/crossing"; rm -rf "$XC"; mkdir -p "$XC/led" "$XC/mled" "$XC/bin" "$XC/cbin"
 TAB="$(printf '\t')"
 
@@ -475,44 +479,48 @@ fi
 if [ "$xc_r2" = "$xc_r3" ]; then
   ok "ACCEPTANCE TEST HOLDS ACROSS THE CROSSING: annotate-then-rotate on a two-member sprint prefix leaves the ROW SET unchanged by status and subject"
 else
-  bad "ACCEPTANCE TEST FALSE-FAILS: rotating an annotated-but-unrotated sibling changed the ROW SET while nothing was swept. The prefix count dipped to 1 at the annotate and returned at the rotate, so the survivor's row crossed between named_absorbed()'s single attribution and named_ambiguous(). An operator following SKILL.md reads this as a swept live entry and unwinds correct work"
+  bad "ACCEPTANCE TEST FALSE-FAILS: rotating an annotated-but-unrotated sibling changed the ROW SET while nothing was swept. The prefix row depends on a count that moves at the rotate — closed or archived members are being read — so it crossed one-vs-many between the two states. An operator following SKILL.md reads this as a swept live entry and unwinds correct work"
   diff <(printf '%s\n' "$xc_r2") <(printf '%s\n' "$xc_r3") | sed 's/^/      /' | head -8
 fi
 
-# --- MUTATION: REVERT prefix_entry_count() TO ITS TWO-SOURCE BODY -------------------------
+# --- MUTATION: PUT THE HISTORY BACK INTO THE PREFIX ROW ------------------------------------
 #
-# ANCHORED ON THE FUNCTION, NOT ON A LIST OF LINES. The property above is satisfied by counting
-# live-but-skipped entries somewhere, and where that lands inside `prefix_entry_count()` is the
-# implementer's choice; a `sed` naming one of its lines goes vacuous the moment the fix is
-# respelled and nothing announces it. So the WHOLE function is replaced by the two-source union
-# it had before -- open `$ENTRIES` labels and `$ARCHIVE_LABELS`, nothing else -- which reverts
-# every layer of any fix living inside it.
+# THE DELETED DESIGN, RESTORED IN ONE PLACE. The prefix row used to be gated on a count of the
+# entries carrying the prefix, taken over the open live entries UNIONED with the rotation
+# archive: more than one, the AMBIGUOUS row; exactly one, no AMBIGUOUS row (the old prefix
+# fallback attributed it instead). The mutant reinstates exactly that: directly below the
+# shipping count of open live entries it ADDS the archive's carriers of the prefix and refuses
+# the row unless the sum exceeds one. Every other line of the classifier is the shipping one.
 #
-# AND THE REVERT IS PROVED TO BITE, WHICH `cmp -s` CANNOT DO. A mutation that applies cleanly and
-# removes no property is the failure mode `cmp` is blind to, and here it has a specific meaning:
-# if the mutant and the shipping copy agree on state 2, the counter has no live-but-skipped
-# source to remove and the arm above is red for the subject's own reason. That is asserted
-# before either verdict below is read.
-cp "$(dirname "$RV")"/*.sh "$XC/bin"/  2>/dev/null
-cp "$(dirname "$RV")"/*.sh "$XC/cbin"/ 2>/dev/null
-cat > "$XC/prefix-body.sh" <<'XCB'
-prefix_entry_count() { # MUTANT BODY: open entries UNION archive labels, and nothing else
-  { printf '%s\n' "$ENTRIES" | awk -F'\t' 'NF{print $1}'
-    printf '%s\n' "${ARCHIVE_LABELS:-}"
-  } | sort -u | grep -cE "^$1-" 2>/dev/null || true
-}
+# ANCHORED ON THE COUNT'S OWN VALIDATION LINE, the one statement every spelling of the count
+# must pass through before the row is built, and asserted to occur exactly once in the subject
+# so the insertion cannot land twice or nowhere.
+#
+# AND THE MUTANT IS PROVED TO BITE, WHICH `cmp -s` CANNOT DO. A mutation that applies cleanly and
+# removes no property is the failure mode `cmp` is blind to: if the mutant and the shipping copy
+# agree on state 2, nothing in the row reads history and the arm above is red for the subject's
+# own reason. That is asserted before either verdict below is read.
+XC_ANCHOR="  case \"\$_n\" in ''|*[!0-9]*) return 0 ;; esac"
+cat > "$WORK/hist-count-body.sh" <<'XCB'
+  _hf="$(dirname "$LEDGER")/push-candidate-ledger.archive.md"
+  if [ -r "$_hf" ]; then _n=$((_n + $(LR_P="$_pfx-" LC_ALL=C awk '{ l = $0; sub(/^(## |- \*\*)/, "", l) } l != $0 && index(l, ENVIRON["LR_P"]) == 1 { n++ } END { print n + 0 }' "$_hf"))); fi
+  [ "$_n" -gt 1 ] || return 0
 XCB
-awk -v BODY="$XC/prefix-body.sh" '
-  /^prefix_entry_count\(\) \{/ { inf=1; while ((getline l < BODY) > 0) print l; close(BODY); next }
-  inf && /^\}[[:space:]]*$/    { inf=0; next }
-  inf                          { next }
-  { print }
-' "$RV" > "$XC/bin/ledger-reverify.sh"
+mk_hist_mutant() { # <out-dir> -> a copy of reverify's directory whose prefix row reads the archive
+  cp "$(dirname "$RV")"/*.sh "$1"/ 2>/dev/null
+  LR_A="$XC_ANCHOR" awk -v BODY="$WORK/hist-count-body.sh" '
+    { print }
+    $0 == ENVIRON["LR_A"] { while ((getline l < BODY) > 0) print l; close(BODY) }
+  ' "$RV" > "$1/ledger-reverify.sh"
+}
+cp "$(dirname "$RV")"/*.sh "$XC/cbin"/ 2>/dev/null
+mk_hist_mutant "$XC/bin"
+xc_anchor_n="$(grep -cxF "$XC_ANCHOR" "$RV")" || xc_anchor_n=0
 
-if cmp -s "$RV" "$XC/bin/ledger-reverify.sh"; then
-  bad "FIXTURE BROKEN — the prefix_entry_count() replacement DID NOT APPLY: the function header was not found, so the mutation below is a no-op and the arm above is unproven"
-elif [ "$(grep -c '^prefix_entry_count() {' "$XC/bin/ledger-reverify.sh")" -ne 1 ]; then
-  bad "FIXTURE BROKEN — the mutated copy carries $(grep -c '^prefix_entry_count() {' "$XC/bin/ledger-reverify.sh") definitions of prefix_entry_count(), expected exactly 1; a duplicated or deleted definition makes any verdict below unattributable"
+if [ "$xc_anchor_n" -ne 1 ]; then
+  bad "FIXTURE BROKEN — the count-validation anchor occurs ${xc_anchor_n} times in ledger-reverify.sh, expected exactly 1, so the history mutant below lands nowhere or twice and the arm above is unproven"
+elif cmp -s "$RV" "$XC/bin/ledger-reverify.sh"; then
+  bad "FIXTURE BROKEN — the history-count insertion DID NOT APPLY, so the mutation below is a no-op and the arm above is unproven"
 else
   xc_walk "$XC/cbin/ledger-reverify.sh" "$XC/mled"   # unmutated control, same sandbox
   xc_c2="$(rowset < "$XC/mled/v2")"; xc_c3="$(rowset < "$XC/mled/v3")"
@@ -535,14 +543,14 @@ else
   fi
 
   if [ "$xc_mr2" = "$xc_c2" ]; then
-    bad "  MUTATION DID NOT BITE — reverting prefix_entry_count() to open-UNION-archive changed no verdict at state 2. Either the fix that makes an annotated-but-unrotated entry countable is not in this tree, or it lives outside prefix_entry_count() and this revert does not reach it"
+    bad "  MUTATION DID NOT BITE — gating the prefix row on an open-UNION-archive count changed no verdict at state 2, so the count the mutant inserts never reached the row and the arm above is unproven"
   elif ! grep -q "^STILL-LIVE${TAB}PC-S910-ALPHA${TAB}" <<<"$xc_m3"; then
-    bad "  MUTATION: the mutated copy stops classifying the survivor altogether, so it is a broken classifier and its row-set difference is not attributable to the counter"
+    bad "  MUTATION: the mutated copy stops classifying the survivor altogether, so it is a broken classifier and its row-set difference is not attributable to the count"
   elif [ "$xc_mr2" = "$xc_mr3" ]; then
-    bad "  MUTATION: with the live-but-skipped source removed the row set STILL matched across the rotation, so the arm above is not measuring what keeps it stable"
-  elif grep -q "^NAMED-UPSTREAM${TAB}PC-S910-ALPHA${TAB}" <<<"$xc_m2" \
+    bad "  MUTATION: with the row gated on history the row set STILL matched across the rotation, so the arm above is not measuring what keeps it stable"
+  elif ! grep -q "^NAMED-UPSTREAM-AMBIGUOUS${TAB}PC-S910${TAB}" <<<"$xc_m2" \
     && grep -q "^NAMED-UPSTREAM-AMBIGUOUS${TAB}PC-S910${TAB}" <<<"$xc_m3"; then
-    ok "  MUTATION: with prefix_entry_count() back to open-UNION-archive the survivor's row flips NAMED-UPSTREAM -> NAMED-UPSTREAM-AMBIGUOUS across --apply and the arm above fires — it is bound to the count's live-but-skipped source"
+    ok "  MUTATION: with the prefix row gated on an open-UNION-archive count the PC-S910 row is ABSENT while the sibling sits annotated and RETURNS once --apply archives it, and the arm above fires — it is bound to the row reading no history"
   else
     bad "  MUTATION: the row set changed but not into the reported flip, so this arm is measuring some other difference"
   fi
@@ -1432,29 +1440,26 @@ else
   ok "  MUTATION: fence-blind, the closed entry's head is stranded live with an unterminated fence while its tail archives under the timestamp label, and the open control survives — the fence-aware boundary is load-bearing"
 fi
 
-# --- MUTATION: DELETE THE ARCHIVE ARM OF prefix_entry_count() -----------------------------
+# --- THE PREFIX ROW IS THE SAME WITH THE ROTATION ARCHIVE DELETED ---------------------------
 #
-# WHY THIS GUARD LIVES IN THE ROTATE FIXTURE AND NOT IN `ledger-reverify`. The arm being guarded
-# is one line inside `prefix_entry_count()`: the sprint prefix is counted over the OPEN entries
-# UNIONED with the ARCHIVED labels. Its whole purpose is to survive a ROTATION — an archived
-# sibling must keep counting, so that moving it cannot make a shared prefix look unique. That
-# harm therefore needs an archive file holding a sibling, which is a state only a rotation
-# produces, and this is the only fixture that rotates. `core/fixtures/ledger-reverify` passes
-# 88/88 with the line present and 88/88 with it deleted, because its own ambiguity pair is two
-# LIVE entries and its seed writes no archive at all; giving it one would mean teaching that
-# fixture to rotate, which is this fixture.
+# THE OPERATOR'S RULE, ASSERTED ON THE ONE STATE ONLY A ROTATION PRODUCES. A reader's rows must
+# be the same with all sprint history deleted. The history ledger-reverify could once read is
+# the rotation archive, and an archive holding a sibling is a state only a rotation produces;
+# this is the only fixture that rotates, which is why the arm lives here and not in
+# `core/fixtures/ledger-reverify`, whose seed writes no archive at all.
 #
-# THE HARM IS NOT A CHANGED NUMBER, IT IS A CHANGED VERDICT, and the seed is built to show that
-# rather than a count. Two entries share PC-S901; one is closed and rotates. With the archive arm
-# the prefix still names 2 entries, so the survivor stays NAMED-UPSTREAM-AMBIGUOUS — "upstream
-# cites this prefix, more than one entry carries it, read the commit and decide". Without it the
-# prefix names 1, `named_absorbed()`'s fallback fires, and the operator is told upstream absorbed
-# THIS entry, by name, on a commit that says no such thing. A confidently wrong single attribution
-# is worse than the silence it replaces, which is why the arm exists.
+# THE HARM IS A CHANGED VERDICT, NOT A CHANGED NUMBER. Two entries share PC-S901; one is closed
+# and rotates. The survivor's upstream citation is the BARE prefix, and the row for it is one
+# NAMED-UPSTREAM-AMBIGUOUS PC-S901 row attributed to no entry. The count it used to be gated on
+# was open-live UNION archive, so deleting the archive changed the count from 2 to 1 and the row
+# with it — exactly what the rule forbids. So: the shipping reverify must print BYTE-IDENTICAL
+# output with the archive present and with it deleted, AND that output must carry the AMBIGUOUS
+# row, AND it must not attribute the survivor by name. The history mutant from 4c is the kill:
+# it reads the archive, so its two outputs differ.
 #
-# NOTE THE ROW-SET ARM ABOVE CANNOT COVER THIS. The count it moves lives in the DETAIL column,
-# which that arm drops by design; only when the count crosses 1 does a STATUS change. Two
-# assertions, two subjects.
+# NOTE THE ROW-SET ARM ABOVE CANNOT COVER THIS. It compares before and after a rotation, and the
+# archive is present on the after side only; it never compares a tree against the same tree with
+# its history gone. Two assertions, two subjects.
 PC="$WORK/prefix-counter"; rm -rf "$PC"; mkdir -p "$PC/led" "$PC/ctl" "$PC/mut"
 cat > "$PC/led/push-candidate-ledger.md" <<'PCLED'
 # Push-candidate ledger
@@ -1470,44 +1475,54 @@ verify: theirs_has core/scripts/s900-landed.sh "s900"
 verify: theirs_has core/scripts/thing.sh "MARKER_B"
 PCLED
 bash "$ROT" "$PC/led/push-candidate-ledger.md" --apply >/dev/null 2>&1
+# THE HISTORY-DELETED TWIN: the same rotated live ledger, with no archive beside it.
+mkdir -p "$PC/nohist"
+cp "$PC/led/push-candidate-ledger.md" "$PC/nohist/push-candidate-ledger.md"
 
 cp "$(dirname "$RV")"/*.sh "$PC/ctl"/ 2>/dev/null
-cp "$(dirname "$RV")"/*.sh "$PC/mut"/ 2>/dev/null
-# ONE LINE, REPLACED BY A NO-OP RATHER THAN DELETED, so the brace group it sits in still parses
-# and the mutant is a working classifier whose ONLY difference is the archive side of the union.
-sed 's@^\( *\)printf .*ARCHIVE_LABELS.*@\1:@' "$RV" > "$PC/mut/ledger-reverify.sh"
-pc_rows() { bash "$1" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" "$PC/led/push-candidate-ledger.md" 2>/dev/null; }
+mk_hist_mutant "$PC/mut"
+pc_rows() { bash "$1" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" "$2/push-candidate-ledger.md" 2>/dev/null; }
 
-pc_ndiff="$(diff "$RV" "$PC/mut/ledger-reverify.sh" | grep -c '^[<>]' || true)"
 if [ ! -s "$PC/led/push-candidate-ledger.archive.md" ] || grep -q 'PC-S901-BETA' "$PC/led/push-candidate-ledger.md"; then
-  bad "FIXTURE BROKEN — the PC-S901 sibling did not reach the archive, so the counter guard below has no archived label to count and would pass for the wrong reason"
+  bad "FIXTURE BROKEN — the PC-S901 sibling did not reach the archive, so there is no history to delete and the twin below compares two identical trees"
+elif [ -e "$PC/nohist/push-candidate-ledger.archive.md" ] || ! cmp -s "$PC/led/push-candidate-ledger.md" "$PC/nohist/push-candidate-ledger.md"; then
+  bad "FIXTURE BROKEN — the history-deleted twin is not the same live ledger without its archive, so the comparison below is not the one the rule names"
 elif cmp -s "$RV" "$PC/mut/ledger-reverify.sh"; then
-  bad "FIXTURE BROKEN — the prefix_entry_count mutation matched nothing, so the counter assertions below are unproven"
-elif [ "$pc_ndiff" -ne 2 ]; then
-  bad "FIXTURE BROKEN — the prefix_entry_count mutation changed $((pc_ndiff / 2)) lines, expected exactly 1; a wider mutation makes any kill unattributable"
+  bad "FIXTURE BROKEN — the history mutant did not apply, so the twin assertion below is unproven"
 else
-  pc_ctl="$(pc_rows "$PC/ctl/ledger-reverify.sh")"
-  pc_mut="$(pc_rows "$PC/mut/ledger-reverify.sh")"
-  # THE CONTROL, TWICE OVER. An unmutated copy in the sandbox must reproduce the real answer, and
-  # the mutant must still be a working classifier — both arms below are ABSENCE-shaped on the
-  # mutant side, and a copy that died sourcing lib.sh emits nothing, which satisfies an absence.
-  if ! grep -q 'NAMED-UPSTREAM-AMBIGUOUS' <<<"$pc_ctl" || ! grep -q 'PC-S901' <<<"$pc_ctl"; then
-    bad "FIXTURE BROKEN — an UNMUTATED reverify copy does not report PC-S901 as ambiguous after the rotation, so the mutant's silence below is not attributable to the deleted arm"
-  elif ! grep -q 'STILL-LIVE' <<<"$pc_mut" || ! grep -q 'PC-S901-ALPHA' <<<"$pc_mut"; then
-    bad "  MUTATION: the mutated copy emits no verdict for the surviving entry at all, so it is a broken classifier and its silence is not a kill"
-  elif grep -q 'NAMED-UPSTREAM-AMBIGUOUS' <<<"$pc_mut"; then
-    bad "  MUTATION: PC-S901 is still reported AMBIGUOUS with the archive arm of prefix_entry_count() deleted — nothing in this repo notices that deletion, and the archived sibling is not what keeps the prefix shared"
-  elif grep -q 'NAMED-UPSTREAM	PC-S901-ALPHA' <<<"$pc_mut"; then
-    ok "  MUTATION: deleting the archive arm of prefix_entry_count() turns the correct AMBIGUOUS row into a confident NAMED-UPSTREAM attribution of PC-S901-ALPHA — the arm is load-bearing across a rotation"
+  pc_hist="$(pc_rows "$PC/ctl/ledger-reverify.sh" "$PC/led")"
+  pc_nohist="$(pc_rows "$PC/ctl/ledger-reverify.sh" "$PC/nohist")"
+  pc_mhist="$(pc_rows "$PC/mut/ledger-reverify.sh" "$PC/led")"
+  pc_mnohist="$(pc_rows "$PC/mut/ledger-reverify.sh" "$PC/nohist")"
+  # PRESENCE FIRST: two empty outputs are byte-identical, so equality alone would score a
+  # classifier that never ran as one that ignores history.
+  if ! grep -q "^NAMED-UPSTREAM-AMBIGUOUS${TAB}PC-S901${TAB}" <<<"$pc_hist" \
+     || ! grep -q "^STILL-LIVE${TAB}PC-S901-ALPHA${TAB}" <<<"$pc_hist"; then
+    bad "FIXTURE BROKEN — the shipping reverify emits no NAMED-UPSTREAM-AMBIGUOUS PC-S901 row (or no verdict for the survivor) with the archive present, so the twin below compares silences"
+  elif [ "$pc_hist" = "$pc_nohist" ]; then
+    ok "the shipping reverify prints BYTE-IDENTICAL output with the rotation archive present and deleted, including the unattributed NAMED-UPSTREAM-AMBIGUOUS PC-S901 row — no row depends on sprint history"
   else
-    bad "  MUTATION: the AMBIGUOUS row vanished but no single attribution replaced it, so the mutant changed the count in some other way and this arm is not measuring the union's archive side"
+    bad "ledger-reverify's output CHANGED when the rotation archive was deleted — a row depends on sprint history, which the operator ruled out"
+    diff <(printf '%s\n' "$pc_hist") <(printf '%s\n' "$pc_nohist") | sed 's/^/      /' | head -6
   fi
-  # AND THE CORRECT ANSWER IS ASSERTED POSITIVELY, not merely as the mutant's opposite: the
-  # survivor must NOT be attributed to a commit that names only the prefix.
-  if grep -q 'NAMED-UPSTREAM	PC-S901-ALPHA' <<<"$pc_ctl"; then
-    bad "  the shipping reverify attributes PC-S901-ALPHA to upstream by NAME after its sibling was archived — that is the anti-monotonic count the archive arm exists to prevent"
+  # AND THE CORRECT ANSWER IS ASSERTED POSITIVELY: the survivor is never attributed by name on a
+  # commit that cites only the prefix, with or without history.
+  if grep -q "^NAMED-UPSTREAM${TAB}PC-S901-ALPHA${TAB}" <<<"$pc_hist$pc_nohist"; then
+    bad "  the shipping reverify attributes PC-S901-ALPHA to upstream BY NAME on a bare-prefix citation — a bare prefix does not say which entry it means"
   else
-    ok "  and the shipping reverify makes no single attribution for the surviving entry, which is the verdict the archive arm buys"
+    ok "  and it makes no single attribution for the surviving entry, with the archive or without it"
+  fi
+  # THE MUTANT: the prefix row gated on open-UNION-archive. With history it emits the row (1 open
+  # + 1 archived), without it it does not — the flip the rule forbids.
+  if ! grep -q "^STILL-LIVE${TAB}PC-S901-ALPHA${TAB}" <<<"$pc_mnohist"; then
+    bad "  MUTATION: the history mutant emits no verdict for the survivor, so it is a broken classifier and its difference is not a kill"
+  elif [ "$pc_mhist" = "$pc_mnohist" ]; then
+    bad "  MUTATION: a reverify whose prefix row reads the archive printed the SAME output with the archive deleted, so the twin above cannot see a history-dependent row"
+  elif grep -q "^NAMED-UPSTREAM-AMBIGUOUS${TAB}PC-S901${TAB}" <<<"$pc_mhist" \
+    && ! grep -q "^NAMED-UPSTREAM-AMBIGUOUS${TAB}PC-S901${TAB}" <<<"$pc_mnohist"; then
+    ok "  MUTATION: with the prefix row gated on an open-UNION-archive count, deleting the archive deletes the AMBIGUOUS row — the twin above fires on a history-reading row"
+  else
+    bad "  MUTATION: the two outputs differ but not by the AMBIGUOUS row, so this arm is measuring some other difference"
   fi
 fi
 

@@ -1803,8 +1803,10 @@ lr_unit_short_id() {
 # distinct prefixes appeared in upstream's history. Among the misses were three entries that
 # consumer had filed and upstream had just fixed — so on the entries where the third signal was
 # most needed, it was silent.
-row_has "PC-S901-SHORT-ID-UNIQUE-PREFIX" NAMED-UPSTREAM \
-  "upstream cites the SHORT id and one entry carries that prefix -> attributed, though the full slug appears nowhere"
+row_has "PC-S901" NAMED-UPSTREAM-AMBIGUOUS \
+  "upstream cites the SHORT id and ONE open entry carries that prefix -> still the unattributed prefix row, so the citation is visible though the full slug appears nowhere"
+row_lacks "PC-S901-SHORT-ID-UNIQUE-PREFIX" NAMED-UPSTREAM \
+  "and the lone carrier is NOT attributed by name: a count of one says what this ledger still holds, not what the commit meant, and it would change if sprint history were deleted"
 
 # AND THE NAIVE VERSION OF THAT FIX IS WRONG, WHICH IS WHY BOTH HALVES ARE ASSERTED. Of the 20
 # cited prefixes on the reference consumer, 11 were shared by two or more entries. Matching the
@@ -1830,8 +1832,8 @@ else
   FAILURES=$((FAILURES+1))
 fi
 
-# THE CONTROL, and without it the two arms above only prove the code runs. An id-shaped label
-# with a unique prefix that upstream names in NEITHER form must stay silent.
+# THE CONTROL, and without it the arms above only prove the code runs. An id-shaped label
+# whose prefix one open entry carries, and which upstream names in NEITHER form, must stay silent.
 row_lacks "PC-S903-NEVER-CITED-AT-ALL" NAMED-UPSTREAM \
   "never cited in either form -> silent, so the prefix arm joins on evidence and not on shape"
 row_lacks "PC-S903-NEVER-CITED-AT-ALL" NAMED-UPSTREAM-AMBIGUOUS \
@@ -2068,12 +2070,12 @@ if [ "$co_ctl_read" = "$co_ctl_want" ]; then
     PC-S959-INLINE-FORM-CITATION NAMED-UPSTREAM-CITED-ONLY "PC-S955-FORM-ONLY-CITATION PC-S956-BOTH-FORMS-CITATION PC-S957-ORDINARY-X PC-S957-FORM-Y PC-S958-FORM-CORE-ORDINARY-DOCS" \
     "an unanchored strip eats a mid-line mention and demotes it to a citation, and S959 is what sees it"
   co_case reach-unfiltered \
-    '  printf '"'"'%s %s %s %s'"'"' "$_how" "${_n:-1}" "$_list" "$(named_reach "$_hits")"' \
-    '  printf '"'"'%s %s %s %s'"'"' "$_how" "${_n:-1}" "$_list" "$(named_reach "$_all")"' \
+    '  printf '"'"'%s %s %s'"'"' "${_n:-1}" "$_list" "$(named_reach "$_hits")"' \
+    '  printf '"'"'%s %s %s'"'"' "${_n:-1}" "$_list" "$(named_reach "$_all")"' \
     PC-S958-FORM-CORE-ORDINARY-DOCS NAMED-UPSTREAM "PC-S955-FORM-ONLY-CITATION PC-S956-BOTH-FORMS-CITATION PC-S957-ORDINARY-X PC-S957-FORM-Y PC-S959-INLINE-FORM-CITATION" \
     "reach read over the whole set lets the form-only core commit lift a docs-only naming to the plain kind, and S958 is what sees it"
   co_case cited-only-no-row \
-    '    printf '"'"'%s %s %s cited'"'"' "$_how" "${_n:-1}" "$(printf '"'"'%s\n'"'"' "$_all" | tr '"'"'\n'"'"' '"'"','"'"' | sed '"'"'s/,$//'"'"')"; return 0' \
+    '    printf '"'"'%s %s cited'"'"' "${_n:-1}" "$(printf '"'"'%s\n'"'"' "$_all" | tr '"'"'\n'"'"' '"'"','"'"' | sed '"'"'s/,$//'"'"')"; return 0' \
     '    return 0' \
     PC-S955-FORM-ONLY-CITATION "" "PC-S956-BOTH-FORMS-CITATION PC-S957-ORDINARY-X PC-S958-FORM-CORE-ORDINARY-DOCS PC-S959-INLINE-FORM-CITATION" \
     "a filter that deletes the row instead of qualifying it loses the citation, and S955 is what sees it (want no row)"
@@ -2419,10 +2421,16 @@ fi
 # NAMED-UPSTREAM-SIBLING-ATTRIBUTED. Its own world and its own ledger, beside an archive at the
 # derived path. Each X cell is the subject of one mutant; Y entries are seeded only to be named.
 #
-#   S1001  offender: Y (closed, live) anchor changed in X's file, X's not   -> SIBLING (keep-closed)
+# Y IS DRAWN FROM THE OPEN LIVE ENTRIES ONLY. A closed sibling (still in the live ledger, or rotated
+# to the archive) is no sibling: a row that depended on it would change at the rotate, or when the
+# archive is deleted, and a reader's rows must be the same with all sprint history deleted. So
+# S1001 and S1007 -- the same shape as S1041 but with a closed or archived Y -- read the plain kind.
+#
+#   S1041  offender: Y (OPEN, live) anchor changed in X's file, X's not     -> SIBLING (sha-list/short-sha subject)
+#   S1001  Y (closed, live) anchor changed in X's file, X's not             -> NAMED-UPSTREAM (closed-sibling)
 #   S1003  Y's receipt and change are on a DIFFERENT file                     -> NAMED-UPSTREAM (sibling-any-file)
 #   S1005  in-commit control: X's anchor changed too                          -> NAMED-UPSTREAM (gate-off)
-#   S1007  Y present ONLY in the archive, closed                              -> SIBLING (sibling-live-only)
+#   S1007  Y present ONLY in the archive, closed                              -> NAMED-UPSTREAM (archive never read)
 #   S1009  release span: an unnamed neighbour changes X's file, no anchor    -> NAMED-UPSTREAM (quantifier-exists)
 #   S1011  X's anchor changed in an unnamed span parent, Y's in the release  -> NAMED-UPSTREAM (span-off-attribution)
 #   S1013  Y named only by its short id                                       -> NAMED-UPSTREAM (sibling-prefix)
@@ -2465,7 +2473,7 @@ sb_rc=0
   g init -q
   mkdir -p "$SBD/core/scripts"
   printf '0.1.0\n' > "$SBD/VERSION"
-  for t in A C D E F G I J K N O T U; do
+  for t in A C D E F G I J K N O T U V; do
     printf '#!/bin/sh\nFILLER_TOP\nf1\nf2\nf3\nf4\nANCHX_%s_\nANCHY_%s_\n' "$t" "$t" > "$SBD/core/scripts/sb-$t.sh"
   done
   printf '#!/bin/sh\nFILLER_TOP\nANCHX_B_\n' > "$SBD/core/scripts/sb-B.sh"
@@ -2518,6 +2526,8 @@ sb_rc=0
   # `.` that continues the id), so the commit names a longer id and not the sibling.
   sw sb-T.sh ANCHY_T_ fixedT; c 'fix: absorb PC-S1038-CONT_LONGER; cites PC-S1037-ID-CONT-X'
   sw sb-U.sh ANCHY_U_ fixedU; c 'fix: absorb PC-S1040-DOT.3-LONGER; cites PC-S1039-DOT-CONT-X'
+  # S1041: S1001's shape with an OPEN sibling. After the last release, so no release span holds it.
+  sw sb-V.sh ANCHY_V_ fixedV; c 'fix: absorb PC-S1042-SIB-OPEN-LIVE; cross-references PC-S1041-OFFENDER-OPEN'
 ) >/dev/null 2>&1 || sb_rc=$?
 if [ "$sb_rc" -ne 0 ]; then
   FAILURES=$((FAILURES + 1))
@@ -2664,6 +2674,12 @@ cat > "$SBW/ledger.md" <<'SBLED'
 - **PC-S1040-DOT** — sibling, whose slug is continued by `.3-` in the naming commit.
   verify: theirs_lacks core/scripts/sb-U.sh "ANCHY_U_"
 
+- **PC-S1041-OFFENDER-OPEN** — an OPEN sibling's release changes my file only where its anchor is.
+  verify: theirs_has core/scripts/sb-V.sh "ANCHX_V_"
+
+- **PC-S1042-SIB-OPEN-LIVE** — the sibling, open in the live ledger.
+  verify: theirs_lacks core/scripts/sb-V.sh "ANCHY_V_"
+
 - **PC-S1099-NEVER** — never named (control).
   verify: theirs_has core/scripts/sb-never.sh "never"
 SBLED
@@ -2676,9 +2692,9 @@ verify: theirs_lacks core/scripts/sb-D.sh "ANCHY_D_"
 SBARC
 sb_rows() { bash "$1" "$SBD" "$SBB" "$CONS" "$SBT" "$SBW/ledger.md" 2>/dev/null; }
 sb_kind() { printf '%s\n' "$1" | awk -F'\t' -v l="$2" '$2 == l && $1 ~ /^NAMED-UPSTREAM(-DOCS-ONLY|-CITED-ONLY|-OFF-SUBJECT|-SIBLING-ATTRIBUTED)?$/ {print $1; exit}'; }
-SB_IDS="PC-S1001-OFFENDER PC-S1003-DIFFERENT-FILE PC-S1005-INCOMMIT-X PC-S1007-ARCHIVE-ONLY PC-S1009-SPAN-NEIGHBOUR PC-S1011-SPANOFF-X PC-S1013-SHORT-ID-X PC-S1015-WHOLE-DIFF-X PC-S1017-TWO-COMMITS-X PC-S1019-MERGE-P2-X PC-S1021-MERGE-P1-X PC-S1023-MERGE-CONCAT-X PC-S1025-PREFIX-X PC-S1027-PIPE-X PC-S1029-BACKSLASH-X PC-S1031-TWO-PATH-X PC-S1033-MULTI-SUB-X PC-S1035-HEADER-X PC-S1037-ID-CONT-X PC-S1039-DOT-CONT-X"
+SB_IDS="PC-S1001-OFFENDER PC-S1003-DIFFERENT-FILE PC-S1005-INCOMMIT-X PC-S1007-ARCHIVE-ONLY PC-S1009-SPAN-NEIGHBOUR PC-S1011-SPANOFF-X PC-S1013-SHORT-ID-X PC-S1015-WHOLE-DIFF-X PC-S1017-TWO-COMMITS-X PC-S1019-MERGE-P2-X PC-S1021-MERGE-P1-X PC-S1023-MERGE-CONCAT-X PC-S1025-PREFIX-X PC-S1027-PIPE-X PC-S1029-BACKSLASH-X PC-S1031-TWO-PATH-X PC-S1033-MULTI-SUB-X PC-S1035-HEADER-X PC-S1037-ID-CONT-X PC-S1039-DOT-CONT-X PC-S1041-OFFENDER-OPEN"
 SA=NAMED-UPSTREAM-SIBLING-ATTRIBUTED; NU=NAMED-UPSTREAM
-SB_WANT="$SA $NU $NU $SA $NU $NU $NU $NU $NU $SA $SA $NU $NU $SA $NU $NU $NU $NU $NU $NU"
+SB_WANT="$NU $NU $NU $NU $NU $NU $NU $NU $NU $SA $SA $NU $NU $SA $NU $NU $NU $NU $NU $NU $SA"
 sb_expect() { local _i _k _w="$SB_WANT"; for _i in $SB_IDS; do _k="${_w%% *}"; _w="${_w#* }"; [ "$_i" = "$1" ] && { printf '%s' "$_k"; return; }; done; }
 sb_read() { local _i _s=""; for _i in $SB_IDS; do _s="$_s $_i=$(sb_kind "$1" "$_i")"; done; printf '%s' "${_s# }"; }
 # THE CONTROL IS PRESENCE-SHAPED: every X cell must carry a NAMED- row of exactly its kind, the
@@ -2692,17 +2708,17 @@ sb_never_named="$(printf '%s\n' "$sb_ctl" | awk -F'\t' '$2 == "PC-S1099-NEVER" &
 ASSERTIONS=$((ASSERTIONS + 1))
 if [ "$sb_ctl_read" != "$sb_ctl_want" ] || [ "$(sb_kind "$sb_ctl" PC-S1006-INCOMMIT-Y)" != "$NU" ] || [ "$sb_never_rows" -lt 1 ] || [ "$sb_never_named" != 0 ]; then
   FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the shipped engine over S1001-S1030 read {%s} S1006=%s never=%s/%s, want {%s} S1006=%s never>=1/0; no mutant below is attributable\n' "sibling-control" "$sb_ctl_read" "$(sb_kind "$sb_ctl" PC-S1006-INCOMMIT-Y)" "$sb_never_rows" "$sb_never_named" "$sb_ctl_want" "$NU"
+  printf '  FAIL  %-22s the shipped engine over S1001-S1041 read {%s} S1006=%s never=%s/%s, want {%s} S1006=%s never>=1/0; no mutant below is attributable\n' "sibling-control" "$sb_ctl_read" "$(sb_kind "$sb_ctl" PC-S1006-INCOMMIT-Y)" "$sb_never_rows" "$sb_never_named" "$sb_ctl_want" "$NU"
   return 0
 fi
-printf '  ok    %-22s the shipped engine reproduces every S1001-S1030 kind; the in-commit sibling stays NAMED-UPSTREAM and the never-named control has a row and no NAMED- row\n' "sibling-control"
+printf '  ok    %-22s the shipped engine reproduces every S1001-S1041 kind; closed and archived siblings attribute nothing, the in-commit sibling stays NAMED-UPSTREAM and the never-named control has a row and no NAMED- row\n' "sibling-control"
 # THE ROW NAMES ONLY THE SIBLING WHOSE ANCHOR SAT ON THE CHANGED LINE.
 ASSERTIONS=$((ASSERTIONS + 1))
-sb_det="$(printf '%s\n' "$sb_ctl" | awk -F'\t' '$1 == "NAMED-UPSTREAM-SIBLING-ATTRIBUTED" && $2 == "PC-S1001-OFFENDER" {print $3; exit}')"
+sb_det="$(printf '%s\n' "$sb_ctl" | awk -F'\t' '$1 == "NAMED-UPSTREAM-SIBLING-ATTRIBUTED" && $2 == "PC-S1041-OFFENDER-OPEN" {print $3; exit}')"
 case "$sb_det" in
-  *"receipt substring there: PC-S1002-SIB-CLOSED-LIVE ("*"core/scripts/sb-A.sh"*|*"core/scripts/sb-A.sh"*"receipt substring there: PC-S1002-SIB-CLOSED-LIVE ("*)
-    printf '  ok    %-22s S1001 names its receipt file and exactly the sibling whose anchor changed\n' "sibling-detail" ;;
-  *) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s S1001 does not name sb-A.sh and exactly PC-S1002-SIB-CLOSED-LIVE: %s\n' "sibling-detail" "$(printf '%s' "$sb_det" | cut -c1-240)" ;;
+  *"receipt substring there: PC-S1042-SIB-OPEN-LIVE ("*"core/scripts/sb-V.sh"*|*"core/scripts/sb-V.sh"*"receipt substring there: PC-S1042-SIB-OPEN-LIVE ("*)
+    printf '  ok    %-22s S1041 names its receipt file and exactly the sibling whose anchor changed\n' "sibling-detail" ;;
+  *) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s S1041 does not name sb-V.sh and exactly PC-S1042-SIB-OPEN-LIVE: %s\n' "sibling-detail" "$(printf '%s' "$sb_det" | cut -c1-240)" ;;
 esac
 # THE CLOSE RULE STAYS SINGLE-HOMED: the shipped lib.sh lifts exactly one body rule and one entry-line
 # rule from this ledger-reverify.sh -- the lift the previous release's lib.sh performs on the pull
@@ -2714,7 +2730,7 @@ sb_n1="$(grep -cE '^[[:space:]]*/.*ADOPTED UPSTREAM.*closed=1 \}$' "$CLOSER")" |
 if [ "$sb_lift" = ok ] && [ "$sb_n1" = 1 ]; then
   printf '  ok    %-22s lib.sh lifts exactly one close rule and one entry-line rule (body-rule matches: %s)\n' "sibling-close-lift" "$sb_n1"
 else
-  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s lift=%s body-rule matches=%s, want ok and 1 -- KEEP must not land on the close-rule line\n' "sibling-close-lift" "${sb_lift:-refused}" "$sb_n1"
+  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s lift=%s body-rule matches=%s, want ok and 1 -- the close rule must stay single-homed on one line\n' "sibling-close-lift" "${sb_lift:-refused}" "$sb_n1"
 fi
 # THE MUTANTS: a fragment replaced in EXACTLY one place of a copy of the reconcile directory,
 # `bash -n` clean and byte-different, or the arm is FIXTURE BROKEN.
@@ -2772,12 +2788,11 @@ sb_case sibling-any-file PC-S1003-DIFFERENT-FILE "$SA" - \
 sb_case sibling-whole-diff PC-S1015-WHOLE-DIFF-X "$SA" - \
   "matching a sibling anchor anywhere in the diff, not in the block for its own path, credits X's file with text written elsewhere, and S1015 is what sees it" \
   'if (yp[k] == bp && index(t, ys[k])) { by[bp] = 1; if (bp in isx) hit[yl[k]] = 1 }' 'if (index(t, ys[k])) { by[yp[k]] = 1; hit[yl[k]] = 1 }'
-sb_case sibling-live-only PC-S1007-ARCHIVE-ONLY "$NU" - \
-  "without the archive staged an archived sibling is invisible, and S1007 is what sees it" \
-  'lr_entries "$ARCHIVE_PATH" 1 >> "$LR_STAGE/sib-entries" 2>/dev/null || LR_SIB_OK=0' ':'
-sb_case keep-closed PC-S1001-OFFENDER "$NU" "PC-S1007-ARCHIVE-ONLY" \
-  "staging only OPEN entries loses a closed sibling, and S1001 is what sees it (S1007, whose archived sibling is closed too, co-moves by construction)" \
-  '(!closed || KEEP)' '!closed'
+# OPEN-ONLY IS LOAD-BEARING: let a closed entry into the one staged extraction and S1001's closed
+# live sibling attributes again. S1007 holds -- its sibling is in the archive, which nothing reads.
+sb_case closed-sibling PC-S1001-OFFENDER "$SA" - \
+  "a sibling set that keeps closed entries attributes on a sibling the next rotate removes, and S1001 is what sees it" \
+  '(has_verify && !closed && label != "")' '(has_verify && label != "")'
 sb_case quantifier-exists PC-S1009-SPAN-NEIGHBOUR "$SA" "PC-S1023-MERGE-CONCAT-X" \
   "ignoring a block that carries neither anchor attributes a release whose span also touched X's file elsewhere, and S1009 is what sees it (S1023, whose second parent block carries neither, co-moves by construction)" \
   'else if (!by[p]) bad++' 'else if (!by[p]) blk--'
@@ -2799,11 +2814,11 @@ sb_case sibling-class-narrow PC-S1037-ID-CONT-X "$SA" "PC-S1039-DOT-CONT-X" \
 sb_case first-touching-commit-only PC-S1017-TWO-COMMITS-X "$SA" - \
   "judging only the newest naming commit misses an older one that changed X's anchor, and S1017 is what sees it" \
   "printf '%s\\n' \"\$2\" | tr ',' '\\n' > \"\$LR_STAGE/nsb-shas\"" "printf '%s\\n' \"\${2%%,*}\" > \"\$LR_STAGE/nsb-shas\""
-sb_case sha-list-unterminated PC-S1001-OFFENDER "$NU" "PC-S1007-ARCHIVE-ONLY PC-S1019-MERGE-P2-X PC-S1021-MERGE-P1-X PC-S1027-PIPE-X PC-S1017-TWO-COMMITS-X" \
-  "an unterminated sha list drops the LAST naming commit, which on a one-commit naming set is every commit, and S1001 is what sees it (every other attributed cell co-moves, and S1017 then judges only its newest commit)" \
+sb_case sha-list-unterminated PC-S1041-OFFENDER-OPEN "$NU" "PC-S1019-MERGE-P2-X PC-S1021-MERGE-P1-X PC-S1027-PIPE-X PC-S1017-TWO-COMMITS-X" \
+  "an unterminated sha list drops the LAST naming commit, which on a one-commit naming set is every commit, and S1041 is what sees it (every other attributed cell co-moves, and S1017 then judges only its newest commit)" \
   "printf '%s\\n' \"\$2\" | tr ',' '\\n' > \"\$LR_STAGE/nsb-shas\"" "printf '%s' \"\$2\" | tr ',' '\\n' > \"\$LR_STAGE/nsb-shas\""
-sb_case short-sha-span PC-S1001-OFFENDER "$NU" "PC-S1007-ARCHIVE-ONLY PC-S1019-MERGE-P2-X PC-S1021-MERGE-P1-X PC-S1027-PIPE-X" \
-  "handing diff-tree --stdin the abbreviated sha prints no diff, so a non-release naming commit is never judged, and S1001 is what sees it (every other attributed cell is named by a non-release commit and co-moves)" \
+sb_case short-sha-span PC-S1041-OFFENDER-OPEN "$NU" "PC-S1019-MERGE-P2-X PC-S1021-MERGE-P1-X PC-S1027-PIPE-X" \
+  "handing diff-tree --stdin the abbreviated sha prints no diff, so a non-release naming commit is never judged, and S1041 is what sees it (every other attributed cell is named by a non-release commit and co-moves)" \
   'git -C "$DIST" rev-parse --verify -q "${_c}^{commit}" > "$LR_STAGE/nsb-span"' 'printf '"'"'%s\n'"'"' "$_c" > "$LR_STAGE/nsb-span"'
 sb_case first-parent-only PC-S1019-MERGE-P2-X "$NU" - \
   "diffing a merge against its first parent alone never sees a change visible only against the second, and S1019 is what sees it" \
@@ -2986,8 +3001,8 @@ MUTB="$(dirname "$DIST")/mut-bound"
 rm -rf "$MUTB"; mkdir -p "$MUTB"
 cp "$(dirname "$CLOSER")"/*.sh "$MUTB/" 2>/dev/null
 # EVERY SEARCH, and KEYED ON THE THING BEING BOUNDED rather than on the grep expression.
-# `named_absorbed` falls back to the SHORT id when the full slug finds nothing, `named_ambiguous`
-# asks the same two questions again, and each is its own `git log`. Bounding only some of them is a
+# `named_absorbed` asks the full slug, `named_ambiguous` asks the slug again and then the SHORT id,
+# and each is its own `git log`. Bounding only some of them is a
 # PARTIAL revert, which proves the layer left in place and comes out looking like a surviving
 # mutant — the failure mode this arm's predecessor actually hit.
 #
@@ -3000,7 +3015,7 @@ cp "$(dirname "$CLOSER")"/*.sh "$MUTB/" 2>/dev/null
 # range-bounded and carries no bare `"$THEIRS"`, so it is untouched.
 #
 # AND THE FORMAT LETTER IS NOT PART OF THE ANCHOR, WHICH IS A SECOND INSTANCE OF THE SAME LESSON.
-# The pattern was `--format=%H "$THEIRS"` spelled out. When `named_absorbed`'s two searches moved
+# The pattern was `--format=%H "$THEIRS"` spelled out. When `named_absorbed`'s searches (then two) moved
 # to `--format=%h` — because the function now emits abbreviated shas directly instead of walking
 # them through `rev-parse --short` — the sed stopped matching THOSE TWO lines while still matching
 # `named_ambiguous`'s. `MUTB_LEFT` counted the same spelling, so it read 0 and the guard passed:
@@ -3213,9 +3228,9 @@ fi
 # holds are the anchor.
 #
 # THE PATTERN SEPARATES THREE NEARLY IDENTICAL LINES. `named_ambiguous` runs the same query and
-# assigns it to `_slug_hit`; the prefix fallback in this same function assigns `_hits` from an
-# `-E` search on the SHORT id. The assignment target and `-F --grep="$_id"` together pick exactly
-# one, and the arm below asserts that it picked exactly one before any mutant is built.
+# assigns it to `_slug_hit`, and its prefix walk assigns `_hits` from an `-E` search on the SHORT
+# id. The assignment target and `-F --grep="$_id"` together pick exactly one, and the arm below
+# asserts that it picked exactly one before any mutant is built.
 NAMED_ANCHOR="$(LC_ALL=C awk '/^  _hits="\$\(git .*log -F --grep="\$_id"/' "$CLOSER")"
 anchor_n="$(printf '%s\n' "$NAMED_ANCHOR" | grep -c . )"
 ASSERTIONS=$((ASSERTIONS + 1))
@@ -5556,7 +5571,7 @@ dp_kill mutation-bare-bold-no-shape "$bb_m1" \
 # shape still opens the entry, so the neighbour keeps one row, but the label is "" and the entry
 # and its receipt vanish together — the half of the fix a shape-only change leaves broken.
 bb_m2="$(rl_dir bb-narrow-strip)" \
-  && rl_mutant "$bb_m2" ledger-reverify.sh 'sub(/^(- )?\*\*/' 'sub(/^- \*\*/' 4 \
+  && rl_mutant "$bb_m2" ledger-reverify.sh 'sub(/^(- )?\*\*/' 'sub(/^- \*\*/' 3 \
   && rl_mutant "$bb_m2" lib.sh 'sub(/^(- )?\*\*/' 'sub(/^- \*\*/' 2 || bb_m2=""
 dp_kill mutation-bare-bold-narrow-strip "$bb_m2" \
   '$2 ~ /PC-FIXTURE-BARE-BOLD-RECORD/ {g=1} $2 ~ /PC-FIXTURE-DASHED-ABOVE-BARE-BOLD/ {n++} END{exit !(!g && n == 1)}' \
@@ -5805,7 +5820,9 @@ idc_amb() { # <rows> <prefix> -> AMBIGUOUS or none
 # boundary is installed.
 IDC_CELLS="s810:k:PC-S810-3.2-DOTTED_SLUG-NAMED:NAMED-UPSTREAM s811:k:PC-S811-4.1_HEADING-FORM:NAMED-UPSTREAM s812:k:PC-S812-DASH-ONLY-CONTROL:NAMED-UPSTREAM s802:a:PC-S802:AMBIGUOUS s816:k:PC-S816-5.2-DOTTED_CITED:NAMED-UPSTREAM-CITED-ONLY prose:k:validate-fixture-gates.sh:none"
 [ "$idc_guard" = 1 ] || IDC_CELLS="s812:k:PC-S812-DASH-ONLY-CONTROL:NAMED-UPSTREAM prose:k:validate-fixture-gates.sh:none"
-[ "$idc_bound" = 1 ] && IDC_CELLS="$IDC_CELLS s813:k:PC-S813-UNDERSCORE-BOUNDARY:none s814:k:PC-S814-DOT-BOUNDARY:none s817:a:PC-S817:none s815:k:PC-S815-FULL-STOP-PREFIX:NAMED-UPSTREAM"
+# The boundary cells read the PREFIX-KEYED row: a bare-prefix citation is never attributed to an
+# entry, so whether the boundary admitted a mention shows only as an AMBIGUOUS row on the prefix.
+[ "$idc_bound" = 1 ] && IDC_CELLS="$IDC_CELLS s813:a:PC-S813:none s814:a:PC-S814:none s817:a:PC-S817:none s815:a:PC-S815:AMBIGUOUS"
 idc_cell() { # <rows> <cell spec> -> the cell's reading
   local _t="${2%%:*}" _r="${2#*:}" _m _l
   _m="${_r%%:*}"; _r="${_r#*:}"; _l="${_r%:*}"
@@ -5819,10 +5836,10 @@ idc_why() {
     s802) echo "a prefix shared ONLY by dotted entries and cited bare -> one AMBIGUOUS row keyed on the prefix" ;;
     s816) echo "a dotted id cited only on a Not-discharged: line -> the citation kind, never the plain one" ;;
     prose) echo "a RECEIPTED lowercase prose label with a dash and a dot, named verbatim -> no naming row; it is not an entry id" ;;
-    s813) echo "the prefix mentioned only as <prefix>_X, a longer id -> \`_\` extends an id, so no naming row" ;;
-    s814) echo "the prefix mentioned only as <prefix>.3-X, a longer id -> an id-continuing \`.\` extends it, so no naming row" ;;
+    s813) echo "the prefix mentioned only as <prefix>_X, a longer id -> \`_\` extends an id, so no prefix row" ;;
+    s814) echo "the prefix mentioned only as <prefix>.3-X, a longer id -> an id-continuing \`.\` extends it, so no prefix row" ;;
     s817) echo "a SHARED prefix mentioned only as <prefix>_X -> no AMBIGUOUS row" ;;
-    s815) echo "the prefix followed by a full stop and a space -> punctuation, so the prefix IS cited: the presence twin" ;;
+    s815) echo "the prefix followed by a full stop and a space -> punctuation, so the prefix IS cited: one unattributed AMBIGUOUS row, the presence twin" ;;
   esac
 }
 for _c in $IDC_CELLS; do
@@ -5997,17 +6014,18 @@ if [ "$idc_guard" = 1 ]; then
     "$IDC_NA_EQ" '  :' 1
 fi
 if [ "$idc_bound" = 1 ]; then
-  # ALL THREE BYTE-PAIRED SITES go back to the old boundary together: the two git EREs and the awk
-  # copy in named_cited_filter. Reverting one alone leaves the other rejecting the same commit,
-  # which reads as a citation row rather than as the defect.
-  idc_case narrow-boundary "s813=NAMED-UPSTREAM s814=NAMED-UPSTREAM s817=AMBIGUOUS" \
+  # BOTH BYTE-PAIRED SITES go back to the old boundary together: the one git ERE (in
+  # named_ambiguous, the only prefix walk left) and the awk copy in named_cited_filter. Reverting
+  # one alone leaves the other rejecting the same commit, which reads as a silenced row rather than
+  # as the defect.
+  idc_case narrow-boundary "s813=AMBIGUOUS s814=AMBIGUOUS s817=AMBIGUOUS" \
     "a prefix boundary of [^0-9A-Za-z-] reads <prefix>_X and <prefix>.3-X as citing the bare prefix, and id-class-s813/-s814/-s817 are what see it; the full stop (s815) holds" \
-    '([^0-9A-Za-z_.-]|[.]([^0-9A-Za-z_-]|\$)|\$)' '([^0-9A-Za-z-]|\$)' 2 \
+    '([^0-9A-Za-z_.-]|[.]([^0-9A-Za-z_-]|\$)|\$)' '([^0-9A-Za-z-]|\$)' 1 \
     '"([^0-9A-Za-z_.-]|[.]([^0-9A-Za-z_-]|$)|$)"' '"([^0-9A-Za-z-]|$)"' 1
   # THE CARVE-OUT, mirrored: every `.` read as id-continuing silences the full-stop citation.
   idc_case dot-never-boundary "s815=none" \
     "reading every . as id-continuing silences a prefix cited at the end of a sentence, and id-class-s815 is what sees it" \
-    '([^0-9A-Za-z_.-]|[.]([^0-9A-Za-z_-]|\$)|\$)' '([^0-9A-Za-z_.-]|\$)' 2 \
+    '([^0-9A-Za-z_.-]|[.]([^0-9A-Za-z_-]|\$)|\$)' '([^0-9A-Za-z_.-]|\$)' 1 \
     '"([^0-9A-Za-z_.-]|[.]([^0-9A-Za-z_-]|$)|$)"' '"([^0-9A-Za-z_.-]|$)"' 1
 fi
 if [ "$idc_det" = 1 ]; then
@@ -6023,8 +6041,8 @@ if [ "$idc_det" = 1 ]; then
   # THE SHIPPED-AT-555894ec RECORDING: shas kept for every naming kind, before the kind is decided.
   idc_case shas-every-kind "s822=cites-sha s823=cites-sha" \
     "keeping the naming shas for a cited-only or docs-only row routes the close to commits that row calls no absorption, and id-class-s822/-s823 are what see it" \
-    "    na_r=\"\$(printf '%s' \"\$na\" | awk '{print \$4}')\"" \
-    "    na_r=\"\$(printf '%s' \"\$na\" | awk '{print \$4}')\"; NA_ENTRY_SHAS=\"\$na_c\"" 1
+    "    na_r=\"\$(printf '%s' \"\$na\" | awk '{print \$3}')\"" \
+    "    na_r=\"\$(printf '%s' \"\$na\" | awk '{print \$3}')\"; NA_ENTRY_SHAS=\"\$na_c\"" 1
   # THE NAMING BRANCH ALONE dropped: the named entry falls to the find-the-release text.
   idc_case close-detail-no-shas "s818=find-release" \
     "dropping the naming-commit branch sends a named entry to a bisect it does not need, and id-class-s818 is what sees it" \

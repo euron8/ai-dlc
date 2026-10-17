@@ -593,28 +593,6 @@ Owner: ai-dlc-4e [9b62de] (lead ai-dlc-9c), the fourth release of its load serie
 
 verify: manual
 
-## BL-631 — shipped mechanisms read past sprints' artifacts, so a pull or gate can fail, or owe work, because of a historical artifact
-
-**DEFECT.** Operator ruling, relayed by lead ai-dlc-9c: "I'm stating that I don't care if a fixture or check fails against a historical sprint artifact." Earlier: "if someone deleted all of graph consumer's sprint history, it should not matter whatsoever" and "it's a nice to have, not a need." The candidates come from a read-only Sonnet census; intake checked each cite at origin/main `f4ca6764`. The open backlog has no entry on it (0 matches for "historical sprint" or "past sprint").
-
-Readers that take in past sprints, each confirmed at the cited lines:
-1. `core/skills/ai-dlc-update/reconcile/apply.sh:1350-1407`, `vd_join`: lists every `*.md` under the consumer's `_bmad-output/` (`find "$4" -type f -name '*.md'`) and turns the result into the pull's `WORKLIST artifact-derivations` / `artifact-derivations-unreadable` / `-unchecked` rows. A past sprint's artifact can drive the pull's row.
-2. `core/scripts/validate-artifact-derivations.sh:800-806`: given a directory, it walks every `*.md` under it.
-3. `core/skills/ai-dlc-update/reconcile/derivation-differential.sh`: its NEWLY-FAILING set (`:30`, "THIS PULL'S WORK"; exit 1 at `:41`) is taken over `_bmad-output/**/*.md` (`:9`), the same corpus.
-4. `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:2287-2291` and `:2524-2525`: reads `push-candidate-ledger.archive.md` into `ARCHIVE_LABELS` (via `corpus_labels`) and into the sibling entries.
-5. `core/scripts/validate-mandatory-rules.sh:574-581` and `:689-692`: Check 6 counts story files under every `stories/` directory in the area, and the FAIL at `:689` reports that count. Whether a past sprint's story can change the verdict, and not only the message, is for the owner to read at `:683-692`.
-6. `core/hooks/ai-dlc-gate-remediation-guard.sh:1315`: globs `planning-artifacts/s*/gate-*repair*.md` across every sprint, though `:1317` keeps only a record carrying the live nonce, so a historical record is used only if it carries that nonce.
-7. `core/scripts/validate-artifact-budget.sh:1376-1379`: with no canonical live log, it falls back to `find … -name gate-log.md | head -1`, which can return an archived sprint's log. The order of `find` is unspecified, so which log it gets is not stable either.
-
-OPEN QUESTIONS, not filed as defects. Each needs SOME prior state, so the question is whether that state comes from a history read or from a current-state record:
-- `core/scripts/sprint-status.sh:296-381`, `max_frozen` / `frozen_sprints`: derives the current sprint number from the frozen archives, in both spellings.
-- I81 SPRINT_PENDING, `core/hooks/ai-dlc-continue.sh:1146-1152` and `core/hooks/ai-dlc-acknowledge.sh:416-421`: tests for `s(N-1)/` and for any later `s*/`.
-- `core/scripts/validate-trunk-audit-gate.sh`: takes its genesis from the prior sprint's `audit-anchors.md` entry when there is no watermark (`:73`).
-
-Owed: scope each reader in items 1-7 to the current sprint (or to the current pull's own range), so a failing or absent historical artifact can neither block nor owe anything. No prose rule. Answer each open question with a reason. Receipt per reader: the verdict is the same with every past sprint's artifacts deleted and with a deliberately failing artifact seeded into a past sprint. Control: the same failing artifact in the CURRENT sprint still fails.
-
-verify: manual
-
 ## BL-632 — shipped checks and fixtures pass or fail on an arbitrary number instead of a binary property of their subject
 
 **DEFECT.** Operator, relayed by lead ai-dlc-9c: "really need to stop forcing arbitrary goals that aren't based on binary attributes." Part of ai-dlc-4e [9b62de]'s load series (BL-616). Subject: assertions whose verdict turns on a number with no stated property behind it, such as wall-clock bounds (`$((SECONDS - t0)) -lt N`, timeouts that fail as HANG or FAIL), percentage windows, and repeat or rep counts. Under load such a bound turns a correct subject red, which is BL-616's consequence, and when tuned to pass it asserts nothing about the subject.
@@ -817,23 +795,6 @@ Related: BL-635 (12214 dead rows for fixtures keyed on `inputs.decl`); together 
 
 verify: manual
 
-## BL-645 — the owed-derivation classifier misses two of the four history companions the consolidation step writes, so a stale derivation in an archive refuses the planning gate
-
-**DEFECT.** Found by ai-dlc-53 on graph; widened and confirmed by ai-dlc-c2 (formerly 60); tiered DEFECT against 0.808.0 by lead ai-dlc-71. Intake re-derived it read-only at origin/main `b307a96b`. Subject: `core/scripts/check-owed-derivations.sh` `is_history()` (`:161`), shipped in 0.808.0 (BL-587).
-- The HISTORY class is the set of exact names an ai-dlc writer produces as history. The exact-name case (`:176`) lists `prd-history.md` and `product-brief-history.md` (each 2 mentions in the script). `carry-over-backlog-archive.md` and `architecture-history.md` have 0 mentions.
-- The writer names FOUR companions: `core/skills/ai-dlc/steps/artifact-consolidation.md:127-129` ("Append the history relocation draft to the companion file … verbatim", listing `prd-history.md` / `product-brief-history.md` / `carry-over-backlog-archive.md` / `docs/architecture-history.md`), and `core/skills/ai-dlc/SKILL.md:696-699` (Rule (a), "cut-and-paste, verbatim", the same four pairs). `core/skills/ai-dlc/steps/retro.md:650-652` also writes `carry-over-backlog-archive.md` ("cut-and-paste, verbatim").
-- Measured with the shipped program in a clean worktree at `b307a96b`: `check-owed-derivations.sh --scope` answers LIVING for `_bmad-output/planning-artifacts/carry-over-backlog-archive.md`, `_bmad-output/architecture-history.md`, `_bmad-output/planning-artifacts/architecture-history.md` and `docs/architecture-history.md`. Controls in the same run: `_bmad-output/planning-artifacts/prd-history.md` answers HISTORY, and the live `carry-over-backlog.md` answers LIVING.
-- Consequence: the writer records a stale derivation in either archive as owed, and gate Check 37 refuses the planning gate on it, though these files are verbatim archives, which is exactly what the HISTORY class exists to exclude. On graph, 53 measured `carry-over-backlog-archive.md` carrying 2 derived fences, one naming a core path.
-
-Owed (inside BL-631, by 71's ruling):
-1. Add both names to `is_history`'s exact-name case.
-2. Add an arm binding `is_history`'s companion names to the writer's companion list, so a fifth companion cannot be missed the same way.
-3. Fixture: one HISTORY world per new name, plus the near-miss `carry-over-backlog.md` (the live file), which must stay LIVING. Re-measure the M23 substring mutant's kill set and report it to the lead before editing.
-
-Owner: ai-dlc-53, closed by BL-631.
-
-verify: manual
-
 ## BL-646 — one adversarial-shard-merge mutant scorer costs about 140 CPU-seconds against the 22 its header designs for, so under the gate's pool every scorer, the control included, times out
 
 **DEFECT.** Measured by ai-dlc-6f and filed on lead ai-dlc-71's instruction; intake re-derived the static half read-only at origin/main `fd09acbf` and read 6f's retained capture. Subject: `core/fixtures/adversarial-shard-merge-mutants/run.sh` and its shards.
@@ -856,13 +817,16 @@ verify: manual
 - Found when shard a of `adversarial-shard-merge-mutants` at `66e5de0a` exited 1 with "run.sh: line 630: pst: unbound variable" inside the [MW] probe's `mwr="$( … )"`, printing no [MW] line and no verdict.
 - (a) A comment carrying a single apostrophe inside a multi-line `"$( … )"`: `# the scorer's own subshell (bash -c's PPID) is excluded` gives "bad substitution: no closing `)'", and the assignment never happens (`mwr: unbound variable`). The same text without apostrophes prints `[1 0]`. Intake's narrowing: a comment carrying a balanced PAIR of apostrophes and no `)` prints `[1 0]`, while a comment carrying a lone `)` and no apostrophe fails the same way. So the trigger is an unbalanced quote or paren in comment text, not "any apostrophe". That is consistent with 6f's report that `core/fixtures/wait-stale-deliverable/run.sh` carries apostrophe comments inside substitutions and still passes.
 - (b) `case "$h" in ''|*[!0-9]*) k=x ;; *) k=1 ;; esac` inside a multi-line `"$( … )"` gives "syntax error near unexpected token `newline'" and then `pst: unbound variable`. With the POSIX leading-paren form, `(''|*[!0-9]*)` and `(*)`, it prints `[1 0]`.
-- `bash -n` exits 0 on all four failing forms, so the shell-syntax step of the gate cannot see this. The hazard is only visible at run time, as an unbound variable or a missing verdict far from its cause.
+- (c) A `$(` inside a single-quoted string inside `"$( … )"`. Measured by ai-dlc-c2 at `39955c93` (clean detached worktree, hermetic): `core/fixtures/postcompact-rulebook-recovery/run.sh:1642-1643`, `amutant_arm "the stage never arms …" "$(amut noarm 'index($0,"owed_put \"$(printf"){print …; next} 1')" …`, added by `3d5f1e70` (0.797.0). It printed "bad substitution" once, ran 0 of 8 advisor-stage mutant lines, and exited rc=0. Intake reproduced it standalone under `/bin/bash` 3.2.57, at a top-level `if` with a line before and after the site and a line after the `fi`. The site's exact two lines, and the reduced line `amutant_arm a "$(amut n 'x "$(p"){y} 1')" z`, each give "bad substitution". The rest of the `if` block is skipped, the line after `fi` runs, rc=0, and `bash -n` exits 0. Paired passing forms: `'x $(p){y} 1'` (a balanced `$(p)`), the next site line `amut mate '…'` (no `$(`), and `'a "$(printf" b'` (no `)` after the `$(`) all run the block to its end. So the trigger is the `$(` inside the quotes followed later by a `)`, not a quote alone. The outer substitution at this site is ONE line, so form (c) does not need a multi-line `$( )`.
+- `bash -n` exits 0 on all four failing forms of (a) and (b) and on form (c), so the shell-syntax step of the gate cannot see this. The hazard is only visible at run time, as an unbound variable or a missing verdict far from its cause.
 
 Live sites: none on origin/main `33361d56` (0 matches for the case line, control 0 `hkd` anywhere), and fixed for `adversarial-shard-merge-mutants` on `b235-bl536-g1` at `070ca3d0`. ai-dlc-c8's `b235-load-series` `87116aa0` carries the identical bare-pattern line, `case "$hpid" in ''|*[!0-9]*) hkd=x ;; *) kill -0 …`, in 5 batteries: `adversarial-shard-merge-mutants/run.sh:420`, `apply-self-overwrite-mutants/run.sh:327`, `remediator-shard-join-mutants/run.sh:767`, `review-shard-merge-mutants/run.sh:669` and `self-update-fixture-log-mutants/run.sh:1913` (5 of 5 read at that commit; each sits inside a `="$(` opened 14 lines above, by a hand scan, not the parser). FIXED on that branch by c8's `ed286604`, which writes all 5 in the leading-paren form: 0 unparenthesised sites there, against 5 at `87116aa0` (control).
 
+Correction to "Live sites: none": that held for forms (a) and (b) only. A form (c) site was live on main from 0.797.0 (`3d5f1e70`) through 0.817.0: `core/fixtures/postcompact-rulebook-recovery/run.sh:1643` at `39955c93` (1 match for `amut noarm 'index` on origin/main). c2's BL-607 commit `86962cd9` binds that awk program to a variable (`"$(amut noarm "$AP_NOARM")"`), and it lands in 0.818.0.
+
 NOT measured: the false-positive set of a `validate-shell-portability.sh` arm that flags a bare `case` pattern, or an unbalanced quote or paren in a comment, inside a multi-line `$( )`. 71 asks that it be measured across the tree before such an arm is proposed. Per "cross-check a parser against what EXECUTES it", the oracle for any such arm is `/bin/bash` 3.2 running the extracted substitution, not `bash -n` and not a second grammar.
 
-Owed (lead ai-dlc-71): a `validate-shell-portability.sh` arm that flags both forms inside a multi-line `$( )`, after its false-positive set is measured across the tree, so the next author cannot write either form. The known sites are already fixed. Receipt: each failing form above is flagged, and its paired passing form is not.
+Owed (lead ai-dlc-71): a `validate-shell-portability.sh` arm that flags forms (a) and (b) inside a multi-line `$( )`, and form (c) inside any `$( )`, after its false-positive set is measured across the tree, so the next author cannot write any of them. The known sites are fixed once `86962cd9` lands. Receipt: each failing form above, (c) included, is flagged, and its paired passing form is not.
 
 Owner: unowned (71: filed, not built by 6f).
 

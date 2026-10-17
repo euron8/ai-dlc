@@ -10,6 +10,7 @@ grep
 head
 mktemp
 mv
+python3
 rm
 sed
 sort

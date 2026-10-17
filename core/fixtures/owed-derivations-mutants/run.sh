@@ -129,13 +129,28 @@ mutate M2-reader-treats-past-as-open reader "Sp1 Sp5 Sp7" \
   'if [ "$sc" = PAST ]; then' \
   's/^  if \[ "\$sc" = PAST \]; then$/  if false; then/'
 
-# M11: the writer RECORDS a PAST row instead of printing INFO and dropping it.
-mutate M11-writer-records-past writer "Sp3a Sp3b Wc Wd Wf" \
-  'PAST) printf' \
-  's|^      PAST) printf .*$|      PAST) printf "%s\\n" "$_orow" >> "$TMP/owed.keep" ;;|'
+# M11 (RE-ANCHORED by BL-631): the helper runs an UNSCOPED join, so a past sprint's break is run, printed
+# NEWLY-FAILING and offered to the writer. The writer's own PAST arm, this mutant's old subject, was deleted
+# once the join itself kept only CURRENT and LIVING files; the property moved there, so the mutation does
+# too: the helper's lift of vd_join() kills the scope gate on the way in. DECLARED SET, measured: Sp3a Sp3b Hw1
+# Hw2 are the out-of-scope rows the dropped files no longer print; Wb Wc Wd We Wf Wg are the writer world,
+# whose past-sprint break the unscoped join now runs, prints and records (BL-631 item 3, the helper's join). W0
+# (exit 1 without --record-owed) holds: the LIVING break fails either way.
+# Both strings carry single quotes, so they are read from quoted heredocs, byte for byte.
+M11_ANCHOR="$(cat <<'M11A'
+eval "$(awk '/^vd_join\(\) \{/,/^\}/' "$SELF/apply.sh" 2>/dev/null)"
+M11A
+)"
+M11_SED="$(cat <<'M11S'
+s#^eval "\$(awk '/\^vd_join\\(\\) \\{/,/\^\\}/' "\$SELF/apply.sh" 2>/dev/null)"$#eval "$(awk '/^vd_join\\(\\) \\{/,/^\\}/' "$SELF/apply.sh" 2>/dev/null | sed 's/^    if \\[ "\\$VD_HITS" -gt 0 \\] || \\[ "\\$VD_SCANNED" -lt "\\$VD_LISTED" \\]; then$/    if false; then/')"#
+M11S
+)"
+mutate M11-writer-records-past writer "Sp3a Sp3b Hw1 Hw2 Wb Wc Wd We Wf Wg" "$M11_ANCHOR" "$M11_SED"
 
 # M12: the classifier reads LIVING as PAST (a prd.md row stops being enforced, and the writer drops it).
-mutate M12-classifier-living-as-past reader "B1b B1f B3a B5d B7a Bt1b Gf Ha3 Ha4 Ha5 Hc1 Hn Hw1 Sc5 Sc7 Sc8 Sl1 Sl2 Sp3a Sp4 Wc Wd We Wf Wg" \
+# Hw2 Sp3b are BL-631's re-pointed out-of-scope rows; W0 Wb are the writer world's exit, which moves because the
+# helper's join now reads this classifier and drops the LIVING break as PAST (BL-631 item 3).
+mutate M12-classifier-living-as-past reader "B1b B1f B3a B5d B7a Bt1b Gf Ha3 Ha4 Ha5 Hc1 Hn Hw1 Hw2 Sc5 Sc7 Sc8 Sl1 Sl2 Sp3a Sp3b Sp4 W0 Wb Wc Wd We Wf Wg" \
   '  SCOPE_TOKEN=LIVING' \
   's/^  SCOPE_TOKEN=LIVING$/  SCOPE_TOKEN=PAST/'
 
@@ -145,13 +160,16 @@ mutate M13-classifier-substring-segment reader "Sc1 Sp7" \
   's/^    if \[ "\$((10#\$SP_N))" -eq "\$CUR" \]; then SCOPE_TOKEN=CURRENT; else SCOPE_TOKEN=PAST; fi$/    case "$SP_N" in "$CUR"*) SCOPE_TOKEN=CURRENT ;; *) SCOPE_TOKEN=PAST ;; esac/'
 
 # M15: HISTORY is checked AFTER the sprint classification instead of first: a history file inside the
-# current sprint (s<current>/archive/) reads CURRENT again, and the writer records it.
-mutate M15-history-checked-after-current reader "Ha6 Hl3 Hr Hs Hw1 Hw2 Sl4 Wc Wd Wf Wg" \
+# current sprint (s<current>/archive/) reads CURRENT again, and the writer records it. Hw3 is BL-631's
+# never-RUN arm for the dropped history file. Wd is not declared: the writer records only what the join keeps
+# (BL-631 item 3), so the row it compares no longer moves; M3 is Wd's killer.
+mutate M15-history-checked-after-current reader "Ha6 Hl3 Hr Hs Hw1 Hw2 Hw3 Sl4 Wc Wf Wg" \
   '  if is_history "$p"; then SCOPE_TOKEN=HISTORY; return 0; fi' \
   '/^  if is_history "\$p"; then SCOPE_TOKEN=HISTORY; return 0; fi$/d;s/^  SCOPE_TOKEN=LIVING$/  if is_history "$p"; then SCOPE_TOKEN=HISTORY; return 0; fi; SCOPE_TOKEN=LIVING/'
 
-# M16: the classifier never returns HISTORY.
-mutate M16-classifier-never-history reader "Ha6 Hl3 Hr Hs Hw1 Hw2 Sl4 Wc Wd Wf Wg" \
+# M16: the classifier never returns HISTORY. Ha7 Ha8 Ha9 are BL-631's history-companion arms and Hw3 its
+# never-RUN arm; Wd is not declared, as for M15.
+mutate M16-classifier-never-history reader "Ha6 Ha7 Ha8 Ha9 Hl3 Hr Hs Hw1 Hw2 Hw3 Sl4 Wc Wf Wg" \
   '  if is_history "$p"; then SCOPE_TOKEN=HISTORY; return 0; fi' \
   's/^  if is_history "\$p"; then SCOPE_TOKEN=HISTORY; return 0; fi$/  if false; then SCOPE_TOKEN=HISTORY; return 0; fi/'
 
@@ -169,18 +187,21 @@ mutate M20-older-stem-picked-as-live reader "Hl1 Hl1b Hl2 Hl4 Hl5" \
 
 # M18: the batch classifier resolves and classifies nothing and defaults every path to LIVING. --scope runs
 # through scope_batch too, so every --scope arm moves; the reader's per-row scoping calls classify directly,
-# so Wg (the reader over the writer's over-recorded rows) stays green and is not declared.
-mutate M18-batch-defaults-living reader "Bt1b Ha1 Ha2 Ha6 Hc2 Hl1 Hl1b Hl3 Hl4 Hl6 Hl7 Hl8 Hl9 Hn Hs Hw1 Hw2 Sc1 Sc2 Sc3 Sc4 Sc6 Sc9 Sl Sl3 Sl4 Sp3a Sp3b Wc Wd Wf" \
+# so Wg (the reader over the writer's over-recorded rows) stays green and is not declared. Ha7 Ha8 Ha9 are
+# BL-631's history-companion arms, Hw3 and Sp3c its never-RUN arms; Wd is not declared, as for M15.
+mutate M18-batch-defaults-living reader "Bt1b Ha1 Ha2 Ha6 Ha7 Ha8 Ha9 Hc2 Hl1 Hl1b Hl3 Hl4 Hl6 Hl7 Hl8 Hl9 Hn Hs Hw1 Hw2 Hw3 Sc1 Sc2 Sc3 Sc4 Sc6 Sc9 Sl Sl3 Sl4 Sp3a Sp3b Sp3c Wc Wf" \
   '    classify "$_bp"' \
   's/^    classify "\$_bp"$/    SCOPE_TOKEN=LIVING/'
 
 # (M19 and the Bd binding arms are REMOVED: HISTORY no longer copies is_archive, it matches exact names.)
 
 # M23: HISTORY matches a basename by SUBSTRING/suffix (`*-history.md`, `*-archive*.md`), as the old is_archive
-# copy did. The three live look-alikes then read HISTORY.
+# copy did. The live look-alikes then read HISTORY. RE-ANCHORED by BL-631 on the companion line, which gained
+# carry-over-backlog-archive.md and architecture-history.md; the property is unchanged. DECLARED SET: measured
+# in the slot and sent to the lead before it is written (the archive-notes near-miss joins Hn).
 mutate M23-substring-archive-match reader "Ha1 Ha2 Ha3 Hn" \
-  '    prd-history.md|product-brief-history.md|push-candidate-ledger.archive.md) return 0 ;;' \
-  's/^    prd-history\.md|product-brief-history\.md|push-candidate-ledger\.archive\.md) return 0 ;;$/    *-history.md|*-archive*.md|prd-history.md|product-brief-history.md|push-candidate-ledger.archive.md) return 0 ;;/'
+  '    prd-history.md|product-brief-history.md|carry-over-backlog-archive.md|architecture-history.md) return 0 ;;' \
+  's/^    prd-history\.md|product-brief-history\.md|carry-over-backlog-archive\.md|architecture-history\.md) return 0 ;;$/    *-history.md|*-archive*.md|prd-history.md|product-brief-history.md|carry-over-backlog-archive.md|architecture-history.md) return 0 ;;/'
 
 # M24: the `archive` directory is matched as a SUBSTRING of a component, so `archived/` and `archive-notes/`
 # read HISTORY.
@@ -197,6 +218,36 @@ sed "s/^SLOT_RE='\^s\[0-9\]+\$'/SLOT_RE='^s[0-9]*\$'/" "$READER" > "$WORK/slotdr
 if cmp -s "$READER" "$WORK/slotdrift.sh"; then bad "Bs2 the slot drift mutation DID NOT APPLY"
 elif [ "$(slot_of "$WORK/slotdrift.sh")" != "$slot_cfg" ]; then ok "Bs2 M21-slot-re-copy-drifts: KILLED by the binding arm (declared: Bs1 on the pristine copy, Bs2 on the drifted one)"
 else bad "Bs2 M21-slot-re-copy-drifts: SURVIVED"; fi
+
+# ---- Bh: the HISTORY companion names are BOUND to the writer's own pair list ---------------------------
+# SKILL.md's "Current-state live, history archive" rule names each living artifact beside the file its
+# superseded text is MOVED to (`<live>` -> `<history>`). Every history side must be on the reader's companion
+# case line and no live side may be. Derived, never hand-listed: two names were once missing from a hand list.
+# A pair list shorter than the floor means the paragraph was respelled and the join reads nothing, so it
+# refuses rather than passing; a copy with one companion deleted must fail, so the arm can fire.
+SKILL="$ROOT/core/skills/ai-dlc/SKILL.md"
+printf 'HERMETIC-CONSUMED core/skills/ai-dlc/SKILL.md\n'
+bh_pairs() { awk '/Current-state live, history archive/ { s = 1 } s { printf "%s ", $0 } s && /Nothing is ever dropped/ { exit }' "$SKILL" \
+  | grep -oE '`[a-z0-9.-]+\.md` -> `[a-z0-9.-]+\.md`' | tr -d '`' | sed 's/ -> /\t/'; }
+bh_line() { grep -E '^    prd-history\.md\|' "$1" | head -1; }
+bh_miss() { # <reader> -> problems, empty when bound
+  local f="$1" line live hist out=""
+  line="|$(bh_line "$f" | sed 's/) return 0 ;;$//; s/^ *//')|"
+  while IFS="$(printf '\t')" read -r live hist; do
+    case "$line" in *"|$hist|"*) ;; *) out="$out missing:$hist" ;; esac
+    case "$line" in *"|$live|"*) out="$out live-listed:$live" ;; esac
+  done <<<"$(bh_pairs)"
+  printf '%s' "$out"
+}
+bh_n="$(bh_pairs | grep -c .)" || bh_n=0
+if [ "$bh_n" -lt 4 ]; then bad "Bh0 SKILL.md's live -> history pair list yields $bh_n pair(s), below the floor of 4 -- the paragraph was respelled and the binding reads nothing"
+elif [ -z "$(bh_line "$READER")" ]; then bad "Bh1 the reader carries no companion case line opening with prd-history.md"
+elif [ -z "$(bh_miss "$READER")" ]; then ok "Bh1 every one of SKILL.md's $bh_n history companions is on the reader's companion line, and no live side is"
+else bad "Bh1 companion binding broken:$(bh_miss "$READER")"; fi
+sed 's/|architecture-history\.md) return 0 ;;$/) return 0 ;;/' "$READER" > "$WORK/bhdrift.sh"
+if cmp -s "$READER" "$WORK/bhdrift.sh"; then bad "Bh2 the companion-deletion mutation DID NOT APPLY"
+elif [ -n "$(bh_miss "$WORK/bhdrift.sh")" ]; then ok "Bh2 M25-companion-dropped: KILLED by the binding arm (declared: Bh1 on the pristine reader, Bh2 on the drifted copy)"
+else bad "Bh2 M25-companion-dropped: SURVIVED"; fi
 
 # ---- Bg: the live-stem rule is BOUND to the guard's own lines (core/hooks/ai-dlc-gate-remediation-guard.sh:790-804)
 # The guard is frozen and is not edited. The three lines that DEFINE the rule must appear byte-for-byte in

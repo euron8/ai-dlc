@@ -1,3 +1,8 @@
-# Reads one script outside its own directory: the budget validator under test, which run.sh drives
-# with --root against seeded trees and copies for its mutants. It resolves nothing beside itself.
+# Reads the validator under test, which run.sh drives with --root against seeded trees and copies for
+# its mutants, plus the two siblings its gate-log fallback runs (the scope classifier and the
+# sprint-status reader it calls) and the schema that reader loads. Each mutant host is a scripts/
+# directory carrying those siblings with schemas/ beside it.
 !core/scripts/validate-artifact-budget.sh
+!core/scripts/check-owed-derivations.sh
+!core/scripts/sprint-status.sh
+!core/schemas/sprint-status.json

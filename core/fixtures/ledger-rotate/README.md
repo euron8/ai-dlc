@@ -54,43 +54,40 @@ The asymmetry is deliberate and is stated in the script header.
     digit removed from its close predicate archives a live entry that quotes the annotation
     form, its row disappears, and the comparison in 9 fails. Without this the reshape in 9
     would be a looser assertion with nothing saying so.
-13. **The prefix counter survives a rotation** — a mutant with the archive arm of
-    `prefix_entry_count()` removed turns a correct `NAMED-UPSTREAM-AMBIGUOUS` row into a
-    confident single attribution of the surviving sibling.
+13. **No row depends on the rotation archive** — the same rotated live ledger is classified
+    with its archive present and with it deleted, and the output must be byte-identical and
+    carry the unattributed `NAMED-UPSTREAM-AMBIGUOUS` row. A mutant whose prefix row is gated
+    on an open-union-archive count loses that row when the archive is deleted.
 
 ## Why the acceptance test is the row set and not the bytes
 
 The row set — status and subject — is what the classifier SAYS about which work, and a swept
-entry cannot hide behind a duplicate in it the way it can behind a row count. The bytes are
-stricter than the invariant needs, and until the counter was corrected they false-failed on
-the workflow the skill prescribes — annotate, then rotate, in one pass.
+entry cannot hide behind a duplicate in it the way it can behind a row count. The detail column
+carries a count of OPEN live entries, which a correct ANNOTATE moves; the bytes across the
+rotation alone are asserted separately, and there nothing may move.
 
-`prefix_entry_count()` in `ledger-reverify.sh` now counts a sprint prefix over the **corpus** —
-every entry line in both files, open or closed — so annotating moves nothing between the files
-and rotating moves one entry from one to the other, and the count is the same on both sides of
-either step. It used to count the OPEN entries unioned with the archived labels, and the open
-extractor skips any entry carrying `ADOPTED UPSTREAM`: an entry annotated in the same pass was
-on neither side while it sat in the live file and on the archive side once moved, so the count
-**dipped** at the annotate and **returned** at the rotate. On the `PC-S900` trio that was a
-count of 2 before the move and 3 after, printed inside the `NAMED-UPSTREAM-AMBIGUOUS` detail —
-a changed line on an identical row. On a two-member prefix with one member annotated, it was
-a count of **1** before the move and 2 after, which crosses the threshold between
-`named_absorbed()`'s single attribution and `named_ambiguous()` — the surviving sibling's row
-flips `NAMED-UPSTREAM <slug>` to `NAMED-UPSTREAM-AMBIGUOUS <prefix>` across a rotation that
-swept nothing, and that IS a changed row set. The reference consumer reported that shape from
-its own ledger with 89 rows either side. Assertion 4c seeds the two-member `PC-S910` pair and
-asserts the row set holds across all three states; its mutant reverts the counter to the
-open-union-archive body and shows the flip.
+`ledger-reverify.sh` reads the open entries of the live ledger and nothing else. It never opens
+the rotation archive, a closed entry emits no row and is counted nowhere, and a bare-prefix
+citation gets one `NAMED-UPSTREAM-AMBIGUOUS` row attributed to no entry, whatever the count. A
+rotation moves only closed entries, so it can move neither a row nor a byte. That is the
+operator's rule: a reader's rows must be the same with all sprint history deleted.
 
-The archive arm of the counter is not the defect: without it the count is anti-monotonic and
-converts a correct ambiguity into a confidently wrong attribution. The corpus count is that
-fix carried one step further — strictly fewer attributions, never more.
+It used to read history. The prefix was counted over the open entries unioned with the archived
+labels, and a count of one handed the row to a prefix fallback as a single attribution. An entry
+annotated in the same pass was on neither side while it sat in the live file and on the archive
+side once moved, so the count **dipped** at the annotate and **returned** at the rotate. On a
+two-member prefix with one member annotated that crossed one-vs-many and the surviving sibling's
+row flipped between `NAMED-UPSTREAM <slug>` and `NAMED-UPSTREAM-AMBIGUOUS <prefix>` across a
+rotation that swept nothing. The reference consumer reported that shape from its own ledger with
+89 rows either side. Assertion 4c seeds the two-member `PC-S910` pair and asserts the row set
+holds across all three states; its mutant gates the prefix row on the open-union-archive count
+again and shows the flip.
 
-The seed carries a `PC-S900` trio — two open entries and one closed in the same pass — because
-`named_ambiguous()` gates on a `PC-S<n>` prefix shared by two or more entries. Before that
-trio existed the ledger held no id of that shape at all, so the row this assertion is about
-could not be produced no matter what the code under test did, and the assertion was decorative
-rather than merely unseeded.
+The seed carries a `PC-S900` trio — two open entries and one closed in the same pass — so the
+AMBIGUOUS row has a subject and its count (2, the open members) has a value to assert on both
+sides of the move. Before that trio existed the ledger held no id of that shape at all, so the
+row this assertion is about could not be produced no matter what the code under test did, and
+the assertion was decorative rather than merely unseeded.
 
 ## Notes for future edits
 

@@ -66,9 +66,10 @@ git -C "$DIST" commit -q -m 'feat(v0.099.0): land two consumer-filed entries' \
 # THE SHORT-ID COMMITS. Upstream cites `PC-S<n>`, never the full slug -- measured against it at
 # 0.328.0, the slug search found 20 of 128 ledger entries while 20 of 29 prefixes appeared. The
 # message above therefore names PC-S901 and PC-S902 and NOT their slugs, which is the shape the
-# join was blind to. PC-S901 is carried by exactly ONE ledger entry (attributable); PC-S902 is
-# carried by TWO (ambiguous), and naming both would tell the operator to close an entry upstream
-# never touched.
+# join was blind to. PC-S901 is carried by exactly ONE open ledger entry and PC-S902 by TWO, and
+# BOTH get one unattributed NAMED-UPSTREAM-AMBIGUOUS row: a bare prefix does not say which entry
+# it means (the sprint may have filed others since closed or rotated), and naming one would tell
+# the operator to close an entry upstream may never have touched.
 
 # --- pre-base: THE MIDDLE-COMMIT CASE, AND THE TWO NEAR-MISSES THAT SIT BESIDE IT ---
 #
@@ -269,7 +270,7 @@ git -C "$DIST" commit -q -m 'fix: a second change citing PC-S902'
 #   PC-S813  prefix mentioned only as `PC-S813_…`, a longer id          -> no naming row
 #   PC-S814  prefix mentioned only as `PC-S814.3-…`, a longer id        -> no naming row
 #   PC-S817  a SHARED prefix mentioned only as `PC-S817_…`              -> no AMBIGUOUS row
-#   PC-S815  prefix followed by a FULL STOP and a space                 -> NAMED-UPSTREAM (prefix)
+#   PC-S815  prefix followed by a FULL STOP and a space                 -> one AMBIGUOUS row
 #   validate-fixture-gates.sh  a RECEIPTED lowercase prose label with a dash and a dot, named
 #            verbatim by a commit -> no naming row: a widened class admits it, the shared rule not
 for f in s810-subject s811-subject s812-subject; do printf '#!/bin/sh\necho %s\n' "$f" > "$DIST/core/scripts/$f.sh"; done
@@ -479,9 +480,11 @@ cat > "$LED" <<'LEDGER'
   the path never compares the substring and silently reports nothing about the claim.
   verify: theirs_lacks core/.claude/skills/ai-dlc/SKILL.md "MARKER_B"
 
-- **PC-S901-SHORT-ID-UNIQUE-PREFIX** — upstream cites the short id, this ledger carries one
-  entry under it, so the attribution is unambiguous. The full slug appears NOWHERE in the
-  distribution's history, which is the normal case and is what the slug-only join was blind to.
+- **PC-S901-SHORT-ID-UNIQUE-PREFIX** — upstream cites the short id, and this ledger carries one
+  open entry under it. It is STILL not attributed: the bare prefix gets one unattributed AMBIGUOUS
+  row, because a count of one is a fact about what this ledger still holds, not about what the
+  commit meant. The full slug appears NOWHERE in the distribution's history, which is the normal
+  case and is what the slug-only join was blind to.
   verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
 
 - **PC-S902-SHARED-PREFIX-FIRST** — upstream cites `PC-S902`, and TWO entries here carry it.
@@ -534,7 +537,8 @@ cat > "$LED" <<'LEDGER'
   verify: theirs_lacks core/scripts/s817-other.sh "MARKER_A"
 
 - **PC-S815-FULL-STOP-PREFIX** — upstream cites `PC-S815.` at the end of a sentence. A full stop
-  followed by a space is punctuation, so the prefix IS cited and the row is NAMED-UPSTREAM.
+  followed by a space is punctuation, so the prefix IS cited and the row is NAMED-UPSTREAM-AMBIGUOUS
+  PC-S815.
   verify: theirs_lacks core/scripts/s815-subject.sh "MARKER_A"
 
 - **`validate-fixture-gates.sh`** — a RECEIPTED prose label: lowercase, a dash and a dot, and a

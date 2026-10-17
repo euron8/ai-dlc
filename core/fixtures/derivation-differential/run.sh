@@ -51,11 +51,35 @@ if [ -z "$SUBJ" ]; then
   exit 0
 fi
 SUBJ="$(cd "$(dirname "$SUBJ")" && pwd)/$(basename "$SUBJ")"
+printf 'HERMETIC-CONSUMED %s\n' "$SUBJ"
 
 VALIDATOR="$(pick "$HERE/../../scripts/validate-artifact-derivations.sh" \
                   "$HERE/../../../scripts/ai-dlc/validate-artifact-derivations.sh" \
                   "$HERE/../../../core/scripts/validate-artifact-derivations.sh")"
 [ -n "$VALIDATOR" ] || { echo "FIXTURE ERROR: cannot locate validate-artifact-derivations.sh, which the helper runs on both sides" >&2; exit 2; }
+printf 'HERMETIC-CONSUMED %s\n' "$(cd "$(dirname "$VALIDATOR")" && pwd)/$(basename "$VALIDATOR")"
+
+# THE SCOPE CLASSIFIER IS THE REAL ONE TOO. The helper's join keeps only the artifact files that
+# `check-owed-derivations.sh --scope-batch` calls CURRENT or LIVING, and reads that script, its sibling
+# sprint-status.sh and the schema sprint-status.sh loads out of the DISTRIBUTION at <theirs>. A stub
+# would score every file in scope and the S arms below would read the helper over a classifier that
+# never says PAST. Each is seeded into the FIRST commit of every distribution, so it is present and
+# byte-identical at every ref and never enters the changed set (A8 counts changed paths exactly).
+CLASSIFIER="$(pick "$HERE/../../scripts/check-owed-derivations.sh" \
+                   "$HERE/../../../scripts/ai-dlc/check-owed-derivations.sh" \
+                   "$HERE/../../../core/scripts/check-owed-derivations.sh")"
+SPRINTSH="$(pick "$HERE/../../scripts/sprint-status.sh" \
+                 "$HERE/../../../scripts/ai-dlc/sprint-status.sh" \
+                 "$HERE/../../../core/scripts/sprint-status.sh")"
+SPRINTSCHEMA="$(pick "$HERE/../../schemas/sprint-status.json" \
+                     "$HERE/../../../.claude/schemas/sprint-status.json" \
+                     "$HERE/../../../core/schemas/sprint-status.json")"
+[ -n "$CLASSIFIER" ] && [ -n "$SPRINTSH" ] && [ -n "$SPRINTSCHEMA" ] \
+  || { echo "FIXTURE ERROR: cannot locate check-owed-derivations.sh, sprint-status.sh or sprint-status.json, which the helper's scope join reads out of the distribution" >&2; exit 2; }
+
+printf 'HERMETIC-CONSUMED core/scripts/check-owed-derivations.sh\n'
+printf 'HERMETIC-CONSUMED core/scripts/sprint-status.sh\n'
+printf 'HERMETIC-CONSUMED core/schemas/sprint-status.json\n'
 
 WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
@@ -84,11 +108,20 @@ rows_of() { awk -F'\t' -v s="$1" '$1 == s { print $2 }' <<<"$2"; }
 # nrows <status> <output> -> how many rows carry that status (awk, so zero prints 0 and exits 0)
 nrows() { awk -F'\t' -v s="$1" '$1 == s { n++ } END { print n + 0 }' <<<"$2"; }
 
+# seed_cls <dist> -- the scope classifier and what it loads, into <dist>'s working tree
+seed_cls() {
+  mkdir -p "$1/core/scripts" "$1/core/schemas"
+  cp "$CLASSIFIER" "$1/core/scripts/check-owed-derivations.sh"
+  cp "$SPRINTSH" "$1/core/scripts/sprint-status.sh"
+  cp "$SPRINTSCHEMA" "$1/core/schemas/sprint-status.json"
+}
+
 # ---- the distribution ---------------------------------------------------------------------
 DIST="$WORK/dist"
 mkdir -p "$DIST/core/scripts"
 g "$DIST" init -q
 printf 'qqprev\n' > "$DIST/core/scripts/toy.sh"
+seed_cls "$DIST"
 g "$DIST" add -A && g "$DIST" commit -qm prev
 PREV="$(g "$DIST" rev-parse HEAD)"
 printf 'qqalpha\nqqgamma\n' > "$DIST/core/scripts/toy.sh"
@@ -299,6 +332,7 @@ mkdir -p "$DIST2/core/scripts" "$DIST2/core/rules"
 g "$DIST2" init -q
 printf 'qqsu\n' > "$DIST2/core/scripts/su.sh"; printf 'qqkeep\n' > "$DIST2/core/scripts/keep.sh"
 printf 'rule-a\n' > "$DIST2/core/rules/su.md"
+seed_cls "$DIST2"
 g "$DIST2" add -A && g "$DIST2" commit -qm base2
 BASE2="$(g "$DIST2" rev-parse HEAD)"
 printf 'qqother\n' > "$DIST2/core/scripts/su.sh"; printf 'rule-b\n' > "$DIST2/core/rules/su.md"
@@ -640,6 +674,92 @@ ck "A19o the superseded derivation is counted on the INFO row" "$(printf 'INFO\t
 ck "A19p the LATER copy carries the verdict" "$(printf 'NEWLY-FAILING\t%s\t' "$K19_LATE")" "$OUT19N"
 nk "A19q and the superseded copy gets no row" "$(printf '\t%s\t' "$K19_EARLY")" "$OUT19N"
 
+# ---- S: the join is SCOPED to the current sprint and the living documents ---------------------
+# The classifier is the real one, read out of the distribution at <theirs>. S1 seeds W1's world with
+# its only derivation-bearing file in a PAST sprint (s0) beside a canonical saying sprint 1 is in
+# progress, plus one LIVING file that carries no derivation, so the corpus is not empty and the
+# refusal is the join's "no fenced derivation" one rather than "lists no markdown file". S1c is the
+# same world with the story under s1/ (CURRENT), the one property that differs: it must read as W1.
+CANON="_bmad-output/implementation-artifacts/sprint-status.yaml"
+build_scoped() { # build_scoped <dir> <slot dir under planning-artifacts> [<extra: past|none>]
+  local c="$1" slot="$2" dest
+  build_consumer "$c" "$THEIRS_BREAK" 1 real
+  dest="_bmad-output/planning-artifacts/$slot/story.md"
+  mkdir -p "$c/${dest%/*}" "$c/${CANON%/*}"
+  mv "$c/$SF" "$c/$dest"
+  printf '# Product requirements\n\nNo recorded derivation here.\n' > "$c/_bmad-output/planning-artifacts/prd.md"
+  printf 'sprint: 1\nstatus: in_progress\n' > "$c/$CANON"
+  if [ "${3:-none}" = past ]; then
+    mkdir -p "$c/_bmad-output/planning-artifacts/s0"
+    sed 's/Story/Old story/' "$c/$dest" > "$c/_bmad-output/planning-artifacts/s0/old.md"
+  fi
+  g "$c" add -A _bmad-output && g "$c" commit -qm "story under $slot"
+}
+WS1="$WORK/ws1-past";      build_scoped "$WS1"  s0
+WS1C="$WORK/ws1c-current"; build_scoped "$WS1C" s1
+WS3S="$WORK/ws3-both";     build_scoped "$WS3S" s1 past
+K_S1="_bmad-output/planning-artifacts/s1/story.md:$(grep -n -- 'grep -c qqalpha' "$WS1C/_bmad-output/planning-artifacts/s1/story.md" | head -1 | cut -d: -f1)"
+case "$K_S1" in *: ) echo "FIXTURE ERROR: the seeded S1 derivation line was not found" >&2; exit 2 ;; esac
+if [ "$(tr -d ' \n' < "$WS1/$CANON")" = "sprint:1status:in_progress" ] && [ ! -f "$WS1/$SF" ] \
+   && [ -f "$WS1/_bmad-output/planning-artifacts/s0/story.md" ] && [ -f "$WS1C/_bmad-output/planning-artifacts/s1/story.md" ]; then
+  ok "S0 seed: a canonical names sprint 1 in progress, and the story sits under s0 in one world and s1 in the other"
+else
+  bad "S0 seed: the scoped worlds were not built -- S1 and S1c are unreadable"
+fi
+dd "$WS1"; OUTS1="$OUT"; RCS1="$RC"
+rc_is "S1a the only derivation-bearing file is a PAST sprint's -> exit 2, a refusal" 2 "$RCS1"
+ck "S1b and the refusal is the join's: no fenced derivation names a path (a past sprint's file has no row to clear)" "no fenced derivation names a path" "$OUTS1"
+nk "S1e and no derivation was run: nothing is named NEWLY-FAILING" "NEWLY-FAILING" "$OUTS1"
+dd "$WS1C"; OUTS1C="$OUT"; RCS1C="$RC"
+rc_is "S1c near-miss: the same world, the story under s1/ (CURRENT) -> exit 1" 1 "$RCS1C"
+ck "S1d and qqalpha is NEWLY-FAILING" "$(printf 'NEWLY-FAILING\t%s\t' "$K_S1")" "$OUTS1C"
+dd "$WS3S"; OUTS3="$OUT"; RCS3="$RC"
+rc_is "S3a a CURRENT file and a PAST file both break -> exit 1 on the CURRENT one alone" 1 "$RCS3"
+ck "S3b the CURRENT file is NEWLY-FAILING" "$(printf 'NEWLY-FAILING\t%s\t' "$K_S1")" "$OUTS3"
+rc_is "S3c exactly one NEWLY-FAILING row: the past sprint's file was never run" 1 "$(nrows NEWLY-FAILING "$OUTS3")"
+ck "S3d the dropped file is NAMED by an INFO out-of-scope row" "$(printf 'INFO\tout-of-scope\tPAST\t_bmad-output/planning-artifacts/s0/old.md')" "$OUTS3"
+nk "S3e and the CURRENT file is not named out-of-scope" "$(printf 'INFO\tout-of-scope\tPAST\t_bmad-output/planning-artifacts/s1')" "$OUTS3"
+
+# S2: a classifier that cannot run is a refusal, never a guessed scope. THEIRS deletes it from the
+# distribution and the consumer carries no copy, so neither source exists. The near-miss is the same
+# distribution whose THEIRS keeps the classifier, and it reaches W1's verdict.
+DIST3="$WORK/dist3"
+mkdir -p "$DIST3/core/scripts"
+g "$DIST3" init -q
+printf 'qqprev\n' > "$DIST3/core/scripts/toy.sh"; seed_cls "$DIST3"
+g "$DIST3" add -A && g "$DIST3" commit -qm prev3
+PREV3="$(g "$DIST3" rev-parse HEAD)"
+printf 'qqalpha\nqqgamma\n' > "$DIST3/core/scripts/toy.sh"
+g "$DIST3" add -A && g "$DIST3" commit -qm base3
+BASE3="$(g "$DIST3" rev-parse HEAD)"
+printf 'qqgamma\nqqdelta\n' > "$DIST3/core/scripts/toy.sh"
+g "$DIST3" add -A && g "$DIST3" commit -qm theirs3-keep
+THEIRS3_KEEP="$(g "$DIST3" rev-parse HEAD)"
+g "$DIST3" checkout -q "$BASE3" 2>/dev/null
+printf 'qqgamma\nqqdelta\n' > "$DIST3/core/scripts/toy.sh"
+g "$DIST3" rm -q core/scripts/check-owed-derivations.sh
+g "$DIST3" add -A && g "$DIST3" commit -qm theirs3-no-classifier
+THEIRS3_GONE="$(g "$DIST3" rev-parse HEAD)"
+if [ -n "$PREV3" ] && [ -n "$BASE3" ] && [ "$THEIRS3_KEEP" != "$THEIRS3_GONE" ] \
+   && g "$DIST3" cat-file -e "${THEIRS3_KEEP}:core/scripts/check-owed-derivations.sh" 2>/dev/null \
+   && ! g "$DIST3" cat-file -e "${THEIRS3_GONE}:core/scripts/check-owed-derivations.sh" 2>/dev/null; then
+  ok "S2 seed: one THEIRS carries the classifier and the other deletes it, both off the same BASE"
+else
+  bad "S2 seed: the classifier is not present at one THEIRS and absent at the other -- S2 is unreadable"
+fi
+build3() { ( DIST="$DIST3"; BASE="$BASE3"; PREV="$PREV3"; build_consumer "$1" "$2" 1 real ); }
+WS2="$WORK/ws2-no-classifier"; build3 "$WS2" "$THEIRS3_GONE"
+WS2C="$WORK/ws2c-classifier";  build3 "$WS2C" "$THEIRS3_KEEP"
+[ ! -e "$WS2/scripts/ai-dlc/check-owed-derivations.sh" ] \
+  || { echo "FIXTURE ERROR: the S2 consumer carries a classifier copy, so the fallback would be reachable" >&2; exit 2; }
+dd "$WS2"; OUTS2="$OUT"; RCS2="$RC"
+rc_is "S2a no classifier at THEIRS and none on the consumer -> exit 2" 2 "$RCS2"
+ck "S2b and the refusal is the scope one" "$(printf 'REFUSED\tscope\t')" "$OUTS2"
+nk "S2c and no verdict is printed over an unknown scope" "VERDICT" "$OUTS2"
+dd "$WS2C"; OUTS2C="$OUT"; RCS2C="$RC"
+rc_is "S2n near-miss: THEIRS keeps the classifier -> exit 1" 1 "$RCS2C"
+ck "S2o and it names the broken derivation" "$(printf 'NEWLY-FAILING\t%s\t' "$K_ALPHA")" "$OUTS2C"
+
 # ---- A10: the default base root leaves no worktree and no scratch behind --------------------
 # CONTROL FIRST: the counter must see a worktree when one exists, or a 1 below is a counter that
 # cannot count.
@@ -653,7 +773,7 @@ else
   bad "A10a control: the counter read $c_ctl on a repository carrying one extra worktree, expected 2 -- A10b is unreadable"
 fi
 leaked=""
-for c in "$W1" "$W2" "$W3" "$W5" "$W5P" "$WSU" "$WSUN" "$W13" "$W13N" "$WS3" "$WS3N" "$W16" "$W16N" "$W17" "$W17N" "$W18" "$W19"; do
+for c in "$W1" "$W2" "$W3" "$W5" "$W5P" "$WSU" "$WSUN" "$W13" "$W13N" "$WS3" "$WS3N" "$W16" "$W16N" "$W17" "$W17N" "$W18" "$W19" "$WS1" "$WS1C" "$WS3S" "$WS2" "$WS2C"; do
   # W6 is left out on purpose: it carries the seeded LEAKED worktree A12c asserts is kept.
   n="$(wtcount "$c")"; [ "$n" = 1 ] || leaked="$leaked $(basename "$c")=$n"
 done

@@ -75,14 +75,17 @@
 # and must not infer, which files on disk are stories.
 #
 # ROTATION HAPPENS AT PIPELINE START, NOT AT CLOSE. `roll` freezes the closed sprint to
-# s<N>/sprint-status.yaml and writes the new envelope in ONE step. The reference consumer
-# rotates at retro-close instead, which prunes the `status: done` block that sprint-id must read and
-# leaves a preamble-only file no rule covers — a window its lead fills BY HAND. Rotating at start
-# keeps the predecessor's terminal state readable exactly until its successor exists.
+# s<N>/sprint-status.yaml and writes the new envelope in ONE step. A rotate-at-close prunes the
+# `status: done` block that sprint-id must read and leaves a preamble-only file; the reference
+# consumer did that until it retired its close-sweep. Rotating at start keeps the predecessor's
+# terminal state readable exactly until its successor exists, and sprint-id REFUSES a
+# preamble-only canonical (exit 1) rather than reconstruct the number from the frozen archives.
 #
 # Exit codes:
 #   0  — success
 #   1  — fail-closed (schema unreadable, canonical malformed, byte-verify failed)
+#        sprint-id also: a canonical exists with no top-level `sprint:` key (preamble-only). The
+#        current-state record is gone; the number is never re-derived from the frozen archives.
 #   2  — usage error
 #   3  — HARD_BLOCK: the two canonical copies disagree on `sprint:`. Never guess which is
 #        authoritative (route.md Step 6 rule 5). Surface both and wait for the operator.
@@ -296,10 +299,10 @@ PRIMARY = "implementation"
 # a path that failed their own pre-push. Measured with a control in one tree: the old form was the
 # single BLOCKING row and the migrated sibling was not reported at all.
 #
-# THE WRITER MOVES; THE READER MUST NOT. Every consumer that has not run the migration still holds
-# its history under the old spelling, so `max_frozen` reads BOTH — and that reader is the one whose
-# empty answer falls back to sprint 1, "which would silently re-stamp a live project as greenfield".
-# A writer-only fix would leave a migrated tree's archive invisible to the fallback it guards.
+# THE WRITER MOVES; THE OLD SPELLING STAYS READABLE. Every consumer that has not run the migration
+# still holds its history under the old spelling, so `roll`'s idempotency check honours a freeze in
+# EITHER form rather than mint a second archive beside it. No resolver reads these archives: the
+# current sprint comes from the canonical's own `sprint:` + `status:` (resolve_sprint_id).
 def frozen_path(view, n):
     """The grammar form: the sprint slot is the DIRECTORY, never the basename."""
     return VIEWS[view].parent / ("s%d" % n) / "sprint-status.yaml"
@@ -308,26 +311,9 @@ def legacy_frozen_path(view, n):
     """The pre-migration form. Read, never written."""
     return VIEWS[view].parent / "sprint-status" / ("sprint-%d.yaml" % n)
 
-def frozen_sprints(view):
-    """Every frozen sprint number this view carries, in EITHER spelling."""
-    parent = VIEWS[view].parent
-    ns = set()
-    if parent.is_dir():
-        for d in parent.glob("s*"):
-            m = re.match(r"^s([0-9]+)$", d.name)
-            if m and (d / "sprint-status.yaml").is_file():
-                ns.add(int(m.group(1)))
-    legacy = parent / "sprint-status"
-    if legacy.is_dir():
-        for f in legacy.glob("sprint-*.yaml"):
-            m = re.match(r"^sprint-([0-9]+)\.yaml$", f.name)
-            if m:
-                ns.add(int(m.group(1)))
-    return ns
-
 def parse(text):
-    """Return (sprint:int|None, status:str|None). None means the key is absent — which is a REAL
-    state, not an error: a rotated-at-close canonical is preamble-only and carries neither."""
+    """Return (sprint:int|None, status:str|None). None means the key is absent: a preamble-only
+    canonical, which `sprint-id` and `close` refuse and `roll` steps past."""
     m = SPRINT_RE.search(text)
     s = STATUS_RE.search(text)
     return (int(m.group(1)) if m else None,
@@ -338,10 +324,6 @@ def read_view(view):
     if not p.is_file():
         return None
     return parse(p.read_text())
-
-def max_frozen(view):
-    ns = frozen_sprints(view)
-    return max(ns) if ns else None
 
 def render_header():
     return "\n".join(schema["header_lines"])
@@ -370,18 +352,29 @@ def resolve_sprint_id():
     if rec is None:
         return 1
 
-    sprint, status = rec
+    # THE CURRENT-STATE RECORD IS THE CANONICAL'S OWN `sprint:` + `status:` LINES, and nothing
+    # else. `close` writes `status: done` beside the `sprint:` it leaves in place, and `roll` replaces
+    # both only when the successor exists, so a tree driven by core's own writers always carries
+    # them. History is never read here: a resolver that derives the current sprint from the frozen
+    # `s<N>/` archives returns a different answer the moment those archives are deleted, and
+    # deleting history must change nothing.
+    #
+    # A view that EXISTS with no `sprint:` key is therefore a destroyed record, never a state to
+    # resolve. Read as greenfield it re-stamps a live project from 1 and destroys the prior
+    # sprint's drafts, and every scoped reader silently collapses to `s1/`. It REFUSES, the same
+    # exit `close` gives the same state, and it refuses when ANY view is degenerate — even beside a
+    # view that does carry the key — because that is the tree `close` would refuse too, and
+    # picking the readable copy is a guess about which one the operator meant to keep.
+    degenerate = sorted(v for v, r in seen.items() if r[0] is None)
+    if degenerate:
+        fail("the current-state record is gone: %s exist%s with no top-level `sprint:` key. The "
+             "current sprint is read ONLY from that record (`sprint: <N>` + `status:`), never "
+             "derived from the frozen archives. Restore `sprint: <N>` and `status:` (`done` if "
+             "sprint <N> closed) in %s before anything resolves."
+             % (", ".join(str(VIEWS[v]) for v in degenerate), "s" if len(degenerate) == 1 else "",
+                "that file" if len(degenerate) == 1 else "each"), code=1)
 
-    # The state route.md Step 6 has NO CASE for: the file EXISTS but carries no `sprint:` key.
-    # A rotate-at-close canonical is pruned to its preamble, so rule 2 ("file does not exist") does
-    # not match and rules 3/4 branch on a `status:` that is absent. Derive from the durable record
-    # instead of guessing — and never fall back to 1, which would silently re-stamp a live project
-    # as greenfield and destroy the prior sprint's drafts.
-    if sprint is None:
-        frozen = max((n for n in (max_frozen(v) for v in VIEWS) if n is not None), default=None)
-        if frozen is not None:
-            return frozen + 1
-        return 1
+    sprint, status = rec
 
     # Rule 3: the prior sprint is closed and a new pipeline is starting.
     if status == "done":

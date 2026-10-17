@@ -551,8 +551,9 @@ the exact defect the stamp exists to prevent.
 The script also decides the case a hand-applied rule set has no branch for:
 a canonical that exists but carries no `sprint:` key, the state a
 rotate-at-close leaves behind. Read as "greenfield" it restamps a live
-project from sprint 1, so the script derives that case from the frozen
-archives instead.
+project from sprint 1, and the frozen archives are history, not the current
+state, so the script REFUSES it with exit 1 and names the file. Restore
+`sprint: <N>` and `status:` in that file; never resolve the number by hand.
 
 **Rotate the sprint envelope (MANDATORY).** Immediately after resolving
 `sprint_id`, run:

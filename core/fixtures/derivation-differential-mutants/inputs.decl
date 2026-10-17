@@ -2,7 +2,12 @@
 # helper lifts functions out of apply.sh and preclassify.sh), the sibling driver derivation-differential/run.sh (re-executed
 # against each copy; declared whole), the shared preamble that driver sources, and the real validator the helper runs on both
 # sides. scripts/install.sh is the marker run.sh walks up for to find its root (distribution coordinates; it is not read).
+# The driver also seeds the real scope classifier, the sprint-status reader it runs and that reader's schema into every
+# distribution it builds, so the helper's join reads them; the driver announces them.
 !core/skills/ai-dlc-update/reconcile/derivation-differential.sh
+core/scripts/check-owed-derivations.sh
+core/scripts/sprint-status.sh
+core/schemas/sprint-status.json
 core/skills/ai-dlc-update/reconcile/
 core/fixtures/derivation-differential/
 core/fixtures/lib/

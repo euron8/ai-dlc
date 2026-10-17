@@ -34902,3 +34902,46 @@ Owner: ai-dlc-60, as a release behind U-b (lead ai-dlc-9c's assignment): an upda
 
 verify: manual
 
+## BL-631 — shipped mechanisms read past sprints' artifacts, so a pull or gate can fail, or owe work, because of a historical artifact
+
+**DEFECT.** Operator ruling, relayed by lead ai-dlc-9c: "I'm stating that I don't care if a fixture or check fails against a historical sprint artifact." Earlier: "if someone deleted all of graph consumer's sprint history, it should not matter whatsoever" and "it's a nice to have, not a need." The candidates come from a read-only Sonnet census; intake checked each cite at origin/main `f4ca6764`. The open backlog has no entry on it (0 matches for "historical sprint" or "past sprint").
+
+Readers that take in past sprints, each confirmed at the cited lines:
+1. `core/skills/ai-dlc-update/reconcile/apply.sh:1350-1407`, `vd_join`: lists every `*.md` under the consumer's `_bmad-output/` (`find "$4" -type f -name '*.md'`) and turns the result into the pull's `WORKLIST artifact-derivations` / `artifact-derivations-unreadable` / `-unchecked` rows. A past sprint's artifact can drive the pull's row.
+2. `core/scripts/validate-artifact-derivations.sh:800-806`: given a directory, it walks every `*.md` under it.
+3. `core/skills/ai-dlc-update/reconcile/derivation-differential.sh`: its NEWLY-FAILING set (`:30`, "THIS PULL'S WORK"; exit 1 at `:41`) is taken over `_bmad-output/**/*.md` (`:9`), the same corpus.
+4. `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:2287-2291` and `:2524-2525` (at `f4ca6764`): read `push-candidate-ledger.archive.md` into the prefix labels (via `corpus_labels`) and into the sibling entries.
+5. `core/scripts/validate-mandatory-rules.sh:574-581` and `:689-692`: Check 6 counts story files under every `stories/` directory in the area, and the FAIL at `:689` reports that count. Whether a past sprint's story can change the verdict, and not only the message, is for the owner to read at `:683-692`.
+6. `core/hooks/ai-dlc-gate-remediation-guard.sh:1315`: globs `planning-artifacts/s*/gate-*repair*.md` across every sprint, though `:1317` keeps only a record carrying the live nonce, so a historical record is used only if it carries that nonce.
+7. `core/scripts/validate-artifact-budget.sh:1376-1379`: with no canonical live log, it falls back to `find … -name gate-log.md | head -1`, which can return an archived sprint's log. The order of `find` is unspecified, so which log it gets is not stable either.
+
+OPEN QUESTIONS, not filed as defects. Each needs SOME prior state, so the question is whether that state comes from a history read or from a current-state record:
+- `core/scripts/sprint-status.sh:296-381`, `max_frozen` / `frozen_sprints`: derives the current sprint number from the frozen archives, in both spellings.
+- I81 SPRINT_PENDING, `core/hooks/ai-dlc-continue.sh:1146-1152` and `core/hooks/ai-dlc-acknowledge.sh:416-421`: tests for `s(N-1)/` and for any later `s*/`.
+- `core/scripts/validate-trunk-audit-gate.sh`: takes its genesis from the prior sprint's `audit-anchors.md` entry when there is no watermark (`:73`).
+
+Owed: scope each reader in items 1-7 to the current sprint (or to the current pull's own range), so a failing or absent historical artifact can neither block nor owe anything. No prose rule. Answer each open question with a reason. Receipt per reader: the verdict is the same with every past sprint's artifacts deleted and with a deliberately failing artifact seeded into a past sprint. Control: the same failing artifact in the CURRENT sprint still fails.
+
+**LANDED (v0.819.0, verified 820a152e).** Items 1 and 3: a pull's `artifact-derivations` row and `derivation-differential.sh` read only what `check-owed-derivations.sh --scope-batch` calls CURRENT or LIVING, and the classifier comes from the distribution at `<theirs>`; with none, `DECISION artifact-derivations-unscoped`. Item 4: `ledger-reverify.sh` reads no archive and counts no closed entry, so bare prefixes are always AMBIGUOUS and siblings must be open live entries. Item 5: Check 6 counts the flat layout plus the current slot. Item 7: Check 15's gate-log fallback takes the first CURRENT or LIVING log. Items 2 and 6 close by receipt. Open question 1: `sprint-id` reads only the canonical's own `sprint:`/`status:` and refuses a preamble-only canonical; questions 2 and 3 are NOTEs. Each changed fixture asserts the history-deleted twin, and all 14 exit 0 through `hermetic-run.sh` with `required_missing=0`.
+
+verify: manual
+
+## BL-645 — the owed-derivation classifier misses two of the four history companions the consolidation step writes, so a stale derivation in an archive refuses the planning gate
+
+**DEFECT.** Found by ai-dlc-53 on graph; widened and confirmed by ai-dlc-c2 (formerly 60); tiered DEFECT against 0.808.0 by lead ai-dlc-71. Intake re-derived it read-only at origin/main `b307a96b`. Subject: `core/scripts/check-owed-derivations.sh` `is_history()` (`:161`), shipped in 0.808.0 (BL-587).
+- The HISTORY class is the set of exact names an ai-dlc writer produces as history. The exact-name case (`:176`) lists `prd-history.md` and `product-brief-history.md` (each 2 mentions in the script). `carry-over-backlog-archive.md` and `architecture-history.md` have 0 mentions.
+- The writer names FOUR companions: `core/skills/ai-dlc/steps/artifact-consolidation.md:127-129` ("Append the history relocation draft to the companion file … verbatim", listing `prd-history.md` / `product-brief-history.md` / `carry-over-backlog-archive.md` / `docs/architecture-history.md`), and `core/skills/ai-dlc/SKILL.md:696-699` (Rule (a), "cut-and-paste, verbatim", the same four pairs). `core/skills/ai-dlc/steps/retro.md:650-652` also writes `carry-over-backlog-archive.md` ("cut-and-paste, verbatim").
+- Measured with the shipped program in a clean worktree at `b307a96b`: `check-owed-derivations.sh --scope` answers LIVING for `_bmad-output/planning-artifacts/carry-over-backlog-archive.md`, `_bmad-output/architecture-history.md`, `_bmad-output/planning-artifacts/architecture-history.md` and `docs/architecture-history.md`. Controls in the same run: `_bmad-output/planning-artifacts/prd-history.md` answers HISTORY, and the live `carry-over-backlog.md` answers LIVING.
+- Consequence: the writer records a stale derivation in either archive as owed, and gate Check 37 refuses the planning gate on it, though these files are verbatim archives, which is exactly what the HISTORY class exists to exclude. On graph, 53 measured `carry-over-backlog-archive.md` carrying 2 derived fences, one naming a core path.
+
+Owed (inside BL-631, by 71's ruling):
+1. Add both names to `is_history`'s exact-name case.
+2. Add an arm binding `is_history`'s companion names to the writer's companion list, so a fifth companion cannot be missed the same way.
+3. Fixture: one HISTORY world per new name, plus the near-miss `carry-over-backlog.md` (the live file), which must stay LIVING. Re-measure the M23 substring mutant's kill set and report it to the lead before editing.
+
+Owner: ai-dlc-53, closed by BL-631.
+
+**LANDED (v0.819.0, verified 820a152e).** `is_history` names `carry-over-backlog-archive.md` and `architecture-history.md` exactly, beside `prd-history.md` and `product-brief-history.md`; `carry-over-backlog.md` and `architecture.md` stay LIVING. Arm Bh derives the four live -> history pairs from SKILL.md and fails on a missing companion or a listed live side; its self-probe M25 is killed. Ha7-Ha9 pin the new names and three near-misses stay LIVING. M23 measures [Ha1 Ha2 Ha3 Hn], unchanged. On graph, `carry-over-backlog-archive.md` now reads HISTORY.
+
+verify: manual
+
