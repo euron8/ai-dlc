@@ -132,8 +132,10 @@ mutate M2-reader-treats-past-as-open reader "Sp1 Sp5 Sp7" \
 # M11 (RE-ANCHORED by BL-631): the helper runs an UNSCOPED join, so a past sprint's break is run, printed
 # NEWLY-FAILING and offered to the writer. The writer's own PAST arm, this mutant's old subject, was deleted
 # once the join itself kept only CURRENT and LIVING files; the property moved there, so the mutation does
-# too: the helper's lift of vd_join() kills the scope gate on the way in. DECLARED SET: measured in the slot
-# and sent to the lead before it is written; the placeholder below is the predicted owner set.
+# too: the helper's lift of vd_join() kills the scope gate on the way in. DECLARED SET, measured: Sp3a Sp3b Hw1
+# Hw2 are the out-of-scope rows the dropped files no longer print; Wb Wc Wd We Wf Wg are the writer world,
+# whose past-sprint break the unscoped join now runs, prints and records (BL-631 item 3, the helper's join). W0
+# (exit 1 without --record-owed) holds: the LIVING break fails either way.
 # Both strings carry single quotes, so they are read from quoted heredocs, byte for byte.
 M11_ANCHOR="$(cat <<'M11A'
 eval "$(awk '/^vd_join\(\) \{/,/^\}/' "$SELF/apply.sh" 2>/dev/null)"
@@ -143,10 +145,12 @@ M11_SED="$(cat <<'M11S'
 s#^eval "\$(awk '/\^vd_join\\(\\) \\{/,/\^\\}/' "\$SELF/apply.sh" 2>/dev/null)"$#eval "$(awk '/^vd_join\\(\\) \\{/,/^\\}/' "$SELF/apply.sh" 2>/dev/null | sed 's/^    if \\[ "\\$VD_HITS" -gt 0 \\] || \\[ "\\$VD_SCANNED" -lt "\\$VD_LISTED" \\]; then$/    if false; then/')"#
 M11S
 )"
-mutate M11-writer-records-past writer "Sp3a Sp3b Hw1 Hw2" "$M11_ANCHOR" "$M11_SED"
+mutate M11-writer-records-past writer "Sp3a Sp3b Hw1 Hw2 Wb Wc Wd We Wf Wg" "$M11_ANCHOR" "$M11_SED"
 
 # M12: the classifier reads LIVING as PAST (a prd.md row stops being enforced, and the writer drops it).
-mutate M12-classifier-living-as-past reader "B1b B1f B3a B5d B7a Bt1b Gf Ha3 Ha4 Ha5 Hc1 Hn Hw1 Sc5 Sc7 Sc8 Sl1 Sl2 Sp3a Sp4 Wc Wd We Wf Wg" \
+# Hw2 Sp3b are BL-631's re-pointed out-of-scope rows; W0 Wb are the writer world's exit, which moves because the
+# helper's join now reads this classifier and drops the LIVING break as PAST (BL-631 item 3).
+mutate M12-classifier-living-as-past reader "B1b B1f B3a B5d B7a Bt1b Gf Ha3 Ha4 Ha5 Hc1 Hn Hw1 Hw2 Sc5 Sc7 Sc8 Sl1 Sl2 Sp3a Sp3b Sp4 W0 Wb Wc Wd We Wf Wg" \
   '  SCOPE_TOKEN=LIVING' \
   's/^  SCOPE_TOKEN=LIVING$/  SCOPE_TOKEN=PAST/'
 
@@ -156,13 +160,16 @@ mutate M13-classifier-substring-segment reader "Sc1 Sp7" \
   's/^    if \[ "\$((10#\$SP_N))" -eq "\$CUR" \]; then SCOPE_TOKEN=CURRENT; else SCOPE_TOKEN=PAST; fi$/    case "$SP_N" in "$CUR"*) SCOPE_TOKEN=CURRENT ;; *) SCOPE_TOKEN=PAST ;; esac/'
 
 # M15: HISTORY is checked AFTER the sprint classification instead of first: a history file inside the
-# current sprint (s<current>/archive/) reads CURRENT again, and the writer records it.
-mutate M15-history-checked-after-current reader "Ha6 Hl3 Hr Hs Hw1 Hw2 Sl4 Wc Wd Wf Wg" \
+# current sprint (s<current>/archive/) reads CURRENT again, and the writer records it. Hw3 is BL-631's
+# never-RUN arm for the dropped history file. Wd is not declared: the writer records only what the join keeps
+# (BL-631 item 3), so the row it compares no longer moves; M3 is Wd's killer.
+mutate M15-history-checked-after-current reader "Ha6 Hl3 Hr Hs Hw1 Hw2 Hw3 Sl4 Wc Wf Wg" \
   '  if is_history "$p"; then SCOPE_TOKEN=HISTORY; return 0; fi' \
   '/^  if is_history "\$p"; then SCOPE_TOKEN=HISTORY; return 0; fi$/d;s/^  SCOPE_TOKEN=LIVING$/  if is_history "$p"; then SCOPE_TOKEN=HISTORY; return 0; fi; SCOPE_TOKEN=LIVING/'
 
-# M16: the classifier never returns HISTORY.
-mutate M16-classifier-never-history reader "Ha6 Hl3 Hr Hs Hw1 Hw2 Sl4 Wc Wd Wf Wg" \
+# M16: the classifier never returns HISTORY. Ha7 Ha8 Ha9 are BL-631's history-companion arms and Hw3 its
+# never-RUN arm; Wd is not declared, as for M15.
+mutate M16-classifier-never-history reader "Ha6 Ha7 Ha8 Ha9 Hl3 Hr Hs Hw1 Hw2 Hw3 Sl4 Wc Wf Wg" \
   '  if is_history "$p"; then SCOPE_TOKEN=HISTORY; return 0; fi' \
   's/^  if is_history "\$p"; then SCOPE_TOKEN=HISTORY; return 0; fi$/  if false; then SCOPE_TOKEN=HISTORY; return 0; fi/'
 
@@ -180,8 +187,9 @@ mutate M20-older-stem-picked-as-live reader "Hl1 Hl1b Hl2 Hl4 Hl5" \
 
 # M18: the batch classifier resolves and classifies nothing and defaults every path to LIVING. --scope runs
 # through scope_batch too, so every --scope arm moves; the reader's per-row scoping calls classify directly,
-# so Wg (the reader over the writer's over-recorded rows) stays green and is not declared.
-mutate M18-batch-defaults-living reader "Bt1b Ha1 Ha2 Ha6 Hc2 Hl1 Hl1b Hl3 Hl4 Hl6 Hl7 Hl8 Hl9 Hn Hs Hw1 Hw2 Sc1 Sc2 Sc3 Sc4 Sc6 Sc9 Sl Sl3 Sl4 Sp3a Sp3b Wc Wd Wf" \
+# so Wg (the reader over the writer's over-recorded rows) stays green and is not declared. Ha7 Ha8 Ha9 are
+# BL-631's history-companion arms, Hw3 and Sp3c its never-RUN arms; Wd is not declared, as for M15.
+mutate M18-batch-defaults-living reader "Bt1b Ha1 Ha2 Ha6 Ha7 Ha8 Ha9 Hc2 Hl1 Hl1b Hl3 Hl4 Hl6 Hl7 Hl8 Hl9 Hn Hs Hw1 Hw2 Hw3 Sc1 Sc2 Sc3 Sc4 Sc6 Sc9 Sl Sl3 Sl4 Sp3a Sp3b Sp3c Wc Wf" \
   '    classify "$_bp"' \
   's/^    classify "\$_bp"$/    SCOPE_TOKEN=LIVING/'
 
@@ -218,6 +226,7 @@ else bad "Bs2 M21-slot-re-copy-drifts: SURVIVED"; fi
 # A pair list shorter than the floor means the paragraph was respelled and the join reads nothing, so it
 # refuses rather than passing; a copy with one companion deleted must fail, so the arm can fire.
 SKILL="$ROOT/core/skills/ai-dlc/SKILL.md"
+printf 'HERMETIC-CONSUMED core/skills/ai-dlc/SKILL.md\n'
 bh_pairs() { awk '/Current-state live, history archive/ { s = 1 } s { printf "%s ", $0 } s && /Nothing is ever dropped/ { exit }' "$SKILL" \
   | grep -oE '`[a-z0-9.-]+\.md` -> `[a-z0-9.-]+\.md`' | tr -d '`' | sed 's/ -> /\t/'; }
 bh_line() { grep -E '^    prd-history\.md\|' "$1" | head -1; }

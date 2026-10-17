@@ -6041,8 +6041,8 @@ if [ "$idc_det" = 1 ]; then
   # THE SHIPPED-AT-555894ec RECORDING: shas kept for every naming kind, before the kind is decided.
   idc_case shas-every-kind "s822=cites-sha s823=cites-sha" \
     "keeping the naming shas for a cited-only or docs-only row routes the close to commits that row calls no absorption, and id-class-s822/-s823 are what see it" \
-    "    na_r=\"\$(printf '%s' \"\$na\" | awk '{print \$4}')\"" \
-    "    na_r=\"\$(printf '%s' \"\$na\" | awk '{print \$4}')\"; NA_ENTRY_SHAS=\"\$na_c\"" 1
+    "    na_r=\"\$(printf '%s' \"\$na\" | awk '{print \$3}')\"" \
+    "    na_r=\"\$(printf '%s' \"\$na\" | awk '{print \$3}')\"; NA_ENTRY_SHAS=\"\$na_c\"" 1
   # THE NAMING BRANCH ALONE dropped: the named entry falls to the find-the-release text.
   idc_case close-detail-no-shas "s818=find-release" \
     "dropping the naming-commit branch sends a named entry to a bisect it does not need, and id-class-s818 is what sees it" \

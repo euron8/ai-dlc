@@ -48,7 +48,7 @@ echo "HERMETIC-CONSUMED $VALIDATOR"
 VAL_DIR="$(dirname "$VALIDATOR")"
 SIB_SCRIPTS="check-owed-derivations.sh sprint-status.sh"
 if [ -f "$VAL_DIR/../schemas/sprint-status.json" ]; then
-  SIB_SCHEMA="$VAL_DIR/../schemas/sprint-status.json"
+  SIB_SCHEMA="$(cd "$VAL_DIR/../schemas" && pwd)/sprint-status.json"
 elif [ -f "$ROOT/.claude/schemas/sprint-status.json" ]; then
   SIB_SCHEMA="$ROOT/.claude/schemas/sprint-status.json"
 else
@@ -703,11 +703,12 @@ d_score() { # d_score <name> <must-differ:1|0> [sole-killing-world]
 d_score ctl    0
 d_score base   1
 d_score sort   1
-# W9 IS THE ONLY WORLD THAT KILLS `tail`, AND THAT IS ASSERTED, NOT OBSERVED. In
-# every two-log world here the canonical copy is readdir-LAST, so `tail -1` picks
-# the live log by accident and scores identically to the fix. Only a world with a
-# decoy on each side separates them.
-d_score tail   1 W9
+# W2 W2h W9 ARE THE ONLY WORLDS THAT KILL `tail`, AND THAT IS ASSERTED, NOT OBSERVED.
+# In every other two-log world here the canonical copy is readdir-LAST, so `tail -1`
+# picks the live log by accident and scores identically to the fix. W9 has a decoy on
+# each side; W2 and W2h (BL-631's current-sprint scope) hold only a log the classifier
+# refuses, which `tail -1` reads without asking.
+d_score tail   1 "W2 W2h W9"
 d_score hard   1
 d_score uncond 1
 
@@ -944,6 +945,19 @@ mkdir -p "$WK/_bmad-output/planning-artifacts/s300/archive/cycle-1" || exit 2
 rm -f "$WK/$E_LIVE"
 e_snap "$WK" "- last_gate_passed: implementation (gate-3) 2026-08-20T09:00:00Z"
 
+# W-K2 The same log and snapshot under the CURRENT sprint (s1, not archive). The
+#      fallback selects it, it is not the canonical live log, and the snapshot names
+#      a different gate, so there is nothing to cross-check and the tree passes.
+#      W-K is refused before the canonical test; this is the world that reaches it.
+e_new WK2
+mkdir -p "$WK2/_bmad-output/planning-artifacts/s1/cycle-1" || exit 2
+{ printf '# Gate Log\n\n'
+  e_sec architecture "$T2" "$(e_cell 4200)"
+  e_sec stories      "$T3" "$(e_cell 5076)"
+} > "$WK2/_bmad-output/planning-artifacts/s1/cycle-1/gate-log.md"
+rm -f "$WK2/$E_LIVE"
+e_snap "$WK2" "- last_gate_passed: implementation (gate-3) 2026-08-20T09:00:00Z"
+
 # W-L  The snapshot names a LATER gate whose section logged NO Check 14 row
 #      (the reference consumer's implementation gate-3 shape). The refusal must
 #      name that section, not call the snapshot stale.
@@ -982,9 +996,9 @@ e_new WO
 } > "$WO/$E_LIVE"
 e_snap "$WO" "- last_gate_passed: planning (stories) 2026-08-14"
 
-E_NAMES="W-A W-B W-C W-D W-D2 W-E W-E2 W-F W-F2 W-F3 W-G W-H W-I W-J W-K W-L W-M W-N W-O"
-E_ROOTS="$WA $WB $WC $WD $WD2 $WE $WE2 $WF $WF2 $WF3 $WG $WH $WI $WJ $WK $WL $WM $WN $WO"
-E_WANT="PASS/5076/- PASS/5076/- PASS/5492/- FAIL1/-/STALE FAIL1/-/STALE FAIL1/-/STALE PASS/5076/- FAIL1/-/STALE PASS/5076/- PASS/5076/- PASS/5076/- PASS/5076/- FAIL1/-/TIE FAIL1/-/NOTS FAIL1/-/- FAIL1/-/NOROW@$(e_line "$WL/$E_LIVE" gate-3) FAIL1/-/NOROW@$(e_line "$WM/$E_LIVE" gate-3b) FAIL1/-/STALE PASS/5076/-"
+E_NAMES="W-A W-B W-C W-D W-D2 W-E W-E2 W-F W-F2 W-F3 W-G W-H W-I W-J W-K W-K2 W-L W-M W-N W-O"
+E_ROOTS="$WA $WB $WC $WD $WD2 $WE $WE2 $WF $WF2 $WF3 $WG $WH $WI $WJ $WK $WK2 $WL $WM $WN $WO"
+E_WANT="PASS/5076/- PASS/5076/- PASS/5492/- FAIL1/-/STALE FAIL1/-/STALE FAIL1/-/STALE PASS/5076/- FAIL1/-/STALE PASS/5076/- PASS/5076/- PASS/5076/- PASS/5076/- FAIL1/-/TIE FAIL1/-/NOTS FAIL1/-/- PASS/5076/- FAIL1/-/NOROW@$(e_line "$WL/$E_LIVE" gate-3) FAIL1/-/NOROW@$(e_line "$WM/$E_LIVE" gate-3b) FAIL1/-/STALE PASS/5076/-"
 
 # EXIT/CITED/CLASS. The class is read from the refusal text, most specific first.
 e_verdict() { # e_verdict <script> <root>
@@ -1034,10 +1048,10 @@ for r in $E_ROOTS; do
   n="$(LC_ALL=C awk '/^## /{s=NR} /^\| \[core\] 14 /{h[s]=1} END{c=0; for(k in h)c++; print c}' "$l")"
   [ "$n" -ge 2 ] && e_nsecs=$((e_nsecs+1))
 done
-if [ "$e_nsecs" -eq 19 ]; then
-  ok "all 19 selection worlds carry two or more row-bearing sections (none takes the fast path)"
+if [ "$e_nsecs" -eq 20 ]; then
+  ok "all 20 selection worlds carry two or more row-bearing sections (none takes the fast path)"
 else
-  bad "only $e_nsecs of 19 selection worlds carry two or more row-bearing sections"
+  bad "only $e_nsecs of 20 selection worlds carry two or more row-bearing sections"
 fi
 
 # --- 14. THE SHIPPED PROGRAM'S VERDICT IN EVERY WORLD -------------------------
@@ -1209,7 +1223,7 @@ e_score oneline    W-F
 e_score noprec     W-G
 e_score tie        W-I
 e_score skipnots   W-J
-e_score xcanon     W-K
+e_score xcanon     W-K2
 e_score nohit      W-L W-M
 e_score dateabsent W-N
 e_score noprior    W-F3

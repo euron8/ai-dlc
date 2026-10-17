@@ -51,11 +51,13 @@ if [ -z "$SUBJ" ]; then
   exit 0
 fi
 SUBJ="$(cd "$(dirname "$SUBJ")" && pwd)/$(basename "$SUBJ")"
+printf 'HERMETIC-CONSUMED %s\n' "$SUBJ"
 
 VALIDATOR="$(pick "$HERE/../../scripts/validate-artifact-derivations.sh" \
                   "$HERE/../../../scripts/ai-dlc/validate-artifact-derivations.sh" \
                   "$HERE/../../../core/scripts/validate-artifact-derivations.sh")"
 [ -n "$VALIDATOR" ] || { echo "FIXTURE ERROR: cannot locate validate-artifact-derivations.sh, which the helper runs on both sides" >&2; exit 2; }
+printf 'HERMETIC-CONSUMED %s\n' "$(cd "$(dirname "$VALIDATOR")" && pwd)/$(basename "$VALIDATOR")"
 
 # THE SCOPE CLASSIFIER IS THE REAL ONE TOO. The helper's join keeps only the artifact files that
 # `check-owed-derivations.sh --scope-batch` calls CURRENT or LIVING, and reads that script, its sibling
