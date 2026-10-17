@@ -20,6 +20,38 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.809.0] - 2026-10-16
+
+Batch 235 (BL-622, plus intake 9 and intake 10's backlog filings). Closes BL-622. Closes no `PC-` id.
+
+### The context sensor reads an advisor turn's last message iteration, not the top-level sum (BL-622)
+
+- A lead turn that calls the advisor carries `message.usage.iterations`: the lead's `message`, the advisor's
+  `advisor_message`, then the lead's `message` again. The top-level usage adds both `message` reads, so one advisor
+  call roughly doubled `ai-dlc-context-sensor.sh`'s figure. Measured on the graph consumer's s319 lead: top level
+  554953 against a real 278049 (the next turn read 279085), a false IMMINENT at about 132% of a window the lead was
+  about 66% into.
+- The sensor now takes the LAST `type: "message"` iteration when one exists, and keeps the top-level reading for a
+  line with no iterations or none of type `message`.
+- `context-sensor` gains the arms, seeded in Claude Code's own shape. The measured advisor line reads 278049. A second
+  advisor line, where the sum, the first message, the advisor's own reading and the maximum over iterations are each a
+  different wrong number, reads 120000. A one-iteration line and a line with no iterations read exactly their top
+  level. A committed mutant restores the sum and must read 554953 and 220000 on the advisor lines while the
+  one-iteration line still reads 279085. In the release slot: 172 passed, 0 failed.
+
+### Read-set map
+
+- `context-sensor` and `self-update-join-gate` are traced at this release's tip with the sandbox tracer.
+  `self-update-join-gate` had no committed rows after 0.808.0, whose trace omitted it because a stray worktree ref was
+  present; it now has 1050, 984 of them under `.git/objects`, which the hook does not key.
+- `self-update-reinvoke-liveness`'s 13 traced rows are removed. It carries `inputs.decl`, so the hook keys it on its
+  declaration and never read them.
+
+### Backlog
+
+- Intake 9 and intake 10's filings ride this release unchanged: BL-620, BL-621, BL-636, BL-637, the BL-587 addendum,
+  BL-530's sixth instance and BL-622's own entry. None of them except BL-622 closes here.
+
 ## [0.808.0] - 2026-10-16
 
 Batch 235 (release BL-587 + BL-612 + BL-633). Closes BL-612 and BL-633. BL-587 ships PARTIAL: its snapshot pointer

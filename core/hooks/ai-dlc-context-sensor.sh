@@ -417,8 +417,17 @@ if [ -n "$LEAD_MODEL" ]; then
   fi
 fi
 
+# AN ADVISOR TURN'S TOP-LEVEL USAGE IS A SUM OVER ITS API ITERATIONS, NOT A CONTEXT SIZE. A turn
+# that calls the advisor carries `usage.iterations`: the lead's `message` call, the advisor's
+# `advisor_message`, then the lead's `message` again. The top level adds both `message` reads, so
+# one advisor call roughly doubles the figure. Measured on the graph consumer's s319 lead: top
+# level 554953, iterations 276904 / 277772 / 278049, and the next turn 279085 -- a false IMMINENT
+# at 132% of a window the lead was 66% into. The context is the LAST `message` iteration. A line
+# with no iterations, or none of type `message`, keeps the top-level reading.
 TOKENS="$(printf '%s' "$LINE" | jq '
   .message.usage
+  | ([ .iterations[]? | select(.type == "message") ] | last) as $lastmsg
+  | ($lastmsg // .)
   | (.input_tokens // 0) + (.cache_creation_input_tokens // 0) + (.cache_read_input_tokens // 0)
 ' 2>/dev/null || true)"
 case "${TOKENS:-}" in ''|*[!0-9]*) exit 0 ;; esac

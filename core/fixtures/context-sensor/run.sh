@@ -141,6 +141,62 @@ check "  and records the reading" "$(field last_measured)" "50000"
 reset
 check "no usage in transcript is silent" "$(fire no-usage.jsonl | ctx)" ""
 
+# --- an advisor turn's usage.iterations (BL-622) --------------------------------
+# The top level of an advisor turn sums its `message` iterations. Seeds are synthesized in the
+# shape Claude Code writes: the top level carries the SUM of the message iterations, and the
+# context is the LAST message iteration. ADV is the measured graph s319 line (554953 top level,
+# 278049 real). ADV2 makes every wrong reading a different number: the sum (220000), the first
+# message (100000), the advisor's own (300000) and the max over all iterations (300000) all
+# differ from the last message (120000). ONE is a one-iteration turn, which must read exactly
+# as the top level does (the near-miss: a fix that broke the common case).
+iter() { # $1 type  $2 input  $3 cache_creation  $4 cache_read
+  printf '{"type":"%s","input_tokens":%s,"cache_creation_input_tokens":%s,"cache_read_input_tokens":%s,"output_tokens":5}' "$1" "$2" "$3" "$4"
+}
+usage_line() { # $1 out  $2 top input  $3 top cache_creation  $4 top cache_read  $5 iterations json array
+  printf '{"type":"assistant","isSidechain":false,"message":{"model":"claude-haiku-4-5","usage":{"input_tokens":%s,"cache_creation_input_tokens":%s,"cache_read_input_tokens":%s,"output_tokens":9,"iterations":%s}}}\n' \
+    "$2" "$3" "$4" "$5" > "$1"
+}
+ADV="$WORK/advisor-turn.jsonl"
+usage_line "$ADV" 392 1174 553387 "[$(iter message 390 0 276514),$(iter advisor_message 277772 0 0),$(iter message 2 1174 276873)]"
+ADV2="$WORK/advisor-turn-2.jsonl"
+usage_line "$ADV2" 0 0 220000 "[$(iter message 0 0 100000),$(iter advisor_message 300000 0 0),$(iter message 0 0 120000)]"
+ONE="$WORK/one-iteration.jsonl"
+usage_line "$ONE" 2 1210 277873 "[$(iter message 2 1210 277873)]"
+# SEED CONTROL: each seed's TOP level really is the wrong number, so the arms below discriminate.
+check "  CONTROL: the advisor seed's top level sums to 554953" \
+  "$(jq '.message.usage | (.input_tokens + .cache_creation_input_tokens + .cache_read_input_tokens)' "$ADV")" "554953"
+reset1m
+raw "$ADV" >/dev/null
+check "an advisor turn reads its LAST message iteration (278049), not the top-level sum" "$(field last_measured)" "278049"
+reset1m
+raw "$ADV2" >/dev/null
+check "  and not the sum, the first message, the advisor's, or the max (120000)" "$(field last_measured)" "120000"
+reset1m
+raw "$ONE" >/dev/null
+check "  a one-iteration turn reads exactly its top level (279085)" "$(field last_measured)" "279085"
+reset1m
+raw "$(at 150000)" >/dev/null
+check "  a line with no iterations keeps the top-level reading (150000)" "$(field last_measured)" "150000"
+# MUTANT: the top-level sum restored. The advisor arms must read the sums; the one-iteration and
+# no-iterations arms still pass, which is the point of their being near-misses. The hook sources
+# its sibling window library, so the copy goes beside an unmutated copy of it.
+SENSOR_PATH="${HOOK#bash }"
+MUTI="$WORK/mutant-iter-sum"; mkdir -p "$MUTI"
+cp "$(dirname "$SENSOR_PATH")/ai-dlc-window.sh" "$MUTI/ai-dlc-window.sh"
+sed -e '/^  | (\[ \.iterations\[\]? | select(\.type == "message") \] | last) as \$lastmsg$/d' \
+    -e '/^  | (\$lastmsg \/\/ \.)$/d' "$SENSOR_PATH" > "$MUTI/ai-dlc-context-sensor.sh"
+if cmp -s "$SENSOR_PATH" "$MUTI/ai-dlc-context-sensor.sh" \
+   || [ "$(grep -c 'lastmsg' "$MUTI/ai-dlc-context-sensor.sh")" -ne 0 ]; then
+  bad "iteration-sum mutant applied" "sed did not remove both lines (lastmsg left: $(grep -c 'lastmsg' "$MUTI/ai-dlc-context-sensor.sh"))"
+else
+  for m in "$ADV:554953" "$ADV2:220000" "$ONE:279085"; do
+    reset1m
+    printf '{"transcript_path":"%s","session_id":"t"}' "${m%:*}" \
+      | CLAUDE_PROJECT_DIR="$WORK" bash "$MUTI/ai-dlc-context-sensor.sh" >/dev/null 2>&1
+    check "MUTANT: with the top-level sum restored $(basename "${m%:*}") reads ${m##*:}" "$(field last_measured)" "${m##*:}"
+  done
+fi
+
 reset
 check "subagent (agent_id) is silent" "$(fire at-red.jsonl ',"agent_id":"a1"' | ctx)" ""
 
