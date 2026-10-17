@@ -412,6 +412,9 @@ gp-join-serial|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Aut
 gp-redispatch-fresh|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**A completed record is never reopened by `SendMessage`.**|para|`TaskStop` the resident remediator and send ONE fresh `Agent` dispatch
 gp-redispatch-never|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**A completed record is never reopened by `SendMessage`.**|para|Never resume the finished remediator with `SendMessage`
 r28-no-reopen|S|rule-bodies/rule-28.md||**A dispatched teammate reaches the lead with `SendMessage` `to: "main"`.**|- **Retracted or narrowed scope.**|para|re-dispatches it fresh
+r28-epoch-outside-round|S|rule-bodies/rule-28.md|**Waves: the harness caps concurrent subagents.**|**A rejected spawn is undelivered, and holding it is not a retry.**|**The round's epoch is written down before wave 1.**|para|A beat outside a fan-out round has no round epoch and passes `--dispatch` alone
+r28-epoch-recorded|S|rule-bodies/rule-28.md|**Waves: the harness caps concurrent subagents.**|**A rejected spawn is undelivered, and holding it is not a retry.**|**The round's epoch is written down before wave 1.**|para|The `<epoch>` is the one recorded before wave 1, never one minted at the beat.
+r28-serial-join|S|rule-bodies/rule-28.md|**A notification the live beat already covers is not a turn's work.**|**The join names what is missing, never what it counted.**|**The serial remediator's join is armed on the record it appends to.**|para|`**Join**`, with `--complete-repair` and `--dispatch` alone
 arch-lint-invoke|S|steps/architecture.md|### 2. Architecture Creation or Update|### 3.|`bmad-architecture` ships `scripts/lint_spine.py`|para|lint_spine.py --workspace <the run folder holding ARCHITECTURE-SPINE.md> -o <lint json>
 PINS
 }
