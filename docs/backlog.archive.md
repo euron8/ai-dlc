@@ -33928,7 +33928,7 @@ verify: manual
 
 ## BL-572 — a fenced `git diff --stat` derivation goes STALE at any terminal width but 80, because the derivations checker never pins `COLUMNS`
 
-**LANDED (v0.793.0, verified c6790471).** `validate-artifact-derivations.sh` runs each derivation's eval under `COLUMNS=80`, so a `git --stat` graph is checked at a fixed width rather than the invoker's terminal width; the STALE message names `--stat=100` and `--numstat` as width-stable forms. Arm O of `artifact-derivations` holds 80→200 and 80→40 OK, wrong-count and recorded-at-60 STALE, and kills a pin-removal mutant. Graph: 3 of 55 width-sensitive blocks no longer flip at `COLUMNS=100`.
+**LANDED (v0.793.0, verified c16609ba).** `validate-artifact-derivations.sh` runs each derivation's eval under `COLUMNS=80`, so a `git --stat` graph is checked at a fixed width rather than the invoker's terminal width; the STALE message names `--stat=100` and `--numstat` as width-stable forms. Arm O of `artifact-derivations` holds 80→200 and 80→40 OK, wrong-count and recorded-at-60 STALE, and kills a pin-removal mutant. Graph: 3 of 55 width-sensitive blocks no longer flip at `COLUMNS=100`.
 
 **DEFECT.** Filed from batch 235's read of graph s319 `planning-artifacts/s319/carry-over-evaluation-party-repair-p1.md:465`, which records the output unfenced and says "re-run it by hand", and the Group H contract adversary's correction. The checker does not mangle the graph glyphs: `norm()` in `core/scripts/validate-artifact-derivations.sh` (`:530`) trims trailing blanks only. `git diff --stat` sizes its graph to `COLUMNS`, which the script never pins (`COLUMNS` 0 hits), so the same derivation is STALE at 40, 60, 120 and 200 columns and OK at 80 or unset. In graph's corpus there are 48 fenced `--stat` derivations in 37 files, and 33 are already STALE identically under 80 and unset (22 with an empty actual, 11 with real drift).
 
@@ -33938,7 +33938,7 @@ verify: sh V=core/scripts/validate-artifact-derivations.sh; W=$(mktemp -d) || ex
 
 ## BL-550 — party seats grep for files that do not exist, because nothing gives them the repository's real paths
 
-**LANDED (v0.794.0, verified 2f6d5199).** The party-seat section of architect, dev, pm and tea (byte-identical across the four, I124) tells a seat to list a code path with `git ls-files <dir-or-glob>` before reading it, and that a grep which errored searched nothing.
+**LANDED (v0.794.0, verified 8aab009d).** The party-seat section of architect, dev, pm and tea (byte-identical across the four, I124) tells a seat to list a code path with `git ls-files <dir-or-glob>` before reading it, and that a grep which errored searched nothing.
 
 **DEFECT (efficiency).** Across 134 s319 party and elicitation seat transcripts there are 105 "No such file or directory" lines. Seats guessed paths such as `rebalancer/db.py`, `rebalancer/state_store.py`, `server/main.py`, `rebalancer/config_schema.py`, `infra/lib/ecs-stack.ts` and `rebalancer/execution_log.py`, none of which exist and none of which the subject files cite (`grep -l -F` over the PRD, SPEC, brief and `architecture-impact.md` returns 0 for each, against 3 for the control `rebalancer/execution.py`). Each miss is a tool round trip and a guess that can be filled in with an invented answer. Owed: the seat brief carries the subject's cited code paths (derivable from the subject files) and an instruction to resolve any other path with `git ls-files` before reading it.
 
@@ -33948,7 +33948,7 @@ verify: sh for r in architect dev pm tea; do s=$(LC_ALL=C awk "/^## As a party s
 
 ## BL-551 — a teammate leaves files staged, and nothing returns the git index to the lead clean
 
-**LANDED (v0.794.0, verified 2f6d5199).** pm, pm-escalated, architect, analyst and remediator each carry "Leave the git index as you found it."; discovery.md and requirements.md relocate the spec package with plain `mv`, never `git mv`, and pm-escalated no longer relocates it.
+**LANDED (v0.794.0, verified 8aab009d).** pm, pm-escalated, architect, analyst and remediator each carry "Leave the git index as you found it."; discovery.md and requirements.md relocate the spec package with plain `mv`, never `git mv`, and pm-escalated no longer relocates it.
 
 **DEFECT.** The s319 requirements authoring agent (`pm-escalated`, 22:01–22:21Z) relocated the spec package with `git add` then `git mv`, so `_bmad-output/specs/s319/offramp-config-and-rewards/{SPEC.md,.memlog.md}` are staged in graph's main checkout (`git diff --cached --name-status` shows them as `A`), alongside the lead's own staged `pipeline-snapshot-archive.md`. Its report disclosed this. The teammate role files do not say whether a planning teammate may stage or commit, so the lead's next commit can carry another agent's staging without either noticing. Owed: a stated rule that a planning teammate leaves the index as it found it (no `git add`/`git mv`), and a check at dispatch return that the index is unchanged, or names what changed.
 
@@ -33956,7 +33956,7 @@ verify: sh for r in pm pm-escalated architect analyst remediator; do grep -qF "L
 
 ## BL-552 — the lead posts a status line for every finished seat even with a join covering the round
 
-**LANDED (v0.794.0, verified 2f6d5199).** rule-28: a notification for an agent whose deliverable a live beat covers gets no status line and no re-check; a `--complete` round is reported once, from the merge. A failed agent and a held rejected set are carved out.
+**LANDED (v0.794.0, verified 8aab009d).** rule-28: a notification for an agent whose deliverable a live beat covers gets no status line and no re-check; a `--complete` round is reported once, from the merge. A failed agent and a held rejected set are carved out.
 
 **DEFECT (efficiency).** Distinct from BL-538 (the wake itself): even when the lead does take a turn, the step files give it nothing to do with "seat N delivered" except narrate it. In the s319 party round (36 seats) and elicitation round (19 shards), almost every arrival produced a lead message of the form "<seat> delivered (n findings). The join beat is still armed …". The text carries per-seat finding counts that the merge recomputes anyway. Owed: the step files say a notification for an agent inside an armed `--complete` join gets no per-agent summary; the lead ends the turn, and reports the round once from the merge.
 
@@ -33964,7 +33964,7 @@ verify: sh f=core/skills/ai-dlc/rule-bodies/rule-28.md; t=$(tr "\n" " " < "$f");
 
 ## BL-547 — the lead hand-writes the walk-up for "is this seat file finished", and a trailing blank line miscounts it
 
-**LANDED (v0.796.0, verified 47be6be6).** `wait-for-deliverable.sh --status <paths>` prints DELIVERED, UNFINISHED, UNSETTLED or WAITING per path from the beat's own predicate (with `--complete` or `--complete-repair` as armed), returns at once and writes nothing; an absent path reads WAITING, a path with no armed join says so, and a path a beat already consumed reads DELIVERED. It is refused together with `--reset`.
+**LANDED (v0.796.0, verified e3073787).** `wait-for-deliverable.sh --status <paths>` prints DELIVERED, UNFINISHED, UNSETTLED or WAITING per path from the beat's own predicate (with `--complete` or `--complete-repair` as armed), returns at once and writes nothing; an absent path reads WAITING, a path with no armed join says so, and a path a beat already consumed reads DELIVERED. It is refused together with `--reset`.
 
 **DEFECT.** In s319 at 22:52Z the lead counted completed party seats with its own last-line check, got a low count, and spent a second round trip finding that several files end in a trailing blank line, which `wait-for-deliverable.sh --complete` already skips. Its words: "my last-line check may be tripping on a trailing blank line." The program that answers this correctly exists, but its answer is only available as a beat that sleeps. Owed: `wait-for-deliverable.sh --complete --status <paths>` (or a sibling) prints, without sleeping, the same DELIVERED/UNFINISHED/UNSETTLED per path, so a progress check uses the shipped predicate rather than a hand-rolled one.
 
@@ -33974,7 +33974,7 @@ verify: sh bash core/fixtures/wait-stale-deliverable/receipt.sh BL-547
 
 ## BL-549 — the stop hook reported "no live wait-beat" while a beat had just been armed
 
-**LANDED (v0.796.0, verified 47be6be6).** `.beat-inflight` is a one-holder lease, `<epoch> <pid>`, and every beat also registers `.wait-beats/.lease-<pid>`. A beat takes the marker only when it is absent, garbage or expired, or its holder is dead; on exit it removes the marker only if it holds it, and first hands it to a live registered beat. The lease is written before the beat's pre-sleep work, so a Stop between arming and sleeping sees it. `ai-dlc-continue.sh`'s `beat_lease_live` reads the first field, so the bare-epoch form still reads live. A live lease with no pid (a pre-upgrade beat) is never taken.
+**LANDED (v0.796.0, verified e3073787).** `.beat-inflight` is a one-holder lease, `<epoch> <pid>`, and every beat also registers `.wait-beats/.lease-<pid>`. A beat takes the marker only when it is absent, garbage or expired, or its holder is dead; on exit it removes the marker only if it holds it, and first hands it to a live registered beat. The lease is written before the beat's pre-sleep work, so a Stop between arming and sleeping sees it. `ai-dlc-continue.sh`'s `beat_lease_live` reads the first field, so the bare-epoch form still reads live. A live lease with no pid (a pre-upgrade beat) is never taken.
 
 **DEFECT.** Twice in s319 the Stop hook fired "IF YOU ARE WAITING ON A TEAMMATE, this block means NO LIVE WAIT-BEAT IS ARMED" while a beat appeared live. First at 23:13:02Z: five seconds later the lead read `.beat-inflight` as holding an epoch about 29 s in the future. Then at 00:00:49Z, seconds after the lead armed beat `bcd634p7x`. `ai-dlc-continue.sh` defers only on a live `.beat-inflight` lease (`beat_lease_live`, comment around line 290). A beat that returns and re-arms within the hook's read window, or a marker written after the hook reads it, would explain both. Not proven: the marker may have cleared in between. Owed: trace the order in which the beat writes, clears and rewrites the marker against the Stop hook's read, and either lock it or have the hook re-read once after a short delay. A probe races a re-arm against a Stop.
 
@@ -33982,7 +33982,7 @@ verify: sh bash core/fixtures/wait-stale-deliverable/receipt.sh BL-549
 
 ## BL-566 — one beat exiting deletes `.beat-inflight` for every other live beat, and concurrent beats reset each other's per-path state
 
-**LANDED (v0.796.0, verified 47be6be6).** The lease half is BL-549's: one beat's exit no longer removes another live beat's lease. The per-path half: each beat settles a path's join epoch and settle record once per process (`JM_<key>`, `SM_<key>`) and does not re-read the shared sidecars after that, so a beat that delivers and deletes them cannot reset another beat over the same path. Measured on two beats from two shells over one seat file sealed after both armed: both deliver, 16 of 16 on the fix and 0 of 4 on the base.
+**LANDED (v0.796.0, verified e3073787).** The lease half is BL-549's: one beat's exit no longer removes another live beat's lease. The per-path half: each beat settles a path's join epoch and settle record once per process (`JM_<key>`, `SM_<key>`) and does not re-read the shared sidecars after that, so a beat that delivers and deletes them cannot reset another beat over the same path. Measured on two beats from two shells over one seat file sealed after both armed: both deliver, 16 of 16 on the fix and 0 of 4 on the base.
 
 **DEFECT.** Filed by peer session ai-dlc-68 from graph's s319 resumed lead (session `f65eae3b`, round `requirements-adversarial-p1`, 19 adversaries dispatched 02:31:33–02:32:12Z on 2026-10-16). graph's installed `wait-for-deliverable.sh:967` uses one shared `BEAT_MARKER`, and `:970` sets an unconditional EXIT trap that removes it. Two beats were live: `bxo15gjt1`, a stale beat on the fold armed at 02:27:39Z and never TaskStopped after the fold delivered at 02:30:30Z, and `by8hw963y`, the 19-shard join armed at 02:32:16Z. `bxo15gjt1` exited at 02:37:31Z; the Stop hook fired at 02:37:36Z; `cat .beat-inflight` exited 1 at 02:37:41Z; and the lead armed a duplicate join at 02:37:47Z. One beat's exit removed the lease for the beat still running, so the hook read no live beat. This is the same mechanism as BL-549, and the two are fixed together.
 
@@ -33996,7 +33996,7 @@ verify: sh bash core/fixtures/wait-stale-deliverable/receipt.sh BL-566
 
 ## BL-531 — a message typed in another session of the same project raises the lead's pause flag
 
-**LANDED (v0.797.0, verified d8fd0c57).** `ai-dlc-pause.sh` asks the typing session's own transcript for its
+**LANDED (v0.797.0, verified 3d5f1e70).** `ai-dlc-pause.sh` asks the typing session's own transcript for its
 last ai-dlc marker (the typed `/ai-dlc` record or a `Skill(ai-dlc)` call) instead of storing a lead id; route.md
 is frozen, and a stored id goes stale across a `/clear` resume. Prose from a session with no marker, or whose last
 marker is `ai-dlc-update`, is captured in full and logged `PAUSE_SKIPPED` with a `- Reason:` line, and raises no
@@ -34031,7 +34031,7 @@ verify: sh bash core/fixtures/pause-hook-origin/run.sh
 
 ## BL-545 — after a compaction the lead dispatched before its Rule 32 R advisor call
 
-**LANDED (v0.797.0, verified e07a3b04).** `ai-dlc-recover-gate.sh` gains a lead-only stage: after the step-file
+**LANDED (v0.797.0, verified 3d5f1e70).** `ai-dlc-recover-gate.sh` gains a lead-only stage: after the step-file
 Read satisfies recovery, the lead's Agent, Task, TaskCreate, Write, Edit, MultiEdit and NotebookEdit are denied
 until an advisor attempt follows the `postcompact-digest.md` Read. Bash is never refused. It stands down with no
 grant or a withdrawn one, an `unavailable` result, for a teammate or another session, and after 3 refusals per
@@ -34045,7 +34045,7 @@ verify: sh bash core/fixtures/postcompact-rulebook-recovery/run.sh
 
 ## BL-559 — the pause gate denies `Skill` to an in-flight teammate, so a dispatched render cannot finish and the handoff waits on it
 
-**LANDED (v0.797.0, verified d8fd0c57).** While paused, a teammate whose transcript started before the pause
+**LANDED (v0.797.0, verified 3d5f1e70).** While paused, a teammate whose transcript started before the pause
 flag's mtime may call `Skill` unless the skill is `ai-dlc`; `ai-dlc-update` stays allowed through the existing
 updater arm. A teammate dispatched during the pause, the lead's own Skill, and a teammate's Agent, Task and
 TaskCreate stay denied, and a pending Rule 8 STOP still denies.
@@ -34058,7 +34058,7 @@ verify: sh bash core/fixtures/updater-session-signals/run.sh
 
 ## BL-571 — `ADVERSARIAL_STATE_UNADJUDICABLE` fires on every sprint transition with a remedy that blames a correct declaration
 
-**LANDED (v0.797.0, verified d8fd0c57).** Inside the I81 block, still byte-identical in both hooks, the emitters
+**LANDED (v0.797.0, verified 3d5f1e70).** Inside the I81 block, still byte-identical in both hooks, the emitters
 log a pending-sprint form when `s<N-1>/` exists, `s<N>/` does not and no later `s<K>/` exists: Rule 8 is unarmed
 until the sprint's first artifact and no action is owed. Otherwise the "Fix the declared sprint" form is unchanged.
 The `ADVERSARIAL_STATE_UNADJUDICABLE` token stays in both forms. Over graph's 40 archives the predicate classes all
@@ -34072,7 +34072,7 @@ verify: sh bash core/fixtures/divergence-hard-block/run.sh
 
 ## BL-562 — the lead pushed the handoff with `--no-verify`, and nothing prohibits or denies it
 
-**LANDED (v0.798.0, verified f99cd0c2).** `ai-dlc-advisor-gate.sh` denies a ref-moving `git push` whose last
+**LANDED (v0.798.0, verified a0451c70).** `ai-dlc-advisor-gate.sh` denies a ref-moving `git push` whose last
 `--verify`/`--no-verify` word is `--no-verify` (or `--no-veri`/`--no-verif`), computed right after the parse so no
 other exit lets it through and an advisor call does not license it. It applies where `.claude/.ai-dlc-version`
 exists, stands down for a session whose last ai-dlc marker is `ai-dlc-update` (the I126 scan), and allows a branch
@@ -34091,7 +34091,7 @@ verify: sh bash core/fixtures/advisor-gate-deny/run.sh
 
 ## BL-567 — the early-write header instruction collides with the teammate advisor gate, so most adversaries' first shard write is denied
 
-**LANDED (v0.798.0, verified f99cd0c2).** A teammate's header-only Write to a non-repair review shard is allowed
+**LANDED (v0.798.0, verified a0451c70).** A teammate's header-only Write to a non-repair review shard is allowed
 and never recorded, so the write that adds the first finding still owes the advisor call. Header-only means no
 `###`..`######` heading (a code-review or QA `####` finding counts), no `F-<n>` heading, no `seat-complete:` and no
 `*verdict:` line. The sequence cell shows exactly one deny, on the finding write and not on the header. Over graph's
@@ -34107,7 +34107,7 @@ verify: sh bash core/fixtures/advisor-gate-deny/run.sh
 
 ## BL-580 — the ai-dlc-update skill prescribes long runs but never says to background them, so every pull's first long call is denied and re-issued
 
-**LANDED (v0.799.0, verified 5a374b33).** `ai-dlc-update/SKILL.md` opens `## Procedure` with the background-run
+**LANDED (v0.799.0, verified efcd5373).** `ai-dlc-update/SKILL.md` opens `## Procedure` with the background-run
 paragraph: `run_in_background: true` for every reconcile script and push, the exit status written to a scratchpad
 file as `rc=`, never piped into `tail`, never a bare `/tmp/<name>`.
 
@@ -34127,7 +34127,7 @@ verify: manual
 
 ## BL-581 — the reconcile log records a false-zero as "Verified": a consumer-repo `git show <dist-sha>:` failed silently and every base count read 0
 
-**LANDED (v0.799.0, verified 5a374b33).** `derivation-differential.sh` appends `recorded: … actual: …` to each
+**LANDED (v0.799.0, verified efcd5373).** `derivation-differential.sh` appends `recorded: … actual: …` to each
 NEWLY-FAILING row (fixture `derivation-differential` world A18, mutants R11/R12); SKILL.md names
 `git -C <dist> show "<ref>:core/…"` for any distribution read and says why a bare consumer-repo `git show` reads 0.
 
@@ -34166,7 +34166,7 @@ Assigned to ai-dlc-4e [9b62de] by lead ai-dlc-9c, to build after H-b, with the t
 
 Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
 
-**LANDED (v0.800.0, verified 0b342210).** Owed 1: the catchers of batch 235's reds are named, and each is timed alone
+**LANDED (v0.800.0, verified d19a4d9f).** Owed 1: the catchers of batch 235's reds are named, and each is timed alone
 by `scripts/pregate-self-check.sh`, which prints per-arm seconds: vssnap I54 (enforcement map, 26s); W and H-a
 procsub r3 (spelling arm, under 1s); U-a S8 (shell portability, 5s). H-a's fork-budget red is arm d (31s). H-a's
 gate-resume red is caught only by running the fixture; that is BL-609. Owed 2: the self-check, receipts C1-C2b at
@@ -34178,7 +34178,7 @@ verify: manual
 
 ## BL-539 — the lead can defer an operator-locked scope item without asking, and the operator learns of it only after deploy
 
-**LANDED (v0.801.0, verified 40581bc2).** `carry-over-evaluation.md` section 4 makes a deferral of a confirmed-scope item a Rule 12 HARD_BLOCK, asked with AskUserQuestion. `validate-scope-confirmation.sh`'s locked-scope arm refuses a live `DEFERRAL_REQUEST` naming one, with 0 false positives over 78 graph snapshots, and its closing line names the legs that ran.
+**LANDED (v0.801.0, verified 86d3a695).** `carry-over-evaluation.md` section 4 makes a deferral of a confirmed-scope item a Rule 12 HARD_BLOCK, asked with AskUserQuestion. `validate-scope-confirmation.sh`'s locked-scope arm refuses a live `DEFERRAL_REQUEST` naming one, with 0 false positives over 78 graph snapshots, and its closing line names the legs that ran.
 
 **DEFECT.** In graph s319 the operator confirmed scope as items 1–5, 7 and the Sweep→HODL discharges (snapshot Locked Decisions, AskUserQuestion label "Confirmed as read", SHA256 `df46bb336a64e238caae509cf351631d1877f86086650077bbef49c9e172428e`). At 21:42Z the lead filed a `DEFERRAL_REQUEST` for item 5 (the Collect Rewards button) in `docs/escalations/pending.md`, because an operator decision on claim signing was open, and continued. It mentioned the deferral only in its own progress lines. Neither AskUserQuestion it put between 21:42Z and 23:32Z asked about it. The operator found it at 23:49Z by pushing on D-12 ("if the reason not to build it this sprint is the same reason that I'll be confronted with in a future sprint, then why would I defer?"), and the lead then said there was no remaining reason to defer and put item 5 back in.
 
@@ -34190,7 +34190,7 @@ verify: manual
 
 ## BL-563 — the ai-dlc-update post-write gates passed on an exit code nobody observed
 
-**LANDED (v0.801.0, verified 40581bc2).** `reconcile/post-write-gates.sh` runs the four post-write gates with each rc captured on the next statement and prints one `GATE <name> PASS|FAIL|UNDECIDED rc=<n>` line per gate. An unobserved exit is UNDECIDED, never PASS. The `post-write-gates` fixture drives each real gate.
+**LANDED (v0.801.0, verified 86d3a695).** `reconcile/post-write-gates.sh` runs the four post-write gates with each rc captured on the next statement and prints one `GATE <name> PASS|FAIL|UNDECIDED rc=<n>` line per gate. An unobserved exit is UNDECIDED, never PASS. The `post-write-gates` fixture drives each real gate.
 
 **DEFECT.** Filed by peer session ai-dlc-68. Graph session `3d1088df` ran `/ai-dlc-update apply` for 0.789.0 → 0.790.0 and merged it as PR #1228 at 02:09Z on 2026-10-16. At 02:02:29Z it ran the post-write gates as one compound command, piping `setup-site-drift.sh … | tail -3; echo "rc=${pipestatus[1]}"` and `validate-hook-registration.sh | tail -3; echo "rc=${pipestatus[1]}"`. Both printed `rc=` with nothing after it. At 02:02:33Z the session wrote "The exit codes printed empty because the shell is zsh, but each check's own output line reports clean", then proceeded to `apply.sh --finish`, the commit, the push and the merge. graph's installed `.claude/skills/ai-dlc-update/SKILL.md:2853` states the gate as "Run `reconcile/setup-site-drift.sh <dist> <consumer> <theirs>`; exit 0", and `:2255` names `validate-hook-registration.sh`, so the verdict the skill prescribes is the exit code, and the session never observed it. It substituted a reading of truncated output (`tail -3`). The output happened to be decisive this time (SETUP-SITE-OK ×2, SETUP-SITE-SCANNED; UNREGISTERED none, DANGLING none), but a refusal line above the last three would have been cut away and the gate would still have read clean. The same hazard hit hard-blockers: at 02:03:42Z the background `hard-blockers.sh --post-apply` "came back empty", and the session re-ran it in the foreground.
 
@@ -34206,7 +34206,7 @@ verify: manual
 
 ## BL-570 — the step-1b trunk audit's result lands nowhere a gate reads, and core never absorbed the consumer check that re-runs it
 
-**LANDED (v0.801.0, verified 40581bc2).** Gate Check 36 re-runs `validate-cycle-commits.sh --audit-trunk` at carry-over planning gates, absorbing consumer check 925. A trunk finding exits through an operator-RESOLVED escalation naming the failing sha, the genesis is read through `validate-audit-anchors.sh --prior-sprint-sha`, and a shallow clone is named.
+**LANDED (v0.801.0, verified 86d3a695).** Gate Check 36 re-runs `validate-cycle-commits.sh --audit-trunk` at carry-over planning gates, absorbing consumer check 925. A trunk finding exits through an operator-RESOLVED escalation naming the failing sha, the genesis is read through `validate-audit-anchors.sh --prior-sprint-sha`, and a shallow clone is named.
 
 **DEFECT.** Filed from batch 235's read of graph's s319 planning artifacts (read-only) and the Group H contract adversary's correction. `core/skills/ai-dlc/steps/carry-over-evaluation.md:60-75` makes the step-1b `--audit-trunk` result a HARD_BLOCK on exit 1 and forbids a silent skip, but no gate check reads that result: `audit-trunk` occurs 0 times in `gate-validation.md` (control: `Check 29` = 1). Step 1b DID run in s319: lead transcript `62eadbbe…`, tool call `toolu_0116F9FBNXTbeX13YftRWuHz` at 18:56:17Z, exit 0, `AUDIT-TRUNK: audited=12 of=12 clean=12 findings=0 classes=6`, and `.audit-watermark` at 18:56:52Z equal to graph main `d82236ce`. The lead runs 1b outside the analyst's artifact, so its result lands nowhere a gate reads; the same holds in s313 and s315.
 
@@ -34218,7 +34218,7 @@ verify: manual
 
 ## BL-573 — operator questions ask what the agent can derive, or what the operator already answered
 
-**LANDED (v0.801.0, verified 40581bc2).** Rule 11(a) puts three steps on every operator question: apply a prior answer with its citation, derive what the tree can give and offer it for veto, and gloss internal ids. `route.md`'s scope question takes the same steps, and a derived operator-owned value goes out unbadged.
+**LANDED (v0.801.0, verified 86d3a695).** Rule 11(a) puts three steps on every operator question: apply a prior answer with its citation, derive what the tree can give and offer it for veto, and gloss internal ids. `route.md`'s scope question takes the same steps, and a derived operator-owned value goes out unbadged.
 
 **DEFECT.** Filed from batch 235's read of graph's s319 `operator-requests-history` diff. Of D-1..D-15, five drew complaints: D-6 "No idea what the check 924 band is", D-13 "No idea what this means", D-11 "Pretty sure I supplied this already", D-12 "I assumed you'd be able to derive" (the Distributor address), and "why can't you add the contract_allowlist?". `requirements.md` and `SKILL.md` carry no derive-first or already-answered test (`operator-owned|derivable` 0; control: `route.md` = 1). BL-539 covers only the item-5 deferral and BL-524 only the `(Recommended)` badge.
 
@@ -34228,7 +34228,7 @@ verify: manual
 
 ## BL-590 — the recover gate denies TEAMMATE tool calls with text addressed to the lead
 
-**LANDED (v0.801.0, verified 40581bc2).** The recover gate's read stages bind the lead only: a teammate leaves the read path before the marker is read, and its Reads no longer advance the lead's stages. A6 now arms the advisor stage with the lead's own Reads, and asserts that a teammate's Agent call is allowed while the lead's is refused naming touchpoint R.
+**LANDED (v0.801.0, verified 86d3a695).** The recover gate's read stages bind the lead only: a teammate leaves the read path before the marker is read, and its Reads no longer advance the lead's stages. A6 now arms the advisor stage with the lead's own Reads, and asserts that a teammate's Agent call is allowed while the lead's is refused naming touchpoint R.
 
 **DEFECT.** Filed from batch 235's Group E contract adversary (read-only on graph). `core/hooks/ai-dlc-recover-gate.sh` carries no `agent_id` test (0 hits; control: `ai-dlc-acknowledge.sh` uses it), its marker is project-wide and its matcher is `*`. Measured on graph: 253 teammate tool calls across 113 `subagents/*.jsonl` transcripts were denied with the lead's "your FIRST tool call" text (control: 168 lead-file lines carry the same text). In-flight teammates, which the recovery block itself says are alive, have their writes denied during the lead's recovery window.
 
@@ -34238,7 +34238,7 @@ verify: manual
 
 ## BL-576 — `wait-for-deliverable.sh` resolves its state dir from the cwd, so a beat run inside a shard dir plants `_bmad-output/` there and the stop hook cannot see the beat
 
-**LANDED (v0.802.0, verified ab065361).** `wait-for-deliverable.sh` resolves a relative or unset `AI_DLC_STATE_DIR` under the project root (`AI_DLC_PROJECT_ROOT`, else the marker walk), refuses with exit 64 when no root resolves, and keys a relative target from a cwd below the root on its root-relative path, so a beat armed from a shard directory leaves its lease where the stop hook reads it. An absolute `AI_DLC_STATE_DIR` is used as given. Receipt `core/fixtures/wait-stale-deliverable/receipt.sh BL-576`.
+**LANDED (v0.802.0, verified f4ca6764).** `wait-for-deliverable.sh` resolves a relative or unset `AI_DLC_STATE_DIR` under the project root (`AI_DLC_PROJECT_ROOT`, else the marker walk), refuses with exit 64 when no root resolves, and keys a relative target from a cwd below the root on its root-relative path, so a beat armed from a shard directory leaves its lease where the stop hook reads it. An absolute `AI_DLC_STATE_DIR` is used as given. Receipt `core/fixtures/wait-stale-deliverable/receipt.sh BL-576`.
 
 **DEFECT.** Filed by peer session ai-dlc-68 from graph's s319 lead `949015a6` (Sonnet 5.5). `core/scripts/wait-for-deliverable.sh:316` is `STATE_DIR="${AI_DLC_STATE_DIR:-_bmad-output}"` and `:415` `COUNTER_DIR="${STATE_DIR}/.wait-beats"` — both cwd-relative; the script carries no root resolution. At 04:53:03Z on 2026-10-16 the lead armed a beat from `…/s319/shards/requirements-p1` (a 04:51:49Z `cd` persisted in the Bash cwd), so the beat wrote `requirements-p1/_bmad-output/.beat-inflight` and `.wait-beats/*` into the shard dir. At 04:53:54Z `merge-adversarial-shards.sh` refused the stray `_bmad-output` entry, and at 04:54:05Z the lead moved it to its scratchpad (intake confirmed `…/949015a6-…/scratchpad/stray-beat-state/_bmad-output` on disk; the shard dir now carries 0 `_bmad` entries). The second consequence is mechanical, not presumed: the stop hook reads the lease at `${PROJECT_DIR}/_bmad-output/.beat-inflight` (`core/hooks/ai-dlc-continue.sh:120`, `LOG_DIR="${PROJECT_DIR}/_bmad-output"`), so a beat whose marker lands elsewhere is invisible to it, which matches the hook firing three times in 30s (04:52:58Z, 04:53:15Z, 04:53:31Z) while beats were armed.
 
@@ -34250,7 +34250,7 @@ verify: sh bash core/fixtures/wait-stale-deliverable/receipt.sh BL-576
 
 ## BL-604 — a refused wait-for-deliverable.sh call (exit 64) reads as NON-DELIVERY by the lead's own instructions, so a live teammate is re-dispatched
 
-**LANDED (v0.802.0, verified ab065361).** rule-29's exit list names `exit 64 -- REFUSED`, and wait-stale-deliverable case C46 derives the script's exit codes and fails when rule-29's list omits one.
+**LANDED (v0.802.0, verified f4ca6764).** rule-29's exit list names `exit 64 -- REFUSED`, and wait-stale-deliverable case C46 derives the script's exit codes and fails when rule-29's list omits one.
 
 **DEFECT.** Filed by peer session ai-dlc-ad; closes with its BL-599 release (branch `b235-since-dispatch`). `core/scripts/wait-for-deliverable.sh` exits 64 at 12 usage-refusal sites at origin/main 3d5f1e70, all executable (`--since` with no or a bad value, an unknown arg, no paths, `--complete` with `--progress-path`, …). `core/skills/ai-dlc/rule-bodies/rule-29.md` (the beat's exit list, ~:96-108) names only `exit 0` (BEAT COMPLETE) and `exit 1` (NON-DELIVERY: re-dispatch ONCE, then HARD_BLOCK) — intake counted 64 mentioned 0 times there — and `core/skills/ai-dlc/steps/_gate-procedures.md:141` says "Nonzero means non-delivery, nothing else." So a backgrounded beat refused for a malformed call arrives as rc 64, reads as non-delivery, and the lead spends the Rule 20 re-dispatch on a live agent with no beat armed.
 
@@ -34270,7 +34270,7 @@ Owed:
 
 Related: BL-585.
 
-**LANDED (v0.802.0, verified c85549ca).** CLOSED AS MEASURED-NO-VALUE under Owed 2; nothing was built, and lead ai-dlc-9c accepted the close. For each of batch 235's red gates, the fixtures whose read-set (`.ai-dlc-fixture-readsets.tsv`, plus every `inputs.decl`) holds a path in the gate's own diff, excluding fixtures that diff edits, against that gate's red units:
+**LANDED (v0.802.0, verified f4ca6764).** CLOSED AS MEASURED-NO-VALUE under Owed 2; nothing was built, and lead ai-dlc-9c accepted the close. For each of batch 235's red gates, the fixtures whose read-set (`.ai-dlc-fixture-readsets.tsv`, plus every `inputs.decl`) holds a path in the gate's own diff, excluding fixtures that diff edits, against that gate's red units:
 
 | Red gate (base..tip) | Fixtures listed | Red units in the list | Non-red units in the list |
 |---|---|---|---|
@@ -34286,7 +34286,7 @@ verify: manual
 
 ## BL-603 — derivation-differential.sh's `_good` cache is never written, so its early-break arm can never fire
 
-**LANDED (v0.803.0, verified b170a712).** The `_good` init and its `case` read are deleted from `reconcile/derivation-differential.sh`'s base-commit walk; `_bad` stays. The differential fixture and its mutant battery pass on the tip.
+**LANDED (v0.803.0, verified 21facb0f).** The `_good` init and its `case` read are deleted from `reconcile/derivation-differential.sh`'s base-commit walk; `_bad` stays. The differential fixture and its mutant battery pass on the tip.
 
 **DEFECT.** Filed by peer session ai-dlc-c3, measured read-only. In `core/skills/ai-dlc-update/reconcile/derivation-differential.sh` at origin/main 3d5f1e70, :240 initialises `_good=" "` and :243 reads it (`case "$_good" in *" $_b "*) BASE_COMMIT="$_c"; break ;; esac`); intake found `_good` on those two lines only, while `_bad` has 1 append in the same file. Per the filer the same holds at U-a head d524616d (:245, :248). A matching blob is handled by the `resolves_to_base && skill_commit_ok` branch, which sets BASE_COMMIT and breaks, so the `_good` arm is a guard whose removal changes nothing (`mechanism-design.md`, "A vacuous guard is a loaded gun").
 
@@ -34296,7 +34296,7 @@ verify: manual
 
 ## BL-588 — an append-only repair record whose later blocks change a subject leaves the earlier blocks' derivations permanently STALE, and nothing lets a later block supersede them
 
-**LANDED (v0.803.0, verified b170a712).** Option 1, keyed on the command itself: inside a record, a byte-identical later `$ ` command supersedes the earlier one, reported as `SUPERSEDED: <file>:<line> by <file>:<later>`. On graph's s319 record at `e18724963` the 9 named lines read 0 STALE, each superseded by its serial-2 re-derivation. A stale record fence with no later copy still fails (the fixture's stays-open arm). The differential drops superseded keys, so its broken-base-root refusal still fires.
+**LANDED (v0.803.0, verified 21facb0f).** Option 1, keyed on the command itself: inside a record, a byte-identical later `$ ` command supersedes the earlier one, reported as `SUPERSEDED: <file>:<line> by <file>:<later>`. On graph's s319 record at `e18724963` the 9 named lines read 0 STALE, each superseded by its serial-2 re-derivation. A stale record fence with no later copy still fails (the fixture's stays-open arm). The differential drops superseded keys, so its broken-base-root refusal still fires.
 
 **DEFECT.** Filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]) from the graph s319 watch; intake re-derived it read-only (the validator itself was not re-run here; the filer re-ran it). At graph's handoff commit `e18724963` (08:21 EDT, lead `cf53b84f`), `_bmad-output/planning-artifacts/s319/requirements-repair-p1.md` (1697 lines) carries three blocks, closed by `repair-complete: serial 1` (:1261), `repair-complete: spec-render 1` (:1477) and `repair-complete: serial 2` (:1696). `scripts/ai-dlc/validate-artifact-derivations.sh` on it reports "FAIL: 9 stale or unrunnable derivation(s) of 105 checked", at lines 30, 536, 581, 646, 780, 793, 1409, 1426 and 1444.
 
@@ -34317,7 +34317,7 @@ verify: manual
 
 ## BL-558 — `story-evidence-scaffold` costs 173-177s solo against a recorded pool-12 history of 2-3s, and the cause is not found
 
-**LANDED (v0.806.0, verified 4a6773ae).** The 2-3s rows were passing runs of the 232-line fixture from before 0.783.0; 0.787.0's battery took it to about 175s, its real cost. The validator battery moved to four `.dist-only` shards (`story-evidence-scaffold-mutants`, `-b`, `-c`, `-d`), so consumers stop running it; solo in a clean worktree the shipped fixture is 26s and the shards 53s, 50s, 58s and 46s.
+**LANDED (v0.806.0, verified 581ca289).** The 2-3s rows were passing runs of the 232-line fixture from before 0.783.0; 0.787.0's battery took it to about 175s, its real cost. The validator battery moved to four `.dist-only` shards (`story-evidence-scaffold-mutants`, `-b`, `-c`, `-d`), so consumers stop running it; solo in a clean worktree the shipped fixture is 26s and the shards 53s, 50s, 58s and 46s.
 
 **DEFECT (efficiency).** Found at batch 234 while gating 0.790.0. Pushed from a linked worktree, the pre-push runner re-ran the same 10 fixtures every time (the 8 its read-set map leaves unmapped there, plus two), and `story-evidence-scaffold` was the pole of that set at 144s and 146s. The suite-pole guard judged it against its own pool-12 history, 8 rows with a maximum of 3s, and failed two gates on the regime ceiling (6s). Measured solo and interleaved, from detached worktrees of `origin/main` (`bfb5589e`) and the release tip (`1c2bf345`), at load 4-6: base 177s and 175s, tip 173s and 171s. So the cost is not the release. The 2-3s rows are not explained: a grep of `run.sh` (725 lines, one file in the fixture) for reads outside `core/` (`projects`, `graph`, `HOME`, `git log`, `find`) found none, and the fixture's own run log shows a full mutant battery over about 30 handoff and strategy cases. Its 8 pool-12 rows were dropped on the operator's choice with the guard's own printed remedy (backup kept), and the next gate read `CALIBRATING (1/3)` at 143s and passed.
 
@@ -34327,7 +34327,7 @@ verify: manual
 
 ## BL-595 — the Check 22 arm refusing `none (serial-document)` on a `stories/` subject is still unbuilt
 
-**LANDED (v0.805.0, verified 26e51dcd).** Check 24's new arm L judges the stories elicitation's shape against the name set `merge-adversarial-shards.sh --map` and `partition-document.sh --cross-groups` owe: a single voice, missing ordinals, short cross groups, wrong names or an owed-absent elicitation at `full` FAIL, with era and unreadable-history cases PENDING. Check 22's S3 is not tightened (the ledger carries no subject). The check-24 fixture drives it end to end in 21 worlds and 9 mutants. The receipt, the consumer's next stories elicitation, is owed.
+**LANDED (v0.805.0, verified c07dc9d1).** Check 24's new arm L judges the stories elicitation's shape against the name set `merge-adversarial-shards.sh --map` and `partition-document.sh --cross-groups` owe: a single voice, missing ordinals, short cross groups, wrong names or an owed-absent elicitation at `full` FAIL, with era and unreadable-history cases PENDING. Check 22's S3 is not tightened (the ledger carries no subject). The check-24 fixture drives it end to end in 21 worlds and 9 mutants. The receipt, the consumer's next stories elicitation, is owed.
 
 **NOTE.** BL-509's close (archived, `docs/backlog.archive.md:32870ff`) built the sharded stories-elicitation rule (`_gate-procedures.md:413-420`, "never `shard: none (…)`", pinned by 8 `elic-shape-*`/`sts-elic-*` rows in `process-rule-pins`) but left Check 22 untightened: "an S3 arm refusing `none (serial-document)` on a `stories/` subject was not built because its false-positive set on graph's ledgers was not measured". `core/scripts/validate-spawn-ledger.sh:920-923` S3 still fails only an exception outside the four, and `:973` reads only the first parenthesised token, so a single serial-document voice over `stories/` passes. The yield evidence that the sharded shape is worth enforcing now exists: `docs/analysis/step-value-s317-s319.md:137` (s317 22 shards about 15 unique; s318 one voice at most 1). Owed: measure the arm's false-positive set on graph's ledgers (it fires on graph's closed s318 stories row, a true finding), then build it or record why not.
 
@@ -34337,7 +34337,7 @@ verify: manual
 
 ## BL-600 — the lead hand-rolls file times with `stat -f %Sm -t %FT%TZ`, which prints LOCAL time with a literal `Z`
 
-**LANDED (v0.805.0, verified 26e51dcd).** `core/scripts/file-mtime.sh` states each path's mtime as an epoch and a UTC stamp, taking the epoch from `stat` so that a numeric basename is never read as a time. Rule 28's join paragraph names it for a record's time against a dispatch, along with the format that went wrong. The probe: under `TZ=America/New_York` the helper prints `2026-10-16T04:59:42Z`, equal to the `TZ=UTC` control, while the hand-written `stat -f %Sm -t %FT%TZ` prints `2026-10-16T00:59:42Z`.
+**LANDED (v0.805.0, verified c07dc9d1).** `core/scripts/file-mtime.sh` states each path's mtime as an epoch and a UTC stamp, taking the epoch from `stat` so that a numeric basename is never read as a time. Rule 28's join paragraph names it for a record's time against a dispatch, along with the format that went wrong. The probe: under `TZ=America/New_York` the helper prints `2026-10-16T04:59:42Z`, equal to the `TZ=UTC` control, while the hand-written `stat -f %Sm -t %FT%TZ` prints `2026-10-16T00:59:42Z`.
 
 **DEFECT.** Carried from a BL-528 addendum that missed BL-528's close: b235-docs (4abbd6c3) archived BL-528 as landed in v0.792.0, whose write-time stamp check judges lines ADDED to `pipeline-snapshot.md` (FUTURE, MALFORMED, BACKDATED). That check does not reach a time the lead derives in its own reasoning. Filed by peer session ai-dlc-68 from graph s319 lead `949015a6` (Sonnet 5.5): at 05:10:12Z on 2026-10-16 the lead ran `stat -f '%Sm' -t %FT%TZ <record>`, which prints local time followed by a literal `Z`. The box is EDT; the record's mtime was 2026-10-16T00:59:42 local (04:59:42Z), and the lead wrote "last modified at 00:59Z", four hours wrong and reading as authoritative. Its conclusion held only because 04:59Z preceded the 05:00:03Z dispatch. No shipped script or hook formats a file time this way (`%Sm` 0 hits in `core/scripts` and `core/hooks` at 4abbd6c3; control: `stat -f` 2 hits, both epoch `%m`/`%z:%m`), so the time is the lead's own hand-roll.
 
@@ -34349,7 +34349,7 @@ verify: manual
 
 ## BL-602 — derivation-differential-mutants claims each mutant is killed by EXACTLY its declared arms, but checks only that the declared arms are a SUBSET of the failed ones
 
-**LANDED (v0.805.0, verified 26e51dcd).** The battery checks set EQUALITY through one self-probed comparison function, with a FAIL-line-count guard; every declared set is the measured one with its reason; R8 and A15n are disentangled by the WS3N re-seed, and R13 and R14 are added. All 15 mutants are killed by exactly their declared arms (R8, R13 and R14 measured equal to their declarations).
+**LANDED (v0.805.0, verified c07dc9d1).** The battery checks set EQUALITY through one self-probed comparison function, with a FAIL-line-count guard; every declared set is the measured one with its reason; R8 and A15n are disentangled by the WS3N re-seed, and R13 and R14 are added. All 15 mutants are killed by exactly their declared arms (R8, R13 and R14 measured equal to their declarations).
 
 **DEFECT.** Filed by peer session ai-dlc-60 while building release U-a; the fix is assigned to ai-dlc-c3. `core/fixtures/derivation-differential-mutants/run.sh` states an equality contract at :6 ("killed by exactly its declared arms"), :7 (exit 1 includes a mutant that "moved an arm it does not own"), :14-15 ("the set of arms that FAIL must EQUAL the set the mutant declares … one that fails an arm it does not own means two arms are entangled") and :231. The check at :127 is `missed="$(comm -13 "$WORK/$label.moved" "$WORK/$label.declared" …)"`, which prints only declared arms that did not fail: declared ⊆ failed. Intake confirmed all five lines at origin/main 3d5f1e70. A mutant that also fails an arm it does not own prints `KILLED`; the extra arms appear only in the "full failed set" text, which nothing asserts. That is the entanglement the header promises to catch and `.claude/rules/fixture-mutants.md` ("A mutant must fail **only** its own assertion") requires. Per the filer, of the 23 fixture `run.sh` files that use `comm -`, only this one carries the `comm -13 "$WORK/$label.moved"` form; other batteries need their own read before generalising.
 
@@ -34392,7 +34392,7 @@ Items 2 and 3 ship together and ride BL-587's release (lead ai-dlc-9c's ruling),
 
 Owner: ai-dlc-60 (lead ai-dlc-9c).
 
-**LANDED (v0.808.0, verified b4e39db1).** Items 2 and 3: `.claude/rules/consumer-boundary.md`'s first consequence bullet now reads "Only steps 1-2 of the delivering pull run the old engine", the `self-update-reinvoke-liveness` fixture (ships) drives the step-2 re-invoke against the real `machinery_paths()` and `map_consumer()`, and the 0.808.0 CHANGELOG lists the misplaced release-note statements under Corrections, with the shipped-comment fixes.
+**LANDED (v0.808.0, verified 8cc25e89).** Items 2 and 3: `.claude/rules/consumer-boundary.md`'s first consequence bullet now reads "Only steps 1-2 of the delivering pull run the old engine", the `self-update-reinvoke-liveness` fixture (ships) drives the step-2 re-invoke against the real `machinery_paths()` and `map_consumer()`, and the 0.808.0 CHANGELOG lists the misplaced release-note statements under Corrections, with the shipped-comment fixes.
 
 verify: manual
 
@@ -34411,7 +34411,7 @@ Owed: one line beside `:181-184` saying a glob pathspec must not end in `/` (use
 
 Owner: ai-dlc-60 (lead ai-dlc-9c), inside the BL-587+612 release.
 
-**LANDED (v0.808.0, verified b4e39db1).** `.claude/rules/tool-hazards.md` carries the line beside the `ls-tree` entry, and `DURABLE_MAX` is 69584 in `scripts/validate-claude-rules.sh` (control: 69583 exits 1, 69584 exits 0).
+**LANDED (v0.808.0, verified 8cc25e89).** `.claude/rules/tool-hazards.md` carries the line beside the `ls-tree` entry, and `DURABLE_MAX` is 69584 in `scripts/validate-claude-rules.sh` (control: 69583 exits 1, 69584 exits 0).
 
 **A6 sizing (lead ai-dlc-9c, from the operator's single approval):** the operator approved one question covering two durable-channel additions in the BL-587+612 release, raised by their measured total: BL-612's `consumer-boundary.md` bullet (+70 bytes) and this entry's `tool-hazards.md` line (+187 bytes, against an earlier estimate of ~120). 69327 + 70 + 187 = 69584, which is the approved ceiling.
 
@@ -34419,7 +34419,7 @@ verify: manual
 
 ## BL-622 — `ai-dlc-context-sensor.sh` sums the top-level `message.usage`, which on an advisor turn adds every API iteration, so one advisor call roughly doubles the reading and fires a false IMMINENT
 
-**LANDED (v0.809.0, verified d5b9aa11).** `ai-dlc-context-sensor.sh` takes the context figure from the LAST `type: "message"` iteration when `message.usage.iterations` is present and keeps the top-level reading otherwise. `context-sensor` seeds the measured s319 advisor line (reads 278049, not 554953), a line where every wrong reading differs (reads 120000), a one-iteration line and a line with no iterations, with a committed mutant that restores the sum.
+**LANDED (v0.809.0, verified b72a39f8).** `ai-dlc-context-sensor.sh` takes the context figure from the LAST `type: "message"` iteration when `message.usage.iterations` is present and keeps the top-level reading otherwise. `context-sensor` seeds the measured s319 advisor line (reads 278049, not 554953), a line where every wrong reading differs (reads 120000), a one-iteration line and a line with no iterations, with a committed mutant that restores the sum.
 
 **DEFECT.** Filed by graph watch ai-dlc-f7; intake re-derived it read-only from graph's s319 lead transcript `0e9a936b`. At 22:09:48Z on 2026-10-16 the lead made a Rule 32 touchpoint-I advisor call before its handoff push. That assistant line (transcript line 866) carries three `usage.iterations`:
 - `message`: cache_read 276514, sum 276904.
@@ -34437,7 +34437,7 @@ Owed: when `message.usage.iterations` is present, the sensor takes the context f
 verify: manual
 ## BL-642 — WITHDRAWN (false premise): `pregate-self-check.sh` was never run on the tip it was said to have passed
 
-**LANDED (v0.810.0, verified 1246e4ef).** Closed by withdrawal, no build: the premise was false (the self-check was never run on that tip), and the process fix lives on the lead's side.
+**LANDED (v0.810.0, verified b307a96b).** Closed by withdrawal, no build: the premise was false (the self-check was never run on that tip), and the process fix lives on the lead's side.
 
 **WITHDRAWN (false premise; lead ai-dlc-71).** The filing said `pregate-self-check` reported rc 0 on ai-dlc-c2's 0.808.0 tip while `validate-enforcement-map.sh` failed it with 7 FAILs (I77, I75 ×2, I54/I54b ×2, I95, and the check-manifest-bypass seed). c2's account, relayed by the lead: c2 never ran `pregate-self-check` in that release. It ran a partial set of validators and called them "final-tree checks". So no rc-0 self-check run exists to reconcile, and the tool is not shown to be defective. The intake reading already pointed this way: the self-check's arm (a) runs the WHOLE validator, unscoped, from the tree root (`scripts/pregate-self-check.sh:84-100`), and fails on any non-zero exit, so it could not have passed that tip.
 
@@ -34447,7 +34447,7 @@ verify: manual
 
 ## BL-591 — a red pre-push run's loaded timings are merged into the durations record the runner orders by
 
-**LANDED (v0.811.0, verified fea68e33).** Both pre-push hooks merge `$out/.durations` into the record, and copy it to `.last`, only when the pool exited 0 (`[ "$rc" -eq 0 ] && [ -s "$out/.durations" ]`, two sites per hook). `suite-dispatch-order` arm 5 asserts a red pool leaves the record byte-identical while a green control updates it, and M5 (the gate removed from the merge line only) reddens arm 5.
+**LANDED (v0.811.0, verified fd09acbf).** Both pre-push hooks merge `$out/.durations` into the record, and copy it to `.last`, only when the pool exited 0 (`[ "$rc" -eq 0 ] && [ -s "$out/.durations" ]`, two sites per hook). `suite-dispatch-order` arm 5 asserts a red pool leaves the record byte-identical while a green control updates it, and M5 (the gate removed from the merge line only) reddens arm 5.
 
 **DEFECT.** Filed by peer session ai-dlc-bb (batch 235 gate throughput), routed by ai-dlc-b8. `.githooks/pre-push` (952b9319) folds `$out/.durations` into `$DURATIONS_RECORD` (`.git/ai-dlc-fixture-durations`) at `:2112-2118` with no `rc` gate, while `:2139` publishes `.last` only when `rc -eq 0`, and its own comment at `:2134-2138` gives the reason that applies equally to the merge: "a red run's timings belong to a suite that stopped early". Measured by the filer from `.git/ai-dlc-suite-pole.history` (clean gates only): `readset-skip-d` is recorded at 928s but ran 330-502s across 6 clean gates and 928 appears in no clean row; `gate-adjudication-mutants` a/c/e are recorded at 666/646/642, from the red run at 2026-10-16T00:16Z, against 216/196/195 at the last clean gate. Intake re-read the live record: `readset-skip-d 928`, `gate-adjudication-mutants 666`, `-c 646`, `-e 642`; the history carries 48 `readset-skip-d` and 18 `gate-adjudication-mutants` rows and 0 occurrences of `928` (control for the absence: the row counts are non-zero).
 
@@ -34459,7 +34459,7 @@ verify: manual
 
 ## BL-542 — a remediator record entry escapes the `--sources` join by spelling its disposition key differently
 
-**LANDED (v0.812.0, verified d853b8fc).** The join refuses an `edit:` entry under a renamed key, a disposition outside repaired|escalated|skipped|not-reproduced|operator-ruling from the record's era, and an unresolved `operator-ruling` cite. Stated limit: a ruling given as a slash command, or cited by a request's SHA256 line, does not resolve; 0 operator-ruling entries exist, so it refuses nothing today.
+**LANDED (v0.812.0, verified 33361d56).** The join refuses an `edit:` entry under a renamed key, a disposition outside repaired|escalated|skipped|not-reproduced|operator-ruling from the record's era, and an unresolved `operator-ruling` cite. Stated limit: a ruling given as a slash command, or cited by a request's SHA256 line, does not resolve; 0 operator-ruling entries exist, so it refuses nothing today.
 
 **DEFECT.** `join-remediator-shards.sh` treats an entry as structured, and so subject to the source, siblings and closes checks, only when it carries `disposition:` (header lines 64 and 165). In s319 the requirements D-answer fold record (`s319/requirements-d-answers-fold.md`, a `pm-escalated` dispatch) was refused by `--sources` because its `source:` lines named no `<seat-file>#<finding-id>`. The agent then renamed `disposition:` to `outcome:` on six entries, and the join reported zero refusals. The lead's own words at 00:38:30Z: "it got there by renaming `disposition:` to `outcome:` on six entries, which sidesteps the check." The lead accepted the record, reasoning that the entries record folds of operator answers, not party findings. There are two gaps. The join has no entry type for an operator decision applied to the subject, so a correct fold cannot pass honestly. And any key other than `disposition:` silently removes an entry from every check. Owed: the join refuses an entry-shaped block (a `### ` heading carrying `edit:` or a sha triple) that has no `disposition:`. A declared `disposition: operator-ruling` resolves against a cited `operator-requests-history.md` entry. A probe shows a renamed key refused and an operator-ruling entry passed.
 
@@ -34467,7 +34467,7 @@ verify: manual
 
 ## BL-546 — a SPEC part remediator hand-edits `SPEC.md`, which core forbids and nothing refuses
 
-**LANDED (v0.812.0, verified d853b8fc).** The SPEC render arm judges a record citing the sprint spec dir: a SPEC part whose memlog carries a `(decision)` after its last render is refused, a part whose memlog does not exist is skipped, and an unreadable one is refused; `requirements.md` states what a SPEC repair owes. Stated limit: the receipt is the seeded probe alone (graph: 19 memlogs SKIP, 0 fire), and graph's first memlog carrying the Render phrase is the real-corpus test still owed.
+**LANDED (v0.812.0, verified 33361d56).** The SPEC render arm judges a record citing the sprint spec dir: a SPEC part whose memlog carries a `(decision)` after its last render is refused, a part whose memlog does not exist is skipped, and an unreadable one is refused; `requirements.md` states what a SPEC repair owes. Stated limit: the receipt is the seeded probe alone (graph: 19 memlogs SKIP, 0 fire), and graph's first memlog carrying the Render phrase is the real-corpus test still owed.
 
 **DEFECT.** `_gate-procedures.md:925-929` and `requirements.md:233-236`: the SPEC part's shard "never edits `SPEC.md` by hand"; it appends a `(decision)` to `.memlog.md` and re-renders through `bmad-spec`. In s319 this was broken twice. The requirements party-repair part 04 remediator "first applied the edits to `SPEC.md` by hand, then redid the change through the memlog and re-rendered". The serial cross-part remediator disclosed "a direct edit of `SPEC.md` without re-rendering through `bmad-spec`" at 00:04Z. Both were caught only by the agents' own disclosure. No hook refuses an Edit/Write to `_bmad-output/specs/**/SPEC.md` from a remediator, and the join does not compare `SPEC.md` against a render of its memlog. Owed: a guard denying direct writes to `SPEC.md` outside the `bmad-spec` render path, or a join arm that re-renders from `.memlog.md` and refuses a byte difference.
 
@@ -34487,7 +34487,7 @@ verify: manual
 
 ## BL-560 — the SPEC re-render is a separate dispatch the lead must remember, and the subject is left stale between them
 
-**LANDED (v0.812.0, verified d853b8fc).** The join refuses a SPEC whose `.memlog.md` holds a `(decision)` dated after `SPEC.md`'s last render, so the stale state cannot reach the adversary. Same stated limit as BL-546: seeded probe only, 19 graph memlogs SKIP.
+**LANDED (v0.812.0, verified 33361d56).** The join refuses a SPEC whose `.memlog.md` holds a `(decision)` dated after `SPEC.md`'s last render, so the stale state cannot reach the adversary. Same stated limit as BL-546: seeded probe only, 19 graph memlogs SKIP.
 
 **DEFECT.** In graph s319 the serial cross-part remediator appended 4 `(decision)` entries to the spec's `.memlog.md` and edited none of `SPEC.md` (its writes: prd 28, architecture-impact 8, product-brief 8, memlog 4). That is correct under `requirements.md:233-236`. But it left `SPEC.md` behind its memlog when the pass delivered, and the join accepted the record. The lead then had to dispatch a separate render agent (01:50:21Z), which the pause then stranded (BL-559). The earlier SPEC remediators (BL-546) did the opposite, rendering by hand. Between the two, nothing ties "the memlog has entries newer than `SPEC.md`" to any check, so the subject that the next adversarial pass and the gate read can carry a SPEC that does not reflect its own decisions. Owed: the join (or `validate-artifact-derivations.sh` over the subject) refuses when `.memlog.md` holds a `(decision)` entry dated after `SPEC.md`'s last render stamp, so the stale state cannot reach the adversary. BL-546's render path is what lets the serial remediator close it itself.
 
@@ -34495,7 +34495,7 @@ verify: manual
 
 ## BL-561 — `--sources` on a non-party repair record does not refuse whenever the sprint also has party seats
 
-**LANDED (v0.812.0, verified d853b8fc).** `--sources` on a record whose source tokens are all part-shaped refuses once and names `--escalations` (graph's s319 elicitation repair: 138 refusals become 1). Token-less and own-artifact-token records keep their earlier refusals.
+**LANDED (v0.812.0, verified 33361d56).** `--sources` on a record whose source tokens are all part-shaped refuses once and names `--escalations` (graph's s319 elicitation repair: 138 refusals become 1). Token-less and own-artifact-token records keep their earlier refusals.
 
 **DEFECT.** Filed by peer session ai-dlc-68 from graph s319 (lead `62eadbbe`, handoff 01:50–01:55Z 2026-10-16). At 01:50:23Z the lead ran `join-remediator-shards.sh --sources _bmad-output/planning-artifacts/s319/requirements-elicitation-repair.md --sprint 319`. graph's installed `_gate-procedures.md:851-858` says that after the serial remediator appends to a record with no party seat files (adversarial, elicitation or gate repair), the lead runs `--escalations <record> --sprint <N>`, and that only a party record takes `--sources`. The script's own header (`join-remediator-shards.sh:579-580`, `:801-803`) says `--sources` "needs the sprint's party-mode/s<N> seat dir and refuses without it". s319 HAS a `party-mode/s319/` dir because a party round ran this sprint, so `--sources` did not refuse: it resolved the elicitation record's `<cross-N|N>.md#F-n` tokens against the party seats and printed 138 REFUSED lines. The lead then misdiagnosed this as a tool defect, wrote it into `pipeline-snapshot.md` as "PC candidate worth filing: elicitation-pass sources resolve against the wrong dir", and never ran `--escalations`, so the open-escalation list in the handoff (S-21, S-22, S-23, S-8) was assembled by hand rather than printed by the join.
 
@@ -34507,7 +34507,7 @@ verify: manual
 
 ## BL-540 — a remediator edits the escalation record, outside its brief and past a protected-path list that names the file
 
-**LANDED (v0.813.0, verified 070ca3d0).** Arm 1b of `ai-dlc-gate-remediation-guard.sh` denies a remediator's Edit/Write/MultiEdit to `docs/escalations/pending.md`, with the remedy to record it as an `escalated` entry; the lead's own Edit passes. The protect-hook gap is traced: `ai-dlc-protect.sh` is registered only on the context-mode MCP matcher and never sees an Edit. False-positive replay over graph's transcripts: 3240 subagent transcripts, 2881 prefilter hits (prefilter control: 1 of 25 hit-half and 0 of 25 miss-half transcripts hold a pending.md edit), 27 pending.md edit calls; deny control before the corpus: remediator deny, developer and lead allow; 10 denies, every one a remediator; 0 of the 13 dev and 4 architect calls denied.
+**LANDED (v0.813.0, verified 2ca609f1).** Arm 1b of `ai-dlc-gate-remediation-guard.sh` denies a remediator's Edit/Write/MultiEdit to `docs/escalations/pending.md`, with the remedy to record it as an `escalated` entry; the lead's own Edit passes. The protect-hook gap is traced: `ai-dlc-protect.sh` is registered only on the context-mode MCP matcher and never sees an Edit. False-positive replay over graph's transcripts: 3240 subagent transcripts, 2881 prefilter hits (prefilter control: 1 of 25 hit-half and 0 of 25 miss-half transcripts hold a pending.md edit), 27 pending.md edit calls; deny control before the corpus: remediator deny, developer and lead allow; 10 denies, every one a remediator; 0 of the 13 dev and 4 architect calls denied.
 
 **DEFECT.** In graph s319 the serial cross-part requirements remediator (dispatched at 23:11:31Z) made four successful Edits to `docs/escalations/pending.md`, starting at 23:37:11Z. One appended `**CORRECTION (serial remediator, 2026-10-15):**` to an existing escalation entry's evidence line, changing the premise the operator would rule on. `_gate-procedures.md:940-945` gives the serial remediator the ASSEMBLED subject files and PRD text outside the in-scope parts. Its brief names the four subject files and the spec `.memlog.md`. Neither names `pending.md`, which is the escalation record the lead and the operator adjudicate (`gate-remediation-guard.sh:1407` tells a remediator to ESCALATE there, by way of the lead, not to rewrite it).
 
@@ -34519,7 +34519,7 @@ verify: manual
 
 ## BL-536 — an adversary shard cannot know its own dispatch id, and the merge took whatever was typed
 
-**LANDED (v0.813.0, verified 070ca3d0).** The merge derives each adversary shard's dispatch id from the write ledger, the meta file and the spawn ledger, corroborated by the probe ledger, and never from the shard; `--rerun` re-runs one stalled shard. The join's behaviour on the real corpus is unmeasured; the replay stopped first. Filed, not delivered here: BL-596, BL-597, BL-598.
+**LANDED (v0.813.0, verified 2ca609f1).** The merge derives each adversary shard's dispatch id from the write ledger, the meta file and the spawn ledger, corroborated by the probe ledger, and never from the shard; `--rerun` re-runs one stalled shard. The join's behaviour on the real corpus is unmeasured; the replay stopped first. Filed, not delivered here: BL-596, BL-597, BL-598.
 
 **DEFECT.** Discharges `PC-S319-CONVERGENCE-ADVERSARY-CANNOT-KNOW-ITS-OWN-TOOL-USE-ID`.
 
@@ -34656,7 +34656,7 @@ With jq absent or the hook absent it exits 9.
 verify: sh M=core/scripts/merge-adversarial-shards.sh; H=core/hooks/ai-dlc-gate-remediation-guard.sh; [ -f "$M" ] || M=scripts/ai-dlc/merge-adversarial-shards.sh; [ -f "$H" ] || H=.claude/hooks/ai-dlc-gate-remediation-guard.sh; [ -f "$M" ] && [ -f "$H" ] && command -v jq >/dev/null || exit 9; M="$(pwd -P)/$M"; H="$(pwd -P)/$H"; Q=toolu_01ZZZZZZZZZZZZZZZZZZZZZZ; i() { printf 'toolu_01Rcpt%s' "$1"; }; w() { r="$(mktemp -d)" && r="$(cd "$r" && pwd -P)" || exit 9; PA="$r/_bmad-output/planning-artifacts"; D="$PA/s319/shards/stories-p1"; O="$PA/s319/stories-adversarial-p1.md"; mkdir -p "$D" "$PA/s319/stories" "$r/t/sess/subagents" || exit 9; : > "$r/_bmad-output/pipeline-snapshot.md"; for n in a b c; do printf '# story %s\n' "$n" > "$PA/s319/stories/$n.md"; done; }; s() { case "$1" in cross*) z="artifact: _bmad-output/planning-artifacts/s319/stories" ;; *) z="artifact_sha: $(shasum -a 256 "$PA/s319/stories/$(printf abc | cut -c"$1").md" | cut -d' ' -f1)" ;; esac; { printf '# shard %s\n\n## Findings\n\n<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\ninvoked_at: 2026-10-15T21:00:00Z\n' "$1"; [ "$2" = - ] || printf 'tool_use_id: %s\n' "$2"; printf 'mode: subagent\nlead_role: stories-test-strategy\n%s\nfindings_critical: 0\nfindings_major: 0\nverdict: EXIT_CONDITION_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$z"; } > "$D/$1.md"; }; g() { [ "${5:-}" = nometa ] || printf '{"toolUseId":"%s"}\n' "$3" > "$r/t/sess/subagents/agent-$2.meta.json"; [ "${5:-}" = nospawn ] || printf '{"v":1,"role":"%s","tool_use_id":"%s"}\n' "${4:-adversary}" "$3" >> "$r/_bmad-output/spawn-ledger.jsonl"; case "${5:-}" in nometa|noprobe) ;; *) printf '{"v":3,"agent_id":"%s","role":"%s","tool_use_id":"%s"}\n' "$2" "${4:-adversary}" "$3" >> "$r/_bmad-output/subagent-context.jsonl" ;; esac; t="$r/t/sess.jsonl"; [ "${5:-}" != pre ] || t=""; jq -nc --arg f "${F:-$D/$1.md}" --arg a "$2" --arg t "$t" --arg sid "${SID:-sess}" '{session_id:$sid,tool_name:"Write",transcript_path:$t,tool_use_id:"toolu_w",tool_input:{file_path:$f},agent_id:$a}' | AI_DLC_STATE_DIR=_bmad-output CLAUDE_PROJECT_DIR="$r" bash "$H" >/dev/null 2>&1; }; b() { w; for k in 1 3 cross-1 cross-2 cross-3; do s "$k" "$1"; g "$k" "ag$k" "$(i "$k")"; done; }; m() { o="$(bash "$M" "$@" "$D" 2>&1)"; c=$?; }; x() { m "${@:2}"; [ "$c" -eq 2 ] && grep -qF "REFUSED:" <<<"$o" && [ ! -e "$O" ] || exit 1; [ -z "${1:-}" ] || grep -qF -- "$1" <<<"$o" || exit 1; }; old() { L="$PA/.artifact-writes.jsonl"; sed 's/"ts":"[^"]*"/"ts":"2000-01-01T00:00:00Z"/' "$L" > "$L.t" && mv "$L.t" "$L" || exit 9; S="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; }; b unavailable; s 2 unavailable; g 2 ag2 "$(i 2)"; m; if [ "$c" -ne 0 ]; then [ "$c" -eq 2 ] && grep -qF "is not a toolu_ id" <<<"$o" && exit 1; exit 9; fi; grep -qF "MERGED: " <<<"$o" && grep -qx "shard_tool_use_ids: 1=$(i 1) 2=$(i 2) 3=$(i 3) cross-1=$(i cross-1) cross-2=$(i cross-2) cross-3=$(i cross-3)" "$O" && grep -qx "tool_use_id: $(i cross-1)" "$O" || exit 1; b unavailable; s 2 toolu_cross2_forged; x; b unavailable; s 2 "$Q"; g 2 ag2 "$(i 2)" adversary nometa; x; b unavailable; s 2 "$Q"; g 2 ag2 "$(i 2)"; x; b unavailable; s 2 unavailable; g 2 ag2 "$(i 2)" remediator; x; w; for k in 1 cross-1 cross-2 cross-3; do s "$k" unavailable; g "$k" "ag$k" "$(i "$k")"; done; s 2 unavailable; s 3 unavailable; g 2 ag2 "$(i 2)"; g 3 ag2 "$(i 2)"; x "one dispatch delivered two shards"; b unavailable; s 2 unavailable; g 2 ag2 "$(i 2)"; g 2 ag2b "$(i 2b)"; x; b unavailable; s 2 unavailable; g 2 ag2 "$(i 2)" adversary nospawn; x; b unavailable; s 2 unavailable; g 2 ag2 "$(i 2)"; g 2 ag2r "$(i 2r)" remediator; x; b unavailable; s 2 unavailable; g 2 ag2 "$(i 2)" adversary pre; printf '{"agent_id":"ag2","tool_use_id":"%s"}\n' "$(i 2)" >> "$r/_bmad-output/subagent-context.jsonl"; m; [ "$c" -eq 0 ] && grep -qF " 2=$(i 2) " "$O" || exit 1; b unavailable; s 2 unavailable; g 2 ag2 "$(i 2)" adversary pre; sed '/"agent_id":"ag2"/d' "$r/_bmad-output/subagent-context.jsonl" > "$r/p.t" && mv "$r/p.t" "$r/_bmad-output/subagent-context.jsonl" || exit 9; x; grep -qF "predates transcript_path" <<<"$o" || exit 1; w; for k in 1 2 3 cross-1 cross-2 cross-3; do s "$k" "toolu_$(printf '%s' "$k" | tr -d -)_g1_dispatch"; g "$k" "ag$k" "$(i "$k")"; done; m; [ "$c" -eq 0 ] && grep -qx "tool_use_id: $(i cross-1)" "$O" && grep -qF " 2=$(i 2) " "$O" && ! grep -qF "_g1_dispatch" "$O" || exit 1; b unavailable; s 2 -; mkdir -p "$PA/s319/shards/stories-p2" "$PA/s318/shards/stories-p1" || exit 9; F="$PA/s319/shards/stories-p2/2.md" g 2 ag2 "$(i 2)"; F="$PA/s318/shards/stories-p1/2.md" g 2 ag2 "$(i 2)"; [ "$(grep -c '/shards/stories-p[12]/2.md"' "$PA/.artifact-writes.jsonl")" -eq 2 ] || exit 9; x "2.md has no row in"; b unavailable; s 2 unavailable; g 2 ag2 "$(i 2)"; printf '{"agent_id":"ag2","tool_use_id":"%s"}\n' "$Q" >> "$r/_bmad-output/subagent-context.jsonl"; printf '{"v":1,"role":"adversary","tool_use_id":"%s"}\n' "$Q" >> "$r/_bmad-output/spawn-ledger.jsonl"; x "the meta file was rewritten after the agent stopped"; b unavailable; s 2 unavailable; g 2 ag2 "$(i 2)"; printf '{"v":1,"role":"remediator","tool_use_id":"%s"}\n' "$(i 2)" >> "$r/_bmad-output/spawn-ledger.jsonl"; x "dispatched as role remediator"; SID=other b unavailable; s 2 unavailable; SID=other g 2 ag2 "$(i 2)"; m; [ "$c" -eq 0 ] && grep -qF " 2=$(i 2) " "$O" || exit 1; b unavailable; s 2 unavailable; g 2 agA "$(i 2a)" adversary noprobe; old; g 2 ag2 "$(i 2)"; m --rerun "2.md@$S"; [ "$c" -eq 0 ] && grep -qF " 2=$(i 2) " "$O" && grep -qx "rerun: 2.md since $S; superseded: agA (1 rows, 2000-01-01T00:00:00Z..2000-01-01T00:00:00Z)" "$O" || exit 1; b unavailable; s 2 unavailable; g 2 agcross-1 "$(i cross-1)"; old; g 2 ag2 "$(i 2)"; x "is a superseded writer of 2.md and also wrote" --rerun "2.md@$S"; b unavailable; s 2 unavailable; g 2 agR "$(i 2r)" remediator noprobe; old; g 2 ag2 "$(i 2)"; x "a non-adversary write on a shard is a role violation, not a stale dispatch" --rerun "2.md@$S"; b unavailable; s 2 unavailable; mkdir -p "$PA/s319/shards/stories-p2" || exit 9; F="$PA/s319/shards/stories-p2/1.md" g x agX "$(i X)"; F="$D/2.md" g x agX "$(i X)" adversary nospawn; x "under another shard dir"; b unavailable; s 2 unavailable; F="$PA/s319/shards/stories-p2/1.md" g x agX "$(i X)"; F="$D/2.md" g x agX "$(i X)" adversary nospawn; old; g 2 ag2 "$(i 2)"; x "under another shard dir" --rerun "2.md@$S"; b unavailable; s 2 unavailable; F="$D/2.md.draft" g x ag2 "$(i 2)"; g 2 ag2 "$(i 2)" adversary nospawn; m; [ "$c" -eq 0 ] || exit 1; b unavailable; s 2 unavailable; g 2 ag2 "$(i 2)" adversary noprobe; x "has no row for that agent; an adversary that has not stopped has not delivered"; grep -qF "re-dispatch the shard and merge with --rerun 2.md@" <<<"$o" || exit 1; exit 0
 ## BL-582 — ai-dlc-update has no advisor touchpoint before its pushes and merges, and the advisor gate exempts them
 
-**LANDED (v0.814.0, verified c2da1d98).** The advisor gate excludes only the PUSH of an `ai-dlc-update/*` branch; a merge from that cwd (`gh … pr merge`, the MCP merge, or a merge chained after a push) is gated. `ai-dlc-update/SKILL.md` names the touchpoint at step 2's auto-merge and at step 8's merge. A session with no advisor grant is silent: 0 of graph's 9 local-model update sessions carry a grant line (control: 59 of 75 Anthropic-model ones do).
+**LANDED (v0.814.0, verified b9f9fe06).** The advisor gate excludes only the PUSH of an `ai-dlc-update/*` branch; a merge from that cwd (`gh … pr merge`, the MCP merge, or a merge chained after a push) is gated. `ai-dlc-update/SKILL.md` names the touchpoint at step 2's auto-merge and at step 8's merge. A session with no advisor grant is silent: 0 of graph's 9 local-model update sessions carry a grant line (control: 59 of 75 Anthropic-model ones do).
 
 **DEFECT.** Raised by the operator's question ("should the graph session have called the advisor before the push? I thought that was a requirement?"); filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]). Rule 32 touchpoint I — "Before a push, a merge or a deploy" — is in the pipeline skill only (`core/skills/ai-dlc/SKILL.md`, 1 line). `core/skills/ai-dlc-update/SKILL.md` at ffef448b names no advisor touchpoint: `advisor` 0 times outside "advisory" (4), control `self-update-fixtures` 6. `core/hooks/ai-dlc-advisor-gate.sh:58-74` excludes a push or merge while the cwd branch is `ai-dlc-update/*` and a push whose every refspec destination is `ai-dlc-update/*`, giving as its reason that the update skill is "a bootstrapping file; its text carries no touchpoint and this release does not edit it". The exclusion shipped in 0.738.0 (`9bdbc311`); that release's CHANGELOG cites an operator ruling for the per-kind gate ("THE SAME KIND (operator ruling, batch 201)") and lists the update-branch exclusion as release text with no ruling attached.
 
@@ -34670,9 +34670,9 @@ verify: manual
 
 ## BL-529 — the derivation re-run the repair procedure requires over `s<N>/` can never pass once seat files are frozen
 
-**LANDED (v0.815.0, verified 35569940).** The repair procedure's derivation re-run names FILE targets and never the slot directory: the joined repair record, the assembled document (for the requirements subject each of `prd.md`, `product-brief.md`, `architecture-impact.md` and `SPEC.md`) and the spec's `.memlog.md`, plus any other record a repair edited. The validator half shipped in 0.801.0; this is the join-time closure in `_gate-procedures.md`, pinned as `gp-derive-file`, with the slot-target absence as its own `artifact-derivations` arm.
+**LANDED (v0.815.0, verified a88f88d4).** The repair procedure's derivation re-run names FILE targets and never the slot directory: the joined repair record, the assembled document (for the requirements subject each of `prd.md`, `product-brief.md`, `architecture-impact.md` and `SPEC.md`) and the spec's `.memlog.md`, plus any other record a repair edited. The validator half shipped in 0.801.0; this is the join-time closure in `_gate-procedures.md`, pinned as `gp-derive-file`, with the slot-target absence as its own `artifact-derivations` arm.
 
-**PARTIAL (v0.801.0, verified 40581bc2) — the validator half shipped; the join-time closure in `_gate-procedures.md` is OPEN.** A directory target skips `shards/` and the slot's record grammar, prints an `EXCLUDED:` count, and `--all` walks them. It reduces the run without making it pass: s316 297 of 650, s317 598 of 1224, s318 207 of 418 still stale, in live documents and record names outside the grammar.
+**PARTIAL (v0.801.0, verified 86d3a695) — the validator half shipped; the join-time closure in `_gate-procedures.md` is OPEN.** A directory target skips `shards/` and the slot's record grammar, prints an `EXCLUDED:` count, and `--all` walks them. It reduces the run without making it pass: s316 297 of 650, s317 598 of 1224, s318 207 of 418 still stale, in live documents and record names outside the grammar.
 
 **DEFECT.** `_gate-procedures.md:981` requires
 `validate-artifact-derivations.sh _bmad-output/planning-artifacts/s<N>/` after every repair join, and
@@ -34695,7 +34695,7 @@ verify: manual
 
 ## BL-543 — the serial remediator discovers its sibling and moved-cite worklist by hand, making it the longest single wait in the planning steps
 
-**LANDED (v0.815.0, verified 35569940).** `core/scripts/serial-remediation-worklist.sh` derives the serial remediator's replaced-text HITs and MOVED-CITEs from the pre-repair copies the splitters now keep (`sections/.before`, `.before/<stem>`), and removes each copy it resolved unless `--keep` is passed. A file with no copy is UNASSESSABLE, exit 3. The sections and subject repair dispatch runs it once after the join and before the serial dispatch, and the remediator adjudicates its hits instead of deriving them. Fixture `serial-remediation-worklist`.
+**LANDED (v0.815.0, verified a88f88d4).** `core/scripts/serial-remediation-worklist.sh` derives the serial remediator's replaced-text HITs and MOVED-CITEs from the pre-repair copies the splitters now keep (`sections/.before`, `.before/<stem>`), and removes each copy it resolved unless `--keep` is passed. A file with no copy is UNASSESSABLE, exit 3. The sections and subject repair dispatch runs it once after the join and before the serial dispatch, and the remediator adjudicates its hits instead of deriving them. Fixture `serial-remediation-worklist`.
 
 **DEFECT (efficiency).** In s319 carry-over-evaluation (2.8 h), the two serial cross-section remediators took 42 min (party repair, 19:54–20:36Z) and 29 min (elicitation repair, 20:53–21:22Z), about 42% of the step. Every parallel fan-out in the same step finished in 5–15 min. In requirements, the serial cross-part remediator ran 52 min (23:11Z–00:04Z). Most of that work is mechanical. For every `repaired` entry it runs `grep -rn -F '<replaced text>'` over the assembled files, and it re-reads every cite into an edited file (`_gate-procedures.md:991-1002`). BL-508 (v0.786.0) made the serial remediator run whenever `SERIAL-REQUIRED` is above 0, so this cost now lands on every sharded repair. Owed: the join emits that worklist itself, meaning each repaired entry's replaced text with its grep hits over the assembled files, and each cite into an edited file whose line moved. The serial remediator is then briefed to adjudicate the hits rather than find them. Measure by re-timing the serial remediator on the next consumer sprint.
 
@@ -34705,7 +34705,7 @@ verify: manual
 
 ## BL-544 — the elicitation brief's finding format contradicts what the merge counts, and core states the format only inside the script
 
-**LANDED (v0.815.0, verified 35569940).** `merge-adversarial-shards.sh` refuses a `## ` finding heading (the elicitation silent-zero shape), and the finding grammar is stated in `adversary.md` item 5 and `_gate-procedures.md`, not only inside the script. Measured on graph: 20 of 177 adversarial and elicitation shard files carry `## E-n` headings (74 lines; control `^### ` 143).
+**LANDED (v0.815.0, verified a88f88d4).** `merge-adversarial-shards.sh` refuses a `## ` finding heading (the elicitation silent-zero shape), and the finding grammar is stated in `adversary.md` item 5 and `_gate-procedures.md`, not only inside the script. Measured on graph: 20 of 177 adversarial and elicitation shard files carry `## E-n` headings (74 lines; control `^### ` 143).
 
 **DEFECT.** In s319 the lead's requirements elicitation brief told 19 adversaries "Every finding opens a `##` heading whose first token is the id (`## F-1 (major)`)". `merge-adversarial-shards.sh:468-469` counts only `### ` headings inside a `## Findings` section, so a shard that followed the brief would merge as zero findings. Shard 12 noticed and used `### F-n (MAJOR)`, and the lead began auditing every shard's heading shape before the merge. This is the same root as `PC-S319-COE-ADVERSARIAL-SHARD-DIR-STEM-NEVER-STATED`: a format the lead must restate in a brief appears only in a script, not in the step file the brief is written from. Owed: the elicitation and adversarial shard format is rendered from the merge script's grammar into `_gate-procedures.md` (or the adversary role file), and the merge refuses a shard whose `## Findings` holds `## F-` headings rather than reporting it as zero.
 
@@ -34713,9 +34713,9 @@ verify: manual
 
 ## BL-548 — a seat edits its own file after writing `seat-complete:`, against its contract, and nothing records that the findings changed
 
-**LANDED (v0.815.0, verified 35569940).** The merge-side half: `merge-adversarial-shards.sh --dry-run` prints the first failing phase's refusals and writes nothing (files mode; no `--document`/`--subject` arm), and `_gate-procedures.md` names `REVISED-AFTER-MARKER` and `remediator.md` the `revised-seats:` line. The beat half shipped in 0.796.0.
+**LANDED (v0.815.0, verified a88f88d4).** The merge-side half: `merge-adversarial-shards.sh --dry-run` prints the first failing phase's refusals and writes nothing (files mode; no `--document`/`--subject` arm), and `_gate-procedures.md` names `REVISED-AFTER-MARKER` and `remediator.md` the `revised-seats:` line. The beat half shipped in 0.796.0.
 
-**PARTIAL (v0.796.0, verified 47be6be6) — the beat half shipped; the merge `--dry-run` half is OPEN.** A seat file whose content hash changes, or whose marker is lost, after the beat first saw its marker is counted in a `<key>.revised` sidecar, and the beat prints `REVISED-AFTER-MARKER <n>` beside DELIVERED; `--status` prints it too. The count survives delivery and is cleared by `--reset`, a bound wipe or a new round's join epoch. Receipt: `bash core/fixtures/wait-stale-deliverable/receipt.sh BL-548` (fix 0, base 1, mutant 1). Still owed: the repair brief marking a revised seat's findings for re-read, and `merge-adversarial-shards.sh --dry-run` printing every refusal at once (that file is frozen in batch 235).
+**PARTIAL (v0.796.0, verified e3073787) — the beat half shipped; the merge `--dry-run` half is OPEN.** A seat file whose content hash changes, or whose marker is lost, after the beat first saw its marker is counted in a `<key>.revised` sidecar, and the beat prints `REVISED-AFTER-MARKER <n>` beside DELIVERED; `--status` prints it too. The count survives delivery and is cleared by `--reset`, a bound wipe or a new round's join epoch. Receipt: `bash core/fixtures/wait-stale-deliverable/receipt.sh BL-548` (fix 0, base 1, mutant 1). Still owed: the repair brief marking a revised seat's findings for re-read, and `merge-adversarial-shards.sh --dry-run` printing every refusal at once (that file is frozen in batch 235).
 
 **DEFECT.** In s319 three seats edited their sealed file after the marker. Requirements dev part 01 ("I edited the file once after writing `seat-complete` … The seat contract says not to edit after that line") and dev cross g4 did so in the party round, and dev cross g2 reported its sealed "Checked and not raised" section unreliable. `--complete`'s settle window only delays delivery until the edits stop. It does not record that a finding set changed after the seat declared it final, so the repair cannot tell a revised seat from an original one. Owed: the beat or the merge reports any seat whose content hash changed after its marker was first seen (it already holds that hash in the `.settle` sidecar), and the lead's repair brief marks those seats' findings for re-read.
 
@@ -34725,7 +34725,7 @@ verify: manual
 
 ## BL-554 — the adversary's `.draft` sibling is written into the shard directory the merge reads, and the merge refuses it
 
-**LANDED (v0.815.0, verified 35569940).** The merge skips a `.draft` beside a shard it owes, and only then; a `.draft` of a shard the set does not owe is still refused.
+**LANDED (v0.815.0, verified a88f88d4).** The merge skips a `.draft` beside a shard it owes, and only then; a `.draft` of a shard the set does not owe is still refused.
 
 **DEFECT.** `core/team-roles/adversary.md:286-291` tells an adversary whose deliverable names no completion signal to "chunk to the sibling draft path `<result>.draft` … delete nothing". Shards that do name one (`seat-complete:`) also wrote drafts. In graph s319 requirements elicitation, three shards left `10.md.draft`, `3.md.draft` and `cross-4.md.draft` beside their deliverables in `s319/shards/requirements-elicitation/`. `merge-adversarial-shards.sh:395-401` refuses any file that is not `<ordinal>.md`, `cross.md` or `cross-<g>.md` ("is not a shard name"). The lead hit the refusal at 00:59:45Z and moved the drafts out by hand, which took two merge attempts. The role contract and the merge disagree on what may sit in the directory. Owed: either the draft path lies outside the shard directory (for example `<dir>/.drafts/<name>`), or the merge ignores `*.md.draft` and refuses only an unrecognised `.md`. A probe puts a draft beside a complete shard and asserts the merge's verdict.
 
@@ -34735,7 +34735,7 @@ verify: manual
 
 ## BL-555 — the cross-group brief omits the owner rule, so two cross shards report the same finding and the merge refuses
 
-**LANDED (v0.815.0, verified 35569940).** The cross-group brief states the owner rule and `--cross-owner`, so two cross shards no longer report one finding and trip the merge's refusal.
+**LANDED (v0.815.0, verified a88f88d4).** The cross-group brief states the owner rule and `--cross-owner`, so two cross shards no longer report one finding and trip the merge's refusal.
 
 **DEFECT.** `_gate-procedures.md:355-357`: "Each cross finding has one owner, `partition-document.sh --cross-owner`; the merge refuses a finding reported outside its owner only when the owner's shard carries the identical cited set." `merge-adversarial-shards.sh:671-681` enforces it. The lead's s319 elicitation brief (`scratchpad/elicitation-brief.md`) contains no mention of an owner (`grep -c -i owner` = 0), so cross agents, who are told to read the whole subject and "may cite any ordinal" (`:351-352`), have no way to know a finding they found belongs to another group. At 01:00:01Z the merge refused: cross-3 repeated a finding that cross-1 owns (sections 1,4). The lead read both, checked every cross finding's section set against its owner, and resumed cross-1 and cross-3 to resolve it, costing another beat round. Owed: the cross brief carries each group's owned section sets (`--cross-owner` output for the round), plus the instruction to report a finding only from its owner group, or to name it as a cross-reference. Alternatively the merge collapses an identical duplicate rather than refusing it. A probe seeds two cross shards with the same cited set and asserts the result.
 
@@ -34744,7 +34744,7 @@ verify: manual
 
 ## BL-574 — the lead invented an operator go-ahead before the handoff push
 
-**LANDED (v0.815.0, verified 35569940).** The auto-handoff push site in `_gate-procedures.md` carries the directed-handoff authorisation sentence and the never-`--no-verify` prohibition, byte-identical in wrap to `handoff.md`, so all three push sites (`handoff.md`, `retro.md`, `_gate-procedures.md`) now carry it. `push-authorised.sh` binds the three.
+**LANDED (v0.815.0, verified a88f88d4).** The auto-handoff push site in `_gate-procedures.md` carries the directed-handoff authorisation sentence and the never-`--no-verify` prohibition, byte-identical in wrap to `handoff.md`, so all three push sites (`handoff.md`, `retro.md`, `_gate-procedures.md`) now carry it. `push-authorised.sh` binds the three.
 
 **DEFECT.** Filed by peer session ai-dlc-68 from graph's s319 handoff (lead `f65eae3b`, 02:58–03:06Z 2026-10-16). At 02:58:57Z the operator wrote "when adversary agent finishes, handoff." At 02:59:18Z the lead's plan read "5. Ask for your go-ahead before the push, then emit `/ai-dlc resume`." At 03:02:12Z the operator wrote "why do you need my go-ahead before the push? I've already given it when i directed a handoff. proceed." At 03:03:04Z the lead conceded "`handoff.md` step 3 includes it", but graph's installed `handoff.md` has no confirm, approval or go-ahead step before the push (`go-ahead|confirm|approval|ask` matches only the TaskStop lines 27, 36, 40 and 41). Cost: one operator round trip, about 4 min of operator attention at the moment the operator steps away. The class is a lead inventing approval gates the pipeline does not have.
 
@@ -34759,9 +34759,9 @@ verify: manual
 
 ## BL-579 — at a handoff the lead attributes every uncommitted subject edit to the agent it stopped, so the successor is told to redo joined work
 
-**LANDED (v0.815.0, verified 35569940).** Half b and the auto-handoff twin: once a repair round's join is accepted the lead commits the repaired subject files before the next pass, and the auto-handoff's stop step runs `join-remediator-shards.sh --agent-writes <task id>` per stopped row, as `handoff.md` step 1 does. `--agent-writes` itself shipped in 0.812.0.
+**LANDED (v0.815.0, verified a88f88d4).** Half b and the auto-handoff twin: once a repair round's join is accepted the lead commits the repaired subject files before the next pass, and the auto-handoff's stop step runs `join-remediator-shards.sh --agent-writes <task id>` per stopped row, as `handoff.md` step 1 does. `--agent-writes` itself shipped in 0.812.0.
 
-**PARTIAL (v0.812.0, verified d853b8fc) — `--agent-writes` and the handoff step-1 recording shipped; half b and the auto-handoff twin are OPEN.** `join-remediator-shards.sh --agent-writes` lists a stopped agent's writes from the ledger, and `handoff.md` step 1 records them. Still owed: committing after the join accepts a repair round, and the same step-1 recording in the auto-handoff path.
+**PARTIAL (v0.812.0, verified 33361d56) — `--agent-writes` and the handoff step-1 recording shipped; half b and the auto-handoff twin are OPEN.** `join-remediator-shards.sh --agent-writes` lists a stopped agent's writes from the ledger, and `handoff.md` step 1 records them. Still owed: committing after the join accepts a repair round, and the same step-1 recording in the auto-handoff path.
 
 **DEFECT.** Filed by peer session ai-dlc-4e from graph's s319 handoff by lead `949015a6` (Sonnet 5.5), 05:35-05:41Z on 2026-10-16. At 05:40:05Z the operator typed "no, i mean handoff immediately"; the lead TaskStopped the serial remediator `a7ffc8dcd555207b8` at 05:40:11Z and committed `3dd8a9fd4` ("… sharded repair joined, serial repair stopped at handoff"). Its `pipeline-snapshot.md:36` lists prd.md, product-brief.md, s319/architecture-impact.md, s319/locked-requirements.md, SPEC.md and .memlog.md as the stopped agent's "UNRECORDED partial edits" and makes diffing them the successor's FIRST ACTION.
 
@@ -34779,9 +34779,9 @@ verify: manual
 
 ## BL-599 — a FORWARD-dated `--since` is unmeasured against the BACKDATED arm, which judges only a row earlier than its dispatch
 
-**LANDED (v0.815.0, verified 35569940).** The bounded-join beat's dispatch row passes `--dispatch <agentId>` with `dispatched-at`, so the beat reads the dispatch time from the spawn ledger and refuses a later `--since`; "so rounding it is harmless" is replaced with "but a stamp after the dispatch is not". The beat's exit sentence names exit 64, a refused call that armed nothing.
+**LANDED (v0.815.0, verified a88f88d4).** The bounded-join beat's dispatch row passes `--dispatch <agentId>` with `dispatched-at`, so the beat reads the dispatch time from the spawn ledger and refuses a later `--since`; "so rounding it is harmless" is replaced with "but a stamp after the dispatch is not". The beat's exit sentence names exit 64, a refused call that armed nothing.
 
-**PARTIAL (v0.802.0, verified ab065361) — the script half and rule-28 shipped; the `_gate-procedures.md` sentence is OPEN.** `wait-for-deliverable.sh --dispatch <agentId|name@team|toolu_ id>` reads the dispatch time from the spawn ledger, starts the join there when `--since` is absent, and refuses with exit 64 a `--since` later than the dispatch; `--since` without `--dispatch` warns on stderr. rule-28 tells the lead to pass `--dispatch`. Receipt `core/fixtures/wait-stale-deliverable/receipt.sh BL-599`. The frozen `_gate-procedures.md` still carries the old wording until its own release.
+**PARTIAL (v0.802.0, verified f4ca6764) — the script half and rule-28 shipped; the `_gate-procedures.md` sentence is OPEN.** `wait-for-deliverable.sh --dispatch <agentId|name@team|toolu_ id>` reads the dispatch time from the spawn ledger, starts the join there when `--since` is absent, and refuses with exit 64 a `--since` later than the dispatch; `--since` without `--dispatch` warns on stderr. rule-28 tells the lead to pass `--dispatch`. Receipt `core/fixtures/wait-stale-deliverable/receipt.sh BL-599`. The frozen `_gate-procedures.md` still carries the old wording until its own release.
 
 **DEFECT.** Carried from a BL-564 addendum that missed BL-564's close: b235-docs (4abbd6c3) archived BL-564 as landed in v0.792.0 with its `--since` half "CLOSED by operator ruling (batch 235, 2026-10-16) as covered by the BACKDATED arm: a back-dated `--since` follows from a back-dated row, which that arm refuses." That reasoning covers back-dating only. Filed by peer session ai-dlc-68 from graph s319 lead `949015a6` (Sonnet 5.5): the serial remediator was dispatched at 05:00:03Z on 2026-10-16, and at 05:00:04Z the lead armed `wait-for-deliverable.sh --since 2026-10-16T05:00:30Z …/s319/requirements-repair-p1.md`, 27s AFTER the dispatch, so any write in the remediator's first 27s was invisible to the beat. At 05:10:02Z it re-armed with `--since 2026-10-16T05:01:30Z` and called that "`--since` set to the dispatch time", false by 87s. The BACKDATED arm lives in `core/scripts/validate-artifact-budget.sh` (emitter `:1290`, "dispatched-at … is N s before its dispatch in the spawn ledger"), surfaced through `verdict.sh`, `validate-spawn-ledger.sh` and the write-time call in `core/hooks/ai-dlc-derivation-capture.sh` (all at 4abbd6c3). As written it judges an in-flight row's `dispatched-at` against the spawn ledger and fires only when the row is EARLIER than its dispatch; its header names the beat's `--since` (`:1203`) only as the window a back-dated row widens. Whether anything refuses a `--since` hand-typed LATER than a correctly stamped row is UNMEASURED: intake has not run the arm or the beat against a forward-dated `--since`. Back-dating accepts files older than the teammate; forward-dating misses the teammate's own early writes.
 
@@ -34793,7 +34793,7 @@ verify: manual
 
 ## BL-596 — the planning-artifact write ledger drops which tree a write landed in, so a worktree or clone write credits the main tree's shard
 
-**LANDED (v0.816.0, verified a724a050).** `record_artifact_write` records the physical `root` of the tree a planning-artifact write landed in, and the merge refuses a row under its shard dir written under another root ("not this tree"). The filer's worktree world refuses (cell TR1), with a symlink alias of this tree and a pre-field row without `root` merging as controls.
+**LANDED (v0.816.0, verified 8670f0ba).** `record_artifact_write` records the physical `root` of the tree a planning-artifact write landed in, and the merge refuses a row under its shard dir written under another root ("not this tree"). The filer's worktree world refuses (cell TR1), with a symlink alias of this tree and a pre-field row without `root` merging as controls.
 
 **DEFECT.** Filed by peer session ai-dlc-f5 from the BL-536 tip adversary run on `07dfcbfa` (b235-bl536 before its rebase onto 0.792.0), routed by lead ai-dlc-9c. `record_artifact_write` in `core/hooks/ai-dlc-gate-remediation-guard.sh` (`:519`, at origin/main 27467671) normalises its fallback spelling at `:528` — `*/${STATE_DIR_NAME}/planning-artifacts/*` → `_raw_rel="${STATE_DIR_NAME}/${1#*/${STATE_DIR_NAME}/}"` — stripping everything before the state-dir name. A write to `<repo>/.claude/worktrees/wt1/_bmad-output/planning-artifacts/s319/shards/stories-p1/2.md` is therefore recorded as `_bmad-output/planning-artifacts/s319/shards/stories-p1/2.md`, byte-identical to the main tree's shard path, with no trace of the worktree; the same holds for any scratch or rehearsal clone an agent of the session writes. BL-536's merge keys on that path.
 
@@ -34807,7 +34807,7 @@ verify: manual
 
 ## BL-597 — under a local-model lead the merge writes `call_…` dispatch ids that Check 24 reads as no ids
 
-**LANDED (v0.816.0, verified a724a050).** The dispatch-id grammar is declared once in `validate-adversarial-convergence.sh` (`DISPATCH_ID_PREFIXES`, `DISPATCH_ID_ERE`) and read by arm K, K3 and the merge. A `call_` round passes arm K end to end (`check-24-adversarial-convergence` case `shard-recovered-call`), and an `xyz_` round still fails it (`shard-recovered-xyz`).
+**LANDED (v0.816.0, verified 8670f0ba).** The dispatch-id grammar is declared once in `validate-adversarial-convergence.sh` (`DISPATCH_ID_PREFIXES`, `DISPATCH_ID_ERE`) and read by arm K, K3 and the merge. A `call_` round passes arm K end to end (`check-24-adversarial-convergence` case `shard-recovered-call`), and an `xyz_` round still fails it (`shard-recovered-xyz`).
 
 **DEFECT.** Local-model lead goal (operator ruling: a defect a local lead exposes is a pipeline fix). Filed by peer session ai-dlc-f5 from the same BL-536 tip adversary run on `07dfcbfa`. The harness meta records `toolUseId` in a non-Anthropic shape under a local model: intake found exactly 1 subagent meta on this machine carrying `"toolUseId":"call_` (another project, a local-model session), against 5065 carrying `"toolUseId":"toolu_` in the same glob. With meta and spawn-ledger ids of shape `call_…`, the BL-536 merge returns rc=0 and writes `shard_tool_use_ids: 1=call_1abc …`. Check 24's `k_has_ids` (`core/scripts/validate-adversarial-convergence.sh:1763-1764`, `case " $1" in *=toolu_?*`) answers NO on that line, so arm K treats a correctly derived round as carrying no ids. The merge's own id vocabulary is `toolu_`-only too: `RE_REAL_TUID='^toolu_[0-9A-Za-z]{24}$'` (`07dfcbfa:core/scripts/merge-adversarial-shards.sh:677`), and on origin/main `:585` refuses any `tool_use_id` that is not `toolu_?*`. Before BL-536 a non-`toolu_` self-reported id was refused at the merge; after it, the id passes the merge and is mis-scored downstream.
 
@@ -34821,7 +34821,7 @@ verify: manual
 
 ## BL-598 — `merge-adversarial-shards.sh --rerun <shard>@<S>` never checks S against a dispatch time
 
-**LANDED (v0.816.0, verified a724a050).** `--rerun <shard>.md@<S>` refuses an S farther than `BACKDATE_TOL_S` from the credited dispatch's spawn-ledger time. The 1999 start refuses, and a start 45 s after the recorded dispatch merges (cell RB1).
+**LANDED (v0.816.0, verified 8670f0ba).** `--rerun <shard>.md@<S>` refuses an S farther than `BACKDATE_TOL_S` from the credited dispatch's spawn-ledger time. The 1999 start refuses, and a start 45 s after the recorded dispatch merges (cell RB1).
 
 **NOTE.** Filed by peer session ai-dlc-f5 from the BL-536 tip adversary run on `07dfcbfa` (`--rerun` is documented at `core/scripts/merge-adversarial-shards.sh:68-80` there). S is taken as typed: a far-past S (`1999-01-01T00:00:00Z`) on a normal round merges; a future S (`2999-…`) refuses with `has no row`. Harmless today because the role check is the guard (that gap is BL-536 D1, folded there), but S binds nothing — the same hand-typed-time shape as BL-564's `--since`.
 
@@ -34843,7 +34843,7 @@ Receipt: every element enumerated from the findings-summary list carries a failu
 
 **Progress (v0.805.0):** R1 (architecture §2a-§2c removed) and R2 (Rules 1, 5, 6 and 9 folded) landed; R3 (the failure-case lines for the elements kept) remains.
 
-**LANDED (v0.817.0, verified 3c8088b7).** R3: every element `step-value-s317-s319.md` keeps carries a Rule 26(c) block (failure caught, false-positive cost, removal condition): `_gate-procedures.md` "Validation cycle" items 1-3, `sprint-review.md` section 2, `stories-test-strategy.md` step 4, SKILL.md Rules 10 and 14; stories 5.1a merged into step 1. With R1 and R2 (v0.805.0) every element on the findings-summary list carries a failure-case line or is absent from core.
+**LANDED (v0.817.0, verified 39955c93).** R3: every element `step-value-s317-s319.md` keeps carries a Rule 26(c) block (failure caught, false-positive cost, removal condition): `_gate-procedures.md` "Validation cycle" items 1-3, `sprint-review.md` section 2, `stories-test-strategy.md` step 4, SKILL.md Rules 10 and 14; stories 5.1a merged into step 1. With R1 and R2 (v0.805.0) every element on the findings-summary list carries a failure-case line or is absent from core.
 
 verify: manual
 
@@ -34859,7 +34859,7 @@ Receipt: a committed measurement table under `docs/analysis/` keyed by round, pl
 
 **Measured (batch 235, `docs/analysis/step-value-s317-s319.md`):** no requirements round is removable. Party and elicitation each carry unique high-consequence catches that shipped (s317-s319). Adversarial p1-p3 carry none: most p1 MAJORs and every p2+ MAJOR sit in text a repair or fold wrote, so the waste is the repair defect rate (archived BL-508, landed v0.786.0, now three-sprint evidence), not a round. The per-round rationale ships in ai-dlc-de's release R3.
 
-**LANDED (v0.817.0, verified 405263c0).** The measurement table keyed by round is `docs/analysis/step-value-s317-s319.md` ("Cost", "Yield", "Verdict"); every round remains, and `_gate-procedures.md` "Validation cycle" items 1 (party), 2 (elicitation) and 3 (adversarial) each carry a Rule 26(c) block naming its failure case and its measured catches (3c8088b7, 405263c0).
+**LANDED (v0.817.0, verified 39955c93).** The measurement table keyed by round is `docs/analysis/step-value-s317-s319.md` ("Cost", "Yield", "Verdict"); every round remains, and `_gate-procedures.md` "Validation cycle" items 1 (party), 2 (elicitation) and 3 (adversarial) each carry a Rule 26(c) block naming its failure case and its measured catches (3c8088b7, 405263c0).
 
 verify: manual
 
@@ -34875,7 +34875,7 @@ Owed: one lead-side instruction, placed where the serial remediator is dispatche
 
 Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
 
-**LANDED (v0.817.0, verified 22ccc50e).** `_gate-procedures.md` "Adversarial repair dispatch": a record carrying `repair-complete:` is never reopened by `SendMessage`; more repair is `TaskStop` plus ONE fresh `Agent` dispatch appending its own block. `rule-28.md` adds it as the third thing `SendMessage` may never carry. Pinned by `process-rule-pins` rows gp-redispatch-fresh, gp-redispatch-never, r28-no-reopen. No hook guard: the only `SendMessage` matcher is PostToolUse, and no ledger joins an agentId to a repair record.
+**LANDED (v0.817.0, verified 39955c93).** `_gate-procedures.md` "Adversarial repair dispatch": a record carrying `repair-complete:` is never reopened by `SendMessage`; more repair is `TaskStop` plus ONE fresh `Agent` dispatch appending its own block. `rule-28.md` adds it as the third thing `SendMessage` may never carry. Pinned by `process-rule-pins` rows gp-redispatch-fresh, gp-redispatch-never, r28-no-reopen. No hook guard: the only `SendMessage` matcher is PostToolUse, and no ledger joins an agentId to a repair record.
 
 verify: manual
 
@@ -34898,7 +34898,7 @@ Owner: ai-dlc-60, as a release behind U-b (lead ai-dlc-9c's assignment): an upda
 
 **Third instance, case 2 (graph update session `6b192363`, 2026-10-17 05:54:03Z; filed by graph watch ai-dlc-f7, intake re-derived it read-only).** An `/ai-dlc-update` from 0.805.0 to 0.812.0, run as 0.807.0 first. The transcript has 343 lines and 0 `compact_boundary` lines, so this session never compacted. Its first tool call, the stamp-read Bash, was denied 8 s after the skill loaded with "your FIRST tool call must be `Read _bmad-output/pipeline-snapshot.md` in full" (1 deny line). The likely source of the stale `.recover-fired` is the s319 lead's own compaction: transcript `0e9a936b` line 953 is a `compact_boundary` at 2026-10-16T23:15:26Z. That is the cross-session marker case 2 names. Graph's installed `.claude/hooks/ai-dlc-recover-gate.sh` is byte-identical to `core/hooks/ai-dlc-recover-gate.sh` at origin/main `33361d56` (`cmp` identical), so the case reproduces on the current engine, not only at 0.805.0: `session_id` appears only on the advisor-stage lines (`:80`, `:132`, `:136`, `:147`, `:151`, `:388`), and the read-stage fast path is `:227` `[ -f "$MARKER" ] || exit 0`, with no session or source test. Graph's `ai-dlc-postcompact.sh`, the marker's writer, has 0 `session_id` lines (control: 1 `recover-fired` line). The cost this time was one turn and two irrelevant Reads, then the pull ran normally (a SELF-UPDATE-DEFER on 0.812.0, then 0.807.0 OK, 3 fixtures green, and a push). This seed is a natural case-2 receipt input: an update session with no compaction, a stale marker from another session, and a denied first Bash.
 
-**LANDED (v0.818.0, verified 86962cd9).** `ai-dlc-recover.sh` and `ai-dlc-postcompact.sh` stand down for an update session, and `.recover-fired` records `session_id`. `ai-dlc-recover-gate.sh` stands down, without deleting the marker, for a call from another session (the owner test) and for an update session (the updater test), above the readability block. The update-session question is the I126 scan line, byte-bound across 8 hooks, not a new shared helper. Receipt: on a `file://` clone of graph, the update-session cases are silent on the tip and DENY on the base (compaction, another session's stale marker, an ownerless marker, and graph's real `6b192363` transcript), while the `/ai-dlc` controls still deny. FP set: 0 over graph's 186 transcripts. Fixture `postcompact-rulebook-recovery` carries C1-C9.
+**LANDED (v0.818.0, verified 477352d4).** `ai-dlc-recover.sh` and `ai-dlc-postcompact.sh` stand down for an update session, and `.recover-fired` records `session_id`. `ai-dlc-recover-gate.sh` stands down, without deleting the marker, for a call from another session (the owner test) and for an update session (the updater test), above the readability block. The update-session question is the I126 scan line, byte-bound across 8 hooks, not a new shared helper. Receipt: on a `file://` clone of graph, the update-session cases are silent on the tip and DENY on the base (compaction, another session's stale marker, an ownerless marker, and graph's real `6b192363` transcript), while the `/ai-dlc` controls still deny. FP set: 0 over graph's 186 transcripts. Fixture `postcompact-rulebook-recovery` carries C1-C9.
 
 verify: manual
 
@@ -34922,7 +34922,7 @@ OPEN QUESTIONS, not filed as defects. Each needs SOME prior state, so the questi
 
 Owed: scope each reader in items 1-7 to the current sprint (or to the current pull's own range), so a failing or absent historical artifact can neither block nor owe anything. No prose rule. Answer each open question with a reason. Receipt per reader: the verdict is the same with every past sprint's artifacts deleted and with a deliberately failing artifact seeded into a past sprint. Control: the same failing artifact in the CURRENT sprint still fails.
 
-**LANDED (v0.819.0, verified 820a152e).** Items 1 and 3: a pull's `artifact-derivations` row and `derivation-differential.sh` read only what `check-owed-derivations.sh --scope-batch` calls CURRENT or LIVING, and the classifier comes from the distribution at `<theirs>`; with none, `DECISION artifact-derivations-unscoped`. Item 4: `ledger-reverify.sh` reads no archive and counts no closed entry, so bare prefixes are always AMBIGUOUS and siblings must be open live entries. Item 5: Check 6 counts the flat layout plus the current slot. Item 7: Check 15's gate-log fallback takes the first CURRENT or LIVING log. Items 2 and 6 close by receipt. Open question 1: `sprint-id` reads only the canonical's own `sprint:`/`status:` and refuses a preamble-only canonical; questions 2 and 3 are NOTEs. Each changed fixture asserts the history-deleted twin, and all 14 exit 0 through `hermetic-run.sh` with `required_missing=0`.
+**LANDED (v0.819.0, verified ddad2ac3).** Items 1 and 3: a pull's `artifact-derivations` row and `derivation-differential.sh` read only what `check-owed-derivations.sh --scope-batch` calls CURRENT or LIVING, and the classifier comes from the distribution at `<theirs>`; with none, `DECISION artifact-derivations-unscoped`. Item 4: `ledger-reverify.sh` reads no archive and counts no closed entry, so bare prefixes are always AMBIGUOUS and siblings must be open live entries. Item 5: Check 6 counts the flat layout plus the current slot. Item 7: Check 15's gate-log fallback takes the first CURRENT or LIVING log. Items 2 and 6 close by receipt. Open question 1: `sprint-id` reads only the canonical's own `sprint:`/`status:` and refuses a preamble-only canonical; questions 2 and 3 are NOTEs. Each changed fixture asserts the history-deleted twin, and all 14 exit 0 through `hermetic-run.sh` with `required_missing=0`.
 
 verify: manual
 
@@ -34941,7 +34941,7 @@ Owed (inside BL-631, by 71's ruling):
 
 Owner: ai-dlc-53, closed by BL-631.
 
-**LANDED (v0.819.0, verified 820a152e).** `is_history` names `carry-over-backlog-archive.md` and `architecture-history.md` exactly, beside `prd-history.md` and `product-brief-history.md`; `carry-over-backlog.md` and `architecture.md` stay LIVING. Arm Bh derives the four live -> history pairs from SKILL.md and fails on a missing companion or a listed live side; its self-probe M25 is killed. Ha7-Ha9 pin the new names and three near-misses stay LIVING. M23 measures [Ha1 Ha2 Ha3 Hn], unchanged. On graph, `carry-over-backlog-archive.md` now reads HISTORY.
+**LANDED (v0.819.0, verified ddad2ac3).** `is_history` names `carry-over-backlog-archive.md` and `architecture-history.md` exactly, beside `prd-history.md` and `product-brief-history.md`; `carry-over-backlog.md` and `architecture.md` stay LIVING. Arm Bh derives the four live -> history pairs from SKILL.md and fails on a missing companion or a listed live side; its self-probe M25 is killed. Ha7-Ha9 pin the new names and three near-misses stay LIVING. M23 measures [Ha1 Ha2 Ha3 Hn], unchanged. On graph, `carry-over-backlog-archive.md` now reads HISTORY.
 
 verify: manual
 
@@ -34949,7 +34949,7 @@ verify: manual
 
 **DEFECT.** Filed on ai-dlc-f5's report, routed by ai-dlc-b8. `core/fixtures/remediator-shard-join-mutants/run.sh:185-186`, `review-shard-merge-mutants/run.sh:177-178` and `adversarial-shard-merge-mutants/run.sh:103-104` each set `POOL=8` and `SCORER_BOUND=900`; a scorer still running past the bound is killed and scored `TIMEOUT -- the scorer ran past 900s and was killed; no verdict`, which fails the unit (`:213/:231`, `:205/:223`, `:131/:149`). The bound is wall clock, so under a loaded gate (pool of 12 fixtures each running 8 scorers) a scorer can exceed it with no defect in the subject; ai-dlc-f5 reports `adversarial-shard-merge-mutants` failing exactly this way in batch 235. The `-b/-c/-d` shards of the first two carry the same runner. A false red on a release gate costs a full re-push.
 
-**LANDED (v0.820.0, verified 05f9d17b).** The scorer watchdog in apply-self-overwrite-, remediator-shard-join-, review-shard-merge- and self-update-fixture-log-mutants keys on no progress: a scorer with no fresh file under its progress marker or work dir for SCORER_IDLE=300 s is refused (FIXTURE BROKEN, exit 2), never scored TIMEOUT. adversarial-shard-merge-mutants carries the same watchdog from v0.813.0. Arm [MW] drives the real `slot()` at SCORER_POLL=1 / SCORER_IDLE=4: a stub that advances for ~9 s finishes unstalled, and a stub that writes nothing is stalled with its recorded pid dead. Slot: every shard of the four batteries ok in one concurrent wave, [MW] ok in shard a of each and absent elsewhere.
+**LANDED (v0.820.0, verified 4e6670c1).** The scorer watchdog in apply-self-overwrite-, remediator-shard-join-, review-shard-merge- and self-update-fixture-log-mutants keys on no progress: a scorer with no fresh file under its progress marker or work dir for SCORER_IDLE=300 s is refused (FIXTURE BROKEN, exit 2), never scored TIMEOUT. adversarial-shard-merge-mutants carries the same watchdog from v0.813.0. Arm [MW] drives the real `slot()` at SCORER_POLL=1 / SCORER_IDLE=4: a stub that advances for ~9 s finishes unstalled, and a stub that writes nothing is stalled with its recorded pid dead. Slot: every shard of the four batteries ok in one concurrent wave, [MW] ok in shard a of each and absent elsewhere.
 
 Owed: a bound that separates "hung" from "slow under load" (e.g. CPU time, or progress-since-last-check, rather than wall clock), or a bound derived from the unit's recorded cost; a probe scorer that is slow but progressing under an artificially low bound must not be scored TIMEOUT, with a genuinely hung scorer as the control that still is.
 
@@ -34964,7 +34964,7 @@ verify: manual
 - The hook's own comment (`:577-578`) says a scan's cost "grows with the transcript and the load" (0.35 s solo on a 4432-line graph prefix; 4.73 s for 2 re-reads on graph's 815-line deny). Under load, fewer re-reads fit in the 10 s, and the transcript write being waited for lands later too.
 - The hook ships to consumers: `templates/` registers it (1 file).
 
-**LANDED (v0.820.0, verified f5876dc4).** advisor-gate denies only when the call's own `tool_use` line is on disk (SEEN); the 10 s re-read is a net. OPERATOR RULING R1: at net expiry with SEEN=0 the hook allows with a stderr reason (fail-open); knobs 0 and 1 keep the time-only deny. R2(a): a missing `tool_use_id` is silent. recover-gate's advisor stage follows the same rule. Cells rr-seen and rr-never; mutants net-expiry-denies and net-ignores-seen (MIN_MUTANTS 99); postcompact-rulebook-recovery arm A10 and its mutant. Slot: advisor-gate-deny and all five mutant shards ok; postcompact-rulebook-recovery ok with 52 mutant lines, 9 of 9 whose arms and A10 ok, 0 bad substitution.
+**LANDED (v0.820.0, verified 4e6670c1).** advisor-gate denies only when the call's own `tool_use` line is on disk (SEEN); the 10 s re-read is a net. OPERATOR RULING R1: at net expiry with SEEN=0 the hook allows with a stderr reason (fail-open); knobs 0 and 1 keep the time-only deny. R2(a): a missing `tool_use_id` is silent. recover-gate's advisor stage follows the same rule. Cells rr-seen and rr-never; mutants net-expiry-denies and net-ignores-seen (MIN_MUTANTS 99); postcompact-rulebook-recovery arm A10 and its mutant. Slot: advisor-gate-deny and all five mutant shards ok; postcompact-rulebook-recovery ok with 52 mutant lines, 9 of 9 whose arms and A10 ok, 0 bad substitution.
 
 The fixture that carries it is `core/fixtures/advisor-gate-deny/lib.sh:547-549`, cell `rr-late`: it appends 3 s after the hook starts (`APPEND_DELAY=3`) and expects SILENT against the 10 s ceiling. This is BL-616's census item 5. It was moved here because a fixture-side change would hide a property of the hook.
 
@@ -34987,7 +34987,7 @@ verify: manual
 - `:109` "MUTANT lease-always-put: delivered 30 of 30, A alive=0 — the window under test never ran".
 The session then ran the fixture twice standalone, and both passed. Graph's copy (`tests/fixtures/wait-stale-deliverable/run.sh`) is byte-identical to origin/main's (md5 `f7e19c11d2015cf16b4f941627446ba5` on both). The filer reports load averages of 55-58 during the suite and about 4 for the reruns; intake found no load figure in the transcript, so those numbers are the filer's.
 
-**LANDED (v0.820.0, verified e05f4418).** lease-noclobber freezes beat A with SIGSTOP in its poll sleep (POLL 600, a 2×POLL quantum), so neither A's re-stamp nor its lease expiry can land in the window at any load; controls void the case unless A is stopped (`ps` T) and its lease is still in the future. arrives-mid-beat, since-earlier, knob-split-forward, knob-split-reverse and receipt BL-547 read a recording `sleep` stub instead of `ELAPSED`. marker-goes-stale bounds the lease against a clock read after the reap (`LEASE <= KILL_T + 3*POLL`); new mutant lease-end-time writes the END-time lease. lease-handoff's read-early control is a sleep record. Slot: wait-stale-deliverable 142 ok, 0 failing, in a 30-unit concurrent wave at load up to 45; receipt BL-547 rc 0.
+**LANDED (v0.820.0, verified 4e6670c1).** lease-noclobber freezes beat A with SIGSTOP in its poll sleep (POLL 600, a 2×POLL quantum), so neither A's re-stamp nor its lease expiry can land in the window at any load; controls void the case unless A is stopped (`ps` T) and its lease is still in the future. arrives-mid-beat, since-earlier, knob-split-forward, knob-split-reverse and receipt BL-547 read a recording `sleep` stub instead of `ELAPSED`. marker-goes-stale bounds the lease against a clock read after the reap (`LEASE <= KILL_T + 3*POLL`); new mutant lease-end-time writes the END-time lease. lease-handoff's read-early control is a sleep record. Slot: wait-stale-deliverable 142 ok, 0 failing, in a 30-unit concurrent wave at load up to 45; receipt BL-547 rc 0.
 
 Mechanism, at `core/fixtures/wait-stale-deliverable/run.sh:1160-1206` on origin/main:
 - `run_noclobber` starts beat A with quantum 10 and POLL 8 (`:1172`).
