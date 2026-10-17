@@ -1069,3 +1069,13 @@ Owed (lead ai-dlc-71): a `validate-shell-portability.sh` arm that flags both for
 Owner: unowned (71: filed, not built by 6f).
 
 verify: manual
+
+## BL-648 — the advisor gate counts only the built-in advisor, so a granted session that consulted over `mcp__advisor__consult` is still denied
+
+**NOTE.** Measured by ai-dlc-c2 and filed on lead ai-dlc-71's instruction; intake re-derived the static half read-only at origin/main `b9f9fe06`. `core/hooks/ai-dlc-advisor-gate.sh:7` clears a gated action only on an advisor ATTEMPT, defined as a `server_tool_use` named `advisor`. The hook has 0 mentions of `mcp__advisor` (control: 42 mentions of `advisor`). A session holding the built-in `advisor_tool` grant that consults only through the MCP tool `mcp__advisor__consult` therefore has no attempt on record, and its push or merge is denied. c2 measured the cell "grant + MCP only" = 1 at 0.814.0.
+
+Scope: a session with no grant is silent (`:20-22`), so local-model leads are unaffected. c2 found 0 of graph's 9 local-model update sessions carry a grant, against 59 of 75 Anthropic-model sessions (control). The operator's global instructions already tell a granted session to use the built-in advisor and ignore the MCP one, so the denied cell is a session that took the MCP path while granted.
+
+Owed: either count an `mcp__advisor__consult` call as an attempt (a `tool_use` of that name followed by its result), or state in the deny text that a granted session must use the built-in `advisor`. Receipt: the "grant + MCP only" cell is allowed (or its deny names the built-in tool), and "grant + no attempt" stays denied (control).
+
+verify: manual
