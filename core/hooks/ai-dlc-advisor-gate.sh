@@ -55,12 +55,35 @@
 #       steps/gate-validation.md:790 (heading grammar :805) -- touchpoint G1, :167
 #     The retro 7a-post rotation (`git mv`, then a header-only `# Gate Log`, retro.md:1288-1300)
 #     and the in-sprint rotation (gate-validation.md:900, which REMOVES entries) are not gated.
-#   THE UPDATE SKILL, measured against core/skills/ai-dlc-update/SKILL.md (a bootstrapping file;
-#   its text carries no touchpoint and this release does not edit it):
-#   - EXCLUDED: a push or merge while the branch checked out in the hook input's `cwd` is
-#     `ai-dlc-update/*` (`git -C <cwd> symbolic-ref --short -q HEAD`) -- the self-update branch
-#     cut at :502 and pushed and auto-merged at :520. A detached HEAD, a non-repository or any
+#   THE UPDATE SKILL, measured against core/skills/ai-dlc-update/SKILL.md (a bootstrapping file:
+#   the delivering pull runs its steps 1-2 on the old text and steps 3-8 on the new, after the
+#   step-2 re-invoke; hooks are live from step 2's working-tree write -- reasoned from the step-2
+#   text, not measured -- so the delivering pull's step-2 merge would meet the gate before its text
+#   names the touchpoint). Its PUSH of an update branch
+#   lands only on an `ai-dlc-update/*` ref and is excluded below. Its MERGE is GATED (BL-582): a
+#   merge lands machinery into the consumer's working branch, which is touchpoint I's case, and the
+#   skill names the touchpoint itself at step 2's auto-merge and at step 8's merge.
+#   - EXCLUDED: a PUSH while the branch checked out in the hook input's `cwd` is `ai-dlc-update/*`
+#     (`git -C <cwd> symbolic-ref --short -q HEAD`) -- step 2's self-update branch and step 6's
+#     reconcile branch, each pushed by step 2 or step 8. A detached HEAD, a non-repository or any
 #     git failure is NOT excluded, so it stays gated.
+#   - GATED from that same cwd: a `merge` kind (`gh … pr merge`, the MCP merge), standalone or
+#     chained after a push. A command kinded `push` is excluded only when no segment of it is a
+#     `gh … pr merge` (HASMERGE, the same `ghmerge` test `leadkind` uses), because a chained
+#     `git push … && gh pr merge N` is kinded `push` (the push test runs first) and would otherwise
+#     carry its merge through the push's exclusion. The per-kind scan of recorded calls is NOT
+#     re-kinded: only the incoming call's exclusion reads the flag.
+#     Step 2's push is `bash reconcile/self-update-push.sh …`, which `gitpush` does not kind at all,
+#     so `wrapper && gh pr merge N` is kinded `merge` and gated with or without the flag.
+#     NARROWING / FP SET: the callers that merge from an `ai-dlc-update/*` cwd are update step 2
+#     (the auto-merge after the wrapper's push), update step 8 (the operator-approved merge of the
+#     reconcile branch), and untangle mode's step 8, which cuts `ai-dlc-update/untangle-<ts>` at its
+#     step 6 and delivers through step 8 "reused as-is" (push, PR, operator-approved merge). All
+#     three ARE the subject, so the false-positive set under this ruling is empty; the cost is one
+#     deny per merge on a lead that holds the advisor tool and has not called it, cleared by one
+#     call. A lead with no grant (a local model) is silent, as everywhere.
+#     Measured on graph's 0.791 -> 0.793 update session: `gh pr merge 1230` and `gh pr merge 1231`
+#     ran standalone from the update cwd with 0 advisor attempts, both exempt before this change.
 #   - EXCLUDED BY COMMAND TEXT, because PreToolUse sees the cwd branch BEFORE the command runs:
 #     a push whose every refspec destination is `ai-dlc-update/*` (`git push -u origin
 #     ai-dlc-update/x`, `HEAD:refs/heads/ai-dlc-update/x`), and a push of `HEAD` or of
@@ -68,7 +91,8 @@
 #     `switch -c`/`-C`. A `$B`/`${B}` refspec resolves through a `B=...` assignment in the same
 #     command. Measured on graph: 4 real pushes ran from another branch with the update branch as
 #     the refspec, and 1 cut it as `B=ai-dlc-update/...; git checkout -q -b $B && ... git push -u
-#     origin $B`. A push naming any other ref beside an update ref stays gated.
+#     origin $B`. A push naming any other ref beside an update ref stays gated. These are
+#     push-only: they never exclude a merge.
 #   - ALLOWED, AND KNOWN: a cwd already on `ai-dlc-update/*` plus `cd <elsewhere> && git push`.
 #     The exclusion reads the cwd, not where the command moves to; a session on an update branch
 #     that pushes a different checkout in the same command is not gated.
@@ -316,6 +340,9 @@ def pushupd($v; $cut): pushrefs($v) as $r
   | (($r | length) > 0 and ($r | all(upd))) or ($cut and ($r | all(. == "HEAD" or upd)));
 def cutupd($v): test(gitre + "(checkout|switch)\\s") and (words as $w
   | [range(0; ($w | length) - 1) as $i | select($w[$i] | test("^-[A-Za-z]*[bBcC]$")) | $w[$i + 1] | xv($v) | upd] | any);
+# A `gh [-R|--repo <r>] pr merge` segment. ONE test: leadkind kinds with it, and the incoming pass
+# reads it as HASMERGE (a merge chained after a push from an update cwd is not excluded).
+def ghmerge: test("^(\\S*/)?gh(\\s+(-R|--repo)(\\s+|=)\\S+)*\\s+pr\\s+merge(\\s|$)");
 def leadkind:
   if ((.name // "") | tostring | startswith("mcp__") and endswith("__merge_pull_request")) then "merge"
   elif .name == "Bash" then
@@ -323,7 +350,7 @@ def leadkind:
     | (if ($c | test("ai-dlc-update/")) then ($c | vars) else {} end) as $v
     | ($s | map(cutupd($v)) | any) as $cut
     | if ($s | map(gitpush and (isdelete | not) and (pushupd($v; $cut) | not)) | any) then "push"
-      elif ($s | map(test("^(\\S*/)?gh(\\s+(-R|--repo)(\\s+|=)\\S+)*\\s+pr\\s+merge(\\s|$)")) | any) then "merge"
+      elif ($s | map(ghmerge) | any) then "merge"
       elif ($s | map(test("^((bash|sh)\\s+)?\\S*gate-checkpoint\\.sh(\\s.*)?\\sclose(\\s|$)")) | any) then "close"
       elif ($c | contains("## Gate Log:"))
            and ((($c | redirs) + [$s[] | words | select(length > 0 and .[0] == "tee") | .[1:][]])
@@ -408,9 +435,10 @@ PARSED="$(printf '%s' "$IN" | jq -r --arg home "${HOME:-}" "$CLASSIFY"'
      | sub("^hdrw$"; "")) as $k
   | (if $k == "push" and $call.name == "Bash" then (($ti.command // "") | tostring | l3push) else "" end) as $l3
   | (if $call.name == "Bash" then (($ti.command // "") | tostring | csegs | map(gitpush and nvflag and (isdelete | not) and (isdry | not)) | any) else false end) as $nv
-  | @sh "TP=\($tp) AID=\((.agent_id // "") | tostring) CWD=\((.cwd // "") | tostring) PROJ=\($proj) ROLE=\($role) KIND=\($k) FP=\(($ti.file_path // "") | tostring) NEWN=\(($ti.content // "") | tostring | heads) TUID=\((.tool_use_id // "") | tostring) L3=\($l3) NV=\($nv)"' 2>/dev/null)" \
+  | (if $call.name == "Bash" and (($ti.command // "") | tostring | csegs | map(ghmerge) | any) then 1 else 0 end) as $hm
+  | @sh "TP=\($tp) AID=\((.agent_id // "") | tostring) CWD=\((.cwd // "") | tostring) PROJ=\($proj) ROLE=\($role) KIND=\($k) FP=\(($ti.file_path // "") | tostring) NEWN=\(($ti.content // "") | tostring | heads) TUID=\((.tool_use_id // "") | tostring) L3=\($l3) NV=\($nv) HASMERGE=\($hm)"' 2>/dev/null)" \
   || { say "the tool call is not readable JSON; gate skipped"; exit 0; }
-TP=""; AID=""; CWD=""; PROJ=""; ROLE=""; KIND=""; FP=""; NEWN=0; TUID=""; L3=""; NV=false
+TP=""; AID=""; CWD=""; PROJ=""; ROLE=""; KIND=""; FP=""; NEWN=0; TUID=""; L3=""; NV=false; HASMERGE=0
 eval "$PARSED"
 
 # BL-562: a ref-moving push that skips the pre-push hook, from ANY agent on a layered consumer. It
@@ -461,8 +489,9 @@ if [ "$KIND" = gatelogw ]; then
   KIND=gatelog
 fi
 
-# The update skill's own branch: a push or merge from `ai-dlc-update/*` is not gated.
-if [ "$KIND" = push ] || [ "$KIND" = merge ]; then
+# The update skill's own branch: a PUSH from `ai-dlc-update/*` is not gated. A merge from it is,
+# standalone (KIND merge) or chained after a push (KIND push, HASMERGE 1) -- BL-582.
+if [ "$KIND" = push ] && [ "$HASMERGE" = 0 ]; then
   _br="$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git -C "${CWD:-.}" symbolic-ref --short -q HEAD 2>/dev/null)" || _br=""
   case "$_br" in ai-dlc-update/*) exit 0 ;; esac
 fi

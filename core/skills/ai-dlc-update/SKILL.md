@@ -545,7 +545,9 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      `bash reconcile/self-update-push.sh <consumer> origin <self-update-branch> _bmad-output/ai-dlc-update/self-update-push-<ts>.md`
      (`origin` is the remote step 1 synced against; the last argument is a NEW untracked path
      the wrapper writes only on a hook refusal). Exit 0 means pushed: open a PR, and
-     **auto-merge (squash, delete branch)** — no operator gate. Exit 4 (`TRANSPORT`) and exit 3
+     **auto-merge (squash, delete branch)** — no operator gate.
+     If you hold the advisor tool, call it in a message of its own before `gh pr merge`.
+     Exit 4 (`TRANSPORT`) and exit 3
      (`HOOK-REFUSED`) are the next paragraph's two cases; exit 2 is a refusal with nothing
      pushed — a bad argument, a remote with more than one push URL, or a hook that moved the
      branch — so report its stderr line and treat it as exit 4.
@@ -2725,7 +2727,9 @@ declared sites, not everywhere unconditionally.
      independent gate — separate from the `apply` arg that authorized the write.
      The skill does NOT auto-merge. None of the following authorize a merge: zero
      conflicts, a clean diff, the `apply` arg already given, or inferred intent.
-     Present the PR and wait for the operator to approve it; only then merge
+     Present the PR and wait for the operator to approve it.
+     If you hold the advisor tool, call it in a message of its own before `gh pr merge`.
+     Only then merge
      (squash, delete branch). On merge, the re-stamp + log + changes reach the
      working branch.
 9. **Safety.** Three independent recover layers: the step-6 reconcile **branch**

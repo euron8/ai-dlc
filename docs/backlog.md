@@ -461,18 +461,6 @@ Scheduled in batch 235 for a later release (scope ruling: the boundary is the re
 
 verify: manual
 
-## BL-582 — ai-dlc-update has no advisor touchpoint before its pushes and merges, and the advisor gate exempts them
-
-**DEFECT.** Raised by the operator's question ("should the graph session have called the advisor before the push? I thought that was a requirement?"); filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]). Rule 32 touchpoint I — "Before a push, a merge or a deploy" — is in the pipeline skill only (`core/skills/ai-dlc/SKILL.md`, 1 line). `core/skills/ai-dlc-update/SKILL.md` at ffef448b names no advisor touchpoint: `advisor` 0 times outside "advisory" (4), control `self-update-fixtures` 6. `core/hooks/ai-dlc-advisor-gate.sh:58-74` excludes a push or merge while the cwd branch is `ai-dlc-update/*` and a push whose every refspec destination is `ai-dlc-update/*`, giving as its reason that the update skill is "a bootstrapping file; its text carries no touchpoint and this release does not edit it". The exclusion shipped in 0.738.0 (`9bdbc311`); that release's CHANGELOG cites an operator ruling for the per-kind gate ("THE SAME KIND (operator ruling, batch 201)") and lists the update-branch exclusion as release text with no ruling attached.
-
-Measured on update session `1d7b4691` (Sonnet 5.5, the 0.791.0 → 0.793.0 pull, 2026-10-16): it pushed the self-update branch twice (02:45 EDT, failed TRANSPORT; 03:03 EDT), ran `gh pr merge 1230` at 03:10 EDT into `ai-dlc/carry-over/offramp-config-and-rewards`, pushed the reconcile branch at 03:22 EDT and ran `gh pr merge 1231` at 03:26 EDT. Intake counted 0 `advisor_tool_result` in its transcript against 4 in pipeline lead `f65eae3b` on the same model, so the tool was very likely available. Every one of those calls was exempt, because each merge ran while the cwd was still on the update branch. Two merges landed machinery into the sprint branch with the operator's approval ("merge is approved when ready") and no second reading — touchpoint I's case.
-
-Owed: touchpoint I in ai-dlc-update/SKILL.md before step 2's self-update push and auto-merge and before step 8's delivery push and merge, and the hook's exclusion narrowed to the push of the update branch only, gating the `gh pr merge` into the original branch. Bootstrapping caveat: a fix to the update skill takes effect on the pull after the one that delivers it. Receipt: the hook denies a `gh pr merge` from an `ai-dlc-update/*` cwd with no advisor attempt; a push of `ai-dlc-update/x` stays allowed as the control; SKILL.md names the touchpoint at both steps.
-
-Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
-
-verify: manual
-
 ## BL-583 — the push suite costs about 8 fixture-hours per full run, over 40% in mutant batteries, and no fixture has been judged on value
 
 **DEFECT (efficiency).** Operator-raised, 2026-10-16 ~04:30 EDT: "gating a release is so expensive, like stupidly expensive to run the push suite". Filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]). Assigned to ai-dlc-a6: phase 1 is a read-only census of where kill sets overlap, phase 2 is confirmation in the lead's slots after H-b. ai-dlc-bb's world-cache release already targets the `review-shard-merge-mutants` pole, so this entry does not count that saving twice.
@@ -557,6 +545,8 @@ Cause of case 2, measured at a0451c70 by the filer and re-derived by intake: `ai
 Consequence: a stand-down in `recover.sh` alone does not cover case 2 — the update-session stand-down must sit in `recover-gate.sh` as well. The receipt gains a case: a pre-existing `.recover-fired` with no compaction leaves an update-session Bash call silent, and the same seed with an `/ai-dlc` marker still denies. DEFECT stands.
 
 Owner: ai-dlc-60, as a release behind U-b (lead ai-dlc-9c's assignment): an update-session stand-down in both hooks through the shared session-marker scan, the gate's read stages keyed on `session_id`, a 5-case receipt, and an FP set measured against graph's 179 transcripts.
+
+**Third instance, case 2 (graph update session `6b192363`, 2026-10-17 05:54:03Z; filed by graph watch ai-dlc-f7, intake re-derived it read-only).** An `/ai-dlc-update` from 0.805.0 to 0.812.0, run as 0.807.0 first. The transcript has 343 lines and 0 `compact_boundary` lines, so this session never compacted. Its first tool call, the stamp-read Bash, was denied 8 s after the skill loaded with "your FIRST tool call must be `Read _bmad-output/pipeline-snapshot.md` in full" (1 deny line). The likely source of the stale `.recover-fired` is the s319 lead's own compaction: transcript `0e9a936b` line 953 is a `compact_boundary` at 2026-10-16T23:15:26Z. That is the cross-session marker case 2 names. Graph's installed `.claude/hooks/ai-dlc-recover-gate.sh` is byte-identical to `core/hooks/ai-dlc-recover-gate.sh` at origin/main `33361d56` (`cmp` identical), so the case reproduces on the current engine, not only at 0.805.0: `session_id` appears only on the advisor-stage lines (`:80`, `:132`, `:136`, `:147`, `:151`, `:388`), and the read-stage fast path is `:227` `[ -f "$MARKER" ] || exit 0`, with no session or source test. Graph's `ai-dlc-postcompact.sh`, the marker's writer, has 0 `session_id` lines (control: 1 `recover-fired` line). The cost this time was one turn and two irrelevant Reads, then the pull ran normally (a SELF-UPDATE-DEFER on 0.812.0, then 0.807.0 OK, 3 fixtures green, and a push). This seed is a natural case-2 receipt input: an update session with no compaction, a stale marker from another session, and a denied first Bash.
 
 verify: manual
 
@@ -1062,4 +1052,20 @@ Related: BL-592 (the wall-clock bound killing a control, the verdict shape; c8's
 
 verify: manual
 
+## BL-647 — `/bin/bash` 3.2 closes a multi-line `$( … )` early at a bare `case` pattern's `)` or at a lone apostrophe in a comment, and `bash -n` accepts both
 
+**DEFECT.** Found by ai-dlc-6f and filed on lead ai-dlc-71's instruction; intake reproduced both forms under `/bin/bash` 3.2.57(1)-release, standalone, with `set -u`. Tool-hazards class.
+- Found when shard a of `adversarial-shard-merge-mutants` at `66e5de0a` exited 1 with "run.sh: line 630: pst: unbound variable" inside the [MW] probe's `mwr="$( … )"`, printing no [MW] line and no verdict.
+- (a) A comment carrying a single apostrophe inside a multi-line `"$( … )"`: `# the scorer's own subshell (bash -c's PPID) is excluded` gives "bad substitution: no closing `)'", and the assignment never happens (`mwr: unbound variable`). The same text without apostrophes prints `[1 0]`. Intake's narrowing: a comment carrying a balanced PAIR of apostrophes and no `)` prints `[1 0]`, while a comment carrying a lone `)` and no apostrophe fails the same way. So the trigger is an unbalanced quote or paren in comment text, not "any apostrophe". That is consistent with 6f's report that `core/fixtures/wait-stale-deliverable/run.sh` carries apostrophe comments inside substitutions and still passes.
+- (b) `case "$h" in ''|*[!0-9]*) k=x ;; *) k=1 ;; esac` inside a multi-line `"$( … )"` gives "syntax error near unexpected token `newline'" and then `pst: unbound variable`. With the POSIX leading-paren form, `(''|*[!0-9]*)` and `(*)`, it prints `[1 0]`.
+- `bash -n` exits 0 on all four failing forms, so the shell-syntax step of the gate cannot see this. The hazard is only visible at run time, as an unbound variable or a missing verdict far from its cause.
+
+Live sites: none on origin/main `33361d56` (0 matches for the case line, control 0 `hkd` anywhere), and fixed for `adversarial-shard-merge-mutants` on `b235-bl536-g1` at `070ca3d0`. ai-dlc-c8's `b235-load-series` `87116aa0` carries the identical bare-pattern line, `case "$hpid" in ''|*[!0-9]*) hkd=x ;; *) kill -0 …`, in 5 batteries: `adversarial-shard-merge-mutants/run.sh:420`, `apply-self-overwrite-mutants/run.sh:327`, `remediator-shard-join-mutants/run.sh:767`, `review-shard-merge-mutants/run.sh:669` and `self-update-fixture-log-mutants/run.sh:1913` (5 of 5 read at that commit; each sits inside a `="$(` opened 14 lines above, by a hand scan, not the parser). FIXED on that branch by c8's `ed286604`, which writes all 5 in the leading-paren form: 0 unparenthesised sites there, against 5 at `87116aa0` (control).
+
+NOT measured: the false-positive set of a `validate-shell-portability.sh` arm that flags a bare `case` pattern, or an unbalanced quote or paren in a comment, inside a multi-line `$( )`. 71 asks that it be measured across the tree before such an arm is proposed. Per "cross-check a parser against what EXECUTES it", the oracle for any such arm is `/bin/bash` 3.2 running the extracted substitution, not `bash -n` and not a second grammar.
+
+Owed (lead ai-dlc-71): a `validate-shell-portability.sh` arm that flags both forms inside a multi-line `$( )`, after its false-positive set is measured across the tree, so the next author cannot write either form. The known sites are already fixed. Receipt: each failing form above is flagged, and its paired passing form is not.
+
+Owner: unowned (71: filed, not built by 6f).
+
+verify: manual

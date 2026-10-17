@@ -27,7 +27,11 @@
 #   CLOSE        `gate-checkpoint.sh ... close` -> DENY; twin `... record 12 PASS` -> SILENT
 #   DELETE       `git push origin --delete x`, `-d`, `:x` -> SILENT (twin: PUSH)
 #   MENTION      `echo git push origin x`, `grep -c "gh pr merge" log` -> SILENT
-#   UPDATE       cwd on `ai-dlc-update/x`: push and merge -> SILENT; twin: same on `sprint/3` -> DENY
+#   UPDATE       cwd on `ai-dlc-update/x`: push -> SILENT; BL-582, a merge from it is gated:
+#                `gh pr merge` -> DENY (u-merge), MCP merge -> DENY (u-mcp), `git push ... && gh pr
+#                merge` -> DENY (u-chain), `bash reconcile/self-update-push.sh ... && gh pr merge`
+#                -> DENY (u-wrap); twins: each merge after an advisor attempt -> SILENT (u-merge-adv,
+#                u-mcp-adv), the push alone -> SILENT; and push and merge on `sprint/3` -> DENY
 #   UPDATEREF    from `sprint/3`, every refspec destination `ai-dlc-update/*` (bare, `HEAD:refs/heads/`,
 #                redirected, inside `nohup bash -c 'exec setsid ...'`) -> SILENT; twins `ai-dlc-updated/x`,
 #                `HEAD:ai-dlc-update-x`, `sprint/3 ai-dlc-update/x` -> DENY
@@ -338,8 +342,8 @@ _na="$(grep -c . "$P1/rr.add")" || _na=0
 #   tool_use_id `-` omits the key, the shape of a harness that does not send one
 bash_in() { jq -cn --arg t "$1" --arg d "$2" --arg c "$3" --arg a "${4:-}" --arg u "${5:-tNEW}" \
   '{hook_event_name:"PreToolUse",tool_name:"Bash",tool_input:{command:$c},transcript_path:$t,cwd:$d} + (if $u == "-" then {} else {tool_use_id:$u} end) + (if $a == "" then {} else {agent_id:$a} end)'; }
-# tool_in <transcript> <tool> <input-json> [agent_id]
-tool_in() { jq -cn --arg t "$1" --arg n "$2" --argjson i "$3" --arg a "${4:-}" --arg d "$SPRINT" \
+# tool_in <transcript> <tool> <input-json> [agent_id] [cwd]   (cwd defaults to $SPRINT)
+tool_in() { jq -cn --arg t "$1" --arg n "$2" --argjson i "$3" --arg a "${4:-}" --arg d "${5:-$SPRINT}" \
   '{hook_event_name:"PreToolUse",tool_name:$n,tool_input:$i,transcript_path:$t,cwd:$d,tool_use_id:"tNEW"} + (if $a == "" then {} else {agent_id:$a} end)'; }
 write_in() { tool_in "$1" Write "$(jq -cn --arg f "$2" --arg c "${4:-x}" '{file_path:$f,content:$c}')" "${3:-}"; }
 edit_in() { tool_in "$1" Edit "$(jq -cn --arg f "$2" --arg o "$3" --arg n "$4" '{file_path:$f,old_string:$o,new_string:$n}')" "${5:-}"; }
@@ -396,7 +400,16 @@ B MENTION SILENT 'echo git push origin x'
 B MENTION SILENT 'grep -c "gh pr merge" log'
 
 c UPDATE SILENT "$(bash_in "$P1/g.jsonl" "$UPDATE" 'git push -u origin HEAD')"
-c UPDATE SILENT "$(bash_in "$P1/g.jsonl" "$UPDATE" 'gh pr merge 9 --squash --delete-branch')"
+# BL-582: the update branch's MERGE is gated, standalone, by MCP, or chained after a push (kinded
+# push, carried by HASMERGE) or after the self-update wrapper (kinded merge). par.jsonl holds an
+# advisor attempt after the grant, so u-merge-adv and u-mcp-adv are the allow twins of u-merge and
+# u-mcp; the push-only cell above is u-chain's and u-wrap's.
+ct UPDATE DENY u-merge "$(bash_in "$P1/g.jsonl" "$UPDATE" 'gh pr merge 9 --squash --delete-branch')"
+ct UPDATE SILENT u-merge-adv "$(bash_in "$P1/par.jsonl" "$UPDATE" 'gh pr merge 9 --squash --delete-branch')"
+ct UPDATE DENY u-mcp "$(tool_in "$P1/g.jsonl" mcp__github__merge_pull_request '{"owner":"o","repo":"r","pullNumber":9}' '' "$UPDATE")"
+ct UPDATE SILENT u-mcp-adv "$(tool_in "$P1/par.jsonl" mcp__github__merge_pull_request '{"owner":"o","repo":"r","pullNumber":9}' '' "$UPDATE")"
+ct UPDATE DENY u-chain "$(bash_in "$P1/g.jsonl" "$UPDATE" 'git push -u origin HEAD && gh pr merge 7')"
+ct UPDATE DENY u-wrap "$(bash_in "$P1/g.jsonl" "$UPDATE" 'bash reconcile/self-update-push.sh x origin y z && gh pr merge 7')"
 B UPDATE DENY 'git push -u origin HEAD'
 B UPDATE DENY 'gh pr merge 9 --squash --delete-branch'
 

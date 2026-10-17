@@ -20,6 +20,61 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.814.0] - 2026-10-17
+
+Batch 235 (release U-b: BL-582). Closes BL-582. Closes no `PC-` id. Carries two docs-only intake commits: BL-607's
+third instance (intake 14) and the new entry BL-647 (intake 15).
+
+### The advisor gate gates a merge from an update branch, and the update skill names the touchpoint (BL-582)
+
+- `ai-dlc-advisor-gate.sh` excluded a push OR a merge whose hook-input `cwd` was on `ai-dlc-update/*`. Graph's
+  0.791.0 → 0.793.0 update session ran `gh pr merge 1230` and `gh pr merge 1231` from that cwd with 0 advisor
+  attempts, and both were exempt. The exclusion now covers the PUSH only: a `merge` kind (`gh … pr merge` or the MCP
+  merge tool) from an update cwd is gated, and so is a chained `git push … && gh pr merge N`, which is kinded `push`.
+  The `gh … pr merge` test is one jq def, `ghmerge`, which `leadkind` kinds with and the incoming-call pass reads as
+  `HASMERGE`. The per-kind transcript scan is unchanged.
+- The header states the narrowing: the callers that merge from an update cwd are update step 2 (the auto-merge),
+  update step 8 (the operator-approved merge) and untangle mode's step 8. All three are the subject, so the
+  false-positive set is empty. A lead with no advisor grant (a local model) is silent, as everywhere.
+- `ai-dlc-update/SKILL.md` gains "If you hold the advisor tool, call it in a message of its own before `gh pr merge`."
+  at step 2's auto-merge and at step 8 after the operator's approval.
+- Fixture `advisor-gate-deny`: the UPDATE arm gains u-merge, u-mcp, u-chain and u-wrap (deny) and u-merge-adv and
+  u-mcp-adv (silent twins). Mutants: `update-merge-exempt` and `chained-merge-exempt` are added, `no-mcp-merge` gains
+  UPDATE, and MIN_MUTANTS goes from 95 to 97.
+- Delivery: hooks are live from the delivering pull's step-2 working-tree write (0.808.0's statement, reasoned from
+  the step-2 text, not measured), and step 2 runs on the old SKILL.md text. So on the pull that delivers this release,
+  step 2's auto-merge would meet the gate before any text names the touchpoint: one deny round trip, which the lead
+  accepted on the condition that it clears itself (below). Step 8 runs on the new text.
+
+### Corrections, and the conditions this release shipped on
+
+- The hook header said the update skill "governs the pull AFTER the one that delivers it". That is the claim BL-612
+  corrected in 0.808.0: the delivering pull runs steps 1-2 on the old text and steps 3-8 on the new. Rewritten.
+- The lead set three conditions for accepting the first pull's deny, each measured on a seeded repo checked out on
+  `ai-dlc-update/x`, driving U-b's hook with main's hook as the other side:
+  - (a) the deny names the remedy: "call the advisor in a message of its own, read its answer, then retry the same
+    command", and states the `unavailable` fallback (control: an absent token reads 0);
+  - (b) after a recorded advisor attempt the identical `gh pr merge` is allowed (U-b deny 1 without the attempt, 0
+    with it; main 0 and 0, the pre-fix exemption);
+  - (c) a session with no advisor grant is never held: (c1) a transcript with no grant line and an
+    `mcp__advisor__consult` call is silent, and so is one with neither; (c2) graph's top-level transcripts hold 84
+    update sessions; 9 ran on a local Qwen model (the lead's figure was 7 of 74; the corpus has grown), and 0 of the
+    9 carry an `advisor_tool` grant line, added or removed, so none is gated. One of the 9 (`3d11d44a`) also ran on
+    Sonnet and still carries none. Control in the same invocation: 59 of the 75 Anthropic-model update sessions
+    carry a grant line.
+  The gate does not count `mcp__advisor__consult` as an attempt: a session holding the built-in grant that consulted
+  only over MCP is still denied. That case is (c2)'s failure shape, and the census above bounds it.
+
+### Verification
+
+- Engine: graph's installed `ai-dlc-update/reconcile/` (0.812.0) and U-b's are byte-identical, 33 of 33 files;
+  `SKILL.md` differs (the control: U-b edits it). This release changes no reconcile engine file, so there is no
+  engine differential to run.
+- hermetic-run.sh, each fixture this release edits, plus `update-preflight-push` (SKILL.md's step-2 unit):
+  advisor-gate-deny, advisor-gate-deny-mutants{,-b..-e} and update-preflight-push, each rc 0, required_missing 0.
+- Receipt BL-582: the hook denies a `gh pr merge` from an `ai-dlc-update/*` cwd with no advisor attempt (U-b 1,
+  main 0); a push of `ai-dlc-update/x` stays allowed (0 both sides); SKILL.md names the touchpoint at both steps.
+
 ## [0.813.0] - 2026-10-17
 
 Batch 235 (combined release: BL-536, and BL-540 with BL-530's recorder half). Closes BL-536 and BL-540. Advances
