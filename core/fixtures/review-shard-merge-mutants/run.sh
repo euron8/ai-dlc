@@ -43,8 +43,11 @@
 # DIRECTORY, and this battery, 66 mutants in one unit, was that directory at 1481s loaded. So the
 # mutant set is dealt across three units, this directory (shard a) and the one-line drivers
 # `review-shard-merge-mutants-b` and `-c`, each `exec bash "$IMPL" --group <x>`, the shape
-# `fold-architect-ledger-join-mutants` carries. Every scorer runs every predicate, so the cost per
-# mutant is roughly uniform and an equal count balances: 22 each, in declaration order by family.
+# `fold-architect-ledger-join-mutants` carries. Every scorer runs every predicate, but the cost per
+# mutant is NOT uniform: a scorer whose world builders are byte-identical to SRCDIR's clones the
+# parent's world templates (THE TEMPLATES below), and a mutant of a builder-run script -- the 14
+# partition mutants -- rebuilds every world. So the partition mutants are dealt as evenly as the shards
+# allow (5/5/4) and the merge mutants fill each shard to 22.
 # Every shard pays the unmutated control MX0, the J1 join and the MJ probe itself, because a shard
 # that skipped them could report a kill against a harness that never ran.
 #
@@ -57,9 +60,9 @@
 # The join proves it can fire, on a seeded duplicate and a seeded omission, before it is trusted.
 # After the reap, [J2] asserts this shard dispatched exactly the mutants dealt to it.
 SHARDS="a b c"
-MUTANTS_a="MX1 MX2 MX3 MX4 MX5 MX6 MX7 MX8 MX9 MX10 MX11 MX12 MX13 MX14 MX15 MX16 MX17 MX18 MX19 MX20 MX21 MX22"
-MUTANTS_b="MX23 MX24 MX25 MX26 MX27 MX28 MQ1 MQ2 MQ3 MQ4 MQ5 MQ6 MQ7 MQ8 MQ9 MH1 MH2 MH3 MH4 MH5 MH6 MH7"
-MUTANTS_c="MH8 MH10 MH11 MH12 MH13 MH14 MH9 MG1 MG2 MG3 MC1 MC2 MC3 MC4 MC11 MC12 MC5 MC6 MC7 MC8 MC9 MC10"
+MUTANTS_a="MX1 MX2 MX3 MX4 MX5 MX6 MX7 MX8 MX9 MX10 MX11 MX12 MX13 MX14 MX15 MX16 MX17 MX18 MX22 MH8 MH10 MH11"
+MUTANTS_b="MX23 MX24 MX25 MX26 MX27 MQ1 MQ2 MQ3 MQ4 MQ5 MQ6 MQ7 MQ8 MQ9 MH1 MH2 MH3 MH4 MH5 MH6 MH7 MH12"
+MUTANTS_c="MX19 MX20 MX21 MX28 MH13 MH14 MH9 MG1 MG2 MG3 MC1 MC2 MC3 MC4 MC11 MC12 MC5 MC6 MC7 MC8 MC9 MC10"
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 unset AI_DLC_REVIEW_SHARD_MIN_FILES
@@ -186,6 +189,8 @@ scorer() { # <id> <label> <script-dir>
   local id="$1" label="$2" sd="$3" sw p n=0 dead=""
   sw="$WORK/mut-$id"; mkdir -p "$sw" || exit 1
   WORK="$sw"; bind_scratch "$sw"; RC=""; PRC=""
+  if tpl_eligible "$sd"; then RSM_TPL_HITS="$sw/tpl.hits"; : > "$RSM_TPL_HITS"; echo yes > "$sw/tpl.elig"
+  else RSM_TPL=""; echo no > "$sw/tpl.elig"; fi
   for p in $P_ALL; do n=$((n + 1)); "p_$p" "$sd" || dead="$dead $p"; done
   dead="${dead# }"
   printf '%s\t%s\t%s\n' "$label" "$n" "$dead" > "$VD/$id.tmp" && mv "$VD/$id.tmp" "$VD/$id.v"
@@ -246,6 +251,81 @@ mutant() { # <label> <file> <expected> <old> <new> [<old2> <new2>]
   bash -n "$d/$f" 2>/dev/null || { bad "$label: FIXTURE BROKEN -- the mutated $f does not parse"; return; }
   dispatch "$label" "$d" "$want"
 }
+
+# ------------------------------------------------------------------------------ THE TEMPLATES
+# The world builders (new_world, kworld, xshards) run only partition-review-diff.sh, the
+# artifact-path-config.sh it calls and partition-document.sh -- never the merge. So for every scorer
+# whose copies of those three are byte-identical to SRCDIR's (the 52 merge mutants and MX0), each world
+# it builds is byte-identical to one built from SRCDIR. The parent builds each such world ONCE, here,
+# serially, before any dispatch; an eligible scorer clones it into its own fresh directory. A scorer
+# with any builder-run script mutated never sees the templates and rebuilds every world as before.
+# A world whose arguments no fill call below names is simply built: a missing template costs time,
+# never a verdict. MX0 runs on the templates, so the cached path has its unmutated control; the
+# uncached path has the shipped fixture's every-push run.
+tpl_eligible() { # <script-dir>: 0 when its three builder-run scripts are byte-identical to SRCDIR's
+  local s
+  for s in partition-review-diff.sh artifact-path-config.sh partition-document.sh; do cmp -s "$SRCDIR/$s" "$1/$s" || return 1; done
+}
+RSM_TPL="$WORK/tpl"; mkdir -p "$RSM_TPL" || { echo "FIXTURE ERROR: cannot create $RSM_TPL" >&2; exit 2; }
+RSM_TPL_FILL=1
+tpl_fill() {
+  local SHARD_SHA
+  world4 "$SRCDIR" APPROVED APPROVED APPROVED APPROVED > /dev/null \
+  && qworld "$SRCDIR" PASS PASS PASS PASS > /dev/null \
+  && qworld "$SRCDIR" PASS PASS PASS PASS -p2 > /dev/null \
+  && new_world "$SRCDIR" "$REPO_B" code-review -p3 > /dev/null \
+  && kworld "$SRCDIR" "$REPO_E" "$E_BASE" "$E_SHA" 8 code-review APPROVED > /dev/null \
+  && { SHARD_SHA="$F_SHA"; kworld "$SRCDIR" "$REPO_F" "$F_BASE" "$F_SHA" 2 code-review APPROVED > /dev/null; } \
+  && kworld "$SRCDIR" "$REPO_F" "$F_BASE" "$F_SHA" 2 "$QA_SFX" PASS qa > /dev/null
+}
+tpl_fill || { echo "FIXTURE BROKEN: building the world templates from SRCDIR failed" >&2; exit 2; }
+RSM_TPL_FILL=""
+# MT0: the seven world keys the fill names are each present, recomputed here from their argument tuples,
+# and the cross-group templates are exactly one per distinct part count those seven worlds' manifests hold.
+_tw=""; _tm=0
+for _k in "nw $REPO_B $B_BASE $B_SHA 4 3 code-review " "nw $REPO_B $B_BASE $B_SHA 4 3 $QA_SFX " \
+          "nw $REPO_B $B_BASE $B_SHA 4 3 $QA_SFX -p2" "nw $REPO_B $B_BASE $B_SHA 4 3 code-review -p3" \
+          "kw $REPO_E $E_BASE $E_SHA 4 8 code-review" "kw $REPO_F $F_BASE $F_SHA 4 2 code-review" \
+          "kw $REPO_F $F_BASE $F_SHA 4 2 $QA_SFX"; do
+  set -f; set -- $_k; set +f
+  [ "$1" = nw ] && [ $# -eq 7 ] && set -- "$@" ""
+  _h="$(tpl_key "$@")"
+  if [ -d "$RSM_TPL/$_h" ]; then _tw="$_tw $_h"; else _tm=$((_tm + 1)); fi
+done
+_kset="$(for _h in $_tw; do awk -F'\t' '$1 == "part" { n++ } END { print n + 0 }' "$RSM_TPL/$_h"/*/.manifest; done | sort -u)"
+_nk="$(grep -c . <<<"$_kset")" || _nk=0
+_nall="$(find "$RSM_TPL" -mindepth 1 -maxdepth 1 -type d | grep -c .)" || _nall=0
+if [ "$_tm" -eq 0 ] && [ "$_nk" -ge 1 ] && [ "$_nall" -eq $((7 + _nk)) ]; then
+  ok "MT0: the parent built 7 world templates and $_nk cross-group templates (K = $(tr '\n' ' ' <<<"$_kset")) from SRCDIR before any dispatch"
+else bad "MT0: $_tm of 7 world templates missing; $_nall templates on disk, want $((7 + _nk)) (K = $(tr '\n' ' ' <<<"$_kset"))"; fi
+# MT1 -- ELIGIBILITY, both directions: a one-byte change to any builder-run script makes a copy
+# ineligible; a one-byte change to the merge alone does not.
+_te=0
+for _s in partition-review-diff.sh artifact-path-config.sh partition-document.sh merge-review-shards.sh; do
+  _d="$(mutdir "te-${_s%%.*}")" || { _te=99; break; }
+  printf '#\n' >> "$_d/$_s"
+  if tpl_eligible "$_d"; then [ "$_s" = merge-review-shards.sh ] || _te=$((_te + 1))
+  else [ "$_s" = merge-review-shards.sh ] && _te=$((_te + 1)); fi
+done
+_d="$(mutdir te-none)" && tpl_eligible "$_d" || _te=$((_te + 1))
+if [ "$_te" -eq 0 ]; then ok "MT1: a one-byte change to each builder-run script makes a copy ineligible; the merge alone and no change leave it eligible"
+else bad "MT1: the eligibility probe misjudged $_te of five copies"; fi
+# MT2 -- CLONE FIDELITY: per builder, a world cloned from the templates equals one built fresh from SRCDIR,
+# byte for byte and file for file, and the clone path is the one taken.
+_tf=0; _th="$WORK/tpl.probe.hits"
+for _b in w4 kw; do
+  : > "$_th"
+  case "$_b" in
+    w4) _fr="$(RSM_TPL=""; world4 "$SRCDIR" APPROVED APPROVED APPROVED APPROVED)" \
+        && _cl="$(RSM_TPL_HITS="$_th"; world4 "$SRCDIR" APPROVED APPROVED APPROVED APPROVED)" || _tf=$((_tf + 10)) ;;
+    kw) _fr="$(RSM_TPL=""; kworld "$SRCDIR" "$REPO_E" "$E_BASE" "$E_SHA" 8 code-review APPROVED)" \
+        && _cl="$(RSM_TPL_HITS="$_th"; kworld "$SRCDIR" "$REPO_E" "$E_BASE" "$E_SHA" 8 code-review APPROVED)" || _tf=$((_tf + 10)) ;;
+  esac
+  [ "$(grep -c . "$_th")" -eq 2 ] || _tf=$((_tf + 1))
+  [ "$(dirname "$_fr")" != "$(dirname "$_cl")" ] && diff -r "$(dirname "$_fr")" "$(dirname "$_cl")" > /dev/null 2>&1 || _tf=$((_tf + 1))
+done
+if [ "$_tf" -eq 0 ]; then ok "MT2: a cloned world4 and kworld each equal a fresh build from SRCDIR (diff -r), and each took two template hits (world + cross groups)"
+else bad "MT2: the clone-fidelity probe scored $_tf (want 0)"; fi
 
 C0="$(mutdir m0)"
 if [ -f "$C0/partition-review-diff.sh" ] && [ -f "$C0/merge-review-shards.sh" ] && [ -f "$C0/artifact-path-config.sh" ] \
@@ -479,6 +559,28 @@ if [ "$NSEEN" -eq "$nmine" ] && [ "$((NDISP - 1))" -eq "$nmine" ]; then
 else
   bad "[J2] shard '$GROUP' reached $NSEEN mutants and dispatched $((NDISP - 1)), of $nmine dealt -- a dealt mutant never ran"
 fi
+# MT3 -- THE TEMPLATES WERE USED, AND ONLY WHERE ELIGIBLE. The ineligible count is derived from this
+# file's own `mutant` lines (the ones dealt here whose subject is not the merge), independently of the
+# scorers' cmp; every eligible scorer, MX0 among them, must have cloned at least once, and no
+# ineligible one may have.
+_want_no=0
+for _m in $MINE; do
+  _f="$(sed -n "s/^mutant \"$_m [^\"]*\" \([a-z-]*\.sh\) .*/\1/p" "$SELF")"
+  [ -n "$_f" ] && [ "$_f" != merge-review-shards.sh ] && _want_no=$((_want_no + 1))
+done
+_no=0; _bad=""; _hits=0; _c0=""
+while IFS='	' read -r id label want; do
+  _e="$(cat "$WORK/mut-$id/tpl.elig" 2>/dev/null)"; _h="$(grep -c . "$WORK/mut-$id/tpl.hits" 2>/dev/null)" || _h=0
+  case "$_e" in
+    yes) [ "$_h" -gt 0 ] || _bad="$_bad ${label%% *}(eligible,0 hits)"; _hits=$((_hits + _h)) ;;
+    no)  _no=$((_no + 1)); [ "$_h" -eq 0 ] || _bad="$_bad ${label%% *}(ineligible,$_h hits)" ;;
+    *)   _bad="$_bad ${label%% *}(no eligibility record)" ;;
+  esac
+  case "$label" in "MX0 "*) _c0="$_e/$_h" ;; esac
+done < "$IDX"
+if [ -z "$_bad" ] && [ "$_no" -eq "$_want_no" ] && [ "${_c0%%/*}" = yes ] && [ "${_c0#*/}" -gt 0 ]; then
+  ok "MT3: $_no scorer(s) rebuilt every world (the $_want_no dealt here mutate a builder-run script); every other scorer, MX0 among them ($_c0 hits), cloned the templates, $_hits clones in all"
+else bad "MT3: ineligible $_no (want $_want_no), MX0 $_c0, offenders:${_bad:- none}"; fi
 while IFS='	' read -r id label want; do
   if line="$(judge "$VD/$id" "$label" "$want")"; then ok "$line"; else bad "$line"; fi
   if [ -n "$ROWS" ] && [ -f "$VD/$id.v" ]; then

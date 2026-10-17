@@ -386,16 +386,6 @@ Fix (one of, builder to weigh against the existing shard corpus): count only `##
 verify: manual
 
 
-## BL-591 — a red pre-push run's loaded timings are merged into the durations record the runner orders by
-
-**DEFECT.** Filed by peer session ai-dlc-bb (batch 235 gate throughput), routed by ai-dlc-b8. `.githooks/pre-push` (952b9319) folds `$out/.durations` into `$DURATIONS_RECORD` (`.git/ai-dlc-fixture-durations`) at `:2112-2118` with no `rc` gate, while `:2139` publishes `.last` only when `rc -eq 0`, and its own comment at `:2134-2138` gives the reason that applies equally to the merge: "a red run's timings belong to a suite that stopped early". Measured by the filer from `.git/ai-dlc-suite-pole.history` (clean gates only): `readset-skip-d` is recorded at 928s but ran 330-502s across 6 clean gates and 928 appears in no clean row; `gate-adjudication-mutants` a/c/e are recorded at 666/646/642, from the red run at 2026-10-16T00:16Z, against 216/196/195 at the last clean gate. Intake re-read the live record: `readset-skip-d 928`, `gate-adjudication-mutants 666`, `-c 646`, `-e 642`; the history carries 48 `readset-skip-d` and 18 `gate-adjudication-mutants` rows and 0 occurrences of `928` (control for the absence: the row counts are non-zero).
-
-Effect: the runner's longest-first dispatch order and any ranking a human reads off the record use inflated poles; this batch's throughput work started from a pole that does not exist. Remedy is the builder's: gate the merge on `rc` as `:2139` is, or merge only units whose own verdict was ok. Either edit sits inside the I66-joined region, so both pre-push hooks move together.
-
-Owed: a red run (one seeded failing unit) leaves `.git/ai-dlc-fixture-durations` unchanged for units it timed (or, under the per-verdict remedy, unchanged for the failing and unfinished units only); a green run as the control updates it.
-
-verify: manual
-
 ## BL-592 — the shard-mutant batteries' per-scorer SCORER_BOUND=900 under POOL=8 times out under gate contention with no defect present
 
 **DEFECT.** Filed on ai-dlc-f5's report, routed by ai-dlc-b8. `core/fixtures/remediator-shard-join-mutants/run.sh:185-186`, `review-shard-merge-mutants/run.sh:177-178` and `adversarial-shard-merge-mutants/run.sh:103-104` each set `POOL=8` and `SCORER_BOUND=900`; a scorer still running past the bound is killed and scored `TIMEOUT -- the scorer ran past 900s and was killed; no verdict`, which fails the unit (`:213/:231`, `:205/:223`, `:131/:149`). The bound is wall clock, so under a loaded gate (pool of 12 fixtures each running 8 scorers) a scorer can exceed it with no defect in the subject; ai-dlc-f5 reports `adversarial-shard-merge-mutants` failing exactly this way in batch 235. The `-b/-c/-d` shards of the first two carry the same runner. A false red on a release gate costs a full re-push.
@@ -1078,5 +1068,22 @@ The objects subtree is only part of it: `.git/HEAD` (133 rows), `.git/refs/` (18
 Owed: the deriver drops `.git` and `.git/**` at write time, through the same predicate the hook uses (or a shared helper, so the two cannot disagree), and the next re-derive removes the existing rows. Receipt: a re-derived map holds 0 rows under `.git`, and a seeded `.git/objects/` read in a probe trace does not become a row; a `.gitignore` read (a tracked file, which the hook keeps) still does.
 
 Related: BL-635 (12214 dead rows for fixtures keyed on `inputs.decl`); together they are the map's dead weight.
+
+verify: manual
+
+## BL-645 — the owed-derivation classifier misses two of the four history companions the consolidation step writes, so a stale derivation in an archive refuses the planning gate
+
+**DEFECT.** Found by ai-dlc-53 on graph; widened and confirmed by ai-dlc-c2 (formerly 60); tiered DEFECT against 0.808.0 by lead ai-dlc-71. Intake re-derived it read-only at origin/main `b307a96b`. Subject: `core/scripts/check-owed-derivations.sh` `is_history()` (`:161`), shipped in 0.808.0 (BL-587).
+- The HISTORY class is the set of exact names an ai-dlc writer produces as history. The exact-name case (`:176`) lists `prd-history.md` and `product-brief-history.md` (each 2 mentions in the script). `carry-over-backlog-archive.md` and `architecture-history.md` have 0 mentions.
+- The writer names FOUR companions: `core/skills/ai-dlc/steps/artifact-consolidation.md:127-129` ("Append the history relocation draft to the companion file … verbatim", listing `prd-history.md` / `product-brief-history.md` / `carry-over-backlog-archive.md` / `docs/architecture-history.md`), and `core/skills/ai-dlc/SKILL.md:696-699` (Rule (a), "cut-and-paste, verbatim", the same four pairs). `core/skills/ai-dlc/steps/retro.md:650-652` also writes `carry-over-backlog-archive.md` ("cut-and-paste, verbatim").
+- Measured with the shipped program in a clean worktree at `b307a96b`: `check-owed-derivations.sh --scope` answers LIVING for `_bmad-output/planning-artifacts/carry-over-backlog-archive.md`, `_bmad-output/architecture-history.md`, `_bmad-output/planning-artifacts/architecture-history.md` and `docs/architecture-history.md`. Controls in the same run: `_bmad-output/planning-artifacts/prd-history.md` answers HISTORY, and the live `carry-over-backlog.md` answers LIVING.
+- Consequence: the writer records a stale derivation in either archive as owed, and gate Check 37 refuses the planning gate on it, though these files are verbatim archives, which is exactly what the HISTORY class exists to exclude. On graph, 53 measured `carry-over-backlog-archive.md` carrying 2 derived fences, one naming a core path.
+
+Owed (inside BL-631, by 71's ruling):
+1. Add both names to `is_history`'s exact-name case.
+2. Add an arm binding `is_history`'s companion names to the writer's companion list, so a fifth companion cannot be missed the same way.
+3. Fixture: one HISTORY world per new name, plus the near-miss `carry-over-backlog.md` (the live file), which must stay LIVING. Re-measure the M23 substring mutant's kill set and report it to the lead before editing.
+
+Owner: ai-dlc-53, closed by BL-631.
 
 verify: manual

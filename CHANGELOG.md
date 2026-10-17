@@ -20,6 +20,51 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.811.0] - 2026-10-16
+
+Batch 235 (BL-591, and gate throughput on the review-shard-merge battery). Closes BL-591. Closes no `PC-` id.
+
+### A red pre-push run no longer writes its timings into the durations record (BL-591)
+
+- Both pre-push hooks folded every run's `$out/.durations` into `.git/ai-dlc-fixture-durations`, red runs included.
+  A unit that came back ok inside a red run was still timed under that run's load, and those rows poisoned the
+  record the runner orders by: readset-skip-d at 928s against 330-502s in every clean gate, and three
+  gate-adjudication-mutants shards at about 650s against about 200s. The merge, and the copy to `.last`, are now
+  gated on the pool exiting 0. The gate is on the run, not on each unit: a per-unit gate would have kept every one
+  of those rows.
+- `suite-dispatch-order` gains arm 5: a pool red on one unit leaves the record byte-identical, the ok unit it timed
+  included, while the same tree made green records the run's cost. Mutant M5 removes the gate from the merge line
+  only and must redden arm 5. `EXPECTED_ASSERTIONS` is 15.
+- With `.last` now empty after a red run, the suite-pole step prints "(no suite run, no pole)" for a red push,
+  where it used to print a figure taken under that run's load.
+
+### review-shard-merge-mutants builds its unmutated worlds once, not once per scorer
+
+- Each scorer in the battery rebuilt about 94 worlds, and for the 52 merge mutants and MX0 every one of them was
+  byte-identical to a world built from the unmutated scripts. The parent now builds each such world once, before
+  dispatch, and a scorer whose copies of the three builder-run scripts (partition-review-diff.sh,
+  artifact-path-config.sh, partition-document.sh) are cmp-identical to the source clones them. Any other scorer
+  rebuilds every world as before. The templates live in the run's own work directory and are rebuilt every run.
+- New arms MT0 to MT3, scored before any mutant verdict is read: the templates are all present (MT0), eligibility
+  holds in both directions (MT1), a cloned world equals a fresh build (MT2), and every eligible scorer cloned while
+  no ineligible one did (MT3).
+- The 14 partition mutants keep their full cost, so they are re-dealt 5/5/4 across the three shards instead of
+  8/6/0.
+- In this release's slot, shard `a` ran once at the base and once at the tip, each at a load of about 10. CPU
+  seconds were 1545.1 at the base and 1372.4 at the tip, 11.2% less, in one rep each. Both were green with 22 kills;
+  the 20 mutants shard `a` holds under both deals were killed by identical arm sets, with no survivor, and MT0 to
+  MT3 were all ok at the tip. An interleaved base-against-tip measurement is owed after the merge.
+
+### Hermetic runs
+
+- `suite-dispatch-order` and `review-shard-merge` each ran through `core/scripts/hermetic-run.sh` with rc 0 and
+  `required_missing=0`. The battery itself gets its first sandbox run at the gate: `hermetic-run.sh` passes no
+  arguments to a fixture, so it cannot run one shard alone.
+
+### Backlog
+
+- BL-591 closes and rotates to the archive.
+
 ## [0.810.0] - 2026-10-16
 
 Batch 235 (BL-583 partial, plus intake 10 and intake 11's backlog filings). Closes BL-642 by withdrawal. Closes no `PC-` id.

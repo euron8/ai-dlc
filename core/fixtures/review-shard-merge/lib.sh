@@ -11,6 +11,9 @@
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 unset AI_DLC_REVIEW_SHARD_MIN_FILES
+# THE WORLD TEMPLATES are the mutation battery's alone (tpl_* below). Plain shell variables, unset HERE
+# so no exported value can switch them on in the shipped arms; the battery sets them after sourcing.
+unset RSM_TPL RSM_TPL_FILL RSM_TPL_HITS
 [ -n "${NAME:-}" ] || { echo "FIXTURE ERROR: lib.sh sourced without NAME set" >&2; exit 2; }
 
 # Resolution walks up from THIS file's directory, so both callers resolve identically.
@@ -170,13 +173,34 @@ F_BASE="$(G -C "$REPO_F" rev-parse HEAD~1)"; F_SHA="$(G -C "$REPO_F" rev-parse H
 # --------------------------------------------------------------------------------- worlds
 # A merge world: its own directory, the shard dir `1-code-review-<sha12>/` inside it holding the
 # manifest the REAL partition (the predicate's own sibling) wrote, and --out beside it.
+# WORLD TEMPLATES. With RSM_TPL unset (the shipped fixture, always) every builder runs its subject as
+# below and nothing else here is reached. The battery sets RSM_TPL to a directory the PARENT filled once
+# (RSM_TPL_FILL set: each builder publishes the world it just built, before any shard is written into
+# it), and then only for a scorer whose builder-run scripts are byte-identical to SRCDIR's; such a
+# scorer clones the world into its own fresh directory instead of re-running the partition. The key is
+# the builder's whole argument tuple; every other input -- the seeded repos, the environment, the
+# scripts -- is the same run's, which is what makes the key sufficient. No world records its own path.
+tpl_key() { printf '%s\n' "$@" | shasum | cut -c1-16; }
+tpl_has() { [ -n "$1" ] && [ -n "${RSM_TPL:-}" ] && [ -z "${RSM_TPL_FILL:-}" ] && [ -d "$RSM_TPL/$1" ]; }
+tpl_hit() { [ -z "${RSM_TPL_HITS:-}" ] || printf '%s\n' "$1" >> "$RSM_TPL_HITS"; }
+tpl_put() { # <key> <world dir>: fill mode only, and never over a published template
+  [ -n "$1" ] && [ -n "${RSM_TPL:-}" ] && [ -n "${RSM_TPL_FILL:-}" ] || return 0
+  [ -d "$RSM_TPL/$1" ] && return 0
+  mkdir "$RSM_TPL/$1" && cp -R "$2/." "$RSM_TPL/$1/"
+}
 # new_world <script-dir> [repo] -> prints the shard dir
 new_world() { # <script-dir> [repo] [dir-suffix] [pass-marker, e.g. -p2]
-  local sd="$1" repo="${2:-$REPO_B}" sfx="${3:-code-review}" pm="${4:-}" w d
+  local sd="$1" repo="${2:-$REPO_B}" sfx="${3:-code-review}" pm="${4:-}" w d tk=""
   w="$(mktemp -d "$WORK/w.XXXXXX")" || return 1
   d="$w/1-$sfx-$B_SHA12$pm"
-  bash "$sd/partition-review-diff.sh" --map "$repo" "$B_BASE" "$B_SHA" --min-files 4 --max-parts 3 \
-    --shard-dir "$d" > "$w/map" 2> "$w/map.err" < /dev/null || return 1
+  [ -z "${RSM_TPL:-}" ] || tk="$(tpl_key nw "$repo" "$B_BASE" "$B_SHA" 4 3 "$sfx" "$pm")"
+  if tpl_has "$tk"; then
+    cp -R "$RSM_TPL/$tk/." "$w/" || return 1; tpl_hit "$tk"
+  else
+    bash "$sd/partition-review-diff.sh" --map "$repo" "$B_BASE" "$B_SHA" --min-files 4 --max-parts 3 \
+      --shard-dir "$d" > "$w/map" 2> "$w/map.err" < /dev/null || return 1
+    tpl_put "$tk" "$w" || return 1
+  fi
   [ -f "$d/.manifest" ] || return 1
   printf '%s' "$d"
 }
@@ -207,9 +231,17 @@ shard() {
 # definition, never from asking --cross-owner what the merge will accept.
 # xshards <script-dir> <shard-dir> <verdict> [code-review|qa]
 xshards() {
-  local sd="$1" d="$2" v="$3" gate="${4:-code-review}" k n g gl first last key
+  local sd="$1" d="$2" v="$3" gate="${4:-code-review}" k n g gl first last key tk=""
   k="$(awk -F'\t' '$1 == "part" { n++ } END { print n + 0 }' "$d/.manifest")"
-  bash "$sd/partition-document.sh" --cross-groups "$k" > "$d.groups" 2> /dev/null < /dev/null || return 1
+  [ -z "${RSM_TPL:-}" ] || tk="$(tpl_key xs "$k")"
+  if tpl_has "$tk"; then
+    cp "$RSM_TPL/$tk/groups" "$d.groups" || return 1; tpl_hit "$tk"
+  else
+    bash "$sd/partition-document.sh" --cross-groups "$k" > "$d.groups" 2> /dev/null < /dev/null || return 1
+    if [ -n "$tk" ] && [ -n "${RSM_TPL_FILL:-}" ] && [ ! -d "$RSM_TPL/$tk" ]; then
+      mkdir "$RSM_TPL/$tk" && cp "$d.groups" "$RSM_TPL/$tk/groups" || return 1
+    fi
+  fi
   n="$(grep -c . "$d.groups")" || n=0
   [ "$n" -ge 1 ] || return 1
   while IFS='	' read -r g gl; do
@@ -229,11 +261,17 @@ world4() { # <script-dir> <v1> <v2> <v3> <vcross> -> shard dir with the three pa
 # frozen sha the shard writers stamp; each caller binds it `local` for its world.
 # kworld <script-dir> <repo> <base> <sha> <max-parts> <dir-suffix> <verdict> [code-review|qa]
 kworld() {
-  local sd="$1" repo="$2" base="$3" sha="$4" mp="$5" sfx="$6" v="$7" gate="${8:-code-review}" w d k
+  local sd="$1" repo="$2" base="$3" sha="$4" mp="$5" sfx="$6" v="$7" gate="${8:-code-review}" w d k tk=""
   w="$(mktemp -d "$WORK/k.XXXXXX")" || return 1
   d="$w/1-$sfx-$(printf '%s' "$sha" | cut -c1-12)"
-  bash "$sd/partition-review-diff.sh" --map "$repo" "$base" "$sha" --min-files 4 --max-parts "$mp" \
-    --shard-dir "$d" > "$w/map" 2> "$w/map.err" < /dev/null || return 1
+  [ -z "${RSM_TPL:-}" ] || tk="$(tpl_key kw "$repo" "$base" "$sha" 4 "$mp" "$sfx")"
+  if tpl_has "$tk"; then
+    cp -R "$RSM_TPL/$tk/." "$w/" || return 1; tpl_hit "$tk"
+  else
+    bash "$sd/partition-review-diff.sh" --map "$repo" "$base" "$sha" --min-files 4 --max-parts "$mp" \
+      --shard-dir "$d" > "$w/map" 2> "$w/map.err" < /dev/null || return 1
+    tpl_put "$tk" "$w" || return 1
+  fi
   [ -f "$d/.manifest" ] || return 1
   for k in $(cut -f1 "$w/map"); do
     if [ "$gate" = qa ]; then qshard "$d" "$k" "$v" "$k"; else shard "$d" "$k" "$v" "$k"; fi
