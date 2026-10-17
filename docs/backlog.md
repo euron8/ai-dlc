@@ -846,3 +846,71 @@ Related: line 2370 shows a dev-2 beat passing `--since` with no `--dispatch`, ag
 Not BL-605: that entry's subject is an In-Flight row stamped late, while this stamp was freshly minted per rule-28's instruction. Owed: one statement of whether a `--dispatch` beat takes `--since`. Either rule-28 exempts beats that carry `--dispatch`, or the join text says which epoch to pass. Cite one from the other.
 
 verify: manual
+
+## BL-657 — `join-remediator-shards.sh --rerun` gives a record-only re-run no identity, so a correct text repair passes only if the re-run makes an edit no finding asked for
+
+**DEFECT.** Reported by ai-dlc-f7, read-only on graph's s319 lead (0.818.0, transcript `74de15ba`, architecture elicitation repair, part 5). Intake ai-dlc-40.
+
+The instance:
+1. Line 3314: the first join refused part 5 because `the F-1 — MAJOR entry is dispositioned repaired while its claim sets part of the fix aside ... names no hand-off`. The cure is a record change. The text repair in `sections/5.md` was correct.
+2. Line 3343: the lead re-dispatched part 5 as `a042cd411e71b1ce4` and told it to "keep the F-1 text repair already in the section file", so it rewrote the record only.
+3. Line 3393: the join with `--rerun 5.md@2026-10-17T18:53:52Z` refused three ways: `is not its re-run writer`, `written by its re-run writer`, and `which no dispatched agent wrote`.
+4. Line 3438: a second re-run, `af58dac98f4b93dfd`, was briefed "you MUST make at least one genuine `Edit` ... to the section file", and it did.
+
+Intake read graph's write ledger (`_bmad-output/planning-artifacts/.artifact-writes.jsonl`) for that repair's part 5:
+- `a042cd411e71b1ce4` wrote only `5.md`, at 18:54:40Z and 18:56:40Z, after S_P.
+- The original writer `abd88800a2c928e2e` wrote `sections/5.md` at 18:48:53-57Z and `5.md` at 18:49:24-35Z, all before S_P.
+- `af58dac98f4b93dfd` wrote `sections/5.md` at 18:57:51Z, then `5.md`.
+Control: an agent id absent from the ledger matched 0.
+
+Cause. `core/scripts/join-remediator-shards.sh:111-112` at origin/main `06ae8b85` defines the re-run writer only as "any writer of F_P at or after S_P", where F_P is the set of files P's `edit:` lines cite. Graph's installed copy is byte-identical (same md5). An agent that writes only P's own record therefore has no re-run-writer identity, and its record row is refused under :110. Once the superseded rows before S_P are dropped, F_P has no writer left, and the UNWRITTEN arm fires.
+
+`core/skills/ai-dlc/steps/_gate-procedures.md` step 1b says "The re-run writer rewrites the part's own record ... after S_P" and never says the re-run must also write F_P. Step 1b is gated at :916 on two refusal shapes only, `which no dispatched agent wrote` and `written by more than one agent`. The refusal that started this one is the hand-off rule at :912, which no recovery step covers.
+
+Consequence: one wasted re-dispatch (about 3 minutes plus a turn), and a gate pass that now carries a document edit no finding asked for, made because the lead's brief demanded it.
+
+Fix (builder weighs both against the arms at :96-112):
+- (a) The re-run writer is the agent dispatched at or after S_P that wrote P's own record. When that agent makes no F_P write and its record accounts for the whole diff, as step 1b already requires, the superseded writers' F_P rows stand.
+- (b) Add a step-1b variant for a record-only refusal, with the gate covering that refusal shape.
+
+Owed: a probe where a re-run rewrites only `5.md` after S_P, with `sections/5.md` last written before S_P by the superseded writer, and the join accepts it. Control: a re-run that writes nothing is refused.
+
+Related, not duplicates: archived BL-533 (alias rows in the write ledger) and the `--rerun` entry that introduced S_P.
+
+**Outcome (reported by ai-dlc-f7, read-only on graph, transcript line 3474).** The second re-run joined: `JOINED: .../architecture-elicitation-repair-p1.md (5 parts, 5 writers, 3 superseded rows)`, ESCALATED-COUNT 4 including `5.md F-1 — MAJOR`, which is the escalation the original refusal asked for. The joined record's line 4 reads `rerun: 5.md since 2026-10-17T18:57:15Z; superseded on .../sections/5.md: abd88800a2c928e2e (3 rows, 18:48:53Z..18:48:57Z)`. So `af58dac98f4b93dfd`'s one Edit to `sections/5.md` at 18:57:51Z is what identified the re-run writer, and the record-only attempt by `a042cd411e71b1ce4` left no line. The gate pass therefore rests on the edit no finding asked for.
+
+verify: manual
+
+## BL-658 — the recover gate can deny a third Read from stage `snapshot` after both mandated Reads succeeded, because a missing PROGRESS defaults to `snapshot`
+
+**NOTE.** Reported by ai-dlc-f7, read-only on graph's s319 lead (0.818.0, transcript `74de15ba`, second compaction at 19:26Z). Intake ai-dlc-40.
+
+Observed (transcript lines 3710-3724). Three Reads were issued in one message:
+- 19:26:15.057Z: `Read _bmad-output/pipeline-snapshot.md`, OK at 15.662Z.
+- 19:26:15.427Z: `Read steps/architecture.md`, OK at 16.101Z.
+- 19:26:15.731Z: `Read postcompact-digest.md`, DENIED at 16.379Z with the stage-`snapshot` text "your FIRST tool call must be `Read _bmad-output/pipeline-snapshot.md` in full".
+
+The digest Read retried alone went through, at a cost of one turn. Line 3735 repeats the same three tool_use ids as a request blob, so this is one deny, not two. Control: an id absent from the transcript matched 0.
+
+Mechanism (hypothesis from the code, not measured). In `core/hooks/ai-dlc-recover-gate.sh` at origin/main `06ae8b85`:
+- :255 exits early when `$MARKER` is absent.
+- :362 reads `STAGE="$(cat "$PROGRESS" 2>/dev/null || printf 'snapshot')"`, so an absent PROGRESS reads as stage `snapshot`.
+- :440, on the satisfying step Read, removes `"$MARKER" "$PROGRESS"`.
+
+A hook invocation that passes :255 before that removal and reaches :362 after it sees stage `snapshot` and denies at :398, which is the observed text. Graph's installed copy differs from main (md5), but the same three lines sit at its :242, :349 and :427. The header's "THE RACE" (:116-120) covers the advisor stage's same-message race, not the read stages.
+
+Owed: an absent PROGRESS with the marker gone at :362 exits 0 (re-test `[ -f "$MARKER" ]`), or the satisfying Read removes PROGRESS before MARKER. Probe: two invocations for one session, a satisfying step Read and a third Read, with the removal forced between the second's :255 and :362. The third is allowed. Control: a genuine first-call non-snapshot Read still denies.
+
+verify: manual
+
+## BL-659 — `provenance-block.json` disagrees with the merge on adversary shard headers: no elicitation profile, a `tool_use_id` instruction the prose contradicts, and a wrong `artifact_sha` comment
+
+**NOTE.** Found by builder H3 while building BL-575 (0.822.0), and promised as a NOTE in 0.822.0's CHANGELOG Limits. Intake ai-dlc-40.
+
+1. `core/schemas/provenance-block.json` has no `elicitation` profile, only `full`, `adversary-pass` and `retro-party-mode`. The `adversary-pass` profile pins `skill: ai-dlc-adversary-review` and carries `verdict:`. The merge refuses both on an elicitation shard (`merge-adversarial-shards.sh --check-header --axis elicitation`: "an elicitation shard carries none"). So the elicitation dispatch sites in `_gate-procedures.md` tell the lead to copy the rendered `adversary-pass` region with two stated changes, rather than a clean verbatim copy.
+2. The rendered region in `core/team-roles/adversary.md` tells the writer to fill `tool_use_id` from the Skill or Agent call that spawned it. The prose in `_gate-procedures.md` says a shard writes `tool_use_id: NOT_ACCESSIBLE`, and the merge refuses a real-shaped id that differs from the one it derives. A verbatim paste is correct only because the `NOT_ACCESSIBLE` sentence is kept beside it.
+3. The rendered `artifact_sha` comment describes the multi-file form as "one per story". The subject axis notarizes one entry per subject stem, and the sections axis notarizes the whole document's sha.
+
+Owed: an `elicitation` profile (or an axis switch on `adversary-pass`) that the brief can copy verbatim, a `tool_use_id` instruction that agrees with what the merge accepts, and an `artifact_sha` comment per axis. Rendered by `sync-taught-schema.sh` and checked by its `--check`.
+
+verify: manual

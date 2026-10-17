@@ -1042,3 +1042,15 @@ slot (b) DONE, and the slot is free.
 Timing, adversarial-shard-merge in CPU-s, BTBTBT, HEAD asserted before each rep: base 115.02 / 115.90 / 114.37, tip 124.14 / 125.75 / 124.36. The delta is +9.3 CPU-s (+8.1%), about 6x the spread (~1.6). Wall is +11 s. The growth comes from 18 new arms at about 0.5 s each, so the mutants stay inline.
 Trace: wait-beat-liveness, sandbox, rc 0, 229/229 proper-subset control. The map is +4/-2 with only that fixture's rows moving (5c44cc48). The main checkout is restored to local main 4e6670c1 with 0 dirty files.
 c9 GATE ASK: b235-c9-build at 5c44cc48 (9 commits) covers BL-575, 577, 594, 613 and 614. SLOT GO (c) goes to c9 with VERSION 0.822.0. This train-log range rides it as a docs-only range.
+
+## 3:08 PM
+0.822.0 CUT by c9 at 10d90c9e (6 past 06ae8b85: the 5 train-log commits plus 1 release commit). The diff against 5c44cc48 is exactly CHANGELOG, VERSION, the train log and backlog(.archive), and the ids appear only in the release commit. BL-575/577/594/613/614 are rotated, with LANDED anchors on the backup ref b235-c9-build-pre2 (re-anchor at close). It edits .githooks/pre-push, so the runner, the rehearsal and the push all run from the main checkout detached at 10d90c9e, which I granted. GATE OPEN 3:08 PM, load 2.43, sent to c9 and f7.
+
+## 3:45 PM
+0.822.0 dress rehearsal GREEN, run from the main checkout detached at 10d90c9e with the new hook. Runner: 20/20, failing 0; self-check rc 0. The rehearsal ran 15:14-15:44 with 22 phase PASS and 0 FAIL. 87 of 307 fixtures ran and all were ok, every changed fixture read by name (including mutants shards a-f). Pole: adversarial-shard-merge-mutants at 1681 s loaded (was 2122 s). zz-dress deleted (0, main 1). GO for the real push at load 18.22, the rehearsal tail; it is expected to skip on the content key.
+
+## 3:48 PM
+0.822.0 LANDED as edcae8aa (PR #1187). Verified by content: the diff against 10d90c9e is rc 0, VERSION is 0.822.0, the parent is 06ae8b85, and the control diff against 06ae8b85 is rc 1. The real push skipped on the content key. The main checkout is restored to local main 4e6670c1 and clean. GATE CLOSED was sent to c9 and f7. BL-575/577/594/613/614 are archived. Their LANDED anchors sit on b235-c9-build-pre2 (5c44cc48) and get re-anchored at the close. Batch 235's code work is DONE. Next is the batch-close docs commit, with c9's intake-27 (BL-657, BL-658, BL-659) riding it if it arrives before the cut.
+
+## 3:54 PM (built 3:52 PM)
+Batch-close docs commit built on b235-train: intake-27 (BL-657/658/659), the 0.822.0 re-anchor (5 clauses to edcae8aa; batch 235 now has 0 off-main clauses and 68 older remain), the batch-235 resume block, the delivery-gap command reading both graph refs, and the plan rotated 150813 -> 141664 bytes (plan-shape rc 0). Instrument: live 50, archive 600 headings, reverify 50 HAND-REVIEW, rotate --check rc 0. Intake-28 (BL-660) arrived after the cut and is held for batch 236. Action 7 is BANK IT. Next: gate, merge, actions 6b and 9.
