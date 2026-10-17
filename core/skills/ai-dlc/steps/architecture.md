@@ -48,8 +48,11 @@ applied as a local override. Adopt the spine as a spec companion, keeping
 `bmad-architecture` ships `scripts/lint_spine.py`, which emits JSON findings
 for unfilled placeholders, duplicate or non-monotonic `AD` IDs, an `AD`
 missing Binds/Prevents/Rule, and an unpinned stack version — and **exits 0
-unconditionally, by design, leaving the decision to its caller.** Pass its
-JSON to gate-validation Check 30 via `--spine-lint`; that check is the
+unconditionally, by design, leaving the decision to its caller.** Run it as
+`uv run .claude/skills/bmad-architecture/scripts/lint_spine.py --workspace <the run folder holding ARCHITECTURE-SPINE.md> -o <lint json>`,
+the form `bmad-architecture`'s `references/reviewer-gate.md` gives for its
+deterministic pass: `--workspace` takes the folder, never the spine file.
+Pass `<lint json>` to gate-validation Check 30 via `--spine-lint`; that check is the
 caller that decides. Do not re-implement the linter.
 
 The per-variant guidance below governs the CONTENT of the design, not

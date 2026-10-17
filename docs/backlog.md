@@ -701,7 +701,7 @@ verify: manual
 
 Owed: `architecture.md:48` gives the literal invocation or cites `reviewer-gate.md:5`. Receipt: the step names `--workspace` and the run folder.
 
-verify: manual
+verify: sh t="$(awk '/^### 2\./{p=1} /^### 3\./{p=0} p' core/skills/ai-dlc/steps/architecture.md | tr '\n' ' ' | tr -s ' ')"; [ -n "$t" ] || exit 9; grep -qE 'lint_spine\.py --workspace <[^>]*(folder|director)[^>]*> (-o|--output) <[^>]+>' <<<"$t" && ! grep -qE '\{(doc_workspace|skill-root)\}' <<<"$t" && grep -qF -- '--spine-lint' <<<"$t"
 
 ## BL-654 — the architect's spine has no completion contract, so a header-only spine joined as DELIVERED
 
