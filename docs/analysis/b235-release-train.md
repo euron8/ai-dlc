@@ -1036,3 +1036,9 @@ slot (b) item 1 GREEN at 13ca153f, run solo in a clean worktree with a private s
 - process-rule-pins: rc 0, 19 s. gp-req-p1-prior mutants killed.
 - validator-fork-budget: rc 0, 35 s. 3442 of FORK_BUDGET 3446; 15/15 mutants killed.
 required_missing=0 on all four. Item 2 (BTBTBT timing, about 15 min) is running; item 3 (trace) comes after.
+
+## 3:03 PM
+slot (b) DONE, and the slot is free.
+Timing, adversarial-shard-merge in CPU-s, BTBTBT, HEAD asserted before each rep: base 115.02 / 115.90 / 114.37, tip 124.14 / 125.75 / 124.36. The delta is +9.3 CPU-s (+8.1%), about 6x the spread (~1.6). Wall is +11 s. The growth comes from 18 new arms at about 0.5 s each, so the mutants stay inline.
+Trace: wait-beat-liveness, sandbox, rc 0, 229/229 proper-subset control. The map is +4/-2 with only that fixture's rows moving (5c44cc48). The main checkout is restored to local main 4e6670c1 with 0 dirty files.
+c9 GATE ASK: b235-c9-build at 5c44cc48 (9 commits) covers BL-575, 577, 594, 613 and 614. SLOT GO (c) goes to c9 with VERSION 0.822.0. This train-log range rides it as a docs-only range.
