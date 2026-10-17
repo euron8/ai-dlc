@@ -425,7 +425,7 @@ The consumer pre-push runs this validator (`core/git-hooks/pre-push:77-79`). On 
 
 Owed: W10 says which case it is in, or words its timing so that it holds in both. Receipt: drive the validator in a scaffold-absent tree on both a mid-pull push and a between-pulls push, and read the message in each.
 
-verify: manual
+verify: sh d="$(mktemp -d)" || exit 9; mkdir -p "$d/.claude/skills/ai-dlc/extensions" "$d/.claude/skills/ai-dlc/overrides" "$d/scripts/ai-dlc-local" && cp core/skills/ai-dlc/layer-contract.yaml core/skills/ai-dlc/core-manifest.md "$d/.claude/skills/ai-dlc/" || exit 9; o="$(bash core/scripts/validate-layer-entries.sh "$d" 2>/dev/null)"; w="$(grep -E '^WARN +W10' <<<"$o")"; [ -n "$w" ] || exit 9; grep -qF 'the ai-dlc machinery inventory has not been scaffolded' <<<"$w" && grep -qF 'RESOLVED machinery-scaffold' <<<"$w" && grep -qiE 'on the pull that declares it|this pull|the pull that (declares|ships|delivers) it' <<<"$w" && ! grep -qF 'The next pull creates it' <<<"$w"
 
 ## BL-618 — implementation.md tells the first cross QA its beat state directory goes "outside the shard directory", which no longer says where it lands
 
