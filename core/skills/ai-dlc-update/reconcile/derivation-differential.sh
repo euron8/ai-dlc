@@ -464,14 +464,14 @@ fi
 cat "$TMP/rows"
 # A file the scope dropped is named, never silently absent: one row per hit-bearing PAST or HISTORY file.
 # It is not run, not recorded, not refused and not closed.
-printf '%s\n' "$VD_DROPPED" | while IFS="$(printf '\t')" read -r _dt _dp; do
+while IFS="$(printf '\t')" read -r _dt _dp; do
   [ -n "$_dp" ] || continue
   case "$_dt" in
     PAST) _dw="a sprint that has since finished" ;;
     *)    _dw="a history file (an archive, or an ai-dlc rotation output)" ;;
   esac
   say_row INFO out-of-scope "${_dt}	${_dp} carries a recorded derivation naming a path this range changed, and is ${_dw}: it is not this pull's to repair, so it is NOT run, NOT recorded, NOT refused at the gate and NOT carried forward, and it is not closed."
-done
+done <<<"$VD_DROPPED"
 
 # ---- NOTEs: what the differential cannot attribute -----------------------------------------
 # Operands are read as whitespace-split words of the recorded command with globbing OFF, so a

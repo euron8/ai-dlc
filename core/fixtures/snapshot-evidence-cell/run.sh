@@ -47,8 +47,8 @@ echo "HERMETIC-CONSUMED $VALIDATOR"
 # lives in a scripts/ directory beside a schemas/ directory, both copied once from the resolved tree.
 VAL_DIR="$(dirname "$VALIDATOR")"
 SIB_SCRIPTS="check-owed-derivations.sh sprint-status.sh"
-if [ -f "$VAL_DIR/../schemas/sprint-status.json" ]; then
-  SIB_SCHEMA="$(cd "$VAL_DIR/../schemas" && pwd)/sprint-status.json"
+if [ -f "$ROOT/core/schemas/sprint-status.json" ]; then
+  SIB_SCHEMA="$ROOT/core/schemas/sprint-status.json"
 elif [ -f "$ROOT/.claude/schemas/sprint-status.json" ]; then
   SIB_SCHEMA="$ROOT/.claude/schemas/sprint-status.json"
 else
