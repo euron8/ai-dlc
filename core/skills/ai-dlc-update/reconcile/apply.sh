@@ -1339,12 +1339,30 @@ fi
 # It must stay at column 0 and close on a column-0 `}` -- that is the lift's grammar.
 #
 # vd_join <dist> <base> <theirs> <artifact-dir>  ->  sets VD_MOVED VD_LISTED VD_SCANNED VD_HITS
-# VD_NF VD_FILES. VD_FILES is the newline-joined, sorted set of artifact files carrying at least
-# one hit -- the row's file set, and the helper's corpus. The scan runs only when the changed set
-# is non-empty and the corpus lists at least one file; otherwise the counts are 0 and the caller's
-# own guard decides.
+# VD_NF VD_FILES VD_SCOPE_ERR VD_DROPPED. VD_FILES is the newline-joined, sorted set of artifact files carrying
+# at least one hit -- the row's file set, and the helper's corpus. The scan runs only when the
+# changed set is non-empty and the corpus lists at least one file; otherwise the counts are 0 and
+# the caller's own guard decides.
+#
+# ONLY THE CURRENT SPRINT AND THE LIVING DOCUMENTS DRIVE THE ROW (operator ruling, BL-631): a past
+# sprint's artifact or a history file can neither fail nor owe anything here. Every count is
+# therefore taken over the files `check-owed-derivations.sh --scope-batch` classifies CURRENT or
+# LIVING -- the one classifier, never a private reading of the path. It is THEIRS' copy first, with
+# its sibling `sprint-status.sh` and that script's schema, read out of <dist> at <theirs>, so the
+# pull that first delivers the classifier is scoped by it; only where <theirs> carries none is the
+# consumer's installed copy used. Root is the parent of <artifact-dir>, the consumer itself.
+#
+# THE CLASSIFIER IS CONSULTED ONLY WHEN A ROW IS POSSIBLE: some fenced hit, or some listed file the
+# scan could not open. A corpus with neither draws no row before scoping and none after, so the
+# answer is the same with every past sprint deleted and nothing is spent learning it.
+#
+# A CLASSIFIER THAT CANNOT RUN IS LOUD, NEVER A GUESS. VD_SCOPE_ERR then names why and every count
+# is left unscoped; each caller turns it into its own refusal (a DECISION row here, `refuse` in the
+# helper). Dropping the scan, or keeping it unscoped and silent, would be the guessed scope the
+# ruling forbids.
 vd_join() {
-  VD_MOVED=""; VD_LISTED=0; VD_SCAN=""; VD_SCANNED=0; VD_HITS=0; VD_NF=0; VD_FILES=""
+  VD_MOVED=""; VD_LISTED=0; VD_SCAN=""; VD_SCANNED=0; VD_HITS=0; VD_NF=0; VD_FILES=""; VD_SCOPE_ERR=""; VD_DROPPED=""
+  local _vt _vr _vrc _vc
   # Consumer-relative, because that is how an artifact writes a path. `map_consumer` is the one
   # mapper this program has (loaded from preclassify.sh above); a private table here is the
   # defect I17 exists to prevent.
@@ -1363,10 +1381,11 @@ vd_join() {
     # counts are summed below and compared against the `find` listing: a batch that never ran
     # produces the same empty stdout as a batch that matched nothing.
     #
-    # EACH BATCH ALSO NAMES ITS HIT FILES, one `F<TAB>path` line per file, and the count line
-    # stays the only line whose first field is numeric. The sums skip the `F` lines, so the
-    # three counts the rows print are computed exactly as they were before the file names rode
-    # along -- the names are an addition to the scan's output, never a change to its arithmetic.
+    # EACH BATCH ALSO NAMES ITS HIT FILES, one `F<TAB>hits<TAB>path` line per file, and each file
+    # it OPENED, one `O<TAB>path` line, and the count line stays the only line whose first field
+    # is numeric. The sums skip the `F` and `O` lines, so the three counts the rows print are
+    # computed exactly as they were before the file names rode along; the names are what the
+    # scoping below re-counts over.
     #
     # OPENED IS COUNTED BY A PROBE READ IN BEGIN, NOT BY `FNR == 1`. An EMPTY file has no first
     # record, so a counter on `FNR == 1` scores it unopened, and one zero-byte log in the corpus
@@ -1376,38 +1395,96 @@ vd_join() {
     VD_SCAN="$(find "$4" -type f -name '*.md' -print0 2>/dev/null \
       | xargs -0 awk -v paths="$VD_MOVED" '
           BEGIN { n = split(paths, A, "|"); for (i = 1; i <= n; i++) if (A[i] != "") P[A[i]] = 1
-                  for (i = 1; i < ARGC; i++) if ((getline _vl < ARGV[i]) >= 0) { files++; close(ARGV[i]) } }
+                  for (i = 1; i < ARGC; i++) if ((getline _vl < ARGV[i]) >= 0) { files++; printf "O\t%s\n", ARGV[i]; close(ARGV[i]) } }
           FNR == 1 { infence = 0 }
           /^[[:blank:]]*```derived[[:blank:]]*$/ { infence = 1; next }
           infence && /^[[:blank:]]*```[[:blank:]]*$/ { infence = 0; next }
           infence && /^[[:blank:]]*\$ / {
-            for (p in P) if (index($0, p) > 0) { hits++; H[FILENAME] = 1; break }
+            for (p in P) if (index($0, p) > 0) { hits++; H[FILENAME]++; break }
           }
-          END { m = 0; for (f in H) { m++; printf "F\t%s\n", f }; printf "%d\t%d\t%d\n", files + 0, hits + 0, m }
+          END { m = 0; for (f in H) { m++; printf "F\t%d\t%s\n", H[f], f }; printf "%d\t%d\t%d\n", files + 0, hits + 0, m }
         ' 2>/dev/null)"
-    VD_FILES="$(printf '%s\n' "$VD_SCAN" | awk -F'\t' '$1 == "F" { print substr($0, 3) }' | sort -u)"
-    VD_SCANNED="$(printf '%s\n' "$VD_SCAN" | awk -F'\t' '$1 != "F" {a+=$1} END{print a+0}')"
-    VD_HITS="$(printf '%s\n' "$VD_SCAN" | awk -F'\t' '$1 != "F" {a+=$2} END{print a+0}')"
-    VD_NF="$(printf '%s\n' "$VD_SCAN" | awk -F'\t' '$1 != "F" {a+=$3} END{print a+0}')"
+    VD_FILES="$(printf '%s\n' "$VD_SCAN" | awk -F'\t' '$1 == "F" { sub(/^F\t[0-9]+\t/, ""); print }' | sort -u)"
+    VD_SCANNED="$(printf '%s\n' "$VD_SCAN" | awk -F'\t' '$1 != "F" && $1 != "O" {a+=$1} END{print a+0}')"
+    VD_HITS="$(printf '%s\n' "$VD_SCAN" | awk -F'\t' '$1 != "F" && $1 != "O" {a+=$2} END{print a+0}')"
+    VD_NF="$(printf '%s\n' "$VD_SCAN" | awk -F'\t' '$1 != "F" && $1 != "O" {a+=$3} END{print a+0}')"
     case "${VD_SCANNED:-0}" in ''|*[!0-9]*) VD_SCANNED=0 ;; esac
     case "${VD_HITS:-0}" in ''|*[!0-9]*) VD_HITS=0 ;; esac
     case "${VD_NF:-0}" in ''|*[!0-9]*) VD_NF=0 ;; esac
+    if [ "$VD_HITS" -gt 0 ] || [ "$VD_SCANNED" -lt "$VD_LISTED" ]; then
+      _vr="${4%/*}"
+      _vt="$(mktemp -d "${TMPDIR:-/tmp}/vd-join.XXXXXX" 2>/dev/null)" \
+        || { VD_SCOPE_ERR="could not create a scratch directory for the scope classifier"; return 0; }
+      mkdir -p "$_vt/scripts" "$_vt/schemas" 2>/dev/null
+      _vc="$_vt/scripts/check-owed-derivations.sh"
+      if git -C "$1" show "${3}:core/scripts/check-owed-derivations.sh" > "$_vc" 2>/dev/null \
+         && git -C "$1" show "${3}:core/scripts/sprint-status.sh" > "$_vt/scripts/sprint-status.sh" 2>/dev/null \
+         && git -C "$1" show "${3}:core/schemas/sprint-status.json" > "$_vt/schemas/sprint-status.json" 2>/dev/null; then
+        :
+      elif [ -f "$_vr/scripts/ai-dlc/check-owed-derivations.sh" ]; then
+        # A distribution that does not carry the classifier at <theirs> cannot be the one that
+        # scopes; the consumer's installed copy, beside its own sprint-status.sh, is the next
+        # real classifier. One too old for --scope-batch exits 2, which is the loud refusal below.
+        _vc="$_vr/scripts/ai-dlc/check-owed-derivations.sh"
+      else
+        _vc=""
+        VD_SCOPE_ERR="neither the distribution at ${3} (core/scripts/check-owed-derivations.sh, core/scripts/sprint-status.sh, core/schemas/sprint-status.json) nor this consumer (scripts/ai-dlc/check-owed-derivations.sh) carries the scope classifier, so which artifacts belong to the current sprint cannot be classified"
+      fi
+      if [ -n "$_vc" ]; then
+        # Every LISTED file, root-relative, one per line: the classifier refuses a blank line, and
+        # `find` never emits one, so the input is exactly the listing.
+        find "$4" -type f -name '*.md' 2>/dev/null \
+          | awk -v r="$_vr/" 'index($0, r) == 1 { print substr($0, length(r) + 1) }' > "$_vt/rel"
+        AI_DLC_PROJECT_ROOT="$_vr" bash "$_vc" --scope-batch \
+          < "$_vt/rel" > "$_vt/cls" 2> "$_vt/cls.err"
+        _vrc=$?
+        if [ "$_vrc" -ne 0 ]; then
+          VD_SCOPE_ERR="the scope classifier (check-owed-derivations.sh --scope-batch, from ${3}) exited ${_vrc}: $(head -2 "$_vt/cls.err" | tr '\n' ' ')"
+        elif [ "$(awk 'END { print NR + 0 }' "$_vt/cls")" -ne "$VD_LISTED" ]; then
+          VD_SCOPE_ERR="the scope classifier answered for $(awk 'END { print NR + 0 }' "$_vt/cls") of ${VD_LISTED} listed artifact file(s)"
+        else
+          # RE-COUNT OVER THE KEPT SET. Every number the rows print, and VD_FILES, now describes only
+          # CURRENT and LIVING files, so `VD_SCANNED -lt VD_LISTED` still means a kept file went unread.
+          printf '%s\n' "$VD_SCAN" > "$_vt/scan"
+          VD_LISTED="$(awk -F'\t' '$1 == "CURRENT" || $1 == "LIVING" { n++ } END { print n + 0 }' "$_vt/cls")"
+          VD_SCANNED="$(awk -F'\t' -v r="$_vr/" 'FNR == NR { if ($1 == "CURRENT" || $1 == "LIVING") K[r substr($0, length($1) + 2)] = 1; next }
+                          $1 == "O" && (substr($0, 3) in K) { n++ } END { print n + 0 }' "$_vt/cls" "$_vt/scan")"
+          awk -F'\t' -v r="$_vr/" 'FNR == NR { if ($1 == "CURRENT" || $1 == "LIVING") K[r substr($0, length($1) + 2)] = 1; next }
+                 $1 == "F" { p = $0; sub(/^F\t[0-9]+\t/, "", p); if (p in K) printf "%s\t%s\n", $2, p }' \
+            "$_vt/cls" "$_vt/scan" > "$_vt/kept"
+          # The hit-bearing files the scope DROPPED, as `<TOKEN><TAB><root-relative path>`, so a caller
+          # can name each one rather than let it vanish: out of scope is not the same as absent.
+          VD_DROPPED="$(awk -F'\t' -v r="$_vr/" 'FNR == NR { if ($1 == "PAST" || $1 == "HISTORY") D[r substr($0, length($1) + 2)] = $1; next }
+                 $1 == "F" { p = $0; sub(/^F\t[0-9]+\t/, "", p); if (p in D) printf "%s\t%s\n", D[p], substr(p, length(r) + 1) }' \
+            "$_vt/cls" "$_vt/scan" | LC_ALL=C sort -t "$(printf '\t')" -k2,2)"
+          VD_HITS="$(awk -F'\t' '{ a += $1 } END { print a + 0 }' "$_vt/kept")"
+          VD_NF="$(awk 'END { print NR + 0 }' "$_vt/kept")"
+          VD_FILES="$(awk -F'\t' '{ print substr($0, length($1) + 2) }' "$_vt/kept" | sort -u)"
+        fi
+      fi
+      rm -f "$_vt/scripts/check-owed-derivations.sh" "$_vt/scripts/sprint-status.sh" "$_vt/schemas/sprint-status.json" \
+            "$_vt/rel" "$_vt/cls" "$_vt/cls.err" "$_vt/scan" "$_vt/kept" 2>/dev/null
+      rmdir "$_vt/scripts" "$_vt/schemas" "$_vt" 2>/dev/null
+    fi
   fi
 }
 VD_ART="$CONSUMER/_bmad-output"
 VD_VALIDATOR="$CONSUMER/scripts/ai-dlc/validate-artifact-derivations.sh"
 if [ -d "$VD_ART" ]; then
   vd_join "$DIST" "$BASE" "$THEIRS" "$VD_ART"
-  if [ -n "${VD_MOVED:-}" ] && [ "$VD_LISTED" -gt 0 ]; then
+  if [ -n "${VD_SCOPE_ERR:-}" ]; then
+    say DECISION artifact-derivations-unscoped "_bmad-output/" \
+      "${VD_HITS} recorded \`derived\` command(s) name a core path this range changed (${VD_SCANNED} of ${VD_LISTED} markdown file(s) opened), but whether any of them belongs to the CURRENT sprint or a living document is UNKNOWN: ${VD_SCOPE_ERR}. Only those are this pull's to repair; a past sprint's artifact is owed by nobody, so nothing is listed here rather than listing every sprint's. Restore the current sprint's canonical \`sprint-status.yaml\` (its \`sprint: <N>\` and \`status:\` lines) so \`bash scripts/ai-dlc/sprint-status.sh sprint-id\` answers, then re-run this apply."
+  elif [ -n "${VD_MOVED:-}" ] && [ "$VD_LISTED" -gt 0 ]; then
     if [ "$VD_SCANNED" -lt "$VD_LISTED" ]; then
       say DECISION artifact-derivations-unreadable "_bmad-output/" \
-        "the artifact corpus could not be fully read — ${VD_SCANNED} of ${VD_LISTED} markdown file(s) were opened — so whether this range stranded a recorded derivation is UNKNOWN, and unknown reads exactly like clean. Run \`bash scripts/ai-dlc/validate-artifact-derivations.sh _bmad-output/\` by hand before treating this pull as done."
+        "the current sprint's and the living artifacts could not be fully read — ${VD_SCANNED} of ${VD_LISTED} markdown file(s) were opened — so whether this range stranded a recorded derivation is UNKNOWN, and unknown reads exactly like clean. Make every markdown file under _bmad-output/ readable and re-run this apply before treating this pull as done. A past sprint's file is not this row's to read."
     elif [ "$VD_HITS" -gt 0 ] && [ -f "$VD_VALIDATOR" ]; then
       say WORKLIST artifact-derivations "_bmad-output/" \
         "${VD_HITS} recorded \`derived\` command(s) across ${VD_NF} artifact file(s) name a core path this range CHANGED between ${BASE} and ${THEIRS}. Core text that moved leaves each of those commands measuring whatever still happens to sit at the old path, which re-runs without failing. RE-POINT each one this range broke at the path core carries at ${THEIRS}. The check is \`bash .claude/skills/ai-dlc-update/reconcile/derivation-differential.sh <dist> ${BASE} . ${THEIRS}\`, run before the apply is committed: it re-derives this row's file set with the same join, runs the installed validator over those files once against the pre-apply tree and once against this one, and keys each derivation on its pass/fail STATUS. The clear is ZERO NEWLY-FAILING — a derivation that passed before this apply and fails after it; exit 0 is that clear, exit 1 names each newly-failing one, exit 2 is a refusal and is never a clear. A derivation that was already stale before the apply is OUT OF THIS ROW'S SCOPE: this range did not break it, and the whole-corpus validator's exit 0 is a clear no edit made for this pull can reach. UNASSESSABLE derivations (refused by the validator on either side: ALLOWLIST, GRAMMAR, READS-STDIN) are LISTED, never counted as cleared — adjudicate each by hand. To LEAVE a NEWLY-FAILING derivation without re-pointing it (the operator chose that by AskUserQuestion), re-run the same command with \`--record-owed _bmad-output/ai-dlc-update/owed-derivations.tsv --log-name <this pull's reconcile-log-<ts>.md>\`: the flag appends each CURRENT-sprint or living-document NEWLY-FAILING row to the owed record (a past sprint's break prints INFO and is not recorded), and \`scripts/ai-dlc/check-owed-derivations.sh\` keeps it open until the derivation reproduces. To CLOSE an owed row by re-pointing it, append \`REPOINTED<TAB><old file:line><TAB><new file:line><TAB>\$ <new command>\` to that record; the reader re-derives the NEW derivation on every read, so the append closes nothing unless it reproduces. NOT run from here: it executes the commands it finds, twice, and that is a cost this driver must not charge on a pull."
     elif [ "$VD_HITS" -gt 0 ]; then
       say DECISION artifact-derivations-unchecked "_bmad-output/" \
-        "${VD_HITS} recorded \`derived\` command(s) across ${VD_NF} artifact file(s) name a core path this range changed, and scripts/ai-dlc/validate-artifact-derivations.sh is not on this consumer, so nothing can re-run them. It is delivered by install.sh's copy loop over core/scripts/; run a fresh install of that script, then \`bash scripts/ai-dlc/validate-artifact-derivations.sh _bmad-output/\`."
+        "${VD_HITS} recorded \`derived\` command(s) across ${VD_NF} artifact file(s) name a core path this range changed, and scripts/ai-dlc/validate-artifact-derivations.sh is not on this consumer, so nothing can re-run them. It is delivered by install.sh's copy loop over core/scripts/; run a fresh install of that script, then re-run this apply, which then draws the WORKLIST row and names the check that scopes to the current sprint."
     fi
   fi
 fi

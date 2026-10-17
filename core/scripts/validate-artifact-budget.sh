@@ -1354,6 +1354,21 @@ env_override() {
 # PREVIOUS gate, whose section then wins, so the artifact under audit chooses
 # its own evidence.
 # -----------------------------------------------------------------------------
+# gl_current_first: absolute gate-log.md paths on stdin -> the first, in sorted order, that
+# `check-owed-derivations.sh --scope-batch` (the sibling beside this script; the one classifier,
+# never a private reading of the path) calls CURRENT or LIVING. Nothing on stdout when none does,
+# or when the classifier is absent or refuses -- which it then says on stderr.
+gl_current_first() {
+  local gl_cls gl_tool="$AI_DLC_SELF_DIR/check-owed-derivations.sh"
+  [ -f "$gl_tool" ] || {
+    echo "FAIL: no check-owed-derivations.sh beside this script, so the current sprint's gate-log.md copies cannot be told from the past sprints'" >&2
+    return 0; }
+  gl_cls="$(awk -v r="$ROOT/" 'index($0, r) == 1 { print substr($0, length(r) + 1) }' | LC_ALL=C sort \
+    | AI_DLC_PROJECT_ROOT="$ROOT" bash "$gl_tool" --scope-batch 2>&1)" || {
+    echo "FAIL: the scope classifier could not say which gate-log.md copies belong to the current sprint: $(printf '%s\n' "$gl_cls" | head -2 | tr '\n' ' ')" >&2
+    return 0; }
+  printf '%s\n' "$gl_cls" | awk -F'\t' -v r="$ROOT/" '$1 == "CURRENT" || $1 == "LIVING" { print r substr($0, length($1) + 2); exit }'
+}
 if [ "$CHECK_EVIDENCE" -eq 1 ]; then
   # DISCOVERY PREFERS THE CANONICAL LIVE PATH. The `find` below matches on
   # BASENAME ALONE across the whole of `_bmad-output`, so any second
@@ -1365,22 +1380,24 @@ if [ "$CHECK_EVIDENCE" -eq 1 ]; then
   # measurement at all. That is fails-open: the arm reported on a file nobody
   # was gating.
   #
-  # `archive/` is where those extra copies come from TODAY; it is not the
-  # condition. Excluding that one path segment would leave every other second
-  # copy winning, and would REGRESS the consumer whose only gate log is an
-  # archived one -- that tree passes today and must keep passing. So the
-  # preference is stated positively and the discovery below is kept UNCHANGED
-  # as the fallback: a tree with no canonical live log resolves exactly as it
-  # did before, and a tree with none at all still reaches the loud failure.
+  # THE FALLBACK READS THE CURRENT SPRINT ONLY (operator ruling, BL-631: a past
+  # sprint's artifact can neither fail nor pass this gate). With no canonical
+  # live log, gl_current_first() keeps the copies the scope classifier calls
+  # CURRENT or LIVING, sorted, first wins, so neither readdir order nor a closed
+  # sprint's archived copy decides. A tree whose only log is a past sprint's or
+  # a history file's therefore reaches the loud failure below, and that is the
+  # tightening: it used to PASS on that copy. A classifier that is absent or
+  # refuses says why on stderr and selects nothing, so it reaches the same loud
+  # failure and never the old unscoped answer.
   if [ -z "$GATE_LOG" ]; then
     if [ -f "$ROOT/_bmad-output/implementation-artifacts/gate-log.md" ]; then
       GATE_LOG="$ROOT/_bmad-output/implementation-artifacts/gate-log.md"
     else
-      GATE_LOG="$(find "$ROOT/_bmad-output" -type f -name 'gate-log.md' 2>/dev/null | head -1)"
+      GATE_LOG="$(find "$ROOT/_bmad-output" -type f -name 'gate-log.md' 2>/dev/null | gl_current_first)"
     fi
   fi
   [ -n "$GATE_LOG" ] && [ -f "$GATE_LOG" ] || {
-    echo "FAIL: no gate-log.md found under $ROOT/_bmad-output (pass --gate-log PATH)" >&2
+    echo "FAIL: no gate-log.md found under $ROOT/_bmad-output for the current sprint (pass --gate-log PATH)" >&2
     exit 1; }
 
   # Both row shapes in use. The long form is gate-validation.md's own
