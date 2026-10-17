@@ -300,7 +300,10 @@ _bmad-output/planning-artifacts/data-archive-policy.md
 _bmad-output/planning-artifacts/s1/requirements-history.md
 _bmad-output/planning-artifacts/s1/stories/story-3-archive-cleanup.md
 _bmad-output/planning-artifacts/archived/x.md
-_bmad-output/planning-artifacts/archive-notes/x.md"
+_bmad-output/planning-artifacts/archive-notes/x.md
+_bmad-output/planning-artifacts/carry-over-backlog.md
+_bmad-output/planning-artifacts/architecture.md
+_bmad-output/planning-artifacts/carry-over-backlog-archive-notes.md"
 : > "$WORK/hrows.tsv"
 for hp in $HSHAPES $LIVEGA $NEARS; do
   mkdir -p "$R/${hp%/*}"; { printf '# h\n\n'; fence 5; } > "$R/$hp"
@@ -349,6 +352,9 @@ scope_in "$R" "_bmad-output/planning-artifacts/data-archive-policy.md"; rc_is "H
 scope_in "$R" "_bmad-output/planning-artifacts/archived/x.md"; rc_is "Ha4 archived/x.md (contains archive, is not the component) -> LIVING" 0 "$([ "$SC" = LIVING ] && echo 0 || echo 1)"
 scope_in "$R" "_bmad-output/planning-artifacts/archive-notes/x.md"; rc_is "Ha5 archive-notes/x.md -> LIVING" 0 "$([ "$SC" = LIVING ] && echo 0 || echo 1)"
 scope_in "$R" "_bmad-output/planning-artifacts/s1/archive/x.md"; rc_is "Ha6 near-miss control: s<current>/archive/x.md -> HISTORY" 0 "$([ "$SC" = HISTORY ] && echo 0 || echo 1)"
+scope_in "$R" "_bmad-output/planning-artifacts/carry-over-backlog-archive.md"; rc_is "Ha7 carry-over-backlog-archive.md (a history companion the writer names) -> HISTORY" 0 "$([ "$SC" = HISTORY ] && echo 0 || echo 1)"
+scope_in "$R" "_bmad-output/planning-artifacts/architecture-history.md"; rc_is "Ha8 planning-artifacts/architecture-history.md -> HISTORY" 0 "$([ "$SC" = HISTORY ] && echo 0 || echo 1)"
+scope_in "$R" "_bmad-output/architecture-history.md"; rc_is "Ha9 _bmad-output/architecture-history.md (HISTORY anywhere under the root) -> HISTORY" 0 "$([ "$SC" = HISTORY ] && echo 0 || echo 1)"
 scope_in "$R" "_bmad-output/planning-artifacts/prd.md"; rc_is "Hc1 control: prd.md -> LIVING" 0 "$([ "$SC" = LIVING ] && echo 0 || echo 1)"
 scope_in "$R" "_bmad-output/planning-artifacts/s1/x.md"; rc_is "Hc2 control: s<current>/x.md -> CURRENT" 0 "$([ "$SC" = CURRENT ] && echo 0 || echo 1)"
 # the writer records nothing for a history path: the writer calls --scope per row, so HISTORY is dropped
@@ -498,14 +504,16 @@ dd --record-owed "$OWED" --log-name reconcile-log-t1.md
 rc_is "Wb with --record-owed the exit is unchanged (1)" 1 "$RCD"
 K_W="_bmad-output/story.md:4"
 printed="$(awk -F'\t' '$1 == "NEWLY-FAILING" { print }' <<<"$OUTD")"
-want_rec="$(awk -F'\t' -v rng="$BASE..$THEIRS" -v past="$K_WPAST" -v hist="$K_WHIST" '$1 == "NEWLY-FAILING" && $2 != past && $2 != hist {
+want_rec="$(awk -F'\t' -v rng="$BASE..$THEIRS" '$1 == "NEWLY-FAILING" {
   s = $3; i = index(s, "  $ "); j = index(s, "  recorded: "); k = index(s, "  actual: ")
   printf "OWED\t%s\t%s\t%s\t%s\t%s\treconcile-log-t1.md\n", $2, substr(s, i + 4, j - i - 4), substr(s, j + 12, k - j - 12), substr(s, k + 10), rng }' <<<"$OUTD")"
 rc_is "Wc the record has exactly one row (the LIVING one; the past-sprint break is not recorded)" 1 "$(awk 'END { print NR + 0 }' "$OWED" 2>/dev/null)"
-rc_is "Sp3a the record carries no row for the past-sprint key, though the helper printed it NEWLY-FAILING" 0 "$([ "$(awk -F'\t' -v k="$K_WPAST" '$2 == k { n++ } END { print n + 0 }' "$OWED" 2>/dev/null)" = 0 ] && [ -n "$(awk -F'\t' -v k="$K_WPAST" '$1 == "NEWLY-FAILING" && $2 == k' <<<"$OUTD")" ] && echo 0 || echo 1)"
-rc_is "Hw1 the record carries no row for a history key (s1/archive/, HISTORY beats CURRENT), though the helper printed it NEWLY-FAILING" 0 "$([ "$(awk -F'\t' -v k="$K_WHIST" '$2 == k { n++ } END { print n + 0 }' "$OWED" 2>/dev/null)" = 0 ] && [ -n "$(awk -F'\t' -v k="$K_WHIST" '$1 == "NEWLY-FAILING" && $2 == k' <<<"$OUTD")" ] && echo 0 || echo 1)"
-ck "Hw2 and the helper prints an INFO history row naming it" "$(printf 'INFO\thistory\t%s' "$K_WHIST")" "$OUTD"
-ck "Sp3b and the helper prints an INFO past-sprint row naming it" "$(printf 'INFO\tpast-sprint\t%s' "$K_WPAST")" "$OUTD"
+rc_is "Sp3a the record carries no row for the past-sprint key, and the helper never ran that file" 0 "$([ "$(awk -F'\t' -v k="$K_WPAST" '$2 == k { n++ } END { print n + 0 }' "$OWED" 2>/dev/null)" = 0 ] && [ -z "$(awk -F'\t' -v k="$K_WPAST" '$1 == "NEWLY-FAILING" && $2 == k' <<<"$OUTD")" ] && echo 0 || echo 1)"
+rc_is "Hw1 the record carries no row for a history key (s1/archive/, HISTORY beats CURRENT), and the helper never ran that file" 0 "$([ "$(awk -F'\t' -v k="$K_WHIST" '$2 == k { n++ } END { print n + 0 }' "$OWED" 2>/dev/null)" = 0 ] && [ -z "$(awk -F'\t' -v k="$K_WHIST" '$1 == "NEWLY-FAILING" && $2 == k' <<<"$OUTD")" ] && echo 0 || echo 1)"
+ck "Hw2 and the helper prints an INFO out-of-scope HISTORY row that names the file" "$(printf 'INFO\tout-of-scope\tHISTORY\t_bmad-output/planning-artifacts/s1/archive/old.md')" "$OUTD"
+ck "Sp3b and the helper prints an INFO out-of-scope PAST row that names the file" "$(printf 'INFO\tout-of-scope\tPAST\t_bmad-output/planning-artifacts/s0/old.md')" "$OUTD"
+nk "Sp3c the dropped PAST file was never RUN: the helper prints no NEWLY-FAILING row for its key" "$(printf 'NEWLY-FAILING\t%s\t' "$K_WPAST")" "$OUTD"
+nk "Hw3 and the dropped HISTORY file was never RUN either" "$(printf 'NEWLY-FAILING\t%s\t' "$K_WHIST")" "$OUTD"
 if [ -n "$want_rec" ] && [ "$(cat "$OWED" 2>/dev/null)" = "$want_rec" ]; then
   ok "Wd the record row is byte-equal to the row the helper PRINTED (key, command, recorded, actual, range, log)"
 else
