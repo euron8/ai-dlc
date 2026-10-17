@@ -20,6 +20,23 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.821.0] - 2026-10-17
+
+Batch 235 (docs release). Docs only: no engine, hook, fixture or consumer-visible file changes. Closes no `BL-` id
+and no `PC-` id.
+
+- **Intakes 23 to 25, filings only.** BL-653 (a NOTE: `architecture.md` never states how to invoke `lint_spine.py`),
+  BL-654 (a NOTE: the architect's spine join has no completion contract) and BL-655 (the load series roughly doubled
+  two mutant and read-set units under the pool; cause not established), plus a BL-655 addendum: one base-vs-tip pair
+  in CPU-seconds, n=1, read 1.014 and 0.988, so no CPU growth at that resolution. Each stays OPEN.
+- **80 LANDED and PARTIAL clauses re-anchored.** Every batch-235 clause (v0.793.0 to v0.820.0) whose `verified` sha was
+  a branch commit no longer reachable from `origin/main` now names that release's squash. Derived over all 612
+  clauses in both backlog files: 148 were off main, 80 of them batch 235's; the 68 older ones are left as they were.
+- **`graph-ledger-full-drain.md` action 4** states the pre-suite run (the hook's own prefix up to the fixture-suite
+  marker, one verdict per step, then `pregate-self-check.sh`) and the dress rehearsal (a hooked push to a throwaway
+  ref, deleted with `--no-verify`, after which the real push skips on the content key). Both existed only in
+  messages.
+
 ## [0.820.0] - 2026-10-17
 
 Batch 235 (combined release: the load series). Closes BL-589, BL-592 and BL-630. Advances BL-632 and BL-616, which

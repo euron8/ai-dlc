@@ -1486,6 +1486,24 @@ given at batch 90.
    `--no-verify` for durability already equals its tip on origin, so a gated push to that ref is a
    no-op and the hook gates nothing. Delete that ref (`git push --no-verify origin --delete`) and
    read `ls-remote` EMPTY before the gated push, so the post-gate check that the ref MOVED can fire.
+
+   **BEFORE THE GATE ASK, RUN THE STEPS ABOVE THE SUITE AND THEN A DRESS REHEARSAL, BOTH ON THE
+   TREE THAT WILL BE PUSHED.** Batch 235 gated twenty-nine releases this way, serially on one box.
+   - **The pre-suite run executes the hook's own bytes, never a list.** In a clean checkout detached
+     at the release commit, take `.githooks/pre-push` from line 1 up to, not including, the single
+     line beginning `step "fixture suite`, append `exit $fail`, and run it with stdin from
+     `/dev/null`. Refuse if that marker occurs other than once. Count the `step "` calls in the
+     extracted prefix and require exactly one PASS or FAIL per call, with none failing; a run that
+     stopped early is not a pass of the steps it never reached. Then run
+     `scripts/pregate-self-check.sh origin/main` last and read its exit.
+   - **The dress rehearsal is a hooked push to a throwaway ref**, `zz-dress-<session>-<version>`.
+     It runs the whole suite and records the content key. Delete that ref with `git push
+     --no-verify origin --delete` in a separate command, after the push has returned. The real push
+     of the same tree then skips the suite on the recorded key; read each changed fixture by name
+     in the rehearsal's output, never in the skip's.
+   - **Run both from the builder's worktree, and from the main checkout detached at the commit only
+     when the release edits `.githooks/`** — the rule above about a linked worktree running the old
+     hook. A release that edits `core/hooks/` is not that case.
 5. **Close the batch properly. A `CLOSE-CANDIDATE` row is the instrument saying the fix is
    present; it is NOT the close.** Annotate each entry with `**LANDED (v<version>, verified
    <sha>).**` at the START of a line — that FORM is what the rotator keys on — then
