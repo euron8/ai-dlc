@@ -1042,3 +1042,6 @@ slot (b) DONE, and the slot is free.
 Timing, adversarial-shard-merge in CPU-s, BTBTBT, HEAD asserted before each rep: base 115.02 / 115.90 / 114.37, tip 124.14 / 125.75 / 124.36. The delta is +9.3 CPU-s (+8.1%), about 6x the spread (~1.6). Wall is +11 s. The growth comes from 18 new arms at about 0.5 s each, so the mutants stay inline.
 Trace: wait-beat-liveness, sandbox, rc 0, 229/229 proper-subset control. The map is +4/-2 with only that fixture's rows moving (5c44cc48). The main checkout is restored to local main 4e6670c1 with 0 dirty files.
 c9 GATE ASK: b235-c9-build at 5c44cc48 (9 commits) covers BL-575, 577, 594, 613 and 614. SLOT GO (c) goes to c9 with VERSION 0.822.0. This train-log range rides it as a docs-only range.
+
+## 3:08 PM
+0.822.0 CUT by c9 at 10d90c9e (6 past 06ae8b85: the 5 train-log commits plus 1 release commit). The diff against 5c44cc48 is exactly CHANGELOG, VERSION, the train log and backlog(.archive), and the ids appear only in the release commit. BL-575/577/594/613/614 are rotated, with LANDED anchors on the backup ref b235-c9-build-pre2 (re-anchor at close). It edits .githooks/pre-push, so the runner, the rehearsal and the push all run from the main checkout detached at 10d90c9e, which I granted. GATE OPEN 3:08 PM, load 2.43, sent to c9 and f7.
