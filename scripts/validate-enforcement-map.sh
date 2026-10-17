@@ -875,7 +875,15 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   clean detached worktree at one path: base 3424, tip 3429, so +5. By arm, 129 arms on both sides:
 #   I8 113 -> 118 and no other arm moved. The new directories are adversarial-shard-merge-mutants-b,
 #   -c, -d, -e and -f, each `.dist-only`. Tip reading 3429 plus the same 4.
-FORK_BUDGET=3433
+#
+#   RAISED TO 3446 FOR ONE NEW SCRIPT AND ONE NEW SHIPPING FIXTURE DIRECTORY. `fork-profile.sh
+#   --stable --section by-arm`, base b9f9fe06 (0.814.0) and tip 35569940 ((a)+(b)), in ONE clean
+#   detached worktree at one path, interleaved B T B T B T: base 3429 3429 3429, tip 3442 3442 3442,
+#   spread 0 against a delta of +13. By arm, 128 arms on both sides, identical in all three pairs:
+#   I75 +10 (one more root-consulting subject, core/scripts/serial-remediation-worklist.sh), I84 +2,
+#   I83 +1; no other arm moved. The new directory is serial-remediation-worklist, which ships.
+#   HIGH tip reading 3442 plus the same 4.
+FORK_BUDGET=3446
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

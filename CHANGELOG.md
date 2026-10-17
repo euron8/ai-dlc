@@ -20,6 +20,66 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.815.0] - 2026-10-17
+
+Batch 235 (releases (a) and (b), rebuilt on main: the repair procedure's wiring and the adversary merge's
+grammar). Closes BL-529, BL-543, BL-544, BL-548, BL-554, BL-555, BL-574, BL-579 and BL-599. BL-541 is PARTIAL.
+Carries the BL-546/560 mirror line and intake 16 (BL-648 and BL-649, docs only). Closes no `PC-` id.
+
+### The repair procedure names file targets, joins the serial remediator on completion, and commits after a join (BL-529, BL-541, BL-579, BL-599)
+
+- The derivation re-run after a repair names FILES and never the slot directory: the joined repair record, the
+  assembled document (for the requirements subject each of `prd.md`, `product-brief.md`,
+  `architecture-impact.md` and `SPEC.md`) and the spec's `.memlog.md`. A directory target skips the frozen shard
+  and seat records, so it could not reach the cites a repair moved. The validator half is 0.801.0's.
+- The serial and unsharded remediator are joined with `wait-for-deliverable.sh --complete-repair --dispatch
+  <agentId>`, which returns only on `repair-complete: serial <pass>`. The earlier `--since <dispatch epoch>`
+  form is dropped: `--dispatch` alone sets the window, and the beat's own remedy for a later `--since` is to drop it.
+  The auto-handoff and `handoff.md` step 1 split a mixed in-flight set into plain, `--complete` and
+  `--complete-repair` calls, because the flag is per call.
+- Once a repair round's join is accepted, the lead commits the repaired subject files before the next pass, and
+  the auto-handoff's stop step runs `join-remediator-shards.sh --agent-writes <task id>` per stopped row.
+- The beat's dispatch row passes `--dispatch <agentId>`; "so rounding it is harmless" becomes "but a stamp after
+  the dispatch is not". The beat's exit sentence names exit 64.
+- BL-541 stays PARTIAL: whether the stop hook's `beat_lease_live` misreads a lease a just-returned beat rewrote
+  is a second subject, untraced.
+
+### The serial remediator's worklist is derived, not discovered by hand (BL-543)
+
+- New `core/scripts/serial-remediation-worklist.sh` lists, per replaced hunk, the replaced text and every place
+  it still stands (HIT), and every cite whose line moved (MOVED-CITE). Its input is bytes: `partition-document.sh
+  --split` and `partition-subject.sh --split` now keep the pre-repair copies, and the worklist removes each copy
+  it resolved unless `--keep` is passed. A file with no copy is UNASSESSABLE, exit 3, never a clean 0.
+- Measured on graph s319's requirements elicitation repair: 9 lines listed, of which the serial remediator's 22
+  edits touched 2. Against graph HEAD, 3 of 5 HITs and 4 of 13 MOVED-CITEs still stand.
+- The sections and subject repair dispatch runs it once after the join; the remediator adjudicates its hits.
+  A re-run is assessable only when the run before it passed `--keep`.
+- New fixture `serial-remediation-worklist` (shipping, declared), with its mutants each killed by its own arm.
+
+### The adversary merge refuses a `##` finding heading, skips an owed shard's draft, and has a dry run (BL-544, BL-548, BL-554, BL-555)
+
+- `merge-adversarial-shards.sh` refuses a `## ` finding heading. The refusal fires on real data: 20 of 177 graph
+  adversarial and elicitation shard files carry `## E-n` lines (74 lines; control `^### ` 143). The finding
+  grammar is now stated in `adversary.md` item 5 and `_gate-procedures.md`, not only inside the script.
+- A `.draft` beside a shard the set owes is skipped; one beside a shard the set does not owe is still refused.
+- `--dry-run` prints the first failing phase's refusals and writes nothing. Its arms cover files mode only; there
+  is no `--document` or `--subject` arm.
+- The cross-group brief states the owner rule and `--cross-owner`. `_gate-procedures.md` names
+  `REVISED-AFTER-MARKER` and `remediator.md` the `revised-seats:` line, both pinned in `process-rule-pins`.
+
+### The auto-handoff push carries the authorisation sentence and the `--no-verify` prohibition (BL-574)
+
+- The `_gate-procedures.md` auto-handoff push site now carries both, byte-identical in wrap to `handoff.md`, so
+  all three push sites agree. `push-authorised.sh` binds them.
+
+### Also
+
+- The BL-546/560 mirror: `_gate-procedures.md`'s stale-SPEC sentence ends "and the join refuses it", byte-identical
+  to `requirements.md`, now that 0.812.0's refusal is on main.
+- `FORK_BUDGET` raised for the new script and fixture directory, by measurement (comment at the constant).
+- Release built by replaying the builder commits onto main rather than merging the scratch branch: the replay and
+  the builders' work touch the same 24 files with identical per-file line counts.
+
 ## [0.814.0] - 2026-10-17
 
 Batch 235 (release U-b: BL-582). Closes BL-582. Closes no `PC-` id. Carries two docs-only intake commits: BL-607's
