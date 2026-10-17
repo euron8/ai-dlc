@@ -548,6 +548,15 @@ sprint's stories — its passes use the **Adversarial review dispatch** and
 - **on convergence:** append a changelog to each story file, then stamp story
   provenance (below).
 
+**Minimum mechanism (Rule 26(c)).** Failure caught: per story, the party round catches AC and
+edge-case defects no later pass raises; the cross-story party catches a defect between stories,
+such as a funds destination one story sets and another sweeps; sharded elicitation catches what
+one voice over every story misses, such as an uncapped mint through a raised wallet read, where
+a single voice found at most one unique defect. False-positive cost: one agent per (seat or
+shard, story ordinal) and per cross group, and their repairs. Removal condition: measured
+sprints in which a round carries no unique MAJOR or CRITICAL catch that survives to the shipped
+stories.
+
 A SPEC.md or sprint artifact whose series already stamped MET and that this step must change is
 amended by `_gate-procedures.md`'s amendment procedure, never edited in place.
 
@@ -602,18 +611,18 @@ made about this pipeline's consolidation byproducts.
 
 **Intensity gate for carry-over-single.** When
 `validation_intensity == carry-over-single`, skip `/bmad-testarch-test-design`
-(step 1 below) and derive the test strategy directly from the story
+(in step 1 below) and derive the test strategy directly from the story
 acceptance criteria. Test strategy for ≤2 already-scoped stories is
 covered by the story validation cycle; the TEA sub-skill adds overhead
-without value. Still run the step-2 adversarial review on the derived
-strategy. Steps 1a–2 below otherwise proceed.
+without value. Still run step 1's `/bmad-testarch-trace` and the step-2
+adversarial review on the derived strategy.
 
 **Execute back-to-back without pausing:**
 
 1. `/bmad-testarch-test-design` then select test strategy — risk-based test
-   strategy for the sprint
-1a. `/bmad-testarch-trace` — generate the requirements-to-tests traceability
-   matrix and its quality gate decision (PASS / CONCERNS / FAIL / WAIVED).
+   strategy for the sprint. Then `/bmad-testarch-trace` — generate the
+   requirements-to-tests traceability matrix and its quality gate decision
+   (PASS / CONCERNS / FAIL / WAIVED).
    This closes the last leg of the chain, `AC → test`, against the same
    `CAP-<n>` IDs the spec and the PRD carry.
 
