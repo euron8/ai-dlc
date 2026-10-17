@@ -20,6 +20,98 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.818.0] - 2026-10-17
+
+Batch 235 (release BL-607). Closes BL-607. Closes no `PC-` id.
+
+### An update session no longer gets the pipeline's post-compact recovery, and a recovery marker binds only the session that wrote it (BL-607)
+
+- `ai-dlc-recover.sh` (SessionStart `compact`) stands down when the session's own transcript says its last ai-dlc
+  marker is `/ai-dlc-update`. It writes no `.recover-fired` and injects nothing. When it does write the marker, the
+  marker now records `session_id`.
+- `ai-dlc-recover-gate.sh` gets two stand-downs before its read stages. Both sit above the readability block, which
+  deletes the marker, so neither stand-down can clear a recovery a lead still owes, and neither deletes anything:
+  (1) the owner test, where the marker's `session_id` and the incoming call's are both present and differ; and
+  (2) the updater test, where the calling session's last ai-dlc marker is `/ai-dlc-update`, whatever wrote the
+  marker. A marker with no `session_id`, a call with none, or an unreadable transcript keeps the old deny path.
+- `ai-dlc-postcompact.sh` stands down for an update session, so it neither logs `recovery_injected` nor prints the
+  warning. It reads the marker only when the marker is this session's, so it never logs `yes` with another lead's
+  byte count.
+- Mechanism: the entry asked for a shared helper. The update-session question is the existing I126 session-marker
+  scan line instead, byte-bound by `validate-enforcement-map.sh`'s I126 arm. That arm now binds 8 hooks: recover.sh,
+  recover-gate.sh and postcompact.sh, plus `ai-dlc-gate-remediation-guard.sh`. The guard already carried the scan
+  line inside gate-remediation-deny's 3b-bind block. It gains the opener on the line above that block, so 3b-bind's
+  bytes are unchanged and the replaced OWED paragraph says so.
+- Fixture `postcompact-rulebook-recovery` gains the whose-recovery arms C1-C9:
+  - C1 an update session compacts;
+  - C2 the pipeline control;
+  - C3 a stale owned marker with an update caller;
+  - C4 the same marker with a pipeline caller;
+  - C5 the same-session control;
+  - C6 back-compat for an ownerless marker with a pipeline caller;
+  - C7 an ownerless marker with an update caller (the shape of graph's `6b192363`);
+  - C8 and C9 ordering against the readability block.
+
+  It also gains five out-of-tree mutants. The arms skip, rather than read green, against installed hooks that
+  predate the `session_id` key.
+
+- PRE-EXISTING DEFECT, fixed here because it sits in the fixture this release edits: since 0.797.0 (3d5f1e70),
+  `postcompact-rulebook-recovery` ran 0 of its 8 advisor-stage mutants and reported rc 0. Its
+  `amutant_arm "the stage never arms"` line put a `$(` inside single quotes inside a multi-line `"$( )"`. bash 3.2
+  reports `bad substitution` there and abandons the rest of the enclosing top-level `if`, so the eight advisor-stage
+  mutants and everything after them in the GATE block were skipped while the fixture exited 0. Measured on main
+  (39955c93), hermetic: 1 `bad substitution`, 0 advisor-stage mutant lines, rc 0. BL-607's new postcompact arms sit
+  after that point, so the first hermetic run of this branch went red (4 FAIL, helpers undefined). The awk program
+  is now bound to a variable first. The new postcompact arms read the compaction log through a here-string, not a
+  pipe into `grep -q` (I54b).
+
+### Limits
+
+- Delivery: on the pull that delivers this release, steps 1-2 run the old engine. The hooks are live from step 2's
+  working-tree write, which is reasoned from the step-2 text, not measured. So the delivering pull's own step-1
+  stamp read can still meet a stale marker and be denied once, as `6b192363` was. Every later pull is covered.
+- Session-id stability was measured on a headless `claude -p` session: across startup, `--resume` and a manual
+  `/compact`, 8 hook rows (SessionStart startup/resume/compact, PreCompact, PostCompact, PreToolUse) carried one
+  distinct id, and a minted-id control varied. Interactive auto-compaction was NOT probed. The transcript census
+  below is the evidence for that path.
+- A marker written before this release carries no owner. Until a pipeline compaction rewrites it, a full step Read
+  clears it, or the readability block deletes it, a pipeline session that is not its owner is still gated (C6).
+  Update sessions are covered either way (C7).
+
+### Verification
+
+- Probe, base 39955c93 against tip, both sides' `recover.sh` and `recover-gate.sh` driven on a `file://` clone
+  of graph at d40810f39 (snapshot present), with the two sides' gates asserted to differ. Base denies every
+  stale-marker case; tip:
+  - update session compacts: no marker, gate silent (base: marker written, DENY);
+  - pipeline session compacts: marker owned by that session, its first Bash DENIED on both sides (control);
+  - a full snapshot Read clears it, and a startup source or an absent snapshot writes no marker (controls);
+  - session A's marker, update session B with no compaction: silent, marker byte-identical after (base DENY);
+  - session A's marker, pipeline session B: silent by the owner test, marker byte-identical (base DENY);
+  - session A calls on its own marker: DENY on both sides (control);
+  - an ownerless marker written by the base producer, update session B: silent, marker kept (base DENY);
+    pipeline session B: DENY on both sides (back-compat control);
+  - graph's real `6b192363` transcript, read-only, as the calling session over an ownerless marker: silent on
+    the tip, DENY on the base. That is the third instance's own input on the shipping code.
+- False positives over graph's 186 top-level transcripts in `~/.claude/projects/-Users-n8-git-graph`, with the
+  regex taken from the tip hook (control: it matches the updater seed). 84 transcripts end on the updater
+  marker. 0 of them carry an earlier `/ai-dlc` marker, so 0 can be a lead that the updater test would silence.
+  Control: 85 transcripts carry a pipeline marker. The owner test's FP shape is a transcript holding more than
+  one `sessionId`. 0 of 66 transcripts with a `compact_boundary` do, and 0 of 120 without one (control
+  population), and every transcript's ids include its filename id.
+- hermetic-run.sh `postcompact-rulebook-recovery`: rc 0, required_missing 0. All 9 whose-recovery arms are ok and
+  the arms ran (0 skip lines; control: the skip text is in run.sh). Every mutant line is ok, 51 against 36 on
+  main, and the 15 new ones each report an exact flip set: the eight advisor-stage mutants now run, the five
+  whose-recovery mutants and the two postcompact mutants are killed, and mate_calls and mate_reads are killed by
+  the teammate-exit-REMOVED mutant.
+- `validate-enforcement-map.sh`, B T B T B T in one clean detached worktree at one path: fork total base 3442 three
+  times; tip 3443 three times at 138eb23a, the extra fork being the I54b finding's own report on the pipes fixed
+  above, and 3442 at the fixed tip. FORK_BUDGET 3446 holds. Wall clock: base 28.27, 27.93, 27.97 s against tip
+  27.90, 28.45, 28.00 s. The eighth I126 hook adds no fork the profile resolves.
+- Re-runs this change triggers, before the content-key skip: 22 fixtures through the committed read-set map, and
+  at least 38 through `inputs.decl` declarations naming a changed file. The 11 that declare the `core/hooks/`
+  directory are not counted in the 38.
+
 ## [0.817.0] - 2026-10-17
 
 Batch 235 (one release: BL-568 R3, BL-569 and BL-593).

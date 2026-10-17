@@ -43,6 +43,27 @@ if command -v jq >/dev/null 2>&1; then
   [ -z "$_AGENT_ID" ] || exit 0
 fi
 
+# AN UPDATE SESSION'S COMPACTION IS NOT THE LEAD'S, so it is neither logged nor announced.
+# ai-dlc-recover.sh stands down for /ai-dlc-update and writes no marker; without the same
+# stand-down here this hook read that absence as "recovery hook did not fire", logged
+# `recovery_injected: no` -- which retro.md reads as a lead that resumed from the summary
+# alone -- and printed the warning into the updater. With a lead's marker still on disk it
+# logged `yes` with the lead's byte count instead. The question is the I126 scan, one line
+# shared with the hooks that already ask it; an unreadable or absent transcript leaves the
+# hook as it was.
+_EV_SID=""; _EV_TP=""
+if command -v jq >/dev/null 2>&1; then
+  _EV_P="$(printf '%s' "$INPUT" | jq -r '@sh "_EV_SID=\((.session_id // "") | tostring) _EV_TP=\((.transcript_path // "") | tostring)"' 2>/dev/null)" && eval "$_EV_P"
+fi
+if [ -n "$_EV_TP" ] && [ -r "$_EV_TP" ]; then
+  TRANSCRIPT="$_EV_TP"
+  # >>> I126 SESSION-MARKER SCAN: the next line, byte-identical in every bound hook >>>
+  LAST_SKILL=$(grep -oE '"role":"user","content":"<command-message>ai-dlc(-update)?</command-message>\\n<command-name>/ai-dlc(-update)?</command-name>|"name":"Skill","input":\{"skill":"ai-dlc(-update)?"' "$TRANSCRIPT" 2>/dev/null | tail -1)
+  case "$LAST_SKILL" in
+    *'/ai-dlc-update</command-name>'|*'"skill":"ai-dlc-update"') exit 0 ;;
+  esac
+fi
+
 field() {
   if command -v jq >/dev/null 2>&1; then
     printf '%s' "$INPUT" | jq -r "$1 // empty" 2>/dev/null
@@ -65,7 +86,17 @@ SUMMARY_BYTES="$(printf '%s' "$SUMMARY" | wc -c | tr -d ' ')"
 # `degraded` means the block was too large to land in context at all.
 RECOVERED="no"
 INJECTED_BYTES=""
-if [ -f "$MARKER" ]; then
+#
+# THE MARKER IS READ ONLY IF IT IS THIS SESSION'S. ai-dlc-recover.sh records the session it
+# wrote for, and this event carries its own session_id. A marker owned by a different session
+# is not this compaction's injection -- the recovery hook ran for this session and wrote
+# nothing (or did not run), so the truthful report is `no`, never `yes` with another lead's
+# byte count. A marker with no owner, or an event with none, is read as before.
+_MK_SID=""
+[ -f "$MARKER" ] && _MK_SID="$(sed -n 's/^session_id=//p' "$MARKER" 2>/dev/null | head -1)"
+_MK_FOREIGN=0
+if [ -n "$_MK_SID" ] && [ -n "$_EV_SID" ] && [ "$_MK_SID" != "$_EV_SID" ]; then _MK_FOREIGN=1; fi
+if [ -f "$MARKER" ] && [ "$_MK_FOREIGN" -eq 0 ]; then
   INJECTED_BYTES="$(sed -n 's/^injected_bytes=//p' "$MARKER" 2>/dev/null | head -1)"
   DEGRADED="$(sed -n 's/^degraded=//p' "$MARKER" 2>/dev/null | head -1)"
   if [ "${DEGRADED:-no}" = "yes" ]; then

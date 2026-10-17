@@ -98,6 +98,21 @@
 # never advance or disarm the lead's recovery; the advisor stage has its own stand-down. The
 # measurement and the case are at the exit, after the INPUT read.
 #
+# WHOSE RECOVERY. The read stages used to gate EVERY session in the tree, because the marker
+# carried no owner and nothing asked what kind of session was calling. Measured on the reference
+# consumer's 179 transcripts: of 78 whose last ai-dlc marker is the updater, 2 were denied the
+# snapshot mandate (30 transcripts corpus-wide got it) -- one after real compactions, one with no
+# compact_boundary at all, denied 11 seconds after /ai-dlc-update by a marker another session left.
+# So the read stages now stand down, WITHOUT deleting the marker (it may be a real lead's pending
+# recovery), for (1) a call whose session_id differs from the one the marker records and (2) a
+# call whose own transcript's last ai-dlc marker is the updater (the I126 scan). A marker with
+# no session_id, or a call with none, keeps the old behaviour. The advisor stage needs neither:
+# it is armed only by the call that satisfied the reads, is keyed on that session_id and
+# deletes its file for any other, and an update session never satisfies the step Read. The
+# teammate exit above (BL-590, `agent_id`) runs first, so the owner key never has to separate a
+# teammate from its lead -- which it could not be relied on to do: subagent transcript files record
+# the PARENT's sessionId, and what a teammate's PreToolUse stdin carries was never measured.
+#
 # THE RACE. The incoming call's own message is usually not on disk when PreToolUse fires
 # (measured in the advisor gate's header, THE RACE), so an advisor call in the same message
 # may not be visible yet. A DENY is therefore re-judged every 0.25s until the incoming call's
@@ -270,6 +285,28 @@ STEP_REL="$(mval step_file)"
 
 [ -n "$SNAP_REL" ] || exit 0
 [ -n "$STEP_REL" ] || exit 0
+
+# TWO STAND-DOWNS FOR A CALL THIS RECOVERY IS NOT OWED TO (header: WHOSE RECOVERY). Both sit
+# ABOVE the readability block, because that block deletes the marker and a call that is not the
+# lead's must never be the one to clear a recovery the lead still owes. Neither deletes anything.
+# Both are keyed on the INCOMING call and fail toward the existing gate: an absent field, an
+# unreadable transcript or a marker from before the key existed leaves the deny path as it was.
+G_SID=""; G_TP=""
+G_P="$(printf '%s' "$INPUT" | jq -r '@sh "G_SID=\((.session_id // "") | tostring) G_TP=\((.transcript_path // "") | tostring)"' 2>/dev/null)" && eval "$G_P"
+# 1. A marker another session wrote. Both ids must be present and different.
+M_SID="$(mval session_id)"
+if [ -n "$M_SID" ] && [ -n "$G_SID" ] && [ "$M_SID" != "$G_SID" ]; then
+  exit 0
+fi
+# 2. An update session, whatever wrote the marker: the recovery mandate is the lead's.
+if [ -n "$G_TP" ] && [ -r "$G_TP" ]; then
+  TRANSCRIPT="$G_TP"
+  # >>> I126 SESSION-MARKER SCAN: the next line, byte-identical in every bound hook >>>
+  LAST_SKILL=$(grep -oE '"role":"user","content":"<command-message>ai-dlc(-update)?</command-message>\\n<command-name>/ai-dlc(-update)?</command-name>|"name":"Skill","input":\{"skill":"ai-dlc(-update)?"' "$TRANSCRIPT" 2>/dev/null | tail -1)
+  case "$LAST_SKILL" in
+    *'/ai-dlc-update</command-name>'|*'"skill":"ai-dlc-update"') exit 0 ;;
+  esac
+fi
 
 # ARMING PRECONDITION, RE-CHECKED ON EVERY CALL. If either mandated file is not readable now,
 # the gate stands down permanently for this recovery: it clears the marker so it does not

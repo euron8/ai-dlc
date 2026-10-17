@@ -26,6 +26,21 @@
 # records its own emitted size so `ai-dlc-postcompact.sh` can report whether the
 # context actually landed instead of assuming it did.
 #
+# AN UPDATE SESSION IS NOT A PIPELINE SESSION, AND THIS HOOK USED TO ASK NEITHER WAY. It fired
+# for any session in the tree that compacted, so a consumer-pull session (`/ai-dlc-update`) was
+# handed the lead's recovery mandate and gated on it by ai-dlc-recover-gate.sh. Measured on the
+# reference consumer's 179 transcripts: of 78 whose last ai-dlc marker is the updater, 2 were
+# denied "your FIRST tool call must be `Read _bmad-output/pipeline-snapshot.md`" -- one after
+# real auto-compactions, one with NO compact_boundary at all, denied 11 seconds after the
+# command, because another session's compaction had left the marker on disk. So when the
+# session's own transcript says its last marker is the updater, this hook exits before it writes
+# or emits anything. The question is the I126 scan, one line shared with the hooks that already
+# ask it (scripts/validate-enforcement-map.sh binds the copies). It fails TOWARD recovery: no
+# transcript, an unreadable one, or no marker leaves today's behaviour untouched.
+#
+# The marker also records `session_id`, so the gate can tell a recovery owed to ITS session from
+# one another session left behind.
+#
 # INSTALL
 #   .claude/settings.json:
 #     "SessionStart": [{ "matcher": "compact",
@@ -58,6 +73,23 @@ command -v jq >/dev/null 2>&1 || exit 0
 # a recovery directive into a fresh session would be actively harmful.
 SOURCE="$(printf '%s' "$INPUT" | jq -r '.source // empty' 2>/dev/null)"
 [ "$SOURCE" = "compact" ] || exit 0
+
+# The session this compaction belongs to, and its transcript. Both come from the one input the
+# harness handed this hook; an absent field leaves the variable empty and the checks below inert.
+REC_SID=""; REC_TP=""
+REC_P="$(printf '%s' "$INPUT" | jq -r '@sh "REC_SID=\((.session_id // "") | tostring) REC_TP=\((.transcript_path // "") | tostring)"' 2>/dev/null)" && eval "$REC_P"
+
+# THE UPDATER STANDS DOWN (header: AN UPDATE SESSION IS NOT A PIPELINE SESSION). Nothing is
+# written and nothing is emitted, so the sensor state below is not touched either: it describes
+# the lead's window, not this session's.
+if [ -n "$REC_TP" ] && [ -r "$REC_TP" ]; then
+  TRANSCRIPT="$REC_TP"
+  # >>> I126 SESSION-MARKER SCAN: the next line, byte-identical in every bound hook >>>
+  LAST_SKILL=$(grep -oE '"role":"user","content":"<command-message>ai-dlc(-update)?</command-message>\\n<command-name>/ai-dlc(-update)?</command-name>|"name":"Skill","input":\{"skill":"ai-dlc(-update)?"' "$TRANSCRIPT" 2>/dev/null | tail -1)
+  case "$LAST_SKILL" in
+    *'/ai-dlc-update</command-name>'|*'"skill":"ai-dlc-update"') exit 0 ;;
+  esac
+fi
 
 # Compaction reset the context-window token count, so the context sensor's fire
 # state now describes a window that no longer exists. The sensor self-heals on
@@ -651,6 +683,10 @@ mkdir -p "$STATE_DIR" 2>/dev/null || true
   printf 'snapshot_path=%s\n' "${SNAPSHOT#"$PROJECT_DIR"/}"
   printf 'step_file=%s\n' "$STEP_FILE"
   printf 'step_file_resolved=%s\n' "$STEP_FILE_RESOLVED"
+  # WHOSE RECOVERY THIS IS. The gate stands down for a call from any other session, because a
+  # marker with no owner gated every session in the tree. Empty when the harness sent none, which
+  # reads to the gate exactly like a marker from before this key existed.
+  printf 'session_id=%s\n' "$REC_SID"
 } >"$MARKER" 2>/dev/null || true
 
 # A NEW RECOVERY INVALIDATES THE PREVIOUS ONE'S SATISFACTION BREADCRUMB.

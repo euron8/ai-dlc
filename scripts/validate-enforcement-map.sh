@@ -7590,14 +7590,15 @@ fi
 # ADDING A HOOK: put the opener comment on the line above that hook's scan and append the path to
 # i126_hooks. Nothing else in this arm names a hook.
 #
-# OWED, NOT BOUND: core/hooks/ai-dlc-gate-remediation-guard.sh:756 carries a fourth copy. That file is
-# frozen for this release; bind it here once BL-536 lands. Until then gate-remediation-deny's 3b-bind
-# arm is the only thing holding it to acknowledge.sh.
+# THE GUARD IS BOUND HERE TOO. core/hooks/ai-dlc-gate-remediation-guard.sh carries the scan inside the
+# block gate-remediation-deny's 3b-bind arm byte-compares against acknowledge.sh (`LAST_SKILL=` through
+# `esac`). Its opener sits on the line ABOVE that range, as acknowledge.sh's does, so 3b-bind's block
+# is unchanged; the two arms bind different spans and neither replaces the other.
 #
 # BOTH DIRECTIONS, and the probe runs FIRST. A seeded pair of identical copies must read SAME and a
 # seeded pair one byte apart must read DIFFER, before the shipped hooks are compared, so a broken
 # extractor (two empty strings compare equal) cannot report agreement.
-i126_hooks="core/hooks/ai-dlc-acknowledge.sh core/hooks/ai-dlc-pause.sh core/hooks/ai-dlc-continue.sh core/hooks/ai-dlc-advisor-gate.sh"
+i126_hooks="core/hooks/ai-dlc-acknowledge.sh core/hooks/ai-dlc-pause.sh core/hooks/ai-dlc-continue.sh core/hooks/ai-dlc-advisor-gate.sh core/hooks/ai-dlc-recover.sh core/hooks/ai-dlc-recover-gate.sh core/hooks/ai-dlc-postcompact.sh core/hooks/ai-dlc-gate-remediation-guard.sh"
 i126_open='>>> I126 SESSION-MARKER SCAN: the next line, byte-identical in every bound hook >>>'
 # ONE awk, ONE fork, FOR THE PROBE AND THE CORPUS TOGETHER. The first draft ran a grep and an awk
 # per file inside a per-call subshell, four calls, plus a mktemp/mkdir/rm probe directory -- about
