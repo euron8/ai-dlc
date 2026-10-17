@@ -219,6 +219,7 @@ core_manifest:
   - core/fixtures/preclassify-mode-bucket/**
   - core/fixtures/predicate-reclassification/**
   - core/fixtures/derivation-differential/**
+  - core/fixtures/owed-derivations/**
   - core/fixtures/deploy-validate-smoke-classification/**
   - core/fixtures/story-evidence-scaffold/**
   - core/fixtures/review-carry-over-clauses/**
@@ -249,6 +250,7 @@ core_manifest:
   - core/fixtures/self-update-gate-b/**
   - core/fixtures/self-update-gate-c/**
   - core/fixtures/self-update-gate-d/**
+  - core/fixtures/self-update-reinvoke-liveness/**
   - core/fixtures/setup-config-drift/**
   - core/fixtures/shadowed-local-validators/**
   - core/fixtures/snapshot-evidence-cell/**

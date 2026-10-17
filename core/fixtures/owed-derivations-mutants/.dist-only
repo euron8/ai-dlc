@@ -1,0 +1,9 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+It is the MUTATION BATTERY behind `owed-derivations`. It edits COPIES of
+`core/scripts/check-owed-derivations.sh` and `core/skills/ai-dlc-update/reconcile/derivation-differential.sh`,
+which are core's own sources, and drives the shipping fixture against each copy to prove that its arms
+can fail. It locates those sources under `core/`, which does not exist at that path in a consumer tree.
+
+A consumer needs the behaviour, and `owed-derivations` ships and asserts it through the real programs.
+This battery shows that those assertions are load-bearing, a claim about this repository's suite.

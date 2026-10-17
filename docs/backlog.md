@@ -650,40 +650,19 @@ Related: BL-581 (the false-zero "Verified" in the same 0.793.0 log), BL-579 (the
 
 **Scope ruling (operator, relayed by lead ai-dlc-9c): CURRENT SPRINT only.** The owed record, its channel, and its check carry derivations owed to the sprint that is current when the reconcile runs. A derivation in a past sprint's artifact is owed to nobody, and must neither block that sprint's lead nor show as open there. The ruling is BL-631's: "I'm stating that I don't care if a fixture or check fails against a historical sprint artifact", and "if someone deleted all of graph consumer's sprint history, it should not matter whatsoever". Item 3's proof is therefore over those of the 8 rows whose artifacts belong to the current sprint. A control row in a past sprint must NOT appear in the record.
 
-verify: manual
+**Second instance (graph 0.800.0 → 0.803.0 reconcile, session `89a3adec`, 12:43-12:49 PM EDT).** Filed by ai-dlc-68 (listed as ai-dlc-4e [e15800]); intake re-derived it read-only on graph. `_bmad-output/ai-dlc-update/reconcile-log-20261016T164848Z.md:27-31` (68 lines; committed as `4558f87fe`) records `derivation-differential.sh` exiting 1 with 5 NEWLY-FAILING derivations. Three of them are in the LIVE sprint s319:
+- `party-mode/s319/carry-over-evaluation-pm-3.md:38`
+- `planning-artifacts/s319/carry-over-evaluation-party-repair-p1.md:337`
+- `planning-artifacts/s319/shards/carry-over-evaluation-party-repair-p1/3.md:35`
+Each greps `carry-over-evaluation.md` for 'dominant work rather than one item among', and upstream inserted a line above that text: the file grew from 251 lines at `efcd5373` to 266 at `21facb0f`. The other two rows belong to closed sprints, `s303/test-strategy-repair-p1.md:286` and `s308/derivation-staleness-repair-p2.md:61`.
 
-## BL-612 — "takes effect on the pull AFTER the one that delivers it" is wrong for any change the update skill runs after its step-2 re-invoke
+The operator was asked and answered "Record, don't edit (Recommended)"; that phrase occurs 4 times in the session transcript. The disposition went only into the reconcile log. `_bmad-output/pipeline-snapshot.md` carries none of the three s319 rows and does not name the log (0 hits for each; control: `s319` 8). The s319 debt is now 11 re-points: the 8 from 0.793.0 plus these 3.
 
-**DEFECT.** Filed by peer session ai-dlc-60, found by the BL-587 contract adversary; intake re-derived it read-only. `core/skills/ai-dlc-update/SKILL.md` step 2 (origin/main, ~:248-256) self-updates the machinery slice (`core/skills/ai-dlc-update/**`, `core/scripts/*`, hooks, schemas) on its own commit-and-merge cycle, then (~:731-740) says "STOP this invocation and re-invoke `/ai-dlc-update` automatically … THIS invocation is still executing the PRE-update logic … do NOT proceed to step 3 on stale logic". So steps 3 onward run the NEW engine and the NEW skill text on the delivering pull, unless the self-update gate returns `SELF-UPDATE-DEFER` (9 mentions in SKILL.md). Only behaviour that executes in steps 1-2 of that invocation really runs the pre-update version.
+The question also rested on a false premise. The log's disposition says "these are closed or sha-locked sprint artifacts", and "sha-locked" occurs 6 times in the transcript. s319 is mid-sprint, though, and its repair records are append-only, not closed, so a later block can supersede these derivations: BL-588's mechanism, landed in 0.803.0.
 
-Measured on graph's 0.791.0 → 0.793.0 pull: `scripts/ai-dlc/validate-artifact-derivations.sh` is blob `deacd13c` at `3dd8a9fd4` (pre-pull), and `e3cdd564` at `41d2dbf91` (#1230, the self-update) and at `897dfdb32` (#1231, the reconcile). In this repo the same file is `deacd13c` at 952b9319 and `e3cdd564` at c16609ba, so the two blobs differ and the new validator was in place at the delivering pull's reconcile.
+Under the current-sprint scope ruling above, this instance is exactly the discriminating input. The three s319 rows must reach the lead, and the s303 and s308 rows must not. Receipt addition, as suggested by the filer: seed a closed-sprint row (s303) and a live-sprint row (s319) from one reconcile log, and assert that only the live one reaches the lead, whether or not the reconcile chose to edit.
 
-So these release notes are wrong: 0.793.0's "the reconcile engine runs this validator, so a consumer gets the pin on the pull AFTER", and 0.799.0's "both files are read by the update session, so a consumer gets this on the pull AFTER the one that delivers it". The CHANGELOG has 35 lines matching "pull after" (control: 887 `## [` headings), and the live backlog carries the same claim in BL-563 and BL-582. Each needs classifying:
-- step-1/2 behaviour: really takes effect on the next pull.
-- anything read or run from step 3 on: live on the delivering pull, after the re-invoke.
-BL-582, for example, splits: its step-2 touchpoint is next-pull, and its step-8 touchpoint is live on delivery.
-
-Hooks may be live even earlier, per ai-dlc-60. This is REASONED from the step-2 text and NOT yet measured; ai-dlc-60 is measuring it in U-b's slot. Step 2 writes the new machinery into the working tree before its own commit, push and merge, and Claude Code runs the on-disk hook on every call. A changed hook would therefore already govern the delivering pull's own step-2 merge, while the session still follows the old SKILL.md. That makes a third class beside the two above.
-
-Owed:
-1. The delivery-phase rule written once where release authors read it.
-2. Correct the reconcile-phase claims, in the CHANGELOG's "Bootstrapping" lines and in BL-563 and BL-582, as a Corrections paragraph in BL-612's own release entry naming each misclassified "pull after" line plus the BL-563 and BL-582 items. That paragraph closes item 2 only. It is prose, so it cannot stand as the receipt for the mechanism; item 3 is that receipt.
-3. Receipt: a fixture or derivation that takes a reconcile-engine change, simulates step 2 and then a re-invoke, and shows the new engine running at step 3. A step-1 behaviour change is the control, which must NOT be live. Lead ai-dlc-9c ruled the fixture is the receipt; the CHANGELOG paragraph closes only the documentation item. Whoever builds the fixture checks that its simulated re-invoke matches step 2's real re-invoke mechanism, read from the skill text itself (SKILL.md ~:731-740), not from a summary of it.
-
-The same wrong delivery-timing claim appears in shipped text, all at `86d3a695`. Corrected in the BL-587+612 release:
-- `core/skills/ai-dlc-update/reconcile/apply.sh:762-764` and `:2483-2485`
-- `core/skills/ai-dlc-update/SKILL.md:2456-2460`, and `:1399-1404` (timing half)
-- `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:209-211`
-- `core/skills/ai-dlc-update/reconcile/emit-report.sh:591-593`
-Filed separately: `core/scripts/validate-layer-entries.sh:1329` (W10 message), BL-617.
-Known-stale fixture COMMENTS, left unchanged because no assertion depends on them:
-- `core/fixtures/apply-drift-refile/run.sh:758-759`
-- `core/fixtures/ledger-reverify/run.sh:2125-2130` and `:5257-5262`
-- `core/fixtures/ledger-reverify/seed.sh:816`
-
-Items 2 and 3 ship together and ride BL-587's release (lead ai-dlc-9c's ruling), and that release closes the whole entry. Release U-b is built, so per the scope-boundary ruling nothing from this entry joins it; U-b adds only its own (a)/(b)/(c) outcome lines as part of its own verification. The hook-phase class above stays unmeasured until U-b's slot.
-
-Owner: ai-dlc-60 (lead ai-dlc-9c).
+**PARTIAL (v0.808.0).** Delivered: items 1 (debt-row half) and 2. Withdrawn by operator ruling: item 3 (the 8 rows are prose in a reconcile log written before this release, never recorded, so no reader can pick them up; the receipt proves the shape on seeded rows). The 8 rows are live CURRENT/LIVING stale derivations in graph; the operator hands them to graph's own session to re-point, with the 3 s319 rows of the second instance. Open: item 1's snapshot half (D6: no writer can reach the working branch before the reconcile PR merges). Scoped by operator rulings: current sprint and living documents only; refused at the planning gate only.
 
 verify: manual
 
@@ -880,5 +859,96 @@ OPEN QUESTIONS, not filed as defects. Each needs SOME prior state, so the questi
 - `core/scripts/validate-trunk-audit-gate.sh`: takes its genesis from the prior sprint's `audit-anchors.md` entry when there is no watermark (`:73`).
 
 Owed: scope each reader in items 1-7 to the current sprint (or to the current pull's own range), so a failing or absent historical artifact can neither block nor owe anything. No prose rule. Answer each open question with a reason. Receipt per reader: the verdict is the same with every past sprint's artifacts deleted and with a deliberately failing artifact seeded into a past sprint. Control: the same failing artifact in the CURRENT sprint still fails.
+
+verify: manual
+
+## BL-632 — shipped checks and fixtures pass or fail on an arbitrary number instead of a binary property of their subject
+
+**DEFECT.** Operator, relayed by lead ai-dlc-9c: "really need to stop forcing arbitrary goals that aren't based on binary attributes." Part of ai-dlc-4e [9b62de]'s load series (BL-616). Subject: assertions whose verdict turns on a number with no stated property behind it, such as wall-clock bounds (`$((SECONDS - t0)) -lt N`, timeouts that fail as HANG or FAIL), percentage windows, and repeat or rep counts. Under load such a bound turns a correct subject red, which is BL-616's consequence, and when tuned to pass it asserts nothing about the subject.
+
+Instances known today:
+1. `H4` in `adversarial-shard-merge`, on ai-dlc-c9's local branches `b235-ra-g3` and `b235-ra-scratch`: `core/fixtures/adversarial-shard-merge/lib.sh:1139`, `[ "$((SECONDS - t0))" -lt 8 ] && [ "$RC" -eq 2 ] …`, which `run.sh` names "within 8s". It is a timing proxy standing in for "never read stdin". BEING FIXED, NOT OWED: c9's release replaces it with a poison-token file, which is this entry's remedy shape.
+2. 0.804.0's 120 s HANG watchdogs (`b235-load-a2`): `fold-architect-ledger-join` D6 raised from 15 s to 120 s, and `readset-stage1-verdict` `:582`, `:639` and `:660` raised to 120 s. That release raises the number; it does not remove it.
+3. The advisor-gate 10 s re-read ceiling, BL-630 (`core/hooks/ai-dlc-advisor-gate.sh:579`).
+4. The suite-pole wall-clock growth arm, `scripts/validate-suite-pole.sh:947-957` at origin/main `21facb0f`: a run FAILS past `A_MAX + A_MAX * REGIME_BAND / 100`, with `REGIME_BAND=100` at `:248`. Its own header calls that band "uncalibrated" (`:945`).
+
+Owed, per instance: convert it to a binary attribute (did X happen: a poison token read, a sentinel written, a line seen), or name the property the number stands for and justify the number from a measurement of that property. A census of the remaining instances goes with item 1 of BL-616's census.
+
+NOT IN SCOPE, listed for the OPERATOR to decide, not for the owner: budgets the operator set or approved. `FORK_BUDGET=3405` (`scripts/validate-enforcement-map.sh`), the A6 durable-channel ceiling (`DURABLE_MAX`, 69120 on main, 69376 on intake-7, `scripts/validate-claude-rules.sh`), and the backlog size cap (`MAX=104`, `scripts/validate-backlog-size.sh:129`, which `:72` records the operator raised).
+
+Owner: ai-dlc-4e [9b62de] (lead ai-dlc-9c).
+
+**Census (ai-dlc-4e [9b62de], at lead ai-dlc-9c's request; a haiku grep census at origin/main `8f1a9074`, classified by 4e, with the cited lines read in context except the untriaged ones; intake spot-checked every cited line at `8f1a9074`).**
+
+*OWED: fixture assertions judged on elapsed time.*
+- `core/fixtures/wait-stale-deliverable/run.sh:362` (`ELAPSED -ge 2`), `:400` (`-le 1`), `:462` (`-le 10`), `:479` (`-ge 6`), and `receipt.sh:113` (`-le 2`). Each asserts whether a beat slept, a property a sentinel could carry instead.
+- `core/fixtures/spec-join-integrity/run.sh:495`, `run_bounded`, called with 5 at `:1388` and `:1406`. Its HANG mutant is killed at the 5 s bound, so the bound itself is the discriminator.
+- The 0.804.0 120 s nets (item 2) stay for now. Lead's ruling: the hang question is its own release with BL-630, and it starts from what "hung" means as a yes/no property. Measured by 4e: no per-unit ceiling exists in the pre-push pool or in `hermetic-run.sh`, and the hook's 3x/600 s ceiling bounds only the detached read-set trace.
+- About 25 untriaged lines: the `sleep 1; t=$((t + 1))` tick loops in five `*-mutants` fixtures (`adversarial-shard-merge`, `apply-self-overwrite`, `remediator-shard-join`, `review-shard-merge` and `self-update-fixture-log`; intake confirmed the five, against 20 files containing `sleep 1`), `core/scripts/derive-fixture-readsets.sh:1088`, `:1510` and `:1568`, and `readset-skip` `:1307`, `:1316`, `:1369`, `:1386`, `:1453`, `:1457`, `:1458` and `:4104`.
+
+*SEPARATE CLASS: product code with a time ceiling, which ships to consumers.*
+- `core/scripts/wait-for-deliverable.sh`: `IDLE_SECS` at `:938`, `SETTLE` at `:1003`, `BUDGET` at `:1138` and `DEADLINE` at `:1434`.
+- `core/hooks/ai-dlc-recover-gate.sh:201`: a 10 s `SECONDS` re-read loop, the same shape as BL-630.
+- `core/hooks/ai-dlc-continue.sh:363`: `RAPID_WINDOW_SECONDS`.
+
+*CLOSES with 4e's pole release now in preparation:* instance 4, `REGIME_BAND`. That release deletes `scripts/validate-suite-pole.sh` and makes the pole information-only. The file is still present at `8f1a9074`.
+
+verify: manual
+
+## BL-634 — `enforcement-map.yaml` is not valid YAML: `yaml.safe_load` fails on an unquoted `: ` in a prose value
+
+**NOTE.** Reported by lead ai-dlc-9c; intake reproduced it at origin/main `21facb0f`. PyYAML 6.0.3 `yaml.safe_load` on `core/skills/ai-dlc/enforcement-map.yaml` (1425 lines) raises "mapping values are not allowed here" at line 129, column 66. The offending line is `posture: FAILS the gate (exit 0 required; exit 0 with `OK: EXAMINED NOTHING` — printed`, where the unquoted `: ` inside the prose value starts a second mapping. (9c's reading said line 128; PyYAML reports 129, and line 128 is `- site: gate-validation.md Check 2`.) Control in the same run: a small valid file parses.
+
+Nothing breaks today. No tracked file imports PyYAML (0 matches for `import yaml` in any form across the tree, which has 89 `.py` files; control: `import json` in 75 files and `import sys` in 33). The only two `yaml.safe_load` mentions are prose, in `CHANGELOG.md:33885` and `docs/reviews/`. The repo's readers parse the map with awk and grep (fixtures such as `enforcement-map-sites` and `enforcement-map-derivations`). But the file carries a `.yaml` name and ships: `scripts/install.sh` mentions it 4 times and `core-manifest.md` 6. So any standard YAML tool a consumer points at it fails.
+
+The same failure class was fixed once before for a different writer: 0.237.1's `yaml_scalar()` (`CHANGELOG.md:33885` onward) quotes any value carrying `: `, after a regex reader returned PASS over a file `yaml.safe_load` rejected.
+
+Owed: the map parses under a standard YAML loader (quote the offending values, or rename the file to stop claiming YAML), and a check that keeps it so. Measure the check's false-positive set before shipping it, and note that no PyYAML is assumed on a consumer box. Receipt: `yaml.safe_load` succeeds on the shipped map, and a seeded unquoted `: ` in a prose value makes the check fail.
+
+verify: manual
+
+## BL-635 — the read-set map still carries traced rows for 184 fixtures that are keyed on `inputs.decl`, so about 12 thousand rows are dead records
+
+**DEFECT.** Measured by ai-dlc-c9 and relayed by lead ai-dlc-9c; intake re-derived it read-only at origin/main `8f1a9074`. The hook keys a fixture that carries `inputs.decl` on that declaration alone. `.githooks/pre-push:866-871` reads "A fixture carrying `inputs.decl` has no committed rows and needs none: its declaration is its read set", and it adds the fixture to `.mapped.all` before the read-set map is consulted. Yet `.ai-dlc-fixture-readsets.tsv` still holds traced rows for most declared fixtures:
+- 248 fixtures carry `inputs.decl`, and 225 fixtures have rows in the map (13765 rows in all).
+- 184 fixtures are both declared and mapped, and together they hold 12214 rows. No reader consults these rows.
+- Control: 41 undeclared fixtures hold the remaining 1551 rows, which are live.
+- c9's figures (249, 185 and 12260) were taken on another ref. The shape is the same.
+
+The dead rows inflate the map that the deriver regenerates whole, and a reader added later could trust them. The precedent fix is c9's `42d9578d` ("drop fold-architect-ledger-join's 46 traced rows now that it is keyed on inputs.decl"). It regenerated the map through the deriver's own `readset_merge_map` (`core/scripts/derive-fixture-readsets.sh:377`, called at `:1360`): fold went from 46 rows to 0, every other row stayed byte-identical, and the undeclared control kept its rows. On main, `fold-architect-ledger-join` still has its 46 rows and is not declared, so that commit has not landed here.
+
+Owed:
+1. Regenerate the map through `readset_merge_map`, so declared fixtures carry 0 rows. Every undeclared fixture's rows stay byte-identical (control).
+2. A guard so that a declared fixture cannot regain rows, either in the deriver at write time or as an arm at pre-push. Measure its false-positive set before shipping it.
+Receipt: after the regeneration the guard reports 0, and a seeded row for a declared fixture makes it fail.
+
+verify: manual
+
+## BL-589 — `wait-stale-deliverable`'s lease-noclobber window is a fixed wall-clock quantum raced against a load-dependent sweep, so under load it fails a consumer's push gate
+
+**DEFECT.** Filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]); intake re-derived it read-only on graph and at origin/main `c07dc9d1`. Graph's 0.800.0 → 0.803.0 reconcile push (session `89a3adec`, started 12:49 PM EDT) ran graph's full pre-push. At about 1:20 PM the hook blocked the push on this one fixture. Graph's `.git/ai-dlc-fixture-failures` (17:20:18Z) reads "pool width 12, 1 of 118 units red" and "wait-stale-deliverable: 4 assertion(s) FAILED". The four are:
+- `:104` "lease-noclobber: delivered 30 of 30, A alive=0 — the window under test never ran".
+- `:106` "the marker read '1792170599 25473' mid-beat against A's '1792170591 25473' — a second beat clobbered a live lease".
+- `:107` "marker '' after the instant beat, expected A's '1792170591 25473'".
+- `:109` "MUTANT lease-always-put: delivered 30 of 30, A alive=0 — the window under test never ran".
+The session then ran the fixture twice standalone, and both passed. Graph's copy (`tests/fixtures/wait-stale-deliverable/run.sh`) is byte-identical to origin/main's (md5 `f7e19c11d2015cf16b4f941627446ba5` on both). The filer reports load averages of 55-58 during the suite and about 4 for the reruns; intake found no load figure in the transcript, so those numbers are the filer's.
+
+Mechanism, at `core/fixtures/wait-stale-deliverable/run.sh:1160-1206` on origin/main:
+- `run_noclobber` starts beat A with quantum 10 and POLL 8 (`:1172`).
+- It waits until A is asleep, sleeps 0.5 s, runs a `--status` call, and only then starts the second beat over 30 delivered targets (`:1182`).
+- It samples until that beat exits, and `noclobber_preconditions` (`:1204`) requires A still alive at the end.
+A's life is fixed at about 10 s, but the setup and the 30-target sweep scale with load. Under a loaded pool A exits first, and the control fails closed: correctly, not green. It still fails the whole gate, though, and the subject is innocent.
+
+The `:106` "clobbered a live lease" line is itself an artefact of the same race. Both markers carry A's own pid 25473 and differ only by epoch, so that is A's own re-stamp landing inside a window that ran late, which `:1166` says the quantum is chosen to prevent. The line accuses the subject of a clobber that A made itself.
+
+Cost: one consumer pull push, about 31 minutes of graph's suite, re-run in full on each red.
+
+Owed:
+1. Make A's window outlast the probe by construction, not by a fixed quantum. Candidates: A's life ends on a sentinel the probe writes after its last sample; or A gets a quantum far above any sweep, since `reap_tree "$pa"` at `:1199` kills A anyway, so the passing path pays nothing. Check either against `:1166`, which requires A's own re-stamp to stay outside the window.
+2. Receipt: force the slow sweep (for example, a delay injected into the second beat) and assert the control still holds. A pass at low load proves nothing here.
+
+Related: BL-616 (load-sensitive verdicts) and BL-632 (its census lists other elapsed-time asserts in this fixture, `:362`, `:400`, `:462` and `:479`).
+
+Owner: ai-dlc-4e [9b62de] (lead ai-dlc-9c), in its load series with BL-616 and BL-632.
 
 verify: manual

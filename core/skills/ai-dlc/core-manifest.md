@@ -291,6 +291,7 @@ core_manifest:
   - fixtures/preclassify-mode-bucket/**
   - fixtures/predicate-reclassification/**
   - fixtures/derivation-differential/**
+  - fixtures/owed-derivations/**
   - fixtures/deploy-validate-smoke-classification/**
   - fixtures/story-evidence-scaffold/**
   - fixtures/review-carry-over-clauses/**
@@ -321,6 +322,7 @@ core_manifest:
   - fixtures/self-update-gate-b/**
   - fixtures/self-update-gate-c/**
   - fixtures/self-update-gate-d/**
+  - fixtures/self-update-reinvoke-liveness/**
   - fixtures/setup-config-drift/**
   - fixtures/shadowed-local-validators/**
   - fixtures/snapshot-evidence-cell/**

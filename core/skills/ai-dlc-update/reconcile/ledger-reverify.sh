@@ -206,8 +206,10 @@ THEIRS="${4:?}"
 #                 `theirs_tree()` below. It has NO `.git`, so `git -C "$THEIRS_TREE"` is wrong;
 #                 to run git against the distribution use `git -C "$DIST" … "${THEIRS}:…"`.
 #                 A RECEIPT USING IT OPENS WITH `[ -n "${THEIRS_TREE:-}" ] || exit 127;` —
-#                 re-verification runs on the engine the consumer LAST INSTALLED, which for one
-#                 pull after this release does not export the value, and an unguarded receipt
+#                 re-verification runs on the engine the consumer LAST INSTALLED, which does not
+#                 export the value until the consumer pulls this release (and on that pull only
+#                 under SELF-UPDATE-DEFER, an un-synced step 2 or a failed step-2 push, since a
+#                 landed self-update runs this engine at step 3f), and an unguarded receipt
 #                 there reads `/…`, exits non-zero and is scored as a CLOSE. The guard turns that
 #                 into the 126/127 NEEDS-REVIEW every shipped engine already emits.
 #   $DIST         NOT a path to read. It is the distribution repository handed to `git -C`, and

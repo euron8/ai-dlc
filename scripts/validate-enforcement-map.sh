@@ -861,7 +861,15 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   128 arms: I8 104 -> 108 and no other arm moved, in all three pairs. The new directories are
 #   story-evidence-scaffold-mutants and its shards -b, -c and -d, each `.dist-only`. HIGH tip
 #   reading 3408 plus the same 4.
-FORK_BUDGET=3412
+#
+#   RAISED TO 3424 FOR ONE NEW SCRIPT AND ONE NEW .dist-only FIXTURE DIRECTORY. `fork-profile.sh
+#   --section all`, base 9f8e7691 (0.807.0) and tip b24e1b46 (0.808.0), in ONE clean detached worktree
+#   at one path, interleaved B T B T B T: base 3405 3405 3405, tip 3420 3420 3420, spread 0 against a
+#   delta of +15. By arm, 129 arms on both sides, identical in all three pairs: I75 +10 (one more
+#   root-consulting subject, the same +10 per script 0.800.0 measured), I84 +2, I83 +1, I9 +1 (the
+#   per-file walks), I8 +1 (owed-derivations-mutants is `.dist-only`); no other arm moved. The new
+#   script is core/scripts/check-owed-derivations.sh. HIGH tip reading 3420 plus the same 4.
+FORK_BUDGET=3424
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

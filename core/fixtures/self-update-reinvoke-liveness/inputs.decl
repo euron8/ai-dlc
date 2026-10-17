@@ -1,0 +1,8 @@
+# self-update-reinvoke-liveness reads three real files: the step-2 text it models (SKILL.md), and the two
+# reconcile files whose functions it lifts exactly as the shipped scripts do (machinery_paths() and
+# map_consumer() out of preclassify.sh, and the machinery: list in setup-sites.md). Everything else is
+# a throwaway distribution and consumer built under mktemp.
+!core/skills/ai-dlc-update/SKILL.md
+!core/skills/ai-dlc-update/reconcile/preclassify.sh
+!core/skills/ai-dlc-update/reconcile/setup-sites.md
+core/fixtures/lib/

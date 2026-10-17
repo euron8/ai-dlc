@@ -760,8 +760,11 @@ ap_stage_or_refuse() {
 # marker from another base is started fresh.
 #
 # A SAME-BASE MARKER WITH NO `classify-hashes:` LINE STAYS UNRECORDED. That is a marker an engine
-# without this record wrote -- on the pull that DELIVERS this engine, the first ordinary run is the old
-# one -- and the tree may already carry the operator's merges, so any blob read now could be a merged
+# without this record wrote -- under SELF-UPDATE-DEFER, where the installed apply.sh runs step 7 of the
+# pull that delivers this engine, or left in flight by an earlier unfinished attempt from the same base
+# (a marker outlives its run only while the stamp is withheld, so a leftover is always same-base); on a
+# pull whose step-2 self-update landed, step 7 runs THIS engine after the re-invoke and the record is
+# written -- and the tree may already carry the operator's merges, so any blob read now could be a merged
 # copy. This run writes no hash lines and no `classify-hashes:` line, and `--finish` says so on a NOTE.
 #
 # `classify-hashes: <n>` IS OTHERWISE ALWAYS WRITTEN, zero included. Without it a marker from this
@@ -1401,7 +1404,7 @@ if [ -d "$VD_ART" ]; then
         "the artifact corpus could not be fully read — ${VD_SCANNED} of ${VD_LISTED} markdown file(s) were opened — so whether this range stranded a recorded derivation is UNKNOWN, and unknown reads exactly like clean. Run \`bash scripts/ai-dlc/validate-artifact-derivations.sh _bmad-output/\` by hand before treating this pull as done."
     elif [ "$VD_HITS" -gt 0 ] && [ -f "$VD_VALIDATOR" ]; then
       say WORKLIST artifact-derivations "_bmad-output/" \
-        "${VD_HITS} recorded \`derived\` command(s) across ${VD_NF} artifact file(s) name a core path this range CHANGED between ${BASE} and ${THEIRS}. Core text that moved leaves each of those commands measuring whatever still happens to sit at the old path, which re-runs without failing. RE-POINT each one this range broke at the path core carries at ${THEIRS}. The check is \`bash .claude/skills/ai-dlc-update/reconcile/derivation-differential.sh <dist> ${BASE} . ${THEIRS}\`, run before the apply is committed: it re-derives this row's file set with the same join, runs the installed validator over those files once against the pre-apply tree and once against this one, and keys each derivation on its pass/fail STATUS. The clear is ZERO NEWLY-FAILING — a derivation that passed before this apply and fails after it; exit 0 is that clear, exit 1 names each newly-failing one, exit 2 is a refusal and is never a clear. A derivation that was already stale before the apply is OUT OF THIS ROW'S SCOPE: this range did not break it, and the whole-corpus validator's exit 0 is a clear no edit made for this pull can reach. UNASSESSABLE derivations (refused by the validator on either side: ALLOWLIST, GRAMMAR, READS-STDIN) are LISTED, never counted as cleared — adjudicate each by hand. NOT run from here: it executes the commands it finds, twice, and that is a cost this driver must not charge on a pull."
+        "${VD_HITS} recorded \`derived\` command(s) across ${VD_NF} artifact file(s) name a core path this range CHANGED between ${BASE} and ${THEIRS}. Core text that moved leaves each of those commands measuring whatever still happens to sit at the old path, which re-runs without failing. RE-POINT each one this range broke at the path core carries at ${THEIRS}. The check is \`bash .claude/skills/ai-dlc-update/reconcile/derivation-differential.sh <dist> ${BASE} . ${THEIRS}\`, run before the apply is committed: it re-derives this row's file set with the same join, runs the installed validator over those files once against the pre-apply tree and once against this one, and keys each derivation on its pass/fail STATUS. The clear is ZERO NEWLY-FAILING — a derivation that passed before this apply and fails after it; exit 0 is that clear, exit 1 names each newly-failing one, exit 2 is a refusal and is never a clear. A derivation that was already stale before the apply is OUT OF THIS ROW'S SCOPE: this range did not break it, and the whole-corpus validator's exit 0 is a clear no edit made for this pull can reach. UNASSESSABLE derivations (refused by the validator on either side: ALLOWLIST, GRAMMAR, READS-STDIN) are LISTED, never counted as cleared — adjudicate each by hand. To LEAVE a NEWLY-FAILING derivation without re-pointing it (the operator chose that by AskUserQuestion), re-run the same command with \`--record-owed _bmad-output/ai-dlc-update/owed-derivations.tsv --log-name <this pull's reconcile-log-<ts>.md>\`: the flag appends each CURRENT-sprint or living-document NEWLY-FAILING row to the owed record (a past sprint's break prints INFO and is not recorded), and \`scripts/ai-dlc/check-owed-derivations.sh\` keeps it open until the derivation reproduces. To CLOSE an owed row by re-pointing it, append \`REPOINTED<TAB><old file:line><TAB><new file:line><TAB>\$ <new command>\` to that record; the reader re-derives the NEW derivation on every read, so the append closes nothing unless it reproduces. NOT run from here: it executes the commands it finds, twice, and that is a cost this driver must not charge on a pull."
     elif [ "$VD_HITS" -gt 0 ]; then
       say DECISION artifact-derivations-unchecked "_bmad-output/" \
         "${VD_HITS} recorded \`derived\` command(s) across ${VD_NF} artifact file(s) name a core path this range changed, and scripts/ai-dlc/validate-artifact-derivations.sh is not on this consumer, so nothing can re-run them. It is delivered by install.sh's copy loop over core/scripts/; run a fresh install of that script, then \`bash scripts/ai-dlc/validate-artifact-derivations.sh _bmad-output/\`."
@@ -2482,7 +2485,9 @@ finish_verify_tree() {
 #
 # A MARKER WITH NO `classify-hashes:` LINE WAS WRITTEN BY AN ENGINE THAT RECORDED NOTHING, or by this
 # one over a same-base marker that engine wrote (see ap_write_marker). It gets a NOTE and the
-# behaviour that engine had: this check cannot fire on the pull that delivers it.
+# behaviour that engine had: this check cannot fire on such a marker. On the pull that delivers this
+# engine that happens only under SELF-UPDATE-DEFER or a leftover same-base marker; when the step-2
+# self-update lands, step 7 runs this engine, the record is written, and the check is live.
 finish_classify_unmerged() {
   local _ml _l _h _m _c _now _nm _tab
   [ -f "$APPLYING" ] || return 0

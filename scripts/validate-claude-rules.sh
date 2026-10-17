@@ -842,7 +842,14 @@ fi
 # where nothing waits, quoting the operator verbatim. The operator approved this raise in the
 # intake session and confirmed it to the lead. A6 WAS OBSERVED FAILING AT 69327/69120 BEFORE THE
 # CEILING MOVED. 69376 is 67.75 KiB, leaving 49 bytes. NO SUBTRACTION: the debt is eight raises old.
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-69376}"
+#
+# RAISED A TWENTIETH TIME, 69376 -> 69584, ON AN EXPLICIT OPERATOR RULING ("raise by measured need"),
+# FOR TWO LINES. `consumer-boundary.md`'s bootstrapping bullet now says only steps 1-2 of the
+# delivering pull run the old engine (BL-612), +70 bytes; `tool-hazards.md` gained the trailing-`/`
+# glob pathspec zero (BL-633), +187 bytes. A6 WAS OBSERVED FAILING AT 69584/69376 BEFORE THE CEILING
+# MOVED. 69584 is the measured total with no headroom, so the next byte fires this arm. NO
+# SUBTRACTION: the debt is nine raises old.
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-69584}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done

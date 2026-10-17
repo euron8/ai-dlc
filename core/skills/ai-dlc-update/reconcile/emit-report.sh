@@ -589,8 +589,9 @@ render() {
   # six releases, with the template untouched for most of them.
   #
   # RUN THEIRS' COPY, not the consumer's: the pull that first DELIVERS this validator must
-  # already be able to report with it, and at step 5 nothing has been written to the consumer
-  # yet. A temp copy is safe here only because the validator resolves everything it reads from
+  # already be able to report with it -- including under SELF-UPDATE-DEFER, where step 2 wrote
+  # nothing and the machinery slice (this validator's `scripts/ai-dlc/` copy among it) lands only
+  # at step 7; on a landed self-update step 2 has already written that copy. A temp copy is safe here only because the validator resolves everything it reads from
   # its `--root` argument and nothing from its own location — running a validator from /tmp is
   # otherwise how a missing sibling gets reported as a failed check.
   #

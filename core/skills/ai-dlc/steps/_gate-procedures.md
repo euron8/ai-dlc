@@ -1023,6 +1023,8 @@ slot, `shards/` or a record, and records it as its own entry with a `siblings:` 
 why SERIAL-REQUIRED dispatches it: a round whose every finding stayed inside one shard still
 owes this grep.
 
+Owed derivations are refused at gate-validation.md Check 37, not here.
+
 Exit 1 from `validate-artifact-derivations.sh` is a repair that falsified a
 derivation — most often not its own, but one
 elsewhere in the artifact set that was counting the thing this repair moved. Send it back to

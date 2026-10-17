@@ -20,6 +20,121 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.808.0] - 2026-10-16
+
+Batch 235 (release BL-587 + BL-612 + BL-633). Closes BL-612 and BL-633. BL-587 ships PARTIAL: its snapshot pointer
+line (contract D6) is not built and stays open, see below. Closes no `PC-` id.
+
+### A reconcile's owed derivations are recorded where the sprint reads them, and the planning gate refuses while one is open (BL-587)
+
+- `reconcile/derivation-differential.sh --record-owed <file> [--log-name <name>]` appends every NEWLY-FAILING row
+  it prints to an append-only record (default `_bmad-output/ai-dlc-update/owed-derivations.tsv`), rendered from the
+  same variables as the printed row: `OWED<TAB>key<TAB>command<TAB>recorded<TAB>actual<TAB><base>..<theirs><TAB>log`.
+  The record has no status cell. Without the flag nothing is written, and a refused run records nothing.
+- The new `core/scripts/check-owed-derivations.sh` (installed as `scripts/ai-dlc/check-owed-derivations.sh`)
+  re-derives every row on every read. It finds the row's command by CONTENT inside a ```derived fence of the row's
+  file, so a shifted line is still judged; no match reads MOVED, an ambiguous match refuses. It then joins the
+  validator's verdicts: exit 2 is UNASSESSED, never closed; a key named in a `SUPERSEDED:` line is judged at its
+  later copy; otherwise a FAIL or UNRUN line keeps it OPEN. Exit 0 no open row or no record, 1 open rows, 2 a refused,
+  unreadable or malformed record.
+- A row closes only by re-pointing. The re-pointer appends
+  `REPOINTED<TAB><old file:line><TAB><new file:line><TAB>$ <new command>`; the reader follows the latest one,
+  chained, and the row is closed only if that new derivation reproduces when re-run. Writing a word closes nothing.
+- **Scope, by operator ruling: the current sprint only.** A row is recorded and enforced only when its file is
+  under the current sprint's `s<N>/` in `_bmad-output/planning-artifacts/`, `party-mode/` or `specs/` (the areas
+  `join-remediator-shards.sh` already treats as a sprint's subject), or is a living document with no `s<N>`
+  segment, such as `prd.md`. The current sprint comes only from `sprint-status.sh sprint-id`; if it cannot be
+  resolved the reader refuses. A break in a past sprint's file prints an `INFO past-sprint` row and is never
+  recorded, refused or carried. **Owed work recorded in a sprint that has since finished turns INFO and STOPS
+  BLOCKING. An INFO row is unrepaired debt that is no longer enforced. It is not closed.**
+- Gate **Check 37** (`gate-validation.md`, planning gate) runs the reader and FAILS on any exit other than 0,
+  including 126 and 127. The deny names the REPOINTED remedy and states that one UNRUN derivation anywhere in a
+  file makes every owed row in that file UNASSESSED. Step 0a (`route.md`) shows open rows on resume, and the retro
+  carries each open key forward once.
+- HISTORY files are INFO too: a path an ai-dlc program writes or classes as an archive is classified HISTORY
+  and is never recorded, refused or carried, wherever it sits. That is the rotators' outputs (rotated
+  gate-adjudication records, `pipeline-history/pipeline-snapshot-archive.md`, `push-candidate-ledger.archive.md`),
+  the prose steps' `prd-history.md` and `product-brief-history.md`, and `planning-artifacts/archive/**` and
+  `s<N>/archive/**`, each cited at its source beside the set. One classifier,
+  `check-owed-derivations.sh --scope`, answers CURRENT, LIVING, PAST or HISTORY for every caller.
+- **Limit, fails open:** in the preamble-only window `sprint-status.sh sprint-id` reads frozen archives, and with
+  that history deleted it can answer 1. Current-sprint rows then read PAST, so they turn INFO and do not block.
+  That is the open direction, never a false refusal; BL-631 fixes the resolver.
+- **Enforced at the planning gate only, by operator ruling, so a sprint can always close.** A row recorded after
+  the planning gate is shown and carried but never refused: each resume shows it and the retro carries it, and
+  by the next planning gate its sprint has finished and it reads INFO. That is a deliberate scope, not a gap. A
+  living-document row (`prd.md`) stays OPEN across sprints and is refused at every later planning gate.
+- **Not built (D6, open):** the contract's snapshot pointer naming the pending reconcile PR. At step 8 the update
+  session is on the reconcile branch and never touches the working branch, so a pointer there lands at the PR
+  merge, the same moment as the record. Until the operator merges the reconcile PR, the working branch carries
+  no record, and nothing on it reads the debt that pull recorded.
+- Delivery, per file:
+  - Live from step 3 of the pull that delivers it, unless the step-2 self-update returns `SELF-UPDATE-DEFER`, is
+    un-synced, or fails to push: `reconcile/derivation-differential.sh`, `reconcile/apply.sh` (the WORKLIST row
+    text), `ai-dlc-update/SKILL.md`, and `scripts/ai-dlc/check-owed-derivations.sh`, all in the step-2 machinery
+    slice.
+  - Live only once the operator merges that pull's reconcile PR: `steps/gate-validation.md` (Check 37),
+    `steps/route.md`, `steps/retro.md`, `steps/_gate-procedures.md`.
+- Fixtures: `owed-derivations` (ships) drives the writer and reader over seeded trees; `owed-derivations-mutants`
+  (distribution-only) carries 14 mutants, each required to fail exactly its declared arms, and the rulebook-text
+  checks, which do not ship because a consumer's rulebook at step 2 is still the old one.
+- A current-sprint NEWLY-FAILING row, written by `--record-owed`, reads OPEN on every later read until its
+  derivation is re-pointed and reproduces, and Check 37 refuses the planning gate while it does. Rows a
+  reconcile left only in its log's prose, before this release, are not in the record and are not picked up.
+  The receipt seeds the reference consumer's shape: three line-number moves in a live `s<N>/` (one under
+  `party-mode/`) read OPEN, and two in closed sprints read INFO.
+
+### "The pull AFTER" is wrong for anything the update runs after its step-2 re-invoke (BL-612)
+
+- Step 2 of `/ai-dlc-update` writes and merges the machinery slice (`core/skills/ai-dlc-update/**` with
+  `reconcile/*`, `core/scripts/*`, hooks, schemas), then STOPS and re-invokes; the fresh invocation runs steps 3-8
+  on the new engine. So the old engine governs the delivering pull only in:
+  - steps 1-2 of its first pass (the re-invoke re-runs steps 1-2 from the new text, and its slice is then empty);
+  - `SELF-UPDATE-DEFER`, where the slice lands at step 7 through the installed `apply.sh`;
+  - an un-synced branch, where step 2 defers before the gate, writes nothing and does not re-invoke;
+  - a failed step-2 push, where nothing landed and nothing re-invokes.
+  Hooks are live from step 2's working-tree write (reasoned from the step-2 text, not measured). Rulebook text is
+  live only once the operator merges the reconcile PR. Measured on graph's 0.791.0 → 0.793.0 pull:
+  `validate-artifact-derivations.sh` was the old blob before the pull and the new blob at both the self-update
+  and the reconcile commit. 0.762.0 stated this correctly ("takes effect ON the delivering pull").
+- Fixture `self-update-reinvoke-liveness` (ships) lifts the real `machinery_paths()` and `map_consumer()` out of
+  `preclassify.sh` and drives a throwaway dist and consumer: a reconcile-engine change is live at step 3 after the
+  re-invoke; a step-1-only change is not live in the first pass (the control); under DEFER the engine is old at
+  step 3 and new after step 7. Mutants: the re-invoke reads the pre-step-2 tree; the slice excludes `reconcile/*`.
+  The `unsynced` world pins the documented sequence from SKILL.md's step-2 text; it models that state rather than
+  driving the program, and step 6's refusal is quoted, not executed — it is not behavioural coverage.
+- **Corrections.** These release notes misplace a change as "the pull after" when it is live on the delivering
+  pull's step 3 or later (unless deferred):
+  - wholly: 0.793.0, 0.710.0, 0.706.0, 0.701.0, 0.700.0, 0.699.0, 0.698.0 (two statements), 0.696.0, 0.695.0,
+    0.693.0, 0.691.0, 0.689.0, 0.687.0, 0.685.0, 0.660.0, 0.658.0, 0.657.0, 0.656.0, 0.637.0, 0.632.0, 0.611.0,
+    0.578.0, 0.163.0, 0.612.0;
+  - in part: 0.799.0 (derivation-differential and the apply/push guidance), 0.704.0 (all but the gate), 0.673.0
+    (the step-6 refusal), 0.661.0 (the CLASSIFY rows), 0.655.0 (`apply.sh` and unregistered-drift), 0.651.0
+    (`ledger-reverify.sh` and `emit-report.sh`; the self-update gate half is right), 0.316.0 (the default path; its
+    DEFER half is right), 0.698.0's "`--finish` NOTEs on the delivering pull" (true only under DEFER or a leftover
+    same-base marker);
+  - the same claim in other words: 0.711.0, 0.680.0, 0.678.0, 0.677.0, 0.670.0 (preamble), 0.641.0, 0.618.0,
+    0.506.0.
+  BL-563's archived entry ("the update skill is the program that delivers its own repair, so a fix lands on the
+  pull after the one that carries it") is wrong in the same way: its post-write gates run at step 7, after the
+  re-invoke. BL-582 states no delivery timing; its step-2 touchpoint runs on the old text in the first pass and
+  its step-8 touchpoint runs on the new.
+  Correct as written: the step-1/2 statements, 0.670.0's DEFER-conditioned line, and 0.679.0 (a failed step-2 push
+  re-invokes nothing).
+- The same claim in shipped comments is corrected here, comment-only: `reconcile/apply.sh` (the same-base marker
+  and the `--finish` record check), `ai-dlc-update/SKILL.md` (the same `--finish` note, and the `$THEIRS_TREE`
+  guard's window), `reconcile/ledger-reverify.sh` (the same guard), `reconcile/emit-report.sh` (what step 2 has
+  written by step 5). `validate-layer-entries.sh`'s W10 message makes it in user-facing text and is filed as
+  BL-617. Fixture comments in `apply-drift-refile` and `ledger-reverify` repeat it; no assertion depends on them.
+
+### A glob pathspec ending in `/` is a stated tool hazard (BL-633)
+
+- `.claude/rules/tool-hazards.md` gains one line beside the `ls-tree` pathspec entry: `'dir*/'` matches nothing,
+  exit 0, in `git grep` and `ls-files`; use the bare glob, the plain directory, or `:(glob)<dir>*/**`.
+- That line and BL-612's `consumer-boundary.md` bullet are both durable-channel bytes, so arm A6's ceiling
+  (`DURABLE_MAX`, `scripts/validate-claude-rules.sh`) rises 69376 -> 69584 by their measured total, on one
+  operator approval.
+
 ## [0.807.0] - 2026-10-16
 
 Batch 235 (combined release: the pole, and the self-update-join-gate seed). The suite-pole guard is removed and the

@@ -60,7 +60,7 @@ planning gate that edits `scripts/*.sh`.
 | Gate type      | Required checks                                                 |
 |----------------|-----------------------------------------------------------------|
 | universal      | 1, 2, 2a, 3, 4, 7, 12, 13, 14, 15, 16, 25, 26, H1, H2, failure  |
-| planning       | 1c, 17, 20, 23, 24, 27, 28, 29, 32, 33, 34, 35, 36                  |
+| planning       | 1c, 17, 20, 23, 24, 27, 28, 29, 32, 33, 34, 35, 36, 37             |
 | story          | 3a, 3b, 5, 17, 24, 30, 31                                       |
 | implementation | 5, 6, 8, 9, 10, 11, 11a, 17, 19, 22                             |
 | sprint-review  | 18, 20, 21                                                      |
@@ -3291,6 +3291,39 @@ passing with the trunk audit's result recorded nowhere — or never run — so a
 that bypassed every hook reaches planning unaudited. False-positive cost: one
 audit run per carry-over planning gate. Removal condition: retire when step 1b's
 result is written by the audit itself to a tracked record a script check reads.
+
+### 37. No owed derivation is open (all planning gates).
+<!-- CHECK_LOADED: 37 -->
+
+Run `scripts/ai-dlc/check-owed-derivations.sh` from the project root. **Any exit other than 0
+(1, 2, 126, 127 or anything else) DENIES the gate**: print every line it emitted and do not pass
+it. Exit 0 passes, and an absent record is exit 0.
+
+The deny text states, in this order:
+1. Exit 1 prints one `OPEN` line per derivation an earlier pull left broken, in the CURRENT sprint's
+   `s<N>/` or in a living document (`prd.md`). **Remedy: append
+   `REPOINTED<TAB><old file:line><TAB><new file:line><TAB>$ <new command>` to
+   `_bmad-output/ai-dlc-update/owed-derivations.tsv`.** The reader re-derives the new derivation on
+   every read, so the append closes the row only if that derivation reproduces; a REPOINTED row that is
+   stale, unrunnable or aimed at a line that is not a derived-fence command stays OPEN.
+2. Exit 2 means the record is unreadable or malformed, or the current sprint could not be resolved: the
+   rows are REFUSED and unassessed, never closed. Repair the record or the sprint envelope and re-run.
+3. An `UNASSESSED` row has a file the validator exited 2 on. **An UNRUN derivation anywhere in the same
+   file makes every owed row in it UNASSESSED; run or remove that derivation.**
+4. **Owed work recorded in a sprint that has since finished turns INFO and STOPS BLOCKING.** An
+   `INFO past-sprint` row is unrepaired debt that is no longer enforced. It is not closed. Show those
+   lines in the gate output; they never deny. An `INFO history` row (a row in an archive or an
+   ai-dlc rotation output) is treated the same way.
+   This check runs at the PLANNING gate only. A row recorded after the planning gate is shown and carried but never refused — that is deliberate, so a sprint can always close; it is NOT closed.
+5. A row in the live `_bmad-output/gate-adjudication/` is cleared by rotating it
+   (`rotate-gate-adjudication.sh`) or re-pointing it.
+
+Fixture: `tests/fixtures/owed-derivations/`.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: a derivation left broken at a pull being forgotten
+by the next session, because the only record of it was the model's recollection. False-positive cost:
+one validator run per file holding an owed row. Removal condition: retire when the update's own gate
+refuses a pull that leaves a NEWLY-FAILING derivation unrepaired.
 
 ## Gate Failure
 <!-- CHECK_LOADED: failure -->
