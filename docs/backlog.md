@@ -543,6 +543,9 @@ Caveat: the record is a loaded-cost set from recent runs, not a solo timing, and
 
 Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
 
+
+**Partial, v0.810.0.** Item (a), the sandbox re-trace of 13 of the 14 stale fixtures, landed in intake 2 (`52555359`). Items (b) and (c) land here: `fold-architect-ledger-join-mutants` runs C0 and the M6 premise in shard `a` only, bound by a J2 arm, and `derivation-capture-mutants` is four pool units with a derived deal and coverage join (J0, J1, J1b) and no redundant control. Open: the remaining phase-2 items (gate-adjudication M0 in one shard, the readset-skip-digest and advisor-gate-deny controls in one shard each, the ledger-reverify-shard control) and the per-gate wall clock and dollars, which need the gate log of a real release push.
+
 verify: manual
 
 ## BL-584 — two fixtures cannot be traced and have no `inputs.decl`, so they run on every push
@@ -1048,14 +1051,6 @@ verify: manual
 ## BL-641 — `ai-dlc-continue.sh`'s RAPID_WINDOW_SECONDS can defeat the stall backoff on the unknown-tool path
 
 **NOTE.** Filed by ai-dlc-4e [9b62de], same header pass; a mechanism read, cites confirmed at `9f8e7691`. `core/hooks/ai-dlc-continue.sh:123` sets `RAPID_WINDOW_SECONDS=30`, and `stall_run()` (`:348`) sets `RUN_TOOL=unknown` (`:357`) when there is no transcript, no jq, or an old two-line state file. On that path the time test alone decides whether a run continues. Load stretches a genuinely stalled session's gaps past 30 s, which resets the counter to 1, so `EFF_MAX` (`:131-134`) is never reached and release falls to the harness cap. Owed: measure how often `RUN_TOOL=unknown` actually occurs; if it is non-zero, decide whether the unknown path should hold the run rather than reset it. Receipt: `stall_run` driven with an unreadable transcript at 31 s spacing reaches `EFF_MAX`, where today it resets to 1 on every block.
-
-verify: manual
-
-## BL-642 — WITHDRAWN (false premise): `pregate-self-check.sh` was never run on the tip it was said to have passed
-
-**WITHDRAWN (false premise; lead ai-dlc-71).** The filing said `pregate-self-check` reported rc 0 on ai-dlc-c2's 0.808.0 tip while `validate-enforcement-map.sh` failed it with 7 FAILs (I77, I75 ×2, I54/I54b ×2, I95, and the check-manifest-bypass seed). c2's account, relayed by the lead: c2 never ran `pregate-self-check` in that release. It ran a partial set of validators and called them "final-tree checks". So no rc-0 self-check run exists to reconcile, and the tool is not shown to be defective. The intake reading already pointed this way: the self-check's arm (a) runs the WHOLE validator, unscoped, from the tree root (`scripts/pregate-self-check.sh:84-100`), and fails on any non-zero exit, so it could not have passed that tip.
-
-The miss was procedural. The lead fixed it on the lead's side, not in this repo: every gate ask must now cite a `pregate-self-check` rc 0 taken at the exact tip being pushed. The 0.806.0 I77 red (`story-evidence-scaffold/world.sh` tracked 100644) has the same shape and needs nothing further here.
 
 verify: manual
 

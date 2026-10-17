@@ -34435,3 +34435,13 @@ Effect: SKILL.md's IMMINENT path has the lead refresh its snapshot for a compact
 Owed: when `message.usage.iterations` is present, the sensor takes the context figure from the LAST `type: "message"` iteration (input + cache_creation + cache_read), and otherwise falls back to the top level. Receipt: a seeded usage line with iterations [message 276k, advisor_message 277k, message 278k] reads about 278k, and a single-iteration line reads exactly as today (near-miss control).
 
 verify: manual
+## BL-642 — WITHDRAWN (false premise): `pregate-self-check.sh` was never run on the tip it was said to have passed
+
+**LANDED (v0.810.0, verified 1246e4ef).** Closed by withdrawal, no build: the premise was false (the self-check was never run on that tip), and the process fix lives on the lead's side.
+
+**WITHDRAWN (false premise; lead ai-dlc-71).** The filing said `pregate-self-check` reported rc 0 on ai-dlc-c2's 0.808.0 tip while `validate-enforcement-map.sh` failed it with 7 FAILs (I77, I75 ×2, I54/I54b ×2, I95, and the check-manifest-bypass seed). c2's account, relayed by the lead: c2 never ran `pregate-self-check` in that release. It ran a partial set of validators and called them "final-tree checks". So no rc-0 self-check run exists to reconcile, and the tool is not shown to be defective. The intake reading already pointed this way: the self-check's arm (a) runs the WHOLE validator, unscoped, from the tree root (`scripts/pregate-self-check.sh:84-100`), and fails on any non-zero exit, so it could not have passed that tip.
+
+The miss was procedural. The lead fixed it on the lead's side, not in this repo: every gate ask must now cite a `pregate-self-check` rc 0 taken at the exact tip being pushed. The 0.806.0 I77 red (`story-evidence-scaffold/world.sh` tracked 100644) has the same shape and needs nothing further here.
+
+verify: manual
+
