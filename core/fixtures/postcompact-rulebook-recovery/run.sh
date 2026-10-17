@@ -1644,8 +1644,12 @@ amutant_arm() { # amutant_arm <label> <mutant> <expected flip set, in APREDS ord
 amut() { # amut <name> <awk program> -> mutant path
   awk "$2" "$GATE" > "$WORK/gate-adv-$1.sh"; printf '%s\n' "$WORK/gate-adv-$1.sh"
 }
+# The program is bound to a variable first: bash 3.2 cannot scan a `$(` inside single quotes inside
+# "$( )", reports "bad substitution", and abandons the rest of the enclosing top-level compound --
+# which silently skipped every arm from here to the end of the GATE block.
+AP_NOARM='index($0,"owed_put \"$(printf"){print "          :"; next} 1'
 amutant_arm "the stage never arms (the owed write removed)" \
-  "$(amut noarm 'index($0,"owed_put \"$(printf"){print "          :"; next} 1')" "deny before mate bound"
+  "$(amut noarm "$AP_NOARM")" "deny before mate bound"
 amutant_arm "the teammate stand-down removed at the stage" \
   "$(amut mate 'index($0,"[ -z \"$R_AID\" ] || exit 0"){next} 1')" "mate"
 amutant_arm "an advisor attempt anywhere satisfies R" \
@@ -2410,8 +2414,9 @@ pc_foreign() {
   _p="$(newproj architecture.md consumer)"; stx pipe "$_p/tA.jsonl"; stx pipe "$_p/tB.jsonl"
   sarm "$HOOK" "$_p" S-A "$_p/tA.jsonl"
   _o="$(pcall "$1" "$_p" S-B "$_p/tB.jsonl")"
-  plog "$_p" | grep -qx -- '- recovery_injected: no' || { printf 'FAIL:did not log `no` for a marker owned by another session\n'; return; }
-  plog "$_p" | grep -q '^- injected_bytes:' && { printf 'FAIL:logged another session'"'"'s byte count\n'; return; }
+  _l="$(plog "$_p")"
+  grep -qx -- '- recovery_injected: no' <<<"$_l" || { printf 'FAIL:did not log `no` for a marker owned by another session\n'; return; }
+  grep -q '^- injected_bytes:' <<<"$_l" && { printf 'FAIL:logged another session'"'"'s byte count\n'; return; }
   printf 'PASS\n'
 }
 # P6c. CONTROL / BACK-COMPAT: an ownerless marker and a pipeline session still log `yes` with bytes.
@@ -2419,8 +2424,9 @@ pc_legacy() {
   _p="$(newproj architecture.md consumer)"; stx pipe "$_p/tB.jsonl"
   sarm "$HOOK" "$_p" S-A "$_p/tB.jsonl"; sunowned "$_p"
   pcall "$1" "$_p" S-B "$_p/tB.jsonl" >/dev/null
-  plog "$_p" | grep -qx -- '- recovery_injected: yes' || { printf 'FAIL:an ownerless marker stopped reading as an injection\n'; return; }
-  plog "$_p" | grep -q '^- injected_bytes: [0-9]' || { printf 'FAIL:the byte count was not logged for an ownerless marker\n'; return; }
+  _l="$(plog "$_p")"
+  grep -qx -- '- recovery_injected: yes' <<<"$_l" || { printf 'FAIL:an ownerless marker stopped reading as an injection\n'; return; }
+  grep -q '^- injected_bytes: [0-9]' <<<"$_l" || { printf 'FAIL:the byte count was not logged for an ownerless marker\n'; return; }
   printf 'PASS\n'
 }
 PCPREDS="upd_nomark upd_foreign foreign legacy"
