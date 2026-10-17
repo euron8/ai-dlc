@@ -7,6 +7,7 @@ core/scripts/validate-adversarial-convergence.sh
 core/scripts/partition-document.sh
 core/scripts/partition-subject.sh
 core/scripts/validate-steering-budget.sh
+core/scripts/validate-artifact-budget.sh
 core/fixtures/adversarial-shard-merge/
 core/fixtures/lib/
 core/fixtures/adversarial-shard-merge-mutants/run.sh

@@ -383,6 +383,17 @@ VALID_VERDICTS="EXIT_CONDITION_MET EXIT_CONDITION_NOT_MET DIVERGENT_HARD_BLOCK"
 CRITICAL_EXIT_CEILING=0
 MAJOR_EXIT_CEILING=3
 
+# THE DISPATCH-ID GRAMMAR, declared once; merge-adversarial-shards.sh reads both lines from here as
+# it reads the ceilings above. The PREFIXES are what arm K and K3 accept as "carries an id": a
+# merged `shard_tool_use_ids:` token is `<key>=<prefix><more>`. The ERE is a REAL harness id, the only
+# self-reported value the merge compares. Derived from what subagent metas carry on the operator's
+# machine (`toolUseId` across ~/.claude/projects/*/*/subagents/): `toolu_` and 24 base62 characters
+# (4534), `toolu_`, 13 digits, `_` and a counter (587), and `call_` and 32 hex characters under a
+# local-model lead (1). A fabricated `toolu_cross1_g1_dispatch` matches none of the three. Every ERE
+# alternative opens with a declared prefix; arm K's self-probe holds the two lines together.
+DISPATCH_ID_PREFIXES="toolu_ call_"
+DISPATCH_ID_ERE='^(toolu_[0-9A-Za-z]{24}|toolu_[0-9]{13}_[0-9]+|call_[0-9a-f]{32})$'
+
 # THE RESOLUTION ENUM -- and the member that is NOT in it is the point.
 #
 # FREEZE_SCOPE IS DELIBERATELY ABSENT. DIVERGENT_HARD_BLOCK is stamped only when
@@ -1760,8 +1771,11 @@ k_count_md() {   # $1 dir -> K_COUNT, the merge's own story count. No subshell.
   K_COUNT=0
   for k_md in "$1"/*.md; do [ -e "$k_md" ] && K_COUNT=$((K_COUNT + 1)); done
 }
-k_has_ids() {    # $1 the shard_tool_use_ids: value -> 0 when it carries a <key>=toolu_ token
-  case " $1" in *=toolu_?*) return 0 ;; esac
+k_has_ids() {    # $1 the shard_tool_use_ids: value -> 0 when it carries a <key>=<DISPATCH_ID_PREFIXES> token
+  local kp
+  for kp in $DISPATCH_ID_PREFIXES; do
+    case " $1" in *="$kp"?*) return 0 ;; esac
+  done
   return 1
 }
 k_resolve() {    # $1 pass file, $2 artifact token -> K_DIR (empty when no directory resolves)
@@ -1806,8 +1820,22 @@ if [ "$N" -gt 0 ]; then
   k_resolve "$AC_T/deep/p.md" "${AC_T##*/}/"; kp3="$K_DIR"
   k_resolve "$AC_T/p.md" "k-one.md"; kp4="$K_DIR"
   if [ "$kp1" != 1 ] || [ "$kp2" != 2 ] || [ "$kp3" != "${AC_T%/*}/${AC_T##*/}" ] || [ -n "$kp4" ] \
-     || ! k_has_ids " 01=toolu_a cross=toolu_b" || k_has_ids "" || k_has_ids " 01= cross=toolu_"; then
+     || ! k_has_ids " 01=toolu_a cross=toolu_b" || k_has_ids "" || k_has_ids " 01= cross=toolu_" \
+     || ! k_has_ids " 01=call_a cross=call_b" || k_has_ids " 01=xyz_a cross=xyz_b"; then
     echo "validate-adversarial-convergence.sh: arm K self-probe failed (count 1->$kp1, 2->$kp2, resolve '$kp3', file-as-dir '$kp4'); no verdict" >&2
+    exit 2
+  fi
+  # THE GRAMMAR'S TWO LINES AGREE: each real shape matches the ERE and opens with a declared prefix,
+  # and the fabricated id matches neither shape. Fork-free: bash's own =~ and a prefix loop.
+  for kg in toolu_01AbCdEfGhIjKlMnOpQrStUv toolu_1789696640267_0 call_45aba045bf78553ca703fc8694de7577; do
+    kgp=0; for kp in $DISPATCH_ID_PREFIXES; do case "$kg" in "$kp"?*) kgp=1 ;; esac; done
+    if ! [[ $kg =~ $DISPATCH_ID_ERE ]] || [ "$kgp" -ne 1 ]; then
+      echo "validate-adversarial-convergence.sh: arm K grammar self-probe failed: '$kg' is not both a DISPATCH_ID_ERE match and a DISPATCH_ID_PREFIXES member; no verdict" >&2
+      exit 2
+    fi
+  done
+  if [[ toolu_cross1_g1_dispatch =~ $DISPATCH_ID_ERE ]]; then
+    echo "validate-adversarial-convergence.sh: arm K grammar self-probe failed: the fabricated toolu_cross1_g1_dispatch matches DISPATCH_ID_ERE; no verdict" >&2
     exit 2
   fi
 fi
@@ -2319,7 +2347,7 @@ K3_RELEASE="0.735.0"
 K3B_RELEASE="0.738.0"
 K3C_RELEASE="0.744.0"
 k3_keys() {  # $1 a shard_tool_use_ids value -> its key set, numeric keys de-padded, sorted, one per line
-  printf '%s\n' $1 | awk -F= 'NF >= 2 && $2 ~ /^toolu_./ { k = $1; if (k ~ /^[0-9]+$/) k = k + 0; print k }' | LC_ALL=C sort -u
+  printf '%s\n' $1 | awk -F= -v re="^(${DISPATCH_ID_PREFIXES// /|})." 'NF >= 2 && $2 ~ re { k = $1; if (k ~ /^[0-9]+$/) k = k + 0; print k }' | LC_ALL=C sort -u
 }
 k3_want() {  # $1 a map file (rc 0), $2 the cross keys (space-separated) -> the ordinal set plus them, de-padded, sorted
   { awk -F'\t' '$1 ~ /^[0-9]+$/ { print $1 + 0 }' "$1"; printf '%s\n' $2; } | LC_ALL=C sort -u
@@ -2397,7 +2425,10 @@ if [ "$N" -gt 0 ] && [ "$k3_go" -eq 1 ]; then
   k3p_x3="$(k3_xkeys "$AC_T/k3-g3")"; k3p_x1="$(k3_xkeys "$AC_T/k3-g1")"
   k3p_wg="$(k3_want "$AC_T/k3-map" "$k3p_x3" | tr '\n' ' ')"
   k3p_4="$(k3_keys " 1=toolu_a 2=toolu_b 3=toolu_c cross-1=toolu_d cross-2=toolu_e cross-3=toolu_f" | tr '\n' ' ')"
+  k3p_5="$(k3_keys " 1=call_a 02=call_b 3=call_c cross=call_d" | tr '\n' ' ')"
+  k3p_6="$(k3_keys " 1=xyz_a 02=xyz_b 3=xyz_c cross=xyz_d" | tr '\n' ' ')"
   if [ "$k3p_w" != "$k3p_1" ] || [ "$k3p_w" = "$k3p_2" ] || [ "$k3p_w" = "$k3p_3" ] \
+     || [ "$k3p_w" != "$k3p_5" ] || [ -n "$k3p_6" ] \
      || [ "$k3p_x3" != "cross-1 cross-2 cross-3" ] || [ "$k3p_x1" != "cross" ] \
      || [ "$k3p_wg" != "$k3p_4" ] || [ "$k3p_wg" = "$k3p_1" ]; then
     echo "validate-adversarial-convergence.sh: arm K3 self-probe failed (want '$k3p_w', same set '$k3p_1', other set '$k3p_2', empty id '$k3p_3', groups '$k3p_x3'/'$k3p_x1', grouped want '$k3p_wg' vs '$k3p_4'); no verdict" >&2

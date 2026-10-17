@@ -60,10 +60,12 @@
 #   for, or names another dispatch than its probe rows; a pre-upgrade writer with no probe row; a
 #   dispatch id with no spawn row; a writer of any role other than `adversary` (a remediator, an sm,
 #   ...); two or more adversary dispatches writing one shard; one dispatch deriving for two shards;
-#   one dispatch writing in this shard dir and under any OTHER `shards/<x>-p<M>/` dir; and a self-
-#   reported id that is REAL-SHAPED (`toolu_` and 24 base62 characters, the shape every harness id
-#   on the reference consumer carries) and differs from the derived one. Any other self value --
-#   `NOT_ACCESSIBLE`, `unavailable`, absent, or a fabricated `toolu_cross1_g1_dispatch` -- is
+#   one dispatch writing in this shard dir and under any OTHER `shards/<x>-p<M>/` dir; a row under
+#   this shard dir written in ANOTHER TREE (ONE TREE, below); and a self-reported id that is REAL
+#   (`DISPATCH_ID_ERE`, declared beside the ceilings in validate-adversarial-convergence.sh and read
+#   from there: `toolu_` and 24 base62 characters, `toolu_` with 13 digits and a counter, or `call_`
+#   and 32 hex characters under a local-model lead) and differs from the derived one. Any other self
+#   value -- `NOT_ACCESSIBLE`, `unavailable`, absent, or a fabricated `toolu_cross1_g1_dispatch` -- is
 #   ignored: the derived id is written. NOTHING FALLS BACK TO THE SELF-REPORT. There is no
 #   zero-writer refusal of its own: a shard with no writer has no row, and a shard whose writers
 #   are all of another role is refused on the role.
@@ -82,6 +84,11 @@
 #   dir's. False-positive set, measured on the reference consumer's ledger as it stood: 71 (agent,
 #   shard dir) pairs would refuse, every one a remediator the role hop already refuses, and 0 an
 #   adversary. The write ledger is transient, so that is one snapshot and a floor, not a census.
+#   ONE TREE. A row's `path` is normalised to start at the state dir's name, so a write to a
+#   worktree's or a scratch clone's copy of this shard reads byte-identical to one in this tree. The
+#   hook records `root`, the physical directory holding the state dir the write landed in; a row
+#   under this shard dir whose `root` is not this tree's is refused by name. A row with no `root`
+#   predates the field and is read as this tree's, so a ledger written before it still merges.
 #   The meta file supplies the id whenever the row carries `transcript_path`, and the probe ledger
 #   corroborates it (above); the probe row SUPPLIES the id only for a row without one. A dispatch id with two spawn rows is refused if ANY of
 #   them names a role other than `adversary`.
@@ -108,10 +115,14 @@
 #     ANY row in the shard dir on a file other than P or `P.draft` (it was not only P's writer --
 #     another shard's adversary that edited P is a cross-shard write, never a stale dispatch); a
 #     superseded writer with any row on P at or after S (the re-run is a NEW dispatch, never one of
-#     the writers it supersedes). `--map` with `--rerun` is refused.
+#     the writers it supersedes); an S further than BACKDATE_TOL_S (read from
+#     validate-artifact-budget.sh, the BACKDATED arm's own tolerance) from any spawn-ledger `ts` of
+#     the dispatch the join credits for P, or a `ts` that does not parse. `--map` with `--rerun` is
+#     refused.
 #   - The merged block adds one `rerun: <shard> since <S>; superseded: <agent ids> (<n> rows,
 #     <first>..<last>)` line per re-run after `shard_tool_use_ids:`, and MERGED adds `superseded=<n>`.
-#   S is the re-dispatch's dispatched-at. Without --rerun nothing above runs and the output is the
+#   S is the re-dispatch's dispatched-at, and is checked against the time its dispatch recorded, so a
+#   typed S binds to nothing (BL-598). Without --rerun nothing above runs and the output is the
 #   bytes it was.
 #
 # THE SERIES STEM IS NOT THE ARTIFACT. A shard dir whose <artifact> ends in `-adversarial`
@@ -536,6 +547,15 @@ read_ceiling() { # $1 name -> the value, or empty unless declared exactly once a
 }
 MAJOR_CEIL="$(read_ceiling MAJOR_EXIT_CEILING)"
 CRIT_CEIL="$(read_ceiling CRITICAL_EXIT_CEILING)"
+# THE DISPATCH-ID GRAMMAR, read from the same declaration file as the ceilings, so arm K and this
+# merge accept one set of id shapes (BL-597). A single-quoted ERE declared exactly once, else empty.
+read_grammar() { # $1 name -> the quoted value, or empty unless declared exactly once
+  local hits
+  hits="$(grep -E "^$1='[^']+'\$" "$VALIDATOR")" || return 0
+  [ "$(printf '%s\n' "$hits" | wc -l | tr -d ' ')" = "1" ] || return 0
+  # The grep above fixed the form NAME='value': drop the name and `=`, then the two quotes.
+  hits="${hits#*=}"; hits="${hits#?}"; printf '%s' "${hits%?}"
+}
 [ -n "$MAJOR_CEIL" ] && [ -n "$CRIT_CEIL" ] \
   || refuse "MAJOR_EXIT_CEILING / CRITICAL_EXIT_CEILING are not each declared exactly once as an integer in $VALIDATOR"
 
@@ -615,6 +635,23 @@ REC_PREFIX="$(basename "$REC_STATE")/planning-artifacts/$(basename "$SPRINT_DIR"
 # One jq per record. Write rows: `<file under the shard dir>\t<agent_id>\t<meta path, empty when
 # the row carries no transcript_path>`.
 : > "$T/wrows" && : > "$T/spawns" && : > "$T/probes" && : > "$T/metas" || refuse "cannot stage the harness records"
+# ONE TREE (BL-596). The hook records `root`, the physical directory holding the state dir the write
+# landed in, because the row's `path` is normalised and reads byte-identical for a worktree's or a
+# clone's shard. A row under this shard dir whose root is another tree is refused by name, never
+# silently dropped. A row with no `root` predates the field and is read as this tree's.
+REC_ROOT="$(cd "$REC_STATE/.." 2>/dev/null && pwd -P)" || refuse "cannot resolve the tree holding $REC_STATE"
+if [ -f "$REC_WRITES" ]; then
+  OT="$(jq -rn --arg p "$REC_PREFIX" --arg r "$REC_ROOT" '
+      first(inputs | select(type == "object") | select(.kind == "artifact-write")
+        | select((.path // "") | type == "string" and startswith($p))
+        | select((.root // "") | type == "string" and . != "" and . != $r)
+        | [.path, (.agent_id // ""), (.ts // "" | tostring), .root] | @tsv)' "$REC_WRITES" 2>/dev/null)" \
+    || refuse "the write ledger $REC_WRITES does not parse as JSON lines"
+  if [ -n "$OT" ]; then
+    IFS="$(printf '\t')" read -r _op _oa _ot _or <<< "$OT"
+    refuse "${_op} carries a write-ledger row by agent ${_oa} at ${_ot} written under ${_or}, not this tree (${REC_ROOT}); a worktree's or a clone's write is not this tree's shard -- write the shard in this tree"
+  fi
+fi
 if [ -f "$REC_WRITES" ]; then
   jq -rn --arg p "$REC_PREFIX" '[inputs | select(type == "object") | select(.kind == "artifact-write")
       | select((.path // "") | type == "string" and startswith($p)) | select((.agent_id // "") != "")
@@ -809,8 +846,43 @@ if [ -s "$T/wagents" ] && [ -f "$REC_WRITES" ]; then
     refuse "agent ${_xa} wrote in ${REC_PREFIX} and also wrote ${_xp} at ${_xt}, under another shard dir; one dispatch delivers one shard of one pass, never shards for two merges"
   fi
 fi
-# A REAL-SHAPED self id: `toolu_` and 24 base62 characters. Only such a value is compared.
-RE_REAL_TUID='^toolu_[0-9A-Za-z]{24}$'
+# ---- the re-run start binds to a recorded dispatch time (BL-598) ---------------------------
+# S is the re-dispatch's dispatched-at, so it must sit within the BACKDATED tolerance of every
+# spawn-ledger row of the dispatch the join credited for that shard. The tolerance is read from its
+# one declaration, `BACKDATE_TOL_S` in validate-artifact-budget.sh, and only when --rerun is given.
+# A shard with no credited dispatch is left to its own per-shard refusal below.
+if [ -n "$RERUN" ]; then
+  RR_TOL_FILE="$(dirname "$VALIDATOR")/validate-artifact-budget.sh"
+  RR_TOL="$(grep -E '^BACKDATE_TOL_S=[0-9]+$' "$RR_TOL_FILE" 2>/dev/null)"
+  [ "$(printf '%s\n' "$RR_TOL" | grep -c .)" = 1 ] \
+    || refuse "--rerun binds each re-run start to a recorded dispatch time within BACKDATE_TOL_S, which is not declared exactly once as an integer in $RR_TOL_FILE"
+  RR_TOL="${RR_TOL#*=}"
+  while IFS="$(printf '\t')" read -r _rp _rs; do
+    [ -n "$_rp" ] || continue
+    _rk="$(awk -F'\t' -v b="$_rp" '{ n = $2; sub(/.*\//, "", n) } n == b { print $1; exit }' "$T/shards")"
+    _rd="$(awk -F'\t' -v k="$_rk" '$1 == k { print $2; exit }' "$T/ids")"
+    [ -n "$_rd" ] || continue
+    _rb="$(jq -rn --arg id "$_rd" --arg s "$_rs" --argjson tol "$RR_TOL" '
+        ($s | fromdateiso8601) as $se
+        | [inputs | select(type == "object") | select(.tool_use_id == $id) | (.ts // "" | tostring)] as $t
+        | if ($t | length) == 0 then "NONE"
+          else ([$t[] | (try fromdateiso8601 catch null)] | if any(. == null) then "UNREADABLE\t" + ($t | join(" "))
+                else (map(. - $se | if . < 0 then -. else . end) | max) as $d
+                     | if $d > $tol then "FAR\t" + ($d | tostring) + "\t" + ($t | join(" ")) else "OK" end end) end' \
+        "$REC_SPAWNS" 2>/dev/null)" || refuse "--rerun ${_rp}@${_rs}: the spawn ledger $REC_SPAWNS could not be read for dispatch ${_rd}'s recorded time"
+    case "$_rb" in
+      OK) ;;
+      UNREADABLE*) refuse "--rerun ${_rp}@${_rs}: dispatch ${_rd}'s spawn-ledger ts is not ISO 8601 (${_rb#UNREADABLE	}); the start cannot be bound to it" ;;
+      FAR*) _rf="${_rb#FAR	}"
+            refuse "--rerun ${_rp}@${_rs}: the start is ${_rf%%	*} s from dispatch ${_rd}'s recorded dispatch time (${_rf#*	}) in $REC_SPAWNS, past BACKDATE_TOL_S=${RR_TOL}; the re-run start is that dispatch's dispatched-at, never a typed time" ;;
+      *) refuse "--rerun ${_rp}@${_rs}: the start binding over $REC_SPAWNS did not run" ;;
+    esac
+  done < "$T/rspec"
+fi
+# A REAL self id: one of the harness's id shapes, read from the grammar's declaration (above). Only
+# such a value is compared.
+RE_REAL_TUID="$(read_grammar DISPATCH_ID_ERE)"
+[ -n "$RE_REAL_TUID" ] || refuse "DISPATCH_ID_ERE is not declared exactly once as a single-quoted ERE in $VALIDATOR"
 
 # ---- seat-complete (the belt; the join beat's --complete is the braces) --------------------
 # If ANY shard's last non-blank line is the marker, every shard's must be. See the header.

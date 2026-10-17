@@ -72,7 +72,9 @@
 # mutant goes to the shard whose projected CPU (its CPU plus its per-scorer cost per added mutant) is
 # lowest, never to f, whose wall clock was the longest (359s against 180-231s) despite the lowest CPU.
 # That gives c+2 (TM11 TM12) -> 1456, d+2 (RM3 TM13) -> 1453, e+1 (TM10) -> 1323, a 1320, b 1329,
-# f 1046. The deal is 7, 7, 9, 8, 7, 5. Each shard's scorers (its mutants plus the control) run
+# f 1046. The BL-596/597/598 mutants (TM14, TM15, RM4) go by the same rule to the three shards with
+# the lowest CPU measured solo through hermetic-run at 916de740 -- a 1214, b 1216, e 1229 against c
+# 1399 and d 1304 -- one each, never to f. The deal is 8, 8, 9, 9, 9, 7. Each shard's scorers (its mutants plus the control) run
 # POOL at a time, in as many waves as that takes, which moves wall clock and no verdict. Every shard pays
 # the unmutated control MX0, the J1 join and the MJ probe itself, because a shard that skipped them
 # could report a kill against a harness that never ran. MX6b, an assertion and not a scoring, runs
@@ -88,11 +90,11 @@
 # before it is trusted. After the reap, [J2] asserts this shard dispatched exactly the mutants dealt
 # to it.
 SHARDS="a b c d e f"
-MUTANTS_a="MX1 MX2 MX3 MX4 MX5 MX6 MX7"
-MUTANTS_b="MX8 MX9 MX10 MX11 MX12 MX13 MX14"
+MUTANTS_a="MX1 MX2 MX3 MX4 MX5 MX6 MX7 TM14"
+MUTANTS_b="MX8 MX9 MX10 MX11 MX12 MX13 MX14 TM15"
 MUTANTS_c="MX15 XM1 XM2 XM7 XM8 XM3 XM4 TM11 TM12"
 MUTANTS_d="XM5 XM6 SM1 SM2 SM3 SM4 RM3 TM13 DM1"
-MUTANTS_e="TM1 TM2 TM3 TM4 TM5 TM6 TM10 BM1"
+MUTANTS_e="TM1 TM2 TM3 TM4 TM5 TM6 TM10 BM1 RM4"
 MUTANTS_f="TM7 TM8 TM9 RM1 RM2 HM1 CM1"
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
@@ -194,7 +196,7 @@ set -- $P_ALL; N_ALL=$#
 mutdir() { # <name> -> a dir holding the merge and the siblings it and the predicates resolve
   local d s
   d="$(mktemp -d "$WORK/mut-$1.XXXXXX")" || return 1
-  for s in merge-adversarial-shards.sh validate-adversarial-convergence.sh validate-steering-budget.sh partition-document.sh partition-subject.sh; do
+  for s in merge-adversarial-shards.sh validate-adversarial-convergence.sh validate-steering-budget.sh partition-document.sh partition-subject.sh validate-artifact-budget.sh; do
     [ -f "$SRCDIR/$s" ] && cp "$SRCDIR/$s" "$d/"
   done
   printf '%s' "$d"
@@ -301,8 +303,9 @@ mutant() { # <label> <expected> <old> <new> [<old2> <new2>]
 }
 
 C0="$(mutdir m0)"
-if [ -f "$C0/validate-adversarial-convergence.sh" ] && [ -f "$C0/merge-adversarial-shards.sh" ] && [ -f "$C0/partition-document.sh" ]; then
-  ok "MX-pre: the sandbox carries the merge, the convergence validator it reads its ceilings from, and the partition section mode reads its --map from"
+if [ -f "$C0/validate-adversarial-convergence.sh" ] && [ -f "$C0/merge-adversarial-shards.sh" ] && [ -f "$C0/partition-document.sh" ] \
+   && [ -f "$C0/validate-artifact-budget.sh" ]; then
+  ok "MX-pre: the sandbox carries the merge, the convergence validator it reads its ceilings and id grammar from, the partition section mode reads its --map from, and the budget validator --rerun reads its tolerance from"
   dispatch "MX0 control (unmutated copy)" "$C0/merge-adversarial-shards.sh" NONE
 else
   bad "MX-pre: FIXTURE BROKEN -- the sandbox lacks the merge or its sibling"
@@ -393,7 +396,7 @@ mutant "MX15 B4-by-document refuses every document" "b4doc b4doc_other" \
 # The cross groups (BL-464). XM1: files and --subject left single-cross -- the groups are read only
 # in --document mode, the wrong build "merge sharded in one mode only". Every files and subject arm
 # that seeds cross-<g> dies; the --document arms hold.
-mutant "XM1 one mode left single-cross" "b3 clean ceiling miss_ord miss_cross partition sha ms files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit xfiles xelicit xmix xunknown xcomplete tuid_main tuid_norow tuid_nometa tuid_selfdiff tuid_role tuid_twowriters tuid_oneagent tuid_nospawn tuid_session tuid_pre tuid_basename tuid_probemeta tuid_tworoles rerun_join rerun_other rerun_same rerun_role xdir probe_disagree probe_absent rerun_residual hdr draft dry dry_barrier" \
+mutant "XM1 one mode left single-cross" "b3 clean ceiling miss_ord miss_cross partition sha ms files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit xfiles xelicit xmix xunknown xcomplete tuid_main tuid_norow tuid_nometa tuid_selfdiff tuid_role tuid_twowriters tuid_oneagent tuid_nospawn tuid_session tuid_pre tuid_basename tuid_probemeta tuid_tworoles rerun_join rerun_other rerun_same rerun_role xdir probe_disagree probe_absent rerun_residual hdr draft dry dry_barrier tree tuid_call rerun_bind" \
   'bash "$XPART" --cross-groups "$K" > "$T/groups" 2> "$T/groups.err"; grc=$?' \
   'bash "$XPART" --cross-groups "$( [ -n "$DOCUMENT" ] && echo "$K" || echo 2)" > "$T/groups" 2> "$T/groups.err"; grc=$?'
 # XM2: the owner rule off -- a finding two covering groups both report is summed twice. Only the
@@ -463,8 +466,8 @@ mutant "TM1 no-row shard falls back to the self-report" "tuid_norow" \
 mutant "TM2 writer role not checked" "tuid_role tuid_tworoles" \
   '        if (R[j] != "adversary") no(' \
   '        if (0) no('
-# TM3: the real-shaped self id never compared. Only T4 seeds one that differs.
-mutant "TM3 self-reported id never compared" "tuid_selfdiff" \
+# TM3: the real-shaped self id never compared. T4 seeds a toolu_ one that differs, TC1 a call_ one.
+mutant "TM3 self-reported id never compared" "tuid_selfdiff tuid_call" \
   '  if [[ $self =~ $RE_REAL_TUID ]] && [ "$self" != "$tid" ]; then' \
   '  if false; then'
 # TM4: the first of two adversary writers taken. Only T6 seeds two.
@@ -568,6 +571,22 @@ phase_barrier
 true
 
 '
+# BL-596. TM14: a row written under another tree read as this tree's -- the root select matches
+# nothing. TR1's worktree write then credits shard 2 and merges; its alias and no-root twins merge
+# either way.
+mutant "TM14 another tree's row read as this tree's" "tree" \
+  '        | select((.root // "") | type == "string" and . != "" and . != $r)' \
+  '        | select((.root // "") | type == "string" and . != "" and . != $r and false)'
+# BL-597. TM15: the real-shape grammar restated as the toolu_-only literal instead of read from its
+# one declaration. TC1's real-shaped call_ self id is then ignored and that set merges.
+mutant "TM15 real-shape grammar restated toolu_-only" "tuid_call" \
+  'RE_REAL_TUID="$(read_grammar DISPATCH_ID_ERE)"' \
+  "RE_REAL_TUID='^toolu_[0-9A-Za-z]{24}\$'"
+# BL-598. RM4: the re-run start never bound -- the far-from-dispatch case reads as within tolerance.
+# RB1's 1999 start merges; every other --rerun cell already binds within it.
+mutant "RM4 rerun start never bound to its dispatch time" "rerun_bind" \
+  '| if $d > $tol then "FAR\t"' \
+  '| if false then "FAR\t"'
 # ---- END MX MUTANTS
 
 # ------------------------------------------------------------------------------ the reap

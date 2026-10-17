@@ -1161,6 +1161,20 @@ k_pass "$TARGET/shard-recovered/stories-adversarial-p1.md" 1 5 EXIT_CONDITION_NO
 k_pass "$TARGET/shard-recovered/stories-adversarial-p2.md" 2 0 EXIT_CONDITION_MET     2026-09-29T12:00:00Z "$K_IDS"
 repair "$TARGET/shard-recovered/stories-repair-p1.md"
 
+# shard-recovered-call -- THE LOCAL-MODEL LEAD (BL-597): the same recovery, every shard id in the
+# `call_` shape a local model's harness writes into a subagent meta. Must PASS; a toolu_-only arm K
+# read the merged line as carrying no ids. shard-recovered-xyz is its control: ids in no declared
+# shape, which arm K must still FAIL.
+K_IDS_CALL=' 1=call_00000000000000000000000000000001 2=call_00000000000000000000000000000002 cross=call_00000000000000000000000000000003'
+k_world "$TARGET/shard-recovered-call"
+k_pass "$TARGET/shard-recovered-call/stories-adversarial-p1.md" 1 5 EXIT_CONDITION_NOT_MET 2026-09-29T11:00:00Z ""
+k_pass "$TARGET/shard-recovered-call/stories-adversarial-p2.md" 2 0 EXIT_CONDITION_MET     2026-09-29T12:00:00Z "$K_IDS_CALL"
+repair "$TARGET/shard-recovered-call/stories-repair-p1.md"
+k_world "$TARGET/shard-recovered-xyz"
+k_pass "$TARGET/shard-recovered-xyz/stories-adversarial-p1.md" 1 5 EXIT_CONDITION_NOT_MET 2026-09-29T11:00:00Z ""
+k_pass "$TARGET/shard-recovered-xyz/stories-adversarial-p2.md" 2 0 EXIT_CONDITION_MET     2026-09-29T12:00:00Z ' 1=xyz_1 2=xyz_2 cross=xyz_3'
+repair "$TARGET/shard-recovered-xyz/stories-repair-p1.md"
+
 # shard-terminal-unsharded -- THE OFFENDER, one property from the case above: the sharding is
 # on p1 and the TERMINAL pass is the whole-subject one. Must FAIL (K). A validator keyed on the
 # FIRST pass, or on "any pass is sharded", passes it.
