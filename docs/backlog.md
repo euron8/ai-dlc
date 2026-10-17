@@ -324,38 +324,6 @@ Deferred to next batch (operator, batch 235).
 
 verify: manual
 
-## BL-596 — the planning-artifact write ledger drops which tree a write landed in, so a worktree or clone write credits the main tree's shard
-
-**DEFECT.** Filed by peer session ai-dlc-f5 from the BL-536 tip adversary run on `07dfcbfa` (b235-bl536 before its rebase onto 0.792.0), routed by lead ai-dlc-9c. `record_artifact_write` in `core/hooks/ai-dlc-gate-remediation-guard.sh` (`:519`, at origin/main 27467671) normalises its fallback spelling at `:528` — `*/${STATE_DIR_NAME}/planning-artifacts/*` → `_raw_rel="${STATE_DIR_NAME}/${1#*/${STATE_DIR_NAME}/}"` — stripping everything before the state-dir name. A write to `<repo>/.claude/worktrees/wt1/_bmad-output/planning-artifacts/s319/shards/stories-p1/2.md` is therefore recorded as `_bmad-output/planning-artifacts/s319/shards/stories-p1/2.md`, byte-identical to the main tree's shard path, with no trace of the worktree; the same holds for any scratch or rehearsal clone an agent of the session writes. BL-536's merge keys on that path.
-
-Measured by the filer in mktemp worlds driving the real tip merge and hook, every ledger row written by the real hook: shards 1, 3 and cross-1..3 written through the hook; shard 2 present in the main tree with no hook-seen write; adversary `agWT` writes the worktree path above through the hook; the merge on the main tree's shard dir returned rc=0 MERGED with `2=toolu_01RcptWT` (expected: refuse, 2.md has no row for this tree). Control, same harness without the worktree write: refuses with `2.md has no row`.
-
-Owed: the ledger row records which tree it was written in, or the merge refuses a row whose original spelling is not under this project root. This changes the row schema read by `join-remediator-shards.sh`, `merge-adversarial-shards.sh` and `validate-draft-stamps.sh`, which is why it was not folded into BL-536. Receipt: the filer's world above, refusing, with the no-worktree world as the control.
-
-Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
-
-verify: manual
-
-## BL-597 — under a local-model lead the merge writes `call_…` dispatch ids that Check 24 reads as no ids
-
-**DEFECT.** Local-model lead goal (operator ruling: a defect a local lead exposes is a pipeline fix). Filed by peer session ai-dlc-f5 from the same BL-536 tip adversary run on `07dfcbfa`. The harness meta records `toolUseId` in a non-Anthropic shape under a local model: intake found exactly 1 subagent meta on this machine carrying `"toolUseId":"call_` (another project, a local-model session), against 5065 carrying `"toolUseId":"toolu_` in the same glob. With meta and spawn-ledger ids of shape `call_…`, the BL-536 merge returns rc=0 and writes `shard_tool_use_ids: 1=call_1abc …`. Check 24's `k_has_ids` (`core/scripts/validate-adversarial-convergence.sh:1763-1764`, `case " $1" in *=toolu_?*`) answers NO on that line, so arm K treats a correctly derived round as carrying no ids. The merge's own id vocabulary is `toolu_`-only too: `RE_REAL_TUID='^toolu_[0-9A-Za-z]{24}$'` (`07dfcbfa:core/scripts/merge-adversarial-shards.sh:677`), and on origin/main `:585` refuses any `tool_use_id` that is not `toolu_?*`. Before BL-536 a non-`toolu_` self-reported id was refused at the merge; after it, the id passes the merge and is mis-scored downstream.
-
-Measured by the filer: a receipt world whose every shard meta and spawn row carries `call_<k>abc`; the merge, then the `k_has_ids` predicate on its line → NO; control in the same run, the predicate on ` 1=toolu_01RcptX` → yes. Limit: the validator was not run, so the arm-K FAIL is predicted from its predicate, not measured.
-
-Owed: one id vocabulary across the merge, `RE_REAL_TUID` and Check 24 that admits the harness's real id shapes, derived from what metas actually carry. Receipt: the `call_` world passes arm K end to end (the validator run, not the predicate alone), with a malformed id as the control that still fails.
-
-Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
-
-verify: manual
-
-## BL-598 — `merge-adversarial-shards.sh --rerun <shard>@<S>` never checks S against a dispatch time
-
-**NOTE.** Filed by peer session ai-dlc-f5 from the BL-536 tip adversary run on `07dfcbfa` (`--rerun` is documented at `core/scripts/merge-adversarial-shards.sh:68-80` there). S is taken as typed: a far-past S (`1999-01-01T00:00:00Z`) on a normal round merges; a future S (`2999-…`) refuses with `has no row`. Harmless today because the role check is the guard (that gap is BL-536 D1, folded there), but S binds nothing — the same hand-typed-time shape as BL-564's `--since`.
-
-Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
-
-verify: manual
-
 ## BL-583 — the push suite costs about 8 fixture-hours per full run, over 40% in mutant batteries, and no fixture has been judged on value
 
 **DEFECT (efficiency).** Operator-raised, 2026-10-16 ~04:30 EDT: "gating a release is so expensive, like stupidly expensive to run the push suite". Filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]). Assigned to ai-dlc-a6: phase 1 is a read-only census of where kill sets overlap, phase 2 is confirmation in the lead's slots after H-b. ai-dlc-bb's world-cache release already targets the `review-shard-merge-mutants` pole, so this entry does not count that saving twice.
