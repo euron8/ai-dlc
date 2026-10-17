@@ -1079,3 +1079,17 @@ Scope: a session with no grant is silent (`:20-22`), so local-model leads are un
 Owed: either count an `mcp__advisor__consult` call as an attempt (a `tool_use` of that name followed by its result), or state in the deny text that a granted session must use the built-in `advisor`. Receipt: the "grant + MCP only" cell is allowed (or its deny names the built-in tool), and "grant + no attempt" stays denied (control).
 
 verify: manual
+
+## BL-649 — `wait-for-deliverable.sh --dispatch` refuses a local-model lead's `call_` dispatch id
+
+**DEFECT.** Found by ai-dlc-6f; intake re-derived it read-only at origin/main `b9f9fe06`. `core/scripts/wait-for-deliverable.sh:856-891`, `dispatch_epoch_of()`, accepts three id forms (`:862-882`): `toolu_*` is taken as the tool_use_id (`:863`), `*@*` as a named teammate (`:864`), and anything else as a hex agentId, looked up as `agent-<id>.meta.json` (`:873-878`). A `call_<hex>` id passes the charset guard (`:860`) and falls to the agentId arm, which finds no `agent-call_….meta.json` and refuses with "no agent-… meta.json in this session's subagents dir" (`:877`). Passing the agentId instead already works: `:879`'s `toolUseId` extraction accepts `[A-Za-z0-9_]`, so a meta carrying `call_…` resolves. Only the id handed directly fails.
+
+Real shape (6f's count, not re-taken: it is a transcript sweep and needs a slot): subagent metas on this machine carry `"toolUseId":"call_45aba045bf78553ca703fc8694de7577"` in 1 meta, under a local-model session, against 5122 carrying `toolu_`. A local-model lead is an operator goal, so this is a pipeline fix.
+
+NOT measured: `wait-for-deliverable.sh` was not driven with a `call_` id; the refusal is read from the case arms.
+
+Owed: `dispatch_epoch_of` takes a `call_` id as a tool_use_id, as it does `toolu_`. Read the id grammar from the single declaration BL-597 introduces (`DISPATCH_ID_PREFIXES="toolu_ call_"` and `DISPATCH_ID_ERE` in `core/scripts/validate-adversarial-convergence.sh` on `b235-bl596-598`, absent from main today), never a second literal. Receipt: `--dispatch call_<32 hex>` against a seeded ledger row resolves its epoch, and a non-prefixed hex id still takes the agentId arm (control).
+
+Related: BL-597 (the id grammar's declaration).
+
+verify: manual
