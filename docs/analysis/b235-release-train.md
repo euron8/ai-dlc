@@ -1022,3 +1022,6 @@ The train log is now TRACKED at docs/analysis/b235-release-train.md, on the oper
 ## 2:31 PM
 The train-log docs commit LANDED as 06ae8b85 (PR #1186). Verified by content: the diff against a7281089 is rc 0, VERSION is 0.821.0, the parent is 5e045cd4, and the control diff against 5e045cd4 is rc 1. The push ran the suite rather than skipping it, since the new file had no recorded pass: 22 PASS, 0 FAIL. GATE CLOSED was sent to c9 and f7.
 Carrier for later appends: this worktree (/Users/n8/git/ai-dlc-wt-train, branch b235-train based on origin/main) is the lead docs tree for the rest of the batch. Appends are committed here and ride c9's release as a docs-only range under the standing intake rule. Then the batch close carries the final entries. On main the log runs one landing behind by design.
+
+## 2:31 PM
+c9 verified intake-26 on main (BL-605/656 byte-equal to 7bc0bd40; verify: 56) and deleted it. c9 now holds no intake branches. b235-c9-build is rebased onto 06ae8b85 at 9369fe17 (6 commits, range-diff 6/6 identical; backup b235-c9-build-pre at c5350be5). H2 is still running, and slot (b) is next. c9 will ask for the train-log range before cutting its release commit.
