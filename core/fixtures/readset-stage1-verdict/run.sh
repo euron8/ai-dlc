@@ -569,6 +569,47 @@ wrap_ok() {
   return "$f"
 }
 
+# THE WAITS BELOW ARE KEYED ON NO PROGRESS, NEVER ON ELAPSED TIME. Each waits for one event the
+# wrapper or its stub produces (a `ready` file, a pgid file, a process exiting), and between start
+# and that event both write files under the run's own `$R`: the wrapper's map snapshot, ledger
+# line, pgid and deriver.log, the stub's env dump, map copy and pid list. `await` polls the event;
+# it gives up only when the process that should produce it has EXITED first (a binary fact) or
+# when nothing under `$R` has changed for STALL_IDLE seconds, and the caller then refuses -- exit
+# 2, never a FAIL. The wrapper's load sampler appends `load.tsv` every 15s whatever else happens,
+# so that file (and the sampler's pid file) is not progress, or a wedged run would never refuse.
+# The 120s wall bounds these replaced turned a loaded box into a stub that "never started".
+# STALL_IDLE is a margin over one observed step, not a measurement; a refusal costs a re-run, never a verdict.
+STALL_IDLE=30
+AWAIT_WHY=""
+# await <scope-dir> <watch-pid | -> <what> <test...>: 0 once <test> holds; 1 with AWAIT_WHY set.
+await() {
+  local sc="$1" wpid="$2" what="$3" mk="$WORK/await.mark" n=0 idle=0
+  shift 3
+  : > "$mk"
+  while ! "$@"; do
+    if [ "$wpid" != - ] && ! kill -0 "$wpid" 2>/dev/null; then
+      "$@" && return 0
+      AWAIT_WHY="process $wpid exited before $what"; return 1
+    fi
+    sleep 0.1; n=$((n + 1))
+    [ "$((n % 10))" -eq 0 ] || continue
+    : > "$mk.next"
+    if [ -n "$(find "$sc" -newer "$mk" ! -name load.tsv ! -name sampler.pid -print -quit 2>/dev/null)" ]; then
+      mv "$mk.next" "$mk"; idle=0
+    else
+      idle=$((idle + 1))
+      if [ "$idle" -ge "$STALL_IDLE" ]; then
+        AWAIT_WHY="neither $what nor any file under $sc (load.tsv aside) advanced for ${STALL_IDLE}s"; return 1
+      fi
+    fi
+  done
+}
+is_file() { [ -f "$1" ]; }
+ready_and_pgid() { [ -f "$1" ] && [ -s "$2" ]; }
+pid_gone() { ! kill -0 "$1" 2>/dev/null; }
+group_gone() { ! kill -0 -- "-$1" 2>/dev/null; }
+all_gone() { local p; while IFS= read -r p; do kill -0 "$p" 2>/dev/null && return 1; done < "$1"; return 0; }
+
 # wrap_term <wrapper-source> <tag>: the wrapper is TERMed while the trap-less stub holds two
 # background children. Prints the property lines; returns 1 if any failed.
 wrap_term() {
@@ -579,13 +620,22 @@ wrap_term() {
   AI_DLC_READSET_STAGE1_LEDGER="$L" STUB_MODE=hang STUB_PIDS="$R/pids" STUB_READY="$R/ready" \
     bash "$R/repo/scripts/readset-stage1-run.sh" "$rd" > "$R/out" 2>&1 &
   wp=$!
-  # 120s: a bound sized to a HANG, not to the expected start. It costs a passing run nothing and a
-  # tight one reports a loaded box as a stub that never started.
-  n=0; while [ ! -f "$R/ready" ] && [ "$n" -lt 1200 ]; do sleep 0.1; n=$((n + 1)); done
-  [ -f "$R/ready" ] || { kill "$wp" 2>/dev/null; cat "$R/pids" >> "$ORPHANS"; broken "[$t] the stub never signalled ready"; }
+  await "$R" "$wp" "the stub's ready file" is_file "$R/ready" \
+    || { kill "$wp" 2>/dev/null; cat "$R/pids" >> "$ORPHANS"; broken "[$t] the stub never signalled ready: $AWAIT_WHY"; }
   cat "$R/pids" >> "$ORPHANS"
-  kill -TERM "$wp"; wait "$wp"; rc=$?
-  sleep 0.5
+  kill -TERM "$wp"
+  await "$R" - "the TERMed wrapper's exit" pid_gone "$wp" \
+    || { kill -KILL "$wp" 2>/dev/null; broken "[$t] the TERMed wrapper did not exit: $AWAIT_WHY"; }
+  wait "$wp"; rc=$?
+  # THE ONE WALL BOUND, AND WHY IT CANNOT BE PROGRESS. The wrapper's finish() TERMs the stub's whole
+  # process group but waits only on the stub itself, so its two `sleep 300` children can still be
+  # dying when the wrapper returns. A signalled process exiting is a single step with nothing
+  # observable in between, so nothing can be keyed on progress here; the property read is binary
+  # (every recorded pid gone, or one alive), and the bound only says how long a pid may take to
+  # die. It replaces a fixed `sleep 0.5`, which read a loaded box as a surviving tree. It must stay
+  # far below the children's 300s, or a group kill that never happened would pass once they exit
+  # on their own.
+  n=0; while ! all_gone "$R/pids" && [ "$n" -lt 300 ]; do sleep 0.1; n=$((n + 1)); done
   [ "$rc" = 143 ] || { echo "    [$t] the TERMed wrapper exited $rc, not 143"; f=1; }
   cmp -s "$R/repo.map.orig" "$R/repo/.ai-dlc-fixture-readsets.tsv" || { echo "    [$t] the map was not restored after TERM"; f=1; }
   grep -qx 'stub-wrote' "$rd/root/w/map.written" 2>/dev/null || { echo "    [$t] the stub never rewrote the map"; f=1; }
@@ -638,8 +688,8 @@ wrap_kill9() {
   AI_DLC_READSET_STAGE1_LEDGER="$L" STUB_MODE=hang-late STUB_PIDS="$R/pids" STUB_READY="$R/ready" \
     bash "$R/repo/scripts/readset-stage1-run.sh" "$rd" > "$R/out" 2>&1 &
   wp=$!
-  n=0; while { [ ! -f "$R/ready" ] || [ ! -s "$rd/pgid" ]; } && [ "$n" -lt 1200 ]; do sleep 0.1; n=$((n + 1)); done
-  [ -f "$R/ready" ] && [ -s "$rd/pgid" ] || { kill "$wp" 2>/dev/null; cat "$R/pids" >> "$ORPHANS"; broken "[$t] the stub never signalled ready, or the wrapper wrote no pgid"; }
+  await "$R" "$wp" "the stub's ready file and the wrapper's pgid file" ready_and_pgid "$R/ready" "$rd/pgid" \
+    || { kill "$wp" 2>/dev/null; cat "$R/pids" >> "$ORPHANS"; broken "[$t] the stub never signalled ready, or the wrapper wrote no pgid: $AWAIT_WHY"; }
   cat "$R/pids" >> "$ORPHANS"; cat "$rd/sampler.pid" >> "$ORPHANS" 2>/dev/null
   # CONTROL: RUN_DIR/pgid is the stub's own pid, which leads its process group (third STUB_PIDS line).
   pg="$(cat "$rd/pgid")"; sp="$(sed -n 3p "$R/pids")"
@@ -659,8 +709,9 @@ wrap_kill9() {
   [ ! -e "$R/run2" ] || { echo "    [$t] (a) the refused run beside the orphan created its RUN_DIR"; f=1; }
   # (b) end the orphan's two children: its `wait` returns, it writes the map LAST and exits.
   sed -n '1,2p' "$R/pids" | while IFS= read -r p; do kill "$p" 2>/dev/null; done
-  n=0; while kill -0 -- "-$pg" 2>/dev/null && [ "$n" -lt 1200 ]; do sleep 0.1; n=$((n + 1)); done
-  kill -0 -- "-$pg" 2>/dev/null && broken "[$t] the orphaned process group $pg did not exit after its children were ended"
+  # Its progress between here and its exit is the map write: `root/w/map.written` and the repo map.
+  await "$R" - "the orphaned group $pg's exit" group_gone "$pg" \
+    || broken "[$t] the orphaned process group $pg did not exit after its children were ended: $AWAIT_WHY"
   grep -qx 'stub-wrote' "$rd/root/w/map.written" 2>/dev/null || { echo "    [$t] (b) the orphan never reached its final map write"; f=1; }
   cmp -s "$R/repo.map.orig" "$R/repo/.ai-dlc-fixture-readsets.tsv" && { echo "    [$t] (b) the map is clean after the orphan exited, so the dirty-tree refusal proves nothing"; f=1; }
   out="$(AI_DLC_READSET_STAGE1_LEDGER="$L" STUB_MODE=ok bash "$R/repo/scripts/readset-stage1-run.sh" "$R/run3" 2>&1)"; rc2=$?

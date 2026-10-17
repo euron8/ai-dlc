@@ -28,7 +28,8 @@ printf '  cells %s\n' "$nc"
 
 printf 'HERMETIC-CONSUMED %s\n' "$HOOK"
 [ -x "$HOOK" ] || bad "hook is not executable: $HOOK -- settings.json invokes it as a bare path"
-GOT="$(score "$HOOK" "$W/failed.shipped")"
+# NET_CELLS=1 for the shipped hook only: rr-never pays the 10s safety net once, here (lib.sh REREAD).
+GOT="$(NET_CELLS=1 score "$HOOK" "$W/failed.shipped")"
 if [ -z "$GOT" ]; then
   ok "shipped hook passes every arm (PUSH REASON NOGRANT WITHDRAWN ORDER ERRCLEAR UNAV REARM MERGE CLOSE DELETE MENTION UPDATE UPDATEREF UPDATECUT WRAP STACK BASHC QUOTEDPAT QUOTEDALT PATHGIT BODY QUOTEDC QUOTEDENV GHREPO MCPNAME DETACHED MATE MATEABSENT MATEPUSH MATEPATH MATEREWRITE REDISPATCH DENIED ENVELOPE FAILED REREAD WINDOW BMADONLY SELF SELFLAST PERKIND TWRITE TWRITEREAD GATELOG NOVERIFY HDRONLY FAILOPEN EXIT)"
 else

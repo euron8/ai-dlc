@@ -2,6 +2,7 @@ awk
 basename
 bash
 cat
+chmod
 cmp
 cp
 date
@@ -12,6 +13,7 @@ mkdir
 mktemp
 perl
 pgrep
+ps
 python3
 rm
 sed

@@ -103,14 +103,24 @@ r541() {
   ! grep -q '^DELIVERED part.md' o.txt && ! grep -q '^DELIVERED bare.md' o.txt
 }
 
+# "RETURNS AT ONCE" IS READ AS "NEVER ENTERED A SLEEP", NOT AS A NUMBER OF SECONDS. The subject's
+# only `sleep` is its poll loop's, so a recording `sleep` first on PATH answers the question as a
+# yes/no fact, whatever the box's load. The stub is shown to record (one `sleep 0` through the same
+# PATH) before its empty log is read as an absence; a stub that never ran cannot pass as a beat
+# that never slept.
 r547() {
-  local d s0 t0 n0 n1
+  local d s0 n0 n1 sb
   d="$(mktemp -d "$ROOT/w.XXXXXX")" || exit 9; cd "$d" || exit 9; s0=$(( $(date +%s) - 30 ))
   printf 'h\nseat-complete: s\n\n  \n' > tb.md
   printf 'h\nseat-complete: s\n- finding after\n' > nl.md
-  t0=$(date +%s)
-  env AI_DLC_WAIT_SETTLE_SECS=60 AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" --status --complete --since "$s0" tb.md nl.md absent.md > o.txt 2>&1 || return 1
-  [ $(( $(date +%s) - t0 )) -le 2 ] || return 1
+  sb="$ROOT/stub547"; mkdir -p "$sb/bin" || exit 9; : > "$sb/log"
+  printf '#!%s\nprintf "%%s\\n" "$*" >> "%s"\nexec "%s" "$@"\n' "$(command -v bash)" "$sb/log" "$(command -v sleep)" > "$sb/bin/sleep" || exit 9
+  chmod +x "$sb/bin/sleep" || exit 9
+  env PATH="$sb/bin:$PATH" sleep 0 || exit 9
+  [ "$(awk 'END { print NR }' "$sb/log")" = 1 ] || exit 9
+  : > "$sb/log"
+  env PATH="$sb/bin:$PATH" AI_DLC_WAIT_SETTLE_SECS=60 AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" --status --complete --since "$s0" tb.md nl.md absent.md > o.txt 2>&1 || return 1
+  [ ! -s "$sb/log" ] || return 1
   [ ! -e _bmad-output ] || return 1
   grep -q '^UNSETTLED tb.md' o.txt && grep -q '^UNFINISHED nl.md' o.txt && grep -q '^WAITING   absent.md' o.txt \
     && ! grep -q '^DELIVERED' o.txt || return 1

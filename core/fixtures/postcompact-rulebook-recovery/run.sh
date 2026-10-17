@@ -1914,6 +1914,39 @@ fi
 
 fi  # whose-recovery arms present
 
+# A10. THE NET IS NOT A DENY (BL-630). R owed, and the incoming call's own `tool_use` line NEVER
+# lands (acall always appends it, so no predicate above can reach this branch): the 10s safety net
+# expires with R_SEEN=0, a transcript the stage cannot read. It must ALLOW, say why on stderr, and
+# not count a refusal -- `denies=` unchanged. The pre-BL-630 gate denied here, so a correct advisor
+# call whose line was merely late (load makes it later) was refused. Outside APREDS on purpose:
+# it pays the full 10s by construction, once for the gate and once for its mutant.
+a_net() {
+  _p="$(a_world "$1" grant boundary digest)"
+  [ -e "$_p/$OW" ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the advisor stage did not arm\n'; return; }
+  _d0="$(sed -n 's/^denies=//p' "$_p/$OW")"
+  _e="$_p/net.err"
+  d="$(jq -n --arg tp "$_p/t.jsonl" '{tool_name:"Agent",session_id:"sess-A",transcript_path:$tp,tool_use_id:"tin-never",tool_input:{}}' \
+    | CLAUDE_PROJECT_DIR="$_p" bash "$1" 2>"$_e" \
+    | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null)"
+  [ "$d" = deny ] && { printf 'FAIL:an unseen call was denied when the safety net expired\n'; return; }
+  grep -q 'did not land within the 10s safety net' "$_e" || { printf 'FAIL:the stand-down gave no stderr reason\n'; return; }
+  [ -e "$_p/$OW" ] || { printf 'FAIL:the stand-down removed the owed file, so R is forgotten for the next dispatch\n'; return; }
+  [ "$(sed -n 's/^denies=//p' "$_p/$OW")" = "$_d0" ] || { printf 'FAIL:the stand-down counted a refusal\n'; return; }
+  printf 'PASS\n'
+}
+r_net="$(a_net "$GATE")"
+if [ "$r_net" = PASS ]; then ok "R: the safety net's expiry with the incoming call's line unseen allows, uncounted, with a stderr reason"
+else bad "R: the safety net's expiry with the incoming call's line unseen — ${r_net#FAIL:}"; fi
+MR_NET="$WORK/gate-adv-net.sh"
+awk 'index($0,"if [ \"${R_SEEN:-0}\" != 1 ]; then"){print "  if false; then"; next} 1' "$GATE" > "$MR_NET"
+if cmp -s "$GATE" "$MR_NET" || ! bash -n "$MR_NET" 2>/dev/null; then
+  bad "FIXTURE STALE: the time-only-ceiling mutant did not apply"
+elif [ "$(a_net "$MR_NET")" = PASS ]; then
+  bad "MUTANT KILLED NOTHING: a gate whose clock denies an unseen call still passes the net arm"
+else
+  ok "mutant: a gate whose 10s ceiling denies an unseen call fails the net arm"
+fi
+
 fi  # GATE present
 
 # --- Assertion 23: the SECOND mandate never renders prose where a path goes --

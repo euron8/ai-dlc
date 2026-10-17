@@ -47,7 +47,8 @@
 # own tree and makes one full run of the fixture; the only shared prerequisite is C1,
 # which every shard repeats (C0 and the premise run in shard a only). So the partition balances the two things that
 # vary: a validate-spawn-ledger.sh mutant also pays the un-bypassed self-probe, and M13 also pays
-# the D6 watchdog's 15-second timeout on the hang it re-creates. Round v3.3 dealt M19-M25 three,
+# D6's CPU cap on the spin it re-creates (`ulimit -t`, 10 CPU-seconds; it was a 15s wall timeout
+# when this deal was measured, then 120s, and is now neither). Round v3.3 dealt M19-M25 three,
 # two and two, and bypassed the probe in EVERY copy: re-measured solo, one after another on this
 # machine, a 135s, b 130s, c 145s (c carries M13). Round v3.4 re-measured the three before adding
 # anything -- a 139s, b 135s, c 143s -- and dealt M26 and M27 both to b, the lowest.
@@ -55,7 +56,7 @@
 # Round v3.6 (four shards) dealt seven apiece. Cost per mutant is one full run of the fixture plus,
 # for a `byp` 1 mutant, the un-bypassed self-probe; `byp` 0 mutants (M5 M6 M8 M14 M15 M16 M20 M27)
 # skip it. Every shard holds seven mutants: five byp-1 and two byp-0 (a: M5 M6, b: M8 M14,
-# c: M15 M16, d: M20 M27), and M13's 15-second watchdog hang sits in c. The old b (452s against
+# c: M15 M16, d: M20 M27), and M13's capped spin sits in c. The old b (452s against
 # a 299s and c 291s) held ten mutants against nine and nine, seven of them byp-1 against six and
 # seven, so its excess is only partly explained by count; if a shard is still the slowest after
 # this deal, find the individually slow mutant rather than moving counts again.
@@ -238,9 +239,60 @@ else
   echo "FIXTURE BROKEN: the probe-bypass control did not pass (rc=$c1)" >&2; sed -n '1,40p' "$WORK/c1.out" >&2; exit 2
 fi
 
+# --- THE SCORING, FACTORED SO IT CAN BE PROBED ---------------------------------------------
+# A FIXTURE THAT REFUSES HAS GIVEN NO VERDICT, SO ITS REFUSAL IS PASSED THROUGH, NEVER SCORED. The
+# fixture under test exits 2 only on a FIXTURE ERROR/BROKEN path -- its arms end in 0 or 1 -- and
+# one of those paths is D6's no-progress refusal, which fires on a wedged harness, not on the
+# mutation. Read as a FAIL row, a refusal would put a red mutant on the push for a box that was
+# merely stuck. So rc 2 is collected and the battery itself refuses at the end, exit 2, naming
+# every mutant whose verdict was never read. Every other rc is scored exactly as before: rc 1
+# with the declared red set is a kill, and a missing verdict line on rc 0 or 1 stays a FAIL.
+# score_mutant reads nothing but its arguments and the file it is given, prints one line, and
+# returns 0 killed, 1 FAIL, 2 refusal.
+score_mutant() { # <id> <want> <rc> <fixture output> <probe verdict>
+  local id="$1" want="$2" rc="$3" o="$4" pv="$5" got why
+  if [ "$rc" -eq 2 ]; then
+    why="$(grep -m 1 -E 'FIXTURE (BROKEN|ERROR)' "$o" 2>/dev/null)"
+    printf '[%s] REFUSED -- the fixture under test exited 2 and gave no verdict on this mutant: %s\n' "$id" "${why:-no refusal line}"
+    return 2
+  fi
+  if ! grep -q '^fold-architect-ledger-join: [0-9]* ok, [0-9]* FAIL' "$o"; then
+    printf '[%s] the fixture produced no verdict line (rc=%s) — a harness failure, not a kill\n' "$id" "$rc"; return 1
+  fi
+  got="$(red_set "$o")"
+  if [ "$rc" -ne 0 ] && [ "$got" = "$want" ]; then
+    printf '[%s] KILLED by exactly {%s}; subject self-probe on the un-bypassed mutant: %s\n' "$id" "$want" "$pv"; return 0
+  elif [ -z "$got" ]; then
+    printf '[%s] SURVIVED (rc=%s); subject self-probe: %s\n' "$id" "$rc" "$pv"; return 1
+  fi
+  printf '[%s] killed by {%s}, declared {%s} — entangled or mis-owned (rc=%s)\n' "$id" "$got" "$want" "$rc"; return 1
+}
+# [MS] THE SCORING, PROBED ON SEEDED OUTPUTS in every shard, both directions. A refusal (rc 2, a
+# FIXTURE BROKEN line, no verdict line) must come back 2 -- never 1, which is the FAIL row this
+# change exists to prevent. Its near-misses, one property apart: rc 1 with the declared red set is
+# still a KILL (0); rc 1 with a different red set, rc 0 with nothing red, and rc 1 with no verdict
+# line are each still a FAIL (1). A scorer that refused everything, or scored everything as a FAIL,
+# cannot produce `2 0 1 1 1`.
+MS="$WORK/ms"; mkdir -p "$MS" || { echo "FIXTURE ERROR: cannot create $MS" >&2; exit 2; }
+printf '%s\n' "FIXTURE BROKEN: [D6--ledger] the subject neither exited nor advanced" > "$MS/refused"
+printf '%s\n' '  FAIL  [A-v] seeded' 'fold-architect-ledger-join: 71 ok, 1 FAIL, 0 stood down' > "$MS/killed"
+printf '%s\n' 'fold-architect-ledger-join: 72 ok, 0 FAIL, 0 stood down' > "$MS/clean"
+got_ms=""
+score_mutant MS-refusal "A-v" 2 "$MS/refused" n/a > /dev/null; got_ms="$got_ms $?"
+score_mutant MS-kill "A-v" 1 "$MS/killed" n/a > /dev/null; got_ms="$got_ms $?"
+score_mutant MS-misowned "A-vi" 1 "$MS/killed" n/a > /dev/null; got_ms="$got_ms $?"
+score_mutant MS-survived "A-v" 0 "$MS/clean" n/a > /dev/null; got_ms="$got_ms $?"
+score_mutant MS-noverdict "A-v" 1 "$MS/refused" n/a > /dev/null; got_ms="$got_ms $?"
+if [ "$got_ms" = " 2 0 1 1 1" ]; then
+  ok "[MS] the scoring passes a refusal (rc 2) through as a refusal, and still scores rc 1 as a kill, a mis-owned kill, a survivor and a missing verdict as before"
+else
+  bad "[MS] the scoring probe returned {$got_ms }, want { 2 0 1 1 1 } (refusal, kill, mis-owned, survived, no verdict)"
+fi
+
 # --- MUTANTS --------------------------------------------------------------------------------
 # run_mutant <id> <owned arms, sorted, space-separated> <file> <bypass 1|0> <old> <new> [<old2> <new2>]
 N=0
+REFUSED=""
 run_mutant() {
   local id="$1" want="$2" rel="$3" byp="$4" t got rc pv="n/a"
   case " $MINE " in *" ${id%%-*} "*) : ;; *) return ;; esac
@@ -256,17 +308,13 @@ run_mutant() {
   [ "$byp" = 1 ] && pv="$(probe_verdict "$t")"
   mut "$t/$VSL_REL" "$BYPASS_OLD" "$BYPASS_NEW" || { bad "[$id] probe bypass DID NOT APPLY"; return; }
   drive_fx "$t" "$WORK/m$N.out"; rc=$?
-  if ! grep -q '^fold-architect-ledger-join: [0-9]* ok, [0-9]* FAIL' "$WORK/m$N.out"; then
-    bad "[$id] the fixture produced no verdict line (rc=$rc) — a harness failure, not a kill"; return
-  fi
-  got="$(red_set "$WORK/m$N.out")"
-  if [ "$rc" -ne 0 ] && [ "$got" = "$want" ]; then
-    ok "[$id] KILLED by exactly {$want}; subject self-probe on the un-bypassed mutant: $pv"
-  elif [ -z "$got" ]; then
-    bad "[$id] SURVIVED (rc=$rc); subject self-probe: $pv"
-  else
-    bad "[$id] killed by {$got}, declared {$want} — entangled or mis-owned (rc=$rc)"
-  fi
+  local line sc
+  line="$(score_mutant "$id" "$want" "$rc" "$WORK/m$N.out" "$pv")"; sc=$?
+  case "$sc" in
+    0) ok "$line" ;;
+    2) REFUSED="$REFUSED $id"; echo "$line" >&2 ;;
+    *) bad "$line" ;;
+  esac
 }
 
 run_mutant M1-drop-ledger-join "A-sprint A-unknown A-v A-vi D1-1" "$VSL_REL" 1 \
@@ -450,6 +498,10 @@ if once_ok "$NC0" "$NPREM" "$wantp"; then
   ok "[J2] C0 ran $NC0 and the M6 premise ran $NPREM in shard '$GROUP' (M6 dealt here: $wantp)"
 else
   bad "[J2] shard '$GROUP': C0 ran $NC0, premise ran $NPREM, expected $wantp each (M6 dealt here: $wantp)"
+fi
+if [ -n "$REFUSED" ]; then
+  echo "$NAME: FIXTURE BROKEN: the fixture under test refused (exit 2) for {${REFUSED# }}; no verdict on those mutants is readable, and a refusal is re-run, never scored" >&2
+  exit 2
 fi
 echo "$NAME: $N mutants, $fails FAIL"
 [ "$fails" -eq 0 ]

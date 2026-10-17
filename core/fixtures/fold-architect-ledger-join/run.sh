@@ -448,28 +448,53 @@ residue "$SLOT/$RES" "$ARCH_AFTER" "./$STORY"
 drive --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF
 expect D5-dot 0 "PASS: $ONE -> $RES" "" 0 "residue artifact: with a leading ./ -> PASS"
 
-# --- D6: a value-taking flag given last with no value exits 2, under a watchdog -----------------
-# A background run plus a sentinel the run writes on exit; never a process-table grep. A timeout
-# reaps the tree (the subshell's children, then the subshell) and is a hang FAIL, never a SKIP.
+# --- D6: a value-taking flag given last with no value exits 2 ----------------------------------
+# A background run plus a sentinel the run writes on exit; never a process-table grep.
 #
-# THE BOUND IS SIZED TO A HANG, NOT TO THE EXPECTED RUN. A correct run returns as soon as the parse
-# refuses; the watchdog only costs time when it fires, so a generous one costs a passing run nothing.
-# A tight one -- it was 15s -- turns a loaded box into a reported hang in a program that parsed fine.
+# THE DEFECT IS A SPIN, AND A SPIN IS READ AS A BINARY FACT: THE SUBJECT DIES OF ITS CPU CAP. The
+# pre-fix parse left `$#` at 1 and looped forever on builtins, burning CPU and writing nothing.
+# The subject runs under `ulimit -t D6_CPU`, so a spin ends in SIGXCPU (rc 152) and the arm reads
+# rc != 2 -- a FAIL owned by this arm, which is how the battery's M13 is killed. A correct refusal
+# costs about 2ms of CPU (measured), so the cap is three orders of magnitude clear of it, and CPU
+# seconds are the subject's own work: load stretches the wall clock it takes to spend them, never
+# the amount. The 120s wall bound this replaced read a loaded box as a HANG.
+#
+# THE WATCHDOG IS A REFUSAL KEYED ON NO PROGRESS. A subject that BLOCKS -- burning no CPU, so the
+# cap never fires -- would wedge the gate. Every second the loop asks whether the subject has
+# ADVANCED: its output file `d6<flag>.out` grew, or its CPU time (`ps -o time=` on the pid it
+# recorded) moved. A spinning subject advances its CPU time on every check however loaded the box
+# is, and so always reaches its cap; only a subject that has neither exited nor advanced for
+# D6_IDLE seconds is reaped and the fixture refuses, exit 2. That is a harness that wedged, not a
+# verdict about the parse, so it is never a FAIL row. D6_IDLE is a margin over one observed step, not a measurement; a refusal costs a re-run, never a verdict.
+D6_CPU=10
+D6_IDLE=30
 for flag in --ledger --sprint --settings --probe --variant --route --snapshot; do
-  o="$WORK/d6${flag}.out"; s="$WORK/d6${flag}.rc"
-  ( bash "$VSL" --fold-architect "$WORK/x/fold-architecture-z.md" "$WORK/x/bug-fix-oneshot-z.md" "$flag" \
-      > "$o" 2>&1; echo $? > "$s" ) &
-  wpid=$!; n=0
-  while [ ! -s "$s" ] && [ "$n" -lt 1200 ]; do sleep 0.1; n=$((n+1)); done
-  if [ ! -s "$s" ]; then
-    pkill -P "$wpid" 2>/dev/null; kill "$wpid" 2>/dev/null; wait "$wpid" 2>/dev/null
-    bad "[D6$flag] HANG: $flag with no value did not exit within 120s"
-    continue
-  fi
+  o="$WORK/d6${flag}.out"; s="$WORK/d6${flag}.rc"; pf="$WORK/d6${flag}.pid"
+  : > "$o"
+  ( ulimit -t "$D6_CPU"
+    bash "$VSL" --fold-architect "$WORK/x/fold-architecture-z.md" "$WORK/x/bug-fix-oneshot-z.md" "$flag" \
+      > "$o" 2>&1 < /dev/null &
+    echo "$!" > "$pf"; wait "$!"; echo $? > "$s" ) 2>/dev/null &
+  wpid=$!; n=0; idle=0; lsz=""; lcpu=""
+  while [ ! -s "$s" ] && kill -0 "$wpid" 2>/dev/null; do
+    sleep 0.1; n=$((n+1))
+    [ "$((n % 10))" -eq 0 ] || continue
+    sz="$(wc -c < "$o" 2>/dev/null | tr -d ' ')"
+    cpu="$(ps -o time= -p "$(cat "$pf" 2>/dev/null)" 2>/dev/null | tr -d ' ')"
+    if [ "$sz" != "$lsz" ] || [ "$cpu" != "$lcpu" ]; then lsz="$sz"; lcpu="$cpu"; idle=0; continue; fi
+    idle=$((idle+1))
+    if [ "$idle" -ge "$D6_IDLE" ]; then
+      sp="$(cat "$pf" 2>/dev/null)"; [ -n "$sp" ] && { pkill -9 -P "$sp" 2>/dev/null; kill -9 "$sp" 2>/dev/null; }
+      pkill -P "$wpid" 2>/dev/null; kill "$wpid" 2>/dev/null; wait "$wpid" 2>/dev/null
+      echo "FIXTURE BROKEN: [D6$flag] the subject neither exited nor advanced its output file $o or its CPU time for ${D6_IDLE}s; no verdict on the parse is readable" >&2
+      exit 2
+    fi
+  done
   wait "$wpid" 2>/dev/null
-  frc="$(cat "$s")"
+  frc="$(cat "$s" 2>/dev/null)"
   if [ "$frc" = 2 ] && grep -qF -- "FAIL: $flag takes" "$o"; then ok "[D6$flag] $flag given last with no value -> exit 2"
-  else bad "[D6$flag] $flag given last with no value -> exit 2 -- rc=$frc"; fi
+  elif [ "$frc" = 152 ]; then bad "[D6$flag] $flag given last with no value SPUN until its ${D6_CPU}s CPU cap killed it (rc=152), never refusing"
+  else bad "[D6$flag] $flag given last with no value -> exit 2 -- rc=${frc:-none}"; fi
 done
 
 # --- D3: the retired-pin remedy on a fold residue says the RESIDUE is wrong --------------------

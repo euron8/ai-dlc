@@ -17,6 +17,7 @@ mkdir
 mktemp
 mv
 pkill
+ps
 python3
 rm
 rmdir
@@ -25,3 +26,4 @@ sh
 sleep
 sort
 tr
+wc

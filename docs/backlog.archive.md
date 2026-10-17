@@ -34945,3 +34945,67 @@ Owner: ai-dlc-53, closed by BL-631.
 
 verify: manual
 
+## BL-592 — the shard-mutant batteries' per-scorer SCORER_BOUND=900 under POOL=8 times out under gate contention with no defect present
+
+**DEFECT.** Filed on ai-dlc-f5's report, routed by ai-dlc-b8. `core/fixtures/remediator-shard-join-mutants/run.sh:185-186`, `review-shard-merge-mutants/run.sh:177-178` and `adversarial-shard-merge-mutants/run.sh:103-104` each set `POOL=8` and `SCORER_BOUND=900`; a scorer still running past the bound is killed and scored `TIMEOUT -- the scorer ran past 900s and was killed; no verdict`, which fails the unit (`:213/:231`, `:205/:223`, `:131/:149`). The bound is wall clock, so under a loaded gate (pool of 12 fixtures each running 8 scorers) a scorer can exceed it with no defect in the subject; ai-dlc-f5 reports `adversarial-shard-merge-mutants` failing exactly this way in batch 235. The `-b/-c/-d` shards of the first two carry the same runner. A false red on a release gate costs a full re-push.
+
+**LANDED (v0.820.0, verified 05f9d17b).** The scorer watchdog in apply-self-overwrite-, remediator-shard-join-, review-shard-merge- and self-update-fixture-log-mutants keys on no progress: a scorer with no fresh file under its progress marker or work dir for SCORER_IDLE=300 s is refused (FIXTURE BROKEN, exit 2), never scored TIMEOUT. adversarial-shard-merge-mutants carries the same watchdog from v0.813.0. Arm [MW] drives the real `slot()` at SCORER_POLL=1 / SCORER_IDLE=4: a stub that advances for ~9 s finishes unstalled, and a stub that writes nothing is stalled with its recorded pid dead. Slot: every shard of the four batteries ok in one concurrent wave, [MW] ok in shard a of each and absent elsewhere.
+
+Owed: a bound that separates "hung" from "slow under load" (e.g. CPU time, or progress-since-last-check, rather than wall clock), or a bound derived from the unit's recorded cost; a probe scorer that is slow but progressing under an artificially low bound must not be scored TIMEOUT, with a genuinely hung scorer as the control that still is.
+
+verify: manual
+
+## BL-630 — advisor-gate's re-read ceiling is a hardcoded 10 s of wall clock, so a correct advisor line that lands late on a loaded box is denied, in consumers as well as the fixture
+
+**DEFECT.** Filed by ai-dlc-4e [9b62de] under the operator's load directive (BL-616), assigned by lead ai-dlc-9c; intake re-derived it read-only at origin/main `f4ca6764`.
+- `core/hooks/ai-dlc-advisor-gate.sh:579` sets the ceiling: `case "${ADVISOR_GATE_REREADS:-2}" in 0) _cap=0 ;; 1) _cap=2 ;; *) _cap=10 ;; esac`.
+- `:581` loops `while [ "$V" != allow ] && [ "${SEEN:-0}" != 1 ] && [ $((SECONDS - _t0)) -lt "$_cap" ]`, re-scanning every 0.25 s until the incoming call's own line is seen or 10 s pass.
+- The only knob is stricter-only (`:17`, `:157`), so neither a fixture nor a consumer can widen it.
+- The hook's own comment (`:577-578`) says a scan's cost "grows with the transcript and the load" (0.35 s solo on a 4432-line graph prefix; 4.73 s for 2 re-reads on graph's 815-line deny). Under load, fewer re-reads fit in the 10 s, and the transcript write being waited for lands later too.
+- The hook ships to consumers: `templates/` registers it (1 file).
+
+**LANDED (v0.820.0, verified f5876dc4).** advisor-gate denies only when the call's own `tool_use` line is on disk (SEEN); the 10 s re-read is a net. OPERATOR RULING R1: at net expiry with SEEN=0 the hook allows with a stderr reason (fail-open); knobs 0 and 1 keep the time-only deny. R2(a): a missing `tool_use_id` is silent. recover-gate's advisor stage follows the same rule. Cells rr-seen and rr-never; mutants net-expiry-denies and net-ignores-seen (MIN_MUTANTS 99); postcompact-rulebook-recovery arm A10 and its mutant. Slot: advisor-gate-deny and all five mutant shards ok; postcompact-rulebook-recovery ok with 52 mutant lines, 9 of 9 whose arms and A10 ok, 0 bad substitution.
+
+The fixture that carries it is `core/fixtures/advisor-gate-deny/lib.sh:547-549`, cell `rr-late`: it appends 3 s after the hook starts (`APPEND_DELAY=3`) and expects SILENT against the 10 s ceiling. This is BL-616's census item 5. It was moved here because a fixture-side change would hide a property of the hook.
+
+Rejected starting points:
+- (a) A re-read COUNT (for example 40 × 0.25 s) instead of `SECONDS`. It is not load-free on its own: per-scan cost grows with load, so the hook's worst-case stall grows with load without bound, and the wait still races the harness's transcript write instead of observing it.
+- (b) A fixture-only change, where the appender waits for the hook to start. The hook emits no start signal, so this needs a hook edit anyway, and it would turn the fixture green while consumers keep the wall-clock ceiling.
+
+Owed: a ceiling that does not deny a correct advisor line because of load, with a bounded worst-case stall. Receipt: per BL-616, `rr-late` and `rr-none` give the same verdict solo and under the gate's pool, with a load-free control.
+
+Owner: ai-dlc-4e [9b62de] (lead ai-dlc-9c), the fourth release of its load series, after the CPU-seconds pole and the receipt flap.
+
+verify: manual
+
+## BL-589 — `wait-stale-deliverable`'s lease-noclobber window is a fixed wall-clock quantum raced against a load-dependent sweep, so under load it fails a consumer's push gate
+
+**DEFECT.** Filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]); intake re-derived it read-only on graph and at origin/main `c07dc9d1`. Graph's 0.800.0 → 0.803.0 reconcile push (session `89a3adec`, started 12:49 PM EDT) ran graph's full pre-push. At about 1:20 PM the hook blocked the push on this one fixture. Graph's `.git/ai-dlc-fixture-failures` (17:20:18Z) reads "pool width 12, 1 of 118 units red" and "wait-stale-deliverable: 4 assertion(s) FAILED". The four are:
+- `:104` "lease-noclobber: delivered 30 of 30, A alive=0 — the window under test never ran".
+- `:106` "the marker read '1792170599 25473' mid-beat against A's '1792170591 25473' — a second beat clobbered a live lease".
+- `:107` "marker '' after the instant beat, expected A's '1792170591 25473'".
+- `:109` "MUTANT lease-always-put: delivered 30 of 30, A alive=0 — the window under test never ran".
+The session then ran the fixture twice standalone, and both passed. Graph's copy (`tests/fixtures/wait-stale-deliverable/run.sh`) is byte-identical to origin/main's (md5 `f7e19c11d2015cf16b4f941627446ba5` on both). The filer reports load averages of 55-58 during the suite and about 4 for the reruns; intake found no load figure in the transcript, so those numbers are the filer's.
+
+**LANDED (v0.820.0, verified e05f4418).** lease-noclobber freezes beat A with SIGSTOP in its poll sleep (POLL 600, a 2×POLL quantum), so neither A's re-stamp nor its lease expiry can land in the window at any load; controls void the case unless A is stopped (`ps` T) and its lease is still in the future. arrives-mid-beat, since-earlier, knob-split-forward, knob-split-reverse and receipt BL-547 read a recording `sleep` stub instead of `ELAPSED`. marker-goes-stale bounds the lease against a clock read after the reap (`LEASE <= KILL_T + 3*POLL`); new mutant lease-end-time writes the END-time lease. lease-handoff's read-early control is a sleep record. Slot: wait-stale-deliverable 142 ok, 0 failing, in a 30-unit concurrent wave at load up to 45; receipt BL-547 rc 0.
+
+Mechanism, at `core/fixtures/wait-stale-deliverable/run.sh:1160-1206` on origin/main:
+- `run_noclobber` starts beat A with quantum 10 and POLL 8 (`:1172`).
+- It waits until A is asleep, sleeps 0.5 s, runs a `--status` call, and only then starts the second beat over 30 delivered targets (`:1182`).
+- It samples until that beat exits, and `noclobber_preconditions` (`:1204`) requires A still alive at the end.
+A's life is fixed at about 10 s, but the setup and the 30-target sweep scale with load. Under a loaded pool A exits first, and the control fails closed: correctly, not green. It still fails the whole gate, though, and the subject is innocent.
+
+The `:106` "clobbered a live lease" line is itself an artefact of the same race. Both markers carry A's own pid 25473 and differ only by epoch, so that is A's own re-stamp landing inside a window that ran late, which `:1166` says the quantum is chosen to prevent. The line accuses the subject of a clobber that A made itself.
+
+Cost: one consumer pull push, about 31 minutes of graph's suite, re-run in full on each red.
+
+Owed:
+1. Make A's window outlast the probe by construction, not by a fixed quantum. Candidates: A's life ends on a sentinel the probe writes after its last sample; or A gets a quantum far above any sweep, since `reap_tree "$pa"` at `:1199` kills A anyway, so the passing path pays nothing. Check either against `:1166`, which requires A's own re-stamp to stay outside the window.
+2. Receipt: force the slow sweep (for example, a delay injected into the second beat) and assert the control still holds. A pass at low load proves nothing here.
+
+Related: BL-616 (load-sensitive verdicts) and BL-632 (its census lists other elapsed-time asserts in this fixture, `:362`, `:400`, `:462` and `:479`).
+
+Owner: ai-dlc-4e [9b62de] (lead ai-dlc-9c), in its load series with BL-616 and BL-632.
+
+verify: manual
+

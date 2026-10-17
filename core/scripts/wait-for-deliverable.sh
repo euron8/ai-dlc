@@ -352,6 +352,20 @@ BUDGET="${AI_DLC_WAIT_BEAT_SECS:-600}"
 POLL="${AI_DLC_WAIT_POLL_SECS:-10}"
 MAX_BEATS="${AI_DLC_MAX_WAIT_BEATS:-6}"
 MARGIN="${AI_DLC_WAIT_MARGIN_SECS:-10}"
+# SETTLE (default 180s) BOUNDS ONE PROPERTY: HOW LONG A MARKED FILE'S CONTENT HASH MUST STAY
+# UNCHANGED BEFORE THE MARKER IS TRUSTED AS THE SEAT'S FINAL WRITE. The event it waits for
+# is "the seat has finished editing", and that event CANNOT be observed: a seat that is
+# thinking between two Edits and a seat that is done leave the same bytes on disk. Quiet is
+# the only evidence there is, so the number is the longest inter-write gap measured in a
+# real marked-then-edited seat (146.6s, see "THE WINDOW IS MEASURED" in the --complete
+# header) plus margin. It is a multiple of nothing else in this file.
+# WHEN HIT (the hash held for more than SETTLE): the file DELIVERS -- the lead consumes it.
+# That is the harmful direction, because consuming is irreversible for the beat.
+# LOAD-SENSITIVE: the gap a seat leaves between edits is its own turn latency, and a loaded
+# box (or a slow local model) stretches it. A correct seat whose gap exceeds SETTLE is
+# consumed mid-edit. The mitigation is after the fact only -- revised_bump / say_revised
+# report that the hash changed after delivery -- it cannot un-consume the file. The
+# 146.6s gap was measured on an unloaded harness; no gap was measured under load.
 SETTLE="${AI_DLC_WAIT_SETTLE_SECS:-180}"
 case "$SETTLE" in ''|*[!0-9]*) SETTLE=180 ;; esac
 
@@ -816,6 +830,21 @@ if [ -z "$TEAMMATE_DIR" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
     TEAMMATE_DIR="$td_"; break
   done
 fi
+# IDLE_SECS (default 2 x BUDGET = 1200s) BOUNDS ONE PROPERTY: HOW LONG A SESSION'S NEWEST
+# TEAMMATE TRANSCRIPT MAY GO UNWRITTEN BEFORE THE BEAT SAYS "THIS LOOKS DIVERGED, NOT SLOW".
+# The event it waits for is a teammate's next turn. That event IS observable directly -- it
+# is the mtime of the newest `*.jsonl` under TEAMMATE_DIR (teammate_quiet_for) -- but what it
+# MEANS is not: a live teammate inside one long tool call and a teammate that finished and
+# wrote elsewhere are both silent, and no file distinguishes them. So the number cannot be
+# derived from the event; it is a measured separation point (see "THE THRESHOLD IS MEASURED"
+# in the header: 0.0036% of live appends exceed 1200s against 57 of 844 genuinely idle
+# episodes), and it is a multiple of BUDGET so that a retune of the quantum moves it too.
+# WHEN HIT: say_liveness prints TEAMMATE IDLE, DELIVERABLE ABSENT. That is a report; it
+# changes no exit code, no beat count and no grant, so hitting it cannot deny, consume or
+# re-dispatch anything. LOAD: the outcome (one extra line) does not depend on load, but the
+# measurement does -- a loaded box stretches a live teammate's single tool call, so the
+# false-IDLE rate measured on an unloaded corpus is a floor under load. The line is advice
+# to read the path before beating again, which is harmless when wrong.
 IDLE_SECS="${AI_DLC_TEAMMATE_IDLE_SECS:-$(( BUDGET * 2 ))}"
 case "$IDLE_SECS" in ''|*[!0-9]*) IDLE_SECS=$(( BUDGET * 2 )) ;; esac
 
@@ -1130,6 +1159,21 @@ fi
 # the markers accumulating forever.
 find "$COUNTER_DIR" -maxdepth 1 -name '.shell-*' -mmin +"$(( (BUDGET / 60) + 1 ))" -delete 2>/dev/null || true
 
+# THE `-lt "$BUDGET"` TEST BELOW BOUNDS ONE PROPERTY: "A SIBLING BEAT IN THIS SHELL STARTED
+# LESS THAN ONE QUANTUM AGO, SO IT HAS NOT YET HAD TIME TO FINISH SLEEPING -- WHICH MEANS
+# THIS CALL IS CHAINED BEHIND IT". The event it infers is a chained invocation, and that is
+# not observable directly: $PPID is shared, but a prior call from the same long-lived shell
+# looks identical once enough time has passed. The marker is stamped BEFORE the sleep
+# (the printf below), and a sleeping beat runs to start + BUDGET - RESERVE with RESERVE
+# >= MARGIN (10s), so a genuinely chained second beat arrives at about BUDGET - RESERVE: 10s
+# inside the window. BUDGET is therefore the natural bound, not a tuned one.
+# WHEN HIT (age < BUDGET): MAY_SLEEP=0, the beat does one instantaneous check, charges no
+# beat and returns. WHEN NOT HIT: the beat sleeps a full quantum.
+# LOAD-SENSITIVE (a NOTE-tier cost, no wrong delivery): the 10s of slack is all that separates
+# the two, so a loaded box that delays the chained call's start by more than RESERVE
+# makes age >= BUDGET, the guard fails OPEN, and the call serializes a second full quantum
+# behind the first -- the 2 x BUDGET wait this guard exists to prevent. The cost is wall
+# clock and one beat charged, never a false DELIVERED or NON-DELIVERY on its own.
 SIBLING="${COUNTER_DIR}/.shell-${PPID}"
 MAY_SLEEP=1
 if [ -f "$SIBLING" ]; then
@@ -1391,6 +1435,20 @@ IFS="$OLDIFS"
 # worst-case beat runs to `deadline + POLL`; the reserve must cover a whole poll
 # interval or a large POLL silently pushes the beat past the budget.
 # ---------------------------------------------------------------------------
+# DEADLINE (start + BUDGET - RESERVE) BOUNDS ONE PROPERTY: THE MOMENT THIS BEAT STOPS POLLING
+# AND HANDS THE LEAD BACK ITS TURN. The event it waits for is the deliverable landing, which
+# IS observed directly (all_present, every POLL seconds); the deadline exists only because
+# the wait must be finite -- THE CALL BOUND in the header. It is BUDGET minus a reserve of
+# one poll interval (at least MARGIN) because the loop sleeps AFTER its check, so the
+# worst-case beat ends at DEADLINE + POLL, which is then at most BUDGET.
+# WHEN HIT: the loop breaks and the code below RE-EVALUATES is_delivered for every path, so
+# a file that landed during the last sleep is still reported DELIVERED; anything else is
+# reported WAITING and costs the beat already charged above. Exit 0 either way.
+# LOAD-FREE: the deadline is a wall-clock epoch, not a count of polls, so a loaded box
+# gets fewer polls in the same window rather than a longer or shorter window, and the
+# verdict is read once more after the loop. The only load effect is the beat overrunning
+# BUDGET by the cost of one slow final poll. What load CAN change is whether a settle
+# window opens in time, and that belongs to SETTLE above, not here.
 RESERVE="$MARGIN"
 [ "$POLL" -gt "$RESERVE" ] && RESERVE="$POLL"
 DEADLINE=$(( $(date +%s) + BUDGET - RESERVE ))

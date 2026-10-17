@@ -70,8 +70,12 @@
 #                `Everything up-to-date` (the cell the is_error test alone holds)
 #   REREAD       THE RACE: the advisor line and the incoming push are appended to the transcript
 #                APPEND_DELAY (3s, past the old fixed 2 x 1s) after the hook starts -> SILENT, with
-#                ADVISOR_GATE_REREADS unset (the 10s poll ceiling); twin: nothing appended -> DENY,
-#                at 1 (2s ceiling). Every other cell runs with it 0, so a deny cell pays no ceiling
+#                ADVISOR_GATE_REREADS unset (the 10s safety net); twins: the incoming push's line
+#                ALONE appended at 1s, knob unset -> DENY (rr-seen: decided by the transcript, not
+#                the clock), and nothing appended at 1 (2s bound) -> DENY (rr-none: the knob stays
+#                stricter-only). NET cell rr-never: nothing appended, knob unset -> SILENT with the
+#                reason on stderr once the net expires (BL-630). Every other cell runs with the knob
+#                0, so a deny cell pays no bound
 #   QUOTEDALT    a quoted alternation holding `git push -u origin HEAD --no-verify` (the graph row
 #                that was denied) and a heredoc body carrying one -> SILENT; twin: `echo 'a;b' &&
 #                git push origin HEAD` -> DENY. QUOTEDPAT's qp-dashc holds the `-c`-flag carve-out
@@ -277,6 +281,8 @@ mk "$P1/fokutd.jsonl"   "$GRANT" "$ADV" "$OKRES" "$PUSH9" "$OK9"
 mk "$P1/rr.tmpl"        "$GRANT" "$PUSHL" "$(tr_ t1 false 'To x
    1111111..2222222  HEAD -> main')"
 mk "$P1/rr.add"         "$ADV" "$(tu tNEW Bash '{"command":"git push -u origin HEAD"}')"
+# The incoming call's own line ALONE: the transcript advances past the call with no advisor line.
+mk "$P1/rr.self"        "$(tu tNEW Bash '{"command":"git push -u origin HEAD"}')"
 # PER-KIND worlds: one advisor call, then gated actions of different kinds, each answered.
 MERGEL="$(tu t2 Bash '{"command":"gh pr merge 7 --squash --delete-branch"}')"
 CLOSEL="$(tu t3 Bash '{"command":"bash scripts/ai-dlc/gate-checkpoint.sh --nonce n close"}')"
@@ -336,7 +342,9 @@ for _f in g none off regrant pa ap err unav rearm denied pushed deniedarr ran ra
 done
 _nt="$(grep -c . "$P1/rr.tmpl")" || _nt=0
 _na="$(grep -c . "$P1/rr.add")" || _na=0
-[ "$_nt" -eq 3 ] && [ "$_na" -eq 2 ] || { echo "FIXTURE BROKEN: the REREAD template holds $_nt lines (want 3) and its append $_na (want 2)" >&2; exit 2; }
+_ns="$(grep -c '"id":"tNEW"' "$P1/rr.self")" || _ns=0
+[ "$_nt" -eq 3 ] && [ "$_na" -eq 2 ] && [ "$_ns" -eq 1 ] \
+  || { echo "FIXTURE BROKEN: the REREAD template holds $_nt lines (want 3), its append $_na (want 2), its self-only append $_ns incoming lines (want 1)" >&2; exit 2; }
 
 # bash_in <transcript> <cwd> <command> [agent_id] [tool_use_id]
 #   tool_use_id `-` omits the key, the shape of a harness that does not send one
@@ -555,13 +563,28 @@ ct FAILED DENY f-ok-uptodate "$(bash_in "$P1/fokutd.jsonl" "$SPRINT" 'git push -
 # rr.add APPEND_DELAY seconds after the hook starts. 3s: past the old fixed 2 x 1s re-read (graph's
 # advisor line landed >2s after PreToolUse), so a fixed-2s loop judges before the append and denies,
 # and well inside the 10s ceiling, where the poll sees it within 0.25s and stops (rr.add carries the
-# incoming call's own line). rr-none appends nothing and runs at 1 (2s ceiling) so its DENY does not
-# pay 10s on every score.
+# incoming call's own line). rr-none appends nothing and runs at 1 (2s bound): the stricter-only
+# knob still judges its last scan and DENIES, and it does not pay 10s on every score.
+# THE DENY IS DECIDED BY THE TRANSCRIPT, NOT THE CLOCK (BL-630). rr-seen appends the incoming
+# call's own line ALONE at 1s with the knob unset: the transcript has advanced past the call with
+# no advisor line -> DENY, at ~1s, never waiting out the net. It is the only default-knob DENY cell,
+# so a default that always fails open dies on it. rr-never appends nothing with the knob unset:
+# the 10s net expires with the call's line absent -> SILENT, and stderr says why. Under the
+# pre-BL-630 hook that was a DENY: a time-only ceiling denied a call whose advisor line was merely
+# late, which load makes later. It costs the full 10s by construction -- no cheaper cell separates
+# the two builds, since they agree whenever the line lands inside the net -- so it is a NET cell
+# (`$CELLS/<n>.net`), scored only while NET_CELLS=1: on the shipped hook, and on the one mutant
+# that restores the time-only ceiling.
 APPEND_DELAY=3
 ct REREAD SILENT rr-late "$(bash_in "$P1/rr-late.jsonl" "$SPRINT" 'git push -u origin HEAD')"
 printf '%s\t%s\t%s\t%s\n' "$P1/rr-late.jsonl" "$P1/rr.add" "$APPEND_DELAY" - > "$CELLS/$nc.app"
 ct REREAD DENY rr-none "$(bash_in "$P1/rr-none.jsonl" "$SPRINT" 'git push -u origin HEAD')"
 printf '%s\t%s\t%s\t%s\n' "$P1/rr-none.jsonl" - - 1 > "$CELLS/$nc.app"
+ct REREAD DENY rr-seen "$(bash_in "$P1/rr-seen.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+printf '%s\t%s\t%s\t%s\n' "$P1/rr-seen.jsonl" "$P1/rr.self" 1 - > "$CELLS/$nc.app"
+cell REREAD SILENT 'E:did not land within the 10s safety net' rr-never "$(bash_in "$P1/rr-never.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+printf '%s\t%s\t%s\t%s\n' "$P1/rr-never.jsonl" - - - > "$CELLS/$nc.app"
+: > "$CELLS/$nc.net"
 
 # THE WINDOW (operator ruling): an advisor attempt within the last 10 assistant turns clears the
 # call, however many pushes shipped since. A `$CELLS/<n>.win` file runs the cell with
@@ -806,6 +829,8 @@ score() {
   : > "$log"
   local tgt add dly rrk apid cpd
   while IFS=$'\t' read -r n id check arm want <&3; do
+    # A NET cell pays the 10s safety net by construction; it is scored only while NET_CELLS=1.
+    if [ -f "$CELLS/$n.net" ] && [ "${NET_CELLS:-0}" != 1 ]; then continue; fi
     cpd="$CPD"; [ ! -f "$CELLS/$n.cpd" ] || cpd="$CONS"
     if [ -f "$CELLS/$n.app" ]; then
       apid=""

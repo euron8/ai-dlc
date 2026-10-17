@@ -26,6 +26,7 @@ md5
 mkdir
 mktemp
 mv
+pgrep
 pkill
 ps
 python3

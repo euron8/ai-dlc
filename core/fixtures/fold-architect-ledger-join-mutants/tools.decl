@@ -21,6 +21,7 @@ mkdir
 mktemp
 mv
 pkill
+ps
 python3
 rm
 sed

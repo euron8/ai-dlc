@@ -1078,6 +1078,13 @@ if [ -n "$LOCAL_MAP" ]; then
   # arms at load 23-47 and passed solo at 18-26, and a stub stream started 2s late failed 16 arms
   # under both stream levels. Inside a sandbox `log stream` exits at once ("Cannot run while
   # sandboxed"), so the refusal that window exists for still comes in well under a second.
+  # THE BOUND (50 x 0.2s) STANDS FOR: the stream attaching and delivering this run's own tagged
+  # sentinel read. PROGRESS TOWARD THAT IS NOT OBSERVABLE -- a stream that has not attached and one
+  # that never will print the same nothing, and the only signal short of the event is the stream
+  # process exiting, which the loop already keys on. OUTCOME ON HIT: `die` below, before anything is
+  # traced or written; the fixtures stay unmapped and so run on every push. LOAD-FREE: a loaded box
+  # makes the refusal MORE LIKELY on a healthy stream, but the outcome of a refusal is the same at
+  # any load and is never a wrong or short read-set, so the cost is a wasted run and not a verdict.
   lv_ok=0; i=0
   while [ "$i" -lt 50 ]; do
     sandboxed cat "$SENTINEL" >/dev/null 2>&1 </dev/null
@@ -1494,6 +1501,13 @@ for fx in $LIST; do
   # run.sh to the capture boundary. Here the sentinel is read in a loop and the fixture does
   # not start until that read APPEARS IN THE TRACE, i.e. until tracing is provably live. Under
   # the sandbox tracer the read has to happen INSIDE the profile, or nothing reports it.
+  # THE BOUND (100 x 0.2s) STANDS FOR: the stream carrying this fixture's start sentinel. PROGRESS IS
+  # NOT OBSERVABLE before that event, for the reason the liveness bound gives; a no-progress keying
+  # would need a stream-side counter and this stream exposes none. OUTCOME ON HIT: `settled` stays 0,
+  # the loop falls through and the fixture RUNS ANYWAY (its run is the push's run under --in-pool),
+  # then the fail-closed block reads `settled` and OMITS it from the map as "tracing never settled".
+  # LOAD-FREE: an unsettled trace is never emitted, so a slow attach costs the fixture its mapping
+  # (it runs every push) and cannot record a short set as complete.
   settled=0; i=0
   while [ "$i" -lt 100 ]; do
     if [ "$TRACER" = fs_usage ]; then
@@ -1561,6 +1575,13 @@ for fx in $LIST; do
     # exiting says nothing about whether its last reports have arrived. Its own tail is read
     # through the profile until that read APPEARS, and everything before it in the stream is
     # the fixture's. No end sentinel, no trustworthy window: the fixture is omitted below.
+    # THE BOUND (100 x 0.2s) STANDS FOR: the stream delivering the end sentinel read, i.e. the
+    # fixture's last reports having arrived. PROGRESS IS NOT OBSERVABLE: the stream is asynchronous
+    # and gives no count of what is still in flight, so a late tail and a lost tail look alike. OUTCOME
+    # ON HIT: `flushed` stays 0 and the fail-closed block omits the fixture ("no end sentinel in the
+    # stream"); the window code below also forces `flushed=0` when no end line follows the start
+    # line. LOAD-FREE in outcome: a short window is never emitted. (This loop runs under the sandbox
+    # tracers only; the fs_usage branch above has no flush control and waits a fixed `sleep 1`.)
     flushed=0; i=0
     while [ "$i" -lt 100 ]; do
       sandboxed cat "$ENDMARK" >/dev/null 2>&1 </dev/null
