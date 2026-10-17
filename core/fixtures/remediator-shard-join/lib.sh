@@ -1253,21 +1253,31 @@ p_specunread() { # a cited, stale memlog made unreadable (chmod 000) -> rc 2, 't
 
 # ---- THE SPEC RENDER ARM, SUBJECT MODE (--subject 9): the SPEC is a WHOLE-FILE part, so the join's SUBJ_SET
 # carries `.../specs/s9/kernel/.memlog.md` beside SPEC.md. The memlog is written by the SPEC part's own
-# writer (same agent as the SPEC edit), so the ledger half stays clean and only the render order is judged.
+# writer (same agent as the SPEC edit), and that part's record CITES IT on a second `edit:` line, as
+# `_gate-procedures.md` "Parts" item 2 requires ("its `edit:` lines cite both files"). Without that cite
+# the join's coverage arm refuses the memlog write as UNCITED -- a missing shard -- before the render arm
+# reports, so the ALLOW twin (SP7) could never pass; the join was right and this world was not. With
+# no memlog ("-") nothing is written and nothing extra is cited, since a cite of an unwritten file is
+# UNWRITTEN. So the ledger half stays clean and only the render order is judged.
 # A refusal here leaves NO record, which is what sj_refused asserts.
 SJMEMLOG=_bmad-output/specs/s9/kernel/.memlog.md
 sj_spec_world() { # <memlog body, printf %b | "-" for none> -> prints the world; every part by its own agent, SPEC's agent also edits the memlog
-  local w o n=0 ag="" spo; w="$(subj_world)" || return 1
+  local w o n=0 ag="" spo spc=""; w="$(subj_world)" || return 1
   spo="$(sj_part_rows "$w" | awk -F'\t' '$3 == "SPEC" { print $2 }')"
   [ -n "$spo" ] || return 1
   for o in $(sj_part_rows "$w" | cut -f2); do
     n=$((n + 1)); sj_edit "$w" "$o" "a$(printf '%016d' "$n")"; sj_part "$w" "$o" "$SJ_LAST"
-    [ "$o" = "$spo" ] && ag="a$(printf '%016d' "$n")"
+    [ "$o" = "$spo" ] && { ag="a$(printf '%016d' "$n")"; spc="$SJ_LAST"; }
   done
   [ -n "$ag" ] || return 1
   if [ "$1" != "-" ]; then
+    # The memlog is cited in the spelling the part's SPEC.md cite uses, so both resolve the same way,
+    # on a second `edit:` line placed directly under the first, inside the same entry.
+    [ "${spc%SPEC.md}" != "$spc" ] || return 1
     printf '%b' "$1" > "$w/$SJMEMLOG" || return 1
     drive "$w" Edit "$w/$SJMEMLOG" "$ag"
+    awk -v m="${spc%SPEC.md}.memlog.md" '{ print } !d && /^- \*\*edit:\*\*/ { printf "- **edit:** `%s:1`\n", m; d = 1 }
+      END { exit !d }' "$w/$SJRD/$spo.md" > "$w/$SJRD/$spo.md.t" && mv "$w/$SJRD/$spo.md.t" "$w/$SJRD/$spo.md" || return 1
   fi
   printf '%s' "$w"
 }

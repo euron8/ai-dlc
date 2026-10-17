@@ -324,7 +324,10 @@ $SHF_DROWS"
 # whole-file part rows outside shards/, so the join still reaches the source check and refuses by name.
 # sibdoc (BL-508) dies too: with no section rows the join refuses on the empty ledger before its siblings arm.
 # The document- and subject-mode re-run arms die too: with no section rows nothing is re-run.
-mutant2 "JX4 section rows dropped in document mode (the pre-BL-372 file set)" "docjoin docoverlap asmrefuse sjoin sjnames sjgate sjnest partydoc sibdoc rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrsubj" \
+# sjspecfresh and sjspecnone die for sjoin's reason: each is a subject join that must JOIN, and its prd
+# section parts cite copies under shards/ whose rows are now dropped, so they read UNWRITTEN. sjspecstale
+# does NOT: the join still reaches the SPEC render arm and refuses the stale memlog by name, as it expects.
+mutant2 "JX4 section rows dropped in document mode (the pre-BL-372 file set)" "docjoin docoverlap asmrefuse sjoin sjnames sjgate sjnest partydoc sibdoc rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrsubj sjspecfresh sjspecnone" \
   "   $SHF
 $SHF_ROWS" \
   "   | select((.path | startswith(\$sh + \"/\")) | not)
@@ -746,11 +749,15 @@ mutant "JX87 a memlog with no phrased Render refused instead of skipped" "specha
   '    refuse "SKIP -- ${m} carries no'
 # JX88: the order test inverted -- decisions BEFORE the render are counted and a render no longer resets
 # them. stale reports 2 at line 1, fresh is refused outright; a non-empty-set pair, one per direction.
-mutant2 "JX88 the order test inverted (decisions before the render counted), self-probe removed" "specstale specfresh sjspecstale sjspecfresh" \
+# THREE layers, so mutant3: the two order anchors AND the self-probe. As mutant2 it carried only the two
+# anchors, its label's "self-probe removed" was false, the probe read the inverted scan and `die`d in
+# every join that reached it, and the mutant killed every predicate there (25 beyond its set).
+mutant3 "JX88 the order test inverted (decisions before the render counted), self-probe removed" "specstale specfresh sjspecstale sjspecfresh" \
   '{ r = NR; n = 0; f = 0; next }' \
   '{ r = NR; next }' \
   '/^[[:space:]]*[-*][[:space:]]*\(decision([[:space:]][^)]*)?\)/ { if (r) {' \
-  '/^[[:space:]]*[-*][[:space:]]*\(decision([[:space:]][^)]*)?\)/ { if (!r) {'
+  '/^[[:space:]]*[-*][[:space:]]*\(decision([[:space:]][^)]*)?\)/ { if (!r) {' \
+  "$SPROBE_OLD" "$SPROBE_NEW"
 # JX89: record_tail runs the render check and then restores refuse_n, discarding whatever the call refused (the JX91 shape,
 # so an earlier refusal stands). specstale and specunread both expect a refusal FROM THAT CALL, so both die: one call
 # site, two refusals. The SPEC-RENDER line is still printed for the rest.
