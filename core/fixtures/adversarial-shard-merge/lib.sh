@@ -31,6 +31,19 @@ if [ -z "$MERGE" ]; then
   exit 2
 fi
 SRCDIR="$(cd "$(dirname "$MERGE")" && pwd)"
+# The hook whose write ledger the merge derives each shard's dispatch id from. Every shard helper
+# below drives it, so it is required: absent, every merge refuses "has no row" and every refusal arm
+# would read as passing for that reason.
+HOOK=""
+_d="$LIB_DIR"
+while [ -n "$_d" ] && [ "$_d" != "/" ]; do
+  for _c in "$_d/core/hooks/ai-dlc-gate-remediation-guard.sh" "$_d/.claude/hooks/ai-dlc-gate-remediation-guard.sh"; do
+    if [ -f "$_c" ]; then HOOK="$_c"; break 2; fi
+  done
+  _d="$(dirname "$_d")"
+done
+[ -n "$HOOK" ] || { echo "FIXTURE ERROR: ai-dlc-gate-remediation-guard.sh not found above $LIB_DIR in either layout; no shard can carry a harness record" >&2; exit 2; }
+command -v jq >/dev/null 2>&1 || { echo "FIXTURE ERROR: jq is not on PATH; the hook records nothing and the merge derives nothing without it" >&2; exit 2; }
 CONV="$SRCDIR/validate-adversarial-convergence.sh"
 [ -f "$CONV" ] || { echo "FIXTURE ERROR: $CONV is not beside the merge; it reads its ceilings from there" >&2; exit 2; }
 # Section mode reads its ordinal set from this sibling. Absent, the D arms would all refuse for
@@ -95,6 +108,63 @@ xkeys() {
 }
 is_cross() { case "$1" in cross|cross-*) return 0 ;; esac; return 1; }
 
+# ------------------------------------------------------------------- the harness records
+# The merge derives each shard's dispatch id from three records the harness writes, never from the
+# shard's own `tool_use_id:` (merge-adversarial-shards.sh, THE DISPATCH ID). Every shard helper
+# below therefore seeds them, the write-ledger row by driving the REAL hook with the PreToolUse
+# Write payload a dispatched agent's write produces:
+#   write ledger   the hook appends `kind: "artifact-write"` (it is reached because the world holds
+#                  <state>/pipeline-snapshot.md and the payload carries agent_id)
+#   meta file      <transcript minus .jsonl>/subagents/agent-<agent_id>.meta.json, `toolUseId`
+#   spawn ledger   <state>/spawn-ledger.jsonl, a row in ai-dlc-dispatch-guard.sh's shape
+# IDENTITY IS A FUNCTION OF THE SHARD DIR AND FILE NAME ALONE (hr_ids), never of a temp path or a
+# counter: the files-mode golden compares bytes, and a predicate that rewrites one shard twice must
+# record ONE writer, not two. All shards of a world share one session and one transcript_path, as
+# every subagent of one lead session does.
+# Knobs, each scoped to one helper call by a prefix assignment (`HR_ROLE=remediator shard ...`):
+#   HR_OFF=1      no record at all (a Bash-written shard)
+#   HR_ROLE=<r>   the spawn row's role (default adversary)
+#   HR_AGENT_O / HR_DID_O   override the derived agent id / dispatch id
+#   HR_NOMETA=1   no meta file     HR_NOSPAWN=1  no spawn row
+#   HR_PRE=1      the row carries no transcript_path (written before the hook recorded one)
+#   HR_NOPROBE=1  no subagent-context.jsonl probe row (the writer has not stopped); by default one
+#                 is written, agent_id -> dispatch id, except with HR_NOMETA=1 unless HR_PROBE=1
+#   HR_SESSION=<s>  the payload's session_id (default fx-session, the transcript's own stem)
+#   SELF_ID=<v>   the shard's self-reported tool_use_id (default NOT_ACCESSIBLE; ABSENT omits the line)
+hr_ids() { # <shard file> -> HR_AGENT, HR_DID
+  local c
+  c="$(printf '%s/%s' "$(basename "$(dirname "$1")")" "$(basename "$1")" | cksum)"; c="${c%% *}"
+  HR_AGENT="$(printf 'a%016x' "$c")"
+  HR_DID="$(printf 'toolu_01AdvDispatch%011d' "$c")"
+}
+did_of() { hr_ids "$1/$2.md"; printf '%s' "$HR_DID"; } # <shard dir> <key> -> the derived dispatch id
+hr_state() { printf '%s' "$(dirname "$(dirname "$(dirname "$(dirname "$(dirname "$1")")")")")"; } # <shard file> -> <state>
+harness_record() { # <shard file>
+  [ "${HR_OFF:-0}" = 1 ] && return 0
+  local f="$1" st root tp tpr role="${HR_ROLE:-adversary}"
+  st="$(hr_state "$f")"; root="$(dirname "$st")"
+  hr_ids "$f"
+  [ -n "${HR_AGENT_O:-}" ] && HR_AGENT="$HR_AGENT_O"
+  [ -n "${HR_DID_O:-}" ] && HR_DID="$HR_DID_O"
+  tp="$root/.harness/fx-session.jsonl"
+  mkdir -p "${tp%.jsonl}/subagents" || return 1
+  [ -f "$st/pipeline-snapshot.md" ] || : > "$st/pipeline-snapshot.md"
+  [ "${HR_NOMETA:-0}" = 1 ] || printf '{"agentType":"%s","description":"fixture shard writer","toolUseId":"%s","spawnDepth":1,"requestShape":"background"}\n' \
+    "$role" "$HR_DID" > "${tp%.jsonl}/subagents/agent-$HR_AGENT.meta.json"
+  [ "${HR_NOSPAWN:-0}" = 1 ] || printf '{"v":1,"ts":"2026-10-15T20:00:00Z","sprint":1,"name":null,"role":"%s","model_pinned":"opus","tier_pinned":null,"model_requested":"opus","model_bound":"definition","effort_bound":null,"role_contract_cited":true,"contract_via":"definition","role_file_readable":true,"definition_bound":true,"definition_stale":false,"name_stripped":null,"tool_use_id":"%s","shard":null}\n' \
+    "$role" "$HR_DID" >> "$st/spawn-ledger.jsonl"
+  # The probe row ai-dlc-subagent-probe.sh writes when the writer STOPS, carrying the toolUseId it
+  # read from the meta file -- so none without a meta file (the hook then records a null id).
+  [ "${HR_NOPROBE:-0}" = 1 ] || { [ "${HR_NOMETA:-0}" = 1 ] && [ "${HR_PROBE:-0}" != 1 ]; } || printf '{"v":3,"ts":"2026-10-15T20:30:00Z","sprint":1,"agent_id":"%s","model":"opus","role":"%s","turns":9,"peak_tokens":1000,"compactions":0,"duration_s":60,"effort":null,"definition":null,"tool_use_id":"%s","transcript_version":null}\n' \
+    "$HR_AGENT" "$role" "$HR_DID" >> "$st/subagent-context.jsonl"
+  tpr="$tp"; [ "${HR_PRE:-0}" = 1 ] && tpr=""
+  printf '{"session_id":"%s","transcript_path":"%s","cwd":"%s","hook_event_name":"PreToolUse","tool_name":"Write","tool_use_id":"toolu_01FxWriteCall%s","agent_id":"%s","agent_type":"%s","tool_input":{"file_path":"%s","content":"shard"}}' \
+    "${HR_SESSION:-fx-session}" "$tpr" "$root" "${HR_DID#toolu_01AdvDispatch}" "$HR_AGENT" "$role" "$f" \
+    | CLAUDE_PROJECT_DIR="$root" bash "$HOOK" >/dev/null 2>&1
+  return 0
+}
+self_line() { [ "${SELF_ID:-NOT_ACCESSIBLE}" = ABSENT ] || printf 'tool_use_id: %s\n' "${SELF_ID:-NOT_ACCESSIBLE}"; }
+
 # shard <shard-dir> <key: ordinal|cross|cross-<g>> <n-major> <verdict> <stories-cite> [sha-override] [invoked_at]
 shard() {
   local d="$1" k="$2" n="$3" v="$4" cite="$5" sha="${6:-}" at_o="${7:-}" i=0 b at hn
@@ -112,7 +182,7 @@ shard() {
     done
     printf '## Probed and found sound\n\nNothing further.\n\n'
     printf '<!-- SKILL_INVOCATION_PROVENANCE v1\n'
-    printf 'skill: ai-dlc-adversary-review\ninvoked_at: %s\ntool_use_id: toolu_014KW7m9L81QQd5tmf3J%s\n' "$at" "$k"
+    printf 'skill: ai-dlc-adversary-review\ninvoked_at: %s\n' "$at"; self_line
     printf 'mode: subagent\nlead_role: .claude/skills/ai-dlc/steps/stories-test-strategy.md\n'
     is_cross "$k" && printf 'artifact: _bmad-output/planning-artifacts/s1/stories\n'
     [ -n "$sha" ] && printf 'artifact_sha: %s\n' "$sha"
@@ -120,6 +190,7 @@ shard() {
     printf 'findings_major_underived: 0\nfindings_minor: 0\nverdict: %s\n' "$v"
     printf 'SKILL_INVOCATION_PROVENANCE_END -->\n'
   } > "$d/$k.md"
+  harness_record "$d/$k.md"
 }
 
 # The B3 input: three ordinal shards, 2 MAJOR each, each stamped MET; clean cross shards, one per
@@ -256,9 +327,9 @@ p_xgroups() {
   d="$(xworld "$mode" 8)"; xset "$mode" "$d" "$K" groups; xfind "$mode" "$d" "cross-$non3" "1, 2, $((K - 1))"
   xmerge "$m" "$mode" "$d"
   [ "$RC" -eq 0 ] && has "$MO" "major=1" || return 1
-  # The merged tool_use_id is cross-1's and the id keys are cross-1..cross-6.
+  # The merged tool_use_id is cross-1's DERIVED id and the id keys are cross-1..cross-6.
   local o; case "$mode" in files) o="$(out_of "$d")" ;; document) o="$(doc_out_of "$d")" ;; elicit) o="$(dirname "$(dirname "$d")")/requirements-elicitation.md" ;; esac
-  grep -q '^tool_use_id: .*cross-1$' "$o" && grep -q ' cross-6=' "$o" && ! grep -q ' cross=' "$o" || return 1
+  grep -qx "tool_use_id: $(did_of "$d" cross-1)" "$o" && grep -q ' cross-6=' "$o" && ! grep -q ' cross=' "$o" || return 1
   [ "$mode" = elicit ] && return 0
   d="$(xworld "$mode" 2)"; [ "$(xk_of "$mode" "$d")" -eq 2 ] || return 1
   xset "$mode" "$d" 2 single; xmerge "$m" "$mode" "$d"
@@ -435,13 +506,14 @@ dshard() {
     done
     printf '## Probed and found sound\n\nNothing further.\n\n'
     printf '<!-- SKILL_INVOCATION_PROVENANCE v1\n'
-    printf 'skill: ai-dlc-adversary-review\ninvoked_at: %s\ntool_use_id: toolu_01DocShard9xQ%s\n' "$at" "$k"
+    printf 'skill: ai-dlc-adversary-review\ninvoked_at: %s\n' "$at"; self_line
     printf 'mode: subagent\nlead_role: .claude/skills/ai-dlc/steps/stories-test-strategy.md\n'
     printf 'artifact: %s\nartifact_sha: %s\n' "$art" "$sha"
     printf 'findings_critical: 0\nfindings_critical_prior_scope: 0\nfindings_major: %s\n' "$n"
     printf 'findings_major_underived: 0\nfindings_minor: 0\nverdict: %s\n' "$v"
     printf 'SKILL_INVOCATION_PROVENANCE_END -->\n'
   } > "$d/$k.md"
+  harness_record "$d/$k.md"
 }
 # The section-mode B3: three part shards of 2 MAJOR each, each stamped MET, and clean cross
 # shards cross-1..3.
@@ -464,7 +536,7 @@ p_doc_b3() { # sums, recomputes, ONE artifact_sha, a shard_wall entry per shard,
   n_sha="$(grep -c '^artifact_sha:' "$o")" || n_sha=0
   [ "$n_sha" -eq 1 ] && [ "$(grep '^artifact_sha:' "$o")" = "artifact_sha: $sha" ] || return 1
   # The merged tool_use_id is cross-1's -- the first group's dispatch, never the last one read.
-  grep -qx 'tool_use_id: toolu_01DocShard9xQcross-1' "$o" || return 1
+  grep -qx "tool_use_id: $(did_of "$d" cross-1)" "$o" || return 1
   n_wall="$(grep '^shard_wall:' "$o" | tr ' ' '\n' | grep -cE '^(1|2|3|cross-1|cross-2|cross-3)=[0-9T:.Z-]+/[0-9T:Z-]+$')" || n_wall=0
   [ "$n_wall" -eq 6 ] || return 1
   # The per-file line of the validator's report (not --cycle-state, whose exit is the cycle's).
@@ -541,11 +613,12 @@ sshard() {
   { printf '# requirements -- subject shard %s\n\n## Findings\n\n' "$k"
     while [ "$i" -lt "$n" ]; do i=$((i + 1)); printf '### M%s — MAJOR — %s\n\nsections: %s\n\nBody.\n\n' "$i" "$(real_title "$i")" "$cite"; done
     printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: %s\ninvoked_at: 2026-10-01T10:%02d:00Z\n' "$sk" "$mm"
-    printf 'tool_use_id: toolu_01Subj%s\nmode: subagent\nlead_role: .claude/skills/ai-dlc/steps/requirements.md\n' "$k"
+    self_line; printf 'mode: subagent\nlead_role: .claude/skills/ai-dlc/steps/requirements.md\n'
     printf 'artifact: %s\nartifact_sha: %s\n' "$art" "$sl"
     printf 'findings_critical: 0\nfindings_critical_prior_scope: 0\nfindings_major: %s\nfindings_major_underived: 0\nfindings_minor: 0\n' "$n"
     [ "$v" = "-" ] || printf 'verdict: %s\n' "$v"
     printf 'SKILL_INVOCATION_PROVENANCE_END -->\n'; } > "$d/$k.md"
+  harness_record "$d/$k.md"
 }
 subj_xkeys() { xkeys "$(grep -c . "$(subj_root "$1")/subject.map")"; } # <shard dir> -> its cross keys
 subj_b3_world() { # every part shard 1 MAJOR stamped MET, summed over the ceiling; clean cross shards
@@ -721,5 +794,284 @@ p_stem_files() { # files mode and --map, shards/stories-adversarial-p1/ -> both 
     && ! grep -q "$(printf '\t')a.md" "$MO" && stem_none "$s9"
 }
 
-P_ALL="b3 clean ceiling miss_ord miss_cross dup partition sha ms doc_b3 doc_axis doc_sha doc_path doc_serial files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit subj_b4 b4doc b4doc_nomf b4doc_other xfiles xdoc xelicit xmix xunknown xcomplete stem_series stem_control stem_near stem_files"
+# --------------------------------------------- the dispatch id is DERIVED, never self-reported
+# Every world below is the B3 world with shard 2 (and only shard 2) written under the knob the cell
+# varies; shards 1, 3 and cross-1..3 are written normally, so each refusal is that shard's alone.
+# The ALLOW twin of each refusal sits in the same predicate wherever one property separates them.
+tw() { # -> a B3 shard dir with every shard but 2 written and recorded
+  local d x; d="$(new_world)"
+  shard "$d" 1 2 EXIT_CONDITION_MET 1
+  shard "$d" 3 2 EXIT_CONDITION_MET 3
+  for x in $(xkeys 3); do shard "$d" "$x" 0 EXIT_CONDITION_MET "1, 3"; done
+  printf '%s' "$d"
+}
+s2() { shard "$1" 2 2 EXIT_CONDITION_MET 2; } # <shard dir> -- shard 2, under whatever knobs prefix the call
+REAL_OTHER=toolu_01ZZZZZZZZZZZZZZZZZZZZZZ   # real-shaped (toolu_ + 24 base62) and no fixture's derived id
+FORGED=toolu_cross1_g1_dispatch             # a fabricated id the reference consumer merged; NOT real-shaped
+p_tuid_main() { # self ids NOT_ACCESSIBLE / unavailable / absent / forged all merge, ids = the derived ones
+  local m="$1" d o k want have sid
+  for sid in NOT_ACCESSIBLE unavailable ABSENT "$FORGED"; do
+    d="$(SELF_ID="$sid" b3_world)"; o="$(out_of "$d")"
+    run_merge "$m" "$d"
+    [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && [ -f "$o" ] || return 1
+    want=""; for k in 1 2 3 cross-1 cross-2 cross-3; do want="$want $k=$(did_of "$d" "$k")"; done
+    have="$(sed -n 's/^shard_tool_use_ids://p' "$o")"
+    [ "$have" = "$want" ] || return 1
+    grep -qx "tool_use_id: $(did_of "$d" cross-1)" "$o" || return 1
+    ! grep -qF -- "$FORGED" "$o" || return 1
+  done
+}
+p_tuid_norow() { # R1: shard 2 has no write-ledger row (a Bash write) -> REFUSED; no fallback to its self id
+  local d; d="$(tw)"; SELF_ID="$FORGED" HR_OFF=1 s2 "$d"; run_merge "$1" "$d"
+  refused_clean "2.md has no row in" "$d"
+}
+p_tuid_nometa() { # R2: the writer's meta file is absent, no probe row, a real-shaped self id -> REFUSED
+  local d; d="$(tw)"; SELF_ID="$REAL_OTHER" HR_NOMETA=1 s2 "$d"; run_merge "$1" "$d"
+  refused_clean "whose meta file" "$d" && has "$MO" "is absent; its dispatch id cannot be derived"
+}
+p_tuid_selfdiff() { # R3: a real-shaped self id that differs from the derived one -> REFUSED; equal merges
+  local d; d="$(tw)"; SELF_ID="$REAL_OTHER" s2 "$d"; run_merge "$1" "$d"
+  refused_clean "self-reports tool_use_id $REAL_OTHER, but the harness records derive" "$d" || return 1
+  d="$(tw)"; SELF_ID="$(did_of "$d" 2)" s2 "$d"; run_merge "$1" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:"
+}
+p_tuid_role() { # R4: shard 2's only writer was dispatched as a remediator; R8: an adversary AND a
+                # remediator wrote it -- each REFUSED naming the role
+  local d; d="$(tw)"; HR_ROLE=remediator s2 "$d"; run_merge "$1" "$d"
+  refused_clean "dispatched as role remediator; only an adversary writes an adversary shard" "$d" || return 1
+  d="$(tw)"; s2 "$d"
+  HR_ROLE=remediator HR_AGENT_O=a00000000000000r8 HR_DID_O=toolu_01RemediatorWrite000008 harness_record "$d/2.md"
+  run_merge "$1" "$d"
+  refused_clean "dispatched as role remediator; only an adversary writes an adversary shard" "$d"
+}
+p_tuid_twowriters() { # R6: two adversary dispatches wrote shard 2 -> REFUSED, never the first taken
+  local d; d="$(tw)"; s2 "$d"
+  HR_AGENT_O=a00000000000000r6 HR_DID_O=toolu_01SecondAdversary0000006 harness_record "$d/2.md"
+  run_merge "$1" "$d"
+  refused_clean "was written by more than one adversary dispatch" "$d"
+}
+p_tuid_oneagent() { # R5: one agent wrote shards 2 and 3 -> REFUSED, one dispatch delivered two shards
+  local d x; d="$(new_world)"
+  shard "$d" 1 2 EXIT_CONDITION_MET 1; s2 "$d"
+  hr_ids "$d/2.md"
+  HR_AGENT_O="$HR_AGENT" HR_DID_O="$HR_DID" shard "$d" 3 2 EXIT_CONDITION_MET 3
+  for x in $(xkeys 3); do shard "$d" "$x" 0 EXIT_CONDITION_MET "1, 3"; done
+  run_merge "$1" "$d"
+  refused_clean "one dispatch delivered two shards" "$d"
+}
+p_tuid_nospawn() { # R7: the meta file's dispatch id has no spawn-ledger row -> REFUSED
+  local d; d="$(tw)"; HR_NOSPAWN=1 s2 "$d"; run_merge "$1" "$d"
+  refused_clean "which has no row in" "$d" && has "$MO" "spawn-ledger.jsonl"
+}
+p_tuid_session() { # the meta file is found from the ROW's transcript_path and agent_id: a payload whose
+                   # session_id is not the transcript's stem still merges
+  local d x; d="$(new_world)"
+  for x in 1 2 3; do HR_SESSION=other-session shard "$d" "$x" 2 EXIT_CONDITION_MET "$x"; done
+  for x in $(xkeys 3); do HR_SESSION=other-session shard "$d" "$x" 0 EXIT_CONDITION_MET "1, 3"; done
+  run_merge "$1" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && grep -qx "tool_use_id: $(did_of "$d" cross-1)" "$(out_of "$d")"
+}
+p_tuid_pre() { # R9: a row with no transcript_path takes the probe row's id (merges); with no probe row
+               # it is REFUSED naming the agent and "predates transcript_path"
+  local d; d="$(tw)"; HR_PRE=1 HR_PROBE=1 s2 "$d"; run_merge "$1" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && grep -q " 2=$(did_of "$d" 2) " "$(out_of "$d")" || return 1
+  d="$(tw)"; HR_PRE=1 HR_NOPROBE=1 s2 "$d"; hr_ids "$d/2.md"; run_merge "$1" "$d"
+  refused_clean "agent $HR_AGENT in a row that predates transcript_path" "$d"
+}
+p_tuid_basename() { # rows are keyed on the FULL path under the shard dir: shard 2's only rows sit under
+                    # ANOTHER shard dir of the same sprint and under the same dir name in ANOTHER sprint
+  local d pa o; d="$(tw)"; pa="$(dirname "$(dirname "$(dirname "$d")")")"
+  # ABSENT self id: a no-row shard then has nothing a self-report fallback (TM1) could take, so the
+  # refusal is this cell's alone.
+  SELF_ID=ABSENT HR_OFF=1 s2 "$d"
+  for o in "$pa/s1/shards/stories-p2" "$pa/s2/shards/stories-p1"; do
+    mkdir -p "$o" && harness_record "$o/2.md" || return 1
+  done
+  [ "$(grep -c '"path":"[^"]*/shards/stories-p[12]/2.md"' "$pa/.artifact-writes.jsonl")" -eq 2 ] || return 1
+  run_merge "$1" "$d"
+  refused_clean "2.md has no row in" "$d"
+}
+p_tuid_probemeta() { # the probe ledger carries TWO ids for shard 2's agent, the meta file's and another
+                     # adversary dispatch's -> REFUSED: every probe row must carry the meta's id (BL-536 D4)
+  local d st; d="$(tw)"; s2 "$d"; hr_ids "$d/2.md"; st="$(hr_state "$d/2.md")"
+  printf '{"v":3,"agent_id":"%s","role":"adversary","tool_use_id":"%s"}\n' "$HR_AGENT" "$REAL_OTHER" >> "$st/subagent-context.jsonl"
+  printf '{"v":1,"role":"adversary","tool_use_id":"%s"}\n' "$REAL_OTHER" >> "$st/spawn-ledger.jsonl"
+  run_merge "$1" "$d"
+  refused_clean "whose meta file names dispatch $HR_DID but" "$d" \
+    && has "$MO" "for that agent; the meta file was rewritten after the agent stopped"
+}
+p_tuid_tworoles() { # ONE dispatch id carrying two spawn rows, adversary and remediator -> REFUSED
+  local d st; d="$(tw)"; s2 "$d"; hr_ids "$d/2.md"; st="$(hr_state "$d/2.md")"
+  printf '{"v":1,"role":"remediator","tool_use_id":"%s"}\n' "$HR_DID" >> "$st/spawn-ledger.jsonl"
+  run_merge "$1" "$d"
+  refused_clean "dispatch $HR_DID, dispatched as role remediator" "$d"
+}
+# ------------------------------------------------- the re-dispatch of one shard (--rerun)
+# The hook stamps each row with the wall clock, so a cell that must place rows on either side of a
+# re-run start re-stamps the rows ONE harness_record call appended, by line number, after the hook
+# wrote them: hr_at <ts> <command...>. Nothing else in the row moves.
+hr_at() {
+  local ts="$1" led n0 n1; shift
+  led="$(hr_state "$WORLD_SHARD")/planning-artifacts/.artifact-writes.jsonl"
+  n0="$(grep -c . "$led" 2>/dev/null)" || n0=0
+  "$@" || return 1
+  n1="$(grep -c . "$led")" || n1=0
+  [ "$n1" -gt "$n0" ] || return 1
+  awk -v n0="$n0" -v ts="$ts" 'NR > n0 { sub(/"ts":"[^"]*"/, "\"ts\":\"" ts "\"") } { print }' "$led" > "$led.tmp" \
+    && mv "$led.tmp" "$led"
+}
+RR_S=2026-10-15T20:30:00Z
+p_rerun_join() { # a stalled adversary wrote 2.md and its draft before S; the re-dispatch, a NEW dispatch,
+                 # wrote 2.md after it -> MERGED with --rerun, the rerun: line naming the superseded agent
+  local d o; d="$(tw)"; WORLD_SHARD="$d/2.md"
+  # The draft row is the stalled writer's own and is allowed; it is not a row ON 2.md, so it is not
+  # among the superseded rows counted. The stalled writer never reached SubagentStop, so it carries
+  # no probe row (HR_NOPROBE=1), which is what the real producer leaves behind.
+  HR_NOPROBE=1 HR_AGENT_O=a0000000000stall HR_DID_O=toolu_01StalledAdversary000002 hr_at 2026-10-15T19:59:00Z harness_record "$d/2.md.draft" || return 1
+  HR_NOPROBE=1 HR_AGENT_O=a0000000000stall HR_DID_O=toolu_01StalledAdversary000002 hr_at 2026-10-15T20:00:00Z s2 "$d" || return 1
+  HR_NOPROBE=1 HR_AGENT_O=a0000000000stall HR_DID_O=toolu_01StalledAdversary000002 hr_at 2026-10-15T20:01:00Z s2 "$d" || return 1
+  hr_at 2026-10-15T21:00:00Z s2 "$d" || return 1
+  hr_ids "$d/2.md"; o="$(out_of "$d")"
+  bash "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && has "$MO" "superseded=2" && grep -q " 2=$HR_DID " "$o" \
+    && grep -qx "rerun: 2.md since $RR_S; superseded: a0000000000stall (2 rows, 2026-10-15T20:00:00Z..2026-10-15T20:01:00Z)" "$o"
+}
+p_rerun_other() { # graph s318 requirements-p1/cross-2's shape: cross-1's OWN adversary edited shard 2
+                  # before S, and a new dispatch wrote it after -> REFUSED; --rerun never acquits a
+                  # cross-shard write
+  local d c1a c1d; d="$(tw)"; WORLD_SHARD="$d/2.md"
+  hr_ids "$d/cross-1.md"; c1a="$HR_AGENT"; c1d="$HR_DID"
+  HR_AGENT_O="$c1a" HR_DID_O="$c1d" hr_at 2026-10-15T20:00:00Z s2 "$d" || return 1
+  hr_at 2026-10-15T21:00:00Z s2 "$d" || return 1
+  bash "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
+  refused_clean "--rerun 2.md: $c1a is a superseded writer of 2.md and also wrote" "$d" && has "$MO" "cross-1.md at"
+}
+p_rerun_same() { # the superseded writer writes 2.md again after S, and nobody else does -> REFUSED: the
+                 # re-run is a NEW dispatch
+  local d; d="$(tw)"; WORLD_SHARD="$d/2.md"
+  hr_at 2026-10-15T20:00:00Z s2 "$d" || return 1
+  hr_at 2026-10-15T21:00:00Z s2 "$d" || return 1
+  hr_ids "$d/2.md"
+  bash "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
+  refused_clean "--rerun 2.md: $HR_AGENT wrote" "$d" && has "$MO" "its writer must not be one of the writers it supersedes"
+}
+# ---------------------------------------------------------------- BL-536 D1, D2, D4
+# Each refusing cell sits beside its MERGED twin one property apart. The discriminating member is
+# seeded NOT first: D1's remediator sorts after the stalled adversary among the superseded writers,
+# D2's offending row follows the agent's own in-dir row and an unrelated agent's row in another -p
+# dir, and D4's shard 2 is the second ordinal the join reaches.
+p_rerun_role() { # D1: a REMEDIATOR among the writers --rerun supersedes -> REFUSED as a role violation;
+                 # the same world with that writer an adversary MERGES (superseded=2)
+  local d role
+  for role in remediator adversary; do
+    d="$(tw)"; WORLD_SHARD="$d/2.md"
+    HR_NOPROBE=1 HR_AGENT_O=a0000000000stall HR_DID_O=toolu_01StalledAdversary000002 hr_at 2026-10-15T20:00:00Z s2 "$d" || return 1
+    HR_NOPROBE=1 HR_ROLE="$role" HR_AGENT_O=a000000000zremed HR_DID_O=toolu_01SupersededWriter0000r1 hr_at 2026-10-15T20:05:00Z s2 "$d" || return 1
+    hr_at 2026-10-15T21:00:00Z s2 "$d" || return 1
+    hr_ids "$d/2.md"
+    bash "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
+    if [ "$role" = remediator ]; then
+      refused_clean "carries rows --rerun would supersede from agent a000000000zremed, dispatch toolu_01SupersededWriter0000r1, dispatched as role remediator" "$d" \
+        && has "$MO" "a non-adversary write on a shard is a role violation, not a stale dispatch" || return 1
+    else
+      [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && has "$MO" "superseded=2" && grep -q " 2=$HR_DID " "$(out_of "$d")" || return 1
+    fi
+  done
+}
+XP_A=a0000000000xpass; XP_D=toolu_01CrossPassAdversary000
+p_xdir() { # D2: shard 2's sole writer also wrote under ANOTHER shards/<x>-p<M>/ dir -> REFUSED, with and
+           # without --rerun, and stories-p10 is another dir than stories-p1. Twins: a .draft in this
+           # dir, and an UNRELATED agent's row in stories-p10, each MERGE; --rerun without the p2 row MERGES
+  local d sh o
+  for o in stories-p2/1.md stories-p10/1.md own-draft other-agent-p10; do
+    d="$(tw)"; sh="$(dirname "$d")"
+    mkdir -p "$sh/stories-p3" "$sh/stories-p2" "$sh/stories-p10" || return 1
+    harness_record "$sh/stories-p3/1.md"
+    HR_AGENT_O="$XP_A" HR_DID_O="$XP_D" s2 "$d"
+    case "$o" in
+      own-draft) HR_AGENT_O="$XP_A" HR_DID_O="$XP_D" harness_record "$d/2.md.draft" ;;
+      other-agent-p10) harness_record "$sh/stories-p10/1.md" ;;
+      *) HR_AGENT_O="$XP_A" HR_DID_O="$XP_D" harness_record "$sh/$o" ;;
+    esac
+    run_merge "$1" "$d"
+    case "$o" in
+      own-draft|other-agent-p10) [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && grep -q " 2=$XP_D " "$(out_of "$d")" || return 1 ;;
+      *) refused_clean "agent $XP_A wrote in _bmad-output/planning-artifacts/s1/shards/stories-p1/ and also wrote _bmad-output/planning-artifacts/s1/shards/$o at " "$d" \
+           && has "$MO" "under another shard dir; one dispatch delivers one shard of one pass" || return 1 ;;
+    esac
+  done
+  for o in refuse merge; do
+    d="$(tw)"; sh="$(dirname "$d")"; WORLD_SHARD="$d/2.md"; mkdir -p "$sh/stories-p2" || return 1
+    HR_AGENT_O="$XP_A" HR_DID_O="$XP_D" hr_at 2026-10-15T20:00:00Z s2 "$d" || return 1
+    [ "$o" = merge ] || { HR_AGENT_O="$XP_A" HR_DID_O="$XP_D" hr_at 2026-10-15T20:01:00Z harness_record "$sh/stories-p2/1.md" || return 1; }
+    hr_at 2026-10-15T21:00:00Z s2 "$d" || return 1
+    hr_ids "$d/2.md"
+    bash "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
+    if [ "$o" = refuse ]; then
+      refused_clean "agent $XP_A wrote in _bmad-output/planning-artifacts/s1/shards/stories-p1/ and also wrote _bmad-output/planning-artifacts/s1/shards/stories-p2/1.md at 2026-10-15T20:01:00Z, under another shard dir" "$d" || return 1
+    else
+      [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && has "$MO" "superseded=1" && grep -q " 2=$HR_DID " "$(out_of "$d")" || return 1
+    fi
+  done
+}
+forge_meta() { # <shard file> <agent id> <toolUseId> -- rewrite that agent's meta file, as a lead Write would
+  printf '{"agentType":"adversary","description":"rewritten","toolUseId":"%s","spawnDepth":1}\n' "$3" \
+    > "$(dirname "$(hr_state "$1")")/.harness/fx-session/subagents/agent-$2.meta.json"
+}
+other_spawn() { # <shard dir> -- REAL_OTHER recorded as an adversary dispatch, so a forged meta naming it resolves
+  printf '{"v":1,"role":"adversary","tool_use_id":"%s"}\n' "$REAL_OTHER" >> "$(hr_state "$1/2.md")/spawn-ledger.jsonl"
+}
+p_probe_disagree() { # D4: shard 2's meta file rewritten to another adversary dispatch after its writer
+                     # stopped -- the writer an adversary, then a remediator -> each REFUSED 'rewritten';
+                     # the unforged twin (same spawn rows) MERGES
+  local d role
+  d="$(tw)"; s2 "$d"; other_spawn "$d"; run_merge "$1" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && grep -q " 2=$(did_of "$d" 2) " "$(out_of "$d")" || return 1
+  for role in adversary remediator; do
+    d="$(tw)"; HR_ROLE="$role" s2 "$d"; other_spawn "$d"; hr_ids "$d/2.md"; forge_meta "$d/2.md" "$HR_AGENT" "$REAL_OTHER"
+    run_merge "$1" "$d"
+    refused_clean "agent $HR_AGENT, whose meta file names dispatch $REAL_OTHER but" "$d" \
+      && has "$MO" "records $HR_DID for that agent; the meta file was rewritten after the agent stopped" || return 1
+  done
+}
+p_rerun_residual() { # THE STATED KNOWN GAP (merge header RE-DISPATCH, "RESIDUAL, ACQUITTED"): a writer
+                     # --rerun supersedes is held to probe EQUALITY only, so a remediator that never
+                     # stopped (no probe row) with its meta rewritten to an adversary dispatch is set
+                     # aside and the set MERGES. This cell is the exemption's own probe: it pins exactly
+                     # what is acquitted, so a change that widens or closes the gap moves it. Its twin,
+                     # one property apart, is the same remediator WITH its probe row (it stopped) ->
+                     # REFUSED by the equality the superseded writer is still held to.
+  local d probe
+  for probe in 0 1; do
+    d="$(tw)"; WORLD_SHARD="$d/2.md"; other_spawn "$d"
+    HR_NOPROBE="$([ "$probe" = 1 ] && echo 0 || echo 1)" HR_ROLE=remediator HR_AGENT_O=a000000000zremed HR_DID_O=toolu_01SupersededWriter0000r1 \
+      hr_at 2026-10-15T20:05:00Z s2 "$d" || return 1
+    forge_meta "$d/2.md" a000000000zremed "$REAL_OTHER"
+    hr_at 2026-10-15T21:00:00Z s2 "$d" || return 1
+    hr_ids "$d/2.md"
+    bash "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
+    if [ "$probe" = 0 ]; then
+      [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && has "$MO" "superseded=1" && grep -q " 2=$HR_DID " "$(out_of "$d")" || return 1
+    else
+      refused_clean "agent a000000000zremed, whose meta file names dispatch $REAL_OTHER but" "$d" \
+        && has "$MO" "records toolu_01SupersededWriter0000r1 for that agent; the meta file was rewritten after the agent stopped" || return 1
+    fi
+  done
+}
+p_probe_absent() { # D4: shard 2's writer has a meta file and NO probe row -- a legitimate adversary, and a
+                   # remediator whose meta is forged to an adversary dispatch -> each REFUSED 'has not
+                   # stopped'; the same legitimate world WITH its probe row MERGES
+  local d
+  d="$(tw)"; s2 "$d"; other_spawn "$d"; run_merge "$1" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && grep -q " 2=$(did_of "$d" 2) " "$(out_of "$d")" || return 1
+  d="$(tw)"; HR_NOPROBE=1 s2 "$d"; other_spawn "$d"; hr_ids "$d/2.md"; run_merge "$1" "$d"
+  refused_clean "agent $HR_AGENT, whose meta file names dispatch $HR_DID but" "$d" \
+    && has "$MO" "has no row for that agent; an adversary that has not stopped has not delivered" || return 1
+  d="$(tw)"; HR_ROLE=remediator HR_NOPROBE=1 s2 "$d"; other_spawn "$d"; hr_ids "$d/2.md"; forge_meta "$d/2.md" "$HR_AGENT" "$REAL_OTHER"
+  run_merge "$1" "$d"
+  refused_clean "agent $HR_AGENT, whose meta file names dispatch $REAL_OTHER but" "$d" \
+    && has "$MO" "has no row for that agent; an adversary that has not stopped has not delivered"
+}
+
+P_ALL="b3 clean ceiling miss_ord miss_cross dup partition sha ms doc_b3 doc_axis doc_sha doc_path doc_serial files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit subj_b4 b4doc b4doc_nomf b4doc_other xfiles xdoc xelicit xmix xunknown xcomplete stem_series stem_control stem_near stem_files tuid_main tuid_norow tuid_nometa tuid_selfdiff tuid_role tuid_twowriters tuid_oneagent tuid_nospawn tuid_session tuid_pre tuid_basename tuid_probemeta tuid_tworoles rerun_join rerun_other rerun_same rerun_role xdir probe_disagree probe_absent rerun_residual"
 

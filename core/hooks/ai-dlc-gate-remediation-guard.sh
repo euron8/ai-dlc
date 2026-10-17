@@ -58,7 +58,9 @@
 # DECISION ORDER (first match wins)
 #   0. jq absent                     -> allow (nothing can be parsed; see posture)
 #   1. no pipeline snapshot          -> allow (not an ai-dlc session)
-#   2. payload carries agent_id      -> RECORD the write (verdict, planning artifact), then allow (a dispatched teammate;
+#  1b. a dispatched REMEDIATOR's edit to docs/escalations/pending.md -> DENY, and log
+#                                       REMEDIATOR_ESCALATION_EDIT_DENIED (see "ARM 1b" below)
+#   2. payload carries agent_id      -> RECORD the write (verdict, planning artifact, adjudication part), then allow (a dispatched teammate;
 #                                       THE remediator, and the only event that names a writer)
 #   3. tool is not an edit           -> allow
 #  3b. lead edit to PRODUCT CODE in an /ai-dlc session -> DENY, and log LEAD_PRODUCT_EDIT_DENIED
@@ -158,10 +160,77 @@
 # THE GUARDED ROOTS (deliberately narrow -- Rule 26 minimum mechanism)
 #   `_bmad-output/planning-artifacts/**`, `_bmad-output/implementation-artifacts/**`,
 #   `docs/**`. That is where all four measured top edit targets live, plus the
-#   `docs/architecture.md` insertion pass 11 named as the root cause. These roots
+#   `docs/architecture.md` insertion pass 11 named as the root cause. Three gate
+#   records sit beside them for arm 7a's reason, not as edit targets:
+#   `gate-adjudication/**`, `spawn-ledger.jsonl` and `subagent-context.jsonl` (the
+#   records a verdict or a shard merge binds by; hooks append to the two ledgers
+#   directly, never through this matcher). These roots
 #   bound the GATE arms (4-10) only. Product code is not a gate-remediation
 #   subject at all -- an `[implementation]` gate's repairs run through the dev/qa
 #   loop -- and it is denied to the lead by arm 3b, which reads no gate state.
+#
+# ARM 1b -- A REMEDIATOR DOES NOT WRITE THE ESCALATION RECORD
+# `docs/escalations/pending.md` is what the lead and the operator adjudicate. Measured on the
+# reference consumer, s319: the serial cross-part requirements remediator made four successful
+# Edits to it, one appending a `**CORRECTION (serial remediator, ...)**` to an existing entry's
+# evidence line -- changing the premise the operator would rule on. Its brief named neither the
+# file nor any escalation work. A remediator's channel for a fix outside its files is an
+# `escalated` entry in its own repair record (`team-roles/remediator.md`), which the lead applies.
+#
+# WHY HERE AND NOT `ai-dlc-protect.sh`, WHICH LISTS THE FILE. Traced: `ai-dlc-protect.sh` is
+# registered exactly once in `templates/settings.json.template`, on the context-mode MCP matcher
+# (`ctx_execute_file|ctx_batch_execute|ctx_index`), and its job is to stop CONSOLIDATION through
+# those tools. It never sees an Edit, Write or MultiEdit, which is why the s319 Edits went
+# through. Re-registering it on the edit matcher would deny the LEAD's own `pending.md` Edit --
+# arm 6 below permits that edit deliberately, because the escalation is the lead's sanctioned
+# exit from a stalled gate. So the close is keyed on the ROLE, here, where `agent_id` is read.
+#
+# DENIED when ALL hold: the tool is Edit|Write|MultiEdit; the payload carries `agent_id`; the
+# target, made absolute against PROJECT_DIR when relative and collapsed lexically by `lpe_lex`,
+# ends in `/docs/escalations/pending.md` (a relative `docs/escalations/pending.md`, the
+# PROJECT_DIR spelling and any absolute spelling all reach it); and the dispatch's definition is
+# exactly `remediator`.
+#
+# THE ROLE IS READ FROM THE HARNESS'S META SIDECAR, NEVER FROM THE agent_id. The id is opaque.
+# `<transcript_path minus .jsonl>/subagents/agent-<agent_id>.meta.json`, read with
+# `.customAgentType // .agentType // empty` -- the expression `ai-dlc-subagent-probe.sh` uses for
+# its DEFINITION, copied BYTE-IDENTICALLY rather than factored: `install.sh` splits hooks from
+# scripts, I33 forbids locating one core file from another, and a hook that sources a missing
+# helper fails open, which is I92's reason for its own four copies. The fixture
+# `gate-remediation-deny` greps the probe's expression out of the probe and asserts it occurs in
+# this file, and seeds a drift that fails. THE PRODUCER WRITES THE ROLE IN `agentType`:
+# `customAgentType` is in 0 of 3216 graph metas and 0 of 1797 ai-dlc metas, and `agentType` is in
+# all 3216 graph metas, measured on 2026-10-16. It is read first only because the probe's expression reads
+# it first; nothing the harness emits exercises it.
+#
+# THIS ARM DEPENDS ON `ai-dlc-dispatch-guard.sh:1186`, the `del(.name)` in its role-bound rewrite.
+# On a NAMED teammate the harness writes the spawn NAME into `agentType` --
+# `{"agentType":"remediator-serial-cross","name":...,"teamName":...}` -- and this arm then ALLOWS a
+# real remediator. The dispatch guard deletes `name` on every role-bound dispatch, so the meta
+# carries `agentType: remediator`; all 9 named remediator spawns in graph do. The fixture's
+# `1b-name-strip` arm fails if that deletion goes, and its named-shape cell asserts the unstripped
+# meta ALLOWS, as the known gap this dependency holds shut.
+#
+# THE ROLE SET HAS NO VARIANTS: `core/team-roles/` holds `remediator.md` and no `remediator-*`.
+# Measured over the reference consumer's 3216 subagent metas on 2026-10-16: 539 resolve to `remediator`, 0 to any
+# other spelling containing it (control: 262 `gate-adjudicator` in the same pass). So the match is
+# the exact string.
+#
+# FAILS OPEN, SILENTLY, when the meta cannot be read: no `transcript_path`, no meta file, a meta
+# that does not parse, or one carrying neither key. The call then reaches arm 2 exactly as before.
+# Silent, because the absent meta is the COMMON gap rather than a broken state. Measured on graph
+# on 2026-10-16: 235 metas were born more than 5s after their agent transcript, and 194 of those
+# have a probe row OLDER than the meta's birth, so they are rewrites of a meta that already
+# existed; real late creation is at most 41. A remediator whose FIRST call is the `pending.md`
+# Edit can precede its own meta and is allowed. That is a stated gap of this arm. On the
+# motivating s319 Edit the arm's outcome is undetermined: that meta's birth time is a rewrite, so
+# it is not a known miss.
+# STATED GAP: a case-folded spelling (`Pending.md`, `Docs/Escalations/`) or one reached through a
+# symlinked directory ALLOWS, because the collapse is lexical and case-exact.
+# STATED GAP: a remediator can force the fail-open itself, by making its own meta unreadable or
+# unparseable, and the arm then ALLOWS.
+# What it does NOT cover: a remediator's Bash write to the file (not on this matcher); any other
+# role's write (dev and architect have sanctioned writes there); the lead (no `agent_id`).
 #
 # ARM 3b -- THE LEAD DOES NOT EDIT PRODUCT CODE (Rule 28), GATE OR NO GATE
 # Measured on the reference consumer, sprints 317-318: 1803 lead Edit/Write/MultiEdit
@@ -249,12 +318,14 @@
 # OUTPUT
 # - Appends to: _bmad-output/pipeline-continuation-log.md
 #   (GATE_REMEDIATION_DENIED / GATE_REMEDIATION_LIFTED / GATE_REMEDIATION_SUPPRESSED /
-#    GATE_STATE_UNADJUDICABLE / GATE_VERDICT_UNBOUND / LEAD_PRODUCT_EDIT_DENIED)
+#    GATE_STATE_UNADJUDICABLE / GATE_VERDICT_UNBOUND / LEAD_PRODUCT_EDIT_DENIED /
+#    REMEDIATOR_ESCALATION_EDIT_DENIED)
 # - Appends to: _bmad-output/gate-adjudication/.verdict-writes.jsonl (arm 7a's own record;
 #   durable, because it is evidence about a pass and is read by
 #   `validate-gate-adjudication.sh` at the gate as well as by this hook)
 # - Appends to: _bmad-output/planning-artifacts/.artifact-writes.jsonl (arm 2's record of a
-#   dispatched agent's planning-artifact write; read only by `join-remediator-shards.sh`)
+#   dispatched agent's planning-artifact, spec or gate-adjudication part-file write; read by
+#   `join-remediator-shards.sh` and `merge-adversarial-shards.sh`)
 # - Rewrites: _bmad-output/.gate-remediation-in-force (arm 7b's one-line-keyed cache;
 #   declared transient in schemas/pipeline-state-paths.json, so it renders into the
 #   consumer's .gitignore and is never committed)
@@ -401,8 +472,9 @@ STEER_SCRIPT="${PROJECT_DIR}/scripts/ai-dlc/validate-steering-budget.sh"
 # The spawn ledger's `role`, though, is what `ai-dlc-dispatch-guard.sh` reads out of the
 # lead's OWN dispatch prompt, so a dispatch naming the adjudicator role is a genuine
 # `gate-adjudicator` row whatever that dispatch then does. Both files are guarded roots below
-# (the write ledger by its directory, the spawn ledger by name), so a denied lead cannot
-# rewrite either through Write or Edit; through Bash it can rewrite both, as it can every
+# (the write ledger by its directory, the spawn ledger by name), and so is the subagent probe
+# ledger the shard merge joins through, so a denied lead cannot
+# rewrite any of them through Write or Edit; through Bash it can rewrite all three, as it can every
 # artifact this guard reads, and that limit is the guard's, not this arm's.
 WRITE_LEDGER="${GATE_DIR}/.verdict-writes.jsonl"
 SPAWN_LEDGER="${LOG_DIR}/spawn-ledger.jsonl"
@@ -516,7 +588,23 @@ record_verdict_write() { # $1 file_path -- silent no-op unless this is a verdict
 # overlap, which is the conservative direction for a check whose subject is two writers.
 # A row is written only for an Edit, Write or MultiEdit the harness validated and passed to
 # PreToolUse; a Bash write (a redirect, `sed -i`, `tee`, a script's open) produces none.
-record_artifact_write() { # $1 file_path -- silent no-op unless this is a planning-artifact write
+#
+# GATE-ADJUDICATION PART FILES ARE RECORDED HERE TOO, and in THIS ledger, never the verdict one.
+# A sharded adjudication writes `<nonce>.part-<i>of<N>.jsonl` beside the verdict, and before this
+# no ledger named who wrote one, so `adjudicator_agent_id` was self-reported with nothing to
+# derive it from (part file -> writer agent_id -> meta toolUseId -> spawn role). A part row in
+# `.verdict-writes.jsonl` would move the pre-migration epoch for the reason the paragraph above
+# gives, so it goes here with `kind: "artifact-write"`. `record_verdict_write` returns before
+# such a path (`.jsonl` is not `.verdict.json`), so one write never produces two rows.
+# Every reader of this ledger was censused for an assumption that `path` sits under
+# `planning-artifacts/` or `specs/`: `join-remediator-shards.sh` filters on its artifact slot,
+# shard prefix or subject set and drops any other path; `merge-adversarial-shards.sh` filters on
+# `<state>/planning-artifacts/s<N>/shards/<artifact>-p<M>/`; `validate-draft-stamps.sh` names the
+# file only to exempt it and reads no row. None derives a sprint slot from a path it did not
+# select by prefix first, so a `gate-adjudication/` row reaches none of them.
+# STATED GAP: in `--subject` mode `join-remediator-shards.sh` drops these rows by its subject-set
+# filter, not by a prefix, so "by prefix first" does not describe that mode.
+record_artifact_write() { # $1 file_path -- silent no-op unless this is a planning-artifact, spec or part-file write
   case "$TOOL_NAME" in Edit|Write|MultiEdit) ;; *) return 0 ;; esac
   # The LOG_DIR prefix first, so a directory under planning-artifacts that happens to share the
   # state directory's name cannot move the cut; the generic form is the fallback for a payload
@@ -527,6 +615,11 @@ record_artifact_write() { # $1 file_path -- silent no-op unless this is a planni
     "$LOG_DIR"/planning-artifacts/*|"$LOG_DIR"/specs/s[0-9]*/*) _raw_rel="${STATE_DIR_NAME}/${1#"$LOG_DIR"/}" ;;
     */${STATE_DIR_NAME}/planning-artifacts/*|*/${STATE_DIR_NAME}/specs/s[0-9]*/*) _raw_rel="${STATE_DIR_NAME}/${1#*/${STATE_DIR_NAME}/}" ;;
     ${STATE_DIR_NAME}/planning-artifacts/*|${STATE_DIR_NAME}/specs/s[0-9]*/*) _raw_rel="$1" ;;
+    # A gate adjudicator's PART FILE, `<nonce>.part-<i>of<N>.jsonl` beside the verdict. Its own
+    # lines, so a mutation anchored on them cannot touch the two subjects above.
+    "$LOG_DIR"/gate-adjudication/*.part-*.jsonl) _raw_rel="${STATE_DIR_NAME}/${1#"$LOG_DIR"/}" ;;
+    */${STATE_DIR_NAME}/gate-adjudication/*.part-*.jsonl) _raw_rel="${STATE_DIR_NAME}/${1#*/${STATE_DIR_NAME}/}" ;;
+    ${STATE_DIR_NAME}/gate-adjudication/*.part-*.jsonl) _raw_rel="$1" ;;
     *) return 0 ;;
   esac
   mkdir -p "$ARTIFACT_LEDGER_DIR" 2>/dev/null || return 0
@@ -586,6 +679,25 @@ verdict_binding() { # $1 live stem; stem list on stdin -> two lines, or nothing 
           --argjson win "$DISPATCH_WINDOW_S" --arg live "$1" "$BIND_PROG" 2>/dev/null
 }
 
+# `.` and `..` collapsed LEXICALLY, before `lpe_phys`. `lpe_phys` walks up to the deepest
+# EXISTING directory and appends the rest verbatim, so a `..` that climbs out of a directory that
+# does not exist survived into the tree-relative path: `docs/nx/../../src/app.py` kept its
+# `docs/` prefix, matched the pipeline-tree allow, and the product edit walked through.
+# Defined here, ahead of every arm, because arm 1b collapses its target the same way.
+lpe_lex() { # $1 absolute path -> the same path with `.`, `..` and empty segments collapsed
+  _ll_in="$1"; _ll_out=""
+  while [ -n "$_ll_in" ]; do
+    _ll_seg="${_ll_in%%/*}"
+    case "$_ll_in" in */*) _ll_in="${_ll_in#*/}" ;; *) _ll_in="" ;; esac
+    case "$_ll_seg" in
+      ""|.) ;;
+      ..) _ll_out="${_ll_out%/*}" ;;
+      *)  _ll_out="${_ll_out}/${_ll_seg}" ;;
+    esac
+  done
+  printf '%s' "${_ll_out:-/}"
+}
+
 # --- 0. jq. Everything below parses JSON; without it nothing can be adjudicated.
 if ! command -v jq >/dev/null 2>&1; then
   SESSION_ID=""
@@ -607,6 +719,59 @@ FP=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
 # --- 1. Not an ai-dlc session. Free, and it precedes every directory read for the
 # reason `ai-dlc-acknowledge.sh:122-130` gives: this matcher is hot.
 [ -f "$SNAPSHOT_FILE" ] || exit 0
+
+# --- 1b. A REMEDIATOR DOES NOT WRITE THE ESCALATION RECORD. Header: "ARM 1b". Evaluated
+# cheapest first: tool, then a `case` on the payload path, then the lexical collapse, and only a
+# write that lands on `docs/escalations/pending.md` pays the jq fork that reads the role.
+# Everything that cannot be evaluated falls through to arm 2 unchanged.
+if [ -n "$AGENT_ID" ]; then
+  case "$TOOL_NAME" in
+    Edit|Write|MultiEdit)
+      case "$FP" in
+        *pending.md*)
+          case "$FP" in /*) _esc_abs="$FP" ;; *) _esc_abs="${PROJECT_DIR}/${FP}" ;; esac
+          case "$_esc_abs" in /*) ;; *) _esc_abs="${PWD}/${_esc_abs}" ;; esac
+          _esc_abs="$(lpe_lex "$_esc_abs")"
+          case "$_esc_abs" in
+            */docs/escalations/pending.md)
+              META="<no transcript_path>"
+              DEFINITION=""
+              if [ -n "$TRANSCRIPT" ]; then
+                META="${TRANSCRIPT%.jsonl}/subagents/agent-${AGENT_ID}.meta.json"
+                if [ -r "$META" ]; then
+                  DEFINITION="$(jq -r '.customAgentType // .agentType // empty' "$META" 2>/dev/null || true)"
+                fi
+              fi
+              case "$DEFINITION" in
+                remediator)
+                  ESC_REASON="AI/DLC: A REMEDIATOR DOES NOT EDIT THE ESCALATION RECORD. \`${TOOL_NAME}\` on \`${FP}\` is DENIED: this dispatch's definition is \`remediator\` (read from \`${META}\`), and \`docs/escalations/pending.md\` is the record the lead and the operator adjudicate. A correction written into it by a repair seat changes the premise the operator rules on.
+
+DO THIS INSTEAD: record the correction as an \`escalated\` entry in YOUR OWN repair record (\`disposition: escalated\`, with an \`edit:\` line naming \`docs/escalations/pending.md\` and the line(s) the correction is about, and the evidence). The lead reads your record and applies the correction to the escalation record itself.
+
+STILL ALLOWED: every other file your brief names, and your repair record. The lead's own edit to \`docs/escalations/pending.md\` is not affected by this arm."
+                  log_event REMEDIATOR_ESCALATION_EDIT_DENIED \
+                    "Tool denied: ${TOOL_NAME}" \
+                    "Target: ${FP}" \
+                    "Agent: ${AGENT_ID}; definition remediator, read from ${META}" \
+                    "A remediator records the correction as an escalated entry; the lead applies it"
+                  jq -n --arg reason "$ESC_REASON" \
+                    '{
+                      hookSpecificOutput: {
+                        hookEventName: "PreToolUse",
+                        permissionDecision: "deny",
+                        permissionDecisionReason: $reason
+                      }
+                    }'
+                  exit 0
+                  ;;
+              esac
+              ;;
+          esac
+          ;;
+      esac
+      ;;
+  esac
+fi
 
 # --- 2. A dispatched teammate. THE WHOLE POINT: the remediator edits freely.
 # `agent_id` is the harness's own discriminator; `ai-dlc-context-sensor.sh:160`
@@ -639,23 +804,6 @@ lpe_phys() { # $1 absolute path -> physical spelling on stdout, or rc 1
   _lp_d="$(cd -P "$_lp_p" 2>/dev/null && pwd -P)" || return 1
   [ "$_lp_d" = "/" ] && _lp_d=""
   printf '%s%s' "$_lp_d" "$_lp_s"
-}
-# `.` and `..` collapsed LEXICALLY, before `lpe_phys`. `lpe_phys` walks up to the deepest
-# EXISTING directory and appends the rest verbatim, so a `..` that climbs out of a directory that
-# does not exist survived into the tree-relative path: `docs/nx/../../src/app.py` kept its
-# `docs/` prefix, matched the pipeline-tree allow, and the product edit walked through.
-lpe_lex() { # $1 absolute path -> the same path with `.`, `..` and empty segments collapsed
-  _ll_in="$1"; _ll_out=""
-  while [ -n "$_ll_in" ]; do
-    _ll_seg="${_ll_in%%/*}"
-    case "$_ll_in" in */*) _ll_in="${_ll_in#*/}" ;; *) _ll_in="" ;; esac
-    case "$_ll_seg" in
-      ""|.) ;;
-      ..) _ll_out="${_ll_out%/*}" ;;
-      *)  _ll_out="${_ll_out}/${_ll_seg}" ;;
-    esac
-  done
-  printf '%s' "${_ll_out:-/}"
 }
 case "$FP" in /*) LPE_ABS="$FP" ;; *) LPE_ABS="${PROJECT_DIR}/${FP}" ;; esac
 case "$LPE_ABS" in /*) ;; *) LPE_ABS="${PWD}/${LPE_ABS}" ;; esac
@@ -855,6 +1003,15 @@ case "$FP" in
   # Hooks append to it directly and never pass through this matcher, so nothing legitimate
   # is lost; a dispatched agent's edit still exits at arm 2.
   */${STATE_DIR_NAME}/spawn-ledger.jsonl|${STATE_DIR_NAME}/spawn-ledger.jsonl) GUARDED=1 ;;
+  # THE SUBAGENT PROBE LEDGER, for the spawn ledger's reason one join over. On a consumer whose
+  # write rows carry no `transcript_path` (graph: 0 of 8084), every adversary dispatch id
+  # `merge-adversarial-shards.sh` derives comes from this file's agent_id -> tool_use_id rows,
+  # so one prepended row maps a remediator's shard onto a real adversary dispatch. Measured
+  # before this line: a denied lead's Write on it was ALLOWED, and that one row turned a
+  # REFUSED merge into MERGED. `ai-dlc-subagent-probe.sh` appends with a shell redirect and
+  # never passes through this matcher, so nothing legitimate is lost; a dispatched agent's
+  # edit still exits at arm 2.
+  */${STATE_DIR_NAME}/subagent-context.jsonl|${STATE_DIR_NAME}/subagent-context.jsonl) GUARDED=1 ;;
   */docs/*|docs/*) GUARDED=1 ;;
 esac
 [ "$GUARDED" -eq 1 ] || exit 0

@@ -6,5 +6,9 @@ core/scripts/validate-steering-budget.sh
 core/scripts/artifact-path-config.sh
 core/skills/ai-dlc/artifact-path-grammar.md
 core/hooks/ai-dlc-acknowledge.sh
+# arm 1b: the role expression is extracted from the subagent probe and bound to the guard's copy.
+core/hooks/ai-dlc-subagent-probe.sh
+# arm 1b: 1b-name-strip greps the dispatch guard's `del(.name)` emission, which arm 1b relies on.
+core/hooks/ai-dlc-dispatch-guard.sh
 core/scripts/validate-suppression-lifetime.sh
 core/skills/ai-dlc/enforcement-map.yaml

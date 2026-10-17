@@ -39,7 +39,9 @@
 # (origin/main at dd7e40ad), so D6 holds files mode to its old bytes rather than to whatever the
 # current merge prints. Regenerated once for the cross groups (BL-464): K=3 now owes cross-1..3,
 # and the diff against the earlier golden is confined to the cross headers, the shard count and
-# the two id lines -- every ordinal shard's body is byte-identical.
+# the two id lines -- every ordinal shard's body is byte-identical. Regenerated again when the
+# dispatch ids became DERIVED from the harness records: the diff is confined to the same two id
+# lines (lines 118-119), now carrying the ids lib.sh's hr_ids derives from each shard's dir and name.
 #
 # Every arm that scores a merge calls its predicate as `p_<name> "$MERGE"` at the start of a
 # line; the battery's join J1 reads exactly that shape to prove the shipped arm set and P_ALL
@@ -162,6 +164,59 @@ p_stem_near "$MERGE" && ok "S3: shards/adversarial-notes-p1/ (the word, not the 
   || bad "S3: a stem containing 'adversarial' without ending in it was refused (rc=$RC): $(cat "$MO")"
 p_stem_files "$MERGE" && ok "S4: files mode and --map on shards/stories-adversarial-p1/ -> each REFUSED naming the series, nothing written" \
   || bad "S4: files mode or --map accepted a series-named shard dir (rc=$RC): $(cat "$MO")"
+
+# ---- the dispatch id is DERIVED from the harness records, never self-reported (T1-T10). Every
+# shard helper drives the REAL remediation-guard hook with a PreToolUse Write payload, and seeds the
+# agent's meta file and an adversary spawn row; each cell below varies ONE of those for shard 2.
+p_tuid_main "$MERGE" && ok "T1: self ids NOT_ACCESSIBLE, unavailable, absent and the forged toolu_cross1_g1_dispatch each merge; shard_tool_use_ids are the derived ids, tool_use_id is cross-1's, the forged string absent" \
+  || bad "T1: a set with real records did not merge to the derived ids (rc=$RC): $(cat "$MO")"
+p_tuid_norow "$MERGE" && ok "T2: shard 2 with no write-ledger row (a Bash write) and a toolu_-prefixed self id -> REFUSED 'has no row', nothing written" \
+  || bad "T2: (rc=$RC) $(cat "$MO")"
+p_tuid_nometa "$MERGE" && ok "T3: shard 2's writer has no meta file, no probe row, and a real-shaped self id -> REFUSED, nothing written" \
+  || bad "T3: (rc=$RC) $(cat "$MO")"
+p_tuid_selfdiff "$MERGE" && ok "T4: a real-shaped self id differing from the derived one -> REFUSED; the derived id self-reported merges" \
+  || bad "T4: (rc=$RC) $(cat "$MO")"
+p_tuid_role "$MERGE" && ok "T5: shard 2 written only by a remediator dispatch, and by an adversary plus a remediator -> each REFUSED naming the role" \
+  || bad "T5: (rc=$RC) $(cat "$MO")"
+p_tuid_twowriters "$MERGE" && ok "T6: two adversary dispatches wrote shard 2 -> REFUSED, neither taken" \
+  || bad "T6: (rc=$RC) $(cat "$MO")"
+p_tuid_oneagent "$MERGE" && ok "T7: one agent wrote shards 2 and 3 -> REFUSED 'one dispatch delivered two shards'" \
+  || bad "T7: (rc=$RC) $(cat "$MO")"
+p_tuid_nospawn "$MERGE" && ok "T8: the meta file's dispatch id has no spawn-ledger row -> REFUSED" \
+  || bad "T8: (rc=$RC) $(cat "$MO")"
+p_tuid_session "$MERGE" && ok "T9: payload session_id differs from the transcript stem -> the meta file is found by the row's transcript_path and agent_id, and the set merges" \
+  || bad "T9: (rc=$RC) $(cat "$MO")"
+p_tuid_pre "$MERGE" && ok "T10: a row with no transcript_path takes the probe row's id and merges; without the probe row it is REFUSED naming the agent and 'predates transcript_path'" \
+  || bad "T10: (rc=$RC) $(cat "$MO")"
+p_tuid_basename "$MERGE" && ok "T11: shard 2's only rows sit under shards/stories-p2/ and under s2/shards/stories-p1/ -> REFUSED 'has no row' (rows keyed on the full path, never the basename)" \
+  || bad "T11: (rc=$RC) $(cat "$MO")"
+p_tuid_probemeta "$MERGE" && ok "T12: the probe ledger names the meta's id AND another adversary dispatch for shard 2's agent -> REFUSED 'the meta file was rewritten after the agent stopped'" \
+  || bad "T12: (rc=$RC) $(cat "$MO")"
+p_tuid_tworoles "$MERGE" && ok "T13: shard 2's dispatch id carries two spawn rows, adversary and remediator -> REFUSED naming the remediator role" \
+  || bad "T13: (rc=$RC) $(cat "$MO")"
+
+# ---- the re-dispatch of one shard (--rerun <shard>.md@<ISO>). RR1 is the contracted path; RR2 is
+# graph s318 requirements-p1/cross-2, a genuine cross-shard write --rerun must never acquit; RR3 is
+# the superseded writer posing as its own re-run.
+p_rerun_join "$MERGE" && ok "RR1: a stalled adversary's 2.md and 2.md.draft before S, a NEW dispatch's 2.md after -> MERGED with --rerun 2.md@S, superseded=2, the rerun: line naming the stalled agent, 2= the new id" \
+  || bad "RR1: (rc=$RC) $(cat "$MO")"
+p_rerun_other "$MERGE" && ok "RR2: cross-1's own adversary edited 2.md before S -> REFUSED with --rerun, naming its cross-1.md row" \
+  || bad "RR2: (rc=$RC) $(cat "$MO")"
+p_rerun_same "$MERGE" && ok "RR3: the superseded writer writes 2.md again after S -> REFUSED, the re-run is a NEW dispatch" \
+  || bad "RR3: (rc=$RC) $(cat "$MO")"
+
+# ---- BL-536: a superseded writer is role-checked (D1), one dispatch writes one shard dir (D2), and
+# the meta file is corroborated by the probe ledger (D4). Each refusal beside its MERGED twin.
+p_rerun_role "$MERGE" && ok "RR4: --rerun superseding a stalled adversary AND a remediator -> REFUSED as a role violation; the same world with that writer an adversary MERGES superseded=2" \
+  || bad "RR4: (rc=$RC) $(cat "$MO")"
+p_xdir "$MERGE" && ok "XD1: shard 2's writer also wrote stories-p2/1.md, or stories-p10/1.md -> REFUSED 'under another shard dir', and under --rerun too; its own 2.md.draft, an unrelated agent in stories-p10, and --rerun without the p2 row each MERGE" \
+  || bad "XD1: (rc=$RC) $(cat "$MO")"
+p_probe_disagree "$MERGE" && ok "PR2: shard 2's meta file rewritten to another adversary dispatch after its adversary, or remediator, stopped -> each REFUSED 'the meta file was rewritten'; the unforged twin MERGES" \
+  || bad "PR2: (rc=$RC) $(cat "$MO")"
+p_probe_absent "$MERGE" && ok "PR1: a legitimate writer with no probe row, and a remediator with a forged meta and no probe row -> each REFUSED 'has not stopped'; the legitimate writer with its row MERGES" \
+  || bad "PR1: (rc=$RC) $(cat "$MO")"
+p_rerun_residual "$MERGE" && ok "RR5: KNOWN GAP, stated in the merge header -- a superseded remediator with no probe row and its meta forged to an adversary dispatch MERGES under --rerun; the same remediator WITH its probe row is REFUSED 'the meta file was rewritten'" \
+  || bad "RR5: (rc=$RC) $(cat "$MO")"
 
 # R6: a finding heading EXACTLY as the real pass wrote it carries no severity word, so the heads
 # counted (0 MAJOR) disagree with findings_major -- refused, never counted as zero.

@@ -20,6 +20,71 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.813.0] - 2026-10-17
+
+Batch 235 (combined release: BL-536, and BL-540 with BL-530's recorder half). Closes BL-536 and BL-540. Advances
+BL-530, which stays OPEN (PARTIAL). Discharges `PC-S319-CONVERGENCE-ADVERSARY-CANNOT-KNOW-ITS-OWN-TOOL-USE-ID`.
+
+### An adversary shard's dispatch id is derived from the harness records, never from the shard (BL-536)
+
+- `merge-adversarial-shards.sh` derives each shard's `tool_use_id` in three hops: the write ledger's `artifact-write`
+  row names the writing agent; that row's `transcript_path` locates `subagents/agent-<id>.meta.json`, whose
+  `toolUseId` is the dispatch id; every spawn-ledger row for that id names role `adversary`. A row with no
+  `transcript_path` takes the probe ledger's `agent_id -> tool_use_id` row or refuses. Nothing falls back to the
+  self-report: `NOT_ACCESSIBLE`, `unavailable`, an absent line and an invented id are ignored and the derived id is
+  written. A real-shaped self id (`toolu_` and 24 base62 characters) that differs from the derived one refuses.
+- Refused, exit 2, nothing written: a shard with no write-ledger row; an absent meta file or `toolUseId`; a dispatch id
+  with no spawn row; a writer of any other role; two adversary dispatches on one shard; one dispatch deriving for two
+  shards; one dispatch with rows under another `shards/<x>-p<M>/` dir; a meta-resolved credited writer with no
+  probe-ledger row, or one whose probe row names another dispatch.
+- `--rerun <shard>.md@<ISO>` (repeatable) supersedes a stalled dispatch's rows on that shard. Every superseded writer
+  is role-checked, and is held to probe agreement only, because a stalled adversary never reaches SubagentStop. The
+  residual this acquits is stated in the merge header and pinned by cell RR5: a forged meta on a superseded writer that
+  never stopped.
+- `ai-dlc-gate-remediation-guard.sh` adds `subagent-context.jsonl` to its guarded roots beside the spawn ledger.
+- `_gate-procedures.md` and `adversary.md` tell a shard to write `tool_use_id: NOT_ACCESSIBLE` and to write shards with
+  Write or Edit; the re-dispatch remedy and the probe-ledger rule are stated there, held by process-rule-pins rows.
+- Fixtures: `adversarial-shard-merge` drives the real hook for every shard (cells T1-T13, RR1-RR5, XD1, PR1, PR2); its
+  mutant battery is sharded six ways (a..f) with a coverage join. `check-24-adversarial-convergence` and
+  `subject-partition` seed the same records.
+- The battery's scorer watchdog keys on no progress, never on elapsed time (BL-592's shape, ai-dlc-c8's change for this
+  battery): `SCORER_POLL=5` and `SCORER_IDLE=300` replace `SCORER_BOUND=900`, a scorer that neither exits nor advances
+  for 300s is recorded `.stalled` and the fixture refuses with exit 2 before any verdict, and arm `[MW]` drives the real
+  `slot()` over a progressing and a hung stub. The pool is 2 wide, so the six concurrent shards put 12 scorers on the
+  box; at 8 wide they put 48 on 18 cores, and in the release's first dress-rehearsal push every scorer, the unmutated
+  control included, ran past the old 900s bound. The width is a concurrency choice no verdict reads. The per-scorer
+  cost, about 140 CPU-seconds against the header's 22, is filed as BL-646.
+- The `[MW]` probe's `case` patterns are parenthesised and its comment carries no apostrophe: inside its multi-line
+  `$( )`, bash 3.2 ended the substitution at a bare pattern `)` (or an unbalanced quote or paren in a comment), so the
+  first concurrent run of the six shards crashed shard a with `pst: unbound variable` after `MJ`. `bash -n` accepts every
+  failing form; the class is filed as BL-647. `[MW]` runs only in shard a, and both of its failure modes, the parse
+  crash and a failed arm, exit non-zero, so shard a reading `ok` under the hook means the arm passed. Driven alone with
+  `slot` and `killtree` extracted verbatim, the fixed block prints its `[MW]` ok line and the unfixed one, the
+  same-invocation control, still crashes.
+- `FORK_BUDGET` rises by the five new `.dist-only` directories, which arm I8 walks one fork each.
+- **Not measured.** The join's behaviour on the real corpus is unmeasured; the replay stopped first. Filed, not built
+  here: BL-596 (the write ledger drops which tree a write was in), BL-597 (a `call_` id under a local-model lead passes
+  the merge and fails Check 24), BL-598 (`--rerun`'s start time is unchecked).
+
+### A remediator may not edit the escalation record; gate-adjudication part files are recorded (BL-540; BL-530, recorder half)
+
+- New arm 1b in `ai-dlc-gate-remediation-guard.sh`, before arm 2's exit: an `Edit|Write|MultiEdit` carrying `agent_id`
+  whose target is `docs/escalations/pending.md` (relative, project-dir and absolute spellings) and whose meta
+  definition is `remediator` is denied, with the remedy to record the correction as an `escalated` entry in the
+  remediator's own repair record for the lead to apply. The role is read with the subagent probe's own expression,
+  byte-identical and bound by the fixture. The arm fails open when the meta is absent or unparseable.
+- Why the original Edit went through: `ai-dlc-protect.sh` is registered only on the context-mode MCP matcher, so it
+  never sees an Edit. Re-registering it would deny the lead's own `pending.md` Edit.
+- Stated gaps, in the arm header: a case-folded or symlinked spelling; a fail-open the remediator forces itself; a
+  named teammate's meta, which carries its spawn name in `agentType` and is allowed (the arm depends on
+  `ai-dlc-dispatch-guard.sh`'s `del(.name)`, bound by arm `1b-name-strip`).
+- False-positive replay over graph's subagent transcripts, every dispatched Edit/Write/MultiEdit to a `pending.md`
+  path, driven through the shipping guard: 3240 subagent transcripts, 2881 prefilter hits (prefilter control: 1 of 25 hit-half and 0 of 25 miss-half transcripts hold a pending.md edit), 27 pending.md edit calls; deny control before the corpus: remediator deny, developer and lead allow; 10 denies, every one a remediator; 0 of the 13 dev and 4 architect calls denied.
+- `record_artifact_write` records `gate-adjudication/*.part-*.jsonl` to the artifact ledger, never to
+  `.verdict-writes.jsonl`. BL-530's Bash in-place-write deny is not built.
+- `gate-remediation-deny` gains 13 arm-1b cells (4 deny, 9 allow, 3 of them fail-open), six arm-1b mutants each scored
+  on the exact cells it flips, the expression binding with a drift control, and the recorder arm.
+
 ## [0.812.0] - 2026-10-17
 
 Batch 235 (the repair join, the SPEC render arm, and a handoff's writes from the ledger). Closes BL-542, BL-546,

@@ -109,6 +109,8 @@ verify: manual
 
 ## BL-530 — a Bash in-place edit rewrites gate inputs with no ledger row, including the adversary's independence field
 
+**PARTIAL (v0.813.0, verified 070ca3d0) — the gate-adjudication recorder shipped; the Bash in-place-write deny is OPEN.** `record_artifact_write` records `gate-adjudication/*.part-*.jsonl` to the artifact ledger, so an adjudicator's part file has a writer row. The adversary-shard half was delivered by BL-536: the merged id is derived and joined to the spawn ledger, and a shard's self-reported id is ignored unless it is real-shaped and differs, which refuses. Nothing here makes a lead or remediator Bash in-place write to a shard, record or snapshot denied or recorded.
+
 **DEFECT.** At 21:38:58 the s319 lead ran `perl -0pi` over the 12 `shards/coe-p1/*.md` adversary
 shards, replacing `tool_use_id: unavailable` with ids it read from its own transcript, so that
 `merge-adversarial-shards.sh` (which refuses a non-`toolu_` id, lines 573-575) would accept them. The
@@ -126,6 +128,10 @@ is a separate defect.
 Owed: the dispatch id reaches the shard by a path that is not a lead hand-edit (for example written
 at dispatch or by the merge from the transcript), and a lead Bash in-place write to a shard,
 record or snapshot under the sprint slot is either denied or recorded.
+
+**First half delivered by BL-536** (adversary shards: the merge derives each shard's dispatch id from
+the harness records and never from the shard). The second half, denying or recording a Bash
+in-place write, stays open, and `adjudicator_agent_id` below is not covered by BL-536.
 
 **Second instance, a shipped field (graph s319 planning gate, 21:49Z).** Gate adjudicator shard 1/2 (agent `a04aa26080fcca36f`) wrote `adjudicator_agent_id: gate-adjudicator` on all 10 of its verdict rows in `_bmad-output/gate-adjudication/planning-20261015T214932Z.part-1of2.jsonl`, where `core/team-roles/gate-adjudicator.md:163` requires "the agent_id of THIS gate-adjudicator dispatch". Its own final report says so. Shard 2/2 wrote a descriptive label, `gate-adjudicator-planning-20261015T214932Z-shard-2of2`, which is not an agent id either. Check 26 (`validate-gate-adjudication.sh`) passed both. So the problem is not confined to adversary shards: no dispatched agent can read its own id, and every field that asks for one is filled by the agent guessing or by the lead hand-patching it afterwards. The fix owed above (the id reaches the record by a path other than the agent's own claim or a lead edit) applies to `adjudicator_agent_id` as well.
 
@@ -170,16 +176,6 @@ verify: manual
 **DEFECT (efficiency).** In graph s319 lead session `62eadbbe-59c3-436d-bf7c-931ebc09ecba`, measured at 22:47Z: 109 `<task-notification>` wakes, of which 61 ended with no tool call and only a restatement that the join was still armed ("X delivered … the join beat is still armed, so I'm waiting"). Each such turn re-reads the lead's whole context. That context ran 250–320K tokens (the sensor fired yellow at 252,985 and the snapshot records red readings of 317,305 and 324,185), and by 21:37Z the session had already spent 61 M tokens of lead cache read over 272 API calls. The waits it restates are `wait-for-deliverable.sh --complete` beats over the whole round, which return on their own. Core says what a notification MEANS for the cap-release rule (`rule-28.md:195`) but nowhere what the lead should DO with one that arrives while a beat covers that agent's deliverable. The analysis this backlog is filed from ranks lead waiting among the largest costs (`docs/analysis/pipeline-efficiency-s317-s318.md`, headline and "Relation to the v0.380.0 investigation").
 
 Owed: a stated lead response to a notification for an agent whose deliverable an armed beat covers: no per-agent status line, no re-check, end the turn. Optionally, a hook that injects that instruction when the notified agent's deliverable is inside `.beat-inflight`'s path set. Measure it by re-running the per-wake count on the next consumer sprint.
-
-verify: manual
-
-## BL-540 — a remediator edits the escalation record, outside its brief and past a protected-path list that names the file
-
-**DEFECT.** In graph s319 the serial cross-part requirements remediator (dispatched at 23:11:31Z) made four successful Edits to `docs/escalations/pending.md`, starting at 23:37:11Z. One appended `**CORRECTION (serial remediator, 2026-10-15):**` to an existing escalation entry's evidence line, changing the premise the operator would rule on. `_gate-procedures.md:940-945` gives the serial remediator the ASSEMBLED subject files and PRD text outside the in-scope parts. Its brief names the four subject files and the spec `.memlog.md`. Neither names `pending.md`, which is the escalation record the lead and the operator adjudicate (`gate-remediation-guard.sh:1407` tells a remediator to ESCALATE there, by way of the lead, not to rewrite it).
-
-`core/hooks/ai-dlc-protect.sh:56` lists `docs/escalations/pending.md` as protected, yet the teammate's Edit went through. Why it was allowed was not traced: whether `ai-dlc-protect.sh` exempts teammates, or is not bound on that matcher, or protects only against another path.
-
-Owed: a remediator's write to `docs/escalations/pending.md` is denied, with a remedy telling it to report the correction as an `escalated` entry in its own record for the lead to apply, and the protect-hook gap is traced and closed. Probe: a remediator-context Edit to `pending.md` is denied, and the lead's own Edit still passes.
 
 verify: manual
 
@@ -1065,3 +1061,5 @@ Owed: profile one scorer in a slot, then cut the per-scorer cost to the scale th
 Related: BL-592 (the wall-clock bound killing a control, the verdict shape; c8's SCORER_IDLE change addresses it). This entry is the cost itself.
 
 verify: manual
+
+

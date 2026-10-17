@@ -34505,3 +34505,152 @@ Owed: a probe running `--sources` on an elicitation record in a tree that also h
 
 verify: manual
 
+## BL-540 — a remediator edits the escalation record, outside its brief and past a protected-path list that names the file
+
+**LANDED (v0.813.0, verified 070ca3d0).** Arm 1b of `ai-dlc-gate-remediation-guard.sh` denies a remediator's Edit/Write/MultiEdit to `docs/escalations/pending.md`, with the remedy to record it as an `escalated` entry; the lead's own Edit passes. The protect-hook gap is traced: `ai-dlc-protect.sh` is registered only on the context-mode MCP matcher and never sees an Edit. False-positive replay over graph's transcripts: 3240 subagent transcripts, 2881 prefilter hits (prefilter control: 1 of 25 hit-half and 0 of 25 miss-half transcripts hold a pending.md edit), 27 pending.md edit calls; deny control before the corpus: remediator deny, developer and lead allow; 10 denies, every one a remediator; 0 of the 13 dev and 4 architect calls denied.
+
+**DEFECT.** In graph s319 the serial cross-part requirements remediator (dispatched at 23:11:31Z) made four successful Edits to `docs/escalations/pending.md`, starting at 23:37:11Z. One appended `**CORRECTION (serial remediator, 2026-10-15):**` to an existing escalation entry's evidence line, changing the premise the operator would rule on. `_gate-procedures.md:940-945` gives the serial remediator the ASSEMBLED subject files and PRD text outside the in-scope parts. Its brief names the four subject files and the spec `.memlog.md`. Neither names `pending.md`, which is the escalation record the lead and the operator adjudicate (`gate-remediation-guard.sh:1407` tells a remediator to ESCALATE there, by way of the lead, not to rewrite it).
+
+`core/hooks/ai-dlc-protect.sh:56` lists `docs/escalations/pending.md` as protected, yet the teammate's Edit went through. Why it was allowed was not traced: whether `ai-dlc-protect.sh` exempts teammates, or is not bound on that matcher, or protects only against another path.
+
+Owed: a remediator's write to `docs/escalations/pending.md` is denied, with a remedy telling it to report the correction as an `escalated` entry in its own record for the lead to apply, and the protect-hook gap is traced and closed. Probe: a remediator-context Edit to `pending.md` is denied, and the lead's own Edit still passes.
+
+verify: manual
+
+## BL-536 — an adversary shard cannot know its own dispatch id, and the merge took whatever was typed
+
+**LANDED (v0.813.0, verified 070ca3d0).** The merge derives each adversary shard's dispatch id from the write ledger, the meta file and the spawn ledger, corroborated by the probe ledger, and never from the shard; `--rerun` re-runs one stalled shard. The join's behaviour on the real corpus is unmeasured; the replay stopped first. Filed, not delivered here: BL-596, BL-597, BL-598.
+
+**DEFECT.** Discharges `PC-S319-CONVERGENCE-ADVERSARY-CANNOT-KNOW-ITS-OWN-TOOL-USE-ID`.
+
+Filed by graph on 2026-10-15 from Sprint 319, uncommitted in its push-candidate ledger.
+`merge-adversarial-shards.sh` demanded each shard's self-reported `tool_use_id` and checked only that
+it began with `toolu_`. A dispatched adversary cannot know the id of the Agent call that spawned it,
+so the value was always written by someone else.
+
+**Measured on graph, sprints 315-319** (413 convergence shard files):
+
+- 360 carry a final id written by someone other than the adversary.
+- The lead hand-filled the ids for whole shard sets in s318 `coe-p1` and s319 `coe-p1`. In s319 it
+  did so with a Bash `perl -0pi`, the BL-530 instance.
+- s317 `stories-p3/18.md` carries the typo `toolu_01CFNaGGJRJMMcDXEDzDV2eSJ` (the real id is
+  `toolu_01CFNaGGJRJMMcDXEDQ88aQz`), and it merged.
+- 12 fabricated ids (`toolu_cross1_g1_dispatch` and similar) passed the shape check, and 13 carry
+  `NOT_ACCESSIBLE`.
+
+**Fix.** The merge derives each shard's dispatch id from three harness records and never from the
+shard:
+
+1. The write ledger (`<state>/planning-artifacts/.artifact-writes.jsonl`, `kind: "artifact-write"`,
+   the path normalised as `ai-dlc-gate-remediation-guard.sh` writes it) names the agent that wrote
+   the shard.
+2. That row's `transcript_path` locates `subagents/agent-<agent_id>.meta.json`, whose `toolUseId` is
+   the dispatch id.
+3. Every spawn-ledger row carrying that id has role `adversary`.
+
+The records are found by walking up from the shard dir, never from a resolved root. It refuses
+(exit 2, nothing written) when:
+
+- a shard has no write-ledger row;
+- a writer's meta file or `toolUseId` is absent;
+- a dispatch id has no spawn row;
+- a writer has any other role;
+- two adversary dispatches wrote one shard;
+- one dispatch derives for two shards;
+- a self-reported id that is real-shaped (`toolu_` and 24 base62 characters) differs from the
+  derived one;
+- a writer whose meta file names a dispatch with no probe-ledger row for that agent;
+- a writer whose meta file names a different dispatch from its probe row;
+- one dispatch with rows in this shard dir and under another `shards/<x>-p<M>/` dir;
+- a `--rerun` superseded writer that is not an `adversary` dispatch.
+
+A pre-upgrade row (no `transcript_path`) takes the probe ledger's `agent_id -> tool_use_id` row, or
+refuses naming the agent and "row predates transcript_path". `NOT_ACCESSIBLE`, `unavailable`, an
+absent line and a forged id are ignored, and the derived id is written. Nothing falls back to the
+self-report. Shards now write `tool_use_id: NOT_ACCESSIBLE` (`_gate-procedures.md` "Adversarial
+review dispatch", `adversary.md` Contract item 2), pinned by `gp-shard-sentinel`,
+`gp-shard-derived` and `adv-shard-sentinel`. An unsharded pass still self-reports, and Check 24
+checks that value for shape only.
+
+**The forge floor.** A shard written with Bash leaves no row and is refused. A row is an attempt
+recorded at PreToolUse, not proof of authorship. A lead Bash write to any of the three records, or
+to `subagent-context.jsonl`, can forge the join; the hook denies Write/Edit to all four.
+
+**Rows are keyed on the full path, and the meta file wins.** A write row joins a shard only under
+that shard's own directory, never by basename: a row for `2.md` under another shard dir or another
+sprint is not a row for this shard. A row carrying `transcript_path` takes its id from the meta
+file, and the probe ledger must agree with it. A dispatch id with two spawn rows is
+refused if either names a role other than `adversary`.
+
+**Re-dispatch.** Write-ledger rows never expire, so a stalled adversary re-dispatched under
+`_gate-procedures.md:132` leaves two adversary dispatches on its shard and the merge refuses it.
+`--rerun <shard>.md@<ISO>` (repeatable) supersedes rows on that shard (and its `.draft`) older
+than the start, with the grammar and messages of `join-remediator-shards.sh --rerun`. It refuses a
+superseded writer that has any other row in the shard dir, and a superseded writer that writes the
+shard again at or after the start. The shard's remaining writer must be exactly one adversary
+dispatch. A superseded writer must be an `adversary` dispatch, and its probe row is checked for
+agreement only, because a stalled adversary never reached SubagentStop and has none. This acquits a
+forged meta on a superseded writer that never stopped, which resolves to whatever dispatch id the
+lead typed; that needs a non-adversary that never reached SubagentStop. A credited writer with no
+probe row is refused with the remedy to re-dispatch the shard and merge with `--rerun`. The merged
+record adds a `rerun:` line naming the superseded agent ids. graph s318
+`requirements-p1/cross-2.md` stays REFUSED with `--rerun`: its earlier writer `ad948afc87faf39fe` is
+cross-1's own adversary, which also wrote `cross-1.md`. The step tells the lead to merge with
+`--rerun` after a re-dispatch, and that a refusal naming another shard's writer is a finding
+(`gp-shard-rerun`, `gp-shard-rerun-finding`). It also says the probe ledger is not rotated
+mid-round (`gp-probe-ledger`, `gp-probe-ledger-rerun`).
+
+The receipt drives the REAL merge and the REAL hook in mktemp worlds of the s319 shape (3 stories,
+shards 1..3 and cross-1..3, self ids `unavailable`):
+
+- **Main.** The merge must exit 0 with `shard_tool_use_ids` equal to the derived ids and
+  `tool_use_id` equal to cross-1's. At origin/main this arm refuses with `is not a toolu_ id`,
+  which the receipt asserts on the before side.
+- **R1-R8** must each exit 2 and leave no output:
+  - R1: no ledger row, with a `toolu_`-prefixed forged self id;
+  - R2: the meta file absent, no probe row, and a real-shaped self id;
+  - R3: a differing real-shaped self id;
+  - R4: the spawn role is remediator;
+  - R5: one agent wrote two shards;
+  - R6: two adversaries wrote one shard;
+  - R7: the meta id has no spawn row;
+  - R8: a remediator row on a shard beside its adversary.
+- **R9.** A pre-upgrade row plus a probe row merges; without the probe row it refuses with
+  "predates transcript_path".
+- **Control.** Forged self ids with correct records merge, and the output carries the derived ids
+  and no forged string.
+- **R10.** Shard 2's only rows sit under `s319/shards/stories-p2/` and `s318/shards/stories-p1/`. It
+  must refuse with "has no row".
+- **R11.** The probe ledger names another adversary dispatch for shard 2's agent. It must refuse
+  with "the meta file was rewritten after the agent stopped".
+- **R12.** Shard 2's dispatch id carries an adversary and a remediator spawn row. It must refuse
+  naming the remediator role.
+- **R13.** A payload session differing from the transcript stem still merges.
+- **RR1.** A stalled writer with no probe row has its rows re-stamped before S, and a new dispatch
+  writes after. `--rerun 2.md@S` merges with the `rerun:` line.
+- **RR2.** Cross-1's own adversary wrote 2.md before S. `--rerun` must refuse naming its other row.
+- **RR4.** A remediator wrote 2.md before S and an adversary after. `--rerun` must refuse as a role
+  violation.
+- **X1.** One adversary dispatch wrote `stories-p2/1.md` and `stories-p1/2.md`. The p1 merge must
+  refuse naming the other shard dir, and so must the same world under `--rerun`.
+- **X2.** A `.draft` beside shard 2 by its own writer still merges.
+- **P1.** A credited writer with a meta file and no probe row must refuse as not yet stopped, naming
+  the remedy `--rerun 2.md@`.
+
+Every credited writer carries the probe row the SubagentStop hook writes. R9's refusing half removes
+it, and the stalled writers of RR1 and RR4 never get one.
+
+Scored under `set -uo pipefail` (BL-536 alone, origin/main 952b9319 vs this fix): origin/main 1,
+the fix 0. Each of these regressions scores 1:
+
+- W1, rows joined by basename;
+- W2, the probe preferred over the meta file;
+- W3, the role checked only on single-row ids;
+- W4, the one-dispatch-two-shards check deleted;
+- W5, the meta file keyed by session;
+- `--rerun` without its other-row check;
+- `--rerun` superseding nothing.
+
+With jq absent or the hook absent it exits 9.
+
+verify: sh M=core/scripts/merge-adversarial-shards.sh; H=core/hooks/ai-dlc-gate-remediation-guard.sh; [ -f "$M" ] || M=scripts/ai-dlc/merge-adversarial-shards.sh; [ -f "$H" ] || H=.claude/hooks/ai-dlc-gate-remediation-guard.sh; [ -f "$M" ] && [ -f "$H" ] && command -v jq >/dev/null || exit 9; M="$(pwd -P)/$M"; H="$(pwd -P)/$H"; Q=toolu_01ZZZZZZZZZZZZZZZZZZZZZZ; i() { printf 'toolu_01Rcpt%s' "$1"; }; w() { r="$(mktemp -d)" && r="$(cd "$r" && pwd -P)" || exit 9; PA="$r/_bmad-output/planning-artifacts"; D="$PA/s319/shards/stories-p1"; O="$PA/s319/stories-adversarial-p1.md"; mkdir -p "$D" "$PA/s319/stories" "$r/t/sess/subagents" || exit 9; : > "$r/_bmad-output/pipeline-snapshot.md"; for n in a b c; do printf '# story %s\n' "$n" > "$PA/s319/stories/$n.md"; done; }; s() { case "$1" in cross*) z="artifact: _bmad-output/planning-artifacts/s319/stories" ;; *) z="artifact_sha: $(shasum -a 256 "$PA/s319/stories/$(printf abc | cut -c"$1").md" | cut -d' ' -f1)" ;; esac; { printf '# shard %s\n\n## Findings\n\n<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\ninvoked_at: 2026-10-15T21:00:00Z\n' "$1"; [ "$2" = - ] || printf 'tool_use_id: %s\n' "$2"; printf 'mode: subagent\nlead_role: stories-test-strategy\n%s\nfindings_critical: 0\nfindings_major: 0\nverdict: EXIT_CONDITION_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$z"; } > "$D/$1.md"; }; g() { [ "${5:-}" = nometa ] || printf '{"toolUseId":"%s"}\n' "$3" > "$r/t/sess/subagents/agent-$2.meta.json"; [ "${5:-}" = nospawn ] || printf '{"v":1,"role":"%s","tool_use_id":"%s"}\n' "${4:-adversary}" "$3" >> "$r/_bmad-output/spawn-ledger.jsonl"; case "${5:-}" in nometa|noprobe) ;; *) printf '{"v":3,"agent_id":"%s","role":"%s","tool_use_id":"%s"}\n' "$2" "${4:-adversary}" "$3" >> "$r/_bmad-output/subagent-context.jsonl" ;; esac; t="$r/t/sess.jsonl"; [ "${5:-}" != pre ] || t=""; jq -nc --arg f "${F:-$D/$1.md}" --arg a "$2" --arg t "$t" --arg sid "${SID:-sess}" '{session_id:$sid,tool_name:"Write",transcript_path:$t,tool_use_id:"toolu_w",tool_input:{file_path:$f},agent_id:$a}' | AI_DLC_STATE_DIR=_bmad-output CLAUDE_PROJECT_DIR="$r" bash "$H" >/dev/null 2>&1; }; b() { w; for k in 1 3 cross-1 cross-2 cross-3; do s "$k" "$1"; g "$k" "ag$k" "$(i "$k")"; done; }; m() { o="$(bash "$M" "$@" "$D" 2>&1)"; c=$?; }; x() { m "${@:2}"; [ "$c" -eq 2 ] && grep -qF "REFUSED:" <<<"$o" && [ ! -e "$O" ] || exit 1; [ -z "${1:-}" ] || grep -qF -- "$1" <<<"$o" || exit 1; }; old() { L="$PA/.artifact-writes.jsonl"; sed 's/"ts":"[^"]*"/"ts":"2000-01-01T00:00:00Z"/' "$L" > "$L.t" && mv "$L.t" "$L" || exit 9; S="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; }; b unavailable; s 2 unavailable; g 2 ag2 "$(i 2)"; m; if [ "$c" -ne 0 ]; then [ "$c" -eq 2 ] && grep -qF "is not a toolu_ id" <<<"$o" && exit 1; exit 9; fi; grep -qF "MERGED: " <<<"$o" && grep -qx "shard_tool_use_ids: 1=$(i 1) 2=$(i 2) 3=$(i 3) cross-1=$(i cross-1) cross-2=$(i cross-2) cross-3=$(i cross-3)" "$O" && grep -qx "tool_use_id: $(i cross-1)" "$O" || exit 1; b unavailable; s 2 toolu_cross2_forged; x; b unavailable; s 2 "$Q"; g 2 ag2 "$(i 2)" adversary nometa; x; b unavailable; s 2 "$Q"; g 2 ag2 "$(i 2)"; x; b unavailable; s 2 unavailable; g 2 ag2 "$(i 2)" remediator; x; w; for k in 1 cross-1 cross-2 cross-3; do s "$k" unavailable; g "$k" "ag$k" "$(i "$k")"; done; s 2 unavailable; s 3 unavailable; g 2 ag2 "$(i 2)"; g 3 ag2 "$(i 2)"; x "one dispatch delivered two shards"; b unavailable; s 2 unavailable; g 2 ag2 "$(i 2)"; g 2 ag2b "$(i 2b)"; x; b unavailable; s 2 unavailable; g 2 ag2 "$(i 2)" adversary nospawn; x; b unavailable; s 2 unavailable; g 2 ag2 "$(i 2)"; g 2 ag2r "$(i 2r)" remediator; x; b unavailable; s 2 unavailable; g 2 ag2 "$(i 2)" adversary pre; printf '{"agent_id":"ag2","tool_use_id":"%s"}\n' "$(i 2)" >> "$r/_bmad-output/subagent-context.jsonl"; m; [ "$c" -eq 0 ] && grep -qF " 2=$(i 2) " "$O" || exit 1; b unavailable; s 2 unavailable; g 2 ag2 "$(i 2)" adversary pre; sed '/"agent_id":"ag2"/d' "$r/_bmad-output/subagent-context.jsonl" > "$r/p.t" && mv "$r/p.t" "$r/_bmad-output/subagent-context.jsonl" || exit 9; x; grep -qF "predates transcript_path" <<<"$o" || exit 1; w; for k in 1 2 3 cross-1 cross-2 cross-3; do s "$k" "toolu_$(printf '%s' "$k" | tr -d -)_g1_dispatch"; g "$k" "ag$k" "$(i "$k")"; done; m; [ "$c" -eq 0 ] && grep -qx "tool_use_id: $(i cross-1)" "$O" && grep -qF " 2=$(i 2) " "$O" && ! grep -qF "_g1_dispatch" "$O" || exit 1; b unavailable; s 2 -; mkdir -p "$PA/s319/shards/stories-p2" "$PA/s318/shards/stories-p1" || exit 9; F="$PA/s319/shards/stories-p2/2.md" g 2 ag2 "$(i 2)"; F="$PA/s318/shards/stories-p1/2.md" g 2 ag2 "$(i 2)"; [ "$(grep -c '/shards/stories-p[12]/2.md"' "$PA/.artifact-writes.jsonl")" -eq 2 ] || exit 9; x "2.md has no row in"; b unavailable; s 2 unavailable; g 2 ag2 "$(i 2)"; printf '{"agent_id":"ag2","tool_use_id":"%s"}\n' "$Q" >> "$r/_bmad-output/subagent-context.jsonl"; printf '{"v":1,"role":"adversary","tool_use_id":"%s"}\n' "$Q" >> "$r/_bmad-output/spawn-ledger.jsonl"; x "the meta file was rewritten after the agent stopped"; b unavailable; s 2 unavailable; g 2 ag2 "$(i 2)"; printf '{"v":1,"role":"remediator","tool_use_id":"%s"}\n' "$(i 2)" >> "$r/_bmad-output/spawn-ledger.jsonl"; x "dispatched as role remediator"; SID=other b unavailable; s 2 unavailable; SID=other g 2 ag2 "$(i 2)"; m; [ "$c" -eq 0 ] && grep -qF " 2=$(i 2) " "$O" || exit 1; b unavailable; s 2 unavailable; g 2 agA "$(i 2a)" adversary noprobe; old; g 2 ag2 "$(i 2)"; m --rerun "2.md@$S"; [ "$c" -eq 0 ] && grep -qF " 2=$(i 2) " "$O" && grep -qx "rerun: 2.md since $S; superseded: agA (1 rows, 2000-01-01T00:00:00Z..2000-01-01T00:00:00Z)" "$O" || exit 1; b unavailable; s 2 unavailable; g 2 agcross-1 "$(i cross-1)"; old; g 2 ag2 "$(i 2)"; x "is a superseded writer of 2.md and also wrote" --rerun "2.md@$S"; b unavailable; s 2 unavailable; g 2 agR "$(i 2r)" remediator noprobe; old; g 2 ag2 "$(i 2)"; x "a non-adversary write on a shard is a role violation, not a stale dispatch" --rerun "2.md@$S"; b unavailable; s 2 unavailable; mkdir -p "$PA/s319/shards/stories-p2" || exit 9; F="$PA/s319/shards/stories-p2/1.md" g x agX "$(i X)"; F="$D/2.md" g x agX "$(i X)" adversary nospawn; x "under another shard dir"; b unavailable; s 2 unavailable; F="$PA/s319/shards/stories-p2/1.md" g x agX "$(i X)"; F="$D/2.md" g x agX "$(i X)" adversary nospawn; old; g 2 ag2 "$(i 2)"; x "under another shard dir" --rerun "2.md@$S"; b unavailable; s 2 unavailable; F="$D/2.md.draft" g x ag2 "$(i 2)"; g 2 ag2 "$(i 2)" adversary nospawn; m; [ "$c" -eq 0 ] || exit 1; b unavailable; s 2 unavailable; g 2 ag2 "$(i 2)" adversary noprobe; x "has no row for that agent; an adversary that has not stopped has not delivered"; grep -qF "re-dispatch the shard and merge with --rerun 2.md@" <<<"$o" || exit 1; exit 0

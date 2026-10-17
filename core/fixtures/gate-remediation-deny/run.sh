@@ -536,6 +536,64 @@ if denied "$OUT"; then bad "7a: a DISPATCHED agent's edit of the spawn ledger wa
 else ok "7a: ...and a dispatched agent's edit of the same file is allowed (arm 2 precedes the guarded roots)"; fi
 rm -rf "$W"
 
+# THE SUBAGENT PROBE LEDGER IS A GUARDED ROOT, for the spawn ledger's reason one join over: on a
+# consumer whose write rows carry no transcript_path, `merge-adversarial-shards.sh` derives every
+# adversary dispatch id from this file, so one lead-written row maps a remediator's shard onto a
+# real adversary dispatch — measured, it turned a REFUSED merge into MERGED. Write and Edit are
+# both denied; the ALLOW twins are one property apart each: a dispatched agent's Write of the same
+# file (arm 2), and the same lead Write with no FAIL on the live pass.
+seed open-fail
+PROBE_LEDGER="$W/_bmad-output/subagent-context.jsonl"
+OUT="$(drive "$W" Write "$PROBE_LEDGER")"
+if denied "$OUT"; then ok "7a: a denied LEAD may not Write subagent-context.jsonl — the probe ledger a shard merge joins through is under the guard"
+else bad "7a: the lead Wrote subagent-context.jsonl while denied — one row maps a remediator's shard onto an adversary dispatch"; fi
+OUT="$(drive "$W" Edit "$PROBE_LEDGER")"
+if denied "$OUT"; then ok "7a: ...and may not Edit it either"
+else bad "7a: the lead Edited subagent-context.jsonl while denied — the Write deny is bypassed by the other tool"; fi
+OUT="$(drive "$W" Write "$PROBE_LEDGER" "agate-x-0123456789abcdef")"
+if denied "$OUT"; then bad "7a: a DISPATCHED agent's Write of subagent-context.jsonl was denied — arm 2 no longer precedes the guarded roots"
+else ok "7a: ...and a dispatched agent's Write of the same file is allowed (arm 2 precedes the guarded roots)"; fi
+rm -rf "$W"
+seed pass
+OUT="$(drive "$W" Write "$W/_bmad-output/subagent-context.jsonl")"
+if denied "$OUT"; then bad "7a: a lead Write of subagent-context.jsonl under an all-PASS gate was DENIED — the probe-ledger root fires with no failure to guard"
+else ok "7a: ...and the same lead Write with no FAIL on the live pass is allowed"; fi
+rm -rf "$W"
+
+# --- the mutant: the probe-ledger root removed ----------------------------------------------
+# The DENY cells above are presence-shaped, but the docs/ and planning roots are not what they
+# exercise, so only a mutant shows the new case is the line that fires. Anchored on the full case
+# line (the file's comments also name the file), asserted to match exactly once, built as a copy
+# and preceded by an unmutated control. The spawn-ledger cell is the "nothing else moves" arm.
+MWORK="$(mktemp -d)"
+cp "$HOOK" "$MWORK/control.sh"
+PL_ANCHOR='  */${STATE_DIR_NAME}/subagent-context.jsonl|${STATE_DIR_NAME}/subagent-context.jsonl) GUARDED=1 ;;'
+PL_N="$(grep -cxF "$PL_ANCHOR" "$HOOK")" || PL_N=0
+PL_IMPOSSIBLE="$(grep -cxF "${PL_ANCHOR}#never-a-line" "$HOOK")" || PL_IMPOSSIBLE=0
+grep -vxF "$PL_ANCHOR" "$HOOK" > "$MWORK/m-no-probe-root.sh"
+if [ "$PL_N" != 1 ] || [ "$PL_IMPOSSIBLE" != 0 ]; then
+  bad "MUTANT: the probe-ledger anchor matched ${PL_N} line(s) (want 1; impossible-anchor control ${PL_IMPOSSIBLE}, want 0)"
+elif cmp -s "$HOOK" "$MWORK/m-no-probe-root.sh"; then
+  bad "MUTANT: removing the probe-ledger root changed no bytes — it would score as a kill"
+elif ! bash -n "$MWORK/m-no-probe-root.sh"; then
+  bad "MUTANT: the no-probe-root copy does not parse; its silence would score as a kill"
+else
+  seed open-fail
+  OUT="$(drive "$W" Write "$W/_bmad-output/subagent-context.jsonl" "" "" "$MWORK/control.sh")"
+  if denied "$OUT"; then ok "CONTROL: an unmutated copy of the hook DENIES the lead's probe-ledger Write"
+  else bad "CONTROL: an unmutated copy did not deny the probe-ledger Write — every verdict below is about the copy"; fi
+  rm -rf "$W"
+  seed open-fail
+  OUT="$(drive "$W" Write "$W/_bmad-output/subagent-context.jsonl" "" "" "$MWORK/m-no-probe-root.sh")"
+  if denied "$OUT"; then bad "MUTANT: with the probe-ledger root removed the lead's Write is still denied — the cell does not key on that line"
+  else ok "MUTANT: the probe-ledger root removed ALLOWS the lead's Write — the new cell is killed by its own line"; fi
+  OUT="$(drive "$W" Edit "$W/_bmad-output/spawn-ledger.jsonl" "" "" "$MWORK/m-no-probe-root.sh")"
+  if denied "$OUT"; then ok "MUTANT: the spawn-ledger cell is UNCHANGED — the mutant kills only its own arm"
+  else bad "MUTANT: the spawn-ledger cell also went green — the two ledger roots are entangled"; fi
+  rm -rf "$W"
+fi
+rm -rf "$MWORK"
+
 # =============================================================================
 # FAILURE POSTURE — unreadable gate state fails OPEN, and says so.
 # =============================================================================
@@ -1350,6 +1408,258 @@ for _m7a in m11-window-ignores-order m12-records-every-writer m14-write-never-bi
   [ -f "$MW/$_m7a.sh" ] || continue
   kill_arm "$_m7a" allow "$W" "7a: ${_m7a} leaves the NO-LEDGER world allowing — the arm's subject is the ledger, not the second verdict"
 done
+rm -rf "$W"
+
+# =============================================================================
+# ARM 1b — A REMEDIATOR DOES NOT WRITE THE ESCALATION RECORD. The role comes from the harness's
+# meta sidecar, never from the agent_id, so every id below is opaque except the one cell that
+# puts a role NAME in the id and a different role in the meta. Every DENY has an ALLOW twin one
+# property apart, in this one workspace.
+# =============================================================================
+seed open-fail
+E1_TR="$W/sess/lead.jsonl"
+E1_SUB="$W/sess/lead/subagents"
+mkdir -p "$E1_SUB"
+printf '%s\n' '{"type":"user","message":{"content":"dispatching"}}' > "$E1_TR"
+e1_meta() { printf '%s\n' "$2" > "$E1_SUB/agent-$1.meta.json"; }
+# SEVERAL METAS, AND THE REMEDIATOR'S IS NOT THE FIRST MEMBER: an arm that read the first meta in
+# the directory instead of the one named by agent_id would read `dev` here and allow.
+# SEEDED FROM WHAT THE PRODUCER EMITS. The harness writes the role in `agentType` and never writes
+# `customAgentType` (0 of 3216 graph metas, 0 of 1797 ai-dlc metas); the keys below are a real
+# graph remediator meta's, ids replaced. Every DENY cell rests on these producer-shaped metas.
+e1_meta a0dev    '{"agentType":"dev","description":"Dev seat","toolUseId":"toolu_e1dev","spawnDepth":1,"requestShape":"background","requestNonInteractive":true}'
+e1_meta b0arch   '{"agentType":"architect","description":"Architect seat","toolUseId":"toolu_e1arch","spawnDepth":1,"requestShape":"background","requestNonInteractive":true}'
+# READER ACCEPT-SET ONLY: c0named and d0swap carry `customAgentType`, which no producer emits. They
+# are kept, with cells E4 and A8 and mutant m1b-key-order, solely to cover the reader's key order,
+# which the `1b-bind` arm binds to the subagent probe's copy. No deny verdict depends on them.
+e1_meta c0named  '{"agentType":"general-purpose","customAgentType":"remediator","teamName":"t"}'
+e1_meta d0swap   '{"agentType":"remediator","customAgentType":"dev","teamName":"t"}'
+e1_meta e0bad    '{"agentType":"remediator",'
+# THE PRODUCER'S NAMED SHAPE, NOT STRIPPED: a named teammate's meta carries its spawn NAME in
+# `agentType`. Cell A13 asserts this ALLOWS. It is the KNOWN GAP, held shut by
+# `ai-dlc-dispatch-guard.sh` deleting `name` on role-bound dispatches; `1b-name-strip` binds that.
+e1_meta f0named  '{"agentType":"remediator-serial-cross","description":"Serial cross-section repair","name":"x","spawnDepth":0,"requestShape":"background","requestNonInteractive":true,"taskKind":"in_process_teammate","teamName":"t"}'
+e1_meta remediator-x '{"agentType":"dev","description":"Dev seat","toolUseId":"toolu_e1named","spawnDepth":1,"requestShape":"background","requestNonInteractive":true}'
+e1_meta z9rem    '{"agentType":"remediator","description":"Serial cross-section repair","toolUseId":"toolu_e1rem","spawnDepth":1,"requestShape":"background","requestNonInteractive":true}'
+E1_FIRST=""; E1_NMETA=0
+for _e1m in "$E1_SUB"/*.meta.json; do [ -n "$E1_FIRST" ] || E1_FIRST="${_e1m##*/}"; E1_NMETA=$((E1_NMETA+1)); done
+case "$E1_FIRST" in
+  agent-a0dev.meta.json) ok "1b-pre: the remediator's meta is not the first of the $E1_NMETA in subagents/ (first: $E1_FIRST)" ;;
+  *) bad "1b-pre: FIXTURE BROKEN — the first meta is '$E1_FIRST', so the not-first property is not seeded" ;;
+esac
+[ ! -e "$E1_SUB/agent-y9rem.meta.json" ] || bad "1b-pre: FIXTURE BROKEN — y9rem must have NO meta"
+E1_PEND="$W/docs/escalations/pending.md"
+e1() { # <expect deny|allow> <label> <tool> <file_path> <agent> <transcript> [hook]
+  local o; o="$(drive "$W" "$3" "$4" "$5" "$6" "${7:-$HOOK}")"
+  if [ "$1" = deny ]; then
+    if denied "$o"; then ok "$2"; else bad "$2"; fi
+  else
+    if denied "$o"; then bad "$2"; else ok "$2"; fi
+  fi
+}
+# The cells, as one list so the unmutated hook and each mutant are driven over the same set.
+# Fields: id|expect|tool|path|agent|transcript ("-" = no transcript_path)|label
+E1_CELLS="E1|deny|Edit|$E1_PEND|z9rem|$E1_TR|a remediator's Edit to pending.md (PROJECT_DIR spelling) is DENIED
+E2|deny|Write|docs/escalations/pending.md|z9rem|$E1_TR|a remediator's Write to the RELATIVE docs/escalations/pending.md is DENIED
+E3|deny|MultiEdit|$W/src/../docs/escalations/pending.md|z9rem|$E1_TR|a remediator's MultiEdit to an absolute spelling through src/.. is DENIED
+E4|deny|Edit|$E1_PEND|c0named|$E1_TR|READER ACCEPT-SET ONLY: customAgentType remediator over agentType general-purpose is DENIED (no producer emits customAgentType)
+A1|allow|Edit|$E1_PEND|a0dev|$E1_TR|a dev's identical Edit to pending.md is ALLOWED (role, not tool or path, decides)
+A2|allow|Edit|$E1_PEND|b0arch|$E1_TR|an architect's identical Edit to pending.md is ALLOWED
+A3|allow|Edit|$E1_PEND||$E1_TR|the LEAD's identical Edit (no agent_id) to pending.md is ALLOWED
+A4|allow|Edit|$W/docs/escalations/resolved.md|z9rem|$E1_TR|the remediator's Edit to another docs/escalations file is ALLOWED
+A5|allow|Edit|$E1_PEND|y9rem|$E1_TR|FAIL-OPEN: a dispatch with NO meta file is ALLOWED
+A6|allow|Edit|$E1_PEND|e0bad|$E1_TR|FAIL-OPEN: a meta that does not parse is ALLOWED
+A7|allow|Edit|$E1_PEND|z9rem|-|FAIL-OPEN: the remediator with no transcript_path (so no meta path) is ALLOWED
+A8|allow|Edit|$E1_PEND|d0swap|$E1_TR|READER ACCEPT-SET ONLY: agentType remediator under customAgentType dev is ALLOWED (customAgentType is read first)
+A9|allow|Edit|$E1_PEND|remediator-x|$E1_TR|an agent_id spelling 'remediator' whose meta says dev is ALLOWED (the id is opaque)
+A10|allow|Edit|$W/docs/notes/pending.md|z9rem|$E1_TR|NEAR-MISS past the prefilter: the remediator's Edit to docs/notes/pending.md is ALLOWED
+A11|allow|Write|$W/docs/escalations/pending.md.draft|z9rem|$E1_TR|NEAR-MISS past the prefilter: the remediator's Write to docs/escalations/pending.md.draft is ALLOWED
+A12|allow|Edit|$W/_bmad-output/planning-artifacts/s1/pending.md|z9rem|$E1_TR|NEAR-MISS past the prefilter: the remediator's Edit to a planning-artifacts pending.md is ALLOWED
+A13|allow|Edit|$E1_PEND|f0named|$E1_TR|KNOWN GAP, held shut by the dispatch guard's name deletion: an UNSTRIPPED named remediator meta (agentType = spawn name) is ALLOWED"
+e1_drive_all() { # [hook] -> one ok/bad per cell
+  while IFS='|' read -r _id _want _tool _fp _ag _tr _lab; do
+    [ -n "$_id" ] || continue
+    [ "$_tr" = "-" ] && _tr=""
+    e1 "$_want" "1b $_id: $_lab" "$_tool" "$_fp" "$_ag" "$_tr" "${1:-$HOOK}"
+  done <<E1EOF
+$E1_CELLS
+E1EOF
+}
+e1_drive_all "$HOOK"
+# The deny's TEXT, guarded on the deny existing.
+OUT="$(drive "$W" Edit "$E1_PEND" z9rem "$E1_TR")"
+if denied "$OUT"; then
+  case "$OUT" in *'`escalated` entry in YOUR OWN repair record'*'The lead reads your record and applies'*) ok "1b: the deny's remedy is an escalated entry in the remediator's own record, which the lead applies" ;;
+    *) bad "1b: the deny does not give the escalated-entry remedy" ;; esac
+  grep -qF 'REMEDIATOR_ESCALATION_EDIT_DENIED' "$W/_bmad-output/pipeline-continuation-log.md" 2>/dev/null \
+    && ok "1b: the deny is logged as REMEDIATOR_ESCALATION_EDIT_DENIED" \
+    || bad "1b: the deny wrote no REMEDIATOR_ESCALATION_EDIT_DENIED event"
+else
+  bad "1b: no denial to inspect"; bad "  (remedy)"; bad "  (log event)"
+fi
+# ARM 2 STILL RECORDS FOR THE SAME REMEDIATOR on a path this arm does not own.
+E1_AL="$W/_bmad-output/planning-artifacts/.artifact-writes.jsonl"
+rm -f "$E1_AL"
+OUT="$(drive "$W" Edit "$W/$ART" z9rem "$E1_TR")"
+_e1n=0; [ -f "$E1_AL" ] && { _e1n="$(jq -n --arg p "$ART" '[inputs | select(.path == $p and .agent_id == "z9rem")] | length' "$E1_AL" 2>/dev/null)" || _e1n=0; }
+if ! denied "$OUT" && [ "$_e1n" = 1 ]; then ok "1b: the remediator's planning-artifact Edit is ALLOWED and arm 2 records exactly 1 row for it"
+else bad "1b: the remediator's planning-artifact Edit: denied=$(denied "$OUT" && echo y || echo n), rows=$_e1n (want n, 1)"; fi
+
+# THE ROLE EXPRESSION IS ONE TEXT IN TWO HOOKS. Extracted from the probe's DEFINITION line, asserted
+# present exactly once in the guard, and a one-token drift (the two keys swapped) is reported.
+PROBE="$(pick "$HERE/../../hooks/ai-dlc-subagent-probe.sh" \
+              "$HERE/../../../.claude/hooks/ai-dlc-subagent-probe.sh" \
+              "$HERE/../../../core/hooks/ai-dlc-subagent-probe.sh")"
+E1_EXPR=""
+[ -n "$PROBE" ] && E1_EXPR="$(sed -n "s/^  DEFINITION=\"\\\$(jq -r '\\([^']*\\)'.*/\\1/p" "$PROBE" | head -1)"
+case "$E1_EXPR" in
+  *customAgentType*agentType*)
+    _e1c="$(grep -cF -- "jq -r '$E1_EXPR'" "$HOOK")" || _e1c=0
+    if [ "$_e1c" = 1 ]; then ok "1b-bind: the probe's role expression ($E1_EXPR) occurs exactly once in the guard"
+    else bad "1b-bind: the probe's role expression occurs $_e1c time(s) in the guard (want 1) — the two reads have FORKED"; fi ;;
+  *) bad "1b-bind: no role expression extracted from the subagent probe ('$E1_EXPR') — the binding is vacuous" ;;
+esac
+
+# 1b-name-strip -- ARM 1b DEPENDS ON THE DISPATCH GUARD DELETING `name`. A JOIN to the emission that
+# `dispatch-model-guard` asserts behaviourally ("`name` is DELETED"), not a second copy of that
+# assertion: this arm only proves the emission this fixture's A13 gap relies on is still THERE.
+# Keyed on the role-bound rewrite's whole jq program, the line that emits the stripped payload.
+DGUARD="$(pick "$HERE/../../hooks/ai-dlc-dispatch-guard.sh" \
+               "$HERE/../../../.claude/hooks/ai-dlc-dispatch-guard.sh" \
+               "$HERE/../../../core/hooks/ai-dlc-dispatch-guard.sh")"
+E1_STRIP="'. + {subagent_type: \$t} | del(.name) | del(.model)'"
+E1_NONE="'. + {subagent_type: \$t} | del(.nameZq7Never) | del(.model)'"
+e1_strip_count() { local n; n="$(grep -cF -- "$2" "$1")" || n=0; printf '%s' "$n"; }
+if [ -z "$DGUARD" ]; then
+  bad "1b-name-strip: cannot locate ai-dlc-dispatch-guard.sh — the dependency arm 1b rests on is unchecked"
+else
+  _e1s="$(e1_strip_count "$DGUARD" "$E1_STRIP")"
+  _e1z="$(e1_strip_count "$DGUARD" "$E1_NONE")"
+  if [ "$_e1s" = 1 ] && [ "$_e1z" = 0 ]; then
+    ok "1b-name-strip: the dispatch guard's role-bound rewrite deletes \`name\` (emission count 1; impossible-anchor control 0)"
+  else
+    bad "1b-name-strip: the dispatch guard's \`del(.name)\` emission count is $_e1s (want 1; control $_e1z, want 0) — a named remediator's meta then carries its spawn name in agentType, and arm 1b ALLOWS it"
+  fi
+  # The arm can fire: a copy with `del(.name) | ` removed must score 0.
+  cp "$DGUARD" "$MW/dguard-nostrip.sh"
+  sed -i.bak 's@del(\.name) | @@' "$MW/dguard-nostrip.sh"; rm -f "$MW/dguard-nostrip.sh.bak"
+  if cmp -s "$DGUARD" "$MW/dguard-nostrip.sh"; then
+    bad "MUTANT dguard-nostrip: the sed changed NO bytes — it matched nothing, and its silence would score as a kill"
+  elif ! bash -n "$MW/dguard-nostrip.sh" 2>/dev/null; then
+    bad "MUTANT dguard-nostrip: the copy does not parse"
+  else
+    _e1m="$(e1_strip_count "$MW/dguard-nostrip.sh" "$E1_STRIP")"
+    if [ "$_e1m" = 0 ]; then ok "1b-name-strip: a dispatch guard with \`del(.name)\` removed is reported (emission count 0) — the binding can fire"
+    else bad "1b-name-strip: the stripped copy still carries the emission ($_e1m) — the binding cannot fire"; fi
+  fi
+fi
+
+# --- arm 1b's mutants. Each moves only its own cells; every other cell must hold.
+e1_mut_score() { # <mutant> <space-separated ids that must FLIP> <label>
+  local m="$1" flips=" $2 " got="" o w
+  while IFS='|' read -r _id _want _tool _fp _ag _tr _lab; do
+    [ -n "$_id" ] || continue
+    [ "$_tr" = "-" ] && _tr=""
+    o="$(drive "$W" "$_tool" "$_fp" "$_ag" "$_tr" "$MW/$m.sh")"
+    if denied "$o"; then w=deny; else w=allow; fi
+    [ "$w" != "$_want" ] && got="${got}${_id} "
+  done <<E1EOF
+$E1_CELLS
+E1EOF
+  if [ " $got" = "$flips" ]; then ok "$3 (flipped: ${got% })"
+  else bad "$3: flipped '${got% }', wanted '${2}'"; fi
+}
+if mut m1b-role-nothing 's@^                remediator)$@                remediator-matches-nothing)@'; then
+  e1_mut_score m1b-role-nothing "E1 E2 E3 E4" "M1b-role: a role test that matches nothing ALLOWS every deny cell and moves no allow cell"
+fi
+if mut m1b-path-widened 's@^        \*pending\.md\*)$@        *)@;s@^            \*/docs/escalations/pending\.md)$@            *)@'; then
+  e1_mut_score m1b-path-widened "A4 A10 A11 A12" "M1b-path: both path tests widened to every path DENY the remediator's other-docs Edit and every near-miss, and move nothing else"
+fi
+# THE INNER EXACT TEST ALONE. A4 fails the `*pending.md*` prefilter, so only A10-A12 -- which pass
+# it -- can see a widening of the exact test. Anchored on the 12-space indent the inner line has
+# and the prefilter's 8-space line does not; A4 staying put is what separates it from m1b-path.
+if mut m1b-inner-widened 's@^            \*/docs/escalations/pending\.md)$@            *)@'; then
+  e1_mut_score m1b-inner-widened "A10 A11 A12" "M1b-inner: the exact test widened alone DENIES every pending.md past the prefilter and moves nothing else"
+fi
+if mut m1b-absent-denies 's@^              DEFINITION=""$@              DEFINITION="remediator"@'; then
+  e1_mut_score m1b-absent-denies "A5 A7" "M1b-open: reading an UNREADABLE meta as remediator DENIES both no-meta cells — fail-open is asserted"
+fi
+if mut m1b-unparseable-denies 's@"\$META" 2>/dev/null || true)"@"$META" 2>/dev/null || echo remediator)"@'; then
+  e1_mut_score m1b-unparseable-denies "A6" "M1b-parse: reading an UNPARSEABLE meta as remediator DENIES only the unparseable cell"
+fi
+if mut m1b-key-order "s@jq -r '.customAgentType // .agentType // empty' \"\\\$META\"@jq -r '.agentType // .customAgentType // empty' \"\$META\"@"; then
+  e1_mut_score m1b-key-order "E4 A8" "M1b-order: agentType read first ALLOWS the named remediator and DENIES the dev-defined one"
+  _e1c="$(grep -cF -- "jq -r '$E1_EXPR'" "$MW/m1b-key-order.sh")" || _e1c=0
+  if [ -n "$E1_EXPR" ] && [ "$_e1c" = 0 ]; then ok "1b-bind: the key-order drift in a copy is reported (expression count 0) — the binding can fire"
+  else bad "1b-bind: the drifted copy still carries the probe's expression ($_e1c) — the binding cannot fire"; fi
+fi
+rm -rf "$W"
+
+# =============================================================================
+# THE RECORDER — a gate adjudicator's PART FILE is an artifact-write row, never a verdict-ledger
+# row. Three spellings of one file, one writer; the verdict ledger holds a NON-ZERO baseline so
+# "unchanged" is a number, not an empty file staying empty.
+# =============================================================================
+seed open-fail
+R_NONCE="story-20260811T193044Z"
+R_REL="_bmad-output/gate-adjudication/${R_NONCE}.part-1of3.jsonl"
+R_VL="$W/_bmad-output/gate-adjudication/.verdict-writes.jsonl"
+R_AL="$W/_bmad-output/planning-artifacts/.artifact-writes.jsonl"
+r_world() { # resets both ledgers to the baseline
+  printf '%s\n' \
+    '{"v":1,"ts":"2026-08-11T19:31:00Z","stem":"story-20260811T193044Z","agent_id":"g0seed","session":"t","tool":"Write"}' \
+    '{"v":1,"ts":"2026-08-11T19:32:00Z","stem":"story-20260811T193044Z","agent_id":"g0seed","session":"t","tool":"Edit"}' > "$R_VL"
+  rm -f "$R_AL"
+}
+r_count() { # <file> <jq filter over one row> -> count
+  [ -f "$1" ] || { printf '0'; return; }
+  jq -n "[inputs | select($2)] | length" "$1" 2>/dev/null || printf 'ERR'
+}
+r_drive() { # [hook] -> drives the three spellings and the near-miss as adjudicator g7adj
+  local h="${1:-$HOOK}"
+  drive "$W" Write "$W/$R_REL" g7adj "" "$h" >/dev/null
+  drive "$W" Write "$R_REL" g7adj "" "$h" >/dev/null
+  drive "$W" Edit "/elsewhere/$R_REL" g7adj "" "$h" >/dev/null
+  drive "$W" Write "$W/_bmad-output/gate-adjudication/${R_NONCE}.repair.md" g7adj "" "$h" >/dev/null
+}
+r_score() { # <label prefix> -> sets R_PRESENT R_KIND R_AGENT R_TWIN R_VN
+  R_PRESENT="$(r_count "$R_AL" ".path == \"$R_REL\"")"
+  R_KIND="$(r_count "$R_AL" ".path == \"$R_REL\" and .kind == \"artifact-write\"")"
+  R_AGENT="$(r_count "$R_AL" ".path == \"$R_REL\" and .agent_id == \"g7adj\"")"
+  R_TWIN="$(r_count "$R_AL" "(.path // \"\") | endswith(\".repair.md\")")"
+  R_VN="$(r_count "$R_VL" "true")"
+}
+r_world
+R_V0="$(r_count "$R_VL" "true")"
+[ "$R_V0" = 2 ] || bad "R-pre: FIXTURE BROKEN — the verdict-ledger baseline is $R_V0, not 2"
+r_drive "$HOOK"; r_score
+[ "$R_PRESENT" = 3 ] && ok "R: all three spellings of the part file record one artifact-write row each, under ONE normalised path (3)" \
+  || bad "R: $R_PRESENT row(s) for $R_REL (want 3: LOG_DIR, relative and foreign-absolute spellings)"
+if [ "$R_PRESENT" != 0 ]; then
+  [ "$R_KIND" = "$R_PRESENT" ] && ok "R: every part-file row carries kind artifact-write ($R_KIND/$R_PRESENT)" \
+    || bad "R: $R_KIND of $R_PRESENT part-file rows carry kind artifact-write — every reader filters on kind"
+  [ "$R_AGENT" = "$R_PRESENT" ] && ok "R: every part-file row names the adjudicator's agent_id g7adj" \
+    || bad "R: $R_AGENT of $R_PRESENT part-file rows name g7adj"
+fi
+[ "$R_TWIN" = 0 ] && ok "R: the same adjudicator's Write to <nonce>.repair.md (not a part file) records NO artifact row" \
+  || bad "R: a non-part gate-adjudication write recorded $R_TWIN artifact row(s)"
+[ "$R_VN" = "$R_V0" ] && ok "R: the verdict ledger still holds exactly $R_V0 rows — no part row entered it" \
+  || bad "R: the verdict ledger went from $R_V0 to $R_VN rows"
+# Mutants: (i) the three part-file lines deleted; (ii) the kind dropped from the row. Each owns one
+# assertion: (i) the row-present count, (ii) the kind count. The kind and agent arms stand down
+# when no row is present, so (i) fails exactly one.
+if mut mr-no-part-case '/gate-adjudication\/\*\.part-\*\.jsonl) _raw_rel=/d'; then
+  r_world; r_drive "$MW/mr-no-part-case.sh"; r_score
+  [ "$R_PRESENT" = 0 ] && [ "$R_TWIN" = 0 ] && [ "$R_VN" = "$R_V0" ] \
+    && ok "MR-case: without the part-file lines no row is recorded (0), and the twin and verdict-ledger arms hold" \
+    || bad "MR-case: present=$R_PRESENT twin=$R_TWIN verdict=$R_VN (want 0, 0, $R_V0)"
+fi
+if mut mr-no-kind 's@{v: 1, kind: "artifact-write", ts: \$ts, path: \$path@{v: 1, ts: $ts, path: $path@'; then
+  r_world; r_drive "$MW/mr-no-kind.sh"; r_score
+  [ "$R_PRESENT" = 3 ] && [ "$R_KIND" = 0 ] && [ "$R_AGENT" = 3 ] && [ "$R_VN" = "$R_V0" ] \
+    && ok "MR-kind: rows without kind are present (3) and the kind arm alone reads 0" \
+    || bad "MR-kind: present=$R_PRESENT kind=$R_KIND agent=$R_AGENT verdict=$R_VN (want 3, 0, 3, $R_V0)"
+fi
 rm -rf "$W"
 
 # =============================================================================

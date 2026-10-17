@@ -37,6 +37,25 @@ S=""
 for c in "$TREE/core/scripts" "$TREE/scripts/ai-dlc"; do [ -f "$c/merge-adversarial-shards.sh" ] && { S="$c"; break; }; done
 [ -n "$S" ] || { echo "receipt: $TREE carries no merge-adversarial-shards.sh in either layout" >&2; exit 9; }
 miss() { echo "receipt: STILL LIVE -- $*"; exit 1; }
+# The merge derives each shard's dispatch id from the harness records, so every shard written here
+# is recorded the way a dispatched adversary's Write is: <tree>'s own remediation-guard hook
+# appends the write-ledger row, and the meta file, the adversary spawn row and the SubagentStop probe
+# row are seeded beside it.
+# A tree whose merge predates the derivation ignores all three.
+H=""
+for c in "$TREE/core/hooks" "$TREE/.claude/hooks"; do [ -f "$c/ai-dlc-gate-remediation-guard.sh" ] && { H="$c/ai-dlc-gate-remediation-guard.sh"; break; }; done
+[ -n "$H" ] && command -v jq >/dev/null 2>&1 || { echo "receipt: $TREE carries no ai-dlc-gate-remediation-guard.sh, or jq is not on PATH" >&2; exit 9; }
+rec() { # <shard file under $P/_bmad-output/planning-artifacts/s9/shards/<dir>/>
+  local c ag id tp="$P/.harness/rc-session.jsonl"
+  c="$(printf '%s' "$1" | cksum)"; c="${c%% *}"; ag="$(printf 'a%016x' "$c")"; id="$(printf 'toolu_01RcDispatch%012d' "$c")"
+  mkdir -p "${tp%.jsonl}/subagents" || exit 9
+  [ -f "$P/_bmad-output/pipeline-snapshot.md" ] || : > "$P/_bmad-output/pipeline-snapshot.md"
+  printf '{"toolUseId":"%s","agentType":"adversary"}\n' "$id" > "${tp%.jsonl}/subagents/agent-$ag.meta.json"
+  printf '{"v":1,"ts":"2026-10-01T09:00:00Z","role":"adversary","tool_use_id":"%s"}\n' "$id" >> "$P/_bmad-output/spawn-ledger.jsonl"
+  printf '{"v":3,"ts":"2026-10-01T09:30:00Z","agent_id":"%s","role":"adversary","tool_use_id":"%s"}\n' "$ag" "$id" >> "$P/_bmad-output/subagent-context.jsonl"
+  jq -nc --arg f "$1" --arg a "$ag" --arg t "$tp" '{session_id:"rc-session",transcript_path:$t,hook_event_name:"PreToolUse",tool_name:"Write",tool_use_id:"toolu_01RcWriteCall",agent_id:$a,tool_input:{file_path:$f,content:"shard"}}' \
+    | CLAUDE_PROJECT_DIR="$P" bash "$H" >/dev/null 2>&1
+}
 [ -f "$S/partition-subject.sh" ] || miss "no partition-subject.sh in $S"
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/subject-receipt.XXXXXX")" || exit 9
@@ -86,6 +105,7 @@ for o in $(printf '%s\n' "$DMAP" | cut -f1) $DXK; do
     printf 'invoked_at: 2026-10-03T10:00:00Z\ntool_use_id: toolu_d%s\nmode: subagent\nlead_role: requirements\n' "$o"
     printf 'artifact: _bmad-output/planning-artifacts/prd.md\nartifact_sha: %s\nfindings_critical: 0\nfindings_major: 0\n' "$PSHA"
     printf 'verdict: EXIT_CONDITION_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n'; } > "$DD/$o.md"
+  rec "$DD/$o.md"
 done
 MO="$(bash "$S/merge-adversarial-shards.sh" --document "$PA/prd.md" "$DD" 2>&1)" || miss "(c) the --document merge refused with no manifest present: $(printf '%s' "$MO" | head -1)"
 mv "$PA/s9/prd-adversarial-p3.md" "$W/parked-p3.md" && mv "$DD" "$W/parked-prd-p3" || exit 9
@@ -118,6 +138,7 @@ shard() { # <dir> <key> <n-major> <cite> <minute>
     printf 'tool_use_id: toolu_r%s%s\nmode: subagent\nlead_role: requirements\n' "$6" "$2"
     printf 'artifact: _bmad-output/planning-artifacts/s9/requirements-subject.md\nartifact_sha: %s\n' "$SL"
     printf 'findings_critical: 0\nfindings_major: %s\nverdict: EXIT_CONDITION_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$3"; } > "$1/$2.md"
+  rec "$1/$2.md"
 }
 # The cross keys, derived from the LIVE map's part count through the tree's own partitioner: one
 # shard per `--cross-groups <K>` row (`cross` when it prints one), or `cross` from a tree whose
