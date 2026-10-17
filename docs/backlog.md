@@ -821,7 +821,7 @@ verify: manual
 
 Owed: an `elicitation` profile (or an axis switch on `adversary-pass`) that the brief can copy verbatim, a `tool_use_id` instruction that agrees with what the merge accepts, and an `artifact_sha` comment per axis. Rendered by `sync-taught-schema.sh` and checked by its `--check`.
 
-verify: manual
+verify: sh bash core/scripts/sync-taught-schema.sh --check >/dev/null 2>&1 || exit 1; python3 -c 'import json,sys; S=json.load(open(sys.argv[1])); P=S["profiles"]; e=P.get("elicitation") or sys.exit(1); a=set(P["adversary-pass"]["fields"]); F={f["name"]: f for f in S["fields"]}; d=F["artifact_sha"]["doc"]; ok=e.get("pin",{}).get("skill")=="bmad-advanced-elicitation" and e["pin"].get("mode")=="subagent" and set(e["fields"])==a-{"verdict","resolves_divergence"} and "NOT_ACCESSIBLE" in F["tool_use_id"]["placeholder"] and "one per story" not in d and "section" in d; sys.exit(0 if ok else 1)' core/schemas/provenance-block.json && grep -qF '<!-- BEGIN GENERATED: provenance-block/elicitation ' core/skills/ai-dlc/steps/_gate-procedures.md && ! grep -qF 'in place of its pinned skill' core/skills/ai-dlc/steps/_gate-procedures.md
 
 ## BL-660 — the merge opens a code fence on any line starting with three backticks, so a prose line hides the next finding and the shard is refused with a count mismatch
 
