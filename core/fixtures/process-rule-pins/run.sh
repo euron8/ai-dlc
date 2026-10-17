@@ -402,6 +402,9 @@ gp-probe-ledger-rerun|S|steps/_gate-procedures.md|## Adversarial review dispatch
 adv-shard-sentinel|R|adversary.md|## Contract|## Severity|1. **Run the evaluation you were dispatched for, in your own context.**|para|**A shard writes `tool_use_id: NOT_ACCESSIBLE`, never an id it was told or guessed.**
 gp-derive-file|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|Every re-run names a FILE and never the slot directory.|para|`validate-artifact-derivations.sh <the joined repair record>`
 gp-join-serial|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh --complete-repair|para|--complete-repair --dispatch <agentId> <repair_record_path>
+gp-redispatch-fresh|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**A completed record is never reopened by `SendMessage`.**|para|`TaskStop` the resident remediator and send ONE fresh `Agent` dispatch
+gp-redispatch-never|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**A completed record is never reopened by `SendMessage`.**|para|Never resume the finished remediator with `SendMessage`
+r28-no-reopen|S|rule-bodies/rule-28.md||**A dispatched teammate reaches the lead with `SendMessage` `to: "main"`.**|- **Retracted or narrowed scope.**|para|re-dispatches it fresh
 PINS
 }
 

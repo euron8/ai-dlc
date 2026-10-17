@@ -1060,6 +1060,16 @@ verifies against that record; so does the gate's re-run of the failed checks.
 unsharded `shard: none (serial-document)` remediator both end their record with `repair-complete:
 serial <pass>`, which only `--complete-repair` waits for; the part records a shard join writes are
 written by that join, synchronously, and need no beat.
+
+**A completed record is never reopened by `SendMessage`.** Once a remediator's record carries its
+`repair-complete:` line, that remediator is finished, and it may not edit the record again
+(`remediator.md`). When the join, a refusal or a later check needs more repair on that record,
+`TaskStop` the resident remediator and send ONE fresh `Agent` dispatch, whose brief names the open
+work and which appends a new block that opens with its own triple and ends in its own
+`repair-complete: serial <pass>` line. Join that dispatch with its own `--dispatch <agentId>`.
+Never resume the finished remediator with `SendMessage`, even to deliver a refusal: it can either
+leave the work undone or finish it by editing past its own completion line.
+
 SKILL.md Rule 32 touchpoint V1 applies once the repair record is joined, before the next pass.
 Once the join is accepted, commit the repaired subject files (`git add` and `git commit`) before
 the next pass dispatches, so a later stop cannot blur joined edits with in-flight ones.
