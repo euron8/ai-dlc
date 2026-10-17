@@ -35113,3 +35113,17 @@ Built (b235-c9-h4): the budget now lives in `fork-budget.txt` at the repo root, 
 
 verify: manual
 
+## BL-650 — 0.818.0's Limits line says the delivering pull is denied "once"; a DEFERred pull was denied twice
+
+**NOTE.** Measured by ai-dlc-f7 and re-read by ai-dlc-c2; filed on lead ai-dlc-71's instruction. Intake re-read the transcript read-only. The 0.818.0 CHANGELOG `### Limits` says that on the delivering pull "steps 1-2 run the old engine", the hooks are live from step 2, and "the delivering pull's own step-1 stamp read can still meet a stale marker and be denied once". graph transcript `1556f1eb` (the pull from 0.812.0 to 0.818.0, 198 lines, 0 `compact_boundary`) carries 2 denies: line 34 at 12:52:20Z ("your FIRST tool call must be `Read _bmad-output/pipeline-snapshot.md`") and line 70 at 12:52:31Z ("your SECOND tool call must be `Read .claude/skills/ai-dlc/steps/requirements.md`"). Both are `is_error` results of a `PreToolUse:Bash` hook, and they are the only 2 `is_error` lines in the file. The pull's self-update DEFERred (8 `SELF-UPDATE-DEFER` lines; negative control 0). On a DEFER the 0.818.0 hooks are written at the apply, so the old gate stays live until the apply, not only through steps 1-2. That the stale marker was stamped at 04:16 is f7's reading; intake did not re-take it.
+
+**LANDED (v0.820.0, verified 4e6670c1).** The owed correction line is `[0.820.0]`'s `### Correction to 0.818.0 (BL-650)`, which quotes the corrected statement and names `[0.818.0]` Limits; the `[0.818.0]` section is byte-identical at `477352d4` and at 0.823.0. Closed by 0.823.0.
+
+Corrected statement: until the 0.818.0 hooks are written (at step 2, or at the apply on a DEFER), an update session can be denied once per read stage the old gate holds, up to two. Neither deny is a new defect. A deny after the apply would be a finding.
+
+Owed: a correction line in the carrying release's CHANGELOG (c8's 0.820.0) naming 0.818.0's Limits claim. The 0.818.0 heading is not edited. Receipt: the carrying release's CHANGELOG entry quotes the corrected statement and names `[0.818.0]` Limits; the `[0.818.0]` section is byte-identical before and after.
+
+Related: BL-607.
+
+verify: manual
+

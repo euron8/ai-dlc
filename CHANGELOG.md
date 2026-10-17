@@ -20,6 +20,21 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.823.0] - 2026-10-17
+
+Batch 236 (docs release). Docs only: no engine, hook, fixture or consumer-visible file changes. Closes BL-650. Closes
+no `PC-` id. Net for this release: 1 closed, 3 filed (the three were filed after batch 235's close was cut and ride
+here by that close's ruling).
+
+- **Intakes 28 and 29, filings only.** BL-660 (a NOTE: the adversarial and remediator merges open a code fence on any
+  line beginning with three backticks), BL-661 (a DEFECT: `wait-for-deliverable.sh --dispatch` leaves `set -f` on, so
+  the liveness glob and the lease heir glob never expand) and BL-662 (a NOTE: the adversarial repair record is the
+  only repair kind whose name carries no round word). Each stays OPEN.
+- **BL-650 closes.** Its owed correction line is `[0.820.0]`'s `### Correction to 0.818.0 (BL-650)`, which quotes the
+  corrected statement and names `[0.818.0]` Limits. The `[0.818.0]` section is byte-identical at `477352d4` and at
+  this release (md5 `1d5f259b…` both).
+- **`docs/analysis/b236-release-train.md`**: batch 236's gate log, tracked in the repo per the batch-235 ruling.
+
 ## [0.822.0] - 2026-10-17
 
 Batch 235 (c9's build). Closes BL-575, BL-577, BL-594, BL-613 and BL-614. Carries the lead's release-train log appends
