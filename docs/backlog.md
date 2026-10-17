@@ -332,6 +332,8 @@ Effect: `_gate-procedures.md:149` tells the lead to pass the row's `dispatched-a
 
 Owed: the row is stamped from the ledger `ts`, or a write-time arm fires on a row later than its dispatch by more than a stated tolerance. Probe: a row 57 s late fires; a row at the dispatch is quiet.
 
+**Recurring (reported by ai-dlc-f7, read-only on graph; intake ai-dlc-40).** Graph's s319 lead on 0.818.0 (transcript `74de15ba`, line 965, 2026-10-17T14:36:04Z) had the `--dispatch` guard refuse its architect join: `FAIL: --since is 153 s after the earliest dispatch it joins (2026-10-17T14:35:27Z, tool_use_id toolu_01XfPWCXnLJSZTfkDZqv1SxE)`. The lead then corrected its In-Flight row's `dispatched-at`, which is this entry's row defect. The guard did its job and the lead recovered in one turn. The cost was one refused beat and one extra turn. Intake: the line reads as quoted. The transcript carries the `FAIL: --since is` text on 3 lines, and line 1364 is an attachment echoing line 965's text, so there are 2 distinct refusals. The other refusal (line 2816) has a different cause and is filed as BL-656. Control: a token absent from the transcript matched 0.
+
 verify: manual
 
 ## BL-606 — the pre-push fixture pool runs every unit with no per-unit timeout
@@ -906,5 +908,19 @@ Measured pair (by ai-dlc-4e [9b62de], c8, in the lead's slot after 0.820.0 lande
 - review-shard-merge-mutants-b: base 1379.42 (user 474.53, sys 904.89, wall 217 s); tip 1398.37 (user 475.88, sys 922.49, wall 219 s); ratio 1.014.
 - readset-skip-d: base 202.93 (user 94.73, sys 108.20, wall 206 s); tip 200.48 (user 93.46, sys 107.02, wall 202 s); ratio 0.988.
 The 1-minute load before each run was 6.25/11.35 (shard b, base/tip) and 10.67/3.51 (readset-skip-d). Run alone, each side took about 3.5 to 4 minutes of wall against the rehearsal's loaded 1193 s and 1261 s, so the doubling is not reproduced as CPU work at n=1. That is consistent with pool contention but does not establish it: each side ran once, base before tip, so the pair has no measured spread and cannot resolve a change of a few percent. A cause needs more reps or a loaded pair. Intake (read-only): both shas resolve and an impossible sha does not; all twelve user, sys and real figures match the filer's `/usr/bin/time -p` outputs, and the per-side sums and both ratios recompute from them.
+
+verify: manual
+
+## BL-656 — rule-28 tells the lead to pass `--since` on every beat, while the serial-remediator join takes `--dispatch` alone, so a lead following rule-28 mints a stamp the guard refuses
+
+**NOTE.** Reported by ai-dlc-f7, read-only on graph's s319 lead (0.818.0, transcript `74de15ba`). Intake ai-dlc-40.
+
+`core/skills/ai-dlc/rule-bodies/rule-28.md:175-176` says the lead "passes `--since <epoch>` on every beat of the round", and that every such beat also passes `--dispatch <agentId>`. `core/skills/ai-dlc/steps/_gate-procedures.md:1061-1062` gives the serial-remediator join as `wait-for-deliverable.sh --complete-repair --dispatch <agentId> <repair_record_path>`, with no `--since` (0 `--since` within :1055-1068 at origin/main `5e045cd4`).
+
+At transcript line 2805 the lead followed rule-28 for a re-dispatched serial remediator: `--complete-repair --since 1792261015 --dispatch a40a8b719c2fd1c6a`, using an epoch it minted after the spawn. Line 2816: `FAIL: --since is 1 s after the earliest dispatch it joins (2026-10-17T18:16:54Z, tool_use_id toolu_012gduCVQMijVMheR1Bqccvb)`, exit 64. The guard caught it, and the lead re-armed on `--dispatch` alone within one turn. The cost was one refused beat.
+
+Related: line 2370 shows a dev-2 beat passing `--since` with no `--dispatch`, against rule-28.md:176. It drew `WARN: wait-for-deliverable: --since without --dispatch -- nothing checks the stamp against the dispatch` and did no harm.
+
+Not BL-605: that entry's subject is an In-Flight row stamped late, while this stamp was freshly minted per rule-28's instruction. Owed: one statement of whether a `--dispatch` beat takes `--since`. Either rule-28 exempts beats that carry `--dispatch`, or the join text says which epoch to pass. Cite one from the other.
 
 verify: manual
