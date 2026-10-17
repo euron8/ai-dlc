@@ -87,8 +87,8 @@ session was ever messaged.
   distinct ids: `BL-084` carries two archived headings, a bare `## BL-084` and a titled one, and did before this
   batch, so the two counts differ by exactly one. 87 filed, 70 closed (45 of them filed this batch), so the net is
   +17: the batch filed faster than it closed. Still live and filed before the batch: BL-530, 537, 538, 541, 553,
-  556, 557, 565. The highest id on `main` is BL-659; **the next free id is BL-661**, because BL-660 is c9's held
-  intake-28 below. 54 live `verify:` lines.
+  556, 557, 565. The highest id on `main` is BL-659; **the next free id is BL-662**, because BL-660 and BL-661 are
+  c9's held intake-28 below. 54 live `verify:` lines.
 - **Anchors.** Every batch-235 LANDED or PARTIAL clause names its release's squash on `origin/main` (85 re-anchored
   at close). 68 clauses older than this batch still name off-main branch commits and were left alone.
 - **Operator rulings, batch 235**, beyond those already in `.claude/rules/operator-rulings.md`: BL-587 item 3 is
@@ -97,8 +97,11 @@ session was ever messaged.
 - **Held, not deleted.** Ten local `bl585-*` tags. BL-585's archived table cites four of their red targets
   (`c833cde7`, `7ce8c6f9`, `8915fa18`, `825eafe7`), none of which is reachable from `origin/main`, so the tags are
   the only thing keeping that evidence alive. Their deletion is the operator's decision and has not been made.
-  Also held: c9's local `b235-intake-28` (BL-660, a NOTE filed after this close was cut, at `584882bd` on this
-  close; it rides batch 236 and the batch-236 lead names its carrier). ai-dlc-c9 holds it and is live for that.
+  Also held: ai-dlc-c9's LOCAL branch `b235-intake-28`, not on origin, two filings made after this close was cut:
+  BL-660 (NOTE: the merge opens a code fence on any line beginning with three backticks) and BL-661 (DEFECT:
+  `wait-for-deliverable.sh` leaves `set -f` on for every `--dispatch` beat, so the teammate glob never expands and
+  every beat reports LIVENESS unavailable). They ride batch 236; its lead names the carrier and asks ai-dlc-c9 for
+  the range.
 - **Unexplained.** BL-655: the load series roughly doubled two units under the pool. One CPU-seconds pair at n=1
   reads 1.014 and 0.988, so the doubling is not reproduced as work. The suite pole at 0.822.0 is
   `adversarial-shard-merge-mutants` at 1681 s loaded.
