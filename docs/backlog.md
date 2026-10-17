@@ -1087,3 +1087,19 @@ Owed (inside BL-631, by 71's ruling):
 Owner: ai-dlc-53, closed by BL-631.
 
 verify: manual
+
+## BL-646 — one adversarial-shard-merge mutant scorer costs about 140 CPU-seconds against the 22 its header designs for, so under the gate's pool every scorer, the control included, times out
+
+**DEFECT.** Measured by ai-dlc-6f and filed on lead ai-dlc-71's instruction; intake re-derived the static half read-only at origin/main `fd09acbf` and read 6f's retained capture. Subject: `core/fixtures/adversarial-shard-merge-mutants/run.sh` and its shards.
+- The header (`:40-41`) designs for "One scoring is |P_ALL| predicates (32 since the cross groups), about 22 CPU-seconds solo at 26", and sizes `SCORER_BOUND=900` (`:104`) as "roughly 10x" a 4x-loaded figure derived from it.
+- Solo, measured by 6f at `b235-bl536-g1` `916de740` (which shards the battery into `-mutants` and `-mutants-b`..`-f`), one unit at a time through `hermetic-run.sh` at load 3.8-5.4: shard c, 10 scorers, user 485.08 + sys 913.93 = 1399 CPU-s, about 140 per scorer; shard a, 8 scorers, 417 + 797 = 1214, about 152 per scorer. Sys is about two-thirds of every shard (b 800/416, d 854/450, e 817/413, f 533/286, sys/user).
+- Loaded, in 6f's dress-rehearsal push of `58864282` (pool width 12, 91 units, load peak 34): all 6 shards red. Every scorer, the unmutated MX0 control included, read "TIMEOUT -- the scorer ran past 900s and was killed", while MR read "N scorers dispatched, N recorded, N completed". Intake read the retained capture `.git/ai-dlc-fixture-failures.20261017T050356Z.60793`: 45 TIMEOUT lines, 6 of them MX0, against 6 "scorers dispatched" lines (control).
+- On main the unsharded battery is the suite pole: `adversarial-shard-merge-mutants 1629` is the top of `.git/ai-dlc-fixture-durations` (next: `remediator-shard-join-mutants-d 1164`).
+
+NOT measured, and available only from a profiled scorer run, which needs a lead slot: where the sys time goes (fork and exec, the sandbox copy, or hook re-invocation per predicate), and how much of the 22 to 140 growth is main's own predicates versus the TM/RM predicates `916de740` adds. Main's battery has not been run solo.
+
+Owed: profile one scorer in a slot, then cut the per-scorer cost to the scale the header designs for (or restate the design figure from a measurement and re-size the bound from it). Receipt: one scorer's measured CPU-seconds sits within the header's stated figure, and the unmutated control completes under the gate's pool.
+
+Related: BL-592 (the wall-clock bound killing a control, the verdict shape; c8's SCORER_IDLE change addresses it). This entry is the cost itself.
+
+verify: manual
