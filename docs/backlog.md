@@ -864,3 +864,19 @@ Related: BL-587 (the evidence, and the withdrawn item 3).
 Fix shape (lead ai-dlc-71): M4's pin means silence on an absent record was a deliberate choice, most likely so that a tree with no reconcile yet is not wedged at its gate. The builder first reads why M4 pinned silence. The fix then reports the missing and empty cases as a visible UNMEASURED/PENDING line, exits 0, and does not refuse, unless that reason turns out not to hold. If it does not hold, the entry is amended with what was found before a refusal is built.
 
 verify: manual
+
+## BL-653 — `steps/architecture.md` names `lint_spine.py` but not how to invoke it, and a lead passed the spine file where `--workspace` takes the run folder
+
+**NOTE.** Reported by graph watch ai-dlc-f7; intake re-read it read-only on graph (0.818.0) and at origin/main `ddad2ac3`. `core/skills/ai-dlc/steps/architecture.md:48-53` says `bmad-architecture` ships `scripts/lint_spine.py` and that its JSON goes to gate-validation Check 30 via `--spine-lint` (`gate-validation.md:2790`). The step gives no command and does not mention `--workspace` or `reviewer-gate`. Graph's installed copy is byte-identical. The vendored `lint_spine.py:232` declares `--workspace` as required, with the help text "run folder containing ARCHITECTURE-SPINE.md". `references/reviewer-gate.md:5` gives the right form: `uv run {skill-root}/scripts/lint_spine.py --workspace {doc_workspace}`. Instance: graph transcript `74de15ba` line 1076, where the lead passed the spine file as a positional argument and got "the following arguments are required: --workspace" (1 hit; negative control 0).
+
+Owed: `architecture.md:48` gives the literal invocation or cites `reviewer-gate.md:5`. Receipt: the step names `--workspace` and the run folder.
+
+verify: manual
+
+## BL-654 — the architect's spine has no completion contract, so a header-only spine joined as DELIVERED
+
+**NOTE.** Reported by graph watch ai-dlc-f7; intake re-read it read-only on graph transcript `74de15ba` and at origin/main `ddad2ac3`. The s319 lead's architect brief said "Write the spine FIRST with its header, then append" (line 929). It joined with a plain `wait-for-deliverable.sh --dispatch` that had no `--complete`. At line 1061 the beat reported "BEAT COMPLETE -- all 1 delivered" for `ARCHITECTURE-SPINE.md`, which was then 24 lines and 1197 bytes with no AD entry (line 1076). The lead caught it by size, then re-armed the join on `docs/architecture-index.md` (line 1083). The early-write contract, a final `seat-complete:` line joined with `--complete`, covers seat and shard files only: `wait-for-deliverable.sh`, rule-bodies 20, 28 and 29, and the shard merge and join scripts. `core/skills/ai-dlc/steps/architecture.md` mentions neither `seat-complete` nor `--complete` nor `wait-for-deliverable` (0 hits each). So a lead that borrows the header-first pattern gets a join that cannot tell a header from a finished spine. Had the lead not checked, a spine with no ADs would have been linted and adopted.
+
+Owed, one of two: `architecture.md` gives the architect's deliverable a completion marker and its join `--complete`, or it names the last file in the write chain as the join target and forbids joining on the spine. Receipt: a header-only spine does not satisfy the step's join (a seeded probe on `wait-for-deliverable.sh`); the full write chain does (control).
+
+verify: manual
