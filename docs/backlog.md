@@ -744,18 +744,6 @@ Related: BL-597 (the id grammar's declaration).
 
 verify: manual
 
-## BL-650 — 0.818.0's Limits line says the delivering pull is denied "once"; a DEFERred pull was denied twice
-
-**NOTE.** Measured by ai-dlc-f7 and re-read by ai-dlc-c2; filed on lead ai-dlc-71's instruction. Intake re-read the transcript read-only. The 0.818.0 CHANGELOG `### Limits` says that on the delivering pull "steps 1-2 run the old engine", the hooks are live from step 2, and "the delivering pull's own step-1 stamp read can still meet a stale marker and be denied once". graph transcript `1556f1eb` (the pull from 0.812.0 to 0.818.0, 198 lines, 0 `compact_boundary`) carries 2 denies: line 34 at 12:52:20Z ("your FIRST tool call must be `Read _bmad-output/pipeline-snapshot.md`") and line 70 at 12:52:31Z ("your SECOND tool call must be `Read .claude/skills/ai-dlc/steps/requirements.md`"). Both are `is_error` results of a `PreToolUse:Bash` hook, and they are the only 2 `is_error` lines in the file. The pull's self-update DEFERred (8 `SELF-UPDATE-DEFER` lines; negative control 0). On a DEFER the 0.818.0 hooks are written at the apply, so the old gate stays live until the apply, not only through steps 1-2. That the stale marker was stamped at 04:16 is f7's reading; intake did not re-take it.
-
-Corrected statement: until the 0.818.0 hooks are written (at step 2, or at the apply on a DEFER), an update session can be denied once per read stage the old gate holds, up to two. Neither deny is a new defect. A deny after the apply would be a finding.
-
-Owed: a correction line in the carrying release's CHANGELOG (c8's 0.820.0) naming 0.818.0's Limits claim. The 0.818.0 heading is not edited. Receipt: the carrying release's CHANGELOG entry quotes the corrected statement and names `[0.818.0]` Limits; the `[0.818.0]` section is byte-identical before and after.
-
-Related: BL-607.
-
-verify: manual
-
 ## BL-651 — I84 accepts a `stories_dir` reader whose only mention of the sprint slot is a comment
 
 **DEFECT.** Measured by ai-dlc-53 in the BL-631 rehearsal at `09c624ae` and filed on lead ai-dlc-71's instruction. Intake reproduced it at `09c624ae` in a clean detached worktree. In `scripts/validate-enforcement-map.sh`, I84's no-substitution arm (`:8289-8293` at `09c624ae`) narrows the READ to non-comment lines (`i84_reads`, `:8254-8256`). The slot check that follows is a whole-file `grep -qF "$i84_slot"` (or `stories_dir_sprint_placeholder`), and a comment satisfies it. 53's run of `enforcement-map-derivations-b` printed "a reader of stories_dir that never names the slot is REPORTED — the validator did NOT report it". The reason was a Check 6 comment in `core/scripts/validate-mandatory-rules.sh` (`:339`, from `2ec660ec`) that spells `` `s{sprint}` ``.
@@ -912,5 +900,67 @@ verify: manual
 3. The rendered `artifact_sha` comment describes the multi-file form as "one per story". The subject axis notarizes one entry per subject stem, and the sections axis notarizes the whole document's sha.
 
 Owed: an `elicitation` profile (or an axis switch on `adversary-pass`) that the brief can copy verbatim, a `tool_use_id` instruction that agrees with what the merge accepts, and an `artifact_sha` comment per axis. Rendered by `sync-taught-schema.sh` and checked by its `--check`.
+
+verify: manual
+
+## BL-660 — the merge opens a code fence on any line starting with three backticks, so a prose line hides the next finding and the shard is refused with a count mismatch
+
+**NOTE.** Reported by ai-dlc-f7, read-only on graph's s319 lead (0.818.0, transcript `74de15ba`, architecture adversarial pass 1). Intake ai-dlc-40.
+
+Observed:
+- Line 3986: `REFUSED: .../shards/architecture-p1/2.md ends in 'seat-complete: ... findings=2' but its ## Findings section heads 1 finding(s)`.
+- Lines 4018 and 4027: the lead traced it to `2.md:70`, a wrapped prose line beginning "```derived fence that `ecs-deploy.sh` treats `data == null` as idle". The real fences after it then pair the wrong way round, and F-2's heading falls inside what the merge reads as a fence.
+- Line 4037: the lead edited the adversary's shard to remove the backticks, disclosed in the changelog, and re-merged.
+
+The cost was about 4 turns of diagnosis and a lead-authored edit to a gate input. Intake: the transcript reads as quoted, and an impossible-token control matched 0. The shard is untracked in graph, and its working copy now carries the edited line 70 with real `derived` fences at :73/:83, :110/:116 and :141/:154.
+
+Cause. `core/scripts/merge-adversarial-shards.sh:378` at origin/main `edcae8aa` reads `/^[ \t]*(```|~~~)/ { fence = !fence; next }`, and `:1152` repeats the toggle in `same_set`. Graph's installed copy, md5-identical to 0.818.0's, has the same two lines at :929 and :983. Any line opening with three backticks flips the state, whatever follows. Under CommonMark a backtick fence's info string cannot contain a backtick, so `2.md:70` is not a fence opener. The refusal names a count mismatch, not the fence, so the cause had to be found by hand.
+
+Owed: open a fence only where the info string carries no backtick, or name, in the count-mismatch refusal, any `###`-hiding fence opener inside `## Findings`. Probe: a shard whose prose line starts "```derived fence that `x`", followed by a real ```derived block and two findings, counts 2. Control: a genuinely unclosed fence still refuses.
+
+Related, not duplicates: archived BL-577 (a `### ` non-finding subsection counted, closed in 0.822.0), and archived BL-162 (the derived-fence opener matched at column 0 only).
+
+verify: manual
+
+## BL-661 — a `--dispatch` beat leaves `set -f` on, so the teammate-liveness glob never expands and every such beat reports `LIVENESS unavailable`
+
+**DEFECT.** Reported by ai-dlc-f7, read-only on graph's s319 lead (0.818.0, transcript `74de15ba`). Intake ai-dlc-40.
+
+Cause. `core/scripts/wait-for-deliverable.sh:1005` at origin/main `a39aa52a` runs `set -f` at top level inside `if [ -n "$DISPATCH" ]`, so the id split cannot glob. The file contains 0 `set +f`, so noglob stays on for the rest of the run. `teammate_quiet_for`'s `for tq_f_ in "$TEAMMATE_DIR"/*.jsonl` (:1027) then iterates once over the literal pattern, `[ -f ]` rejects it, and the beat prints `LIVENESS  unavailable (no teammate transcripts for this session)`. The TEAMMATE IDLE, DELIVERABLE ABSENT warning, which exists for a teammate that finished and wrote somewhere else, can therefore never fire on a `--dispatch` beat. Graph's installed copy has the same lines at :894, :916 and :934.
+
+A second glob after the `set -f` is also affected and was not reported: the lease heir loop `for lr_f_ in "$COUNTER_DIR"/.lease-*` (:1195). This is read from the code, not measured.
+
+Evidence:
+- Intake re-ran f7's probe under bash on a mktemp dir holding 2 `*.jsonl` files. The same loop counts 2 with globbing on and 0 after `set -f`.
+- The s319 transcript carries 7 `LIVENESS unavailable` result lines (998, 1028, 1093, 2055, 2301, 3932, 4254), 0 `took a turn`, and 103 `--dispatch` mentions. Control: a token absent from the transcript matched 0.
+- Per f7, across graph's transcripts older beats with no `--dispatch` report `took a turn` 1991 times and `unavailable` 18 times.
+- The lead compensated by hand, checking subagent mtimes itself (lines 2287 and 2622).
+
+Consequence: BL-599 made `--dispatch` the standard arming form, so every fan-out join now runs without the liveness signal, and a teammate that delivered to a diverged path reads as still working until the beats run out.
+
+Owed: restore globbing after the dispatch split (`set +f`), or scope the split so noglob never leaks. Probe: a `--dispatch <real id>` beat over a session dir holding a fresh `*.jsonl` prints `LIVENESS a teammate in this session took a turn`. Control: the same beat without `--dispatch`, which already does. Check the lease heir loop under the same arming too.
+
+Related, not a duplicate: the live entry on the liveness sensor counting api-request retries as fresh turns (a false-alive mtime).
+
+verify: manual
+
+## BL-662 — the adversarial repair record is the only repair kind with no round word, the join accepts `<artifact>-adversarial-repair-p<M>`, and only gate-time arm H catches it
+
+**NOTE.** Reported by ai-dlc-f7, read-only on graph's s319 lead (0.818.0, transcript `74de15ba`). Intake ai-dlc-40.
+
+Observed:
+- Lines 4089 and 4098: for the sectioned repair of adversarial pass 1, the lead split into `shards/architecture-adversarial-repair-p1/`, and the `--document` join wrote `s319/architecture-adversarial-repair-p1.md` without complaint.
+- Line 4605, after pass 2: `validate-adversarial-convergence.sh --series` printed `FAIL (H -- REPAIR-RECORD)`, naming the owed record `architecture-repair-p1.md` and the existing one as "not this series' prescribed name".
+- Line 4626: the lead ran `mv architecture-adversarial-repair-p1.md architecture-repair-p1.md`.
+
+The cost was about one turn and a rename of a joined gate record after a whole pass had run on top of it. Intake: the transcript reads as quoted, and an impossible-token control matched 0.
+
+Why the wrong name is the natural one. At origin/main `cc3c113f`, `core/skills/ai-dlc/steps/_gate-procedures.md` names party repairs `<artifact>-party-repair-p<M>` (:320-321) and elicitation repairs `<artifact>-elicitation-repair-p<M>` (:471-472). Adversarial repairs are named `<artifact>-repair-p<M>` (:894, :963, :1066), with no round word, and the step prose says so nowhere (0 mentions of `-adversarial-repair`). `core/scripts/join-remediator-shards.sh` takes the record name from the lead's shard dir and never checks it against the series. `validate-adversarial-convergence.sh:3399` (`h_own="$dir/${H_STEM}-repair-p${M}.md"`) is the first reader to enforce the name, and it runs at gate time.
+
+Related, not duplicates:
+- Archived BL-455 (0.733.0) made arm H refuse another series' record, which is why this now fails at the gate rather than passing.
+- Archived BL-535 (0.791.0) fixed the carry-over evaluation's stem, with the same symptom on `coe-adversarial-repair-p1.md`. Its fix was step prose for that step only, so this is the same mis-naming one step over.
+
+Owed: either the join refuses a `-adversarial-repair-p<M>` dir, or any name but `<artifact>-repair-p<M>` beside an `<artifact>-adversarial-p<M>.md`, printing the owed name; or the step prose at :894 states the asymmetry. Probe: a `--document` join into `shards/x-adversarial-repair-p1/` beside `x-adversarial-p1.md` refuses and names `x-repair-p1`. Control: `shards/x-repair-p1/` joins.
 
 verify: manual
