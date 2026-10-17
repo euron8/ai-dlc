@@ -1,0 +1,10 @@
+# Shard driver: it execs the sibling battery, which copies the hook, the validator, the splitter and the
+# shipped derivation-capture fixture into a throwaway tree. The sibling directories are read whole.
+core/fixtures/derivation-capture-mutants/
+core/fixtures/derivation-capture/
+!core/hooks/ai-dlc-derivation-capture.sh
+!core/scripts/validate-artifact-derivations.sh
+core/scripts/partition-document.sh
+# The sibling battery verifies that every other shard driver exists and drives its shard.
+core/fixtures/derivation-capture-mutants-b/
+core/fixtures/derivation-capture-mutants-d/

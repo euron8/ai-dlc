@@ -20,6 +20,50 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.810.0] - 2026-10-16
+
+Batch 235 (BL-583 partial, plus intake 10 and intake 11's backlog filings). Closes BL-642 by withdrawal. Closes no `PC-` id.
+
+### The derivation-capture mutation battery runs as four pool units, not one (BL-583, partial)
+
+- `derivation-capture-mutants` was one directory holding all 33 mutants, and the push suite is pole-bound on its
+  longest directory: it was the top row of `.git/ai-dlc-fixture-durations` (737s and 776s LOADED in two readings).
+  It is now shard `a` of four. `derivation-capture-mutants-b`, `-c` and `-d` are new `.dist-only` directories, each
+  a driver that execs the sibling with `--group <x>`, so the mutants, the deal and the coverage join stay in one file.
+- Every shard runs the join itself before any mutant: the declared set is derived from the `mutate` lines, dealt
+  `(i-1) mod 4`, and refused if a mutant is dealt twice, to no shard, or without a declaration, or if the set falls
+  below `MIN_MUTANTS=33` (J0). After its mutants run, a shard asserts it reached exactly the ones dealt to it (J1) and
+  that the `mutate` calls seen at run time equal the declared set (J1b), so a call hidden from the deal fails it.
+- The unmutated control is dropped. `mutate`'s scoring already refuses a dead harness on every mutant, so the
+  control caught nothing a mutant did not.
+- In this release's slot, 8 shards ran in one parallel wave at a 1-minute load peak of 9.36: the four shards
+  took 74, 65, 64 and 66s, with 9, 8, 8 and 8 mutants each, every one reddening exactly its declared arms. J0 read 33
+  mutants dealt across `{a b c d}`, union exact; `origin/main` carries the same 33 `mutate` lines. These are LOADED
+  figures from a slot, not from a gate pool, and are not comparable to the durations record.
+
+### fold-architect-ledger-join-mutants pays its control and premise once, not four times (BL-583, partial)
+
+- Every shard of this battery ran the C0 control and the M6 premise, about 65s solo each time, so that no shard could
+  report a kill against a harness that never ran. They now run only in shard `a`, the shard M6 is dealt to. A new J2
+  arm asserts that C0 and the premise each ran exactly as often as M6 is dealt there, so moving M6 to another shard
+  without moving them fails the battery. C1, each mutant's diff base, still runs in every shard.
+- In the slot, shards `a` to `d` reported 7 mutants and 0 FAIL each, every mutant killed by exactly its declared arms,
+  and J2 read "C0 ran 1 and the M6 premise ran 1 in shard 'a' (M6 dealt here: 1)".
+
+### Fork budget
+
+- `validator-fork-budget` reads 3423 forks against `FORK_BUDGET=3424` across 303 fixture directories. 0.808.0 read
+  3420 across 300; the +3 matches the three new shard directories, one fork each, and this release changes no
+  validator. The budget is not raised: it passes, and a raise is made only by a release that measures one owed.
+
+### Backlog
+
+- BL-583 stays open with a Partial paragraph: items (b) and (c) of its phase-2 ranking land here, item (a) landed in
+  intake 2's read-set re-trace, and the remaining items are not built.
+- BL-642 closes by withdrawal, with no build, and rotates to the archive.
+- Intake 10 and intake 11's filings ride this release unchanged: BL-638, BL-639, BL-640, BL-641, BL-643 and BL-644.
+  None of them closes here.
+
 ## [0.809.0] - 2026-10-16
 
 Batch 235 (BL-622, plus intake 9 and intake 10's backlog filings). Closes BL-622. Closes no `PC-` id.

@@ -9,9 +9,9 @@
 # battery would have been the whole suite's wall clock.
 #
 # The shard set and the mutant partition are declared in the sibling and joined there against
-# the `run_mutant` lines of that same file. Every shard runs that join, the controls and the
-# premise itself, so no shard can pass without them, and a shard declared with no driver
-# directory fails the build in all three.
+# the `run_mutant` lines of that same file. Every shard runs that join (J0), the C1 control and the
+# J1 count (C0 and the M6 premise run in shard a only, bound by J2), so no shard can pass without
+# them, and a shard declared with no driver directory fails the build in all three.
 #
 # Resolved as a SIBLING inside core/fixtures/, never by walking up into a core subtree.
 #

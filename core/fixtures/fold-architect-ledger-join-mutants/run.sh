@@ -33,18 +33,19 @@
 # for 20 runs of the shipped fixture (C0, C1 and 18 mutants, ~22s each) plus the M6 premise's
 # three I32 runs, and a loaded cost runs well above a solo one, so it would have been the pole.
 #
-# FOUR SHARDS, NOT THREE, AND THE FIXED COST IS WHY. Every shard pays the controls and the
-# premise itself (below), about 65s solo, because a shard that skipped them could report a
-# kill against a harness that never ran. Two shards would be ~65 + 9 x 22 = ~260s each; three
-# were ~65 + 6 x 22 = ~200s solo. The last green gate's LOADED costs (12-way pool) were a 299s,
+# FOUR SHARDS, NOT THREE, AND THE FIXED COST IS WHY. Every shard runs J0, C1 and J1, so none can
+# report a kill against a harness that never ran; C1 is each mutant's diff base. C0 and the M6
+# premise run only in the shard M6 is dealt to (a), bound by J2, and that fixed cost (about 65s
+# solo when every shard paid it) now falls on a alone. Two shards would have been ~65 + 9 x 22 =
+# ~260s each; three were ~65 + 6 x 22 = ~200s solo. The last green gate's LOADED costs (12-way pool) were a 299s,
 # b 452s, c 291s -- b the second-longest unit on the push -- and re-dealing three shards cannot get
 # under ~347s each (1042 / 3). Four shards of seven mutants each are estimated at ~260s loaded
 # (1042 less three fixed-cost shares, over four); that is an estimate from the code, not a timing,
 # and the next green gate's recorded costs are the check on it.
 #
 # THE DEAL IS BY COST, AND NO MUTANT SHARES A PREREQUISITE WITH ANOTHER. Each mutant builds its
-# own tree and makes one full run of the fixture; the only shared prerequisites are the controls
-# and the premise, which every shard repeats. So the partition balances the two things that
+# own tree and makes one full run of the fixture; the only shared prerequisite is C1,
+# which every shard repeats (C0 and the premise run in shard a only). So the partition balances the two things that
 # vary: a validate-spawn-ledger.sh mutant also pays the un-bypassed self-probe, and M13 also pays
 # the D6 watchdog's 15-second timeout on the hang it re-creates. Round v3.3 dealt M19-M25 three,
 # two and two, and bypassed the probe in EVERY copy: re-measured solo, one after another on this
@@ -107,6 +108,8 @@ partition_ok() {
   echo "dealt twice: {${dup% }} dealt to no shard: {${miss% }} dealt but not declared: {${extra% }}"
   return 1
 }
+# once_ok <C0 runs> <premise runs> <M6 dealt here 0|1> -> 0 when both ran exactly as often as M6 is dealt.
+once_ok() { [ "$1" -eq "$3" ] && [ "$2" -eq "$3" ]; }
 JW="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 printf '%s\n' M1 M2 M3 > "$JW/pd"
 printf '%s\n' M1 M2 M2 M3 > "$JW/pdup"
@@ -115,6 +118,13 @@ printf '%s\n' M3 M1 M2 > "$JW/pok"
 if partition_ok "$JW/pd" "$JW/pdup" >/dev/null || partition_ok "$JW/pd" "$JW/pmiss" >/dev/null \
    || ! partition_ok "$JW/pd" "$JW/pok" >/dev/null; then
   echo "FIXTURE BROKEN: the coverage join's self-probe did not discriminate (duplicate, omission, exact)" >&2
+  rm -rf "$JW"; exit 2
+fi
+# J2's predicate fires on a guard dropped (ran in a shard not dealt M6), a guard comparing the wrong
+# shard (ran nowhere M6 is dealt), and a half-guarded pair, and holds on the two correct shapes.
+if once_ok 1 1 0 || once_ok 0 0 1 || once_ok 1 0 1 || once_ok 0 1 1 || once_ok 0 1 0 \
+   || ! once_ok 0 0 0 || ! once_ok 1 1 1; then
+  echo "FIXTURE BROKEN: the J2 once-only predicate's self-probe did not discriminate" >&2
   rm -rf "$JW"; exit 2
 fi
 sed -n 's/^run_mutant \(M[0-9][0-9]*\)-.*/\1/p' "$SELF" > "$JW/declared"
@@ -201,7 +211,15 @@ probe_verdict() {  # <tree> -> refuses | holds
 }
 
 # --- CONTROLS -------------------------------------------------------------------------------
-T0="$WORK/t-pristine"; mktree "$T0" || { echo "FIXTURE ERROR: could not build the pristine tree" >&2; exit 2; }
+# C0 (the un-bypassed pristine run) and the M6 premise below are ONE unit: the premise reads C0's
+# tree, and M6 is dealt to shard a alone. Every other shard skips both -- C0 duplicates the base
+# fixture, which runs on every push, and C1 (kept in every shard) is each mutant's diff base.
+# NC0 and NPREM count the executions; J2 at the end joins them to the DEAL, not to this guard.
+NC0=0; NPREM=0
+T0="$WORK/t-pristine"
+if [ "$GROUP" = a ]; then
+NC0=$((NC0+1))
+mktree "$T0" || { echo "FIXTURE ERROR: could not build the pristine tree" >&2; exit 2; }
 drive_fx "$T0" "$WORK/c0.out"; c0=$?
 if [ "$c0" -eq 0 ] && grep -q '^fold-architect-ledger-join: 72 ok, 0 FAIL, 0 stood down$' "$WORK/c0.out"; then
   ok "[C0] pristine copy: 72 ok, 0 FAIL"
@@ -210,6 +228,7 @@ else
   sed -n '1,40p' "$WORK/c0.out" >&2; exit 2
 fi
 [ "$(probe_verdict "$T0")" = holds ] || { echo "FIXTURE BROKEN: the pristine subject's own self-probe refuses" >&2; exit 2; }
+fi
 T1="$WORK/t-bypass"; mktree "$T1" || { echo "FIXTURE ERROR: tree build failed" >&2; exit 2; }
 mut "$T1/$VSL_REL" "$BYPASS_OLD" "$BYPASS_NEW" || { echo "FIXTURE BROKEN: the self-probe bypass DID NOT APPLY" >&2; exit 2; }
 drive_fx "$T1" "$WORK/c1.out"; c1=$?
@@ -401,6 +420,8 @@ STALE_NEW='`scripts/ai-dlc/validate-provenance-block.sh <story-file> --require-s
 FOLD_OLD='- **Fold architecture gate (bug-investigation):** for each folded bug-fix story,'
 FOLD_NEW='  Fold architecture gate (bug-investigation): for each folded bug-fix story,'
 TA="$WORK/t-i32-apart"; TF="$WORK/t-i32-folded"
+if [ "$GROUP" = a ]; then
+NPREM=$((NPREM+1))
 if mktree "$TA" && mktree "$TF" \
    && mut "$TA/$GV_REL" "$STALE_OLD" "$STALE_NEW" \
    && mut "$TF/$GV_REL" "$STALE_OLD" "$STALE_NEW" && mut "$TF/$GV_REL" "$FOLD_OLD" "$FOLD_NEW"; then
@@ -415,10 +436,20 @@ if mktree "$TA" && mktree "$TF" \
 else
   bad "[M6-premise] a premise mutation DID NOT APPLY"
 fi
+fi
 
 # Every mutant dealt to this shard must have RUN: a dealt id whose run_mutant line was deleted or
 # renamed would otherwise leave this shard shorter and green.
 nmine=0; for _m in $MINE; do nmine=$((nmine+1)); done
 [ "$N" -eq "$nmine" ] || bad "[J1] shard '$GROUP' ran $N mutants, $nmine dealt"
+# J2: C0 and the M6 premise run exactly where M6 is dealt, and nowhere else. The expectation is
+# derived from the DEAL (MINE), not from the guard's own condition, so a guard dropped or compared
+# to another shard reads here as a shard running work it was not dealt.
+wantp=0; case " $MINE " in *" M6 "*) wantp=1 ;; esac
+if once_ok "$NC0" "$NPREM" "$wantp"; then
+  ok "[J2] C0 ran $NC0 and the M6 premise ran $NPREM in shard '$GROUP' (M6 dealt here: $wantp)"
+else
+  bad "[J2] shard '$GROUP': C0 ran $NC0, premise ran $NPREM, expected $wantp each (M6 dealt here: $wantp)"
+fi
 echo "$NAME: $N mutants, $fails FAIL"
 [ "$fails" -eq 0 ]

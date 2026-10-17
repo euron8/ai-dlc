@@ -543,6 +543,9 @@ Caveat: the record is a loaded-cost set from recent runs, not a solo timing, and
 
 Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
 
+
+**Partial, v0.810.0.** Item (a), the sandbox re-trace of 13 of the 14 stale fixtures, landed in intake 2 (`52555359`). Items (b) and (c) land here: `fold-architect-ledger-join-mutants` runs C0 and the M6 premise in shard `a` only, bound by a J2 arm, and `derivation-capture-mutants` is four pool units with a derived deal and coverage join (J0, J1, J1b) and no redundant control. Open: the remaining phase-2 items (gate-adjudication M0 in one shard, the readset-skip-digest and advisor-gate-deny controls in one shard each, the ledger-reverify-shard control) and the per-gate wall clock and dollars, which need the gate log of a real release push.
+
 verify: manual
 
 ## BL-584 — two fixtures cannot be traced and have no `inputs.decl`, so they run on every push
@@ -1013,3 +1016,67 @@ verify: manual
 
 verify: manual
 
+## BL-638 — `ai-dlc-subagent-probe.sh` takes `peak_tokens` as the max of the top-level `message.usage`, so any advisor turn inside a subagent inflates the recorded peak
+
+**DEFECT.** Found by ai-dlc-08 and relayed by lead ai-dlc-71; intake verified it by reading the code and measured it on real transcripts. It is BL-622's class with a separate reader. `core/hooks/ai-dlc-subagent-probe.sh:219-224` (origin/main) computes `peak` as the max, over a subagent's assistant turns, of the top-level `.message.usage` input + cache_creation + cache_read. The file never mentions `iterations` (0; control: `cache_read_input_tokens` 1). On an advisor turn that top level sums every API iteration (BL-622), so the turn reads roughly double the real context, and a max takes it. The result is written as `peak_tokens`, which the hook's own header (`:42-63`) says to read against the compaction threshold ("did a teammate approach the ceiling").
+
+Measured (python over `~/.claude/projects/*/<session>/subagents/agent-*.jsonl`, comparing the probe's peak with the max of each turn's last `message`-type iteration, or the top level where there is none):
+- graph: 3240 subagent transcripts, 1254 with an advisor turn, 1244 of those with an inflated peak.
+- ai-dlc: 1818 subagent transcripts, 699 with an advisor turn, 692 inflated.
+- The largest inflation: `agent-ab12255aca6bb34ba` (ai-dlc session `bbaa3aca`) reads 873695 against a true peak of 441012, with 4 advisor turns. The next four inflate by 384-428 thousand tokens.
+- Graph's live probe ledger `_bmad-output/subagent-context.jsonl` holds 7528 rows, 146 of them with `peak_tokens` above 420000, past the effective window. Some or all of those are likely inflated; intake did not join them row-by-row to their transcripts.
+
+So any ceiling or model decision read from `peak_tokens` over-states teammate context wherever an advisor ran. No shipped core reader of `peak_tokens` was found outside the probe itself (0 in the dispatch guard, the precompact and acknowledge hooks, and `steps/gate-validation.md`), so the cost today is in the analysis that reads the ledger, not in a gate.
+
+Owed: when `message.usage.iterations` is present, take each turn's figure from its LAST `type: "message"` iteration, otherwise the top level, and keep the max over turns. Share the extraction with BL-622's sensor fix so the two readers cannot drift. Receipt: a seeded subagent transcript with one advisor turn records the true peak, and a transcript without one records exactly what it records today (control).
+
+verify: manual
+
+## BL-639 — `wait-for-deliverable.sh`'s SETTLE window delivers a correct seat mid-edit when load or a slow local model stretches its write gaps
+
+**DEFECT.** Filed by ai-dlc-4e [9b62de] from BL-632's product-code header pass, on lead ai-dlc-71's ruling that a load-sensitive consumer deadline found there is its own filing. It is a mechanism read from the code, not a measurement; intake confirmed the cites at origin/main `9f8e7691`. `core/scripts/wait-for-deliverable.sh:355` sets `SETTLE="${AI_DLC_WAIT_SETTLE_SECS:-180}"`, and `settled()` (`:713`, test at `:730`, and again at `:1003`) delivers a marked file once its hash has been unchanged for more than SETTLE seconds. The header's own measurement (`:302`) is a series of gaps of 1.6, 5.1, 146.6, 2.4 and 1.4 s on an unloaded harness. A seat that writes its marker and keeps editing can have its gaps stretched past 180 s by pool load or by a slow local model, and the lead then consumes a half-edited deliverable. `say_revised` (`:695`) reports the later edit but cannot undo the delivery. A local-model lead is an operator goal, so this is in its path.
+
+Owed: measure the inter-write gaps of marked-then-edited seats under pool load and under a local model. Then either derive SETTLE from that distribution, or observe completion directly (an explicit completion write) instead of quiet time; under BL-632 the second is the binary attribute. Receipt: a seeded marked file edited at gaps above SETTLE is NOT delivered mid-sequence. Control: the same sequence delivers early under today's SETTLE.
+
+Related: BL-632 (lists SETTLE in its product-code class), BL-616.
+
+verify: manual
+
+## BL-640 — `wait-for-deliverable.sh`'s chained-beat guard fails open under load and serialises two quanta
+
+**NOTE.** Filed by ai-dlc-4e [9b62de], same header pass; a mechanism read, cites confirmed at `9f8e7691`. `:1138` (`[ $(( $(date +%s) - LAST )) -lt "$BUDGET" ]`, setting `MAY_SLEEP=0` at `:1139`) separates a chained call from a fresh one by elapsed time alone, with only `RESERVE` slack (`:1394-1395`, the larger of `MARGIN` and `POLL`). If load delays the chained call past that slack, the beat sleeps a second quantum: the 2x BUDGET serialisation the guard exists to prevent. The cost is wall clock and one beat charged, with no wrong delivery. Owed: decide from the sibling's lease liveness or its recorded end epoch instead of a bare BUDGET. Receipt: `.shell-$PPID` stamped at BUDGET-5s gives `MAY_SLEEP=0`. Control: at BUDGET+1s it sleeps today.
+
+verify: manual
+
+## BL-641 — `ai-dlc-continue.sh`'s RAPID_WINDOW_SECONDS can defeat the stall backoff on the unknown-tool path
+
+**NOTE.** Filed by ai-dlc-4e [9b62de], same header pass; a mechanism read, cites confirmed at `9f8e7691`. `core/hooks/ai-dlc-continue.sh:123` sets `RAPID_WINDOW_SECONDS=30`, and `stall_run()` (`:348`) sets `RUN_TOOL=unknown` (`:357`) when there is no transcript, no jq, or an old two-line state file. On that path the time test alone decides whether a run continues. Load stretches a genuinely stalled session's gaps past 30 s, which resets the counter to 1, so `EFF_MAX` (`:131-134`) is never reached and release falls to the harness cap. Owed: measure how often `RUN_TOOL=unknown` actually occurs; if it is non-zero, decide whether the unknown path should hold the run rather than reset it. Receipt: `stall_run` driven with an unreadable transcript at 31 s spacing reaches `EFF_MAX`, where today it resets to 1 on every block.
+
+verify: manual
+
+## BL-643 — `pregate-self-check.sh` hand-copies 2 of the hook's 20 above-pool steps, so a clean self-check still goes red at the gate
+
+**DEFECT.** Measured by lead ai-dlc-71; intake re-derived the step lists at origin/main `9f8e7691`. `.githooks/pre-push` runs 20 `step` lines before `fixture suite`, among them provenance-block, enforcement-map integrity, the invariant, vocabulary, path-mapping and post-compact-digest renders, stray party-mode provenance, no dead doc refs, release version, plan shape, claude-rules joins, backlog depth, backlog receipts, shell portability, re-attach budget, rule-file audit, write-format steering, fixture git-env scrub, agent definitions and shell syntax. `scripts/pregate-self-check.sh` runs two of them (`validate-enforcement-map.sh` and `validate-shell-portability.sh`), plus the fork-budget fixture and the procsub spelling arm, which are both fixtures inside the pool. Its header (`:4-8`) frames the three classes it catches as the ones the hook "finds only after minutes", but the list is hand-written and nothing binds it to the hook.
+
+Measured instance: ai-dlc-c2's 0.808.0 had a self-check rc 0 at `0e413c8e`, then went red at the gate on "fixture git-env scrub" (`scripts/validate-fixture-git-env.sh`): `core/fixtures/self-update-reinvoke-liveness/run.sh` never sources `lib/preamble.sh` (0 mentions at `0e413c8e`). That step sits above the pool, so every fixture was SKIPPED-on-earlier-red and the gate cycle was spent.
+
+Owed: derive the self-check's step list from the hook's above-pool step list rather than a hand copy, either by having the hook export it (the hook already runs these as `step "<name>" <command>`) or by binding the two lists the way I66 binds the two pre-push hooks. Measure the added wall clock: several of these steps are cheap, and the self-check's purpose is seconds, not minutes. Receipt: a validator added to the hook's above-pool steps and absent from the self-check fails a check, and today's list passes it (control).
+
+Related: BL-585 (which introduced the self-check), and the lead's process rule that every gate ask cites a self-check rc 0 at the exact tip, which this entry makes worth trusting.
+
+verify: manual
+
+## BL-644 — the read-set map carries `.git/**` rows that the hook strips before keying, about a sixth of all rows
+
+**NOTE.** Reported by lead ai-dlc-71 from ai-dlc-08's measurement; intake re-derived it read-only at origin/main `8cc25e89` and on 08's 0.809.0 branch `b235-622` (`0b96c077`). `.githooks/pre-push:655-657`'s `readset_universe_paths` drops `.git/**` and `.git` before any matching (`grep -v '^\.git/' | grep -v '^\.git$'`), and both the manifest (`:696`) and the committed digest go through it, so a `.git` row can never select or skip a fixture. The deriver's header says the same (`core/scripts/derive-fixture-readsets.sh:32-34`). But the deriver applies that exclusion only to its sandbox-miss comparison, not when it writes rows, so the committed map still carries them:
+- At `8cc25e89`: 2109 of 13519 rows (15.6%) are under `.git/`, and 1205 of them are under `.git/objects/` (8.9%). Together they are 137395 of the map's 889504 bytes. 124 fixtures carry `.git/objects/` rows; the largest is `procsub-staged-refusal` with 136.
+- At `b235-622`: 3143 of 14556 rows (21.6%) are under `.git/`, 2188 of them under `.git/objects/` (15.0%). `self-update-join-gate` grew from 0 rows (540 at `9f8e7691`) to 1050, of which 983 are under `.git/objects/`.
+- Control in the same runs: 10425 `core/` rows at `8cc25e89`.
+
+The objects subtree is only part of it: `.git/HEAD` (133 rows), `.git/refs/` (189) and a bare `.git` (84) are stripped by the same filter.
+
+Owed: the deriver drops `.git` and `.git/**` at write time, through the same predicate the hook uses (or a shared helper, so the two cannot disagree), and the next re-derive removes the existing rows. Receipt: a re-derived map holds 0 rows under `.git`, and a seeded `.git/objects/` read in a probe trace does not become a row; a `.gitignore` read (a tracked file, which the hook keeps) still does.
+
+Related: BL-635 (12214 dead rows for fixtures keyed on `inputs.decl`); together they are the map's dead weight.
+
+verify: manual
