@@ -1025,3 +1025,6 @@ Carrier for later appends: this worktree (/Users/n8/git/ai-dlc-wt-train, branch 
 
 ## 2:31 PM
 c9 verified intake-26 on main (BL-605/656 byte-equal to 7bc0bd40; verify: 56) and deleted it. c9 now holds no intake branches. b235-c9-build is rebased onto 06ae8b85 at 9369fe17 (6 commits, range-diff 6/6 identical; backup b235-c9-build-pre at c5350be5). H2 is still running, and slot (b) is next. c9 will ask for the train-log range before cutting its release commit.
+
+## 2:36 PM
+SLOT GO (b) to c9 at load 2.94. c9 has collected all four hands at 13ca153f (local, base 06ae8b85, 7 commits, 19 files, +749/-129). The slot runs serially: (1) the four changed fixtures solo through hermetic-run with a private store; (2) adversarial-shard-merge base vs tip, CPU, BTBTBT; (3) the wait-beat-liveness read-set retrace in the main checkout detached at 13ca153f, which I granted. The main checkout must go back to main and clean afterwards. VERSION 0.822.0 is reserved for c9 at the gate SLOT GO.
