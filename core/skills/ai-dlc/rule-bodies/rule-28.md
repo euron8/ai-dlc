@@ -296,7 +296,7 @@ brief and every prior exchange remain in its context and OUTRANK anything sent
 later. So `SendMessage` carries only content that is ADDITIVE AND CONSISTENT
 with the brief that teammate was dispatched under -- a fold-in arriving before
 the deliverable lands, a crash-recovery resolution, an answer to the teammate's
-own question, a gate verdict on its own work. Two things it may never carry:
+own question, a gate verdict on its own work. Three things it may never carry:
 
 - **Retracted or narrowed scope.** A patch message cannot displace the original
   brief; the teammate builds what the brief said. Scope reduction is `TaskStop`
@@ -305,6 +305,9 @@ own question, a gate verdict on its own work. Two things it may never carry:
   dispatch, regardless of how many resident teammates already exist. Resident-
   teammate count is a `TaskStop` cleanup concern, never a dispatch-routing
   input.
+- **More work for a remediator whose record already carries its `repair-complete:`
+  line**, a refusal included. A gate verdict on its work does not reopen a finished
+  record; `_gate-procedures.md`, "Adversarial repair dispatch", re-dispatches it fresh.
 
 **A dispatched teammate reaches the lead with `SendMessage` `to: "main"`.** The
 word "lead" is a role, not an address: the harness registers no agent by that

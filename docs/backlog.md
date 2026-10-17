@@ -210,36 +210,6 @@ Owed: let an escalated serial entry carry `supersedes:`/`closes:` for the part e
 
 verify: manual
 
-## BL-568 — the pipeline-efficiency analysis's rationale gaps never reached the backlog
-
-**DEFECT.** Filed by peer session ai-dlc-68, operator-approved. The findings summary of `docs/analysis/pipeline-efficiency-s317-s318.md` (`:577` at `origin/main`) lists pipeline elements with no stated rationale: the stories-test-strategy sub-steps (`:308-310`; finding 2 at `:499-501` names it the most expensive sub-step, with no rationale for its fan-out shape: s317 14.9 h/$622, s318 25.6 h/$414, 18.3 h of agent wait including a 4.1 h block), architecture 2a–2d (`:297`), the sprint-review party fan-out shape (`:355`), and Rules 1, 5, 6, 9, 10 and 14. The backlog and its archive at `origin/main` carry 0 hits for "no stated rationale", "rationale gap", "2a–2d" and "party fan-out shape" (control: BL-509 = 1 in the archive). The analysis's "Ranked defects" table (`:446-470`) ranks only the DEFECT list's rows (some with a dollar "Cost removed", ranks 11 and 12 "not measured"), so the rationale gaps, which carry no cost figure and were never DEFECT rows, were dropped.
-
-**Operator ruling 2026-10-16, applied before filing:** "if a step is unnecessary, redundant, or just plain wasteful providing no real value to the outcome of the sprint then it needs to go." An element with no measured value is REMOVED; that is not put to the operator as a choice. It stays only on evidence: a stated failure case it prevents AND findings it catches that no other element catches and that survived to the shipped artifact. A restated rationale alone does not keep it. Rare high-consequence catches (for example a capital-path or live-allowlist defect) are measured separately and judged on consequence, not on frequency over three sprints.
-
-Owed: for each element, measured from the s317–s319 transcripts and ranked by wall clock removed (dollars beside it), either the evidence above, recorded as a failure-case line in the step file or rule body, or the element's removal.
-
-Receipt: every element enumerated from the findings-summary list carries a failure-case line with its measured unique surviving catches, or is absent from core.
-
-**Measured (batch 235, `docs/analysis/step-value-s317-s319.md`):** remove architecture 2a and 2b and Rule 1; merge 2c into the adversary's Rule 26 focus, Rules 5 and 6 into Rule 4, Rule 9 into Rule 3, stories 5.1a into 5.1; keep 2d, Rules 10 and 14, the sprint-review party round, stories step-4 party and sharded elicitation, each with a failure-case line. The `:577` list was wrong on 2c and 2d, which already carry Catches: lines. Built as three releases by ai-dlc-de.
-
-**Progress (v0.805.0):** R1 (architecture §2a-§2c removed) and R2 (Rules 1, 5, 6 and 9 folded) landed; R3 (the failure-case lines for the elements kept) remains.
-
-verify: manual
-
-## BL-569 — requirements runs three validation rounds over one subject with no stated or measured distinction between them
-
-**DEFECT.** Filed by peer session ai-dlc-68, operator-approved. The requirements step runs a party round, then elicitation (`_gate-procedures.md:407`, "probe until zero ambiguity"), then the adversarial series, each with up to 19 agents plus a join, a repair fan-out and a serial remediator. `_gate-procedures.md:410-411` says elicitation "takes the axis and the shape of the step's adversarial pass … sharded … exactly as 'Adversarial review dispatch' shards it". `requirements.md:10-18` and CHANGELOG [0.531.0] justify one requirements step, not three rounds inside it. s319 cost so far: requirements at 4.6 h/$194 before the adversarial round finished, and four serial remediator passes of 42, 29, 52 and 31 min (BL-543). The early adversarial findings (shards cross-2, 1 and 12) are mostly elicitation-round PRD repairs that never reached the SPEC or the brief, which is rank 2 of the analysis and BL-508.
-
-**Operator ruling 2026-10-16, applied before filing:** "why do they need my decisions? As far as I'm concerned if a step is unnecessary, redundant, or just plain wasteful providing no real value to the outcome of the sprint then it needs to go." A round whose measured unique surviving findings do not earn its wall clock is merged or removed by the batch, without asking the operator. Rare high-consequence catches (for example a capital-path or live-allowlist defect) are measured separately: name what each round caught and judge on consequence, not on frequency over three sprints.
-
-Owed: a per-round measured case from s317–s319 (findings per round by severity; findings re-found by a later round; findings introduced by the prior round's repair), and then the batch merges or removes every round that does not earn its wall clock.
-
-Receipt: a committed measurement table under `docs/analysis/` keyed by round, plus a per-round rationale in `_gate-procedures.md` naming the failure case and the unique surviving catches for every round that remains.
-
-**Measured (batch 235, `docs/analysis/step-value-s317-s319.md`):** no requirements round is removable. Party and elicitation each carry unique high-consequence catches that shipped (s317-s319). Adversarial p1-p3 carry none: most p1 MAJORs and every p2+ MAJOR sit in text a repair or fold wrote, so the waste is the repair defect rate (archived BL-508, landed v0.786.0, now three-sprint evidence), not a round. The per-round rationale ships in ai-dlc-de's release R3.
-
-verify: manual
-
 ## BL-575 — the lead's hand-written adversary brief omitted `verdict:`, 13 of 19 shards shipped without it, and nothing caught it before the merge
 
 **DEFECT.** Filed by peer session ai-dlc-68 from graph's s319. Resumed lead `949015a6` (`/ai-dlc resume` at 04:47:20Z on 2026-10-16, Sonnet 5.5) ran `merge-adversarial-shards.sh --subject 319 --base d82236ce… s319/shards/requirements-p1` at 04:47:39Z and got rc=2: `REFUSED: …/requirements-p1/1.md declares verdict '<none>', not one of EXIT_CONDITION_MET EXIT_CONDITION_NOT_MET DIVERGENT_HARD_BLOCK` (`core/scripts/merge-adversarial-shards.sh:575`). Intake re-derived on graph read-only: `_bmad-output/planning-artifacts/s319/shards/requirements-p1/` holds 19 shards; all 19 carry a `seat-complete: ` line and only 6 carry `^verdict:` (2, 5, 6, 9, 12, cross-5 per the filer). The previous lead `f65eae3b` dispatched each adversary at a hand-written `scratchpad/adversarial-p1-brief.md` (54 lines): `verdict` 0 times, against `seat-complete` 1 and `PENDING-LEAD` 2 in the same file. `core/team-roles/adversary.md:371` makes `verdict:` "required on every adversarial-review pass" and `:135` points at it; the shards whose adversaries followed the role file carry it, the rest followed the brief. At 04:49:17Z the lead asked the operator whether to hand-add the field to 13 shards, which is the BL-530 pattern of a lead editing agent-written gate inputs.
@@ -272,20 +242,6 @@ verify: manual
 **DEFECT.** Filed on ai-dlc-f5's report, routed by ai-dlc-b8. `core/fixtures/remediator-shard-join-mutants/run.sh:185-186`, `review-shard-merge-mutants/run.sh:177-178` and `adversarial-shard-merge-mutants/run.sh:103-104` each set `POOL=8` and `SCORER_BOUND=900`; a scorer still running past the bound is killed and scored `TIMEOUT -- the scorer ran past 900s and was killed; no verdict`, which fails the unit (`:213/:231`, `:205/:223`, `:131/:149`). The bound is wall clock, so under a loaded gate (pool of 12 fixtures each running 8 scorers) a scorer can exceed it with no defect in the subject; ai-dlc-f5 reports `adversarial-shard-merge-mutants` failing exactly this way in batch 235. The `-b/-c/-d` shards of the first two carry the same runner. A false red on a release gate costs a full re-push.
 
 Owed: a bound that separates "hung" from "slow under load" (e.g. CPU time, or progress-since-last-check, rather than wall clock), or a bound derived from the unit's recorded cost; a probe scorer that is slow but progressing under an artificially low bound must not be scored TIMEOUT, with a genuinely hung scorer as the control that still is.
-
-verify: manual
-
-## BL-593 — a serial remediator is RESUMED by SendMessage after a refusal, and nothing tells the lead to re-dispatch instead
-
-**DEFECT.** Filed by ai-dlc-b8 from ai-dlc-0b's read-only analysis of graph session `62eadbbe` (s319). At 00:07:23Z on 2026-10-16 the lead resumed a serial remediator by `SendMessage` after a refusal, and armed a sentinel beat to wait on it (that beat is BL-553's subject, which cites this instance).
-
-The conflict lands with train #3 (b235-prose-P, `03c36778`, unmerged at 952b9319): its `core/team-roles/remediator.md:205-208` makes `repair-complete: serial <pass>` the serial remediator's LAST write and says "once it is written, do not edit the record again". A remediator resumed after it wrote that line can therefore either not finish, or finish by violating the clause. On origin/main the clause does not exist yet (`repair-complete` 0 hits in `core/team-roles/remediator.md` at 952b9319; the same command finds it at `03c36778:205`), so the defect is armed by that release.
-
-Nothing routes the lead away from the resume. `core/skills/ai-dlc/rule-bodies/rule-28.md:267-282` permits `SendMessage` to a resident teammate for "a crash-recovery resolution … a gate verdict on its own work", which reads as covering a refusal, and forbids it only for narrowed scope and new work. `core/skills/ai-dlc/steps/_gate-procedures.md` mentions `SendMessage` 0 times (control: `remediator` 61 times in the same file), and its serial-remediator text (`:843-855`) covers dispatching after the join and adjudicating `ESCALATED:` lines, never repairing a refused serial record.
-
-Owed: one lead-side instruction, placed where the serial remediator is dispatched (`_gate-procedures.md` near `:843-855`) and cited from rule-28's `SendMessage` carve-outs: a serial remediator whose record already carries its `repair-complete:` line is re-dispatched fresh (`TaskStop` the resident, one new `Agent` dispatch that appends a new block), never resumed by `SendMessage`. Plus a guard if one fits an existing hook (`core/hooks/` already carries five `SendMessage` readers, e.g. `ai-dlc-acknowledge.sh`, `ai-dlc-escalation-delivery.sh`); the builder measures that hook's ability to identify the recipient as a serial remediator with a marked record before adding it, and records the false-positive set.
-
-Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
 
 verify: manual
 

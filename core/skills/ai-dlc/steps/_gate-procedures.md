@@ -268,6 +268,13 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    walk the step's subject and record findings; run the step's source-fidelity check if it
    names one.
 
+   **Minimum mechanism (Rule 26(c)).** Failure caught: a capital-path or address defect in
+   first-authored text that no later round raises, such as a partial request rebalancing a whole
+   position, a sweep re-minting a withheld remainder, or a lowercase address that crash-loops a
+   live process at load. False-positive cost: one seat agent per (seat, part) and the party
+   repair. Removal condition: measured sprints in which this round carries no unique MAJOR or
+   CRITICAL catch that survives to the shipped artifact.
+
    **The seats edit nothing, in every case below.** Several seats walking one subject would
    each write it in place at once, and nothing attributes or orders those writes, so a lost
    update between two seats is invisible. Each seat writes one findings file per (seat, shard)
@@ -421,6 +428,14 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
 2. `/bmad-advanced-elicitation` — probe until zero ambiguity and update the
    artifact. **Run sub-step snapshot update**, then proceed.
 
+   **Minimum mechanism (Rule 26(c)).** Failure caught: a defect in text the party round never
+   read (a fold, the party repair), or in first-authored text it missed, such as a swap quoted
+   against another chain's hard-coded quoter, a checksum-invalid address passing validation, an
+   empty allowlist failing open, or a fee floor orders of magnitude above the threshold it
+   replaced. False-positive cost: one sharded elicitation round and its repair. Removal
+   condition: measured sprints in which elicitation carries no unique MAJOR or CRITICAL catch
+   that survives to the shipped artifact.
+
    **Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**
    The subject is sharded for elicitation exactly as "Adversarial review dispatch" shards it for
    the step's convergence passes; a lighter shape is not the lead's to choose. Two or more files
@@ -497,6 +512,16 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    ends the session, otherwise continue until the terminal pass stamps
    `EXIT_CONDITION_MET`. A `DIVERGENT_HARD_BLOCK` or STALL does not end the loop:
    follow "Divergence resolution dispatch" below.
+
+   **Minimum mechanism (Rule 26(c)).** Failure caught: a defect a repair or a fold wrote into
+   the subject, such as a subscription broadcast from a burn hash, a destination rebind placed
+   before the assignment that overwrites it, or a config key a repair left in place so the loader
+   raises at start. This round's catches are all of that kind: no first-authored defect is unique
+   to it. Most MAJORs at every adversarial pass sit in text the previous repair wrote, and
+   the next pass is the only reader of that text; the terminal pass is also the counted exit
+   Check 24 reads (Rule 8). False-positive cost: one pass and its repair per round until the
+   exit. Removal condition: repairs that measurably stop writing defects, and a Rule 8 that no
+   longer counts an exit.
 4. Append the step's changelog ("Where a changelog is written" below), then proceed to
    the step's next action.
 
@@ -1038,6 +1063,16 @@ verifies against that record; so does the gate's re-run of the failed checks.
 unsharded `shard: none (serial-document)` remediator both end their record with `repair-complete:
 serial <pass>`, which only `--complete-repair` waits for; the part records a shard join writes are
 written by that join, synchronously, and need no beat.
+
+**A completed record is never reopened by `SendMessage`.** Once a remediator's record carries its
+`repair-complete:` line, that remediator is finished, and it may not edit the record again
+(`remediator.md`). When the join, a refusal or a later check needs more repair on that record,
+`TaskStop` the resident remediator and send ONE fresh `Agent` dispatch, whose brief names the open
+work and which appends a new block that opens with its own triple and ends in its own
+`repair-complete: serial <pass>` line. Join that dispatch with its own `--dispatch <agentId>`.
+Never resume the finished remediator with `SendMessage`, even to deliver a refusal: it can either
+leave the work undone or finish it by editing past its own completion line.
+
 SKILL.md Rule 32 touchpoint V1 applies once the repair record is joined, before the next pass.
 Once the join is accepted, commit the repaired subject files (`git add` and `git commit`) before
 the next pass dispatches, so a later stop cannot blur joined edits with in-flight ones.

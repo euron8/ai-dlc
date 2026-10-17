@@ -300,6 +300,13 @@ Checkpoint to the human. For multi-sprint features (Rule 14), the
 checkpoint runs after each sprint; the agent does not proceed to the
 next sprint until the human validates the current one.
 
+**Minimum mechanism (Rule 26(c)).** Failure caught: a sprint reaching
+production with no human validating its live behaviour; this is the only
+human gate before production, and Rule 14's one-phase-at-a-time clause
+rests on it. False-positive cost: one operator checkpoint per sprint,
+after smoke. Removal condition: none while the pipeline deploys to a live
+environment.
+
 ### Rule 11 -- Seek clarity when ambiguous -- HARD_BLOCK severity
 
 Two observable requirements.
@@ -425,6 +432,12 @@ sprints without human approval. Requirements: document the phasing
 rationale, define phase boundaries, ensure each phase delivers
 standalone value. Each sprint is deployed and validated at the
 production checkpoint before the next sprint begins.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: a feature too large
+or too risky for one sprint shipped whole, or a phase started on top of
+an unvalidated one. False-positive cost: one extra production checkpoint
+when a feature is phased that one sprint could have carried. Removal
+condition: a gate that refuses an oversized sprint mechanically.
 
 
 **Carrier:** `.claude/skills/ai-dlc/steps/route.md`

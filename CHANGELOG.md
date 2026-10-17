@@ -20,6 +20,30 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.817.0] - 2026-10-17
+
+Batch 235 (one release: BL-568 R3, BL-569 and BL-593).
+Closes BL-568, BL-569 and BL-593. Closes no `PC-` id.
+
+### Every pipeline element that stays states what it catches, and a finished remediator is re-dispatched, never resumed (BL-568, BL-569, BL-593)
+
+- **Failure-case lines (BL-568 R3).** Each element `docs/analysis/step-value-s317-s319.md` keeps now carries a
+  Rule 26(c) block: failure caught, false-positive cost, removal condition. That covers `_gate-procedures.md`
+  "Validation cycle" items 1 (party), 2 (elicitation) and 3 (adversarial), `sprint-review.md` section 2 (the
+  sprint-level party round), `stories-test-strategy.md` step 4 (per-story party, cross-story party, sharded
+  elicitation), and SKILL.md Rules 10 and 14. Stories sub-step 5.1a folds into step 1, and the carry-over-single
+  gate's "Steps 1a-2" pointer now names step 1's trace and step 2. `pipeline-efficiency-s317-s318.md`'s gap list
+  drops 2c and 2d, which already carried `Catches:` lines. With R1 and R2 (0.805.0) the entry is complete.
+- **Per-round rationale (BL-569).** No requirements round is removed: the measured table in the step-value document
+  keeps all three. Item 3's block names the adversarial passes' repair-introduced catches and states that none of
+  them is a unique first-authored defect.
+- **No resume of a finished remediator (BL-593).** In "Adversarial repair dispatch", once a remediator's record
+  carries `repair-complete:`, more repair on it is `TaskStop` plus one fresh `Agent` dispatch that appends its own
+  block, never a `SendMessage` resume, a refusal included. `rule-28.md` lists it as a third thing `SendMessage` may
+  never carry. `process-rule-pins` gains gp-redispatch-fresh, gp-redispatch-never and r28-no-reopen. No hook guard:
+  the only `SendMessage` hook matcher is PostToolUse, which cannot deny, and no ledger joins an agentId to a
+  repair record.
+
 ## [0.816.0] - 2026-10-17
 
 Batch 235 (one release: BL-596, BL-597 and BL-598, the three filings BL-536 left open in the adversary merge).

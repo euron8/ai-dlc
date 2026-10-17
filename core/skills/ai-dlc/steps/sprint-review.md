@@ -112,6 +112,13 @@ is for a single-document subject, not this one.
   applied in Step 3 by dev teammates, not by a seat and not inline by the lead (Rule 28); the
   lead owns disposition, not the edit.**
 
+**Minimum mechanism (Rule 26(c)).** Failure caught: a defect only the whole sprint shows, such
+as a capital path left without its halt after a burn or a funds destination reachable through a
+path no single story owned, and per-story defects the one-shot pass in Step 1 does not raise.
+False-positive cost: one agent per (seat, story) plus one per (seat, cross group). Removal
+condition: measured sprints in which this round carries no unique MAJOR or CRITICAL catch that
+reaches the merged code.
+
 ### 3. Fix and Re-Validate
 
 If the sprint review surfaced findings that required code changes:

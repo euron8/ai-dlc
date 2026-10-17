@@ -578,8 +578,10 @@ None. No measured cost blocks the pipeline from completing.
 - **9 `ESCALATION_UNDELIVERED` events with "No agent named 'lead'"**: the escalation path addresses a
   name the harness does not register.
   → `core/hooks/ai-dlc-escalation-delivery.sh`.
-- **Rationale gaps** (no stated reason found): stories-test-strategy sub-steps, architecture 2a–2d,
-  sprint-review party fan-out shape, Rules 1, 5, 6, 9, 10 and 14.
+- **Rationale gaps** (no stated reason found): stories-test-strategy sub-steps, architecture 2a and
+  2b, sprint-review party fan-out shape, Rules 1, 5, 6, 9, 10 and 14. Architecture 2c and 2d were
+  listed here in error: each already carried a `Catches:` line. `step-value-s317-s319.md` measures
+  every element on this list and gives its verdict.
 
 ## Role efficacy: did each model and effort binding produce work that survived?
 
