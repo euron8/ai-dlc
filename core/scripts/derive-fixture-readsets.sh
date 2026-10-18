@@ -374,8 +374,19 @@ fi
 # Kept as a standalone function between sentinels because the rest of this script needs root
 # and cannot run in the fixture suite. The fixture extracts THIS block and drives it directly,
 # so the logic under test is the shipped logic rather than a restatement of it.
+#   $4 OPTIONAL fixture root. When given, a fixture whose `<root>/<fx>/inputs.decl` exists is DECLARED, and the
+#      hook maps a declared fixture before it ever reads this file, so its rows and its `# digest` line are dead
+#      weight: they are dropped from BOTH the old map and the new rows. With 3 arguments nothing is filtered.
 readset_merge_map() {
-  local old="$1" new="$2" traced="$3"
+  local old="$1" new="$2" traced="$3" root="${4:-}" decl="" d
+  if [ -n "$root" ]; then
+    # The glob is guarded: an unmatched one iterates once over the literal pattern.
+    for d in "$root"/*/inputs.decl; do
+      [ -f "$d" ] || continue
+      d="${d%/inputs.decl}"; decl="${decl}${decl:+ }${d##*/}"
+    done
+    [ -z "$decl" ] || decl=" $decl "
+  fi
   # NEWLINES IN `traced` ABORT THE awk BELOW, AND IT FAILS SILENTLY IN THE WORST DIRECTION.
   # `awk -v` cannot carry a newline: the caller builds its list with a `for` loop, so it arrives
   # newline-separated and awk dies with `newline in string` on line 1. The `if` branch then
@@ -390,17 +401,30 @@ readset_merge_map() {
   # not trace, dropped for one it did (the caller adds the new one, or none for an omitted fixture).
   # Every other `#` line is the header, which the writer regenerates.
   if [ -s "$old" ]; then
-    awk -v traced=" $traced " '
-      $1 == "#" && $2 == "digest" && NF == 4 { if (index(traced, " " $3 " ") == 0) print; next }
+    awk -v traced=" $traced " -v decl="$decl" '
+      $1 == "#" && $2 == "digest" && NF == 4 { if (index(traced, " " $3 " ") == 0 && (decl == "" || index(decl, " " $3 " ") == 0)) print; next }
       /^#/ { next }
       {
         fx = $0
         sub(/\t.*$/, "", fx)
-        if (index(traced, " " fx " ") == 0) print
+        if (index(traced, " " fx " ") == 0 && (decl == "" || index(decl, " " fx " ") == 0)) print
       }
     ' "$old"
   fi
-  [ -s "$new" ] && cat "$new"
+  if [ -s "$new" ]; then
+    if [ -n "$decl" ]; then
+      awk -v decl="$decl" '
+        $1 == "#" && $2 == "digest" && NF == 4 { if (index(decl, " " $3 " ") == 0) print; next }
+        {
+          fx = $0
+          sub(/\t.*$/, "", fx)
+          if (index(decl, " " fx " ") == 0) print
+        }
+      ' "$new"
+    else
+      cat "$new"
+    fi
+  fi
   return 0
 }
 # READSET_MERGE_END
@@ -462,6 +486,8 @@ readset_all_list() {
   local root="$1" d out=""
   for d in "$root"/*/; do
     [ -f "${d}run.sh" ] || continue
+    # A DECLARED fixture is mapped by the hook without a trace and carries no rows (readset_merge_map drops them).
+    [ -f "${d}inputs.decl" ] && continue
     d="${d%/}"
     out="${out}${out:+ }${d##*/}"
   done
@@ -487,18 +513,27 @@ readset_all_list() {
 # same one: the `--all` list arrived newline-separated, no name matched, and every fixture read as
 # untraced.
 readset_untraced_lost() {
-  local old="$1" merged="$2" traced="$3"
+  local old="$1" merged="$2" traced="$3" root="${4:-}" decl="" d
   [ -s "$old" ] || return 0
   [ -r "$merged" ] || return 2
   traced="$(printf '%s' "$traced" | tr '\n\t' '  ')"
-  awk -F'\t' -v traced=" $traced " '
+  # $4 OPTIONAL fixture root: a DECLARED fixture (`<root>/<fx>/inputs.decl`) is dropped by readset_merge_map on
+  # purpose, so it is not a loss. The same set that merge builds, spelled again because this span is extracted alone.
+  if [ -n "$root" ]; then
+    for d in "$root"/*/inputs.decl; do
+      [ -f "$d" ] || continue
+      d="${d%/inputs.decl}"; decl="${decl}${decl:+ }${d##*/}"
+    done
+    [ -z "$decl" ] || decl=" $decl "
+  fi
+  awk -F'\t' -v traced=" $traced " -v decl="$decl" '
     FILENAME == ARGV[1] { if ($0 !~ /^#/) have[$1] = 1; next }
     /^#/ { next }
     $1 == "" { next }
     ($1 in seen) { next }
     {
       seen[$1] = 1
-      if (index(traced, " " $1 " ") == 0 && ($1 in have) == 0) print $1
+      if (index(traced, " " $1 " ") == 0 && ($1 in have) == 0 && (decl == "" || index(decl, " " $1 " ") == 0)) print $1
     }
   ' "$merged" "$old"
 }
@@ -1176,8 +1211,16 @@ reset_atimes() {
 # prefix, then every path `git check-ignore` calls ignored. drop_ignored FAILS OPEN -- if
 # check-ignore cannot run every path is kept -- so a broken filter can only ADD misses, which
 # refuses the replacement rather than approving it.
+# readset_drop_git is the hook's own predicate, sourced from its READSET_UNIVERSE span. The definition below is
+# the fallback for a runner whose span carries none (an older hook), and keeps this span self-contained;
+# readset-skip byte-compares its body with the hook's.
+if ! type readset_drop_git > /dev/null 2>&1; then
+readset_drop_git() { # reads paths on stdin, writes all but `.git` and `.git/**`; awk, so an all-`.git` stream exits 0
+  awk '$0 != ".git" && index($0, ".git/") != 1'
+}
+fi
 readset_both_comparable() {
-  awk '$0 != "" && $0 != ".git" && index($0, ".git/") != 1' | drop_ignored
+  awk '$0 != ""' | readset_drop_git | drop_ignored
 }
 #   $1 the fs_usage set   $2 the sandbox set   $3 output prefix
 # Writes $3.sbmiss (in fs_usage, not in the sandbox -- the verdict's subject) and $3.fsmiss (the
@@ -1364,7 +1407,7 @@ fi
 # fixture root (notify-hook-channel). Such a fixture is untraced and kept by the merge, so the
 # guard below does not die on it -- its rows survive every `--all` run until removed by hand.
 MERGED="$WORK/merged"
-readset_merge_map "$MAP" "$WORK/map" "$LIST" | LC_ALL=C sort -u > "$MERGED"
+readset_merge_map "$MAP" "$WORK/map" "$LIST" "$TREE/$FIXTURE_ROOT" | LC_ALL=C sort -u > "$MERGED"
 # THE DIGEST LINES CARRIED OVER ARE SPLIT OFF HERE, before anything counts fixtures: a `# digest` line
 # has no tab, so `cut -f1` would count it as a fixture of its own.
 # grep exits 1 on no match, which leaves the redirect's empty file -- correct; 2 is a failed read, which dies.
@@ -1386,7 +1429,7 @@ fi
 # output is staged to a file and its status read: a failed read must refuse, never pass as "lost
 # nothing".
 if [ -s "$MAP" ]; then
-  readset_untraced_lost "$MAP" "$MERGED" "$LIST" > "$WORK/untraced.lost" \
+  readset_untraced_lost "$MAP" "$MERGED" "$LIST" "$TREE/$FIXTURE_ROOT" > "$WORK/untraced.lost" \
     || die "could not compare $MAP against the merged map $MERGED -- refusing to write a map whose losses were never checked"
   if [ -s "$WORK/untraced.lost" ]; then
     f="$(head -1 "$WORK/untraced.lost")"
@@ -1679,7 +1722,7 @@ for fx in $LIST; do
   fi
 
   cat "$WORK/$fx.at" "$WORK/$fx.fs" "$WORK/$fx.fsu" | LC_ALL=C sort -u \
-    | grep -v '^\.readset-sentinel$' | grep -v '^\.readset-end$' | readset_drop_pseudo | drop_ignored > "$WORK/$fx.set"
+    | grep -v '^\.readset-sentinel$' | grep -v '^\.readset-end$' | readset_drop_pseudo | readset_drop_git | drop_ignored > "$WORK/$fx.set"
   n="$(grep -c . "$WORK/$fx.set" 2>/dev/null)"; case "$n" in ''|*[!0-9]*) n=0 ;; esac
 
   # FAIL CLOSED. Anything that makes this trace untrustworthy omits the fixture from the map,

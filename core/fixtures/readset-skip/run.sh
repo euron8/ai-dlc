@@ -2354,12 +2354,184 @@ else
     ok "MERGE MUTANT rewrite moves arm 1: dropping the old-map read loses every untraced fixture"
   fi
   MERGE_ARMS=$((MERGE_ARMS+1))
-  merge_mutant keepstale 's|if (index(traced, " " fx " ") == 0) print|print|'
+  merge_mutant keepstale 's|if (index(traced, " " fx " ") == 0 \&\& (decl == "" |if ((decl == "" |'
   if grep -q 'src/x' "$WORK/mm.out"; then
     ok "MERGE MUTANT keepstale moves arm 2: without the traced filter the re-traced fixture keeps its stale entry"
   else
     bad "MERGE MUTANT keepstale: the stale entry did not survive — arm 2 does not depend on the traced filter"
   fi
+
+  # ------------------------------ the write pipeline drops `.git` through the hook's own predicate ----
+  # THE MAP CARRIED `.git/**` ROWS THE HOOK STRIPS BEFORE KEYING. The deriver's write pipeline now ends in
+  # readset_drop_git, the hook's predicate (READSET_UNIVERSE span), with a fallback inside the deriver's
+  # READSET_BOTH span for a runner whose span carries none. The pipeline is EXTRACTED from the deriver (the one
+  # line that redirects into "$WORK/$fx.set") and run over a seeded stream, so the shipped line is the subject.
+  # The seed carries the nested `sub/.git/HEAD` (an unanchored predicate drops it) and `.gitignore` (the
+  # near-miss a prefix match on `.git` would drop).
+  DG="$WORK/dg"
+  mkdir -p "$DG/r" "$DG/w" || broken "mkdir failed"
+  ( cd "$DG/r" && git init -q . ) >/dev/null 2>&1 || broken "could not seed the .git-drop repo"
+  printf '%s\n' .git/objects/ab/cd .git/HEAD .git sub/.git/HEAD .gitignore core/x.sh > "$DG/seed"
+  printf '%s\n' .gitignore core/x.sh sub/.git/HEAD > "$DG/want"
+  sed -n '/^# READSET_DROP_BEGIN$/,/^# READSET_DROP_END$/p' "$DERIVER" > "$DG/drop.span"
+  sed -n '/^# READSET_PSEUDO_BEGIN$/,/^# READSET_PSEUDO_END$/p' "$DERIVER" > "$DG/pseudo.span"
+  sed -n '/^# READSET_BOTH_BEGIN$/,/^# READSET_BOTH_END$/p' "$DERIVER" > "$DG/both.span"
+  sed -n '/^# READSET_UNIVERSE_BEGIN$/,/^# READSET_UNIVERSE_END$/p' "$HOOK" > "$DG/univ.span"
+  grep -F '> "$WORK/$fx.set"' "$DERIVER" > "$DG/wline"
+  # dg_pipe <deriver-for-the-write-line> <hook-span|-> : prints what the shipped write pipeline leaves of the seed
+  dg_pipe() {
+    local wl="$1" us="$2"
+    {
+      printf '. "%s"\n. "%s"\n' "$DG/drop.span" "$DG/pseudo.span"
+      if [ "$us" = - ]; then :; else printf '. "%s"\n' "$us"; fi
+      printf '. "%s"\n' "$DG/both.span"
+      printf 'cd "%s" || exit 9\n' "$DG/r"
+      printf 'cat "%s" | LC_ALL=C sort -u \\\n' "$DG/seed"
+      cat "$wl"
+    } > "$DG/pipe.sh"
+    rm -f "$DG/w/dgfx.set"
+    ( TREE="$DG/r" WORK="$DG/w" fx=dgfx bash "$DG/pipe.sh" ) >/dev/null 2>&1
+    cat "$DG/w/dgfx.set" 2>/dev/null
+  }
+  dg_verdict() { if [ "$(LC_ALL=C sort "$1" 2>/dev/null | tr '\n' ' ')" = "$(LC_ALL=C sort "$DG/want" | tr '\n' ' ')" ]; then echo exact; else echo wrong; fi; }
+  MERGE_ARMS=$((MERGE_ARMS+1))
+  if [ "$(grep -c . "$DG/wline")" -ne 1 ] || ! grep -q '^readset_drop_git()' "$DG/univ.span" || ! grep -q 'readset_drop_git()' "$DG/both.span"; then
+    bad "(g) extracted no single write line from $DERIVER, no readset_drop_git from the hook's READSET_UNIVERSE span, or no fallback from the deriver's READSET_BOTH span — nothing below ran"
+  else
+    dg_pipe "$DG/wline" "$DG/univ.span" > "$DG/out.hook"
+    dg_pipe "$DG/wline" - > "$DG/out.fallback"
+    if [ "$(dg_verdict "$DG/out.hook")" = exact ]; then
+      ok "(g) the shipped write pipeline over .git/objects/ab/cd, .git/HEAD, a bare .git, sub/.git/HEAD, .gitignore and core/x.sh leaves exactly sub/.git/HEAD, .gitignore and core/x.sh, with the hook's predicate sourced"
+    else
+      bad "(g) the write pipeline left [$(tr '\n' ' ' < "$DG/out.hook")], wanted exactly [$(tr '\n' ' ' < "$DG/want")]"
+    fi
+    MERGE_ARMS=$((MERGE_ARMS+1))
+    if [ "$(dg_verdict "$DG/out.fallback")" = exact ]; then
+      ok "(g) and the same holds with NO hook span sourced: the READSET_BOTH fallback carries the predicate (the deriver run against an older hook)"
+    else
+      bad "(g) with no hook span the write pipeline left [$(tr '\n' ' ' < "$DG/out.fallback")], wanted exactly [$(tr '\n' ' ' < "$DG/want")]"
+    fi
+    # BYTE-COMPARE the executable body of the fallback with the hook's definition: the lines between the
+    # function header and its closing brace, whitespace-trimmed. The header line carries a comment and is not compared.
+    dg_body() { awk '/^[[:space:]]*readset_drop_git\(\)/ { on = 1; next } on && /^}/ { exit } on { sub(/^[[:space:]]+/, ""); print }' "$1"; }
+    dg_body "$DG/univ.span" > "$DG/body.hook"
+    dg_body "$DG/both.span" > "$DG/body.fb"
+    MERGE_ARMS=$((MERGE_ARMS+1))
+    if [ -s "$DG/body.hook" ] && cmp -s "$DG/body.hook" "$DG/body.fb"; then
+      ok "(g) the fallback's executable body is byte-identical to the hook's readset_drop_git"
+    else
+      bad "(g) the fallback body in the READSET_BOTH span differs from the hook's readset_drop_git (or is empty): [$(tr '\n' ' ' < "$DG/body.fb")] vs [$(tr '\n' ' ' < "$DG/body.hook")]"
+    fi
+    sed 's|index(\$0, "\.git/") != 1|index($0, ".git/") != 0|' "$DG/univ.span" > "$DG/univ.drift"
+    dg_body "$DG/univ.drift" > "$DG/body.drift"
+    MERGE_ARMS=$((MERGE_ARMS+1))
+    if cmp -s "$DG/univ.span" "$DG/univ.drift"; then bad "(g) SEEDED MISMATCH did not apply"
+    elif cmp -s "$DG/body.drift" "$DG/body.fb"; then bad "(g) SEEDED MISMATCH: a drifted hook predicate still compared equal to the fallback, so the byte-compare cannot fail"
+    else ok "(g) a seeded drift in the hook's predicate FAILS the fallback byte-compare"
+    fi
+    # MUTANT (a): the anchor is dropped, so the nested sub/.git/HEAD goes too. The edit is the exact predicate line.
+    _o="$(grep -m1 -F "awk '\$0 != \".git\" && index(\$0, \".git/\") != 1'" "$DG/univ.span")"
+    mut_line "$DG/univ.span" "$DG/univ.mutA" "$_o" "  awk '\$0 != \".git\" && index(\$0, \".git/\") == 0'"
+    MERGE_ARMS=$((MERGE_ARMS+1))
+    if [ -z "$_o" ] || cmp -s "$DG/univ.span" "$DG/univ.mutA"; then bad "WRITE-PIPELINE MUTANT unanchored: the edit matched nothing"
+    else
+      dg_pipe "$DG/wline" "$DG/univ.mutA" > "$DG/out.mutA"
+      if [ "$(dg_verdict "$DG/out.mutA")" = wrong ] && ! grep -qx 'sub/.git/HEAD' "$DG/out.mutA"; then
+        ok "WRITE-PIPELINE MUTANT unanchored moves (g): the nested sub/.git/HEAD is dropped"
+      else bad "WRITE-PIPELINE MUTANT unanchored: the pipeline still left [$(tr '\n' ' ' < "$DG/out.mutA")]"
+      fi
+    fi
+    # MUTANT (b): the write line omits the helper, so .git/HEAD survives.
+    sed 's/ | readset_drop_git//' "$DG/wline" > "$DG/wline.mutB"
+    MERGE_ARMS=$((MERGE_ARMS+1))
+    if cmp -s "$DG/wline" "$DG/wline.mutB"; then bad "WRITE-PIPELINE MUTANT no-helper: the edit matched nothing"
+    else
+      dg_pipe "$DG/wline.mutB" "$DG/univ.span" > "$DG/out.mutB"
+      if grep -qx '.git/HEAD' "$DG/out.mutB"; then ok "WRITE-PIPELINE MUTANT no-helper moves (g): .git/HEAD survives"
+      else bad "WRITE-PIPELINE MUTANT no-helper: .git/HEAD did not survive, so (g) does not depend on the helper in the write line"
+      fi
+    fi
+  fi
+
+
+  # ------------------------------ a DECLARED fixture carries no map rows (readset_merge_map's 4th argument) ----
+  # The hook maps a declared fixture (`inputs.decl`) before it reads the map, so its rows and `# digest` line
+  # are dead. The merge drops them from the old map AND the new rows when given the fixture root; with three
+  # arguments it is byte-identical to before. alpha is declared, beta is not.
+  DM="$WORK/dm"
+  mkdir -p "$DM/root/alpha" "$DM/root/beta" "$DM/root0" "$DM/rootnone" || broken "mkdir failed"
+  : > "$DM/root/alpha/inputs.decl"; : > "$DM/root/alpha/run.sh"; : > "$DM/root/beta/run.sh"; : > "$DM/root0/beta.file"
+  mkdir -p "$DM/root0/beta"; : > "$DM/root0/beta/run.sh"
+  printf 'alpha\tsrc/a\nalpha\tsrc/x\nbeta\tsrc/b\nbeta\tsrc/c\n# digest alpha aaaa\n# digest beta bbbb\n' > "$DM/old.map"
+  printf 'alpha\tsrc/NEW\nbeta\tsrc/NEWB\n' > "$DM/new.map"
+  printf 'beta\tsrc/b\nbeta\tsrc/c\n# digest beta bbbb\nbeta\tsrc/NEWB\n' > "$DM/beta.want"
+  dm_merge() { ( . "$1"; shift; readset_merge_map "$@" ) 2>/dev/null; }
+  dm_merge "$M" "$DM/old.map" "$DM/new.map" "" "$DM/root" > "$DM/out.4"
+  dm_merge "$M" "$DM/old.map" "$DM/new.map" "" > "$DM/out.3"
+  grep -v '^alpha' "$DM/out.4" | grep -v '^# digest alpha' > /dev/null
+  MERGE_ARMS=$((MERGE_ARMS+1))
+  if ! grep -q 'alpha' "$DM/out.4" && grep -q 'beta' "$DM/out.4"; then
+    ok "(h) readset_merge_map with the fixture root: the declared alpha has no row and no digest line, from the old map or the new rows"
+  else bad "(h) the 4-argument merge left alpha or lost beta: $(tr '\n' ' ' < "$DM/out.4")"
+  fi
+  MERGE_ARMS=$((MERGE_ARMS+1))
+  if cmp -s "$DM/out.4" "$DM/beta.want"; then
+    ok "(h) and the undeclared beta is byte-identical to its input rows (old rows, its digest line, its new row; cmp -s)"
+  else bad "(h) beta's output differs from its input: $(tr '\n' ' ' < "$DM/out.4")"
+  fi
+  MERGE_ARMS=$((MERGE_ARMS+1))
+  if grep -q 'alpha	src/a' "$DM/out.3" && grep -q '# digest alpha aaaa' "$DM/out.3" && grep -q 'alpha	src/NEW' "$DM/out.3"; then
+    ok "(h) the same merge with THREE arguments keeps alpha's old rows, digest line and new row — the filter is opt-in"
+  else bad "(h) the 3-argument merge no longer keeps alpha: $(tr '\n' ' ' < "$DM/out.3")"
+  fi
+  dm_merge "$M" "$DM/old.map" "$DM/new.map" "" "$DM/root0" > "$DM/out.0"
+  dm_merge "$M" "$DM/old.map" "$DM/new.map" "" "$DM/rootnone" > "$DM/out.n"
+  MERGE_ARMS=$((MERGE_ARMS+1))
+  if cmp -s "$DM/out.0" "$DM/out.3" && cmp -s "$DM/out.n" "$DM/out.3" && [ -s "$DM/out.3" ]; then
+    ok "(h) a root holding zero declared fixtures — and an empty root, where the glob does not expand — gives a merge byte-identical to the unfiltered one"
+  else bad "(h) a root with no declared fixture changed the merge (the unexpanded glob read as a fixture?)"
+  fi
+  # A MAPPED fixture that gains inputs.decl is dropped by the merge on purpose; readset_untraced_lost must not report it.
+  sed -n '/^# READSET_UNTRACED_BEGIN$/,/^# READSET_UNTRACED_END$/p' "$DERIVER" > "$DM/untraced.span"
+  dm_merge "$M" "$DM/old.map" "/dev/null" "" "$DM/root" > "$DM/merged.map"
+  dm_lost() { ( . "$DM/untraced.span"; readset_untraced_lost "$DM/old.map" "$DM/merged.map" "" "$@" ) 2>/dev/null | tr '\n' ' '; }
+  MERGE_ARMS=$((MERGE_ARMS+1))
+  _l4="$(dm_lost "$DM/root")"; _l3="$(dm_lost)"
+  if [ -z "$_l4" ] && [ "$_l3" = "alpha " ]; then
+    ok "(h) a mapped fixture that gains inputs.decl is not reported lost with the root (control: without it readset_untraced_lost names 'alpha')"
+  else bad "(h) readset_untraced_lost with the root says [$_l4]; without it [$_l3]; wanted empty and 'alpha '"
+  fi
+  # --all lists no declared fixture.
+  sed -n '/^# READSET_ALLLIST_BEGIN$/,/^# READSET_ALLLIST_END$/p' "$DERIVER" > "$DM/alllist.span"
+  MERGE_ARMS=$((MERGE_ARMS+1))
+  _al="$( . "$DM/alllist.span"; readset_all_list "$DM/root" )"
+  if [ "$_al" = beta ]; then ok "(h) readset_all_list skips the declared alpha (control: beta, which has a run.sh and no declaration, is listed)"
+  else bad "(h) readset_all_list on a root with one declared and one undeclared fixture gave [$_al], wanted [beta]"
+  fi
+  # MUTANTS on the filter.
+  _o="$(grep -m1 -F 'if [ -n "$decl" ]; then' "$M")"
+  mut_line "$M" "$DM/merge.mutA.sh" "$_o" '    if false; then'
+  MERGE_ARMS=$((MERGE_ARMS+1))
+  if [ -z "$_o" ] || cmp -s "$M" "$DM/merge.mutA.sh"; then bad "MERGE MUTANT old-map-only: the edit matched nothing"
+  else
+    dm_merge "$DM/merge.mutA.sh" "$DM/old.map" "$DM/new.map" "" "$DM/root" > "$DM/out.mutA"
+    if grep -q 'alpha	src/NEW' "$DM/out.mutA" && ! cmp -s "$DM/out.mutA" "$DM/beta.want"; then
+      ok "MERGE MUTANT old-map-only moves (h): a filter that reads only the old map lets the declared fixture's NEW rows through"
+    else bad "MERGE MUTANT old-map-only: alpha's new row did not survive ($(tr '\n' ' ' < "$DM/out.mutA"))"
+    fi
+  fi
+  _o="$(grep -m1 -F '$1 == "#" && $2 == "digest" && NF == 4 { if (index(traced, " " $3 " ") == 0 && (decl' "$M")"
+  mut_line "$M" "$DM/merge.mutB.sh" "$_o" '      $1 == "#" && $2 == "digest" && NF == 4 { if (index(traced, " " $3 " ") == 0) print; next }'
+  MERGE_ARMS=$((MERGE_ARMS+1))
+  if [ -z "$_o" ] || cmp -s "$M" "$DM/merge.mutB.sh"; then bad "MERGE MUTANT keeps-digest: the edit matched nothing"
+  else
+    dm_merge "$DM/merge.mutB.sh" "$DM/old.map" "$DM/new.map" "" "$DM/root" > "$DM/out.mutB"
+    if grep -q '# digest alpha aaaa' "$DM/out.mutB" && ! grep -q 'alpha	src' "$DM/out.mutB"; then
+      ok "MERGE MUTANT keeps-digest moves (h): the rows go but the declared fixture's digest line stays"
+    else bad "MERGE MUTANT keeps-digest: expected rows gone and the digest kept, got $(tr '\n' ' ' < "$DM/out.mutB")"
+    fi
+  fi
+
 
   # ------------------------- the --all subject list and the untraced-loss guard ----
   # THE `--all` LIST WAS BUILT NEWLINE-SEPARATED, AND TWO GUARDS SILENTLY NEVER MATCHED A NAME. Every
@@ -2511,8 +2683,8 @@ else
       fi
     fi
     MERGE_ARMS=$((MERGE_ARMS+1))
-    _o="$(grep -m1 '^      if (index(traced, " " \$1 " ") == 0 && (\$1 in have) == 0) print \$1$' "$UL")"
-    mut_line "$UL" "$WORK/ul.substr.sh" "$_o" '      if (index(traced, $1) == 0 && ($1 in have) == 0) print $1'
+    _o="$(grep -m1 '^      if (index(traced, " " \$1 " ") == 0 && (\$1 in have) == 0 && (decl == "" || index(decl, " " \$1 " ") == 0)) print \$1$' "$UL")"
+    mut_line "$UL" "$WORK/ul.substr.sh" "$_o" '      if (index(traced, $1) == 0 && ($1 in have) == 0 && (decl == "" || index(decl, " " $1 " ") == 0)) print $1'
     if cmp -s "$UL" "$WORK/ul.substr.sh"; then bad "UNTRACED MUTANT substring-membership did not apply"
     else
       _v="$(ul_with "$WORK/ul.substr.sh" "$WORK/ul.old3" "$WORK/ul.m3" "fx-b")"
@@ -2916,7 +3088,7 @@ EOF
   # demoted to a warning (W1).
   _o="$(grep -m1 '^  --all)  LIST="\$(readset_all_list ' "$DERIVER")"
   mut_line "$DERIVER" "$WORK/cs.inline.sh" "$_o" '  --all)  LIST="$(cd "$TREE" && for d in "$FIXTURE_ROOT"/*/; do [ -f "$d/run.sh" ] && basename "$d"; done)" ;;'
-  _o2="$(grep -m1 '^  readset_untraced_lost "\$MAP" "\$MERGED" "\$LIST" > ' "$DERIVER")"
+  _o2="$(grep -m1 '^  readset_untraced_lost "\$MAP" "\$MERGED" "\$LIST" "\$TREE/\$FIXTURE_ROOT" > ' "$DERIVER")"
   mut_line "$DERIVER" "$WORK/cs.nocall.sh" "$_o2" '  : > "$WORK/untraced.lost" \'
   _o3="$(grep -m1 "^    die \"merge dropped '" "$DERIVER")"
   mut_line "$DERIVER" "$WORK/cs.warn.sh" "$_o3" "    echo \"WARNING: merge dropped '\$f'\" >&2"
@@ -3612,11 +3784,11 @@ d/-p'
     #   unanch     an unanchored `<[^/]*>` inside the last component, so absent `e<f>g.sh` goes too;
     #   existonly  the existence test with no shape test, so absent `src/missing.sh` goes too;
     #   sbonly     the filter on the sandbox set only, so the fs_usage set carries the pseudo rows back.
-    sed 's/ | readset_drop_pseudo | drop_ignored > / | drop_ignored > /' "$SB/deriver.sh" > "$SB/deriver.p.nofilter.sh"
+    sed 's/ | readset_drop_pseudo | readset_drop_git | drop_ignored > / | readset_drop_git | drop_ignored > /' "$SB/deriver.sh" > "$SB/deriver.p.nofilter.sh"
     sed 's/^    case "\${p##\*\/}" in$/    case "$p" in/' "$SB/deriver.sh" > "$SB/deriver.p.wholepath.sh"
     sed "s/^      '<'\*'>') if /      *'<'*'>'*) if /" "$SB/deriver.sh" > "$SB/deriver.p.unanch.sh"
     sed "s/^      '<'\*'>') if /      *) if /" "$SB/deriver.sh" > "$SB/deriver.p.existonly.sh"
-    sed -e 's/ | readset_drop_pseudo | drop_ignored > / | drop_ignored > /' \
+    sed -e 's/ | readset_drop_pseudo | readset_drop_git | drop_ignored > / | readset_drop_git | drop_ignored > /' \
         -e 's/^    sandbox_paths < "\$WORK\/\$fx.win" | grep -v /    sandbox_paths < "$WORK\/$fx.win" | readset_drop_pseudo | grep -v /' \
         "$SB/deriver.sh" > "$SB/deriver.p.sbonly.sh"
     #   eonly      `-e` without `-L`, so the dangling `<link>` goes;
@@ -4380,7 +4552,7 @@ STUB
     else
       bad "DIGEST: expected '0|1|1|0|0|3' and fxa 'match', got '$DW1' / '$DW_V' — $(tail -2 "$WORK/dw.out" | tr '\n' ' ')"
     fi
-    sed '/^      \$1 == "#" && \$2 == "digest" && NF == 4 { if (index(traced, " " \$3 " ") == 0) print; next }$/d' "$SB/deriver.sh" > "$SX/deriver.nocarry.sh"
+    sed '/^      \$1 == "#" && \$2 == "digest" && NF == 4 { if (index(traced, " " \$3 " ") == 0 && (decl == "" || index(decl, " " \$3 " ") == 0)) print; next }$/d' "$SB/deriver.sh" > "$SX/deriver.nocarry.sh"
     TRACE_ARMS=$((TRACE_ARMS+1))
     if cmp -s "$SB/deriver.sh" "$SX/deriver.nocarry.sh"; then bad "DIGEST MUTANT nocarry did not apply"
     else

@@ -241,7 +241,45 @@ emit_components() {
   printf '### fixtures\n'
   find core/fixtures -mindepth 1 -maxdepth 1 -type d -print 2>/dev/null | LC_ALL=C sort
 
-  # 7. THE TOOLS. Identity, hash and version -- see TOOLS above for why all three.
+  # 7. THE `+`-DECLARED FILES, the one hole in EXCLUDE that a fixture opts INTO. A
+  #    fixture whose verdict reads a file under an excluded top (this repo's own
+  #    docs/backlog.md) declares it in its inputs.decl with a leading `+`, and the
+  #    hook's READSET_KEYROWS span keys that fixture on the file. Without this
+  #    component a push changing only such a file would match this key, skip the whole
+  #    suite, and never reach the per-fixture key that names it.
+  #    DERIVED FROM THE DECLARATIONS, never hand-listed: every `+` line of every
+  #    core/fixtures/*/inputs.decl. A line carrying `+` and `!` together refuses the
+  #    key, as the hook's parse refuses it (`plusbang`). Only
+  #    the named files are hashed, never their top -- a plan edit under docs/ still
+  #    matches. FAILS CLOSED: a `+` path that is absolute, carries `..`, names a
+  #    directory, or is not a readable file refuses the key, so the caller runs the
+  #    suite. A glob that matches no declaration contributes an empty section, which
+  #    is the honest answer: no fixture opted in.
+  printf '### keyed\n'
+  local d kl kp
+  kl=""
+  for d in core/fixtures/*/inputs.decl; do
+    [ -f "$d" ] || continue
+    kp="$(awk '{ sub(/\r$/, ""); x = 0; r = 0
+                 while ((c = substr($0, 1, 1)) == "!" || c == "+") { if (c == "+") x = 1; else r = 1; $0 = substr($0, 2) }
+                 if (x && r) { bad = 1; exit }
+                 if (x) print }
+               END { exit bad ? 3 : 0 }' "$d")" || die "could not read $d for its + declarations, or a line there carries + and ! together. Fails closed."
+    [ -n "$kp" ] && kl="${kl}${kp}
+"
+  done
+  kl="$(printf '%s' "$kl" | grep -v '^$' | LC_ALL=C sort -u)"
+  if [ -n "$kl" ]; then
+    while IFS= read -r p; do
+      case "$p" in
+        /*|*/|..|../*|*/../*|*/..) die "a + declaration names '$p', which is not a root-relative file. Fails closed." ;;
+      esac
+      [ -f "$p" ] && [ -r "$p" ] || die "a + declaration names '$p', which is not a readable file here. Fails closed."
+      shasum -a 256 -- "$p" 2>/dev/null || die "could not hash the + declared file '$p'. Fails closed."
+    done <<< "$kl"
+  fi
+
+  # 8. THE TOOLS. Identity, hash and version -- see TOOLS above for why all three.
   printf '### tools\n'
   local t p
   for t in $TOOLS; do

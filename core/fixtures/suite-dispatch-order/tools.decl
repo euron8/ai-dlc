@@ -25,3 +25,5 @@ shasum
 find
 basename
 wc
+ps
+kill

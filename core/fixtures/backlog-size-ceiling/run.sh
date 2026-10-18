@@ -2,8 +2,8 @@
 # backlog-size-ceiling -- exercise scripts/validate-backlog-size.sh, the live-entry ceiling
 # over docs/backlog.md.
 #
-# SIXTEEN PROBES, THE DECLARED-EMPTY ARMS AND THEIR MUTANTS, PLUS AN UNMUTATED CONTROL, each a
-# throwaway repo under a temp dir.
+# FIFTEEN PROBES (b16 moved to core/fixtures/backlog-real-ledger/), THE DECLARED-EMPTY ARMS AND
+# THEIR MUTANTS, PLUS AN UNMUTATED CONTROL, each a throwaway repo under a temp dir.
 # Exit 0 iff the control is green AND every probe holds.
 #
 # THE CEILING IS ENTRY-DENOMINATED AND THERE IS NO BYTE CLAUSE. A byte ceiling was proposed
@@ -78,16 +78,13 @@ if [ -z "$LIBSRC" ]; then
   echo "run.sh: could not locate reconcile/lib.sh" >&2; exit 2
 fi
 
-# The shipping classifier and the rotator, for the two join probes. Resolved the same way.
-REVERIFY=""; ROTATOR=""; REAL_LEDGER=""
+# The shipping classifier and the rotator. Resolved the same way.
+REVERIFY=""; ROTATOR=""
 for cand in "$DIR/../../../scripts/backlog-reverify.sh" "$DIR/../../scripts/backlog-reverify.sh"; do
   [ -f "$cand" ] && REVERIFY="$cand" && break
 done
 for cand in "$DIR/../../../scripts/backlog-rotate.sh" "$DIR/../../scripts/backlog-rotate.sh"; do
   [ -f "$cand" ] && ROTATOR="$cand" && break
-done
-for cand in "$DIR/../../../docs/backlog.md" "$DIR/../../docs/backlog.md"; do
-  [ -f "$cand" ] && REAL_LEDGER="$cand" && break
 done
 
 TMP="$(mktemp -d)"
@@ -398,40 +395,9 @@ else
   rc=1
 fi
 
-# b16 -- the same join against the REAL ledger, which is the one that catches a drift filed
-# after this fixture was written.
-# WHEN THE REAL LEDGER IS DECLARED EMPTY the count join has no population, so the two sides are
-# asked the declared state instead: the ceiling must report 0 with its declared-empty OK line,
-# and the classifier must emit exactly one DECLARED-EMPTY row. Which branch runs is decided by the
-# classifier's own --declared-empty on the real file, and each branch is presence-shaped.
-if [ -n "$REVERIFY" ] && [ -n "$REAL_LEDGER" ]; then
-  seed "$TMP/b16"; cp "$REAL_LEDGER" "$TMP/b16/docs/backlog.md"
-  b16_out="$(run_v "AI_DLC_BACKLOG_MAX_ENTRIES=100000" "$TMP/b16")"
-  b16_arm="$(bl_reported "$b16_out")"
-  b16_rows="$( cd "$TMP/b16" && bash scripts/backlog-reverify.sh docs/backlog.md 2>/dev/null )"
-  b16_rev="$(printf '%s\n' "$b16_rows" | cut -f2 | sort -u | grep -c . )"
-  ( cd "$TMP/b16" && bash scripts/backlog-reverify.sh --declared-empty docs/backlog.md >/dev/null 2>&1 ); b16_de=$?
-  if [ "$b16_de" -eq 0 ]; then
-    b16_nrow="$(printf '%s\n' "$b16_rows" | grep -c .)" || b16_nrow=0
-    if [ "$b16_arm" = 0 ] && grep -qF ', declared empty (' <<<"$b16_out" \
-       && [ "$b16_nrow" -eq 1 ] && [ "$(printf '%s\n' "$b16_rows" | cut -f1)" = DECLARED-EMPTY ]; then
-      note "ok    b16 -- the real ledger is declared empty, and the ceiling (0, declared empty) and the classifier (one DECLARED-EMPTY row) both say so"
-    else
-      note "FAIL  b16 -- the real ledger is declared empty but the sides disagree (arm='$b16_arm', classifier rows=$b16_nrow first='$(printf '%s\n' "$b16_rows" | sed -n '1p' | cut -f1)')"; rc=1
-    fi
-  elif [ "$b16_de" -ne 1 ]; then
-    note "FAIL  b16 -- backlog-reverify.sh --declared-empty exited $b16_de on the real ledger, an environment failure"; rc=1
-  elif [ -z "$b16_arm" ] || [ -z "$b16_rev" ] || [ "$b16_arm" -eq 0 ] || [ "$b16_rev" -eq 0 ]; then
-    note "FAIL  b16 -- a side produced no usable value (arm='$b16_arm' reverify='$b16_rev')"; rc=1
-  elif [ "$b16_arm" -ne "$b16_rev" ]; then
-    note "FAIL  b16 -- on the REAL ledger the ceiling counts $b16_arm and backlog-reverify.sh classifies $b16_rev"; rc=1
-  else
-    note "ok    b16 -- on the real ledger the ceiling and the classifier agree at $b16_arm entries"
-  fi
-else
-  note "FAIL  b16 -- reverify or the real ledger not resolvable; a skip here reads exactly like agreement."
-  rc=1
-fi
+# b16 -- the same join against the REAL ledger -- is core/fixtures/backlog-real-ledger/ now. Its verdict
+# depends on docs/backlog.md, which sits under an excluded top of the content key, and that unit
+# declares it `+` so a backlog-only push re-runs it.
 
 # b17 WAS HERE AND IS DELETED ON PURPOSE. It asserted that the ceiling's label rule and the
 # ROTATOR's agreed on the real ledger. That drift is no longer CONSTRUCTIBLE: the rule moved

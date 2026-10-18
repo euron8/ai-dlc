@@ -27,12 +27,14 @@ was written were zero bytes. Getting it wrong in the shipping direction is how a
 battery once became the reference consumer's suite pole; getting it wrong the other way
 means a fixture reaches no consumer while this repo's own suite stays green over it.
 
-**A new fixture directory has no read-set entry until someone traces it**, and the pre-push
+**A fixture carrying `inputs.decl` is keyed on its declaration and owes no trace**: it has no
+read-set rows, and the committed map drops any it is given. A read it adds goes into `inputs.decl`.
+**An UNdeclared new fixture has no read-set entry until someone traces it**, and the pre-push
 runner runs an unmapped fixture on every push, silently. Trace it yourself with the sandbox
 tracer, which needs no root — `bash core/scripts/derive-fixture-readsets.sh --list "<name>"
 --tracer sandbox` — and commit the map it writes (`operator-rulings.md` owns the ruling). The
-same is owed when a change makes an existing fixture READ a new file — the runner cannot see
-that case at all.
+same is owed when a change makes an existing undeclared fixture READ a new file — the runner
+cannot see that case at all.
 
 **Three hand-written lists remain and they are deliberate.** `uninstall.sh` bounds a
 DESTRUCTIVE loop and runs on a consumer where `core/fixtures/` does not exist, so it cannot

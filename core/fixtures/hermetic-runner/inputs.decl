@@ -1,0 +1,14 @@
+# hermetic-runner drives the REAL hermetic-run.sh against probe projects it builds under mktemp. The fixture's OWN
+# directory (run.sh and suite-content-key.seed) is copied by the runner, so it is not declared.
+# The subject and its mapper: run.sh walks up from its own directory for core/scripts/hermetic-run.sh or
+# scripts/ai-dlc/hermetic-run.sh, and copies core-paths.sh from beside it (the runner resolves its mapper there).
+core/scripts/hermetic-run.sh
+core/scripts/core-paths.sh
+# The hook every probe copies and whose READSET_UNIVERSE, READSET_TOOLS, READSET_VS, READSET_KEYROWS and
+# FIXTURE_POOL spans the runner and run.sh source. run.sh takes .githooks/pre-push first and core/git-hooks/pre-push
+# second, so each layout declares what it carries; the mapper sends core/git-hooks/pre-push to .githooks/pre-push on
+# a consumer, where the second line names the same file.
+core/git-hooks/pre-push
+.githooks/pre-push
+# The shared preamble run.sh sources first (unsets the inherited GIT_* variables).
+core/fixtures/lib/

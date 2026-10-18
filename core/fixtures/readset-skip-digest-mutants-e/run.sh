@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # readset-skip-digest-mutants-e -- shard 'e' of the readset-skip-digest-mutants mutation battery.
 #
-# THIS IS A SCHEDULING BOUNDARY, NOT A SUBJECT BOUNDARY. The mutants, both controls and the reasoning all
-# live in the sibling's run.sh; this directory is a unit the pre-push pool can start on its own, because
+# THIS IS A SCHEDULING BOUNDARY, NOT A SUBJECT BOUNDARY. The mutants, the controls and the reasoning all
+# live in the sibling's run.sh (the controls run in shard a only, bound by J2 and held to this shard by D14); this directory is a unit the pre-push pool can start on its own, because
 # that suite is pole-bound and the unsharded battery was its longest directory. The partition is declared
 # in the sibling and joined there (J0) against the sibling's own mutant lines, in every shard.
 #

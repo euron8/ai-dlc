@@ -19,7 +19,13 @@
 # SHARDED. The pre-push suite is POLE-BOUND, so this battery's 32 full runs of the shipped
 # fixture are dealt across five shards — this file and four .dist-only drivers
 # (`gate-adjudication-mutants-b`, `-c`, `-d`, `-e`) that
-# `exec bash <this file> --group <x>`. Every shard pays the M0 control and the coverage join;
+# `exec bash <this file> --group <x>`. Every shard pays the coverage join and the D14 arm; the M0 control
+# runs in shard `a` ONLY, bound by the J2 once-only arm at the foot of this file (BL-583 b). The safety
+# argument is D14: a non-`a` shard's kill is attributable only if its harness is shard `a`'s, and D14
+# holds every shard's `inputs.decl` and `tools.decl` equal to `a`'s apart from the driver lines, in
+# EVERY shard, so a declaration edited in one shard alone fails all five. The hook keys the five
+# shards on the same subject files, so `a` runs in the same push as any sibling that runs. Before this
+# every shard paid M0, a full run of the shipped fixture.
 # the mutant partition below is declared HERE and joined (J0) against this file's own
 # `score "m<n> ` lines, so no mutant can fall out of every shard and no shard can be declared
 # without a driver. The shard arrives as an ARGUMENT, never the environment (scrubbed below).
@@ -89,6 +95,35 @@ for s in $SHARDS; do
   fi
 done
 rm -rf "$JW"
+
+# D14 (BL-583 b): the predicate that holds every shard's declarations to shard a's, and its self-probe.
+# decl_same <a file> <x file> <a dir> <x dir>: 0 when X equals A once comment lines and the `run.sh`
+# driver lines of the compared pair (shard a's and X's own) are removed. Any other difference -- an extra
+# line, a missing line, a flipped `!`, an unreadable file -- is a shard whose harness is not a's.
+decl_strip() { grep -v -E -e '^[[:space:]]*#' -e "^!?core/fixtures/($2|$3)/run\\.sh\$" "$1"; }
+decl_same() {
+  [ -f "$1" ] && [ -f "$2" ] || return 1
+  [ "$(decl_strip "$1" "$3" "$4")" = "$(decl_strip "$2" "$3" "$4")" ]
+}
+PD="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
+printf '%s\n' '# header a' '!core/s/y.sh' 'core/fixtures/gate-adjudication-mutants-b/run.sh' 'core/fixtures/gate-adjudication-mutants-c/run.sh' > "$PD/a"
+printf '%s\n' '# header b' '!core/s/y.sh' '!core/fixtures/gate-adjudication-mutants/run.sh' 'core/fixtures/gate-adjudication-mutants-c/run.sh' > "$PD/ok"
+printf '%s\n' '# header b' '!core/s/y.sh' '!core/fixtures/gate-adjudication-mutants/run.sh' 'core/fixtures/gate-adjudication-mutants-c/run.sh' 'core/extra.sh' > "$PD/extra"
+printf '%s\n' '# header b' '!core/s/y.sh' '!core/fixtures/gate-adjudication-mutants/run.sh' > "$PD/other"
+printf '%s\n' '# header b' 'core/s/y.sh' '!core/fixtures/gate-adjudication-mutants/run.sh' 'core/fixtures/gate-adjudication-mutants-c/run.sh' > "$PD/flip"
+if ! decl_same "$PD/a" "$PD/ok" gate-adjudication-mutants gate-adjudication-mutants-b || decl_same "$PD/a" "$PD/extra" gate-adjudication-mutants gate-adjudication-mutants-b || decl_same "$PD/a" "$PD/other" gate-adjudication-mutants gate-adjudication-mutants-b \
+   || decl_same "$PD/a" "$PD/flip" gate-adjudication-mutants gate-adjudication-mutants-b || decl_same "$PD/a" "$PD/nonexistent" gate-adjudication-mutants gate-adjudication-mutants-b; then
+  rm -f "$PD/a" "$PD/ok" "$PD/extra" "$PD/other" "$PD/flip"; rmdir "$PD"
+  echo "FIXTURE BROKEN: the D14 declaration-equality predicate's self-probe did not discriminate" >&2; exit 2
+fi
+rm -f "$PD/a" "$PD/ok" "$PD/extra" "$PD/other" "$PD/flip"; rmdir "$PD"
+# ctl_ok <times the shard-a-only control ran> <times the deal says it must run here>: the J2 once-only
+# predicate. Fires on the guard dropped (ran where it was not dealt), on the guard dropped from a too or
+# inverted (ran nowhere it was dealt), and on a double run; holds on the two correct shapes.
+ctl_ok() { [ "$1" -eq "$2" ]; }
+if ctl_ok 1 0 || ctl_ok 0 1 || ctl_ok 2 1 || ! ctl_ok 0 0 || ! ctl_ok 1 1; then
+  echo "FIXTURE BROKEN: the J2 once-only predicate's self-probe did not discriminate" >&2; exit 2
+fi
 NMINE="$(printf '%s\n' $MINE | grep -c .)" || NMINE=0
 echo "[J0] coverage join: $ndecl mutants derived from score lines, dealt disjointly across {$SHARDS}, union exact; this shard runs {$MINE}"
 
@@ -138,7 +173,21 @@ echo "fixture:  $FIXTURE/run.sh"
 
 FAILURES=0
 SCORED=0
+NCTL=0
 note_fail() { echo "FAIL: $*"; FAILURES=$((FAILURES + 1)); }
+
+# D14: every shard checks every sibling shard's declarations against shard a's. A declaration edited in
+# one shard alone fails EVERY shard, which is what lets shard a's control stand for the others.
+for _f in inputs.decl tools.decl; do
+  for _s in $SHARDS; do
+    [ "$_s" = a ] && continue
+    if decl_same "$HERE/$_f" "$HERE/../gate-adjudication-mutants-$_s/$_f" gate-adjudication-mutants "gate-adjudication-mutants-$_s"; then
+      : "  ok    [D14] $_f of shard '$_s' equals shard a's apart from the drivers"
+    else
+      note_fail "[D14] $_f of shard '$_s' differs from shard a's beyond its driver line (or is unreadable), so shard a's control does not stand for it"
+    fi
+  done
+done
 
 # --------------------------------------------------------------------------
 # Sandbox. The fixture resolves its validator as `$HERE/../../../core/scripts/…`, the
@@ -202,6 +251,7 @@ score() {
     case " $MINE " in *" $mid "*) ;; *) return ;; esac
   fi
   SCORED=$((SCORED + 1))
+  [ "$mid" = M0 ] && NCTL=$((NCTL + 1))
   sb="$(build_sandbox)"
   if ! mutate "$ROOT_DIR/core/scripts/$target" "$sb/core/scripts/$target" "$old" "$new"; then
     note_fail "$label: the mutation did not apply — its anchor is not in $target, or is in it
@@ -289,10 +339,12 @@ score() {
 # M0 — the unmutated control. A trailing space on a shell assignment: different bytes, same
 # program. If this does not pass, nothing below is attributable.
 # --------------------------------------------------------------------------
+if [ "$GROUP" = a ]; then
 score "M0 control (unmutated)" validate-gate-adjudication.sh "" \
   'GA_IN_FORCE_STATUS="not-asked"' \
   'GA_IN_FORCE_STATUS="not-asked" ' \
   ""
+fi
 
 # --------------------------------------------------------------------------
 # m1 — the caller never asks the sibling. The rows arrive empty while the STATUS still reads
@@ -724,13 +776,20 @@ score "m31 sprint field admits a leading zero" validate-gate-adjudication.sh \
 # The kill count itself. A battery whose mutants all applied and killed nothing reports zero
 # failures, which is byte-identical to a battery that worked.
 # --------------------------------------------------------------------------
-if [ "$SCORED" -ne $((NMINE + 1)) ]; then
-  note_fail "$SCORED run(s) were scored; this shard was dealt $NMINE mutant(s) plus the M0 control.
+# J2: the M0 control ran exactly in the first shard of the deal and nowhere else. The expectation comes
+# from SHARDS, not from the guard above, so a guard dropped, inverted or compared to another shard reads
+# as a shard running (or not running) work it was (or was not) dealt.
+wantc=0; [ "$GROUP" = "${SHARDS%% *}" ] && wantc=1
+if ! ctl_ok "$NCTL" "$wantc"; then
+  note_fail "[J2] shard '$GROUP': the M0 control ran $NCTL time(s), expected $wantc (it runs in the first shard of {$SHARDS} only)"
+fi
+if [ "$SCORED" -ne $((NMINE + NCTL)) ]; then
+  note_fail "$SCORED run(s) were scored; this shard was dealt $NMINE mutant(s) plus $NCTL control run(s).
   A mutant that never ran cannot have been survived or killed."
 fi
 
 if [ "$FAILURES" -eq 0 ]; then
-  echo "ok: $NAME — $SCORED run(s) scored (M0 plus $NMINE mutant(s) of shard $GROUP); the"
+  echo "ok: $NAME — $SCORED run(s) scored ($NCTL M0 control run(s) plus $NMINE mutant(s) of shard $GROUP); the"
   echo "    unmutated control passes with S1's SUPPRESSED line present, and removing the"
   echo "    sibling's rows, the catalog compare, the lifetime test, the malformed-shape"
   echo "    exclusion, the fail-closed default, the exact-id match, the empty-catalog rule,"

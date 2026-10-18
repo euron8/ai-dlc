@@ -16,3 +16,14 @@ core/fixtures/gate-adjudication-mutants-b/run.sh
 core/fixtures/gate-adjudication-mutants-c/run.sh
 core/fixtures/gate-adjudication-mutants-d/run.sh
 core/fixtures/gate-adjudication-mutants-e/run.sh
+# D14 reads every shard's declarations, so each is declared here, identically in every shard.
+core/fixtures/gate-adjudication-mutants/inputs.decl
+core/fixtures/gate-adjudication-mutants/tools.decl
+core/fixtures/gate-adjudication-mutants-b/inputs.decl
+core/fixtures/gate-adjudication-mutants-b/tools.decl
+core/fixtures/gate-adjudication-mutants-c/inputs.decl
+core/fixtures/gate-adjudication-mutants-c/tools.decl
+core/fixtures/gate-adjudication-mutants-d/inputs.decl
+core/fixtures/gate-adjudication-mutants-d/tools.decl
+core/fixtures/gate-adjudication-mutants-e/inputs.decl
+core/fixtures/gate-adjudication-mutants-e/tools.decl

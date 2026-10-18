@@ -9,13 +9,13 @@ consumer tree gets no docs/backlog.md at all. On a consumer this fixture would r
 validator and no ledger, and could only pass -- a unit that cannot fail scores as a pass in
 the consumer's own suite verdict.
 
-It also reads scripts/backlog-reverify.sh and docs/backlog.md directly for its population
-join, which binds the arm's `sh` receipt set to the shipping classifier's view of the same
-ledger. Neither exists on a consumer.
+It also copies scripts/backlog-reverify.sh into every seed and reads docs/backlog.archive.md for
+its receipt join (rj). Neither exists on a consumer. Its real-ledger population join (j1) moved
+to core/fixtures/backlog-real-ledger/, which is keyed on docs/backlog.md.
 
 The consumer's equivalent ledger is the push-candidate ledger under
 _bmad-output/ai-dlc-update/, whose own fixtures (ledger-reverify, ledger-rotate,
 ledger-status-vocabulary, ledger-reverify-unfalsifiable) ship and cover it. This one must not
 be confused for those, and its siblings core/fixtures/backlog-size-ceiling/,
-core/fixtures/backlog-ledger/ and core/fixtures/backlog-rotate-fence-guard/ carry the same
+core/fixtures/backlog-real-ledger/, core/fixtures/backlog-ledger/ and core/fixtures/backlog-rotate-fence-guard/ carry the same
 declaration for the same reason.

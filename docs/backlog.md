@@ -131,11 +131,13 @@ Scheduled in batch 235 for a later release (scope ruling: the boundary is the re
 
 **Gate-log evidence (f7 measured, graph session `f78aa565`; transcript-only, not re-derived here).** The graph push of the reconcile commit took 17.6 minutes in pre-push with 139 of 224 fixtures selected. That is a real release-class push on a consumer tree and a first data point toward the per-gate wall clock this entry owes; it is a consumer's selected subset, not this repo's full-suite figure, and the two must not be compared.
 
+**Item (b), batch 236.** `gate-adjudication-mutants` (M0) and `readset-skip-digest-mutants` (unmutated and impossible-anchor controls) now run their controls in shard `a` only, bound by a J2 once-only arm with a two-direction self-probe, and a D14 arm every shard runs holds each shard's `inputs.decl`/`tools.decl` equal to `a`'s apart from the driver lines (also added to `fold-architect-ledger-join-mutants`). `advisor-gate-deny-mutants` keeps its per-shard control because its shards' declarations differ (`-d` adds `od` and `tee`; `-b`/`-e` declare sibling directories whole), and `ledger-reverify-shard-mutants` keeps its C-a and C-b controls because it is one unit whose kill list is 3 in `a` and 1 in `b`, so `b`'s control is the only one for its mutants. Item (b)'s receipt: `for f in gate-adjudication-mutants readset-skip-digest-mutants; do case $f in gate*) r='/^# M0 /,/^# m1 /' ;; *) r='/^NCTL=0$/,/^# J2: both/' ;; esac; t=$(mktemp) || exit 9; sed -n "${r}p" core/fixtures/$f/run.sh | sed '$d' > $t; [ -s $t ] || exit 9; S=$(grep -m1 '^SHARDS=' core/fixtures/$f/run.sh | cut -d'"' -f2); [ -n "$S" ] || exit 9; first=${S%% *}; for s in $S; do c=$(GROUP=$s C=0; score() { C=$((C+1)); }; dg_all() { C=$((C+1)); }; broken() { :; }; ok() { :; }; bad() { :; }; DG_WORLDS=; POOL=/dev/null; FX=x; HOOK=h; ROOT=r; . $t >/dev/null 2>&1; echo $C); w=0; [ "$s" = "$first" ] && w=1; [ "$c" = "$w" ] || { rm -f $t; exit 1; }; done; rm -f $t; done`. The entry stays open for the per-gate wall clock and dollars.
+
 verify: manual
 
 ## BL-584 — two fixtures cannot be traced and have no `inputs.decl`, so they run on every push
 
-**PARTIAL (v0.806.0, verified 581ca289) — owed (1) shipped for `fold-architect-ledger-join` only; owed (1) for `hermetic-runner` and owed (3) are OPEN.** `fold-architect-ledger-join` carries `inputs.decl` and `tools.decl` and runs under `hermetic-run.sh` (72 ok, `required_missing=0`); its 46 traced rows are removed. `hermetic-runner` reads its subject files from copies made once at startup. That cut its trace window about 6x (17691 lines to 2902, loaded) but did NOT stop the drops: one 6-fixture `--tracer sandbox` call dropped 3 reports in its window, and three `--local-map` reps dropped 1, 2 and 7, at load 27-43 (0 of 3 clean). The premise that the drops come from re-opening four tree files hundreds of times is REFUTED; the drop cause is undiagnosed. `hermetic-runner`'s 17 rows and digest are removed, so it runs on every push (fail-closed) until the drops are fixed. The earlier count of 27 held fixtures is 5: 27 have `#discards` at n≥3 in `.git/ai-dlc-fixture-readsets.local`, and only 5 are keyed on the current runner and deriver.
+**PARTIAL (v0.806.0, verified 581ca289) — owed (1) shipped for `fold-architect-ledger-join` only; owed (1) for `hermetic-runner` shipped in v0.832.0 (verified 67bdbb7a), and owed (3) is OPEN.** `fold-architect-ledger-join` carries `inputs.decl` and `tools.decl` and runs under `hermetic-run.sh` (72 ok, `required_missing=0`); its 46 traced rows are removed. `hermetic-runner` reads its subject files from copies made once at startup. That cut its trace window about 6x (17691 lines to 2902, loaded) but did NOT stop the drops: one 6-fixture `--tracer sandbox` call dropped 3 reports in its window, and three `--local-map` reps dropped 1, 2 and 7, at load 27-43 (0 of 3 clean). The premise that the drops come from re-opening four tree files hundreds of times is REFUTED; the drop cause is undiagnosed. `hermetic-runner`'s 17 rows and digest are removed, so it runs on every push (fail-closed) until the drops are fixed. The earlier count of 27 held fixtures is 5: 27 have `#discards` at n≥3 in `.git/ai-dlc-fixture-readsets.local`, and only 5 are keyed on the current runner and deriver.
 
 **DEFECT (efficiency).** Operator-raised, 2026-10-16 ~04:40 EDT: "what about the fixtures whose readsets cant be mapped? i do not believe you cant figure out a way to refactor those so they dont need to be run every time." Filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]).
 
@@ -150,7 +152,9 @@ Caveat: in a linked worktree the local map is a different file (the BL-558 sympt
 
 Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
 
-verify: manual
+**The completeness proof covers `inputs.decl` only (batch 236; root cause BL-676).** `tools.decl` KEYS tools but does not RESTRICT them. The sandbox PATH is `$HR_TOOL_DIRS:$HR_BIN` (`core/scripts/hermetic-run.sh:544`: `env -i PATH="$HR_TOOL_DIRS:$HR_BIN"`; header `:54-55`: "PATH pinned to the fixed tool dirs plus a symlink farm / of the declared tools (keyed and unkeyed)"), so every system tool dir is reachable whether declared or not. Removing a tool line therefore makes no fixture fail, and a removed tool line is invisible to any receipt or fixture. Of the 5 `inputs.decl` lines, 4 are mutated by `core/fixtures/hermetic-runner/run.sh` (DC1 `core/scripts/hermetic-run.sh`, DC2 `core/scripts/core-paths.sh`, DC3 `core/fixtures/lib/`, DC4 `.githooks/pre-push`), and two groups cannot be caught. All `tools.decl` lines cannot, because the sandbox never refuses an undeclared tool, so a dropped line changes nothing a fixture can observe. The fifth `inputs.decl` line, `core/git-hooks/pre-push`, cannot on the distribution, because the fixture never opens it there, although it is still part of the key. The result "one tool removed: 0" is therefore not coverage.
+
+verify: sh o="$(bash core/scripts/hermetic-run.sh --root . --key-only hermetic-runner 2>&1)" || exit 1; k="$(printf '%s\n' "$o" | cut -f1)"; nt="$(grep -cv -e '^[[:space:]]*#' -e '^[[:space:]]*$' core/fixtures/hermetic-runner/tools.decl)" || exit 1; nr="$(grep -c '^/' <<<"$k")" || nr=0; [ "$nt" -gt 0 ] && [ "$nr" = "$nt" ] || exit 1; for p in core/scripts/hermetic-run.sh core/scripts/core-paths.sh .githooks/pre-push core/git-hooks/pre-push core/fixtures/lib/ core/fixtures/lib/preamble.sh; do grep -qxF -- "$p" <<<"$k" || exit 1; done # known limit: a removed tool line is invisible (tools.decl keys, does not restrict; BL-676)
 
 ## BL-605 — an In-Flight row's `dispatched-at` can be stamped LATER than the real dispatch, and the BACKDATED arm is quiet on a late row by design
 
@@ -168,7 +172,17 @@ verify: manual
 
 **NOTE.** Filed by peer session ai-dlc-bb (batch 235 gate throughput), derived by the BL-592 contract adversary and re-derived by the filer. At origin/main 3d5f1e70 the pool worker runs each unit unbounded: `.githooks/pre-push:2027` (`bash "$hr" --root "$PWD" "$b"`) and `:2035`, `:2039` (`bash "$d/run.sh"`), intake confirmed; `core/git-hooks/pre-push` carries the same lines (I66 binds the pair). Per the filer the hook's 13 timeout/watchdog/`ulimit -t` matches all belong to the detached read-set trace's watchdog (:992-1054, :1194, :1217, :1315) plus a tool-key comment at :1339. `core/scripts/hermetic-run.sh` has 0 timeout/watchdog/`ulimit -t` matches against 6 `inputs.decl` (intake confirmed). The only hang bounds in the suite are the five mutant batteries' per-scorer watchdogs (BL-592's subject). A unit that hangs anywhere else hangs the push indefinitely, and a slow unit is indistinguishable from a hung one except by the operator watching the clock. No hang has been observed. Remedy left to the builder; one option is a per-unit bound derived from the unit's recorded clean cost.
 
-verify: manual
+Progress is new bytes in the unit's pool log or under its per-unit TMPDIR, a fresh `mktemp -d "$out/.t.XXXXX"` under a `<root>/fx.XXXXXX` "$out", whose encoded length (characters plus two per `/`) must not exceed the system default's for any unit, because the first form, `"$out/.tmp/<fixture>"` under a bare `mktemp -d`, measured 112 encoded for procsub-staged-refusal-boot against the 85 its padded worlds allow and the default's 58 (operator ruling, option A): CPU time and process membership are not progress, so a polling loop and a silent compute unit are both refused. The POOL_STALL default is set from the forced full run described in the paragraph below, with the figures on the Window line; each unit's longest silent stretch is read from `.git/ai-dlc-pool-stall.last`. The pool root is `$TMPDIR` when it is a writable directory whose physical path is at most 35 encoded (so a unit's TMPDIR, 23 past the root, stays at or under 58), otherwise `/tmp`, otherwise a bare `mktemp -d`, which prints one stderr line naming the fallback root, the reason `/tmp` failed and that units with a path-length limit may then fail.
+
+Window method. Under ruling A, progress is new bytes under the unit's TMPDIR or in its pool log. On macOS a bare `mktemp -d` ignores TMPDIR, so a fixture taking scratch that way is seen only through its log, and its stall is its longest gap between log lines. Such a unit that legitimately goes quiet for longer than the window under load is refused, which costs a re-run. fold-architect-ledger-join-mutants was refused at the 300-poll clamp for this reason, and its scratch has since been made visible to the pool by taking it from the explicit template (8c238d29). The source is one run, D9, a full forced run in which 299 units were measured exactly and that one unit was censored at the 300-poll clamp, because the forced override of 1000000 was clamped to the default: the hook's guard clamps 6 or more digits to the default, so the run actually ran at 300. A warning line is now printed when an override is rejected. The bound exists to catch a hang, not to fit the distribution, so it is set well above the largest exact reading and above the clamp the censored unit hit.
+
+Caller freeze, found and fixed in this release (no new BL id). With an empty self-pgid (`ps -o pgid= -p $$` failing), the base `pool_kill` walk's STOP pass stopped the calling shell itself (state T), the KILL pass never ran, and the push hung. The fix's first line, `[ -n "$2" ] || { kill -KILL "$1"; return 0; }` (`.githooks/pre-push:2178`, `core/git-hooks/pre-push:2077`), kills only the recorded pid. Evidence is the probe `hands/d1/probe-self.sh`: it stubs `ps` to fail on `-p`, runs `pool_kill` with an empty self inside a sacrificial process group, and prints unit-alive, sibling-alive, grandchild-alive and inner-survived for the fix, the consumer hook and the base hook at 44acd520. On the base the caller is frozen in state T and never finishes; with the fix the unit is killed and the caller finishes. Not re-run at this edit.
+
+Window: POOL_STALL_DEFAULT=600 polls, from a measured maximum silent stretch of 96 polls (derivation-differential-mutants 96, fold-architect-ledger-join-mutants-c 58, validator-arm-selection-b 45) plus a margin: 600 is 6x the largest exact reading and 2x the 300-poll clamp the one censored unit hit; set from the forced full run D9.
+
+**LANDED (v0.832.0, verified 67bdbb7a).** The pre-push pool refuses a unit that makes no progress and kills its whole process tree. Progress is new bytes under the unit's watched TMPDIR or in its pool log. `POOL_STALL_DEFAULT=600`, from a forced full run whose maximum exact reading was 96 polls, with one unit censored at the 300-poll clamp. The empty-self caller freeze in `pool_kill` is fixed. The pool root honours a short TMPDIR, the bare fallback prints a loud line, each unit gets a unique `mktemp -d` watched root, and a rejected `AI_DLC_POOL_STALL` warns. The receipt lives at `scripts/receipt-bl606-pool-stall.sh`. A consumer that installed an earlier copy of `consumer-suite-pool/receipt.sh` keeps it until update prunes it; it exits 9 and nothing executes it.
+
+verify: sh bash scripts/receipt-bl606-pool-stall.sh
 
 ## BL-608 — the validator fork budget's headroom eroded from +6 to 0 across five releases, and nothing warned
 
@@ -202,7 +216,9 @@ So a backlog commit that introduces exactly the drift these arms exist to catch 
 
 Owed: decide, with the cost stated, whether a declared EXCLUDED-top file is keyed for the fixtures that declare it (a per-fixture opt-in, not a population change), or whether the real-ledger arms move to a cheaper, separately keyed unit. Receipt: a push that changes only `docs/backlog.md` re-runs a fixture whose arm reads it, with a push changing an unrelated file as the control that still skips it.
 
-verify: manual
+**LANDED (v0.832.0, verified 67bdbb7a).** The real-ledger arms j1 and b16 moved into the new `.dist-only` fixture `backlog-real-ledger`, which declares `+docs/backlog.md`. A leading `+` in `inputs.decl` keys a declared file even under an excluded top, in both hooks and in `scripts/suite-content-key.sh`, and I55 arm 3 acquits a reach only for such a declared file. A push changing only the backlog now re-runs the fixture, and the receipt drives both directions of the key comparison.
+
+verify: sh d="$(mktemp -d)" && bk="$(mktemp)" && mkdir -p "$d/.githooks" "$d/core/fixtures" "$d/core/skills/ai-dlc-update/reconcile" "$d/scripts" "$d/docs/plans" && cp .githooks/pre-push "$d/.githooks/" && cp -R core/scripts "$d/core/" && cp -R core/fixtures/backlog-real-ledger "$d/core/fixtures/" && cp core/skills/ai-dlc-update/reconcile/lib.sh core/skills/ai-dlc-update/reconcile/ledger-reverify.sh "$d/core/skills/ai-dlc-update/reconcile/" && cp scripts/suite-content-key.sh scripts/validate-backlog-receipts.sh scripts/validate-backlog-size.sh scripts/backlog-reverify.sh "$d/scripts/" && cp docs/backlog.md "$d/docs/" && printf 'plan\n' > "$d/docs/plans/p.md" && ( cd "$d" && git init -q . && git add -A && git -c user.email=r@l -c user.name=r commit -q -m r ) && kr() { ( cd "$d" && bash core/scripts/hermetic-run.sh --root . --key-only backlog-real-ledger 2>/dev/null ); } && ok() { ( cd "$d" && bash scripts/suite-content-key.sh 2>/dev/null ); } && R0="$(kr)" && O0="$(ok)" && [ -n "$R0" ] && [ "${#O0}" -eq 64 ] && cp "$d/docs/backlog.md" "$bk" && printf 'x\n' >> "$d/docs/backlog.md" && R1="$(kr)" && O1="$(ok)" && cp "$bk" "$d/docs/backlog.md" && printf 'x\n' >> "$d/docs/plans/p.md" && R2="$(kr)" && O2="$(ok)" && [ "$O1" != "$O0" ] && [ "$(diff <(printf '%s\n' "$R0") <(printf '%s\n' "$R1") | grep -c '^[<>] docs/backlog\.md	')" = 2 ] && [ "$(diff <(printf '%s\n' "$R0") <(printf '%s\n' "$R1") | grep -c '^[<>]')" = 2 ] && [ "$O2" = "$O0" ] && [ "$R2" = "$R0" ]
 
 ## BL-587 — a reconcile that records derivations "owed to the sprint's derivation-validator step" has no channel to the sprint lead, so the debt is silently dropped
 
@@ -386,7 +402,9 @@ Owed:
 2. A guard so that a declared fixture cannot regain rows, either in the deriver at write time or as an arm at pre-push. Measure its false-positive set before shipping it.
 Receipt: after the regeneration the guard reports 0, and a seeded row for a declared fixture makes it fail.
 
-verify: manual
+**LANDED (v0.832.0, verified 67bdbb7a).** `readset_merge_map` takes an optional fixture root and drops the rows and digest lines of every fixture carrying `inputs.decl`, `readset_untraced_lost` takes the same root, and `readset_all_list` skips declared fixtures. The map was regenerated offline: 186 declared fixtures with 10341 rows and 42 digest lines went to none, and undeclared rows and digests are byte-identical. The `readset-skip` fixture's arm (h) pins declared versus undeclared, the three-argument opt-in, the untraced-loss exclusion and the `--all` list, with two mutants.
+
+verify: sh d=$(mktemp -d) && for x in core/fixtures/*/inputs.decl; do [ -f "$x" ] && basename "$(dirname "$x")"; done > $d/dec && [ -s $d/dec ] && n=$(awk -F'\t' 'NR==FNR{D[$1]=1;next} /^# digest /{split($0,a," ");if(a[3] in D)c++;next} /^#/{next} ($1 in D){c++} END{print c+0}' $d/dec .ai-dlc-fixture-readsets.tsv) && [ "$n" = 0 ] && [ "$(grep -vc '^#' .ai-dlc-fixture-readsets.tsv)" -gt 0 ]
 
 ## BL-620 — the LC-A1 layer adjudication accepts a verdict with no evidence the entry was read, so nine re-reads were closed by one keyword grep
 
@@ -466,7 +484,9 @@ Owed: the deriver drops `.git` and `.git/**` at write time, through the same pre
 
 Related: BL-635 (12214 dead rows for fixtures keyed on `inputs.decl`); together they are the map's dead weight.
 
-verify: manual
+**LANDED (v0.832.0, verified 67bdbb7a).** The deriver drops `.git` and `.git/**` at write time through the hook's own `readset_drop_git` predicate, which `readset_universe_paths` in both hooks also calls, with a fallback definition inside the deriver's READSET_BOTH span. The committed map was regenerated offline: the `.git` rows are gone, every other row is byte-identical, and the header count is recomputed. The `readset-skip` fixture's arm (g) drives the extracted write pipeline over a seeded stream, with two mutants.
+
+verify: sh d=$(mktemp -d) && D=core/scripts/derive-fixture-readsets.sh && M=.ai-dlc-fixture-readsets.tsv && [ "$(grep -v '^#' $M | awk -F'\t' '$2 ~ /^\.git(\/|$)/' | grep -c .)" = 0 ] && [ "$(grep -v '^#' $M | awk -F'\t' '$2 == ".gitignore"' | grep -c .)" -gt 0 ] && sed -n '/^readset_drop_git() {/,/^}/p' $D > $d/fn.sh && [ -s $d/fn.sh ] && grep -F '> "$WORK/$fx.set"' $D | sed 's/^[[:space:]]*|//; s/readset_drop_pseudo/cat/; s/drop_ignored/cat/' > $d/wl && . $d/fn.sh && WORK=$d && fx=x && printf '%s\n' .git/objects/ab/cd .git/HEAD .git sub/.git/HEAD .gitignore core/x.sh | eval "$(cat $d/wl)" && [ "$(LC_ALL=C sort $d/x.set | tr '\n' ' ')" = ".gitignore core/x.sh sub/.git/HEAD " ]
 
 ## BL-646 — one adversarial-shard-merge mutant scorer costs about 140 CPU-seconds against the 22 its header designs for, so under the gate's pool every scorer, the control included, times out
 
@@ -704,6 +724,71 @@ line with no later "verified" parses the same as today.
 
 verify: manual
 
+## BL-674 — I55 arm 3's reach scan recognises four root variables, so a fixture that reads an excluded path through any other root variable is never checked
+
+**DEFECT.** Filed by peer session ai-dlc-c0 (batch 236 READSET), id allocated by lead ai-dlc-c8; found by the BL-606 receipt hand. Tiered DEFECT rather than NOTE because the gap was reproduced in both directions on a probe tree and the arm stays green over a real instance, so a fixture's input can change without the suite re-running.
+
+`scripts/validate-enforcement-map.sh:6619` fixes the grammar as `i55_roots='(REPO_ROOT|ROOT|D_ROOT|C_ROOT)'`, and `i55_reach_scan` (`:6620`) builds both its `grep -rHnoE` pattern (`:6623`) and its awk `pat` (`:6637`) from it. A read written `"$X/docs/..."` through any other variable matches neither, so arm 3 never sees the line. The arm's control (`:6688`) uses the same four names, so it cannot notice either. The arm's self-probe (`:6657-6690`) seeds only `$ROOT`.
+
+Instance: `core/fixtures/gate-repair-record-mutants/run.sh` binds `ROOT_DIR` at `:24` (`ROOT_DIR="$DIR"`, walked up at `:26` until it holds `VERSION`) and reads through it at `:25`, `[ ! -f "$ROOT_DIR/VERSION" ]`, and at `:28`-`:32`. `VERSION` is a content-key-excluded top, and `ROOT_DIR` is not among the four recognised names, so arm 3 (whose reach scan globs only `core/fixtures/*/*.sh`, `scripts/validate-enforcement-map.sh:6623`) cannot see the `:25` read. The original instance, `scripts/receipt-bl606-pool-stall.sh` reading `"$D9_ROOT/docs"`, moved out of the arm's population at d10a4893, so `D9_ROOT` now reads 0 in the population and is no longer a usable control.
+
+Measured (probe copy of `:6619-6656` at `d3f8d151`, `bash /private/tmp/claude-501/-Users-n8-git-ai-dlc/44823695-8b1f-4a1e-8168-15f96d480726/scratchpad/hands/bl674/probe.sh`, mktemp tree, two fixtures `cat "$ROOT/docs/x"` and `cat "$D9_ROOT/docs/x"`, excluded entry `docs`):
+
+```
+rootvar/run.sh:1:$ROOT/docs/         <- reported (the control, same invocation)
+(d9var/run.sh                        <- absent under the shipped grammar)
+widened roots + D9_ROOT:  d9var/run.sh:1:$D9_ROOT/docs/  and  rootvar/run.sh:1:$ROOT/docs/
+```
+
+So the ROOT read is reported, the D9_ROOT read of the identical path is not (that probe predates the move at d10a4893, and its claim about the grammar stands unchanged), and adding the one name makes it appear. This is the control plus the instance in one run. It shows the grammar is the cause; it does not show that the real `receipt.sh` reads are unkeyed.
+
+Real tree at tip dc919cc8 (`hands/bl674/realtree.sh`): the 4 excluded entries are CHANGELOG.md, VERSION, docs and CLAUDE.md; the scan reports 0 hits naming the receipt, and the seeded `$ROOT` control returns 1. The real-tree instance is now the `ROOT_DIR` read of `VERSION` at `core/fixtures/gate-repair-record-mutants/run.sh:25`, which the shipped grammar does not report while a widened grammar would.
+
+Population (`hands/bl674/population.sh`, one grep over `core/fixtures/*/*.sh` for `$X_ROOT.../`, minus the four recognised names), run at tip dc919cc8: 36 distinct non-recognised root variables, read through in 38 files. The four largest by reads are TMPROOT (82 reads, 3 files), MUTROOT (27, 3), BLROOT (26, 1) and ROOT_DIR (23, 4). Control: the four recognised names carry 2109 reads. Population control for the repointed instance: `ROOT_DIR` is in the list at 23 reads over 4 files. The old `D9_ROOT` control reads 0 (receipt.sh moved). This is a grep floor, not a parse: it sees only `*ROOT*` names written as `$NAME/` or `${NAME}/`, so a differently named variable or an indirect read is outside it.
+
+Owed: widen the root grammar, for example by deriving the roots from assignments of the form `X_ROOT=` or `*ROOT=` in each scanned file rather than hand-listing four. The false-positive set must be measured before it ships (CLAUDE.md), and the I55 self-probe must gain a non-standard-root case in both directions: a `$D9_ROOT/docs/x` read reported, and a near-miss (a `*ROOT` variable that does not point at the distribution root, or a `+`-declared literal path through it) acquitted. The control at `:6688` should count the widened grammar too.
+
+verify: manual
+
+## BL-676 — the hermetic sandbox puts every system tool dir on PATH, so `tools.decl` restricts nothing and a fixture that forks an undeclared tool is neither refused nor re-keyed
+
+**DEFECT.** Filed by peer session ai-dlc-c0 (batch 236 READSET), id allocated by lead ai-dlc-c8; found by the BL-584 hand. This is the root of the defect class the batch's decl-tools fix (d5) addressed: that fix repairs one fixture's declaration, while the sandbox still cannot tell a complete declaration from an incomplete one.
+
+Mechanism. `core/scripts/hermetic-run.sh:157` takes `HR_TOOL_DIRS="$READSET_TOOL_DIRS"`, and `.githooks/pre-push:1432` assigns `READSET_TOOL_DIRS="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"`. `core/scripts/hermetic-run.sh:544` then runs the fixture under `env -i PATH="$HR_TOOL_DIRS:$HR_BIN"`, and the header at `:54-55` states the same ("PATH pinned to the fixed tool dirs plus a symlink farm of the declared tools"). So every tool in those six directories is reachable whether or not `tools.decl` names it. `tools.decl` decides what is KEYED, never what may RUN.
+
+Effect. A fixture that forks an undeclared tool is not refused, so the sandbox run passes, and the tool is not in the key, so a change to that tool does not re-run the fixture. A removed `tools.decl` line fails nothing. This is why the BL-584 receipt cannot cover `tools.decl` (see that entry).
+
+Measured by the BL-584 hand through the real runner (cited, not re-run here): with no `tools.decl`, and again with a comment-only `tools.decl`, a stub fixture still ran `jq`, `awk` and `shasum` (rc 0). The control, a tool found only on the caller's PATH, was unreachable.
+
+Prior art, re-derived in this worktree against `docs/backlog.archive.md`: `grep -n 'tools.decl' docs/backlog.archive.md | grep -c restrict` gives 0, against a control of 30 for `grep -c 'inputs.decl' docs/backlog.archive.md`. No existing entry covers it.
+
+Owed, and it is the operator's to choose because it changes what every fixture may run: (i) restrict the sandbox PATH to the declared tools, after measuring the false-positive set over every declared fixture first; or (ii) a trace-derived check that compares the tools each fixture actually forks against its `tools.decl`.
+
+OPEN OPERATOR QUESTION: restrict the sandbox PATH to the declared tools, (i), or add a trace-derived declared-versus-forked comparison, (ii)? The lead's recommendation is (i), measured first.
+
+verify: manual
+
+## BL-677 — on the empty-self path `pool_kill` kills only the recorded pid, so children in a unit's process group survive the worker's kill on the worker-death and abort paths
+
+**DEFECT.** Filed by peer session ai-dlc-c0 (batch 236 READSET), id allocated by lead ai-dlc-c8; found by the hook-delta adversary. It is a leak, not a hang: it leaves orphaned processes after a kill, and it blocks nothing. DEFECT rather than NOTE because a kill that leaves the killed unit's children running is wrong behaviour with a concrete owed fix, not an observation.
+
+Mechanism. `pool_kill` opens with `[ -n "$2" ] || { kill -KILL "$1"; return 0; }` (`.githooks/pre-push:2154`, `core/git-hooks/pre-push:2053`), added this release so that an empty self-pgid walk cannot stop the calling shell. With `$2` (`self`) empty it signals only the recorded pid `$1` and returns. `self` is empty when `ps -o pgid= -p "$$"` fails (`.githooks/pre-push:2177`, `core/git-hooks/pre-push:2076`). The callers:
+- The watcher's worker-death line, `if ! kill -0 "$$"; then pool_kill "$pid" "$self" "$kp" "$kg"; exit 0; fi` (`.githooks/pre-push:2185`, `core/git-hooks/pre-push:2084`). Nothing follows it, so the unit's group is never signalled.
+- The watcher's refusal path (`.githooks/pre-push:2194-2195`, `core/git-hooks/pre-push:2093-2094`), where `pool_kill` is followed by `kill -KILL -- "-$pid" 2>/dev/null`.
+- `pool_kill_saved` (`.githooks/pre-push:2163-2167`, `core/git-hooks/pre-push:2062-2066`), called from `pool_abort` (`.githooks/pre-push:2170`, `core/git-hooks/pre-push:2069`) and from the worker after a late refusal (`.githooks/pre-push:2206`, `core/git-hooks/pre-push:2105`). `pool_abort` kills `-$wpid` (the watcher's group) and then reaches `pool_kill_saved`, with no `-$pid` group kill.
+
+On the refusal path the `kill -KILL -- "-$pid"` after `pool_kill` still reaps the unit's group. On the worker-death and abort paths nothing does, so the unit's group children survive.
+
+Why it is not a hang. The unit's children write to the unit's pool log (`TMPDIR="$wr" "$@" > "$lg" 2>&1 < /dev/null &`, `.githooks/pre-push:2180`, `core/git-hooks/pre-push:2079`), not to the hook's stdout, and the worker blocks on `wait "$pid"` (`.githooks/pre-push:2202`, `core/git-hooks/pre-push:2101`), which returns on the unit's own exit, not on EOF of any pipe. So the survivors cannot hold the push open.
+
+Prior state. Before this release a failing `ps` killed nothing at all, so this is a remaining gap, not a regression.
+
+Evidence, measured by the hook-delta adversary (cited, not re-run here): a unit leading its own group with a child in it, then `pool_kill "$U" ""`, gave `unit alive=no child alive=yes`; after the group kill of the refusal path, `child alive=no`.
+
+Owed: add `kill -KILL -- "-$1"` to the guard in both hooks (safe for a non-leader pid: ESRCH, nothing signalled), plus a consumer-suite-pool arm proving the group dies on the worker-death path with `self` empty (a stub `ps` that fails on `-p`), and that arm's mutant: the guard without the group kill must leave the child alive.
+
+verify: manual
+
 ## BL-678 — plan-rotate.sh rebuilds the plan's archive pointer from the current run's ranges alone, so every earlier rotated range drops out of the plan
 
 **NOTE.** Filed by the TRAIN owner on the lead's instruction, and tiered NOTE by the lead's ruling. `scripts/plan-rotate.sh:205-206` spell the
@@ -793,3 +878,18 @@ cannot be built, a corpus reads empty or a self-probe fails, or `bl.sh` is not f
 
 verify: sh unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY; V=scripts/validate-shell-portability.sh; [ -s "$V" ] || exit 9; T=$(mktemp -d "${TMPDIR:-/tmp}/bl681.XXXXXX") || exit 9; mkdir -p "$T/scripts" "$T/core/fixtures/x" || exit 9; printf '0.0.0-receipt\n' > "$T/VERSION" || exit 9; cp "$V" "$T/$V" || exit 9; printf '%s\n' 'probe text' > "$T/core/a.md" || exit 9; printf '%s\n' 'true' > "$T/core/fixtures/x/run.sh" || exit 9; printf '%s\n' "awk '" '      if (inwin) { gsub(/[ \t]+/, " ", win); print head "\037" win }' "' f" > "$T/scripts/fp.sh" || exit 9; printf '%s\n' 'awk '"'"'{ gsub(/x/, "\\1", s) }'"'"' f' > "$T/scripts/bl.sh" || exit 9; git -C "$T" init -q && git -C "$T" add -A || exit 9; O=$(bash "$T/$V" 2>&1); grep -qE 'corpus is empty|own probe did not fire|no VERSION marker' <<<"$O" && exit 9; H=$(awk '/^FAIL: /{s=($2=="S7:")} s' <<<"$O"); grep -qF 'scripts/bl.sh:' <<<"$H" || exit 9; grep -qF 'scripts/fp.sh:' <<<"$H" && exit 1; exit 0
 
+## BL-690 — the pre-push fixture pool installs no EXIT, INT or TERM trap, so an interrupted hook leaks its pool root `/tmp/fx.*`
+
+**NOTE.** The pool function sets `out="$(mktemp -d /tmp/fx.XXXXXX ...)"` (`.githooks/pre-push:2030`, `core/git-hooks/pre-push:1938`) and removes it only by straight-line `rm -rf "$out"` (`.githooks/pre-push:2044`, `:2080`, `:2088`, `:2446`; `core/git-hooks/pre-push:1952`, `:1984`, `:1992`, `:2320`). The hook says so itself: "There is no trap in this hook" (`.githooks/pre-push:2383`; `core/git-hooks/pre-push:2259` carries the same sentence). An interrupted hook (SIGINT, SIGTERM, SIGHUP, or a `set -u` abort) therefore leaks its pool root. The leak predates this release; the root moved from `/var/folders` to `/tmp` in this release, so it now lands in shared `/tmp`. Filed by peer session ai-dlc-c0 (batch 236 READSET), id allocated by lead ai-dlc-c8, found by the READSET tip adversary on the per-unit TMPDIR change.
+
+Owed: the pool function installs a trap naming EXIT (or INT and TERM) whose body removes `"$out"`, in both hooks, which I66 holds to one program.
+
+verify: sh for f in .githooks/pre-push core/git-hooks/pre-push; do b=$(sed -n '/out="\$(mktemp/,/rm -rf "\$out"/p' "$f" | grep -v '^[[:space:]]*#'); [ -n "$b" ] && [ "$(printf '%s\n' "$b" | grep -c 'trap .*\$out.*\(EXIT\|INT\|TERM\)')" -gt 0 ] || exit 1; done
+
+## BL-691 — a nested pool makes its pool root outside the OUTER unit's watched TMPDIR, so the outer watcher does not see the nested pool's scratch writes
+
+**NOTE.** A fixture that drives the real hook's pool makes a nested pool: `core/fixtures/prepush-pool-depth/run.sh` calls `run_fixtures` at depth 1 (`:79`, `:120`), and `core/fixtures/readset-skip/run.sh` sources the extracted FIXTURE_POOL block (`:287`, `:361`). `core/fixtures/self-update-fixture-log/run.sh` drives the hook through `h_enter` (`:2090`) and names PREPUSH_POOL_DEPTH (`:2063`); whether it reaches `run_fixtures` was not established. The nested pool chooses its root at the `out=` line (`.githooks/pre-push:2030`, `core/git-hooks/pre-push:1938`), which is `/tmp/fx.XXXXXX` and not under the caller's TMPDIR. The outer pool watches a per-unit TMPDIR (`TMPDIR="$wr" "$@"`, `.githooks/pre-push:2206`; the watched-root limit is commented at `:467-:469`). The nested pool's scratch writes land outside that root, so the outer watcher sees only the nested hook's log output. Whether the outer progress check still holds for those three fixtures is UNRUN.
+
+Owed: when `PREPUSH_POOL_DEPTH` is above 0, the pool root is made under the caller's TMPDIR.
+
+verify: sh for f in .githooks/pre-push core/git-hooks/pre-push; do b=$(sed -n '/out="\$(mktemp/,/mkdir -p .*\$out/p' "$f" | grep -v '^[[:space:]]*#'); [ -n "$b" ] && [ "$(printf '%s\n' "$b" | grep -c 'PREPUSH_POOL_DEPTH\|POOL_DEPTH_IN')" -gt 0 ] && [ "$(printf '%s\n' "$b" | grep -c 'TMPDIR')" -gt 0 ] || exit 1; done

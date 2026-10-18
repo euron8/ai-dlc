@@ -1,13 +1,17 @@
 # Tools run.sh and the extracted pool block invoke.
 awk
+basename
 bash
 cat
 cp
 env
+find
 git
 grep
+kill
 mkdir
 mktemp
+ps
 rm
 sed
 seq

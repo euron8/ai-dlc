@@ -55,13 +55,18 @@
 #      must fail exactly its own arms. The declaration parse lives in the hook's READSET_KEYROWS
 #      span, so M4/M5 mutate a copy of the hook the probes copy (run_hook_mutant), not the runner.
 #   cwd  the verdict is the same from two different working directories
+#   DC   this fixture's own inputs.decl is complete: removing one declared line, in a copy of the declared
+#        tree run through the runner under test, fails the run for that line (DC4, the hook line, in the
+#        distribution layout only)
 #
 # The probe is a throwaway git repo under mktemp: the runner's --key-only reads `git ls-files`.
-# This fixture carries no inputs.decl of its own.
+# This fixture is declared (inputs.decl, tools.decl) and runs under hermetic-run.sh; its exclusion seed is its own file.
 
 # Sourced FIRST: a fixture invoked directly from a linked worktree inherits an absolute GIT_DIR,
 # and every scratch `git init` below would then silently redirect onto the caller's repository.
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+# A missing preamble refuses: without the guard the source fails, the run continues, and the line below
+# redoes the preamble's work, so a declaration that drops core/fixtures/lib/ passed (DC3).
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "hermetic-runner: FIXTURE BROKEN: core/fixtures/lib/preamble.sh is absent" >&2; exit 2; }
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(GIT_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
@@ -70,6 +75,8 @@ unset HERMETIC_FX_NESTED
 
 # The repo root: walk up from this script for whichever runner layout is present. No hop count.
 HERE="$(cd "$(dirname "$0")" && pwd)"
+# A DC copy (below) marks its own directory, and runs as NESTED: arms only, so DC cannot recurse.
+[ -f "$HERE/.decl-mutant" ] && NESTED=1
 RUN=""
 d="$HERE"
 while [ -n "$d" ] && [ "$d" != "/" ]; do
@@ -209,10 +216,20 @@ FXR="core/fixtures"
 # The hook the runner's --key-only sources its universe from, and the content-key declaration whose
 # EXCLUDE span names the excluded tops. Taken from the repo under test, whichever layout it is.
 HOOK_SRC=""; SCK_SRC=""
+# A DISTRIBUTION tree tests the distribution hook. Without this refusal a tree missing .githooks/pre-push fell
+# back to core/git-hooks/pre-push and ran every arm against the consumer's hook, so a declaration that dropped
+# .githooks/pre-push passed (DC4). A consumer carries one hook, at .githooks/pre-push, and takes the loop below.
+if [ -d "$ROOT/core/scripts" ] && [ ! -f "$ROOT/.githooks/pre-push" ]; then
+  echo "FIXTURE ERROR: a distribution tree (core/scripts/ present) with no .githooks/pre-push: the distribution hook is the subject here" >&2
+  exit 2
+fi
 for cand in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
   if [ -f "$cand" ] && grep -q '^# READSET_UNIVERSE_BEGIN$' "$cand"; then HOOK_SRC="$cand"; break; fi
 done
-for cand in "$ROOT/scripts/suite-content-key.sh"; do
+# The exclusion declaration is a FIXTURE-OWNED seed, not the repository's scripts/suite-content-key.sh: that file is
+# distribution-only, and a declared absent file is a refusal on a consumer. The arms test the hook's reading of an
+# EXCLUDE span, which the seed carries.
+for cand in "$HERE/suite-content-key.seed"; do
   if [ -f "$cand" ] && grep -q '^# EXCLUDE_BEGIN$' "$cand"; then SCK_SRC="$cand"; fi
 done
 [ -n "$HOOK_SRC" ] && echo "hermetic-runner: universe hook: $HOOK_SRC" || echo "hermetic-runner: no hook with a READSET_UNIVERSE span here; arm G is skipped"
@@ -1244,6 +1261,9 @@ if [ -n "$STRAY" ]; then
   echo "  SKIP  arms A B C D E F H I K L N G J P Q R S T U V W X Y Y2 Y3, mutants M1-M22 and cwd: each needs a probe run the stray marker refuses"
   ARMS="Z1 Z2 Z3 Z4"
 fi
+# A DC copy runs only the arms its marker names: the control's positive conjunct (A) and the arm that reads the
+# mapper (L).
+[ -f "$HERE/.decl-mutant" ] && ARMS="$(cat "$HERE/.decl-mutant")"
 for _a in $ARMS; do
   ( "arm_$_a" > "$WORK/par/$_a.out" 2>&1; printf '%s' "$FAILED" > "$WORK/par/$_a.failed" ) &
 done
@@ -1283,6 +1303,60 @@ run_hook_mutant() {
   mkdir -p "$WORK/hmutdir-$1" || { echo "BROKEN" > "$WORK/mut-$1.res"; return; }
   mutate_file "$HOOK_SRC" "$h" "$3" "$4" || { echo "BROKEN" > "$WORK/mut-$1.res"; return; }
   ( HOOK_SRC="$h"; WK="$WORK/m-$1"; mkdir -p "$WK"; VERBOSE=0; FAILED=""; for _a in $2; do "arm_$_a"; done; failed_set "$FAILED" > "$WORK/mut-$1.res" )
+}
+
+# --- DC: this fixture's own declaration is complete (BL-584 item 1) ------------------------------------
+# Each DC mutant copies every declared path and this fixture's own directory into a fresh git tree, removes ONE
+# line from the copy's inputs.decl, and runs the copy through its own runner. The file stays on disk in the copy;
+# only the declaration loses it, so the runner leaves it out of the inner sandbox, which is the state a fixture
+# with an incomplete declaration runs in. Each mutant asserts its exit code AND the message that names its line,
+# so a copy that failed for some other reason cannot score the kill. DC0, the unmutated copy, must pass with ok
+# lines from both arms it runs: without it a copy that cannot run at all would score every mutant as killed.
+# The copy marks its own directory (.decl-mutant), which makes it NESTED (no M battery, no cwd pass, no DC) and
+# limits it to arms A and L.
+# NOT COVERED, and why (a removal mutant of these lines cannot fail):
+#   every tools.decl line: hermetic-run.sh puts READSET_TOOL_DIRS (the fixed system dirs) ahead of the declared
+#     farm on the sandbox PATH, and every tool this fixture declares lives in one of those dirs or in git's
+#     exec-path, so it stays reachable undeclared. tools.decl keys the tools; it does not restrict them.
+#   core/git-hooks/pre-push: the distribution reads .githooks/pre-push first and never opens this file; on a
+#     consumer both hook lines map to .githooks/pre-push, so either one alone covers it. DC4 is therefore
+#     distribution-only.
+DC_DECL="$HERE/inputs.decl"
+DC_FXREL="${HERE#"$ROOT"/}"
+DC_RUNREL="${RUN_TREE#"$ROOT"/}"
+dc_paths() { # the declared paths, markers stripped, in this tree's own spelling (mapped on a consumer)
+  local raw
+  raw="$(grep -v -e '^[[:space:]]*#' -e '^[[:space:]]*$' "$DC_DECL" | sed 's/^[!+]*//')"
+  if [ -d "$ROOT/core/scripts" ]; then printf '%s\n' "$raw"
+  else printf '%s\n' "$raw" | bash "$(dirname "$RUN_TREE")/core-paths.sh" --map; fi
+}
+dc_build() { # <copy dir> <inputs.decl line to remove, or empty>
+  local c="$1" drop="$2" p n0 n1
+  mkdir -p "$c" || return 1
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    case "$p" in
+      */) mkdir -p "$c/$p" && cp -R "$ROOT/$p." "$c/$p" || return 1 ;;
+      *) mkdir -p "$c/$(dirname "$p")" && cp -p "$ROOT/$p" "$c/$p" || return 1 ;;
+    esac
+  done <<<"$(dc_paths)"
+  mkdir -p "$c/$DC_FXREL" && cp -R "$HERE/." "$c/$DC_FXREL/" || return 1
+  printf 'A L\n' > "$c/$DC_FXREL/.decl-mutant" || return 1
+  if [ -n "$drop" ]; then
+    grep -vxF -- "$drop" "$DC_DECL" > "$c/$DC_FXREL/inputs.decl"
+    n0="$(grep -c . "$DC_DECL")" || n0=0
+    n1="$(grep -c . "$c/$DC_FXREL/inputs.decl")" || n1=0
+    # Exactly one line gone: a line that matched nothing is a lost anchor, not a mutant.
+    [ "$n1" -eq $((n0 - 1)) ] || return 1
+  fi
+  ( cd "$c" && git init -q && git add -A && git -c user.name=t -c user.email=t@t commit -qm dc ) >/dev/null 2>&1 || return 1
+}
+dc_run() { # <id> <inputs.decl line to remove, or empty>: writes $WORK/dc-<id>.rc and .out, or BROKEN
+  local c="$WORK/dc-$1" out rc
+  if ! dc_build "$c" "$2"; then echo "BROKEN" > "$WORK/dc-$1.rc"; return; fi
+  out="$(bash "$c/$DC_RUNREL" --root "$c" hermetic-runner 2>&1)"; rc=$?
+  printf '%s\n' "$out" > "$WORK/dc-$1.out"
+  printf '%s\n' "$rc" > "$WORK/dc-$1.rc"
 }
 
 # Under a stray marker only M23/M24 can be scored, and against the Z arms alone: arm A, their control, is
@@ -1355,6 +1429,12 @@ if [ "$NESTED" != 1 ] && [ -z "$STRAY" ]; then
   run_mutant M25 "Z3 Z1 A" '[ "$hr_honours" = 1 ]; }; then' 'true; }; then' &
   # M26: the $HOME message advises moving TMPDIR, which cannot move a bare mktemp -d where this branch is reachable.
   run_mutant M26 "Z4 Z3" 'TMPDIR cannot move a bare mktemp -d here; do not remove the marker. Run under an account whose system temp dir is outside $HOME.' 'Point TMPDIR outside $HOME; do not remove the marker.' &
+  # DC: the declaration-completeness mutants (definitions and the uncovered lines above dc_run).
+  dc_run DC0 "" &
+  dc_run DC1 "core/scripts/hermetic-run.sh" &
+  dc_run DC2 "core/scripts/core-paths.sh" &
+  dc_run DC3 "core/fixtures/lib/" &
+  [ ! -d "$ROOT/core/scripts" ] || dc_run DC4 ".githooks/pre-push" &
   # cwd-invariance: two nested runs of this fixture from different working directories.
   ( cd "$ROOT" && HERMETIC_FX_NESTED=1 bash "$HERE/run.sh" > "$WORK/cwd1.out" 2>&1; echo $? > "$WORK/cwd1.rc" ) &
   ( cd "$(dirname "$RUN_TREE")" && HERMETIC_FX_NESTED=1 bash "$HERE/run.sh" > "$WORK/cwd2.out" 2>&1; echo $? > "$WORK/cwd2.rc" ) &
@@ -1368,6 +1448,21 @@ if [ "$NESTED" != 1 ] && [ -z "$STRAY" ]; then
     fi
     eq "$mname fails exactly its own arms [$want]" "$got" "$want"
   done
+  CUR=DC
+  [ "$(cat "$WORK/dc-DC0.rc" 2>/dev/null)" != BROKEN ] || { echo "FIXTURE ERROR: DC0, the unmutated declared copy, could not be built" >&2; exit 2; }
+  eq "DC0 the unmutated declared copy passes: exit" "$(cat "$WORK/dc-DC0.rc" 2>/dev/null)" 0
+  yes "DC0 the copy ran arm A" "$(cat "$WORK/dc-DC0.out" 2>/dev/null)" "  ok    A: declared file+dir: exit 0"
+  yes "DC0 the copy ran arm L" "$(cat "$WORK/dc-DC0.out" 2>/dev/null)" "  ok    L: consumer layout, core/ declaration: exit 0"
+  dc_pairs="DC1|2|FIXTURE ERROR: hermetic-run.sh not found walking up from
+DC2|1|FAIL  L: no core-paths.sh beside the runner under test
+DC3|2|FIXTURE BROKEN: core/fixtures/lib/preamble.sh is absent"
+  [ ! -d "$ROOT/core/scripts" ] || dc_pairs="$dc_pairs
+DC4|2|FIXTURE ERROR: a distribution tree (core/scripts/ present) with no .githooks/pre-push"
+  while IFS='|' read -r dcid dcrc dcmsg; do
+    [ "$(cat "$WORK/dc-$dcid.rc" 2>/dev/null)" != BROKEN ] || { echo "FIXTURE ERROR: $dcid did not apply: its inputs.decl line is gone, or the copy could not be built" >&2; exit 2; }
+    eq "$dcid one declared line removed: exit" "$(cat "$WORK/dc-$dcid.rc" 2>/dev/null)" "$dcrc"
+    yes "$dcid fails for its own line" "$(cat "$WORK/dc-$dcid.out" 2>/dev/null)" "$dcmsg"
+  done <<<"$dc_pairs"
   CUR=cwd
   eq "from the root: exit 0" "$(cat "$WORK/cwd1.rc" 2>/dev/null)" 0
   eq "from the runner's dir: exit 0" "$(cat "$WORK/cwd2.rc" 2>/dev/null)" 0

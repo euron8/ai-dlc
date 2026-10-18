@@ -65,6 +65,10 @@
 # unsets AI_DLC_*, and a fallback-to-'a' design would run shard 'a' three times and report three
 # green fixtures. The sibling directories `-b`, `-c` and `-d` are one-line drivers that exec this file.
 #
+# D14 (BL-583 b) runs in EVERY shard too: each shard's `inputs.decl` and `tools.decl` must equal shard a's
+# apart from the driver lines, so a declaration edited in one shard alone fails all four, and shard a's
+# C0 and premise stand for the others on a harness known to be the same.
+#
 # THE COVERAGE JOIN runs in EVERY shard, before any tree is built: the declared mutant set is
 # DERIVED from this file's own `run_mutant M<n>-` lines, and the dealt lists must be disjoint and
 # their union must equal it exactly, so no mutant can fall out of every shard; every declared shard
@@ -128,6 +132,28 @@ if once_ok 1 1 0 || once_ok 0 0 1 || once_ok 1 0 1 || once_ok 0 1 1 || once_ok 0
   echo "FIXTURE BROKEN: the J2 once-only predicate's self-probe did not discriminate" >&2
   rm -rf "$JW"; exit 2
 fi
+# D14 (BL-583 b): the predicate that holds every shard's declarations to shard a's, and its self-probe.
+# decl_same <a file> <x file> <a dir> <x dir>: 0 when X equals A once comment lines and the `run.sh`
+# driver lines of the compared pair (shard a's and X's own) are removed. Any other difference -- an extra
+# line, a missing line, a flipped `!`, an unreadable file -- is a shard whose harness is not a's.
+decl_strip() { grep -v -E -e '^[[:space:]]*#' -e "^!?core/fixtures/($2|$3)/run\\.sh\$" "$1"; }
+decl_same() {
+  [ -f "$1" ] && [ -f "$2" ] || return 1
+  [ "$(decl_strip "$1" "$3" "$4")" = "$(decl_strip "$2" "$3" "$4")" ]
+}
+PD="$JW"
+printf '%s\n' '# header a' '!core/s/y.sh' 'core/fixtures/fold-architect-ledger-join-mutants-b/run.sh' 'core/fixtures/fold-architect-ledger-join-mutants-c/run.sh' > "$PD/a"
+printf '%s\n' '# header b' '!core/s/y.sh' '!core/fixtures/fold-architect-ledger-join-mutants/run.sh' 'core/fixtures/fold-architect-ledger-join-mutants-c/run.sh' > "$PD/ok"
+printf '%s\n' '# header b' '!core/s/y.sh' '!core/fixtures/fold-architect-ledger-join-mutants/run.sh' 'core/fixtures/fold-architect-ledger-join-mutants-c/run.sh' 'core/extra.sh' > "$PD/extra"
+printf '%s\n' '# header b' '!core/s/y.sh' '!core/fixtures/fold-architect-ledger-join-mutants/run.sh' > "$PD/other"
+printf '%s\n' '# header b' 'core/s/y.sh' '!core/fixtures/fold-architect-ledger-join-mutants/run.sh' 'core/fixtures/fold-architect-ledger-join-mutants-c/run.sh' > "$PD/flip"
+if ! decl_same "$PD/a" "$PD/ok" fold-architect-ledger-join-mutants fold-architect-ledger-join-mutants-b || decl_same "$PD/a" "$PD/extra" fold-architect-ledger-join-mutants fold-architect-ledger-join-mutants-b || decl_same "$PD/a" "$PD/other" fold-architect-ledger-join-mutants fold-architect-ledger-join-mutants-b \
+   || decl_same "$PD/a" "$PD/flip" fold-architect-ledger-join-mutants fold-architect-ledger-join-mutants-b || decl_same "$PD/a" "$PD/nonexistent" fold-architect-ledger-join-mutants fold-architect-ledger-join-mutants-b; then
+  rm -f "$PD/a" "$PD/ok" "$PD/extra" "$PD/other" "$PD/flip"
+  echo "FIXTURE BROKEN: the D14 declaration-equality predicate's self-probe did not discriminate" >&2
+  rm -rf "$JW"; exit 2
+fi
+rm -f "$PD/a" "$PD/ok" "$PD/extra" "$PD/other" "$PD/flip"
 sed -n 's/^run_mutant \(M[0-9][0-9]*\)-.*/\1/p' "$SELF" > "$JW/declared"
 for s in $SHARDS; do eval "printf '%s\n' \${MUTANTS_$s}"; done | grep . > "$JW/dealt"
 ndecl="$(grep -c . "$JW/declared")" || ndecl=0
@@ -162,7 +188,7 @@ done
 command -v python3 >/dev/null 2>&1 || { echo "FIXTURE ERROR: python3 not on PATH" >&2; exit 2; }
 echo "HERMETIC-CONSUMED $VSL_REL"
 
-WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/falj.XXXXXX" 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd)"
 case "$WORK" in /tmp/*|/private/*|/var/folders/*) trap 'rm -rf "$WORK"' EXIT ;; esac
 
@@ -173,6 +199,19 @@ fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 ok "$JOIN_LINE"
+
+# D14: every shard checks every sibling shard's declarations against shard a's. A declaration edited in
+# one shard alone fails EVERY shard, which is what lets shard a's control stand for the others.
+for _f in inputs.decl tools.decl; do
+  for _s in $SHARDS; do
+    [ "$_s" = a ] && continue
+    if decl_same "$HERE/$_f" "$HERE/../fold-architect-ledger-join-mutants-$_s/$_f" fold-architect-ledger-join-mutants "fold-architect-ledger-join-mutants-$_s"; then
+      ok "[D14] $_f of shard '$_s' equals shard a's apart from the drivers"
+    else
+      bad "[D14] $_f of shard '$_s' differs from shard a's beyond its driver line (or is unreadable), so shard a's control does not stand for it"
+    fi
+  done
+done
 
 # The fixture's own tree: core/ minus the other fixtures, the fixture under test, and scripts/
 # (validate-enforcement-map.sh, for the I32 premise below).
