@@ -3969,6 +3969,7 @@ Batch 221 (graph-ledger-full-drain), third release. Thirty-three `inputs.decl` f
 - BL-465 and BL-496 annotated LANDED and rotated. BL-497 filed: nothing joins a fixture's declaration against its
   read-set trace, and that join, run once, finds 110 of 182 traced declared fixtures reading an undeclared tracked file.
 
+## [0.770.0] - 2026-10-10
 Batch 221 (graph-ledger-full-drain), second release. `hermetic-run.sh` nested a fixture's own directory inside
 itself whenever a declaration had already copied part of it in, on this tree AND on consumers; and
 `validator-fork-budget` is declared.
@@ -4009,6 +4010,7 @@ itself whenever a declaration had already copied part of it in, on this tree AND
   fixed runner it reads 3323, arm for arm equal to the worktree, under `FORK_BUDGET=3335`.
 - BL-481 stays open: `self-update-join-gate` is still reported UNMAPPED beside `hermetic-runner`.
 
+## [0.769.0] - 2026-10-10
 Batch 221 (graph-ledger-full-drain), first release. Since 0.763.0 the reference consumer's pre-push refused every
 push on two shipped fixtures that pass when run directly, and the consumer has pushed with `--no-verify` since.
 
@@ -4040,6 +4042,7 @@ push on two shipped fixtures that pass when run directly, and the consumer has p
 BL-465 is adjudicated CLOSE this batch (a width-6 push compared its pole against its own width's three rows) and is
 annotated at the batch close.
 
+## [0.768.0] - 2026-10-10
 Batch 220 (graph-ledger-full-drain), second release. The detached post-green read-set trace had no lifetime bound:
 on the reference consumer one survived its push by 42 minutes with parent init, holding `diagnosticd` and
 `fseventsd` busy until the operator killed its process group. And two of the fixtures that ran unmapped on every
@@ -40275,6 +40278,7 @@ whole history and cannot land. Core exempts it and says so.
   against. The explicit no-refs branch is what surfaced it; a silent pass there would
   have shipped a check that cannot fire. That branch is now asserted on its wording.
 
+## [0.200.0] — 2026-07-28
 ### Added — core demanded a mutation-RED capture in four rule files and shipped no way to take one
 
 `scripts/ai-dlc/validate-mutation-red.sh <target-file> <line-number> <replacement-line>

@@ -83,6 +83,30 @@
 #      arm is not redundant with A and B. The retained squash `de1cc21` adds three
 #      and likewise passes the triple.
 #
+#      A RANGE ALSO REMOVES NO HEADING PRESENT AT ITS BASE. A count of ADDED
+#      headings is blind to a release that REPLACES the previous release's heading
+#      in place: 0.806.0 (581ca289, parent c07dc9d1) turned `## [0.805.0]` into
+#      `## [0.806.0]`, the set difference netted to one added, and it passed. The
+#      old release's body survived under the new heading with nothing naming it.
+#      MEASURED FALSE-POSITIVE SET: a census over 917 first-parent commits that
+#      touched CHANGELOG.md found 5 that removed a heading and never restored it,
+#      all true positives -- 581ca289 removed 0.805.0; 60f776c2, fc957e40 and
+#      f2e0403f removed 0.768.0, 0.769.0 and 0.770.0; 0cc40283 removed 0.200.0.
+#
+#      A RESTORED HISTORICAL HEADING IS NOT A NEW RELEASE. The repair of the shape
+#      above re-adds a heading, and a range carrying that repair plus its own
+#      release counted two and failed (ed0fa33d restored 0.805.0). So when two or
+#      more are added, a heading at or BELOW the base's top heading (numeric per
+#      field, in awk -- `sort -V` is not on this box) is exempt iff
+#      `git log -1 -S "## [x.y.z]" <range_base> -- CHANGELOG.md` finds it in the
+#      base's own history; it is named on a NOTE line, never silently dropped. A
+#      heading ABOVE the base top always counts. THE TRAP: the search starts at
+#      range_base, NEVER the tip -- from the tip `-S` finds the restoring commit
+#      itself and exempts every low-numbered heading anyone writes. The exemption
+#      is skipped entirely below two added headings, so a normal one-release push
+#      pays no `-S` call; measured cost when it runs, 0.07 s on a recent hit and
+#      ~2 s on an old or absent heading.
+#
 #   D. A branch carries no commit that exists on local `main` but not on
 #      `origin/main`. That is the PRECONDITION of the squash above: such commits
 #      sit behind the PR's merge-base and ride into it unremarked. Evaluated only
@@ -175,10 +199,11 @@
 #                   origin/main is not present (a fresh clone, a detached head).
 #
 # EXIT
-#   0  every checked commit's three names agree, the range carries one release,
+#   0  every checked commit's three names agree, the range carries one release
+#      and removes no heading,
 #      the branch inherits nothing unpushed from local main, no tracked file
 #      carries conflict markers, and no not-discharged citation is misspelled
-#   1  a disagreement, a multi-release range, an unpushed-main inheritance, a
+#   1  a disagreement, a multi-release range, a removed heading, an unpushed-main inheritance, a
 #      committed conflict, a misspelled citation, or a commit that could not be read
 
 set -uo pipefail
@@ -248,7 +273,15 @@ semver_of() { printf '%s' "$1" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1; }
 #
 # Keyed on the CHANGELOG heading set at each end of the range, never on the
 # triple's internal agreement -- see the header for why that distinction is the
-# whole point of this arm.
+# whole point of this arm. Two directions: a heading present at the base and gone
+# at the tip fails (an in-place replacement), and more than one heading added
+# fails once restored historical headings are set aside. The header carries the
+# measured false-positive set and the search-from-the-base trap.
+#
+# THE CONDITIONS ARE SPELLED `[ -n "$removed" ]` AND `-gt 1` ON PURPOSE, for the
+# same reason as arm E's below: the fixture neuters this arm's count and arm D's
+# by rewriting each one's threshold-and-`then` text, and a new line sharing either
+# anchor would move two cells under one mutation.
 # ---------------------------------------------------------------------------
 headings_at() {
   # No `grep -m1`: the first heading is not the question, the SET is. Sorted
@@ -283,15 +316,84 @@ else
   [ -n "$range_base" ] || range_why="origin/main is absent and HEAD is a root commit"
 fi
 
-if [ -n "$range_base" ]; then
+semver_le() { # <a> <b> -> 0 when a <= b, compared NUMERICALLY per field
+  # `sort -V` is not on this box's BSD userland, and a lexical compare puts
+  # 0.10.0 below 0.9.0. awk coerces each field to a number.
+  awk -v a="$1" -v b="$2" 'BEGIN {
+    split(a, x, "."); split(b, y, ".")
+    for (i = 1; i <= 3; i++) {
+      if (x[i] + 0 < y[i] + 0) exit 0
+      if (x[i] + 0 > y[i] + 0) exit 1
+    }
+    exit 0 }'
+}
+
+restored_in_history() { # <"## [x.y.z]"> -> a sha when the heading text ever changed at or before the BASE
+  # SEARCHED FROM range_base, NEVER the tip. From the tip, `-S` finds the very
+  # commit that restores (or invents) the heading and exempts everything -- the
+  # exemption would then acquit every multi-release range carrying a low number.
+  git log -1 --format=%H -S "$1" "$range_base" -- CHANGELOG.md 2>/dev/null
+}
+
+# THE SELF-PROBE RUNS BEFORE THE CORPUS, both directions, no git. The exemption
+# below turns on one numeric comparison; a lexical one would read 0.10.0 as below
+# 0.9.0 and exempt a release ABOVE the base's top. The `-S` half is not probed
+# here -- it is git's own search, and the release-version-triple fixture drives it
+# both ways (R3 exempt, R5 refused, and a mutant searching from the tip).
+arm_c_probe_bad=""
+semver_le 0.9.0 0.10.0 || arm_c_probe_bad="0.9.0 <= 0.10.0 read false"
+semver_le 0.10.0 0.9.0 && arm_c_probe_bad="${arm_c_probe_bad:+$arm_c_probe_bad; }0.10.0 <= 0.9.0 read true"
+semver_le 0.9.0 0.9.0 || arm_c_probe_bad="${arm_c_probe_bad:+$arm_c_probe_bad; }0.9.0 <= 0.9.0 read false"
+
+range_removed=0
+range_multi=0
+if [ -n "$arm_c_probe_bad" ]; then
+  echo "FAIL  arm C's own semver probe did not discriminate -- $arm_c_probe_bad. Every restored-heading exemption below would then rest on a comparison that cannot order two releases." >&2
+  range_fail=1
+elif [ -n "$range_base" ]; then
   arm_c_ran=1
+  # REMOVAL FIRST. A release that REPLACES the previous release's heading in
+  # place nets to one added heading and passed the count below; the heading it
+  # destroyed is visible only as a member of the base set missing at the tip.
+  removed="$(comm -23 <(headings_at "$range_base") <(headings_at "$range_tip"))"
+  if [ -n "$removed" ]; then
+    echo "FAIL  this range removes release heading(s) present at its base: $(printf '%s\n' "$removed" | tr -d '#[] ' | tr '\n' ' ')" >&2
+    range_fail=1
+    range_removed=1
+  fi
   added="$(comm -13 <(headings_at "$range_base") <(headings_at "$range_tip"))"
   # `grep -c` prints 0 and exits 1 on no match; it answers this unaided and a
   # `|| echo 0` fallback would fire on exactly the case it appears to cover.
   n_added="$(printf '%s\n' "$added" | grep -c .)"
+  # THE RESTORED-HEADING EXEMPTION, computed only when the count could fail, so a
+  # normal one-release push pays zero `git log -S` calls. The base's top is read
+  # in FILE order the way predicate B reads it, never from `headings_at`, whose
+  # lexical sort puts 0.10.0 before 0.9.0. An EMPTY base top (a root, or a
+  # headingless parent) exempts nothing: every added heading counts as new.
+  if [ "${n_added:-0}" -gt 1 ]; then
+    base_top="$(semver_of "$(git show "$range_base:CHANGELOG.md" 2>/dev/null \
+                  | grep -m1 -E '^## \[[0-9]+\.[0-9]+\.[0-9]+\]')")"
+    new_list=""; exempt_list=""
+    while IFS= read -r h; do
+      [ -n "$h" ] || continue
+      hv="$(semver_of "$h")"
+      if [ -n "$base_top" ] && semver_le "$hv" "$base_top" && [ -n "$(restored_in_history "$h")" ]; then
+        exempt_list="${exempt_list:+$exempt_list }$hv"
+      else
+        new_list="${new_list}${h}
+"
+      fi
+    done <<<"$added"
+    if [ -n "$exempt_list" ]; then
+      echo "NOTE  restored historical heading(s), not counted: $exempt_list"
+    fi
+    added="$new_list"
+    n_added="$(printf '%s' "$added" | grep -c .)"
+  fi
   if [ "${n_added:-0}" -ge 2 ]; then
     echo "FAIL  this range adds ${n_added} release headings to CHANGELOG.md: $(printf '%s\n' "$added" | tr -d '#[] ' | tr '\n' ' ')" >&2
     range_fail=1
+    range_multi=1
   fi
 else
   # Announced rather than skipped: an arm that goes quiet reads exactly like one
@@ -539,7 +641,21 @@ EOF
   echo "FAIL: ${fails} of ${checked} commit(s) disagree." >&2
 fi
 
-if [ "$range_fail" -ne 0 ]; then
+if [ "$range_removed" -ne 0 ]; then
+  cat >&2 <<'EOF'
+
+      A release heading that existed at the range's base is gone at its tip. The
+      usual shape is a release that edited the previous heading's version in place
+      instead of inserting its own above it: the old release's body survives, now
+      filed under the new release's heading, and nothing names it any more. A
+      count of added headings cannot see this, because the replacement nets to one.
+
+      Remedy: put the removed heading line back above its own body and insert this
+      release's heading above it. `git show <base>:CHANGELOG.md` has the original.
+EOF
+fi
+
+if [ "$range_multi" -ne 0 ]; then
   cat >&2 <<'EOF'
 
       A range that adds more than one release heading is a multi-version branch,
@@ -607,7 +723,7 @@ fi
 # fixed summary would report an unevaluated arm as a green one, which is the
 # failure mode this file is a response to.
 summary="PASS  ${checked} commit(s)${SUBJECT_NOTE}: subject, VERSION and CHANGELOG heading agree"
-if [ "$arm_c_ran" -eq 1 ]; then summary="$summary; one release in the range"
+if [ "$arm_c_ran" -eq 1 ]; then summary="$summary; one release in the range, no heading removed"
 else                            summary="$summary; MULTI-RELEASE ARM NOT EVALUATED"; fi
 if [ "$arm_d_ran" -eq 1 ]; then summary="$summary; no unpushed main commits inherited"
 elif [ "$arm_d_why" = "on-main" ]; then summary="$summary; branch-base arm n/a on main"
