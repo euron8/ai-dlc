@@ -586,12 +586,181 @@ if mut prune-suffix-unanchored '/case "\${fl_f##\*\.}" in/d'; then M="$MUT"
   fi
 fi
 
+# ================================================ 7. NO-PROGRESS REFUSAL (BL-606) ===
+# THE DEFECT. Every pool run site ran its unit unbounded, so one hung unit hung the push with
+# nothing to say which. `pool_run` now refuses a unit whose progress signature -- log size plus
+# the CPU time and membership of its whole descendant tree, across every process group in it --
+# stays still for POOL_STALL polls, kills that tree by recorded ids, and records REFUSED.
+# Four stubs, each moving through ONE channel so no mutant is covered by another channel:
+#   (h)  a hang whose `sleep` is a grandchild: REFUSED, and no recorded member survives;
+#   (s)  writes one log line a second for 4 x POOL_STALL polls, CPU-free and fork-free (a `read -t`
+#        on a fifo paces it): ok -- the LOG alone carries its progress;
+#   (g)  a grandchild in its OWN group (`set -m`) burns CPU every second while the log stays silent
+#        and the parent waits: ok -- only the cross-group walk sees it move;
+#   (gh) the same grandchild shape, idle: REFUSED, and the grandchild's group is gone;
+#   (f)  exits 1: FAIL, never REFUSED.
+# Every pid a stub starts is RECORDED by the stub, and checked and stopped by that pid only.
+# THE VERDICT IS BINARY: REFUSED or not, alive or gone; nothing is judged on elapsed time.
+st_stub() {                    # st_stub <tree> <name> : writes the stub and its helper
+  local t="$1" n="$2" d="$1/tests/fixtures/$2"
+  mkdir -p "$d"
+  case "$n" in
+    h) cat > "$d/run.sh" <<'FX'
+#!/usr/bin/env bash
+echo $$ >> "$CSP_PIDS/h"
+bash -c 'echo $$ >> "$1"; sleep 100000 & echo $! >> "$1"; wait $!; :' _ "$CSP_PIDS/h"
+FX
+    ;;
+    s) cat > "$d/run.sh" <<'FX'
+#!/usr/bin/env bash
+echo $$ >> "$CSP_PIDS/s"
+exec 3<>"$CSP_FIFO"; i=0
+while [ $i -lt $((4 * CSP_STALL)) ]; do i=$((i + 1)); echo "line $i"; read -t 1 -u 3 x; done
+exit 0
+FX
+    ;;
+    g|gh) cat > "$d/run.sh" <<'FX'
+#!/usr/bin/env bash
+n="$(basename "$(cd "$(dirname "$0")" && pwd)")"
+echo $$ >> "$CSP_PIDS/$n"
+ps -o pgid= -p $$ | tr -d ' ' > "$CSP_PIDS/$n.pgid.parent"
+bash -c 'set -m; bash "$1" & echo $! >> "$2"; wait $!; :' _ "$(dirname "$0")/gc.sh" "$CSP_PIDS/$n"
+exit 0
+FX
+      if [ "$n" = g ]; then cat > "$d/gc.sh" <<'FX'
+ps -o pgid= -p $$ | tr -d ' ' > "$CSP_PIDS/g.pgid.gc"
+exec 3<>"$CSP_FIFO"; k=0
+while [ $k -lt $((4 * CSP_STALL)) ]; do
+  k=$((k + 1)); j=0; while [ $j -lt 20000 ]; do j=$((j + 1)); done
+  read -t 1 -u 3 x
+done
+FX
+      else cat > "$d/gc.sh" <<'FX'
+ps -o pgid= -p $$ | tr -d ' ' > "$CSP_PIDS/gh.pgid.gc"
+sleep 100000 & echo $! >> "$CSP_PIDS/gh"; wait $!
+FX
+      fi
+    ;;
+    f) printf '#!/usr/bin/env bash\necho $$ >> "$CSP_PIDS/f"\nexit 1\n' > "$d/run.sh" ;;
+  esac
+}
+ST=3                           # AI_DLC_POOL_STALL for every drive in this section
+st_world() {                   # st_world <tree> <hook> <stubs...> : seed, export CSP_* for this world
+  local t="$1" h="$2" n; shift 2
+  seed "$t" "$h" || broken "seed failed"
+  mkdir -p "$t/pids"; mkfifo "$t/fifo" || broken "mkfifo failed"
+  for n in "$@"; do st_stub "$t" "$n"; done
+  export CSP_PIDS="$t/pids" CSP_FIFO="$t/fifo" CSP_STALL="$ST"
+}
+st_drive() {                   # st_drive <tree> <outfile> -> rc
+  ( cd "$1" && AI_DLC_POOL_STALL="$ST" AI_DLC_READSET_LIVE_TRACE=0 bash .githooks/pre-push </dev/null >"$2" 2>&1; echo $? )
+}
+# st_alive <tree> <stub>: count the stub's RECORDED pids still alive, and kill each by that pid.
+st_alive() {
+  local n=0 p f="$1/pids/$2"
+  [ -s "$f" ] || { echo none; return; }
+  while read -r p; do
+    case "$p" in ''|*[!0-9]*) continue ;; esac
+    if kill -0 "$p" 2>/dev/null; then n=$((n + 1)); kill -KILL "$p" 2>/dev/null; fi
+  done < "$f"
+  echo "$n"
+}
+st_refused() { grep -q "REFUSED  $2  (no progress for $ST polls; a refusal costs a re-run, never a verdict)" "$1"; }
+
+T="$WORK/stall"; st_world "$T" "$HOOK" h s g gh f
+rc="$(st_drive "$T" "$WORK/stall.out")"
+# SEED VALIDITY FIRST: (g)'s grandchild must really sit in another group, or the cross-group arm
+# below would pass against a walk that never leaves the leader's group.
+g_pp="$(cat "$T/pids/g.pgid.parent" 2>/dev/null)"; g_gc="$(cat "$T/pids/g.pgid.gc" 2>/dev/null)"
+[ -n "$g_pp" ] && [ -n "$g_gc" ] && [ "$g_pp" != "$g_gc" ] \
+  || broken "stub (g)'s grandchild did not lead its own process group (parent $g_pp, grandchild $g_gc) -- the cross-group arm would read a world nobody built"
+h_live="$(st_alive "$T" h)"; gh_live="$(st_alive "$T" gh)"
+if st_refused "$WORK/stall.out" h && [ "$h_live" = 0 ]; then
+  ok "(h) a hung unit is REFUSED and every member of its tree it recorded, the grandchild sleep included, is gone"
+else
+  bad "(h) a hung unit was not refused with its whole tree killed (rc=$rc, live recorded members $h_live): $(grep ' h' "$WORK/stall.out" | tr '\n' ' ')"
+fi
+if grep -q '^   ok    s$' "$WORK/stall.out"; then
+  ok "(s) a unit that writes its log for 4x POOL_STALL polls is ok, not refused -- the log is part of the signature"
+else
+  bad "(s) a slow unit whose only progress is its log was not ok: $(grep ' s' "$WORK/stall.out" | tr '\n' ' ')"
+fi
+if grep -q '^   ok    g$' "$WORK/stall.out"; then
+  ok "(g) a unit whose grandchild works in its OWN group is ok while it progresses -- the walk crosses groups"
+else
+  bad "(g) a unit whose grandchild works in another group was not ok: $(grep ' g$\| g ' "$WORK/stall.out" | tr '\n' ' ')"
+fi
+if st_refused "$WORK/stall.out" gh && [ "$gh_live" = 0 ]; then
+  ok "(gh) the same cross-group grandchild, idle, is REFUSED and its group is killed"
+else
+  bad "(gh) a hung cross-group grandchild was not refused and killed (live recorded members $gh_live)"
+fi
+if [ "$rc" = 1 ] && grep -q '^   FAIL  f$' "$WORK/stall.out" && ! st_refused "$WORK/stall.out" f; then
+  ok "(f) a unit that exits 1 is FAIL, not REFUSED, and a real FAIL beside a refusal exits 1"
+else
+  bad "(f) exit 1 did not read FAIL with the push at 1 (rc=$rc)"
+fi
+
+# THE EXIT-2 CARRIER: a refusal alone exits 2, never 1 and never 0.
+T="$WORK/stall2"; st_world "$T" "$HOOK" h
+mkfx "$T" alpha 0
+rc="$(st_drive "$T" "$WORK/stall2.out")"
+h2_live="$(st_alive "$T" h)"
+if [ "$rc" = 2 ] && st_refused "$WORK/stall2.out" h && grep -q '^   ok    alpha$' "$WORK/stall2.out" && [ "$h2_live" = 0 ]; then
+  ok "a refusal with no FAIL beside it exits 2: the absence of a verdict, not a red verdict"
+else
+  bad "a lone refusal did not exit 2 (rc=$rc, live recorded members $h2_live)"
+fi
+
+# MUTANTS of the refusal, each a copy of the RESOLVED hook, applied by exact-string replacement and
+# guarded by `cmp -s`; each asserts the observable its own removal produces.
+mutx() {                       # mutx <label> <old> <new> -> sets MUT, or returns 1
+  local m="$WORK/hook.$1"
+  OLD="$2" NEW="$3" awk '{ i = index($0, ENVIRON["OLD"]); if (i > 0) { $0 = substr($0, 1, i - 1) ENVIRON["NEW"] substr($0, i + length(ENVIRON["OLD"])); n++ } print } END { if (n != 1) exit 3 }' "$HOOK" > "$m" \
+    || { bad "MUTANT $1 did not apply (its anchor is not unique in $HOOK)"; return 1; }
+  cmp -s "$HOOK" "$m" && { bad "MUTANT $1 matched nothing (cmp -s guard)"; return 1; }
+  MUT="$m"
+}
+# st-a: the signature omits the log, so (s), whose only progress is its log, is refused.
+if mutx st-a 'cur="$(wc -c < "$lg" | tr -d " ");$wsig"' 'cur="$wsig"'; then
+  T="$WORK/st-a"; st_world "$T" "$MUT" s
+  rc="$(st_drive "$T" "$WORK/st-a.out")"; st_alive "$T" s >/dev/null
+  st_refused "$WORK/st-a.out" s && ok "st-a without the log in the signature a log-only unit is REFUSED -- the log is what keeps (s) alive" \
+                                || bad "st-a (s) was not refused with the log dropped from the signature (rc=$rc)"
+fi
+# st-b: the refusal writes FAIL, so (h) reads FAIL and the push exits 1, not 2.
+if mutx st-b 'printf REFUSED > "$AI_DLC_FX_OUT/$b"' 'printf FAIL > "$AI_DLC_FX_OUT/$b"'; then
+  T="$WORK/st-b"; st_world "$T" "$MUT" h
+  rc="$(st_drive "$T" "$WORK/st-b.out")"; st_alive "$T" h >/dev/null
+  if [ "$rc" = 1 ] && grep -q '^   FAIL  h$' "$WORK/st-b.out" && ! st_refused "$WORK/st-b.out" h; then
+    ok "st-b a refusal written as FAIL reads as a red verdict at exit 1 -- the REFUSED record is what keeps it out of the verdicts"
+  else
+    bad "st-b the refusal-as-FAIL mutant did not read FAIL at 1 (rc=$rc)"
+  fi
+fi
+# st-c: the kill covers the leader pid only, so (h)'s grandchild sleep survives.
+if mutx st-c '            pool_kill "$pid" "$self" "$pr.g"' '            kill -KILL "$pid"'; then
+  T="$WORK/st-c"; st_world "$T" "$MUT" h
+  rc="$(st_drive "$T" "$WORK/st-c.out")"; c_live="$(st_alive "$T" h)"
+  [ "${c_live:-0}" != none ] && [ "${c_live:-0}" -ge 1 ] \
+    && ok "st-c killing the leader pid alone leaves $c_live recorded member(s) of (h)'s tree alive -- the tree kill is what reaps them" \
+    || bad "st-c with the leader-only kill no recorded member of (h) survived ($c_live) -- the arm cannot see a partial kill"
+fi
+# st-d: the walk stays in the leader's group, so (g)'s busy grandchild is invisible and (g) is refused.
+if mutx st-d '} else if ((pp[i] in T) || (pg[i] in G)) { T[pid[i]] = 1; c = 1 }' '} else if (pg[i] == root) { T[pid[i]] = 1; c = 1 }'; then
+  T="$WORK/st-d"; st_world "$T" "$MUT" g
+  rc="$(st_drive "$T" "$WORK/st-d.out")"; st_alive "$T" g >/dev/null
+  st_refused "$WORK/st-d.out" g && ok "st-d a walk confined to the leader's group REFUSES a unit whose grandchild works in its own group -- the cross-group walk is what keeps (g) alive" \
+                                || bad "st-d (g) was not refused with the walk confined to the leader's group (rc=$rc)"
+fi
+unset CSP_PIDS CSP_FIFO CSP_STALL
+
 # ------------------------------------------------------------------- floor ---------
 # EXPECTED_ASSERTIONS, mandatory since v0.217.0 for any fixture whose arms are
 # emitted from inside a conditional: an assertion that never executed prints nothing,
 # and a short green report reads exactly like a complete one. This is the same
 # property the hook itself now asserts about its own workers, one layer out.
-EXPECTED_ASSERTIONS=28
+EXPECTED_ASSERTIONS=38
 if [ "$asserts" -ne "$EXPECTED_ASSERTIONS" ]; then
   printf '  FAIL  %s assertions ran, %s expected — an arm did not execute, and a short green report reads exactly like a complete one\n' \
     "$asserts" "$EXPECTED_ASSERTIONS"

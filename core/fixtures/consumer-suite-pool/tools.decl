@@ -43,3 +43,4 @@ uniq
 wc
 xargs
 kill
+mkfifo

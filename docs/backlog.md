@@ -170,7 +170,9 @@ verify: manual
 
 **NOTE.** Filed by peer session ai-dlc-bb (batch 235 gate throughput), derived by the BL-592 contract adversary and re-derived by the filer. At origin/main 3d5f1e70 the pool worker runs each unit unbounded: `.githooks/pre-push:2027` (`bash "$hr" --root "$PWD" "$b"`) and `:2035`, `:2039` (`bash "$d/run.sh"`), intake confirmed; `core/git-hooks/pre-push` carries the same lines (I66 binds the pair). Per the filer the hook's 13 timeout/watchdog/`ulimit -t` matches all belong to the detached read-set trace's watchdog (:992-1054, :1194, :1217, :1315) plus a tool-key comment at :1339. `core/scripts/hermetic-run.sh` has 0 timeout/watchdog/`ulimit -t` matches against 6 `inputs.decl` (intake confirmed). The only hang bounds in the suite are the five mutant batteries' per-scorer watchdogs (BL-592's subject). A unit that hangs anywhere else hangs the push indefinitely, and a slow unit is indistinguishable from a hung one except by the operator watching the clock. No hang has been observed. Remedy left to the builder; one option is a per-unit bound derived from the unit's recorded clean cost.
 
-verify: manual
+Owed: the POOL_STALL window (300 polls) is a margin over one observed step, not a measurement. The measurement is a forced full run on an unpushed throwaway branch, inside a slot, reading the per-unit maximum still count each run publishes to `.git/ai-dlc-pool-stall.last`.
+
+verify: sh bash core/fixtures/consumer-suite-pool/receipt.sh
 
 ## BL-608 — the validator fork budget's headroom eroded from +6 to 0 across five releases, and nothing warned
 
