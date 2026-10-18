@@ -945,6 +945,21 @@ p_chkrec() { # --escalations: a record with neither field is outside the era -> 
   esc_rec "$1" '- advisor: called\n\n### F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n'
   [ "$r0" -eq 0 ] && [ "$RC" -eq 2 ] && has "$JO" "stories-repair-p1.md: no derivations: line"
 }
+# ---- THE SERIAL BLOCKS (BL-557): segmented by their column-0 `repair-complete:` terminators.
+CHS_HEAD='- artifact: r.md\n\n<!-- shard: 01.md -->\n- artifact: p.md\n- advisor: called\n- derivations: replayed 1\n\n### F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\n### F-2 — MAJOR\n- disposition: escalated\n- edit: n/a\n\n- artifact: p.md\n- advisor: called\n- derivations: replayed 2\n\n### S-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\nrepair-complete: serial 1\n'
+CHS_TAIL='\n### S-2 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\nrepair-complete: serial 2\n'
+p_chkserial() { # --escalations over a joined record carrying TWO serial blocks, the part and the first block
+  # stating both lines: the second block omits both -> rc 2 naming THAT block's terminator, the count
+  # still printed; the same record with the second block stating both -> rc 0. A last-triple or
+  # last-part read lends the second block the first block's or the part's lines and reads 0 both ways.
+  esc_rec "$1" "${CHS_HEAD}${CHS_TAIL}"
+  local r1="$RC"
+  has "$JO" "no advisor: line (the block closed at line 30 by 'repair-complete: serial 2')" \
+    && has "$JO" "no derivations: line (the block closed at line 30 by 'repair-complete: serial 2')" \
+    && ! has "$JO" "serial 1')" && has "$JO" "ESCALATED-COUNT: 1 (0 closed" || return 1
+  esc_rec "$1" "${CHS_HEAD}- advisor: unavailable\n- derivations: replayed 0\n${CHS_TAIL}"
+  [ "$r1" -eq 2 ] && [ "$RC" -eq 0 ] && ! has "$JO" "REFUSED" && has "$JO" "ESCALATED: 01.md F-2 — MAJOR"
+}
 
 # ---- RE-RUN OF ONE PART (--rerun <part>.md@<ISO>) AND THE ALIAS RULE. Every row is still the REAL
 # hook's; only its clock is pinned, by the `date` shim drive() puts on PATH when it is handed a ts.
@@ -1431,7 +1446,7 @@ p_agentwrites() {
   [ "$RC" -eq 2 ] && has "$JO" "REFUSED:"
 }
 
-P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrargs rrfiles rrsubj alias alnokeys alresult alown alsecond alother alsess altwo altool nested rronly dispkey dispvocab dispruling srcparts gapfill chkpart chkrec rulingedit rulingtab chkjoined partsilent specstale specfresh spechand specnone spectwo sjspecstale sjspecfresh sjspecnone specother specunread agentwrites"
+P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrargs rrfiles rrsubj alias alnokeys alresult alown alsecond alother alsess altwo altool nested rronly dispkey dispvocab dispruling srcparts gapfill chkpart chkrec rulingedit rulingtab chkjoined partsilent specstale specfresh spechand specnone spectwo sjspecstale sjspecfresh sjspecnone specother specunread agentwrites chkserial"
 
 # ---- A PART'S DERIVATION SURVIVES THE JOIN. The part's ```derived fence is copied into the joined
 # record, and the gate re-runs `validate-artifact-derivations.sh` over the sprint dir AFTER the

@@ -786,9 +786,30 @@ src_probe() {
 #       (`Advisor: unavailable (rate-limited) ...`), and read case-insensitively they would bind
 #       s317 stories-repair-p1.md and shards/stories-adversarial-repair-p1/20.md -- each carries a
 #       lone advisor line and no derivations line, so each would refuse where the base passes.
-#       HOLES, STATED: a serial pass writing neither line never enters the era; and the fields are
-#       read per FILE, so in a joined record the parts' own lines satisfy the check and a serial
-#       remediator that omits its own two is not caught.
+#       THE SERIAL BLOCKS ARE SEGMENTED BY THEIR TERMINATORS, and the lines are counted PER SEGMENT,
+#       never per file. After the last shard marker, the last part runs to the SECOND `- artifact:`
+#       triple (the first is the part's own; the serial remediator opens its block with its own,
+#       remediator.md); the first block runs from that triple to the first column-0
+#       `repair-complete:` line, and each later block from the previous terminator to its own. A block
+#       closed by `repair-complete: serial ...` OWES BOTH LINES whatever any era says: that line and
+#       the check-fields rule shipped together, so a record carrying it was written under the rule.
+#       A `repair-complete: spec-render ...` block owes neither; an unterminated tail is era-gated
+#       like a part. A serial terminator with no second triple is refused by name: that block's lines
+#       cannot be told from the last part's. An unmarked record owes the lines only in a block its
+#       serial terminator closes; with none it is one era-gated segment, as before. The parts' lines
+#       never satisfy a serial block. Each part and the text above the first marker are judged on
+#       their own, era-gated each: a pre-rule part carrying neither line charges nothing, so a
+#       record whose parts predate the rule is still read (graph s319 requirements-repair-p1, parts
+#       01-12). FALSE-POSITIVE SET, MEASURED with this checks_field over graph's 4 s319 records
+#       carrying `repair-complete: serial` (8 blocks, c3-term.py beside it): 0 new findings; the one
+#       CHK line in requirements-repair-p1 (a prose `derivations: replayed. ...` value in the
+#       spec-render block) is read identically at the base. 0 of the 343 `.md` files under graph's
+#       `shards/*repair*` dirs carry two triple lines (313 carry one, the control), so the part's own
+#       triple is the first. THE DEFINITION THIS REPLACES -- "the block after the
+#       last marker", in the cluster file -- still holds the last part's own lines, and a last-triple
+#       read lends a block with no triple of its own (requirements-repair-p1 serial 3) the lines of
+#       the block before it. HOLE, STATED: a serial pass writing neither line AND no terminator is
+#       outside every era.
 #       MEASURED with this join, serially, against 952b9319's over graph's 60 s317-s319 repair and
 #       fold records in both record modes: 0 runs refused by a check field; the base printed an
 #       escalation count and this join did not on 2 runs, both the BL-542 true positive (the
@@ -1080,6 +1101,22 @@ CHK	notrep.md	derivations: not replayed" ] || { rm -rf "$d"; die "the check-fiel
   o="$(checks_field 1 "$d/prose.md"; checks_field 1 "$d/trail.md"; checks_field 1 "$d/mixed.md")"
   [ "$o" = "CHK	mixed.md	no derivations: line
 CHK	mixed.md	a value outside the grammar: derivations: the validator reports ok" ] || { rm -rf "$d"; die "the check-fields self-probe failed on prose and trailers: read '${o}'; no verdict"; }
+  # The serial blocks (BL-557): a joined record whose part carries both lines and whose SECOND serial
+  # block, closed by its own terminator, omits both fires for that block alone; the same record with
+  # the second block carrying both is quiet (the near-miss a last-part or last-triple read cannot
+  # tell apart); a serial terminator with no triple after the part's own is refused by name; a
+  # `spec-render` block owes neither line; an unterminated tail with no line is quiet.
+  printf -- '- artifact: j\n\n<!-- shard: 01.md -->\n- artifact: p\n- advisor: called\n- derivations: replayed 1\n\n### F-1\n- disposition: repaired\n- edit: n/a\n\n- artifact: s\n- advisor: called\n- derivations: replayed 2\n\n### S-1\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: serial 1\n\n%s\n### S-2\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: serial 2\n\n- artifact: m\n- derivations: replayed 1\n\n### R-1\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: spec-render 2\n' '' > "$d/ser.md"
+  printf -- '- artifact: j\n\n<!-- shard: 01.md -->\n- artifact: p\n- advisor: called\n- derivations: replayed 1\n\n### F-1\n- disposition: repaired\n- edit: n/a\n\n- artifact: s\n- advisor: called\n- derivations: replayed 2\n\n### S-1\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: serial 1\n\n%s\n### S-2\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: serial 2\n\n- artifact: m\n- derivations: replayed 1\n\n### R-1\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: spec-render 2\n' '- advisor: unavailable
+- derivations: replayed 0
+' > "$d/serok.md"
+  printf -- '- artifact: j\n\n<!-- shard: 01.md -->\n- artifact: p\n- advisor: called\n- derivations: replayed 1\n\n### F-1\n- disposition: repaired\n- edit: n/a\n\n### S-1\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: serial 1\n' > "$d/sernt.md"
+  printf -- '- artifact: j\n\n<!-- shard: 01.md -->\n- artifact: p\n\n### F-1\n- disposition: repaired\n- edit: n/a\n\n- artifact: s\n\n### S-1\n- disposition: repaired\n- edit: n/a\n' > "$d/seropen.md"
+  o="$(checks_field 1 "$d/ser.md"; checks_field 1 "$d/serok.md"; checks_field 1 "$d/sernt.md"; checks_field 1 "$d/seropen.md")"
+  [ "$o" = "CHK	ser.md	no advisor: line (the block closed at line 27 by 'repair-complete: serial 2')
+CHK	ser.md	no derivations: line (the block closed at line 27 by 'repair-complete: serial 2')
+CHK	sernt.md	the serial block closed at line 16 by 'repair-complete: serial 1' opens with no sha triple of its own after the last shard marker, so its advisor: and derivations: lines cannot be told from those of shard 01.md" ] \
+    || { rm -rf "$d"; die "the check-fields self-probe failed on the serial blocks: read '${o}'; no verdict"; }
   rm -rf "$d"
 }
 # checks_field <0 parts | 1 record> <file> -> one "CHK\t<file>\t<what>" line per defect (BL-557).
@@ -1103,34 +1140,79 @@ checks_field() {
     function val(  v) { v = $0; sub(/^[^:]*:/, "", v); gsub(/[*_`\r]/, "", v); v = tolower(v)
                         gsub(/^[ \t]+|[ \t]+$/, "", v); return v }
     function kw(v, re) { return v ~ ("^(" re ")[ \t]*($|[(;,]|--)") }
-    # A JOINED RECORD IS JUDGED PART BY PART, as the join judged it: a shard segment holding no
-    # repaired entry charges neither its `not replayed` nor a value outside the grammar, because the
-    # parts-mode join exempted that part and the record it wrote must not fail its own reader (the
-    # third tip adversary). The serial block appended after the last part reads as that last
-    # segment, so a serial repair makes that segment chargeable -- the conservative direction.
-    function commit() { if (!seg || srep) { bad = bad sbad; if (snr) nr = 1 }; sbad = ""; snr = 0; srep = 0 }
+    # EVERY LINE LANDS IN A CHUNK, and segments are resolved in END: the serial block opens at a
+    # triple that is known to be the serial one only once the LAST shard marker is known. A chunk
+    # opens at line 1, at each shard marker (M), at each `- artifact:` triple line (T) and after each
+    # column-0 `repair-complete:` terminator (E), which closes the chunk it ends.
+    function brk(t) { nk++; ck[nk] = t; cl[nk] = FNR }
+    function seg(lo, hi,   j) { sa = 0; sd = 0; sr = 0; sn = 0; sb = ""
+      for (j = lo; j <= hi; j++) { sa += ca[j]; sd += cd[j]; sr += cr[j]; if (cn[j]) sn = 1; sb = sb cb[j] } }
+    function emit(what, w) { print "CHK\t" b "\t" what w }
+    # judge <chunks lo..hi> <label> <mode> <need>. Mode E: a part (or an unmarked record with no
+    # terminator), bound only once it carries a grammar line, the record era per segment. Mode S: a
+    # block closed by `repair-complete: serial`, which owes both lines whatever any era says. Mode V:
+    # any other block, values only. need: charge nothing unless the segment holds a repaired entry --
+    # A JOINED RECORD IS JUDGED PART BY PART, as the join judged it, and the parts-mode join exempted a
+    # part holding none, so the record it wrote must not fail its own reader (the third tip adversary).
+    function judge(lo, hi, w, mode, need) {
+      seg(lo, hi)
+      if (need && !sr) return
+      if (mode == "E" && sa + sd == 0) return
+      if (mode != "V") { if (!sa) emit("no advisor: line", w); if (!sd) emit("no derivations: line", w) }
+      if (sb != "") emit("a value outside the grammar:" sb, w)
+      if (sn) emit("derivations: not replayed", w)
+    }
+    function blk(j) { return " (the block closed at line " tl[j] " by \047" tx[j] "\047)" }
+    BEGIN { nk = 1; ck[1] = "H"; cl[1] = 1 }
     fence && ((fc == "`" && $0 ~ /^[ \t]*```+[ \t]*$/) || (fc == "~" && $0 ~ /^[ \t]*~~~+[ \t]*$/)) { fence = 0; next }
     !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; next }
     fence { next }
-    rec == 1 && /^<!-- shard: [^ ]+ -->[ \t]*$/ { commit(); seg = 1; next }
+    rec == 1 && /^<!-- shard: [^ ]+ -->[ \t]*$/ { brk("M"); cm[nk] = $0; sub(/^<!-- shard: /, "", cm[nk]); sub(/ -->.*$/, "", cm[nk]); next }
+    rec == 1 && /^repair-complete:/ { tl[nk] = FNR; tx[nk] = $0; gsub(/[\t\r]/, " ", tx[nk]); sub(/[ ]+$/, "", tx[nk])
+                                      split(tx[nk], tw, " "); ts[nk] = (tw[2] == "serial"); brk("E"); next }
+    rec == 1 && /^[[:space:]-]*[*_`]*artifact[*_`]*:/ { brk("T") }
     /^[[:space:]-]*[*_`]*advisor[*_`]*:/ { v = val()
-      if (kw(v, "called|unavailable")) na++; else sbad = sbad " advisor: " v; next }
+      if (kw(v, "called|unavailable")) ca[nk]++; else cb[nk] = cb[nk] " advisor: " v; next }
     /^[[:space:]-]*[*_`]*derivations[*_`]*:/ { v = val()
-      if (kw(v, "not replayed")) { nd++; snr = 1 }
-      else if (kw(v, "replayed [0-9]+")) nd++
-      else if (kw(v, "deferred to the join")) { nd++; if (!dok) sbad = sbad " derivations: deferred in a files-mode part" }
-      else sbad = sbad " derivations: " v
+      if (kw(v, "not replayed")) { cd[nk]++; cn[nk] = 1 }
+      else if (kw(v, "replayed [0-9]+")) cd[nk]++
+      else if (kw(v, "deferred to the join")) { cd[nk]++; if (!dok) cb[nk] = cb[nk] " derivations: deferred in a files-mode part" }
+      else cb[nk] = cb[nk] " derivations: " v
       next }
-    /^[[:space:]-]*[*_`]*disposition[*_`]*:/ { v = tolower(val()); sub(/[^a-z-].*$/, "", v); if (v == "repaired") { nrep++; srep++ } }
+    /^[[:space:]-]*[*_`]*disposition[*_`]*:/ { v = tolower(val()); sub(/[^a-z-].*$/, "", v); if (v == "repaired") { nrep++; cr[nk]++ } }
     END {
-      commit()
       b = FILENAME; sub(/.*\//, "", b)
-      if (rec == 1 && na + nd == 0) exit
-      if (rec == 0 && nrep == 0) exit
-      if (!na) print "CHK\t" b "\tno advisor: line"
-      if (!nd) print "CHK\t" b "\tno derivations: line"
-      if (bad != "") print "CHK\t" b "\ta value outside the grammar:" bad
-      if (nr) print "CHK\t" b "\tderivations: not replayed"
+      # A PART is one segment, bound unconditionally once it holds a repaired entry.
+      if (rec == 0) { if (nrep == 0) exit; judge(1, nk, "", "S", 0); exit }
+      lm = 0; nt = 0
+      for (j = 1; j <= nk; j++) { if (ck[j] == "M") lm = j; if (tl[j]) nt++ }
+      lo = 1
+      if (!lm) {
+        # AN UNMARKED RECORD (the one unsharded remediator, or a record no join wrote) owes the lines
+        # unconditionally only in a block its serial terminator closes; with no terminator it is one
+        # era-gated segment, as before.
+        if (!nt) { judge(1, nk, "", "E", 0); exit }
+      } else {
+        # The head and every shard segment, era-gated per segment. The LAST part runs to the SECOND
+        # `- artifact:` triple after the last marker: the first is that part own, and the serial
+        # remediator opens its block with its own (team-roles/remediator.md).
+        s0 = 1
+        for (j = 2; j <= lm; j++) if (ck[j] == "M") { judge(s0, j - 1, (s0 == 1 ? " (above the first shard marker)" : " (shard " cm[s0] ")"), "E", s0 > 1); s0 = j }
+        t1 = 0; t2 = 0
+        for (j = lm + 1; j <= nk; j++) if (ck[j] == "T") { if (!t1) t1 = j; else { t2 = j; break } }
+        hi = (t2 ? t2 - 1 : nk)
+        # A SERIAL TERMINATOR BEFORE THAT SECOND TRIPLE closes a block with no triple of its own, whose
+        # lines cannot be told from the last part, so it is refused by name, never judged.
+        for (j = lm; j <= hi; j++) if (tl[j] && ts[j]) emit("the serial block closed at line " tl[j] " by \047" tx[j] "\047 opens with no sha triple of its own after the last shard marker, so its advisor: and derivations: lines cannot be told from those of shard " cm[lm], "")
+        judge(lm, hi, " (shard " cm[lm] ")", "E", 1)
+        if (!t2) exit
+        lo = t2
+      }
+      # THE BLOCKS: each runs to the terminator that closes it; the next opens after it. A block
+      # closed by `repair-complete: serial` owes both lines; any other block (`spec-render`) is judged
+      # on its values alone; an unterminated tail is era-gated like a part. Parts never reach a block.
+      for (j = lo; j <= nk; j++) if (tl[j]) { judge(lo, j, blk(j), (ts[j] ? "S" : "V"), (lm && !ts[j])); lo = j + 1 }
+      if (lo <= nk) judge(lo, nk, (lm ? " (the unterminated block from line " cl[lo] ")" : ""), "E", (lm > 0))
     }' "$2"
 }
 checks_refusals() {  # <checks_field output>

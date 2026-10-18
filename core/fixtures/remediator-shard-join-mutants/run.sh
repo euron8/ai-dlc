@@ -72,7 +72,7 @@
 # omission, before it is trusted. After the reap, [J2] asserts this shard dispatched exactly the
 # mutants dealt to it.
 SHARDS="a b c d e"
-MUTANTS_a="JX1 JX2 JX3 JX4 JX5 JX6 JX7 JX8 JX10 JX9 JX11 JX12 JX13 JX14 JX15 JX16 JX17 JX18"
+MUTANTS_a="JX1 JX2 JX3 JX4 JX5 JX6 JX7 JX8 JX10 JX9 JX11 JX12 JX13 JX14 JX15 JX16 JX17 JX18 JX110"
 MUTANTS_b="JX19 JX20 JX21 JX22 JX23 JX24 JX25 JX26 JX27 JX28 JX29 JX30 JX36 JX37 JX38 JX42 JX43 JX44 JX95"
 MUTANTS_c="JX45 JX46 JX47 JX48 JX49 JX39 JX40 JX41 JX31 JX32 JX33 JX34 JX35 JX50 JX51 JX52 JX53 JX54 JX93 JX94"
 MUTANTS_d="JX55 JX56 JX57 JX58 JX59 JX60 JX61 JX62 JX63 JX64 JX65 JX66 JX67 JX68 JX69 JX70 JX71 JX72 JX73"
@@ -439,7 +439,7 @@ mutant "JX23 subject --pass party not a party repair" "sjpartysrc" \
   '[ "$SUBJMODE" = 1 ] && [ "$PASS" = party ] && [ -z "$ARTIFACT" ] && PARTY=1' \
   'false && PARTY=1'
 # srcsetaside and srcera die too: each refusal is reported and then acquitted by the same exit 0.
-mutant "JX24 --sources reports refusals and exits 0" "srcunres srcsetaside srcera dispkey dispvocab dispruling chkrec rulingedit rulingtab chkjoined specstale specunread" \
+mutant "JX24 --sources reports refusals and exits 0" "srcunres srcsetaside srcera dispkey dispvocab dispruling chkrec rulingedit rulingtab chkjoined specstale specunread chkserial" \
   '  [ "$refuse_n" -eq 0 ] || exit 2
   printf '"'"'%s\n'"'"' "$SPEC_LINE"
   exit 0
@@ -558,7 +558,7 @@ mutant "JX39 set-aside regex cut to 'not required' only" "setasideshard" \
 mutant "JX40 set-aside regex cut to the shard phrase only" "setasidenr" \
   'claim ~ /outside (this|my|the) (shard|part|section)|not required/' \
   'claim ~ /outside (this|my|the) (shard|part|section)/'
-mutant "JX41 --sources prints no ESCALATED-COUNT line" "srcclosed srchalf srccross escopen escclosed gapfill rulingedit specfresh spechand specnone spectwo specother specunread" \
+mutant "JX41 --sources prints no ESCALATED-COUNT line" "srcclosed srchalf srccross escopen escclosed gapfill rulingedit specfresh spechand specnone spectwo specother specunread chkserial" \
   '  echo "ESCALATED-COUNT: ${ESC_N} (${ESC_X} closed' \
   '  : "ESCALATED-COUNT: ${ESC_N} (${ESC_X} closed'
 mutant2 "JX31 the set-aside hand-off exemption removed, self-probe removed" "handoff" \
@@ -580,7 +580,7 @@ printf '"'"'%s'"'"' "$ESC_LINES"' \
   '# "Adversarial repair dispatch").
 :'
 # escopen and escclosed die too: --escalations runs the same record_tail.
-mutant "JX35 --sources does not apply the entry contract" "srcsetaside srcpending srcera srcclosed srchalf srccross escopen escclosed dispkey dispvocab dispruling gapfill rulingedit rulingtab chkjoined specfresh spechand specnone spectwo specother specunread" \
+mutant "JX35 --sources does not apply the entry contract" "srcsetaside srcpending srcera srcclosed srchalf srccross escopen escclosed dispkey dispvocab dispruling gapfill rulingedit rulingtab chkjoined specfresh spechand specnone spectwo specother specunread chkserial" \
   '  contract_refusals 1 "$(contract_check 1 "$1")"' \
   '  ESC_LINES=""; ESC_CLOSED=""; ESC_N=0; ESC_X=0'
 # ---- the four siblings forms, the point-in-time fence, escalated citations, --escalations.
@@ -605,7 +605,7 @@ mutant "JX53 the siblings control not counted at the join" "sibnever" \
 mutant "JX54 an escalated entry's edit: path counted as a shard citation" "escpath" \
   '    function emit(   i) { if (disp !~ /^escalat/) for (i = 1; i <= nt; i++) print tk[i]; nt = 0; disp = "" }' \
   '    function emit(   i) { for (i = 1; i <= nt; i++) print tk[i]; nt = 0; disp = "" }'
-mutant "JX55 --escalations runs as --sources (needs a seat dir)" "escopen escclosed dispkey dispvocab dispruling gapfill chkrec rulingedit rulingtab chkjoined specstale specfresh spechand specnone spectwo specother specunread" \
+mutant "JX55 --escalations runs as --sources (needs a seat dir)" "escopen escclosed dispkey dispvocab dispruling gapfill chkrec rulingedit rulingtab chkjoined specstale specfresh spechand specnone spectwo specother specunread chkserial" \
   '    --escalations) SRC_REC="${2:-}"; SRCMODE=2; shift 2 ;;' \
   '    --escalations) SRC_REC="${2:-}"; SRCMODE=1; shift 2 ;;'
 # ---- the re-run window (--rerun <part>.md@<ISO>). Expected sets are the measured kills; the
@@ -720,9 +720,9 @@ mutant2 "JX77 the gap-fill tripwire removed, self-probe removed" "gapfill" \
 mutant "JX78 the check fields not read in parts mode" "chkpart" \
   '  checks_refusals "$(checks_field 0 "$p")"' \
   '  :'
-mutant2 "JX79 the record-mode era removed (a record with neither field binds), self-probe removed" "srcok srcpending srcclosed srchalf srccross escopen escclosed dispruling srcparts gapfill chkrec rulingtab specfresh spechand specnone spectwo specother" \
-  '      if (rec == 1 && na + nd == 0) exit' \
-  '      if (0) exit' \
+mutant2 "JX79 the record-mode era removed (a record with neither field binds), self-probe removed" "srcok srcpending srcclosed srchalf srccross escopen escclosed dispruling srcparts gapfill chkrec rulingtab chkjoined specfresh spechand specnone spectwo specother chkserial" \
+  '      if (mode == "E" && sa + sd == 0) return' \
+  '      if (0) return' \
   "$CTPROBE_OLD" "$CTPROBE_NEW"
 # JX80: the gap-fill report turned back into a refusal (the shape that hid s319's escalations): the
 # record exits 2 before its count, which p_gapfill's rc 0 and ESCALATED-COUNT assertions see.
@@ -740,9 +740,12 @@ mutant "JX82 a TAB in a heading kept, so it splits the finding's fields" "ruling
 mutant "JX83 a CR kept on a ruling cite" "rulingtab" \
   '    function vtrim(v) { gsub(/^[ \t*_`\r]+|[ \t*_`\r]+$/, "", v); return v }' \
   '    function vtrim(v) { gsub(/^[ \t*_`]+|[ \t*_`]+$/, "", v); return v }'
-mutant "JX84 the check fields judged per file again, not per shard segment" "chkjoined" \
-  '    rec == 1 && /^<!-- shard: [^ ]+ -->[ \t]*$/ { commit(); seg = 1; next }' \
-  '    rec == 1 && /^<!-- shard: [^ ]+ -->[ \t]*$/ { next }'
+# JX84 is paired off: with the markers ignored, the serial self-probe cell sernt.md reads as an unmarked
+# record and the probe dies in every join.
+mutant2 "JX84 the check fields judged per file again, not per shard segment, self-probe removed" "chkjoined" \
+  '    rec == 1 && /^<!-- shard: [^ ]+ -->[ \t]*$/ { brk("M");' \
+  '    rec == 1 && /^<!-- shard: [^ ]+ -->[ \t]*$/ { next; brk("M");' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
 # JX85: a refused parts join prints the escalation report before its exit, as record mode does.
 mutant "JX85 a refused parts join prints the escalation report" "partsilent" \
   '[ "$refuse_n" -eq 0 ] || exit 2
@@ -825,6 +828,13 @@ mutant "JX96 a nested writer not folded into its dispatcher" "nested rronly" \
 mutant "JX97 a record-only re-run not recognised" "rronly" \
   '          if (p in post) continue' \
   '          continue'
+# ---- BL-557 serial blocks. JX110: a block closed by `repair-complete: serial` judged under the era like a
+# part, so a serial block writing neither line owes nothing (receipt regression 3). The self-probe's ser.md
+# sees it, so it is paired off.
+mutant2 "JX110 a serial block exempt via the era, self-probe removed" "chkserial" \
+  '{ judge(lo, j, blk(j), (ts[j] ? "S" : "V"),' \
+  '{ judge(lo, j, blk(j), (ts[j] ? "E" : "V"),' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
 # ---- END JX MUTANTS.
 
 # ------------------------------------------------------------------------------ the reap
