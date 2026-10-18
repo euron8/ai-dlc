@@ -47,6 +47,8 @@
 #   jq -s 'map(select(.duration_s>900))'    <- the long tail
 #   jq -s 'map(select(.duration_s>900 and (.turns/(.duration_s/60))<1))'
 #                                           <- long AND barely turning: stalled, not working
+# ALSO   ${AI_DLC_STATE_DIR:-_bmad-output}/.subagent-final/<agent_id>.txt  (transient)
+#   the teammate's `last_assistant_message`, capped -- see THE FINAL MESSAGE below.
 # `role` is null when the transcript's opening records do not carry it, and
 # `duration_s` is null when no dispatch row matched; a null is "not observed",
 # never "zero".
@@ -82,6 +84,66 @@ PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 STATE_DIR="${PROJECT_DIR}/${AI_DLC_STATE_DIR:-_bmad-output}"
 SNAPSHOT_FILE="${STATE_DIR}/pipeline-snapshot.md"
 OUT="${STATE_DIR}/subagent-context.jsonl"
+
+# --- THE FINAL MESSAGE: a per-agent SIBLING file, never a field of the row below ---------
+# SubagentStop carries `last_assistant_message`, the teammate's final reply, which is the one
+# copy of its return that survives on disk once the notification has been read. It is NOT
+# added to the subagent-context.jsonl row: that file is committed and read whole, often, and a
+# long field torn across a line breaks every jsonl reader that splits on newlines. One file per
+# agent_id instead, under a TRANSIENT directory (pipeline-state-paths.json renders it into the
+# consumer .gitignore), so a final message is never committed.
+#
+# WRITTEN HERE, BEFORE EVERY EARLY EXIT BELOW, because the row needs a readable teammate
+# transcript, the usage library and a non-zero peak, and the message needs none of them. The
+# one gate it keeps is an EXISTING state directory (`-d $STATE_DIR`, not the snapshot file): it
+# never creates the pipeline root, so a project with no AI/DLC tree is left untouched.
+#
+# WRITE-THEN-RENAME. The temp file sits in the same directory, so the `mv` is a rename and a
+# reader sees either the previous file or the whole new one, never a partial write.
+#
+# CAPPED at 65536 bytes per agent (override: AI_DLC_PROBE_FINAL_CAP_BYTES). The cap bounds disk
+# use per agent; a final message is a summary, and one past 64 KiB is a payload a reader would
+# not want resident anyway. Over the cap the body is cut at a CODEPOINT boundary (jq slices
+# strings by codepoint, so no UTF-8 sequence is split) and a fixed marker line is appended:
+#   <cut body> LF "[ai-dlc-subagent-probe: final message truncated at the byte cap]" LF
+# The marker is one literal whatever the cap is, so a reader tests one byte sequence.
+#
+# FAIL-OPEN, AND IT CANNOT MOVE THE HOOK: a subshell with stdout and stderr discarded and its
+# status forced by `|| true`. It reads `$INPUT`, never stdin, and assigns nothing the parent
+# reads. Only a SubagentStop payload with a non-empty string message writes; anything else
+# leaves no file, and an agent_id that is not a safe filename leaves none either.
+(
+  _fm_cap="${AI_DLC_PROBE_FINAL_CAP_BYTES:-65536}"
+  case "$_fm_cap" in ''|*[!0-9]*) _fm_cap=65536 ;; esac
+  # Leading zeros are stripped: `--argjson` rejects `007` as invalid JSON and nothing would be
+  # written. An empty or zero result is the default, since a zero cap could never hold a message.
+  _fm_cap="${_fm_cap#"${_fm_cap%%[!0]*}"}"
+  case "$_fm_cap" in ''|0) _fm_cap=65536 ;; esac
+  [ -d "$STATE_DIR" ] || exit 0
+  _fm_id="$(printf '%s' "$INPUT" | jq -r 'select(.hook_event_name == "SubagentStop") | .agent_id // empty | strings')"
+  case "$_fm_id" in ''|.*|*[!A-Za-z0-9_.-]*) exit 0 ;; esac
+  _fm_dir="${STATE_DIR}/.subagent-final"
+  mkdir -p "$_fm_dir" || exit 0
+  _fm_tmp="$(mktemp "${_fm_dir}/.tmp.XXXXXX")" || exit 0
+  if printf '%s' "$INPUT" | jq -j --argjson cap "$_fm_cap" '
+       select(.hook_event_name == "SubagentStop")
+       | (.last_assistant_message | strings | select(length > 0)) as $m
+       | if ($m | utf8bytelength) <= $cap then $m
+         else
+           # Largest codepoint prefix within the cap: lo always fits, hi never does.
+           ({lo: 0, hi: ($m | length)}
+            | until(.hi - .lo <= 1;
+                (((.lo + .hi) / 2) | floor) as $k
+                | if ($m[:$k] | utf8bytelength) <= $cap then .lo = $k else .hi = $k end)
+            | .lo) as $n
+           | $m[:$n] + "\n[ai-dlc-subagent-probe: final message truncated at the byte cap]\n"
+         end
+     ' > "$_fm_tmp" && [ -s "$_fm_tmp" ]; then
+    mv -f "$_fm_tmp" "${_fm_dir}/${_fm_id}.txt" || rm -f "$_fm_tmp"
+  else
+    rm -f "$_fm_tmp"
+  fi
+) >/dev/null 2>&1 || true
 
 # Not an AI/DLC pipeline -> stay out of it entirely (same gate as every other hook).
 [ -f "$SNAPSHOT_FILE" ] || exit 0

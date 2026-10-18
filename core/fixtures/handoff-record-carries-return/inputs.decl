@@ -1,0 +1,6 @@
+# The subject program for arm (a): run.sh finds it by the root walk and runs --mark, one beat and --status on seeded records.
+!core/scripts/wait-for-deliverable.sh
+# Arms (b), (c) and (d) read the skill tree (architecture.md, rule-24.md, artifact-consolidation.md, ui-direction.md and
+# the step files arm (d) derives) and the roles (architect.md, analyst.md, ux.md and every role arm (d) derives).
+!core/skills/ai-dlc/
+core/team-roles/

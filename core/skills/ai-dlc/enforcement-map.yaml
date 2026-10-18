@@ -1420,7 +1420,8 @@ non_catalog_units:
     hard_block: false
     enforcer:
       - core/hooks/ai-dlc-subagent-probe.sh
-    emits: subagent-context.jsonl   # {v,ts,sprint,agent_id,model,role,turns,peak_tokens,compactions,duration_s}
+    emits: subagent-context.jsonl   # v:3 {v,ts,sprint,agent_id,model,role,turns,peak_tokens,compactions,duration_s,effort,definition,tool_use_id,transcript_version}
+    # also writes .subagent-final/<agent_id>.txt (transient): last_assistant_message, capped at 65536 bytes
     call_sites:
       - site: ai-dlc-subagent-probe.sh (SubagentStop)
         posture: records only; NEVER blocks (a blocking SubagentStop hook hangs a teammate)

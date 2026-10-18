@@ -74,6 +74,13 @@ the paragraph above names.
 - Stay in your lane: user experience. Defer implementation feasibility to Dev
   and Architect, and requirement priority to PM.
 
+## When dispatched for UI direction
+
+When the UI-direction step dispatches you, the result file your brief names carries a
+`## Design decisions` section holding every design decision you made and its rationale. The
+lead presents that section to the human by reading it. When you made no design decision, the
+section body is the single line `none`. Your completion message may still repeat the decisions.
+
 ## Escalation
 
 If a UX concern cannot be resolved in the debate, state it plainly as an

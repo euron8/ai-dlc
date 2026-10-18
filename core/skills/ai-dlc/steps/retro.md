@@ -128,7 +128,7 @@ file.** Where a step below says "dispatch an `analyst`", it means: the Agent
 tool, bound to the analyst role file `.claude/team-roles/analyst.md` per
 SKILL.md Rule 19 — both bindings, `model` and the standing role-contract Read
 line. The subagent writes its artifact and returns only
-`{artifact_path, summary, gaps}`; an absent artifact at the returned path is
+`{artifact_path, summary, gaps}`, and its gaps are also in the `## Gaps` section of the artifact, except where a dispatch names a carrier: there the gaps go in the carrier and not in the artifact; an absent artifact at the brief's path is
 non-delivery → the lead re-dispatches. Every dispatch is conditional on
 `planning_offload: on` (the default); with it `off`, the lead does that read
 inline. Per SKILL.md Rule 24.
@@ -277,7 +277,18 @@ summary**. It reads:
 - The committed party-mode transcript from Step 2
 
 and writes the draft to
-`_bmad-output/retro-artifacts/s<N>/retro-draft.md`. Two hard
+`_bmad-output/retro-artifacts/s<N>/retro-draft.md`. Gaps go in a carrier file, never in the
+draft or a part. Sharded, each shard writes its own carrier,
+`_bmad-output/retro-artifacts/s<N>/retro-gaps-parts/<surface>.md`; unsharded, the analyst
+writes the single `_bmad-output/retro-artifacts/s<N>/retro-gaps.md`. Each carrier holds a
+`## Gaps` section (the section reads `none` when there are none), and the lead reads every
+carrier file. No part, no joined draft and no retro doc carries a `## Gaps` section, and no
+carrier is assembled into the retro doc. Each analyst brief names its carrier path: each
+shard's brief names `_bmad-output/retro-artifacts/s<N>/retro-gaps-parts/<surface>.md`, and the
+unsharded brief names `_bmad-output/retro-artifacts/s<N>/retro-gaps.md`. A missing carrier is
+non-delivery exactly as a missing part is: the carrier paths go into the same
+`scripts/ai-dlc/wait-for-deliverable.sh` call as the part paths, and the count of carrier files
+must equal the surface count. Two hard
 constraints on that draft:
 - The Agent-findings summary MUST cite the existing `transcript_path:
   path@<sha>` verbatim and summarize that already-byte-cited transcript.

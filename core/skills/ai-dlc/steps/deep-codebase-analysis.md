@@ -20,7 +20,7 @@ Spawn an `analyst` subagent (Agent tool, bound to the analyst role file `.claude
 sections 1–5 — it performs the full codebase exploration and writes
 the complete analysis to
 `_bmad-output/planning-artifacts/codebase-analysis.md`, returning only
-`{artifact_path, summary, gaps}`. Then resume at section 6 (Route). If
+`{artifact_path, summary, gaps}` (gaps travel in the `## Gaps` section of the artifact; the return may still carry them). Then resume at section 6 (Route). If
 `planning_offload: off`, run all sections inline. Per SKILL.md Rule 24 (Rule 28, "Split
 dispatch": surfaces axis; a single-surface scope stays one analyst).
 

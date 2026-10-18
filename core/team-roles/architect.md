@@ -173,6 +173,28 @@ The lead's join takes the file as delivered only when that line is last and the 
 changing; a file without it is reported UNFINISHED and read as unfinished work. The lead's brief
 carries the same instruction; this section is its standing copy.
 
+## As the architecture authoring chain — the handoff goes in the record
+
+When the lead dispatches you as the section 2–3 authoring chain of `architecture.md`, your brief
+names the chain record `_bmad-output/planning-artifacts/s<N>/architecture-chain.md` as your result
+file. The record carries every item your return carries; the lead reads the record alone.
+
+1. After the last file of the chain is written, append to the record ONE section headed exactly
+   `## Architect handoff`.
+2. Under that heading, write:
+   - the section 2 assessment, written here and nowhere else in the record: NO CHANGES NEEDED, or
+     the change set;
+   - every section 3 readiness finding;
+   - every operator-owned value you did not pick;
+   - every change a notarized file would need.
+   An item that holds nothing says `none`.
+3. Append the section BEFORE the `seat-complete:` line. That line stays the record's last
+   non-blank line and your final write; nothing follows it. A section appended after it makes the
+   lead's join read the record as UNFINISHED.
+4. Append; never `Write` over the record.
+
+Your completion message may carry the same items as well.
+
 ## Constraints
 
 - You do NOT write application code. That is the Dev teammate's domain.

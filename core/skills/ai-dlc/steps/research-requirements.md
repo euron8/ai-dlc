@@ -21,7 +21,7 @@ research notes to
 `_bmad-output/planning-artifacts/s<N>/research-notes.md` (Rule 24 sprint
 stamp: `<N>` is `sprint_id` from the pipeline snapshot's Sprint Context,
 resolved at `route.md` Step 6), returning only
-`{artifact_path, summary, gaps}`. Then resume at section 2 (PRD
+`{artifact_path, summary, gaps}` (gaps travel in the `## Gaps` section of the artifact; the return may still carry them). Then resume at section 2 (PRD
 Creation) using the notes. **Sections 2 onward stay inline in the
 lead** — PRD authoring and the Rule 8 / PRD validation cycles are never
 offloaded. If `planning_offload: off`, run all sections inline. Per

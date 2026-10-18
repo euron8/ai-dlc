@@ -21,11 +21,12 @@ Rule 28 they are delegated. Spawn a `ux` subagent (Agent tool, bound to
 scoped to sections 1, 2, and 4: it generates the ASCII wireframes and copy
 for each new UI surface, confirms each introduced CSS class against the
 stylesheet, runs the accessibility/device check, writes the result to
-`_bmad-output/planning-artifacts/s<N>/ui-mockups.md`, and returns only
-`{artifact_path, summary, decisions}`. The lead resumes at section 3
+`_bmad-output/planning-artifacts/s<N>/ui-mockups.md` (which carries a
+`## Design decisions` section with every design decision and its rationale, body `none`
+when empty), and returns `{artifact_path, summary, decisions}`. The lead resumes at section 3
 (present) and section 5 (proceed). **Sections 3 and 5 stay inline** — reading
 the artifact, presenting it non-blocking to the human, and routing to
-implementation are lead actions. An absent artifact at the returned path is
+implementation are lead actions. An absent artifact at the path in the brief (the same value the lead records for this teammate and passes to the join) is
 non-delivery; the lead re-dispatches (Rule 24 delivery discipline). One `ux` agent: Rule 28
 "Split dispatch" serial exception 3, as section 2 checks the mockups section 1 produces.
 
@@ -59,7 +60,7 @@ Output the mockups and copy to the conversation. Include:
 - ASCII wireframe per surface
 - All user-facing copy
 - CSS class list
-- Any design decisions made and rationale
+- Any design decisions made and rationale, read from the `## Design decisions` section of the artifact
 
 **State clearly:** "UI direction presented above. Continuing to
 implementation. Interrupt at any point if you want to steer the direction."

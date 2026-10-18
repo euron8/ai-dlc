@@ -125,6 +125,7 @@ core_manifest:
   - core/fixtures/gate-verdict-grep-shape/**
   - core/fixtures/h2-attest-scripts-dir/**
   - core/fixtures/handoff-completion-assertion/**
+  - core/fixtures/handoff-record-carries-return/**
   - core/fixtures/handoff-resume-guard/**
   - core/fixtures/hook-registration-join/**
   - core/fixtures/implementation-join-yield/**

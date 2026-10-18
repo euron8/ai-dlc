@@ -22,7 +22,7 @@ needs and writes a context digest to
 `_bmad-output/planning-artifacts/s<N>/discovery-context.md` (Rule 24
 sprint stamp: `<N>` is `sprint_id` from the pipeline snapshot's Sprint
 Context, resolved at `route.md` Step 6), returning only
-`{artifact_path, summary, gaps}`. Then resume at section 2.
+`{artifact_path, summary, gaps}` (gaps travel in the `## Gaps` section of the artifact; the return may still carry them). Then resume at section 2.
 **Join it with the bounded-join beat** (`_gate-procedures.md`, "Bounded-join beat"):
 `scripts/ai-dlc/wait-for-deliverable.sh <artifact_path>`, `run_in_background: true`. A
 hand-rolled `until`/`sleep` wait is a Rule 29 Check A violation and gate Check 25 counts it.

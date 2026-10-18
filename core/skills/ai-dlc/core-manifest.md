@@ -250,6 +250,7 @@ core_manifest:
   - fixtures/gate-verdict-grep-shape/**
   - fixtures/h2-attest-scripts-dir/**
   - fixtures/handoff-completion-assertion/**
+  - fixtures/handoff-record-carries-return/**
   - fixtures/handoff-resume-guard/**
   - fixtures/hook-registration-join/**
   - fixtures/implementation-join-yield/**

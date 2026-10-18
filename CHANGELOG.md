@@ -19,6 +19,80 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.876.0] - 2026-10-19
+
+Batch 236 (HANDOFF). The architect, analyst and ux prompts write into their deliverable what they previously returned
+only in their final message, and SubagentStop keeps each subagent's final message on disk. This is the precondition
+for a later hook that suppresses a lead wake already covered by its beat (BL-538); it installs no hook. Closes no
+backlog entry and no `PC-` id. Net for this release: 0 closed, 1 filed.
+
+### Consumer effect
+
+- The architect's chain record carries `## Architect handoff`, appended BEFORE the `seat-complete:` marker, which stays
+  the last non-blank line and the final write. It holds the section 2 assessment (by reference to the record's
+  existing section), the section 3 readiness findings, the operator-owned values and the needed notarized-file
+  changes. The architecture step reads that section of the record alone once the join reports DELIVERED, and the
+  clause requiring the completion notification to have carried the return is gone. The liveness signal is unchanged.
+- The analyst's artifact carries `## Gaps` (body `none` when empty). The step prompts and `rule-24.md` say gaps travel
+  in that section. A dispatch with several outputs puts it ONLY in the file the step names as its carrier, never in a
+  draft that is swapped or assembled into a live doc: consolidation's carrier is the coverage report and retro's are
+  its gaps files. Each shard part carries its own, and the lead reads every part's. The path in the brief, not the
+  returned `artifact_path`, is the authoritative one.
+- The ux artifact carries `## Design decisions` (body `none` when empty), holding the decisions and rationale the lead
+  presents in `ui-direction.md` section 3. The lead reads that section.
+- The returns still carry what they carried. The additions are additive, so a session without the later hook is
+  unchanged.
+- `core/hooks/ai-dlc-subagent-probe.sh` writes each SubagentStop `last_assistant_message` to
+  `_bmad-output/.subagent-final/<agent_id>.txt`, by temp file and rename, before any of the hook's early exits. The
+  state directory must already exist; an unsafe `agent_id` writes nothing; the block is fail-open. A body over 65536
+  bytes (override `AI_DLC_PROBE_FINAL_CAP_BYTES`) is cut at a codepoint boundary and ends with the line
+  `[ai-dlc-subagent-probe: final message truncated at the byte cap]`. The file is a sibling, so the committed
+  `subagent-context.jsonl` row is unchanged.
+- No hook is installed and no gate's verdict changes.
+
+### The pull
+
+- `core/schemas/pipeline-state-paths.json` gains a transient entry for `.subagent-final`. Each consumer's pull raises
+  one `transient-ignore` worklist row until `scripts/ai-dlc/sync-transient-ignore.sh` re-renders the managed
+  `.gitignore` block. Until then `.subagent-final/*.txt` is not ignored.
+- The `enforcement-map.yaml` probe row names the new output, and `core-manifest.md`, `setup-sites.md` and
+  `scripts/uninstall.sh` declare the new fixture.
+
+### Sites
+
+- Roles: `architect.md`, `analyst.md`, `ux.md`.
+- Steps: 12 files under `core/skills/ai-dlc/steps/` (architecture, artifact-consolidation, retro, ui-direction and the
+  eight steps that restated `{artifact_path, summary, gaps}`), plus `rule-bodies/rule-24.md`.
+
+### Tests
+
+- New fixture `core/fixtures/handoff-record-carries-return/`, four arms, each with its self-probe run first in both
+  directions under `mktemp`:
+  - (a) the real `wait-for-deliverable.sh --complete --status` on two seeded records: the section before the marker is
+    DELIVERED, after it UNFINISHED;
+  - (b) each fixed heading is carried by every file that must carry it, and a seeded mismatch fails;
+  - (c) the dropped notification clause is absent from `architecture.md`, and a seeded re-insertion fails;
+  - (d) every site under `core/` restating the return shape or putting gaps in the return must also name `## Gaps`,
+    derived by grep inside the arm with a floor of one site. A seeded offender fails and a near-miss passes.
+    `protected-path-editor.md` is excluded by name, and a probe shows the exclusion does not cover `analyst.md`.
+  - It ships, and carries `inputs.decl` and `tools.decl`.
+- `subagent-probe` gains arms 9a to 9f, including the multibyte seed, the cap, the no-state-directory case, and a check
+  that the write precedes the hook's early exits.
+- `process-rule-pins` gains six presence pins (`hand-architect-role`, `hand-architect-step`, `hand-gaps-role`,
+  `hand-gaps-rule24`, `hand-design-role`, `hand-design-step`) in the existing `contains` mode. Its three
+  architecture-step needles are unchanged.
+
+### Why
+
+- BL-538's hook half would block a completed-task notification whose deliverable an armed beat already covers. That is
+  lossless only if every item the notification carried is also in the deliverable and the final message survives on
+  disk. This release makes both true and ships no hook.
+
+### Filed
+
+- BL-697 (NOTE): I110 reads any backticked token within six lines after an `In-Flight` line as a taught status. This
+  release's ui-direction.md wording tripped it and was reworded. The grammar still fires for the next author.
+
 ## [0.875.0] - 2026-10-19
 
 Batch 236 (c0's POOLHOOKS). The fixture pool's two hooks now kill a unit's whole process group when the watcher's `ps` lookup fails, and the pool root no longer leaks when the hook is interrupted. BL-691 stays open: measured against its owed fix, a pool root made under the caller's TMPDIR nests under hermetic-run to a unit TMPDIR of 90 encoded characters against the 85 that `procsub-staged-refusal-boot` allows, and to 62 without hermetic-run against the hook's own 58, so the fix design is deferred. Closes BL-677, BL-690. Files nothing. Closes no `PC-` id. Net for this release: 2 closed, 0 filed.

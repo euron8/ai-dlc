@@ -36,9 +36,9 @@ cross-cutting rules the lead applies to every such dispatch: dispatch with
 spawn locks the operator out for its full duration); order the
 dispatch prompt shared-block-first (dispatch-prompt cache discipline,
 `implementation.md`); the analyst writes the artifact to disk and returns
-ONLY `{artifact_path, summary, gaps}`, never raw content or its
+`{artifact_path, summary, gaps}` (the gaps are ALSO in the `## Gaps` section of the artifact, body `none` when empty), never raw content or its
 exploration trace; the lead reads the artifact from disk only when a
-decision needs it (Rule 23(a)); an absent artifact at the returned path is
+decision needs it (Rule 23(a)); an absent artifact at the brief's path is
 non-delivery — the lead re-dispatches (a text-only summary is not a
 delivered draft). Build no detector for this; the lead's read of the
 expected path is the check (Rule 26: audit before adding mechanism).
@@ -48,7 +48,7 @@ repos, or question groups), the lead derives the surface list from that
 Section 0 and dispatches one analyst per surface in waves (Rule 28,
 "Split dispatch"), each brief carrying `shard: <i>/<N> <surface>`. Each writes its part to
 `<area>/s<N>/<base>-parts/<surface>.md`, where `<surface>` carries no
-sprint token, and returns the same `{artifact_path, summary, gaps}`. The
+sprint token, and returns the same `{artifact_path, summary, gaps}`; each part carries its own `## Gaps` section, and the lead reads the `## Gaps` section of every part. Where the step names a carrier file for gaps, the brief names that carrier path and the part carries no `## Gaps` section. The
 join: one `scripts/ai-dlc/wait-for-deliverable.sh` call over every part
 path, then a count of the part files, which must equal the surface count,
 and only then the canonical `<area>/s<N>/<base>.md` as the lead's `cat`
@@ -106,7 +106,7 @@ re-drafting sprint N (a re-dispatch after non-delivery, or a re-plan)
 correctly overwrites sprint N's own file.
 
 The stamp lives in the **filename**. The draft's H1 is prose and MUST NOT
-be parsed for the sprint number. The returned `artifact_path` is
+be parsed for the sprint number. The path in the brief (the same value as the In-Flight row and the join) is
 authoritative — never reconstruct the path from the basename.
 
 Mechanized by `scripts/ai-dlc/validate-draft-stamps.sh` (gate-validation Check

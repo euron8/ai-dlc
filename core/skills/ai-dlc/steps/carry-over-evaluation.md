@@ -24,7 +24,7 @@ audit anchor, evaluates each item, and writes a draft evaluation to
 sprint stamp: `<N>` is `sprint_id` from the pipeline snapshot's Sprint
 Context, resolved at `route.md` Step 6 — never the unstamped path, which
 would destroy the prior sprint's evaluation), returning
-only `{artifact_path, summary, gaps}`. Then resume at section 3.
+only `{artifact_path, summary, gaps}` (gaps travel in the `## Gaps` section of the artifact; the return may still carry them). Then resume at section 3.
 **Join it, and section 3's party seats, on their DELIVERABLES** — the analyst's artifact
 with one `scripts/ai-dlc/wait-for-deliverable.sh <path>` call, and each wave of seat files
 with one `scripts/ai-dlc/wait-for-deliverable.sh --complete <path> [<path> ...]` call, because a
