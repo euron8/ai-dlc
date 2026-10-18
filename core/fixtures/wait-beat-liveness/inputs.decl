@@ -1,6 +1,9 @@
-# wait-beat-liveness reads TWO files outside its own directory: the join script under test, and its sibling merge.
+# wait-beat-liveness reads THREE files outside its own directory: the join script under test, and two siblings.
 # run.sh finds it by walking from $0, drives it for every arm, and copies it to build each mutant.
 !core/scripts/wait-for-deliverable.sh
 # --shard-header resolves merge-adversarial-shards.sh as the subject's sibling (run.sh MERGE=); the fixture also runs
 # its --check-header directly to read the expected refusal text, and copies it beside the M37 mutant.
 !core/scripts/merge-adversarial-shards.sh
+# --dispatch reads DISPATCH_ID_PREFIXES from validate-adversarial-convergence.sh beside the subject (run.sh GRAMMAR=);
+# sections 18-19 copy it beside every --dispatch subject, and section 19 seeds a duplicate declaration into a copy.
+!core/scripts/validate-adversarial-convergence.sh

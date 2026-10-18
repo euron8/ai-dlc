@@ -22,3 +22,6 @@ stat
 tail
 touch
 tr
+mkfifo
+ps
+pgrep

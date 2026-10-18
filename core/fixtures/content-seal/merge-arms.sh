@@ -131,5 +131,83 @@ if [ "$c6b" = 1 ] && grep -q "01.md $TOKEN" "$WORK/m6b.out" && [ "$c6t" = 0 ]; t
   ok "CS-M6b: a sealed stories-elicitation shard rewritten by sed -i: --check exit 1; its untouched twin exit 0"
 else bad "CS-M6b: stories-elicitation: rewritten --check exit $c6b (want 1), untouched exit $c6t (want 0): $(head -1 "$WORK/m6b.out")"; fi
 
+# ---- --mark: THE ONE SANCTIONED BASH WRITE to a shard (wait-for-deliverable.sh, "THE CONTENT SEAL").
+mark_one() { # <engine> <shard file> -> MRC, $WORK/mark.out; marked with the shard's own finding count
+  local n; n="$(grep -c '^### ' "$2")" || n=0
+  bash "$1" --mark "$2" stories adversary "$(basename "$2" .md)" "findings=$n" > "$WORK/mark.out" 2>&1; MRC=$?
+}
+PROW='"actor":"program:wait-for-deliverable"'
+
+# CS-K1: every shard sealed by its writer, then closed with --mark -> each file's newest row is the
+# program's, --check passes on all of them, and the merge takes the marked set.
+dk1="$(clean_world)"; seal_all "$dk1"; stk1="$(hr_state "$dk1/1.md")"; mk1=0
+for f in "$dk1"/*.md; do mark_one "$WFD" "$f"; [ "$MRC" = 0 ] || mk1="$MRC"; done
+bash "$SEAL" --check "$stk1" "$dk1"/*.md > /dev/null 2>&1; ck1=$?
+rk1="$(bash "$SEAL" --row "$stk1" "$dk1/1.md" 2>/dev/null)"
+run_merge "$MERGE" "$dk1"
+if [ "$mk1" = 0 ] && [ "$ck1" = 0 ] && grep -qF "$PROW" <<<"$rk1" && grep -q '^seat-complete: stories adversary 1 sha=' "$dk1/1.md" \
+   && [ "$RC" -eq 0 ] && has "$MO" "MERGED:"; then
+  ok "CS-K1: sealed shards closed with --mark: the program re-seals each, --check passes, MERGED"
+else bad "CS-K1: --mark over sealed shards: mark rc=$mk1, --check rc=$ck1, newest row ${rk1:-none}, merge rc=$RC: $(head -2 "$MO")"; fi
+
+# CS-K2: a sealed shard amended through Bash (the motivating perl -0pi), then --mark -> refused (64),
+# the file untouched, and no row appended: --mark never launders amended bytes into a seal.
+dk2="$(clean_world)"; seal_all "$dk2"; patch_shard "$dk2/2.md"; cp "$dk2/2.md" "$WORK/k2.before"
+nb2="$(seal_count "$(ledger_of "$dk2")")"; mark_one "$WFD" "$dk2/2.md"; na2="$(seal_count "$(ledger_of "$dk2")")"
+if [ "$MRC" = 64 ] && cmp -s "$dk2/2.md" "$WORK/k2.before" && [ "$na2" = "$nb2" ] && has "$WORK/mark.out" "changed through Bash after its last Write or Edit"; then
+  ok "CS-K2: a Bash-amended sealed shard: --mark refuses (64), writes nothing, appends no row"
+else bad "CS-K2: --mark over a Bash-amended sealed shard: rc=$MRC, rows $nb2 -> $na2: $(head -1 "$WORK/mark.out")"; fi
+
+# CS-K3: a shard with NO seal row (written wholly through Bash) beside one that has one -> --mark
+# marks it and leaves it with no row: an unsealed file never becomes a sealed one.
+dk3="$(clean_world)"; seal_hook "$(world_root "$dk3")" Write "$dk3/2.md" ""; stk3="$(hr_state "$dk3/1.md")"
+nb3="$(seal_count "$(ledger_of "$dk3")")"; mark_one "$WFD" "$dk3/1.md"; na3="$(seal_count "$(ledger_of "$dk3")")"
+rk3="$(bash "$SEAL" --row "$stk3" "$dk3/1.md" 2>/dev/null)"
+if [ "$MRC" = 0 ] && [ "$rk3" = null ] && [ "$na3" = "$nb3" ] && [ "$nb3" -ge 1 ] && grep -q '^seat-complete: stories adversary 1 sha=' "$dk3/1.md"; then
+  ok "CS-K3: a shard with no seal row is marked and stays with none (rows $nb3 -> $na3)"
+else bad "CS-K3: --mark on an unsealed shard: rc=$MRC, its row ${rk3:-none}, rows $nb3 -> $na3"; fi
+
+# CS-K4: a Bash write lands between --mark's move and its seal row (the stub sibling forces it) -> no
+# program row is recorded, --mark exits 64, and the merge refuses the shard on its writer's seal.
+dk4="$(clean_world)"; seal_all "$dk4"; re4="$(race_engine "$WORK/race-m")" || { echo "FIXTURE BROKEN: CS-K4 race engine" >&2; exit 2; }
+mark_one "$re4" "$dk4/2.md"
+# The race is forced only when the shard carries a seal row, so --mark reaches --record-expect and the
+# stub fires. Its absence is a verdict on this arm (a mutant that leaves no row), never a broken fixture.
+if grep -q 'written through Bash after the move' "$dk4/2.md"; then ok "CS-K4r: race forced: the shard carried a seal row and the stub wrote after --mark's move"
+else bad "CS-K4r: race not forced: no seal row, so --mark never reached --record-expect and the stub never wrote"; fi
+run_merge "$MERGE" "$dk4"
+if [ "$MRC" = 64 ] && has "$WORK/mark.out" "changed again before its content-seal row" && ! grep -qF "$PROW" "$(ledger_of "$dk4")" \
+   && [ "$RC" -eq 2 ] && has "$MO" "2.md $TOKEN"; then
+  ok "CS-K4: a write between --mark's move and its row: no row recorded, --mark 64, the merge refuses 2.md"
+else bad "CS-K4: the write after --mark's move was sealed or not refused: mark rc=$MRC, merge rc=$RC: $(head -2 "$MO")"; fi
+
+# CS-K5: a marked shard amended through Bash afterwards -> REFUSED, naming the program's row and the
+# remedy that does not stack a second marker.
+dk5="$(clean_world)"; seal_all "$dk5"; for f in "$dk5"/*.md; do mark_one "$WFD" "$f"; done
+printf 'a line after the mark\n' >> "$dk5/1.md"
+run_merge "$MERGE" "$dk5"
+if [ "$RC" -eq 2 ] && has "$MO" "1.md $TOKEN" && has "$MO" "program wait-for-deliverable" && has "$MO" "restore the bytes with Edit, then re-run wait-for-deliverable.sh --mark"; then
+  ok "CS-K5: a marked shard amended through Bash: REFUSED naming program wait-for-deliverable and the restore-then-mark remedy"
+else bad "CS-K5: a marked-then-amended shard was not refused with the --mark remedy (rc=$RC): $(head -2 "$MO")"; fi
+
+# CS-K6: a SYMLINKED state dir. The recorder names a row by the state dir as spelled (`_bmad-output`),
+# so --mark must derive it the same way, never through `pwd -P` to the target's name, or it reads no
+# row, seals nothing, and the merge refuses the marked shard on its writer's Write.
+dk6="$(clean_world)"; r6="$(world_root "$dk6")"
+mv "$r6/_bmad-output" "$r6/real-out" && ln -s real-out "$r6/_bmad-output" || { echo "FIXTURE BROKEN: CS-K6 cannot link the state dir" >&2; exit 2; }
+# The precondition, as its own line: the arm below means nothing unless the state dir IS a symlink
+# whose name differs from its target's, and every shard path reaches the merge through it.
+if [ -L "$r6/_bmad-output" ] && [ "$(cd "$r6/_bmad-output" && pwd -P)" != "$(cd "$r6/_bmad-output" && pwd)" ] \
+   && case "$dk6" in "$r6/_bmad-output/"*) true ;; *) false ;; esac; then
+  ok "CS-K6s: the state dir is a symlink: _bmad-output -> real-out, and the shards are addressed through it"
+else bad "CS-K6s: symlink not set up: _bmad-output is not a link to a differently named dir, or the shard path does not pass through it ($dk6)"; fi
+seal_all "$dk6"; nb6="$(seal_count "$(ledger_of "$dk6")")"
+for f in "$dk6"/*.md; do mark_one "$WFD" "$f"; done
+bash "$SEAL" --check "$r6/_bmad-output" "$dk6"/*.md > /dev/null 2>&1; ck6=$?
+run_merge "$MERGE" "$dk6"
+if [ "$nb6" -ge 4 ] && grep -qF "$PROW" "$(ledger_of "$dk6")" && [ "$ck6" = 0 ] && [ "$RC" -eq 0 ] && has "$MO" "MERGED:"; then
+  ok "CS-K6: through a symlinked _bmad-output, --mark re-seals each shard by the spelled name: --check passes, MERGED"
+else bad "CS-K6: through a symlinked state dir --mark left the shards unsealed: rows $nb6, --check rc=$ck6, merge rc=$RC: $(head -2 "$MO")"; fi
+
 echo "$NAME: $fails failure(s)"
 [ "$fails" -eq 0 ]

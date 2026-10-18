@@ -81,5 +81,51 @@ if [ "$RC" -eq 2 ] && has "$JO" "REFUSED:" && has "$JO" "$TOKEN" && has "$JO" "p
   ok "CS-J5: program write then a python3 rewrite of the joined record: join --escalations REFUSED naming the program's seal row"
 else bad "CS-J5: a python3 rewrite of the program-written joined record was not refused by join --escalations (rc=$RC): $(head -2 "$JO")"; fi
 
+# ---- --mark-repair: the serial remediator's ONE sanctioned Bash write to the joined record.
+PROW='"actor":"program:wait-for-deliverable"'
+ST=_bmad-output
+joined() { # -> a world whose record the join wrote and sealed with its program row; RW, RREC
+  RW="$(world3)"; seal3 "$RW"; run_join "$JOIN" "$RW"; RREC="$(out_of "$RW")"
+  [ "$RC" -eq 0 ] && [ -f "$RREC" ] || { echo "FIXTURE BROKEN: the join wrote no record (rc=$RC)" >&2; exit 2; }
+}
+mark_rep() { bash "$1" --mark-repair "$2" 1 > "$WORK/mark.out" 2>&1; MRC=$?; } # <engine> <record> -> MRC
+
+# CS-J6: the program-sealed record closed with --mark-repair -> the program re-seals it and
+# --escalations reads it.
+joined; mark_rep "$WFD" "$RREC"; r6="$(bash "$SEAL" --row "$RW/$ST" "$RREC" 2>/dev/null)"
+run_esc "$RW" "$RREC"
+if [ "$MRC" = 0 ] && grep -qF "$PROW" <<<"$r6" && tail -1 "$RREC" | grep -q '^repair-complete: serial 1 sha=' \
+   && [ "$RC" -eq 0 ] && has "$JO" "ESCALATED-COUNT:" && ! has "$JO" "$TOKEN"; then
+  ok "CS-J6: a sealed joined record closed with --mark-repair: re-sealed by the program, --escalations reads it"
+else bad "CS-J6: --mark-repair on a sealed record: mark rc=$MRC, newest row ${r6:-none}, --escalations rc=$RC: $(head -2 "$JO")"; fi
+
+# CS-J7: the record rewritten through python3, then --mark-repair -> refused (64), untouched, no row.
+joined; python3 -c "import sys;p=sys.argv[1];open(p,'a').write('\n- appended through python3\n')" "$RREC"
+cp "$RREC" "$WORK/j7.before"; L7="$RW/$ST/planning-artifacts/.artifact-writes.jsonl"; nb7="$(seal_count "$L7")"
+mark_rep "$WFD" "$RREC"; na7="$(seal_count "$L7")"
+if [ "$MRC" = 64 ] && cmp -s "$RREC" "$WORK/j7.before" && [ "$na7" = "$nb7" ] && has "$WORK/mark.out" "changed through Bash after its last Write or Edit"; then
+  ok "CS-J7: a Bash-amended sealed record: --mark-repair refuses (64), writes nothing, appends no row"
+else bad "CS-J7: --mark-repair over a Bash-amended record: rc=$MRC, rows $nb7 -> $na7: $(head -1 "$WORK/mark.out")"; fi
+
+# CS-J8: a part record with NO seal row, beside a sealed one -> marked, and left with no row.
+w8="$(world3)"; seal_hook "$w8" Write "$w8/$PD/02.md" "$AG2"; L8="$w8/$ST/planning-artifacts/.artifact-writes.jsonl"
+nb8="$(seal_count "$L8")"; mark_rep "$WFD" "$w8/$PD/01.md"; na8="$(seal_count "$L8")"
+r8="$(bash "$SEAL" --row "$w8/$ST" "$w8/$PD/01.md" 2>/dev/null)"
+if [ "$MRC" = 0 ] && [ "$r8" = null ] && [ "$na8" = "$nb8" ] && [ "$nb8" -ge 1 ]; then
+  ok "CS-J8: a repair file with no seal row is marked and stays with none (rows $nb8 -> $na8)"
+else bad "CS-J8: --mark-repair on an unsealed part: rc=$MRC, its row ${r8:-none}, rows $nb8 -> $na8"; fi
+
+# CS-J9: a Bash write between --mark-repair's move and its row (stub sibling) -> no program row,
+# 64, and --escalations refuses the record on the join's own seal row.
+joined; re9="$(race_engine "$WORK/race-j")" || { echo "FIXTURE BROKEN: CS-J9 race engine" >&2; exit 2; }
+mark_rep "$re9" "$RREC"
+# As CS-K4r: the race is forced only when the record carries a seal row. Its absence is this arm's verdict.
+if grep -q 'written through Bash after the move' "$RREC"; then ok "CS-J9r: race forced: the record carried a seal row and the stub wrote after --mark-repair's move"
+else bad "CS-J9r: race not forced: no seal row, so --mark-repair never reached --record-expect and the stub never wrote"; fi
+run_esc "$RW" "$RREC"
+if [ "$MRC" = 64 ] && ! grep -qF "$PROW" "$RW/$ST/planning-artifacts/.artifact-writes.jsonl" && [ "$RC" -eq 2 ] && has "$JO" "$TOKEN"; then
+  ok "CS-J9: a write between --mark-repair's move and its row: no row recorded, 64, --escalations refuses the record"
+else bad "CS-J9: the write after --mark-repair's move was sealed or not refused: mark rc=$MRC, --escalations rc=$RC: $(head -2 "$JO")"; fi
+
 echo "$NAME: $fails failure(s)"
 [ "$fails" -eq 0 ]

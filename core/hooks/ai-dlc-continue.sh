@@ -354,10 +354,10 @@ tool_mark() { # -> sets TOOL_MARK once per invocation; empty when the transcript
   TOOL_MARK="${SESSION_ID}:${_tm_id:-none}"
 }
 
-# stall_run <state-file>: reads the previous block from a 3-line state file and decides whether
+# stall_run <state-file>: reads the previous block from a 4-line state file (3- and 2-line ones parse as before) and decides whether
 # THIS block continues that stall run. Sets RUN_LAST (previous epoch, 0 = none), RUN_DELTA,
 # RUN_CNT (the new count), RUN_TOOL (yes|no|unknown -- a tool call since the previous block)
-# and RUN_SIGNAL (tool|time|reset -- which test continued the run). The caller writes the state
+# and RUN_SIGNAL (tool|session|time|reset -- which test continued the run). The caller writes the state
 # back with stall_run_write, so the mark it persists is the one this decision was made on.
 #
 # CONTINUE ON EITHER, RESET ONLY ON BOTH: no new tool call, OR under RAPID_WINDOW_SECONDS. The
@@ -365,10 +365,10 @@ tool_mark() { # -> sets TOOL_MARK once per invocation; empty when the transcript
 # EARLIER than the hook it replaced, and on the transcript path it is never lower than the
 # harness's own count, so the hook releases before the harness overrides.
 stall_run() {
-  RUN_LAST=0; RUN_CNT=0; _run_prev=""
+  RUN_LAST=0; RUN_CNT=0; _run_prev=""; _run_sess=""
   if [ -f "$1" ]; then
     RUN_LAST=$(sed -n '1p' "$1" 2>/dev/null); RUN_CNT=$(sed -n '2p' "$1" 2>/dev/null)
-    _run_prev=$(sed -n '3p' "$1" 2>/dev/null)
+    _run_prev=$(sed -n '3p' "$1" 2>/dev/null); _run_sess=$(sed -n '4p' "$1" 2>/dev/null)
     [[ "$RUN_LAST" =~ ^[0-9]+$ ]] || RUN_LAST=0; [[ "$RUN_CNT" =~ ^[0-9]+$ ]] || RUN_CNT=0
   fi
   RUN_DELTA=$((NOW - RUN_LAST))
@@ -379,19 +379,28 @@ stall_run() {
   fi
   if [ "$RUN_TOOL" = "no" ]; then
     RUN_CNT=$((RUN_CNT + 1)); RUN_SIGNAL=tool
+  elif [ "$RUN_TOOL" = "unknown" ] && [ -n "$_run_sess" ] && [ -n "$SESSION_ID" ]; then
+    # THE TOOL TEST CANNOT ANSWER, BUT THE STATE FILE NAMES THE SESSION THAT WROTE IT: the same
+    # session continues the run at any spacing (a loaded box stretches the gap past the window
+    # and would otherwise reset a stalled session on every block), and a different one starts
+    # a new run. A file with no fourth line keeps the time test below, exactly as before.
+    if [ "$_run_sess" = "$SESSION_ID" ]; then RUN_CNT=$((RUN_CNT + 1)); RUN_SIGNAL=session
+    else RUN_CNT=1; RUN_SIGNAL=reset; fi
   elif [ "$RUN_DELTA" -lt "$RAPID_WINDOW_SECONDS" ]; then
     RUN_CNT=$((RUN_CNT + 1)); RUN_SIGNAL=time
   else
     RUN_CNT=1; RUN_SIGNAL=reset
   fi
 }
-stall_run_write() { # <state-file>: NOW, RUN_CNT, TOOL_MARK -- the third line may be empty
-  printf '%s\n%s\n%s\n' "$NOW" "$RUN_CNT" "$TOOL_MARK" > "$1"
+stall_run_write() { # <state-file>: NOW, RUN_CNT, TOOL_MARK, SESSION_ID -- the last two may be empty
+  printf '%s\n%s\n%s\n%s\n' "$NOW" "$RUN_CNT" "$TOOL_MARK" "$SESSION_ID" > "$1"
 }
 # The BACKOFF detail line, naming the test that closed the run.
 stall_run_why() {
   if [ "$RUN_SIGNAL" = "tool" ]; then
     printf '%s' "no tool call across ${RUN_CNT} consecutive blocks (the last with none since the previous block, at any spacing); stall confirmed"
+  elif [ "$RUN_SIGNAL" = "session" ]; then
+    printf '%s' "${RUN_CNT} consecutive blocks in one session with the transcript unreadable (at any spacing); stall confirmed"
   else
     printf '%s' "${EFF_MAX} consecutive rapid-fire blocks (within ${RAPID_WINDOW_SECONDS}s of each other); stall confirmed"
   fi

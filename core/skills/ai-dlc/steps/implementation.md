@@ -361,9 +361,10 @@ joins the part shard files as the first cross QA does below and runs every
 handed-over replay there, recorded as `handover-run:` lines; every other cross
 reviewer executes nothing.
 Every shard writes its header first, appends each finding as it is verified,
-and, once finished, makes ONE final write, never with its header: the line
-`seat-complete: implementation code-reviewer <shard> findings=<n>`, <n> its
-`#### ` findings; the join beat is `wait-for-deliverable.sh --complete <path> [<path> ...]`,
+and, once finished, closes it with ONE Bash call, never with its header:
+`scripts/ai-dlc/wait-for-deliverable.sh --mark <shard path> implementation code-reviewer <shard> findings=<n>`,
+<n> its `#### ` findings, which appends
+`seat-complete: implementation code-reviewer <shard> sha=<hex> findings=<n>`; the join beat is `wait-for-deliverable.sh --complete <path> [<path> ...]`,
 and the merge refuses a count that disagrees. Join in the frozen worktree with
 `merge-review-shards.sh <shard-dir> --gate code-review --out docs/reviews/s<N>/<story-index>-code-review.md`,
 passing the pass-specific name on a later pass (`-p2`, ...). The merge
@@ -452,9 +453,10 @@ delivers. The first cross QA
 worktree, runs every handed-over replay and writes the per-AC table and the
 `## Deferred ACs` section; every other cross QA executes nothing and reports
 interaction findings only, focused on its group's pairs. Every shard writes its
-header first, appends each finding as it is verified, and, once finished, makes
-ONE final write, never with its header: `seat-complete: implementation qa
-<shard> findings=<n>`, <n> its `#### ` findings; the join beat is
+header first, appends each finding as it is verified, and, once finished, closes
+it with ONE Bash call, never with its header: `scripts/ai-dlc/wait-for-deliverable.sh
+--mark <shard path> implementation qa <shard> findings=<n>`, <n> its `#### ` findings,
+which appends `seat-complete: implementation qa <shard> sha=<hex> findings=<n>`; the join beat is
 `wait-for-deliverable.sh --complete <path> [<path> ...]`, and the merge refuses a count that disagrees.
 Each shard gets the go-signal
 `gate-2 go-signal: <story-id> @ <SHA>` with the full SHA the manifest records.

@@ -150,7 +150,8 @@ defines and returning ONLY that path. A text-only final message from a
 subagent is an unreliable transport; the lead MUST treat an absent file
 as non-delivery and re-dispatch. A PRESENT file is never absent: when a
 `--complete` beat reports `UNFINISHED <path>` (no closing `seat-complete:`
-line) or `UNSETTLED <path>` (closed, still changing), read the file and
+line, or one whose `sha=` no longer matches) or `UNSETTLED <path>` (closed
+with no `sha=`, still changing), read the file and
 decide from what it holds — a re-dispatch over it discards the seat's
 findings. Build no detector for this — the lead's
 own read of the expected path is the check (Rule 26: audit before adding

@@ -110,27 +110,13 @@ Owed: a stated lead response to a notification for an agent whose deliverable an
 
 verify: manual
 
-## BL-541 — the serial remediator's join is a beat on a record that already exists and is appended to, so it returns on every append and never on completion
-
-**PARTIAL (v0.796.0, verified e3073787; v0.815.0, verified a88f88d4) — the completion signal and its join step shipped; the stop-hook lease-race trace is OPEN.** `_gate-procedures.md` joins the serial and unsharded remediator with `wait-for-deliverable.sh --complete-repair --dispatch <agentId>`, and the auto-handoff and `handoff.md` step 1 split a mixed in-flight set into plain, `--complete` and `--complete-repair` calls. The second subject, whether `ai-dlc-continue.sh`'s `beat_lease_live` misreads a lease a just-returned beat rewrote, is untraced.
-
-**PARTIAL (v0.794.0, verified 8aab009d) — the prose half shipped.** remediator.md: the serial remediator, and the one unsharded remediator, end the record with `repair-complete: serial <pass>` at column 0; a part or shard remediator writes no such line.
-
-**DEFECT (efficiency).** `_gate-procedures.md:975` joins a repair with `scripts/ai-dlc/wait-for-deliverable.sh <repair_record_path>`. For the serial cross-section or cross-part remediator, that path is the JOINED record, which exists before the dispatch, and the remediator APPENDS its entries to it (`:940-942`). The plain predicate, "non-empty and written since the join armed", is therefore met by the first append and by every one after it. `--complete` cannot help: it keys on a last line beginning `seat-complete:`, and a repair record carries none (`wait-for-deliverable.sh:254-312`). So nothing distinguishes a serial remediator that has finished from one that has written one entry.
-
-Measured in graph s319 lead session `62eadbbe-59c3-436d-bf7c-931ebc09ecba`, 23:54Z to 00:04Z: 21 `wait-for-deliverable.sh` invocations on `s319/requirements-party-repair.md` and two lead-made sentinel files. 9 were plain `--since <ts>`, 6 used `--reset --since`, and two waited on sentinels the remediator would never write, so they could only time out. Each return woke a ~300K-token lead turn (BL-538). The lead diagnosed it itself ("each beat returns as soon as the remediator writes again") but had no correct form to arm.
-
-The stop hook also fired "NO LIVE WAIT-BEAT IS ARMED" at 00:00:49Z, seconds after the lead armed beat `bcd634p7x`. That repeats 23:13:02Z, when the lead read `.beat-inflight` five seconds later as holding a future epoch. Both are consistent with `ai-dlc-continue.sh`'s lease test (`beat_lease_live`, around `:290`) misreading a lease a just-returned beat rewrote. Neither is proven, because the marker may have cleared between the hook and the read.
-
-Owed: a completion signal the serial remediator writes last (a terminal line in its appended block that the beat can key on, as `seat-complete:` does for seats), and a step that tells the lead to arm `--complete`-style on it; or a join on the agent's own completion notification instead of a file. Separately, trace whether the stop hook's lease read can race a beat's own marker rewrite.
-
-verify: manual
-
 ## BL-553 — the lead arms a beat on a sentinel nothing will write, to keep the Stop hook quiet
 
 **DEFECT.** Consequence of BL-541. With no completion signal for the serial remediator, the s319 lead armed beats on files it created for the purpose and that no agent writes. At 00:03:48Z it wrote: "A sleeping beat, `bw7kr8cpi`, is now armed on a sentinel file that nothing will write. Its marker holds a future epoch, so it holds for a full quantum." Session 62eadbbe holds 8 such sentinel beats (corrected: the 00:17Z "fold record" beat was a real beat on requirements-d-answers-fold.md that delivered at 00:35:15Z, not a sentinel). Five are serial-remediator waits (00:03:48, 01:19:11, 01:29:06, 01:39:02, 01:48:57Z), closed once `_gate-procedures.md` prescribes `--complete` on the serial repair record. Three stay open: 00:07:23Z, a serial remediator RESUMED by SendMessage after a refusal (filed separately); 01:15:08Z, a part-04 SPEC render whose part record writes no marker; 01:52:38Z, a render agent's real SPEC.md beat that delivered early on a partial write (BL-541's shape on SPEC.md). That satisfies `ai-dlc-continue.sh`'s lease test while waiting on nothing, which is the "filler tool call" the hook's own text forbids ("Do NOT emit filler tool calls to get past this block"). Owed: BL-541's completion signal removes the need. Until then, a beat whose targets lie outside `_bmad-output/` and every In-Flight row's deliverable is refused, so it does not count as a lease.
 
 **Fourth instance (01:52:38Z).** The lead armed `wait-for-deliverable.sh --reset … $SCRATCH/never-written-sentinel-render`, a path it named itself as never-written; the beat existed only to sleep until the render agent's notification. The notification arrived at 01:53:08Z and the lead TaskStopped the beat.
+
+**Part (b), the target-containment refusal, is NOT shippable as specified (batch 236, measured by the wfd contract adversary over the reference consumer's lead transcripts, read-only).** 189 transcripts carry 2,869 beat calls over 5,866 targets. The legitimate targets outside the state dir include 803 teammate story-worktree deliverables, 75 background done files, 64 main-tree docs, 57 scratchpad and task outputs and 7 git refs, so "outside `_bmad-output/`" is not a defect signal. The In-Flight table is empty today and no transcript records it at arm time, so "outside every In-Flight row's deliverable" is unobservable. The seat beats that set a custom state dir (`implementation.md:447`, `qa.md:457`, `code-reviewer.md:196`) would fail it outright. At arm time a sentinel and a real done file are the same act; the difference is the lead's intent, which no check can see. Five of the eight recorded instances are serial-remediator waits, which `--complete-repair` now covers. The entry stays open on the other three.
 
 verify: manual
 
@@ -161,22 +147,6 @@ verify: manual
 Owed: let an escalated serial entry carry `supersedes:`/`closes:` for the part escalation it restates and have the join dedupe on it, or have the lead's answer fold write closes for every escalation in the chain. Probe: a record whose serial escalated entry restates a part escalation reports ESCALATED-COUNT 1, not 2; after a repaired entry closes the serial entry, 0.
 
 **The fold did not close the chain (02:30Z).** The fold record `s319/requirements-operator-answers-fold.md` landed at 02:30:00Z. It carries 3 `disposition` lines and **0 `closes:` lines**, and the lead's `join-remediator-shards.sh --escalations` on it printed `ESCALATED-COUNT: 0 (0 closed …)`, which describes the new record only. The operator's three answers therefore close nothing in `requirements-elicitation-repair.md`: all nine of S-21, S-22, S-23, 07.md F-1, 08.md F-1, 09.md F-1, 04.md F-8, S-8 and S-17 still read as open to the join, and the lead dispatched the adversarial series at 02:31:27Z without re-running `--escalations` on the elicitation record. The fold also returned five open questions to the lead (Q20, whether S3 NOT_READY blocks or not; the S-23 gloss "does not fail closed" versus the operator's words; the S-21 scope "items 1-4" applied as FR-S319-1..9 and 13; "before any sweep" being the lead's option wording; and a stale pointer pending.md:5224), and the lead adjudicated none of them before the dispatch.
-
-verify: manual
-
-## BL-578 — a teammate wedged re-sending one API request reads as live to the beat, because the liveness sensor keys on transcript mtime and every retry line bumps it
-
-**DEFECT.** Filed by peer session ai-dlc-68 from graph's s319 lead `949015a6` (Sonnet 5.5). The pass-1 serial remediator `a7ffc8dcd555207b8` (dispatched 05:00:03Z on 2026-10-16) called `Skill bmad-spec` at 05:14:47Z ("update: append decision to .memlog.md then re-render SPEC.md …"); the skill body loaded at 05:14:50Z. Intake re-read its transcript read-only (`~/.claude/projects/-Users-n8-git-graph/949015a6-…/subagents/agent-a7ffc8dcd555207b8.jsonl`, 245 lines): the last `assistant` line is 05:14:47Z (control: 68 assistant lines in the file), and lines 239-245 are seven `api-request` records, 05:14:51Z → 05:34:24Z at ~195s intervals, all `shapeHash 7d7e1ada`, with nothing between them. The record `s319/requirements-repair-p1.md` gained nothing; the agent's only writes were 4 Edits at 05:08Z (locked-requirements.md, prd.md). The lead re-armed at 05:10:03Z, 05:20:12Z and 05:30:12Z and read it as "a long run is plausible" (05:20:15Z) and "still running at 30 minutes" (05:30:12Z); at 05:21:19Z the operator had ruled "when the remediator agent finishes, handoff", so the sprint waits on an agent that may never finish.
-
-**Why the beat cannot see it (mechanical, not inferred).** `core/scripts/wait-for-deliverable.sh:635-649` `teammate_quiet_for` measures quiet as `now - mtime` of the newest `subagents/*.jsonl`, and `:672` prints `LIVENESS a teammate in this session took a turn …`. Each retry appends an `api-request` line, so the file's mtime advanced to 05:34:24Z (local 01:34:24, matching the last line) and the sensor reported a fresh turn every ~3 minutes; the `TEAMMATE IDLE` arm at `:661-670` (threshold `IDLE_SECS`, default 2×budget) could never fire. So the one signal that exists errs in the direction that keeps the lead waiting, which the sensor's own header (`:612-617`) names as the hazard.
-
-Third failure beside BL-543 (serial pass untimed) and BL-541 (serial beat cannot detect completion): alive by every signal, no progress.
-
-**Cause established: the account ran out of usage (correction relayed by peer session ai-dlc-4e).** The operator stated on 2026-10-16: "The cause is that I hit usage limit on a subscription and had to login to another account." The seven unanswered `api-request` records are the client retrying requests the exhausted account refused; the `Skill bmad-spec` call at 05:14:47Z is only where the remediator was when the quota ran out. The filing's link to the `bmad-spec` path (BL-546, BL-559) was a guess and is refuted. The refusals are not recorded in the agent's transcript: lines 239-245 carry 0 occurrences of `rate limit`/`429`/`usage limit`/`overloaded`/`"error"` against 7 `api-request` lines in the same range — the same unrecorded-refusal shape as BL-557, where an advisor rate limit left no trace. A teammate that could not reach the model at all looked live to the mtime sensor, to `ListAgents`, and to the lead.
-
-Owed: (a) the liveness sensor keys on the last `assistant`/tool line's timestamp, not file mtime, and reports STALLED when none has landed for N minutes or when K consecutive `api-request` lines follow the last assistant line. Note the shapeHash alone does not discriminate: `7d7e1ada` appears 31 times in this transcript including before the wedge, so the arm keys on "no assistant line since", not on a repeated hash. The STALLED report names the likely cause: consecutive unanswered `api-request` lines after the last assistant line mean the model is unreachable (quota, auth or network), not that the agent is thinking. (b) The lead's procedure for STALLED: TaskStop, record the partial work, and — on the unanswered-request signature — tell the operator directly that the account may be out of usage, since only the operator can switch accounts and a re-dispatch on the same account wedges again; then re-dispatch or hand off with that state. Receipt: a probe transcript ending in 3+ `api-request` lines after its last assistant line, with a fresh mtime, reports STALLED; a transcript whose last line is a recent assistant line is the control and does not.
-
-Deferred to next batch (operator, batch 235).
 
 verify: manual
 
@@ -392,16 +362,6 @@ Each fixed unit still owes its solo-against-pool receipt, with a load-free contr
 
 verify: manual
 
-## BL-619 — `ai-dlc-continue.sh` ignores `AI_DLC_STATE_DIR`, so the stop hook cannot see a beat whose state dir was set
-
-**DEFECT.** Found by ai-dlc-ad during 0.802.0, relayed by lead ai-dlc-9c; intake re-derived it read-only at origin/main `f4ca6764`. The defect predates 0.802.0. The stop hook hardcodes the marker at `core/hooks/ai-dlc-continue.sh:113` and `:120`: `LOG_DIR="${PROJECT_DIR}/_bmad-output"`, then `BEAT_MARKER="${LOG_DIR}/.beat-inflight"`. Check 2b reads it at `:152-153`. Its own comment at `:118-119` claims the "same dir and default as the script's AI_DLC_STATE_DIR (_bmad-output)", but the script writes the marker to `BEAT_MARKER="${STATE_DIR}/.beat-inflight"` (`core/scripts/wait-for-deliverable.sh:1050`), where `STATE_DIR` honours `AI_DLC_STATE_DIR` (`:502-504`). `ai-dlc-continue.sh` mentions `AI_DLC_STATE_DIR` once, in that comment (control: `PROJECT_DIR` 14). Sibling hooks do read it, for example `core/hooks/ai-dlc-dispatch-guard.sh:546`: `SPAWN_STATE_DIR="${PROJECT_DIR}/${AI_DLC_STATE_DIR:-_bmad-output}"`.
-
-So any beat run with `AI_DLC_STATE_DIR` set writes its liveness marker where Check 2b never looks, and `implementation.md:456` prescribes exactly that for the first cross QA. This is BL-576's failure (the stop hook cannot see the beat) reached through a different door. A hook's environment can also differ from the beat's, so the fix has to say which value of `AI_DLC_STATE_DIR` the hook can actually observe.
-
-Owed: Check 2b finds the marker wherever `wait-for-deliverable.sh` wrote it, resolved the same way (`:502-504`). Receipt: drive the hook against a live beat started with a non-default `AI_DLC_STATE_DIR`, and show Check 2b sees it. Control: the default-dir beat is still seen.
-
-verify: manual
-
 ## BL-632 — shipped checks and fixtures pass or fail on an arbitrary number instead of a binary property of their subject
 
 **DEFECT.** Operator, relayed by lead ai-dlc-9c: "really need to stop forcing arbitrary goals that aren't based on binary attributes." Part of ai-dlc-4e [9b62de]'s load series (BL-616). Subject: assertions whose verdict turns on a number with no stated property behind it, such as wall-clock bounds (`$((SECONDS - t0)) -lt N`, timeouts that fail as HANG or FAIL), percentage windows, and repeat or rep counts. Under load such a bound turns a correct subject red, which is BL-616's consequence, and when tuned to pass it asserts nothing about the subject.
@@ -434,6 +394,8 @@ Owner: ai-dlc-4e [9b62de] (lead ai-dlc-9c).
 - `core/hooks/ai-dlc-continue.sh:363`: `RAPID_WINDOW_SECONDS`.
 
 *CLOSES with 4e's pole release now in preparation:* instance 4, `REGIME_BAND`. That release deletes `scripts/validate-suite-pole.sh` and makes the pole information-only. The file is still present at `8f1a9074`.
+
+**Product-code class, batch 236 (wfd release).** BL-639, BL-640 and BL-641 are done in that release, each with its own receipt: SETTLE no longer decides a seat sealed with `--mark` (it stays only as the fail-open net for a legacy marker with no `sha=`), the chained-beat guard decides by the parent shell's start time rather than BUDGET, and the continue hook's unknown-tool path keys the stall run on the session id rather than RAPID_WINDOW_SECONDS alone. This entry stays PARTIAL: BL-630, the 0.804.0 120 s nets, the suite-pole growth arm and `core/hooks/ai-dlc-recover-gate.sh:201` are untouched by it.
 
 verify: manual
 
@@ -519,28 +481,6 @@ verify: manual
 
 verify: manual
 
-## BL-639 — `wait-for-deliverable.sh`'s SETTLE window delivers a correct seat mid-edit when load or a slow local model stretches its write gaps
-
-**DEFECT.** Filed by ai-dlc-4e [9b62de] from BL-632's product-code header pass, on lead ai-dlc-71's ruling that a load-sensitive consumer deadline found there is its own filing. It is a mechanism read from the code, not a measurement; intake confirmed the cites at origin/main `9f8e7691`. `core/scripts/wait-for-deliverable.sh:355` sets `SETTLE="${AI_DLC_WAIT_SETTLE_SECS:-180}"`, and `settled()` (`:713`, test at `:730`, and again at `:1003`) delivers a marked file once its hash has been unchanged for more than SETTLE seconds. The header's own measurement (`:302`) is a series of gaps of 1.6, 5.1, 146.6, 2.4 and 1.4 s on an unloaded harness. A seat that writes its marker and keeps editing can have its gaps stretched past 180 s by pool load or by a slow local model, and the lead then consumes a half-edited deliverable. `say_revised` (`:695`) reports the later edit but cannot undo the delivery. A local-model lead is an operator goal, so this is in its path.
-
-Owed: measure the inter-write gaps of marked-then-edited seats under pool load and under a local model. Then either derive SETTLE from that distribution, or observe completion directly (an explicit completion write) instead of quiet time; under BL-632 the second is the binary attribute. Receipt: a seeded marked file edited at gaps above SETTLE is NOT delivered mid-sequence. Control: the same sequence delivers early under today's SETTLE.
-
-Related: BL-632 (lists SETTLE in its product-code class), BL-616.
-
-verify: manual
-
-## BL-640 — `wait-for-deliverable.sh`'s chained-beat guard fails open under load and serialises two quanta
-
-**NOTE.** Filed by ai-dlc-4e [9b62de], same header pass; a mechanism read, cites confirmed at `9f8e7691`. `:1138` (`[ $(( $(date +%s) - LAST )) -lt "$BUDGET" ]`, setting `MAY_SLEEP=0` at `:1139`) separates a chained call from a fresh one by elapsed time alone, with only `RESERVE` slack (`:1394-1395`, the larger of `MARGIN` and `POLL`). If load delays the chained call past that slack, the beat sleeps a second quantum: the 2x BUDGET serialisation the guard exists to prevent. The cost is wall clock and one beat charged, with no wrong delivery. Owed: decide from the sibling's lease liveness or its recorded end epoch instead of a bare BUDGET. Receipt: `.shell-$PPID` stamped at BUDGET-5s gives `MAY_SLEEP=0`. Control: at BUDGET+1s it sleeps today.
-
-verify: manual
-
-## BL-641 — `ai-dlc-continue.sh`'s RAPID_WINDOW_SECONDS can defeat the stall backoff on the unknown-tool path
-
-**NOTE.** Filed by ai-dlc-4e [9b62de], same header pass; a mechanism read, cites confirmed at `9f8e7691`. `core/hooks/ai-dlc-continue.sh:123` sets `RAPID_WINDOW_SECONDS=30`, and `stall_run()` (`:348`) sets `RUN_TOOL=unknown` (`:357`) when there is no transcript, no jq, or an old two-line state file. On that path the time test alone decides whether a run continues. Load stretches a genuinely stalled session's gaps past 30 s, which resets the counter to 1, so `EFF_MAX` (`:131-134`) is never reached and release falls to the harness cap. Owed: measure how often `RUN_TOOL=unknown` actually occurs; if it is non-zero, decide whether the unknown path should hold the run rather than reset it. Receipt: `stall_run` driven with an unreadable transcript at 31 s spacing reaches `EFF_MAX`, where today it resets to 1 on every block.
-
-verify: manual
-
 ## BL-643 — `pregate-self-check.sh` hand-copies 2 of the hook's 20 above-pool steps, so a clean self-check still goes red at the gate
 
 **DEFECT.** Measured by lead ai-dlc-71; intake re-derived the step lists at origin/main `9f8e7691`. `.githooks/pre-push` runs 20 `step` lines before `fixture suite`, among them provenance-block, enforcement-map integrity, the invariant, vocabulary, path-mapping and post-compact-digest renders, stray party-mode provenance, no dead doc refs, release version, plan shape, claude-rules joins, backlog depth, backlog receipts, shell portability, re-attach budget, rule-file audit, write-format steering, fixture git-env scrub, agent definitions and shell syntax. `scripts/pregate-self-check.sh` runs two of them (`validate-enforcement-map.sh` and `validate-shell-portability.sh`), plus the fork-budget fixture and the procsub spelling arm, which are both fixtures inside the pool. Its header (`:4-8`) frames the three classes it catches as the ones the hook "finds only after minutes", but the list is hand-written and nothing binds it to the hook.
@@ -602,20 +542,6 @@ NOT measured: the false-positive set of a `validate-shell-portability.sh` arm th
 Owed (lead ai-dlc-71): a `validate-shell-portability.sh` arm that flags forms (a) and (b) inside a multi-line `$( )`, and form (c) inside any `$( )`, after its false-positive set is measured across the tree, so the next author cannot write any of them. The known sites are fixed once `86962cd9` lands. Receipt: each failing form above, (c) included, is flagged, and its paired passing form is not.
 
 Owner: unowned (71: filed, not built by 6f).
-
-verify: manual
-
-## BL-649 — `wait-for-deliverable.sh --dispatch` refuses a local-model lead's `call_` dispatch id
-
-**DEFECT.** Found by ai-dlc-6f; intake re-derived it read-only at origin/main `b9f9fe06`. `core/scripts/wait-for-deliverable.sh:856-891`, `dispatch_epoch_of()`, accepts three id forms (`:862-882`): `toolu_*` is taken as the tool_use_id (`:863`), `*@*` as a named teammate (`:864`), and anything else as a hex agentId, looked up as `agent-<id>.meta.json` (`:873-878`). A `call_<hex>` id passes the charset guard (`:860`) and falls to the agentId arm, which finds no `agent-call_….meta.json` and refuses with "no agent-… meta.json in this session's subagents dir" (`:877`). Passing the agentId instead already works: `:879`'s `toolUseId` extraction accepts `[A-Za-z0-9_]`, so a meta carrying `call_…` resolves. Only the id handed directly fails.
-
-Real shape (6f's count, not re-taken: it is a transcript sweep and needs a slot): subagent metas on this machine carry `"toolUseId":"call_45aba045bf78553ca703fc8694de7577"` in 1 meta, under a local-model session, against 5122 carrying `toolu_`. A local-model lead is an operator goal, so this is a pipeline fix.
-
-NOT measured: `wait-for-deliverable.sh` was not driven with a `call_` id; the refusal is read from the case arms.
-
-Owed: `dispatch_epoch_of` takes a `call_` id as a tool_use_id, as it does `toolu_`. Read the id grammar from the single declaration BL-597 introduces (`DISPATCH_ID_PREFIXES="toolu_ call_"` and `DISPATCH_ID_ERE` in `core/scripts/validate-adversarial-convergence.sh` on `b235-bl596-598`, absent from main today), never a second literal. Receipt: `--dispatch call_<32 hex>` against a seeded ledger row resolves its epoch, and a non-prefixed hex id still takes the agentId arm (control).
-
-Related: BL-597 (the id grammar's declaration).
 
 verify: manual
 
@@ -754,28 +680,6 @@ Cause. `core/scripts/merge-adversarial-shards.sh:378` at origin/main `edcae8aa` 
 Owed: open a fence only where the info string carries no backtick, or name, in the count-mismatch refusal, any `###`-hiding fence opener inside `## Findings`. Probe: a shard whose prose line starts "```derived fence that `x`", followed by a real ```derived block and two findings, counts 2. Control: a genuinely unclosed fence still refuses.
 
 Related, not duplicates: archived BL-577 (a `### ` non-finding subsection counted, closed in 0.822.0), and archived BL-162 (the derived-fence opener matched at column 0 only).
-
-verify: manual
-
-## BL-661 — a `--dispatch` beat leaves `set -f` on, so the teammate-liveness glob never expands and every such beat reports `LIVENESS unavailable`
-
-**DEFECT.** Reported by ai-dlc-f7, read-only on graph's s319 lead (0.818.0, transcript `74de15ba`). Intake ai-dlc-40.
-
-Cause. `core/scripts/wait-for-deliverable.sh:1005` at origin/main `a39aa52a` runs `set -f` at top level inside `if [ -n "$DISPATCH" ]`, so the id split cannot glob. The file contains 0 `set +f`, so noglob stays on for the rest of the run. `teammate_quiet_for`'s `for tq_f_ in "$TEAMMATE_DIR"/*.jsonl` (:1027) then iterates once over the literal pattern, `[ -f ]` rejects it, and the beat prints `LIVENESS  unavailable (no teammate transcripts for this session)`. The TEAMMATE IDLE, DELIVERABLE ABSENT warning, which exists for a teammate that finished and wrote somewhere else, can therefore never fire on a `--dispatch` beat. Graph's installed copy has the same lines at :894, :916 and :934.
-
-A second glob after the `set -f` is also affected and was not reported: the lease heir loop `for lr_f_ in "$COUNTER_DIR"/.lease-*` (:1195). This is read from the code, not measured.
-
-Evidence:
-- Intake re-ran f7's probe under bash on a mktemp dir holding 2 `*.jsonl` files. The same loop counts 2 with globbing on and 0 after `set -f`.
-- The s319 transcript carries 7 `LIVENESS unavailable` result lines (998, 1028, 1093, 2055, 2301, 3932, 4254), 0 `took a turn`, and 103 `--dispatch` mentions. Control: a token absent from the transcript matched 0.
-- Per f7, across graph's transcripts older beats with no `--dispatch` report `took a turn` 1991 times and `unavailable` 18 times.
-- The lead compensated by hand, checking subagent mtimes itself (lines 2287 and 2622).
-
-Consequence: BL-599 made `--dispatch` the standard arming form, so every fan-out join now runs without the liveness signal, and a teammate that delivered to a diverged path reads as still working until the beats run out.
-
-Owed: restore globbing after the dispatch split (`set +f`), or scope the split so noglob never leaks. Probe: a `--dispatch <real id>` beat over a session dir holding a fresh `*.jsonl` prints `LIVENESS a teammate in this session took a turn`. Control: the same beat without `--dispatch`, which already does. Check the lease heir loop under the same arming too.
-
-Related, not a duplicate: the live entry on the liveness sensor counting api-request retries as fresh turns (a false-alive mtime).
 
 verify: manual
 
