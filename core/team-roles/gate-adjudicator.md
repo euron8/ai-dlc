@@ -48,7 +48,11 @@ output path (`${AI_DLC_STATE_DIR:-_bmad-output}/gate-adjudication/<gate_nonce>.v
        scripts/ai-dlc/validate-gate-adjudication.sh --expected <gate_type> --shard <i>/<N>
 
    Adjudicate exactly those ids. Write them, one JSON object per line, to
-   `<gate_nonce>.part-<i>of<N>.jsonl` beside the verdict path. Never write a `.json` there:
+   `<gate_nonce>.part-<i>of<N>.jsonl` beside the verdict path, **with the Write or Edit tool,
+   never Bash** (no `python3` open, redirect, `tee` or `sed -i`): `--merge` refuses a part file
+   written or amended through Bash after its last Write or Edit, and derives your
+   `adjudicator_agent_id` from the harness record of that Write, so the value you put in the
+   field is not the one merged. Never write a `.json` there:
    `--series` walks that directory and refuses a non-verdict `.json`. The per-line fields are
    the ones `validate-gate-adjudication.sh`'s SHARDING header names. You do not write the
    verdict and you do not run `--coverage`. The lead runs `--merge`, which writes the one v1

@@ -62,7 +62,11 @@
 #   - a part citing a file no agent wrote in the window -- including a write whose ledger row
 #     was lost, because the hook's append is silent on failure and this is where that surfaces;
 #   - a part that arm H would not read as structured on its own (see below);
-#   - an existing `<artifact>-repair-p<M>.md` (a join never overwrites a record).
+#   - an existing `<artifact>-repair-p<M>.md` (a join never overwrites a record);
+#   - a part record or section copy whose bytes differ from its newest content-seal row, i.e. one
+#     amended through Bash after its last Write or Edit (THE CONTENT SEAL; `content-seal.sh` owns it).
+#     `--sources` and `--escalations` refuse the same way, at mode entry, a RECORD whose bytes differ
+#     from its newest seal row (this join's program row, or the serial remediator's later Edit).
 #
 # PARTS ARE KEYED ON THE FILES THEY CITE, NEVER ON AN AGENT ID THEY REPORT. The ledger's
 # `agent_id` is the harness's attribution and no dispatched model is shown it, so the join
@@ -409,6 +413,28 @@ if [ "$AGENTMODE" = 1 ]; then
   fi
   echo "not covered: Bash writes, and writes outside planning-artifacts/ and specs/s<N>/"
   exit 0
+fi
+
+# --- THE CONTENT SEAL ON A RECORD (BL-530). `--sources` and `--escalations` read one joined record,
+# which is in the sealed set: this join's own write leaves a program row, and the serial remediator's
+# Edit append fires the recorder, whose newer row is the one compared. A record whose bytes differ
+# from its newest seal row -- a python3 rewrite, a `sed -i`, a Bash append -- is REFUSED here, at mode
+# entry, before any body reads it, naming that row's writer. A record with no seal row is not
+# compared. `content-seal.sh`, beside this script, owns the set and the comparison. A tree with NO
+# state dir has no ledger and so no seal row: it is not compared, exactly as before seals existed,
+# because the library refuses a missing state dir (exit 2) and that would refuse correct input.
+SEAL="${JR_SCRIPT_DIR}/content-seal.sh"
+if [ "$SRCMODE" != 0 ] && [ -d "$STATE" ]; then
+  if [ -f "$SEAL" ]; then
+    _seal_out="$(bash "$SEAL" --check "$STATE" "$SRC_REC" 2>&1)"; _seal_rc=$?
+    case "$_seal_rc" in
+      0) ;;
+      1) die "$_seal_out" ;;
+      *) die "the content-seal check over ${LEDGER} did not run (exit ${_seal_rc}): $(printf '%s\n' "$_seal_out" | head -1)" ;;
+    esac
+  elif [ -f "$LEDGER" ] && grep -qE '"actor":[[:space:]]*"(agent|session)"' "$LEDGER"; then
+    die "${LEDGER} carries content-seal rows but ${SEAL} is absent, so the record's bytes cannot be compared with its seal; reinstall ai-dlc"
+  fi
 fi
 
 # --- PARTY SOURCES (BL-462). Every applied entry names `source: <seat-file>#<finding-id>`, and the
@@ -1353,6 +1379,28 @@ done
 PARTS="$(printf '%s' "$PARTS" | sort)"
 [ -n "$PARTS" ] || die "no shard records at ${SHARD_DIR}/*.md"
 
+# --- THE CONTENT SEAL (BL-530): a part record or section copy amended after its last sealed write is
+# refused. `content-seal.sh`, beside this script, owns the sealed set, the row and the comparison; this
+# site hands it every `*.md` under the repair dir (the parts and, in document and subject mode, the
+# section copies the assembler reads). Seal rows are `kind: "content-seal"` and are read there with no
+# agent_id filter; every ledger read below keys on `kind == "artifact-write"`, so neither sees the
+# other's rows. A file with no seal row is not compared. The joined record this program writes is
+# sealed too, and compared where it is read: `--sources` and `--escalations`, at mode entry above.
+if [ -f "$SEAL" ]; then
+  _seal_out="$(find "$SHARD_DIR" -type f -name '*.md' | LC_ALL=C sort | bash "$SEAL" --check "$STATE" - 2>&1)"; _seal_rc=$?
+  case "$_seal_rc" in
+    0) ;;
+    1) while IFS= read -r _sl; do [ -n "$_sl" ] && refuse "$_sl"; done <<SEALEOF
+$_seal_out
+SEALEOF
+       ;;
+    *) die "the content-seal check over ${LEDGER} did not run (exit ${_seal_rc}): $(printf '%s\n' "$_seal_out" | head -1)" ;;
+  esac
+elif [ -f "$LEDGER" ] && grep -qE '"actor":[[:space:]]*"(agent|session)"' "$LEDGER"; then
+  # A TOOL seal row (only seal rows carry `actor`); a program row alone is record-only.
+  die "${LEDGER} carries content-seal rows but ${SEAL} is absent, so no part's bytes can be compared with its seal; reinstall ai-dlc"
+fi
+
 # --- the ledger: per-file distinct writers inside the window, under the artifact path.
 [ -f "$LEDGER" ] || die "no write ledger at ${LEDGER}; disjointness cannot be proven"
 _jdoc="$DOCMODE"; [ "$SUBJMODE" = 1 ] && _jdoc=1
@@ -1894,6 +1942,11 @@ $PARTS
 CATEOF
 } > "$TMP" || { echo "REFUSED: could not write ${TMP}" >&2; exit 2; }
 mv "$TMP" "$OUT" || { echo "REFUSED: could not move the joined record into ${OUT}" >&2; exit 2; }
+# The program's own seal row: the joined record is sealed, and `--sources`/`--escalations` compare it
+# (content-seal.sh, PROGRAM ROWS). A failed append leaves the record with no row, which is never
+# compared, so it changes no outcome.
+[ -f "$SEAL" ] && { bash "$SEAL" --record "$STATE" program:join-remediator-shards "$OUT" \
+  || echo "NOTE: the program seal row for ${OUT} was not appended" >&2; }
 _jx=""
 [ -z "$RERUN" ] || _jx=", ${RR_SUPERSEDED} superseded rows"
 [ "$AL_N" = 0 ] || _jx="${_jx}, ${AL_N} alias rows"

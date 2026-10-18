@@ -1,0 +1,27 @@
+# The battery copies every path content-seal's own inputs.decl declares, plus that fixture's
+# directory, into one tree per mutant, and edits one line family of the seal library, the recorder
+# or the three readers in the copy. So it declares the same set, and the fixture whose arms it scores.
+!core/fixtures/content-seal/inputs.decl
+core/fixtures/content-seal/
+core/scripts/content-seal.sh
+core/hooks/ai-dlc-content-seal.sh
+core/scripts/merge-adversarial-shards.sh
+core/scripts/join-remediator-shards.sh
+core/scripts/validate-gate-adjudication.sh
+core/scripts/validate-adversarial-convergence.sh
+core/scripts/validate-steering-budget.sh
+core/scripts/validate-suppression-lifetime.sh
+core/scripts/validate-artifact-budget.sh
+core/scripts/validate-artifact-derivations.sh
+core/scripts/validate-provenance-block.sh
+core/scripts/partition-document.sh
+core/scripts/partition-subject.sh
+core/schemas/provenance-block.json
+core/schemas/gate-adjudication-verdict.json
+core/skills/ai-dlc/enforcement-map.yaml
+core/team-roles/remediator.md
+core/hooks/ai-dlc-gate-remediation-guard.sh
+core/hooks/ai-dlc-derivation-capture.sh
+core/fixtures/adversarial-shard-merge/
+core/fixtures/remediator-shard-join/
+core/fixtures/lib/

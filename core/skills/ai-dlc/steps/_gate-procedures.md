@@ -596,7 +596,9 @@ PRIOR pass's findings and the repair record, because pass 2+ reviews the REPAIR,
 again. On pass 1 of the requirements subject, sharded or one-part, that pair is the elicitation
 record: `_bmad-output/planning-artifacts/s<N>/requirements-elicitation.md` as the prior pass's findings and `_bmad-output/planning-artifacts/s<N>/requirements-elicitation-repair.md` as the repair record ("Validation cycle" item 3). Every adversary brief, sharded or not, also carries the early-write instruction of
 "Validation cycle" item 1: header first, each finding appended as verified, and ONE final
-write once it has finished, never with the header: `seat-complete: <step> adversary <shard>
+write once it has finished, never with the header, appended with Edit, never Bash (the merge
+refuses a shard written or amended through Bash after its last Write or Edit, by its content
+seal; `content-seal.sh` owns the check): `seat-complete: <step> adversary <shard>
 findings=<n>`, `<shard>` being the brief's `shard:` value (`none` when it carries none) and
 `<n>` its `### ` findings, each a `### ` heading inside `## Findings` with an UPPERCASE severity word (FINDING GRAMMAR in `merge-adversarial-shards.sh`'s header; item 1's `##` seat example does not apply to a shard). On every axis, once ANY shard in the directory carries a
 `seat-complete:` line anywhere, the merge refuses every shard in it that does not end in

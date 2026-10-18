@@ -14,7 +14,7 @@
 # path<TAB>sha lines in the runner's universe as traced; the runner clears a stale key record when
 # it recomputes the same value over the tree it is pushing.
 #
-# fixtures mapped: 229    entries: 14560
+# fixtures mapped: 230    entries: 14697
 absorbed-specifics-survive	core/fixtures/absorbed-specifics-survive/run.sh
 absorbed-specifics-survive	core/skills/ai-dlc/SKILL.md
 absorbed-specifics-survive	core/skills/ai-dlc/rule-bodies/rule-13.md
@@ -1672,6 +1672,131 @@ consumer-suite-pool	core/fixtures/consumer-suite-pool/run.sh
 consumer-suite-pool	core/fixtures/lib
 consumer-suite-pool	core/fixtures/lib/preamble.sh
 consumer-suite-pool	core/git-hooks/pre-push
+content-seal	.git
+content-seal	.git/HEAD
+content-seal	.git/commondir
+content-seal	.git/config
+content-seal	.git/info/attributes
+content-seal	.git/objects
+content-seal	.git/objects/4e
+content-seal	.git/objects/5f
+content-seal	.git/objects/c6
+content-seal	.git/objects/d9
+content-seal	.git/objects/info/alternates
+content-seal	.git/objects/pack
+content-seal	.git/objects/pack/multi-pack-index
+content-seal	.git/objects/pack/pack-0d9e0028d34fccbb4488280df1c8d39c5c854d33.keep
+content-seal	.git/objects/pack/pack-0d9e0028d34fccbb4488280df1c8d39c5c854d33.mtimes
+content-seal	.git/objects/pack/pack-0d9e0028d34fccbb4488280df1c8d39c5c854d33.pack
+content-seal	.git/objects/pack/pack-0d9e0028d34fccbb4488280df1c8d39c5c854d33.promisor
+content-seal	.git/objects/pack/pack-4333261e4974a339bf3cef95159fed28be143884.keep
+content-seal	.git/objects/pack/pack-4333261e4974a339bf3cef95159fed28be143884.mtimes
+content-seal	.git/objects/pack/pack-4333261e4974a339bf3cef95159fed28be143884.pack
+content-seal	.git/objects/pack/pack-4333261e4974a339bf3cef95159fed28be143884.promisor
+content-seal	.git/objects/pack/pack-449201f5d3cc3ac6c23f712c3809371a0b7bda06.keep
+content-seal	.git/objects/pack/pack-449201f5d3cc3ac6c23f712c3809371a0b7bda06.mtimes
+content-seal	.git/objects/pack/pack-449201f5d3cc3ac6c23f712c3809371a0b7bda06.pack
+content-seal	.git/objects/pack/pack-449201f5d3cc3ac6c23f712c3809371a0b7bda06.promisor
+content-seal	.git/objects/pack/pack-edbe4cef3a2ab34f6cd709f01d74e83249d8c78a.keep
+content-seal	.git/objects/pack/pack-edbe4cef3a2ab34f6cd709f01d74e83249d8c78a.mtimes
+content-seal	.git/objects/pack/pack-edbe4cef3a2ab34f6cd709f01d74e83249d8c78a.pack
+content-seal	.git/objects/pack/pack-edbe4cef3a2ab34f6cd709f01d74e83249d8c78a.promisor
+content-seal	.git/refs
+content-seal	.gitattributes
+content-seal	core
+content-seal	core/.claude
+content-seal	core/.claude/hooks/ai-dlc-content-seal.sh
+content-seal	core/.claude/hooks/ai-dlc-derivation-capture.sh
+content-seal	core/.claude/hooks/ai-dlc-gate-remediation-guard.sh
+content-seal	core/.git
+content-seal	core/core/hooks/ai-dlc-content-seal.sh
+content-seal	core/core/hooks/ai-dlc-derivation-capture.sh
+content-seal	core/core/hooks/ai-dlc-gate-remediation-guard.sh
+content-seal	core/core/scripts/join-remediator-shards.sh
+content-seal	core/core/scripts/merge-adversarial-shards.sh
+content-seal	core/core/scripts/validate-gate-adjudication.sh
+content-seal	core/core/skills/ai-dlc
+content-seal	core/fixtures
+content-seal	core/fixtures/.claude/hooks/ai-dlc-content-seal.sh
+content-seal	core/fixtures/.claude/hooks/ai-dlc-derivation-capture.sh
+content-seal	core/fixtures/.claude/hooks/ai-dlc-gate-remediation-guard.sh
+content-seal	core/fixtures/adversarial-shard-merge
+content-seal	core/fixtures/adversarial-shard-merge/.claude/hooks/ai-dlc-gate-remediation-guard.sh
+content-seal	core/fixtures/adversarial-shard-merge/core/hooks/ai-dlc-gate-remediation-guard.sh
+content-seal	core/fixtures/adversarial-shard-merge/core/scripts/merge-adversarial-shards.sh
+content-seal	core/fixtures/adversarial-shard-merge/lib.sh
+content-seal	core/fixtures/adversarial-shard-merge/scripts/ai-dlc/merge-adversarial-shards.sh
+content-seal	core/fixtures/adversarial-shard-merge/seed.192-ff-A-token-decimal-resolution.md
+content-seal	core/fixtures/adversarial-shard-merge/seed.bug-192-il-accuracy.md
+content-seal	core/fixtures/adversarial-shard-merge/seed.doc-serial-epics.md
+content-seal	core/fixtures/adversarial-shard-merge/seed.doc-test-strategy.md
+content-seal	core/fixtures/adversarial-shard-merge/seed.files-b3-merged.expected
+content-seal	core/fixtures/adversarial-shard-merge/seed.finding-headings.txt
+content-seal	core/fixtures/adversarial-shard-merge/seed.story-1-rebalancer-il-accuracy.md
+content-seal	core/fixtures/content-seal
+content-seal	core/fixtures/content-seal/.claude/hooks/ai-dlc-content-seal.sh
+content-seal	core/fixtures/content-seal/core/hooks/ai-dlc-content-seal.sh
+content-seal	core/fixtures/content-seal/core/scripts/validate-gate-adjudication.sh
+content-seal	core/fixtures/content-seal/gate-arms.sh
+content-seal	core/fixtures/content-seal/join-arms.sh
+content-seal	core/fixtures/content-seal/merge-arms.sh
+content-seal	core/fixtures/content-seal/run.sh
+content-seal	core/fixtures/content-seal/scripts/ai-dlc/validate-gate-adjudication.sh
+content-seal	core/fixtures/content-seal/seal-lib.sh
+content-seal	core/fixtures/core/hooks/ai-dlc-content-seal.sh
+content-seal	core/fixtures/core/hooks/ai-dlc-derivation-capture.sh
+content-seal	core/fixtures/core/hooks/ai-dlc-gate-remediation-guard.sh
+content-seal	core/fixtures/core/scripts/join-remediator-shards.sh
+content-seal	core/fixtures/core/scripts/merge-adversarial-shards.sh
+content-seal	core/fixtures/core/scripts/validate-gate-adjudication.sh
+content-seal	core/fixtures/lib
+content-seal	core/fixtures/lib/preamble.sh
+content-seal	core/fixtures/remediator-shard-join
+content-seal	core/fixtures/remediator-shard-join/.claude/hooks/ai-dlc-derivation-capture.sh
+content-seal	core/fixtures/remediator-shard-join/.claude/hooks/ai-dlc-gate-remediation-guard.sh
+content-seal	core/fixtures/remediator-shard-join/core/hooks/ai-dlc-derivation-capture.sh
+content-seal	core/fixtures/remediator-shard-join/core/hooks/ai-dlc-gate-remediation-guard.sh
+content-seal	core/fixtures/remediator-shard-join/core/scripts/join-remediator-shards.sh
+content-seal	core/fixtures/remediator-shard-join/lib.sh
+content-seal	core/fixtures/remediator-shard-join/scripts/ai-dlc/join-remediator-shards.sh
+content-seal	core/fixtures/remediator-shard-join/seed.block-2.1.md
+content-seal	core/fixtures/remediator-shard-join/seed.block-2.2.md
+content-seal	core/fixtures/remediator-shard-join/seed.block-3.1.md
+content-seal	core/fixtures/remediator-shard-join/seed.block-epics.md
+content-seal	core/fixtures/remediator-shard-join/seed.block-handoff.md
+content-seal	core/fixtures/remediator-shard-join/seed.block-setaside.md
+content-seal	core/fixtures/remediator-shard-join/seed.block-sib.md
+content-seal	core/fixtures/remediator-shard-join/seed.seat-architecture-architect-1.md
+content-seal	core/fixtures/remediator-shard-join/seed.seat-architecture-dev-1.md
+content-seal	core/fixtures/remediator-shard-join/seed.seat-architecture-dev-4.md
+content-seal	core/fixtures/remediator-shard-join/seed.seat-architecture-tea-1.md
+content-seal	core/fixtures/remediator-shard-join/seed.story-2.1-positions-on-demand.md
+content-seal	core/fixtures/remediator-shard-join/seed.story-2.2-lifetime-pnl-on-demand.md
+content-seal	core/fixtures/remediator-shard-join/seed.story-3.1-dark-theme.md
+content-seal	core/fixtures/scripts/ai-dlc/join-remediator-shards.sh
+content-seal	core/fixtures/scripts/ai-dlc/merge-adversarial-shards.sh
+content-seal	core/fixtures/scripts/ai-dlc/validate-gate-adjudication.sh
+content-seal	core/hooks/ai-dlc-content-seal.sh
+content-seal	core/hooks/ai-dlc-derivation-capture.sh
+content-seal	core/hooks/ai-dlc-gate-remediation-guard.sh
+content-seal	core/schemas/gate-adjudication-verdict.json
+content-seal	core/scripts
+content-seal	core/scripts/.claude
+content-seal	core/scripts/.git
+content-seal	core/scripts/ai-dlc/join-remediator-shards.sh
+content-seal	core/scripts/ai-dlc/merge-adversarial-shards.sh
+content-seal	core/scripts/ai-dlc/validate-gate-adjudication.sh
+content-seal	core/scripts/content-seal.sh
+content-seal	core/scripts/core/skills/ai-dlc
+content-seal	core/scripts/join-remediator-shards.sh
+content-seal	core/scripts/merge-adversarial-shards.sh
+content-seal	core/scripts/partition-document.sh
+content-seal	core/scripts/partition-subject.sh
+content-seal	core/scripts/validate-adversarial-convergence.sh
+content-seal	core/scripts/validate-artifact-budget.sh
+content-seal	core/scripts/validate-artifact-derivations.sh
+content-seal	core/scripts/validate-gate-adjudication.sh
+content-seal	core/skills/ai-dlc/enforcement-map.yaml
 context-mode-protect	.git/HEAD
 context-mode-protect	.git/config
 context-mode-protect	.git/index
@@ -9002,14 +9127,22 @@ remediator-shard-join	.git/objects/c6
 remediator-shard-join	.git/objects/info/alternates
 remediator-shard-join	.git/objects/pack
 remediator-shard-join	.git/objects/pack/multi-pack-index
-remediator-shard-join	.git/objects/pack/pack-3af86136785cab26fb3cce940480121d41e2e3ba.keep
-remediator-shard-join	.git/objects/pack/pack-3af86136785cab26fb3cce940480121d41e2e3ba.mtimes
-remediator-shard-join	.git/objects/pack/pack-3af86136785cab26fb3cce940480121d41e2e3ba.pack
-remediator-shard-join	.git/objects/pack/pack-3af86136785cab26fb3cce940480121d41e2e3ba.promisor
-remediator-shard-join	.git/objects/pack/pack-b94b71641194fa77d8e7228f92ae4f180aeba501.keep
-remediator-shard-join	.git/objects/pack/pack-b94b71641194fa77d8e7228f92ae4f180aeba501.mtimes
-remediator-shard-join	.git/objects/pack/pack-b94b71641194fa77d8e7228f92ae4f180aeba501.pack
-remediator-shard-join	.git/objects/pack/pack-b94b71641194fa77d8e7228f92ae4f180aeba501.promisor
+remediator-shard-join	.git/objects/pack/pack-0d9e0028d34fccbb4488280df1c8d39c5c854d33.keep
+remediator-shard-join	.git/objects/pack/pack-0d9e0028d34fccbb4488280df1c8d39c5c854d33.mtimes
+remediator-shard-join	.git/objects/pack/pack-0d9e0028d34fccbb4488280df1c8d39c5c854d33.pack
+remediator-shard-join	.git/objects/pack/pack-0d9e0028d34fccbb4488280df1c8d39c5c854d33.promisor
+remediator-shard-join	.git/objects/pack/pack-4333261e4974a339bf3cef95159fed28be143884.keep
+remediator-shard-join	.git/objects/pack/pack-4333261e4974a339bf3cef95159fed28be143884.mtimes
+remediator-shard-join	.git/objects/pack/pack-4333261e4974a339bf3cef95159fed28be143884.pack
+remediator-shard-join	.git/objects/pack/pack-4333261e4974a339bf3cef95159fed28be143884.promisor
+remediator-shard-join	.git/objects/pack/pack-449201f5d3cc3ac6c23f712c3809371a0b7bda06.keep
+remediator-shard-join	.git/objects/pack/pack-449201f5d3cc3ac6c23f712c3809371a0b7bda06.mtimes
+remediator-shard-join	.git/objects/pack/pack-449201f5d3cc3ac6c23f712c3809371a0b7bda06.pack
+remediator-shard-join	.git/objects/pack/pack-449201f5d3cc3ac6c23f712c3809371a0b7bda06.promisor
+remediator-shard-join	.git/objects/pack/pack-edbe4cef3a2ab34f6cd709f01d74e83249d8c78a.keep
+remediator-shard-join	.git/objects/pack/pack-edbe4cef3a2ab34f6cd709f01d74e83249d8c78a.mtimes
+remediator-shard-join	.git/objects/pack/pack-edbe4cef3a2ab34f6cd709f01d74e83249d8c78a.pack
+remediator-shard-join	.git/objects/pack/pack-edbe4cef3a2ab34f6cd709f01d74e83249d8c78a.promisor
 remediator-shard-join	.git/refs
 remediator-shard-join	.gitattributes
 remediator-shard-join	core
@@ -9045,6 +9178,9 @@ remediator-shard-join	core/fixtures/remediator-shard-join/seed.block-2.1.md
 remediator-shard-join	core/fixtures/remediator-shard-join/seed.block-2.2.md
 remediator-shard-join	core/fixtures/remediator-shard-join/seed.block-3.1.md
 remediator-shard-join	core/fixtures/remediator-shard-join/seed.block-epics.md
+remediator-shard-join	core/fixtures/remediator-shard-join/seed.block-handoff.md
+remediator-shard-join	core/fixtures/remediator-shard-join/seed.block-setaside.md
+remediator-shard-join	core/fixtures/remediator-shard-join/seed.block-sib.md
 remediator-shard-join	core/fixtures/remediator-shard-join/seed.seat-architecture-architect-1.md
 remediator-shard-join	core/fixtures/remediator-shard-join/seed.seat-architecture-dev-1.md
 remediator-shard-join	core/fixtures/remediator-shard-join/seed.seat-architecture-dev-4.md
@@ -9057,6 +9193,7 @@ remediator-shard-join	core/hooks/ai-dlc-derivation-capture.sh
 remediator-shard-join	core/hooks/ai-dlc-gate-remediation-guard.sh
 remediator-shard-join	core/scripts
 remediator-shard-join	core/scripts/ai-dlc/join-remediator-shards.sh
+remediator-shard-join	core/scripts/content-seal.sh
 remediator-shard-join	core/scripts/join-remediator-shards.sh
 remediator-shard-join	core/scripts/partition-document.sh
 remediator-shard-join	core/scripts/partition-subject.sh
@@ -14586,6 +14723,7 @@ write-format-steering-multiformat	core/skills/ai-dlc-update/reconcile/lib.sh
 # digest check-22-spawn-ledger 70c842fa5bbe4dd53306fe4b5f7acd2e8bd91119aaf277642390c76df054fbaf
 # digest consumer-machinery-inventory d20cc399988d538e902de541916f7059332110ef170506b5a03ec3b34e0f7a07
 # digest consumer-suite-pool 7911a7e39a32ca5d34bd6ee397045a8fb6ffeb97334b9df9810a12980534db79
+# digest content-seal 46b8d64c67eeaa133b64bdf71cd5798b651ceb8bb62513aa459674985cc31841
 # digest context-sensor 102379bdc996820c4790e6b38495cf32df11e88778f071c576da608ea9a43e7e
 # digest core-write-guard eb1bee086635b85fec4e29a8caa87203db0f1ab513ac5ab3282ee0289cc25a59
 # digest derivation-capture 0a8155feef61a90cf7225ffbb5f38a852e557958f2acc595e06521c8d1d28504
@@ -14615,6 +14753,7 @@ write-format-steering-multiformat	core/skills/ai-dlc-update/reconcile/lib.sh
 # digest readset-sandbox-root-clause ee0d710c52ad7703c45a7ca1a54a86b8c5494d5c281684341cb76f09adf5a648
 # digest readset-skip c6a2be46cfd16847bc01971e9f5a49c9028a87a4146d5829690d5c5f5bffac46
 # digest readset-stage1-verdict b93137ba76a80cfe4f6f2e8b13cd89e89173e86f34533444641bd3df97da5c46
+# digest remediator-shard-join b5b0b2c0911a3253db43a4d2305ceaba0538efd9037c61037bef8e933f3a88ab
 # digest requirements-step 2289822877479bc1e9540a38027a86e1a34bc3913ee88ab7a5397f82ae979ef9
 # digest resume-whole-read c6dc1f11575252a427e27bf3d1393f48bde571c39a7dba9f660308e9b08c857c
 # digest retired-layer-contract e88a4774d6c4fd9472d48db3dc99d92dcec0886aa56f85cf29ac7da14d609a10

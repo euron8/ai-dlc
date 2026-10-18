@@ -169,6 +169,7 @@ core_manifest:
   - core/fixtures/adversarial-shard-merge/**
   - core/fixtures/review-shard-merge/**
   - core/fixtures/remediator-shard-join/**
+  - core/fixtures/content-seal/**
   - core/fixtures/document-partition/**
   - core/fixtures/subject-partition/**
   - core/fixtures/serial-remediation-worklist/**
