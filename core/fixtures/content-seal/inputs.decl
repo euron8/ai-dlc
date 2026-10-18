@@ -8,6 +8,8 @@
 !core/scripts/merge-adversarial-shards.sh
 !core/scripts/join-remediator-shards.sh
 !core/scripts/validate-gate-adjudication.sh
+# --mark / --mark-repair, the one sanctioned Bash write into the sealed set (arms CS-K*, CS-J6..J9).
+!core/scripts/wait-for-deliverable.sh
 core/scripts/validate-adversarial-convergence.sh
 core/scripts/validate-steering-budget.sh
 core/scripts/validate-suppression-lifetime.sh

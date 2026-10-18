@@ -532,6 +532,19 @@ seal_of() {
 # body ending inside an unclosed fence would put the marker in the fence, a file no beat accepts
 # -- the hang this exists to prevent -- so that, and every other bad call, is exit 64 with the
 # file untouched.
+#
+# THE CONTENT SEAL (`content-seal.sh`, beside this script, owns the sealed set and the
+# comparison). A file under `planning-artifacts/` may be in the sealed set, whose join readers
+# refuse bytes that differ from the file's newest seal row -- and this call is a Bash write. So it
+# is the ONE sanctioned Bash write, on three terms:
+#   1. It reads a SNAPSHOT of the file, and when the file carries a seal row the snapshot must be
+#      the sealed bytes: a file already amended through Bash is refused (64), never laundered.
+#   2. It seals only a file that HAD a seal row. A file with none -- written wholly through Bash,
+#      or before the recorder -- stays uncompared, as the seal leaves it, so marking never turns
+#      an unsealed file into a sealed one.
+#   3. Its program row records the sha of the bytes THIS CALL WROTE (`--record-expect`), never
+#      whatever is on disk after the move, and none at all when those bytes are already gone. A
+#      write landing after the move then differs from the row, and every reader refuses it.
 # ---------------------------------------------------------------------------
 mark_refuse() { echo "FAIL: $MK_MODE: $1 Nothing was written." >&2; exit 64; }
 case "${1:-}" in
@@ -556,20 +569,53 @@ case "${1:-}" in
       [ $# -eq 1 ] || mark_refuse "takes <file> <pass>."
       MARK_TOKEN="repair-complete: serial "; MK_F="$1"; MK_TAIL=""
     fi
-    MK_KEEP=1; has_marker "$MK_FILE" && MK_KEEP=0
+    MK_SEAL="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/content-seal.sh"
+    MK_PHYS="$(cd "$(dirname "$MK_FILE")" 2>/dev/null && pwd -P)/$(basename "$MK_FILE")"
+    MK_STATE=""; MK_ROWED=0; MK_SRC="$MK_FILE"
+    case "$MK_PHYS" in */planning-artifacts/*) MK_STATE="${MK_PHYS%/planning-artifacts/*}" ;; esac
+    if [ -n "$MK_STATE" ] && [ -f "$MK_SEAL" ]; then
+      MK_SRC="$(mktemp "${TMPDIR:-/tmp}/wfd-mark.XXXXXX")" || mark_refuse "cannot take a snapshot of $MK_FILE."
+      cp "$MK_FILE" "$MK_SRC" || { rm -f "$MK_SRC"; mark_refuse "cannot take a snapshot of $MK_FILE."; }
+      MK_ROW="$(bash "$MK_SEAL" --row "$MK_STATE" "$MK_FILE" 2>&1)" \
+        || { rm -f "$MK_SRC"; mark_refuse "its content-seal row could not be read: $(printf '%s\n' "$MK_ROW" | head -1)"; }
+      if [ "$MK_ROW" != null ]; then
+        MK_ROWED=1
+        MK_WANT="$(printf '%s' "$MK_ROW" | sed -n 's/.*"sha256":"\([0-9a-f][0-9a-f]*\)".*/\1/p')"
+        MK_HAVE="$( . "$MK_SEAL" && seal_sha "$MK_SRC" )"
+        if [ -z "$MK_WANT" ] || [ "$MK_HAVE" != "$MK_WANT" ]; then
+          rm -f "$MK_SRC"
+          mark_refuse "'$MK_FILE' is not the bytes its newest content-seal row records ($MK_WANT; on disk $MK_HAVE), so it changed through Bash after its last Write or Edit. --mark never seals such bytes: restore the file with Edit, then mark."
+        fi
+      fi
+    elif [ -n "$MK_STATE" ] && grep -qE '"actor":[[:space:]]*"(agent|session)"' "$MK_STATE/planning-artifacts/.artifact-writes.jsonl" 2>/dev/null; then
+      mark_refuse "$MK_STATE/planning-artifacts/.artifact-writes.jsonl carries content-seal rows but $MK_SEAL is absent, so the file's seal cannot be honoured; reinstall ai-dlc."
+    fi
+    MK_KEEP=1; has_marker "$MK_SRC" && MK_KEEP=0
     MK_TMP="${MK_FILE}.mark-tmp.$$"
-    seal_body "$MK_FILE" "$MK_KEEP" > "$MK_TMP" || { rm -f "$MK_TMP"; mark_refuse "cannot write $MK_TMP."; }
+    mk_drop_() { rm -f "$MK_TMP"; [ "$MK_SRC" = "$MK_FILE" ] || rm -f "$MK_SRC"; }
+    seal_body "$MK_SRC" "$MK_KEEP" > "$MK_TMP" || { mk_drop_; mark_refuse "cannot write $MK_TMP."; }
     MK_SHA="$(content_hash "$MK_TMP")"
-    [ -n "$MK_SHA" ] || { rm -f "$MK_TMP"; mark_refuse "no content hash could be taken."; }
+    [ -n "$MK_SHA" ] || { mk_drop_; mark_refuse "no content hash could be taken."; }
     MK_LINE="${MARK_TOKEN}${MK_F} sha=${MK_SHA}${MK_TAIL:+ }${MK_TAIL}"
-    printf '%s\n' "$MK_LINE" >> "$MK_TMP" || { rm -f "$MK_TMP"; mark_refuse "cannot write $MK_TMP."; }
+    printf '%s\n' "$MK_LINE" >> "$MK_TMP" || { mk_drop_; mark_refuse "cannot write $MK_TMP."; }
     if ! has_marker "$MK_TMP"; then
-      rm -f "$MK_TMP"
+      mk_drop_
       mark_refuse "the marker would not be the last line a beat accepts (the body ends inside an unclosed fence, or carries a carriage return). Close the fence first."
     fi
     seal_of "$MK_TMP" >/dev/null
-    [ "$SEAL_V" = "sealed" ] || { rm -f "$MK_TMP"; mark_refuse "the written seal does not read back as sealed."; }
-    mv -f "$MK_TMP" "$MK_FILE" || { rm -f "$MK_TMP"; mark_refuse "cannot replace $MK_FILE."; }
+    [ "$SEAL_V" = "sealed" ] || { mk_drop_; mark_refuse "the written seal does not read back as sealed."; }
+    MK_EXP=""
+    if [ "$MK_ROWED" = 1 ]; then
+      MK_EXP="$( . "$MK_SEAL" && seal_sha "$MK_TMP" )"
+      [ -n "$MK_EXP" ] || { mk_drop_; mark_refuse "no sha256 could be taken for the content seal."; }
+    fi
+    mv -f "$MK_TMP" "$MK_FILE" || { mk_drop_; mark_refuse "cannot replace $MK_FILE."; }
+    [ "$MK_SRC" = "$MK_FILE" ] || rm -f "$MK_SRC"
+    if [ "$MK_ROWED" = 1 ]; then
+      MK_REC="$(bash "$MK_SEAL" --record-expect "$MK_STATE" program:wait-for-deliverable "$MK_EXP" "$MK_FILE" 2>&1)" || {
+        echo "FAIL: $MK_MODE: $MK_FILE was replaced, but its bytes changed again before its content-seal row was written ($(printf '%s\n' "$MK_REC" | head -1)); no row was recorded, so every join reader refuses the file. Restore it with Edit, then mark again." >&2
+        exit 64; }
+    fi
     echo "MARKED $MK_FILE -- $MK_LINE"
     exit 0 ;;
 esac

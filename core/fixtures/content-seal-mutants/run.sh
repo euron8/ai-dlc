@@ -20,6 +20,10 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 #   SF  restore the agent_id filter on seal rows (BOTH reads: the --check table and --row)
 #   SP  drop the program seal row at all three --record call sites
 #   SD  drop --merge's refusal of a sealless gate part once the recorder was live (D2)
+#   KP  --mark drops its pre-check, so a Bash-amended sealed file is marked and re-sealed
+#   KU  --mark seals unconditionally, so a file with no seal row gains one
+#   KD  --mark seals the bytes on disk after its move, not the bytes it wrote
+#   KR  the program:wait-for-deliverable remedy case is gone (the generic "re-run" one answers)
 # Exit: 0 every mutant killed exactly its set and the control ran clean; 1 a mismatch; 2 broken.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -57,6 +61,11 @@ EXP_SF="CS-J5 CS-M3"
 EXP_SP="CS-G1b CS-J1b CS-J5 CS-M1b"
 # SD: only the refusing cell of CS-G4; its two merging twins (CS-G4b, CS-G4c) pass either way.
 EXP_SD="CS-G4"
+# The --mark mutants. EXPECTED, UNMEASURED: derived from the arms, not yet scored.
+EXP_KP="CS-J7 CS-K2"
+EXP_KU="CS-J8 CS-K3"
+EXP_KD="CS-J9 CS-K4"
+EXP_KR="CS-K5"
 
 copy_tree() { # <dest> -- every declared path, and the fixture directory itself
   local dst="$1" p
@@ -144,6 +153,26 @@ copy_tree "$WORK/SD" && mutate "$WORK/SD" core/scripts/validate-gate-adjudicatio
   's/if first_t is not None and nonce_t is not None and first_t < nonce_t:/if False:/' \
   'first_t < nonce_t:' 'first_t < nonce_t:' \
   && score SD "$EXP_SD" || bad "SD: the mutant was not built"
+# KP: the sealed-bytes pre-check never refuses.
+copy_tree "$WORK/KP" && mutate "$WORK/KP" core/scripts/wait-for-deliverable.sh \
+  's/if \[ -z "\$MK_WANT" \] \|\| \[ "\$MK_HAVE" != "\$MK_WANT" \]; then/if false; then/' \
+  '"\$MK_HAVE" != "\$MK_WANT"' '"\$MK_HAVE" != "\$MK_WANT"' \
+  && score KP "$EXP_KP" || bad "KP: the mutant was not built"
+# KU: every marked file under planning-artifacts/ is sealed, row or no row.
+copy_tree "$WORK/KU" && mutate "$WORK/KU" core/scripts/wait-for-deliverable.sh \
+  's/MK_STATE=""; MK_ROWED=0; MK_SRC=/MK_STATE=""; MK_ROWED=1; MK_SRC=/' \
+  'MK_ROWED=0; MK_SRC=' 'MK_ROWED=0; MK_SRC=' \
+  && score KU "$EXP_KU" || bad "KU: the mutant was not built"
+# KD: the row records whatever is on disk after the move.
+copy_tree "$WORK/KD" && mutate "$WORK/KD" core/scripts/wait-for-deliverable.sh \
+  's/--record-expect "\$MK_STATE" program:wait-for-deliverable "\$MK_EXP" "\$MK_FILE"/--record "\$MK_STATE" program:wait-for-deliverable "\$MK_FILE"/' \
+  'bash "\$MK_SEAL" --record-expect' 'bash "\$MK_SEAL" --record-expect' \
+  && score KD "$EXP_KD" || bad "KD: the mutant was not built"
+# KR: the --mark remedy case is deleted.
+copy_tree "$WORK/KR" && mutate "$WORK/KR" core/scripts/content-seal.sh \
+  's/^    program:wait-for-deliverable\) printf [^\n]*\n//m' \
+  '^    program:wait-for-deliverable\) printf' '^    program:wait-for-deliverable\) printf' \
+  && score KR "$EXP_KR" || bad "KR: the mutant was not built"
 # The program-row mutant is keyed on the readers' own call: the three readers together must hold
 # exactly three --record calls in the unmutated tree and none in the mutant.
 n0="$(cat "$C0"/core/scripts/merge-adversarial-shards.sh "$C0"/core/scripts/join-remediator-shards.sh "$C0"/core/scripts/validate-gate-adjudication.sh | grep -cE 'bash "\$SEAL" --record|"bash", SEAL_LIB, "--record"')" || n0=0

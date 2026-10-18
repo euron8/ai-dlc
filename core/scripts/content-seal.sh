@@ -82,6 +82,11 @@
 #   content-seal.sh --record <state-dir> program:<name> <file>...   append a program row per file.
 #        A file outside the state dir is skipped; a state dir with no planning-artifacts/ records
 #        nothing (it is not a pipeline state dir) and exits 0.
+#   content-seal.sh --record-expect <state-dir> program:<name> <sha256> <file>   append ONE program
+#        row for <file> recording <sha256>, and only when the file's bytes on disk ARE that sha. A
+#        program that wrote the file from bytes it hashed itself passes that sha, so a write landing
+#        between its own write and this row is never sealed as the program's: exit 1, no row, and
+#        the file stays refused by every reader. `wait-for-deliverable.sh --mark` is the caller.
 #   content-seal.sh --first-tool-ts <state-dir>           the earliest `ts` of a TOOL seal row (actor
 #        `agent` or `session`) in this tree's ledger, same root filter as --check, or nothing when
 #        there is none. When the recorder first ran here; program rows do not count.
@@ -191,6 +196,9 @@ _seal_remedy() { # actor, path relative to the state dir -> the remedy sentence
       return ;;
   esac
   case "$1" in
+    # --mark appends a marker; re-running it over amended bytes is refused, and it never stacks a
+    # second marker, so the only remedy is the bytes it sealed, restored with Edit, then the mark.
+    program:wait-for-deliverable) printf 'restore the bytes with Edit, then re-run wait-for-deliverable.sh --mark (or --mark-repair), which re-seals the file' ;;
     program:*) printf 're-run %s, which writes the file and seals it again (it never overwrites, so move the file aside first), or restore its bytes with Edit, which seals them again' "${1#program:}" ;;
     *) printf 'restore the file with Write or Edit (which seals it again) or re-dispatch its writer, and never amend a join input through Bash' ;;
   esac
@@ -267,6 +275,22 @@ seal_record() { # <state dir> program:<name> <file>...
   done
 }
 
+seal_record_expect() { # <state dir> program:<name> <sha256> <file> -> 0 row appended / 1 bytes moved / 2
+  local st="$1" actor="$2" want="$3" f="$4" have
+  case "$actor" in program:[a-z0-9]*) ;; *) echo "content-seal: --record-expect takes program:<name>, not '$actor'" >&2; return 2 ;; esac
+  case "$want" in *[!0-9a-f]*|'') echo "content-seal: --record-expect takes a sha256, not '$want'" >&2; return 2 ;; esac
+  _seal_state "$st" || return 2
+  [ -d "${_SP}/planning-artifacts" ] || return 0
+  command -v jq >/dev/null 2>&1 || { echo "content-seal: jq is not on PATH" >&2; return 2; }
+  _seal_rel "$f" || return 0
+  have="$(seal_sha "$_FP")"
+  if [ "$have" != "$want" ]; then
+    echo "content-seal: $f is $have on disk, not the $want $actor wrote; no row was recorded" >&2
+    return 1
+  fi
+  seal_append "$_SL" "${_SN}/${_REL}" "$_SR" "$actor" "" "" "" "" "" "$want" || return 2
+}
+
 seal_main() {
   local mode="${1:-}" st
   case "$mode" in
@@ -283,11 +307,14 @@ seal_main() {
       [ "$#" -ge 4 ] || { echo "usage: $0 --record <state-dir> program:<name> <file>..." >&2; return 2; }
       st="$2"; shift
       seal_record "$st" "${2}" "${@:3}" ;;
+    --record-expect)
+      [ "$#" -eq 5 ] || { echo "usage: $0 --record-expect <state-dir> program:<name> <sha256> <file>" >&2; return 2; }
+      seal_record_expect "$2" "$3" "$4" "$5" ;;
     --first-tool-ts)
       [ "$#" -eq 2 ] || { echo "usage: $0 --first-tool-ts <state-dir>" >&2; return 2; }
       seal_first_tool_ts "$2" ;;
     --agent-ere) printf '%s\n' "$AGENT_ID_ERE" ;;
-    *) echo "usage: $0 --check|--row <state-dir> <file>... | --record <state-dir> program:<name> <file>... | --first-tool-ts <state-dir> | --agent-ere" >&2
+    *) echo "usage: $0 --check|--row <state-dir> <file>... | --record <state-dir> program:<name> <file>... | --record-expect <state-dir> program:<name> <sha256> <file> | --first-tool-ts <state-dir> | --agent-ere" >&2
        return 2 ;;
   esac
 }
