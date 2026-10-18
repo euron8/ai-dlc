@@ -1276,10 +1276,29 @@ CHK	mixed.md	a value outside the grammar: derivations: the validator reports ok"
 ' > "$d/serok.md"
   printf -- '- artifact: j\n\n<!-- shard: 01.md -->\n- artifact: p\n- advisor: called\n- derivations: replayed 1\n\n### F-1\n- disposition: repaired\n- edit: n/a\n\n### S-1\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: serial 1\n' > "$d/sernt.md"
   printf -- '- artifact: j\n\n<!-- shard: 01.md -->\n- artifact: p\n\n### F-1\n- disposition: repaired\n- edit: n/a\n\n- artifact: s\n\n### S-1\n- disposition: repaired\n- edit: n/a\n' > "$d/seropen.md"
-  o="$(checks_field 1 "$d/ser.md"; checks_field 1 "$d/serok.md"; checks_field 1 "$d/sernt.md"; checks_field 1 "$d/seropen.md")"
+  # A PART THAT WROTE NO TRIPLE (of graph's 266 s317-s319 parts, 5 repair parts with entries and no
+  # triple, plus 6 one-line *-done.md markers): the serial block opens at its own triple, so it is
+  # judged and passes (nonp); with no serial triple it is refused by name (nont). A count rule ("the
+  # second triple") refuses nonp. The near-miss (lowp): a part triple BELOW its first entry is read as
+  # the serial opener, and the block it opens owes both lines. A STATED LIMIT, FAIL-OPEN: had that part
+  # triple carried BOTH lines, they would satisfy the serial block -- no signal in the position rule
+  # separates it, and graph holds 0 of 266 parts with a triple below an entry and 0 with more than one.
+  # A TITLE IS NOT AN ENTRY (ktitle): a non-entry `### ` heading above the own triple of the part must not
+  # hand that triple to the serial block; an entry is seen at its `disposition:` line, so the serial
+  # triple with neither line still fires twice. An any-`### ` rule reads it quiet.
+  printf -- '- artifact: j\n\n<!-- shard: 01.md -->\n### F-1\n- disposition: repaired\n- edit: n/a\n\n- artifact: s\n- advisor: called\n- derivations: replayed 0\n\n### S-1\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: serial 1\n' > "$d/nonp.md"
+  printf -- '- artifact: j\n\n<!-- shard: 01.md -->\n### F-1\n- disposition: repaired\n- edit: n/a\n\n### S-1\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: serial 1\n' > "$d/nont.md"
+  printf -- '- artifact: j\n\n<!-- shard: 01.md -->\n### F-1\n- disposition: repaired\n- edit: n/a\n\n- artifact: p\n\n### S-1\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: serial 1\n' > "$d/lowp.md"
+  printf -- '- artifact: j\n\n<!-- shard: 01.md -->\n### Repair record -- shard 01\n- artifact: p\n- advisor: called\n- derivations: replayed 1\n\n### F-1\n- disposition: repaired\n- edit: n/a\n\n- artifact: s\n\n### S-1\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: serial 1\n' > "$d/ktitle.md"
+  o="$(checks_field 1 "$d/ser.md"; checks_field 1 "$d/serok.md"; checks_field 1 "$d/sernt.md"; checks_field 1 "$d/seropen.md"; checks_field 1 "$d/nonp.md"; checks_field 1 "$d/nont.md"; checks_field 1 "$d/lowp.md"; checks_field 1 "$d/ktitle.md")"
   [ "$o" = "CHK	ser.md	no advisor: line (the block closed at line 27 by 'repair-complete: serial 2')
 CHK	ser.md	no derivations: line (the block closed at line 27 by 'repair-complete: serial 2')
-CHK	sernt.md	the serial block closed at line 16 by 'repair-complete: serial 1' opens with no sha triple of its own after the last shard marker, so its advisor: and derivations: lines cannot be told from those of shard 01.md" ] \
+CHK	sernt.md	the serial block closed at line 16 by 'repair-complete: serial 1' opens with no sha triple of its own after the entries of the last shard, so its advisor: and derivations: lines cannot be told from those of shard 01.md
+CHK	nont.md	the serial block closed at line 12 by 'repair-complete: serial 1' opens with no sha triple of its own after the entries of the last shard, so its advisor: and derivations: lines cannot be told from those of shard 01.md
+CHK	lowp.md	no advisor: line (the block closed at line 14 by 'repair-complete: serial 1')
+CHK	lowp.md	no derivations: line (the block closed at line 14 by 'repair-complete: serial 1')
+CHK	ktitle.md	no advisor: line (the block closed at line 19 by 'repair-complete: serial 1')
+CHK	ktitle.md	no derivations: line (the block closed at line 19 by 'repair-complete: serial 1')" ] \
     || { rm -rf "$d"; die "the check-fields self-probe failed on the serial blocks: read '${o}'; no verdict"; }
   rm -rf "$d"
 }
@@ -1331,10 +1350,10 @@ checks_field() {
     fence && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { fence = 0; next } }
     !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
     fence { next }
-    rec == 1 && /^<!-- shard: [^ ]+ -->[ \t]*$/ { brk("M"); cm[nk] = $0; sub(/^<!-- shard: /, "", cm[nk]); sub(/ -->.*$/, "", cm[nk]); next }
+    rec == 1 && /^<!-- shard: [^ ]+ -->[ \t]*$/ { sawe = 0; brk("M"); cm[nk] = $0; sub(/^<!-- shard: /, "", cm[nk]); sub(/ -->.*$/, "", cm[nk]); next }
     rec == 1 && /^repair-complete:/ { tl[nk] = FNR; tx[nk] = $0; gsub(/[\t\r]/, " ", tx[nk]); sub(/[ ]+$/, "", tx[nk])
                                       split(tx[nk], tw, " "); ts[nk] = (tw[2] == "serial"); brk("E"); next }
-    rec == 1 && /^[[:space:]-]*[*_`]*artifact[*_`]*:/ { brk("T") }
+    rec == 1 && /^[[:space:]-]*[*_`]*artifact[*_`]*:/ { brk("T"); ce[nk] = sawe }
     /^[[:space:]-]*[*_`]*advisor[*_`]*:/ { v = val()
       if (kw(v, "called|unavailable")) ca[nk]++; else cb[nk] = cb[nk] " advisor: " v; next }
     /^[[:space:]-]*[*_`]*derivations[*_`]*:/ { v = val()
@@ -1343,7 +1362,7 @@ checks_field() {
       else if (kw(v, "deferred to the join")) { cd[nk]++; if (!dok) cb[nk] = cb[nk] " derivations: deferred in a files-mode part" }
       else cb[nk] = cb[nk] " derivations: " v
       next }
-    /^[[:space:]-]*[*_`]*disposition[*_`]*:/ { v = tolower(val()); sub(/[^a-z-].*$/, "", v); if (v == "repaired") { nrep++; cr[nk]++ } }
+    /^[[:space:]-]*[*_`]*disposition[*_`]*:/ { if (rec == 1) sawe = 1; v = tolower(val()); sub(/[^a-z-].*$/, "", v); if (v == "repaired") { nrep++; cr[nk]++ } }
     END {
       b = FILENAME; sub(/.*\//, "", b)
       # A PART is one segment, bound unconditionally once it holds a repaired entry.
@@ -1357,17 +1376,31 @@ checks_field() {
         # era-gated segment, as before.
         if (!nt) { judge(1, nk, "", "E", 0); exit }
       } else {
-        # The head and every shard segment, era-gated per segment. The LAST part runs to the SECOND
-        # `- artifact:` triple after the last marker: the first is that part own, and the serial
-        # remediator opens its block with its own (team-roles/remediator.md).
+        # The head and every shard segment, era-gated per segment. THE SERIAL BLOCK OPENS BY POSITION:
+        # at the first `- artifact:` triple after the last marker that follows one of the entries of
+        # that part (its `disposition:` line, outside a fence). A `### ` heading alone is not an entry: a
+        # part titled `### Repair record -- shard 01` above its own triple would otherwise hand that
+        # triple to the serial block, whose missing lines the part then satisfies (the ktitle probe).
+        # The own triple of a part opens its record (team-roles/remediator.md:
+        # the record "opens with the file it repaired"), so it sits ABOVE its first entry, and a triple
+        # below an entry belongs to the serial remediator. Keyed on a COUNT ("the second triple") the rule refused a correct
+        # serial block after a part that wrote no triple. Graph s317-s319 carry 266 parts: 255 whose
+        # triple sits above its first entry, 0 below, and 11 with no triple -- 5 repair parts with
+        # entries and no triple, plus 6 one-line *-done.md markers with no entries. THE NEAR-MISS, STATED: a part
+        # whose OWN triple sat below its first entry would be read as the serial opener, so its lines
+        # would be judged as the lines of a serial block -- and, closed by no terminator, as an era-gated tail.
+        # A STATED LIMIT, FAIL-OPEN: such a part triple carrying BOTH lines is still read as the serial
+        # opener, and its lines satisfy the serial block. No signal inside this rule separates it from a
+        # serial triple; the corpus holds 0 of 266 parts with a triple below an entry and 0 with more
+        # than one triple. The self-probe pins which way the engine answers it.
         s0 = 1
         for (j = 2; j <= lm; j++) if (ck[j] == "M") { judge(s0, j - 1, (s0 == 1 ? " (above the first shard marker)" : " (shard " cm[s0] ")"), "E", s0 > 1); s0 = j }
-        t1 = 0; t2 = 0
-        for (j = lm + 1; j <= nk; j++) if (ck[j] == "T") { if (!t1) t1 = j; else { t2 = j; break } }
+        t2 = 0
+        for (j = lm + 1; j <= nk; j++) if (ck[j] == "T" && ce[j]) { t2 = j; break }
         hi = (t2 ? t2 - 1 : nk)
-        # A SERIAL TERMINATOR BEFORE THAT SECOND TRIPLE closes a block with no triple of its own, whose
-        # lines cannot be told from the last part, so it is refused by name, never judged.
-        for (j = lm; j <= hi; j++) if (tl[j] && ts[j]) emit("the serial block closed at line " tl[j] " by \047" tx[j] "\047 opens with no sha triple of its own after the last shard marker, so its advisor: and derivations: lines cannot be told from those of shard " cm[lm], "")
+        # A SERIAL TERMINATOR BEFORE THAT TRIPLE closes a block with no triple of its own, whose lines
+        # cannot be told from the last part, so it is refused by name, never judged.
+        for (j = lm; j <= hi; j++) if (tl[j] && ts[j]) emit("the serial block closed at line " tl[j] " by \047" tx[j] "\047 opens with no sha triple of its own after the entries of the last shard, so its advisor: and derivations: lines cannot be told from those of shard " cm[lm], "")
         judge(lm, hi, " (shard " cm[lm] ")", "E", 1)
         if (!t2) exit
         lo = t2

@@ -959,7 +959,7 @@ fix aside as outside the shard or not required without naming a hand-off, and, i
 mode, a `repaired` entry with an edit whose `siblings:` field is absent or in none of its four
 forms, and a siblings fence whose control text is not in the file it names.
 
-After a join refusal naming a file `which no dispatched agent wrote`, a file `written by more
+After a join refusal naming a file `which no dispatched agent wrote`, or a file `written by more
 than one agent in the window`, or a part whose entry `sets part of the fix aside` and names no
 hand-off:
 

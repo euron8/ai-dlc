@@ -91,8 +91,14 @@ joined() { # -> a world whose record the join wrote and sealed with its program 
 mark_rep() { bash "$1" --mark-repair "$2" 1 > "$WORK/mark.out" 2>&1; MRC=$?; } # <engine> <record> -> MRC
 
 # CS-J6: the program-sealed record closed with --mark-repair -> the program re-seals it and
-# --escalations reads it.
-joined; mark_rep "$WFD" "$RREC"; r6="$(bash "$SEAL" --row "$RW/$ST" "$RREC" 2>/dev/null)"
+# --escalations reads it. The serial remediator first appends its OWN block with Edit -- its sha
+# triple and both check lines, as remediator.md requires -- because a serial terminator closing no
+# block of its own is refused by the join (BL-557): its check lines could not be told from the last
+# shard's.
+joined
+printf '\n- artifact: _bmad-output/planning-artifacts/s305/stories/story-2.1.md\n- artifact_sha_before: 0\n- artifact_sha_after: 0\n- advisor: called\n- derivations: replayed 0\n' >> "$RREC"
+seal_hook "$RW" Edit "$RREC" "$AG4"
+mark_rep "$WFD" "$RREC"; r6="$(bash "$SEAL" --row "$RW/$ST" "$RREC" 2>/dev/null)"
 run_esc "$RW" "$RREC"
 if [ "$MRC" = 0 ] && grep -qF "$PROW" <<<"$r6" && tail -1 "$RREC" | grep -q '^repair-complete: serial 1 sha=' \
    && [ "$RC" -eq 0 ] && has "$JO" "ESCALATED-COUNT:" && ! has "$JO" "$TOKEN"; then

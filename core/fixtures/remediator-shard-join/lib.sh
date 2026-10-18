@@ -1018,7 +1018,23 @@ p_chkserial() { # --escalations over a joined record carrying TWO serial blocks,
     && has "$JO" "no derivations: line (the block closed at line 30 by 'repair-complete: serial 2')" \
     && ! has "$JO" "serial 1')" && has "$JO" "ESCALATED-COUNT: 1 (0 closed" || return 1
   esc_rec "$1" "${CHS_HEAD}- advisor: unavailable\n- derivations: replayed 0\n${CHS_TAIL}"
-  [ "$r1" -eq 2 ] && [ "$RC" -eq 0 ] && ! has "$JO" "REFUSED" && has "$JO" "ESCALATED: 01.md F-2 — MAJOR"
+  [ "$r1" -eq 2 ] && [ "$RC" -eq 0 ] && ! has "$JO" "REFUSED" && has "$JO" "ESCALATED: 01.md F-2 — MAJOR" || return 1
+  # A PART THAT WROTE NO TRIPLE (of graph's 266 s317-s319 parts, 5 repair parts with entries and no triple,
+  # plus 6 one-line *-done.md markers with no entries): the serial block opens BY POSITION at
+  # its own triple, below the part's entries, so a correct block passes; with no serial triple it is
+  # refused by name. A count rule ("the second triple") refuses the correct block.
+  esc_rec "$1" "- artifact: r.md\n\n<!-- shard: 01.md -->\n### F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\n- artifact: s.md\n- advisor: called\n- derivations: replayed 0\n\n### S-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\nrepair-complete: serial 1\n"
+  [ "$RC" -eq 0 ] && ! has "$JO" "REFUSED" && has "$JO" "ESCALATED-COUNT: 0" || return 1
+  esc_rec "$1" "- artifact: r.md\n\n<!-- shard: 01.md -->\n### F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\n### S-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\nrepair-complete: serial 1\n"
+  [ "$RC" -eq 2 ] && has "$JO" "opens with no sha triple of its own after the entries of the last shard" \
+    && has "$JO" "ESCALATED-COUNT: 0" || return 1
+  # A TITLE IS NOT AN ENTRY: a non-entry `### ` heading above the part's own triple must not hand that
+  # triple to the serial block, so the serial triple stating neither line is refused for both. An entry
+  # is seen at its `disposition:` line; an any-`### ` rule lends the block the part's lines and reads rc 0.
+  esc_rec "$1" "- artifact: r.md\n\n<!-- shard: 01.md -->\n### Repair record -- shard 01\n- artifact: p.md\n- advisor: called\n- derivations: replayed 1\n\n### F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\n- artifact: s.md\n\n### S-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\nrepair-complete: serial 1\n"
+  [ "$RC" -eq 2 ] && has "$JO" "no advisor: line (the block closed at line 19 by 'repair-complete: serial 1')" \
+    && has "$JO" "no derivations: line (the block closed at line 19 by 'repair-complete: serial 1')" \
+    && has "$JO" "ESCALATED-COUNT: 0"
 }
 
 # ---- RE-RUN OF ONE PART (--rerun <part>.md@<ISO>) AND THE ALIAS RULE. Every row is still the REAL

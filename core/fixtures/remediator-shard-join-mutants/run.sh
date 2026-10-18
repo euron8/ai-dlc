@@ -75,7 +75,7 @@ SHARDS="a b c d e"
 MUTANTS_a="JX1 JX2 JX3 JX4 JX5 JX6 JX7 JX8 JX10 JX9 JX11 JX12 JX13 JX14 JX15 JX16 JX17 JX18 JX110"
 MUTANTS_b="JX19 JX20 JX21 JX22 JX23 JX24 JX25 JX26 JX27 JX28 JX29 JX30 JX36 JX37 JX38 JX42 JX43 JX44 JX95"
 MUTANTS_c="JX45 JX46 JX47 JX48 JX49 JX39 JX40 JX41 JX31 JX32 JX33 JX34 JX35 JX50 JX51 JX52 JX53 JX54 JX93 JX94"
-MUTANTS_d="JX55 JX56 JX57 JX58 JX59 JX60 JX61 JX62 JX63 JX64 JX65 JX66 JX67 JX68 JX69 JX70 JX71 JX72 JX73 JX111 JX112"
+MUTANTS_d="JX55 JX56 JX57 JX58 JX59 JX60 JX61 JX62 JX63 JX64 JX65 JX66 JX67 JX68 JX69 JX70 JX71 JX72 JX73 JX111 JX112 JX113 JX114"
 MUTANTS_e="JX74 JX75 JX76 JX77 JX78 JX79 JX80 JX81 JX82 JX83 JX84 JX85 JX86 JX87 JX88 JX89 JX90 JX91 JX92 JX96 JX97"
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
@@ -746,10 +746,11 @@ mutant "JX83 a CR kept on a ruling cite" "rulingtab" \
   '    function vtrim(v) { gsub(/^[ \t*_`\r]+|[ \t*_`\r]+$/, "", v); return v }' \
   '    function vtrim(v) { gsub(/^[ \t*_`]+|[ \t*_`]+$/, "", v); return v }'
 # JX84 is paired off: with the markers ignored, the serial self-probe cell sernt.md reads as an unmarked
-# record and the probe dies in every join.
-mutant2 "JX84 the check fields judged per file again, not per shard segment, self-probe removed" "chkjoined" \
-  '    rec == 1 && /^<!-- shard: [^ ]+ -->[ \t]*$/ { brk("M");' \
-  '    rec == 1 && /^<!-- shard: [^ ]+ -->[ \t]*$/ { next; brk("M");' \
+# record and the probe dies in every join. Re-anchored on the marker rule's `sawe = 0` reset, ignoring
+# the markers also strips p_chkserial's no-triple refusal, which is why its set widened to chkserial.
+mutant2 "JX84 the check fields judged per file again, not per shard segment, self-probe removed" "chkjoined chkserial" \
+  '    rec == 1 && /^<!-- shard: [^ ]+ -->[ \t]*$/ { sawe = 0; brk("M");' \
+  '    rec == 1 && /^<!-- shard: [^ ]+ -->[ \t]*$/ { next; sawe = 0; brk("M");' \
   "$CTPROBE_OLD" "$CTPROBE_NEW"
 # JX85: a refused parts join prints the escalation report before its exit, as record mode does.
 mutant "JX85 a refused parts join prints the escalation report" "partsilent" \
@@ -839,6 +840,22 @@ mutant "JX97 a record-only re-run not recognised" "rronly" \
 mutant2 "JX110 a serial block exempt via the era, self-probe removed" "chkserial" \
   '{ judge(lo, j, blk(j), (ts[j] ? "S" : "V"),' \
   '{ judge(lo, j, blk(j), (ts[j] ? "E" : "V"),' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
+# JX113: the COUNT rule restored -- the serial block opens at the second triple after the last marker, not
+# at the first one below the part entries -- so a correct serial block after a part that wrote no
+# triple is refused. The self-probe nonp cell sees it, so it is paired off.
+mutant2 "JX113 the serial block opened by triple count, not position, self-probe removed" "chkserial" \
+  '        for (j = lm + 1; j <= nk; j++) if (ck[j] == "T" && ce[j]) { t2 = j; break }' \
+  '        t1 = 0; for (j = lm + 1; j <= nk; j++) if (ck[j] == "T") { if (!t1) t1 = j; else { t2 = j; break } }' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
+# JX114: the any-heading rule restored -- the serial block opens at any ### heading after the last marker,
+# not at an entry's disposition line -- so a heading above the part entries opens it early and the
+# ktitle cell emits neither "no advisor/derivations ... line 19" message; p_chkserial's ktitle cell kills
+# it. The self-probe sees it, so it is paired off.
+mutant2 "JX114 the serial block opener keyed on any ### heading, not an entry, self-probe removed" "chkserial" \
+  '    /^[[:space:]-]*[*_`]*disposition[*_`]*:/ { if (rec == 1) sawe = 1; v = tolower(val()); sub(/[^a-z-].*$/, "", v); if (v == "repaired") { nrep++; cr[nk]++ } }' \
+  '    rec == 1 && /^###[ \t]/ { sawe = 1 }
+    /^[[:space:]-]*[*_`]*disposition[*_`]*:/ { v = tolower(val()); sub(/[^a-z-].*$/, "", v); if (v == "repaired") { nrep++; cr[nk]++ } }' \
   "$CTPROBE_OLD" "$CTPROBE_NEW"
 # ---- BL-565 supersedes chain. JX111: no dedupe (supersedes read but never linked), so seed a reads 2
 # (receipt regression r1''). The self-probe sees it, so it is paired off. EXPECTED SET IS AN UNRUN
