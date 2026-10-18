@@ -596,8 +596,8 @@ mutant2 "JX51 any siblings: spelling accepted, self-probe removed" "sibforms sib
   '    /^[[:space:]-]*[*_`]*siblings[*_`]*:/ { sibf = 1; sib = 1; inclaim = 0; next }' \
   "$CTPROBE_OLD" "$CTPROBE_NEW"
 mutant2 "JX52 a derived siblings fence accepted as the text form, self-probe removed" "sibforms" \
-  '                            if (b == "```text") {' \
-  '                            if (b == "```text" || b == "```derived") {' \
+  '                  if (b == "```text") {' \
+  '                  if (b == "```text" || b == "```derived") {' \
   "$CTPROBE_OLD" "$CTPROBE_NEW"
 mutant "JX53 the siblings control not counted at the join" "sibnever" \
   '      CTL) sib_control "$r" "$d" "$l" "$m" ;;' \
