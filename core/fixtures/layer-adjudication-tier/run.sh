@@ -1795,7 +1795,8 @@ p13_vec() {
   p13_rec "$d" "$P13_EL" "$P13_OFFDIFF" > "$REG"; v="$v $(p13_n "$s")"
   printf '%s' "$v"
 }
-if grep -q "^$P13_EL\$" "$CONS/$ENTRY" && git -C "$DIST" show "$THEIRS:core/skills/ai-dlc/steps/demo.md" | grep -qxF "$P13_OFFDIFF"; then
+p13_theirs_demo="$(git -C "$DIST" show "$THEIRS:core/skills/ai-dlc/steps/demo.md" 2>/dev/null)"
+if grep -qxF -- "$P13_EL" "$CONS/$ENTRY" && grep -qxF -- "$P13_OFFDIFF" <<<"$p13_theirs_demo"; then
   ok "Part 13 precondition: the entry line is in the entry, and R4's off-diff line IS in the hooked file at THEIRS — so R4 discriminates the diff from the whole file"
 else
   bad "Part 13 precondition failed: the seeded lines are not where the arms below assume, so they would measure the seed rather than the engine"
