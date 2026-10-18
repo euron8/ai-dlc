@@ -1392,7 +1392,7 @@ readset_vs_input() { # <fx> <ident> <rows file>: the digest input
 #   other inputs.decl readers strip a single `!`), ALL trailing `/` stripped from a directory. An absolute path
 #   or a `..` component refuses the declaration BEFORE the mapper runs, which is fed exactly these normalised
 #   paths.
-#   `+` KEYS A DECLARED FILE THAT SITS OUTSIDE THE UNIVERSE (an excluded top, e.g. docs/backlog.md). Such a file has
+#   `+` KEYS A DECLARED FILE THAT SITS OUTSIDE THE UNIVERSE (an excluded top, such as the dev-repo backlog). Such a file has
 #   no `.now` row, so readset_decl_keys has nothing to read its value from; the parse hashes it and emits a P row,
 #   which readset_decl_keys turns into an ordinary key row. The F row is emitted as for any declared file, so the
 #   sandbox copies it unchanged. `+` on a DIRECTORY is refused (`plusdir`): a directory under an excluded top has

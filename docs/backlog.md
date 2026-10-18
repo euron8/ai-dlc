@@ -176,7 +176,7 @@ Progress is new bytes in the unit's pool log or under its per-unit TMPDIR (opera
 
 Window: POOL_STALL_DEFAULT=<D9-WINDOW> polls, from a measured maximum silent stretch of <D9-MAX> polls (<D9-UNITS>) plus a margin of <D9-MARGIN>; set from the forced full run D9.
 
-verify: sh bash core/fixtures/consumer-suite-pool/receipt.sh
+verify: sh bash scripts/receipt-bl606-pool-stall.sh
 
 ## BL-608 — the validator fork budget's headroom eroded from +6 to 0 across five releases, and nothing warned
 
@@ -718,7 +718,7 @@ verify: manual
 
 `scripts/validate-enforcement-map.sh:6619` fixes the grammar as `i55_roots='(REPO_ROOT|ROOT|D_ROOT|C_ROOT)'`, and `i55_reach_scan` (`:6620`) builds both its `grep -rHnoE` pattern (`:6623`) and its awk `pat` (`:6637`) from it. A read written `"$X/docs/..."` through any other variable matches neither, so arm 3 never sees the line. The arm's control (`:6688`) uses the same four names, so it cannot notice either. The arm's self-probe (`:6657-6690`) seeds only `$ROOT`.
 
-Instance: `core/fixtures/consumer-suite-pool/receipt.sh` binds `D9_ROOT` at `:46` and reads through it at `:50`, `:52`, `:56`, `:58`, `:68`, `:69` and `:72`: the literal `"$D9_ROOT/docs"` at `:52`, and `"$D9_ROOT/$f"` at the others, where `$f` runs over `.githooks/pre-push` and `core/git-hooks/pre-push` (loops at `:49` and `:55`) and over `docs/backlog.md` and `docs/backlog.archive.md` (loop at `:67`). `docs/` is a content-key-excluded top, so these are the shape the arm hunts, were the root name recognised. Whether this receipt is a fixture input that should be keyed is a separate question; the point here is that the arm cannot say.
+Instance: `scripts/receipt-bl606-pool-stall.sh` binds `D9_ROOT` at `:49` and reads through it at `:53`, `:55`, `:59`, `:61`, `:71`, `:72`, `:75` and `:87`: the literal `"$D9_ROOT/docs"` at `:55`, and `"$D9_ROOT/$f"` at the others, where `$f` runs over `.githooks/pre-push` and `core/git-hooks/pre-push` (loops at `:52` and `:58`, and the hook candidates at `:87`) and over `docs/backlog.md` and `docs/backlog.archive.md` (loop at `:70`). `docs/` is a content-key-excluded top, so these are the shape the arm hunts, were the root name recognised. Whether this receipt is a fixture input that should be keyed is a separate question; the point here is that the arm cannot say.
 
 Measured (probe copy of `:6619-6656` at `d3f8d151`, `bash /private/tmp/claude-501/-Users-n8-git-ai-dlc/44823695-8b1f-4a1e-8168-15f96d480726/scratchpad/hands/bl674/probe.sh`, mktemp tree, two fixtures `cat "$ROOT/docs/x"` and `cat "$D9_ROOT/docs/x"`, excluded entry `docs`):
 
@@ -730,7 +730,7 @@ widened roots + D9_ROOT:  d9var/run.sh:1:$D9_ROOT/docs/  and  rootvar/run.sh:1:$
 
 So the ROOT read is reported, the D9_ROOT read of the identical path is not, and adding the one name makes it appear. This is the control plus the instance in one run. It shows the grammar is the cause; it does not show that the real `receipt.sh` reads are unkeyed.
 
-Real tree at `d3f8d151`: `<REALTREE: run realtree.sh>` (script `.../hands/bl674/realtree.sh`; it seeds a `$ROOT` control, derives the excluded list as the arm does, and counts hits naming `consumer-suite-pool/receipt.sh`, expected 0). Not run by the filing hand, by the lead's instruction.
+Real tree at `d3f8d151`: `<REALTREE: run realtree.sh>` (script `.../hands/bl674/realtree.sh`; it seeds a `$ROOT` control, derives the excluded list as the arm does, and counts hits naming `scripts/receipt-bl606-pool-stall.sh`, expected 0). Not run by the filing hand, by the lead's instruction.
 
 Population: `<POPULATION: run population.sh>` (script `.../hands/bl674/population.sh`: one grep over `core/fixtures/*/*.sh` for `$X_ROOT.../`, minus the four recognised names, listing distinct variable names with counts, with a control on the four names and on `D9_ROOT` in `receipt.sh`). This is a grep floor, not a parse: it sees only `*ROOT*` names written as `$NAME/` or `${NAME}/`, so a differently named variable or an indirect read is outside it. Not run by the filing hand.
 

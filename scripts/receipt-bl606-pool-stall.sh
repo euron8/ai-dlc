@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# consumer-suite-pool/receipt.sh [<hook>] -- the BL-606 backlog receipt: the pool worker REFUSES a unit
+# scripts/receipt-bl606-pool-stall.sh [<hook>] -- the BL-606 backlog receipt: the pool worker REFUSES a unit
 # that makes no progress, and kills its whole tree.
 #
 # Drives the hook's OWN extracted worker body (the `xargs ... bash -c` string, with POOL_WALK) over two
@@ -34,7 +34,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 #       so at rotation time the entry is still in docs/backlog.md.
 # An unfilled `<D9-WINDOW>` token fails A2, and must: an unfilled release does not pass.
 # Exit 1 on a failed assertion; exit 9 when an input is ABSENT (no repository root, either hook, or
-# docs/), which is every consumer tree -- this fixture ships, and they carry none of the three. With
+# docs/), which is any tree that carries none of the three. With
 # docs/ present and the entry in neither file the entry was deleted, which is a FAIL, not an absence.
 d9_root() { # walk up from $1 for a repository marker; never count hops
   local d="$1"
@@ -84,7 +84,7 @@ v="$(sed -n 's/^Window: POOL_STALL_DEFAULT=\([1-9][0-9]\{0,4\}\) polls.*$/\1/p' 
 
 HOOK="${1:-}"
 if [ -z "$HOOK" ]; then
-  for c in "$HERE/../../git-hooks/pre-push" "$HERE/../../../.githooks/pre-push"; do
+  for c in "$D9_ROOT/core/git-hooks/pre-push" "$D9_ROOT/.githooks/pre-push"; do
     [ -f "$c" ] && { HOOK="$c"; break; }
   done
 fi
