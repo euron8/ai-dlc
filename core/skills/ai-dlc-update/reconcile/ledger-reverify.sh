@@ -422,7 +422,7 @@ release_containing() {
   # branch it advanced, and it leaves no `<commit>:VERSION` read in this file at all -- which is
   # the token the filing anchors on, because reading VERSION AT a commit is the defect itself.
   if ! git -C "$DIST" rev-parse -q --verify "${_c}^" >/dev/null 2>&1 \
-     || ! git -C "$DIST" diff --quiet "${_c}^" "$_c" -- VERSION 2>/dev/null; then
+     || ! git -C "$DIST" diff --quiet --no-textconv "${_c}^" "$_c" -- VERSION 2>/dev/null; then
     _rc="$_c"
   else
     _rc="$(git -C "$DIST" log --reverse --format=%H "${_c}..${THEIRS}" -- VERSION 2>/dev/null)"

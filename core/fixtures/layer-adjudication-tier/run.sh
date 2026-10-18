@@ -172,6 +172,28 @@ case "$(spentnote)" in
   *)
     bad "the re-fired blocking row is byte-indistinguishable from one that was never adjudicated, so an operator who recorded and then made the edit the row itself prescribed is told only 'record a verdict' again: $(spentnote | cut -c1-90)" ;;
 esac
+# BL-704: the dirty test in adj_spent_note is `git diff --quiet` (working tree vs index), which
+# follows a textconv driver. A driver in the CONSUMER's own git config mapping both versions of the
+# entry to one text makes the operator's uncommitted edit read as clean, and the SPENT note vanishes.
+# The liveness premise (plain diff says "same", --no-textconv says "differ") is measured first.
+TC_ATTR="$CONS/.git/info/attributes"; TC_HAD=0; [ -f "$TC_ATTR" ] && { TC_HAD=1; cp "$TC_ATTR" "$TC_ATTR.tchold"; }
+git -C "$CONS" config diff.same.textconv 'sh -c "echo same" --'
+mkdir -p "$CONS/.git/info"; echo '* diff=same' >> "$TC_ATTR"
+tc_plain=0; git -C "$CONS" diff --quiet -- "$ENTRY" 2>/dev/null || tc_plain=$?
+tc_raw=0;   git -C "$CONS" diff --quiet --no-textconv -- "$ENTRY" 2>/dev/null || tc_raw=$?
+tc_note="$(spentnote)"
+git -C "$CONS" config --unset diff.same.textconv
+if [ "$TC_HAD" = 1 ]; then mv "$TC_ATTR.tchold" "$TC_ATTR"; else rm -f "$TC_ATTR"; fi
+if [ "$tc_plain" -ne 0 ] || [ "$tc_raw" -ne 1 ]; then
+  bad "textconv premise: the seeded consumer driver is not live (plain diff rc=$tc_plain, --no-textconv rc=$tc_raw; wanted 0 and 1), so the arm below would pass on a driver that does nothing"
+else
+  case "$tc_note" in
+    *"SPENT verdict rather than an unanswered one"*)
+      ok "textconv: a consumer driver mapping the edited and committed entry to one text still yields the SPENT note (the dirty test reads bytes)" ;;
+    *)
+      bad "textconv: the dirty test followed the consumer's textconv driver and read an edited entry as clean, so the SPENT note was dropped: $(printf '%s' "$tc_note" | cut -c1-90)" ;;
+  esac
+fi
 # CONTROL 1: with the register cleared the SAME dirty entry must NOT carry the note.
 mv "$REG" "$REG.spenthold"
 case "$(spentnote)" in
