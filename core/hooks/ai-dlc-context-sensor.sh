@@ -417,19 +417,24 @@ if [ -n "$LEAD_MODEL" ]; then
   fi
 fi
 
-# AN ADVISOR TURN'S TOP-LEVEL USAGE IS A SUM OVER ITS API ITERATIONS, NOT A CONTEXT SIZE. A turn
-# that calls the advisor carries `usage.iterations`: the lead's `message` call, the advisor's
-# `advisor_message`, then the lead's `message` again. The top level adds both `message` reads, so
-# one advisor call roughly doubles the figure. Measured on the graph consumer's s319 lead: top
-# level 554953, iterations 276904 / 277772 / 278049, and the next turn 279085 -- a false IMMINENT
-# at 132% of a window the lead was 66% into. The context is the LAST `message` iteration. A line
-# with no iterations, or none of type `message`, keeps the top-level reading.
-TOKENS="$(printf '%s' "$LINE" | jq '
-  .message.usage
-  | ([ .iterations[]? | select(.type == "message") ] | last) as $lastmsg
-  | ($lastmsg // .)
-  | (.input_tokens // 0) + (.cache_creation_input_tokens // 0) + (.cache_read_input_tokens // 0)
-' 2>/dev/null || true)"
+# AN ADVISOR TURN'S TOP-LEVEL USAGE IS A SUM OVER ITS API ITERATIONS, NOT A CONTEXT SIZE. Read
+# raw it put the graph consumer's s319 lead at 554953 against a true 278049 -- a false IMMINENT
+# at 132% of a window the lead was 66% into. THE RULE IS NOT SPELLED HERE: it lives in the
+# sibling library ai-dlc-usage-tokens.sh as the jq def `ctx_tokens`, because the subagent probe
+# reads the same quantity off the same record shape and kept its own copy of the old sum after
+# this hook was fixed. One def, two readers, no second copy.
+#
+# NO INLINE FALLBACK WHEN THE LIBRARY IS ABSENT, AND THE OMISSION IS THE POINT. A fallback is the
+# second copy this library exists to delete. An unreadable library exits 0 silently, exactly as
+# an unparseable reading does two lines down -- the library ships in the same copy step as this
+# hook, so its absence is a broken install, and I13 fails the build on a sourced sibling that
+# names no file. The variable is set EMPTY before the source because this hook runs `set -u`: a
+# missing library would otherwise make the test below an unbound-variable error, not an exit 0.
+CTX_TOKENS_DEF=""
+_AI_DLC_USAGE_LIB="$(dirname "${BASH_SOURCE[0]}")/ai-dlc-usage-tokens.sh"
+[ -r "$_AI_DLC_USAGE_LIB" ] && . "$_AI_DLC_USAGE_LIB"
+[ -n "$CTX_TOKENS_DEF" ] || exit 0
+TOKENS="$(printf '%s' "$LINE" | jq "${CTX_TOKENS_DEF}"' .message.usage | ctx_tokens' 2>/dev/null || true)"
 case "${TOKENS:-}" in ''|*[!0-9]*) exit 0 ;; esac
 [ "$TOKENS" -gt 0 ] || exit 0
 
