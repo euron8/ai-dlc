@@ -49,19 +49,26 @@ lead, and the architect dispatches and joins nothing), and names
 its result file and completion signal: the chain record
 `_bmad-output/planning-artifacts/s<N>/architecture-chain.md`. The architect
 writes that record FIRST, with its header; appends one line naming each file
-of the chain as it finishes writing that file; and only after the LAST file of
-the chain is written makes one final write, the line
+of the chain when it STARTS writing that file, and another when it finishes
+it; and only after the LAST file of the chain is written makes one final
+write, the line
 `seat-complete: architecture architect none findings=0`, after which it edits
-no file of the chain. Join it with
+no file of the chain. The record is appended to, never rewritten. Join it with
 `scripts/ai-dlc/wait-for-deliverable.sh --complete --dispatch <agentId> _bmad-output/planning-artifacts/s<N>/architecture-chain.md`,
 `run_in_background: true`, `<agentId>` being the one its Agent result
 returned. Never join on `ARCHITECTURE-SPINE.md`, and never on
-`docs/architecture*.md`.
+`docs/architecture*.md`. Under `--complete` a beat is granted again only
+when the record has changed, so one file that takes longer than the beat
+budget ends the join as NON-DELIVERY with the record UNFINISHED. While the
+architect's completion notification has not arrived, that is a live
+architect, not a non-delivery: re-arm the same join with `--reset`, and
+never re-dispatch a second architect beside it.
 
 **The chain drafts; the lead adopts.** The architect runs `lint_spine.py` as
-below and lists its `<lint json>` in the record, and returns section 3's
-readiness findings, every operator-owned value it did not pick, and every
-change a notarized file would need. Once the join reports the record
+below and lists its `<lint json>` in the record. It records its section 2
+assessment (NO CHANGES NEEDED, or the change set) in the record and returns
+it, with section 3's readiness findings, every operator-owned value it did
+not pick, and every change a notarized file would need. Once the join reports the record
 `DELIVERED` AND the architect's completion notification has carried its
 return, the lead reads the record and the return, routes each operator-owned
 value and finding, and only then starts section 4. The lead
