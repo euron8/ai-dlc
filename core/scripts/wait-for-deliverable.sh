@@ -581,6 +581,98 @@ if [ "$STATUS" -eq 0 ]; then   # --status creates nothing, not even the state di
   mkdir -p "$COUNTER_DIR" 2>/dev/null || true
 fi
 
+# A sidecar write whose loss costs a record, never the beat: the beat goes on, and the failure
+# is said on stderr rather than folded into success.
+sidecar_put() {  # $1 = file, $2 = content
+  printf '%s' "$2" > "$1" 2>/dev/null || echo "WARN: wait-for-deliverable: could not write $1" >&2
+}
+
+# ---------------------------------------------------------------------------
+# THE BEAT-LIVENESS LEASE, AND WHO MAY REMOVE IT.
+#
+# `.beat-inflight` is the ONE marker Stop-hook Check 2b reads, and every beat in a project
+# shares it. Until this release each beat wrote a bare epoch and its EXIT trap deleted the file
+# unconditionally, so the first beat to exit took the lease from every other beat still asleep.
+# Measured, two beats from two shells: B delivered and exited, A stayed alive, and the marker was
+# ABSENT, 3 runs of 3 -- the Stop hook then reports "no live wait-beat" with one sleeping.
+#
+# So the marker is `<epoch> <pid>` and has ONE holder. Every live beat also registers its own
+# `.wait-beats/.lease-<pid>` (its epoch), re-stamped every poll. A beat takes the marker only
+# when it is absent, unparseable, expired, or names a holder that is dead -- no registration,
+# an expired one, or a pid `kill -0` cannot signal; the registration is what makes a recycled
+# pid read dead. On exit a beat removes the marker only if it holds it, and first hands it to
+# any other live registered beat. A pid-less live marker is a beat from before this release,
+# mid-pull: it is left alone, because that beat re-stamps it and deletes it on its own exit,
+# after which the next poll here re-takes it.
+#
+# THE WINDOW THAT REMAINS. A SIGKILLed holder skips its trap, so a live sibling takes the
+# marker when the dead holder's registration expires, up to one lease length (3 x POLL) -- the
+# same window a single SIGKILLed beat leaves today, worth at most one Rule 3 block.
+#
+# WRITTEN BEFORE THE PRE-SLEEP WORK, not after it. The bound check, the shell-marker prune and
+# the sweep run first and can take seconds over a large wave; a lease written only at the sleep
+# left that window uncovered, which is the "armed seconds ago, hook saw no beat" the s319 lead
+# reported. A call that turns out not to sleep releases what it took, through the same trap.
+#
+# AND BEFORE EVERY OTHER READ, right after the state dir exists. The guards, the --dispatch
+# resolution (which reads the spawn ledger and the subagents dir) and the sweep's `--shard-header`
+# check (a subprocess per shard) all ran before the lease, and any of them can block: measured
+# with the ledger as a FIFO, a --dispatch beat sat blocked with no marker on disk, so the hook
+# saw no beat while one was armed. A call those steps refuse (exit 64) releases the lease through
+# the same trap, so a refusal leaves nothing behind.
+# ---------------------------------------------------------------------------
+BEAT_MARKER="${STATE_DIR}/.beat-inflight"
+LEASE_SELF="${COUNTER_DIR}/.lease-$$"
+lease_holder_dead() {  # $1 = holder pid -> 0 when no live beat stands behind it
+  ld_r_="$(cat "${COUNTER_DIR}/.lease-$1" 2>/dev/null || echo '')"
+  case "$ld_r_" in ''|*[!0-9]*) return 0 ;; esac
+  [ "$ld_r_" -gt "$(date +%s)" ] || return 0
+  kill -0 "$1" 2>/dev/null && return 1
+  return 0
+}
+LEASE_TMP="${COUNTER_DIR}/.beat-inflight.$$"   # inside the ignored .wait-beats/, same filesystem
+lease_put() {  # $1 = epoch, $2 = pid -- whole-file replace, never a partial line for the hook to read
+  { printf '%s %s' "$1" "$2" > "$LEASE_TMP" 2>/dev/null && mv -f "$LEASE_TMP" "$BEAT_MARKER" 2>/dev/null; } \
+    || echo "WARN: wait-for-deliverable: could not write the lease $BEAT_MARKER; the stop hook will not see this beat" >&2
+}
+beat_alive() {
+  ba_e_=$(( $(date +%s) + 3 * POLL ))
+  sidecar_put "$LEASE_SELF" "$ba_e_"
+  ba_cur_="$(cat "$BEAT_MARKER" 2>/dev/null || echo '')"
+  ba_ep_="${ba_cur_%% *}"
+  case "$ba_cur_" in *' '*) ba_pid_="${ba_cur_#* }" ;; *) ba_pid_="" ;; esac
+  case "$ba_ep_" in ''|*[!0-9]*) lease_put "$ba_e_" "$$"; return 0 ;; esac
+  case "$ba_pid_" in *[!0-9]*) lease_put "$ba_e_" "$$"; return 0 ;; esac
+  if [ "$ba_ep_" -le "$(date +%s)" ]; then lease_put "$ba_e_" "$$"; return 0; fi
+  [ -n "$ba_pid_" ] || return 0                     # a live pre-upgrade lease: not ours to take
+  if [ "$ba_pid_" = "$$" ] || lease_holder_dead "$ba_pid_"; then lease_put "$ba_e_" "$$"; fi
+  return 0
+}
+lease_release() {
+  lr_cur_="$(cat "$BEAT_MARKER" 2>/dev/null || echo '')"
+  case "$lr_cur_" in *' '*) lr_pid_="${lr_cur_#* }" ;; *) lr_pid_="" ;; esac
+  if [ "$lr_pid_" = "$$" ]; then
+    lr_now_="$(date +%s)"; lr_heir_=""
+    for lr_f_ in "$COUNTER_DIR"/.lease-*; do
+      [ -f "$lr_f_" ] || continue
+      lr_p_="${lr_f_##*/.lease-}"
+      [ "$lr_p_" = "$$" ] && continue
+      lr_e_="$(cat "$lr_f_" 2>/dev/null || echo '')"
+      case "$lr_p_$lr_e_" in *[!0-9]*|'') rm -f "$lr_f_" 2>/dev/null; continue ;; esac
+      if [ "$lr_e_" -gt "$lr_now_" ] && kill -0 "$lr_p_" 2>/dev/null; then lr_heir_="$lr_e_ $lr_p_"; break; fi
+      rm -f "$lr_f_" 2>/dev/null
+    done
+    if [ -n "$lr_heir_" ]; then lease_put "${lr_heir_%% *}" "${lr_heir_#* }"
+    else rm -f "$BEAT_MARKER" 2>/dev/null; fi
+  fi
+  rm -f "$LEASE_SELF" "$LEASE_TMP" 2>/dev/null || true
+}
+# --status writes nothing (header: "--status"), so it neither takes the lease nor arms the trap.
+if [ "$STATUS" -eq 0 ]; then
+trap 'lease_release' EXIT
+beat_alive
+fi
+
 # ---------------------------------------------------------------------------
 # THE PROGRESS PATH MAY NOT BE THE STATE DIR, OR ANY ANCESTOR OF IT.
 # `_bmad-output` is the obvious thing to reach for -- it is where deliverables
@@ -767,11 +859,6 @@ settle_record() {  # $1 = sidecar -> prints `<hash> <epoch>`; 1 when there is no
 # cleared by --reset, a bound
 # wipe, or a beat armed with a join epoch later than its last write (a new round; see
 # "ROUND-SCOPED RECORDS").
-# A sidecar write whose loss costs a record, never the beat: the beat goes on, and the failure
-# is said on stderr rather than folded into success.
-sidecar_put() {  # $1 = file, $2 = content
-  printf '%s' "$2" > "$1" 2>/dev/null || echo "WARN: wait-for-deliverable: could not write $1" >&2
-}
 revised_bump() {  # $1 = the .settle sidecar path; bumps its sibling .revised
   rb_f_="${1%.settle}.revised"
   rb_n_=0; [ -f "$rb_f_" ] && rb_n_="$(cat "$rb_f_" 2>/dev/null || echo 0)"
@@ -1168,81 +1255,6 @@ if [ "$STATUS" -eq 1 ]; then
   exit 0
 fi
 
-# ---------------------------------------------------------------------------
-# THE BEAT-LIVENESS LEASE, AND WHO MAY REMOVE IT.
-#
-# `.beat-inflight` is the ONE marker Stop-hook Check 2b reads, and every beat in a project
-# shares it. Until this release each beat wrote a bare epoch and its EXIT trap deleted the file
-# unconditionally, so the first beat to exit took the lease from every other beat still asleep.
-# Measured, two beats from two shells: B delivered and exited, A stayed alive, and the marker was
-# ABSENT, 3 runs of 3 -- the Stop hook then reports "no live wait-beat" with one sleeping.
-#
-# So the marker is `<epoch> <pid>` and has ONE holder. Every live beat also registers its own
-# `.wait-beats/.lease-<pid>` (its epoch), re-stamped every poll. A beat takes the marker only
-# when it is absent, unparseable, expired, or names a holder that is dead -- no registration,
-# an expired one, or a pid `kill -0` cannot signal; the registration is what makes a recycled
-# pid read dead. On exit a beat removes the marker only if it holds it, and first hands it to
-# any other live registered beat. A pid-less live marker is a beat from before this release,
-# mid-pull: it is left alone, because that beat re-stamps it and deletes it on its own exit,
-# after which the next poll here re-takes it.
-#
-# THE WINDOW THAT REMAINS. A SIGKILLed holder skips its trap, so a live sibling takes the
-# marker when the dead holder's registration expires, up to one lease length (3 x POLL) -- the
-# same window a single SIGKILLed beat leaves today, worth at most one Rule 3 block.
-#
-# WRITTEN BEFORE THE PRE-SLEEP WORK, not after it. The bound check, the shell-marker prune and
-# the sweep run first and can take seconds over a large wave; a lease written only at the sleep
-# left that window uncovered, which is the "armed seconds ago, hook saw no beat" the s319 lead
-# reported. A call that turns out not to sleep releases what it took, through the same trap.
-# ---------------------------------------------------------------------------
-BEAT_MARKER="${STATE_DIR}/.beat-inflight"
-LEASE_SELF="${COUNTER_DIR}/.lease-$$"
-lease_holder_dead() {  # $1 = holder pid -> 0 when no live beat stands behind it
-  ld_r_="$(cat "${COUNTER_DIR}/.lease-$1" 2>/dev/null || echo '')"
-  case "$ld_r_" in ''|*[!0-9]*) return 0 ;; esac
-  [ "$ld_r_" -gt "$(date +%s)" ] || return 0
-  kill -0 "$1" 2>/dev/null && return 1
-  return 0
-}
-LEASE_TMP="${COUNTER_DIR}/.beat-inflight.$$"   # inside the ignored .wait-beats/, same filesystem
-lease_put() {  # $1 = epoch, $2 = pid -- whole-file replace, never a partial line for the hook to read
-  { printf '%s %s' "$1" "$2" > "$LEASE_TMP" 2>/dev/null && mv -f "$LEASE_TMP" "$BEAT_MARKER" 2>/dev/null; } \
-    || echo "WARN: wait-for-deliverable: could not write the lease $BEAT_MARKER; the stop hook will not see this beat" >&2
-}
-beat_alive() {
-  ba_e_=$(( $(date +%s) + 3 * POLL ))
-  sidecar_put "$LEASE_SELF" "$ba_e_"
-  ba_cur_="$(cat "$BEAT_MARKER" 2>/dev/null || echo '')"
-  ba_ep_="${ba_cur_%% *}"
-  case "$ba_cur_" in *' '*) ba_pid_="${ba_cur_#* }" ;; *) ba_pid_="" ;; esac
-  case "$ba_ep_" in ''|*[!0-9]*) lease_put "$ba_e_" "$$"; return 0 ;; esac
-  case "$ba_pid_" in *[!0-9]*) lease_put "$ba_e_" "$$"; return 0 ;; esac
-  if [ "$ba_ep_" -le "$(date +%s)" ]; then lease_put "$ba_e_" "$$"; return 0; fi
-  [ -n "$ba_pid_" ] || return 0                     # a live pre-upgrade lease: not ours to take
-  if [ "$ba_pid_" = "$$" ] || lease_holder_dead "$ba_pid_"; then lease_put "$ba_e_" "$$"; fi
-  return 0
-}
-lease_release() {
-  lr_cur_="$(cat "$BEAT_MARKER" 2>/dev/null || echo '')"
-  case "$lr_cur_" in *' '*) lr_pid_="${lr_cur_#* }" ;; *) lr_pid_="" ;; esac
-  if [ "$lr_pid_" = "$$" ]; then
-    lr_now_="$(date +%s)"; lr_heir_=""
-    for lr_f_ in "$COUNTER_DIR"/.lease-*; do
-      [ -f "$lr_f_" ] || continue
-      lr_p_="${lr_f_##*/.lease-}"
-      [ "$lr_p_" = "$$" ] && continue
-      lr_e_="$(cat "$lr_f_" 2>/dev/null || echo '')"
-      case "$lr_p_$lr_e_" in *[!0-9]*|'') rm -f "$lr_f_" 2>/dev/null; continue ;; esac
-      if [ "$lr_e_" -gt "$lr_now_" ] && kill -0 "$lr_p_" 2>/dev/null; then lr_heir_="$lr_e_ $lr_p_"; break; fi
-      rm -f "$lr_f_" 2>/dev/null
-    done
-    if [ -n "$lr_heir_" ]; then lease_put "${lr_heir_%% *}" "${lr_heir_#* }"
-    else rm -f "$BEAT_MARKER" 2>/dev/null; fi
-  fi
-  rm -f "$LEASE_SELF" "$LEASE_TMP" 2>/dev/null || true
-}
-trap 'lease_release' EXIT
-beat_alive
 
 # ---------------------------------------------------------------------------
 # COUNTERS ARE SCOPED TO THE BOUND THEY WERE COUNTED AGAINST.

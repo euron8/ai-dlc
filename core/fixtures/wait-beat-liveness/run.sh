@@ -2023,6 +2023,75 @@ M39_dispatch_toolu_only() {
   rm -rf "$W"
 }
 
+# ===========================================================================
+# 20. THE LEASE IS HELD BEFORE ANY STEP THAT CAN BLOCK.
+#     The stop hook allows the lead's yield only while `.beat-inflight` is live. A beat that
+#     blocks before writing it reads to the hook as "no beat armed" while one is. Two blocking
+#     steps are forced, each on a FIFO this fixture holds open: the --dispatch ledger read
+#     (20a, which the lease once followed) and the sweep's --shard-header check (20b, which it
+#     already preceded -- a pin). Each case first proves the beat REACHED the blocking read (the
+#     FIFO's writer opens only once a reader has); no progress there is FIXTURE BROKEN, exit 2,
+#     never a FAIL. Nothing here reads a clock.
+# ===========================================================================
+BLK_PID=""; BLK_MARK=""
+fifo_hold() {  # $1 = fifo, $2 = reached file, $3 = release file: opens the writer, records it, holds until released
+  ( exec 3> "$1"; : > "$2"; while [ ! -e "$3" ]; do sleep 0.1; done; printf '%s\n' "${4:-}" >&3 ) &
+  FH_PID=$!
+}
+blocked_lease() {  # $1 = workdir, $2 = reached file, $3 = release file; reads BLK_PID; sets BLK_MARK
+  until_ok 300 test -e "$2" || { kill "$BLK_PID" "$FH_PID" 2>/dev/null; broken "lease: the beat never reached its blocking read"; }
+  BLK_MARK=0; [ -n "$(marker_pid "$1")" ] && [ "$(marker_pid "$1")" = "$BLK_PID" ] && BLK_MARK=1
+  : > "$3"
+  wait "$FH_PID" 2>/dev/null; wait "$BLK_PID" 2>/dev/null
+}
+ledger_fifo_world() {  # $1 = subject (in a sibling dir); leaves W, sets BLK_MARK
+  W="$(mk_work)"; command -v mkfifo >/dev/null || broken "no mkfifo"
+  mkfifo "$W/_bmad-output/spawn-ledger.jsonl" || broken "cannot make the ledger a FIFO"
+  fifo_hold "$W/_bmad-output/spawn-ledger.jsonl" "$W/reached" "$W/release" \
+    "{\"v\":1,\"ts\":\"$(fx_iso $(( $(date +%s) - 30 )))\",\"name\":\"wbl\",\"tool_use_id\":\"toolu_wbl541\"}"
+  ( cd "$W" && exec env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 \
+      AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+      AI_DLC_PROJECT_ROOT="$PWD" bash "$1" --dispatch toolu_wbl541 deliv.md ) > "$BEATOUT" 2>&1 &
+  BLK_PID=$!
+  blocked_lease "$W" "$W/reached" "$W/release"
+  OUT="$(cat "$BEATOUT")"
+}
+S20a_lease_before_dispatch_read() {
+  ledger_fifo_world "$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  if has "WAITING   deliv.md"; then ok "lease-early: CONTROL — the beat blocked on the ledger resumed and ran once the row arrived"
+  else bad "lease-early: CONTROL FAILED — the beat over a FIFO ledger never ran a beat: $OUT"; fi
+  if [ "$BLK_MARK" -eq 1 ]; then ok "lease-early: a --dispatch beat blocked reading the spawn ledger already holds .beat-inflight"
+  else bad "lease-early: a --dispatch beat blocked on the ledger held no lease — the stop hook sees no beat while one is armed"; fi
+  rm -rf "$W"
+}
+S20b_lease_before_shard_check() {
+  SD="$(sib_dir "$SUBJ")"; W="$(mk_work)"; command -v mkfifo >/dev/null || broken "no mkfifo"
+  mkfifo "$W/hdr.fifo" || broken "cannot make the header FIFO"
+  # The stub merge: records that the sweep reached it, then blocks reading the FIFO; exits 0 (header passes).
+  printf '#!/usr/bin/env bash\n: > "%s/reached"\nIFS= read -r _ < "%s/hdr.fifo"\nexit 0\n' "$W" "$W" > "$SD/merge-adversarial-shards.sh"
+  printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W/s.md"
+  fifo_hold "$W/hdr.fifo" "$W/held" "$W/release" go
+  ( cd "$W" && exec env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_SETTLE_SECS=1 AI_DLC_WAIT_POLL_SECS=1 \
+      AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+      AI_DLC_PROJECT_ROOT="$PWD" bash "$SD/wait-for-deliverable.sh" --since "$(( $(date +%s) - 30 ))" --complete --shard-header convergence s.md ) > "$BEATOUT" 2>&1 &
+  BLK_PID=$!
+  blocked_lease "$W" "$W/reached" "$W/release"
+  OUT="$(cat "$BEATOUT")"
+  if [ -e "$W/reached" ]; then ok "lease-early: CONTROL — the sweep reached the stub header check"
+  else bad "lease-early: CONTROL FAILED — the sweep never ran the header check: $OUT"; fi
+  if [ "$BLK_MARK" -eq 1 ]; then ok "lease-early: a beat blocked inside the sweep's header check already holds .beat-inflight"
+  else bad "lease-early: a beat blocked in the sweep's header check held no lease"; fi
+  rm -rf "$W"
+}
+M40_lease_after_dispatch() {
+  mutant lease-not-first -e "/^trap 'lease_release' EXIT\$/{n;/^beat_alive\$/d;}" || return
+  ledger_fifo_world "$(sib_dir "$MUT")/wait-for-deliverable.sh"
+  if [ "$BLK_MARK" -eq 0 ] && has "WAITING   deliv.md"; then
+    ok "MUTANT lease-not-first: without the lease at arming a beat blocked on the ledger holds none — section 20a catches it"
+  else bad "MUTANT lease-not-first: section 20a survives the early lease being deleted (mark=$BLK_MARK): $OUT"; fi
+  rm -rf "$W"
+}
+
 # ---------------------------------------------------------------------------
 # THE DRIVER
 # ---------------------------------------------------------------------------
