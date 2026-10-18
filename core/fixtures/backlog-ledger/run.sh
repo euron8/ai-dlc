@@ -956,18 +956,19 @@ LS="$GS/backlog.md"
 { printf '# Probe\n\n## BL-801 — prose after\n\nbody\n\n<br>**LANDED (v0.370.0, verified %s).** Done; it was verified against the shipping join.\n\nverify: manual\n\n' "$GSHA"
   printf '## BL-802 — near miss\n\nbody\n\n<br>**LANDED (v0.370.0, verified %s).** Done.\n\nverify: manual\n\n' "$GSHA"
   printf '## BL-803 — prose before\n\nbody\n\n**LANDED (v0.370.0, verified %s).** Done.\n\nverify: manual\n\n' "$GSHA"
+  printf '## BL-805 — dot inside the parens\n\nbody\n\n<br>**LANDED (v0.607.0, verified %s.)**\n\nverify: manual\n\n' "$GSHA"
   printf '## BL-804 — live\n\nbody\n\nverify: manual\n'; } > "$LS"
 SA="$(bash "$RT" "$LS" --check 2>&1)"
 n_res="$(grep -c "\[sha $GSHA resolves\]" <<<"$SA")" || n_res=0
-if [ "$n_res" -eq 3 ] && ! grep -q "DOES NOT RESOLVE" <<<"$SA"; then
-  ok "sha-anchored" "all three LANDED lines resolve their OWN sha, including the one whose later prose says \"verified against\""
-else bad "sha-anchored" "$n_res of 3 LANDED lines resolved $GSHA; output: $(grep -E 'sha ' <<<"$SA" | tr '\n' '|')"; fi
+if [ "$n_res" -eq 4 ] &&! grep -q "DOES NOT RESOLVE" <<<"$SA"; then
+  ok "sha-anchored" "all four LANDED lines resolve their OWN sha, including the one whose later prose says \"verified against\" and the archive form ending \"<sha>.)**\""
+else bad "sha-anchored" "$n_res of 4 LANDED lines resolved $GSHA; output: $(grep -E 'sha ' <<<"$SA" | tr '\n' '|')"; fi
 # MUTANT: the greedy read restored.
-SHN="$(grep -cF 'verified \([0-9a-f]\{7,\}\)).*/\2/p' "$RT")" || SHN=0
+SHN="$(grep -cF 'verified \([0-9a-f]\{7,\}\)[^0-9a-f].*/\2/p' "$RT")" || SHN=0
 if [ "$SHN" -ne 1 ]; then bad "mutation-sha-greedy" "the anchored sha read appears $SHN times; the mutation needs exactly one"
 else
   # ENVIRON carries both strings, because awk -v would strip one level of backslash escaping.
-  MUT_NEEDLE='verified \([0-9a-f]\{7,\}\)).*/\2/p' \
+  MUT_NEEDLE='verified \([0-9a-f]\{7,\}\)[^0-9a-f].*/\2/p' \
   MUT_LINE='  SHA="$(printf '"'"'%s\n'"'"' "$ANN" | sed -n '"'"'s/.*verified \([0-9a-f][0-9a-f]*\).*/\1/p'"'"')"' \
     awk 'index($0, ENVIRON["MUT_NEEDLE"]) { print ENVIRON["MUT_LINE"]; next } { print }' "$RT" > "$RRT"
   if cmp -s "$RT" "$RRT"; then bad "mutation-sha-greedy" "DID NOT APPLY: the mutation matched nothing"
