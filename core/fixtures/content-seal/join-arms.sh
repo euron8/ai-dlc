@@ -119,7 +119,9 @@ else bad "CS-J8: --mark-repair on an unsealed part: rc=$MRC, its row ${r8:-none}
 # 64, and --escalations refuses the record on the join's own seal row.
 joined; re9="$(race_engine "$WORK/race-j")" || { echo "FIXTURE BROKEN: CS-J9 race engine" >&2; exit 2; }
 mark_rep "$re9" "$RREC"
-grep -q 'written through Bash after the move' "$RREC" || { echo "FIXTURE BROKEN: CS-J9's stub wrote nothing; the race was not forced" >&2; exit 2; }
+# As CS-K4r: the race is forced only when the record carries a seal row. Its absence is this arm's verdict.
+if grep -q 'written through Bash after the move' "$RREC"; then ok "CS-J9r: race forced: the record carried a seal row and the stub wrote after --mark-repair's move"
+else bad "CS-J9r: race not forced: no seal row, so --mark-repair never reached --record-expect and the stub never wrote"; fi
 run_esc "$RW" "$RREC"
 if [ "$MRC" = 64 ] && ! grep -qF "$PROW" "$RW/$ST/planning-artifacts/.artifact-writes.jsonl" && [ "$RC" -eq 2 ] && has "$JO" "$TOKEN"; then
   ok "CS-J9: a write between --mark-repair's move and its row: no row recorded, 64, --escalations refuses the record"

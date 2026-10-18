@@ -171,7 +171,10 @@ else bad "CS-K3: --mark on an unsealed shard: rc=$MRC, its row ${rk3:-none}, row
 # program row is recorded, --mark exits 64, and the merge refuses the shard on its writer's seal.
 dk4="$(clean_world)"; seal_all "$dk4"; re4="$(race_engine "$WORK/race-m")" || { echo "FIXTURE BROKEN: CS-K4 race engine" >&2; exit 2; }
 mark_one "$re4" "$dk4/2.md"
-grep -q 'written through Bash after the move' "$dk4/2.md" || { echo "FIXTURE BROKEN: CS-K4's stub wrote nothing; the race was not forced" >&2; exit 2; }
+# The race is forced only when the shard carries a seal row, so --mark reaches --record-expect and the
+# stub fires. Its absence is a verdict on this arm (a mutant that leaves no row), never a broken fixture.
+if grep -q 'written through Bash after the move' "$dk4/2.md"; then ok "CS-K4r: race forced: the shard carried a seal row and the stub wrote after --mark's move"
+else bad "CS-K4r: race not forced: no seal row, so --mark never reached --record-expect and the stub never wrote"; fi
 run_merge "$MERGE" "$dk4"
 if [ "$MRC" = 64 ] && has "$WORK/mark.out" "changed again before its content-seal row" && ! grep -qF "$PROW" "$(ledger_of "$dk4")" \
    && [ "$RC" -eq 2 ] && has "$MO" "2.md $TOKEN"; then

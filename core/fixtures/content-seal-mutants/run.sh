@@ -53,12 +53,14 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }
 # THE SETS BELOW ARE EXPECTED, UNMEASURED for the widened engine: the additions over the measured
 # b6822f00 kill sets -- SA: CS-G4 CS-J4 CS-M6 CS-M6b; SC: CS-J5 CS-M6 CS-M6b; SF: CS-J5; SP: CS-J5;
 # SD: CS-G4 -- are derived from the engine, and this battery has not been run on it.
-EXP_SA="CS-G1 CS-G2 CS-G3 CS-G4 CS-J1 CS-J2 CS-J3 CS-J4 CS-M1 CS-M2 CS-M3 CS-M3b CS-M4 CS-M5 CS-M6 CS-M6b"
-EXP_SC="CS-G3 CS-J2 CS-J3 CS-J5 CS-M2 CS-M3 CS-M6 CS-M6b"
+EXP_SA="CS-G1 CS-G2 CS-G3 CS-G4 CS-J1 CS-J2 CS-J3 CS-J4 CS-J8 CS-K1 CS-K2 CS-K3 CS-K4 CS-K4r CS-K5 CS-M1 CS-M2 CS-M3 CS-M3b CS-M4 CS-M5 CS-M6 CS-M6b"
+# SC also stops the refusals the --mark arms read (measured, batch 236 slot): the race (CS-J9, CS-K4)
+# and the marked-then-amended shard (CS-K5).
+EXP_SC="CS-G3 CS-J2 CS-J3 CS-J5 CS-J9 CS-K4 CS-K5 CS-M2 CS-M3 CS-M6 CS-M6b"
 # SF owes CS-J5 too: a program row is appended with an EMPTY agent_id (content-seal.sh seal_record),
 # so the filter drops it and the python3-rewritten joined record reads as never sealed.
-EXP_SF="CS-J5 CS-M3"
-EXP_SP="CS-G1b CS-J1b CS-J5 CS-M1b"
+EXP_SF="CS-J5 CS-J6 CS-J7 CS-J9 CS-J9r CS-K1 CS-K5 CS-M3"
+EXP_SP="CS-G1b CS-J1b CS-J5 CS-J6 CS-J7 CS-J9 CS-J9r CS-M1b"
 # SD: only the refusing cell of CS-G4; its two merging twins (CS-G4b, CS-G4c) pass either way.
 EXP_SD="CS-G4"
 # The --mark mutants. EXPECTED, UNMEASURED: derived from the arms, not yet scored.
@@ -119,6 +121,10 @@ WIDENED="CS-J4 CS-J5 CS-M6"
 [ -z "$(minus "$BASE" "$WIDENED")" ] || { echo "FIXTURE BROKEN: the unmutated control fails {$(minus "$BASE" "$WIDENED")}, outside the widened-set arms {$WIDENED}" >&2; exit 2; }
 if [ "$RANOK" = 1 ]; then ok "MC: the unmutated copy ran (seal library resolved under the copy, baselines ok); base FAIL set {${BASE}}"
 else echo "FIXTURE BROKEN: the unmutated control did not run; its output:" >&2; grep -E 'resolved seal|CS-[MJG]0|FIXTURE' "$WORK/control.out" >&2; exit 2; fi
+# The race arms score a mutant only if the UNMUTATED copy forces the race: both precondition lines ok.
+if grep -q '^  ok    CS-K4r:' "$WORK/control.out" && grep -q '^  ok    CS-J9r:' "$WORK/control.out"; then
+  ok "MC-race: the unmutated copy forces both races (CS-K4r and CS-J9r ok: seal row present, stub fired)"
+else echo "FIXTURE BROKEN: the unmutated control did not force the --mark races, so CS-K4/CS-J9 score nothing:" >&2; grep -E 'CS-(K4|J9)r?:' "$WORK/control.out" >&2; exit 2; fi
 
 score() { # <id> <expected set> -- the copy at $WORK/<id> is already mutated
   local id="$1" exp got
