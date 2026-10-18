@@ -10,8 +10,8 @@
 #   a. the hook's own prefix: `.githooks/pre-push` of $ROOT from line 1 up to, NOT including, the single
 #      `step "fixture suite` line, with `exit $fail` appended, run as `bash <prefix> </dev/null` from $ROOT.
 #      Every above-pool step, its flags and its wrapper functions are the hook's own bytes, so "a step in the
-#      hook that the self-check does not run" is unconstructible. Guards, each a refusal (exit 2): the cut
-#      marker occurs exactly once; the prefix passes `bash -n`; it declares >= 1 `step` call; the PASS/FAIL
+#      hook that the self-check does not run" is unconstructible. Guards, each a refusal (exit 2): the hook
+#      carries no NUL byte; the cut marker occurs exactly once; the prefix passes `bash -n`; it declares >= 1 `step` call; the PASS/FAIL
 #      verdicts printed equal the `step` calls declared (a run that stopped early is not a pass of the steps
 #      it never reached). The prefix's top-level code (function definitions, and `ssh_keepalive_warn` with no
 #      arguments, which returns at once) writes nothing into the tree.
@@ -36,6 +36,22 @@
 # Exit:  0 = clean, 1 = at least one finding (the check and the lines are named), 2 = cannot run.
 set -uo pipefail
 export LC_ALL=C
+
+# NO -e, SO AN EXPANSION DEATH IS NOT A REFUSAL BY ITSELF. Under bash 3.2 a fatal arithmetic-expansion error
+# under -u ends the script with the PREVIOUS command's status, which is usually 0, and the steps never run: a
+# false clean. So exit 0 or 1 is honoured only once `done_` is set, as the last act before the verdict; any
+# exit before it that is not an explicit refusal (2) becomes exit 2 here, with this message.
+done_=0
+W=""
+on_exit() {
+  local rc=$?
+  [ -n "$W" ] && rm -rf "$W"
+  if [ "$done_" != 1 ] && [ "$rc" -ne 2 ]; then
+    printf 'pregate-self-check: the run died before its verdict (shell status %s) -- an early death is a refusal, never a clean run\n' "$rc" >&2
+    exit 2
+  fi
+}
+trap on_exit EXIT
 
 BASE="${1:-origin/main}"
 [ "$#" -le 1 ] || { echo "usage: $(basename "$0") [<base>]" >&2; exit 2; }
@@ -68,7 +84,6 @@ git rev-parse --verify --quiet "${BASE}^{commit}" >/dev/null 2>&1 \
   || { echo "pregate-self-check: base '$BASE' does not resolve to a commit in $ROOT" >&2; exit 2; }
 
 W="$(mktemp -d)" || exit 2
-trap 'rm -rf "$W"' EXIT
 fail=0
 fail_checks=""
 note_fail() { fail=1; fail_checks="${fail_checks}${fail_checks:+, }$1"; }
@@ -91,6 +106,10 @@ fi
 # The prefix is cut from $ROOT's own hook, so AI_DLC_PREGATE_ROOT judges that tree's hook.
 printf '== a. hook steps above the fixture suite (derived from .githooks/pre-push)\n'
 HOOK="$ROOT/.githooks/pre-push"
+# A NUL byte makes grep read the hook as binary: -c still counts the marker, but -n prints "Binary file ...
+# matches" in place of the line number. Refuse it before either grep runs.
+tr -d '\000' < "$HOOK" | cmp -s - "$HOOK" \
+  || { printf 'pregate-self-check: %s carries a NUL byte, so grep reads it as binary; refusing to cut it\n' "$HOOK" >&2; exit 2; }
 nm="$(grep -c '^step "fixture suite' "$HOOK")" || nm=0
 [ "$nm" -eq 1 ] || { printf 'pregate-self-check: the fixture-suite step marker occurs %s times in %s, expected exactly 1\n' "$nm" "$HOOK" >&2; exit 2; }
 cut="$(grep -n '^step "fixture suite' "$HOOK" | cut -d: -f1)"
@@ -169,6 +188,7 @@ else
 fi
 
 printf '\n'
+done_=1
 if [ "$fail" -ne 0 ]; then
   printf 'pregate-self-check: FINDINGS in %s\n' "$fail_checks" >&2
   exit 1
