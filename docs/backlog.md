@@ -323,7 +323,9 @@ The same failure class was fixed once before for a different writer: 0.237.1's `
 
 Owed: the map parses under a standard YAML loader (quote the offending values, or rename the file to stop claiming YAML), and a check that keeps it so. Measure the check's false-positive set before shipping it, and note that no PyYAML is assumed on a consumer box. Receipt: `yaml.safe_load` succeeds on the shipped map, and a seeded unquoted `: ` in a prose value makes the check fail.
 
-verify: manual
+Built (batch 236): The seven values are double-quoted. PyYAML and Ruby Psych both load the fixed map and both reject the base map; those were build-time oracles, run once, and the shipped check assumes no PyYAML. The keeping check is the shipping fixture `enforcement-map-yaml-plain`. It flags a plain scalar carrying `: ` on a key or continuation line, tracks block scalars, and FAILS on the base map with 7 FAIL lines. The fixture is DECL-KEYED: it carries `inputs.decl`, so the hook keys it on that declaration and it needs no read-set trace (`.githooks/pre-push:868-873`). The proof from the owner's slot: `hermetic-run.sh --key-only` lists `core/skills/ai-dlc/enforcement-map.yaml` with its sha, 1 declared input against 1 in the key, and the sandboxed run reads `rc=0 sandbox_files=4 required_missing=0`. The reader differential covered all 45 tracked files that name the map, plus `escalation-status-vocabulary`. The fixture ships via `scripts/uninstall.sh` and both manifests.
+
+verify: sh bash core/fixtures/enforcement-map-yaml-plain/receipt-bl634.sh
 
 ## BL-620 — the LC-A1 layer adjudication accepts a verdict with no evidence the entry was read, so nine re-reads were closed by one keyword grep
 
