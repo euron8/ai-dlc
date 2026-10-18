@@ -780,7 +780,11 @@ src_probe() {
 #       said as "(span of <cite>, lines may have moved)". Neither resolves: `-- location unresolved
 #       (<cite>)`. Never a refusal, and never an exit code. The FP set measured for the words above is
 #       unchanged: 09.md F-4 and F-7 in the part and the same two in the joined record, all true
-#       positives, and their section (prd.md part 5, 1307-1356) cites D-5.
+#       positives. Measured with this suffix on graph's real joined record, through the retained
+#       manifest: F-4 lands at prd.md:1318 under 'Net P&L 24h triage and fix', which cites LR-S319-2
+#       (the first decision token in the section wins, and it precedes D-5 on that line); F-7 lands at
+#       prd.md:1354 under 'Merkl rewards cards', which cites no decision. So the location says where
+#       an edit landed; it is no proof that the edit extended the decision the claim names.
 #       FALSE-POSITIVE SET, MEASURED with this contract_check, parts mode over graph's 251 s317-s319
 #       shard parts and record mode over its 60 repair and fold records: s319 requirements
 #       elicitation repair 09.md F-4 and F-7, and the same two entries in the joined record, which is

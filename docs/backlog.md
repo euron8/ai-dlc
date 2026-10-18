@@ -788,7 +788,7 @@ verify: manual
 
 ## BL-672 — the adversarial-shard merge's mutant battery grew by a third at 0.824.0, plausibly one seal-check subprocess per merge call
 
-**DEFECT (efficiency).** Measured at 0.824.0's dress rehearsal, a hooked push of b3db049b, load 23-28: the suite pole
+**DEFECT (efficiency).** Measured at 0.824.0's dress rehearsal, a hooked push of the release tree (the commit later squashed as a6e29a7e), load 23-28: the suite pole
 `adversarial-shard-merge-mutants` ran 2246s loaded, against 1681s recorded before that run, which is +565s, about a
 third. The whole push took 2893s. The cost is a loaded figure and must not be compared with a solo one.
 
