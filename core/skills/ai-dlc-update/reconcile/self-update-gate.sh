@@ -320,7 +320,8 @@ gate_input() {
   return 0
 }
 # The fallback hook lives in the DISTRIBUTION, so it is hashed from an absolute path and its
-# consumer column is `-`.
+# consumer column is `-`. That path is a copy of theirs' blob in `$TMP`, so the digest is the
+# `theirs` blob id the runner compares it against.
 gate_input_dist() {
   [ -n "$GATE_IN" ] || return 0
   if [ -f "$2" ]; then
@@ -720,11 +721,20 @@ gate_record_open
 # THE HOOK IS RESOLVED ONCE, HERE, and the differential arm below reads `$HOOK` rather than
 # re-deciding it. Two resolutions of "which hook is the authority" is two chances to record one
 # file and read another — the failure this whole input list exists to make impossible.
+#
+# THE FALLBACK IS THEIRS' BLOB, NEVER THE DISTRIBUTION'S WORKING TREE (BL-693). The dist is a
+# repository the range is read from, and whatever it has CHECKED OUT is not `theirs`: a checkout
+# on another branch handed this gate another branch's hook, and a BARE dist has no working tree
+# at all, so the fallback read ABSENT and the gate went UNDECIDED on a hook `theirs` carries. The
+# blob is copied into this run's `$TMP` so every reader below takes a FILE as before. A `show`
+# that failed leaves no file: the record then carries ABSENT and the "no pre-push hook found"
+# terminal refuses OK, so a failed read can never acquit. The runner reads the same blob.
 HOOK="$CONSUMER/.githooks/pre-push"
 if [ -f "$HOOK" ]; then
   gate_input ".githooks/pre-push" "core/git-hooks/pre-push"
 else
-  HOOK="$DIST/core/git-hooks/pre-push"
+  HOOK="$TMP/hook-fallback"
+  git -C "$DIST" show "${THEIRS}:core/git-hooks/pre-push" > "$HOOK" 2>/dev/null || rm -f "$HOOK"
   gate_input_dist "core/git-hooks/pre-push" "$HOOK"
 fi
 # THE STAMP IS DELIBERATELY NOT RECORDED. `.claude/.ai-dlc-version` is the one input step 2
@@ -1196,16 +1206,60 @@ if [ -n "$R2_RB" ]; then
   # Fixtures whose NON-COMMENT code resolves a rulebook file in the LIVE tree. A comment
   # naming SKILL.md is not a subject -- a whole-file grep is satisfied by prose.
   R2_HITS=""
-  for fx in "$DIST"/core/fixtures/*/; do
-    [ -d "$fx" ] || continue
+  # THE FIXTURES ARE THEIRS', READ AS BLOBS, NEVER THE DISTRIBUTION'S WORKING TREE (BL-693).
+  # A glob over `$DIST/core/fixtures/` scanned whatever branch the dist had CHECKED OUT: a fixture
+  # theirs adds and that branch lacks was never scanned, the arm acquitted, and step 2 pushed a
+  # slice that fixture turns red. A bare dist has no working tree, so the glob saw ZERO
+  # directories and acquitted every pull. The listing's status is read: a failed `ls-tree`
+  # prints nothing, which is "no fixture is coupled". `core/fixtures` ABSENT at theirs is a
+  # different answer and is decided FIRST, by a listing of its parent whose status is read: rc 0
+  # and no entry is a theirs that ships no fixtures, the one case that is genuinely none; a
+  # non-zero rc is UNDECIDED. Once the tree is there, an EMPTY directory listing is UNDECIDED too.
+  R2_FX=""
+  R2_LS_RC=0
+  R2_TOP="$(git -C "$DIST" ls-tree --name-only "$THEIRS" -- core/fixtures 2>/dev/null)" || R2_LS_RC=$?
+  if [ "$R2_LS_RC" -ne 0 ]; then
+    emit SELF-UPDATE-UNDECIDED "rulebook-coupled-fixtures" "whether ${THEIRS} carries core/fixtures could not be read (git ls-tree exited ${R2_LS_RC}), so whether a fixture asserts on rulebook this pull changes is UNKNOWN; treat as DEFER and re-run."
+    exit 0
+  fi
+  if [ -n "$R2_TOP" ]; then
+    R2_FX="$(git -C "$DIST" -c core.quotePath=false ls-tree -d --name-only "${THEIRS}:core/fixtures/" 2>/dev/null)" || R2_LS_RC=$?
+    if [ "$R2_LS_RC" -ne 0 ] || [ -z "$R2_FX" ]; then
+      emit SELF-UPDATE-UNDECIDED "rulebook-coupled-fixtures" "the fixture listing of ${THEIRS}:core/fixtures/ failed (git ls-tree exited ${R2_LS_RC}, $(printf '%s' "$R2_FX" | grep -c .) directories), so whether a fixture asserts on rulebook this pull changes is UNKNOWN. A listing that failed prints nothing, which reads as no coupled fixture -- the OK this arm exists to withhold; treat as DEFER and re-run."
+      exit 0
+    fi
+  fi
+  gate_stage r2-fx "$R2_FX" "the fixture directory list at theirs"
+  while IFS= read -r fxn; do
+    [ -n "$fxn" ] || continue
+    fx="$fxn/"
+    # Each `*.sh` directly in the fixture directory, as the old glob `"$fx"*.sh` took them, read
+    # with `git show`. A failed listing or a failed `show` is UNDECIDED, never an empty body.
+    r2_files_rc=0
+    r2_files="$(git -C "$DIST" -c core.quotePath=false ls-tree --name-only "${THEIRS}:core/fixtures/${fxn}/" 2>/dev/null)" || r2_files_rc=$?
+    r2_body=""
+    if [ "$r2_files_rc" -eq 0 ]; then
+      gate_stage r2-fx-files "$r2_files" "the file list of fixture ${fxn} at theirs"
+      while IFS= read -r r2f; do
+        case "$r2f" in *.sh) ;; *) continue ;; esac
+        if ! r2_one="$(git -C "$DIST" show "${THEIRS}:core/fixtures/${fxn}/${r2f}" 2>/dev/null)"; then
+          r2_files_rc=128; break
+        fi
+        r2_body="$r2_body
+$(printf '%s\n' "$r2_one" | grep -v '^[[:space:]]*#' || true)"
+      done < "$TMP/r2-fx-files"
+    fi
+    if [ "$r2_files_rc" -ne 0 ]; then
+      emit SELF-UPDATE-UNDECIDED "rulebook-coupled-fixtures" "fixture ${fxn} could not be read at ${THEIRS} (git exited ${r2_files_rc}), so whether it asserts on rulebook this pull changes is UNKNOWN. An unread fixture reads as an uncoupled one, which is the OK this arm exists to withhold; treat as DEFER and re-run."
+      exit 0
+    fi
     # Read once into a variable and test it with `gate_has`: a `grep -c` fed by `printf`, which
     # reads its WHOLE input. Never `... | grep -q`: under `pipefail` that reports the WRITER's
     # EPIPE once the upstream's output past the match exceeds the pipe buffer, so the test
     # answers "not found" on input that contains the pattern -- a size threshold, wrong
     # permanently and with no symptom (I54b). Never a here-string either: a temp file that could
     # not be written answers "not found" too (see `gate_has_line`). A reader that FAILED is
-    # neither answer, and is UNDECIDED.
-    r2_body="$(grep -hv '^[[:space:]]*#' "$fx"*.sh 2>/dev/null || true)"
+    # neither answer, and is UNDECIDED. `r2_body` is the non-comment lines assembled above.
     for r2_re in '(SKILL\.md|escalations\.md|rule-authoring\.md|skills/ai-dlc/steps/)' \
                  '\$\{?(D_ROOT|ROOT|REPO_ROOT|AI_DLC_ROOT)\b'; do
       r2_rc=0; gate_has "$r2_re" "$r2_body" || r2_rc=$?
@@ -1217,7 +1271,7 @@ if [ -n "$R2_RB" ]; then
     fi
     [ "$r2_rc" -eq 0 ] || continue
     R2_HITS="$R2_HITS $(basename "${fx%/}")"
-  done
+  done < "$TMP/r2-fx"
   if [ -n "$R2_HITS" ]; then
     emit SELF-UPDATE-DEFER "rulebook-coupled-fixtures" "this pull changes rulebook file(s) [$R2_RB], and fixture(s)${R2_HITS} assert against a rulebook file resolved in the live tree. Step 2 installs machinery without rulebook, so those fixtures judge new machinery against the OLD rulebook and go red on a pull that broke nothing. Fold the slice into the gated apply so both land on one branch."
     deferred_join=1

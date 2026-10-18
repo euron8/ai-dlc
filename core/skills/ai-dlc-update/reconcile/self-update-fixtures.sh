@@ -457,7 +457,13 @@ else
       gr_hook="$CONSUMER/.githooks/pre-push"
       gr_hook_key=".githooks/pre-push"
       if [ ! -f "$gr_hook" ]; then
-        gr_hook="$DIST/core/git-hooks/pre-push"
+        # THEIRS' BLOB, NEVER THE DISTRIBUTION'S WORKING TREE (BL-693): the gate records its
+        # fallback hook from `${THEIRS}:core/git-hooks/pre-push`, and a checkout on another branch
+        # or a bare dist would hand this reader a different file or none. A failed `show` leaves
+        # no file; the gate that met the same failure recorded ABSENT and a non-OK verdict, which
+        # this runner refuses above, and a `-` row's digest is then compared against no file.
+        gr_hook="$SU_T/hook-fallback"
+        git -C "$DIST" show "${THEIRS}:core/git-hooks/pre-push" > "$gr_hook" 2>/dev/null || rm -f "$gr_hook"
         # Column 1 `-` is the ONLY spelling for "read from the distribution", and column 3 must
         # then be the fallback hook's core path. Anything else under a `-` would let a record
         # point the reader at an arbitrary distribution file.
@@ -502,7 +508,8 @@ $gr_p"
   a distribution-side row whose core path is '${gr_c}' — the only file read from the distribution is core/git-hooks/pre-push"
             continue
           fi
-          gr_abs="$DIST/$gr_c"
+          # No file: this row is compared against theirs' BLOB ID below, never a path (BL-693).
+          gr_abs=""
         else
           gr_abs="$CONSUMER/$gr_p"
         fi
@@ -517,20 +524,24 @@ $gr_p"
         fi
 
         # THE `-` ROW GETS NO `theirs` ACCEPTANCE, AND THAT IS A SEPARATE RULE RATHER THAN A
-        # CONSEQUENCE OF THE ONE BELOW. Its file IS the distribution's own copy — the reader
-        # resolves it under `$DIST` — so `hash(now)` equals the `theirs` blob by construction on
-        # every run, and a `theirs`-acceptance there would make the digest column decorative:
-        # any value at all, a decoy or forty zeroes, would pass. Measured: rc=0 for an all-zero
-        # digest on this row before this branch existed. The slice never writes the
-        # distribution's own file, so there is nothing for the acceptance to be FOR.
+        # CONSEQUENCE OF THE ONE BELOW. Its subject IS theirs' own blob — the gate hashed
+        # `${THEIRS}:core/git-hooks/pre-push`, and `now` here is that blob's id `gr_tb` — so a
+        # `theirs`-acceptance there would make the digest column decorative: any value at all, a
+        # decoy or forty zeroes, would pass. Measured: rc=0 for an all-zero digest on this row
+        # before this branch existed. The comparison is STRICT equality with the blob id.
+        #
+        # THE BLOB, NOT THE DIST'S WORKING TREE (BL-693). This compare once hashed
+        # `$DIST/core/git-hooks/pre-push`, which is whatever branch the dist has CHECKED OUT and
+        # does not exist in a bare dist; the gate now records theirs' blob, so the two would
+        # disagree on exactly the dists where the gate's answer changed.
         if [ "$gr_p" = "-" ]; then
           case "$gr_h" in
             ABSENT)
-              [ -e "$gr_abs" ] && gr_moved="$gr_moved
+              [ -n "$gr_tb" ] && gr_moved="$gr_moved
   the distribution fallback hook — recorded ABSENT, and present now"
               ;;
             *)
-              gr_now="$(git hash-object "$gr_abs" 2>/dev/null)"
+              gr_now="$gr_tb"
               [ "$gr_now" = "$gr_h" ] || gr_moved="$gr_moved
   the distribution fallback hook — recorded ${gr_h}, now ${gr_now:-<unhashable>}; a distribution-side row is compared STRICTLY, because its file is the one the reader resolves and a theirs-acceptance would accept any digest at all"
               ;;
