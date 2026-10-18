@@ -8459,11 +8459,14 @@ i84_reads() { # <file> -> 0 when a non-comment line reads the declaration
 # was satisfied by a COMMENT: a reader that lost its placeholder-key line but kept a `# ... {sprint}`
 # explanation of it stayed silent (BL-651, reproduced in validate-mandatory-rules.sh). It matches
 # i84_reads's narrowing exactly -- whole-comment lines are skipped, and a trailing `# ... {sprint}`
-# on a code line still counts, the same tolerance. One awk pass with `index()`, not an ERE: the slot
+# on a code line still counts, the same tolerance. awk with `index()`, not an ERE: the slot
 # is `{sprint}`, whose braces are metacharacters, and a fixed-string match needs no escaping and
-# nothing piped into `grep -q`.
-i84_names_slot() { # <file> -> 0 when a non-comment line names the slot or the placeholder key
-  awk -v s="$i84_slot" '!/^[[:blank:]]*#/ && (index($0, s) || index($0, "stories_dir_sprint_placeholder")) { f = 1; exit } END { exit !f }' "$1" 2>/dev/null
+# nothing piped into `grep -q`. ONE awk OVER EVERY READER, not one per reader, for fork-budget
+# headroom: a per-file flag reset at `FNR == 1` (no `nextfile`, which macOS awk lacks) prints each
+# file with no naming line, and the two probes below drive this same function on one file each.
+i84_names_slot() { # <file>... -> 0 when every file has a non-comment line naming the slot or the placeholder key; prints each that does not
+  [ "$#" -gt 0 ] || return 1
+  awk -v s="$i84_slot" 'FNR == 1 { if (p != "" && !f) { print p; u++ } p = FILENAME; f = 0 } !f && !/^[[:blank:]]*#/ && (index($0, s) || index($0, "stories_dir_sprint_placeholder")) { f = 1 } END { if (p == "") exit 1; if (!f) { print p; u++ } exit (u > 0) }' "$@" 2>/dev/null
 }
 
 i84_probe_dir="$(mktemp -d)"
@@ -8491,15 +8494,16 @@ else
     err "I84 read core/schemas/sprint-status.json but found stories_dir='${i84_tmpl:-<absent>}' and its slot placeholder='${i84_slot:-<absent>}'. Both are required: the declaration is the thing every reader resolves, and a reader resolving an empty template composes the repo root."
   elif [ "$i84_has_slot" -ne 1 ]; then
     err "I84 the stories_dir template '$i84_tmpl' does not contain its own sprint slot '$i84_slot'. Every sprint would then resolve to the SAME directory — the flat, cross-sprint corpus rule 2 exists to end — and it would do so silently, because a shared directory is a directory that exists."
-  elif i84_names_slot "$i84_probe_dir/slotcomment.sh"; then
+  elif i84_names_slot "$i84_probe_dir/slotcomment.sh" >/dev/null; then
     err "I84's own probe: a reader whose sprint slot appears ONLY in a comment was scored as naming it. The slot check is satisfied by an explanation of the substitution, so a reader that lost the substitution stays silent -- the whole-file grep this replaced."
-  elif ! i84_names_slot "$i84_probe_dir/slotcode.sh"; then
+  elif ! i84_names_slot "$i84_probe_dir/slotcode.sh" >/dev/null; then
     err "I84's own probe: a reader that DOES name the sprint slot in code was not matched. Every reader would be reported as never substituting, or the expression matches nothing and the slot check below is an instrument that cannot fire."
   else
     i84_bad=""
     i84_nosub=""
     i84_readers=0
     i84_files=0
+    i84_rarr=()
     while IFS= read -r i84_f; do
       [ -n "$i84_f" ] || continue
       i84_files=$((i84_files + 1))
@@ -8507,10 +8511,18 @@ else
       i84_restates "$i84_f" && i84_bad="${i84_bad} $i84_rel"
       if i84_reads "$i84_f"; then
         i84_readers=$((i84_readers + 1))
-        i84_names_slot "$i84_f" || i84_nosub="${i84_nosub} $i84_rel"
+        i84_rarr+=("$i84_f")
       fi
     done < <( { find "$REPO_ROOT/core" -type f -name '*.sh' -not -path "$REPO_ROOT/core/fixtures/*"
                 find "$REPO_ROOT/scripts" "$REPO_ROOT/.githooks" -type f 2>/dev/null; } | sort )
+    # Expanded only behind the guard: an empty array under `set -u` is an error on bash 3.2, and
+    # awk handed no file would read stdin. Its report lands in the probe dir, removed below.
+    if [ "$i84_readers" -ge 1 ]; then
+      i84_names_slot "${i84_rarr[@]}" > "$i84_probe_dir/nosub"
+      while IFS= read -r i84_f; do
+        [ -n "$i84_f" ] && i84_nosub="${i84_nosub} ${i84_f#"$REPO_ROOT/"}"
+      done < "$i84_probe_dir/nosub"
+    fi
     if [ "$i84_files" -lt 20 ]; then
       err "I84 found only $i84_files file(s) to scan. The corpus is derived by find; a count this low means the tree is not the one this runs against, and an empty corpus reports the same one-declaration line as a bound one."
     elif [ "$i84_readers" -lt 1 ]; then
