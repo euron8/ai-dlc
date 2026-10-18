@@ -1,0 +1,13 @@
+# A fixture-owned seed for the content-key exclusion declaration. run.sh copies it to <probe>/scripts/suite-content-key.sh,
+# where the hook's readset_excluded_re reads the span between EXCLUDE_BEGIN and EXCLUDE_END. It stands in for the
+# repository's own scripts/suite-content-key.sh, which a consumer does not carry and a declared fixture cannot name
+# there. Arms G and J assert that a declared directory under an excluded top (docs) yields no key rows.
+# EXCLUDE_BEGIN
+EXCLUDE="
+.git
+CHANGELOG.md
+VERSION
+docs
+CLAUDE.md
+"
+# EXCLUDE_END

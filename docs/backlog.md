@@ -150,7 +150,7 @@ Caveat: in a linked worktree the local map is a different file (the BL-558 sympt
 
 Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
 
-verify: manual
+verify: sh o="$(bash core/scripts/hermetic-run.sh --root . --key-only hermetic-runner 2>&1)" || exit 1; case "$o" in *core/scripts/hermetic-run.sh*) exit 0 ;; *) exit 1 ;; esac
 
 ## BL-605 — an In-Flight row's `dispatched-at` can be stamped LATER than the real dispatch, and the BACKDATED arm is quiet on a late row by design
 

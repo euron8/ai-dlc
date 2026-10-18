@@ -57,7 +57,7 @@
 #   cwd  the verdict is the same from two different working directories
 #
 # The probe is a throwaway git repo under mktemp: the runner's --key-only reads `git ls-files`.
-# This fixture carries no inputs.decl of its own.
+# This fixture is declared (inputs.decl, tools.decl) and runs under hermetic-run.sh; its exclusion seed is its own file.
 
 # Sourced FIRST: a fixture invoked directly from a linked worktree inherits an absolute GIT_DIR,
 # and every scratch `git init` below would then silently redirect onto the caller's repository.
@@ -212,7 +212,10 @@ HOOK_SRC=""; SCK_SRC=""
 for cand in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
   if [ -f "$cand" ] && grep -q '^# READSET_UNIVERSE_BEGIN$' "$cand"; then HOOK_SRC="$cand"; break; fi
 done
-for cand in "$ROOT/scripts/suite-content-key.sh"; do
+# The exclusion declaration is a FIXTURE-OWNED seed, not the repository's scripts/suite-content-key.sh: that file is
+# distribution-only, and a declared absent file is a refusal on a consumer. The arms test the hook's reading of an
+# EXCLUDE span, which the seed carries.
+for cand in "$HERE/suite-content-key.seed"; do
   if [ -f "$cand" ] && grep -q '^# EXCLUDE_BEGIN$' "$cand"; then SCK_SRC="$cand"; fi
 done
 [ -n "$HOOK_SRC" ] && echo "hermetic-runner: universe hook: $HOOK_SRC" || echo "hermetic-runner: no hook with a READSET_UNIVERSE span here; arm G is skipped"
