@@ -437,11 +437,12 @@ END { if (nbuf > 0) flush() }
 
 # S13 -- A MULTI-LINE OR NESTED `$( ... )` THAT /bin/bash 3.2 CLOSES EARLY, WHICH `bash -n` ACCEPTS.
 # bash 3.2 finds the end of a command substitution with a quote-and-paren scan of its own, BEFORE
-# it parses the body. Three body shapes defeat that scan; `bash -n` exits 0 on every one, the
-# assignment or argument never happens, and the hazard surfaces as an unbound variable or a missing
-# verdict far from the cause. Every fact below is from the ORACLE -- /bin/bash 3.2.57 RUNNING the
+# it parses the body. Four forms, (a) to (d) below, defeat that scan; `bash -n` exits 0 on every one.
+# In (a) to (c) the assignment or argument never happens, and the hazard surfaces as an unbound
+# variable or a missing verdict far from the cause; in (d) the script runs rc 0 with a WRONG value.
+# Every fact below is from the ORACLE -- /bin/bash 3.2.57 RUNNING the
 # seed with its commands stubbed -- and not from the backlog prose. `set -n` is NOT the oracle in
-# any placement: as the file's first statement it hides all three (rc 0, empty stderr), and placed
+# any placement: as the file's first statement it hides every form (nothing runs), and placed
 # inside the OUTER `$(` it hides every NESTED form.
 #   (a) a comment, inside a DOUBLE-QUOTED substitution (`"$( ... )"`, `$(echo "$( ... )")`), carrying
 #       a lone `'` or a lone `)`, followed later in the same substitution by a double-quoted string
@@ -460,6 +461,19 @@ END { if (nbuf > 0) flush() }
 #       command after a prefix assignment; a backtick outer. NOT expanded, so they parse: a plain
 #       `v=` assignment, a `case` word, a `[[ ]]` operand and a here-string. A single-quoted body
 #       ending in `\'` parses.
+#   (d) a HEREDOC BODY inside any `$( )` (quoted or not, nested or not, any delimiter quoting)
+#       carrying a `)` that closes nothing: `v="$(cat <<'X'` / `a ) here` / `X` / `)"`. `bash -n`
+#       exits 0 and the script runs rc 0, but the value is WRONG -- bash 3.2's scan takes the body's
+#       `)` as the substitution's end, so `v` reads `a  here`, `X`, `)`. Measured under 3.2.57 by
+#       comparing the captured value against the literal body: a `(` before it on the same or an
+#       earlier body line balances it (`a ( b ) here`, `a ( b` / `c ) d` both correct); quotes,
+#       a backslash and a `#` comment (after a blank or at line start) hide it (`it's ) ok's`,
+#       `a ")" here`, `a \) here`, `x # a ) b`); `a#) b`, `(x)# a ) b`, `case x in a) ;; esac` and
+#       `$((1+2)) ) x` break. A heredoc in a backtick substitution, at top level, in a process
+#       substitution's sibling or in a function the substitution calls is correct. The other
+#       unbalanced body shapes (a lone quote or `(`) are `bash -n` errors, which S14 refuses.
+#       This is BL-689's silent half; the rule reads the body with its own quote-and-paren
+#       counter (`hbscan`), carried across every heredoc opened on one line.
 # THE GRAMMAR (S13_JOIN) is one awk over the whole file list, one fork like S12, no bash per hit. It
 # tracks quote, substitution and `case` state across lines, so it reads the multi-line shapes a
 # line grep cannot. The oracle is NOT run here: it runs in core/fixtures/shell-portability, which
@@ -479,6 +493,10 @@ END { if (nbuf > 0) flush() }
 #   4. A lone `)` in a comment breaks only when a later double-quoted string in the same substitution
 #      holds a space (probed: `echo "a"` parses, `echo "1 0"` breaks). It is held as pending and
 #      reported when such a string closes, instead of being reported where it stands.
+#   5. Form (d), scored on 71 in-class oracle probes (bash -n 0 on each; BREAK = stderr, a missing
+#      trailing line, or a captured value differing from the literal body): missed 0, over 0. One
+#      run over the tracked shell corpus (601 files at the build), a seeded offender appended: 0 corpus hits, the
+#      offender reported.
 # MEASURED, 191 probe files under /bin/bash 3.2 (33 break, bash -n accepts all of them): flagged
 # 49, MISSED 0, OVER 1. The OVER is enumerated, not exempted: a comment `# (a lone open` inside
 # `"$( ... )"` closed by an extra `) )` on the final line parses under 3.2 because the stray
@@ -488,12 +506,27 @@ END { if (nbuf > 0) flush() }
 # their `set -n;`, which is the placement artifact that hides nested forms. Corpus: 0 hits over the
 # tracked shell files, a seeded control reported in the same run.
 S13_PAT=""
-S13_WHY="a construct bash 3.2 closes a command substitution on early, which \`bash -n\` accepts: (a) inside a double-quoted \`\$( )\`, a comment with a lone apostrophe or \`)\` before a double-quoted string holding a space (a comment with any other unbalanced quote or paren is flagged too); (b) a bare \`case\` pattern such as \`''|*[!0-9]*) ... ;;\` in a \`\$( )\`; (c) in a brace-expanded word (a command argument, a \`local\`/\`export\` argument, a \`for\` list, an array element, a backtick outer) inside a double-quoted \`\$( )\`, a \`{\` anywhere in the word plus a single-quoted body holding an unclosed double-quoted \`\$(\`. The assignment or argument never happens and nothing reports it. Move the comment out of the substitution or balance it, write the case pattern as \`(''|*[!0-9]*)\`, and bind the single-quoted program to a variable first."
+S13_WHY="a construct bash 3.2 closes a command substitution on early, which \`bash -n\` accepts: (d) a heredoc body inside a \`\$( )\` carrying a \`)\` that closes nothing, which runs rc 0 with a WRONG value (\`a ) here\` reads back as \`a  here\`); (a) inside a double-quoted \`\$( )\`, a comment with a lone apostrophe or \`)\` before a double-quoted string holding a space (a comment with any other unbalanced quote or paren is flagged too); (b) a bare \`case\` pattern such as \`''|*[!0-9]*) ... ;;\` in a \`\$( )\`; (c) in a brace-expanded word (a command argument, a \`local\`/\`export\` argument, a \`for\` list, an array element, a backtick outer) inside a double-quoted \`\$( )\`, a \`{\` anywhere in the word plus a single-quoted body holding an unclosed double-quoted \`\$(\`. The assignment or argument never happens and nothing reports it. Move the comment out of the substitution or balance it, write the case pattern as \`(''|*[!0-9]*)\`, and bind the single-quoted program to a variable first. For (d), balance the body's paren, or build the heredoc in a function the substitution calls (\`v=\"\$(f)\"\`)."
 S13_JOIN='
 function reset() {
   n = 1; ft[1] = "T"; fdq[1] = 0; fcs[1] = 0; cst[1] = ""; fcp[1] = 1; fpd[1] = 0
-  hd = 0; nhp = 0; split("", seen); split("", lines)
+  hd = 0; nhp = 0; split("", seen); split("", lines); hbsub = 0; selp = 0
   ws[1] = 0; cp[1] = 1; dbk[1] = 0; hs[1] = 0; rdp[1] = 0; cmw[1] = ""; nob = 0; narr = 0
+}
+function hbscan(t,   j, L, c, pv) {
+  L = length(t); pv = " "
+  for (j = 1; j <= L; j++) {
+    c = substr(t, j, 1)
+    if (hbq == SQ) { if (c == SQ) hbq = ""; pv = c; continue }
+    if (hbq == "\"") { if (c == BS) { j++; continue }; if (c == "\"") hbq = ""; pv = c; continue }
+    if (hbq == "`") { if (c == "`") hbq = ""; pv = c; continue }
+    if (c == SQ || c == "\"" || c == "`") { hbq = c; pv = c; continue }
+    if (c == BS) { j++; pv = "x"; continue }
+    if (c == "#" && (pv == " " || pv == "\t")) return
+    if (c == "(") hbd++
+    else if (c == ")") { hbd--; if (hbd < 0) { report(FNR); hbd = 0 } }
+    pv = c
+  }
 }
 function push(t) {
   n++; ft[n] = t
@@ -503,7 +536,7 @@ function push(t) {
 }
 function pop() { if (n > 1) n-- }
 function report(l) {
-  if (l in seen) return
+  if (SEL || (l in seen)) return
   seen[l] = 1; print FILENAME ":" l ":" lines[l]
 }
 function cs() { return substr(cst[n], length(cst[n]), 1) }
@@ -678,6 +711,8 @@ function heredoc(s, i,   j, w, st, q, e) {
     w = substr(s, j, RLENGTH); j = j + RLENGTH; gsub(/[\\"]/, "", w); gsub(SQ, "", w)
   } else return j
   if (w == "") return j
+  if (nhp == 0) { hbsub = 0; hbd = 0; hbq = "" }
+  if (fcs[n] > 0) { hbsub = 1; selp = 1 }
   nhp++; hpd[nhp] = w; hpt[nhp] = st
   return j
 }
@@ -779,25 +814,85 @@ BEGIN {
   SQ = sprintf("%c", 39); BS = "\\"
   WRD = "^[^] \t;&|()<>\"`$\\\\" SQ "]+"
   DQS = "[\\\\\"$`]"; BTS = "[\\\\`]"; ANS = "[\\\\" SQ "]"
+  SEL = (ENVIRON["S13_SELECT"] == "1")
+  SELRE = "[$][(][^)]*[^<]<<-?[ \t]*[\\\\\"" SQ "A-Za-z_]"
 }
 FNR == 1 { reset() }
 {
   lines[FNR] = $0
+  if (SEL && $0 ~ SELRE) { print FILENAME; nextfile }
   if (hd) {
     l = $0; if (hpt[hi]) sub(/^\t+/, "", l)
     if (l == hpd[hi]) { hi++; if (hi > nhp) { hd = 0; nhp = 0 } }
+    else if (hbsub) hbscan($0)
     next
   }
   if (n == 1 && fast($0)) next
   scan($0)
+  if (SEL && selp) { print FILENAME; nextfile }
   if (nhp > 0) { hd = 1; hi = 1 }
 }
 '
 
+# S14 IS THE ONE ARM HERE WITH NO GRAMMAR OF ITS OWN, AND THAT IS DELIBERATE: ITS ORACLE IS THE PARSER THAT
+# EXECUTES THE FILE. Its subject is a quote or paren that bash 3.2 cannot balance inside a heredoc
+# body nested in a command substitution -- `v="$(cat <<'X'` / `it's here` / `X` / `)"`. bash 3.2
+# scans a `$( )` body for its closing paren with a quote-tracking scanner that does not know a
+# heredoc body is literal, so the lone apostrophe opens a quote that never closes. Measured under
+# `/bin/bash` 3.2.57: rc=2 at run time ("unexpected EOF while looking for matching"), and
+# `bash -n` REJECTS it -- so unlike BL-647's three forms this one is visible to a parse, and the
+# arm is that parse. The trigger is an UNBALANCED quote or `(` in the body: one or three
+# apostrophes fail, two pass; a lone `"` fails; a lone `(` fails. The outer double quote is NOT
+# required (`v=$(cat <<'X' ...)` fails too) and the delimiter's quoting does not matter (`<<X`,
+# `<<'X'`, `<<"X"`, `<<-'X'` all fail). A backtick substitution and a heredoc outside any `$( )`
+# (including one inside a function the substitution calls) parse and run.
+#
+# WHY AN ARM WHEN THE GATE ALREADY RUNS `bash -n`. `syntax_all` in `.githooks/pre-push` parses
+# `scripts/`, `core/scripts/`, `core/hooks/`, the reconcile engine and the hooks -- 151 of the 603
+# tracked `.sh` files when this arm was built. The other 452, 431 of them fixture scripts, were
+# parsed by nothing: a fixture carrying the form fails at run time as a bare `FAIL <name>` with no
+# cause, and a helper SOURCED by a fixture returns 1 to a caller that keeps going. 15 of the 16
+# files then carrying a heredoc opener on a `$(` line were fixtures, outside that glob. This arm
+# runs over the `shell` corpus, so every tracked `.sh` is parsed.
+#
+# S14_PAT IS THE BINARY, PINNED. `syntax_all` runs `bash` off PATH; bash 4 and later parse a `$( )`
+# body recursively and ACCEPT this form, so a machine with a newer bash first on PATH would pass a
+# file the 3.2 floor cannot run. `/bin/bash` is the floor this file exists to hold. NOT measured:
+# a bash 5 parse of the form -- none is installed on the machine the arm was built on.
+#
+# COST, AND THE NARROWING THAT SET IT. The first cut forked one `/bin/bash -n` per corpus file,
+# about 600 per validator call. The arm now parses only the files S13's lexer SELECTS: one awk over
+# the whole list (`S13_SELECT=1` runs S13_JOIN in select mode, reporting nothing and printing each
+# file once, at the first heredoc opener whose lexer state is inside a `$(`), then one `-n` per
+# selected file. The selector is S13's lexer and not a regex because a regex keyed on the opener's
+# LINE misses the multi-line spelling (`"$(` on one line, `cat <<X` on the next), and a looser
+# "opener and `$(` anywhere in the file" regex selects 292 of 604 files. The selector self-probes
+# below in both directions on its own seed set (`$(cat<<X`, `$( cat <<-'X'`, a nested
+# `$(echo "$(cat <<X`, the opener on the line after a multi-line `"$(`; quiet on a heredoc outside
+# any `$(`, a function-held one and a backtick one). The selector has TWO keys, and the second
+# exists because the first alone failed its false-negative measurement: against the 16 files the
+# BL-689 census found by the line regex `$(` ... `<<`, the lexer key selected 7. The other 9 carry
+# that text in a `<<<` here-string, a comment or a quoted string -- not a heredoc in a `$(` -- but
+# a prefilter that drops a file the census named is a parse that silently never happens, so the
+# census regex is ALSO a selection key, read on every line (heredoc bodies and comments included),
+# narrowed to a real opener (`[^<]<<-?` then a quote, backslash or word) so a `<<<` here-string is
+# not one -- the unnarrowed form selected 130 files of 603. Measured with both keys: 15 of 603
+# selected, 14 of the 16 census files. The other 2 (`check-24-adversarial-convergence/run.sh`,
+# `suite-dispatch-order/run.sh`) hold no heredoc opener inside any `$( )`: their census lines are
+# `<<<` here-strings the census regex mistook for openers, and both parse under `/bin/bash -n`.
+# A file the selector cannot reach -- a parse error that is NOT a heredoc in a `$( )` -- is
+# outside this arm by design; `syntax_all` in the gate parses scripts/, core/scripts/ and the hooks.
+# FALSE-POSITIVE SET: EMPTY, measured over the tracked shell corpus at the build (0 rejected; the
+# seeded offender rejected rc=2 in the same run). One fixture seed (`n4`) carried python lines
+# bare in a `.sh`, which no real file does, and was rewritten to the heredoc'd embedding the
+# corpus actually uses.
+S14_PAT="/bin/bash"
+S14_WHY="a shell file that \`/bin/bash\` 3.2 cannot PARSE. The usual cause here is an unbalanced apostrophe, double quote or \`(\` in a heredoc body nested inside a \`\$( )\` -- bash 3.2 scans the substitution for its closing paren with a quote tracker that does not know the heredoc body is literal, so \`v=\"\$(cat <<'X'\` / \`it's here\` / \`X\` / \`)\"\` dies with rc=2 (\"unexpected EOF while looking for matching\"). The gate's own \`bash -n\` covers only \`scripts/\`, \`core/scripts/\`, \`core/hooks/\` and the hooks, so a fixture carrying it fails at run time as a bare FAIL with no cause. Balance the body, write it with the Write tool into a file the script reads, or build it outside the substitution (a function holding the heredoc, called as \`v=\"\$(f)\"\`, parses). The message after each path is bash's own."
+
 # Only S1 subtracts. Declared explicitly rather than defaulted in a loop, because `set -u`
 # turns a missing one into an abort mid-scan, and an aborted scan prints fewer findings than
 # a clean one rather than more.
-S2_SKIP=""; S3_SKIP=""; S4_SKIP=""; S5_SKIP=""; S6_SKIP=""; S8_SKIP=""; S8b_SKIP=""; S9_SKIP=""; S12_SKIP=""; S13_SKIP=""
+S2_SKIP=""; S3_SKIP=""; S4_SKIP=""; S5_SKIP=""; S6_SKIP=""; S8_SKIP=""; S8b_SKIP=""; S9_SKIP=""; S12_SKIP=""; S13_SKIP=""; S14_SKIP=""
 # S7's one measured false positive is PYTHON, not awk. Several shell files here embed a
 # heredoc'd python program, and `re.sub(r"...", r"\1...")` is correct there -- python has
 # backreferences and awk does not. The subtraction is on the LANGUAGE (`re.` qualifies the
@@ -805,7 +900,7 @@ S2_SKIP=""; S3_SKIP=""; S4_SKIP=""; S5_SKIP=""; S6_SKIP=""; S8_SKIP=""; S8b_SKIP
 # lands and an awk backreference in the same file is still caught.
 S7_SKIP="re\\.g?sub\\("
 
-ARMS="S1 S2 S3 S4 S5 S6 S7 S8 S8b S9 S10 S11 S12 S13"
+ARMS="S1 S2 S3 S4 S5 S6 S7 S8 S8b S9 S10 S11 S12 S13 S14"
 
 # Two more per-arm columns, declared for EVERY arm for the reason the SKIP block above gives:
 # under `set -u` a missing one aborts the scan mid-way, and an aborted scan prints FEWER
@@ -831,15 +926,18 @@ ARMS="S1 S2 S3 S4 S5 S6 S7 S8 S8b S9 S10 S11 S12 S13"
 S1_CORPUS=shell; S2_CORPUS=shell; S3_CORPUS=shell; S4_CORPUS=shell
 S5_CORPUS=shell; S6_CORPUS=shell; S7_CORPUS=shell; S8_CORPUS=instr; S8b_CORPUS=doc
 S9_CORPUS=shell; S10_CORPUS=shell; S11_CORPUS=fixture
-S12_CORPUS=shell; S13_CORPUS=shell
+S12_CORPUS=shell; S13_CORPUS=shell; S14_CORPUS=shell
 S1_COMMENTS=skip; S2_COMMENTS=skip; S3_COMMENTS=skip; S4_COMMENTS=skip
 S5_COMMENTS=skip; S6_COMMENTS=skip; S7_COMMENTS=skip; S8_COMMENTS=keep; S8b_COMMENTS=keep
-S9_COMMENTS=skip; S10_COMMENTS=skip; S11_COMMENTS=skip; S12_COMMENTS=skip; S13_COMMENTS=keep
+S9_COMMENTS=skip; S10_COMMENTS=skip; S11_COMMENTS=skip; S12_COMMENTS=skip; S13_COMMENTS=keep; S14_COMMENTS=keep
 # KIND. `line` is one `grep -E` per line through `scan`; `join` is S12's two-pass program over
 # whole files through `scan_join`, which the PATTERN still drives. `awk13` is S13's program, which
 # takes NO pattern: S13_PAT is empty and inert, the one PAT cell here that no scan reads.
+# `parse` is S14's: the PAT cell is the shell binary `scan_parse` runs `-n` under, and its probe
+# pair is its own, because the shared `good.sh` carries awk and python lines no shell parses.
 S1_KIND=line; S2_KIND=line; S3_KIND=line; S4_KIND=line; S5_KIND=line; S6_KIND=line
 S7_KIND=line; S8_KIND=line; S8b_KIND=line; S9_KIND=line; S10_KIND=line; S11_KIND=line; S12_KIND=join; S13_KIND=awk13
+S14_KIND=parse
 
 # Corpus: every tracked shell file except this one and its own mutation battery.
 #
@@ -935,9 +1033,35 @@ scan_awk13() { # scan_awk13 <unused-pattern> <skip-pattern-or-empty> <skip|keep 
   [ -n "$skip" ] && out="$(grep -vE "$skip" <<<"$out")"
   printf '%s' "$out"
 }
+# The same contract again: one `file:line:text` row per file the binary refuses to parse, where
+# `text` is the first line of the binary's own stderr with its `path: line N:` prefix removed.
+# No pipe: the first line is cut with a parameter expansion, so pipefail cannot rewrite a status.
+# Only the files S13's lexer SELECTS are parsed (see S14's header): one awk, then one `bin -n`
+# per selected file.
+scan_parse() { # scan_parse <shell-binary> <skip-pattern-or-empty> <skip|keep comments> <file...>
+  local bin="$1" skip="$2" comments="$3" f e ln out="" sel; shift 3
+  # Counted like S12 and S13 (see `awk_counted`): an EMPTY selection over a readable corpus is
+  # "nothing to parse", while a failed open is a refusal -- the two must not share the return 0.
+  # Select mode leaves each file at its first selecting line by `nextfile`, after FNR == 1 has
+  # already been counted, so a selected file is counted once.
+  sel="$(S13_SELECT=1 awk_counted "$S13_JOIN" "$@")" || return 2
+  [ -n "$sel" ] || return 0
+  while IFS= read -r f; do
+    e="$("$bin" -n "$f" 2>&1 >/dev/null </dev/null)" && continue
+    e="${e%%$'\n'*}"
+    ln="$(sed -n 's/^.*: line \([0-9][0-9]*\): .*$/\1/p' <<<"$e")"
+    out="$out$f:${ln:-0}:$(sed 's/^.*: line [0-9][0-9]*: //' <<<"$e")"$'\n'
+  done <<<"$sel"
+  [ "$comments" = "skip" ] && out="$(grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' <<<"$out")"
+  [ -n "$skip" ] && out="$(grep -vE "$skip" <<<"$out")"
+  printf '%s' "${out%$'\n'}"
+}
 run_arm() { # run_arm <kind> <pattern> <skip> <comments> <file...>
   local k="$1"; shift
-  if [ "$k" = "join" ]; then scan_join "$@"; elif [ "$k" = "awk13" ]; then scan_awk13 "$@"; else scan "$@"; fi
+  if [ "$k" = "join" ]; then scan_join "$@"
+  elif [ "$k" = "awk13" ]; then scan_awk13 "$@"
+  elif [ "$k" = "parse" ]; then scan_parse "$@"
+  else scan "$@"; fi
 }
 
 # --- self-probes, before the corpus --------------------------------------------------------
@@ -1014,6 +1138,23 @@ echo "[[ \$x =~ \$g ]] in a string is prose"
 lb='a\\bc'
 [[ $x =~ $lb ]] && echo literal-backslash
 GOODEOF
+# S14's pair, one property apart: the offender's heredoc body inside `"$( )"` carries ONE
+# apostrophe, the near-miss's carries a balanced pair in the identical structure -- so an arm
+# that flagged every heredoc in a substitution, or every apostrophe in one, misfires here.
+cat > "$probe/bad-parse.sh" <<'BADPEOF'
+v="$(cat <<'X'
+it's here
+X
+)"
+echo "$v"
+BADPEOF
+cat > "$probe/good-parse.sh" <<'GOODPEOF'
+v="$(cat <<'X'
+it's x's here
+X
+)"
+echo "$v"
+GOODPEOF
 
 # S13 reads MULTI-LINE state, so its probe is its own pair of files: appended to the shared pair
 # its state would be carried through every other arm's seeded lines. Bad: each failing form, with
@@ -1030,6 +1171,10 @@ y="$(
 if true; then
   amutant_arm a "$(amut n 'x "$(p"){y} 1')" z
 fi
+v="$(cat <<'X'
+a ) here
+X
+)"
 S13BADEOF
 cat > "$probe/s13good.sh" <<'S13GOODEOF'
 x="$(
@@ -1050,7 +1195,36 @@ if true; then
   v="$(amut n 'x "$(p"){y} 1')"
   amutant_arm a "$(amut n 'x "$(p") 1')" z
 fi
+v="$(cat <<'X'
+a ( b ) here, it's ) ok's, a \) b
+X
+)"
+f() { cat <<'X'
+a ) here
+X
+}
 S13GOODEOF
+
+# S14's SELECTOR, probed in both directions BEFORE the corpus: every spelling of a heredoc opened
+# inside a `$(` must be SELECTED (a miss there is a file S14 never parses), and a heredoc outside
+# any `$(` must not be, or the narrowing is not a narrowing.
+mkdir -p "$probe/sel"
+printf '%s\n' 'v="$(cat<<X' 'a' 'X' ')"' > "$probe/sel/y1.sh"
+printf '%s\n' "v=\"\$( cat <<-'X'" '	a' '	X' ')"' > "$probe/sel/y2.sh"
+printf '%s\n' 'v="$(echo "$(cat <<X' 'a' 'X' ')")"' > "$probe/sel/y3.sh"
+printf '%s\n' 'v="$(' "  cat <<'X'" 'a' 'X' ')"' > "$probe/sel/y4.sh"
+printf '%s\n' 'v=$(f <<"X"' 'a' 'X' ')' > "$probe/sel/y5.sh"
+printf '%s\n' 'cat <<X' 'a $(b) c' 'X' > "$probe/sel/n1.sh"
+printf '%s\n' 'f() { cat <<X' 'a' 'X' '}' 'v="$(f)"' > "$probe/sel/n2.sh"
+printf '%s\n' 'v="`cat <<X' 'a' 'X' '`"' > "$probe/sel/n3.sh"
+printf '%s\n' 'v="$(cat <<<"a")"' 'n=$((1 << 2))' > "$probe/sel/n4.sh"
+sel_got="$(S13_SELECT=1 awk "$S13_JOIN" "$probe"/sel/y*.sh "$probe"/sel/n*.sh 2>/dev/null)"
+for y in "$probe"/sel/y*.sh; do
+  grep -qxF "$y" <<<"$sel_got" || err "S14's selector did not select $(basename "$y"), a heredoc opened inside a \`\$(\`. S14 would never parse such a file, and its clean run would read exactly like a parse that passed."
+done
+for nn in "$probe"/sel/n*.sh; do
+  grep -qxF "$nn" <<<"$sel_got" && err "S14's selector selected $(basename "$nn"), a heredoc outside any \`\$(\`: the prefilter has stopped narrowing."
+done
 
 for a in $ARMS; do
   ARM_NOW="$a"
@@ -1060,6 +1234,7 @@ for a in $ARMS; do
   eval "kd=\$${a}_KIND"
   pb="$probe/bad.sh"; pg="$probe/good.sh"
   if [ "$a" = S13 ]; then pb="$probe/s13bad.sh"; pg="$probe/s13good.sh"; fi
+  if [ "$kd" = "parse" ]; then pb="$probe/bad-parse.sh"; pg="$probe/good-parse.sh"; fi
   hit_bad="$(run_arm "$kd" "$p" "$sk" "$cm" "$pb")"
   hit_good="$(run_arm "$kd" "$p" "$sk" "$cm" "$pg")"
   if [ -z "$hit_bad" ]; then
@@ -1151,6 +1326,6 @@ if [ -s "$probe/refused" ]; then
   exit 2
 fi
 if [ "$fail" -eq 0 ]; then
-  say "validate-shell-portability: PASS -- $n_shell shell file(s) + $n_instr core file(s) ($n_doc non-shell) + $n_fixture fixture shell file(s), $n_arms arms (S1 sed -i, S2 mapfile, S3 declare -A, S4 setsid, S5/S6 backslash-s, S7 awk backreference, S8 unquoted rev-path, S8b unbraced \$VAR: rev-path in non-shell text, S9 git-grep ERE escape, S10 multibyte bracket class, S11 unguarded cd in a fixture script, S12 GNU escape reaching [[ =~ ]], S13 command substitution bash 3.2 closes early), every arm probed in both directions."
+  say "validate-shell-portability: PASS -- $n_shell shell file(s) + $n_instr core file(s) ($n_doc non-shell) + $n_fixture fixture shell file(s), $n_arms arms (S1 sed -i, S2 mapfile, S3 declare -A, S4 setsid, S5/S6 backslash-s, S7 awk backreference, S8 unquoted rev-path, S8b unbraced \$VAR: rev-path in non-shell text, S9 git-grep ERE escape, S10 multibyte bracket class, S11 unguarded cd in a fixture script, S12 GNU escape reaching [[ =~ ]], S13 command substitution bash 3.2 closes early or misreads, S14 a heredoc-in-\$( ) file /bin/bash 3.2 cannot parse), every arm probed in both directions."
 fi
 exit "$fail"

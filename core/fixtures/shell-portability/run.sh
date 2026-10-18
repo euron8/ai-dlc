@@ -67,9 +67,13 @@
 #   x21 S13 dropped from ARMS                                     -> the report must VANISH
 #   x22 S13 S13_COMMENTS forced from `keep` to `skip`             -> the report must VANISH
 #   x25 S13 a bare `((` lexed as `(` again, so `<<` opens a heredoc -> the report must VANISH
-#   x26     a tracked file deleted from the worktree: S12/S13 must
-#           REFUSE (exit 2); the uncounted mutant PASSES it        -> refused, then PASS
-#   n1     `sed -i ''` and `sed -i.bak`                          -> must NOT fail
+#   x26     a tracked file deleted from the worktree: S12/S13/S14
+#           must REFUSE (exit 2); the uncounted mutant PASSES it   -> refused, then PASS
+#   m15 S14 a lone apostrophe in a heredoc inside `"$( )"`, in a
+#           FIXTURE script the gate's `bash -n` never parses       -> must FAIL
+#   x23 S14 dropped from ARMS                                     -> the report must VANISH
+#   x24 S13 form (d)'s heredoc-body scan disconnected             -> the report must VANISH
+#   n1      `sed -i ''` and `sed -i.bak`                          -> must NOT fail
 #   n2      python `re.sub(r"\1")` in a .sh file                  -> must NOT fail
 #   n3      braced, `HEAD:`-literal, `"${SHA}:` and the braced
 #           ESCAPED-quote rev-paths                             -> must NOT fail
@@ -78,6 +82,8 @@
 #   n5  S11 guarded cd in six spellings plus a comment            -> must NOT fail
 #   n6  S12 correct `=~` forms and grep-only escapes              -> must NOT fail
 #   n7  S8b braced, `$`-after-colon, `docs/` and literal-ref forms -> must NOT fail
+#   n8  S14 a balanced apostrophe pair, a backtick substitution and
+#           a function-held heredoc                               -> must NOT fail
 #
 # THE NEGATIVE ARMS ARE NOT DECORATION. n1 and n2 are measured false positives the validator
 # was narrowed against: every `sed -i` site in this repo already uses the portable pair, and
@@ -917,6 +923,10 @@ corpus_cell_check "x20 empty-guard CORE TEXT" "$TMP/x20" 's/n_doc:-0/n_shell:-0/
 # acquitted by the context requirement and says nothing about the comment filter; this one
 # would be reported the moment S10_COMMENTS flipped to `keep`, so the filter is what holds it.
 #
+# LINES 4 AND 5 SIT IN A `python3 - <<'PY'` HEREDOC, THE SHAPE THE CORPUS EMBEDS PYTHON IN. Bare,
+# they are not shell, and S14 -- which parses every seeded `.sh` under `/bin/bash -n` -- reported
+# this seed as unparseable. That was the arm's whole false-positive set across this battery.
+#
 # LINES 4 AND 5 ARE ACQUITTED BY THE CONTEXT REQUIREMENT AND NOT BY S10_SKIP, MEASURED. Over
 # the tracked shell corpus S10_SKIP subtracts ZERO of S10_PAT's hits: all four python sites
 # fail the context test first. They are kept because they are the shapes the arm's header names
@@ -926,8 +936,10 @@ seed_shell "$TMP/n4" <<'N4EOF'
 awk '{ sub(/[[:space:]]*(—|–|-)[[:space:]].*$/, "", s) }' f
 HEAD_RE='^#{2,4}[[:space:]]+(Check[[:space:]]+)?([0-9]+)[[:space:]]*(\.|—)'
   ROW="$(grep -nE '^\|[[:space:]]*(\[core\][[:space:]]*)?14[[:space:]]*(\||—|-)' "$GATE_LOG" | tail -1)"
+python3 - <<'PY'
 SECTION_RE = re.compile(r'^## Sprint (\d+) [—\-]+ (.+)')
     r"^#{2,4}[ \t]+(?:Check[ \t]+)?([0-9]+[a-z-]*|[A-Z]{1,3}[0-9]*)[ \t]*[.—]")
+PY
 ok "prose naming a class in a message ([…]) is a string, not a class"
 note=" [resolved by basename from '$path' — not dist-relative]"
 #   a grep -E '[—–-]' named in a comment is prose, not code
@@ -1261,6 +1273,38 @@ EOF
 s13_seed m1-setB-off ok <<'EOF'
   set +B; f a "$(amut n 'x "$(p"){y} 1')" z; set -B
 EOF
+# form (d): a heredoc body inside $( ) carrying a `)` that closes nothing. bash -n accepts it and the
+# run exits 0, so the seed checks its own captured VALUE and writes to stderr when it is wrong --
+# that wrong value is the whole hazard (`a ) here` reads back as `a  here`, `X`, `)`).
+s13_seed d1-heredoc-lone-close BREAK <<'EOF'
+  v="$(cat <<'X'
+a ) here
+X
+)"
+  [ "$v" = 'a ) here' ] || echo "WRONG VALUE [$v]" >&2
+EOF
+s13_seed d2-heredoc-balanced ok <<'EOF'
+  v="$(cat <<'X'
+a ( b ) here
+X
+)"
+  [ "$v" = 'a ( b ) here' ] || echo "WRONG VALUE [$v]" >&2
+EOF
+s13_seed d3-nested-heredoc-lone-close BREAK <<'EOF'
+  v="$(echo "$(cat <<X
+a ) here
+X
+)")"
+  [ "$v" = 'a ) here' ] || echo "WRONG VALUE [$v]" >&2
+EOF
+s13_seed d4-function-held-heredoc ok <<'EOF'
+  hf() { cat <<'X'
+a ) here
+X
+}
+  v="$(hf)"
+  [ "$v" = 'a ) here' ] || echo "WRONG VALUE [$v]" >&2
+EOF
 # THE SEED COUNT IS DERIVED from this file's own `s13_seed` call sites, never written: a literal
 # beside a growing seed list went stale once already. The floor guards a grep that matched nothing.
 _s13_decl=$(grep -c '^s13_seed [^ ]* \(BREAK\|ok\) <<' "$0")
@@ -1278,7 +1322,7 @@ if true; then
   amutant_arm a "$(amut n 'x "$(p"){y} 1')" z
 fi
 X21EOF
-blind_check "x21 S13 in ARMS" "$TMP/x21" 's/ S12 S13"/ S12"/' S13 \
+blind_check "x21 S13 in ARMS" "$TMP/x21" 's/ S13 S14"/ S14"/' S13 \
   "the arm's membership in ARMS"
 
 # x22 -- S13's COMMENTS column. Form (a)'s whole subject is comment text, so `skip` blinds the arm
@@ -1325,16 +1369,16 @@ grep -q '^validate-shell-portability: PASS' <<<"$x26_ctl" && grep -qx 'rc=0' <<<
 grep -qx 'rc=2' <<<"$x26_out" || x26_ok=0
 grep -q '^validate-shell-portability: PASS' <<<"$x26_out" && x26_ok=0
 grep -q '^validate-shell-portability: REFUSED' <<<"$x26_out" || x26_ok=0
-for x26_a in S12 S13; do
+for x26_a in S12 S13 S14; do
   grep -q "^REFUSED: ${x26_a}: .*unopenable: scripts/a0.sh" <<<"$x26_out" || x26_ok=0
 done
 if [ "$x26_ok" -ne 1 ]; then
-  note "FAIL  x26 unopenable listed file -- control PASS rc 0 and refusal rc 2 naming S12 and S13 and scripts/a0.sh were not both seen"
+  note "FAIL  x26 unopenable listed file -- control PASS rc 0 and refusal rc 2 naming S12, S13 and S14 and scripts/a0.sh were not both seen"
   printf '%s\n' "$x26_ctl" "$x26_out" | sed 's/^/      /' | head -8; rc=1
 elif mutate "$TMP/x26" 's/^  AWKN_OUT="\$probe\/awkn" awk \(.*\) 2>"\$probe\/awke"$/  AWKN_OUT="$probe\/awkn" awk \1 2>\/dev\/null/; s/^  if \[ "\$rc" -ne 0 \] || \[ "\${got:-none}" != "\$want" \]; then$/  if false; then/' "x26"; then
   x26_mut="$(x26_run "$TMP/x26")"
   if grep -qx 'rc=0' <<<"$x26_mut" && grep -q '^validate-shell-portability: PASS' <<<"$x26_mut"; then
-    note "ok    x26 unopenable listed file -- refused rc 2 naming S12 and S13 (control PASS rc 0); the uncounted mutant PASSES the same tree"
+    note "ok    x26 unopenable listed file -- refused rc 2 naming S12, S13 and S14 (control PASS rc 0); the uncounted mutant PASSES the same tree"
   else
     note "FAIL  x26 unopenable listed file -- the uncounted mutant did not PASS the deleted tree, so the count is not what refused it"
     printf '%s\n' "$x26_mut" | sed 's/^/      /' | head -4; rc=1
@@ -1392,6 +1436,69 @@ else
   printf '%s\n' "$out" | sed 's/^/      /' | head -8; rc=1
 fi
 
+# x24 -- S13 form (d)'s heredoc-body scan. Disconnected (the body line no longer reaches `hbscan`),
+# the arm must go quiet on a seed whose ONLY offender is a lone `)` in a heredoc body in `$( )`.
+seed_shell "$TMP/x24" <<'X24EOF'
+v="$(cat <<'X'
+a ) here
+X
+)"
+X24EOF
+blind_check "x24 S13 form (d) body scan" "$TMP/x24" 's/    else if (hbsub) hbscan(\$0)/    else if (0) hbscan($0)/' S13 \
+  "form (d)'s heredoc-body scan"
+
+# m15 -- S14's subject, seeded where the gate's own `bash -n` never looks: a FIXTURE script. A
+# heredoc body carrying one apostrophe inside `"$( )"`, which `/bin/bash` 3.2 cannot parse.
+seed "$TMP/m15"
+seed_fixture "$TMP/m15" probe-heredoc run.sh <<'M15EOF'
+v="$(cat <<'X'
+it's here
+X
+)"
+echo "$v"
+M15EOF
+kill_check "m15 S14 apostrophe in a heredoc inside \$( )" "$TMP/m15" S14
+
+# n8 -- S14's near-misses, each one property from m15 and each parsed and RUN by 3.2: a balanced
+# apostrophe pair in the identical structure, a backtick substitution carrying the lone apostrophe,
+# and the lone apostrophe in a function's heredoc that the substitution calls (S14's remedy).
+seed "$TMP/n8"
+seed_fixture "$TMP/n8" probe-heredoc run.sh <<'N8EOF'
+v="$(cat <<'X'
+it's x's here
+X
+)"
+w="`cat <<'X'
+it's here
+X
+`"
+f() { cat <<'X'
+it's here
+X
+}
+u="$(f)"
+echo "$v $w $u"
+N8EOF
+if out="$(run_v "$TMP/n8")" && grep -q "PASS" <<<"$out"; then
+  note "ok    n8 -- a balanced pair, a backtick substitution and a function-held heredoc are NOT reported"
+else
+  note "FAIL  n8 -- S14 flagged a form /bin/bash 3.2 parses; the arm fires on its own remedy"
+  printf '%s\n' "$out" | sed 's/^/      /' | head -8; rc=1
+fi
+
+# x23 -- S14's MEMBERSHIP in ARMS, on m15's world. Dropped, both the probe loop and the corpus loop
+# skip it, so the fixture-script offender must go unreported. Anchored on the closing ` S14"` so an
+# arm inserted before it in the list does not move the anchor.
+seed "$TMP/x23"
+seed_fixture "$TMP/x23" probe-heredoc run.sh <<'X23EOF'
+v="$(cat <<'X'
+it's here
+X
+)"
+echo "$v"
+X23EOF
+blind_check "x23 S14 in ARMS" "$TMP/x23" 's/ S14"$/"/' S14 "S14's membership in ARMS"
+
 # THE MUTANT COUNT IS DERIVED; THE OTHER TWO ARE NOT, AND THE ASYMMETRY IS DELIBERATE.
 # This line read a hardcoded `11/11 ... (24 assertions)` and went stale the moment `m9b` and
 # `m9c` landed -- it still said 11 with twelve corpus mutants live. A total that decays
@@ -1402,7 +1509,7 @@ fi
 # falling, a report appearing, the validator REFUSING under a foreign locale). A
 # `grep -c blind_check` therefore reads 6 where the truth is 13 -- a derivation that is
 # confidently wrong is worse than a literal somebody must update, so this one stays a literal
-# and says why. If you add an `x*`, update the 22.
+# and says why. If you add an `x*`, update the 24.
 # `m11` goes through `count_check` (it asserts a LINE COUNT, not merely a kill), and `m8`/`m10`
 # assert fail-closed rather than a kill, so all three are counted separately from `kill_check`.
 # A count that silently omitted them is what the first derivation of this line did.
@@ -1410,6 +1517,6 @@ _n_kill=$(grep -o 'kill_check "' "$0" | grep -c .)
 _n_count=$(grep -o 'count_check "' "$0" | grep -c .)
 _n_kill=$((_n_kill - 1 + _n_count - 1))   # each counting line names its own helper
 if [ "$rc" -eq 0 ]; then
-  note "PASS  shell-portability -- control green, ${_n_kill}/${_n_kill} corpus mutants killed by their own arm, 24/24 arm-table cells proven load-bearing, 7/7 negatives silent"
+  note "PASS  shell-portability -- control green, ${_n_kill}/${_n_kill} corpus mutants killed by their own arm, 26/26 arm-table cells proven load-bearing, 8/8 negatives silent"
 fi
 exit "$rc"
