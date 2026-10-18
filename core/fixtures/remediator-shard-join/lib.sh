@@ -1219,7 +1219,17 @@ p_rronly() { # a record-only re-run of 5.md -> JOINED, nothing on sections/5.md 
   run_docjoin "$1" "$w" --rerun "5.md@$G_SP"; o="$(doc_out "$w")"
   [ "$RC" -eq 0 ] && has "$JO" "(6 parts, 6 writers, 1 superseded rows)" && [ -f "$o" ] \
     && grep -qx -- "rerun: 5.md since $G_SP; superseded on $RDREL/sections/5.md: $G_A5 (1 rows, $(gts 19:28:20)..$(gts 19:28:20))" "$o" \
-    && grep -qx -- "nested: $NEST_C is $G_NEW's subagent (spawn toolu_SPNC); its 1 rows on $RDREL/sections/5.md are counted as $G_NEW" "$o"
+    && grep -qx -- "nested: $NEST_C is $G_NEW's subagent (spawn toolu_SPNC); its 1 rows on $RDREL/sections/5.md are counted as $G_NEW" "$o" || return 1
+  # The record-only re-run's RECORD written by the re-run writer's nested child: folded, so the re-run is
+  # record-only by G_NEW, and that fold is NAMED on the part record, in the output and in the record.
+  w="$(r5_world)" || return 1
+  spawn_row "$w" toolu_SPAG1 ""; spawn_row "$w" toolu_SPNC "$G_NEW"; probe_row "$w" "$NEST_C" toolu_SPNC
+  grec "$w" 5 "$NEST_C" 19:51:00
+  run_docjoin "$1" "$w" --rerun "5.md@$G_SP"; o="$(doc_out "$w")"
+  local nl="nested: $NEST_C is $G_NEW's subagent (spawn toolu_SPNC); its 1 rows on $RDREL/5.md are counted as $G_NEW"
+  [ "$RC" -eq 0 ] && has "$JO" "(6 parts, 6 writers, 0 superseded rows)" && [ -f "$o" ] \
+    && grep -qx -- "rerun: 5.md since $G_SP; record-only, by $G_NEW; kept on $RDREL/sections/5.md: $G_A5 (1 rows, $(gts 19:28:20)..$(gts 19:28:20))" "$o" \
+    && grep -qx -- "$nl" "$JO" && grep -qx -- "$nl" "$o"
 }
 # THE ALIAS RULE. A row by an agent with no transcript of its own, whose tool_use_id is ONE assistant
 # tool_use in another writer's transcript, is that writer's. The transcripts are seeded in a projects

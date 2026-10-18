@@ -1892,9 +1892,24 @@ RREOF
        | [$b, .agent_id, .ts] | @tsv' "$LEDGER" 2>/dev/null)" \
       || die "the write ledger ${LEDGER} does not parse as JSON lines"
     # The same nested-writer fold as the file rows, so a record written by the re-run writer's own
-    # subagent is the re-run writer's.
-    [ -z "$FOLD_MAP" ] || _prrows="$({ printf '%s\n' "$FOLD_MAP" | sed '/^$/d; s/^/M\t/'; printf '%s\n' "$_prrows" | sed '/^$/d; s/^/Q\t/'; } | awk -F'\t' '
-      BEGIN { OFS = "\t" } $1 == "M" { fm[$2] = $3; next } { $0 = substr($0, 3); if ($2 in fm) $2 = fm[$2]; print }')"
+    # subagent is the re-run writer's. Each such fold is NAMED, on the same `nested:` output as the file
+    # rows' folds: `N\t<line>` comes back beside the rows, one line per nested agent with part-record rows.
+    if [ -n "$FOLD_MAP" ]; then
+      _prq="$({ printf '%s\n' "$FOLD_MAP" | sed '/^$/d; s/^/M\t/'; printf '%s\n' "$_prrows" | sed '/^$/d; s/^/Q\t/'; } | awk -F'\t' -v px="$_prpfx" '
+        BEGIN { OFS = "\t" }
+        $1 == "M" { fm[$2] = $3; ft[$2] = $4; next }
+        { $0 = substr($0, 3)
+          if ($2 in fm) { a = $2; nr[a]++; f = px $1
+                          if (!((a, f) in fs)) { fs[a, f] = 1; fl[a] = (a in fl) ? fl[a] ", " f : f; if (!(a in seen)) { seen[a] = 1; A[++na] = a } }
+                          $2 = fm[a] }
+          print "Q", $0 }
+        END { for (i = 1; i <= na; i++) { a = A[i]
+                print "N", "nested: " a " is " fm[a] "\047s subagent (spawn " ft[a] "); its " nr[a] " rows on " fl[a] " are counted as " fm[a] } }')"
+      _prrows="$(printf '%s\n' "$_prq" | sed -n 's/^Q	//p')"
+      _prn="$(printf '%s\n' "$_prq" | sed -n 's/^N	//p')"
+      [ -z "$_prn" ] || NEST_LINES="${NEST_LINES}${_prn}
+"
+    fi
     _rres="$({ printf '%s' "$_rspec"; printf '%s\n' "$DROWS" | sed '/^$/d; s/^/D\t/'; printf '%s\n' "$_prrows" | sed '/^$/d; s/^/Q\t/'; } | awk -F'\t' -v px="$_prpfx" '
       $1 == "R" { if (!($2 in S)) { S[$2] = $3; PP[++npp] = $2 }; inF[$2, $4] = 1; nf[$2]++; F[$2, nf[$2]] = $4; fp[$4] = $2; next }
       $1 == "D" { nr++; for (j = 2; j <= NF; j++) r[nr, j - 1] = $j; next }
