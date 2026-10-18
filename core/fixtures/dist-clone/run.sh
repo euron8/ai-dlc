@@ -207,7 +207,7 @@ SHIM
   if [ "$x_rc" -eq 0 ] && [ "$x_l2" = "theirs $x" ] && [ "$RC" -eq 1 ] && [ -z "$OUT" ] && has "the ref names nothing in the distribution clone"; then
     V DC12 "a sha only on an upstream branch resolved while it existed; a fresh clone STOPped, named, after upstream deleted and pruned it"
   else X DC12 "while present rc=$x_rc [$x_l2]; after prune rc=$RC out=[$OUT]"; fi
-  if git --git-dir="$D12" cat-file -e "$x^{commit}" 2>/dev/null && git --git-dir="$D12" fsck -q --connectivity-only >/dev/null 2>&1; then
+  if git --git-dir="$D12" cat-file -e "$x^{commit}" 2>/dev/null && git --git-dir="$D12" fsck --connectivity-only --no-progress >/dev/null 2>&1; then
     V DC9 "after the upstream gc --prune=now the clone still reads $x and every object (no alternates)"
   else X DC9 "the clone lost objects when the upstream pruned: it borrows the upstream's store"; fi
   return 0
