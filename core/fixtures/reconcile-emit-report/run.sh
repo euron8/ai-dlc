@@ -3409,8 +3409,10 @@ pcv_suite() {
     pcv_lat_approve v10
     bash "$(dirname "$PS_E")/layer-drift.sh" "$L_D" "$L_B" "$L_T" "$L_C" > "$PS_D/ld10.out" 2>/dev/null
     L_DIG="$(awk -F'\t' '$1 == "HARD-LAYER-ADJUDICATION-MISSING"' "$PS_D/ld10.out" | grep -o 'subject_digest [0-9a-f]\{40\}' | awk '{ print $2; exit }')"
-    if ! grep -q '^HARD-LAYER-ADJUDICATION-MISSING' "$PS_D/region10.md" || [ "${#L_DIG}" -ne 40 ]; then
-      pcv_x PC-V10 "FIXTURE BROKEN: the adjudication world rendered no HARD-LAYER-ADJUDICATION-MISSING row, or layer-drift.sh printed no subject_digest to record against"
+    if [ ! -s "$PS_D/region-v10.md" ] || ! grep -q '^HARD-LAYER-ADJUDICATION-MISSING' "$PS_D/region-v10.md"; then
+      pcv_x PC-V10 "FIXTURE BROKEN: the adjudication world's approval (region-v10.md) is missing or carries no HARD-LAYER-ADJUDICATION-MISSING row, so there is no blocker to resolve"
+    elif [ "${#L_DIG}" -ne 40 ]; then
+      pcv_x PC-V10 "FIXTURE BROKEN: layer-drift.sh printed no 40-hex subject_digest on its HARD-LAYER-ADJUDICATION-MISSING row, so no register row can be recorded against it"
     else
       pcv_run v10r "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"; v10r="$(pcv_why)"; v10r_ok=0
       pcv_is_miss 0 && [ -f "$L_REC" ] && v10r_ok=1
@@ -3499,8 +3501,17 @@ else
   if grep -q '^FAIL ' "$PCV_ROOT/ship/verdicts" 2>/dev/null || [ -s "$PCV_ROOT/ship.log" ]; then
     awk 'NR <= 20 { print "  DIAG  pcache ship.log | " $0 }' "$PCV_ROOT/ship.log"
   fi
+  # THE CONTROL GATES THE SCORE. A mutant's kill set is a difference from the shipping engine, so an id
+  # the shipping run did not pass would sit in every kill set and score kills nobody earned (measured:
+  # a control-red PC-V10 made M-direxcl read "fails exactly [PC-V10]"). Any control id not ok means no
+  # mutant is scored, and each is reported as UNSCORED naming the control's failing ids.
+  PCV_CTLFAIL="$(pcv_failset "$PCV_ROOT/ship/verdicts")"
   for _m in $PCV_BUILT; do
     _got="$(pcv_failset "$PCV_ROOT/$_m/verdicts")"; _want="$(pcv_want "$_m")"
+    if [ -n "$PCV_CTLFAIL" ]; then
+      bad "MUTANT UNSCORED [BL-679 $_m]: the unmutated control did not pass [$PCV_CTLFAIL], so a kill set read against it would credit the control's failures as kills"
+      continue
+    fi
     case " $_got " in
       *" PC-V0 "*) bad "MUTANT HARNESS BROKEN [BL-679 $_m]: the copy failed the seed sanity arm, so its score is a copy that did not run" ;;
       *)
