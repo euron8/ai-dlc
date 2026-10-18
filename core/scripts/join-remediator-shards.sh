@@ -818,29 +818,33 @@ src_probe() {
 #       s317 stories-repair-p1.md and shards/stories-adversarial-repair-p1/20.md -- each carries a
 #       lone advisor line and no derivations line, so each would refuse where the base passes.
 #       THE SERIAL BLOCKS ARE SEGMENTED BY THEIR TERMINATORS, and the lines are counted PER SEGMENT,
-#       never per file. After the last shard marker, the last part runs to the SECOND `- artifact:`
-#       triple (the first is the part's own; the serial remediator opens its block with its own,
-#       remediator.md); the first block runs from that triple to the first column-0
-#       `repair-complete:` line, and each later block from the previous terminator to its own. A block
-#       closed by `repair-complete: serial ...` OWES BOTH LINES whatever any era says: that line and
-#       the check-fields rule shipped together, so a record carrying it was written under the rule.
-#       A `repair-complete: spec-render ...` block owes neither; an unterminated tail is era-gated
-#       like a part. A serial terminator with no second triple is refused by name: that block's lines
-#       cannot be told from the last part's. An unmarked record owes the lines only in a block its
-#       serial terminator closes; with none it is one era-gated segment, as before. The parts' lines
-#       never satisfy a serial block. Each part and the text above the first marker are judged on
-#       their own, era-gated each: a pre-rule part carrying neither line charges nothing, so a
-#       record whose parts predate the rule is still read (graph s319 requirements-repair-p1, parts
-#       01-12). FALSE-POSITIVE SET, MEASURED with this checks_field over graph's 4 s319 records
-#       carrying `repair-complete: serial` (8 blocks, c3-term.py beside it): 0 new findings; the one
-#       CHK line in requirements-repair-p1 (a prose `derivations: replayed. ...` value in the
+#       never per file. After the last shard marker, the last part runs to the first
+#       `- artifact:` triple that follows one of ITS ENTRIES -- an entry is its `disposition:`
+#       line, and a non-entry `### ` heading is not one -- because the serial remediator opens
+#       its block with its own triple (remediator.md) and the part's own triple sits above its
+#       first entry. The serial block opens BY POSITION, never by counting triples. The first
+#       block runs from that triple to the first column-0 `repair-complete:` line, and each later
+#       block from the previous terminator to its own. A block closed by `repair-complete:
+#       serial ...` OWES BOTH LINES whatever any era says: that line and the check-fields rule
+#       shipped together, so a record carrying it was written under the rule. A
+#       `repair-complete: spec-render ...` block owes neither; an unterminated tail is era-gated
+#       like a part. A serial terminator before any triple that follows an entry of the last
+#       part is refused by name: that block's lines cannot be told from the last part's. An
+#       unmarked record owes the lines only in a block its serial terminator closes; with none
+#       it is one era-gated segment, as before. The parts' lines never satisfy a serial block.
+#       Each part and the text above the first marker are judged on their own, era-gated each:
+#       a pre-rule part carrying neither line charges nothing, so a record whose parts predate
+#       the rule is still read (graph s319 requirements-repair-p1, parts 01-12). FALSE-POSITIVE
+#       SET, MEASURED with this checks_field over graph's 4 s319 records carrying
+#       `repair-complete: serial` (8 blocks, c3-term.py beside it): 0 new findings; the one CHK
+#       line in requirements-repair-p1 (a prose `derivations: replayed. ...` value in the
 #       spec-render block) is read identically at the base. 0 of the 343 `.md` files under graph's
-#       `shards/*repair*` dirs carry two triple lines (313 carry one, the control), so the part's own
-#       triple is the first. THE DEFINITION THIS REPLACES -- "the block after the
-#       last marker", in the cluster file -- still holds the last part's own lines, and a last-triple
-#       read lends a block with no triple of its own (requirements-repair-p1 serial 3) the lines of
-#       the block before it. HOLE, STATED: a serial pass writing neither line AND no terminator is
-#       outside every era.
+#       `shards/*repair*` dirs carry two triple lines (313 carry one, the control), so no part
+#       carries a second triple of its own for the position rule to misread. THE DEFINITION THIS
+#       REPLACES -- "the block after the last marker", in the cluster file -- still holds the last
+#       part's own lines, and a last-triple read lends a block with no triple of its own
+#       (requirements-repair-p1 serial 3) the lines of the block before it. HOLE, STATED: a
+#       serial pass writing neither line AND no terminator is outside every era.
 #       MEASURED with this join, serially, against 952b9319's over graph's 60 s317-s319 repair and
 #       fold records in both record modes: 0 runs refused by a check field; the base printed an
 #       escalation count and this join did not on 2 runs, both the BL-542 true positive (the
@@ -1268,8 +1272,8 @@ CHK	mixed.md	a value outside the grammar: derivations: the validator reports ok"
   # The serial blocks (BL-557): a joined record whose part carries both lines and whose SECOND serial
   # block, closed by its own terminator, omits both fires for that block alone; the same record with
   # the second block carrying both is quiet (the near-miss a last-part or last-triple read cannot
-  # tell apart); a serial terminator with no triple after the part's own is refused by name; a
-  # `spec-render` block owes neither line; an unterminated tail with no line is quiet.
+  # tell apart); a serial terminator with no triple after the entries of the last shard is refused
+  # by name; a `spec-render` block owes neither line; an unterminated tail with no line is quiet.
   printf -- '- artifact: j\n\n<!-- shard: 01.md -->\n- artifact: p\n- advisor: called\n- derivations: replayed 1\n\n### F-1\n- disposition: repaired\n- edit: n/a\n\n- artifact: s\n- advisor: called\n- derivations: replayed 2\n\n### S-1\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: serial 1\n\n%s\n### S-2\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: serial 2\n\n- artifact: m\n- derivations: replayed 1\n\n### R-1\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: spec-render 2\n' '' > "$d/ser.md"
   printf -- '- artifact: j\n\n<!-- shard: 01.md -->\n- artifact: p\n- advisor: called\n- derivations: replayed 1\n\n### F-1\n- disposition: repaired\n- edit: n/a\n\n- artifact: s\n- advisor: called\n- derivations: replayed 2\n\n### S-1\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: serial 1\n\n%s\n### S-2\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: serial 2\n\n- artifact: m\n- derivations: replayed 1\n\n### R-1\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: spec-render 2\n' '- advisor: unavailable
 - derivations: replayed 0
