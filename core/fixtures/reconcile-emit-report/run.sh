@@ -47,7 +47,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # consumer seed. That was checked by listing every name each phase defines and every line outside
 # it that reads one.
 SHARDS="a b c"
-PHASES_a="seeded b230 moved shadow b1b2 wg"
+PHASES_a="seeded b230 moved shadow b1b2 wg pcache"
 PHASES_b="vworlds1 vworlds2"
 PHASES_c="step3b sb"
 GROUP=a
@@ -3058,6 +3058,560 @@ else
   bad "only $WGN of 6 world-guard mutants were scored — a mutation that never became a mutant leaves its arm unproven and this fixture would report PASS over it"
 fi
 fi # end rer_phase wg
+
+# --- BL-679: --verify ACCEPTS A RECORDED PASS, AND EVERY INPUT THE RENDER READS STILL MISSES IT ---
+# A pull ran `--verify` three or four times on one tree, each a full detector re-render. The engine
+# now records an exit-0 `--verify` in the consumer's GIT-DIR (`ai-dlc-verify-pass`) keyed on every
+# render input, and a matching record is accepted without rendering. The cache is a SAFETY GATE's
+# cache: apply.sh writes on its 0. So every arm here is a MISS the cache must take, each one property
+# away from a HIT its own control establishes in the same world immediately before.
+#
+# HIT vs FRESH is decided by the pinned prefix `emit-report: accepted a recorded PASS (` AND by a PATH
+# shim: a `bash` first on PATH counts every detector the render launches (the key computation launches
+# none), into a file named by PCV_COUNT -- never an AI_DLC_* name, which the runner scrubs, and never a
+# file under the engine directory, which the engine key hashes. A hit is the exact two-line stdout,
+# exit 0 and ZERO launches; a miss is NO hit line, the fresh render's exit code, and at least one.
+#
+# EACH WORLD IS A GIT TOP LEVEL OF ITS OWN (the cache refuses a consumer nested in another repo,
+# which V15 holds), built by copying the seed and `git init`, so nothing here touches the seeded
+# CONSUMER the other phases read, and the dist is a copy too (V6 adds an object, V16 moves HEAD).
+#
+# THE SUITE RUNS FOUR TIMES, in parallel: once against the shipping engine, whose verdicts are this
+# phase's ok/FAIL lines, and once per mutant against a COPY of the reconcile directory with one line
+# of emit-report.sh edited. Each mutant's expected kill set is written beside it and must be met
+# EXACTLY. PC-V0 is the seed sanity arm and is in no kill set: a copy that died fails it, which is
+# reported as a harness failure, never as a kill.
+#
+# AN ENGINE WITHOUT THE CACHE (a consumer whose fixture arrived before its engine) prints SKIP and
+# no ok line: it is never green.
+if rer_phase pcache; then
+PCV_HITP='emit-report: accepted a recorded PASS ('
+PCV_OKLINE="emit-report: the report's mechanical region is present, current, and complete."
+PCV_IDS="PC-V0 PC-V1 PC-V14 PC-V2 PC-V3 PC-V9 PC-V4 PC-V11 PC-V12 PC-V13 PC-V5 PC-V6 PC-V7 PC-V8 PC-V15 PC-V16 PC-V17 PC-V18 PC-V19 PC-V20 PC-V21 PC-V22 PC-V23 PC-V24 PC-V25 PC-V26 PC-V10"
+# THE PRE-CACHE ENGINE for V26, extracted from this checkout's history into a scratch dir, every file of
+# reconcile/ at 2875c7ad. The root is found by walking up for `.git` beside the engine; a tree with no
+# such history (a consumer, a hermetic sandbox) leaves PCV_OLD_ENG empty and V26 says which comparison it made.
+PCV_OLD_SHA=2875c7adfc82324c204f66e651fcd166f6e33655
+PCV_OLD_ENG=""
+_pr="$HERE"
+while [ -n "$_pr" ] && [ "$_pr" != / ]; do
+  if [ -e "$_pr/.git" ] && [ -f "$_pr/core/skills/ai-dlc-update/reconcile/emit-report.sh" ]; then break; fi
+  _pr="$(dirname "$_pr")"
+done
+if [ -n "$_pr" ] && [ "$_pr" != / ] && git -C "$_pr" cat-file -e "${PCV_OLD_SHA}^{commit}" 2>/dev/null; then
+  _po="$WORK/pcache-old-engine"; mkdir -p "$_po"
+  git -C "$_pr" ls-tree --name-only "${PCV_OLD_SHA}:core/skills/ai-dlc-update/reconcile/" > "$_po.list" 2>/dev/null
+  _pn=0; _pt="$(grep -c . "$_po.list")" || _pt=0
+  while IFS= read -r _pf; do
+    git -C "$_pr" show "${PCV_OLD_SHA}:core/skills/ai-dlc-update/reconcile/${_pf}" > "$_po/$_pf" 2>/dev/null && _pn=$((_pn+1))
+  done < "$_po.list"
+  if [ "$_pt" -gt 0 ] && [ "$_pn" -eq "$_pt" ] && [ -f "$_po/emit-report.sh" ] && ! grep -qF "$PCV_HITP" "$_po/emit-report.sh"; then
+    PCV_OLD_ENG="$_po/emit-report.sh"
+  fi
+fi
+PCV_ROOT="$WORK/pcache"; mkdir -p "$PCV_ROOT"
+PCV_BASH="$(command -v bash)"
+PCV_LAT_SEED="$HERE/../layer-adjudication-tier/seed.sh"
+unset AI_DLC_VERIFY_NO_CACHE
+
+pcv_v() { printf 'ok %s %s\n' "$1" "$2" >> "$PS_D/verdicts"; }
+pcv_x() { printf 'FAIL %s %s\n' "$1" "$2" >> "$PS_D/verdicts"; }
+pcv_why() { printf 'rc=%s hit=%s detector-launches=%s' "$PRC" "$PHIT" "$PN"; }
+# pcv_run <tag> <consumer> <report> <dist> <base> <theirs> [nocache] -- one --verify through the shim.
+# Sets PRC (exit), PHIT (1 when the hit prefix is on stdout), PN (detector launches counted).
+pcv_run() {
+  local eng="${PCV_ENG:-$PS_E}"
+  : > "$PS_D/count"
+  # PCV_ENVPRE: extra `env` operands for one arm (V24's locale), word-split on purpose; empty elsewhere.
+  # PCV_ARM: the cache OPT-IN. The cache ships OFF, so every acceptance arm arms it, and a miss is a
+  # miss of an ARMED cache; V26 alone replaces it with `-u EMIT_REPORT_VERIFY_CACHE`.
+  if [ -n "${7:-}" ]; then
+    env ${PCV_ENVPRE:-} ${PCV_ARM:-EMIT_REPORT_VERIFY_CACHE=1} AI_DLC_VERIFY_NO_CACHE=1 PCV_COUNT="$PS_D/count" PATH="$PS_SHIM:$PATH" \
+      "$PCV_BASH" "$eng" --verify "$3" "$4" "$5" "$2" "$6" > "$PS_D/$1.out" 2> "$PS_D/$1.err"; PRC=$?
+  else
+    env ${PCV_ENVPRE:-} ${PCV_ARM:-EMIT_REPORT_VERIFY_CACHE=1} PCV_COUNT="$PS_D/count" PATH="$PS_SHIM:$PATH" \
+      "$PCV_BASH" "$eng" --verify "$3" "$4" "$5" "$2" "$6" > "$PS_D/$1.out" 2> "$PS_D/$1.err"; PRC=$?
+  fi
+  PN="$(grep -c . "$PS_D/count")" || PN=0
+  PHIT=0; grep -qF "$PCV_HITP" "$PS_D/$1.out" && PHIT=1
+  return 0
+}
+pcm() { pcv_run "$1" "$PC_C" "$PC_R" "$PC_D" "$BASE" "$THEIRS" "${2:-}"; }
+# pcv_is_hit <tag> <record path> -- exit 0, the pinned two lines byte for byte, and no detector launched.
+pcv_is_hit() {
+  [ "$PRC" -eq 0 ] && [ "$PHIT" -eq 1 ] && [ "$PN" -eq 0 ] || return 1
+  printf '%s\n%s\n' "$PCV_OKLINE" \
+    "emit-report: accepted a recorded PASS ($2); nothing was re-rendered. Set AI_DLC_VERIFY_NO_CACHE=1 to re-render." > "$PS_D/$1.want"
+  cmp -s "$PS_D/$1.want" "$PS_D/$1.out"
+}
+# pcv_is_miss <rc> -- no hit line, the fresh render's exit code, and the render really ran.
+pcv_is_miss() { [ "$PHIT" -eq 0 ] && [ "$PRC" -eq "$1" ] && [ "$PN" -gt 0 ]; }
+# pcv_ctl <tag> -- the unchanged world HITS (the allow twin of the miss that follows), and the record
+# is kept so an arm whose fresh render exits non-zero can put it back for the next control.
+pcv_ctl() { pcm "$1.ctl"; pcv_is_hit "$1.ctl" "$PC_REC" || return 1; cp "$PC_REC" "$PS_D/rec.keep"; }
+pcv_back() { cp "$PS_D/rec.keep" "$PC_REC"; }
+pcv_noctl() { pcv_x "$1" "control: the unchanged world did not HIT before the change ($(pcv_why)), so a miss after it would prove nothing"; }
+
+# pcv_lat <tag> -- a fresh layer-adjudication-tier world under <suite dir>/<tag>; sets L_D L_C L_B L_T L_R L_REC.
+pcv_lat() {
+  mkdir -p "$PS_D/$1" || return 1
+  L_ROOT="$(TMPDIR="$PS_D/$1" bash "$PCV_LAT_SEED" 2>/dev/null)" && [ -d "$L_ROOT/consumer/.git" ] || return 1
+  L_D="$L_ROOT/dist"; L_C="$L_ROOT/consumer"
+  L_B="$(git -C "$L_D" rev-parse HEAD~1)" && L_T="$(git -C "$L_D" rev-parse HEAD)" || return 1
+  L_R="$L_C/_bmad-output/ai-dlc-update/reconcile-report.md"
+  L_REC="$(git -C "$L_C" rev-parse --absolute-git-dir 2>/dev/null)/ai-dlc-verify-pass"
+}
+pcv_lat_approve() { # pcv_lat_approve <tag> -- render at the full base sha and write the report
+  env ${PCV_ENVPRE:-} "$PCV_BASH" "$PS_E" "$L_D" "$L_B" "$L_C" "$L_T" > "$PS_D/region-$1.md" 2>/dev/null
+  { echo "# Reconcile report (fixture)"; echo; cat "$PS_D/region-$1.md"; } > "$L_R"
+  grep -q 'reconcile-mechanical' "$PS_D/region-$1.md"
+}
+PCV_HOOKREG='scripts/ai-dlc/validate-hook-registration.sh'
+PCV_QEXT='.claude/skills/ai-dlc/extensions/q"x.md'
+# pcv_latarm <id> <tag> <description> -- seed, approve, record, HIT control, change, then a MISS whose exit
+# equals an opt-out render of the same tree and is non-zero (so the change is one the render sees).
+pcv_latarm() {
+  local id="$1" t="$2" b2 rec ctl n0 ovr dang="" wt
+  PCV_ENVPRE=""
+  pcv_lat "$t" || { pcv_x "$id" "FIXTURE BROKEN: layer-adjudication-tier/seed.sh did not build its world"; return 0; }
+  b2="$L_B"; ovr="$L_C/.claude/skills/ai-dlc/overrides"
+  case "$t" in
+    # V21/V22: an override whose base_sha names a DANGLING commit, in the consumer or in the dist. A
+    # prune after the recording run removes the object and the row the render prints changes.
+    v21) dang="$(git -C "$L_C" -c user.email=f@f -c user.name=fixture commit-tree -m dangling "$(git -C "$L_C" write-tree)" 2>/dev/null)" ;;
+    v22) dang="$(git -C "$L_D" -c user.email=f@f -c user.name=fixture commit-tree -m dangling -p "$L_B" "${L_B}^{tree}" 2>/dev/null)" ;;
+    # V23: a fixture core DELETED on a side branch, which the render names by an ABBREVIATED sha, so
+    # core.abbrev changes the bytes of the RETIRED-FIXTURE-ORPHAN row and nothing else.
+    v23) wt="$PS_D/$t/wt"
+         { git -C "$L_D" worktree add -q --detach "$wt" "$L_B" \
+           && mkdir -p "$wt/core/fixtures/oldfx" && printf 'exit 0\n' > "$wt/core/fixtures/oldfx/run.sh" \
+           && git -C "$wt" add -A && git -C "$wt" -c user.email=f@f -c user.name=fixture commit -qm oldfx \
+           && git -C "$wt" branch -q hist && git -C "$L_D" worktree remove --force "$wt"; } >/dev/null 2>&1 \
+           || { pcv_x "$id" "FIXTURE BROKEN: could not build the deleted-fixture history in the dist"; return 0; }
+         mkdir -p "$L_C/tests/fixtures/oldfx"; printf 'exit 0\n' > "$L_C/tests/fixtures/oldfx/run.sh" ;;
+    # V24: approved and recorded under a UTF-8 collation, verified under LC_ALL=C, where the render's
+    # sorted lists come out in another order.
+    v24) PCV_ENVPRE="-u LC_ALL LANG=en_US.UTF-8" ;;
+  esac
+  if [ "$t" = v21 ] || [ "$t" = v22 ]; then
+    [ -n "$dang" ] || { pcv_x "$id" "FIXTURE BROKEN: could not create the dangling commit"; return 0; }
+    mkdir -p "$ovr" && printf -- '---\nshadows: steps/demo.md\nbase_sha: %s\n---\n\nbody\n' "$dang" > "$ovr/demo.md"
+  fi
+  case "$t" in
+    v17) printf -- '---\nkind: check\nhooks: steps/demo.md\nreason: q\n---\n\n### 902. [ext:q] Q.\n\nBody.\n' > "$L_C/$PCV_QEXT" ;;
+    v18|v19) mkdir -p "$L_C/scripts/ai-dlc"
+         printf '#!/bin/bash\necho "HOOKREG-SHIM-RAN"\n' > "$L_C/$PCV_HOOKREG"; chmod 644 "$L_C/$PCV_HOOKREG" ;;
+  esac
+  if [ "$t" = v19 ]; then
+    git -C "$L_C" config core.filemode false
+    { git -C "$L_C" add -A && git -C "$L_C" -c user.email=f@f -c user.name=fixture commit -qm v19; } >/dev/null 2>&1 \
+      || { pcv_x "$id" "FIXTURE BROKEN: could not commit the tracked hook-registration file"; return 0; }
+  fi
+  pcv_lat_approve "$t" || { pcv_x "$id" "FIXTURE BROKEN: the world rendered no region"; return 0; }
+  pcv_run "$t.r" "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"; rec="$(pcv_why)"; n0=0
+  pcv_is_miss 0 && [ -f "$L_REC" ] && n0=1
+  pcv_run "$t.c" "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"; ctl="$(pcv_why)"
+  if [ "$n0" -ne 1 ] || ! pcv_is_hit "$t.c" "$L_REC"; then
+    pcv_x "$id" "control: the unchanged world did not record [$rec] and then hit [$ctl], so a miss after the change would prove nothing"; return 0
+  fi
+  case "$t" in
+    v17) printf -- '---\nkind: check\nreason: q\n---\n\n### 902. [ext:q] Q.\n\nBody.\n' > "$L_C/$PCV_QEXT" ;;
+    v18|v19) chmod 755 "$L_C/$PCV_HOOKREG" ;;
+    v20) b2="$(git -C "$L_D" rev-parse --short "$L_B" 2>/dev/null)"
+         [ -n "$b2" ] && [ "$b2" != "$L_B" ] || { pcv_x "$id" "FIXTURE BROKEN: no short spelling distinct from the full base sha"; return 0; } ;;
+    v21) git -C "$L_C" prune --expire=now >/dev/null 2>&1
+         ! git -C "$L_C" cat-file -e "$dang" 2>/dev/null || { pcv_x "$id" "FIXTURE BROKEN: the prune left the dangling consumer commit in place"; return 0; } ;;
+    v22) git -C "$L_D" prune --expire=now >/dev/null 2>&1
+         ! git -C "$L_D" cat-file -e "$dang" 2>/dev/null || { pcv_x "$id" "FIXTURE BROKEN: the prune left the dangling dist commit in place"; return 0; } ;;
+    v23) git -C "$L_D" config core.abbrev 20 ;;
+    v24) PCV_ENVPRE="LC_ALL=C" ;;
+    v25) chmod 000 "$L_C/.claude/skills/ai-dlc/extensions" ;;
+  esac
+  # The cached run goes FIRST: an opt-out run before it would, under M-exit3, record the changed tree
+  # and turn this arm's miss into a hit, putting V17..V20 into a kill set that is not theirs.
+  pcv_run "$t" "$L_C" "$L_R" "$L_D" "$b2" "$L_T"; local c_rc="$PRC" c_hit="$PHIT" c_n="$PN"
+  pcv_run "$t.n" "$L_C" "$L_R" "$L_D" "$b2" "$L_T" nocache; n0="$PRC"
+  PRC="$c_rc"; PHIT="$c_hit"; PN="$c_n"
+  # V25's directory is put back at once, by its own path, or the EXIT trap's rm cannot descend into it.
+  [ "$t" = v25 ] && chmod 755 "$L_C/.claude/skills/ai-dlc/extensions"
+  PCV_ENVPRE=""
+  if [ "$n0" -eq 0 ]; then
+    pcv_x "$id" "FIXTURE BROKEN: the opt-out render after the change still exits 0, so the change is not one the render sees and a hit would be correct"
+  elif pcv_is_miss "$n0"; then
+    pcv_v "$id" "$3 MISSES: no hit line, and the fresh render exits $n0 exactly as the opt-out render of the same tree"
+  else
+    pcv_x "$id" "$3 did not force a fresh render: [$(pcv_why)], opt-out render exits $n0 -- a recorded PASS answered for a tree it never rendered"
+  fi
+  return 0
+}
+
+# pcv_suite <emit> <dir> -- every PC-V arm against that engine; one verdict line per id in <dir>/verdicts.
+pcv_suite() {
+  PS_E="$1"; PS_D="$2"; PS_SHIM="$2/shim"; PCV_ENG=""
+  mkdir -p "$PS_SHIM" && : > "$PS_D/verdicts" || return 1
+  { printf '#!%s\n' "$PCV_BASH"; printf '%s\n' 'printf "x\n" >> "$PCV_COUNT"'; printf 'exec "%s" "$@"\n' "$PCV_BASH"; } > "$PS_SHIM/bash" \
+    && chmod +x "$PS_SHIM/bash" || { pcv_x PC-V0 "FIXTURE BROKEN: could not write the PATH shim"; return 1; }
+
+  # ---- the main world ----
+  PC_C="$PS_D/consumer"; PC_D="$PS_D/dist"
+  { cp -R "$CONSUMER" "$PC_C" && cp -R "$DIST" "$PC_D"; } || { pcv_x PC-V0 "FIXTURE BROKEN: could not copy the seeded world"; return 1; }
+  mkdir -p "$PC_C/notes" "$PC_C/_bmad-output/ai-dlc-update"
+  printf 'v4 original\n' > "$PC_C/notes/pc-v4.txt"
+  printf '#!/usr/bin/env bash\necho v11\n' > "$PC_C/notes/pc-v11.sh"; chmod -x "$PC_C/notes/pc-v11.sh"
+  printf '.claude/settings.local.json\n' > "$PC_C/.gitignore"
+  printf 'version: 1.0.0\ncommit: %s\n' "$BASE" > "$PC_C/.claude/.ai-dlc-version"
+  { git -C "$PC_C" init -q && git -C "$PC_C" add -A \
+    && git -C "$PC_C" -c user.email=f@f -c user.name=fixture commit -q -m consumer; } >/dev/null 2>&1 \
+    || { pcv_x PC-V0 "FIXTURE BROKEN: could not make the consumer copy a git work tree"; return 1; }
+  printf '{"local": 1}\n' > "$PC_C/.claude/settings.local.json"
+  printf 'v13 bytes\n' > "$PC_C/notes/pc-v13.txt"
+  PC_T2="$(git -C "$PC_D" -c user.email=f@f -c user.name=fixture commit-tree "${THEIRS}^{tree}" -p "$THEIRS" -m pc-v6 2>/dev/null)" || PC_T2=""
+  PC_REC="$(git -C "$PC_C" rev-parse --absolute-git-dir 2>/dev/null)/ai-dlc-verify-pass"
+  PC_R="$PC_C/_bmad-output/ai-dlc-update/reconcile-report.md"
+  "$PCV_BASH" "$PS_E" "$PC_D" "$BASE" "$PC_C" "$THEIRS" > "$PS_D/region.md" 2> "$PS_D/region.err"
+  { echo "# Reconcile report (fixture)"; echo; cat "$PS_D/region.md"; } > "$PC_R"
+  pc_top="$(git -C "$PC_C" rev-parse --show-toplevel 2>/dev/null)"
+  if ! grep -q 'reconcile-mechanical' "$PS_D/region.md" || ! grep -q '^HARD-UNREGISTERED-CORE-DRIFT' "$PS_D/region.md"; then
+    pcv_x PC-V0 "FIXTURE BROKEN: the main world's approval rendered no region carrying HARD-UNREGISTERED-CORE-DRIFT"; return 1
+  elif grep -q '^_stamp_ ' "$PS_D/region.md"; then
+    pcv_x PC-V0 "FIXTURE BROKEN: the approval already carries a _stamp_ line, so V5's stamp move is not one property"; return 1
+  elif [ -z "$PC_T2" ] || [ "$PC_T2" = "$THEIRS" ] \
+       || [ "$(git -C "$PC_D" rev-parse "${PC_T2}:core" 2>/dev/null)" != "$(git -C "$PC_D" rev-parse "${THEIRS}:core" 2>/dev/null)" ]; then
+    pcv_x PC-V0 "FIXTURE BROKEN: V6's second theirs commit is missing, equal to theirs, or carries another core/ tree"; return 1
+  elif [ -e "$PC_REC" ] || [ "$(cd "$pc_top" 2>/dev/null && pwd -P)" != "$(cd "$PC_C" && pwd -P)" ]; then
+    pcv_x PC-V0 "FIXTURE BROKEN: a record exists before any run, or the consumer is not its own git top level ($pc_top)"; return 1
+  fi
+  pcv_v PC-V0 "the main world is its own git top level, its approval carries the HARD blocker and no _stamp_ line, and no record exists yet"
+
+  # ---- V1 / V14: the recording run, then the hit ----
+  git -C "$PC_C" status --porcelain > "$PS_D/st0" 2>&1
+  pcm r0; r0="$(pcv_why)"
+  r0ok=0
+  if pcv_is_miss 0 && [ -f "$PC_REC" ] && [ "$(cat "$PS_D/r0.out")" = "$PCV_OKLINE" ]; then r0ok=1; fi
+  git -C "$PC_C" status --porcelain > "$PS_D/st1" 2>&1
+  pcm v1
+  if [ "$r0ok" -eq 1 ] && pcv_is_hit v1 "$PC_REC"; then
+    pcv_v PC-V1 "the second --verify on an unchanged world HITS: the pinned two lines, exit 0, and no detector launched, after a first run that rendered and recorded"
+  else
+    pcv_x PC-V1 "no hit on an unchanged world: first run [$r0, record $( [ -f "$PC_REC" ] && echo present || echo absent)], second run [$(pcv_why)]"
+  fi
+  pc_wt="$(find "$PC_C" -name 'ai-dlc-verify-pass*' ! -path "$PC_C/.git/*" | grep -c .)" || pc_wt=0
+  pc_gd="$(find "$PC_C/.git" -maxdepth 1 -name 'ai-dlc-verify-pass' | grep -c .)" || pc_gd=0
+  if [ "$pc_gd" -eq 1 ] && [ "$pc_wt" -eq 0 ] && cmp -s "$PS_D/st0" "$PS_D/st1"; then
+    pcv_v PC-V14 "the record lives in the consumer's git-dir and git status --porcelain is byte-identical across the recording run"
+  else
+    pcv_x PC-V14 "the record is not confined to the git-dir: $pc_gd in .git, $pc_wt in the work tree, status $(cmp -s "$PS_D/st0" "$PS_D/st1" && echo unchanged || echo CHANGED)"
+  fi
+
+  # ---- V2: an edit OUTSIDE the region still hits ----
+  printf '\n## Semantic notes\nedited outside the region after the PASS was recorded\n' >> "$PC_R"
+  pcm v2
+  if pcv_is_hit v2 "$PC_REC"; then pcv_v PC-V2 "an edit to the report OUTSIDE the region still HITS (the region, not the file, is keyed)"
+  else pcv_x PC-V2 "an edit outside the region did not hit ($(pcv_why))"; fi
+
+  # ---- V3 / V9: an edit INSIDE the region misses, exits 1, and writes no record ----
+  cp "$PC_R" "$PS_D/report.keep"; cp "$PC_REC" "$PS_D/rec.keep" 2>/dev/null
+  awk -v p='^HARD-UNREGISTERED-CORE-DRIFT' '$0 ~ p && !d { d=1; next } { print }' "$PS_D/report.keep" > "$PS_D/report.v3"
+  if cmp -s "$PS_D/report.keep" "$PS_D/report.v3" || [ ! -f "$PS_D/rec.keep" ]; then
+    pcv_x PC-V3 "FIXTURE BROKEN: the in-region edit changed nothing, or there is no record to be wrongly accepted"
+    pcv_x PC-V9 "FIXTURE BROKEN: V3's exit-1 run could not be built"
+  else
+    cat "$PS_D/report.v3" > "$PC_R"
+    pcm v3
+    if pcv_is_miss 1; then pcv_v PC-V3 "an edit INSIDE the region (a HARD row dropped) MISSES with a record present, and the fresh render fails it exit 1"
+    else pcv_x PC-V3 "an edit inside the region was not a fresh exit-1 render ($(pcv_why)) -- a doctored region could ride a recorded PASS"; fi
+    if [ -f "$PC_REC" ] && cmp -s "$PC_REC" "$PS_D/rec.keep"; then pcv_v PC-V9 "the exit-1 verify wrote no record: the record is byte-identical across it"
+    else pcv_x PC-V9 "the exit-1 verify rewrote or removed the record"; fi
+    cat "$PS_D/report.keep" > "$PC_R"; pcv_back
+  fi
+
+  # ---- V4 / V11 / V12 / V13: consumer changes the region does not see, each a miss at exit 0 ----
+  if ! pcv_ctl v4; then pcv_noctl PC-V4; else
+    printf 'v4 changed\n' > "$PC_C/notes/pc-v4.txt"; pcm v4
+    if pcv_is_miss 0; then pcv_v PC-V4 "a tracked consumer file's content change MISSES and re-renders (exit 0)"
+    else pcv_x PC-V4 "a tracked content change did not force a fresh render ($(pcv_why))"; fi
+  fi
+  if ! pcv_ctl v11; then pcv_noctl PC-V11; else
+    chmod +x "$PC_C/notes/pc-v11.sh"
+    if [ -z "$(git -C "$PC_C" status --porcelain -- notes/pc-v11.sh 2>/dev/null)" ]; then
+      pcv_x PC-V11 "FIXTURE BROKEN: git does not see the chmod (core.fileMode off?), so the arm cannot discriminate"
+    else
+      pcm v11
+      if pcv_is_miss 0; then pcv_v PC-V11 "chmod +x on a tracked file, bytes unchanged, MISSES and re-renders"
+      else pcv_x PC-V11 "an exec-bit change did not force a fresh render ($(pcv_why))"; fi
+    fi
+  fi
+  if ! pcv_ctl v12; then pcv_noctl PC-V12; else
+    if ! git -C "$PC_C" check-ignore -q .claude/settings.local.json; then
+      pcv_x PC-V12 "FIXTURE BROKEN: .claude/settings.local.json is not ignored, so the arm tests a tracked-file change"
+    else
+      printf '{"local": 2}\n' > "$PC_C/.claude/settings.local.json"; pcm v12
+      if pcv_is_miss 0; then pcv_v PC-V12 "a change to the IGNORED .claude/settings.local.json MISSES and re-renders"
+      else pcv_x PC-V12 "an ignored file under .claude/ changed without a fresh render ($(pcv_why))"; fi
+    fi
+  fi
+  if ! pcv_ctl v13; then pcv_noctl PC-V13; else
+    git -C "$PC_C" add notes/pc-v13.txt >/dev/null 2>&1
+    if ! git -C "$PC_C" ls-files --error-unmatch notes/pc-v13.txt >/dev/null 2>&1; then
+      pcv_x PC-V13 "FIXTURE BROKEN: git add did not track notes/pc-v13.txt"
+    else
+      pcm v13
+      if pcv_is_miss 0; then pcv_v PC-V13 "git add of an untracked file, bytes unchanged, MISSES and re-renders"
+      else pcv_x PC-V13 "an index-only change did not force a fresh render ($(pcv_why))"; fi
+    fi
+  fi
+
+  # ---- V5: the stamp moved -- a miss, and STAMP-MOVED exactly as before the cache ----
+  if ! pcv_ctl v5; then pcv_noctl PC-V5; else
+    cp "$PC_C/.claude/.ai-dlc-version" "$PS_D/stamp.keep"
+    printf 'version: 2.0.0\ncommit: %s\n' "$THEIRS" > "$PC_C/.claude/.ai-dlc-version"; pcm v5
+    if pcv_is_miss 1 && grep -qF 'cause: STAMP-MOVED' "$PS_D/v5.err"; then
+      pcv_v PC-V5 "a moved consumer stamp MISSES and the fresh render exits 1 naming STAMP-MOVED"
+    else pcv_x PC-V5 "a stamp move was not a fresh STAMP-MOVED render ($(pcv_why))"; fi
+    cat "$PS_D/stamp.keep" > "$PC_C/.claude/.ai-dlc-version"; pcv_back
+  fi
+
+  # ---- V6: another theirs COMMIT carrying the same core/ tree, refs untouched (an unreferenced object) ----
+  if ! pcv_ctl v6; then pcv_noctl PC-V6; else
+    pcv_run v6 "$PC_C" "$PC_R" "$PC_D" "$BASE" "$PC_T2"
+    if pcv_is_miss 1; then pcv_v PC-V6 "a different theirs commit with the SAME core/ tree MISSES; the fresh render reads the moved theirs and exits 1"
+    else pcv_x PC-V6 "a different theirs commit was not a fresh render ($(pcv_why)) -- the key holds the core tree but not the commit"; fi
+    pcv_back
+  fi
+
+  # ---- V7: an engine one byte apart ----
+  if ! pcv_ctl v7; then pcv_noctl PC-V7; else
+    if ! cp -R "$(dirname "$PS_E")" "$PS_D/eng7"; then pcv_x PC-V7 "FIXTURE BROKEN: could not copy the engine"
+    else
+      PCV_ENG="$PS_D/eng7/emit-report.sh"; pcm v7c; v7c="$(pcv_why)"; v7c_hit=0
+      pcv_is_hit v7c "$PC_REC" && v7c_hit=1
+      printf '\n' >> "$PS_D/eng7/emit-report.sh"
+      if cmp -s "$PS_E" "$PS_D/eng7/emit-report.sh"; then pcv_x PC-V7 "FIXTURE BROKEN: the one-byte engine change did not apply"
+      else
+        pcm v7
+        if [ "$v7c_hit" -eq 1 ] && pcv_is_miss 0; then
+          pcv_v PC-V7 "a byte-identical engine copy elsewhere HITS, and the same copy one byte apart MISSES and re-renders"
+        else pcv_x PC-V7 "engine: identical copy [$v7c], one byte apart [$(pcv_why)] (want hit, then a fresh exit-0 render)"; fi
+      fi
+      PCV_ENG=""
+    fi
+    pcv_back
+  fi
+
+  # ---- V8: the opt-out re-renders over a matching record ----
+  if ! pcv_ctl v8; then pcv_noctl PC-V8; else
+    pcm v8 nocache
+    if pcv_is_miss 0; then pcv_v PC-V8 "AI_DLC_VERIFY_NO_CACHE=1 re-renders over a record that would hit"
+    else pcv_x PC-V8 "the opt-out did not force a fresh render ($(pcv_why))"; fi
+  fi
+
+  # ---- V26: the cache ships OFF -- unarmed, a valid matching record is NOT accepted ----
+  # Run right after an armed HIT on the same tree, so the record is valid and would hit if read. The
+  # unarmed run must render, write or keep the record, and print exactly what the pre-cache engine
+  # (2875c7ad) prints on the same world: stdout, stderr and exit code, byte for byte.
+  if ! pcv_ctl v26; then pcv_noctl PC-V26; else
+    PCV_ARM="-u EMIT_REPORT_VERIFY_CACHE"; pcm v26; PCV_ARM=""
+    v26_why="$(pcv_why)"; v26_rec=absent; [ -f "$PC_REC" ] && v26_rec=present
+    if [ "$PHIT" -ne 0 ] || [ "$PN" -eq 0 ] || [ "$PRC" -ne 0 ] || [ "$v26_rec" != present ]; then
+      pcv_x PC-V26 "unarmed --verify over a valid record: [$v26_why], record $v26_rec (want a fresh exit-0 render, no hit line, the record still there)"
+    elif [ -z "$PCV_OLD_ENG" ]; then
+      # The pre-cache engine is not in this tree's history (a consumer, or a sandbox without the pin):
+      # the byte comparison falls back to the pinned exit-0 line the amendment fixes, and says so.
+      if [ "$(cat "$PS_D/v26.out")" = "$PCV_OKLINE" ] && [ ! -s "$PS_D/v26.err" ]; then
+        pcv_v PC-V26 "unarmed, a valid record is NOT accepted: a fresh render, the record kept, stdout exactly the pinned exit-0 line and stderr empty -- THE ENGINE COMPARISON DID NOT RUN: 2875c7ad is not in this tree's history (a consumer), so the off path was checked against a constant, not against the pre-cache engine"
+      else
+        pcv_x PC-V26 "unarmed --verify printed something other than the pre-cache exit-0 line alone [$v26_why]"
+      fi
+    else
+      env -u EMIT_REPORT_VERIFY_CACHE "$PCV_BASH" "$PCV_OLD_ENG" --verify "$PC_R" "$PC_D" "$BASE" "$PC_C" "$THEIRS" \
+        > "$PS_D/v26.old.out" 2> "$PS_D/v26.old.err"; v26_orc=$?
+      if [ "$v26_orc" -eq "$PRC" ] && cmp -s "$PS_D/v26.old.out" "$PS_D/v26.out" && cmp -s "$PS_D/v26.old.err" "$PS_D/v26.err"; then
+        pcv_v PC-V26 "unarmed, a valid record is NOT accepted: a fresh render, the record kept, and stdout, stderr and exit byte-equal to the 2875c7ad engine on the same world"
+      else
+        pcv_x PC-V26 "unarmed --verify differs from the 2875c7ad engine: exit $PRC vs $v26_orc, stdout $(cmp -s "$PS_D/v26.old.out" "$PS_D/v26.out" && echo same || echo DIFFERS), stderr $(cmp -s "$PS_D/v26.old.err" "$PS_D/v26.err" && echo same || echo DIFFERS)"
+      fi
+    fi
+  fi
+
+  # ---- V15: a consumer that is NOT its own git top level never records ----
+  PO="$PS_D/outer"; mkdir -p "$PO"
+  if ! { cp -R "$CONSUMER" "$PO/consumer" && git -C "$PO" init -q && git -C "$PO" add -A \
+         && git -C "$PO" -c user.email=f@f -c user.name=fixture commit -q -m outer; } >/dev/null 2>&1; then
+    pcv_x PC-V15 "FIXTURE BROKEN: could not build the nested consumer"
+  else
+    PO_R="$PO/consumer/_bmad-output/ai-dlc-update/reconcile-report.md"; mkdir -p "${PO_R%/*}"
+    "$PCV_BASH" "$PS_E" "$PC_D" "$BASE" "$PO/consumer" "$THEIRS" > "$PS_D/region15.md" 2>/dev/null
+    { echo "# Reconcile report (fixture)"; echo; cat "$PS_D/region15.md"; } > "$PO_R"
+    pcv_run v15a "$PO/consumer" "$PO_R" "$PC_D" "$BASE" "$THEIRS"; v15a="$(pcv_why)"; v15a_ok=0
+    pcv_is_miss 0 && [ "$(cat "$PS_D/v15a.out")" = "$PCV_OKLINE" ] && v15a_ok=1
+    pcv_run v15b "$PO/consumer" "$PO_R" "$PC_D" "$BASE" "$THEIRS"
+    po_rec="$(find "$PO" -name 'ai-dlc-verify-pass*' | grep -c .)" || po_rec=0
+    po_ctl="$(find "$PO/.git" -maxdepth 1 -name HEAD | grep -c .)" || po_ctl=0
+    if ! grep -q 'reconcile-mechanical' "$PS_D/region15.md" || [ "$po_ctl" -ne 1 ]; then
+      pcv_x PC-V15 "FIXTURE BROKEN: the nested world rendered no region, or its find control read $po_ctl"
+    elif [ "$v15a_ok" -eq 1 ] && pcv_is_miss 0 && [ "$(cat "$PS_D/v15b.out")" = "$PCV_OKLINE" ] && [ "$po_rec" -eq 0 ]; then
+      pcv_v PC-V15 "a consumer nested in another repository renders on both runs, prints only the pre-cache exit-0 line, and no record appears anywhere"
+    else
+      pcv_x PC-V15 "nested consumer: first [$v15a], second [$(pcv_why)], records found $po_rec (want two plain exit-0 renders and none)"
+    fi
+  fi
+
+  # ---- V16: the dist's HEAD moves (detached, unreferenced commit), every ref unchanged ----
+  if ! pcv_ctl v16; then pcv_noctl PC-V16; else
+    git -C "$PC_D" for-each-ref > "$PS_D/refs0" 2>&1
+    pc_n="$(git -C "$PC_D" -c user.email=f@f -c user.name=fixture commit-tree 'HEAD^{tree}' -p HEAD -m pc-v16 2>/dev/null)" || pc_n=""
+    [ -n "$pc_n" ] && git -C "$PC_D" update-ref --no-deref HEAD "$pc_n" >/dev/null 2>&1
+    git -C "$PC_D" for-each-ref > "$PS_D/refs1" 2>&1
+    if [ -z "$pc_n" ] || [ "$(git -C "$PC_D" rev-parse HEAD 2>/dev/null)" != "$pc_n" ] || ! cmp -s "$PS_D/refs0" "$PS_D/refs1"; then
+      pcv_x PC-V16 "FIXTURE BROKEN: HEAD did not move to a new unreferenced commit with every ref unchanged"
+    else
+      pcm v16
+      if pcv_is_miss 0; then pcv_v PC-V16 "the dist's HEAD moved to an unreferenced commit with every ref unchanged, and the next --verify MISSES and re-renders"
+      else pcv_x PC-V16 "a moved dist HEAD did not force a fresh render ($(pcv_why))"; fi
+    fi
+  fi
+
+  # ---- V17..V20: inputs the render reads that a key can miss, each in its own adjudication world ----
+  # Each world is layer-adjudication-tier's seed (a git top level whose render carries an adjudicable
+  # extension). The change is chosen so the FRESH render really differs: each arm asserts the cached
+  # run is a fresh render with a NON-ZERO exit equal to an AI_DLC_VERIFY_NO_CACHE=1 run on the same
+  # tree, so an arm whose change the render cannot see fails here rather than passing vacuously.
+  pcv_latarm PC-V17 v17 "an UNTRACKED extension whose name carries a double quote, rewritten between the calls (its hooks: line dropped),"
+  pcv_latarm PC-V18 v18 "an UNTRACKED scripts/ai-dlc/validate-hook-registration.sh going 644 to 755, a bit the render reads,"
+  pcv_latarm PC-V19 v19 "a TRACKED file's chmod under core.filemode=false, which git status cannot see,"
+  pcv_latarm PC-V20 v20 "a --verify recorded with the FULL base sha and re-run with the SHORT spelling of the same commit"
+  pcv_latarm PC-V21 v21 "a prune of the dangling CONSUMER commit an override's base_sha names"
+  pcv_latarm PC-V22 v22 "a prune of the dangling DIST commit an override's base_sha names"
+  pcv_latarm PC-V23 v23 "git config core.abbrev 20 in the dist, which re-spells an abbreviated sha the region prints,"
+  pcv_latarm PC-V24 v24 "a verify under LC_ALL=C of a PASS recorded under en_US.UTF-8, where the render's sort order differs,"
+  pcv_latarm PC-V25 v25 "chmod 000 on .claude/skills/ai-dlc/extensions, a directory the render reads,"
+
+  # ---- V10: a REGISTER ROW resolves HARD-LAYER-ADJUDICATION-MISSING: a miss reaching exit 3 ----
+  # The world is layer-adjudication-tier's seed (its own git top level, one adjudicable row). The
+  # register lives in _bmad-output/ai-dlc-update/, the directory the report lives in, so a key that
+  # excluded the whole directory would hit here. After the exit-3 run the record must be unchanged
+  # and a second run must reach exit 3 again: a record written on exit 3 would turn it into a hit.
+  if ! command -v jq >/dev/null 2>&1; then pcv_x PC-V10 "jq is not on PATH; layer-drift.sh cannot read the register, so no resolution can be seeded"
+  elif ! pcv_lat v10; then
+    pcv_x PC-V10 "FIXTURE BROKEN: layer-adjudication-tier/seed.sh did not build its world"
+  else
+    L_REG="$L_C/_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl"
+    pcv_lat_approve v10
+    bash "$(dirname "$PS_E")/layer-drift.sh" "$L_D" "$L_B" "$L_T" "$L_C" > "$PS_D/ld10.out" 2>/dev/null
+    L_DIG="$(awk -F'\t' '$1 == "HARD-LAYER-ADJUDICATION-MISSING"' "$PS_D/ld10.out" | grep -o 'subject_digest [0-9a-f]\{40\}' | awk '{ print $2; exit }')"
+    if [ ! -s "$PS_D/region-v10.md" ] || ! grep -q '^HARD-LAYER-ADJUDICATION-MISSING' "$PS_D/region-v10.md"; then
+      pcv_x PC-V10 "FIXTURE BROKEN: the adjudication world's approval (region-v10.md) is missing or carries no HARD-LAYER-ADJUDICATION-MISSING row, so there is no blocker to resolve"
+    elif [ "${#L_DIG}" -ne 40 ]; then
+      pcv_x PC-V10 "FIXTURE BROKEN: layer-drift.sh printed no 40-hex subject_digest on its HARD-LAYER-ADJUDICATION-MISSING row, so no register row can be recorded against it"
+    else
+      pcv_run v10r "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"; v10r="$(pcv_why)"; v10r_ok=0
+      pcv_is_miss 0 && [ -f "$L_REC" ] && v10r_ok=1
+      pcv_run v10c "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"; v10c="$(pcv_why)"; v10c_ok=0
+      pcv_is_hit v10c "$L_REC" && v10c_ok=1
+      if [ "$v10r_ok" -ne 1 ] || [ "$v10c_ok" -ne 1 ]; then
+        pcv_x PC-V10 "control: the adjudication world did not record [$v10r] and then hit [$v10c], so its resolution's miss would prove nothing"
+      else
+        cp "$L_REC" "$PS_D/rec10.keep"
+        printf '{"clause":"LC-E4","entry":".claude/skills/ai-dlc/extensions/adjudicable.md","subject_digest":"%s","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"seeded"}\n' "$L_DIG" >> "$L_REG"
+        pcv_run v10 "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"; v10="$(pcv_why)"; v10_ok=0
+        pcv_is_miss 3 && grep -qF 'cause: BLOCKERS-RESOLVED' "$PS_D/v10.err" && v10_ok=1
+        v10_rec=CHANGED; cmp -s "$L_REC" "$PS_D/rec10.keep" && v10_rec=unchanged
+        pcv_run v10b "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
+        if [ "$v10_ok" -eq 1 ] && [ "$v10_rec" = unchanged ] && pcv_is_miss 3; then
+          pcv_v PC-V10 "a register row resolving HARD-LAYER-ADJUDICATION-MISSING MISSES, exits 3 BLOCKERS-RESOLVED, leaves the record unchanged, and a second run exits 3 again"
+        else
+          pcv_x PC-V10 "register-row resolution: first [$v10], record $v10_rec, second [$(pcv_why)] (want two fresh exit-3 renders and the record untouched)"
+        fi
+      fi
+    fi
+  fi
+  return 0
+}
+
+# pcv_failset <verdicts> -- every id that has no single ok line (a FAIL, or no verdict at all).
+pcv_failset() {
+  local id o f out=""
+  for id in $PCV_IDS; do
+    o="$(grep -c "^ok $id " "$1")" || o=0
+    f="$(grep -c "^FAIL $id " "$1")" || f=0
+    { [ "$o" -eq 1 ] && [ "$f" -eq 0 ]; } || out="$out $id"
+  done
+  printf '%s\n' "${out# }"
+}
+
+# THE MUTANTS. Each is a COPY of the reconcile directory with one line of emit-report.sh edited by
+# awk on an exact whole-line anchor that must occur ONCE, guarded by cmp -s. Expected kill sets:
+#   M-region   the region field dropped from the key loop: a doctored region rides the record -> PC-V3
+#   M-direxcl  the work-tree exclusion widened from the report FILE to its DIRECTORY, which hides
+#              layer-adjudication-register.jsonl from the key                              -> PC-V10
+#   M-exit3    er_cache_record called before the mismatch tail, so exit 1 and exit 3 record -> PC-V9 PC-V10
+pcv_mk() { # pcv_mk <name> -> 0 when <root>/<name>/eng/emit-report.sh is built and differs
+  local d="$PCV_ROOT/$1" a t m n
+  case "$1" in
+    M-region)  m=replace
+               a='  for f in engine base theirs distrefs consroot consindex conswork consignored consobjects consresolve env region; do'
+               t='  for f in engine base theirs distrefs consroot consindex conswork consignored consobjects consresolve env; do' ;;
+    M-direxcl) m=replace; a='    _er_ex="$_er_rel"'; t='    _er_ex="${_er_rel%/*}"' ;;
+    M-exit3)   m=before;  a='[ "$cause" = BLOCKERS-RESOLVED ] && exit 3'; t='er_cache_record' ;;
+    *) return 1 ;;
+  esac
+  mkdir -p "$d" && cp -R "$(dirname "$EMIT")" "$d/eng" || return 1
+  n="$(grep -cxF -- "$a" "$EMIT")" || n=0
+  printf '%s\n' "$n" > "$d/anchor-count"
+  [ "$n" -eq 1 ] || return 1
+  awk -v a="$a" -v t="$t" -v m="$m" '$0 == a { print t; if (m == "replace") next } { print }' "$EMIT" > "$d/eng/emit-report.sh" || return 1
+  ! cmp -s "$EMIT" "$d/eng/emit-report.sh"
+}
+pcv_want() { case "$1" in M-region) echo "PC-V3" ;; M-direxcl) echo "PC-V10" ;; M-exit3) echo "PC-V9 PC-V10" ;; esac; }
+PCV_MUTS="M-region M-direxcl M-exit3"
+
+if ! grep -qF "$PCV_HITP" "$EMIT"; then
+  printf '  SKIP  PC-V0..PC-V26: %s carries no recorded-PASS cache, so this engine predates BL-679 and no cache arm can be checked against it\n' "$EMIT"
+else
+  mkdir -p "$PCV_ROOT/ship"
+  ( pcv_suite "$EMIT" "$PCV_ROOT/ship" ) > "$PCV_ROOT/ship.log" 2>&1 &
+  PCV_BUILT=""
+  for _m in $PCV_MUTS; do
+    if pcv_mk "$_m"; then
+      PCV_BUILT="$PCV_BUILT $_m"
+      ( pcv_suite "$PCV_ROOT/$_m/eng/emit-report.sh" "$PCV_ROOT/$_m" ) > "$PCV_ROOT/$_m.log" 2>&1 &
+    else
+      bad "MUTANT NOT BUILT [BL-679 $_m]: its anchor occurs $(cat "$PCV_ROOT/$_m/anchor-count" 2>/dev/null || echo '?') time(s) in emit-report.sh (want 1), or the edit changed nothing -- re-anchor it on the engine's line"
+    fi
+  done
+  wait
+  for _id in $PCV_IDS; do
+    _l="$(grep -m1 -E "^(ok|FAIL) $_id " "$PCV_ROOT/ship/verdicts" 2>/dev/null)"
+    case "$_l" in
+      "ok $_id "*)   ok "${_l#ok }" ;;
+      "FAIL $_id "*) bad "${_l#FAIL }" ;;
+      *)             bad "$_id produced no verdict -- the suite stopped before reaching it" ;;
+    esac
+  done
+  if grep -q '^FAIL ' "$PCV_ROOT/ship/verdicts" 2>/dev/null || [ -s "$PCV_ROOT/ship.log" ]; then
+    awk 'NR <= 20 { print "  DIAG  pcache ship.log | " $0 }' "$PCV_ROOT/ship.log"
+  fi
+  # THE CONTROL GATES THE SCORE. A mutant's kill set is a difference from the shipping engine, so an id
+  # the shipping run did not pass would sit in every kill set and score kills nobody earned (measured:
+  # a control-red PC-V10 made M-direxcl read "fails exactly [PC-V10]"). Any control id not ok means no
+  # mutant is scored, and each is reported as UNSCORED naming the control's failing ids.
+  PCV_CTLFAIL="$(pcv_failset "$PCV_ROOT/ship/verdicts")"
+  for _m in $PCV_BUILT; do
+    _got="$(pcv_failset "$PCV_ROOT/$_m/verdicts")"; _want="$(pcv_want "$_m")"
+    if [ -n "$PCV_CTLFAIL" ]; then
+      bad "MUTANT UNSCORED [BL-679 $_m]: the unmutated control did not pass [$PCV_CTLFAIL], so a kill set read against it would credit the control's failures as kills"
+      continue
+    fi
+    case " $_got " in
+      *" PC-V0 "*) bad "MUTANT HARNESS BROKEN [BL-679 $_m]: the copy failed the seed sanity arm, so its score is a copy that did not run" ;;
+      *)
+        if [ "$_got" = "$_want" ]; then ok "mutant BL-679 $_m fails exactly [$_want]"
+        elif [ -z "$_got" ]; then bad "MUTANT SURVIVED [BL-679 $_m]: every arm passed with the edit in place, so [$_want] cannot see it"
+        else bad "MUTANT [BL-679 $_m] failed [$_got], expected exactly [$_want] -- the arms are entangled or one is vacuous"; fi ;;
+    esac
+  done
+fi
+fi # end rer_phase pcache
 
 # J1: the SET of phases entered equals this shard's list AS DECLARED IN THIS FILE'S TEXT, and no
 # phase dealt to another shard was entered. A count off the loop variable cannot see a shard whose

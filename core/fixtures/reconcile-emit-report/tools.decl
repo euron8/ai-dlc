@@ -23,6 +23,8 @@ mktemp
 mv
 rm
 sed
+sha256sum
+shasum
 sort
 tail
 tr

@@ -1,0 +1,4 @@
+# PC-V26 extracts the pre-cache reconcile engine with `git -C "<tree root>" show "2875c7ad...:core/skills/ai-dlc-update/reconcile/<file>"`
+# and byte-compares the cache-OFF --verify against it. This fixture SHIPS, and a consumer has no such commit, so the pin
+# is optional: absent, it is not imported and V26 falls back to the pinned exit-0 line, saying the comparison did not run.
+pin? 2875c7adfc82324c204f66e651fcd166f6e33655

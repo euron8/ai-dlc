@@ -256,9 +256,20 @@ if [ "$FINISH" = 0 ]; then
     # (3 = the approved region lists HARD-* rows that no longer render, refs unchanged, nothing
     # HARD new) and prints the rows it decided from. The refusal below quotes that line rather
     # than restating the grammar, so the two programs cannot disagree about what was decided.
-    _ug_verr="$(bash "$SELF/emit-report.sh" --verify "$UNION_REPORT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>&1 >/dev/null)"
+    # STDOUT IS KEPT IN A FILE for one reason: a --verify that accepted a recorded PASS says so on
+    # stdout (emit-report.sh's header owns the key), and the NOTE row below must not claim the
+    # detectors rendered when they did not. A file that could not be made reads as a fresh render.
+    _ug_vo="$(mktemp "${TMPDIR:-/tmp}/apply-ug-verify.XXXXXX" 2>/dev/null)" || _ug_vo=""
+    _ug_verr="$(bash "$SELF/emit-report.sh" --verify "$UNION_REPORT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>&1 >"${_ug_vo:-/dev/null}")"
     _ug_rc=$?
-    if [ "$_ug_rc" -eq 0 ]; then
+    _ug_hit=0
+    if [ -n "$_ug_vo" ]; then
+      grep -q '^emit-report: accepted a recorded PASS (' "$_ug_vo" 2>/dev/null && _ug_hit=1
+      rm -f "$_ug_vo"
+    fi
+    if [ "$_ug_rc" -eq 0 ] && [ "$_ug_hit" = 1 ]; then
+      say NOTE report-verified "${UNION_REPORT#"${CONSUMER}"/}" "union-gate condition (1): a recorded --verify PASS was accepted for this report (opt-in EMIT_REPORT_VERIFY_CACHE=1; the key and its known gaps are in emit-report.sh's header); nothing was re-rendered."
+    elif [ "$_ug_rc" -eq 0 ]; then
       say NOTE report-verified "${UNION_REPORT#"${CONSUMER}"/}" "union-gate condition (1): the approved report's mechanical region matches what the detectors render at THIS run's theirs ($THEIRS)."
     else
       # THE THIRD CAUSE, DECIDED RATHER THAN LISTED. A region also fails to match when an apply

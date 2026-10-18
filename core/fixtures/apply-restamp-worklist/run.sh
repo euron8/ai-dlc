@@ -1325,7 +1325,7 @@ fi
 # the operator's own work, so waving it through looks like removing a wedge — and it authorises a
 # write against a region nobody re-approved, where a resolution can leave rows the operator has
 # not seen. U1 must stay green under it, or the arm is measuring the gate rather than the carve-out.
-if sed 's/^    if \[ "$_ug_rc" -eq 0 \]; then$/    if [ "$_ug_rc" -eq 0 ] || [ "$_ug_rc" -eq 3 ]; then/' "$REC/apply.sh" \
+if sed 's/^    elif \[ "$_ug_rc" -eq 0 \]; then$/    elif [ "$_ug_rc" -eq 0 ] || [ "$_ug_rc" -eq 3 ]; then/' "$REC/apply.sh" \
    | mut_apply "$WORK/a2"; then
   A2="$(u5_score "$WORK/a2/apply.sh")"
   case "$A2" in
@@ -1344,7 +1344,7 @@ if sed 's/^    if \[ "$_ug_rc" -eq 0 \]; then$/    if [ "$_ug_rc" -eq 0 ] || [ "
     fi
   fi
 else
-  bad "A2 did not apply — apply.sh no longer opens the union gate with \`if [ \"\$_ug_rc\" -eq 0 ]; then\`, so this mutant proves nothing. Re-anchor it on the current spelling."
+  bad "A2 did not apply — apply.sh no longer passes the union gate on \`elif [ \"\$_ug_rc\" -eq 0 ]; then\`, so this mutant proves nothing. Re-anchor it on the current spelling."
 fi
 
 # A3: the forward deleted. THE MESSAGE SURVIVES IT INTACT, which is the whole reason this needs
