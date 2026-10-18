@@ -752,4 +752,4 @@ verify: manual
 - **The fix.** `--no-textconv` on those four `git diff --quiet` calls.
 - **Two further sites, fixed in the same release.** The same one-flag fix (`--no-textconv`) also covers `ledger-reverify.sh`'s VERSION bump test (`diff --quiet "${_c}^" "$_c" -- VERSION`) and `layer-drift.sh`'s consumer working-tree test (`git -C "$CONSUMER" diff --quiet -- <file>`), whose driver sits in the consumer's own config. Each gets its own arm.
 
-verify: sh o="$(bash core/fixtures/layer-extends-grain/run.sh 2>&1)"; rc=$?; [ "$rc" -eq 0 ] && printf '%s\n' "$o" | grep -qE '^  ok +run1 +textconv: ' && ! printf '%s\n' "$o" | grep -qE '^  FAIL '
+verify: sh o="$(bash core/fixtures/layer-extends-grain/run.sh 2>&1)"; rc=$?; [ "$rc" -eq 0 ] && printf '%s\n' "$o" | grep -qE '^  ok +run1 +textconv: ' && ! printf '%s\n' "$o" | grep -qE '^  FAIL ' || exit 1; o="$(bash core/fixtures/ledger-reverify-c/run.sh 2>&1)"; rc=$?; [ "$rc" -eq 0 ] && printf '%s\n' "$o" | grep -qE '^  ok +textconv-version ' || exit 1; o="$(bash core/fixtures/layer-adjudication-tier/run.sh 2>&1)"; rc=$?; [ "$rc" -eq 0 ] && printf '%s\n' "$o" | grep -qE '^  ok +textconv: a consumer driver ' || exit 1
