@@ -102,7 +102,7 @@ cycle" item 1 (Rule 28, "Split dispatch": seats x parts axis). That means one pe
 (seat, story ordinal) from `merge-adversarial-shards.sh --map` over the sprint's stories, plus
 one cross-story agent per (seat, cross group) from `partition-document.sh --cross-groups <K>`
 that reads every story and focuses on its group's pairs, every seat writing early, closing with
-one final `seat-complete: ... findings=<n>` line, and its join beat passing `--complete`. The lead's join counts the per-seat files against that map before
+one final `seat-complete: ... sha=<hex> findings=<n>` line appended by `wait-for-deliverable.sh --mark`, and its join beat passing `--complete`. The lead's join counts the per-seat files against that map before
 dispositioning, and it counts only the files that item names. That item's seats x sections axis
 is for a single-document subject, not this one.
 - Does the implementation match the requirements?

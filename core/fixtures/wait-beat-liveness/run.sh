@@ -1855,6 +1855,80 @@ M37_shard_check_exit_ignored() {
   rm -rf "$W"
 }
 
+# ===========================================================================
+# 18. --mark: THE SEAL DECIDES, WITH NO WINDOW, AND A LEGACY MARKER STILL SETTLES.
+#     A seat closes with `--mark`, which appends `sha=<digest of everything above>` before
+#     `findings=`. A sealed file DELIVERS in one beat under a settle window it could never close
+#     (SETTLE=600); the same file edited above its marker is UNFINISHED under SETTLE=1 in a beat
+#     long enough to settle anything, i.e. at any age; re-marked it DELIVERS again. The CONTROL is
+#     a bare marker beside it in the same beat, which settles and DELIVERS -- so the broken file's
+#     WAITING is the seal's verdict and not a beat too short to settle.
+# ===========================================================================
+SEAL_BROKEN='-- its seat-complete: line carries sha= but the file changed after it was marked'
+seal_world() {  # $1 = subject, $2 = workdir -> s.md sealed, x.md sealed then edited, b.md bare
+  printf '%s\n' "$SKELETON" > "$2/s.md"; printf '%s\n' "$SKELETON" > "$2/x.md"
+  printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$2/b.md"
+  bash "$1" --mark "$2/s.md" requirements pm cross-1 findings=1 > "$BEATOUT" 2>&1 || broken "--mark refused s.md: $(cat "$BEATOUT")"
+  bash "$1" --mark "$2/x.md" requirements pm cross-1 findings=1 > "$BEATOUT" 2>&1 || broken "--mark refused x.md: $(cat "$BEATOUT")"
+  awk 'NR == 3 { print "- a finding rewritten after the marker"; next } { print }' "$2/x.md" > "$2/x.tmp" && mv "$2/x.tmp" "$2/x.md"
+}
+
+S18a_seal_decides() {
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  seal_world "$SUBJ" "$W"
+  case "$(tail -1 "$W/s.md")" in
+    "$MARKER sha="*" findings=1") ok "seal: --mark appends '<marker> sha=<hex> findings=<n>', sha= before findings=" ;;
+    *) bad "seal: --mark wrote '$(tail -1 "$W/s.md")'" ;;
+  esac
+  CB_SETTLE=600 cbeat "$SUBJ" "$W" --complete s.md
+  if has "DELIVERED s.md"; then ok "seal: a sealed file DELIVERS in one 2s beat under SETTLE=600 -- no window"
+  else bad "seal: a sealed file waited on the settle window: $OUT"; fi
+  CB_BEAT=3 cbeat "$SUBJ" "$W" --complete x.md b.md
+  if has "DELIVERED b.md"; then ok "seal: CONTROL -- a bare marker settles and DELIVERS in the same 3s beat under SETTLE=1"
+  else bad "seal: CONTROL FAILED -- the bare marker did not settle, so the beat below proves nothing: $OUT"; fi
+  if ! has "DELIVERED x.md" && has "UNFINISHED x.md $SEAL_BROKEN"; then
+    ok "seal: a sealed file edited above its marker is UNFINISHED where a bare one settles -- at any age"
+  else bad "seal: a broken seal was delivered or not named UNFINISHED: $OUT"; fi
+  CB_SETTLE=600 scall "$SUBJ" "$W" --complete --since "$CBEAT_SINCE" s.md x.md
+  if has "DELIVERED s.md" && has "UNFINISHED x.md $SEAL_BROKEN"; then ok "seal: --status reads sealed DELIVERED and broken UNFINISHED, with no beat run"
+  else bad "seal: --status disagrees with the beat on a sealed or broken file: $OUT"; fi
+  bash "$SUBJ" --mark "$W/x.md" requirements pm cross-1 findings=1 > "$BEATOUT" 2>&1 || broken "re-mark refused"
+  n_mk="$(grep -c '^seat-complete: ' "$W/x.md")" || n_mk=0
+  CB_SETTLE=600 cbeat "$SUBJ" "$W" --complete x.md
+  if has "DELIVERED x.md" && [ "$n_mk" = 1 ]; then ok "seal: re-marked, the edited file DELIVERS at once and carries one marker"
+  else bad "seal: re-mark did not deliver (markers=$n_mk): $OUT"; fi
+  rm -rf "$W"
+}
+
+S18b_mark_refusals() {
+  W="$(mk_work)"
+  printf '%s\n```text\nan open fence\n' "$SKELETON" > "$W/f.md"; cp "$W/f.md" "$W/f.orig"
+  bash "$SUBJ" --mark "$W/f.md" requirements pm cross-1 findings=0 > "$BEATOUT" 2>&1; rc=$?
+  if [ "$rc" -eq 64 ] && cmp -s "$W/f.md" "$W/f.orig"; then ok "seal: --mark on a body ending inside an open fence refuses (64) and writes nothing"
+  else bad "seal: --mark into an open fence rc=$rc, file changed or accepted"; fi
+  bash "$SUBJ" --mark "$W/f.orig" requirements pm cross-1 > "$BEATOUT" 2>&1; rc=$?
+  if [ "$rc" -eq 64 ]; then ok "seal: --mark without findings=<n> refuses (64)"; else bad "seal: --mark without findings= rc=$rc"; fi
+  printf '### e\n- edit: x\n' > "$W/r.md"
+  bash "$SUBJ" --mark-repair "$W/r.md" requirements > "$BEATOUT" 2>&1; rc=$?
+  case "$rc $(tail -1 "$W/r.md")" in
+    "0 repair-complete: serial requirements sha="*) ok "seal: --mark-repair appends 'repair-complete: serial <pass> sha=<hex>'" ;;
+    *) bad "seal: --mark-repair rc=$rc wrote '$(tail -1 "$W/r.md")'" ;;
+  esac
+  rm -rf "$W"
+}
+
+# The digest ignored: every marker is judged as legacy. The sealed file then waits on SETTLE=600
+# and the broken one settles and DELIVERS -- section 18a must catch it.
+M38_seal_ignored() {
+  mutant seal-ignored -e 's@^  seal_of "\$1"; id_sv_=\$?$@  seal_of "$1"; id_sv_=2@' || return
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  seal_world "$SUBJ" "$W"
+  CB_BEAT=3 cbeat "$MUT" "$W" --complete x.md b.md
+  if has "DELIVERED x.md"; then ok "MUTANT seal-ignored: a beat ignoring the digest DELIVERS the edited file -- section 18a catches it"
+  else bad "MUTANT seal-ignored: section 18a survives the digest being ignored (or the mutant never ran): $OUT"; fi
+  rm -rf "$W"
+}
+
 # ---------------------------------------------------------------------------
 # THE DRIVER
 # ---------------------------------------------------------------------------

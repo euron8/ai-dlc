@@ -197,8 +197,14 @@
 #                                   [--progress-path <dir|file>]...
 #                                   [--complete | --complete-repair] [--status]
 #                                   [--shard-header convergence|elicitation]
+#   scripts/ai-dlc/wait-for-deliverable.sh --mark <file> <step> <seat> <shard>... findings=<n>
+#   scripts/ai-dlc/wait-for-deliverable.sh --mark-repair <file> <pass>
 #
-#   --complete         DELIVERED also needs a settled last line `seat-complete: `.
+#   --mark             the SEAT's closing call, never a beat: appends its sealed marker
+#                      `seat-complete: <step> <seat> <shard> sha=<hex> findings=<n>`.
+#   --mark-repair      the same for a repair record: `repair-complete: serial <pass> sha=<hex>`.
+#   --complete         DELIVERED also needs a last line `seat-complete: ` whose sha= matches
+#                      (a marker with no sha= must instead have settled).
 #   --complete-repair  the same, keyed on `repair-complete: serial ` -- the serial
 #                      remediator's terminal line on a joined repair record.
 #   --status           print DELIVERED / UNFINISHED / UNSETTLED / WAITING per path
@@ -292,11 +298,25 @@ set -u
 #   The exhaustion advice to re-arm with --progress-path is not printed: under this
 #   flag the progress signal is already on.
 #
-#   THE MARKER MUST ALSO HAVE SETTLED. A seat that writes its marker and then edits
+#   THE MARKER BINDS THE CONTENT ABOVE IT. A seat that writes its marker and then edits
 #   ABOVE it -- measured on the reference consumer: one cross seat wrote its file once,
 #   marker last, then made seven in-place Edits over three minutes -- ends in the marker
-#   the whole time, so "marker last" alone consumed it mid-edit. DELIVERED therefore also
-#   requires the file's content hash to be unchanged for the SETTLE WINDOW: a `.settle`
+#   the whole time, so "marker last" alone consumed it mid-edit. So the seat closes with
+#   `--mark` (header: "--mark"), which appends `sha=<hex>`: the content_hash of every line
+#   above the marker. A marker carrying `sha=` is decided by that digest alone, with NO
+#   window and at any age: it matches, and the file is DELIVERED at once; it does not, and
+#   the file is UNFINISHED until the seat re-marks, printed as
+#     UNFINISHED <path> -- its seat-complete: line carries sha= but the file changed after it was marked; re-mark with --mark
+#   on every beat, by --status, and in place of `absent` at exhaustion. A broken seal opens no
+#   settle record and is not counted by REVISED-AFTER-MARKER: with a seal no file is consumed
+#   mid-edit, so that after-the-fact report belongs to the legacy path alone.
+#
+#   A MARKER WITH NO `sha=` KEEPS THE SETTLE PATH, AND THAT IS THE FAIL-OPEN NET FOR LEGACY
+#   MARKERS DURING THE PULL. This engine is live from pull step 3; the role and step files that
+#   tell a seat to run --mark arrive only at the reconcile merge, so until then seats write the
+#   bare marker. Refusing it would hang every join of that sprint. So a bare marker is judged
+#   exactly as before: DELIVERED also requires the file's content hash to be unchanged for
+#   the SETTLE WINDOW: a `.settle`
 #   sidecar beside the counter holds `<hash> <epoch first seen>`, any change of hash
 #   restarts it, and the file delivers only once `now - epoch > SETTLE` in whole seconds
 #   (so at least SETTLE real seconds). A file that loses its marker drops its sidecar.
@@ -328,7 +348,10 @@ set -u
 # serial remediator is dispatched and is APPENDED to, so the plain predicate returns on its
 # first append and on every one after it, and `seat-complete:` is not a line a repair record
 # carries. This flag is --complete in every respect except the marker, which is
-# `repair-complete: serial ` and ONLY that. The token is keyed per CALL, never per target and
+# `repair-complete: serial ` and ONLY that. The serial remediator closes with `--mark-repair
+# <record> <pass>`, which seals `repair-complete: serial <pass> sha=<hex>` exactly as --mark seals
+# a seat file; a bare `repair-complete: serial <pass>` is a legacy marker and settles as before.
+# The token is keyed per CALL, never per target and
 # never as an either-token: the join that builds the record concatenates PART remediators'
 # records, so a joined record can end in a part's own marker before the serial pass has
 # started, and a beat that accepted any marker would consume it. A lead never joins seat files
@@ -342,8 +365,10 @@ set -u
 #                        is unchanged since (its hash is kept in `<key>.delivered`, because a
 #                        delivering beat drops the join state --status otherwise reads)
 #   UNFINISHED <path>    present and written since the join armed, no marker last
-#   UNSETTLED <path>     marker present, settle pending -- the settle window needs a hash a
-#                        BEAT recorded more than SETTLE seconds ago, and --status records none
+#                        (also a marker whose sha= is broken: changed after it was marked)
+#   UNSETTLED <path>     a marker with no sha=, settle pending -- the settle window needs a hash a
+#                        BEAT recorded more than SETTLE seconds ago, and --status records none.
+#                        A marker whose sha= matches reads DELIVERED here with no beat at all.
 #   WAITING   <path>     absent, empty, older than the join, or no join armed on it
 # It is STRICTLY read-only: it exits before the state dir is created, before the bound check
 # that can wipe every live join's counters, and before any `.since`, `.settle`, `.progress`,
@@ -376,6 +401,8 @@ BUDGET="${AI_DLC_WAIT_BEAT_SECS:-600}"
 POLL="${AI_DLC_WAIT_POLL_SECS:-10}"
 MAX_BEATS="${AI_DLC_MAX_WAIT_BEATS:-6}"
 MARGIN="${AI_DLC_WAIT_MARGIN_SECS:-10}"
+# SETTLE APPLIES TO A LEGACY MARKER ONLY -- one carrying no `sha=` (header: "THE MARKER BINDS THE
+# CONTENT ABOVE IT"). A sealed marker is decided by its digest and never waits on this window.
 # SETTLE (default 180s) BOUNDS ONE PROPERTY: HOW LONG A MARKED FILE'S CONTENT HASH MUST STAY
 # UNCHANGED BEFORE THE MARKER IS TRUSTED AS THE SEAT'S FINAL WRITE. The event it waits for
 # is "the seat has finished editing", and that event CANNOT be observed: a seat that is
@@ -441,6 +468,111 @@ to_epoch() {  # accept a bare epoch or an ISO8601 stamp; empty on failure
   date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "$1" +%s 2>/dev/null && return 0   # BSD
   return 1
 }
+
+# --complete: the LAST NON-BLANK line begins with this call's marker token (`seat-complete: `,
+# or `repair-complete: serial ` under --complete-repair), carries no carriage return, and is
+# not inside an unclosed fence. A whitespace-only line is blank (NF == 0), so trailing blank
+# lines cannot hide the marker. The token reaches awk through the environment, never `-v`,
+# which would strip a level of escaping.
+has_marker() {  # $1 = path
+  MT_="$MARK_TOKEN" awk '
+    # A fence opens on a run of 3+ backticks or tildes; it closes only on a run of the SAME
+    # character at least as long, with nothing but blanks after it.
+    match($0, /^[ \t]*(```+|~~~+)/) {
+      r = substr($0, RSTART, RLENGTH); sub(/^[ \t]*/, "", r)
+      if (fc == "") { fc = substr(r, 1, 1); fl = length(r) }
+      else if (substr(r, 1, 1) == fc && length(r) >= fl && substr($0, RSTART + RLENGTH) ~ /^[ \t\r]*$/) { fc = ""; fl = 0 }
+    }
+    NF { l = $0 }
+    END { exit ((fc == "" && l !~ /\r/ && index(l, ENVIRON["MT_"]) == 1) ? 0 : 1) }' "$1" 2>/dev/null
+}
+
+content_hash() {  # $1 = path -> a content hash, empty when unreadable
+  if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1
+  elif command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" 2>/dev/null | cut -d' ' -f1
+  else cksum < "$1" 2>/dev/null | tr -d ' \t'; fi
+}
+
+# THE SEAL (header: "--mark"). The body a seal binds is every line above the file's LAST
+# NON-BLANK line, each with its newline; `seal_body <path> 1` keeps that last line too (the
+# writer's body when the file ends in no marker yet). ONE extraction serves the writer and the
+# reader, so both hash the same bytes with the same content_hash.
+seal_body() {  # $1 = path, $2 = 1 to keep the last non-blank line -> bytes on stdout
+  awk -v k="${2:-0}" 'NF { L = NR } { a[NR] = $0 } END { if (k == 1) L++; for (i = 1; i < L; i++) print a[i] }' "$1" 2>/dev/null
+}
+# seal_of <path whose marker has_marker accepted> -> SEAL_V and its status:
+#   sealed (0)  the marker carries `sha=<hex>` and it equals the digest of the body above it
+#   broken (1)  the marker carries `sha=` and it does not: the file changed after it was marked
+#   legacy (2)  the marker carries no `sha=` token: a seat from before the seal, which SETTLE judges
+seal_of() {
+  so_s_="$(awk 'NF { l = $0 } END { n = split(l, w, /[ \t]+/); f = "N"
+    for (i = 1; i <= n; i++) if (w[i] ~ /^sha=/) { f = "Y"; s = substr(w[i], 5) }; print f s }' "$1" 2>/dev/null)"
+  case "$so_s_" in
+    Y*) so_s_="${so_s_#Y}" ;;
+    *) SEAL_V="legacy"; return 2 ;;
+  esac
+  so_d_="$(seal_body "$1" | content_hash /dev/stdin)"
+  if [ -n "$so_s_" ] && [ -n "$so_d_" ] && [ "$so_s_" = "$so_d_" ]; then SEAL_V="sealed"; return 0; fi
+  SEAL_V="broken"; return 1
+}
+
+# ---------------------------------------------------------------------------
+# --mark / --mark-repair: THE SEAL WRITER. It runs here, before the flag loop, the root walk and
+# every write below, so it creates no state dir, takes no lease and charges no beat: it is the
+# seat's own last act, not a beat. One Bash call:
+#   wait-for-deliverable.sh --mark <file> <step> <seat> <shard>... findings=<n>
+#   wait-for-deliverable.sh --mark-repair <file> <pass>
+# It drops a trailing marker of its own token (sealed or bare), so a re-mark replaces rather
+# than stacks, and drops trailing blank lines. It writes the body to a sibling temp file, takes
+# that file's content_hash, appends
+#   seat-complete: <step> <seat> <shard>... sha=<hex> findings=<n>
+#   repair-complete: serial <pass> sha=<hex>
+# (`sha=` BEFORE `findings=`: both merges anchor `findings=[0-9]+[ \t]*$` at end of line), and
+# moves it over the file only once the beat's own has_marker and seal_of read it as sealed. A
+# body ending inside an unclosed fence would put the marker in the fence, a file no beat accepts
+# -- the hang this exists to prevent -- so that, and every other bad call, is exit 64 with the
+# file untouched.
+# ---------------------------------------------------------------------------
+mark_refuse() { echo "FAIL: $MK_MODE: $1 Nothing was written." >&2; exit 64; }
+case "${1:-}" in
+  --mark|--mark-repair)
+    MK_MODE="$1"; shift
+    MK_FILE="${1:-}"; [ $# -gt 0 ] && shift
+    [ -n "$MK_FILE" ] || mark_refuse "needs the file to mark."
+    [ -f "$MK_FILE" ] && [ -s "$MK_FILE" ] || mark_refuse "'$MK_FILE' is not a non-empty file; write the findings first, then mark."
+    for mk_w_ in "$@"; do
+      case "$mk_w_" in ''|*"$(printf '\r')"*|*"
+"*) mark_refuse "a marker field is empty or carries a line break." ;; esac
+    done
+    if [ "$MK_MODE" = "--mark" ]; then
+      [ $# -ge 4 ] || mark_refuse "takes <file> <step> <seat> <shard>... findings=<n>."
+      eval "MK_N=\${$#}"
+      case "$MK_N" in findings=[0-9]*) case "${MK_N#findings=}" in *[!0-9]*) mark_refuse "the last field must be findings=<n> (got '$MK_N')." ;; esac ;;
+        *) mark_refuse "the last field must be findings=<n> (got '$MK_N')." ;; esac
+      MK_F=""; mk_i_=1
+      for mk_w_ in "$@"; do [ "$mk_i_" -lt $# ] && MK_F="${MK_F}${MK_F:+ }$mk_w_"; mk_i_=$(( mk_i_ + 1 )); done
+      MARK_TOKEN="seat-complete: "; MK_TAIL="$MK_N"
+    else
+      [ $# -eq 1 ] || mark_refuse "takes <file> <pass>."
+      MARK_TOKEN="repair-complete: serial "; MK_F="$1"; MK_TAIL=""
+    fi
+    MK_KEEP=1; has_marker "$MK_FILE" && MK_KEEP=0
+    MK_TMP="${MK_FILE}.mark-tmp.$$"
+    seal_body "$MK_FILE" "$MK_KEEP" > "$MK_TMP" || { rm -f "$MK_TMP"; mark_refuse "cannot write $MK_TMP."; }
+    MK_SHA="$(content_hash "$MK_TMP")"
+    [ -n "$MK_SHA" ] || { rm -f "$MK_TMP"; mark_refuse "no content hash could be taken."; }
+    MK_LINE="${MARK_TOKEN}${MK_F} sha=${MK_SHA}${MK_TAIL:+ }${MK_TAIL}"
+    printf '%s\n' "$MK_LINE" >> "$MK_TMP" || { rm -f "$MK_TMP"; mark_refuse "cannot write $MK_TMP."; }
+    if ! has_marker "$MK_TMP"; then
+      rm -f "$MK_TMP"
+      mark_refuse "the marker would not be the last line a beat accepts (the body ends inside an unclosed fence, or carries a carriage return). Close the fence first."
+    fi
+    seal_of "$MK_TMP" >/dev/null
+    [ "$SEAL_V" = "sealed" ] || { rm -f "$MK_TMP"; mark_refuse "the written seal does not read back as sealed."; }
+    mv -f "$MK_TMP" "$MK_FILE" || { rm -f "$MK_TMP"; mark_refuse "cannot replace $MK_FILE."; }
+    echo "MARKED $MK_FILE -- $MK_LINE"
+    exit 0 ;;
+esac
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -680,35 +812,20 @@ is_delivered() {  # $1 = path, $2 = join epoch
   # --shard-header: a header the merge refuses is UNFINISHED, checked BEFORE the settle window so
   # it opens no settle record and its repair is not counted as a revision.
   if [ -n "$SHARD_AXIS" ] && header_refused "$1"; then return 1; fi
+  # THE SEAL DECIDES, WITH NO WINDOW (header: "--mark"). A sealed marker delivers now; a broken
+  # one is UNFINISHED at any age until the seat re-marks. Only a legacy marker reaches SETTLE.
+  seal_of "$1"; id_sv_=$?
+  if [ "$id_sv_" -ne 2 ]; then
+    rm -f "$id_st_" 2>/dev/null; settle_memo "$id_st_" ""
+    return "$id_sv_"
+  fi
   settled "$1" "$id_st_"
 }
 
-# --complete: the LAST NON-BLANK line begins with this call's marker token (`seat-complete: `,
-# or `repair-complete: serial ` under --complete-repair), carries no carriage return, and is
-# not inside an unclosed fence. A whitespace-only line is blank (NF == 0), so trailing blank
-# lines cannot hide the marker. The token reaches awk through the environment, never `-v`,
-# which would strip a level of escaping.
-has_marker() {  # $1 = path
-  MT_="$MARK_TOKEN" awk '
-    # A fence opens on a run of 3+ backticks or tildes; it closes only on a run of the SAME
-    # character at least as long, with nothing but blanks after it.
-    match($0, /^[ \t]*(```+|~~~+)/) {
-      r = substr($0, RSTART, RLENGTH); sub(/^[ \t]*/, "", r)
-      if (fc == "") { fc = substr(r, 1, 1); fl = length(r) }
-      else if (substr(r, 1, 1) == fc && length(r) >= fl && substr($0, RSTART + RLENGTH) ~ /^[ \t\r]*$/) { fc = ""; fl = 0 }
-    }
-    NF { l = $0 }
-    END { exit ((fc == "" && l !~ /\r/ && index(l, ENVIRON["MT_"]) == 1) ? 0 : 1) }' "$1" 2>/dev/null
-}
-# The token as the report lines name it: `seat-complete:` byte-identical to every earlier
-# release, or `repair-complete: serial`.
+# has_marker, content_hash, seal_body and seal_of are defined above the flag loop, beside
+# --mark, which runs before anything below. The token as the report lines name it:
+# `seat-complete:` byte-identical to every earlier release, or `repair-complete: serial`.
 MARK_NAME="${MARK_TOKEN% }"
-
-content_hash() {  # $1 = path -> a content hash, empty when unreadable
-  if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1
-  elif command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" 2>/dev/null | cut -d' ' -f1
-  else cksum < "$1" 2>/dev/null | tr -d ' \t'; fi
-}
 
 # --shard-header: 0 when the sibling merge's --check-header REFUSES $1's header, with HC_MSG set to
 # its refusal (the `REFUSED: ` prefix removed); 1 when it passes. A missing sibling, or any exit but
@@ -835,9 +952,19 @@ is_header_unfinished() {  # $1 = path, $2 = join epoch; sets HC_MSG
 say_header_unfinished() {  # $1 = path; reads HC_MSG. The one emitter of this line, at every site.
   echo "UNFINISHED $1 -- ends in ${MARK_NAME} but the merge would refuse it: $HC_MSG"
 }
+# A BROKEN SEAL: present, written since the join armed, marked with `sha=`, and changed since.
+# Its own function, so is_unfinished above keeps the unmarked case alone.
+is_seal_broken() {  # $1 = path, $2 = join epoch
+  [ "$COMPLETE" -eq 1 ] && [ -s "$1" ] && [ "$(mtime_of "$1")" -ge "$2" ] && has_marker "$1" \
+    && ! { [ -n "$SHARD_AXIS" ] && header_refused "$1"; } && { seal_of "$1"; [ $? -eq 1 ]; }
+}
+say_seal_broken() {  # $1 = path. The one emitter of this line, at every site.
+  echo "UNFINISHED $1 -- its ${MARK_NAME} line carries sha= but the file changed after it was marked; re-mark with --mark"
+}
 say_unfinished() {  # $1 = path, $2 = join epoch -- the line beneath a WAITING line
   is_unfinished "$1" "$2" && echo "UNFINISHED $1 -- present, last non-blank line is not ${MARK_NAME}"
   is_header_unfinished "$1" "$2" && say_header_unfinished "$1"
+  is_seal_broken "$1" "$2" && say_seal_broken "$1"
   return 0
 }
 
@@ -1109,6 +1236,10 @@ if [ "$STATUS" -eq 1 ]; then
       S_V="UNFINISHED"; echo "UNFINISHED $t -- present, last non-blank line is not ${MARK_NAME}"
     elif [ -n "$SHARD_AXIS" ] && header_refused "$t"; then
       S_V="UNFINISHED"; say_header_unfinished "$t"
+    elif seal_of "$t"; then
+      S_V="DELIVERED"; echo "DELIVERED $t"
+    elif [ "$SEAL_V" = "broken" ]; then
+      S_V="UNFINISHED"; say_seal_broken "$t"
     else
       ss_rec="$(cat "${COUNTER_DIR}/$(key_of "$t").settle" 2>/dev/null || echo '')"
       ss_t="${ss_rec#* }"; case "$ss_t" in ''|*[!0-9]*) ss_t="" ;; esac
@@ -1424,6 +1555,9 @@ if [ -n "$EXHAUSTED" ]; then
     elif is_header_unfinished "$t" "$(join_of "$t")"; then
       echo "NON-DELIVERY $t -- after $MAX_BEATS beats."
       say_header_unfinished "$t"
+    elif is_seal_broken "$t" "$(join_of "$t")"; then
+      echo "NON-DELIVERY $t -- after $MAX_BEATS beats."
+      say_seal_broken "$t"
     elif [ "$COMPLETE" -eq 1 ] && [ -s "$t" ] && [ "$(mtime_of "$t")" -ge "$(join_of "$t")" ] && has_marker "$t"; then
       echo "NON-DELIVERY $t -- after $MAX_BEATS beats."
       echo "UNSETTLED $t -- present and ends in ${MARK_NAME}, but its content was still changing"
