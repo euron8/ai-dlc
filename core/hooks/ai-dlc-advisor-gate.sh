@@ -13,8 +13,8 @@
 #   - A call to `mcp__advisor__consult` IS NOT AN ATTEMPT FOR A GRANTED AGENT. The scan recognises
 #     the built-in `server_tool_use` named `advisor` and nothing else, on purpose: the operator's
 #     instructions prefer the built-in advisor wherever it is held, and the operator-home gate that
-#     this one descends from counts the MCP consult ONLY when the transcript carries no grant
-#     (docs/backlog.archive.md:31638-31640). Crediting it here would reverse that ruling for exactly
+#     this one descends from counts the MCP consult ONLY when the transcript carries no grant.
+#     Crediting it here would reverse that ruling for exactly
 #     the agents it binds. So a granted agent that calls the MCP tool and retries is denied again,
 #     and the deny text says why: it names the built-in tool as the one to call and says the MCP
 #     consult does not clear. An agent with NO grant is silent before the scan and never reaches it.
