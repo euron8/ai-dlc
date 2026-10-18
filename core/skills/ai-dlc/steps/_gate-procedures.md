@@ -1393,6 +1393,8 @@ carry the no-human-present additions:
    redirect-then-read is not needed, a pipe replaces the push's exit
    code with the last command's, and a chained push is denied by the
    steering-budget hook.
+   If the push was moved to the background, do not issue another; end the
+   turn and wait for its notification.
 
    If the push fails (no
    remote configured, offline, or a protected branch), note the reason

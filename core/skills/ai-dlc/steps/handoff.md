@@ -82,6 +82,8 @@ Execute this 5-step procedure in order:
    chained, piped or redirected after it; its exit code is in the tool
    result** — `_gate-procedures.md` ("Auto-handoff evaluation", step 3)
    owns why, and the reason is not restated here.
+   If the push was moved to the background, do not issue another; end the
+   turn and wait for its notification.
    If the push fails (no
    remote configured, offline, or a protected branch), report it to the
    operator in one line and continue; the local commits still stand and

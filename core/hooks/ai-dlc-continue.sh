@@ -174,6 +174,94 @@ beat_lease_live() {
   [[ "$BEAT_DEADLINE" =~ ^[0-9]+$ ]] && [ "$BEAT_DEADLINE" -gt "$NOW" ]
 }
 
+# THE ONE READER OF "A BACKGROUNDED PUSH IS STILL RUNNING", used only by Check 0's push deferral.
+# Sets PUSH_BG_ID (the harness task id) and PUSH_BG_AGE (whole seconds since the harness moved
+# the push to the background), both empty when there is no such push. Always returns 0: the
+# caller's `[ -n "$PUSH_BG_ID" ]` is the gate, so a failed read is "no push in flight".
+#
+# THE SIGNAL, AND IT IS AN ABSENCE PAIRED WITH A PRESENCE. A Bash `tool_use` whose command runs
+# `git push`, whose tool-result record carries `toolUseResult.backgroundTaskId` (the harness moved
+# it to the background -- at the 600000 ms timeout, or on `run_in_background`), and NO later
+# `queue-operation` `enqueue` record naming that task id. The enqueue predicate is the one
+# ai-dlc-dispatch-guard.sh keys on for an exiting agent (`.type == "queue-operation" and
+# .operation? == "enqueue"`), read here for a `<task-id>` instead of an Agent summary. The
+# harness writes the enqueue the moment the task exits. Measured on the reference consumer
+# session that motivated this (BL-698): 16 of 16 background tasks enqueue, the push among them,
+# and the push enqueue lands with the push itself. Without the id there is no deferral at all.
+#
+# NOT A PROCESS-TABLE PROBE, deliberately: a `ps`/`pgrep` grep scores a subject that was never
+# started as running (tool-hazards.md). Every input here is a record the harness wrote.
+#
+# LIMITS, STATED:
+#  - Transcript-only. With no readable transcript there is no signal and no deferral.
+#  - The record shape is HARNESS-INTERNAL. If the harness renames `backgroundTaskId`, the
+#    queue-operation record or its `<task-id>` element, this reads nothing, the deferral never
+#    fires, and the PUSH text returns -- the safe side.
+#  - A task the lead TaskStops: whether the harness enqueues a killed task is UNMEASURED. If it
+#    does not, the ceiling below bounds the deferral.
+#  - THE COMMAND MATCH IS `git push` AS THE PROGRAM, never as text. Quoted spans are blanked
+#    first, so `until grep -q 'git push' log`, `echo "git push"` and a watcher pattern such as
+#    `grep -E 'pre-push|git push -u'` carry no match. What remains must open a command: start
+#    of string, or after `;`, `&`, `|`, `(` or a newline, then optional `env` and VAR=value
+#    prefixes, then `git`, an optional `-C <dir>` (a lead working from another directory
+#    plausibly writes it), then `push`. Not matched: `git -c k=v push`, a push inside
+#    `bash -c '...'` (its quotes are blanked), and a push hidden in a script file. A heredoc
+#    body line that begins `git push` WOULD match -- a backgrounded command carrying one is
+#    deferred until its own enqueue, bounded by the ceiling.
+push_bg_read() {
+  PUSH_BG_ID=""; PUSH_BG_AGE=""
+  [ "$HANDOFF_TRANSCRIPT_OK" = "1" ] || return 0
+  command -v jq >/dev/null 2>&1 || return 0
+  local _o
+  # The single quote reaches jq as $q: it cannot be spelled inside this single-quoted program.
+  _o="$(jq -Rrn --argjson now "$NOW" --arg q "'" '
+    def push_cmd:
+      gsub($q + "[^" + $q + "]*" + $q; $q + $q) | gsub("\"([^\"\\\\]|\\\\.)*\""; "\"\"")
+      | test("(^|[;&|(\n])[ \t]*(env[ \t]+)?([A-Za-z_][A-Za-z0-9_]*=[^ \t;&|]*[ \t]+)*git([ \t]+-C[ \t]+[^ \t;&|]+)?[ \t]+push([ \t;&|)]|$)");
+    reduce (inputs | fromjson? | select(type == "object" and .isSidechain != true)) as $r
+      ({push: {}, bg: [], enq: {}};
+       ($r.message | if type == "object" then .content else null end) as $c
+       | if ($c | type) == "array" then
+           reduce ($c[] | select(type == "object" and .type == "tool_use" and .name == "Bash"
+                                 and ((.input.command // "") | type == "string")
+                                 and ((.input.command // "") | push_cmd))) as $u
+             (.; if (($u.id // "") | type) == "string" and ($u.id // "") != "" then .push[$u.id] = true else . end)
+         else . end
+       | if ($r.toolUseResult | type) == "object"
+            and (($r.toolUseResult.backgroundTaskId // "") | type == "string")
+            and ($r.toolUseResult.backgroundTaskId // "") != "" and ($c | type) == "array" then
+           reduce ($c[] | select(type == "object" and .type == "tool_result") | (.tool_use_id // "")
+                   | select(type == "string" and . != "")) as $t
+             (.; .bg += [{t: $t, id: $r.toolUseResult.backgroundTaskId, ts: ($r.timestamp // "")}])
+         else . end
+       | if $r.type == "queue-operation" and $r.operation? == "enqueue" then
+           reduce ($r.content? | select(type == "string") | scan("<task-id>([^<]+)</task-id>") | .[0]) as $k
+             (.; .enq[$k] = true)
+         else . end)
+    | . as $s
+    | [ $s.bg[] | select(($s.push[.t] // false) and (($s.enq[.id] // false) | not)) ] | last // empty
+    | ((.ts | tostring) | try (sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601) catch null) as $e
+    | select($e != null and $now >= $e)
+    | "\(.id) \(($now - $e) | floor)"
+  ' < "$TRANSCRIPT" 2>/dev/null)" || _o=""
+  case "$_o" in
+    *" "*) PUSH_BG_ID="${_o%% *}"; PUSH_BG_AGE="${_o##* }" ;;
+  esac
+  case "$PUSH_BG_AGE" in ''|*[!0-9]*) PUSH_BG_ID=""; PUSH_BG_AGE="" ;; esac
+  return 0
+}
+# THE CEILING, ONE QUANTITY WITH ONE ORIGIN: from the tool-result record, 3604 - 600 = 3004 s.
+# 3604 s is the LONGEST push wall clock recorded in the reference consumer's transcripts (333
+# paired pushes across 190 sessions, tool_use to exit): graph session 94702274, push tool_use at
+# line 2150 (2026-10-05T19:42:58.799Z) to its enqueue at line 2323 (20:43:03.241Z). Age is counted
+# from the tool-result record, which the harness writes 600 s (the `timeout: 600000` step 3
+# prescribes) after a foreground push starts, so the record-relative ceiling is 3604 - 600. Past
+# it the guard answers with the PUSH text, never with silence; too long costs only a later
+# prompt, too short is the second concurrent suite this exists to prevent. A push started with
+# `run_in_background` (step 3 forbids it) has its record at push START, so its window is 3004 s.
+PUSH_BG_CEIL=3004
+PUSH_BG_ID=""; PUSH_BG_AGE=""
+
 # -----------------------------------------------------------------------------
 # Seed log header if needed
 # -----------------------------------------------------------------------------
@@ -923,8 +1011,8 @@ EOF
       # lead that was told plainly and skipped the steps.
       [ "$HANDOFF_ON_DISK" = "1" ] && H_WHY="${H_WHY} [pending handoff seen on disk via ${AI_DLC_HANDOFF_KEY:-unknown}, not the transcript]"
       [ "$HANDOFF_ON_DISK" != "1" ] && [ "$HANDOFF_STICKY" = "1" ] && H_WHY="${H_WHY} [armed by an earlier Stop of this session, no key holds now]"
-      # The block TEXT below can still say "the resume prompt is well-formed"; with no transcript
-      # that clause was not checked, and the record says so rather than rewording six messages.
+      # Only the DRIVER text below says "the resume prompt is well-formed" -- it is dispatched after
+      # the resume arm -- and with no transcript that clause was not checked; the record says so.
       [ "$HANDOFF_TRANSCRIPT_OK" != "1" ] && H_WHY="${H_WHY} [no transcript: the resume block and the dispatch set were not read]"
       # The remediation text is assembled the same way, so a lead that satisfied one arm is
       # not told to redo it.
@@ -955,6 +1043,33 @@ EOF
           echo "- Unsatisfied: ${H_WHY}"
           echo ""
         } >> "$LOG_FILE"
+      # A BACKGROUNDED PUSH STILL RUNNING DEFERS THIS GUARD TOO, beside the beat and for the same
+      # reason: the PUSH text tells the lead to push in the foreground, and with the first push
+      # still inside its pre-push suite that is a SECOND concurrent suite on the same tree.
+      # Measured on the reference consumer (BL-698): the harness backgrounded a step-3 push at
+      # 600000 ms and the guard then blocked three Stops while it ran. The signal and its limits
+      # are on push_bg_read above; the ceiling's derivation is on PUSH_BG_CEIL.
+      #
+      # Same posture as the beat deferral: inside the unsatisfied branch, after H_WHY; the stall
+      # counter is not written and the arming record is not cleared, so the push's notification
+      # re-invokes the lead and its next Stop is examined. The Stop FALLS THROUGH to the checks
+      # below. In a directed handoff the pause flag is up (ai-dlc-pause.sh raised it when the
+      # operator asked, and the sticky arming requires it), so Check 1 allows it as
+      # ALLOWED_BY_PAUSE. With the flag down it continues to Checks 2-3 and the default path,
+      # exactly as a beat-deferred Stop does.
+      #
+      # IT REPLACES THE PUSH ANSWER ONLY. It is read only when the PUSH text is what the dispatch
+      # below would emit -- step 3 unsatisfied with steps 1 and 2 satisfied. A running push does
+      # not excuse an unswept teammate, an empty In-Flight table or an uncommitted tree; those
+      # keep their earliest-unsatisfied text, and none of their remedies is a second push.
+      elif [ "$PUSH_OK" != "1" ] && [ "$COMMIT_OK" = "1" ] && [ "$TEAMMATES_OK" = "1" ] && [ "$INFLIGHT_OK" = "1" ] && push_bg_read && [ -n "$PUSH_BG_ID" ] && [ "${PUSH_BG_AGE:-0}" -le "$PUSH_BG_CEIL" ]; then
+        {
+          echo "## ${TIMESTAMP} -- HANDOFF_GUARD_DEFERRED_BY_PUSH"
+          echo "- Session: ${SESSION_ID}"
+          echo "- Background push task ${PUSH_BG_ID} has no exit record; backgrounded ${PUSH_BG_AGE}s ago (ceiling ${PUSH_BG_CEIL}s); guard deferred, not cleared"
+          echo "- Unsatisfied: ${H_WHY}"
+          echo ""
+        } >> "$LOG_FILE"
       else
       if [ "$H_CNT" -le "$EFF_MAX" ]; then
         stall_run_write "$HANDOFF_STATE"
@@ -965,31 +1080,53 @@ EOF
           echo "- Tool call since previous block: ${RUN_TOOL}"
           echo ""
         } >> "$LOG_FILE"
-        # DISPATCHED IN THE PROCEDURE'S OWN ORDER -- step 1, then 3, then 4 -- so the lead is
-        # told the EARLIEST unsatisfied step rather than whichever arm this code tests first.
-        # With two arms the old form could infer the cause from `RESUME_OK`; with three that
-        # inference is wrong, and it would have answered a missing PUSH with the teammate text.
+        # DISPATCHED IN THE PROCEDURE'S OWN ORDER -- step 1, then 2, then 3, then the resume line
+        # (step 4), then step 4's touch and step 5's clear -- so the lead is told the EARLIEST
+        # unsatisfied step rather than whichever arm this code tests first. The COMMIT and PUSH arms
+        # are TESTED first but require the step-1 arms (TEAMMATES, INFLIGHT) satisfied, so their
+        # effective order is after step 1. With two arms the old form could infer the cause from
+        # `RESUME_OK`; with three that inference is wrong, and it would have answered a missing
+        # PUSH with the teammate text.
+        #
+        # NEITHER THE COMMIT NOR THE PUSH ARM READS `RESUME_OK`. The conjunct came in with the old
+        # two-arm dispatch (v0.447.0, push; copied to the commit arm by BL-159) and guarded no
+        # recorded case. With it, a handoff whose step 2 or step 3 had not landed AND whose resume
+        # line was not yet emitted skipped both arms and got the RESUME text -- an instruction to
+        # emit a resume prompt pointing at an unpushed branch, which is the reverse of the
+        # procedure. Measured on the reference consumer (BL-698): the resume text three times in
+        # one handoff while the push was still inside its pre-push suite.
         #
         # STEP 2 PRECEDES STEP 3, so an uncommitted tree is answered before an unpushed branch.
         # A tree that is 0 ahead and dirty would otherwise reach no push text at all, and one
         # that is both is told to commit first -- a push then carries the work.
-        if [ "$COMMIT_OK" != "1" ] && [ "$TEAMMATES_OK" = "1" ] && [ "$INFLIGHT_OK" = "1" ] \
-           && [ "$RESUME_OK" = "1" ]; then
-          jq -n --arg r "HANDOFF GUARD: the operator requested a handoff, the teammate sweep is recorded and the resume prompt is well-formed, but step 2's commit has NOT landed -- the working tree carries uncommitted work outside ${LOG_DIR##*/}/:
+        if [ "$COMMIT_OK" != "1" ] && [ "$TEAMMATES_OK" = "1" ] && [ "$INFLIGHT_OK" = "1" ]; then
+          jq -n --arg r "HANDOFF GUARD: the operator requested a handoff and the teammate sweep is recorded, but step 2's commit has NOT landed -- the working tree carries uncommitted work outside ${LOG_DIR##*/}/:
 $(printf '%s\n' "$COMMIT_DIRTY" | sed '/^$/d' | head -10)
 
-Per steps/handoff.md step 2, \`git add\` and \`git commit\` that work, including anything teammates left in the working tree, then push (step 3, \`git push -u origin HEAD\`) and end the turn again. A push cannot carry work that was never committed, so a clean push of the earlier commits does not satisfy this. Do not resume pipeline work." '{decision:"block",reason:$r,suppressOutput:true}'
+Per steps/handoff.md step 2, \`git add\` and \`git commit\` that work, including anything teammates left in the working tree, then push (step 3, \`git push -u origin HEAD\`) and end the turn again. A push cannot carry work that was never committed, so a clean push of the earlier commits does not satisfy this. Emit no resume prompt until the commit and the push have landed. Do not resume pipeline work." '{decision:"block",reason:$r,suppressOutput:true}'
           exit 0
         fi
-        if [ "$PUSH_OK" != "1" ] && [ "$TEAMMATES_OK" = "1" ] && [ "$INFLIGHT_OK" = "1" ] \
-           && [ "$RESUME_OK" = "1" ]; then
-          jq -n --arg r "HANDOFF GUARD: the operator requested a handoff, the teammate sweep is recorded and the resume prompt is well-formed, but step 3's push has NOT landed -- this branch is either unpublished or still ahead of its upstream, so the commits this handoff just made exist only on this machine. Per steps/handoff.md step 3, run \`git push -u origin HEAD\` in the foreground with \`timeout: 600000\`, as the whole command -- nothing chained, piped or redirected after it; its exit code is in the tool result. \`-u origin HEAD\`, never a bare \`git push\`: a bare push cannot succeed on a branch that has never been pushed, which is every sprint's FIRST handoff wherever a branch is cut per sprint.
+        if [ "$PUSH_OK" != "1" ] && [ "$TEAMMATES_OK" = "1" ] && [ "$INFLIGHT_OK" = "1" ]; then
+          # THIS TEXT CARRIES NO "END THE TURN AND WAIT", AND THAT ABSENCE IS THE POINT. Within the
+          # ceiling a backgrounded push never reaches here -- the deferral above takes the Stop on
+          # this arm's own conditions plus the id and the ceiling -- so the only background push
+          # this text can meet is one PAST the ceiling. A lead told to wait there waits, every
+          # wait is a block counting toward EFF_MAX, and BACKOFF then ALLOWS the unpushed handoff:
+          # the original defect three turns later. So past the ceiling it is told to check the
+          # push and re-push only if it exited without landing. push_bg_read ran in the deferral
+          # test whenever this arm is reached, so PUSH_BG_ID/AGE describe this Stop; with no
+          # background push recorded there is no clause at all.
+          H_PUSH_BG=""
+          if [ -n "$PUSH_BG_ID" ]; then
+            H_PUSH_BG=" The backgrounded push (task ${PUSH_BG_ID}) has overrun its ceiling: it was backgrounded ${PUSH_BG_AGE}s ago, past the ${PUSH_BG_CEIL}s allowed for the longest recorded gate. Check its output file or its notification now. If it has exited without landing, push again as above; if the remote branch now carries this commit, the push landed and this arm clears on the next Stop."
+          fi
+          jq -n --arg r "HANDOFF GUARD: the operator requested a handoff and the teammate sweep is recorded, but step 3's push has NOT landed -- this branch is either unpublished or still ahead of its upstream, so the commits this handoff just made exist only on this machine. Per steps/handoff.md step 3, run \`git push -u origin HEAD\` in the foreground with \`timeout: 600000\`, as the whole command -- nothing chained, piped or redirected after it; its exit code is in the tool result. \`-u origin HEAD\`, never a bare \`git push\`: a bare push cannot succeed on a branch that has never been pushed, which is every sprint's FIRST handoff wherever a branch is cut per sprint.${H_PUSH_BG} Emit no resume prompt until the push has landed.
 
-If the push genuinely cannot succeed -- no remote configured, offline, or a protected branch -- report that to the operator in ONE line and end the turn again; those three are environmental and the handoff is not blocked by them. A branch that merely has no upstream yet is NOT one of them. Do not resume pipeline work." '{decision:"block",reason:$r,suppressOutput:true}'
+If the push genuinely cannot succeed -- no remote configured, offline, or a protected branch -- report that to the operator in ONE line, then finish steps 4 and 5 in this same turn and end it; those three are environmental and the handoff is not blocked by them. A branch that merely has no upstream yet is NOT one of them. Do not resume pipeline work." '{decision:"block",reason:$r,suppressOutput:true}'
           exit 0
         fi
         if [ "$TEAMMATES_OK" != "1" ]; then
-          jq -n --arg r "HANDOFF GUARD: the operator requested a handoff and the resume prompt is well-formed, but the pipeline snapshot's \`## In-Flight Teammates\` section still carries a row whose status reads \`in-flight\`. ${H_FIX_TEAM}
+          jq -n --arg r "HANDOFF GUARD: the operator requested a handoff, but the pipeline snapshot's \`## In-Flight Teammates\` section still carries a row whose status reads \`in-flight\`. ${H_FIX_TEAM}
 
 Then finalize the snapshot (step 3) and end the turn again. A handoff whose teammate sweep is not recorded looks identical to one that had no teammates." '{decision:"block",reason:$r,suppressOutput:true}'
           exit 0
@@ -999,7 +1136,7 @@ Then finalize the snapshot (step 3) and end the turn again. A handoff whose team
         # it is dispatched second because a table carrying a stale row is the more
         # specific finding and its remedy is an edit rather than a new row.
         if [ "$INFLIGHT_OK" != "1" ]; then
-          jq -n --arg r "HANDOFF GUARD: the operator requested a handoff and the resume prompt is well-formed, but the pipeline snapshot's \`## In-Flight Teammates\` table has NO data rows while ${OPEN_N} role-bound dispatch(es) from this session have no SubagentStop record:
+          jq -n --arg r "HANDOFF GUARD: the operator requested a handoff, but the pipeline snapshot's \`## In-Flight Teammates\` table has NO data rows while ${OPEN_N} role-bound dispatch(es) from this session have no SubagentStop record:
 ${OPEN_DETAIL}
 
 Per steps/handoff.md step 1, WRITE a row for each into the In-Flight Teammates table before ending the turn -- \`stopped\` if you stopped it, or \`delivered-reachable\` if its deliverable landed. Do NOT call \`TaskStop\` to satisfy this: the missing stop record is not evidence the teammate is running. A teammate that FINISHED cleanly can leave no record at all -- the case this arm was built on returned normally with no error and wrote none -- so TaskStop would neither clear the state nor tell you anything, and the successor session reads the ROW, not the tool call.
