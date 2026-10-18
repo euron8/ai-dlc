@@ -20,6 +20,35 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.830.0] - 2026-10-18
+
+Batch 236 (cb's INTAKE, filing-only): ai-dlc-f7's read-only performance findings from graph's 0.828.0 install and
+transcripts. Files BL-679 and BL-680. Adds evidence to BL-583, BL-538 and BL-658. Closes nothing and changes no
+code. Closes no `PC-` id. Net for this release: 0 closed, 2 filed.
+
+### Filed
+
+- BL-679 (DEFECT, efficiency): one consumer pull re-runs `emit-report.sh --verify` three or four times, and each run is
+  a full re-render of every detector. f7 measured about 35 of the pull's 116 in-session minutes in graph's pull session,
+  from its transcript read. The sites are the two statements of the step-7 gate in
+  `core/skills/ai-dlc-update/SKILL.md` (`:1514` and `:1720`), the union gate's own call at
+  `core/skills/ai-dlc-update/reconcile/apply.sh:259`, and the `predicate-differential.sh` call at
+  `core/skills/ai-dlc-update/reconcile/emit-report.sh:832`, which every `--verify` reaches through `render()`. The owed
+  fix is a recorded PASS keyed on the four tree identities and the region hash, written only by a `--verify` that
+  exited 0.
+- BL-680 (NOTE): a receipt line with a reason after `verify: manual` counts as neither manual nor sh, so R2 failed
+  this release's own pre-gate with only "ZERO scored receipts". The owed fix names the offending entry.
+
+### Evidence added
+
+- BL-583: f7 measured a 17.6-minute pre-push on graph's reconcile push, with 139 of 224 fixtures selected. That is a
+  consumer's selected subset, so it is not comparable to this repo's full-suite figure.
+- BL-538: f7 counted 20 of 29 task-notification wakes ending with no tool call in graph's s319 lead session, by its
+  own heuristic. That is a different series from the filing's 61 of 109, and the two ratios are not a trend. f7 then counted 14 consecutive "no action" wakes in about 8 minutes on one 25-agent
+  seat, each a full turn at about 318k tokens, which the prose half cannot remove.
+- BL-658: f7 recorded the first measured occurrence of the open parallel-Read race, a denied digest Read in a block of
+  three parallel Reads, at the step-stage deny in `core/hooks/ai-dlc-recover-gate.sh:474`.
+
 ## [0.829.0] - 2026-10-18
 
 Batch 236 (cb's JOIN build). Closes BL-537, BL-556, BL-557, BL-565, BL-657 and BL-660. Files BL-672 and BL-673.

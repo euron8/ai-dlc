@@ -92,6 +92,10 @@ that builds an entry owes its behavioural `sh` receipt and the probe behind it.
 
 Owed: a stated lead response to a notification for an agent whose deliverable an armed beat covers: no per-agent status line, no re-check, end the turn. Optionally, a hook that injects that instruction when the notified agent's deliverable is inside `.beat-inflight`'s path set. Measure it by re-running the per-wake count on the next consumer sprint.
 
+**Second reading (f7 measured; transcript-only, not re-derived here).** In graph's s319 lead session `c61a91eb`, 20 of 29 task-notification wakes ended with no tool call. Method, f7's heuristic: a wake counts as ending with no tool call when no `tool_use` block appears before the next user line. This is NOT the same series as the filing's 61 of 109, which is a different session (`62eadbbe`), a different count of wakes, and was classed by whether the turn only restated that the join was armed; the two ratios (20/29 and 61/109) are two readings and are not a trend. Both say most wakes under an armed beat end without acting.
+
+**Sharper reading (f7 measured; transcript-only, not re-derived here).** In graph's s319 lead session `c61a91eb`, on 0.828.0, one 25-agent SM seat ran under a single armed join (task `brrt6rqjh`). Between 14:40:41Z and 14:48:20Z (transcript lines 2702-2838) the lead took 14 consecutive wakes whose entire output was "Covered by the armed join; no action." Each was a full turn over a context of about 318k tokens or more, past the RED threshold. By f7's heuristic, the same method as the paragraph above, idle wakes went from 20 of 37 to 37 of 54: 17 in about 8 minutes on one round. The round plans 4 seats of about 25 agents each, so about 70 such turns are expected per round; that figure is f7's projection, not a count. Reading: the 0.794.0 prose half shortened each turn's output but cannot remove the turns; only the hook half can.
+
 verify: manual
 
 ## BL-553 — the lead arms a beat on a sentinel nothing will write, to keep the Stop hook quiet
@@ -124,6 +128,8 @@ Scheduled in batch 235 for a later release (scope ruling: the boundary is the re
 
 
 **Partial, v0.810.0.** Item (a), the sandbox re-trace of 13 of the 14 stale fixtures, landed in intake 2 (`52555359`). Items (b) and (c) land here: `fold-architect-ledger-join-mutants` runs C0 and the M6 premise in shard `a` only, bound by a J2 arm, and `derivation-capture-mutants` is four pool units with a derived deal and coverage join (J0, J1, J1b) and no redundant control. Open: the remaining phase-2 items (gate-adjudication M0 in one shard, the readset-skip-digest and advisor-gate-deny controls in one shard each, the ledger-reverify-shard control) and the per-gate wall clock and dollars, which need the gate log of a real release push.
+
+**Gate-log evidence (f7 measured, graph session `f78aa565`; transcript-only, not re-derived here).** The graph push of the reconcile commit took 17.6 minutes in pre-push with 139 of 224 fixtures selected. That is a real release-class push on a consumer tree and a first data point toward the per-gate wall clock this entry owes; it is a consumer's selected subset, not this repo's full-suite figure, and the two must not be compared.
 
 verify: manual
 
@@ -582,6 +588,12 @@ A hook invocation that passes :255 before that removal and reaches :362 after it
 
 Owed: an absent PROGRESS with the marker gone at :362 exits 0 (re-test `[ -f "$MARKER" ]`), or the satisfying Read removes PROGRESS before MARKER. Probe: two invocations for one session, a satisfying step Read and a third Read, with the removal forced between the second's :255 and :362. The third is allowed. Control: a genuine first-call non-snapshot Read still denies.
 
+**First measured occurrence of the open half (f7 measured, graph s319 lead session `c61a91eb`, 0.828.0 = `b503b232`, which includes 0.826.0's partial fix; transcript line numbers are f7's and transcript-only).** After the compaction at transcript line 1401, one response issued three parallel Reads at 13:51:21Z (lines 1436-1438): the snapshot, `steps/architecture.md` and `postcompact-digest.md`. The snapshot and step Reads succeeded (lines 1441, 1442). The digest Read was DENIED (line 1440) with the stage-`step` text "your SECOND tool call must be `Read .claude/skills/ai-dlc/steps/architecture.md`". Control: the step Read in the same block was allowed.
+
+That text is the step-stage deny at `core/hooks/ai-dlc-recover-gate.sh:474`, reached through `case "$STAGE"` after the `:380` stage read. It is not the snapshot default that 0.826.0 closed at `:362-381`. So the digest call read PROGRESS as `step` after the snapshot call wrote it (`:408`, `printf 'step\n' >"$PROGRESS"`) and before the step call removed it (`:459`, `rm -f "$MARKER" "$PROGRESS"`), with the marker still present at the `:381` re-test. This is exactly the window the PARTIAL text above names as open. Cost: one denied call, a re-issued Read at 13:51:30Z (line 1459), one extra turn at about 318k tokens, and a false "you skipped the step Read" message.
+
+The line numbers in this tree match the ones f7 cited from the consumer's installed copy, so there is no distribution/consumer offset to report for these five sites. f7 read the deny text and the stage from the transcript, so which line each invocation executed is inferred from the text, not traced.
+
 verify: manual
 
 ## BL-662 — the adversarial repair record is the only repair kind with no round word, the join accepts `<artifact>-adversarial-repair-p<M>`, and only gate-time arm H catches it
@@ -689,5 +701,30 @@ Owed: anchor the read on the annotation's own form,
 `s/^\(<br>\)\{0,1\}\*\*LANDED (v[^,]*, verified \([0-9a-f]\{7,\}\)).*/\2/p`, so only the sha inside the bold form
 is taken. Probe: a LANDED line whose prose later says "verified against" parses to its own sha. Control: a LANDED
 line with no later "verified" parses the same as today.
+
+verify: manual
+
+## BL-679 — one consumer pull re-runs `emit-report.sh --verify` three or four times, each a full detector re-render, and no caller accepts an earlier PASS
+
+**DEFECT (efficiency).** In the graph pull session `f78aa565` (0.823.0 to 0.828.0), f7 measured `emit-report.sh --verify` run 3-4 times in one pull, each a full re-render of every detector at 3-14 minutes, about 35 of the pull's 116 in-session minutes. Source: f7's transcript read, not re-derived here; a transcript-only figure. Handoff gaps are excluded from the 116.
+
+Sites, re-derived against this tree at 9ad0e21c (f7's consumer line numbers matched the distribution's exactly):
+- `core/skills/ai-dlc-update/SKILL.md:1514` (the first step-7 `emit-report.sh --verify <report> <dist> <base> <consumer> <theirs>` instruction, "it MUST exit 0") and `:1720` (the second statement of the same gate, "(1) ... exits 0"). `:1748` says to run `--verify` again after pasting a freshly rendered region.
+- `core/skills/ai-dlc-update/reconcile/apply.sh:259`, the union gate's own call: `bash "$SELF/emit-report.sh" --verify "$UNION_REPORT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS"`.
+- Inside each `--verify`, `core/skills/ai-dlc-update/reconcile/emit-report.sh:832` runs `predicate-differential.sh "$DIST" "$BASE" "$THEIRS" "$CONSUMER"`. `--verify` begins at `:67` and re-renders the whole region through `render()` (`:165`), so every caller pays every detector, this one included.
+
+Owed: key a recorded PASS on (dist, base, theirs, consumer tree hash, region hash). A later caller in the same pull whose key matches accepts the recorded PASS instead of re-running the detectors. An edit outside the mechanical region leaves the key unchanged and so triggers no re-run; an edit inside the region, or any change to the four tree identities, changes the key and re-runs. The write is made only by a `--verify` that exited 0, and the PASS is read, not trusted from the report text. f7 estimates about 20 minutes removable per pull, which makes this the first of the pull-path costs; that estimate is f7's and is not re-measured here. Probe: a second `--verify` on an unchanged key skips the render (assert by detector invocation count, not by output), and a one-byte edit inside the region re-renders and fails. Control: an edit outside the region on the same key still accepts.
+
+Note that `emit-report.sh` and `apply.sh` are the consumer's INSTALLED engine, so the pull that delivers this fix still runs the old re-runs.
+
+No existing receipt shape fits: the subject is a count of detector invocations across a multi-caller pull, which needs a seeded world and a driver of the real `--verify`, and no such receipt has been written or run here (UNRUN).
+
+verify: manual
+
+## BL-680 — a receipt line carrying a reason after `verify: manual` is counted as neither manual nor sh, and R2 names only "ZERO scored receipts"
+
+**NOTE.** At 0.830.0's gate, a new entry's line `verify: manual. No existing receipt shape fits: ...` was counted neither as a manual receipt (the R2_ALLMANUAL count needs the line to be exactly `verify: manual`, `scripts/validate-backlog-receipts.sh:1114`) nor as an sh receipt. The ledger then had 34 entries against 33 manual lines, and R2 failed the push with "produced ZERO scored receipts (entries 34, sh receipts 0, manual 33, ...)". That message does not say that one line matched no receipt form.
+
+Owed: either refuse a `verify:` line that matches no receipt form, naming its entry and line number, or have R2's message name the entries whose verify line was counted as nothing. Probe: a `verify: manual. <reason>` line is named by its entry id. Control: a bare `verify: manual` line is not named.
 
 verify: manual
