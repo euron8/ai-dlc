@@ -743,3 +743,13 @@ verify: sh o="$(bash core/fixtures/self-update-gate-d/run.sh 2>&1)"; rc=$?; [ "$
 - **Receipt basis:** the phase's own cost row in `.git/ai-dlc-fixture-durations`, compared like for like (loaded on both sides) with the method stated. The "before" side is the first suite run on main after 0.834.0 that dispatches `reconcile-emit-report`; the record still held the pre-pcache rows 124 / 299 / 134 when this was filed.
 
 verify: manual
+
+## BL-704 — the reconcile's change tests follow a textconv driver, so two different blobs read as unchanged
+
+**DEFECT.** Found by the BL-685 key-hardening hand (batch 236); filed by the lead (ai-dlc-c8) and closed in BL-685's release. Owner: ai-dlc-77 [e29316].
+- **The cause.** `git diff --quiet` applies a configured textconv driver, so two blobs with different bytes that the driver maps to one text exit 0, "unchanged". Measured on a scratch repo with `diff.same.textconv 'sh -c "echo same" --'` and `* diff=same`: `git diff --quiet A B -- f` gives rc 0, and with `--no-textconv` gives rc 1. `GIT_EXTERNAL_DIFF=true` does not affect `--quiet` (rc 1).
+- **The sites.** `layer-drift.sh`'s three base→theirs change tests (the hooked-file and anchor-file tests) and `self-update-gate.sh`'s pre-push hook change test. Each read "unchanged" under such a driver, so a real rulebook or hook change went unreported (EXTENSION-OK where EXTENSION-HOOK-DRIFT was due).
+- **The fix.** `--no-textconv` on those four `git diff --quiet` calls.
+- **Two further sites, fixed in the same release.** The same one-flag fix (`--no-textconv`) also covers `ledger-reverify.sh`'s VERSION bump test (`diff --quiet "${_c}^" "$_c" -- VERSION`) and `layer-drift.sh`'s consumer working-tree test (`git -C "$CONSUMER" diff --quiet -- <file>`), whose driver sits in the consumer's own config. Each gets its own arm.
+
+verify: sh o="$(bash core/fixtures/layer-extends-grain/run.sh 2>&1)"; rc=$?; [ "$rc" -eq 0 ] && printf '%s\n' "$o" | grep -qE '^  ok +run1 +textconv: ' && ! printf '%s\n' "$o" | grep -qE '^  FAIL '
