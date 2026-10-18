@@ -1038,16 +1038,34 @@ adj_line_in() { # $1 trimmed needle, $2 trimmed haystack file -> 0 when the need
 # which this file emits -- so the table cannot drift from the contract's ids. Every source is text
 # this script already reads through git_show or git diff, in every mode including a degenerate
 # range. Run with stdin from /dev/null: two call sites sit inside a loop reading a staged file.
-adj_core_text() { # $1 status, $2 entry (consumer-relative), $3 core-relative target -> text on stdout
+#
+# EVERY PRODUCER'S STATUS IS READ, AND A FAILURE MEANS "THIS RECORD DOES NOT CLEAR", NEVER A RUN
+# REFUSAL. This helper decides whether ONE record clears, and adj_prefix reaches it from inside a
+# `$( )`, where ld_refuse_staging would end only the subshell. So a read that fails returns 3, the
+# caller marks the core half `core-unread`, and the row stays HARD naming that half: the failure
+# direction is a blocking row the operator can read, not an empty core text that a quote then fails
+# against silently, and not an exemption. A path ABSENT at a ref is not a failure -- it has no lines,
+# which is the true answer (adj_show tells the two apart through the tree, as `have` does).
+adj_show() { # $1 ref, $2 dist path, $3 destination -> 0 read (or absent at that ref, empty), 3 unreadable
+  local _rc=0 _ls
+  git_show "$1" "$2" > "$3" 2>/dev/null || _rc=$?
+  [ "$_rc" -ne 0 ] || return 0
+  _ls="$(git -C "$DIST" ls-tree --name-only "$1" -- "$2" 2>/dev/null)" || return 3
+  [ -z "$_ls" ] || return 3
+  : > "$3" || return 3
+  return 0
+}
+adj_core_text() { # $1 status, $2 entry (consumer-relative), $3 core-relative target -> text on stdout; 3 = unreadable
   local cpath f _x _b _fl _an _d _ut _ct
   cpath="$(dist_path "$3")"; f="$CONSUMER/$2"
   case "$1" in
     # LC-E4 / LC-E6, range-keyed: an added or removed line of the range diff, marker stripped. The
-    # options are pinned so a consumer's diff config cannot move which lines count.
+    # options are pinned so a consumer's diff config cannot move which lines count. Staged, so the
+    # diff's own status is read rather than the awk's.
     EXTENSION-HOOK-DRIFT|EXTENSION-RETIRE-CANDIDATE)
       git -C "$DIST" -c diff.algorithm=myers diff --no-ext-diff --no-textconv --no-color -U0 \
-          "$BASE" "$THEIRS" -- "$cpath" 2>/dev/null \
-        | awk '/^@@/ { h = 1; next } /^diff --git / { h = 0; next } h && /^[-+]/ { print substr($0, 2) }' ;;
+          "$BASE" "$THEIRS" -- "$cpath" > "$LD_T/adj-diff" 2>/dev/null || return 3
+      awk '/^@@/ { h = 1; next } /^diff --git / { h = 0; next } h && /^[-+]/ { print substr($0, 2) }' "$LD_T/adj-diff" || return 3 ;;
     # LC-E14: the span(s) the entry's extends: declares in the target, at BASE or at THEIRS.
     EXTENSION-ANCHOR-DRIFT)
       _x="$(unquote "$(fm "$f" extends)")"
@@ -1056,8 +1074,10 @@ adj_core_text() { # $1 status, $2 entry (consumer-relative), $3 core-relative ta
         [ -n "$_an" ] || continue
         [ -n "$_fl" ] || _fl="$3"
         [ "$_fl" = "$3" ] || continue
-        git_show "$BASE" "$cpath" | section_of "$_an" || :
-        git_show "$THEIRS" "$cpath" | section_of "$_an" || :
+        adj_show "$BASE" "$cpath" "$LD_T/adj-blob" || return 3
+        section_of "$_an" < "$LD_T/adj-blob" || return 3
+        adj_show "$THEIRS" "$cpath" "$LD_T/adj-blob" || return 3
+        section_of "$_an" < "$LD_T/adj-blob" || return 3
       done < "$LD_T/adj-parts" ;;
     # LC-O15: the section(s) the override's shadows: names in the target, at its base_sha or THEIRS.
     OVERRIDE-SUPERSEDED)
@@ -1067,26 +1087,32 @@ adj_core_text() { # $1 status, $2 entry (consumer-relative), $3 core-relative ta
         [ -n "$_an" ] || continue
         [ -n "$_fl" ] || _fl="$3"
         [ "$_fl" = "$3" ] || continue
-        [ -z "$_b" ] || { git_show "$_b" "$cpath" | section_of "$_an" || :; }
-        git_show "$THEIRS" "$cpath" | section_of "$_an" || :
+        if [ -n "$_b" ]; then
+          adj_show "$_b" "$cpath" "$LD_T/adj-blob" || return 3
+          section_of "$_an" < "$LD_T/adj-blob" || return 3
+        fi
+        adj_show "$THEIRS" "$cpath" "$LD_T/adj-blob" || return 3
+        section_of "$_an" < "$LD_T/adj-blob" || return 3
       done < "$LD_T/adj-parts" ;;
     # LC-E19: the core section(s) at THEIRS whose heading the title-join matched to this entry's,
     # re-derived with the same predicate and the same skeleton exclusion the firing arm uses.
     EXTENSION-TITLE-MATCHES-CORE)
       unnumbered_titles_of_file "$f" > "$LD_T/adj-ext-titles" || return 3
-      git_show "$THEIRS" "$cpath" > "$LD_T/adj-theirs-blob" || :
-      heading_titles_of_stream < "$LD_T/adj-theirs-blob" | titles_only > "$LD_T/adj-theirs-titles" || :
+      adj_show "$THEIRS" "$cpath" "$LD_T/adj-theirs-blob" || return 3
+      heading_titles_of_stream < "$LD_T/adj-theirs-blob" > "$LD_T/adj-theirs-heads" || return 3
+      titles_only < "$LD_T/adj-theirs-heads" > "$LD_T/adj-theirs-titles" || return 3
       while IFS="$TAB" read -r _d _ut; do
         [ -n "$_ut" ] || continue
         ld_has_line "${SKELETON_TITLES:-}" "$_ut" && continue
         while IFS= read -r _ct; do
           [ -n "$_ct" ] || continue
           same_section "$_ut" "$_ct" || continue
-          section_of "$_ct" < "$LD_T/adj-theirs-blob" || :
+          section_of "$_ct" < "$LD_T/adj-theirs-blob" || return 3
         done < "$LD_T/adj-theirs-titles"
       done < "$LD_T/adj-ext-titles" ;;
     # Any other clause that reaches this helper: the target file at THEIRS. A source, never a pass.
-    *) git_show "$THEIRS" "$cpath" || : ;;
+    *) adj_show "$THEIRS" "$cpath" "$LD_T/adj-blob" || return 3
+       cat "$LD_T/adj-blob" || return 3 ;;
   esac
 }
 
@@ -1143,7 +1169,9 @@ adj_records() { # $1 digest, $2 status, $3 entry (consumer-relative), $4 core-re
           if adj_core_text "$2" "$3" "$4" < /dev/null > "$LD_T/adj-core-raw" \
              && adj_stage_trimmed "$LD_T/adj-core-raw" "$LD_T/adj-hay-core"; then hay_c=ok; else hay_c=bad; fi
         fi
-        if [ "$hay_c" != ok ] || ! adj_qualifies "$cl" || ! adj_line_in "$cl" "$LD_T/adj-hay-core"; then
+        if [ "$hay_c" != ok ]; then
+          st=core-unread
+        elif ! adj_qualifies "$cl" || ! adj_line_in "$cl" "$LD_T/adj-hay-core"; then
           st=core
         else
           st=clears
@@ -1183,6 +1211,9 @@ adj_lookup() { # $1 digest, $2 status, $3 entry, $4 target
              ADJ_READ_WHY="the record carries no \`read\` evidence" ;;
     entry)   ADJ_READ_HALF="read.entry_line not in the entry"
              ADJ_READ_WHY="its read.entry_line is not a line of this entry (verbatim, at least 20 characters, not a heading)" ;;
+    core-unread)
+             ADJ_READ_HALF="the $(adj_clause_of "${2:-}") core text could not be read"
+             ADJ_READ_WHY="the core text its read.core_line is checked against, $(adj_core_where "${2:-}" "${4:-}"), could not be read in this run, so the record is not cleared on an unread input; re-run, and if it persists the distribution clone is damaged" ;;
     *)       ADJ_READ_HALF="read.core_line not in the $(adj_clause_of "${2:-}") core text"
              ADJ_READ_WHY="its read.core_line is not $(adj_core_where "${2:-}" "${4:-}") (verbatim, at least 20 characters, not a heading)" ;;
   esac
