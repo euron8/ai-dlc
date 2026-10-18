@@ -58,14 +58,18 @@ cd "$REPO" || exit 2
 # --- a1: the unmutated control ----------------------------------------------------------------
 bash "$RECEIPT" "$SUBJECT" > "$WORK/a1.out" 2>&1; a1=$?
 if [ "$a1" -eq 9 ]; then echo "FIXTURE BROKEN: the receipt could not build its worlds" >&2; sed 's/^/     /' "$WORK/a1.out" >&2; exit 2; fi
-# The receipt exits 9 on every path before it has tested (-s, its :17) and copied (cp, its :24) the probe
-# into the SELF tree the self-check reads it from; any other exit is past both, so the probe was consumed.
-echo "HERMETIC-CONSUMED core/fixtures/procsub-staged-refusal/procsub-spell-probe.diff"
-# The same exit-9 boundary covers the receipt and the self-check: every exit the receipt writes before its
-# first drive (its :55) is `exit 9`, and its only other exits (0 and 1, its :89-90) come after all four
-# drives, so an exit it wrote that is not 9 is past its cp of the self-check (its :24) and its first run of it.
-echo "HERMETIC-CONSUMED scripts/pregate-self-check.sh"
-echo "HERMETIC-CONSUMED $RECEIPT"
+# THE THREE SENTINELS BELOW ARE KEYED ON THE RECEIPT'S OUTPUT, NOT ON ITS EXIT CODE. A sentinel attests a
+# read that happened. The receipt prints its `A=...` summary line (its :86) only after it has tested (-s,
+# its :17) and copied (cp, its :24-25) the probe and the self-check into its SELF tree and driven that copy
+# of the self-check in every world (its :55-58, :68). An exit code alone cannot attest that: a1 may be one
+# the receipt never wrote -- 126/127 when bash cannot run the file, 128+n when a signal kills it, 2 when a
+# syntax error stops it before its first line runs -- and any of those passes an a1 != 9 test. `grep -q` on
+# the file, never fed from a pipe. Its own `A| ` echo of world A (its :85) cannot match `^A=`.
+if [ "$a1" -ne 9 ] && grep -q '^A=' "$WORK/a1.out"; then
+  echo "HERMETIC-CONSUMED core/fixtures/procsub-staged-refusal/procsub-spell-probe.diff"
+  echo "HERMETIC-CONSUMED scripts/pregate-self-check.sh"
+  echo "HERMETIC-CONSUMED $RECEIPT"
+fi
 [ "$a1" -eq 0 ] && ok "a1 control: receipt exit 0 on the unmutated self-check" || bad "a1 control: receipt exit $a1, expected 0"
 grep -qxF "$WANT" "$WORK/a1.out" && ok "a1 control: the line '$WANT' is present" || bad "a1 control: the line '$WANT' is absent (got: $(tail -1 "$WORK/a1.out"))"
 
