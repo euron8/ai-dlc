@@ -25,6 +25,9 @@
 #   A1  floor        a measurement at or below what a BROKEN subject measures, profiled live
 #   A5  wholeness    the traced run exited 0 and reached past the LAST arm header's line
 #   A3  ceiling      measured <= FORK_BUDGET
+#   A3b headroom     measured + HEADROOM_MARGIN <= FORK_BUDGET: the window between "headroom gone"
+#                    and A3's red, which A3 alone cannot see. It FAILS, never warns, because a
+#                    passing fixture's stdout is hidden by the hook
 #   A4  stale-high   measured >= 70% of FORK_BUDGET, or the budget has ratcheted out of reach
 #
 # A1 AND A5 ARE THE TWO THAT MAKE THE OTHERS MEAN ANYTHING. A validator that dies at line 400
@@ -42,7 +45,9 @@
 # drive `judge` at the COMMITTED budget: m8 inside A4's window, m9 one fork above the floor.
 # m10-m12 drive the profiler's own assignment probe with its classifier mutated three ways --
 # reverted, `+=` dropped, widened -- so the classifier fix cannot be undone without a red. m13
-# widens the trace marker to drop its `+` run, the near-miss direction of m7.
+# widens the trace marker to drop its `+` run, the near-miss direction of m7. m15 drives `judge`
+# at the COMMITTED budget with a total inside the headroom margin, and again with the margin
+# dropped, so A3b is proven to fire and to be the only thing that makes it fire.
 #
 # WHERE THIS FIXTURE'S TIME GOES, because it became the suite's second-longest unit and the
 # obvious guess is wrong. Instrumented solo, 32.2s wall / 36.0 CPU-seconds: the corpus reading
@@ -113,6 +118,16 @@ FXROOT="$REPO/core/fixtures"
 [ -d "$FXROOT" ] || FXROOT="$REPO/tests/fixtures"
 NFX="$(find "$FXROOT" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | grep -c .)"
 
+# --- A3b's margin, declared ONCE ---------------------------------------------------------
+# BL-616 made the reading exact (A2 asserts equality across runs), so this margin is not jitter
+# allowance; it is one release of warning before A3 goes red. A3 alone is silent from "headroom
+# gone" until the first push that reads one fork over, and the push that spends the last of the
+# headroom then fails on a change that looks like any other.
+# OWNER-TO-CONFIRM: the value 2 is a placeholder. Insert the measured spread here (5 interleaved
+# reps, measured in a slot): <MEASURED SPREAD>
+# It must stay under 30% of the budget, or A3b would meet A4's window; m15 asserts that.
+HEADROOM_MARGIN=2
+
 # --- judge: the whole verdict, one implementation -----------------------------------------
 # judge <total> <exit> <maxline> <lastarm> <budget> -> "PASS" | "RED <why>" | "BROKEN <why>"
 # Reads the global `$FLOOR`, which is profiled live below before the first call.
@@ -121,7 +136,9 @@ NFX="$(find "$FXROOT" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | grep -c .)"
 # only meaningful once both of those have been ruled out -- which is why A5 now runs BEFORE
 # them. With the floor near zero, a validator that dies after a few hundred forks passes A1;
 # evaluated after A4 it read "stale-high, lower the budget", a broken subject with a remedy
-# that would ratchet the budget onto it.
+# that would ratchet the budget onto it. A3b sits between A3 and A4: after A3 so an over-budget
+# reading keeps A3's message, before A4 because the two windows are disjoint by construction
+# (`t > b - margin` against `t*10 < b*7`) and m15 asserts it.
 judge() {
   local t="$1" ex="$2" mx="$3" la="$4" b="$5"
   case "$t" in ''|*[!0-9]*) echo "BROKEN the profiler reported no numeric TOTAL ('$t'); a tracer that produced nothing is not a validator that forked nothing"; return ;; esac
@@ -184,6 +201,12 @@ judge() {
   # A3 ceiling
   if [ "$t" -gt "$b" ]; then
     echo "RED measured $t fork(s) against FORK_BUDGET=$b ($((t - b)) over). Across $NFX fixture directories that is $((t / (NFX > 0 ? NFX : 1))) fork(s) per fixture. The suite runs this validator well over a hundred times per full push, so this is a change to the suite's wall clock. Either remove the forks (scripts/fork-profile.sh --section by-line names the sites) or raise FORK_BUDGET in $BUDGET_FILE as a deliberate one-line diff."
+    return
+  fi
+  # A3b headroom -- after A3 so a reading over the budget keeps A3's message, before A4 so the
+  # two windows (t > b - margin, t*10 < b*7) are evaluated in the order that keeps them disjoint.
+  if [ "$((t + ${HEADROOM_MARGIN:-0}))" -gt "$b" ]; then
+    echo "RED headroom: measured $t fork(s) of FORK_BUDGET=$b leaves $((b - t)), under the margin of ${HEADROOM_MARGIN:-0}. The next change that adds a fork turns A3 red on an unrelated push. Re-measure with scripts/fork-profile.sh and raise FORK_BUDGET in $BUDGET_FILE by that measurement, as a one-line diff with the measurement in a comment above it."
     return
   fi
   # A4 stale-high
@@ -311,6 +334,7 @@ case "$VERDICT" in
   PASS)
     note "ok    A1 floor       -- $T1 forks is above the broken-subject floor of $FLOOR (the most a broken subject read this run)"
     note "ok    A3 ceiling     -- $T1 <= FORK_BUDGET=$BUDGET ($((BUDGET - T1)) of headroom, $NFX fixture dirs)"
+    note "ok    A3b spare      -- $((BUDGET - T1)) fork(s) to spare, at least the allowance of $HEADROOM_MARGIN"
     note "ok    A4 stale-high  -- $T1 is at least 70% of $BUDGET, so the ceiling is still reachable"
     note "ok    A5 wholeness   -- traced run exited $EX and reached line $MX, past the last arm header at $LA"
     ;;
@@ -490,6 +514,27 @@ case "$m14_v" in
   *) note "FAIL  m14 displaced -- equal readers with one displaced host produced: $m14_v"; rc=1 ;;
 esac
 
+# m15 -- A3b IS REACHABLE AND LOAD-BEARING AT THE COMMITTED BUDGET. A total one fork inside the
+# margin (`b - margin + 1`) passes A3 and must be refused by A3b alone. The same total with the
+# margin dropped must PASS: that is the proof that no other arm was holding the input back, and
+# that A3b is what made the first call red. A3b's window is `t > b - margin` and A4's is
+# `t*10 < b*7`; they are disjoint iff `b - margin >= b*7/10`, asserted here so a margin that
+# grows into A4's window fails the push rather than silently shadowing m8.
+M15_T="$((BUDGET - HEADROOM_MARGIN + 1))"
+if [ "$M15_T" -gt "$FLOOR" ] && [ "$M15_T" -le "$BUDGET" ] \
+   && [ "$((BUDGET - HEADROOM_MARGIN))" -ge "$((BUDGET * 7 / 10))" ]; then
+  kill_j "m15 A3b-headroom a total one fork inside the margin at the LIVE budget" RED "headroom" \
+         "$M15_T" "$EX" "$MX" "$LA" "$BUDGET"
+  m15_off="$(HEADROOM_MARGIN=0; judge "$M15_T" "$EX" "$MX" "$LA" "$BUDGET")"
+  if [ "$m15_off" != "PASS" ]; then
+    note "FAIL  m15 A3b-headroom -- with the margin dropped the same total produced '$m15_off', not PASS, so A3b is not what made it red"
+    rc=1
+  fi
+else
+  note "FAIL  m15 A3b-headroom -- total $M15_T (budget $BUDGET, margin $HEADROOM_MARGIN, floor $FLOOR) is not a reachable A3b input disjoint from A4's window"
+  rc=1
+fi
+
 # m10-m12 -- THE ASSIGNMENT CLASSIFIER IS LOAD-BEARING, IN BOTH DIRECTIONS. Each is a copy of
 # the profiler with `is_assign` changed one way, run `--probe-only` from a root that carries a
 # VERSION, and each must be refused by the ASSIGNMENT probe and by nothing else -- a refusal from
@@ -542,13 +587,13 @@ fi
 # reads when a refactor deletes the mutants -- two inert runs compare equal. The floor is the
 # count this file is known to carry; it rises with a new mutant and refuses a run that
 # silently lost one.
-EXPECTED_MUTANTS=15
+EXPECTED_MUTANTS=16
 if [ "$rc" -eq 0 ] && [ "$N_KILLED" -lt "$EXPECTED_MUTANTS" ]; then
   note "FAIL  validator-fork-budget -- only $N_KILLED of $EXPECTED_MUTANTS mutants were killed. A battery that lost a mutant reports the same green line as one that killed them all."
   rc=1
 fi
 
 if [ "$rc" -eq 0 ]; then
-  note "PASS  validator-fork-budget -- $T1 fork(s) of FORK_BUDGET=$BUDGET across $NFX fixture dirs; 6 arms green, $N_KILLED/$EXPECTED_MUTANTS mutants killed"
+  note "PASS  validator-fork-budget -- $T1 fork(s) of FORK_BUDGET=$BUDGET across $NFX fixture dirs; 7 arms green, $N_KILLED/$EXPECTED_MUTANTS mutants killed"
 fi
 exit "$rc"
