@@ -399,9 +399,11 @@ mutant "MX15 B4-by-document refuses every document" "b4doc b4doc_other" \
 mutant "XM1 one mode left single-cross" "b3 clean ceiling miss_ord miss_cross partition sha ms files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit xfiles xelicit xmix xunknown xcomplete tuid_main tuid_norow tuid_nometa tuid_selfdiff tuid_role tuid_twowriters tuid_oneagent tuid_nospawn tuid_session tuid_pre tuid_basename tuid_probemeta tuid_tworoles rerun_join rerun_other rerun_same rerun_role xdir probe_disagree probe_absent rerun_residual hdr draft dry dry_barrier tree tuid_call rerun_bind fence_prose fence_unclosed fence_tilde fence_four fence_nested" \
   'bash "$XPART" --cross-groups "$K" > "$T/groups" 2> "$T/groups.err"; grc=$?' \
   'bash "$XPART" --cross-groups "$( [ -n "$DOCUMENT" ] && echo "$K" || echo 2)" > "$T/groups" 2> "$T/groups.err"; grc=$?'
-# XM2: the owner rule off -- a finding two covering groups both report is summed twice. Only the
-# duplicate cell of X1-X3 seeds one.
-mutant "XM2 owner rule off (duplicate summed)" "xfiles xdoc xelicit" \
+# XM2: the owner rule off -- a finding two covering groups both report is summed twice. The
+# duplicate cell of X1-X3 seeds one. fence_sameset and fence_nested_set seed one too, by
+# construction: each builds cross-1/cross-2 shards carrying a duplicate of the owner shard's
+# finding, so their counts depend on the owner rule, and the two arms are killed here by design.
+mutant "XM2 owner rule off (duplicate summed)" "xfiles xdoc xelicit fence_sameset fence_nested_set" \
   '      if [ "$ownk" != "$key" ]; then' \
   '      if false; then'
 # XM7: the pre-v4 rule -- every finding outside its owner's shard refused, identical or not. The
