@@ -61,7 +61,8 @@
 #                blockers were RESOLVED after the render (the adjudication loop's own work). Still a
 #                refusal; apply.sh names the cause and the remedy is a re-render and re-approval.
 #
-# A RECORDED PASS IS ACCEPTED INSTEAD OF A RE-RENDER, AND ONLY ON A KEY THAT PINS EVERY RENDER INPUT.
+# A RECORDED PASS CAN BE ACCEPTED INSTEAD OF A RE-RENDER, ON A KEY COVERING THE INPUTS LISTED BELOW.
+# It does not cover every render input: further unkeyed inputs are known (see THE LIMITS).
 # One pull ran `--verify` three or four times on one tree (step 5, step 7 clause (1), step 7 after
 # resolving, `apply.sh`'s own gate), each a full detector re-render at 3-14 minutes: about 35 of a
 # 116-minute pull, measured from a graph pull transcript (BL-679). So an exit-0 `--verify` writes a
@@ -123,6 +124,10 @@
 # none of that is keyed. `AI_DLC_VERIFY_NO_CACHE=1` re-renders.
 # (3) Tool availability (`jq`, `python3`, PATH) is not keyed: a render that passed with a tool
 # present is accepted after the tool is gone. The opt-out re-renders in every case.
+# (4) Further inputs a fourth review found UNKEYED: assume-unchanged and skip-worktree flags; the
+# CONTENTS of a nested repository; a tracked symlink whose target lies outside the tree; diff
+# attributes from info/attributes, global or system attributes, and GIT_EXTERNAL_DIFF; and tool
+# versions. These are why the cache ships OFF by default.
 set -uo pipefail
 
 MODE=print
@@ -997,7 +1002,7 @@ er_cgit() {
   else git -C "$CONSUMER" -c core.quotePath=false -c core.fileMode=true "$@" -- .; fi
 }
 # er_hash_list <NUL-listfile> -- for each listed consumer path that exists (an entry ending `/` is a
-# nested repository git will not descend into, and is named by the status, not hashed): its exec bit
+# nested repository; it is skipped here, so its CONTENTS ARE NOT KEYED -- a known gap): its exec bit
 # and name, NUL-terminated, then the content hashes in the same order. THE LIST IS NUL-SEPARATED
 # because git C-quotes a name carrying `"`, `\`, a tab or a newline in line output, the quoted form
 # names no file, and the old `[ -e ] || continue` dropped its bytes from the key without a sound
@@ -1082,7 +1087,8 @@ er_kf_distrefs() {
 er_kf_consroot()  { printf '%s\0%s\0' "$_er_root" "$CONSUMER"; }
 er_kf_consindex() { git -C "$CONSUMER" ls-files -s -z; }
 # The status names every modified and untracked path; their BYTES are hashed after it. An untracked
-# entry ending in `/` is a nested repository git will not descend into: named, not hashed.
+# entry ending in `/` is a nested repository: its name is in the status, its CONTENTS ARE NOT KEYED
+# (a known gap, header limit (4)).
 er_kf_conswork() {
   er_cgit --no-optional-locks status --porcelain=v2 -z --untracked-files=all || return 1
   er_cgit ls-files -z -m -o --exclude-standard > "$_er_tmp/key.work" || return 1
