@@ -915,3 +915,16 @@ Owed: the stage is written whole or not at all. Write to a sibling temp file and
 
 verify: manual
 
+## BL-664 — `merge-adversarial-shards.sh --check-header` refuses a provenance region copied verbatim with its inline ` #` comments, while the schema and `validate-provenance-block.sh` strip them
+
+**DEFECT.** Found by batch 236's PROSE tip adversary.
+
+A shard built by copying a `provenance-block` region verbatim, inline ` #` comments kept, is refused by `merge-adversarial-shards.sh --check-header` ("does not declare integer findings_critical and findings_major"); with the comments stripped it passes. Measured on the elicitation axis and on the convergence axis (the adversary-pass region). The merge documents that it does not strip comments (`core/scripts/merge-adversarial-shards.sh` ~:250-254), while the schema's `parser.comments` (`core/schemas/provenance-block.json` ~:516) says a trailing ` #` comment is stripped, and `validate-provenance-block.sh` ~:536 applies that rule. So the merge's parser disagrees with its own schema.
+
+Graph's 988 shards carry 0 commented count lines, so writers strip in practice. The new "copy this region verbatim" sentence made a verbatim copy more likely.
+
+Fixed here by prose: both region instructions tell the shard to delete each trailing ` #` comment, and each sentence has a `process-rule-pins` row (`elic-header-strip`, `adv-header-strip`).
+
+Residual: the root fix is one comment-strip in the merge's own reader, `merge-adversarial-shards.sh` ~:371-374, after which the two prose sentences are redundant.
+
+verify: sh sh -c 'f=core/skills/ai-dlc/steps/_gate-procedures.md; d=$(mktemp -d) || exit 9; trap "rm -f \"$d/r.md\" \"$d/s.md\"; rmdir \"$d\"" EXIT; awk "/BEGIN GENERATED: provenance-block\/elicitation/{p=1;next} p&&/END GENERATED/{exit} p" "$f" > "$d/r.md" && [ -s "$d/r.md" ] && { sed -e "s/<ISO 8601 UTC, to the second>/2026-10-17T10:00:00Z/" -e "s/^tool_use_id: <[^>]*>/tool_use_id: NOT_ACCESSIBLE/" -e "s/<the step file that invoked or dispatched the evaluation>/steps\/requirements.md/" -e "s/<path of the artifact you reviewed>/x.md/" -e "s/<sha256 of that file, as you read it>/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/" -e "s/<int>/0/" "$d/r.md" | sed -e "s/[[:space:]]\{1,\}#[[:space:]].*\$//"; printf "\n## Findings\n\nseat-complete: elicitation findings=0\n"; } > "$d/s.md" && bash core/scripts/merge-adversarial-shards.sh --check-header "$d/s.md" --axis elicitation && tr "\n" " " < "$f" | grep -Eq "copies the region verbatim[, ]+(and )?then +(deletes|strips|removes)"'
