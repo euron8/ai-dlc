@@ -359,7 +359,26 @@ is_full_read() {
 FABS=""
 [ -n "$FPATH" ] && FABS="$(resolve "$FPATH")"
 
+# THE MARKER IS RE-TESTED AFTER THE STAGE READ, BECAUSE A CONCURRENT SATISFYING CALL CAN REMOVE
+# BOTH FILES BETWEEN THE FAST-PATH ABOVE AND THIS LINE (BL-658). A lead issued the snapshot Read,
+# the step Read and the digest Read together, as parallel calls, so three invocations of this hook
+# ran side by side. The digest Read's invocation passed the marker fast-path while recovery was still owed;
+# the step Read's invocation then satisfied the mandate and removed the marker and the progress
+# file; the digest Read's invocation read no progress file here, took the default `snapshot`, and
+# was DENIED with the first-call text -- a refusal made after both mandated Reads had succeeded,
+# which cost a turn and told the lead it had skipped a Read it had just made.
+#
+# AFTER THE READ, NOT BEFORE IT, AND THE ORDER OF THE SATISFYING CALL'S REMOVAL IS WHY. That call
+# removes the MARKER FIRST and the progress file second, so a marker still on disk after this read
+# proves the progress file had not been removed yet when it was read, and the stage is the real
+# one. A test placed above the read leaves the window open: the test passes, the satisfying call
+# removes both, and the read then defaults to `snapshot` exactly as before.
+#
+# THE MARKER, NOT THE PROGRESS FILE. A missing progress file with the marker present is the
+# GENUINE first call of a recovery, which must be refused; testing the progress file here would
+# wave that call through and the gate would never deny anything at stage one.
 STAGE="$(cat "$PROGRESS" 2>/dev/null || printf 'snapshot')"
+[ -f "$MARKER" ] || exit 0
 
 # PROVENANCE MARKER -- PC-S306-UNSOLICITED-CONTEXT-HAS-NO-PROVENANCE-SIGNAL. The
 # library is a SIBLING in both layouts (core/hooks/, .claude/hooks/), so this is a

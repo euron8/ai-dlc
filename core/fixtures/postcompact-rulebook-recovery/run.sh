@@ -1082,9 +1082,23 @@ mutant_arm "a gate that arms when the snapshot named no step file" "$MG_R0" "sta
 # own: it is a third ladder and its last call is refused too. The two `full_*` arms are NOT here,
 # and that is the discriminating part — a re-armed gate still refuses a bounded Read, so the
 # in-full test is untouched by this mutation.
+#
+# THE MARKER TEST IS TWO LINES, AND THIS MUTANT TAKES BOTH ON PURPOSE. The fast-path is the first;
+# the second re-tests the marker just after the stage read (BL-658, the race battery below owns
+# it). Both are arming preconditions on the same file. Kept, the second alone stands a markerless
+# call down -- the unset paths resolve to the readable project directory, the stage defaults, and
+# the re-test exits -- so `inert`, the three ladders and `standdown_missing` would stop flipping
+# and this arm would read as entangled on a correct gate. The count below holds the removal to
+# every copy of that line and refuses a mutant that left one behind.
 MG_WEDGE="$WORK/gate-no-standdown.sh"
 awk '!(index($0,"[ -f \"$MARKER\" ] || exit 0") || index($0,"[ \"$STEP_RESOLVED\" = \"1\" ] || exit 0") || index($0,"[ -n \"$SNAP_REL\" ] || exit 0") || index($0,"[ -n \"$STEP_REL\" ] || exit 0"))' "$GATE" > "$MG_WEDGE"
-mutant_arm "a gate with every arming precondition removed" "$MG_WEDGE" "inert ladder_abs ladder_rel ladder_consumer standdown_r0 standdown_missing legacy fastpath"
+_mw_n="$(grep -cF '[ -f "$MARKER" ] || exit 0' "$GATE")" || _mw_n=0
+_mw_m="$(grep -cF '[ -f "$MARKER" ] || exit 0' "$MG_WEDGE")" || _mw_m=0
+if [ "$_mw_n" -lt 1 ] || [ "$_mw_m" -ne 0 ]; then
+  bad "FIXTURE STALE: the every-precondition mutant left ${_mw_m} of ${_mw_n} marker tests in place"
+else
+  mutant_arm "a gate with every arming precondition removed" "$MG_WEDGE" "inert ladder_abs ladder_rel ladder_consumer standdown_r0 standdown_missing legacy fastpath"
+fi
 
 # --- Assertion 21: MUTANT — one spelling only --------------------------------
 # The call's path left unnormalised while the marker's stays resolved. The absolute ladder is
@@ -1121,9 +1135,22 @@ fi
 # `jq`, which sits below the stand-downs — and only `fastpath`
 # may notice. If this ever flips a second predicate, the line acquired a behavioural subject
 # and the comment in the gate claiming it is a pure fast-path has gone stale.
+#
+# ANCHORED ON WHAT SEPARATES THE FAST-PATH FROM THE SECOND MARKER TEST (BL-658): the two lines are
+# byte-identical, and only the fast-path is followed by the unindented `jq` lookup. Removing both
+# would also remove the race battery's subject and the arm would stop being about cost alone.
 MG_FAST="$WORK/gate-no-fastpath.sh"
-awk '!index($0,"[ -f \"$MARKER\" ] || exit 0")' "$GATE" > "$MG_FAST"
-mutant_arm "the marker fast-path deleted — the gate still works but parses on every call" "$MG_FAST" "fastpath"
+MG_FAST_AT='prev == ENVIRON["F"] && $0 == ENVIRON["J"] { print NR - 1 } { prev = $0 }'
+MG_FAST_F='[ -f "$MARKER" ] || exit 0'
+MG_FAST_J='command -v jq >/dev/null 2>&1 || exit 0'
+_mf_at="$(F="$MG_FAST_F" J="$MG_FAST_J" awk "$MG_FAST_AT" "$GATE")"
+case "$_mf_at" in
+  (''|*[!0-9]*) bad "FIXTURE STALE: the marker fast-path is not exactly one line directly above the jq lookup (found '${_mf_at}'), so its mutant has no subject" ;;
+  (*)
+    awk -v t="$_mf_at" 'NR != t' "$GATE" > "$MG_FAST"
+    mutant_arm "the marker fast-path deleted — the gate still works but parses on every call" "$MG_FAST" "fastpath"
+    ;;
+esac
 
 # --- Assertion 22: MUTANT — the gate replaced by a dead hook -----------------
 # THE CONTROL THE ALLOW-SHAPED ARMS REQUIRE. Four of the predicates pass when nothing fires, and
@@ -1946,6 +1973,207 @@ elif [ "$(a_net "$MR_NET")" = PASS ]; then
 else
   ok "mutant: a gate whose 10s ceiling denies an unseen call fails the net arm"
 fi
+
+# =============================================================================
+# THE SAME-MESSAGE RACE AT THE READ STAGES (BL-658)
+#
+# Measured on the reference consumer: a lead issued the snapshot Read, the step Read and the digest
+# Read together as parallel calls, both mandated Reads succeeded, and the digest Read was DENIED with the
+# stage-one text. Three invocations of the gate ran side by side. The third passed the marker
+# fast-path while recovery was owed; the second then satisfied the mandate and removed the marker
+# and the progress file; the third read no progress file, took the default stage, and refused.
+#
+# THE RACE IS FORCED, NEVER TIMED. A timed race passes on a quiet box and proves nothing. Each
+# variant is a copy of the WHOLE hooks directory whose gate carries one injected line doing what
+# the concurrent satisfying call does -- removing both files -- plus a sentinel write, at a fixed
+# point between the fast-path and the stage read. The world is armed by the real producer and
+# advanced to stage two by the REAL gate, so the variant judges only the third call.
+#
+# OUTSIDE PREDS ON PURPOSE. Every mutant above is re-scored on every PREDS member, and most of
+# them cannot carry the injection (the dead gate has no line to anchor on), so a race predicate
+# there would fail for a reason that has nothing to do with the race.
+#
+# FOUR SHAPES. R1 the injected shipped gate ALLOWS. R2 the genuine first call (marker, no progress)
+# is DENIED with the stage-one text -- the call a fix keyed on the progress file waves through.
+# R3 the injected line RAN: sentinel present, both files gone. And an uninjected copy of the same
+# world is denied with the stage-TWO text, so the allow in R1 belongs to the injection and the
+# re-test and not to a copy that went inert.
+# =============================================================================
+RACE_FABS='[ -n "$FPATH" ] && FABS="$(resolve "$FPATH")"'
+RACE_STAGE='STAGE="$(cat "$PROGRESS" 2>/dev/null || printf '"'"'snapshot'"'"')"'
+RACE_RETEST='[ -f "$MARKER" ] || exit 0'
+RACE_WRONG='[ -f "$PROGRESS" ] || exit 0'
+RACE_LINE='rm -f "$MARKER" "$PROGRESS" 2>/dev/null; : > "${STATE_DIR}/.race-injected"'
+RACE_SENT="_bmad-output/.race-injected"
+# What directly follows the stage read: yes (the re-test), no, or none (no stage read at all).
+RACE_AT='prev == ENVIRON["S"] { print (($0 == ENVIRON["R"]) ? "yes" : "no"); f = 1; exit } { prev = $0 } END { if (!f) print "none" }'
+# The two lines directly above the stage read, joined by a bar.
+RACE_ABOVE='$0 == ENVIRON["S"] { print p2 "|" p1; exit } { p2 = p1; p1 = $0 }'
+RACE_AFTER='{ print } $0 == ENVIRON["A"] { print ENVIRON["L"] }'
+RACE_BEFORE='$0 == ENVIRON["A"] { print ENVIRON["L"] } { print }'
+RACE_DROP='prev == ENVIRON["A"] && $0 == ENVIRON["L"] { prev = $0; next } { print; prev = $0 }'
+RACE_SWAP='prev == ENVIRON["A"] && $0 == ENVIRON["L"] { print ENVIRON["W"]; prev = $0; next } { print; prev = $0 }'
+
+_race_at="$(S="$RACE_STAGE" R="$RACE_RETEST" awk "$RACE_AT" "$GATE")"
+if [ "$_race_at" != yes ]; then
+  skip "race arms" "the gate does not re-test the marker directly after its stage read (found: ${_race_at}); this fixture ships one pull ahead of its subject"
+else
+
+race_dir() { # race_dir -> a fresh copy of the WHOLE hooks directory, or nothing when a sibling did not arrive
+  _rd="$(mktemp -d "$WORK/race.XXXXXX")" || return 0
+  _rs="$(dirname "$GATE")"
+  cp "$_rs"/*.sh "$_rd"/ 2>/dev/null
+  [ "$(ls "$_rs"/*.sh | wc -l)" -eq "$(ls "$_rd"/*.sh | wc -l)" ] || return 0
+  [ -f "$_rd/ai-dlc-recover-gate.sh" ] || return 0
+  printf '%s\n' "$_rd"
+}
+# race_edit <src> <out> <awk program> <anchor> <line> [W] -- refused unless the anchor is ONE whole
+# line, the output differs and it parses. The caller checks the shape it wanted.
+race_edit() {
+  [ "$(grep -cxF -- "$4" "$1")" -eq 1 ] || return 1
+  A="$4" L="$5" W="${6:-}" awk "$3" "$1" > "$2" || return 1
+  cmp -s "$1" "$2" && return 1
+  bash -n "$2" 2>/dev/null
+}
+# race_world <gate> -> project; the third Read's answer is in <project>/race.d
+race_world() {
+  _p="$(newproj architecture.md flat)"; arm_marker "$HOOK" "$_p"
+  gate_call "$GATE" "$_p" "$(jcall Read "$_p/_bmad-output/pipeline-snapshot.md")" >/dev/null
+  if [ "$(cat "$_p/$pg" 2>/dev/null)" = step ] && [ -e "$_p/$mk" ]; then
+    gate_call "$1" "$_p" "$(jcall Read "$_p/decoy.md")" > "$_p/race.d"
+  else
+    printf 'SEED\n' > "$_p/race.d"
+  fi
+  printf '%s\n' "$_p"
+}
+# race_first <gate> -> project; the genuine first call (marker present, no progress file yet)
+race_first() {
+  _p="$(newproj architecture.md flat)"; arm_marker "$HOOK" "$_p"
+  if [ -e "$_p/$mk" ] && [ ! -e "$_p/$pg" ]; then
+    gate_call "$1" "$_p" "$(jcall Read "$_p/decoy.md")" > "$_p/race.d"
+  else
+    printf 'SEED\n' > "$_p/race.d"
+  fi
+  printf '%s\n' "$_p"
+}
+race_read() { # race_read <project> -> seed | allow | first | second | other
+  _d="$(cat "$1/race.d" 2>/dev/null)"
+  case "$_d" in
+    (SEED|'') printf 'seed\n' ;;
+    ('|'*) printf 'allow\n' ;;
+    (*'FIRST tool call must be'*) printf 'first\n' ;;
+    (*'SECOND tool call must be'*) printf 'second\n' ;;
+    (*) printf 'other\n' ;;
+  esac
+}
+race_ran() { [ -e "$1/$RACE_SENT" ] && [ ! -e "$1/$mk" ] && [ ! -e "$1/$pg" ]; }
+
+RG=ai-dlc-recover-gate.sh
+RD_IN="$(race_dir)"; RD_CTL="$(race_dir)"; RD_PRE="$(race_dir)"
+RD_M1="$(race_dir)"; RD_M2="$(race_dir)"; RD_M3="$(race_dir)"
+if [ -z "$RD_IN" ] || [ -z "$RD_CTL" ] || [ -z "$RD_PRE" ] || [ -z "$RD_M1" ] || [ -z "$RD_M2" ] || [ -z "$RD_M3" ]; then
+  bad "FIXTURE BROKEN: a whole-directory copy of the hooks did not carry every sibling, so no race variant below is evidence"
+else
+  # The shipped gate, the removal injected directly after the call-path normalisation.
+  race_edit "$GATE" "$RD_IN/$RG" "$RACE_AFTER" "$RACE_FABS" "$RACE_LINE" \
+    && [ "$(S="$RACE_STAGE" R="$RACE_RETEST" awk "$RACE_AT" "$RD_IN/$RG")" = yes ] || RD_IN=""
+  # M2 twin: the shipped gate, the removal injected directly above the stage read.
+  race_edit "$GATE" "$RD_PRE/$RG" "$RACE_BEFORE" "$RACE_STAGE" "$RACE_LINE" \
+    && [ "$(S="$RACE_STAGE" awk "$RACE_ABOVE" "$RD_PRE/$RG" | sed 's/^.*|//')" = "$RACE_LINE" ] || RD_PRE=""
+  # M1: the re-test removed, then the same injection as RD_IN.
+  race_edit "$GATE" "$RD_M1/m.step1" "$RACE_DROP" "$RACE_STAGE" "$RACE_RETEST" \
+    && race_edit "$RD_M1/m.step1" "$RD_M1/$RG" "$RACE_AFTER" "$RACE_FABS" "$RACE_LINE" \
+    && [ "$(S="$RACE_STAGE" R="$RACE_RETEST" awk "$RACE_AT" "$RD_M1/$RG")" = no ] || RD_M1=""
+  # M2: the re-test moved directly ABOVE the stage read, and the removal injected between the two.
+  race_edit "$GATE" "$RD_M2/m.step1" "$RACE_DROP" "$RACE_STAGE" "$RACE_RETEST" \
+    && race_edit "$RD_M2/m.step1" "$RD_M2/m.step2" "$RACE_BEFORE" "$RACE_STAGE" "$RACE_RETEST" \
+    && race_edit "$RD_M2/m.step2" "$RD_M2/$RG" "$RACE_BEFORE" "$RACE_STAGE" "$RACE_LINE" \
+    && [ "$(S="$RACE_STAGE" awk "$RACE_ABOVE" "$RD_M2/$RG")" = "${RACE_RETEST}|${RACE_LINE}" ] \
+    && [ "$(S="$RACE_STAGE" R="$RACE_RETEST" awk "$RACE_AT" "$RD_M2/$RG")" = no ] || RD_M2=""
+  # M3: the re-test keyed on the progress file instead of the marker. No injection: its subject is R2.
+  race_edit "$GATE" "$RD_M3/$RG" "$RACE_SWAP" "$RACE_STAGE" "$RACE_RETEST" "$RACE_WRONG" \
+    && [ "$(S="$RACE_STAGE" R="$RACE_WRONG" awk "$RACE_AT" "$RD_M3/$RG")" = yes ] || RD_M3=""
+  cmp -s "$GATE" "$RD_CTL/$RG" || RD_CTL=""
+
+  # R1 and R3, one world.
+  if [ -z "$RD_IN" ]; then
+    bad "FIXTURE STALE: R1 — the removal could not be injected after the call-path normalisation, so the race has no forcing point"
+  else
+    _rp="$(race_world "$RD_IN/$RG")"; _rv="$(race_read "$_rp")"
+    if race_ran "$_rp"; then ok "race R3: the injected removal ran — sentinel written, marker and progress file gone"
+    else bad "race R3: the injected removal did not run, so R1 measures the ordinary stage-two world (answer: ${_rv})"; fi
+    if [ "$_rv" = allow ]; then ok "race R1: the satisfying call removed both files mid-call, and the third Read is ALLOWED"
+    else bad "race R1: the satisfying call removed both files mid-call, and the third Read got '${_rv}' instead of an allow"; fi
+  fi
+  # The uninjected copy: the same world is refused at stage TWO, so the copy is live.
+  if [ -z "$RD_CTL" ]; then
+    bad "FIXTURE BROKEN: the uninjected race copy differs from the gate"
+  else
+    _rp="$(race_world "$RD_CTL/$RG")"; _rv="$(race_read "$_rp")"
+    if [ "$_rv" = second ] && [ ! -e "$_rp/$RACE_SENT" ]; then ok "race control: an uninjected copy refuses the same third Read with the stage-two text"
+    else bad "race control: an uninjected copy answered '${_rv}' where the stage-two deny was expected, so the race variants are not evidence"; fi
+  fi
+  # R2, against the shipped gate.
+  _rv="$(race_read "$(race_first "$GATE")")"
+  if [ "$_rv" = first ]; then ok "race R2: the genuine first call (marker present, no progress file) is DENIED with the stage-one text"
+  else bad "race R2: the genuine first call answered '${_rv}' where the stage-one deny was expected"; fi
+
+  # M1, the pre-fix gate: R1 flips to the stage-one deny, the injection still ran, R2 holds.
+  if [ -z "$RD_M1" ]; then bad "FIXTURE STALE: M1 — the re-test could not be removed from directly after the stage read"
+  else
+    _rp="$(race_world "$RD_M1/$RG")"; _rv="$(race_read "$_rp")"; _r2="$(race_read "$(race_first "$RD_M1/$RG")")"
+    if [ "$_rv" = first ] && race_ran "$_rp" && [ "$_r2" = first ]; then ok "mutant: re-test removed — the raced third Read is refused with the stage-one text, and only R1 flips"
+    else bad "mutant: re-test removed — expected R1 'first' with the injection run and R2 'first', measured R1 '${_rv}' R2 '${_r2}'"; fi
+  fi
+  # M2: the re-test above the stage read leaves the window open. Its twin, the shipped gate with
+  # the removal at the same point, still allows.
+  if [ -z "$RD_M2" ] || [ -z "$RD_PRE" ]; then bad "FIXTURE STALE: M2 — the misplaced re-test or its twin could not be built around the stage read"
+  else
+    _rp="$(race_world "$RD_M2/$RG")"; _rv="$(race_read "$_rp")"; _r2="$(race_read "$(race_first "$RD_M2/$RG")")"
+    _tp="$(race_world "$RD_PRE/$RG")"; _tv="$(race_read "$_tp")"
+    if [ "$_rv" = first ] && race_ran "$_rp" && [ "$_r2" = first ] && [ "$_tv" = allow ] && race_ran "$_tp"; then
+      ok "mutant: re-test placed BEFORE the stage read — the removal between them is refused with the stage-one text, while the shipped gate allows at the same point"
+    else bad "mutant: re-test placed BEFORE the stage read — expected 'first' against a twin 'allow', measured '${_rv}' (R2 '${_r2}') against twin '${_tv}'"; fi
+  fi
+  # M3: the re-test keyed on the progress file. R1 still allows; R2 is waved through.
+  if [ -z "$RD_M3" ]; then bad "FIXTURE STALE: M3 — the re-test could not be rekeyed on the progress file"
+  else
+    _rv="$(race_read "$(race_first "$RD_M3/$RG")")"
+    _r1="$(race_read "$(race_world "$RD_M3/$RG")")"
+    if [ "$_rv" = allow ] && [ "$_r1" = second ]; then ok "mutant: re-test keyed on the progress file — the genuine first call is waved through, and only R2 flips"
+    else bad "mutant: re-test keyed on the progress file — expected R2 'allow' and the uninjected world 'second', measured R2 '${_rv}' world '${_r1}'"; fi
+  fi
+
+  # THE REMOVAL ORDER (BL-658). The fix holds only because the satisfying Read removes the MARKER
+  # before the PROGRESS file: a concurrent call that sees the marker gone exits at the re-test, one
+  # that sees the progress file gone but the marker present would take the default stage. Every
+  # injection above supplies its OWN removal, so nothing above binds the shipped line's operand
+  # order. This arm reads the line itself, whole-line and exact, and the mutant swaps its operands
+  # in a copy of the whole hooks directory.
+  RACE_RM='        rm -f "$MARKER" "$PROGRESS" 2>/dev/null || true'
+  RACE_RMSW='        rm -f "$PROGRESS" "$MARKER" 2>/dev/null || true'
+  RACE_RMNONE='        rm -f "$MARKER" "$PROGRESS" 2>/dev/null || true # impossible-anchor-bl658-zz'
+  RACE_REPL='$0 == ENVIRON["A"] { print ENVIRON["W"]; next } { print }'
+  race_rm_order() { printf '%s|%s\n' "$(grep -cxF -- "$RACE_RM" "$1")" "$(grep -cxF -- "$RACE_RMSW" "$1")"; }
+  _ro="$(race_rm_order "$GATE")"; _rc="$(grep -cxF -- "$RACE_RMNONE" "$GATE")"
+  if [ "$_ro" = "1|0" ] && [ "$_rc" = 0 ]; then
+    ok "race order: the satisfying Read removes the marker BEFORE the progress file (exact line 1, swapped spelling 0, impossible-anchor control 0)"
+  else bad "race order: expected exact line 1 and swapped spelling 0 with control 0, measured ${_ro} with control '${_rc}' in ${GATE}"; fi
+  RD_M4="$(race_dir)"
+  if [ -z "$RD_M4" ]; then bad "FIXTURE BROKEN: a whole-directory copy of the hooks did not carry every sibling, so the order mutant below is not evidence"
+  else
+    race_edit "$GATE" "$RD_M4/$RG" "$RACE_REPL" "$RACE_RM" "" "$RACE_RMSW" \
+      && [ "$(race_rm_order "$RD_M4/$RG")" = "0|1" ] || RD_M4=""
+    if [ -z "$RD_M4" ]; then bad "FIXTURE STALE: M4 — the removal operands could not be swapped on the whole-line anchor"
+    else
+      _mo="$(race_rm_order "$RD_M4/$RG")"
+      if [ "$_mo" = "0|1" ] && [ "$_mo" != "$_ro" ]; then ok "mutant: removal operands swapped (progress file first) — the order arm reports exact 0 and swapped 1 against 1 and 0 unmutated"
+      else bad "mutant: removal operands swapped — the order arm measured ${_mo} against ${_ro} unmutated, so it cannot tell the order"; fi
+    fi
+  fi
+fi
+
+fi  # race subject present
 
 fi  # GATE present
 

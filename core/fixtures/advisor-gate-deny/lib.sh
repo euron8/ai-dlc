@@ -16,6 +16,12 @@
 #                `cd <d> && git push`, `timeout 600 git push` -> DENY
 #   REASON       that deny names its remedy: "call the advisor in a message of its own, read its
 #                answer, then retry the same command" (the one shape that never races; REREAD)
+#   MCPCONSULT   a GRANTED agent whose transcript holds a completed `mcp__advisor__consult` (call and
+#                result, then a bare tool_use with no result) and no built-in attempt -> DENY, and the
+#                reason names the built-in advisor tool and says the MCP consult does not clear (two
+#                cells, one phrase each); twin: the same MCP consult followed by a built-in `advisor`
+#                attempt -> SILENT. The operator's instructions prefer the built-in advisor wherever
+#                it is held, so the MCP tool is never an attempt for an agent that has the grant
 #   NOGRANT      the same push with the grant line absent -> SILENT; a teammate whose own file has
 #                no grant while its parent's does -> SILENT
 #   WITHDRAWN    grant then `available:false` -> SILENT; twin: withdrawn then re-granted -> DENY
@@ -305,6 +311,14 @@ mk "$P1/par/subagents/agent-a12.jsonl" "$GRANT" "$WV" "$(tr_ w1 false ok)" "$UTX
 mk "$P1/par/subagents/agent-a13.jsonl" "$GRANT" "$WV" "$(tr_ w1 false ok)" "$UHUMAN"
 mk "$P1/par/subagents/agent-a14.jsonl" "$GRANT" "$WV" "$(tr_ w1 false ok)" "$UPEER"
 mk "$P1/q.jsonl"        "$GRANT"
+# MCPCONSULT worlds. The MCP consult's own result is on disk in mcp-done, so the only property that
+# separates it from a built-in attempt is the tool NAME; mcp-bare has the call and no result; mcp-adv
+# is mcp-done plus a built-in attempt, the twin one property apart.
+MCPU="$(tu mc1 mcp__advisor__consult '{"question":"review the plan"}')"
+MCPR="$(tr_ mc1 false 'advice: proceed')"
+mk "$P1/mcp-done.jsonl" "$GRANT" "$USER" "$MCPU" "$MCPR"
+mk "$P1/mcp-bare.jsonl" "$GRANT" "$USER" "$MCPU"
+mk "$P1/mcp-adv.jsonl"  "$GRANT" "$USER" "$MCPU" "$MCPR" "$ADV" "$OKRES"
 mkdir -p "$P1/q/subagents"
 # WINDOW worlds. Real assistant lines carry `message.id`, and one message spans several lines; these
 # helpers stamp it, so a turn is a message and not a line. Every push after the advisor SHIPPED, so
@@ -334,6 +348,7 @@ printf '%s' "$_wo" >> "$P1/win-out.jsonl"
 _wt="$(jq -r '.message.id? // empty' "$P1/win-out.jsonl" | sort -u | grep -c .)" || _wt=0
 [ "$_wt" -eq 11 ] || { echo "FIXTURE BROKEN: WINDOW-OUT holds $_wt assistant turns (want 11)" >&2; exit 2; }
 for _f in g none off regrant pa ap err unav rearm denied pushed deniedarr ran ranfull okenv apok apm amp ap1 ac par q \
+          mcp-done mcp-bare mcp-adv \
           win-in win-out \
           f404 fmergeok fmergedel fmerge404 f141 fdots fforced frej fsafe fhook fred fokref fokutd \
           par/subagents/agent-a7 par/subagents/agent-a9 par/subagents/agent-a10 par/subagents/agent-a11 par/subagents/agent-a12 \
@@ -378,6 +393,14 @@ for x in 'git push -u origin HEAD' "git -C $SPRINT push origin HEAD:refs/heads/r
   B PUSH DENY "$x"
 done
 cell REASON DENY 'R:call the advisor in a message of its own, read its answer, then retry the same command' - "$(bash_in "$P1/g.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+
+# MCPCONSULT: the built-in advisor is the only attempt for a granted agent. m-deny and the two reason
+# cells share one world, so the mutant that drops the clause fails exactly the two reason cells.
+ct MCPCONSULT DENY m-deny "$(bash_in "$P1/mcp-done.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+cell MCPCONSULT DENY 'R:call the built-in advisor tool itself' m-reason-builtin "$(bash_in "$P1/mcp-done.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+cell MCPCONSULT DENY 'R:a call to mcp__advisor__consult does not clear this gate' m-reason-mcp "$(bash_in "$P1/mcp-done.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+ct MCPCONSULT DENY m-bare "$(bash_in "$P1/mcp-bare.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+ct MCPCONSULT SILENT m-twin-adv "$(bash_in "$P1/mcp-adv.jsonl" "$SPRINT" 'git push -u origin HEAD')"
 
 c NOGRANT SILENT "$(bash_in "$P1/none.jsonl" "$SPRINT" 'git push -u origin HEAD')"
 c NOGRANT SILENT "$(write_in "$P1/par.jsonl" "$VERDICT" a4)"

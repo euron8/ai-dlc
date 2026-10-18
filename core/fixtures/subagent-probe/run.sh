@@ -15,6 +15,9 @@ trap 'rm -rf "$WORK"' EXIT
 # The REQUIRED input of inputs.decl: every fire() below pipes into this hook, and seed.sh has
 # already resolved it into $HOOK, so this is the point the declaration is consumed.
 echo "HERMETIC-CONSUMED core/hooks/ai-dlc-subagent-probe.sh"
+# The hook sources its per-turn token def from this sibling and writes NO ROW without it, so
+# every row asserted below is the point this second declaration is consumed.
+echo "HERMETIC-CONSUMED core/hooks/ai-dlc-usage-tokens.sh"
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
@@ -218,6 +221,62 @@ chk "a negative duration is never recorded (end_ts before start_ts)" \
   "$(raw .duration_s)" "null"
 chk "  and the row is still written -- the teammate is not dropped for it" \
   "$(last .peak_tokens)" "64000"
+
+# --- 4d. AN ADVISOR TURN IS READ AT ITS LAST `message` ITERATION -------------------
+# The top level of an advisor turn sums its API iterations, so a max over top-level readings
+# takes that turn at roughly double its real context. The seeds give every wrong rule its own
+# number (see seed.sh): 140000 is the only answer the shared `ctx_tokens` def produces.
+reset
+fire "$PROJ" advisor.jsonl >/dev/null
+chk "P1 an advisor turn counts at its LAST message iteration (140000), not its top-level sum (240000), not its first (which lets the 120000 turn win)" \
+  "$(last .peak_tokens)" "140000"
+# P2 is the CONTROL: a transcript with no iterations anywhere reads exactly what it read before
+# the shared def existed. SEED CONTROL first, so the arm cannot pass on a seed that grew some.
+chk "P2 CONTROL: the calm seed carries no iterations" "$(grep -c iterations "$WORKDIR/calm.jsonl")" "0"
+reset
+fire "$PROJ" calm.jsonl >/dev/null
+chk "P2 a transcript with no iterations keeps its top-level peak (60000)" "$(last .peak_tokens)" "60000"
+reset
+fire "$PROJ" advisor-nomsg.jsonl >/dev/null
+chk "P3 an advisor turn with no message-type iteration falls back to its top level (90000)" \
+  "$(last .peak_tokens)" "90000"
+
+# MUTANTS of the shared def. P1 is presence-shaped, but a library copy that the hook could not
+# source writes no row and would fail P1 for the WRONG reason, so each mutant carries a positive
+# ran-control: P2 must still pass on it. Built in a copy of the hook's WHOLE directory (the hook
+# resolves the library as its own sibling), the library asserted present in the copy, and `cmp
+# -s` refuses a sed that matched nothing.
+#   M1  the two iteration lines deleted -> the old top-level sum. P1 reads 240000.
+#   M2  `last` replaced by `first`      -> the advisor turn reads 100000 and the 120000 turn wins.
+HOOKDIR="$(dirname "$HOOK")"
+USAGELIB="$HOOKDIR/ai-dlc-usage-tokens.sh"
+mkmut() { # <name> <sed args...> -> prints the mutant hook path, or nothing
+  _mm_d="$WORKDIR/mut-$1"; shift
+  mkdir -p "$_mm_d"
+  cp "$HOOKDIR"/*.sh "$_mm_d/" 2>/dev/null
+  [ -f "$_mm_d/ai-dlc-usage-tokens.sh" ] && [ -f "$_mm_d/$(basename "$HOOK")" ] || return 1
+  sed "$@" "$USAGELIB" > "$_mm_d/ai-dlc-usage-tokens.sh" || return 1
+  cmp -s "$USAGELIB" "$_mm_d/ai-dlc-usage-tokens.sh" && return 1
+  printf '%s' "$_mm_d/$(basename "$HOOK")"
+}
+mutfire() { # <mutant hook> <seed> -> that run's peak_tokens
+  _mf_h="$HOOK"; HOOK="$1"; reset; fire "$PROJ" "$2" >/dev/null 2>&1; HOOK="$_mf_h"; last .peak_tokens
+}
+M1="$(mkmut m1 -e '/^  | (\[ \.iterations\[\]? | select(\.type == "message") \] | last) as \$lastmsg$/d' \
+               -e '/^  | (\$lastmsg \/\/ \.)$/d')"
+if [ -z "$M1" ] || [ "$(grep -c lastmsg "$(dirname "$M1")/ai-dlc-usage-tokens.sh")" != 0 ]; then
+  bad "M1 top-level-sum mutant applied (the sed did not remove both iteration lines)"
+else
+  chk "M1 ran-control: with the top-level sum restored P2 still reads 60000" "$(mutfire "$M1" calm.jsonl)" "60000"
+  chk "M1 with the top-level sum restored P1 reads the advisor turn at 240000" "$(mutfire "$M1" advisor.jsonl)" "240000"
+fi
+M2="$(mkmut m2 -e 's/| last) as \$lastmsg$/| first) as $lastmsg/')"
+if [ -z "$M2" ]; then
+  bad "M2 first-iteration mutant applied (the sed matched nothing)"
+else
+  chk "M2 ran-control: with first in place of last P2 still reads 60000" "$(mutfire "$M2" calm.jsonl)" "60000"
+  chk "M2 with first in place of last the 120000 non-advisor turn wins P1" "$(mutfire "$M2" advisor.jsonl)" "120000"
+fi
 
 # --- 5. silence cases --------------------------------------------------------
 reset

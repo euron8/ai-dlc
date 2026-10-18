@@ -29,7 +29,7 @@
 #        nothing, 1 = an assertion failed, 2 = fixture broken.
 SHARDS="a b c d e"
 # A ratchet, raised when a mutant is added: lowering it is a visible edit, a lost mutant is not.
-MIN_MUTANTS=99
+MIN_MUTANTS=100
 set -uo pipefail
 
 # The pre-push gate exports AI_DLC_* tunables; none is read here, but scrub them all the same.
@@ -144,11 +144,11 @@ CTL="$(score "$MUT/hook-control.sh" "$W/failed.control")"
 # Expected sets are C-locale sorted, which is what score() prints.
 # 1. the whole subject replaced by silence: every arm holding a DENY, WARN or stderr cell fails.
 #    ENVELOPE holds only SILENT cells since batch 208 and survives it; FAILED and REREAD hold DENY cells.
-mut silence "BASHC BMADONLY BODY CLOSE DENIED DETACHED FAILED FAILOPEN GATELOG GHREPO HDRONLY MATE MATEABSENT MATEPATH MATEREWRITE MCPNAME MERGE NOVERIFY ORDER PATHGIT PERKIND PUSH QUOTEDALT QUOTEDC QUOTEDENV REARM REASON REDISPATCH REREAD SELF SELFLAST STACK TWRITE UNAV UPDATE UPDATECUT UPDATEREF WINDOW WITHDRAWN WRAP" -e '2i\
+mut silence "BASHC BMADONLY BODY CLOSE DENIED DETACHED FAILED FAILOPEN GATELOG GHREPO HDRONLY MATE MATEABSENT MATEPATH MATEREWRITE MCPCONSULT MCPNAME MERGE NOVERIFY ORDER PATHGIT PERKIND PUSH QUOTEDALT QUOTEDC QUOTEDENV REARM REASON REDISPATCH REREAD SELF SELFLAST STACK TWRITE UNAV UPDATE UPDATECUT UPDATEREF WINDOW WITHDRAWN WRAP" -e '2i\
 exit 0'
 # 2. warn-only: the rejected design, the same text as context with no decision.
 #    UNAV survives it by design: the warn path is its own emission and this mutant leaves it intact.
-mut warn-only "BASHC BMADONLY BODY CLOSE DENIED DETACHED FAILED GATELOG GHREPO HDRONLY MATE MATEPATH MATEREWRITE MCPNAME MERGE NOVERIFY ORDER PATHGIT PERKIND PUSH QUOTEDALT QUOTEDC QUOTEDENV REARM REASON REDISPATCH REREAD SELF SELFLAST STACK TWRITE UPDATE UPDATECUT UPDATEREF WINDOW WITHDRAWN WRAP" \
+mut warn-only "BASHC BMADONLY BODY CLOSE DENIED DETACHED FAILED GATELOG GHREPO HDRONLY MATE MATEPATH MATEREWRITE MCPCONSULT MCPNAME MERGE NOVERIFY ORDER PATHGIT PERKIND PUSH QUOTEDALT QUOTEDC QUOTEDENV REARM REASON REDISPATCH REREAD SELF SELFLAST STACK TWRITE UPDATE UPDATECUT UPDATEREF WINDOW WITHDRAWN WRAP" \
   -e 's/permissionDecision: "deny", permissionDecisionReason: \$m/additionalContext: $m/'
 # 3. no grant test: a hook with a knob-free default of ON.
 #    NOVERIFY is in the set because cell nv-updater carries NO advisor grant on purpose, so that only
@@ -398,6 +398,11 @@ NET_CELLS=0
 # the net fails open on the default knob even when the call IS seen: a default that never denies an
 # unseen-then-seen race. Killed on rr-seen, the one default-knob DENY cell.
 mutc net-ignores-seen "REREAD" "REREAD:rr-seen" -e 's/^if \[ "\$_net" = 1 \] && \[ "\${SEEN:-0}" != 1 \]; then$/if [ "$_net" = 1 ] \&\& [ "${SEEN:-0}" = 1 ]; then/'
+
+# the deny text loses the clause naming the built-in advisor and saying the MCP consult does not
+# clear. The verdict is unchanged (m-deny stays DENY), so only the two reason cells, which demand
+# one phrase each, can see it.
+mutc mcp-clause-removed "MCPCONSULT" "MCPCONSULT:m-reason-builtin MCPCONSULT:m-reason-mcp" -e 's/ This agent holds the built-in advisor tool, so call the built-in advisor tool itself; a call to mcp__advisor__consult does not clear this gate\.//'
 
 # Every mutant dealt to this shard must have RUN, and every one that ran must have died exactly.
 [ "$n_seen" -eq "$nmine" ] || bad "[J1] shard '$GROUP' reached $n_seen mutants, $nmine dealt -- a dealt mutant never ran"

@@ -20,6 +20,93 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.826.0] - 2026-10-18
+
+Batch 236, HOOKS release (ai-dlc-b9's). Closes BL-601, BL-638 and BL-648; BL-658 lands PARTIAL. Files BL-666
+(NOTE) and BL-671, which closes in this release as no-defect by the harness. No `PC-` id. Net for this release:
+4 closed (BL-601, BL-638, BL-648, BL-671), 2 filed (BL-666, BL-671), so +2 off the live set.
+
+### A teammate's Read of the handoff step no longer arms the lead's marker (BL-601)
+
+- `ai-dlc-handoff-entry.sh` (PostToolUse on Read) exits when the payload carries `agent_id`. The exit sits after
+  the path match and BEFORE the `.recover-satisfied` breadcrumb block, so a teammate's Read neither writes
+  `.handoff-in-progress` nor consumes the lead's breadcrumb. A `claude --agent` lead, which carries `agent_type`
+  and no `agent_id`, still arms.
+- Premise measured on CC 2.1.302 with logging Pre- and PostToolUse hooks: a subagent's PostToolUse Read payload
+  carries `agent_id` and `agent_type`, and the lead's carries neither key. PreToolUse was the control.
+- `handoff-completion-assertion`: arms A1 (teammate, no marker), A2 (lead twin, marker), A2b (`agent_type` only,
+  marker) and A3 (teammate with a breadcrumb on disk, breadcrumb survives); mutants exit-removed, exit below the
+  breadcrumb, and keyed on `agent_type`, each killed by exactly its own arm.
+
+### A granted agent's advisor deny names the built-in tool (BL-648)
+
+- The deny text gains one clause: this agent holds the built-in `advisor` tool, so call that tool; a call to
+  `mcp__advisor__consult` does not clear the gate. The existing pinned phrase is unchanged and `scan()` is
+  untouched.
+- The entry offered counting the MCP consult as an attempt instead. That was not taken: the operator-home gate's
+  recorded ruling counts the MCP consult only when no grant is held, because the operator's instructions prefer
+  the built-in advisor wherever it is held.
+- `advisor-gate-deny`: the MCPCONSULT arm (a completed MCP consult then a push denies, with both reason phrases
+  as cells; a bare call denies; a built-in attempt alongside it allows). Mutant `mcp-clause-removed` is killed by
+  exactly MCPCONSULT on its two reason cells. Two of those cells first shipped with six arguments to a
+  five-argument `cell()`, which dropped their payload; the slot run caught it and the fix is in this release.
+
+### The recover gate re-tests its marker after the stage read (BL-658, PARTIAL)
+
+- `ai-dlc-recover-gate.sh` adds `[ -f "$MARKER" ] || exit 0` directly after `STAGE="$(cat "$PROGRESS" ...)"`.
+  The satisfying Read removes the marker before the progress file, so a marker still present after the read
+  proves the stage it read was intact; a test placed before the read would leave the window open.
+- `postcompact-rulebook-recovery` forces the race rather than timing it: copies of the whole hooks directory inject
+  the removal between the two reads. R1 allows the raced third Read, R2 still denies a genuine first call, R3
+  proves the injection ran. Mutants: re-test removed (M1), re-test before the read (M2), re-test keyed on the
+  progress file (M3, which waves the genuine first call through). A structural arm binds the removal order (the
+  exact line once, the swapped spelling never) with an operand-swap mutant (M4), because every behavioural arm
+  injects its own removal and would accept a swapped one.
+- Open: a third call that finishes its stage read and re-test before the satisfying call removes the files still
+  enters stage `step` and denies with the stage-two text. Closing that needs the stage held atomically.
+
+### One context-token definition for the sensor and the subagent probe (BL-638)
+
+- New sourced library `core/hooks/ai-dlc-usage-tokens.sh` sets `CTX_TOKENS_DEF`, a jq `def ctx_tokens:` taking a
+  turn's last `type: "message"` iteration, else its top-level usage. `ai-dlc-context-sensor.sh` and
+  `ai-dlc-subagent-probe.sh` both source it, with no inline fallback; a missing library exits 0 without a row.
+  The probe's `peak_tokens` no longer counts an advisor turn's summed iterations.
+- `subagent-probe`: P1 (an advisor turn records the true peak, 140000, where the top level reads 240000), P2 (no
+  iterations: the figure it records today) and P3 (no `message` iteration: the top level); mutants top-level sum
+  and `first` instead of `last`.
+- `context-sensor` and `context-provenance` copy the library beside every single-file sensor copy in their
+  mutants; MUTI is re-anchored inside the library.
+- Read-set map: `subagent-probe`, `whole-read-pool`, `context-sensor` and `context-provenance` re-traced with the
+  sandbox tracer, each now naming the library once. `context-provenance` drops from 24 rows to 10, losing 12
+  `.git/` rows and `.gitignore` from an earlier trace. This is not a lost read: the pre-push hook strips `.git/`
+  rows before keying (BL-644's class), so they never keyed anything, and nothing that fixture or its hooks run
+  calls git. `subagent-probe` loses its `.git/` rows the same way.
+- `FORK_BUDGET` 3459 -> 3465. `validate-enforcement-map.sh` read 3455 forks at 51ea279f and 3461 on this release,
+  measured with `scripts/fork-profile.sh`; by arm I84 +2, I14 +2, I83 +1, I13 +1, each iterating the files in
+  `core/hooks/`. The budget is the high reading plus the +4 margin both earlier raises took.
+
+### Filed
+
+- BL-666 (NOTE): the recover gate's stage write truncates before it writes, so a concurrent call can read an empty
+  stage and reset the recovery to `snapshot`.
+- BL-671 (NOTE, closed here): `ai-dlc-answer-capture.sh` touches the project-wide pause flag with no `agent_id`
+  test. Measured on CC 2.1.302: a `general-purpose` subagent has no `AskUserQuestion` (the interactive lead, the
+  control, does), and `render-agent-definitions.sh` grants no `tools:` key, so no shipped spawn path reaches it. A
+  consumer's own agent definition listing the tool is named as the unmeasured residual.
+
+### Limits
+
+- Slot measurements at 41d22607 and 256f0dfc: `handoff-completion-assertion`, `postcompact-rulebook-recovery`,
+  `subagent-probe`, `context-sensor`, `context-provenance`, `advisor-gate-deny` and its five mutant shards all PASS.
+  Each receipt was scored on whole-tree copies with one edit, through `eval` as `backlog-reverify.sh` runs it: the
+  fix 0, two or three regressions non-zero, a second correct spelling 0, and 9 with no hook present.
+- BL-658's receipt stays `manual` while the entry is PARTIAL.
+- The LANDED and PARTIAL lines name `256f0dfc`, the slot-measured tip. One comment-only commit followed it,
+  `c0042914`: the BL-648 header paragraph had cited `docs/backlog.archive.md`, which `install.sh` does not ship, and
+  `validate-no-dead-doc-refs.sh` refused it. The citation is dropped and the sentence kept; this release's dress
+  rehearsal covers that commit.
+
+
 ## [0.825.0] - 2026-10-18
 
 Batch 236 (ai-dlc-48's release). Closes BL-665 and discharges

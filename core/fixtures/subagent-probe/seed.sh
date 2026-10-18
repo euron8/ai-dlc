@@ -168,6 +168,38 @@ fi
                            cache_read_input_tokens:63000}}}'
 } > "$WORK/backwards.jsonl"
 
+# AN ADVISOR TURN, IN THE SHAPE CLAUDE CODE WRITES IT. The top level of an advisor turn SUMS its
+# `message` iterations, and the context is the LAST `message` iteration. Every reading a wrong
+# rule could take here is a DIFFERENT number, so a failure names the rule that was used:
+#   the advisor turn's LAST `message`              140000   <- the true peak
+#   the advisor turn's top level (the old sum)     240000   <- top-level reading
+#   a non-advisor turn sitting between first/last  120000   <- what a `first` reading lets win
+#   the advisor turn's FIRST `message`             100000
+#   the advisor's own `advisor_message`            300000   <- max over all iterations
+# The non-advisor turn is the near-miss with weight: a top-level reading takes the advisor turn
+# OVER it, and a first-iteration reading drops the advisor turn BELOW it. It is seeded FIRST so
+# the advisor turn is not the only candidate a scan can stop at.
+advrec() { # <top input> <top cache_read> <iterations json>
+  jq -nc --argjson i "$1" --argjson cr "$2" --argjson it "$3" \
+    '{type:"assistant", message:{model:"claude-opus-4-8",
+      usage:{input_tokens:$i, cache_creation_input_tokens:0, cache_read_input_tokens:$cr, iterations:$it}}}'
+}
+iterrec() { # <type> <cache_read> -> one usage.iterations entry
+  jq -nc --arg t "$1" --argjson cr "$2" \
+    '{type:$t, input_tokens:0, cache_creation_input_tokens:0, cache_read_input_tokens:$cr, output_tokens:5}'
+}
+{ mkrec 0 120000
+  advrec 0 240000 "[$(iterrec message 100000),$(iterrec advisor_message 300000),$(iterrec message 140000)]"
+  mkrec 0 30000
+} > "$WORK/advisor.jsonl"
+
+# AN ADVISOR TURN WHOSE ITERATIONS CARRY NO `message` ENTRY. The rule falls back to the top level
+# (90000), and the turn is the peak. A rule that drops such a turn reads the smaller 50000 one;
+# a max over every iteration reads the advisor's 300000.
+{ mkrec 0 50000
+  advrec 0 90000 "[$(iterrec advisor_message 300000)]"
+} > "$WORK/advisor-nomsg.jsonl"
+
 cat > "$WORK/env.sh" <<ENV
 HOOK="$HOOK"
 PROJ="$PROJ"

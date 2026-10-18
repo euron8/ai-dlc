@@ -1,6 +1,8 @@
 # The tools run.sh, seed.sh and the hook invoke, keyed on their binaries. No node: nothing here runs it.
 bash
+basename
 cat
+cmp
 cp
 date
 dirname

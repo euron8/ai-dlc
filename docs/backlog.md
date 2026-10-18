@@ -222,16 +222,6 @@ Scheduled in batch 235 for a later release (scope ruling: the boundary is the re
 
 verify: manual
 
-## BL-601 — the handoff-entry hook arms the lead's handoff marker on a TEAMMATE's Read of steps/handoff.md
-
-**DEFECT (latent; 0 measured occurrences).** Filed by peer session ai-dlc-11, found by the batch 235 release V contract adversary while it sized BL-590. `core/hooks/ai-dlc-handoff-entry.sh` (PostToolUse on Read) writes the project-wide `.handoff-in-progress` whenever `steps/handoff.md` is read, with no `agent_id` test: intake counted `agent_id` 0 times in it at origin/main 3d5f1e70, against 4 in `core/hooks/ai-dlc-recover-gate.sh` (the control, which BL-590 bound). So a dispatched teammate's Read of that file arms the lead's marker — BL-590's shape (graph measured 253 denied teammate calls there).
-
-Measured by the filer on graph's transcripts, 2026-10-16: 0 of 3237 subagent transcripts hold a `Read` of a path ending `steps/handoff.md`; control: 69 of 178 lead transcripts do; grammar control: the same pattern over any `steps/*.md` matched 357 subagent transcripts; negative control: an impossible path matched 0. The hazard has never fired on the reference consumer.
-
-Owed: the hook's write applies to the lead only (empty `agent_id`), as BL-590 binds the recover gate, with an arm and a mutant: a teammate's Read leaves no `.handoff-in-progress`, and the lead's Read still writes it. ai-dlc-11 builds it as a small release after V2 (BL-590) merges.
-
-verify: manual
-
 ## BL-605 — an In-Flight row's `dispatched-at` can be stamped LATER than the real dispatch, and the BACKDATED arm is quiet on a late row by design
 
 **DEFECT.** Filed by peer session ai-dlc-ad, read-only on graph. Graph's `_bmad-output/pipeline-snapshot.md:68` (In-Flight Teammates) reads `remediator (serial, pass 1 cross-part, a7ffc8dcd555207b8) | remediator | s319/requirements-repair-p1.md (appended) | 2026-10-16T05:01:00Z | stopped` (intake confirmed). BL-599's filing puts that remediator's dispatch at 05:00:03Z, so the row is 57 s late. `core/scripts/validate-artifact-budget.sh` `check_backdated_dispatch` states at :1213 (origin/main 3d5f1e70) "A row stamped LATE (after its dispatch) stays quiet; this arm is about back-dating only." Measured by the filer on the extracted function with a one-row ledger at D: a row at D-112 fires BACKDATED (control), and rows at D, D+27 and D+87 are quiet.
@@ -572,22 +562,6 @@ verify: manual
 
 verify: manual
 
-## BL-638 — `ai-dlc-subagent-probe.sh` takes `peak_tokens` as the max of the top-level `message.usage`, so any advisor turn inside a subagent inflates the recorded peak
-
-**DEFECT.** Found by ai-dlc-08 and relayed by lead ai-dlc-71; intake verified it by reading the code and measured it on real transcripts. It is BL-622's class with a separate reader. `core/hooks/ai-dlc-subagent-probe.sh:219-224` (origin/main) computes `peak` as the max, over a subagent's assistant turns, of the top-level `.message.usage` input + cache_creation + cache_read. The file never mentions `iterations` (0; control: `cache_read_input_tokens` 1). On an advisor turn that top level sums every API iteration (BL-622), so the turn reads roughly double the real context, and a max takes it. The result is written as `peak_tokens`, which the hook's own header (`:42-63`) says to read against the compaction threshold ("did a teammate approach the ceiling").
-
-Measured (python over `~/.claude/projects/*/<session>/subagents/agent-*.jsonl`, comparing the probe's peak with the max of each turn's last `message`-type iteration, or the top level where there is none):
-- graph: 3240 subagent transcripts, 1254 with an advisor turn, 1244 of those with an inflated peak.
-- ai-dlc: 1818 subagent transcripts, 699 with an advisor turn, 692 inflated.
-- The largest inflation: `agent-ab12255aca6bb34ba` (ai-dlc session `bbaa3aca`) reads 873695 against a true peak of 441012, with 4 advisor turns. The next four inflate by 384-428 thousand tokens.
-- Graph's live probe ledger `_bmad-output/subagent-context.jsonl` holds 7528 rows, 146 of them with `peak_tokens` above 420000, past the effective window. Some or all of those are likely inflated; intake did not join them row-by-row to their transcripts.
-
-So any ceiling or model decision read from `peak_tokens` over-states teammate context wherever an advisor ran. No shipped core reader of `peak_tokens` was found outside the probe itself (0 in the dispatch guard, the precompact and acknowledge hooks, and `steps/gate-validation.md`), so the cost today is in the analysis that reads the ledger, not in a gate.
-
-Owed: when `message.usage.iterations` is present, take each turn's figure from its LAST `type: "message"` iteration, otherwise the top level, and keep the max over turns. Share the extraction with BL-622's sensor fix so the two readers cannot drift. Receipt: a seeded subagent transcript with one advisor turn records the true peak, and a transcript without one records exactly what it records today (control).
-
-verify: manual
-
 ## BL-639 — `wait-for-deliverable.sh`'s SETTLE window delivers a correct seat mid-edit when load or a slow local model stretches its write gaps
 
 **DEFECT.** Filed by ai-dlc-4e [9b62de] from BL-632's product-code header pass, on lead ai-dlc-71's ruling that a load-sensitive consumer deadline found there is its own filing. It is a mechanism read from the code, not a measurement; intake confirmed the cites at origin/main `9f8e7691`. `core/scripts/wait-for-deliverable.sh:355` sets `SETTLE="${AI_DLC_WAIT_SETTLE_SECS:-180}"`, and `settled()` (`:713`, test at `:730`, and again at `:1003`) delivers a marked file once its hash has been unchanged for more than SETTLE seconds. The header's own measurement (`:302`) is a series of gaps of 1.6, 5.1, 146.6, 2.4 and 1.4 s on an unloaded harness. A seat that writes its marker and keeps editing can have its gaps stretched past 180 s by pool load or by a slow local model, and the lead then consumes a half-edited deliverable. `say_revised` (`:695`) reports the later edit but cannot undo the delivery. A local-model lead is an operator goal, so this is in its path.
@@ -671,16 +645,6 @@ NOT measured: the false-positive set of a `validate-shell-portability.sh` arm th
 Owed (lead ai-dlc-71): a `validate-shell-portability.sh` arm that flags forms (a) and (b) inside a multi-line `$( )`, and form (c) inside any `$( )`, after its false-positive set is measured across the tree, so the next author cannot write any of them. The known sites are fixed once `86962cd9` lands. Receipt: each failing form above, (c) included, is flagged, and its paired passing form is not.
 
 Owner: unowned (71: filed, not built by 6f).
-
-verify: manual
-
-## BL-648 — the advisor gate counts only the built-in advisor, so a granted session that consulted over `mcp__advisor__consult` is still denied
-
-**NOTE.** Measured by ai-dlc-c2 and filed on lead ai-dlc-71's instruction; intake re-derived the static half read-only at origin/main `b9f9fe06`. `core/hooks/ai-dlc-advisor-gate.sh:7` clears a gated action only on an advisor ATTEMPT, defined as a `server_tool_use` named `advisor`. The hook has 0 mentions of `mcp__advisor` (control: 42 mentions of `advisor`). A session holding the built-in `advisor_tool` grant that consults only through the MCP tool `mcp__advisor__consult` therefore has no attempt on record, and its push or merge is denied. c2 measured the cell "grant + MCP only" = 1 at 0.814.0.
-
-Scope: a session with no grant is silent (`:20-22`), so local-model leads are unaffected. c2 found 0 of graph's 9 local-model update sessions carry a grant, against 59 of 75 Anthropic-model sessions (control). The operator's global instructions already tell a granted session to use the built-in advisor and ignore the MCP one, so the denied cell is a session that took the MCP path while granted.
-
-Owed: either count an `mcp__advisor__consult` call as an attempt (a `tool_use` of that name followed by its result), or state in the deny text that a granted session must use the built-in `advisor`. Receipt: the "grant + MCP only" cell is allowed (or its deny names the built-in tool), and "grant + no attempt" stays denied (control).
 
 verify: manual
 
@@ -825,6 +789,8 @@ verify: manual
 
 ## BL-658 — the recover gate can deny a third Read from stage `snapshot` after both mandated Reads succeeded, because a missing PROGRESS defaults to `snapshot`
 
+**PARTIAL (v0.826.0, verified 256f0dfc) — the marker-vanished window is closed; a third call that reads stage `step` before the satisfying call's removal still denies.** `ai-dlc-recover-gate.sh` re-tests `[ -f "$MARKER" ]` directly AFTER its stage read: the satisfying Read removes the marker before the progress file, so a marker still present after the `cat` proves the stage it read was intact. A structural arm in `postcompact-rulebook-recovery` binds that removal order (exact line 1, swapped spelling 0, with mutant M4), and the race battery forces the removal between the two reads by injection (R1-R3, mutants M1-M3). Open: a third invocation that completes its stage read and re-test before the satisfying call reaches its `rm` enters `case step` and denies the digest Read with the stage-two text. Closing that needs the stage held atomically, which a re-test cannot give (see BL-666 for the same file's stage write). The receipt stays `manual` while the entry is live.
+
 **NOTE.** Reported by ai-dlc-f7, read-only on graph's s319 lead (0.818.0, transcript `74de15ba`, second compaction at 19:26Z). Intake ai-dlc-40.
 
 Observed (transcript lines 3710-3724). Three Reads were issued in one message:
@@ -936,3 +902,16 @@ Since BL-665 an unstamped divergence resolves exactly as a stamped one does, so 
 Owed: decide whether the merge should stamp from the sum. It has the previous pass's CRITICAL count only by reading the prior pass file, which it does not do today. Probe: two shards each declaring prior-scope 1 over a previous pass with 1 CRITICAL; the merged verdict. Control: the same with a previous pass of 2 CRITICAL.
 
 verify: manual
+
+## BL-666 — the recover gate's stage write truncates before it writes, so a concurrent call can read an empty stage and reset the recovery to `snapshot`
+
+**NOTE.** Found by the batch 236 HOOKS contract adversary while it sized BL-658, and filed by the HOOKS owner on the lead's instruction. This is a code reading only, with no measured occurrence.
+
+`core/hooks/ai-dlc-recover-gate.sh:408` advances the recovery with `printf 'step\n' >"$PROGRESS"`. The shell truncates the file before `printf` writes, so for a moment the file exists and is empty. A second invocation of the gate in that moment reads it with `cat` at `:380`. `cat` succeeds on an empty file, so the `|| printf 'snapshot'` default does not apply and `STAGE` is the empty string. That falls into the `*)` arm at `:481`, which treats it as an unreadable value and runs `rm -f "$PROGRESS"`. The next call then finds no progress file and reads stage `snapshot`, so the recovery restarts from its first mandated Read and denies the step Read the lead just earned.
+
+BL-658's re-test does not cover this, because the marker is still present throughout.
+
+Owed: the stage is written whole or not at all. Write to a sibling temp file and `mv` it over `$PROGRESS`, which `rename(2)` makes atomic on one filesystem. Or have the `*)` arm treat an empty value as "unchanged" instead of deleting. Probe: inject a read of an empty `$PROGRESS` between the truncate and the write, and the stage stays `step`. Control: a genuinely unreadable value still stands down.
+
+verify: manual
+
