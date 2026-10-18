@@ -219,7 +219,33 @@ err() { echo "apply: $*" >&2; exit 1; }
 # `--finish` NOW RE-CHECKS BOTH AND REFUSES, rather than stamping over them (finish_reapply_owed
 # below), and the withheld row no longer offers it while one of these rows is outstanding. It
 # still does not REDO either step, which is why this remedy does not name it.
-reapply_remedy="re-render the report with \`emit-report.sh ${DIST} ${BASE} ${CONSUMER} ${THEIRS}\` from the tree as it now stands, re-approve it, then re-run apply with the same four arguments. A bare re-run is refused by the union gate, because this run already wrote the tree the approved report describes; and the finish mode does not redo this step -- it re-checks it and withholds the stamp while it is still undone."
+#
+# THIS IS THE ONE PATH WHERE A RE-RENDER IS STILL THE REMEDY, and its re-approval is still prose.
+# Here the tree has been WRITTEN, so the approved report genuinely no longer describes it, and the
+# union gate's recorded-re-approval check (exit 3 below) cannot apply: --verify answers exit 1 on a
+# moved tree, not 3. So the remedy says to ASK the re-approval by AskUserQuestion, and says that
+# nothing records or checks it on this path.
+reapply_remedy="re-render the report with \`emit-report.sh ${DIST} ${BASE} ${CONSUMER} ${THEIRS}\` from the tree as it now stands; have the operator re-approve it, then re-run apply with the same four arguments. Ask that re-approval with AskUserQuestion and wait for the answer: on this path nothing records or checks it, because this run already wrote the tree the approved report describes, which is also why a bare re-run is refused by the union gate; and the finish mode does not redo this step -- it re-checks it and withholds the stamp while it is still undone."
+
+# ra_recorded <answers-history> <digest> <label> -> 0 when ONE record is a re-approval of THIS
+# region; the union gate's exit-3 branch below is its only caller. All three conjuncts sit in one
+# record, read as a state machine over its lines: a header ending `-- AskUserQuestion` (the
+# answer-capture hook's; a USER_PAUSE or typed-request record is not an answer), a `- Question`
+# line carrying the full digest, and the first line of that record's fenced answer body beginning
+# with the label. A file-wide test of each conjunct separately is NOT this check: it passes a
+# digest quoted in one record beside a label answered in another. A digest that is not 64 hex
+# characters (UNAVAILABLE) never matches.
+ra_recorded() {
+  [ "${#2}" -eq 64 ] || return 1
+  case "$2" in *[!0-9a-f]*) return 1 ;; esac
+  [ -n "$3" ] && [ -f "$1" ] || return 1
+  awk -v dg="$2" -v lb="$3" '
+    /^## / { inrec = ($0 ~ /^## [^ ]+ -- AskUserQuestion$/); q = 0; fence = 0; next }
+    inrec && index($0, "- Question") == 1 { if (index($0, dg) > 0) q = 1; next }
+    inrec && q && fence == 0 && $0 == "```text" { fence = 1; next }
+    inrec && q && fence == 1 { if (index($0, lb) == 1) found = 1; fence = 2; next }
+    END { exit !found }' "$1"
+}
 
 # --- MECHANICAL UNION GATE, CONDITION (1), DRIVEN HERE RATHER THAN NARRATED ----
 # SKILL.md step 7 lets `apply` write only after
@@ -316,11 +342,32 @@ if [ "$FINISH" = 0 ]; then
       # unwritten workaround; the fifth got the listed message below, both of whose named causes
       # were false. Filed as PC-S305-UNION-GATE-UNPASSABLE-ON-ANY-PULL-THAT-HAD-A-BLOCKER.
       #
-      # STILL A REFUSAL, and after the stamp arm above on purpose: a post-apply re-run is the more
-      # specific state (nothing is left to write) and can carry resolved rows too. The remedy here
-      # is one re-render and one re-approval, and the message says so — the safe direction (a HARD
-      # row the operator has NOT seen) never reaches this branch, because --verify keys the cause on
-      # the approved region losing HARD rows and the fresh render gaining none.
+      # AFTER the stamp arm above on purpose: a post-apply re-run is the more specific state
+      # (nothing is left to write) and can carry resolved rows too. The safe direction (a HARD row
+      # the operator has NOT seen) never reaches this branch, because --verify keys the cause on the
+      # approved region losing HARD rows and the fresh render gaining none.
+      #
+      # DECIDED HERE, NOT HANDED BACK AS "RE-RENDER AND RE-APPROVE". That remedy was prose with no
+      # reader, and following it destroyed the evidence a reader would need: the report is one fixed
+      # filename, the fresh region is spliced over the approved one, and --verify then exits 0
+      # exactly as on a first apply. Measured on the reference consumer, twice: a session
+      # re-rendered, verified 0 and applied with no operator question between, once citing a
+      # PR-merge approval as the re-approval. So the approved report is kept and --verify's
+      # `re-approval:` line (digest, unseen count, option label; emitted for exit 3 only) decides:
+      #   unseen=0  PROCEED with a NOTE row. The approval saw a superset of what renders now --
+      #             the only change is blockers it listed that step 7 then resolved.
+      #   unseen>0  PROCEED only when the answers history holds a hook-written AskUserQuestion
+      #             record whose Question line carries the FULL digest and whose answer body's first
+      #             line begins with the label. Otherwise REFUSE, printing the question and label to
+      #             ask. An absent history file refuses. There is no bypass flag.
+      # The digest binds the record to THIS region: the label alone is a per-label constant (the
+      # hook hashes the answer, and every selection of one label hashes alike), and the question is
+      # where the region is named.
+      #
+      # LIMITS, stated rather than implied. The Question line is lead-authored and no hash covers it,
+      # so a session that writes the answers history by Bash instead of asking is not caught here.
+      # And after an apply has written the tree, --verify answers STAMP-MOVED (exit 1), not 3: the
+      # re-render that path needs still carries a re-approval that nothing records (reapply_remedy).
       # The cause line is matched on its `cause:` label at any indent, and an absent line falls
       # back to naming the exit code rather than to an empty string: a prefix drift in --verify
       # must not silently delete the diagnosis from the refusal.
@@ -333,7 +380,34 @@ if [ "$FINISH" = 0 ]; then
       if [ -n "$_ug_at" ]; then
         err "the report at ${UNION_REPORT#"${CONSUMER}"/} does not match what the detectors render at this run's theirs ($THEIRS) — and the consumer's stamp records ${_ug_at}, whose core/ tree is theirs'. That stamp says an earlier apply already brought this tree to theirs, so this is a post-apply re-run (the one the driver-self-update row used to prescribe): the approved report describes the tree BEFORE that apply moved it, and a report rendered then cannot verify against the tree as it now stands. The stamp is a claim about the tree, not a measurement of it — if a core file or the report was changed by hand since, this refusal cannot see that. To see the current driver's reading of this tree, re-run the dry run at $THEIRS so the report is rendered from the tree as it now stands, re-approve it, then apply. NOTHING HAS BEEN WRITTEN."
       elif [ "$_ug_rc" -eq 3 ]; then
-        err "the report at ${UNION_REPORT#"${CONSUMER}"/} does not match what the detectors render at this run's theirs ($THEIRS) — and the only difference in the blocking list is that the approved region lists HARD-* row(s) the detectors no longer render, with upstream unchanged. ${_ug_cause} Those blockers were resolved after the report was rendered — step 7's own work (a --stamp readopt, a register row) — so no HARD-* row is hidden from the approval; but the operator approved a region that no longer describes this tree, and the 'unseen:' lines above are rows a resolution left that they have not read. One step closes it: re-render the region with emit-report.sh $DIST $BASE $CONSUMER $THEIRS from the tree as it now stands, re-approve it, then re-run apply with the same four arguments. NOTHING HAS BEEN WRITTEN."
+        # The line is cut with parameter expansion after ONE awk read, so no second reader of the
+        # grammar exists here. A line that is absent or malformed refuses: it is never read as
+        # unseen=0.
+        _ra="$(awk '/^[[:space:]]*re-approval: /{sub(/^[[:space:]]*re-approval: /, ""); print; exit}' <<< "$_ug_verr")"
+        _ra_dg="${_ra#digest=}"; _ra_dg="${_ra_dg%% *}"
+        _ra_un="${_ra#* unseen=}"; _ra_un="${_ra_un%% *}"
+        _ra_lb="${_ra#* label=\"}"; _ra_lb="${_ra_lb%\"}"
+        _ra_hist="$CONSUMER/_bmad-output/operator-answers-history.md"
+        _ra_q="Re-approve the reconcile report for this pull? Its blockers were resolved after approval, and the region now renders ${_ra_un} finding row(s) the approval did not show (the unseen: lines). Region digest ${_ra_dg}."
+        case "$_ra_un" in ''|*[!0-9]*) _ra_ok=bad ;; *) _ra_ok=ok ;; esac
+        case "$_ra" in digest=*" unseen="*" label=\""*\") ;; *) _ra_ok=bad ;; esac
+        if [ "$_ra_ok" = bad ]; then
+          err "the report at ${UNION_REPORT#"${CONSUMER}"/} does not match what the detectors render at this run's theirs ($THEIRS), and --verify exited 3 (${_ug_cause}) without a readable 're-approval:' line, so whether the approval saw every row that renders now cannot be decided. Re-run apply with the same four arguments once emit-report.sh beside this script prints that line. Do not re-render the report. NOTHING HAS BEEN WRITTEN."
+        elif [ "$_ra_un" -eq 0 ]; then
+          say NOTE blockers-resolved "${UNION_REPORT#"${CONSUMER}"/}" "union-gate condition (1), decided on --verify exit 3: ${_ug_cause} No finding renders that the approval did not show (unseen=0), so the approval covers this region and no re-approval is asked."
+        elif ra_recorded "$_ra_hist" "$_ra_dg" "$_ra_lb"; then
+          say NOTE blockers-resolved "${UNION_REPORT#"${CONSUMER}"/}" "union-gate condition (1), decided on --verify exit 3: ${_ug_cause} The ${_ra_un} unseen row(s) were re-approved: ${_ra_hist#"${CONSUMER}"/} holds an AskUserQuestion record quoting digest ${_ra_dg} answered '${_ra_lb}'."
+        else
+          {
+            echo "apply: RE-APPROVAL OWED. Ask the operator with AskUserQuestion, exactly:"
+            echo "  question: ${_ra_q}"
+            echo "  option label: ${_ra_lb}"
+            echo "  (any other options are yours to add; only an answer beginning with that label re-approves)"
+            echo "  unseen rows it covers:"
+            printf '%s\n' "$_ug_verr" | sed -n 's/^[[:space:]]*unseen: /    /p'
+          } >&2
+          err "the report at ${UNION_REPORT#"${CONSUMER}"/} does not match what the detectors render at this run's theirs ($THEIRS), and the only difference in the blocking list is HARD-* row(s) the approval listed that no longer render. ${_ug_cause} So no HARD-* row is hidden from the approval, but the region now renders ${_ra_un} finding row(s) the approval did not show, and ${_ra_hist#"${CONSUMER}"/} holds no AskUserQuestion record quoting digest ${_ra_dg} answered '${_ra_lb}'. Ask the question printed above with AskUserQuestion — a typed message is not that ask, and a re-approval of anything else is not this one — then re-run apply with the same four arguments. Do NOT re-render the report: that discards the approved region this check compares against. NOTHING HAS BEEN WRITTEN."
+        fi
       else
         err "the report at ${UNION_REPORT#"${CONSUMER}"/} does not match what the detectors render at this run's theirs ($THEIRS). SKILL.md step 7 lets apply write only after emit-report.sh --verify exits 0, and it does not. ${_ug_cause} Either upstream moved after that report was rendered — which is what this gate exists to catch — or the region was hand-edited or a detector now renders a finding the approval never saw, or an earlier apply of this same range already moved this tree and its stamp is still withheld (a re-run after a withheld run). Re-run the dry run at $THEIRS, or name the ref the report describes explicitly so the two agree, then re-approve. NOTHING HAS BEEN WRITTEN."
       fi

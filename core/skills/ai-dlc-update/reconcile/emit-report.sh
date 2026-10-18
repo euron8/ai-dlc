@@ -59,7 +59,9 @@
 #            3 = stale in the SAFE direction only: the refs are unchanged and the approved region
 #                lists HARD-* row(s) the detectors no longer render, and none they newly do — the
 #                blockers were RESOLVED after the render (the adjudication loop's own work). Still a
-#                refusal; apply.sh names the cause and the remedy is a re-render and re-approval.
+#                mismatch, and it alone prints a `re-approval:` line (digest, unseen count, option
+#                label) that apply.sh decides from: unseen=0 proceeds, unseen>0 needs a recorded
+#                re-approval quoting the digest. Re-rendering the report is NOT the remedy.
 #
 # A RECORDED PASS CAN BE ACCEPTED INSTEAD OF A RE-RENDER, ON A KEY COVERING THE INPUTS LISTED BELOW.
 # It does NOT pin every render input: the inputs it cannot key are either REFUSED (a miss) or named
@@ -1416,12 +1418,12 @@ echo "  what the detectors render now. Re-render with emit-report.sh and re-emit
 # fifth got this FAIL first with a message naming (a) and (b), both false. Filed as
 # PC-S305-UNION-GATE-UNPASSABLE-ON-ANY-PULL-THAT-HAD-A-BLOCKER.
 #
-# STILL A REFUSAL. The operator approved findings that no longer exist, and a resolution can add
-# rows they have not seen (a merge that leaves OVERRIDE-ASSERTS-SHADOW-SURVIVES, say), so the
-# post-resolution region is re-rendered and re-approved rather than waved through; a pass here
-# would need a vocabulary of "benign" rows and would acquit whatever that vocabulary missed. What
-# changes is the DIAGNOSIS: a distinct exit code so apply.sh can say which case this is, and a
-# `cause:` line so an operator running --verify by hand reads the same answer.
+# STILL A MISMATCH, NEVER A 0. The operator approved findings that no longer exist, and a
+# resolution can add rows they have not seen (a merge that leaves OVERRIDE-ASSERTS-SHADOW-SURVIVES,
+# say); a 0 here would need a vocabulary of "benign" rows and would acquit whatever that vocabulary
+# missed. What this program adds is the DIAGNOSIS: a distinct exit code so apply.sh can say which
+# case this is, a `cause:` line so an operator running --verify by hand reads the same answer, and
+# the `re-approval:` line apply.sh decides the case from (see where it is printed).
 #
 # KEYED ON THE `HARD-` PREFIX ONLY, which is the contract SKILL.md already binds ("statuses
 # prefixed HARD- must block apply"), never on a list of status names. A mismatch with no HARD row
@@ -1436,7 +1438,7 @@ echo "  what the detectors render now. Re-render with emit-report.sh and re-emit
 # OVERRIDE-ANCHOR-UNRESOLVED or OVERRIDE-ASSERTS-SHADOW-SURVIVES, say); (c) still fires, because
 # the HARD rule is the blocking contract, but the cause line COUNTS those rows rather than
 # asserting they do not exist, and the re-approval is where they get read. That is why (c)
-# refuses instead of passing.
+# is never a 0.
 # NORMALISED BEFORE THE SET DIFFERENCE, NOT AFTER. One blocker renders twice in the region with
 # different padding — `%-32s %s` in the blocking list, `STATUS  path` in its detector's section
 # — and a difference taken over raw lines then de-duplicated afterwards reports a blocker as
@@ -1508,9 +1510,31 @@ elif [ -n "$er_sets_why" ]; then
   echo "  cause: UNDECIDED — the region does not match, but which rows differ could not be computed (${er_sets_why}), so no HARD-* row can be called resolved or new. Re-run --verify once the fault is gone; do not re-approve on this run's reading." >&2
 elif [ "$hard_gone" -gt 0 ] && [ "$hard_new" -eq 0 ] && [ "$refused_new" -eq 0 ]; then
   cause=BLOCKERS-RESOLVED
-  echo "  cause: BLOCKERS-RESOLVED — ${hard_gone} HARD-* row(s) in the approved region no longer render, no HARD-* row is new, and the refs are unchanged: the blockers were resolved after this report was rendered (or the report carries a HARD row that never rendered; either way the approval saw more than exists). The fresh render carries ${other_new} finding row(s) the approval has not seen (listed below as unseen:, boilerplate excluded); re-render the region from the tree as it now stands and re-approve it reading them." >&2
+  echo "  cause: BLOCKERS-RESOLVED — ${hard_gone} HARD-* row(s) in the approved region no longer render, no HARD-* row is new, and the refs are unchanged: the blockers were resolved after this report was rendered (or the report carries a HARD row that never rendered; either way the approval saw more than exists). The fresh render carries ${other_new} finding row(s) the approval has not seen (listed below as unseen:, boilerplate excluded). Do NOT re-render the report to clear this: apply.sh decides it from the re-approval: line below — with unseen=0 it proceeds, the approval having seen a superset of what renders now; with unseen>0 it refuses until the operator's re-approval quoting that digest is on record." >&2
   printf '%s\n' "$gone_rows" | sed 's/^/    resolved: /' >&2
   [ "$other_new" -gt 0 ] && printf '%s\n' "$only_render" | unseen_rows | sed 's/^/    unseen: /' >&2
+  # THE RE-APPROVAL LINE, PRINTED FOR THIS CAUSE ONLY. SKILL.md step 7 used to say: resolve the
+  # blockers, re-render the region, verify to 0, have the operator re-approve it, then apply. The
+  # last clause had no reader. Measured on the reference consumer, twice: a session re-rendered,
+  # verified 0 and applied with no operator question between, once citing a PR-merge approval as
+  # the re-approval. And the re-render DESTROYS the evidence a reader would need: the report is one
+  # fixed filename, the fresh region is spliced over the approved one, and --verify then exits 0
+  # exactly as on a first apply. So the remedy is no longer a re-render. The approved report stays,
+  # --verify keeps exiting 3, and apply.sh decides from this line:
+  #   digest  sha256 over the FRESH render's region as `norm_dist` leaves it, never raw bytes: the
+  #           raw region carries the dist path, and a scratch clone and a normal checkout would
+  #           then ask for two different re-approvals of one region.
+  #   unseen  `other_new` above, the same count the cause line prints. 0 means the approval saw a
+  #           superset of what renders now, and apply.sh proceeds with no question.
+  #   label   the option label the operator selects. This line is its ONE source; apply.sh and
+  #           SKILL.md quote it from here.
+  # A digest that cannot be computed prints UNAVAILABLE rather than an empty field, so a sandbox
+  # with no sha256 tool still exits 3 with the same cause, and apply.sh refuses an unseen>0 case
+  # it cannot bind rather than matching an empty string. Exit 0 and exit 1 print no such line.
+  _ra_dg="$(printf '%s\n' "$want" | { shasum -a 256 2>/dev/null || sha256sum 2>/dev/null; } | cut -d' ' -f1)" || _ra_dg=""
+  case "$_ra_dg" in *[!0-9a-f]*|'') _ra_dg=UNAVAILABLE ;; esac
+  [ "${#_ra_dg}" -eq 64 ] || _ra_dg=UNAVAILABLE
+  echo "  re-approval: digest=${_ra_dg} unseen=${other_new} label=\"Re-approve ${_ra_dg:0:12}, run apply\"" >&2
 else
   cause=UNDECIDED
   echo "  cause: UNDECIDED — the fresh render carries ${hard_new} HARD-* row(s) and ${refused_new} DETECTOR-REFUSED line(s) the approved region lacks (a finding the approval never saw, or a detector that did not run), or the difference is outside the blocking list. Read the diff." >&2
