@@ -842,6 +842,13 @@ mutant2 "JX111 a supersedes chain not deduped, self-probe removed" "supchain" \
   '          for (i = 1; i < nesc; i++) if (sp[k] == ef[i] " " en[i]) { nlk++; la[nlk] = i; lb[nlk] = nesc; mh = 1 }' \
   '          for (i = 1; i < nesc; i++) if (sp[k] == ef[i] " " en[i]) { mh = 1 }' \
   "$CTPROBE_OLD" "$CTPROBE_NEW"
+# ---- BL-556 gap-fill location. JX112: the section bound dropped, the token test scans the whole file, so
+# the adjacent-section near-miss reads a decision (receipt regression r2). The self-probe sees it, so it is
+# paired off. EXPECTED SET IS AN UNRUN PREDICTION (gaploc alone), scored by the owner in a slot.
+mutant2 "JX112 the gap-fill token test scans the whole file, self-probe removed" "gaploc" \
+  '      s = (hs ? hs : lo); e = (he ? he : (NR < hi ? NR : hi)); tok = ""' \
+  '      s = lo; e = (NR < hi ? NR : hi); tok = ""' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
 # ---- END JX MUTANTS.
 
 # ------------------------------------------------------------------------------ the reap

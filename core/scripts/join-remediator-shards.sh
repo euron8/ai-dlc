@@ -767,8 +767,20 @@ src_probe() {
 #       gate the report the lead adjudicates from. An agent that
 #       applied a rule an operator decision does not state, and offered it for the lead's veto, wrote
 #       an operator choice into the subject. Nothing in the record separates EXTENDING a D-/LR-/LRC-
-#       decision from APPLYING one, so the arm keys on the words, carries no decision-token test, and
-#       ITS RECALL DEPENDS ON THE AGENT USING THOSE WORDS: a gap fill described any other way passes.
+#       decision from APPLYING one, so the arm keys on the words, and ITS RECALL DEPENDS ON THE AGENT
+#       USING THOSE WORDS: a gap fill described any other way passes. THE LOCATION ONLY NARROWS IT:
+#       when the entry's `edit:` cite resolves, the line gains `-- lands in <cite> under '<heading>',
+#       which cites <token>` (or "cites no D-, LR- or LRC- decision"). The section is the nearest
+#       heading at or above the line, to the next heading of the same or higher level; the token is
+#       `D-<n>`, `LR-<x>` or `LRC-<x>`, word-bounded, outside fences, inside that section only. A live
+#       file resolves as the siblings control does. Parts, --document and --subject modes run this
+#       before assembly, so a `sections/<i>.md` cite is still a live copy there. In record mode the
+#       copy is gone: the cite is matched by PART NUMBER (graph cites `sections/5.md`, the row and copy
+#       were `05`) to the retained `.manifest`'s part row, and that row's span in its document is read,
+#       said as "(span of <cite>, lines may have moved)". Neither resolves: `-- location unresolved
+#       (<cite>)`. Never a refusal, and never an exit code. The FP set measured for the words above is
+#       unchanged: 09.md F-4 and F-7 in the part and the same two in the joined record, all true
+#       positives, and their section (prd.md part 5, 1307-1356) cites D-5.
 #       FALSE-POSITIVE SET, MEASURED with this contract_check, parts mode over graph's 251 s317-s319
 #       shard parts and record mode over its 60 repair and fold records: s319 requirements
 #       elicitation repair 09.md F-4 and F-7, and the same two entries in the joined record, which is
@@ -886,12 +898,12 @@ contract_check() {
         if (rp && edt && sib && src == 0 && sfile != "") print "CTL\t" cf "\t" cur "\t" sfile "\t" stext
         if (rp && sev && claim ~ /outside (this|my|the) (shard|part|section)|not required/ \
             && claim !~ /escalat|serial remediator/) print "SETASIDE\t" cf "\t" cur "\t" hl
-        if (disp == "repaired" && claim ~ /gap[- ]?fill|veto/) print "GAPFILL\t" cf "\t" cur
+        if (disp == "repaired" && claim ~ /gap[- ]?fill|veto/) print "GAPFILL\t" cf "\t" cur (ecite != "" ? "\t" ecite : "")
         if ((src == 0 || era) && !(dfull in VOC)) print "BADDISP\t" cf "\t" cur "\t" draw
         if (dfull == "operator-ruling") print "RULING\t" cf "\t" cur "\t" rcite
       }
       if (disp == "" && edf) print "NODISP\t" cf "\t" cur
-      disp = ""; dfull = ""; edt = 0; edf = 0; rcite = ""; sib = 0; sibf = 0; sibw = 0; sibin = 0; sfile = ""; stext = ""; claim = ""; inclaim = 0; ncl = 0; nsp = 0
+      disp = ""; dfull = ""; edt = 0; edf = 0; rcite = ""; sib = 0; sibf = 0; sibw = 0; sibin = 0; sfile = ""; stext = ""; claim = ""; inclaim = 0; ncl = 0; nsp = 0; ecite = ""
     }
     # THE CHAIN (BL-565): escalations joined by supersedes links, rooted at the LATEST member. The latest OPEN
     # member carries the one count of the chain; every other open member is SUP (printed ESCALATED-SUPERSEDED,
@@ -949,6 +961,7 @@ contract_check() {
       split(v, a, /[^a-z]/); disp = a[1]; draw = v; gsub(/[\t\r]/, " ", draw); sub(/[ \t]+$/, "", draw); dfull = v; sub(/[^a-z-].*$/, "", dfull); inclaim = 0; next }
     /^[[:space:]-]*[*_`]*edit[*_`]*:/ {
       v = $0; sub(/^[^:]*:/, "", v); edf = 1
+      if (match(v, /[A-Za-z0-9_.\/-]+[.](md|json|jsonl|yaml|yml|txt|csv)(:[0-9]+)?/)) ecite = substr(v, RSTART, RLENGTH)
       if (match(v, /[A-Za-z0-9_.\/-]+[.](md|json|jsonl|yaml|yml|txt|csv)/)) edt = 1
       inclaim = 0; next }
     /^[[:space:]-]*[*_`]*ruling[*_`]*:/ { v = $0; sub(/^[^:]*:/, "", v); rcite = vtrim(v); gsub(/\t/, " ", rcite); inclaim = 0; next }
@@ -1012,6 +1025,72 @@ ruling_cite() {
   esac
   [ "$n" -ge 1 ] || refuse "${r}: the ${d} entry's ruling cite '${c}' resolves to nothing in ${h}; an operator-ruling applies an answer the operator gave, and the cite is how the join finds it"
 }
+# gap_section <file> <line> <lo> <hi> -> "<heading>\t<token>" for the section enclosing <line>: the nearest
+# heading at or above it (not before <lo>), to the next heading of the same or higher level (not past <hi>);
+# <token> is the first D-<n>, LR-<x> or LRC-<x> in it, word-bounded, outside fences, or empty. Nothing when
+# <line> is outside [lo, hi] or the file has fewer lines.
+gap_section() {
+  awk -v L="$2" -v lo="$3" -v hi="$4" '
+    function lvl(s) { match(s, /^#+/); return RLENGTH }
+    NR < lo { next }
+    NR > hi { exit }
+    fence && ((fc == "`" && $0 ~ /^[ \t]*```+[ \t]*$/) || (fc == "~" && $0 ~ /^[ \t]*~~~+[ \t]*$/)) { fence = 0; t[NR] = ""; next }
+    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; t[NR] = ""; next }
+    { t[NR] = fence ? "" : $0 }
+    !fence && /^#+[ \t]/ { if (NR <= L) { hs = NR; hv = lvl($0); hd = $0 } else if (hs && !he && lvl($0) <= hv) he = NR - 1 }
+    END {
+      if (L < lo || L > NR || L > hi) exit
+      s = (hs ? hs : lo); e = (he ? he : (NR < hi ? NR : hi)); tok = ""
+      for (i = s; i <= e && tok == ""; i++) {
+        x = " " t[i] " "
+        if (match(x, /[^[:alnum:]_-](D-[0-9]+|LRC?-[[:alnum:]][[:alnum:]-]*)[^[:alnum:]_]/)) tok = substr(x, RSTART + 1, RLENGTH - 2)
+      }
+      sub(/^#+[ \t]+/, "", hd); gsub(/[\t\r]/, " ", hd); sub(/[ ]+$/, "", hd)
+      print (hs ? hd : "(before any heading)") "\t" tok
+    }' "$1"
+}
+# gap_where <cite> -> the GAPFILL line's location suffix (BL-556), NOTE tier: it never refuses and changes no
+# exit code. A LIVE file resolves under the project root, then the state dir's parent, then absolutely (the
+# siblings control's order). A dead `<dir>/sections/<n>.md` -- assembly deletes the copies, so only the
+# join itself sees them -- is looked up in `<dir>/sections/.manifest` by its PART NUMBER (5 matches a row
+# 05 or 5; never a padded filename): its live copy `<row>.md` if present, else the row's span in the
+# manifest's document, said to be a span. Neither: `location unresolved`.
+gap_where() {
+  local c="$1" f n p="" sd mf row ord a z doc out mode=live
+  [ -n "$c" ] || return 0
+  case "$c" in *:[0-9]*) f="${c%:*}"; n="${c##*:}" ;; *) printf ' -- location unresolved (%s, no line)' "$c"; return 0 ;; esac
+  case "$f" in
+    /*) [ -f "$f" ] && p="$f" ;;
+    *) if [ -f "${JR_ROOT}/${f}" ]; then p="${JR_ROOT}/${f}"; elif [ -f "${STATE_PARENT}${f}" ]; then p="${STATE_PARENT}${f}"; fi ;;
+  esac
+  if [ -z "$p" ]; then
+    case "$f" in
+      */sections/*.md)
+        sd="${f%/*}"; ord="${f##*/}"; ord="${ord%.md}"
+        case "$ord" in ''|*[!0-9]*) ;; *)
+          for mf in "${JR_ROOT}/${sd}/.manifest" "${STATE_PARENT}${sd}/.manifest" "${sd}/.manifest"; do [ -f "$mf" ] && break; done
+          if [ -f "$mf" ]; then
+            row="$(awk -F'\t' -v o="$ord" '$1 == "part" && ($2 + 0) == (o + 0) { print $2 "\t" $3 "\t" $4; exit }' "$mf")"
+            doc="$(awk -F'\t' '$1 == "document" { print $2; exit }' "$mf")"
+            if [ -n "$row" ]; then
+              IFS='	' read -r ord a z <<ROWEOF
+$row
+ROWEOF
+              if [ -f "${mf%/.manifest}/${ord}.md" ]; then p="${mf%/.manifest}/${ord}.md"
+              elif [ -n "$doc" ] && [ -f "$doc" ]; then p="$doc"; mode=span; n=$((a + n - 1)); fi
+            fi
+          fi ;;
+        esac ;;
+    esac
+  fi
+  [ -n "$p" ] || { printf ' -- location unresolved (%s)' "$c"; return 0; }
+  if [ "$mode" = span ]; then out="$(gap_section "$p" "$n" "$a" "$z")"; else out="$(gap_section "$p" "$n" 1 999999999)"; fi
+  [ -n "$out" ] || { printf ' -- location unresolved (%s, line %s is outside the file)' "$c" "$n"; return 0; }
+  local h="${out%%	*}" t="${out#*	}" w="$c"
+  [ "$mode" = span ] && w="${doc}:${n} (span of ${c}, lines may have moved)"
+  if [ -n "$t" ]; then printf " -- lands in %s under '%s', which cites %s" "$w" "$h" "$t"
+  else printf " -- lands in %s under '%s', which cites no D-, LR- or LRC- decision" "$w" "$h"; fi
+}
 # contract_refusals <0 parts | 1 --sources> <contract_check output> -> refuse per finding;
 # ESC_LINES / ESC_N carry the open escalated entries and ESC_CLOSED / ESC_X the closed ones, for the
 # caller to print once the run has otherwise cleared; SERIAL_N counts the repaired entries with a
@@ -1053,7 +1132,7 @@ ${r} ${d}
       NODISP) refuse "${r}: the ${d} entry carries an 'edit:' line and no 'disposition:' line, so no check reads it; every entry that edits is dispositioned (team-roles/remediator.md), and a renamed key ('outcome:', 'status:') is not the field" ;;
       BADDISP) refuse "${r}: the ${d} entry is dispositioned '${l}', which is none of repaired|escalated|skipped|not-reproduced|operator-ruling; any other value is read by no check" ;;
       RULING) ruling_cite "$r" "$d" "$l" ;;
-      GAPFILL) GAP_N=$((GAP_N + 1)); GAP_LINES="${GAP_LINES}GAPFILL: ${r} ${d} -- repaired while its claim calls the fix a gap fill or offers it for veto; a rule the decision's own words do not state is the operator's, so this entry should be escalated with options and the artifact keep the decision's words (team-roles/remediator.md, \"Applying such a decision\")
+      GAPFILL) GAP_N=$((GAP_N + 1)); GAP_LINES="${GAP_LINES}GAPFILL: ${r} ${d} -- repaired while its claim calls the fix a gap fill or offers it for veto; a rule the decision's own words do not state is the operator's, so this entry should be escalated with options and the artifact keep the decision's words (team-roles/remediator.md, \"Applying such a decision\")$(gap_where "$l")
 " ;;
     esac
   done <<CTEOF
@@ -1152,6 +1231,14 @@ X	01.md	S-1
 E	01.md	S-2
 E	01.md	S-3
 N	5	0	0	0	0" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: a record with no supersedes line read '${o}'; no verdict"; }
+  # The gap-fill location (BL-556): an edit line under a section citing D-5 names the token; the same file
+  # two lines on, in the ADJACENT section citing D-7 only in a fence and D-50x in prose, names none -- a
+  # whole-file scan, an unfenced scan or an unbounded token would each read a decision there.
+  printf '# Doc\n\n## A\nThe rule per D-5.\nedited here\n\n## B\nedited there\n```text\nD-7\n```\nnot D-50x\n\n### B.1\nD-9 is a child of B\n' > "$d/sec.md"
+  o="$(gap_section "$d/sec.md" 5 1 999; gap_section "$d/sec.md" 8 1 13; gap_section "$d/sec.md" 8 1 999)"
+  [ "$o" = "A	D-5
+B	
+B	D-9" ] || { rm -rf "$d"; die "the gap-fill location self-probe failed: read '${o}'; no verdict"; }
   # The two check fields (BL-557): a part with a repaired entry and neither field fires twice; a part
   # holding only an escalated entry is exempt; a record with neither field is outside the era; a
   # record that opened it and wrote `not replayed` fires once.

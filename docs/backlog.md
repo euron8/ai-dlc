@@ -145,7 +145,9 @@ verify: manual
 
 **The serial remediator kept the gap fills (01:50Z).** The serial cross-part remediator's report reads: "Part 09 gap-fills (kept as written): one unavailable pool makes the total unavailable (F-4), and a partial price miss renders the whole card as an em dash (F-7)." The lead did not strike them and the gate has not run. So two agent-chosen rules extending the operator's D-5 ruling have passed a second agent and are in the requirements subject heading into the adversarial series, with no operator sight of them. In the same pass, S-24 reversed part 01's F-2 wording on the stable-only sweep. That is a second agent overriding a first agent's repair, with no adjudication recorded beyond its own report.
 
-verify: manual
+**The location half, at NOTE tier (b236-join).** The `GAPFILL:` line now says where the edit landed, and it still refuses nothing. When the entry's `edit:` cite resolves, the line names the enclosing section and the first `D-`, `LR-` or `LRC-` token in it (outside fences, inside that section only). Parts, --document and --subject modes read the live section copy, because the contract check runs before assembly. Record mode maps a dead `sections/<i>.md` cite through the retained `.manifest` row, matching by part number (graph's cite is `5.md`, the row and copy were `05`), to the document span, and says the span's lines may have moved. A cite that resolves nowhere reads `location unresolved`. Recall is unchanged: the arm still keys on the gap-fill and veto words. So this adds the location and does not close the refusal this entry first asked for.
+
+verify: sh [ -f core/fixtures/remediator-shard-join/lib.sh ] || exit 9; ( NAME=bl556-receipt; . core/fixtures/remediator-shard-join/lib.sh > /dev/null; p_gaploc "$JOIN" )
 
 ## BL-557 — a remediator proceeds without the advisor and without replaying its derivations, and the record does not say which checks it skipped
 

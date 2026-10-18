@@ -945,6 +945,24 @@ p_chkrec() { # --escalations: a record with neither field is outside the era -> 
   esc_rec "$1" '- advisor: called\n\n### F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n'
   [ "$r0" -eq 0 ] && [ "$RC" -eq 2 ] && has "$JO" "stories-repair-p1.md: no derivations: line"
 }
+# ---- THE GAP-FILL LOCATION (BL-556): the GAPFILL line names where the edit landed, report-only.
+p_gaploc() { # --escalations, one world: (a) a gap-fill edit citing a LIVE file under a section that cites D-5
+  # -> the suffix names D-5; (b) the same claim editing the ADJACENT section of that file, whose only token
+  # sits in a fence -> "cites no ... decision"; (c) a dead `sections/5.md` resolved through the retained
+  # .manifest part row 05 (padded) to the document span -> D-5, "(span of ..., lines may have moved)";
+  # (d) a cite resolving nowhere -> "location unresolved". rc 0, every line after ESCALATED-COUNT.
+  local w; w="$(mktemp -d "$WORK/gap.XXXXXX")" && mkdir -p "$w/.claude" "$w/d/sections" || return 1
+  printf '# PRD\n\n## Net P&L\nShow - per D-5.\nThe card line.\n\n## Collect\nThe collect line.\n```text\nD-6\n```\n' > "$w/d/prd.md"
+  printf 'document\t%s\npart\t05\t3\t6\t## Net P&L\npart\t06\t7\t11\t## Collect\n' "$w/d/prd.md" > "$w/d/sections/.manifest"
+  printf '%b' '### F-4\n- disposition: repaired\n- edit: d/prd.md:5\n- siblings: n/a (insertion)\n- claim now asserted: a gap fill the lead may veto.\n\n### F-5\n- disposition: repaired\n- edit: d/prd.md:8\n- siblings: n/a (insertion)\n- claim now asserted: a gap fill the lead may veto.\n\n### F-7\n- disposition: repaired\n- edit: d/sections/5.md:2\n- siblings: n/a (insertion)\n- claim now asserted: a gap fill the lead may veto.\n\n### F-8\n- disposition: repaired\n- edit: d/gone/9.md:2\n- siblings: n/a (insertion)\n- claim now asserted: a gap fill the lead may veto.\n\n### F-9\n- disposition: escalated\n- edit: n/a\n' > "$w/stories-repair-p1.md"
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --escalations "$w/stories-repair-p1.md" --sprint 305 > "$JO" 2>&1; RC=$?
+  [ "$RC" -eq 0 ] && ! has "$JO" "REFUSED" && has "$JO" "ESCALATED-COUNT: 1 (0 closed" \
+    && has "$JO" "F-4 -- repaired while" && has "$JO" "-- lands in d/prd.md:5 under 'Net P&L', which cites D-5" \
+    && has "$JO" "-- lands in d/prd.md:8 under 'Collect', which cites no D-, LR- or LRC- decision" \
+    && has "$JO" "-- lands in $w/d/prd.md:4 (span of d/sections/5.md:2, lines may have moved) under 'Net P&L', which cites D-5" \
+    && has "$JO" "-- location unresolved (d/gone/9.md:2)" \
+    && [ "$(grep -n 'ESCALATED-COUNT' "$JO" | cut -d: -f1)" -lt "$(grep -n '^GAPFILL:' "$JO" | head -1 | cut -d: -f1)" ]
+}
 # ---- THE SUPERSEDES CHAIN (BL-565): p565's three seeds plus the dangling link, each its own world.
 SUP_A='<!-- shard: 01.md -->\n### F-1 — MAJOR\n- source: s-1.md#F-1\n- disposition: escalated\n- edit: n/a\n\n### S-1 — MAJOR\n- source: 01.md#F-1\n- disposition: escalated\n- supersedes: 01.md F-1 — MAJOR\n- edit: n/a\n'
 p_supchain() { # (a) a serial escalation superseding the part escalation -> ESCALATED-COUNT 1, the part member
@@ -1465,7 +1483,7 @@ p_agentwrites() {
   [ "$RC" -eq 2 ] && has "$JO" "REFUSED:"
 }
 
-P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrargs rrfiles rrsubj alias alnokeys alresult alown alsecond alother alsess altwo altool nested rronly dispkey dispvocab dispruling srcparts gapfill chkpart chkrec rulingedit rulingtab chkjoined partsilent specstale specfresh spechand specnone spectwo sjspecstale sjspecfresh sjspecnone specother specunread agentwrites chkserial supchain"
+P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrargs rrfiles rrsubj alias alnokeys alresult alown alsecond alother alsess altwo altool nested rronly dispkey dispvocab dispruling srcparts gapfill chkpart chkrec rulingedit rulingtab chkjoined partsilent specstale specfresh spechand specnone spectwo sjspecstale sjspecfresh sjspecnone specother specunread agentwrites chkserial supchain gaploc"
 
 # ---- A PART'S DERIVATION SURVIVES THE JOIN. The part's ```derived fence is copied into the joined
 # record, and the gate re-runs `validate-artifact-derivations.sh` over the sprint dir AFTER the
