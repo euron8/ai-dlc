@@ -172,6 +172,8 @@ verify: manual
 
 Progress is new bytes in the unit's pool log or under its per-unit TMPDIR (operator ruling, option A): CPU time and process membership are not progress, so a polling loop and a silent compute unit are both refused. Owed, and BL-606 does not land without it: the POOL_STALL default (a 300-poll placeholder) is set from a forced full run with a very high window, on an unpushed throwaway branch inside a slot, reading each unit's longest silent stretch from `.git/ai-dlc-pool-stall.last`; that run is also the false-positive set.
 
+Window: POOL_STALL_DEFAULT=<D9-WINDOW> polls, from a measured maximum silent stretch of <D9-MAX> polls (<D9-UNITS>) plus a margin of <D9-MARGIN>; set from the forced full run D9.
+
 verify: sh bash core/fixtures/consumer-suite-pool/receipt.sh
 
 ## BL-608 — the validator fork budget's headroom eroded from +6 to 0 across five releases, and nothing warned

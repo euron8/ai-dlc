@@ -471,16 +471,18 @@ fi
 # their own groups -- by recorded id, never by pattern. The verdict is REFUSED: no recorded duration, no
 # recorded key, no kept trace rows, and the push exits 2 rather than 1 when nothing else failed. The
 # window is counted in POLLS, so a loaded box widens it instead of shrinking it.
-# POOL_STALL=300 IS A PLACEHOLDER, not a measurement; a refusal costs a re-run, never a verdict. The
-# default is set from the measurement this pool instruments: each run publishes every unit's LONGEST
-# silent stretch (consecutive polls with no new bytes) to "$GITDIR/ai-dlc-pool-stall.last", and one forced
-# full run with a very high window, on an unpushed throwaway branch inside a slot, produces the
-# false-positive set and the figure together. BL-606 does not land without that measurement.
+# A refusal costs a re-run, never a verdict. The default, POOL_STALL_DEFAULT, is set from the measurement
+# this pool instruments: each run publishes every unit's LONGEST silent stretch (consecutive polls with no
+# new bytes) to "$GITDIR/ai-dlc-pool-stall.last", and one forced full run with a very high window, on an
+# unpushed throwaway branch inside a slot, produces the false-positive set and the figure together. The
+# default is that measured maximum plus a stated margin. The figures -- the maximum, the margin, and the
+# units nearest it -- are recorded in the BL-606 backlog entry and the CHANGELOG, not here.
 # AI_DLC_POOL_STALL overrides it, for a fixture driving a deliberately hung unit.
-POOL_STALL="${AI_DLC_POOL_STALL:-300}"
-case "$POOL_STALL" in ''|*[!0-9]*|??????*) POOL_STALL=300 ;; esac
+POOL_STALL_DEFAULT=300                     # D9-WINDOW
+POOL_STALL="${AI_DLC_POOL_STALL:-$POOL_STALL_DEFAULT}"
+case "$POOL_STALL" in ''|*[!0-9]*|??????*) POOL_STALL=$POOL_STALL_DEFAULT ;; esac
 POOL_STALL=$((10#$POOL_STALL))
-[ "$POOL_STALL" -ge 1 ] || POOL_STALL=300
+[ "$POOL_STALL" -ge 1 ] || POOL_STALL=$POOL_STALL_DEFAULT
 POOL_REFUSED_ONLY=0
 # THE TREE WALK, one `ps` and one awk per poll. Input rows are `pid ppid pgid stat time`; `root` is the
 # unit's recorded pid, `self` the worker's own group (never walked, never signalled: a unit whose `set -m`
