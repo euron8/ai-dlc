@@ -95,7 +95,7 @@ MUTANTS_b="MX8 MX9 MX10 MX11 MX12 MX13 MX14 TM15"
 MUTANTS_c="MX15 XM1 XM2 XM7 XM8 XM3 XM4 TM11 TM12"
 MUTANTS_d="XM5 XM6 SM1 SM2 SM3 SM4 RM3 TM13 DM1"
 MUTANTS_e="TM1 TM2 TM3 TM4 TM5 TM6 TM10 BM1 RM4"
-MUTANTS_f="TM7 TM8 TM9 RM1 RM2 HM1 CM1 FM1 FM2 FM3"
+MUTANTS_f="TM7 TM8 TM9 RM1 RM2 HM1 CM1 FM1 FM2 FM3 FM4 FM5"
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
@@ -396,7 +396,7 @@ mutant "MX15 B4-by-document refuses every document" "b4doc b4doc_other" \
 # The cross groups (BL-464). XM1: files and --subject left single-cross -- the groups are read only
 # in --document mode, the wrong build "merge sharded in one mode only". Every files and subject arm
 # that seeds cross-<g> dies; the --document arms hold.
-mutant "XM1 one mode left single-cross" "b3 clean ceiling miss_ord miss_cross partition sha ms files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit xfiles xelicit xmix xunknown xcomplete tuid_main tuid_norow tuid_nometa tuid_selfdiff tuid_role tuid_twowriters tuid_oneagent tuid_nospawn tuid_session tuid_pre tuid_basename tuid_probemeta tuid_tworoles rerun_join rerun_other rerun_same rerun_role xdir probe_disagree probe_absent rerun_residual hdr draft dry dry_barrier tree tuid_call rerun_bind" \
+mutant "XM1 one mode left single-cross" "b3 clean ceiling miss_ord miss_cross partition sha ms files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit xfiles xelicit xmix xunknown xcomplete tuid_main tuid_norow tuid_nometa tuid_selfdiff tuid_role tuid_twowriters tuid_oneagent tuid_nospawn tuid_session tuid_pre tuid_basename tuid_probemeta tuid_tworoles rerun_join rerun_other rerun_same rerun_role xdir probe_disagree probe_absent rerun_residual hdr draft dry dry_barrier tree tuid_call rerun_bind fence_prose fence_unclosed fence_tilde fence_four fence_nested" \
   'bash "$XPART" --cross-groups "$K" > "$T/groups" 2> "$T/groups.err"; grc=$?' \
   'bash "$XPART" --cross-groups "$( [ -n "$DOCUMENT" ] && echo "$K" || echo 2)" > "$T/groups" 2> "$T/groups.err"; grc=$?'
 # XM2: the owner rule off -- a finding two covering groups both report is summed twice. Only the
@@ -591,19 +591,32 @@ mutant "RM4 rerun start never bound to its dispatch time" "rerun_bind" \
 # same_set left on the new grammar. FM2: the old opener restored in same_set only. FM3: the loose
 # closer restored (any ``` or ~~~ run closes), openers unchanged. FM1 also kills fence_sameset: its owner
 # shard carries the prose line before the finding, which the old count hides, so the arms overlap there by construction.
+# FM1 and FM2 keep the opener's run-length capture, so each moves the opener grammar alone.
 mutant "FM1 old fence opener restored in the count" "fence_prose fence_sameset" \
-  '    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; next }
+  '    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
     fence { next }
     /^## [A-Z]+' \
-  '    !fence && /^[ \t]*(```|~~~)/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; next }
+  '    !fence && /^[ \t]*(```|~~~)/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
     fence { next }
     /^## [A-Z]+'
 mutant "FM2 old fence opener restored in same_set only" "fence_sameset" \
-  '    !f && /^[ \t]*(```+[^`]*|~~~+.*)$/ { f = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; next }' \
-  '    !f && /^[ \t]*(```|~~~)/ { f = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; next }'
+  '    !f && /^[ \t]*(```+[^`]*|~~~+.*)$/ { f = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }' \
+  '    !f && /^[ \t]*(```|~~~)/ { f = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }'
 mutant "FM3 loose fence closer restored" "fence_tilde" \
-  '    fence && ((fc == "`" && $0 ~ /^[ \t]*```+[ \t]*$/) || (fc == "~" && $0 ~ /^[ \t]*~~~+[ \t]*$/)) { fence = 0; next }' \
+  '    fence && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { fence = 0; next } }' \
   '    fence && ($0 ~ /^[ \t]*(```|~~~)/) { fence = 0; next }'
+# FM4: the length rule dropped at the count site -- a ```` fence closes on the inner bare ``` and its real
+# closer opens a phantom fence. fence_nested's M1 is then counted, so declared 0 is refused. FM4 also kills
+# fence_nested_set: the owner's shard is counted by the same parse before same_set reads it, and under FM4
+# the phantom fence hides its one finding, so the arms overlap there by construction. FM5: the same rule
+# dropped in same_set only -- the owner's `sections:` line falls into the phantom fence, the duplicate is
+# no longer seen, and only fence_nested_set dies.
+mutant "FM4 fence length rule dropped in the count" "fence_nested fence_nested_set" \
+  '&& length(frr) >= fln) { fence = 0; next } }' \
+  ') { fence = 0; next } }'
+mutant "FM5 fence length rule dropped in same_set only" "fence_nested_set" \
+  '&& length(frr) >= fln) { f = 0; next } }' \
+  ') { f = 0; next } }'
 # ---- END MX MUTANTS
 
 # ------------------------------------------------------------------------------ the reap

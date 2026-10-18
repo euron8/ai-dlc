@@ -478,8 +478,8 @@ SEAT_DIR="${STATE}/party-mode/s${SPRINT}"
 src_ids() {
   awk '
     FNR == 1 { fence = 0; b = FILENAME; sub(/.*\//, "", b); print b "\t" }
-    fence && ((fc == "`" && $0 ~ /^[ \t]*```+[ \t]*$/) || (fc == "~" && $0 ~ /^[ \t]*~~~+[ \t]*$/)) { fence = 0; next }
-    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; next }
+    fence && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { fence = 0; next } }
+    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
     fence { next }
     /^##+[ \t]/ {
       s = $0; sub(/^#+[ \t]+/, "", s); gsub(/[*`_]/, "", s); gsub(/[][]/, "", s); sub(/^[ \t]+/, "", s)
@@ -501,8 +501,8 @@ src_check() {
   toks="$(awk '
     function flush() { if (disp && !nsrc && !ruled) print "NOSOURCE\t" cf "\t" cur; if (disp) ne++; disp = 0; nsrc = 0; ruled = 0 }
     FNR == 1 { flush(); cur = "(before any heading)"; cf = FILENAME; sub(/.*\//, "", cf); fence = 0 }
-    fence && ((fc == "`" && $0 ~ /^[ \t]*```+[ \t]*$/) || (fc == "~" && $0 ~ /^[ \t]*~~~+[ \t]*$/)) { fence = 0; next }
-    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; next }
+    fence && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { fence = 0; next } }
+    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
     fence { next }
     /^#+[ \t]/ { flush(); cur = $0; sub(/^#+[ \t]+/, "", cur); next }
     /^[[:space:]-]*[*_`]*disposition[*_`]*:/ { disp = 1; v = tolower($0); sub(/^[^:]*:/, "", v); gsub(/[*_`]/, "", v); sub(/^[ \t]+/, "", v)
@@ -943,13 +943,13 @@ contract_check() {
       if (r != "" && r !~ /[ \t]/) cfile = r; else ctext = ""
     }
     FNR == 1 { flush(); cur = "(before any heading)"; sev = 0; hl = 0; cf = FILENAME; sub(/.*\//, "", cf); part = cf; fence = 0 }
-    fence && ((fc == "`" && $0 ~ /^[ \t]*```+[ \t]*$/) || (fc == "~" && $0 ~ /^[ \t]*~~~+[ \t]*$/)) {
+    fence && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) {
       if (sibin) sibclose()
-      fence = 0; inclaim = 0; next }
+      fence = 0; inclaim = 0; next } }
     !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ {
       if (sibw) { b = $0; sub(/^[ \t]+/, "", b); sub(/[ \t]+$/, "", b); sibw = 0
                   if (b == "```text") { sibin = 1; srn = 0; sctl = 0; sn = "" } }
-      fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; inclaim = 0; next }
+      fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; inclaim = 0; next }
     fence && sibin {
       l = $0; sub(/^[ \t]+/, "", l); sub(/[ \t]+$/, "", l)
       if (sctl == 1) { sctl = 2; sn = l }
@@ -1041,8 +1041,8 @@ gap_section() {
     function lvl(s) { match(s, /^#+/); return RLENGTH }
     NR < lo { next }
     NR > hi { exit }
-    fence && ((fc == "`" && $0 ~ /^[ \t]*```+[ \t]*$/) || (fc == "~" && $0 ~ /^[ \t]*~~~+[ \t]*$/)) { fence = 0; t[NR] = ""; next }
-    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; t[NR] = ""; next }
+    fence && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { fence = 0; t[NR] = ""; next } }
+    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; t[NR] = ""; next }
     { t[NR] = fence ? "" : $0 }
     !fence && /^#+[ \t]/ { if (NR <= L) { hs = NR; hv = lvl($0); hd = $0 } else if (hs && !he && lvl($0) <= hv) he = NR - 1 }
     END {
@@ -1328,8 +1328,8 @@ checks_field() {
     }
     function blk(j) { return " (the block closed at line " tl[j] " by \047" tx[j] "\047)" }
     BEGIN { nk = 1; ck[1] = "H"; cl[1] = 1 }
-    fence && ((fc == "`" && $0 ~ /^[ \t]*```+[ \t]*$/) || (fc == "~" && $0 ~ /^[ \t]*~~~+[ \t]*$/)) { fence = 0; next }
-    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; next }
+    fence && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { fence = 0; next } }
+    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
     fence { next }
     rec == 1 && /^<!-- shard: [^ ]+ -->[ \t]*$/ { brk("M"); cm[nk] = $0; sub(/^<!-- shard: /, "", cm[nk]); sub(/ -->.*$/, "", cm[nk]); next }
     rec == 1 && /^repair-complete:/ { tl[nk] = FNR; tx[nk] = $0; gsub(/[\t\r]/, " ", tx[nk]); sub(/[ ]+$/, "", tx[nk])
@@ -1531,8 +1531,8 @@ record_tail() {
 # seat token with a part token is not refused here either: its part tokens refuse as NOFILE.
 src_kind() {  # <record> -> "PARTY", "PART" or "NONE" from its source: tokens, outside fences
   awk '
-    fence && ((fc == "`" && $0 ~ /^[ \t]*```+[ \t]*$/) || (fc == "~" && $0 ~ /^[ \t]*~~~+[ \t]*$/)) { fence = 0; next }
-    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; next }
+    fence && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { fence = 0; next } }
+    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
     fence { next }
     /^[[:space:]-]*[*_`]*source[*_`]*:/ {
       v = $0; sub(/^[^:]*:/, "", v)

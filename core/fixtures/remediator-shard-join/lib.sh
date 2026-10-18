@@ -982,6 +982,29 @@ p_supchain() { # (a) a serial escalation superseding the part escalation -> ESCA
   [ "$RC" -eq 2 ] && has "$JO" "the S-1 — MAJOR entry's 'supersedes: 01.md S-2 — MAJOR' names no earlier escalation" \
     && has "$JO" "ESCALATED-COUNT: 2 (0 closed"
 }
+# ---- ONE FENCE GRAMMAR across the record readers: a fence closes only on a bare run of its own character
+# at least as long as its opener. Every cell nests a ``` block (opened with an info string) inside a ````
+# fence and puts the content the reader must NOT see between the inner closer and the outer one.
+FN_O='````md\n```text\nquoted\n```\n'
+p_fencenest() { # (a) contract_check: in the siblings era (F-0 carries the field), a repaired edit with no
+  # siblings: inside the fence is not an entry -> rc 0, nothing refused; (b) checks_field: a `derivations: not
+  # replayed` line inside it is not read -> rc 0; (c) --sources: src_kind and src_check read no part token inside
+  # it, and src_ids reads the seat heading F-98 after a nested fence in the seat file -> both seat tokens
+  # resolve, rc 0; (d) gap_section: a fenced `## ` heading is no heading, so the edit lands under the real one
+  esc_rec "$1" "### F-0 — MAJOR\n- disposition: repaired\n- edit: s305/a.md:1\n- siblings: n/a (insertion)\n\n${FN_O}### F-1 — MAJOR\n- disposition: repaired\n- edit: s305/a.md:3\n\`\`\`\`\n"
+  [ "$RC" -eq 0 ] && ! has "$JO" "REFUSED" && has "$JO" "ESCALATED-COUNT: 0 (0 closed" || return 1
+  esc_rec "$1" "- advisor: called\n- derivations: replayed 1\n\n${FN_O}- derivations: not replayed\n\`\`\`\`\n\n### F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n"
+  [ "$RC" -eq 0 ] && ! has "$JO" "REFUSED" || return 1
+  local w; w="$(mktemp -d "$WORK/src.XXXXXX")" && mkdir -p "$w/.claude" && seat_seed "$w" 305 || return 1
+  printf '%b' "\n${FN_O}\`\`\`\`\n\n## F-98 a heading after a nested fence\n" >> "$w/_bmad-output/party-mode/s305/architecture-dev-1.md" || return 1
+  src_rec "$w" "### F-1\n- disposition: repaired\n${FN_O}- source: 07.md#F-1\n\`\`\`\`\n- source: architecture-dev-1.md#F-1 architecture-dev-1.md#F-98\n" "$1"
+  [ "$RC" -eq 0 ] && has "$JO" "-- 1 entries, 2 sources, every one resolved in" || return 1
+  w="$(mktemp -d "$WORK/gap.XXXXXX")" && mkdir -p "$w/.claude" "$w/d" || return 1
+  printf '%b' "# PRD\n\n## Net P&L\nShow - per D-5.\n${FN_O}## Fenced\n\`\`\`\`\nThe card line.\n" > "$w/d/prd.md"
+  printf '%b' '### F-4\n- disposition: repaired\n- edit: d/prd.md:11\n- siblings: n/a (insertion)\n- claim now asserted: a gap fill the lead may veto.\n' > "$w/stories-repair-p1.md"
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --escalations "$w/stories-repair-p1.md" --sprint 305 > "$JO" 2>&1; RC=$?
+  [ "$RC" -eq 0 ] && has "$JO" "-- lands in d/prd.md:11 under 'Net P&L', which cites D-5"
+}
 # ---- THE SERIAL BLOCKS (BL-557): segmented by their column-0 `repair-complete:` terminators.
 CHS_HEAD='- artifact: r.md\n\n<!-- shard: 01.md -->\n- artifact: p.md\n- advisor: called\n- derivations: replayed 1\n\n### F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\n### F-2 — MAJOR\n- disposition: escalated\n- edit: n/a\n\n- artifact: p.md\n- advisor: called\n- derivations: replayed 2\n\n### S-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\nrepair-complete: serial 1\n'
 CHS_TAIL='\n### S-2 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\nrepair-complete: serial 2\n'
@@ -1483,7 +1506,7 @@ p_agentwrites() {
   [ "$RC" -eq 2 ] && has "$JO" "REFUSED:"
 }
 
-P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrargs rrfiles rrsubj alias alnokeys alresult alown alsecond alother alsess altwo altool nested rronly dispkey dispvocab dispruling srcparts gapfill chkpart chkrec rulingedit rulingtab chkjoined partsilent specstale specfresh spechand specnone spectwo sjspecstale sjspecfresh sjspecnone specother specunread agentwrites chkserial supchain gaploc"
+P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrargs rrfiles rrsubj alias alnokeys alresult alown alsecond alother alsess altwo altool nested rronly dispkey dispvocab dispruling srcparts gapfill chkpart chkrec rulingedit rulingtab chkjoined partsilent specstale specfresh spechand specnone spectwo sjspecstale sjspecfresh sjspecnone specother specunread agentwrites chkserial supchain gaploc fencenest"
 
 # ---- A PART'S DERIVATION SURVIVES THE JOIN. The part's ```derived fence is copied into the joined
 # record, and the gate re-runs `validate-artifact-derivations.sh` over the sprint dir AFTER the

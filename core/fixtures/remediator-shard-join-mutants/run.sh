@@ -420,7 +420,7 @@ src_probe_disabled() {'
 # so every party run stops at it: the arms that expect a party join or a NAMED refusal all die.
 # srcsetaside, srcpending, srcera and srcclosed (BL-508/519) die too: each is a --sources run, and the
 # probe stops every one before its arm.
-mutant "JX18 source keyed on the id alone (self-probe in place)" "sjnames party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 srcsetaside srcpending srcera srcclosed srchalf srccross srcparts" \
+mutant "JX18 source keyed on the id alone (self-probe in place)" "sjnames party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 srcsetaside srcpending srcera srcclosed srchalf srccross srcparts fencenest" \
   "$IDONLY_OLD" "$IDONLY_NEW"
 # JX19: the same key AND the probe removed -- now only the arms that seed an id another seat carries see it.
 mutant2 "JX19 source keyed on the id alone, self-probe removed" "partyunres srcunres" \
@@ -558,7 +558,7 @@ mutant "JX39 set-aside regex cut to 'not required' only" "setasideshard" \
 mutant "JX40 set-aside regex cut to the shard phrase only" "setasidenr" \
   'claim ~ /outside (this|my|the) (shard|part|section)|not required/' \
   'claim ~ /outside (this|my|the) (shard|part|section)/'
-mutant "JX41 --sources prints no ESCALATED-COUNT line" "srcclosed srchalf srccross escopen escclosed gapfill rulingedit specfresh spechand specnone spectwo specother specunread chkserial supchain gaploc" \
+mutant "JX41 --sources prints no ESCALATED-COUNT line" "srcclosed srchalf srccross escopen escclosed gapfill rulingedit specfresh spechand specnone spectwo specother specunread chkserial supchain gaploc fencenest" \
   '  echo "ESCALATED-COUNT: ${ESC_N} (${ESC_X} closed' \
   '  : "ESCALATED-COUNT: ${ESC_N} (${ESC_X} closed'
 mutant2 "JX31 the set-aside hand-off exemption removed, self-probe removed" "handoff" \
@@ -580,7 +580,7 @@ printf '"'"'%s'"'"' "$ESC_LINES"' \
   '# "Adversarial repair dispatch").
 :'
 # escopen and escclosed die too: --escalations runs the same record_tail.
-mutant "JX35 --sources does not apply the entry contract" "srcsetaside srcpending srcera srcclosed srchalf srccross escopen escclosed dispkey dispvocab dispruling gapfill rulingedit rulingtab chkjoined specfresh spechand specnone spectwo specother specunread chkserial supchain gaploc" \
+mutant "JX35 --sources does not apply the entry contract" "srcsetaside srcpending srcera srcclosed srchalf srccross escopen escclosed dispkey dispvocab dispruling gapfill rulingedit rulingtab chkjoined specfresh spechand specnone spectwo specother specunread chkserial supchain gaploc fencenest" \
   '  contract_refusals 1 "$(contract_check 1 "$1")"' \
   '  ESC_LINES=""; ESC_CLOSED=""; ESC_N=0; ESC_X=0'
 # ---- the four siblings forms, the point-in-time fence, escalated citations, --escalations.
@@ -605,7 +605,7 @@ mutant "JX53 the siblings control not counted at the join" "sibnever" \
 mutant "JX54 an escalated entry's edit: path counted as a shard citation" "escpath" \
   '    function emit(   i) { if (disp !~ /^escalat/) for (i = 1; i <= nt; i++) print tk[i]; nt = 0; disp = "" }' \
   '    function emit(   i) { for (i = 1; i <= nt; i++) print tk[i]; nt = 0; disp = "" }'
-mutant "JX55 --escalations runs as --sources (needs a seat dir)" "escopen escclosed dispkey dispvocab dispruling gapfill chkrec rulingedit rulingtab chkjoined specstale specfresh spechand specnone spectwo specother specunread chkserial supchain gaploc" \
+mutant "JX55 --escalations runs as --sources (needs a seat dir)" "escopen escclosed dispkey dispvocab dispruling gapfill chkrec rulingedit rulingtab chkjoined specstale specfresh spechand specnone spectwo specother specunread chkserial supchain gaploc fencenest" \
   '    --escalations) SRC_REC="${2:-}"; SRCMODE=2; shift 2 ;;' \
   '    --escalations) SRC_REC="${2:-}"; SRCMODE=1; shift 2 ;;'
 # ---- the re-run window (--rerun <part>.md@<ISO>). Expected sets are the measured kills; the
@@ -706,7 +706,7 @@ mutant "JX75 an operator-ruling cite not resolved" "dispruling" \
 mutant "JX76 --sources on a part-token record not refused" "srcparts" \
   '  [ "$(src_kind "$SRC_REC")" = PART ] \' \
   '  [ "$(src_kind "$SRC_REC")" = NEVER ] \'
-mutant2 "JX77 the gap-fill tripwire removed, self-probe removed" "gapfill gaploc" \
+mutant2 "JX77 the gap-fill tripwire removed, self-probe removed" "gapfill gaploc fencenest" \
   '        if (disp == "repaired" && claim ~ /gap[- ]?fill|veto/) print "GAPFILL\t" cf "\t" cur' \
   '        if (0) print "GAPFILL\t" cf "\t" cur' \
   "$CTPROBE_OLD" "$CTPROBE_NEW"
@@ -720,13 +720,13 @@ mutant2 "JX77 the gap-fill tripwire removed, self-probe removed" "gapfill gaploc
 mutant "JX78 the check fields not read in parts mode" "chkpart" \
   '  checks_refusals "$(checks_field 0 "$p")"' \
   '  :'
-mutant2 "JX79 the record-mode era removed (a record with neither field binds), self-probe removed" "srcok srcpending srcclosed srchalf srccross escopen escclosed dispruling srcparts gapfill chkrec rulingtab chkjoined specfresh spechand specnone spectwo specother chkserial supchain gaploc" \
+mutant2 "JX79 the record-mode era removed (a record with neither field binds), self-probe removed" "srcok srcpending srcclosed srchalf srccross escopen escclosed dispruling srcparts gapfill chkrec rulingtab chkjoined specfresh spechand specnone spectwo specother chkserial supchain gaploc fencenest" \
   '      if (mode == "E" && sa + sd == 0) return' \
   '      if (0) return' \
   "$CTPROBE_OLD" "$CTPROBE_NEW"
 # JX80: the gap-fill report turned back into a refusal (the shape that hid s319's escalations): the
 # record exits 2 before its count, which p_gapfill's rc 0 and ESCALATED-COUNT assertions see.
-mutant "JX80 the gap-fill report made a refusal again" "gapfill gaploc" \
+mutant "JX80 the gap-fill report made a refusal again" "gapfill gaploc fencenest" \
   '      GAPFILL) GAP_N=$((GAP_N + 1)); GAP_LINES=' \
   '      GAPFILL) refuse "gap fill"; GAP_N=$((GAP_N + 1)); GAP_LINES='
 # ---- the third tip adversary's four. JX81: a ruling held to nothing again (keyed on repaired alone);

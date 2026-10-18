@@ -1252,6 +1252,31 @@ p_fence_sameset() { # same_set: cross-2 duplicates the set cross-1 (its owner) c
     doc_refused_clean "a finding owned by cross-1" "$d" || return 1
   done
 }
+# A fence closes only on a run of its own character AT LEAST AS LONG as its opener's. The inner block
+# opens with an info string, so a reader that closes on any bare run ends the outer fence at the inner
+# bare ``` and then opens a phantom fence at the real ```` closer; a bare inner opener would hide M1
+# under both readers and discriminate nothing.
+FW_NEST='````md\n```text\nquoted\n```\n'
+p_fence_nested() { # count: a ```` fence holding a ``` block, then M1, then the ```` closer -- M1 is hidden, so
+                   # declared 0 merges (major=4) and declared 1 is REFUSED on the count
+  local d
+  d="$(fence_world "## Findings\n\n$FW_NEST$FW_M1\n\`\`\`\`" 0)" || return 1
+  run_merge "$1" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && has "$MO" "major=4" || return 1
+  d="$(fence_world "## Findings\n\n$FW_NEST$FW_M1\n\`\`\`\`" 1)" || return 1
+  run_merge "$1" "$d"
+  refused_clean "Findings section heads 0" "$d"
+}
+p_fence_nested_set() { # same_set: the owner cross-1 opens its ## Findings with a ```` fence holding a ``` block,
+                       # its finding AFTER the ```` closer; cross-2 duplicates its set -> REFUSED as cross-1's
+  local d
+  d="$(doc_b3_world)" || return 1
+  dshard "$d" cross-1 1 EXIT_CONDITION_MET "1, 2"; dshard "$d" cross-2 1 EXIT_CONDITION_MET "1, 2"
+  awk '{ print } $0 == "## Findings" { print ""; print "````md"; print "```text"; print "quoted"; print "```"; print "````" }' \
+    "$d/cross-1.md" > "$d/cross-1.tmp" && mv "$d/cross-1.tmp" "$d/cross-1.md" || return 1
+  run_doc_merge "$1" "$d"
+  doc_refused_clean "a finding owned by cross-1" "$d"
+}
 
-P_ALL="b3 clean ceiling miss_ord miss_cross dup partition sha ms doc_b3 doc_axis doc_sha doc_path doc_serial files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit subj_b4 b4doc b4doc_nomf b4doc_other xfiles xdoc xelicit xmix xunknown xcomplete stem_series stem_control stem_near stem_files tuid_main tuid_norow tuid_nometa tuid_selfdiff tuid_role tuid_twowriters tuid_oneagent tuid_nospawn tuid_session tuid_pre tuid_basename tuid_probemeta tuid_tworoles rerun_join rerun_other rerun_same rerun_role xdir probe_disagree probe_absent rerun_residual hdr draft dry dry_barrier tree tuid_call rerun_bind fence_prose fence_unclosed fence_tilde fence_four fence_sameset"
+P_ALL="b3 clean ceiling miss_ord miss_cross dup partition sha ms doc_b3 doc_axis doc_sha doc_path doc_serial files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit subj_b4 b4doc b4doc_nomf b4doc_other xfiles xdoc xelicit xmix xunknown xcomplete stem_series stem_control stem_near stem_files tuid_main tuid_norow tuid_nometa tuid_selfdiff tuid_role tuid_twowriters tuid_oneagent tuid_nospawn tuid_session tuid_pre tuid_basename tuid_probemeta tuid_tworoles rerun_join rerun_other rerun_same rerun_role xdir probe_disagree probe_absent rerun_residual hdr draft dry dry_barrier tree tuid_call rerun_bind fence_prose fence_unclosed fence_tilde fence_four fence_sameset fence_nested fence_nested_set"
 

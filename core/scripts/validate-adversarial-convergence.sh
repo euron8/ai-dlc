@@ -2817,8 +2817,8 @@ l_kparse() {
   [ -e "$1" ] || return 0
   l_kr="$(awk '
     FNR == 1 { got = 0; inf = 0 }
-    inf && ((fc == "`" && $0 ~ /^[ \t]*```+[ \t]*$/) || (fc == "~" && $0 ~ /^[ \t]*~~~+[ \t]*$/)) { inf = 0; next }
-    !inf && /^[ \t]*(```+[^`]*|~~~+.*)$/ { inf = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; next }
+    inf && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { inf = 0; next } }
+    !inf && /^[ \t]*(```+[^`]*|~~~+.*)$/ { inf = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
     !got && !inf && /^shard:[ \t]*(cross(-[0-9]+)?|[0-9]+)\/[0-9]/ {
       v = $0; sub(/^shard:[ \t]*[^\/]*\//, "", v); r = v; sub(/^[0-9]+/, "", r)
       if (r != "" && r !~ /^[ \t]/) next
@@ -3005,8 +3005,11 @@ EOF
   # judgment against K_rec can owe. Then the DIRECTION: l_kuse honours only a LARGER recorded K --
   # 5 over 3 yes; 3 over 3 (equality), 1 over 3 (`shard: 1/1`, one voice) and 2 over 3 no -- and the
   # equality and grow dirs are judged against today's K=3, failing (b) and (c).
-  mkdir -p "$AC_T/l-probe/c" "$AC_T/l-probe/d" "$AC_T/l-probe/e" "$AC_T/l-probe/f" "$AC_T/l-probe/g" "$AC_T/l-probe/h" \
+  # n: a ```` fence holding a ``` block, a quoted shard line (K=9) after the inner closer, then the real
+  # line (K=4) after the ```` closer -> 4; a closer without the length rule reads the quote, so 9.
+  mkdir -p "$AC_T/l-probe/c" "$AC_T/l-probe/d" "$AC_T/l-probe/e" "$AC_T/l-probe/f" "$AC_T/l-probe/g" "$AC_T/l-probe/h" "$AC_T/l-probe/n" \
     && printf '```\nshard: 01/9 quoted\n```\nshard: 02/4 real\n' > "$AC_T/l-probe/g/02.md" \
+    && printf '````md\n```text\nx\n```\nshard: 01/9 quoted\n````\nshard: 02/4 real\n' > "$AC_T/l-probe/n/02.md" \
     && printf 'shard: 01/1000 x\n' > "$AC_T/l-probe/h/01.md" \
     && : > "$AC_T/l-probe/c/01.md" && printf '# x\n\nshard: 02/5 story-2\n' > "$AC_T/l-probe/c/02.md" \
     && printf 'body\nshard: cross/5 cross-1\n' > "$AC_T/l-probe/c/cross-1.md" \
@@ -3018,6 +3021,7 @@ EOF
   l_kparse "$AC_T/l-probe/d"
   case "$L_KREC/$L_KBAD" in "/(f) the shard: lines do not record one K in 1..999: 02.md=5 03.md=3") ;; *) lp_bad="$lp_bad [recorded K disagreeing: '$L_KREC/$L_KBAD']" ;; esac
   l_kparse "$AC_T/l-probe/g"; [ "$L_KREC/$L_KBAD" = "4/" ] || lp_bad="$lp_bad [recorded K, fenced quote: '$L_KREC/$L_KBAD' want '4/']"
+  l_kparse "$AC_T/l-probe/n"; [ "$L_KREC/$L_KBAD" = "4/" ] || lp_bad="$lp_bad [recorded K, quote in a nested fence: '$L_KREC/$L_KBAD' want '4/']"
   l_kparse "$AC_T/l-probe/h"
   case "$L_KREC/$L_KBAD" in "/(f) the shard: lines do not record one K in 1..999: 01.md=1000") ;; *) lp_bad="$lp_bad [recorded K over the cap: '$L_KREC/$L_KBAD']" ;; esac
   lp_ku="$(l_kuse 5 3 && printf y)$(l_kuse 3 3 && printf y)$(l_kuse 1 3 && printf y)$(l_kuse 2 3 && printf y)$(l_kuse '' 3 && printf y)"

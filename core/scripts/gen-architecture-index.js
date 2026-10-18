@@ -64,19 +64,25 @@ function makeSlugger() {
 }
 
 // A fence opens on 3+ backticks whose info string carries no backtick, or 3+ tildes; it closes only on
-// a bare run (blanks aside) of the opener's own character.
+// a bare run (blanks aside) of the opener's own character at least as long as the opener's run, so a
+// ```` fence holding a ``` block does not close on the inner bare ```.
 function fenceOpens(t) { return /^(```+[^`]*|~~~+.*)$/.test(t); }
-function fenceCloses(t, ch) { return ch === '`' ? /^```+\s*$/.test(t) : /^~~~+\s*$/.test(t); }
+function fenceRun(t) { return /^(`+|~+)/.exec(t)[1].length; }
+function fenceCloses(t, ch, len) {
+  const m = ch === '`' ? /^(```+)\s*$/.exec(t) : /^(~~~+)\s*$/.exec(t);
+  return m !== null && m[1].length >= len;
+}
 
 // First non-empty, non-heading, non-fence prose line under a heading, truncated.
 function firstSummary(lines, startIdx, endIdx, maxLen) {
   let inFence = false;
   let fenceCh = '';
+  let fenceLen = 0;
   for (let i = startIdx; i < endIdx; i++) {
     const line = lines[i];
     const t = line.trim();
-    if (inFence) { if (fenceCloses(t, fenceCh)) inFence = false; continue; }
-    if (fenceOpens(t)) { inFence = true; fenceCh = t[0]; continue; }
+    if (inFence) { if (fenceCloses(t, fenceCh, fenceLen)) inFence = false; continue; }
+    if (fenceOpens(t)) { inFence = true; fenceCh = t[0]; fenceLen = fenceRun(t); continue; }
     if (t === '' || /^#{1,6}\s/.test(t)) continue;
     if (/^(<!--|\|)/.test(t)) continue; // skip HTML comments and table rows
     const oneLine = t.replace(/\s+/g, ' ');
@@ -90,11 +96,12 @@ function extractHeadings(text) {
   const headings = [];
   let inFence = false;
   let fenceCh = '';
+  let fenceLen = 0;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const t = line.trim();
-    if (inFence) { if (fenceCloses(t, fenceCh)) inFence = false; continue; }
-    if (fenceOpens(t)) { inFence = true; fenceCh = t[0]; continue; }
+    if (inFence) { if (fenceCloses(t, fenceCh, fenceLen)) inFence = false; continue; }
+    if (fenceOpens(t)) { inFence = true; fenceCh = t[0]; fenceLen = fenceRun(t); continue; }
     const m = /^(#{2,3})\s+(.*\S)\s*$/.exec(line); // H2 and H3 only
     if (m) headings.push({ level: m[1].length, title: m[2].trim(), line: i + 1, idx: i });
   }

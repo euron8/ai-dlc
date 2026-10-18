@@ -72,7 +72,7 @@
 SHARDS="a b c"
 MUTANTS_a="MX1 MX2 MX3 MX4 MX5 MX6 MX7 MX8 MX9 MX10 MX11 MX12 MX13 MX14 MX15 MX16 MX17 MX18 MX22 MH8 MH10 MH11"
 MUTANTS_b="MX23 MX24 MX25 MX26 MX27 MQ1 MQ2 MQ3 MQ4 MQ5 MQ6 MQ7 MQ8 MQ9 MH1 MH2 MH3 MH4 MH5 MH6 MH7 MH12"
-MUTANTS_c="MX19 MX20 MX21 MX28 MH13 MH14 MH9 MG1 MG2 MG3 MC1 MC2 MC3 MC4 MC11 MC12 MC5 MC6 MC7 MC8 MC9 MC10"
+MUTANTS_c="MX19 MX20 MX21 MX28 MH13 MH14 MH9 MG1 MG2 MG3 MC1 MC2 MC3 MC4 MC11 MC12 MC5 MC6 MC7 MC8 MC9 MC10 MF1"
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 unset AI_DLC_REVIEW_SHARD_MIN_FILES
@@ -384,6 +384,11 @@ mutant "MX4 accepts a short union" merge-review-shards.sh "miss_ord miss_cross" 
 mutant "MX5 emits a second Check-1 line" merge-review-shards.sh "c1 rerun q_table" \
   'cp "$T/out" "$OUT.merge-tmp.$$" && mv' \
   '{ cat "$T/out"; printf '"'"'**Verdict:** %s\n'"'"' "$WORST"; } > "$OUT.merge-tmp.$$" && mv'
+# MF1: the fence length rule dropped at the shard parse -- a ```` fence closes on the inner bare ``` and
+# the fenced '#### ' finding is counted. Only R20 seeds a nested fence.
+mutant "MF1 fence length rule dropped in the shard parse" merge-review-shards.sh "fence_nested" \
+  '&& length(frr) >= fln) { fence = 0; next } }' \
+  ') { fence = 0; next } }'
 mutant "MX6 skips the manifest re-derivation" merge-review-shards.sh "moved" \
   'bash "$PART" --map "$M_WT" "$M_BASE" "$M_SHA" --min-files "$M_MIN" --max-parts "$M_MAX" > "$T/map" 2> "$T/map.err"; prc=$?' \
   'cp "$T/mfmap" "$T/map"; prc=$?'

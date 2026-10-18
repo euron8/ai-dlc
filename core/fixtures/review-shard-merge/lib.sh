@@ -413,6 +413,20 @@ p_c1() { # Check 1's pattern matches the merged file EXACTLY once, and reads NEE
   o="$(out_of "$d")"; run_merge "$sd" "$d"
   [ "$RC" -eq 0 ] && [ -f "$o" ] && [ "$(check1_count "$o")" = "1" ] && [ "$(check1_value "$o")" = "NEEDS_REWORK" ]
 }
+p_fence_nested() { # a ```` fence holding a ``` block, then a '#### ' finding citing part 2, then the ```` closer,
+  # under shard 2's ## Findings: the finding is inside the fence, so the merge counts exactly the base
+  # world's findings. A closer without the length rule ends the fence at the inner bare ``` and counts it.
+  local sd="$1" d n0
+  d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || return 1
+  run_merge "$sd" "$d"; [ "$RC" -eq 0 ] || return 1
+  n0="$(sed -n 's/.* findings=\([0-9]*\) .*/\1/p' "$MO")"; [ -n "$n0" ] || return 1
+  d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || return 1
+  awk '{ print } /^### Important/ && !x { x = 1; print ""; print "````md"; print "```text"; print "quoted"; print "```"
+         print "#### F-2-9 a finding quoted inside the outer fence"; print "parts: 2"; print "````"; print "" }' \
+    "$d/2.md" > "$d/2.tmp" && mv "$d/2.tmp" "$d/2.md" && grep -q '^#### F-2-9 ' "$d/2.md" || return 1
+  run_merge "$sd" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "findings=$n0 "
+}
 p_conserve() { # a unique token from every part and from cross appears in the output
   local sd="$1" d o k
   d="$(world4 "$sd" NEEDS_REWORK APPROVED NEEDS_REWORK NEEDS_REWORK)" || return 1
@@ -1136,7 +1150,7 @@ p_cr_hc_missing() { # G5: a code-review part shard without its declared count ->
   run_merge "$1" "$d"; refused_clean "$QT_HC_MISSING" "$d"; }
 C_ALL="cr_ho_ok cr_ho_block cr_ho_unm cr_ho_runtwice cr_hc_missing"
 Q_ALL="q_worst q_table q_title q_fenced q_part_ac q_part_def q_cross_noac q_cross_twoac q_cross_twodef q_nodef q_rank q_pm q_suffix q_gate q_vset q_secvar q_ho_ok q_ho_unm q_ho_orph q_ho_force q_ho_cross q_ho_prun q_ho_fenced q_ho_shape q_ho_multi q_ho_twoline q_ho_dup q_ho_deco q_ho_nocolon q_ho_prose q_ho_acid q_hc_dash q_hc_hidden q_hc_zero q_hc_missing q_hc_two q_hc_nonint q_hc_cross q_hc_none q_ho_widen"
-P_ALL="part dflt_lo dflt_hi off refuse_val prec dmerge env worst c1 conserve miss_ord miss_cross dup part_cite cross_one sha_dir sha_rev moved a3 rerun anc cross_sha bad_verdict noparts manifest two_sha default_k stray nofind knob $Q_ALL $X_ALL $C_ALL"
+P_ALL="part dflt_lo dflt_hi off refuse_val prec dmerge env worst c1 conserve miss_ord miss_cross dup part_cite cross_one sha_dir sha_rev moved a3 rerun anc cross_sha bad_verdict noparts manifest two_sha default_k stray nofind knob fence_nested $Q_ALL $X_ALL $C_ALL"
 
 # Seed controls: the worlds must be able to express what the arms are named for. Both callers run
 # them before any arm or mutant verdict is read.

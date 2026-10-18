@@ -380,8 +380,8 @@ parse_shard() {
       }
       next
     }
-    fence && ((fc == "`" && $0 ~ /^[ \t]*```+[ \t]*$/) || (fc == "~" && $0 ~ /^[ \t]*~~~+[ \t]*$/)) { fence = 0; next }
-    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; next }
+    fence && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { fence = 0; next } }
+    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
     fence { next }
     /^## [A-Z]+-?[0-9]+([^A-Za-z0-9]|$)/ { if (hline == 0) hline = NR }
     /^## / { flush(); infind = ($0 ~ /^## Findings[ \t]*$/); next }
@@ -1175,8 +1175,8 @@ resolve_artifact() {
 same_set() {
   awk -v lab="$2:" -v want="$3" '
     BEGIN { n = split(want, w, /[ \t]+/); for (i = 1; i <= n; i++) if (w[i] != "") { W[w[i] + 0] = 1; nw++ } }
-    f && ((fc == "`" && $0 ~ /^[ \t]*```+[ \t]*$/) || (fc == "~" && $0 ~ /^[ \t]*~~~+[ \t]*$/)) { f = 0; next }
-    !f && /^[ \t]*(```+[^`]*|~~~+.*)$/ { f = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; next }
+    f && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { f = 0; next } }
+    !f && /^[ \t]*(```+[^`]*|~~~+.*)$/ { f = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
     f { next }
     /^## / { inf = ($0 ~ /^## Findings[ \t]*$/); next }
     !inf || index($0, lab) != 1 { next }
