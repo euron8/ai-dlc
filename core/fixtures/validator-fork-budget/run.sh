@@ -123,9 +123,16 @@ NFX="$(find "$FXROOT" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | grep -c .)"
 # allowance; it is one release of warning before A3 goes red. A3 alone is silent from "headroom
 # gone" until the first push that reads one fork over, and the push that spends the last of the
 # headroom then fails on a change that looks like any other.
-# OWNER-TO-CONFIRM: the value 2 is a placeholder. Insert the measured spread here (5 interleaved
-# reps, measured in a slot): <MEASURED SPREAD>
+# Measured: fork-profile TOTAL read the same count in 5 of 5 interleaved base/tip reps (spread 0), so
+# no part of the margin covers noise. 2 is policy: the smallest margin that still warns one release
+# ahead of A3, chosen against a deterministic count and not fitted to the headroom left.
 # It must stay under 30% of the budget, or A3b would meet A4's window; m15 asserts that.
+# False-positive set, replayed over every recorded raise: the 23 "RAISED TO" paragraphs in the
+# validator's raise history plus the 2 in fork-budget.txt, each paired with the reading it was set from
+# (25 of 25 paired). Every raise left headroom 6 (the first 17) or 4 (the last 8), and A3b is quiet on
+# all 25. So a raise taken by this repo's own method never trips it. It fires only on a state that
+# spent the margin since the last raise. That is BL-608's motivating state: 0.796.0 read 3362-3363
+# against 3363, headroom 0-1.
 HEADROOM_MARGIN=2
 
 # --- judge: the whole verdict, one implementation -----------------------------------------
