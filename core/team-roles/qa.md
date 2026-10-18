@@ -410,7 +410,10 @@ findings in your file. It appends `seat-complete: implementation qa <shard>
 sha=<hex> findings=<n>`, whose `sha=` binds every line above it: an edit after it
 reads unfinished until you run the same call again. Never type the line by hand
 or with your header; the lead's join waits for a matching `sha=` and the merge
-refuses a count that disagrees. The go-signal SHA is the frozen sha. Your
+refuses a count that disagrees. If the call fails with `unknown arg: --mark`, the
+engine copy you ran predates the seal: append the bare line `seat-complete:
+implementation qa <shard> findings=<n>` instead, which the join accepts once the
+file has stopped changing. The go-signal SHA is the frozen sha. Your
 `reviewed-sha:` line carries it in FULL (40 or 64 hex characters) even when the
 go-signal abbreviates it, so resolve it with `git rev-parse` in the frozen
 worktree.

@@ -215,7 +215,10 @@ closing what you wrote: `scripts/ai-dlc/wait-for-deliverable.sh --mark-repair <r
 `<pass>` being the pass your brief names. It appends `repair-complete: serial <pass> sha=<hex>`,
 whose `sha=` binds every line above it, so an edit after it reads unfinished until you run the
 same call again; never type the line by hand. This one call is the exception to "never a Bash
-redirect" above: your Edit and Write calls already recorded every entry. The unsharded remediator, whose brief reads `shard: none (serial-document)`, is the only
+redirect" above: your Edit and Write calls already recorded every entry. If that call fails with
+`unknown arg: --mark-repair`, the engine copy you ran predates the seal: append the bare line
+`repair-complete: serial <pass>` instead, which the join accepts once the record has stopped
+changing. The unsharded remediator, whose brief reads `shard: none (serial-document)`, is the only
 pass over its record, so its record ends in that line exactly as the serial remediator's appended
 block does. The call writes it at column 0, as the
 record's last non-blank line, outside any fence and never as a list item (`- repair-complete:`

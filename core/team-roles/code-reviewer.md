@@ -208,7 +208,10 @@ code-reviewer <shard> findings=<n>`, <n> being the number of `#### ` findings in
 your file. It appends `seat-complete: implementation code-reviewer <shard>
 sha=<hex> findings=<n>`, whose `sha=` binds every line above it: an edit after it
 reads unfinished until you run the same call again. Never type the line by hand
-or with your header; the merge refuses a shard whose count disagrees. Your shard replaces the template's
+or with your header; the merge refuses a shard whose count disagrees. If the call fails with
+`unknown arg: --mark`, the engine copy you ran predates the seal: append the bare line
+`seat-complete: implementation code-reviewer <shard> findings=<n>` instead, which the join
+accepts once the file has stopped changing. Your shard replaces the template's
 `## Verdict` heading and value with one column-0 line
 `shard-verdict: <VALUE>` (`APPROVED`, `NEEDS_REWORK` or `BLOCKED`), carries one
 column-0 `reviewed-sha: <full frozen sha>`, and writes no line Check 1's grep

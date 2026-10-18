@@ -2439,6 +2439,43 @@ M46_seal_ignored() {
   rm -rf "$W"
 }
 
+# --mark-repair seals the serial remediator's record the same way: a sealed record DELIVERS under
+# --complete-repair at SETTLE=600, an edit above its marker is UNFINISHED, and the CONTROL is a
+# bare `repair-complete: serial` record settling in that same beat under SETTLE=1.
+repair_world() {  # $1 = subject, $2 = workdir -> rs.md sealed, rx.md sealed then edited, rb.md bare
+  printf '### e\n- edit: x\n' > "$2/rs.md"; printf '### e\n- edit: x\n' > "$2/rx.md"
+  printf '### e\n- edit: x\n%s\n' "$REPAIR_MARKER" > "$2/rb.md"
+  bash "$1" --mark-repair "$2/rs.md" requirements > "$BEATOUT" 2>&1 || broken "--mark-repair refused rs.md: $(cat "$BEATOUT")"
+  bash "$1" --mark-repair "$2/rx.md" requirements > "$BEATOUT" 2>&1 || broken "--mark-repair refused rx.md: $(cat "$BEATOUT")"
+  awk 'NR == 1 { print "### a repair entry added after the marker" } { print }' "$2/rx.md" > "$2/rx.tmp" && mv "$2/rx.tmp" "$2/rx.md"
+}
+S24c_mark_repair_seals() {
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  repair_world "$SUBJ" "$W"
+  CB_SETTLE=600 cbeat "$SUBJ" "$W" --complete-repair rs.md
+  if has "DELIVERED rs.md"; then ok "seal: a --mark-repair record DELIVERS under --complete-repair in one beat at SETTLE=600"
+  else bad "seal: a sealed repair record waited on the settle window: $OUT"; fi
+  CB_BEAT=3 cbeat "$SUBJ" "$W" --complete-repair rx.md rb.md
+  if has "DELIVERED rb.md"; then ok "seal: CONTROL -- a bare repair-complete record settles and DELIVERS in the same 3s beat"
+  else bad "seal: CONTROL FAILED -- the bare repair record did not settle, so the beat below proves nothing: $OUT"; fi
+  if ! has "DELIVERED rx.md" && has "UNFINISHED rx.md" && has "changed after it was marked"; then
+    ok "seal: a sealed repair record edited above its marker is UNFINISHED"
+  else bad "seal: a broken repair seal was delivered or not named UNFINISHED: $OUT"; fi
+  rm -rf "$W"
+}
+# --mark-repair writing the seat token: the record ends in `seat-complete:`, which --complete-repair
+# must refuse -- section 24c's sealed record then never delivers.
+M48_mark_repair_seat_token() {
+  mutant mark-repair-seat-token -e 's@MARK_TOKEN="repair-complete: serial "; MK_F="\$1"; MK_TAIL=""@MARK_TOKEN="seat-complete: "; MK_F="$1"; MK_TAIL=""@' || return
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '### e\n- edit: x\n' > "$W/rs.md"
+  bash "$MUT" --mark-repair "$W/rs.md" requirements > "$BEATOUT" 2>&1
+  CB_SETTLE=600 cbeat "$SUBJ" "$W" --complete-repair rs.md
+  if ! has "DELIVERED rs.md"; then ok "MUTANT mark-repair-seat-token: a repair record sealed under the seat token is not delivered -- section 24c catches it"
+  else bad "MUTANT mark-repair-seat-token: section 24c survives --mark-repair writing seat-complete: $OUT"; fi
+  rm -rf "$W"
+}
+
 # ---------------------------------------------------------------------------
 # THE DRIVER
 # ---------------------------------------------------------------------------
