@@ -90,6 +90,26 @@
         "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$"
       },
       "description": "OPTIONAL. Retracts the REASON PROSE of earlier records on this SAME entry without changing any verdict. Each item is the `recorded_utc` of an earlier record on this record's `entry`, copied verbatim; every record on the entry at that instant is withdrawn (twin rows written at one instant under two clauses are one act and are withdrawn together). Use it when an earlier reason stated something that turned out false \u2014 an obligation that does not exist, most often \u2014 and the verdict itself stands, so `supersedes` (scoped to a DIFFERENT verdict) does not apply. The register is append-only, so a sentence is withdrawn by a LATER row naming it, never by editing the row that wrote it. `audit-layer-debt.sh` stops listing a withdrawn record under UNDECLARED, and reports under WITHDRAWALS THAT RESOLVE TO NOTHING any value that names no earlier record on the entry, names one at or after this record's own instant, or is not an array of strings. A withdrawn record's verdict still answers `layer-drift.sh` lookups; this field is read by the debt audit and nothing else."
+    },
+    "read": {
+      "type": "object",
+      "description": "Evidence that the entry was READ against the core change. Optional here so older records stay schema-valid, and REQUIRED FOR CLEARING: `layer-drift.sh` clears a row only for a record that carries it with both members found. Each member is ONE line copied verbatim from what was read, compared after tabs become spaces and leading and trailing whitespace is trimmed, at least 20 characters after trimming, and not a markdown heading. The blocking row names where the core line must come from for its clause and never prints a line that would pass, so the evidence cannot be copied from the row. Without it, 0 of 1011 records on the reference consumer carried any sign of a read, and nine were written after a keyword grep and no Read call at all.",
+      "required": [
+        "entry_line",
+        "core_line"
+      ],
+      "properties": {
+        "entry_line": {
+          "type": "string",
+          "minLength": 20,
+          "description": "A whole line of the entry file the subject_digest pins."
+        },
+        "core_line": {
+          "type": "string",
+          "minLength": 20,
+          "description": "A whole line of the clause's core-side text: an added or removed line of the range diff of the hooked file (LC-E4, LC-E6); a line of the declared extends: span at base or theirs (LC-E14); a line of the shadowed section at the entry's base_sha or at theirs (LC-O15); a line of the matched core section at theirs (LC-E19); a line of the target file at theirs (any other clause)."
+        }
+      }
     }
   }
 }

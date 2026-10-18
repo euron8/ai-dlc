@@ -944,13 +944,15 @@ adj_digest() { # $1 entry (consumer-relative), $2 core-relative target, [$3 firi
   # failure mode). Reusing memo_rev_parse here would be a correctness change riding on a caching
   # change, not caching alone.
   tb="$(git -C "$DIST" rev-parse "$THEIRS:$(dist_path "$2")" 2>/dev/null)"
+  # The fifth column is the STATUS, so the listing can hand adj_verdict the same clause-keyed core
+  # source the gate used. The listing prints only the first four columns' worth plus the clause.
   if [ -z "$ef" ] || [ -z "$tb" ]; then
-    [ -n "$ADJ_LIST_FILE" ] && printf '%s\t%s\t-\t%s\n' "$1" "$2" "$cl" >> "$ADJ_LIST_FILE"
+    [ -n "$ADJ_LIST_FILE" ] && printf '%s\t%s\t-\t%s\t%s\n' "$1" "$2" "$cl" "${3:-}" >> "$ADJ_LIST_FILE"
     return 1
   fi
   dg="$(printf '%s\n%s\n' "$ef" "$tb" | git -C "$DIST" hash-object --stdin)"
   [ -n "$dg" ] || return 1
-  [ -n "$ADJ_LIST_FILE" ] && printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$dg" "$cl" >> "$ADJ_LIST_FILE"
+  [ -n "$ADJ_LIST_FILE" ] && printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$dg" "$cl" "${3:-}" >> "$ADJ_LIST_FILE"
   printf '%s\n' "$dg"
 }
 
@@ -964,27 +966,228 @@ adj_digest() { # $1 entry (consumer-relative), $2 core-relative target, [$3 firi
 # would be a blocking row on a consumer who had recorded the verdict. Both sides are read into
 # variables first and the test is a `case` per recorded line -- no pipe, and no here-string
 # either (see `ld_has_line`).
-# ONE jq EXPRESSION, TWO CALLERS. adj_lookup answers "is there a verdict"; adj_verdict
-# answers "which one". They must never disagree about what counts as a record, so the
-# second is written in terms of the first rather than beside it.
-adj_verdict() { # $1 digest -> prints the recorded verdict, empty if none
+# ONE SELECTION, THREE READERS. adj_records decides, per record under a digest, whether that
+# record CLEARS; adj_lookup answers "does a vocabulary verdict clear this row", adj_verdict answers
+# "which verdicts clear it", and `--list-adjudications` reads adj_verdict. None of them re-decides,
+# so the gate, the `adjudicated=` prefix apply.sh keys on and the listing cannot disagree about
+# what counts as a record.
+#
+# A VERDICT WITH NO EVIDENCE OF A READ USED TO CLEAR THE ROW, AND THAT IS WHAT THIS SELECTION
+# FILTERS. The key was (digest, vocabulary verdict) and nothing else, so a schema-valid line whose
+# digest was copied out of the listing cleared LC-A1 whatever its `reason` said. Measured on the
+# reference consumer: 0 of 1011 register records carry any read evidence, and the nine records of
+# one pull's re-read duty were written after 0 Read calls, on the strength of a rule-NUMBER grep
+# that cannot find an extension restating a rule's content without citing its number.
+#
+# SO A RECORD CLEARS ONLY WHEN IT CARRIES `read`: {"entry_line", "core_line"}, and BOTH are found.
+# entry_line must be a whole line of the entry file the digest pins (read from the same path
+# adj_digest hashes); core_line must be a whole line of THIS CLAUSE'S CORE-SIDE TEXT, which is
+# adj_core_text below. Both compare after tabs become spaces and leading and trailing whitespace is
+# trimmed, and each must be at least 20 characters and not a markdown heading -- a heading or a
+# fragment is what a reader who never opened the file can still produce. Evidence is a LINE the
+# row does not print, so it cannot be copied from the row: a draft that took hunk headers and a
+# file hash could be satisfied by a loop over the listing without one line being read.
+#
+# THE CORE SIDE IS PER CLAUSE, AND A RANGE DIFF IS THE WRONG ANSWER FOR TWO OF THEM. LC-O15
+# compares against the entry's own base_sha and LC-E19 fires on a title match core may have
+# carried for releases, so `git diff BASE THEIRS` is EMPTY for both on an unchanged target --
+# measured on a scratch copy of the reference consumer, all 8 keyed subjects of one range were
+# LC-E19 on unchanged targets. Keyed on the range diff, those rows could never clear, and through
+# adj_prefix apply.sh would re-prescribe retire over a recorded `still-additive`.
+#
+# THE LIMIT, STATED: this proves the recorder had a line of each side in hand. It acquits a script
+# that quotes the first qualifying line of each side without judging, and a sound quote on a wrong
+# verdict. It rules out a reason pasted nine times, evidence copied from the row, and a verdict
+# whose recorder never held a line of the entry or of the core text. The record's own `entry` and
+# `clause` fields are NOT consulted here: the digest keys the record, and the caller supplies the
+# status and the target the core text is derived from.
+#
+# THREE READERS STAY UNFILTERED, ON PURPOSE. adj_register_contradictions compares verdicts under
+# one key whether or not they clear -- a contradiction is a property of what was WRITTEN.
+# adj_spent_note quotes a prior verdict to explain a re-fire, which is history, not clearance.
+# audit-layer-debt.sh's owed / closes_owed / withdraws are obligations a record declares, and an
+# older record without `read` still declared them. Only "does this record clear" changed: older
+# records keep their history and every one of those readers, and do not clear.
+#
+# The core text and the entry are read only when a record under the digest carries `read`, so a
+# register with none costs one jq pass per lookup, as before.
+ADJ_READ_WHY=""
+ADJ_READ_HALF=""
+
+adj_trim() { # $1 -> $1 with tabs as spaces and leading and trailing whitespace removed
+  local s="${1//"$TAB"/ }"
+  s="${s#"${s%%[![:space:]]*}"}"
+  s="${s%"${s##*[![:space:]]}"}"
+  printf '%s' "$s"
+}
+adj_qualifies() { # $1 trimmed line -> 0 when it is at least 20 characters and not a heading
+  [ "${#1}" -ge 20 ] || return 1
+  local h="$1"
+  while [ "${h#\#}" != "$h" ]; do h="${h#\#}"; done
+  if [ "$h" != "$1" ] && [ "${h# }" != "$h" ]; then return 1; fi
+  return 0
+}
+adj_stage_trimmed() { # $1 source file, $2 destination -> the source with every line trimmed as adj_trim does
+  LC_ALL=C tr '\t' ' ' < "$1" | LC_ALL=C sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' > "$2"
+}
+adj_line_in() { # $1 trimmed needle, $2 trimmed haystack file -> 0 when the needle is a WHOLE line of it
+  LC_ALL=C grep -Fxq -e "$1" "$2" 2>/dev/null
+}
+
+# THE CLAUSE'S CORE-SIDE TEXT, keyed on the firing STATUS, which every caller already holds and
+# which this file emits -- so the table cannot drift from the contract's ids. Every source is text
+# this script already reads through git_show or git diff, in every mode including a degenerate
+# range. Run with stdin from /dev/null: two call sites sit inside a loop reading a staged file.
+adj_core_text() { # $1 status, $2 entry (consumer-relative), $3 core-relative target -> text on stdout
+  local cpath f _x _b _fl _an _d _ut _ct
+  cpath="$(dist_path "$3")"; f="$CONSUMER/$2"
+  case "$1" in
+    # LC-E4 / LC-E6, range-keyed: an added or removed line of the range diff, marker stripped. The
+    # options are pinned so a consumer's diff config cannot move which lines count.
+    EXTENSION-HOOK-DRIFT|EXTENSION-RETIRE-CANDIDATE)
+      git -C "$DIST" -c diff.algorithm=myers diff --no-ext-diff --no-textconv --no-color -U0 \
+          "$BASE" "$THEIRS" -- "$cpath" 2>/dev/null \
+        | awk '/^@@/ { h = 1; next } /^diff --git / { h = 0; next } h && /^[-+]/ { print substr($0, 2) }' ;;
+    # LC-E14: the span(s) the entry's extends: declares in the target, at BASE or at THEIRS.
+    EXTENSION-ANCHOR-DRIFT)
+      _x="$(unquote "$(fm "$f" extends)")"
+      shadow_parts "$_x" > "$LD_T/adj-parts" || return 3
+      while IFS="$TAB" read -r _fl _an; do
+        [ -n "$_an" ] || continue
+        [ -n "$_fl" ] || _fl="$3"
+        [ "$_fl" = "$3" ] || continue
+        git_show "$BASE" "$cpath" | section_of "$_an" || :
+        git_show "$THEIRS" "$cpath" | section_of "$_an" || :
+      done < "$LD_T/adj-parts" ;;
+    # LC-O15: the section(s) the override's shadows: names in the target, at its base_sha or THEIRS.
+    OVERRIDE-SUPERSEDED)
+      _x="$(fm "$f" shadows)"; _b="$(fm "$f" base_sha)"
+      shadow_parts "$_x" > "$LD_T/adj-parts" || return 3
+      while IFS="$TAB" read -r _fl _an; do
+        [ -n "$_an" ] || continue
+        [ -n "$_fl" ] || _fl="$3"
+        [ "$_fl" = "$3" ] || continue
+        [ -z "$_b" ] || { git_show "$_b" "$cpath" | section_of "$_an" || :; }
+        git_show "$THEIRS" "$cpath" | section_of "$_an" || :
+      done < "$LD_T/adj-parts" ;;
+    # LC-E19: the core section(s) at THEIRS whose heading the title-join matched to this entry's,
+    # re-derived with the same predicate and the same skeleton exclusion the firing arm uses.
+    EXTENSION-TITLE-MATCHES-CORE)
+      unnumbered_titles_of_file "$f" > "$LD_T/adj-ext-titles" || return 3
+      git_show "$THEIRS" "$cpath" > "$LD_T/adj-theirs-blob" || :
+      heading_titles_of_stream < "$LD_T/adj-theirs-blob" | titles_only > "$LD_T/adj-theirs-titles" || :
+      while IFS="$TAB" read -r _d _ut; do
+        [ -n "$_ut" ] || continue
+        ld_has_line "${SKELETON_TITLES:-}" "$_ut" && continue
+        while IFS= read -r _ct; do
+          [ -n "$_ct" ] || continue
+          same_section "$_ut" "$_ct" || continue
+          section_of "$_ct" < "$LD_T/adj-theirs-blob" || :
+        done < "$LD_T/adj-theirs-titles"
+      done < "$LD_T/adj-ext-titles" ;;
+    # Any other clause that reaches this helper: the target file at THEIRS. A source, never a pass.
+    *) git_show "$THEIRS" "$cpath" || : ;;
+  esac
+}
+
+# WHERE TO LOOK, for the row. Never a line: anything printed here that would pass if pasted is
+# evidence copied from the row. Hunk ranges are numbers, and core_line is matched against content.
+adj_core_where() { # $1 status, $2 core-relative target -> a phrase naming the clause's core source
+  local cpath hk
+  cpath="$(dist_path "$2")"
+  case "$1" in
+    EXTENSION-HOOK-DRIFT|EXTENSION-RETIRE-CANDIDATE)
+      hk="$(git -C "$DIST" -c diff.algorithm=myers diff --no-ext-diff --no-textconv --no-color -U0 \
+              "$BASE" "$THEIRS" -- "$cpath" 2>/dev/null </dev/null \
+            | awk '/^@@/ { n++; if (n <= 8) s = s (s == "" ? "" : ", ") $2 " " $3 } END { if (n > 8) s = s ", and " n - 8 " more"; print s }')"
+      printf '%s' "an added or removed line (marker stripped) of \`git diff ${BASE} ${THEIRS} -- ${cpath}\`${hk:+, hunks ${hk}}" ;;
+    EXTENSION-ANCHOR-DRIFT)
+      printf '%s' "a line of the span(s) this entry's extends: declares in ${cpath}, at ${BASE} or at ${THEIRS}" ;;
+    OVERRIDE-SUPERSEDED)
+      printf '%s' "a line of the section(s) this entry's shadows: names in ${cpath}, at this entry's base_sha or at ${THEIRS}" ;;
+    EXTENSION-TITLE-MATCHES-CORE)
+      printf '%s' "a line of the core section in ${cpath} at ${THEIRS} whose heading this row matched" ;;
+    *) printf '%s' "a line of ${cpath} at ${THEIRS}" ;;
+  esac
+}
+
+# The instruction every keyed row carries, naming the field and its two members.
+adj_read_ask() { # $1 status, $2 core-relative target
+  printf '%s' " The record must also carry \`read\`: {\"entry_line\": <a line copied verbatim from this entry>, \"core_line\": <${1:+$(adj_core_where "$1" "$2")}>}, each at least 20 characters after trimming and not a heading. Copy both from what you READ: a grep with no hit gives you nothing to quote, which is the point, and a verdict without them does not clear."
+}
+
+# THE SELECTION. One `verdict<TAB>state` line per record under the digest, state one of `clears`,
+# `no-read`, `entry`, `core`. Every field is prefixed with `x` because a TAB is IFS whitespace and
+# `read` would collapse an empty field into its neighbour's place.
+adj_records() { # $1 digest, $2 status, $3 entry (consumer-relative), $4 core-relative target
+  local v has el cl st hay_e="" hay_c=""
+  jq -r --arg d "$1" 'select(.subject_digest == $d)
+      | [ (.verdict // "" | tostring),
+          (if (.read | type) == "object" then "1" else "0" end),
+          (if (.read | type) == "object" then (.read.entry_line // "" | tostring) else "" end),
+          (if (.read | type) == "object" then (.read.core_line // "" | tostring) else "" end) ]
+      | map("x" + gsub("[\t\r\n]"; " ")) | join("\t")' "$ADJ_REGISTER" > "$LD_T/adj-recs" 2>/dev/null
+  [ -s "$LD_T/adj-recs" ] || return 0
+  while IFS="$TAB" read -r v has el cl; do
+    v="${v#x}"; has="${has#x}"; el="$(adj_trim "${el#x}")"; cl="$(adj_trim "${cl#x}")"
+    if [ "$has" != 1 ]; then
+      st=no-read
+    else
+      if [ -z "$hay_e" ]; then
+        if adj_stage_trimmed "$CONSUMER/$3" "$LD_T/adj-hay-entry"; then hay_e=ok; else hay_e=bad; fi
+      fi
+      if [ "$hay_e" != ok ] || ! adj_qualifies "$el" || ! adj_line_in "$el" "$LD_T/adj-hay-entry"; then
+        st=entry
+      else
+        if [ -z "$hay_c" ]; then
+          if adj_core_text "$2" "$3" "$4" < /dev/null > "$LD_T/adj-core-raw" \
+             && adj_stage_trimmed "$LD_T/adj-core-raw" "$LD_T/adj-hay-core"; then hay_c=ok; else hay_c=bad; fi
+        fi
+        if [ "$hay_c" != ok ] || ! adj_qualifies "$cl" || ! adj_line_in "$cl" "$LD_T/adj-hay-core"; then
+          st=core
+        else
+          st=clears
+        fi
+      fi
+    fi
+    printf '%s\t%s\n' "$v" "$st"
+  done < "$LD_T/adj-recs"
+}
+
+adj_verdict() { # $1 digest, $2 status, $3 entry, $4 target -> the verdict of every record that CLEARS
   [ -f "$ADJ_REGISTER" ] || return 1
   command -v jq >/dev/null 2>&1 || return 2
-  jq -r --arg d "$1" 'select(.subject_digest == $d) | .verdict' "$ADJ_REGISTER" 2>/dev/null
+  adj_records "$@" > "$LD_T/adj-vsel" || return 1
+  awk -F'\t' '$2 == "clears" { print $1 }' "$LD_T/adj-vsel"
 }
-adj_lookup() { # $1 digest -> 0 if a record with a vocabulary verdict exists
-  local found rc
-  found="$(adj_verdict "$1")"; rc=$?
-  [ "$rc" -eq 2 ] && return 2
-  [ -n "$found" ] || return 1
-  # ANY recorded line that is a whole vocabulary member answers 0 -- the `grep -qxF -f <vocab>`
-  # this replaces, spelled as a walk over `found`'s lines.
-  local _rest="$found$NL" _l
-  while [ -n "$_rest" ]; do
-    _l="${_rest%%"$NL"*}"; _rest="${_rest#*"$NL"}"
-    ld_has_line "$ADJ_VERDICTS" "$_l" && return 0
-  done
-  return 1
+
+# 0 = a record with a vocabulary verdict clears this row. 1 = none recorded. 2 = jq absent.
+# 3 = a record with a vocabulary verdict EXISTS under this digest and its `read` evidence is absent
+# or not found; ADJ_READ_WHY then says which half failed, for the row. 3 is NOT this file's staging
+# refusal: every caller reads it in the main shell, and adj_prefix's `|| return 0` takes it as "no
+# token" -- the HARD row this writes is what blocks.
+adj_lookup() { # $1 digest, $2 status, $3 entry, $4 target
+  local _v _st _fv="" _fs=""
+  ADJ_READ_WHY=""; ADJ_READ_HALF=""
+  [ -f "$ADJ_REGISTER" ] || return 1
+  command -v jq >/dev/null 2>&1 || return 2
+  adj_records "$@" > "$LD_T/adj-sel" || return 1
+  while IFS="$TAB" read -r _v _st; do
+    ld_has_line "$ADJ_VERDICTS" "$_v" || continue
+    [ "$_st" = clears ] && return 0
+    [ -n "$_fs" ] || { _fv="$_v"; _fs="$_st"; }
+  done < "$LD_T/adj-sel"
+  [ -n "$_fs" ] || return 1
+  case "$_fs" in
+    no-read) ADJ_READ_HALF="no read evidence"
+             ADJ_READ_WHY="the record carries no \`read\` evidence" ;;
+    entry)   ADJ_READ_HALF="read.entry_line not in the entry"
+             ADJ_READ_WHY="its read.entry_line is not a line of this entry (verbatim, at least 20 characters, not a heading)" ;;
+    *)       ADJ_READ_HALF="read.core_line not in the $(adj_clause_of "${2:-}") core text"
+             ADJ_READ_WHY="its read.core_line is not $(adj_core_where "${2:-}" "${4:-}") (verbatim, at least 20 characters, not a heading)" ;;
+  esac
+  ADJ_READ_WHY="a record under this digest carries verdict '${_fv}' and does NOT clear it: ${ADJ_READ_WHY}"
+  return 3
 }
 
 # WHY A SPENT VERDICT AND A NEVER-RECORDED ONE PRINTED THE SAME ROW, AND WHY THAT IS THE WHOLE
@@ -1114,8 +1317,8 @@ adj_prefix() { # $1 entry, $2 target, [$3 firing status]
   case "$2" in ''|'?') return 0 ;; esac
   _d="$(adj_digest "$1" "$2" "${3:-}" 2>/dev/null || true)"
   [ -n "$_d" ] || return 0
-  adj_lookup "$_d" 2>/dev/null || return 0
-  _v="$(adj_verdict "$_d" 2>/dev/null | head -1)"
+  adj_lookup "$_d" "${3:-}" "$1" "$2" 2>/dev/null || return 0
+  _v="$(adj_verdict "$_d" "${3:-}" "$1" "$2" 2>/dev/null | head -1)"
   printf '%s' "${ADJ_ROW_TOKEN}=${_v} :: "
 }
 
@@ -1148,13 +1351,15 @@ adj_check() { # $1 status, $2 entry, $3 target
     return 0
   }
   [ "$MODE" = list ] && return 0
-  adj_lookup "$d"; rc=$?
+  adj_lookup "$d" "$1" "$2" "$3"; rc=$?
   case "$rc" in
     0) return 0 ;;
     2) emit_raw HARD-LAYER-ADJUDICATION-MISSING "$2" "$3" \
          "row '$1' is clause ${cl} and needs a recorded verdict, and jq is not on PATH, so ${ADJ_REGISTER#"$CONSUMER"/} cannot be read. A register that cannot be read is not an empty one." ;;
+    3) emit_raw HARD-LAYER-ADJUDICATION-MISSING "$2" "$3" \
+         "row '$1' is clause ${cl} at level ADJUDICATED, and ${ADJ_READ_WHY} [${ADJ_READ_HALF}]. A verdict clears only with evidence the entry was read against the core change. Append a NEW line to ${ADJ_REGISTER#"$CONSUMER"/} with clause ${cl}, subject_digest ${d}, your verdict and reason.$(adj_read_ask "$1" "$3")" ;;
     *) emit_raw HARD-LAYER-ADJUDICATION-MISSING "$2" "$3" \
-         "row '$1' is the layer conformance adjudication: its candidate set is mechanized and its verdict is yours. Record one line in ${ADJ_REGISTER#"$CONSUMER"/} with clause ${cl} and subject_digest ${d} and a verdict of $(printf '%s' "$ADJ_VERDICTS" | tr '\n' '|' | sed 's/|$//'), plus a reason. Both of those are COPIED from this row, not derived: the clause is the code this status maps to in ${ADJ_CONTRACT_REL} at ${THEIRS}, and a different clause produces a textually similar row. The digest covers this entry AND the core file it hooks at ${THEIRS}, so the verdict is spent the next time either one moves — it is not an exemption for the path.$(adj_spent_note "$2" "$d" "$(adj_clause_of "$1")")" ;;
+         "row '$1' is the layer conformance adjudication: its candidate set is mechanized and its verdict is yours. Record one line in ${ADJ_REGISTER#"$CONSUMER"/} with clause ${cl} and subject_digest ${d} and a verdict of $(printf '%s' "$ADJ_VERDICTS" | tr '\n' '|' | sed 's/|$//'), plus a reason. Both of those are COPIED from this row, not derived: the clause is the code this status maps to in ${ADJ_CONTRACT_REL} at ${THEIRS}, and a different clause produces a textually similar row. The digest covers this entry AND the core file it hooks at ${THEIRS}, so the verdict is spent the next time either one moves — it is not an exemption for the path.$(adj_read_ask "$1" "$3")$(adj_spent_note "$2" "$d" "$(adj_clause_of "$1")")" ;;
   esac
 }
 
@@ -2340,9 +2545,12 @@ while IFS= read -r f; do
       # travel with the key: eleven of the reference consumer's twelve keyed subjects are this
       # row, so a clause column that covered only the blocking arm would cover one of twelve.
       tm_digest="$(adj_digest "$entry" "$hooks" EXTENSION-TITLE-MATCHES-CORE 2>/dev/null || true)"
-      if [ -n "$tm_digest" ] && adj_lookup "$tm_digest"; then
+      ADJ_READ_WHY=""
+      if [ -n "$tm_digest" ] && adj_lookup "$tm_digest" EXTENSION-TITLE-MATCHES-CORE "$entry" "$hooks"; then
         continue
       fi
+      tm_read=""
+      [ -z "$ADJ_READ_WHY" ] || tm_read=" Not cleared: ${ADJ_READ_WHY} [${ADJ_READ_HALF}]; append a NEW record."
       # THE SPENT-VERDICT NOTE REACHES THIS ROW TOO, for the reason `adj_check`'s
       # HARD-LAYER-ADJUDICATION-MISSING arm carries it: this row also prescribes an ENTRY EDIT and a
       # digest-keyed verdict in one sentence, so an operator following it in order spends the record
@@ -2354,7 +2562,7 @@ while IFS= read -r f; do
       # clause -- and it is `adj_clause_of` rather than `adj_clause_cell` because only the former
       # answers EMPTY when the code resolves to nothing, which is what the helper's guard reads.
       emit EXTENSION-TITLE-MATCHES-CORE "$entry" "$hooks" \
-        "${when}: this entry's heading '$ut' names the same section as core's '$hit' in '$hooks', matched on TEXT because neither side carries a number. ${extra}. THREE dispositions, and the entry decides which: if the body DUPLICATES core's section, retire it per Rule 27(b) — an absorbed-but-kept entry starts as an exact copy and diverges from there. If it AUGMENTS that section, record it in ${ADJ_REGISTER#"$CONSUMER"/} with clause $(adj_clause_cell EXTENSION-TITLE-MATCHES-CORE) and subject_digest ${tm_digest:-<unkeyable: entry or target unreadable>} and a verdict of $(printf '%s' "$ADJ_VERDICTS" | tr '\n' '|' | sed 's/|$//'), plus a reason -- that is what clears this row, and it is the only thing that does. The digest covers this entry AND the core file it hooks at ${THEIRS}, so the verdict is spent the next time either one moves; it is a record of a reading, not an exemption for the path. If it REPRODUCES core's section in order to append to it, neither of those is the answer and the grain is: \`kind: qualifier\` with \`extends: '#${hit}'\` and \`position: append\`, which renders your addition INSIDE core's section and carries no obligation on the prose you did not write. Recording an augmenting verdict on a reproduction clears this row and leaves the copy frozen, and a frozen copy cannot receive an upstream improvement -- measured on the reference consumer at this exact clause: 165 lines reproducing a 133-line core section to carry 49 additive ones, and core's step 1 had already gained guidance the copy never received. That is Rule 27(c)'s silent fork, and the verdict channel is not where it gets fixed. Declaring \`extends: '#${hit}'\` (spelled as the core heading actually reads) is worth doing anyway because it narrows the DRIFT subject to that span, but it does NOT silence this row and never has: \`extends:\` answers 'which span do I augment', never 'does core now carry my body'. Weaker than EXTENSION-RESTATES-CORE on purpose: a numbered anchor is an identity claim, a prose heading is not, so this reports the match and does not prescribe the delete.$([ -n "$tm_digest" ] && adj_spent_note "$entry" "$tm_digest" "$(adj_clause_of EXTENSION-TITLE-MATCHES-CORE)")"
+        "${when}: this entry's heading '$ut' names the same section as core's '$hit' in '$hooks', matched on TEXT because neither side carries a number. ${extra}. THREE dispositions, and the entry decides which: if the body DUPLICATES core's section, retire it per Rule 27(b) — an absorbed-but-kept entry starts as an exact copy and diverges from there. If it AUGMENTS that section, record it in ${ADJ_REGISTER#"$CONSUMER"/} with clause $(adj_clause_cell EXTENSION-TITLE-MATCHES-CORE) and subject_digest ${tm_digest:-<unkeyable: entry or target unreadable>} and a verdict of $(printf '%s' "$ADJ_VERDICTS" | tr '\n' '|' | sed 's/|$//'), plus a reason -- that is what clears this row, and it is the only thing that does. The digest covers this entry AND the core file it hooks at ${THEIRS}, so the verdict is spent the next time either one moves; it is a record of a reading, not an exemption for the path. If it REPRODUCES core's section in order to append to it, neither of those is the answer and the grain is: \`kind: qualifier\` with \`extends: '#${hit}'\` and \`position: append\`, which renders your addition INSIDE core's section and carries no obligation on the prose you did not write. Recording an augmenting verdict on a reproduction clears this row and leaves the copy frozen, and a frozen copy cannot receive an upstream improvement -- measured on the reference consumer at this exact clause: 165 lines reproducing a 133-line core section to carry 49 additive ones, and core's step 1 had already gained guidance the copy never received. That is Rule 27(c)'s silent fork, and the verdict channel is not where it gets fixed. Declaring \`extends: '#${hit}'\` (spelled as the core heading actually reads) is worth doing anyway because it narrows the DRIFT subject to that span, but it does NOT silence this row and never has: \`extends:\` answers 'which span do I augment', never 'does core now carry my body'. Weaker than EXTENSION-RESTATES-CORE on purpose: a numbered anchor is an identity claim, a prose heading is not, so this reports the match and does not prescribe the delete.${tm_read}$(adj_read_ask EXTENSION-TITLE-MATCHES-CORE "$hooks")$([ -n "$tm_digest" ] && adj_spent_note "$entry" "$tm_digest" "$(adj_clause_of EXTENSION-TITLE-MATCHES-CORE)")"
     done < "$LD_T/title-cands"
   fi
 
@@ -2524,8 +2732,9 @@ if [ "$MODE" = list ]; then
   sort -u "$ADJ_LIST_FILE" 2>/dev/null | awk -F"$TAB" -v OFS="$TAB" '
       { k = $1 OFS $2 OFS $3
         if (!(k in seen)) { seen[k] = 1; order[++nk] = k }
-        if ($4 != "" && index("," cl[k] ",", "," $4 ",") == 0) cl[k] = (cl[k] == "" ? $4 : cl[k] "," $4) }
-      END { for (i = 1; i <= nk; i++) print order[i], cl[order[i]] }
+        if ($4 != "" && index("," cl[k] ",", "," $4 ",") == 0) cl[k] = (cl[k] == "" ? $4 : cl[k] "," $4)
+        if ($5 != "" && index("," st[k] ",", "," $5 ",") == 0) st[k] = (st[k] == "" ? $5 : st[k] "," $5) }
+      END { for (i = 1; i <= nk; i++) print order[i], cl[order[i]], st[order[i]] }
     ' > "$LD_T/adj-list-subjects" || _al_rc=$?
   if [ "$_al_rc" -ne 0 ]; then
     rm -f "$ADJ_LIST_FILE"
@@ -2534,7 +2743,11 @@ if [ "$MODE" = list ]; then
   # W4: this mode's writer, counted like the classify rows, so the N in its refusal is real. A
   # failed row ends the listing -- the break, and the count line below is withheld: a count of
   # subjects LISTED beside a listing that is missing some is the short-reads-as-complete shape.
-  while IFS="$TAB" read -r _e _t _d _c; do
+  # THE VERDICT COLUMN IS WHAT CLEARS, read through adj_verdict with each status that keyed the
+  # subject, so the listing answers exactly as the gate does. A record that exists and does not
+  # clear prints `(recorded, not clearing: <which half failed>)` rather than `(none)`: the
+  # operator opened the listing to find that record, and `(none)` would say it was never written.
+  while IFS="$TAB" read -r _e _t _d _c _s; do
     [ "$ld_emit_failed" -eq 0 ] || break
     [ -n "$_e" ] || continue
     _n=$((_n + 1))
@@ -2542,10 +2755,23 @@ if [ "$MODE" = list ]; then
       printf 'ADJUDICABLE\t%s\t%s\t(unkeyable: entry or target unreadable)\t(none)\t%s\n' "$_e" "$_t" "${_c:-(unmapped)}"; ld_wrote $?
       _without=$((_without + 1)); continue
     fi
-    _v="$(adj_verdict "$_d")"; _rc=$?
+    _v=""; _rc=0; _nc=""
+    _srest="${_s},"
+    while [ -n "$_srest" ]; do
+      _st="${_srest%%,*}"; _srest="${_srest#*,}"
+      _sv="$(adj_verdict "$_d" "$_st" "$_e" "$_t")"; _src=$?
+      [ "$_src" -ne 2 ] || { _rc=2; break; }
+      _v="${_v}${_v:+$NL}${_sv}"
+      if [ -z "$_sv" ] && [ -z "$_nc" ]; then
+        adj_lookup "$_d" "$_st" "$_e" "$_t"
+        [ "$?" -ne 3 ] || _nc="$ADJ_READ_HALF"
+      fi
+    done
     if [ "$_rc" -eq 2 ]; then
       _v="(register unreadable: jq is not on PATH)"; _without=$((_without + 1))
-    elif [ -z "$_v" ]; then
+    elif [ -z "$(printf '%s' "$_v" | tr -d '\n')" ] && [ -n "$_nc" ]; then
+      _v="(recorded, not clearing: ${_nc})"; _without=$((_without + 1))
+    elif [ -z "$(printf '%s' "$_v" | tr -d '\n')" ]; then
       _v="(none)"; _without=$((_without + 1))
     else
       # Comma-joined rather than first-wins: two DIFFERING verdicts under one key is the state
