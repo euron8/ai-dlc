@@ -882,6 +882,8 @@ orphans_gone() {
     while IFS= read -r p; do
       case "$p" in ''|*[!0-9]*) continue ;; esac
       kill -0 "$p" 2>/dev/null || continue
+      # `ps` is NOT in tools.decl: /bin/ps is setuid and a sandbox refuses it. Refused, st is empty, a
+      # zombie reads live, and the arm can only REFUSE (exit 2) on it -- never pass a survivor, never FAIL.
       st="$(ps -o stat= -p "$p" 2>/dev/null)"
       case "$st" in *Z*) continue ;; esac
       live="$live $p"

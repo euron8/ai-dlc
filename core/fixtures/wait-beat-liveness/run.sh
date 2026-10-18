@@ -835,7 +835,7 @@ churn_stop() {
 # THE CAP'S REFUSAL, PROBED BOTH WAYS: a 0s cap expires before the sentinel and must refuse (exit 2);
 # the default cap, stopped by its sentinel, must not.
 S13h_churn_cap_refuses() {
-  ( W="$(mk_work)"; CHURN_CAP=0; churn "$W/cap.md"; while [ ! -e "$W/cap.md.stop.capped" ]; do sleep 0.1; done; churn_stop ) 2>/dev/null; cp1=$?
+  ( W="$(mk_work)"; CHURN_CAP=0; churn "$W/cap.md"; while [ ! -e "$W/cap.md.stop.capped" ] && kill -0 "$CHURN_PID" 2>/dev/null; do sleep 0.1; done; churn_stop ) 2>/dev/null; cp1=$?
   ( W="$(mk_work)"; churn "$W/cap.md"; sleep 0.4; churn_stop ) 2>/dev/null; cp2=$?
   if [ "$cp1" = 2 ] && [ "$cp2" = 0 ]; then ok "churn: a writer that stopped on its cap refuses (rc $cp1); one stopped by its sentinel does not (rc $cp2)"
   else bad "churn cap probe: capped rc=$cp1 (want 2), sentinel-stopped rc=$cp2 (want 0)"; fi
