@@ -124,13 +124,15 @@ The stop hook also fired "NO LIVE WAIT-BEAT IS ARMED" at 00:00:49Z, seconds afte
 
 Owed: a completion signal the serial remediator writes last (a terminal line in its appended block that the beat can key on, as `seat-complete:` does for seats), and a step that tells the lead to arm `--complete`-style on it; or a join on the agent's own completion notification instead of a file. Separately, trace whether the stop hook's lease read can race a beat's own marker rewrite.
 
-verify: manual
+verify: sh S=core/scripts/wait-for-deliverable.sh; [ -f "$S" ] || S=scripts/ai-dlc/wait-for-deliverable.sh; [ -f "$S" ] || exit 9; S="$(pwd -P)/$S"; command -v mkfifo >/dev/null || exit 9; d="$(mktemp -d)" || exit 9; mkdir -p "$d/_bmad-output" || exit 9; mkfifo "$d/_bmad-output/spawn-ledger.jsonl" || exit 9; row="$(printf '{"v":1,"ts":"%s","name":"r","tool_use_id":"toolu_R541"}' "$(date -u -r $(( $(date +%s) - 30 )) +%Y-%m-%dT%H:%M:%SZ)")"; ( exec 3> "$d/_bmad-output/spawn-ledger.jsonl"; : > "$d/reached"; while [ ! -e "$d/release" ]; do sleep 0.1; done; printf '%s\n' "$row" >&3 ) & h=$!; ( cd "$d" && exec env -u CLAUDE_CODE_SESSION_ID AI_DLC_STATE_DIR= AI_DLC_TEAMMATE_DIR=/nonexistent AI_DLC_PROJECT_ROOT="$d" AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 bash "$S" --dispatch toolu_R541 x.md ) > "$d/o" 2>&1 & b=$!; n=0; while [ ! -e "$d/reached" ] && [ "$n" -lt 300 ]; do sleep 0.1; n=$((n+1)); done; [ -e "$d/reached" ] || { kill "$b" "$h" 2>/dev/null; exit 9; }; m="$(cat "$d/_bmad-output/.beat-inflight" 2>/dev/null)"; : > "$d/release"; wait "$h"; wait "$b"; grep -q '^WAITING   x.md' "$d/o" || exit 9; [ "${m#* }" = "$b" ]
 
 ## BL-553 — the lead arms a beat on a sentinel nothing will write, to keep the Stop hook quiet
 
 **DEFECT.** Consequence of BL-541. With no completion signal for the serial remediator, the s319 lead armed beats on files it created for the purpose and that no agent writes. At 00:03:48Z it wrote: "A sleeping beat, `bw7kr8cpi`, is now armed on a sentinel file that nothing will write. Its marker holds a future epoch, so it holds for a full quantum." Session 62eadbbe holds 8 such sentinel beats (corrected: the 00:17Z "fold record" beat was a real beat on requirements-d-answers-fold.md that delivered at 00:35:15Z, not a sentinel). Five are serial-remediator waits (00:03:48, 01:19:11, 01:29:06, 01:39:02, 01:48:57Z), closed once `_gate-procedures.md` prescribes `--complete` on the serial repair record. Three stay open: 00:07:23Z, a serial remediator RESUMED by SendMessage after a refusal (filed separately); 01:15:08Z, a part-04 SPEC render whose part record writes no marker; 01:52:38Z, a render agent's real SPEC.md beat that delivered early on a partial write (BL-541's shape on SPEC.md). That satisfies `ai-dlc-continue.sh`'s lease test while waiting on nothing, which is the "filler tool call" the hook's own text forbids ("Do NOT emit filler tool calls to get past this block"). Owed: BL-541's completion signal removes the need. Until then, a beat whose targets lie outside `_bmad-output/` and every In-Flight row's deliverable is refused, so it does not count as a lease.
 
 **Fourth instance (01:52:38Z).** The lead armed `wait-for-deliverable.sh --reset … $SCRATCH/never-written-sentinel-render`, a path it named itself as never-written; the beat existed only to sleep until the render agent's notification. The notification arrived at 01:53:08Z and the lead TaskStopped the beat.
+
+**Part (b), the target-containment refusal, is NOT shippable as specified (batch 236, measured by the wfd contract adversary over the reference consumer's lead transcripts, read-only).** 189 transcripts carry 2,869 beat calls over 5,866 targets. The legitimate targets outside the state dir include 803 teammate story-worktree deliverables, 75 background done files, 64 main-tree docs, 57 scratchpad and task outputs and 7 git refs, so "outside `_bmad-output/`" is not a defect signal. The In-Flight table is empty today and no transcript records it at arm time, so "outside every In-Flight row's deliverable" is unobservable. The seat beats that set a custom state dir (`implementation.md:447`, `qa.md:457`, `code-reviewer.md:196`) would fail it outright. At arm time a sentinel and a real done file are the same act; the difference is the lead's intent, which no check can see. Five of the eight recorded instances are serial-remediator waits, which `--complete-repair` now covers. The entry stays open on the other three.
 
 verify: manual
 
@@ -178,7 +180,7 @@ Owed: (a) the liveness sensor keys on the last `assistant`/tool line's timestamp
 
 Deferred to next batch (operator, batch 235).
 
-verify: manual
+verify: sh S=core/scripts/wait-for-deliverable.sh; [ -f "$S" ] || S=scripts/ai-dlc/wait-for-deliverable.sh; [ -f "$S" ] || exit 9; S="$(pwd -P)/$S"; d="$(mktemp -d)" || exit 9; mkdir -p "$d/_bmad-output" || exit 9; o="$(date -u -r $(( $(date +%s) - 3600 )) +%Y-%m-%dT%H:%M:%S)"; n="$(date -u +%Y-%m-%dT%H:%M:%S)"; w() { mkdir -p "$d/$1" || exit 9; { printf '{"isSidechain":true,"message":{"role":"assistant"},"type":"assistant","timestamp":"%s.3Z"}\n' "$2"; i=0; while [ "$i" -lt "$3" ]; do printf '{"type":"%s","timestamp":"%s.2Z"}\n' "$4" "$n"; i=$((i+1)); done; } > "$d/$1/agent-a1.jsonl"; }; b() { ( cd "$d" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_STATE_DIR= AI_DLC_TEAMMATE_DIR="$d/$1" AI_DLC_TEAMMATE_IDLE_SECS=60 AI_DLC_PROJECT_ROOT="$d" AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 bash "$S" x.md 2>&1 ); }; w live "$n" 0 api-request; r="$(b live)"; grep -q 'took a turn' <<<"$r" && ! grep -q 'STALLED' <<<"$r" || exit 9; w two "$o" 2 api-request; r="$(b two)"; ! grep -q 'TEAMMATE STALLED' <<<"$r" || exit 1; w blob "$o" 5 api-request-blob; r="$(b blob)"; ! grep -q 'TEAMMATE STALLED' <<<"$r" || exit 1; w k3 "$o" 3 api-request; r="$(b k3)"; grep -q 'TEAMMATE STALLED agent-a1.jsonl' <<<"$r" && ! grep -q 'took a turn' <<<"$r"
 
 ## BL-583 — the push suite costs about 8 fixture-hours per full run, over 40% in mutant batteries, and no fixture has been judged on value
 
@@ -400,7 +402,7 @@ So any beat run with `AI_DLC_STATE_DIR` set writes its liveness marker where Che
 
 Owed: Check 2b finds the marker wherever `wait-for-deliverable.sh` wrote it, resolved the same way (`:502-504`). Receipt: drive the hook against a live beat started with a non-default `AI_DLC_STATE_DIR`, and show Check 2b sees it. Control: the default-dir beat is still seen.
 
-verify: manual
+verify: sh S=core/scripts/wait-for-deliverable.sh; H=core/hooks/ai-dlc-continue.sh; [ -f "$S" ] || S=scripts/ai-dlc/wait-for-deliverable.sh; [ -f "$H" ] || H=.claude/hooks/ai-dlc-continue.sh; [ -f "$S" ] && [ -f "$H" ] || exit 9; S="$(pwd -P)/$S"; H="$(pwd -P)/$H"; d="$(mktemp -d)" || exit 9; mkdir -p "$d/_bmad-output" || exit 9; printf -- '- current_step_file: .claude/skills/ai-dlc/steps/implementation.md\n' > "$d/_bmad-output/pipeline-snapshot.md"; hk() { printf '{"session_id":"r619","transcript_path":""}' | env -u AI_DLC_STATE_DIR CLAUDE_PROJECT_DIR="$d" bash "$H" 2>/dev/null; }; hk >/dev/null; grep -q 'ALLOWED_BY_LIVE_BEAT' "$d/_bmad-output/pipeline-continuation-log.md" 2>/dev/null && exit 9; ( cd "$d" && exec env -u CLAUDE_CODE_SESSION_ID AI_DLC_STATE_DIR=_bmad-output/seat-q AI_DLC_TEAMMATE_DIR=/nonexistent AI_DLC_PROJECT_ROOT="$d" AI_DLC_WAIT_BEAT_SECS=40 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 bash "$S" x.md ) >/dev/null 2>&1 & b=$!; n=0; until ls "$d/_bmad-output/seat-q/.wait-beats" 2>/dev/null | grep -q '^[0-9]'; do n=$((n+1)); [ "$n" -lt 300 ] || { kill "$b"; exit 9; }; sleep 0.1; done; reg=0; ls -A "$d/_bmad-output/.wait-beats" 2>/dev/null | grep -q "^\.lease-$b\$" && reg=1; ls -A "$d/_bmad-output/seat-q/.wait-beats" 2>/dev/null | grep -q '^\.lease-' && reg=0; hk >/dev/null; printf 'x\n' > "$d/x.md"; wait "$b"; [ "$reg" -eq 1 ] && grep -q 'ALLOWED_BY_LIVE_BEAT' "$d/_bmad-output/pipeline-continuation-log.md"
 
 ## BL-632 — shipped checks and fixtures pass or fail on an arbitrary number instead of a binary property of their subject
 
@@ -434,6 +436,8 @@ Owner: ai-dlc-4e [9b62de] (lead ai-dlc-9c).
 - `core/hooks/ai-dlc-continue.sh:363`: `RAPID_WINDOW_SECONDS`.
 
 *CLOSES with 4e's pole release now in preparation:* instance 4, `REGIME_BAND`. That release deletes `scripts/validate-suite-pole.sh` and makes the pole information-only. The file is still present at `8f1a9074`.
+
+**Product-code class, batch 236 (wfd release).** BL-639, BL-640 and BL-641 are done in that release, each with its own receipt: SETTLE no longer decides a seat sealed with `--mark` (it stays only as the fail-open net for a legacy marker with no `sha=`), the chained-beat guard decides by the parent shell's start time rather than BUDGET, and the continue hook's unknown-tool path keys the stall run on the session id rather than RAPID_WINDOW_SECONDS alone. This entry stays PARTIAL: BL-630, the 0.804.0 120 s nets, the suite-pole growth arm and `core/hooks/ai-dlc-recover-gate.sh:201` are untouched by it.
 
 verify: manual
 
@@ -527,19 +531,19 @@ Owed: measure the inter-write gaps of marked-then-edited seats under pool load a
 
 Related: BL-632 (lists SETTLE in its product-code class), BL-616.
 
-verify: manual
+verify: sh bash core/fixtures/wait-beat-liveness/receipt-bl639.sh
 
 ## BL-640 — `wait-for-deliverable.sh`'s chained-beat guard fails open under load and serialises two quanta
 
 **NOTE.** Filed by ai-dlc-4e [9b62de], same header pass; a mechanism read, cites confirmed at `9f8e7691`. `:1138` (`[ $(( $(date +%s) - LAST )) -lt "$BUDGET" ]`, setting `MAY_SLEEP=0` at `:1139`) separates a chained call from a fresh one by elapsed time alone, with only `RESERVE` slack (`:1394-1395`, the larger of `MARGIN` and `POLL`). If load delays the chained call past that slack, the beat sleeps a second quantum: the 2x BUDGET serialisation the guard exists to prevent. The cost is wall clock and one beat charged, with no wrong delivery. Owed: decide from the sibling's lease liveness or its recorded end epoch instead of a bare BUDGET. Receipt: `.shell-$PPID` stamped at BUDGET-5s gives `MAY_SLEEP=0`. Control: at BUDGET+1s it sleeps today.
 
-verify: manual
+verify: sh S=core/scripts/wait-for-deliverable.sh; [ -f "$S" ] || S=scripts/ai-dlc/wait-for-deliverable.sh; [ -f "$S" ] || exit 9; S="$(pwd -P)/$S"; t() { d="$(mktemp -d)" || exit 9; mkdir -p "$d/_bmad-output" || exit 9; ( cd "$d" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_STATE_DIR= AI_DLC_TEAMMATE_DIR=/nonexistent AI_DLC_PROJECT_ROOT="$d" AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 MODE="$1" bash -c 'AI_DLC_WAIT_BEAT_SECS=2 bash "$0" x.md >/dev/null 2>&1; m="_bmad-output/.wait-beats/.shell-$$"; [ -f "$m" ] || exit 9; r="$(cat "$m")"; r="$(( $(date +%s) - 120 ))${r#"${r%% *}"}"; [ "$MODE" = other ] && r="${r%% *} Thu Jan 1 00:00:00 1970"; printf "%s" "$r" > "$m"; touch -t "$(date -v-300S +%Y%m%d%H%M.%S 2>/dev/null || date -d "-300 seconds" +%Y%m%d%H%M.%S)" "$m"; ( sleep 3; printf "x\n" > x.md ) & AI_DLC_WAIT_BEAT_SECS=60 bash "$0" x.md; r=$?; wait; exit $r' "$S" ) > "$d/o" 2>&1 || exit 9; grep -q 'a sibling beat already ran in this same Bash call' "$d/o"; }; t other && exit 9; t same
 
 ## BL-641 — `ai-dlc-continue.sh`'s RAPID_WINDOW_SECONDS can defeat the stall backoff on the unknown-tool path
 
 **NOTE.** Filed by ai-dlc-4e [9b62de], same header pass; a mechanism read, cites confirmed at `9f8e7691`. `core/hooks/ai-dlc-continue.sh:123` sets `RAPID_WINDOW_SECONDS=30`, and `stall_run()` (`:348`) sets `RUN_TOOL=unknown` (`:357`) when there is no transcript, no jq, or an old two-line state file. On that path the time test alone decides whether a run continues. Load stretches a genuinely stalled session's gaps past 30 s, which resets the counter to 1, so `EFF_MAX` (`:131-134`) is never reached and release falls to the harness cap. Owed: measure how often `RUN_TOOL=unknown` actually occurs; if it is non-zero, decide whether the unknown path should hold the run rather than reset it. Receipt: `stall_run` driven with an unreadable transcript at 31 s spacing reaches `EFF_MAX`, where today it resets to 1 on every block.
 
-verify: manual
+verify: sh bash core/fixtures/implementation-join-yield/receipt-bl641.sh
 
 ## BL-643 — `pregate-self-check.sh` hand-copies 2 of the hook's 20 above-pool steps, so a clean self-check still goes red at the gate
 
@@ -617,7 +621,7 @@ Owed: `dispatch_epoch_of` takes a `call_` id as a tool_use_id, as it does `toolu
 
 Related: BL-597 (the id grammar's declaration).
 
-verify: manual
+verify: sh S=core/scripts/wait-for-deliverable.sh; [ -f "$S" ] || S=scripts/ai-dlc/wait-for-deliverable.sh; [ -f "$S" ] || exit 9; S="$(pwd -P)/$S"; d="$(mktemp -d)" || exit 9; mkdir -p "$d/_bmad-output" "$d/td" || exit 9; e=$(( $(date +%s) - 60 )); C=call_45aba045bf78553ca703fc8694de7577; for r in "toolu_R649epoch $(( e - 600 ))" "$C $e"; do printf '{"v":1,"ts":"%s","name":"r","tool_use_id":"%s"}\n' "$(date -u -r "${r#* }" +%Y-%m-%dT%H:%M:%SZ)" "${r% *}" >> "$d/_bmad-output/spawn-ledger.jsonl"; done; printf '{"toolUseId":"%s"}' "$C" > "$d/td/agent-a649.meta.json"; printf 'x\n' > "$d/r.md"; q() { ( cd "$d" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_STATE_DIR= AI_DLC_TEAMMATE_DIR="$d/td" AI_DLC_PROJECT_ROOT="$d" bash "$1" --status --dispatch "$2" r.md 2>&1 ); }; o="$(q "$S" a649)" && grep -q '^DELIVERED r.md' <<<"$o" || exit 9; o="$(q "$S" "$C")" && grep -q '^DELIVERED r.md' <<<"$o" || exit 1; L="$d/lone"; mkdir -p "$L" && cp "$S" "$L/" || exit 9; q "$L/$(basename "$S")" "$C" >/dev/null; [ $? -eq 64 ]
 
 ## BL-651 — I84 accepts a `stories_dir` reader whose only mention of the sprint slot is a comment
 
@@ -777,7 +781,7 @@ Owed: restore globbing after the dispatch split (`set +f`), or scope the split s
 
 Related, not a duplicate: the live entry on the liveness sensor counting api-request retries as fresh turns (a false-alive mtime).
 
-verify: manual
+verify: sh S=core/scripts/wait-for-deliverable.sh; [ -f "$S" ] || S=scripts/ai-dlc/wait-for-deliverable.sh; [ -f "$S" ] || exit 9; S="$(pwd -P)/$S"; d="$(mktemp -d)" || exit 9; mkdir -p "$d/_bmad-output" "$d/td" || exit 9; printf '{"type":"assistant"}\n' > "$d/td/agent-a1.jsonl"; printf '{"v":1,"ts":"%s","name":"r","tool_use_id":"toolu_R661"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$d/_bmad-output/spawn-ledger.jsonl"; o="$(cd "$d" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_STATE_DIR= AI_DLC_TEAMMATE_DIR="$d/td" AI_DLC_PROJECT_ROOT="$d" AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 bash "$S" --dispatch toolu_R661 x.md 2>&1)"; c=$?; [ "$c" -eq 0 ] && grep -q '^WAITING   x.md' <<<"$o" || exit 9; grep -q 'LIVENESS  a teammate in this session took a turn' <<<"$o" && ! grep -q 'LIVENESS  unavailable' <<<"$o"
 
 ## BL-662 — the adversarial repair record is the only repair kind with no round word, the join accepts `<artifact>-adversarial-repair-p<M>`, and only gate-time arm H catches it
 
