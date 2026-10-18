@@ -648,6 +648,50 @@ else
   note "FAIL  m8c-mut DID NOT APPLY"; rc=1
 fi
 
+# ===== M8e. A `verify:` VALUE THAT MATCHES NO RECEIPT FORM IS NAMED BY ENTRY ID. ==============
+# `verify: manual. reason` carries a char after `manual` that is not a space, so it is neither
+# `manual` nor `manual <reason>`; it used to fall through uncounted and R2 said only "ZERO".
+# Offender BL-851 is named; near-misses BL-852 (`manual`) and BL-853 (`manual reason`) are not
+# named and count as manual (so the all-manual ledger below still passes).
+seed "$TMP/m8e"
+printf '# Probe backlog\n\n## BL-851\n\nBody.\n\nverify: manual. no receipt shape fits\n\n## BL-852\n\nBody.\n\nverify: manual\n\n## BL-853\n\nBody.\n\nverify: manual reason\n\n' > "$TMP/m8e/docs/backlog.md"
+( cd "$TMP/m8e" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m unrec >/dev/null 2>&1 )
+M8E_ARGS="--max-prose-closable 0 --max-unscorable 0 --max-out-of-population 0 --max-unstable 0 --min-sh-receipts 0 --min-entries 1"
+# shellcheck disable=SC2086
+m8e_out="$(run_v "" "$TMP/m8e" $M8E_ARGS)"; m8e_rc=$?
+if [ "$m8e_rc" -eq 1 ] && grep -qE '^FAIL: UNRECOGNISED.BL-851' <<<"$m8e_out" \
+   && ! grep -qE 'UNRECOGNISED.BL-85[23]' <<<"$m8e_out"; then
+  note "ok    m8e -- 'verify: manual.' is named by entry id; bare 'manual' and 'manual reason' are not"
+else
+  note "FAIL  m8e -- the unrecognised value must be named by id and the near-misses left alone (rc=$m8e_rc)"
+  printf '%s\n' "$m8e_out" | grep -E '^(FAIL|OK):' | sed 's/^/      /' | head -4; rc=1
+fi
+seed "$TMP/m8en"
+printf '# Probe backlog\n\n## BL-852\n\nBody.\n\nverify: manual\n\n## BL-853\n\nBody.\n\nverify: manual reason\n\n' > "$TMP/m8en/docs/backlog.md"
+( cd "$TMP/m8en" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m nearmiss >/dev/null 2>&1 )
+# shellcheck disable=SC2086
+m8en_out="$(run_v "" "$TMP/m8en" $M8E_ARGS)"; m8en_rc=$?
+if [ "$m8en_rc" -eq 0 ] && grep -q ' R2 all-manual$' <<<"$m8en_out" && ! grep -q UNRECOGNISED <<<"$m8en_out"; then
+  note "ok    m8e-near -- 'manual' and 'manual reason' count as manual (R2 all-manual) and are never named"
+else
+  note "FAIL  m8e-near -- the near-miss ledger must pass as all-manual with no UNRECOGNISED row (rc=$m8en_rc)"
+  printf '%s\n' "$m8en_out" | grep -E '^(FAIL|OK):' | sed 's/^/      /' | head -3; rc=1
+fi
+# ...and the mutant: the fallthrough restored -- an unrecognised value is dropped, not recorded.
+# The subject's own self-probe then refuses (exit 2) and no id is ever named, which is the
+# pre-fix behaviour made loud; the assertion is that the id is NOT named and the run is not green.
+if mut "$TMP/m8e" 's|>> "$WORK/unrec"; continue ;; esac|>/dev/null; continue ;; esac|'; then
+  # shellcheck disable=SC2086
+  m8em_out="$(run_v "" "$TMP/m8e" $M8E_ARGS)"; m8em_rc=$?
+  if [ "$m8em_rc" -ne 0 ] && ! grep -qE '^FAIL: UNRECOGNISED.BL-851' <<<"$m8em_out" && grep -q 'unrecognised-value arm did not name' <<<"$m8em_out"; then
+    note "ok    m8e-mut -- KILLED: with the fallthrough unrecorded the 'manual.' entry is named nowhere and the subject's self-probe refuses (rc=$m8em_rc)"
+  else
+    note "FAIL  m8e-mut SURVIVED: rc=$m8em_rc and the id was still named or the self-probe stayed quiet"; rc=1
+  fi
+else
+  note "FAIL  m8e-mut DID NOT APPLY"; rc=1
+fi
+
 # ===== M8d. A LEDGER DECLARED EMPTY IS ACCOUNTED FOR, NOT A ZERO. ===========================
 # The rotation of the last entry leaves zero entries and the empty marker as the last line. R2
 # asks backlog-reverify.sh --declared-empty, only at zero entries, and passes with `R2

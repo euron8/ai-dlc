@@ -783,13 +783,17 @@ score_ledger() {
   rm -rf "$WORK/out" "$WORK/rec" "$WORK/t"
   mkdir -p "$WORK/out" "$WORK/rec" "$WORK/t"
   _sl_i=0; _sl_e=0; _sl_m=0
+  : > "$WORK/unrec"
   while IFS="$(printf '\t')" read -r _l _c _r; do
     [ -n "$_l" ] || continue
     [ "$_c" = "1" ] && continue                 # annotated LANDED: awaiting rotation, not live
     _sl_e=$(( _sl_e + 1 ))
     [ "$_r" = "@NONE@" ] && continue
     case "$_r" in "manual"|"manual "*) _sl_m=$(( _sl_m + 1 )); continue ;; esac
-    case "$_r" in "sh "*|"sh") ;; *) continue ;; esac
+    # A VALUE THAT IS NEITHER FORM IS NAMED, NOT DROPPED. `manual.` / `manual,` / `manual:` carry a
+    # char after `manual` that is not a space, so they match neither case above; falling through
+    # silently left the ledger one entry short of its manual count with nothing naming the line.
+    case "$_r" in "sh "*|"sh") ;; *) printf '%s\t%s\n' "$_l" "$(printf '%s' "$_r" | cut -c1-20)" >> "$WORK/unrec"; continue ;; esac
     _sl_i=$(( _sl_i + 1 ))
     printf '%s\n%s\n' "$_l" "$_r" > "$WORK/rec/$(printf '%04d' "$_sl_i")"
   done <<EOF
@@ -1067,6 +1071,16 @@ case "$(probe_status "$R1G_OUT" BL-901)" in
   PROSE-CLOSABLE) echo "$(me): SELF-PROBE FAILED -- the generic seed flipped the literal-grep receipt, so the two seeds do not differ and the pair above is one measurement twice." >&2; exit 2 ;;
 esac
 
+# UNRECOGNISED-VALUE SELF-PROBE: a seeded `verify: manual.` entry MUST be named by id, and the
+# near-misses `manual` and `manual reason` MUST NOT be, and must count as manual.
+mkdir -p "$WORK/unrecprobe"
+printf '## BL-951\n\nverify: manual. reason\n\n## BL-952\n\nverify: manual\n\n## BL-953\n\nverify: manual reason\n\n' > "$WORK/unrecprobe/backlog.md"
+score_ledger "$WORK/unrecprobe/backlog.md" "$P" >/dev/null || exit 2
+read_counts
+if [ "$(cut -f1 "$WORK/unrec" | tr '\n' ' ')" != "BL-951 " ] || [ "$MANUAL_RECEIPTS" -ne 2 ] || [ "$ENTRIES" -ne 3 ]; then
+  echo "$(me): SELF-PROBE FAILED -- the unrecognised-value arm did not name exactly BL-951 (named: $(cut -f1 "$WORK/unrec" | tr '\n' ' '); manual $MANUAL_RECEIPTS of $ENTRIES), so a clean corpus below would mean only that it ran." >&2; exit 2
+fi
+
 # ---------------------------------------------------------------------------
 # THE CORPUS.
 # ---------------------------------------------------------------------------
@@ -1130,9 +1144,18 @@ fi
 # DRIVER: each driver ran a tracked script and was read, which is an observation. The predicate is
 # r2_alldriver, the function R1 probed in both directions above.
 R2_ALLDRIVER=""
+R2_UNREC_IDS=""
+# The rows print BEFORE R2 so an R2 exit still names them; the exit itself is after R2.
+[ -s "$WORK/unrec" ] && awk -F'\t' '{ printf "FAIL: UNRECOGNISED\t%s\tverify: %s\n", $1, $2 }' "$WORK/unrec" >&2
+[ -s "$WORK/unrec" ] && R2_UNREC_IDS="; entries whose verify: value matched no receipt form: $(cut -f1 "$WORK/unrec" | tr '\n' ' ')"
 [ "$SCORED" -eq 0 ] && r2_alldriver "$OUT" "$SH_RECEIPTS" && R2_ALLDRIVER=" R2 all-driver"
 if [ "$SCORED" -eq 0 ] && [ "$N_PASS" -eq 0 ] && [ -z "$R2_ALLMANUAL" ] && [ -z "$R2_DECLEMPTY" ] && [ -z "$R2_ALLDRIVER" ]; then
-  echo "FAIL: R2: $LEDGER produced ZERO scored receipts (entries $ENTRIES, sh receipts ${SH_RECEIPTS:-0}, manual ${MANUAL_RECEIPTS:-0}, unscorable $N_UNSC, unseeded $N_UNSEED, out of population $N_OOP, already passing $N_PASS, driver $N_DRIVER). Nothing was observed, and an arm that observed nothing is not a clean corpus." >&2
+  echo "FAIL: R2: $LEDGER produced ZERO scored receipts (entries $ENTRIES, sh receipts ${SH_RECEIPTS:-0}, manual ${MANUAL_RECEIPTS:-0}, unscorable $N_UNSC, unseeded $N_UNSEED, out of population $N_OOP, already passing $N_PASS, driver $N_DRIVER)$R2_UNREC_IDS. Nothing was observed, and an arm that observed nothing is not a clean corpus." >&2
+  exit 1
+fi
+
+if [ -s "$WORK/unrec" ]; then
+  echo "FAIL: $LEDGER carries $(grep -c . "$WORK/unrec") live entr(ies) whose verify: value is neither 'sh' nor 'manual' (ids above). A value like 'manual.' matches no receipt form and is counted as nothing; write 'verify: manual <reason>' or 'verify: sh ...'." >&2
   exit 1
 fi
 
