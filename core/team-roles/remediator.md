@@ -78,7 +78,8 @@ source; do not infer either value from anywhere else.
    **Close your part with `--mark`.** As any shard (files, section or subject), your LAST act
    is ONE Bash call on your part file:
    `scripts/ai-dlc/wait-for-deliverable.sh --mark <part path> <step> remediator <shard> findings=<n>`,
-   `<step>` and `<shard>` being the step and the ordinal your brief names and `<n>` the number of
+   `<step>` being the `<artifact>` of your part path `s<N>/shards/<artifact>-repair-p<M>/`,
+   `<shard>` your part's ordinal (the part file's name without `.md`) and `<n>` the number of
    entries in your part. It appends `seat-complete: <step> remediator <shard> sha=<hex> findings=<n>`,
    whose `sha=` binds every line above it; the lead's `--complete` beat takes your part as
    delivered only once that line is last and matches, so a part you are still rewriting is never
