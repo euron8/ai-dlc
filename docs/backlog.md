@@ -926,3 +926,13 @@ verify: manual
 Owed: a shard whose newest seal row is `actor: "session"` refuses at merge, as a gate part already does, naming re-dispatch as the remedy; or the role check reads seal rows as well as artifact-write rows. Probe: an adversary Write then a session Edit on one shard refuses; control: an adversary Write then the same adversary's Edit merges.
 
 verify: manual
+
+## BL-670 — the shard merge never stamps DIVERGENT_HARD_BLOCK from the summed prior-scope count, so a sharded divergence reaches the validator unstamped
+
+**NOTE.** Found while building BL-665. `merge-adversarial-shards.sh` (`:302` header; `:429` and `:1336` at `e91b4d86`) stamps the merged pass DIVERGENT_HARD_BLOCK only when some shard declared it. It sums `findings_critical_prior_scope` across shards but never applies arm C's test (summed prior-scope above the previous pass's CRITICAL count) to that sum. A divergence that exists only in the sum — no single shard's count rose — is therefore never stamped, and the validator's arm-C path is the only thing that sees it. Measured on graph's s319 architecture p2 (read-only): the shard bodies that state a prior-scope count give 0 or 1, and none calls its finding divergence. The merged pass carries `findings_critical_prior_scope: 2` against p1's `findings_critical: 1`, and its verdict is EXIT_CONDITION_NOT_MET. The per-shard values that summed to 2 are not re-derived here: some shard lines are prose, and the merge defaults an absent field to that shard's whole CRITICAL count.
+
+Since BL-665 an unstamped divergence resolves exactly as a stamped one does, so this no longer deadlocks; the cost left is a mislabelled pass. Its gate error tells the adversary to stamp DIVERGENT_HARD_BLOCK, which no shard was in a position to do.
+
+Owed: decide whether the merge should stamp from the sum. It has the previous pass's CRITICAL count only by reading the prior pass file, which it does not do today. Probe: two shards each declaring prior-scope 1 over a previous pass with 1 CRITICAL; the merged verdict. Control: the same with a previous pass of 2 CRITICAL.
+
+verify: manual
