@@ -74,6 +74,16 @@ source; do not infer either value from anywhere else.
    yours: report it in your part as escalated, and the serial remediator after assembly owns it.
    A subject shard writes no siblings fence either: every `repaired` entry with an edit carries
    `- siblings: n/a (section shard; re-checked by the serial remediator after assembly)`.
+
+   **Close your part with `--mark`.** As any shard (files, section or subject), your LAST act
+   is ONE Bash call on your part file:
+   `scripts/ai-dlc/wait-for-deliverable.sh --mark <part path> <step> remediator <shard> findings=<n>`,
+   `<step>` and `<shard>` being the step and the ordinal your brief names and `<n>` the number of
+   entries in your part. It appends `seat-complete: <step> remediator <shard> sha=<hex> findings=<n>`,
+   whose `sha=` binds every line above it; the lead's `--complete` beat takes your part as
+   delivered only once that line is last and matches, so a part you are still rewriting is never
+   joined. Never type the line by hand, never run it before your last entry, and do not edit the
+   part after it.
 2. **Repair every CRITICAL and MAJOR.** MINOR/NIT at your discretion; say which you
    skipped and why.
 3. **Write the repaired artifact in place**, and write a **repair record** to
@@ -227,10 +237,15 @@ before your last entry and never append after it; once it is marked, do not edit
 again. The lead's join beat takes the record as delivered only when that line is last and its
 `sha=` matches the record above it, so a record without it reads as
 unfinished however many entries it holds. The line closes your block only: a later appender,
-such as a spec re-render, writes its own block after it. A part or shard remediator writes no
-such line: the join concatenates the parts into the record the serial remediator appends to, so
-a part's line would end that record before the serial pass's first entry and deliver it
-unfinished.
+such as a spec re-render, writes its own block after it. When your block appended a `(decision)`
+entry to a spec's `.memlog.md`, re-render `SPEC.md` from it and append its
+`- (event) Render <pass>: re-derived from memlog through <last decision>` line BEFORE your
+`--mark-repair`, never after it: the lead's beat ends at that call, and no separate render agent
+is dispatched. A part or shard remediator writes no `repair-complete:` line and closes with
+`--mark` instead (item 1, **Close your part with `--mark`**). Its `seat-complete:` line ends
+nothing in the joined record: the lead's beat on that record keys on `repair-complete: serial`
+alone, and the join reads a `seat-complete:` line as neither a block terminator nor a sha
+triple, so the serial pass's block still opens at its own triple.
 
 **A party repair names the seat finding behind every entry.** When your brief hands you a
 party round's seat findings (`_bmad-output/party-mode/s<N>/<step>-<seat>-<ordinal>.md`), every
