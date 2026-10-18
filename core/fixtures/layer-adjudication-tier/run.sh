@@ -66,7 +66,7 @@ need_digest() { # $1 part label -> echoes a 40-hex digest or records the failure
 # a line of its clause's core text (Part 13). Both are the literal lines seed.sh wrote: the entry's
 # `reason:` line, and the line THEIRS added to demo.md -- an LC-E4 core line is a +/- line of the
 # range diff. Hardcoded rather than derived, so a seed and the reader cannot agree by construction.
-READ_E4='"read":{"entry_line":"reason: seeded entry whose hooked core file moves across the range","core_line":"Gamma'"'"'s body at THEIRS — REWRITTEN. This is the change the re-read duty fires on."}'
+READ_E4='"read":{"entry_line":"The consumer check this entry adds below its numbered heading.","core_line":"Gamma'"'"'s body at THEIRS — REWRITTEN. This is the change the re-read duty fires on."}'
 record() { # $1 digest, $2 verdict, [$3 supersedes]
   if [ -n "${3:-}" ]; then
     printf '{"clause":"LC-E4","entry":"%s","subject_digest":"%s","verdict":"%s","recorded_utc":"2026-01-01T00:00:00Z","reason":"seeded","supersedes":"%s",%s}\n' \
@@ -1102,6 +1102,35 @@ case ",$dual_cell," in
   *) bad "the dual-keyed subject's clause cell is '$dual_cell' and names no LC-E19. The dedupe kept one clause and discarded the other" ;;
 esac
 
+# R10 / R11 — THE DUAL-KEYED SUBJECT WITH A RECORD THAT CLEARS ONE CLAUSE AND NOT THE OTHER. The
+# core_line `Gamma's body at BASE.` is a REMOVED line of the range diff (LC-E4's core text) and is
+# not in `## Gamma review` at THEIRS (LC-E19's), so LC-E4's row clears and the title-join row stays.
+# R11: the listing must not call that subject adjudicated while the gate still raises a row on it.
+# R10: the listing reaches the LC-E19 core text in its own shell, and that derivation once wrote
+# the entry's heading into the loop's target variable, so the target column is asserted verbatim.
+# That leak needs a NUMBERED heading in the entry (it is the anchors loop that assigns the name), so
+# one is appended for these two arms and the file is restored after them.
+printf '\n### 903. [ext:dual-keyed] A numbered consumer check.\n\nNumbered body.\n' >> "$E14CONS/$DUALENTRY"
+dual_dig="$(e14_list | awk -F'\t' -v e="$DUALENTRY" '$1=="ADJUDICABLE" && $2==e {print $4; exit}')"
+jq -cn --arg d "$dual_dig" --arg e "$DUALENTRY" '{clause:"LC-E4",entry:$e,subject_digest:$d,verdict:"still-additive",recorded_utc:"2026-01-01T00:00:00Z",reason:"seeded",read:{entry_line:"Body this entry adds under a heading core already has.",core_line:"Gamma'"'"'s body at BASE."}}' > "$E14REG"
+dual_out="$(e14_run)"
+dual_hard="$(printf '%s\n' "$dual_out" | awk -F'\t' -v e="$DUALENTRY" '$1=="HARD-LAYER-ADJUDICATION-MISSING" && $2==e' | grep -c .)"
+dual_tm="$(printf '%s\n' "$dual_out" | awk -F'\t' -v e="$DUALENTRY" '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2==e' | grep -c .)"
+dual_row="$(e14_list | awk -F'\t' -v e="$DUALENTRY" '$1=="ADJUDICABLE" && $2==e {print $3 "\t" $5; exit}')"
+if [ ${#dual_dig} -ne 40 ] || [ "$dual_hard" -ne 0 ] || [ "$dual_tm" -ne 1 ]; then
+  bad "R11 precondition: the record should clear LC-E4 and not LC-E19 (digest '${dual_dig}', HARD=$dual_hard, title rows=$dual_tm, want 0 and 1)"
+else
+  ok "R11 precondition: one record clears the subject's LC-E4 row and leaves its LC-E19 row firing"
+  case "${dual_row#*	}" in
+    "(recorded, not clearing: "*"for LC-E19)") ok "R11: the listing calls the dual-keyed subject NOT clearing, naming LC-E19 — it clears only when every clause that keyed it clears, as the gate judges each row" ;;
+    *) bad "R11: the listing prints '${dual_row#*	}' for a subject whose LC-E19 row still fires, so listing and gate disagree" ;;
+  esac
+  if [ "${dual_row%%	*}" = "steps/demo.md" ]; then ok "R10: the non-clearing LC-E19 subject's target column is 'steps/demo.md' — deriving its core text did not overwrite the listing's own variables"
+  else bad "R10: the listing's target column for the LC-E19 subject is '${dual_row%%	*}', not steps/demo.md — the core-text derivation leaked a variable into the listing loop"; fi
+fi
+rm -f "$E14REG"
+git -C "$E14CONS" checkout -q -- "$DUALENTRY"
+
 # MUTANTS. Whole-directory copies, `cmp -s`-guarded, with the unmutated copy scored first: a copy
 # that dies sourcing lib.sh emits nothing, and no row at all satisfies an arm looking for a wrong
 # row exactly as well as it satisfies one looking for the right one.
@@ -1780,7 +1809,9 @@ p13_rec() { # $1 digest, $2 entry_line or '-', $3 core_line -> one LC-E4 record 
     jq -cn --arg d "$1" --arg e "$ENTRY" --arg el "$2" --arg cl "$3" '{clause:"LC-E4",entry:$e,subject_digest:$d,verdict:"still-additive",recorded_utc:"2026-01-01T00:00:00Z",reason:"seeded",read:{entry_line:$el,core_line:$cl}}'
   fi
 }
-P13_EL="reason: seeded entry whose hooked core file moves across the range"
+P13_EL="The consumer check this entry adds below its numbered heading."
+P13_FM="reason: seeded entry whose hooked core file moves across the range"
+P13_SEP="|----------|----------|"
 P13_CL="Gamma's body at THEIRS — REWRITTEN. This is the change the re-read duty fires on."
 P13_OFFDIFF="Alpha's body, unchanged across the range."
 p13_hard() { bash "${1:-$DRIFT}" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null | awk -F'\t' '$1=="HARD-LAYER-ADJUDICATION-MISSING"'; }
@@ -1821,11 +1852,20 @@ if [ -n "$P13D" ]; then
     *"[read.core_line not in the LC-E4 core text]"*) ok "R4: a core_line present in the hooked file but NOT in the range diff blocks and names the LC-E4 core half" ;;
     *) bad "R4: a core_line outside LC-E4's core text did not block naming the core half: $(p13_hard | cut -f4 | cut -c1-120)" ;;
   esac
+  # R8: a FRONTMATTER line is in the file but not the body, so it is not evidence of a read.
+  p13_rec "$P13D" "$P13_FM" "$P13_CL" > "$REG"
+  if grep -qxF -- "$P13_FM" "$CONS/$ENTRY" && [ "$(p13_n)" -eq 1 ]; then ok "R8: an entry_line quoted from the entry's FRONTMATTER blocks — the entry side is the body"
+  else bad "R8: a frontmatter line cleared as entry evidence (or the seed lost it): HARD=$(p13_n)"; fi
+  # R9: a content-free line (a table separator, 22 characters, no letters or digits) is in the body
+  # and is long enough, and it still does not qualify.
+  p13_rec "$P13D" "$P13_SEP" "$P13_CL" > "$REG"
+  if grep -qxF -- "$P13_SEP" "$CONS/$ENTRY" && [ "${#P13_SEP}" -ge 20 ] && [ "$(p13_n)" -eq 1 ]; then ok "R9: a content-free body line ('$P13_SEP') blocks — evidence needs 10 letters or digits"
+  else bad "R9: a content-free separator line cleared as entry evidence: HARD=$(p13_n)"; fi
   # R6: the listing answers as the gate does.
   p13_rec "$P13D" - > "$REG"
   p13_lv="$(bash "$DRIFT" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null | awk -F'\t' -v d="$P13D" '$4==d {print $5; exit}')"
   case "$p13_lv" in
-    "(recorded, not clearing: no read evidence)") ok "R6: the listing shows the R1 record as recorded and NOT clearing — it agrees with the gate rather than calling it adjudicated" ;;
+    "(recorded, not clearing: no read evidence for LC-E4)") ok "R6: the listing shows the R1 record as recorded and NOT clearing — it agrees with the gate rather than calling it adjudicated" ;;
     *) bad "R6: the listing's verdict cell for the R1 record is '$p13_lv'; the gate blocks on it, so the listing disagrees with the gate" ;;
   esac
   # R7: the unfiltered readers. Two differing verdicts, neither with `read`, still contradict; and

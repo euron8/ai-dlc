@@ -93,7 +93,7 @@
     },
     "read": {
       "type": "object",
-      "description": "Evidence that the entry was READ against the core change. Optional here so older records stay schema-valid, and REQUIRED FOR CLEARING: `layer-drift.sh` clears a row only for a record that carries it with both members found. Each member is ONE line copied verbatim from what was read, compared after tabs become spaces and leading and trailing whitespace is trimmed, at least 20 characters after trimming, and not a markdown heading. The blocking row names where the core line must come from for its clause and never prints a line that would pass, so the evidence cannot be copied from the row. Without it, 0 of 1011 records on the reference consumer carried any sign of a read, and nine were written after a keyword grep and no Read call at all.",
+      "description": "Evidence that the entry was READ against the core change. Optional here so older records stay schema-valid, and REQUIRED FOR CLEARING: `layer-drift.sh` clears a row only for a record that carries it with both members found. Each member is ONE line copied verbatim from what was read, compared after tabs become spaces and leading and trailing whitespace is trimmed, at least 20 characters after trimming with at least 10 letters or digits, and not a markdown heading. The blocking row names where the core line must come from for its clause and never prints a line that would pass, so the evidence cannot be copied from the row. Without it, 0 of 1011 records on the reference consumer carried any sign of a read, and nine were written after a keyword grep and no Read call at all.",
       "required": [
         "entry_line",
         "core_line"
@@ -102,7 +102,7 @@
         "entry_line": {
           "type": "string",
           "minLength": 20,
-          "description": "A whole line of the entry file the subject_digest pins."
+          "description": "A whole line of the BODY of the entry file the subject_digest pins, below its frontmatter."
         },
         "core_line": {
           "type": "string",

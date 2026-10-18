@@ -2039,7 +2039,8 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    re-merge. Read the entry against the new core text and record a verdict per entry —
    **still-additive**, **contradicts-core**, or **retire** — with the evidence of that read:
    `read.entry_line` and `read.core_line`, each ONE line copied verbatim from what you read (the
-   entry, and the core text the blocking row names for its clause), at least 20 characters and not
+   entry's body, never its frontmatter, and the core text the blocking row names for its clause), at
+   least 20 characters with at least 10 letters or digits, and not
    a heading. A verdict without them does not clear the row. A grep with no hit gives you nothing
    to quote, which is the point: the row never prints a line that would pass.
 

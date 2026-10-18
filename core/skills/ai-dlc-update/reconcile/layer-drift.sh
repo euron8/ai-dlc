@@ -980,10 +980,10 @@ adj_digest() { # $1 entry (consumer-relative), $2 core-relative target, [$3 firi
 # that cannot find an extension restating a rule's content without citing its number.
 #
 # SO A RECORD CLEARS ONLY WHEN IT CARRIES `read`: {"entry_line", "core_line"}, and BOTH are found.
-# entry_line must be a whole line of the entry file the digest pins (read from the same path
-# adj_digest hashes); core_line must be a whole line of THIS CLAUSE'S CORE-SIDE TEXT, which is
+# entry_line must be a whole line of the BODY of the entry file the digest pins (frontmatter is
+# excluded: it is quotable without opening the body); core_line must be a whole line of THIS CLAUSE'S CORE-SIDE TEXT, which is
 # adj_core_text below. Both compare after tabs become spaces and leading and trailing whitespace is
-# trimmed, and each must be at least 20 characters and not a markdown heading -- a heading or a
+# trimmed, and each must be at least 20 characters with at least 10 letters or digits and not a markdown heading -- a heading or a
 # fragment is what a reader who never opened the file can still produce. Evidence is a LINE the
 # row does not print, so it cannot be copied from the row: a draft that took hunk headers and a
 # file hash could be satisfied by a loop over the listing without one line being read.
@@ -1020,9 +1020,13 @@ adj_trim() { # $1 -> $1 with tabs as spaces and leading and trailing whitespace 
   s="${s%"${s##*[![:space:]]}"}"
   printf '%s' "$s"
 }
-adj_qualifies() { # $1 trimmed line -> 0 when it is at least 20 characters and not a heading
+# At least 20 characters, at least 10 of them letters or digits, and not a heading: a table
+# separator `|---|---|` or a rule line is content-free and could be quoted from any file unread.
+adj_qualifies() { # $1 trimmed line -> 0 when it qualifies as read evidence
   [ "${#1}" -ge 20 ] || return 1
-  local h="$1"
+  local h="$1" an
+  an="${1//[!A-Za-z0-9]/}"
+  [ "${#an}" -ge 10 ] || return 1
   while [ "${h#\#}" != "$h" ]; do h="${h#\#}"; done
   if [ "$h" != "$1" ] && [ "${h# }" != "$h" ]; then return 1; fi
   return 0
@@ -1139,14 +1143,18 @@ adj_core_where() { # $1 status, $2 core-relative target -> a phrase naming the c
 
 # The instruction every keyed row carries, naming the field and its two members.
 adj_read_ask() { # $1 status, $2 core-relative target
-  printf '%s' " The record must also carry \`read\`: {\"entry_line\": <a line copied verbatim from this entry>, \"core_line\": <${1:+$(adj_core_where "$1" "$2")}>}, each at least 20 characters after trimming and not a heading. Copy both from what you READ: a grep with no hit gives you nothing to quote, which is the point, and a verdict without them does not clear."
+  printf '%s' " The record must also carry \`read\`: {\"entry_line\": <a line copied verbatim from this entry's body>, \"core_line\": <${1:+$(adj_core_where "$1" "$2")}>}, each at least 20 characters after trimming, at least 10 of them letters or digits, and not a heading. Copy both from what you READ: a grep with no hit gives you nothing to quote, which is the point, and a verdict without them does not clear."
 }
 
 # THE SELECTION. One `verdict<TAB>state` line per record under the digest, state one of `clears`,
 # `no-read`, `entry`, `core`. Every field is prefixed with `x` because a TAB is IFS whitespace and
 # `read` would collapse an empty field into its neighbour's place.
+# THE ENTRY SIDE IS THE BODY, via body_of: frontmatter (`hooks:`, `shadows:`, `base_sha:`) is
+# what a script can quote without opening the body. THE CORE SIDE IS CACHED per (status, target)
+# for the run, so adj_prefix's lookup + verdict and adj_check's lookup derive it once, not three
+# times; the key is a cksum of the pair, and a failed derivation is not cached.
 adj_records() { # $1 digest, $2 status, $3 entry (consumer-relative), $4 core-relative target
-  local v has el cl st hay_e="" hay_c=""
+  local v has el cl st hay_e="" hay_c="" ck
   jq -r --arg d "$1" 'select(.subject_digest == $d)
       | [ (.verdict // "" | tostring),
           (if (.read | type) == "object" then "1" else "0" end),
@@ -1160,18 +1168,23 @@ adj_records() { # $1 digest, $2 status, $3 entry (consumer-relative), $4 core-re
       st=no-read
     else
       if [ -z "$hay_e" ]; then
-        if adj_stage_trimmed "$CONSUMER/$3" "$LD_T/adj-hay-entry"; then hay_e=ok; else hay_e=bad; fi
+        if body_of "$CONSUMER/$3" > "$LD_T/adj-entry-body" \
+           && adj_stage_trimmed "$LD_T/adj-entry-body" "$LD_T/adj-hay-entry"; then hay_e=ok; else hay_e=bad; fi
       fi
       if [ "$hay_e" != ok ] || ! adj_qualifies "$el" || ! adj_line_in "$el" "$LD_T/adj-hay-entry"; then
         st=entry
       else
         if [ -z "$hay_c" ]; then
-          if adj_core_text "$2" "$3" "$4" < /dev/null > "$LD_T/adj-core-raw" \
-             && adj_stage_trimmed "$LD_T/adj-core-raw" "$LD_T/adj-hay-core"; then hay_c=ok; else hay_c=bad; fi
+          ck="$(printf '%s\t%s\t%s' "$2" "$3" "$4" | cksum | tr ' ' '-')"
+          if [ -f "$LD_T/adj-hay-core.$ck" ]; then
+            hay_c=ok
+          elif ( adj_core_text "$2" "$3" "$4" ) < /dev/null > "$LD_T/adj-core-raw" \
+             && adj_stage_trimmed "$LD_T/adj-core-raw" "$LD_T/adj-hay-core.$ck.tmp" \
+             && mv "$LD_T/adj-hay-core.$ck.tmp" "$LD_T/adj-hay-core.$ck"; then hay_c=ok; else hay_c=bad; fi
         fi
         if [ "$hay_c" != ok ]; then
           st=core-unread
-        elif ! adj_qualifies "$cl" || ! adj_line_in "$cl" "$LD_T/adj-hay-core"; then
+        elif ! adj_qualifies "$cl" || ! adj_line_in "$cl" "$LD_T/adj-hay-core.$ck"; then
           st=core
         else
           st=clears
@@ -1210,12 +1223,12 @@ adj_lookup() { # $1 digest, $2 status, $3 entry, $4 target
     no-read) ADJ_READ_HALF="no read evidence"
              ADJ_READ_WHY="the record carries no \`read\` evidence" ;;
     entry)   ADJ_READ_HALF="read.entry_line not in the entry"
-             ADJ_READ_WHY="its read.entry_line is not a line of this entry (verbatim, at least 20 characters, not a heading)" ;;
+             ADJ_READ_WHY="its read.entry_line is not a line of this entry's body (verbatim, at least 20 characters, 10 letters or digits, not a heading)" ;;
     core-unread)
              ADJ_READ_HALF="the $(adj_clause_of "${2:-}") core text could not be read"
              ADJ_READ_WHY="the core text its read.core_line is checked against, $(adj_core_where "${2:-}" "${4:-}"), could not be read in this run, so the record is not cleared on an unread input; re-run, and if it persists the distribution clone is damaged" ;;
     *)       ADJ_READ_HALF="read.core_line not in the $(adj_clause_of "${2:-}") core text"
-             ADJ_READ_WHY="its read.core_line is not $(adj_core_where "${2:-}" "${4:-}") (verbatim, at least 20 characters, not a heading)" ;;
+             ADJ_READ_WHY="its read.core_line is not $(adj_core_where "${2:-}" "${4:-}") (verbatim, at least 20 characters, 10 letters or digits, not a heading)" ;;
   esac
   ADJ_READ_WHY="a record under this digest carries verdict '${_fv}' and does NOT clear it: ${ADJ_READ_WHY}"
   return 3
@@ -2786,23 +2799,26 @@ if [ "$MODE" = list ]; then
       printf 'ADJUDICABLE\t%s\t%s\t(unkeyable: entry or target unreadable)\t(none)\t%s\n' "$_e" "$_t" "${_c:-(unmapped)}"; ld_wrote $?
       _without=$((_without + 1)); continue
     fi
-    _v=""; _rc=0; _nc=""
+    # A SUBJECT KEYED BY SEVERAL STATUSES CLEARS ONLY WHEN EVERY ONE OF THEM CLEARS -- the gate
+    # judges each status's row on its own, so a listing that showed a verdict because one clause
+    # cleared would call adjudicated a subject whose other row still blocks.
+    _v=""; _rc=0; _nc=""; _all=1
     _srest="${_s},"
     while [ -n "$_srest" ]; do
       _st="${_srest%%,*}"; _srest="${_srest#*,}"
-      _sv="$(adj_verdict "$_d" "$_st" "$_e" "$_t")"; _src=$?
-      [ "$_src" -ne 2 ] || { _rc=2; break; }
-      _v="${_v}${_v:+$NL}${_sv}"
-      if [ -z "$_sv" ] && [ -z "$_nc" ]; then
-        adj_lookup "$_d" "$_st" "$_e" "$_t"
-        [ "$?" -ne 3 ] || _nc="$ADJ_READ_HALF"
-      fi
+      adj_lookup "$_d" "$_st" "$_e" "$_t"; _lrc=$?
+      case "$_lrc" in
+        0) _sv="$(adj_verdict "$_d" "$_st" "$_e" "$_t")"; _v="${_v}${_v:+$NL}${_sv}" ;;
+        2) _rc=2; break ;;
+        3) _all=0; [ -n "$_nc" ] || _nc="${ADJ_READ_HALF} for $(adj_clause_of "$_st")" ;;
+        *) _all=0 ;;
+      esac
     done
     if [ "$_rc" -eq 2 ]; then
       _v="(register unreadable: jq is not on PATH)"; _without=$((_without + 1))
-    elif [ -z "$(printf '%s' "$_v" | tr -d '\n')" ] && [ -n "$_nc" ]; then
+    elif [ "$_all" -eq 0 ] && [ -n "$_nc" ]; then
       _v="(recorded, not clearing: ${_nc})"; _without=$((_without + 1))
-    elif [ -z "$(printf '%s' "$_v" | tr -d '\n')" ]; then
+    elif [ "$_all" -eq 0 ] || [ -z "$(printf '%s' "$_v" | tr -d '\n')" ]; then
       _v="(none)"; _without=$((_without + 1))
     else
       # Comma-joined rather than first-wins: two DIFFERING verdicts under one key is the state
