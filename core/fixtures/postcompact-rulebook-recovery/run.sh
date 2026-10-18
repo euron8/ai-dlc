@@ -2143,6 +2143,34 @@ else
     if [ "$_rv" = allow ] && [ "$_r1" = second ]; then ok "mutant: re-test keyed on the progress file — the genuine first call is waved through, and only R2 flips"
     else bad "mutant: re-test keyed on the progress file — expected R2 'allow' and the uninjected world 'second', measured R2 '${_rv}' world '${_r1}'"; fi
   fi
+
+  # THE REMOVAL ORDER (BL-658). The fix holds only because the satisfying Read removes the MARKER
+  # before the PROGRESS file: a concurrent call that sees the marker gone exits at the re-test, one
+  # that sees the progress file gone but the marker present would take the default stage. Every
+  # injection above supplies its OWN removal, so nothing above binds the shipped line's operand
+  # order. This arm reads the line itself, whole-line and exact, and the mutant swaps its operands
+  # in a copy of the whole hooks directory.
+  RACE_RM='        rm -f "$MARKER" "$PROGRESS" 2>/dev/null || true'
+  RACE_RMSW='        rm -f "$PROGRESS" "$MARKER" 2>/dev/null || true'
+  RACE_RMNONE='        rm -f "$MARKER" "$PROGRESS" 2>/dev/null || true # impossible-anchor-bl658-zz'
+  RACE_REPL='$0 == ENVIRON["A"] { print ENVIRON["W"]; next } { print }'
+  race_rm_order() { printf '%s|%s\n' "$(grep -cxF -- "$RACE_RM" "$1")" "$(grep -cxF -- "$RACE_RMSW" "$1")"; }
+  _ro="$(race_rm_order "$GATE")"; _rc="$(grep -cxF -- "$RACE_RMNONE" "$GATE")"
+  if [ "$_ro" = "1|0" ] && [ "$_rc" = 0 ]; then
+    ok "race order: the satisfying Read removes the marker BEFORE the progress file (exact line 1, swapped spelling 0, impossible-anchor control 0)"
+  else bad "race order: expected exact line 1 and swapped spelling 0 with control 0, measured ${_ro} with control '${_rc}' in ${GATE}"; fi
+  RD_M4="$(race_dir)"
+  if [ -z "$RD_M4" ]; then bad "FIXTURE BROKEN: a whole-directory copy of the hooks did not carry every sibling, so the order mutant below is not evidence"
+  else
+    race_edit "$GATE" "$RD_M4/$RG" "$RACE_REPL" "$RACE_RM" "" "$RACE_RMSW" \
+      && [ "$(race_rm_order "$RD_M4/$RG")" = "0|1" ] || RD_M4=""
+    if [ -z "$RD_M4" ]; then bad "FIXTURE STALE: M4 — the removal operands could not be swapped on the whole-line anchor"
+    else
+      _mo="$(race_rm_order "$RD_M4/$RG")"
+      if [ "$_mo" = "0|1" ] && [ "$_mo" != "$_ro" ]; then ok "mutant: removal operands swapped (progress file first) — the order arm reports exact 0 and swapped 1 against 1 and 0 unmutated"
+      else bad "mutant: removal operands swapped — the order arm measured ${_mo} against ${_ro} unmutated, so it cannot tell the order"; fi
+    fi
+  fi
 fi
 
 fi  # race subject present
