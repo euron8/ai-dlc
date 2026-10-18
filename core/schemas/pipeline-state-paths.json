@@ -162,8 +162,8 @@
       "name": ".recover-gate-progress",
       "transient": true,
       "producer": "core/hooks/ai-dlc-recover-gate.sh",
-      "ignore": "_bmad-output/.recover-gate-progress",
-      "reason": "Progress marker for the recovery gate, read once and discarded."
+      "ignore": "_bmad-output/.recover-gate-progress*",
+      "reason": "Progress marker for the recovery gate, read once and discarded. The gate writes it as a sibling temp file, .recover-gate-progress.<pid>, renamed into place, so a hook killed between the write and the rename can leave that temp file behind; the trailing * ignores it too. ai-dlc-recover.sh clears both when a new recovery starts."
     },
     {
       "name": ".recover-advisor-owed",
