@@ -20,6 +20,127 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.832.0] - 2026-10-18
+
+Batch 236 (READSET). The read-set deriver stops writing rows the hook never reads, the pre-push fixture pool refuses a
+unit that makes no progress, and the real-ledger arms are keyed on the backlog. Closes BL-644, BL-635, BL-606 and
+BL-611. Advances BL-584 item 1 and BL-583 item (b), which stay open. Files BL-674, BL-676, BL-677, BL-690 and BL-691.
+Closes no `PC-` id. Net for this release: 4 closed, 5 filed.
+
+### The deriver drops `.git` rows at write time (BL-644)
+
+- The hook's `READSET_UNIVERSE` span gains `readset_drop_git`, an awk predicate, so a stream holding only `.git` rows
+  exits 0. `readset_universe_paths` calls it in both hooks identically, and the deriver's write pipeline and
+  `readset_both_comparable` call it too. The deriver carries a fallback definition inside its READSET_BOTH span for a
+  hook span that defines none.
+- The committed map was regenerated offline: 3228 `.git` rows are removed, every other row is byte-identical, and the
+  header count is recomputed.
+- `readset-skip` gains arm (g): the extracted write pipeline over a seeded stream, the fallback byte-compare with a
+  seeded mismatch, and two mutants (an unanchored predicate, and a write line without the helper).
+
+### Declared fixtures carry no map rows (BL-635)
+
+- `readset_merge_map` takes an optional fixture root as a fourth argument and drops the rows and digest lines of
+  declared fixtures from both the old map and the new rows. With three arguments it behaves as before.
+  `readset_untraced_lost` takes the same root, so the run does not die "merge dropped" on a fixture the merge filtered
+  on purpose, and `readset_all_list` skips declared fixtures.
+- The map was regenerated offline through the extracted merge: 186 declared fixtures with 10341 rows and 42 digest
+  lines go to none, and undeclared rows and digests are byte-identical.
+- `readset-skip` gains arm (h): declared versus undeclared, the three-argument opt-in, a root with no declared
+  fixtures, the untraced-loss exclusion and the `--all` list, plus mutants for a filter that reads only the old map and
+  one that keeps the digest line.
+- The `fixture-ship-decl` rule now says a declared fixture owes no trace, and that only the committed map drops a
+  declared fixture's rows (`readset_local_write` does not, which is harmless because the hook never queues a declared
+  fixture for tracing).
+- Seven `readset-skip` mutants whose anchor lines these edits rewrote were re-anchored, each removing only the property
+  it targets. No assertion is changed or loosened.
+
+### The pre-push pool refuses a unit that makes no progress, and kills its whole tree (BL-606)
+
+- All four run sites in the pool worker go through `pool_run`, identically in both hooks (I66). The unit leads its own
+  process group and a watcher in a group of its own polls once a second. Progress is new bytes under the unit's watched
+  TMPDIR or in its pool log; CPU time and process membership are not in the signature. `POOL_STALL` consecutive still
+  polls are a refusal. The verdict is `REFUSED`, which keeps no recorded key and no trace rows, and the push exits 2
+  rather than 1 when nothing else failed. `steps/handoff.md` and `steps/retro.md` give `pre-push: REFUSED.` its own
+  branch: re-run the same push once, and treat a second REFUSED as BLOCKED.
+- The window is one value, `POOL_STALL_DEFAULT=600`, marked `D9-WINDOW` and identical in both hooks. It is set from a
+  forced full run in which the largest exact reading was 96 polls (derivation-differential-mutants 96,
+  fold-architect-ledger-join-mutants-c 58, validator-arm-selection-b 45), and one unit was censored at the 300-poll
+  clamp. 600 is 6x the largest exact reading and 2x that clamp. The run itself ran at the 300 default, because the
+  hook's guard clamps six or more digits to the default.
+- The watcher dies with its worker, and a saved group whose members are all gone is never walked or killed.
+- The in-pool trace site also watches the traced fixture's own `<fx>.log`, and not the `.raw` beside it.
+- Caller freeze, found and fixed here: with an empty self process group (`ps -o pgid= -p $$` failing), the base
+  `pool_kill` walk's STOP pass stopped the calling shell and the push hung. An empty self now kills only the recorded
+  pid. The consequence for a unit's group children is filed as BL-677.
+- Per-unit TMPDIR: the first form, `"$out/.tmp/<fixture>"` under a bare `mktemp -d`, put
+  `procsub-staged-refusal-boot` at 112 encoded characters against the 85 its padded worlds allow, so all three of its
+  shards went FIXTURE BROKEN. The unit's watched root is now a fresh `mktemp -d "$out/.t.XXXXX"` under a short pool root
+  `<root>/fx.XXXXXX`, 23 encoded characters past the root, so the length no longer depends on the fixture name. If
+  `mktemp` fails the unit is not run, and the reason goes to its pool log and stderr.
+- The pool root is `$TMPDIR` when it is a writable directory whose physical path is at most 35 encoded characters,
+  otherwise `/tmp`, otherwise a bare `mktemp -d`. That last fallback prints one stderr line naming the root, the reason
+  `/tmp` failed and that units with a path-length limit may then fail.
+- A rejected `AI_DLC_POOL_STALL`, including `0` through `00000`, prints a warning that names the value, the accepted
+  form `1-99999` and the default.
+- `fold-architect-ledger-join-mutants` takes its work directory from the explicit `mktemp` template, so the pool sees
+  its writes.
+- The receipt moved out of the shipped `consumer-suite-pool` fixture to `scripts/receipt-bl606-pool-stall.sh`, which
+  never ships under `core/`. It finds the hooks through its walked-up repository root, asserts the filled window before
+  the pool arm, and runs a second stub that makes progress and must be `ok` beside the refused one. The fixture's
+  deriver lookup in a consumer is corrected, and its redirect check reads the sandbox writer's own line.
+
+NOTE: a consumer that installed an earlier copy of consumer-suite-pool/receipt.sh keeps it until update prunes it; it
+exits 9 and nothing executes it.
+
+### The real-ledger arms are keyed on the backlog (BL-611)
+
+- `backlog-receipt-binding` arm j1 and `backlog-size-ceiling` arm b16 moved, not copied, into the new `.dist-only`
+  fixture `backlog-real-ledger`, with their seeds, self-probe and anchor. Neither source fixture reads the real ledger
+  any more.
+- A leading `+` in `inputs.decl` keys a declared file even under an excluded top, identically in both hooks. `+` with
+  `!` on one line, `+` on a directory, and an unhashable `+` file are each refused.
+  `scripts/suite-content-key.sh` hashes every `+`-declared file in a `keyed` component and fails closed on an absolute,
+  `..`, directory or unreadable path.
+- I55 arm 3 acquits a reach only when every root-prefixed reach on the line names a file the same fixture declares with
+  `+`, and only when that path ends at a boundary. Its self-probe runs through the same function before the corpus.
+- The BL-611 receipt drives both directions of the key comparison: an edit of `docs/backlog.md` moves the outer key and
+  exactly one inner key row, and an edit of an unrelated plan file moves neither.
+
+### I55 arm 3 forks less (no entry)
+
+- The arm strips, escapes and probes with builtins, and scans every excluded entry in one grep and one awk. Its
+  self-probe drives the two-entry regrouping, so a reversed group order or a dropped second attribution is reported
+  BROKEN. The measured `validator-fork-budget` count is 3462 against FORK_BUDGET=3465, 3 of headroom, budget unchanged.
+- NOTE: the root-prefix strip is now a literal match, so a repository root containing `@` or regex characters is
+  reported correctly where the base's `sed` failed open. The verdicts are otherwise unchanged.
+
+### BL-584 item 1: the hermetic runner declares and proves its inputs (stays open)
+
+- `hermetic-runner` gains `inputs.decl` and `tools.decl`, and its content-key probe is seeded from a fixture-owned
+  copy, so the hook keys it on the declaration. Arm DC adds removal mutants for the fixture's own declaration, DC1 to
+  DC4. Two latent holes closed: the preamble source had no guard, and a distribution tree fell back to
+  `core/git-hooks/pre-push`; each now refuses.
+- The completeness proof covers `inputs.decl` only. Entry text states the limit (BL-676).
+- The fixtures that run the pool worker declare the tools it now forks: `ps`, `find`, `sleep`, `kill`, `tr`, `basename`
+  and `xargs`.
+- BL-584 owed (3), the dropped trace reports, stays OPEN.
+
+### BL-583 item (b): controls are paid once (stays open)
+
+- `gate-adjudication-mutants` and `readset-skip-digest-mutants` pay their controls in shard a only, bound by a J2
+  once-only arm and a D14 arm that holds sibling declarations equal. The receipt executes each extracted control guard
+  with GROUP=a and GROUP=b, requiring 1 and 0, and probes every shard the batteries define.
+
+### Filed
+
+- BL-674: I55 arm 3's reach scan recognises four root variables.
+- BL-676: `tools.decl` keys tools but restricts none, because the sandbox PATH carries every system tool dir.
+- BL-677: on the empty-self path `pool_kill` kills only the recorded pid, so a unit's group children survive the
+  worker-death and abort paths.
+- BL-690: the pool installs no EXIT, INT or TERM trap, so an interrupted hook leaks `/tmp/fx.*`.
+- BL-691: a nested pool's root sits outside the outer unit's watched TMPDIR.
+
 ## [0.831.0] - 2026-10-18
 
 Batch 236 (b9's TRAIN). Every live plan now designates a lead session before anything is dispatched, and plan-shape
