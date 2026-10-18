@@ -835,6 +835,13 @@ mutant2 "JX110 a serial block exempt via the era, self-probe removed" "chkserial
   '{ judge(lo, j, blk(j), (ts[j] ? "S" : "V"),' \
   '{ judge(lo, j, blk(j), (ts[j] ? "E" : "V"),' \
   "$CTPROBE_OLD" "$CTPROBE_NEW"
+# ---- BL-565 supersedes chain. JX111: no dedupe (supersedes read but never linked), so seed a reads 2
+# (receipt regression r1''). The self-probe sees it, so it is paired off. EXPECTED SET IS AN UNRUN
+# PREDICTION (supchain alone), scored by the owner in a slot.
+mutant2 "JX111 a supersedes chain not deduped, self-probe removed" "supchain" \
+  '          for (i = 1; i < nesc; i++) if (sp[k] == ef[i] " " en[i]) { nlk++; la[nlk] = i; lb[nlk] = nesc; mh = 1 }' \
+  '          for (i = 1; i < nesc; i++) if (sp[k] == ef[i] " " en[i]) { mh = 1 }' \
+  "$CTPROBE_OLD" "$CTPROBE_NEW"
 # ---- END JX MUTANTS.
 
 # ------------------------------------------------------------------------------ the reap

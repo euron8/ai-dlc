@@ -945,6 +945,25 @@ p_chkrec() { # --escalations: a record with neither field is outside the era -> 
   esc_rec "$1" '- advisor: called\n\n### F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n'
   [ "$r0" -eq 0 ] && [ "$RC" -eq 2 ] && has "$JO" "stories-repair-p1.md: no derivations: line"
 }
+# ---- THE SUPERSEDES CHAIN (BL-565): p565's three seeds plus the dangling link, each its own world.
+SUP_A='<!-- shard: 01.md -->\n### F-1 — MAJOR\n- source: s-1.md#F-1\n- disposition: escalated\n- edit: n/a\n\n### S-1 — MAJOR\n- source: 01.md#F-1\n- disposition: escalated\n- supersedes: 01.md F-1 — MAJOR\n- edit: n/a\n'
+p_supchain() { # (a) a serial escalation superseding the part escalation -> ESCALATED-COUNT 1, the part member
+  # on its own ESCALATED-SUPERSEDED line, the chain on a CHAIN line; (b) the same without supersedes: -> 2;
+  # (c) a fold closing only the serial member -> 1, the part member open and FLAGGED; (d) a supersedes:
+  # naming a LATER escalation -> rc 2 as dangling, the count still printed
+  esc_rec "$1" "$SUP_A"
+  [ "$RC" -eq 0 ] && has "$JO" "ESCALATED-COUNT: 1 (0 closed" && grep -qx 'ESCALATED-SUPERSEDED: 01.md F-1 — MAJOR' "$JO" \
+    && has "$JO" "CHAIN: 01.md S-1 — MAJOR supersedes 01.md F-1 — MAJOR" && ! has "$JO" "ESCALATED: 01.md F-1" || return 1
+  esc_rec "$1" "$(printf '%s' "$SUP_A" | sed 's/\\n- supersedes: 01.md F-1 — MAJOR//')"
+  [ "$RC" -eq 0 ] && has "$JO" "ESCALATED-COUNT: 2 (0 closed" && ! has "$JO" "CHAIN" || return 1
+  esc_rec "$1" "${SUP_A}\n### A-1\n- disposition: repaired\n- closes: 01.md S-1 — MAJOR\n- edit: n/a (operator answer folded)\n"
+  [ "$RC" -eq 0 ] && has "$JO" "ESCALATED-COUNT: 1 (1 closed" && has "$JO" "ESCALATED: 01.md F-1 — MAJOR" \
+    && has "$JO" "CHAIN-OPEN: closes: named 01.md S-1 — MAJOR and left 01.md F-1 — MAJOR open" \
+    && [ "$(grep -n 'ESCALATED-COUNT' "$JO" | cut -d: -f1)" -lt "$(grep -n '^CHAIN-OPEN:' "$JO" | cut -d: -f1)" ] || return 1
+  esc_rec "$1" '<!-- shard: 01.md -->\n### S-1 — MAJOR\n- disposition: escalated\n- supersedes: 01.md S-2 — MAJOR\n- edit: n/a\n\n### S-2 — MAJOR\n- disposition: escalated\n- edit: n/a\n'
+  [ "$RC" -eq 2 ] && has "$JO" "the S-1 — MAJOR entry's 'supersedes: 01.md S-2 — MAJOR' names no earlier escalation" \
+    && has "$JO" "ESCALATED-COUNT: 2 (0 closed"
+}
 # ---- THE SERIAL BLOCKS (BL-557): segmented by their column-0 `repair-complete:` terminators.
 CHS_HEAD='- artifact: r.md\n\n<!-- shard: 01.md -->\n- artifact: p.md\n- advisor: called\n- derivations: replayed 1\n\n### F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\n### F-2 — MAJOR\n- disposition: escalated\n- edit: n/a\n\n- artifact: p.md\n- advisor: called\n- derivations: replayed 2\n\n### S-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\nrepair-complete: serial 1\n'
 CHS_TAIL='\n### S-2 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\nrepair-complete: serial 2\n'
@@ -1446,7 +1465,7 @@ p_agentwrites() {
   [ "$RC" -eq 2 ] && has "$JO" "REFUSED:"
 }
 
-P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrargs rrfiles rrsubj alias alnokeys alresult alown alsecond alother alsess altwo altool nested rronly dispkey dispvocab dispruling srcparts gapfill chkpart chkrec rulingedit rulingtab chkjoined partsilent specstale specfresh spechand specnone spectwo sjspecstale sjspecfresh sjspecnone specother specunread agentwrites chkserial"
+P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrargs rrfiles rrsubj alias alnokeys alresult alown alsecond alother alsess altwo altool nested rronly dispkey dispvocab dispruling srcparts gapfill chkpart chkrec rulingedit rulingtab chkjoined partsilent specstale specfresh spechand specnone spectwo sjspecstale sjspecfresh sjspecnone specother specunread agentwrites chkserial supchain"
 
 # ---- A PART'S DERIVATION SURVIVES THE JOIN. The part's ```derived fence is copied into the joined
 # record, and the gate re-runs `validate-artifact-derivations.sh` over the sprint dir AFTER the

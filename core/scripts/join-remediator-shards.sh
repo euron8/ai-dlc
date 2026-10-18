@@ -710,6 +710,18 @@ src_probe() {
 #       closes nothing -- no part is later than another. Stated hole: the serial remediator's
 #       appended entries sit after the LAST marker and so read as that shard's; an escalated entry
 #       the serial remediator itself writes is closed only by a still later `closes:` naming that part.
+#   (3b) THE SUPERSEDES CHAIN (BL-565), RECORD MODES ONLY. An escalated entry restating an earlier
+#       escalation carries `- supersedes: <part> <heading>`, trimmed as `closes:` is. The links make
+#       chains, transitive, and a chain is counted ONCE, under its latest OPEN member; every other open
+#       member prints `ESCALATED-SUPERSEDED: <part> <heading>` alone, so the line is copyable as a
+#       `closes:` tail, and the chain is named on its own `CHAIN:` line. CLOSURE IS PER MEMBER, as
+#       remediator.md has it ("an escalation with no `closes:` line of its own stays open"): a
+#       `closes:` naming one member leaves the rest open, and that is FLAGGED on a `CHAIN-OPEN:` line
+#       after ESCALATED-COUNT -- reported, never refused. A `supersedes:` naming no earlier escalation
+#       in the record, a later one included, is refused as a dangling link; the count still prints.
+#       Parts mode reads no `supersedes:` line. NOTE, stated: graph's filed s319 elicitation record
+#       carries 0 `supersedes:` lines, so this join alone does not repair that instance; its count
+#       reads the same on the base and here.
 #   (4) SERIAL-REQUIRED, PARTS MODE ONLY. The count of `repaired` entries with a real edit (arm 1's
 #       predicate; `edit: n/a` entries are not counted). Each one owes the serial remediator's
 #       cross-file sibling grep and moved-cite check, which no shard can run, so the procedure
@@ -861,6 +873,11 @@ contract_check() {
         if (disp ~ /^escalat/) { nesc++; ef[nesc] = part; en[nesc] = cur; ex[nesc] = 0 }
         if (disp == "repaired" && src == 1)
           for (k = 1; k <= ncl; k++) for (i = 1; i <= nesc; i++) if (cl[k] == ef[i] " " en[i]) ex[i] = 1
+        # A SUPERSEDES LINK names an EARLIER escalation of this record, byte-equal to its ESCALATED: tail;
+        # one naming none, or a later one, is a dangling link (record modes only; sp is never filled in parts mode).
+        if (disp ~ /^escalat/) for (k = 1; k <= nsp; k++) { mh = 0
+          for (i = 1; i < nesc; i++) if (sp[k] == ef[i] " " en[i]) { nlk++; la[nlk] = i; lb[nlk] = nesc; mh = 1 }
+          if (!mh) print "DANGLING\t" cf "\t" cur "\t" sp[k] }
         if (rp && edt && !sib) {
           if (sibf) print "BADSIB\t" cf "\t" cur
           else if (src == 0 || era) print "NOSIB\t" cf "\t" cur
@@ -874,7 +891,22 @@ contract_check() {
         if (dfull == "operator-ruling") print "RULING\t" cf "\t" cur "\t" rcite
       }
       if (disp == "" && edf) print "NODISP\t" cf "\t" cur
-      disp = ""; dfull = ""; edt = 0; edf = 0; rcite = ""; sib = 0; sibf = 0; sibw = 0; sibin = 0; sfile = ""; stext = ""; claim = ""; inclaim = 0; ncl = 0
+      disp = ""; dfull = ""; edt = 0; edf = 0; rcite = ""; sib = 0; sibf = 0; sibw = 0; sibin = 0; sfile = ""; stext = ""; claim = ""; inclaim = 0; ncl = 0; nsp = 0
+    }
+    # THE CHAIN (BL-565): escalations joined by supersedes links, rooted at the LATEST member. The latest OPEN
+    # member carries the one count of the chain; every other open member is SUP (printed ESCALATED-SUPERSEDED,
+    # never counted); a chain holding a closed member and an open one is CHOPEN, reported, never refused.
+    function fnd(x) { while (x in par) x = par[x]; return x }
+    function chains(   k, a, b, i, rt) {
+      for (k = 1; k <= nlk; k++) { a = fnd(la[k]); b = fnd(lb[k]); if (a != b) { if (a < b) par[a] = b; else par[b] = a } }
+      for (i = 1; i <= nesc; i++) { rt = fnd(i); csz[rt]++
+        if (ex[i]) mcl[rt] = (rt in mcl) ? mcl[rt] " ; " ef[i] " " en[i] : ef[i] " " en[i]
+        else { lop[rt] = i; mop[rt] = (rt in mop) ? mop[rt] " ; " ef[i] " " en[i] : ef[i] " " en[i] }
+        if (i != rt) mem[rt] = (rt in mem) ? mem[rt] " ; " ef[i] " " en[i] : ef[i] " " en[i] }
+      for (i = 1; i <= nesc; i++) { rt = fnd(i); if (csz[rt] > 1 && !ex[i] && i != lop[rt]) print "SUP\t" ef[i] "\t" en[i] }
+      for (rt = 1; rt <= nesc; rt++) if (csz[rt] > 1 && fnd(rt) == rt) {
+        print "CHAIN\t" ef[rt] " " en[rt] "\t" mem[rt]
+        if ((rt in mcl) && (rt in mop)) print "CHOPEN\t" mcl[rt] "\t" mop[rt] }
     }
     # THE SIBLINGS FENCE. `- siblings:` with no value, then (blank lines aside) a ```text fence holding a
     # `$ grep -rn -F` line and the control `$ grep -c -F <quoted text> <file>` whose next line is a count of
@@ -922,11 +954,13 @@ contract_check() {
     /^[[:space:]-]*[*_`]*ruling[*_`]*:/ { v = $0; sub(/^[^:]*:/, "", v); rcite = vtrim(v); gsub(/\t/, " ", rcite); inclaim = 0; next }
     /^[[:space:]-]*[*_`]*siblings[*_`]*:/ { sibf = 1; v = $0; sub(/^[^:]*:/, "", v); v = vtrim(v); if (v == "") sibw = 1; else if (v in SIBNA) sib = 1; inclaim = 0; next }
     /^[[:space:]-]*[*_`]*closes[*_`]*:/ { v = $0; sub(/^[^:]*:/, "", v); sub(/^[*_`]+/, "", v); cl[++ncl] = trim(v); inclaim = 0; next }
+    /^[[:space:]-]*[*_`]*supersedes[*_`]*:/ { if (src == 1) { v = $0; sub(/^[^:]*:/, "", v); sub(/^[*_`]+/, "", v); sp[++nsp] = trim(v) }; inclaim = 0; next }
     /^[[:space:]-]*[*_`]*claim now asserted[*_`]*:/ { claim = tolower($0); inclaim = 1; next }
     /^[[:space:]-]*[*_`]*[a-z][a-z _]*[*_`]*:/ { inclaim = 0 }
     inclaim { claim = claim " " tolower($0) }
     END {
       flush()
+      if (nlk) chains()
       for (i = 1; i <= nesc; i++) print (ex[i] ? "X" : "E") "\t" ef[i] "\t" en[i]
       print "N\t" ne + 0 "\t" nedt + 0 "\t" nsib + 0 "\t" npend + 0 "\t" nrep + 0
     }' "$@"
@@ -986,13 +1020,28 @@ contract_refusals() {
   local srcm="$1" k r d l m q ne nedt nsib npend nosib="" remedy=""
   shift
   ESC_LINES=""; ESC_CLOSED=""; ESC_N=0; ESC_X=0; SERIAL_N=0; GAP_LINES=""; GAP_N=0; ne=0; nedt=0; nsib=0; npend=0
+  ESC_SUP=""; CHAIN_LINES=""
   # A parts-mode refusal of a missing field is, for a round whose parts predate the install, the
   # pre-rule shape: the remedy is the re-dispatch, never a hand-added field.
   [ "$srcm" = 0 ] && remedy="; parts written before the install: re-dispatch the shards"
   while IFS='	' read -r k r d l m q; do
     case "$k" in
       N) ne="$r"; nedt="$d"; nsib="$l"; npend="$m"; SERIAL_N="${q:-0}" ;;
-      E) ESC_N=$((ESC_N + 1)); ESC_LINES="${ESC_LINES}ESCALATED: ${r} ${d}
+      SUP) ESC_SUP="${ESC_SUP}${r} ${d}
+" ;;
+      CHAIN) CHAIN_LINES="${CHAIN_LINES}CHAIN: ${r} supersedes ${d}
+" ;;
+      CHOPEN) CHAIN_LINES="${CHAIN_LINES}CHAIN-OPEN: closes: named ${r} and left ${d} open; one closes: line per chain member (team-roles/remediator.md)
+" ;;
+      DANGLING) refuse "${r}: the ${d} entry's 'supersedes: ${l}' names no earlier escalation in this record; copy it from the tail of that escalation's ESCALATED: line, which must precede it" ;;
+      E) case "
+${ESC_SUP}" in
+           *"
+${r} ${d}
+"*) ESC_CLOSED="${ESC_CLOSED}ESCALATED-SUPERSEDED: ${r} ${d}
+"; continue ;;
+         esac
+         ESC_N=$((ESC_N + 1)); ESC_LINES="${ESC_LINES}ESCALATED: ${r} ${d}
 " ;;
       X) ESC_X=$((ESC_X + 1)); ESC_CLOSED="${ESC_CLOSED}ESCALATED-CLOSED: ${r} ${d}
 " ;;
@@ -1082,6 +1131,27 @@ N	3	0	0	0	0" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: th
   [ "$o" = "GAPFILL	gap.md	F-4
 E	gap.md	F-5
 N	2	0	0	0	0" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: the gap-fill tripwire read '${o}'; no verdict"; }
+  # The supersedes chain (BL-565), record mode: a serial escalation superseding a part escalation makes ONE
+  # chain, the part member SUP and the latest the counted one; a closes: on the latest alone leaves the part
+  # member open and flagged; a supersedes naming a LATER escalation is DANGLING. Near-miss: the same record
+  # with no supersedes line reads two plain escalations, no chain.
+  printf '<!-- shard: 01.md -->\n### F-1\n- disposition: escalated\n- edit: n/a\n\n### S-1\n- disposition: escalated\n- supersedes: 01.md F-1\n- edit: n/a\n\n### A-1\n- disposition: repaired\n- closes: 01.md S-1\n- edit: n/a\n\n### S-2\n- disposition: escalated\n- supersedes: 01.md S-3\n- edit: n/a\n\n### S-3\n- disposition: escalated\n- edit: n/a\n' > "$d/sup.md"
+  o="$(contract_check 1 "$d/sup.md")"
+  [ "$o" = "DANGLING	sup.md	S-2	01.md S-3
+CHAIN	01.md S-1	01.md F-1
+CHOPEN	01.md S-1	01.md F-1
+E	01.md	F-1
+X	01.md	S-1
+E	01.md	S-2
+E	01.md	S-3
+N	5	0	0	0	0" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: the supersedes chain read '${o}'; no verdict"; }
+  grep -v -e '^- supersedes:' "$d/sup.md" > "$d/nosup.md"
+  o="$(contract_check 1 "$d/nosup.md")"
+  [ "$o" = "E	01.md	F-1
+X	01.md	S-1
+E	01.md	S-2
+E	01.md	S-3
+N	5	0	0	0	0" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: a record with no supersedes line read '${o}'; no verdict"; }
   # The two check fields (BL-557): a part with a repaired entry and neither field fires twice; a part
   # holding only an escalated entry is exempt; a record with neither field is outside the era; a
   # record that opened it and wrote `not replayed` fires once.
@@ -1342,7 +1412,8 @@ record_tail() {
   printf '%s' "$ESC_LINES"
   printf '%s' "$ESC_CLOSED"
   echo "ESCALATED-COUNT: ${ESC_N} (${ESC_X} closed by a later repaired entry's closes: line)"
-  # The gap-fill tripwire (7) REPORTS: a NOTE-tier arm never gates the report above.
+  # The supersedes chains (3b) and the gap-fill tripwire (7) REPORT: neither gates the count above.
+  printf '%s' "$CHAIN_LINES"
   printf '%s' "$GAP_LINES"
   [ "$refuse_n" -eq 0 ] || exit 2
   printf '%s\n' "$SPEC_LINE"
