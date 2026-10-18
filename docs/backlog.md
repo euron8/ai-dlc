@@ -841,7 +841,7 @@ Note that `emit-report.sh` and `apply.sh` are the consumer's INSTALLED engine, s
 
 No existing receipt shape fits: the subject is a count of detector invocations across a multi-caller pull, which needs a seeded world and a driver of the real `--verify`, and no such receipt has been written or run here (UNRUN).
 
-verify: manual
+verify: sh f="$(mktemp)" || exit 9; bash core/fixtures/reconcile-emit-report/run.sh >"$f" 2>&1 </dev/null; [ -s "$f" ] || exit 9; grep -Eq '^ +ok +PC-V1( |$)' "$f" && grep -Eq '^ +ok +PC-V3( |$)' "$f" && grep -Eq '^ +ok +PC-V10( |$)' "$f" && ! grep -Eq '^ +FAIL +PC-V' "$f"; r=$?; rm -f "$f"; exit $r
 
 ## BL-680 — a receipt line carrying a reason after `verify: manual` is counted as neither manual nor sh, and R2 names only "ZERO scored receipts"
 
