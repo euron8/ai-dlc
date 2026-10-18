@@ -28,7 +28,7 @@ battery once became the reference consumer's suite pole; getting it wrong the ot
 means a fixture reaches no consumer while this repo's own suite stays green over it.
 
 **A fixture carrying `inputs.decl` is keyed on its declaration and owes no trace**: it has no
-read-set rows, and the deriver drops any it is given. A read it adds goes into `inputs.decl`.
+read-set rows, and the committed map drops any it is given. A read it adds goes into `inputs.decl`.
 **An UNdeclared new fixture has no read-set entry until someone traces it**, and the pre-push
 runner runs an unmapped fixture on every push, silently. Trace it yourself with the sandbox
 tracer, which needs no root — `bash core/scripts/derive-fixture-readsets.sh --list "<name>"
