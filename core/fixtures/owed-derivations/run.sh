@@ -195,6 +195,9 @@ ck "B4l2 and it says 0 OWED rows" "is present with 0 OWED rows" "$OUT"
 row "$K_PRD" "$CMD" > "$WORK/closed-row.tsv"
 rd "$R2" "$WORK/closed-row.tsv"
 rc_is "B4m control: an OWED row whose derivation reproduces -> exit 0" 0 "$RC"
+# An arm asserting EMPTY output is killed by every mutant that makes the subject print anything on its seed,
+# so its author reads each mutant in owed-derivations-mutants (classifier mutants first) for a scope or verdict
+# change on this seed and declares the arm in every mutant that reaches it.
 rc_is "B4m2 and it prints nothing, so no UNMEASURED line (the record WAS measured)" 0 "$(printf '%s%s' "$OUT" "$ERR" | wc -c | tr -d ' ')"
 mkdir "$WORK/dir.tsv"
 rd "$R" "$WORK/dir.tsv"
