@@ -2476,6 +2476,52 @@ M48_mark_repair_seat_token() {
   rm -rf "$W"
 }
 
+# ===========================================================================
+# 25. A REPAIR PART IS JOINED ON ITS --mark LINE. A part remediator writes its part early and
+#     rewrites it, so a plain beat takes its first partial write as delivered. The part closes
+#     with the argv remediator.md prescribes, `--mark <part> <step> remediator <shard>
+#     findings=<n>`, and the part join beat passes --complete. A written, unmarked part is
+#     UNFINISHED under --complete and DELIVERED after --mark; the CONTROL is the same unmarked
+#     part under a plain beat, which DELIVERS, so the UNFINISHED is the flag's verdict.
+# ===========================================================================
+PART_BODY='- artifact: _bmad-output/planning-artifacts/s9/stories/a.md
+- advisor: called
+- derivations: replayed 1
+
+### F-1 — MAJOR
+- disposition: repaired
+- edit: _bmad-output/planning-artifacts/s9/stories/a.md:4'
+S25_part_marked_join() {
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '%s\n' "$PART_BODY" > "$W/04.md"
+  scall "$SUBJ" "$W" --since "$CBEAT_SINCE" 04.md
+  if has "DELIVERED 04.md"; then ok "part: CONTROL -- a written, unmarked repair part is DELIVERED by a plain beat"
+  else bad "part: CONTROL FAILED -- the plain beat did not deliver the unmarked part, so the UNFINISHED below means nothing: $OUT"; fi
+  scall "$SUBJ" "$W" --complete --since "$CBEAT_SINCE" 04.md
+  if has "UNFINISHED 04.md" && ! has "DELIVERED 04.md"; then ok "part: the same unmarked part under --complete is UNFINISHED"
+  else bad "part: an unmarked repair part was delivered under --complete: $OUT"; fi
+  bash "$SUBJ" --mark "$W/04.md" stories remediator 04 findings=1 > "$BEATOUT" 2>&1 || broken "--mark refused the part: $(cat "$BEATOUT")"
+  case "$(tail -1 "$W/04.md")" in
+    "seat-complete: stories remediator 04 sha="*" findings=1") ok "part: --mark appends 'seat-complete: <step> remediator <shard> sha=<hex> findings=<n>'" ;;
+    *) bad "part: --mark wrote '$(tail -1 "$W/04.md")'" ;;
+  esac
+  scall "$SUBJ" "$W" --complete --since "$CBEAT_SINCE" 04.md
+  if has "DELIVERED 04.md"; then ok "part: marked, the part is DELIVERED under --complete"
+  else bad "part: a marked repair part was not delivered under --complete: $OUT"; fi
+  rm -rf "$W"
+}
+# --complete ignored: the flag parses but never sets COMPLETE, so the unmarked part is DELIVERED
+# under the part join beat -- section 25 must catch it.
+M49_part_complete_ignored() {
+  mutant part-complete-ignored -e 's@^    --complete) COMPLETE=1; SEAT_FLAG=1; shift ;;$@    --complete) SEAT_FLAG=1; shift ;;@' || return
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '%s\n' "$PART_BODY" > "$W/04.md"
+  scall "$MUT" "$W" --complete --since "$CBEAT_SINCE" 04.md
+  if has "DELIVERED 04.md"; then ok "MUTANT part-complete-ignored: an ignored --complete DELIVERS the unmarked part -- section 25 catches it"
+  else bad "MUTANT part-complete-ignored: section 25 survives --complete being ignored (or the mutant never ran): $OUT"; fi
+  rm -rf "$W"
+}
+
 # ---------------------------------------------------------------------------
 # THE DRIVER
 # ---------------------------------------------------------------------------

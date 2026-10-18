@@ -1036,6 +1036,40 @@ p_chkserial() { # --escalations over a joined record carrying TWO serial blocks,
     && has "$JO" "ESCALATED-COUNT: 0"
 }
 
+# ---- A MARKED PART IN THE JOINED RECORD. A part remediator closes its part with the REAL
+# `wait-for-deliverable.sh --mark` (remediator.md, "Close your part with `--mark`"), and the join
+# concatenates the part, marker line and all, into the record the serial remediator appends to.
+# The fear that made parts write no line: that line would end the record before the serial pass.
+# It does not, because the record readers key on `repair-complete:` alone. Parts 01 and 03 are
+# marked and 02 is not (a part written before the rule, which must still join); 03 is the LAST
+# part, so its line sits directly above the serial triple, where a misread would land. Then two
+# copies of the joined record, each with a serial block appended: (a) stating both check lines ->
+# rc 0; (b) stating neither -> refused naming the SERIAL terminator's own line, never a
+# `seat-complete:` line. A reader that took the part's line for a serial terminator refuses (a).
+p_partmark() {
+  local w sd r a b ln WFD="$SRCDIR/wait-for-deliverable.sh"
+  [ -f "$WFD" ] || return 1
+  w="$(new_world)"; three_writers "$w"
+  part "$w" 01 2.1; part "$w" 02 2.2; part "$w" 03 3.1
+  stamp "$w"
+  sd="$w/$SLOT/shards/stories-repair-p1"
+  bash "$WFD" --mark "$sd/01.md" stories remediator 01 findings=1 > /dev/null 2>&1 || return 1
+  bash "$WFD" --mark "$sd/03.md" stories remediator 03 findings=1 > /dev/null 2>&1 || return 1
+  run_join "$1" "$w"
+  r="$(out_of "$w")"
+  [ "$RC" -eq 0 ] && has "$JO" "(3 parts, 3 writers)" && [ -f "$r" ] || return 1
+  [ "$(grep -c '^seat-complete: stories remediator 0[13] sha=' "$r")" = 2 ] || return 1
+  a="$w/$SLOT/stories-repair-p2.md"; b="$w/$SLOT/stories-repair-p3.md"
+  { cat "$r"; printf '\n- artifact: %s/stories\n- artifact_sha_before: x\n- artifact_sha_after: y\n- advisor: called\n- derivations: replayed 1\n\n### S-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\nrepair-complete: serial 1\n' "$SLOT"; } > "$a"
+  { cat "$r"; printf '\n- artifact: %s/stories\n- artifact_sha_before: x\n- artifact_sha_after: y\n\n### S-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\nrepair-complete: serial 1\n' "$SLOT"; } > "$b"
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --escalations "$a" --sprint 305 > "$JO" 2>&1; RC=$?
+  [ "$RC" -eq 0 ] && ! has "$JO" "REFUSED" || return 1
+  ln="$(grep -n '^repair-complete: serial 1$' "$b" | cut -d: -f1)"
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --escalations "$b" --sprint 305 > "$JO" 2>&1; RC=$?
+  [ "$RC" -eq 2 ] && [ -n "$ln" ] && has "$JO" "no advisor: line (the block closed at line $ln by 'repair-complete: serial 1')" \
+    && has "$JO" "no derivations: line (the block closed at line $ln by 'repair-complete: serial 1')" && ! has "$JO" "seat-complete"
+}
+
 # ---- RE-RUN OF ONE PART (--rerun <part>.md@<ISO>) AND THE ALIAS RULE. Every row is still the REAL
 # hook's; only its clock is pinned, by the `date` shim drive() puts on PATH when it is handed a ts.
 # Rows are driven in chronological order, because the record lists superseded ids in ledger order.
@@ -1454,6 +1488,22 @@ p_specunread() { # a cited, stale memlog made unreadable (chmod 000) -> rc 2, 't
     && ! has "$JO" "SPEC-RENDER:" && has "$JO" "ESCALATED-COUNT: 0 (1 closed"
 }
 
+# THE SERIAL REMEDIATOR'S RENDER. A joined record whose part escalates and whose TERMINATED serial
+# block repairs the SPEC: that block's own `edit:` line is the only cite of the memlog, and its
+# `repair-complete: serial 1` line closes it. A decision the serial block appended after the last
+# phrased Render (no render before `--mark-repair`) -> rc 2 naming the memlog; the same memlog
+# with the Render after it -> rc 0, rendered through. The cite sits BELOW the terminator's block
+# opener and above the terminator, never in a part, which p_specstale's record cannot express.
+SPEC_REC_SERIAL='- artifact: r.md\n\n<!-- shard: 01.md -->\n- artifact: p.md\n- advisor: called\n- derivations: replayed 1\n\n### F-1 — MAJOR\n- disposition: escalated\n- edit: n/a\n\n- artifact: _bmad-output/specs/s305/x/SPEC.md\n- advisor: called\n- derivations: replayed 0\n\n### S-1 — MAJOR\n- disposition: repaired\n- edit: _bmad-output/specs/s305/x/.memlog.md:3\n- closes: 01.md F-1 — MAJOR\n\nrepair-complete: serial 1\n'
+p_specserial() {
+  SPEC_REC="$SPEC_REC_SERIAL" spec_world "$1" "- (decision) a\n- (event) Render p1: $SPEC_PH a\n- (decision by serial) b\n" || return 1
+  [ "$RC" -eq 2 ] && has "$JO" "REFUSED: $SW/_bmad-output/specs/s305/x/.memlog.md:3: 1 (decision) entry(ies) after the last render (line 2)" \
+    && ! has "$JO" "rendered through" || return 1
+  SPEC_REC="$SPEC_REC_SERIAL" spec_world "$1" "- (decision) a\n- (event) Render p1: $SPEC_PH a\n- (decision by serial) b\n- (event) Render p1: $SPEC_PH b\n" || return 1
+  [ "$RC" -eq 0 ] && has "$JO" "SPEC-RENDER: $SW/_bmad-output/specs/s305/x/.memlog.md -- rendered through its last decision (line 4)" \
+    && ! has "$JO" "REFUSED"
+}
+
 # ---- THE SPEC RENDER ARM, SUBJECT MODE (--subject 9): the SPEC is a WHOLE-FILE part, so the join's SUBJ_SET
 # carries `.../specs/s9/kernel/.memlog.md` beside SPEC.md. The memlog is written by the SPEC part's own
 # writer (same agent as the SPEC edit), and that part's record CITES IT on a second `edit:` line, as
@@ -1531,7 +1581,7 @@ p_agentwrites() {
   [ "$RC" -eq 2 ] && has "$JO" "REFUSED:"
 }
 
-P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrargs rrfiles rrsubj alias alnokeys alresult alown alsecond alother alsess altwo altool nested rronly dispkey dispvocab dispruling srcparts gapfill chkpart chkrec rulingedit rulingtab chkjoined partsilent specstale specfresh spechand specnone spectwo sjspecstale sjspecfresh sjspecnone specother specunread agentwrites chkserial supchain gaploc fencenest"
+P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrargs rrfiles rrsubj alias alnokeys alresult alown alsecond alother alsess altwo altool nested rronly dispkey dispvocab dispruling srcparts gapfill chkpart chkrec rulingedit rulingtab chkjoined partsilent specstale specfresh spechand specnone spectwo sjspecstale sjspecfresh sjspecnone specother specunread agentwrites chkserial supchain gaploc fencenest partmark specserial"
 
 # ---- A PART'S DERIVATION SURVIVES THE JOIN. The part's ```derived fence is copied into the joined
 # record, and the gate re-runs `validate-artifact-derivations.sh` over the sprint dir AFTER the
