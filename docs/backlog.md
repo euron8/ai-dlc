@@ -744,6 +744,8 @@ verify: manual
 
 Owed: a shard whose newest seal row is `actor: "session"` refuses at merge, as a gate part already does, naming re-dispatch as the remedy; or the role check reads seal rows as well as artifact-write rows. Probe: an adversary Write then a session Edit on one shard refuses; control: an adversary Write then the same adversary's Edit merges.
 
+Judge the LAST NON-PROGRAM tool row, never the newest row. Once `wait-for-deliverable.sh --mark` seals a shard as `program:wait-for-deliverable`, its newest seal row is that program row. A lead Edit followed by the seat's `--mark` would then hide the session row behind it, and a newest-row test would pass it.
+
 verify: manual
 
 ## BL-670 — the shard merge never stamps DIVERGENT_HARD_BLOCK from the summed prior-scope count, so a sharded divergence reaches the validator unstamped
