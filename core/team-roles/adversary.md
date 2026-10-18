@@ -382,11 +382,11 @@ parses it, so every field in it goes unadjudicated and the gate reports your pas
 <!-- SKILL_INVOCATION_PROVENANCE v1
 skill: ai-dlc-adversary-review              # the evaluation that ACTUALLY RAN. Naming one you did not invoke is a forged block.
 invoked_at: <ISO 8601 UTC, to the second>   # Check 24 orders the pass series on this. Ambiguity here reorders the cycle.
-tool_use_id: <toolu_... — from the Skill tool response, or the Agent dispatch that spawned you> # the id of the Skill/Agent call that ran this evaluation. CHECKED FOR SHAPE ONLY — nothing verifies it against a transcript, so it is not proof the evaluation ran.
+tool_use_id: <NOT_ACCESSIBLE as a shard; unsharded, the toolu_... id of the Skill call or Agent dispatch that spawned you> # a SHARD writes the literal NOT_ACCESSIBLE, never an id it was told or guessed: it cannot know its own dispatch id, and the merge derives each shard's id from the harness records and refuses a real-shaped id that differs. An UNSHARDED pass writes the id of the Skill/Agent call that ran this evaluation. CHECKED FOR SHAPE ONLY — nothing verifies it against a transcript, so it is not proof the evaluation ran.
 mode: subagent                              # never solo.
 lead_role: <the step file that invoked or dispatched the evaluation> # which step owns this pass.
 artifact: <path of the artifact you reviewed> # what this pass reviewed.
-artifact_sha: <sha256 of that file, as you read it> # `shasum -a 256 <artifact> | cut -d' ' -f1`. Makes the pass a notarization of the bytes it reviewed, which is what lets the gate later prove a claimed revert landed on a state some pass actually saw. A pass merged from shards by merge-adversarial-shards.sh carries the multi-file form instead, `<stem>=<sha> <stem>=<sha> ...` (two or more, one per story), and the `artifact_sha` pattern accepts exactly those two shapes.
+artifact_sha: <sha256 of that file, as you read it> # `shasum -a 256 <artifact> | cut -d' ' -f1`. Makes the pass a notarization of the bytes it reviewed, which is what lets the gate later prove a claimed revert landed on a state some pass actually saw. What a shard notarizes depends on its axis: a per-story shard on the files axis carries its one story's sha; a cross-story shard carries one `<stem>=<sha>` per story it read; the merged files-axis pass, which the merge writes, carries one `<stem>=<sha>` per story; a subject-axis shard, cross included, carries one `<stem>=<sha>` per subject stem; and a sections-axis shard, cross included, carries the whole document's sha. The `artifact_sha` pattern accepts exactly those two shapes: one sha256, or two or more space-separated `<stem>=<sha>` entries.
 findings_critical: <int>                    # the residue the verdict is adjudicated against. Required of EVERY known evaluation, not only verdict-bearing ones — see rules.counts_always.
 findings_critical_prior_scope: <int>        # of the CRITICALs above, those in text the PRIOR pass also reviewed. OPTIONAL BY DESIGN: absent means the validator assumes ALL of them (fail-closed). Requiring it would invert that default and reject the safe omission. This is what separates 'not converging' from 'the document is moving'.
 findings_major: <int>                       # omit it and the stall rung goes silent for the ENTIRE series.
@@ -400,6 +400,9 @@ SKILL_INVOCATION_PROVENANCE_END -->
 
 The block above is rendered from `.claude/schemas/provenance-block.json`, which is also the file the
 gate's parser loads. There is no second copy of this schema to disagree with.
+
+**A shard copies the region above verbatim and then deletes each line's trailing ` #` comment**
+(the space, the `#` and everything after it), because the merge reads every value literally.
 
 **In a shard brief, `tool_use_id` is the schema's sentinel `NOT_ACCESSIBLE`.** The merge derives
 each shard's dispatch id from the harness records and never reads the self-reported one except to
@@ -577,6 +580,12 @@ item 3); your filename and the pass you stamp stay pass 1. You MUST:
 - **The sub-skill drives behavior; you supply independence.** Do not override the
   sub-skill's method with a lighter review, and do not let the authoring
   context's framing steer you — re-derive from the requirement.
+
+- **List a code path your brief does not cite before you open it.** Before you
+  read or grep a code path that neither your brief nor the artifact under review
+  cites, list it with `git ls-files <dir-or-glob>` and read only what that
+  returns. A path you guessed and did not list is not evidence that the code is
+  absent, and a finding built on it is an invented one.
 
 ## Escalation
 

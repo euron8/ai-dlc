@@ -20,6 +20,91 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.827.0] - 2026-10-18
+
+Batch 236, PROSE release (built by the lead ai-dlc-c8, owned and gated by ai-dlc-b9). Closes BL-653, BL-654,
+BL-656, BL-618, BL-615, BL-659 and BL-617; BL-664 lands PARTIAL. Files BL-664. No `PC-` id. Net for this release:
+7 closed, 1 filed.
+
+### The architecture step gives the spine lint's literal invocation (BL-653)
+
+- `steps/architecture.md` names `uv run .claude/skills/bmad-architecture/scripts/lint_spine.py --workspace <run
+  folder> -o <lint json>`, cites bmad-architecture `references/reviewer-gate.md` for the form, and passes the
+  lint json to Check 30 `--spine-lint`. Neither `{skill-root}` nor `{doc_workspace}`, which ai-dlc never binds,
+  appears. Pin `arch-lint-invoke`.
+
+### Architecture sections 2 and 3 run as one dispatched architect chain (BL-654)
+
+- Operator ruling: dispatch the chain. Sections 2 and 3 run as ONE dispatched `architect` chain under Rule 28
+  "Split dispatch" serial exception 3; the lead adopts the design decisions.
+- The chain record is appended to, never rewritten, logs each file when it starts and when it finishes, and ends
+  with `seat-complete: architecture architect none findings=0` only after the last file is written. The lead joins
+  with `wait-for-deliverable.sh --complete --dispatch <agentId> <record>`, never on the spine.
+- A live architect whose record reads UNFINISHED is re-armed with `--reset` once per beat, and only while the
+  record is still growing; a record that has not moved is a non-delivery and falls to Rule 29 "The bounded
+  file-wait beat". The tip adversary found the first cut re-armed without a bound.
+- Pins `arch-chain-join`, `arch-chain-marker-last` and `arch-chain-rearm-growth`. The receipt drives the shipping
+  `wait-for-deliverable.sh` (a header-only record is not DELIVERED, one ending in the marker is), checks section 0
+  positively, and removes its own temp dir.
+
+### Rule 28's dispatch-alone beat is scoped and its join cited (BL-656)
+
+- `rule-bodies/rule-28.md`: a round's epoch is recorded before wave 1, never minted at the beat; a beat outside a
+  fan-out round, on an agent this session dispatched, passes `--dispatch` alone. Both resume cases are cited by
+  section, and the serial remediator's join cites `_gate-procedures.md` "Adversarial repair dispatch".
+- Pin `r28-epoch-outside-round`. The receipt accepts correct paraphrases of the scope ("an agent it dispatched
+  itself") and refuses a dropped scope, a prior-session scope and a `--since` beside the beat.
+
+### The first cross QA's beat state directory stays outside the shard directory (BL-618)
+
+- `steps/implementation.md`: "given as an absolute path outside the shard directory, and never the lead's". The
+  `AI_DLC_STATE_DIR=` line that `review-shard-merge` anchors stays byte-identical. Pin `impl-cross-statedir`.
+
+### The adversary lists an uncited code path before opening it (BL-615)
+
+- `team-roles/adversary.md` gains a Constraints item: before reading or grepping a code path its brief does not
+  cite, list it with `git ls-files <dir-or-glob>` and read only what that returns. It sits outside the I123
+  adjacency and opens no "As a party seat" heading. Pin `adv-ls-files`.
+
+### The provenance schema's shard docs and the elicitation header (BL-659)
+
+- `core/schemas/provenance-block.json`: the `artifact_sha` doc states what each shard kind notarizes; the
+  `tool_use_id` doc says a shard writes the `NOT_ACCESSIBLE` sentinel and an unsharded pass its dispatch id; a new
+  `elicitation` profile pins `skill: bmad-advanced-elicitation`, `mode: subagent`.
+- `_gate-procedures.md` carries it as a generated `provenance-block/elicitation` region in place of a "copied with
+  two changes" instruction. `sync-taught-schema.sh` re-rendered `adversary.md` and `_gate-procedures.md`.
+- The cross-story clause is read only by the convergence validator's arm L, which collects names and validates
+  nothing; the merge checks a cross-story shard's `artifact:` alone.
+
+### The scaffold message names the apply step (BL-617)
+
+- `core/scripts/validate-layer-entries.sh`: a pull's apply step creates the scaffold from core's template
+  (`RESOLVED machinery-scaffold`), on the pull that declares it or the next one. The prefix through "has not been
+  scaffolded" stays byte-identical for `consumer-machinery-inventory` M4.
+
+### A shard told to copy a provenance region verbatim also strips its comments (BL-664, PARTIAL)
+
+- A shard copying the `provenance-block` region verbatim, inline ` #` comments kept, is refused by
+  `merge-adversarial-shards.sh --check-header`; stripped, it passes. Measured on the elicitation and convergence
+  axes. BL-659's new "copy this region verbatim" sentence made that copy more likely.
+- Both region instructions now tell the shard to delete each trailing ` #` comment. Pins `elic-header-strip` and
+  `adv-header-strip`.
+- Open: the merge's own reader does not apply the schema's `parser.comments` rule, which
+  `validate-provenance-block.sh` already applies. That one strip would make both sentences redundant.
+
+### Filed
+
+- BL-664 (DEFECT, PARTIAL here): the shard merge refuses a provenance region copied verbatim with its comments.
+
+### Limits
+
+- Slot measurements at 04adbf68: `process-rule-pins` PASS, with every new or changed row read by name (negate,
+  relocate, fence and comment kills plus the corpus pin) against an impossible-name control. `sync-taught-schema.sh
+  --check` rc 0. Each of the eight receipts exits 0 at 04adbf68 and 1 at e91b4d86, run through `eval` as
+  `backlog-reverify.sh` runs it.
+- BL-664's receipt stays `manual` while the entry is PARTIAL.
+
+
 ## [0.826.0] - 2026-10-18
 
 Batch 236, HOOKS release (ai-dlc-b9's). Closes BL-601, BL-638 and BL-648; BL-658 lands PARTIAL. Files BL-666

@@ -25,16 +25,59 @@ current architecture doc and writes a context digest to
 `_bmad-output/planning-artifacts/s<N>/architecture-context.md` (Rule 24
 sprint stamp: `<N>` is `sprint_id` from the pipeline snapshot's Sprint
 Context, resolved at `route.md` Step 6), returning only
-`{artifact_path, summary, gaps}`. Then resume at section 1. **Sections 1
-onward stay inline in the lead** — the PRD/brief read, all design decisions,
-ADR authoring, and the Rule 8 validation cycle are never offloaded. If
-`planning_offload: off`, run all sections inline. Per SKILL.md Rule 24.
+`{artifact_path, summary, gaps}`. Then resume at section 1. **Section 1
+stays inline in the lead; sections 2 and 3 are ONE dispatched `architect`
+chain** (section 2's opening paragraph), and the lead orchestrates the Rule 8
+validation cycle of section 4. Rule 24's "authoring + validation stay inline"
+bounds this analyst dispatch, not that chain, which is Rule 28's. If
+`planning_offload: off`, the lead reads the code and the existing architecture
+itself, and still dispatches the section 2–3 chain. Per SKILL.md Rule 24.
 
 ### 1. Context Loading
 
 Read the PRD and product brief from `_bmad-output/planning-artifacts/`.
 
 ### 2. Architecture Creation or Update
+
+**Sections 2 and 3 run as ONE dispatched `architect` chain** (Rule 28 "Split
+dispatch", serial exception 3, the ordered authoring chain). Dispatch one
+`architect` subagent, bound per Rule 19 (model + role-contract line), with
+`run_in_background: true`. Its brief carries `shard: none (authoring-chain)`,
+names sections 2 through 3 of this file as its spec, run in order, starting at
+the `/bmad-architecture` paragraph (this paragraph and the next address the
+lead, and the architect dispatches and joins nothing), and names
+its result file and completion signal: the chain record
+`_bmad-output/planning-artifacts/s<N>/architecture-chain.md`. The architect
+writes that record FIRST, with its header; appends one line naming each file
+of the chain when it STARTS writing that file, and another when it finishes
+it; and only after the LAST file of the chain is written makes one final
+write, the line
+`seat-complete: architecture architect none findings=0`, after which it edits
+no file of the chain. The record is appended to, never rewritten. Join it with
+`scripts/ai-dlc/wait-for-deliverable.sh --complete --dispatch <agentId> _bmad-output/planning-artifacts/s<N>/architecture-chain.md`,
+`run_in_background: true`, `<agentId>` being the one its Agent result
+returned. Never join on `ARCHITECTURE-SPINE.md`, and never on
+`docs/architecture*.md`. Under `--complete` a beat is granted again only
+when the record has changed, so one file that takes longer than the beat
+budget ends the join as NON-DELIVERY with the record UNFINISHED. While the
+architect's completion notification has not arrived and the record is still
+growing, that is a live architect, not a non-delivery: re-arm the same join
+with `--reset` ONCE per beat, and never re-dispatch a second architect beside
+it. The record is growing when it has a new start or finish line since the
+previous beat; compare its line count with the one you noted at the previous
+beat. A record that has not moved since the previous beat is a non-delivery,
+and you take Rule 29 "The bounded file-wait beat" exhaustion path, not another
+`--reset`.
+
+**The chain drafts; the lead adopts.** The architect runs `lint_spine.py` as
+below and lists its `<lint json>` in the record. It records its section 2
+assessment (NO CHANGES NEEDED, or the change set) in the record and returns
+it, with section 3's readiness findings, every operator-owned value it did
+not pick, and every change a notarized file would need. Once the join reports the record
+`DELIVERED` AND the architect's completion notification has carried its
+return, the lead reads the record and the return, routes each operator-owned
+value and finding, and only then starts section 4. The lead
+passes the record's `<lint json>` to Check 30.
 
 **Invoke `/bmad-architecture` for EVERY variant that reaches this step**, not
 only greenfield/brownfield-b. It takes the spec package as its richest input,
@@ -48,8 +91,11 @@ applied as a local override. Adopt the spine as a spec companion, keeping
 `bmad-architecture` ships `scripts/lint_spine.py`, which emits JSON findings
 for unfilled placeholders, duplicate or non-monotonic `AD` IDs, an `AD`
 missing Binds/Prevents/Rule, and an unpinned stack version — and **exits 0
-unconditionally, by design, leaving the decision to its caller.** Pass its
-JSON to gate-validation Check 30 via `--spine-lint`; that check is the
+unconditionally, by design, leaving the decision to its caller.** Run it as
+`uv run .claude/skills/bmad-architecture/scripts/lint_spine.py --workspace <the run folder holding ARCHITECTURE-SPINE.md> -o <lint json>`,
+the form `bmad-architecture`'s `references/reviewer-gate.md` gives for its
+deterministic pass: `--workspace` takes the folder, never the spine file.
+Pass `<lint json>` to gate-validation Check 30 via `--spine-lint`; that check is the
 caller that decides. Do not re-implement the linter.
 
 The per-variant guidance below governs the CONTENT of the design, not

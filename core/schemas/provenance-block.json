@@ -172,8 +172,8 @@
       "forbidden_match": "prefix_ci",
       "forbidden_match_reason": "a DECORATED placeholder — `toolu_PLACEHOLDER_LEAD_TO_FILL` — is the same forged evidence cell as the bare literal, and under exact matching it PASSED. The list can never be complete under exact matching because the decoration is free text, so the match is by case-insensitive PREFIX: a value whose id begins with a placeholder stem is refused however it continues. Declared per field rather than globally because `mode` must stay EXACT — its forbidden value `solo` is an enum member, and a prefix rule there would be a rule about a closed set that already discriminates. Measured over the 870 distinct `tool_use_id` values in the distribution and the reference consumer, whole tree: prefix matching newly refuses exactly ONE value that exact matching admits, and it is the decorated placeholder itself, so the false-positive set is EMPTY. State the population when quoting that figure — it is a working-tree count over two repos the consumer writes to continuously, and it moves.",
       "forbidden_reason": "a placeholder literal that passes the toolu_ charset but cannot have come from a real Skill/Agent call. The id must be the one from the Skill tool response, or the Agent dispatch that spawned you. A value that satisfies the SHAPE but was not drawn from the RUN is a forged evidence cell. Every value here clears the tool_use_id pattern, so it is caught as forbidden and not double-reported as a pattern miss. A value that merely BEGINS with one of these stems is the same cell with decoration on it.",
-      "placeholder": "<toolu_... — from the Skill tool response, or the Agent dispatch that spawned you>",
-      "doc": "the id of the Skill/Agent call that ran this evaluation. CHECKED FOR SHAPE ONLY — nothing verifies it against a transcript, so it is not proof the evaluation ran."
+      "placeholder": "<NOT_ACCESSIBLE as a shard; unsharded, the toolu_... id of the Skill call or Agent dispatch that spawned you>",
+      "doc": "a SHARD writes the literal NOT_ACCESSIBLE, never an id it was told or guessed: it cannot know its own dispatch id, and the merge derives each shard's id from the harness records and refuses a real-shaped id that differs. An UNSHARDED pass writes the id of the Skill/Agent call that ran this evaluation. CHECKED FOR SHAPE ONLY — nothing verifies it against a transcript, so it is not proof the evaluation ran."
     },
     {
       "name": "mode",
@@ -220,7 +220,7 @@
       "required_for_verdict": false,
       "pattern_ref": "artifact_sha",
       "placeholder": "<sha256 of that file, as you read it>",
-      "doc": "`shasum -a 256 <artifact> | cut -d' ' -f1`. Makes the pass a notarization of the bytes it reviewed, which is what lets the gate later prove a claimed revert landed on a state some pass actually saw. A pass merged from shards by merge-adversarial-shards.sh carries the multi-file form instead, `<stem>=<sha> <stem>=<sha> ...` (two or more, one per story), and the `artifact_sha` pattern accepts exactly those two shapes.",
+      "doc": "`shasum -a 256 <artifact> | cut -d' ' -f1`. Makes the pass a notarization of the bytes it reviewed, which is what lets the gate later prove a claimed revert landed on a state some pass actually saw. What a shard notarizes depends on its axis: a per-story shard on the files axis carries its one story's sha; a cross-story shard carries one `<stem>=<sha>` per story it read; the merged files-axis pass, which the merge writes, carries one `<stem>=<sha>` per story; a subject-axis shard, cross included, carries one `<stem>=<sha>` per subject stem; and a sections-axis shard, cross included, carries the whole document's sha. The `artifact_sha` pattern accepts exactly those two shapes: one sha256, or two or more space-separated `<stem>=<sha>` entries.",
       "enforced_by": "Check 24 arm A (validate-adversarial-convergence.sh), not Check 17. Named here so the taught example carries it; asserted there, where the series is in scope."
     },
     {
@@ -317,6 +317,33 @@
         "findings_minor",
         "resolves_divergence",
         "verdict"
+      ]
+    },
+    "elicitation": {
+      "$comment": [
+        "An elicitation shard's header. It is the adversary-pass view minus `verdict` and",
+        "`resolves_divergence`, with the elicitation skill pinned: elicitation records findings and",
+        "is not a convergence pass, and merge-adversarial-shards.sh --check-header --axis",
+        "elicitation refuses a verdict on it. The brief copies this region verbatim."
+      ],
+      "title": "an elicitation shard",
+      "pin": {
+        "skill": "bmad-advanced-elicitation",
+        "mode": "subagent"
+      },
+      "fields": [
+        "skill",
+        "invoked_at",
+        "tool_use_id",
+        "mode",
+        "lead_role",
+        "artifact",
+        "artifact_sha",
+        "findings_critical",
+        "findings_critical_prior_scope",
+        "findings_major",
+        "findings_major_underived",
+        "findings_minor"
       ]
     },
     "retro-party-mode": {

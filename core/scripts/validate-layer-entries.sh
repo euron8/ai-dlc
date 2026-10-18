@@ -1326,7 +1326,7 @@ if [ -n "$MACHINERY_REL" ] && [ -n "$MACHINERY_HOME" ]; then
     # Scaffolded by install.sh and by the pull driver. Absent means neither has run since the
     # declaration shipped -- v0.228.0's finding, where a create-once file reached no existing
     # consumer because a consumer never runs install.sh twice.
-    warn W10 "$MACHINERY_REL: the ai-dlc machinery inventory has not been scaffolded, so this project has not declared which of its scripts are ai-dlc machinery. The next pull creates it from core's template; until then nothing states the inventory and nothing can check it. An empty inventory is legitimate and is declared with the literal 'none' -- what is not legitimate is silence, because a project with no machinery and a project that has never looked are indistinguishable without it."
+    warn W10 "$MACHINERY_REL: the ai-dlc machinery inventory has not been scaffolded, so this project has not declared which of its scripts are ai-dlc machinery. A pull's apply step creates it from core's template ('RESOLVED machinery-scaffold'), on the pull that declares it or the next one; until then nothing states the inventory and nothing can check it. An empty inventory is legitimate and is declared with the literal 'none' -- what is not legitimate is silence, because a project with no machinery and a project that has never looked are indistinguishable without it."
   else
     # The inventory: every non-blank line inside the fenced block that is not prose. The
     # grammar is deliberately dumb -- a path per line -- because the consumer writes this by
