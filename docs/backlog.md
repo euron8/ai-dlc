@@ -429,7 +429,9 @@ Related: BL-587 (the evidence, and the withdrawn item 3).
 
 Fix shape (lead ai-dlc-71): M4's pin means silence on an absent record was a deliberate choice, most likely so that a tree with no reconcile yet is not wedged at its gate. The builder first reads why M4 pinned silence. The fix then reports the missing and empty cases as a visible UNMEASURED/PENDING line, exits 0, and does not refuse, unless that reason turns out not to hold. If it does not hold, the entry is amended with what was found before a refusal is built.
 
-verify: manual
+Built (batch 236): an absent record now prints `UNMEASURED: no owed-derivations record at <path> …`. An empty record, or one holding no OWED row, prints a distinct `UNMEASURED: … present with 0 OWED rows …` line. Both still exit 0, because M4's original pin was exit-code-only silence, kept so that a never-reconciled tree is not wedged at its gate. A record with OWED rows and none OPEN stays silent (the control). In the fixtures, arm B4b is inverted to assert the UNMEASURED line, a new arm B4k covers the empty record, M4 is re-aimed at the silent exit (`M4-absent-silent`), the old refuse-on-absent mutant is kept as `M4b-absent-treated-as-refusal`, and `M4c-empty-silent` is added. `steps/route.md`, `steps/gate-validation.md` and `steps/retro.md` name the line, and retro.md says UNMEASURED is not debt. The fix writes no record row and edits no consumer file. BL-668 (filed) is the follow-up: no shipped program creates the record, so absent is the normal state.
+
+verify: sh bash core/fixtures/owed-derivations/receipt-bl652.sh
 
 ## BL-667 — four release headings are missing from CHANGELOG.md, each dropped by the next release replacing it in place
 
