@@ -841,7 +841,7 @@ Note that `emit-report.sh` and `apply.sh` are the consumer's INSTALLED engine, s
 
 No existing receipt shape fits: the subject is a count of detector invocations across a multi-caller pull, which needs a seeded world and a driver of the real `--verify`, and no such receipt has been written or run here (UNRUN).
 
-verify: sh f="$(mktemp)" || exit 9; bash core/fixtures/reconcile-emit-report/run.sh >"$f" 2>&1 </dev/null; [ -s "$f" ] || exit 9; grep -Eq '^ +ok +PC-V1( |$)' "$f" && grep -Eq '^ +ok +PC-V3( |$)' "$f" && grep -Eq '^ +ok +PC-V10( |$)' "$f" && ! grep -Eq '^ +FAIL +PC-V' "$f"; r=$?; rm -f "$f"; exit $r
+verify: sh f="$(mktemp)" || exit 9; bash core/fixtures/reconcile-emit-report/run.sh >"$f" 2>&1 </dev/null; [ -s "$f" ] || exit 9; grep -Eq '^ +ok +PC-V1( |$)' "$f" && grep -Eq '^ +ok +PC-V3( |$)' "$f" && grep -Eq '^ +ok +PC-V10( |$)' "$f" && grep -Eq '^ +ok +PC-V4( |$)' "$f" && grep -Eq '^ +ok +PC-V26( |$)' "$f" && ! grep -Eq '^ +FAIL +PC-V' "$f"; r=$?; rm -f "$f"; exit $r
 
 ## BL-680 — a receipt line carrying a reason after `verify: manual` is counted as neither manual nor sh, and R2 names only "ZERO scored receipts"
 
@@ -877,6 +877,32 @@ once S7 stops flagging `fp.sh` while still flagging `bl.sh`. It exits 9 when the
 cannot be built, a corpus reads empty or a self-probe fails, or `bl.sh` is not flagged.
 
 verify: sh unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY; V=scripts/validate-shell-portability.sh; [ -s "$V" ] || exit 9; T=$(mktemp -d "${TMPDIR:-/tmp}/bl681.XXXXXX") || exit 9; mkdir -p "$T/scripts" "$T/core/fixtures/x" || exit 9; printf '0.0.0-receipt\n' > "$T/VERSION" || exit 9; cp "$V" "$T/$V" || exit 9; printf '%s\n' 'probe text' > "$T/core/a.md" || exit 9; printf '%s\n' 'true' > "$T/core/fixtures/x/run.sh" || exit 9; printf '%s\n' "awk '" '      if (inwin) { gsub(/[ \t]+/, " ", win); print head "\037" win }' "' f" > "$T/scripts/fp.sh" || exit 9; printf '%s\n' 'awk '"'"'{ gsub(/x/, "\\1", s) }'"'"' f' > "$T/scripts/bl.sh" || exit 9; git -C "$T" init -q && git -C "$T" add -A || exit 9; O=$(bash "$T/$V" 2>&1); grep -qE 'corpus is empty|own probe did not fire|no VERSION marker' <<<"$O" && exit 9; H=$(awk '/^FAIL: /{s=($2=="S7:")} s' <<<"$O"); grep -qF 'scripts/bl.sh:' <<<"$H" || exit 9; grep -qF 'scripts/fp.sh:' <<<"$H" && exit 1; exit 0
+
+## BL-685 — BL-679's recorded `--verify` PASS never forms when the dist shares its ref store with active worktrees
+
+**DEFECT, efficiency.** Found by ai-dlc-77 [e29316] in batch 236 while building BL-679.
+- **The cause.** BL-679's key field `distrefs` hashes the dist's `for-each-ref`, HEAD and shallow flag. On a dist
+  that is the main ai-dlc checkout, or a worktree of it, agent sessions create, advance and delete branches
+  continuously. So the key taken after the render differs from the one taken before, and no record is written.
+- **Measured** on a file:// clone of graph, with the dist set to a worktree of the main ai-dlc store: 0 of 5
+  rounds recorded and 0 of 5 hit. The heads count moved 990 → 999 → 1011 → 997 → 996 → 998 across the rounds.
+  The same consumer, with a self-contained file:// clone as the dist, recorded on the first `--verify` and hit
+  on the second.
+- **Why it matters.** graph's pulls use `/Users/n8/git/ai-dlc` itself as the dist, through
+  `git -C /Users/n8/git/ai-dlc fetch -q origin` (graph sessions f78aa565 and 55506a8e, read by ai-dlc-f7). So
+  BL-679 as shipped saves graph nothing.
+- **Rejected:** narrowing the key to an enumerated set of ref readers. An adversary found four readers besides
+  `retired-fixtures.sh`:
+  - the stamp and override base names resolved as dist refs;
+  - ledger `sh` receipts, whose read set is open;
+  - `refs/replace`;
+  - HEAD.
+  graph's stamp uses 8-hex shas and its ledger carries 7 `verify: sh` receipts, so a narrowed key would fall back
+  on graph every time.
+- **Direction (lead-ruled):** keep the key, and remove the churn: the update skill owns a private, main-only, bare distribution clone under the consumer's git-common-dir, built in a later release with BL-693. The recorded PASS ships OFF by default (`EMIT_REPORT_VERIFY_CACHE=1` opts in) until an adversary round on the key finds no BLOCKER.
+- Owner: ai-dlc-77 [e29316].
+
+verify: manual
 
 ## BL-690 — the pre-push fixture pool installs no EXIT, INT or TERM trap, so an interrupted hook leaks its pool root `/tmp/fx.*`
 
