@@ -476,11 +476,11 @@ to_epoch() {  # accept a bare epoch or an ISO8601 stamp; empty on failure
 # which would strip a level of escaping.
 has_marker() {  # $1 = path
   MT_="$MARK_TOKEN" awk '
-    # A fence opens on a run of 3+ backticks or tildes; it closes only on a run of the SAME
+    # A fence opens on a run of 3+ backticks (info string carrying no backtick) or 3+ tildes; it closes only on a run of the SAME
     # character at least as long, with nothing but blanks after it.
     match($0, /^[ \t]*(```+|~~~+)/) {
       r = substr($0, RSTART, RLENGTH); sub(/^[ \t]*/, "", r)
-      if (fc == "") { fc = substr(r, 1, 1); fl = length(r) }
+      if (fc == "") { if (!(substr(r, 1, 1) == "`" && substr($0, RSTART + RLENGTH) ~ /`/)) { fc = substr(r, 1, 1); fl = length(r) } }
       else if (substr(r, 1, 1) == fc && length(r) >= fl && substr($0, RSTART + RLENGTH) ~ /^[ \t\r]*$/) { fc = ""; fl = 0 }
     }
     NF { l = $0 }

@@ -272,10 +272,25 @@ else
   bad "the non-adjacent row scored ${p_na_sub} under the subject and ${p_na_mut} under the mutant, expected 5 and 5. Either the seed no longer reaches the branch under test, or the counter is unstable"
 fi
 
+# ----------------- arm 9: a fence closes only on a run at least as long ------------
+# A ```` fence holding a ``` block (opened with an info string) and a fenced `## ` heading after its
+# inner closer: the heading is inside the outer fence, so it is no index row. A closer without the
+# length rule ends the fence at the inner bare ``` and indexes the fenced heading; the real ```` then
+# opens a phantom fence that swallows the heading after it, so both rows are asserted.
+mkdir -p "$WORK/fdoc" || broken "could not create the fence seed directory"
+printf '# Fence Seed\n\n## real before\n\nBefore.\n\n````md\n```text\nquoted\n```\n## fenced heading\n````\n\n## real after\n\nAfter.\n' > "$WORK/fdoc/architecture.md"
+node "$GEN" --doc "$WORK/fdoc/architecture.md" --out "$WORK/out-fence.md" >/dev/null 2>>"$WORK/gen.err"; rc_f=$?
+if [ "$rc_f" = 0 ] && grep -qF '#real-after' "$WORK/out-fence.md" && grep -qF '#real-before' "$WORK/out-fence.md" \
+   && ! grep -qF '#fenced-heading' "$WORK/out-fence.md"; then
+  ok "a four-backtick fence holding a three-backtick block hides its fenced heading, and the heading after its closer is indexed"
+else
+  bad "the fence seed (exit ${rc_f}) indexed the fenced heading or lost the one after the closer: $(grep -c '^|' "$WORK/out-fence.md" 2>/dev/null) rows"
+fi
+
 # ------------------------------------------------------------------- floor --------
 # EXPECTED_ASSERTIONS: several arms sit behind `broken` guards, and an assertion that never
 # executed prints nothing — a short green report reads exactly like a complete one.
-EXPECTED_ASSERTIONS=8
+EXPECTED_ASSERTIONS=9
 if [ "$asserts" -ne "$EXPECTED_ASSERTIONS" ]; then
   printf '  FAIL  %s assertions ran, %s expected — an arm did not execute, and a short green report reads exactly like a complete one\n' \
     "$asserts" "$EXPECTED_ASSERTIONS"

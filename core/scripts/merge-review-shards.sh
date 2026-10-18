@@ -407,7 +407,8 @@ fi
 parse_shard() {
   awk '
     function flush() { if (fl > 0) printf "X %d %d %s %d %d\n", fl, fn, (fst == "" ? "-" : fst), fh + 0, fr + 0; fl = 0 }
-    /^[ \t]*(```|~~~)/ { fence = !fence; next }
+    fence && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { fence = 0; next } }
+    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
     fence { next }
     /^reviewed-sha:/ { nr++; if (nr == 1) { v = $0; sub(/^reviewed-sha:[ \t]*/, "", v); sub(/[ \t]+$/, "", v); rv = v } }
     /^shard-verdict:/ { nv++; if (nv == 1) { v = $0; sub(/^shard-verdict:[ \t]*/, "", v); sub(/[ \t]+$/, "", v); vv = v } }
@@ -441,7 +442,8 @@ RE_AC='^[A-Za-z0-9][A-Za-z0-9._-]*$'
 same_set() {
   awk -v lab="$2:" -v want="$3" '
     BEGIN { n = split(want, w, /[ \t]+/); for (i = 1; i <= n; i++) if (w[i] != "") { W[w[i] + 0] = 1; nw++ } }
-    /^[ \t]*(```|~~~)/ { f = !f; next }
+    f && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { f = 0; next } }
+    !f && /^[ \t]*(```+[^`]*|~~~+.*)$/ { f = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
     f || index($0, lab) != 1 { next }
     { v = substr($0, length(lab) + 1); m = split(v, a, /[ ,\t]+/); delete G; ng = 0; ok = 1
       for (i = 1; i <= m; i++) if (a[i] ~ /^[0-9]+$/ && !((a[i] + 0) in G)) { G[a[i] + 0] = 1; ng++; if (!((a[i] + 0) in W)) ok = 0 }

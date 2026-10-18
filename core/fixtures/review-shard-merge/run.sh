@@ -103,6 +103,8 @@ arm stray "R17: a 'parts:' line behind a bullet inside ## Findings, and a '#### 
 arm nofind "R18: a shard with no '## Findings' section -> REFUSED, exit 2, nothing at --out" "R18: a shard without ## Findings was merged"
 arm knob "R19: --min-files, the env key and --max-parts at 18446744073709551617 -> each REFUSED 'longer than 9 digits', no manifest; a 9-digit --min-files answers SERIAL" \
          "R19: a value over 9 digits was not refused before arithmetic"
+arm fence_nested "R20: a '#### ' finding inside a four-backtick fence holding a three-backtick block is not counted -> MERGED with the base world's findings count" \
+                 "R20: a four-backtick fence closed on the inner three-backtick line and the fenced finding was counted"
 arm q_worst "Q1: --gate qa worst-of -- all PASS merges PASS; one part NEEDS_REWORK (cross PASS) merges NEEDS_REWORK; cross NEEDS_REWORK (parts PASS) merges NEEDS_REWORK; each read back Check 1's way" \
             "Q1: the merged QA verdict is not the worst shard verdict"
 arm q_table "Q2: a cross shard carrying a '| AC | Verdict |' table under '## Acceptance Criteria' merges with exactly one Check-1 match, every shard's token and finding conserved" \

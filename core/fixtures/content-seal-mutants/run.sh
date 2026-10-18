@@ -53,14 +53,17 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }
 # EVERY SET BELOW IS MEASURED: each equals the kill set its mutant produced in batch 236's wfd slot,
 # against a base FAIL set of {}. SA, SF and SP include the --mark arms, with CS-K4r / CS-J9r being the
 # race precondition line those mutants trip (no seal row, so --mark never reaches --record-expect).
-EXP_SA="CS-G1 CS-G2 CS-G3 CS-G4 CS-J1 CS-J2 CS-J3 CS-J4 CS-J8 CS-K1 CS-K2 CS-K3 CS-K4 CS-K4r CS-K5 CS-K6 CS-M1 CS-M2 CS-M3 CS-M3b CS-M4 CS-M5 CS-M6 CS-M6b"
+# SA and SP were re-measured after the CS-J6 seed gained the serial remediator's own Edit (BL-557):
+# SA gains CS-J6 (the Edit row is the recorder's), SP loses it (the Edit row covers the record before
+# --mark-repair), and SP is still killed by 7 cells.
+EXP_SA="CS-G1 CS-G2 CS-G3 CS-G4 CS-J1 CS-J2 CS-J3 CS-J4 CS-J6 CS-J8 CS-K1 CS-K2 CS-K3 CS-K4 CS-K4r CS-K5 CS-K6 CS-M1 CS-M2 CS-M3 CS-M3b CS-M4 CS-M5 CS-M6 CS-M6b"
 # SC also stops the refusals the --mark arms read (measured, batch 236 slot): the race (CS-J9, CS-K4)
 # and the marked-then-amended shard (CS-K5).
 EXP_SC="CS-G3 CS-J2 CS-J3 CS-J5 CS-J9 CS-K4 CS-K5 CS-M2 CS-M3 CS-M6 CS-M6b"
 # SF owes CS-J5 too: a program row is appended with an EMPTY agent_id (content-seal.sh seal_record),
 # so the filter drops it and the python3-rewritten joined record reads as never sealed.
 EXP_SF="CS-J5 CS-J6 CS-J7 CS-J9 CS-J9r CS-K1 CS-K5 CS-K6 CS-M3"
-EXP_SP="CS-G1b CS-J1b CS-J5 CS-J6 CS-J7 CS-J9 CS-J9r CS-M1b"
+EXP_SP="CS-G1b CS-J1b CS-J5 CS-J7 CS-J9 CS-J9r CS-M1b"
 # SD: only the refusing cell of CS-G4; its two merging twins (CS-G4b, CS-G4c) pass either way.
 EXP_SD="CS-G4"
 # The --mark mutants, measured. KS restores `pwd -P` in --mark's state-dir derivation (CS-K6).

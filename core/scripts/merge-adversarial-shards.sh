@@ -259,7 +259,7 @@
 #
 # FINDING GRAMMAR (the partition this script checks; `adversary.md` cites it, not restates it)
 #   A finding is a `### ` heading carrying a severity word inside the shard `## Findings` section (up to the next
-#   `## ` heading); lines inside ``` or ~~~ fences are not headings. Its severity is the FIRST
+#   `## ` heading); lines inside ``` or ~~~ fences are not headings. A fence opens on a run of 3+ backticks whose info string carries no backtick, or 3+ tildes, and closes only on a bare run of its own character. Its severity is the FIRST
 #   of CRITICAL / MAJOR / MINOR / NIT in the heading. Each finding carries EXACTLY ONE line
 #       stories: <ordinal>[, <ordinal>...]          e.g. `stories: 03` or `stories: 01, 04`
 #   outside a fence, citing ordinals from `--map`. A per-ordinal shard may cite ONLY its own
@@ -380,7 +380,8 @@ parse_shard() {
       }
       next
     }
-    /^[ \t]*(```|~~~)/ { fence = !fence; next }
+    fence && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { fence = 0; next } }
+    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
     fence { next }
     /^## [A-Z]+-?[0-9]+([^A-Za-z0-9]|$)/ { if (hline == 0) hline = NR }
     /^## / { flush(); infind = ($0 ~ /^## Findings[ \t]*$/); next }
@@ -1174,7 +1175,8 @@ resolve_artifact() {
 same_set() {
   awk -v lab="$2:" -v want="$3" '
     BEGIN { n = split(want, w, /[ \t]+/); for (i = 1; i <= n; i++) if (w[i] != "") { W[w[i] + 0] = 1; nw++ } }
-    /^[ \t]*(```|~~~)/ { f = !f; next }
+    f && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { f = 0; next } }
+    !f && /^[ \t]*(```+[^`]*|~~~+.*)$/ { f = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
     f { next }
     /^## / { inf = ($0 ~ /^## Findings[ \t]*$/); next }
     !inf || index($0, lab) != 1 { next }

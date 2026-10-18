@@ -84,22 +84,6 @@ These are in addition to the four `PC-S319-*` candidates already in graph's unco
 push-candidate ledger, and none of them restates one. Every receipt is `manual` at filing: the batch
 that builds an entry owes its behavioural `sh` receipt and the probe behind it.
 
-## BL-537 — a spawn made by a teammate is recorded nowhere, so a second writer or reviewer has no provenance
-
-**DEFECT.** In graph s319 the `pm-escalated` requirements authoring agent (`a1c69096c184098d6`, dispatched by the lead at 22:01Z) spawned a `general-purpose` subagent itself, "PRD rubric walker S319" (`afe532cc5f05cad9d`, 22:14:55–22:16:40Z), which wrote `_bmad-output/planning-artifacts/s319/prd-validate/review-rubric.md`. That spawn is required by the skill the step invokes: `requirements.md:178` runs `/bmad-prd` validate, and `.claude/skills/bmad-prd/SKILL.md:73-75` tells it to dispatch its rubric walker and reviewers as parallel subagents. `_bmad-output/spawn-ledger.jsonl` has 0 rows for it, against 1 row in `subagent-context.jsonl` (the post-completion probe), so the dispatch-time record misses it while the completion record sees it. `ai-dlc-dispatch-guard.sh` writes the ledger row at dispatch (append at line 1120). Why this call left no row was not traced: it is a teammate-issued call (`agent_id` set) for a role with no `core/team-roles/` file.
-
-This is the same class as the consumer's `PC-S319-LEDGER-ATTRIBUTES-AN-EDIT-TO-AN-AGENT-ID-WITH-NO-TRANSCRIPT`: there, one `.artifact-writes.jsonl` row on `sections/2.md` carries agent id `ad67234a336bc2239`, which has no transcript, no spawn-ledger row and no tool call in its parent remediator's transcript, and the join refused the shard as two writers. Both cases leave a write by an agent the pipeline has no dispatch record for. Check 22 and every join that counts writers read the spawn ledger, so a nested spawn is invisible to them.
-
-Owed: either a teammate's `Agent`/`Task` call is recorded in the spawn ledger with its parent `agent_id`, so a join can attribute a nested writer to its dispatcher, or teammate spawns are refused and any skill that a step invokes and that dispatches subagents (`bmad-prd` validate is one) is told to run its reviewers sequentially, which `SKILL.md:75` already allows ("If subagents are unavailable, run sequentially"). A probe drives one teammate-issued spawn and asserts the record.
-
-**Partial, v0.797.0.** Every spawn-ledger row now carries `parent_agent_id` (`""` for the lead), and a role-less
-spawn issued from inside a subagent (`Explore`, or no `subagent_type`) is recorded with role `""` rather than
-dropped; `dispatch-model-guard` arms 16a-16e. The filed call already had its dispatch-time row (`toolu_01RRc1tN…`,
-graph `dbc4c057e`), so "recorded nowhere" did not hold. Open: no join reads `parent_agent_id` yet, and the second
-subject, the writer `ad67234a336bc2239` with no transcript, is untouched.
-
-verify: manual
-
 ## BL-538 — the lead takes a full turn for every agent notification while an armed join already covers it
 
 **PARTIAL (v0.794.0, verified 8aab009d) — the prose half shipped; the hook and the measurement are OPEN.** rule-28 states the lead's response to a notification a live beat covers (no status line, no re-check) and the two that are not covered. Correction at v0.796.0: 0.794.0 said "arming the beat ships with the wait release"; that release's rule-28 paragraph arms the serial remediator's join with `--complete-repair`, which is BL-541's subject, and carries nothing for this entry. Still owed: the optional hook that injects the response when the notified agent's deliverable is inside a live beat's path set, and the per-wake count re-measured on the next consumer sprint.
@@ -117,36 +101,6 @@ verify: manual
 **Fourth instance (01:52:38Z).** The lead armed `wait-for-deliverable.sh --reset … $SCRATCH/never-written-sentinel-render`, a path it named itself as never-written; the beat existed only to sleep until the render agent's notification. The notification arrived at 01:53:08Z and the lead TaskStopped the beat.
 
 **Part (b), the target-containment refusal, is NOT shippable as specified (batch 236, measured by the wfd contract adversary over the reference consumer's lead transcripts, read-only).** 189 transcripts carry 2,869 beat calls over 5,866 targets. The legitimate targets outside the state dir include 803 teammate story-worktree deliverables, 75 background done files, 64 main-tree docs, 57 scratchpad and task outputs and 7 git refs, so "outside `_bmad-output/`" is not a defect signal. The In-Flight table is empty today and no transcript records it at arm time, so "outside every In-Flight row's deliverable" is unobservable. The seat beats that set a custom state dir (`implementation.md:447`, `qa.md:457`, `code-reviewer.md:196`) would fail it outright. At arm time a sentinel and a real done file are the same act; the difference is the lead's intent, which no check can see. Five of the eight recorded instances are serial-remediator waits, which `--complete-repair` now covers. The entry stays open on the other three.
-
-verify: manual
-
-## BL-556 — a remediator writes its own rule into an operator-owned decision and asks the lead to veto it afterwards
-
-**PARTIAL (v0.794.0, verified 8aab009d; v0.812.0, verified 33361d56) — the prose half shipped in v0.794.0; the join half shipped in v0.812.0 at NOTE tier.** A `repaired` entry whose claim says gap fill or veto is REPORTED on a `GAPFILL:` line after the escalation count and changes no exit code; its recall depends on the words. Still OPEN: a refusal keyed on an `edit:` landing in a span citing a `D-` or `LR-` id. remediator.md: a fix extending a `D-`, `LR-` or `LRC-` decision to a case its words do not cover makes NO edit applying it and is `escalated` with the options, never `repaired`.
-
-**DEFECT.** `core/team-roles/remediator.md:313-316`: "For an item that is locked or operator-owned, give no recommendation. That is a … `D-<n>` decision, a config leaf, a money-path threshold or literal … State each option with its concrete effect … and stop there." In graph s319 requirements elicitation repair, part 09 (`s319/shards/requirements-elicitation-repair/09.md`, PRD section 5, the Net P&L card) repaired seven findings. Two of the fixes applied rules the operator never stated: F-4 "one unavailable pool makes the total unavailable", and F-7 "whole-card em dash for a partial price miss". Both are the behaviour of the operator's D-5 ruling, which reads only "If inputs are unavailable then show -. Yes it is acceptable interim risk." The remediator's own report calls them "My gap fills … The lead may veto either." So operator-owned text now carries an agent-chosen rule unless the lead happens to strike it. The same part did the right thing for its F-1 (S3 pass-or-block on a null), which it escalated without picking, so the role contract is understood. It just does not stop the agent applying the gap fill. Its siblings in the same round followed it: part 08 escalated the D-1 write ordering with options and no recommendation. Owed: the repair brief and `remediator.md` say a fix that extends a `D-<n>` or `LR-` decision to a case its words do not cover is an `escalated` entry, never `repaired`. The `--sources`/`--escalations` join refuses a `repaired` entry whose `edit:` lands in a span citing a `D-<n>` or `LR-` id when its claim carries "gap fill" or "veto". The refusal is measured against graph's records first.
-
-**The serial remediator kept the gap fills (01:50Z).** The serial cross-part remediator's report reads: "Part 09 gap-fills (kept as written): one unavailable pool makes the total unavailable (F-4), and a partial price miss renders the whole card as an em dash (F-7)." The lead did not strike them and the gate has not run. So two agent-chosen rules extending the operator's D-5 ruling have passed a second agent and are in the requirements subject heading into the adversarial series, with no operator sight of them. In the same pass, S-24 reversed part 01's F-2 wording on the stable-only sweep. That is a second agent overriding a first agent's repair, with no adjudication recorded beyond its own report.
-
-verify: manual
-
-## BL-557 — a remediator proceeds without the advisor and without replaying its derivations, and the record does not say which checks it skipped
-
-**PARTIAL (v0.794.0, verified 8aab009d; v0.812.0, verified 33361d56) — the prose half shipped in v0.794.0; the join half shipped in v0.812.0.** A part holding a `repaired` entry must state `advisor:` and `derivations:`, and `not replayed` is refused; a record binds from its first keyword-led line. Still OPEN: a serial pass writing neither line never enters the era, and per-file reading lets a joined record's part lines satisfy the check for a serial remediator that omits its own. remediator.md: a repair record states `advisor:` and `derivations:`; replay is the default, and a section or subject shard records derivations as deferred to the join only for a fence naming the section or assembled document.
-
-**DEFECT.** In graph s319 requirements elicitation repair (13 part remediators, 01:04–01:09Z), 9 of the 19 elicitation-round transcripts (repairs plus shards) report the advisor rate-limited. At least six part remediators (01, 02, 05, 07, 10, 11) wrote their part record "without that review". Separately, part 02, 07, 10 and 12 report "I did not replay the `derived` fences with `validate-artifact-derivations.sh`", against `remediator.md:221-223`. That rule says a check that reads the tree is a `derived` fence "replayed by one call to `scripts/ai-dlc/validate-artifact-derivations.sh <that file>`". Each disclosed the gap only in its final chat message. The record that the join and the next pass read carries no field for it. The lead replayed the fences itself for every part (01:06–01:09Z), which caught nothing but cost 12 tool calls. Part 06 also edited before its first advisor call, against the role file's "consult the advisor … first" order, and the advisor flagged it. `ai-dlc-advisor-gate.sh` only WARNS when the last advisor result is `unavailable` (header lines 13-15), so a rate-limited round runs without review and leaves no trace in the artifacts. Owed: a part record carries `- advisor: called|unavailable` and `- derivations: replayed <n>|not replayed` lines. The join refuses a missing or `not replayed` value. The lead's per-part replay becomes unnecessary when the join reports it.
-
-verify: manual
-
-## BL-565 — a serial remediator entry that re-escalates a part escalation carries no `closes:` link, so one open decision is counted twice
-
-**PARTIAL (v0.794.0, verified 8aab009d) — the prose half shipped; the join dedupe is OPEN.** remediator.md: a restating escalated entry carries `supersedes:` lines, not part tokens in `source:`; pm-escalated appends the answer fold to the joined record, one `###` heading per entry with one `closes:` per chain member and an `edit:` line the join reads.
-
-**DEFECT.** Filed by peer session ai-dlc-68 from graph's s319 resumed lead. At 02:17:57Z the lead ran `join-remediator-shards.sh --escalations …/s319/requirements-elicitation-repair.md --sprint 319`, which printed `ESCALATED-COUNT: 9 (2 closed …)`. The open set is 04.md F-8, 07.md F-1, 08.md F-1, 09.md F-1, 13.md S-8, S-17, S-21, S-22 and S-23. The serial entries' own `source:` lines show these are four decisions counted twice: S-21 `source: 7.md#F-1`, S-22 `source: 8.md#F-1 …`, S-23 `source: 9.md#F-1 …` and S-17 `source: … 4.md#F-8`. Each serial entry is itself `disposition: escalated`, and none carries `- closes:`, because `_gate-procedures.md:853-855` lets only a `repaired` entry close an escalation. The lead's snapshot then says "Still open after the fold: 13.md S-8 … and S-17" and drops 04 F-8, 07 F-1, 08 F-1 and 09 F-1 from its own accounting, contradicting the join it had just run, so the open list is again the lead's reading rather than the tool's. The operator's AskUserQuestion answers (S-21 "Proceed, no pin", S-22 "First deploy-validate action", S-23 "S3 passes or NOT_READY") resolve S-21..S-23, but unless the fold writes `closes:` lines for BOTH the serial entry and its part source, the join keeps reporting 07/08/09 F-1 open into the adversarial series and the gate.
-
-Owed: let an escalated serial entry carry `supersedes:`/`closes:` for the part escalation it restates and have the join dedupe on it, or have the lead's answer fold write closes for every escalation in the chain. Probe: a record whose serial escalated entry restates a part escalation reports ESCALATED-COUNT 1, not 2; after a repaired entry closes the serial entry, 0.
-
-**The fold did not close the chain (02:30Z).** The fold record `s319/requirements-operator-answers-fold.md` landed at 02:30:00Z. It carries 3 `disposition` lines and **0 `closes:` lines**, and the lead's `join-remediator-shards.sh --escalations` on it printed `ESCALATED-COUNT: 0 (0 closed …)`, which describes the new record only. The operator's three answers therefore close nothing in `requirements-elicitation-repair.md`: all nine of S-21, S-22, S-23, 07.md F-1, 08.md F-1, 09.md F-1, 04.md F-8, S-8 and S-17 still read as open to the join, and the lead dispatched the adversarial series at 02:31:27Z without re-running `--escalations` on the elicitation record. The fold also returned five open questions to the lead (Q20, whether S3 NOT_READY blocks or not; the S-23 gloss "does not fail closed" versus the operator's words; the S-21 scope "items 1-4" applied as FR-S319-1..9 and 13; "before any sweep" being the lead's option wording; and a stale pointer pending.md:5224), and the lead adjudicated none of them before the dispatch.
 
 verify: manual
 
@@ -606,40 +560,6 @@ The 1-minute load before each run was 6.25/11.35 (shard b, base/tip) and 10.67/3
 
 verify: manual
 
-## BL-657 — `join-remediator-shards.sh --rerun` gives a record-only re-run no identity, so a correct text repair passes only if the re-run makes an edit no finding asked for
-
-**DEFECT.** Reported by ai-dlc-f7, read-only on graph's s319 lead (0.818.0, transcript `74de15ba`, architecture elicitation repair, part 5). Intake ai-dlc-40.
-
-The instance:
-1. Line 3314: the first join refused part 5 because `the F-1 — MAJOR entry is dispositioned repaired while its claim sets part of the fix aside ... names no hand-off`. The cure is a record change. The text repair in `sections/5.md` was correct.
-2. Line 3343: the lead re-dispatched part 5 as `a042cd411e71b1ce4` and told it to "keep the F-1 text repair already in the section file", so it rewrote the record only.
-3. Line 3393: the join with `--rerun 5.md@2026-10-17T18:53:52Z` refused three ways: `is not its re-run writer`, `written by its re-run writer`, and `which no dispatched agent wrote`.
-4. Line 3438: a second re-run, `af58dac98f4b93dfd`, was briefed "you MUST make at least one genuine `Edit` ... to the section file", and it did.
-
-Intake read graph's write ledger (`_bmad-output/planning-artifacts/.artifact-writes.jsonl`) for that repair's part 5:
-- `a042cd411e71b1ce4` wrote only `5.md`, at 18:54:40Z and 18:56:40Z, after S_P.
-- The original writer `abd88800a2c928e2e` wrote `sections/5.md` at 18:48:53-57Z and `5.md` at 18:49:24-35Z, all before S_P.
-- `af58dac98f4b93dfd` wrote `sections/5.md` at 18:57:51Z, then `5.md`.
-Control: an agent id absent from the ledger matched 0.
-
-Cause. `core/scripts/join-remediator-shards.sh:111-112` at origin/main `06ae8b85` defines the re-run writer only as "any writer of F_P at or after S_P", where F_P is the set of files P's `edit:` lines cite. Graph's installed copy is byte-identical (same md5). An agent that writes only P's own record therefore has no re-run-writer identity, and its record row is refused under :110. Once the superseded rows before S_P are dropped, F_P has no writer left, and the UNWRITTEN arm fires.
-
-`core/skills/ai-dlc/steps/_gate-procedures.md` step 1b says "The re-run writer rewrites the part's own record ... after S_P" and never says the re-run must also write F_P. Step 1b is gated at :916 on two refusal shapes only, `which no dispatched agent wrote` and `written by more than one agent`. The refusal that started this one is the hand-off rule at :912, which no recovery step covers.
-
-Consequence: one wasted re-dispatch (about 3 minutes plus a turn), and a gate pass that now carries a document edit no finding asked for, made because the lead's brief demanded it.
-
-Fix (builder weighs both against the arms at :96-112):
-- (a) The re-run writer is the agent dispatched at or after S_P that wrote P's own record. When that agent makes no F_P write and its record accounts for the whole diff, as step 1b already requires, the superseded writers' F_P rows stand.
-- (b) Add a step-1b variant for a record-only refusal, with the gate covering that refusal shape.
-
-Owed: a probe where a re-run rewrites only `5.md` after S_P, with `sections/5.md` last written before S_P by the superseded writer, and the join accepts it. Control: a re-run that writes nothing is refused.
-
-Related, not duplicates: archived BL-533 (alias rows in the write ledger) and the `--rerun` entry that introduced S_P.
-
-**Outcome (reported by ai-dlc-f7, read-only on graph, transcript line 3474).** The second re-run joined: `JOINED: .../architecture-elicitation-repair-p1.md (5 parts, 5 writers, 3 superseded rows)`, ESCALATED-COUNT 4 including `5.md F-1 — MAJOR`, which is the escalation the original refusal asked for. The joined record's line 4 reads `rerun: 5.md since 2026-10-17T18:57:15Z; superseded on .../sections/5.md: abd88800a2c928e2e (3 rows, 18:48:53Z..18:48:57Z)`. So `af58dac98f4b93dfd`'s one Edit to `sections/5.md` at 18:57:51Z is what identified the re-run writer, and the record-only attempt by `a042cd411e71b1ce4` left no line. The gate pass therefore rests on the edit no finding asked for.
-
-verify: manual
-
 ## BL-658 — the recover gate can deny a third Read from stage `snapshot` after both mandated Reads succeeded, because a missing PROGRESS defaults to `snapshot`
 
 **PARTIAL (v0.826.0, verified 256f0dfc) — the marker-vanished window is closed; a third call that reads stage `step` before the satisfying call's removal still denies.** `ai-dlc-recover-gate.sh` re-tests `[ -f "$MARKER" ]` directly AFTER its stage read: the satisfying Read removes the marker before the progress file, so a marker still present after the `cat` proves the stage it read was intact. A structural arm in `postcompact-rulebook-recovery` binds that removal order (exact line 1, swapped spelling 0, with mutant M4), and the race battery forces the removal between the two reads by injection (R1-R3, mutants M1-M3). Open: a third invocation that completes its stage read and re-test before the satisfying call reaches its `rm` enters `case step` and denies the digest Read with the stage-two text. Closing that needs the stage held atomically, which a re-test cannot give (see BL-666 for the same file's stage write). The receipt stays `manual` while the entry is live.
@@ -661,25 +581,6 @@ Mechanism (hypothesis from the code, not measured). In `core/hooks/ai-dlc-recove
 A hook invocation that passes :255 before that removal and reaches :362 after it sees stage `snapshot` and denies at :398, which is the observed text. Graph's installed copy differs from main (md5), but the same three lines sit at its :242, :349 and :427. The header's "THE RACE" (:116-120) covers the advisor stage's same-message race, not the read stages.
 
 Owed: an absent PROGRESS with the marker gone at :362 exits 0 (re-test `[ -f "$MARKER" ]`), or the satisfying Read removes PROGRESS before MARKER. Probe: two invocations for one session, a satisfying step Read and a third Read, with the removal forced between the second's :255 and :362. The third is allowed. Control: a genuine first-call non-snapshot Read still denies.
-
-verify: manual
-
-## BL-660 — the merge opens a code fence on any line starting with three backticks, so a prose line hides the next finding and the shard is refused with a count mismatch
-
-**NOTE.** Reported by ai-dlc-f7, read-only on graph's s319 lead (0.818.0, transcript `74de15ba`, architecture adversarial pass 1). Intake ai-dlc-40.
-
-Observed:
-- Line 3986: `REFUSED: .../shards/architecture-p1/2.md ends in 'seat-complete: ... findings=2' but its ## Findings section heads 1 finding(s)`.
-- Lines 4018 and 4027: the lead traced it to `2.md:70`, a wrapped prose line beginning "```derived fence that `ecs-deploy.sh` treats `data == null` as idle". The real fences after it then pair the wrong way round, and F-2's heading falls inside what the merge reads as a fence.
-- Line 4037: the lead edited the adversary's shard to remove the backticks, disclosed in the changelog, and re-merged.
-
-The cost was about 4 turns of diagnosis and a lead-authored edit to a gate input. Intake: the transcript reads as quoted, and an impossible-token control matched 0. The shard is untracked in graph, and its working copy now carries the edited line 70 with real `derived` fences at :73/:83, :110/:116 and :141/:154.
-
-Cause. `core/scripts/merge-adversarial-shards.sh:378` at origin/main `edcae8aa` reads `/^[ \t]*(```|~~~)/ { fence = !fence; next }`, and `:1152` repeats the toggle in `same_set`. Graph's installed copy, md5-identical to 0.818.0's, has the same two lines at :929 and :983. Any line opening with three backticks flips the state, whatever follows. Under CommonMark a backtick fence's info string cannot contain a backtick, so `2.md:70` is not a fence opener. The refusal names a count mismatch, not the fence, so the cause had to be found by hand.
-
-Owed: open a fence only where the info string carries no backtick, or name, in the count-mismatch refusal, any `###`-hiding fence opener inside `## Findings`. Probe: a shard whose prose line starts "```derived fence that `x`", followed by a real ```derived block and two findings, counts 2. Control: a genuinely unclosed fence still refuses.
-
-Related, not duplicates: archived BL-577 (a `### ` non-finding subsection counted, closed in 0.822.0), and archived BL-162 (the derived-fence opener matched at column 0 only).
 
 verify: manual
 
@@ -709,6 +610,8 @@ verify: manual
 **NOTE.** Found by BL-530's tip adversary (0.824.0, NOTE 6), filed by the lead as BL-669. `merge-adversarial-shards.sh` refuses a shard whose bytes differ from its newest content-seal row, and a Write or Edit by ANY actor re-seals the file. A top-level session's Edit therefore writes a seal row (`actor: "session"`, no `agent_id`) and the shard merges with the lead's bytes in it. The merge's role check ("only an adversary writes an adversary shard") reads `kind: "artifact-write"` rows keyed on a non-empty `agent_id`, so the session's Edit is invisible to it too. Every one of BL-530's six instances is a Bash channel; this one is the sanctioned channel used by the wrong actor, which the seal attests as recorded and never as permitted (`content-seal.sh` LIMITS: "a seal attests the channel of the last write, not who should have made it").
 
 Owed: a shard whose newest seal row is `actor: "session"` refuses at merge, as a gate part already does, naming re-dispatch as the remedy; or the role check reads seal rows as well as artifact-write rows. Probe: an adversary Write then a session Edit on one shard refuses; control: an adversary Write then the same adversary's Edit merges.
+
+Judge the LAST NON-PROGRAM tool row, never the newest row. Once `wait-for-deliverable.sh --mark` seals a shard as `program:wait-for-deliverable`, its newest seal row is that program row. A lead Edit followed by the seat's `--mark` would then hide the session row behind it, and a newest-row test would pass it.
 
 verify: manual
 
@@ -747,5 +650,44 @@ Graph's 988 shards carry 0 commented count lines, so writers strip in practice. 
 Fixed here by prose: both region instructions tell the shard to delete each trailing ` #` comment, and each sentence has a `process-rule-pins` row (`elic-header-strip`, `adv-header-strip`).
 
 Residual: the root fix is one comment-strip in the merge's own reader, `merge-adversarial-shards.sh` ~:371-374, after which the two prose sentences are redundant.
+
+verify: manual
+
+## BL-672 — the adversarial-shard merge's mutant battery grew by a third at 0.824.0, plausibly one seal-check subprocess per merge call
+
+**DEFECT (efficiency).** Measured at 0.824.0's dress rehearsal, a hooked push of the release tree (the commit later squashed as a6e29a7e), load 23-28: the suite pole
+`adversarial-shard-merge-mutants` ran 2246s loaded, against 1681s recorded before that run, which is +565s, about a
+third. The whole push took 2893s. The cost is a loaded figure and must not be compared with a solo one.
+
+Hypothesis, unmeasured: 0.824.0 (BL-530) made `merge-adversarial-shards.sh` run a `bash content-seal.sh --check`
+subprocess on every merge call, and the battery runs the merge once per mutant copy per arm, so the subprocess cost is
+multiplied across the whole battery. If so, this is the CLAUDE.md case "a change to a validator the pole invokes is a
+change to the suite's wall clock", raised by the change that introduced it.
+
+Owed, in a slot with nothing else on the box (a pole timing):
+1. Per-merge-call CPU-seconds at e91b4d86 against 0.824.0. Take them in clean worktrees at the same path, with
+   interleaved reps, and a spread small enough to resolve the effect.
+2. Ablate the seal call at the tip and difference it.
+Then choose the fix by measurement: for example one `--check` over the whole input set per merge rather than one per
+file, if that is the shape. If the seal call is not the cost, say what is.
+
+verify: manual
+
+## BL-673 — the rotator reads a LANDED line's sha with a greedy sed, so later prose saying "verified <word>" replaces the sha
+
+**DEFECT.** Found at 0.829.0's gate, and filed by the lead. `scripts/backlog-rotate.sh:483` reads the sha as
+`sed -n 's/.*verified \([0-9a-f][0-9a-f]*\).*/\1/p'`. The leading `.*` is greedy, so it matches the LAST
+`verified ` followed by a hex digit anywhere on the line, not the one inside the annotation. BL-537's
+LANDED line went on to say the second subject "was verified against the shipping join", and `a` is a hex
+digit, so the rotator read the sha as `a`, reported `the annotation's sha a DOES NOT RESOLVE`, and refused to
+move a correct entry. The entry rotated only after that phrase was reworded.
+
+Two outcomes, depending on the prose: a correct LANDED line is refused (as here), or, when the later word happens
+to be a real short sha, the wrong commit is checked and the check passes on evidence the annotation never named.
+
+Owed: anchor the read on the annotation's own form,
+`s/^\(<br>\)\{0,1\}\*\*LANDED (v[^,]*, verified \([0-9a-f]\{7,\}\)).*/\2/p`, so only the sha inside the bold form
+is taken. Probe: a LANDED line whose prose later says "verified against" parses to its own sha. Control: a LANDED
+line with no later "verified" parses the same as today.
 
 verify: manual

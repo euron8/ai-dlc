@@ -945,6 +945,97 @@ p_chkrec() { # --escalations: a record with neither field is outside the era -> 
   esc_rec "$1" '- advisor: called\n\n### F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n'
   [ "$r0" -eq 0 ] && [ "$RC" -eq 2 ] && has "$JO" "stories-repair-p1.md: no derivations: line"
 }
+# ---- THE GAP-FILL LOCATION (BL-556): the GAPFILL line names where the edit landed, report-only.
+p_gaploc() { # --escalations, one world: (a) a gap-fill edit citing a LIVE file under a section that cites D-5
+  # -> the suffix names D-5; (b) the same claim editing the ADJACENT section of that file, whose only token
+  # sits in a fence -> "cites no ... decision"; (c) a dead `sections/5.md` resolved through the retained
+  # .manifest part row 05 (padded) to the document span -> D-5, "(span of ..., lines may have moved)";
+  # (d) a cite resolving nowhere -> "location unresolved". rc 0, every line after ESCALATED-COUNT.
+  local w; w="$(mktemp -d "$WORK/gap.XXXXXX")" && mkdir -p "$w/.claude" "$w/d/sections" || return 1
+  printf '# PRD\n\n## Net P&L\nShow - per D-5.\nThe card line.\n\n## Collect\nThe collect line.\n```text\nD-6\n```\n' > "$w/d/prd.md"
+  printf 'document\t%s\npart\t05\t3\t6\t## Net P&L\npart\t06\t7\t11\t## Collect\n' "$w/d/prd.md" > "$w/d/sections/.manifest"
+  printf '%b' '### F-4\n- disposition: repaired\n- edit: d/prd.md:5\n- siblings: n/a (insertion)\n- claim now asserted: a gap fill the lead may veto.\n\n### F-5\n- disposition: repaired\n- edit: d/prd.md:8\n- siblings: n/a (insertion)\n- claim now asserted: a gap fill the lead may veto.\n\n### F-7\n- disposition: repaired\n- edit: d/sections/5.md:2\n- siblings: n/a (insertion)\n- claim now asserted: a gap fill the lead may veto.\n\n### F-8\n- disposition: repaired\n- edit: d/gone/9.md:2\n- siblings: n/a (insertion)\n- claim now asserted: a gap fill the lead may veto.\n\n### F-9\n- disposition: escalated\n- edit: n/a\n' > "$w/stories-repair-p1.md"
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --escalations "$w/stories-repair-p1.md" --sprint 305 > "$JO" 2>&1; RC=$?
+  [ "$RC" -eq 0 ] && ! has "$JO" "REFUSED" && has "$JO" "ESCALATED-COUNT: 1 (0 closed" \
+    && has "$JO" "F-4 -- repaired while" && has "$JO" "-- lands in d/prd.md:5 under 'Net P&L', which cites D-5" \
+    && has "$JO" "-- lands in d/prd.md:8 under 'Collect', which cites no D-, LR- or LRC- decision" \
+    && has "$JO" "-- lands in $w/d/prd.md:4 (span of d/sections/5.md:2, lines may have moved) under 'Net P&L', which cites D-5" \
+    && has "$JO" "-- location unresolved (d/gone/9.md:2)" \
+    && [ "$(grep -n 'ESCALATED-COUNT' "$JO" | cut -d: -f1)" -lt "$(grep -n '^GAPFILL:' "$JO" | head -1 | cut -d: -f1)" ]
+}
+# ---- THE SUPERSEDES CHAIN (BL-565): p565's three seeds plus the dangling link, each its own world.
+SUP_A='<!-- shard: 01.md -->\n### F-1 — MAJOR\n- source: s-1.md#F-1\n- disposition: escalated\n- edit: n/a\n\n### S-1 — MAJOR\n- source: 01.md#F-1\n- disposition: escalated\n- supersedes: 01.md F-1 — MAJOR\n- edit: n/a\n'
+p_supchain() { # (a) a serial escalation superseding the part escalation -> ESCALATED-COUNT 1, the part member
+  # on its own ESCALATED-SUPERSEDED line, the chain on a CHAIN line; (b) the same without supersedes: -> 2;
+  # (c) a fold closing only the serial member -> 1, the part member open and FLAGGED; (d) a supersedes:
+  # naming a LATER escalation -> rc 2 as dangling, the count still printed
+  esc_rec "$1" "$SUP_A"
+  [ "$RC" -eq 0 ] && has "$JO" "ESCALATED-COUNT: 1 (0 closed" && grep -qx 'ESCALATED-SUPERSEDED: 01.md F-1 — MAJOR' "$JO" \
+    && has "$JO" "CHAIN: 01.md S-1 — MAJOR supersedes 01.md F-1 — MAJOR" && ! has "$JO" "ESCALATED: 01.md F-1" || return 1
+  esc_rec "$1" "$(printf '%s' "$SUP_A" | sed 's/\\n- supersedes: 01.md F-1 — MAJOR//')"
+  [ "$RC" -eq 0 ] && has "$JO" "ESCALATED-COUNT: 2 (0 closed" && ! has "$JO" "CHAIN" || return 1
+  esc_rec "$1" "${SUP_A}\n### A-1\n- disposition: repaired\n- closes: 01.md S-1 — MAJOR\n- edit: n/a (operator answer folded)\n"
+  [ "$RC" -eq 0 ] && has "$JO" "ESCALATED-COUNT: 1 (1 closed" && has "$JO" "ESCALATED: 01.md F-1 — MAJOR" \
+    && has "$JO" "CHAIN-OPEN: closes: named 01.md S-1 — MAJOR and left 01.md F-1 — MAJOR open" \
+    && [ "$(grep -n 'ESCALATED-COUNT' "$JO" | cut -d: -f1)" -lt "$(grep -n '^CHAIN-OPEN:' "$JO" | cut -d: -f1)" ] || return 1
+  esc_rec "$1" '<!-- shard: 01.md -->\n### S-1 — MAJOR\n- disposition: escalated\n- supersedes: 01.md S-2 — MAJOR\n- edit: n/a\n\n### S-2 — MAJOR\n- disposition: escalated\n- edit: n/a\n'
+  [ "$RC" -eq 2 ] && has "$JO" "the S-1 — MAJOR entry's 'supersedes: 01.md S-2 — MAJOR' names no earlier escalation" \
+    && has "$JO" "ESCALATED-COUNT: 2 (0 closed"
+}
+# ---- ONE FENCE GRAMMAR across the record readers: a fence closes only on a bare run of its own character
+# at least as long as its opener. Every cell nests a ``` block (opened with an info string) inside a ````
+# fence and puts the content the reader must NOT see between the inner closer and the outer one.
+FN_O='````md\n```text\nquoted\n```\n'
+p_fencenest() { # (a) contract_check: in the siblings era (F-0 carries the field), a repaired edit with no
+  # siblings: inside the fence is not an entry -> rc 0, nothing refused; (b) checks_field: a `derivations: not
+  # replayed` line inside it is not read -> rc 0; (c) --sources: src_kind and src_check read no part token inside
+  # it, and src_ids reads the seat heading F-98 after a nested fence in the seat file -> both seat tokens
+  # resolve, rc 0; (d) gap_section: a fenced `## ` heading is no heading, so the edit lands under the real one
+  esc_rec "$1" "### F-0 — MAJOR\n- disposition: repaired\n- edit: s305/a.md:1\n- siblings: n/a (insertion)\n\n${FN_O}### F-1 — MAJOR\n- disposition: repaired\n- edit: s305/a.md:3\n\`\`\`\`\n"
+  [ "$RC" -eq 0 ] && ! has "$JO" "REFUSED" && has "$JO" "ESCALATED-COUNT: 0 (0 closed" || return 1
+  esc_rec "$1" "- advisor: called\n- derivations: replayed 1\n\n${FN_O}- derivations: not replayed\n\`\`\`\`\n\n### F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n"
+  [ "$RC" -eq 0 ] && ! has "$JO" "REFUSED" || return 1
+  local w; w="$(mktemp -d "$WORK/src.XXXXXX")" && mkdir -p "$w/.claude" && seat_seed "$w" 305 || return 1
+  printf '%b' "\n${FN_O}\`\`\`\`\n\n## F-98 a heading after a nested fence\n" >> "$w/_bmad-output/party-mode/s305/architecture-dev-1.md" || return 1
+  src_rec "$w" "### F-1\n- disposition: repaired\n${FN_O}- source: 07.md#F-1\n\`\`\`\`\n- source: architecture-dev-1.md#F-1 architecture-dev-1.md#F-98\n" "$1"
+  [ "$RC" -eq 0 ] && has "$JO" "-- 1 entries, 2 sources, every one resolved in" || return 1
+  w="$(mktemp -d "$WORK/gap.XXXXXX")" && mkdir -p "$w/.claude" "$w/d" || return 1
+  printf '%b' "# PRD\n\n## Net P&L\nShow - per D-5.\n${FN_O}## Fenced\n\`\`\`\`\nThe card line.\n" > "$w/d/prd.md"
+  printf '%b' '### F-4\n- disposition: repaired\n- edit: d/prd.md:11\n- siblings: n/a (insertion)\n- claim now asserted: a gap fill the lead may veto.\n' > "$w/stories-repair-p1.md"
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --escalations "$w/stories-repair-p1.md" --sprint 305 > "$JO" 2>&1; RC=$?
+  [ "$RC" -eq 0 ] && has "$JO" "-- lands in d/prd.md:11 under 'Net P&L', which cites D-5"
+}
+# ---- THE SERIAL BLOCKS (BL-557): segmented by their column-0 `repair-complete:` terminators.
+CHS_HEAD='- artifact: r.md\n\n<!-- shard: 01.md -->\n- artifact: p.md\n- advisor: called\n- derivations: replayed 1\n\n### F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\n### F-2 — MAJOR\n- disposition: escalated\n- edit: n/a\n\n- artifact: p.md\n- advisor: called\n- derivations: replayed 2\n\n### S-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\nrepair-complete: serial 1\n'
+CHS_TAIL='\n### S-2 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\nrepair-complete: serial 2\n'
+p_chkserial() { # --escalations over a joined record carrying TWO serial blocks, the part and the first block
+  # stating both lines: the second block omits both -> rc 2 naming THAT block's terminator, the count
+  # still printed; the same record with the second block stating both -> rc 0. A last-triple or
+  # last-part read lends the second block the first block's or the part's lines and reads 0 both ways.
+  esc_rec "$1" "${CHS_HEAD}${CHS_TAIL}"
+  local r1="$RC"
+  has "$JO" "no advisor: line (the block closed at line 30 by 'repair-complete: serial 2')" \
+    && has "$JO" "no derivations: line (the block closed at line 30 by 'repair-complete: serial 2')" \
+    && ! has "$JO" "serial 1')" && has "$JO" "ESCALATED-COUNT: 1 (0 closed" || return 1
+  esc_rec "$1" "${CHS_HEAD}- advisor: unavailable\n- derivations: replayed 0\n${CHS_TAIL}"
+  [ "$r1" -eq 2 ] && [ "$RC" -eq 0 ] && ! has "$JO" "REFUSED" && has "$JO" "ESCALATED: 01.md F-2 — MAJOR" || return 1
+  # A PART THAT WROTE NO TRIPLE (of graph's 266 s317-s319 parts, 5 repair parts with entries and no triple,
+  # plus 6 one-line *-done.md markers with no entries): the serial block opens BY POSITION at
+  # its own triple, below the part's entries, so a correct block passes; with no serial triple it is
+  # refused by name. A count rule ("the second triple") refuses the correct block.
+  esc_rec "$1" "- artifact: r.md\n\n<!-- shard: 01.md -->\n### F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\n- artifact: s.md\n- advisor: called\n- derivations: replayed 0\n\n### S-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\nrepair-complete: serial 1\n"
+  [ "$RC" -eq 0 ] && ! has "$JO" "REFUSED" && has "$JO" "ESCALATED-COUNT: 0" || return 1
+  esc_rec "$1" "- artifact: r.md\n\n<!-- shard: 01.md -->\n### F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\n### S-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\nrepair-complete: serial 1\n"
+  [ "$RC" -eq 2 ] && has "$JO" "opens with no sha triple of its own after the entries of the last shard" \
+    && has "$JO" "ESCALATED-COUNT: 0" || return 1
+  # A TITLE IS NOT AN ENTRY: a non-entry `### ` heading above the part's own triple must not hand that
+  # triple to the serial block, so the serial triple stating neither line is refused for both. An entry
+  # is seen at its `disposition:` line; an any-`### ` rule lends the block the part's lines and reads rc 0.
+  esc_rec "$1" "- artifact: r.md\n\n<!-- shard: 01.md -->\n### Repair record -- shard 01\n- artifact: p.md\n- advisor: called\n- derivations: replayed 1\n\n### F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\n- artifact: s.md\n\n### S-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\nrepair-complete: serial 1\n"
+  [ "$RC" -eq 2 ] && has "$JO" "no advisor: line (the block closed at line 19 by 'repair-complete: serial 1')" \
+    && has "$JO" "no derivations: line (the block closed at line 19 by 'repair-complete: serial 1')" \
+    && has "$JO" "ESCALATED-COUNT: 0"
+}
 
 # ---- RE-RUN OF ONE PART (--rerun <part>.md@<ISO>) AND THE ALIAS RULE. Every row is still the REAL
 # hook's; only its clock is pinned, by the `date` shim drive() puts on PATH when it is handed a ts.
@@ -1104,6 +1195,58 @@ p_rrsubj() { # SUBJECT mode: one SECTIONED part re-run by a new agent after S_P 
     && grep -q -- "^rerun: $o.md since $G_SP; superseded on " "$(sj_out "$w")" \
     && grep -qx -- "every subject file and section copy was written by exactly one agent in its window;" "$(sj_out "$w")"
 }
+# THE RECORD-ONLY RE-RUN (graph s319 part 5). Six sections, one writer each, every record written before
+# S_P; part 5 is re-run and its cure is a record change, so no row on sections/5.md falls after S_P.
+r5_world() { # -> world
+  local w o; w="$(new_world)" || return 1
+  { printf '# Architecture\n\n'
+    for o in 1 2 3 4 5 6; do printf '## Section %s\nThe first line of section %s, in prose.\nThe second line of section %s, in prose.\n\n' "$o" "$o" "$o"; done; } > "$w/$DOCREL"
+  bash "$PARTITION" --split "$w/$DOCREL" "$w/$RDREL" >/dev/null 2>&1 && [ -f "$w/$RDREL/sections/6.md" ] || return 1
+  gsec "$w" 1 "$AG1" 19:25:00; gsec "$w" 2 "$AG2" 19:26:00; gsec "$w" 3 "$AG3" 19:28:00
+  gsec "$w" 4 "$AG4" 19:28:10; gsec "$w" 5 "$G_A5" 19:28:20; gsec "$w" 6 "$G_A6" 19:28:30
+  for o in 1 2 3 4 5 6; do docpart "$w" "$o"; done
+  grec "$w" 1 "$AG1" 19:29:01; grec "$w" 2 "$AG2" 19:29:02; grec "$w" 3 "$AG3" 19:29:03
+  grec "$w" 4 "$AG4" 19:29:04; grec "$w" 5 "$G_A5" 19:29:05; grec "$w" 6 "$G_A6" 19:29:06
+  printf '%s' "$w"
+}
+p_rronly() { # a record-only re-run of 5.md -> JOINED, nothing on sections/5.md dropped, the record line `record-only`;
+  # a re-run writing nothing -> PRNONE alone; the original rewriting 5.md -> REFUSED; two record writers -> REFUSED;
+  # a nested child of the re-run writer editing sections/5.md after S_P counts as the re-run writer -> JOINED
+  local w o r5="--rerun 5.md: no file 5.md cites was written at or after the re-run start, so this is a record-only re-run"
+  w="$(r5_world)" || return 1
+  grec "$w" 5 "$G_NEW" 19:51:00
+  run_docjoin "$1" "$w" --rerun "5.md@$G_SP"; o="$(doc_out "$w")"
+  [ "$RC" -eq 0 ] && has "$JO" "(6 parts, 6 writers, 0 superseded rows)" && [ -f "$o" ] \
+    && grep -qx -- "rerun: 5.md since $G_SP; record-only, by $G_NEW; kept on $RDREL/sections/5.md: $G_A5 (1 rows, $(gts 19:28:20)..$(gts 19:28:20))" "$o" \
+    && has "$w/$DOCREL" "Repaired at 19:28:20 by $G_A5." || return 1
+  w="$(r5_world)" || return 1
+  rr5() { run_docjoin "$1" "$2" --rerun "5.md@$G_SP"; doc_refused "$2" "$3"; }
+  rr5 "$1" "$w" "--rerun 5.md: no row on 5.md's own part record $RDREL/5.md at or after the re-run start was written by its re-run writer" \
+    && [ "$(grep -c 'REFUSED:' "$JO")" -eq 1 ] || return 1
+  w="$(r5_world)" || return 1; grec "$w" 5 "$G_A5" 19:51:00
+  rr5 "$1" "$w" "$r5, and its own part record $RDREL/5.md was written after the start by $G_A5, which wrote 5.md's files before it" \
+    && ! has "$JO" "is not its re-run writer" || return 1
+  w="$(r5_world)" || return 1; grec "$w" 5 "$G_NEW" 19:51:00; grec "$w" 5 "$G_ORPH" 19:52:00
+  rr5 "$1" "$w" "$r5, and its own part record $RDREL/5.md was written after the start by more than one agent ($G_NEW $G_ORPH)" \
+    && ! has "$JO" "is not its re-run writer" || return 1
+  w="$(r5_world)" || return 1
+  spawn_row "$w" toolu_SPAG1 ""; spawn_row "$w" toolu_SPNC "$G_NEW"; probe_row "$w" "$NEST_C" toolu_SPNC
+  gsec "$w" 5 "$NEST_C" 19:50:00; grec "$w" 5 "$G_NEW" 19:51:00
+  run_docjoin "$1" "$w" --rerun "5.md@$G_SP"; o="$(doc_out "$w")"
+  [ "$RC" -eq 0 ] && has "$JO" "(6 parts, 6 writers, 1 superseded rows)" && [ -f "$o" ] \
+    && grep -qx -- "rerun: 5.md since $G_SP; superseded on $RDREL/sections/5.md: $G_A5 (1 rows, $(gts 19:28:20)..$(gts 19:28:20))" "$o" \
+    && grep -qx -- "nested: $NEST_C is $G_NEW's subagent (spawn toolu_SPNC); its 1 rows on $RDREL/sections/5.md are counted as $G_NEW" "$o" || return 1
+  # The record-only re-run's RECORD written by the re-run writer's nested child: folded, so the re-run is
+  # record-only by G_NEW, and that fold is NAMED on the part record, in the output and in the record.
+  w="$(r5_world)" || return 1
+  spawn_row "$w" toolu_SPAG1 ""; spawn_row "$w" toolu_SPNC "$G_NEW"; probe_row "$w" "$NEST_C" toolu_SPNC
+  grec "$w" 5 "$NEST_C" 19:51:00
+  run_docjoin "$1" "$w" --rerun "5.md@$G_SP"; o="$(doc_out "$w")"
+  local nl="nested: $NEST_C is $G_NEW's subagent (spawn toolu_SPNC); its 1 rows on $RDREL/5.md are counted as $G_NEW"
+  [ "$RC" -eq 0 ] && has "$JO" "(6 parts, 6 writers, 0 superseded rows)" && [ -f "$o" ] \
+    && grep -qx -- "rerun: 5.md since $G_SP; record-only, by $G_NEW; kept on $RDREL/sections/5.md: $G_A5 (1 rows, $(gts 19:28:20)..$(gts 19:28:20))" "$o" \
+    && grep -qx -- "$nl" "$JO" && grep -qx -- "$nl" "$o"
+}
 # THE ALIAS RULE. A row by an agent with no transcript of its own, whose tool_use_id is ONE assistant
 # tool_use in another writer's transcript, is that writer's. The transcripts are seeded in a projects
 # dir inside the world; transcript_path is the PARENT session's, carried by every row alike.
@@ -1185,6 +1328,67 @@ p_altool() { # the one tool_use holding the id is a Read, not an Edit, Write or 
   local w; w="$(al_world tool)" || return 1
   run_join "$1" "$w"
   refused "$w" "$AL_REF (tool_use_id toolu_ORPH;" && has "$JO" "the id is held by $w/projects/sess-1/subagents/agent-$AG1.jsonl (1 block(s)))"
+}
+
+# ---- A NESTED WRITER IS ITS DISPATCHER'S. The write rows come from the real hook, every evidence key
+# present; the probe row and the spawn rows are seeded with jq in the shape ai-dlc-subagent-probe.sh and
+# ai-dlc-dispatch-guard.sh write them. The spawn ledger opens with an EPOCH row that is not the subject
+# (the lead's own dispatch of AG1), so the subject row is never first.
+NEST_C=a7c1d2e3f4a5b6c7d
+probe_row() { # <world> <agent_id> <tool_use_id> -- one subagent-context.jsonl row
+  jq -nc --arg a "$2" --arg u "$3" '{v:3, ts:"2026-10-15T19:40:00Z", sprint:305, agent_id:$a, model:"claude-sonnet",
+    role:null, turns:4, peak_tokens:12000, compactions:0, duration_s:60, effort:null, definition:null,
+    tool_use_id:$u, transcript_version:"2.1.0"}' >> "$1/_bmad-output/subagent-context.jsonl"
+}
+spawn_row() { # <world> <tool_use_id> <parent_agent_id | "-" for a row with no such key> -- one spawn-ledger.jsonl row
+  jq -nc --arg u "$2" --arg p "$3" '{v:1, ts:"2026-10-15T19:20:00Z", sprint:305, name:null, role:"remediator",
+    model_pinned:null, tier_pinned:null, model_requested:null, model_bound:false, effort_bound:null,
+    role_contract_cited:true, contract_via:"prompt", role_file_readable:true, definition_bound:false,
+    definition_stale:false, name_stripped:null, tool_use_id:$u, parent_agent_id:$p, shard:null}
+    | if $p == "-" then del(.parent_agent_id) else . end' >> "$1/_bmad-output/spawn-ledger.jsonl"
+}
+nest_world() { # <variant: fold | lead | nokey | noprobe> -> world: three writers, and AG1's subagent NEST_C also editing story 2.1
+  local w tp sd; w="$(new_world)" || return 1
+  tp="$w/projects/sess-1.jsonl"; sd="$w/projects/sess-1"; mkdir -p "$sd/subagents" || return 1
+  : > "$sd/subagents/agent-$AG1.jsonl"; : > "$sd/subagents/agent-$NEST_C.jsonl"
+  spawn_row "$w" toolu_SPAG1 ""
+  case "$1" in
+    lead) spawn_row "$w" toolu_SPNC "" ;;
+    nokey) spawn_row "$w" toolu_SPNC - ;;
+    *) spawn_row "$w" toolu_SPNC "$AG1" ;;
+  esac
+  probe_row "$w" "$AG2" toolu_SPAG2
+  [ "$1" = noprobe ] || probe_row "$w" "$NEST_C" toolu_SPNC
+  drive "$w" Edit "$w/$REL/$S21" "$AG1" toolu_E1 "$tp" "$(gts 19:25:00)"
+  drive "$w" Edit "$w/$REL/$S21" "$NEST_C" toolu_E2 "$tp" "$(gts 19:25:30)"
+  drive "$w" Edit "$w/$REL/$S21" "$AG1" toolu_E3 "$tp" "$(gts 19:25:40)"
+  drive "$w" Edit "$w/$REL/$S22" "$AG2" toolu_E4 "$tp" "$(gts 19:26:00)"
+  drive "$w" Edit "$w/$REL/$S31" "$AG3" toolu_E5 "$tp" "$(gts 19:27:00)"
+  part "$w" 01 2.1; part "$w" 02 2.2; part "$w" 03 3.1
+  printf '%s' "$w"
+}
+p_nested() { # AG1's subagent edits AG1's story: folded -> JOINED with the nested: line; a lead-issued spawn, a key-less
+  # spawn row and a missing probe row each leave it unfolded -> REFUSED naming the ledger that lacked the link
+  local w o nl; w="$(nest_world fold)" || return 1
+  [ "$(jq -r 'select(.agent_id == "'"$NEST_C"'") | [.tool_use_id, .transcript_path, (.agent_transcript | tostring), .session] | join(" ")' \
+       "$w/$SJPA/.artifact-writes.jsonl")" = "toolu_E2 $w/projects/sess-1.jsonl true t" ] || return 1
+  run_join "$1" "$w"
+  o="$(out_of "$w")"
+  nl="nested: $NEST_C is $AG1's subagent (spawn toolu_SPNC); its 1 rows on $REL/$S21 are counted as $AG1"
+  [ "$RC" -eq 0 ] && has "$JO" "JOINED: " && has "$JO" "(3 parts, 3 writers)" && grep -qx -- "$nl" "$JO" \
+    && [ -f "$o" ] && grep -qx -- "$nl" "$o" || return 1
+  w="$(nest_world lead)" || return 1; run_join "$1" "$w"
+  refused "$w" "$REL/$S21 was written by more than one agent in the window: " \
+    && has "$JO" "; not folded as a nested writer: " && has "$JO" "$NEST_C (its spawn toolu_SPNC in $w/_bmad-output/spawn-ledger.jsonl is the lead's own dispatch (parent_agent_id \"\"))" \
+    && ! has "$JO" "nested: " || return 1
+  w="$(nest_world nokey)" || return 1; run_join "$1" "$w"
+  refused "$w" "$REL/$S21 was written by more than one agent in the window: " \
+    && has "$JO" "; not folded as a nested writer: " && has "$JO" "$NEST_C (its spawn toolu_SPNC in $w/_bmad-output/spawn-ledger.jsonl carries no parent_agent_id key (an older guard))" \
+    && ! has "$JO" "nested: " || return 1
+  w="$(nest_world noprobe)" || return 1; run_join "$1" "$w"
+  refused "$w" "$REL/$S21 was written by more than one agent in the window: " \
+    && has "$JO" "; not folded as a nested writer: " && has "$JO" "$NEST_C (no row for $NEST_C in $w/_bmad-output/subagent-context.jsonl)" \
+    && ! has "$JO" "nested: "
 }
 
 # ---- THE SPEC RENDER ARM (BL-546/560): --escalations --sprint 305 over a clean record, in a world whose
@@ -1328,7 +1532,7 @@ p_agentwrites() {
   [ "$RC" -eq 2 ] && has "$JO" "REFUSED:"
 }
 
-P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrargs rrfiles rrsubj alias alnokeys alresult alown alsecond alother alsess altwo altool dispkey dispvocab dispruling srcparts gapfill chkpart chkrec rulingedit rulingtab chkjoined partsilent specstale specfresh spechand specnone spectwo sjspecstale sjspecfresh sjspecnone specother specunread agentwrites"
+P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrargs rrfiles rrsubj alias alnokeys alresult alown alsecond alother alsess altwo altool nested rronly dispkey dispvocab dispruling srcparts gapfill chkpart chkrec rulingedit rulingtab chkjoined partsilent specstale specfresh spechand specnone spectwo sjspecstale sjspecfresh sjspecnone specother specunread agentwrites chkserial supchain gaploc fencenest"
 
 # ---- A PART'S DERIVATION SURVIVES THE JOIN. The part's ```derived fence is copied into the joined
 # record, and the gate re-runs `validate-artifact-derivations.sh` over the sprint dir AFTER the
