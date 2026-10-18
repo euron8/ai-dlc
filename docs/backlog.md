@@ -187,7 +187,9 @@ verify: manual
 
 Owed: a headroom arm in `validator-fork-budget` that FAILS when the STABLE reading + 2 > FORK_BUDGET, naming the remedy (re-measure and raise by the HIGH reading plus 6, per the file's own rule), so erosion reports while margin remains. It needs its own mutant (the arm with the +2 dropped must miss a seeded reading at budget - 1) and its FP set measured over the budget history in that file's paragraphs. Scope: a small later release.
 
-verify: manual
+Built (batch 236): Arm A3b of `validator-fork-budget` FAILS with `RED headroom` when the reading + 2 > FORK_BUDGET, between A3 and A4. Mutant m15 drives `judge` at the budget minus the margin plus one, and it also asserts that the margin stays under 30% of the budget, so A3b cannot meet A4's window. The margin of 2 is policy headroom over a deterministic count, not a noise allowance: fork-profile TOTAL read 3461 in 5 of 5 interleaved base/tip reps with spread 0, at FORK_BUDGET 3465, so A3b reads 3463 <= 3465 and stays green. The false-positive replay covers 65 states: every paragraph that sets or re-confirms the budget, across the whole validator history plus `fork-budget.txt`, and that count is checked against an independent grep of the openers, 65 of 65. A3b fires on 2 of them, named: v0.436.0 set 7195 on a reading of 7195, and v0.442.0 set 7196 on 7196. Both were zero-headroom budgets, which is the state A3b exists to fail; the other 63 leave headroom of 3 or more. Eight committed FORK_BUDGET values have no paragraph and no reading, so they are OUTSIDE the population, not quiet in it: 7000 d4fd318c, 7050 f7318db0, 7060 727ddc6c, 7177 3bde1ca9, 7192 81443020, 6431 5fb543b3, 3261 8f177ba7, 3405 f4ca6764. A first replay read only a 25-paragraph window, with its control taken from the same window, and reported 0 fires; it was superseded by the 65-state replay.
+
+verify: sh bash core/fixtures/validator-fork-budget/receipt-bl608.sh
 
 ## BL-587 — a reconcile that records derivations "owed to the sprint's derivation-validator step" has no channel to the sprint lead, so the debt is silently dropped
 
