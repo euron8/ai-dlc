@@ -941,7 +941,8 @@ join_scan() {
       if (c == "<" || c == "[" || c == "-") {
         k = index(rest, "`"); args = (k ? substr(rest, 1, k - 1) : rest)
         ln = 0; for (q = 1; q <= nl; q++) if (st[q] <= base + i) ln = lno[q]
-        printf "%s:%d:%d\tP=%d\t%s\n", pf, pl, ln, (tolower(p) ~ /seat|cross/), (args ~ /--complete([^A-Za-z-]|$)/ ? "COMPLETE" : "BARE")
+        # A --mark or --mark-repair call is the seat CLOSING its own file, not a join.
+        if (args !~ /^--mark(-repair)?([^A-Za-z-]|$)/) printf "%s:%d:%d\tP=%d\t%s\n", pf, pl, ln, (tolower(p) ~ /seat|cross/), (args ~ /--complete([^A-Za-z-]|$)/ ? "COMPLETE" : "BARE")
       }
       base += i + 23; s = rest
     }
@@ -971,6 +972,17 @@ printf 'Join the seats with one `scripts/ai-dlc/wait-for-deliverable.sh <path> [
 printf 'Join the artifact with one `scripts/ai-dlc/wait-for-deliverable.sh <artifact_path>` call.\n' > "$JS/exempt.md"
 printf 'The analyst with `scripts/ai-dlc/wait-for-deliverable.sh <path>`, and each wave of seat files\nwith `scripts/ai-dlc/wait-for-deliverable.sh --complete <path>`.\n' > "$JS/mixed.md"
 printf '```\nJoin the seats with `scripts/ai-dlc/wait-for-deliverable.sh <path>`.\n```\n' > "$JS/fenced.md"
+# A seat paragraph naming only the seat's own --mark close is not a join; one that also carries a
+# bare join is still flagged, so the exclusion is the --mark call's and not the paragraph's.
+printf 'Close the seat with one `scripts/ai-dlc/wait-for-deliverable.sh --mark <file> <step> <seat> <shard> findings=<n>` call.\n' > "$JS/mark.md"
+printf 'Join the seats with `scripts/ai-dlc/wait-for-deliverable.sh <path>`; each seat closes with `scripts/ai-dlc/wait-for-deliverable.sh --mark <file> s a c findings=0`.\n' > "$JS/markbare.md"
+n_mk="$(join_scan "$JS/mark.md" | grep -c .)" || n_mk=0
+n_mb="$(join_findings "$JS/markbare.md" | grep -c .)" || n_mb=0
+if [ "$n_mk" = 0 ] && [ "$n_mb" = 1 ]; then
+  ok "join-pre: a seat's --mark close is not read as a join (0 calls); a bare seat join beside one is still flagged (1)"
+else
+  bad "join-pre: FIXTURE BROKEN -- mark-only calls=$n_mk (want 0), mark+bare findings=$n_mb (want 1)"
+fi
 n_off="$(join_findings "$JS/off.md" | grep -c .)" || n_off=0
 n_ex="$(join_findings "$JS/exempt.md" | grep -c .)" || n_ex=0
 n_mx="$(join_findings "$JS/mixed.md" | grep -c .)" || n_mx=0

@@ -139,7 +139,8 @@ It enforces both bounds so you do not have to hold them:
   giving a 60-minute ceiling at the default quantum). Exhaustion over a path the
   beat reports `absent` is what Rule 20 defines as non-delivery -- **re-dispatch**
   once, then HARD_BLOCK. A `--complete` path reported `UNFINISHED` (present, not
-  closed by its `seat-complete:` line) or `UNSETTLED` (closed, still changing) is
+  closed by its `seat-complete:` line, or changed since its `sha=`) or `UNSETTLED`
+  (closed with no `sha=`, still changing) is
   not absent: read it first. The wait never runs forever. The script counts the
   beats in a sidecar keyed by the deliverable, so the sequence terminates
   whether or not you remember it.

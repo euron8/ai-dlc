@@ -83,7 +83,8 @@ source; do not infer either value from anywhere else.
 4. **Return `{artifact_path, repair_record_path, repaired, escalated}`** — counts, not prose.
 
    **A brief that carries `revised-seats: <path>…`** names seat files that changed after their
-   `seat-complete:` line was first seen. Re-read each named seat's findings from the file on disk
+   `seat-complete:` line was first seen (a seat marked without `sha=`, which the beat still
+   settles). Re-read each named seat's findings from the file on disk
    before you repair from it, and never from a summary the brief or an earlier turn gave you.
 
 ## The evidence contract — assert nothing you did not run
@@ -209,15 +210,19 @@ operator's answer, carries one `- closes:` line per member of the chain, the res
 and every part escalation it supersedes: an escalation with no `closes:` line of its own stays
 open however many of its links were closed.
 
-**As the serial remediator, or as the one unsharded remediator**, your LAST write is one line
-closing what you wrote: `repair-complete: serial <pass>`, `<pass>` being the pass your brief
-names. The unsharded remediator, whose brief reads `shard: none (serial-document)`, is the only
+**As the serial remediator, or as the one unsharded remediator**, your LAST act is ONE Bash call
+closing what you wrote: `scripts/ai-dlc/wait-for-deliverable.sh --mark-repair <record> <pass>`,
+`<pass>` being the pass your brief names. It appends `repair-complete: serial <pass> sha=<hex>`,
+whose `sha=` binds every line above it, so an edit after it reads unfinished until you run the
+same call again; never type the line by hand. This one call is the exception to "never a Bash
+redirect" above: your Edit and Write calls already recorded every entry. The unsharded remediator, whose brief reads `shard: none (serial-document)`, is the only
 pass over its record, so its record ends in that line exactly as the serial remediator's appended
-block does. Write it at column 0, as the
+block does. The call writes it at column 0, as the
 record's last non-blank line, outside any fence and never as a list item (`- repair-complete:`
-is not the line). Never write it before your last entry and never append after it; once it is
-written, do not edit the record again. The lead's join beat takes the record as delivered only
-when that line is last and the file has stopped changing, so a record without it reads as
+is not the line); it refuses a record whose last line sits inside an open fence. Never run it
+before your last entry and never append after it; once it is marked, do not edit the record
+again. The lead's join beat takes the record as delivered only when that line is last and its
+`sha=` matches the record above it, so a record without it reads as
 unfinished however many entries it holds. The line closes your block only: a later appender,
 such as a spec re-render, writes its own block after it. A part or shard remediator writes no
 such line: the join concatenates the parts into the record the serial remediator appends to, so

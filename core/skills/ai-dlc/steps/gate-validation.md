@@ -2264,8 +2264,9 @@ recorded. The validator resolves this session's transcript itself; pass no path:
 **On FAIL.** The validator names the offending calls. The remedy depends on which arm fired,
 and only one of them has something left to do:
 
-- **Arms A / C (starvation, unbounded wait).** Re-issue any still-pending wait through
-  `scripts/ai-dlc/wait-for-deliverable.sh` — one call, every path in the wave,
+- **Arms A / C (starvation, unbounded wait).** Re-issue each still-pending wait through
+  `scripts/ai-dlc/wait-for-deliverable.sh` with the original call's flags (`--complete`,
+  `--complete-repair`, `--shard-header`, `--dispatch`, `--since`, as it was armed) — one call per wave, every path in the wave,
   `run_in_background: true` (`_gate-procedures.md`, "Bounded-join beat") — and record the
   count.
 - **Arm B (steamroll), and arm D.** Nothing to re-issue. These fire on a historical fact in
