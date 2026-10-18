@@ -26,6 +26,7 @@
 # Usage: run.sh
 # Exit:  0 = every assertion holds, 1 = one regressed, 2 = fixture broken.
 set -uo pipefail
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "backlog-ledger: FIXTURE BROKEN: core/fixtures/lib/preamble.sh is absent" >&2; exit 2; }
 # Ambient AI_DLC_* cleared, as the suite does: seed E sets AI_DLC_RECONCILE_MEMO itself on the
 # drive that needs it, and an inherited one would otherwise decide which drive is "no memo".
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
