@@ -394,7 +394,16 @@ Owed: derive the self-check's step list from the hook's above-pool step list rat
 
 Related: BL-585 (which introduced the self-check), and the lead's process rule that every gate ask cites a self-check rc 0 at the exact tip, which this entry makes worth trusting.
 
-verify: manual
+Built (batch 236): The self-check now runs the hook's own above-pool prefix, so its step list is the hook's by construction, with no hand list and no hook edit. It cuts `.githooks/pre-push` up to the single `step "fixture suite` line, appends `exit $fail`, and runs the result. Four guards refuse with exit 2: the marker must occur exactly once, the prefix must pass `bash -n`, it must declare at least one step, and the PASS/FAIL verdicts printed must equal the steps declared. One rep at load 2-3.6, from the owner's slot (1), gave this table:
+
+| Run | Steps | Wall clock |
+|---|---|---|
+| Hook prefix | 20 | 66 s |
+| Old hand list (enforcement-map integrity 29 s, shell portability 5 s) | 2 | 34 s |
+
+The trade is +32 s for the 18 steps the hand list never ran, of which no-dead-doc-refs is 19 s and the other 16 steps total 13 s. The measured miss it closes is c2's 0.808.0, whose self-check was rc 0 at `0e413c8e` and then went red at the gate on "fixture git-env scrub".
+
+verify: sh bash core/fixtures/pregate-self-check/receipt-bl643.sh
 
 ## BL-651 — I84 accepts a `stories_dir` reader whose only mention of the sprint slot is a comment
 

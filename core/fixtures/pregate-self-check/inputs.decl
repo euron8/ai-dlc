@@ -1,0 +1,11 @@
+# The scripts under test: the self-check, REQUIRED (run.sh prints the sentinel once it has found it).
+!scripts/pregate-self-check.sh
+# The grammar and probe the self-check loads from its own tree; the receipt copies both into its SELF tree.
+!core/fixtures/procsub-staged-refusal/procsub-spell.awk
+!core/fixtures/procsub-staged-refusal/procsub-spell-probe.diff
+core/fixtures/procsub-staged-refusal/
+# The receipt run.sh drives, and the preamble sourced on line 2.
+!core/fixtures/pregate-self-check/receipt-bl643.sh
+core/fixtures/lib/
+# run.sh and the self-check walk up for VERSION.
+VERSION
