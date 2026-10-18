@@ -6612,35 +6612,46 @@ else
     # excluded entry on it names, literally, a file that the same fixture's inputs.decl carries with
     # `+`. Everything else is flagged as before: an undeclared path, a path declared without `+`, a
     # `+` on a different path, a `+` in a SIBLING fixture's declaration, and a reach whose path is a
-    # variable (`$ROOT/docs/$x`), because nothing can say what it names. An unreadable source line or
-    # declaration acquits nothing (awk getline returns -1 there and the count stays short).
+    # variable (`$ROOT/docs/$x`), because nothing can say what it names. An unreadable declaration
+    # acquits nothing (awk getline returns -1 there and the count stays short).
     # ONE FUNCTION FOR THE PROBE AND THE CORPUS, so the probe certifies the instrument the scan uses.
-    # Cost: the grep is the one it replaces; the awk runs once per excluded entry, over its hits only.
+    #
+    # ONE PASS FOR EVERY ENTRY. The entries arrive as one space-separated argument (the EXCLUDE
+    # grammar admits no space). One grep selects every line reaching ANY of them by alternation; the
+    # awk then re-derives, PER ENTRY and in argument order, the exact `-o` matches a per-entry
+    # `grep -o` would have printed: each root-prefixed reach whose following text is literally that
+    # entry and then a boundary, as `<file>:<line>:<prefix><entry><boundary>`. Matching the entry by
+    # substr equality rather than by a regex is what keeps attribution exact: a line reaching two
+    # entries is reported under each, `docs` cannot claim `docs.x`, and a dot is never a wildcard. The
+    # hits are held per entry INDEX and printed in END, entry by entry, so the output is the
+    # concatenation the per-entry calls produced, a duplicated entry included. Cost: one grep and one
+    # awk per call, where the corpus used to pay one of each per excluded entry.
     i55_roots='(REPO_ROOT|ROOT|D_ROOT|C_ROOT)'
-    i55_reach_scan() { # <tree root> <excluded entry> -> unacquitted `<abs file>:<line>:<match>` hits
-      local re
-      re="${2//./\\.}"   # parameter expansion, not printf|sed: no fork per call
-      grep -rHnoE '\$\{?'"$i55_roots"'\}?/'"$re"'([/"'"'"' ]|$)' "$1"/core/fixtures/*/*.sh 2>/dev/null \
-        | awk -v e="$2" -v rootre="$i55_roots" '
+    i55_reach_scan() { # <tree root> <excluded entries, space-separated> -> unacquitted `<abs file>:<line>:<match>` hits, grouped by entry in argument order
+      local alt
+      [ -n "$2" ] || return 0
+      alt="${2//./\\.}"; alt="${alt// /|}"   # parameter expansion, not a split loop: no glob, no fork
+      grep -rHnE '\$\{?'"$i55_roots"'\}?/('"$alt"')([/"'"'"' ]|$)' "$1"/core/fixtures/*/*.sh 2>/dev/null \
+        | awk -v el="$2" -v rootre="$i55_roots" '
           function plusset(dir,   f, l, c, x) {
             if (dir in PD) return; PD[dir] = 1; f = dir "/inputs.decl"
             while ((getline l < f) > 0) { sub(/\r$/, "", l); x = 0
               if (substr(l, 1, 1) == "+") { x = 1; l = substr(l, 2) }
               if (x && substr(l, 1, 1) != "!") PLUS[dir SUBSEP l] = 1 }
             close(f) }
+          BEGIN { ne = split(el, E, " "); pat = "\\$\\{?" rootre "\\}?/" }
           { line = $0; t = index(line, ":"); file = substr(line, 1, t - 1); rest = substr(line, t + 1)
-            t = index(rest, ":"); ln = substr(rest, 1, t - 1) + 0
-            if ((file SUBSEP ln) in SEEN) { if (!SEEN[file SUBSEP ln]) print line; next }
+            t = index(rest, ":"); ln = substr(rest, 1, t - 1) + 0; src = substr(rest, t + 1)
             dir = file; sub(/\/[^\/]*$/, "", dir); plusset(dir)
-            src = ""; n = 0; while ((getline l < file) > 0) { n++; if (n == ln) { src = l; break } }; close(file)
-            ok = 0; all = 0; s = src
-            pat = "\\$\\{?" rootre "\\}?/"
+            for (i = 1; i <= ne; i++) { e = E[i]
+            ok = 0; all = 0; s = src; hits = ""
             while (match(s, pat)) {
+              m = substr(s, RSTART, RLENGTH)
               s = substr(s, RSTART + RLENGTH)
               if (substr(s, 1, length(e)) != e) continue
               nx = substr(s, length(e) + 1, 1)
               if (nx != "/" && nx != "\"" && nx != "'"'"'" && nx != " " && nx != "") continue
-              all++
+              all++; hits = hits file ":" ln ":" m e nx "\n"
               p = e; r = substr(s, length(e) + 1)
               if (match(r, /^(\/[A-Za-z0-9._-]+)+/)) { p = e substr(r, 1, RLENGTH); r = substr(r, RLENGTH + 1) }
               # THE PATH MUST END AT A BOUNDARY. A following `$`, `*`, `?`, `[`, `{` or backtick
@@ -6651,8 +6662,8 @@ else
               if (b == "\"" || b == "'"'"'") b = substr(r, 2, 1)
               if (b != "" && b != " " && b != "\t" && b != ";" && b != ")" && b != "<" && b != ">" && b != "|" && b != "&") continue
               if ((dir SUBSEP p) in PLUS) ok++ }
-            SEEN[file SUBSEP ln] = (all > 0 && ok == all)
-            if (!SEEN[file SUBSEP ln]) print line }'
+            if (!(all > 0 && ok == all)) OUT[i] = OUT[i] hits } }
+          END { for (i = 1; i <= ne; i++) printf "%s", OUT[i] }'
     }
     # SELF-PROBE, BOTH DIRECTIONS, through i55_reach_scan, before the corpus. Ten fixtures, each one
     # property from the acquitted one: (a) `+` declared, literal path -> acquitted; (b) declared without
@@ -6715,21 +6726,19 @@ else
       i55_reach=""
       i55_nl='
 '
+      i55_ents=""
       while IFS= read -r e; do
         [ -n "$e" ] || continue
         [ "$e" = ".git" ] && continue
-        # Strip the root prefix from each line with parameter expansion, not a piped sed.
-        i55_raw="$(i55_reach_scan "$REPO_ROOT" "$e")"
-        i55_hit=""
-        if [ -n "$i55_raw" ]; then
-          while IFS= read -r i55_l; do
-            i55_hit="${i55_hit}${i55_nl}${i55_l#"$REPO_ROOT"/}"
-          done <<<"$i55_raw"
-          i55_hit="${i55_hit#"$i55_nl"}"
-        fi
-        [ -n "$i55_hit" ] && i55_reach="${i55_reach}
-${i55_hit}"
+        i55_ents="${i55_ents} $e"
       done <<<"$i55_excl"
+      # One scan for every entry; strip the root prefix from each line with parameter expansion.
+      i55_raw="$(i55_reach_scan "$REPO_ROOT" "${i55_ents# }")"
+      if [ -n "$i55_raw" ]; then
+        while IFS= read -r i55_l; do
+          i55_reach="${i55_reach}${i55_nl}${i55_l#"$REPO_ROOT"/}"
+        done <<<"$i55_raw"
+      fi
       [ -n "$i55_reach" ] && err "I55 fixture(s) reach a content-key-EXCLUDED path at the distribution root:${i55_reach}
 The pre-push hook skips the entire fixture suite when the key is unchanged, and the key does not hash those paths -- so a fixture reading one is a fixture whose input can change without the suite ever re-running. Either stop reading it, or delete its line from suite-content-key.sh's EXCLUDE block and re-take the mutation measurement recorded in that script's header."
     fi
