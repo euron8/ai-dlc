@@ -79,11 +79,12 @@
 # THE KEY -- every field required; any field that cannot be computed is a miss, never a hit:
 #   engine       every file under this directory, by relative name and content hash (not path, not
 #                mtime), so a record from any other engine is refused in both directions;
-#   base/theirs  each one's commit object AND its `:core` tree, resolved in <dist>; the ref STRING is
-#                not the key, because a symbolic `origin/main` moves;
-#   distrefs     <dist>'s refs (`for-each-ref`, which lists refs/replace/* too), its HEAD, and
-#                whether it is shallow;
-#   consroot     `pwd -P` of <consumer>, because the region renders absolute consumer paths;
+#   base/theirs  each one AS TYPED (the region prints it so), then its commit object AND its `:core`
+#                tree resolved in <dist> (a symbolic `origin/main` moves under one spelling);
+#   distrefs     <dist>'s refs (`for-each-ref`, which lists refs/replace/* too), its HEAD, whether it
+#                is shallow, its EFFECTIVE `config --list` (global and system through $HOME), and the
+#                auto-abbrev length of theirs -- every rendered `%h` comes from <dist>;
+#   consroot     `pwd -P` of <consumer> and <consumer> as typed: the region prints both forms;
 #   consindex    `ls-files -s` (mode, blob, path: the exec bit and tracked-ness);
 #   conswork     `status --porcelain=v2 --untracked-files=all` plus the bytes of every modified or
 #                untracked path, EXCLUDING ONLY the report file itself (never its directory: the
@@ -91,12 +92,24 @@
 #   consignored  name, bytes and exec bit of every IGNORED file under the engine's read roots:
 #                `.claude/` (not `.claude/worktrees/`), `_bmad-output/`, every `corpus-root:` in
 #                predicate-sites.md, and the other consumer paths the detectors name;
-#   consobjects  <consumer>'s `for-each-ref` (an override's `base_sha` resolves there);
-#   env          `AI_DLC_KNOWN_SKILLS_EXT`, set and unset distinguished, and the file it names;
+#   consobjects  <consumer>'s `for-each-ref` and its EFFECTIVE `config --list`;
+#   consresolve  each override `base_sha` and the stamp's `commit:` / `skill_commit:`, resolved as a
+#                commit through the OBJECT STORE of <dist> and of <consumer> (not through refs: a
+#                prune of an unreferenced commit moves the region with no ref moving), or `unresolved`;
+#   env          LANG, LC_ALL, LC_COLLATE, LC_CTYPE and `AI_DLC_KNOWN_SKILLS_EXT`, each set and unset
+#                distinguished, and the file the last one names;
 #   region       the report region's hash after the dist-path normalisation below, which must equal
 #                the region of the render that passed -- an edit OUTSIDE the region still hits, one
 #                byte inside it misses.
+# A directory under <consumer> (pruning `.git` and `.claude/worktrees`) that the user cannot read and
+# search refuses both the hit and the record: git lists nothing beneath it, so no field could see it.
 # On a hit the preclassify-refusal check is not re-run: it ran on the render the record came from.
+#
+# OFF BY DEFAULT. A recorded PASS is ACCEPTED only when `EMIT_REPORT_VERIFY_CACHE=1` is set (exactly
+# `1`; no `AI_DLC_` prefix, because fixtures scrub those) and `AI_DLC_VERIFY_NO_CACHE` is empty. The
+# record is WRITTEN regardless, so turning the cache on later finds records in place. With the
+# opt-in unset, every path's stdout, stderr and exit are what they were before the cache existed.
+# The default turns ON only in a later release, after an adversary round on the key finds no BLOCKER.
 #
 # THE LIMITS, STATED RATHER THAN HIDDEN. (1) The record is a CACHE, NOT AN ATTESTATION: anyone who
 # can write the git-dir can forge one, and `AI_DLC_VERIFY_NO_CACHE=1` (any non-empty value) forces a
@@ -1056,6 +1069,14 @@ er_kf_distrefs() {
   # detached HEAD on unreferenced commits moved the region with every listed ref unchanged.
   git -C "$DIST" rev-parse HEAD || return 1
   git -C "$DIST" rev-parse --is-shallow-repository || return 1
+  # The EFFECTIVE config (local, global through $HOME, system) and the auto-abbrev length: every
+  # `%h` the region renders comes from <dist> (ledger-reverify.sh, retired-fixtures.sh), and its
+  # length moves with core.abbrev or with the object count, with no ref moving.
+  echo "config"
+  git -C "$DIST" config --list || return 1
+  local _ab
+  _ab="$(git -C "$DIST" rev-parse --short "$THEIRS")" || return 1
+  echo "abbrev ${#_ab}"
 }
 # Resolved AND as typed: the region's `full: diff` lines print <consumer> as the caller spelled it.
 er_kf_consroot()  { printf '%s\0%s\0' "$_er_root" "$CONSUMER"; }
@@ -1098,8 +1119,47 @@ er_kf_consignored() {
   # er_hash_list emits each name with its exec bit before the bytes: a chmod alone moves this field.
   er_hash_list "$_er_tmp/key.ign-sorted" || return 1
 }
-er_kf_consobjects() { git -C "$CONSUMER" for-each-ref; }
+# The consumer's refs, then its EFFECTIVE config (local, global through $HOME, system): config moves
+# what git prints, and an override's `log -1 --format=%s` runs here.
+er_kf_consobjects() {
+  git -C "$CONSUMER" for-each-ref || return 1
+  echo "config"
+  git -C "$CONSUMER" config --list || return 1
+}
+# OBJECT-STORE RESOLUTION, NOT REFS. An override's `base_sha` (layer-drift.sh decides DIST, then
+# CONSUMER, then neither) and the stamp's `commit:` / `skill_commit:` resolve through each repo's
+# object store, so a `git prune` that drops an unreferenced commit moves the region with every ref
+# unchanged (measured both ways). Each value is resolved in both repos, the answer or `unresolved`.
+er_kf_consresolve() {
+  local f v
+  : > "$_er_tmp/key.rv" || return 1
+  if [ -f "$CONSUMER/.claude/.ai-dlc-version" ]; then
+    sed -n 's/^\(skill_\)\{0,1\}commit:[[:space:]]*\([^[:space:]]*\).*/\2/p' "$CONSUMER/.claude/.ai-dlc-version" \
+      >> "$_er_tmp/key.rv" || return 1
+  fi
+  if [ -d "$CONSUMER/.claude/skills/ai-dlc/overrides" ]; then
+    find "$CONSUMER/.claude/skills/ai-dlc/overrides" -type f -name '*.md' > "$_er_tmp/key.ovr" || return 1
+    while IFS= read -r f; do
+      awk 'NR==1 && $0=="---" { inf=1; next } inf && $0=="---" { exit }
+           inf && index($0, "base_sha:")==1 { sub("^base_sha:[[:space:]]*", ""); print; exit }' "$f" \
+        >> "$_er_tmp/key.rv" || return 1
+    done < "$_er_tmp/key.ovr"
+  fi
+  LC_ALL=C sort -u "$_er_tmp/key.rv" > "$_er_tmp/key.rv-sorted" || return 1
+  while IFS= read -r v; do
+    [ -n "$v" ] || continue
+    printf '%s\0' "$v"
+    git -C "$DIST" rev-parse -q --verify "${v}^{commit}" 2>/dev/null || echo unresolved
+    git -C "$CONSUMER" rev-parse -q --verify "${v}^{commit}" 2>/dev/null || echo unresolved
+  done < "$_er_tmp/key.rv-sorted"
+}
 er_kf_env() {
+  # The locale moves `sort`, `[[:space:]]` and every awk the detectors run: keyed, set vs unset.
+  local _lv
+  for _lv in LANG LC_ALL LC_COLLATE LC_CTYPE; do
+    if eval "[ -n \"\${$_lv+x}\" ]"; then eval "printf '%s=set %s\n' \"\$_lv\" \"\$$_lv\""
+    else printf '%s=unset\n' "$_lv"; fi
+  done
   if [ -n "${AI_DLC_KNOWN_SKILLS_EXT+x}" ]; then
     printf 'set %s\n' "$AI_DLC_KNOWN_SKILLS_EXT"
     if [ -f "$AI_DLC_KNOWN_SKILLS_EXT" ]; then git hash-object --no-filters "$AI_DLC_KNOWN_SKILLS_EXT" || return 1; fi
@@ -1116,8 +1176,15 @@ er_kf_region() { [ -n "$got" ] || return 1; printf '%s\n' "$got"; }
 er_key() {
   local f v
   [ -n "$_er_rec" ] || return 1
+  # AN UNREADABLE DIRECTORY IS A MISS. Git lists nothing under a directory it cannot open, so a
+  # chmod 000 hides its whole subtree from every field above while the detectors render it as
+  # absent (measured: cached 0, fresh 1). Any such directory refuses both the hit and the record.
+  # The prune list (.git, .claude/worktrees) is the set the key does not read.
+  _er_unread="$(find "$_er_root" \( -name .git -o -path "$_er_root/.claude/worktrees" \) -prune -o -type d ! -perm -u+rx -print 2>/dev/null)" \
+    || return 1
+  [ -z "$_er_unread" ] || return 1
   : > "$_er_tmp/key.block" || return 1
-  for f in engine base theirs distrefs consroot consindex conswork consignored consobjects env region; do
+  for f in engine base theirs distrefs consroot consindex conswork consignored consobjects consresolve env region; do
     "er_kf_$f" > "$_er_tmp/key.f.$f" 2>/dev/null || return 1
     v="$(er_sha256 "$_er_tmp/key.f.$f")" || return 1
     printf '%s=%s\n' "$f" "$v" >> "$_er_tmp/key.block" || return 1
@@ -1140,7 +1207,8 @@ er_cache_record() {
   return 0
 }
 _er_key0="$(er_key 2>/dev/null)" || _er_key0=""
-if [ -n "$_er_key0" ] && [ -z "${AI_DLC_VERIFY_NO_CACHE:-}" ] && [ -f "$_er_rec" ]; then
+if [ -n "$_er_key0" ] && [ "${EMIT_REPORT_VERIFY_CACHE:-}" = 1 ] && [ -z "${AI_DLC_VERIFY_NO_CACHE:-}" ] \
+   && [ -f "$_er_rec" ]; then
   _er_rk="$(sed -n 's/^key //p' "$_er_rec" 2>/dev/null | head -1)"
   if [ -n "$_er_rk" ] && [ "$_er_rk" = "$_er_key0" ]; then
     echo "emit-report: the report's mechanical region is present, current, and complete."
