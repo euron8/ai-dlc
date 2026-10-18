@@ -777,3 +777,23 @@ Fixed here by prose: both region instructions tell the shard to delete each trai
 Residual: the root fix is one comment-strip in the merge's own reader, `merge-adversarial-shards.sh` ~:371-374, after which the two prose sentences are redundant.
 
 verify: manual
+
+## BL-672 — the adversarial-shard merge's mutant battery grew by a third at 0.824.0, plausibly one seal-check subprocess per merge call
+
+**DEFECT (efficiency).** Measured at 0.824.0's dress rehearsal, a hooked push of b3db049b, load 23-28: the suite pole
+`adversarial-shard-merge-mutants` ran 2246s loaded, against 1681s recorded before that run, which is +565s, about a
+third. The whole push took 2893s. The cost is a loaded figure and must not be compared with a solo one.
+
+Hypothesis, unmeasured: 0.824.0 (BL-530) made `merge-adversarial-shards.sh` run a `bash content-seal.sh --check`
+subprocess on every merge call, and the battery runs the merge once per mutant copy per arm, so the subprocess cost is
+multiplied across the whole battery. If so, this is the CLAUDE.md case "a change to a validator the pole invokes is a
+change to the suite's wall clock", raised by the change that introduced it.
+
+Owed, in a slot with nothing else on the box (a pole timing):
+1. Per-merge-call CPU-seconds at e91b4d86 against 0.824.0. Take them in clean worktrees at the same path, with
+   interleaved reps, and a spread small enough to resolve the effect.
+2. Ablate the seal call at the tip and difference it.
+Then choose the fix by measurement: for example one `--check` over the whole input set per merge rather than one per
+file, if that is the shape. If the seal call is not the cost, say what is.
+
+verify: manual
