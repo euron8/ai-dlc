@@ -23,8 +23,8 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 ## [0.831.0] - 2026-10-18
 
 Batch 236 (b9's TRAIN). Every live plan now designates a lead session before anything is dispatched, and plan-shape
-arm P14 binds that designation. Closes BL-675. Files BL-678 and BL-681. Closes no `PC-` id. Net for this release:
-1 closed, 3 filed.
+arm P14 binds that designation. Closes BL-675 and BL-682. Files BL-678, BL-681 and BL-682. Closes no `PC-` id. Net
+for this release: 2 closed, 3 filed.
 
 ### The multi-session release train is a standard plan shape (BL-675)
 
@@ -33,8 +33,8 @@ arm P14 binds that designation. Closes BL-675. Files BL-678 and BL-681. Closes n
   the lead. The lead runs `ListAgents` and roll-calls every other `ai-dlc-*` session. The action states that the lead
   orchestrates and never builds, and that owners build through hands and make no edits. It also carries the generic
   owner-rules block the lead sends verbatim, the operator's time sentence, and five release-schedule rules:
-  RELEASES BEFORE MEASUREMENTS, SHORTEST GATE FIRST, NO IDLE SESSIONS, EXCLUSIVE WINDOWS ARE CAPPED and RELEASE TEXT
-  IS PREPARED IN ADVANCE. The lead-cuts-the-release sentences now say they describe the no-owner shape.
+  RELEASES BEFORE MEASUREMENTS, SHORTEST GATE FIRST, NO IDLE SESSIONS, NO TIMING RUNS and RELEASE TEXT IS PREPARED
+  IN ADVANCE. The lead-cuts-the-release sentences now say they describe the no-owner shape.
 - `consumer-context-footprint.md`, `hermetic-fixtures-poc.md` and `pre-push-wall-clock.md` each gain their own
   action 0. It states the designation, the no-edits rule, the time sentence and the five rules in full, and cites the
   drain plan's action by title for the owner-rules block. Each plan's resume line now starts at action 0.
@@ -69,7 +69,7 @@ arm P14 binds that designation. Closes BL-675. Files BL-678 and BL-681. Closes n
   record 231 (3889 bytes) and batch record 232 (3338 bytes) moved to `docs/plans/archive/graph-ledger-full-drain.md`.
   The plan ends at 146738 bytes.
 
-Measured in the release's slot, at load 18.21 falling to 5.84:
+Measured on the release branch:
 - `validate-plan-shape.sh` over `docs/plans` reports 50 plans, 0 errors and 0 warnings, and the plan-shape fixture
   PASSES.
 - Eight validator mutants are each killed by the arm built for them: m1 (P14 removed) by every P14 arm, m2 (window
@@ -80,6 +80,24 @@ Measured in the release's slot, at load 18.21 falling to 5.84:
 - BL-675's receipt exits 0 on the fix, 1 under m1 and under m7, 0 on a second correct spelling, 9 on a missing plan,
   and 0 with a marker seeded into the resume block.
 
+### Box load gates nothing and nothing is timed without a named decision (BL-682)
+
+The operator, verbatim: "box load should not matter. Stop timing things that don't need to be timed." and "bake it
+into the plan, no timing runs unless it's absolutely needed."
+
+- Every live plan's action 0 replaces EXCLUSIVE WINDOWS ARE CAPPED with a NO TIMING RUNS rule. No timing run (wall
+  clock, durations, per-arm profiles, stall distributions, load series) happens unless a named fix cannot be chosen
+  without the figure, and the lead approves each one. Box load gates nothing, and correctness runs (fixtures,
+  mutants, receipts, fork counts) run whenever they are ready. A timing-flavoured entry starts with a read-only
+  diagnosis from the code and the data already recorded. RELEASES BEFORE MEASUREMENTS now says a ready release gates
+  before any measurement, and that a measurement happens only when NO TIMING RUNS allows it.
+- The slot and exclusive-window text is removed from the drain plan's action 0, its owner-rules block and action 0a:
+  GATE OPEN / GATE CLOSED, SLOT GO / SLOT DONE, `uptime` before runs, and slot scheduling. The three sibling plans'
+  "schedules slots and gates" goes too. The only serialisation is one push at a time: an owner tells the lead when it
+  is ready to push, and the lead lets one push run at a time. The lead still assigns each release its VERSION.
+- P14 of `scripts/validate-plan-shape.sh` binds `NO TIMING RUNS` in place of `EXCLUSIVE WINDOWS ARE CAPPED`. The
+  plan-shape fixture and `.claude/rules/plan-shape.md` name the new label.
+
 ### Filed
 
 - BL-678 (NOTE): `plan-rotate.sh` rebuilds the plan's archive pointer from the current run's ranges alone, so every
@@ -89,6 +107,7 @@ Measured in the release's slot, at load 18.21 falling to 5.84:
   replacement backreference, including an octal escape such as `"\037"` in a later `print`. P14's window helper now
   names its record separator once, so the arm does not trip on it, and its printed records are unchanged. The owed
   fix scopes S7 to the replacement argument. Its receipt exits 1 today.
+- BL-682 (DEFECT), closed in this release; see above.
 
 ## [0.830.0] - 2026-10-18
 
