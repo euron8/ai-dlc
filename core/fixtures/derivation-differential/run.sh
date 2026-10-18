@@ -426,10 +426,12 @@ ck "A11o and it reaches the clear from the pre-pull commit" "base root (worktree
 # the shape of a concurrent run by ANOTHER uid, where bare `kill -0` fails with EPERM and read a
 # live run as dead. Only LEAKED may be named.
 #
-# NO CONTROL HERE CALLS `ps`. `/bin/ps` is setuid root, and under a `sandbox-exec` profile (the
-# read-set tracer's) its exec is refused for every pid, so controls keyed on it failed there and
-# took the fixture out of the trace. The controls read `kill -0`'s own answer instead -- the same
-# three inputs, the same three outcomes, inside a sandbox and out.
+# NOTHING HERE EXECS `ps`, `sandbox-exec` OR ANY SETUID BINARY. `/bin/ps` is setuid root, and under
+# the read-set tracer's `sandbox-exec` profile its exec is refused for every pid, so controls keyed
+# on it failed there and took the fixture out of the trace; and the pre-push trace (`--local-map`)
+# discards any fixture that execs a setuid binary or `sandbox-exec`. The controls read `kill -0`'s
+# own answer instead. The refused-`ps` world is re-created with a SHIM (A12s..A12w below), not a
+# sandbox, so the fixture stays traceable.
 W6="$WORK/w6-leak"; build_consumer "$W6" "$THEIRS_BREAK" 1 real
 LEAK="$WORK/derivation-differential-root-LEAKED/base"
 LIVE="$WORK/derivation-differential-root-LIVE/base"
@@ -444,8 +446,8 @@ wait "$DEADPID" 2>/dev/null
 printf '%s\n' "$DEADPID" > "${LEAK%/*}/pid"
 printf '%s\n' "$$" > "${LIVE%/*}/pid"
 printf '1\n' > "${FRGN%/*}/pid"
-k0_dead="$(LC_ALL=C kill -0 "$DEADPID" 2>&1)"; k0_dead_rc=$?
-k0_live="$(LC_ALL=C kill -0 "$$" 2>&1)"; k0_live_rc=$?
+k0_dead="$(export LC_ALL=C; kill -0 "$DEADPID" 2>&1)"; k0_dead_rc=$?
+k0_live="$(export LC_ALL=C; kill -0 "$$" 2>&1)"; k0_live_rc=$?
 if [ "$k0_dead_rc" -ne 0 ] && [ "${k0_dead%No such process}" != "$k0_dead" ] && [ "$k0_live_rc" -eq 0 ]; then
   ok "A12 control: kill -0 answers ESRCH for the recorded dead PID and succeeds on the recorded live PID"
 else
@@ -455,7 +457,7 @@ fi
 # with EPERM, so a test reading only the status calls it dead. Run as root, `kill -0 1` succeeds and
 # the seed no longer exercises the EPERM branch; the control says so rather than letting A12e pass
 # for the wrong reason.
-k0_one="$(LC_ALL=C kill -0 1 2>&1)"; k0_one_rc=$?
+k0_one="$(export LC_ALL=C; kill -0 1 2>&1)"; k0_one_rc=$?
 if [ "$k0_one_rc" -ne 0 ] && [ "${k0_one%Operation not permitted}" != "$k0_one" ]; then
   ok "A12 control: kill -0 on PID 1 fails with EPERM, so FOREIGN exercises the other-uid branch"
 else
@@ -475,37 +477,49 @@ if grep -qxF "worktree $LEAK" <<<"$wt6"; then
 else
   bad "A12c the leaked worktree was removed or unregistered; the helper must only name it"
 fi
-# A12 UNDER THE READ-SET TRACER'S SANDBOX. The same call, the same three worktrees, run inside
-# `sandbox-exec` with the profile shape `core/scripts/derive-fixture-readsets.sh` writes for
-# `--tracer sandbox` (allow default; file and process-exec reported under two subpaths). There every
-# setuid exec is refused, so a liveness test that execs `/bin/ps` reads every PID as dead and names
-# LIVE and FOREIGN. The control proves `ps` IS refused inside this profile on this host: where it is
-# not, the arm cannot tell a `ps`-based test from the shipped one, and says so rather than passing.
-# Where `sandbox-exec` does not exist the arm SKIPs, and a SKIP is not a pass.
-# WHERE THE PROFILE CANNOT BE APPLIED THE ARM SKIPS TOO. A process already inside a sandbox -- this
-# fixture run BY the tracer -- cannot apply a second, different profile: `sandbox-exec` exits 71
-# "sandbox_apply: Operation not permitted" (measured). There the arms above already ran under the
-# tracer's own sandbox, which is the world these four re-create. The ps control is read only after
-# the profile is shown to apply, or a refused APPLY would pass for a refused `ps`.
-SBT="$WORK/sb-tree"; SBM="$WORK/sb-mark"; mkdir -p "$SBT" "$SBM"
-SBP="$WORK/sb.sb"
-printf '(version 3)\n(allow default)\n(allow file* process-exec* (subpath "%s") (subpath "%s") (with report))\n(allow file-read-metadata file-test-existence (literal "%s"))\n' "$SBT" "$SBM" "$SBT" > "$SBP"
-if ! command -v sandbox-exec >/dev/null 2>&1; then
-  printf '  SKIP  A12q A12r A12v A12w: sandbox-exec is not on this host, so the tracer-sandbox arms did not run (not a pass)\n'
-elif ! sandbox-exec -f "$SBP" true >/dev/null 2>&1; then
-  printf '  SKIP  A12q A12r A12v A12w: sandbox-exec cannot apply the profile here (already inside a sandbox?), so the tracer-sandbox arms did not run (not a pass)\n'
+# ---- A12 in the REFUSED-`ps` world: the read-set tracer's, re-created with a shim ----------------
+# Inside the tracer's `sandbox-exec` profile `/bin/ps` is setuid and its exec is refused: run from a
+# bash script, `ps -p <pid>` exits 126 and bash writes `<script>: line <N>: /bin/ps: Operation not
+# permitted` (measured once, directly, under the profile shape derive-fixture-readsets.sh writes for
+# `--tracer sandbox`). The shim answers exactly that, so a liveness test that execs `ps` reads EVERY
+# PID dead here, as it did under the tracer, and names LIVE and FOREIGN. No sandbox is entered: the
+# pre-push trace discards a fixture that execs `sandbox-exec` or a setuid binary, and the fixture
+# must stay traceable. The real-sandbox anchor for this shim lives in BL-610's receipt.
+PSHIM="$WORK/ps-refused"; mkdir -p "$PSHIM"
+printf '#!/usr/bin/env bash\nprintf '"'"'%%s: line 1: /bin/ps: Operation not permitted\\n'"'"' "$0" >&2\nexit 126\n' > "$PSHIM/ps"
+chmod +x "$PSHIM/ps"
+shim_err="$(PATH="$PSHIM:$PATH" ps -p "$$" 2>&1 >/dev/null)"; shim_rc=$?
+if [ "$shim_rc" -eq 126 ] && [ "${shim_err%: /bin/ps: Operation not permitted}" != "$shim_err" ] \
+   && [ "$(PATH="$PSHIM:$PATH" command -v ps)" = "$PSHIM/ps" ]; then
+  ok "A12s the shim is first on PATH and answers as the tracer's refusal: exit 126, '/bin/ps: Operation not permitted'"
 else
-  if sandbox-exec -f "$SBP" ps -p "$$" >/dev/null 2>&1; then
-    bad "A12 sandbox control: ps -p runs inside the tracer's profile on this host, so the sandboxed arms cannot separate a ps-based liveness test from the shipped one -- A12q, A12r, A12v and A12w are unreadable"
-  else
-    ok "A12 sandbox control: ps -p is refused inside the tracer's profile, so a ps-based liveness test would read every PID dead there"
-  fi
-  OUT12S="$(cd / && TMPDIR="$DDTMP" sandbox-exec -f "$SBP" bash "$SUBJ" "$(cat "$W6/.D")" "$(cat "$W6/.B")" "$W6" "$(cat "$W6/.T")" 2>&1)"; RC12S=$?
-  rc_is "A12q under the tracer's sandbox the verdict is unchanged -> exit 1" 1 "$RC12S"
-  ck "A12r under the tracer's sandbox the DEAD run's worktree is still NAMED" "$(printf 'NOTE\tworktree\t%s is a registered worktree' "$LEAK")" "$OUT12S"
-  nk "A12v near-miss under the tracer's sandbox: the LIVE run's worktree is NOT named" "$LIVE" "$OUT12S"
-  nk "A12w near-miss under the tracer's sandbox: the other-uid run's worktree (PID 1) is NOT named" "$FRGN" "$OUT12S"
+  bad "A12s the ps shim does not answer as the tracer's refusal (rc $shim_rc: $shim_err) -- A12t..A12x are unreadable"
 fi
+# SELF-PROBE: the subject's own liveness function, fed the refusal as its answer, must read
+# "cannot tell" -- live, never dead -- for a live PID, a reaped child and PID 1 alike, so no worktree
+# is ever named on the strength of a refused probe. `kill` is overridden by a function inside a
+# subshell, which shadows the builtin; nothing is exec'd.
+PL_FN="$(awk '/^pid_live\(\) \{/,/^}$/' "$SUBJ")"
+if [ -z "$PL_FN" ]; then
+  bad "A12t the subject defines no pid_live() -- its liveness test cannot be fed the refusal"
+else
+  pl_dead=""
+  for _p in "$$" "$DEADPID" 1; do
+    ( eval "$PL_FN"
+      kill() { printf '%s\n' "$shim_err" >&2; return 126; }
+      pid_live "$_p" ) || pl_dead="$pl_dead $_p"
+  done
+  if [ -z "$pl_dead" ]; then
+    ok "A12t pid_live reads the refused-ps answer as live (cannot tell) for \$\$, a reaped child and PID 1"
+  else
+    bad "A12t pid_live reads the refused-ps answer as DEAD for:$pl_dead -- a refused probe would name a worktree"
+  fi
+fi
+OUT12P="$(cd / && PATH="$PSHIM:$PATH" TMPDIR="$DDTMP" bash "$SUBJ" "$(cat "$W6/.D")" "$(cat "$W6/.B")" "$W6" "$(cat "$W6/.T")" 2>&1)"; RC12P=$?
+rc_is "A12u with ps refused the verdict is unchanged -> exit 1" 1 "$RC12P"
+ck "A12v with ps refused the DEAD run's worktree is still NAMED" "$(printf 'NOTE\tworktree\t%s is a registered worktree' "$LEAK")" "$OUT12P"
+nk "A12w near-miss with ps refused: the LIVE run's worktree is NOT named" "$LIVE" "$OUT12P"
+nk "A12x near-miss with ps refused: the other-uid run's worktree (PID 1) is NOT named" "$FRGN" "$OUT12P"
 nk "A12n near-miss: a run whose only root-* worktree is its OWN names none" "$(printf 'NOTE\tworktree\t')" "$OUT1"
 
 # ---- A13: a STALE skill_commit: with no self-update is still the pre-pull tree ---------------

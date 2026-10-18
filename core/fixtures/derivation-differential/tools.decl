@@ -3,6 +3,7 @@ awk
 basename
 bash
 cat
+chmod
 cp
 cut
 dirname
@@ -16,14 +17,11 @@ mktemp
 mv
 paste
 printf
-ps
 python3
 rm
 rmdir
-sandbox-exec
 sed
 sort
 tr
-true
 wc
 xargs

@@ -103,7 +103,9 @@
 # permitted" (EPERM) is a live process we may not signal; and ANY OTHER outcome -- an unparsed or
 # empty message -- reads as live. An unreadable answer fails toward silence, never toward a removal
 # remedy. Bash's builtin prefixes the message with the script path and line, so it is matched by
-# suffix. macOS `strerror` is not localized; `LC_ALL=C` holds the text fixed where it would be.
+# suffix. macOS `strerror` is not localized; `LC_ALL=C` holds the text fixed where it would be, and
+# is EXPORTED inside the substitution, because a temporary assignment prefixed to a builtin
+# (`LC_ALL=C kill`) does not reach the builtin's message catalogue alike across bash versions.
 # ACCEPTED RESIDUAL: a dead run whose PID the kernel has handed to an unrelated process reads as
 # live -- under another uid via EPERM, under ours via rc 0 -- and its leaked worktree goes unnamed.
 # That is the safe direction: the row is suppressed, nothing is removed, and a later run whose PID
@@ -521,7 +523,7 @@ _own="${WT_PARENT##*/}"
 # an unreadable answer is live.
 pid_live() {
   local _e
-  _e="$(LC_ALL=C kill -0 "$1" 2>&1)" && return 0
+  _e="$(export LC_ALL=C; kill -0 "$1" 2>&1)" && return 0
   case "$_e" in
     *"No such process") return 1 ;;
     *"Operation not permitted") return 0 ;;
