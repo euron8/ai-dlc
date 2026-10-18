@@ -388,7 +388,7 @@ fi
 # default is that measured maximum plus a stated margin. The figures -- the maximum, the margin, and the
 # units nearest it -- are recorded in the BL-606 backlog entry and the CHANGELOG, not here.
 # AI_DLC_POOL_STALL overrides it, for a fixture driving a deliberately hung unit.
-POOL_STALL_DEFAULT=300                     # D9-WINDOW
+POOL_STALL_DEFAULT=600                     # D9-WINDOW
 POOL_STALL="${AI_DLC_POOL_STALL:-$POOL_STALL_DEFAULT}"
 case "$POOL_STALL" in ''|*[!0-9]*|??????*) POOL_STALL=$POOL_STALL_DEFAULT ;; esac
 POOL_STALL=$((10#$POOL_STALL))
