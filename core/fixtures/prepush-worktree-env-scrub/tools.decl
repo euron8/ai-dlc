@@ -10,9 +10,14 @@ cp
 cut
 dirname
 env
+find
 git
 grep
+kill
 mkdir
 mktemp
+ps
 rm
 sed
+sleep
+tr

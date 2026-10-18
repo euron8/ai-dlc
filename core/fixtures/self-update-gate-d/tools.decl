@@ -20,10 +20,12 @@ mkdir
 mktemp
 mv
 perl
+ps
 python3
 rm
 sed
 sh
+sleep
 sort
 split
 tail

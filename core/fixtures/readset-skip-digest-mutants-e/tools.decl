@@ -16,13 +16,16 @@ find
 git
 grep
 head
+kill
 ls
 mkdir
 mktemp
 mv
+ps
 rm
 sed
 shasum
+sleep
 sort
 tail
 tr

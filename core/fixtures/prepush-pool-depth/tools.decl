@@ -4,10 +4,13 @@ bash
 cat
 cp
 env
+find
 git
 grep
+kill
 mkdir
 mktemp
+ps
 rm
 sed
 seq
