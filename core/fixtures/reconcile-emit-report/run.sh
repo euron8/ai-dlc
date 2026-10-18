@@ -3549,8 +3549,8 @@ pcv_mk() { # pcv_mk <name> -> 0 when <root>/<name>/eng/emit-report.sh is built a
   local d="$PCV_ROOT/$1" a t m n
   case "$1" in
     M-region)  m=replace
-               a='  for f in engine base theirs distrefs consroot consindex conswork consignored consobjects env region; do'
-               t='  for f in engine base theirs distrefs consroot consindex conswork consignored consobjects env; do' ;;
+               a='  for f in engine base theirs distrefs consroot consindex conswork consignored consobjects consresolve env region; do'
+               t='  for f in engine base theirs distrefs consroot consindex conswork consignored consobjects consresolve env; do' ;;
     M-direxcl) m=replace; a='    _er_ex="$_er_rel"'; t='    _er_ex="${_er_rel%/*}"' ;;
     M-exit3)   m=before;  a='[ "$cause" = BLOCKERS-RESOLVED ] && exit 3'; t='er_cache_record' ;;
     *) return 1 ;;
