@@ -945,6 +945,40 @@ else
   else bad "mutation-apply-unvalidated" "SURVIVED: the unvalidated --apply exited $KM_RC and left the ledger unchanged"; fi
 fi
 
+# SHA READ ANCHORED ON THE ANNOTATION FORM. The ledger must live in a GIT repo, or the rotator's sha arm
+# SKIPS and nothing below can fire. Seeds: A = LANDED line whose LATER prose says "was verified against"
+# (the greedy read took `a`); B = near-miss, no later "verified" (reads the same as before); C = the
+# form without its <br> prefix.
+mkdir -p "$WORK/s"; GS="$WORK/s/repo"; mkdir -p "$GS"
+git -C "$GS" init -q . && git -C "$GS" -c user.email=f@x -c user.name=f commit -q --allow-empty -m seed
+GSHA="$(git -C "$GS" rev-parse --short=9 HEAD)"
+LS="$GS/backlog.md"
+{ printf '# Probe\n\n## BL-801 — prose after\n\nbody\n\n<br>**LANDED (v0.370.0, verified %s).** Done; it was verified against the shipping join.\n\nverify: manual\n\n' "$GSHA"
+  printf '## BL-802 — near miss\n\nbody\n\n<br>**LANDED (v0.370.0, verified %s).** Done.\n\nverify: manual\n\n' "$GSHA"
+  printf '## BL-803 — prose before\n\nbody\n\n**LANDED (v0.370.0, verified %s).** Done.\n\nverify: manual\n\n' "$GSHA"
+  printf '## BL-804 — live\n\nbody\n\nverify: manual\n'; } > "$LS"
+SA="$(bash "$RT" "$LS" --check 2>&1)"
+n_res="$(grep -c "\[sha $GSHA resolves\]" <<<"$SA")" || n_res=0
+if [ "$n_res" -eq 3 ] && ! grep -q "DOES NOT RESOLVE" <<<"$SA"; then
+  ok "sha-anchored" "all three LANDED lines resolve their OWN sha, including the one whose later prose says \"verified against\""
+else bad "sha-anchored" "$n_res of 3 LANDED lines resolved $GSHA; output: $(grep -E 'sha ' <<<"$SA" | tr '\n' '|')"; fi
+# MUTANT: the greedy read restored.
+SHN="$(grep -cF 'verified \([0-9a-f]\{7,\}\)).*/\2/p' "$RT")" || SHN=0
+if [ "$SHN" -ne 1 ]; then bad "mutation-sha-greedy" "the anchored sha read appears $SHN times; the mutation needs exactly one"
+else
+  # ENVIRON carries both strings, because awk -v would strip one level of backslash escaping.
+  MUT_NEEDLE='verified \([0-9a-f]\{7,\}\)).*/\2/p' \
+  MUT_LINE='  SHA="$(printf '"'"'%s\n'"'"' "$ANN" | sed -n '"'"'s/.*verified \([0-9a-f][0-9a-f]*\).*/\1/p'"'"')"' \
+    awk 'index($0, ENVIRON["MUT_NEEDLE"]) { print ENVIRON["MUT_LINE"]; next } { print }' "$RT" > "$RRT"
+  if cmp -s "$RT" "$RRT"; then bad "mutation-sha-greedy" "DID NOT APPLY: the mutation matched nothing"
+  elif ! grep -qF 's/.*verified \([0-9a-f][0-9a-f]*\).*/\1/p' "$RRT"; then bad "mutation-sha-greedy" "DID NOT APPLY: the greedy read is absent from the mutant"
+  else
+    SM="$(bash "$RRT" "$LS" --check 2>&1)"
+    if grep -q "sha a DOES NOT RESOLVE" <<<"$SM"; then ok "mutation-sha-greedy" "killed: the greedy read takes \`a\` from the later prose and refuses a correct entry"
+    else bad "mutation-sha-greedy" "SURVIVED: the greedy read still resolved every sha"; fi
+  fi
+fi
+
 echo
 if [ "$FAIL" -eq 0 ]; then
   echo "PASS: every assertion holds."

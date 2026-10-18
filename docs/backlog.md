@@ -579,7 +579,7 @@ Owed: anchor the read on the annotation's own form,
 is taken. Probe: a LANDED line whose prose later says "verified against" parses to its own sha. Control: a LANDED
 line with no later "verified" parses the same as today.
 
-verify: manual
+verify: sh d=$(mktemp -d) && git -C "$d" init -q && git -C "$d" -c user.email=a@b -c user.name=n commit -q --allow-empty -m s && s=$(git -C "$d" rev-parse --short=9 HEAD) && printf "## BL-1 - c\n\nbody\n\n<br>**LANDED (v1.0.0, verified %s).** Done; was verified against the join and later verified decafbad1.\n\nverify: manual\n\n## BL-2 - open\n\nbody\n\nverify: manual\n" "$s" > "$d/b.md" && o=$(bash scripts/backlog-rotate.sh "$d/b.md" --check 2>&1); case "$o" in *"[sha $s resolves]"*) exit 0;; *) exit 1;; esac
 
 ## BL-674 — I55 arm 3's reach scan recognises four root variables, so a fixture that reads an excluded path through any other root variable is never checked
 
