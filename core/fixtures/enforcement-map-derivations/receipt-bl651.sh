@@ -7,7 +7,18 @@
 #   exit 9   the receipt cannot measure: the tree could not be copied, or the seeded edit did not apply
 set -uo pipefail
 W="$(mktemp -d)" || exit 9
-git archive HEAD | tar -x -C "$W" || exit 9
+trap '[ -n "$W" ] && rm -rf "$W"' EXIT
+# ONLY WHAT `--arms I84` READS, not the whole tree. Each path's reader, in validate-enforcement-map.sh:
+#   the four startup inputs it refuses without (the GV/MAP/CORE_MANIFEST/SETUP_SITES loop);
+#   scripts/ -- the validator itself and render-invariant-index.sh, which the `--arms` renderer call
+#     runs on an explicit source, so no VERSION walk; and I84's corpus `find`: every core *.sh outside
+#     core/fixtures/, plus all of scripts/ and .githooks/; core/schemas/sprint-status.json is
+#     I84_SCHEMA. That find corpus is reproduced exactly, so I84 scans the same files as it does on
+#     the full tree.
+git archive HEAD -- 'core/*.sh' ':(exclude)core/fixtures' scripts .githooks \
+  core/schemas/sprint-status.json core/skills/ai-dlc/steps/gate-validation.md \
+  core/skills/ai-dlc/enforcement-map.yaml core/skills/ai-dlc/core-manifest.md \
+  core/skills/ai-dlc-update/reconcile/setup-sites.md | tar -x -C "$W" || exit 9
 M="$W/core/scripts/validate-mandatory-rules.sh"
 [ -f "$M" ] || exit 9
 [ -f "$W/scripts/validate-enforcement-map.sh" ] || exit 9

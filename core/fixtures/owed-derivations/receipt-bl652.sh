@@ -15,6 +15,7 @@ VAL=core/scripts/validate-artifact-derivations.sh
 [ -f "$RD" ] || exit 9
 [ -f "$VAL" ] || exit 9
 D="$(mktemp -d "${TMPDIR:-/tmp}/bl652rcpt.XXXXXX")" || exit 9
+trap '[ -n "$D" ] && rm -rf "$D"' EXIT
 [ -d "$D" ] || exit 9
 mkdir -p "$D/bin" "$D/r/scripts/ai-dlc" "$D/r/.claude" "$D/r/_bmad-output/planning-artifacts/s1" "$D/r/_bmad-output/ai-dlc-update" || exit 9
 cp "$RD" "$D/bin/check-owed-derivations.sh" || exit 9

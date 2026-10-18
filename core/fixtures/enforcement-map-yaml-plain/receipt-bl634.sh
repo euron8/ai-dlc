@@ -13,6 +13,7 @@ MAP="$R/core/skills/ai-dlc/enforcement-map.yaml"
 [ -f "$FX" ] || exit 9
 [ -f "$MAP" ] || exit 9
 T="$(mktemp -d)" || exit 9
+trap '[ -n "$T" ] && rm -rf "$T"' EXIT
 # (a) the fix as committed
 bash "$FX" "$MAP" >/dev/null 2>&1; a=$?
 # (b1) regression: the base map, all seven values plain again

@@ -16,6 +16,7 @@ SC="${1:-scripts/pregate-self-check.sh}"
 FX=core/fixtures/procsub-staged-refusal
 for f in "$SC" "$FX/procsub-spell.awk" "$FX/procsub-spell-probe.diff"; do [ -s "$f" ] || exit 9; done
 W="$(mktemp -d)" || exit 9
+trap '[ -n "$W" ] && rm -rf "$W"' EXIT
 [ -d "$W" ] || exit 9
 S="$W/self"
 mkdir -p "$S/scripts" "$S/$FX" || exit 9

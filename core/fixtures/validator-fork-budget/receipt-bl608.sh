@@ -13,7 +13,9 @@ n="$(grep -c '^HEADROOM_MARGIN=' "$F")" || n=0
 start="$(grep -n '^HEADROOM_MARGIN=' "$F" | cut -d: -f1)"
 end="$(awk '/^judge\(\) \{/{j=1} j && /^}$/ {print NR; exit}' "$F")"
 [ -n "$start" ] && [ -n "$end" ] || exit 9
-X="$(mktemp -d "${TMPDIR:-/tmp}/bl608.XXXXXX")/j.sh" || exit 9
+W="$(mktemp -d "${TMPDIR:-/tmp}/bl608.XXXXXX")" || exit 9
+trap '[ -n "$W" ] && rm -rf "$W"' EXIT
+X="$W/j.sh"
 sed -n "${start},${end}p" "$F" > "$X"
 [ -s "$X" ] || exit 9
 ( FLOOR=1; NFX=10; BUDGET_FILE=fork-budget.txt; . "$X"

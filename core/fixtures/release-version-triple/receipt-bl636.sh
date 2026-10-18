@@ -11,6 +11,7 @@ V="${1:-scripts/validate-release-version.sh}"
 case "$V" in /*) ;; *) V="$(pwd -P)/$V" ;; esac
 [ -f "$V" ] || exit 9
 T="$(mktemp -d)" || exit 9
+trap '[ -n "$T" ] && rm -rf "$T"' EXIT
 cd "$T" && git init -q . && git config user.email r@x && git config user.name r && git config commit.gpgsign false || exit 9
 snap() { local v="$1"; shift; printf '%s' "$v" > VERSION || return 1
   { printf '# Changelog\n'; for h in "$@"; do printf '\n## [%s] - 2026-01-01\n\n- e\n' "$h"; done; } > CHANGELOG.md || return 1
