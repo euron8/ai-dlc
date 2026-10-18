@@ -8,5 +8,8 @@ core/scripts/validate-adversarial-convergence.sh
 core/scripts/partition-document.sh
 core/scripts/partition-subject.sh
 core/scripts/validate-artifact-derivations.sh
+# The record-mode seal check runs whenever the library sits beside the join; without it here the
+# sandbox takes the absent-sibling path and the --sources/--escalations arms never reach the shipped one.
+core/scripts/content-seal.sh
 core/team-roles/remediator.md
 core/fixtures/lib/

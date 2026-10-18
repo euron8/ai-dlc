@@ -83,7 +83,8 @@
 # which writes the single v1 verdict every reader already reads — the schema, the path and
 # Check 26 are unchanged — and refuses rather than writes on an incomplete or overlapping
 # union, since a merge that accepts a short union reads exactly like a passing gate. The
-# merged adjudicator_agent_id lists every shard's id, and its generated_at is the merge time.
+# merged adjudicator_agent_id lists every shard's id -- DERIVED from the part's content seal where it
+# carries one (THE CONTENT SEAL, at the merge) -- and its generated_at is the merge time.
 # No write-ledger row is ever produced for a merged file, so it binds through the spawn
 # ledger's dispatch window alone.
 #
@@ -698,6 +699,11 @@ GAROWEOF
 fi
 export GA_IN_FORCE GA_IN_FORCE_STATUS GA_UNVERIFIED_CITES GA_VERIFIER_ERRORS GA_UNBOUNDED_CITES
 export GA_SHARD
+# The content seal (--merge only): the sibling that owns the sealed set and the comparison. Empty when absent; the merge then refuses
+# only a ledger that carries seal rows it cannot compare.
+GA_SEAL=""
+[ -f "$GA_SCRIPT_DIR/content-seal.sh" ] && GA_SEAL="$GA_SCRIPT_DIR/content-seal.sh"
+export GA_SEAL
 
 # At most one of the two arrays is non-empty, and each is read only by its own mode.
 python3 - "$MODE" "$GATE_TYPE" "$VERDICT_PATH" "$SCHEMA" "$MAP" "$SIBLING" ${SERIES_PATHS+"${SERIES_PATHS[@]}"} ${MERGE_PARTS+"${MERGE_PARTS[@]}"} <<'PYEOF'
@@ -1342,6 +1348,159 @@ if mode == "expected":
 # into the envelope arms and `coverage_arms()` as `--coverage` runs them, and returns their
 # verdict. The dispatch binding is not run here, for the reason the coverage mode gives; the
 # lead's full run decides the gate.
+# THE CONTENT SEAL AND THE DERIVED ADJUDICATOR ID (BL-530 claims b and c). `content-seal.sh`, beside
+# this script, owns the sealed set (a `<nonce>.part-<i>of<N>.jsonl` is in it), the seal row and the
+# comparison; the PostToolUse recorder `ai-dlc-content-seal.sh` appends a row after every Write or
+# Edit of a part. Here:
+#   1. every part whose bytes differ from its newest seal row is REFUSED, naming that row's writer and
+#      the remedy -- a part amended through Bash (`python3` open-for-write, `printf >>`) after its
+#      last Write or Edit;
+#   2. a part WITH a seal row has its adjudicator_agent_id DERIVED, never read: the newest row's
+#      `agent_id` -> `<transcript_path minus .jsonl>/subagents/agent-<id>.meta.json` `toolUseId` ->
+#      every spawn-ledger row carrying that id names role `gate-adjudicator`. A row with no agent_id
+#      (the top-level session wrote the part last), no readable meta, no toolUseId, no spawn row, or a
+#      spawn row of another role REFUSES. The self-report is then compared only when it is
+#      real-shaped (AGENT_ID_ERE) and refused when it differs (BL-536's rule); `gate-adjudicator`,
+#      a descriptive label or empty is ignored, and the merged id is the derived one;
+#   3. a part with NO seal row is REFUSED when this tree's ledger holds a TOOL seal row (actor `agent`
+#      or `session`, `content-seal.sh --first-tool-ts`, the --check root filter) dated BEFORE the
+#      part's nonce: the recorder was live when the gate began, so a Write would have left a row and
+#      the part came through Bash. Remedy: re-dispatch the adjudicator, writing with Write. The
+#      recorder's append is silent on failure, so a lost row is refused the same way, toward
+#      re-dispatch -- the conservative direction. A gate whose nonce predates the first tool seal
+#      (or a ledger with none) keeps today's behaviour: its self-reported id is required non-empty
+#      and merged as written, so nothing already on a consumer's disk moves.
+# An UNSHARDED verdict is not a part and is untouched here: it keeps the `.verdict-writes.jsonl`
+# binding the guard records and the dispatch-binding arm below reads.
+SEAL_LIB = os.environ.get("GA_SEAL", "")
+SEAL_AGENT_RE = None
+
+
+# One JSON-lines reader for every ledger this program reads; defined here, ahead of its first caller
+# (merge_seal), and read again by the dispatch binding below.
+def _rows(path):
+    out = []
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(row, dict):
+                    out.append(row)
+    except OSError:
+        pass
+    return out
+
+
+def _merge_state_dir(vp):
+    return os.path.dirname(os.path.dirname(os.path.abspath(vp)))
+
+
+def merge_seal(parts, vp):
+    """{part path: derived agent_id} for every part carrying a seal row; refuses on a broken seal."""
+    global SEAL_AGENT_RE
+    state = _merge_state_dir(vp)
+    ledger = os.path.join(state, "planning-artifacts", ".artifact-writes.jsonl")
+    try:
+        with open(ledger, "r", encoding="utf-8") as fh:
+            body = fh.read()
+    except OSError:
+        body = ""
+    if not SEAL_LIB:
+        # Only a TOOL seal row (only seal rows carry `actor`) is something the merge could have
+        # compared; a program row alone is record-only.
+        if re.search(r'"actor":\s*"(agent|session)"', body):
+            refuse(f"--merge: {ledger} carries content-seal rows but content-seal.sh is not beside "
+                   f"this script, so no part's bytes can be compared with its seal; reinstall ai-dlc.")
+        return {}
+    if "content-seal" not in body:
+        return {}
+    r = subprocess.run(["bash", SEAL_LIB, "--agent-ere"], capture_output=True, text=True)
+    if r.returncode != 0 or not r.stdout.strip():
+        refuse(f"--merge: {SEAL_LIB} --agent-ere printed no agent-id grammar (exit {r.returncode}).")
+    SEAL_AGENT_RE = re.compile(r.stdout.strip())
+    r = subprocess.run(["bash", SEAL_LIB, "--check", state] + list(parts), capture_output=True, text=True)
+    if r.returncode == 1:
+        lines = [l for l in r.stdout.splitlines() if l.strip()]
+        refuse("--merge: " + "\n  REFUSED: --merge: ".join(lines))
+    if r.returncode != 0:
+        refuse(f"--merge: the content-seal check did not run (exit {r.returncode}): "
+               f"{(r.stderr.strip().splitlines() or [''])[0]}")
+    r = subprocess.run(["bash", SEAL_LIB, "--row", state] + list(parts), capture_output=True, text=True)
+    rows = r.stdout.splitlines()
+    if r.returncode != 0 or len(rows) != len(parts):
+        refuse(f"--merge: the content-seal rows for the parts could not be read (exit {r.returncode}).")
+    spawns = _rows(os.path.join(state, "spawn-ledger.jsonl"))
+    # THE RECORDER WAS LIVE BEFORE THIS GATE BEGAN (D2). The earliest TOOL seal row in this tree
+    # (content-seal.sh --first-tool-ts, the same root filter --check uses) against the part's nonce
+    # time: a part with no seal row whose nonce is AFTER that row was written while the recorder was
+    # running, so its Write would have left a row -- it was written through Bash. A gate whose nonce
+    # predates the first seal still merges.
+    r = subprocess.run(["bash", SEAL_LIB, "--first-tool-ts", state], capture_output=True, text=True)
+    if r.returncode != 0:
+        refuse(f"--merge: content-seal.sh --first-tool-ts did not run (exit {r.returncode}): "
+               f"{(r.stderr.strip().splitlines() or [''])[0]}")
+    first_ts = r.stdout.strip()
+    try:
+        first_t = calendar.timegm(time.strptime(first_ts, "%Y-%m-%dT%H:%M:%SZ")) if first_ts else None
+    except ValueError:
+        first_t = None
+    stem = os.path.basename(vp)[: -len(".verdict.json")]
+    try:
+        nonce_t = calendar.timegm(time.strptime(stem[-16:], "%Y%m%dT%H%M%SZ"))
+    except ValueError:
+        nonce_t = None
+    out = {}
+    for p, raw in zip(parts, rows):
+        try:
+            sr = json.loads(raw)
+        except ValueError:
+            refuse(f"--merge: the content-seal row for {p} is not JSON.")
+        if sr is None:
+            if first_t is not None and nonce_t is not None and first_t < nonce_t:
+                refuse(f"--merge: {p} carries no content-seal row, but this tree's recorder sealed a "
+                       f"Write or Edit at {first_ts}, before this gate's nonce {stem}; a part written "
+                       f"with Write after that leaves a row, so this one was written through Bash (or "
+                       f"its seal append failed, or a Write/Edit whose seal has not landed yet; "
+                       f"re-run). Re-dispatch the gate-adjudicator for that slice, writing the part "
+                       f"with Write.")
+            continue
+        aid = str(sr.get("agent_id") or "")
+        who = sr.get("actor") or "?"
+        if not aid:
+            refuse(f"--merge: {p} was last written by {who} with no agent_id (the top-level session); "
+                   f"a part is a gate-adjudicator's own write. Re-dispatch the adjudicator for that "
+                   f"slice, which rewrites the part with Write.")
+        tp = str(sr.get("transcript_path") or "")
+        meta = (tp[:-len(".jsonl")] if tp.endswith(".jsonl") else tp) + f"/subagents/agent-{aid}.meta.json"
+        tuid = ""
+        try:
+            with open(meta, "r", encoding="utf-8") as fh:
+                m = json.load(fh)
+            tuid = str(m.get("toolUseId") or "") if isinstance(m, dict) else ""
+        except (OSError, ValueError):
+            refuse(f"--merge: {p} was last written by agent {aid}, whose meta file {meta} is absent "
+                   f"or unreadable; its dispatch cannot be derived.")
+        if not tuid:
+            refuse(f"--merge: {p} was last written by agent {aid}, whose meta file {meta} carries no "
+                   f"toolUseId; its dispatch cannot be derived.")
+        roles = [str(s.get("role") or "") for s in spawns if s.get("tool_use_id") == tuid]
+        if not roles:
+            refuse(f"--merge: {p} was last written by agent {aid}, dispatch {tuid}, which has no row in "
+                   f"spawn-ledger.jsonl; a dispatch the guard never recorded is not a gate-adjudicator.")
+        bad = [x for x in roles if x != "gate-adjudicator"]
+        if bad:
+            refuse(f"--merge: {p} was last written by agent {aid}, dispatch {tuid}, dispatched as role "
+                   f"{bad[0] or '<none>'}; only a gate-adjudicator writes a part.")
+        out[p] = aid
+    return out
+
+
 if mode == "merge":
     merge_parts = sys.argv[7:]
     vbase = os.path.basename(verdict_path)
@@ -1376,6 +1535,7 @@ if mode == "merge":
     item_fields = next(f for f in S["fields"] if f["name"] == "verdicts")["item_fields"]
     env_keys = ("gate_nonce", "gate_series_id", "catalog", "adjudicator_agent_id")
     line_keys = set(env_keys) | {f["name"] for f in item_fields}
+    seal_ids = merge_seal(merge_parts, verdict_path)
     rows, agents, shared = [], [], {}
     for idx, p in sorted(zip(indices, merge_parts)):
         try:
@@ -1398,7 +1558,15 @@ if mode == "merge":
             if row["gate_nonce"] != mnonce:
                 refuse(f"--merge: {p}:{n} carries gate_nonce {row['gate_nonce']!r}, not this "
                        f"verdict's {mnonce!r} — it is another gate pass's work.")
+            # A part whose id is DERIVED (seal_ids) carries a self-report that is never written, so
+            # an empty one is not a defect. A part with no seal row reaches here only from a gate
+            # older than the recorder, a ledger with no tool seal row, or a tree without
+            # content-seal.sh (merge_seal refused the rest), and keeps the requirement.
             for k in env_keys[1:]:
+                if k == "adjudicator_agent_id" and p in seal_ids:
+                    if not isinstance(row[k], str):
+                        refuse(f"--merge: {p}:{n} has a non-string {k}.")
+                    continue
                 if not isinstance(row[k], str) or not row[k].strip():
                     refuse(f"--merge: {p}:{n} has a missing or empty {k}.")
             for k in ("gate_series_id", "catalog"):
@@ -1411,8 +1579,18 @@ if mode == "merge":
                     refuse(f"--merge: {p}:{n} has an empty {f['name']}.")
                 if "enum" in f and val not in f["enum"]:
                     refuse(f"--merge: {p}:{n} has {f['name']} {val!r}, not one of {f['enum']}.")
-            if row["adjudicator_agent_id"] not in agents:
-                agents.append(row["adjudicator_agent_id"])
+            # THE BL-536 RULE, for the adjudicator: the self-report is compared only when it is
+            # REAL-SHAPED (AGENT_ID_ERE, owned by content-seal.sh) and then must equal the derived id;
+            # any other value -- `gate-adjudicator`, a descriptive label, empty -- is ignored.
+            aid = row["adjudicator_agent_id"]
+            if p in seal_ids:
+                if SEAL_AGENT_RE is not None and SEAL_AGENT_RE.match(aid) and aid != seal_ids[p]:
+                    refuse(f"--merge: {p}:{n} self-reports adjudicator_agent_id {aid!r}, but the content "
+                           f"seal derives {seal_ids[p]!r} for the gate-adjudicator dispatch that wrote "
+                           f"the part; the id was written by someone else.")
+                aid = seal_ids[p]
+            if aid not in agents:
+                agents.append(aid)
             rows.append((str(row["check_id"]), p,
                          {f["name"]: row[f["name"]] for f in item_fields}))
     seen_at = {}
@@ -1444,6 +1622,14 @@ if mode == "merge":
         refuse(f"--merge: cannot create {verdict_path} ({exc}).")
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         fh.write(json.dumps(merged, indent=2) + "\n")
+    # The program's own seal row, RECORD-ONLY: the verdict is outside the sealed set and bound by its
+    # .verdict-writes.jsonl row alone (content-seal.sh, PROGRAM ROWS). A failed append changes no
+    # outcome.
+    if SEAL_LIB:
+        if subprocess.run(["bash", SEAL_LIB, "--record", _merge_state_dir(verdict_path),
+                           "program:validate-gate-adjudication", verdict_path],
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
+            sys.stderr.write(f"NOTE: the program seal row for {verdict_path} was not appended\n")
     print(f"VALIDATE-GATE-ADJUDICATION: MERGED ({verdict_path}, {pn} part(s), "
           f"{len(E)} escalated check(s) for {gate_type})")
     mode = "coverage"
@@ -1693,24 +1879,6 @@ def _ep(s, fmt):
     except (ValueError, TypeError):
         return None
 
-
-def _rows(path):
-    out = []
-    try:
-        with open(path, "r", encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    row = json.loads(line)
-                except ValueError:
-                    continue
-                if isinstance(row, dict):
-                    out.append(row)
-    except OSError:
-        pass
-    return out
 
 
 def dispatch_binding(stem, gate_dir, window_s):

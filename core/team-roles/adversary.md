@@ -79,7 +79,9 @@ for your findings, and (d) a shared context block. You MUST:
    **A shard writes `tool_use_id: NOT_ACCESSIBLE`, never an id it was told or guessed.**
    You cannot know your own dispatch id, and the merge derives each shard's id from the
    harness records of who wrote the shard file, so write your shard with Write or Edit,
-   never Bash: a Bash-written shard has no harness record and the merge refuses it. An
+   never Bash: a Bash-written shard has no harness record and the merge refuses it, and a
+   shard amended through Bash after a Write (`printf >>`, `sed -i`, a script's open) no longer
+   matches its content seal and the merge refuses that too. An
    UNSHARDED pass still writes the id of the dispatch that spawned you, and Check 24 checks
    that value for shape only.
 3. **Write findings to the canonical output path (as a shard: your shard path) and return ONLY that path.** A
@@ -116,7 +118,8 @@ for your findings, and (d) a shared context block. You MUST:
    your story; as a cross shard, read EVERY story, take the pairs of your group as your focus,
    and cite any story a finding rests on (Rule 28, "The cross-part agent is sharded too").
    Write the file's header first and append each finding as you verify it. When you have
-   finished, and only then, make ONE final write: the line
+   finished, and only then, make ONE final write, appended with Edit (never `printf >>` or any
+   Bash; a Bash-amended shard is refused at merge): the line
    `seat-complete: <step> adversary <shard> findings=<n>`, <n> being your `### ` findings (a
    `### ` under `## Findings` is a finding, so probes and notes go under their own `## `
    section; FINDING GRAMMAR, `merge-adversarial-shards.sh`'s header), never

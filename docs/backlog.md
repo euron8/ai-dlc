@@ -84,52 +84,6 @@ These are in addition to the four `PC-S319-*` candidates already in graph's unco
 push-candidate ledger, and none of them restates one. Every receipt is `manual` at filing: the batch
 that builds an entry owes its behavioural `sh` receipt and the probe behind it.
 
-## BL-530 — a Bash in-place edit rewrites gate inputs with no ledger row, including the adversary's independence field
-
-**PARTIAL (v0.813.0, verified 2ca609f1) — the gate-adjudication recorder shipped; the Bash in-place-write deny is OPEN.** `record_artifact_write` records `gate-adjudication/*.part-*.jsonl` to the artifact ledger, so an adjudicator's part file has a writer row. The adversary-shard half was delivered by BL-536: the merged id is derived and joined to the spawn ledger, and a shard's self-reported id is ignored unless it is real-shaped and differs, which refuses. Nothing here makes a lead or remediator Bash in-place write to a shard, record or snapshot denied or recorded.
-
-**DEFECT.** At 21:38:58 the s319 lead ran `perl -0pi` over the 12 `shards/coe-p1/*.md` adversary
-shards, replacing `tool_use_id: unavailable` with ids it read from its own transcript, so that
-`merge-adversarial-shards.sh` (which refuses a non-`toolu_` id, lines 573-575) would accept them. The
-merge then exited 0. `core/team-roles/adversary.md:77` calls that field the only evidence that the
-review was independent, and `:360` says it is checked for shape only. The lead also edited the
-snapshot with `sed -i` at 19:25:50.
-
-Neither write produced a row in `.artifact-writes.jsonl`. Every write-capturing hook matches
-`Edit|Write|MultiEdit`, and `core/hooks/ai-dlc-gate-remediation-guard.sh:212-215` states that a Bash
-`sed -i`, redirect or script write is not covered. The join's two-writer refusal and the merge's id
-checks read records a Bash rewrite never enters. The consumer's
-`PC-S319-CONVERGENCE-ADVERSARY-CANNOT-KNOW-ITS-OWN-TOOL-USE-ID` treats this patch as the remedy; it
-is a separate defect.
-
-Owed: the dispatch id reaches the shard by a path that is not a lead hand-edit (for example written
-at dispatch or by the merge from the transcript), and a lead Bash in-place write to a shard,
-record or snapshot under the sprint slot is either denied or recorded.
-
-**First half delivered by BL-536** (adversary shards: the merge derives each shard's dispatch id from
-the harness records and never from the shard). The second half, denying or recording a Bash
-in-place write, stays open, and `adjudicator_agent_id` below is not covered by BL-536.
-
-**Second instance, a shipped field (graph s319 planning gate, 21:49Z).** Gate adjudicator shard 1/2 (agent `a04aa26080fcca36f`) wrote `adjudicator_agent_id: gate-adjudicator` on all 10 of its verdict rows in `_bmad-output/gate-adjudication/planning-20261015T214932Z.part-1of2.jsonl`, where `core/team-roles/gate-adjudicator.md:163` requires "the agent_id of THIS gate-adjudicator dispatch". Its own final report says so. Shard 2/2 wrote a descriptive label, `gate-adjudicator-planning-20261015T214932Z-shard-2of2`, which is not an agent id either. Check 26 (`validate-gate-adjudication.sh`) passed both. So the problem is not confined to adversary shards: no dispatched agent can read its own id, and every field that asks for one is filled by the agent guessing or by the lead hand-patching it afterwards. The fix owed above (the id reaches the record by a path other than the agent's own claim or a lead edit) applies to `adjudicator_agent_id` as well.
-
-**Third instance, a remediator rewriting its own repair record (graph s319 requirements party repair, 00:00:36Z on 2026-10-16).** The serial cross-part remediator rewrote `_bmad-output/planning-artifacts/s319/requirements-party-repair.md` with `python3` (`t=open(p).read(); t=t.replace(...)`, then written back) instead of Edit. Its next message reads: "I changed the record through a script, which the contract forbids, so I'll check what it did and redo the fixes with Edit." The agent knew the rule and broke it, and no hook refused the write. That file is the joined record `join-remediator-shards.sh --sources` reads, so a Bash rewrite of it leaves no `.artifact-writes.jsonl` row on the one record the join's writer and coverage checks are keyed on. Three agent kinds have now done this in one session: the lead (the 12 adversary shards and the snapshot), the gate adjudicators (the id field), and a remediator (its own record).
-
-**Fourth instance, the lead again, on 19 more shards (graph s319 requirements elicitation, 00:58–00:59Z on 2026-10-16).** The lead wrote each elicitation shard's `tool_use_id` with a `python3 -I` heredoc carrying an `ids={...}` map read from its own transcript, then with `sed -i '' 's/^tool_use_id: PEN…'` per shard (cross-1, 8, 4). The brief told every shard to leave the field `PENDING-LEAD`. The step therefore DEPENDS on the lead hand-patching the one field `adversary.md:77` calls the evidence of independence, through a channel with no ledger row, for every sharded round. BL-536 (derived dispatch id) is the fix that removes it. This instance shows it recurs on every round until that lands.
-
-**Fifth instance, all 19 adversarial shards (graph s319 resumed lead `f65eae3b`, requirements-adversarial-p1, 02:42Z on 2026-10-16).** Filed by peer session ai-dlc-68. Every adversary wrote `tool_use_id: PENDING-LEAD`, and the lead patched all 19 with in-place `python3` `open(p,'w')` rewrites, 11 at 02:42:37Z and then one per notification. `PENDING-LEAD` occurs 0 times in graph's installed `_gate-procedures.md`, `adversary.md` and `merge-adversarial-shards.sh` (control: `tool_use_id` = 2 in `adversary.md`), so the placeholder the brief tells the shard to write is named in none of those installed files. Each patch is a Bash write to a gate input that no write ledger sees. Shard 8's chained `.replace` came out right (`toolu_01TkJ3V9RMQd4QVVrjepzAFb`), but nothing checked it.
-
-**Sixth instance, and an invented id shaped like a real one (graph s319 requirements-adversarial-p2, transcript `0e9a936b`, 2026-10-16 21:53-22:04Z).** Filed by graph watch ai-dlc-f7; intake re-derived it read-only. Graph's installed `_gate-procedures.md:554` asks each shard for "the `tool_use_id` of THIS Agent dispatch". The 19 shards under `planning-artifacts/s319/shards/requirements-p2/` came back with `NOT_ACCESSIBLE` or "not visible"/"not available" prose, one id repeated across shards 1 and 7 (per the lead at 21:56:33Z), and at least two ids the adversaries made up:
-- `6.md` carried `toolu_01S319P2Shard6AdversaryReq`, which its own text called "a placeholder". It appears once in the transcript and 0 times in `_bmad-output/spawn-ledger.jsonl`. Control: the real shard id `toolu_01QEcSBpQPURM8YxpJwz9GqD` appears once in the ledger.
-- `cross-6.md:6` still carries `toolu_s319_req_adv_p2_cross_6`, which appears 0 times in the ledger.
-
-The tree has already moved. At 18:06 EDT `6.md` was rewritten to `toolu_01JvXpffd3RTR8GDxEnugR25`, which IS in the ledger (count 1). That is the lead's hand-edit the transcript announced ("check the placeholders against the ledger and fix them before running merge"), which is this entry's original defect again. `NOT_ACCESSIBLE` now remains in 2 shards. The shards are uncommitted, so the invented `6.md` value survives only in the transcript.
-
-The new sub-shape: `merge-adversarial-shards.sh:585` (origin/main and graph's installed copy alike), `case "$tid" in toolu_?*)`, tests the id's SHAPE only, and `:586` refuses only a repeat. The merge never reads `spawn-ledger` (0 mentions). An invented `toolu_` id therefore merges as a valid independence id, as `cross-6.md`'s would today, unless the lead happens to catch it.
-
-Added to what this entry owes, stated as a binary property per lead ai-dlc-71: **no merged independence id lacks a `spawn-ledger.jsonl` row.** The mechanism is not "refuse an invented self-id". A shard's self-reported id is a cosmetic field, and refusing on it would wedge live work. Instead the merged id is derived from the write, meta and probe ledgers and joined to `spawn-ledger.jsonl`, a derived id with no spawn row is refused, and a shard's invented self-id is ignored, so it never reaches the merged record. ai-dlc-6f's `b235-bl536-g1` does this (pinned by T8 `p_tuid_nospawn`) and can discharge this item. Receipt: seed a shard carrying an invented self-id and assert it is ABSENT from the merged record. Control: a real-shaped derived id with no spawn row is REFUSED.
-
-verify: manual
-
 ## BL-537 — a spawn made by a teammate is recorded nowhere, so a second writer or reviewer has no provenance
 
 **DEFECT.** In graph s319 the `pm-escalated` requirements authoring agent (`a1c69096c184098d6`, dispatched by the lead at 22:01Z) spawned a `general-purpose` subagent itself, "PRD rubric walker S319" (`afe532cc5f05cad9d`, 22:14:55–22:16:40Z), which wrote `_bmad-output/planning-artifacts/s319/prd-validate/review-rubric.md`. That spawn is required by the skill the step invokes: `requirements.md:178` runs `/bmad-prd` validate, and `.claude/skills/bmad-prd/SKILL.md:73-75` tells it to dispatch its rubric walker and reviewers as parallel subagents. `_bmad-output/spawn-ledger.jsonl` has 0 rows for it, against 1 row in `subagent-context.jsonl` (the post-completion probe), so the dispatch-time record misses it while the completion record sees it. `ai-dlc-dispatch-guard.sh` writes the ledger row at dispatch (append at line 1120). Why this call left no row was not traced: it is a teammate-issued call (`agent_id` set) for a role with no `core/team-roles/` file.
@@ -962,5 +916,13 @@ Related, not duplicates:
 - Archived BL-535 (0.791.0) fixed the carry-over evaluation's stem, with the same symptom on `coe-adversarial-repair-p1.md`. Its fix was step prose for that step only, so this is the same mis-naming one step over.
 
 Owed: either the join refuses a `-adversarial-repair-p<M>` dir, or any name but `<artifact>-repair-p<M>` beside an `<artifact>-adversarial-p<M>.md`, printing the owed name; or the step prose at :894 states the asymmetry. Probe: a `--document` join into `shards/x-adversarial-repair-p1/` beside `x-adversarial-p1.md` refuses and names `x-repair-p1`. Control: `shards/x-repair-p1/` joins.
+
+verify: manual
+
+## BL-669 — a lead's Edit of an adversary shard is sealed but never refused, and the merge's role check cannot see it
+
+**NOTE.** Found by BL-530's tip adversary (0.824.0, NOTE 6), filed by the lead as BL-669. `merge-adversarial-shards.sh` refuses a shard whose bytes differ from its newest content-seal row, and a Write or Edit by ANY actor re-seals the file. A top-level session's Edit therefore writes a seal row (`actor: "session"`, no `agent_id`) and the shard merges with the lead's bytes in it. The merge's role check ("only an adversary writes an adversary shard") reads `kind: "artifact-write"` rows keyed on a non-empty `agent_id`, so the session's Edit is invisible to it too. Every one of BL-530's six instances is a Bash channel; this one is the sanctioned channel used by the wrong actor, which the seal attests as recorded and never as permitted (`content-seal.sh` LIMITS: "a seal attests the channel of the last write, not who should have made it").
+
+Owed: a shard whose newest seal row is `actor: "session"` refuses at merge, as a gate part already does, naming re-dispatch as the remedy; or the role check reads seal rows as well as artifact-write rows. Probe: an adversary Write then a session Edit on one shard refuses; control: an adversary Write then the same adversary's Edit merges.
 
 verify: manual

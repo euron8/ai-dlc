@@ -241,6 +241,7 @@ core_manifest:
   - fixtures/adversarial-shard-merge/**
   - fixtures/review-shard-merge/**
   - fixtures/remediator-shard-join/**
+  - fixtures/content-seal/**
   - fixtures/document-partition/**
   - fixtures/subject-partition/**
   - fixtures/serial-remediation-worklist/**

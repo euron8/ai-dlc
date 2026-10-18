@@ -20,6 +20,48 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.824.0] - 2026-10-17
+
+Batch 236 (cb's build). Closes BL-530 whole, on claims (b) and (c). Files BL-669. Closes
+`PC-S319-CONVERGENCE-ADVERSARY-CANNOT-KNOW-ITS-OWN-TOOL-USE-ID`. Net for this release: 1 closed, 1 filed.
+
+### A content seal on gate join inputs (BL-530)
+
+- A new PostToolUse recorder, `core/hooks/ai-dlc-content-seal.sh`, sits on the existing `Write|Edit|MultiEdit`
+  matcher. For every write to a sealed path it appends a `kind: "content-seal"` row to
+  `planning-artifacts/.artifact-writes.jsonl` carrying the sha256 of the bytes the write left. The sealed set is
+  declared once, in `core/scripts/content-seal.sh`: every file under `s<N>/shards/` (suffix-less dirs such as
+  `requirements-elicitation/` included), the joined `s<N>/*-repair*.md` records, and the gate-adjudicator
+  `*.part-*.jsonl` files.
+- `merge-adversarial-shards.sh`, `join-remediator-shards.sh` and `validate-gate-adjudication.sh --merge` refuse an
+  input whose bytes differ from its newest seal row, naming that row's writer and the remedy. None of them enumerates
+  Bash commands, so every s319 shape is refused whatever channel changed the bytes: a function-variable `perl -0pi`,
+  `python3` open-for-write, `sed -i`, `printf >>` and `git checkout`. A file with no seal row is read as before
+  seals existed, so nothing on disk wedges.
+- The join compares its joined record at `--sources`/`--escalations` mode entry, and only in a tree that has a
+  state dir. The recorder's pre-filter admits `-repair`, which is inside the contract: without it the serial
+  remediator's Edit append to a sealed record would leave no seal row and refuse.
+- Claim (c): `--merge` derives each part's `adjudicator_agent_id` from its seal row (agent_id, then the meta file's
+  `toolUseId`, then a spawn row with role `gate-adjudicator`). An invented self-report is replaced by the derived id,
+  and a real-shaped self-report that differs is refused. A part with NO seal row is refused once the tree's ledger
+  holds a tool seal row older than the part's nonce; a gate from before the recorder existed still merges.
+- Role text: `gate-adjudicator.md`, `adversary.md` and `_gate-procedures.md` say the part and shard are written with
+  Write/Edit, and that a Bash-written or Bash-amended file is refused at merge.
+- Fixtures: `content-seal` (ships) drives the real recorder and all three readers. `content-seal-mutants`
+  (`.dist-only`) kills a dropped seal append, a dropped sha comparison, a restored empty-`agent_id` filter, a dropped
+  program seal row and a dropped sealless-part refusal, each on exactly its declared arms, measured at this gate.
+  `remediator-shard-join` now declares `content-seal.sh`, so its record-mode arms drive the shipped check rather
+  than the absent-sibling path. `content-seal`'s read set is traced with the sandbox tracer (125 paths).
+- Limits, stated in the headers: a Bash write to the seal ledger can forge a seal, the floor every ledger here
+  shares; the snapshot's stamp check on Bash writes stays open; a top-level agent-teams teammate and MultiEdit are
+  unmeasured; a remediator part created wholly through Bash carries no seal row and is not compared; the adversarial
+  pass file and the gate verdict stay record-only (the verdict is bound by its `.verdict-writes.jsonl` row alone).
+
+### Filed
+
+- BL-669 (NOTE): a lead's Edit of an adversary shard writes a session seal row and merges, and the merge's role check
+  reads only artifact-write rows carrying an agent_id, so it cannot see the session either. Stays OPEN.
+
 ## [0.823.0] - 2026-10-17
 
 Batch 236 (docs release). Docs only: no engine, hook, fixture or consumer-visible file changes. Closes BL-650. Closes

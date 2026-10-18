@@ -10,4 +10,10 @@
 # pointer in scripts/validate-enforcement-map.sh. There is deliberately NO environment override.
 #
 # The reader anchors at column 0 and requires exactly ONE line matching ^FORK_BUDGET=<digits>$.
-FORK_BUDGET=3446
+#
+# Raised 3446 -> 3459 at 0.824.0 (BL-530). Measured with validator-fork-budget in two clean detached
+# worktrees, serially, 2 interleaved reps each: base e91b4d86 read 3442 forks across 310 fixture dirs,
+# release read 3455 across 312, both reps alike. The 13 forks are the two new fixture dirs
+# (content-seal, content-seal-mutants) the validator walks, about 6.5 forks per dir; no validator code
+# changed. The budget is the high reading plus the +4 margin the previous raise used.
+FORK_BUDGET=3459

@@ -1,0 +1,27 @@
+# content-seal drives the recorder hook and the seal library it sources (every seal row), and the three
+# join readers that compare against it. Without the two seal files declared, the sandbox omits them and
+# every arm runs the absent-sibling path, so both are REQUIRED. The arm scripts borrow the worlds of
+# adversarial-shard-merge and remediator-shard-join by sourcing their lib.sh, so those directories and
+# every sibling those libs check at startup are declared too.
+!core/scripts/content-seal.sh
+!core/hooks/ai-dlc-content-seal.sh
+!core/scripts/merge-adversarial-shards.sh
+!core/scripts/join-remediator-shards.sh
+!core/scripts/validate-gate-adjudication.sh
+core/scripts/validate-adversarial-convergence.sh
+core/scripts/validate-steering-budget.sh
+core/scripts/validate-suppression-lifetime.sh
+core/scripts/validate-artifact-budget.sh
+core/scripts/validate-artifact-derivations.sh
+core/scripts/validate-provenance-block.sh
+core/scripts/partition-document.sh
+core/scripts/partition-subject.sh
+core/schemas/provenance-block.json
+core/schemas/gate-adjudication-verdict.json
+core/skills/ai-dlc/enforcement-map.yaml
+core/team-roles/remediator.md
+core/hooks/ai-dlc-gate-remediation-guard.sh
+core/hooks/ai-dlc-derivation-capture.sh
+core/fixtures/adversarial-shard-merge/
+core/fixtures/remediator-shard-join/
+core/fixtures/lib/

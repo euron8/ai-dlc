@@ -79,8 +79,12 @@
 #   are all of another role is refused on the role.
 #   The merged `tool_use_id` is the derived id of the first cross shard, and `shard_tool_use_ids`
 #   lists the derived ids.
+#   THE CONTENT SEAL. A shard whose bytes differ from its newest `kind: "content-seal"` row (taken
+#   by ai-dlc-content-seal.sh after every Write or Edit) is REFUSED, naming that row's writer and the
+#   remedy; a shard with no seal row is not compared. content-seal.sh owns the set and the check.
 #   LIMITS. A shard written with Bash (a redirect, `sed -i`, a script's open) leaves no row and is
-#   refused: write shards with Write or Edit. A row is an ATTEMPT recorded at PreToolUse, not proof
+#   refused: write shards with Write or Edit. A shard AMENDED with Bash after a Write is refused by
+#   the seal. A row is an ATTEMPT recorded at PreToolUse, not proof
 #   that the recorded agent authored the bytes on disk. A lead Bash write to any of the three
 #   records, or to `subagent-context.jsonl`, can forge the join; the hook denies Write/Edit to all
 #   four, and BL-530's second half owns the Bash floor. No second ledger is kept here.
@@ -323,6 +327,7 @@
 #   reached while an earlier one refuses. In order:
 #     1. arguments, placement, the map, the ceilings          exit at once, one line
 #     2. the shard-set walk (names, duplicates, cross shape, missing shards)   all collected
+#     2b. the content seal (every shard whose bytes differ from its seal row)  all collected
 #     3. the dispatch ids from the harness records (--rerun staging included)  exit at once, one line
 #     4. the seat-complete set check                          exit at once, one line
 #     5. per shard: a structural refusal (provenance block, counts, verdict, invoked_at, dispatch id,
@@ -846,6 +851,26 @@ REC_WRITES="$REC_PLAN/.artifact-writes.jsonl"
 REC_SPAWNS="$REC_STATE/spawn-ledger.jsonl"
 REC_PROBES="$REC_STATE/subagent-context.jsonl"
 REC_PREFIX="$(basename "$REC_STATE")/planning-artifacts/$(basename "$SPRINT_DIR")/shards/$SHARD_BASE/"
+# ---- THE CONTENT SEAL (BL-530): a shard amended after its last sealed write is refused ---------
+# `content-seal.sh`, beside this script, owns the sealed set, the row and the comparison; this site
+# only hands it the shard files. Its seal rows (`kind: "content-seal"`) are read there with no
+# agent_id filter, and every write-ledger read below keys on `kind == "artifact-write"`, so neither
+# sees the other's rows. A shard with no seal row is not compared, so a tree written before the
+# recorder existed merges as it did. With the sibling absent the merge refuses only when the ledger
+# holds a TOOL seal row (`"actor":"agent"` or `"session"`; only seal rows carry `actor`); otherwise
+# there is nothing it could have compared, and a program row alone is record-only.
+SEAL="$(cd "$(dirname "$0")" && pwd)/content-seal.sh"
+if [ -f "$SEAL" ]; then
+  cut -f2 "$T/shards" | bash "$SEAL" --check "$REC_STATE" - > "$T/seal" 2> "$T/seal.err"; SEAL_RC=$?
+  case "$SEAL_RC" in
+    0) ;;
+    1) while IFS= read -r _sl; do [ -n "$_sl" ] && collect "$_sl"; done < "$T/seal" ;;
+    *) refuse "the content-seal check over $REC_WRITES did not run (exit $SEAL_RC): $(head -1 "$T/seal.err")" ;;
+  esac
+  phase_barrier
+elif [ -f "$REC_WRITES" ] && grep -qE '"actor":[[:space:]]*"(agent|session)"' "$REC_WRITES"; then
+  refuse "$REC_WRITES carries content-seal rows but $SEAL is absent, so no shard's bytes can be compared with its seal; reinstall ai-dlc"
+fi
 # One jq per record. Write rows: `<file under the shard dir>\t<agent_id>\t<meta path, empty when
 # the row carries no transcript_path>`.
 : > "$T/wrows" && : > "$T/spawns" && : > "$T/probes" && : > "$T/metas" || refuse "cannot stage the harness records"
@@ -1390,6 +1415,12 @@ if [ -e "$OUT" ]; then
   refuse "$OUT already exists and differs from this merge; a pass file is never overwritten"
 fi
 cp "$T/out" "$OUT.merge-tmp.$$" && mv "$OUT.merge-tmp.$$" "$OUT" || refuse "writing $OUT failed"
+# The program's own seal row, RECORD-ONLY: the pass file is outside the sealed set because none of
+# the three join programs reads it as an input -- Check 24 does, and this merge's only look at an
+# existing pass file is the `cmp -s` above, which already refuses any byte difference
+# (content-seal.sh, PROGRAM ROWS). A failed append changes no outcome.
+[ -f "$SEAL" ] && { bash "$SEAL" --record "$REC_STATE" program:merge-adversarial-shards "$OUT" \
+  || printf 'NOTE: the program seal row for %s was not appended\n' "$OUT" >&2; }
 if [ "$ELICIT" -eq 1 ]; then
   printf 'MERGED: %s elicitation shards=%s critical=%s major=%s minor=%s (no verdict)%s\n' \
     "$OUT" "$(wc -l < "$T/shards" | tr -d ' ')" "$S_CRIT" "$S_MAJOR" "$S_MINOR" \
