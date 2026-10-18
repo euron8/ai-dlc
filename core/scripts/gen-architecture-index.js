@@ -63,14 +63,20 @@ function makeSlugger() {
   };
 }
 
+// A fence opens on 3+ backticks whose info string carries no backtick, or 3+ tildes; it closes only on
+// a bare run (blanks aside) of the opener's own character.
+function fenceOpens(t) { return /^(```+[^`]*|~~~+.*)$/.test(t); }
+function fenceCloses(t, ch) { return ch === '`' ? /^```+\s*$/.test(t) : /^~~~+\s*$/.test(t); }
+
 // First non-empty, non-heading, non-fence prose line under a heading, truncated.
 function firstSummary(lines, startIdx, endIdx, maxLen) {
   let inFence = false;
+  let fenceCh = '';
   for (let i = startIdx; i < endIdx; i++) {
     const line = lines[i];
     const t = line.trim();
-    if (/^(```|~~~)/.test(t)) { inFence = !inFence; continue; }
-    if (inFence) continue;
+    if (inFence) { if (fenceCloses(t, fenceCh)) inFence = false; continue; }
+    if (fenceOpens(t)) { inFence = true; fenceCh = t[0]; continue; }
     if (t === '' || /^#{1,6}\s/.test(t)) continue;
     if (/^(<!--|\|)/.test(t)) continue; // skip HTML comments and table rows
     const oneLine = t.replace(/\s+/g, ' ');
@@ -83,11 +89,12 @@ function extractHeadings(text) {
   const lines = text.split('\n');
   const headings = [];
   let inFence = false;
+  let fenceCh = '';
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const t = line.trim();
-    if (/^(```|~~~)/.test(t)) { inFence = !inFence; continue; }
-    if (inFence) continue;
+    if (inFence) { if (fenceCloses(t, fenceCh)) inFence = false; continue; }
+    if (fenceOpens(t)) { inFence = true; fenceCh = t[0]; continue; }
     const m = /^(#{2,3})\s+(.*\S)\s*$/.exec(line); // H2 and H3 only
     if (m) headings.push({ level: m[1].length, title: m[2].trim(), line: i + 1, idx: i });
   }

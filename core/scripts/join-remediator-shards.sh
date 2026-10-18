@@ -444,7 +444,8 @@ SEAT_DIR="${STATE}/party-mode/s${SPRINT}"
 src_ids() {
   awk '
     FNR == 1 { fence = 0; b = FILENAME; sub(/.*\//, "", b); print b "\t" }
-    /^[ \t]*(```|~~~)/ { fence = !fence; next }
+    fence && ((fc == "`" && $0 ~ /^[ \t]*```+[ \t]*$/) || (fc == "~" && $0 ~ /^[ \t]*~~~+[ \t]*$/)) { fence = 0; next }
+    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; next }
     fence { next }
     /^##+[ \t]/ {
       s = $0; sub(/^#+[ \t]+/, "", s); gsub(/[*`_]/, "", s); gsub(/[][]/, "", s); sub(/^[ \t]+/, "", s)
@@ -466,7 +467,8 @@ src_check() {
   toks="$(awk '
     function flush() { if (disp && !nsrc && !ruled) print "NOSOURCE\t" cf "\t" cur; if (disp) ne++; disp = 0; nsrc = 0; ruled = 0 }
     FNR == 1 { flush(); cur = "(before any heading)"; cf = FILENAME; sub(/.*\//, "", cf); fence = 0 }
-    /^[ \t]*(```|~~~)/ { fence = !fence; next }
+    fence && ((fc == "`" && $0 ~ /^[ \t]*```+[ \t]*$/) || (fc == "~" && $0 ~ /^[ \t]*~~~+[ \t]*$/)) { fence = 0; next }
+    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; next }
     fence { next }
     /^#+[ \t]/ { flush(); cur = $0; sub(/^#+[ \t]+/, "", cur); next }
     /^[[:space:]-]*[*_`]*disposition[*_`]*:/ { disp = 1; v = tolower($0); sub(/^[^:]*:/, "", v); gsub(/[*_`]/, "", v); sub(/^[ \t]+/, "", v)
@@ -531,14 +533,14 @@ SRCEOF
 # had all finished; deciding it over the whole dir convicted an earlier step's seat written before
 # the instruction. A cited file of a step with no marker anywhere is accepted unchecked -- exactly
 # as the merges treat an unmarked directory. The marker predicate is the beat's: last non-blank
-# line, no carriage return, outside an unclosed fence (closed only by the opener's character, at
-# least as long).
+# line, no carriage return, outside an unclosed fence (opened by 3+ backticks whose info string
+# carries no backtick, or by 3+ tildes; closed only by the opener's character, at least as long).
 # seat_marked <file> -> 0 iff it ends in the marker; prints the marker's <step> token.
 SEAT_FENCE_AWK='
     function fence_line(   r) {
       if (!match($0, /^[ \t]*(```+|~~~+)/)) return 0
       r = substr($0, RSTART, RLENGTH); sub(/^[ \t]*/, "", r)
-      if (fc == "") { fc = substr(r, 1, 1); fl = length(r) }
+      if (fc == "") { if (substr(r, 1, 1) == "`" && substr($0, RSTART + RLENGTH) ~ /`/) return 0; fc = substr(r, 1, 1); fl = length(r) }
       else if (substr(r, 1, 1) == fc && length(r) >= fl && substr($0, RSTART + RLENGTH) ~ /^[ \t\r]*$/) { fc = ""; fl = 0 }
       return 1
     }'
@@ -838,11 +840,13 @@ contract_check() {
       if (r != "" && r !~ /[ \t]/) cfile = r; else ctext = ""
     }
     FNR == 1 { flush(); cur = "(before any heading)"; sev = 0; hl = 0; cf = FILENAME; sub(/.*\//, "", cf); part = cf; fence = 0 }
-    /^[ \t]*(```|~~~)/ {
-      if (!fence && sibw) { b = $0; sub(/^[ \t]+/, "", b); sub(/[ \t]+$/, "", b); sibw = 0
-                            if (b == "```text") { sibin = 1; srn = 0; sctl = 0; sn = "" } }
-      else if (fence && sibin) sibclose()
-      fence = !fence; inclaim = 0; next }
+    fence && ((fc == "`" && $0 ~ /^[ \t]*```+[ \t]*$/) || (fc == "~" && $0 ~ /^[ \t]*~~~+[ \t]*$/)) {
+      if (sibin) sibclose()
+      fence = 0; inclaim = 0; next }
+    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ {
+      if (sibw) { b = $0; sub(/^[ \t]+/, "", b); sub(/[ \t]+$/, "", b); sibw = 0
+                  if (b == "```text") { sibin = 1; srn = 0; sctl = 0; sn = "" } }
+      fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; inclaim = 0; next }
     fence && sibin {
       l = $0; sub(/^[ \t]+/, "", l); sub(/[ \t]+$/, "", l)
       if (sctl == 1) { sctl = 2; sn = l }
@@ -1074,7 +1078,8 @@ checks_field() {
     # third tip adversary). The serial block appended after the last part reads as that last
     # segment, so a serial repair makes that segment chargeable -- the conservative direction.
     function commit() { if (!seg || srep) { bad = bad sbad; if (snr) nr = 1 }; sbad = ""; snr = 0; srep = 0 }
-    /^[ \t]*(```|~~~)/ { fence = !fence; next }
+    fence && ((fc == "`" && $0 ~ /^[ \t]*```+[ \t]*$/) || (fc == "~" && $0 ~ /^[ \t]*~~~+[ \t]*$/)) { fence = 0; next }
+    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; next }
     fence { next }
     rec == 1 && /^<!-- shard: [^ ]+ -->[ \t]*$/ { commit(); seg = 1; next }
     /^[[:space:]-]*[*_`]*advisor[*_`]*:/ { v = val()
@@ -1248,7 +1253,8 @@ record_tail() {
 # seat token with a part token is not refused here either: its part tokens refuse as NOFILE.
 src_kind() {  # <record> -> "PARTY", "PART" or "NONE" from its source: tokens, outside fences
   awk '
-    /^[ \t]*(```|~~~)/ { fence = !fence; next }
+    fence && ((fc == "`" && $0 ~ /^[ \t]*```+[ \t]*$/) || (fc == "~" && $0 ~ /^[ \t]*~~~+[ \t]*$/)) { fence = 0; next }
+    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; next }
     fence { next }
     /^[[:space:]-]*[*_`]*source[*_`]*:/ {
       v = $0; sub(/^[^:]*:/, "", v)

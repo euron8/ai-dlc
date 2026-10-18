@@ -276,6 +276,14 @@ d="$(hdr_world "## Findings\n\n\`\`\`text\n$PROBES\n\`\`\`")"; mk_markers "$d"; 
   && ok "RS4: the probes heading inside a fence under ## Findings -> ignored, MERGED at shard 2 = 0" \
   || bad "RS4: a fenced ### under ## Findings was not ignored (rc=$RC): $(cat "$MO")"
 
+# ---- BL-660: one fence grammar (opener: no backtick in a backtick fence's info string; closer: a bare run of the opener's character)
+p_fence_prose "$MERGE" && ok "FG1: a prose line opening with three backticks and carrying a backtick, then a real derived fence and two findings -> MERGED counting both (the filed instance)" \
+  || bad "FG1: (rc=$RC) $(cat "$MO")"
+p_fence_unclosed "$MERGE" && ok "FG2: a genuinely unclosed fence still hides its finding -> REFUSED on the count" || bad "FG2: (rc=$RC) $(cat "$MO")"
+p_fence_tilde "$MERGE" && ok "FG3: a backtick fence holding a ~~~~^^^ line closes only on its own backtick line -> M1 stays hidden, MERGED major=4" || bad "FG3: (rc=$RC) $(cat "$MO")"
+p_fence_four "$MERGE" && ok "FG4: a four-backtick opener with an info string opens and its bare four-backtick line closes -> MERGED major=5" || bad "FG4: (rc=$RC) $(cat "$MO")"
+p_fence_sameset "$MERGE" && ok "FG5: same_set -- a cross finding duplicating its owner's set is REFUSED identically with and without a prose backtick line in the owner's shard" || bad "FG5: (rc=$RC) $(cat "$MO")"
+
 # CH1-CH8: --check-header on one file. The base is a real B3 shard, which passes; each cell varies ONE field.
 ch() { bash "$MERGE" --check-header "$1" --axis "$2" > "$MO" 2>&1; RC=$?; } # <shard file> <axis>
 chv() { sed "$2" "$1" > "$3"; } # <src> <sed script> <dst>

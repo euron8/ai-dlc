@@ -95,7 +95,7 @@ MUTANTS_b="MX8 MX9 MX10 MX11 MX12 MX13 MX14 TM15"
 MUTANTS_c="MX15 XM1 XM2 XM7 XM8 XM3 XM4 TM11 TM12"
 MUTANTS_d="XM5 XM6 SM1 SM2 SM3 SM4 RM3 TM13 DM1"
 MUTANTS_e="TM1 TM2 TM3 TM4 TM5 TM6 TM10 BM1 RM4"
-MUTANTS_f="TM7 TM8 TM9 RM1 RM2 HM1 CM1"
+MUTANTS_f="TM7 TM8 TM9 RM1 RM2 HM1 CM1 FM1 FM2 FM3"
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
@@ -587,6 +587,23 @@ mutant "TM15 real-shape grammar restated toolu_-only" "tuid_call" \
 mutant "RM4 rerun start never bound to its dispatch time" "rerun_bind" \
   '| if $d > $tol then "FAR\t"' \
   '| if false then "FAR\t"'
+# BL-660. FM1: the old opener restored in the count (any line starting with three backticks toggles),
+# same_set left on the new grammar. FM2: the old opener restored in same_set only. FM3: the loose
+# closer restored (any ``` or ~~~ run closes), openers unchanged. FM1 also kills fence_sameset: its owner
+# shard carries the prose line before the finding, which the old count hides, so the arms overlap there by construction.
+mutant "FM1 old fence opener restored in the count" "fence_prose fence_sameset" \
+  '    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; next }
+    fence { next }
+    /^## [A-Z]+' \
+  '    !fence && /^[ \t]*(```|~~~)/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; next }
+    fence { next }
+    /^## [A-Z]+'
+mutant "FM2 old fence opener restored in same_set only" "fence_sameset" \
+  '    !f && /^[ \t]*(```+[^`]*|~~~+.*)$/ { f = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; next }' \
+  '    !f && /^[ \t]*(```|~~~)/ { f = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; next }'
+mutant "FM3 loose fence closer restored" "fence_tilde" \
+  '    fence && ((fc == "`" && $0 ~ /^[ \t]*```+[ \t]*$/) || (fc == "~" && $0 ~ /^[ \t]*~~~+[ \t]*$/)) { fence = 0; next }' \
+  '    fence && ($0 ~ /^[ \t]*(```|~~~)/) { fence = 0; next }'
 # ---- END MX MUTANTS
 
 # ------------------------------------------------------------------------------ the reap

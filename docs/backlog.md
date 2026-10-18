@@ -681,7 +681,7 @@ Owed: open a fence only where the info string carries no backtick, or name, in t
 
 Related, not duplicates: archived BL-577 (a `### ` non-finding subsection counted, closed in 0.822.0), and archived BL-162 (the derived-fence opener matched at column 0 only).
 
-verify: manual
+verify: sh bash -c 'set -uo pipefail; NAME=adversarial-shard-merge; . core/fixtures/adversarial-shard-merge/lib.sh && p_fence_prose "$MERGE" && p_fence_unclosed "$MERGE" && p_fence_tilde "$MERGE" && p_fence_four "$MERGE" && p_fence_sameset "$MERGE"' >/dev/null 2>&1
 
 ## BL-662 — the adversarial repair record is the only repair kind with no round word, the join accepts `<artifact>-adversarial-repair-p<M>`, and only gate-time arm H catches it
 
