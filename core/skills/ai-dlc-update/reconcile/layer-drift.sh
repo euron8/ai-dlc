@@ -2794,7 +2794,7 @@ if [ "$MODE" = list ]; then
     # is: showing one of two would hide the thing the operator opened the listing to find.
   done < "$LD_T/adj-list-subjects"
   rm -f "$ADJ_LIST_FILE"
-  [ "$ld_emit_failed" -eq 0 ] && echo "layer-drift --list-adjudications: ${_n} keyed subject(s) in ${BASE}..${THEIRS} — ${_withv} with a recorded verdict, ${_without} without. A subject is any row this pass asked adj_digest to key; ZERO means the pass produced no keyed row, not that the layer is clean." >&2
+  [ "$ld_emit_failed" -eq 0 ] && echo "layer-drift --list-adjudications: ${_n} keyed subject(s) in ${BASE}..${THEIRS} — ${_withv} with a clearing verdict, ${_without} without. A subject is any row this pass asked adj_digest to key; ZERO means the pass produced no keyed row, not that the layer is clean." >&2
   ld_finish
 fi
 ld_finish
