@@ -942,7 +942,8 @@ case "$IDLE_SECS" in ''|*[!0-9]*) IDLE_SECS=$(( BUDGET * 2 )) ;; esac
 # The id is what the lead HOLDS at arm time, never what arrives later. The Agent result
 # shows `agentId: <hex>` for a spawn and `agent_id: <name>@<team>` for a named teammate;
 # the toolu_ id first reaches the lead in the task-notification, when the agent ENDS.
-#   toolu_<...>      the ledger row whose `tool_use_id` is it
+#   toolu_<...>      the ledger row whose `tool_use_id` is it. Any DISPATCH_ID_PREFIXES member
+#   call_<...>       (read from the sibling validator, below) is taken the same way.
 #   <name>@<team>    a named teammate: the ONE ledger row whose `name` is <name>. Its
 #                    meta.json carries no toolUseId, so the name is the only key.
 #   <hex agentId>    this session's `agent-<id>.meta.json` gives `toolUseId`, which is the
@@ -968,10 +969,12 @@ dispatch_epoch_of() {  # $1 = agentId, <name>@<team> or toolu_ id -> sets dp_ts_
   dp_id_="$1"
   [ -r "$SPAWN_LEDGER" ] || dispatch_refuse "no spawn ledger at $SPAWN_LEDGER" \
     "Arm from the project root, where the dispatch guard writes it."
-  case "$dp_id_" in *[!A-Za-z0-9_@.-]*) dispatch_refuse "not an agentId or a toolu_ id" \
+  case "$dp_id_" in *[!A-Za-z0-9_@.-]*) dispatch_refuse "not an agentId, a <name>@<team> or a dispatch id (prefixes: $DP_PREFIXES)" \
     "Pass the agentId the Agent result returned." ;; esac
-  case "$dp_id_" in
-    toolu_*) dp_tui_="$dp_id_" ;;
+  dp_hit_=0
+  for dp_p_ in $DP_PREFIXES; do case "$dp_id_" in "$dp_p_"?*) dp_hit_=1 ;; esac; done
+  case "$dp_hit_:$dp_id_" in
+    1:*) dp_tui_="$dp_id_" ;;
     *@*)
       dp_n_="${dp_id_%%@*}"
       dp_rows_="$(ledger_rows name "$dp_n_")"
@@ -1000,7 +1003,31 @@ dispatch_epoch_of() {  # $1 = agentId, <name>@<team> or toolu_ id -> sets dp_ts_
   [ -n "$dp_e_" ] || dispatch_refuse "its ledger row has no readable ts ('$dp_ts_')" \
     "Arm without --since."
 }
+# THE DISPATCH-ID PREFIXES ARE READ FROM THEIR ONE DECLARATION, never retyped here: the sibling
+# validate-adversarial-convergence.sh declares `DISPATCH_ID_PREFIXES="toolu_ call_"`, and an id
+# opening with any member is a tool_use_id (`call_` is a local-model lead's). Resolved beside this
+# script, as --shard-header resolves its sibling. The value may be double- or single-quoted; it
+# must be declared exactly once, and every member must be word characters. Under --dispatch, a
+# missing sibling or a missing, duplicated or malformed declaration REFUSES (exit 64): a silent
+# `toolu_`-only fallback would refuse a local-model lead's ids while reading as a working grammar.
+DISPATCH_GRAMMAR="${WD_SCRIPT_DIR}/validate-adversarial-convergence.sh"
+dispatch_prefixes() {  # prints the declared prefix list; 1 when it cannot be read as one
+  [ -f "$DISPATCH_GRAMMAR" ] || return 1
+  dg_h_="$(grep -E "^DISPATCH_ID_PREFIXES=(\"[^\"]*\"|'[^']*')[[:blank:]]*\$" "$DISPATCH_GRAMMAR" 2>/dev/null)" || return 1
+  [ "$(grep -c '^DISPATCH_ID_PREFIXES=' "$DISPATCH_GRAMMAR" 2>/dev/null)" = 1 ] || return 1
+  dg_v_="${dg_h_#DISPATCH_ID_PREFIXES=}"
+  dg_v_="$(printf '%s' "$dg_v_" | sed 's/[[:blank:]]*$//')"   # trailing blanks after the quote
+  dg_v_="${dg_v_#?}"; dg_v_="${dg_v_%?}"                       # the quote pair
+  case "$dg_v_" in *[!A-Za-z0-9_\ ]*) return 1 ;; esac
+  [ -n "${dg_v_// /}" ] || return 1
+  printf '%s' "$dg_v_"
+}
 if [ -n "$DISPATCH" ]; then
+  DP_PREFIXES="$(dispatch_prefixes)" || {
+    echo "FAIL: --dispatch cannot read its id grammar: DISPATCH_ID_PREFIXES is not declared exactly once," >&2
+    echo "  quoted and word-only, in $DISPATCH_GRAMMAR (or that file is absent beside this script)." >&2
+    echo "  No dispatch id can be classified, so NO beat ran and the join is NOT armed." >&2
+    exit 64; }
   DISPATCH_EPOCH=""; DISPATCH_TS=""; DISPATCH_TUI=""
   # An id is validated inside the loop, after this split, so no glob may expand first: noglob is
   # on for the SPLIT ALONE and restored before anything else runs. Left on, it silenced every glob

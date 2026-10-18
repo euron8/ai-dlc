@@ -48,6 +48,10 @@ echo "HERMETIC-CONSUMED core/scripts/wait-for-deliverable.sh"
 MERGE="$(dirname "$SUBJ")/merge-adversarial-shards.sh"
 [ -f "$MERGE" ] || { echo "FIXTURE ERROR: merge-adversarial-shards.sh is not beside $SUBJ" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/scripts/merge-adversarial-shards.sh"
+# --dispatch reads its id prefixes from this sibling's DISPATCH_ID_PREFIXES (sections 18-19).
+GRAMMAR="$(dirname "$SUBJ")/validate-adversarial-convergence.sh"
+[ -f "$GRAMMAR" ] || { echo "FIXTURE ERROR: validate-adversarial-convergence.sh is not beside $SUBJ" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/scripts/validate-adversarial-convergence.sh"
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
@@ -1879,9 +1883,7 @@ mk_ledger_row() {  # $1 = workdir, $2 = tool_use_id, $3 = epoch -- appends one s
 sib_dir() {  # $1 = subject copy -> prints a fresh dir holding it as wait-for-deliverable.sh
   sd_="$(mktemp -d "$TMPROOT/sib.XXXXXX")" || broken "mktemp failed"
   cp "$1" "$sd_/wait-for-deliverable.sh" || broken "cannot copy the subject"
-  for sb_ in "$(dirname "$SUBJ")"/merge-adversarial-shards.sh "$(dirname "$SUBJ")"/validate-adversarial-convergence.sh; do
-    [ -f "$sb_" ] && { cp "$sb_" "$sd_/" || broken "cannot copy $sb_"; }
-  done
+  cp "$MERGE" "$GRAMMAR" "$sd_/" || broken "cannot copy the subject's siblings beside it"
   printf '%s' "$sd_"
 }
 
@@ -1951,6 +1953,73 @@ M38_dispatch_noglob_leaks() {
   if [ -n "$HEIR_B_PID" ] && [ "$HEIR_AFTER" != "$HEIR_A_PID" ]; then
     ok "MUTANT dispatch-noglob-leaks: the leaked noglob makes the exiting holder drop the marker under its sibling — section 18b catches it"
   else bad "MUTANT dispatch-noglob-leaks: section 18b survives noglob leaking (marker after: '$HEIR_AFTER', sibling '$HEIR_A_PID')"; fi
+  rm -rf "$W"
+}
+
+# ===========================================================================
+# 19. --dispatch TAKES EVERY DECLARED ID PREFIX, READ FROM ITS ONE DECLARATION.
+#     A local-model lead's dispatch id is `call_<32 hex>`. The subject once matched `toolu_*`
+#     alone, so a `call_` id fell to the agentId arm and refused for a missing meta.json. The
+#     prefixes are declared once, in the sibling validate-adversarial-convergence.sh; the arms
+#     drive a `call_` id against a seeded ledger row, a bare-hex agentId through meta.json as the
+#     control that the agentId arm still runs, and a subject with no sibling, which must refuse
+#     64 rather than fall back to `toolu_` alone. The ledger seeds an EPOCH row first, so the
+#     subject's row is not the ledger's only one.
+# ===========================================================================
+CALL_ID="call_45aba045bf78553ca703fc8694de7577"
+call_world() {  # $1 = subject -> W, OUT, RC; a --status read of a path written after the dispatch
+  W="$(mk_work)"; cw_e_=$(( $(date +%s) - 60 ))
+  mk_ledger_row "$W" toolu_wbl649epoch $(( cw_e_ - 600 ))
+  mk_ledger_row "$W" "$CALL_ID" "$cw_e_"
+  printf 'x\n' > "$W/deliv.md"
+  ( cd "$W" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+      AI_DLC_PROJECT_ROOT="$PWD" bash "$1" --status --dispatch "$CALL_ID" deliv.md ) > "$BEATOUT" 2>&1
+  RC=$?; OUT="$(cat "$BEATOUT")"
+}
+S19a_dispatch_call_prefix() {
+  call_world "$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  if [ "$RC" -eq 0 ] && has "DELIVERED deliv.md"; then ok "dispatch-call: a call_ dispatch id resolves its ledger row and joins from it"
+  else bad "dispatch-call: a call_ dispatch id did not resolve (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+  # CONTROL: a bare-hex agentId still takes the meta.json arm and reaches the same row.
+  W="$(mk_work)"; TD="$TMPROOT/s19-td.$$"; mkdir -p "$TD"
+  mk_ledger_row "$W" "$CALL_ID" $(( $(date +%s) - 60 ))
+  printf '{"agentType":"dev","toolUseId":"%s"}' "$CALL_ID" > "$TD/agent-a649beef.meta.json"
+  printf 'x\n' > "$W/deliv.md"
+  ( cd "$W" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_TEAMMATE_DIR="$TD" \
+      AI_DLC_PROJECT_ROOT="$PWD" bash "$(sib_dir "$SUBJ")/wait-for-deliverable.sh" --status --dispatch a649beef deliv.md ) > "$BEATOUT" 2>&1
+  RC=$?; OUT="$(cat "$BEATOUT")"
+  if [ "$RC" -eq 0 ] && has "DELIVERED deliv.md"; then ok "dispatch-call: CONTROL — a bare-hex agentId still resolves through its meta.json"
+  else bad "dispatch-call: CONTROL FAILED — the agentId arm no longer resolves (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+}
+S19b_dispatch_grammar_missing_refuses() {
+  LONE649="$(mktemp -d "$TMPROOT/lone649.XXXXXX")"; cp "$SUBJ" "$LONE649/wait-for-deliverable.sh" || broken "cannot copy the subject"
+  call_world "$LONE649/wait-for-deliverable.sh"
+  if [ "$RC" -eq 64 ] && has "cannot read its id grammar"; then ok "dispatch-call: a subject with no sibling grammar refuses --dispatch (exit 64)"
+  else bad "dispatch-call: a missing id grammar did not refuse (rc=$RC) — a silent fallback: $OUT"; fi
+  rm -rf "$W"
+  # CONTROL: the same lone copy without --dispatch still runs, so the refusal is the grammar's.
+  W="$(mk_work)"
+  ( cd "$W" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+      AI_DLC_PROJECT_ROOT="$PWD" bash "$LONE649/wait-for-deliverable.sh" --status --since "$(( $(date +%s) - 60 ))" deliv.md ) > "$BEATOUT" 2>&1
+  RC=$?; OUT="$(cat "$BEATOUT")"
+  if [ "$RC" -eq 0 ] && has "STATUS --"; then ok "dispatch-call: CONTROL — the same lone copy without --dispatch runs"
+  else bad "dispatch-call: CONTROL FAILED — the lone copy does not run at all (rc=$RC): $OUT"; fi
+  # A DUPLICATED declaration refuses too: two lines are two grammars, and picking one is a guess.
+  SD="$(sib_dir "$SUBJ")"
+  printf '\nDISPATCH_ID_PREFIXES="toolu_"\n' >> "$SD/validate-adversarial-convergence.sh"
+  call_world "$SD/wait-for-deliverable.sh"
+  if [ "$RC" -eq 64 ]; then ok "dispatch-call: a duplicated DISPATCH_ID_PREFIXES declaration refuses (exit 64)"
+  else bad "dispatch-call: a duplicated declaration was accepted (rc=$RC): $OUT"; fi
+  rm -rf "$W" "$LONE649"
+}
+M39_dispatch_toolu_only() {
+  mutant dispatch-toolu-only -e 's@^  for dp_p_ in \$DP_PREFIXES; do@  for dp_p_ in toolu_; do@' || return
+  call_world "$(sib_dir "$MUT")/wait-for-deliverable.sh"
+  if [ "$RC" -eq 64 ] && ! has "DELIVERED deliv.md"; then
+    ok "MUTANT dispatch-toolu-only: a prefix list hardwired to toolu_ refuses the call_ id — section 19a catches it"
+  else bad "MUTANT dispatch-toolu-only: section 19a survives the prefix list being hardwired (rc=$RC): $OUT"; fi
   rm -rf "$W"
 }
 
