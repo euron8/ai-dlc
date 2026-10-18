@@ -655,7 +655,18 @@ Related, not duplicates: archived BL-533 (alias rows in the write ledger) and th
 
 **Outcome (reported by ai-dlc-f7, read-only on graph, transcript line 3474).** The second re-run joined: `JOINED: .../architecture-elicitation-repair-p1.md (5 parts, 5 writers, 3 superseded rows)`, ESCALATED-COUNT 4 including `5.md F-1 — MAJOR`, which is the escalation the original refusal asked for. The joined record's line 4 reads `rerun: 5.md since 2026-10-17T18:57:15Z; superseded on .../sections/5.md: abd88800a2c928e2e (3 rows, 18:48:53Z..18:48:57Z)`. So `af58dac98f4b93dfd`'s one Edit to `sections/5.md` at 18:57:51Z is what identified the re-run writer, and the record-only attempt by `a042cd411e71b1ce4` left no line. The gate pass therefore rests on the edit no finding asked for.
 
-verify: manual
+**Fix, b236-join: option (a).** The re-run writer set is kept. RECW is added: the agents that wrote P's own record at
+or after S_P. When F_P has a row at or after S_P, RECW must be among its writers, and PRFOREIGN is unchanged. When F_P
+has none, the re-run is RECORD-ONLY. Nothing on F_P is superseded, and RECW must be exactly one agent that is not one of
+F_P's writers before S_P. Two new refusals name the record in that case. The record line reads
+`rerun: <part> since <S_P>; record-only, by <id>; kept on <file>: <ids> (...)`. A re-run that writes nothing is still
+PRNONE alone. LATE, SAME, PRLATE, PROUT, RWOUT and PRNONE are unchanged. The nested-writer fold (BL-537) runs first, so a
+re-run writer's own subagent editing F_P is the re-run writer. `_gate-procedures.md` step 1b's gate now covers the
+`sets part of the fix aside` refusal and states the record-only re-run. The fixture arm is `remediator-shard-join`
+RR15, and its mutant is JX97. Residual, stated in the header: the record-only decision is per part, so a re-run that
+edits one of two cited files reads the other UNWRITTEN.
+
+verify: sh F=core/fixtures/remediator-shard-join/lib.sh; J=core/scripts/join-remediator-shards.sh; [ -f "$F" ] && [ -f "$J" ] || exit 9; grep -q '^p_rronly() {' "$F" || exit 9; ( NAME=remediator-shard-join; AI_DLC_VERDICT_STORE="$(mktemp -d)"; export AI_DLC_VERDICT_STORE; . "$F" >/dev/null 2>&1 || exit 2; p_rronly "$JOIN" >/dev/null 2>&1 ); r=$?; [ "$r" -eq 2 ] && exit 9; exit "$r"
 
 ## BL-658 — the recover gate can deny a third Read from stage `snapshot` after both mandated Reads succeeded, because a missing PROGRESS defaults to `snapshot`
 

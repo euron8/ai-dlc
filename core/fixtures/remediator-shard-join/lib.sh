@@ -1104,6 +1104,48 @@ p_rrsubj() { # SUBJECT mode: one SECTIONED part re-run by a new agent after S_P 
     && grep -q -- "^rerun: $o.md since $G_SP; superseded on " "$(sj_out "$w")" \
     && grep -qx -- "every subject file and section copy was written by exactly one agent in its window;" "$(sj_out "$w")"
 }
+# THE RECORD-ONLY RE-RUN (graph s319 part 5). Six sections, one writer each, every record written before
+# S_P; part 5 is re-run and its cure is a record change, so no row on sections/5.md falls after S_P.
+r5_world() { # -> world
+  local w o; w="$(new_world)" || return 1
+  { printf '# Architecture\n\n'
+    for o in 1 2 3 4 5 6; do printf '## Section %s\nThe first line of section %s, in prose.\nThe second line of section %s, in prose.\n\n' "$o" "$o" "$o"; done; } > "$w/$DOCREL"
+  bash "$PARTITION" --split "$w/$DOCREL" "$w/$RDREL" >/dev/null 2>&1 && [ -f "$w/$RDREL/sections/6.md" ] || return 1
+  gsec "$w" 1 "$AG1" 19:25:00; gsec "$w" 2 "$AG2" 19:26:00; gsec "$w" 3 "$AG3" 19:28:00
+  gsec "$w" 4 "$AG4" 19:28:10; gsec "$w" 5 "$G_A5" 19:28:20; gsec "$w" 6 "$G_A6" 19:28:30
+  for o in 1 2 3 4 5 6; do docpart "$w" "$o"; done
+  grec "$w" 1 "$AG1" 19:29:01; grec "$w" 2 "$AG2" 19:29:02; grec "$w" 3 "$AG3" 19:29:03
+  grec "$w" 4 "$AG4" 19:29:04; grec "$w" 5 "$G_A5" 19:29:05; grec "$w" 6 "$G_A6" 19:29:06
+  printf '%s' "$w"
+}
+p_rronly() { # a record-only re-run of 5.md -> JOINED, nothing on sections/5.md dropped, the record line `record-only`;
+  # a re-run writing nothing -> PRNONE alone; the original rewriting 5.md -> REFUSED; two record writers -> REFUSED;
+  # a nested child of the re-run writer editing sections/5.md after S_P counts as the re-run writer -> JOINED
+  local w o r5="--rerun 5.md: no file 5.md cites was written at or after the re-run start, so this is a record-only re-run"
+  w="$(r5_world)" || return 1
+  grec "$w" 5 "$G_NEW" 19:51:00
+  run_docjoin "$1" "$w" --rerun "5.md@$G_SP"; o="$(doc_out "$w")"
+  [ "$RC" -eq 0 ] && has "$JO" "(6 parts, 6 writers, 0 superseded rows)" && [ -f "$o" ] \
+    && grep -qx -- "rerun: 5.md since $G_SP; record-only, by $G_NEW; kept on $RDREL/sections/5.md: $G_A5 (1 rows, $(gts 19:28:20)..$(gts 19:28:20))" "$o" \
+    && has "$w/$DOCREL" "Repaired at 19:28:20 by $G_A5." || return 1
+  w="$(r5_world)" || return 1
+  rr5() { run_docjoin "$1" "$2" --rerun "5.md@$G_SP"; doc_refused "$2" "$3"; }
+  rr5 "$1" "$w" "--rerun 5.md: no row on 5.md's own part record $RDREL/5.md at or after the re-run start was written by its re-run writer" \
+    && [ "$(grep -c 'REFUSED:' "$JO")" -eq 1 ] || return 1
+  w="$(r5_world)" || return 1; grec "$w" 5 "$G_A5" 19:51:00
+  rr5 "$1" "$w" "$r5, and its own part record $RDREL/5.md was written after the start by $G_A5, which wrote 5.md's files before it" \
+    && ! has "$JO" "is not its re-run writer" || return 1
+  w="$(r5_world)" || return 1; grec "$w" 5 "$G_NEW" 19:51:00; grec "$w" 5 "$G_ORPH" 19:52:00
+  rr5 "$1" "$w" "$r5, and its own part record $RDREL/5.md was written after the start by more than one agent ($G_NEW $G_ORPH)" \
+    && ! has "$JO" "is not its re-run writer" || return 1
+  w="$(r5_world)" || return 1
+  spawn_row "$w" toolu_SPAG1 ""; spawn_row "$w" toolu_SPNC "$G_NEW"; probe_row "$w" "$NEST_C" toolu_SPNC
+  gsec "$w" 5 "$NEST_C" 19:50:00; grec "$w" 5 "$G_NEW" 19:51:00
+  run_docjoin "$1" "$w" --rerun "5.md@$G_SP"; o="$(doc_out "$w")"
+  [ "$RC" -eq 0 ] && has "$JO" "(6 parts, 6 writers, 1 superseded rows)" && [ -f "$o" ] \
+    && grep -qx -- "rerun: 5.md since $G_SP; superseded on $RDREL/sections/5.md: $G_A5 (1 rows, $(gts 19:28:20)..$(gts 19:28:20))" "$o" \
+    && grep -qx -- "nested: $NEST_C is $G_NEW's subagent (spawn toolu_SPNC); its 1 rows on $RDREL/sections/5.md are counted as $G_NEW" "$o"
+}
 # THE ALIAS RULE. A row by an agent with no transcript of its own, whose tool_use_id is ONE assistant
 # tool_use in another writer's transcript, is that writer's. The transcripts are seeded in a projects
 # dir inside the world; transcript_path is the PARENT session's, carried by every row alike.
@@ -1389,7 +1431,7 @@ p_agentwrites() {
   [ "$RC" -eq 2 ] && has "$JO" "REFUSED:"
 }
 
-P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrargs rrfiles rrsubj alias alnokeys alresult alown alsecond alother alsess altwo altool nested dispkey dispvocab dispruling srcparts gapfill chkpart chkrec rulingedit rulingtab chkjoined partsilent specstale specfresh spechand specnone spectwo sjspecstale sjspecfresh sjspecnone specother specunread agentwrites"
+P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrargs rrfiles rrsubj alias alnokeys alresult alown alsecond alother alsess altwo altool nested rronly dispkey dispvocab dispruling srcparts gapfill chkpart chkrec rulingedit rulingtab chkjoined partsilent specstale specfresh spechand specnone spectwo sjspecstale sjspecfresh sjspecnone specother specunread agentwrites"
 
 # ---- A PART'S DERIVATION SURVIVES THE JOIN. The part's ```derived fence is copied into the joined
 # record, and the gate re-runs `validate-artifact-derivations.sh` over the sprint dir AFTER the

@@ -76,7 +76,7 @@ MUTANTS_a="JX1 JX2 JX3 JX4 JX5 JX6 JX7 JX8 JX10 JX9 JX11 JX12 JX13 JX14 JX15 JX1
 MUTANTS_b="JX19 JX20 JX21 JX22 JX23 JX24 JX25 JX26 JX27 JX28 JX29 JX30 JX36 JX37 JX38 JX42 JX43 JX44 JX95"
 MUTANTS_c="JX45 JX46 JX47 JX48 JX49 JX39 JX40 JX41 JX31 JX32 JX33 JX34 JX35 JX50 JX51 JX52 JX53 JX54 JX93 JX94"
 MUTANTS_d="JX55 JX56 JX57 JX58 JX59 JX60 JX61 JX62 JX63 JX64 JX65 JX66 JX67 JX68 JX69 JX70 JX71 JX72 JX73"
-MUTANTS_e="JX74 JX75 JX76 JX77 JX78 JX79 JX80 JX81 JX82 JX83 JX84 JX85 JX86 JX87 JX88 JX89 JX90 JX91 JX92 JX96"
+MUTANTS_e="JX74 JX75 JX76 JX77 JX78 JX79 JX80 JX81 JX82 JX83 JX84 JX85 JX86 JX87 JX88 JX89 JX90 JX91 JX92 JX96 JX97"
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
@@ -349,7 +349,7 @@ $SHF_DROWS"
 # sjspecfresh and sjspecnone die for sjoin's reason: each is a subject join that must JOIN, and its prd
 # section parts cite copies under shards/ whose rows are now dropped, so they read UNWRITTEN. sjspecstale
 # does NOT: the join still reaches the SPEC render arm and refuses the stale memlog by name, as it expects.
-mutant2 "JX4 section rows dropped in document mode (the pre-BL-372 file set)" "docjoin docoverlap asmrefuse sjoin sjnames sjgate sjnest partydoc sibdoc rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrsubj sjspecfresh sjspecnone" \
+mutant2 "JX4 section rows dropped in document mode (the pre-BL-372 file set)" "docjoin docoverlap asmrefuse sjoin sjnames sjgate sjnest partydoc sibdoc rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrsubj rronly sjspecfresh sjspecnone" \
   "   $SHF
 $SHF_ROWS" \
   "   | select((.path | startswith(\$sh + \"/\")) | not)
@@ -359,7 +359,7 @@ $SHF_DROWS" \
   "     | select((.path | startswith(\$sh + \"/\")) | not)
 $SHF_DROWS"
 # rrgraph asserts the re-run writer's edit reached the assembled document.
-mutant "JX5 the assembly skipped" "docjoin asmrefuse partydoc rrgraph" \
+mutant "JX5 the assembly skipped" "docjoin asmrefuse partydoc rrgraph rronly" \
   '  ASM_LINE="$(bash "$PARTITION" --assemble "$SHARD_DIR" 2>&1)" || {' \
   '  ASM_LINE="skipped" || {'
 mutant "JX6 the assembler's refusal ignored" "asmrefuse" \
@@ -617,12 +617,12 @@ RR_DROP='          if ((f in fp) && t < S[fp[f]]) {
             p = fp[f]; drop[i] = 1; sw[p, a] = 1'
 # JX56: no narrowing -- nothing is superseded, so the re-run part keeps every writer.
 # rrprlate and rrprout die too: with nothing superseded the original is no superseded writer.
-mutant "JX56 --rerun narrows nothing" "rrgraph rrout rrlate rrlatein rrsame rrprlate rrprout rrfiles rrsubj" \
+mutant "JX56 --rerun narrows nothing" "rrgraph rrout rrlate rrlatein rrsame rrprlate rrprout rrfiles rrsubj rronly" \
   "$RR_DROP" \
   '          if (0) {
             p = fp[f]; drop[i] = 1; sw[p, a] = 1'
 # JX57: S_P applied to every part's files, not only to the re-run part's.
-mutant "JX57 the re-run start applied to every part" "rrgraph rrspan rrfiles rrsubj" \
+mutant "JX57 the re-run start applied to every part" "rrgraph rrspan rrfiles rrsubj rronly" \
   "$RR_DROP" \
   '          if (t < S[PP[1]]) {
             p = PP[1]; drop[i] = 1; sw[p, a] = 1'
@@ -679,7 +679,7 @@ mutant "JX68 a superseded writer's row on another part's record not refused" "rr
 mutant "JX69 a foreign row on the re-run part's own record after S_P not refused" "rrprforeign" \
   '        PRFOREIGN) refuse' \
   '        PRFOREIGN) :'
-mutant "JX70 a re-run with no row on its own part record not refused" "rrprnone" \
+mutant "JX70 a re-run with no row on its own part record not refused" "rrprnone rronly" \
   '        PRNONE) refuse' \
   '        PRNONE) :'
 mutant "JX71 a re-run writer with rows outside its part not refused" "rrreuse" \
@@ -817,9 +817,14 @@ mutant "JX95 --agent-writes read piped through sort with no parse check" "agentw
       || die "the write ledger ${LEDGER} does not parse as JSON lines"' \
   '    _aw="$(jq -r --arg a "$AGENT_ID" --arg s "$SINCE" '"'"'select(.kind == "artifact-write" and .agent_id == $a and ($s == "" or .ts >= $s)) | .path'"'"' "$LEDGER" 2>/dev/null | sort -u)"'
 # JX96: the nested-writer fold resolves nothing, so a subagent's row on its dispatcher's file is a second writer.
-mutant "JX96 a nested writer not folded into its dispatcher" "nested" \
+# rronly dies too: its fifth cell is the re-run writer's subagent editing sections/5.md.
+mutant "JX96 a nested writer not folded into its dispatcher" "nested rronly" \
   '  FOLD_MAP="$(printf '"$_Q"'%s\n'"$_Q"' "$_fres" | sed -n '"$_Q"'s/^F	//p'"$_Q"')"' \
   '  FOLD_MAP=""'
+# JX97: no part is ever record-only, so a re-run that rewrote only its record has no re-run writer again.
+mutant "JX97 a record-only re-run not recognised" "rronly" \
+  '          if (p in post) continue' \
+  '          continue'
 # ---- END JX MUTANTS.
 
 # ------------------------------------------------------------------------------ the reap

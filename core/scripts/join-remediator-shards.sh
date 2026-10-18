@@ -112,9 +112,20 @@
 #     separately, non-recursively, in the outer window. Refused: a superseded writer of P with a row
 #     on ANY part record at or after S_P; a superseded writer with a row on ANOTHER part's record;
 #     a row on P's own record at or after S_P by any agent but P's re-run writer, or no such row by
-#     the re-run writer at all (the covering account is then the re-run's); the re-run writer (any
-#     writer of F_P at or after S_P) with a row on any file or part record outside F_P and P's own
-#     record in the outer window -- a finished part's agent is not a new dispatch.
+#     the re-run writer at all (the covering account is then the re-run's); the re-run writer with a
+#     row on any file or part record outside F_P and P's own record in the outer window -- a
+#     finished part's agent is not a new dispatch.
+#   - THE RE-RUN WRITER. When F_P has a row at or after S_P, it is every writer of F_P at or after
+#     S_P, and RECW (the agents that wrote P's own record at or after S_P) must be among them -- the
+#     foreign-record refusal above. When F_P has none, the re-run is RECORD-ONLY (the cure was a
+#     record change): nothing on F_P is superseded, its earlier writers' rows STAND and still need
+#     exactly one writer, and the re-run writer is RECW, which must be exactly one agent that is not
+#     one of F_P's writers before S_P; either refusal names the record. The record line reads
+#     `rerun: <part> since <S_P>; record-only, by <id>; kept on <file>: <ids> (<n> rows, ..)`.
+#     A nested writer folds into its dispatcher before any of this is read, so a re-run writer's
+#     own subagent editing F_P is the re-run writer.
+#     Residual, stated: the record-only decision is per PART, over all of F_P, so a re-run that edits
+#     one of two cited files supersedes both, and the unedited one then reads UNWRITTEN.
 #   - Subject mode classifies in-place writes (sectioned or part-less subject files) on the
 #     unnarrowed rows, before any narrowing.
 #   - The record keeps the outer `window` line and adds one `rerun: <part> since <S_P>; superseded
@@ -1642,6 +1653,34 @@ RREOF
       $1 == "D" { nr++; for (j = 2; j <= NF; j++) r[nr, j - 1] = $j; next }
       $1 == "Q" { nq++; qb[nq] = $2; qa[nq] = $3; qt[nq] = $4; next }
       END {
+        # Pass 0, RECORD-ONLY: P is record-only when no row on F_P falls at or after S_P. Its files then leave
+        # fp, so pass 1 supersedes none of their rows, and its re-run writer is RECW, the agents that wrote P own
+        # record at or after S_P: exactly one, and not one of the writers of F_P before S_P.
+        for (i = 1; i <= nr; i++) {
+          f = r[i, 1]; a = r[i, 2]; t = r[i, 3]
+          if (!(f in fp)) continue
+          p = fp[f]
+          if (t >= S[p]) { post[p] = 1; continue }
+          pre[p, a] = 1; k = p SUBSEP f; kn[k]++
+          if (!((k, a) in kid)) { kid[k, a] = 1; kids[k] = (k in kids) ? kids[k] " " a : a }
+          if (!(k in kf) || t < kf[k]) kf[k] = t
+          if (!(k in kl) || t > kl[k]) kl[k] = t
+        }
+        for (i = 1; i <= nq; i++) {
+          b = qb[i]; a = qa[i]; t = qt[i]
+          if ((b in S) && t >= S[b] && !((b, a) in recw)) { recw[b, a] = 1; nrw[b]++; rwl[b, nrw[b]] = a; rws[b] = (b in rws) ? rws[b] " " a : a }
+        }
+        for (q = 1; q <= npp; q++) { p = PP[q]
+          if (p in post) continue
+          ro[p] = 1
+          for (m = 1; m <= nf[p]; m++) delete fp[F[p, m]]
+          if (nrw[p] == 0) continue
+          if (nrw[p] > 1) print "RECMANY\t" p "\t" rws[p] "\t" px p
+          else if ((p, rwl[p, 1]) in pre) print "RECOLD\t" p "\t" rwl[p, 1] "\t" px p
+          else continue
+          # Refused here, so the foreign-record and no-record lines, which presume a re-run writer, stand down.
+          own[p] = 1; for (m = 1; m <= nrw[p]; m++) pq[p, rwl[p, m], "F"] = 1
+        }
         # Pass 1: rows on a re-run file before its start are superseded; their writers are the superseded writers of P.
         for (i = 1; i <= nr; i++) {
           f = r[i, 1]; a = r[i, 2]; t = r[i, 3]
@@ -1671,6 +1710,8 @@ RREOF
           f = r[i, 1]; a = r[i, 2]; t = r[i, 3]
           if ((f in fp) && t >= S[fp[f]]) rw[fp[f], a] = 1
         }
+        # A record-only P: its one record writer, not an earlier writer of F_P, is its re-run writer.
+        for (q = 1; q <= npp; q++) { p = PP[q]; if ((p in ro) && nrw[p] == 1 && !((p, rwl[p, 1]) in pre)) rw[p, rwl[p, 1]] = 1 }
         # The re-run writer is a NEW dispatch: no row on a file outside F_P, in any part or none.
         for (i = 1; i <= nr; i++) {
           f = r[i, 1]; a = r[i, 2]; t = r[i, 3]
@@ -1695,6 +1736,10 @@ RREOF
         }
         for (q = 1; q <= npp; q++) { p = PP[q]; if (!(p in own)) print "PRNONE\t" p "\t" px p }
         for (q = 1; q <= npp; q++) { p = PP[q]; ln = "rerun: " p " since " S[p]
+          if (p in ro) { ln = ln "; record-only, by " rws[p]
+            for (m = 1; m <= nf[p]; m++) { f = F[p, m]; k = p SUBSEP f
+              ln = ln "; kept on " f ": " ((k in kn) ? kids[k] " (" kn[k] " rows, " kf[k] ".." kl[k] ")" : "none") }
+            print "L\t" ln; continue }
           for (m = 1; m <= nf[p]; m++) { f = F[p, m]; k = p SUBSEP f
             if (k in sn) { ln = ln "; superseded on " f ": " sids[k] " (" sn[k] " rows, " sf[k] ".." sl[k] ")"; ns += sn[k] }
             else ln = ln "; superseded on " f ": none" }
@@ -1712,6 +1757,8 @@ RREOF
         PRFOREIGN) refuse "--rerun ${_a}: ${_b} wrote ${_a}'s own part record ${_c} at ${_d}, at or after the re-run start, and is not its re-run writer; the covering account is the re-run writer's alone" ;;
         PRNONE) refuse "--rerun ${_a}: no row on ${_a}'s own part record ${_b} at or after the re-run start was written by its re-run writer; the account covering the superseded bytes must be the re-run's" ;;
         RWOUT) refuse "--rerun ${_a}: ${_b}, the re-run writer of ${_a}, also wrote ${_c} at ${_d}, which belongs to no file ${_a} cites; the re-run is a NEW dispatch, never a finished part's agent" ;;
+        RECMANY) refuse "--rerun ${_a}: no file ${_a} cites was written at or after the re-run start, so this is a record-only re-run, and its own part record ${_c} was written after the start by more than one agent (${_b}); a record-only re-run has exactly one writer" ;;
+        RECOLD) refuse "--rerun ${_a}: no file ${_a} cites was written at or after the re-run start, so this is a record-only re-run, and its own part record ${_c} was written after the start by ${_b}, which wrote ${_a}'s files before it; the re-run is a NEW dispatch, never the writer it re-runs" ;;
         L) RR_LINES="${RR_LINES}${_a}
 " ;;
         N) RR_SUPERSEDED="$_a" ;;
