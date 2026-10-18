@@ -1002,8 +1002,16 @@ dispatch_epoch_of() {  # $1 = agentId, <name>@<team> or toolu_ id -> sets dp_ts_
 }
 if [ -n "$DISPATCH" ]; then
   DISPATCH_EPOCH=""; DISPATCH_TS=""; DISPATCH_TUI=""
-  set -f   # an id is validated inside the loop, after this split: no glob may expand first
-  for dp_one_ in $DISPATCH; do
+  # An id is validated inside the loop, after this split, so no glob may expand first: noglob is
+  # on for the SPLIT ALONE and restored before anything else runs. Left on, it silenced every glob
+  # below -- the teammate-transcript scan read `unavailable` and the EXIT trap's lease-heir scan
+  # found no heir -- on every --dispatch beat. Restored before the loop, not after it, because
+  # dispatch_refuse exits from inside the loop, and any EXIT trap armed by then globs too.
+  dp_noglob_=0; case "$-" in *f*) dp_noglob_=1 ;; esac
+  set -f
+  DP_IDS_=( $DISPATCH )
+  [ "$dp_noglob_" = 1 ] || set +f
+  for dp_one_ in "${DP_IDS_[@]}"; do
     dispatch_epoch_of "$dp_one_"
     if [ -z "$DISPATCH_EPOCH" ] || [ "$dp_e_" -lt "$DISPATCH_EPOCH" ]; then
       DISPATCH_EPOCH="$dp_e_"; DISPATCH_TS="$dp_ts_"; DISPATCH_TUI="$dp_tui_"

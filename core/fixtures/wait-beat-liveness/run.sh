@@ -1855,6 +1855,105 @@ M37_shard_check_exit_ignored() {
   rm -rf "$W"
 }
 
+# ===========================================================================
+# 18. --dispatch MUST NOT SWITCH GLOBBING OFF FOR THE REST OF THE BEAT.
+#     The id split runs under `set -f`. Left on, every later glob in the subject iterates once
+#     over its own literal pattern: the teammate scan reads `unavailable` on a session with a
+#     fresh transcript, and the EXIT trap's heir scan finds no heir, so a holder that exits
+#     deletes the marker under a sibling still asleep. Measured on the reference consumer: a
+#     lead whose every join was armed with --dispatch read `LIVENESS  unavailable` 7 times and
+#     `took a turn` 0 times. Each arm below has its no-dispatch twin in this file (section 2;
+#     the heir arm's control is B's own pre-exit marker), and section 18c deletes the restore.
+# ===========================================================================
+fx_iso() {  # $1 = epoch -> ISO8601 UTC, BSD then GNU
+  date -u -r "$1" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null
+}
+mk_ledger_row() {  # $1 = workdir, $2 = tool_use_id, $3 = epoch -- appends one spawn-ledger row
+  le_ts="$(fx_iso "$3")"; [ -n "$le_ts" ] || broken "neither BSD nor GNU date can format an epoch"
+  printf '{"v":1,"ts":"%s","name":"wbl","role":"dev","tool_use_id":"%s"}\n' "$le_ts" "$2" \
+    >> "$1/_bmad-output/spawn-ledger.jsonl" || broken "cannot write the spawn ledger"
+}
+# Every subject this section drives sits in a directory with its siblings, because --dispatch
+# reads its id grammar from the one beside it; a lone copy would refuse for that, not for the
+# behaviour under test.
+sib_dir() {  # $1 = subject copy -> prints a fresh dir holding it as wait-for-deliverable.sh
+  sd_="$(mktemp -d "$TMPROOT/sib.XXXXXX")" || broken "mktemp failed"
+  cp "$1" "$sd_/wait-for-deliverable.sh" || broken "cannot copy the subject"
+  for sb_ in "$(dirname "$SUBJ")"/merge-adversarial-shards.sh "$(dirname "$SUBJ")"/validate-adversarial-convergence.sh; do
+    [ -f "$sb_" ] && { cp "$sb_" "$sd_/" || broken "cannot copy $sb_"; }
+  done
+  printf '%s' "$sd_"
+}
+
+dispatch_live_world() {  # $1 = subject; sets OUT/RC -- a --dispatch beat over a fresh transcript
+  W="$(mk_work)"; TD="$TMPROOT/s18-td.$$.$RANDOM"; mk_transcript "$TD" 0 agent-aone-1.jsonl
+  mk_ledger_row "$W" toolu_wbl661 $(( $(date +%s) - 30 ))
+  beat "$1" "$W" 3600 "$TD" --dispatch toolu_wbl661
+}
+S18a_dispatch_keeps_liveness() {
+  dispatch_live_world "$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  if [ "$RC" -eq 0 ] && has "WAITING   deliv.md"; then ok "dispatch-glob: CONTROL — the --dispatch beat resolved its ledger row and ran a beat"
+  else bad "dispatch-glob: CONTROL FAILED — the --dispatch beat did not run (rc=$RC), so the line below proves nothing: $OUT"; fi
+  if has "$LIVE_LINE" && ! has "$UNAVAIL_LINE"; then ok "dispatch-glob: a --dispatch beat over a fresh transcript reports the teammate's turn"
+  else bad "dispatch-glob: a --dispatch beat read a fresh transcript as no signal — noglob leaked past the id split: $OUT"; fi
+  rm -rf "$W"
+}
+
+# Beat B (armed --dispatch) holds the marker; a live registered sibling A stands behind it; B's
+# target lands and B exits. Its EXIT trap must hand the marker to A. A is a registration the
+# fixture plants -- `.lease-<pid>` with an unexpired epoch, naming a `sleep` this fixture started
+# -- rather than a second real beat, because a real A re-stamps the marker on its own next poll
+# and would mask a holder that dropped it. Every wait below is bounded on PROGRESS and refuses as
+# BROKEN (exit 2) on none; nothing FAILs on a clock.
+HEIR_A_PID=""; HEIR_B_PID=""; HEIR_AFTER=""
+until_ok() {  # $1 = tenths, rest = command -> 0 once it holds, 1 when the bound runs out
+  uo_n_="$1"; shift
+  while [ "$uo_n_" -gt 0 ]; do "$@" && return 0; sleep 0.1; uo_n_=$(( uo_n_ - 1 )); done
+  return 1
+}
+marker_pid() { mp_=""; IFS= read -r mp_ 2>/dev/null < "$1/_bmad-output/.beat-inflight"; case "$mp_" in *' '*) printf '%s' "${mp_#* }" ;; esac; }
+marker_present() { [ -n "$(marker_pid "$1")" ]; }
+pid_gone() { ! kill -0 "$1" 2>/dev/null; }
+heir_world() {  # $1 = subject (in a sibling dir); leaves W, sets HEIR_*
+  W="$(mk_work)"; HEIR_A_PID=""; HEIR_B_PID=""; HEIR_AFTER=""
+  mk_ledger_row "$W" toolu_wbl661heir $(( $(date +%s) - 30 ))
+  ( cd "$W" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=40 AI_DLC_WAIT_POLL_SECS=1 \
+      AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+      AI_DLC_PROJECT_ROOT="$PWD" bash "$1" --dispatch toolu_wbl661heir b.md ) > "$BEATOUT.B" 2>&1 &
+  hw_bg_=$!
+  until_ok 300 marker_present "$W" || broken "heir: the --dispatch beat never wrote the marker"
+  HEIR_B_PID="$(marker_pid "$W")"
+  sleep 120 & HEIR_A_PID=$!
+  printf '%s' "$(( $(date +%s) + 300 ))" > "$W/_bmad-output/.wait-beats/.lease-$HEIR_A_PID" || broken "heir: cannot plant A's registration"
+  printf 'b\n' > "$W/b.md"
+  until_ok 300 pid_gone "$HEIR_B_PID" || broken "heir: the --dispatch beat never exited after its target landed"
+  HEIR_AFTER="$(marker_pid "$W")"
+  kill "$HEIR_A_PID" 2>/dev/null; wait "$HEIR_A_PID" 2>/dev/null
+  wait "$hw_bg_" 2>/dev/null
+}
+S18b_dispatch_holder_hands_off() {
+  heir_world "$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  if [ -n "$HEIR_B_PID" ] && [ "$HEIR_B_PID" != "$HEIR_A_PID" ]; then ok "dispatch-heir: CONTROL — the --dispatch beat held the marker while its sibling registered"
+  else bad "dispatch-heir: CONTROL FAILED — B ('$HEIR_B_PID') did not hold the marker apart from A ('$HEIR_A_PID')"; fi
+  if [ -n "$HEIR_AFTER" ] && [ "$HEIR_AFTER" = "$HEIR_A_PID" ]; then ok "dispatch-heir: a --dispatch holder that exits hands the marker to the live sibling"
+  else bad "dispatch-heir: after the --dispatch holder exited the marker names '$HEIR_AFTER', not the live sibling $HEIR_A_PID — its heir scan never globbed"; fi
+  rm -rf "$W"
+}
+M38_dispatch_noglob_leaks() {
+  mutant dispatch-noglob-leaks -e 's@^  \[ "\$dp_noglob_" = 1 \] || set +f$@  :@' || return
+  SD="$(sib_dir "$MUT")"
+  dispatch_live_world "$SD/wait-for-deliverable.sh"
+  if [ "$RC" -eq 0 ] && has "$UNAVAIL_LINE" && ! has "$LIVE_LINE"; then
+    ok "MUTANT dispatch-noglob-leaks: with the restore deleted a --dispatch beat reads a fresh transcript as no signal — section 18a catches it"
+  else bad "MUTANT dispatch-noglob-leaks: section 18a survives noglob leaking (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+  heir_world "$SD/wait-for-deliverable.sh"
+  if [ -n "$HEIR_B_PID" ] && [ "$HEIR_AFTER" != "$HEIR_A_PID" ]; then
+    ok "MUTANT dispatch-noglob-leaks: the leaked noglob makes the exiting holder drop the marker under its sibling — section 18b catches it"
+  else bad "MUTANT dispatch-noglob-leaks: section 18b survives noglob leaking (marker after: '$HEIR_AFTER', sibling '$HEIR_A_PID')"; fi
+  rm -rf "$W"
+}
+
 # ---------------------------------------------------------------------------
 # THE DRIVER
 # ---------------------------------------------------------------------------
