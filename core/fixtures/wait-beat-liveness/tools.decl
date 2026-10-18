@@ -27,3 +27,4 @@ ps
 pgrep
 chmod
 perl
+ln

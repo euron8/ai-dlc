@@ -2201,7 +2201,7 @@ aged_shell_beat() {  # $1 = subject, $2 = workdir, $3 = same|other, [$4 = a dir 
         [ "$AG_MODE" = other ] && r="${r%% *} Thu Jan 1 00:00:00 1970"
         printf "%s" "$r" > "$m" || exit 3
         touch -t "$(date -v-300S +%Y%m%d%H%M.%S 2>/dev/null || date -d "-300 seconds" +%Y%m%d%H%M.%S)" "$m" || exit 3
-        [ -n "$AG_PATH2" ] && PATH="$AG_PATH2:$PATH"
+        case "$AG_PATH2" in "") ;; =*) PATH="${AG_PATH2#=}" ;; *) PATH="$AG_PATH2:$PATH" ;; esac
         AI_DLC_WAIT_BEAT_SECS=60 bash "$s" deliv.md
         exit $?' _ "$1" ) > "$BEATOUT" 2>&1 &
   AG_PID=$!
@@ -2260,6 +2260,46 @@ S22b_start_time_without_ps() {
   if [ "$RC" -eq 0 ] && ! has "a sibling beat already ran in this same Bash call" && has "DELIVERED deliv.md"; then
     ok "chained: CONTROL — with ps AND perl refused there is no start time, the clock decides, and the aged marker sleeps"
   else bad "chained: CONTROL FAILED — with ps and perl both refused the aged marker still read as chained (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+}
+# 22c. NO PERL AT ALL (BL-686, the lead's ruling: perl is optional). The second beat runs on a PATH
+#      that is ONLY a directory of links to this fixture's declared tools, with perl left out and a
+#      `ps` that prints nothing and exits 0. The beat has no start time, so it must say once, on
+#      stderr, that the guard decides by the clock -- never fall back silently.
+NOPERL_LINE='-- the chained-beat guard decides by the clock alone this beat'
+noperl_path() {  # -> $TMPROOT/noperl: links to every tools.decl tool except perl and ps, plus a ps that prints nothing
+  np_d_="$TMPROOT/noperl"; mkdir -p "$np_d_" || broken "cannot create the no-perl PATH dir"
+  while IFS= read -r np_t_; do
+    case "$np_t_" in ''|'#'*|perl|ps) continue ;; esac
+    np_p_="$(command -v "$np_t_")" || broken "tools.decl names $np_t_, which is not on PATH"
+    ln -sf "$np_p_" "$np_d_/$np_t_" || broken "cannot link $np_t_"
+  done < "$HERE/tools.decl"
+  printf '#!/bin/sh\nexit 0\n' > "$np_d_/ps" && chmod +x "$np_d_/ps" || broken "cannot write the empty ps stub"
+  [ -z "$(PATH="$np_d_" command -v perl)" ] && [ "$(PATH="$np_d_" command -v ps)" = "$np_d_/ps" ] \
+    || broken "the no-perl PATH still finds perl, or not the empty ps"
+}
+np_count() { printf '%s\n' "$OUT" | grep -cF -- "$NOPERL_LINE" || true; }
+S22c_no_perl_states_clock_fallback() {
+  noperl_path
+  W="$(mk_work)"; aged_shell_beat "$SUBJ" "$W" same "=$TMPROOT/noperl"; ag_wait "$W"
+  np_n_="$(np_count)"
+  if [ "$RC" -eq 0 ] && [ "$np_n_" = 1 ] && has "DELIVERED deliv.md"; then
+    ok "no perl: with ps empty and perl absent from PATH the beat states its clock fallback exactly once on stderr"
+  else bad "no perl: the clock-fallback line appeared $np_n_ time(s), want 1 (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+  W="$(mk_work)"; aged_shell_beat "$SUBJ" "$W" same; ag_wait "$W"
+  np_n_="$(np_count)"
+  if [ "$np_n_" = 0 ] && has "a sibling beat already ran in this same Bash call"; then
+    ok "no perl: CONTROL — with ps working the line is absent and identity decides"
+  else bad "no perl: CONTROL FAILED — with ps working the clock-fallback line appeared $np_n_ time(s): $OUT"; fi
+  rm -rf "$W"
+}
+M51_silent_clock_fallback() {
+  noperl_path; mutant silent-clock-fallback -e '/^\[ -n "\$SHELL_START" \] || printf .NOTE: start time of shell/d' || return
+  W="$(mk_work)"; aged_shell_beat "$MUT" "$W" same "=$TMPROOT/noperl"; ag_wait "$W"
+  if [ "$(np_count)" != 1 ]; then
+    ok "MUTANT silent-clock-fallback: a beat with no start time that falls back silently -- section 22c catches it"
+  else bad "MUTANT silent-clock-fallback: section 22c survives the fallback line being removed: $OUT"; fi
   rm -rf "$W"
 }
 M49_start_time_no_fallback() {

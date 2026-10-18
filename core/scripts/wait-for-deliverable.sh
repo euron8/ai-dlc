@@ -1605,6 +1605,9 @@ done
 # persistent shell would make every beat after the first read as chained; none does today.
 SIBLING="${COUNTER_DIR}/.shell-${PPID}"
 SHELL_START="$(shell_start_of "$PPID")"
+# NEITHER SOURCE COULD READ IT (BL-686): `ps` refused or empty, and no perl. Said once per beat, on
+# stderr, because the guard below then decides by the clock alone and a reader must know that.
+[ -n "$SHELL_START" ] || printf 'NOTE: start time of shell %s unreadable (ps refused or printed nothing, and no perl fallback) -- the chained-beat guard decides by the clock alone this beat\n' "$PPID" >&2
 MAY_SLEEP=1
 if [ -f "$SIBLING" ]; then
   LAST_REC="$(cat "$SIBLING" 2>/dev/null || echo 0)"

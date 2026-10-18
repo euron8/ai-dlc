@@ -992,6 +992,21 @@ readset_pid_start() { # <pid>
   printf '%s' "$*"
 }
 
+# WRITE THE LIVE-TRACE LOCK'S PID FILE, the one writer both lock takers call. Line 1 `<pid> <epoch>`,
+# line 2 the pid's start time. When neither `ps` nor the perl fallback can read it (BL-686: a sandbox
+# refusing the setuid /bin/ps, on a host with no perl), it NEVER writes an empty line 2: it writes the
+# two-field lock an older hook wrote, which readset_lock_stale judges HELD on pid and age alone -- the
+# reader's own announce-and-hold -- and it says so on stderr.
+readset_lock_write() { # <lock dir> <pid>
+  local s
+  if s="$(readset_pid_start "$2")"; then
+    printf '%s %s\n%s\n' "$2" "$(date +%s)" "$s" > "$1/pid" 2>/dev/null
+  else
+    printf '%s %s\n' "$2" "$(date +%s)" > "$1/pid" 2>/dev/null
+    printf '   ..    read-set lock: could not read the start time of pid %s (ps refused or printed nothing, and no perl fallback) -- the lock records no start line and is judged HELD on pid and age alone\n' "$2" >&2
+  fi
+}
+
 # IS THE LIVE-TRACE LOCK STALE? `$lk/pid` is line 1 `<pid> <epoch>` (the only line an older hook
 # writes or reads) and line 2 the start time of that pid as readset_pid_start printed it when the
 # lock was taken. The pid is the detached trace subshell's `$!`, never `$$`. Decided in this order:
@@ -1150,7 +1165,7 @@ readset_live_trace() { # <out>
   ) </dev/null >"$logf" 2>&1 &
   tp="$!"
   set +m
-  printf '%s %s\n%s\n' "$tp" "$(date +%s)" "$(readset_pid_start "$tp")" > "$lk/pid" 2>/dev/null
+  readset_lock_write "$lk" "$tp"
   printf '   ..    read-set live trace: started detached for %s unmapped fixture(s) (%s) -> %s; ceiling %ss\n' "$n" "$names" "$logf" "$cl"
   return 0
 }
@@ -1231,7 +1246,7 @@ readset_pool_trace_merge() { # <out>
       return 0
     fi
   fi
-  printf '%s %s\n%s\n' "$$" "$(date +%s)" "$(readset_pid_start "$$")" > "$lk/pid" 2>/dev/null
+  readset_lock_write "$lk" "$$"
   if bash "$PT_DV" --merge-pool "$out/.lt" --local-map "$READSET_LOCAL" > "$out/.lt.merge" 2>&1; then
     printf '   ..    read-set in-pool trace: recorded %s%s\n' "${kept:-none}" "${disc:+; discarded: $disc}"
   else
