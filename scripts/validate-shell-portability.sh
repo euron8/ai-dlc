@@ -88,7 +88,12 @@ S6_PAT="sed[^|;]*\\\\s"
 S6_WHY="\`\\s\` in a sed expression. Same as grep: BSD sed has no \`\\s\`, and the substitution silently applies to a different set of lines. Use \`[[:blank:]]\` or \`[[:space:]]\`."
 # `[^)]*` cannot cross the `)` inside a regex literal like `/(a)b/`, which is exactly where
 # the capture being back-referenced comes from -- the first cut could not see its own probe.
-S7_PAT="g?sub\\(.*,.*\\\\[0-9]"
+# The backslash-digit must sit INSIDE the replacement: the first double-quoted string after the
+# first comma following `sub(`/`gsub(`, scanned to its unescaped closing quote. The body units are
+# a non-quote non-backslash char, an escaped backslash, an escaped quote, or a backslash before any
+# other non-digit; the tail is one or more backslashes then a digit. A later `"\037"` in a `print`
+# on the same line is past the closing quote and is not reached.
+S7_PAT='g?sub\([^,]*,[[:space:]]*"([^"\\]|\\\\|\\"|\\[^0-9"\\])*\\+[0-9]'
 S7_WHY="a backreference in an \`awk\` \`sub()\`/\`gsub()\` replacement. awk has no \`\\1\`; it emits the literal text and the capture is lost. Use \`match()\` with \`substr()\`."
 # S8 KEYS ON THE PLACEHOLDER, NOT ON `git`, AND THE TWO ARE INDISTINGUISHABLE ON TODAY'S
 # CORPUS. Measured on the pre-fix tree: over `core/` this pattern finds 13 renderings and a
