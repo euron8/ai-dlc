@@ -451,7 +451,8 @@ if [ "$POOL_DEPTH_IN" -ge 1 ]; then
 fi
 # A UNIT THAT MAKES NO PROGRESS IS REFUSED, NEVER JUDGED ON ELAPSED TIME (BL-606). Every unit runs through
 # the worker's `pool_run`, which starts it in its own process group with TMPDIR set to a per-unit WATCHED
-# ROOT, "$out/.t.<worker pid>" under a short `/tmp/fx.XXXXXX` "$out" (never the fixture name), and polls once a second.
+# ROOT, a fresh `mktemp -d "$out/.t.XXXXX"` under a short "$out" `<root>/fx.XXXXXX` (never the fixture name; the
+# root order is at run_fixtures), and polls once a second.
 # PROGRESS IS NEW BYTES, AND NOTHING ELSE: the summed size of every file under the watched root plus the
 # unit's pool log. CPU time and process membership are not in the signature. The watched root holds the
 # hermetic runner's work dir (its HR_LOG and sandbox) and every template-based `mktemp`. A poll that
@@ -488,9 +489,8 @@ fi
 # AI_DLC_POOL_STALL overrides it, for a fixture driving a deliberately hung unit.
 POOL_STALL_DEFAULT=600                     # D9-WINDOW
 POOL_STALL="${AI_DLC_POOL_STALL:-$POOL_STALL_DEFAULT}"
-case "$POOL_STALL" in ''|*[!0-9]*|??????*) [ -n "${AI_DLC_POOL_STALL:-}" ] && printf 'pre-push: AI_DLC_POOL_STALL=%s rejected (want 1-5 digits); using the default %s\n' "$AI_DLC_POOL_STALL" "$POOL_STALL_DEFAULT" >&2; POOL_STALL=$POOL_STALL_DEFAULT ;; esac
+case "$POOL_STALL" in ''|*[!0-9]*|??????*|0|00|000|0000|00000) [ -n "${AI_DLC_POOL_STALL:-}" ] && printf 'pre-push: AI_DLC_POOL_STALL=%s rejected (want 1-99999); using the default %s\n' "$AI_DLC_POOL_STALL" "$POOL_STALL_DEFAULT" >&2; POOL_STALL=$POOL_STALL_DEFAULT ;; esac
 POOL_STALL=$((10#$POOL_STALL))
-[ "$POOL_STALL" -ge 1 ] || POOL_STALL=$POOL_STALL_DEFAULT
 POOL_REFUSED_ONLY=0
 # THE TREE WALK, one `ps` and one awk per poll. Input rows are `pid ppid pgid stat time`; `root` is the
 # unit's recorded pid, `self` the worker's own group (never walked, never signalled: a unit whose `set -m`
@@ -2005,13 +2005,37 @@ apply_readset_skip() {
 }
 
 run_fixtures() {
-  local rc=0 rf_hard=0 d b out n_expected n_actual n_ordered verdict
+  local rc=0 rf_hard=0 d b out n_expected n_actual n_ordered verdict fx_root fx_s fx_err
   if [ "$POOL_DEPTH_IN" -ge 2 ]; then
     printf '   FAIL  fixture pool refused: nested at depth %s (PREPUSH_POOL_DEPTH=%s), a hook started by a hook started by a pool opens no pool\n' "$POOL_DEPTH_IN" "$POOL_DEPTH_IN"
     return 1
   fi
   if [ "$POOL_DEPTH_IN" -ge 1 ]; then printf '   nested: depth %s, width %s\n' "$POOL_DEPTH_IN" "$FIXTURE_JOBS"; fi
-  out="$(mktemp -d /tmp/fx.XXXXXX 2>/dev/null)" || out="$(mktemp -d)" || return 1
+  # THE POOL ROOT, in order: $TMPDIR, then /tmp, then a LOUD bare `mktemp -d`. A unit's TMPDIR is
+  # "<root>/fx.XXXXXX/.t.XXXXX", 23 ENCODED characters (characters plus two per `/`) past the root, and it
+  # must stay at or under 58 -- the macOS default TMPDIR `/var/folders/xx/<28>/T` as units saw it before the
+  # pool set their TMPDIR -- so $TMPDIR is taken only when it is a writable directory whose PHYSICAL path is
+  # at most 58 - 23 = 35 encoded. That keeps "point TMPDIR at a shorter directory" true under the pool, and a
+  # consumer whose /tmp is a small tmpfs keeps its scratch on the disk TMPDIR names. A longer $TMPDIR (the
+  # macOS default is 68 physical) is passed over silently for /tmp, which is 29 encoded per unit. The bare
+  # fallback lands under the system temp dir, 86 encoded per unit on macOS as mktemp names it and 96 physical, past
+  # the 85 that procsub-staged-refusal-boot allows, so it says so on stderr with the reason /tmp failed.
+  fx_root=""
+  if [ -n "${TMPDIR:-}" ] && [ -d "$TMPDIR" ] && [ -w "$TMPDIR" ]; then
+    fx_root="$(cd "$TMPDIR" 2>/dev/null && pwd -P)" || fx_root=""
+    fx_s="${fx_root//[!\/]/}"
+    if [ -z "$fx_root" ] || [ "$(( ${#fx_root} + 2 * ${#fx_s} ))" -gt 35 ]; then fx_root=""; fi
+  fi
+  out=""
+  if [ -n "$fx_root" ]; then out="$(mktemp -d "$fx_root/fx.XXXXXX" 2>/dev/null)" || out=""; fi
+  if [ -z "$out" ]; then
+    if fx_err="$(mktemp -d /tmp/fx.XXXXXX 2>&1)" && [ -d "$fx_err" ]; then out="$fx_err"
+    else
+      out="$(mktemp -d)" || return 1
+      fx_s="${out//[!\/]/}"
+      printf 'pre-push: fixture pool: /tmp/fx.XXXXXX failed (%s); FELL BACK to %s, where a unit TMPDIR is %s encoded characters -- units with a path-length limit may then fail; point TMPDIR at a short writable directory\n' "$(printf '%s' "$fx_err" | tr '\n' ' ')" "$out" "$(( ${#out} + 2 * ${#fx_s} + 11 ))" >&2
+    fi
+  fi
   # DOT-PREFIXED, and that is what makes the name collision-proof rather than
   # unlikely. Every verdict file in "$out" is named for a fixture, and the glob
   # below cannot match a directory whose name begins with a dot -- so no fixture
@@ -2172,10 +2196,12 @@ run_fixtures() {
     } 2>/dev/null
     trap pool_abort INT TERM HUP
     pool_run() {
-      local lg="$1" rc wr="$AI_DLC_FX_OUT/.t.$$"
+      local lg="$1" rc wr
       shift
+      wr="$(mktemp -d "$AI_DLC_FX_OUT/.t.XXXXX" 2>&1)" && [ -d "$wr" ] \
+        || { printf "pre-push: pool: no watched root under %s (%s); the unit is NOT run\n" "$AI_DLC_FX_OUT" "$wr" | tee "$lg" >&2; return 1; }
       self="$(ps -o pgid= -p "$$" 2>/dev/null | tr -d " ")"
-      : > "$pr.g"; rm -f "$pr.st"; mkdir -p "$wr"
+      : > "$pr.g"; rm -f "$pr.st"
       set -m
       TMPDIR="$wr" "$@" > "$lg" 2>&1 < /dev/null &
       pid=$!
