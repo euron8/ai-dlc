@@ -421,6 +421,26 @@ Fix shape (lead ai-dlc-71): M4's pin means silence on an absent record was a del
 
 verify: manual
 
+## BL-667 — four release headings are missing from CHANGELOG.md, each dropped by the next release replacing it in place
+
+**DEFECT.** Found by the batch-236 contract adversary (census over 917 first-parent CHANGELOG commits), confirmed by ai-dlc-77 [ab5b1f] at `e91b4d86`. `CHANGELOG.md` holds no `## [0.768.0]`, `## [0.769.0]`, `## [0.770.0]` or `## [0.200.0]` heading (`grep -c` 0 each; controls `0.771.0`, `0.201.0` and `0.805.0` count 1 each). Each was removed by the next release, which changed exactly one heading line in place instead of inserting above it: `60f776c2` (0.769.0) rewrote `## [0.768.0] - 2026-10-10`, `fc957e40` (0.770.0) rewrote `[0.769.0]`, `f2e0403f` (0.771.0) rewrote `[0.770.0]`, and `0cc40283` (v0.201.0) rewrote `## [0.200.0] — 2026-07-28`. `git diff -U0` of each against its parent shows one `-## [old]` and one `+## [new]` line, so only the heading line was lost. The old release body is still in the file, sitting under the next release heading. This is BL-636 three releases running in batch 221, and once in v0.201.0. Nothing caught any of them, because arm C of `validate-release-version.sh` counts only headings added.
+
+Owed: restore the four heading lines above their original bodies (4 insertions, 0 deletions), with the BL-636 removal arm in place so the shape fails the push from then on. Receipt: each of the four headings counts 1 and the controls stay 1.
+
+Related: BL-636 (the arm), BL-637 (the exemption that lets a restore pass).
+
+verify: manual
+
+## BL-668 — no shipped program creates the owed-derivations record, so "absent" is every clean consumer's normal state and BL-652's UNMEASURED line prints at every resume
+
+**NOTE.** Raised by the batch-236 contract adversary, filed by ai-dlc-77 [ab5b1f]. `core/scripts/check-owed-derivations.sh` reads `_bmad-output/ai-dlc-update/owed-derivations.tsv`. Its only writer, `reconcile/derivation-differential.sh --record-owed`, APPENDS NEWLY-FAILING rows and creates the file only when it has a row to write. `core/skills/ai-dlc-update/SKILL.md:1797` describes the record in prose. So a consumer whose reconciles never left a derivation broken has no record at all. Once BL-652 ships, "absent" prints `UNMEASURED` on every resume (`steps/route.md:250`) and every planning gate (Check 37), and the line stops meaning anything because it is always there.
+
+Owed: a reconcile that runs the derivation differential writes the record even when it has nothing to record (a header-only or empty file), so "absent" means "no reconcile has ever measured this tree" and "present with 0 OWED rows" means "measured, nothing owed". Probe: a reconcile with zero NEWLY-FAILING rows leaves a record behind, and `check-owed-derivations.sh` then prints the empty-record line, not the absent one. Control: a tree never reconciled still prints the absent line.
+
+Related: BL-652 (the UNMEASURED lines), BL-587.
+
+verify: manual
+
 ## BL-674 — I55 arm 3's reach scan recognises four root variables, so a fixture that reads an excluded path through any other root variable is never checked
 
 **DEFECT.** Filed by peer session ai-dlc-c0 (batch 236 READSET), id allocated by lead ai-dlc-c8; found by the BL-606 receipt hand. Tiered DEFECT rather than NOTE because the gap was reproduced in both directions on a probe tree and the arm stays green over a real instance, so a fixture's input can change without the suite re-running.
