@@ -62,13 +62,18 @@ need_digest() { # $1 part label -> echoes a 40-hex digest or records the failure
   printf '%s' "$d"
 }
 
+# EVERY CLEARING RECORD CARRIES `read`, because a verdict clears only with a line of the entry and
+# a line of its clause's core text (Part 13). Both are the literal lines seed.sh wrote: the entry's
+# `reason:` line, and the line THEIRS added to demo.md -- an LC-E4 core line is a +/- line of the
+# range diff. Hardcoded rather than derived, so a seed and the reader cannot agree by construction.
+READ_E4='"read":{"entry_line":"reason: seeded entry whose hooked core file moves across the range","core_line":"Gamma'"'"'s body at THEIRS — REWRITTEN. This is the change the re-read duty fires on."}'
 record() { # $1 digest, $2 verdict, [$3 supersedes]
   if [ -n "${3:-}" ]; then
-    printf '{"clause":"LC-E4","entry":"%s","subject_digest":"%s","verdict":"%s","recorded_utc":"2026-01-01T00:00:00Z","reason":"seeded","supersedes":"%s"}\n' \
-      "$ENTRY" "$1" "$2" "$3"
+    printf '{"clause":"LC-E4","entry":"%s","subject_digest":"%s","verdict":"%s","recorded_utc":"2026-01-01T00:00:00Z","reason":"seeded","supersedes":"%s",%s}\n' \
+      "$ENTRY" "$1" "$2" "$3" "$READ_E4"
   else
-    printf '{"clause":"LC-E4","entry":"%s","subject_digest":"%s","verdict":"%s","recorded_utc":"2026-01-01T00:00:00Z","reason":"seeded"}\n' \
-      "$ENTRY" "$1" "$2"
+    printf '{"clause":"LC-E4","entry":"%s","subject_digest":"%s","verdict":"%s","recorded_utc":"2026-01-01T00:00:00Z","reason":"seeded",%s}\n' \
+      "$ENTRY" "$1" "$2" "$READ_E4"
   fi
 }
 
@@ -295,8 +300,9 @@ tm_detail() { tm_run "${1:-$DRIFT}" | awk -F'\t' -v e="$TMENTRY" \
                 '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2==e {print $4; exit}'; }
 tm_rows()   { tm_run | awk -F'\t' -v e="$TMENTRY" \
                 '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2==e {c++} END{print c+0}'; }
+# An LC-E19 core line is a line of the matched core section at THEIRS: `## Alpha gate`'s body.
 tm_record() { # $1 digest, [$2 clause, default LC-E19] -> one record for this entry
-  printf '{"clause":"%s","entry":"%s","subject_digest":"%s","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"seeded"}\n' \
+  printf '{"clause":"%s","entry":"%s","subject_digest":"%s","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"seeded","read":{"entry_line":"Body this entry adds under a heading core already has.","core_line":"Alpha'"'"'s body, unchanged across the range."}}\n' \
     "${2:-LC-E19}" "$TMENTRY" "$1"
 }
 
@@ -935,7 +941,7 @@ rm -rf "$MUT9DIR"; mkdir -p "$MUT9DIR"
 cp "$(dirname "$DRIFT")"/* "$MUT9DIR"/ 2>/dev/null
 MUT9="$MUT9DIR/layer-drift.sh"
 CTL9="$MUT9DIR/layer-drift-unmutated.sh"; cp "$DRIFT" "$CTL9" 2>/dev/null
-MUT9_OLD='[ -n "$ADJ_LIST_FILE" ] && printf '"'"'%s\t%s\t%s\t%s\n'"'"' "$1" "$2" "$dg" "$cl" >> "$ADJ_LIST_FILE"'
+MUT9_OLD='[ -n "$ADJ_LIST_FILE" ] && printf '"'"'%s\t%s\t%s\t%s\t%s\n'"'"' "$1" "$2" "$dg" "$cl" "${3:-}" >> "$ADJ_LIST_FILE"'
 MUT9_OLD="$MUT9_OLD" python3 -c 'import os,sys; s=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(s.replace(os.environ["MUT9_OLD"],"true",1))' \
   "$DRIFT" "$MUT9" 2>/dev/null
 ctl9_rows="$(bash "$CTL9" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null | grep -c '^ADJUDICABLE')"
@@ -1750,6 +1756,195 @@ if [ "$p12_live" = yes ]; then
   fi
 fi
 rm -rf "$P12W"
+
+# --- Part 13: a verdict clears only with evidence the entry was READ against the core change ---
+#
+# THE DEFECT. A record cleared LC-A1 on (digest, vocabulary verdict) alone, so a line whose digest
+# was copied from the listing cleared the block whatever its reason said. Measured on the reference
+# consumer: 0 of 1011 records carry read evidence, and nine were written after a keyword grep and
+# no Read call. A record now clears only with `read.entry_line` (a line of the entry) and
+# `read.core_line` (a line of THAT CLAUSE's core text), each verbatim.
+#
+# R4's wrong core line is `Alpha's body, unchanged across the range.` -- present in the hooked file
+# at THEIRS and absent from the range diff -- so a core source widened from the diff to the whole
+# file is killed. R3's wrong entry line is a real CORE line, so "the quote is absent from the side it
+# names" is tested rather than gibberish. R5 is the input that discriminates the per-clause source
+# from a range diff: LC-O15 and LC-E19 rows on a target UNCHANGED in the range, where the range
+# diff is empty and a diff-keyed source could never clear.
+echo
+echo "Part 13 — a verdict clears only with read evidence"
+p13_rec() { # $1 digest, $2 entry_line or '-', $3 core_line -> one LC-E4 record on $ENTRY
+  if [ "$2" = - ]; then
+    jq -cn --arg d "$1" --arg e "$ENTRY" '{clause:"LC-E4",entry:$e,subject_digest:$d,verdict:"still-additive",recorded_utc:"2026-01-01T00:00:00Z",reason:"seeded"}'
+  else
+    jq -cn --arg d "$1" --arg e "$ENTRY" --arg el "$2" --arg cl "$3" '{clause:"LC-E4",entry:$e,subject_digest:$d,verdict:"still-additive",recorded_utc:"2026-01-01T00:00:00Z",reason:"seeded",read:{entry_line:$el,core_line:$cl}}'
+  fi
+}
+P13_EL="reason: seeded entry whose hooked core file moves across the range"
+P13_CL="Gamma's body at THEIRS — REWRITTEN. This is the change the re-read duty fires on."
+P13_OFFDIFF="Alpha's body, unchanged across the range."
+p13_hard() { bash "${1:-$DRIFT}" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null | awk -F'\t' '$1=="HARD-LAYER-ADJUDICATION-MISSING"'; }
+p13_n()    { p13_hard "${1:-}" | grep -c .; }
+# p13_vec <drift> -> "R1 R2 R3 R4" as 1 = the row blocks, 0 = it clears
+p13_vec() {
+  local v="" d s="${1:-$DRIFT}"
+  d="$(need_digest 'Part 13')" || { printf 'nodigest'; return; }
+  p13_rec "$d" - > "$REG";                        v="$v$(p13_n "$s")"
+  p13_rec "$d" "$P13_EL" "$P13_CL" > "$REG";      v="$v $(p13_n "$s")"
+  p13_rec "$d" "$P13_CL" "$P13_CL" > "$REG";      v="$v $(p13_n "$s")"
+  p13_rec "$d" "$P13_EL" "$P13_OFFDIFF" > "$REG"; v="$v $(p13_n "$s")"
+  printf '%s' "$v"
+}
+if grep -q "^$P13_EL\$" "$CONS/$ENTRY" && git -C "$DIST" show "$THEIRS:core/skills/ai-dlc/steps/demo.md" | grep -qxF "$P13_OFFDIFF"; then
+  ok "Part 13 precondition: the entry line is in the entry, and R4's off-diff line IS in the hooked file at THEIRS — so R4 discriminates the diff from the whole file"
+else
+  bad "Part 13 precondition failed: the seeded lines are not where the arms below assume, so they would measure the seed rather than the engine"
+fi
+P13D="$(need_digest 'Part 13')" || P13D=""
+if [ -n "$P13D" ]; then
+  p13_rec "$P13D" - > "$REG"
+  case "$(p13_hard | cut -f4)" in
+    *"[no read evidence]"*) ok "R1: a vocabulary verdict with no read evidence still BLOCKS, and the row names the half: no read evidence" ;;
+    *) bad "R1: a verdict with no \`read\` did not produce a blocking row naming 'no read evidence': $(p13_hard | cut -f4 | cut -c1-120)" ;;
+  esac
+  p13_rec "$P13D" "$P13_EL" "$P13_CL" > "$REG"
+  if [ "$(p13_n)" -eq 0 ]; then ok "R2: valid read evidence clears the row (control)"
+  else bad "R2: a record whose entry_line and core_line are both verbatim lines of their sides left $(p13_n) blocking row(s)"; fi
+  p13_rec "$P13D" "$P13_CL" "$P13_CL" > "$REG"
+  case "$(p13_hard | cut -f4)" in
+    *"[read.entry_line not in the entry]"*) ok "R3: an entry_line that is a CORE line, not a line of the entry, blocks and names the entry half" ;;
+    *) bad "R3: an entry_line absent from the entry did not block naming the entry half: $(p13_hard | cut -f4 | cut -c1-120)" ;;
+  esac
+  p13_rec "$P13D" "$P13_EL" "$P13_OFFDIFF" > "$REG"
+  case "$(p13_hard | cut -f4)" in
+    *"[read.core_line not in the LC-E4 core text]"*) ok "R4: a core_line present in the hooked file but NOT in the range diff blocks and names the LC-E4 core half" ;;
+    *) bad "R4: a core_line outside LC-E4's core text did not block naming the core half: $(p13_hard | cut -f4 | cut -c1-120)" ;;
+  esac
+  # R6: the listing answers as the gate does.
+  p13_rec "$P13D" - > "$REG"
+  p13_lv="$(bash "$DRIFT" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null | awk -F'\t' -v d="$P13D" '$4==d {print $5; exit}')"
+  case "$p13_lv" in
+    "(recorded, not clearing: no read evidence)") ok "R6: the listing shows the R1 record as recorded and NOT clearing — it agrees with the gate rather than calling it adjudicated" ;;
+    *) bad "R6: the listing's verdict cell for the R1 record is '$p13_lv'; the gate blocks on it, so the listing disagrees with the gate" ;;
+  esac
+  # R7: the unfiltered readers. Two differing verdicts, neither with `read`, still contradict; and
+  # the spent note still quotes a prior record without `read` on a dirty entry.
+  { p13_rec "$P13D" -; jq -cn --arg d "$P13D" --arg e "$ENTRY" '{clause:"LC-E4",entry:$e,subject_digest:$d,verdict:"retire",recorded_utc:"2026-01-01T00:00:01Z",reason:"seeded"}'; } > "$REG"
+  if [ "$(run | grep -c '^HARD-REGISTER-CONTRADICTION')" -ge 1 ]; then ok "R7: two differing verdicts WITHOUT read evidence are still a contradiction — the contradiction reader is not filtered by \`read\`"
+  else bad "R7: differing verdicts without \`read\` no longer contradict, so the filter reached a reader of what was WRITTEN"; fi
+  p13_rec "0000000000000000000000000000000000000000" - > "$REG"
+  printf '\n' >> "$CONS/$ENTRY"
+  case "$(p13_hard | cut -f4)" in
+    *"SPENT verdict rather than an unanswered one"*) ok "R7: a prior record WITHOUT read on a dirty entry is still quoted as a spent verdict — the spent note is not filtered by \`read\`" ;;
+    *) bad "R7: the spent note stopped quoting a prior record without \`read\`: $(p13_hard | cut -f4 | cut -c1-120)" ;;
+  esac
+  git -C "$CONS" checkout -q -- "$ENTRY"
+  rm -f "$REG"
+fi
+
+# R5 — its own world: LC-O15 and LC-E19 on a target UNCHANGED in BASE..THEIRS. Seeded here rather
+# than in seed.sh because LC-O15 at ADJUDICATED in the shared contract would add a blocking row to
+# every count above.
+P13W="$ROOT/p13-unchanged"; rm -rf "$P13W"; mkdir -p "$P13W/dist/core/skills/ai-dlc/steps" "$P13W/dist/core/schemas"
+P13WD="$P13W/dist"; P13WC="$P13W/cons"
+cp "$DIST/core/schemas/layer-adjudication-register.json" "$P13WD/core/schemas/"
+git -C "$P13WD" init -q; git -C "$P13WD" config user.email f@x; git -C "$P13WD" config user.name f; git -C "$P13WD" config maintenance.auto false
+p13_contract() {
+  printf 'contract_version: 7\nclauses:\n  - id: LC-O15\n    subject: override\n    level: ADJUDICATED\n    code: OVERRIDE-SUPERSEDED\n  - id: LC-E19\n    subject: extension\n    level: WARN\n    code: EXTENSION-TITLE-MATCHES-CORE\n'
+  [ "$1" = 1 ] && printf 'override_supersessions:\n  - shadows: steps/stable.md#Stable Section\n    since_core_version: "9.9.9"\n    reason: core took it.\n'
+  return 0
+}
+p13_contract 0 > "$P13WD/core/skills/ai-dlc/layer-contract.yaml"
+printf '# Stable\n\n## Stable Section\n\nThe stable core body line that never moves across the range.\n\n## Other Part\n\nAnother core line that is not in the matched section at all.\n' > "$P13WD/core/skills/ai-dlc/steps/stable.md"
+printf '# Moving\n\n## Moving Part\n\nMoving body at BASE.\n' > "$P13WD/core/skills/ai-dlc/steps/moving.md"
+git -C "$P13WD" add -A; git -C "$P13WD" commit -qm base
+P13B="$(git -C "$P13WD" rev-parse HEAD)"
+p13_contract 1 > "$P13WD/core/skills/ai-dlc/layer-contract.yaml"
+printf '# Moving\n\n## Moving Part\n\nMoving body at THEIRS, rewritten.\n' > "$P13WD/core/skills/ai-dlc/steps/moving.md"
+git -C "$P13WD" add -A; git -C "$P13WD" commit -qm theirs
+P13T="$(git -C "$P13WD" rev-parse HEAD)"
+mkdir -p "$P13WC/.claude/skills/ai-dlc/overrides" "$P13WC/.claude/skills/ai-dlc/extensions" "$P13WC/_bmad-output/ai-dlc-update"
+P13OV=".claude/skills/ai-dlc/overrides/stable-ov.md"; P13EX=".claude/skills/ai-dlc/extensions/stable-ext.md"
+printf -- '---\nshadows: steps/stable.md#Stable Section\nbase_sha: %s\nreason: fixture override of the stable section\nconforms_to: 7\n---\n\n## Stable Section\n\nThe consumer replacement body for the stable section, long enough.\n' "$P13B" > "$P13WC/$P13OV"
+printf -- '---\nkind: check\nhooks: steps/stable.md\nreason: fixture extension matching a stable core title\n---\n\n## Stable Section\n\nThe consumer augmenting body that sits under the stable title.\n' > "$P13WC/$P13EX"
+git -C "$P13WC" init -q; git -C "$P13WC" config user.email f@x; git -C "$P13WC" config user.name f; git -C "$P13WC" add -A; git -C "$P13WC" commit -qm c
+P13REG="$P13WC/_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl"
+p13w_run() { bash "$DRIFT" "$P13WD" "$P13B" "$P13T" "$P13WC" 2>/dev/null; }
+p13w_records() { # $1 core_line for both records
+  jq -cn --arg d "$P13OD" --arg e "$P13OV" --arg c "$1" '{clause:"LC-O15",entry:$e,subject_digest:$d,verdict:"still-additive",recorded_utc:"2026-01-01T00:00:00Z",reason:"seeded",read:{entry_line:"The consumer replacement body for the stable section, long enough.",core_line:$c}}'
+  jq -cn --arg d "$P13ED" --arg e "$P13EX" --arg c "$1" '{clause:"LC-E19",entry:$e,subject_digest:$d,verdict:"still-additive",recorded_utc:"2026-01-01T00:00:00Z",reason:"seeded",read:{entry_line:"The consumer augmenting body that sits under the stable title.",core_line:$c}}'
+}
+rm -f "$P13REG"
+p13w_out="$(p13w_run)"
+P13OD="$(printf '%s\n' "$p13w_out" | awk -F'\t' '$1=="HARD-LAYER-ADJUDICATION-MISSING" && $2 ~ /stable-ov/' | grep -o 'subject_digest [0-9a-f]\{40\}' | awk '{print $2}' | head -1)"
+P13ED="$(printf '%s\n' "$p13w_out" | awk -F'\t' '$1=="EXTENSION-TITLE-MATCHES-CORE"' | grep -o 'subject_digest [0-9a-f]\{40\}' | awk '{print $2}' | head -1)"
+if git -C "$P13WD" diff --quiet "$P13B" "$P13T" -- core/skills/ai-dlc/steps/stable.md && [ ${#P13OD} -eq 40 ] && [ ${#P13ED} -eq 40 ]; then
+  ok "R5 precondition: stable.md is UNCHANGED in the range, and both an LC-O15 blocking row and an LC-E19 row fire on it with a digest"
+  p13w_records "The stable core body line that never moves across the range." > "$P13REG"
+  p13w_out="$(p13w_run)"
+  p13w_h="$(printf '%s\n' "$p13w_out" | grep -c '^HARD-LAYER-ADJUDICATION-MISSING')"
+  p13w_t="$(printf '%s\n' "$p13w_out" | grep -c '^EXTENSION-TITLE-MATCHES-CORE')"
+  case "$(printf '%s\n' "$p13w_out" | awk -F'\t' '$1=="OVERRIDE-SUPERSEDED"{print $4; exit}')" in
+    "$TOKEN"=still-additive\ ::\ *) p13w_p=1 ;; *) p13w_p=0 ;;
+  esac
+  if [ "$p13w_h" -eq 0 ] && [ "$p13w_t" -eq 0 ] && [ "$p13w_p" -eq 1 ]; then
+    ok "R5: correct records clear an LC-O15 and an LC-E19 row on an UNCHANGED target, and the supersession row carries the adjudicated token apply.sh keys on"
+  else
+    bad "R5: correct records on an unchanged target left HARD=$p13w_h, title rows=$p13w_t, token=$p13w_p — a core source keyed on the range diff wedges these clauses and apply.sh re-prescribes retire over a recorded keep"
+  fi
+  # Near-miss: a line of the SAME file, outside the shadowed / matched section.
+  p13w_records "Another core line that is not in the matched section at all." > "$P13REG"
+  p13w_out="$(p13w_run)"
+  if [ "$(printf '%s\n' "$p13w_out" | grep -c '^HARD-LAYER-ADJUDICATION-MISSING')" -eq 1 ] \
+     && [ "$(printf '%s\n' "$p13w_out" | grep -c '^EXTENSION-TITLE-MATCHES-CORE')" -eq 1 ]; then
+    ok "R5 near-miss: a core_line from another section of the same file clears neither — the source is the section, not the file"
+  else
+    bad "R5 near-miss: a core_line outside the shadowed and matched sections cleared a row"
+  fi
+else
+  bad "R5 precondition failed: stable.md moved in the range or a row carried no digest (O15='$P13OD' E19='$P13ED'), so R5 would not test an unchanged target"
+fi
+
+# MV1 / MV2 — each built in a copy of the whole reconcile directory (layer-drift.sh sources lib.sh
+# beside itself) by an exact-once python replace, refused unless the anchor occurs exactly once.
+p13_mut() { # $1 name, $2 old, $3 new -> path of the mutant, or empty
+  local md="$ROOT/reconcile-mutant-$1"
+  rm -rf "$md"; mkdir -p "$md"; cp "$(dirname "$DRIFT")"/* "$md"/ 2>/dev/null
+  P13_OLD="$2" P13_NEW="$3" python3 -c 'import os,sys
+s=open(sys.argv[1]).read(); o=os.environ["P13_OLD"]
+if s.count(o)==1: open(sys.argv[2],"w").write(s.replace(o,os.environ["P13_NEW"],1))
+else: sys.exit(1)' "$DRIFT" "$md/layer-drift.sh.mut" 2>/dev/null || { printf ''; return; }
+  mv "$md/layer-drift.sh.mut" "$md/layer-drift.sh"
+  if cmp -s "$DRIFT" "$md/layer-drift.sh" || [ ! -f "$md/lib.sh" ]; then printf ''; return; fi
+  printf '%s' "$md/layer-drift.sh"
+}
+P13_CTL="$(p13_mut control 'ADJ_ROW_TOKEN="adjudicated"' 'ADJ_ROW_TOKEN="adjudicated" ')"
+p13_base="$(p13_vec)"
+if [ "$p13_base" != "1 0 1 1" ]; then
+  bad "Part 13 MUTANTS: the unmutated vector is '$p13_base', want '1 0 1 1', so no mutant below is attributable"
+elif [ -z "$P13_CTL" ] || [ "$(p13_vec "$P13_CTL")" != "1 0 1 1" ]; then
+  bad "FIXTURE ERROR: an inert copy in a mutant directory does not score '1 0 1 1', so the copied directory is not a working harness"
+else
+  ok "Part 13 CONTROL: an inert copy in a mutant directory scores the unmutated vector '1 0 1 1' (R1 R2 R3 R4)"
+  P13_MV1="$(p13_mut mv1 '      st=no-read' '      st=clears')"
+  P13_MV2="$(p13_mut mv2 $'      st=no-read\n    else' $'      st=no-read\n    elif :; then\n      st=clears\n    else')"
+  if [ -z "$P13_MV1" ]; then bad "FIXTURE ERROR: MV1's anchor is not exactly once in layer-drift.sh, so the mutant does not exist"
+  else
+    case "$(p13_vec "$P13_MV1")" in
+      "0 0 1 1") ok "MV1 (the read check dropped) KILLED: R1 moves to clearing, R2 does not" ;;
+      *) bad "MV1 (the read check dropped) scored '$(p13_vec "$P13_MV1")', want '0 0 1 1' — R1 does not see a verdict clearing without evidence" ;;
+    esac
+  fi
+  if [ -z "$P13_MV2" ]; then bad "FIXTURE ERROR: MV2's anchor is not exactly once in layer-drift.sh, so the mutant does not exist"
+  else
+    case "$(p13_vec "$P13_MV2")" in
+      "1 0 0 0") ok "MV2 (presence-only check) KILLED: R3 and R4 move to clearing, R1 and R2 do not" ;;
+      *) bad "MV2 (presence-only check) scored '$(p13_vec "$P13_MV2")', want '1 0 0 0' — R3/R4 do not see a \`read\` that is present and wrong" ;;
+    esac
+  fi
+fi
+rm -rf "$ROOT/reconcile-mutant-control" "$ROOT/reconcile-mutant-mv1" "$ROOT/reconcile-mutant-mv2" "$P13W"
+rm -f "$REG"
 
 echo
 if [ "$fails" -eq 0 ]; then

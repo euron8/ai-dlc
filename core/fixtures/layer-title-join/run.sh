@@ -481,7 +481,10 @@ if [ -z "$DIG" ] || [ "$BASE_ROWS" -lt 1 ]; then
   bad "FIXTURE BROKEN: no keyed title-match row to record against (rows=$BASE_ROWS)"
 else
   # 6b. a recorded verdict silences THAT row and no other
-  printf '{"clause":"LC-E19","entry":"x","subject_digest":"%s","verdict":"still-additive","recorded_utc":"2026-08-07T00:00:00Z","reason":"read the body; augments"}\n' "$DIG" > "$REG"
+  # `read` is the evidence a verdict clears on: a line of MATCH.md and a line of core's matched
+  # `## Widget Handling` section at theirs, both the literal text this file seeded.
+  READ_MATCH='"read":{"entry_line":"Consumer text under a heading that names core'"'"'s section.","core_line":"Core text for widget handling."}'
+  printf '{"clause":"LC-E19","entry":"x","subject_digest":"%s","verdict":"still-additive","recorded_utc":"2026-08-07T00:00:00Z","reason":"read the body; augments",%s}\n' "$DIG" "$READ_MATCH" > "$REG"
   AFTER="$(rerun)"; A_ROWS="$(tm_rows "$AFTER")"
   if [ "$A_ROWS" -eq $((BASE_ROWS - 1)) ]; then
     ok "a recorded still-additive verdict silences exactly that row ($BASE_ROWS -> $A_ROWS), leaving the others"
@@ -563,7 +566,7 @@ else
     bad "the listing does not name this row's digest, so it is derived from the adjudicated code set rather than from adj_digest. Every clause that keys on a digest without sitting at ADJUDICATED is then invisible to the one reader built to show keys"
   fi
 
-  printf '{"clause":"LC-E19","entry":"x","subject_digest":"%s","verdict":"still-additive","recorded_utc":"2026-08-07T00:00:00Z","reason":"read the body; augments"}\n' "$DIG2" > "$REG"
+  printf '{"clause":"LC-E19","entry":"x","subject_digest":"%s","verdict":"still-additive","recorded_utc":"2026-08-07T00:00:00Z","reason":"read the body; augments","read":{"entry_line":"Consumer text under a heading that names core'"'"'s section.","core_line":"Core text for widget handling."}}\n' "$DIG2" > "$REG"
   TM_AFTER="$(printf '%s\n' "$(rerun)" | awk -F'\t' '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2 ~ /MATCH\.md$/' | grep -c .)"
   if [ "$TM_AFTER" -ne 0 ]; then
     bad "PRECONDITION FAILED: the recorded verdict left $TM_AFTER such row(s), so the next assertion is not measuring the state in which this site's key disappears. Read arm 6b first"
