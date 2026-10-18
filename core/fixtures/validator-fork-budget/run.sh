@@ -133,11 +133,13 @@ NFX="$(find "$FXROOT" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | grep -c .)"
 # 61 pair by script and the other 4 by their own text. A3b fires on 2 of 65, and both are enumerated:
 # v0.436.0 set 7195 on a reading of 7195 and v0.442.0 set 7196 on 7196. Each set the budget at the
 # spread top on purpose, back when the reading still had a spread. Under A3b those two releases
-# take 2 more. The other 63 leave headroom 3 or more; 38 of them use the usual 6 and the last 8 use 4.
+# take 2 more. The other 63 leave headroom 3 or more; 44 of them use the usual 6 and the last 8 use 4.
 # A first replay read only the 25 "RAISED TO" paragraphs and took its control from the same window,
 # so it reported 0 fires; its blindness to the older states is why the control is independent now.
-# The committed assignment history has 72 distinct values, and 13 of them have no paragraph and no
-# recorded reading. They are outside this replay, not quiet in it. A3b fires on a state that spent the
+# The committed assignment history (first-parent, origin/main) has 72 distinct values. 8 of them have
+# no paragraph and no recorded reading, so they are OUTSIDE this replay, not quiet in it: 7000 d4fd318c,
+# 7050 f7318db0, 7060 727ddc6c, 7177 3bde1ca9, 7192 81443020, 6431 5fb543b3, 3261 8f177ba7,
+# 3405 f4ca6764 (value, then the last commit that carried it). A3b fires on a state that spent the
 # margin since the last raise. That is BL-608's motivating state: 0.796.0 read 3362-3363 against 3363,
 # headroom 0-1.
 HEADROOM_MARGIN=2
