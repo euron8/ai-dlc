@@ -756,6 +756,27 @@ OPEN OPERATOR QUESTION: restrict the sandbox PATH to the declared tools, (i), or
 
 verify: manual
 
+## BL-677 — on the empty-self path `pool_kill` kills only the recorded pid, so children in a unit's process group survive the worker's kill on the worker-death and abort paths
+
+**DEFECT.** Filed by peer session ai-dlc-c0 (batch 236 READSET), id allocated by lead ai-dlc-c8; found by the hook-delta adversary. It is a leak, not a hang: it leaves orphaned processes after a kill, and it blocks nothing. DEFECT rather than NOTE because a kill that leaves the killed unit's children running is wrong behaviour with a concrete owed fix, not an observation.
+
+Mechanism. `pool_kill` opens with `[ -n "$2" ] || { kill -KILL "$1"; return 0; }` (`.githooks/pre-push:2154`, `core/git-hooks/pre-push:2053`), added this release so that an empty self-pgid walk cannot stop the calling shell. With `$2` (`self`) empty it signals only the recorded pid `$1` and returns. `self` is empty when `ps -o pgid= -p "$$"` fails (`.githooks/pre-push:2177`, `core/git-hooks/pre-push:2076`). The callers:
+- The watcher's worker-death line, `if ! kill -0 "$$"; then pool_kill "$pid" "$self" "$kp" "$kg"; exit 0; fi` (`.githooks/pre-push:2185`, `core/git-hooks/pre-push:2084`). Nothing follows it, so the unit's group is never signalled.
+- The watcher's refusal path (`.githooks/pre-push:2194-2195`, `core/git-hooks/pre-push:2093-2094`), where `pool_kill` is followed by `kill -KILL -- "-$pid" 2>/dev/null`.
+- `pool_kill_saved` (`.githooks/pre-push:2163-2167`, `core/git-hooks/pre-push:2062-2066`), called from `pool_abort` (`.githooks/pre-push:2170`, `core/git-hooks/pre-push:2069`) and from the worker after a late refusal (`.githooks/pre-push:2206`, `core/git-hooks/pre-push:2105`). `pool_abort` kills `-$wpid` (the watcher's group) and then reaches `pool_kill_saved`, with no `-$pid` group kill.
+
+On the refusal path the `kill -KILL -- "-$pid"` after `pool_kill` still reaps the unit's group. On the worker-death and abort paths nothing does, so the unit's group children survive.
+
+Why it is not a hang. The unit's children write to the unit's pool log (`TMPDIR="$wr" "$@" > "$lg" 2>&1 < /dev/null &`, `.githooks/pre-push:2180`, `core/git-hooks/pre-push:2079`), not to the hook's stdout, and the worker blocks on `wait "$pid"` (`.githooks/pre-push:2202`, `core/git-hooks/pre-push:2101`), which returns on the unit's own exit, not on EOF of any pipe. So the survivors cannot hold the push open.
+
+Prior state. Before this release a failing `ps` killed nothing at all, so this is a remaining gap, not a regression.
+
+Evidence, measured by the hook-delta adversary (cited, not re-run here): a unit leading its own group with a child in it, then `pool_kill "$U" ""`, gave `unit alive=no child alive=yes`; after the group kill of the refusal path, `child alive=no`.
+
+Owed: add `kill -KILL -- "-$1"` to the guard in both hooks (safe for a non-leader pid: ESRCH, nothing signalled), plus a consumer-suite-pool arm proving the group dies on the worker-death path with `self` empty (a stub `ps` that fails on `-p`), and that arm's mutant: the guard without the group kill must leave the child alive.
+
+verify: manual
+
 ## BL-678 — plan-rotate.sh rebuilds the plan's archive pointer from the current run's ranges alone, so every earlier rotated range drops out of the plan
 
 **NOTE.** Filed by the TRAIN owner on the lead's instruction, and tiered NOTE by the lead's ruling. `scripts/plan-rotate.sh:205-206` spell the
