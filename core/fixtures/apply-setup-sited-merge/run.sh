@@ -32,8 +32,8 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # today's arm. Each world is built fresh per drive and records its refs in `.B`/`.T` beside it.
 #
 # WHERE THE MUTANTS ARE. The worlds, drives and predicates live in lib.sh beside this file. The
-# 24-mutant battery that proves these arms can fail is `apply-setup-sited-merge-mutants`,
-# distribution-only, which sources the SAME lib.sh: it edits copies of core's own apply.sh and
+# 24-mutant battery that once proved these arms can fail has been retired;
+# it sourced the SAME lib.sh: it edits copies of core's own apply.sh and
 # setup-site-drift.sh, which a consumer is denied editing, so it is a question only this repository
 # asks. The unmutated control copy (S2) moved with it.
 #
@@ -114,8 +114,8 @@ for l in tip-clean tip-clean2 ref-clean; do
 done
 
 # === S: the reference is today's arm ===========================================================
-# (S2, the unmutated control copy, moved to apply-setup-sited-merge-mutants with the mutants it
-# vouches for.)
+# (S2, the unmutated control copy, moved out with the retired mutant battery it
+# vouched for.)
 if has_today ref-clean "$DV" && ! has_resolved ref-clean "$DV"; then
   ok "S1 the reference copy (merge call replaced by false) hands the clean world back as today's semantic-merge row -- it is a real 'before'"
 else

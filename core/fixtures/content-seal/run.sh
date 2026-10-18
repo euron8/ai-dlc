@@ -18,7 +18,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # (`adversarial-shard-merge/lib.sh`, `remediator-shard-join/lib.sh`) each own WORK, the EXIT trap and
 # the ok/bad counters, and cannot be sourced into one process. Each script is run here as its own
 # `bash`, from the caller's working directory; its FAIL lines carry the arm id, which is what the
-# distribution-only battery `content-seal-mutants` reads its kill sets from.
+# retired mutation battery read its kill sets from.
 #
 # THE SEALED SET IS NEVER RESTATED HERE. Each near-miss asks `content-seal.sh`'s own `seal_sealed`
 # whether its path is in the set (seal-lib.sh `in_set`), so a widened or narrowed declaration moves

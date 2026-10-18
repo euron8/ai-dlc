@@ -2910,7 +2910,7 @@ fi
 # the machine entirely to itself.
 #
 # So the fixture is SHARDED ACROSS DIRECTORIES, which is the same move and the same reason
-# as `trunk-audit-mutants` being split out of `trunk-audit-classes`. Each shard is a
+# as a mutation battery being split out of `trunk-audit-classes`. Each shard is a
 # directory the outer pool can start independently and interleave with everything else.
 #
 # ROUND-ROBIN, NOT CONTIGUOUS THIRDS. These assertions differ by an order of magnitude in

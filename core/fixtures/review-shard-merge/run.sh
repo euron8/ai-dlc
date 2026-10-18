@@ -2,9 +2,8 @@
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # review-shard-merge/run.sh -- partition-review-diff.sh and merge-review-shards.sh, the part set
 # and the JOIN of a sharded gate-1 code review and of a sharded gate-2 QA validation (--gate qa;
-# arms Q1-Q16, S7-S10). The behavioural arms only: the mutation battery that proves each of them
-# can fail is `review-shard-merge-mutants`, distribution-only, which sources the SAME predicates
-# from `lib.sh` beside this file. The battery mutates copies of core's own scripts, which a
+# arms Q1-Q16, S7-S10). The behavioural arms only: the mutation battery that once proved each of them
+# can fail has been retired; the predicates live in `lib.sh` beside this file. The battery mutates copies of core's own scripts, which a
 # consumer cannot edit, so the consumer keeps every correctness arm and loses only that proof.
 #
 # WHAT IS AT STAKE. Check 1 in gate-validation.md reads ONE verdict line from ONE review file. A

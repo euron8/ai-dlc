@@ -5,8 +5,8 @@ Whether it ships is decided by the absence of a `.dist-only` marker
 remediation-guard hook whose ledger it reads, by walking up in either layout.
 
 - `run.sh` — the behavioural arms; the header states what each proves.
-- `lib.sh` — the resolution, worlds and predicates, sourced by `run.sh` and by the JX mutation
-  battery `remediator-shard-join-mutants` (distribution-only), so both score one copy.
+- `lib.sh` — the resolution, worlds and predicates, sourced by `run.sh` (the retired JX mutation
+  battery sourced it too), so there is one copy.
 - `seed.<story>.md` — the first 12 lines of three real story files from one reference-consumer
   sprint (s305).
 - `seed.block-*.md` — three finding blocks of that sprint's real repair record, one per story.
