@@ -131,7 +131,8 @@ live wait over a teammate that has not delivered.
   beat again over the `WAITING <path>` ones. Exit 0 alone does not mean all landed.
 - `exit 1` — Rule 20 non-delivery. Re-dispatch, then HARD_BLOCK — for a path the beat
   reports `absent`. Under `--complete`, `UNFINISHED <path>` (present, last non-blank line is
-  not `seat-complete:`) and `UNSETTLED <path>` (marked, still changing) are NOT absent, on a
+  not `seat-complete:`, or its `sha=` no longer matches) and `UNSETTLED <path>` (marked with no
+  `sha=`, still changing) are NOT absent, on a
   waiting beat or an exhausted one: read the file before deciding, never re-dispatch over it
   unread — that discards the seat's findings.
 
@@ -288,15 +289,19 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
 
    **Every seat writes its file early and closes it with a completion line.** Its brief tells
    it to Write the file's header first, append each finding as soon as it is verified, and,
-   when it has finished and only then, make ONE final write: the line
-   `seat-complete: <step> <seat> <shard> findings=<n>`, where `<shard>` is the brief's
-   `shard:` value and `<n>` the number of findings in the file. The marker is never written
-   with the header. Every adversary shard brief — part or cross, in item 2 and in "Adversarial
+   when it has finished and only then, close it with ONE Bash call,
+   `scripts/ai-dlc/wait-for-deliverable.sh --mark <file> <step> <seat> <shard> findings=<n>`,
+   which appends `seat-complete: <step> <seat> <shard> sha=<hex> findings=<n>`, where `<shard>`
+   is the brief's `shard:` value, `<n>` the number of findings in the file, and `sha=` the digest
+   of every line above the marker. The marker is never written with the header, nor by hand.
+   Every adversary shard brief — part or cross, in item 2 and in "Adversarial
    review dispatch" — carries the same instruction with the adversary in place of the seat.
    Every beat that joins such a file passes `--complete` (`wait-for-deliverable.sh`, its
    header): the file counts as DELIVERED only when that line is last — outside any fence, with
-   no carriage return — and the file has not changed for the settle window
-   (`AI_DLC_WAIT_SETTLE_SECS`, default 180s, measured from a cross seat's real edit gaps), so a file written
+   no carriage return — and its `sha=` matches the content above it, with no window; a file
+   edited after its marker reads UNFINISHED until the seat runs `--mark` again. A marker with no
+   `sha=` (a seat briefed before this release) is judged as before, by the settle window
+   (`AI_DLC_WAIT_SETTLE_SECS`, default 180s, measured from a cross seat's real edit gaps). So a file written
    early is never taken as finished, a seat editing above its marker is not either, and a seat
    still appending shows as progress on its own file rather than as silence. The beat reads the marker only; `merge-adversarial-shards.sh` and
    `merge-review-shards.sh` check `findings=<n>` against the findings they parse and refuse a
@@ -616,10 +621,13 @@ PRIOR pass's findings and the repair record, because pass 2+ reviews the REPAIR,
 again. On pass 1 of the requirements subject, sharded or one-part, that pair is the elicitation
 record: `_bmad-output/planning-artifacts/s<N>/requirements-elicitation.md` as the prior pass's findings and `_bmad-output/planning-artifacts/s<N>/requirements-elicitation-repair.md` as the repair record ("Validation cycle" item 3). Every adversary brief, sharded or not, also carries the early-write instruction of
 "Validation cycle" item 1: header first, each finding appended as verified, and ONE final
-write once it has finished, never with the header, appended with Edit, never Bash (the merge
+act once it has finished, never with the header: the ONE Bash call
+`scripts/ai-dlc/wait-for-deliverable.sh --mark <shard path> <step> adversary <shard> findings=<n>`,
+which appends `seat-complete: <step> adversary <shard> sha=<hex> findings=<n>`. That call is the
+one sanctioned Bash write to a shard; every other write is Write or Edit, never Bash (the merge
 refuses a shard written or amended through Bash after its last Write or Edit, by its content
-seal; `content-seal.sh` owns the check): `seat-complete: <step> adversary <shard>
-findings=<n>`, `<shard>` being the brief's `shard:` value (`none` when it carries none) and
+seal; `content-seal.sh` owns the check, and `--mark` re-seals what it writes). `<shard>` is
+the brief's `shard:` value (`none` when it carries none) and
 `<n>` its `### ` findings, each a `### ` heading inside `## Findings` with an UPPERCASE severity word (FINDING GRAMMAR in `merge-adversarial-shards.sh`'s header; item 1's `##` seat example does not apply to a shard). On every axis, once ANY shard in the directory carries a
 `seat-complete:` line anywhere, the merge refuses every shard in it that does not end in
 exactly one, or whose `findings=<n>` differs from the findings it parses there. Its limit: a directory where no shard carries the marker merges
@@ -639,7 +647,7 @@ the dispatch, and the spawn ledger must record that dispatch as an `adversary`. 
 with Write or Edit, never Bash; a Bash-written shard has no harness record and the merge refuses it.
 Filename numbering is load-bearing: Check 24 orders the series by the `p<M>` token.
 
-**Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh --complete <findings_path>`, which takes a file as delivered only once it ends in its `seat-complete:` line.
+**Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh --complete <findings_path>`, which takes a file as delivered only once it ends in its `seat-complete:` line and that line's `sha=` matches.
 
 **A re-dispatched shard is merged with `--rerun`.** Write-ledger rows never expire, so after a stalled adversary is re-dispatched the merge refuses its shard as written by two adversary dispatches. When it does, run the same merge with `--rerun <shard>.md@<the re-dispatch's dispatched-at>` (repeatable, one per re-dispatched shard). The re-dispatch is a NEW dispatch, and a refusal naming a writer of another shard is a finding, never a timestamp to move.
 
@@ -1098,8 +1106,9 @@ verifies against that record; so does the gate's re-run of the failed checks.
 
 **Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh --complete-repair
 --dispatch <agentId> <repair_record_path>`. The serial remediator and the
-unsharded `shard: none (serial-document)` remediator both end their record with `repair-complete:
-serial <pass>`, which only `--complete-repair` waits for; the part records a shard join writes are
+unsharded `shard: none (serial-document)` remediator both end their record with
+`wait-for-deliverable.sh --mark-repair <record> <pass>`, which appends `repair-complete: serial
+<pass> sha=<hex>`, the line only `--complete-repair` waits for; the part records a shard join writes are
 written by that join, synchronously, and need no beat.
 
 **A completed record is never reopened by `SendMessage`.** Once a remediator's record carries its
@@ -1107,7 +1116,7 @@ written by that join, synchronously, and need no beat.
 (`remediator.md`). When the join, a refusal or a later check needs more repair on that record,
 `TaskStop` the resident remediator and send ONE fresh `Agent` dispatch, whose brief names the open
 work and which appends a new block that opens with its own triple and ends in its own
-`repair-complete: serial <pass>` line. Join that dispatch with its own `--dispatch <agentId>`.
+`repair-complete: serial <pass> sha=<hex>` line, written by `--mark-repair`. Join that dispatch with its own `--dispatch <agentId>`.
 Never resume the finished remediator with `SendMessage`, even to deliver a refusal: it can either
 leave the work undone or finish it by editing past its own completion line.
 

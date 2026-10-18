@@ -118,12 +118,20 @@ for your findings, and (d) a shared context block. You MUST:
    your story; as a cross shard, read EVERY story, take the pairs of your group as your focus,
    and cite any story a finding rests on (Rule 28, "The cross-part agent is sharded too").
    Write the file's header first and append each finding as you verify it. When you have
-   finished, and only then, make ONE final write, appended with Edit (never `printf >>` or any
-   Bash; a Bash-amended shard is refused at merge): the line
-   `seat-complete: <step> adversary <shard> findings=<n>`, <n> being your `### ` findings (a
+   finished, and only then, close the shard with ONE Bash call,
+   `scripts/ai-dlc/wait-for-deliverable.sh --mark <shard path> <step> adversary <shard> findings=<n>`,
+   which appends `seat-complete: <step> adversary <shard> sha=<hex> findings=<n>` (`sha=` binds
+   every line above it; an edit after it reads unfinished until you run the same call again;
+   never type the line by hand). That call is the ONE sanctioned Bash write to a shard: it
+   refuses a shard already amended through Bash and re-seals the bytes it writes (the content
+   seal, `content-seal.sh`). Every other write is Write or Edit, never `printf >>` or any other
+   Bash; a Bash-amended shard is refused at merge. <n> is your `### ` findings (a
    `### ` under `## Findings` is a finding, so probes and notes go under their own `## `
    section; FINDING GRAMMAR, `merge-adversarial-shards.sh`'s header), never
-   with the header (`steps/_gate-procedures.md`, "Validation cycle" item 1). Write to the shard
+   with the header (`steps/_gate-procedures.md`, "Validation cycle" item 1). If the `--mark`
+   call fails with `unknown arg: --mark`, the engine copy you ran predates `--mark`: append, with Edit, the
+   bare line `seat-complete: <step> adversary <shard> findings=<n>` instead, which the join
+   accepts once the file has stopped changing. Write to the shard
    path your brief names. Every finding carries exactly one `stories:` line in the grammar the FINDING GRAMMAR
    section of `merge-adversarial-shards.sh`'s header defines, citing ordinals from the map in your
    brief. Report a finding that cites another story only if you are a cross shard. Stamp your

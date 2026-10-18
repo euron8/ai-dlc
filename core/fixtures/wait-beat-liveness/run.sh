@@ -48,6 +48,10 @@ echo "HERMETIC-CONSUMED core/scripts/wait-for-deliverable.sh"
 MERGE="$(dirname "$SUBJ")/merge-adversarial-shards.sh"
 [ -f "$MERGE" ] || { echo "FIXTURE ERROR: merge-adversarial-shards.sh is not beside $SUBJ" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/scripts/merge-adversarial-shards.sh"
+# --dispatch reads its id prefixes from this sibling's DISPATCH_ID_PREFIXES (sections 18-19).
+GRAMMAR="$(dirname "$SUBJ")/validate-adversarial-convergence.sh"
+[ -f "$GRAMMAR" ] || { echo "FIXTURE ERROR: validate-adversarial-convergence.sh is not beside $SUBJ" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/scripts/validate-adversarial-convergence.sh"
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
@@ -99,9 +103,19 @@ fx_backdate() {  # $1 = file, $2 = seconds into the past
 
 # A teammate transcript, aged. `$2` seconds of quiet, verified by the fixture's own
 # reader before the subject ever sees it.
+#
+# THE LINES ARE THE HARNESS'S OWN SHAPE, NOT `{"t":1}`. The sensor reads a turn from the newest
+# timestamp on an assistant or user line, so a seed with no such line exercises only its mtime
+# fallback. Each transcript carries a user line, an answered `{"type":"api-request"` line and an
+# assistant line, every timestamp `$2` seconds old, and the file's mtime agrees. The fallback has
+# its own seed (mk_transcript_bare) and its own arm in section 23.
 mk_transcript() {  # $1 = dir, $2 = age seconds, $3 = basename
   mkdir -p "$1" || broken "cannot create $1"
-  printf '{"t":1}\n' > "$1/$3" || broken "cannot write $1/$3"
+  mt_ts_="$(fx_iso $(( $(date +%s) - $2 )))"; [ -n "$mt_ts_" ] || broken "neither BSD nor GNU date can format an epoch"
+  { printf '{"parentUuid":null,"isSidechain":true,"agentId":"a1","type":"user","message":{"role":"user","content":[{"type":"text","text":"brief"}]},"timestamp":"%s.100Z"}\n' "$mt_ts_"
+    printf '{"type":"api-request","sessionId":"s","agentId":"a1","id":"r1","timestamp":"%s.200Z","shapeHash":"7d7e1ada"}\n' "$mt_ts_"
+    printf '{"parentUuid":"u1","isSidechain":true,"agentId":"a1","message":{"role":"assistant","content":[{"type":"text","text":"ok"}]},"type":"assistant","timestamp":"%s.300Z"}\n' "$mt_ts_"
+  } > "$1/$3" || broken "cannot write $1/$3"
   if [ "$2" -gt 0 ]; then
     fx_backdate "$1/$3" "$2" || broken "neither BSD nor GNU date can backdate a file here"
     age=$(( $(date +%s) - $(fx_mtime "$1/$3") ))
@@ -1852,6 +1866,613 @@ M37_shard_check_exit_ignored() {
   if has "DELIVERED s-nov.md" && has "DELIVERED s-ok.md"; then
     ok "MUTANT shard-check-exit-ignored: a join ignoring the check's exit delivers the no-verdict shard — section 17a (1) catches it"
   else bad "MUTANT shard-check-exit-ignored: section 17a (1) survives the check's exit being ignored (or the mutant never ran): $OUT"; fi
+  rm -rf "$W"
+}
+
+# ===========================================================================
+# 18. --dispatch MUST NOT SWITCH GLOBBING OFF FOR THE REST OF THE BEAT.
+#     The id split runs under `set -f`. Left on, every later glob in the subject iterates once
+#     over its own literal pattern: the teammate scan reads `unavailable` on a session with a
+#     fresh transcript, and the EXIT trap's heir scan finds no heir, so a holder that exits
+#     deletes the marker under a sibling still asleep. Measured on the reference consumer: a
+#     lead whose every join was armed with --dispatch read `LIVENESS  unavailable` 7 times and
+#     `took a turn` 0 times. Each arm below has its no-dispatch twin in this file (section 2;
+#     the heir arm's control is B's own pre-exit marker), and section 18c deletes the restore.
+# ===========================================================================
+fx_iso() {  # $1 = epoch -> ISO8601 UTC, BSD then GNU
+  date -u -r "$1" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null
+}
+mk_ledger_row() {  # $1 = workdir, $2 = tool_use_id, $3 = epoch -- appends one spawn-ledger row
+  le_ts="$(fx_iso "$3")"; [ -n "$le_ts" ] || broken "neither BSD nor GNU date can format an epoch"
+  printf '{"v":1,"ts":"%s","name":"wbl","role":"dev","tool_use_id":"%s"}\n' "$le_ts" "$2" \
+    >> "$1/_bmad-output/spawn-ledger.jsonl" || broken "cannot write the spawn ledger"
+}
+# Every subject this section drives sits in a directory with its siblings, because --dispatch
+# reads its id grammar from the one beside it; a lone copy would refuse for that, not for the
+# behaviour under test.
+sib_dir() {  # $1 = subject copy -> prints a fresh dir holding it as wait-for-deliverable.sh
+  sd_="$(mktemp -d "$TMPROOT/sib.XXXXXX")" || broken "mktemp failed"
+  cp "$1" "$sd_/wait-for-deliverable.sh" || broken "cannot copy the subject"
+  cp "$MERGE" "$GRAMMAR" "$sd_/" || broken "cannot copy the subject's siblings beside it"
+  printf '%s' "$sd_"
+}
+
+dispatch_live_world() {  # $1 = subject; sets OUT/RC -- a --dispatch beat over a fresh transcript
+  W="$(mk_work)"; TD="$TMPROOT/s18-td.$$.$RANDOM"; mk_transcript "$TD" 0 agent-aone-1.jsonl
+  mk_ledger_row "$W" toolu_wbl661 $(( $(date +%s) - 30 ))
+  beat "$1" "$W" 3600 "$TD" --dispatch toolu_wbl661
+}
+S18a_dispatch_keeps_liveness() {
+  dispatch_live_world "$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  if [ "$RC" -eq 0 ] && has "WAITING   deliv.md"; then ok "dispatch-glob: CONTROL — the --dispatch beat resolved its ledger row and ran a beat"
+  else bad "dispatch-glob: CONTROL FAILED — the --dispatch beat did not run (rc=$RC), so the line below proves nothing: $OUT"; fi
+  if has "$LIVE_LINE" && ! has "$UNAVAIL_LINE"; then ok "dispatch-glob: a --dispatch beat over a fresh transcript reports the teammate's turn"
+  else bad "dispatch-glob: a --dispatch beat read a fresh transcript as no signal — noglob leaked past the id split: $OUT"; fi
+  rm -rf "$W"
+}
+
+# Beat B (armed --dispatch) holds the marker; a live registered sibling A stands behind it; B's
+# target lands and B exits. Its EXIT trap must hand the marker to A. A is a registration the
+# fixture plants -- `.lease-<pid>` with an unexpired epoch, naming a `sleep` this fixture started
+# -- rather than a second real beat, because a real A re-stamps the marker on its own next poll
+# and would mask a holder that dropped it. Every wait below is bounded on PROGRESS and refuses as
+# BROKEN (exit 2) on none; nothing FAILs on a clock.
+HEIR_A_PID=""; HEIR_B_PID=""; HEIR_AFTER=""
+until_ok() {  # $1 = tenths, rest = command -> 0 once it holds, 1 when the bound runs out
+  uo_n_="$1"; shift
+  while [ "$uo_n_" -gt 0 ]; do "$@" && return 0; sleep 0.1; uo_n_=$(( uo_n_ - 1 )); done
+  return 1
+}
+marker_pid() { mp_=""; IFS= read -r mp_ 2>/dev/null < "$1/_bmad-output/.beat-inflight"; case "$mp_" in *' '*) printf '%s' "${mp_#* }" ;; esac; }
+marker_present() { [ -n "$(marker_pid "$1")" ]; }
+pid_gone() { ! kill -0 "$1" 2>/dev/null; }
+heir_world() {  # $1 = subject (in a sibling dir); leaves W, sets HEIR_*
+  W="$(mk_work)"; HEIR_A_PID=""; HEIR_B_PID=""; HEIR_AFTER=""
+  mk_ledger_row "$W" toolu_wbl661heir $(( $(date +%s) - 30 ))
+  ( cd "$W" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=40 AI_DLC_WAIT_POLL_SECS=1 \
+      AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+      AI_DLC_PROJECT_ROOT="$PWD" bash "$1" --dispatch toolu_wbl661heir b.md ) > "$BEATOUT.B" 2>&1 &
+  hw_bg_=$!
+  until_ok 300 marker_present "$W" || broken "heir: the --dispatch beat never wrote the marker"
+  HEIR_B_PID="$(marker_pid "$W")"
+  sleep 120 & HEIR_A_PID=$!
+  printf '%s' "$(( $(date +%s) + 300 ))" > "$W/_bmad-output/.wait-beats/.lease-$HEIR_A_PID" || broken "heir: cannot plant A's registration"
+  printf 'b\n' > "$W/b.md"
+  until_ok 300 pid_gone "$HEIR_B_PID" || broken "heir: the --dispatch beat never exited after its target landed"
+  HEIR_AFTER="$(marker_pid "$W")"
+  kill "$HEIR_A_PID" 2>/dev/null; wait "$HEIR_A_PID" 2>/dev/null
+  wait "$hw_bg_" 2>/dev/null
+}
+S18b_dispatch_holder_hands_off() {
+  heir_world "$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  if [ -n "$HEIR_B_PID" ] && [ "$HEIR_B_PID" != "$HEIR_A_PID" ]; then ok "dispatch-heir: CONTROL — the --dispatch beat held the marker while its sibling registered"
+  else bad "dispatch-heir: CONTROL FAILED — B ('$HEIR_B_PID') did not hold the marker apart from A ('$HEIR_A_PID')"; fi
+  if [ -n "$HEIR_AFTER" ] && [ "$HEIR_AFTER" = "$HEIR_A_PID" ]; then ok "dispatch-heir: a --dispatch holder that exits hands the marker to the live sibling"
+  else bad "dispatch-heir: after the --dispatch holder exited the marker names '$HEIR_AFTER', not the live sibling $HEIR_A_PID — its heir scan never globbed"; fi
+  rm -rf "$W"
+}
+M38_dispatch_noglob_leaks() {
+  mutant dispatch-noglob-leaks -e 's@^  \[ "\$dp_noglob_" = 1 \] || set +f$@  :@' || return
+  SD="$(sib_dir "$MUT")"
+  dispatch_live_world "$SD/wait-for-deliverable.sh"
+  if [ "$RC" -eq 0 ] && has "$UNAVAIL_LINE" && ! has "$LIVE_LINE"; then
+    ok "MUTANT dispatch-noglob-leaks: with the restore deleted a --dispatch beat reads a fresh transcript as no signal — section 18a catches it"
+  else bad "MUTANT dispatch-noglob-leaks: section 18a survives noglob leaking (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+  heir_world "$SD/wait-for-deliverable.sh"
+  if [ -n "$HEIR_B_PID" ] && [ "$HEIR_AFTER" != "$HEIR_A_PID" ]; then
+    ok "MUTANT dispatch-noglob-leaks: the leaked noglob makes the exiting holder drop the marker under its sibling — section 18b catches it"
+  else bad "MUTANT dispatch-noglob-leaks: section 18b survives noglob leaking (marker after: '$HEIR_AFTER', sibling '$HEIR_A_PID')"; fi
+  rm -rf "$W"
+}
+
+# ===========================================================================
+# 19. --dispatch TAKES EVERY DECLARED ID PREFIX, READ FROM ITS ONE DECLARATION.
+#     A local-model lead's dispatch id is `call_<32 hex>`. The subject once matched `toolu_*`
+#     alone, so a `call_` id fell to the agentId arm and refused for a missing meta.json. The
+#     prefixes are declared once, in the sibling validate-adversarial-convergence.sh; the arms
+#     drive a `call_` id against a seeded ledger row, a bare-hex agentId through meta.json as the
+#     control that the agentId arm still runs, and a subject with no sibling, which must refuse
+#     64 rather than fall back to `toolu_` alone. The ledger seeds an EPOCH row first, so the
+#     subject's row is not the ledger's only one.
+# ===========================================================================
+CALL_ID="call_45aba045bf78553ca703fc8694de7577"
+call_world() {  # $1 = subject -> W, OUT, RC; a --status read of a path written after the dispatch
+  W="$(mk_work)"; cw_e_=$(( $(date +%s) - 60 ))
+  mk_ledger_row "$W" toolu_wbl649epoch $(( cw_e_ - 600 ))
+  mk_ledger_row "$W" "$CALL_ID" "$cw_e_"
+  printf 'x\n' > "$W/deliv.md"
+  ( cd "$W" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+      AI_DLC_PROJECT_ROOT="$PWD" bash "$1" --status --dispatch "$CALL_ID" deliv.md ) > "$BEATOUT" 2>&1
+  RC=$?; OUT="$(cat "$BEATOUT")"
+}
+S19a_dispatch_call_prefix() {
+  call_world "$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  if [ "$RC" -eq 0 ] && has "DELIVERED deliv.md"; then ok "dispatch-call: a call_ dispatch id resolves its ledger row and joins from it"
+  else bad "dispatch-call: a call_ dispatch id did not resolve (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+  # CONTROL: a bare-hex agentId still takes the meta.json arm and reaches the same row.
+  W="$(mk_work)"; TD="$TMPROOT/s19-td.$$"; mkdir -p "$TD"
+  mk_ledger_row "$W" "$CALL_ID" $(( $(date +%s) - 60 ))
+  printf '{"agentType":"dev","toolUseId":"%s"}' "$CALL_ID" > "$TD/agent-a649beef.meta.json"
+  printf 'x\n' > "$W/deliv.md"
+  ( cd "$W" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_TEAMMATE_DIR="$TD" \
+      AI_DLC_PROJECT_ROOT="$PWD" bash "$(sib_dir "$SUBJ")/wait-for-deliverable.sh" --status --dispatch a649beef deliv.md ) > "$BEATOUT" 2>&1
+  RC=$?; OUT="$(cat "$BEATOUT")"
+  if [ "$RC" -eq 0 ] && has "DELIVERED deliv.md"; then ok "dispatch-call: CONTROL — a bare-hex agentId still resolves through its meta.json"
+  else bad "dispatch-call: CONTROL FAILED — the agentId arm no longer resolves (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+}
+S19b_dispatch_grammar_missing_refuses() {
+  LONE649="$(mktemp -d "$TMPROOT/lone649.XXXXXX")"; cp "$SUBJ" "$LONE649/wait-for-deliverable.sh" || broken "cannot copy the subject"
+  call_world "$LONE649/wait-for-deliverable.sh"
+  if [ "$RC" -eq 64 ] && has "cannot read its id grammar"; then ok "dispatch-call: a subject with no sibling grammar refuses --dispatch (exit 64)"
+  else bad "dispatch-call: a missing id grammar did not refuse (rc=$RC) — a silent fallback: $OUT"; fi
+  rm -rf "$W"
+  # CONTROL: the same lone copy without --dispatch still runs, so the refusal is the grammar's.
+  W="$(mk_work)"
+  ( cd "$W" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+      AI_DLC_PROJECT_ROOT="$PWD" bash "$LONE649/wait-for-deliverable.sh" --status --since "$(( $(date +%s) - 60 ))" deliv.md ) > "$BEATOUT" 2>&1
+  RC=$?; OUT="$(cat "$BEATOUT")"
+  if [ "$RC" -eq 0 ] && has "STATUS --"; then ok "dispatch-call: CONTROL — the same lone copy without --dispatch runs"
+  else bad "dispatch-call: CONTROL FAILED — the lone copy does not run at all (rc=$RC): $OUT"; fi
+  # A DUPLICATED declaration refuses too: two lines are two grammars, and picking one is a guess.
+  SD="$(sib_dir "$SUBJ")"
+  printf '\nDISPATCH_ID_PREFIXES="toolu_"\n' >> "$SD/validate-adversarial-convergence.sh"
+  call_world "$SD/wait-for-deliverable.sh"
+  if [ "$RC" -eq 64 ]; then ok "dispatch-call: a duplicated DISPATCH_ID_PREFIXES declaration refuses (exit 64)"
+  else bad "dispatch-call: a duplicated declaration was accepted (rc=$RC): $OUT"; fi
+  rm -rf "$W" "$LONE649"
+}
+M39_dispatch_toolu_only() {
+  mutant dispatch-toolu-only -e 's@^  for dp_p_ in \$DP_PREFIXES; do@  for dp_p_ in toolu_; do@' || return
+  call_world "$(sib_dir "$MUT")/wait-for-deliverable.sh"
+  if [ "$RC" -eq 64 ] && ! has "DELIVERED deliv.md"; then
+    ok "MUTANT dispatch-toolu-only: a prefix list hardwired to toolu_ refuses the call_ id — section 19a catches it"
+  else bad "MUTANT dispatch-toolu-only: section 19a survives the prefix list being hardwired (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+}
+
+# ===========================================================================
+# 20. THE LEASE IS HELD BEFORE ANY STEP THAT CAN BLOCK.
+#     The stop hook allows the lead's yield only while `.beat-inflight` is live. A beat that
+#     blocks before writing it reads to the hook as "no beat armed" while one is. Two blocking
+#     steps are forced, each on a FIFO this fixture holds open: the --dispatch ledger read
+#     (20a, which the lease once followed) and the sweep's --shard-header check (20b, which it
+#     already preceded -- a pin). Each case first proves the beat REACHED the blocking read (the
+#     FIFO's writer opens only once a reader has); no progress there is FIXTURE BROKEN, exit 2,
+#     never a FAIL. Nothing here reads a clock.
+# ===========================================================================
+BLK_PID=""; BLK_MARK=""
+fifo_hold() {  # $1 = fifo, $2 = reached file, $3 = release file: opens the writer, records it, holds until released
+  ( exec 3> "$1"; : > "$2"; while [ ! -e "$3" ]; do sleep 0.1; done; printf '%s\n' "${4:-}" >&3 ) &
+  FH_PID=$!
+}
+blocked_lease() {  # $1 = workdir, $2 = reached file, $3 = release file; reads BLK_PID; sets BLK_MARK
+  until_ok 300 test -e "$2" || { kill "$BLK_PID" "$FH_PID" 2>/dev/null; broken "lease: the beat never reached its blocking read"; }
+  BLK_MARK=0; [ -n "$(marker_pid "$1")" ] && [ "$(marker_pid "$1")" = "$BLK_PID" ] && BLK_MARK=1
+  : > "$3"
+  wait "$FH_PID" 2>/dev/null; wait "$BLK_PID" 2>/dev/null
+}
+ledger_fifo_world() {  # $1 = subject (in a sibling dir); leaves W, sets BLK_MARK
+  W="$(mk_work)"; command -v mkfifo >/dev/null || broken "no mkfifo"
+  mkfifo "$W/_bmad-output/spawn-ledger.jsonl" || broken "cannot make the ledger a FIFO"
+  fifo_hold "$W/_bmad-output/spawn-ledger.jsonl" "$W/reached" "$W/release" \
+    "{\"v\":1,\"ts\":\"$(fx_iso $(( $(date +%s) - 30 )))\",\"name\":\"wbl\",\"tool_use_id\":\"toolu_wbl541\"}"
+  ( cd "$W" && exec env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 \
+      AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+      AI_DLC_PROJECT_ROOT="$PWD" bash "$1" --dispatch toolu_wbl541 deliv.md ) > "$BEATOUT" 2>&1 &
+  BLK_PID=$!
+  blocked_lease "$W" "$W/reached" "$W/release"
+  OUT="$(cat "$BEATOUT")"
+}
+S20a_lease_before_dispatch_read() {
+  ledger_fifo_world "$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  if has "WAITING   deliv.md"; then ok "lease-early: CONTROL — the beat blocked on the ledger resumed and ran once the row arrived"
+  else bad "lease-early: CONTROL FAILED — the beat over a FIFO ledger never ran a beat: $OUT"; fi
+  if [ "$BLK_MARK" -eq 1 ]; then ok "lease-early: a --dispatch beat blocked reading the spawn ledger already holds .beat-inflight"
+  else bad "lease-early: a --dispatch beat blocked on the ledger held no lease — the stop hook sees no beat while one is armed"; fi
+  rm -rf "$W"
+}
+S20b_lease_before_shard_check() {
+  SD="$(sib_dir "$SUBJ")"; W="$(mk_work)"; command -v mkfifo >/dev/null || broken "no mkfifo"
+  mkfifo "$W/hdr.fifo" || broken "cannot make the header FIFO"
+  # The stub merge: records that the sweep reached it, then blocks reading the FIFO; exits 0 (header passes).
+  printf '#!/usr/bin/env bash\n: > "%s/reached"\nIFS= read -r _ < "%s/hdr.fifo"\nexit 0\n' "$W" "$W" > "$SD/merge-adversarial-shards.sh"
+  printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W/s.md"
+  fifo_hold "$W/hdr.fifo" "$W/held" "$W/release" go
+  ( cd "$W" && exec env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_SETTLE_SECS=1 AI_DLC_WAIT_POLL_SECS=1 \
+      AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+      AI_DLC_PROJECT_ROOT="$PWD" bash "$SD/wait-for-deliverable.sh" --since "$(( $(date +%s) - 30 ))" --complete --shard-header convergence s.md ) > "$BEATOUT" 2>&1 &
+  BLK_PID=$!
+  blocked_lease "$W" "$W/reached" "$W/release"
+  OUT="$(cat "$BEATOUT")"
+  if [ -e "$W/reached" ]; then ok "lease-early: CONTROL — the sweep reached the stub header check"
+  else bad "lease-early: CONTROL FAILED — the sweep never ran the header check: $OUT"; fi
+  if [ "$BLK_MARK" -eq 1 ]; then ok "lease-early: a beat blocked inside the sweep's header check already holds .beat-inflight"
+  else bad "lease-early: a beat blocked in the sweep's header check held no lease"; fi
+  rm -rf "$W"
+}
+M40_lease_after_dispatch() {
+  mutant lease-not-first -e "/^trap 'lease_release' EXIT\$/{n;/^beat_alive\$/d;}" || return
+  ledger_fifo_world "$(sib_dir "$MUT")/wait-for-deliverable.sh"
+  if [ "$BLK_MARK" -eq 0 ] && has "WAITING   deliv.md"; then
+    ok "MUTANT lease-not-first: without the lease at arming a beat blocked on the ledger holds none — section 20a catches it"
+  else bad "MUTANT lease-not-first: section 20a survives the early lease being deleted (mark=$BLK_MARK): $OUT"; fi
+  rm -rf "$W"
+}
+
+# ===========================================================================
+# 21. THE LEASE IS WHERE THE STOP HOOK LOOKS, WHATEVER AI_DLC_STATE_DIR SAYS.
+#     The hook reads `<root>/_bmad-output/.beat-inflight` and never sees AI_DLC_STATE_DIR (lead
+#     beats set it as a per-command prefix). So a beat armed with a custom state dir holds its
+#     marker and its registration at the root's `_bmad-output`, while its counters stay in the
+#     custom dir -- the control that the state dir was honoured at all.
+# ===========================================================================
+# Re-evaluated on every poll: passed to until_ok as a NAME, never as an expanded `$(...)`.
+cs_counter_written() { for cw_ in "$1"/_bmad-output/seat-q/.wait-beats/*; do [ -f "$cw_" ] && return 0; done; return 1; }
+custom_state_world() {  # $1 = subject; leaves W, sets CS_MARK (holder pid at root, or ''), CS_LEASE, CS_CTR
+  W="$(mk_work)"; CS_MARK=""; CS_LEASE=0; CS_CTR=0
+  ( cd "$W" && exec env -u CLAUDE_CODE_SESSION_ID AI_DLC_STATE_DIR=_bmad-output/seat-q AI_DLC_WAIT_BEAT_SECS=40 \
+      AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+      AI_DLC_PROJECT_ROOT="$PWD" bash "$1" deliv.md ) > "$BEATOUT" 2>&1 &
+  cs_p_=$!
+  until_ok 300 cs_counter_written "$W" \
+    || { kill "$cs_p_" 2>/dev/null; broken "custom-state: the beat never wrote a counter in its state dir"; }
+  CS_CTR=1
+  until_ok 50 marker_present "$W" && CS_MARK="$(marker_pid "$W")"
+  [ -f "$W/_bmad-output/.wait-beats/.lease-$cs_p_" ] && CS_LEASE=1
+  printf 'x\n' > "$W/deliv.md"
+  wait "$cs_p_" 2>/dev/null
+  CS_PID="$cs_p_"
+}
+S21_lease_at_root_under_custom_state_dir() {
+  custom_state_world "$SUBJ"
+  if [ "$CS_CTR" -eq 1 ]; then ok "custom-state: CONTROL — the beat's counters land in its custom state dir"
+  else bad "custom-state: CONTROL FAILED — no counter in the custom state dir"; fi
+  if [ "$CS_MARK" = "$CS_PID" ] && [ "$CS_LEASE" -eq 1 ]; then ok "custom-state: a beat armed with a custom AI_DLC_STATE_DIR holds its marker and registration at the root _bmad-output"
+  else bad "custom-state: marker at the root names '$CS_MARK' (beat $CS_PID), registration=$CS_LEASE — the stop hook cannot see this beat"; fi
+  rm -rf "$W"
+}
+# THE REGISTRATIONS MOVE WITH THE MARKER. Beat B (default state dir) holds the marker; beat A,
+# armed with a custom state dir, registers behind it; B's target lands and B exits. B's heir scan
+# must find A, so A's `.lease-<pid>` has to sit where B scans. A polls every 30s, so it cannot
+# re-take a dropped marker inside the window read here -- a heir found is B's handoff, not A's poll.
+cross_heir_world() {  # $1 = subject; leaves W, sets XH_A, XH_B, XH_AFTER
+  W="$(mk_work)"; XH_A=""; XH_B=""; XH_AFTER=""
+  ( cd "$W" && exec env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=40 AI_DLC_WAIT_POLL_SECS=1 \
+      AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+      AI_DLC_PROJECT_ROOT="$PWD" bash "$1" b.md ) > "$BEATOUT.B" 2>&1 &
+  XH_B=$!
+  until_ok 300 marker_present "$W" || { kill "$XH_B" 2>/dev/null; broken "cross-heir: beat B never wrote the marker"; }
+  ( cd "$W" && exec env -u CLAUDE_CODE_SESSION_ID AI_DLC_STATE_DIR=_bmad-output/seat-q AI_DLC_WAIT_BEAT_SECS=80 \
+      AI_DLC_WAIT_POLL_SECS=30 AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+      AI_DLC_PROJECT_ROOT="$PWD" bash "$1" a.md ) > "$BEATOUT.A" 2>&1 &
+  XH_A=$!
+  until_ok 300 cs_counter_written "$W" || { kill "$XH_A" "$XH_B" 2>/dev/null; broken "cross-heir: beat A never reached its sweep"; }
+  printf 'b\n' > "$W/b.md"
+  until_ok 300 pid_gone "$XH_B" || { kill "$XH_A" "$XH_B" 2>/dev/null; broken "cross-heir: beat B never exited after its target landed"; }
+  XH_AFTER="$(marker_pid "$W")"
+  for xp_ in $(pgrep -P "$XH_A" 2>/dev/null); do kill "$xp_" 2>/dev/null; done
+  kill "$XH_A" 2>/dev/null; wait "$XH_A" 2>/dev/null; wait "$XH_B" 2>/dev/null
+}
+S21b_heir_across_state_dirs() {
+  cross_heir_world "$SUBJ"
+  if [ "$XH_AFTER" = "$XH_A" ]; then ok "custom-state: a holder that exits hands the marker to a live beat armed with a different state dir"
+  else bad "custom-state: after the holder exited the marker names '$XH_AFTER', not the live custom-state beat $XH_A — the heir scan cannot see its registration"; fi
+  rm -rf "$W"
+}
+M42_registrations_left_in_state_dir() {
+  mutant registrations-in-state-dir -e 's@^LEASE_DIR="\${LEASE_HOME}/.wait-beats"$@LEASE_DIR="${COUNTER_DIR}"@' || return
+  cross_heir_world "$MUT"
+  if [ "$XH_AFTER" != "$XH_A" ]; then
+    ok "MUTANT registrations-in-state-dir: a marker moved without its registrations is dropped under a live custom-state beat — section 21b catches it"
+  else bad "MUTANT registrations-in-state-dir: section 21b survives the registrations staying in the state dir"; fi
+  rm -rf "$W"
+}
+M41_lease_in_state_dir() {
+  mutant lease-in-state-dir -e 's@^LEASE_HOME="\${WD_ROOT}/_bmad-output"$@LEASE_HOME="${STATE_DIR}"@' || return
+  custom_state_world "$MUT"
+  if [ "$CS_CTR" -eq 1 ] && [ -z "$CS_MARK" ]; then
+    ok "MUTANT lease-in-state-dir: a lease kept in the custom state dir is absent where the hook reads — section 21 catches it"
+  else bad "MUTANT lease-in-state-dir: section 21 survives the lease following the state dir (root marker '$CS_MARK')"; fi
+  rm -rf "$W"
+}
+
+# ===========================================================================
+# 22. A CHAINED BEAT IS RECOGNISED BY ITS SHELL, NOT BY HOW RECENTLY ITS SIBLING RAN.
+#     The guard once called a sibling "chained" only if its stamp was under BUDGET old, so a
+#     loaded box that delayed the second call fails it open and serialises a second quantum.
+#     The marker now carries the parent shell's start time. One wrapper shell runs a REAL first
+#     beat (short quantum), which writes the marker in the subject's own format; the wrapper then
+#     ages that marker 2 x BUDGET (its stamp and its mtime, past the prune age), and for the
+#     control replaces the start time with one no live process has (a recycled pid). A second beat
+#     from the same wrapper must then not sleep, and the control must. The trailing `exit $?`
+#     keeps bash from exec-ing the subject, so both beats' $PPID is the wrapper.
+# ===========================================================================
+aged_shell_beat() {  # $1 = subject, $2 = workdir, $3 = same|other
+  ( cd "$2" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_POLL_SECS=1 \
+      AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+      AG_MODE="$3" AI_DLC_PROJECT_ROOT="$2" bash -c '
+        s="$1"
+        AI_DLC_WAIT_BEAT_SECS=2 bash "$s" first.md > /dev/null 2>&1
+        m="_bmad-output/.wait-beats/.shell-$$"; [ -f "$m" ] || exit 3
+        r="$(cat "$m")"; r="$(( $(date +%s) - 120 ))${r#"${r%% *}"}"
+        [ "$AG_MODE" = other ] && r="${r%% *} Thu Jan 1 00:00:00 1970"
+        printf "%s" "$r" > "$m" || exit 3
+        touch -t "$(date -v-300S +%Y%m%d%H%M.%S 2>/dev/null || date -d "-300 seconds" +%Y%m%d%H%M.%S)" "$m" || exit 3
+        AI_DLC_WAIT_BEAT_SECS=60 bash "$s" deliv.md
+        exit $?' _ "$1" ) > "$BEATOUT" 2>&1 &
+  AG_PID=$!
+}
+# A sleeping beat would run its whole 60s quantum; the non-sleeping one returns at once. The arm
+# reads which return it TOOK -- the chained NOTE or a charged beat -- not how long it took: the
+# sleeping control is released by delivering its target once it has registered its sleep.
+ag_wait() {  # $1 = workdir -> OUT, RC
+  ag_n_=0
+  while kill -0 "$AG_PID" 2>/dev/null; do
+    if ag_counter_charged "$1"; then printf 'x\n' > "$1/deliv.md"; fi
+    ag_n_=$(( ag_n_ + 1 )); [ "$ag_n_" -lt 600 ] || { kill "$AG_PID" 2>/dev/null; broken "chained: the beat neither returned nor charged a beat"; }
+    sleep 0.1
+  done
+  wait "$AG_PID"; RC=$?; OUT="$(cat "$BEATOUT")"
+}
+ag_counter_charged() { [ "$(cat "$1/_bmad-output/.wait-beats/$(printf '%s' deliv.md | cksum | tr -d ' \t' | cut -c1-16)" 2>/dev/null)" = 1 ]; }
+S22_chained_by_shell_identity() {
+  W="$(mk_work)"; aged_shell_beat "$SUBJ" "$W" same; ag_wait "$W"
+  if [ "$RC" -eq 0 ] && has "a sibling beat already ran in this same Bash call"; then
+    ok "chained: a same-shell sibling stamped 2 x BUDGET ago still reads as chained — the beat does not sleep"
+  else bad "chained: a same-shell sibling older than BUDGET let the beat sleep a second quantum (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+  W="$(mk_work)"; aged_shell_beat "$SUBJ" "$W" other; ag_wait "$W"
+  if [ "$RC" -eq 0 ] && ! has "a sibling beat already ran in this same Bash call" && has "DELIVERED deliv.md"; then
+    ok "chained: CONTROL — a marker naming another start time (a recycled pid) sleeps"
+  else bad "chained: CONTROL FAILED — a different-shell marker was read as chained (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+}
+M43_chained_by_clock() {
+  mutant chained-by-clock -e 's@^  if \[ -n "\$LAST_START" \] && \[ -n "\$SHELL_START" \]; then$@  if false; then@' || return
+  W="$(mk_work)"; aged_shell_beat "$MUT" "$W" same; ag_wait "$W"
+  if ! has "a sibling beat already ran in this same Bash call"; then
+    ok "MUTANT chained-by-clock: deciding by age alone sleeps a same-shell sibling stamped past BUDGET — section 22 catches it"
+  else bad "MUTANT chained-by-clock: section 22 survives the identity test being removed: $OUT"; fi
+  rm -rf "$W"
+}
+
+# ===========================================================================
+# 23. A TEAMMATE WHOSE MODEL IS NOT ANSWERING IS STALLED, NOT LIVE.
+#     The harness appends a `{"type":"api-request"` line per request it sends, answered or not.
+#     Keyed on mtime, seven unanswered retries read as seven fresh turns. Every seed below has a
+#     FRESH mtime; only its lines differ. 3 trailing requests after the last assistant line is
+#     STALLED; 2 is not (live runs of 2 occur); `api-request-blob` lines do not count; a recent
+#     assistant line last is the control. A wedged transcript's last TURN is old even though the
+#     file is new, so with a short idle threshold it also reads IDLE -- which the mtime sensor
+#     could never say. Under --dispatch the dispatched agent's transcript is judged by name, so a
+#     live sibling does not hide it.
+# ===========================================================================
+mk_wedged() {  # $1 = dir, $2 = basename, $3 = trailing request lines, $4 = line type (api-request|api-request-blob)
+  mkdir -p "$1" || broken "cannot create $1"
+  mw_old_="$(fx_iso $(( $(date +%s) - 3600 )))"; mw_now_="$(fx_iso "$(date +%s)")"
+  { printf '{"parentUuid":"u1","isSidechain":true,"agentId":"a1","message":{"role":"assistant","content":[{"type":"tool_use","name":"Skill"}]},"type":"assistant","timestamp":"%s.300Z"}\n' "$mw_old_"
+    mw_i_=0; while [ "$mw_i_" -lt "$3" ]; do
+      printf '{"type":"%s","sessionId":"s","agentId":"a1","id":"r%s","timestamp":"%s.200Z","shapeHash":"7d7e1ada"}\n' "$4" "$mw_i_" "$mw_now_"
+      mw_i_=$(( mw_i_ + 1 )); done
+  } > "$1/$2" || broken "cannot write $1/$2"
+}
+mk_recovered() {  # $1 = dir, $2 = basename: 3 requests, then a fresh assistant line -- the run was answered
+  mkdir -p "$1" || broken "cannot create $1"
+  mr_old_="$(fx_iso $(( $(date +%s) - 3600 )))"; mr_now_="$(fx_iso "$(date +%s)")"
+  { printf '{"isSidechain":true,"agentId":"a1","message":{"role":"assistant"},"type":"assistant","timestamp":"%s.300Z"}\n' "$mr_old_"
+    for mr_i_ in 0 1 2; do
+      printf '{"type":"api-request","sessionId":"s","agentId":"a1","id":"r%s","timestamp":"%s.200Z"}\n' "$mr_i_" "$mr_now_"; done
+    printf '{"isSidechain":true,"agentId":"a1","message":{"role":"assistant"},"type":"assistant","timestamp":"%s.400Z"}\n' "$mr_now_"
+  } > "$1/$2" || broken "cannot write $1/$2"
+}
+mk_transcript_bare() {  # $1 = dir, $2 = age seconds, $3 = basename: no timestamp on any line
+  mkdir -p "$1" || broken "cannot create $1"
+  printf '{"t":1}\n' > "$1/$3" || broken "cannot write $1/$3"
+  [ "$2" -gt 0 ] && { fx_backdate "$1/$3" "$2" || broken "cannot backdate $1/$3"; }
+  return 0
+}
+STALL_LINE='TEAMMATE STALLED '
+S23a_stalled_after_three_requests() {
+  W="$(mk_work)"; TD="$TMPROOT/s23a.$$"; mk_wedged "$TD" agent-awedge.jsonl 3 api-request
+  beat "$SUBJ" "$W" 60 "$TD"
+  if has "${STALL_LINE}agent-awedge.jsonl" && [ "$RC" -eq 0 ]; then ok "stalled: 3 unanswered api-request lines after the last assistant line report STALLED (rc 0)"
+  else bad "stalled: a transcript ending in 3 unanswered requests was not reported STALLED (rc=$RC): $OUT"; fi
+  if has "$IDLE_BANNER" && ! has "$LIVE_LINE"; then ok "stalled: its last TURN is an hour old though the file is fresh — not reported as a live turn"
+  else bad "stalled: a fresh mtime over an hour-old last turn still read as live: $OUT"; fi
+  rm -rf "$W" "$TD"
+  W="$(mk_work)"; TD="$TMPROOT/s23b.$$"; mk_wedged "$TD" agent-atwo.jsonl 2 api-request
+  beat "$SUBJ" "$W" 60 "$TD"
+  if ! has "$STALL_LINE"; then ok "stalled: 2 trailing api-request lines do NOT report STALLED (live runs of 2 occur)"
+  else bad "stalled: 2 trailing requests were called STALLED: $OUT"; fi
+  rm -rf "$W" "$TD"
+  W="$(mk_work)"; TD="$TMPROOT/s23c.$$"; mk_wedged "$TD" agent-ablob.jsonl 5 api-request-blob
+  beat "$SUBJ" "$W" 60 "$TD"
+  if ! has "$STALL_LINE"; then ok "stalled: api-request-blob lines are not requests and do NOT count"
+  else bad "stalled: api-request-blob lines were counted as unanswered requests: $OUT"; fi
+  rm -rf "$W" "$TD"
+  # A run of 3 that an assistant line then ANSWERED is a recovered teammate: the run resets.
+  W="$(mk_work)"; TD="$TMPROOT/s23r.$$"; mk_recovered "$TD" agent-arecov.jsonl
+  beat "$SUBJ" "$W" 60 "$TD"
+  if has "$LIVE_LINE" && ! has "$STALL_LINE"; then ok "stalled: 3 requests followed by an assistant line read live, NOT STALLED (the run resets)"
+  else bad "stalled: a teammate that answered after 3 requests was called STALLED or not live: $OUT"; fi
+  rm -rf "$W" "$TD"
+  W="$(mk_work)"; TD="$TMPROOT/s23d.$$"; mk_transcript "$TD" 0 agent-alive.jsonl
+  beat "$SUBJ" "$W" 60 "$TD"
+  if has "$LIVE_LINE" && ! has "$STALL_LINE"; then ok "stalled: CONTROL — a recent assistant line last reads as a live turn, not STALLED"
+  else bad "stalled: CONTROL FAILED — a live transcript did not read live: $OUT"; fi
+  rm -rf "$W" "$TD"
+}
+S23b_quiet_fallback_without_timestamps() {
+  W="$(mk_work)"; TD="$TMPROOT/s23e.$$"; mk_transcript_bare "$TD" 7200 agent-abare.jsonl
+  beat "$SUBJ" "$W" 60 "$TD"
+  if has "$IDLE_BANNER"; then ok "stalled: a transcript carrying no timestamps falls back to its mtime (2h old reads IDLE)"
+  else bad "stalled: a timestamp-less transcript gave no reading from its mtime: $OUT"; fi
+  rm -rf "$W" "$TD"
+  W="$(mk_work)"; TD="$TMPROOT/s23f.$$"; mk_transcript_bare "$TD" 0 agent-abare.jsonl
+  beat "$SUBJ" "$W" 60 "$TD"
+  if has "$LIVE_LINE"; then ok "stalled: CONTROL — the same seed with a fresh mtime reads live"
+  else bad "stalled: CONTROL FAILED — a fresh timestamp-less transcript is not read live: $OUT"; fi
+  rm -rf "$W" "$TD"
+}
+S23c_dispatch_judges_its_own_transcript() {
+  W="$(mk_work)"; TD="$TMPROOT/s23g.$$"
+  mk_wedged "$TD" agent-awedge.jsonl 3 api-request
+  mk_transcript "$TD" 0 agent-alive.jsonl
+  printf '{"agentType":"dev","toolUseId":"toolu_wbl578"}' > "$TD/agent-awedge.meta.json"
+  mk_ledger_row "$W" toolu_wbl578 $(( $(date +%s) - 30 ))
+  beat "$(sib_dir "$SUBJ")/wait-for-deliverable.sh" "$W" 60 "$TD" --dispatch toolu_wbl578
+  if has "${STALL_LINE}agent-awedge.jsonl" && has "$IDLE_BANNER" && ! has "$LIVE_LINE"; then
+    ok "stalled: under --dispatch the dispatched agent's own transcript is judged — a live sibling does not hide the wedge"
+  else bad "stalled: a live sibling hid the dispatched agent's wedge under --dispatch: $OUT"; fi
+  rm -rf "$W"
+  # CONTROL: the same directory without --dispatch takes the newest turn across the session.
+  W="$(mk_work)"; beat "$SUBJ" "$W" 60 "$TD"
+  if has "$LIVE_LINE" && has "${STALL_LINE}agent-awedge.jsonl"; then ok "stalled: CONTROL — without --dispatch the session reads live and still names the stalled transcript"
+  else bad "stalled: CONTROL FAILED — the whole-session reading is not the live sibling's: $OUT"; fi
+  rm -rf "$W" "$TD"
+}
+M44_quiet_from_mtime() {
+  mutant quiet-from-mtime -e 's@^    tq_m_=""; \[ "\$tq_t_" = "-" \] || tq_m_=.*$@    tq_m_=""@' || return
+  W="$(mk_work)"; TD="$TMPROOT/m44.$$"; mk_wedged "$TD" agent-awedge.jsonl 3 api-request
+  beat "$MUT" "$W" 60 "$TD"
+  if has "$LIVE_LINE" && ! has "$IDLE_BANNER"; then
+    ok "MUTANT quiet-from-mtime: reading quiet from mtime reports a wedged teammate as a live turn — section 23a catches it"
+  else bad "MUTANT quiet-from-mtime: section 23a survives quiet being read from mtime: $OUT"; fi
+  rm -rf "$W" "$TD"
+}
+M45_stall_counts_blobs() {
+  mutant stall-counts-blobs -e 's@index(\$0, "{\\"type\\":\\"api-request\\"") == 1@index($0, "{\\"type\\":\\"api-request") == 1@' || return
+  W="$(mk_work)"; TD="$TMPROOT/m45.$$"; mk_wedged "$TD" agent-ablob.jsonl 5 api-request-blob
+  beat "$MUT" "$W" 60 "$TD"
+  if has "$STALL_LINE"; then ok "MUTANT stall-counts-blobs: matching without the closing quote counts blob lines as requests — section 23a catches it"
+  else bad "MUTANT stall-counts-blobs: section 23a survives the closing quote being dropped: $OUT"; fi
+  rm -rf "$W" "$TD"
+}
+# The reset dropped: every request in the file counts, so a recovered teammate reads STALLED and
+# the lead is told to stop a healthy one.
+M47_run_never_resets() {
+  mutant run-never-resets -e 's@^    NF { run = 0 }$@    NF { }@' || return
+  W="$(mk_work)"; TD="$TMPROOT/m47.$$"; mk_recovered "$TD" agent-arecov.jsonl
+  beat "$MUT" "$W" 60 "$TD"
+  if has "$STALL_LINE"; then ok "MUTANT run-never-resets: an answered run still counted reads a recovered teammate STALLED -- section 23a catches it"
+  else bad "MUTANT run-never-resets: section 23a survives the run never resetting: $OUT"; fi
+  rm -rf "$W" "$TD"
+}
+
+# ===========================================================================
+# 24. --mark: THE SEAL DECIDES, WITH NO WINDOW, AND A LEGACY MARKER STILL SETTLES.
+#     A seat closes with `--mark`, which appends `sha=<digest of everything above>` before
+#     `findings=`. A sealed file DELIVERS in one beat under a settle window it could never close
+#     (SETTLE=600); the same file edited above its marker is UNFINISHED under SETTLE=1 in a beat
+#     long enough to settle anything, i.e. at any age; re-marked it DELIVERS again. The CONTROL is
+#     a bare marker beside it in the same beat, which settles and DELIVERS -- so the broken file's
+#     WAITING is the seal's verdict and not a beat too short to settle.
+# ===========================================================================
+SEAL_BROKEN='-- its seat-complete: line carries sha= but the file changed after it was marked'
+seal_world() {  # $1 = subject, $2 = workdir -> s.md sealed, x.md sealed then edited, b.md bare
+  printf '%s\n' "$SKELETON" > "$2/s.md"; printf '%s\n' "$SKELETON" > "$2/x.md"
+  printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$2/b.md"
+  bash "$1" --mark "$2/s.md" requirements pm cross-1 findings=1 > "$BEATOUT" 2>&1 || broken "--mark refused s.md: $(cat "$BEATOUT")"
+  bash "$1" --mark "$2/x.md" requirements pm cross-1 findings=1 > "$BEATOUT" 2>&1 || broken "--mark refused x.md: $(cat "$BEATOUT")"
+  awk 'NR == 3 { print "- a finding rewritten after the marker"; next } { print }' "$2/x.md" > "$2/x.tmp" && mv "$2/x.tmp" "$2/x.md"
+}
+
+S24a_seal_decides() {
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  seal_world "$SUBJ" "$W"
+  case "$(tail -1 "$W/s.md")" in
+    "$MARKER sha="*" findings=1") ok "seal: --mark appends '<marker> sha=<hex> findings=<n>', sha= before findings=" ;;
+    *) bad "seal: --mark wrote '$(tail -1 "$W/s.md")'" ;;
+  esac
+  CB_SETTLE=600 cbeat "$SUBJ" "$W" --complete s.md
+  if has "DELIVERED s.md"; then ok "seal: a sealed file DELIVERS in one 2s beat under SETTLE=600 -- no window"
+  else bad "seal: a sealed file waited on the settle window: $OUT"; fi
+  CB_BEAT=3 cbeat "$SUBJ" "$W" --complete x.md b.md
+  if has "DELIVERED b.md"; then ok "seal: CONTROL -- a bare marker settles and DELIVERS in the same 3s beat under SETTLE=1"
+  else bad "seal: CONTROL FAILED -- the bare marker did not settle, so the beat below proves nothing: $OUT"; fi
+  if ! has "DELIVERED x.md" && has "UNFINISHED x.md $SEAL_BROKEN"; then
+    ok "seal: a sealed file edited above its marker is UNFINISHED where a bare one settles -- at any age"
+  else bad "seal: a broken seal was delivered or not named UNFINISHED: $OUT"; fi
+  CB_SETTLE=600 scall "$SUBJ" "$W" --complete --since "$CBEAT_SINCE" s.md x.md
+  if has "DELIVERED s.md" && has "UNFINISHED x.md $SEAL_BROKEN"; then ok "seal: --status reads sealed DELIVERED and broken UNFINISHED, with no beat run"
+  else bad "seal: --status disagrees with the beat on a sealed or broken file: $OUT"; fi
+  bash "$SUBJ" --mark "$W/x.md" requirements pm cross-1 findings=1 > "$BEATOUT" 2>&1 || broken "re-mark refused"
+  n_mk="$(grep -c '^seat-complete: ' "$W/x.md")" || n_mk=0
+  CB_SETTLE=600 cbeat "$SUBJ" "$W" --complete x.md
+  if has "DELIVERED x.md" && [ "$n_mk" = 1 ]; then ok "seal: re-marked, the edited file DELIVERS at once and carries one marker"
+  else bad "seal: re-mark did not deliver (markers=$n_mk): $OUT"; fi
+  rm -rf "$W"
+}
+
+S24b_mark_refusals() {
+  W="$(mk_work)"
+  printf '%s\n```text\nan open fence\n' "$SKELETON" > "$W/f.md"; cp "$W/f.md" "$W/f.orig"
+  bash "$SUBJ" --mark "$W/f.md" requirements pm cross-1 findings=0 > "$BEATOUT" 2>&1; rc=$?
+  if [ "$rc" -eq 64 ] && cmp -s "$W/f.md" "$W/f.orig"; then ok "seal: --mark on a body ending inside an open fence refuses (64) and writes nothing"
+  else bad "seal: --mark into an open fence rc=$rc, file changed or accepted"; fi
+  # Four fields on a clean file, so the refusal is the findings= check and not the arity or a fence.
+  printf '%s\n' "$SKELETON" > "$W/c.md"
+  bash "$SUBJ" --mark "$W/c.md" requirements pm cross-1 count=1 > "$BEATOUT" 2>&1; rc=$?
+  if [ "$rc" -eq 64 ] && grep -qF 'the last field must be findings=<n>' "$BEATOUT"; then ok "seal: --mark whose last field is not findings=<n> refuses (64)"
+  else bad "seal: --mark with a malformed findings field rc=$rc: $(cat "$BEATOUT")"; fi
+  printf '### e\n- edit: x\n' > "$W/r.md"
+  bash "$SUBJ" --mark-repair "$W/r.md" requirements > "$BEATOUT" 2>&1; rc=$?
+  case "$rc $(tail -1 "$W/r.md")" in
+    "0 repair-complete: serial requirements sha="*) ok "seal: --mark-repair appends 'repair-complete: serial <pass> sha=<hex>'" ;;
+    *) bad "seal: --mark-repair rc=$rc wrote '$(tail -1 "$W/r.md")'" ;;
+  esac
+  rm -rf "$W"
+}
+
+# The digest ignored: every marker is judged as legacy. The sealed file then waits on SETTLE=600
+# and the broken one settles and DELIVERS -- section 24a must catch it.
+M46_seal_ignored() {
+  mutant seal-ignored -e 's@^  seal_of "\$1"; id_sv_=\$?$@  seal_of "$1"; id_sv_=2@' || return
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  seal_world "$SUBJ" "$W"
+  CB_BEAT=3 cbeat "$MUT" "$W" --complete x.md b.md
+  if has "DELIVERED x.md"; then ok "MUTANT seal-ignored: a beat ignoring the digest DELIVERS the edited file -- section 24a catches it"
+  else bad "MUTANT seal-ignored: section 24a survives the digest being ignored (or the mutant never ran): $OUT"; fi
+  rm -rf "$W"
+}
+
+# --mark-repair seals the serial remediator's record the same way: a sealed record DELIVERS under
+# --complete-repair at SETTLE=600, an edit above its marker is UNFINISHED, and the CONTROL is a
+# bare `repair-complete: serial` record settling in that same beat under SETTLE=1.
+repair_world() {  # $1 = subject, $2 = workdir -> rs.md sealed, rx.md sealed then edited, rb.md bare
+  printf '### e\n- edit: x\n' > "$2/rs.md"; printf '### e\n- edit: x\n' > "$2/rx.md"
+  printf '### e\n- edit: x\n%s\n' "$REPAIR_MARKER" > "$2/rb.md"
+  bash "$1" --mark-repair "$2/rs.md" requirements > "$BEATOUT" 2>&1 || broken "--mark-repair refused rs.md: $(cat "$BEATOUT")"
+  bash "$1" --mark-repair "$2/rx.md" requirements > "$BEATOUT" 2>&1 || broken "--mark-repair refused rx.md: $(cat "$BEATOUT")"
+  awk 'NR == 1 { print "### a repair entry added after the marker" } { print }' "$2/rx.md" > "$2/rx.tmp" && mv "$2/rx.tmp" "$2/rx.md"
+}
+S24c_mark_repair_seals() {
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  repair_world "$SUBJ" "$W"
+  CB_SETTLE=600 cbeat "$SUBJ" "$W" --complete-repair rs.md
+  if has "DELIVERED rs.md"; then ok "seal: a --mark-repair record DELIVERS under --complete-repair in one beat at SETTLE=600"
+  else bad "seal: a sealed repair record waited on the settle window: $OUT"; fi
+  CB_BEAT=3 cbeat "$SUBJ" "$W" --complete-repair rx.md rb.md
+  if has "DELIVERED rb.md"; then ok "seal: CONTROL -- a bare repair-complete record settles and DELIVERS in the same 3s beat"
+  else bad "seal: CONTROL FAILED -- the bare repair record did not settle, so the beat below proves nothing: $OUT"; fi
+  if ! has "DELIVERED rx.md" && has "UNFINISHED rx.md" && has "changed after it was marked"; then
+    ok "seal: a sealed repair record edited above its marker is UNFINISHED"
+  else bad "seal: a broken repair seal was delivered or not named UNFINISHED: $OUT"; fi
+  rm -rf "$W"
+}
+# --mark-repair writing the seat token: the record ends in `seat-complete:`, which --complete-repair
+# must refuse -- section 24c's sealed record then never delivers.
+M48_mark_repair_seat_token() {
+  mutant mark-repair-seat-token -e 's@MARK_TOKEN="repair-complete: serial "; MK_F="\$1"; MK_TAIL=""@MARK_TOKEN="seat-complete: "; MK_F="$1"; MK_TAIL=""@' || return
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '### e\n- edit: x\n' > "$W/rs.md"
+  bash "$MUT" --mark-repair "$W/rs.md" requirements > "$BEATOUT" 2>&1
+  CB_SETTLE=600 cbeat "$SUBJ" "$W" --complete-repair rs.md
+  if ! has "DELIVERED rs.md"; then ok "MUTANT mark-repair-seat-token: a repair record sealed under the seat token is not delivered -- section 24c catches it"
+  else bad "MUTANT mark-repair-seat-token: section 24c survives --mark-repair writing seat-complete: $OUT"; fi
   rm -rf "$W"
 }
 

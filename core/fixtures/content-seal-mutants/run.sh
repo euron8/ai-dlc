@@ -20,6 +20,10 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 #   SF  restore the agent_id filter on seal rows (BOTH reads: the --check table and --row)
 #   SP  drop the program seal row at all three --record call sites
 #   SD  drop --merge's refusal of a sealless gate part once the recorder was live (D2)
+#   KP  --mark drops its pre-check, so a Bash-amended sealed file is marked and re-sealed
+#   KU  --mark seals unconditionally, so a file with no seal row gains one
+#   KD  --mark seals the bytes on disk after its move, not the bytes it wrote
+#   KR  the program:wait-for-deliverable remedy case is gone (the generic "re-run" one answers)
 # Exit: 0 every mutant killed exactly its set and the control ran clean; 1 a mismatch; 2 broken.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -46,17 +50,25 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }
 # to a mutant and never owed by one. CS-M6, CS-J4 and CS-J5 are the widened-set arms (suffix-less
 # shard dirs and the joined records sealed); on an engine that seals neither they are red on the
 # control and drop out here, and on one that does they are owed as listed.
-# THE SETS BELOW ARE EXPECTED, UNMEASURED for the widened engine: the additions over the measured
-# b6822f00 kill sets -- SA: CS-G4 CS-J4 CS-M6 CS-M6b; SC: CS-J5 CS-M6 CS-M6b; SF: CS-J5; SP: CS-J5;
-# SD: CS-G4 -- are derived from the engine, and this battery has not been run on it.
-EXP_SA="CS-G1 CS-G2 CS-G3 CS-G4 CS-J1 CS-J2 CS-J3 CS-J4 CS-M1 CS-M2 CS-M3 CS-M3b CS-M4 CS-M5 CS-M6 CS-M6b"
-EXP_SC="CS-G3 CS-J2 CS-J3 CS-J5 CS-M2 CS-M3 CS-M6 CS-M6b"
+# EVERY SET BELOW IS MEASURED: each equals the kill set its mutant produced in batch 236's wfd slot,
+# against a base FAIL set of {}. SA, SF and SP include the --mark arms, with CS-K4r / CS-J9r being the
+# race precondition line those mutants trip (no seal row, so --mark never reaches --record-expect).
+EXP_SA="CS-G1 CS-G2 CS-G3 CS-G4 CS-J1 CS-J2 CS-J3 CS-J4 CS-J8 CS-K1 CS-K2 CS-K3 CS-K4 CS-K4r CS-K5 CS-K6 CS-M1 CS-M2 CS-M3 CS-M3b CS-M4 CS-M5 CS-M6 CS-M6b"
+# SC also stops the refusals the --mark arms read (measured, batch 236 slot): the race (CS-J9, CS-K4)
+# and the marked-then-amended shard (CS-K5).
+EXP_SC="CS-G3 CS-J2 CS-J3 CS-J5 CS-J9 CS-K4 CS-K5 CS-M2 CS-M3 CS-M6 CS-M6b"
 # SF owes CS-J5 too: a program row is appended with an EMPTY agent_id (content-seal.sh seal_record),
 # so the filter drops it and the python3-rewritten joined record reads as never sealed.
-EXP_SF="CS-J5 CS-M3"
-EXP_SP="CS-G1b CS-J1b CS-J5 CS-M1b"
+EXP_SF="CS-J5 CS-J6 CS-J7 CS-J9 CS-J9r CS-K1 CS-K5 CS-K6 CS-M3"
+EXP_SP="CS-G1b CS-J1b CS-J5 CS-J6 CS-J7 CS-J9 CS-J9r CS-M1b"
 # SD: only the refusing cell of CS-G4; its two merging twins (CS-G4b, CS-G4c) pass either way.
 EXP_SD="CS-G4"
+# The --mark mutants, measured. KS restores `pwd -P` in --mark's state-dir derivation (CS-K6).
+EXP_KP="CS-J7 CS-K2"
+EXP_KU="CS-J8 CS-K3"
+EXP_KD="CS-J9 CS-K4"
+EXP_KR="CS-K5"
+EXP_KS="CS-K6"
 
 copy_tree() { # <dest> -- every declared path, and the fixture directory itself
   local dst="$1" p
@@ -110,6 +122,10 @@ WIDENED="CS-J4 CS-J5 CS-M6"
 [ -z "$(minus "$BASE" "$WIDENED")" ] || { echo "FIXTURE BROKEN: the unmutated control fails {$(minus "$BASE" "$WIDENED")}, outside the widened-set arms {$WIDENED}" >&2; exit 2; }
 if [ "$RANOK" = 1 ]; then ok "MC: the unmutated copy ran (seal library resolved under the copy, baselines ok); base FAIL set {${BASE}}"
 else echo "FIXTURE BROKEN: the unmutated control did not run; its output:" >&2; grep -E 'resolved seal|CS-[MJG]0|FIXTURE' "$WORK/control.out" >&2; exit 2; fi
+# The race arms score a mutant only if the UNMUTATED copy forces the race: both precondition lines ok.
+if grep -q '^  ok    CS-K4r:' "$WORK/control.out" && grep -q '^  ok    CS-J9r:' "$WORK/control.out"; then
+  ok "MC-race: the unmutated copy forces both races (CS-K4r and CS-J9r ok: seal row present, stub fired)"
+else echo "FIXTURE BROKEN: the unmutated control did not force the --mark races, so CS-K4/CS-J9 score nothing:" >&2; grep -E 'CS-(K4|J9)r?:' "$WORK/control.out" >&2; exit 2; fi
 
 score() { # <id> <expected set> -- the copy at $WORK/<id> is already mutated
   local id="$1" exp got
@@ -144,6 +160,31 @@ copy_tree "$WORK/SD" && mutate "$WORK/SD" core/scripts/validate-gate-adjudicatio
   's/if first_t is not None and nonce_t is not None and first_t < nonce_t:/if False:/' \
   'first_t < nonce_t:' 'first_t < nonce_t:' \
   && score SD "$EXP_SD" || bad "SD: the mutant was not built"
+# KP: the sealed-bytes pre-check never refuses.
+copy_tree "$WORK/KP" && mutate "$WORK/KP" core/scripts/wait-for-deliverable.sh \
+  's/if \[ -z "\$MK_WANT" \] \|\| \[ "\$MK_HAVE" != "\$MK_WANT" \]; then/if false; then/' \
+  '"\$MK_HAVE" != "\$MK_WANT"' '"\$MK_HAVE" != "\$MK_WANT"' \
+  && score KP "$EXP_KP" || bad "KP: the mutant was not built"
+# KU: every marked file under planning-artifacts/ is sealed, row or no row.
+copy_tree "$WORK/KU" && mutate "$WORK/KU" core/scripts/wait-for-deliverable.sh \
+  's/MK_STATE=""; MK_ROWED=0; MK_SRC=/MK_STATE=""; MK_ROWED=1; MK_SRC=/' \
+  'MK_ROWED=0; MK_SRC=' 'MK_ROWED=0; MK_SRC=' \
+  && score KU "$EXP_KU" || bad "KU: the mutant was not built"
+# KD: the row records whatever is on disk after the move.
+copy_tree "$WORK/KD" && mutate "$WORK/KD" core/scripts/wait-for-deliverable.sh \
+  's/--record-expect "\$MK_STATE" program:wait-for-deliverable "\$MK_EXP" "\$MK_FILE"/--record "\$MK_STATE" program:wait-for-deliverable "\$MK_FILE"/' \
+  'bash "\$MK_SEAL" --record-expect' 'bash "\$MK_SEAL" --record-expect' \
+  && score KD "$EXP_KD" || bad "KD: the mutant was not built"
+# KR: the --mark remedy case is deleted.
+copy_tree "$WORK/KR" && mutate "$WORK/KR" core/scripts/content-seal.sh \
+  's/^    program:wait-for-deliverable\) printf [^\n]*\n//m' \
+  '^    program:wait-for-deliverable\) printf' '^    program:wait-for-deliverable\) printf' \
+  && score KR "$EXP_KR" || bad "KR: the mutant was not built"
+# KS: --mark derives its state dir through the symlink's target again.
+copy_tree "$WORK/KS" && mutate "$WORK/KS" core/scripts/wait-for-deliverable.sh \
+  's/MK_PHYS="\$\(cd "\$\(dirname "\$MK_FILE"\)" 2>\/dev\/null && pwd\)/MK_PHYS="\$(cd "\$(dirname "\$MK_FILE")" 2>\/dev\/null \&\& pwd -P)/' \
+  'MK_PHYS=.*&& pwd\)/' 'MK_PHYS=.*&& pwd\)/' \
+  && score KS "$EXP_KS" || bad "KS: the mutant was not built"
 # The program-row mutant is keyed on the readers' own call: the three readers together must hold
 # exactly three --record calls in the unmutated tree and none in the mutant.
 n0="$(cat "$C0"/core/scripts/merge-adversarial-shards.sh "$C0"/core/scripts/join-remediator-shards.sh "$C0"/core/scripts/validate-gate-adjudication.sh | grep -cE 'bash "\$SEAL" --record|"bash", SEAL_LIB, "--record"')" || n0=0

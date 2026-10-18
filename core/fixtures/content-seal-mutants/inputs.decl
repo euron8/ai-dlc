@@ -8,6 +8,7 @@ core/hooks/ai-dlc-content-seal.sh
 core/scripts/merge-adversarial-shards.sh
 core/scripts/join-remediator-shards.sh
 core/scripts/validate-gate-adjudication.sh
+core/scripts/wait-for-deliverable.sh
 core/scripts/validate-adversarial-convergence.sh
 core/scripts/validate-steering-budget.sh
 core/scripts/validate-suppression-lifetime.sh

@@ -480,7 +480,28 @@ arm_8i() { # handoff.md step 1's beat: three deferred Stops within 30s, then the
   [ "$_df" = 3 ] || return 1
   [ "$_ev" = 'HANDOFF_GUARD_BLOCK (1/3) ' ]
 }
-ARMS_8="8a 8b 8c 8d 8e 8f 8g 8h 8i"
+# BL-641: the unknown-tool path (transcript unreadable) keyed on the session the state file names.
+# The transcript is REMOVED, never emptied, so the hook's own readability test answers unknown. The
+# clock is the shimmed one (+31 is 31 shimmed seconds, never a sleep), and the 4th state line is
+# produced by the hook itself, so these arms read the writer and the reader together.
+arm_8j() { # unreadable transcript, one session, 31s apart: the run reaches EFF_MAX and releases
+  _w="$(tx_world transcript)"; rm -f "$_w/transcript.jsonl"
+  _d="$(tx_seq "$_w" "$1" - S +31 S +31 S +31 S +31 S)"
+  _rows="$(tx_rows "$_w")"; _fl="$(sed -n '4p' "$_w/_bmad-output/pipeline-block-state.txt" 2>/dev/null)"
+  ARM_MSG="[$_d | $_rows| line4=$_fl]"; rm -rf "$_w"
+  # EFF_MAX is 3: blocks at count 1, 2, 3 and the release at 4. The time-only reading resets every
+  # 31s block to 1 and never releases (`bbbbb`).
+  [ "$_d" = bbbab ] && [ "$_rows" = 'unknown unknown unknown unknown ' ]
+}
+arm_8k() { # CONTROL: a different session_id over the same unreadable transcript starts a new run
+  _w="$(tx_world transcript)"; rm -f "$_w/transcript.jsonl"
+  _d="$(tx_seq "$_w" "$1" - S +31 S +31 S @jy2 +31 S +31 S +31 S +31 S)"
+  ARM_MSG="[$_d]"; rm -rf "$_w"
+  # jy: 1 2 3 | jy2: reset to 1, 2, 3, then the release at 4 -- seven Stops, `bbb` `bbb` `a`. An
+  # always-increment reading releases on the 4th Stop (the first jy2 one) instead, `bbba`.
+  [ "$_d" = bbbbbba ]
+}
+ARMS_8="8a 8b 8c 8d 8e 8f 8g 8h 8i 8j 8k"
 arm_desc() {
   case "$1" in
     8a) echo "text-only stall at 45s and 300s: blocks then BACKOFF on the 4th Stop, detail names the no-tool-call signal" ;;
@@ -491,6 +512,8 @@ arm_desc() {
     8f) echo "CLAUDE_CODE_STOP_HOOK_BLOCK_CAP clamps EFF_MAX: 1 -> ba, 0 -> bbba, 2 -> bba" ;;
     8g) echo "a slow text-only handoff-guard run releases after EFF_MAX, each row carrying the tool-call line" ;;
     8h) echo "the same run with the pause flag DOWN releases by the 4th Stop via a 'Handoff guard:' BACKOFF, never more than 3 blocks in a row over 9 Stops" ;;
+    8j) echo "an unreadable transcript in one session, 31s apart, blocks three times and releases on the 4th Stop (never resets on the gap)" ;;
+    8k) echo "control: a changed session_id over the unreadable transcript resets the run to 1 (the release comes two Stops after the change, not before)" ;;
     8i) echo "three Stops on handoff.md step 1's live beat are deferred (aaa) and the first Stop past the lease is the guard's block at 1/3 (H)" ;;
   esac
 }
@@ -604,13 +627,19 @@ mut_bg() { job mut "$@"; }
   # block read as a four-block stall and the guard releases on the Stop it exists to catch.
   mut_bg deferral-writes-counter 8i 's/^          echo "## \${TIMESTAMP} -- HANDOFF_GUARD_DEFERRED_BY_LIVE_BEAT"$/          stall_run_write "$HANDOFF_STATE"; echo "## ${TIMESTAMP} -- HANDOFF_GUARD_DEFERRED_BY_LIVE_BEAT"/' \
       "Check 0's live-beat deferral writes the stall counter"
+  # (xi) BL-641: the unknown path increments whatever the session -- killed by the control arm.
+  mut_bg unknown-always-increments 8k 's/^    if \[ "\$_run_sess" = "\$SESSION_ID" \]; then RUN_CNT=\$((RUN_CNT + 1)); RUN_SIGNAL=session$/    if true; then RUN_CNT=$((RUN_CNT + 1)); RUN_SIGNAL=session/' \
+      "the unknown path increments on a changed session"
+  # (xii) BL-641: the unknown path always resets -- killed by the main arm.
+  mut_bg unknown-always-resets 8j 's/^    if \[ "\$_run_sess" = "\$SESSION_ID" \]; then RUN_CNT=\$((RUN_CNT + 1)); RUN_SIGNAL=session$/    if false; then RUN_CNT=$((RUN_CNT + 1)); RUN_SIGNAL=session/' \
+      "the unknown path resets on the same session"
 }
 wait
 # Every section-8 arm on the shipping hook, every one again on the unmutated copy, and the
-# ten mutant lines above. With no control copy the FIXTURE BROKEN line above has already
+# twelve mutant lines above. With no control copy the FIXTURE BROKEN line above has already
 # failed the run and only the section-8 jobs exist.
 set -- $ARMS_8; N_ARMS=$#
-JOBS_WANT=$((2 * N_ARMS + 10)); [ -n "$CTRL" ] || JOBS_WANT=$N_ARMS
+JOBS_WANT=$((2 * N_ARMS + 12)); [ -n "$CTRL" ] || JOBS_WANT=$N_ARMS
 _i=0
 while [ "$_i" -lt "$JOB_N" ]; do
   _i=$((_i + 1)); _vf="$JOBS/verdict.$_i"

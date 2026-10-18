@@ -403,10 +403,17 @@ diff: your group's pairs are your FOCUS, and you may cite any part. The merge
 refuses your finding only when the group `partition-document.sh --cross-owner`
 names already carries the identical `parts:` set. Write there and nowhere
 else, never to the validation file above. Write your header first and append
-each finding as you verify it. When you have finished, and only then, make ONE
-final write: `seat-complete: implementation qa <shard> findings=<n>`, <n> being
-the number of `#### ` findings in your file, never with your header; the lead's
-join waits for that line and the merge refuses a count that disagrees. The go-signal SHA is the frozen sha. Your
+each finding as you verify it. When you have finished, and only then, close the
+shard with ONE Bash call: `scripts/ai-dlc/wait-for-deliverable.sh --mark <shard
+path> implementation qa <shard> findings=<n>`, <n> being the number of `#### `
+findings in your file. It appends `seat-complete: implementation qa <shard>
+sha=<hex> findings=<n>`, whose `sha=` binds every line above it: an edit after it
+reads unfinished until you run the same call again. Never type the line by hand
+or with your header; the lead's join waits for a matching `sha=` and the merge
+refuses a count that disagrees. If the call fails with `unknown arg: --mark`, the
+engine copy you ran predates `--mark`: append, with Edit, the bare line `seat-complete:
+implementation qa <shard> findings=<n>` instead, which the join accepts once the
+file has stopped changing. The go-signal SHA is the frozen sha. Your
 `reviewed-sha:` line carries it in FULL (40 or 64 hex characters) even when the
 go-signal abbreviates it, so resolve it with `git rev-parse` in the frozen
 worktree.

@@ -120,8 +120,9 @@ two smallest cited ordinals, as `partition-document.sh --cross-owner
 <K> <ordinals>` prints. The join accepts a finding reported outside its
 owner, and refuses it only when the owner's shard carries the identical
 cited set. Every part and cross agent writes its file early
-and ends it with one `seat-complete: ... findings=<n>` line, written
-once as its final write, and its join beat passes `--complete`
+and ends it with one `seat-complete: ... sha=<hex> findings=<n>` line,
+appended once as its final act by `wait-for-deliverable.sh --mark`, and its
+join beat passes `--complete`
 (`_gate-procedures.md`, "Validation cycle" item 1). A SERIAL map has no
 cross agent.
 
@@ -246,7 +247,8 @@ re-dispatched on it as above.
 Arm it as `_gate-procedures.md` "Adversarial repair dispatch" gives its
 `**Join**`, with `--complete-repair` and `--dispatch` alone, never the
 plain completion flag: the remediator ends its block with a
-`repair-complete: serial <pass>` line, which only `--complete-repair`
+`repair-complete: serial <pass> sha=<hex>` line, appended by
+`wait-for-deliverable.sh --mark-repair`, which only `--complete-repair`
 reads as complete, so a plain beat reads that record unfinished forever.
 
 **The join names what is missing, never what it counted.** It derives the

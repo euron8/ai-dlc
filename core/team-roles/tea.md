@@ -124,10 +124,16 @@ That file is the only thing you write in the round; you edit nothing else, the s
 1. Write the file's header with `Write` FIRST, as this contract's chunked-write paragraph says.
 2. Append each finding as soon as it is verified: a `##` heading whose first token is its id
    (`## F-1 (major) sections: 2`), with its one `sections:` line.
-3. When you have finished, and only then, make ONE final write: the line
-   `seat-complete: <step> <seat> <shard> findings=<n>`, `<n>` being the findings in the file.
-   Never write it with the header, never inside a code fence, never followed by more findings.
-   Once it is written, do not edit the file again.
+3. When you have finished, and only then, close the file with ONE Bash call:
+   `scripts/ai-dlc/wait-for-deliverable.sh --mark <file> <step> <seat> <shard> findings=<n>`,
+   `<n>` being the findings in the file. It appends the line
+   `seat-complete: <step> <seat> <shard> sha=<hex> findings=<n>`, whose `sha=` binds every line
+   above it. Never write that line by hand, never with the header, never followed by more
+   findings. Once it is marked, do not edit the file again; if you must, run the same `--mark`
+   call again afterwards, or the lead's join reads the file as unfinished.
+   If that call fails with `unknown arg: --mark`, the engine copy you ran predates `--mark`: append, with Edit,
+   the bare line `seat-complete: <step> <seat> <shard> findings=<n>` instead, which the join
+   accepts once the file has stopped changing.
 
 **Resolve a code path before you read or grep it.** The subject files cite the code paths they
 rest on; read those as cited. For any other path, list it first with `git ls-files <dir-or-glob>`

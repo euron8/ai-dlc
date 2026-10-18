@@ -100,6 +100,12 @@ on in beats:
               `DELIVERED <path>` lines are yours to consume; `WAITING
               <path>` lines are still out -- beat again over those.
               Exit 0 does NOT mean everything landed.
+              `TEAMMATE STALLED <transcript>` means that teammate's
+              model has stopped answering it (usage limit, auth or
+              network): TELL THE OPERATOR FIRST, in plain words, that the
+              account may be out of usage. Stop the teammate (TaskStop)
+              only on the operator's word, or when the next beat reports
+              it STALLED again. Never re-dispatch on the same account.
     exit 1 -- NON-DELIVERY. Sequence exhausted: re-dispatch ONCE (then
               re-run with --reset), and if it fails again, HARD_BLOCK.
               Under --complete, a path reported `UNFINISHED` or `UNSETTLED`
@@ -133,7 +139,8 @@ It enforces both bounds so you do not have to hold them:
   giving a 60-minute ceiling at the default quantum). Exhaustion over a path the
   beat reports `absent` is what Rule 20 defines as non-delivery -- **re-dispatch**
   once, then HARD_BLOCK. A `--complete` path reported `UNFINISHED` (present, not
-  closed by its `seat-complete:` line) or `UNSETTLED` (closed, still changing) is
+  closed by its `seat-complete:` line, or changed since its `sha=`) or `UNSETTLED`
+  (closed with no `sha=`, still changing) is
   not absent: read it first. The wait never runs forever. The script counts the
   beats in a sidecar keyed by the deliverable, so the sequence terminates
   whether or not you remember it.

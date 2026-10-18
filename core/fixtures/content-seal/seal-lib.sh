@@ -38,6 +38,22 @@ seal_hook() {
 }
 # seal_count <ledger> -> the number of content-seal rows in it (0 when it is absent)
 seal_count() { local n; n="$(grep -c '"kind":"content-seal"' "$1" 2>/dev/null)" || n=0; printf '%s' "$n"; }
+# THE --mark SUBJECT. `wait-for-deliverable.sh --mark`/`--mark-repair` is the ONE sanctioned Bash write
+# into the sealed set; it sits beside the reader, as content-seal.sh does.
+WFD="$SRCDIR/wait-for-deliverable.sh"
+[ -f "$WFD" ] || { echo "FIXTURE ERROR: $WFD is not beside the reader under test; the --mark arms have no subject" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/scripts/wait-for-deliverable.sh"
+# race_engine <dir> -> the path of a --mark engine copy whose content-seal.sh sibling is a STUB: on a
+# --record or --record-expect call it first appends a line to the file through Bash, then runs the real
+# library. That is a write landing between --mark's move and its seal row, forced, with no sleep.
+race_engine() {
+  mkdir -p "$1" && cp "$WFD" "$1/wait-for-deliverable.sh" || return 1
+  { printf '#!/bin/bash\nREAL=%q\n' "$SEAL"
+    printf 'if [ "${BASH_SOURCE[0]}" != "$0" ]; then . "$REAL"; return 0; fi\n'
+    printf 'case "${1:-}" in --record|--record-expect) printf "written through Bash after the move\\n" >> "${@: -1}" ;; esac\n'
+    printf 'exec bash "$REAL" "$@"\n'; } > "$1/content-seal.sh" || return 1
+  printf '%s' "$1/wait-for-deliverable.sh"
+}
 # in_set <path relative to the state dir> -> the DECLARATION's answer (content-seal.sh seal_sealed),
 # read from the library itself, so no arm restates the sealed set.
 in_set() { ( . "$SEAL" && seal_sealed "$1" ); }

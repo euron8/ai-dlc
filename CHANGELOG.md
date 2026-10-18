@@ -20,6 +20,98 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.828.0] - 2026-10-18
+
+Batch 236, WFD release (owned and gated by ai-dlc-77 [e29316], lead ai-dlc-c8). Closes BL-661, BL-649, BL-541,
+BL-619, BL-640, BL-578, BL-639 and BL-641. BL-632 stays PARTIAL and BL-553 part (b) stays open, each with this
+batch's measurement recorded. Files nothing. No `PC-` id. Net for this release: 8 closed, 0 filed.
+
+### A `--dispatch` beat restores globbing after the id split (BL-661)
+
+- `wait-for-deliverable.sh` turned `set -f` on for the `--dispatch` id split and never off, so every later glob
+  iterated over its own literal pattern: the teammate scan read `LIVENESS unavailable` on every `--dispatch`
+  beat, and the EXIT trap's heir scan found no heir, so an exiting holder deleted the marker under a live sibling.
+  noglob now covers the split alone and the prior state is restored before the loop.
+
+### `--dispatch` takes every declared id prefix (BL-649)
+
+- A local-model lead's dispatch id is `call_<32 hex>`, which matched no `toolu_*` arm and was refused for a
+  missing meta file. The engine reads `DISPATCH_ID_PREFIXES` from its sibling
+  `validate-adversarial-convergence.sh`, declared there once, and takes any member. Under `--dispatch` only, a
+  missing sibling or a missing, duplicated or malformed declaration refuses with exit 64 and the message `cannot
+  read its id grammar`; there is no `toolu_`-only fallback.
+
+### The beat takes its lease as soon as the state dir exists (BL-541)
+
+- The lease was taken after the argument guards, the `--dispatch` resolution and `--status`, so a beat blocked
+  in any of them held no `.beat-inflight` and the stop hook saw no beat while one was armed. Measured with the
+  spawn ledger as a FIFO. The lease and its EXIT trap now sit directly after the state-dir mkdir; `--status`
+  still takes none, and a refusal after the early lease leaves no marker.
+
+### The lease lives at the root's `_bmad-output` under any state dir (BL-619)
+
+- The stop hook reads `${CLAUDE_PROJECT_DIR}/_bmad-output/.beat-inflight` and cannot see `AI_DLC_STATE_DIR`, so
+  a beat armed with one was invisible to it. The marker, its temp file and every `.lease-<pid>` registration
+  now live at `${WD_ROOT}/_bmad-output`; counters, join epochs and settle records stay in the state dir.
+
+### A chained beat is recognised by its shell, not by its sibling's age (BL-640)
+
+- The guard read a sibling as chained only while its `.shell-$PPID` stamp was younger than the beat budget, so
+  load that delayed the second call failed it open and serialised a second quantum. The marker stores the
+  parent shell's start time (`ps -o lstart=`): the same start time is the same shell at any age, a different one
+  is a recycled pid. A one-field marker or an unreadable start time keeps the age test.
+
+### A teammate whose model stopped answering reads STALLED, not live (BL-578)
+
+- Liveness keyed on transcript mtime, and the harness appends an `api-request` line per request, answered or
+  not. Quiet is now `now` minus the newest timestamp on an assistant or user line, with an mtime fallback. A
+  transcript ending in 3 or more `{"type":"api-request"` lines (closing quote required, so `-blob` and `-shape`
+  lines do not count) reports `TEAMMATE STALLED`, per transcript; under `--dispatch` the dispatched agent's own
+  transcript is judged. An answered run resets.
+- Rule 20, 28 and 29: STALLED is a prompt to look, not a kill. The lead tells the operator first and stops the
+  teammate only on the operator's word or a second consecutive STALLED.
+- Measured on graph: the real wedge reads STALLED cut mid-wedge (runs of 3 and 8), and a run of 4 in another
+  session read STALLED and then recovered on the next line. Both are in the entry.
+
+### A seat closes with a sealed marker the beat delivers on its digest (BL-639)
+
+- Operator ruling: a content-bound completion marker. A seat closes with one Bash call,
+  `wait-for-deliverable.sh --mark <file> <step> <seat> <shard>... findings=<n>`, and the serial remediator with
+  `--mark-repair <record> <pass>`. It appends `seat-complete: ... sha=<hex> findings=<n>` (`sha=` before
+  `findings=`, which both merges anchor at end of line). A sealed marker delivers at once on a matching digest and
+  reads UNFINISHED at any age on a mismatch. A bare legacy marker keeps SETTLE as the stated fail-open net during
+  the pull. Eight role files close with it; a seat whose engine copy predates `--mark` appends the bare line with
+  Edit.
+- **`--mark` is the one sanctioned Bash write into 0.824.0's content-sealed set.** It refuses (64) a sealed file
+  already amended through Bash; seals only a file that already had a seal row; and records the sha of the bytes
+  it wrote through the new `content-seal.sh --record-expect`, which appends nothing if the file moved again
+  before the row. The state dir is derived as spelled, so a symlinked `_bmad-output` is re-sealed. The remedy for
+  a `program:wait-for-deliverable` row is "restore the bytes with Edit, then re-run --mark". `adversary.md` and
+  `_gate-procedures.md` name `--mark` as that one write; rule 28's serial-remediator join names `--mark-repair`.
+- Arms CS-K1 to K6, CS-K4r, CS-K6s and CS-J6 to J9 in `content-seal`; mutants KP, KU, KD, KR and KS in
+  `content-seal-mutants`, each killing exactly its set.
+
+### The stop hook's unknown-tool path no longer resets a stalled run on a slow gap (BL-641)
+
+- `ai-dlc-continue.sh`'s state file gains the session id as a 4th line. On the unknown-tool path the same
+  session increments the run at any spacing and a different one resets it; a 2- or 3-line file keeps the 30 s
+  time test.
+
+### Recorded, not closed
+
+- BL-632 stays PARTIAL: its product-code class (BL-639, BL-640, BL-641) is done here, and the entry says so.
+- BL-553 part (b) is measured and not shippable here; the entry stays open.
+
+### Limits
+
+- Slot measurements at 738eb902, 6409abca and its successor: `wait-beat-liveness` (223 ok), `wait-stale-deliverable`
+  (C46's exit-list arms), `implementation-join-yield`, `process-rule-pins`, `pause-question-in-prose-mutants`
+  and `content-seal` all PASS, each new arm read by name against an impossible-name control. `content-seal-mutants`
+  measured every kill set; SA and SF were set to their measured sets, including the `--mark` arms.
+- Three read-only tip adversaries: no BLOCKER; every DEFECT folded (the run reset, the BL-649 receipt's grammar
+  text, `--mark-repair` coverage, the content-seal collision, and the symlinked state dir).
+
+
 ## [0.827.0] - 2026-10-18
 
 Batch 236, PROSE release (built by the lead ai-dlc-c8, owned and gated by ai-dlc-b9). Closes BL-653, BL-654,

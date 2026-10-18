@@ -197,8 +197,14 @@
 #                                   [--progress-path <dir|file>]...
 #                                   [--complete | --complete-repair] [--status]
 #                                   [--shard-header convergence|elicitation]
+#   scripts/ai-dlc/wait-for-deliverable.sh --mark <file> <step> <seat> <shard>... findings=<n>
+#   scripts/ai-dlc/wait-for-deliverable.sh --mark-repair <file> <pass>
 #
-#   --complete         DELIVERED also needs a settled last line `seat-complete: `.
+#   --mark             the SEAT's closing call, never a beat: appends its sealed marker
+#                      `seat-complete: <step> <seat> <shard> sha=<hex> findings=<n>`.
+#   --mark-repair      the same for a repair record: `repair-complete: serial <pass> sha=<hex>`.
+#   --complete         DELIVERED also needs a last line `seat-complete: ` whose sha= matches
+#                      (a marker with no sha= must instead have settled).
 #   --complete-repair  the same, keyed on `repair-complete: serial ` -- the serial
 #                      remediator's terminal line on a joined repair record.
 #   --status           print DELIVERED / UNFINISHED / UNSETTLED / WAITING per path
@@ -292,11 +298,25 @@ set -u
 #   The exhaustion advice to re-arm with --progress-path is not printed: under this
 #   flag the progress signal is already on.
 #
-#   THE MARKER MUST ALSO HAVE SETTLED. A seat that writes its marker and then edits
+#   THE MARKER BINDS THE CONTENT ABOVE IT. A seat that writes its marker and then edits
 #   ABOVE it -- measured on the reference consumer: one cross seat wrote its file once,
 #   marker last, then made seven in-place Edits over three minutes -- ends in the marker
-#   the whole time, so "marker last" alone consumed it mid-edit. DELIVERED therefore also
-#   requires the file's content hash to be unchanged for the SETTLE WINDOW: a `.settle`
+#   the whole time, so "marker last" alone consumed it mid-edit. So the seat closes with
+#   `--mark` (header: "--mark"), which appends `sha=<hex>`: the content_hash of every line
+#   above the marker. A marker carrying `sha=` is decided by that digest alone, with NO
+#   window and at any age: it matches, and the file is DELIVERED at once; it does not, and
+#   the file is UNFINISHED until the seat re-marks, printed as
+#     UNFINISHED <path> -- its seat-complete: line carries sha= but the file changed after it was marked; re-mark with --mark
+#   on every beat, by --status, and in place of `absent` at exhaustion. A broken seal opens no
+#   settle record and is not counted by REVISED-AFTER-MARKER: with a seal no file is consumed
+#   mid-edit, so that after-the-fact report belongs to the legacy path alone.
+#
+#   A MARKER WITH NO `sha=` KEEPS THE SETTLE PATH, AND THAT IS THE FAIL-OPEN NET FOR LEGACY
+#   MARKERS DURING THE PULL. This engine is live from pull step 3; the role and step files that
+#   tell a seat to run --mark arrive only at the reconcile merge, so until then seats write the
+#   bare marker. Refusing it would hang every join of that sprint. So a bare marker is judged
+#   exactly as before: DELIVERED also requires the file's content hash to be unchanged for
+#   the SETTLE WINDOW: a `.settle`
 #   sidecar beside the counter holds `<hash> <epoch first seen>`, any change of hash
 #   restarts it, and the file delivers only once `now - epoch > SETTLE` in whole seconds
 #   (so at least SETTLE real seconds). A file that loses its marker drops its sidecar.
@@ -328,7 +348,10 @@ set -u
 # serial remediator is dispatched and is APPENDED to, so the plain predicate returns on its
 # first append and on every one after it, and `seat-complete:` is not a line a repair record
 # carries. This flag is --complete in every respect except the marker, which is
-# `repair-complete: serial ` and ONLY that. The token is keyed per CALL, never per target and
+# `repair-complete: serial ` and ONLY that. The serial remediator closes with `--mark-repair
+# <record> <pass>`, which seals `repair-complete: serial <pass> sha=<hex>` exactly as --mark seals
+# a seat file; a bare `repair-complete: serial <pass>` is a legacy marker and settles as before.
+# The token is keyed per CALL, never per target and
 # never as an either-token: the join that builds the record concatenates PART remediators'
 # records, so a joined record can end in a part's own marker before the serial pass has
 # started, and a beat that accepted any marker would consume it. A lead never joins seat files
@@ -342,8 +365,10 @@ set -u
 #                        is unchanged since (its hash is kept in `<key>.delivered`, because a
 #                        delivering beat drops the join state --status otherwise reads)
 #   UNFINISHED <path>    present and written since the join armed, no marker last
-#   UNSETTLED <path>     marker present, settle pending -- the settle window needs a hash a
-#                        BEAT recorded more than SETTLE seconds ago, and --status records none
+#                        (also a marker whose sha= is broken: changed after it was marked)
+#   UNSETTLED <path>     a marker with no sha=, settle pending -- the settle window needs a hash a
+#                        BEAT recorded more than SETTLE seconds ago, and --status records none.
+#                        A marker whose sha= matches reads DELIVERED here with no beat at all.
 #   WAITING   <path>     absent, empty, older than the join, or no join armed on it
 # It is STRICTLY read-only: it exits before the state dir is created, before the bound check
 # that can wipe every live join's counters, and before any `.since`, `.settle`, `.progress`,
@@ -376,6 +401,8 @@ BUDGET="${AI_DLC_WAIT_BEAT_SECS:-600}"
 POLL="${AI_DLC_WAIT_POLL_SECS:-10}"
 MAX_BEATS="${AI_DLC_MAX_WAIT_BEATS:-6}"
 MARGIN="${AI_DLC_WAIT_MARGIN_SECS:-10}"
+# SETTLE APPLIES TO A LEGACY MARKER ONLY -- one carrying no `sha=` (header: "THE MARKER BINDS THE
+# CONTENT ABOVE IT"). A sealed marker is decided by its digest and never waits on this window.
 # SETTLE (default 180s) BOUNDS ONE PROPERTY: HOW LONG A MARKED FILE'S CONTENT HASH MUST STAY
 # UNCHANGED BEFORE THE MARKER IS TRUSTED AS THE SEAT'S FINAL WRITE. The event it waits for
 # is "the seat has finished editing", and that event CANNOT be observed: a seat that is
@@ -441,6 +468,161 @@ to_epoch() {  # accept a bare epoch or an ISO8601 stamp; empty on failure
   date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "$1" +%s 2>/dev/null && return 0   # BSD
   return 1
 }
+
+# --complete: the LAST NON-BLANK line begins with this call's marker token (`seat-complete: `,
+# or `repair-complete: serial ` under --complete-repair), carries no carriage return, and is
+# not inside an unclosed fence. A whitespace-only line is blank (NF == 0), so trailing blank
+# lines cannot hide the marker. The token reaches awk through the environment, never `-v`,
+# which would strip a level of escaping.
+has_marker() {  # $1 = path
+  MT_="$MARK_TOKEN" awk '
+    # A fence opens on a run of 3+ backticks or tildes; it closes only on a run of the SAME
+    # character at least as long, with nothing but blanks after it.
+    match($0, /^[ \t]*(```+|~~~+)/) {
+      r = substr($0, RSTART, RLENGTH); sub(/^[ \t]*/, "", r)
+      if (fc == "") { fc = substr(r, 1, 1); fl = length(r) }
+      else if (substr(r, 1, 1) == fc && length(r) >= fl && substr($0, RSTART + RLENGTH) ~ /^[ \t\r]*$/) { fc = ""; fl = 0 }
+    }
+    NF { l = $0 }
+    END { exit ((fc == "" && l !~ /\r/ && index(l, ENVIRON["MT_"]) == 1) ? 0 : 1) }' "$1" 2>/dev/null
+}
+
+content_hash() {  # $1 = path -> a content hash, empty when unreadable
+  if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1
+  elif command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" 2>/dev/null | cut -d' ' -f1
+  else cksum < "$1" 2>/dev/null | tr -d ' \t'; fi
+}
+
+# THE SEAL (header: "--mark"). The body a seal binds is every line above the file's LAST
+# NON-BLANK line, each with its newline; `seal_body <path> 1` keeps that last line too (the
+# writer's body when the file ends in no marker yet). ONE extraction serves the writer and the
+# reader, so both hash the same bytes with the same content_hash.
+seal_body() {  # $1 = path, $2 = 1 to keep the last non-blank line -> bytes on stdout
+  awk -v k="${2:-0}" 'NF { L = NR } { a[NR] = $0 } END { if (k == 1) L++; for (i = 1; i < L; i++) print a[i] }' "$1" 2>/dev/null
+}
+# seal_of <path whose marker has_marker accepted> -> SEAL_V and its status:
+#   sealed (0)  the marker carries `sha=<hex>` and it equals the digest of the body above it
+#   broken (1)  the marker carries `sha=` and it does not: the file changed after it was marked
+#   legacy (2)  the marker carries no `sha=` token: a seat from before the seal, which SETTLE judges
+seal_of() {
+  so_s_="$(awk 'NF { l = $0 } END { n = split(l, w, /[ \t]+/); f = "N"
+    for (i = 1; i <= n; i++) if (w[i] ~ /^sha=/) { f = "Y"; s = substr(w[i], 5) }; print f s }' "$1" 2>/dev/null)"
+  case "$so_s_" in
+    Y*) so_s_="${so_s_#Y}" ;;
+    *) SEAL_V="legacy"; return 2 ;;
+  esac
+  so_d_="$(seal_body "$1" | content_hash /dev/stdin)"
+  if [ -n "$so_s_" ] && [ -n "$so_d_" ] && [ "$so_s_" = "$so_d_" ]; then SEAL_V="sealed"; return 0; fi
+  SEAL_V="broken"; return 1
+}
+
+# ---------------------------------------------------------------------------
+# --mark / --mark-repair: THE SEAL WRITER. It runs here, before the flag loop, the root walk and
+# every write below, so it creates no state dir, takes no lease and charges no beat: it is the
+# seat's own last act, not a beat. One Bash call:
+#   wait-for-deliverable.sh --mark <file> <step> <seat> <shard>... findings=<n>
+#   wait-for-deliverable.sh --mark-repair <file> <pass>
+# It drops a trailing marker of its own token (sealed or bare), so a re-mark replaces rather
+# than stacks, and drops trailing blank lines. It writes the body to a sibling temp file, takes
+# that file's content_hash, appends
+#   seat-complete: <step> <seat> <shard>... sha=<hex> findings=<n>
+#   repair-complete: serial <pass> sha=<hex>
+# (`sha=` BEFORE `findings=`: both merges anchor `findings=[0-9]+[ \t]*$` at end of line), and
+# moves it over the file only once the beat's own has_marker and seal_of read it as sealed. A
+# body ending inside an unclosed fence would put the marker in the fence, a file no beat accepts
+# -- the hang this exists to prevent -- so that, and every other bad call, is exit 64 with the
+# file untouched.
+#
+# THE CONTENT SEAL (`content-seal.sh`, beside this script, owns the sealed set and the
+# comparison). A file under `planning-artifacts/` may be in the sealed set, whose join readers
+# refuse bytes that differ from the file's newest seal row -- and this call is a Bash write. So it
+# is the ONE sanctioned Bash write, on three terms:
+#   1. It reads a SNAPSHOT of the file, and when the file carries a seal row the snapshot must be
+#      the sealed bytes: a file already amended through Bash is refused (64), never laundered.
+#   2. It seals only a file that HAD a seal row. A file with none -- written wholly through Bash,
+#      or before the recorder -- stays uncompared, as the seal leaves it, so marking never turns
+#      an unsealed file into a sealed one.
+#   3. Its program row records the sha of the bytes THIS CALL WROTE (`--record-expect`), never
+#      whatever is on disk after the move, and none at all when those bytes are already gone. A
+#      write landing after the move then differs from the row, and every reader refuses it.
+# ---------------------------------------------------------------------------
+mark_refuse() { echo "FAIL: $MK_MODE: $1 Nothing was written." >&2; exit 64; }
+case "${1:-}" in
+  --mark|--mark-repair)
+    MK_MODE="$1"; shift
+    MK_FILE="${1:-}"; [ $# -gt 0 ] && shift
+    [ -n "$MK_FILE" ] || mark_refuse "needs the file to mark."
+    [ -f "$MK_FILE" ] && [ -s "$MK_FILE" ] || mark_refuse "'$MK_FILE' is not a non-empty file; write the findings first, then mark."
+    for mk_w_ in "$@"; do
+      case "$mk_w_" in ''|*"$(printf '\r')"*|*"
+"*) mark_refuse "a marker field is empty or carries a line break." ;; esac
+    done
+    if [ "$MK_MODE" = "--mark" ]; then
+      [ $# -ge 4 ] || mark_refuse "takes <file> <step> <seat> <shard>... findings=<n>."
+      eval "MK_N=\${$#}"
+      case "$MK_N" in findings=[0-9]*) case "${MK_N#findings=}" in *[!0-9]*) mark_refuse "the last field must be findings=<n> (got '$MK_N')." ;; esac ;;
+        *) mark_refuse "the last field must be findings=<n> (got '$MK_N')." ;; esac
+      MK_F=""; mk_i_=1
+      for mk_w_ in "$@"; do [ "$mk_i_" -lt $# ] && MK_F="${MK_F}${MK_F:+ }$mk_w_"; mk_i_=$(( mk_i_ + 1 )); done
+      MARK_TOKEN="seat-complete: "; MK_TAIL="$MK_N"
+    else
+      [ $# -eq 1 ] || mark_refuse "takes <file> <pass>."
+      MARK_TOKEN="repair-complete: serial "; MK_F="$1"; MK_TAIL=""
+    fi
+    MK_SEAL="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/content-seal.sh"
+    # The state dir AS SPELLED (logical `pwd`, never -P): content-seal.sh names a row by the state
+    # dir's own name, which the recorder takes from AI_DLC_STATE_DIR, so a symlinked `_bmad-output`
+    # resolved to its target would name no row and the file would never be re-sealed. The FIRST
+    # `/planning-artifacts/` is the state dir's; a later one is a directory inside the sprint.
+    MK_PHYS="$(cd "$(dirname "$MK_FILE")" 2>/dev/null && pwd)/$(basename "$MK_FILE")"
+    MK_STATE=""; MK_ROWED=0; MK_SRC="$MK_FILE"
+    case "$MK_PHYS" in */planning-artifacts/*) MK_STATE="${MK_PHYS%%/planning-artifacts/*}" ;; esac
+    if [ -n "$MK_STATE" ] && [ -f "$MK_SEAL" ]; then
+      MK_SRC="$(mktemp "${TMPDIR:-/tmp}/wfd-mark.XXXXXX")" || mark_refuse "cannot take a snapshot of $MK_FILE."
+      cp "$MK_FILE" "$MK_SRC" || { rm -f "$MK_SRC"; mark_refuse "cannot take a snapshot of $MK_FILE."; }
+      MK_ROW="$(bash "$MK_SEAL" --row "$MK_STATE" "$MK_FILE" 2>&1)" \
+        || { rm -f "$MK_SRC"; mark_refuse "its content-seal row could not be read: $(printf '%s\n' "$MK_ROW" | head -1)"; }
+      if [ "$MK_ROW" != null ]; then
+        MK_ROWED=1
+        MK_WANT="$(printf '%s' "$MK_ROW" | sed -n 's/.*"sha256":"\([0-9a-f][0-9a-f]*\)".*/\1/p')"
+        MK_HAVE="$( . "$MK_SEAL" && seal_sha "$MK_SRC" )"
+        if [ -z "$MK_WANT" ] || [ "$MK_HAVE" != "$MK_WANT" ]; then
+          rm -f "$MK_SRC"
+          mark_refuse "'$MK_FILE' is not the bytes its newest content-seal row records ($MK_WANT; on disk $MK_HAVE), so it changed through Bash after its last Write or Edit. --mark never seals such bytes: restore the file with Edit, then mark."
+        fi
+      fi
+    elif [ -n "$MK_STATE" ] && grep -qE '"actor":[[:space:]]*"(agent|session)"' "$MK_STATE/planning-artifacts/.artifact-writes.jsonl" 2>/dev/null; then
+      mark_refuse "$MK_STATE/planning-artifacts/.artifact-writes.jsonl carries content-seal rows but $MK_SEAL is absent, so the file's seal cannot be honoured; reinstall ai-dlc."
+    fi
+    MK_KEEP=1; has_marker "$MK_SRC" && MK_KEEP=0
+    MK_TMP="${MK_FILE}.mark-tmp.$$"
+    mk_drop_() { rm -f "$MK_TMP"; [ "$MK_SRC" = "$MK_FILE" ] || rm -f "$MK_SRC"; }
+    seal_body "$MK_SRC" "$MK_KEEP" > "$MK_TMP" || { mk_drop_; mark_refuse "cannot write $MK_TMP."; }
+    MK_SHA="$(content_hash "$MK_TMP")"
+    [ -n "$MK_SHA" ] || { mk_drop_; mark_refuse "no content hash could be taken."; }
+    MK_LINE="${MARK_TOKEN}${MK_F} sha=${MK_SHA}${MK_TAIL:+ }${MK_TAIL}"
+    printf '%s\n' "$MK_LINE" >> "$MK_TMP" || { mk_drop_; mark_refuse "cannot write $MK_TMP."; }
+    if ! has_marker "$MK_TMP"; then
+      mk_drop_
+      mark_refuse "the marker would not be the last line a beat accepts (the body ends inside an unclosed fence, or carries a carriage return). Close the fence first."
+    fi
+    seal_of "$MK_TMP" >/dev/null
+    [ "$SEAL_V" = "sealed" ] || { mk_drop_; mark_refuse "the written seal does not read back as sealed."; }
+    MK_EXP=""
+    if [ "$MK_ROWED" = 1 ]; then
+      MK_EXP="$( . "$MK_SEAL" && seal_sha "$MK_TMP" )"
+      [ -n "$MK_EXP" ] || { mk_drop_; mark_refuse "no sha256 could be taken for the content seal."; }
+    fi
+    mv -f "$MK_TMP" "$MK_FILE" || { mk_drop_; mark_refuse "cannot replace $MK_FILE."; }
+    [ "$MK_SRC" = "$MK_FILE" ] || rm -f "$MK_SRC"
+    if [ "$MK_ROWED" = 1 ]; then
+      MK_REC="$(bash "$MK_SEAL" --record-expect "$MK_STATE" program:wait-for-deliverable "$MK_EXP" "$MK_FILE" 2>&1)" || {
+        echo "FAIL: $MK_MODE: $MK_FILE was replaced, but its bytes changed again before its content-seal row was written ($(printf '%s\n' "$MK_REC" | head -1)); no row was recorded, so every join reader refuses the file. Restore it with Edit, then mark again." >&2
+        exit 64; }
+    fi
+    echo "MARKED $MK_FILE -- $MK_LINE"
+    exit 0 ;;
+esac
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -581,6 +763,110 @@ if [ "$STATUS" -eq 0 ]; then   # --status creates nothing, not even the state di
   mkdir -p "$COUNTER_DIR" 2>/dev/null || true
 fi
 
+# A sidecar write whose loss costs a record, never the beat: the beat goes on, and the failure
+# is said on stderr rather than folded into success.
+sidecar_put() {  # $1 = file, $2 = content
+  printf '%s' "$2" > "$1" 2>/dev/null || echo "WARN: wait-for-deliverable: could not write $1" >&2
+}
+
+# ---------------------------------------------------------------------------
+# THE BEAT-LIVENESS LEASE, AND WHO MAY REMOVE IT.
+#
+# `.beat-inflight` is the ONE marker Stop-hook Check 2b reads, and every beat in a project
+# shares it. Until this release each beat wrote a bare epoch and its EXIT trap deleted the file
+# unconditionally, so the first beat to exit took the lease from every other beat still asleep.
+# Measured, two beats from two shells: B delivered and exited, A stayed alive, and the marker was
+# ABSENT, 3 runs of 3 -- the Stop hook then reports "no live wait-beat" with one sleeping.
+#
+# So the marker is `<epoch> <pid>` and has ONE holder. Every live beat also registers its own
+# `.wait-beats/.lease-<pid>` (its epoch), re-stamped every poll. A beat takes the marker only
+# when it is absent, unparseable, expired, or names a holder that is dead -- no registration,
+# an expired one, or a pid `kill -0` cannot signal; the registration is what makes a recycled
+# pid read dead. On exit a beat removes the marker only if it holds it, and first hands it to
+# any other live registered beat. A pid-less live marker is a beat from before this release,
+# mid-pull: it is left alone, because that beat re-stamps it and deletes it on its own exit,
+# after which the next poll here re-takes it.
+#
+# THE WINDOW THAT REMAINS. A SIGKILLed holder skips its trap, so a live sibling takes the
+# marker when the dead holder's registration expires, up to one lease length (3 x POLL) -- the
+# same window a single SIGKILLed beat leaves today, worth at most one Rule 3 block.
+#
+# WRITTEN BEFORE THE PRE-SLEEP WORK, not after it. The bound check, the shell-marker prune and
+# the sweep run first and can take seconds over a large wave; a lease written only at the sleep
+# left that window uncovered, which is the "armed seconds ago, hook saw no beat" the s319 lead
+# reported. A call that turns out not to sleep releases what it took, through the same trap.
+#
+# AND BEFORE EVERY OTHER READ, right after the state dir exists. The guards, the --dispatch
+# resolution (which reads the spawn ledger and the subagents dir) and the sweep's `--shard-header`
+# check (a subprocess per shard) all ran before the lease, and any of them can block: measured
+# with the ledger as a FIFO, a --dispatch beat sat blocked with no marker on disk, so the hook
+# saw no beat while one was armed. A call those steps refuse (exit 64) releases the lease through
+# the same trap, so a refusal leaves nothing behind.
+#
+# THE LEASE LIVES AT THE PROJECT ROOT'S `_bmad-output`, WHATEVER AI_DLC_STATE_DIR SAYS. The stop
+# hook reads `${CLAUDE_PROJECT_DIR}/_bmad-output/.beat-inflight` (ai-dlc-continue.sh:120) and
+# never sees AI_DLC_STATE_DIR: every lead beat that sets one sets it as a per-command prefix, so
+# the hook's environment cannot carry it. A lease written under a custom state dir was therefore
+# invisible to the hook. Counters, join epochs and settle records stay in STATE_DIR; only the
+# marker and the `.lease-<pid>` registrations move, together, because the heir scan must see
+# every live beat's registration in the one directory the marker's holder scans -- writing the
+# marker in two places instead would hand it to no heir.
+# ---------------------------------------------------------------------------
+LEASE_HOME="${WD_ROOT}/_bmad-output"
+LEASE_DIR="${LEASE_HOME}/.wait-beats"
+[ "$STATUS" -eq 1 ] || mkdir -p "$LEASE_DIR" 2>/dev/null || true
+BEAT_MARKER="${LEASE_HOME}/.beat-inflight"
+LEASE_SELF="${LEASE_DIR}/.lease-$$"
+lease_holder_dead() {  # $1 = holder pid -> 0 when no live beat stands behind it
+  ld_r_="$(cat "${LEASE_DIR}/.lease-$1" 2>/dev/null || echo '')"
+  case "$ld_r_" in ''|*[!0-9]*) return 0 ;; esac
+  [ "$ld_r_" -gt "$(date +%s)" ] || return 0
+  kill -0 "$1" 2>/dev/null && return 1
+  return 0
+}
+LEASE_TMP="${LEASE_DIR}/.beat-inflight.$$"   # inside the ignored .wait-beats/, same filesystem
+lease_put() {  # $1 = epoch, $2 = pid -- whole-file replace, never a partial line for the hook to read
+  { printf '%s %s' "$1" "$2" > "$LEASE_TMP" 2>/dev/null && mv -f "$LEASE_TMP" "$BEAT_MARKER" 2>/dev/null; } \
+    || echo "WARN: wait-for-deliverable: could not write the lease $BEAT_MARKER; the stop hook will not see this beat" >&2
+}
+beat_alive() {
+  ba_e_=$(( $(date +%s) + 3 * POLL ))
+  sidecar_put "$LEASE_SELF" "$ba_e_"
+  ba_cur_="$(cat "$BEAT_MARKER" 2>/dev/null || echo '')"
+  ba_ep_="${ba_cur_%% *}"
+  case "$ba_cur_" in *' '*) ba_pid_="${ba_cur_#* }" ;; *) ba_pid_="" ;; esac
+  case "$ba_ep_" in ''|*[!0-9]*) lease_put "$ba_e_" "$$"; return 0 ;; esac
+  case "$ba_pid_" in *[!0-9]*) lease_put "$ba_e_" "$$"; return 0 ;; esac
+  if [ "$ba_ep_" -le "$(date +%s)" ]; then lease_put "$ba_e_" "$$"; return 0; fi
+  [ -n "$ba_pid_" ] || return 0                     # a live pre-upgrade lease: not ours to take
+  if [ "$ba_pid_" = "$$" ] || lease_holder_dead "$ba_pid_"; then lease_put "$ba_e_" "$$"; fi
+  return 0
+}
+lease_release() {
+  lr_cur_="$(cat "$BEAT_MARKER" 2>/dev/null || echo '')"
+  case "$lr_cur_" in *' '*) lr_pid_="${lr_cur_#* }" ;; *) lr_pid_="" ;; esac
+  if [ "$lr_pid_" = "$$" ]; then
+    lr_now_="$(date +%s)"; lr_heir_=""
+    for lr_f_ in "$LEASE_DIR"/.lease-*; do
+      [ -f "$lr_f_" ] || continue
+      lr_p_="${lr_f_##*/.lease-}"
+      [ "$lr_p_" = "$$" ] && continue
+      lr_e_="$(cat "$lr_f_" 2>/dev/null || echo '')"
+      case "$lr_p_$lr_e_" in *[!0-9]*|'') rm -f "$lr_f_" 2>/dev/null; continue ;; esac
+      if [ "$lr_e_" -gt "$lr_now_" ] && kill -0 "$lr_p_" 2>/dev/null; then lr_heir_="$lr_e_ $lr_p_"; break; fi
+      rm -f "$lr_f_" 2>/dev/null
+    done
+    if [ -n "$lr_heir_" ]; then lease_put "${lr_heir_%% *}" "${lr_heir_#* }"
+    else rm -f "$BEAT_MARKER" 2>/dev/null; fi
+  fi
+  rm -f "$LEASE_SELF" "$LEASE_TMP" 2>/dev/null || true
+}
+# --status writes nothing (header: "--status"), so it neither takes the lease nor arms the trap.
+if [ "$STATUS" -eq 0 ]; then
+trap 'lease_release' EXIT
+beat_alive
+fi
+
 # ---------------------------------------------------------------------------
 # THE PROGRESS PATH MAY NOT BE THE STATE DIR, OR ANY ANCESTOR OF IT.
 # `_bmad-output` is the obvious thing to reach for -- it is where deliverables
@@ -680,35 +966,20 @@ is_delivered() {  # $1 = path, $2 = join epoch
   # --shard-header: a header the merge refuses is UNFINISHED, checked BEFORE the settle window so
   # it opens no settle record and its repair is not counted as a revision.
   if [ -n "$SHARD_AXIS" ] && header_refused "$1"; then return 1; fi
+  # THE SEAL DECIDES, WITH NO WINDOW (header: "--mark"). A sealed marker delivers now; a broken
+  # one is UNFINISHED at any age until the seat re-marks. Only a legacy marker reaches SETTLE.
+  seal_of "$1"; id_sv_=$?
+  if [ "$id_sv_" -ne 2 ]; then
+    rm -f "$id_st_" 2>/dev/null; settle_memo "$id_st_" ""
+    return "$id_sv_"
+  fi
   settled "$1" "$id_st_"
 }
 
-# --complete: the LAST NON-BLANK line begins with this call's marker token (`seat-complete: `,
-# or `repair-complete: serial ` under --complete-repair), carries no carriage return, and is
-# not inside an unclosed fence. A whitespace-only line is blank (NF == 0), so trailing blank
-# lines cannot hide the marker. The token reaches awk through the environment, never `-v`,
-# which would strip a level of escaping.
-has_marker() {  # $1 = path
-  MT_="$MARK_TOKEN" awk '
-    # A fence opens on a run of 3+ backticks or tildes; it closes only on a run of the SAME
-    # character at least as long, with nothing but blanks after it.
-    match($0, /^[ \t]*(```+|~~~+)/) {
-      r = substr($0, RSTART, RLENGTH); sub(/^[ \t]*/, "", r)
-      if (fc == "") { fc = substr(r, 1, 1); fl = length(r) }
-      else if (substr(r, 1, 1) == fc && length(r) >= fl && substr($0, RSTART + RLENGTH) ~ /^[ \t\r]*$/) { fc = ""; fl = 0 }
-    }
-    NF { l = $0 }
-    END { exit ((fc == "" && l !~ /\r/ && index(l, ENVIRON["MT_"]) == 1) ? 0 : 1) }' "$1" 2>/dev/null
-}
-# The token as the report lines name it: `seat-complete:` byte-identical to every earlier
-# release, or `repair-complete: serial`.
+# has_marker, content_hash, seal_body and seal_of are defined above the flag loop, beside
+# --mark, which runs before anything below. The token as the report lines name it:
+# `seat-complete:` byte-identical to every earlier release, or `repair-complete: serial`.
 MARK_NAME="${MARK_TOKEN% }"
-
-content_hash() {  # $1 = path -> a content hash, empty when unreadable
-  if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1
-  elif command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" 2>/dev/null | cut -d' ' -f1
-  else cksum < "$1" 2>/dev/null | tr -d ' \t'; fi
-}
 
 # --shard-header: 0 when the sibling merge's --check-header REFUSES $1's header, with HC_MSG set to
 # its refusal (the `REFUSED: ` prefix removed); 1 when it passes. A missing sibling, or any exit but
@@ -767,11 +1038,6 @@ settle_record() {  # $1 = sidecar -> prints `<hash> <epoch>`; 1 when there is no
 # cleared by --reset, a bound
 # wipe, or a beat armed with a join epoch later than its last write (a new round; see
 # "ROUND-SCOPED RECORDS").
-# A sidecar write whose loss costs a record, never the beat: the beat goes on, and the failure
-# is said on stderr rather than folded into success.
-sidecar_put() {  # $1 = file, $2 = content
-  printf '%s' "$2" > "$1" 2>/dev/null || echo "WARN: wait-for-deliverable: could not write $1" >&2
-}
 revised_bump() {  # $1 = the .settle sidecar path; bumps its sibling .revised
   rb_f_="${1%.settle}.revised"
   rb_n_=0; [ -f "$rb_f_" ] && rb_n_="$(cat "$rb_f_" 2>/dev/null || echo 0)"
@@ -835,9 +1101,19 @@ is_header_unfinished() {  # $1 = path, $2 = join epoch; sets HC_MSG
 say_header_unfinished() {  # $1 = path; reads HC_MSG. The one emitter of this line, at every site.
   echo "UNFINISHED $1 -- ends in ${MARK_NAME} but the merge would refuse it: $HC_MSG"
 }
+# A BROKEN SEAL: present, written since the join armed, marked with `sha=`, and changed since.
+# Its own function, so is_unfinished above keeps the unmarked case alone.
+is_seal_broken() {  # $1 = path, $2 = join epoch
+  [ "$COMPLETE" -eq 1 ] && [ -s "$1" ] && [ "$(mtime_of "$1")" -ge "$2" ] && has_marker "$1" \
+    && ! { [ -n "$SHARD_AXIS" ] && header_refused "$1"; } && { seal_of "$1"; [ $? -eq 1 ]; }
+}
+say_seal_broken() {  # $1 = path. The one emitter of this line, at every site.
+  echo "UNFINISHED $1 -- its ${MARK_NAME} line carries sha= but the file changed after it was marked; re-mark with --mark"
+}
 say_unfinished() {  # $1 = path, $2 = join epoch -- the line beneath a WAITING line
   is_unfinished "$1" "$2" && echo "UNFINISHED $1 -- present, last non-blank line is not ${MARK_NAME}"
   is_header_unfinished "$1" "$2" && say_header_unfinished "$1"
+  is_seal_broken "$1" "$2" && say_seal_broken "$1"
   return 0
 }
 
@@ -942,7 +1218,8 @@ case "$IDLE_SECS" in ''|*[!0-9]*) IDLE_SECS=$(( BUDGET * 2 )) ;; esac
 # The id is what the lead HOLDS at arm time, never what arrives later. The Agent result
 # shows `agentId: <hex>` for a spawn and `agent_id: <name>@<team>` for a named teammate;
 # the toolu_ id first reaches the lead in the task-notification, when the agent ENDS.
-#   toolu_<...>      the ledger row whose `tool_use_id` is it
+#   toolu_<...>      the ledger row whose `tool_use_id` is it. Any DISPATCH_ID_PREFIXES member
+#   call_<...>       (read from the sibling validator, below) is taken the same way.
 #   <name>@<team>    a named teammate: the ONE ledger row whose `name` is <name>. Its
 #                    meta.json carries no toolUseId, so the name is the only key.
 #   <hex agentId>    this session's `agent-<id>.meta.json` gives `toolUseId`, which is the
@@ -968,10 +1245,12 @@ dispatch_epoch_of() {  # $1 = agentId, <name>@<team> or toolu_ id -> sets dp_ts_
   dp_id_="$1"
   [ -r "$SPAWN_LEDGER" ] || dispatch_refuse "no spawn ledger at $SPAWN_LEDGER" \
     "Arm from the project root, where the dispatch guard writes it."
-  case "$dp_id_" in *[!A-Za-z0-9_@.-]*) dispatch_refuse "not an agentId or a toolu_ id" \
+  case "$dp_id_" in *[!A-Za-z0-9_@.-]*) dispatch_refuse "not an agentId, a <name>@<team> or a dispatch id (prefixes: $DP_PREFIXES)" \
     "Pass the agentId the Agent result returned." ;; esac
-  case "$dp_id_" in
-    toolu_*) dp_tui_="$dp_id_" ;;
+  dp_hit_=0
+  for dp_p_ in $DP_PREFIXES; do case "$dp_id_" in "$dp_p_"?*) dp_hit_=1 ;; esac; done
+  case "$dp_hit_:$dp_id_" in
+    1:*) dp_tui_="$dp_id_" ;;
     *@*)
       dp_n_="${dp_id_%%@*}"
       dp_rows_="$(ledger_rows name "$dp_n_")"
@@ -1000,15 +1279,61 @@ dispatch_epoch_of() {  # $1 = agentId, <name>@<team> or toolu_ id -> sets dp_ts_
   [ -n "$dp_e_" ] || dispatch_refuse "its ledger row has no readable ts ('$dp_ts_')" \
     "Arm without --since."
 }
+# THE DISPATCH-ID PREFIXES ARE READ FROM THEIR ONE DECLARATION, never retyped here: the sibling
+# validate-adversarial-convergence.sh declares `DISPATCH_ID_PREFIXES="toolu_ call_"`, and an id
+# opening with any member is a tool_use_id (`call_` is a local-model lead's). Resolved beside this
+# script, as --shard-header resolves its sibling. The value may be double- or single-quoted; it
+# must be declared exactly once, and every member must be word characters. Under --dispatch, a
+# missing sibling or a missing, duplicated or malformed declaration REFUSES (exit 64): a silent
+# `toolu_`-only fallback would refuse a local-model lead's ids while reading as a working grammar.
+DISPATCH_GRAMMAR="${WD_SCRIPT_DIR}/validate-adversarial-convergence.sh"
+dispatch_prefixes() {  # prints the declared prefix list; 1 when it cannot be read as one
+  [ -f "$DISPATCH_GRAMMAR" ] || return 1
+  dg_h_="$(grep -E "^DISPATCH_ID_PREFIXES=(\"[^\"]*\"|'[^']*')[[:blank:]]*\$" "$DISPATCH_GRAMMAR" 2>/dev/null)" || return 1
+  [ "$(grep -c '^DISPATCH_ID_PREFIXES=' "$DISPATCH_GRAMMAR" 2>/dev/null)" = 1 ] || return 1
+  dg_v_="${dg_h_#DISPATCH_ID_PREFIXES=}"
+  dg_v_="$(printf '%s' "$dg_v_" | sed 's/[[:blank:]]*$//')"   # trailing blanks after the quote
+  dg_v_="${dg_v_#?}"; dg_v_="${dg_v_%?}"                       # the quote pair
+  case "$dg_v_" in *[!A-Za-z0-9_\ ]*) return 1 ;; esac
+  [ -n "${dg_v_// /}" ] || return 1
+  printf '%s' "$dg_v_"
+}
 if [ -n "$DISPATCH" ]; then
+  DP_PREFIXES="$(dispatch_prefixes)" || {
+    echo "FAIL: --dispatch cannot read its id grammar: DISPATCH_ID_PREFIXES is not declared exactly once," >&2
+    echo "  quoted and word-only, in $DISPATCH_GRAMMAR (or that file is absent beside this script)." >&2
+    echo "  No dispatch id can be classified, so NO beat ran and the join is NOT armed." >&2
+    exit 64; }
   DISPATCH_EPOCH=""; DISPATCH_TS=""; DISPATCH_TUI=""
-  set -f   # an id is validated inside the loop, after this split: no glob may expand first
-  for dp_one_ in $DISPATCH; do
+  # An id is validated inside the loop, after this split, so no glob may expand first: noglob is
+  # on for the SPLIT ALONE and restored before anything else runs. Left on, it silenced every glob
+  # below -- the teammate-transcript scan read `unavailable` and the EXIT trap's lease-heir scan
+  # found no heir -- on every --dispatch beat. Restored before the loop, not after it, because
+  # dispatch_refuse exits from inside the loop, and any EXIT trap armed by then globs too.
+  dp_noglob_=0; case "$-" in *f*) dp_noglob_=1 ;; esac
+  set -f
+  DP_IDS_=( $DISPATCH )
+  [ "$dp_noglob_" = 1 ] || set +f
+  # The liveness scope (in_liveness_scope): each dispatch's agentId, found as the subagents-dir
+  # meta.json whose toolUseId is the dispatch's tool_use_id. If ANY dispatch has none, the scope
+  # stays the whole session -- a partial scope would drop the one transcript that matters.
+  DP_AGENTS_=""; dp_scope_ok_=1
+  for dp_one_ in "${DP_IDS_[@]}"; do
     dispatch_epoch_of "$dp_one_"
     if [ -z "$DISPATCH_EPOCH" ] || [ "$dp_e_" -lt "$DISPATCH_EPOCH" ]; then
       DISPATCH_EPOCH="$dp_e_"; DISPATCH_TS="$dp_ts_"; DISPATCH_TUI="$dp_tui_"
     fi
+    dp_ag_=""
+    if [ -n "$TEAMMATE_DIR" ] && [ -d "$TEAMMATE_DIR" ]; then
+      for dp_mf_ in "$TEAMMATE_DIR"/agent-*.meta.json; do
+        [ -f "$dp_mf_" ] || continue
+        grep -qF "\"toolUseId\":\"$dp_tui_\"" "$dp_mf_" 2>/dev/null || continue
+        dp_ag_="${dp_mf_##*/agent-}"; dp_ag_="${dp_ag_%.meta.json}"; break
+      done
+    fi
+    if [ -n "$dp_ag_" ]; then DP_AGENTS_="${DP_AGENTS_}${DP_AGENTS_:+ }$dp_ag_"; else dp_scope_ok_=0; fi
   done
+  [ "$dp_scope_ok_" = 1 ] || DP_AGENTS_=""
   if [ -n "$SINCE" ] && [ "$SINCE" -gt "$DISPATCH_EPOCH" ]; then
     echo "FAIL: --since is $(( SINCE - DISPATCH_EPOCH )) s after the earliest dispatch it joins ($DISPATCH_TS, tool_use_id $DISPATCH_TUI)." >&2
     echo "  Every write the teammate made in between would read as pre-existing. Drop --since;" >&2
@@ -1020,20 +1345,65 @@ elif [ -n "$SINCE" ]; then
   echo "WARN: wait-for-deliverable: --since without --dispatch -- nothing checks the stamp against the dispatch, and a stamp later than it misses the teammate's early writes. Pass --dispatch <agentId from the Agent result>." >&2
 fi
 
-teammate_quiet_for() {  # prints seconds since the most recent teammate turn in this
-                        # session; returns 1 and prints nothing when there is no signal
+# ---------------------------------------------------------------------------
+# A TURN IS AN ASSISTANT OR USER (TOOL-RESULT) LINE, NOT A WRITE TO THE FILE. The harness also
+# appends an `api-request` line for every request it SENDS, answered or not, so a teammate whose
+# requests the model never answers -- measured on the reference consumer: an account out of
+# usage, seven retries ~195s apart, no assistant line after them -- kept its transcript's mtime
+# fresh and read as a live turn every ~3 minutes, for as long as anyone waited. Quiet is now
+# `now` minus the NEWEST timestamp on an assistant/user line (the maximum, never the last line's:
+# timestamps are not monotonic in a transcript), and a transcript with no such timestamp falls
+# back to its mtime, which is exactly the old reading.
+#
+# STALL_K (3) BOUNDS ONE PROPERTY: HOW MANY CONSECUTIVE `{"type":"api-request"` LINES MUST END A
+# TRANSCRIPT BEFORE THE BEAT SAYS ITS MODEL IS NOT ANSWERING. Measured over 3,349 real teammate
+# transcripts: runs of api-request lines between two assistant lines were 1 long 7,400 times, 2
+# long 7 times (all live: a reply followed in 3-108s), 4 long once and 8 long once (the wedge).
+# So 3 has no false positive in that corpus. The match carries its closing quote, because
+# `api-request-blob` and `api-request-shape` lines open the same way and are not requests.
+# WHEN HIT: a STALLED report, per transcript. Like IDLE it changes no exit code, beat count or
+# grant -- it tells the lead to tell the operator. LOAD-FREE: a count of lines, not of seconds.
+# ---------------------------------------------------------------------------
+STALL_K=3
+transcript_turn() {  # $1 = transcript -> "<newest turn YYYY-MM-DDTHH:MM:SS|-> <trailing api-request run>"
+  awk '
+    index($0, "{\"type\":\"api-request\"") == 1 { run++; next }
+    NF { run = 0 }
+    index($0, "\"type\":\"assistant\"") || index($0, "\"type\":\"user\"") {
+      if (match($0, /"timestamp":"[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]/)) {
+        t = substr($0, RSTART + 13, 19); if (t > mx) mx = t
+      }
+    }
+    END { print (mx == "" ? "-" : mx), run + 0 }' "$1" 2>/dev/null
+}
+# Under --dispatch the sensor reads ONLY the dispatched agents' own transcripts, by name: across a
+# session the newest turn of ANY teammate would let a live one hide the wedged one being joined.
+in_liveness_scope() {  # $1 = transcript path -> 0 when it is read
+  [ -n "${DP_AGENTS_:-}" ] || return 0
+  for il_a_ in $DP_AGENTS_; do [ "${1##*/}" = "agent-${il_a_}.jsonl" ] && return 0; done
+  return 1
+}
+teammate_quiet_for() {  # prints seconds since the most recent teammate turn in this session,
+                        # then ` STALLED <file>...` for each transcript ending in a stalled run;
+                        # returns 1 and prints nothing when there is no signal
   [ -n "$TEAMMATE_DIR" ] && [ -d "$TEAMMATE_DIR" ] || return 1
-  tq_now_="$(date +%s)"; tq_best_=""
+  tq_now_="$(date +%s)"; tq_best_=""; tq_stall_=""
   for tq_f_ in "$TEAMMATE_DIR"/*.jsonl; do
     [ -f "$tq_f_" ] || continue
-    tq_m_="$(mtime_of "$tq_f_")"
+    in_liveness_scope "$tq_f_" || continue
+    tq_r_="$(transcript_turn "$tq_f_")"
+    tq_t_="${tq_r_%% *}"; tq_k_="${tq_r_##* }"
+    case "$tq_k_" in ''|*[!0-9]*) tq_k_=0 ;; esac
+    tq_m_=""; [ "$tq_t_" = "-" ] || tq_m_="$(to_epoch "${tq_t_}Z")" || tq_m_=""
+    [ -n "$tq_m_" ] || tq_m_="$(mtime_of "$tq_f_")"
     [ "$tq_m_" -gt 0 ] || continue
     tq_a_=$(( tq_now_ - tq_m_ ))
     [ "$tq_a_" -lt 0 ] && tq_a_=0   # clock skew must not manufacture a future turn
+    [ "$tq_k_" -ge "$STALL_K" ] && tq_stall_="${tq_stall_} ${tq_f_##*/}:${tq_k_}"
     if [ -z "$tq_best_" ] || [ "$tq_a_" -lt "$tq_best_" ]; then tq_best_="$tq_a_"; fi
   done
   [ -n "$tq_best_" ] || return 1
-  printf '%s' "$tq_best_"
+  printf '%s%s' "$tq_best_" "${tq_stall_:+ STALLED$tq_stall_}"
 }
 
 # ONE function, called from all THREE places a beat can end -- the exhaustion path,
@@ -1041,11 +1411,22 @@ teammate_quiet_for() {  # prints seconds since the most recent teammate turn in 
 # them has to get the same three-way answer, and three copies of this ladder would
 # be three chances for one of them to stop agreeing.
 say_liveness() {
-  if ! sl_q_="$(teammate_quiet_for)"; then
+  if ! sl_r_="$(teammate_quiet_for)"; then
     say "LIVENESS  unavailable (no teammate transcripts for this session) -- this beat"
     say "  cannot tell a working teammate from one that finished and delivered elsewhere."
     return 0
   fi
+  sl_q_="${sl_r_%% *}"; sl_st_=""
+  case "$sl_r_" in *' STALLED '*) sl_st_="${sl_r_#* STALLED }" ;; esac
+  # echo, not say, for the reason the IDLE banner below gives: the wait itself is the wrong action.
+  for sl_s_ in $sl_st_; do
+    echo "TEAMMATE STALLED ${sl_s_%:*} -- its transcript ends in ${sl_s_##*:} api-request lines with no reply"
+    echo "  after them: the model is not answering this teammate (account usage limit, auth or network),"
+    echo "  and it is not thinking. Beating again cannot fix that. Tell the operator now: only the"
+    echo "  operator can switch accounts, and a re-dispatch on the same account wedges again. Stop the"
+    echo "  teammate only on the operator's word, or when the next beat reports it STALLED again."
+  done
+  case "$sl_q_" in ''|*[!0-9]*) sl_q_=0 ;; esac
   if [ "$sl_q_" -ge "$IDLE_SECS" ]; then
     # echo, not say: this is the line that tells the lead the wait itself is the
     # wrong action, and --quiet must not be able to hide it -- the same reason the
@@ -1109,6 +1490,10 @@ if [ "$STATUS" -eq 1 ]; then
       S_V="UNFINISHED"; echo "UNFINISHED $t -- present, last non-blank line is not ${MARK_NAME}"
     elif [ -n "$SHARD_AXIS" ] && header_refused "$t"; then
       S_V="UNFINISHED"; say_header_unfinished "$t"
+    elif seal_of "$t"; then
+      S_V="DELIVERED"; echo "DELIVERED $t"
+    elif [ "$SEAL_V" = "broken" ]; then
+      S_V="UNFINISHED"; say_seal_broken "$t"
     else
       ss_rec="$(cat "${COUNTER_DIR}/$(key_of "$t").settle" 2>/dev/null || echo '')"
       ss_t="${ss_rec#* }"; case "$ss_t" in ''|*[!0-9]*) ss_t="" ;; esac
@@ -1133,81 +1518,6 @@ if [ "$STATUS" -eq 1 ]; then
   exit 0
 fi
 
-# ---------------------------------------------------------------------------
-# THE BEAT-LIVENESS LEASE, AND WHO MAY REMOVE IT.
-#
-# `.beat-inflight` is the ONE marker Stop-hook Check 2b reads, and every beat in a project
-# shares it. Until this release each beat wrote a bare epoch and its EXIT trap deleted the file
-# unconditionally, so the first beat to exit took the lease from every other beat still asleep.
-# Measured, two beats from two shells: B delivered and exited, A stayed alive, and the marker was
-# ABSENT, 3 runs of 3 -- the Stop hook then reports "no live wait-beat" with one sleeping.
-#
-# So the marker is `<epoch> <pid>` and has ONE holder. Every live beat also registers its own
-# `.wait-beats/.lease-<pid>` (its epoch), re-stamped every poll. A beat takes the marker only
-# when it is absent, unparseable, expired, or names a holder that is dead -- no registration,
-# an expired one, or a pid `kill -0` cannot signal; the registration is what makes a recycled
-# pid read dead. On exit a beat removes the marker only if it holds it, and first hands it to
-# any other live registered beat. A pid-less live marker is a beat from before this release,
-# mid-pull: it is left alone, because that beat re-stamps it and deletes it on its own exit,
-# after which the next poll here re-takes it.
-#
-# THE WINDOW THAT REMAINS. A SIGKILLed holder skips its trap, so a live sibling takes the
-# marker when the dead holder's registration expires, up to one lease length (3 x POLL) -- the
-# same window a single SIGKILLed beat leaves today, worth at most one Rule 3 block.
-#
-# WRITTEN BEFORE THE PRE-SLEEP WORK, not after it. The bound check, the shell-marker prune and
-# the sweep run first and can take seconds over a large wave; a lease written only at the sleep
-# left that window uncovered, which is the "armed seconds ago, hook saw no beat" the s319 lead
-# reported. A call that turns out not to sleep releases what it took, through the same trap.
-# ---------------------------------------------------------------------------
-BEAT_MARKER="${STATE_DIR}/.beat-inflight"
-LEASE_SELF="${COUNTER_DIR}/.lease-$$"
-lease_holder_dead() {  # $1 = holder pid -> 0 when no live beat stands behind it
-  ld_r_="$(cat "${COUNTER_DIR}/.lease-$1" 2>/dev/null || echo '')"
-  case "$ld_r_" in ''|*[!0-9]*) return 0 ;; esac
-  [ "$ld_r_" -gt "$(date +%s)" ] || return 0
-  kill -0 "$1" 2>/dev/null && return 1
-  return 0
-}
-LEASE_TMP="${COUNTER_DIR}/.beat-inflight.$$"   # inside the ignored .wait-beats/, same filesystem
-lease_put() {  # $1 = epoch, $2 = pid -- whole-file replace, never a partial line for the hook to read
-  { printf '%s %s' "$1" "$2" > "$LEASE_TMP" 2>/dev/null && mv -f "$LEASE_TMP" "$BEAT_MARKER" 2>/dev/null; } \
-    || echo "WARN: wait-for-deliverable: could not write the lease $BEAT_MARKER; the stop hook will not see this beat" >&2
-}
-beat_alive() {
-  ba_e_=$(( $(date +%s) + 3 * POLL ))
-  sidecar_put "$LEASE_SELF" "$ba_e_"
-  ba_cur_="$(cat "$BEAT_MARKER" 2>/dev/null || echo '')"
-  ba_ep_="${ba_cur_%% *}"
-  case "$ba_cur_" in *' '*) ba_pid_="${ba_cur_#* }" ;; *) ba_pid_="" ;; esac
-  case "$ba_ep_" in ''|*[!0-9]*) lease_put "$ba_e_" "$$"; return 0 ;; esac
-  case "$ba_pid_" in *[!0-9]*) lease_put "$ba_e_" "$$"; return 0 ;; esac
-  if [ "$ba_ep_" -le "$(date +%s)" ]; then lease_put "$ba_e_" "$$"; return 0; fi
-  [ -n "$ba_pid_" ] || return 0                     # a live pre-upgrade lease: not ours to take
-  if [ "$ba_pid_" = "$$" ] || lease_holder_dead "$ba_pid_"; then lease_put "$ba_e_" "$$"; fi
-  return 0
-}
-lease_release() {
-  lr_cur_="$(cat "$BEAT_MARKER" 2>/dev/null || echo '')"
-  case "$lr_cur_" in *' '*) lr_pid_="${lr_cur_#* }" ;; *) lr_pid_="" ;; esac
-  if [ "$lr_pid_" = "$$" ]; then
-    lr_now_="$(date +%s)"; lr_heir_=""
-    for lr_f_ in "$COUNTER_DIR"/.lease-*; do
-      [ -f "$lr_f_" ] || continue
-      lr_p_="${lr_f_##*/.lease-}"
-      [ "$lr_p_" = "$$" ] && continue
-      lr_e_="$(cat "$lr_f_" 2>/dev/null || echo '')"
-      case "$lr_p_$lr_e_" in *[!0-9]*|'') rm -f "$lr_f_" 2>/dev/null; continue ;; esac
-      if [ "$lr_e_" -gt "$lr_now_" ] && kill -0 "$lr_p_" 2>/dev/null; then lr_heir_="$lr_e_ $lr_p_"; break; fi
-      rm -f "$lr_f_" 2>/dev/null
-    done
-    if [ -n "$lr_heir_" ]; then lease_put "${lr_heir_%% *}" "${lr_heir_#* }"
-    else rm -f "$BEAT_MARKER" 2>/dev/null; fi
-  fi
-  rm -f "$LEASE_SELF" "$LEASE_TMP" 2>/dev/null || true
-}
-trap 'lease_release' EXIT
-beat_alive
 
 # ---------------------------------------------------------------------------
 # COUNTERS ARE SCOPED TO THE BOUND THEY WERE COUNTED AGAINST.
@@ -1241,7 +1551,23 @@ fi
 # would suppress a legitimate beat. Anything older than the budget cannot be a
 # sibling of THIS call by definition, so it is safe to drop, and this also stops
 # the markers accumulating forever.
-find "$COUNTER_DIR" -maxdepth 1 -name '.shell-*' -mmin +"$(( (BUDGET / 60) + 1 ))" -delete 2>/dev/null || true
+#
+# A MARKER WHOSE SHELL IS STILL THE SAME PROCESS IS KEPT AT ANY AGE (see THE SHELL'S IDENTITY
+# below): its age no longer decides anything, and pruning it would let a chained call delayed
+# past the prune age sleep a second quantum. Identity is the pid in the name plus the start time
+# stored in the marker; a recycled pid has a different start time and is pruned on age as before.
+shell_start_of() {  # $1 = pid -> its start time, whitespace-normalised; empty when it cannot be read
+  ps -o lstart= -p "$1" 2>/dev/null | tr -s ' \t' ' ' | sed 's/^ //; s/ $//'
+}
+SH_PRUNE_SECS=$(( ( (BUDGET / 60) + 1 ) * 60 ))
+for sh_f_ in "$COUNTER_DIR"/.shell-*; do
+  [ -f "$sh_f_" ] || continue
+  sh_r_="$(cat "$sh_f_" 2>/dev/null || echo '')"
+  case "$sh_r_" in
+    *' '*) [ "${sh_r_#* }" = "$(shell_start_of "${sh_f_##*/.shell-}")" ] && continue ;;
+  esac
+  [ $(( $(date +%s) - $(mtime_of "$sh_f_") )) -gt "$SH_PRUNE_SECS" ] && rm -f "$sh_f_" 2>/dev/null
+done
 
 # THE `-lt "$BUDGET"` TEST BELOW BOUNDS ONE PROPERTY: "A SIBLING BEAT IN THIS SHELL STARTED
 # LESS THAN ONE QUANTUM AGO, SO IT HAS NOT YET HAD TIME TO FINISH SLEEPING -- WHICH MEANS
@@ -1258,16 +1584,31 @@ find "$COUNTER_DIR" -maxdepth 1 -name '.shell-*' -mmin +"$(( (BUDGET / 60) + 1 )
 # makes age >= BUDGET, the guard fails OPEN, and the call serializes a second full quantum
 # behind the first -- the 2 x BUDGET wait this guard exists to prevent. The cost is wall
 # clock and one beat charged, never a false DELIVERED or NON-DELIVERY on its own.
+#
+# THE SHELL'S IDENTITY DECIDES IT NOW, AND THE CLOCK ONLY FOR A MARKER THAT CARRIES NONE. The
+# marker is `<stamp> <start time of $PPID>`. A sibling beat in the SAME process -- same pid, same
+# start time -- is a chained call at any age, so load can no longer push it past the window. A
+# different start time is a recycled pid, a different shell, and sleeps. A one-field marker
+# (a beat from before this release, mid-pull) and a box where `ps` cannot read the start time
+# both keep the `-lt "$BUDGET"` test above. MEASURED: two calls from one shell read the same
+# start time, and the harness starts a fresh shell for every Bash tool call (two calls, two
+# parent pids), so "same shell" is "same Bash call" there. A harness that ran every call in ONE
+# persistent shell would make every beat after the first read as chained; none does today.
 SIBLING="${COUNTER_DIR}/.shell-${PPID}"
+SHELL_START="$(shell_start_of "$PPID")"
 MAY_SLEEP=1
 if [ -f "$SIBLING" ]; then
-  LAST="$(cat "$SIBLING" 2>/dev/null || echo 0)"
+  LAST_REC="$(cat "$SIBLING" 2>/dev/null || echo 0)"
+  LAST="${LAST_REC%% *}"
   case "$LAST" in ''|*[!0-9]*) LAST=0 ;; esac
-  if [ $(( $(date +%s) - LAST )) -lt "$BUDGET" ]; then
+  LAST_START=""; case "$LAST_REC" in *' '*) LAST_START="${LAST_REC#* }" ;; esac
+  if [ -n "$LAST_START" ] && [ -n "$SHELL_START" ]; then
+    [ "$LAST_START" = "$SHELL_START" ] && MAY_SLEEP=0
+  elif [ $(( $(date +%s) - LAST )) -lt "$BUDGET" ]; then
     MAY_SLEEP=0
   fi
 fi
-printf '%s' "$(date +%s)" > "$SIBLING" 2>/dev/null || true
+printf '%s%s' "$(date +%s)" "${SHELL_START:+ $SHELL_START}" > "$SIBLING" 2>/dev/null
 
 # ---------------------------------------------------------------------------
 # Reset / already-delivered sweep, and the sequence bound. Done for every path
@@ -1424,6 +1765,9 @@ if [ -n "$EXHAUSTED" ]; then
     elif is_header_unfinished "$t" "$(join_of "$t")"; then
       echo "NON-DELIVERY $t -- after $MAX_BEATS beats."
       say_header_unfinished "$t"
+    elif is_seal_broken "$t" "$(join_of "$t")"; then
+      echo "NON-DELIVERY $t -- after $MAX_BEATS beats."
+      say_seal_broken "$t"
     elif [ "$COMPLETE" -eq 1 ] && [ -s "$t" ] && [ "$(mtime_of "$t")" -ge "$(join_of "$t")" ] && has_marker "$t"; then
       echo "NON-DELIVERY $t -- after $MAX_BEATS beats."
       echo "UNSETTLED $t -- present and ends in ${MARK_NAME}, but its content was still changing"
