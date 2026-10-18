@@ -292,6 +292,9 @@ export LC_ALL=C
 
 refuse_n=0
 GAP_LINES=""; GAP_N=0
+# Every variable record_tail prints has a global default: contract_refusals assigns them, and a run
+# that never reaches it must print empty under `set -u`, never die naming an unbound variable.
+CHAIN_LINES=""; ESC_SUP=""; ESC_LINES=""; ESC_CLOSED=""; ESC_N=0; ESC_X=0
 refuse() { echo "REFUSED: $*" >&2; refuse_n=$((refuse_n + 1)); }
 die() { echo "REFUSED: $*" >&2; exit 2; }
 
