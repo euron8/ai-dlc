@@ -93,7 +93,14 @@ S6_WHY="\`\\s\` in a sed expression. Same as grep: BSD sed has no \`\\s\`, and t
 # a non-quote non-backslash char, an escaped backslash, an escaped quote, or a backslash before any
 # other non-digit; the tail is one or more backslashes then a digit. A later `"\037"` in a `print`
 # on the same line is past the closing quote and is not reached.
-S7_PAT='g?sub\([^,]*,[[:space:]]*"([^"\\]|\\\\|\\"|\\[^0-9"\\])*\\+[0-9]'
+# The first argument is walked unit by unit so a comma INSIDE a regex literal or a string
+# literal (`/a,(b)/`, `","`) does not end it early: a unit is a char other than comma, quote or
+# slash, a `/…/` regex literal, or a `"…"` string. Measured over an 8-line matrix (hits A1 A4 A5
+# A7 A9, spares A2 A8 B1): this form 8/8, the earlier `[^,]*` form 6/8 (missed A4, A5), the
+# adversary's `(/…/|[^,/])*` form 7/8 (missed A5). KNOWN MISSES: a first argument holding a
+# dynamic-regex string with an escaped quote, a division or a bare `/` outside a literal, and
+# a call whose arguments wrap onto the next line; none is in the tracked corpus.
+S7_PAT='g?sub\(([^,"/]|/([^/\\]|\\.)*/|"([^"\\]|\\.)*")*,[[:space:]]*"([^"\\]|\\\\|\\"|\\[^0-9"\\])*\\+[0-9]'
 S7_WHY="a backreference in an \`awk\` \`sub()\`/\`gsub()\` replacement. awk has no \`\\1\`; it emits the literal text and the capture is lost. Use \`match()\` with \`substr()\`."
 # S8 KEYS ON THE PLACEHOLDER, NOT ON `git`, AND THE TWO ARE INDISTINGUISHABLE ON TODAY'S
 # CORPUS. Measured on the pre-fix tree: over `core/` this pattern finds 13 renderings and a

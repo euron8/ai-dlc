@@ -1116,14 +1116,16 @@ fi
 seed_shell "$TMP/m7b" <<'M7BEOF'
 awk '{ gsub(/x/, "\\1", s) }' f
 awk '{ gsub(/x/, "a\"\\1", s) }' f
+awk '{ gsub(/a,(b)/, "\\1") }' f
 M7BEOF
-count_check "m7b S7 replacement backreference, plain and escaped-quote" "$TMP/m7b" S7 2
+count_check "m7b S7 replacement backreference, plain, escaped-quote and comma-in-regex (A4)" "$TMP/m7b" S7 3
 
 seed_shell "$TMP/n8" <<'N8EOF'
 awk '
   if (inwin) { gsub(/[ \t]+/, " ", win); print head "\037" win }
 ' f
 awk '{ sub(/a/, "x\"", s); print "\037" }' f
+awk '{ sub(/a/, "b", s); printf "x,\037" }' f
 N8EOF
 if out="$(run_v "$TMP/n8")" && grep -q "^validate-shell-portability: PASS" <<<"$out"; then
   note "ok    n8 -- an octal escape past the gsub replacement's closing quote is NOT a backreference"
