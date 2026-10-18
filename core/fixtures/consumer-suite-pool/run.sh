@@ -853,13 +853,19 @@ fi
 #   (r)  only `<root>/w/u.raw` grows the same way: REFUSED -- stream reports are not the fixture's progress.
 # SEED VALIDITY: the stub's layout is the real deriver's, read off the deriver itself, or the arm would
 # pass against a path no deriver writes.
+# Both layouts, named: core/fixtures/<fx> -> core/scripts/ (distribution); tests/fixtures/<fx> ->
+# scripts/ai-dlc/ (consumer, per core-paths.sh --map), which is three hops up, as the hook lookup above is.
 DV=""
-for cand in "$HERE/../../scripts/derive-fixture-readsets.sh" "$HERE/../../scripts/ai-dlc/derive-fixture-readsets.sh"; do
+for cand in "$HERE/../../scripts/derive-fixture-readsets.sh" "$HERE/../../../scripts/ai-dlc/derive-fixture-readsets.sh"; do
   [ -f "$cand" ] && { DV="$cand"; break; }
 done
 [ -n "$DV" ] || broken "cannot locate derive-fixture-readsets.sh in either layout from $HERE -- the trace-site arm would stub a layout nobody checked"
-grep -qxF 'WORK="$TRACE_ROOT/w"' "$DV" && grep -qF '>"$WORK/$fx.log" 2>&1 </dev/null' "$DV" && grep -qxF '  raw="$WORK/$fx.raw"' "$DV" \
-  || broken "the deriver no longer writes the fixture's output to \$TRACE_ROOT/w/<fx>.log beside <fx>.raw -- the hook's trace-site watch path and this arm's stub are both stale"
+# The redirect is read off the SANDBOX writer line, the only one the in-pool trace site runs (--tracer sandbox).
+# A file-wide grep is also satisfied by the fs_usage writer's identical redirect, so moving only the sandbox
+# line's log path would leave this check green while the hook watched a file nobody writes.
+DV_SB="$(grep -F '&& sandboxed env ' "$DV")" || DV_SB=""
+grep -qxF 'WORK="$TRACE_ROOT/w"' "$DV" && grep -qF '>"$WORK/$fx.log" 2>&1 </dev/null' <<<"$DV_SB" && grep -qxF '  raw="$WORK/$fx.raw"' "$DV" \
+  || broken "the deriver's sandbox writer no longer sends the fixture's output to \$TRACE_ROOT/w/<fx>.log beside <fx>.raw -- the hook's trace-site watch path and this arm's stub are both stale"
 st_trace() {                   # st_trace <hook> <tag> <t|r> -> prints the unit's verdict, or BROKEN
   local h="$1" R="$WORK/trace.$2" p
   mkdir -p "$R/t/tests/fixtures/u" "$R/out/.log" "$R/out/.dur" "$R/out/.pr" "$R/out/.lt" "$R/tmp"
