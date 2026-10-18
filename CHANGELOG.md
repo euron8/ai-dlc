@@ -20,6 +20,76 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.831.0] - 2026-10-18
+
+Batch 236 (b9's TRAIN). Every live plan now designates a lead session before anything is dispatched, and plan-shape
+arm P14 binds that designation. Closes BL-675. Files BL-678 and BL-681. Closes no `PC-` id. Net for this release:
+1 closed, 3 filed.
+
+### The multi-session release train is a standard plan shape (BL-675)
+
+- `docs/plans/graph-ledger-full-drain.md` gains a numbered action `**0. DESIGNATE THE LEAD BEFORE ANYTHING IS
+  DISPATCHED.**` ahead of the dispatch action, which becomes `0a.`. It names the session that accepts the one-liner as
+  the lead. The lead runs `ListAgents` and roll-calls every other `ai-dlc-*` session. The action states that the lead
+  orchestrates and never builds, and that owners build through hands and make no edits. It also carries the generic
+  owner-rules block the lead sends verbatim, the operator's time sentence, and five release-schedule rules:
+  RELEASES BEFORE MEASUREMENTS, SHORTEST GATE FIRST, NO IDLE SESSIONS, EXCLUSIVE WINDOWS ARE CAPPED and RELEASE TEXT
+  IS PREPARED IN ADVANCE. The lead-cuts-the-release sentences now say they describe the no-owner shape.
+- `consumer-context-footprint.md`, `hermetic-fixtures-poc.md` and `pre-push-wall-clock.md` each gain their own
+  action 0. It states the designation, the no-edits rule, the time sentence and the five rules in full, and cites the
+  drain plan's action by title for the owner-rules block. Each plan's resume line now starts at action 0.
+- `scripts/validate-plan-shape.sh` gains arm P14 and a shared `plan_action_windows` helper. P14 requires a live
+  plan's Next actions section to open with a column-0 numbered action carrying `DESIGNATE THE LEAD`. That action must
+  be the first numbered action of the section, and its own window must hold every conjunct:
+  - `ListAgents`, as a fixed string.
+  - `never builds`, `through hands` and `no edits`, case-insensitive, with any whitespace between the words.
+  - The operator's time sentence, matched as a fixed string byte for byte. The whitespace collapse does not touch a
+    non-breaking space, so a sentence carrying one is refused.
+  - The five rule labels, as case-sensitive fixed strings.
+  A marker action that only points at another plan carries none of the conjuncts and fails.
+- P13 is re-keyed from the whole file to the handoff action's own window. `ListAgents` must now sit in the same
+  numbered action as the `SendMessage` and `READ and FOLLOW` one-liner, because a file-wide `ListAgents` was satisfied
+  by any other action.
+- `.claude/rules/plan-shape.md` gains the designation bullet and the time-sentence bullet, each carried by P14. Its
+  count of banner-silenced arms moves from five to six.
+- `core/fixtures/plan-shape/run.sh` pins P14 and the P13 re-key with seeded defects, written by a different hand from
+  the arm. The seeds cover:
+  - a removed marker, each missing conjunct, and a pointer-only action;
+  - bleed past a blank line, and a wrapped conjunct;
+  - a marker on a history line outside Next actions, and a marker in unnumbered prose;
+  - the `0a.` and `**0.` forms, a fenced block inside the action, and a discharged plan;
+  - the marker action following a dispatch action, and the no-edits conjunct;
+  - the time sentence removed, wrapped, reworded, and carrying a non-breaking space;
+  - one seed per rule label, and a lower-cased label;
+  - a prose line saying "next actions" (the case-insensitive heading match opens only on a heading);
+  - separate subjects for P13 and P14.
+  The bleed and history seeds carry every conjunct. The history line sits before the Next actions heading, so each arm
+  fails only on the mutant it exists to kill.
+- `docs/plans/graph-ledger-full-drain.md` was rotated under the plan ceiling twice by `plan-rotate.sh --apply`. Batch
+  record 231 (3889 bytes) and batch record 232 (3338 bytes) moved to `docs/plans/archive/graph-ledger-full-drain.md`.
+  The plan ends at 146738 bytes.
+
+Measured in the release's slot, at load 18.21 falling to 5.84:
+- `validate-plan-shape.sh` over `docs/plans` reports 50 plans, 0 errors and 0 warnings, and the plan-shape fixture
+  PASSES.
+- Eight validator mutants are each killed by the arm built for them: m1 (P14 removed) by every P14 arm, m2 (window
+  bleed) by the bleed arm, m3 (P13 file-wide) by the P13 seed, m4 (order) by the order arm, m5 (no edits) by the
+  no-edits arm, m6 (time sentence) by the three time-sentence arms, m7 (section bound dropped) by the history and
+  prose-heading arms, and m8 (labels) by the five label arms and the lower-case arm.
+- The unmutated validator, run in the same layout as the mutants, passes the fixture.
+- BL-675's receipt exits 0 on the fix, 1 under m1 and under m7, 0 on a second correct spelling, 9 on a missing plan,
+  and 0 with a marker seeded into the resume block.
+
+### Filed
+
+- BL-678 (NOTE): `plan-rotate.sh` rebuilds the plan's archive pointer from the current run's ranges alone, so every
+  earlier rotated range drops out of the plan. The archived records survive; only the plan's own account of where
+  they came from is lost. Its receipt exits 1 today.
+- BL-681 (NOTE): shell-portability arm S7 reads any `\<digit>` after a `sub`/`gsub` on the same line as a
+  replacement backreference, including an octal escape such as `"\037"` in a later `print`. P14's window helper now
+  names its record separator once, so the arm does not trip on it, and its printed records are unchanged. The owed
+  fix scopes S7 to the replacement argument. Its receipt exits 1 today.
+
 ## [0.830.0] - 2026-10-18
 
 Batch 236 (cb's INTAKE, filing-only): ai-dlc-f7's read-only performance findings from graph's 0.828.0 install and

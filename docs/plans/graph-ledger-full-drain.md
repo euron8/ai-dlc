@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 240..336. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 184..214. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -180,77 +180,6 @@ Batch 232's block below is history: this block replaces its delivery gap. Starte
   discharged.
 - **Net for the batch**: closed 0 entries, filed 0; 1 candidate closed upstream by graph's pull. Backlog 0 live, 526
   archived.
-
-**BATCH 232 SHIPPED `v0.789.0` (`dc8efe43`, #1144): GRAPH'S ONE UNFILED CANDIDATE CLOSED UPSTREAM, AND CORE GAINED THE
-TWO WORKTREE-DISPATCH RULES ITS 0.713.0 "ABSORBED" RULING HAD MISSED. THE BACKLOG IS DECLARED EMPTY AGAIN. THE PULL
-0.788.0 -> 0.789.0 IS REQUIRED; ITS RUNBOOK LANDS WITH THIS CLOSE.**
-Batch 231's block below is history: this block replaces its delivery gap. Started by peer ai-dlc-76's one-liner at
-`origin/main` `16f69a27` (`VERSION` 0.788.0); graph-14 was live, running graph's 0.788.0 pull, and was never messaged.
-- **Opening sweep** (at `16f69a27`): live 2, unfiled 1, worklist 0, DISCHARGED 1 (the S318 rotate id), invisible 0,
-  TERMINAL 240, archive 363, 0 qualifying refs, every control passing. Ledger md5 `f58c9b1a…` on graph `main`
-  `6196073a8`. The unfiled id was `PC-S319-IMPLEMENTATION-PUSH-WORKTREE-EXPLICIT-DISPATCH-BLOCK-RESTATES-CORE-DISPATCH-PROTOCOL`,
-  filed 2026-10-15 in graph #1223. Backlog 0 live, 525 archived, declared empty. Scope: that candidate.
-- **`v0.789.0`**: BL-527. graph's `implementation-push.md` §2 block was refused as absorbed in 0.713.0 (`push-refusals.tsv`
-  row `8a28c2ef…`); graph's 0.785.0 pull added core's own `to: "main"` line to its point 5, the digest moved to
-  `b0e3cc6b…` and the block resurfaced. The pre-edit body digests to exactly the refused row. The contract adversary
-  found two points core never stated: `git -C` on every git command (a teammate's cwd resets between Bash calls, so a
-  first-action `cd` let `git add -A` land in the primary tree), and one story per dispatch (`dev.md` told devs to claim
-  from the shared task list). `_dispatch-protocol.md` point 3 and `dev.md` now state both, `process-rule-pins` pins four
-  sentences (each deletion fails only its own row), and the refusal row for `b0e3cc6b…` is added beside the old one.
-- **Not absorbed, recorded**: `git branch -D` after `git worktree remove` (loud stall); `git worktree list` before merge
-  (redundant once `git -C` holds); `lead_only` and "dev never commits `_bmad-output/**`" are graph-local and contradict
-  core. `dev.md`'s commit-before-reporting bullet is unpinned by choice.
-- **graph delivery**: graph pulled 0.788.0 itself during this batch (#1225, `fa2444635`) and archived the S318 id; its live
-  ledger is PC-S319 alone. Installed 0.788.0 against `VERSION` 0.789.0. **The pull is REQUIRED**: this tree's
-  `push-drain.sh` against a clone of graph reads the §2 block `PUSH-CANDIDATE` at 0.788.0 and `PUSH-REFUSED` at 0.789.0,
-  while every update-engine file is byte-identical across the range, so action 7's binary differential cannot see it.
-  The runbook `docs/plans/graph-pull-0788-to-0789.md` lands with this close, rehearsed: 4 rows (1 BOTH-CHANGED,
-  `dev.md`), 2 `HARD-LAYER-ADJUDICATION-MISSING` on graph's dev extensions, and PC-S319 closing as `CLOSED AS REJECTED —
-  BY DESIGN` through the refusal channel. It is ready, not authorized: the pull is the operator's. The 0786-to-0788
-  runbook is discharged by graph's #1225.
-- **Process facts**: one gate, green on the first push (pool 12, load ~40). No operator rulings this batch.
-- **Net for the batch**: closed 1 entry (BL-527), filed 1 (BL-527): net 0 entries, because the backlog opened empty and
-  nothing else existed to close; 1 candidate closed upstream. Backlog 0 live, 526 archived.
-
-**BATCH 231 SHIPPED `v0.787.0` (`2dc7b58d`, #1140) AND `v0.788.0` (`c96ad358`, #1142), AND LANDED BATCH 230's HELD
-CLOSE (`8e5f1b2f`, #1141). THREE ENTRIES CLOSED; GRAPH'S LAST LIVE CANDIDATE CLOSED UPSTREAM; THE BACKLOG IS DECLARED
-EMPTY. THE OPERATOR STARTED THE GRAPH PULL TO 0.788.0 DURING THIS CLOSE.**
-Batch 230's block below is history: this block replaces its delivery gap. Started by peer ai-dlc-15's one-liner at
-`origin/main` `4aa734c4` (`VERSION` 0.786.0); graph-55 was live and was never messaged.
-- **Opening sweep** (at `aadd5c93`, the held close): live 5, unfiled 1, worklist 0, DISCHARGED 4 (the four 0.786.0
-  ids), invisible 0, TERMINAL 236, archive 359, 0 qualifying refs, every control passing. Ledger md5 `8261b9ab…` on
-  graph `main` `8f313c3c0`. The unfiled id was the rotate candidate (filed 2026-10-14, graph `03ff6a8af`). Scope: that
-  candidate, both halves, plus BL-510 held from batch 230.
-- **Operator rulings, batch 231**:
-  - Graph runs no ai-dlc pipeline until batch 231 is pulled, so no old-form gate verdict exists after the C5(b)
-    `SERIES_FORM_FROM` cutoff. Discharged when the operator ran the pull.
-  - The backlog's "Pipeline-efficiency ranked set" section was removed by the batch-230 close to pass the rotator's
-    declared-empty refusal; the operator had not asked. It is restored verbatim in 0.788.0, and at this close its
-    heading was reworded to `(efficiency ranks 1–14)` on the operator's choice, the only change to the section. **Do
-    not remove or reword operator-authored text to satisfy a gate; ask.**
-- **`v0.787.0`**: BL-510's bookkeeping half (five refusal kinds at the frozen sha; gate-1 FP 0 over 56 real passes).
-  Two tip adversaries.
-- **`v0.788.0`**: BL-523 (the rotator refuses an empty `--sprint` selection beside an unmatchable FAIL series;
-  `--series` is the escape) and BL-526 (`gate_series_id` prescribed as `<gate_type>-<slug>-s<N>-<TS>` for a
-  single-story gate, slug from the `story:` line the lead writes on its brief, else `<gate_type>-s<N>-<TS>`; checked
-  per pass from `SERIES_FORM_FROM`). The candidate id is named in that release's message only. C5(a) took four tip
-  adversaries and C5(b) five rounds; every round found a real defect. Shipping C5(a) alone was tried and abandoned:
-  BL-523 alone is the only live entry, its receipt is UNSCORABLE (it builds its own tree), and R2 then reads zero
-  scored receipts, the batch-230 shape the operator ruled against widening.
-- **Unfixed, recorded**: two unmovable FAIL verdicts sharing one nonce make the printed `--series`/`--legacy-through`
-  remedies refuse each other (0 in graph's corpus); nothing checks the `story:` line against the id's slug; two
-  unslugged gates over different story sets can share a series (0 of 8 real cases); "trailing punctuation" is not
-  enumerated; BL-510's gate 2 stays unwired (FP 2). Batch 230's unfixed list stands.
-- **Process facts**: 0.787.0's first gate failed S7 (an octal escape on a `gsub` line) and the pole at load 32.
-  0.788.0's first gate failed the pole: eleven new mutants doubled shards b and c, and both the builder and its
-  adversary had judged against the suite's 1100s pole where the guard judges each unit against its OWN history; it
-  shipped sharded five ways. The sandbox read-set tracer dropped reports under load twice and wrote the fixture as
-  `OMITTED`; one such map was committed and caught before push. Re-run at low load, and check `OMITTED` before commit.
-- **graph delivery**: graph pulled 0.785.0 and 0.786.0 itself (#1222, #1223) and closed the four 0.786.0 ids. The
-  runbook `docs/plans/graph-pull-0786-to-0788.md` lands with this close; the operator is running that pull now. The
-  0781-to-0787 runbook is discharged.
-- **Net for the batch**: closed 3 entries (BL-510, BL-523, BL-526), filed 2 (BL-523, BL-526); 1 candidate closed
-  upstream. Backlog 0 live, 525 archived.
 
 ### Derive the state; do not trust the numbers below
 
@@ -878,7 +807,9 @@ every action below, and where an older paragraph reads narrower, this one wins.
   release's files is fixed in the release, not filed. A release whose net is not negative says why
   in its first ping.
 - **Fan out to the hand cap.** One hand per candidate or per disjoint file set, all in one spawn
-  block; the lead only scopes, collects by content, cuts the release and pings.
+  block; the lead only scopes, collects by content, cuts the release and pings. That is the
+  no-owner shape; with owners present (action 0), each owner cuts, gates and merges its own
+  release and the lead verifies it by content.
 - **The bootstrapping rule in action 2 still holds**; candidates touching the same bootstrapping
   file ship together in one release, and bootstrapping releases run back to back WITHIN the batch
   that scoped them.
@@ -943,10 +874,141 @@ stop, and only the operator rules a part serial by design. The operator gives th
 candidate's surviving half is upstream's to file and build, never a question for the consumer. Gate 2, which
 0.718.0 left serial, shipped sharded in 0.731.0.
 
-**0. DISPATCH HANDS BEFORE YOU RUN A SINGLE SWEEP COMMAND YOURSELF.** Operator instruction,
+**0. DESIGNATE THE LEAD BEFORE ANYTHING IS DISPATCHED.** Operator instruction at batch 236:
+   "if multiple fresh ai-dlc sessions exist that we designate a lead session for orchestration",
+   and "I want this to be a standard plan shape going forward."
+
+   - **Who leads.** The session that receives and ACCEPTS the one-liner is the LEAD. Its first
+     call is `ListAgents`.
+   - **Roll call.** In ONE parallel block with action 0a's first spawns, `SendMessage` every other
+     `ai-dlc-*` session in the listing (never a `graph-*` session, not even a read-only question),
+     asking for its current state and whether it is free to own a release. A session that finished
+     an earlier release is a valid owner. A session that has not answered after one re-ask and one
+     more timer counts as no session.
+   - **Assign at once, after scoping.** When action 1's sweep and scoping are done, the lead assigns
+     without asking: one cluster = one release per available owner, each sent its cluster and the
+     owner-rules block below, verbatim, with `<lead>`, `<cluster>` and `<batch>` filled in. The
+     owner replies exactly `ACCEPTED <cluster>` or `REFUSED: <reason>`; only an explicit refusal
+     moves the cluster to the next session. The roster (every session's reported state and its
+     assignment) goes into the lead's FIRST operator ping as a report, not a question.
+   - **The lead ORCHESTRATES and NEVER BUILDS.** Operator, when a lead built: "this is the lead
+     session and should be orchestrating, not building." The lead's work is: scoping and the
+     rulings record; backlog-id and VERSION allocation, lead only, owners ask (measured at batch
+     210: sessions each took the next VERSION with no allocator, and releases collided); slot and
+     gate scheduling under `.claude/rules/operator-rulings.md` "The lead orchestrates the box's
+     load", with `GATE OPEN` and `GATE CLOSED` sent to every owner; landing verification by
+     content; a landing notice to the WHOLE queue, never only the next lander; CLOSABLE statements
+     under "A closable session is stated plainly" in the same file; and the docs close (actions 6,
+     6b and 9).
+   - **With owners present, the OWNER cuts, gates and merges its own release**, and the lead
+     verifies the landing by content. Where action 0a, action 3 or a standing ruling above says the
+     lead cuts the release, it describes the shape with no owner.
+   - **Owners build through hands.** Each owner owns ONE cluster as ONE release, end to end, and
+     makes NO edits: every edit (code, fixture, receipt, entry prose, comment, script) goes to a
+     hand. Operator, twice, of owners that built alone: "<owner> is not using subagents".
+   - **With no other session available, the lead still NEVER BUILDS.** It dispatches hands per
+     action 0a and runs the no-owner shape.
+   - **The release schedule.** Operator instruction at batch 236, after "what's taking so long for
+     releases?": "better make it so the plan dictates that, I don't want to discover it the hard
+     way again."
+   - RELEASES BEFORE MEASUREMENTS. A ready release gates before any measurement window it does not
+     itself need in order to ship. Measurement windows (timings, profiles, census sweeps) queue
+     AFTER every release in the batch that is ready or in flight, unless a release depends on the
+     result.
+   - SHORTEST GATE FIRST. Among ready releases, a docs-only release (whose push skips the suite on
+     the content key) gates first, then the others in order of readiness.
+   - NO IDLE SESSIONS. At roll call, and again whenever a session finishes, every unassigned plan
+     item goes to an idle session at once. Build work (hands, edits only) never waits on box load;
+     only runs load the box.
+   - EXCLUSIVE WINDOWS ARE CAPPED. An exclusive measurement window states its estimate. At 1.5x the
+     estimate, the lead checks the oldest running unit's age and, on that evidence, decides whether
+     to continue or stop. It never just waits.
+   - RELEASE TEXT IS PREPARED IN ADVANCE. Each owner has its release commit text (a VERSION
+     placeholder, CHANGELOG, LANDED lines) written by a hand before its gate opens, so a gate starts
+     the moment its turn comes.
+   - **The owner-rules block.** Send it verbatim; it cites the rulebooks and actions it depends on
+     rather than restating them.
+
+   ```
+   **Release owner rules — batch <batch>, lead <lead>, cluster <cluster>**
+
+   You own ONE cluster end to end, as ONE release. <lead> schedules every slot and gate, allocates
+   every VERSION and backlog id, and owns the plan and the batch close.
+
+   **Reply first.** Reply to <lead> now with exactly `ACCEPTED <cluster>` or `REFUSED: <reason>`.
+
+   **Base and boundaries.**
+   - Base: `origin/main`. `git fetch origin` first; another release may have landed.
+   - Branch `<batch>-<cluster>`, built in your own worktree. NEVER use or check out the main
+     checkout: <lead> gates from it.
+   - The consumer repo is READ ONLY, per the plan's `## Start here`. Never message a `graph-*`
+     session, not even a read-only question.
+   - <lead>'s rulings record holds the batch's operator rulings. Do not re-litigate them. Scope is
+     the operator's: build every entry in your cluster, or say exactly which one you did not and why.
+
+   **Load.** Slots, GATE OPEN / GATE CLOSED and `uptime` follow `.claude/rules/operator-rulings.md`
+   "The lead orchestrates the box's load". Ask <lead> for a slot by SendMessage; <lead> replies
+   `SLOT GO` and later expects `SLOT DONE`. Hands run NO fixture suite, no mutant scorer, no timing
+   and no corpus sweep, ever: those are slot weight however small the script looks, and the owner
+   runs them in its slot. A hand may run the single fixture it edited, only inside your slot.
+   `bash -n`, a discriminating probe and `scripts/validate-enforcement-map.sh` are not heavy.
+   Killing and the verdict store: `.claude/rules/tool-hazards.md`.
+
+   **Owners build through hands.** You make NO edits. Every edit (code, fixture, receipt, entry
+   prose, comment, script) goes to a hand; independent edits go to parallel hands at once. Your own
+   tool calls are only: reading to diagnose, writing briefs, folding by content, slotted runs, and
+   gate steps (release commit, rebase, push, merge). While waiting for a slot, keep hands busy on
+   anything that needs no measurement. When <lead> asks, list your running hands (id, model, task).
+
+   **Flow.**
+   1. Write your contract to a file in your scratchpad. Spawn a contract adversary (`opus`,
+      read-only, `isolation: "remote"`) on it BEFORE any builder. Fold its BLOCKERs and DEFECTs. A
+      blocker is a fix list unless it proves no fix exists.
+   2. Build through hands, each `isolation: "remote"`, model stated with its one-clause reason.
+      Every brief carries the two verbatim spawn sentences of `docs/plans/graph-ledger-full-drain.md`
+      action "DISPATCH HANDS BEFORE YOU RUN A SINGLE SWEEP COMMAND YOURSELF.", this sentence
+      verbatim: "Time matters here: do not spend time that can be avoided, and the earlier a
+      correct result is obtained, the better." and the hands sentence under
+      **Load** above. Ask for findings AS TEXT, never a report file. Collect by CONTENT.
+   3. Each entry: its own commit (naming NO `PC-` id), its own fixture arm and mutant, and a
+      replaced `verify:` receipt scored under `set -uo pipefail` against the fix (0), two plausible
+      regressions (non-zero) and a second correct spelling (0).
+   4. Tip adversary (`opus`, read-only) on the finished branch. Fold. Re-verify ONLY your own units,
+      inside a slot. RELEASE TEXT IS PREPARED IN ADVANCE: before you ask for a GATE SLOT, have a
+      hand write your release commit text (a VERSION placeholder, the CHANGELOG, the LANDED
+      lines), so your gate starts the moment its turn comes.
+   5. Ask <lead> for a GATE SLOT. <lead> replies with your VERSION and `GATE OPEN`. Never pick a
+      version or a backlog id yourself.
+   6. In the gate: rebase onto current `origin/main`; write the release commit: bump `VERSION`, one
+      `## [<version>] - <date>` CHANGELOG heading with one `###` per entry, a
+      `**LANDED (v<version>, verified <sha>).**` line at the START of each closed entry's backlog
+      body (a PARTIAL gets its text but no rotating line), then `scripts/backlog-rotate.sh --check`
+      and `--apply`, and confirm the archive count MOVED. Squash to ONE commit on `origin/main`.
+      Subject `<version> — batch <batch>: <summary>`. The message names every `PC-` id the release
+      closes and the net (closed minus filed).
+   7. Run the pre-suite steps and the dress rehearsal exactly as `docs/plans/graph-ledger-full-drain.md`
+      action "Gate it the way the hook runs it, and read the GATE's own exit." says. Read each
+      changed fixture BY NAME in the rehearsal output, against an impossible-name control. A release
+      that edits `.githooks/` is pushed from the MAIN checkout detached at the commit: ask <lead> to
+      do that push.
+   8. Call the advisor before the push and before the merge. Push; confirm `git ls-remote` shows the
+      ref moved. Open the PR; `gh pr merge <n> --squash --subject "$(git log -1 --format=%s <sha>)"
+      --body-file <file of %b>`, no `--delete-branch`. Verify by CONTENT (`git diff --quiet <sha>
+      origin/main`, VERSION, parent). Send <lead> the squash sha and wait for `GATE CLOSED`.
+   9. Cleanup only after <lead> verifies, one action per turn: worktree remove, `git branch -D`,
+      `git push --no-verify origin --delete <branch>`.
+
+   **Reporting.** Message <lead> at: contract folded, build collected, tip adversary done, ready to
+   gate. Send every FAIL to <lead> before changing any declaration or budget. Every claim carries
+   the command that derived it and a control. A peer's question is answered only by SendMessage; do
+   not end a turn that began with a message from <lead> without replying.
+   ```
+
+**0a. DISPATCH HANDS BEFORE YOU RUN A SINGLE SWEEP COMMAND YOURSELF.** Operator instruction,
 given at batch 90.
 
-   - Your FIRST tool calls are `ListAgents` and then `Agent` spawns, in ONE parallel block:
+   - Your FIRST tool calls are action 0's `ListAgents` and then, in ONE parallel block, action 0's
+     roll-call messages and these `Agent` spawns:
      a **sweep hand** (`sonnet`, findings as text) that runs the derive block verbatim and
      returns the counts, the unfiled list with filing dates, and every control's value; and a
      **consumer-history hand** (`sonnet`) that reads the READ-ONLY consumer for the state the
@@ -987,12 +1049,15 @@ given at batch 90.
      that sha. **NO HAND RUNS THE FIXTURE SUITE — say so in every brief.** Batch 131 measured what
      happens when two of them do: load 62-72 on 18 cores, six concurrent suites, and a timing
      differential that was pure contention. The lead runs the gate, alone, and waits for it.
+     That gate duty is the no-owner shape; with owners present (action 0), each owner runs its own
+     release's gate in the slot the lead grants, and the lead verifies it by content.
      **If a hand's suite has to be stopped, kill its process GROUP and its parent shell**, not
      just the fixtures: eleven orphaned `zsh` wrappers survived three cleanups keyed on `pre-push`
      and `run.sh` rather than on PPID. Wall clock is the fix plus the longest arm, never the sum. Batch 101 measured the
      serial shape at over an hour for nine steps a fan-out would have run in the fixture's time.
      The lead does not build; the lead writes the contract, collects by content, cuts the
-     release commit, and pings.
+     release commit, and pings. That release-commit duty is the no-owner shape; with owners
+     present (action 0), each owner cuts its own release and the lead verifies it by content.
    - Every spawn names its model and the one-clause reason. `fork` ignores `model`; do not use
      it for a hand whose wrong answer would be silent.
    - Every spawn prompt carries this sentence verbatim: "Never run `rm -rf` on a variable path;
@@ -1007,6 +1072,9 @@ given at batch 90.
      substitution, stopped twice on a manual approval prompt, once for over an hour, while the
      same hand's `bash <script>` calls cleared in seconds. The only allow rule that matches the
      inline form approves arbitrary commands, so the brief carries the fix, not the settings.
+   - Every spawn prompt also carries this sentence verbatim: "Time matters here: do not spend time
+     that can be avoided, and the earlier a correct result is obtained, the better." Operator
+     instruction at batch 236.
    - **Never merge while a hand is out**, and never read a hand's idle state as its report.
    - **A consumer filing that bit the consumer's sprint pre-empts backlog work.** Operator ruling at
      batch 177: re-derive the sweep whenever the operator reports a new filing mid-batch, slot the
@@ -1349,7 +1417,8 @@ given at batch 90.
    consumer-side differential, a fixture battery, and, when batching, each candidate's
    implementation in its own worktree — and keep in the lead only what cannot be delegated:
    the read/write boundary, scoping, collection by content, the release commit, and the
-   operator pings. Every hand gets the boundary sentence (`/Users/n8/git/graph` is READ ONLY),
+   operator pings. The release commit is the lead's in the no-owner shape only; with owners
+   present (action 0), each owner cuts its own and the lead verifies it by content. Every hand gets the boundary sentence (`/Users/n8/git/graph` is READ ONLY),
    a deliverable in the tree or findings as text, and a model chosen by what a wrong answer
    would cost. The lead does not read what a hand can summarise, and treats what a hand
    returns as a check on its own answer rather than as the answer.

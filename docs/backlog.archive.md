@@ -35620,3 +35620,33 @@ Related, not duplicates: archived BL-577 (a `### ` non-finding subsection counte
 
 verify: sh bash -c 'set -uo pipefail; NAME=adversarial-shard-merge; . core/fixtures/adversarial-shard-merge/lib.sh && p_fence_prose "$MERGE" && p_fence_unclosed "$MERGE" && p_fence_tilde "$MERGE" && p_fence_four "$MERGE" && p_fence_sameset "$MERGE"' >/dev/null 2>&1
 
+## BL-675 — the multi-session release train is a standard plan shape: every live plan designates the lead before it dispatches
+
+**FEATURE.** Operator instructions, in their words: "this is the lead session and should be orchestrating, not
+building", and "I want this to be a standard plan shape going forward". A lead that also builds starves scoping,
+allocation, slot scheduling and landing verification, and owners that build alone serialize the work that hands exist
+to parallelize. Filed and closed in the release that carries it.
+
+Four deliverables:
+1. **The plan action.** `docs/plans/graph-ledger-full-drain.md` gains a numbered action `**0. DESIGNATE THE LEAD ...**`
+   ahead of the dispatch action (renamed `0a.`): the `ListAgents` roll call, the lead never builds and owners build
+   only through hands, with the owner rules as a block the lead sends verbatim. The other three live plans each gain a
+   marker action that states the designation itself and cites the drain plan's action-0 heading for the owner rules.
+2. **The standard-shape bullet.** `.claude/rules/plan-shape.md` gains one bullet after P13, carried by P14.
+3. **The mechanism.** `scripts/validate-plan-shape.sh` arm **P14**: a live plan's `Next actions` section must hold a
+   col-0 numbered action carrying `DESIGNATE THE LEAD` whose own window carries `ListAgents`, `never builds` and
+   `through hands`. P13 is re-keyed to the handoff action's window rather than the whole file.
+4. **The fixture.** `core/fixtures/plan-shape/run.sh` pins P14 and the P13 re-key with seeded defects, written by a
+   different hand from the arm.
+
+Carriers: the plan action, the `plan-shape.md` bullet, P14, and the plan-shape fixture.
+
+Receipt: it drives the validator on a mktemp copy of the drain plan with two seeds, (a) the marker moved off its
+numbered line into prose and (b) the marker action reduced to a pointer, and requires both to print P14's error text,
+and the real plan to print none. Until the plan action lands, the real-plan conjunct fails, so the receipt exits
+non-zero (STILL-LIVE) by design; once it lands the receipt exits 0.
+
+**LANDED (v0.831.0, verified eb82cc6e).** Every live plan's Next actions opens with a numbered `DESIGNATE THE LEAD` action, and `scripts/validate-plan-shape.sh` arm P14 binds it, with its window holding ListAgents, never builds, through hands, no edits, the operator's time sentence and the five rule labels. P13 keys on the handoff action's own window. The `core/fixtures/plan-shape` seeds pin both arms, and each of eight validator mutants is killed by its own arm.
+
+verify: sh P=docs/plans/graph-ledger-full-drain.md; V=scripts/validate-plan-shape.sh; t='never DESIGNATE THE LEAD'; T=$(mktemp -d "${TMPDIR:-/tmp}/bl675.XXXXXX") || exit 9; [ -s "$P" ] || exit 9; r=$(bash "$V" "$P" 2>&1); grep -q 'error(s)' <<<"$r" || exit 9; ! grep -qF "$t" <<<"$r" || exit 1; awk '/^[ \t]*```/{f=!f} !f&&/^#+[ \t]/{h=$0;sub(/[ \t].*$/,"",h);l=length(h);if(s&&l<=sl)s=0;if(!s&&l>=2&&l<=3&&tolower($0)~/next actions/){s=1;sl=l}} !m&&s&&/^(\*\*)?[0-9]+[a-z]?\.[ \t]/&&/DESIGNATE THE LEAD/{sub(/^(\*\*)?[0-9]+[a-z]?\.[ \t]+/,"Note: ");m=1} 1' "$P" > "$T/a.md"; cmp -s "$P" "$T/a.md" && exit 9; awk '/^[ \t]*```/{f=!f} !f&&/^#+[ \t]/{h=$0;sub(/[ \t].*$/,"",h);l=length(h);if(s&&l<=sl)s=0;if(!s&&l>=2&&l<=3&&tolower($0)~/next actions/){s=1;sl=l}} sk&&!f&&(/^(\*\*)?[0-9]+[a-z]?\.[ \t]/||/^#/){sk=0} !m&&!f&&s&&/^(\*\*)?[0-9]+[a-z]?\.[ \t]/&&/DESIGNATE THE LEAD/{print "0. DESIGNATE THE LEAD. See the drain plan for the roll call and the owner rules.";m=1;sk=1;next} sk{next} 1' "$P" > "$T/b.md"; cmp -s "$P" "$T/b.md" && exit 9; ra=$(bash "$V" "$T/a.md" 2>&1); rb=$(bash "$V" "$T/b.md" 2>&1); grep -qF "$t" <<<"$ra" && grep -qF "$t" <<<"$rb"
+
