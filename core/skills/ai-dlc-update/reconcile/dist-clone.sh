@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# reconcile-region: exempt — builds the private distribution clone that SKILL.md step 1 reads from; it renders no finding.
 # dist-clone.sh -- the update skill's PRIVATE, main-only, bare distribution clone, which is the
 # `<dist>` every reconcile script reads.
 #
