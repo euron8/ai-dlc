@@ -191,8 +191,9 @@ printf 'REPOINTED\t%s\t%s\t$ %s\n' "$K_PRD" "$K_STORY" "$CMD" > "$WORK/repointed
 rd "$R" "$WORK/repointed-only.tsv"
 rc_is "B4l a record holding only a REPOINTED row -> exit 0" 0 "$RC"
 ck "B4l2 and it says 0 OWED rows" "is present with 0 OWED rows" "$OUT"
-row "$K_PRD" "$CMD" > "$WORK/owed-closed.tsv"
-rd "$R2" "$WORK/owed-closed.tsv"
+# Named without "owed": arm Wa counts every depth-1 *owed* name under $WORK and requires none.
+row "$K_PRD" "$CMD" > "$WORK/closed-row.tsv"
+rd "$R2" "$WORK/closed-row.tsv"
 rc_is "B4m control: an OWED row whose derivation reproduces -> exit 0" 0 "$RC"
 rc_is "B4m2 and it prints nothing, so no UNMEASURED line (the record WAS measured)" 0 "$(printf '%s%s' "$OUT" "$ERR" | wc -c | tr -d ' ')"
 mkdir "$WORK/dir.tsv"
