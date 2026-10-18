@@ -754,14 +754,14 @@ mutx() {                       # mutx <label> <old> <new> [<source>] -> sets MUT
   mv "$m.t" "$m"; MUT="$m"
 }
 # st-a: the signature omits the log, so (s), whose only progress is its log, is refused.
-if mutx st-a 'cur="$(find "$wr" "$lg" -type f -ls' 'cur="$(find "$wr" -type f -ls'; then
+if mutx st-a 'cur="$(find "$wr" "$lg" ${wx:+"$wx"} -type f -ls' 'cur="$(find "$wr" ${wx:+"$wx"} -type f -ls'; then
   T="$WORK/st-a"; st_world "$T" "$MUT" s
   rc="$(st_drive "$T" "$WORK/st-a.out")"; st_alive "$T" s >/dev/null
   st_refused "$WORK/st-a.out" s && ok "st-a without the log in the signature a log-only unit is REFUSED -- the log is what keeps (s) alive" \
                                 || bad "st-a (s) was not refused with the log dropped from the signature (rc=$rc)"
 fi
 # st-w: the signature ignores the watched root, so (w), whose only progress is under it, is refused.
-if mutx st-w 'cur="$(find "$wr" "$lg" -type f -ls' 'cur="$(find "$lg" -type f -ls'; then
+if mutx st-w 'cur="$(find "$wr" "$lg" ${wx:+"$wx"} -type f -ls' 'cur="$(find "$lg" ${wx:+"$wx"} -type f -ls'; then
   T="$WORK/st-w"; st_world "$T" "$MUT" w
   rc="$(st_drive "$T" "$WORK/st-w.out")"; st_alive "$T" w >/dev/null
   st_refused "$WORK/st-w.out" w && ok "st-w without the watched root in the signature a scratch-only unit is REFUSED -- the root is what keeps (w) alive" \
@@ -845,6 +845,62 @@ if mutx st-e '          if ! kill -0 "$$"; then pool_kill "$pid" "$self" "$kp" "
     *) bad "st-e the watcher did not outlive its worker with the liveness check removed ($o)" ;;
   esac
 fi
+# THE IN-POOL TRACE SITE WATCHES THE TRACED FIXTURE'S OWN OUTPUT, AND NOT THE STREAM CAPTURE BESIDE IT.
+# There the unit is the deriver, which writes the fixture's output to `$WORK/<fx>.log` under the trace root
+# (outside the watched root; the pool log gets only say-lines) and its `log stream` capture to
+# `$WORK/<fx>.raw` in the same dir. The extracted worker runs one traced unit through a STUB deriver:
+#   (t)  only `<root>/w/u.log` grows, one line a second for 4 x POOL_STALL polls, then rc 0: ok;
+#   (r)  only `<root>/w/u.raw` grows the same way: REFUSED -- stream reports are not the fixture's progress.
+# SEED VALIDITY: the stub's layout is the real deriver's, read off the deriver itself, or the arm would
+# pass against a path no deriver writes.
+DV=""
+for cand in "$HERE/../../scripts/derive-fixture-readsets.sh" "$HERE/../../scripts/ai-dlc/derive-fixture-readsets.sh"; do
+  [ -f "$cand" ] && { DV="$cand"; break; }
+done
+[ -n "$DV" ] || broken "cannot locate derive-fixture-readsets.sh in either layout from $HERE -- the trace-site arm would stub a layout nobody checked"
+grep -qxF 'WORK="$TRACE_ROOT/w"' "$DV" && grep -qF '>"$WORK/$fx.log" 2>&1 </dev/null' "$DV" && grep -qxF '  raw="$WORK/$fx.raw"' "$DV" \
+  || broken "the deriver no longer writes the fixture's output to \$TRACE_ROOT/w/<fx>.log beside <fx>.raw -- the hook's trace-site watch path and this arm's stub are both stale"
+st_trace() {                   # st_trace <hook> <tag> <t|r> -> prints the unit's verdict, or BROKEN
+  local h="$1" R="$WORK/trace.$2" p
+  mkdir -p "$R/t/tests/fixtures/u" "$R/out/.log" "$R/out/.dur" "$R/out/.pr" "$R/out/.lt" "$R/tmp"
+  awk '/xargs -P "\$FIXTURE_JOBS" -I\{\} bash -c /{f=1;next} /^  . _ \{\} < "\$out\/.order"$/{f=0} f' "$h" > "$R/body.sh"
+  awk '/^POOL_WALK=/{f=1} f{print} f && /^}.$/{exit}' "$h" > "$R/walk.sh"
+  POOL_WALK=""; . "$R/walk.sh"
+  [ -s "$R/body.sh" ] && [ -n "$POOL_WALK" ] || { echo BROKEN; return; }
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$R/t/tests/fixtures/u/run.sh"
+  cat > "$R/dv.sh" <<'FX'
+while [ $# -gt 0 ]; do case "$1" in --in-pool) ip="$2"; shift ;; esac; shift; done
+echo $$ >> "$CSP_TR_PIDS"
+mkdir -p "$ip" "$AI_DLC_READSET_TRACE_ROOT/w"; W="$(cd "$AI_DLC_READSET_TRACE_ROOT/w" && pwd -P)"
+case "$CSP_TR_KIND" in t) f="$W/u.log" ;; *) f="$W/u.raw" ;; esac
+i=0; while [ $i -lt $((4 * CSP_STALL)) ]; do i=$((i + 1)); echo "line $i" >> "$f"; sleep 1; done
+: >> "$W/u.log"; cp "$W/u.log" "$ip/log"; echo 0 > "$ip/rc"
+FX
+  ( cd "$R/t" && TMPDIR="$R/tmp" CSP_TR_PIDS="$R/pids" CSP_TR_KIND="$3" CSP_STALL="$ST" \
+     AI_DLC_FX_OUT="$R/out" AI_DLC_FX_TRACE="$R/tmp/trace" AI_DLC_FX_TRACE_LIST="u" AI_DLC_FX_DV="$R/dv.sh" \
+     POOL_STALL="$ST" POOL_WALK="$POOL_WALK" bash -c "$(cat "$R/body.sh")" _ tests/fixtures/u/ ) >/dev/null 2>&1
+  [ -s "$R/pids" ] && while read -r p; do kill -KILL "$p" 2>/dev/null; done < "$R/pids"
+  [ -s "$R/pids" ] || { echo BROKEN; return; }
+  cat "$R/out/u" 2>/dev/null || echo none
+}
+v="$(st_trace "$HOOK" t t)"
+[ "$v" = ok ] && ok "(t) a traced unit whose only progress is the fixture's output under the trace root is ok, not refused" \
+              || bad "(t) a traced unit progressing only through its output was not ok (verdict $v)"
+v="$(st_trace "$HOOK" r r)"
+[ "$v" = REFUSED ] && ok "(r) a traced unit whose only growth is the stream capture (.raw) is REFUSED -- stream reports are not progress" \
+                   || bad "(r) a traced unit growing only its .raw was not refused (verdict $v) -- a hung traced unit would never be refused"
+# st-x: the trace site does not watch the fixture's output, so (t) is REFUSED -- the defect itself.
+if mutx st-x '; wx="$tr/w/$b.log"' ''; then
+  v="$(st_trace "$MUT" st-x t)"
+  [ "$v" = REFUSED ] && ok "st-x without the fixture's output watched a traced output-only unit is REFUSED -- the watch is what keeps (t) alive" \
+                     || bad "st-x (t) was not refused with the trace-site watch removed (verdict $v)"
+fi
+# st-r: the watch widened to the whole work dir takes in the .raw, so (r) is never refused.
+if mutx st-r 'wx="$tr/w/$b.log"' 'wx="$tr/w"'; then
+  v="$(st_trace "$MUT" st-r r)"
+  [ "$v" = ok ] && ok "st-r with the whole work dir watched a .raw-only unit is never refused -- watching the .log alone is what refuses (r)" \
+                || bad "st-r (r) was still refused with the work dir watched (verdict $v)"
+fi
 unset CSP_PIDS CSP_FIFO CSP_STALL
 
 # ------------------------------------------------------------------- floor ---------
@@ -852,7 +908,7 @@ unset CSP_PIDS CSP_FIFO CSP_STALL
 # emitted from inside a conditional: an assertion that never executed prints nothing,
 # and a short green report reads exactly like a complete one. This is the same
 # property the hook itself now asserts about its own workers, one layer out.
-EXPECTED_ASSERTIONS=44
+EXPECTED_ASSERTIONS=48
 if [ "$asserts" -ne "$EXPECTED_ASSERTIONS" ]; then
   printf '  FAIL  %s assertions ran, %s expected — an arm did not execute, and a short green report reads exactly like a complete one\n' \
     "$asserts" "$EXPECTED_ASSERTIONS"

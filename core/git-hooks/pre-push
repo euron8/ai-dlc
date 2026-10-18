@@ -369,6 +369,13 @@ fi
 #   - the watched root's limit: 77 of 307 fixture run.sh files use a bare `mktemp -d`, and `mktemp -t`
 #     likewise, which on macOS ignore TMPDIR; their scratch writes are NOT seen. A unit whose only work
 #     is silent computation, or writes outside the root, is refused, by design.
+# AT THE IN-POOL TRACE SITE A THIRD PATH IS WATCHED, `wx`: the traced fixture's own output file, which the
+# deriver writes as `$WORK/<fx>.log` with WORK="$AI_DLC_READSET_TRACE_ROOT/w". That trace root lives under
+# the hook's TMPDIR, outside the watched root, and the pool log there gets only the deriver's say-lines, so
+# without `wx` a traced fixture whose only progress is output was refused where its plain run was ok. ONLY
+# the .log: the same dir's `<fx>.raw` is the `log stream` capture of the fixture's sandbox REPORTS (one per
+# file operation under the tree, plus stream notices), so a hang that stats one file a second would count
+# as progress forever. `wx` is empty at every other site.
 # On a refusal the pool kills every process in the unit's tree and every group found in it -- the tree
 # is walked from the recorded pid by parent link AND by every process group in it, because units start
 # their own groups -- by recorded id, never by pattern. The verdict is REFUSED: no recorded duration, no
@@ -391,7 +398,9 @@ POOL_REFUSED_ONLY=0
 # unit's recorded pid, `self` the worker's own group (never walked, never signalled: a unit whose `set -m`
 # did not take is still walked by parent link, and the hook's own group is never killed), `groups` the
 # groups the last poll saw (so a grandchild reparented to init stays reachable through its group), `known`
-# the pids the last poll saw. A SAVED GROUP IS TAKEN ONLY WHILE IT STILL HOLDS A KNOWN PID: a group whose
+# the pids the last poll saw. AN EMPTY `self` (its `ps` failed) WALKS NOTHING: pool_kill then kills the
+# recorded pid alone, because `pg[i] != self` excludes no group and a unit whose `set -m` also failed
+# shares the push's foreground group. A SAVED GROUP IS TAKEN ONLY WHILE IT STILL HOLDS A KNOWN PID: a group whose
 # members are all gone may have a reused id naming an unrelated process, and it is never walked or killed.
 # Output is one line `<S|U>|<signature>|<live pids>|<live groups>`; U means the root row was not visible.
 POOL_WALK='BEGIN { n = split(groups, g0, " "); for (i = 1; i <= n; i++) SG[g0[i]] = 1
@@ -2037,10 +2046,11 @@ run_fixtures() {
   PREPUSH_POOL_DEPTH="$((POOL_DEPTH_IN + 1))" AI_DLC_FX_OUT="$out" AI_DLC_FX_TRACE="$PT_ROOT" AI_DLC_FX_TRACE_LIST="$PT_LIST" AI_DLC_FX_DV="$PT_DV" \
   POOL_STALL="$POOL_STALL" POOL_WALK="$POOL_WALK" \
     xargs -P "$FIXTURE_JOBS" -I{} bash -c '
-    d="$1"; b="$(basename "$d")"; tp=""; pr="$AI_DLC_FX_OUT/.pr/$b"
+    d="$1"; b="$(basename "$d")"; tp=""; wx=""; pr="$AI_DLC_FX_OUT/.pr/$b"
     pool_walk() { ps -A -o pid=,ppid=,pgid=,stat=,time= 2>/dev/null | awk -v root="$1" -v self="$2" -v groups="$3" -v known="$4" "$POOL_WALK"; }
     pool_kill() {
       local w ws wsig wlp wlg p
+      [ -n "$2" ] || { kill -KILL "$1"; return 0; }
       w="$(pool_walk "$1" "$2" "$4" "$3")"
       IFS="|" read -r ws wsig wlp wlg <<< "$w"
       for p in $wlp; do kill -STOP "$p"; done
@@ -2075,7 +2085,7 @@ run_fixtures() {
           w="$(pool_walk "$pid" "$self" "$kg" "$kp")"
           IFS="|" read -r ws wsig wlp wlg <<< "$w"
           [ -n "$wlp" ] && { kp="$wlp"; kg="$wlg"; printf "%s\n%s\n" "$kp" "$kg" > "$pr.g"; }
-          cur="$(find "$wr" "$lg" -type f -ls 2>/dev/null | awk "{ s += \$7 } END { print s + 0 }")"
+          cur="$(find "$wr" "$lg" ${wx:+"$wx"} -type f -ls 2>/dev/null | awk "{ s += \$7 } END { print s + 0 }")"
           if [ "$cur" = "$sg" ]; then still=$((still + 1)); else still=0; sg="$cur"; fi
           [ "$still" -gt "$max" ] && { max=$still; printf "%s\n" "$max" > "$pr.st"; }
           if [ "$still" -ge "$POOL_STALL" ]; then
@@ -2109,8 +2119,8 @@ run_fixtures() {
       elif pool_run "$AI_DLC_FX_OUT/.log/$b" bash "$hr" --root "$PWD" "$b"; then printf ok   > "$AI_DLC_FX_OUT/$b"
       else                                                                    printf FAIL > "$AI_DLC_FX_OUT/$b"; fi
     elif [ -n "${AI_DLC_FX_TRACE:-}" ] && case " $AI_DLC_FX_TRACE_LIST " in *" $b "*) true ;; *) false ;; esac; then
-      tp="$AI_DLC_FX_OUT/.lt/$b"; tr="$AI_DLC_FX_TRACE.$b"
-      AI_DLC_READSET_TRACE_ROOT="$tr" pool_run "$tp.drv" bash "$AI_DLC_FX_DV" --list "$b" --tracer sandbox --in-pool "$tp"
+      tp="$AI_DLC_FX_OUT/.lt/$b"; tr="$AI_DLC_FX_TRACE.$b"; wx="$tr/w/$b.log"
+      AI_DLC_READSET_TRACE_ROOT="$tr" pool_run "$tp.drv" bash "$AI_DLC_FX_DV" --list "$b" --tracer sandbox --in-pool "$tp"; wx=""
       if [ -f "$pr.refused" ]; then :
       elif [ -f "$tp/rc" ] && [ ! -f "$tp/trip" ]; then
         cp "$tp/log" "$AI_DLC_FX_OUT/.log/$b"

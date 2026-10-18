@@ -1,3 +1,5 @@
 # consumer-suite-pool copies the pre-push hook into synthetic repositories and drives it; the shared preamble is sourced.
 !core/git-hooks/pre-push
 core/fixtures/lib/
+# The deriver's output layout is read to validate the trace-site arm's stub.
+core/scripts/derive-fixture-readsets.sh
