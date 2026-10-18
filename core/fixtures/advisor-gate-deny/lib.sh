@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # advisor-gate-deny/lib.sh — the worlds, the cells and the scorer, sourced by the shipped
-# fixture beside it and by its distribution-only mutation battery (advisor-gate-deny-mutants*).
+# fixture beside it (a retired mutation battery sourced it too).
 # One copy, so a mutant is scored over the very cells the shipped arms run.
 #
 # THE DEFECT (BL-459). SKILL.md Rule 32 and every role file name advisor touchpoints, and nothing

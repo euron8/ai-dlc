@@ -1,8 +1,0 @@
-This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
-
-It is the MUTATION BATTERY behind the shipped story-evidence-scaffold fixture: it edits copies of
-core's own validate-handoff-evidence.sh and sprint-status.sh in temp trees and scores 37 mutants against
-seeded git worlds, so every verdict is a question about whether THIS repository's validator still
-discriminates. On a consumer it would re-prove the distribution's own source on every suite run, and
-the shipped fixture keeps the prose arms, the control vector and the in-place arm that a consumer can
-act on. It reads the worlds from the shipped fixture's world.sh as a sibling.

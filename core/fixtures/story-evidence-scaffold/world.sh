@@ -1,5 +1,4 @@
-# Shared worlds for story-evidence-scaffold and its mutation battery (story-evidence-scaffold-mutants and
-# its shards). SOURCED, never run: it defines functions and tables and prints nothing.
+# Shared worlds for story-evidence-scaffold (and, formerly, its mutation battery). SOURCED, never run: it defines functions and tables and prints nothing.
 #
 # WHY THIS FILE EXISTS. The shipped fixture asserts the validator against a control vector and in place;
 # the battery (dist-only) asserts that each mutated COPY of the validator moves exactly its own cases.

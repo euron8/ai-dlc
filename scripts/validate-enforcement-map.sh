@@ -260,7 +260,7 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #
 # 7061 -> 7073 at v0.428.0, and it is a CORPUS raise for the third time running: no arm here
 # gained a loop. `core/fixtures/fanout-untracked-corpus/` and
-# `core/fixtures/gate-repair-record-mutants/` were added for the sprint-306 candidate set, and
+# a since-retired gate-repair-record battery were added for the sprint-306 candidate set, and
 # this script's per-fixture passes cost forks per DIRECTORY. Isolated by differential inside this
 # repo, the two directories moved aside and restored, with the sides asserted to differ before
 # the reading was taken: 7067 with them present, 7054 with them moved -- 13 forks for two
@@ -273,7 +273,7 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 # 7073 -> 7114 at v0.429.0, and this is the FIRST raise in four that is not purely a corpus
 # raise: one arm was added. Both halves were measured separately, each by a differential inside
 # this repo with the sides asserted to differ before the reading was taken.
-#   THREE FIXTURE DIRECTORIES -- `context-provenance`, `context-provenance-mutants` and
+#   THREE FIXTURE DIRECTORIES -- `context-provenance`, its since-retired mutation battery and
 #   `wait-beat-liveness`, moved aside together and restored: 7108 present, 7091 moved --
 #   17 forks for three directories, which is the per-directory cost the three raises above
 #   already measured.
@@ -609,7 +609,7 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   on both sides: base 3275-3275, tip 3281-3283, so +8, each +1 at a per-file site. Seven are
 #   `reconcile/derivation-differential.sh` joining the populations I21 (awk per reconcile
 #   script), I105 (three sites over reconcile scripts) and I83/I84 (three sites over shipped core
-#   `.sh`); one is `derivation-differential-mutants` joining the `.dist-only` census. HIGH
+#   `.sh`); one is the since-retired `derivation-differential` battery joining the `.dist-only` census. HIGH
 #   reading 3283 plus the usual 6.
 #
 #   RAISED TO 3299 FOR CHECK 17's TWO NEW BULLETS AND FOUR NEW FIXTURE DIRECTORIES, AFTER A CUT.
@@ -859,7 +859,7 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   (0.805.0) and tip d38817a8 (0.806.0), in ONE clean detached worktree at one path, interleaved
 #   B T B T B T: base 3404 3404 3404, tip 3408 3408 3408, spread 0 against a delta of +4. By arm,
 #   128 arms: I8 104 -> 108 and no other arm moved, in all three pairs. The new directories are
-#   story-evidence-scaffold-mutants and its shards -b, -c and -d, each `.dist-only`. HIGH tip
+#   the since-retired story-evidence-scaffold battery and its three shards, each `.dist-only`. HIGH tip
 #   reading 3408 plus the same 4.
 #
 #   RAISED TO 3424 FOR ONE NEW SCRIPT AND ONE NEW .dist-only FIXTURE DIRECTORY. `fork-profile.sh
@@ -867,14 +867,14 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   at one path, interleaved B T B T B T: base 3405 3405 3405, tip 3420 3420 3420, spread 0 against a
 #   delta of +15. By arm, 129 arms on both sides, identical in all three pairs: I75 +10 (one more
 #   root-consulting subject, the same +10 per script 0.800.0 measured), I84 +2, I83 +1, I9 +1 (the
-#   per-file walks), I8 +1 (owed-derivations-mutants is `.dist-only`); no other arm moved. The new
+#   per-file walks), I8 +1 (the since-retired owed-derivations battery was `.dist-only`); no other arm moved. The new
 #   script is core/scripts/check-owed-derivations.sh. HIGH tip reading 3420 plus the same 4.
 #
 #   RAISED TO 3433 FOR FIVE NEW .dist-only FIXTURE DIRECTORIES. `fork-profile.sh --section by-arm`,
 #   ONE base reading at 33361d56 (0.812.0) and ONE tip reading at 7cfe66ad (BL-536 and BL-540), in ONE
 #   clean detached worktree at one path: base 3424, tip 3429, so +5. By arm, 129 arms on both sides:
-#   I8 113 -> 118 and no other arm moved. The new directories are adversarial-shard-merge-mutants-b,
-#   -c, -d, -e and -f, each `.dist-only`. Tip reading 3429 plus the same 4.
+#   I8 113 -> 118 and no other arm moved. The new directories are five shards of the since-retired adversarial-shard-merge
+#   battery, each `.dist-only`. Tip reading 3429 plus the same 4.
 #
 #   RAISED TO 3446 FOR ONE NEW SCRIPT AND ONE NEW SHIPPING FIXTURE DIRECTORY. `fork-profile.sh
 #   --stable --section by-arm`, base b9f9fe06 (0.814.0) and tip 35569940 ((a)+(b)), in ONE clean

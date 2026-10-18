@@ -967,7 +967,7 @@ CV_OKLINE="VALIDATE-GATE-ADJUDICATION: COVERAGE-OK"
 # and its sentence and exits immediately, so everything it emits is the tail of stderr from
 # that header on — and anything the carve-out's sibling wrote sits ABOVE it. C3-bind compares
 # the two modes' TEXT for one defect, and comparing whole streams couples it to whether the
-# sibling was asked at all: measured, `gate-adjudication-mutants`' m13 (the caller asks the
+# sibling was asked at all: measured, the retired gate-adjudication battery's m13 (the caller asks the
 # sibling on a verdict with no FAIL) put a diagnostic on the full mode's stderr and only the
 # full mode's, and C3-bind joined m13's kill set for a reason that has nothing to do with the
 # coverage join. Keyed on the emitter, the two modes are compared and the sibling is not.

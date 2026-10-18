@@ -3,7 +3,7 @@
 # owed-derivations — assert a derivation an operator LEAVES broken stays owed until it is re-pointed.
 #
 # Usage: run.sh [<check-owed-derivations.sh> [<derivation-differential.sh>]]
-#   The arguments exist for `owed-derivations-mutants`, which drives this file against mutated copies.
+#   The arguments existed for a retired mutation battery, which drove this file against mutated copies.
 # Exit: 0 every assertion holds | 1 something regressed | 2 the harness could not run.
 #
 # TWO SUBJECTS. The WRITER is reconcile/derivation-differential.sh --record-owed; the READER is
@@ -529,7 +529,7 @@ rd "$C" "$OWED"
 rc_is "Wh once the tree reproduces the derivation again the writer's rows read closed -> exit 0" 0 "$RC"
 
 # ---- G: the callers (rulebook prose) --------------------------------------------------------------
-# The prose-presence arms for the three callers live in owed-derivations-mutants (dist-only): on a
+# The prose-presence arms for the three callers lived in a retired dist-only mutation battery: on a
 # consumer at update step 2 the rulebook is still the old one, so a shipping arm grepping it would go red.
 # GATE ARM, executed: the gate site passes iff the reader exits 0. Open row -> refuse; control -> pass.
 gate_site() { rd "$1" "$2"; [ "$RC" = 0 ] && echo PASS || echo REFUSE; }

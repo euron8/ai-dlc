@@ -83,8 +83,8 @@ never looked. All three channels (`AI_DLC_ESCALATIONS`, `AI_DLC_GATE_METRICS`,
 `docs/escalations/pending.md` holds real in-force suppressions, and a case that inherits the
 default is adjudicated against whatever that consumer suppressed this week.
 
-`core/fixtures/gate-adjudication-mutants/` scores these cases against thirteen wrong fixes and
-an unmutated control, and asserts for each one exactly which cases go red.
+A retired mutation battery scored these cases against thirteen wrong fixes and
+an unmutated control, and asserted for each one exactly which cases go red.
 
 ## The `--coverage` mode (C0–C8, CV-M0/MA/MB/MC)
 
@@ -107,8 +107,7 @@ adjudicator self-checks against a rule the lead does not apply.
   string does not compare equal). One body, two callers, asserted as bytes — two modes that
   print different text for one defect would both still exit 1, and nothing else here would
   notice. The comparison is keyed on the `block()` emission and not the whole stream, because
-  the carve-out's sibling writes above it: whole-stream, this arm joined `m13`'s kill set in
-  `gate-adjudication-mutants` for a reason unrelated to the coverage join.
+  the carve-out's sibling writes above it: whole-stream, this arm joined the kill set of the retired battery's `m13` for a reason unrelated to the coverage join.
 - **C4** an id outside the escalated set → exit 1. The other direction of the join; a mode
   asking only "is every expected id present" lets the adjudicator invent a check.
 - **C5** an absent path → exit 2 and a DIRECTORY → exit 2, with the real verdict in the same

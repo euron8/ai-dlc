@@ -1,6 +1,0 @@
-This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
-
-It is a mutation battery behind a shipped fixture: the battery behind `content-seal`. It edits
-copies of the distribution's own `content-seal.sh`, `ai-dlc-content-seal.sh` and the three join
-readers that call them, which a consumer is denied editing, and runs the shipped fixture against
-each copy. The consumer keeps every behavioural arm and loses only the proof that each can fail.

@@ -1,7 +1,7 @@
 # self-update-fixture-log/lib.sh -- the resolution, the seeded distribution and consumer trees,
 # the per-part worlds and the log readers of self-update-fixture-log, sourced by that fixture's
-# run.sh (the behavioural arms, shipped) and by self-update-fixture-log-mutants/run.sh (the
-# mutation battery, distribution-only). ONE copy, so every mutant is driven against the very
+# run.sh (the behavioural arms, shipped) (the retired mutation battery sourced it too).
+# ONE copy, so every arm is driven against the very
 # worlds, and read by the very readers, that the shipped arms use -- never a second implementation.
 #
 # The caller sets NAME (the shipped fixture also sets SUFL_RUNNER_ARG from its own $1) and sources

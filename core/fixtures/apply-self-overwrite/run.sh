@@ -3,9 +3,8 @@
 # apply-self-overwrite/run.sh — prove the resolution driver survives replacing ITSELF, and that
 # a failed fetch cannot leave an empty core file where the old one was.
 #
-# The behavioural arms only. The mutation battery that proves each of them can fail is
-# `apply-self-overwrite-mutants`, distribution-only, which sources the SAME worlds and predicates
-# from `lib.sh` beside this file. The battery mutates copies of core's own `reconcile/apply.sh`,
+# The behavioural arms only. The mutation battery that once proved each of them can fail
+# has been retired; the worlds and predicates live in `lib.sh` beside this file. The battery mutates copies of core's own `reconcile/apply.sh`,
 # which a consumer cannot edit, so the consumer keeps every correctness arm and loses only that proof.
 #
 # THE DEFECT, reported by the consumer and reproduced at ground truth before anything was fixed.

@@ -1,7 +1,6 @@
 # review-shard-merge/lib.sh -- the resolution, seeded repositories, worlds and predicates of
-# review-shard-merge, sourced by that fixture's run.sh (the behavioural arms, shipped) and by
-# review-shard-merge-mutants/run.sh (the mutation battery, distribution-only). ONE copy, so the
-# battery scores the predicates the shipped arms run and never a second implementation of them.
+# review-shard-merge, sourced by that fixture's run.sh (the behavioural arms, shipped) (the retired mutation battery sourced it too).
+# ONE copy, so the predicates the shipped arms run are never restated.
 #
 # The caller sets NAME and sources this file; nothing else. This file sets the shell options,
 # scrubs AI_DLC_*, owns WORK and the ONE EXIT trap that removes it -- no caller sets a second.

@@ -20,6 +20,73 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.842.0] - 2026-10-18
+
+Batch 236, cluster MUTANTS (owner ai-dlc-5e, lead ai-dlc-c8). Advances BL-583 (phase 2). Closes BL-646 and BL-672, whose subject this release retires. Closes no `PC-` id. Files none. Net for this release: 2 closed, 0 filed.
+
+### Every mutation battery is retired: none has a catch on record (BL-583)
+
+All 56 mutation-battery units, in 24 batteries, are removed from `core/fixtures/`. The operator's step-value ruling
+decides it: a battery stays only on evidence that it once went red in a named gate run because a real fixture arm had
+stopped firing. A battery's kill set is its design, not evidence of value. A red that was kill-set drift (a mutant
+re-anchored after a subject edit, an expected set re-declared, a scorer timeout, the battery's own bug) is a
+maintenance cost, not a catch.
+
+The census read every record on `origin/main` (`0b7a7a432`) that names a battery: `git log --grep`, `git log -S` on this
+file, this file, `docs/backlog.md` and `docs/backlog.archive.md`. Three read-only hands covered 8 batteries each. A
+mechanical sweep then checked every line naming a battery beside a red or catch word: 11 lines, all classified below.
+Its control found the one known red, BL-181's "152 FAIL"; an impossible battery name returned 0 everywhere.
+
+| Battery | Units | Verdict | Record |
+|---|---|---|---|
+| `adversarial-shard-merge-mutants` | 6 | removed | no catch; drift: `[MW]` probe `pst` unbound, scorer TIMEOUT at 900 s |
+| `advisor-gate-deny-mutants` | 5 | removed | no catch; drift: three declared kill sets corrected (0.797.0) |
+| `apply-self-overwrite-mutants` | 1 | removed | no catch |
+| `apply-setup-sited-merge-mutants` | 1 | removed | no catch, no record at all |
+| `content-seal-mutants` | 1 | removed | no catch; drift: `EXP_SA`/`EXP_SP` re-measured |
+| `context-provenance-mutants` | 1 | removed | no catch |
+| `derivation-capture-mutants` | 4 | removed | no catch |
+| `derivation-differential-mutants` | 1 | removed | no catch; drift: its own subset check made an equality (BL-602) |
+| `fold-architect-ledger-join-mutants` | 4 | removed | no catch; drift: refused at the 300-poll clamp |
+| `gate-adjudication-mutants` | 5 | removed | one red, not a battery catch: BL-181 (0.512.0) was a C-locale byte bug in the SUBJECT, `validate-suppression-lifetime.sh:252`; the shipping fixture `gate-remediation-deny` was red on it too, and a fixture hand found it, not a gate run |
+| `gate-repair-record-mutants` | 1 | removed | no catch |
+| `ledger-reverify-shard-mutants` | 1 | removed | no catch |
+| `owed-derivations-mutants` | 1 | removed | no catch; drift: M11/M23 re-anchored (0.819.0) |
+| `pause-question-in-prose-mutants` | 1 | removed | no catch |
+| `pause-write-allowlist-mutants` | 1 | removed | no catch |
+| `readset-skip-digest-mutants` | 5 | removed | no catch; drift: `-e`'s `filetoo` anchored on a respelled line (0.767.0) |
+| `remediator-shard-join-mutants` | 5 | removed | no catch; drift: scorer TIMEOUT at 900 s |
+| `review-shard-merge-mutants` | 3 | removed | no catch; drift: BL-485 shard declaration, scorer TIMEOUT |
+| `route-read-required-mutants` | 1 | removed | no catch; drift: a mutant re-keyed |
+| `self-update-fixture-log-mutants` | 1 | removed | no catch; drift: watchdog stub |
+| `story-evidence-scaffold-mutants` | 4 | removed | no catch |
+| `story-fields-derive-mutants` | 1 | removed | no catch; "one red against the pre-fix tool" describes its design, not a gate red |
+| `trunk-audit-mutants` | 1 | removed | no catch; drift: M13 locale range bug, M2 re-anchored |
+| `updater-session-signals-mutants` | 1 | removed | no catch; drift: a mutant re-keyed |
+
+No other battery was found. A detector keyed on a battery's shape (it drives a sibling fixture's arms and scores kills)
+matches only 46 of the 56 named units, so it can miss one. It found 10 more candidates, all of them subject fixtures
+carrying inline mutant arms or a dead-predicate check, and they stay.
+
+**What it removes.** In the loaded-cost record `.git/ai-dlc-fixture-durations` of the main checkout (312 rows, last
+written 15:20 EDT this day), the 56 units account for 30380 of 54724 fixture-seconds, 56%, about 8.4 fixture-hours. The
+suite's pole moves from `adversarial-shard-merge-mutants` at 2214 s (its shards `-b` to `-e` sit at 2185 to 2205 s) to
+`document-partition` at 732 s, the longest non-battery row. Those are loaded costs from the pool, not solo timings, and a
+content-keyed push runs only part of the suite. No dollar figure was measured.
+
+The removal leaves no reader behind. Every unit was `.dist-only`, so no install, uninstall or manifest list changes. No
+live `verify:` receipt names a battery (0 of 49, against 22 prose lines that do). No validator, hook or roster names one
+in code. The once-only and declaration-equality arms lived inside the batteries and go with them. The read-set map loses
+the 321 rows and 4 digest lines of the five batteries that had any. About 30 comments in the paired shipped fixtures,
+`readset-skip`, `validate-enforcement-map.sh`, `.githooks/pre-push` and `fork-budget.txt` no longer point at a deleted
+directory. `fork-budget.txt` stays at 3465: the profile reads 3402 after the removal, inside both bounds.
+`.claude/rules/fixture-mutants.md` keeps its reader, since `core/fixtures/**` still matches 257 fixture directories.
+
+BL-583 advances and stays open: the non-mutant poles have not been judged on value, and no per-gate wall clock or dollar
+figure has been measured. BL-646 (one `adversarial-shard-merge-mutants` scorer's cost) and BL-672 (that battery's growth)
+close with their subject retired. BL-672's one cost outside the battery, the seal check per merge call, was measured at
++0.045 CPU-s per merge, about 7-11%, which is negligible without the battery's multiplier.
+
 ## [0.834.0] - 2026-10-18
 
 Batch 236, PULLCOST release (owned and gated by ai-dlc-77 [e29316], lead ai-dlc-c8). Closes BL-679 and files

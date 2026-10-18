@@ -1,7 +1,6 @@
 # apply-setup-sited-merge/lib.sh -- the resolution, worlds, drives and predicates of
-# apply-setup-sited-merge, sourced by that fixture's run.sh (the behavioural arms, shipped) and by
-# apply-setup-sited-merge-mutants/run.sh (the mutation battery, distribution-only). ONE copy, so the
-# battery scores its mutants with the predicates the shipped arms run, never a second copy of them.
+# apply-setup-sited-merge, sourced by that fixture's run.sh (the behavioural arms, shipped) (the retired mutation battery sourced it too).
+# ONE copy, so the predicates the shipped arms run are never restated.
 #
 # The caller sources the preamble and scrubs AI_DLC_* itself (I10), sets NAME, sources this file,
 # runs its own subject probe, and then calls lib_init, which owns WORK and the ONE EXIT trap that

@@ -133,6 +133,8 @@ Scheduled in batch 235 for a later release (scope ruling: the boundary is the re
 
 **Item (b), batch 236.** `gate-adjudication-mutants` (M0) and `readset-skip-digest-mutants` (unmutated and impossible-anchor controls) now run their controls in shard `a` only, bound by a J2 once-only arm with a two-direction self-probe, and a D14 arm every shard runs holds each shard's `inputs.decl`/`tools.decl` equal to `a`'s apart from the driver lines (also added to `fold-architect-ledger-join-mutants`). `advisor-gate-deny-mutants` keeps its per-shard control because its shards' declarations differ (`-d` adds `od` and `tee`; `-b`/`-e` declare sibling directories whole), and `ledger-reverify-shard-mutants` keeps its C-a and C-b controls because it is one unit whose kill list is 3 in `a` and 1 in `b`, so `b`'s control is the only one for its mutants. Item (b)'s receipt: `for f in gate-adjudication-mutants readset-skip-digest-mutants; do case $f in gate*) r='/^# M0 /,/^# m1 /' ;; *) r='/^NCTL=0$/,/^# J2: both/' ;; esac; t=$(mktemp) || exit 9; sed -n "${r}p" core/fixtures/$f/run.sh | sed '$d' > $t; [ -s $t ] || exit 9; S=$(grep -m1 '^SHARDS=' core/fixtures/$f/run.sh | cut -d'"' -f2); [ -n "$S" ] || exit 9; first=${S%% *}; for s in $S; do c=$(GROUP=$s C=0; score() { C=$((C+1)); }; dg_all() { C=$((C+1)); }; broken() { :; }; ok() { :; }; bad() { :; }; DG_WORLDS=; POOL=/dev/null; FX=x; HOOK=h; ROOT=r; . $t >/dev/null 2>&1; echo $C); w=0; [ "$s" = "$first" ] && w=1; [ "$c" = "$w" ] || { rm -f $t; exit 1; }; done; rm -f $t; done`. The entry stays open for the per-gate wall clock and dollars.
 
+**Phase 2, v0.842.0.** Every mutation battery is retired: 56 units in 24 batteries, removed because none has a catch on record. A census of every record on `origin/main` that names a battery found only drift reds (re-anchored mutants, re-declared kill sets, scorer timeouts, the battery's own bugs) and one red that was not the battery's: BL-181, a subject locale bug the shipping fixture `gate-remediation-deny` also caught. In the main checkout's loaded-cost record the 56 units were 30380 of 54724 fixture-seconds (56%), and the pole moves from `adversarial-shard-merge-mutants` at 2214 s to `document-partition` at 732 s. The CHANGELOG for 0.842.0 carries the per-battery table. Items (b) and (c) above described those batteries' controls and shards; they no longer exist. Open: the non-mutant poles (`document-partition`, `enforcement-map-sites`, `apply-restamp-worklist-c` and the rest of the top of the record) have not been judged on value, and no per-gate wall clock or dollar figure has been measured.
+
 verify: manual
 
 ## BL-584 — two fixtures cannot be traced and have no `inputs.decl`, so they run on every push
@@ -421,22 +423,6 @@ Related: BL-585 (which introduced the self-check), and the lead's process rule t
 
 verify: manual
 
-## BL-646 — one adversarial-shard-merge mutant scorer costs about 140 CPU-seconds against the 22 its header designs for, so under the gate's pool every scorer, the control included, times out
-
-**DEFECT.** Measured by ai-dlc-6f and filed on lead ai-dlc-71's instruction; intake re-derived the static half read-only at origin/main `fd09acbf` and read 6f's retained capture. Subject: `core/fixtures/adversarial-shard-merge-mutants/run.sh` and its shards.
-- The header (`:40-41`) designs for "One scoring is |P_ALL| predicates (32 since the cross groups), about 22 CPU-seconds solo at 26", and sizes `SCORER_BOUND=900` (`:104`) as "roughly 10x" a 4x-loaded figure derived from it.
-- Solo, measured by 6f at `b235-bl536-g1` `916de740` (which shards the battery into `-mutants` and `-mutants-b`..`-f`), one unit at a time through `hermetic-run.sh` at load 3.8-5.4: shard c, 10 scorers, user 485.08 + sys 913.93 = 1399 CPU-s, about 140 per scorer; shard a, 8 scorers, 417 + 797 = 1214, about 152 per scorer. Sys is about two-thirds of every shard (b 800/416, d 854/450, e 817/413, f 533/286, sys/user).
-- Loaded, in 6f's dress-rehearsal push of `58864282` (pool width 12, 91 units, load peak 34): all 6 shards red. Every scorer, the unmutated MX0 control included, read "TIMEOUT -- the scorer ran past 900s and was killed", while MR read "N scorers dispatched, N recorded, N completed". Intake read the retained capture `.git/ai-dlc-fixture-failures.20261017T050356Z.60793`: 45 TIMEOUT lines, 6 of them MX0, against 6 "scorers dispatched" lines (control).
-- On main the unsharded battery is the suite pole: `adversarial-shard-merge-mutants 1629` is the top of `.git/ai-dlc-fixture-durations` (next: `remediator-shard-join-mutants-d 1164`).
-
-NOT measured, and available only from a profiled scorer run, which needs a lead slot: where the sys time goes (fork and exec, the sandbox copy, or hook re-invocation per predicate), and how much of the 22 to 140 growth is main's own predicates versus the TM/RM predicates `916de740` adds. Main's battery has not been run solo.
-
-Owed: profile one scorer in a slot, then cut the per-scorer cost to the scale the header designs for (or restate the design figure from a measurement and re-size the bound from it). Receipt: one scorer's measured CPU-seconds sits within the header's stated figure, and the unmutated control completes under the gate's pool.
-
-Related: BL-592 (the wall-clock bound killing a control, the verdict shape; c8's SCORER_IDLE change addresses it). This entry is the cost itself.
-
-verify: manual
-
 ## BL-647 — `/bin/bash` 3.2 closes a multi-line `$( … )` early at a bare `case` pattern's `)` or at a lone apostrophe in a comment, and `bash -n` accepts both
 
 **DEFECT.** Found by ai-dlc-6f and filed on lead ai-dlc-71's instruction; intake reproduced both forms under `/bin/bash` 3.2.57(1)-release, standalone, with `set -u`. Tool-hazards class.
@@ -573,26 +559,6 @@ Graph's 988 shards carry 0 commented count lines, so writers strip in practice. 
 Fixed here by prose: both region instructions tell the shard to delete each trailing ` #` comment, and each sentence has a `process-rule-pins` row (`elic-header-strip`, `adv-header-strip`).
 
 Residual: the root fix is one comment-strip in the merge's own reader, `merge-adversarial-shards.sh` ~:371-374, after which the two prose sentences are redundant.
-
-verify: manual
-
-## BL-672 — the adversarial-shard merge's mutant battery grew by a third at 0.824.0, plausibly one seal-check subprocess per merge call
-
-**DEFECT (efficiency).** Measured at 0.824.0's dress rehearsal, a hooked push of the release tree (the commit later squashed as a6e29a7e), load 23-28: the suite pole
-`adversarial-shard-merge-mutants` ran 2246s loaded, against 1681s recorded before that run, which is +565s, about a
-third. The whole push took 2893s. The cost is a loaded figure and must not be compared with a solo one.
-
-Hypothesis, unmeasured: 0.824.0 (BL-530) made `merge-adversarial-shards.sh` run a `bash content-seal.sh --check`
-subprocess on every merge call, and the battery runs the merge once per mutant copy per arm, so the subprocess cost is
-multiplied across the whole battery. If so, this is the CLAUDE.md case "a change to a validator the pole invokes is a
-change to the suite's wall clock", raised by the change that introduced it.
-
-Owed, in a slot with nothing else on the box (a pole timing):
-1. Per-merge-call CPU-seconds at e91b4d86 against 0.824.0. Take them in clean worktrees at the same path, with
-   interleaved reps, and a spread small enough to resolve the effect.
-2. Ablate the seal call at the tip and difference it.
-Then choose the fix by measurement: for example one `--check` over the whole input set per merge rather than one per
-file, if that is the shape. If the seal call is not the cost, say what is.
 
 verify: manual
 

@@ -25,7 +25,7 @@
 # after-the-one-shot dispatch of the wrong role. A seeded world written by hand alone found none
 # of batch 145's discriminating cases; the epoch row here is not the subject (S313 has 106 rows).
 #
-# THE MUTATION BATTERY IS `fold-architect-ledger-join-mutants`, distribution-only. It edits
+# THE MUTATION BATTERY HAS BEEN RETIRED. It edited
 # copies of core's sources and requires each edit to redden exactly the arms named for it here.
 set -uo pipefail
 

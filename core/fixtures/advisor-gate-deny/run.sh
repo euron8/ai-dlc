@@ -6,9 +6,8 @@
 # This fixture SHIPS and runs two passes: the shipped hook must fail no arm, and an unmutated copy
 # of it in the mutant directory, beside a copy of its provenance sibling, must fail none either.
 # The second pass is the battery's control, run here too so a consumer sees the harness work from
-# a copied hook. The mutation battery that proves each arm can fail lives in the distribution-only
-# directories advisor-gate-deny-mutants (shard a) and advisor-gate-deny-mutants-<x> beside it: it
-# mutates core's own hook, which a consumer is denied editing, and it is ~97% of this subject's
+# a copied hook. The mutation battery that proved each arm can fail has been retired: it
+# mutated core's own hook, which a consumer is denied editing, and it is ~97% of this subject's
 # wall clock.
 #
 # Usage: run.sh

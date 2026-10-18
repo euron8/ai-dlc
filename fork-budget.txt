@@ -14,7 +14,7 @@
 # Raised 3446 -> 3459 at 0.824.0 (BL-530). Measured with validator-fork-budget in two clean detached
 # worktrees, serially, 2 interleaved reps each: base e91b4d86 read 3442 forks across 310 fixture dirs,
 # release read 3455 across 312, both reps alike. The 13 forks are the two new fixture dirs
-# (content-seal, content-seal-mutants) the validator walks, about 6.5 forks per dir; no validator code
+# (content-seal and its since-retired battery) the validator walks, about 6.5 forks per dir; no validator code
 # changed. The budget is the high reading plus the +4 margin the previous raise used.
 #
 # Raised 3459 -> 3465 for the shared context-token library `core/hooks/ai-dlc-usage-tokens.sh`, which
