@@ -1906,8 +1906,11 @@ S24b_mark_refusals() {
   bash "$SUBJ" --mark "$W/f.md" requirements pm cross-1 findings=0 > "$BEATOUT" 2>&1; rc=$?
   if [ "$rc" -eq 64 ] && cmp -s "$W/f.md" "$W/f.orig"; then ok "seal: --mark on a body ending inside an open fence refuses (64) and writes nothing"
   else bad "seal: --mark into an open fence rc=$rc, file changed or accepted"; fi
-  bash "$SUBJ" --mark "$W/f.orig" requirements pm cross-1 > "$BEATOUT" 2>&1; rc=$?
-  if [ "$rc" -eq 64 ]; then ok "seal: --mark without findings=<n> refuses (64)"; else bad "seal: --mark without findings= rc=$rc"; fi
+  # Four fields on a clean file, so the refusal is the findings= check and not the arity or a fence.
+  printf '%s\n' "$SKELETON" > "$W/c.md"
+  bash "$SUBJ" --mark "$W/c.md" requirements pm cross-1 count=1 > "$BEATOUT" 2>&1; rc=$?
+  if [ "$rc" -eq 64 ] && grep -qF 'the last field must be findings=<n>' "$BEATOUT"; then ok "seal: --mark whose last field is not findings=<n> refuses (64)"
+  else bad "seal: --mark with a malformed findings field rc=$rc: $(cat "$BEATOUT")"; fi
   printf '### e\n- edit: x\n' > "$W/r.md"
   bash "$SUBJ" --mark-repair "$W/r.md" requirements > "$BEATOUT" 2>&1; rc=$?
   case "$rc $(tail -1 "$W/r.md")" in
