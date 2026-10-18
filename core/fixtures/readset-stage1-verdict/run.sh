@@ -866,17 +866,60 @@ n="$(cl_count "$OM")"
 if [ "$n" != 3 ]; then ok "clause mutant one-emitter KILLED (the clause on $n emitter line(s))"; else bad "clause mutant one-emitter SURVIVED"; fi
 
 # NO STUB PROCESS OUTLIVES THE FIXTURE, counted from the pid file every arm appended to -- never from
-# the process table. The control is that the file holds pids at all. A just-killed pid can read alive
-# for a moment, so the count is retried before it fails.
+# the process table. The control is that the file holds pids at all. The property is binary: every
+# recorded pid gone (a zombie counts as gone -- it has died and awaits only its reaper). A just-killed
+# pid can read alive for a moment, so the read waits WHILE THE ALIVE SET SHRINKS, and decides only
+# when that set has not changed for the stall window. The fixture's own `reap` has been sent to every
+# recorded pid before this reads them -- the subject's tree kill is judged in wrap_term's own arm --
+# and a recorded pid can be reused by an unrelated process. So a survivor is the harness's failure or
+# an unreadable pid, never a verdict on the subject: it REFUSES, exit 2, and never FAILs on a count.
+# orphans_gone <pidfile> <stall polls>: 0 when every pid is gone; 2 with ORPHANS_WHY on no progress.
+orphans_gone() {
+  local pf="$1" lim="$2" p live st last="" still=0
+  ORPHANS_WHY=""
+  while :; do
+    live=""
+    while IFS= read -r p; do
+      case "$p" in ''|*[!0-9]*) continue ;; esac
+      kill -0 "$p" 2>/dev/null || continue
+      st="$(ps -o stat= -p "$p" 2>/dev/null)"
+      case "$st" in *Z*) continue ;; esac
+      live="$live $p"
+    done < "$pf"
+    [ -z "$live" ] && return 0
+    if [ "$live" = "$last" ]; then still=$((still + 1)); else still=0; last="$live"; fi
+    if [ "$still" -ge "$lim" ]; then ORPHANS_WHY="recorded pid(s)$live alive and the alive set unchanged for $lim polls"; return 2; fi
+    sleep 0.1
+  done
+}
+# THE ARM'S OWN PROBE, BOTH DIRECTIONS, before it reads the corpus: a sleep that is never killed must
+# refuse, and a reaped pid beside it in a second file must read gone.
+OGP="$WORK/og-probe"; sleep 300 </dev/null >/dev/null 2>&1 & ogl=$!
+sh -c 'exit 0' & ogd=$!; wait "$ogd"
+printf '%s\n' "$ogl" > "$OGP.live"; printf '%s\n' "$ogd" > "$OGP.dead"
+orphans_gone "$OGP.live" 5; ogr1=$?
+orphans_gone "$OGP.dead" 5; ogr2=$?
+kill "$ogl" 2>/dev/null; wait "$ogl" 2>/dev/null
+if [ "$ogr1" = 2 ] && [ "$ogr2" = 0 ]; then ok "orphans_gone refuses on a pid that never dies (rc $ogr1) and passes a reaped pid (rc $ogr2)"; else bad "orphans_gone probe: live pid rc=$ogr1 (want 2), reaped pid rc=$ogr2 (want 0)"; fi
+# MUTANT: the decision on a stall replaced by a pass, built as a copy of the function and scored by the same probe.
+OGM="$MD/og-pass.sh"
+awk '/^orphans_gone\(\) \{$/,/^}$/' "$HERE/run.sh" > "$OGM.src" 2>/dev/null
+export MUT_OLD='    if [ "$still" -ge "$lim" ]; then ORPHANS_WHY="recorded pid(s)$live alive and the alive set unchanged for $lim polls"; return 2; fi' \
+  MUT_NEW='    if [ "$still" -ge "$lim" ]; then return 0; fi'
+mut "$OGM.src" "$OGM" \
+  || broken "orphans_gone mutant og-pass DID NOT APPLY"
+sleep 300 </dev/null >/dev/null 2>&1 & ogl=$!
+printf '%s\n' "$ogl" > "$OGP.live"
+( . "$OGM"; orphans_gone "$OGP.live" 5 ); ogr1=$?
+kill "$ogl" 2>/dev/null; wait "$ogl" 2>/dev/null
+if [ "$ogr1" != 2 ]; then ok "orphans_gone mutant og-pass KILLED (a never-dying pid read rc $ogr1)"; else bad "orphans_gone mutant og-pass SURVIVED"; fi
 NREC="$(grep -c '^[0-9][0-9]*$' "$ORPHANS")" || NREC=0
-n=0
-while :; do
-  alive=0
-  while IFS= read -r p; do case "$p" in ''|*[!0-9]*) ;; *) kill -0 "$p" 2>/dev/null && alive=$((alive + 1)) ;; esac; done < "$ORPHANS"
-  [ "$alive" -eq 0 ] || [ "$n" -ge 20 ] && break
-  sleep 0.1; n=$((n + 1))
-done
-if [ "$NREC" -ge 1 ] && [ "$alive" -eq 0 ]; then ok "no stub or sampler pid is alive: $alive of $NREC recorded in the pid file"; else bad "$alive of $NREC recorded stub/sampler pids are still alive"; fi
+if [ "$NREC" -lt 1 ]; then
+  bad "the pid file records no stub or sampler pid, so the orphan check reads nothing"
+else
+  orphans_gone "$ORPHANS" "$((STALL_IDLE * 10))" || broken "a stub or sampler pid outlived the fixture's own reap: $ORPHANS_WHY"
+  ok "no stub or sampler pid is alive: 0 of $NREC recorded in the pid file"
+fi
 
 echo
 if [ "$FAILS" -ne 0 ]; then

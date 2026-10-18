@@ -333,7 +333,16 @@ Owner: ai-dlc-4e [9b62de] (lead ai-dlc-9c).
 - `core/fixtures/wait-stale-deliverable/run.sh:362` (`ELAPSED -ge 2`), `:400` (`-le 1`), `:462` (`-le 10`), `:479` (`-ge 6`), and `receipt.sh:113` (`-le 2`). Each asserts whether a beat slept, a property a sentinel could carry instead.
 - `core/fixtures/spec-join-integrity/run.sh:495`, `run_bounded`, called with 5 at `:1388` and `:1406`. Its HANG mutant is killed at the 5 s bound, so the bound itself is the discriminator.
 - The 0.804.0 120 s nets (item 2) stay for now. Lead's ruling: the hang question is its own release with BL-630, and it starts from what "hung" means as a yes/no property. Measured by 4e: no per-unit ceiling exists in the pre-push pool or in `hermetic-run.sh`, and the hook's 3x/600 s ceiling bounds only the detached read-set trace.
-- About 25 untriaged lines: the `sleep 1; t=$((t + 1))` tick loops in five `*-mutants` fixtures (`adversarial-shard-merge`, `apply-self-overwrite`, `remediator-shard-join`, `review-shard-merge` and `self-update-fixture-log`; intake confirmed the five, against 20 files containing `sleep 1`), `core/scripts/derive-fixture-readsets.sh:1088`, `:1510` and `:1568`, and `readset-skip` `:1307`, `:1316`, `:1369`, `:1386`, `:1453`, `:1457`, `:1458` and `:4104`.
+- ~~About 25 untriaged lines~~ — triaged at `2875c7ad`, none owed. The five `*-mutants` tick loops are no-progress watchdogs that refuse; `derive-fixture-readsets.sh`'s three waits are sentinel-keyed with named bounds. The `readset-skip` lines, each matched by content to its form at `2875c7ad`:
+  - ~~`:1307`~~ (50 ticks for the stub's ppid) is now `:1410-1413`, an `aw_wait` on `[ -s "$o/ppid" ]` with the trace subshell as owner, and a stall refuses through `aw_stalled`.
+  - ~~`:1316`~~ (100 ticks for the lock to go) is now `:1424-1426`, an `aw_wait` on `[ ! -d "$lk" ]`, owner the status file's pid, and a stall refuses.
+  - ~~`:1369`~~ (the stub's 50 ticks for GO) is now `:1479`, which waits on GO or on the death of the driver that owes it (`STUB_GO_OWNER`).
+  - ~~`:1386`~~ (50 ticks for gc, self and the map temp) is now `:1499-1503`, an `aw_wait` with the trace subshell as owner, and a stall refuses.
+  - ~~`:1453`~~ (100 ticks for the lock) is now `:1604-1606`, an `aw_wait`, and a stall refuses.
+  - ~~`:1457`~~ (100 ticks for the trace pid's exit) is now `:1610-1611`, an `aw_wait`, and a stall refuses.
+  - ~~`:1458`~~ (40 ticks, then a LEAK verdict) is now `:1612-1613`, an `aw_wait` on the group emptying. A leak is now a group member that outlived `$tp` and whose state and CPU time moved nothing for `AW_STALL` polls, which is the property the hook guarantees against, not an elapsed time.
+  - ~~`:4104`~~ (600 ticks for `kill.at`) is now `:4273-4276`, an `aw_wait` with the deriver's pid as owner, and a stall refuses. The fxw3 stub's own 300-tick wait (`:4255`) ends when the fixture removes the flag, and its timeout only bounds a stub the fixture has already killed. It decides nothing.
+- **Settled at batch 236.** `readset-stage1-verdict`'s closing orphan arm FAILed if a recorded pid was still alive after 20 polls. It now calls `orphans_gone`, which waits while the alive set shrinks (a zombie counts as gone) and REFUSES, exit 2 FIXTURE BROKEN, when that set stays unchanged for the stall window. The fixture killed every one of those pids itself, so a survivor is a harness failure and never a verdict on the subject. The arm is probed both ways (a sleep that never dies refuses, a reaped pid passes), and the mutant `og-pass`, which turns the stall into a pass, is KILLED. The pad before `readset-skip`'s judges (`LOCK_T0 … -lt 2`, `:1840`) is a floor and decides nothing. It makes each judge's `lstart` second differ from the lock pid's, and pj_eval's `sdiff` control refuses (`ctlfail`, `broken`) if that does not hold, so a short pad turns into a refusal and never into a verdict. That is now stated in one comment line. `wrap_term`'s 300-poll bound (`readset-stage1-verdict:638`) already names its property and justifies its number (it must stay far below the children's 300 s), which is the accepted shape.
 
 *SEPARATE CLASS: product code with a time ceiling, which ships to consumers.*
 - `core/scripts/wait-for-deliverable.sh`: `IDLE_SECS` at `:938`, `SETTLE` at `:1003`, `BUDGET` at `:1138` and `DEADLINE` at `:1434`.
@@ -342,9 +351,16 @@ Owner: ai-dlc-4e [9b62de] (lead ai-dlc-9c).
 
 *CLOSES with 4e's pole release now in preparation:* instance 4, `REGIME_BAND`. That release deletes `scripts/validate-suite-pole.sh` and makes the pole information-only. The file is still present at `8f1a9074`.
 
-**Product-code class, batch 236 (wfd release).** BL-639, BL-640 and BL-641 are done in that release, each with its own receipt: SETTLE no longer decides a seat sealed with `--mark` (it stays only as the fail-open net for a legacy marker with no `sha=`), the chained-beat guard decides by the parent shell's start time rather than BUDGET, and the continue hook's unknown-tool path keys the stall run on the session id rather than RAPID_WINDOW_SECONDS alone. This entry stays PARTIAL: BL-630, the 0.804.0 120 s nets, the suite-pole growth arm and `core/hooks/ai-dlc-recover-gate.sh:201` are untouched by it.
+**Product-code class, batch 236 (wfd release).** BL-639, BL-640 and BL-641 are done in that release, each with its own receipt: SETTLE no longer decides a seat sealed with `--mark` (it stays only as the fail-open net for a legacy marker with no `sha=`), the chained-beat guard decides by the parent shell's start time rather than BUDGET, and the continue hook's unknown-tool path keys the stall run on the session id rather than RAPID_WINDOW_SECONDS alone. ~~This entry stays PARTIAL: BL-630, the 0.804.0 120 s nets, the suite-pole growth arm and `core/hooks/ai-dlc-recover-gate.sh:201` are untouched by it.~~ Re-triaged at `2875c7ad`:
+- BL-630 is archived LANDED. `ai-dlc-advisor-gate.sh:639` fails open on expiry under the default knob, so SEEN decides. Only the operator-set stricter knobs (`0`/`1`) deny at their bound, and the header there gives the reason.
+- `ai-dlc-recover-gate.sh:225` (formerly `:201`) is decided by `R_SEEN`, and on expiry it stands down with no deny.
+- The 0.804.0 nets are now `fold-architect-ledger-join` D6's and `readset-stage1-verdict`'s no-progress `await` refusals.
+- `scripts/validate-suite-pole.sh` is deleted, which closes instance 4.
+- Instance 1 shipped as a poison-token file.
 
-verify: manual
+**CLOSE-CANDIDATE (batch 236).** No instance stays owed. The last poll-count FAIL found, `readset-stage1-verdict`'s orphan arm, is converted (above). The budgets listed NOT IN SCOPE stay the operator's to decide.
+
+verify: sh f=core/fixtures/readset-stage1-verdict/run.sh; d="$(mktemp -d)"; awk '/^orphans_gone\(\) \{$/,/^}$/' "$f" > "$d/og.sh" && [ -s "$d/og.sh" ] || exit 1; sleep 60 </dev/null >/dev/null 2>&1 & l=$!; sh -c 'exit 0' & x=$!; wait "$x"; echo "$l" > "$d/l"; echo "$x" > "$d/x"; ( . "$d/og.sh"; orphans_gone "$d/l" 5 ); a=$?; ( . "$d/og.sh"; orphans_gone "$d/x" 5 ); b=$?; kill "$l"; [ "$a" = 2 ] && [ "$b" = 0 ] && awk 'index($0, "orphans_gone \"$ORPHANS\"") && /(\|\||then) broken / { n++ } END { exit !n }' "$f" && ! grep -qF 'recorded stub/sampler pids are still alive' "$f"
 
 ## BL-634 — `enforcement-map.yaml` is not valid YAML: `yaml.safe_load` fails on an unquoted `: ` in a prose value
 

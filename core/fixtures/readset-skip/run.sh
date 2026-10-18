@@ -1836,6 +1836,7 @@ case "$w" in
 esac
 readset_lock_stale "$lk" > "$o/out" 2>&1; echo "$?" > "$o/rc"
 PJ
+# A FLOOR, NOT A BOUND, DECIDING NO VERDICT: each judge must start in a later `lstart` second than the lock pid; load only lengthens it, and the `sdiff` control above (refused in pj_eval) asserts the property itself.
 while [ $(( $(date +%s) - LOCK_T0 )) -lt 2 ]; do sleep 0.2; done
 pj_judge() { # <lib> <world> -> "<stale|held|err<rc>>|<ann|noann>"; refuses on a failed control
   local o rc c
