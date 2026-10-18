@@ -204,7 +204,7 @@ So a backlog commit that introduces exactly the drift these arms exist to catch 
 
 Owed: decide, with the cost stated, whether a declared EXCLUDED-top file is keyed for the fixtures that declare it (a per-fixture opt-in, not a population change), or whether the real-ledger arms move to a cheaper, separately keyed unit. Receipt: a push that changes only `docs/backlog.md` re-runs a fixture whose arm reads it, with a push changing an unrelated file as the control that still skips it.
 
-verify: manual
+verify: sh s="$(shasum -a 256 docs/backlog.md | cut -d' ' -f1)" && [ "${#s}" -eq 64 ] && k="$(bash core/scripts/hermetic-run.sh --root . --key-only backlog-real-ledger 2>/dev/null)" && [ "$(printf '%s\n' "$k" | awk -F'\t' '$1 == "docs/backlog.md" { print $2 }')" = "$s" ] && e="$(bash scripts/suite-content-key.sh --explain 2>/dev/null)" && printf '%s\n' "$e" | awk '/^### /{ z = ($0 == "### keyed"); next } z' | grep -F "$s" | grep -qF docs/backlog.md && n="$(printf '%s\n' "$e" | awk '/^### /{ z = ($0 == "### contents" || $0 == "### keyed"); next } z' | grep -cE '(^| )docs/')" && [ "$n" = 1 ]
 
 ## BL-587 — a reconcile that records derivations "owed to the sprint's derivation-validator step" has no channel to the sprint lead, so the debt is silently dropped
 
