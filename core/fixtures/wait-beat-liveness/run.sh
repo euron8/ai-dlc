@@ -812,17 +812,34 @@ S13b_complete_progress_per_target() {
 # A writer that rewrites a marked file ABOVE its marker every 0.3s until its SENTINEL exists:
 # the consumer's cross seat that wrote once and then made seven in-place Edits. A counter makes
 # every rewrite distinct bytes. Stopped by `churn_stop`, which touches the sentinel and waits --
-# never killed. A hard cap of 60s keeps a lost sentinel from spinning forever.
+# never killed. A cap of CHURN_CAP seconds keeps a lost sentinel from spinning forever, and it
+# DECIDES NOTHING: a churn that stopped on the cap rather than on its sentinel leaves a static file
+# under arms that assume an edited one, so the writer records `.capped` and churn_stop REFUSES on
+# it (exit 2) -- the number only bounds a leak, the verdict is read only from a churn that was still
+# running when it was told to stop.
+CHURN_CAP=60
 churn() {  # $1 = file
-  CHURN_STOP="$1.stop"; rm -f "$CHURN_STOP"
-  ( i=0; end=$(( $(date +%s) + 60 ))
+  CHURN_STOP="$1.stop"; rm -f "$CHURN_STOP" "$CHURN_STOP.capped"
+  ( i=0; end=$(( $(date +%s) + CHURN_CAP ))
     while [ ! -e "$CHURN_STOP" ] && [ "$(date +%s)" -lt "$end" ]; do
       i=$((i + 1)); printf '%s\n- an in-place edit, revision %d\n%s\n' "$SKELETON" "$i" "$MARKER" > "$1"
       sleep 0.3
-    done ) &
+    done
+    [ -e "$CHURN_STOP" ] || : > "$CHURN_STOP.capped" ) &
   CHURN_PID=$!
 }
-churn_stop() { : > "$CHURN_STOP"; wait "$CHURN_PID" 2>/dev/null; }
+churn_stop() {
+  : > "$CHURN_STOP"; wait "$CHURN_PID" 2>/dev/null
+  [ ! -e "$CHURN_STOP.capped" ] || broken "the churn writer stopped on its ${CHURN_CAP}s cap before its sentinel, so the file it was meant to keep editing was static under the arms that read it"
+}
+# THE CAP'S REFUSAL, PROBED BOTH WAYS: a 0s cap expires before the sentinel and must refuse (exit 2);
+# the default cap, stopped by its sentinel, must not.
+S13h_churn_cap_refuses() {
+  ( W="$(mk_work)"; CHURN_CAP=0; churn "$W/cap.md"; while [ ! -e "$W/cap.md.stop.capped" ]; do sleep 0.1; done; churn_stop ) 2>/dev/null; cp1=$?
+  ( W="$(mk_work)"; churn "$W/cap.md"; sleep 0.4; churn_stop ) 2>/dev/null; cp2=$?
+  if [ "$cp1" = 2 ] && [ "$cp2" = 0 ]; then ok "churn: a writer that stopped on its cap refuses (rc $cp1); one stopped by its sentinel does not (rc $cp2)"
+  else bad "churn cap probe: capped rc=$cp1 (want 2), sentinel-stopped rc=$cp2 (want 0)"; fi
+}
 
 S13c_complete_marker_must_settle() {
   W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
@@ -1797,14 +1814,15 @@ S17c_shard_header_absent_changes_nothing() {
 # Both shards rewritten together every 0.3s until the sentinel exists, each revision distinct
 # bytes outside ## Findings; stopped by churn_stop (shared with section 13c), never killed.
 shard_churn() {  # $1 = workdir
-  CHURN_STOP="$1/churn.stop"; rm -f "$CHURN_STOP"
-  ( i=0; end=$(( $(date +%s) + 60 ))
+  CHURN_STOP="$1/churn.stop"; rm -f "$CHURN_STOP" "$CHURN_STOP.capped"
+  ( i=0; end=$(( $(date +%s) + CHURN_CAP ))
     while [ ! -e "$CHURN_STOP" ] && [ "$(date +%s)" -lt "$end" ]; do
       i=$((i + 1))
       mk_shard "$1/c-bad.md" "$CV" ""                 "" "revision $i"
       mk_shard "$1/c-ok.md"  "$CV" EXIT_CONDITION_MET "" "revision $i"
       sleep 0.3
-    done ) &
+    done
+    [ -e "$CHURN_STOP" ] || : > "$CHURN_STOP.capped" ) &
   CHURN_PID=$!
 }
 
