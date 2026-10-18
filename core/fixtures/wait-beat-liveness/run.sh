@@ -1856,7 +1856,7 @@ M37_shard_check_exit_ignored() {
 }
 
 # ===========================================================================
-# 18. --mark: THE SEAL DECIDES, WITH NO WINDOW, AND A LEGACY MARKER STILL SETTLES.
+# 24. --mark: THE SEAL DECIDES, WITH NO WINDOW, AND A LEGACY MARKER STILL SETTLES.
 #     A seat closes with `--mark`, which appends `sha=<digest of everything above>` before
 #     `findings=`. A sealed file DELIVERS in one beat under a settle window it could never close
 #     (SETTLE=600); the same file edited above its marker is UNFINISHED under SETTLE=1 in a beat
@@ -1873,7 +1873,7 @@ seal_world() {  # $1 = subject, $2 = workdir -> s.md sealed, x.md sealed then ed
   awk 'NR == 3 { print "- a finding rewritten after the marker"; next } { print }' "$2/x.md" > "$2/x.tmp" && mv "$2/x.tmp" "$2/x.md"
 }
 
-S18a_seal_decides() {
+S24a_seal_decides() {
   W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
   seal_world "$SUBJ" "$W"
   case "$(tail -1 "$W/s.md")" in
@@ -1900,7 +1900,7 @@ S18a_seal_decides() {
   rm -rf "$W"
 }
 
-S18b_mark_refusals() {
+S24b_mark_refusals() {
   W="$(mk_work)"
   printf '%s\n```text\nan open fence\n' "$SKELETON" > "$W/f.md"; cp "$W/f.md" "$W/f.orig"
   bash "$SUBJ" --mark "$W/f.md" requirements pm cross-1 findings=0 > "$BEATOUT" 2>&1; rc=$?
@@ -1918,14 +1918,14 @@ S18b_mark_refusals() {
 }
 
 # The digest ignored: every marker is judged as legacy. The sealed file then waits on SETTLE=600
-# and the broken one settles and DELIVERS -- section 18a must catch it.
-M38_seal_ignored() {
+# and the broken one settles and DELIVERS -- section 24a must catch it.
+M46_seal_ignored() {
   mutant seal-ignored -e 's@^  seal_of "\$1"; id_sv_=\$?$@  seal_of "$1"; id_sv_=2@' || return
   W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
   seal_world "$SUBJ" "$W"
   CB_BEAT=3 cbeat "$MUT" "$W" --complete x.md b.md
-  if has "DELIVERED x.md"; then ok "MUTANT seal-ignored: a beat ignoring the digest DELIVERS the edited file -- section 18a catches it"
-  else bad "MUTANT seal-ignored: section 18a survives the digest being ignored (or the mutant never ran): $OUT"; fi
+  if has "DELIVERED x.md"; then ok "MUTANT seal-ignored: a beat ignoring the digest DELIVERS the edited file -- section 24a catches it"
+  else bad "MUTANT seal-ignored: section 24a survives the digest being ignored (or the mutant never ran): $OUT"; fi
   rm -rf "$W"
 }
 
