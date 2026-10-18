@@ -3173,8 +3173,11 @@ pcv_latarm() {
     v20) b2="$(git -C "$L_D" rev-parse --short "$L_B" 2>/dev/null)"
          [ -n "$b2" ] && [ "$b2" != "$L_B" ] || { pcv_x "$id" "FIXTURE BROKEN: no short spelling distinct from the full base sha"; return 0; } ;;
   esac
+  # The cached run goes FIRST: an opt-out run before it would, under M-exit3, record the changed tree
+  # and turn this arm's miss into a hit, putting V17..V20 into a kill set that is not theirs.
+  pcv_run "$t" "$L_C" "$L_R" "$L_D" "$b2" "$L_T"; local c_rc="$PRC" c_hit="$PHIT" c_n="$PN"
   pcv_run "$t.n" "$L_C" "$L_R" "$L_D" "$b2" "$L_T" nocache; n0="$PRC"
-  pcv_run "$t" "$L_C" "$L_R" "$L_D" "$b2" "$L_T"
+  PRC="$c_rc"; PHIT="$c_hit"; PN="$c_n"
   if [ "$n0" -eq 0 ]; then
     pcv_x "$id" "FIXTURE BROKEN: the opt-out render after the change still exits 0, so the change is not one the render sees and a hit would be correct"
   elif pcv_is_miss "$n0"; then
