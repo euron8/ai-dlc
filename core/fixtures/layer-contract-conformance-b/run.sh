@@ -24,7 +24,7 @@
 # markers, and its shard protocol stays placed AFTER that SKIP for the same reason.
 #
 # Resolved as a SIBLING inside core/fixtures/, never by walking up into a core subtree —
-# the same resolution `trunk-audit-classes` uses for its own subject fixture, and the one
+# the same resolution `ledger-reverify-d` uses for the implementation it shares, and the one
 # I33 permits.
 #
 # Usage: run.sh
