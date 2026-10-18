@@ -21,3 +21,4 @@ rm
 sed
 sleep
 tr
+xargs

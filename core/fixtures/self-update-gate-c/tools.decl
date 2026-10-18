@@ -33,4 +33,5 @@ time
 tr
 uniq
 wc
+xargs
 yes
