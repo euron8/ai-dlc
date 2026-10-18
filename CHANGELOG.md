@@ -20,7 +20,7 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
-## [VERSION-PLACEHOLDER-B236-RECOVER] - 2026-10-18
+## [0.833.0] - 2026-10-18
 
 Batch 236 (b9's RECOVER). The post-compaction recovery gate no longer refuses the digest Read its own injected block
 asks for, writes its stage by rename so a parallel Read never sees it empty, and a new recovery no longer inherits the
@@ -78,6 +78,7 @@ release: 3 closed, 3 filed.
   recovery.
 - BL-688 (DEFECT): when `_bmad-output` is unwritable, the snapshot Read is allowed but the stage never advances, so
   every later step Read is refused. That wedge predates this release and is not made worse by it.
+
 ## [0.832.0] - 2026-10-18
 
 Batch 236 (READSET). The read-set deriver stops writing rows the hook never reads, the pre-push fixture pool refuses a
