@@ -89,9 +89,10 @@
 #      `## [0.806.0]`, the set difference netted to one added, and it passed. The
 #      old release's body survived under the new heading with nothing naming it.
 #      MEASURED FALSE-POSITIVE SET: a census over 917 first-parent commits that
-#      touched CHANGELOG.md found 5 that removed a heading and never restored it,
-#      all true positives -- 581ca289 removed 0.805.0; 60f776c2, fc957e40 and
-#      f2e0403f removed 0.768.0, 0.769.0 and 0.770.0; 0cc40283 removed 0.200.0.
+#      touched CHANGELOG.md found 5 that removed a heading, all true positives.
+#      4 were never restored -- 60f776c2, fc957e40 and f2e0403f removed 0.768.0,
+#      0.769.0 and 0.770.0; 0cc40283 removed 0.200.0. The fifth, 581ca289, removed
+#      0.805.0, which ed0fa33d later restored.
 #
 #      A RESTORED HISTORICAL HEADING IS NOT A NEW RELEASE. The repair of the shape
 #      above re-adds a heading, and a range carrying that repair plus its own
