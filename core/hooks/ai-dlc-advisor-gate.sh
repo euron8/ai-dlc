@@ -10,6 +10,14 @@
 #     answer, then retry the same command. The gate does not require a RESULT between the
 #     attempt and the action (batch-200 ruling: any attempt clears); the wording names the shape
 #     that never races (THE RACE, below).
+#   - A call to `mcp__advisor__consult` IS NOT AN ATTEMPT FOR A GRANTED AGENT. The scan recognises
+#     the built-in `server_tool_use` named `advisor` and nothing else, on purpose: the operator's
+#     instructions prefer the built-in advisor wherever it is held, and the operator-home gate that
+#     this one descends from counts the MCP consult ONLY when the transcript carries no grant
+#     (docs/backlog.archive.md:31638-31640). Crediting it here would reverse that ruling for exactly
+#     the agents it binds. So a granted agent that calls the MCP tool and retries is denied again,
+#     and the deny text says why: it names the built-in tool as the one to call and says the MCP
+#     consult does not clear. An agent with NO grant is silent before the scan and never reaches it.
 #   - When the agent's most recent `advisor_tool_result` carries `error_code: "unavailable"` the
 #     harness withdraws the tool, no call can clear a deny, and the gate only WARNS. A later
 #     result that is not `unavailable` re-arms the deny.
@@ -659,4 +667,4 @@ case "$KIND" in
   push) _what="git push" ;; merge) _what="PR merge" ;; close) _what="gate close" ;;
   gatelog) _what="Check 12 gate-log append" ;; verdict) _what="verdict or repair-record write" ;; *) _what="$KIND" ;;
 esac
-deny "ai-dlc-advisor-gate: DENIED -- call the advisor in a message of its own, read its answer, then retry the same command. This ${_what} is a SKILL.md Rule 32 touchpoint, and this agent holds the advisor tool with no advisor attempt since its last ${_what}. Each kind (push, PR merge, gate close, gate-log append, verdict write) owes its own call; one call covers the next action of every kind. Any attempt clears this, including one that errors; if the advisor answers 'unavailable' the gate drops to a warning. This is not a push or merge failure: do not record it as one."
+deny "ai-dlc-advisor-gate: DENIED -- call the advisor in a message of its own, read its answer, then retry the same command. This ${_what} is a SKILL.md Rule 32 touchpoint, and this agent holds the advisor tool with no advisor attempt since its last ${_what}. Each kind (push, PR merge, gate close, gate-log append, verdict write) owes its own call; one call covers the next action of every kind. Any attempt clears this, including one that errors; if the advisor answers 'unavailable' the gate drops to a warning. This is not a push or merge failure: do not record it as one. This agent holds the built-in advisor tool, so call the built-in advisor tool itself; a call to mcp__advisor__consult does not clear this gate."
