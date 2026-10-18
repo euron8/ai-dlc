@@ -397,8 +397,8 @@ cell REASON DENY 'R:call the advisor in a message of its own, read its answer, t
 # MCPCONSULT: the built-in advisor is the only attempt for a granted agent. m-deny and the two reason
 # cells share one world, so the mutant that drops the clause fails exactly the two reason cells.
 ct MCPCONSULT DENY m-deny "$(bash_in "$P1/mcp-done.jsonl" "$SPRINT" 'git push -u origin HEAD')"
-cell MCPCONSULT DENY 'R:call the built-in advisor tool itself' m-reason-builtin - "$(bash_in "$P1/mcp-done.jsonl" "$SPRINT" 'git push -u origin HEAD')"
-cell MCPCONSULT DENY 'R:a call to mcp__advisor__consult does not clear this gate' m-reason-mcp - "$(bash_in "$P1/mcp-done.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+cell MCPCONSULT DENY 'R:call the built-in advisor tool itself' m-reason-builtin "$(bash_in "$P1/mcp-done.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+cell MCPCONSULT DENY 'R:a call to mcp__advisor__consult does not clear this gate' m-reason-mcp "$(bash_in "$P1/mcp-done.jsonl" "$SPRINT" 'git push -u origin HEAD')"
 ct MCPCONSULT DENY m-bare "$(bash_in "$P1/mcp-bare.jsonl" "$SPRINT" 'git push -u origin HEAD')"
 ct MCPCONSULT SILENT m-twin-adv "$(bash_in "$P1/mcp-adv.jsonl" "$SPRINT" 'git push -u origin HEAD')"
 
