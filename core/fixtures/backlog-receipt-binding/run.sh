@@ -677,6 +677,23 @@ else
   note "FAIL  m8e-near -- the near-miss ledger must pass as all-manual with no UNRECOGNISED row (rc=$m8en_rc)"
   printf '%s\n' "$m8en_out" | grep -E '^(FAIL|OK):' | sed 's/^/      /' | head -3; rc=1
 fi
+# m8e-drift: the classifier's `has|lacks)` arm renamed in the seeded copy must make the subject exit 2.
+seed "$TMP/m8ed"
+printf '# Probe backlog\n\n## BL-854\n\nBody.\n\nverify: has VERSION "."\n\n' > "$TMP/m8ed/docs/backlog.md"
+( cd "$TMP/m8ed" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m drift >/dev/null 2>&1 )
+m8ed_f="$TMP/m8ed/scripts/backlog-reverify.sh"
+if [ -f "$m8ed_f" ] && sed 's/has|lacks)/hasx|lacks)/' "$m8ed_f" > "$m8ed_f.new" && ! cmp -s "$m8ed_f" "$m8ed_f.new"; then
+  mv "$m8ed_f.new" "$m8ed_f"
+  # shellcheck disable=SC2086
+  m8ed_out="$(run_v "" "$TMP/m8ed" $M8E_ARGS)"; m8ed_rc=$?
+  if [ "$m8ed_rc" -eq 2 ] && grep -q 'has drifted' <<<"$m8ed_out"; then
+    note "ok    m8e-drift -- with the classifier's has|lacks arm renamed the subject exits 2 naming the drift"
+  else
+    note "FAIL  m8e-drift -- rc=$m8ed_rc; the drift guard did not fire"; rc=1
+  fi
+else
+  note "FAIL  m8e-drift DID NOT APPLY (no reverify copy, or the rename matched nothing)"; rc=1
+fi
 # ...and the mutant: the fallthrough restored -- an unrecognised value is dropped, not recorded.
 # The subject's own self-probe then refuses (exit 2) and no id is ever named, which is the
 # pre-fix behaviour made loud; the assertion is that the id is NOT named and the run is not green.

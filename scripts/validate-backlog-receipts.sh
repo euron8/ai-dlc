@@ -783,8 +783,9 @@ score_ledger() {
   rm -rf "$WORK/out" "$WORK/rec" "$WORK/t"
   mkdir -p "$WORK/out" "$WORK/rec" "$WORK/t"
   _sl_i=0; _sl_e=0; _sl_m=0
-  : > "$WORK/unrec"; _sl_h=0
+  : > "$WORK/unrec"
   # The has/lacks verb pair is bound to the classifier's own case arm: if it moves, refuse rather than drift.
+  # Fixture backlog-receipt-binding arm m8e-drift proves this fires (a copy with the arm renamed exits 2).
   grep -qF 'has|lacks)' "$SELF_ROOT/scripts/backlog-reverify.sh" 2>/dev/null || { echo "$(me): FAIL -- backlog-reverify.sh no longer dispatches 'has|lacks)', so the verb pair recognised here has drifted from it." >&2; return 2; }
   while IFS="$(printf '\t')" read -r _l _c _r; do
     [ -n "$_l" ] || continue
@@ -795,8 +796,8 @@ score_ledger() {
     # A VALUE THAT IS NEITHER FORM IS NAMED, NOT DROPPED. `manual.` / `manual,` / `manual:` carry a
     # char after `manual` that is not a space, so they match neither case above; falling through
     # silently left the ledger one entry short of its manual count with nothing naming the line.
-    # has/lacks are ledger verbs resolved by backlog-reverify.sh: their own bucket (counts[3]), neither manual nor unrecognised.
-    case "$_r" in "has "*|"lacks "*) _sl_h=$(( _sl_h + 1 )); continue ;; esac
+    # has/lacks are ledger verbs resolved by backlog-reverify.sh: recognised, neither manual nor unrecognised.
+    case "$_r" in "has "*|"lacks "*) continue ;; esac
     case "$_r" in "sh "*|"sh") ;; *) printf '%s\t%s\n' "$_l" "$(printf '%s' "$_r" | cut -c1-20)" >> "$WORK/unrec"; continue ;; esac
     _sl_i=$(( _sl_i + 1 ))
     printf '%s\n%s\n' "$_l" "$_r" > "$WORK/rec/$(printf '%04d' "$_sl_i")"
@@ -807,7 +808,6 @@ EOF
   # its rows, and an assignment made inside a command substitution is lost to the subshell --
   # the caller would read an unbound variable, or worse, the PREVIOUS call's value.
   printf '%s %s %s\n' "$_sl_i" "$_sl_e" "$_sl_m" > "$WORK/counts"
-  printf '%s\n' "$_sl_h" > "$WORK/counts.hl"   # has/lacks bucket, read by nobody else yet
   [ "$_sl_i" -eq 0 ] && return 0
 
   # THE COMPLETENESS SENTINEL IS DERIVED FROM THE SUBJECT, NEVER NAMED. A hardcoded path is
