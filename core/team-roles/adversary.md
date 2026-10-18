@@ -401,6 +401,9 @@ SKILL_INVOCATION_PROVENANCE_END -->
 The block above is rendered from `.claude/schemas/provenance-block.json`, which is also the file the
 gate's parser loads. There is no second copy of this schema to disagree with.
 
+**A shard copies the region above verbatim and then deletes each line's trailing ` #` comment**
+(the space, the `#` and everything after it), because the merge reads every value literally.
+
 **In a shard brief, `tool_use_id` is the schema's sentinel `NOT_ACCESSIBLE`.** The merge derives
 each shard's dispatch id from the harness records and never reads the self-reported one except to
 refuse a real-shaped id that differs. An unsharded pass fills the field as the template says.

@@ -461,7 +461,9 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    `## Findings` with an UPPERCASE severity word (FINDING GRAMMAR, `merge-adversarial-shards.sh`'s
    header), not item 1's `##` seat form. The brief carries the shard header as the generated
    `provenance-block/elicitation` region below: copy this region verbatim, never as a field
-   list the lead retypes. Beat-join every shard path with
+   list the lead retypes. The shard copies the region verbatim and then deletes each line's
+   trailing ` #` comment (the space, the `#` and everything after it), because the merge reads
+   every value literally. Beat-join every shard path with
    `--complete --shard-header elicitation`. No merge reads that directory (`merge-adversarial-shards.sh --elicitation` merges
    only the requirements subject), so the shard records ARE the elicitation record, and the
    elicitation repair reads them shard by shard, dispatched on the same axis by "Adversarial
