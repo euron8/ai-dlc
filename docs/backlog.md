@@ -738,6 +738,24 @@ Owed: widen the root grammar, for example by deriving the roots from assignments
 
 verify: manual
 
+## BL-676 — the hermetic sandbox puts every system tool dir on PATH, so `tools.decl` restricts nothing and a fixture that forks an undeclared tool is neither refused nor re-keyed
+
+**DEFECT.** Filed by peer session ai-dlc-c0 (batch 236 READSET), id allocated by lead ai-dlc-c8; found by the BL-584 hand. This is the root of the defect class the batch's decl-tools fix (d5) addressed: that fix repairs one fixture's declaration, while the sandbox still cannot tell a complete declaration from an incomplete one.
+
+Mechanism. `core/scripts/hermetic-run.sh:157` takes `HR_TOOL_DIRS="$READSET_TOOL_DIRS"`, and `.githooks/pre-push:1432` assigns `READSET_TOOL_DIRS="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"`. `core/scripts/hermetic-run.sh:544` then runs the fixture under `env -i PATH="$HR_TOOL_DIRS:$HR_BIN"`, and the header at `:54-55` states the same ("PATH pinned to the fixed tool dirs plus a symlink farm of the declared tools"). So every tool in those six directories is reachable whether or not `tools.decl` names it. `tools.decl` decides what is KEYED, never what may RUN.
+
+Effect. A fixture that forks an undeclared tool is not refused, so the sandbox run passes, and the tool is not in the key, so a change to that tool does not re-run the fixture. A removed `tools.decl` line fails nothing. This is why the BL-584 receipt cannot cover `tools.decl` (see that entry).
+
+Measured by the BL-584 hand through the real runner (cited, not re-run here): with no `tools.decl`, and again with a comment-only `tools.decl`, a stub fixture still ran `jq`, `awk` and `shasum` (rc 0). The control, a tool found only on the caller's PATH, was unreachable.
+
+Prior art, re-derived in this worktree against `docs/backlog.archive.md`: `grep -n 'tools.decl' docs/backlog.archive.md | grep -c restrict` gives 0, against a control of 30 for `grep -c 'inputs.decl' docs/backlog.archive.md`. No existing entry covers it.
+
+Owed, and it is the operator's to choose because it changes what every fixture may run: (i) restrict the sandbox PATH to the declared tools, after measuring the false-positive set over every declared fixture first; or (ii) a trace-derived check that compares the tools each fixture actually forks against its `tools.decl`.
+
+OPEN OPERATOR QUESTION: restrict the sandbox PATH to the declared tools, (i), or add a trace-derived declared-versus-forked comparison, (ii)? The lead's recommendation is (i), measured first.
+
+verify: manual
+
 ## BL-678 — plan-rotate.sh rebuilds the plan's archive pointer from the current run's ranges alone, so every earlier rotated range drops out of the plan
 
 **NOTE.** Filed by the TRAIN owner on the lead's instruction, and tiered NOTE by the lead's ruling. `scripts/plan-rotate.sh:205-206` spell the
