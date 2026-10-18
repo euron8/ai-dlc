@@ -1,0 +1,30 @@
+# Tools run.sh, both validators, the classifier, lib.sh and ledger-reverify.sh invoke, keyed on
+# their binaries. The union of the two source fixtures' declarations, so every real receipt j1
+# executes finds what it found there.
+awk
+basename
+bash
+cat
+chmod
+cksum
+cmp
+cp
+cut
+diff
+dirname
+env
+find
+git
+grep
+head
+mkdir
+mktemp
+mv
+python3
+rm
+sed
+sleep
+sort
+tail
+tr
+xargs

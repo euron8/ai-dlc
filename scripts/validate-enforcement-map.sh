@@ -6604,7 +6604,71 @@ else
     grep -qx '\.git' <<<"$i55_excl" || err "I55 suite-content-key.sh no longer excludes .git. The object store changes on every commit, so the key can never match a previous run and the suite skip is now unreachable code that still prints. Re-exclude it; the one thing inside .git the suite reads -- the tracked path set -- is already folded in as the key's 'tracked' component."
 
     # Arm 3: no fixture reaches an excluded path at the DISTRIBUTION root.
+    #
+    # THE `+` EXEMPTION. A fixture may key a file under an excluded top by declaring it in its OWN
+    # inputs.decl with a leading `+`: the hook's READSET_KEYROWS span keys it per fixture and
+    # suite-content-key.sh hashes it into the outer key, so that reach is covered and is not this
+    # arm's subject. i55_reach_scan acquits a hit LINE only when every root-prefixed reach of the
+    # excluded entry on it names, literally, a file that the same fixture's inputs.decl carries with
+    # `+`. Everything else is flagged as before: an undeclared path, a path declared without `+`, a
+    # `+` on a different path, a `+` in a SIBLING fixture's declaration, and a reach whose path is a
+    # variable (`$ROOT/docs/$x`), because nothing can say what it names. An unreadable source line or
+    # declaration acquits nothing (awk getline returns -1 there and the count stays short).
+    # ONE FUNCTION FOR THE PROBE AND THE CORPUS, so the probe certifies the instrument the scan uses.
+    # Cost: the grep is the one it replaces; the awk runs once per excluded entry, over its hits only.
     i55_roots='(REPO_ROOT|ROOT|D_ROOT|C_ROOT)'
+    i55_reach_scan() { # <tree root> <excluded entry> -> unacquitted `<abs file>:<line>:<match>` hits
+      local re
+      re="$(printf '%s' "$2" | sed 's/\./\\./g')"
+      grep -rHnoE '\$\{?'"$i55_roots"'\}?/'"$re"'([/"'"'"' ]|$)' "$1"/core/fixtures/*/*.sh 2>/dev/null \
+        | awk -v e="$2" -v rootre="$i55_roots" '
+          function plusset(dir,   f, l, c, x) {
+            if (dir in PD) return; PD[dir] = 1; f = dir "/inputs.decl"
+            while ((getline l < f) > 0) { sub(/\r$/, "", l); x = 0
+              if (substr(l, 1, 1) == "+") { x = 1; l = substr(l, 2) }
+              if (x && substr(l, 1, 1) != "!") PLUS[dir SUBSEP l] = 1 }
+            close(f) }
+          { line = $0; t = index(line, ":"); file = substr(line, 1, t - 1); rest = substr(line, t + 1)
+            t = index(rest, ":"); ln = substr(rest, 1, t - 1) + 0
+            if ((file SUBSEP ln) in SEEN) { if (!SEEN[file SUBSEP ln]) print line; next }
+            dir = file; sub(/\/[^\/]*$/, "", dir); plusset(dir)
+            src = ""; n = 0; while ((getline l < file) > 0) { n++; if (n == ln) { src = l; break } }; close(file)
+            ok = 0; all = 0; s = src
+            pat = "\\$\\{?" rootre "\\}?/"
+            while (match(s, pat)) {
+              s = substr(s, RSTART + RLENGTH)
+              if (substr(s, 1, length(e)) != e) continue
+              nx = substr(s, length(e) + 1, 1)
+              if (nx != "/" && nx != "\"" && nx != "'"'"'" && nx != " " && nx != "") continue
+              all++
+              p = e; r = substr(s, length(e) + 1)
+              if (match(r, /^(\/[A-Za-z0-9._-]+)+/)) p = e substr(r, 1, RLENGTH)
+              if ((dir SUBSEP p) in PLUS) ok++ }
+            SEEN[file SUBSEP ln] = (all > 0 && ok == all)
+            if (!SEEN[file SUBSEP ln]) print line }'
+    }
+    # SELF-PROBE, BOTH DIRECTIONS, through i55_reach_scan, before the corpus. Six fixtures, each one
+    # property from the acquitted one: (a) `+` declared, literal path -> acquitted; (b) declared without
+    # `+` -> flagged; (c) `+` on another docs path -> flagged; (d) a variable path -> flagged; (e) its
+    # SIBLING (a) declares the `+` -> flagged; (f) two reaches on one line, one declared -> flagged.
+    i55_pd="$(mktemp -d 2>/dev/null)"
+    if [ -z "$i55_pd" ] || [ ! -d "$i55_pd" ]; then
+      err "I55 arm 3 could not create its + exemption probe directory, so neither direction of the exemption was proven this run."
+    else
+      for i55_c in a b c d e f; do mkdir -p "$i55_pd/core/fixtures/$i55_c"; done
+      printf '+docs/backlog.md\n' > "$i55_pd/core/fixtures/a/inputs.decl"
+      printf 'docs/backlog.md\n'  > "$i55_pd/core/fixtures/b/inputs.decl"
+      printf '+docs/other.md\n'   > "$i55_pd/core/fixtures/c/inputs.decl"
+      printf '+docs/backlog.md\n' > "$i55_pd/core/fixtures/d/inputs.decl"
+      printf 'scripts/x.sh\n'     > "$i55_pd/core/fixtures/e/inputs.decl"
+      printf '+docs/backlog.md\n' > "$i55_pd/core/fixtures/f/inputs.decl"
+      for i55_c in a b c e; do printf 'L="$ROOT/docs/backlog.md"\n' > "$i55_pd/core/fixtures/$i55_c/run.sh"; done
+      printf 'L="$ROOT/docs/$name"\n' > "$i55_pd/core/fixtures/d/run.sh"
+      printf 'cp "$ROOT/docs/backlog.md" "$ROOT/docs/plans/x.md"\n' > "$i55_pd/core/fixtures/f/run.sh"
+      i55_pr="$(i55_reach_scan "$i55_pd" docs | sed "s@^${i55_pd}/core/fixtures/@@; s@/.*@@" | LC_ALL=C sort -u | tr '\n' ' ')"
+      rm -rf "$i55_pd"
+      [ "$i55_pr" = "b c d e f " ] || err "I55 arm 3's + exemption self-probe flagged '${i55_pr}', want 'b c d e f '. Fixture a (a + declared, literal reach) must be ACQUITTED and every other one flagged; anything else means the exemption either acquits its own subject or cannot acquit at all, and the corpus scan below would be read through it."
+    fi
     i55_ctl="$(grep -rhoE '\$\{?'"$i55_roots"'\}?/core([/"]|$)' "$REPO_ROOT"/core/fixtures/*/*.sh 2>/dev/null | grep -c .)"
     if [ "${i55_ctl:-0}" -lt 10 ]; then
       err "I55 arm 3's control found only ${i55_ctl:-0} reference(s) to an INCLUDED path under the same grammar it uses to report an absence. It is about to report that no fixture names an excluded path at the distribution root; over a corpus this grammar cannot read, that zero is a broken matcher and not a finding. Fails closed."
@@ -6613,8 +6677,7 @@ else
       while IFS= read -r e; do
         [ -n "$e" ] || continue
         [ "$e" = ".git" ] && continue
-        i55_hit="$(grep -rHnoE '\$\{?'"$i55_roots"'\}?/'"$(printf '%s' "$e" | sed 's/\./\\./g')"'([/"'"'"' ]|$)' \
-                   "$REPO_ROOT"/core/fixtures/*/*.sh 2>/dev/null | sed "s@^${REPO_ROOT}/@@")"
+        i55_hit="$(i55_reach_scan "$REPO_ROOT" "$e" | sed "s@^${REPO_ROOT}/@@")"
         [ -n "$i55_hit" ] && i55_reach="${i55_reach}
 ${i55_hit}"
       done <<<"$i55_excl"

@@ -51,10 +51,15 @@ mkdir -p "$T"
 cp -R "$DIST/scripts"   "$T/scripts"
 cp -R "$DIST/.githooks" "$T/.githooks"
 cp -R "$DIST/templates" "$T/templates"
-mkdir -p "$T/core/fixtures/alpha" "$T/core/fixtures/beta" "$T/docs"
+mkdir -p "$T/core/fixtures/alpha" "$T/core/fixtures/beta" "$T/core/fixtures/gamma" "$T/docs/plans"
 printf 'body\n' > "$T/core/fixtures/alpha/run.sh"
 printf 'body\n' > "$T/core/fixtures/beta/run.sh"
 printf 'a doc\n'  > "$T/docs/note.md"
+# gamma opts ONE excluded file into the keys with `+` (arms 10-14); docs/plans/p.md is its near-miss.
+printf 'body\n' > "$T/core/fixtures/gamma/run.sh"
+printf '!scripts/suite-content-key.sh\n+docs/backlog.md\n' > "$T/core/fixtures/gamma/inputs.decl"
+printf '## BL-001\n' > "$T/docs/backlog.md"
+printf '# a plan\n'  > "$T/docs/plans/p.md"
 printf '0.0.1\n'  > "$T/VERSION"
 printf '# log\n'  > "$T/CHANGELOG.md"
 printf '.DS_Store\nnode_modules/\n' > "$T/.gitignore"
@@ -171,6 +176,108 @@ if [ "$(key)" = "$K0" ]; then
 else
   bad "the tree did not return to its initial key — one of the restores above missed, and the assertions after it compared against a drifted tree"
 fi
+
+# --- 10-14. THE `+` OPT-IN: a declared file under an excluded top, keyed at BOTH layers ----
+# docs/ is excluded, so a push changing only docs/backlog.md used to match the outer key and run no
+# fixture, and the hook's per-fixture key had no row for it either. A leading `+` on an inputs.decl
+# line keys that one file in both. Every arm below drives the SHIPPED code: the outer key is this
+# copy's suite-content-key.sh, the inner one is the READSET_KEYROWS span cut out of this copy's
+# .githooks/pre-push and sourced, the way hermetic-run.sh sources it.
+#   k1  `+docs/backlog.md` yields a docs/backlog.md key row carrying the file's sha256
+#   k2  the same line with no `+` yields none -- the behaviour before the opt-in, and the control
+#   k3  the outer key moves on an EDIT of docs/backlog.md and NOT on an EDIT of docs/plans/p.md
+#       (an edit, never an add: adding a file moves the key through its listing component)
+#   k4  a `+` naming a file that is not there refuses the outer key (fails closed, never skips)
+#   k5  `+` on a directory is refused by the parse
+#   k6  `+` and `!` on one line is refused, by the parse and by the outer key
+#   k7  no inputs.decl at all: the unmatched glob still yields a well-formed key
+# Two mutants, each a copy, each cmp-guarded, each killed by its own arm only:
+#   M-plus  the parse strips `+` and emits no key row -- silent, it reads exactly like k2. k1 kills it.
+#   M-docs  the outer key hashes all of docs/ (docs dropped from EXCLUDE). k3's plans control kills it.
+span() { # span <hook> <out> -- the READSET_KEYROWS span, or broken
+  sed -n '/^# READSET_KEYROWS_BEGIN$/,/^# READSET_KEYROWS_END$/p' "$1" > "$2"
+  grep -q '^readset_decl_parse() ' "$2" || broken "no READSET_KEYROWS span with readset_decl_parse in $1"
+}
+krows() { # krows <span file> <decl body> -> the composed key rows of a fixture declaring <decl body>, run from $T
+  local s="$1" fd="$WORK/kfx/kx"
+  rm -rf "$WORK/kfx"; mkdir -p "$fd"; printf '%s\n' "$2" > "$fd/inputs.decl"
+  ( cd "$T" && . "$s" && : > "$WORK/k.now" && : > "$WORK/k.ls" && : > "$WORK/k.th" \
+      && readset_decl_parse kx "$fd" dist "" "/usr/bin:/bin" "$WORK/k.w" > "$WORK/k.parse" \
+      && readset_decl_keys "$WORK/k.now" "$WORK/k.ls" "$WORK/k.parse" "$WORK/k.th" "$WORK/kfx/" )
+}
+span "$T/.githooks/pre-push" "$WORK/span.sh"
+BSHA="$(shasum -a 256 "$T/docs/backlog.md" | cut -d' ' -f1)"
+[ "${#BSHA}" -eq 64 ] || broken "could not hash the seeded docs/backlog.md"
+
+k1="$(krows "$WORK/span.sh" '+docs/backlog.md' | awk -F'\t' '$2 == "docs/backlog.md" { print $3 }')"
+if [ "$k1" = "$BSHA" ]; then ok "k1 a +docs/backlog.md declaration yields a docs/backlog.md key row carrying its sha256"
+else bad "k1 a +docs/backlog.md declaration yielded the row value '$k1', want '$BSHA' -- the file under an excluded top is still unkeyed"; fi
+
+k2="$(krows "$WORK/span.sh" 'docs/backlog.md' | awk -F'\t' '$2 == "docs/backlog.md"' | grep -c .)" || k2=0
+if [ "$k2" -eq 0 ]; then ok "k2 the same line WITHOUT + yields no docs/backlog.md row (an excluded top stays unkeyed unless opted in)"
+else bad "k2 a plain docs/backlog.md declaration yielded $k2 row(s) -- the opt-in is not an opt-in"; fi
+
+krows "$WORK/span.sh" '+docs/' > /dev/null
+k5="$(awk -F'\t' '$2 == "X" && $3 == "plusdir"' "$WORK/k.parse" | grep -c .)" || k5=0
+if [ "${k5:-0}" -eq 1 ]; then ok "k5 + on a directory is refused (plusdir), never keyed as a second manifest"
+else bad "k5 + on a directory was not refused (plusdir rows: ${k5:-0})"; fi
+
+KP="$(key)"
+case "$KP" in ????????????????????????????????????????????????????????????????) : ;; *) broken "no key for the + arms' baseline" ;; esac
+edit_key() { # edit_key <file> -> the key after appending one line, then the file restored
+  cp "$T/$1" "$WORK/e.orig"; printf 'edited\n' >> "$T/$1"
+  cmp -s "$WORK/e.orig" "$T/$1" && broken "the edit of $1 changed no bytes"
+  key; cp "$WORK/e.orig" "$T/$1"
+}
+k3b="$(edit_key docs/backlog.md)"; k3p="$(edit_key docs/plans/p.md)"
+if [ -n "$k3b" ] && [ "$k3b" != "$KP" ]; then ok "k3 an EDIT of the +declared docs/backlog.md moves the outer key"
+else bad "k3 an edit of the +declared docs/backlog.md did NOT move the outer key ('$k3b') -- a backlog-only push still skips the suite"; fi
+if [ "$k3p" = "$KP" ]; then ok "k3 an EDIT of docs/plans/p.md does NOT move it (only the declared file is keyed, not its top)"
+else bad "k3 an edit of docs/plans/p.md moved the outer key -- the + opt-in widened to the whole excluded top"; fi
+
+printf '!scripts/suite-content-key.sh\n+docs/backlog.md\n+docs/absent.md\n' > "$T/core/fixtures/gamma/inputs.decl"
+if bash "$KEY" > /dev/null 2>&1; then bad "k4 a + naming an absent file still produced a key -- a skip would be authorised over a file nobody hashed"
+else ok "k4 a + naming an absent file refuses the key (the caller runs the suite)"; fi
+printf '!scripts/suite-content-key.sh\n+!docs/backlog.md\n' > "$T/core/fixtures/gamma/inputs.decl"
+if bash "$KEY" > /dev/null 2>&1; then bad "k6 a line carrying + and ! together still produced an outer key"
+else ok "k6 a line carrying + and ! together refuses the outer key (one marker per line)"; fi
+krows "$WORK/span.sh" '!+docs/backlog.md' > /dev/null
+k6="$(awk -F'\t' '$2 == "X" && $3 == "plusbang"' "$WORK/k.parse" | grep -c .)" || k6=0
+if [ "$k6" -eq 1 ]; then ok "k6 the hook's parse refuses + and ! on one line (plusbang)"
+else bad "k6 the hook's parse did not refuse + and ! on one line (plusbang rows: $k6)"; fi
+# k7 THE UNMATCHED GLOB: with no inputs.decl anywhere, `core/fixtures/*/inputs.decl` matches nothing,
+# and the key must still be well-formed (an empty keyed section), not refused and not the literal glob.
+mv "$T/core/fixtures/gamma/inputs.decl" "$WORK/gamma.decl"
+k7="$(key)"
+case "$k7" in
+  ????????????????????????????????????????????????????????????????) ok "k7 with no inputs.decl at all the glob matches nothing and the key is still well-formed" ;;
+  *) bad "k7 with no inputs.decl at all the key script produced '$k7' -- an unmatched glob refused or broke the key" ;;
+esac
+[ "$k7" != "$KP" ] || bad "k7 removing the only + declaration did not move the key -- the keyed component is not in it"
+mv "$WORK/gamma.decl" "$T/core/fixtures/gamma/inputs.decl"
+printf '!scripts/suite-content-key.sh\n+docs/backlog.md\n' > "$T/core/fixtures/gamma/inputs.decl"
+[ "$(key)" = "$KP" ] || broken "the gamma declaration was not restored"
+
+# M-plus: the parse line that records a `+` path is deleted, so the marker is stripped and no P row
+# is emitted. Anchored on that line alone, which the span carries exactly once.
+mp_n="$(grep -cF 'if (x && $0 != "") print $0 > pl' "$WORK/span.sh")" || mp_n=0
+[ "$mp_n" -eq 1 ] || broken "M-plus anchor found $mp_n time(s) in the span, want 1"
+grep -vF 'if (x && $0 != "") print $0 > pl' "$WORK/span.sh" > "$WORK/span.mplus.sh"
+cmp -s "$WORK/span.sh" "$WORK/span.mplus.sh" && broken "M-plus DID NOT APPLY"
+mp="$(krows "$WORK/span.mplus.sh" '+docs/backlog.md' | awk -F'\t' '$2 == "docs/backlog.md"' | grep -c .)" || mp=0
+mp_ctl="$(awk -F'\t' '$2 == "F" && $3 == "docs/backlog.md"' "$WORK/k.parse" | grep -c .)" || mp_ctl=0
+if [ "$mp" -eq 0 ] && [ "$mp_ctl" -eq 1 ]; then ok "M-plus KILLED by k1: a parse that drops + silently keys nothing, with the F row still parsed (it ran)"
+else bad "M-plus SURVIVED or did not run: rows=$mp, F rows=$mp_ctl"; fi
+
+# M-docs: docs removed from EXCLUDE in a copy of the key script, driven through k3's two edits only.
+sed '/^# EXCLUDE_BEGIN$/,/^# EXCLUDE_END$/{/^docs$/d;}' "$KEY" > "$WORK/key.mdocs.sh"
+cmp -s "$KEY" "$WORK/key.mdocs.sh" && broken "M-docs DID NOT APPLY"
+cp "$WORK/key.mdocs.sh" "$T/scripts/.key-mdocs.sh"
+mkey() { bash "$T/scripts/.key-mdocs.sh" 2>/dev/null; }
+MK="$(mkey)"; cp "$T/docs/plans/p.md" "$WORK/e.orig"; printf 'edited\n' >> "$T/docs/plans/p.md"; MKP="$(mkey)"; cp "$WORK/e.orig" "$T/docs/plans/p.md"
+rm -f "$T/scripts/.key-mdocs.sh"
+if [ -n "$MK" ] && [ "$MKP" != "$MK" ]; then ok "M-docs KILLED by k3: a key hashing all of docs/ moves on the plans edit k3 requires to be still"
+else bad "M-docs SURVIVED: a key hashing all of docs/ did not move on a plans edit ('$MK' -> '$MKP')"; fi
 
 echo
 if [ "$fails" -ne 0 ]; then

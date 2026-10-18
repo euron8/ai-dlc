@@ -190,11 +190,12 @@ fi
 # against READSET_UNKEYED_TOOLS (the `command -v` resolution below still refuses an unreachable one) and does not
 # refuse a duplicate basename at parse time (the tool farm below still refuses two different paths). A probe of
 # the composer must therefore drive the span-present path, never this one.
+# It strips a leading `+` with the `!`, and emits no P row: a skew run writes no key row at all.
 hr_parse_skew() { # <fx> <fixture dir> <dist|cons> <mapper> <tool search path> <scratch prefix>
   local fx="$1" fd="$2" w="$6" t p
   printf '%s\tN\n' "$fx"
   awk -v fx="$fx" '{ sub(/\r$/, ""); if ($0 == "" || $0 ~ /^#/) next
-      r = 0; if (substr($0, 1, 1) == "!") { r = 1; $0 = substr($0, 2) }
+      r = 0; while ((c = substr($0, 1, 1)) == "!" || c == "+") { if (c == "!") r = 1; $0 = substr($0, 2) }
       if ($0 ~ /^\// || $0 ~ /(^|\/)\.\.(\/|$)/) { print fx "\tX\tabs\t" $0; next }
       k = "F"; if ($0 ~ /\/$/) { k = "D"; sub(/\/+$/, "") }
       if ($0 != "") print fx "\t" k "\t" $0 "\t" r }' "$fd/inputs.decl" > "$w.n"
@@ -251,6 +252,9 @@ while IFS="$hr_tab" read -r f k a b c; do
          tpath) printf 'hermetic-run: %s: tools.decl names a path, wants a bare name: %s\n' "$HR_FX" "$b" >&2 ;;
          tnone) printf 'hermetic-run: %s: declared tool %s resolves in none of %s\n' "$HR_FX" "$b" "$HR_XPD" >&2 ;;
          dup) printf 'hermetic-run: %s: two declared tools share the basename %s -- the sandbox farm holds one\n' "$HR_FX" "$b" >&2 ;;
+         plusdir) printf 'hermetic-run: %s: inputs.decl marks a directory with + (KEYED outside the universe); only a file may carry it: %s/\n' "$HR_FX" "$b" >&2 ;;
+         plusbang) printf 'hermetic-run: %s: inputs.decl carries + and ! on one line; a line carries one marker: %s\n' "$HR_FX" "$b" >&2 ;;
+         plushash) printf 'hermetic-run: %s: the + file %s could not be hashed, so it has no key value\n' "$HR_FX" "$b" >&2 ;;
          *) printf 'hermetic-run: %s: the declaration was refused (%s %s)\n' "$HR_FX" "$a" "$b" >&2 ;;
        esac ;;
   esac
@@ -373,6 +377,8 @@ HR_SB="$(cd "$HR_WORK/sb" && pwd -P)" || exit 2
 # under another declared directory is simply re-listed; the copy refuses nothing that exists.
 # DECLARED FILES keep the direct `cp -p` below and are NOT gated by the population: a dist sandbox
 # declares VERSION and docs/backlog*.md, which sit under EXCLUDED tops and so are in no population.
+# Such a file is copied and NOT keyed, unless its inputs.decl line carries a leading `+`: the span's parse
+# then hashes it into a P row and readset_decl_keys keys it (the F row, and so this copy, is unchanged).
 : > "$HR_WORK/copy"
 if [ -s "$HR_WORK/dirs" ]; then
   ( cd "$HR_ROOT" && git -c core.quotePath=false ls-files -s 2>/dev/null ) \

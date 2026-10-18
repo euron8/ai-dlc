@@ -1,0 +1,10 @@
+# backlog-real-ledger joins two validators against the classifier on THIS repository's real ledger.
+# The three scripts are copied into each probe tree and run; the two reconcile files are loaded
+# beside them. docs/backlog.md carries `+`: it sits under an excluded top, and `+` keys it anyway,
+# in the hook's per-fixture key and in scripts/suite-content-key.sh's outer key.
+!scripts/validate-backlog-receipts.sh
+!scripts/validate-backlog-size.sh
+!scripts/backlog-reverify.sh
+core/skills/ai-dlc-update/reconcile/lib.sh
+core/skills/ai-dlc-update/reconcile/ledger-reverify.sh
++docs/backlog.md

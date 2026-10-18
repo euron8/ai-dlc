@@ -97,13 +97,11 @@ if [ -z "$REVSRC" ]; then
   echo "FIXTURE BROKEN: could not locate reconcile/ledger-reverify.sh" >&2; exit 2
 fi
 
-# The shipping classifier and the real ledger, for the population join.
-REVERIFY=""; REAL_LEDGER=""
+# The shipping classifier: R2's declared-empty exemption asks it, so every seed carries it, and m8d
+# reads its marker.
+REVERIFY=""
 for cand in "$DIR/../../../scripts/backlog-reverify.sh" "$DIR/../../scripts/backlog-reverify.sh"; do
   [ -f "$cand" ] && REVERIFY="$cand" && break
-done
-for cand in "$DIR/../../../docs/backlog.md" "$DIR/../../docs/backlog.md"; do
-  [ -f "$cand" ] && REAL_LEDGER="$cand" && break
 done
 
 TMP="$(mktemp -d)"
@@ -749,83 +747,10 @@ else
   fi
 fi
 
-# ===== THE POPULATION JOIN. ================================================================
-# Bind the subject's `sh` population to the SHIPPING classifier's view of the same ledger, at
-# fixture time rather than on the gate's hot path. NO NUMBER IS HARDCODED: a literal would go
-# stale on the next filed entry, and equality alone is satisfied by two broken predicates that
-# both return 0, so both sides are asserted non-zero as well.
-# R2 REFUSES BEFORE THE SUMMARY when this tree can score none of the real ledger's receipts, and
-# that is a property of THIS tree, not of the ledger: it carries only the validator, lib.sh and
-# ledger-reverify.sh, so most real receipts exit 9 or 0 here, and a correct fix closing the last
-# one it could bind empties the scored set. Reading the population out of R2's refusal instead
-# kept j1 green there, and cost j1 its second job: a validator that scored NOTHING read the same.
-# So the j1 ledger carries one ANCHOR receipt, appended LAST and keyed on a seed file every
-# `seed` tree holds, which this tree always scores (a literal grep: PROSE-CLOSABLE). The SUMMARY
-# is then always printed, the population is read from it alone, and `scored=` must be non-zero.
-# The anchor is one more sh receipt on BOTH sides of the join, so the comparison is unmoved.
-J1_ANCHOR='BL-899'
-j1_read() { # j1_read <validator output> -> "<sh-receipts> <scored>", or nothing without a SUMMARY
-  printf '%s\n' "$1" | sed -n 's/^SUMMARY .*sh-receipts=\([0-9][0-9]*\) scored=\([0-9][0-9]*\) .*/\1 \2/p'
-}
-# SELF-PROBE, BOTH DIRECTIONS, before the real ledger: a zero-scored ledger (one exit-9 receipt)
-# must yield NO reading, and the same ledger plus the anchor must yield one with scored >= 1.
-seed "$TMP/j1p"
-printf '# Probe backlog\n\n## BL-803\n\nverify: sh grep -q %s probe/guarded.txt || exit 9\n\n' "'MARK803'" \
-  > "$TMP/j1p/docs/backlog.md"
-( cd "$TMP/j1p" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m zero >/dev/null 2>&1 )
-j1p_zero="$(j1_read "$(run_v "" "$TMP/j1p" --max-prose-closable 9999 --max-unscorable 9999 --max-out-of-population 9999 --min-sh-receipts 0 --min-entries 0)")"
-printf '## %s\n\nverify: sh grep -q %s probe/subject.txt\n\n' "$J1_ANCHOR" "'MARKJ1ANCHOR'" >> "$TMP/j1p/docs/backlog.md"
-( cd "$TMP/j1p" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m anchor >/dev/null 2>&1 )
-j1p_anch="$(j1_read "$(run_v "" "$TMP/j1p" --max-prose-closable 9999 --max-unscorable 9999 --max-out-of-population 9999 --min-sh-receipts 0 --min-entries 0)")"
-if [ -z "$j1p_zero" ] && [ "${j1p_anch#* }" = 1 ]; then
-  note "ok    j1 probe -- a zero-scored ledger yields no SUMMARY reading, and the same ledger plus the anchor yields scored=1"
-else
-  note "FAIL  j1 probe -- zero-scored reading '$j1p_zero' (want none), anchored reading '$j1p_anch' (want '<n> 1'); the j1 reader or its anchor cannot discriminate, so j1 below proves nothing"; rc=1
-fi
-if [ -n "$REVERIFY" ] && [ -n "$REAL_LEDGER" ]; then
-  seed "$TMP/j1"
-  cp "$REVERIFY" "$TMP/j1/scripts/backlog-reverify.sh"
-  cp "$REAL_LEDGER" "$TMP/j1/docs/backlog.md"
-  # The anchor must be an id the real ledger does not carry, or it is a second entry under one id.
-  # Real entries are titled (`## BL-NNN — ...`), so the id is closed by a non-digit or line end.
-  # A real ledger DECLARED EMPTY carries no `## BL-` entry by construction, so that half of the
-  # precondition binds only when the classifier says the ledger is not declared empty; the anchor
-  # then supplies the arm's whole population and the join below still runs.
-  ( cd "$TMP/j1" && bash scripts/backlog-reverify.sh --declared-empty docs/backlog.md >/dev/null 2>&1 ); j1_de=$?
-  if [ "$j1_de" -ne 0 ] && [ "$j1_de" -ne 1 ]; then
-    note "FAIL  j1 -- backlog-reverify.sh --declared-empty exited $j1_de on the real ledger, an environment failure"; rc=1
-  fi
-  if grep -qE "^## ${J1_ANCHOR}([^0-9]|\$)" "$TMP/j1/docs/backlog.md" \
-     || { [ "$j1_de" -ne 0 ] && ! grep -q '^## BL-' "$TMP/j1/docs/backlog.md"; }; then
-    note "FAIL  j1 -- the real ledger already carries ${J1_ANCHOR}, or carries no '## BL-' entry at all while not declared empty; the anchor cannot be told apart"; rc=1
-  fi
-  printf '\n## %s\n\nverify: sh grep -q %s probe/subject.txt\n\n' "$J1_ANCHOR" "'MARKJ1ANCHOR'" >> "$TMP/j1/docs/backlog.md"
-  ( cd "$TMP/j1" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m real >/dev/null 2>&1 )
-  j1_out="$(run_v "" "$TMP/j1" --max-prose-closable 9999 --max-unscorable 9999 --max-out-of-population 9999 --min-sh-receipts 0 --min-entries 0)"
-  j1_rd="$(j1_read "$j1_out")"
-  j1_arm="${j1_rd%% *}"; j1_sc="${j1_rd#* }"
-  if [ -z "$j1_rd" ] || [ "$j1_sc" -eq 0 ]; then
-    note "FAIL  j1 -- the validator printed no SUMMARY or scored nothing on the real ledger plus a receipt it always scores (reading '$j1_rd'); nothing was observed"; rc=1
-    j1_arm=""
-  fi
-  # Reverify's own view: one row per entry, id in field 2, restricted to the rows whose verb
-  # it resolved as `sh` -- which are exactly the ones it reports STILL-LIVE or CLOSE-CANDIDATE
-  # from an sh receipt. Counting its distinct ids for those statuses is its population.
-  j1_rev="$( cd "$TMP/j1" && bash scripts/backlog-reverify.sh docs/backlog.md 2>/dev/null \
-    | awk -F'\t' '$3 ~ /^sh receipt exited/ { print $2 }' | sort -u | grep -c . )"
-  if [ -z "$j1_arm" ] || [ -z "$j1_rev" ]; then
-    note "FAIL  j1 -- a side produced no value (arm='$j1_arm' reverify='$j1_rev')"; rc=1
-  elif [ "$j1_arm" -eq 0 ] || [ "$j1_rev" -eq 0 ]; then
-    note "FAIL  j1 -- a side counted ZERO (arm=$j1_arm reverify=$j1_rev); two predicates that both find nothing agree perfectly and prove nothing"; rc=1
-  elif [ "$j1_arm" -lt "$j1_rev" ]; then
-    note "FAIL  j1 -- the arm sees $j1_arm sh receipts and backlog-reverify.sh resolves $j1_rev. The arm's population is SMALLER than the classifier's, so receipts exist that it never scores."; rc=1
-  else
-    note "ok    j1 -- on the real ledger the arm's sh population ($j1_arm) covers the classifier's resolved set ($j1_rev)"
-  fi
-else
-  note "FAIL  j1 -- backlog-reverify.sh or the real ledger is not resolvable, so the population join could not be evaluated. A skip here reads exactly like agreement."
-  rc=1
-fi
+# ===== THE POPULATION JOIN MOVED. ==========================================================
+# Arm j1 -- the validator's `sh` population against backlog-reverify.sh on the REAL ledger -- is
+# core/fixtures/backlog-real-ledger/ now. Its verdict depends on docs/backlog.md, which sits under an
+# excluded top of the content key, and that unit declares it `+` so a backlog-only push re-runs it.
 
 # ===== M12 / M13. THE SEED AND THE TOKEN GRAMMAR MUST BE COMPLETE, NOT FIRST-ONLY. =========
 # Two wrong cuts that pass every single-subject probe in this file and SHRINK the real answer

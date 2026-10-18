@@ -9,10 +9,10 @@ docs/backlog.md at all. On a consumer this fixture would resolve no validator an
 and could only pass -- a unit that cannot fail scores as a pass in the consumer's own suite
 verdict.
 
-It also reads scripts/backlog-reverify.sh, scripts/backlog-rotate.sh and docs/backlog.md
-directly for its three join probes (b15, b16, b17), which bind the ceiling's entry predicate to
-the shipping classifier's population and to the rotator's own backlog_entry_label(). None of
-those three exists on a consumer either.
+It also copies scripts/backlog-reverify.sh into every seed for its classifier join (b15), which
+binds the ceiling's entry predicate to the shipping classifier's population. That script does not
+exist on a consumer either. The same join on the real ledger (b16) moved to
+core/fixtures/backlog-real-ledger/, which is keyed on docs/backlog.md.
 
 The consumer's equivalent ledger is the push-candidate ledger under
 _bmad-output/ai-dlc-update/, whose own fixtures (ledger-reverify, ledger-rotate,
