@@ -786,7 +786,7 @@ score_ledger() {
   : > "$WORK/unrec"
   # The has/lacks verb pair is bound to the classifier's own case arm: if it moves, refuse rather than drift.
   # Fixture backlog-receipt-binding arm m8e-drift proves this fires (a copy with the arm renamed exits 2).
-  grep -qF 'has|lacks)' "$SELF_ROOT/scripts/backlog-reverify.sh" 2>/dev/null || { echo "$(me): FAIL -- backlog-reverify.sh no longer dispatches 'has|lacks)', so the verb pair recognised here has drifted from it." >&2; return 2; }
+  grep -qE '^[[:space:]]*has\|lacks\)' "$SELF_ROOT/scripts/backlog-reverify.sh" 2>/dev/null || { echo "$(me): FAIL -- backlog-reverify.sh no longer dispatches 'has|lacks)', so the verb pair recognised here has drifted from it." >&2; return 2; }
   while IFS="$(printf '\t')" read -r _l _c _r; do
     [ -n "$_l" ] || continue
     [ "$_c" = "1" ] && continue                 # annotated LANDED: awaiting rotation, not live

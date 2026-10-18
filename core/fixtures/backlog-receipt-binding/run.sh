@@ -684,10 +684,14 @@ printf '# Probe backlog\n\n## BL-854\n\nBody.\n\nverify: has VERSION "."\n\n' > 
 m8ed_f="$TMP/m8ed/scripts/backlog-reverify.sh"
 if [ -f "$m8ed_f" ] && sed 's/has|lacks)/hasx|lacks)/' "$m8ed_f" > "$m8ed_f.new" && ! cmp -s "$m8ed_f" "$m8ed_f.new"; then
   mv "$m8ed_f.new" "$m8ed_f"
+  # A COMMENT still carrying the arm text must not satisfy the guard: the arm is renamed but a
+  # comment line reads `# has|lacks)`, so a whole-file grep would pass and the guard must still fire.
+  printf '# the arm was has|lacks) once\n' >> "$m8ed_f"
+  grep -qF 'has|lacks)' "$m8ed_f" || { note "FAIL  m8e-drift -- the decoy comment did not land"; rc=1; }
   # shellcheck disable=SC2086
   m8ed_out="$(run_v "" "$TMP/m8ed" $M8E_ARGS)"; m8ed_rc=$?
   if [ "$m8ed_rc" -eq 2 ] && grep -q 'has drifted' <<<"$m8ed_out"; then
-    note "ok    m8e-drift -- with the classifier's has|lacks arm renamed the subject exits 2 naming the drift"
+    note "ok    m8e-drift -- with the classifier's has|lacks arm renamed (a comment still carrying the text) the subject exits 2 naming the drift"
   else
     note "FAIL  m8e-drift -- rc=$m8ed_rc; the drift guard did not fire"; rc=1
   fi
