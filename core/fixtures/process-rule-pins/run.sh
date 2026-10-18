@@ -429,6 +429,7 @@ adv-header-strip|R|adversary.md|## The verdict|## |**A shard copies the region a
 arch-lint-invoke|S|steps/architecture.md|### 2. Architecture Creation or Update|### 3.|`bmad-architecture` ships `scripts/lint_spine.py`|para|lint_spine.py --workspace <the run folder holding ARCHITECTURE-SPINE.md> -o <lint json>
 arch-chain-join|S|steps/architecture.md|### 2. Architecture Creation or Update|### 3.|**Sections 2 and 3 run as ONE dispatched `architect` chain**|para|Join it with `scripts/ai-dlc/wait-for-deliverable.sh --complete --dispatch <agentId> _bmad-output/planning-artifacts/s<N>/architecture-chain.md`
 arch-chain-marker-last|S|steps/architecture.md|### 2. Architecture Creation or Update|### 3.|**Sections 2 and 3 run as ONE dispatched `architect` chain**|para|only after the LAST file of the chain is written makes one final write, the line `seat-complete: architecture architect none findings=0`
+arch-chain-rearm-growth|S|steps/architecture.md|### 2. Architecture Creation or Update|### 3.|**Sections 2 and 3 run as ONE dispatched `architect` chain**|para|The record is growing when it has a new start or finish line since the previous beat
 PINS
 }
 

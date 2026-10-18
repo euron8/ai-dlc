@@ -60,9 +60,14 @@ returned. Never join on `ARCHITECTURE-SPINE.md`, and never on
 `docs/architecture*.md`. Under `--complete` a beat is granted again only
 when the record has changed, so one file that takes longer than the beat
 budget ends the join as NON-DELIVERY with the record UNFINISHED. While the
-architect's completion notification has not arrived, that is a live
-architect, not a non-delivery: re-arm the same join with `--reset`, and
-never re-dispatch a second architect beside it.
+architect's completion notification has not arrived and the record is still
+growing, that is a live architect, not a non-delivery: re-arm the same join
+with `--reset` ONCE per beat, and never re-dispatch a second architect beside
+it. The record is growing when it has a new start or finish line since the
+previous beat; compare its line count with the one you noted at the previous
+beat. A record that has not moved since the previous beat is a non-delivery,
+and you take Rule 29 "The bounded file-wait beat" exhaustion path, not another
+`--reset`.
 
 **The chain drafts; the lead adopts.** The architect runs `lint_spine.py` as
 below and lists its `<lint json>` in the record. It records its section 2
