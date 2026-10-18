@@ -60,6 +60,50 @@
 #                lists HARD-* row(s) the detectors no longer render, and none they newly do — the
 #                blockers were RESOLVED after the render (the adjudication loop's own work). Still a
 #                refusal; apply.sh names the cause and the remedy is a re-render and re-approval.
+#
+# A RECORDED PASS IS ACCEPTED INSTEAD OF A RE-RENDER, AND ONLY ON A KEY THAT PINS EVERY RENDER INPUT.
+# One pull ran `--verify` three or four times on one tree (step 5, step 7 clause (1), step 7 after
+# resolving, `apply.sh`'s own gate), each a full detector re-render at 3-14 minutes: about 35 of a
+# 116-minute pull, measured from a graph pull transcript (BL-679). So an exit-0 `--verify` writes a
+# record, and a later `--verify` whose key matches it prints the same exit-0 line plus a line naming
+# the record and the opt-out, and exits 0 without rendering.
+#
+# THE RECORD lives at `<consumer git-dir>/ai-dlc-verify-pass`, OUTSIDE the work tree, so writing it
+# moves no input it keys on. Overwritten, never appended; written through `mktemp` in the same dir and
+# `mv`; a failed write is silent and is never a pass by itself. A consumer that is not the top level
+# of a git work tree never reads or writes one. Exit 1, exit 3, a refusal and a print render never
+# write one. The key is computed BEFORE the render and AGAIN AFTER it, and the record is written only
+# when the two agree: a render whose own detectors wrote under the consumer passed on inputs that no
+# longer stand.
+#
+# THE KEY -- every field required; any field that cannot be computed is a miss, never a hit:
+#   engine       every file under this directory, by relative name and content hash (not path, not
+#                mtime), so a record from any other engine is refused in both directions;
+#   base/theirs  each one's commit object AND its `:core` tree, resolved in <dist>; the ref STRING is
+#                not the key, because a symbolic `origin/main` moves;
+#   distrefs     <dist>'s `for-each-ref` and whether it is shallow;
+#   consroot     `pwd -P` of <consumer>, because the region renders absolute consumer paths;
+#   consindex    `ls-files -s` (mode, blob, path: the exec bit and tracked-ness);
+#   conswork     `status --porcelain=v2 --untracked-files=all` plus the bytes of every modified or
+#                untracked path, EXCLUDING ONLY the report file itself (never its directory: the
+#                adjudication register and the push-candidate ledger live beside it and are inputs);
+#   consignored  name, bytes and exec bit of every IGNORED file under the engine's read roots:
+#                `.claude/` (not `.claude/worktrees/`), `_bmad-output/`, every `corpus-root:` in
+#                predicate-sites.md, and the other consumer paths the detectors name;
+#   consobjects  <consumer>'s `for-each-ref` (an override's `base_sha` resolves there);
+#   env          `AI_DLC_KNOWN_SKILLS_EXT`, set and unset distinguished, and the file it names;
+#   region       the report region's hash after the dist-path normalisation below, which must equal
+#                the region of the render that passed -- an edit OUTSIDE the region still hits, one
+#                byte inside it misses.
+# On a hit the preclassify-refusal check is not re-run: it ran on the render the record came from.
+#
+# THE LIMITS, STATED RATHER THAN HIDDEN. (1) The record is a CACHE, NOT AN ATTESTATION: anyone who
+# can write the git-dir can forge one, and `AI_DLC_VERIFY_NO_CACHE=1` (any non-empty value) forces a
+# fresh render for an operator who wants the detectors' own word. (2) `predicate-differential.sh`
+# runs validators with the consumer as cwd, so their read set is OPEN: an IGNORED file outside the
+# roots above that one of them reads is not keyed, and its change can leave a stale PASS accepted.
+# (3) Tool availability (`jq`, `python3`, PATH) is not keyed: a render that passed with a tool
+# present is accepted after the tool is gone. The opt-out re-renders in every case.
 set -uo pipefail
 
 MODE=print
@@ -904,8 +948,182 @@ fi
 # Nothing else is normalized: this is the one field whose value is a property of WHERE the
 # detectors ran rather than WHAT they found, and a hand-edit anywhere else still fails.
 norm_dist() { sed -E "s|git -C .* show ${THEIRS}:|git -C <dist> show ${THEIRS}:|g"; }
-want="$(render | norm_dist)"
 got="$(awk '/BEGIN GENERATED: reconcile-mechanical/{f=1} f{print} /END GENERATED: reconcile-mechanical/{f=0}' "$REPORT" | norm_dist)"
+
+# --- THE RECORDED PASS (the header's "A RECORDED PASS" block owns the key and its limits) ---------
+# Every helper returns non-zero on any failure, and every caller reads that as a MISS.
+_er_root=""; _er_gd=""; _er_rel=""; _er_ex=""; _er_rec=""; _er_key0=""
+if [ -n "$_er_tmp" ] && _er_root="$(cd "$CONSUMER" 2>/dev/null && pwd -P)" && [ -n "$_er_root" ]; then
+  _er_top="$(git -C "$CONSUMER" rev-parse --show-toplevel 2>/dev/null)" || _er_top=""
+  # The TOP LEVEL only: a consumer that is a subdirectory of some other repository (a fixture world
+  # under a checkout) would key on part of a tree and record into a git-dir that is not its own.
+  if [ -n "$_er_top" ] && [ "$(cd "$_er_top" 2>/dev/null && pwd -P)" = "$_er_root" ]; then
+    _er_gd="$(git -C "$CONSUMER" rev-parse --absolute-git-dir 2>/dev/null)" || _er_gd=""
+  fi
+  if [ -n "$_er_gd" ] && [ -d "$_er_gd" ]; then
+    _er_rec="$_er_gd/ai-dlc-verify-pass"
+    # The report's path relative to the consumer root, when it lies inside it: the ONE path the
+    # work-tree fields exclude, so writing the report does not invalidate its own PASS.
+    _er_rabs="$(cd "$(dirname "$REPORT")" 2>/dev/null && pwd -P)/$(basename "$REPORT")"
+    case "$_er_rabs" in "$_er_root"/*) _er_rel="${_er_rabs#"$_er_root"/}" ;; esac
+    _er_ex="$_er_rel"
+  fi
+fi
+# er_cgit <git-args...> -- a consumer git command over the whole tree minus the report file. Never an
+# empty `:(exclude)`: that excludes the WHOLE tree and reads as an empty one.
+er_cgit() {
+  if [ -n "$_er_ex" ]; then git -C "$CONSUMER" -c core.quotePath=false "$@" -- . ":(exclude,literal)$_er_ex"
+  else git -C "$CONSUMER" -c core.quotePath=false "$@" -- .; fi
+}
+# er_hash_list <listfile> -- each listed consumer path that exists, then its content hash, in order.
+er_hash_list() {
+  local p
+  : > "$_er_tmp/key.exist" || return 1
+  while IFS= read -r p; do
+    { [ -e "$CONSUMER/$p" ] || [ -L "$CONSUMER/$p" ]; } || continue
+    printf '%s\n' "$p" >> "$_er_tmp/key.exist" || return 1
+  done < "$1"
+  cat "$_er_tmp/key.exist" || return 1
+  er_hash_paths "$_er_root" "$_er_tmp/key.exist"
+}
+# er_hash_paths <abs-dir> <listfile> -- content hash of each listed path, by ABSOLUTE path. MEASURED:
+# `git hash-object --stdin-paths` resolves a relative path against the repository TOP, not the cwd,
+# so run from the engine directory inside a checkout it failed every file and the key never formed.
+er_hash_paths() {
+  local p
+  : > "$_er_tmp/key.abs" || return 1
+  while IFS= read -r p; do printf '%s/%s\n' "$1" "${p#./}" >> "$_er_tmp/key.abs" || return 1; done < "$2"
+  [ -s "$_er_tmp/key.abs" ] || return 0
+  git hash-object --no-filters --stdin-paths < "$_er_tmp/key.abs"
+}
+# er_sha256 <file> -- the file's sha256 hex, from whichever of the two common tools exists. Neither
+# present, or a non-hex answer, is a failure (and so a MISS), never an empty field.
+er_sha256() {
+  local h
+  if command -v shasum >/dev/null 2>&1; then h="$(shasum -a 256 < "$1")" || return 1
+  elif command -v sha256sum >/dev/null 2>&1; then h="$(sha256sum < "$1")" || return 1
+  else return 1; fi
+  h="${h%% *}"
+  case "$h" in ""|*[!0-9a-f]*) return 1 ;; esac
+  [ "${#h}" -eq 64 ] || return 1
+  printf '%s\n' "$h"
+}
+# THE ELEVEN FIELD READERS, one per key field, each writing that field's raw material to stdout and
+# returning non-zero on any failure. The order below is the pinned order; er_key hashes each.
+er_kf_engine() {
+  ( cd "$SELF" && find . -type f | LC_ALL=C sort ) > "$_er_tmp/key.engine-list" || return 1
+  [ -s "$_er_tmp/key.engine-list" ] || return 1
+  cat "$_er_tmp/key.engine-list" || return 1
+  er_hash_paths "$SELF" "$_er_tmp/key.engine-list" || return 1
+}
+er_kf_ref() {
+  git -C "$DIST" rev-parse -q --verify "${1}^{commit}" || return 1
+  git -C "$DIST" rev-parse -q --verify "${1}:core" || return 1
+}
+er_kf_base()   { er_kf_ref "$BASE"; }
+er_kf_theirs() { er_kf_ref "$THEIRS"; }
+er_kf_distrefs() {
+  git -C "$DIST" for-each-ref || return 1
+  git -C "$DIST" rev-parse --is-shallow-repository || return 1
+}
+er_kf_consroot()  { printf '%s\n' "$_er_root"; }
+er_kf_consindex() { git -C "$CONSUMER" ls-files -s -z; }
+# The status names every modified and untracked path; their BYTES are hashed after it. An untracked
+# entry ending in `/` is a nested repository git will not descend into: named, not hashed.
+er_kf_conswork() {
+  er_cgit --no-optional-locks status --porcelain=v2 -z --untracked-files=all || return 1
+  er_cgit ls-files -m -o --exclude-standard > "$_er_tmp/key.work-all" || return 1
+  grep -v '/$' "$_er_tmp/key.work-all" > "$_er_tmp/key.work"
+  [ "$?" -le 1 ] || return 1
+  er_hash_list "$_er_tmp/key.work" || return 1
+}
+# IGNORED files are invisible to every git field above, and the detectors read some anyway. The read
+# roots are the consumer paths the render's detectors name (`.claude/` minus `.claude/worktrees/`,
+# `_bmad-output/`, the installed and local script trees, the workflows dir, the fixture tree, the
+# four generated files template-sites.md names, the alternate known-skills location) plus every
+# `corpus-root:` in predicate-sites.md, re-validated with predicate-differential.sh's own refusals:
+# one this cannot use is a MISS, never a narrower key.
+er_kf_consignored() {
+  local r
+  printf '%s\n' .claude _bmad-output scripts/ai-dlc scripts/ai-dlc-local .github/workflows tests \
+    skills/ai-dlc/extensions CLAUDE.md QUICKSTART.md docs/coding-conventions.md > "$_er_tmp/key.roots" || return 1
+  sed -n 's/^corpus-root:[[:space:]]*//p' "$SELF/predicate-sites.md" > "$_er_tmp/key.croots" || return 1
+  while IFS= read -r r; do
+    r="${r%"${r##*[![:space:]]}"}"
+    case "$r" in ""|/*|*[[:space:]]*|..|../*|*/..|*/../*) return 1 ;; esac
+    printf '%s\n' "$r" >> "$_er_tmp/key.roots" || return 1
+  done < "$_er_tmp/key.croots"
+  : > "$_er_tmp/key.ign" || return 1
+  while IFS= read -r r; do
+    if [ -n "$_er_ex" ]; then
+      git -C "$CONSUMER" -c core.quotePath=false ls-files -o -i --exclude-standard -- "$r" \
+        ':(exclude).claude/worktrees' ":(exclude,literal)$_er_ex" >> "$_er_tmp/key.ign" || return 1
+    else
+      git -C "$CONSUMER" -c core.quotePath=false ls-files -o -i --exclude-standard -- "$r" \
+        ':(exclude).claude/worktrees' >> "$_er_tmp/key.ign" || return 1
+    fi
+  done < "$_er_tmp/key.roots"
+  grep -v '/$' "$_er_tmp/key.ign" > "$_er_tmp/key.ign-files"
+  [ "$?" -le 1 ] || return 1
+  LC_ALL=C sort -u "$_er_tmp/key.ign-files" > "$_er_tmp/key.ign-sorted" || return 1
+  # Name and exec bit first, bytes after: a chmod alone moves this field.
+  while IFS= read -r r; do
+    if [ -x "$CONSUMER/$r" ]; then echo "x $r"; else echo "- $r"; fi
+  done < "$_er_tmp/key.ign-sorted"
+  er_hash_list "$_er_tmp/key.ign-sorted" || return 1
+}
+er_kf_consobjects() { git -C "$CONSUMER" for-each-ref; }
+er_kf_env() {
+  if [ -n "${AI_DLC_KNOWN_SKILLS_EXT+x}" ]; then
+    printf 'set %s\n' "$AI_DLC_KNOWN_SKILLS_EXT"
+    if [ -f "$AI_DLC_KNOWN_SKILLS_EXT" ]; then git hash-object --no-filters "$AI_DLC_KNOWN_SKILLS_EXT" || return 1; fi
+  else
+    echo "unset"
+  fi
+}
+# The REPORT's region, never the render's: the key is taken before any render, and an exit-0 run
+# records only when the render equalled this region byte for byte, so the recorded value IS the
+# passing render's.
+er_kf_region() { [ -n "$got" ] || return 1; printf '%s\n' "$got"; }
+# er_key -- prints the key: sha256 over the eleven `name=value` lines, each value the sha256 of that
+# field's material. Non-zero, and nothing usable, when any field could not be computed.
+er_key() {
+  local f v
+  [ -n "$_er_rec" ] || return 1
+  : > "$_er_tmp/key.block" || return 1
+  for f in engine base theirs distrefs consroot consindex conswork consignored consobjects env region; do
+    "er_kf_$f" > "$_er_tmp/key.f.$f" 2>/dev/null || return 1
+    v="$(er_sha256 "$_er_tmp/key.f.$f")" || return 1
+    printf '%s=%s\n' "$f" "$v" >> "$_er_tmp/key.block" || return 1
+  done
+  er_sha256 "$_er_tmp/key.block"
+}
+# er_cache_record -- called ONLY on the exit-0 path, after the render. Writes only when the key taken
+# AFTER the render equals the one taken before it. Silent on every failure.
+er_cache_record() {
+  local k1 t
+  [ -n "$_er_key0" ] || return 0
+  k1="$(er_key)" || return 0
+  [ "$k1" = "$_er_key0" ] || return 0
+  t="$(mktemp "$_er_gd/ai-dlc-verify-pass.XXXXXX" 2>/dev/null)" || return 0
+  if printf 'ai-dlc-verify-pass 1\nkey %s\n' "$k1" > "$t" 2>/dev/null; then
+    mv -f "$t" "$_er_rec" 2>/dev/null || rm -f "$t"
+  else
+    rm -f "$t"
+  fi
+  return 0
+}
+_er_key0="$(er_key 2>/dev/null)" || _er_key0=""
+if [ -n "$_er_key0" ] && [ -z "${AI_DLC_VERIFY_NO_CACHE:-}" ] && [ -f "$_er_rec" ]; then
+  _er_rk="$(sed -n 's/^key //p' "$_er_rec" 2>/dev/null | head -1)"
+  if [ -n "$_er_rk" ] && [ "$_er_rk" = "$_er_key0" ]; then
+    echo "emit-report: the report's mechanical region is present, current, and complete."
+    echo "emit-report: accepted a recorded PASS (${_er_rec}); nothing was re-rendered. Set AI_DLC_VERIFY_NO_CACHE=1 to re-render."
+    exit 0
+  fi
+fi
+
+want="$(render | norm_dist)"
 if [ -z "$got" ]; then
   echo "FAIL: the report has no 'reconcile-mechanical' GENERATED region. The mechanical sections" >&2
   echo "  (buckets, deletions, blocking-layer, drift, relabel) must be RENDERED by emit-report.sh," >&2
@@ -951,6 +1169,7 @@ if [ "$_pc_rc" = 0 ]; then
   exit 1
 fi
 if [ "$want" = "$got" ]; then
+  er_cache_record
   echo "emit-report: the report's mechanical region is present, current, and complete."
   exit 0
 fi
