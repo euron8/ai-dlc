@@ -451,7 +451,7 @@ if [ "$POOL_DEPTH_IN" -ge 1 ]; then
 fi
 # A UNIT THAT MAKES NO PROGRESS IS REFUSED, NEVER JUDGED ON ELAPSED TIME (BL-606). Every unit runs through
 # the worker's `pool_run`, which starts it in its own process group with TMPDIR set to a per-unit WATCHED
-# ROOT, "$out/.tmp/<unit>", and polls once a second.
+# ROOT, "$out/.t.<worker pid>" under a short `/tmp/fx.XXXXXX` "$out" (never the fixture name), and polls once a second.
 # PROGRESS IS NEW BYTES, AND NOTHING ELSE: the summed size of every file under the watched root plus the
 # unit's pool log. CPU time and process membership are not in the signature. The watched root holds the
 # hermetic runner's work dir (its HR_LOG and sandbox) and every template-based `mktemp`. A poll that
@@ -488,7 +488,7 @@ fi
 # AI_DLC_POOL_STALL overrides it, for a fixture driving a deliberately hung unit.
 POOL_STALL_DEFAULT=600                     # D9-WINDOW
 POOL_STALL="${AI_DLC_POOL_STALL:-$POOL_STALL_DEFAULT}"
-case "$POOL_STALL" in ''|*[!0-9]*|??????*) POOL_STALL=$POOL_STALL_DEFAULT ;; esac
+case "$POOL_STALL" in ''|*[!0-9]*|??????*) [ -n "${AI_DLC_POOL_STALL:-}" ] && printf 'pre-push: AI_DLC_POOL_STALL=%s rejected (want 1-5 digits); using the default %s\n' "$AI_DLC_POOL_STALL" "$POOL_STALL_DEFAULT" >&2; POOL_STALL=$POOL_STALL_DEFAULT ;; esac
 POOL_STALL=$((10#$POOL_STALL))
 [ "$POOL_STALL" -ge 1 ] || POOL_STALL=$POOL_STALL_DEFAULT
 POOL_REFUSED_ONLY=0
@@ -2011,7 +2011,7 @@ run_fixtures() {
     return 1
   fi
   if [ "$POOL_DEPTH_IN" -ge 1 ]; then printf '   nested: depth %s, width %s\n' "$POOL_DEPTH_IN" "$FIXTURE_JOBS"; fi
-  out="$(mktemp -d)" || return 1
+  out="$(mktemp -d /tmp/fx.XXXXXX 2>/dev/null)" || out="$(mktemp -d)" || return 1
   # DOT-PREFIXED, and that is what makes the name collision-proof rather than
   # unlikely. Every verdict file in "$out" is named for a fixture, and the glob
   # below cannot match a directory whose name begins with a dot -- so no fixture
@@ -2172,7 +2172,7 @@ run_fixtures() {
     } 2>/dev/null
     trap pool_abort INT TERM HUP
     pool_run() {
-      local lg="$1" rc wr="$AI_DLC_FX_OUT/.tmp/$b"
+      local lg="$1" rc wr="$AI_DLC_FX_OUT/.t.$$"
       shift
       self="$(ps -o pgid= -p "$$" 2>/dev/null | tr -d " ")"
       : > "$pr.g"; rm -f "$pr.st"; mkdir -p "$wr"

@@ -658,7 +658,7 @@ FX
 #!/usr/bin/env bash
 echo $$ >> "$CSP_PIDS/w"
 f="$(mktemp "${TMPDIR:-/tmp}/w.XXXXXX")" || exit 3
-case "$f" in */.tmp/w/w.*) ;; *) echo "w: scratch landed outside the watched root: $f" >&2; exit 4 ;; esac
+case "$f" in "$AI_DLC_FX_OUT"/.t.*/w.*) ;; *) echo "w: scratch landed outside the watched root: $f" >&2; exit 4 ;; esac
 exec 3<>"$CSP_FIFO"; i=0
 while [ $i -lt $((4 * CSP_STALL)) ]; do i=$((i + 1)); printf x >> "$f"; read -t 1 -u 3 x; done
 exit 0
