@@ -18,7 +18,7 @@
 # where keying the two source fixtures on the ledger would have paid backlog-receipt-binding's
 # whole run on every docs release.
 #
-# THE LEDGER IS NAMED THROUGH "$ROOT/docs/backlog.md", A SPELLING I55 READS. I55 arm 3 flags a
+# THE LEDGER IS NAMED THROUGH "$ROOT/docs/backlog.md" -- A SPELLING I55 READS. I55 arm 3 flags a
 # fixture reaching a content-key-excluded path at the distribution root, and acquits one only
 # where the reach names a file this fixture declares with `+`. A `$DIR/../../../docs/...` chain
 # would be invisible to that grammar, so the acquittal could never be checked.

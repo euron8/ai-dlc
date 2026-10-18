@@ -6642,7 +6642,14 @@ else
               if (nx != "/" && nx != "\"" && nx != "'"'"'" && nx != " " && nx != "") continue
               all++
               p = e; r = substr(s, length(e) + 1)
-              if (match(r, /^(\/[A-Za-z0-9._-]+)+/)) p = e substr(r, 1, RLENGTH)
+              if (match(r, /^(\/[A-Za-z0-9._-]+)+/)) { p = e substr(r, 1, RLENGTH); r = substr(r, RLENGTH + 1) }
+              # THE PATH MUST END AT A BOUNDARY. A following `$`, `*`, `?`, `[`, `{` or backtick
+              # extends the name past the literal (`backlog.md$sfx`, `backlog.md"*`), so the reach names
+              # something other than the declared file and acquits nothing. A closing quote counts
+              # only when what follows it is a boundary too.
+              b = substr(r, 1, 1)
+              if (b == "\"" || b == "'"'"'") b = substr(r, 2, 1)
+              if (b != "" && b != " " && b != "\t" && b != ";" && b != ")" && b != "<" && b != ">" && b != "|" && b != "&") continue
               if ((dir SUBSEP p) in PLUS) ok++ }
             SEEN[file SUBSEP ln] = (all > 0 && ok == all)
             if (!SEEN[file SUBSEP ln]) print line }'
@@ -6650,12 +6657,21 @@ else
     # SELF-PROBE, BOTH DIRECTIONS, through i55_reach_scan, before the corpus. Six fixtures, each one
     # property from the acquitted one: (a) `+` declared, literal path -> acquitted; (b) declared without
     # `+` -> flagged; (c) `+` on another docs path -> flagged; (d) a variable path -> flagged; (e) its
-    # SIBLING (a) declares the `+` -> flagged; (f) two reaches on one line, one declared -> flagged.
+    # SIBLING (a) declares the `+` -> flagged; (f) two reaches on one line, one declared -> flagged;
+    # (g) a variable SUFFIX `backlog.md$sfx`, (h) a glob after the closing quote `backlog.md"*` and (i) a
+    # variable after a dot `backlog.md.$x`, each with `+docs/backlog.md` declared -> flagged, because the
+    # name runs past the literal and is not the declared file. (j) the declared path closed by a quote
+    # and a redirect -> acquitted, the near-miss that keeps the boundary rule from flagging everything.
     i55_pd="$(mktemp -d 2>/dev/null)"
     if [ -z "$i55_pd" ] || [ ! -d "$i55_pd" ]; then
       err "I55 arm 3 could not create its + exemption probe directory, so neither direction of the exemption was proven this run."
     else
-      for i55_c in a b c d e f; do mkdir -p "$i55_pd/core/fixtures/$i55_c"; done
+      for i55_c in a b c d e f g h i j; do mkdir -p "$i55_pd/core/fixtures/$i55_c"; done
+      for i55_c in g h i j; do printf '+docs/backlog.md\n' > "$i55_pd/core/fixtures/$i55_c/inputs.decl"; done
+      printf 'L="$ROOT/docs/backlog.md$sfx"\n'      > "$i55_pd/core/fixtures/g/run.sh"
+      printf 'cat "$ROOT/docs/backlog.md"*\n'       > "$i55_pd/core/fixtures/h/run.sh"
+      printf 'L="$ROOT/docs/backlog.md.$x"\n'       > "$i55_pd/core/fixtures/i/run.sh"
+      printf 'n=$(wc -l <"$ROOT/docs/backlog.md")>/dev/null\n' > "$i55_pd/core/fixtures/j/run.sh"
       printf '+docs/backlog.md\n' > "$i55_pd/core/fixtures/a/inputs.decl"
       printf 'docs/backlog.md\n'  > "$i55_pd/core/fixtures/b/inputs.decl"
       printf '+docs/other.md\n'   > "$i55_pd/core/fixtures/c/inputs.decl"
@@ -6667,7 +6683,7 @@ else
       printf 'cp "$ROOT/docs/backlog.md" "$ROOT/docs/plans/x.md"\n' > "$i55_pd/core/fixtures/f/run.sh"
       i55_pr="$(i55_reach_scan "$i55_pd" docs | sed "s@^${i55_pd}/core/fixtures/@@; s@/.*@@" | LC_ALL=C sort -u | tr '\n' ' ')"
       rm -rf "$i55_pd"
-      [ "$i55_pr" = "b c d e f " ] || err "I55 arm 3's + exemption self-probe flagged '${i55_pr}', want 'b c d e f '. Fixture a (a + declared, literal reach) must be ACQUITTED and every other one flagged; anything else means the exemption either acquits its own subject or cannot acquit at all, and the corpus scan below would be read through it."
+      [ "$i55_pr" = "b c d e f g h i " ] || err "I55 arm 3's + exemption self-probe flagged '${i55_pr}', want 'b c d e f g h i '. Fixtures a and j (a + declared, literal reach ending at a boundary) must be ACQUITTED and every other one flagged; anything else means the exemption either acquits its own subject or cannot acquit at all, and the corpus scan below would be read through it."
     fi
     i55_ctl="$(grep -rhoE '\$\{?'"$i55_roots"'\}?/core([/"]|$)' "$REPO_ROOT"/core/fixtures/*/*.sh 2>/dev/null | grep -c .)"
     if [ "${i55_ctl:-0}" -lt 10 ]; then
