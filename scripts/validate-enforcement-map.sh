@@ -6654,7 +6654,7 @@ else
             SEEN[file SUBSEP ln] = (all > 0 && ok == all)
             if (!SEEN[file SUBSEP ln]) print line }'
     }
-    # SELF-PROBE, BOTH DIRECTIONS, through i55_reach_scan, before the corpus. Six fixtures, each one
+    # SELF-PROBE, BOTH DIRECTIONS, through i55_reach_scan, before the corpus. Ten fixtures, each one
     # property from the acquitted one: (a) `+` declared, literal path -> acquitted; (b) declared without
     # `+` -> flagged; (c) `+` on another docs path -> flagged; (d) a variable path -> flagged; (e) its
     # SIBLING (a) declares the `+` -> flagged; (f) two reaches on one line, one declared -> flagged;
