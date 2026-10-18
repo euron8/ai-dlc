@@ -178,10 +178,16 @@ each agent it joins, the `agentId` (or a named teammate's `agent_id`) its
 Agent result returned: the beat reads that dispatch's time from the spawn
 ledger and refuses a `--since` later than it.
 The `<epoch>` is the one recorded before wave 1, never one minted at the
-beat. A beat outside a fan-out round has no round epoch and passes
-`--dispatch` alone, which sets the join to the dispatch; an epoch minted
-after the spawn is the stamp `wait-for-deliverable.sh` refuses with
+beat. A beat outside a fan-out round, on an agent this session
+dispatched, has no round epoch and passes `--dispatch` alone, which sets
+the join to the dispatch; an epoch minted after the spawn is the stamp
+`wait-for-deliverable.sh` refuses with
 `FAIL: --since is <n> s after the earliest dispatch it joins`.
+A join resumed after a compaction passes its row's `dispatched-at` with
+`--dispatch` (`steps/_gate-procedures.md`, "Bounded-join beat"), and a
+teammate a prior session dispatched has no dispatch record this session
+can read, so its row is re-armed by its `dispatched-at` alone
+(`steps/route.md`, "Step 0: Entry-token and Resume Check").
 That line stays through every Open Items refresh until the round's join
 has completed, and is deleted then. The In-Flight Teammates row cannot
 carry it: a row is deleted when its deliverable is consumed, so it is
