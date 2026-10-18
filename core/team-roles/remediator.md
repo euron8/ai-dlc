@@ -216,7 +216,7 @@ closing what you wrote: `scripts/ai-dlc/wait-for-deliverable.sh --mark-repair <r
 whose `sha=` binds every line above it, so an edit after it reads unfinished until you run the
 same call again; never type the line by hand. This one call is the exception to "never a Bash
 redirect" above: your Edit and Write calls already recorded every entry. If that call fails with
-`unknown arg: --mark-repair`, the engine copy you ran predates the seal: append the bare line
+`unknown arg: --mark-repair`, the engine copy you ran predates `--mark`: append, with Edit, the bare line
 `repair-complete: serial <pass>` instead, which the join accepts once the record has stopped
 changing. The unsharded remediator, whose brief reads `shard: none (serial-document)`, is the only
 pass over its record, so its record ends in that line exactly as the serial remediator's appended

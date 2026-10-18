@@ -570,9 +570,13 @@ case "${1:-}" in
       MARK_TOKEN="repair-complete: serial "; MK_F="$1"; MK_TAIL=""
     fi
     MK_SEAL="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/content-seal.sh"
-    MK_PHYS="$(cd "$(dirname "$MK_FILE")" 2>/dev/null && pwd -P)/$(basename "$MK_FILE")"
+    # The state dir AS SPELLED (logical `pwd`, never -P): content-seal.sh names a row by the state
+    # dir's own name, which the recorder takes from AI_DLC_STATE_DIR, so a symlinked `_bmad-output`
+    # resolved to its target would name no row and the file would never be re-sealed. The FIRST
+    # `/planning-artifacts/` is the state dir's; a later one is a directory inside the sprint.
+    MK_PHYS="$(cd "$(dirname "$MK_FILE")" 2>/dev/null && pwd)/$(basename "$MK_FILE")"
     MK_STATE=""; MK_ROWED=0; MK_SRC="$MK_FILE"
-    case "$MK_PHYS" in */planning-artifacts/*) MK_STATE="${MK_PHYS%/planning-artifacts/*}" ;; esac
+    case "$MK_PHYS" in */planning-artifacts/*) MK_STATE="${MK_PHYS%%/planning-artifacts/*}" ;; esac
     if [ -n "$MK_STATE" ] && [ -f "$MK_SEAL" ]; then
       MK_SRC="$(mktemp "${TMPDIR:-/tmp}/wfd-mark.XXXXXX")" || mark_refuse "cannot take a snapshot of $MK_FILE."
       cp "$MK_FILE" "$MK_SRC" || { rm -f "$MK_SRC"; mark_refuse "cannot take a snapshot of $MK_FILE."; }

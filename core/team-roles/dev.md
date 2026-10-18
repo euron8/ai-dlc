@@ -50,7 +50,7 @@ That file is the only thing you write in the round; you edit nothing else, the s
    above it. Never write that line by hand, never with the header, never followed by more
    findings. Once it is marked, do not edit the file again; if you must, run the same `--mark`
    call again afterwards, or the lead's join reads the file as unfinished.
-   If that call fails with `unknown arg: --mark`, the engine copy you ran predates the seal: append
+   If that call fails with `unknown arg: --mark`, the engine copy you ran predates `--mark`: append, with Edit,
    the bare line `seat-complete: <step> <seat> <shard> findings=<n>` instead, which the join
    accepts once the file has stopped changing.
 

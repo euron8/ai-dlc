@@ -411,7 +411,7 @@ sha=<hex> findings=<n>`, whose `sha=` binds every line above it: an edit after i
 reads unfinished until you run the same call again. Never type the line by hand
 or with your header; the lead's join waits for a matching `sha=` and the merge
 refuses a count that disagrees. If the call fails with `unknown arg: --mark`, the
-engine copy you ran predates the seal: append the bare line `seat-complete:
+engine copy you ran predates `--mark`: append, with Edit, the bare line `seat-complete:
 implementation qa <shard> findings=<n>` instead, which the join accepts once the
 file has stopped changing. The go-signal SHA is the frozen sha. Your
 `reviewed-sha:` line carries it in FULL (40 or 64 hex characters) even when the

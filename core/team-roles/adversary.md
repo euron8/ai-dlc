@@ -129,7 +129,7 @@ for your findings, and (d) a shared context block. You MUST:
    `### ` under `## Findings` is a finding, so probes and notes go under their own `## `
    section; FINDING GRAMMAR, `merge-adversarial-shards.sh`'s header), never
    with the header (`steps/_gate-procedures.md`, "Validation cycle" item 1). If the `--mark`
-   call fails with `unknown arg: --mark`, the engine copy you ran predates the seal: append the
+   call fails with `unknown arg: --mark`, the engine copy you ran predates `--mark`: append, with Edit, the
    bare line `seat-complete: <step> adversary <shard> findings=<n>` instead, which the join
    accepts once the file has stopped changing. Write to the shard
    path your brief names. Every finding carries exactly one `stories:` line in the grammar the FINDING GRAMMAR

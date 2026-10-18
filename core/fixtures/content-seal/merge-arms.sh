@@ -190,5 +190,19 @@ if [ "$RC" -eq 2 ] && has "$MO" "1.md $TOKEN" && has "$MO" "program wait-for-del
   ok "CS-K5: a marked shard amended through Bash: REFUSED naming program wait-for-deliverable and the restore-then-mark remedy"
 else bad "CS-K5: a marked-then-amended shard was not refused with the --mark remedy (rc=$RC): $(head -2 "$MO")"; fi
 
+# CS-K6: a SYMLINKED state dir. The recorder names a row by the state dir as spelled (`_bmad-output`),
+# so --mark must derive it the same way, never through `pwd -P` to the target's name, or it reads no
+# row, seals nothing, and the merge refuses the marked shard on its writer's Write.
+dk6="$(clean_world)"; r6="$(world_root "$dk6")"
+mv "$r6/_bmad-output" "$r6/real-out" && ln -s real-out "$r6/_bmad-output" || { echo "FIXTURE BROKEN: CS-K6 cannot link the state dir" >&2; exit 2; }
+[ -L "$r6/_bmad-output" ] || { echo "FIXTURE BROKEN: CS-K6's state dir is not a symlink" >&2; exit 2; }
+seal_all "$dk6"; nb6="$(seal_count "$(ledger_of "$dk6")")"
+for f in "$dk6"/*.md; do mark_one "$WFD" "$f"; done
+bash "$SEAL" --check "$r6/_bmad-output" "$dk6"/*.md > /dev/null 2>&1; ck6=$?
+run_merge "$MERGE" "$dk6"
+if [ "$nb6" -ge 4 ] && grep -qF "$PROW" "$(ledger_of "$dk6")" && [ "$ck6" = 0 ] && [ "$RC" -eq 0 ] && has "$MO" "MERGED:"; then
+  ok "CS-K6: through a symlinked _bmad-output, --mark re-seals each shard by the spelled name: --check passes, MERGED"
+else bad "CS-K6: through a symlinked state dir --mark left the shards unsealed: rows $nb6, --check rc=$ck6, merge rc=$RC: $(head -2 "$MO")"; fi
+
 echo "$NAME: $fails failure(s)"
 [ "$fails" -eq 0 ]

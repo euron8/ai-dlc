@@ -103,7 +103,7 @@ else bad "CS-J6: --mark-repair on a sealed record: mark rc=$MRC, newest row ${r6
 joined; python3 -c "import sys;p=sys.argv[1];open(p,'a').write('\n- appended through python3\n')" "$RREC"
 cp "$RREC" "$WORK/j7.before"; L7="$RW/$ST/planning-artifacts/.artifact-writes.jsonl"; nb7="$(seal_count "$L7")"
 mark_rep "$WFD" "$RREC"; na7="$(seal_count "$L7")"
-if [ "$MRC" = 64 ] && cmp -s "$RREC" "$WORK/j7.before" && [ "$na7" = "$nb7" ]; then
+if [ "$MRC" = 64 ] && cmp -s "$RREC" "$WORK/j7.before" && [ "$na7" = "$nb7" ] && has "$WORK/mark.out" "changed through Bash after its last Write or Edit"; then
   ok "CS-J7: a Bash-amended sealed record: --mark-repair refuses (64), writes nothing, appends no row"
 else bad "CS-J7: --mark-repair over a Bash-amended record: rc=$MRC, rows $nb7 -> $na7: $(head -1 "$WORK/mark.out")"; fi
 
