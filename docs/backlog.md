@@ -131,7 +131,9 @@ Scheduled in batch 235 for a later release (scope ruling: the boundary is the re
 
 **Gate-log evidence (f7 measured, graph session `f78aa565`; transcript-only, not re-derived here).** The graph push of the reconcile commit took 17.6 minutes in pre-push with 139 of 224 fixtures selected. That is a real release-class push on a consumer tree and a first data point toward the per-gate wall clock this entry owes; it is a consumer's selected subset, not this repo's full-suite figure, and the two must not be compared.
 
-verify: manual
+**Item (b), batch 236.** `gate-adjudication-mutants` (M0) and `readset-skip-digest-mutants` (unmutated and impossible-anchor controls) now run their controls in shard `a` only, bound by a J2 once-only arm with a two-direction self-probe, and a D14 arm every shard runs holds each shard's `inputs.decl`/`tools.decl` equal to `a`'s apart from the driver lines (also added to `fold-architect-ledger-join-mutants`). `advisor-gate-deny-mutants` keeps its per-shard control because its shards' declarations differ (`-d` adds `od` and `tee`; `-b`/`-e` declare sibling directories whole), and `ledger-reverify-shard-mutants` keeps its C-a and C-b controls because it is one unit whose kill list is 3 in `a` and 1 in `b`, so `b`'s control is the only one for its mutants.
+
+verify: sh for f in gate-adjudication-mutants readset-skip-digest-mutants; do grep -B2 -E '^(score "M0 control|dg_all .*ctl$)' core/fixtures/$f/run.sh | grep -qE 'GROUP" = a \]|case "\$GROUP" in a\)' || exit 1; grep -qF 'ctl_ok "$NCTL" "$wantc"' core/fixtures/$f/run.sh || exit 1; done
 
 ## BL-584 — two fixtures cannot be traced and have no `inputs.decl`, so they run on every push
 

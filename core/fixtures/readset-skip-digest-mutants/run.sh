@@ -14,9 +14,12 @@
 # file with `--group <x>`. A mutant's id is DERIVED from its own call line (dg_<name> for dg_mut,
 # dd_<name> for dg_mut_deriver, tk_<name> for tk_mut), the partition is declared HERE, and the coverage
 # join J0 compares it with the ids derived from this file's own lines, so no mutant can fall out of every
-# shard and no shard is declared without a driver. EVERY shard pays the unmutated control and the
-# impossible-anchor control, because a shard that skipped them could report a kill against a harness that
-# never ran. The tool-key block (its own span, control and count) runs only in a shard dealt a tk_ id.
+# shard and no shard is declared without a driver. The unmutated control and the impossible-anchor control
+# run in shard `a` ONLY, bound by the J2 once-only arm (BL-583 b). The safety argument is D14: a non-`a`
+# shard's kill is attributable only if its harness is shard `a`'s, and D14 holds every shard's `inputs.decl`
+# and `tools.decl` equal to `a`'s apart from the driver lines, in EVERY shard, so a declaration edited in one
+# shard alone fails all five. The hook keys the five shards on the same subject files, so `a` runs in the
+# same push as any sibling that runs. The tool-key block (its own span, control and count) runs only in a shard dealt a tk_ id.
 # The shard arrives as an ARGUMENT, never the environment: the scrub below unsets AI_DLC_*.
 SHARDS="a b c d e"
 MUTANTS_a="dg_bypass dg_nodigest_valid dg_nodigest_unmapped dg_needs_deriver"
@@ -35,6 +38,7 @@ case " $SHARDS " in *" $GROUP "*) ;; *) echo "FIXTURE ERROR: unknown shard '$GRO
 eval "MINE=\"\${MUTANTS_$GROUP:-}\""
 [ -n "$MINE" ] || { echo "FIXTURE ERROR: shard '$GROUP' has no MUTANTS_$GROUP list; a shard dealt nothing passes everything it never checked" >&2; exit 2; }
 NAME="readset-skip-digest-mutants"; [ "$GROUP" = a ] || NAME="$NAME-$GROUP"
+d14bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 mine() { case " $MINE " in *" $1 "*) return 0 ;; esac; return 1; }
 
 asserts=0; fails=0
@@ -84,6 +88,35 @@ for s in $SHARDS; do
   [ "$s" = "$GROUP" ] || echo "HERMETIC-CONSUMED $dp"
 done
 rm -rf "$JW"
+
+# D14 (BL-583 b): the predicate that holds every shard's declarations to shard a's, and its self-probe.
+# decl_same <a file> <x file> <a dir> <x dir>: 0 when X equals A once comment lines and the `run.sh`
+# driver lines of the compared pair (shard a's and X's own) are removed. Any other difference -- an extra
+# line, a missing line, a flipped `!`, an unreadable file -- is a shard whose harness is not a's.
+decl_strip() { grep -v -E -e '^[[:space:]]*#' -e "^!?core/fixtures/($2|$3)/run\\.sh\$" "$1"; }
+decl_same() {
+  [ -f "$1" ] && [ -f "$2" ] || return 1
+  [ "$(decl_strip "$1" "$3" "$4")" = "$(decl_strip "$2" "$3" "$4")" ]
+}
+PD="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
+printf '%s\n' '# header a' '!core/s/y.sh' 'core/fixtures/readset-skip-digest-mutants-b/run.sh' 'core/fixtures/readset-skip-digest-mutants-c/run.sh' > "$PD/a"
+printf '%s\n' '# header b' '!core/s/y.sh' '!core/fixtures/readset-skip-digest-mutants/run.sh' 'core/fixtures/readset-skip-digest-mutants-c/run.sh' > "$PD/ok"
+printf '%s\n' '# header b' '!core/s/y.sh' '!core/fixtures/readset-skip-digest-mutants/run.sh' 'core/fixtures/readset-skip-digest-mutants-c/run.sh' 'core/extra.sh' > "$PD/extra"
+printf '%s\n' '# header b' '!core/s/y.sh' '!core/fixtures/readset-skip-digest-mutants/run.sh' > "$PD/other"
+printf '%s\n' '# header b' 'core/s/y.sh' '!core/fixtures/readset-skip-digest-mutants/run.sh' 'core/fixtures/readset-skip-digest-mutants-c/run.sh' > "$PD/flip"
+if ! decl_same "$PD/a" "$PD/ok" readset-skip-digest-mutants readset-skip-digest-mutants-b || decl_same "$PD/a" "$PD/extra" readset-skip-digest-mutants readset-skip-digest-mutants-b || decl_same "$PD/a" "$PD/other" readset-skip-digest-mutants readset-skip-digest-mutants-b \
+   || decl_same "$PD/a" "$PD/flip" readset-skip-digest-mutants readset-skip-digest-mutants-b || decl_same "$PD/a" "$PD/nonexistent" readset-skip-digest-mutants readset-skip-digest-mutants-b; then
+  rm -f "$PD/a" "$PD/ok" "$PD/extra" "$PD/other" "$PD/flip"; rmdir "$PD"
+  rm -rf "$JW"; broken "the D14 declaration-equality predicate's self-probe did not discriminate"
+fi
+rm -f "$PD/a" "$PD/ok" "$PD/extra" "$PD/other" "$PD/flip"; rmdir "$PD"
+# ctl_ok <times the shard-a-only control ran> <times the deal says it must run here>: the J2 once-only
+# predicate. Fires on the guard dropped (ran where it was not dealt), on the guard dropped from a too or
+# inverted (ran nowhere it was dealt), and on a double run; holds on the two correct shapes.
+ctl_ok() { [ "$1" -eq "$2" ]; }
+if ctl_ok 1 0 || ctl_ok 0 1 || ctl_ok 2 1 || ! ctl_ok 0 0 || ! ctl_ok 1 1; then
+  rm -rf "$JW"; broken "the J2 once-only predicate's self-probe did not discriminate"
+fi
 echo "  [J0] coverage join: $ndecl mutants derived from their call lines, dealt disjointly across {$SHARDS}, union exact; this shard runs {$MINE}"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/readset-dgmut.XXXXXX")" || broken "mktemp failed"
@@ -109,6 +142,9 @@ echo "HERMETIC-CONSUMED .githooks/pre-push"
 
 # UNMUTATED CONTROL, PRESENCE-SHAPED: every world must reach its want on the shipped block, or every
 # kill below is a harness that never ran.
+NCTL=0
+if [ "$GROUP" = a ]; then
+NCTL=$((NCTL+1))
 dg_all "$POOL" "$FX" ctl
 n_ok=0
 for w in $DG_WORLDS; do [ "$(cat "$CK_W/dg.ctl.$w.got")" = "$(dg_want "$w")" ] && n_ok=$((n_ok+1)); done
@@ -123,6 +159,25 @@ DG_Z="$(dg_count "$POOL" 'bad[f] = 1 NEVER-IN-ANY-POOL-BL480')"
 DG_O="$(dg_count "$POOL" 'FILENAME == ENVIRON["RL_L"] { now[substr($1, 1, length($1) - 1)] = $2; next }')"
 if [ "$DG_Z" = 0 ] && [ "$DG_O" = 1 ]; then ok "CONTROL: the anchor counter reads 0 for an impossible anchor and 1 for the listings-load line in ${HOOK#"$ROOT"/}"
 else bad "CONTROL: the anchor counter read $DG_Z for an impossible anchor and $DG_O for the listings-load line, want 0 and 1"; fi
+fi
+# J2: both controls ran exactly in the first shard of the deal. The expectation comes from SHARDS, not from
+# the guard above, so a guard dropped, inverted or compared to another shard fails here.
+wantc=0; [ "$GROUP" = "${SHARDS%% *}" ] && wantc=1
+if ctl_ok "$NCTL" "$wantc"; then printf '  ok    [J2] the unmutated and impossible-anchor controls ran %s time(s) in shard %s (dealt here: %s)\n' "$NCTL" "$GROUP" "$wantc"
+else printf '  FAIL  [J2] shard %s: the controls ran %s time(s), expected %s\n' "$GROUP" "$NCTL" "$wantc"; fails=$((fails+1)); fi
+
+# D14: every shard checks every sibling shard's declarations against shard a's. A declaration edited in
+# one shard alone fails EVERY shard, which is what lets shard a's control stand for the others.
+for _f in inputs.decl tools.decl; do
+  for _s in $SHARDS; do
+    [ "$_s" = a ] && continue
+    if decl_same "$HERE/$_f" "$HERE/../readset-skip-digest-mutants-$_s/$_f" readset-skip-digest-mutants "readset-skip-digest-mutants-$_s"; then
+      printf '%s\n' "  ok    [D14] $_f of shard '$_s' equals shard a's apart from the drivers"
+    else
+      d14bad "[D14] $_f of shard '$_s' differs from shard a's beyond its driver line (or is unreadable), so shard a's control does not stand for it"
+    fi
+  done
+done
 
 dg_mut() { # <name> "<declared worlds>" then triples <count> <from> <to>
   local name="$1" want="$2" dst="$CK_W/dgmut.$1.sh" n o moved=""; shift 2
@@ -291,7 +346,7 @@ fi
 fi
 
 dgn=0; for _m in $MINE; do case "$_m" in dg_*|dd_*) dgn=$((dgn+1)) ;; esac; done
-EXPECTED=$(( 2 + dgn + tkm_want ))
+EXPECTED=$(( 2 * NCTL + dgn + tkm_want ))
 if [ "$asserts" -lt "$EXPECTED" ]; then
   printf '  FAIL  only %s assertions ran; this battery carries %s\n' "$asserts" "$EXPECTED"; fails=$((fails+1))
 fi

@@ -9,8 +9,8 @@
 # battery would have been the whole suite's wall clock.
 #
 # The shard set and the mutant partition are declared in the sibling and joined there against
-# the `score` lines of that same file. Every shard runs that join, the controls and the
-# coverage join, so no shard can pass without them, and a shard declared with no driver
+# the `score` lines of that same file. Every shard runs that join and the D14 declaration-equality
+# arm; the M0 control runs in shard a only (J2), so no shard can pass without the join, and a shard declared with no driver
 # directory fails the build in all three.
 #
 # Resolved as a SIBLING inside core/fixtures/, never by walking up into a core subtree.

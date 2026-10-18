@@ -9,3 +9,14 @@ core/fixtures/readset-skip-digest-mutants/run.sh
 core/fixtures/readset-skip-digest-mutants-c/run.sh
 core/fixtures/readset-skip-digest-mutants-d/run.sh
 core/fixtures/readset-skip-digest-mutants-e/run.sh
+# D14 reads every shard's declarations, so each is declared here, identically in every shard.
+core/fixtures/readset-skip-digest-mutants/inputs.decl
+core/fixtures/readset-skip-digest-mutants/tools.decl
+core/fixtures/readset-skip-digest-mutants-b/inputs.decl
+core/fixtures/readset-skip-digest-mutants-b/tools.decl
+core/fixtures/readset-skip-digest-mutants-c/inputs.decl
+core/fixtures/readset-skip-digest-mutants-c/tools.decl
+core/fixtures/readset-skip-digest-mutants-d/inputs.decl
+core/fixtures/readset-skip-digest-mutants-d/tools.decl
+core/fixtures/readset-skip-digest-mutants-e/inputs.decl
+core/fixtures/readset-skip-digest-mutants-e/tools.decl
