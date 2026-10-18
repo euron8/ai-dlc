@@ -1835,7 +1835,7 @@ while IFS= read -r f; do
   have "$THEIRS" "$cp" || { emit OVERRIDE-ANCHOR-UNRESOLVED "$entry" "$tgt" "target absent at $THEIRS"; continue; }
 
   file_changed=no
-  if ! git -C "$DIST" diff --quiet "$base_sha" "$THEIRS" -- "$cp" 2>/dev/null; then file_changed=yes; fi
+  if ! git -C "$DIST" diff --quiet --no-textconv "$base_sha" "$THEIRS" -- "$cp" 2>/dev/null; then file_changed=yes; fi
 
   # Evaluate every (file, anchor) pair in a possibly multi-anchor `shadows:` value.
   #
@@ -1877,7 +1877,7 @@ while IFS= read -r f; do
       continue
     fi
     a_changed=no
-    git -C "$DIST" diff --quiet "$base_sha" "$THEIRS" -- "$a_cp" 2>/dev/null || a_changed=yes
+    git -C "$DIST" diff --quiet --no-textconv "$base_sha" "$THEIRS" -- "$a_cp" 2>/dev/null || a_changed=yes
 
     # Record the (file, anchor) key for the cross-entry duplicate check below. Normalised on
     # both halves, because `#4a. Close-Out Sweep` and `#4a Close-Out sweep` are one anchor to
@@ -2457,7 +2457,7 @@ while IFS= read -r f; do
     done < "$LD_T/ext-parts"
   fi
 
-  if git -C "$DIST" diff --quiet "$BASE" "$THEIRS" -- "$cp" 2>/dev/null; then
+  if git -C "$DIST" diff --quiet --no-textconv "$BASE" "$THEIRS" -- "$cp" 2>/dev/null; then
     emit EXTENSION-OK "$entry" "$hooks" "hooked core file unchanged"
   elif [ -n "$ext_ancs" ]; then
     ext_missing=""; ext_moved=""; ext_all=""

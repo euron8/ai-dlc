@@ -1305,7 +1305,7 @@ fi
 # so the record still identifies every byte this verdict read.
 HOOK_CUR="$HOOK"
 hp_rc=0
-git -C "$DIST" diff --quiet "${BASE}..${THEIRS}" -- core/git-hooks/pre-push >/dev/null 2>&1 || hp_rc=$?
+git -C "$DIST" diff --quiet --no-textconv "${BASE}..${THEIRS}" -- core/git-hooks/pre-push >/dev/null 2>&1 || hp_rc=$?
 if [ "$hp_rc" -gt 1 ]; then
   emit SELF-UPDATE-UNDECIDED "pre-push" "whether ${BASE}..${THEIRS} changes core/git-hooks/pre-push could not be computed (git diff exited ${hp_rc}), so which hook the push will run is unknown; treat as defer."
   exit 0
