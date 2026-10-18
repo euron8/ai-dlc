@@ -2,11 +2,14 @@
 # consumer-suite-pool/receipt.sh [<hook>] -- the BL-606 backlog receipt: the pool worker REFUSES a unit
 # that makes no progress, and kills its whole tree.
 #
-# Drives the hook's OWN extracted worker body (the `xargs ... bash -c` string, with POOL_WALK) over one
-# stub fixture that hangs with a grandchild `sleep`, at POOL_STALL=3. Exit 0 when the unit's verdict is
-# REFUSED and every pid the stub recorded is gone; 1 otherwise; 9 when the body cannot be extracted (the
-# receipt cannot measure its subject). Behaviour only: no name is grepped, so a byte signature summed
-# through `stat -f %z` passes exactly as one summed from `find -ls` does.
+# Drives the hook's OWN extracted worker body (the `xargs ... bash -c` string, with POOL_WALK) over two
+# stub fixtures, concurrently in one `xargs -P 2` pool at POOL_STALL=3: `h` hangs with a grandchild
+# `sleep`, and `p` writes one byte under its TMPDIR every 0.2s for ~8s (well past POOL_STALL polls),
+# then exits 0. Exit 0 when h's verdict is REFUSED, every pid h recorded is gone, AND p's verdict is ok;
+# 1 otherwise; 9 when the body cannot be extracted (the receipt cannot measure its subject). The `p` arm
+# is what separates a stall guard from a pool that refuses EVERY unit at its first poll -- with h alone,
+# that pool passes. Behaviour only: no name is grepped, so a byte signature summed through
+# `stat -f %z` passes exactly as one summed from `find -ls` does.
 #
 # THE OUTER BOUND IS A HARNESS NET, NOT A VERDICT. A body with no bound would hang this receipt, and the
 # rotator EXECUTES receipts, so after 60 one-second polls the receipt kills every pid the stub recorded,
@@ -92,12 +95,20 @@ awk '/^POOL_WALK=/{f=1} f{print} f && /^}.$/{exit}' "$HOOK" > "$R/walk.sh"
 [ -s "$R/body.sh" ] && [ -s "$R/walk.sh" ] || { echo "receipt: the worker body or POOL_WALK did not extract from $HOOK" >&2; rm -rf "$R"; exit 9; }
 POOL_WALK=""; . "$R/walk.sh"
 [ -n "$POOL_WALK" ] || { echo "receipt: POOL_WALK is empty" >&2; rm -rf "$R"; exit 9; }
-mkdir -p "$R/t/core/fixtures/h" "$R/out/.log" "$R/out/.dur" "$R/out/.pr"
+mkdir -p "$R/t/core/fixtures/h" "$R/t/core/fixtures/p" "$R/out/.log" "$R/out/.dur" "$R/out/.pr"
 cat > "$R/t/core/fixtures/h/run.sh" <<EOF
 echo \$\$ >> "$R/pids"
 bash -c 'echo \$\$ >> "\$1"; sleep 100000 & echo \$! >> "\$1"; wait \$!; :' _ "$R/pids"
 EOF
-printf 'core/fixtures/h/\n' > "$R/list"
+cat > "$R/t/core/fixtures/p/run.sh" <<'EOF'
+i=0
+while [ "$i" -lt 40 ]; do
+  printf x >> "$TMPDIR/p"
+  i=$((i + 1)); sleep 0.2
+done
+exit 0
+EOF
+printf 'core/fixtures/h/\ncore/fixtures/p/\n' > "$R/list"
 kill_recorded() { # kill every pid the stub recorded; prints how many were alive
   local p k=0
   [ -s "$R/pids" ] || { echo 0; return; }
@@ -109,19 +120,23 @@ kill_recorded() { # kill every pid the stub recorded; prints how many were alive
 }
 set -m
 ( cd "$R/t" && AI_DLC_FX_OUT="$R/out" AI_DLC_FX_TRACE="" AI_DLC_FX_TRACE_LIST="" AI_DLC_FX_DV="" \
-    POOL_STALL=3 POOL_WALK="$POOL_WALK" xargs -P 1 -I{} bash -c "$(cat "$R/body.sh")" _ {} < "$R/list" ) >/dev/null 2>&1 &
+    POOL_STALL=3 POOL_WALK="$POOL_WALK" xargs -P 2 -I{} bash -c "$(cat "$R/body.sh")" _ {} < "$R/list" ) >/dev/null 2>&1 &
 X=$!
 set +m
 rc=0; n=0
 while kill -0 "$X" 2>/dev/null && [ "$n" -lt 60 ]; do n=$((n + 1)); sleep 1; done
 if kill -0 "$X" 2>/dev/null; then
-  rc=1; kill_recorded >/dev/null
+  rc=1; echo "receipt: pool FAIL: the pool was still live after 60 polls" >&2; kill_recorded >/dev/null
   n=0; while kill -0 "$X" 2>/dev/null && [ "$n" -lt 10 ]; do n=$((n + 1)); sleep 1; done
   kill -0 "$X" 2>/dev/null && kill -KILL -- "-$X" 2>/dev/null
 fi
 wait "$X" 2>/dev/null
-[ "$(cat "$R/out/h" 2>/dev/null)" = REFUSED ] || rc=1
-[ -s "$R/pids" ] || rc=1
-[ "$(kill_recorded)" = 0 ] || rc=1
+v="$(cat "$R/out/h" 2>/dev/null)"
+[ "$v" = REFUSED ] || { rc=1; echo "receipt: pool FAIL: hang stub h verdict '$v', want REFUSED" >&2; }
+v="$(cat "$R/out/p" 2>/dev/null)"
+[ "$v" = ok ] || { rc=1; echo "receipt: pool FAIL: progress stub p verdict '$v', want ok" >&2; }
+[ -s "$R/pids" ] || { rc=1; echo "receipt: pool FAIL: hang stub h recorded no pids" >&2; }
+k="$(kill_recorded)"
+[ "$k" = 0 ] || { rc=1; echo "receipt: pool FAIL: $k pid(s) of h's tree were still alive" >&2; }
 rm -rf "$R"
 exit "$rc"
