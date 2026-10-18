@@ -1,7 +1,6 @@
 # apply-self-overwrite/lib.sh -- the resolution, synthetic pulls, worlds and predicates of
-# apply-self-overwrite, sourced by that fixture's run.sh (the behavioural arms, shipped) and by
-# apply-self-overwrite-mutants/run.sh (the mutation battery, distribution-only). ONE copy, so the
-# battery scores the predicates the shipped arms run and never a second implementation of them.
+# apply-self-overwrite, sourced by that fixture's run.sh (the behavioural arms, shipped) (the retired mutation battery sourced it too).
+# ONE copy, so the predicates the shipped arms run are never restated.
 #
 # The caller sets NAME and sources this file; nothing else. This file sets the shell options,
 # owns W and the ONE EXIT trap that removes it -- no caller sets a second.

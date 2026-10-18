@@ -2,9 +2,8 @@
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # adversarial-shard-merge/run.sh -- merge-adversarial-shards.sh, the JOIN that turns one
 # adversary per story ordinal plus one cross-story adversary into the ONE pass file every gate
-# reads. The behavioural arms only: the mutation battery that proves each of them can fail is
-# `adversarial-shard-merge-mutants`, distribution-only, which sources the SAME predicates and
-# worlds from `lib.sh` beside this file. The battery mutates copies of core's own scripts, which a
+# reads. The behavioural arms only: the mutation battery that once proved each of them can fail
+# has been retired; the predicates and worlds live in `lib.sh` beside this file. The battery mutates copies of core's own scripts, which a
 # consumer cannot edit, so the consumer keeps every correctness arm and loses only that proof.
 #
 # WHY A FIXTURE OF ITS OWN. No existing fixture owns this script: check-24-adversarial-convergence
@@ -238,8 +237,8 @@ p_rerun_bind "$MERGE" && ok "RB1: --rerun 2.md@1999-01-01T00:00:00Z on a normal 
 
 # ---- BL-577: `### ` under `## Findings` is reserved for a finding (FINDING GRAMMAR). BL-575: one
 # header check, owned by the merge, callable on one file as --check-header. These arms are INLINE,
-# not `p_<name> "$MERGE"` predicates: a predicate joins P_ALL and the mutant battery's J1 and XM1
-# sets, which live in adversarial-shard-merge-mutants/run.sh. RM-A and RM-B below are this
+# not `p_<name> "$MERGE"` predicates: a predicate joins P_ALL and the retired mutant battery's J1 and XM1
+# sets. RM-A and RM-B below are this
 # fixture's own mutants, built PM1's way in a copy of the merge's whole sibling set.
 mk_markers() { # <shard dir>: every shard ends in its seat-complete marker, n = its `### M<n>` findings
   local f n

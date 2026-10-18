@@ -437,7 +437,7 @@ grep -q "has 'capture: sprint', which is a name with no regex" <<<"$outct" && [ 
 # The class's validators run in a `while read … done < valres` loop, so a validator's inherited
 # stdin is THE REST OF THE CLASS'S VALIDATOR LIST. Measured before the fix: `cat >/dev/null`
 # then `false` reported CLEAN, findings=0, the watermark advancing -- `false` never ran. The
-# fix closes stdin on the eval INSIDE the `$( … )`; trunk-audit-mutants proves that the
+# fix closes stdin on the eval INSIDE the `$( … )`; a retired mutation battery proved that the
 # redirect removed, moved outside the substitution, or spelled `<&0` all turn these arms red.
 #
 # TWO SPELLINGS, because a fix keyed on one reader is not a fix for the class: `cat` drains

@@ -31,7 +31,7 @@ broken() { printf '  FAIL  %s\n' "$1" >&2; echo "${NAME:-readset-skip}: FIXTURE 
 # THIS FILE IS FOUR SHARDS OF ONE FIXTURE, AND THE SPLIT IS A SCHEDULING BOUNDARY, NOT A SUBJECT
 # BOUNDARY. Every section below is a UNIT guarded by `if sg <unit>; then ... fi`; `--group <x>` runs
 # the units dealt to shard <x>. The three siblings `readset-skip-{b,c,d}/run.sh` are one-line drivers
-# that `exec bash` this file with their group (the fold-architect-ledger-join-mutants shape), so the
+# that `exec bash` this file with their group (the shape the fold-architect-ledger-join battery used), so the
 # pre-push pool can start each on its own and the suite's makespan stops tracking one 4600-line
 # directory. No `--group` runs shard 'a', so `bash core/fixtures/readset-skip/run.sh` is shard a.
 #
@@ -4664,8 +4664,8 @@ fi
 # killed one has no verdict -- which is the no-verdict half of (l), deterministic only serially.
 CK_ARMS=0
 CK_W="$WORK/ck"; mkdir -p "$CK_W" || broken "could not create the checksum-key worlds"
-# CK_HELPERS_BEGIN -- readset-skip-digest-mutants sources this span and the DG span below, so its
-# mutants are scored by the worlds this fixture ships, never by a restatement of them.
+# CK_HELPERS_BEGIN -- a retired mutation battery sourced this span and the DG span below, so its
+# mutants were scored by the worlds this fixture ships, never by a restatement of them.
 ck_sha() { shasum -a 256 -- "$1" | cut -d' ' -f1; }
 ck_seed() { # <t> <fixture root> [extra fixture]: alpha, beta, delta mapped; the extra one unmapped
   local t="$1" x="$2" f
@@ -5175,7 +5175,7 @@ fi
 #           rows and no old one, the next push migrates nothing, and a later binary change reruns alpha.
 #   migrun  the amnesty never covers a tree key: an old-format record whose FILE moved runs, for that file.
 if sg tk; then
-# TK_WORLDS_BEGIN -- readset-skip-digest-mutants sources this span after CK_HELPERS, to score the tool-key mutants.
+# TK_WORLDS_BEGIN -- a retired mutation battery sourced this span after CK_HELPERS, to score the tool-key mutants.
 TK_ARMS=0
 TK_FX="$WORK/tk.xp"; mkdir -p "$TK_FX" || broken "could not create the fake exec-path dir"
 TK_GIT="$(command -v git)" || broken "no git on PATH"
@@ -5371,7 +5371,7 @@ fi
 # deriver's readset_hash_rows over the pool's own manifest, through the pool's readset_digests -- the
 # function the deriver sources out of the hook -- so the seed is what a real trace writes.
 # Each world is one vector against a want string, run against both hooks like the CK worlds. The
-# mutants that kill these worlds live in readset-skip-digest-mutants, which sources this span: run
+# mutants that killed these worlds lived in a retired battery, which sourced this span: run
 # here they would multiply the worlds onto this fixture, which is already the suite's pole.
 DG_ARMS=0
 # DG_WORLDS_BEGIN

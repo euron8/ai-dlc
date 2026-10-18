@@ -266,8 +266,7 @@ mutant sr-unwired SR '{ gsub(/validate-handoff-evidence\.sh --strategy HEAD/, "a
 
 # --- validate-handoff-evidence.sh, driven ---------------------------------------
 # The worlds, the case table, the verdict function and the vector live in world.sh. The MUTATION
-# BATTERY over this validator is core/fixtures/story-evidence-scaffold-mutants (dist-only, four
-# shards); this fixture keeps the control vector, the IN PLACE arm, the range and sibling-exit arms.
+# BATTERY over this validator has been retired; this fixture keeps the control vector, the IN PLACE arm, the range and sibling-exit arms.
 WORLDS_OK=1
 se_build_worlds "hks" || WORLDS_OK=0
 if [ "$WORLDS_OK" -eq 1 ] && ! HECTL="$(mk_tree control)"; then

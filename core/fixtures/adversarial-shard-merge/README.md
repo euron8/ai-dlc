@@ -5,7 +5,7 @@ Whether it ships is decided by the absence of a `.dist-only` marker
 either layout.
 
 - `run.sh` — the behavioural arms; the header states what each proves. The mutation battery
-  that proves each arm can fail is the distribution-only `adversarial-shard-merge-mutants`.
+  that proved each arm can fail has been retired.
 - `lib.sh` — the resolution, seeds, worlds and predicates, sourced by `run.sh` and by the
   battery, so a mutant is scored by the predicate bodies the shipped arms run.
 - `seed.<story>.md` — the first 12 lines of three real story files from one reference-consumer

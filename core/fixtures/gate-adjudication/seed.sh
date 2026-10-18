@@ -329,7 +329,7 @@ ESC_MISSING="$WORK/esc/there-is-no-such-file.md"
 # --- an escalations file that EXISTS and holds no entry at all -----------------------------
 # The C-arms below drive the FULL mode as the other half of a differential, and what they are
 # about is the coverage join -- not the carve-out. An ABSENT file would work for them and
-# couples them to the fail-closed default: `gate-adjudication-mutants` scores its mutants on
+# couples them to the fail-closed default: the retired gate-adjudication battery scored its mutants on
 # WHICH case dies, and m5 (the caller fails OPEN when the sibling cannot be asked) keys on any
 # non-`ok:` status, so a C-arm reading $ESC_MISSING would join m5's kill set and that battery's
 # equality check would go red for a reason that has nothing to do with m5. An EXISTING empty

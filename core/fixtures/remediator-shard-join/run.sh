@@ -2,9 +2,8 @@
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 # remediator-shard-join/run.sh -- join-remediator-shards.sh and the write ledger it reads. The
-# behavioural arms only: the JX mutation battery that proves each of them can fail is
-# `remediator-shard-join-mutants`, distribution-only, which sources the SAME predicates from
-# `lib.sh` beside this file. The battery mutates copies of core's own join, which a consumer
+# behavioural arms only: the JX mutation battery that once proved each of them can fail
+# has been retired; the predicates live in `lib.sh` beside this file. The battery mutates copies of core's own join, which a consumer
 # cannot edit, so the consumer keeps every correctness arm and loses only that proof.
 #
 # WHY A FIXTURE OF ITS OWN. No existing fixture owns this script. gate-remediation-deny owns the

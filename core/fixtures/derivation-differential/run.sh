@@ -4,7 +4,7 @@
 # `WORKLIST artifact-derivations` row on what THIS PULL broke, and on nothing else.
 #
 # Usage: run.sh [<path-to-derivation-differential.sh>]
-#   The argument exists for `derivation-differential-mutants`, which drives this file against
+#   The argument existed for a retired mutation battery, which drove this file against
 #   mutated copies. With no argument the subject is found beside this fixture in either layout.
 # Exit: 0 every assertion holds | 1 something regressed | 2 the harness could not run.
 #

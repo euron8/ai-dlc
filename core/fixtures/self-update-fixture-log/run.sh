@@ -30,7 +30,7 @@
 # and reports green. Part 12 is that input, and it is what the ref-loop mutant dies on.
 #
 #
-# THE MUTATION BATTERY IS `self-update-fixture-log-mutants`, distribution-only. It mutates copies
+# THE MUTATION BATTERY HAS BEEN RETIRED. It mutated copies
 # of core's own `self-update-fixtures.sh`, which a consumer is denied editing, so proving each arm
 # here can fail is a question about a file only this repository changes; a consumer keeps every
 # behavioural arm and loses only that proof. Both fixtures source `lib.sh` beside this file, so a
