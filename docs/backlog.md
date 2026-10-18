@@ -168,22 +168,6 @@ Owed: the row is stamped from the ledger `ts`, or a write-time arm fires on a ro
 
 verify: manual
 
-## BL-606 — the pre-push fixture pool runs every unit with no per-unit timeout
-
-**NOTE.** Filed by peer session ai-dlc-bb (batch 235 gate throughput), derived by the BL-592 contract adversary and re-derived by the filer. At origin/main 3d5f1e70 the pool worker runs each unit unbounded: `.githooks/pre-push:2027` (`bash "$hr" --root "$PWD" "$b"`) and `:2035`, `:2039` (`bash "$d/run.sh"`), intake confirmed; `core/git-hooks/pre-push` carries the same lines (I66 binds the pair). Per the filer the hook's 13 timeout/watchdog/`ulimit -t` matches all belong to the detached read-set trace's watchdog (:992-1054, :1194, :1217, :1315) plus a tool-key comment at :1339. `core/scripts/hermetic-run.sh` has 0 timeout/watchdog/`ulimit -t` matches against 6 `inputs.decl` (intake confirmed). The only hang bounds in the suite are the five mutant batteries' per-scorer watchdogs (BL-592's subject). A unit that hangs anywhere else hangs the push indefinitely, and a slow unit is indistinguishable from a hung one except by the operator watching the clock. No hang has been observed. Remedy left to the builder; one option is a per-unit bound derived from the unit's recorded clean cost.
-
-Progress is new bytes in the unit's pool log or under its per-unit TMPDIR, a fresh `mktemp -d "$out/.t.XXXXX"` under a `<root>/fx.XXXXXX` "$out", whose encoded length (characters plus two per `/`) must not exceed the system default's for any unit, because the first form, `"$out/.tmp/<fixture>"` under a bare `mktemp -d`, measured 112 encoded for procsub-staged-refusal-boot against the 85 its padded worlds allow and the default's 58 (operator ruling, option A): CPU time and process membership are not progress, so a polling loop and a silent compute unit are both refused. The POOL_STALL default is set from the forced full run described in the paragraph below, with the figures on the Window line; each unit's longest silent stretch is read from `.git/ai-dlc-pool-stall.last`. The pool root is `$TMPDIR` when it is a writable directory whose physical path is at most 35 encoded (so a unit's TMPDIR, 23 past the root, stays at or under 58), otherwise `/tmp`, otherwise a bare `mktemp -d`, which prints one stderr line naming the fallback root, the reason `/tmp` failed and that units with a path-length limit may then fail.
-
-Window method. Under ruling A, progress is new bytes under the unit's TMPDIR or in its pool log. On macOS a bare `mktemp -d` ignores TMPDIR, so a fixture taking scratch that way is seen only through its log, and its stall is its longest gap between log lines. Such a unit that legitimately goes quiet for longer than the window under load is refused, which costs a re-run. fold-architect-ledger-join-mutants was refused at the 300-poll clamp for this reason, and its scratch has since been made visible to the pool by taking it from the explicit template (8c238d29). The source is one run, D9, a full forced run in which 299 units were measured exactly and that one unit was censored at the 300-poll clamp, because the forced override of 1000000 was clamped to the default: the hook's guard clamps 6 or more digits to the default, so the run actually ran at 300. A warning line is now printed when an override is rejected. The bound exists to catch a hang, not to fit the distribution, so it is set well above the largest exact reading and above the clamp the censored unit hit.
-
-Caller freeze, found and fixed in this release (no new BL id). With an empty self-pgid (`ps -o pgid= -p $$` failing), the base `pool_kill` walk's STOP pass stopped the calling shell itself (state T), the KILL pass never ran, and the push hung. The fix's first line, `[ -n "$2" ] || { kill -KILL "$1"; return 0; }` (`.githooks/pre-push:2178`, `core/git-hooks/pre-push:2077`), kills only the recorded pid. Evidence is the probe `hands/d1/probe-self.sh`: it stubs `ps` to fail on `-p`, runs `pool_kill` with an empty self inside a sacrificial process group, and prints unit-alive, sibling-alive, grandchild-alive and inner-survived for the fix, the consumer hook and the base hook at 44acd520. On the base the caller is frozen in state T and never finishes; with the fix the unit is killed and the caller finishes. Not re-run at this edit.
-
-Window: POOL_STALL_DEFAULT=600 polls, from a measured maximum silent stretch of 96 polls (derivation-differential-mutants 96, fold-architect-ledger-join-mutants-c 58, validator-arm-selection-b 45) plus a margin: 600 is 6x the largest exact reading and 2x the 300-poll clamp the one censored unit hit; set from the forced full run D9.
-
-**LANDED (v0.832.0, verified 67bdbb7a).** The pre-push pool refuses a unit that makes no progress and kills its whole process tree. Progress is new bytes under the unit's watched TMPDIR or in its pool log. `POOL_STALL_DEFAULT=600`, from a forced full run whose maximum exact reading was 96 polls, with one unit censored at the 300-poll clamp. The empty-self caller freeze in `pool_kill` is fixed. The pool root honours a short TMPDIR, the bare fallback prints a loud line, each unit gets a unique `mktemp -d` watched root, and a rejected `AI_DLC_POOL_STALL` warns. The receipt lives at `scripts/receipt-bl606-pool-stall.sh`. A consumer that installed an earlier copy of `consumer-suite-pool/receipt.sh` keeps it until update prunes it; it exits 9 and nothing executes it.
-
-verify: sh bash scripts/receipt-bl606-pool-stall.sh
-
 ## BL-608 — the validator fork budget's headroom eroded from +6 to 0 across five releases, and nothing warned
 
 **DEFECT.** Filed by peer session ai-dlc-a6. `scripts/validate-enforcement-map.sh` FORK_BUDGET was set to 3363 in 0.786.0 as "HIGH reading 3357 plus the usual 6" (paragraph ~:825-831 then). Measured by the filer on 2026-10-16 with `fork-profile.sh --section by-arm --stable`, interleaved base/tip/base/tip in one detached worktree at one path, caller environment inherited: origin/main e3073787 (0.796.0) read 3362 and 3363 (STABLE 2, spread 3360-3362), equal to the budget — 0.792.0 through 0.796.0 spent the full +6 and no arm said so. `validator-fork-budget` fails only when the reading EXCEEDS the budget (its arm A3, "measured <= FORK_BUDGET"), so the window between "headroom gone" and "red" is invisible; at zero headroom the instrument's ±1-2 jitter makes any release adding one fork a ~1-in-4 red that reads as a flake. On 0.797.0 (+1 fork, I126 0 -> 1) the re-verify read 3362 with one rep at 3364 against 3363; 0.797.0 raised the budget to 3370 (+1 for its arm, +5 to restore headroom), which intake confirmed as `FORK_BUDGET=3370` at origin/main 3d5f1e70 (`:841`).
@@ -204,21 +188,6 @@ Outside the sandbox the fixture is green: per the filer, `ok derivation-differen
 Cost: it stays unmapped and runs on every push, about 20 s, not the gate pole. It ran on every push before too (its rows were stale), so this is a permanent read-set gap, not a regression. Two candidate fixes, neither chosen: grant process-info in the profile (broadens what a trace records, to be weighed), or skip the liveness arms under the sandbox (weakens the fixture exactly where the trace looks; not recommended). Not to be fixed now.
 
 verify: manual
-
-## BL-611 — two fixtures whose verdict depends on the real `docs/backlog.md` are never re-run when only the backlog changes
-
-**DEFECT.** Found by batch 235 intake on the intake-2 docs gate (2026-10-16), adjudicated with lead ai-dlc-9c. That push changed `docs/backlog.md`; the content-key skip passed over `backlog-receipt-binding` and `backlog-size-ceiling` although both `inputs.decl` list `docs/backlog.md` (a non-`!` line). By design: `core/scripts/hermetic-run.sh:374-375` (origin/main) states a dist sandbox "declares VERSION and docs/backlog*.md, which sit under EXCLUDED tops and so are in no population", so a declared `docs/` file is copied into the sandbox but never keyed. Their recorded keys (`.git/ai-dlc-fixture-keys/<fx>.key`) carry no `docs/backlog.md` row (0), against `scripts/backlog-reverify.sh` and the fixture's own files (1 each).
-
-It is a GAP, not a correct skip, because both verdicts can change when only the backlog changes:
-- `backlog-receipt-binding` arm j1 (`run.sh:785-824`) copies the real ledger (`:105-106` resolves `docs/backlog.md`; `:788` `cp "$REAL_LEDGER"`) and joins the validator's `sh` population against `backlog-reverify.sh`'s resolved set. It FAILs when either side is 0, when the arm's population is smaller than the classifier's (`:820`), when `--declared-empty` misbehaves on the real file (`:796`), or when the real ledger already carries the anchor `BL-899` (`:798-800`). Each of those is a property of the ledger's content.
-- `backlog-size-ceiling` arm b16 (`run.sh:400ff`) does the same join for the size ceiling (`:408` `cp "$REAL_LEDGER"`), branching on the real ledger's declared-empty state. Its own comment says it is "the one that catches a drift filed after this fixture was written".
-So a backlog commit that introduces exactly the drift these arms exist to catch is skipped on the push that carries it; it surfaces only on the next push that happens to change the validator, the classifier or the fixture. Cost if keyed: `backlog-receipt-binding` 139 s, `backlog-size-ceiling` 4 s recorded (loaded), on every push that edits the backlog — most docs releases.
-
-Owed: decide, with the cost stated, whether a declared EXCLUDED-top file is keyed for the fixtures that declare it (a per-fixture opt-in, not a population change), or whether the real-ledger arms move to a cheaper, separately keyed unit. Receipt: a push that changes only `docs/backlog.md` re-runs a fixture whose arm reads it, with a push changing an unrelated file as the control that still skips it.
-
-**LANDED (v0.832.0, verified 67bdbb7a).** The real-ledger arms j1 and b16 moved into the new `.dist-only` fixture `backlog-real-ledger`, which declares `+docs/backlog.md`. A leading `+` in `inputs.decl` keys a declared file even under an excluded top, in both hooks and in `scripts/suite-content-key.sh`, and I55 arm 3 acquits a reach only for such a declared file. A push changing only the backlog now re-runs the fixture, and the receipt drives both directions of the key comparison.
-
-verify: sh d="$(mktemp -d)" && bk="$(mktemp)" && mkdir -p "$d/.githooks" "$d/core/fixtures" "$d/core/skills/ai-dlc-update/reconcile" "$d/scripts" "$d/docs/plans" && cp .githooks/pre-push "$d/.githooks/" && cp -R core/scripts "$d/core/" && cp -R core/fixtures/backlog-real-ledger "$d/core/fixtures/" && cp core/skills/ai-dlc-update/reconcile/lib.sh core/skills/ai-dlc-update/reconcile/ledger-reverify.sh "$d/core/skills/ai-dlc-update/reconcile/" && cp scripts/suite-content-key.sh scripts/validate-backlog-receipts.sh scripts/validate-backlog-size.sh scripts/backlog-reverify.sh "$d/scripts/" && cp docs/backlog.md "$d/docs/" && printf 'plan\n' > "$d/docs/plans/p.md" && ( cd "$d" && git init -q . && git add -A && git -c user.email=r@l -c user.name=r commit -q -m r ) && kr() { ( cd "$d" && bash core/scripts/hermetic-run.sh --root . --key-only backlog-real-ledger 2>/dev/null ); } && ok() { ( cd "$d" && bash scripts/suite-content-key.sh 2>/dev/null ); } && R0="$(kr)" && O0="$(ok)" && [ -n "$R0" ] && [ "${#O0}" -eq 64 ] && cp "$d/docs/backlog.md" "$bk" && printf 'x\n' >> "$d/docs/backlog.md" && R1="$(kr)" && O1="$(ok)" && cp "$bk" "$d/docs/backlog.md" && printf 'x\n' >> "$d/docs/plans/p.md" && R2="$(kr)" && O2="$(ok)" && [ "$O1" != "$O0" ] && [ "$(diff <(printf '%s\n' "$R0") <(printf '%s\n' "$R1") | grep -c '^[<>] docs/backlog\.md	')" = 2 ] && [ "$(diff <(printf '%s\n' "$R0") <(printf '%s\n' "$R1") | grep -c '^[<>]')" = 2 ] && [ "$O2" = "$O0" ] && [ "$R2" = "$R0" ]
 
 ## BL-587 — a reconcile that records derivations "owed to the sprint's derivation-validator step" has no channel to the sprint lead, so the debt is silently dropped
 
@@ -387,25 +356,6 @@ Owed: the map parses under a standard YAML loader (quote the offending values, o
 
 verify: manual
 
-## BL-635 — the read-set map still carries traced rows for 184 fixtures that are keyed on `inputs.decl`, so about 12 thousand rows are dead records
-
-**DEFECT.** Measured by ai-dlc-c9 and relayed by lead ai-dlc-9c; intake re-derived it read-only at origin/main `8f1a9074`. The hook keys a fixture that carries `inputs.decl` on that declaration alone. `.githooks/pre-push:866-871` reads "A fixture carrying `inputs.decl` has no committed rows and needs none: its declaration is its read set", and it adds the fixture to `.mapped.all` before the read-set map is consulted. Yet `.ai-dlc-fixture-readsets.tsv` still holds traced rows for most declared fixtures:
-- 248 fixtures carry `inputs.decl`, and 225 fixtures have rows in the map (13765 rows in all).
-- 184 fixtures are both declared and mapped, and together they hold 12214 rows. No reader consults these rows.
-- Control: 41 undeclared fixtures hold the remaining 1551 rows, which are live.
-- c9's figures (249, 185 and 12260) were taken on another ref. The shape is the same.
-
-The dead rows inflate the map that the deriver regenerates whole, and a reader added later could trust them. The precedent fix is c9's `42d9578d` ("drop fold-architect-ledger-join's 46 traced rows now that it is keyed on inputs.decl"). It regenerated the map through the deriver's own `readset_merge_map` (`core/scripts/derive-fixture-readsets.sh:377`, called at `:1360`): fold went from 46 rows to 0, every other row stayed byte-identical, and the undeclared control kept its rows. On main, `fold-architect-ledger-join` still has its 46 rows and is not declared, so that commit has not landed here.
-
-Owed:
-1. Regenerate the map through `readset_merge_map`, so declared fixtures carry 0 rows. Every undeclared fixture's rows stay byte-identical (control).
-2. A guard so that a declared fixture cannot regain rows, either in the deriver at write time or as an arm at pre-push. Measure its false-positive set before shipping it.
-Receipt: after the regeneration the guard reports 0, and a seeded row for a declared fixture makes it fail.
-
-**LANDED (v0.832.0, verified 67bdbb7a).** `readset_merge_map` takes an optional fixture root and drops the rows and digest lines of every fixture carrying `inputs.decl`, `readset_untraced_lost` takes the same root, and `readset_all_list` skips declared fixtures. The map was regenerated offline: 186 declared fixtures with 10341 rows and 42 digest lines went to none, and undeclared rows and digests are byte-identical. The `readset-skip` fixture's arm (h) pins declared versus undeclared, the three-argument opt-in, the untraced-loss exclusion and the `--all` list, with two mutants.
-
-verify: sh d=$(mktemp -d) && for x in core/fixtures/*/inputs.decl; do [ -f "$x" ] && basename "$(dirname "$x")"; done > $d/dec && [ -s $d/dec ] && n=$(awk -F'\t' 'NR==FNR{D[$1]=1;next} /^# digest /{split($0,a," ");if(a[3] in D)c++;next} /^#/{next} ($1 in D){c++} END{print c+0}' $d/dec .ai-dlc-fixture-readsets.tsv) && [ "$n" = 0 ] && [ "$(grep -vc '^#' .ai-dlc-fixture-readsets.tsv)" -gt 0 ]
-
 ## BL-620 — the LC-A1 layer adjudication accepts a verdict with no evidence the entry was read, so nine re-reads were closed by one keyword grep
 
 **DEFECT** (doubtful, so DEFECT under the operator's standing rule). Filed by ai-dlc-68 (listed as ai-dlc-4e [e15800]); intake re-derived it read-only from graph's session `1b4ba596` and its register record. Graph's 0.803.0 → 0.805.0 pull (2:15-2:22 PM EDT) had 9 `HARD-LAYER-ADJUDICATION-MISSING` rows. Between 18:15Z and 18:21Z the session made **0 `Read` calls in total** (41 Bash calls), and its checks of the nine extensions were keyword greps. The last one, at 18:20:30Z, was `grep -n -i -E 'Rule ?(1|3|4|5|6|9)\b|pause point|phase transiti…'`. One `sed -n '535,550p'` read a single override span. At 18:20:45Z it asked the operator "Can I record 'still-additive' for all nine LC-E4 extension re-reads?", and the operator agreed. `_bmad-output/ai-dlc-update/blocker-adjudication-20261016T181629Z.md:13-25` records the nine rows (entry, core file, sha, verdict) and, under "Verification:", a `grep -n -i -E '\bRule [1569]\b|variant' <nine entries>`.
@@ -470,23 +420,6 @@ Owed: derive the self-check's step list from the hook's above-pool step list rat
 Related: BL-585 (which introduced the self-check), and the lead's process rule that every gate ask cites a self-check rc 0 at the exact tip, which this entry makes worth trusting.
 
 verify: manual
-
-## BL-644 — the read-set map carries `.git/**` rows that the hook strips before keying, about a sixth of all rows
-
-**NOTE.** Reported by lead ai-dlc-71 from ai-dlc-08's measurement; intake re-derived it read-only at origin/main `8cc25e89` and on 08's 0.809.0 branch `b235-622` (`0b96c077`). `.githooks/pre-push:655-657`'s `readset_universe_paths` drops `.git/**` and `.git` before any matching (`grep -v '^\.git/' | grep -v '^\.git$'`), and both the manifest (`:696`) and the committed digest go through it, so a `.git` row can never select or skip a fixture. The deriver's header says the same (`core/scripts/derive-fixture-readsets.sh:32-34`). But the deriver applies that exclusion only to its sandbox-miss comparison, not when it writes rows, so the committed map still carries them:
-- At `8cc25e89`: 2109 of 13519 rows (15.6%) are under `.git/`, and 1205 of them are under `.git/objects/` (8.9%). Together they are 137395 of the map's 889504 bytes. 124 fixtures carry `.git/objects/` rows; the largest is `procsub-staged-refusal` with 136.
-- At `b235-622`: 3143 of 14556 rows (21.6%) are under `.git/`, 2188 of them under `.git/objects/` (15.0%). `self-update-join-gate` grew from 0 rows (540 at `9f8e7691`) to 1050, of which 983 are under `.git/objects/`.
-- Control in the same runs: 10425 `core/` rows at `8cc25e89`.
-
-The objects subtree is only part of it: `.git/HEAD` (133 rows), `.git/refs/` (189) and a bare `.git` (84) are stripped by the same filter.
-
-Owed: the deriver drops `.git` and `.git/**` at write time, through the same predicate the hook uses (or a shared helper, so the two cannot disagree), and the next re-derive removes the existing rows. Receipt: a re-derived map holds 0 rows under `.git`, and a seeded `.git/objects/` read in a probe trace does not become a row; a `.gitignore` read (a tracked file, which the hook keeps) still does.
-
-Related: BL-635 (12214 dead rows for fixtures keyed on `inputs.decl`); together they are the map's dead weight.
-
-**LANDED (v0.832.0, verified 67bdbb7a).** The deriver drops `.git` and `.git/**` at write time through the hook's own `readset_drop_git` predicate, which `readset_universe_paths` in both hooks also calls, with a fallback definition inside the deriver's READSET_BOTH span. The committed map was regenerated offline: the `.git` rows are gone, every other row is byte-identical, and the header count is recomputed. The `readset-skip` fixture's arm (g) drives the extracted write pipeline over a seeded stream, with two mutants.
-
-verify: sh d=$(mktemp -d) && D=core/scripts/derive-fixture-readsets.sh && M=.ai-dlc-fixture-readsets.tsv && [ "$(grep -v '^#' $M | awk -F'\t' '$2 ~ /^\.git(\/|$)/' | grep -c .)" = 0 ] && [ "$(grep -v '^#' $M | awk -F'\t' '$2 == ".gitignore"' | grep -c .)" -gt 0 ] && sed -n '/^readset_drop_git() {/,/^}/p' $D > $d/fn.sh && [ -s $d/fn.sh ] && grep -F '> "$WORK/$fx.set"' $D | sed 's/^[[:space:]]*|//; s/readset_drop_pseudo/cat/; s/drop_ignored/cat/' > $d/wl && . $d/fn.sh && WORK=$d && fx=x && printf '%s\n' .git/objects/ab/cd .git/HEAD .git sub/.git/HEAD .gitignore core/x.sh | eval "$(cat $d/wl)" && [ "$(LC_ALL=C sort $d/x.set | tr '\n' ' ')" = ".gitignore core/x.sh sub/.git/HEAD " ]
 
 ## BL-646 — one adversarial-shard-merge mutant scorer costs about 140 CPU-seconds against the 22 its header designs for, so under the gate's pool every scorer, the control included, times out
 
@@ -586,36 +519,6 @@ The 1-minute load before each run was 6.25/11.35 (shard b, base/tip) and 10.67/3
 
 verify: manual
 
-## BL-658 — the recover gate can deny a third Read from stage `snapshot` after both mandated Reads succeeded, because a missing PROGRESS defaults to `snapshot`
-
-**PARTIAL (v0.826.0, verified 256f0dfc) — the marker-vanished window is closed; a third call that reads stage `step` before the satisfying call's removal still denies.** `ai-dlc-recover-gate.sh` re-tests `[ -f "$MARKER" ]` directly AFTER its stage read: the satisfying Read removes the marker before the progress file, so a marker still present after the `cat` proves the stage it read was intact. A structural arm in `postcompact-rulebook-recovery` binds that removal order (exact line 1, swapped spelling 0, with mutant M4), and the race battery forces the removal between the two reads by injection (R1-R3, mutants M1-M3). Open: a third invocation that completes its stage read and re-test before the satisfying call reaches its `rm` enters `case step` and denies the digest Read with the stage-two text. Closing that needs the stage held atomically, which a re-test cannot give (see BL-666 for the same file's stage write). The receipt stays `manual` while the entry is live.
-
-**NOTE.** Reported by ai-dlc-f7, read-only on graph's s319 lead (0.818.0, transcript `74de15ba`, second compaction at 19:26Z). Intake ai-dlc-40.
-
-Observed (transcript lines 3710-3724). Three Reads were issued in one message:
-- 19:26:15.057Z: `Read _bmad-output/pipeline-snapshot.md`, OK at 15.662Z.
-- 19:26:15.427Z: `Read steps/architecture.md`, OK at 16.101Z.
-- 19:26:15.731Z: `Read postcompact-digest.md`, DENIED at 16.379Z with the stage-`snapshot` text "your FIRST tool call must be `Read _bmad-output/pipeline-snapshot.md` in full".
-
-The digest Read retried alone went through, at a cost of one turn. Line 3735 repeats the same three tool_use ids as a request blob, so this is one deny, not two. Control: an id absent from the transcript matched 0.
-
-Mechanism (hypothesis from the code, not measured). In `core/hooks/ai-dlc-recover-gate.sh` at origin/main `06ae8b85`:
-- :255 exits early when `$MARKER` is absent.
-- :362 reads `STAGE="$(cat "$PROGRESS" 2>/dev/null || printf 'snapshot')"`, so an absent PROGRESS reads as stage `snapshot`.
-- :440, on the satisfying step Read, removes `"$MARKER" "$PROGRESS"`.
-
-A hook invocation that passes :255 before that removal and reaches :362 after it sees stage `snapshot` and denies at :398, which is the observed text. Graph's installed copy differs from main (md5), but the same three lines sit at its :242, :349 and :427. The header's "THE RACE" (:116-120) covers the advisor stage's same-message race, not the read stages.
-
-Owed: an absent PROGRESS with the marker gone at :362 exits 0 (re-test `[ -f "$MARKER" ]`), or the satisfying Read removes PROGRESS before MARKER. Probe: two invocations for one session, a satisfying step Read and a third Read, with the removal forced between the second's :255 and :362. The third is allowed. Control: a genuine first-call non-snapshot Read still denies.
-
-**First measured occurrence of the open half (f7 measured, graph s319 lead session `c61a91eb`, 0.828.0 = `b503b232`, which includes 0.826.0's partial fix; transcript line numbers are f7's and transcript-only).** After the compaction at transcript line 1401, one response issued three parallel Reads at 13:51:21Z (lines 1436-1438): the snapshot, `steps/architecture.md` and `postcompact-digest.md`. The snapshot and step Reads succeeded (lines 1441, 1442). The digest Read was DENIED (line 1440) with the stage-`step` text "your SECOND tool call must be `Read .claude/skills/ai-dlc/steps/architecture.md`". Control: the step Read in the same block was allowed.
-
-That text is the step-stage deny at `core/hooks/ai-dlc-recover-gate.sh:474`, reached through `case "$STAGE"` after the `:380` stage read. It is not the snapshot default that 0.826.0 closed at `:362-381`. So the digest call read PROGRESS as `step` after the snapshot call wrote it (`:408`, `printf 'step\n' >"$PROGRESS"`) and before the step call removed it (`:459`, `rm -f "$MARKER" "$PROGRESS"`), with the marker still present at the `:381` re-test. This is exactly the window the PARTIAL text above names as open. Cost: one denied call, a re-issued Read at 13:51:30Z (line 1459), one extra turn at about 318k tokens, and a false "you skipped the step Read" message.
-
-The line numbers in this tree match the ones f7 cited from the consumer's installed copy, so there is no distribution/consumer offset to report for these five sites. f7 read the deny text and the stage from the transcript, so which line each invocation executed is inferred from the text, not traced.
-
-verify: manual
-
 ## BL-662 — the adversarial repair record is the only repair kind with no round word, the join accepts `<artifact>-adversarial-repair-p<M>`, and only gate-time arm H catches it
 
 **NOTE.** Reported by ai-dlc-f7, read-only on graph's s319 lead (0.818.0, transcript `74de15ba`). Intake ai-dlc-40.
@@ -654,18 +557,6 @@ verify: manual
 Since BL-665 an unstamped divergence resolves exactly as a stamped one does, so this no longer deadlocks; the cost left is a mislabelled pass. Its gate error tells the adversary to stamp DIVERGENT_HARD_BLOCK, which no shard was in a position to do.
 
 Owed: decide whether the merge should stamp from the sum. It has the previous pass's CRITICAL count only by reading the prior pass file, which it does not do today. Probe: two shards each declaring prior-scope 1 over a previous pass with 1 CRITICAL; the merged verdict. Control: the same with a previous pass of 2 CRITICAL.
-
-verify: manual
-
-## BL-666 — the recover gate's stage write truncates before it writes, so a concurrent call can read an empty stage and reset the recovery to `snapshot`
-
-**NOTE.** Found by the batch 236 HOOKS contract adversary while it sized BL-658, and filed by the HOOKS owner on the lead's instruction. This is a code reading only, with no measured occurrence.
-
-`core/hooks/ai-dlc-recover-gate.sh:408` advances the recovery with `printf 'step\n' >"$PROGRESS"`. The shell truncates the file before `printf` writes, so for a moment the file exists and is empty. A second invocation of the gate in that moment reads it with `cat` at `:380`. `cat` succeeds on an empty file, so the `|| printf 'snapshot'` default does not apply and `STAGE` is the empty string. That falls into the `*)` arm at `:481`, which treats it as an unreadable value and runs `rm -f "$PROGRESS"`. The next call then finds no progress file and reads stage `snapshot`, so the recovery restarts from its first mandated Read and denies the step Read the lead just earned.
-
-BL-658's re-test does not cover this, because the marker is still present throughout.
-
-Owed: the stage is written whole or not at all. Write to a sibling temp file and `mv` it over `$PROGRESS`, which `rename(2)` makes atomic on one filesystem. Or have the `*)` arm treat an empty value as "unchanged" instead of deleting. Probe: inject a read of an empty `$PROGRESS` between the truncate and the write, and the stage stays `step`. Control: a genuinely unreadable value still stands down.
 
 verify: manual
 
@@ -878,6 +769,31 @@ cannot be built, a corpus reads empty or a self-probe fails, or `bl.sh` is not f
 
 verify: sh unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY; V=scripts/validate-shell-portability.sh; [ -s "$V" ] || exit 9; T=$(mktemp -d "${TMPDIR:-/tmp}/bl681.XXXXXX") || exit 9; mkdir -p "$T/scripts" "$T/core/fixtures/x" || exit 9; printf '0.0.0-receipt\n' > "$T/VERSION" || exit 9; cp "$V" "$T/$V" || exit 9; printf '%s\n' 'probe text' > "$T/core/a.md" || exit 9; printf '%s\n' 'true' > "$T/core/fixtures/x/run.sh" || exit 9; printf '%s\n' "awk '" '      if (inwin) { gsub(/[ \t]+/, " ", win); print head "\037" win }' "' f" > "$T/scripts/fp.sh" || exit 9; printf '%s\n' 'awk '"'"'{ gsub(/x/, "\\1", s) }'"'"' f' > "$T/scripts/bl.sh" || exit 9; git -C "$T" init -q && git -C "$T" add -A || exit 9; O=$(bash "$T/$V" 2>&1); grep -qE 'corpus is empty|own probe did not fire|no VERSION marker' <<<"$O" && exit 9; H=$(awk '/^FAIL: /{s=($2=="S7:")} s' <<<"$O"); grep -qF 'scripts/bl.sh:' <<<"$H" || exit 9; grep -qF 'scripts/fp.sh:' <<<"$H" && exit 1; exit 0
 
+## BL-687 — a parallel step Read whose hook runs before the snapshot call's stage write gets the FIRST deny
+
+**DEFECT.** The residual of BL-658, stated by the RECOVER contract adversary (batch 236) and filed by the lead.
+
+A lead that issues the snapshot Read and the step Read in parallel runs two invocations of `core/hooks/ai-dlc-recover-gate.sh` side by side. If the step call's hook reads the stage before the snapshot call's stage write lands, it finds no progress file and defaults to `snapshot`. It passes the marker re-test because the marker is present, and it is denied with "your FIRST tool call must be…", although the snapshot Read is succeeding in the same message. This is the same mechanism as BL-658 case (iii). BL-658's digest allow does not cover it, because a step Read is a mandated Read: allowing it unconditionally would let a step Read alone satisfy the recovery. Cost: one denied call, a re-issued Read, and a false "you skipped the snapshot" message.
+
+Fix shape, which can be built as written. In the `snapshot)` arm, before the fallthrough deny, a FULL Read of the step file that arrives while no stage is written and the marker is present is ALLOWED WITHOUT ADVANCING AND WITHOUT SATISFYING. It writes no stage, keeps the marker, and writes neither `.recover-satisfied` nor `.recover-advisor-owed`. The recovery is then satisfied only by a step Read made once the stage is `step`, so the lead re-issues the step Read after the snapshot Read, or a parallel step Read is satisfied only if its hook runs after the stage write.
+
+What the shape must not open: a step Read alone must never satisfy the recovery without the snapshot Read. The allowed call must leave the marker present, the stage unwritten and `.recover-satisfied` absent, and a bounded step Read must still be denied.
+
+Probe: arm a recovery, then send a full step Read with no stage written. It is allowed, the marker is still present, and neither the stage nor `.recover-satisfied` exists. Then a sequential snapshot Read followed by a step Read satisfies the recovery: the marker is removed and `.recover-satisfied` is written. The receipt exits 1 while the step Read with no stage is denied with FIRST, or while it satisfies anything.
+
+verify: sh command -v jq >/dev/null || exit 9; [ -f core/hooks/ai-dlc-recover.sh ] && [ -f core/hooks/ai-dlc-recover-gate.sh ] || exit 9; p=$(mktemp -d) || exit 9; mkdir -p "$p/_bmad-output" "$p/.claude/skills/ai-dlc"; printf '# S\n\n## Pipeline Position\ncurrent_step_file: `a.md`\n' >"$p/_bmad-output/pipeline-snapshot.md"; echo x >"$p/a.md"; echo d >"$p/.claude/skills/ai-dlc/postcompact-digest.md"; echo x >"$p/z.md"; printf '{"source":"compact","session_id":"S"}' | CLAUDE_PROJECT_DIR="$p" bash core/hooks/ai-dlc-recover.sh >/dev/null 2>&1; grep -q '^step_file_resolved=1' "$p/_bmad-output/.recover-fired" 2>/dev/null || exit 9; g(){ printf '{"tool_name":"Read","session_id":"S","tool_input":{"file_path":"%s"}}' "$1" | CLAUDE_PROJECT_DIR="$p" bash core/hooks/ai-dlc-recover-gate.sh 2>/dev/null; }; g "$p/z.md" | grep -q "FIRST tool call" || exit 9; [ -e "$p/_bmad-output/.recover-gate-progress" ] && exit 9; g "$p/a.md" | grep -q "FIRST tool call" && exit 1; [ -e "$p/_bmad-output/.recover-fired" ] && [ ! -e "$p/_bmad-output/.recover-satisfied" ] && [ ! -e "$p/_bmad-output/.recover-gate-progress" ] || exit 1; g "$p/_bmad-output/pipeline-snapshot.md" | grep -q deny && exit 1; g "$p/a.md" | grep -q deny && exit 1; [ ! -e "$p/_bmad-output/.recover-fired" ] && [ -e "$p/_bmad-output/.recover-satisfied" ] || exit 1; exit 0
+
+## BL-688 — when `_bmad-output` is unwritable, the snapshot Read is allowed but the stage never advances, so every later step Read is denied with FIRST
+
+**DEFECT.** Measured by the RECOVER contract adversary (batch 236) on both origin/main and the BL-666 fix, and filed by the lead.
+
+The gate's stage write (`core/hooks/ai-dlc-recover-gate.sh`, the `snapshot)` arm) is fail-open: when it cannot write the progress file, it still allows the snapshot Read. So with the marker present and `_bmad-output` unwritable, the snapshot Read goes through and the stage is never written. Every later step Read reads no stage, defaults to `snapshot`, and is denied with "your FIRST tool call must be…", and the snapshot Read the deny asks for advances nothing. The recovery cannot be satisfied: a wedge. Its arming precondition checks that the two mandated files are readable, never that the stage can be written.
+
+The stderr half is closed in this release. Before BL-666's fix, the failed write's redirection error could leak to stderr. The A4 wrapper `{ …; } 2>/dev/null` around the temp write and rename now discards it. The wedge itself is open.
+
+Owed: a stage that cannot be written must not leave the gate denying forever. Either the gate stands down (clears what it can and exits 0) when the stage write fails, as the arming precondition does for an unreadable file, or the arming precondition also requires a writable `_bmad-output`. Probe: arm a recovery, `chmod 555 _bmad-output`, make a full snapshot Read, then a step Read; the step Read is not denied with FIRST. Control: the same sequence with `_bmad-output` writable advances to `step`. If the probe runs as a user that ignores permissions, a write test detects it and the receipt exits 9.
+
+verify: sh command -v jq >/dev/null || exit 9; [ -f core/hooks/ai-dlc-recover.sh ] && [ -f core/hooks/ai-dlc-recover-gate.sh ] || exit 9; p=$(mktemp -d) || exit 9; mkdir -p "$p/_bmad-output" "$p/.claude/skills/ai-dlc"; printf '# S\n\n## Pipeline Position\ncurrent_step_file: `a.md`\n' >"$p/_bmad-output/pipeline-snapshot.md"; echo x >"$p/a.md"; echo d >"$p/.claude/skills/ai-dlc/postcompact-digest.md"; echo x >"$p/z.md"; printf '{"source":"compact","session_id":"S"}' | CLAUDE_PROJECT_DIR="$p" bash core/hooks/ai-dlc-recover.sh >/dev/null 2>&1; grep -q '^step_file_resolved=1' "$p/_bmad-output/.recover-fired" 2>/dev/null || exit 9; g(){ printf '{"tool_name":"Read","session_id":"S","tool_input":{"file_path":"%s"}}' "$1" | CLAUDE_PROJECT_DIR="$p" bash core/hooks/ai-dlc-recover-gate.sh 2>/dev/null; }; g "$p/z.md" | grep -q "FIRST tool call" || exit 9; chmod 555 "$p/_bmad-output" || exit 9; if ( : >"$p/_bmad-output/.w" ) 2>/dev/null; then rm -f "$p/_bmad-output/.w"; chmod 755 "$p/_bmad-output"; exit 9; fi; v=0; g "$p/_bmad-output/pipeline-snapshot.md" | grep -q deny && v=9; [ "$v" = 0 ] && g "$p/a.md" | grep -q "FIRST tool call" && v=1; chmod 755 "$p/_bmad-output"; exit "$v"
 ## BL-690 — the pre-push fixture pool installs no EXIT, INT or TERM trap, so an interrupted hook leaks its pool root `/tmp/fx.*`
 
 **NOTE.** The pool function sets `out="$(mktemp -d /tmp/fx.XXXXXX ...)"` (`.githooks/pre-push:2030`, `core/git-hooks/pre-push:1938`) and removes it only by straight-line `rm -rf "$out"` (`.githooks/pre-push:2044`, `:2080`, `:2088`, `:2446`; `core/git-hooks/pre-push:1952`, `:1984`, `:1992`, `:2320`). The hook says so itself: "There is no trap in this hook" (`.githooks/pre-push:2383`; `core/git-hooks/pre-push:2259` carries the same sentence). An interrupted hook (SIGINT, SIGTERM, SIGHUP, or a `set -u` abort) therefore leaks its pool root. The leak predates this release; the root moved from `/var/folders` to `/tmp` in this release, so it now lands in shared `/tmp`. Filed by peer session ai-dlc-c0 (batch 236 READSET), id allocated by lead ai-dlc-c8, found by the READSET tip adversary on the per-unit TMPDIR change.
