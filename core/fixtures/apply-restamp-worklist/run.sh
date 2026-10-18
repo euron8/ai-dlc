@@ -417,16 +417,40 @@ reason: probe
 probe body
 U5OVR
 }
-u5_build() { # u5_build <consumer> — approve WITH the blocker, then resolve it
+# u5_seed_unseen <consumer> — a NON-HARD finding the approval never saw. The override's base_sha
+# RESOLVES (so it is not the HARD row probe.md is) and its `shadows:` target is absent at theirs,
+# which layer-drift.sh renders as OVERRIDE-ANCHOR-UNRESOLVED: the shape reconcile-emit-report's V-U
+# world uses, and the one --verify counts as `unseen=1`.
+u5_seed_unseen() {
+  mkdir -p "$1/.claude/skills/ai-dlc/overrides" || return 1
+  cat > "$1/.claude/skills/ai-dlc/overrides/absent-anchor.md" <<U5UNS
+---
+shadows: core/rules/nonexistent.md#Nope
+base_sha: $BASE
+reason: probe
+---
+
+## Nope
+
+probe body
+U5UNS
+}
+u5_build() { # u5_build <consumer> [unseen] — approve WITH the blocker, then resolve it
   mk_consumer "$1" green || return 1
   u5_seed_blocker "$1" || return 1
   mk_report "$1" "$THEIRS" || return 1
   rm -rf "$1/.claude/skills/ai-dlc/overrides"
+  [ "${2:-}" = unseen ] || return 0
+  u5_seed_unseen "$1"
 }
 run_apply_err() { bash "$1" "$DIST" "$BASE" "$2" "$THEIRS" 2>"$3"; }
 # u5_score <apply-path> -> "<rc>|<stamp>|<marker>|<CAUSE|->|<REMEDY|->|<FWD|->"
 # PRESENCE-SHAPED IN EVERY FIELD, and a fresh consumer per drive so no arm reads a previous
 # one's leftovers.
+#
+# THE WORLD CARRIES ONE UNSEEN ROW. A resolution that leaves NO unseen row now PROCEEDS (RA0
+# below), so the refusal this scorer reads is the unseen>0 one with no recorded re-approval.
+# REMEDY is keyed on `RE-APPROVAL OWED`, which only the exit-3 branch prints, plus the re-run.
 #
 # FWD IS THE FORWARDED STDERR, and it is keyed on the two things only the forward produces: a
 # `cause:` LINE at --verify's own indent, and at least one `<`/`>` diff line. The refusal message
@@ -435,14 +459,108 @@ run_apply_err() { bash "$1" "$DIST" "$BASE" "$2" "$THEIRS" 2>"$3"; }
 # without the forward apply.sh has discarded — a pointer to a tool they must re-run.
 u5_score() {
   local a="$1" c="$WORK/u5-$$-$RANDOM" e rc
-  u5_build "$c" || { echo "BROKEN|||||"; return; }
+  u5_build "$c" unseen || { echo "BROKEN|||||"; return; }
   e="$c/stderr.txt"
   run_apply_err "$a" "$c" "$e" >/dev/null; rc=$?
   printf '%s|%s|%s|%s|%s|%s\n' "$rc" "$(stamp_ver "$c")" "$(marker "$c")" \
     "$(grep -q 'BLOCKERS-RESOLVED' "$e" && echo CAUSE || echo -)" \
-    "$(grep -qF "re-render the region with emit-report.sh $DIST $BASE $c $THEIRS" "$e" \
+    "$(grep -qF 'apply: RE-APPROVAL OWED.' "$e" \
        && grep -q 're-run apply with the same four arguments' "$e" && echo REMEDY || echo -)" \
     "$(grep -qE '^[[:space:]]*cause: ' "$e" && grep -qE '^[<>] ' "$e" && echo FWD || echo -)"
+}
+
+# --- THE RECORDED RE-APPROVAL (RA0-RA5, MR1-MR2) -------------------------------------------------
+# --verify exit 3 prints `re-approval: digest=<sha256> unseen=<N> label="..."`, and apply.sh decides
+# from it: unseen=0 proceeds; unseen>0 proceeds only on an AskUserQuestion record in
+# _bmad-output/operator-answers-history.md whose Question line carries the full digest and whose
+# answer body's first line begins with the label. The step this replaces told the session to
+# re-render, verify to 0 and "have the operator re-approve it"; nothing read the re-approval, and
+# the re-render erased the only evidence a reader could have used. Measured on the reference
+# consumer, twice: re-rendered, verified 0, applied, no question between.
+#
+# RECORDS ARE WRITTEN BY DRIVING THE REAL HOOK with a synthetic PostToolUse payload, never by
+# hand, so the record grammar the gate reads is the one the hook writes. `ra_answer` asserts the
+# record LANDED (the AskUserQuestion header count rose): the hook exits 0 silently without jq,
+# and a proceed arm would then go red for the wrong reason. RA5 is the one derived record: no hook
+# writes a non-AskUserQuestion header into that file, so a hook-written correct record has its
+# header token replaced exactly once — every other property kept, the near-miss for that conjunct.
+ANSWER_HOOK=""
+for cand in "$ROOT/core/hooks/ai-dlc-answer-capture.sh" "$ROOT/.claude/hooks/ai-dlc-answer-capture.sh"; do
+  [ -f "$cand" ] && ANSWER_HOOK="$cand" && break
+done
+# SHIPS AHEAD OF ITS SUBJECT, like the --finish probe below: on a consumer this file can sit beside
+# an apply.sh that predates the gate. In the distribution the subject is always present, so the
+# arms run and go red rather than skipping.
+RA_SKIP=""
+if [ "$IS_DIST" = 0 ] && { ! grep -q '^ra_recorded() {' "$APPLY" || [ -z "$ANSWER_HOOK" ]; }; then
+  RA_SKIP="the installed apply.sh predates the recorded re-approval gate, or the answer-capture hook is not installed; both land with the pull that carries this fixture"
+fi
+ra_answer() { # ra_answer <consumer> <question> <answer> -> 0 when one more AskUserQuestion record landed
+  local h="$1/_bmad-output/operator-answers-history.md" n0 n1
+  n0="$(grep -c '^## .* -- AskUserQuestion$' "$h" 2>/dev/null)" || n0=0
+  jq -n --arg q "$2" --arg a "$3" \
+    '{tool_name:"AskUserQuestion",session_id:"fx-ra",tool_use_id:"fx-ra-tu",tool_response:{answers:{($q):$a}}}' \
+    > "$1/ra-payload.json" || return 1
+  CLAUDE_PROJECT_DIR="$1" bash "$ANSWER_HOOK" < "$1/ra-payload.json" >/dev/null 2>&1
+  n1="$(grep -c '^## .* -- AskUserQuestion$' "$h" 2>/dev/null)" || n1=0
+  [ "$n1" -gt "$n0" ]
+}
+# ra_line <consumer> -> the `re-approval:` payload --verify prints for this consumer's report
+ra_line() {
+  local v
+  v="$(bash "$EMIT" --verify "$1/_bmad-output/ai-dlc-update/reconcile-report.md" "$DIST" "$BASE" "$1" "$THEIRS" 2>&1 >/dev/null)"
+  sed -n 's/^[[:space:]]*re-approval: //p' <<< "$v"
+}
+# exact-once python replace; refuses (non-zero) unless the old text occurs exactly once
+py_replace_once() { # py_replace_once <file> <old> <new>
+  python3 - "$1" "$2" "$3" <<'PYREP'
+import sys
+p, old, new = sys.argv[1], sys.argv[2], sys.argv[3]
+s = open(p).read()
+n = s.count(old)
+if n != 1:
+    sys.stderr.write("anchor occurs %d time(s), want 1\n" % n)
+    sys.exit(1)
+open(p, "w").write(s.replace(old, new))
+PYREP
+}
+# ra_world <consumer> <plain|unseen> <none|right|wrongdg|wronglabel|pause> -> 0 when built as asked
+ra_world() {
+  local c="$1" ra dg lb wrong
+  u5_build "$c" "$2" || return 1
+  [ "$3" = none ] && return 0
+  ra="$(ra_line "$c")"
+  dg="${ra#digest=}"; dg="${dg%% *}"; lb="${ra#* label=\"}"; lb="${lb%\"}"
+  [ "${#dg}" -eq 64 ] && [ -n "$lb" ] || return 1
+  wrong="$(printf 'a different region\n' | { shasum -a 256 2>/dev/null || sha256sum; } | cut -d' ' -f1)"
+  case "$3" in
+    right)      ra_answer "$c" "Re-approve the reconcile report? Region digest ${dg}." "$lb" ;;
+    wrongdg)    ra_answer "$c" "Re-approve the reconcile report? Region digest ${wrong}." "$lb" ;;
+    wronglabel) ra_answer "$c" "Re-approve the reconcile report? Region digest ${dg}." "Not yet, keep the report" ;;
+    pause)      ra_answer "$c" "Re-approve the reconcile report? Region digest ${dg}." "$lb" \
+                  && py_replace_once "$c/_bmad-output/operator-answers-history.md" " -- AskUserQuestion
+" " -- USER_PAUSE
+" ;;
+    *) return 1 ;;
+  esac
+}
+# ra_score <apply-path> <consumer> -> "<rc>|<stamp>|<WRITTEN|UNWRITTEN>|<NOTE|->"
+# WRITTEN is read off a target file's BYTES (the session driver theirs rewrites), not off a row.
+ra_score() {
+  local out rc
+  out="$(bash "$1" "$DIST" "$BASE" "$2" "$THEIRS" 2>"$2/ra-stderr.txt")"; rc=$?
+  printf '%s|%s|%s|%s\n' "$rc" "$(stamp_ver "$2")" \
+    "$(grep -q 'UPSTREAM' "$2/$DRIVER_REL" && echo WRITTEN || echo UNWRITTEN)" \
+    "$(has_row "$out" NOTE blockers-resolved && echo NOTE || echo -)"
+}
+RA_GO="0|$THEIRS_VER|WRITTEN|NOTE"
+RA_STOP="1|1.0.0|UNWRITTEN|-"
+# ra_drive <apply-path> <tag> <plain|unseen> <record-kind> -> the ra_score cell, or BROKEN
+ra_drive() {
+  local c="$WORK/ra-$2-$$-$RANDOM"
+  ra_world "$c" "$3" "$4" || { echo "BROKEN"; return; }
+  ra_score "$1" "$c"
+  cp "$c/ra-stderr.txt" "$WORK/ra-$2.stderr" 2>/dev/null
 }
 
 # Each is a COPY of the whole reconcile directory — apply.sh `eval`s map_consumer() out of its
@@ -931,6 +1049,71 @@ case "$U5" in
   *)       bad "U5 the refusal did not forward --verify's stderr ($U5) — the message quotes the cause text and then tells the operator to read a diff apply.sh discarded, which is a pointer to nothing" ;;
 esac
 
+# --- RA0-RA5: the recorded re-approval, and the exit-0 control --------------------------------
+if [ -n "$RA_SKIP" ]; then
+  printf '  SKIP  RA0-RA5 -- %s\n' "$RA_SKIP"
+else
+  # RA-0 SELF-PROBE, before any verdict: the unseen world must print unseen=1 and a 64-hex digest,
+  # the plain world unseen=0, and the hook must record. Without these the arms below read a world
+  # that cannot express the case.
+  c="$WORK/ra-probe-$$"
+  if ! u5_build "$c" unseen; then
+    bad "RA-0 could not build the unseen world"
+  else
+    RA_L="$(ra_line "$c")"
+    c0="$WORK/ra-probe0-$$"; u5_build "$c0" >/dev/null 2>&1
+    RA_L0="$(ra_line "$c0")"
+    if grep -Eq '^digest=[0-9a-f]{64} unseen=1 label="Re-approve [0-9a-f]{12}, run apply"$' <<< "$RA_L" \
+       && grep -Eq '^digest=[0-9a-f]{64} unseen=0 ' <<< "$RA_L0" \
+       && ra_answer "$c" "probe question" "probe answer"; then
+      ok "RA-0 setup: the unseen world prints unseen=1 with a 64-hex digest and its label, the plain world unseen=0, and the real answer-capture hook records an AskUserQuestion answer"
+    else
+      bad "RA-0 setup: unseen world [$RA_L], plain world [$RA_L0], or the hook ($ANSWER_HOOK) wrote no record — the arms below cannot express the case"
+    fi
+  fi
+  RA0="$(ra_drive "$APPLY" a0 plain none)"
+  RA1="$(ra_drive "$APPLY" a1 unseen none)"
+  RA2="$(ra_drive "$APPLY" a2 unseen right)"
+  RA3="$(ra_drive "$APPLY" a3 unseen wrongdg)"
+  RA4="$(ra_drive "$APPLY" a4 unseen wronglabel)"
+  RA5="$(ra_drive "$APPLY" a5 unseen pause)"
+  [ "$RA0" = "$RA_GO" ]   && ok "RA0 exit 3 with unseen=0 and no record PROCEEDS with a NOTE blockers-resolved row — the approval saw a superset, so no pull that had a blocker is wedged" \
+                          || bad "RA0 unseen=0 did not proceed ($RA0, want $RA_GO) — every pull that resolved a blocker now needs a question nobody can be asked"
+  [ "$RA1" = "$RA_STOP" ] && ok "RA1 exit 3 with unseen>0 and no record REFUSES, the target file unwritten and the stamp at base" \
+                          || bad "RA1 unseen>0 with no re-approval did not refuse ($RA1, want $RA_STOP) — the defect: a region nobody re-approved is written"
+  [ "$RA2" = "$RA_GO" ]   && ok "RA2 unseen>0 with a hook-written record quoting the digest and answered with the label PROCEEDS" \
+                          || bad "RA2 a correct re-approval did not let the apply proceed ($RA2, want $RA_GO) — the gate cannot be satisfied"
+  [ "$RA3" = "$RA_STOP" ] && ok "RA3 a record answered with the label but quoting a DIFFERENT digest refuses — a re-approval of another region is not this one" \
+                          || bad "RA3 a wrong-digest record passed ($RA3, want $RA_STOP) — the label is a constant, so the digest is the only thing binding the record to this region"
+  [ "$RA4" = "$RA_STOP" ] && ok "RA4 a record quoting the digest but answered with something other than the label refuses" \
+                          || bad "RA4 a non-label answer passed ($RA4, want $RA_STOP) — a 'Not yet' re-approves"
+  [ "$RA5" = "$RA_STOP" ] && ok "RA5 the digest and label inside a record that is not an AskUserQuestion answer refuse" \
+                          || bad "RA5 a non-AskUserQuestion record passed ($RA5, want $RA_STOP) — any record the lead can cause to exist re-approves"
+  # The refusal prints the question and label to ask, so a session on old prose recovers in one ask.
+  if grep -qF 'apply: RE-APPROVAL OWED.' "$WORK/ra-a1.stderr" 2>/dev/null \
+     && grep -Eq '^  option label: Re-approve [0-9a-f]{12}, run apply$' "$WORK/ra-a1.stderr"; then
+    ok "RA1 and the refusal prints the question and the exact option label to ask"
+  else
+    bad "RA1 the refusal did not print the question and option label — a session cannot recover without composing the label itself"
+  fi
+fi
+
+# --- RA-X: --verify's exit 0 and exit 1 print no re-approval line ------------------------------
+# The line is emitted for exit 3 ONLY. A current report: stdout is exactly the one success line and
+# stderr is EMPTY. A report rendered at base: exit 1 and no re-approval line.
+c="$WORK/ra-x0-$$"; mk_consumer "$c" green >/dev/null 2>&1; mk_report "$c" "$THEIRS"
+RX0_O="$(bash "$EMIT" --verify "$c/_bmad-output/ai-dlc-update/reconcile-report.md" "$DIST" "$BASE" "$c" "$THEIRS" 2>"$c/x0.err")"; RX0=$?
+c1="$WORK/ra-x1-$$"; mk_consumer "$c1" green >/dev/null 2>&1; mk_report "$c1" "$BASE"
+bash "$EMIT" --verify "$c1/_bmad-output/ai-dlc-update/reconcile-report.md" "$DIST" "$BASE" "$c1" "$THEIRS" >/dev/null 2>"$c1/x1.err"; RX1=$?
+RX1_N="$(grep -c 're-approval:' "$c1/x1.err")" || RX1_N=0
+RX1_C="$(grep -c '^  cause: ' "$c1/x1.err")" || RX1_C=0
+if [ "$RX0" -eq 0 ] && [ "$RX0_O" = "emit-report: the report's mechanical region is present, current, and complete." ] && [ ! -s "$c/x0.err" ] \
+   && [ "$RX1" -eq 1 ] && [ "$RX1_C" -eq 1 ] && [ "$RX1_N" -eq 0 ]; then
+  ok "RA-X --verify exit 0 prints exactly its one success line and nothing on stderr, and exit 1 prints its cause line and no re-approval line"
+else
+  bad "RA-X exit-0/exit-1 output moved (rc0=$RX0 out=[$RX0_O] err-bytes=$(wc -c < "$c/x0.err" | tr -d ' '); rc1=$RX1 cause-lines=$RX1_C re-approval-lines=$RX1_N)"
+fi
+
 fi  # ---- end of unit u
 
 if sg mut; then
@@ -1361,6 +1544,52 @@ if sed '/^      printf .%s\\n. "$_ug_verr" >&2$/d' "$REC/apply.sh" | mut_apply "
   esac
 else
   bad "A3 did not apply — apply.sh no longer forwards --verify's stderr with \`printf '%s\\n' \"\$_ug_verr\" >&2\`, so this mutant proves nothing. Re-anchor it on the current spelling."
+fi
+
+# --- MR1/MR2: the recorded re-approval. Each built by an exact-once replace in a whole-dir copy. --
+# MR1 drops the answer check: an unseen>0 region proceeds with no record. RA1 must move; RA0 (no
+# record needed) and RA2 (a correct record) are the controls that must not. RA3-RA5 moving under
+# MR1 is the same property, so they are not read here.
+# MR2 matches a record regardless of its digest. RA3 must move; RA4 and RA5 (the label and the
+# header conjuncts) must still refuse, and RA2 still proceed.
+ra_mut() { # ra_mut <dir> <old> <new> -> 0 when the copy differs from the shipped apply.sh
+  build_rec "$1" || return 1
+  py_replace_once "$1/apply.sh" "$2" "$3" 2>/dev/null || return 1
+  ! cmp -s "$REC/apply.sh" "$1/apply.sh"
+}
+if [ -n "$RA_SKIP" ]; then
+  printf '  SKIP  MR1/MR2 -- %s\n' "$RA_SKIP"
+else
+  if [ -d "$WORK/mut-ctl" ]; then
+    RC_CTL="$(ra_drive "$WORK/mut-ctl/apply.sh" mctl unseen none)"
+    [ "$RC_CTL" = "$RA_STOP" ] && ok "CONTROL(MR) the unmutated copy refuses RA1's world in a fresh directory, so MR1's proceed below is the mutation and not the copy" \
+                               || bad "CONTROL(MR) the unmutated copy did not refuse RA1's world ($RC_CTL) — MR1/MR2's verdicts are unreadable"
+  fi
+  if ra_mut "$WORK/mr1" '        elif ra_recorded "$_ra_hist" "$_ra_dg" "$_ra_lb"; then' '        elif true; then'; then
+    M1_1="$(ra_drive "$WORK/mr1/apply.sh" m1a1 unseen none)"
+    M1_0="$(ra_drive "$WORK/mr1/apply.sh" m1a0 plain none)"
+    M1_2="$(ra_drive "$WORK/mr1/apply.sh" m1a2 unseen right)"
+    if [ "$M1_1" = "$RA_GO" ] && [ "$M1_0" = "$RA_GO" ] && [ "$M1_2" = "$RA_GO" ]; then
+      ok "MR1 (answer check dropped): RA1 goes red — an unseen region nobody re-approved is written — while RA0 and RA2 hold"
+    else
+      bad "MR1 scored RA1=[$M1_1] RA0=[$M1_0] RA2=[$M1_2], want RA1=$RA_GO with RA0 and RA2 unchanged at $RA_GO — RA1 is carried by something other than the answer check, or the mutant moved a control"
+    fi
+  else
+    bad "MR1 did not apply — the exit-3 branch no longer reads \`elif ra_recorded \"\$_ra_hist\" \"\$_ra_dg\" \"\$_ra_lb\"; then\` exactly once. Re-anchor it."
+  fi
+  if ra_mut "$WORK/mr2" '{ if (index($0, dg) > 0) q = 1; next }' '{ q = 1; next }'; then
+    M2_3="$(ra_drive "$WORK/mr2/apply.sh" m2a3 unseen wrongdg)"
+    M2_4="$(ra_drive "$WORK/mr2/apply.sh" m2a4 unseen wronglabel)"
+    M2_5="$(ra_drive "$WORK/mr2/apply.sh" m2a5 unseen pause)"
+    M2_2="$(ra_drive "$WORK/mr2/apply.sh" m2a2 unseen right)"
+    if [ "$M2_3" = "$RA_GO" ] && [ "$M2_4" = "$RA_STOP" ] && [ "$M2_5" = "$RA_STOP" ] && [ "$M2_2" = "$RA_GO" ]; then
+      ok "MR2 (any record regardless of digest): RA3 goes red — a re-approval of another region passes — while RA4, RA5 and RA2 hold"
+    else
+      bad "MR2 scored RA3=[$M2_3] RA4=[$M2_4] RA5=[$M2_5] RA2=[$M2_2], want RA3=$RA_GO, RA4=RA5=$RA_STOP, RA2=$RA_GO"
+    fi
+  else
+    bad "MR2 did not apply — ra_recorded no longer carries \`{ if (index(\$0, dg) > 0) q = 1; next }\` exactly once. Re-anchor it."
+  fi
 fi
 
 fi  # ---- end of unit mut

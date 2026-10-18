@@ -21,3 +21,5 @@ mv
 env
 diff
 python3
+date
+shasum
