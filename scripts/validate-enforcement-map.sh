@@ -6619,7 +6619,7 @@ else
     i55_roots='(REPO_ROOT|ROOT|D_ROOT|C_ROOT)'
     i55_reach_scan() { # <tree root> <excluded entry> -> unacquitted `<abs file>:<line>:<match>` hits
       local re
-      re="$(printf '%s' "$2" | sed 's/\./\\./g')"
+      re="${2//./\\.}"   # parameter expansion, not printf|sed: no fork per call
       grep -rHnoE '\$\{?'"$i55_roots"'\}?/'"$re"'([/"'"'"' ]|$)' "$1"/core/fixtures/*/*.sh 2>/dev/null \
         | awk -v e="$2" -v rootre="$i55_roots" '
           function plusset(dir,   f, l, c, x) {
@@ -6666,7 +6666,10 @@ else
     if [ -z "$i55_pd" ] || [ ! -d "$i55_pd" ]; then
       err "I55 arm 3 could not create its + exemption probe directory, so neither direction of the exemption was proven this run."
     else
-      for i55_c in a b c d e f g h i j; do mkdir -p "$i55_pd/core/fixtures/$i55_c"; done
+      mkdir -p "$i55_pd"/core/fixtures/a "$i55_pd"/core/fixtures/b "$i55_pd"/core/fixtures/c \
+               "$i55_pd"/core/fixtures/d "$i55_pd"/core/fixtures/e "$i55_pd"/core/fixtures/f \
+               "$i55_pd"/core/fixtures/g "$i55_pd"/core/fixtures/h "$i55_pd"/core/fixtures/i \
+               "$i55_pd"/core/fixtures/j
       for i55_c in g h i j; do printf '+docs/backlog.md\n' > "$i55_pd/core/fixtures/$i55_c/inputs.decl"; done
       printf 'L="$ROOT/docs/backlog.md$sfx"\n'      > "$i55_pd/core/fixtures/g/run.sh"
       printf 'cat "$ROOT/docs/backlog.md"*\n'       > "$i55_pd/core/fixtures/h/run.sh"
@@ -6681,7 +6684,27 @@ else
       for i55_c in a b c e; do printf 'L="$ROOT/docs/backlog.md"\n' > "$i55_pd/core/fixtures/$i55_c/run.sh"; done
       printf 'L="$ROOT/docs/$name"\n' > "$i55_pd/core/fixtures/d/run.sh"
       printf 'cp "$ROOT/docs/backlog.md" "$ROOT/docs/plans/x.md"\n' > "$i55_pd/core/fixtures/f/run.sh"
-      i55_pr="$(i55_reach_scan "$i55_pd" docs | sed "s@^${i55_pd}/core/fixtures/@@; s@/.*@@" | LC_ALL=C sort -u | tr '\n' ' ')"
+      # FAST PATH WITH BUILTINS, EXACT PATH ON ANY DOUBT. The expected answer is the name set
+      # {b..i}; each hit line is cut to its fixture name with parameter expansion and the set is
+      # checked without a fork. Any other outcome -- a missing name, an extra one, an empty one --
+      # recomputes the string with the original sed|sort -u|tr, so a failing message is the same
+      # bytes it always was. Only the passing run is cheaper.
+      i55_praw="$(i55_reach_scan "$i55_pd" docs)"
+      i55_pset=" "; i55_pok=1
+      while IFS= read -r i55_l; do
+        i55_c="${i55_l#"$i55_pd"/core/fixtures/}"; i55_c="${i55_c%%/*}"
+        case "$i55_c" in b|c|d|e|f|g|h|i) i55_pset="${i55_pset}${i55_c} " ;; *) i55_pok=0 ;; esac
+      done <<<"$i55_praw"
+      for i55_c in b c d e f g h i; do
+        case "$i55_pset" in *" $i55_c "*) ;; *) i55_pok=0 ;; esac
+      done
+      if [ -z "$i55_praw" ]; then
+        i55_pr=""
+      elif [ "$i55_pok" = 1 ]; then
+        i55_pr="b c d e f g h i "
+      else
+        i55_pr="$(printf '%s\n' "$i55_praw" | sed "s@^${i55_pd}/core/fixtures/@@; s@/.*@@" | LC_ALL=C sort -u | tr '\n' ' ')"
+      fi
       rm -rf "$i55_pd"
       [ "$i55_pr" = "b c d e f g h i " ] || err "I55 arm 3's + exemption self-probe flagged '${i55_pr}', want 'b c d e f g h i '. Fixtures a and j (a + declared, literal reach ending at a boundary) must be ACQUITTED and every other one flagged; anything else means the exemption either acquits its own subject or cannot acquit at all, and the corpus scan below would be read through it."
     fi
@@ -6690,10 +6713,20 @@ else
       err "I55 arm 3's control found only ${i55_ctl:-0} reference(s) to an INCLUDED path under the same grammar it uses to report an absence. It is about to report that no fixture names an excluded path at the distribution root; over a corpus this grammar cannot read, that zero is a broken matcher and not a finding. Fails closed."
     else
       i55_reach=""
+      i55_nl='
+'
       while IFS= read -r e; do
         [ -n "$e" ] || continue
         [ "$e" = ".git" ] && continue
-        i55_hit="$(i55_reach_scan "$REPO_ROOT" "$e" | sed "s@^${REPO_ROOT}/@@")"
+        # Strip the root prefix from each line with parameter expansion, not a piped sed.
+        i55_raw="$(i55_reach_scan "$REPO_ROOT" "$e")"
+        i55_hit=""
+        if [ -n "$i55_raw" ]; then
+          while IFS= read -r i55_l; do
+            i55_hit="${i55_hit}${i55_nl}${i55_l#"$REPO_ROOT"/}"
+          done <<<"$i55_raw"
+          i55_hit="${i55_hit#"$i55_nl"}"
+        fi
         [ -n "$i55_hit" ] && i55_reach="${i55_reach}
 ${i55_hit}"
       done <<<"$i55_excl"
