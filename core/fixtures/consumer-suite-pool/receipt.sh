@@ -15,6 +15,70 @@
 # bound-removed regression reads as "still live", never as a hang.
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
+
+# A1 and A2 -- THE WINDOW VALUE ITSELF, checked first because they cost milliseconds and the pool
+# arm below costs a minute. The pool arm drives the worker at POOL_STALL=3, so it says nothing about
+# the DEFAULT, and the fallbacks reuse that default: a filled 0 refuses every unit on its first poll,
+# a filled 1e3 is not an integer and disables refusal, and a backlog value that differs from the
+# hooks' records a measurement nothing shipped.
+#   A1  each pre-push hook carries the `# D9-WINDOW` marker on exactly ONE line, that line is
+#       `POOL_STALL_DEFAULT=<N>` with N a plain decimal of 1-5 digits and no leading zero, and the
+#       two hooks carry the same N.
+#   A2  the BL-606 entry (its `## BL-606 ` heading to the next `## `), held by exactly one of
+#       docs/backlog.md and docs/backlog.archive.md, carries exactly one
+#       `Window: POOL_STALL_DEFAULT=<N> polls` line, and that N is the hooks' N. The archive counts
+#       because rotation moves the entry there; backlog-rotate.sh runs this receipt BEFORE the move,
+#       so at rotation time the entry is still in docs/backlog.md.
+# An unfilled `<D9-WINDOW>` token fails A2, and must: an unfilled release does not pass.
+# Exit 1 on a failed assertion; exit 9 when an input is ABSENT (no repository root, either hook, or
+# docs/), which is every consumer tree -- this fixture ships, and they carry none of the three. With
+# docs/ present and the entry in neither file the entry was deleted, which is a FAIL, not an absence.
+d9_root() { # walk up from $1 for a repository marker; never count hops
+  local d="$1"
+  while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "." ]; do
+    if [ -e "$d/.git" ] || [ -d "$d/.claude" ] || [ -d "$d/core/skills/ai-dlc" ]; then
+      printf '%s\n' "$d"; return 0
+    fi
+    d="$(dirname "$d")"
+  done
+  return 1
+}
+D9_ROOT="$(d9_root "$HERE")" || D9_ROOT=""
+[ -n "$D9_ROOT" ] || { echo "receipt: cannot measure: no repository root above $HERE" >&2; exit 9; }
+D9_MISSING=""
+for f in .githooks/pre-push core/git-hooks/pre-push; do
+  [ -f "$D9_ROOT/$f" ] || D9_MISSING="$D9_MISSING $f"
+done
+[ -d "$D9_ROOT/docs" ] || D9_MISSING="$D9_MISSING docs/"
+[ -z "$D9_MISSING" ] || { echo "receipt: cannot measure: absent input(s):$D9_MISSING under $D9_ROOT" >&2; exit 9; }
+D9_VAL=""; D9_FROM=""
+for f in .githooks/pre-push core/git-hooks/pre-push; do
+  n="$(grep -c '# D9-WINDOW' "$D9_ROOT/$f")" || n=0
+  [ "$n" = 1 ] || { echo "receipt: A1 FAIL: $f carries the D9-WINDOW marker on $n line(s), want exactly 1" >&2; exit 1; }
+  line="$(grep '# D9-WINDOW' "$D9_ROOT/$f")"
+  v="$(sed -n 's/^POOL_STALL_DEFAULT=\([1-9][0-9]\{0,4\}\)[[:blank:]][[:blank:]]*# D9-WINDOW$/\1/p' <<<"$line")"
+  [ -n "$v" ] || { echo "receipt: A1 FAIL: $f D9-WINDOW line is '$line', want POOL_STALL_DEFAULT=<1-5 digits, no leading zero, >= 1>" >&2; exit 1; }
+  if [ -n "$D9_VAL" ] && [ "$v" != "$D9_VAL" ]; then
+    echo "receipt: A1 FAIL: the hooks disagree, $D9_FROM POOL_STALL_DEFAULT=$D9_VAL against $f POOL_STALL_DEFAULT=$v" >&2; exit 1
+  fi
+  D9_VAL="$v"; D9_FROM="$f"
+done
+D9_HOLD=""; D9_HN=0; D9_SEC=""
+for f in docs/backlog.md docs/backlog.archive.md; do
+  [ -f "$D9_ROOT/$f" ] || continue
+  h="$(grep -c '^## BL-606 ' "$D9_ROOT/$f")" || h=0
+  [ "$h" = 0 ] && continue
+  D9_HN=$((D9_HN + h)); D9_HOLD="$D9_HOLD $f($h)"
+  D9_SEC="$(awk '/^## BL-606 /{f=1; print; next} f && /^## /{f=0} f' "$D9_ROOT/$f")"
+done
+[ "$D9_HN" = 1 ] || { echo "receipt: A2 FAIL: want exactly one '## BL-606 ' heading across docs/backlog.md and docs/backlog.archive.md, found $D9_HN:${D9_HOLD:- none}" >&2; exit 1; }
+n="$(grep -c '^Window: POOL_STALL_DEFAULT=' <<<"$D9_SEC")" || n=0
+[ "$n" = 1 ] || { echo "receipt: A2 FAIL: the BL-606 entry in$D9_HOLD carries $n 'Window: POOL_STALL_DEFAULT=' line(s), want exactly 1" >&2; exit 1; }
+line="$(grep '^Window: POOL_STALL_DEFAULT=' <<<"$D9_SEC")"
+v="$(sed -n 's/^Window: POOL_STALL_DEFAULT=\([1-9][0-9]\{0,4\}\) polls.*$/\1/p' <<<"$line")"
+[ "$v" = "$D9_VAL" ] || { echo "receipt: A2 FAIL: the BL-606 entry in$D9_HOLD records POOL_STALL_DEFAULT='${v:-$(sed -n 's/^Window: POOL_STALL_DEFAULT=\([^ ]*\).*$/\1/p' <<<"$line")}', the hooks carry $D9_VAL" >&2; exit 1; }
+# --- end of A1/A2 ---
+
 HOOK="${1:-}"
 if [ -z "$HOOK" ]; then
   for c in "$HERE/../../git-hooks/pre-push" "$HERE/../../../.githooks/pre-push"; do
