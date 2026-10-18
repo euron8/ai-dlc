@@ -368,13 +368,17 @@ verify: manual
 
 Owed: `validate-release-version.sh` asserts that every release heading present at the merge base survives at the tip. Receipt: a seeded tip that replaces the previous heading fails the arm, and a normal insertion above it passes (control). The 0.806.0 shape (`c07dc9d1` → `581ca289`) is the discriminating input.
 
-verify: manual
+Built (batch 236): `validate-release-version.sh` arm C now asserts that every release heading present at the range base survives at the tip, and a range that loses one fails naming it. The `release-version-triple` fixture drives it in arms R1 (a release that replaces the previous heading in place fails, naming the removed heading) and R2 (a normal insertion above the previous heading passes), with an unmutated-copy control. The same release restores the four headings that earlier releases dropped in place (0.768.0, 0.769.0, 0.770.0 and 0.200.0; BL-667).
+
+verify: sh bash core/fixtures/release-version-triple/receipt-bl636.sh
 
 ## BL-637 — `validate-release-version.sh` arm C cannot tell a restored historical heading from a second release
 
 **NOTE.** Measured by lead ai-dlc-71. Arm C counts release headings added over a range (`scripts/validate-release-version.sh:293`, "this range adds N release headings to CHANGELOG.md"). ai-dlc-c8's 0.807.0, carrying `ed0fa33d`, failed with `this range adds 2 release headings to CHANGELOG.md: 0.805.0 0.807.0`: the restored `[0.805.0]` reads as a second new release. If BL-636 adds a "base headings survive" arm, arm C could exempt headings present before the range's own parent. The builder judges that.
 
-verify: manual
+Built (batch 236): arm C now exempts a heading the range ADDS when its semver is at or below the base's top heading and `git log -S`, searched from the base and not the tip, finds it in the base's history. The exemption is printed as a NOTE and the restored heading is not counted. The `release-version-triple` fixture drives it in arms R3 (restoring a historical heading plus one new release passes, and the restore is NOTEd), R4 (two genuinely new headings above the base top still fail) and R5 (a below-top heading the base's history never carried counts as new). The same release restores the four headings that earlier releases dropped in place (0.768.0, 0.769.0, 0.770.0 and 0.200.0; BL-667).
+
+verify: sh bash core/fixtures/release-version-triple/receipt-bl636.sh
 
 ## BL-643 — `pregate-self-check.sh` hand-copies 2 of the hook's 20 above-pool steps, so a clean self-check still goes red at the gate
 
