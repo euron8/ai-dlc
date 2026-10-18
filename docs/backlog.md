@@ -792,3 +792,29 @@ once S7 stops flagging `fp.sh` while still flagging `bl.sh`. It exits 9 when the
 cannot be built, a corpus reads empty or a self-probe fails, or `bl.sh` is not flagged.
 
 verify: sh unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY; V=scripts/validate-shell-portability.sh; [ -s "$V" ] || exit 9; T=$(mktemp -d "${TMPDIR:-/tmp}/bl681.XXXXXX") || exit 9; mkdir -p "$T/scripts" "$T/core/fixtures/x" || exit 9; printf '0.0.0-receipt\n' > "$T/VERSION" || exit 9; cp "$V" "$T/$V" || exit 9; printf '%s\n' 'probe text' > "$T/core/a.md" || exit 9; printf '%s\n' 'true' > "$T/core/fixtures/x/run.sh" || exit 9; printf '%s\n' "awk '" '      if (inwin) { gsub(/[ \t]+/, " ", win); print head "\037" win }' "' f" > "$T/scripts/fp.sh" || exit 9; printf '%s\n' 'awk '"'"'{ gsub(/x/, "\\1", s) }'"'"' f' > "$T/scripts/bl.sh" || exit 9; git -C "$T" init -q && git -C "$T" add -A || exit 9; O=$(bash "$T/$V" 2>&1); grep -qE 'corpus is empty|own probe did not fire|no VERSION marker' <<<"$O" && exit 9; H=$(awk '/^FAIL: /{s=($2=="S7:")} s' <<<"$O"); grep -qF 'scripts/bl.sh:' <<<"$H" || exit 9; grep -qF 'scripts/fp.sh:' <<<"$H" && exit 1; exit 0
+
+## BL-682 — the train shape carried load and slot rules the operator rejected: exclusive windows, SLOT GO / SLOT DONE, `uptime` and GATE OPEN / GATE CLOSED
+
+**DEFECT.** Filed by the TRAIN owner at batch 236. The release-train shape that every live plan's action 0 carries
+(and that P14 of `scripts/validate-plan-shape.sh` binds by label) scheduled work around box load. It carried an
+`EXCLUSIVE WINDOWS ARE CAPPED.` rule for exclusive measurement windows. The drain plan's action 0 and its owner-rules
+block also carried a slot protocol: the lead sent `GATE OPEN` / `GATE CLOSED` to every owner, owners asked for a slot
+and got `SLOT GO` / `SLOT DONE`, and `uptime` was read before runs. The operator rejected that, verbatim: "box load
+should not matter. Stop timing things that don't need to be timed." and "bake it into the plan, no timing runs unless
+it's absolutely needed."
+
+Owed: every live plan's action 0 carries a `NO TIMING RUNS.` rule in place of `EXCLUSIVE WINDOWS ARE CAPPED.`. That
+rule says no timing run happens unless a named fix cannot be chosen without the figure and the lead approves it, box
+load gates nothing, correctness runs run when they are ready, and the only serialisation is one push at a time.
+`RELEASES BEFORE MEASUREMENTS.` agrees with it. The slot, `uptime` and exclusive-window text leaves the action-0 and
+owner-rules blocks. P14's label list names `NO TIMING RUNS` in place of `EXCLUSIVE WINDOWS ARE CAPPED`.
+
+Receipt: it drives the real validator on a mktemp copy laid out as `<dir>/scripts/validate-plan-shape.sh` plus
+`<dir>/docs/plans/graph-ledger-full-drain.md`, because the validator resolves its root from its own path. Control: the
+unseeded copy must not print P14's 'never DESIGNATE THE LEAD' text. Seed: every `NO TIMING RUNS` is removed from the
+copy, and P14's error must then name 'NO TIMING RUNS'. It also reads the real plan's action-0 window (from the
+`**0. DESIGNATE THE LEAD` line up to `**0a.`), which must hold `NO TIMING RUNS.` and no `SLOT GO` and no
+`EXCLUSIVE WINDOWS`. It exits 9 when the plan or the validator is missing, the copy cannot be built, the window reads
+empty or the seed matched nothing. It exits 1 while the defect is live and 0 when it is fixed.
+
+verify: sh P=docs/plans/graph-ledger-full-drain.md; V=scripts/validate-plan-shape.sh; [ -s "$P" ] && [ -s "$V" ] || exit 9; W=$(awk '/^\*\*0\. DESIGNATE THE LEAD/{w=1} /^\*\*0a\./{w=0} w' "$P"); [ -n "$W" ] || exit 9; grep -qE 'SLOT GO|EXCLUSIVE WINDOWS' <<<"$W" && exit 1; grep -qF 'NO TIMING RUNS.' <<<"$W" || exit 1; T=$(mktemp -d "${TMPDIR:-/tmp}/bl682.XXXXXX") || exit 9; mkdir -p "$T/scripts" "$T/docs/plans" || exit 9; cp "$V" "$T/$V" && cp "$P" "$T/$P" || exit 9; C=$(bash "$T/$V" "$P" 2>&1); grep -qF 'never DESIGNATE THE LEAD' <<<"$C" && exit 1; sed 's/NO TIMING RUNS//g' "$P" > "$T/$P" || exit 9; cmp -s "$P" "$T/$P" && exit 9; grep -qF 'NO TIMING RUNS' "$T/$P" && exit 9; O=$(bash "$T/$V" "$P" 2>&1); grep -qF "'NO TIMING RUNS'" <<<"$O" && grep -qF 'never DESIGNATE THE LEAD' <<<"$O" || exit 1; exit 0

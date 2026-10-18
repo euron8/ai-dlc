@@ -640,7 +640,7 @@ for f in "${FILES[@]}"; do
       grep -qiE 'no[[:space:]]+edits' <<<"$p14_win" || p14_m="$p14_m 'no edits'"
       grep -qF 'Time matters here: do not spend time that can be avoided, and the earlier a correct result is obtained, the better.' <<<"$p14_win" || p14_m="$p14_m 'the time sentence'"
       # --- BEGIN five train-rule labels (one block, so one edit removes it) ---
-      for p14_lbl in 'RELEASES BEFORE MEASUREMENTS' 'SHORTEST GATE FIRST' 'NO IDLE SESSIONS' 'EXCLUSIVE WINDOWS ARE CAPPED' 'RELEASE TEXT IS PREPARED IN ADVANCE'; do
+      for p14_lbl in 'RELEASES BEFORE MEASUREMENTS' 'SHORTEST GATE FIRST' 'NO IDLE SESSIONS' 'NO TIMING RUNS' 'RELEASE TEXT IS PREPARED IN ADVANCE'; do
         grep -qF "$p14_lbl" <<<"$p14_win" || p14_m="$p14_m '$p14_lbl'"
       done
       # --- END five train-rule labels ---
@@ -651,7 +651,7 @@ for f in "${FILES[@]}"; do
     elif [ "$p14_pos" -gt 0 ]; then
       err "$rel" "is a LIVE plan whose numbered actions never DESIGNATE THE LEAD before the first dispatch: the marker sits on action number ${p14_pos} (counting from 0), after ${p14_pos} earlier action(s). The lead is designated BEFORE any dispatch, so the marker action must be the FIRST numbered action of the Next actions section (0. or 0a. is accepted). Move it to the front."
     elif [ "$p14_ok" -eq 0 ]; then
-      err "$rel" "is a LIVE plan whose numbered actions never DESIGNATE THE LEAD completely: the marker action lacks${p14_missing} within its own window (the action line through the blank line before the next column-0 prose, the next action or the next heading, wrapped lines joined). A pointer to another plan is not a designation. The operator wants the multi-session release train as a standard plan shape -- a lead that also builds starves orchestration, and owners that build alone serialize the work. State in the action itself: ListAgents roll call, the lead never builds, owners build through hands, owners make no edits (every edit goes to a hand), the time sentence, and the five train rules by label: RELEASES BEFORE MEASUREMENTS, SHORTEST GATE FIRST, NO IDLE SESSIONS, EXCLUSIVE WINDOWS ARE CAPPED, RELEASE TEXT IS PREPARED IN ADVANCE."
+      err "$rel" "is a LIVE plan whose numbered actions never DESIGNATE THE LEAD completely: the marker action lacks${p14_missing} within its own window (the action line through the blank line before the next column-0 prose, the next action or the next heading, wrapped lines joined). A pointer to another plan is not a designation. The operator wants the multi-session release train as a standard plan shape -- a lead that also builds starves orchestration, and owners that build alone serialize the work. State in the action itself: ListAgents roll call, the lead never builds, owners build through hands, owners make no edits (every edit goes to a hand), the time sentence, and the five train rules by label: RELEASES BEFORE MEASUREMENTS, SHORTEST GATE FIRST, NO IDLE SESSIONS, NO TIMING RUNS, RELEASE TEXT IS PREPARED IN ADVANCE."
     fi
   fi
 

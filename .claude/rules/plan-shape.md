@@ -105,7 +105,10 @@ it was handed off:
   The owner-rules block the lead sends verbatim lives in the plan, in
   `docs/plans/graph-ledger-full-drain.md`'s action of that title, and other plans cite it there.
   The measured train logs are `docs/analysis/b235-release-train.md` and
-  `docs/analysis/b236-release-train.md`. Carried by **P14**, scoped to live plans.
+  `docs/analysis/b236-release-train.md`. The action also carries the five train rules by label:
+  RELEASES BEFORE MEASUREMENTS, SHORTEST GATE FIRST, NO IDLE SESSIONS, NO TIMING RUNS ("box load
+  should not matter. Stop timing things that don't need to be timed."; one push at a time, no
+  slots) and RELEASE TEXT IS PREPARED IN ADVANCE. Carried by **P14**, scoped to live plans.
 - **A dispatch action that FANS OUT by deliverable, with the adversary's contract pass BEFORE the
   builders spawn.** Operator instruction at batch 101, on a build measured at over an hour serial:
   one builder carried the fix, the fixture, the backlog entry, the docs carriers and four

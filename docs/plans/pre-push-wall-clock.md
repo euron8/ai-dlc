@@ -161,11 +161,11 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    a release. A session that finished an earlier release is a valid owner; one that has not
    answered after one re-ask and one more timer counts as no session. The work this plan
    dispatches is work removal under action 1, one validator or fixture subject per release, each
-   timed only inside a slot the lead grants: once the batch's subjects are scoped, the lead
+   timed only when NO TIMING RUNS allows it: once the batch's subjects are scoped, the lead
    assigns each available owner one cluster as one release, at once and without asking, and
    reports the roster (each session's state and assignment) in its FIRST operator ping. The lead
-   ORCHESTRATES and NEVER BUILDS: it scopes, allocates every VERSION and backlog id, schedules
-   slots and gates, verifies each landing by content, and runs the docs close. Owners build
+   ORCHESTRATES and NEVER BUILDS: it scopes, allocates every VERSION and backlog id, lets one
+   push run at a time, verifies each landing by content, and runs the docs close. Owners build
    through hands: an owner makes NO edits, and every edit (code, fixture, receipt, entry prose,
    comment, script) goes to a hand. With no other session available the lead still never builds;
    the removals go to hands. Every spawn the lead or an owner makes carries this sentence
@@ -179,18 +179,22 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    - **The release schedule.** Operator instruction at batch 236, after "what's taking so long for
      releases?": "better make it so the plan dictates that, I don't want to discover it the hard
      way again."
-   - RELEASES BEFORE MEASUREMENTS. A ready release gates before any measurement window it does not
-     itself need in order to ship. Measurement windows (timings, profiles, census sweeps) queue
-     AFTER every release in the batch that is ready or in flight, unless a release depends on the
-     result.
+   - RELEASES BEFORE MEASUREMENTS. A ready release gates before any measurement. A measurement
+     happens only when NO TIMING RUNS allows it, and then after every release in the batch that is
+     ready or in flight, unless a release depends on the result.
    - SHORTEST GATE FIRST. Among ready releases, a docs-only release (whose push skips the suite on
      the content key) gates first, then the others in order of readiness.
    - NO IDLE SESSIONS. At roll call, and again whenever a session finishes, every unassigned plan
      item goes to an idle session at once. Build work (hands, edits only) never waits on box load;
      only runs load the box.
-   - EXCLUSIVE WINDOWS ARE CAPPED. An exclusive measurement window states its estimate. At 1.5x the
-     estimate, the lead checks the oldest running unit's age and, on that evidence, decides whether
-     to continue or stop. It never just waits.
+   - NO TIMING RUNS. Operator at batch 236: "box load should not matter. Stop timing things that
+     don't need to be timed." and "bake it into the plan, no timing runs unless it's absolutely
+     needed." No timing run (wall clock, durations, per-arm profiles, stall distributions, load
+     series) unless it is absolutely needed, meaning a named fix cannot be chosen without the
+     figure, and the lead approves each one. Box load gates nothing. Correctness runs (fixtures,
+     mutants, receipts, fork COUNTS) run whenever they are ready. The only serialisation is one
+     push at a time. A timing-flavoured entry starts with a read-only diagnosis from the code and
+     the data already recorded.
    - RELEASE TEXT IS PREPARED IN ADVANCE. Each owner has its release commit text (a VERSION
      placeholder, CHANGELOG, LANDED lines) written by a hand before its gate opens, so a gate starts
      the moment its turn comes.

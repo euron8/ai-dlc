@@ -60,10 +60,10 @@ Ping the operator on any question or decision, and when this plan completes.
 0. DESIGNATE THE LEAD. The session that accepts the one-liner is the lead; its first call is ListAgents, and it roll-calls every other ai-dlc session.
    The lead never builds: it orchestrates, and every owner builds only through hands. Owners make NO edits; every edit goes to a hand.
    Time matters here: do not spend time that can be avoided, and the earlier a correct result is obtained, the better.
-   RELEASES BEFORE MEASUREMENTS: a release is built before any measurement is taken.
+   RELEASES BEFORE MEASUREMENTS: a ready release gates before any measurement.
    SHORTEST GATE FIRST: the shortest gate runs before any longer one.
    NO IDLE SESSIONS: every session holds work until its release lands.
-   EXCLUSIVE WINDOWS ARE CAPPED: an exclusive window ends at its stated cap.
+   NO TIMING RUNS: nothing is timed unless a named fix cannot be chosen without the figure.
    RELEASE TEXT IS PREPARED IN ADVANCE: the changelog entry is written before the gate opens.
 
 1. Do the first thing.
@@ -372,7 +372,7 @@ awk '
     print "Owners make NO edits; every edit goes to a hand."
     print "Time matters here: do not spend time that can be avoided, and the earlier a correct result is obtained, the better."
     print "RELEASES BEFORE MEASUREMENTS, SHORTEST GATE FIRST, NO IDLE SESSIONS."
-    print "EXCLUSIVE WINDOWS ARE CAPPED, RELEASE TEXT IS PREPARED IN ADVANCE.\n" }
+    print "NO TIMING RUNS, RELEASE TEXT IS PREPARED IN ADVANCE.\n" }
   { print }' "$T/p14p.md" > "$T/p14bl.md"
 cmp -s "$T/p14bl.md" "$T/p14p.md" && bad "FIXTURE STALE: the bleed seed matched nothing"
 grep -q '^ListAgents is the roll call' "$T/p14bl.md" || bad "FIXTURE STALE: the bleed seed lost its col-0 prose"
@@ -404,7 +404,7 @@ conforming p14h.md | sed 's/DESIGNATE THE LEAD\. //' | awk '
     print "and owners work through hands. Owners make NO edits; every edit goes to a hand."
     print "Time matters here: do not spend time that can be avoided, and the earlier a correct result is obtained, the better."
     print "RELEASES BEFORE MEASUREMENTS, SHORTEST GATE FIRST, NO IDLE SESSIONS,"
-    print "EXCLUSIVE WINDOWS ARE CAPPED, RELEASE TEXT IS PREPARED IN ADVANCE." }' > "$T/p14h.md"
+    print "NO TIMING RUNS, RELEASE TEXT IS PREPARED IN ADVANCE." }' > "$T/p14h.md"
 grep -q '^236\. DESIGNATE THE LEAD' "$T/p14h.md" || bad "FIXTURE STALE: the history seed lost its 236. line"
 p14h_at="$(grep -n '^236\. DESIGNATE THE LEAD' "$T/p14h.md" | head -1 | cut -d: -f1)"
 p14h_na="$(grep -n '^### Next actions$' "$T/p14h.md" | head -1 | cut -d: -f1)"
@@ -439,7 +439,7 @@ conforming p14f.md | awk '
     for (i = 1; i <= 9; i++) print i ". owner rule " i
     print "# a comment line inside the block"
     print "```"
-    print "The lead never builds, and every owner builds only through hands. Owners make NO edits; every edit goes to a hand. Time matters here: do not spend time that can be avoided, and the earlier a correct result is obtained, the better. RELEASES BEFORE MEASUREMENTS: a release is built before any measurement is taken. SHORTEST GATE FIRST: the shortest gate runs before any longer one. NO IDLE SESSIONS: every session holds work until its release lands. EXCLUSIVE WINDOWS ARE CAPPED: an exclusive window ends at its stated cap. RELEASE TEXT IS PREPARED IN ADVANCE: the changelog entry is written before the gate opens."
+    print "The lead never builds, and every owner builds only through hands. Owners make NO edits; every edit goes to a hand. Time matters here: do not spend time that can be avoided, and the earlier a correct result is obtained, the better. RELEASES BEFORE MEASUREMENTS: a ready release gates before any measurement. SHORTEST GATE FIRST: the shortest gate runs before any longer one. NO IDLE SESSIONS: every session holds work until its release lands. NO TIMING RUNS: nothing is timed unless a named fix cannot be chosen without the figure. RELEASE TEXT IS PREPARED IN ADVANCE: the changelog entry is written before the gate opens."
     skip = 1; next }
   skip && /^   / { next }
   { skip = 0; print }' > "$T/p14f.md"; stale "$T/p14f.md" p14f.md
@@ -504,7 +504,7 @@ grep -qF "lacks 'the time sentence' within" <<<"$(run "$T/p14tn.md")" \
 # (h) the five operator-rule labels. DEPENDS ON THE PENDING P14 CONJUNCTS: these cells go red against a
 # validator that does not yet require the labels, and that is expected. Each label is removed on its own
 # and P14 must name exactly it, single-quoted, in the lacks-list.
-for lbl in 'RELEASES BEFORE MEASUREMENTS' 'SHORTEST GATE FIRST' 'NO IDLE SESSIONS' 'EXCLUSIVE WINDOWS ARE CAPPED' 'RELEASE TEXT IS PREPARED IN ADVANCE'; do
+for lbl in 'RELEASES BEFORE MEASUREMENTS' 'SHORTEST GATE FIRST' 'NO IDLE SESSIONS' 'NO TIMING RUNS' 'RELEASE TEXT IS PREPARED IN ADVANCE'; do
   sl="$(printf '%s' "$lbl" | tr 'A-Z ' 'a-z_')"
   conforming "p14l_$sl.md" | sed "s/$lbl: //" > "$T/p14l_$sl.md"; stale "$T/p14l_$sl.md" "p14l_$sl.md"
   [ "$(grep -cF "$lbl" "$T/p14l_$sl.md")" -eq 0 ] || bad "FIXTURE STALE: the '$lbl' seed still carries the label"

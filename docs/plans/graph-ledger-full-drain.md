@@ -894,9 +894,9 @@ candidate's surviving half is upstream's to file and build, never a question for
    - **The lead ORCHESTRATES and NEVER BUILDS.** Operator, when a lead built: "this is the lead
      session and should be orchestrating, not building." The lead's work is: scoping and the
      rulings record; backlog-id and VERSION allocation, lead only, owners ask (measured at batch
-     210: sessions each took the next VERSION with no allocator, and releases collided); slot and
-     gate scheduling under `.claude/rules/operator-rulings.md` "The lead orchestrates the box's
-     load", with `GATE OPEN` and `GATE CLOSED` sent to every owner; landing verification by
+     210: sessions each took the next VERSION with no allocator, and releases collided); one push
+     at a time (an owner tells the lead when it is ready to push, and the lead lets one push run
+     at a time); landing verification by
      content; a landing notice to the WHOLE queue, never only the next lander; CLOSABLE statements
      under "A closable session is stated plainly" in the same file; and the docs close (actions 6,
      6b and 9).
@@ -911,18 +911,22 @@ candidate's surviving half is upstream's to file and build, never a question for
    - **The release schedule.** Operator instruction at batch 236, after "what's taking so long for
      releases?": "better make it so the plan dictates that, I don't want to discover it the hard
      way again."
-   - RELEASES BEFORE MEASUREMENTS. A ready release gates before any measurement window it does not
-     itself need in order to ship. Measurement windows (timings, profiles, census sweeps) queue
-     AFTER every release in the batch that is ready or in flight, unless a release depends on the
-     result.
+   - RELEASES BEFORE MEASUREMENTS. A ready release gates before any measurement. A measurement
+     happens only when NO TIMING RUNS allows it, and then after every release in the batch that is
+     ready or in flight, unless a release depends on the result.
    - SHORTEST GATE FIRST. Among ready releases, a docs-only release (whose push skips the suite on
      the content key) gates first, then the others in order of readiness.
    - NO IDLE SESSIONS. At roll call, and again whenever a session finishes, every unassigned plan
      item goes to an idle session at once. Build work (hands, edits only) never waits on box load;
      only runs load the box.
-   - EXCLUSIVE WINDOWS ARE CAPPED. An exclusive measurement window states its estimate. At 1.5x the
-     estimate, the lead checks the oldest running unit's age and, on that evidence, decides whether
-     to continue or stop. It never just waits.
+   - NO TIMING RUNS. Operator at batch 236: "box load should not matter. Stop timing things that
+     don't need to be timed." and "bake it into the plan, no timing runs unless it's absolutely
+     needed." No timing run (wall clock, durations, per-arm profiles, stall distributions, load
+     series) unless it is absolutely needed, meaning a named fix cannot be chosen without the
+     figure, and the lead approves each one. Box load gates nothing. Correctness runs (fixtures,
+     mutants, receipts, fork COUNTS) run whenever they are ready. The only serialisation is one
+     push at a time. A timing-flavoured entry starts with a read-only diagnosis from the code and
+     the data already recorded.
    - RELEASE TEXT IS PREPARED IN ADVANCE. Each owner has its release commit text (a VERSION
      placeholder, CHANGELOG, LANDED lines) written by a hand before its gate opens, so a gate starts
      the moment its turn comes.
@@ -932,7 +936,7 @@ candidate's surviving half is upstream's to file and build, never a question for
    ```
    **Release owner rules — batch <batch>, lead <lead>, cluster <cluster>**
 
-   You own ONE cluster end to end, as ONE release. <lead> schedules every slot and gate, allocates
+   You own ONE cluster end to end, as ONE release. <lead> lets one push run at a time, allocates
    every VERSION and backlog id, and owns the plan and the batch close.
 
    **Reply first.** Reply to <lead> now with exactly `ACCEPTED <cluster>` or `REFUSED: <reason>`.
@@ -946,19 +950,18 @@ candidate's surviving half is upstream's to file and build, never a question for
    - <lead>'s rulings record holds the batch's operator rulings. Do not re-litigate them. Scope is
      the operator's: build every entry in your cluster, or say exactly which one you did not and why.
 
-   **Load.** Slots, GATE OPEN / GATE CLOSED and `uptime` follow `.claude/rules/operator-rulings.md`
-   "The lead orchestrates the box's load". Ask <lead> for a slot by SendMessage; <lead> replies
-   `SLOT GO` and later expects `SLOT DONE`. Hands run NO fixture suite, no mutant scorer, no timing
-   and no corpus sweep, ever: those are slot weight however small the script looks, and the owner
-   runs them in its slot. A hand may run the single fixture it edited, only inside your slot.
-   `bash -n`, a discriminating probe and `scripts/validate-enforcement-map.sh` are not heavy.
-   Killing and the verdict store: `.claude/rules/tool-hazards.md`.
+   **Runs.** Box load gates nothing, and nothing is timed unless the plan's NO TIMING RUNS rule
+   allows it. One push runs at a time: tell <lead> by SendMessage when you are ready to push, and
+   push when <lead> says it is your turn. Hands run NO fixture suite, no mutant scorer and no corpus sweep when
+   verifying their own change; a hand verifies only its own change (`bash -n`, its discriminating
+   probe, the single fixture it edited). Killing and the verdict store:
+   `.claude/rules/tool-hazards.md`.
 
    **Owners build through hands.** You make NO edits. Every edit (code, fixture, receipt, entry
    prose, comment, script) goes to a hand; independent edits go to parallel hands at once. Your own
-   tool calls are only: reading to diagnose, writing briefs, folding by content, slotted runs, and
-   gate steps (release commit, rebase, push, merge). While waiting for a slot, keep hands busy on
-   anything that needs no measurement. When <lead> asks, list your running hands (id, model, task).
+   tool calls are only: reading to diagnose, writing briefs, folding by content, correctness runs,
+   and gate steps (release commit, rebase, push, merge). While waiting for your push turn, keep
+   hands busy on anything that needs no measurement. When <lead> asks, list your running hands (id, model, task).
 
    **Flow.**
    1. Write your contract to a file in your scratchpad. Spawn a contract adversary (`opus`,
@@ -969,16 +972,16 @@ candidate's surviving half is upstream's to file and build, never a question for
       action "DISPATCH HANDS BEFORE YOU RUN A SINGLE SWEEP COMMAND YOURSELF.", this sentence
       verbatim: "Time matters here: do not spend time that can be avoided, and the earlier a
       correct result is obtained, the better." and the hands sentence under
-      **Load** above. Ask for findings AS TEXT, never a report file. Collect by CONTENT.
+      **Runs** above. Ask for findings AS TEXT, never a report file. Collect by CONTENT.
    3. Each entry: its own commit (naming NO `PC-` id), its own fixture arm and mutant, and a
       replaced `verify:` receipt scored under `set -uo pipefail` against the fix (0), two plausible
       regressions (non-zero) and a second correct spelling (0).
-   4. Tip adversary (`opus`, read-only) on the finished branch. Fold. Re-verify ONLY your own units,
-      inside a slot. RELEASE TEXT IS PREPARED IN ADVANCE: before you ask for a GATE SLOT, have a
-      hand write your release commit text (a VERSION placeholder, the CHANGELOG, the LANDED
+   4. Tip adversary (`opus`, read-only) on the finished branch. Fold. Re-verify ONLY your own
+      units. RELEASE TEXT IS PREPARED IN ADVANCE: before you tell <lead> you are ready to push,
+      have a hand write your release commit text (a VERSION placeholder, the CHANGELOG, the LANDED
       lines), so your gate starts the moment its turn comes.
-   5. Ask <lead> for a GATE SLOT. <lead> replies with your VERSION and `GATE OPEN`. Never pick a
-      version or a backlog id yourself.
+   5. Tell <lead> you are ready to push. <lead> replies with your VERSION and your push turn; one
+      push runs at a time. Never pick a version or a backlog id yourself.
    6. In the gate: rebase onto current `origin/main`; write the release commit: bump `VERSION`, one
       `## [<version>] - <date>` CHANGELOG heading with one `###` per entry, a
       `**LANDED (v<version>, verified <sha>).**` line at the START of each closed entry's backlog
@@ -994,7 +997,7 @@ candidate's surviving half is upstream's to file and build, never a question for
    8. Call the advisor before the push and before the merge. Push; confirm `git ls-remote` shows the
       ref moved. Open the PR; `gh pr merge <n> --squash --subject "$(git log -1 --format=%s <sha>)"
       --body-file <file of %b>`, no `--delete-branch`. Verify by CONTENT (`git diff --quiet <sha>
-      origin/main`, VERSION, parent). Send <lead> the squash sha and wait for `GATE CLOSED`.
+      origin/main`, VERSION, parent). Send <lead> the squash sha; your push turn ends there.
    9. Cleanup only after <lead> verifies, one action per turn: worktree remove, `git branch -D`,
       `git push --no-verify origin --delete <branch>`.
 
@@ -1050,7 +1053,7 @@ given at batch 90.
      happens when two of them do: load 62-72 on 18 cores, six concurrent suites, and a timing
      differential that was pure contention. The lead runs the gate, alone, and waits for it.
      That gate duty is the no-owner shape; with owners present (action 0), each owner runs its own
-     release's gate in the slot the lead grants, and the lead verifies it by content.
+     release's gate when the lead gives it its push turn, and the lead verifies it by content.
      **If a hand's suite has to be stopped, kill its process GROUP and its parent shell**, not
      just the fixtures: eleven orphaned `zsh` wrappers survived three cleanups keyed on `pre-push`
      and `run.sh` rather than on PPID. Wall clock is the fix plus the longest arm, never the sum. Batch 101 measured the
