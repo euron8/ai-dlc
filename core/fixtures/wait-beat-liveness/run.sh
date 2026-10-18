@@ -2259,6 +2259,15 @@ mk_wedged() {  # $1 = dir, $2 = basename, $3 = trailing request lines, $4 = line
       mw_i_=$(( mw_i_ + 1 )); done
   } > "$1/$2" || broken "cannot write $1/$2"
 }
+mk_recovered() {  # $1 = dir, $2 = basename: 3 requests, then a fresh assistant line -- the run was answered
+  mkdir -p "$1" || broken "cannot create $1"
+  mr_old_="$(fx_iso $(( $(date +%s) - 3600 )))"; mr_now_="$(fx_iso "$(date +%s)")"
+  { printf '{"isSidechain":true,"agentId":"a1","message":{"role":"assistant"},"type":"assistant","timestamp":"%s.300Z"}\n' "$mr_old_"
+    for mr_i_ in 0 1 2; do
+      printf '{"type":"api-request","sessionId":"s","agentId":"a1","id":"r%s","timestamp":"%s.200Z"}\n' "$mr_i_" "$mr_now_"; done
+    printf '{"isSidechain":true,"agentId":"a1","message":{"role":"assistant"},"type":"assistant","timestamp":"%s.400Z"}\n' "$mr_now_"
+  } > "$1/$2" || broken "cannot write $1/$2"
+}
 mk_transcript_bare() {  # $1 = dir, $2 = age seconds, $3 = basename: no timestamp on any line
   mkdir -p "$1" || broken "cannot create $1"
   printf '{"t":1}\n' > "$1/$3" || broken "cannot write $1/$3"
@@ -2283,6 +2292,12 @@ S23a_stalled_after_three_requests() {
   beat "$SUBJ" "$W" 60 "$TD"
   if ! has "$STALL_LINE"; then ok "stalled: api-request-blob lines are not requests and do NOT count"
   else bad "stalled: api-request-blob lines were counted as unanswered requests: $OUT"; fi
+  rm -rf "$W" "$TD"
+  # A run of 3 that an assistant line then ANSWERED is a recovered teammate: the run resets.
+  W="$(mk_work)"; TD="$TMPROOT/s23r.$$"; mk_recovered "$TD" agent-arecov.jsonl
+  beat "$SUBJ" "$W" 60 "$TD"
+  if has "$LIVE_LINE" && ! has "$STALL_LINE"; then ok "stalled: 3 requests followed by an assistant line read live, NOT STALLED (the run resets)"
+  else bad "stalled: a teammate that answered after 3 requests was called STALLED or not live: $OUT"; fi
   rm -rf "$W" "$TD"
   W="$(mk_work)"; TD="$TMPROOT/s23d.$$"; mk_transcript "$TD" 0 agent-alive.jsonl
   beat "$SUBJ" "$W" 60 "$TD"
@@ -2334,6 +2349,16 @@ M45_stall_counts_blobs() {
   beat "$MUT" "$W" 60 "$TD"
   if has "$STALL_LINE"; then ok "MUTANT stall-counts-blobs: matching without the closing quote counts blob lines as requests — section 23a catches it"
   else bad "MUTANT stall-counts-blobs: section 23a survives the closing quote being dropped: $OUT"; fi
+  rm -rf "$W" "$TD"
+}
+# The reset dropped: every request in the file counts, so a recovered teammate reads STALLED and
+# the lead is told to stop a healthy one.
+M47_run_never_resets() {
+  mutant run-never-resets -e 's@^    NF { run = 0 }$@    NF { }@' || return
+  W="$(mk_work)"; TD="$TMPROOT/m47.$$"; mk_recovered "$TD" agent-arecov.jsonl
+  beat "$MUT" "$W" 60 "$TD"
+  if has "$STALL_LINE"; then ok "MUTANT run-never-resets: an answered run still counted reads a recovered teammate STALLED -- section 23a catches it"
+  else bad "MUTANT run-never-resets: section 23a survives the run never resetting: $OUT"; fi
   rm -rf "$W" "$TD"
 }
 
