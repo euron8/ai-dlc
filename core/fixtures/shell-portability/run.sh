@@ -63,7 +63,13 @@
 #   x18 S8b the name grammar narrowed to `[A-Za-z_]+`, `$T1:` seed -> the report must VANISH
 #   x19 S8b the modifier class after the colon dropped            -> a report must APPEAR
 #   x20     the CORE TEXT empty-corpus condition at n_shell       -> its NAMED refusal must VANISH
-#   n1      `sed -i ''` and `sed -i.bak`                          -> must NOT fail
+#   m14 S13 seeds per form, nested included, each accepted by `bash -n`: bash 3.2 RUN oracle AND the validator must agree -> all of them (count derived)
+#   x21 S13 dropped from ARMS                                     -> the report must VANISH
+#   x22 S13 S13_COMMENTS forced from `keep` to `skip`             -> the report must VANISH
+#   x25 S13 a bare `((` lexed as `(` again, so `<<` opens a heredoc -> the report must VANISH
+#   x26     a tracked file deleted from the worktree: S12/S13 must
+#           REFUSE (exit 2); the uncounted mutant PASSES it        -> refused, then PASS
+#   n1     `sed -i ''` and `sed -i.bak`                          -> must NOT fail
 #   n2      python `re.sub(r"\1")` in a .sh file                  -> must NOT fail
 #   n3      braced, `HEAD:`-literal, `"${SHA}:` and the braced
 #           ESCAPED-quote rev-paths                             -> must NOT fail
@@ -1056,6 +1062,287 @@ seed_core "$TMP/x19" skills/reconcile.md \
 probe_owned_appear "x19 S8b_PAT modifier class" "$TMP/x19" '/^S8b_PAT=/s/:\[acefghlqrstuwAFPQ\]"$/:"/' \
   S8b 'core/skills/reconcile.md:1:' "the zsh modifier-letter class after the colon"
 
+# m14 -- S13, AND THE ORACLE IS BASH, NOT A SECOND GRAMMAR. S13 is a hand-written reading of how
+# /bin/bash 3.2 closes a command substitution, and `bash -n` accepts every shape it hunts, so the
+# only thing that can say the grammar is right is bash running the same text. The ORACLE copy
+# wraps each seed body with stubs for the commands it calls and RUNS it under /bin/bash 3.2: any
+# stderr, or a missing `AFTER` line, is BREAK. The SUBJECT copy goes through the shipped
+# validator: an S13 report is FLAG. The two verdicts must AGREE, and each must equal the seed's
+# declared expectation, so a drift between the grammar and bash is a FAILURE of this fixture
+# rather than a silent miss. `set -n` is NOT the oracle in any placement: as the file's first
+# statement it hides every form (rc 0, empty stderr), and inside the OUTER `$(` it hides every
+# NESTED form -- which is why each form carries a nested BREAK seed below.
+#
+# EVERY BREAK SEED MUST PASS `bash -n` FIRST. The hazard is a construct a parse accepts; a seed
+# `bash -n` rejects is a parse error, outside the class, and the oracle answers NSYN for it, which
+# no declared verdict matches.
+#
+# THE ORACLE CARRIES ITS OWN CONTROL, in the class: a seed `bash -n` accepts and bash then breaks
+# (a lone `)` in a comment before a spaced string), beside a balanced near-miss, asserted first.
+# An oracle that never breaks would agree with a validator that never fires.
+# The wrapper is `if true; then ... fi` plus a line after, because form (c) was first measured at
+# a top-level `if` and the early close skips the rest of the block.
+S13DIR="$TMP/s13"; mkdir -p "$S13DIR"
+S13_N=0; S13_AGREE=0; S13_BAD=0
+s13_oracle() { # s13_oracle <body-file>  -> prints BREAK, ok, or NSYN (bash -n rejects it)
+  local f="$S13DIR/oracle.$$.sh" e o
+  { echo 'amutant_arm() { :; }'; echo 'amut() { :; }'; echo 'f() { :; }'; echo 'm() { :; }'; echo 'if true; then'
+    cat "$1"; echo 'fi'; echo 'echo AFTER'; } > "$f"
+  /bin/bash -n "$f" >/dev/null 2>&1 </dev/null || { echo NSYN; return; }
+  e="$(/bin/bash "$f" 2>&1 >"$f.out" </dev/null)"
+  o="$(cat "$f.out")"
+  if [ -n "$e" ] || ! grep -qx AFTER <<<"$o"; then echo BREAK; else echo ok; fi
+}
+s13_subject() { # s13_subject <name> <body-file>  -> prints FLAG or ok
+  local d="$TMP/s13-$1" out
+  seed_shell "$d" < <(echo 'if true; then'; cat "$2"; echo 'fi')
+  out="$(run_v "$d")"
+  if grep -q '^FAIL: S13:' <<<"$out"; then echo FLAG; else echo ok; fi
+}
+s13_seed() { # s13_seed <name> <BREAK|ok>   (body on stdin)
+  local n="$1" want="$2" f="$S13DIR/$1.body" o s
+  cat > "$f"
+  S13_N=$((S13_N + 1))
+  o="$(s13_oracle "$f")"; s="$(s13_subject "$n" "$f")"
+  if { [ "$want" = BREAK ] && [ "$o" = BREAK ] && [ "$s" = FLAG ]; } || { [ "$want" = ok ] && [ "$o" = ok ] && [ "$s" = ok ]; }; then
+    S13_AGREE=$((S13_AGREE + 1))
+  else
+    S13_BAD=$((S13_BAD + 1)); rc=1
+    note "FAIL  m14 $n -- declared $want, bash 3.2 says $o, S13 says $s. The grammar and the shell disagree."
+  fi
+}
+
+# the oracle's own control, before any seed is scored
+printf '%s\n' '  x="$(' "    # a lone ) here" '    echo "1 0"' '  )"' > "$S13DIR/ctl-break.body"
+printf '%s\n' '  x="$(' "    # a balanced ( pair ) here" '    echo "1 0"' '  )"' > "$S13DIR/ctl-ok.body"
+if [ "$(s13_oracle "$S13DIR/ctl-break.body")" = BREAK ] && [ "$(s13_oracle "$S13DIR/ctl-ok.body")" = ok ]; then
+  note "ok    m14 oracle control -- /bin/bash 3.2 parses (bash -n 0) and then breaks the lone-paren seed, and runs the balanced one, so it can disagree"
+else
+  note "FIXTURE BROKEN: the /bin/bash 3.2 oracle did not break its control seed. Every m14 verdict below is meaningless."
+  rc=1
+fi
+
+# form (a): comment text inside a DOUBLE-QUOTED substitution
+s13_seed a1-apostrophe BREAK <<'EOF'
+  x="$(
+    # the scorer's own subshell (bash -c's PPID) is excluded
+    echo "1 0"
+  )"
+EOF
+s13_seed a2-balanced-pair ok <<'EOF'
+  x="$(
+    # the 'scorer' own subshell is excluded
+    echo ok
+  )"
+EOF
+s13_seed a3-nested-lone-close BREAK <<'EOF'
+  x="$(echo "$(
+    # a lone ) here
+    echo "1 0"
+  )")"
+EOF
+s13_seed a4-unquoted-outer ok <<'EOF'
+  x=$(
+    # it's an unquoted substitution
+    echo ok
+  )
+EOF
+s13_seed a5-lone-close-then-dq-space BREAK <<'EOF'
+  x="$(
+    # a lone ) here
+    echo "1 0"
+  )"
+EOF
+s13_seed a6-lone-close-no-dq-space ok <<'EOF'
+  x="$(
+    # a lone ) here
+    echo ok
+  )"
+EOF
+# form (b): a bare case pattern
+s13_seed b1-bare-case-multiline BREAK <<'EOF'
+  x="$(
+    case "$h" in ''|*[!0-9]*) k=x ;; *) k=1 ;; esac
+    echo "$k"
+  )"
+EOF
+s13_seed b2-bare-case-single-line-dq BREAK <<'EOF'
+  x="$( case "$h" in ''|*[!0-9]*) k=x ;; *) k=1 ;; esac; echo "$k")"
+EOF
+s13_seed b4-nested-bare-case BREAK <<'EOF'
+  x="$(echo "$(
+    case "$h" in ''|*[!0-9]*) k=x ;; *) k=1 ;; esac
+    echo "$k"
+  )")"
+EOF
+s13_seed b3-paren-case ok <<'EOF'
+  x="$(
+    case "$h" in (''|*[!0-9]*) k=x ;; (*) k=1 ;; esac
+    echo "$k"
+  )"
+EOF
+# a bare `(( ... << ... ))` is ARITHMETIC, as `$((` is. Read as a heredoc opener it swallowed the
+# rest of the file: the form (b) offender after it went unreported (p1), and a `)` inside a
+# substitution after it was read as a stray heredoc-body paren (p2).
+s13_seed p1-arith-shift-then-bare-case BREAK <<'EOF'
+  m=0; k=1
+  (( m = 1 << k ))
+  x="$(
+    case "$h" in ''|*[!0-9]*) k=x ;; *) k=1 ;; esac
+    echo "$k"
+  )"
+EOF
+s13_seed p2-arith-shift-inside-subst ok <<'EOF'
+  v="$(
+    (( m = 1 << k ))
+    echo "a"
+  )"
+EOF
+# form (c): a brace-expanded word inside a double-quoted $( ) carrying a `{` and a single-quoted
+# body with an unclosed double-quoted `$(`. Seeds from the contract adversary (adv647), each
+# accepted by bash -n.
+s13_seed c00-arg-context BREAK <<'EOF'
+  amutant_arm a "$(amut n 'x "$(p"){y} 1')" z
+EOF
+s13_seed c02-local BREAK <<'EOF'
+  g() { local v="$(amut n 'x "$(p"){y} 1')"; echo "L[$v]"; }; g
+EOF
+s13_seed c07-for BREAK <<'EOF'
+  for x in "$(amut n 'x "$(p"){y} 1')"; do echo "X"; done
+EOF
+s13_seed c11-brace-outer BREAK <<'EOF'
+  f a "$(amut n 'x "$(p")' {y})" z
+EOF
+s13_seed c13-brace-after BREAK <<'EOF'
+  f a "$(amut n 'x "$(p")')"{y}
+EOF
+s13_seed c14-dollarbrace-before BREAK <<'EOF'
+  v=1; f a "${v}$(amut n 'x "$(p")')" z
+EOF
+s13_seed c25-outer-backtick BREAK <<'EOF'
+  f a "`amut n 'x "$(p"){y} 1'`" z
+EOF
+s13_seed h1-dollarbrace-noclose BREAK <<'EOF'
+  f a "$(m n 'x "$(p "${T}" q')" z
+EOF
+s13_seed h6-brace-noclose-noquote BREAK <<'EOF'
+  f a "$(m n 'x "$(p {T} q')" z
+EOF
+s13_seed m2-no-close BREAK <<'EOF'
+  f a "$(amut n 'x "$(p" {y} 1')" z
+EOF
+s13_seed nc-nested BREAK <<'EOF'
+  v="$(echo "$(f a "$(amut n 'x "$(p"){y} 1')" z)")"
+EOF
+s13_seed c01-assign ok <<'EOF'
+  v="$(amut n 'x "$(p"){y} 1')"
+EOF
+s13_seed c08-case ok <<'EOF'
+  case "$(amut n 'x "$(p"){y} 1')" in *) echo C ;; esac
+EOF
+s13_seed c09-dbl ok <<'EOF'
+  [[ -n "$(amut n 'x "$(p"){y} 1')" ]] && echo D
+EOF
+s13_seed c10-herestr ok <<'EOF'
+  cat <<<"$(amut n 'x "$(p"){y} 1')"
+EOF
+s13_seed c12-brace-sepword ok <<'EOF'
+  f a "$(amut n 'x "$(p")')" {y}
+EOF
+s13_seed c15-inner-unquoted ok <<'EOF'
+  f a "$(amut n 'x $(p {y} 1')" z
+EOF
+s13_seed c23-close-brace-only ok <<'EOF'
+  f a "$(amut n 'x "$(p")} 1')" z
+EOF
+s13_seed h0-hit2-shape ok <<'EOF'
+  f a "$(m a3 'X="$(git "${T}" -- c/ 2>/dev/null \' 'X="$( (cd "$D" && find c) 2>/dev/null \')" z
+EOF
+s13_seed m1-setB-off ok <<'EOF'
+  set +B; f a "$(amut n 'x "$(p"){y} 1')" z; set -B
+EOF
+# THE SEED COUNT IS DERIVED from this file's own `s13_seed` call sites, never written: a literal
+# beside a growing seed list went stale once already. The floor guards a grep that matched nothing.
+_s13_decl=$(grep -c '^s13_seed [^ ]* \(BREAK\|ok\) <<' "$0")
+_s13_brk=$(grep -c '^s13_seed [^ ]* BREAK <<' "$0")
+if [ "$S13_BAD" -eq 0 ] && [ "$_s13_decl" -ge 2 ] && [ "$S13_N" -eq "$_s13_decl" ] && [ "$S13_AGREE" -eq "$_s13_decl" ]; then
+  note "ok    m14 S13 -- bash 3.2 and the validator AGREE on all $S13_AGREE/$S13_N seeds ($_s13_brk break, $((_s13_decl - _s13_brk)) parse), each equal to its declared verdict and every one accepted by bash -n"
+else
+  note "FAIL  m14 S13 -- $S13_AGREE of $S13_N seeds agreed (expected $_s13_decl of $_s13_decl declared)"; rc=1
+fi
+
+# x21 -- S13's MEMBERSHIP in ARMS. Dropped, the probe loop and the corpus loop both skip it. The
+# anchor carries the space before `S13` and the closing quote, so it cannot touch S12.
+seed_shell "$TMP/x21" <<'X21EOF'
+if true; then
+  amutant_arm a "$(amut n 'x "$(p"){y} 1')" z
+fi
+X21EOF
+blind_check "x21 S13 in ARMS" "$TMP/x21" 's/ S12 S13"/ S12"/' S13 \
+  "the arm's membership in ARMS"
+
+# x22 -- S13's COMMENTS column. Form (a)'s whole subject is comment text, so `skip` blinds the arm
+# to it. The seed's ONLY offender is a comment, as x2's is for S8.
+seed_shell "$TMP/x22" <<'X22EOF'
+if true; then
+  x="$(
+    # the scorer's own subshell (bash -c's PPID) is excluded
+    echo "1 0"
+  )"
+fi
+X22EOF
+blind_check "x22 S13_COMMENTS=keep" "$TMP/x22" 's/S13_COMMENTS=keep/S13_COMMENTS=skip/' S13 \
+  "the comments column"
+
+# x25 -- S13's lexer opens ARITHMETIC at a bare `((`. Reverted to a plain `(`, the `<<` inside
+# `(( m = 1 << k ))` opens a heredoc that swallows the rest of the file, so the form (b) offender
+# below it -- the seed's ONLY offender -- must go unreported.
+seed_shell "$TMP/x25" <<'X25EOF'
+m=0; k=1
+(( m = 1 << k ))
+y="$(
+  case "$h" in ''|*[!0-9]*) k=x ;; *) k=1 ;; esac
+  echo "$k"
+)"
+X25EOF
+blind_check "x25 S13 bare (( is arithmetic" "$TMP/x25" 's/push("A"); fpd\[n\] = 2; return i + 2 }/push("P"); return i + 1 }/' S13 \
+  "the bare-\`((\` arithmetic rule"
+
+# x26 -- an awk arm that cannot OPEN a listed file refuses (exit 2), never PASS. BSD awk abandons
+# the rest of its file list at an unopenable one, so a tracked file deleted from the worktree
+# made S12 and S13 report PASS over a partial corpus. Control first: the same tree, file present,
+# PASSES -- so the refusal below is the deletion and not the seed. The mutant restores the old
+# shape (stderr discarded, no count compared); it must PASS the deleted tree, which is the defect.
+x26_run() { ( cd "$1" && bash scripts/validate-shell-portability.sh 2>&1 </dev/null; echo "rc=$?" ); }
+seed "$TMP/x26"
+printf '%s\n' '#!/usr/bin/env bash' 'echo listed' > "$TMP/x26/scripts/a0.sh"
+( cd "$TMP/x26" && git add -A >/dev/null 2>&1 )
+x26_ctl="$(x26_run "$TMP/x26")"
+rm "$TMP/x26/scripts/a0.sh"
+x26_out="$(x26_run "$TMP/x26")"
+x26_ok=1
+grep -q '^validate-shell-portability: PASS' <<<"$x26_ctl" && grep -qx 'rc=0' <<<"$x26_ctl" || x26_ok=0
+grep -qx 'rc=2' <<<"$x26_out" || x26_ok=0
+grep -q '^validate-shell-portability: PASS' <<<"$x26_out" && x26_ok=0
+grep -q '^validate-shell-portability: REFUSED' <<<"$x26_out" || x26_ok=0
+for x26_a in S12 S13; do
+  grep -q "^REFUSED: ${x26_a}: .*unopenable: scripts/a0.sh" <<<"$x26_out" || x26_ok=0
+done
+if [ "$x26_ok" -ne 1 ]; then
+  note "FAIL  x26 unopenable listed file -- control PASS rc 0 and refusal rc 2 naming S12 and S13 and scripts/a0.sh were not both seen"
+  printf '%s\n' "$x26_ctl" "$x26_out" | sed 's/^/      /' | head -8; rc=1
+elif mutate "$TMP/x26" 's/^  AWKN_OUT="\$probe\/awkn" awk \(.*\) 2>"\$probe\/awke"$/  AWKN_OUT="$probe\/awkn" awk \1 2>\/dev\/null/; s/^  if \[ "\$rc" -ne 0 \] || \[ "\${got:-none}" != "\$want" \]; then$/  if false; then/' "x26"; then
+  x26_mut="$(x26_run "$TMP/x26")"
+  if grep -qx 'rc=0' <<<"$x26_mut" && grep -q '^validate-shell-portability: PASS' <<<"$x26_mut"; then
+    note "ok    x26 unopenable listed file -- refused rc 2 naming S12 and S13 (control PASS rc 0); the uncounted mutant PASSES the same tree"
+  else
+    note "FAIL  x26 unopenable listed file -- the uncounted mutant did not PASS the deleted tree, so the count is not what refused it"
+    printf '%s\n' "$x26_mut" | sed 's/^/      /' | head -4; rc=1
+  fi
+else
+  rc=1
+fi
+
 # n6 -- S12's negatives. Every line is a correct `=~` or a correct `\b`: an anchored inline ERE, a
 # QUOTED literal RHS, a clean variable, a grep count checked by `=~`, a tainted variable that only
 # feeds `grep`, a comment and a string naming `=~`, an EVEN backslash run (a literal backslash,
@@ -1115,7 +1402,7 @@ fi
 # falling, a report appearing, the validator REFUSING under a foreign locale). A
 # `grep -c blind_check` therefore reads 6 where the truth is 13 -- a derivation that is
 # confidently wrong is worse than a literal somebody must update, so this one stays a literal
-# and says why. If you add an `x*`, update the 20.
+# and says why. If you add an `x*`, update the 22.
 # `m11` goes through `count_check` (it asserts a LINE COUNT, not merely a kill), and `m8`/`m10`
 # assert fail-closed rather than a kill, so all three are counted separately from `kill_check`.
 # A count that silently omitted them is what the first derivation of this line did.
@@ -1123,6 +1410,6 @@ _n_kill=$(grep -o 'kill_check "' "$0" | grep -c .)
 _n_count=$(grep -o 'count_check "' "$0" | grep -c .)
 _n_kill=$((_n_kill - 1 + _n_count - 1))   # each counting line names its own helper
 if [ "$rc" -eq 0 ]; then
-  note "PASS  shell-portability -- control green, ${_n_kill}/${_n_kill} corpus mutants killed by their own arm, 20/20 arm-table cells proven load-bearing, 7/7 negatives silent"
+  note "PASS  shell-portability -- control green, ${_n_kill}/${_n_kill} corpus mutants killed by their own arm, 24/24 arm-table cells proven load-bearing, 7/7 negatives silent"
 fi
 exit "$rc"

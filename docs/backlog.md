@@ -440,9 +440,15 @@ NOT measured: the false-positive set of a `validate-shell-portability.sh` arm th
 
 Owed (lead ai-dlc-71): a `validate-shell-portability.sh` arm that flags forms (a) and (b) inside a multi-line `$( )`, and form (c) inside any `$( )`, after its false-positive set is measured across the tree, so the next author cannot write any of them. The known sites are fixed once `86962cd9` lands. Receipt: each failing form above, (c) included, is flagged, and its paired passing form is not.
 
-Owner: unowned (71: filed, not built by 6f).
+Oracle correction (batch 236, from `/bin/bash` 3.2 RUNNING each seed with stubbed commands; `set -n` hides the nested forms in any placement). Form (a) breaks inside a double-quoted substitution only, on a lone apostrophe or a lone `)` in a comment that is followed later in the same substitution by a double-quoted string holding a space. Without that string a lone `)` parses, and a lone apostrophe is a `bash -n` error. A lone `"`, backtick or `(` is a `bash -n` error either way, so a parse already sees it. Form (b) breaks in a multi-line `$( )` and in a single-line double-quoted one. In a single-line unquoted `x=$( … )` it is a `bash -n` error instead. Each form also breaks nested, as in `x="$(echo "$( … )")"`.
 
-verify: manual
+Form (c) is a brace-expansion artifact, and `set +B` makes the entry's line parse. bash 3.2 re-scans the raw text of every brace-expanded word that holds a `{`, and that scan toggles quotes without nesting. A `$(` opened inside double quotes inside a single-quoted body, in a double-quoted `$( )`, is therefore extracted from the wrong place and reported as "bad substitution". The `{` can sit anywhere in the same word, and no later `)` is needed. The form breaks in a command argument, in an argument of `local`/`export`/`declare`/`readonly`, in an array element, a `for` list, a redirect target, a command after a prefix assignment, and a backtick outer. It parses in a plain `v=` assignment, a `case` word, a `[[ ]]` operand and a here-string. A single-quoted body ending in `\'` also parses, which is the shape of the second corpus hit.
+
+Fixed: arm S13 in `scripts/validate-shell-portability.sh`, one awk pass over the shell corpus. For form (c) it models bash's brace_gobbler over each brace-expanded word. Against the 191 probe files it missed 0, with 1 enumerated over-flag. Against the adversary's 115 seeds it missed 1 (`e/bad.sh`, which is not form (c)) and over-flagged 3, all `set -n` placement artifacts. Corpus: 0 hits, with a seeded control reported. In fixture `core/fixtures/shell-portability`, m14 holds the bash 3.2 run oracle and the validator to one verdict per seed. Every form has nested seeds, every seed passes `bash -n`, and the seed count is derived. x21 drops S13 from `ARMS` and x22 sets its comments column to skip, and the report vanishes under each.
+
+Owner: ai-dlc-ae (batch 236, PORTABILITY).
+
+verify: sh bash core/fixtures/shell-portability/receipt-bl647.sh
 
 ## BL-651 — I84 accepts a `stories_dir` reader whose only mention of the sprint slot is a comment
 
