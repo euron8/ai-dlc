@@ -3418,7 +3418,7 @@ pcv_suite() {
       # The pre-cache engine is not in this tree's history (a consumer, or a sandbox without the pin):
       # the byte comparison falls back to the pinned exit-0 line the amendment fixes, and says so.
       if [ "$(cat "$PS_D/v26.out")" = "$PCV_OKLINE" ] && [ ! -s "$PS_D/v26.err" ]; then
-        pcv_v PC-V26 "unarmed, a valid record is NOT accepted: a fresh render, the record kept, stdout exactly the pre-cache exit-0 line and stderr empty (2875c7ad not in history: compared against the pinned line, not the engine)"
+        pcv_v PC-V26 "unarmed, a valid record is NOT accepted: a fresh render, the record kept, stdout exactly the pinned exit-0 line and stderr empty -- THE ENGINE COMPARISON DID NOT RUN: 2875c7ad is not in this tree's history (a consumer), so the off path was checked against a constant, not against the pre-cache engine"
       else
         pcv_x PC-V26 "unarmed --verify printed something other than the pre-cache exit-0 line alone [$v26_why]"
       fi
