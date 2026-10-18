@@ -20,6 +20,64 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [VERSION-PLACEHOLDER-B236-RECOVER] - 2026-10-18
+
+Batch 236 (b9's RECOVER). The post-compaction recovery gate no longer refuses the digest Read its own injected block
+asks for, writes its stage by rename so a parallel Read never sees it empty, and a new recovery no longer inherits the
+last one's stage. Closes BL-658, BL-666 and BL-684. Files BL-684, BL-687 and BL-688. Closes no `PC-` id. Net for this
+release: 3 closed, 3 filed.
+
+### The digest Read is allowed at both stages without advancing (BL-658)
+
+- `core/hooks/ai-dlc-recover-gate.sh` allows a full Read of the digest in both the `snapshot)` and `step)` arms,
+  ahead of each arm's deny. The match is on the resolved absolute path against exactly the two digest paths
+  `digest_readable()` checks, never on a basename. The allow writes nothing: it does not advance the stage, remove
+  the marker, or write `.recover-satisfied` or `.recover-advisor-owed`. A bounded digest Read is still refused.
+- This closes both measured shapes. In (ii), a digest Read issued in parallel with the step Read reached the gate at
+  stage `step` and got the SECOND-call deny (f7 measured it in a consumer lead session). In (iii), a digest Read
+  reached the gate before any stage was written and got the FIRST-call deny, which is the entry's original
+  observation.
+- The residual is filed as BL-687: a parallel STEP Read whose hook runs before the snapshot call's stage write still
+  gets the FIRST deny.
+
+### The stage write is a rename (BL-666)
+
+- The stage write was `printf 'step\n' >"$PROGRESS"`, which truncates the file in place. A parallel Read that caught
+  it empty landed in the garbage arm, which removes the file, and the recovery reset to its first step. It is now
+  written to `${PROGRESS}.$$` beside it and renamed onto it. A failed write removes its own temp file and fails open
+  as before, and its error no longer leaks to stderr.
+- `core/schemas/pipeline-state-paths.json` ignores `_bmad-output/.recover-gate-progress*`, so a temp file left by a
+  killed write is not an untracked file in a consumer tree.
+
+### A new recovery clears the last one's stage (BL-684)
+
+- `core/hooks/ai-dlc-recover.sh` already cleared `.recover-satisfied` and `.recover-advisor-owed` when a new recovery
+  started, but not `.recover-gate-progress`. A session that ended between its two mandated Reads left `step` on
+  disk, so the next recovery's first-call step Read was allowed and satisfied it, skipping the snapshot. The stage
+  file and any temp leftovers are now cleared there too.
+
+### Tests
+
+- `core/fixtures/postcompact-rulebook-recovery/run.sh` gains arms for all three:
+  - the digest allowed at stage `step` and at no stage;
+  - controls: a decoy refused, a same-basename decoy refused, and a bounded digest Read refused at both stages;
+  - the post-state left untouched after a digest allow;
+  - a hard-link inode probe and a killed-write probe for the rename;
+  - the stale stage cleared by a new recovery.
+- Eleven mutants are each killed by a named arm: the allow dropped, widened, advancing, step-only, basename-matched,
+  or missing its full-Read test; the write in place, never renamed, unlinked then written, or under a fixed temp
+  name; and the stale-stage clear removed.
+- Each block detects whether its fix is present before asserting, so the fixture can ship one pull ahead of the
+  hooks. Its frozen race-battery anchors are unchanged.
+
+### Filed
+
+- BL-684 (DEFECT), closed in this release; see above.
+- BL-687 (DEFECT): the residual parallel step-Read race. The entry states the fix shape: a full step Read that
+  arrives with the marker present and no stage written is allowed without advancing and without satisfying the
+  recovery.
+- BL-688 (DEFECT): when `_bmad-output` is unwritable, the snapshot Read is allowed but the stage never advances, so
+  every later step Read is refused. That wedge predates this release and is not made worse by it.
 ## [0.832.0] - 2026-10-18
 
 Batch 236 (READSET). The read-set deriver stops writing rows the hook never reads, the pre-push fixture pool refuses a
