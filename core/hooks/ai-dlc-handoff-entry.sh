@@ -29,6 +29,10 @@
 # writes on the call that discharges the second mandate -- not on the in-flight marker, which
 # that gate has already deleted by the time this PostToolUse hook runs.
 #
+# LEAD ONLY. The marker is project-wide, so it is written from the LEAD's Read and never from a
+# dispatched teammate's, the same lead-only binding `ai-dlc-recover-gate.sh` carries. The
+# discriminator is the payload's `agent_id`; the reasoning is at the exit below.
+#
 # THE MATCH IS ON THE BASENAME UNDER A steps/ PARENT, not on a whole path. The same file lives
 # at .claude/skills/ai-dlc/steps/handoff.md on a consumer and core/skills/ai-dlc/steps/handoff.md
 # in the distribution, and a lead may read it through either spelling or through a relative
@@ -65,6 +69,25 @@ case "$FPATH" in
   */steps/handoff.md) : ;;
   *) exit 0 ;;
 esac
+
+# THE MARKER IS THE LEAD'S, AND A DISPATCHED TEAMMATE'S READ IS NOT THE LEAD ENTERING THE
+# PROCEDURE.
+#
+# `.handoff-in-progress` is project-wide and key 1 of `ai_dlc_handoff_pending`: it arms the Stop
+# guard and reroutes the next compaction's mandate for the WHOLE session. A teammate that reads
+# steps/handoff.md therefore armed the lead's marker, the shape `ai-dlc-recover-gate.sh` was
+# bound against so that its denials apply to the lead only. PostToolUse carries a non-empty
+# `agent_id` for a subagent's call and no such key for the lead's. `agent_type` is NOT the
+# discriminator: a lead started with `claude --agent` carries `agent_type` and no `agent_id`,
+# and it is still the lead.
+#
+# SITED HERE, BEFORE THE BREADCRUMB BLOCK BELOW, AND NOT AFTER IT. That block DELETES
+# `.recover-satisfied` as it reads it. An exit placed after it lets a teammate's Read consume
+# the breadcrumb the LEAD's compelled Read still needs, and the lead's Read then arms the
+# marker from a recovery-mandated call. Fail open: an unreadable payload yields an empty id and
+# falls through to arming, which is this hook's existing behaviour.
+AID="$(printf '%s' "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null)"
+[ -z "$AID" ] || exit 0
 
 # A RECOVERY-MANDATED READ IS NOT A HANDOFF INITIATION, AND THIS HOOK COULD NOT TELL THEM
 # APART.

@@ -211,16 +211,31 @@ fi
 # want the PEAK across the whole run, not the latest reading — a teammate that
 # compacted and came back down still spent time at the ceiling, and that peak is
 # the number the ceiling decision needs.
+#
+# EACH TURN'S FIGURE COMES FROM THE SHARED `ctx_tokens` DEF, NOT FROM THE TOP-LEVEL USAGE. An
+# advisor turn's top level SUMS its API iterations -- two `message` reads plus the advisor's own
+# -- so it reads roughly double the real context, and a MAX over turns takes exactly that turn.
+# Measured over real subagent transcripts: 692 of the 699 in this repo that carried an advisor
+# turn recorded an inflated peak, 1244 of 1254 on the graph consumer, the worst 873695 against a
+# true 441012 -- a teammate reported past its own window. ai-dlc-context-sensor.sh had already
+# been fixed for the same shape; this hook kept its own copy of the old sum, which is the drift
+# the sibling library ai-dlc-usage-tokens.sh now removes. Both hooks prepend that one def.
+#
+# NO INLINE FALLBACK: a missing library exits 0 with no row, the way an unreadable transcript
+# does above. A row computed by a second copy of the rule is the defect, and I13 fails the
+# build on a sourced sibling that names no file. Set EMPTY first because this hook runs `set -u`.
+CTX_TOKENS_DEF=""
+_AI_DLC_USAGE_LIB="$(dirname "${BASH_SOURCE[0]}")/ai-dlc-usage-tokens.sh"
+[ -r "$_AI_DLC_USAGE_LIB" ] && . "$_AI_DLC_USAGE_LIB"
+[ -n "$CTX_TOKENS_DEF" ] || exit 0
 PEAK=0; TURNS=0; COMPACTIONS=0; MODEL=""; END_TS=""; EFFORT=""; TVERSION=""
 for N in ${AI_DLC_PROBE_TAIL_BYTES:-1048576} 4194304 16777216; do
-  READ="$(tail -c "$N" "$TRANSCRIPT" 2>/dev/null | jq -Rsc '
+  READ="$(tail -c "$N" "$TRANSCRIPT" 2>/dev/null | jq -Rsc "${CTX_TOKENS_DEF}"'
       (split("\n") | map(fromjson?)) as $a
       | {
           peak: ([ $a[]
                    | select(.type == "assistant" and .message.usage != null)
-                   | (.message.usage.input_tokens // 0)
-                     + (.message.usage.cache_creation_input_tokens // 0)
-                     + (.message.usage.cache_read_input_tokens // 0)
+                   | .message.usage | ctx_tokens
                  ] | max // 0),
           turns: ([ $a[] | select(.type == "assistant") ] | length),
           compactions: ([ $a[]

@@ -53,10 +53,14 @@ resolve() {  # <basename> -> absolute path, or empty
 LIB="$(resolve ai-dlc-context-provenance.sh)" || LIB=""
 FLOOR="$(resolve ai-dlc-rules-floor.sh)" || FLOOR=""
 SENSOR="$(resolve ai-dlc-context-sensor.sh)" || SENSOR=""
+# The sensor sources its token-extraction def from this sibling and exits 0 WITHOUT EMITTING when
+# it is absent, so every mutant hook directory below must carry it beside the sensor copy, or the
+# sensor-driven arms read as silent mutants rather than as the mutation under test.
+USAGE="$(resolve ai-dlc-usage-tokens.sh)" || USAGE=""
 
-if [ -z "$LIB" ] || [ -z "$FLOOR" ] || [ -z "$SENSOR" ]; then
+if [ -z "$LIB" ] || [ -z "$FLOOR" ] || [ -z "$SENSOR" ] || [ -z "$USAGE" ]; then
   echo "FIXTURE ERROR: could not locate the library or a driver hook from $HERE" >&2
-  echo "  lib=${LIB:-<absent>} floor=${FLOOR:-<absent>} sensor=${SENSOR:-<absent>}" >&2
+  echo "  lib=${LIB:-<absent>} floor=${FLOOR:-<absent>} sensor=${SENSOR:-<absent>} usage=${USAGE:-<absent>}" >&2
   exit 2
 fi
 
@@ -427,7 +431,7 @@ MUT_UNLANDED="$WORK/mutations-that-did-not-land"
 mutlib() {  # <name> <sed program|-> -> prints the mutant hook DIRECTORY
   local name="$1" prog="$2" md="$WORK/mut-$1"
   mkdir -p "$md"
-  cp "$FLOOR" "$SENSOR" "$md/"
+  cp "$FLOOR" "$SENSOR" "$USAGE" "$md/"
   if [ "$prog" = "-" ]; then
     cp "$LIB" "$md/ai-dlc-context-provenance.sh"
   else

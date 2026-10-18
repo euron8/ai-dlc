@@ -178,16 +178,26 @@ reset1m
 raw "$(at 150000)" >/dev/null
 check "  a line with no iterations keeps the top-level reading (150000)" "$(field last_measured)" "150000"
 # MUTANT: the top-level sum restored. The advisor arms must read the sums; the one-iteration and
-# no-iterations arms still pass, which is the point of their being near-misses. The hook sources
-# its sibling window library, so the copy goes beside an unmutated copy of it.
+# no-iterations arms still pass, which is the point of their being near-misses.
+#
+# RE-ANCHORED INTO THE SHARED LIBRARY. The iteration rule moved out of the sensor into the jq def
+# in ai-dlc-usage-tokens.sh, which the sensor and the subagent probe both source, so the two
+# deleted lines now live there and the mutation is on a LIBRARY copy beside an UNMUTATED sensor
+# copy and an unmutated window library. Same two lines, same observable. The library's def opens
+# with a bare `.` so the program left after the deletion is still well-formed: it is exactly the
+# old top-level sum. The sensor exits 0 without writing state when the usage library is absent,
+# so a copy that lost it would score every arm below as a kill it did not earn -- the copy is
+# asserted present first.
 SENSOR_PATH="${HOOK#bash }"
+USAGELIB="$(dirname "$SENSOR_PATH")/ai-dlc-usage-tokens.sh"
 MUTI="$WORK/mutant-iter-sum"; mkdir -p "$MUTI"
 cp "$(dirname "$SENSOR_PATH")/ai-dlc-window.sh" "$MUTI/ai-dlc-window.sh"
+cp "$SENSOR_PATH" "$MUTI/ai-dlc-context-sensor.sh"
 sed -e '/^  | (\[ \.iterations\[\]? | select(\.type == "message") \] | last) as \$lastmsg$/d' \
-    -e '/^  | (\$lastmsg \/\/ \.)$/d' "$SENSOR_PATH" > "$MUTI/ai-dlc-context-sensor.sh"
-if cmp -s "$SENSOR_PATH" "$MUTI/ai-dlc-context-sensor.sh" \
-   || [ "$(grep -c 'lastmsg' "$MUTI/ai-dlc-context-sensor.sh")" -ne 0 ]; then
-  bad "iteration-sum mutant applied" "sed did not remove both lines (lastmsg left: $(grep -c 'lastmsg' "$MUTI/ai-dlc-context-sensor.sh"))"
+    -e '/^  | (\$lastmsg \/\/ \.)$/d' "$USAGELIB" > "$MUTI/ai-dlc-usage-tokens.sh"
+if [ ! -s "$MUTI/ai-dlc-usage-tokens.sh" ] || cmp -s "$USAGELIB" "$MUTI/ai-dlc-usage-tokens.sh" \
+   || [ "$(grep -c 'lastmsg' "$MUTI/ai-dlc-usage-tokens.sh")" -ne 0 ]; then
+  bad "iteration-sum mutant applied" "sed did not remove both lines from the usage library (lastmsg left: $(grep -c 'lastmsg' "$MUTI/ai-dlc-usage-tokens.sh" 2>/dev/null))"
 else
   for m in "$ADV:554953" "$ADV2:220000" "$ONE:279085"; do
     reset1m
@@ -340,6 +350,7 @@ HOOK_PATH="${HOOK#bash }"
 WINLIB="$(dirname "$HOOK_PATH")/ai-dlc-window.sh"
 MUTD="$WORK/mutant"; mkdir -p "$MUTD"
 cp "$HOOK_PATH" "$MUTD/ai-dlc-context-sensor.sh"
+cp "$USAGELIB" "$MUTD/ai-dlc-usage-tokens.sh"
 sed 's/^    \*)                 printf .200000|not a bare alias/    *)                 printf '"'"'1000000|not a bare alias/' "$WINLIB" > "$MUTD/ai-dlc-window.sh"
 if cmp -s "$WINLIB" "$MUTD/ai-dlc-window.sh"; then
   bad "floor mutant applied" "sed matched nothing; the copy is byte-identical"
@@ -374,6 +385,7 @@ done
 # exact alias. The full-id arms above (claude-sonnet-4-5 and the Bedrock id) must read 1M.
 MUTSUB="$WORK/mutant-subdefault"; mkdir -p "$MUTSUB"
 cp "$HOOK_PATH" "$MUTSUB/ai-dlc-context-sensor.sh"
+cp "$USAGELIB" "$MUTSUB/ai-dlc-usage-tokens.sh"
 sed 's/^    fable|opus|sonnet) printf/    *fable*|*opus*|*sonnet*) printf/' "$WINLIB" > "$MUTSUB/ai-dlc-window.sh"
 if cmp -s "$WINLIB" "$MUTSUB/ai-dlc-window.sh"; then
   bad "substring-default mutant applied" "sed matched nothing; the copy is byte-identical"
@@ -408,6 +420,7 @@ rm -f "$WORK/.claude/settings.json"
 # MUTANT: the range check removed (any positive parse accepted). 99 must then be taken.
 MUTR="$WORK/mutant-range"; mkdir -p "$MUTR"
 cp "$HOOK_PATH" "$MUTR/ai-dlc-context-sensor.sh"
+cp "$USAGELIB" "$MUTR/ai-dlc-usage-tokens.sh"
 sed 's/^  \[ "\$1" -ge "\$AI_DLC_WINDOW_MIN" \] 2>\/dev\/null && \[ "\$1" -le "\$AI_DLC_WINDOW_MAX" \] 2>\/dev\/null$/  [ "$1" -gt 0 ]/' "$WINLIB" > "$MUTR/ai-dlc-window.sh"
 if cmp -s "$WINLIB" "$MUTR/ai-dlc-window.sh"; then
   bad "range mutant applied" "sed matched nothing; the copy is byte-identical"
@@ -444,6 +457,7 @@ check "  process env AI_DLC_MODEL_HAIKU_WINDOW outranks the settings .env" "$(fi
 # beside an unmutated hook copy; the .env arm must fall back to the HAIKU default.
 MUTE="$WORK/mutant-env"; mkdir -p "$MUTE"
 cp "$HOOK_PATH" "$MUTE/ai-dlc-context-sensor.sh"
+cp "$USAGELIB" "$MUTE/ai-dlc-usage-tokens.sh"
 sed 's/^\( *\)val="\$(jq -r --arg k "\$var" .*/\1val=""/' "$WINLIB" > "$MUTE/ai-dlc-window.sh"
 if cmp -s "$WINLIB" "$MUTE/ai-dlc-window.sh"; then
   bad "settings-env mutant applied" "sed matched nothing; the copy is byte-identical"
@@ -457,6 +471,7 @@ fi
 # pre-change validator's policy. Undeclared bare `sonnet` must then read 200000.
 MUTS="$WORK/mutant-substr"; mkdir -p "$MUTS"
 cp "$HOOK_PATH" "$MUTS/ai-dlc-context-sensor.sh"
+cp "$USAGELIB" "$MUTS/ai-dlc-usage-tokens.sh"
 sed 's/^    fable|opus|sonnet) printf .1000000|/    NONE) printf '"'"'200000|/' "$WINLIB" > "$MUTS/ai-dlc-window.sh"
 if cmp -s "$WINLIB" "$MUTS/ai-dlc-window.sh"; then
   bad "substring mutant applied" "sed matched nothing; the copy is byte-identical"
@@ -467,9 +482,12 @@ else
     | CLAUDE_PROJECT_DIR="$WORK" bash "$MUTS/ai-dlc-context-sensor.sh" >/dev/null 2>&1
   check "MUTANT: a [1m]-only resolver reads undeclared bare sonnet at 200000" "$(field effective_window)" "200000"
 fi
-# LIBRARY ABSENT: a lone hook copy falls to OTHER at UNDECLARED_MODEL_MAX, never dies.
+# LIBRARY ABSENT: a hook copy without the WINDOW library falls to OTHER at UNDECLARED_MODEL_MAX,
+# never dies. The usage-token library goes beside it: this arm removes the window library, not
+# that one, and without it the sensor would exit before writing any state at all.
 MUTL="$WORK/nolib"; mkdir -p "$MUTL"
 cp "$HOOK_PATH" "$MUTL/ai-dlc-context-sensor.sh"
+cp "$USAGELIB" "$MUTL/ai-dlc-usage-tokens.sh"
 echo '{}' > "$WORK/.claude/settings.json"
 reset
 printf '{"transcript_path":"%s","session_id":"t"}' "$(at 100000 sonnet)" \
@@ -810,6 +828,7 @@ check "relax control: cached at IMMINENT has no unfired threshold above it, so t
 # cannot tell "reads near thresholds" from "reads always".
 MRD="$WORK/mutant-relax"; mkdir -p "$MRD"
 cp "$(dirname "$HOOK_PATH")/ai-dlc-window.sh" "$MRD/" 2>/dev/null || true
+cp "$USAGELIB" "$MRD/ai-dlc-usage-tokens.sh" 2>/dev/null || true
 sed 's/\[ "$_TOK_DISTANCE" -le "$RELAX_TOKENS" \] && RELAX=1/RELAX=0/' "$HOOK_PATH" > "$MRD/ai-dlc-context-sensor.sh"
 if cmp -s "$HOOK_PATH" "$MRD/ai-dlc-context-sensor.sh"; then
   bad "relax mutant applied" "sed matched nothing; the copy is byte-identical"

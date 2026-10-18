@@ -16,4 +16,13 @@
 # release read 3455 across 312, both reps alike. The 13 forks are the two new fixture dirs
 # (content-seal, content-seal-mutants) the validator walks, about 6.5 forks per dir; no validator code
 # changed. The budget is the high reading plus the +4 margin the previous raise used.
-FORK_BUDGET=3459
+#
+# Raised 3459 -> 3465 for the shared context-token library `core/hooks/ai-dlc-usage-tokens.sh`, which
+# the context sensor and the subagent probe both source. Measured with `scripts/fork-profile.sh
+# --section total`, each run from inside its own clean worktree: base 51ea279f read 3455, the release
+# read 3461, with the subagent-probe read-set rows that name the library already present. By arm, base
+# to release: I84 +2, I14 +2, I83 +1, I13 +1. Each of those arms iterates over the files in
+# `core/hooks/`, so the cost is one more hook file and no new loop. Keeping the count flat would have
+# meant an inline copy of the def in both hooks, which is the drift the library exists to remove. The
+# budget is the high reading plus the same +4 margin both previous raises took.
+FORK_BUDGET=3465

@@ -1649,6 +1649,55 @@ else
 fi
 rm -f "$P_ENTRY/_bmad-output/.recover-satisfied" "$CANARY" "$P_ENTRY/_bmad-output/.handoff-in-progress"
 
+# --- LEAD ONLY: a TEAMMATE's Read of steps/handoff.md arms nothing (A1, A2, A2b, A3) ------------
+# The marker is project-wide, so a dispatched teammate's Read must neither write it NOR consume
+# the lead's `.recover-satisfied` breadcrumb. PostToolUse carries a non-empty `agent_id` for a
+# subagent's call and none for the lead's; a `claude --agent` lead carries `agent_type` and NO
+# `agent_id` and is still the lead (A2b), which is what kills a key on `agent_id || agent_type`.
+#
+# A1 IS ABSENCE-SHAPED, so it is followed in the same tree by A2, the lead twin one property apart
+# (no `agent_id`), which must create the marker -- a hook that died on load would score A1 for free.
+# `tdrive` omits a key when its value is empty, so the lead payload carries no `agent_id` at all
+# rather than an empty one.
+tdrive() { # tdrive <projdir> <agent_id|-> <agent_type|-> <path> [hooksdir] -> hook exit code
+  local proj="$1" aid="$2" aty="$3" fp="$4" hd="${5:-$HOOKS_DIR}"
+  jq -nc --arg p "$fp" --arg i "$aid" --arg y "$aty" \
+    '{tool_name:"Read",tool_input:{file_path:$p}}
+     + (if $i == "-" then {} else {agent_id:$i} end)
+     + (if $y == "-" then {} else {agent_type:$y} end)' \
+  | CLAUDE_PROJECT_DIR="$proj" bash "$hd/ai-dlc-handoff-entry.sh" >/dev/null 2>&1
+  printf '%s' "$?"
+}
+# tcase <projdir> <agent_id|-> <agent_type|-> <hooksdir> <breadcrumb: yes|no> -> "<marker|no-marker> <crumb|no-crumb> <rc>"
+tcase() {
+  local proj="$1" sd="$1/_bmad-output" rc
+  mkdir -p "$sd"
+  rm -f "$sd/.handoff-in-progress" "$sd/.recover-satisfied"
+  [ "$5" = yes ] && printf 'step_file=steps/handoff.md\n' > "$sd/.recover-satisfied"
+  rc="$(tdrive "$proj" "$2" "$3" "$proj/$STEP_HANDOFF" "$4")"
+  local m=no-marker c=no-crumb
+  [ -f "$sd/.handoff-in-progress" ] && m=marker
+  [ -f "$sd/.recover-satisfied" ] && c=crumb
+  rm -f "$sd/.handoff-in-progress" "$sd/.recover-satisfied"
+  printf '%s %s %s' "$m" "$c" "$rc"
+}
+_a1="$(tcase "$P_ENTRY" agent-0123456789abcdef general-purpose "$HOOKS_DIR" no)"
+_a2="$(tcase "$P_ENTRY" - - "$HOOKS_DIR" no)"
+_a2b="$(tcase "$P_ENTRY" - general-purpose "$HOOKS_DIR" no)"
+_a3="$(tcase "$P_ENTRY" agent-0123456789abcdef general-purpose "$HOOKS_DIR" yes)"
+[ "$_a1" = "no-marker no-crumb 0" ] \
+  && ok "(A1) a TEAMMATE's Read (agent_id set) of steps/handoff.md -> no marker" \
+  || bad "(A1) a teammate's Read of steps/handoff.md gave '$_a1' — the lead's project-wide marker is armed by a dispatched subagent"
+[ "$_a2" = "marker no-crumb 0" ] \
+  && ok "(A2) the LEAD twin (no agent_id), same run, one property apart -> the marker EXISTS" \
+  || bad "(A2) the lead's Read gave '$_a2' — the hook no longer arms at all, so A1's absence is a dead hook rather than a guard"
+[ "$_a2b" = "marker no-crumb 0" ] \
+  && ok "(A2b) agent_type set and NO agent_id (a claude --agent lead) -> the marker EXISTS" \
+  || bad "(A2b) a Read carrying agent_type and no agent_id gave '$_a2b' — the exit is keyed on agent_type, which a claude --agent LEAD also carries"
+[ "$_a3" = "no-marker crumb 0" ] \
+  && ok "(A3) a teammate's Read leaves the lead's .recover-satisfied breadcrumb ON DISK" \
+  || bad "(A3) a teammate's Read with a breadcrumb present gave '$_a3' — the exit sits after the breadcrumb block, so the teammate consumed the breadcrumb the lead's compelled Read still needs"
+
 # =============================================================================
 # MUTANTS
 # =============================================================================
@@ -2448,6 +2497,43 @@ if mkmut m30-breadcrumb-not-consumed "$ENTF" \
   seq_read "$P_REC" "$P_REC/$STEP_HANDOFF" "$_M30" >/dev/null   # the mandated Read
   mseq m30 "$_M30" "$P_REC" "$P_REC/$STEP_HANDOFF" no-marker \
     "assertion (e10): the breadcrumb survives its own read, so an immediate voluntary re-open is taken for the mandated call and the lead's real initiation is silently unmarked"
+fi
+
+
+# LEAD-ONLY EXIT (A1, A2, A2b, A3). Each mutant is driven through `tcase` with all four cells and
+# must flip EXACTLY the cell it owns; the twin cells it does not own are the positive controls.
+mlead() { # mlead <name> <mutdir> <a1> <a2> <a2b> <a3> <killmsg> — expected tcase result per cell
+  local d="$2" r1 r2 r2b r3 want_ok=1
+  r1="$(tcase "$P_ENTRY" agent-0123456789abcdef general-purpose "$d" no)"
+  r2="$(tcase "$P_ENTRY" - - "$d" no)"
+  r2b="$(tcase "$P_ENTRY" - general-purpose "$d" no)"
+  r3="$(tcase "$P_ENTRY" agent-0123456789abcdef general-purpose "$d" yes)"
+  if [ "$r1" = "$3" ] && [ "$r2" = "$4" ] && [ "$r2b" = "$5" ] && [ "$r3" = "$6" ]; then
+    ok "  mutant [$1] KILLED by $7"
+  else
+    bad "MUTANT [$1] cells A1='$r1' A2='$r2' A2b='$r2b' A3='$r3' — wanted A1='$3' A2='$4' A2b='$5' A3='$6': $7 does not depend on the mutated code, or the mutation touched more than its own cell"
+  fi
+}
+# M-LEAD1 — THE agent_id EXIT IS GONE, which is the pre-fix hook. Killed by A1 (and A3, which
+#           reads the same teammate world). A2 and A2b are the lead worlds and must still arm.
+if mkmut m-lead1-no-agent-exit "$ENTF" -e 's@^\[ -z "$AID" \] || exit 0$@: # agent_id exit removed@'; then
+  mlead m-lead1 "$MUT_DIR" "marker no-crumb 0" "marker no-crumb 0" "marker no-crumb 0" "no-marker no-crumb 0" \
+    "assertion (A1): with the exit gone a dispatched teammate's Read arms the lead's project-wide marker again"
+fi
+# M-LEAD2 — THE EXIT MOVES BELOW THE BREADCRUMB BLOCK. A teammate still writes no marker (A1
+#           holds) but the block above it has already deleted the lead's breadcrumb. Killed by A3
+#           alone; A1, A2, A2b read identically to the correct hook.
+if mkmut m-lead2-exit-below-breadcrumb "$ENTF" \
+     -e 's@^\[ -z "$AID" \] || exit 0$@: # exit moved below the breadcrumb block@' \
+     -e 's@^\[ -d "$STATE_DIR" \] || exit 0$@[ -z "$AID" ] || exit 0; [ -d "$STATE_DIR" ] || exit 0@'; then
+  mlead m-lead2 "$MUT_DIR" "no-marker no-crumb 0" "marker no-crumb 0" "marker no-crumb 0" "no-marker no-crumb 0" \
+    "assertion (A3): with the exit below the breadcrumb block a teammate's Read consumes the lead's .recover-satisfied"
+fi
+# M-LEAD3 — THE EXIT IS KEYED ON agent_id OR agent_type. A claude --agent lead carries agent_type
+#           and no agent_id, so it is silently unmarked. Killed by A2b alone.
+if mkmut m-lead3-keyed-on-agent-type "$ENTF" -e 's@\.agent_id // empty@.agent_id // .agent_type // empty@'; then
+  mlead m-lead3 "$MUT_DIR" "no-marker no-crumb 0" "marker no-crumb 0" "no-marker no-crumb 0" "no-marker crumb 0" \
+    "assertion (A2b): keyed on agent_type a claude --agent lead's Read no longer arms the marker"
 fi
 
 # THE UNMUTATED CONTROL, built by the same copy-the-directory machinery as every mutant. A copy

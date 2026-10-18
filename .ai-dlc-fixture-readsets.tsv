@@ -14,7 +14,7 @@
 # path<TAB>sha lines in the runner's universe as traced; the runner clears a stale key record when
 # it recomputes the same value over the tree it is pushing.
 #
-# fixtures mapped: 230    entries: 14697
+# fixtures mapped: 230    entries: 14696
 absorbed-specifics-survive	core/fixtures/absorbed-specifics-survive/run.sh
 absorbed-specifics-survive	core/skills/ai-dlc/SKILL.md
 absorbed-specifics-survive	core/skills/ai-dlc/rule-bodies/rule-13.md
@@ -1819,21 +1819,6 @@ context-mode-protect	core/fixtures/context-mode-protect/run.sh
 context-mode-protect	core/fixtures/context-mode-protect/seed.sh
 context-mode-protect	core/hooks/ai-dlc-context-provenance.sh
 context-mode-protect	core/hooks/ai-dlc-protect.sh
-context-provenance	.git/HEAD
-context-provenance	.git/config
-context-provenance	.git/index
-context-provenance	.git/info/exclude
-context-provenance	.git/objects/33/a4425c0ed05dea70f881660ffdf01c7c86da33
-context-provenance	.git/objects/7f/1479d0f091b8393b8613744a84c3c8229a65a3
-context-provenance	.git/objects/info/commit-graphs/commit-graph-chain
-context-provenance	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
-context-provenance	.git/objects/info/commit-graphs/graph-61ac52da05ee113a5a22871cdc3010f8f63bd5f1.graph
-context-provenance	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
-context-provenance	.git/objects/info/commit-graphs/graph-fa7bbe6bcd67e84c678384cfb84f17a16d6fa8fa.graph
-context-provenance	.git/objects/pack/multi-pack-index
-context-provenance	.git/packed-refs
-context-provenance	.git/refs/heads/main
-context-provenance	.gitignore
 context-provenance	core
 context-provenance	core/fixtures
 context-provenance	core/fixtures/context-provenance
@@ -1842,6 +1827,7 @@ context-provenance	core/hooks
 context-provenance	core/hooks/ai-dlc-context-provenance.sh
 context-provenance	core/hooks/ai-dlc-context-sensor.sh
 context-provenance	core/hooks/ai-dlc-rules-floor.sh
+context-provenance	core/hooks/ai-dlc-usage-tokens.sh
 context-provenance	core/hooks/ai-dlc-window.sh
 context-provenance-mutants	.git/HEAD
 context-provenance-mutants	.git/config
@@ -1905,6 +1891,7 @@ context-sensor	core/hooks/ai-dlc-recover-gate.sh
 context-sensor	core/hooks/ai-dlc-recover.sh
 context-sensor	core/hooks/ai-dlc-rules-floor.sh
 context-sensor	core/hooks/ai-dlc-subagent-probe.sh
+context-sensor	core/hooks/ai-dlc-usage-tokens.sh
 context-sensor	core/hooks/ai-dlc-window.sh
 core-paths-audit-diff	.git/HEAD
 core-paths-audit-diff	.git/config
@@ -13920,27 +13907,38 @@ stray-party-mode-provenance	core/fixtures/stray-party-mode-provenance/run.sh
 stray-party-mode-provenance	core/fixtures/stray-party-mode-provenance/seed.sh
 stray-party-mode-provenance	core/schemas/provenance-block.json
 stray-party-mode-provenance	core/scripts/validate-provenance-block.sh
-subagent-probe	.git/HEAD
-subagent-probe	.git/config
-subagent-probe	.git/index
-subagent-probe	.git/info/exclude
-subagent-probe	.git/objects/33/a4425c0ed05dea70f881660ffdf01c7c86da33
-subagent-probe	.git/objects/7f/1479d0f091b8393b8613744a84c3c8229a65a3
-subagent-probe	.git/objects/info/commit-graphs/commit-graph-chain
-subagent-probe	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
-subagent-probe	.git/objects/info/commit-graphs/graph-61ac52da05ee113a5a22871cdc3010f8f63bd5f1.graph
-subagent-probe	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
-subagent-probe	.git/objects/info/commit-graphs/graph-fa7bbe6bcd67e84c678384cfb84f17a16d6fa8fa.graph
-subagent-probe	.git/objects/pack/multi-pack-index
-subagent-probe	.git/packed-refs
-subagent-probe	.git/refs/heads/main
-subagent-probe	.gitignore
 subagent-probe	core
 subagent-probe	core/fixtures
 subagent-probe	core/fixtures/subagent-probe
 subagent-probe	core/fixtures/subagent-probe/run.sh
 subagent-probe	core/fixtures/subagent-probe/seed.sh
+subagent-probe	core/hooks
+subagent-probe	core/hooks/ai-dlc-acknowledge.sh
+subagent-probe	core/hooks/ai-dlc-advisor-gate.sh
+subagent-probe	core/hooks/ai-dlc-answer-capture.sh
+subagent-probe	core/hooks/ai-dlc-artifact-path-guard.sh
+subagent-probe	core/hooks/ai-dlc-context-provenance.sh
+subagent-probe	core/hooks/ai-dlc-context-sensor.sh
+subagent-probe	core/hooks/ai-dlc-continue.sh
+subagent-probe	core/hooks/ai-dlc-core-guard.sh
+subagent-probe	core/hooks/ai-dlc-derivation-capture.sh
+subagent-probe	core/hooks/ai-dlc-dispatch-guard.sh
+subagent-probe	core/hooks/ai-dlc-driver-signal.sh
+subagent-probe	core/hooks/ai-dlc-escalation-delivery.sh
+subagent-probe	core/hooks/ai-dlc-foreground-budget.sh
+subagent-probe	core/hooks/ai-dlc-gate-remediation-guard.sh
+subagent-probe	core/hooks/ai-dlc-handoff-entry.sh
+subagent-probe	core/hooks/ai-dlc-handoff-pending.sh
+subagent-probe	core/hooks/ai-dlc-pause.sh
+subagent-probe	core/hooks/ai-dlc-postcompact.sh
+subagent-probe	core/hooks/ai-dlc-precompact.sh
+subagent-probe	core/hooks/ai-dlc-protect.sh
+subagent-probe	core/hooks/ai-dlc-recover-gate.sh
+subagent-probe	core/hooks/ai-dlc-recover.sh
+subagent-probe	core/hooks/ai-dlc-rules-floor.sh
 subagent-probe	core/hooks/ai-dlc-subagent-probe.sh
+subagent-probe	core/hooks/ai-dlc-usage-tokens.sh
+subagent-probe	core/hooks/ai-dlc-window.sh
 subject-partition	--scope-ref/sections/.manifest
 subject-partition	.git
 subject-partition	.git/HEAD
@@ -14661,6 +14659,7 @@ whole-read-pool	core/fixtures
 whole-read-pool	core/fixtures/whole-read-pool
 whole-read-pool	core/fixtures/whole-read-pool/run.sh
 whole-read-pool	core/hooks/ai-dlc-context-sensor.sh
+whole-read-pool	core/hooks/ai-dlc-usage-tokens.sh
 whole-read-pool	core/hooks/ai-dlc-window.sh
 whole-read-pool	core/schemas
 whole-read-pool	core/schemas/sprint-status.json
@@ -14724,7 +14723,8 @@ write-format-steering-multiformat	core/skills/ai-dlc-update/reconcile/lib.sh
 # digest consumer-machinery-inventory d20cc399988d538e902de541916f7059332110ef170506b5a03ec3b34e0f7a07
 # digest consumer-suite-pool 7911a7e39a32ca5d34bd6ee397045a8fb6ffeb97334b9df9810a12980534db79
 # digest content-seal 46b8d64c67eeaa133b64bdf71cd5798b651ceb8bb62513aa459674985cc31841
-# digest context-sensor 102379bdc996820c4790e6b38495cf32df11e88778f071c576da608ea9a43e7e
+# digest context-provenance c49f2f85b5142b7776dc7a936326a3b9a462a57df4550fd36e5a86bdb33c9db2
+# digest context-sensor 7b4447d3e710d2229001ffd5e021649fd3e78f86804b383260074052265b034a
 # digest core-write-guard eb1bee086635b85fec4e29a8caa87203db0f1ab513ac5ab3282ee0289cc25a59
 # digest derivation-capture 0a8155feef61a90cf7225ffbb5f38a852e557958f2acc595e06521c8d1d28504
 # digest dispatch-model-guard 79f59ceffc7d8197c36180477e0ca061734520ecfe964c63f9f21222d2b13f28
@@ -14766,6 +14766,7 @@ write-format-steering-multiformat	core/skills/ai-dlc-update/reconcile/lib.sh
 # digest story-evidence-scaffold-mutants-b f5009e4d2155a5a2cc765dcf7136cc99308ce7b06fd5582990af675d87ebf003
 # digest story-evidence-scaffold-mutants-c 220a0c63b13d31da39c85c999fbd80d66ee89f2d24e26a839560c53485d63b6e
 # digest story-evidence-scaffold-mutants-d 5048ffd15590844e17797e76359f62f8964311c624f630d910d64cbd57efe832
+# digest subagent-probe b228f15e69415aa3c09f034057b9ce8c4df5d6f8b6e5c12f5a78a209237dc8ee
 # digest subject-partition cfd281009538f5e7e01e43d982fa30941d49813af95a91808bef887bc04b5409
 # digest suite-pole-info a2ab8e43277327d5620f138c608d3096871a9dfde7d27793eb5a1180549fe96c
 # digest update-preflight-push e83485232f100b9fa9fb0af07c0acb8815b5b2e7a57773a1b4dd503678335f39
@@ -14774,4 +14775,4 @@ write-format-steering-multiformat	core/skills/ai-dlc-update/reconcile/lib.sh
 # digest upstream-routing 1295d153d2989df414b4fd4afa9d054638a2f0c5002677c31e37238edeb780e2
 # digest vocabulary-index 285594f5acafe647f40c216cc477e52449741b209987713e5b02b8737e09c9a3
 # digest wait-beat-liveness 8e978b31f8bd2c2b3d6669575bf65628e45c53ad60947be3abe17f49051f68da
-# digest whole-read-pool ad55a901b3a0454fe5b11d93f598c5bdf83c46b0b8278d6e9f469e1bdc3fe5a4
+# digest whole-read-pool b6fcb575553d7eb76b917fe536ca58c18e0786b656e979cfbaab41ca84192fe1
