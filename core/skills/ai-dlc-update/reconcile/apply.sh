@@ -268,7 +268,7 @@ if [ "$FINISH" = 0 ]; then
       rm -f "$_ug_vo"
     fi
     if [ "$_ug_rc" -eq 0 ] && [ "$_ug_hit" = 1 ]; then
-      say NOTE report-verified "${UNION_REPORT#"${CONSUMER}"/}" "union-gate condition (1): a recorded --verify PASS was accepted for this report, keyed on every render input (emit-report.sh header); nothing was re-rendered."
+      say NOTE report-verified "${UNION_REPORT#"${CONSUMER}"/}" "union-gate condition (1): a recorded --verify PASS was accepted for this report (opt-in EMIT_REPORT_VERIFY_CACHE=1; the key and its known gaps are in emit-report.sh's header); nothing was re-rendered."
     elif [ "$_ug_rc" -eq 0 ]; then
       say NOTE report-verified "${UNION_REPORT#"${CONSUMER}"/}" "union-gate condition (1): the approved report's mechanical region matches what the detectors render at THIS run's theirs ($THEIRS)."
     else
