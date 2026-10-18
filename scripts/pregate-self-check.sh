@@ -1,14 +1,20 @@
 #!/usr/bin/env bash
 # pregate-self-check.sh -- a builder's own diff, checked in seconds, before a push asks for a gate slot.
 #
-# WHY. The pre-push hook finds three classes of red only after minutes: an enforcement-map invariant
-# (I54 and I54b among them), a shell-portability arm, and the diff-scoped spelling arm r1-r4 of the
-# procsub-staged-refusal fixture, which runs inside the fixture pool. This runs the first two as the
-# hook runs them and the third from the SAME grammar file the fixture loads, so a builder sees all
-# three before the push.
+# WHY. The pre-push hook finds its classes of red only after minutes: every `step` above the fixture
+# suite (the enforcement map with I54 and I54b, shell portability, the fixture git-env scrub, and the rest),
+# and the diff-scoped spelling arm r1-r4 of the procsub-staged-refusal fixture, which runs inside the
+# fixture pool. A hand-written list of the first class drifted from the hook: a self-check rc 0 went red at
+# the gate on an above-pool step it never ran. So the list is DERIVED, not written.
 #
-#   a. bash scripts/validate-enforcement-map.sh
-#   b. bash scripts/validate-shell-portability.sh
+#   a. the hook's own prefix: `.githooks/pre-push` of $ROOT from line 1 up to, NOT including, the single
+#      `step "fixture suite` line, with `exit $fail` appended, run as `bash <prefix> </dev/null` from $ROOT.
+#      Every above-pool step, its flags and its wrapper functions are the hook's own bytes, so "a step in the
+#      hook that the self-check does not run" is unconstructible. Guards, each a refusal (exit 2): the cut
+#      marker occurs exactly once; the prefix passes `bash -n`; it declares >= 1 `step` call; the PASS/FAIL
+#      verdicts printed equal the `step` calls declared (a run that stopped early is not a pass of the steps
+#      it never reached). The prefix's top-level code (function definitions, and `ssh_keepalive_warn` with no
+#      arguments, which returns at once) writes nothing into the tree.
 #   c. core/fixtures/procsub-staged-refusal/procsub-spell.awk over `git diff -U0 <base> -- 'core/*.sh' ':(exclude)core/fixtures/**'`
 #      -- the diff the fixture builds, with <base> in place of its PIN. The grammar and its seeded
 #      probe (procsub-spell-probe.diff beside it) are SINGLE-SOURCED: the fixture reads the same two
@@ -22,7 +28,7 @@
 #
 # DISTRIBUTION-ONLY. This reads scripts/validate-*.sh and the enforcement map, none of which a consumer has.
 #
-# AI_DLC_PREGATE_ROOT, when set, names the tree whose validators (a, b) are run and whose diff (c) is taken;
+# AI_DLC_PREGATE_ROOT, when set, names the tree whose hook prefix (a) is run and whose diff (c) is taken;
 # the grammar and probe are always loaded from THIS script's own tree. That split is what lets the self-check
 # be pointed at an older checkout (its validators judge that tree) while the grammar stays the current one.
 #
@@ -53,7 +59,7 @@ fi
 command -v git >/dev/null 2>&1 || { echo "pregate-self-check: git is not on PATH" >&2; exit 2; }
 AWK_FILE="$SELF_ROOT/core/fixtures/procsub-staged-refusal/procsub-spell.awk"
 PROBE_FILE="$SELF_ROOT/core/fixtures/procsub-staged-refusal/procsub-spell-probe.diff"
-for f in "$AWK_FILE" "$PROBE_FILE" "$ROOT/scripts/validate-enforcement-map.sh" "$ROOT/scripts/validate-shell-portability.sh"; do
+for f in "$AWK_FILE" "$PROBE_FILE" "$ROOT/.githooks/pre-push"; do
   [ -s "$f" ] || { echo "pregate-self-check: missing or empty sibling $f" >&2; exit 2; }
 done
 cd "$ROOT" || exit 2
@@ -81,40 +87,40 @@ else
   exit 2
 fi
 
-# --- (a) enforcement map ---------------------------------------------------------------------------
-printf '== a. enforcement map (I54, I54b and the rest)\n'
+# --- (a) every hook step above the fixture suite, DERIVED from the hook ---------------------------------
+# The prefix is cut from $ROOT's own hook, so AI_DLC_PREGATE_ROOT judges that tree's hook.
+printf '== a. hook steps above the fixture suite (derived from .githooks/pre-push)\n'
+HOOK="$ROOT/.githooks/pre-push"
+nm="$(grep -c '^step "fixture suite' "$HOOK")" || nm=0
+[ "$nm" -eq 1 ] || { printf 'pregate-self-check: the fixture-suite step marker occurs %s times in %s, expected exactly 1\n' "$nm" "$HOOK" >&2; exit 2; }
+cut="$(grep -n '^step "fixture suite' "$HOOK" | cut -d: -f1)"
+head -n "$((cut - 1))" "$HOOK" > "$W/prefix.sh"
+printf '\nexit $fail\n' >> "$W/prefix.sh"
+bash -n "$W/prefix.sh" 2> "$W/prefix.err" || { printf 'pregate-self-check: the extracted hook prefix does not parse: %s\n' "$(head -1 "$W/prefix.err")" >&2; exit 2; }
+ns="$(grep -cE '^[[:space:]]*step "' "$W/prefix.sh")" || ns=0
+[ "$ns" -ge 1 ] || { printf 'pregate-self-check: no step calls above the fixture suite in %s\n' "$HOOK" >&2; exit 2; }
 arm_start
-bash scripts/validate-enforcement-map.sh > "$W/a.out" 2>&1
+bash "$W/prefix.sh" < /dev/null > "$W/a.out" 2>&1
 a_rc=$?
 arm_took
-if [ "$a_rc" -eq 2 ]; then
-  printf '   cannot run: the validator refused (exit 2):\n' >&2
-  head -5 "$W/a.out" | sed 's/^/     /' >&2
+# One verdict per step: the hook prints "── <name>" then, after the step's own output, "   PASS" or "   FAIL".
+awk '/^── / { if (name != "") print "NOVERDICT\t" name; name = $0; sub(/^── /, "", name); next }
+     /^   PASS$/ && name != "" { print "PASS\t" name; name = ""; next }
+     /^   FAIL$/ && name != "" { print "FAIL\t" name; name = ""; next }
+     END { if (name != "") print "NOVERDICT\t" name }' "$W/a.out" > "$W/a.verdicts"
+nv="$(grep -cE '^(PASS|FAIL)	' "$W/a.verdicts")" || nv=0
+nf="$(grep -cE '^(FAIL|NOVERDICT)	' "$W/a.verdicts")" || nf=0
+if [ "$nv" -ne "$ns" ]; then
+  printf 'pregate-self-check: %s step call(s) declared above the fixture suite, %s verdict(s) printed -- the run did not reach every step:\n' "$ns" "$nv" >&2
+  tail -8 "$W/a.out" | sed 's/^/     /' >&2
   exit 2
-elif [ "$a_rc" -eq 0 ]; then
-  printf '   ok\n'
-else
-  printf '   FAIL (exit %s):\n' "$a_rc"
-  grep -E 'FAIL|^ERROR|I[0-9]+[a-z]?[ :]' "$W/a.out" | head -20 | sed 's/^/     /'
-  note_fail "a:enforcement-map"
 fi
-
-# --- (b) shell portability -------------------------------------------------------------------------
-printf '== b. shell portability (S1-S12, S13, S14)\n'
-arm_start
-bash scripts/validate-shell-portability.sh --quiet > "$W/b.out" 2>&1
-b_rc=$?
-arm_took
-if [ "$b_rc" -eq 2 ]; then
-  printf '   cannot run: the validator refused (exit 2):\n' >&2
-  head -5 "$W/b.out" | sed 's/^/     /' >&2
-  exit 2
-elif [ "$b_rc" -eq 0 ]; then
-  printf '   ok\n'
+if [ "$nf" -eq 0 ] && [ "$a_rc" -eq 0 ]; then
+  printf '   ok: %s step(s), every one PASS\n' "$ns"
 else
-  printf '   FAIL (exit %s):\n' "$b_rc"
-  head -20 "$W/b.out" | sed 's/^/     /'
-  note_fail "b:shell-portability"
+  printf '   FAIL (prefix exit %s, %s of %s step(s) failing):\n' "$a_rc" "$nf" "$ns"
+  awk -F'\t' '$1 == "FAIL" || $1 == "NOVERDICT" { printf "     %s: %s\n", $1, $2 }' "$W/a.verdicts"
+  note_fail "a:hook-steps"
 fi
 
 # --- (c) the spelling grammar over this diff ---------------------------------------------------------
