@@ -105,6 +105,9 @@
 # roots above that one of them reads is not keyed, and its change can leave a stale PASS accepted.
 # The same holds for the consumer's ledger `sh` receipts, which run with $DIST exported and can read
 # the dist's reflog or any other git state outside the key; `AI_DLC_VERIFY_NO_CACHE=1` re-renders.
+# More widely, a ledger `verify: sh` receipt (ledger-reverify.sh runs it as `bash -c` at the consumer
+# root) is arbitrary code: it can read ignored files anywhere, PATH, the network or the clock, and
+# none of that is keyed. `AI_DLC_VERIFY_NO_CACHE=1` re-renders.
 # (3) Tool availability (`jq`, `python3`, PATH) is not keyed: a render that passed with a tool
 # present is accepted after the tool is gone. The opt-out re-renders in every case.
 set -uo pipefail
@@ -974,21 +977,40 @@ if [ -n "$_er_tmp" ] && _er_root="$(cd "$CONSUMER" 2>/dev/null && pwd -P)" && [ 
 fi
 # er_cgit <git-args...> -- a consumer git command over the whole tree minus the report file. Never an
 # empty `:(exclude)`: that excludes the WHOLE tree and reads as an empty one.
+# `core.fileMode=true` because the render reads the exec bit (the consumer's validator runs only if
+# `-x`; preclassify tests `-x`), and a consumer set to `false` would hide a chmod from status.
 er_cgit() {
-  if [ -n "$_er_ex" ]; then git -C "$CONSUMER" -c core.quotePath=false "$@" -- . ":(exclude,literal)$_er_ex"
-  else git -C "$CONSUMER" -c core.quotePath=false "$@" -- .; fi
+  if [ -n "$_er_ex" ]; then git -C "$CONSUMER" -c core.quotePath=false -c core.fileMode=true "$@" -- . ":(exclude,literal)$_er_ex"
+  else git -C "$CONSUMER" -c core.quotePath=false -c core.fileMode=true "$@" -- .; fi
 }
-# er_hash_list <listfile> -- each listed consumer path that exists, then its content hash, in order.
+# er_hash_list <NUL-listfile> -- for each listed consumer path that exists (an entry ending `/` is a
+# nested repository git will not descend into, and is named by the status, not hashed): its exec bit
+# and name, NUL-terminated, then the content hashes in the same order. THE LIST IS NUL-SEPARATED
+# because git C-quotes a name carrying `"`, `\`, a tab or a newline in line output, the quoted form
+# names no file, and the old `[ -e ] || continue` dropped its bytes from the key without a sound
+# (measured: a cached 0 where a fresh render gave 3). A name carrying a newline cannot go through
+# `--stdin-paths`, which is line-based, so it is hashed on its own.
 er_hash_list() {
-  local p
+  local p h
   : > "$_er_tmp/key.exist" || return 1
-  while IFS= read -r p; do
+  : > "$_er_tmp/key.nl" || return 1
+  while IFS= read -r -d '' p; do
+    case "$p" in */) continue ;; esac
     { [ -e "$CONSUMER/$p" ] || [ -L "$CONSUMER/$p" ]; } || continue
-    printf '%s\n' "$p" >> "$_er_tmp/key.exist" || return 1
+    if [ -x "$CONSUMER/$p" ]; then printf 'x %s\0' "$p"; else printf -- '- %s\0' "$p"; fi
+    case "$p" in
+      *"$_er_nl"*) printf '%s\0' "$p" >> "$_er_tmp/key.nl" || return 1 ;;
+      *)           printf '%s\n' "$p" >> "$_er_tmp/key.exist" || return 1 ;;
+    esac
   done < "$1"
-  cat "$_er_tmp/key.exist" || return 1
-  er_hash_paths "$_er_root" "$_er_tmp/key.exist"
+  er_hash_paths "$_er_root" "$_er_tmp/key.exist" || return 1
+  while IFS= read -r -d '' p; do
+    h="$(git hash-object --no-filters -- "$_er_root/$p")" || return 1
+    printf '%s\n' "$h"
+  done < "$_er_tmp/key.nl"
 }
+_er_nl='
+'
 # er_hash_paths <abs-dir> <listfile> -- content hash of each listed path, by ABSOLUTE path. MEASURED:
 # `git hash-object --stdin-paths` resolves a relative path against the repository TOP, not the cwd,
 # so run from the engine directory inside a checkout it failed every file and the key never formed.
@@ -1019,7 +1041,10 @@ er_kf_engine() {
   cat "$_er_tmp/key.engine-list" || return 1
   er_hash_paths "$SELF" "$_er_tmp/key.engine-list" || return 1
 }
+# The ref AS TYPED leads, because the region prints it as typed: two spellings of one commit render
+# different regions and must not share a PASS.
 er_kf_ref() {
+  printf '%s\0' "$1"
   git -C "$DIST" rev-parse -q --verify "${1}^{commit}" || return 1
   git -C "$DIST" rev-parse -q --verify "${1}:core" || return 1
 }
@@ -1032,15 +1057,14 @@ er_kf_distrefs() {
   git -C "$DIST" rev-parse HEAD || return 1
   git -C "$DIST" rev-parse --is-shallow-repository || return 1
 }
-er_kf_consroot()  { printf '%s\n' "$_er_root"; }
+# Resolved AND as typed: the region's `full: diff` lines print <consumer> as the caller spelled it.
+er_kf_consroot()  { printf '%s\0%s\0' "$_er_root" "$CONSUMER"; }
 er_kf_consindex() { git -C "$CONSUMER" ls-files -s -z; }
 # The status names every modified and untracked path; their BYTES are hashed after it. An untracked
 # entry ending in `/` is a nested repository git will not descend into: named, not hashed.
 er_kf_conswork() {
   er_cgit --no-optional-locks status --porcelain=v2 -z --untracked-files=all || return 1
-  er_cgit ls-files -m -o --exclude-standard > "$_er_tmp/key.work-all" || return 1
-  grep -v '/$' "$_er_tmp/key.work-all" > "$_er_tmp/key.work"
-  [ "$?" -le 1 ] || return 1
+  er_cgit ls-files -z -m -o --exclude-standard > "$_er_tmp/key.work" || return 1
   er_hash_list "$_er_tmp/key.work" || return 1
 }
 # IGNORED files are invisible to every git field above, and the detectors read some anyway. The read
@@ -1062,20 +1086,16 @@ er_kf_consignored() {
   : > "$_er_tmp/key.ign" || return 1
   while IFS= read -r r; do
     if [ -n "$_er_ex" ]; then
-      git -C "$CONSUMER" -c core.quotePath=false ls-files -o -i --exclude-standard -- "$r" \
+      git -C "$CONSUMER" -c core.quotePath=false ls-files -z -o -i --exclude-standard -- "$r" \
         ':(exclude).claude/worktrees' ":(exclude,literal)$_er_ex" >> "$_er_tmp/key.ign" || return 1
     else
-      git -C "$CONSUMER" -c core.quotePath=false ls-files -o -i --exclude-standard -- "$r" \
+      git -C "$CONSUMER" -c core.quotePath=false ls-files -z -o -i --exclude-standard -- "$r" \
         ':(exclude).claude/worktrees' >> "$_er_tmp/key.ign" || return 1
     fi
   done < "$_er_tmp/key.roots"
-  grep -v '/$' "$_er_tmp/key.ign" > "$_er_tmp/key.ign-files"
-  [ "$?" -le 1 ] || return 1
-  LC_ALL=C sort -u "$_er_tmp/key.ign-files" > "$_er_tmp/key.ign-sorted" || return 1
-  # Name and exec bit first, bytes after: a chmod alone moves this field.
-  while IFS= read -r r; do
-    if [ -x "$CONSUMER/$r" ]; then echo "x $r"; else echo "- $r"; fi
-  done < "$_er_tmp/key.ign-sorted"
+  # Roots can nest, so one file can be listed twice; NUL-separated sort, and a failure is a miss.
+  LC_ALL=C sort -z -u "$_er_tmp/key.ign" > "$_er_tmp/key.ign-sorted" || return 1
+  # er_hash_list emits each name with its exec bit before the bytes: a chmod alone moves this field.
   er_hash_list "$_er_tmp/key.ign-sorted" || return 1
 }
 er_kf_consobjects() { git -C "$CONSUMER" for-each-ref; }
