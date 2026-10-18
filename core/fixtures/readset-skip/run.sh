@@ -2454,6 +2454,85 @@ else
   fi
 
 
+  # ------------------------------ a DECLARED fixture carries no map rows (readset_merge_map's 4th argument) ----
+  # The hook maps a declared fixture (`inputs.decl`) before it reads the map, so its rows and `# digest` line
+  # are dead. The merge drops them from the old map AND the new rows when given the fixture root; with three
+  # arguments it is byte-identical to before. alpha is declared, beta is not.
+  DM="$WORK/dm"
+  mkdir -p "$DM/root/alpha" "$DM/root/beta" "$DM/root0" "$DM/rootnone" || broken "mkdir failed"
+  : > "$DM/root/alpha/inputs.decl"; : > "$DM/root/alpha/run.sh"; : > "$DM/root/beta/run.sh"; : > "$DM/root0/beta.file"
+  mkdir -p "$DM/root0/beta"; : > "$DM/root0/beta/run.sh"
+  printf 'alpha\tsrc/a\nalpha\tsrc/x\nbeta\tsrc/b\nbeta\tsrc/c\n# digest alpha aaaa\n# digest beta bbbb\n' > "$DM/old.map"
+  printf 'alpha\tsrc/NEW\nbeta\tsrc/NEWB\n' > "$DM/new.map"
+  printf 'beta\tsrc/b\nbeta\tsrc/c\n# digest beta bbbb\nbeta\tsrc/NEWB\n' > "$DM/beta.want"
+  dm_merge() { ( . "$1"; shift; readset_merge_map "$@" ) 2>/dev/null; }
+  dm_merge "$M" "$DM/old.map" "$DM/new.map" "" "$DM/root" > "$DM/out.4"
+  dm_merge "$M" "$DM/old.map" "$DM/new.map" "" > "$DM/out.3"
+  grep -v '^alpha' "$DM/out.4" | grep -v '^# digest alpha' > /dev/null
+  MERGE_ARMS=$((MERGE_ARMS+1))
+  if ! grep -q 'alpha' "$DM/out.4" && grep -q 'beta' "$DM/out.4"; then
+    ok "(h) readset_merge_map with the fixture root: the declared alpha has no row and no digest line, from the old map or the new rows"
+  else bad "(h) the 4-argument merge left alpha or lost beta: $(tr '\n' ' ' < "$DM/out.4")"
+  fi
+  MERGE_ARMS=$((MERGE_ARMS+1))
+  if cmp -s "$DM/out.4" "$DM/beta.want"; then
+    ok "(h) and the undeclared beta is byte-identical to its input rows (old rows, its digest line, its new row; cmp -s)"
+  else bad "(h) beta's output differs from its input: $(tr '\n' ' ' < "$DM/out.4")"
+  fi
+  MERGE_ARMS=$((MERGE_ARMS+1))
+  if grep -q 'alpha	src/a' "$DM/out.3" && grep -q '# digest alpha aaaa' "$DM/out.3" && grep -q 'alpha	src/NEW' "$DM/out.3"; then
+    ok "(h) the same merge with THREE arguments keeps alpha's old rows, digest line and new row — the filter is opt-in"
+  else bad "(h) the 3-argument merge no longer keeps alpha: $(tr '\n' ' ' < "$DM/out.3")"
+  fi
+  dm_merge "$M" "$DM/old.map" "$DM/new.map" "" "$DM/root0" > "$DM/out.0"
+  dm_merge "$M" "$DM/old.map" "$DM/new.map" "" "$DM/rootnone" > "$DM/out.n"
+  MERGE_ARMS=$((MERGE_ARMS+1))
+  if cmp -s "$DM/out.0" "$DM/out.3" && cmp -s "$DM/out.n" "$DM/out.3" && [ -s "$DM/out.3" ]; then
+    ok "(h) a root holding zero declared fixtures — and an empty root, where the glob does not expand — gives a merge byte-identical to the unfiltered one"
+  else bad "(h) a root with no declared fixture changed the merge (the unexpanded glob read as a fixture?)"
+  fi
+  # A MAPPED fixture that gains inputs.decl is dropped by the merge on purpose; readset_untraced_lost must not report it.
+  sed -n '/^# READSET_UNTRACED_BEGIN$/,/^# READSET_UNTRACED_END$/p' "$DERIVER" > "$DM/untraced.span"
+  dm_merge "$M" "$DM/old.map" "/dev/null" "" "$DM/root" > "$DM/merged.map"
+  dm_lost() { ( . "$DM/untraced.span"; readset_untraced_lost "$DM/old.map" "$DM/merged.map" "" "$@" ) 2>/dev/null | tr '\n' ' '; }
+  MERGE_ARMS=$((MERGE_ARMS+1))
+  _l4="$(dm_lost "$DM/root")"; _l3="$(dm_lost)"
+  if [ -z "$_l4" ] && [ "$_l3" = "alpha " ]; then
+    ok "(h) a mapped fixture that gains inputs.decl is not reported lost with the root (control: without it readset_untraced_lost names 'alpha')"
+  else bad "(h) readset_untraced_lost with the root says [$_l4]; without it [$_l3]; wanted empty and 'alpha '"
+  fi
+  # --all lists no declared fixture.
+  sed -n '/^# READSET_ALLLIST_BEGIN$/,/^# READSET_ALLLIST_END$/p' "$DERIVER" > "$DM/alllist.span"
+  MERGE_ARMS=$((MERGE_ARMS+1))
+  _al="$( . "$DM/alllist.span"; readset_all_list "$DM/root" )"
+  if [ "$_al" = beta ]; then ok "(h) readset_all_list skips the declared alpha (control: beta, which has a run.sh and no declaration, is listed)"
+  else bad "(h) readset_all_list on a root with one declared and one undeclared fixture gave [$_al], wanted [beta]"
+  fi
+  # MUTANTS on the filter.
+  _o="$(grep -m1 -F 'if [ -n "$decl" ]; then' "$M")"
+  mut_line "$M" "$DM/merge.mutA.sh" "$_o" '    if false; then'
+  MERGE_ARMS=$((MERGE_ARMS+1))
+  if [ -z "$_o" ] || cmp -s "$M" "$DM/merge.mutA.sh"; then bad "MERGE MUTANT old-map-only: the edit matched nothing"
+  else
+    dm_merge "$DM/merge.mutA.sh" "$DM/old.map" "$DM/new.map" "" "$DM/root" > "$DM/out.mutA"
+    if grep -q 'alpha	src/NEW' "$DM/out.mutA" && ! cmp -s "$DM/out.mutA" "$DM/beta.want"; then
+      ok "MERGE MUTANT old-map-only moves (h): a filter that reads only the old map lets the declared fixture's NEW rows through"
+    else bad "MERGE MUTANT old-map-only: alpha's new row did not survive ($(tr '\n' ' ' < "$DM/out.mutA"))"
+    fi
+  fi
+  _o="$(grep -m1 -F '$1 == "#" && $2 == "digest" && NF == 4 { if (index(traced, " " $3 " ") == 0 && (decl' "$M")"
+  mut_line "$M" "$DM/merge.mutB.sh" "$_o" '      $1 == "#" && $2 == "digest" && NF == 4 { if (index(traced, " " $3 " ") == 0) print; next }'
+  MERGE_ARMS=$((MERGE_ARMS+1))
+  if [ -z "$_o" ] || cmp -s "$M" "$DM/merge.mutB.sh"; then bad "MERGE MUTANT keeps-digest: the edit matched nothing"
+  else
+    dm_merge "$DM/merge.mutB.sh" "$DM/old.map" "$DM/new.map" "" "$DM/root" > "$DM/out.mutB"
+    if grep -q '# digest alpha aaaa' "$DM/out.mutB" && ! grep -q 'alpha	src' "$DM/out.mutB"; then
+      ok "MERGE MUTANT keeps-digest moves (h): the rows go but the declared fixture's digest line stays"
+    else bad "MERGE MUTANT keeps-digest: expected rows gone and the digest kept, got $(tr '\n' ' ' < "$DM/out.mutB")"
+    fi
+  fi
+
+
   # ------------------------- the --all subject list and the untraced-loss guard ----
   # THE `--all` LIST WAS BUILT NEWLINE-SEPARATED, AND TWO GUARDS SILENTLY NEVER MATCHED A NAME. Every
   # membership test on it is `case " $LIST " in *" $f "*)`, so under `--all` every fixture read as

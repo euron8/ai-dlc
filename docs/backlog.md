@@ -386,7 +386,7 @@ Owed:
 2. A guard so that a declared fixture cannot regain rows, either in the deriver at write time or as an arm at pre-push. Measure its false-positive set before shipping it.
 Receipt: after the regeneration the guard reports 0, and a seeded row for a declared fixture makes it fail.
 
-verify: manual
+verify: sh d=$(mktemp -d) && for x in core/fixtures/*/inputs.decl; do [ -f "$x" ] && basename "$(dirname "$x")"; done > $d/dec && [ -s $d/dec ] && n=$(awk -F'\t' 'NR==FNR{D[$1]=1;next} /^# digest /{split($0,a," ");if(a[3] in D)c++;next} /^#/{next} ($1 in D){c++} END{print c+0}' $d/dec .ai-dlc-fixture-readsets.tsv) && [ "$n" = 0 ] && [ "$(grep -vc '^#' .ai-dlc-fixture-readsets.tsv)" -gt 0 ]
 
 ## BL-620 — the LC-A1 layer adjudication accepts a verdict with no evidence the entry was read, so nine re-reads were closed by one keyword grep
 
