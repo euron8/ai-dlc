@@ -35177,3 +35177,29 @@ Added to what this entry owes, stated as a binary property per lead ai-dlc-71: *
 
 verify: sh set -uo pipefail; unset AI_DLC_STATE_DIR; command -v jq >/dev/null && command -v perl >/dev/null || exit 9; d=$(mktemp -d) && d=$(cd "$d" && pwd -P) || exit 9; s="$d/_bmad-output/planning-artifacts/s1/shards/stories-p1"; mkdir -p "$s" "$d/scripts/ai-dlc" && cp core/scripts/content-seal.sh "$d/scripts/ai-dlc/" && printf 'tool_use_id: NOT_ACCESSIBLE\n' > "$s/1.md" || exit 9; jq -nc --arg p "$s/1.md" '{session_id:"r",tool_name:"Write",tool_input:{file_path:$p},tool_use_id:"toolu_r",transcript_path:""}' | CLAUDE_PROJECT_DIR="$d" bash core/hooks/ai-dlc-content-seal.sh; bash core/scripts/content-seal.sh --check "$d/_bmad-output" "$s/1.md" >/dev/null 2>&1; a=$?; f() { local x="$1"; perl -0pi -e 's/NOT_ACCESSIBLE/toolu_01Patched/' "$x"; }; f "$s/1.md"; o=$(bash core/scripts/content-seal.sh --check "$d/_bmad-output" "$s/1.md" 2>&1); b=$?; [ "$a" = 0 ] && [ "$b" = 1 ] && grep -q 'the top-level session, which carries no agent_id' <<< "$o"
 
+## BL-665 — an arm-C divergence nobody stamped could not be resolved on the record, so a valid CUT_SCOPE record left every verification dispatch denied
+
+**LANDED (v0.825.0, verified d0a6409a).** `validate-adversarial-convergence.sh` holds arm C's verdict per pass and resolves an unstamped divergence exactly as arm F resolves a stamped one: a non-terminal pass is resolved iff the next pass declares a record `validate_record` accepts, and a terminal one answers RESOLVED at `--cycle-state` once a valid record exists. Fixture arm and mutants M1-M4 in `check-24-adversarial-convergence`; receipt beside it.
+
+**DEFECT.** Filed by the consumer as `PC-S319-SHARDED-DIVERGENCE-UNSTAMPABLE-RESOLUTION-RECORD-UNREACHABLE`. Reported by ai-dlc-f7 (graph watch, read-only), verified by ai-dlc-c8 against main `e91b4d86`, whose validator is md5-identical to graph's installed copy (`06158c74…`).
+
+Cause, at `e91b4d86`:
+- `validate-adversarial-convergence.sh:754-770`: a pass whose prior-scope CRITICALs exceed the previous pass's count and which does not stamp DIVERGENT_HARD_BLOCK raised arm C's error inline and latched `C_DIVERGED=1` for the whole series.
+- `:1363-1397`: arm F, the only reader of resolution records on the divergence path, `continue`s past every pass not stamped DIVERGENT_HARD_BLOCK, so an arm-C pass's record was never read.
+- `:1694`: `C_DIVERGED=1` makes `--cycle-state` answer DIVERGENT/3, and `ai-dlc-acknowledge.sh` denies every dispatch on rc 3.
+- A sharded pass is never stamped from the summed count: the merge stamps DIVERGENT_HARD_BLOCK only when a shard declared it (filed as BL-670). The consumer cannot re-stamp the pass either, because its shards notarize the pre-cut document sha (6e202408; the post-cut document is ad720a48).
+
+Releasing only the terminal record lookup was not enough. On a seeded series it took `--cycle-state` to RESOLVED/0, and the verification pass the record authorizes then re-latched arm C: DIVERGENT/3 and gate exit 1.
+
+Consumer-side measurement: graph's s319 architecture series (p1, p2, `architecture-resolution-p2.md` CUT_SCOPE 172463 -> 169912 bytes, `architecture-repair-p1.md`), copied read-only to scratch and run against graph's transcript directory.
+
+| Stage | validator md5 `06158c74` (graph installed, base) | md5 `60a44525` (this release) |
+|---|---|---|
+| p1 + p2 + record | DIVERGENT/3, gate 1 [C, D] | RESOLVED/0, gate 1 [C, D] |
+| + seeded p3 MET 0/0 on ad720a48, `resolves_divergence:` the record | DIVERGENT/3, gate 1 [C] | CONVERGED/0, gate 0 |
+| control: the same p3 without `resolves_divergence:` | DIVERGENT/3, gate 1 [C, H] | DIVERGENT/3, gate 1 [C, H] |
+
+The gate exit 1 at stage 1 mirrors arm D on a stamped terminal hard block. The p3 is seeded, not graph's: graph has no p3. Graph receives the fix only by a pull, which is the operator's decision.
+
+verify: sh bash core/fixtures/check-24-adversarial-convergence/receipt.sh
+

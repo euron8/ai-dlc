@@ -20,6 +20,50 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.825.0] - 2026-10-18
+
+Batch 236 (ai-dlc-48's release). Closes BL-665 and discharges
+`PC-S319-SHARDED-DIVERGENCE-UNSTAMPABLE-RESOLUTION-RECORD-UNREACHABLE`. Files BL-670. Net for this release: 1 closed,
+1 filed.
+
+### A divergence nobody stamped resolves on the record, as a stamped one does (BL-665)
+
+- `validate-adversarial-convergence.sh`: arm C no longer raises its error or latches `C_DIVERGED` inside the per-pass
+  loop. It records the verdict per pass (`P_CDIV`, `P_CDIV_MSG`), and a new block after arm F's loop, before the stall
+  block that reads `RESOLVED_TERMINAL`, decides each one:
+  - not terminal: resolved iff the next pass declares a record `validate_record` accepts against it. A declared record
+    that fails raises arm F's reason as well as arm C's error.
+  - terminal: arm C's error stands at the gate, as arm D's does for a stamped terminal hard block, and
+    `--cycle-state` answers RESOLVED once a valid record exists.
+- Stamped hard blocks resolve exactly as before. A base-versus-release run over every seeded check-24 series changes
+  no verdict outside the new cases.
+- Arm C's error is now raised after arm F's loop, so in a series carrying both a walked-past stamped block and a
+  later unstamped divergence the gate prints F before C (base: C F D; this release: F C D). State and exit code are
+  unchanged, and nothing parses the order: the hooks read only `--cycle-state`'s two fields.
+- Before this, a valid record beside an unstamped divergence changed nothing. Releasing only the terminal lookup let
+  one dispatch through, then the verification pass re-latched the divergence.
+- Consumer-side measurement, on graph's s319 architecture series copied read-only (p1, p2, the CUT_SCOPE record
+  172463 -> 169912 bytes, the p1 repair record):
+  - validator md5 `06158c74` (graph installed): DIVERGENT/3.
+  - md5 `60a44525` (this release): RESOLVED/0.
+  - With a seeded p3 verification pass declaring the record (MET, on the post-cut sha `ad720a48`): CONVERGED/0 and
+    gate exit 0. Without the declaration it stays DIVERGENT/3 and gate exit 1.
+- Fixture `check-24-adversarial-convergence`:
+  - Six `cdiv-*` series: terminal, terminal-resolved, record-invalid, verified, verified-unresolved and
+    verified-invalid.
+  - Mutants M1 to M4, each attributable: the named case moves and its controls do not.
+  - Swept over all 91 seeded series, M1, M2 and M3 each move only their named case. M4, which drops the terminal
+    arm-C error, moves the C line of five series and no state or exit code: the three terminal `cdiv-*` series and
+    the pre-existing `divergent` and `repair-injected`, which are terminal unstamped divergences too.
+  - The mutants run beside the steering validator, and an unmutated control there must pass the verified series
+    before a gate row counts.
+  - `receipt.sh` drives the shipped validator through all three outcomes in one mktemp world.
+
+### Filed
+
+- BL-670 (NOTE): the shard merge never stamps DIVERGENT_HARD_BLOCK from the summed prior-scope count, so a sharded
+  divergence reaches the validator unstamped.
+
 ## [0.824.0] - 2026-10-17
 
 Batch 236 (cb's build). Closes BL-530 whole, on claims (b) and (c). Files BL-669. Closes

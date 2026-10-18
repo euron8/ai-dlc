@@ -515,6 +515,12 @@ P_AT=()
 P_CRIT=()
 P_MAJOR=()
 P_NUM=()
+# Arm C's verdict per pass, held until the series is known (see the arm-C resolution block
+# after arm F). P_CDIV[i] is 1 iff pass i diverged on prior scope without stamping
+# DIVERGENT_HARD_BLOCK; P_CDIV_MSG[i] is the error arm C would raise for it, rendered here
+# because PREV_CRIT and PREV_FILE are rolling and are gone by the time it is raised.
+P_CDIV=()
+P_CDIV_MSG=()
 
 # --- E. STALL (the plateau rung) --------------------------------------------
 # Rule 8 had exactly two terminal states: CONVERGED (at the exit criteria) and DIVERGENT
@@ -751,10 +757,11 @@ for f in "${SORTED[@]}"; do
   fi
 
   DIVERGENCE_LIED=0
+  CDIV_MSG=""
   if [ -n "$prior" ] && [ -n "$PREV_CRIT" ] && [ "$prior" -gt "$PREV_CRIT" ]; then
     if [ "$verdict" != "DIVERGENT_HARD_BLOCK" ]; then
       DIVERGENCE_LIED=1
-      err "C -- DIVERGENCE" "$f reports $prior CRITICAL in scope the previous pass had
+      CDIV_MSG="$f reports $prior CRITICAL in scope the previous pass had
       already reviewed, up from $PREV_CRIT in $PREV_FILE, and does not stamp
       DIVERGENT_HARD_BLOCK.
       Rule 8: divergence is a HARD_BLOCK, not a reason for another pass. These are
@@ -765,9 +772,11 @@ for f in "${SORTED[@]}"; do
       findings_critical_prior_scope and stamp EXIT_CONDITION_NOT_MET instead.)"
     fi
   fi
-  # A cycle that is diverging but stamped something else is still DIVERGING. --cycle-state
-  # must STOP on the condition, not on the honesty of the label.
-  [ "$DIVERGENCE_LIED" -eq 1 ] && C_DIVERGED=1
+  # NOT RAISED HERE, AND NOT LATCHED HERE. Whether this divergence still stands depends on the
+  # NEXT pass -- did it declare a valid resolution record? -- and that pass has not been read
+  # yet. The arm-C resolution block after arm F raises the error and latches C_DIVERGED.
+  P_CDIV+=("$DIVERGENCE_LIED")
+  P_CDIV_MSG+=("$CDIV_MSG")
 
   # Did this pass find CRITICALs in scope that did not exist at the previous pass?
   # PASS 1 HAS NO PREVIOUS PASS, so an honest `findings_critical_prior_scope: 0` there is not
@@ -1393,6 +1402,57 @@ for ((i = 0; i < N; i++)); do
     # --cycle-state needs to know whether the operator has already adjudicated it, because
     # that is exactly the moment the verification pass becomes legal.
     terminal_record_resolves "$i" && RESOLVED_TERMINAL=1
+  fi
+done
+
+# THE SAME QUESTION, FOR A DIVERGENCE NOBODY STAMPED.
+#
+# Arm C detects a divergence on the residue, not on the label: a pass whose prior-scope
+# CRITICALs rose and which did not stamp DIVERGENT_HARD_BLOCK is still DIVERGING, and
+# --cycle-state must STOP on the condition, not on the honesty of the label. But arm C raised
+# its error and latched `C_DIVERGED` INLINE, while the loop above -- the only reader of
+# resolution records on the divergence path -- `continue`s past every pass that is not stamped
+# DIVERGENT_HARD_BLOCK. So an arm-C pass's record was never read, and nothing could clear the
+# latch.
+#
+# THE COST WAS A DEADLOCK. A sharded pass is never stamped: the shard merge stamps
+# DIVERGENT_HARD_BLOCK only when a shard declared it, and a divergence that exists only in the
+# SUMMED prior-scope count is one no shard saw. Measured on a consumer's real sharded
+# architecture series, copied to scratch with a valid CUT_SCOPE record beside it: DIVERGENT/3,
+# and the record changed nothing. Releasing only the terminal lookup took that series to
+# RESOLVED/0 -- and then the verification pass the record authorizes re-latched it, DIVERGENT/3
+# and gate exit 1, because arm C's error was raised before any record was known. One dispatch
+# released, then the same deadlock one pass later. The consumer cannot re-stamp the pass: its
+# shards notarize the pre-cut document sha.
+#
+# So an arm-C pass is a hard block for RESOLUTION purposes, exactly as a stamped one is. Not
+# terminal: resolved iff the next pass declares a record `validate_record` accepts against it.
+# Terminal: arm C's error stands at the gate (as arm D's does for a stamped terminal block),
+# and --cycle-state asks the same terminal question the stamped and stall paths ask.
+#
+# ORDERING. This block must sit AFTER the loop above, so the record path resolves exactly as
+# arm F's does, and BEFORE the stall block below, which reads RESOLVED_TERMINAL. Indexed on
+# `ci`, never `i`, so no line here is spelled the same as a line in arm F.
+for ((ci = 0; ci < N; ci++)); do
+  [ "${P_CDIV[$ci]}" = "1" ] || continue
+
+  if [ "$((ci + 1))" -lt "$N" ]; then
+    cdiv_ver="${P_FILE[$((ci + 1))]}"
+    cdiv_rec="${P_RESOLVES[$((ci + 1))]}"
+    if [ -n "$cdiv_rec" ]; then
+      [ -f "$cdiv_rec" ] || [ -z "${cdiv_rec##/*}" ] || cdiv_rec="$(dirname "$cdiv_ver")/$(basename "$cdiv_rec")"
+      if validate_record "$cdiv_rec" "${P_FILE[$ci]}" "$ci"; then
+        continue
+      fi
+      err "F -- RESOLUTION" "$(basename "$cdiv_ver") claims to resolve
+      $(basename "${P_FILE[$ci]}"), but $F_WHY"
+    fi
+    err "C -- DIVERGENCE" "${P_CDIV_MSG[$ci]}"
+    C_DIVERGED=1
+  else
+    err "C -- DIVERGENCE" "${P_CDIV_MSG[$ci]}"
+    C_DIVERGED=1
+    terminal_record_resolves "$ci" && RESOLVED_TERMINAL=1
   fi
 done
 
