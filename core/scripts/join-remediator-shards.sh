@@ -112,9 +112,20 @@
 #     separately, non-recursively, in the outer window. Refused: a superseded writer of P with a row
 #     on ANY part record at or after S_P; a superseded writer with a row on ANOTHER part's record;
 #     a row on P's own record at or after S_P by any agent but P's re-run writer, or no such row by
-#     the re-run writer at all (the covering account is then the re-run's); the re-run writer (any
-#     writer of F_P at or after S_P) with a row on any file or part record outside F_P and P's own
-#     record in the outer window -- a finished part's agent is not a new dispatch.
+#     the re-run writer at all (the covering account is then the re-run's); the re-run writer with a
+#     row on any file or part record outside F_P and P's own record in the outer window -- a
+#     finished part's agent is not a new dispatch.
+#   - THE RE-RUN WRITER. When F_P has a row at or after S_P, it is every writer of F_P at or after
+#     S_P, and RECW (the agents that wrote P's own record at or after S_P) must be among them -- the
+#     foreign-record refusal above. When F_P has none, the re-run is RECORD-ONLY (the cure was a
+#     record change): nothing on F_P is superseded, its earlier writers' rows STAND and still need
+#     exactly one writer, and the re-run writer is RECW, which must be exactly one agent that is not
+#     one of F_P's writers before S_P; either refusal names the record. The record line reads
+#     `rerun: <part> since <S_P>; record-only, by <id>; kept on <file>: <ids> (<n> rows, ..)`.
+#     A nested writer folds into its dispatcher before any of this is read, so a re-run writer's
+#     own subagent editing F_P is the re-run writer.
+#     Residual, stated: the record-only decision is per PART, over all of F_P, so a re-run that edits
+#     one of two cited files supersedes both, and the unedited one then reads UNWRITTEN.
 #   - Subject mode classifies in-place writes (sectioned or part-less subject files) on the
 #     unnarrowed rows, before any narrowing.
 #   - The record keeps the outer `window` line and adds one `rerun: <part> since <S_P>; superseded
@@ -139,6 +150,26 @@
 #   A row that fails any clause still refuses, and the refusal names its tool_use_id, whether A's
 #   transcript exists and which transcript, if any, holds that id. A row carrying none of the new
 #   keys is judged exactly as before they existed.
+#
+# A NESTED WRITER IS ITS DISPATCHER'S, ONE LEVEL UP AND ONLY ON TWO LEDGER ROWS. A remediator that
+#   spawns a subagent of its own gets that subagent's writes under the subagent's agent id A. The
+#   join folds A into its dispatcher P when A's own chain resolves:
+#     1. `<state>/subagent-context.jsonl` (ai-dlc-subagent-probe.sh) holds a row with agent_id A,
+#        and every such row carries one non-empty tool_use_id T;
+#     2. `<state>/spawn-ledger.jsonl` (ai-dlc-dispatch-guard.sh) holds a row with tool_use_id T that
+#        HAS the `parent_agent_id` key, and its value P is one non-empty id other than A.
+#   `parent_agent_id: ""` is the lead's own dispatch and folds nothing; a row with no such key was
+#   written by an older guard and folds nothing either. The fold is ONE level: P's own chain is never
+#   consulted. It is applied where the detailed rows are built, to every row of A (the file rows and
+#   the part-record rows a --rerun reads), so the re-run, alias and distinct-writer arms all see P.
+#   Every fold is named in the JOINED output and in the record: `nested: <A> is <P>'s subagent
+#   (spawn <T>); its <n> rows on <files> are counted as <P>`. A writer whose chain does not resolve
+#   stays its own writer, and a file it shares is refused naming, per writer, the ledger that lacked
+#   the row.
+#   Residual, stated: two children of one dispatcher, run in parallel and editing one file, read as
+#   ONE writer. The fold cannot tell them apart, because both resolve to P.
+#   No fold is owed elsewhere: merge-adversarial-shards.sh refuses a nested writer earlier, on role
+#   (an adversary is a leaf and spawns nothing), and validate-gate-adjudication.sh counts no writers.
 #
 # NOT A MODE OF THE ADVERSARY MERGE. A separate program on purpose: the adversary-shard fix and
 # this one close different backlog entries, and a shared mode would let either close both.
@@ -261,6 +292,9 @@ export LC_ALL=C
 
 refuse_n=0
 GAP_LINES=""; GAP_N=0
+# Every variable record_tail prints has a global default: contract_refusals assigns them, and a run
+# that never reaches it must print empty under `set -u`, never die naming an unbound variable.
+CHAIN_LINES=""; ESC_SUP=""; ESC_LINES=""; ESC_CLOSED=""; ESC_N=0; ESC_X=0
 refuse() { echo "REFUSED: $*" >&2; refuse_n=$((refuse_n + 1)); }
 die() { echo "REFUSED: $*" >&2; exit 2; }
 
@@ -444,7 +478,8 @@ SEAT_DIR="${STATE}/party-mode/s${SPRINT}"
 src_ids() {
   awk '
     FNR == 1 { fence = 0; b = FILENAME; sub(/.*\//, "", b); print b "\t" }
-    /^[ \t]*(```|~~~)/ { fence = !fence; next }
+    fence && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { fence = 0; next } }
+    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
     fence { next }
     /^##+[ \t]/ {
       s = $0; sub(/^#+[ \t]+/, "", s); gsub(/[*`_]/, "", s); gsub(/[][]/, "", s); sub(/^[ \t]+/, "", s)
@@ -466,7 +501,8 @@ src_check() {
   toks="$(awk '
     function flush() { if (disp && !nsrc && !ruled) print "NOSOURCE\t" cf "\t" cur; if (disp) ne++; disp = 0; nsrc = 0; ruled = 0 }
     FNR == 1 { flush(); cur = "(before any heading)"; cf = FILENAME; sub(/.*\//, "", cf); fence = 0 }
-    /^[ \t]*(```|~~~)/ { fence = !fence; next }
+    fence && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { fence = 0; next } }
+    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
     fence { next }
     /^#+[ \t]/ { flush(); cur = $0; sub(/^#+[ \t]+/, "", cur); next }
     /^[[:space:]-]*[*_`]*disposition[*_`]*:/ { disp = 1; v = tolower($0); sub(/^[^:]*:/, "", v); gsub(/[*_`]/, "", v); sub(/^[ \t]+/, "", v)
@@ -531,14 +567,14 @@ SRCEOF
 # had all finished; deciding it over the whole dir convicted an earlier step's seat written before
 # the instruction. A cited file of a step with no marker anywhere is accepted unchecked -- exactly
 # as the merges treat an unmarked directory. The marker predicate is the beat's: last non-blank
-# line, no carriage return, outside an unclosed fence (closed only by the opener's character, at
-# least as long).
+# line, no carriage return, outside an unclosed fence (opened by 3+ backticks whose info string
+# carries no backtick, or by 3+ tildes; closed only by the opener's character, at least as long).
 # seat_marked <file> -> 0 iff it ends in the marker; prints the marker's <step> token.
 SEAT_FENCE_AWK='
     function fence_line(   r) {
       if (!match($0, /^[ \t]*(```+|~~~+)/)) return 0
       r = substr($0, RSTART, RLENGTH); sub(/^[ \t]*/, "", r)
-      if (fc == "") { fc = substr(r, 1, 1); fl = length(r) }
+      if (fc == "") { if (substr(r, 1, 1) == "`" && substr($0, RSTART + RLENGTH) ~ /`/) return 0; fc = substr(r, 1, 1); fl = length(r) }
       else if (substr(r, 1, 1) == fc && length(r) >= fl && substr($0, RSTART + RLENGTH) ~ /^[ \t\r]*$/) { fc = ""; fl = 0 }
       return 1
     }'
@@ -677,6 +713,18 @@ src_probe() {
 #       closes nothing -- no part is later than another. Stated hole: the serial remediator's
 #       appended entries sit after the LAST marker and so read as that shard's; an escalated entry
 #       the serial remediator itself writes is closed only by a still later `closes:` naming that part.
+#   (3b) THE SUPERSEDES CHAIN (BL-565), RECORD MODES ONLY. An escalated entry restating an earlier
+#       escalation carries `- supersedes: <part> <heading>`, trimmed as `closes:` is. The links make
+#       chains, transitive, and a chain is counted ONCE, under its latest OPEN member; every other open
+#       member prints `ESCALATED-SUPERSEDED: <part> <heading>` alone, so the line is copyable as a
+#       `closes:` tail, and the chain is named on its own `CHAIN:` line. CLOSURE IS PER MEMBER, as
+#       remediator.md has it ("an escalation with no `closes:` line of its own stays open"): a
+#       `closes:` naming one member leaves the rest open, and that is FLAGGED on a `CHAIN-OPEN:` line
+#       after ESCALATED-COUNT -- reported, never refused. A `supersedes:` naming no earlier escalation
+#       in the record, a later one included, is refused as a dangling link; the count still prints.
+#       Parts mode reads no `supersedes:` line. NOTE, stated: graph's filed s319 elicitation record
+#       carries 0 `supersedes:` lines, so this join alone does not repair that instance; its count
+#       reads the same on the base and here.
 #   (4) SERIAL-REQUIRED, PARTS MODE ONLY. The count of `repaired` entries with a real edit (arm 1's
 #       predicate; `edit: n/a` entries are not counted). Each one owes the serial remediator's
 #       cross-file sibling grep and moved-cite check, which no shard can run, so the procedure
@@ -722,8 +770,24 @@ src_probe() {
 #       gate the report the lead adjudicates from. An agent that
 #       applied a rule an operator decision does not state, and offered it for the lead's veto, wrote
 #       an operator choice into the subject. Nothing in the record separates EXTENDING a D-/LR-/LRC-
-#       decision from APPLYING one, so the arm keys on the words, carries no decision-token test, and
-#       ITS RECALL DEPENDS ON THE AGENT USING THOSE WORDS: a gap fill described any other way passes.
+#       decision from APPLYING one, so the arm keys on the words, and ITS RECALL DEPENDS ON THE AGENT
+#       USING THOSE WORDS: a gap fill described any other way passes. THE LOCATION ONLY NARROWS IT:
+#       when the entry's `edit:` cite resolves, the line gains `-- lands in <cite> under '<heading>',
+#       which cites <token>` (or "cites no D-, LR- or LRC- decision"). The section is the nearest
+#       heading at or above the line, to the next heading of the same or higher level; the token is
+#       `D-<n>`, `LR-<x>` or `LRC-<x>`, word-bounded, outside fences, inside that section only. A live
+#       file resolves as the siblings control does. Parts, --document and --subject modes run this
+#       before assembly, so a `sections/<i>.md` cite is still a live copy there. In record mode the
+#       copy is gone: the cite is matched by PART NUMBER (graph cites `sections/5.md`, the row and copy
+#       were `05`) to the retained `.manifest`'s part row, and that row's span in its document is read,
+#       said as "(span of <cite>, lines may have moved)". Neither resolves: `-- location unresolved
+#       (<cite>)`. Never a refusal, and never an exit code. The FP set measured for the words above is
+#       unchanged: 09.md F-4 and F-7 in the part and the same two in the joined record, all true
+#       positives. Measured with this suffix on graph's real joined record, through the retained
+#       manifest: F-4 lands at prd.md:1318 under 'Net P&L 24h triage and fix', which cites LR-S319-2
+#       (the first decision token in the section wins, and it precedes D-5 on that line); F-7 lands at
+#       prd.md:1354 under 'Merkl rewards cards', which cites no decision. So the location says where
+#       an edit landed; it is no proof that the edit extended the decision the claim names.
 #       FALSE-POSITIVE SET, MEASURED with this contract_check, parts mode over graph's 251 s317-s319
 #       shard parts and record mode over its 60 repair and fold records: s319 requirements
 #       elicitation repair 09.md F-4 and F-7, and the same two entries in the joined record, which is
@@ -753,9 +817,34 @@ src_probe() {
 #       (`Advisor: unavailable (rate-limited) ...`), and read case-insensitively they would bind
 #       s317 stories-repair-p1.md and shards/stories-adversarial-repair-p1/20.md -- each carries a
 #       lone advisor line and no derivations line, so each would refuse where the base passes.
-#       HOLES, STATED: a serial pass writing neither line never enters the era; and the fields are
-#       read per FILE, so in a joined record the parts' own lines satisfy the check and a serial
-#       remediator that omits its own two is not caught.
+#       THE SERIAL BLOCKS ARE SEGMENTED BY THEIR TERMINATORS, and the lines are counted PER SEGMENT,
+#       never per file. After the last shard marker, the last part runs to the first
+#       `- artifact:` triple that follows one of ITS ENTRIES -- an entry is its `disposition:`
+#       line, and a non-entry `### ` heading is not one -- because the serial remediator opens
+#       its block with its own triple (remediator.md) and the part's own triple sits above its
+#       first entry. The serial block opens BY POSITION, never by counting triples. The first
+#       block runs from that triple to the first column-0 `repair-complete:` line, and each later
+#       block from the previous terminator to its own. A block closed by `repair-complete:
+#       serial ...` OWES BOTH LINES whatever any era says: that line and the check-fields rule
+#       shipped together, so a record carrying it was written under the rule. A
+#       `repair-complete: spec-render ...` block owes neither; an unterminated tail is era-gated
+#       like a part. A serial terminator before any triple that follows an entry of the last
+#       part is refused by name: that block's lines cannot be told from the last part's. An
+#       unmarked record owes the lines only in a block its serial terminator closes; with none
+#       it is one era-gated segment, as before. The parts' lines never satisfy a serial block.
+#       Each part and the text above the first marker are judged on their own, era-gated each:
+#       a pre-rule part carrying neither line charges nothing, so a record whose parts predate
+#       the rule is still read (graph s319 requirements-repair-p1, parts 01-12). FALSE-POSITIVE
+#       SET, MEASURED with this checks_field over graph's 4 s319 records carrying
+#       `repair-complete: serial` (8 blocks, c3-term.py beside it): 0 new findings; the one CHK
+#       line in requirements-repair-p1 (a prose `derivations: replayed. ...` value in the
+#       spec-render block) is read identically at the base. 0 of the 343 `.md` files under graph's
+#       `shards/*repair*` dirs carry two triple lines (313 carry one, the control), so no part
+#       carries a second triple of its own for the position rule to misread. THE DEFINITION THIS
+#       REPLACES -- "the block after the last marker", in the cluster file -- still holds the last
+#       part's own lines, and a last-triple read lends a block with no triple of its own
+#       (requirements-repair-p1 serial 3) the lines of the block before it. HOLE, STATED: a
+#       serial pass writing neither line AND no terminator is outside every era.
 #       MEASURED with this join, serially, against 952b9319's over graph's 60 s317-s319 repair and
 #       fold records in both record modes: 0 runs refused by a check field; the base printed an
 #       escalation count and this join did not on 2 runs, both the BL-542 true positive (the
@@ -807,6 +896,11 @@ contract_check() {
         if (disp ~ /^escalat/) { nesc++; ef[nesc] = part; en[nesc] = cur; ex[nesc] = 0 }
         if (disp == "repaired" && src == 1)
           for (k = 1; k <= ncl; k++) for (i = 1; i <= nesc; i++) if (cl[k] == ef[i] " " en[i]) ex[i] = 1
+        # A SUPERSEDES LINK names an EARLIER escalation of this record, byte-equal to its ESCALATED: tail;
+        # one naming none, or a later one, is a dangling link (record modes only; sp is never filled in parts mode).
+        if (disp ~ /^escalat/) for (k = 1; k <= nsp; k++) { mh = 0
+          for (i = 1; i < nesc; i++) if (sp[k] == ef[i] " " en[i]) { nlk++; la[nlk] = i; lb[nlk] = nesc; mh = 1 }
+          if (!mh) print "DANGLING\t" cf "\t" cur "\t" sp[k] }
         if (rp && edt && !sib) {
           if (sibf) print "BADSIB\t" cf "\t" cur
           else if (src == 0 || era) print "NOSIB\t" cf "\t" cur
@@ -815,12 +909,27 @@ contract_check() {
         if (rp && edt && sib && src == 0 && sfile != "") print "CTL\t" cf "\t" cur "\t" sfile "\t" stext
         if (rp && sev && claim ~ /outside (this|my|the) (shard|part|section)|not required/ \
             && claim !~ /escalat|serial remediator/) print "SETASIDE\t" cf "\t" cur "\t" hl
-        if (disp == "repaired" && claim ~ /gap[- ]?fill|veto/) print "GAPFILL\t" cf "\t" cur
+        if (disp == "repaired" && claim ~ /gap[- ]?fill|veto/) print "GAPFILL\t" cf "\t" cur (ecite != "" ? "\t" ecite : "")
         if ((src == 0 || era) && !(dfull in VOC)) print "BADDISP\t" cf "\t" cur "\t" draw
         if (dfull == "operator-ruling") print "RULING\t" cf "\t" cur "\t" rcite
       }
       if (disp == "" && edf) print "NODISP\t" cf "\t" cur
-      disp = ""; dfull = ""; edt = 0; edf = 0; rcite = ""; sib = 0; sibf = 0; sibw = 0; sibin = 0; sfile = ""; stext = ""; claim = ""; inclaim = 0; ncl = 0
+      disp = ""; dfull = ""; edt = 0; edf = 0; rcite = ""; sib = 0; sibf = 0; sibw = 0; sibin = 0; sfile = ""; stext = ""; claim = ""; inclaim = 0; ncl = 0; nsp = 0; ecite = ""
+    }
+    # THE CHAIN (BL-565): escalations joined by supersedes links, rooted at the LATEST member. The latest OPEN
+    # member carries the one count of the chain; every other open member is SUP (printed ESCALATED-SUPERSEDED,
+    # never counted); a chain holding a closed member and an open one is CHOPEN, reported, never refused.
+    function fnd(x) { while (x in par) x = par[x]; return x }
+    function chains(   k, a, b, i, rt) {
+      for (k = 1; k <= nlk; k++) { a = fnd(la[k]); b = fnd(lb[k]); if (a != b) { if (a < b) par[a] = b; else par[b] = a } }
+      for (i = 1; i <= nesc; i++) { rt = fnd(i); csz[rt]++
+        if (ex[i]) mcl[rt] = (rt in mcl) ? mcl[rt] " ; " ef[i] " " en[i] : ef[i] " " en[i]
+        else { lop[rt] = i; mop[rt] = (rt in mop) ? mop[rt] " ; " ef[i] " " en[i] : ef[i] " " en[i] }
+        if (i != rt) mem[rt] = (rt in mem) ? mem[rt] " ; " ef[i] " " en[i] : ef[i] " " en[i] }
+      for (i = 1; i <= nesc; i++) { rt = fnd(i); if (csz[rt] > 1 && !ex[i] && i != lop[rt]) print "SUP\t" ef[i] "\t" en[i] }
+      for (rt = 1; rt <= nesc; rt++) if (csz[rt] > 1 && fnd(rt) == rt) {
+        print "CHAIN\t" ef[rt] " " en[rt] "\t" mem[rt]
+        if ((rt in mcl) && (rt in mop)) print "CHOPEN\t" mcl[rt] "\t" mop[rt] }
     }
     # THE SIBLINGS FENCE. `- siblings:` with no value, then (blank lines aside) a ```text fence holding a
     # `$ grep -rn -F` line and the control `$ grep -c -F <quoted text> <file>` whose next line is a count of
@@ -838,11 +947,13 @@ contract_check() {
       if (r != "" && r !~ /[ \t]/) cfile = r; else ctext = ""
     }
     FNR == 1 { flush(); cur = "(before any heading)"; sev = 0; hl = 0; cf = FILENAME; sub(/.*\//, "", cf); part = cf; fence = 0 }
-    /^[ \t]*(```|~~~)/ {
-      if (!fence && sibw) { b = $0; sub(/^[ \t]+/, "", b); sub(/[ \t]+$/, "", b); sibw = 0
-                            if (b == "```text") { sibin = 1; srn = 0; sctl = 0; sn = "" } }
-      else if (fence && sibin) sibclose()
-      fence = !fence; inclaim = 0; next }
+    fence && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) {
+      if (sibin) sibclose()
+      fence = 0; inclaim = 0; next } }
+    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ {
+      if (sibw) { b = $0; sub(/^[ \t]+/, "", b); sub(/[ \t]+$/, "", b); sibw = 0
+                  if (b == "```text") { sibin = 1; srn = 0; sctl = 0; sn = "" } }
+      fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; inclaim = 0; next }
     fence && sibin {
       l = $0; sub(/^[ \t]+/, "", l); sub(/[ \t]+$/, "", l)
       if (sctl == 1) { sctl = 2; sn = l }
@@ -861,16 +972,19 @@ contract_check() {
       split(v, a, /[^a-z]/); disp = a[1]; draw = v; gsub(/[\t\r]/, " ", draw); sub(/[ \t]+$/, "", draw); dfull = v; sub(/[^a-z-].*$/, "", dfull); inclaim = 0; next }
     /^[[:space:]-]*[*_`]*edit[*_`]*:/ {
       v = $0; sub(/^[^:]*:/, "", v); edf = 1
+      if (match(v, /[A-Za-z0-9_.\/-]+[.](md|json|jsonl|yaml|yml|txt|csv)(:[0-9]+)?/)) ecite = substr(v, RSTART, RLENGTH)
       if (match(v, /[A-Za-z0-9_.\/-]+[.](md|json|jsonl|yaml|yml|txt|csv)/)) edt = 1
       inclaim = 0; next }
     /^[[:space:]-]*[*_`]*ruling[*_`]*:/ { v = $0; sub(/^[^:]*:/, "", v); rcite = vtrim(v); gsub(/\t/, " ", rcite); inclaim = 0; next }
     /^[[:space:]-]*[*_`]*siblings[*_`]*:/ { sibf = 1; v = $0; sub(/^[^:]*:/, "", v); v = vtrim(v); if (v == "") sibw = 1; else if (v in SIBNA) sib = 1; inclaim = 0; next }
     /^[[:space:]-]*[*_`]*closes[*_`]*:/ { v = $0; sub(/^[^:]*:/, "", v); sub(/^[*_`]+/, "", v); cl[++ncl] = trim(v); inclaim = 0; next }
+    /^[[:space:]-]*[*_`]*supersedes[*_`]*:/ { if (src == 1) { v = $0; sub(/^[^:]*:/, "", v); sub(/^[*_`]+/, "", v); sp[++nsp] = trim(v) }; inclaim = 0; next }
     /^[[:space:]-]*[*_`]*claim now asserted[*_`]*:/ { claim = tolower($0); inclaim = 1; next }
     /^[[:space:]-]*[*_`]*[a-z][a-z _]*[*_`]*:/ { inclaim = 0 }
     inclaim { claim = claim " " tolower($0) }
     END {
       flush()
+      if (nlk) chains()
       for (i = 1; i <= nesc; i++) print (ex[i] ? "X" : "E") "\t" ef[i] "\t" en[i]
       print "N\t" ne + 0 "\t" nedt + 0 "\t" nsib + 0 "\t" npend + 0 "\t" nrep + 0
     }' "$@"
@@ -922,6 +1036,72 @@ ruling_cite() {
   esac
   [ "$n" -ge 1 ] || refuse "${r}: the ${d} entry's ruling cite '${c}' resolves to nothing in ${h}; an operator-ruling applies an answer the operator gave, and the cite is how the join finds it"
 }
+# gap_section <file> <line> <lo> <hi> -> "<heading>\t<token>" for the section enclosing <line>: the nearest
+# heading at or above it (not before <lo>), to the next heading of the same or higher level (not past <hi>);
+# <token> is the first D-<n>, LR-<x> or LRC-<x> in it, word-bounded, outside fences, or empty. Nothing when
+# <line> is outside [lo, hi] or the file has fewer lines.
+gap_section() {
+  awk -v L="$2" -v lo="$3" -v hi="$4" '
+    function lvl(s) { match(s, /^#+/); return RLENGTH }
+    NR < lo { next }
+    NR > hi { exit }
+    fence && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { fence = 0; t[NR] = ""; next } }
+    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; t[NR] = ""; next }
+    { t[NR] = fence ? "" : $0 }
+    !fence && /^#+[ \t]/ { if (NR <= L) { hs = NR; hv = lvl($0); hd = $0 } else if (hs && !he && lvl($0) <= hv) he = NR - 1 }
+    END {
+      if (L < lo || L > NR || L > hi) exit
+      s = (hs ? hs : lo); e = (he ? he : (NR < hi ? NR : hi)); tok = ""
+      for (i = s; i <= e && tok == ""; i++) {
+        x = " " t[i] " "
+        if (match(x, /[^[:alnum:]_-](D-[0-9]+|LRC?-[[:alnum:]][[:alnum:]-]*)[^[:alnum:]_]/)) tok = substr(x, RSTART + 1, RLENGTH - 2)
+      }
+      sub(/^#+[ \t]+/, "", hd); gsub(/[\t\r]/, " ", hd); sub(/[ ]+$/, "", hd)
+      print (hs ? hd : "(before any heading)") "\t" tok
+    }' "$1"
+}
+# gap_where <cite> -> the GAPFILL line's location suffix (BL-556), NOTE tier: it never refuses and changes no
+# exit code. A LIVE file resolves under the project root, then the state dir's parent, then absolutely (the
+# siblings control's order). A dead `<dir>/sections/<n>.md` -- assembly deletes the copies, so only the
+# join itself sees them -- is looked up in `<dir>/sections/.manifest` by its PART NUMBER (5 matches a row
+# 05 or 5; never a padded filename): its live copy `<row>.md` if present, else the row's span in the
+# manifest's document, said to be a span. Neither: `location unresolved`.
+gap_where() {
+  local c="$1" f n p="" sd mf row ord a z doc out mode=live
+  [ -n "$c" ] || return 0
+  case "$c" in *:[0-9]*) f="${c%:*}"; n="${c##*:}" ;; *) printf ' -- location unresolved (%s, no line)' "$c"; return 0 ;; esac
+  case "$f" in
+    /*) [ -f "$f" ] && p="$f" ;;
+    *) if [ -f "${JR_ROOT}/${f}" ]; then p="${JR_ROOT}/${f}"; elif [ -f "${STATE_PARENT}${f}" ]; then p="${STATE_PARENT}${f}"; fi ;;
+  esac
+  if [ -z "$p" ]; then
+    case "$f" in
+      */sections/*.md)
+        sd="${f%/*}"; ord="${f##*/}"; ord="${ord%.md}"
+        case "$ord" in ''|*[!0-9]*) ;; *)
+          for mf in "${JR_ROOT}/${sd}/.manifest" "${STATE_PARENT}${sd}/.manifest" "${sd}/.manifest"; do [ -f "$mf" ] && break; done
+          if [ -f "$mf" ]; then
+            row="$(awk -F'\t' -v o="$ord" '$1 == "part" && ($2 + 0) == (o + 0) { print $2 "\t" $3 "\t" $4; exit }' "$mf")"
+            doc="$(awk -F'\t' '$1 == "document" { print $2; exit }' "$mf")"
+            if [ -n "$row" ]; then
+              IFS='	' read -r ord a z <<ROWEOF
+$row
+ROWEOF
+              if [ -f "${mf%/.manifest}/${ord}.md" ]; then p="${mf%/.manifest}/${ord}.md"
+              elif [ -n "$doc" ] && [ -f "$doc" ]; then p="$doc"; mode=span; n=$((a + n - 1)); fi
+            fi
+          fi ;;
+        esac ;;
+    esac
+  fi
+  [ -n "$p" ] || { printf ' -- location unresolved (%s)' "$c"; return 0; }
+  if [ "$mode" = span ]; then out="$(gap_section "$p" "$n" "$a" "$z")"; else out="$(gap_section "$p" "$n" 1 999999999)"; fi
+  [ -n "$out" ] || { printf ' -- location unresolved (%s, line %s is outside the file)' "$c" "$n"; return 0; }
+  local h="${out%%	*}" t="${out#*	}" w="$c"
+  [ "$mode" = span ] && w="${doc}:${n} (span of ${c}, lines may have moved)"
+  if [ -n "$t" ]; then printf " -- lands in %s under '%s', which cites %s" "$w" "$h" "$t"
+  else printf " -- lands in %s under '%s', which cites no D-, LR- or LRC- decision" "$w" "$h"; fi
+}
 # contract_refusals <0 parts | 1 --sources> <contract_check output> -> refuse per finding;
 # ESC_LINES / ESC_N carry the open escalated entries and ESC_CLOSED / ESC_X the closed ones, for the
 # caller to print once the run has otherwise cleared; SERIAL_N counts the repaired entries with a
@@ -930,13 +1110,28 @@ contract_refusals() {
   local srcm="$1" k r d l m q ne nedt nsib npend nosib="" remedy=""
   shift
   ESC_LINES=""; ESC_CLOSED=""; ESC_N=0; ESC_X=0; SERIAL_N=0; GAP_LINES=""; GAP_N=0; ne=0; nedt=0; nsib=0; npend=0
+  ESC_SUP=""; CHAIN_LINES=""
   # A parts-mode refusal of a missing field is, for a round whose parts predate the install, the
   # pre-rule shape: the remedy is the re-dispatch, never a hand-added field.
   [ "$srcm" = 0 ] && remedy="; parts written before the install: re-dispatch the shards"
   while IFS='	' read -r k r d l m q; do
     case "$k" in
       N) ne="$r"; nedt="$d"; nsib="$l"; npend="$m"; SERIAL_N="${q:-0}" ;;
-      E) ESC_N=$((ESC_N + 1)); ESC_LINES="${ESC_LINES}ESCALATED: ${r} ${d}
+      SUP) ESC_SUP="${ESC_SUP}${r} ${d}
+" ;;
+      CHAIN) CHAIN_LINES="${CHAIN_LINES}CHAIN: ${r} supersedes ${d}
+" ;;
+      CHOPEN) CHAIN_LINES="${CHAIN_LINES}CHAIN-OPEN: closes: named ${r} and left ${d} open; one closes: line per chain member (team-roles/remediator.md)
+" ;;
+      DANGLING) refuse "${r}: the ${d} entry's 'supersedes: ${l}' names no earlier escalation in this record; copy it from the tail of that escalation's ESCALATED: line, which must precede it" ;;
+      E) case "
+${ESC_SUP}" in
+           *"
+${r} ${d}
+"*) ESC_CLOSED="${ESC_CLOSED}ESCALATED-SUPERSEDED: ${r} ${d}
+"; continue ;;
+         esac
+         ESC_N=$((ESC_N + 1)); ESC_LINES="${ESC_LINES}ESCALATED: ${r} ${d}
 " ;;
       X) ESC_X=$((ESC_X + 1)); ESC_CLOSED="${ESC_CLOSED}ESCALATED-CLOSED: ${r} ${d}
 " ;;
@@ -948,7 +1143,7 @@ contract_refusals() {
       NODISP) refuse "${r}: the ${d} entry carries an 'edit:' line and no 'disposition:' line, so no check reads it; every entry that edits is dispositioned (team-roles/remediator.md), and a renamed key ('outcome:', 'status:') is not the field" ;;
       BADDISP) refuse "${r}: the ${d} entry is dispositioned '${l}', which is none of repaired|escalated|skipped|not-reproduced|operator-ruling; any other value is read by no check" ;;
       RULING) ruling_cite "$r" "$d" "$l" ;;
-      GAPFILL) GAP_N=$((GAP_N + 1)); GAP_LINES="${GAP_LINES}GAPFILL: ${r} ${d} -- repaired while its claim calls the fix a gap fill or offers it for veto; a rule the decision's own words do not state is the operator's, so this entry should be escalated with options and the artifact keep the decision's words (team-roles/remediator.md, \"Applying such a decision\")
+      GAPFILL) GAP_N=$((GAP_N + 1)); GAP_LINES="${GAP_LINES}GAPFILL: ${r} ${d} -- repaired while its claim calls the fix a gap fill or offers it for veto; a rule the decision's own words do not state is the operator's, so this entry should be escalated with options and the artifact keep the decision's words (team-roles/remediator.md, \"Applying such a decision\")$(gap_where "$l")
 " ;;
     esac
   done <<CTEOF
@@ -1026,6 +1221,35 @@ N	3	0	0	0	0" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: th
   [ "$o" = "GAPFILL	gap.md	F-4
 E	gap.md	F-5
 N	2	0	0	0	0" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: the gap-fill tripwire read '${o}'; no verdict"; }
+  # The supersedes chain (BL-565), record mode: a serial escalation superseding a part escalation makes ONE
+  # chain, the part member SUP and the latest the counted one; a closes: on the latest alone leaves the part
+  # member open and flagged; a supersedes naming a LATER escalation is DANGLING. Near-miss: the same record
+  # with no supersedes line reads two plain escalations, no chain.
+  printf '<!-- shard: 01.md -->\n### F-1\n- disposition: escalated\n- edit: n/a\n\n### S-1\n- disposition: escalated\n- supersedes: 01.md F-1\n- edit: n/a\n\n### A-1\n- disposition: repaired\n- closes: 01.md S-1\n- edit: n/a\n\n### S-2\n- disposition: escalated\n- supersedes: 01.md S-3\n- edit: n/a\n\n### S-3\n- disposition: escalated\n- edit: n/a\n' > "$d/sup.md"
+  o="$(contract_check 1 "$d/sup.md")"
+  [ "$o" = "DANGLING	sup.md	S-2	01.md S-3
+CHAIN	01.md S-1	01.md F-1
+CHOPEN	01.md S-1	01.md F-1
+E	01.md	F-1
+X	01.md	S-1
+E	01.md	S-2
+E	01.md	S-3
+N	5	0	0	0	0" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: the supersedes chain read '${o}'; no verdict"; }
+  grep -v -e '^- supersedes:' "$d/sup.md" > "$d/nosup.md"
+  o="$(contract_check 1 "$d/nosup.md")"
+  [ "$o" = "E	01.md	F-1
+X	01.md	S-1
+E	01.md	S-2
+E	01.md	S-3
+N	5	0	0	0	0" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: a record with no supersedes line read '${o}'; no verdict"; }
+  # The gap-fill location (BL-556): an edit line under a section citing D-5 names the token; the same file
+  # two lines on, in the ADJACENT section citing D-7 only in a fence and D-50x in prose, names none -- a
+  # whole-file scan, an unfenced scan or an unbounded token would each read a decision there.
+  printf '# Doc\n\n## A\nThe rule per D-5.\nedited here\n\n## B\nedited there\n```text\nD-7\n```\nnot D-50x\n\n### B.1\nD-9 is a child of B\n' > "$d/sec.md"
+  o="$(gap_section "$d/sec.md" 5 1 999; gap_section "$d/sec.md" 8 1 13; gap_section "$d/sec.md" 8 1 999)"
+  [ "$o" = "A	D-5
+B	
+B	D-9" ] || { rm -rf "$d"; die "the gap-fill location self-probe failed: read '${o}'; no verdict"; }
   # The two check fields (BL-557): a part with a repaired entry and neither field fires twice; a part
   # holding only an escalated entry is exempt; a record with neither field is outside the era; a
   # record that opened it and wrote `not replayed` fires once.
@@ -1045,6 +1269,41 @@ CHK	notrep.md	derivations: not replayed" ] || { rm -rf "$d"; die "the check-fiel
   o="$(checks_field 1 "$d/prose.md"; checks_field 1 "$d/trail.md"; checks_field 1 "$d/mixed.md")"
   [ "$o" = "CHK	mixed.md	no derivations: line
 CHK	mixed.md	a value outside the grammar: derivations: the validator reports ok" ] || { rm -rf "$d"; die "the check-fields self-probe failed on prose and trailers: read '${o}'; no verdict"; }
+  # The serial blocks (BL-557): a joined record whose part carries both lines and whose SECOND serial
+  # block, closed by its own terminator, omits both fires for that block alone; the same record with
+  # the second block carrying both is quiet (the near-miss a last-part or last-triple read cannot
+  # tell apart); a serial terminator with no triple after the entries of the last shard is refused
+  # by name; a `spec-render` block owes neither line; an unterminated tail with no line is quiet.
+  printf -- '- artifact: j\n\n<!-- shard: 01.md -->\n- artifact: p\n- advisor: called\n- derivations: replayed 1\n\n### F-1\n- disposition: repaired\n- edit: n/a\n\n- artifact: s\n- advisor: called\n- derivations: replayed 2\n\n### S-1\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: serial 1\n\n%s\n### S-2\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: serial 2\n\n- artifact: m\n- derivations: replayed 1\n\n### R-1\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: spec-render 2\n' '' > "$d/ser.md"
+  printf -- '- artifact: j\n\n<!-- shard: 01.md -->\n- artifact: p\n- advisor: called\n- derivations: replayed 1\n\n### F-1\n- disposition: repaired\n- edit: n/a\n\n- artifact: s\n- advisor: called\n- derivations: replayed 2\n\n### S-1\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: serial 1\n\n%s\n### S-2\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: serial 2\n\n- artifact: m\n- derivations: replayed 1\n\n### R-1\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: spec-render 2\n' '- advisor: unavailable
+- derivations: replayed 0
+' > "$d/serok.md"
+  printf -- '- artifact: j\n\n<!-- shard: 01.md -->\n- artifact: p\n- advisor: called\n- derivations: replayed 1\n\n### F-1\n- disposition: repaired\n- edit: n/a\n\n### S-1\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: serial 1\n' > "$d/sernt.md"
+  printf -- '- artifact: j\n\n<!-- shard: 01.md -->\n- artifact: p\n\n### F-1\n- disposition: repaired\n- edit: n/a\n\n- artifact: s\n\n### S-1\n- disposition: repaired\n- edit: n/a\n' > "$d/seropen.md"
+  # A PART THAT WROTE NO TRIPLE (of graph's 266 s317-s319 parts, 5 repair parts with entries and no
+  # triple, plus 6 one-line *-done.md markers): the serial block opens at its own triple, so it is
+  # judged and passes (nonp); with no serial triple it is refused by name (nont). A count rule ("the
+  # second triple") refuses nonp. The near-miss (lowp): a part triple BELOW its first entry is read as
+  # the serial opener, and the block it opens owes both lines. A STATED LIMIT, FAIL-OPEN: had that part
+  # triple carried BOTH lines, they would satisfy the serial block -- no signal in the position rule
+  # separates it, and graph holds 0 of 266 parts with a triple below an entry and 0 with more than one.
+  # A TITLE IS NOT AN ENTRY (ktitle): a non-entry `### ` heading above the own triple of the part must not
+  # hand that triple to the serial block; an entry is seen at its `disposition:` line, so the serial
+  # triple with neither line still fires twice. An any-`### ` rule reads it quiet.
+  printf -- '- artifact: j\n\n<!-- shard: 01.md -->\n### F-1\n- disposition: repaired\n- edit: n/a\n\n- artifact: s\n- advisor: called\n- derivations: replayed 0\n\n### S-1\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: serial 1\n' > "$d/nonp.md"
+  printf -- '- artifact: j\n\n<!-- shard: 01.md -->\n### F-1\n- disposition: repaired\n- edit: n/a\n\n### S-1\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: serial 1\n' > "$d/nont.md"
+  printf -- '- artifact: j\n\n<!-- shard: 01.md -->\n### F-1\n- disposition: repaired\n- edit: n/a\n\n- artifact: p\n\n### S-1\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: serial 1\n' > "$d/lowp.md"
+  printf -- '- artifact: j\n\n<!-- shard: 01.md -->\n### Repair record -- shard 01\n- artifact: p\n- advisor: called\n- derivations: replayed 1\n\n### F-1\n- disposition: repaired\n- edit: n/a\n\n- artifact: s\n\n### S-1\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: serial 1\n' > "$d/ktitle.md"
+  o="$(checks_field 1 "$d/ser.md"; checks_field 1 "$d/serok.md"; checks_field 1 "$d/sernt.md"; checks_field 1 "$d/seropen.md"; checks_field 1 "$d/nonp.md"; checks_field 1 "$d/nont.md"; checks_field 1 "$d/lowp.md"; checks_field 1 "$d/ktitle.md")"
+  [ "$o" = "CHK	ser.md	no advisor: line (the block closed at line 27 by 'repair-complete: serial 2')
+CHK	ser.md	no derivations: line (the block closed at line 27 by 'repair-complete: serial 2')
+CHK	sernt.md	the serial block closed at line 16 by 'repair-complete: serial 1' opens with no sha triple of its own after the entries of the last shard, so its advisor: and derivations: lines cannot be told from those of shard 01.md
+CHK	nont.md	the serial block closed at line 12 by 'repair-complete: serial 1' opens with no sha triple of its own after the entries of the last shard, so its advisor: and derivations: lines cannot be told from those of shard 01.md
+CHK	lowp.md	no advisor: line (the block closed at line 14 by 'repair-complete: serial 1')
+CHK	lowp.md	no derivations: line (the block closed at line 14 by 'repair-complete: serial 1')
+CHK	ktitle.md	no advisor: line (the block closed at line 19 by 'repair-complete: serial 1')
+CHK	ktitle.md	no derivations: line (the block closed at line 19 by 'repair-complete: serial 1')" ] \
+    || { rm -rf "$d"; die "the check-fields self-probe failed on the serial blocks: read '${o}'; no verdict"; }
   rm -rf "$d"
 }
 # checks_field <0 parts | 1 record> <file> -> one "CHK\t<file>\t<what>" line per defect (BL-557).
@@ -1068,33 +1327,93 @@ checks_field() {
     function val(  v) { v = $0; sub(/^[^:]*:/, "", v); gsub(/[*_`\r]/, "", v); v = tolower(v)
                         gsub(/^[ \t]+|[ \t]+$/, "", v); return v }
     function kw(v, re) { return v ~ ("^(" re ")[ \t]*($|[(;,]|--)") }
-    # A JOINED RECORD IS JUDGED PART BY PART, as the join judged it: a shard segment holding no
-    # repaired entry charges neither its `not replayed` nor a value outside the grammar, because the
-    # parts-mode join exempted that part and the record it wrote must not fail its own reader (the
-    # third tip adversary). The serial block appended after the last part reads as that last
-    # segment, so a serial repair makes that segment chargeable -- the conservative direction.
-    function commit() { if (!seg || srep) { bad = bad sbad; if (snr) nr = 1 }; sbad = ""; snr = 0; srep = 0 }
-    /^[ \t]*(```|~~~)/ { fence = !fence; next }
+    # EVERY LINE LANDS IN A CHUNK, and segments are resolved in END: the serial block opens at a
+    # triple that is known to be the serial one only once the LAST shard marker is known. A chunk
+    # opens at line 1, at each shard marker (M), at each `- artifact:` triple line (T) and after each
+    # column-0 `repair-complete:` terminator (E), which closes the chunk it ends.
+    function brk(t) { nk++; ck[nk] = t; cl[nk] = FNR }
+    function seg(lo, hi,   j) { sa = 0; sd = 0; sr = 0; sn = 0; sb = ""
+      for (j = lo; j <= hi; j++) { sa += ca[j]; sd += cd[j]; sr += cr[j]; if (cn[j]) sn = 1; sb = sb cb[j] } }
+    function emit(what, w) { print "CHK\t" b "\t" what w }
+    # judge <chunks lo..hi> <label> <mode> <need>. Mode E: a part (or an unmarked record with no
+    # terminator), bound only once it carries a grammar line, the record era per segment. Mode S: a
+    # block closed by `repair-complete: serial`, which owes both lines whatever any era says. Mode V:
+    # any other block, values only. need: charge nothing unless the segment holds a repaired entry --
+    # A JOINED RECORD IS JUDGED PART BY PART, as the join judged it, and the parts-mode join exempted a
+    # part holding none, so the record it wrote must not fail its own reader (the third tip adversary).
+    function judge(lo, hi, w, mode, need) {
+      seg(lo, hi)
+      if (need && !sr) return
+      if (mode == "E" && sa + sd == 0) return
+      if (mode != "V") { if (!sa) emit("no advisor: line", w); if (!sd) emit("no derivations: line", w) }
+      if (sb != "") emit("a value outside the grammar:" sb, w)
+      if (sn) emit("derivations: not replayed", w)
+    }
+    function blk(j) { return " (the block closed at line " tl[j] " by \047" tx[j] "\047)" }
+    BEGIN { nk = 1; ck[1] = "H"; cl[1] = 1 }
+    fence && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { fence = 0; next } }
+    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
     fence { next }
-    rec == 1 && /^<!-- shard: [^ ]+ -->[ \t]*$/ { commit(); seg = 1; next }
+    rec == 1 && /^<!-- shard: [^ ]+ -->[ \t]*$/ { sawe = 0; brk("M"); cm[nk] = $0; sub(/^<!-- shard: /, "", cm[nk]); sub(/ -->.*$/, "", cm[nk]); next }
+    rec == 1 && /^repair-complete:/ { tl[nk] = FNR; tx[nk] = $0; gsub(/[\t\r]/, " ", tx[nk]); sub(/[ ]+$/, "", tx[nk])
+                                      split(tx[nk], tw, " "); ts[nk] = (tw[2] == "serial"); brk("E"); next }
+    rec == 1 && /^[[:space:]-]*[*_`]*artifact[*_`]*:/ { brk("T"); ce[nk] = sawe }
     /^[[:space:]-]*[*_`]*advisor[*_`]*:/ { v = val()
-      if (kw(v, "called|unavailable")) na++; else sbad = sbad " advisor: " v; next }
+      if (kw(v, "called|unavailable")) ca[nk]++; else cb[nk] = cb[nk] " advisor: " v; next }
     /^[[:space:]-]*[*_`]*derivations[*_`]*:/ { v = val()
-      if (kw(v, "not replayed")) { nd++; snr = 1 }
-      else if (kw(v, "replayed [0-9]+")) nd++
-      else if (kw(v, "deferred to the join")) { nd++; if (!dok) sbad = sbad " derivations: deferred in a files-mode part" }
-      else sbad = sbad " derivations: " v
+      if (kw(v, "not replayed")) { cd[nk]++; cn[nk] = 1 }
+      else if (kw(v, "replayed [0-9]+")) cd[nk]++
+      else if (kw(v, "deferred to the join")) { cd[nk]++; if (!dok) cb[nk] = cb[nk] " derivations: deferred in a files-mode part" }
+      else cb[nk] = cb[nk] " derivations: " v
       next }
-    /^[[:space:]-]*[*_`]*disposition[*_`]*:/ { v = tolower(val()); sub(/[^a-z-].*$/, "", v); if (v == "repaired") { nrep++; srep++ } }
+    /^[[:space:]-]*[*_`]*disposition[*_`]*:/ { if (rec == 1) sawe = 1; v = tolower(val()); sub(/[^a-z-].*$/, "", v); if (v == "repaired") { nrep++; cr[nk]++ } }
     END {
-      commit()
       b = FILENAME; sub(/.*\//, "", b)
-      if (rec == 1 && na + nd == 0) exit
-      if (rec == 0 && nrep == 0) exit
-      if (!na) print "CHK\t" b "\tno advisor: line"
-      if (!nd) print "CHK\t" b "\tno derivations: line"
-      if (bad != "") print "CHK\t" b "\ta value outside the grammar:" bad
-      if (nr) print "CHK\t" b "\tderivations: not replayed"
+      # A PART is one segment, bound unconditionally once it holds a repaired entry.
+      if (rec == 0) { if (nrep == 0) exit; judge(1, nk, "", "S", 0); exit }
+      lm = 0; nt = 0
+      for (j = 1; j <= nk; j++) { if (ck[j] == "M") lm = j; if (tl[j]) nt++ }
+      lo = 1
+      if (!lm) {
+        # AN UNMARKED RECORD (the one unsharded remediator, or a record no join wrote) owes the lines
+        # unconditionally only in a block its serial terminator closes; with no terminator it is one
+        # era-gated segment, as before.
+        if (!nt) { judge(1, nk, "", "E", 0); exit }
+      } else {
+        # The head and every shard segment, era-gated per segment. THE SERIAL BLOCK OPENS BY POSITION:
+        # at the first `- artifact:` triple after the last marker that follows one of the entries of
+        # that part (its `disposition:` line, outside a fence). A `### ` heading alone is not an entry: a
+        # part titled `### Repair record -- shard 01` above its own triple would otherwise hand that
+        # triple to the serial block, whose missing lines the part then satisfies (the ktitle probe).
+        # The own triple of a part opens its record (team-roles/remediator.md:
+        # the record "opens with the file it repaired"), so it sits ABOVE its first entry, and a triple
+        # below an entry belongs to the serial remediator. Keyed on a COUNT ("the second triple") the rule refused a correct
+        # serial block after a part that wrote no triple. Graph s317-s319 carry 266 parts: 255 whose
+        # triple sits above its first entry, 0 below, and 11 with no triple -- 5 repair parts with
+        # entries and no triple, plus 6 one-line *-done.md markers with no entries. THE NEAR-MISS, STATED: a part
+        # whose OWN triple sat below its first entry would be read as the serial opener, so its lines
+        # would be judged as the lines of a serial block -- and, closed by no terminator, as an era-gated tail.
+        # A STATED LIMIT, FAIL-OPEN: such a part triple carrying BOTH lines is still read as the serial
+        # opener, and its lines satisfy the serial block. No signal inside this rule separates it from a
+        # serial triple; the corpus holds 0 of 266 parts with a triple below an entry and 0 with more
+        # than one triple. The self-probe pins which way the engine answers it.
+        s0 = 1
+        for (j = 2; j <= lm; j++) if (ck[j] == "M") { judge(s0, j - 1, (s0 == 1 ? " (above the first shard marker)" : " (shard " cm[s0] ")"), "E", s0 > 1); s0 = j }
+        t2 = 0
+        for (j = lm + 1; j <= nk; j++) if (ck[j] == "T" && ce[j]) { t2 = j; break }
+        hi = (t2 ? t2 - 1 : nk)
+        # A SERIAL TERMINATOR BEFORE THAT TRIPLE closes a block with no triple of its own, whose lines
+        # cannot be told from the last part, so it is refused by name, never judged.
+        for (j = lm; j <= hi; j++) if (tl[j] && ts[j]) emit("the serial block closed at line " tl[j] " by \047" tx[j] "\047 opens with no sha triple of its own after the entries of the last shard, so its advisor: and derivations: lines cannot be told from those of shard " cm[lm], "")
+        judge(lm, hi, " (shard " cm[lm] ")", "E", 1)
+        if (!t2) exit
+        lo = t2
+      }
+      # THE BLOCKS: each runs to the terminator that closes it; the next opens after it. A block
+      # closed by `repair-complete: serial` owes both lines; any other block (`spec-render`) is judged
+      # on its values alone; an unterminated tail is era-gated like a part. Parts never reach a block.
+      for (j = lo; j <= nk; j++) if (tl[j]) { judge(lo, j, blk(j), (ts[j] ? "S" : "V"), (lm && !ts[j])); lo = j + 1 }
+      if (lo <= nk) judge(lo, nk, (lm ? " (the unterminated block from line " cl[lo] ")" : ""), "E", (lm > 0))
     }' "$2"
 }
 checks_refusals() {  # <checks_field output>
@@ -1224,7 +1543,8 @@ record_tail() {
   printf '%s' "$ESC_LINES"
   printf '%s' "$ESC_CLOSED"
   echo "ESCALATED-COUNT: ${ESC_N} (${ESC_X} closed by a later repaired entry's closes: line)"
-  # The gap-fill tripwire (7) REPORTS: a NOTE-tier arm never gates the report above.
+  # The supersedes chains (3b) and the gap-fill tripwire (7) REPORT: neither gates the count above.
+  printf '%s' "$CHAIN_LINES"
   printf '%s' "$GAP_LINES"
   [ "$refuse_n" -eq 0 ] || exit 2
   printf '%s\n' "$SPEC_LINE"
@@ -1248,7 +1568,8 @@ record_tail() {
 # seat token with a part token is not refused here either: its part tokens refuse as NOFILE.
 src_kind() {  # <record> -> "PARTY", "PART" or "NONE" from its source: tokens, outside fences
   awk '
-    /^[ \t]*(```|~~~)/ { fence = !fence; next }
+    fence && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { fence = 0; next } }
+    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
     fence { next }
     /^[[:space:]-]*[*_`]*source[*_`]*:/ {
       v = $0; sub(/^[^:]*:/, "", v)
@@ -1490,8 +1811,55 @@ resolve_cites() {
 # test for an alias; otherwise ROWS above is the whole input and the default join is unchanged.
 # Fields: path, agent, ts, session, tool_use_id, transcript_path, agent_transcript; `-` for empty.
 DROWS=""; RR_SUPERSEDED=0; RR_LINES=""; AL_LINES=""; AL_N=0
+
+# --- NESTED WRITERS (see "A NESTED WRITER IS ITS DISPATCHER'S"). FOLD_MAP holds one
+# `<A>\t<P>\t<T>` line per writer that folds, FOLD_WHY one `<A>\t<reason>` line per writer that
+# does not; every agent id with an artifact-write row in the window is resolved, so the part-record
+# rows a re-run reads are folded by the same map.
+PROBE_LEDGER="${STATE}/subagent-context.jsonl"; SPAWN_LEDGER="${STATE}/spawn-ledger.jsonl"
+FOLD_MAP=""; FOLD_WHY=""; NEST_LINES=""
+_fwr="$(jq -rn --arg since "$SINCE" --arg until "$UNTIL" '
+  inputs | select(type == "object") | select(.kind == "artifact-write")
+  | select((.agent_id // "") != "") | select((.ts | type) == "string")
+  | select(.ts >= $since and .ts <= $until) | .agent_id | tostring' "$LEDGER" 2>/dev/null | sort -u)"
+if [ -n "$_fwr" ]; then
+  _fpr=""; _fsp=""
+  [ -f "$PROBE_LEDGER" ] && _fpr="$(jq -nrR 'inputs | fromjson? | select(type == "object")
+    | select((.agent_id // "") != "") | [(.agent_id | tostring), (.tool_use_id // "" | tostring)] | @tsv' "$PROBE_LEDGER" 2>/dev/null)"
+  [ -f "$SPAWN_LEDGER" ] && _fsp="$(jq -nrR 'inputs | fromjson? | select(type == "object")
+    | select((.tool_use_id // "") != "")
+    | [(.tool_use_id | tostring), (if has("parent_agent_id") then "K" else "N" end), (.parent_agent_id // "" | tostring)]
+    | @tsv' "$SPAWN_LEDGER" 2>/dev/null)"
+  _fres="$({ printf '%s\n' "$_fwr" | sed '/^$/d; s/^/W\t/'
+             printf '%s\n' "$_fpr" | sed '/^$/d; s/^/P\t/'
+             printf '%s\n' "$_fsp" | sed '/^$/d; s/^/S\t/'; } | awk -F'\t' \
+      -v pl="$PROBE_LEDGER" -v sl="$SPAWN_LEDGER" -v hp="$([ -f "$PROBE_LEDGER" ] && echo 1)" -v hs="$([ -f "$SPAWN_LEDGER" ] && echo 1)" '
+    $1 == "W" { W[++nw] = $2; next }
+    $1 == "P" { np[$2]++; if ($3 != "" && !(($2, $3) in pt)) { pt[$2, $3] = 1; nt[$2]++; tu[$2] = $3 }; next }
+    $1 == "S" { ns[$2]++
+                if ($3 == "K") { nk[$2]++; if (!(($2, $4) in sp)) { sp[$2, $4] = 1; npar[$2]++; par[$2] = $4 } }
+                next }
+    END {
+      for (i = 1; i <= nw; i++) { a = W[i]
+        if (!(a in np)) { print "U\t" a "\t" (hp ? "no row for " a " in " pl : pl " is absent"); continue }
+        if (!(a in nt)) { print "U\t" a "\tits row in " pl " carries no tool_use_id"; continue }
+        if (nt[a] > 1) { print "U\t" a "\tits rows in " pl " carry " nt[a] " different tool_use_ids"; continue }
+        t = tu[a]
+        if (!(t in ns)) { print "U\t" a "\t" (hs ? "no row for its spawn " t " in " sl : sl " is absent"); continue }
+        if (!(t in nk)) { print "U\t" a "\tits spawn " t " in " sl " carries no parent_agent_id key (an older guard)"; continue }
+        if (npar[t] > 1) { print "U\t" a "\tits spawn " t " in " sl " carries " npar[t] " different parent_agent_id values"; continue }
+        p = par[t]
+        if (p == "") { print "U\t" a "\tits spawn " t " in " sl " is the lead\047s own dispatch (parent_agent_id \"\")"; continue }
+        if (p == a) { print "U\t" a "\tits spawn " t " in " sl " names " a " as its own parent"; continue }
+        print "F\t" a "\t" p "\t" t
+      }
+    }')"
+  FOLD_MAP="$(printf '%s\n' "$_fres" | sed -n 's/^F	//p')"
+  FOLD_WHY="$(printf '%s\n' "$_fres" | sed -n 's/^U	//p')"
+fi
+
 _ovl0="$(printf '%s\n' "$ROWS" | awk -F'\t' 'NF >= 2 { n[$1]++ } END { for (f in n) if (n[f] > 1) { print f; exit } }')"
-if [ -n "$RERUN" ] || [ -n "$_ovl0" ]; then
+if [ -n "$RERUN" ] || [ -n "$_ovl0" ] || [ -n "$FOLD_MAP" ]; then
   DROWS="$(jq -rn --arg since "$SINCE" --arg until "$UNTIL" --arg ap "$APATH" --arg sh "$SHARD_REL" --arg doc "$_jdoc" '
     def d: if . == null or . == "" then "-" else tostring end;
     inputs | select(type == "object") | select(.kind == "artifact-write")
@@ -1502,9 +1870,25 @@ if [ -n "$RERUN" ] || [ -n "$_ovl0" ]; then
      | [.path, .agent_id, .ts, (.session | d), (.tool_use_id | d), (.transcript_path | d),
         (if has("agent_transcript") then (.agent_transcript | tostring) else "-" end)] | @tsv' "$LEDGER" 2>/dev/null)" \
     || die "the write ledger ${LEDGER} does not parse as JSON lines"
-  # Subject mode kept only the subject's file set; keep the same paths here.
-  DROWS="$({ printf '%s\n' "$ROWS" | sed '/^$/d; s/^/K\t/'; printf '%s\n' "$DROWS" | sed '/^$/d; s/^/D\t/'; } | awk -F'\t' '
-    $1 == "K" { k[$2] = 1; next } ($2 in k) { print substr($0, 3) }')"
+  # Subject mode kept only the subject's file set; keep the same paths here. A NESTED writer's agent
+  # id (column 2) becomes its dispatcher's HERE, before the re-run, alias and distinct-writer arms
+  # read a row, and each fold is named once: `N\t<line>` comes back beside the rows.
+  _dm="$({ printf '%s\n' "$FOLD_MAP" | sed '/^$/d; s/^/M\t/'; printf '%s\n' "$ROWS" | sed '/^$/d; s/^/K\t/'
+           printf '%s\n' "$DROWS" | sed '/^$/d; s/^/D\t/'; } | awk -F'\t' '
+    BEGIN { OFS = "\t" }
+    $1 == "M" { fm[$2] = $3; ft[$2] = $4; next }
+    $1 == "K" { k[$2] = 1; next }
+    ($2 in k) { $0 = substr($0, 3)
+      if ($2 in fm) { a = $2; nr[a]++; if (!((a, $1) in fs)) { fs[a, $1] = 1; fl[a] = (a in fl) ? fl[a] ", " $1 : $1; if (!(a in seen)) { seen[a] = 1; A[++na] = a } }
+                      $2 = fm[a] }
+      print "R", $0 }
+    END { for (i = 1; i <= na; i++) { a = A[i]
+            print "N", "nested: " a " is " fm[a] "\047s subagent (spawn " ft[a] "); its " nr[a] " rows on " fl[a] " are counted as " fm[a] } }')"
+  DROWS="$(printf '%s\n' "$_dm" | sed -n 's/^R	//p')"
+  NEST_LINES="$(printf '%s\n' "$_dm" | sed -n 's/^N	//p')"
+  [ -z "$NEST_LINES" ] || NEST_LINES="${NEST_LINES}
+"
+  ROWS="$(printf '%s\n' "$DROWS" | awk -F'\t' 'NF >= 2 { print $1 "\t" $2 }' | sort -u)"
 fi
 
 # --- RE-RUN NARROWING (see "RE-RUN OF ONE PART"). F_P resolves against the UNNARROWED rows.
@@ -1544,11 +1928,58 @@ RREOF
        | (.path | ltrimstr($px)) as $b | select(($b | contains("/") | not) and ($b | endswith(".md")))
        | [$b, .agent_id, .ts] | @tsv' "$LEDGER" 2>/dev/null)" \
       || die "the write ledger ${LEDGER} does not parse as JSON lines"
+    # The same nested-writer fold as the file rows, so a record written by the re-run writer's own
+    # subagent is the re-run writer's. Each such fold is NAMED, on the same `nested:` output as the file
+    # rows' folds: `N\t<line>` comes back beside the rows, one line per nested agent with part-record rows.
+    if [ -n "$FOLD_MAP" ]; then
+      _prq="$({ printf '%s\n' "$FOLD_MAP" | sed '/^$/d; s/^/M\t/'; printf '%s\n' "$_prrows" | sed '/^$/d; s/^/Q\t/'; } | awk -F'\t' -v px="$_prpfx" '
+        BEGIN { OFS = "\t" }
+        $1 == "M" { fm[$2] = $3; ft[$2] = $4; next }
+        { $0 = substr($0, 3)
+          if ($2 in fm) { a = $2; nr[a]++; f = px $1
+                          if (!((a, f) in fs)) { fs[a, f] = 1; fl[a] = (a in fl) ? fl[a] ", " f : f; if (!(a in seen)) { seen[a] = 1; A[++na] = a } }
+                          $2 = fm[a] }
+          print "Q", $0 }
+        END { for (i = 1; i <= na; i++) { a = A[i]
+                print "N", "nested: " a " is " fm[a] "\047s subagent (spawn " ft[a] "); its " nr[a] " rows on " fl[a] " are counted as " fm[a] } }')"
+      _prrows="$(printf '%s\n' "$_prq" | sed -n 's/^Q	//p')"
+      _prn="$(printf '%s\n' "$_prq" | sed -n 's/^N	//p')"
+      [ -z "$_prn" ] || NEST_LINES="${NEST_LINES}${_prn}
+"
+    fi
     _rres="$({ printf '%s' "$_rspec"; printf '%s\n' "$DROWS" | sed '/^$/d; s/^/D\t/'; printf '%s\n' "$_prrows" | sed '/^$/d; s/^/Q\t/'; } | awk -F'\t' -v px="$_prpfx" '
       $1 == "R" { if (!($2 in S)) { S[$2] = $3; PP[++npp] = $2 }; inF[$2, $4] = 1; nf[$2]++; F[$2, nf[$2]] = $4; fp[$4] = $2; next }
       $1 == "D" { nr++; for (j = 2; j <= NF; j++) r[nr, j - 1] = $j; next }
       $1 == "Q" { nq++; qb[nq] = $2; qa[nq] = $3; qt[nq] = $4; next }
       END {
+        # Pass 0, RECORD-ONLY: P is record-only when no row on F_P falls at or after S_P. Its files then leave
+        # fp, so pass 1 supersedes none of their rows, and its re-run writer is RECW, the agents that wrote P own
+        # record at or after S_P: exactly one, and not one of the writers of F_P before S_P.
+        for (i = 1; i <= nr; i++) {
+          f = r[i, 1]; a = r[i, 2]; t = r[i, 3]
+          if (!(f in fp)) continue
+          p = fp[f]
+          if (t >= S[p]) { post[p] = 1; continue }
+          pre[p, a] = 1; k = p SUBSEP f; kn[k]++
+          if (!((k, a) in kid)) { kid[k, a] = 1; kids[k] = (k in kids) ? kids[k] " " a : a }
+          if (!(k in kf) || t < kf[k]) kf[k] = t
+          if (!(k in kl) || t > kl[k]) kl[k] = t
+        }
+        for (i = 1; i <= nq; i++) {
+          b = qb[i]; a = qa[i]; t = qt[i]
+          if ((b in S) && t >= S[b] && !((b, a) in recw)) { recw[b, a] = 1; nrw[b]++; rwl[b, nrw[b]] = a; rws[b] = (b in rws) ? rws[b] " " a : a }
+        }
+        for (q = 1; q <= npp; q++) { p = PP[q]
+          if (p in post) continue
+          ro[p] = 1
+          for (m = 1; m <= nf[p]; m++) delete fp[F[p, m]]
+          if (nrw[p] == 0) continue
+          if (nrw[p] > 1) print "RECMANY\t" p "\t" rws[p] "\t" px p
+          else if ((p, rwl[p, 1]) in pre) print "RECOLD\t" p "\t" rwl[p, 1] "\t" px p
+          else continue
+          # Refused here, so the foreign-record and no-record lines, which presume a re-run writer, stand down.
+          own[p] = 1; for (m = 1; m <= nrw[p]; m++) pq[p, rwl[p, m], "F"] = 1
+        }
         # Pass 1: rows on a re-run file before its start are superseded; their writers are the superseded writers of P.
         for (i = 1; i <= nr; i++) {
           f = r[i, 1]; a = r[i, 2]; t = r[i, 3]
@@ -1578,6 +2009,8 @@ RREOF
           f = r[i, 1]; a = r[i, 2]; t = r[i, 3]
           if ((f in fp) && t >= S[fp[f]]) rw[fp[f], a] = 1
         }
+        # A record-only P: its one record writer, not an earlier writer of F_P, is its re-run writer.
+        for (q = 1; q <= npp; q++) { p = PP[q]; if ((p in ro) && nrw[p] == 1 && !((p, rwl[p, 1]) in pre)) rw[p, rwl[p, 1]] = 1 }
         # The re-run writer is a NEW dispatch: no row on a file outside F_P, in any part or none.
         for (i = 1; i <= nr; i++) {
           f = r[i, 1]; a = r[i, 2]; t = r[i, 3]
@@ -1602,6 +2035,10 @@ RREOF
         }
         for (q = 1; q <= npp; q++) { p = PP[q]; if (!(p in own)) print "PRNONE\t" p "\t" px p }
         for (q = 1; q <= npp; q++) { p = PP[q]; ln = "rerun: " p " since " S[p]
+          if (p in ro) { ln = ln "; record-only, by " rws[p]
+            for (m = 1; m <= nf[p]; m++) { f = F[p, m]; k = p SUBSEP f
+              ln = ln "; kept on " f ": " ((k in kn) ? kids[k] " (" kn[k] " rows, " kf[k] ".." kl[k] ")" : "none") }
+            print "L\t" ln; continue }
           for (m = 1; m <= nf[p]; m++) { f = F[p, m]; k = p SUBSEP f
             if (k in sn) { ln = ln "; superseded on " f ": " sids[k] " (" sn[k] " rows, " sf[k] ".." sl[k] ")"; ns += sn[k] }
             else ln = ln "; superseded on " f ": none" }
@@ -1619,6 +2056,8 @@ RREOF
         PRFOREIGN) refuse "--rerun ${_a}: ${_b} wrote ${_a}'s own part record ${_c} at ${_d}, at or after the re-run start, and is not its re-run writer; the covering account is the re-run writer's alone" ;;
         PRNONE) refuse "--rerun ${_a}: no row on ${_a}'s own part record ${_b} at or after the re-run start was written by its re-run writer; the account covering the superseded bytes must be the re-run's" ;;
         RWOUT) refuse "--rerun ${_a}: ${_b}, the re-run writer of ${_a}, also wrote ${_c} at ${_d}, which belongs to no file ${_a} cites; the re-run is a NEW dispatch, never a finished part's agent" ;;
+        RECMANY) refuse "--rerun ${_a}: no file ${_a} cites was written at or after the re-run start, so this is a record-only re-run, and its own part record ${_c} was written after the start by more than one agent (${_b}); a record-only re-run has exactly one writer" ;;
+        RECOLD) refuse "--rerun ${_a}: no file ${_a} cites was written at or after the re-run start, so this is a record-only re-run, and its own part record ${_c} was written after the start by ${_b}, which wrote ${_a}'s files before it; the re-run is a NEW dispatch, never the writer it re-runs" ;;
         L) RR_LINES="${RR_LINES}${_a}
 " ;;
         N) RR_SUPERSEDED="$_a" ;;
@@ -1744,7 +2183,9 @@ OVERLAPS="$(printf '%s\n' "$ROWS" | awk -F'\t' '
   END { for (f in n) if (n[f] > 1) print f "\t" w[f] }' | sort)"
 if [ -n "$OVERLAPS" ]; then
   while IFS='	' read -r f w; do
-    refuse "${f} was written by more than one agent in the window: ${w}"
+    # Each writer that did not fold as a nested writer, and the ledger that lacked the link.
+    _nf="$(printf '%s\n' "$FOLD_WHY" | awk -F'\t' -v w=", ${w}, " 'NF >= 2 && index(w, ", " $1 ", ") { printf "%s%s (%s)", (n++ ? "; " : ""), $1, $2 }')"
+    refuse "${f} was written by more than one agent in the window: ${w}${_nf:+; not folded as a nested writer: ${_nf}}"
   done <<OVEOF
 $OVERLAPS
 OVEOF
@@ -1914,6 +2355,7 @@ TMP="${OUT}.join.$$"
     _inwin="in its window"
   fi
   [ -z "$AL_LINES" ] || printf '%s' "$AL_LINES"
+  [ -z "$NEST_LINES" ] || printf '%s' "$NEST_LINES"
   if [ "$SUBJMODE" = 1 ]; then
     echo "every subject file and section copy was written by exactly one agent ${_inwin};"
     printf '%s\n' "$ASM_LINE" | sed 's/^/partition-subject.sh: /'
@@ -1951,6 +2393,7 @@ _jx=""
 [ -z "$RERUN" ] || _jx=", ${RR_SUPERSEDED} superseded rows"
 [ "$AL_N" = 0 ] || _jx="${_jx}, ${AL_N} alias rows"
 echo "JOINED: ${OUT} ($(printf '%s\n' "$PARTS" | grep -c .) parts, $(printf '%s\n' "$WRITERS" | grep -c .) writers${_jx})"
+[ -z "$NEST_LINES" ] || printf '%s' "$NEST_LINES"
 # Every escalated entry, by part, and the count; then the repaired edits whose cross-file siblings
 # and moved cites only the serial remediator can check. Either count above 0 dispatches the serial
 # remediator, in every mode, with every ESCALATED: line in its brief (_gate-procedures.md,

@@ -960,7 +960,8 @@ mode, a `repaired` entry with an edit whose `siblings:` field is absent or in no
 forms, and a siblings fence whose control text is not in the file it names.
 
 After a join refusal naming a file `which no dispatched agent wrote`, or a file `written by more
-than one agent in the window`:
+than one agent in the window`, or a part whose entry `sets part of the fix aside` and names no
+hand-off:
 
 1. Re-dispatch that shard, writing through Edit, Write or MultiEdit, and re-run the join. The
    join lists every reason it refused; clear each one.
@@ -973,6 +974,11 @@ than one agent in the window`:
    refuses a re-run writer that is one of the writers it supersedes, or that wrote any other part's
    file or record in the window. The re-run writer rewrites the part's own record
    `<repair-dir>/<part>.md` after S_P, and the join refuses that record written after S_P by anyone else, or not at all by the re-run writer.
+   When the cure is a record change only (the set-aside refusal above is one), the brief tells the re-run to rewrite
+   the record and nothing else, and never to make an edit no finding asked for. The join reads that re-run as
+   RECORD-ONLY: no cited file written after S_P, so the earlier writes on them stand, and the record's one writer after
+   S_P is the re-run writer. It refuses a record-only re-run whose record has more than one writer after S_P, or whose
+   writer also wrote the part's files before S_P.
    Its brief requires the re-run remediator to account for the whole section diff against the split slice
    (in files mode, against the bytes the pass reviewed), not only its own edits, because the earlier
    writer's bytes stay in the file and the re-run part's account is all that covers them.

@@ -20,6 +20,134 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.829.0] - 2026-10-18
+
+Batch 236 (cb's JOIN build). Closes BL-537, BL-556, BL-557, BL-565, BL-657 and BL-660. Files BL-672 and BL-673.
+Re-anchors BL-530's archived LANDED line and refines BL-669. Closes no `PC-` id. Net for this release: 6 closed,
+2 filed.
+
+### A nested writer folds into its dispatcher (BL-537)
+
+- `join-remediator-shards.sh` folds a writer whose probe row names a spawn row carrying a non-empty
+  `parent_agent_id` into that dispatcher, one level, where the detailed rows are built. The re-run block, the alias
+  block and the distinct-writer arm all see the folded id. Each fold is named on a `nested:` line in the JOINED output
+  and the record, for file rows and part-record rows alike. A writer with no probe row or no spawn row is not folded,
+  and the two-writer refusal names which ledger lacked the row. A key-less spawn row (an older guard) folds nothing.
+- The second subject, a writer with no transcript, needed no change: the shipping join refuses it with its id named,
+  as fixture arms AL1 and AL3 show. `merge-adversarial-shards.sh` needs no fold, because an adversary is a leaf and a
+  nested writer is refused on its role; `validate-gate-adjudication.sh` counts no writers.
+- Residual: two parallel children of one dispatcher editing one file read as one writer.
+
+### A gap-fill line names where its edit landed (BL-556)
+
+- At NOTE tier, changing no exit code, a GAPFILL line gains a location suffix: the enclosing section and the first
+  decision token (`D-<n>`, `LR-…`, `LRC-…`) it cites. Parts, `--document` and `--subject` mode read the live section
+  copy, matching the cite to the manifest by part NUMBER; record mode maps a dead section cite through the retained
+  `.manifest` to the document span and says the lines may have moved; otherwise `location unresolved`.
+- Recall is unchanged, keyed on the gap-fill or veto words. On graph's real record the s319 pair lands under sections
+  citing LR-S319-2 and no decision, so the location reports where an edit landed, not that it extended a decision.
+
+### A serial block owes its own check lines (BL-557)
+
+- `checks_field` segments a joined record's serial blocks by their column-0 `repair-complete:` terminators. The first
+  serial block opens at the second `- artifact:` triple after the last shard marker, and a record with no second
+  triple is refused by name. A `repair-complete: serial` block owes `advisor:` and `derivations:`; a `spec-render`
+  block owes neither; a part's lines never satisfy a serial block.
+- False-positive set over graph's 4 serial-terminated records and their 8 blocks: 0.
+- The serial block opens BY POSITION: at the first `- artifact:` triple after the last shard marker that follows
+  an ENTRY of the last part, where an entry is recognised by its `disposition:` line and not by any `### ` heading,
+  since a part's own triple opens its record above its first entry. A non-entry `### ` heading above a part's own
+  triple (for example `### Repair record -- shard 01`) would otherwise let that part's lines satisfy a serial block
+  that wrote none; a self-probe cell and a fixture cell pin it, and a mutant restoring the any-heading rule is
+  killed by p_chkserial. A rule keyed on a count ("the second triple") refused a correct serial block after a part
+  that wrote no triple. Measured over graph's 266 s317-s319 repair parts: 255 parts have their triple above
+  their first entry and 0 below; 5 repair parts carry entries and no triple, and 6 are one-line `*-done.md` markers
+  with no entries.
+- The entry predicate was censused over the same 266 repair parts. They hold 1452 headings at `### ` level outside
+  fences: 1445 carry a `disposition:` line and 7 do not, and all 7 are non-entry section headings (for example
+  `### Escalated`, `### Validators`, `### Out of shard` and `### Not applied`). The `src_ids` id grammar would miss
+  201 real entries, headings with a disposition but no id, which is why `disposition:` is the predicate. Those 7 are
+  the corpus instances of the non-entry-heading shape, so under the old any-heading rule each would have set the
+  entry flag; the defect was live on graph, not hypothetical.
+- The near-miss, a part triple carrying both lines placed below its first entry, is still read as the serial
+  opener, so its lines satisfy the block (fail-open). Nothing inside the rule separates it. The graph corpus has 0
+  of 266 parts with a triple below an entry and 0 with more than one triple. On graph's 4 serial-terminated records
+  the count rule and the position rule give identical output, so no real record discriminates them; the defect is
+  a shape, pinned by cells.
+- Mutant JX84: its anchor moved with the marker rule, and its declared set widens to `chkjoined chkserial` because,
+  re-anchored, it also strips p_chkserial's no-triple refusal.
+- Seed correction: `content-seal`'s CS-J6 (0.828.0) closed a joined record with `--mark-repair` without
+  appending the serial remediator's own block, which the earlier count rule already refused (HEAD's count rule
+  refused the old seed; the position change did not owe this correction). CS-J6 appends that block with Edit,
+  its triple and both check lines, before `--mark-repair`, as `remediator.md` requires. The arm still tests the
+  seal on `--mark-repair`'s write.
+- The `content-seal-mutants` declaration moved with that seed, so it was re-measured. Mutant SA, which makes the
+  recorder append a no-op, now also kills CS-J6. Mutant SP, which makes the program `--record` calls no-ops, no
+  longer kills it, because the recorded Edit row covers the record before `--mark-repair` re-seals it. SP is still
+  killed by 7 cells.
+
+### A supersedes chain counts once (BL-565)
+
+- In `--sources` and `--escalations`, a `supersedes:` chain counts once, under its latest member. A superseded member
+  prints `ESCALATED-SUPERSEDED: <part> <heading>` and the chain prints `CHAIN:`. A `closes:` that leaves a member open
+  is flagged on `CHAIN-OPEN:` after the count, report-only. A `supersedes:` naming no escalation, or a later one, is
+  refused as dangling. Parts mode is unchanged, and `remediator.md`'s one-`closes:`-per-member rule stands.
+- Graph's counts fall on three records (3 to 1, 16 to 5, 10 to 6); the tip adversary read one chain and found three
+  entries restating one decision with the head still open.
+
+### A record-only re-run has an identity (BL-657)
+
+- `--rerun`: when no row on F_P falls at or after S_P, nothing on F_P is dropped, and P's record must be rewritten after
+  S_P by exactly one agent that did not write F_P before S_P; the record line says `record-only`. Two new refusals,
+  for more than one record writer and for an original writer, sit beside the unchanged ones.
+- `_gate-procedures.md` step 1b covers the hand-off refusal shape and states the record-only re-run. Its gate
+  sentence keeps the "or" the `gp-rerun-trigger` pin matches on.
+
+### One fence grammar at every shard and record reader (BL-660)
+
+- A fence opens only on a run of three or more backticks whose info string carries no backtick, or three or more
+  tildes, and closes only on a bare run of its own character at least as long as its opener. A prose line opening with
+  three backticks no longer toggles a fence; a `~~~~^^^` traceback line inside a ``` fence closes nothing; a ````
+  fence holding a ``` block stays open.
+- False-positive set of the new opener over graph's 747 shard, record and section files: 0.
+- The 32 files in `core/scripts/` and `core/hooks/` matching `(```|~~~)`, by what each does:
+  - Changed (6): `merge-adversarial-shards.sh`, `merge-review-shards.sh`, `join-remediator-shards.sh`,
+    `validate-adversarial-convergence.sh` (its `l_kparse` reads shard files), `wait-for-deliverable.sh` (`has_marker`
+    reads shards and records) and `gen-architecture-index.js`.
+  - Exempt, opening only on an exact ```` ```derived ````: `validate-artifact-derivations.sh`, `ai-dlc-derivation-capture.sh`.
+  - Exempt by what they read, never a shard or record: `validate-spawn-ledger.sh` (the snapshot), `validate-spec-join.sh`
+    (the kernel), `ai-dlc-dispatch-guard.sh` (the brief), `partition-document.sh` (document and section files),
+    `validate-carried-findings.sh` (code-review files), `validate-handoff-evidence.sh` (the story file),
+    `validate-layer-entries.sh` (layer entries and crosswalks), `validate-request-coverage.sh` (the request-coverage
+    file), `sprint-status.sh`, `audit-rule-files.sh`, `validate-audit-anchors.sh`, `validate-cycle-commits.sh` and
+    `artifact-path-config.sh` (other files).
+  - Exempt, its own grammar: `validate-h2-attestation.sh`.
+  - Prose only, no fence parser (the match is in a comment, an error string, or text the script prints or writes):
+    `core-paths.sh`, `ai-dlc-core-guard.sh`, `report-propagation-fanout.sh`, `gate-slice.sh`,
+    `ai-dlc-answer-capture.sh`, `ai-dlc-pause.sh`, `ai-dlc-precompact.sh`, `sync-taught-schema.sh`,
+    `validate-steering-budget.sh`, `validate-provenance-block.sh`.
+- Not in that population: `scripts/backlog-rotate.sh` (outside `core/`) checks the closer's character but not its
+  length.
+
+### Fixtures and batteries
+
+- New arms in `remediator-shard-join` (nested fold, record-only re-run, serial blocks, supersedes chain, gap-fill
+  location, nested fences), `adversarial-shard-merge` (the BL-660 prose line, tilde caret line, four-backtick opener,
+  nested fences at the count and in `same_set`), `review-shard-merge` and `architecture-index-cell-escaping`.
+- Mutant kill sets were measured at this release's slots, across the 14 mutant shards of the three batteries. Four
+  existing closure mutants (JX37, JX38, JX42, JX44) also kill the supersedes-chain arm, each with its reason stated
+  beside it; JX38's kill shows that arm catches closure applied after the chain resolves, which hides an open member.
+
+### Filed and corrected
+
+- BL-672 (DEFECT, efficiency): at 0.824.0's rehearsal the suite pole `adversarial-shard-merge-mutants` grew from 1681s
+  to 2246s loaded. The hypothesis is one seal-check subprocess per merge call; it is owed a measurement.
+- BL-673 (DEFECT): `backlog-rotate.sh:483` reads a LANDED line's sha with a greedy sed, so later prose on that line
+  saying "verified" before a hex-leading word replaces the sha. At this release's gate it read BL-537's sha as `a` and
+  refused a correct entry; the owed fix anchors the read on the annotation's own bold form.
+- BL-530's archived LANDED line names the squash `a6e29a7e`, not the pre-squash branch commit.
+- BL-669's owed fix judges the last non-program tool seal row, since `wait-for-deliverable --mark` writes a program row.
+
 ## [0.828.0] - 2026-10-18
 
 Batch 236, WFD release (owned and gated by ai-dlc-77 [e29316], lead ai-dlc-c8). Closes BL-661, BL-649, BL-541,
