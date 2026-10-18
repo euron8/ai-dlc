@@ -195,7 +195,12 @@ else bad "CS-K5: a marked-then-amended shard was not refused with the --mark rem
 # row, seals nothing, and the merge refuses the marked shard on its writer's Write.
 dk6="$(clean_world)"; r6="$(world_root "$dk6")"
 mv "$r6/_bmad-output" "$r6/real-out" && ln -s real-out "$r6/_bmad-output" || { echo "FIXTURE BROKEN: CS-K6 cannot link the state dir" >&2; exit 2; }
-[ -L "$r6/_bmad-output" ] || { echo "FIXTURE BROKEN: CS-K6's state dir is not a symlink" >&2; exit 2; }
+# The precondition, as its own line: the arm below means nothing unless the state dir IS a symlink
+# whose name differs from its target's, and every shard path reaches the merge through it.
+if [ -L "$r6/_bmad-output" ] && [ "$(cd "$r6/_bmad-output" && pwd -P)" != "$(cd "$r6/_bmad-output" && pwd)" ] \
+   && case "$dk6" in "$r6/_bmad-output/"*) true ;; *) false ;; esac; then
+  ok "CS-K6s: the state dir is a symlink: _bmad-output -> real-out, and the shards are addressed through it"
+else bad "CS-K6s: symlink not set up: _bmad-output is not a link to a differently named dir, or the shard path does not pass through it ($dk6)"; fi
 seal_all "$dk6"; nb6="$(seal_count "$(ledger_of "$dk6")")"
 for f in "$dk6"/*.md; do mark_one "$WFD" "$f"; done
 bash "$SEAL" --check "$r6/_bmad-output" "$dk6"/*.md > /dev/null 2>&1; ck6=$?
