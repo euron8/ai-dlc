@@ -710,6 +710,32 @@ line with no later "verified" parses the same as today.
 
 verify: manual
 
+## BL-674 — I55 arm 3's reach scan recognises four root variables, so a fixture that reads an excluded path through any other root variable is never checked
+
+**DEFECT.** Filed by peer session ai-dlc-c0 (batch 236 READSET), id allocated by lead ai-dlc-c8; found by the BL-606 receipt hand. Tiered DEFECT rather than NOTE because the gap was reproduced in both directions on a probe tree and the arm stays green over a real instance, so a fixture's input can change without the suite re-running.
+
+`scripts/validate-enforcement-map.sh:6619` fixes the grammar as `i55_roots='(REPO_ROOT|ROOT|D_ROOT|C_ROOT)'`, and `i55_reach_scan` (`:6620`) builds both its `grep -rHnoE` pattern (`:6623`) and its awk `pat` (`:6637`) from it. A read written `"$X/docs/..."` through any other variable matches neither, so arm 3 never sees the line. The arm's control (`:6688`) uses the same four names, so it cannot notice either. The arm's self-probe (`:6657-6690`) seeds only `$ROOT`.
+
+Instance: `core/fixtures/consumer-suite-pool/receipt.sh` binds `D9_ROOT` at `:46` and reads through it at `:50`, `:52`, `:56`, `:58`, `:68`, `:69` and `:72`: the literal `"$D9_ROOT/docs"` at `:52`, and `"$D9_ROOT/$f"` at the others, where `$f` runs over `.githooks/pre-push` and `core/git-hooks/pre-push` (loops at `:49` and `:55`) and over `docs/backlog.md` and `docs/backlog.archive.md` (loop at `:67`). `docs/` is a content-key-excluded top, so these are the shape the arm hunts, were the root name recognised. Whether this receipt is a fixture input that should be keyed is a separate question; the point here is that the arm cannot say.
+
+Measured (probe copy of `:6619-6656` at `d3f8d151`, `bash /private/tmp/claude-501/-Users-n8-git-ai-dlc/44823695-8b1f-4a1e-8168-15f96d480726/scratchpad/hands/bl674/probe.sh`, mktemp tree, two fixtures `cat "$ROOT/docs/x"` and `cat "$D9_ROOT/docs/x"`, excluded entry `docs`):
+
+```
+rootvar/run.sh:1:$ROOT/docs/         <- reported (the control, same invocation)
+(d9var/run.sh                        <- absent under the shipped grammar)
+widened roots + D9_ROOT:  d9var/run.sh:1:$D9_ROOT/docs/  and  rootvar/run.sh:1:$ROOT/docs/
+```
+
+So the ROOT read is reported, the D9_ROOT read of the identical path is not, and adding the one name makes it appear. This is the control plus the instance in one run. It shows the grammar is the cause; it does not show that the real `receipt.sh` reads are unkeyed.
+
+Real tree at `d3f8d151`: `<REALTREE: run realtree.sh>` (script `.../hands/bl674/realtree.sh`; it seeds a `$ROOT` control, derives the excluded list as the arm does, and counts hits naming `consumer-suite-pool/receipt.sh`, expected 0). Not run by the filing hand, by the lead's instruction.
+
+Population: `<POPULATION: run population.sh>` (script `.../hands/bl674/population.sh`: one grep over `core/fixtures/*/*.sh` for `$X_ROOT.../`, minus the four recognised names, listing distinct variable names with counts, with a control on the four names and on `D9_ROOT` in `receipt.sh`). This is a grep floor, not a parse: it sees only `*ROOT*` names written as `$NAME/` or `${NAME}/`, so a differently named variable or an indirect read is outside it. Not run by the filing hand.
+
+Owed: widen the root grammar, for example by deriving the roots from assignments of the form `X_ROOT=` or `*ROOT=` in each scanned file rather than hand-listing four. The false-positive set must be measured before it ships (CLAUDE.md), and the I55 self-probe must gain a non-standard-root case in both directions: a `$D9_ROOT/docs/x` read reported, and a near-miss (a `*ROOT` variable that does not point at the distribution root, or a `+`-declared literal path through it) acquitted. The control at `:6688` should count the widened grammar too.
+
+verify: manual
+
 ## BL-678 — plan-rotate.sh rebuilds the plan's archive pointer from the current run's ranges alone, so every earlier rotated range drops out of the plan
 
 **NOTE.** Filed by the TRAIN owner on the lead's instruction, and tiered NOTE by the lead's ruling. `scripts/plan-rotate.sh:205-206` spell the
