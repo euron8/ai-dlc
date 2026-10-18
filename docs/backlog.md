@@ -407,7 +407,9 @@ Owed: I84's slot check keys on a non-comment line, with the same narrowing `i84_
 
 Related: BL-631.
 
-verify: manual
+Built (batch 236): I84's slot check now keys on non-comment lines, using one awk `index()` pass. A whole-comment line no longer satisfies it, and a trailing comment on a code line still does, which is the same tolerance as `i84_reads`. The validator scores two probe seeds before the corpus: one names the slot only in a comment, one names it in code. Fixture arms A17b and A17c were added to `enforcement-map-derivations`, where A17c is the whole-file-grep mutant. Measured in the owner's slot, the fork-profile TOTAL is unchanged at 3461 on both sides over 5 interleaved reps with spread 0, and the I84 row reads 329 on both sides.
+
+verify: sh bash core/fixtures/enforcement-map-derivations/receipt-bl651.sh
 
 ## BL-652 — `check-owed-derivations.sh` reads an absent owed-derivations record as 0 findings, so Check 37 cannot fire on a tree with no record
 
