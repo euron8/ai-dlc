@@ -98,7 +98,24 @@ dropped; `dispatch-model-guard` arms 16a-16e. The filed call already had its dis
 graph `dbc4c057e`), so "recorded nowhere" did not hold. Open: no join reads `parent_agent_id` yet, and the second
 subject, the writer `ad67234a336bc2239` with no transcript, is untouched.
 
-verify: manual
+**Fix, b236-join.** `join-remediator-shards.sh` now reads `parent_agent_id`. A writer A folds into its dispatcher P
+when A's own chain resolves. The chain is A's row in `<state>/subagent-context.jsonl`, which gives one `tool_use_id` T,
+then the `<state>/spawn-ledger.jsonl` row for T, which has the `parent_agent_id` key with a non-empty value P. The fold
+goes one level only and is applied where the detailed rows are built, so the re-run, alias and distinct-writer arms all
+see P. The JOINED output and the record name each fold:
+`nested: <A> is <P>'s subagent (spawn <T>); its <n> rows on <files> are counted as <P>`. A lead-issued spawn (`""`), a
+key-less spawn row, a missing probe row and a missing spawn row each leave A unfolded, and the two-writer refusal names
+the ledger that lacked the link. The fixture arm is `remediator-shard-join` NW1, and its mutant is JX96. No real
+instance exists: graph's two nested children have 0 write rows. Residual, stated in the header: two parallel
+children of one dispatcher editing one file read as one writer. `merge-adversarial-shards.sh` needs no fold because
+an adversary is a leaf and spawns nothing (`adversary.md:572`). `validate-gate-adjudication.sh` counts no writers.
+
+**Second subject, verified by the owner.** The no-transcript writer is refused by name, and the attributable control
+aliases. The probe is `/private/tmp/claude-501/-Users-n8-git-ai-dlc/064e4f5f-ce2b-494a-8273-0616aa9e6094/scratchpad/b236-join/p537b.sh`,
+and arms AL3 and AL1 pin both halves. `ad67234a336bc2239` carries 1 write row and 0 probe rows, so it cannot fold,
+which is consistent with being refused by name.
+
+verify: sh F=core/fixtures/remediator-shard-join/lib.sh; J=core/scripts/join-remediator-shards.sh; [ -f "$F" ] && [ -f "$J" ] || exit 9; grep -q '^p_nested() {' "$F" || exit 9; ( NAME=remediator-shard-join; AI_DLC_VERDICT_STORE="$(mktemp -d)"; export AI_DLC_VERDICT_STORE; . "$F" >/dev/null 2>&1 || exit 2; p_nested "$JOIN" >/dev/null 2>&1 ); r=$?; [ "$r" -eq 2 ] && exit 9; exit "$r"
 
 ## BL-538 — the lead takes a full turn for every agent notification while an armed join already covers it
 

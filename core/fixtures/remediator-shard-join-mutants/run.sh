@@ -76,7 +76,7 @@ MUTANTS_a="JX1 JX2 JX3 JX4 JX5 JX6 JX7 JX8 JX10 JX9 JX11 JX12 JX13 JX14 JX15 JX1
 MUTANTS_b="JX19 JX20 JX21 JX22 JX23 JX24 JX25 JX26 JX27 JX28 JX29 JX30 JX36 JX37 JX38 JX42 JX43 JX44 JX95"
 MUTANTS_c="JX45 JX46 JX47 JX48 JX49 JX39 JX40 JX41 JX31 JX32 JX33 JX34 JX35 JX50 JX51 JX52 JX53 JX54 JX93 JX94"
 MUTANTS_d="JX55 JX56 JX57 JX58 JX59 JX60 JX61 JX62 JX63 JX64 JX65 JX66 JX67 JX68 JX69 JX70 JX71 JX72 JX73"
-MUTANTS_e="JX74 JX75 JX76 JX77 JX78 JX79 JX80 JX81 JX82 JX83 JX84 JX85 JX86 JX87 JX88 JX89 JX90 JX91 JX92"
+MUTANTS_e="JX74 JX75 JX76 JX77 JX78 JX79 JX80 JX81 JX82 JX83 JX84 JX85 JX86 JX87 JX88 JX89 JX90 JX91 JX92 JX96"
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
@@ -319,7 +319,7 @@ fi
 # missing overlap SENTENCE, which is the only thing that names the defect to the lead.
 # rrgraph, rrfiles and rrsubj assert the overlap sentence on their no-rerun half, rrspan on the
 # re-run writer's second section, alnokeys on a keyless ledger.
-mutant "JX1 the >1-writer refusal removed" "overlap docoverlap sjspec2 rrgraph rrspan rrfiles rrsubj alnokeys" \
+mutant "JX1 the >1-writer refusal removed" "overlap docoverlap sjspec2 rrgraph rrspan rrfiles rrsubj alnokeys nested" \
   'if [ -n "$OVERLAPS" ]; then' \
   'if false; then'
 mutant "JX2 the uncited-file refusal removed" "missing" \
@@ -816,6 +816,10 @@ mutant "JX95 --agent-writes read piped through sort with no parse check" "agentw
   '    _aw="$(jq -rn --arg a "$AGENT_ID" --arg s "$SINCE" '"'"'[inputs | select(type == "object") | select(.kind == "artifact-write" and .agent_id == $a and (.path | type) == "string" and ($s == "" or .ts >= $s)) | .path] | unique | .[]'"'"' "$LEDGER" 2>/dev/null)" \
       || die "the write ledger ${LEDGER} does not parse as JSON lines"' \
   '    _aw="$(jq -r --arg a "$AGENT_ID" --arg s "$SINCE" '"'"'select(.kind == "artifact-write" and .agent_id == $a and ($s == "" or .ts >= $s)) | .path'"'"' "$LEDGER" 2>/dev/null | sort -u)"'
+# JX96: the nested-writer fold resolves nothing, so a subagent's row on its dispatcher's file is a second writer.
+mutant "JX96 a nested writer not folded into its dispatcher" "nested" \
+  '  FOLD_MAP="$(printf '"$_Q"'%s\n'"$_Q"' "$_fres" | sed -n '"$_Q"'s/^F	//p'"$_Q"')"' \
+  '  FOLD_MAP=""'
 # ---- END JX MUTANTS.
 
 # ------------------------------------------------------------------------------ the reap

@@ -1187,6 +1187,67 @@ p_altool() { # the one tool_use holding the id is a Read, not an Edit, Write or 
   refused "$w" "$AL_REF (tool_use_id toolu_ORPH;" && has "$JO" "the id is held by $w/projects/sess-1/subagents/agent-$AG1.jsonl (1 block(s)))"
 }
 
+# ---- A NESTED WRITER IS ITS DISPATCHER'S. The write rows come from the real hook, every evidence key
+# present; the probe row and the spawn rows are seeded with jq in the shape ai-dlc-subagent-probe.sh and
+# ai-dlc-dispatch-guard.sh write them. The spawn ledger opens with an EPOCH row that is not the subject
+# (the lead's own dispatch of AG1), so the subject row is never first.
+NEST_C=a7c1d2e3f4a5b6c7d
+probe_row() { # <world> <agent_id> <tool_use_id> -- one subagent-context.jsonl row
+  jq -nc --arg a "$2" --arg u "$3" '{v:3, ts:"2026-10-15T19:40:00Z", sprint:305, agent_id:$a, model:"claude-sonnet",
+    role:null, turns:4, peak_tokens:12000, compactions:0, duration_s:60, effort:null, definition:null,
+    tool_use_id:$u, transcript_version:"2.1.0"}' >> "$1/_bmad-output/subagent-context.jsonl"
+}
+spawn_row() { # <world> <tool_use_id> <parent_agent_id | "-" for a row with no such key> -- one spawn-ledger.jsonl row
+  jq -nc --arg u "$2" --arg p "$3" '{v:1, ts:"2026-10-15T19:20:00Z", sprint:305, name:null, role:"remediator",
+    model_pinned:null, tier_pinned:null, model_requested:null, model_bound:false, effort_bound:null,
+    role_contract_cited:true, contract_via:"prompt", role_file_readable:true, definition_bound:false,
+    definition_stale:false, name_stripped:null, tool_use_id:$u, parent_agent_id:$p, shard:null}
+    | if $p == "-" then del(.parent_agent_id) else . end' >> "$1/_bmad-output/spawn-ledger.jsonl"
+}
+nest_world() { # <variant: fold | lead | nokey | noprobe> -> world: three writers, and AG1's subagent NEST_C also editing story 2.1
+  local w tp sd; w="$(new_world)" || return 1
+  tp="$w/projects/sess-1.jsonl"; sd="$w/projects/sess-1"; mkdir -p "$sd/subagents" || return 1
+  : > "$sd/subagents/agent-$AG1.jsonl"; : > "$sd/subagents/agent-$NEST_C.jsonl"
+  spawn_row "$w" toolu_SPAG1 ""
+  case "$1" in
+    lead) spawn_row "$w" toolu_SPNC "" ;;
+    nokey) spawn_row "$w" toolu_SPNC - ;;
+    *) spawn_row "$w" toolu_SPNC "$AG1" ;;
+  esac
+  probe_row "$w" "$AG2" toolu_SPAG2
+  [ "$1" = noprobe ] || probe_row "$w" "$NEST_C" toolu_SPNC
+  drive "$w" Edit "$w/$REL/$S21" "$AG1" toolu_E1 "$tp" "$(gts 19:25:00)"
+  drive "$w" Edit "$w/$REL/$S21" "$NEST_C" toolu_E2 "$tp" "$(gts 19:25:30)"
+  drive "$w" Edit "$w/$REL/$S21" "$AG1" toolu_E3 "$tp" "$(gts 19:25:40)"
+  drive "$w" Edit "$w/$REL/$S22" "$AG2" toolu_E4 "$tp" "$(gts 19:26:00)"
+  drive "$w" Edit "$w/$REL/$S31" "$AG3" toolu_E5 "$tp" "$(gts 19:27:00)"
+  part "$w" 01 2.1; part "$w" 02 2.2; part "$w" 03 3.1
+  printf '%s' "$w"
+}
+p_nested() { # AG1's subagent edits AG1's story: folded -> JOINED with the nested: line; a lead-issued spawn, a key-less
+  # spawn row and a missing probe row each leave it unfolded -> REFUSED naming the ledger that lacked the link
+  local w o nl; w="$(nest_world fold)" || return 1
+  [ "$(jq -r 'select(.agent_id == "'"$NEST_C"'") | [.tool_use_id, .transcript_path, (.agent_transcript | tostring), .session] | join(" ")' \
+       "$w/$SJPA/.artifact-writes.jsonl")" = "toolu_E2 $w/projects/sess-1.jsonl true t" ] || return 1
+  run_join "$1" "$w"
+  o="$(out_of "$w")"
+  nl="nested: $NEST_C is $AG1's subagent (spawn toolu_SPNC); its 1 rows on $REL/$S21 are counted as $AG1"
+  [ "$RC" -eq 0 ] && has "$JO" "JOINED: " && has "$JO" "(3 parts, 3 writers)" && grep -qx -- "$nl" "$JO" \
+    && [ -f "$o" ] && grep -qx -- "$nl" "$o" || return 1
+  w="$(nest_world lead)" || return 1; run_join "$1" "$w"
+  refused "$w" "$REL/$S21 was written by more than one agent in the window: " \
+    && has "$JO" "; not folded as a nested writer: " && has "$JO" "$NEST_C (its spawn toolu_SPNC in $w/_bmad-output/spawn-ledger.jsonl is the lead's own dispatch (parent_agent_id \"\"))" \
+    && ! has "$JO" "nested: " || return 1
+  w="$(nest_world nokey)" || return 1; run_join "$1" "$w"
+  refused "$w" "$REL/$S21 was written by more than one agent in the window: " \
+    && has "$JO" "; not folded as a nested writer: " && has "$JO" "$NEST_C (its spawn toolu_SPNC in $w/_bmad-output/spawn-ledger.jsonl carries no parent_agent_id key (an older guard))" \
+    && ! has "$JO" "nested: " || return 1
+  w="$(nest_world noprobe)" || return 1; run_join "$1" "$w"
+  refused "$w" "$REL/$S21 was written by more than one agent in the window: " \
+    && has "$JO" "; not folded as a nested writer: " && has "$JO" "$NEST_C (no row for $NEST_C in $w/_bmad-output/subagent-context.jsonl)" \
+    && ! has "$JO" "nested: "
+}
+
 # ---- THE SPEC RENDER ARM (BL-546/560): --escalations --sprint 305 over a clean record, in a world whose
 # `_bmad-output/specs/s305/<dir>/.memlog.md` is seeded in the shape memlog.py emits: `- (decision) <text>`,
 # `- (decision by pm) <text>`, `- (event) <text>`. The discriminating decision is never the first line, and
@@ -1328,7 +1389,7 @@ p_agentwrites() {
   [ "$RC" -eq 2 ] && has "$JO" "REFUSED:"
 }
 
-P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrargs rrfiles rrsubj alias alnokeys alresult alown alsecond alother alsess altwo altool dispkey dispvocab dispruling srcparts gapfill chkpart chkrec rulingedit rulingtab chkjoined partsilent specstale specfresh spechand specnone spectwo sjspecstale sjspecfresh sjspecnone specother specunread agentwrites"
+P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrargs rrfiles rrsubj alias alnokeys alresult alown alsecond alother alsess altwo altool nested dispkey dispvocab dispruling srcparts gapfill chkpart chkrec rulingedit rulingtab chkjoined partsilent specstale specfresh spechand specnone spectwo sjspecstale sjspecfresh sjspecnone specother specunread agentwrites"
 
 # ---- A PART'S DERIVATION SURVIVES THE JOIN. The part's ```derived fence is copied into the joined
 # record, and the gate re-runs `validate-artifact-derivations.sh` over the sprint dir AFTER the

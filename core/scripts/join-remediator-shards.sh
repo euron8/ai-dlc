@@ -140,6 +140,26 @@
 #   transcript exists and which transcript, if any, holds that id. A row carrying none of the new
 #   keys is judged exactly as before they existed.
 #
+# A NESTED WRITER IS ITS DISPATCHER'S, ONE LEVEL UP AND ONLY ON TWO LEDGER ROWS. A remediator that
+#   spawns a subagent of its own gets that subagent's writes under the subagent's agent id A. The
+#   join folds A into its dispatcher P when A's own chain resolves:
+#     1. `<state>/subagent-context.jsonl` (ai-dlc-subagent-probe.sh) holds a row with agent_id A,
+#        and every such row carries one non-empty tool_use_id T;
+#     2. `<state>/spawn-ledger.jsonl` (ai-dlc-dispatch-guard.sh) holds a row with tool_use_id T that
+#        HAS the `parent_agent_id` key, and its value P is one non-empty id other than A.
+#   `parent_agent_id: ""` is the lead's own dispatch and folds nothing; a row with no such key was
+#   written by an older guard and folds nothing either. The fold is ONE level: P's own chain is never
+#   consulted. It is applied where the detailed rows are built, to every row of A (the file rows and
+#   the part-record rows a --rerun reads), so the re-run, alias and distinct-writer arms all see P.
+#   Every fold is named in the JOINED output and in the record: `nested: <A> is <P>'s subagent
+#   (spawn <T>); its <n> rows on <files> are counted as <P>`. A writer whose chain does not resolve
+#   stays its own writer, and a file it shares is refused naming, per writer, the ledger that lacked
+#   the row.
+#   Residual, stated: two children of one dispatcher, run in parallel and editing one file, read as
+#   ONE writer. The fold cannot tell them apart, because both resolve to P.
+#   No fold is owed elsewhere: merge-adversarial-shards.sh refuses a nested writer earlier, on role
+#   (an adversary is a leaf and spawns nothing), and validate-gate-adjudication.sh counts no writers.
+#
 # NOT A MODE OF THE ADVERSARY MERGE. A separate program on purpose: the adversary-shard fix and
 # this one close different backlog entries, and a shared mode would let either close both.
 #
@@ -1496,8 +1516,55 @@ resolve_cites() {
 # test for an alias; otherwise ROWS above is the whole input and the default join is unchanged.
 # Fields: path, agent, ts, session, tool_use_id, transcript_path, agent_transcript; `-` for empty.
 DROWS=""; RR_SUPERSEDED=0; RR_LINES=""; AL_LINES=""; AL_N=0
+
+# --- NESTED WRITERS (see "A NESTED WRITER IS ITS DISPATCHER'S"). FOLD_MAP holds one
+# `<A>\t<P>\t<T>` line per writer that folds, FOLD_WHY one `<A>\t<reason>` line per writer that
+# does not; every agent id with an artifact-write row in the window is resolved, so the part-record
+# rows a re-run reads are folded by the same map.
+PROBE_LEDGER="${STATE}/subagent-context.jsonl"; SPAWN_LEDGER="${STATE}/spawn-ledger.jsonl"
+FOLD_MAP=""; FOLD_WHY=""; NEST_LINES=""
+_fwr="$(jq -rn --arg since "$SINCE" --arg until "$UNTIL" '
+  inputs | select(type == "object") | select(.kind == "artifact-write")
+  | select((.agent_id // "") != "") | select((.ts | type) == "string")
+  | select(.ts >= $since and .ts <= $until) | .agent_id | tostring' "$LEDGER" 2>/dev/null | sort -u)"
+if [ -n "$_fwr" ]; then
+  _fpr=""; _fsp=""
+  [ -f "$PROBE_LEDGER" ] && _fpr="$(jq -nrR 'inputs | fromjson? | select(type == "object")
+    | select((.agent_id // "") != "") | [(.agent_id | tostring), (.tool_use_id // "" | tostring)] | @tsv' "$PROBE_LEDGER" 2>/dev/null)"
+  [ -f "$SPAWN_LEDGER" ] && _fsp="$(jq -nrR 'inputs | fromjson? | select(type == "object")
+    | select((.tool_use_id // "") != "")
+    | [(.tool_use_id | tostring), (if has("parent_agent_id") then "K" else "N" end), (.parent_agent_id // "" | tostring)]
+    | @tsv' "$SPAWN_LEDGER" 2>/dev/null)"
+  _fres="$({ printf '%s\n' "$_fwr" | sed '/^$/d; s/^/W\t/'
+             printf '%s\n' "$_fpr" | sed '/^$/d; s/^/P\t/'
+             printf '%s\n' "$_fsp" | sed '/^$/d; s/^/S\t/'; } | awk -F'\t' \
+      -v pl="$PROBE_LEDGER" -v sl="$SPAWN_LEDGER" -v hp="$([ -f "$PROBE_LEDGER" ] && echo 1)" -v hs="$([ -f "$SPAWN_LEDGER" ] && echo 1)" '
+    $1 == "W" { W[++nw] = $2; next }
+    $1 == "P" { np[$2]++; if ($3 != "" && !(($2, $3) in pt)) { pt[$2, $3] = 1; nt[$2]++; tu[$2] = $3 }; next }
+    $1 == "S" { ns[$2]++
+                if ($3 == "K") { nk[$2]++; if (!(($2, $4) in sp)) { sp[$2, $4] = 1; npar[$2]++; par[$2] = $4 } }
+                next }
+    END {
+      for (i = 1; i <= nw; i++) { a = W[i]
+        if (!(a in np)) { print "U\t" a "\t" (hp ? "no row for " a " in " pl : pl " is absent"); continue }
+        if (!(a in nt)) { print "U\t" a "\tits row in " pl " carries no tool_use_id"; continue }
+        if (nt[a] > 1) { print "U\t" a "\tits rows in " pl " carry " nt[a] " different tool_use_ids"; continue }
+        t = tu[a]
+        if (!(t in ns)) { print "U\t" a "\t" (hs ? "no row for its spawn " t " in " sl : sl " is absent"); continue }
+        if (!(t in nk)) { print "U\t" a "\tits spawn " t " in " sl " carries no parent_agent_id key (an older guard)"; continue }
+        if (npar[t] > 1) { print "U\t" a "\tits spawn " t " in " sl " carries " npar[t] " different parent_agent_id values"; continue }
+        p = par[t]
+        if (p == "") { print "U\t" a "\tits spawn " t " in " sl " is the lead\047s own dispatch (parent_agent_id \"\")"; continue }
+        if (p == a) { print "U\t" a "\tits spawn " t " in " sl " names " a " as its own parent"; continue }
+        print "F\t" a "\t" p "\t" t
+      }
+    }')"
+  FOLD_MAP="$(printf '%s\n' "$_fres" | sed -n 's/^F	//p')"
+  FOLD_WHY="$(printf '%s\n' "$_fres" | sed -n 's/^U	//p')"
+fi
+
 _ovl0="$(printf '%s\n' "$ROWS" | awk -F'\t' 'NF >= 2 { n[$1]++ } END { for (f in n) if (n[f] > 1) { print f; exit } }')"
-if [ -n "$RERUN" ] || [ -n "$_ovl0" ]; then
+if [ -n "$RERUN" ] || [ -n "$_ovl0" ] || [ -n "$FOLD_MAP" ]; then
   DROWS="$(jq -rn --arg since "$SINCE" --arg until "$UNTIL" --arg ap "$APATH" --arg sh "$SHARD_REL" --arg doc "$_jdoc" '
     def d: if . == null or . == "" then "-" else tostring end;
     inputs | select(type == "object") | select(.kind == "artifact-write")
@@ -1508,9 +1575,25 @@ if [ -n "$RERUN" ] || [ -n "$_ovl0" ]; then
      | [.path, .agent_id, .ts, (.session | d), (.tool_use_id | d), (.transcript_path | d),
         (if has("agent_transcript") then (.agent_transcript | tostring) else "-" end)] | @tsv' "$LEDGER" 2>/dev/null)" \
     || die "the write ledger ${LEDGER} does not parse as JSON lines"
-  # Subject mode kept only the subject's file set; keep the same paths here.
-  DROWS="$({ printf '%s\n' "$ROWS" | sed '/^$/d; s/^/K\t/'; printf '%s\n' "$DROWS" | sed '/^$/d; s/^/D\t/'; } | awk -F'\t' '
-    $1 == "K" { k[$2] = 1; next } ($2 in k) { print substr($0, 3) }')"
+  # Subject mode kept only the subject's file set; keep the same paths here. A NESTED writer's agent
+  # id (column 2) becomes its dispatcher's HERE, before the re-run, alias and distinct-writer arms
+  # read a row, and each fold is named once: `N\t<line>` comes back beside the rows.
+  _dm="$({ printf '%s\n' "$FOLD_MAP" | sed '/^$/d; s/^/M\t/'; printf '%s\n' "$ROWS" | sed '/^$/d; s/^/K\t/'
+           printf '%s\n' "$DROWS" | sed '/^$/d; s/^/D\t/'; } | awk -F'\t' '
+    BEGIN { OFS = "\t" }
+    $1 == "M" { fm[$2] = $3; ft[$2] = $4; next }
+    $1 == "K" { k[$2] = 1; next }
+    ($2 in k) { $0 = substr($0, 3)
+      if ($2 in fm) { a = $2; nr[a]++; if (!((a, $1) in fs)) { fs[a, $1] = 1; fl[a] = (a in fl) ? fl[a] ", " $1 : $1; if (!(a in seen)) { seen[a] = 1; A[++na] = a } }
+                      $2 = fm[a] }
+      print "R", $0 }
+    END { for (i = 1; i <= na; i++) { a = A[i]
+            print "N", "nested: " a " is " fm[a] "\047s subagent (spawn " ft[a] "); its " nr[a] " rows on " fl[a] " are counted as " fm[a] } }')"
+  DROWS="$(printf '%s\n' "$_dm" | sed -n 's/^R	//p')"
+  NEST_LINES="$(printf '%s\n' "$_dm" | sed -n 's/^N	//p')"
+  [ -z "$NEST_LINES" ] || NEST_LINES="${NEST_LINES}
+"
+  ROWS="$(printf '%s\n' "$DROWS" | awk -F'\t' 'NF >= 2 { print $1 "\t" $2 }' | sort -u)"
 fi
 
 # --- RE-RUN NARROWING (see "RE-RUN OF ONE PART"). F_P resolves against the UNNARROWED rows.
@@ -1550,6 +1633,10 @@ RREOF
        | (.path | ltrimstr($px)) as $b | select(($b | contains("/") | not) and ($b | endswith(".md")))
        | [$b, .agent_id, .ts] | @tsv' "$LEDGER" 2>/dev/null)" \
       || die "the write ledger ${LEDGER} does not parse as JSON lines"
+    # The same nested-writer fold as the file rows, so a record written by the re-run writer's own
+    # subagent is the re-run writer's.
+    [ -z "$FOLD_MAP" ] || _prrows="$({ printf '%s\n' "$FOLD_MAP" | sed '/^$/d; s/^/M\t/'; printf '%s\n' "$_prrows" | sed '/^$/d; s/^/Q\t/'; } | awk -F'\t' '
+      BEGIN { OFS = "\t" } $1 == "M" { fm[$2] = $3; next } { $0 = substr($0, 3); if ($2 in fm) $2 = fm[$2]; print }')"
     _rres="$({ printf '%s' "$_rspec"; printf '%s\n' "$DROWS" | sed '/^$/d; s/^/D\t/'; printf '%s\n' "$_prrows" | sed '/^$/d; s/^/Q\t/'; } | awk -F'\t' -v px="$_prpfx" '
       $1 == "R" { if (!($2 in S)) { S[$2] = $3; PP[++npp] = $2 }; inF[$2, $4] = 1; nf[$2]++; F[$2, nf[$2]] = $4; fp[$4] = $2; next }
       $1 == "D" { nr++; for (j = 2; j <= NF; j++) r[nr, j - 1] = $j; next }
@@ -1750,7 +1837,9 @@ OVERLAPS="$(printf '%s\n' "$ROWS" | awk -F'\t' '
   END { for (f in n) if (n[f] > 1) print f "\t" w[f] }' | sort)"
 if [ -n "$OVERLAPS" ]; then
   while IFS='	' read -r f w; do
-    refuse "${f} was written by more than one agent in the window: ${w}"
+    # Each writer that did not fold as a nested writer, and the ledger that lacked the link.
+    _nf="$(printf '%s\n' "$FOLD_WHY" | awk -F'\t' -v w=", ${w}, " 'NF >= 2 && index(w, ", " $1 ", ") { printf "%s%s (%s)", (n++ ? "; " : ""), $1, $2 }')"
+    refuse "${f} was written by more than one agent in the window: ${w}${_nf:+; not folded as a nested writer: ${_nf}}"
   done <<OVEOF
 $OVERLAPS
 OVEOF
@@ -1920,6 +2009,7 @@ TMP="${OUT}.join.$$"
     _inwin="in its window"
   fi
   [ -z "$AL_LINES" ] || printf '%s' "$AL_LINES"
+  [ -z "$NEST_LINES" ] || printf '%s' "$NEST_LINES"
   if [ "$SUBJMODE" = 1 ]; then
     echo "every subject file and section copy was written by exactly one agent ${_inwin};"
     printf '%s\n' "$ASM_LINE" | sed 's/^/partition-subject.sh: /'
@@ -1957,6 +2047,7 @@ _jx=""
 [ -z "$RERUN" ] || _jx=", ${RR_SUPERSEDED} superseded rows"
 [ "$AL_N" = 0 ] || _jx="${_jx}, ${AL_N} alias rows"
 echo "JOINED: ${OUT} ($(printf '%s\n' "$PARTS" | grep -c .) parts, $(printf '%s\n' "$WRITERS" | grep -c .) writers${_jx})"
+[ -z "$NEST_LINES" ] || printf '%s' "$NEST_LINES"
 # Every escalated entry, by part, and the count; then the repaired edits whose cross-file siblings
 # and moved cites only the serial remediator can check. Either count above 0 dispatches the serial
 # remediator, in every mode, with every ESCALATED: line in its brief (_gate-procedures.md,
