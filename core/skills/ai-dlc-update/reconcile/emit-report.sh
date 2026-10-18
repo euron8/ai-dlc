@@ -62,7 +62,8 @@
 #                refusal; apply.sh names the cause and the remedy is a re-render and re-approval.
 #
 # A RECORDED PASS CAN BE ACCEPTED INSTEAD OF A RE-RENDER, ON A KEY COVERING THE INPUTS LISTED BELOW.
-# It does not cover every render input: further unkeyed inputs are known (see THE LIMITS).
+# It does NOT pin every render input: the inputs it cannot key are either REFUSED (a miss) or named
+# in THE LIMITS, and an input in neither list is a defect in the key.
 # One pull ran `--verify` three or four times on one tree (step 5, step 7 clause (1), step 7 after
 # resolving, `apply.sh`'s own gate), each a full detector re-render at 3-14 minutes: about 35 of a
 # 116-minute pull, measured from a graph pull transcript (BL-679). So an exit-0 `--verify` writes a
@@ -83,7 +84,9 @@
 #   base/theirs  each one AS TYPED (the region prints it so), then its commit object AND its `:core`
 #                tree resolved in <dist> (a symbolic `origin/main` moves under one spelling);
 #   distrefs     <dist>'s refs (`for-each-ref`, which lists refs/replace/* too), its HEAD, whether it
-#                is shallow, its EFFECTIVE `config --list` (global and system through $HOME), and the
+#                is shallow, its EFFECTIVE `config --list` (global and system through $HOME), the
+#                bytes (or `absent`) of its `info/attributes`, `info/grafts`, `objects/info/alternates`
+#                and of the global attributes file `git var GIT_ATTR_GLOBAL` names, and the
 #                auto-abbrev length of theirs -- every rendered `%h` comes from <dist>;
 #   consroot     `pwd -P` of <consumer> and <consumer> as typed: the region prints both forms;
 #   consindex    `ls-files -s` (mode, blob, path: the exec bit and tracked-ness);
@@ -93,17 +96,30 @@
 #   consignored  name, bytes and exec bit of every IGNORED file under the engine's read roots:
 #                `.claude/` (not `.claude/worktrees/`), `_bmad-output/`, every `corpus-root:` in
 #                predicate-sites.md, and the other consumer paths the detectors name;
-#   consobjects  <consumer>'s `for-each-ref` and its EFFECTIVE `config --list`;
+#   consobjects  <consumer>'s `for-each-ref`, its EFFECTIVE `config --list`, and the same four
+#                git-dir and attributes files as distrefs;
 #   consresolve  each override `base_sha` and the stamp's `commit:` / `skill_commit:`, resolved as a
 #                commit through the OBJECT STORE of <dist> and of <consumer> (not through refs: a
 #                prune of an unreferenced commit moves the region with no ref moving), or `unresolved`;
 #   env          LANG, LC_ALL, LC_COLLATE, LC_CTYPE and `AI_DLC_KNOWN_SKILLS_EXT`, each set and unset
-#                distinguished, and the file the last one names;
+#                distinguished, and the file the last one names; every `GIT_*` variable by name and
+#                value; the bytes (or `absent`) of the system attributes file `git var
+#                GIT_ATTR_SYSTEM` names; `git --version` and `--exec-path`; and the resolved path and
+#                binary `cksum` of awk, sed and sort;
 #   region       the report region's hash after the dist-path normalisation below, which must equal
 #                the region of the render that passed -- an edit OUTSIDE the region still hits, one
 #                byte inside it misses.
-# A directory under <consumer> (pruning `.git` and `.claude/worktrees`) that the user cannot read and
-# search refuses both the hit and the record: git lists nothing beneath it, so no field could see it.
+# REFUSED, a miss for both the hit and the record, because no field could see the input:
+#   - a directory under <consumer> (pruning `.git` and `.claude/worktrees`) that the user cannot read
+#     and search: git lists nothing beneath it;
+#   - any `assume-unchanged` or `skip-worktree` flag in `ls-files -v`, or `core.ignoreStat=true`:
+#     status hides an edit to the flagged file, and keying the flag cannot help, since it is set
+#     before the record and both sides match;
+#   - a NESTED REPOSITORY, untracked (`dir/` in the listing) or tracked (a gitlink): git lists none of
+#     its files;
+#   - a tracked or listed SYMLINK whose chain does not end at an existing path inside <consumer>: the
+#     key hashes the link, the detectors read the target;
+#   - an INHERITED `AI_DLC_RECONCILE_MEMO`: a memo directory another process filled.
 # On a hit the preclassify-refusal check is not re-run: it ran on the render the record came from.
 #
 # OFF BY DEFAULT. A recorded PASS is ACCEPTED only when `EMIT_REPORT_VERIFY_CACHE=1` is set (exactly
@@ -122,12 +138,19 @@
 # More widely, a ledger `verify: sh` receipt (ledger-reverify.sh runs it as `bash -c` at the consumer
 # root) is arbitrary code: it can read ignored files anywhere, PATH, the network or the clock, and
 # none of that is keyed. `AI_DLC_VERIFY_NO_CACHE=1` re-renders.
-# (3) Tool availability (`jq`, `python3`, PATH) is not keyed: a render that passed with a tool
-# present is accepted after the tool is gone. The opt-out re-renders in every case.
-# (4) Further inputs a fourth review found UNKEYED: assume-unchanged and skip-worktree flags; the
-# CONTENTS of a nested repository; a tracked symlink whose target lies outside the tree; diff
-# attributes from info/attributes, global or system attributes, and GIT_EXTERNAL_DIFF; and tool
-# versions. These are why the cache ships OFF by default.
+# (3) Tool AVAILABILITY (`jq`, `python3`, PATH) is not keyed: a render that passed with a tool
+# present is accepted after the tool is gone. Only git, awk, sed and sort are keyed by identity
+# (env field); jq, python3, shasum and every other tool the detectors call are keyed by nothing,
+# so a version change in one of them is not seen either. The opt-out re-renders in every case.
+# (4) What a fourth review found unkeyed is now keyed or refused: index flags and core.ignoreStat,
+# nested repositories, out-of-tree symlinks and an inherited memo are REFUSED (above); the
+# repo-local, global and system attributes files, info/grafts, alternates, every GIT_* variable and
+# the git/awk/sed/sort identities are KEYED; and the detectors' content diffs pass `--text
+# --no-ext-diff --no-textconv`, so an attribute or GIT_EXTERNAL_DIFF no longer moves them at all.
+# Still unkeyed: fsmonitor and untracked-cache daemon STATE (their config values are keyed), the
+# filesystem's case sensitivity and mount type, and, on git before 2.42 (no `git var
+# GIT_ATTR_SYSTEM`), a system attributes file away from the exec-path-derived guess. The cache
+# ships OFF until a review of this key finds no BLOCKER.
 # (5) A dist that shares its ref store with active branches (a developer checkout, or any worktree
 # of one) moves refs between two verifies and never records, which is why the update skill reads
 # `<dist>` from the private main-only clone `dist-clone.sh` builds.
@@ -181,6 +204,9 @@ SELF="$(cd "$(dirname "$0")" && pwd)"
 # (`AI_DLC_MEMO_OWNED`, not `AI_DLC_MEMO_DIR`) — the same non-negotiable rule
 # `core_map_cleanup` states for `ledger-reverify.sh`'s own temporaries: `rm -rf` must never act on
 # a directory this process merely borrowed from a caller who intends to clean it up itself.
+# An INHERITED memo directory is recorded before it is adopted: its contents are answers some other
+# process cached, which no key field can see, so the recorded-PASS block below treats it as a miss.
+_er_memo_in="${AI_DLC_RECONCILE_MEMO:-}"
 export AI_DLC_RECONCILE_MEMO
 if [ -z "${AI_DLC_RECONCILE_MEMO:-}" ]; then
   AI_DLC_RECONCILE_MEMO="$(mktemp -d "${TMPDIR:-/tmp}/reconcile-memo.XXXXXX" 2>/dev/null || true)"
@@ -1004,9 +1030,27 @@ er_cgit() {
   if [ -n "$_er_ex" ]; then git -C "$CONSUMER" -c core.quotePath=false -c core.fileMode=true "$@" -- . ":(exclude,literal)$_er_ex"
   else git -C "$CONSUMER" -c core.quotePath=false -c core.fileMode=true "$@" -- .; fi
 }
-# er_hash_list <NUL-listfile> -- for each listed consumer path that exists (an entry ending `/` is a
-# nested repository; it is skipped here, so its CONTENTS ARE NOT KEYED -- a known gap): its exec bit
-# and name, NUL-terminated, then the content hashes in the same order. THE LIST IS NUL-SEPARATED
+# er_link_inside <abs-path> -- 0 when the symlink chain at <abs-path> ends at an existing path whose
+# directory resolves INSIDE the consumer root. The key hashes a link's own blob, while the detectors
+# read its target: a target outside the root (measured: a tracked adjudication register linked to an
+# outside file, cached 0 where a fresh render gave 3) or a dangling or looping chain is a MISS.
+er_link_inside() {
+  local p="$1" t d n=0
+  while [ -L "$p" ]; do
+    n=$((n + 1)); [ "$n" -le 40 ] || return 1
+    t="$(readlink "$p")" || return 1
+    case "$t" in /*) p="$t" ;; *) p="$(dirname "$p")/$t" ;; esac
+  done
+  [ -e "$p" ] || return 1
+  d="$(cd "$(dirname "$p")" 2>/dev/null && pwd -P)" || return 1
+  case "$d/" in "$_er_root"/*) return 0 ;; esac
+  return 1
+}
+# er_hash_list <NUL-listfile> -- for each listed consumer path that exists: its exec bit and name,
+# NUL-terminated, then the content hashes in the same order. An entry ending `/` is a NESTED
+# REPOSITORY, whose contents git lists nowhere, so it is a MISS (measured: an edit inside one read
+# cached 0 where a fresh render gave 1); so is a listed symlink resolving outside the consumer root
+# (er_link_inside). THE LIST IS NUL-SEPARATED
 # because git C-quotes a name carrying `"`, `\`, a tab or a newline in line output, the quoted form
 # names no file, and the old `[ -e ] || continue` dropped its bytes from the key without a sound
 # (measured: a cached 0 where a fresh render gave 3). A name carrying a newline cannot go through
@@ -1016,7 +1060,8 @@ er_hash_list() {
   : > "$_er_tmp/key.exist" || return 1
   : > "$_er_tmp/key.nl" || return 1
   while IFS= read -r -d '' p; do
-    case "$p" in */) continue ;; esac
+    case "$p" in */) return 1 ;; esac
+    if [ -L "$CONSUMER/$p" ]; then er_link_inside "$_er_root/$p" || return 1; fi
     { [ -e "$CONSUMER/$p" ] || [ -L "$CONSUMER/$p" ]; } || continue
     if [ -x "$CONSUMER/$p" ]; then printf 'x %s\0' "$p"; else printf -- '- %s\0' "$p"; fi
     case "$p" in
@@ -1032,6 +1077,7 @@ er_hash_list() {
 }
 _er_nl='
 '
+_er_tab="$(printf '\t')"
 # er_hash_paths <abs-dir> <listfile> -- content hash of each listed path, by ABSOLUTE path. MEASURED:
 # `git hash-object --stdin-paths` resolves a relative path against the repository TOP, not the cwd,
 # so run from the engine directory inside a checkout it failed every file and the key never formed.
@@ -1082,16 +1128,28 @@ er_kf_distrefs() {
   # length moves with core.abbrev or with the object count, with no ref moving.
   echo "config"
   git -C "$DIST" config --list || return 1
+  er_repo_files "$DIST" || return 1
   local _ab
   _ab="$(git -C "$DIST" rev-parse --short "$THEIRS")" || return 1
   echo "abbrev ${#_ab}"
 }
 # Resolved AND as typed: the region's `full: diff` lines print <consumer> as the caller spelled it.
 er_kf_consroot()  { printf '%s\0%s\0' "$_er_root" "$CONSUMER"; }
-er_kf_consindex() { git -C "$CONSUMER" ls-files -s -z; }
+# A tracked SYMLINK (mode 120000) resolving outside the consumer root, and a tracked GITLINK (160000,
+# a submodule: a nested repository whose files the index does not list), are each a MISS.
+er_kf_consindex() {
+  local e
+  git -C "$CONSUMER" ls-files -s -z > "$_er_tmp/key.idx" || return 1
+  cat "$_er_tmp/key.idx" || return 1
+  while IFS= read -r -d '' e; do
+    case "$e" in
+      160000\ *) return 1 ;;
+      120000\ *) er_link_inside "$_er_root/${e#*"$_er_tab"}" || return 1 ;;
+    esac
+  done < "$_er_tmp/key.idx"
+}
 # The status names every modified and untracked path; their BYTES are hashed after it. An untracked
-# entry ending in `/` is a nested repository: its name is in the status, its CONTENTS ARE NOT KEYED
-# (a known gap, header limit (4)).
+# entry ending in `/` is a nested repository, which er_hash_list refuses as a miss.
 er_kf_conswork() {
   er_cgit --no-optional-locks status --porcelain=v2 -z --untracked-files=all || return 1
   er_cgit ls-files -z -m -o --exclude-standard > "$_er_tmp/key.work" || return 1
@@ -1134,6 +1192,31 @@ er_kf_consobjects() {
   git -C "$CONSUMER" for-each-ref || return 1
   echo "config"
   git -C "$CONSUMER" config --list || return 1
+  er_repo_files "$CONSUMER" || return 1
+}
+# er_file_or_absent <label> <path> -- the label, then the path's content hash or `absent`.
+er_file_or_absent() {
+  printf '%s %s\0' "$1" "$2"
+  if [ -e "$2" ]; then git hash-object --no-filters -- "$2" || return 1; else echo absent; fi
+}
+# er_repo_files <repo> -- git-dir files that move what git prints and that `config --list` does not
+# show: `info/attributes` (a `-diff` there hid a deleted rulebook line from retired-layer-passage.sh,
+# measured), `info/grafts` (honoured by `log --all`), and `objects/info/alternates` (objects reached
+# only through an alternate can vanish with no ref moving); then the GLOBAL attributes file as THIS
+# repo's config resolves it (`core.attributesFile`, else XDG, else $HOME), asked of git itself.
+er_repo_files() {
+  local cd g
+  cd="$(git -C "$1" rev-parse --path-format=absolute --git-common-dir)" || return 1
+  er_file_or_absent info/attributes "$cd/info/attributes" || return 1
+  er_file_or_absent info/grafts "$cd/info/grafts" || return 1
+  er_file_or_absent alternates "$cd/objects/info/alternates" || return 1
+  # git before 2.42 has no `git var GIT_ATTR_GLOBAL`: its documented order is used instead.
+  g="$(git -C "$1" var GIT_ATTR_GLOBAL 2>/dev/null)" || g=""
+  if [ -z "$g" ]; then
+    g="$(git -C "$1" config --path core.attributesFile 2>/dev/null)" || g=""
+    [ -n "$g" ] || g="${XDG_CONFIG_HOME:-${HOME:-}/.config}/git/attributes"
+  fi
+  er_file_or_absent global-attributes "$g" || return 1
 }
 # OBJECT-STORE RESOLUTION, NOT REFS. An override's `base_sha` (layer-drift.sh decides DIST, then
 # CONSUMER, then neither) and the stamp's `commit:` / `skill_commit:` resolve through each repo's
@@ -1175,6 +1258,32 @@ er_kf_env() {
   else
     echo "unset"
   fi
+  # EVERY `GIT_*` variable, by name and value (GIT_EXTERNAL_DIFF=true emptied a content diff the
+  # render parses, measured; GIT_DIFF_OPTS, GIT_ATTR_NOSYSTEM, GIT_NO_REPLACE_OBJECTS and
+  # GIT_ALTERNATE_OBJECT_DIRECTORIES move what git prints the same way). An unset one is absent from
+  # the listing, so set and unset differ.
+  echo "git-env"
+  env | LC_ALL=C grep '^GIT_' | LC_ALL=C sort
+  # The SYSTEM attributes file, by git's own answer, its bytes or `absent`. `git var` fails when
+  # GIT_ATTR_NOSYSTEM is set (keyed above) and on git before 2.42, where the path is derived from the
+  # exec path's prefix -- a guess that is wrong on a relocated build (Apple's reads /etc), which is
+  # why git's own answer comes first.
+  local _sa
+  _sa="$(git var GIT_ATTR_SYSTEM 2>/dev/null)" || _sa=""
+  if [ -n "$_sa" ]; then er_file_or_absent system-attributes "$_sa" || return 1
+  elif [ -n "${GIT_ATTR_NOSYSTEM:-}" ]; then echo "system-attributes nosystem"
+  else er_file_or_absent system-attributes-derived "$(git --exec-path)/../../etc/gitattributes" || return 1; fi
+  # TOOL IDENTITY: git's version and exec path, and the resolved path and binary checksum of awk, sed
+  # and sort (BSD sed prints no version, so the binary is the identity). A tool upgrade between the
+  # record and the hit moves `%h`, diff output or a sort order with no other field moving.
+  git --version || return 1
+  git --exec-path || return 1
+  local _tl _tp
+  for _tl in awk sed sort; do
+    _tp="$(command -v "$_tl")" || return 1
+    printf '%s %s ' "$_tl" "$_tp"
+    if [ -f "$_tp" ]; then cksum < "$_tp" || return 1; else echo "not-a-file"; fi
+  done
 }
 # The REPORT's region, never the render's: the key is taken before any render, and an exit-0 run
 # records only when the render equalled this region byte for byte, so the recorded value IS the
@@ -1192,6 +1301,20 @@ er_key() {
   _er_unread="$(find "$_er_root" \( -name .git -o -path "$_er_root/.claude/worktrees" \) -prune -o -type d ! -perm -u+rx -print 2>/dev/null)" \
     || return 1
   [ -z "$_er_unread" ] || return 1
+  # AN INDEX THAT HIDES WORK-TREE EDITS IS A MISS. `assume-unchanged` (an `h` tag, or any lower-case
+  # one) and `skip-worktree` (`S`, or `s` with both) make status and `ls-files -m` skip a modified
+  # tracked file the detectors still read (measured: cached 0, fresh 3), and `core.ignoreStat=true`
+  # sets the first flag on every file git adds. Keying the flags cannot help: they are set before the
+  # record, so both sides would match. Refused instead, read from the NUL-separated listing.
+  git -C "$CONSUMER" ls-files -v -z > "$_er_tmp/key.tags" || return 1
+  # Staged to a file before the grep: `grep -q` at the end of a pipe under pipefail can report the
+  # writer's EPIPE, which would read a flagged index as clean.
+  LC_ALL=C tr '\0' '\n' < "$_er_tmp/key.tags" | LC_ALL=C cut -c1 > "$_er_tmp/key.tag1" || return 1
+  LC_ALL=C grep -q '[a-zS]' "$_er_tmp/key.tag1" && return 1
+  case "$(git -C "$CONSUMER" config --bool core.ignoreStat 2>/dev/null)" in true) return 1 ;; esac
+  # AN INHERITED MEMO IS A MISS: a reconcile memo directory handed in by a caller holds answers no
+  # field here can see, and a stale one feeds the render.
+  [ -z "$_er_memo_in" ] || return 1
   : > "$_er_tmp/key.block" || return 1
   for f in engine base theirs distrefs consroot consindex conswork consignored consobjects consresolve env region; do
     "er_kf_$f" > "$_er_tmp/key.f.$f" 2>/dev/null || return 1
