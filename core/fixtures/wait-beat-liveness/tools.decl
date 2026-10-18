@@ -26,5 +26,5 @@ mkfifo
 ps
 pgrep
 chmod
-perl
 ln
+uname

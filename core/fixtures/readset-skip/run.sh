@@ -1829,8 +1829,24 @@ mkdir -p "$PJW/psbin/both" && printf '#!/bin/sh\nexit 1\n' > "$PJW/psbin/ps" && 
 cp "$PJW/psbin/ps" "$PJW/psbin/both/ps" && cp "$PJW/psbin/ps" "$PJW/psbin/both/perl" || broken "could not build the failing ps+perl stubs"
 # The psfail world's positive answer comes from the fallback, so it must be able to give one HERE:
 # a fixture on a host where the perl read is empty would score the fallback's absence as its presence.
+# PERL IS OPTIONAL (BL-686): a host with no perl, or not macOS, cannot give it, and that is a SKIP of
+# exactly the three cells that need it -- never `broken`, and never a false kill. PJ_PERL gates them.
 _pf="$( . "$PJ_SEEDLIB"; PATH="$PJW/psbin:$PATH"; readset_pid_start "$LOCKPID" )" || _pf=""
-[ "$_pf" = "$PJ_LIVE" ] || broken "with ps stubbed to fail, readset_pid_start read '$_pf' for the lock pid, not '$PJ_LIVE' -- the BL-686 fallback cannot answer here, so psfail cannot discriminate"
+PJ_PERL=1
+if [ "$_pf" != "$PJ_LIVE" ]; then
+  PJ_PERL=0
+  printf '  SKIP  psfail world, BL-686 MUTANT nofallback, and BL-463 MUTANT readerself'"'"'s psfail cell: with ps stubbed the perl fallback read '"'"'%s'"'"' for the lock pid, not its start -- no usable perl here (it is optional)\n' "$_pf"
+fi
+# ANTI-SKIP: the SKIP above must be UNREACHABLE where the fallback has what it needs, or a broken
+# detector would skip these cells everywhere. The precondition is computed apart from the detector
+# -- perl on PATH (probed, never run) and a Darwin kernel -- and a SKIP under it is a FAIL by name.
+lt_arm
+if command -v perl >/dev/null 2>&1 && [ "$(uname -s 2>/dev/null)" = Darwin ]; then
+  [ "$PJ_PERL" = 1 ] && ok "anti-SKIP: perl is on PATH on Darwin, and the psfail world, nofallback and readerself's psfail cell run (BL-686)" \
+    || bad "anti-SKIP: perl is on PATH on Darwin, yet the psfail world, BL-686 MUTANT nofallback and BL-463 MUTANT readerself's psfail cell were SKIPPED -- the fallback detector is broken"
+else
+  ok "anti-SKIP: no perl on PATH, or not Darwin -- the BL-686 SKIP is allowed here"
+fi
 # THE WRITER WITH NO PERL AT ALL (BL-686; perl is an optional source). PATH is ONLY a directory
 # holding `date` and a `ps` that prints nothing and exits 0, so neither source can read the start.
 # The writer must NOT record an empty start line: it writes the two-field lock and announces on
@@ -1883,6 +1899,7 @@ pj_judge() { # <lib> <world> -> "<stale|held|err<rc>>|<ann|noann>"; refuses on a
   printf '%s|%s' "$rc" "$(grep -q 'could not read the start time of lock pid' "$o/out" && echo ann || echo noann)"
 }
 PJ_WORLDS="wrong right legacylive legacydead psfail bothfail split"
+[ "$PJ_PERL" = 1 ] || PJ_WORLDS="wrong right legacylive legacydead bothfail split"
 pj_want() { # <world> <right's result under the same lib>
   case "$1" in
     wrong|legacydead) printf 'stale|noann' ;;
@@ -1910,7 +1927,7 @@ pj_arm wrong "lock start: a LIVE pid whose recorded start time is not its own (a
 pj_arm right "  the real writer's lock for a live pid is HELD, with no ps-fallback announcement"
 pj_arm legacylive "  a two-field lock from an older hook with a live pid is HELD, judged as before, with no announcement"
 pj_arm legacydead "  a two-field lock from an older hook with a dead pid is STALE"
-pj_arm psfail "  a ps that fails (PATH stub exiting 1, as sandbox-exec refuses the setuid /bin/ps) still reads the start through the perl fallback: HELD, silent (BL-686)"
+[ "$PJ_PERL" = 1 ] && pj_arm psfail "  a ps that fails (PATH stub exiting 1, as sandbox-exec refuses the setuid /bin/ps) still reads the start through the perl fallback: HELD, silent (BL-686)"
 pj_arm bothfail "  a ps AND a perl that fail leave a live lock HELD and say so in one line"
 pj_arm split "  written under de_DE/Asia/Tokyo and judged under fr_FR/America/Los_Angeles, the lock reads as it does under C/UTC0"
 # Each mutant is a pm_copy of the pool block -- the one mutation path every mutant here uses -- with
@@ -1929,7 +1946,7 @@ pj_mut nostart '    [ "$c" != "$s" ] && return 0' '    :' wrong
 pj_mut nopin 'LC_ALL=C TZ=UTC0 ps -o lstart=' 'ps -o lstart=' split
 pj_mut psstale "alone\\n' \"\$p\"" "alone\\n' \"\$p\"; return 0" bothfail
 # BL-686: the perl sysctl fallback removed -- a failing ps is then announced, as under sandbox-exec before.
-pj_mut nofallback '  [ -n "$x" ] || x="$(perl -e' '  [ -n "$x" ] || x="$(false -e' psfail
+[ "$PJ_PERL" = 1 ] && pj_mut nofallback '  [ -n "$x" ] || x="$(perl -e' '  [ -n "$x" ] || x="$(false -e' psfail
 # BL-686: the writer's guard removed -- it writes `pid epoch` and an EMPTY start line, silently, as
 # both writers did under a sandbox before. Killed by the no-perl writer arm.
 if PM_FN=readset_lock_write pm_copy silentempty 1 '  if s="$(readset_pid_start "$2")"; then' '  s="$(readset_pid_start "$2")"; if :; then'; then
@@ -1943,7 +1960,7 @@ pj_mut nonorm '  set -- $x' '  set -- "$x"' right
 # readerself dies on `psfail` too (BL-686): with ps stubbed the fallback still reads the judge's start
 # there, so the comparison is reached in both worlds. helperself does not, because the fallback reads
 # its own `$1` and so the stubbed-ps world never runs the mutated `ps` line.
-pj_mut readerself 'if ! c="$(readset_pid_start "$p")"; then' 'if ! c="$(readset_pid_start "$$")"; then' 'right psfail'
+pj_mut readerself 'if ! c="$(readset_pid_start "$p")"; then' 'if ! c="$(readset_pid_start "$$")"; then' "$([ "$PJ_PERL" = 1 ] && echo 'right psfail' || echo right)"
 pj_mut helperself 'ps -o lstart= -p "$1"' 'ps -o lstart= -p "$$"' right
 fi # end of the ps-dependent start-time worlds
 if [ "$LT_CAN" = 1 ]; then

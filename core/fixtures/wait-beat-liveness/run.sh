@@ -2265,10 +2265,38 @@ nops_stubs() {  # -> $TMPROOT/nops (a `ps` that exits 1) and $TMPROOT/nops/both 
     || broken "cannot write the ps/perl stubs"
   [ "$(PATH="$sb_d_:$PATH" command -v ps)" = "$sb_d_/ps" ] || broken "the ps stub is not first on PATH"
 }
-S22b_start_time_without_ps() {
+# PERL IS OPTIONAL (BL-686). S22b, M49 and M50 need the fallback to read what `ps` reads, and need
+# de_DE.UTF-8 to move an unpinned `ps`. Probed ONCE, through the SUBJECT's own shell_start_of; on a
+# miss the three print SKIP by name -- never `broken`, never a false kill. FB_OK caches the answer.
+FB_OK=""
+fb_probe() {
+  [ -n "$FB_OK" ] && return 0
   nops_stubs
-  sb_a_="$(LC_ALL=de_DE.UTF-8 ps -o lstart= -p $$)"; sb_b_="$(LC_ALL=C ps -o lstart= -p $$)"
-  [ -n "$sb_a_" ] && [ "$sb_a_" != "$sb_b_" ] || broken "ps reads the same start under de_DE.UTF-8 and C ('$sb_a_') -- section 22b cannot hold the pin"
+  fb_f_="$(sed -n '/^shell_start_of() {/,/^}/p' "$SUBJ")"
+  [ -n "$fb_f_" ] || broken "could not extract shell_start_of from $SUBJ"
+  fb_real_="$(eval "$fb_f_"; shell_start_of $$)"
+  fb_stub_="$(eval "$fb_f_"; PATH="$TMPROOT/nops:$PATH"; shell_start_of $$)"
+  fb_de_="$(LC_ALL=de_DE.UTF-8 ps -o lstart= -p $$ 2>/dev/null)"; fb_c_="$(LC_ALL=C ps -o lstart= -p $$ 2>/dev/null)"
+  FB_OK=1; FB_WHY=""
+  [ -n "$fb_real_" ] && [ "$fb_stub_" = "$fb_real_" ] || { FB_OK=0; FB_WHY="with ps stubbed the perl fallback read '$fb_stub_', not '$fb_real_' -- no usable perl here (it is optional)"; }
+  [ -n "$fb_de_" ] && [ "$fb_de_" != "$fb_c_" ] || { FB_OK=0; FB_WHY="${FB_WHY:+$FB_WHY; }de_DE.UTF-8 and C read the same start ('$fb_de_') -- the locale pin cannot be held"; }
+  # ANTI-SKIP: the precondition computed apart from the probe above -- perl on PATH (probed, never
+  # run), a Darwin kernel, and de_DE.UTF-8 moving `ps`. Under it a SKIP is a FAIL, by name.
+  if command -v perl >/dev/null 2>&1 && [ "$(uname -s 2>/dev/null)" = Darwin ] && [ -n "$fb_de_" ] && [ "$fb_de_" != "$fb_c_" ]; then
+    FB_MUST=1
+  else FB_MUST=0; fi
+}
+fb_skip() {  # $1 = case name: 0 (SKIP printed, or FAIL under the anti-SKIP precondition) when the fallback cannot be exercised
+  fb_probe
+  [ "$FB_OK" = 1 ] && return 1
+  if [ "$FB_MUST" = 1 ]; then
+    bad "anti-SKIP: perl is on PATH on Darwin and de_DE.UTF-8 moves ps, yet $1 would be SKIPPED -- the fallback probe is broken: $FB_WHY"
+  else printf '  SKIP  %s: %s\n' "$1" "$FB_WHY"; fi
+  return 0
+}
+S22b_start_time_without_ps() {
+  fb_skip S22b_start_time_without_ps && return
+  nops_stubs
   W="$(mk_work)"; LC_ALL=de_DE.UTF-8 aged_shell_beat "$SUBJ" "$W" same "$sb_d_"; ag_wait "$W"
   if [ "$RC" -eq 0 ] && has "a sibling beat already ran in this same Bash call"; then
     ok "chained: with ps refused (PATH stub, as sandbox-exec refuses the setuid /bin/ps) the perl fallback reads the start ps wrote -- still chained, no second quantum"
@@ -2321,6 +2349,7 @@ M51_silent_clock_fallback() {
   rm -rf "$W"
 }
 M49_start_time_no_fallback() {
+  fb_skip M49_start_time_no_fallback && return
   nops_stubs; mutant start-time-no-fallback -e 's@^  \[ -n "\$ss_" \] || ss_="\$(perl -e@  [ -n "$ss_" ] || ss_="$(false -e@' || return
   W="$(mk_work)"; LC_ALL=de_DE.UTF-8 aged_shell_beat "$MUT" "$W" same "$TMPROOT/nops"; ag_wait "$W"
   if ! has "a sibling beat already ran in this same Bash call"; then
@@ -2329,6 +2358,7 @@ M49_start_time_no_fallback() {
   rm -rf "$W"
 }
 M50_start_time_unpinned() {
+  fb_skip M50_start_time_unpinned && return
   nops_stubs; mutant start-time-unpinned -e 's@^  ss_="\$(LC_ALL=C ps -o lstart=@  ss_="$(ps -o lstart=@' || return
   W="$(mk_work)"; LC_ALL=de_DE.UTF-8 aged_shell_beat "$MUT" "$W" same "$TMPROOT/nops"; ag_wait "$W"
   if ! has "a sibling beat already ran in this same Bash call"; then
