@@ -936,3 +936,31 @@ Since BL-665 an unstamped divergence resolves exactly as a stamped one does, so 
 Owed: decide whether the merge should stamp from the sum. It has the previous pass's CRITICAL count only by reading the prior pass file, which it does not do today. Probe: two shards each declaring prior-scope 1 over a previous pass with 1 CRITICAL; the merged verdict. Control: the same with a previous pass of 2 CRITICAL.
 
 verify: manual
+
+## BL-666 — the recover gate's stage write truncates before it writes, so a concurrent call can read an empty stage and reset the recovery to `snapshot`
+
+**NOTE.** Found by the batch 236 HOOKS contract adversary while it sized BL-658, and filed by the HOOKS owner on the lead's instruction. This is a code reading only, with no measured occurrence.
+
+`core/hooks/ai-dlc-recover-gate.sh:408` advances the recovery with `printf 'step\n' >"$PROGRESS"`. The shell truncates the file before `printf` writes, so for a moment the file exists and is empty. A second invocation of the gate in that moment reads it with `cat` at `:380`. `cat` succeeds on an empty file, so the `|| printf 'snapshot'` default does not apply and `STAGE` is the empty string. That falls into the `*)` arm at `:481`, which treats it as an unreadable value and runs `rm -f "$PROGRESS"`. The next call then finds no progress file and reads stage `snapshot`, so the recovery restarts from its first mandated Read and denies the step Read the lead just earned.
+
+BL-658's re-test does not cover this, because the marker is still present throughout.
+
+Owed: the stage is written whole or not at all. Write to a sibling temp file and `mv` it over `$PROGRESS`, which `rename(2)` makes atomic on one filesystem. Or have the `*)` arm treat an empty value as "unchanged" instead of deleting. Probe: inject a read of an empty `$PROGRESS` between the truncate and the write, and the stage stays `step`. Control: a genuinely unreadable value still stands down.
+
+verify: manual
+
+## BL-671 — the answer-capture hook writes the project-wide pause flag with no `agent_id` test
+
+**NOTE.** Found by the batch 236 HOOKS tip adversary, filed by the HOOKS owner as BL-671. It is BL-601's class in a different hook, and it is closed below as no-defect by the harness.
+
+`core/hooks/ai-dlc-answer-capture.sh` is PostToolUse on `AskUserQuestion` (registered at `templates/settings.json.template:182`). At `:258` it runs `touch "$PAUSE_FLAG"`, the project-wide `pipeline-paused.flag`, with no `agent_id` or `agent_type` test (0 and 0; control 6 in `ai-dlc-recover-gate.sh`). If a dispatched subagent could call `AskUserQuestion`, its call would pause the lead's pipeline.
+
+Measured precondition, CC 2.1.302. A `general-purpose` subagent spawned from an interactive lead has no `AskUserQuestion`, loaded or deferred, and its `ToolSearch select:AskUserQuestion` returned "No matching deferred tools found". The control is the same lead, which holds the tool. A headless `claude -p` run did not discriminate: there the lead itself had no such tool.
+
+Shipped spawn paths. `core/scripts/render-agent-definitions.sh` `render_one` (`:175-189`) writes `name`, `description`, `model`, `effort` and `omitClaudeMd`, and no `tools:` key (`tools:` 0; control `model:` 1). So every rendered role inherits the default tool set the measured subagent has. The one team-role mention, `core/team-roles/qa.md:168`, is prose about the LEAD asking the operator, not a seat calling the tool.
+
+Residual, unmeasured and outside every shipped spawn path: a consumer's own hand-written agent definition that lists `AskUserQuestion` in `tools:`.
+
+Closed as no-defect by the harness for the shipped spawn paths. No change is owed.
+
+verify: manual
