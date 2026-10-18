@@ -654,13 +654,13 @@ fi
 # Offender BL-851 is named; near-misses BL-852 (`manual`) and BL-853 (`manual reason`) are not
 # named and count as manual (so the all-manual ledger below still passes).
 seed "$TMP/m8e"
-printf '# Probe backlog\n\n## BL-851\n\nBody.\n\nverify: manual. no receipt shape fits\n\n## BL-852\n\nBody.\n\nverify: manual\n\n## BL-853\n\nBody.\n\nverify: manual reason\n\n' > "$TMP/m8e/docs/backlog.md"
+printf '# Probe backlog\n\n## BL-851\n\nBody.\n\nverify: manual. no receipt shape fits\n\n## BL-852\n\nBody.\n\nverify: manual\n\n## BL-853\n\nBody.\n\nverify: manual reason\n\n## BL-854\n\nBody.\n\nverify: has VERSION "."\n\n' > "$TMP/m8e/docs/backlog.md"
 ( cd "$TMP/m8e" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m unrec >/dev/null 2>&1 )
 M8E_ARGS="--max-prose-closable 0 --max-unscorable 0 --max-out-of-population 0 --max-unstable 0 --min-sh-receipts 0 --min-entries 1"
 # shellcheck disable=SC2086
 m8e_out="$(run_v "" "$TMP/m8e" $M8E_ARGS)"; m8e_rc=$?
 if [ "$m8e_rc" -eq 1 ] && grep -qE '^FAIL: UNRECOGNISED.BL-851' <<<"$m8e_out" \
-   && ! grep -qE 'UNRECOGNISED.BL-85[23]' <<<"$m8e_out"; then
+   && ! grep -qE 'UNRECOGNISED.BL-85[234]' <<<"$m8e_out"; then
   note "ok    m8e -- 'verify: manual.' is named by entry id; bare 'manual' and 'manual reason' are not"
 else
   note "FAIL  m8e -- the unrecognised value must be named by id and the near-misses left alone (rc=$m8e_rc)"
@@ -1188,6 +1188,7 @@ seed_memo() { # seed_memo <dir>
   cp "$LIBSRC" "$d/core/skills/ai-dlc-update/reconcile/lib.sh"
   printf '\nLIBPROBE_EXPORTED=1\nexport LIBPROBE_EXPORTED\n' >> "$d/core/skills/ai-dlc-update/reconcile/lib.sh"
   cp "$REVSRC" "$d/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh"
+  [ -n "$REVERIFY" ] && cp "$REVERIFY" "$d/scripts/backlog-reverify.sh"
   printf 'alpha\n' > "$d/probe/subject.txt"
   printf 'memo\n' > "$d/probe/memo.txt"
   printf 'probe\n' > "$d/probe/probe.txt"
