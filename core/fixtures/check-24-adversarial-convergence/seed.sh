@@ -764,6 +764,45 @@ record "$TARGET/stalled-record-invalid/s1-resolution-p4.md" \
   "sha_before does not match the pass it claims to resolve" \
   '2026-07-12T05:00:00Z | "Cut the claim and re-verify"'
 
+# --- cdiv-*: AN ARM-C DIVERGENCE NOBODY STAMPED IS RESOLVABLE ON THE RECORD -----
+# A pass whose prior-scope CRITICALs rose (1 -> 2) and which stamps EXIT_CONDITION_NOT_MET is
+# DIVERGING by arm C's predicate. A sharded pass lands here by construction: the merge stamps
+# DIVERGENT_HARD_BLOCK only when a shard declared it, and a rise visible only in the summed
+# count is one no shard saw. Arm C used to raise and latch inline, and arm F -- the only
+# reader of resolution records -- skipped every unstamped pass, so a valid record changed
+# nothing: DIVERGENT/3 before the verification pass, and DIVERGENT/3 again after it.
+#
+# Six series, one trajectory. p1 1/1 -> p2 2/2, both NOT_MET; what varies is the record and
+# whether a verification pass follows:
+#   cdiv-terminal             no record                          -> DIVERGENT/3
+#   cdiv-terminal-resolved    a valid CUT_SCOPE record            -> RESOLVED/0 (the resume)
+#   cdiv-record-invalid       a record whose bytes GREW           -> DIVERGENT/3
+#   cdiv-verified             valid record + p3 MET declaring it  -> CONVERGED/0, gate 0
+#   cdiv-verified-unresolved  p3 MET, no resolves_divergence      -> DIVERGENT/3, gate 1 (C)
+#   cdiv-verified-invalid     p3 MET declaring the invalid record -> DIVERGENT/3, gate 1 (C, F)
+cdiv_head() {
+  mkdir -p "$TARGET/$1"
+  pass "$TARGET/$1/s1-adversarial-p1.md" 1 1 1 1 EXIT_CONDITION_NOT_MET 1 aaa1
+  pass "$TARGET/$1/s1-adversarial-p2.md" 2 2 1 1 EXIT_CONDITION_NOT_MET 2 bbb2
+}
+cdiv_record() {  # $1 case  $2 bytes_before  $3 bytes_after
+  record "$TARGET/$1/s1-resolution-p2.md" \
+    s1-adversarial-p2.md CUT_SCOPE bbb2 ccc3 "$2" "$3" \
+    "cut the unverifiable claim the prior-scope CRITICALs kept landing in" \
+    '2026-07-12T05:00:00Z | "Cut the claim and re-verify"'
+}
+cdiv_verify() {  # $1 case  $2 resolves_divergence (empty = declares none)
+  pass "$TARGET/$1/s1-adversarial-p3.md" 3 0 0 1 EXIT_CONDITION_MET 0 ccc3 "$2" 2026-07-12T06:00:00Z
+}
+cdiv_head cdiv-terminal
+cdiv_head cdiv-terminal-resolved;   cdiv_record cdiv-terminal-resolved 4200 4000
+cdiv_head cdiv-record-invalid;      cdiv_record cdiv-record-invalid 4000 4200
+cdiv_head cdiv-verified;            cdiv_record cdiv-verified 4200 4000
+cdiv_verify cdiv-verified s1-resolution-p2.md
+cdiv_head cdiv-verified-unresolved; cdiv_verify cdiv-verified-unresolved ""
+cdiv_head cdiv-verified-invalid;    cdiv_record cdiv-verified-invalid 4000 4200
+cdiv_verify cdiv-verified-invalid s1-resolution-p2.md
+
 # =============================================================================
 # ARM J -- RE-OPEN: a pass ran after the series already stamped EXIT_CONDITION_MET.
 # =============================================================================
