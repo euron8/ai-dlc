@@ -93,6 +93,10 @@ Execute this 5-step procedure in order:
    resume line for a successor with nothing durable behind it. And
    "the local commits still stand" is false whenever Step 2 was also
    skipped, so verify Step 2 landed before relying on this sentence.
+   **If the hook's output ends `pre-push: REFUSED.`**, a fixture made no
+   progress and was killed, and no gate reached a verdict: re-run the same
+   push ONCE. If that push also ends `pre-push: REFUSED.`, treat it exactly
+   as BLOCKED below.
    **If the PRE-PUSH HOOK REFUSED the push** (its output ends
    `pre-push: BLOCKED.`), do not retry, do not pass `--no-verify`, and do
    not fix the hook's findings inside the handoff: report it to the

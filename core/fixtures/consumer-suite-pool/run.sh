@@ -739,7 +739,7 @@ if mutx st-b 'printf REFUSED > "$AI_DLC_FX_OUT/$b"' 'printf FAIL > "$AI_DLC_FX_O
   fi
 fi
 # st-c: the kill covers the leader pid only, so (h)'s grandchild sleep survives.
-if mutx st-c '            pool_kill "$pid" "$self" "$pr.g"' '            kill -KILL "$pid"'; then
+if mutx st-c '            pool_kill "$pid" "$self" "$kp" "$kg"' '            kill -KILL "$pid"'; then
   T="$WORK/st-c"; st_world "$T" "$MUT" h
   rc="$(st_drive "$T" "$WORK/st-c.out")"; c_live="$(st_alive "$T" h)"
   [ "${c_live:-0}" != none ] && [ "${c_live:-0}" -ge 1 ] \
@@ -753,6 +753,47 @@ if mutx st-d '} else if ((pp[i] in T) || (pg[i] in G)) { T[pid[i]] = 1; c = 1 }'
   st_refused "$WORK/st-d.out" g && ok "st-d a walk confined to the leader's group REFUSES a unit whose grandchild works in its own group -- the cross-group walk is what keeps (g) alive" \
                                 || bad "st-d (g) was not refused with the walk confined to the leader's group (rc=$rc)"
 fi
+# THE WATCHER DIES WITH ITS WORKER. The hook's worker body is extracted and run as a lone worker over
+# one hanging stub; the worker is then SIGKILLed by its recorded pid. The watcher pid the worker recorded
+# (`.pr/<unit>.w`) must be gone within POOL_STALL polls, and so must every pid the stub recorded: a
+# watcher whose only exit was a refusal outlived its worker with ppid 1.
+st_orphan() {                  # st_orphan <hook> <tag> -> prints "<watcher-left> <unit-left>" or BROKEN
+  local h="$1" R="$WORK/orph.$2" WK WP n p ul=0
+  mkdir -p "$R/t/tests/fixtures/u" "$R/out/.log" "$R/out/.dur" "$R/out/.pr"
+  awk '/xargs -P "\$FIXTURE_JOBS" -I\{\} bash -c /{f=1;next} /^  . _ \{\} < "\$out\/.order"$/{f=0} f' "$h" > "$R/body.sh"
+  awk '/^POOL_WALK=/{f=1} f{print} f && /^}.$/{exit}' "$h" > "$R/walk.sh"
+  POOL_WALK=""; . "$R/walk.sh"
+  [ -s "$R/body.sh" ] && [ -n "$POOL_WALK" ] || { echo BROKEN; return; }
+  printf 'echo $$ >> "%s/pids"\nsleep 100000 & echo $! >> "%s/pids"; wait $!\n' "$R" "$R" > "$R/t/tests/fixtures/u/run.sh"
+  ( cd "$R/t" && AI_DLC_FX_OUT="$R/out" AI_DLC_FX_TRACE="" AI_DLC_FX_TRACE_LIST="" AI_DLC_FX_DV="" \
+     POOL_STALL=300 POOL_WALK="$POOL_WALK" exec bash -c "$(cat "$R/body.sh")" _ tests/fixtures/u/ ) >/dev/null 2>&1 &
+  WK=$!
+  n=0; while [ ! -s "$R/out/.pr/u.w" ] && [ "$n" -lt 50 ]; do n=$((n + 1)); sleep 0.1; done
+  WP="$(cat "$R/out/.pr/u.w" 2>/dev/null)"
+  case "$WP" in ''|*[!0-9]*) kill -KILL "$WK" 2>/dev/null; wait "$WK" 2>/dev/null
+    [ -s "$R/pids" ] && while read -r p; do kill -KILL "$p" 2>/dev/null; done < "$R/pids"
+    echo BROKEN; return ;; esac
+  kill -0 "$WP" 2>/dev/null || { echo BROKEN; return; }
+  kill -KILL "$WK" 2>/dev/null; wait "$WK" 2>/dev/null
+  n=0; while kill -0 "$WP" 2>/dev/null && [ "$n" -lt "$ST" ]; do n=$((n + 1)); sleep 1; done
+  local wl=0; if kill -0 "$WP" 2>/dev/null; then wl=1; kill -KILL -- "-$WP" 2>/dev/null; fi
+  while read -r p; do kill -0 "$p" 2>/dev/null && { ul=$((ul + 1)); kill -KILL "$p" 2>/dev/null; }; done < "$R/pids"
+  echo "$wl $ul"
+}
+o="$(st_orphan "$HOOK" fix)"
+case "$o" in
+  BROKEN) bad "orphan arm: the extracted worker recorded no live watcher pid -- the arm cannot read its subject" ;;
+  "0 0") ok "a SIGKILLed worker's watcher exits within POOL_STALL polls and takes the unit's tree with it" ;;
+  *) bad "a SIGKILLed worker left its watcher or unit alive (watcher-left unit-left: $o)" ;;
+esac
+# st-e: the watcher's worker-liveness check removed, so it outlives the worker.
+if mutx st-e '          if ! kill -0 "$$"; then pool_kill "$pid" "$self" "$kp" "$kg"; exit 0; fi' '          :'; then
+  o="$(st_orphan "$MUT" st-e)"
+  case "$o" in
+    "1 "*) ok "st-e without the worker-liveness check the watcher outlives its SIGKILLed worker -- the check is what ends it" ;;
+    *) bad "st-e the watcher did not outlive its worker with the liveness check removed ($o)" ;;
+  esac
+fi
 unset CSP_PIDS CSP_FIFO CSP_STALL
 
 # ------------------------------------------------------------------- floor ---------
@@ -760,7 +801,7 @@ unset CSP_PIDS CSP_FIFO CSP_STALL
 # emitted from inside a conditional: an assertion that never executed prints nothing,
 # and a short green report reads exactly like a complete one. This is the same
 # property the hook itself now asserts about its own workers, one layer out.
-EXPECTED_ASSERTIONS=38
+EXPECTED_ASSERTIONS=40
 if [ "$asserts" -ne "$EXPECTED_ASSERTIONS" ]; then
   printf '  FAIL  %s assertions ran, %s expected — an arm did not execute, and a short green report reads exactly like a complete one\n' \
     "$asserts" "$EXPECTED_ASSERTIONS"

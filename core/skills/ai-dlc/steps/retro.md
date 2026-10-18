@@ -1204,6 +1204,8 @@ the reason is not restated here:
 git push -u origin HEAD
 ```
 A directed handoff authorises this push; the lead does not ask the operator for a go-ahead again.
+If its output ends `pre-push: REFUSED.`, re-run the same push once; a second `pre-push: REFUSED.` is
+handled as BLOCKED.
 If the pre-push hook refuses it (`pre-push: BLOCKED.`), never retry with `--no-verify`: report
 the failing gate to the operator in ONE line, `touch _bmad-output/pipeline-paused.flag`, and stop.
 

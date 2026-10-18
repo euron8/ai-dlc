@@ -475,11 +475,15 @@ POOL_REFUSED_ONLY=0
 # THE TREE WALK, one `ps` and one awk per poll. Input rows are `pid ppid pgid stat time`; `root` is the
 # unit's recorded pid, `self` the worker's own group (never walked, never signalled: a unit whose `set -m`
 # did not take is still walked by parent link, and the hook's own group is never killed), `groups` the
-# groups the last poll saw (so a grandchild reparented to init stays reachable through its group). Output
-# is one line `<S|U>|<signature>|<live pids>|<live groups>`; U means the root row was not visible.
-POOL_WALK='BEGIN { n = split(groups, g0, " "); for (i = 1; i <= n; i++) G[g0[i]] = 1 }
+# groups the last poll saw (so a grandchild reparented to init stays reachable through its group), `known`
+# the pids the last poll saw. A SAVED GROUP IS TAKEN ONLY WHILE IT STILL HOLDS A KNOWN PID: a group whose
+# members are all gone may have a reused id naming an unrelated process, and it is never walked or killed.
+# Output is one line `<S|U>|<signature>|<live pids>|<live groups>`; U means the root row was not visible.
+POOL_WALK='BEGIN { n = split(groups, g0, " "); for (i = 1; i <= n; i++) SG[g0[i]] = 1
+  n = split(known, k0, " "); for (i = 1; i <= n; i++) K[k0[i]] = 1; K[root] = 1 }
 { pid[NR] = $1; pp[NR] = $2; pg[NR] = $3; st[NR] = $4; tm[NR] = $5 }
 END {
+  for (i = 1; i <= NR; i++) if ((pg[i] in SG) && (pid[i] in K)) G[pg[i]] = 1
   T[root] = 1
   do {
     c = 0
@@ -2103,6 +2107,9 @@ run_fixtures() {
   # the record, waits for the watcher to finish rather than killing it mid-sweep. A refusal recorded after
   # the worker killed its watcher (the unit exited in the same instant) is swept again by the worker from
   # the groups the watcher last saw. A refused deriver call never falls through to a direct run.sh.
+  # THE WATCHER CHECKS ITS WORKER'S PID EVERY POLL. A worker that dies (SIGKILLed, or its xargs gone) never
+  # reaps the watcher, so on that poll the watcher kills the unit's tree, whose verdict nobody will record,
+  # and exits; without the check its only exit was a refusal and it outlived its worker indefinitely.
   # A UNIT IN ITS OWN GROUP DOES NOT HEAR THE TERMINAL'S ^C, which reaches only the push's foreground group,
   # so the worker (which is in that group) traps INT/TERM/HUP and kills its unit's tree and its watcher.
   # REFUSED IS WRITTEN BEFORE THE TRACE'S ROW DISCARD, so a refused unit keeps no trace rows; it writes no
@@ -2112,20 +2119,25 @@ run_fixtures() {
   POOL_STALL="$POOL_STALL" POOL_WALK="$POOL_WALK" \
     xargs -P "$FIXTURE_JOBS" -I{} bash -c '
     d="$1"; b="$(basename "$d")"; tp=""; pr="$AI_DLC_FX_OUT/.pr/$b"
-    pool_walk() { ps -A -o pid=,ppid=,pgid=,stat=,time= 2>/dev/null | awk -v root="$1" -v self="$2" -v groups="$3" "$POOL_WALK"; }
+    pool_walk() { ps -A -o pid=,ppid=,pgid=,stat=,time= 2>/dev/null | awk -v root="$1" -v self="$2" -v groups="$3" -v known="$4" "$POOL_WALK"; }
     pool_kill() {
       local w ws wsig wlp wlg p
-      w="$(pool_walk "$1" "$2" "$(cat "$3" 2>/dev/null)")"
+      w="$(pool_walk "$1" "$2" "$4" "$3")"
       IFS="|" read -r ws wsig wlp wlg <<< "$w"
       for p in $wlp; do kill -STOP "$p"; done
-      w="$(pool_walk "$1" "$2" "$wlg $(cat "$3" 2>/dev/null)")"
+      w="$(pool_walk "$1" "$2" "$wlg $4" "$wlp $3")"
       IFS="|" read -r ws wsig wlp wlg <<< "$w"
       for p in $wlg; do kill -KILL -- "-$p"; done
       for p in $wlp; do kill -KILL "$p"; done
     } 2>/dev/null
+    pool_kill_saved() {
+      local kp="" kg=""
+      { read -r kp; read -r kg; } < "$pr.g"
+      pool_kill "$pid" "$self" "$kp" "$kg"
+    } 2>/dev/null
     pool_abort() {
       [ -n "${wpid:-}" ] && kill -KILL -- "-$wpid"
-      [ -n "${pid:-}" ] && pool_kill "$pid" "$self" "$pr.g"
+      [ -n "${pid:-}" ] && pool_kill_saved
       exit 130
     } 2>/dev/null
     trap pool_abort INT TERM HUP
@@ -2137,12 +2149,13 @@ run_fixtures() {
       set -m
       "$@" > "$lg" 2>&1 < /dev/null &
       pid=$!
-      ( still=0; max=0; sg=""
+      ( still=0; max=0; sg=""; kp=""; kg=""
         while :; do
           sleep 1
-          w="$(pool_walk "$pid" "$self" "$(cat "$pr.g")")"
+          if ! kill -0 "$$"; then pool_kill "$pid" "$self" "$kp" "$kg"; exit 0; fi
+          w="$(pool_walk "$pid" "$self" "$kg" "$kp")"
           IFS="|" read -r ws wsig wlp wlg <<< "$w"
-          [ -n "$wlg" ] && printf "%s\n" "$wlg" > "$pr.g"
+          [ -n "$wlp" ] && { kp="$wlp"; kg="$wlg"; printf "%s\n%s\n" "$kp" "$kg" > "$pr.g"; }
           if [ "$ws" = S ]; then
             cur="$(wc -c < "$lg" | tr -d " ");$wsig"
             if [ "$cur" = "$sg" ]; then still=$((still + 1)); else still=0; sg="$cur"; fi
@@ -2150,17 +2163,18 @@ run_fixtures() {
           [ "$still" -gt "$max" ] && { max=$still; printf "%s\n" "$max" > "$pr.st"; }
           if [ "$still" -ge "$POOL_STALL" ]; then
             printf "%s\n" "$still" > "$pr.refused"
-            pool_kill "$pid" "$self" "$pr.g"
+            pool_kill "$pid" "$self" "$kp" "$kg"
             exit 0
           fi
         done ) < /dev/null > /dev/null 2>&1 &
       wpid=$!
       set +m
+      printf "%s\n" "$wpid" > "$pr.w"
       wait "$pid"; rc=$?
       if [ -f "$pr.refused" ]; then wait "$wpid"
       else
         kill -KILL -- "-$wpid"; wait "$wpid"
-        [ -f "$pr.refused" ] && pool_kill "$pid" "$self" "$pr.g"
+        [ -f "$pr.refused" ] && pool_kill_saved
       fi
       pid=""; wpid=""
       printf "%s %s\n" "$b" "$(cat "$pr.st" 2>/dev/null || echo 0)" >> "$AI_DLC_FX_OUT/.stall"
@@ -2602,7 +2616,7 @@ step "suite pole (this run's longest fixture; information, not a verdict)" pole_
 # A POOL WHOSE ONLY RED IS A REFUSAL EXITS 2, NOT 1 (BL-606). Written identically in both hooks, outside
 # the I66 block: POOL_REFUSED_ONLY is set inside it, FAIL_BEFORE_SUITE on the line before the suite step.
 if [ "$fail" -ne 0 ] && [ "${POOL_REFUSED_ONLY:-0}" = 1 ] && [ "${FAIL_BEFORE_SUITE:-1}" = 0 ]; then
-  printf '\npre-push: REFUSED. A fixture unit made no progress and was killed; no verdict exists for it. Re-run the push.\n\n'
+  printf '\npre-push: REFUSED. A fixture unit made no progress and was killed; no verdict exists for it. Re-run the push once; a second REFUSED is handled as BLOCKED (steps/handoff.md step 3).\n\n'
   exit 2
 fi
 if [ "$fail" -ne 0 ]; then
