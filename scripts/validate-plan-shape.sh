@@ -63,6 +63,63 @@ err()  { printf 'ERROR %s: %s\n'   "$1" "$2"; errs=$((errs+1)); }
 warn() { printf 'WARN  %s: %s\n'   "$1" "$2"; warns=$((warns+1)); }
 
 # ===================================================================================
+# plan_action_windows -- ONE WINDOW PER NUMBERED ACTION, shared by P13 and P14.
+#
+# Prints one record per col-0 numbered action of the `Next actions` section:
+#     <the action line> US <the whole window, whitespace squeezed to single spaces>
+# where US is the unit separator \037, so a caller can test the action LINE alone (the marker
+# must sit on it) and the WINDOW (the content the marker action must carry) from one record.
+#
+# EACH CHOICE BELOW PREVENTS A MEASURED OR PREDICTED DEFECT:
+#   - THE SECTION, NOT THE FILE. Plans cite their own history as wrapped numbered lines
+#     (`236. ...`). A scan of the whole file reads a history line as an action and is
+#     satisfied by it; the population is only the section under a `##`/`###` heading naming
+#     `Next actions` in ANY case (the live plans spell it `### NEXT ACTIONS`, and a
+#     case-sensitive match found no section, so every window was empty), up to the next
+#     heading of equal or higher level.
+#   - COL-0 ONLY. A line that begins `9. ` after indentation, or an owner-rules list quoted
+#     inside the action, is not a sibling action. The action grammar is
+#     `^(\*\*)?[0-9]+[a-z]?\.` so `0.`, `**0.` and `0a.` all open a window.
+#   - BLEED (the P6 lesson). A window that runs to the next ACTION reads col-0 prose that
+#     follows a blank line and belongs to no action, so a pointer-only action is scored by
+#     text it does not own. A blank line followed by a col-0 line that is neither a list item
+#     nor a fence ends the window, as does the next heading outside a fence.
+#   - FENCE-AWARE. A fenced block (an owner-rules block holding `1.`..`9.` lines and `#`
+#     lines) would otherwise end the window early; a toggle on the fence marker keeps the
+#     whole block inside it, and a heading-shaped line inside a fence opens no section.
+#   - THE WRAP (the P13 lesson). grep matches per line and prose wraps, so the window is
+#     collapsed to one line before any conjunct is tested; `never` at a line end and `builds`
+#     at the start of the next must still join.
+# awk reads the file itself, and callers take the output through a command substitution and a
+# here-string: no pipe feeds a `grep -q` from it (I54b).
+# ===================================================================================
+plan_action_windows() {
+  awk '
+    BEGIN { US = "\037" }
+    function flush() {
+      if (inwin) { gsub(/[ \t]+/, " ", win); print head US win }
+      inwin = 0; win = ""; head = ""; pend = 0
+    }
+    /^[ \t]*```/ { fence = !fence; pend = 0; if (inwin) win = win " " $0; next }
+    fence { if (inwin) win = win " " $0; next }
+    /^#+[ \t]/ {
+      t = $0; sub(/[ \t].*$/, "", t); lvl = length(t)
+      flush()
+      if (insec && lvl <= seclvl) insec = 0
+      if (!insec && lvl >= 2 && lvl <= 3 && tolower($0) ~ /next actions/) { insec = 1; seclvl = lvl }
+      next
+    }
+    !insec { next }
+    /^(\*\*)?[0-9]+[a-z]?\.[ \t]/ { flush(); inwin = 1; head = $0; win = $0; next }
+    !inwin { next }
+    /^[ \t]*$/ { pend = 1; next }
+    pend && /^[^ \t]/ && !/^([-*+]|[0-9]+[.)])[ \t]/ { flush(); next }
+    { pend = 0; win = win " " $0 }
+    END { flush() }
+  ' "$1"
+}
+
+# ===================================================================================
 # P8 -- A PLAN FILE HAS A BYTE CEILING, AND EVERY PLAN IS IN SCOPE.
 #
 # WHAT THIS BOUNDS AND WHY NOTHING ELSE DOES. A plan is a HANDOFF that also accumulates a
@@ -82,7 +139,7 @@ warn() { printf 'WARN  %s: %s\n'   "$1" "$2"; warns=$((warns+1)); }
 # first section.
 #
 # ===================================================================================
-# WHY THERE IS NO `DISCHARGE_BANNER` GUARD, AND DO NOT ADD ONE. P9, P10, P11, P12 and P13 all
+# WHY THERE IS NO `DISCHARGE_BANNER` GUARD, AND DO NOT ADD ONE. P9, P10, P11, P12, P13 and P14 all
 # open with the same `head -12` liveness test, so a spent plan is out of their scope by
 # construction. P8 deliberately does NOT join that family, and the reason is a measurement
 # taken by driving this validator on the real subject file:
@@ -92,7 +149,7 @@ warn() { printf 'WARN  %s: %s\n'   "$1" "$2"; warns=$((warns+1)); }
 #     byte delta between the two inputs                -> 11
 #     control: an impossible arm name returns 0 on both inputs
 #
-# ELEVEN BYTES, ONE WORD, AND IT SILENCES P9, P10, P11, P12 AND P13 TOGETHER. For those arms
+# ELEVEN BYTES, ONE WORD, AND IT SILENCES P9, P10, P11, P12, P13 AND P14 TOGETHER. For those arms
 # that is correct: their remedy is to write a sentence, and a plan whose author has declared it
 # spent genuinely does not need a resume line. P8's remedy is HOURS of rotation work, and its
 # opt-out would be one word typed into the head window the author is already editing. An arm
@@ -136,7 +193,7 @@ warn() { printf 'WARN  %s: %s\n'   "$1" "$2"; warns=$((warns+1)); }
 #
 # WHAT THIS ARM ACQUITS, stated because catching is only half of it. It acquits every plan at
 # or under the ceiling, and it says NOTHING about whether such a plan's content is resumable;
-# that is P1, P2, P9 through P13. It also acquits a plan that reached the ceiling by deletion
+# that is P1, P2, P9 through P14. It also acquits a plan that reached the ceiling by deletion
 # rather than rotation -- this arm cannot tell a moved section from a destroyed one, which is
 # why `plan-rotate.sh` carries the conservation arms and this file does not try to.
 #
@@ -499,13 +556,102 @@ for f in "${FILES[@]}"; do
   # one-liner within one sentence, and fired on BOTH live plans that carried the step, because
   # the two tokens sat on different wrapped lines -- an arm that cannot pass its own subject.
   # The text is collapsed to one line first, and the join is the SEND verb beside the
-  # one-liner (those two are always in one sentence), with the discovery tool required anywhere.
+  # one-liner (those two are always in one sentence), with the discovery tool required in the
+  # handoff action's OWN window (not anywhere in the file).
   if ! grep -qiE "$DISCHARGE_BANNER" <<<"$(head -12 "$f")"; then
     # HERE-STRING, NOT A PIPE (I54b), for the reason P6, P9, P10, P11 and P12 all record.
-    p13_flat="$(tr '\n' ' ' < "$f")"
-    if ! grep -qiE 'ListAgents' <<<"$p13_flat" \
-       || ! grep -qiE 'SendMessage.{0,120}READ and FOLLOW|READ and FOLLOW.{0,120}SendMessage' <<<"$p13_flat"; then
-      err "$rel" "is a LIVE plan that never tells its executor to hand the plan to a local ai-dlc session once it is ready for a fresh resume. Operator instruction at batch 52: after the fresh-resume check passes, ListAgents; if a local ai-dlc session (never a graph-* one) is found, SendMessage it exactly 'READ and FOLLOW $rel' and stop -- no further work, no further communication with the receiver; if none is found there is nothing further to do. Add it as the LAST numbered action."
+    # THE HANDOFF ACTION MUST CARRY ListAgents ITSELF. A file-wide ListAgents is satisfied by
+    # any other action, so a handoff that never names the discovery tool passed on a mention
+    # elsewhere. The key is the action whose window holds the send beside the one-liner
+    # (plan_action_windows collapses the wrap).
+    p13_ok=0
+    p13_wins="$(plan_action_windows "$f")"
+    while IFS= read -r p13_rec; do
+      [ -n "$p13_rec" ] || continue
+      p13_win="${p13_rec#*$'\037'}"
+      if grep -qiE 'SendMessage.{0,120}READ and FOLLOW|READ and FOLLOW.{0,120}SendMessage' <<<"$p13_win" \
+         && grep -qF 'ListAgents' <<<"$p13_win"; then p13_ok=1; fi
+    done <<<"$p13_wins"
+    if [ "$p13_ok" -eq 0 ]; then
+      err "$rel" "is a LIVE plan that never tells its executor to hand the plan to a local ai-dlc session once it is ready for a fresh resume. Operator instruction at batch 52: after the fresh-resume check passes, ListAgents; if a local ai-dlc session (never a graph-* one) is found, SendMessage it exactly 'READ and FOLLOW $rel' and stop -- no further work, no further communication with the receiver; if none is found there is nothing further to do. Add it as the LAST numbered action, and ListAgents must sit in the same numbered action as the send."
+    fi
+  fi
+
+  # --- P14: a LIVE plan DESIGNATES THE LEAD in a numbered action, before any dispatch ----
+  # THE OPERATOR WANTS THE MULTI-SESSION RELEASE TRAIN AS A STANDARD PLAN SHAPE. A lead that also
+  # builds starves orchestration (scoping, allocation, slots and landing verification all wait on
+  # it), and owners that build alone serialize the work that hands exist to parallelize. A plan
+  # that never says who leads, that the lead roll-calls the other sessions, that the lead never
+  # builds and that owners build through hands leaves each fresh session to improvise the shape.
+  #
+  # WHAT IT BINDS: a col-0 numbered action in the Next actions section carries the marker
+  # `DESIGNATE THE LEAD` on the action LINE (case-sensitive: a structural token, not prose), and
+  # that action's window, collapsed to one line, carries all of `ListAgents`, `never builds` and
+  # `through hands` (the last two case-insensitive, any whitespace between the words). A marker
+  # action that only points at another plan carries none of them and fails. `0.` and `0a.` are
+  # accepted prefixes because the designation precedes the dispatch action and must not force
+  # the renumbering that RESUME blocks and P-arm history cite.
+  #
+  # THIS ARM CANNOT VERIFY THE ROLL CALL HAPPENED, for the reason P11, P12 and P13 give: an act
+  # at a point in time is not a property of the text. It binds that every live plan TELLS its
+  # executor to designate, roll-call, orchestrate and build through hands.
+  #
+  # FALSE-POSITIVE SET, MEASURED BEFORE SHIPPING: over docs/plans/*.md -- 50 plans, 4 live and 46
+  # spent by the P9 discharge test -- the set is EXACTLY THE FOUR LIVE PLANS, none of which
+  # carried the marker when the arm was written; the marker actions are added in the same
+  # release. Control in the same invocation: the P9 discharge loop printed 46 spent beside 4 live.
+  # RE-MEASURED after the order and fourth-conjunct additions below: one run of this validator over
+  # docs/plans left all 4 live plans QUIET with rc 0 (each carries its marker as the FIRST
+  # numbered action and `no edits` inside the marker window).
+  #
+  # HOW THE GRAMMAR GOT HERE. The first draft keyed any numbered line carrying the phrase, and
+  # three cases defeated it: (1) BLEED -- a pointer-only `0.` action scored by col-0 prose after
+  # a blank line; (2) THE WRAP -- `never` and `builds` on different lines failed a per-line grep;
+  # (3) HISTORY -- a wrapped `236.` line cited in the retrospective, outside the Next actions
+  # section, satisfied the marker. plan_action_windows (above) is the narrowing for all three.
+  # TWO MORE NARROWINGS, BOTH ADDED AFTER THE TIP ADVERSARY: (4) ORDER -- the header says the lead
+  # is designated before any dispatch, yet a marker on action `9.` passed; the marker action must
+  # now be the FIRST record plan_action_windows emits for the section. (5) A FOURTH CONJUNCT,
+  # `no edits` (case-insensitive): this action plus P14 is the only carrier of "owners make NO
+  # edits; every edit goes to a hand", and P14 checked only `through hands`. (6) A FIFTH CONJUNCT,
+  # the time sentence: an operator instruction at batch 236 makes it a required brief line, it is
+  # bound here because the designation action's window is the one place every live plan carries its
+  # brief lines, and it is a fixed string (grep -qF after the whitespace collapse), so it has no
+  # false-positive path. (7) FIVE TRAIN-RULE LABELS: the operator's train rules, after "what's
+  # taking so long for releases?". They are bound by their labels. Labels are fixed strings, so
+  # there is no false-positive path. A label carrying no rule text still passes, which is the same
+  # limit as every other conjunct: P14 binds presence, never wording.
+  if ! grep -qiE "$DISCHARGE_BANNER" <<<"$(head -12 "$f")"; then
+    # HERE-STRINGS, NOT PIPES (I54b), for the reason P6 and P9 through P13 record.
+    p14_seen=0; p14_ok=0; p14_missing=""; p14_idx=0; p14_pos=0
+    p14_wins="$(plan_action_windows "$f")"
+    while IFS= read -r p14_rec; do
+      [ -n "$p14_rec" ] || continue
+      p14_idx=$((p14_idx+1))
+      p14_head="${p14_rec%%$'\037'*}"
+      grep -qF 'DESIGNATE THE LEAD' <<<"$p14_head" || continue
+      [ "$p14_seen" -eq 0 ] && p14_pos=$((p14_idx-1))
+      p14_seen=1
+      p14_win="${p14_rec#*$'\037'}"
+      p14_m=""
+      grep -qF 'ListAgents' <<<"$p14_win" || p14_m="$p14_m ListAgents"
+      grep -qiE 'never[[:space:]]+builds' <<<"$p14_win" || p14_m="$p14_m 'never builds'"
+      grep -qiE 'through[[:space:]]+hands' <<<"$p14_win" || p14_m="$p14_m 'through hands'"
+      grep -qiE 'no[[:space:]]+edits' <<<"$p14_win" || p14_m="$p14_m 'no edits'"
+      grep -qF 'Time matters here: do not spend time that can be avoided, and the earlier a correct result is obtained, the better.' <<<"$p14_win" || p14_m="$p14_m 'the time sentence'"
+      # --- BEGIN five train-rule labels (one block, so one edit removes it) ---
+      for p14_lbl in 'RELEASES BEFORE MEASUREMENTS' 'SHORTEST GATE FIRST' 'NO IDLE SESSIONS' 'NO TIMING RUNS' 'RELEASE TEXT IS PREPARED IN ADVANCE'; do
+        grep -qF "$p14_lbl" <<<"$p14_win" || p14_m="$p14_m '$p14_lbl'"
+      done
+      # --- END five train-rule labels ---
+      if [ -z "$p14_m" ]; then p14_ok=1; elif [ -z "$p14_missing" ]; then p14_missing="$p14_m"; fi
+    done <<<"$p14_wins"
+    if [ "$p14_seen" -eq 0 ]; then
+      err "$rel" "is a LIVE plan whose numbered actions never DESIGNATE THE LEAD: no column-0 numbered action in the Next actions section carries the phrase 'DESIGNATE THE LEAD' on its own line. The operator wants the multi-session release train as a standard plan shape -- a lead that also builds starves orchestration, and owners that build alone serialize the work. Add a numbered action (0. is accepted, before the dispatch action) headed 'DESIGNATE THE LEAD' whose body roll-calls via ListAgents, states the lead never builds and that owners build through hands."
+    elif [ "$p14_pos" -gt 0 ]; then
+      err "$rel" "is a LIVE plan whose numbered actions never DESIGNATE THE LEAD before the first dispatch: the marker sits on action number ${p14_pos} (counting from 0), after ${p14_pos} earlier action(s). The lead is designated BEFORE any dispatch, so the marker action must be the FIRST numbered action of the Next actions section (0. or 0a. is accepted). Move it to the front."
+    elif [ "$p14_ok" -eq 0 ]; then
+      err "$rel" "is a LIVE plan whose numbered actions never DESIGNATE THE LEAD completely: the marker action lacks${p14_missing} within its own window (the action line through the blank line before the next column-0 prose, the next action or the next heading, wrapped lines joined). A pointer to another plan is not a designation. The operator wants the multi-session release train as a standard plan shape -- a lead that also builds starves orchestration, and owners that build alone serialize the work. State in the action itself: ListAgents roll call, the lead never builds, owners build through hands, owners make no edits (every edit goes to a hand), the time sentence, and the five train rules by label: RELEASES BEFORE MEASUREMENTS, SHORTEST GATE FIRST, NO IDLE SESSIONS, NO TIMING RUNS, RELEASE TEXT IS PREPARED IN ADVANCE."
     fi
   fi
 

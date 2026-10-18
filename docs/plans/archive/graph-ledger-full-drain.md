@@ -18732,3 +18732,74 @@ to a fresh session because this one's context was deep.
 - **Net for the batch**: 9 entries closed (BL-507, 508, 512, 515, 519, 521, 522, 524, 525); 4 filed (BL-521, 522, 524,
   525); net -5 once the close lands; 9 entries move to `docs/backlog.archive.md`. BL-510 stays live. BL-523 is filed on `b230-c5a-rotate` only.
 
+**BATCH 231 SHIPPED `v0.787.0` (`2dc7b58d`, #1140) AND `v0.788.0` (`c96ad358`, #1142), AND LANDED BATCH 230's HELD
+CLOSE (`8e5f1b2f`, #1141). THREE ENTRIES CLOSED; GRAPH'S LAST LIVE CANDIDATE CLOSED UPSTREAM; THE BACKLOG IS DECLARED
+EMPTY. THE OPERATOR STARTED THE GRAPH PULL TO 0.788.0 DURING THIS CLOSE.**
+Batch 230's block below is history: this block replaces its delivery gap. Started by peer ai-dlc-15's one-liner at
+`origin/main` `4aa734c4` (`VERSION` 0.786.0); graph-55 was live and was never messaged.
+- **Opening sweep** (at `aadd5c93`, the held close): live 5, unfiled 1, worklist 0, DISCHARGED 4 (the four 0.786.0
+  ids), invisible 0, TERMINAL 236, archive 359, 0 qualifying refs, every control passing. Ledger md5 `8261b9ab…` on
+  graph `main` `8f313c3c0`. The unfiled id was the rotate candidate (filed 2026-10-14, graph `03ff6a8af`). Scope: that
+  candidate, both halves, plus BL-510 held from batch 230.
+- **Operator rulings, batch 231**:
+  - Graph runs no ai-dlc pipeline until batch 231 is pulled, so no old-form gate verdict exists after the C5(b)
+    `SERIES_FORM_FROM` cutoff. Discharged when the operator ran the pull.
+  - The backlog's "Pipeline-efficiency ranked set" section was removed by the batch-230 close to pass the rotator's
+    declared-empty refusal; the operator had not asked. It is restored verbatim in 0.788.0, and at this close its
+    heading was reworded to `(efficiency ranks 1–14)` on the operator's choice, the only change to the section. **Do
+    not remove or reword operator-authored text to satisfy a gate; ask.**
+- **`v0.787.0`**: BL-510's bookkeeping half (five refusal kinds at the frozen sha; gate-1 FP 0 over 56 real passes).
+  Two tip adversaries.
+- **`v0.788.0`**: BL-523 (the rotator refuses an empty `--sprint` selection beside an unmatchable FAIL series;
+  `--series` is the escape) and BL-526 (`gate_series_id` prescribed as `<gate_type>-<slug>-s<N>-<TS>` for a
+  single-story gate, slug from the `story:` line the lead writes on its brief, else `<gate_type>-s<N>-<TS>`; checked
+  per pass from `SERIES_FORM_FROM`). The candidate id is named in that release's message only. C5(a) took four tip
+  adversaries and C5(b) five rounds; every round found a real defect. Shipping C5(a) alone was tried and abandoned:
+  BL-523 alone is the only live entry, its receipt is UNSCORABLE (it builds its own tree), and R2 then reads zero
+  scored receipts, the batch-230 shape the operator ruled against widening.
+- **Unfixed, recorded**: two unmovable FAIL verdicts sharing one nonce make the printed `--series`/`--legacy-through`
+  remedies refuse each other (0 in graph's corpus); nothing checks the `story:` line against the id's slug; two
+  unslugged gates over different story sets can share a series (0 of 8 real cases); "trailing punctuation" is not
+  enumerated; BL-510's gate 2 stays unwired (FP 2). Batch 230's unfixed list stands.
+- **Process facts**: 0.787.0's first gate failed S7 (an octal escape on a `gsub` line) and the pole at load 32.
+  0.788.0's first gate failed the pole: eleven new mutants doubled shards b and c, and both the builder and its
+  adversary had judged against the suite's 1100s pole where the guard judges each unit against its OWN history; it
+  shipped sharded five ways. The sandbox read-set tracer dropped reports under load twice and wrote the fixture as
+  `OMITTED`; one such map was committed and caught before push. Re-run at low load, and check `OMITTED` before commit.
+- **graph delivery**: graph pulled 0.785.0 and 0.786.0 itself (#1222, #1223) and closed the four 0.786.0 ids. The
+  runbook `docs/plans/graph-pull-0786-to-0788.md` lands with this close; the operator is running that pull now. The
+  0781-to-0787 runbook is discharged.
+- **Net for the batch**: closed 3 entries (BL-510, BL-523, BL-526), filed 2 (BL-523, BL-526); 1 candidate closed
+  upstream. Backlog 0 live, 525 archived.
+
+**BATCH 232 SHIPPED `v0.789.0` (`dc8efe43`, #1144): GRAPH'S ONE UNFILED CANDIDATE CLOSED UPSTREAM, AND CORE GAINED THE
+TWO WORKTREE-DISPATCH RULES ITS 0.713.0 "ABSORBED" RULING HAD MISSED. THE BACKLOG IS DECLARED EMPTY AGAIN. THE PULL
+0.788.0 -> 0.789.0 IS REQUIRED; ITS RUNBOOK LANDS WITH THIS CLOSE.**
+Batch 231's block below is history: this block replaces its delivery gap. Started by peer ai-dlc-76's one-liner at
+`origin/main` `16f69a27` (`VERSION` 0.788.0); graph-14 was live, running graph's 0.788.0 pull, and was never messaged.
+- **Opening sweep** (at `16f69a27`): live 2, unfiled 1, worklist 0, DISCHARGED 1 (the S318 rotate id), invisible 0,
+  TERMINAL 240, archive 363, 0 qualifying refs, every control passing. Ledger md5 `f58c9b1a…` on graph `main`
+  `6196073a8`. The unfiled id was `PC-S319-IMPLEMENTATION-PUSH-WORKTREE-EXPLICIT-DISPATCH-BLOCK-RESTATES-CORE-DISPATCH-PROTOCOL`,
+  filed 2026-10-15 in graph #1223. Backlog 0 live, 525 archived, declared empty. Scope: that candidate.
+- **`v0.789.0`**: BL-527. graph's `implementation-push.md` §2 block was refused as absorbed in 0.713.0 (`push-refusals.tsv`
+  row `8a28c2ef…`); graph's 0.785.0 pull added core's own `to: "main"` line to its point 5, the digest moved to
+  `b0e3cc6b…` and the block resurfaced. The pre-edit body digests to exactly the refused row. The contract adversary
+  found two points core never stated: `git -C` on every git command (a teammate's cwd resets between Bash calls, so a
+  first-action `cd` let `git add -A` land in the primary tree), and one story per dispatch (`dev.md` told devs to claim
+  from the shared task list). `_dispatch-protocol.md` point 3 and `dev.md` now state both, `process-rule-pins` pins four
+  sentences (each deletion fails only its own row), and the refusal row for `b0e3cc6b…` is added beside the old one.
+- **Not absorbed, recorded**: `git branch -D` after `git worktree remove` (loud stall); `git worktree list` before merge
+  (redundant once `git -C` holds); `lead_only` and "dev never commits `_bmad-output/**`" are graph-local and contradict
+  core. `dev.md`'s commit-before-reporting bullet is unpinned by choice.
+- **graph delivery**: graph pulled 0.788.0 itself during this batch (#1225, `fa2444635`) and archived the S318 id; its live
+  ledger is PC-S319 alone. Installed 0.788.0 against `VERSION` 0.789.0. **The pull is REQUIRED**: this tree's
+  `push-drain.sh` against a clone of graph reads the §2 block `PUSH-CANDIDATE` at 0.788.0 and `PUSH-REFUSED` at 0.789.0,
+  while every update-engine file is byte-identical across the range, so action 7's binary differential cannot see it.
+  The runbook `docs/plans/graph-pull-0788-to-0789.md` lands with this close, rehearsed: 4 rows (1 BOTH-CHANGED,
+  `dev.md`), 2 `HARD-LAYER-ADJUDICATION-MISSING` on graph's dev extensions, and PC-S319 closing as `CLOSED AS REJECTED —
+  BY DESIGN` through the refusal channel. It is ready, not authorized: the pull is the operator's. The 0786-to-0788
+  runbook is discharged by graph's #1225.
+- **Process facts**: one gate, green on the first push (pool 12, load ~40). No operator rulings this batch.
+- **Net for the batch**: closed 1 entry (BL-527), filed 1 (BL-527): net 0 entries, because the backlog opened empty and
+  nothing else existed to close; 1 candidate closed upstream. Backlog 0 live, 526 archived.
+

@@ -50,7 +50,7 @@ it was handed off:
   `docs/plans/archive/<slug>.md`, never deletes, and leaves a pointer line behind.
 
   **That arm is scoped to EVERY plan, spent ones included, and that is deliberate.** Every other
-  arm here exempts a discharged plan, so a discharge banner in the head window silences five of
+  arm here exempts a discharged plan, so a discharge banner in the head window silences six of
   them at once — measured at eleven bytes, one word, taking a firing arm from one hit to zero.
   Those arms' remedy is a sentence; this one's is hours of rotation, and an escape hatch cheaper
   than the remedy is an instruction that ships its own opt-out. A spent plan satisfies the
@@ -93,6 +93,22 @@ it was handed off:
   choice in its first ping, batches multiple items into one release wherever the plan's
   separability conditions allow, and delegates generously so the lead's context stays on plan
   execution.
+- **A numbered action that DESIGNATES THE LEAD before anything is dispatched.** Operator
+  instruction at batch 236: "if multiple fresh ai-dlc sessions exist that we designate a lead
+  session for orchestration", and "I want this to be a standard plan shape going forward." The
+  session that accepts the one-liner is the lead; it runs `ListAgents`, roll-calls every other
+  `ai-dlc-*` session for its state, and assigns each available one a cluster as one release after
+  scoping. The lead ORCHESTRATES and NEVER BUILDS ("this is the lead session and should be
+  orchestrating, not building"), and it alone allocates VERSIONs and backlog ids — measured at
+  batch 210, sessions each took the next VERSION with no allocator and releases collided. Owners
+  build through hands: an owner makes NO edits ("<owner> is not using subagents", given twice).
+  The owner-rules block the lead sends verbatim lives in the plan, in
+  `docs/plans/graph-ledger-full-drain.md`'s action of that title, and other plans cite it there.
+  The measured train logs are `docs/analysis/b235-release-train.md` and
+  `docs/analysis/b236-release-train.md`. The action also carries the five train rules by label:
+  RELEASES BEFORE MEASUREMENTS, SHORTEST GATE FIRST, NO IDLE SESSIONS, NO TIMING RUNS ("box load
+  should not matter. Stop timing things that don't need to be timed."; one push at a time, no
+  slots) and RELEASE TEXT IS PREPARED IN ADVANCE. Carried by **P14**, scoped to live plans.
 - **A dispatch action that FANS OUT by deliverable, with the adversary's contract pass BEFORE the
   builders spawn.** Operator instruction at batch 101, on a build measured at over an hour serial:
   one builder carried the fix, the fixture, the backlog entry, the docs carriers and four
@@ -111,6 +127,10 @@ it was handed off:
   for, so it is not to be allow-listed. A scratch copy goes into a fresh `mktemp -d` under the
   scratchpad and is never deleted by the hand; anything that must be cleared names a literal
   absolute path. The plan's dispatch action carries that sentence into every spawn prompt.
+- **Every hand's brief carries the time sentence verbatim**: "Time matters here: do not spend
+  time that can be avoided, and the earlier a correct result is obtained, the better." Operator
+  instruction at batch 236. The plan's designation action states it, so every spawn the lead or
+  an owner makes carries it. Carried by **P14**, inside the designation action.
 - **A brief NEVER says "leave the worktrees in place", and the lead removes every one it
   spawned before reporting the batch closed.** Operator instruction at batch 129, on a measured
   accumulation: **39 agent worktrees, 1.0G**, dating back three days across batches 114-129.

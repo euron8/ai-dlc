@@ -154,6 +154,50 @@ Neither is 346 on the next. Need to look deeper and refactor more aggressively i
 batch."* Given after being shown that cutting BOTH co-poles bought ~85s of a 500s makespan. The
 ruling stands until the operator replaces it: **the subject is removing work, not scheduling it.**
 
+0. **DESIGNATE THE LEAD BEFORE ANYTHING IS DISPATCHED.** Operator instruction at batch 236, a
+   standard plan shape. The session that receives and ACCEPTS the one-liner is the LEAD; its
+   first call is `ListAgents`, and it `SendMessage`s every other `ai-dlc-*` session in the
+   listing (never a `graph-*` session) asking for its current state and whether it is free to own
+   a release. A session that finished an earlier release is a valid owner; one that has not
+   answered after one re-ask and one more timer counts as no session. The work this plan
+   dispatches is work removal under action 1, one validator or fixture subject per release, each
+   timed only when NO TIMING RUNS allows it: once the batch's subjects are scoped, the lead
+   assigns each available owner one cluster as one release, at once and without asking, and
+   reports the roster (each session's state and assignment) in its FIRST operator ping. The lead
+   ORCHESTRATES and NEVER BUILDS: it scopes, allocates every VERSION and backlog id, lets one
+   push run at a time, verifies each landing by content, and runs the docs close. Owners build
+   through hands: an owner makes NO edits, and every edit (code, fixture, receipt, entry prose,
+   comment, script) goes to a hand. With no other session available the lead still never builds;
+   the removals go to hands. Every spawn the lead or an owner makes carries this sentence
+   verbatim: "Time matters here: do not spend time that can be avoided, and the earlier a correct
+   result is obtained, the better." Operator instruction at batch 236. The owner-rules block the lead sends each owner, verbatim, is the one
+   in `docs/plans/graph-ledger-full-drain.md` under the action titled "DESIGNATE THE LEAD BEFORE
+   ANYTHING IS DISPATCHED". The block's spawn sentences and its gate steps resolve in that same
+   plan, under the actions titled "DISPATCH HANDS BEFORE YOU RUN A SINGLE SWEEP COMMAND YOURSELF."
+   and "Gate it the way the hook runs it, and read the GATE's own exit."; this plan has no action
+   of either kind.
+   - **The release schedule.** Operator instruction at batch 236, after "what's taking so long for
+     releases?": "better make it so the plan dictates that, I don't want to discover it the hard
+     way again."
+   - RELEASES BEFORE MEASUREMENTS. A ready release gates before any measurement. A measurement
+     happens only when NO TIMING RUNS allows it, and then after every release in the batch that is
+     ready or in flight, unless a release depends on the result.
+   - SHORTEST GATE FIRST. Among ready releases, a docs-only release (whose push skips the suite on
+     the content key) gates first, then the others in order of readiness.
+   - NO IDLE SESSIONS. At roll call, and again whenever a session finishes, every unassigned plan
+     item goes to an idle session at once. Build work (hands, edits only) never waits on box load;
+     only runs load the box.
+   - NO TIMING RUNS. Operator at batch 236: "box load should not matter. Stop timing things that
+     don't need to be timed." and "bake it into the plan, no timing runs unless it's absolutely
+     needed." No timing run (wall clock, durations, per-arm profiles, stall distributions, load
+     series) unless it is absolutely needed, meaning a named fix cannot be chosen without the
+     figure, and the lead approves each one. Box load gates nothing. Correctness runs (fixtures,
+     mutants, receipts, fork COUNTS) run whenever they are ready. The only serialisation is one
+     push at a time. A timing-flavoured entry starts with a read-only diagnosis from the code and
+     the data already recorded.
+   - RELEASE TEXT IS PREPARED IN ADVANCE. Each owner has its release commit text (a VERSION
+     placeholder, CHANGELOG, LANDED lines) written by a hand before its gate opens, so a gate starts
+     the moment its turn comes.
 1. **REMOVE TOTAL WORK. The lever is repeated I/O over the same files, and it is the largest
    single finding in this plan.** Operator's own lead at batch 119, confirmed by derivation:
    every real input file is opened **~8.8 times per full suite run**, by different fixtures, for

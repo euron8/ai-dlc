@@ -704,6 +704,43 @@ line with no later "verified" parses the same as today.
 
 verify: manual
 
+## BL-678 — plan-rotate.sh rebuilds the plan's archive pointer from the current run's ranges alone, so every earlier rotated range drops out of the plan
+
+**NOTE.** Filed by the TRAIN owner on the lead's instruction, and tiered NOTE by the lead's ruling. `scripts/plan-rotate.sh:205-206` spell the
+pointer as `PTR_PFX` + ranges + `PTR_SFX`, and `:937-942` build `POINTER` from `RANGES`, which is read from this
+run's `meta.tsv` only, then print it IN PLACE OF the existing `**Archived sections live at` line. Nothing reads the
+ranges the old pointer carried. So each rotation erases the record of every earlier one: the plan names only the
+last run's lines, and the earlier ranges survive only in git history.
+
+Measured with `git log -L3,3:docs/plans/graph-ledger-full-drain.md`: line 3's range was overwritten at each of the
+last seven rotating commits, `350..414` (11ae360d) -> `356..456` (8e5f1b2f) -> `354..387` (16f69a27) -> `315..384`
+(7e8d62d7) -> `305..381` (952b9319) -> `240..336` (23a69fc3) -> `215..254` (bd02a118), and every pointer before
+those was likewise a single run's text. The pointer CAN hold several ranges, but only from one run: 439c0058's reads
+`original lines 40..9767, 12781..14643, 10801..12068`. The archived records themselves survive. For example,
+`**BATCH 230 SHIPPED` sits at line 18638 of `docs/plans/archive/graph-ledger-full-drain.md`. Only the plan's account
+of where they came from is lost.
+
+The documented intent does not conflict with the owed fix. The fixture's header at
+`core/fixtures/plan-rotate/run.sh:691` ("THE POINTER IS REFRESHED, NOT APPENDED") gives its reason as: a second
+rotation "must leave ONE pointer" and "must not stack a second archive header". The intent is ONE pointer line, with
+no stacked second archive header. One line carrying EVERY range satisfies that intent, so the documented choice and
+the fix below can both hold. The consequence of today's behaviour is narrow: only the plan's own record of earlier
+ranges is lost. The archived records survive (`**BATCH 230 SHIPPED` is still in the archive, as above).
+
+Owed: accumulate ranges inside the one pointer line, appending this run's ranges to those the existing pointer
+already carries, and keep the splitter's pointer budget in step with the longer line. The `pointer-refresh` arm at
+`core/fixtures/plan-rotate/run.sh:724` checks only that the pointer CHANGED (`PTR_1` != `PTR_2`), so it cannot tell
+a replace from an append. The owed arm in `core/fixtures/plan-rotate` asserts that the first range survives a second
+rotation. The `run.sh:691` header's "CURRENT range" wording is updated with the fix. Probe: two rotations of one
+plan, the second after a new spent section is appended. Control: one rotation, whose pointer is the same either way.
+
+Receipt: it drives the rotator twice on a mktemp plan. The first rotation moves a 40-line spent section and records
+its range; a 20-line spent section is then appended and rotated. The receipt requires the final pointer to carry the
+first range as one of at least two range tokens. Today it exits 1. It exits 9 when either rotation is refused or
+moves nothing, or when the first range is missing or is not a single token.
+
+verify: sh S=scripts/plan-rotate.sh; [ -s "$S" ] || exit 9; T=$(mktemp -d "${TMPDIR:-/tmp}/bl678.XXXXXX") || exit 9; mkdir -p "$T/scripts" "$T/docs/plans" || exit 9; printf '0.0.0-receipt\n' > "$T/VERSION"; cp "$S" "$T/scripts/plan-rotate.sh" || exit 9; P="$T/docs/plans/p.md"; A="$T/docs/plans/archive/p.md"; awk 'BEGIN{print "# Probe plan";print "";print "## Start here";print "";print "1. `## Start here` -- live.";print "2. `## Next` -- live.";print "";print "## Next";print "";print "1. Do the thing.";print "";print "## SPENT A";print "";for(i=1;i<=40;i++)printf "SPENT-A-%02d padding padding padding padding padding padding padding.\n",i}' > "$P"; bash "$T/scripts/plan-rotate.sh" "$P" --ceiling 1500 --apply >/dev/null 2>&1 || exit 9; grep -q 'SPENT-A-01' "$A" 2>/dev/null || exit 9; R1=$(sed -n 's/.*original lines \(.*\)\. It is a RECORD.*/\1/p' "$P"); [ -n "$R1" ] || exit 9; [ "${R1#*,}" = "$R1" ] || exit 9; awk 'BEGIN{print "";print "## SPENT B";print "";for(i=1;i<=20;i++)printf "SPENT-B-%02d padding padding padding padding padding padding padding.\n",i}' >> "$P"; bash "$T/scripts/plan-rotate.sh" "$P" --ceiling 1500 --apply >/dev/null 2>&1 || exit 9; grep -q 'SPENT-B-01' "$A" || exit 9; R=$(sed -n 's/.*original lines \(.*\)\. It is a RECORD.*/\1/p' "$P"); L=$(tr ', ' '\n\n' <<<"$R" | grep .); n=$(grep -c . <<<"$L"); grep -qxF "$R1" <<<"$L" && [ "$n" -ge 2 ]
+
 ## BL-679 — one consumer pull re-runs `emit-report.sh --verify` three or four times, each a full detector re-render, and no caller accepts an earlier PASS
 
 **DEFECT (efficiency).** In the graph pull session `f78aa565` (0.823.0 to 0.828.0), f7 measured `emit-report.sh --verify` run 3-4 times in one pull, each a full re-render of every detector at 3-14 minutes, about 35 of the pull's 116 in-session minutes. Source: f7's transcript read, not re-derived here; a transcript-only figure. Handoff gaps are excluded from the 116.
@@ -728,3 +765,31 @@ verify: manual
 Owed: either refuse a `verify:` line that matches no receipt form, naming its entry and line number, or have R2's message name the entries whose verify line was counted as nothing. Probe: a `verify: manual. <reason>` line is named by its entry id. Control: a bare `verify: manual` line is not named.
 
 verify: manual
+
+## BL-681 — shell-portability S7 reads any `\<digit>` after a sub/gsub on the same line as a replacement backreference, including an octal escape in a later print
+
+**NOTE.** Filed by the TRAIN owner. `S7_PAT="g?sub\\(.*,.*\\\\[0-9]"` at `scripts/validate-shell-portability.sh:91`
+matches a backslash followed by a digit ANYWHERE after the first comma following `sub(` or `gsub(` on the line. It
+does not stop at the call's closing parenthesis. So a `\<digit>` outside the replacement string is read as a
+backreference, for example an octal escape such as `"\037"` in a later `print` statement on the same line. Measured
+on `scripts/validate-plan-shape.sh:99` at 7bd139fc, inside `plan_action_windows`' awk program:
+
+    if (inwin) { gsub(/[ \t]+/, " ", win); print head "\037" win }
+
+The gsub replacement there is `" "`. The `\037` is the record separator in the `print`. S7 flagged the line, and
+the commit filing this entry removed the hit by naming the separator once (`BEGIN { US = "\037" }`, then `print head US win`), with
+byte-identical output. The arm itself is unchanged, so the next line shaped like this one is flagged the same way.
+
+Owed: S7 scopes its match to the replacement argument of the sub/gsub call, meaning the second argument up to its
+closing delimiter, so a `\<digit>` later on the line is not read as part of it. Probe: the original line 99 above,
+inside an awk program in a tracked `.sh` file, is not flagged. Control: `gsub(/x/, "\\1", s)` is still flagged.
+
+Receipt: it drives the real validator in a mktemp git tree holding a copy of it, a `VERSION` marker, one `core/`
+text file, one fixture shell file (so no corpus is empty and the scan runs), and two staged seeds:
+`scripts/fp.sh`, an awk program carrying the original line 99, and `scripts/bl.sh`, carrying a real backreference.
+It reads only the hits listed under the `FAIL: S7:` block. Today it exits 1, because S7 flags `fp.sh`. It exits 0
+once S7 stops flagging `fp.sh` while still flagging `bl.sh`. It exits 9 when the validator is missing, the tree
+cannot be built, a corpus reads empty or a self-probe fails, or `bl.sh` is not flagged.
+
+verify: sh unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY; V=scripts/validate-shell-portability.sh; [ -s "$V" ] || exit 9; T=$(mktemp -d "${TMPDIR:-/tmp}/bl681.XXXXXX") || exit 9; mkdir -p "$T/scripts" "$T/core/fixtures/x" || exit 9; printf '0.0.0-receipt\n' > "$T/VERSION" || exit 9; cp "$V" "$T/$V" || exit 9; printf '%s\n' 'probe text' > "$T/core/a.md" || exit 9; printf '%s\n' 'true' > "$T/core/fixtures/x/run.sh" || exit 9; printf '%s\n' "awk '" '      if (inwin) { gsub(/[ \t]+/, " ", win); print head "\037" win }' "' f" > "$T/scripts/fp.sh" || exit 9; printf '%s\n' 'awk '"'"'{ gsub(/x/, "\\1", s) }'"'"' f' > "$T/scripts/bl.sh" || exit 9; git -C "$T" init -q && git -C "$T" add -A || exit 9; O=$(bash "$T/$V" 2>&1); grep -qE 'corpus is empty|own probe did not fire|no VERSION marker' <<<"$O" && exit 9; H=$(awk '/^FAIL: /{s=($2=="S7:")} s' <<<"$O"); grep -qF 'scripts/bl.sh:' <<<"$H" || exit 9; grep -qF 'scripts/fp.sh:' <<<"$H" && exit 1; exit 0
+
