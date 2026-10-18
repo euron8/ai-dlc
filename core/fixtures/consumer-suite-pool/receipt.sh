@@ -5,8 +5,8 @@
 # Drives the hook's OWN extracted worker body (the `xargs ... bash -c` string, with POOL_WALK) over one
 # stub fixture that hangs with a grandchild `sleep`, at POOL_STALL=3. Exit 0 when the unit's verdict is
 # REFUSED and every pid the stub recorded is gone; 1 otherwise; 9 when the body cannot be extracted (the
-# receipt cannot measure its subject). Behaviour only: no name is grepped, so a signature spelled with
-# `stat -f %z` passes exactly as `wc -c` does.
+# receipt cannot measure its subject). Behaviour only: no name is grepped, so a byte signature summed
+# through `stat -f %z` passes exactly as one summed from `find -ls` does.
 #
 # THE OUTER BOUND IS A HARNESS NET, NOT A VERDICT. A body with no bound would hang this receipt, and the
 # rotator EXECUTES receipts, so after 60 one-second polls the receipt kills every pid the stub recorded,

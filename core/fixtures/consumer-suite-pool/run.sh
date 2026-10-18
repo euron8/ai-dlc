@@ -588,16 +588,21 @@ fi
 
 # ================================================ 7. NO-PROGRESS REFUSAL (BL-606) ===
 # THE DEFECT. Every pool run site ran its unit unbounded, so one hung unit hung the push with
-# nothing to say which. `pool_run` now refuses a unit whose progress signature -- log size plus
-# the CPU time and membership of its whole descendant tree, across every process group in it --
-# stays still for POOL_STALL polls, kills that tree by recorded ids, and records REFUSED.
-# Four stubs, each moving through ONE channel so no mutant is covered by another channel:
+# nothing to say which. `pool_run` now refuses a unit that writes no new bytes -- to its pool log or
+# under its per-unit watched root (the TMPDIR the pool sets) -- for POOL_STALL polls, kills its tree
+# (every process and every group found in it) by recorded ids, and records REFUSED.
+# Stubs, each moving through ONE channel so no mutant is covered by another channel:
 #   (h)  a hang whose `sleep` is a grandchild: REFUSED, and no recorded member survives;
+#   (p)  a polling loop (a fresh `sleep 1` each pass, no output) for 6 x POOL_STALL passes, then
+#        exit 0: REFUSED -- new pids and a moving CPU clock are not progress;
 #   (s)  writes one log line a second for 4 x POOL_STALL polls, CPU-free and fork-free (a `read -t`
 #        on a fifo paces it): ok -- the LOG alone carries its progress;
-#   (g)  a grandchild in its OWN group (`set -m`) burns CPU every second while the log stays silent
-#        and the parent waits: ok -- only the cross-group walk sees it move;
-#   (gh) the same grandchild shape, idle: REFUSED, and the grandchild's group is gone;
+#   (w)  silent, appends one byte a second to a `mktemp` file under TMPDIR for 4 x POOL_STALL polls:
+#        ok -- the WATCHED ROOT alone carries its progress (it exits 4, a FAIL, if the file lands
+#        outside the root, so a root the pool did not set cannot pass);
+#   (g)  a grandchild in its OWN group burns CPU every second, writing nothing: REFUSED, BY DESIGN --
+#        silent computation is not progress, and this stub documents that;
+#   (gh) a grandchild in its own group, idle: REFUSED, and the grandchild's group is gone;
 #   (f)  exits 1: FAIL, never REFUSED.
 # Every pid a stub starts is RECORDED by the stub, and checked and stopped by that pid only.
 # THE VERDICT IS BINARY: REFUSED or not, alive or gone; nothing is judged on elapsed time.
@@ -642,6 +647,23 @@ FX
       fi
     ;;
     f) printf '#!/usr/bin/env bash\necho $$ >> "$CSP_PIDS/f"\nexit 1\n' > "$d/run.sh" ;;
+    p) cat > "$d/run.sh" <<'FX'
+#!/usr/bin/env bash
+echo $$ >> "$CSP_PIDS/p"
+i=0; while [ $i -lt $((6 * CSP_STALL)) ]; do i=$((i + 1)); sleep 1; done
+exit 0
+FX
+    ;;
+    w) cat > "$d/run.sh" <<'FX'
+#!/usr/bin/env bash
+echo $$ >> "$CSP_PIDS/w"
+f="$(mktemp "${TMPDIR:-/tmp}/w.XXXXXX")" || exit 3
+case "$f" in */.tmp/w/w.*) ;; *) echo "w: scratch landed outside the watched root: $f" >&2; exit 4 ;; esac
+exec 3<>"$CSP_FIFO"; i=0
+while [ $i -lt $((4 * CSP_STALL)) ]; do i=$((i + 1)); printf x >> "$f"; read -t 1 -u 3 x; done
+exit 0
+FX
+    ;;
   esac
 }
 ST=3                           # AI_DLC_POOL_STALL for every drive in this section
@@ -667,31 +689,41 @@ st_alive() {
 }
 st_refused() { grep -q "REFUSED  $2  (no progress for $ST polls; a refusal costs a re-run, never a verdict)" "$1"; }
 
-T="$WORK/stall"; st_world "$T" "$HOOK" h s g gh f
+T="$WORK/stall"; st_world "$T" "$HOOK" h p s w g gh f
 rc="$(st_drive "$T" "$WORK/stall.out")"
-# SEED VALIDITY FIRST: (g)'s grandchild must really sit in another group, or the cross-group arm
-# below would pass against a walk that never leaves the leader's group.
-g_pp="$(cat "$T/pids/g.pgid.parent" 2>/dev/null)"; g_gc="$(cat "$T/pids/g.pgid.gc" 2>/dev/null)"
+# SEED VALIDITY FIRST: (gh)'s grandchild must really sit in another group, or the kill arm below
+# would pass against a walk that never leaves the leader's group.
+g_pp="$(cat "$T/pids/gh.pgid.parent" 2>/dev/null)"; g_gc="$(cat "$T/pids/gh.pgid.gc" 2>/dev/null)"
 [ -n "$g_pp" ] && [ -n "$g_gc" ] && [ "$g_pp" != "$g_gc" ] \
-  || broken "stub (g)'s grandchild did not lead its own process group (parent $g_pp, grandchild $g_gc) -- the cross-group arm would read a world nobody built"
-h_live="$(st_alive "$T" h)"; gh_live="$(st_alive "$T" gh)"
+  || broken "stub (gh)'s grandchild did not lead its own process group (parent $g_pp, grandchild $g_gc) -- the cross-group kill arm would read a world nobody built"
+h_live="$(st_alive "$T" h)"; gh_live="$(st_alive "$T" gh)"; p_live="$(st_alive "$T" p)"; g_live="$(st_alive "$T" g)"
 if st_refused "$WORK/stall.out" h && [ "$h_live" = 0 ]; then
   ok "(h) a hung unit is REFUSED and every member of its tree it recorded, the grandchild sleep included, is gone"
 else
   bad "(h) a hung unit was not refused with its whole tree killed (rc=$rc, live recorded members $h_live): $(grep ' h' "$WORK/stall.out" | tr '\n' ' ')"
+fi
+if st_refused "$WORK/stall.out" p && [ "$p_live" = 0 ]; then
+  ok "(p) a polling loop that writes nothing is REFUSED -- fresh pids and CPU ticks are not progress"
+else
+  bad "(p) a polling loop was not refused (live recorded members $p_live): $(grep ' p' "$WORK/stall.out" | tr '\n' ' ')"
 fi
 if grep -q '^   ok    s$' "$WORK/stall.out"; then
   ok "(s) a unit that writes its log for 4x POOL_STALL polls is ok, not refused -- the log is part of the signature"
 else
   bad "(s) a slow unit whose only progress is its log was not ok: $(grep ' s' "$WORK/stall.out" | tr '\n' ' ')"
 fi
-if grep -q '^   ok    g$' "$WORK/stall.out"; then
-  ok "(g) a unit whose grandchild works in its OWN group is ok while it progresses -- the walk crosses groups"
+if grep -q '^   ok    w$' "$WORK/stall.out"; then
+  ok "(w) a silent unit writing only under its TMPDIR is ok -- the watched root is part of the signature"
 else
-  bad "(g) a unit whose grandchild works in another group was not ok: $(grep ' g$\| g ' "$WORK/stall.out" | tr '\n' ' ')"
+  bad "(w) a unit whose only progress is under its watched root was not ok: $(grep ' w' "$WORK/stall.out" | tr '\n' ' ')"
+fi
+if st_refused "$WORK/stall.out" g && [ "$g_live" = 0 ]; then
+  ok "(g) silent computation in a cross-group grandchild is REFUSED, by design, and its tree is killed"
+else
+  bad "(g) a silent CPU-only unit was not refused and killed (live recorded members $g_live)"
 fi
 if st_refused "$WORK/stall.out" gh && [ "$gh_live" = 0 ]; then
-  ok "(gh) the same cross-group grandchild, idle, is REFUSED and its group is killed"
+  ok "(gh) an idle cross-group grandchild is REFUSED and its group is killed"
 else
   bad "(gh) a hung cross-group grandchild was not refused and killed (live recorded members $gh_live)"
 fi
@@ -714,19 +746,34 @@ fi
 
 # MUTANTS of the refusal, each a copy of the RESOLVED hook, applied by exact-string replacement and
 # guarded by `cmp -s`; each asserts the observable its own removal produces.
-mutx() {                       # mutx <label> <old> <new> -> sets MUT, or returns 1
-  local m="$WORK/hook.$1"
-  OLD="$2" NEW="$3" awk '{ i = index($0, ENVIRON["OLD"]); if (i > 0) { $0 = substr($0, 1, i - 1) ENVIRON["NEW"] substr($0, i + length(ENVIRON["OLD"])); n++ } print } END { if (n != 1) exit 3 }' "$HOOK" > "$m" \
-    || { bad "MUTANT $1 did not apply (its anchor is not unique in $HOOK)"; return 1; }
-  cmp -s "$HOOK" "$m" && { bad "MUTANT $1 matched nothing (cmp -s guard)"; return 1; }
-  MUT="$m"
+mutx() {                       # mutx <label> <old> <new> [<source>] -> sets MUT, or returns 1
+  local m="$WORK/hook.$1" src="${4:-$HOOK}"
+  OLD="$2" NEW="$3" awk '{ i = index($0, ENVIRON["OLD"]); if (i > 0) { $0 = substr($0, 1, i - 1) ENVIRON["NEW"] substr($0, i + length(ENVIRON["OLD"])); n++ } print } END { if (n != 1) exit 3 }' "$src" > "$m.t" \
+    || { bad "MUTANT $1 did not apply (its anchor is not unique in $src)"; return 1; }
+  cmp -s "$src" "$m.t" && { bad "MUTANT $1 matched nothing (cmp -s guard)"; return 1; }
+  mv "$m.t" "$m"; MUT="$m"
 }
 # st-a: the signature omits the log, so (s), whose only progress is its log, is refused.
-if mutx st-a 'cur="$(wc -c < "$lg" | tr -d " ");$wsig"' 'cur="$wsig"'; then
+if mutx st-a 'cur="$(find "$wr" "$lg" -type f -ls' 'cur="$(find "$wr" -type f -ls'; then
   T="$WORK/st-a"; st_world "$T" "$MUT" s
   rc="$(st_drive "$T" "$WORK/st-a.out")"; st_alive "$T" s >/dev/null
   st_refused "$WORK/st-a.out" s && ok "st-a without the log in the signature a log-only unit is REFUSED -- the log is what keeps (s) alive" \
                                 || bad "st-a (s) was not refused with the log dropped from the signature (rc=$rc)"
+fi
+# st-w: the signature ignores the watched root, so (w), whose only progress is under it, is refused.
+if mutx st-w 'cur="$(find "$wr" "$lg" -type f -ls' 'cur="$(find "$lg" -type f -ls'; then
+  T="$WORK/st-w"; st_world "$T" "$MUT" w
+  rc="$(st_drive "$T" "$WORK/st-w.out")"; st_alive "$T" w >/dev/null
+  st_refused "$WORK/st-w.out" w && ok "st-w without the watched root in the signature a scratch-only unit is REFUSED -- the root is what keeps (w) alive" \
+                                || bad "st-w (w) was not refused with the watched root dropped from the signature (rc=$rc)"
+fi
+# st-cpu: the signature counts the tree's CPU and membership again, so (p) is never still and runs
+# to its own exit 0 -- ok, not refused.
+if mutx st-cpu '          if [ "$cur" = "$sg" ]; then still=$((still + 1)); else still=0; sg="$cur"; fi' '          cur="$cur;$wsig"; if [ "$cur" = "$sg" ]; then still=$((still + 1)); else still=0; sg="$cur"; fi'; then
+  T="$WORK/st-cpu"; st_world "$T" "$MUT" p
+  rc="$(st_drive "$T" "$WORK/st-cpu.out")"; st_alive "$T" p >/dev/null
+  grep -q '^   ok    p$' "$WORK/st-cpu.out" && ok "st-cpu with CPU and membership back in the signature a polling loop is never refused -- bytes alone are what refuse (p)" \
+                                         || bad "st-cpu (p) was still refused with CPU in the signature (rc=$rc)"
 fi
 # st-b: the refusal writes FAIL, so (h) reads FAIL and the push exits 1, not 2.
 if mutx st-b 'printf REFUSED > "$AI_DLC_FX_OUT/$b"' 'printf FAIL > "$AI_DLC_FX_OUT/$b"'; then
@@ -738,20 +785,24 @@ if mutx st-b 'printf REFUSED > "$AI_DLC_FX_OUT/$b"' 'printf FAIL > "$AI_DLC_FX_O
     bad "st-b the refusal-as-FAIL mutant did not read FAIL at 1 (rc=$rc)"
   fi
 fi
-# st-c: the kill covers the leader pid only, so (h)'s grandchild sleep survives.
-if mutx st-c '            pool_kill "$pid" "$self" "$kp" "$kg"' '            kill -KILL "$pid"'; then
+# st-c: the kill covers the leader pid only (both the tree kill and the unit's own group kill go), so
+# (h)'s grandchild sleep survives. Two anchors on two lines, each guarded.
+if mutx st-c1 '            pool_kill "$pid" "$self" "$kp" "$kg"' '            kill -KILL "$pid"' \
+   && mutx st-c '            kill -KILL -- "-$pid" 2>/dev/null' '            :' "$MUT"; then
   T="$WORK/st-c"; st_world "$T" "$MUT" h
   rc="$(st_drive "$T" "$WORK/st-c.out")"; c_live="$(st_alive "$T" h)"
   [ "${c_live:-0}" != none ] && [ "${c_live:-0}" -ge 1 ] \
     && ok "st-c killing the leader pid alone leaves $c_live recorded member(s) of (h)'s tree alive -- the tree kill is what reaps them" \
     || bad "st-c with the leader-only kill no recorded member of (h) survived ($c_live) -- the arm cannot see a partial kill"
 fi
-# st-d: the walk stays in the leader's group, so (g)'s busy grandchild is invisible and (g) is refused.
+# st-d: the walk stays in the leader's group, so (gh)'s grandchild, in a group of its own, is never
+# reached by the kill and survives the refusal.
 if mutx st-d '} else if ((pp[i] in T) || (pg[i] in G)) { T[pid[i]] = 1; c = 1 }' '} else if (pg[i] == root) { T[pid[i]] = 1; c = 1 }'; then
-  T="$WORK/st-d"; st_world "$T" "$MUT" g
-  rc="$(st_drive "$T" "$WORK/st-d.out")"; st_alive "$T" g >/dev/null
-  st_refused "$WORK/st-d.out" g && ok "st-d a walk confined to the leader's group REFUSES a unit whose grandchild works in its own group -- the cross-group walk is what keeps (g) alive" \
-                                || bad "st-d (g) was not refused with the walk confined to the leader's group (rc=$rc)"
+  T="$WORK/st-d"; st_world "$T" "$MUT" gh
+  rc="$(st_drive "$T" "$WORK/st-d.out")"; d_live="$(st_alive "$T" gh)"
+  st_refused "$WORK/st-d.out" gh && [ "${d_live:-0}" != none ] && [ "${d_live:-0}" -ge 1 ] \
+    && ok "st-d a walk confined to the leader's group leaves (gh)'s cross-group grandchild alive -- the cross-group walk is what kills it" \
+    || bad "st-d (gh) was not refused with its grandchild surviving under a leader-group walk (rc=$rc, live $d_live)"
 fi
 # THE WATCHER DIES WITH ITS WORKER. The hook's worker body is extracted and run as a lone worker over
 # one hanging stub; the worker is then SIGKILLed by its recorded pid. The watcher pid the worker recorded
@@ -801,7 +852,7 @@ unset CSP_PIDS CSP_FIFO CSP_STALL
 # emitted from inside a conditional: an assertion that never executed prints nothing,
 # and a short green report reads exactly like a complete one. This is the same
 # property the hook itself now asserts about its own workers, one layer out.
-EXPECTED_ASSERTIONS=40
+EXPECTED_ASSERTIONS=44
 if [ "$asserts" -ne "$EXPECTED_ASSERTIONS" ]; then
   printf '  FAIL  %s assertions ran, %s expected — an arm did not execute, and a short green report reads exactly like a complete one\n' \
     "$asserts" "$EXPECTED_ASSERTIONS"

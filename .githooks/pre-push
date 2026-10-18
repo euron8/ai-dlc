@@ -450,23 +450,33 @@ if [ "$POOL_DEPTH_IN" -ge 1 ]; then
   if [ "$FIXTURE_JOBS" -lt 1 ] || [ "$FIXTURE_JOBS" -gt 2 ]; then FIXTURE_JOBS=2; fi
 fi
 # A UNIT THAT MAKES NO PROGRESS IS REFUSED, NEVER JUDGED ON ELAPSED TIME (BL-606). Every unit runs through
-# the worker's `pool_run`, which starts it in its own process group, polls once a second, and reads a
-# progress signature: the unit's log size plus the CPU time and membership of its WHOLE descendant tree,
-# walked from the recorded pid by parent link AND by every process group found in it -- units start their
-# own groups (readset-skip's `set -m` drivers, the live trace), so a walk that stayed in the leader's group
-# would read a busy grandchild as a hang. Any change resets the count. POOL_STALL consecutive unchanged
-# polls kill every process in that tree and every group found in it, by recorded id (never by pattern),
-# and the unit's verdict is REFUSED: no recorded duration, no recorded key, no kept trace rows, and the
-# push exits 2 rather than 1 when nothing else failed. The window is counted in POLLS, so a loaded box
-# widens it instead of shrinking it.
-# POOL_STALL=300 IS a margin over one observed step, not a measurement; a refusal costs a re-run, never a
-# verdict. The step is the longest foreground wait a fixture stub makes with its whole tree idle, the
-# 30s `sleep 30` scorer stubs of the mutant batteries; 300 polls is ten of those. The measurement it
-# stands in for is OWED: a forced full run on an unpushed throwaway branch, inside a slot, reading the
-# per-unit maximum still count each run publishes to "$GITDIR/ai-dlc-pool-stall.last".
+# the worker's `pool_run`, which starts it in its own process group with TMPDIR set to a per-unit WATCHED
+# ROOT, "$out/.tmp/<unit>", and polls once a second.
+# PROGRESS IS NEW BYTES, AND NOTHING ELSE: the summed size of every file under the watched root plus the
+# unit's pool log. CPU time and process membership are not in the signature. The watched root holds the
+# hermetic runner's work dir (its HR_LOG and sandbox) and every template-based `mktemp`. A poll that
+# sees the same byte count as the last one is still; POOL_STALL consecutive still polls are a refusal.
+# Measured, the reasons for that definition:
+#   - CPU: a `while :; do sleep 1; done` loop shell's CPU time moved on only 20 of 330 one-second polls
+#     (its longest unchanged run 18), and its fresh `sleep` pid changes membership every poll, so a
+#     signature carrying either never refuses a polling hang; separating that from real work would take
+#     a tuned CPU threshold.
+#   - log only: hermetic-run.sh:538-541 buffers the fixture's output in HR_LOG and writes the pool log
+#     only at exit, so a declared unit's pool log is empty for its whole run.
+#   - the watched root's limit: 77 of 307 fixture run.sh files use a bare `mktemp -d`, and `mktemp -t`
+#     likewise, which on macOS ignore TMPDIR; their scratch writes are NOT seen. A unit whose only work
+#     is silent computation, or writes outside the root, is refused, by design.
+# On a refusal the pool kills every process in the unit's tree and every group found in it -- the tree
+# is walked from the recorded pid by parent link AND by every process group in it, because units start
+# their own groups -- by recorded id, never by pattern. The verdict is REFUSED: no recorded duration, no
+# recorded key, no kept trace rows, and the push exits 2 rather than 1 when nothing else failed. The
+# window is counted in POLLS, so a loaded box widens it instead of shrinking it.
+# POOL_STALL=300 IS A PLACEHOLDER, not a measurement; a refusal costs a re-run, never a verdict. The
+# default is set from the measurement this pool instruments: each run publishes every unit's LONGEST
+# silent stretch (consecutive polls with no new bytes) to "$GITDIR/ai-dlc-pool-stall.last", and one forced
+# full run with a very high window, on an unpushed throwaway branch inside a slot, produces the
+# false-positive set and the figure together. BL-606 does not land without that measurement.
 # AI_DLC_POOL_STALL overrides it, for a fixture driving a deliberately hung unit.
-# A ps THAT CANNOT SEE THE UNIT (the read-set tracer's sandbox grants no process-info) reads as progress:
-# the net degrades to today's unbounded run there, and never refuses a unit it cannot observe.
 POOL_STALL="${AI_DLC_POOL_STALL:-300}"
 case "$POOL_STALL" in ''|*[!0-9]*|??????*) POOL_STALL=300 ;; esac
 POOL_STALL=$((10#$POOL_STALL))
@@ -2101,12 +2111,19 @@ run_fixtures() {
   # absent FAILS with a log line, because falling through to run.sh would run it un-sandboxed and read green.
   # EVERY RUN SITE GOES THROUGH pool_run (BL-606), the in-pool trace's deriver call included: a hung trace
   # is a hung unit. The unit leads its own group; a WATCHER beside it (its own group too, so the walk never
-  # sees it) polls the tree's signature once a second, and the worker blocks on `wait` for the unit itself,
+  # sees it) reads the byte signature once a second -- one `find -ls` over the watched root and the log,
+  # summed by one awk -- and walks the tree with one `ps` and one awk to know what a kill must reach: five
+  # forks a poll with the `sleep`. NO `{}` MAY APPEAR IN THIS BODY: `xargs -I{}` substitutes it inside the
+  # body string too, so a `find -exec stat {} +` becomes a stat of the unit's own path and the sum is wrong.
+  # The worker blocks on `wait` for the unit itself,
   # so a unit that exits costs no poll latency. On POOL_STALL still polls the watcher records the refusal
   # FIRST, then stops the whole tree, re-walks it and kills every group and pid it found; the worker, seeing
   # the record, waits for the watcher to finish rather than killing it mid-sweep. A refusal recorded after
   # the worker killed its watcher (the unit exited in the same instant) is swept again by the worker from
   # the groups the watcher last saw. A refused deriver call never falls through to a direct run.sh.
+  # The watcher also kills the unit's OWN group by its recorded pid: the unit is still the worker's
+  # unreaped child at that point, so the id cannot have been reused, and a `ps` that cannot see the tree
+  # (a sandbox granting no process-info) still leaves a refused unit killed rather than waited on forever.
   # THE WATCHER CHECKS ITS WORKER'S PID EVERY POLL. A worker that dies (SIGKILLed, or its xargs gone) never
   # reaps the watcher, so on that poll the watcher kills the unit's tree, whose verdict nobody will record,
   # and exits; without the check its only exit was a refusal and it outlived its worker indefinitely.
@@ -2142,12 +2159,12 @@ run_fixtures() {
     } 2>/dev/null
     trap pool_abort INT TERM HUP
     pool_run() {
-      local lg="$1" rc
+      local lg="$1" rc wr="$AI_DLC_FX_OUT/.tmp/$b"
       shift
       self="$(ps -o pgid= -p "$$" 2>/dev/null | tr -d " ")"
-      : > "$pr.g"; rm -f "$pr.st"
+      : > "$pr.g"; rm -f "$pr.st"; mkdir -p "$wr"
       set -m
-      "$@" > "$lg" 2>&1 < /dev/null &
+      TMPDIR="$wr" "$@" > "$lg" 2>&1 < /dev/null &
       pid=$!
       ( still=0; max=0; sg=""; kp=""; kg=""
         while :; do
@@ -2156,14 +2173,13 @@ run_fixtures() {
           w="$(pool_walk "$pid" "$self" "$kg" "$kp")"
           IFS="|" read -r ws wsig wlp wlg <<< "$w"
           [ -n "$wlp" ] && { kp="$wlp"; kg="$wlg"; printf "%s\n%s\n" "$kp" "$kg" > "$pr.g"; }
-          if [ "$ws" = S ]; then
-            cur="$(wc -c < "$lg" | tr -d " ");$wsig"
-            if [ "$cur" = "$sg" ]; then still=$((still + 1)); else still=0; sg="$cur"; fi
-          else still=0; sg=""; fi
+          cur="$(find "$wr" "$lg" -type f -ls 2>/dev/null | awk "{ s += \$7 } END { print s + 0 }")"
+          if [ "$cur" = "$sg" ]; then still=$((still + 1)); else still=0; sg="$cur"; fi
           [ "$still" -gt "$max" ] && { max=$still; printf "%s\n" "$max" > "$pr.st"; }
           if [ "$still" -ge "$POOL_STALL" ]; then
             printf "%s\n" "$still" > "$pr.refused"
             pool_kill "$pid" "$self" "$kp" "$kg"
+            kill -KILL -- "-$pid" 2>/dev/null
             exit 0
           fi
         done ) < /dev/null > /dev/null 2>&1 &
