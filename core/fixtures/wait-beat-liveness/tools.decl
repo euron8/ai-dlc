@@ -23,3 +23,5 @@ tail
 touch
 tr
 mkfifo
+ps
+pgrep

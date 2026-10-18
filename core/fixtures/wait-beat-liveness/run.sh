@@ -2169,6 +2169,66 @@ M41_lease_in_state_dir() {
   rm -rf "$W"
 }
 
+# ===========================================================================
+# 22. A CHAINED BEAT IS RECOGNISED BY ITS SHELL, NOT BY HOW RECENTLY ITS SIBLING RAN.
+#     The guard once called a sibling "chained" only if its stamp was under BUDGET old, so a
+#     loaded box that delayed the second call fails it open and serialises a second quantum.
+#     The marker now carries the parent shell's start time. One wrapper shell runs a REAL first
+#     beat (short quantum), which writes the marker in the subject's own format; the wrapper then
+#     ages that marker 2 x BUDGET (its stamp and its mtime, past the prune age), and for the
+#     control replaces the start time with one no live process has (a recycled pid). A second beat
+#     from the same wrapper must then not sleep, and the control must. The trailing `exit $?`
+#     keeps bash from exec-ing the subject, so both beats' $PPID is the wrapper.
+# ===========================================================================
+aged_shell_beat() {  # $1 = subject, $2 = workdir, $3 = same|other
+  ( cd "$2" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_POLL_SECS=1 \
+      AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+      AG_MODE="$3" AI_DLC_PROJECT_ROOT="$2" bash -c '
+        s="$1"
+        AI_DLC_WAIT_BEAT_SECS=2 bash "$s" first.md > /dev/null 2>&1
+        m="_bmad-output/.wait-beats/.shell-$$"; [ -f "$m" ] || exit 3
+        r="$(cat "$m")"; r="$(( $(date +%s) - 120 ))${r#"${r%% *}"}"
+        [ "$AG_MODE" = other ] && r="${r%% *} Thu Jan 1 00:00:00 1970"
+        printf "%s" "$r" > "$m" || exit 3
+        touch -t "$(date -v-300S +%Y%m%d%H%M.%S 2>/dev/null || date -d "-300 seconds" +%Y%m%d%H%M.%S)" "$m" || exit 3
+        AI_DLC_WAIT_BEAT_SECS=60 bash "$s" deliv.md
+        exit $?' _ "$1" ) > "$BEATOUT" 2>&1 &
+  AG_PID=$!
+}
+# A sleeping beat would run its whole 60s quantum; the non-sleeping one returns at once. The arm
+# reads which return it TOOK -- the chained NOTE or a charged beat -- not how long it took: the
+# sleeping control is released by delivering its target once it has registered its sleep.
+ag_wait() {  # $1 = workdir -> OUT, RC
+  ag_n_=0
+  while kill -0 "$AG_PID" 2>/dev/null; do
+    if ag_counter_charged "$1"; then printf 'x\n' > "$1/deliv.md"; fi
+    ag_n_=$(( ag_n_ + 1 )); [ "$ag_n_" -lt 600 ] || { kill "$AG_PID" 2>/dev/null; broken "chained: the beat neither returned nor charged a beat"; }
+    sleep 0.1
+  done
+  wait "$AG_PID"; RC=$?; OUT="$(cat "$BEATOUT")"
+}
+ag_counter_charged() { [ "$(cat "$1/_bmad-output/.wait-beats/$(printf '%s' deliv.md | cksum | tr -d ' \t' | cut -c1-16)" 2>/dev/null)" = 1 ]; }
+S22_chained_by_shell_identity() {
+  W="$(mk_work)"; aged_shell_beat "$SUBJ" "$W" same; ag_wait "$W"
+  if [ "$RC" -eq 0 ] && has "a sibling beat already ran in this same Bash call"; then
+    ok "chained: a same-shell sibling stamped 2 x BUDGET ago still reads as chained — the beat does not sleep"
+  else bad "chained: a same-shell sibling older than BUDGET let the beat sleep a second quantum (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+  W="$(mk_work)"; aged_shell_beat "$SUBJ" "$W" other; ag_wait "$W"
+  if [ "$RC" -eq 0 ] && ! has "a sibling beat already ran in this same Bash call" && has "DELIVERED deliv.md"; then
+    ok "chained: CONTROL — a marker naming another start time (a recycled pid) sleeps"
+  else bad "chained: CONTROL FAILED — a different-shell marker was read as chained (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+}
+M43_chained_by_clock() {
+  mutant chained-by-clock -e 's@^  if \[ -n "\$LAST_START" \] && \[ -n "\$SHELL_START" \]; then$@  if false; then@' || return
+  W="$(mk_work)"; aged_shell_beat "$MUT" "$W" same; ag_wait "$W"
+  if ! has "a sibling beat already ran in this same Bash call"; then
+    ok "MUTANT chained-by-clock: deciding by age alone sleeps a same-shell sibling stamped past BUDGET — section 22 catches it"
+  else bad "MUTANT chained-by-clock: section 22 survives the identity test being removed: $OUT"; fi
+  rm -rf "$W"
+}
+
 # ---------------------------------------------------------------------------
 # THE DRIVER
 # ---------------------------------------------------------------------------

@@ -1300,7 +1300,23 @@ fi
 # would suppress a legitimate beat. Anything older than the budget cannot be a
 # sibling of THIS call by definition, so it is safe to drop, and this also stops
 # the markers accumulating forever.
-find "$COUNTER_DIR" -maxdepth 1 -name '.shell-*' -mmin +"$(( (BUDGET / 60) + 1 ))" -delete 2>/dev/null || true
+#
+# A MARKER WHOSE SHELL IS STILL THE SAME PROCESS IS KEPT AT ANY AGE (see THE SHELL'S IDENTITY
+# below): its age no longer decides anything, and pruning it would let a chained call delayed
+# past the prune age sleep a second quantum. Identity is the pid in the name plus the start time
+# stored in the marker; a recycled pid has a different start time and is pruned on age as before.
+shell_start_of() {  # $1 = pid -> its start time, whitespace-normalised; empty when it cannot be read
+  ps -o lstart= -p "$1" 2>/dev/null | tr -s ' \t' ' ' | sed 's/^ //; s/ $//'
+}
+SH_PRUNE_SECS=$(( ( (BUDGET / 60) + 1 ) * 60 ))
+for sh_f_ in "$COUNTER_DIR"/.shell-*; do
+  [ -f "$sh_f_" ] || continue
+  sh_r_="$(cat "$sh_f_" 2>/dev/null || echo '')"
+  case "$sh_r_" in
+    *' '*) [ "${sh_r_#* }" = "$(shell_start_of "${sh_f_##*/.shell-}")" ] && continue ;;
+  esac
+  [ $(( $(date +%s) - $(mtime_of "$sh_f_") )) -gt "$SH_PRUNE_SECS" ] && rm -f "$sh_f_" 2>/dev/null
+done
 
 # THE `-lt "$BUDGET"` TEST BELOW BOUNDS ONE PROPERTY: "A SIBLING BEAT IN THIS SHELL STARTED
 # LESS THAN ONE QUANTUM AGO, SO IT HAS NOT YET HAD TIME TO FINISH SLEEPING -- WHICH MEANS
@@ -1317,16 +1333,31 @@ find "$COUNTER_DIR" -maxdepth 1 -name '.shell-*' -mmin +"$(( (BUDGET / 60) + 1 )
 # makes age >= BUDGET, the guard fails OPEN, and the call serializes a second full quantum
 # behind the first -- the 2 x BUDGET wait this guard exists to prevent. The cost is wall
 # clock and one beat charged, never a false DELIVERED or NON-DELIVERY on its own.
+#
+# THE SHELL'S IDENTITY DECIDES IT NOW, AND THE CLOCK ONLY FOR A MARKER THAT CARRIES NONE. The
+# marker is `<stamp> <start time of $PPID>`. A sibling beat in the SAME process -- same pid, same
+# start time -- is a chained call at any age, so load can no longer push it past the window. A
+# different start time is a recycled pid, a different shell, and sleeps. A one-field marker
+# (a beat from before this release, mid-pull) and a box where `ps` cannot read the start time
+# both keep the `-lt "$BUDGET"` test above. MEASURED: two calls from one shell read the same
+# start time, and the harness starts a fresh shell for every Bash tool call (two calls, two
+# parent pids), so "same shell" is "same Bash call" there. A harness that ran every call in ONE
+# persistent shell would make every beat after the first read as chained; none does today.
 SIBLING="${COUNTER_DIR}/.shell-${PPID}"
+SHELL_START="$(shell_start_of "$PPID")"
 MAY_SLEEP=1
 if [ -f "$SIBLING" ]; then
-  LAST="$(cat "$SIBLING" 2>/dev/null || echo 0)"
+  LAST_REC="$(cat "$SIBLING" 2>/dev/null || echo 0)"
+  LAST="${LAST_REC%% *}"
   case "$LAST" in ''|*[!0-9]*) LAST=0 ;; esac
-  if [ $(( $(date +%s) - LAST )) -lt "$BUDGET" ]; then
+  LAST_START=""; case "$LAST_REC" in *' '*) LAST_START="${LAST_REC#* }" ;; esac
+  if [ -n "$LAST_START" ] && [ -n "$SHELL_START" ]; then
+    [ "$LAST_START" = "$SHELL_START" ] && MAY_SLEEP=0
+  elif [ $(( $(date +%s) - LAST )) -lt "$BUDGET" ]; then
     MAY_SLEEP=0
   fi
 fi
-printf '%s' "$(date +%s)" > "$SIBLING" 2>/dev/null || true
+printf '%s%s' "$(date +%s)" "${SHELL_START:+ $SHELL_START}" > "$SIBLING" 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
 # Reset / already-delivered sweep, and the sequence bound. Done for every path
