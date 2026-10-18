@@ -6694,13 +6694,15 @@ else
       printf '+docs/backlog.md\n' > "$i55_pd/core/fixtures/f/inputs.decl"
       for i55_c in a b c e; do printf 'L="$ROOT/docs/backlog.md"\n' > "$i55_pd/core/fixtures/$i55_c/run.sh"; done
       printf 'L="$ROOT/docs/$name"\n' > "$i55_pd/core/fixtures/d/run.sh"
-      printf 'cp "$ROOT/docs/backlog.md" "$ROOT/docs/plans/x.md"\n' > "$i55_pd/core/fixtures/f/run.sh"
+      printf 'cp "$ROOT/docs/backlog.md" "$ROOT/docs/plans/x.md" "$ROOT/zz/y"\n' > "$i55_pd/core/fixtures/f/run.sh"
       # FAST PATH WITH BUILTINS, EXACT PATH ON ANY DOUBT. The expected answer is the name set
       # {b..i}; each hit line is cut to its fixture name with parameter expansion and the set is
       # checked without a fork. Any other outcome -- a missing name, an extra one, an empty one --
       # recomputes the string with the original sed|sort -u|tr, so a failing message is the same
       # bytes it always was. Only the passing run is cheaper.
-      i55_praw="$(i55_reach_scan "$i55_pd" docs)"
+      i55_pe="zz docs"; i55_nl='
+'
+      i55_praw="$(i55_reach_scan "$i55_pd" "${i55_pe#* }")"
       i55_pset=" "; i55_pok=1
       while IFS= read -r i55_l; do
         i55_c="${i55_l#"$i55_pd"/core/fixtures/}"; i55_c="${i55_c%%/*}"
@@ -6716,7 +6718,15 @@ else
       else
         i55_pr="$(printf '%s\n' "$i55_praw" | sed "s@^${i55_pd}/core/fixtures/@@; s@/.*@@" | LC_ALL=C sort -u | tr '\n' ' ')"
       fi
+      # THE TWO-ENTRY REGROUPING, which a one-entry call cannot exercise. Fixture f's line also
+      # reaches `zz`, so under the entry list `zz docs` that ONE line belongs to BOTH groups, and the
+      # groups must come out in list order: the zz hit first, then exactly the docs-only answer
+      # above. A regroup that reorders the groups, or that attributes a line to only one entry,
+      # yields different bytes. The expectation is built from the list itself, not retyped.
+      i55_p2="$(i55_reach_scan "$i55_pd" "$i55_pe")"
+      i55_pw="${i55_pd}/core/fixtures/f/run.sh:1:\$ROOT/${i55_pe%% *}/${i55_nl}${i55_praw}"
       rm -rf "$i55_pd"
+      [ "$i55_p2" = "$i55_pw" ] || err "I55 arm 3's self-probe is BROKEN on the two-entry regrouping: i55_reach_scan '$i55_pe' did not print the '${i55_pe%% *}' group (fixture f's line) followed by exactly the '${i55_pe#* }' answer above. Either the groups came out in a different order from the entry list, or a line reaching both entries was attributed to only one -- and the corpus scan below passes every EXCLUDE entry in one such call. Got:${i55_nl}${i55_p2}"
       [ "$i55_pr" = "b c d e f g h i " ] || err "I55 arm 3's + exemption self-probe flagged '${i55_pr}', want 'b c d e f g h i '. Fixtures a and j (a + declared, literal reach ending at a boundary) must be ACQUITTED and every other one flagged; anything else means the exemption either acquits its own subject or cannot acquit at all, and the corpus scan below would be read through it."
     fi
     i55_ctl="$(grep -rhoE '\$\{?'"$i55_roots"'\}?/core([/"]|$)' "$REPO_ROOT"/core/fixtures/*/*.sh 2>/dev/null | grep -c .)"
