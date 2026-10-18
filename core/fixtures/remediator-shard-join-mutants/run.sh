@@ -487,7 +487,8 @@ mutant2 "JX36 parts mode era-gated on a carrier, self-probe removed" "sibtotal s
 # JX37 (D3): no escalated entry is ever closed in --sources mode.
 CLOSE_LINE='          for (k = 1; k <= ncl; k++) for (i = 1; i <= nesc; i++) if (cl[k] == ef[i] " " en[i]) ex[i] = 1'
 # escopen and escclosed (--escalations) die too: one closure, two modes.
-mutant2 "JX37 --sources closure removed, self-probe removed" "srcclosed srccross escopen escclosed specfresh spechand specnone spectwo specother specunread" \
+# supchain dies too (BY READING): its fold cell asserts `1 closed`, which no closure can give.
+mutant2 "JX37 --sources closure removed, self-probe removed" "srcclosed srccross escopen escclosed specfresh spechand specnone spectwo specother specunread supchain" \
   "$CLOSE_LINE" \
   '          for (k = 1; k <= ncl; k++) for (i = 1; i <= nesc; i++) if (0) ex[i] = 1' \
   "$CTPROBE_OLD" "$CTPROBE_NEW"
@@ -495,7 +496,9 @@ mutant2 "JX37 --sources closure removed, self-probe removed" "srcclosed srccross
 # it. Built by recording every repaired entry's closes: values and applying them at the end. Three
 # layers: the self-probe's early closes: refuses every join under it, so the probe is removed to
 # show srchalf owns the property on its own.
-mutant3 "JX38 closure not order-keyed (an earlier closes: line closes), self-probe removed" "srchalf" \
+# supchain dies too (MEASURED on a copy with all three layers): closure applied after the chain resolves
+# reads `ESCALATED-COUNT: 0` and drops CHAIN-OPEN, hiding the open part member -- BL-565's own property.
+mutant3 "JX38 closure not order-keyed (an earlier closes: line closes), self-probe removed" "srchalf supchain" \
   '        if (disp == "repaired" && src == 1)
 '"$CLOSE_LINE" \
   '        if (disp == "repaired" && src == 1)
@@ -508,7 +511,8 @@ mutant3 "JX38 closure not order-keyed (an earlier closes: line closes), self-pro
 # again -- any LATER repaired entry carrying the escalation's token, cut to its basename as the
 # f0d0af91 join cut it, closes it. srchalf is graph's dev-05#F-3 shape; srccross dies too, because
 # the serial entry shares the token of BOTH parts' escalations.
-mutant3 "JX42 closure keyed on the source: token, self-probe removed" "srchalf srccross escopen escclosed specfresh spechand specnone spectwo specother specunread" \
+# supchain dies too (BY READING): its fold entry carries no source: line, so a token closure closes nothing.
+mutant3 "JX42 closure keyed on the source: token, self-probe removed" "srchalf srccross escopen escclosed specfresh spechand specnone spectwo specother specunread supchain" \
   '        if (disp ~ /^escalat/) { nesc++; ef[nesc] = part; en[nesc] = cur; ex[nesc] = 0 }
         if (disp == "repaired" && src == 1)
 '"$CLOSE_LINE" \
@@ -525,7 +529,8 @@ mutant2 "JX43 closure keyed on the heading alone (part ignored), self-probe remo
   "$CLOSE_LINE" \
   '          for (k = 1; k <= ncl; k++) for (i = 1; i <= nesc; i++) if (substr(cl[k], index(cl[k], " ") + 1) == en[i]) ex[i] = 1' \
   "$CTPROBE_OLD" "$CTPROBE_NEW"
-mutant "JX44 ESCALATED-CLOSED lines not printed" "srcclosed srccross escopen escclosed" \
+# supchain dies too (MEASURED): ESCALATED-SUPERSEDED lines are appended to $ESC_CLOSED, so they go with it.
+mutant "JX44 ESCALATED-CLOSED lines not printed" "srcclosed srccross escopen escclosed supchain" \
   '  printf '"'"'%s'"'"' "$ESC_CLOSED"' \
   '  :'
 # ---- the BLOCKER: SERIAL-REQUIRED, the count that dispatches the serial remediator for the
