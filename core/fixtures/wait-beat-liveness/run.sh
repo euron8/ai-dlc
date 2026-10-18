@@ -2190,10 +2190,10 @@ M41_lease_in_state_dir() {
 #     from the same wrapper must then not sleep, and the control must. The trailing `exit $?`
 #     keeps bash from exec-ing the subject, so both beats' $PPID is the wrapper.
 # ===========================================================================
-aged_shell_beat() {  # $1 = subject, $2 = workdir, $3 = same|other
+aged_shell_beat() {  # $1 = subject, $2 = workdir, $3 = same|other, [$4 = a dir put first on PATH for the SECOND beat only]
   ( cd "$2" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_POLL_SECS=1 \
       AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
-      AG_MODE="$3" AI_DLC_PROJECT_ROOT="$2" bash -c '
+      AG_MODE="$3" AG_PATH2="${4:-}" AI_DLC_PROJECT_ROOT="$2" bash -c '
         s="$1"
         AI_DLC_WAIT_BEAT_SECS=2 bash "$s" first.md > /dev/null 2>&1
         m="_bmad-output/.wait-beats/.shell-$$"; [ -f "$m" ] || exit 3
@@ -2201,6 +2201,7 @@ aged_shell_beat() {  # $1 = subject, $2 = workdir, $3 = same|other
         [ "$AG_MODE" = other ] && r="${r%% *} Thu Jan 1 00:00:00 1970"
         printf "%s" "$r" > "$m" || exit 3
         touch -t "$(date -v-300S +%Y%m%d%H%M.%S 2>/dev/null || date -d "-300 seconds" +%Y%m%d%H%M.%S)" "$m" || exit 3
+        [ -n "$AG_PATH2" ] && PATH="$AG_PATH2:$PATH"
         AI_DLC_WAIT_BEAT_SECS=60 bash "$s" deliv.md
         exit $?' _ "$1" ) > "$BEATOUT" 2>&1 &
   AG_PID=$!
@@ -2228,6 +2229,53 @@ S22_chained_by_shell_identity() {
   if [ "$RC" -eq 0 ] && ! has "a sibling beat already ran in this same Bash call" && has "DELIVERED deliv.md"; then
     ok "chained: CONTROL — a marker naming another start time (a recycled pid) sleeps"
   else bad "chained: CONTROL FAILED — a different-shell marker was read as chained (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+}
+# ===========================================================================
+# 22b. THE START TIME SURVIVES A `ps` THAT CANNOT RUN (BL-686). `/bin/ps` is setuid root and
+#      `sandbox-exec` refuses to exec it, so under a sandboxed harness the identity test had no
+#      input and every beat fell back to the clock. The FIRST beat writes its marker with the real
+#      `ps`; the SECOND beat runs with a PATH `ps` that exits 1, so its start time can come only from
+#      the perl fallback -- and it must read EQUAL to what `ps` wrote, or the chained call sleeps.
+#      Both beats run under LC_ALL=de_DE.UTF-8, where an unpinned `ps` prints German day names and
+#      perl's localtime prints English, so the arm also holds the pin. CONTROL: `ps` AND `perl` both
+#      stubbed -- no start time at all, the clock test decides, and the 2 x BUDGET-old marker sleeps.
+# ===========================================================================
+nops_stubs() {  # -> $TMPROOT/nops (a `ps` that exits 1) and $TMPROOT/nops/both (that `ps` and a `perl` that exits 1)
+  sb_d_="$TMPROOT/nops"; mkdir -p "$sb_d_/both" || broken "cannot create the ps stub dirs"
+  printf '#!/bin/sh\nexit 1\n' > "$sb_d_/ps" && chmod +x "$sb_d_/ps" && cp "$sb_d_/ps" "$sb_d_/both/ps" && cp "$sb_d_/ps" "$sb_d_/both/perl" \
+    || broken "cannot write the ps/perl stubs"
+  [ "$(PATH="$sb_d_:$PATH" command -v ps)" = "$sb_d_/ps" ] || broken "the ps stub is not first on PATH"
+}
+S22b_start_time_without_ps() {
+  nops_stubs
+  sb_a_="$(LC_ALL=de_DE.UTF-8 ps -o lstart= -p $$)"; sb_b_="$(LC_ALL=C ps -o lstart= -p $$)"
+  [ -n "$sb_a_" ] && [ "$sb_a_" != "$sb_b_" ] || broken "ps reads the same start under de_DE.UTF-8 and C ('$sb_a_') -- section 22b cannot hold the pin"
+  W="$(mk_work)"; LC_ALL=de_DE.UTF-8 aged_shell_beat "$SUBJ" "$W" same "$sb_d_"; ag_wait "$W"
+  if [ "$RC" -eq 0 ] && has "a sibling beat already ran in this same Bash call"; then
+    ok "chained: with ps refused (PATH stub, as sandbox-exec refuses the setuid /bin/ps) the perl fallback reads the start ps wrote -- still chained, no second quantum"
+  else bad "chained: with ps refused, a same-shell sibling stamped past BUDGET let the beat sleep (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+  W="$(mk_work)"; LC_ALL=de_DE.UTF-8 aged_shell_beat "$SUBJ" "$W" same "$sb_d_/both"; ag_wait "$W"
+  if [ "$RC" -eq 0 ] && ! has "a sibling beat already ran in this same Bash call" && has "DELIVERED deliv.md"; then
+    ok "chained: CONTROL — with ps AND perl refused there is no start time, the clock decides, and the aged marker sleeps"
+  else bad "chained: CONTROL FAILED — with ps and perl both refused the aged marker still read as chained (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+}
+M49_start_time_no_fallback() {
+  nops_stubs; mutant start-time-no-fallback -e 's@^  \[ -n "\$ss_" \] || ss_="\$(perl -e@  [ -n "$ss_" ] || ss_="$(false -e@' || return
+  W="$(mk_work)"; LC_ALL=de_DE.UTF-8 aged_shell_beat "$MUT" "$W" same "$TMPROOT/nops"; ag_wait "$W"
+  if ! has "a sibling beat already ran in this same Bash call"; then
+    ok "MUTANT start-time-no-fallback: with no perl fallback a refused ps sleeps a same-shell sibling -- section 22b catches it"
+  else bad "MUTANT start-time-no-fallback: section 22b survives the fallback being removed: $OUT"; fi
+  rm -rf "$W"
+}
+M50_start_time_unpinned() {
+  nops_stubs; mutant start-time-unpinned -e 's@^  ss_="\$(LC_ALL=C ps -o lstart=@  ss_="$(ps -o lstart=@' || return
+  W="$(mk_work)"; LC_ALL=de_DE.UTF-8 aged_shell_beat "$MUT" "$W" same "$TMPROOT/nops"; ag_wait "$W"
+  if ! has "a sibling beat already ran in this same Bash call"; then
+    ok "MUTANT start-time-unpinned: an unpinned ps writes a German marker the English fallback cannot match -- section 22b catches it"
+  else bad "MUTANT start-time-unpinned: section 22b survives ps losing its LC_ALL=C pin: $OUT"; fi
   rm -rf "$W"
 }
 M43_chained_by_clock() {

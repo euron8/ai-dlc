@@ -975,10 +975,18 @@ readset_trace_add() { # <out> <fixture> <deriver sha>
 # THE START TIME OF A PID, ONE NORMALISED STRING, for the live-trace lock. The writer and the reader
 # both call this, so the two sides cannot disagree on locale, zone or column padding: `ps` runs
 # under LC_ALL=C TZ=UTC0 and its words are re-joined by single spaces. Prints nothing and returns 1
-# when `ps` fails or prints nothing (no such pid, or no usable `ps`).
+# when neither source can read it (no such pid, or no usable `ps` and no fallback).
+# THE FALLBACK IS THE SAME KERNEL FIELD, READ WITHOUT A SETUID BINARY (BL-686). `/bin/ps` is setuid
+# root and `sandbox-exec` refuses to exec it (exit 126), so under a sandboxed harness the writers
+# below recorded an EMPTY start line and every reader judged the lock on pid and age alone -- the
+# reused-pid window this helper exists to close. When `ps` fails or prints nothing, the stock perl
+# reads the pid's kinfo_proc through sysctl(KERN_PROC_PID) and prints its p_starttime with gmtime,
+# which is `ps -o lstart=` under LC_ALL=C TZ=UTC0 word for word. macOS only ($^O); anywhere else,
+# or for a dead pid (sysctl answers with zero length), it prints nothing and the answer is as before.
 readset_pid_start() { # <pid>
   local x
-  x="$(LC_ALL=C TZ=UTC0 ps -o lstart= -p "$1" 2>/dev/null)" || return 1
+  x="$(LC_ALL=C TZ=UTC0 ps -o lstart= -p "$1" 2>/dev/null)" || x=""
+  [ -n "$x" ] || x="$(perl -e 'exit 1 unless $^O eq "darwin" && $ARGV[0] =~ /^[1-9][0-9]*$/; my $m = pack("i4", 1, 14, 1, $ARGV[0]); my $b = "\0" x 1024; my $l = pack("Q", 1024); syscall(202, $m, 4, $b, $l, 0, 0) == 0 or exit 1; my ($s) = unpack("q", $b); exit 1 unless unpack("Q", $l) > 0 && $s > 0; print scalar gmtime $s' "$1" 2>/dev/null)" || x=""
   set -- $x
   [ -n "$*" ] || return 1
   printf '%s' "$*"

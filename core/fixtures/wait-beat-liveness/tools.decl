@@ -25,3 +25,5 @@ tr
 mkfifo
 ps
 pgrep
+chmod
+perl

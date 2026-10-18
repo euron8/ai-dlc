@@ -48,3 +48,4 @@ uniq
 wc
 xargs
 yes
+perl
