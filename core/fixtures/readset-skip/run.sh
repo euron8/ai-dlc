@@ -2354,7 +2354,7 @@ else
     ok "MERGE MUTANT rewrite moves arm 1: dropping the old-map read loses every untraced fixture"
   fi
   MERGE_ARMS=$((MERGE_ARMS+1))
-  merge_mutant keepstale 's|if (index(traced, " " fx " ") == 0) print|print|'
+  merge_mutant keepstale 's|if (index(traced, " " fx " ") == 0 \&\& (decl == "" |if ((decl == "" |'
   if grep -q 'src/x' "$WORK/mm.out"; then
     ok "MERGE MUTANT keepstale moves arm 2: without the traced filter the re-traced fixture keeps its stale entry"
   else
@@ -2683,8 +2683,8 @@ else
       fi
     fi
     MERGE_ARMS=$((MERGE_ARMS+1))
-    _o="$(grep -m1 '^      if (index(traced, " " \$1 " ") == 0 && (\$1 in have) == 0) print \$1$' "$UL")"
-    mut_line "$UL" "$WORK/ul.substr.sh" "$_o" '      if (index(traced, $1) == 0 && ($1 in have) == 0) print $1'
+    _o="$(grep -m1 '^      if (index(traced, " " \$1 " ") == 0 && (\$1 in have) == 0 && (decl == "" || index(decl, " " \$1 " ") == 0)) print \$1$' "$UL")"
+    mut_line "$UL" "$WORK/ul.substr.sh" "$_o" '      if (index(traced, $1) == 0 && ($1 in have) == 0 && (decl == "" || index(decl, " " $1 " ") == 0)) print $1'
     if cmp -s "$UL" "$WORK/ul.substr.sh"; then bad "UNTRACED MUTANT substring-membership did not apply"
     else
       _v="$(ul_with "$WORK/ul.substr.sh" "$WORK/ul.old3" "$WORK/ul.m3" "fx-b")"
@@ -3088,7 +3088,7 @@ EOF
   # demoted to a warning (W1).
   _o="$(grep -m1 '^  --all)  LIST="\$(readset_all_list ' "$DERIVER")"
   mut_line "$DERIVER" "$WORK/cs.inline.sh" "$_o" '  --all)  LIST="$(cd "$TREE" && for d in "$FIXTURE_ROOT"/*/; do [ -f "$d/run.sh" ] && basename "$d"; done)" ;;'
-  _o2="$(grep -m1 '^  readset_untraced_lost "\$MAP" "\$MERGED" "\$LIST" > ' "$DERIVER")"
+  _o2="$(grep -m1 '^  readset_untraced_lost "\$MAP" "\$MERGED" "\$LIST" "\$TREE/\$FIXTURE_ROOT" > ' "$DERIVER")"
   mut_line "$DERIVER" "$WORK/cs.nocall.sh" "$_o2" '  : > "$WORK/untraced.lost" \'
   _o3="$(grep -m1 "^    die \"merge dropped '" "$DERIVER")"
   mut_line "$DERIVER" "$WORK/cs.warn.sh" "$_o3" "    echo \"WARNING: merge dropped '\$f'\" >&2"
@@ -3784,11 +3784,11 @@ d/-p'
     #   unanch     an unanchored `<[^/]*>` inside the last component, so absent `e<f>g.sh` goes too;
     #   existonly  the existence test with no shape test, so absent `src/missing.sh` goes too;
     #   sbonly     the filter on the sandbox set only, so the fs_usage set carries the pseudo rows back.
-    sed 's/ | readset_drop_pseudo | drop_ignored > / | drop_ignored > /' "$SB/deriver.sh" > "$SB/deriver.p.nofilter.sh"
+    sed 's/ | readset_drop_pseudo | readset_drop_git | drop_ignored > / | readset_drop_git | drop_ignored > /' "$SB/deriver.sh" > "$SB/deriver.p.nofilter.sh"
     sed 's/^    case "\${p##\*\/}" in$/    case "$p" in/' "$SB/deriver.sh" > "$SB/deriver.p.wholepath.sh"
     sed "s/^      '<'\*'>') if /      *'<'*'>'*) if /" "$SB/deriver.sh" > "$SB/deriver.p.unanch.sh"
     sed "s/^      '<'\*'>') if /      *) if /" "$SB/deriver.sh" > "$SB/deriver.p.existonly.sh"
-    sed -e 's/ | readset_drop_pseudo | drop_ignored > / | drop_ignored > /' \
+    sed -e 's/ | readset_drop_pseudo | readset_drop_git | drop_ignored > / | readset_drop_git | drop_ignored > /' \
         -e 's/^    sandbox_paths < "\$WORK\/\$fx.win" | grep -v /    sandbox_paths < "$WORK\/$fx.win" | readset_drop_pseudo | grep -v /' \
         "$SB/deriver.sh" > "$SB/deriver.p.sbonly.sh"
     #   eonly      `-e` without `-L`, so the dangling `<link>` goes;
@@ -4552,7 +4552,7 @@ STUB
     else
       bad "DIGEST: expected '0|1|1|0|0|3' and fxa 'match', got '$DW1' / '$DW_V' — $(tail -2 "$WORK/dw.out" | tr '\n' ' ')"
     fi
-    sed '/^      \$1 == "#" && \$2 == "digest" && NF == 4 { if (index(traced, " " \$3 " ") == 0) print; next }$/d' "$SB/deriver.sh" > "$SX/deriver.nocarry.sh"
+    sed '/^      \$1 == "#" && \$2 == "digest" && NF == 4 { if (index(traced, " " \$3 " ") == 0 && (decl == "" || index(decl, " " \$3 " ") == 0)) print; next }$/d' "$SB/deriver.sh" > "$SX/deriver.nocarry.sh"
     TRACE_ARMS=$((TRACE_ARMS+1))
     if cmp -s "$SB/deriver.sh" "$SX/deriver.nocarry.sh"; then bad "DIGEST MUTANT nocarry did not apply"
     else
