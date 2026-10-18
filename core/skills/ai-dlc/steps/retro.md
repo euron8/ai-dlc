@@ -239,7 +239,7 @@ both at authoring time and committing in this order:
 <!-- SKILL_INVOCATION_PROVENANCE v1
 skill: bmad-party-mode                      # the evaluation that ACTUALLY RAN. Naming one you did not invoke is a forged block.
 invoked_at: <ISO 8601 UTC, to the second>   # Check 24 orders the pass series on this. Ambiguity here reorders the cycle.
-tool_use_id: <toolu_... — from the Skill tool response, or the Agent dispatch that spawned you> # the id of the Skill/Agent call that ran this evaluation. CHECKED FOR SHAPE ONLY — nothing verifies it against a transcript, so it is not proof the evaluation ran.
+tool_use_id: <NOT_ACCESSIBLE as a shard; unsharded, the toolu_... id of the Skill call or Agent dispatch that spawned you> # a SHARD writes the literal NOT_ACCESSIBLE, never an id it was told or guessed: it cannot know its own dispatch id, and the merge derives each shard's id from the harness records and refuses a real-shaped id that differs. An UNSHARDED pass writes the id of the Skill/Agent call that ran this evaluation. CHECKED FOR SHAPE ONLY — nothing verifies it against a transcript, so it is not proof the evaluation ran.
 mode: subagent                              # never solo.
 lead_role: <the step file that invoked or dispatched the evaluation> # which step owns this pass.
 transcript_path: <_bmad-output/party-mode-transcripts/s<N>/retro.md@<sha>> # required for retro party-mode; byte-matched by validate-retro-evidence.sh.

@@ -87,6 +87,12 @@
 #     It proves the brief names both records, never that a lead hands them over or that a p1 shard
 #     reviews the repair rather than re-reading the subject; no program reads a brief's inputs.
 #     Its token spans both file names, so keep them in ONE sentence of that paragraph.
+#   - the architecture step's section 2-3 architect chain joins on its chain record with
+#     `--complete`, never on the spine (architecture.md section 2; arch-chain-join). The spine is
+#     seeded header-first, so a plain join on it delivers a header. The marker predicate itself is
+#     wait-for-deliverable.sh's and its fixtures'; this row pins the join line the lead copies,
+#     from "Join it with" so a negated imperative cannot keep the command; arch-chain-marker-last
+#     pins that the marker is the architect's final write, after the last file of the chain.
 #
 # LEADS ARE NOT ENOUGH. A bold lead left intact over a body rewritten to say the opposite
 # ("need NOT carry", "dropped only through a HARD_BLOCK", "an assertion is a sufficient
@@ -412,6 +418,18 @@ gp-join-serial|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Aut
 gp-redispatch-fresh|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**A completed record is never reopened by `SendMessage`.**|para|`TaskStop` the resident remediator and send ONE fresh `Agent` dispatch
 gp-redispatch-never|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**A completed record is never reopened by `SendMessage`.**|para|Never resume the finished remediator with `SendMessage`
 r28-no-reopen|S|rule-bodies/rule-28.md||**A dispatched teammate reaches the lead with `SendMessage` `to: "main"`.**|- **Retracted or narrowed scope.**|para|re-dispatches it fresh
+r28-epoch-outside-round|S|rule-bodies/rule-28.md|**Waves: the harness caps concurrent subagents.**|**A rejected spawn is undelivered, and holding it is not a retry.**|**The round's epoch is written down before wave 1.**|para|A beat outside a fan-out round, on an agent this session dispatched, has no round epoch and passes `--dispatch` alone, which sets the join to the dispatch
+r28-epoch-recorded|S|rule-bodies/rule-28.md|**Waves: the harness caps concurrent subagents.**|**A rejected spawn is undelivered, and holding it is not a retry.**|**The round's epoch is written down before wave 1.**|para|The `<epoch>` is the one recorded before wave 1, never one minted at the beat.
+r28-serial-join|S|rule-bodies/rule-28.md|**A notification the live beat already covers is not a turn's work.**|**The join names what is missing, never what it counted.**|**The serial remediator's join is armed on the record it appends to.**|para|`**Join**`, with `--complete-repair` and `--dispatch` alone
+impl-cross-statedir|S|steps/implementation.md|### 6. Orchestrate|### 7.|**Gate-2 dispatch: the validation partitions by changed-file group too.**|para|a beat state directory of its own, given as an absolute path outside the shard directory, and never the lead's.
+adv-ls-files|R|adversary.md|## Constraints|## Escalation|- **List a code path your brief does not cite before you open it.**|para|list it with `git ls-files <dir-or-glob>` and read only what that returns.
+elic-header-region|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|The brief carries the shard header as the generated `provenance-block/elicitation` region below: copy this region verbatim
+elic-header-strip|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|The shard copies the region verbatim and then deletes each line's trailing ` #` comment (the space, the `#` and everything after it), because the merge reads every value literally.
+adv-header-strip|R|adversary.md|## The verdict|## |**A shard copies the region above verbatim and then deletes each line's trailing ` #` comment**|para|(the space, the `#` and everything after it), because the merge reads every value literally.
+arch-lint-invoke|S|steps/architecture.md|### 2. Architecture Creation or Update|### 3.|`bmad-architecture` ships `scripts/lint_spine.py`|para|lint_spine.py --workspace <the run folder holding ARCHITECTURE-SPINE.md> -o <lint json>
+arch-chain-join|S|steps/architecture.md|### 2. Architecture Creation or Update|### 3.|**Sections 2 and 3 run as ONE dispatched `architect` chain**|para|Join it with `scripts/ai-dlc/wait-for-deliverable.sh --complete --dispatch <agentId> _bmad-output/planning-artifacts/s<N>/architecture-chain.md`
+arch-chain-marker-last|S|steps/architecture.md|### 2. Architecture Creation or Update|### 3.|**Sections 2 and 3 run as ONE dispatched `architect` chain**|para|only after the LAST file of the chain is written makes one final write, the line `seat-complete: architecture architect none findings=0`
+arch-chain-rearm-growth|S|steps/architecture.md|### 2. Architecture Creation or Update|### 3.|**Sections 2 and 3 run as ONE dispatched `architect` chain**|para|The record is growing when it has a new start or finish line since the previous beat
 PINS
 }
 

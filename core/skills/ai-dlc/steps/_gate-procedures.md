@@ -460,9 +460,10 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    its axis notarizes, and no `verdict:` line. Each finding in it is a `### ` heading inside
    `## Findings` with an UPPERCASE severity word (FINDING GRAMMAR, `merge-adversarial-shards.sh`'s
    header), not item 1's `##` seat form. The brief carries the shard header as the generated
-   `provenance-block/adversary-pass` region of `team-roles/adversary.md` copied verbatim, with
-   `skill: bmad-advanced-elicitation` in place of its pinned skill and its `verdict:` line
-   removed, never as a field list the lead retypes. Beat-join every shard path with
+   `provenance-block/elicitation` region below: copy this region verbatim, never as a field
+   list the lead retypes. The shard copies the region verbatim and then deletes each line's
+   trailing ` #` comment (the space, the `#` and everything after it), because the merge reads
+   every value literally. Beat-join every shard path with
    `--complete --shard-header elicitation`. No merge reads that directory (`merge-adversarial-shards.sh --elicitation` merges
    only the requirements subject), so the shard records ARE the elicitation record, and the
    elicitation repair reads them shard by shard, dispatched on the same axis by "Adversarial
@@ -473,6 +474,25 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    are repaired as "Shard by section" does, split into that same shard dir with `--expect-sha`
    the sha every elicitation shard notarized, and joined with
    `join-remediator-shards.sh --document <doc> <that dir>`.
+
+<!-- BEGIN GENERATED: provenance-block/elicitation — source: .claude/schemas/provenance-block.json; do not edit by hand -->
+```
+<!-- SKILL_INVOCATION_PROVENANCE v1
+skill: bmad-advanced-elicitation            # the evaluation that ACTUALLY RAN. Naming one you did not invoke is a forged block.
+invoked_at: <ISO 8601 UTC, to the second>   # Check 24 orders the pass series on this. Ambiguity here reorders the cycle.
+tool_use_id: <NOT_ACCESSIBLE as a shard; unsharded, the toolu_... id of the Skill call or Agent dispatch that spawned you> # a SHARD writes the literal NOT_ACCESSIBLE, never an id it was told or guessed: it cannot know its own dispatch id, and the merge derives each shard's id from the harness records and refuses a real-shaped id that differs. An UNSHARDED pass writes the id of the Skill/Agent call that ran this evaluation. CHECKED FOR SHAPE ONLY — nothing verifies it against a transcript, so it is not proof the evaluation ran.
+mode: subagent                              # never solo.
+lead_role: <the step file that invoked or dispatched the evaluation> # which step owns this pass.
+artifact: <path of the artifact you reviewed> # what this pass reviewed.
+artifact_sha: <sha256 of that file, as you read it> # `shasum -a 256 <artifact> | cut -d' ' -f1`. Makes the pass a notarization of the bytes it reviewed, which is what lets the gate later prove a claimed revert landed on a state some pass actually saw. What a shard notarizes depends on its axis: a per-story shard on the files axis carries its one story's sha; a cross-story shard carries one `<stem>=<sha>` per story it read; the merged files-axis pass, which the merge writes, carries one `<stem>=<sha>` per story; a subject-axis shard, cross included, carries one `<stem>=<sha>` per subject stem; and a sections-axis shard, cross included, carries the whole document's sha. The `artifact_sha` pattern accepts exactly those two shapes: one sha256, or two or more space-separated `<stem>=<sha>` entries.
+findings_critical: <int>                    # the residue the verdict is adjudicated against. Required of EVERY known evaluation, not only verdict-bearing ones — see rules.counts_always.
+findings_critical_prior_scope: <int>        # of the CRITICALs above, those in text the PRIOR pass also reviewed. OPTIONAL BY DESIGN: absent means the validator assumes ALL of them (fail-closed). Requiring it would invert that default and reject the safe omission. This is what separates 'not converging' from 'the document is moving'.
+findings_major: <int>                       # omit it and the stall rung goes silent for the ENTIRE series.
+findings_major_underived: <int>             # of the MAJORs above, those whose ONLY defect is a MISSING DERIVATION -- a count, a universal, a call-site list or a negative asserted without one, which you have NOT shown to be false. These are RECORDED and do NOT block the exit condition; a MAJOR you have shown WRONG still does. OPTIONAL, and ABSENT MEANS ZERO -- the inverse of findings_critical_prior_scope's default, deliberately. There, absent means ALL, because assuming a cycle has not progressed is the safe assumption. Here, absent means NONE, because assuming a claim is merely unproven is not: an omission leaves every MAJOR blocking, exactly as before this field existed, so no pre-existing block changes verdict and a producer that never emits it can only be stricter, never laxer. It may never exceed findings_major -- that is arm B's business, not the reader's.
+findings_minor: <int>                       # the nitpick bucket. Does not block the exit condition.
+SKILL_INVOCATION_PROVENANCE_END -->
+```
+<!-- END GENERATED: provenance-block -->
 
    **When the subject is the requirements subject**, elicitation is sharded (Rule 28, "Split
    dispatch": subject axis): one `adversary` per part of the subject map, each invoking

@@ -315,31 +315,6 @@ This is the consequence of the PARTIAL note's withdrawal of item 3: no reader pi
 
 verify: manual
 
-## BL-615 — adversary seats and shards are never told to resolve a code path with `git ls-files`, so BL-550's second instance is uncovered
-
-**DEFECT (efficiency).** Filed by peer session ai-dlc-c9 at lead ai-dlc-9c's direction, out of c9's release (a), where it was item A6 and was taken out because BL-550 is closed and A6 would have closed nothing. Intake re-derived it read-only at origin/main `86d3a695`.
-
-BL-550 is archived LANDED (v0.794.0, verified `2f6d5199`) on its role-file half: the party-seat section of `architect`, `dev`, `pm` and `tea`, byte-identical across the four under I124, tells a seat to list a code path with `git ls-files <dir-or-glob>` before reading it. Its receipt loops over `architect dev pm tea` only. The archived entry also records a **second instance, in the adversarial round** (graph s319 resumed lead `f65eae3b`, requirements-adversarial-p1): seven parts (1, 2, 6, 8, 13, cross-3 and cross-6) made 13 greps for paths that do not exist, such as `dashboard/`, `shared/tokens.py` and `rebalancer/config_schema.py`.
-
-Those shards run the `adversary` role. `_gate-procedures.md:413`, `:422`, `:444`, `:585` and `:609` dispatch "one `adversary` per story ordinal", "one `adversary` per part plus one cross-part `adversary`", and so on. The adversary side has no instruction:
-- `git ls-files` counts over `core/team-roles/*.md`: `adversary.md` 0, against `dev` 2 and `architect`, `pm` and `tea` 1 each (the control).
-- `_gate-procedures.md` has 0 mentions of `ls-files` (control: 28 mentions of `adversary`).
-- `adversary.md` (552 lines, 9 `##` headings) never says "code path" and has no `## As a party seat` section.
-
-So the LANDED close never reached the role that produced the second instance. The open backlog does not cover it either (0 `ls-files` mentions).
-
-Constraint on the fix: I124 (`scripts/validate-enforcement-map.sh:13573`, `i124_names='architect dev pm tea'`) binds the party-seat section to exactly those four roles. Its half B fails the push on any other role file carrying a heading opening "As a party seat". The instruction therefore cannot reach `adversary.md` by copying that section. It needs its own text in `adversary.md`, or in the shard brief `_gate-procedures.md` dispatches, or I124's list must widen deliberately. The I123 chunking paragraph is the other binding a role-file edit has to respect.
-
-Rejected at contract time: release (a)'s A6 candidate derived a `code paths:` block for the brief with a hand-written regex in prose (`git ls-files | grep -F -x -f <(grep -ohE '[A-Za-z0-9_./-]+\.[a-z]{1,4}' …)`). The contract adversary flagged it as verification-discipline's hand-regex class (a second implementation of a path grammar). Whether the fix is prose or a mechanism is this entry's decision.
-
-Owed:
-1. Decide prose (an `adversary.md` or shard-brief instruction) or a mechanism (a path list derived by shipping code, not a prose regex), and record why.
-2. Receipt: run the shipping code, not a grep of the role file. For example, a shard brief rendered for a subject naming a non-existent path shows the resolved/absent split; or, for prose, a receipt over the dispatched brief and not over BL-550's four files. Control: the four party-seat roles still pass I124.
-
-Related: BL-550 (archived; both instances), I124, I123.
-
-verify: manual
-
 ## BL-616 — fixture verdicts depend on box load: `validator-fork-budget` reads FIXTURE BROKEN under the gate's pool, and a red costs a full re-push
 
 **DEFECT (efficiency).** Operator directive, relayed by lead ai-dlc-9c: "we need to not be so sensitive to load, it's a self-inflicted issue that fixtures are marked as failed because of it and/or aren't considered successful." The scope is every load-sensitive verdict in the suite, not only the one instance below.
@@ -414,24 +389,6 @@ Each fixed unit still owes its solo-against-pool receipt, with a load-free contr
 - Population: `docs/backlog.md` holds 0 live `verify: sh` receipts (its one `verify: sh` line is the legend at `:22`), against 55 `verify: manual` as the control, so R6 has nothing to score and the arm reports R2 all-manual.
 - History: no recorded R6 firing. The one instance is pre-ship, `BL-099` flipping once in 33 runs under three-way contention (`CHANGELOG.md`, 0.562.0 entry), where the checkout-incompleteness hypothesis did not reproduce.
 - UNSTABLE is a correct refusal of a racing receipt. Relabelling signal exits as BROKEN was considered and dropped: BROKEN fails the push too (`:1094-1096`), so it would change the label and not the outcome, and nothing in the script raises those signals.
-
-verify: manual
-
-## BL-617 — `validate-layer-entries.sh` W10 tells the operator "The next pull creates it" when it fires on the pull that creates it
-
-**DEFECT.** Found by ai-dlc-60's BL-612 shipped-text sweep (opus, read-only); intake re-derived it read-only at origin/main `f4ca6764`. W10 at `core/scripts/validate-layer-entries.sh:1329` warns: "$MACHINERY_REL: the ai-dlc machinery inventory has not been scaffolded, so this project has not declared which of its scripts are ai-dlc machinery. The next pull creates it from core's template; until then nothing states the inventory and nothing can check it. …"
-
-The consumer pre-push runs this validator (`core/git-hooks/pre-push:77-79`). On the delivering pull, step 2 writes the new machinery declaration (`core/skills/ai-dlc-update/reconcile/setup-sites.md:280`, `machinery:`), so W10 can fire on that pull's own step-2 push. Step 7 of the same pull then creates the file: `core/skills/ai-dlc-update/reconcile/apply.sh:2145` (`elif [ ! -f "$CONSUMER/$MC_REL" ]`) copies `core/skills/ai-dlc/templates/<name>` into place and reports `RESOLVED machinery-scaffold` (`:2151`). So "the next pull" is wrong in that case, where "this pull's step 7" is right. It stays right only when W10 fires between pulls. This is BL-612's delivery-phase error appearing in a user-facing message, and it is filed apart from BL-612 because it changes another subsystem's output. The open backlog does not mention W10 (0 matches).
-
-Owed: W10 says which case it is in, or words its timing so that it holds in both. Receipt: drive the validator in a scaffold-absent tree on both a mid-pull push and a between-pulls push, and read the message in each.
-
-verify: manual
-
-## BL-618 — implementation.md tells the first cross QA its beat state directory goes "outside the shard directory", which no longer says where it lands
-
-**NOTE.** Found by ai-dlc-ad during 0.802.0, relayed by lead ai-dlc-9c; intake re-derived it read-only at origin/main `f4ca6764`. `core/skills/ai-dlc/steps/implementation.md:449` gives the first cross QA "a beat state directory of its own, outside the shard directory and never the lead's", used at `:456` as `AI_DLC_STATE_DIR=<that directory> wait-for-deliverable.sh --complete …`. Since BL-576 (0.802.0), `wait-for-deliverable.sh:502-504` resolves `AI_DLC_STATE_DIR` as absolute when it starts with `/`, and otherwise relative to the project root `WD_ROOT` (`:242`: "relative = under the project root"), not to the cwd. "Outside the shard directory" does not say which. A relative name now lands under the project root wherever the QA runs, so the wording no longer tells the QA what it gets. The open backlog does not cover it: the only other "outside the shard directory" match is BL-554's `.draft` entry.
-
-Owed: the step says "an absolute path, or a path relative to the project root", matching `:242`. Receipt: the rendered step names both forms. Control: the `--since` instruction at `:456-458` is unchanged.
 
 verify: manual
 
@@ -695,22 +652,6 @@ Fix shape (lead ai-dlc-71): M4's pin means silence on an absent record was a del
 
 verify: manual
 
-## BL-653 — `steps/architecture.md` names `lint_spine.py` but not how to invoke it, and a lead passed the spine file where `--workspace` takes the run folder
-
-**NOTE.** Reported by graph watch ai-dlc-f7; intake re-read it read-only on graph (0.818.0) and at origin/main `ddad2ac3`. `core/skills/ai-dlc/steps/architecture.md:48-53` says `bmad-architecture` ships `scripts/lint_spine.py` and that its JSON goes to gate-validation Check 30 via `--spine-lint` (`gate-validation.md:2790`). The step gives no command and does not mention `--workspace` or `reviewer-gate`. Graph's installed copy is byte-identical. The vendored `lint_spine.py:232` declares `--workspace` as required, with the help text "run folder containing ARCHITECTURE-SPINE.md". `references/reviewer-gate.md:5` gives the right form: `uv run {skill-root}/scripts/lint_spine.py --workspace {doc_workspace}`. Instance: graph transcript `74de15ba` line 1076, where the lead passed the spine file as a positional argument and got "the following arguments are required: --workspace" (1 hit; negative control 0).
-
-Owed: `architecture.md:48` gives the literal invocation or cites `reviewer-gate.md:5`. Receipt: the step names `--workspace` and the run folder.
-
-verify: manual
-
-## BL-654 — the architect's spine has no completion contract, so a header-only spine joined as DELIVERED
-
-**NOTE.** Reported by graph watch ai-dlc-f7; intake re-read it read-only on graph transcript `74de15ba` and at origin/main `ddad2ac3`. The s319 lead's architect brief said "Write the spine FIRST with its header, then append" (line 929). It joined with a plain `wait-for-deliverable.sh --dispatch` that had no `--complete`. At line 1061 the beat reported "BEAT COMPLETE -- all 1 delivered" for `ARCHITECTURE-SPINE.md`, which was then 24 lines and 1197 bytes with no AD entry (line 1076). The lead caught it by size, then re-armed the join on `docs/architecture-index.md` (line 1083). The early-write contract, a final `seat-complete:` line joined with `--complete`, covers seat and shard files only: `wait-for-deliverable.sh`, rule-bodies 20, 28 and 29, and the shard merge and join scripts. `core/skills/ai-dlc/steps/architecture.md` mentions neither `seat-complete` nor `--complete` nor `wait-for-deliverable` (0 hits each). So a lead that borrows the header-first pattern gets a join that cannot tell a header from a finished spine. Had the lead not checked, a spine with no ADs would have been linted and adopted.
-
-Owed, one of two: `architecture.md` gives the architect's deliverable a completion marker and its join `--complete`, or it names the last file in the write chain as the join target and forbids joining on the spine. Receipt: a header-only spine does not satisfy the step's join (a seeded probe on `wait-for-deliverable.sh`); the full write chain does (control).
-
-verify: manual
-
 ## BL-655 — the load series (0.820.0) roughly doubled review-shard-merge-mutants and readset-skip under the hook's pool, and the cause is not established
 
 **DEFECT.** Measured by ai-dlc-4e [9b62de] (c8) in 0.820.0's hooked dress rehearsal at c1078e8e; tiered DEFECT by lead ai-dlc-71 ("a wall clock that grew under the series is a defect until it is justified").
@@ -736,20 +677,6 @@ Measured pair (by ai-dlc-4e [9b62de], c8, in the lead's slot after 0.820.0 lande
 - review-shard-merge-mutants-b: base 1379.42 (user 474.53, sys 904.89, wall 217 s); tip 1398.37 (user 475.88, sys 922.49, wall 219 s); ratio 1.014.
 - readset-skip-d: base 202.93 (user 94.73, sys 108.20, wall 206 s); tip 200.48 (user 93.46, sys 107.02, wall 202 s); ratio 0.988.
 The 1-minute load before each run was 6.25/11.35 (shard b, base/tip) and 10.67/3.51 (readset-skip-d). Run alone, each side took about 3.5 to 4 minutes of wall against the rehearsal's loaded 1193 s and 1261 s, so the doubling is not reproduced as CPU work at n=1. That is consistent with pool contention but does not establish it: each side ran once, base before tip, so the pair has no measured spread and cannot resolve a change of a few percent. A cause needs more reps or a loaded pair. Intake (read-only): both shas resolve and an impossible sha does not; all twelve user, sys and real figures match the filer's `/usr/bin/time -p` outputs, and the per-side sums and both ratios recompute from them.
-
-verify: manual
-
-## BL-656 — rule-28 tells the lead to pass `--since` on every beat, while the serial-remediator join takes `--dispatch` alone, so a lead following rule-28 mints a stamp the guard refuses
-
-**NOTE.** Reported by ai-dlc-f7, read-only on graph's s319 lead (0.818.0, transcript `74de15ba`). Intake ai-dlc-40.
-
-`core/skills/ai-dlc/rule-bodies/rule-28.md:175-176` says the lead "passes `--since <epoch>` on every beat of the round", and that every such beat also passes `--dispatch <agentId>`. `core/skills/ai-dlc/steps/_gate-procedures.md:1061-1062` gives the serial-remediator join as `wait-for-deliverable.sh --complete-repair --dispatch <agentId> <repair_record_path>`, with no `--since` (0 `--since` within :1055-1068 at origin/main `5e045cd4`).
-
-At transcript line 2805 the lead followed rule-28 for a re-dispatched serial remediator: `--complete-repair --since 1792261015 --dispatch a40a8b719c2fd1c6a`, using an epoch it minted after the spawn. Line 2816: `FAIL: --since is 1 s after the earliest dispatch it joins (2026-10-17T18:16:54Z, tool_use_id toolu_012gduCVQMijVMheR1Bqccvb)`, exit 64. The guard caught it, and the lead re-armed on `--dispatch` alone within one turn. The cost was one refused beat.
-
-Related: line 2370 shows a dev-2 beat passing `--since` with no `--dispatch`, against rule-28.md:176. It drew `WARN: wait-for-deliverable: --since without --dispatch -- nothing checks the stamp against the dispatch` and did no harm.
-
-Not BL-605: that entry's subject is an In-Flight row stamped late, while this stamp was freshly minted per rule-28's instruction. Owed: one statement of whether a `--dispatch` beat takes `--since`. Either rule-28 exempts beats that carry `--dispatch`, or the join text says which epoch to pass. Cite one from the other.
 
 verify: manual
 
@@ -808,18 +735,6 @@ Mechanism (hypothesis from the code, not measured). In `core/hooks/ai-dlc-recove
 A hook invocation that passes :255 before that removal and reaches :362 after it sees stage `snapshot` and denies at :398, which is the observed text. Graph's installed copy differs from main (md5), but the same three lines sit at its :242, :349 and :427. The header's "THE RACE" (:116-120) covers the advisor stage's same-message race, not the read stages.
 
 Owed: an absent PROGRESS with the marker gone at :362 exits 0 (re-test `[ -f "$MARKER" ]`), or the satisfying Read removes PROGRESS before MARKER. Probe: two invocations for one session, a satisfying step Read and a third Read, with the removal forced between the second's :255 and :362. The third is allowed. Control: a genuine first-call non-snapshot Read still denies.
-
-verify: manual
-
-## BL-659 — `provenance-block.json` disagrees with the merge on adversary shard headers: no elicitation profile, a `tool_use_id` instruction the prose contradicts, and a wrong `artifact_sha` comment
-
-**NOTE.** Found by builder H3 while building BL-575 (0.822.0), and promised as a NOTE in 0.822.0's CHANGELOG Limits. Intake ai-dlc-40.
-
-1. `core/schemas/provenance-block.json` has no `elicitation` profile, only `full`, `adversary-pass` and `retro-party-mode`. The `adversary-pass` profile pins `skill: ai-dlc-adversary-review` and carries `verdict:`. The merge refuses both on an elicitation shard (`merge-adversarial-shards.sh --check-header --axis elicitation`: "an elicitation shard carries none"). So the elicitation dispatch sites in `_gate-procedures.md` tell the lead to copy the rendered `adversary-pass` region with two stated changes, rather than a clean verbatim copy.
-2. The rendered region in `core/team-roles/adversary.md` tells the writer to fill `tool_use_id` from the Skill or Agent call that spawned it. The prose in `_gate-procedures.md` says a shard writes `tool_use_id: NOT_ACCESSIBLE`, and the merge refuses a real-shaped id that differs from the one it derives. A verbatim paste is correct only because the `NOT_ACCESSIBLE` sentence is kept beside it.
-3. The rendered `artifact_sha` comment describes the multi-file form as "one per story". The subject axis notarizes one entry per subject stem, and the sections axis notarizes the whole document's sha.
-
-Owed: an `elicitation` profile (or an axis switch on `adversary-pass`) that the brief can copy verbatim, a `tool_use_id` instruction that agrees with what the merge accepts, and an `artifact_sha` comment per axis. Rendered by `sync-taught-schema.sh` and checked by its `--check`.
 
 verify: manual
 
@@ -915,3 +830,18 @@ Owed: the stage is written whole or not at all. Write to a sibling temp file and
 
 verify: manual
 
+## BL-664 — `merge-adversarial-shards.sh --check-header` refuses a provenance region copied verbatim with its inline ` #` comments, while the schema and `validate-provenance-block.sh` strip them
+
+**PARTIAL (v0.827.0, verified 04adbf68) — the shard-writer instruction shipped; the merge's own reader still refuses a verbatim copy.** Both region instructions, in `_gate-procedures.md` and `adversary.md`, tell the shard to copy the region verbatim and then delete each line's trailing ` #` comment, and each sentence is pinned (`elic-header-strip`, `adv-header-strip`). Open: `merge-adversarial-shards.sh` still does not apply the schema's `parser.comments` rule, so a shard that keeps the comments is still refused. The receipt stays `manual` while the entry is live.
+
+**DEFECT.** Found by batch 236's PROSE tip adversary.
+
+A shard built by copying a `provenance-block` region verbatim, inline ` #` comments kept, is refused by `merge-adversarial-shards.sh --check-header` ("does not declare integer findings_critical and findings_major"); with the comments stripped it passes. Measured on the elicitation axis and on the convergence axis (the adversary-pass region). The merge documents that it does not strip comments (`core/scripts/merge-adversarial-shards.sh` ~:250-254), while the schema's `parser.comments` (`core/schemas/provenance-block.json` ~:516) says a trailing ` #` comment is stripped, and `validate-provenance-block.sh` ~:536 applies that rule. So the merge's parser disagrees with its own schema.
+
+Graph's 988 shards carry 0 commented count lines, so writers strip in practice. The new "copy this region verbatim" sentence made a verbatim copy more likely.
+
+Fixed here by prose: both region instructions tell the shard to delete each trailing ` #` comment, and each sentence has a `process-rule-pins` row (`elic-header-strip`, `adv-header-strip`).
+
+Residual: the root fix is one comment-strip in the merge's own reader, `merge-adversarial-shards.sh` ~:371-374, after which the two prose sentences are redundant.
+
+verify: manual

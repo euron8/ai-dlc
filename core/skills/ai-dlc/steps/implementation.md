@@ -437,8 +437,8 @@ diff to read, each writing `cross-<g>.md` there (`cross.md` when the table has o
 row), are dispatched in the same wave as the part QAs, the first cross QA in
 the first wave whatever the cap leaves for the rest, and the first cross QA's
 brief names the absolute path of every part shard file, the round's epoch and
-a beat state directory of its own, outside the shard directory and never the
-lead's. Only
+a beat state directory of its own, given as an absolute path outside the shard
+directory, and never the lead's. Only
 the first cross QA's hand-over replays and per-AC table read what the parts
 wrote, so it first does every duty that reads no part file -- the Handoff
 Evidence Precondition, the one honest-green canonical run, every checklist item
