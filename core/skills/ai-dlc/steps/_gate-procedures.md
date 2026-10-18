@@ -925,9 +925,9 @@ reaches the serial remediator" says, not only for such a finding. A single-file 
 cites the project-relative path in the ledger's spelling (`_bmad-output/planning-artifacts/s<N>/…`)
 of each file it edits, and a citation must not wrap onto the next line. Beat-join
 every part with
-`scripts/ai-dlc/wait-for-deliverable.sh --complete --since <round epoch> --dispatch <agentId>... <part path>...`,
-which takes a part as delivered only once it ends in the `seat-complete:` line its remediator's
-`--mark` wrote, then run the join
+`scripts/ai-dlc/wait-for-deliverable.sh --complete --since <round epoch> --dispatch <agentId> <part path>...`
+(one `--dispatch` per agent the round joined), which takes a part as delivered only once it ends
+in the `seat-complete:` line its remediator's `--mark` wrote. An UNFINISHED part whose body is complete and carries no `seat-complete:` line was written before parts marked: read it, then `--mark` it or re-dispatch its part. Then run the join
 `scripts/ai-dlc/join-remediator-shards.sh --sprint <N> --artifact <name> --pass <M> --artifact-path _bmad-output/planning-artifacts/s<N> --since <ISO> --until <ISO>`
 over the repair window. `--artifact-path` is the sprint slot `s<N>`, not `s<N>/stories`: a
 stories repair also edits `epics/epics.md` and other slot siblings, and every file a shard edits
@@ -1014,9 +1014,9 @@ document in place. Otherwise, in this order:
    project-relative path, never the section file, because assembly removes the section file
    before the derivations validator re-runs the fence.
 3. **Join and assemble.** Beat-join every part with
-   `scripts/ai-dlc/wait-for-deliverable.sh --complete --since <round epoch> --dispatch <agentId>... <part path>...`,
-   which takes a part as delivered only once it ends in the `seat-complete:` line its
-   remediator's `--mark` wrote, then run
+   `scripts/ai-dlc/wait-for-deliverable.sh --complete --since <round epoch> --dispatch <agentId> <part path>...`
+   (one `--dispatch` per agent the round joined), which takes a part as delivered only once it
+   ends in the `seat-complete:` line its remediator's `--mark` wrote. An UNFINISHED part whose body is complete and carries no `seat-complete:` line was written before parts marked: read it, then `--mark` it or re-dispatch its part. Then run
    `scripts/ai-dlc/join-remediator-shards.sh --document <artifact path> <that dir> --since <ISO> --until <ISO>`.
    When one section's remediator was re-run, add `--rerun <part>.md@<S_P>` as "After a join
    refusal" item 1b says.
@@ -1062,9 +1062,9 @@ in this order:
    `(decision)` entry after the last such Render line is a stale SPEC, and the join refuses it. Its `edit:` lines cite
    both files by their project-relative paths under `_bmad-output/specs/s<N>/<slug>/`.
 3. **Join and assemble.** Beat-join every part with
-   `scripts/ai-dlc/wait-for-deliverable.sh --complete --since <round epoch> --dispatch <agentId>... <part path>...`,
-   which takes a part as delivered only once it ends in the `seat-complete:` line its
-   remediator's `--mark` wrote, then run
+   `scripts/ai-dlc/wait-for-deliverable.sh --complete --since <round epoch> --dispatch <agentId> <part path>...`
+   (one `--dispatch` per agent the round joined), which takes a part as delivered only once it
+   ends in the `seat-complete:` line its remediator's `--mark` wrote. An UNFINISHED part whose body is complete and carries no `seat-complete:` line was written before parts marked: read it, then `--mark` it or re-dispatch its part. Then run
    `scripts/ai-dlc/join-remediator-shards.sh --subject <N> --base <base sha> --pass <M> <that dir> --since <ISO> --until <ISO>`.
    When one part's remediator was re-run, add `--rerun <part>.md@<S_P>` as "After a join
    refusal" item 1b says.
@@ -1348,7 +1348,7 @@ carry the no-human-present additions:
    a deliverable path: one call per kind of deliverable, each
    `run_in_background: true` — `scripts/ai-dlc/wait-for-deliverable.sh <path>
    [<path> ...]` for a plain deliverable, `scripts/ai-dlc/wait-for-deliverable.sh
-   --complete <path> [<path> ...]` for seat and cross files, and
+   --complete <path> [<path> ...]` for seat, shard, cross and repair-part files, and
    `scripts/ai-dlc/wait-for-deliverable.sh --complete-repair <record>` for a
    serial-remediator row. The flag is per call and a call mixing the two flags
    is refused (exit 64), so a mixed set is up to three calls and a set of one

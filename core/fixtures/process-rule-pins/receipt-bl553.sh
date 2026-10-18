@@ -5,6 +5,9 @@
 #     UNFINISHED under --complete and the marked part DELIVERED.
 # 1 = a property failed.  9 = the subject is absent or the receipt could not run (no verdict).
 # The pins are read by process-rule-pins' OWN --report, run from a copy, never re-implemented here.
+# LIMIT: the render-before-mark order is mechanised only where `join-remediator-shards.sh --escalations`
+# reads the record. No procedure runs it over an unsharded `shard: none (serial-document)` record, so
+# there the order is held by remediator.md's sentence alone, which this receipt pins and cannot enforce.
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 ROOT="${1:-.}"
@@ -19,7 +22,7 @@ cp -R "$ROOT/core/skills/ai-dlc" "$T/core/skills/" && cp -R "$ROOT/core/team-rol
 OUT="$(bash "$T/core/fixtures/process-rule-pins/run.sh" --report 2>&1)"; prc=$?
 case "$prc" in 0|1) : ;; *) echo "REFUSED: the pin report exited $prc: $(printf '%s\n' "$OUT" | head -2)" >&2; exit 9 ;; esac
 rc=0
-for id in gp-part-complete-files gp-part-complete-doc gp-part-complete-subj gp-part-mark gp-render-before-mark rem-part-mark rem-render-before-mark; do
+for id in gp-part-complete-files gp-part-complete-doc gp-part-complete-subj gp-part-dispatch-one-files gp-part-dispatch-one-doc gp-part-dispatch-one-subj gp-stop-repair-part ho-stop-repair-part gp-part-mark gp-render-before-mark rem-part-mark rem-render-before-mark; do
   case "$OUT" in *"ok    $id: pinned"*) : ;; *) echo "FAIL: $id is not pinned"; rc=1 ;; esac
 done
 # The beat the prose prescribes, on the shipped engine: unmarked UNFINISHED, marked DELIVERED.

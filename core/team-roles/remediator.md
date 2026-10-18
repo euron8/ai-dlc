@@ -78,7 +78,8 @@ source; do not infer either value from anywhere else.
    **Close your part with `--mark`.** As any shard (files, section or subject), your LAST act
    is ONE Bash call on your part file:
    `scripts/ai-dlc/wait-for-deliverable.sh --mark <part path> <step> remediator <shard> findings=<n>`,
-   `<step>` being the `<artifact>` of your part path `s<N>/shards/<artifact>-repair-p<M>/`,
+   `<step>` being your part directory's name up to `-repair` (`stories` for
+   `s<N>/shards/stories-repair-p1/`, `requirements-party` for `s<N>/shards/requirements-party-repair/`),
    `<shard>` your part's ordinal (the part file's name without `.md`) and `<n>` the number of
    entries in your part. It appends `seat-complete: <step> remediator <shard> sha=<hex> findings=<n>`,
    whose `sha=` binds every line above it; the lead's `--complete` beat takes your part as
@@ -237,12 +238,15 @@ is not the line); it refuses a record whose last line sits inside an open fence.
 before your last entry and never append after it; once it is marked, do not edit the record
 again. The lead's join beat takes the record as delivered only when that line is last and its
 `sha=` matches the record above it, so a record without it reads as
-unfinished however many entries it holds. The line closes your block only: a later appender,
-such as a spec re-render, writes its own block after it. When your block appended a `(decision)`
+unfinished however many entries it holds. The line closes your block only: a later appender
+writes its own block after it, and the join's `repair-complete: spec-render` parser stays only to
+read records written before the render moved inside the serial pass. When your block appended a `(decision)`
 entry to a spec's `.memlog.md`, re-render `SPEC.md` from it and append its
 `- (event) Render <pass>: re-derived from memlog through <last decision>` line BEFORE your
 `--mark-repair`, never after it: the lead's beat ends at that call, and no separate render agent
-is dispatched. A part or shard remediator writes no `repair-complete:` line and closes with
+is dispatched. The unsharded `shard: none (serial-document)` remediator is held to the same
+order by this sentence alone: no procedure runs `join-remediator-shards.sh --escalations` over
+its record, so nothing refuses its stale SPEC. A part or shard remediator writes no `repair-complete:` line and closes with
 `--mark` instead (item 1, **Close your part with `--mark`**). Its `seat-complete:` line ends
 nothing in the joined record: the lead's beat on that record keys on `repair-complete: serial`
 alone, and the join reads a `seat-complete:` line as neither a block terminator nor a sha
