@@ -2092,6 +2092,83 @@ M40_lease_after_dispatch() {
   rm -rf "$W"
 }
 
+# ===========================================================================
+# 21. THE LEASE IS WHERE THE STOP HOOK LOOKS, WHATEVER AI_DLC_STATE_DIR SAYS.
+#     The hook reads `<root>/_bmad-output/.beat-inflight` and never sees AI_DLC_STATE_DIR (lead
+#     beats set it as a per-command prefix). So a beat armed with a custom state dir holds its
+#     marker and its registration at the root's `_bmad-output`, while its counters stay in the
+#     custom dir -- the control that the state dir was honoured at all.
+# ===========================================================================
+# Re-evaluated on every poll: passed to until_ok as a NAME, never as an expanded `$(...)`.
+cs_counter_written() { for cw_ in "$1"/_bmad-output/seat-q/.wait-beats/*; do [ -f "$cw_" ] && return 0; done; return 1; }
+custom_state_world() {  # $1 = subject; leaves W, sets CS_MARK (holder pid at root, or ''), CS_LEASE, CS_CTR
+  W="$(mk_work)"; CS_MARK=""; CS_LEASE=0; CS_CTR=0
+  ( cd "$W" && exec env -u CLAUDE_CODE_SESSION_ID AI_DLC_STATE_DIR=_bmad-output/seat-q AI_DLC_WAIT_BEAT_SECS=40 \
+      AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+      AI_DLC_PROJECT_ROOT="$PWD" bash "$1" deliv.md ) > "$BEATOUT" 2>&1 &
+  cs_p_=$!
+  until_ok 300 cs_counter_written "$W" \
+    || { kill "$cs_p_" 2>/dev/null; broken "custom-state: the beat never wrote a counter in its state dir"; }
+  CS_CTR=1
+  until_ok 50 marker_present "$W" && CS_MARK="$(marker_pid "$W")"
+  [ -f "$W/_bmad-output/.wait-beats/.lease-$cs_p_" ] && CS_LEASE=1
+  printf 'x\n' > "$W/deliv.md"
+  wait "$cs_p_" 2>/dev/null
+  CS_PID="$cs_p_"
+}
+S21_lease_at_root_under_custom_state_dir() {
+  custom_state_world "$SUBJ"
+  if [ "$CS_CTR" -eq 1 ]; then ok "custom-state: CONTROL — the beat's counters land in its custom state dir"
+  else bad "custom-state: CONTROL FAILED — no counter in the custom state dir"; fi
+  if [ "$CS_MARK" = "$CS_PID" ] && [ "$CS_LEASE" -eq 1 ]; then ok "custom-state: a beat armed with a custom AI_DLC_STATE_DIR holds its marker and registration at the root _bmad-output"
+  else bad "custom-state: marker at the root names '$CS_MARK' (beat $CS_PID), registration=$CS_LEASE — the stop hook cannot see this beat"; fi
+  rm -rf "$W"
+}
+# THE REGISTRATIONS MOVE WITH THE MARKER. Beat B (default state dir) holds the marker; beat A,
+# armed with a custom state dir, registers behind it; B's target lands and B exits. B's heir scan
+# must find A, so A's `.lease-<pid>` has to sit where B scans. A polls every 30s, so it cannot
+# re-take a dropped marker inside the window read here -- a heir found is B's handoff, not A's poll.
+cross_heir_world() {  # $1 = subject; leaves W, sets XH_A, XH_B, XH_AFTER
+  W="$(mk_work)"; XH_A=""; XH_B=""; XH_AFTER=""
+  ( cd "$W" && exec env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=40 AI_DLC_WAIT_POLL_SECS=1 \
+      AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+      AI_DLC_PROJECT_ROOT="$PWD" bash "$1" b.md ) > "$BEATOUT.B" 2>&1 &
+  XH_B=$!
+  until_ok 300 marker_present "$W" || { kill "$XH_B" 2>/dev/null; broken "cross-heir: beat B never wrote the marker"; }
+  ( cd "$W" && exec env -u CLAUDE_CODE_SESSION_ID AI_DLC_STATE_DIR=_bmad-output/seat-q AI_DLC_WAIT_BEAT_SECS=80 \
+      AI_DLC_WAIT_POLL_SECS=30 AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+      AI_DLC_PROJECT_ROOT="$PWD" bash "$1" a.md ) > "$BEATOUT.A" 2>&1 &
+  XH_A=$!
+  until_ok 300 cs_counter_written "$W" || { kill "$XH_A" "$XH_B" 2>/dev/null; broken "cross-heir: beat A never reached its sweep"; }
+  printf 'b\n' > "$W/b.md"
+  until_ok 300 pid_gone "$XH_B" || { kill "$XH_A" "$XH_B" 2>/dev/null; broken "cross-heir: beat B never exited after its target landed"; }
+  XH_AFTER="$(marker_pid "$W")"
+  for xp_ in $(pgrep -P "$XH_A" 2>/dev/null); do kill "$xp_" 2>/dev/null; done
+  kill "$XH_A" 2>/dev/null; wait "$XH_A" 2>/dev/null; wait "$XH_B" 2>/dev/null
+}
+S21b_heir_across_state_dirs() {
+  cross_heir_world "$SUBJ"
+  if [ "$XH_AFTER" = "$XH_A" ]; then ok "custom-state: a holder that exits hands the marker to a live beat armed with a different state dir"
+  else bad "custom-state: after the holder exited the marker names '$XH_AFTER', not the live custom-state beat $XH_A — the heir scan cannot see its registration"; fi
+  rm -rf "$W"
+}
+M42_registrations_left_in_state_dir() {
+  mutant registrations-in-state-dir -e 's@^LEASE_DIR="\${LEASE_HOME}/.wait-beats"$@LEASE_DIR="${COUNTER_DIR}"@' || return
+  cross_heir_world "$MUT"
+  if [ "$XH_AFTER" != "$XH_A" ]; then
+    ok "MUTANT registrations-in-state-dir: a marker moved without its registrations is dropped under a live custom-state beat — section 21b catches it"
+  else bad "MUTANT registrations-in-state-dir: section 21b survives the registrations staying in the state dir"; fi
+  rm -rf "$W"
+}
+M41_lease_in_state_dir() {
+  mutant lease-in-state-dir -e 's@^LEASE_HOME="\${WD_ROOT}/_bmad-output"$@LEASE_HOME="${STATE_DIR}"@' || return
+  custom_state_world "$MUT"
+  if [ "$CS_CTR" -eq 1 ] && [ -z "$CS_MARK" ]; then
+    ok "MUTANT lease-in-state-dir: a lease kept in the custom state dir is absent where the hook reads — section 21 catches it"
+  else bad "MUTANT lease-in-state-dir: section 21 survives the lease following the state dir (root marker '$CS_MARK')"; fi
+  rm -rf "$W"
+}
+
 # ---------------------------------------------------------------------------
 # THE DRIVER
 # ---------------------------------------------------------------------------

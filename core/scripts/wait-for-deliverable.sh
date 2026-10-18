@@ -620,17 +620,29 @@ sidecar_put() {  # $1 = file, $2 = content
 # with the ledger as a FIFO, a --dispatch beat sat blocked with no marker on disk, so the hook
 # saw no beat while one was armed. A call those steps refuse (exit 64) releases the lease through
 # the same trap, so a refusal leaves nothing behind.
+#
+# THE LEASE LIVES AT THE PROJECT ROOT'S `_bmad-output`, WHATEVER AI_DLC_STATE_DIR SAYS. The stop
+# hook reads `${CLAUDE_PROJECT_DIR}/_bmad-output/.beat-inflight` (ai-dlc-continue.sh:120) and
+# never sees AI_DLC_STATE_DIR: every lead beat that sets one sets it as a per-command prefix, so
+# the hook's environment cannot carry it. A lease written under a custom state dir was therefore
+# invisible to the hook. Counters, join epochs and settle records stay in STATE_DIR; only the
+# marker and the `.lease-<pid>` registrations move, together, because the heir scan must see
+# every live beat's registration in the one directory the marker's holder scans -- writing the
+# marker in two places instead would hand it to no heir.
 # ---------------------------------------------------------------------------
-BEAT_MARKER="${STATE_DIR}/.beat-inflight"
-LEASE_SELF="${COUNTER_DIR}/.lease-$$"
+LEASE_HOME="${WD_ROOT}/_bmad-output"
+LEASE_DIR="${LEASE_HOME}/.wait-beats"
+[ "$STATUS" -eq 1 ] || mkdir -p "$LEASE_DIR" 2>/dev/null || true
+BEAT_MARKER="${LEASE_HOME}/.beat-inflight"
+LEASE_SELF="${LEASE_DIR}/.lease-$$"
 lease_holder_dead() {  # $1 = holder pid -> 0 when no live beat stands behind it
-  ld_r_="$(cat "${COUNTER_DIR}/.lease-$1" 2>/dev/null || echo '')"
+  ld_r_="$(cat "${LEASE_DIR}/.lease-$1" 2>/dev/null || echo '')"
   case "$ld_r_" in ''|*[!0-9]*) return 0 ;; esac
   [ "$ld_r_" -gt "$(date +%s)" ] || return 0
   kill -0 "$1" 2>/dev/null && return 1
   return 0
 }
-LEASE_TMP="${COUNTER_DIR}/.beat-inflight.$$"   # inside the ignored .wait-beats/, same filesystem
+LEASE_TMP="${LEASE_DIR}/.beat-inflight.$$"   # inside the ignored .wait-beats/, same filesystem
 lease_put() {  # $1 = epoch, $2 = pid -- whole-file replace, never a partial line for the hook to read
   { printf '%s %s' "$1" "$2" > "$LEASE_TMP" 2>/dev/null && mv -f "$LEASE_TMP" "$BEAT_MARKER" 2>/dev/null; } \
     || echo "WARN: wait-for-deliverable: could not write the lease $BEAT_MARKER; the stop hook will not see this beat" >&2
@@ -653,7 +665,7 @@ lease_release() {
   case "$lr_cur_" in *' '*) lr_pid_="${lr_cur_#* }" ;; *) lr_pid_="" ;; esac
   if [ "$lr_pid_" = "$$" ]; then
     lr_now_="$(date +%s)"; lr_heir_=""
-    for lr_f_ in "$COUNTER_DIR"/.lease-*; do
+    for lr_f_ in "$LEASE_DIR"/.lease-*; do
       [ -f "$lr_f_" ] || continue
       lr_p_="${lr_f_##*/.lease-}"
       [ "$lr_p_" = "$$" ] && continue
