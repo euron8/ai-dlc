@@ -55,6 +55,17 @@ Working repo: `/some/repo`. Reference consumer: `/other/repo` — read it, never
 
 Ping the operator on any question or decision, and when this plan completes.
 
+### Next actions
+
+0. DESIGNATE THE LEAD. The session that accepts the one-liner is the lead; its first call is ListAgents, and it roll-calls every other ai-dlc session.
+   The lead never builds: it orchestrates, and every owner builds only through hands. Owners make NO edits; every edit goes to a hand.
+   Time matters here: do not spend time that can be avoided, and the earlier a correct result is obtained, the better.
+   RELEASES BEFORE MEASUREMENTS: a ready release gates before any measurement.
+   SHORTEST GATE FIRST: the shortest gate runs before any longer one.
+   NO IDLE SESSIONS: every session holds work until its release lands.
+   NO TIMING RUNS: nothing is timed unless a named fix cannot be chosen without the figure.
+   RELEASE TEXT IS PREPARED IN ADVANCE: the changelog entry is written before the gate opens.
+
 1. Do the first thing.
 2. Do the second thing.
 
@@ -62,7 +73,7 @@ After the merge, re-derive this plan's own resume block before stopping.
 
 Then, from a fresh checkout of origin/main, read this plan as a stranger and confirm it resumes.
 
-Then ListAgents; if a local ai-dlc session is found, SendMessage it `READ and FOLLOW` plus this plan's path, and stop.
+3. Then ListAgents; if a local ai-dlc session is found, SendMessage it `READ and FOLLOW` plus this plan's path, and stop.
 
 ## Where things stand
 
@@ -269,7 +280,10 @@ grep -q 'FRESH-RESUME CHECK' <<<"$(run "$T/p12b.md")" \
 # each: the discovery tool must be named somewhere, and the send verb must sit beside the
 # one-liner. The text is collapsed before matching, so the second seed WRAPS the sentence
 # across a line break to prove a wrapped instruction still satisfies the arm.
-conforming p13.md | grep -v 'ListAgents' > "$T/p13.md"
+# (b) NO ListAgents ANYWHERE: the 0. action loses its copy too, so P14 fires on this seed as well.
+# P14's cell for that is the P14 block below; this arm keys on P13's text alone.
+conforming p13.md | sed 's/ListAgents/the roll call/g' > "$T/p13.md"
+grep -qF 'ListAgents' "$T/p13.md" && bad "FIXTURE STALE: the P13 no-ListAgents seed still carries ListAgents"
 grep -q 'hand the plan to a local ai-dlc session' <<<"$(run "$T/p13.md")" \
   && ok "P13 fires on a live plan that never names ListAgents" \
   || bad "P13 silent on a plan with no session discovery — the plan is never handed on"
@@ -289,6 +303,246 @@ grep -q 'hand the plan to a local ai-dlc session' <<<"$(run "$T/p13w.md")" \
 grep -q 'hand the plan to a local ai-dlc session' <<<"$(run "$T/p13b.md")" \
   && bad "P13 fired on a DISCHARGED plan — a spent record is not handed on" \
   || ok "  and it exempts a banner-marked plan"
+
+# --- P13 re-keyed: the handoff ACTION carries ListAgents, not just the file ------------------
+# Seed A removes ONLY the handoff action's ListAgents; the 0. action still names it, so a
+# file-wide key (mutant m3) is satisfied and P13 stays silent. P14 has nothing to say: the
+# marker action is intact. Seed B (above, p13.md) strips every ListAgents, so no other copy
+# can rescue it -- P14 also fires there because the marker action loses its own conjunct,
+# which is why P14's quiet-on-P13 cell is asserted on seed A alone.
+conforming p13a.md | sed '/^3\. /s/ListAgents/the discovery tool/' > "$T/p13a.md"
+cmp -s "$T/p13a.md" <(conforming p13a.md) && bad "FIXTURE STALE: the P13 handoff-only seed matched nothing"
+[ "$(grep -c 'ListAgents' "$T/p13a.md")" -eq 1 ] || bad "FIXTURE STALE: the P13 handoff-only seed must leave ListAgents in the 0. action only"
+grep -q 'hand the plan to a local ai-dlc session' <<<"$(run "$T/p13a.md")" \
+  && ok "P13 fires when only the handoff action lacks ListAgents, though the 0. action names it" \
+  || bad "P13 silent when the handoff action lacks ListAgents but another action has it — the key is file-wide"
+grep -q 'never DESIGNATE THE LEAD' <<<"$(run "$T/p13a.md")" \
+  && bad "P14 fired on the P13 seed — the two arms share a subject and one of them is vacuous" \
+  || ok "  and P14 stays quiet on it, so the two arms have separate subjects"
+grep -q 'hand the plan to a local ai-dlc session' <<<"$(run "$T/p13.md")" \
+  && ok "P13 fires when no ListAgents survives anywhere (seed B)" \
+  || bad "P13 silent when no ListAgents survives anywhere"
+
+# --- P14 a live plan DESIGNATES THE LEAD in a numbered action ---------------------------
+# Every cell is keyed on the error TEXT "never DESIGNATE THE LEAD", and on P13's phrase for
+# the separate-subjects cells. Each seed is the conforming plan with ONE change and carries
+# a cmp -s guard, so a sed that matched nothing reports FIXTURE STALE instead of passing.
+p14() { grep -q 'never DESIGNATE THE LEAD' <<<"$(run "$1")"; }
+p13() { grep -q 'hand the plan to a local ai-dlc session' <<<"$(run "$1")"; }
+stale() { cmp -s "$1" <(conforming "$2") && bad "FIXTURE STALE: the $2 seed matched nothing"; }
+
+# 1. the marker removed from the numbered line.
+conforming p14a.md | sed 's/DESIGNATE THE LEAD\. //' > "$T/p14a.md"; stale "$T/p14a.md" p14a.md
+p14 "$T/p14a.md" \
+  && ok "P14 fires when the marker line is removed" \
+  || bad "P14 silent on a live plan with no DESIGNATE THE LEAD action"
+
+# 2. each missing conjunct, separately. The 0. action is the only one touched.
+conforming p14l.md | sed '/DESIGNATE THE LEAD/s/ListAgents/the session list/' > "$T/p14l.md"; stale "$T/p14l.md" p14l.md
+p14 "$T/p14l.md" && grep -qF "lacks ListAgents" <<<"$(run "$T/p14l.md")" \
+  && ok "P14 fires when the marker action lacks ListAgents" \
+  || bad "P14 silent when the marker action lacks ListAgents — that conjunct is not load-bearing"
+conforming p14n.md | sed 's/never builds/does not build/' > "$T/p14n.md"; stale "$T/p14n.md" p14n.md
+p14 "$T/p14n.md" && grep -qF "lacks 'never builds'" <<<"$(run "$T/p14n.md")" \
+  && ok "P14 fires when the marker action lacks 'never builds'" \
+  || bad "P14 silent when the marker action lacks 'never builds' — that conjunct is not load-bearing"
+conforming p14t.md | sed 's/through hands/with a helper/' > "$T/p14t.md"; stale "$T/p14t.md" p14t.md
+p14 "$T/p14t.md" && grep -qF "lacks 'through hands'" <<<"$(run "$T/p14t.md")" \
+  && ok "P14 fires when the marker action lacks 'through hands'" \
+  || bad "P14 silent when the marker action lacks 'through hands' — that conjunct is not load-bearing"
+
+# 3. a pointer-only 0. action: the marker is kept and the body is reduced to a pointer.
+conforming p14p.md | awk '
+  /^0\. DESIGNATE THE LEAD/ { print "0. DESIGNATE THE LEAD. See the drain plan, action 0, for the roll call and the owner rules."; skip = 1; next }
+  skip && /^   / { next }
+  { skip = 0; print }' > "$T/p14p.md"; stale "$T/p14p.md" p14p.md
+grep -q 'See the drain plan' "$T/p14p.md" || bad "FIXTURE STALE: the pointer-only seed lost its pointer line"
+[ "$(grep -c 'never builds' "$T/p14p.md")" -eq 0 ] || bad "FIXTURE STALE: the pointer-only seed still carries a conjunct"
+p14 "$T/p14p.md" \
+  && ok "P14 fires on a pointer-only marker action" \
+  || bad "P14 silent on a marker action that only points elsewhere — a pointer passes as a designation"
+
+# 4. bleed: the pointer-only 0. is followed, after a blank line, by col-0 prose that carries
+# EVERY conjunct P14 checks. A window that runs to the next ACTION scores the pointer by that
+# prose, so the arm fires only if the window stops at the blank line. The prose must carry every
+# conjunct: one missing keeps P14 firing under the bleed mutant too, and the arm kills nothing.
+awk '
+  /^1\. Do the first thing/ {
+    print "ListAgents is the roll call; the lead never builds and owners work through hands."
+    print "Owners make NO edits; every edit goes to a hand."
+    print "Time matters here: do not spend time that can be avoided, and the earlier a correct result is obtained, the better."
+    print "RELEASES BEFORE MEASUREMENTS, SHORTEST GATE FIRST, NO IDLE SESSIONS."
+    print "NO TIMING RUNS, RELEASE TEXT IS PREPARED IN ADVANCE.\n" }
+  { print }' "$T/p14p.md" > "$T/p14bl.md"
+cmp -s "$T/p14bl.md" "$T/p14p.md" && bad "FIXTURE STALE: the bleed seed matched nothing"
+grep -q '^ListAgents is the roll call' "$T/p14bl.md" || bad "FIXTURE STALE: the bleed seed lost its col-0 prose"
+grep -qxF 'Time matters here: do not spend time that can be avoided, and the earlier a correct result is obtained, the better.' "$T/p14bl.md" \
+  || bad "FIXTURE STALE: the bleed prose lacks the time sentence, so P14 fires under the bleed mutant too"
+p14 "$T/p14bl.md" \
+  && ok "P14 fires on bleed: a pointer-only action is not scored by col-0 prose after a blank line" \
+  || bad "P14 silent on bleed — the window runs past the blank line into prose the action does not own"
+
+# 5. conjuncts wrapped across lines still satisfy it.
+conforming p14w.md | awk '
+  { gsub(/never builds/, "never\nbuilds"); gsub(/through hands/, "through\nhands"); gsub(/call is ListAgents/, "call is\nListAgents") } 1' > "$T/p14w.md"; stale "$T/p14w.md" p14w.md
+grep -q '^builds' "$T/p14w.md" && grep -q '^hands' "$T/p14w.md" && grep -q '^ListAgents' "$T/p14w.md" \
+  || bad "FIXTURE STALE: the wrap seed did not wrap all three conjuncts"
+p14 "$T/p14w.md" \
+  && bad "P14 fired on a marker action whose conjuncts WRAP across lines — the arm matches per line" \
+  || ok "  and a marker action with its conjuncts wrapped across lines is accepted"
+
+# 6. the marker on a wrapped 236. line OUTSIDE the Next actions section, none on the action.
+# The 236. line carries EVERY conjunct and sits BEFORE the Next actions heading. After the
+# section it would be a later window, and the order rule would fire even when the whole file is
+# scanned, so the arm would kill nothing. Before it, a whole-file scan makes 236. the first
+# window with every conjunct present, and only the section bound keeps P14 firing.
+conforming p14h.md | sed 's/DESIGNATE THE LEAD\. //' | awk '
+  { print }
+  /^Ping the operator/ {
+    print ""
+    print "236. DESIGNATE THE LEAD was recorded here; ListAgents ran, the lead never builds"
+    print "and owners work through hands. Owners make NO edits; every edit goes to a hand."
+    print "Time matters here: do not spend time that can be avoided, and the earlier a correct result is obtained, the better."
+    print "RELEASES BEFORE MEASUREMENTS, SHORTEST GATE FIRST, NO IDLE SESSIONS,"
+    print "NO TIMING RUNS, RELEASE TEXT IS PREPARED IN ADVANCE." }' > "$T/p14h.md"
+grep -q '^236\. DESIGNATE THE LEAD' "$T/p14h.md" || bad "FIXTURE STALE: the history seed lost its 236. line"
+p14h_at="$(grep -n '^236\. DESIGNATE THE LEAD' "$T/p14h.md" | head -1 | cut -d: -f1)"
+p14h_na="$(grep -n '^### Next actions$' "$T/p14h.md" | head -1 | cut -d: -f1)"
+[ -n "$p14h_at" ] && [ -n "$p14h_na" ] && [ "$p14h_at" -lt "$p14h_na" ] \
+  || bad "FIXTURE STALE: the history seed's 236. line does not precede the Next actions heading"
+p14 "$T/p14h.md" \
+  && ok "P14 fires when the marker sits on a wrapped 236. line outside the Next actions section" \
+  || bad "P14 satisfied by a history line outside Next actions — the whole file is scanned"
+
+# 7. the marker in non-numbered prose.
+conforming p14r.md | sed 's/^0\. DESIGNATE THE LEAD/Note: DESIGNATE THE LEAD/' > "$T/p14r.md"; stale "$T/p14r.md" p14r.md
+p14 "$T/p14r.md" \
+  && ok "P14 fires when the marker sits in non-numbered prose" \
+  || bad "P14 satisfied by a prose line carrying the phrase — it must be a numbered action"
+
+# 8. the 0a. and bold forms are accepted prefixes.
+conforming p14z.md | sed 's/^0\. DESIGNATE THE LEAD/0a. DESIGNATE THE LEAD/' > "$T/p14z.md"; stale "$T/p14z.md" p14z.md
+p14 "$T/p14z.md" \
+  && bad "P14 fired on a 0a. marker action — the letter-suffixed form is accepted" \
+  || ok "P14 stays quiet on a 0a. marker action"
+conforming p14y.md | sed 's/^0\. DESIGNATE THE LEAD\./**0. DESIGNATE THE LEAD.**/' > "$T/p14y.md"; stale "$T/p14y.md" p14y.md
+p14 "$T/p14y.md" \
+  && bad "P14 fired on a **0. marker action — the bold form is accepted" \
+  || ok "  and on a bold **0. marker action"
+
+# 9. a fenced block holding 1.-9. lines and a # line sits INSIDE the action; the conjuncts
+# follow the fence, so a window that the fence ended early would lose them.
+conforming p14f.md | awk '
+  /^0\. DESIGNATE THE LEAD/ {
+    print "0. DESIGNATE THE LEAD. The first call is ListAgents."
+    print "```"
+    for (i = 1; i <= 9; i++) print i ". owner rule " i
+    print "# a comment line inside the block"
+    print "```"
+    print "The lead never builds, and every owner builds only through hands. Owners make NO edits; every edit goes to a hand. Time matters here: do not spend time that can be avoided, and the earlier a correct result is obtained, the better. RELEASES BEFORE MEASUREMENTS: a ready release gates before any measurement. SHORTEST GATE FIRST: the shortest gate runs before any longer one. NO IDLE SESSIONS: every session holds work until its release lands. NO TIMING RUNS: nothing is timed unless a named fix cannot be chosen without the figure. RELEASE TEXT IS PREPARED IN ADVANCE: the changelog entry is written before the gate opens."
+    skip = 1; next }
+  skip && /^   / { next }
+  { skip = 0; print }' > "$T/p14f.md"; stale "$T/p14f.md" p14f.md
+grep -q '^9\. owner rule 9' "$T/p14f.md" || bad "FIXTURE STALE: the fence seed lost its col-0 list lines"
+p14 "$T/p14f.md" \
+  && bad "P14 fired on a marker action holding a fenced block — the fence ended the window early" \
+  || ok "P14 stays quiet when a fenced block of 1.-9. and # lines sits inside the action"
+
+# 10. the scoping control: a DISCHARGED plan owes no designation.
+{ printf -- '# Some plan — DISCHARGED\n'; conforming p14d.md | tail -n +2 | sed 's/DESIGNATE THE LEAD\. //'; } > "$T/p14d.md"
+grep -q 'DESIGNATE THE LEAD' "$T/p14d.md" && bad "FIXTURE STALE: the discharged seed still carries the marker"
+p14 "$T/p14d.md" \
+  && bad "P14 fired on a DISCHARGED plan — a spent record is not resumed and owes no designation" \
+  || ok "  and it exempts a banner-marked plan"
+
+# 10b. the ORDER rule and the two newer conjuncts. Each cell keys on its own error TEXT, because
+# p14() matches the shared 'never DESIGNATE THE LEAD' prefix and all three P14 errors carry it.
+# (a) the marker action moved to a 2. line after the 1. action: the order error, not the lacks error.
+conforming p14o.md | awk '
+  /^0\. DESIGNATE THE LEAD/ { cap = 1; blk = $0; sub(/^0\./, "2.", blk); next }
+  cap && /^   / { blk = blk "\n" $0; next }
+  { cap = 0 }
+  /^2\. Do the second thing/ { sub(/^2\./, "3.") }
+  { print }
+  /^1\. Do the first thing/ { print blk }' > "$T/p14o.md"; stale "$T/p14o.md" p14o.md
+grep -q '^2\. DESIGNATE THE LEAD' "$T/p14o.md" && ! grep -q '^0\. ' "$T/p14o.md" \
+  || bad "FIXTURE STALE: the order seed did not move the marker onto a 2. line"
+[ "$(grep -c 'Time matters here' "$T/p14o.md")" -eq 1 ] || bad "FIXTURE STALE: the order seed lost the marker action's body"
+grep -qF 'before the first dispatch' <<<"$(run "$T/p14o.md")" \
+  && ok "P14 fires with the order text when the marker action is not the first numbered action" \
+  || bad "P14 silent on a marker action that follows a dispatch action — the order rule is not load-bearing"
+# (b) 'NO edits' removed from the marker action.
+conforming p14ne.md | sed 's/ Owners make NO edits; every edit goes to a hand\.//' > "$T/p14ne.md"; stale "$T/p14ne.md" p14ne.md
+[ "$(grep -ci 'no edits' "$T/p14ne.md")" -eq 0 ] || bad "FIXTURE STALE: the no-edits seed still carries 'no edits'"
+grep -qF "lacks 'no edits' within" <<<"$(run "$T/p14ne.md")" \
+  && ok "P14 fires and names 'no edits' when the marker action omits it" \
+  || bad "P14 silent when the marker action lacks 'no edits' — that conjunct is not load-bearing"
+# (c) the time sentence removed (its own continuation line).
+conforming p14ts.md | sed '/^   Time matters here/d' > "$T/p14ts.md"; stale "$T/p14ts.md" p14ts.md
+[ "$(grep -c 'Time matters here' "$T/p14ts.md")" -eq 0 ] || bad "FIXTURE STALE: the time-sentence seed still carries the sentence"
+grep -qF "lacks 'the time sentence' within" <<<"$(run "$T/p14ts.md")" \
+  && ok "P14 fires and names 'the time sentence' when the marker action omits it" \
+  || bad "P14 silent when the marker action lacks the time sentence — that conjunct is not load-bearing"
+# (d) the time sentence WRAPPED across two indented lines is accepted (the window is collapsed).
+conforming p14tw.md | awk '{ sub(/avoided, and the earlier/, "avoided,\n   and the earlier") } 1' > "$T/p14tw.md"; stale "$T/p14tw.md" p14tw.md
+grep -q '^   and the earlier a correct result' "$T/p14tw.md" || bad "FIXTURE STALE: the time-sentence wrap seed did not wrap"
+p14 "$T/p14tw.md" \
+  && bad "P14 fired on a time sentence wrapped across two indented lines — the arm matches per line" \
+  || ok "  and a time sentence wrapped across two indented lines is accepted"
+# (e) a one-word variant is not the sentence.
+conforming p14tv.md | sed 's/the earlier a correct/the sooner a correct/' > "$T/p14tv.md"; stale "$T/p14tv.md" p14tv.md
+grep -qF "lacks 'the time sentence' within" <<<"$(run "$T/p14tv.md")" \
+  && ok "P14 fires on a one-word variant of the time sentence ('the sooner')" \
+  || bad "P14 silent on a reworded time sentence — the match is not the fixed string"
+# (f) one space inside the sentence replaced by U+00A0 (bytes C2 A0) is not the sentence.
+nbsp="$(printf '\302\240')"
+conforming p14tn.md | sed "s/do not spend time/do not${nbsp}spend time/" > "$T/p14tn.md"; stale "$T/p14tn.md" p14tn.md
+[ "$(LC_ALL=C grep -c "$nbsp" "$T/p14tn.md")" -eq 1 ] || bad "FIXTURE STALE: the NBSP seed does not carry exactly one line with the bytes C2 A0"
+grep -qF "lacks 'the time sentence' within" <<<"$(run "$T/p14tn.md")" \
+  && ok "P14 fires and names 'the time sentence' when one space in it is a U+00A0" \
+  || bad "P14 silent on a time sentence with a non-breaking space — the whitespace collapse is hiding a byte difference"
+# (h) the five operator-rule labels. DEPENDS ON THE PENDING P14 CONJUNCTS: these cells go red against a
+# validator that does not yet require the labels, and that is expected. Each label is removed on its own
+# and P14 must name exactly it, single-quoted, in the lacks-list.
+for lbl in 'RELEASES BEFORE MEASUREMENTS' 'SHORTEST GATE FIRST' 'NO IDLE SESSIONS' 'NO TIMING RUNS' 'RELEASE TEXT IS PREPARED IN ADVANCE'; do
+  sl="$(printf '%s' "$lbl" | tr 'A-Z ' 'a-z_')"
+  conforming "p14l_$sl.md" | sed "s/$lbl: //" > "$T/p14l_$sl.md"; stale "$T/p14l_$sl.md" "p14l_$sl.md"
+  [ "$(grep -cF "$lbl" "$T/p14l_$sl.md")" -eq 0 ] || bad "FIXTURE STALE: the '$lbl' seed still carries the label"
+  grep -qF "'$lbl'" <<<"$(run "$T/p14l_$sl.md")" && grep -qF "never DESIGNATE THE LEAD completely" <<<"$(run "$T/p14l_$sl.md")" \
+    && ok "P14 fires and names '$lbl' when the marker action omits it" \
+    || bad "P14 silent when the marker action lacks '$lbl' — that conjunct is not load-bearing (or has not landed)"
+done
+# (i) the match is case-sensitive: a lower-cased label is not the label.
+conforming p14lc.md | sed 's/NO IDLE SESSIONS/no idle sessions/' > "$T/p14lc.md"; stale "$T/p14lc.md" p14lc.md
+grep -qF 'no idle sessions' "$T/p14lc.md" || bad "FIXTURE STALE: the lower-case seed did not lower-case the label"
+grep -qF "'NO IDLE SESSIONS'" <<<"$(run "$T/p14lc.md")" \
+  && ok "P14 fires and names 'NO IDLE SESSIONS' when the label is lower-cased (case-sensitive match)" \
+  || bad "P14 silent on a lower-cased label — the match is case-insensitive (or the conjunct has not landed)"
+# (g) separate subjects: P13 is quiet on the order, no-edits and time-sentence seeds.
+n13b=0
+for s in p14o p14ne p14ts; do p13 "$T/$s.md" && n13b=$((n13b+1)); done
+[ "$n13b" -eq 0 ] \
+  && ok "P13 stays quiet on the order, no-edits and time-sentence seeds, so the arms have separate subjects" \
+  || bad "P13 fired on $n13b of the order/no-edits/time-sentence seeds — the arms share a subject"
+
+# 11. separate subjects: P13 stays quiet on every P14 seed (P13's own phrase, not P14's).
+n13=0
+for s in p14a p14l p14n p14t p14p p14bl p14h p14r; do p13 "$T/$s.md" && n13=$((n13+1)); done
+[ "$n13" -eq 0 ] \
+  && ok "P13 stays quiet on every P14 seed, so the two arms have separate subjects" \
+  || bad "P13 fired on $n13 P14 seed(s) — the arms share a subject and one of them is vacuous"
+
+# 12. the Next actions heading: a lower-case PROSE mention is not an opener.
+conforming p14k.md | sed 's/^### Next actions$/see the next actions below/' > "$T/p14k.md"; stale "$T/p14k.md" p14k.md
+grep -q '^0\. DESIGNATE THE LEAD' "$T/p14k.md" || bad "FIXTURE STALE: the no-heading seed lost its conforming 0. action"
+p14 "$T/p14k.md" \
+  && ok "P14 fires when no Next actions HEADING exists, only a lower-case prose mention" \
+  || bad "P14 satisfied by a prose line saying 'next actions' — the case-insensitive match opens on prose"
+sed 's/^see the next actions below$/### NEXT ACTIONS/' "$T/p14k.md" > "$T/p14kc.md"
+cmp -s "$T/p14kc.md" "$T/p14k.md" && bad "FIXTURE STALE: the heading control matched nothing"
+p14 "$T/p14kc.md" \
+  && bad "P14 fired on the same file with a ### NEXT ACTIONS heading — the upper-case heading does not open the section" \
+  || ok "  and the same file with a '### NEXT ACTIONS' heading is accepted (the match is case-insensitive)"
 
 # --- empty corpus is not a pass ---------------------------------------------------
 # `for f in docs/plans/*.md` over an empty directory reads exactly like a clean run.
