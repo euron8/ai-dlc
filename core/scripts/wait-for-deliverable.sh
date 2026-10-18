@@ -1137,12 +1137,26 @@ if [ -n "$DISPATCH" ]; then
   set -f
   DP_IDS_=( $DISPATCH )
   [ "$dp_noglob_" = 1 ] || set +f
+  # The liveness scope (in_liveness_scope): each dispatch's agentId, found as the subagents-dir
+  # meta.json whose toolUseId is the dispatch's tool_use_id. If ANY dispatch has none, the scope
+  # stays the whole session -- a partial scope would drop the one transcript that matters.
+  DP_AGENTS_=""; dp_scope_ok_=1
   for dp_one_ in "${DP_IDS_[@]}"; do
     dispatch_epoch_of "$dp_one_"
     if [ -z "$DISPATCH_EPOCH" ] || [ "$dp_e_" -lt "$DISPATCH_EPOCH" ]; then
       DISPATCH_EPOCH="$dp_e_"; DISPATCH_TS="$dp_ts_"; DISPATCH_TUI="$dp_tui_"
     fi
+    dp_ag_=""
+    if [ -n "$TEAMMATE_DIR" ] && [ -d "$TEAMMATE_DIR" ]; then
+      for dp_mf_ in "$TEAMMATE_DIR"/agent-*.meta.json; do
+        [ -f "$dp_mf_" ] || continue
+        grep -qF "\"toolUseId\":\"$dp_tui_\"" "$dp_mf_" 2>/dev/null || continue
+        dp_ag_="${dp_mf_##*/agent-}"; dp_ag_="${dp_ag_%.meta.json}"; break
+      done
+    fi
+    if [ -n "$dp_ag_" ]; then DP_AGENTS_="${DP_AGENTS_}${DP_AGENTS_:+ }$dp_ag_"; else dp_scope_ok_=0; fi
   done
+  [ "$dp_scope_ok_" = 1 ] || DP_AGENTS_=""
   if [ -n "$SINCE" ] && [ "$SINCE" -gt "$DISPATCH_EPOCH" ]; then
     echo "FAIL: --since is $(( SINCE - DISPATCH_EPOCH )) s after the earliest dispatch it joins ($DISPATCH_TS, tool_use_id $DISPATCH_TUI)." >&2
     echo "  Every write the teammate made in between would read as pre-existing. Drop --since;" >&2
@@ -1154,20 +1168,65 @@ elif [ -n "$SINCE" ]; then
   echo "WARN: wait-for-deliverable: --since without --dispatch -- nothing checks the stamp against the dispatch, and a stamp later than it misses the teammate's early writes. Pass --dispatch <agentId from the Agent result>." >&2
 fi
 
-teammate_quiet_for() {  # prints seconds since the most recent teammate turn in this
-                        # session; returns 1 and prints nothing when there is no signal
+# ---------------------------------------------------------------------------
+# A TURN IS AN ASSISTANT OR USER (TOOL-RESULT) LINE, NOT A WRITE TO THE FILE. The harness also
+# appends an `api-request` line for every request it SENDS, answered or not, so a teammate whose
+# requests the model never answers -- measured on the reference consumer: an account out of
+# usage, seven retries ~195s apart, no assistant line after them -- kept its transcript's mtime
+# fresh and read as a live turn every ~3 minutes, for as long as anyone waited. Quiet is now
+# `now` minus the NEWEST timestamp on an assistant/user line (the maximum, never the last line's:
+# timestamps are not monotonic in a transcript), and a transcript with no such timestamp falls
+# back to its mtime, which is exactly the old reading.
+#
+# STALL_K (3) BOUNDS ONE PROPERTY: HOW MANY CONSECUTIVE `{"type":"api-request"` LINES MUST END A
+# TRANSCRIPT BEFORE THE BEAT SAYS ITS MODEL IS NOT ANSWERING. Measured over 3,349 real teammate
+# transcripts: runs of api-request lines between two assistant lines were 1 long 7,400 times, 2
+# long 7 times (all live: a reply followed in 3-108s), 4 long once and 8 long once (the wedge).
+# So 3 has no false positive in that corpus. The match carries its closing quote, because
+# `api-request-blob` and `api-request-shape` lines open the same way and are not requests.
+# WHEN HIT: a STALLED report, per transcript. Like IDLE it changes no exit code, beat count or
+# grant -- it tells the lead to tell the operator. LOAD-FREE: a count of lines, not of seconds.
+# ---------------------------------------------------------------------------
+STALL_K=3
+transcript_turn() {  # $1 = transcript -> "<newest turn YYYY-MM-DDTHH:MM:SS|-> <trailing api-request run>"
+  awk '
+    index($0, "{\"type\":\"api-request\"") == 1 { run++; next }
+    NF { run = 0 }
+    index($0, "\"type\":\"assistant\"") || index($0, "\"type\":\"user\"") {
+      if (match($0, /"timestamp":"[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]/)) {
+        t = substr($0, RSTART + 13, 19); if (t > mx) mx = t
+      }
+    }
+    END { print (mx == "" ? "-" : mx), run + 0 }' "$1" 2>/dev/null
+}
+# Under --dispatch the sensor reads ONLY the dispatched agents' own transcripts, by name: across a
+# session the newest turn of ANY teammate would let a live one hide the wedged one being joined.
+in_liveness_scope() {  # $1 = transcript path -> 0 when it is read
+  [ -n "${DP_AGENTS_:-}" ] || return 0
+  for il_a_ in $DP_AGENTS_; do [ "${1##*/}" = "agent-${il_a_}.jsonl" ] && return 0; done
+  return 1
+}
+teammate_quiet_for() {  # prints seconds since the most recent teammate turn in this session,
+                        # then ` STALLED <file>...` for each transcript ending in a stalled run;
+                        # returns 1 and prints nothing when there is no signal
   [ -n "$TEAMMATE_DIR" ] && [ -d "$TEAMMATE_DIR" ] || return 1
-  tq_now_="$(date +%s)"; tq_best_=""
+  tq_now_="$(date +%s)"; tq_best_=""; tq_stall_=""
   for tq_f_ in "$TEAMMATE_DIR"/*.jsonl; do
     [ -f "$tq_f_" ] || continue
-    tq_m_="$(mtime_of "$tq_f_")"
+    in_liveness_scope "$tq_f_" || continue
+    tq_r_="$(transcript_turn "$tq_f_")"
+    tq_t_="${tq_r_%% *}"; tq_k_="${tq_r_##* }"
+    case "$tq_k_" in ''|*[!0-9]*) tq_k_=0 ;; esac
+    tq_m_=""; [ "$tq_t_" = "-" ] || tq_m_="$(to_epoch "${tq_t_}Z")" || tq_m_=""
+    [ -n "$tq_m_" ] || tq_m_="$(mtime_of "$tq_f_")"
     [ "$tq_m_" -gt 0 ] || continue
     tq_a_=$(( tq_now_ - tq_m_ ))
     [ "$tq_a_" -lt 0 ] && tq_a_=0   # clock skew must not manufacture a future turn
+    [ "$tq_k_" -ge "$STALL_K" ] && tq_stall_="${tq_stall_} ${tq_f_##*/}:${tq_k_}"
     if [ -z "$tq_best_" ] || [ "$tq_a_" -lt "$tq_best_" ]; then tq_best_="$tq_a_"; fi
   done
   [ -n "$tq_best_" ] || return 1
-  printf '%s' "$tq_best_"
+  printf '%s%s' "$tq_best_" "${tq_stall_:+ STALLED$tq_stall_}"
 }
 
 # ONE function, called from all THREE places a beat can end -- the exhaustion path,
@@ -1175,11 +1234,22 @@ teammate_quiet_for() {  # prints seconds since the most recent teammate turn in 
 # them has to get the same three-way answer, and three copies of this ladder would
 # be three chances for one of them to stop agreeing.
 say_liveness() {
-  if ! sl_q_="$(teammate_quiet_for)"; then
+  if ! sl_r_="$(teammate_quiet_for)"; then
     say "LIVENESS  unavailable (no teammate transcripts for this session) -- this beat"
     say "  cannot tell a working teammate from one that finished and delivered elsewhere."
     return 0
   fi
+  sl_q_="${sl_r_%% *}"; sl_st_=""
+  case "$sl_r_" in *' STALLED '*) sl_st_="${sl_r_#* STALLED }" ;; esac
+  # echo, not say, for the reason the IDLE banner below gives: the wait itself is the wrong action.
+  for sl_s_ in $sl_st_; do
+    echo "TEAMMATE STALLED ${sl_s_%:*} -- its transcript ends in ${sl_s_##*:} api-request lines with no reply"
+    echo "  after them: the model is not answering this teammate (account usage limit, auth or network),"
+    echo "  and it is not thinking. Beating again cannot fix that. Tell the operator now: only the"
+    echo "  operator can switch accounts, and a re-dispatch on the same account wedges again. Stop the"
+    echo "  teammate only on the operator's word, or when the next beat reports it STALLED again."
+  done
+  case "$sl_q_" in ''|*[!0-9]*) sl_q_=0 ;; esac
   if [ "$sl_q_" -ge "$IDLE_SECS" ]; then
     # echo, not say: this is the line that tells the lead the wait itself is the
     # wrong action, and --quiet must not be able to hide it -- the same reason the

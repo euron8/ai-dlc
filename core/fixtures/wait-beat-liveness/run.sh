@@ -103,9 +103,19 @@ fx_backdate() {  # $1 = file, $2 = seconds into the past
 
 # A teammate transcript, aged. `$2` seconds of quiet, verified by the fixture's own
 # reader before the subject ever sees it.
+#
+# THE LINES ARE THE HARNESS'S OWN SHAPE, NOT `{"t":1}`. The sensor reads a turn from the newest
+# timestamp on an assistant or user line, so a seed with no such line exercises only its mtime
+# fallback. Each transcript carries a user line, an answered `{"type":"api-request"` line and an
+# assistant line, every timestamp `$2` seconds old, and the file's mtime agrees. The fallback has
+# its own seed (mk_transcript_bare) and its own arm in section 23.
 mk_transcript() {  # $1 = dir, $2 = age seconds, $3 = basename
   mkdir -p "$1" || broken "cannot create $1"
-  printf '{"t":1}\n' > "$1/$3" || broken "cannot write $1/$3"
+  mt_ts_="$(fx_iso $(( $(date +%s) - $2 )))"; [ -n "$mt_ts_" ] || broken "neither BSD nor GNU date can format an epoch"
+  { printf '{"parentUuid":null,"isSidechain":true,"agentId":"a1","type":"user","message":{"role":"user","content":[{"type":"text","text":"brief"}]},"timestamp":"%s.100Z"}\n' "$mt_ts_"
+    printf '{"type":"api-request","sessionId":"s","agentId":"a1","id":"r1","timestamp":"%s.200Z","shapeHash":"7d7e1ada"}\n' "$mt_ts_"
+    printf '{"parentUuid":"u1","isSidechain":true,"agentId":"a1","message":{"role":"assistant","content":[{"type":"text","text":"ok"}]},"type":"assistant","timestamp":"%s.300Z"}\n' "$mt_ts_"
+  } > "$1/$3" || broken "cannot write $1/$3"
   if [ "$2" -gt 0 ]; then
     fx_backdate "$1/$3" "$2" || broken "neither BSD nor GNU date can backdate a file here"
     age=$(( $(date +%s) - $(fx_mtime "$1/$3") ))
@@ -2227,6 +2237,104 @@ M43_chained_by_clock() {
     ok "MUTANT chained-by-clock: deciding by age alone sleeps a same-shell sibling stamped past BUDGET — section 22 catches it"
   else bad "MUTANT chained-by-clock: section 22 survives the identity test being removed: $OUT"; fi
   rm -rf "$W"
+}
+
+# ===========================================================================
+# 23. A TEAMMATE WHOSE MODEL IS NOT ANSWERING IS STALLED, NOT LIVE.
+#     The harness appends a `{"type":"api-request"` line per request it sends, answered or not.
+#     Keyed on mtime, seven unanswered retries read as seven fresh turns. Every seed below has a
+#     FRESH mtime; only its lines differ. 3 trailing requests after the last assistant line is
+#     STALLED; 2 is not (live runs of 2 occur); `api-request-blob` lines do not count; a recent
+#     assistant line last is the control. A wedged transcript's last TURN is old even though the
+#     file is new, so with a short idle threshold it also reads IDLE -- which the mtime sensor
+#     could never say. Under --dispatch the dispatched agent's transcript is judged by name, so a
+#     live sibling does not hide it.
+# ===========================================================================
+mk_wedged() {  # $1 = dir, $2 = basename, $3 = trailing request lines, $4 = line type (api-request|api-request-blob)
+  mkdir -p "$1" || broken "cannot create $1"
+  mw_old_="$(fx_iso $(( $(date +%s) - 3600 )))"; mw_now_="$(fx_iso "$(date +%s)")"
+  { printf '{"parentUuid":"u1","isSidechain":true,"agentId":"a1","message":{"role":"assistant","content":[{"type":"tool_use","name":"Skill"}]},"type":"assistant","timestamp":"%s.300Z"}\n' "$mw_old_"
+    mw_i_=0; while [ "$mw_i_" -lt "$3" ]; do
+      printf '{"type":"%s","sessionId":"s","agentId":"a1","id":"r%s","timestamp":"%s.200Z","shapeHash":"7d7e1ada"}\n' "$4" "$mw_i_" "$mw_now_"
+      mw_i_=$(( mw_i_ + 1 )); done
+  } > "$1/$2" || broken "cannot write $1/$2"
+}
+mk_transcript_bare() {  # $1 = dir, $2 = age seconds, $3 = basename: no timestamp on any line
+  mkdir -p "$1" || broken "cannot create $1"
+  printf '{"t":1}\n' > "$1/$3" || broken "cannot write $1/$3"
+  [ "$2" -gt 0 ] && { fx_backdate "$1/$3" "$2" || broken "cannot backdate $1/$3"; }
+  return 0
+}
+STALL_LINE='TEAMMATE STALLED '
+S23a_stalled_after_three_requests() {
+  W="$(mk_work)"; TD="$TMPROOT/s23a.$$"; mk_wedged "$TD" agent-awedge.jsonl 3 api-request
+  beat "$SUBJ" "$W" 60 "$TD"
+  if has "${STALL_LINE}agent-awedge.jsonl" && [ "$RC" -eq 0 ]; then ok "stalled: 3 unanswered api-request lines after the last assistant line report STALLED (rc 0)"
+  else bad "stalled: a transcript ending in 3 unanswered requests was not reported STALLED (rc=$RC): $OUT"; fi
+  if has "$IDLE_BANNER" && ! has "$LIVE_LINE"; then ok "stalled: its last TURN is an hour old though the file is fresh — not reported as a live turn"
+  else bad "stalled: a fresh mtime over an hour-old last turn still read as live: $OUT"; fi
+  rm -rf "$W" "$TD"
+  W="$(mk_work)"; TD="$TMPROOT/s23b.$$"; mk_wedged "$TD" agent-atwo.jsonl 2 api-request
+  beat "$SUBJ" "$W" 60 "$TD"
+  if ! has "$STALL_LINE"; then ok "stalled: 2 trailing api-request lines do NOT report STALLED (live runs of 2 occur)"
+  else bad "stalled: 2 trailing requests were called STALLED: $OUT"; fi
+  rm -rf "$W" "$TD"
+  W="$(mk_work)"; TD="$TMPROOT/s23c.$$"; mk_wedged "$TD" agent-ablob.jsonl 5 api-request-blob
+  beat "$SUBJ" "$W" 60 "$TD"
+  if ! has "$STALL_LINE"; then ok "stalled: api-request-blob lines are not requests and do NOT count"
+  else bad "stalled: api-request-blob lines were counted as unanswered requests: $OUT"; fi
+  rm -rf "$W" "$TD"
+  W="$(mk_work)"; TD="$TMPROOT/s23d.$$"; mk_transcript "$TD" 0 agent-alive.jsonl
+  beat "$SUBJ" "$W" 60 "$TD"
+  if has "$LIVE_LINE" && ! has "$STALL_LINE"; then ok "stalled: CONTROL — a recent assistant line last reads as a live turn, not STALLED"
+  else bad "stalled: CONTROL FAILED — a live transcript did not read live: $OUT"; fi
+  rm -rf "$W" "$TD"
+}
+S23b_quiet_fallback_without_timestamps() {
+  W="$(mk_work)"; TD="$TMPROOT/s23e.$$"; mk_transcript_bare "$TD" 7200 agent-abare.jsonl
+  beat "$SUBJ" "$W" 60 "$TD"
+  if has "$IDLE_BANNER"; then ok "stalled: a transcript carrying no timestamps falls back to its mtime (2h old reads IDLE)"
+  else bad "stalled: a timestamp-less transcript gave no reading from its mtime: $OUT"; fi
+  rm -rf "$W" "$TD"
+  W="$(mk_work)"; TD="$TMPROOT/s23f.$$"; mk_transcript_bare "$TD" 0 agent-abare.jsonl
+  beat "$SUBJ" "$W" 60 "$TD"
+  if has "$LIVE_LINE"; then ok "stalled: CONTROL — the same seed with a fresh mtime reads live"
+  else bad "stalled: CONTROL FAILED — a fresh timestamp-less transcript is not read live: $OUT"; fi
+  rm -rf "$W" "$TD"
+}
+S23c_dispatch_judges_its_own_transcript() {
+  W="$(mk_work)"; TD="$TMPROOT/s23g.$$"
+  mk_wedged "$TD" agent-awedge.jsonl 3 api-request
+  mk_transcript "$TD" 0 agent-alive.jsonl
+  printf '{"agentType":"dev","toolUseId":"toolu_wbl578"}' > "$TD/agent-awedge.meta.json"
+  mk_ledger_row "$W" toolu_wbl578 $(( $(date +%s) - 30 ))
+  beat "$(sib_dir "$SUBJ")/wait-for-deliverable.sh" "$W" 60 "$TD" --dispatch toolu_wbl578
+  if has "${STALL_LINE}agent-awedge.jsonl" && has "$IDLE_BANNER" && ! has "$LIVE_LINE"; then
+    ok "stalled: under --dispatch the dispatched agent's own transcript is judged — a live sibling does not hide the wedge"
+  else bad "stalled: a live sibling hid the dispatched agent's wedge under --dispatch: $OUT"; fi
+  rm -rf "$W"
+  # CONTROL: the same directory without --dispatch takes the newest turn across the session.
+  W="$(mk_work)"; beat "$SUBJ" "$W" 60 "$TD"
+  if has "$LIVE_LINE" && has "${STALL_LINE}agent-awedge.jsonl"; then ok "stalled: CONTROL — without --dispatch the session reads live and still names the stalled transcript"
+  else bad "stalled: CONTROL FAILED — the whole-session reading is not the live sibling's: $OUT"; fi
+  rm -rf "$W" "$TD"
+}
+M44_quiet_from_mtime() {
+  mutant quiet-from-mtime -e 's@^    tq_m_=""; \[ "\$tq_t_" = "-" \] || tq_m_=.*$@    tq_m_=""@' || return
+  W="$(mk_work)"; TD="$TMPROOT/m44.$$"; mk_wedged "$TD" agent-awedge.jsonl 3 api-request
+  beat "$MUT" "$W" 60 "$TD"
+  if has "$LIVE_LINE" && ! has "$IDLE_BANNER"; then
+    ok "MUTANT quiet-from-mtime: reading quiet from mtime reports a wedged teammate as a live turn — section 23a catches it"
+  else bad "MUTANT quiet-from-mtime: section 23a survives quiet being read from mtime: $OUT"; fi
+  rm -rf "$W" "$TD"
+}
+M45_stall_counts_blobs() {
+  mutant stall-counts-blobs -e 's@index(\$0, "{\\"type\\":\\"api-request\\"") == 1@index($0, "{\\"type\\":\\"api-request") == 1@' || return
+  W="$(mk_work)"; TD="$TMPROOT/m45.$$"; mk_wedged "$TD" agent-ablob.jsonl 5 api-request-blob
+  beat "$MUT" "$W" 60 "$TD"
+  if has "$STALL_LINE"; then ok "MUTANT stall-counts-blobs: matching without the closing quote counts blob lines as requests — section 23a catches it"
+  else bad "MUTANT stall-counts-blobs: section 23a survives the closing quote being dropped: $OUT"; fi
+  rm -rf "$W" "$TD"
 }
 
 # ---------------------------------------------------------------------------

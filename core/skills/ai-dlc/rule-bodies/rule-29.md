@@ -100,6 +100,12 @@ on in beats:
               `DELIVERED <path>` lines are yours to consume; `WAITING
               <path>` lines are still out -- beat again over those.
               Exit 0 does NOT mean everything landed.
+              `TEAMMATE STALLED <transcript>` means that teammate's
+              model has stopped answering it (usage limit, auth or
+              network): TELL THE OPERATOR FIRST, in plain words, that the
+              account may be out of usage. Stop the teammate (TaskStop)
+              only on the operator's word, or when the next beat reports
+              it STALLED again. Never re-dispatch on the same account.
     exit 1 -- NON-DELIVERY. Sequence exhausted: re-dispatch ONCE (then
               re-run with --reset), and if it fails again, HARD_BLOCK.
               Under --complete, a path reported `UNFINISHED` or `UNSETTLED`
