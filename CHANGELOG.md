@@ -20,6 +20,45 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.834.0] - 2026-10-18
+
+Batch 236, PULLCOST release (owned and gated by ai-dlc-77 [e29316], lead ai-dlc-c8). Closes BL-679 and files
+BL-685. No `PC-` id. Net for this release: 1 closed, 1 filed. BL-647 moved to its own release.
+
+### `--verify` records a PASS and can accept it, shipped off by default (BL-679)
+
+- One consumer pull ran `emit-report.sh --verify` three or four times on one tree, each a full detector
+  re-render. Now an exit-0 `--verify` writes a record in the consumer's git-dir, outside the work tree, when the
+  key taken before the render equals the key taken after it. The record is written whether or not the cache is
+  enabled.
+- **Off by default.** A later `--verify` accepts a matching record, printing `accepted a recorded PASS` and
+  rendering nothing, only when `EMIT_REPORT_VERIFY_CACHE=1` is set. With the variable unset, every `--verify` is
+  byte-identical to the previous release in stdout, stderr and exit. `reconcile-emit-report` PC-V26 checks this
+  against the pre-cache engine. `AI_DLC_VERIFY_NO_CACHE=1` still forces a re-render. `apply.sh`'s
+  `report-verified` row names an accepted record. SKILL.md steps 5 and 7 name the opt-in.
+- **Why it is off.** The key is stated in `emit-report.sh`'s header. Four adversary reviews of it each found inputs
+  the render reads that the key did not cover, and each round's findings were then keyed. The fourth round still
+  found five classes:
+  - index flags (`assume-unchanged`, `skip-worktree`);
+  - a nested repository's files;
+  - a tracked symlink whose target is outside the tree;
+  - diff attributes and `GIT_EXTERNAL_DIFF`;
+  - tool versions.
+  Separately, the key cannot cover what ledger `verify: sh` receipts read, or what the validators
+  `predicate-differential.sh` runs read. The cache turns on only in a later release, after a review of the key
+  finds no BLOCKER (BL-685).
+- **A dist that shares its ref store with active worktrees never records** (BL-685, filed here). That includes a
+  developer checkout used as the distribution. Measured on a graph clone with such a dist: 0 records and 0 hits
+  in 5 rounds. With a self-contained clone as the dist, the same consumer recorded and hit.
+- Delivering pull: nothing changes for it, because the cache is off.
+
+### Limits
+- Measured on the release branch: `reconcile-emit-report` shard a PASS. PC-V0..V26 each read `ok` by name against
+  an impossible-name control. M-region, M-direxcl and M-exit3 each kill exactly their declared set.
+- The saving on a real consumer pull was not measured as wall clock. A record and a hit were measured on a graph
+  clone with a self-contained dist.
+
+
 ## [0.833.0] - 2026-10-18
 
 Batch 236 (b9's RECOVER). The post-compaction recovery gate no longer refuses the digest Read its own injected block

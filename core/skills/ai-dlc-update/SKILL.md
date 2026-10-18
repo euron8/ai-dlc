@@ -1513,7 +1513,7 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    (a HARD core-schema drift, twice). After writing the report, run
    `reconcile/emit-report.sh --verify <report> <dist> <base> <consumer> <theirs>`; **it MUST exit 0
    before the HARD STOP.** A nonzero exit here means the region is missing, stale, or was hand-edited —
-   the report is unsound; regenerate and re-emit. When the fresh render carries a
+   the report is unsound; regenerate and re-emit. A matching recorded PASS is accepted only when `EMIT_REPORT_VERIFY_CACHE=1` is set (off by default), and `--verify` then prints `accepted a recorded PASS`; any change to the consumer tree other than the report file, to the report's mechanical region, to base, theirs or the dist refs, or to the engine re-renders (key: `emit-report.sh`'s header); `AI_DLC_VERIFY_NO_CACHE=1` forces a re-render. When the fresh render carries a
    `DETECTOR-REFUSED  preclassify.sh` line, `--verify` exits 1 with `cause: PRECLASSIFY-REFUSED`,
    even if the report carries the same line. The five sections built from preclassify's rows
    (per-file buckets, semantic worklist, orientation, deletions, scripts relocation) are then
@@ -1718,7 +1718,7 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
 
    **Mechanical union gate — the driver, not memory.** `apply` may write only after BOTH hold:
    (1) `reconcile/emit-report.sh --verify <report> <dist> <base> <consumer> <theirs>` exits 0 — the
-   report the operator approved carries a current, complete mechanical region; exit 1 means
+   report the operator approved carries a current, complete mechanical region (a matching recorded PASS is accepted only when `EMIT_REPORT_VERIFY_CACHE=1` is set (off by default), and `--verify` then prints `accepted a recorded PASS`; any change to the consumer tree other than the report file, to the report's region, to base, theirs or the dist refs, or to the engine re-renders, per `emit-report.sh`'s header; `AI_DLC_VERIFY_NO_CACHE=1` forces a re-render); exit 1 means
    the approval was given without sight of a finding, so STOP and re-emit rather than write, and
    exit 3 means the approval saw findings that have since been resolved — the paragraph after
    clause (2) says what to do; and
@@ -1746,7 +1746,7 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    `reconcile/preclassify.sh` with the same four arguments, fix what it reports, and re-run apply
    with the same arguments. So: resolve every blocker, then re-render the region
    (`reconcile/emit-report.sh <dist> <base> <consumer> <theirs>`) into the report, run `--verify`
-   to exit 0, have the operator re-approve it, and only then run `apply.sh`. An `apply.sh` that
+   to exit 0 (a recorded PASS is accepted only when `EMIT_REPORT_VERIFY_CACHE=1` is set (off by default), `--verify` then prints `accepted a recorded PASS`, and resolving a blocker changes the consumer tree so it re-renders; `AI_DLC_VERIFY_NO_CACHE=1` forces a re-render), have the operator re-approve it, and only then run `apply.sh`. An `apply.sh` that
    refuses with `BLOCKERS-RESOLVED` is telling you the report predates your own work, not that
    upstream moved. The re-approval is not a formality: a resolution can leave rows the first
    approval never saw (the refusal lists them as `unseen:`), and the re-rendered region is the
