@@ -405,7 +405,7 @@ case "$STAGE" in
   snapshot)
     if [ "$TOOL" = "Read" ] && [ -n "$FABS" ] && [ "$FABS" = "$SNAP_ABS" ]; then
       if is_full_read; then
-        printf 'step\n' >"$PROGRESS" 2>/dev/null || true
+        { printf 'step\n' >"${PROGRESS}.$$" && mv -f "${PROGRESS}.$$" "$PROGRESS"; } 2>/dev/null || rm -f "${PROGRESS}.$$" 2>/dev/null || true
         exit 0
       fi
       deny "AI/DLC post-compact recovery: \`Read ${SNAP_REL}\` must be IN FULL, and this call bounds it with \`limit\`/\`offset\`. Re-issue the same Read with neither field." \
@@ -413,6 +413,15 @@ case "$STAGE" in
 the gate would clear and the pipeline state you did not load would be the state
 you act on. Call \`Read ${SNAP_REL}\` again with no \`limit\` and no \`offset\`;
 that call is available to you now."
+    fi
+    # THE DIGEST READ IS ALLOWED WITHOUT ADVANCING (BL-658). The injected block asks for it, and a
+    # lead that issues the three Reads in parallel can have this call's hook run before the
+    # snapshot call's stage write. Matched on the two paths `digest_readable` checks, never a
+    # basename; a bounded Read of it falls through to the deny. Writes nothing.
+    if [ "$TOOL" = "Read" ] && [ -n "$FABS" ] && is_full_read \
+       && { [ "$FABS" = "${PROJECT_DIR}/.claude/skills/ai-dlc/postcompact-digest.md" ] \
+            || [ "$FABS" = "${PROJECT_DIR}/core/skills/ai-dlc/postcompact-digest.md" ]; }; then
+      exit 0
     fi
     deny "AI/DLC post-compact recovery: your FIRST tool call must be \`Read ${SNAP_REL}\` in full. This conversation was compacted and the summary is not the authoritative pipeline state." \
 "The snapshot is a verbatim-load file and the Read is the attention interrupt that
@@ -469,6 +478,12 @@ started and abandoned partway on the judgment that the remainder was duplicative
     # call this gate just demanded. Allow it without advancing, so a lead that reads it twice
     # is not punished for the harness replaying a call.
     if [ "$TOOL" = "Read" ] && [ -n "$FABS" ] && [ "$FABS" = "$SNAP_ABS" ]; then
+      exit 0
+    fi
+    # The digest Read, as in the snapshot arm (BL-658): allowed in full, without advancing.
+    if [ "$TOOL" = "Read" ] && [ -n "$FABS" ] && is_full_read \
+       && { [ "$FABS" = "${PROJECT_DIR}/.claude/skills/ai-dlc/postcompact-digest.md" ] \
+            || [ "$FABS" = "${PROJECT_DIR}/core/skills/ai-dlc/postcompact-digest.md" ]; }; then
       exit 0
     fi
     deny "AI/DLC post-compact recovery: your SECOND tool call must be \`Read ${STEP_REL}\` in full. Compaction cleared the harness's record of every file previously read, so the step file is not loaded no matter how recently you read it." \

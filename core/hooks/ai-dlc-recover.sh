@@ -701,6 +701,10 @@ rm -f "${STATE_DIR}/.recover-satisfied" 2>/dev/null || true
 # The gate's advisor stage (touchpoint R) is per recovery for the same reason: a window left
 # open by a session that ended inside it must not hold the next recovery's calls.
 rm -f "${STATE_DIR}/.recover-advisor-owed" 2>/dev/null || true
+# The gate's read stage is per recovery too (BL-684): a `step` left by a session that ended
+# between the two mandated Reads would start this recovery past the snapshot mandate. The
+# `.<pid>` leftovers are temp files from a stage write killed before its rename.
+rm -f "${STATE_DIR}/.recover-gate-progress" "${STATE_DIR}"/.recover-gate-progress.* 2>/dev/null || true
 
 # The string measured above is the string emitted: the provenance wrap ran once, before the
 # budget, and EMITTED is its head and tail around the trimmed block.
