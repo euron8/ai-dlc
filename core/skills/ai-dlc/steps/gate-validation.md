@@ -3300,7 +3300,7 @@ result is written by the audit itself to a tracked record a script check reads.
 
 Run `scripts/ai-dlc/check-owed-derivations.sh` from the project root. **Any exit other than 0
 (1, 2, 126, 127 or anything else) DENIES the gate**: print every line it emitted and do not pass
-it. Exit 0 passes, and an absent record is exit 0.
+it. Exit 0 passes, and an absent record is exit 0. An absent record, or one with no OWED row, prints an `UNMEASURED:` line: it passes, and it means no reconcile has recorded what it owes, so the silence of a clean record is not being claimed. Print the line with the rest.
 
 The deny text states, in this order:
 1. Exit 1 prints one `OPEN` line per derivation an earlier pull left broken, in the CURRENT sprint's
