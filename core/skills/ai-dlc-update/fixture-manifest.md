@@ -200,6 +200,7 @@ core_manifest:
   - core/fixtures/self-update-gate-c/**
   - core/fixtures/self-update-gate-d/**
   - core/fixtures/self-update-reinvoke-liveness/**
+  - core/fixtures/dist-clone/**
   - core/fixtures/setup-config-drift/**
   - core/fixtures/shadowed-local-validators/**
   - core/fixtures/snapshot-evidence-cell/**

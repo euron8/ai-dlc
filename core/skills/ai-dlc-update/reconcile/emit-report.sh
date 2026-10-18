@@ -128,6 +128,9 @@
 # CONTENTS of a nested repository; a tracked symlink whose target lies outside the tree; diff
 # attributes from info/attributes, global or system attributes, and GIT_EXTERNAL_DIFF; and tool
 # versions. These are why the cache ships OFF by default.
+# (5) A dist that shares its ref store with active branches (a developer checkout, or any worktree
+# of one) moves refs between two verifies and never records, which is why the update skill reads
+# `<dist>` from the private main-only clone `dist-clone.sh` builds.
 set -uo pipefail
 
 MODE=print
