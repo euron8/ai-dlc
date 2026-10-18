@@ -81,7 +81,8 @@
 #                mtime), so a record from any other engine is refused in both directions;
 #   base/theirs  each one's commit object AND its `:core` tree, resolved in <dist>; the ref STRING is
 #                not the key, because a symbolic `origin/main` moves;
-#   distrefs     <dist>'s `for-each-ref` and whether it is shallow;
+#   distrefs     <dist>'s refs (`for-each-ref`, which lists refs/replace/* too), its HEAD, and
+#                whether it is shallow;
 #   consroot     `pwd -P` of <consumer>, because the region renders absolute consumer paths;
 #   consindex    `ls-files -s` (mode, blob, path: the exec bit and tracked-ness);
 #   conswork     `status --porcelain=v2 --untracked-files=all` plus the bytes of every modified or
@@ -102,6 +103,8 @@
 # fresh render for an operator who wants the detectors' own word. (2) `predicate-differential.sh`
 # runs validators with the consumer as cwd, so their read set is OPEN: an IGNORED file outside the
 # roots above that one of them reads is not keyed, and its change can leave a stale PASS accepted.
+# The same holds for the consumer's ledger `sh` receipts, which run with $DIST exported and can read
+# the dist's reflog or any other git state outside the key; `AI_DLC_VERIFY_NO_CACHE=1` re-renders.
 # (3) Tool availability (`jq`, `python3`, PATH) is not keyed: a render that passed with a tool
 # present is accepted after the tool is gone. The opt-out re-renders in every case.
 set -uo pipefail
@@ -1024,6 +1027,9 @@ er_kf_base()   { er_kf_ref "$BASE"; }
 er_kf_theirs() { er_kf_ref "$THEIRS"; }
 er_kf_distrefs() {
   git -C "$DIST" for-each-ref || return 1
+  # HEAD is not a ref for-each-ref lists, and retired-fixtures.sh's `git log --all` walks it: a
+  # detached HEAD on unreferenced commits moved the region with every listed ref unchanged.
+  git -C "$DIST" rev-parse HEAD || return 1
   git -C "$DIST" rev-parse --is-shallow-repository || return 1
 }
 er_kf_consroot()  { printf '%s\n' "$_er_root"; }
