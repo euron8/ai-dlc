@@ -239,11 +239,24 @@ ra_recorded() {
   [ "${#2}" -eq 64 ] || return 1
   case "$2" in *[!0-9a-f]*) return 1 ;; esac
   [ -n "$3" ] && [ -f "$1" ] || return 1
+  # The digest must stand alone: the characters either side of it are not hex, so a question
+  # quoting `ab<digest>cd` (a longer hex string that merely contains it) does not match. The
+  # answer's first body line must EQUAL the label, so `<label> -- no wait` does not re-approve.
   awk -v dg="$2" -v lb="$3" '
+    function alone(s, d,   i, a, b) {
+      i = index(s, d)
+      while (i > 0) {
+        a = (i == 1) ? "" : substr(s, i - 1, 1)
+        b = substr(s, i + length(d), 1)
+        if (a !~ /[0-9a-fA-F]/ && b !~ /[0-9a-fA-F]/) return 1
+        s = substr(s, i + 1); i = index(s, d)
+      }
+      return 0
+    }
     /^## / { inrec = ($0 ~ /^## [^ ]+ -- AskUserQuestion$/); q = 0; fence = 0; next }
-    inrec && index($0, "- Question") == 1 { if (index($0, dg) > 0) q = 1; next }
+    inrec && index($0, "- Question") == 1 { if (alone($0, dg)) q = 1; next }
     inrec && q && fence == 0 && $0 == "```text" { fence = 1; next }
-    inrec && q && fence == 1 { if (index($0, lb) == 1) found = 1; fence = 2; next }
+    inrec && q && fence == 1 { if ($0 == lb) found = 1; fence = 2; next }
     END { exit !found }' "$1"
 }
 
@@ -358,16 +371,24 @@ if [ "$FINISH" = 0 ]; then
       #             the only change is blockers it listed that step 7 then resolved.
       #   unseen>0  PROCEED only when the answers history holds a hook-written AskUserQuestion
       #             record whose Question line carries the FULL digest and whose answer body's first
-      #             line begins with the label. Otherwise REFUSE, printing the question and label to
+      #             line EQUALS the label. Otherwise REFUSE, printing the question and label to
       #             ask. An absent history file refuses. There is no bypass flag.
+      #   unseen=UNDECIDED (the count could not be computed) and digest=UNAVAILABLE (no sha256
+      #             tool) both REFUSE; neither is read as 0, and no unanswerable question is printed.
       # The digest binds the record to THIS region: the label alone is a per-label constant (the
       # hook hashes the answer, and every selection of one label hashes alike), and the question is
       # where the region is named.
       #
       # LIMITS, stated rather than implied. The Question line is lead-authored and no hash covers it,
       # so a session that writes the answers history by Bash instead of asking is not caught here.
-      # And after an apply has written the tree, --verify answers STAMP-MOVED (exit 1), not 3: the
-      # re-render that path needs still carries a re-approval that nothing records (reapply_remedy).
+      # A session that re-renders anyway is not caught either: the re-render makes --verify exit 0,
+      # and this gate then writes with no ask, exactly as on a first apply. After an apply has
+      # written the tree, --verify answers STAMP-MOVED (exit 1), not 3: the re-render that path
+      # needs still carries a re-approval that nothing records (reapply_remedy). And the history is
+      # read at <consumer>/_bmad-output/ ONLY, while the hook writes under $CLAUDE_PROJECT_DIR: a
+      # session run from another project (a scratch clone, the distribution) records its answer
+      # there and this gate refuses. That is fail-closed, and it is chosen: reading a second,
+      # environment-named path would let an exported variable decide which file re-approves.
       # The cause line is matched on its `cause:` label at any indent, and an absent line falls
       # back to naming the exit code rather than to an empty string: a prefix drift in --verify
       # must not silently delete the diagnosis from the refusal.
@@ -393,6 +414,8 @@ if [ "$FINISH" = 0 ]; then
         case "$_ra" in digest=*" unseen="*" label=\""*\") ;; *) _ra_ok=bad ;; esac
         if [ "$_ra_ok" = bad ]; then
           err "the report at ${UNION_REPORT#"${CONSUMER}"/} does not match what the detectors render at this run's theirs ($THEIRS), and --verify exited 3 (${_ug_cause}) without a readable 're-approval:' line, so whether the approval saw every row that renders now cannot be decided. Re-run apply with the same four arguments once emit-report.sh beside this script prints that line. Do not re-render the report. NOTHING HAS BEEN WRITTEN."
+        elif [ "$_ra_un" -ne 0 ] && [ "$_ra_dg" = UNAVAILABLE ]; then
+          err "the report at ${UNION_REPORT#"${CONSUMER}"/} does not match what the detectors render at this run's theirs ($THEIRS); --verify exited 3 (${_ug_cause}) and the region now renders ${_ra_un} finding row(s) the approval did not show, but the digest could not be computed (no sha256 tool: install shasum), so there is no region identity a re-approval could quote. Install shasum (or sha256sum) and re-run apply with the same four arguments. Do not re-render the report. NOTHING HAS BEEN WRITTEN."
         elif [ "$_ra_un" -eq 0 ]; then
           say NOTE blockers-resolved "${UNION_REPORT#"${CONSUMER}"/}" "union-gate condition (1), decided on --verify exit 3: ${_ug_cause} No finding renders that the approval did not show (unseen=0), so the approval covers this region and no re-approval is asked."
         elif ra_recorded "$_ra_hist" "$_ra_dg" "$_ra_lb"; then
@@ -402,7 +425,8 @@ if [ "$FINISH" = 0 ]; then
             echo "apply: RE-APPROVAL OWED. Ask the operator with AskUserQuestion, exactly:"
             echo "  question: ${_ra_q}"
             echo "  option label: ${_ra_lb}"
-            echo "  (any other options are yours to add; only an answer beginning with that label re-approves)"
+            echo "  (any other options are yours to add; only an answer that is exactly that label re-approves)"
+            echo "  (the answer must be recorded under ${_ra_hist}: ask from a session whose project is this consumer)"
             echo "  unseen rows it covers:"
             printf '%s\n' "$_ug_verr" | sed -n 's/^[[:space:]]*unseen: /    /p'
           } >&2

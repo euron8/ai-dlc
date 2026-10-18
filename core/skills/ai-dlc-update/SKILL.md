@@ -1782,7 +1782,7 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    the `re-approval:` line. With `unseen=0` it proceeds and records a `NOTE blockers-resolved` row:
    the approval saw a superset of what renders now. With `unseen>0` it proceeds only when
    `_bmad-output/operator-answers-history.md` holds an AskUserQuestion record whose question
-   carries that full digest and whose answer begins with that label; otherwise it refuses, writes
+   carries that full digest and whose answer is exactly that label; otherwise it refuses, writes
    nothing, and prints the question, the option label and the `unseen:` rows. Ask that question
    with AskUserQuestion, offering that label as an option, then re-run `apply.sh` with the same
    four arguments. A typed operator message is not that ask, and an approval of something else

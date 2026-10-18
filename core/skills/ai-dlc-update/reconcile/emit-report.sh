@@ -1402,7 +1402,13 @@ if [ "$want" = "$got" ]; then
   exit 0
 fi
 echo "FAIL: the report's 'reconcile-mechanical' region is STALE or HAND-EDITED — it does not match" >&2
-echo "  what the detectors render now. Re-render with emit-report.sh and re-emit the report." >&2
+# THE SECOND HEADER LINE IS PRINTED BY THE CAUSE BRANCH BELOW, not here. Its generic remedy is a
+# re-render, and on BLOCKERS-RESOLVED a re-render is the one thing that must NOT happen: it erases
+# the approved region apply.sh decides the re-approval against. Printed here, it reached the
+# operator as line 2 of apply.sh's RE-APPROVAL OWED refusal, twenty lines above "Do NOT re-render".
+# Nothing between this line and the cause branch writes stderr, so every other cause prints the
+# same bytes in the same order as when the line sat here.
+er_hdr2() { echo "  what the detectors render now. Re-render with emit-report.sh and re-emit the report." >&2; }
 # --- THE MISMATCH IS DECIDED, NOT ONLY REPORTED ------------------------------------------------
 # A region goes stale for three reasons, and only one of them is the unsafe direction this gate
 # exists for. (a) Upstream moved after the render: the `_theirs_` tree or `VERSION` line differs,
@@ -1488,31 +1494,50 @@ new_rows="$(printf '%s\n' "$only_render"  | hard_rows)"
 hard_gone="$(printf '%s\n' "$gone_rows" | grep -c '^HARD-')" || hard_gone=0
 hard_new="$(printf '%s\n' "$new_rows"   | grep -c '^HARD-')" || hard_new=0
 # Non-HARD lines the render carries and the approval never saw. Counted, never acquitted — and
-# the LIST is the authority, the count is advisory. A resolution replaces a HARD row with a
+# the count DECIDES: apply.sh proceeds on `unseen=0` with no question asked, so a count that
+# could not be computed must never read as 0. A resolution replaces a HARD row with a
 # section's affirmative-empty text (`none`, `0 HARD blockers.`), or with an `-OK` row, or moves a
 # `**section**` header into the diff; measured, a plain resolution and one hiding a real finding
 # both counted 2 until those were excluded, because the finding REPLACED `none` rather than
 # adding to it. So the boilerplate shapes are left out of the count and kept in the list.
 unseen_rows() { grep -Ev '^HARD-|^DETECTOR-REFUSED|^$|^none$|^0 HARD blockers\.$|^\*\*|^[A-Z][A-Z-]*-OK([[:space:]]|$)|^<!--|^_(base|theirs|stamp)_ |: none$'; }
-other_new="$(printf '%s\n' "$only_render" | unseen_rows | grep -c .)" || other_new=0
+# STAGED, WITH THE FILTER'S STATUS READ. As `… | unseen_rows | grep -c .` with `|| other_new=0` it
+# failed OPEN: measured with the filter's grep shimmed to exit 2, the count read 0, --verify
+# printed unseen=0, and apply.sh wrote with no question asked. grep -Ev answers 0 (rows kept) or 1
+# (none kept); 2 or more is a failure, and so is a staging or count fault. Any failure prints
+# `unseen=UNDECIDED`, which apply.sh refuses as non-numeric. The `unseen:` list below reads the
+# same staged output, so the list and the count cannot disagree.
+other_new=UNDECIDED
+if [ -n "$_er_tmp" ] && er_stage unseen.in "$only_render" 2>/dev/null; then
+  unseen_rows < "$_er_tmp/unseen.in" > "$_er_tmp/unseen.out"; _un_rc=$?
+  if [ "$_un_rc" -le 1 ]; then
+    _un_n="$(grep -c . "$_er_tmp/unseen.out")"; _un_c=$?
+    [ "$_un_c" -le 1 ] && other_new="$_un_n"
+  fi
+fi
+case "$other_new" in ''|*[!0-9]*) other_new=UNDECIDED ;; esac
 # A detector that REFUSED on this render is a HARD row's absence with no one to vouch for it: the
 # rows it would have rendered are simply not there, which is exactly what (c) keys on. A new
 # DETECTOR-REFUSED line therefore blocks (c) the way a new HARD row does.
 refused_new="$(printf '%s\n' "$only_render" | grep -c '^DETECTOR-REFUSED')" || refused_new=0
 if [ "$refs_render" != "$refs_report" ]; then
   cause=UPSTREAM-MOVED
+  er_hdr2
   echo "  cause: UPSTREAM-MOVED — the region was rendered for a different range or a different core/ tree than this run's theirs; every other line is incomparable." >&2
 elif [ "$stamp_render" != "$stamp_report" ]; then
   cause=STAMP-MOVED
+  er_hdr2
   echo "  cause: STAMP-MOVED — the consumer's stamp (.claude/.ai-dlc-version commit:) changed since this report was rendered: an apply of this range already moved this tree (apply.sh decides that case from the stamp), or the stamp was edited by hand. The region is not comparable until the base is re-derived from the stamp as it now stands; re-run the dry run rather than re-approving this report. Beside the stamp, the fresh render carries ${hard_new} HARD-* row(s) the approved region lacks and lacks ${hard_gone} it carries." >&2
 elif [ -n "$er_sets_why" ]; then
   cause=UNDECIDED
+  er_hdr2
   echo "  cause: UNDECIDED — the region does not match, but which rows differ could not be computed (${er_sets_why}), so no HARD-* row can be called resolved or new. Re-run --verify once the fault is gone; do not re-approve on this run's reading." >&2
 elif [ "$hard_gone" -gt 0 ] && [ "$hard_new" -eq 0 ] && [ "$refused_new" -eq 0 ]; then
   cause=BLOCKERS-RESOLVED
+  echo "  what the detectors render now. Do NOT re-render or re-emit the report to clear this: the cause and the re-approval: line below are what apply.sh decides it from." >&2
   echo "  cause: BLOCKERS-RESOLVED — ${hard_gone} HARD-* row(s) in the approved region no longer render, no HARD-* row is new, and the refs are unchanged: the blockers were resolved after this report was rendered (or the report carries a HARD row that never rendered; either way the approval saw more than exists). The fresh render carries ${other_new} finding row(s) the approval has not seen (listed below as unseen:, boilerplate excluded). Do NOT re-render the report to clear this: apply.sh decides it from the re-approval: line below — with unseen=0 it proceeds, the approval having seen a superset of what renders now; with unseen>0 it refuses until the operator's re-approval quoting that digest is on record." >&2
   printf '%s\n' "$gone_rows" | sed 's/^/    resolved: /' >&2
-  [ "$other_new" -gt 0 ] && printf '%s\n' "$only_render" | unseen_rows | sed 's/^/    unseen: /' >&2
+  case "$other_new" in UNDECIDED|0) ;; *) sed 's/^/    unseen: /' "$_er_tmp/unseen.out" >&2 ;; esac
   # THE RE-APPROVAL LINE, PRINTED FOR THIS CAUSE ONLY. SKILL.md step 7 used to say: resolve the
   # blockers, re-render the region, verify to 0, have the operator re-approve it, then apply. The
   # last clause had no reader. Measured on the reference consumer, twice: a session re-rendered,
@@ -1525,7 +1550,8 @@ elif [ "$hard_gone" -gt 0 ] && [ "$hard_new" -eq 0 ] && [ "$refused_new" -eq 0 ]
   #           raw region carries the dist path, and a scratch clone and a normal checkout would
   #           then ask for two different re-approvals of one region.
   #   unseen  `other_new` above, the same count the cause line prints. 0 means the approval saw a
-  #           superset of what renders now, and apply.sh proceeds with no question.
+  #           superset of what renders now, and apply.sh proceeds with no question. UNDECIDED
+  #           means the count could not be computed, and apply.sh refuses.
   #   label   the option label the operator selects. This line is its ONE source; apply.sh and
   #           SKILL.md quote it from here.
   # A digest that cannot be computed prints UNAVAILABLE rather than an empty field, so a sandbox
@@ -1537,6 +1563,7 @@ elif [ "$hard_gone" -gt 0 ] && [ "$hard_new" -eq 0 ] && [ "$refused_new" -eq 0 ]
   echo "  re-approval: digest=${_ra_dg} unseen=${other_new} label=\"Re-approve ${_ra_dg:0:12}, run apply\"" >&2
 else
   cause=UNDECIDED
+  er_hdr2
   echo "  cause: UNDECIDED — the fresh render carries ${hard_new} HARD-* row(s) and ${refused_new} DETECTOR-REFUSED line(s) the approved region lacks (a finding the approval never saw, or a detector that did not run), or the difference is outside the blocking list. Read the diff." >&2
 fi
 echo "  Diff (want vs report):" >&2

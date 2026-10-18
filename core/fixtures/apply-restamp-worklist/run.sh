@@ -537,6 +537,8 @@ ra_world() {
     right)      ra_answer "$c" "Re-approve the reconcile report? Region digest ${dg}." "$lb" ;;
     wrongdg)    ra_answer "$c" "Re-approve the reconcile report? Region digest ${wrong}." "$lb" ;;
     wronglabel) ra_answer "$c" "Re-approve the reconcile report? Region digest ${dg}." "Not yet, keep the report" ;;
+    embedded)   ra_answer "$c" "Re-approve the reconcile report? Region digest ab${dg}cd." "$lb" ;;
+    labelplus)  ra_answer "$c" "Re-approve the reconcile report? Region digest ${dg}." "$lb -- no wait" ;;
     pause)      ra_answer "$c" "Re-approve the reconcile report? Region digest ${dg}." "$lb" \
                   && py_replace_once "$c/_bmad-output/operator-answers-history.md" " -- AskUserQuestion
 " " -- USER_PAUSE
@@ -561,6 +563,31 @@ ra_drive() {
   ra_world "$c" "$3" "$4" || { echo "BROKEN"; return; }
   ra_score "$1" "$c"
   cp "$c/ra-stderr.txt" "$WORK/ra-$2.stderr" 2>/dev/null
+}
+# ra_shim <dir> <grep|sha> -> a PATH directory whose one tool FAILS where the arm needs it to.
+#   grep  exits 2 when its pattern is unseen_rows()'s (the only caller passing `0 HARD blockers`),
+#         and runs the real grep otherwise -- the count's filter fails, nothing else does.
+#   sha   shasum and sha256sum both exit 1, so --verify can compute no digest.
+RA_REAL_GREP="$(command -v grep)"
+ra_shim() {
+  mkdir -p "$1" || return 1
+  case "$2" in
+    grep) printf '#!/bin/bash\nfor a in "$@"; do case "$a" in *"0 HARD blockers"*) exit 2 ;; esac; done\nexec %s "$@"\n' "$RA_REAL_GREP" > "$1/grep" ;;
+    sha)  printf '#!/bin/bash\nexit 1\n' > "$1/shasum"; printf '#!/bin/bash\nexit 1\n' > "$1/sha256sum"; chmod +x "$1/sha256sum" ;;
+  esac
+  chmod +x "$1"/*
+}
+# ra_drive_shim <tag> <grep|sha> -> "<ra_score cell>|<the re-approval line under the shim>"
+ra_drive_shim() {
+  local c="$WORK/ra-$1-$$-$RANDOM" s="$WORK/ra-shim-$1" out rc l
+  u5_build "$c" unseen || { echo "BROKEN"; return; }
+  ra_shim "$s" "$2" || { echo "BROKEN"; return; }
+  l="$(PATH="$s:$PATH" bash "$EMIT" --verify "$c/_bmad-output/ai-dlc-update/reconcile-report.md" "$DIST" "$BASE" "$c" "$THEIRS" 2>&1 >/dev/null)"
+  l="$(sed -n 's/^[[:space:]]*re-approval: //p' <<< "$l")"
+  out="$(PATH="$s:$PATH" bash "$APPLY" "$DIST" "$BASE" "$c" "$THEIRS" 2>"$WORK/ra-$1.stderr")"; rc=$?
+  printf '%s|%s|%s|%s|%s\n' "$rc" "$(stamp_ver "$c")" \
+    "$(grep -q 'UPSTREAM' "$c/$DRIVER_REL" && echo WRITTEN || echo UNWRITTEN)" \
+    "$(has_row "$out" NOTE blockers-resolved && echo NOTE || echo -)" "$l"
 }
 
 # Each is a COPY of the whole reconcile directory — apply.sh `eval`s map_consumer() out of its
@@ -1096,6 +1123,42 @@ else
   else
     bad "RA1 the refusal did not print the question and option label — a session cannot recover without composing the label itself"
   fi
+  # RA1-R: the forwarded --verify stderr carries NO re-render instruction. The mismatch header's
+  # generic "Re-render with emit-report.sh and re-emit the report." used to be line 2 of this
+  # refusal, twenty lines above "Do NOT re-render". A present `Do NOT re-render` is the positive half.
+  if [ -s "$WORK/ra-a1.stderr" ] && ! grep -qF 'Re-render with emit-report.sh' "$WORK/ra-a1.stderr" \
+     && grep -qF 'Do NOT re-render' "$WORK/ra-a1.stderr"; then
+    ok "RA1-R the exit-3 refusal carries no 'Re-render with emit-report.sh' line, only 'Do NOT re-render'"
+  else
+    bad "RA1-R the exit-3 refusal still tells the session to re-render, or says nothing either way — the evidence-destroying path is offered in the same message that forbids it"
+  fi
+  # RA6/RA7: the digest must stand alone and the answer must EQUAL the label.
+  RA6="$(ra_drive "$APPLY" a6 unseen embedded)"
+  RA7="$(ra_drive "$APPLY" a7 unseen labelplus)"
+  [ "$RA6" = "$RA_STOP" ] && ok "RA6 a question quoting the digest inside a longer hex run (ab<digest>cd) refuses" \
+                          || bad "RA6 an embedded digest passed ($RA6, want $RA_STOP) — a different, longer hash re-approves this region"
+  [ "$RA7" = "$RA_STOP" ] && ok "RA7 an answer that starts with the label and goes on ('<label> -- no wait') refuses" \
+                          || bad "RA7 a label-prefixed answer passed ($RA7, want $RA_STOP) — a retraction typed after the label re-approves"
+  # RA8: the unseen count's filter FAILS (grep exit 2 on unseen_rows' own pattern). The count must
+  # read UNDECIDED, never 0, and apply must refuse with the target unwritten. Before the fix it read
+  # 0 and apply wrote with no ask.
+  RA8="$(ra_drive_shim a8 grep)"
+  case "$RA8" in
+    "$RA_STOP|digest="*" unseen=UNDECIDED label="*) ok "RA8 a failing unseen filter prints unseen=UNDECIDED and the apply refuses, the target file unwritten" ;;
+    *) bad "RA8 a failing unseen filter scored [$RA8], want $RA_STOP with unseen=UNDECIDED — the count fails open and a region nobody re-approved is written" ;;
+  esac
+  # RA9: no sha256 tool. digest=UNAVAILABLE with unseen>0 refuses naming the missing tool, and
+  # prints no question that could never be answered.
+  RA9="$(ra_drive_shim a9 sha)"
+  case "$RA9" in
+    "$RA_STOP|digest=UNAVAILABLE unseen=1 "*)
+      if grep -qF 'no sha256 tool: install shasum' "$WORK/ra-a9.stderr" && ! grep -qF 'RE-APPROVAL OWED' "$WORK/ra-a9.stderr"; then
+        ok "RA9 with no sha256 tool the digest is UNAVAILABLE and the apply refuses naming shasum, printing no unanswerable question"
+      else
+        bad "RA9 the refusal did not name the missing tool, or still printed a question quoting UNAVAILABLE"
+      fi ;;
+    *) bad "RA9 with no sha256 tool scored [$RA9], want $RA_STOP with digest=UNAVAILABLE unseen=1" ;;
+  esac
 fi
 
 # --- RA-X: --verify's exit 0 and exit 1 print no re-approval line ------------------------------
@@ -1106,9 +1169,11 @@ RX0_O="$(bash "$EMIT" --verify "$c/_bmad-output/ai-dlc-update/reconcile-report.m
 c1="$WORK/ra-x1-$$"; mk_consumer "$c1" green >/dev/null 2>&1; mk_report "$c1" "$BASE"
 bash "$EMIT" --verify "$c1/_bmad-output/ai-dlc-update/reconcile-report.md" "$DIST" "$BASE" "$c1" "$THEIRS" >/dev/null 2>"$c1/x1.err"; RX1=$?
 RX1_N="$(grep -c 're-approval:' "$c1/x1.err")" || RX1_N=0
+# The generic re-render line moved into the non-exit-3 cause branches; exit 1 must still print it.
+grep -qF 'Re-render with emit-report.sh and re-emit the report.' "$c1/x1.err" || RX1_N=missing-rerender-line
 RX1_C="$(grep -c '^  cause: ' "$c1/x1.err")" || RX1_C=0
 if [ "$RX0" -eq 0 ] && [ "$RX0_O" = "emit-report: the report's mechanical region is present, current, and complete." ] && [ ! -s "$c/x0.err" ] \
-   && [ "$RX1" -eq 1 ] && [ "$RX1_C" -eq 1 ] && [ "$RX1_N" -eq 0 ]; then
+   && [ "$RX1" -eq 1 ] && [ "$RX1_C" -eq 1 ] && [ "$RX1_N" = 0 ]; then
   ok "RA-X --verify exit 0 prints exactly its one success line and nothing on stderr, and exit 1 prints its cause line and no re-approval line"
 else
   bad "RA-X exit-0/exit-1 output moved (rc0=$RX0 out=[$RX0_O] err-bytes=$(wc -c < "$c/x0.err" | tr -d ' '); rc1=$RX1 cause-lines=$RX1_C re-approval-lines=$RX1_N)"
@@ -1484,8 +1549,8 @@ fi
 #
 # AND THE MESSAGE CONJUNCT IS KEYED ON THE REMEDY, NOT ON THE WORD `BLOCKERS-RESOLVED`. The
 # generic refusal quotes --verify's own `cause:` line, which carries that word too, so an arm
-# demanding only the word survives A1 and proves nothing. `re-render the region with
-# emit-report.sh <the four arguments>` is emitted by this branch alone.
+# demanding only the word survives A1 and proves nothing. `apply: RE-APPROVAL OWED.` is printed
+# by this branch alone (u5_score's REMEDY field).
 if sed 's/^      elif \[ "$_ug_rc" -eq 3 \]; then$/      elif [ 1 -eq 0 ]; then/' "$REC/apply.sh" \
    | mut_apply "$WORK/a1"; then
   A1="$(u5_score "$WORK/a1/apply.sh")"
@@ -1577,7 +1642,7 @@ else
   else
     bad "MR1 did not apply — the exit-3 branch no longer reads \`elif ra_recorded \"\$_ra_hist\" \"\$_ra_dg\" \"\$_ra_lb\"; then\` exactly once. Re-anchor it."
   fi
-  if ra_mut "$WORK/mr2" '{ if (index($0, dg) > 0) q = 1; next }' '{ q = 1; next }'; then
+  if ra_mut "$WORK/mr2" '{ if (alone($0, dg)) q = 1; next }' '{ q = 1; next }'; then
     M2_3="$(ra_drive "$WORK/mr2/apply.sh" m2a3 unseen wrongdg)"
     M2_4="$(ra_drive "$WORK/mr2/apply.sh" m2a4 unseen wronglabel)"
     M2_5="$(ra_drive "$WORK/mr2/apply.sh" m2a5 unseen pause)"
@@ -1588,7 +1653,7 @@ else
       bad "MR2 scored RA3=[$M2_3] RA4=[$M2_4] RA5=[$M2_5] RA2=[$M2_2], want RA3=$RA_GO, RA4=RA5=$RA_STOP, RA2=$RA_GO"
     fi
   else
-    bad "MR2 did not apply — ra_recorded no longer carries \`{ if (index(\$0, dg) > 0) q = 1; next }\` exactly once. Re-anchor it."
+    bad "MR2 did not apply — ra_recorded no longer carries \`{ if (alone(\$0, dg)) q = 1; next }\` exactly once. Re-anchor it."
   fi
 fi
 
