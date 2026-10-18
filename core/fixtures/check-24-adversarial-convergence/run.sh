@@ -553,12 +553,35 @@ expect cdiv-verified-unresolved 1 "the divergence was walked past -- FAIL (C)" s
 expect cdiv-verified-invalid    1 "the record does not resolve it -- FAIL (C, F)" s1-adversarial-p
 expect_says cdiv-verified-invalid s1-adversarial-p "cdiv-invalid-names-defect" \
   "C -- DIVERGENCE" "F -- RESOLUTION" "did not shrink"
+# The terminal branch's own error. Arm D fires on these series too, so the exit code alone
+# cannot see arm C go silent there -- only the arm's name can.
+expect_says cdiv-terminal-resolved s1-adversarial-p "cdiv-terminal-names-C" "C -- DIVERGENCE"
 
 # --- MUTATIONS: each branch of the arm-C resolution block is load-bearing --------
 # Built with an EXACT-ONCE replace: an anchor that occurs zero times or twice refuses (exit 3)
 # rather than silently mutating nothing or the wrong site. The terminal lookup is spelled on
 # `ci` precisely so its anchor is not arm F's `"$i"` line. Each mutant must move its NAMED case
 # and leave both controls where the shipped validator puts them, or it is not attributable.
+#
+# THE MUTANTS LIVE BESIDE THE STEERING VALIDATOR. Outside --cycle-state a record's citation is
+# checked by `validate-steering-budget.sh` resolved beside $0; a mutant without it fails every
+# record for that reason alone, so a GATE row would read 1 whether or not the mutation applied.
+# The unmutated control in the same directory must reproduce the shipped gate first.
+CDIV_DIR="$ROOT/mut-cdiv"; mkdir -p "$CDIV_DIR"
+cp "$(dirname "$VALIDATOR")/validate-steering-budget.sh" "$CDIV_DIR/" 2>/dev/null
+cp "$VALIDATOR" "$CDIV_DIR/control.sh"
+cdiv_gate() {  # $1 validator  $2 case -> the gate's exit code
+  bash "$1" --series "$ROOT/$2/s1-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" >/dev/null 2>&1
+  printf '%s' "$?"
+}
+ASSERTIONS=$((ASSERTIONS + 1))
+cdiv_ctl="$(cdiv_gate "$CDIV_DIR/control.sh" cdiv-verified)"
+if [ -f "$CDIV_DIR/validate-steering-budget.sh" ] && [ "$cdiv_ctl" = "0" ]; then
+  printf '  ok    %-28s gate=0  (the unmutated copy in the mutant dir passes the verified series)\n' "MUTATION cdiv-control"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-28s gate=%s on cdiv-verified, want 0 -- a gate row on a mutant here proves nothing\n' "MUTATION cdiv-control" "$cdiv_ctl"
+fi
 cdiv_mutant() {  # $1 out  (MUT_OLD / MUT_NEW in the env) -> python's exit status
   python3 -c '
 import os, sys
@@ -597,23 +620,22 @@ cdiv_build() {  # $1 label  $2 out -> 0 if built and different
 }
 
 # M1: drop the terminal lookup. cdiv-terminal-resolved re-deadlocks; the two without a valid record were never RESOLVED.
-MUT="$ROOT/mutant-cdiv-terminal.sh"
+MUT="$CDIV_DIR/mutant-cdiv-terminal.sh"
 MUT_OLD='    terminal_record_resolves "$ci" && RESOLVED_TERMINAL=1' MUT_NEW='    :' \
   cdiv_build "MUTATION cdiv-terminal" "$MUT" \
   && cdiv_score "MUTATION cdiv-terminal" "$MUT" "DIVERGENT/3 DIVERGENT/3 DIVERGENT/3" \
        cdiv-terminal-resolved cdiv-terminal cdiv-record-invalid
 
 # M2: the non-terminal branch never resolves. cdiv-verified re-latches -- the defect after the verification pass.
-MUT="$ROOT/mutant-cdiv-never.sh"
+MUT="$CDIV_DIR/mutant-cdiv-never.sh"
 MUT_OLD='      if validate_record "$cdiv_rec" "${P_FILE[$ci]}" "$ci"; then' MUT_NEW='      if false; then' \
   cdiv_build "MUTATION cdiv-never-resolves" "$MUT" \
   && cdiv_score "MUTATION cdiv-never-resolves" "$MUT" "DIVERGENT/3 DIVERGENT/3 DIVERGENT/3" \
        cdiv-verified cdiv-verified-unresolved cdiv-verified-invalid \
   && {
     ASSERTIONS=$((ASSERTIONS + 1))
-    bash "$MUT" --series "$ROOT/cdiv-verified/s1-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" >/dev/null 2>&1
-    m_gate=$?
-    if [ "$m_gate" -eq 1 ]; then
+    m_gate="$(cdiv_gate "$MUT" cdiv-verified)"
+    if [ "$m_gate" = "1" ]; then
       printf '  ok    %-28s gate=1  (and the GATE refuses the verified series again)\n' "MUTATION cdiv-never-resolves"
     else
       FAILURES=$((FAILURES + 1))
@@ -623,11 +645,37 @@ MUT_OLD='      if validate_record "$cdiv_rec" "${P_FILE[$ci]}" "$ci"; then' MUT_
 
 # M3: the non-terminal branch resolves on ANY declared record. cdiv-verified-invalid escapes;
 # cdiv-verified was already clear and cdiv-verified-unresolved declares nothing.
-MUT="$ROOT/mutant-cdiv-always.sh"
+MUT="$CDIV_DIR/mutant-cdiv-always.sh"
 MUT_OLD='      if validate_record "$cdiv_rec" "${P_FILE[$ci]}" "$ci"; then' MUT_NEW='      if true; then' \
   cdiv_build "MUTATION cdiv-always-resolves" "$MUT" \
   && cdiv_score "MUTATION cdiv-always-resolves" "$MUT" "CONVERGED/0 CONVERGED/0 DIVERGENT/3" \
        cdiv-verified-invalid cdiv-verified cdiv-verified-unresolved
+
+# M4: the terminal branch stops RAISING arm C. Every state and exit is unchanged, because arm D
+# fails the same series -- so only the named arm can see it. cdiv-terminal-resolved loses its
+# `C -- DIVERGENCE` line; the non-terminal cdiv-verified-unresolved keeps its own.
+MUT="$CDIV_DIR/mutant-cdiv-terminal-silent.sh"
+MUT_OLD='    err "C -- DIVERGENCE" "${P_CDIV_MSG[$ci]}"
+    C_DIVERGED=1
+    terminal_record_resolves' MUT_NEW='    :
+    C_DIVERGED=1
+    terminal_record_resolves' \
+  cdiv_build "MUTATION cdiv-terminal-silent" "$MUT" \
+  && {
+    ASSERTIONS=$((ASSERTIONS + 1))
+    # The output is captured BEFORE it is counted: the validator exits 1 on both series, and a
+    # pipeline's `|| m=0` would read that exit as zero matches under pipefail.
+    m_out="$(bash "$MUT" --series "$ROOT/cdiv-terminal-resolved/s1-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"
+    m_t="$(grep -c 'C -- DIVERGENCE' <<<"$m_out")" || m_t=0
+    m_out="$(bash "$MUT" --series "$ROOT/cdiv-verified-unresolved/s1-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"
+    m_u="$(grep -c 'C -- DIVERGENCE' <<<"$m_out")" || m_u=0
+    if [ "$m_t" = "0" ] && [ "$m_u" != "0" ]; then
+      printf '  ok    %-28s terminal C lines=0, non-terminal=%s  (the terminal error is pinned by name)\n' "MUTATION cdiv-terminal-silent" "$m_u"
+    else
+      FAILURES=$((FAILURES + 1))
+      printf '  FAIL  %-28s terminal C lines=%s want 0, non-terminal=%s want >0\n' "MUTATION cdiv-terminal-silent" "$m_t" "$m_u"
+    fi
+  }
 
 # --- the citation must OUTLIVE the session that wrote it ------------------------
 # `stalled-resolved`'s operator adjudication lives in `prior-session-transcript.jsonl`,
