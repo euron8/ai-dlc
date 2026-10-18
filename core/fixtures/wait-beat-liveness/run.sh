@@ -981,19 +981,19 @@ M17_fence_closes_on_any_run() {
 }
 
 M18_settle_is_poll() {
-  # D1's defect restored: the window read from POLL, not SETTLE. With POLL=1 and SETTLE=10 a file
-  # changing every 4s settles under POLL and never under SETTLE. The settle test is STRICTLY greater
-  # over whole-second stamps, so a POLL window needs at least 2 quiet seconds between two polls:
-  # edits 2-2.5s apart left the mutant that by a hair, and it missed both unloaded and under a gate.
-  # 4s gaps give it 3 polls per gap; 10s keeps the subject 6s clear of any gap load can stretch; the
-  # edits outlast the 12s beat, so the subject never sees a quiet window at all.
+  # D1's defect restored: the window read from POLL, not SETTLE. This arm tests that settle age is
+  # compared against SETTLE, not against POLL -- and nothing else, so it needs no writer. A static
+  # marked file, SETTLE=600, POLL=1, a 5s beat with no margin: the sweep records the settle epoch
+  # t0, and the deadline is an EPOCH (t0 + 4 or later), so the post-deadline re-check (wfd's
+  # "is_delivered" after the poll loop) runs at least 4 whole seconds after t0 however long load
+  # stretches any step. The mutant (age > POLL=1) therefore always delivers -- in the loop or at
+  # that re-check -- and the subject (age > 600) never does. The old arm raced a writer editing
+  # every 4s against the poll cadence, and a stretched poll left the mutant no quiet window (BL-703).
   mutant settle-is-poll -e 's@-gt "\$SETTLE" \] && return 0@-gt "$POLL" ] \&\& return 0@' || return
   W="$(mk_work)"
   printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W/slow.md"
-  ( for i in 1 2 3 4 5; do sleep 4; printf '%s\n- slow edit %d\n%s\n' "$SKELETON" "$i" "$MARKER" > "$W/slow.md"; done ) &
-  sp_=$!
   for s in "$SUBJ" "$MUT"; do
-    ( cd "$W" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=12 AI_DLC_WAIT_SETTLE_SECS=10 \
+    ( cd "$W" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=5 AI_DLC_WAIT_SETTLE_SECS=600 \
         AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_MAX_WAIT_BEATS=3 \
         AI_DLC_STATE_DIR="_bmad-output/$(basename "$s")" AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
         AI_DLC_PROJECT_ROOT="$PWD" bash "$s" --since "$(( $(date +%s) - 30 ))" --complete slow.md ) > "$BEATOUT.$(basename "$s")" 2>&1 &
@@ -1002,9 +1002,8 @@ M18_settle_is_poll() {
   OUT="$(cat "$BEATOUT.$(basename "$SUBJ")")"; o_s="$OUT"
   OUT="$(cat "$BEATOUT.$(basename "$MUT")")"
   if has "DELIVERED slow.md" && case "$o_s" in *"DELIVERED slow.md"*) false ;; *) true ;; esac; then
-    ok "MUTANT settle-is-poll: edits 4s apart deliver under a POLL window and not under SETTLE=10 — the window is SETTLE's"
+    ok "MUTANT settle-is-poll: a static marked file delivers under a POLL window and not under SETTLE=600 — the window is SETTLE's"
   else bad "MUTANT settle-is-poll: the settle window does not separate SETTLE from POLL (subject: $o_s) (mutant: $OUT)"; fi
-  wait "$sp_" 2>/dev/null
   rm -rf "$W"
 }
 
@@ -1241,9 +1240,10 @@ scall() {  # $1=subject $2=workdir ; rest = argv after --status. CB_SETTLE honou
 }
 # A beat in its OWN parent shell, so a second beat in one case sleeps instead of returning as a
 # chained sibling. The trailing `exit $?` stops bash exec-ing the subject in place of the wrapper.
+# OB_PATH, when set, is the beat's PATH (the gated sleep stub, section 16); unset, the fixture's own.
 obeat() {  # $1=subject $2=workdir $3=outfile $4=beat secs $5=settle secs $6=since ; rest = argv
   ob_subj="$1" ob_w="$2" ob_o="$3" ob_b="$4" ob_st="$5" ob_si="$6"; shift 6
-  ( cd "$ob_w" && env -u CLAUDE_CODE_SESSION_ID \
+  ( cd "$ob_w" && env -u CLAUDE_CODE_SESSION_ID PATH="${OB_PATH:-$PATH}" \
         AI_DLC_WAIT_BEAT_SECS="$ob_b" AI_DLC_WAIT_SETTLE_SECS="$ob_st" \
         AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_MAX_WAIT_BEATS=6 \
         AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
@@ -1394,13 +1394,92 @@ M34_status_no_delivered_record() {
     *) ok "MUTANT status-no-delivered-record: without the record a consumed seat reads unarmed or UNSETTLED — section 15d catches it" ;; esac
 }
 
+# ---------------------------------------------------------------------------
+# THE GATED SLEEP STUB (BL-703). An arm that must place a fixture event BETWEEN two steps of a
+# beat cannot do it with a wall-clock `( sleep 1.5; edit ) &`: load stretches the beat's steps and
+# the edit lands before the first observation or after the beat gave up. The only executable
+# `sleep` in the subject is its poll sleep, so a `sleep` first on the beat's PATH is an EVENT the
+# subject writes: `gate_stub <dir> [tenths]` writes `<dir>/bin/sleep`, which appends its argument
+# to `<dir>/sleep.log`, then waits for `<dir>/gate` (bounded: `tenths` x 0.1s of the REAL sleep,
+# default 300), then execs the real sleep. A writer blocks on the log, acts, and touches the gate.
+# A pre-touched gate makes it a plain logging stub.
+#
+# THE BOUND FAILS LOUD. A gate never seen within the bound writes `<dir>/expired` and the stub
+# exits 3 without sleeping; every gated arm reads that marker and refuses as BROKEN, so an expired
+# wait can never read as a pass or as a finding. The real sleep and bash are resolved HERE, before
+# any PATH is prepended (under the hermetic runner PATH is a tool farm and `env -i`). The stub dir
+# must sit under this fixture's TMPROOT and only the beat's own PATH carries it; nothing exports it.
+# Sets STUB_DIR, STUB_PATH, STUB_LOG, STUB_GATE, STUB_EXPIRED.
+# ---------------------------------------------------------------------------
+STUB_DIR=""; STUB_PATH=""; STUB_LOG=""; STUB_GATE=""; STUB_EXPIRED=""
+gate_stub() {  # $1 = dir under $TMPROOT, $2 = bound in tenths (default 300)
+  gs_real_sleep_="$(command -v sleep)"; gs_real_bash_="$(command -v bash)"
+  [ -n "$gs_real_sleep_" ] && [ -n "$gs_real_bash_" ] || broken "cannot resolve sleep/bash for the gated sleep stub"
+  STUB_DIR="$1"
+  case "$STUB_DIR" in "$TMPROOT"/*) ;; *) broken "gated sleep stub dir '$STUB_DIR' is not under the fixture's mktemp root" ;; esac
+  mkdir -p "$STUB_DIR/bin" || broken "cannot create the gated sleep stub dir"
+  STUB_LOG="$STUB_DIR/sleep.log"; STUB_GATE="$STUB_DIR/gate"; STUB_EXPIRED="$STUB_DIR/expired"
+  : > "$STUB_LOG" || broken "cannot create the gated sleep stub log"
+  rm -f "$STUB_GATE" "$STUB_EXPIRED"
+  { printf '#!%s\n' "$gs_real_bash_"
+    printf 'printf "%%s\\n" "$*" >> "%s"\n' "$STUB_LOG"
+    printf 'n_=%s\n' "${2:-300}"
+    printf 'while [ ! -e "%s" ]; do\n' "$STUB_GATE"
+    printf '  [ "$n_" -gt 0 ] || { : > "%s"; exit 3; }\n' "$STUB_EXPIRED"
+    printf '  "%s" 0.1; n_=$(( n_ - 1 ))\n' "$gs_real_sleep_"
+    printf 'done\n'
+    printf 'exec "%s" "$@"\n' "$gs_real_sleep_"
+  } > "$STUB_DIR/bin/sleep" || broken "cannot write the gated sleep stub"
+  chmod +x "$STUB_DIR/bin/sleep" || broken "cannot make the gated sleep stub executable"
+  STUB_PATH="$STUB_DIR/bin:$PATH"
+}
+stub_has_log() { [ -s "$STUB_LOG" ]; }
+# THE STUB'S OWN CONTROL, IN BOTH DIRECTIONS, on a probe stub of its own: without the gate a
+# `sleep 0` through STUB_PATH is logged and stays blocked; the gate releases it with exit 0; and a
+# gate never written expires -- the `expired` marker appears and the stub exits non-zero. A stub
+# that never blocked would make every gated arm a wall-clock race again, and one that blocked
+# forever or expired silently would make it a false pass. Refuses as BROKEN on any miss.
+gate_stub_control() {
+  gate_stub "$(mktemp -d "$TMPROOT/gctl.XXXXXX")" 300
+  env PATH="$STUB_PATH" sleep 0 & gc_p_=$!
+  until_ok 300 stub_has_log || { kill "$gc_p_" 2>/dev/null; broken "gated stub control: a sleep through STUB_PATH logged nothing"; }
+  sleep 0.3
+  pid_gone "$gc_p_" && broken "gated stub control: the stub did not block without its gate"
+  : > "$STUB_GATE"
+  until_ok 300 pid_gone "$gc_p_" || { kill "$gc_p_" 2>/dev/null; broken "gated stub control: the gate did not release the stub"; }
+  wait "$gc_p_"; gc_rc_=$?
+  [ "$gc_rc_" -eq 0 ] && [ ! -e "$STUB_EXPIRED" ] || broken "gated stub control: a released stub exited $gc_rc_ or wrote expired"
+  gate_stub "$(mktemp -d "$TMPROOT/gctl.XXXXXX")" 3
+  env PATH="$STUB_PATH" sleep 0; gc_rc_=$?
+  [ "$gc_rc_" -ne 0 ] && [ -e "$STUB_EXPIRED" ] || broken "gated stub control: an ungated stub past its bound exited $gc_rc_ with no expired marker"
+}
+# The writer every gated revision arm uses: block until the beat logs its first poll sleep (the
+# sweep's first observation always precedes it), edit rv.md above the marker, open the gate. A
+# writer whose wait ran out leaves `writer-timeout` and no gate, so the stub expires too.
+gated_revision_writer() {  # $1 = workdir
+  if until_ok 300 stub_has_log; then
+    printf '%s\n- an edit above the marker\n%s\n' "$SKELETON" "$MARKER" > "$1/rv.md"
+    : > "$STUB_GATE"
+  else : > "$STUB_DIR/writer-timeout"; fi
+}
+gated_refuse_if_expired() {  # $1 = arm label
+  [ -e "$STUB_EXPIRED" ] && broken "$1: the gated sleep stub's bound expired before its gate opened — no verdict"
+  [ -e "$STUB_DIR/writer-timeout" ] && broken "$1: the beat never entered its poll sleep, so the edit never landed — no verdict"
+  case "$STUB_DIR" in "$TMPROOT"/*) ;; *) broken "$1: gated stub dir '$STUB_DIR' left the fixture's mktemp root" ;; esac
+}
+
 # The REVISED-AFTER-MARKER count must outlive DELIVERED: a beat's printed line is read once and
 # gone, so `<key>.revised` is the record a repair brief reads. Only --reset (or a new round) clears it.
+# The edit is ordered by the gated stub, not by a clock: it lands inside the beat's first poll
+# sleep, after the sweep observed the marked file, so the beat counts exactly one revision.
 revised_survives() {  # $1 = subject -> RS_BEAT, RS_AFTER, RS_RESET
+  gate_stub_control
   W="$(mk_work)"; SI=$(( $(date +%s) - 30 ))
   printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W/rv.md"
-  ( sleep 1.5; printf '%s\n- an edit above the marker\n%s\n' "$SKELETON" "$MARKER" > "$W/rv.md" ) & rs_w_=$!
-  obeat "$1" "$W" "$BEATOUT" 8 2 "$SI" --quiet --complete rv.md; wait "$rs_w_"
+  gate_stub "$(mktemp -d "$TMPROOT/gstub.XXXXXX")"
+  gated_revision_writer "$W" & rs_w_=$!
+  OB_PATH="$STUB_PATH" obeat "$1" "$W" "$BEATOUT" 8 2 "$SI" --quiet --complete rv.md; wait "$rs_w_"
+  gated_refuse_if_expired revised-survives
   RS_BEAT="$(cat "$BEATOUT")"
   RS_AFTER="$(cat "$W/_bmad-output/.wait-beats/$(fx_key rv.md).revised" 2>/dev/null || echo ABSENT)"
   ( cd "$W" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=1 AI_DLC_WAIT_POLL_SECS=1 \
@@ -1417,8 +1496,8 @@ S16b_revised_survives_delivery() {
     ok "revised-survives: CONTROL — the beat saw rv.md revised and reported it, even under --quiet" ;;
     *) bad "revised-survives: CONTROL FAILED — the beat did not report rv.md revised, so there is no count to keep: '$RS_BEAT'" ;; esac
   case "$RS_AFTER" in ''|*[!0-9]*) bad "revised-survives: after DELIVERED .revised is '$RS_AFTER', not a count" ;;
-    *) if [ "$RS_AFTER" -ge 1 ]; then ok "revised-survives: after DELIVERED .revised still holds $RS_AFTER"
-       else bad "revised-survives: after DELIVERED .revised holds 0"; fi ;; esac
+    *) if [ "$RS_AFTER" -eq 1 ]; then ok "revised-survives: after DELIVERED .revised still holds $RS_AFTER"
+       else bad "revised-survives: after DELIVERED .revised holds $RS_AFTER, not the 1 revision the beat saw"; fi ;; esac
   if [ "$RS_RESET" = ABSENT ]; then ok "revised-survives: --reset clears .revised"
   else bad "revised-survives: .revised survived --reset"; fi
 }
@@ -1427,6 +1506,10 @@ M35_revised_deleted_on_delivery() {
     -e 's@^    rm -f "\$c" "\$s" "\$pg" "\$gr" "\${c}\.settle" 2>/dev/null || true$@    rm -f "$c" "$s" "$pg" "$gr" "${c}.settle" "${c}.revised" 2>/dev/null || true@' \
     -e 's@^    rm -f "\$c" "\$s" "\${c}\.progress" "\${c}\.grants" "\${c}\.settle" 2>/dev/null || true$@    rm -f "$c" "$s" "${c}.progress" "${c}.grants" "${c}.settle" "${c}.revised" 2>/dev/null || true@' || return
   revised_survives "$MUT"
+  # The control S16b carries: a world in which the beat saw no revision has no count to delete,
+  # and ABSENT would then acquit nothing.
+  case "$RS_BEAT" in *"REVISED-AFTER-MARKER 1 rv.md"*) ;;
+    *) broken "MUTANT revised-deleted-on-delivery: CONTROL — the mutant's beat did not report rv.md revised once, so ABSENT below would mean nothing" ;; esac
   if [ "$RS_AFTER" = ABSENT ]; then ok "MUTANT revised-deleted-on-delivery: DELIVERED takes the count with it — section 16b catches it"
   else bad "MUTANT revised-deleted-on-delivery: .revised ('$RS_AFTER') survived the restored rm — something else rewrites it"; fi
 }
@@ -1435,10 +1518,13 @@ M35_revised_deleted_on_delivery() {
 # the count is ROUND-SCOPED: a later round re-arms with `--since <round epoch>` (never --reset), so
 # a reused seat path must not inherit the earlier round's revision -- not in --status, not on disk.
 revised_rounds() {  # $1 = subject -> RR_* from one world
+  gate_stub_control
   W="$(mk_work)"; SI=$(( $(date +%s) - 30 ))
   printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W/rv.md"
-  ( sleep 1.5; printf '%s\n- an edit above the marker\n%s\n' "$SKELETON" "$MARKER" > "$W/rv.md" ) & rr_w_=$!
-  obeat "$1" "$W" "$BEATOUT" 8 2 "$SI" --complete rv.md; wait "$rr_w_"
+  gate_stub "$(mktemp -d "$TMPROOT/gstub.XXXXXX")"
+  gated_revision_writer "$W" & rr_w_=$!
+  OB_PATH="$STUB_PATH" obeat "$1" "$W" "$BEATOUT" 8 2 "$SI" --complete rv.md; wait "$rr_w_"
+  gated_refuse_if_expired revised-rounds
   RR_BEAT="$(cat "$BEATOUT")"
   CB_SETTLE=60 scall "$1" "$W" --complete --since "$SI" rv.md; RR_STATUS1="$OUT"
   sleep 1; R2=$(( $(date +%s) + 1 )); sleep 1
@@ -1461,10 +1547,16 @@ S16c_revised_status_and_rounds() {
 M36_revised_rounds_mutants() {
   mutant revised-status-silent -e 's@^      say_revised "\$t" "\$sd_c"$@      :@' || return; M_RS="$MUT"
   mutant revised-round-kept -e 's@^    \[ -f "\$rr_" \] && \[ "\$(mtime_of "\$rr_")" -lt "\$j" \] && rm -f "\$rr_" 2>/dev/null$@    :@' || return; M_RK="$MUT"
+  # Each mutant run carries S16c's control: in a world whose beat saw no revision there is no count
+  # for --status to withhold and no round-one .revised to leak, so both verdicts would be acquittals.
   revised_rounds "$M_RS"
+  case "$RR_BEAT" in *"REVISED-AFTER-MARKER 1 rv.md"*) ;;
+    *) broken "MUTANT revised-status-silent: CONTROL — the mutant's round one did not report rv.md revised once" ;; esac
   case "$RR_STATUS1" in *"REVISED-AFTER-MARKER"*) bad "MUTANT revised-status-silent: --status still printed the count — something else carries it" ;;
     *) ok "MUTANT revised-status-silent: --status no longer surfaces the count — section 16c catches it" ;; esac
   revised_rounds "$M_RK"
+  case "$RR_BEAT" in *"REVISED-AFTER-MARKER 1 rv.md"*) ;;
+    *) broken "MUTANT revised-round-kept: CONTROL — the mutant's round one did not report rv.md revised once, so no .revised existed to leak" ;; esac
   if [ "$RR_DISK" = PRESENT ]; then ok "MUTANT revised-round-kept: round one's .revised leaks past a later --since — section 16c catches it"
   else bad "MUTANT revised-round-kept: .revised was dropped without the round clear — something else removes it"; fi
 }
@@ -1925,6 +2017,7 @@ until_ok() {  # $1 = tenths, rest = command -> 0 once it holds, 1 when the bound
 }
 marker_pid() { mp_=""; IFS= read -r mp_ 2>/dev/null < "$1/_bmad-output/.beat-inflight"; case "$mp_" in *' '*) printf '%s' "${mp_#* }" ;; esac; }
 marker_present() { [ -n "$(marker_pid "$1")" ]; }
+marker_names() { [ "$(marker_pid "$1")" = "$2" ]; }  # $1 = workdir, $2 = pid
 pid_gone() { ! kill -0 "$1" 2>/dev/null; }
 heir_world() {  # $1 = subject (in a sibling dir); leaves W, sets HEIR_*
   W="$(mk_work)"; HEIR_A_PID=""; HEIR_B_PID=""; HEIR_AFTER=""
@@ -2136,20 +2229,29 @@ S21_lease_at_root_under_custom_state_dir() {
 }
 # THE REGISTRATIONS MOVE WITH THE MARKER. Beat B (default state dir) holds the marker; beat A,
 # armed with a custom state dir, registers behind it; B's target lands and B exits. B's heir scan
-# must find A, so A's `.lease-<pid>` has to sit where B scans. A polls every 30s, so it cannot
-# re-take a dropped marker inside the window read here -- a heir found is B's handoff, not A's poll.
+# must find A, so A's `.lease-<pid>` has to sit where B scans. A's post-sweep beat_alive (the one
+# before its poll loop) CAN re-take the marker -- under the mutant it sees no registration for B
+# and does -- so b.md is written only once A is past it and inside its 30s poll sleep (A's sleep
+# stub has logged), and only once the marker names B again (B's 1s poll re-takes a marker A took).
+# From there A cannot touch the marker inside the window read here, so a heir found is B's
+# handoff, not A's poll. Ordered on events the subject writes, never on a clock (BL-703).
 cross_heir_world() {  # $1 = subject; leaves W, sets XH_A, XH_B, XH_AFTER
   W="$(mk_work)"; XH_A=""; XH_B=""; XH_AFTER=""
+  gate_stub "$(mktemp -d "$TMPROOT/xhstub.XXXXXX")"; : > "$STUB_GATE"   # a plain logging stub for A
+  A_STUB_LOG="$STUB_LOG"; A_STUB_PATH="$STUB_PATH"
   ( cd "$W" && exec env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=40 AI_DLC_WAIT_POLL_SECS=1 \
       AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
       AI_DLC_PROJECT_ROOT="$PWD" bash "$1" b.md ) > "$BEATOUT.B" 2>&1 &
   XH_B=$!
   until_ok 300 marker_present "$W" || { kill "$XH_B" 2>/dev/null; broken "cross-heir: beat B never wrote the marker"; }
-  ( cd "$W" && exec env -u CLAUDE_CODE_SESSION_ID AI_DLC_STATE_DIR=_bmad-output/seat-q AI_DLC_WAIT_BEAT_SECS=80 \
+  ( cd "$W" && exec env -u CLAUDE_CODE_SESSION_ID PATH="$A_STUB_PATH" AI_DLC_STATE_DIR=_bmad-output/seat-q AI_DLC_WAIT_BEAT_SECS=80 \
       AI_DLC_WAIT_POLL_SECS=30 AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
       AI_DLC_PROJECT_ROOT="$PWD" bash "$1" a.md ) > "$BEATOUT.A" 2>&1 &
   XH_A=$!
   until_ok 300 cs_counter_written "$W" || { kill "$XH_A" "$XH_B" 2>/dev/null; broken "cross-heir: beat A never reached its sweep"; }
+  until_ok 300 [ -s "$A_STUB_LOG" ] || { kill "$XH_A" "$XH_B" 2>/dev/null; broken "cross-heir: beat A never entered its poll sleep"; }
+  until_ok 300 marker_names "$W" "$XH_B" || { kill "$XH_A" "$XH_B" 2>/dev/null; broken "cross-heir: the marker never named B once A was asleep"; }
+  gated_refuse_if_expired cross-heir
   printf 'b\n' > "$W/b.md"
   until_ok 300 pid_gone "$XH_B" || { kill "$XH_A" "$XH_B" 2>/dev/null; broken "cross-heir: beat B never exited after its target landed"; }
   XH_AFTER="$(marker_pid "$W")"

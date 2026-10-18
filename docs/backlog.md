@@ -849,3 +849,17 @@ Mechanism, from the code and not traced: Check 0's transcript readers (`LAST_USE
 Owed: a Stop whose transcript cannot be parsed or read, or that runs with no `jq`, must not let a requested handoff end with step 3 unsatisfied and no HANDOFF_GUARD record. The fix is not one line, and it rides a later release. The readers must tolerate a partial last line (`-R` with `fromjson?`, as `push_bg_read` and `ai-dlc-dispatch-guard.sh` already do), and a path with no `jq` needs its own decision.
 
 verify: sh bash core/fixtures/handoff-completion-assertion/receipt-bl700.sh
+
+## BL-703 — wait-beat-liveness and wait-stale-deliverable arms order a fixture event against a step inside wait-for-deliverable.sh with a wall-clock sleep, so under load they fail, and four of their mutants survive
+
+**DEFECT.** The arms fail intermittently under concurrency on trees whose `core/scripts/wait-for-deliverable.sh` and fixture are identical to base. They pass when run alone, and the subject is not at fault. Each arm orders its own event against a step inside wfd using a sleep or a poll cadence, and load stretches the step. In M18, M42, M36 and C41 it is the MUTANT that loses its distinguishing interleaving, so under load the battery acquits.
+- S16b `revised-survives`, S16c `revised-rounds`, M36 `revised-round-kept`: the writer `( sleep 1.5; edit )` assumes the beat's first observation (the sweep's `is_delivered` -> `settled()`, wfd :1656 -> :1089) happens before 1.5s. A late beat sees only the edited file, so `.revised` is never written. Forced with `sleep 2` before the sweep (wfd :1617), they fail 2 of 2.
+- M18 `settle-is-poll`: the mutant delivers only if its poll period holds one hash for 2s inside each 4s edit gap. Forced with a 4s poll stretch before wfd :1925, it fails 2 of 2.
+- M42 `registrations-in-state-dir`: the fixture writes `b.md` the instant A's counter appears, which puts A's post-sweep `beat_alive` steal (wfd :1911) directly on B's exit. Forced, M42 fails 2 of 2 and S21b passes 2 of 2.
+- C41 `no-join-memo` (wait-stale-deliverable): both beats read one shared `.settle` record (wfd :1067-1090), so the 1.5s start offset protects nothing. Forced with `sleep 2` before the `.since` rm (wfd :1940), the mutant survives 2 of 2.
+- The `WARN: --since without --dispatch` lines in the failure output are not a cause. Every beat prints that warning, and it is the only captured text left when the expected line is missing.
+Reports came from peers 48 (BL-553, BL-620), 18 (SHARDS) and 5e (TOOLING), plus a hermetic run during HOOKWAKE. All five wait-beat-liveness arms and C41 were forced on base 0b7a7a432 in scratch copies, each with a cmp-differs control.
+
+Fix: every arm blocks on an event the subject writes, through a fixture-local gated sleep stub. The stub's bound writes `expired` and the arm reports BROKEN, so an expired bound is never a pass. M18 uses a static file with SETTLE=600, POLL=1 and BEAT=5, and now tests that settle age is compared against SETTLE, not against POLL. M35 and M36 refuse unless their world shows `REVISED-AFTER-MARKER 1`. C41 is fixed in TOOLING (0.835.0) at 4162cb9e9: beat 2's process tree is SIGSTOPped until beat 1 has delivered, `.since` is gone and the seal's second has passed.
+
+verify: manual
