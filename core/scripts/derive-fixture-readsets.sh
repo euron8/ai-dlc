@@ -1176,8 +1176,16 @@ reset_atimes() {
 # prefix, then every path `git check-ignore` calls ignored. drop_ignored FAILS OPEN -- if
 # check-ignore cannot run every path is kept -- so a broken filter can only ADD misses, which
 # refuses the replacement rather than approving it.
+# readset_drop_git is the hook's own predicate, sourced from its READSET_UNIVERSE span. The definition below is
+# the fallback for a runner whose span carries none (an older hook), and keeps this span self-contained;
+# readset-skip byte-compares its body with the hook's.
+if ! type readset_drop_git > /dev/null 2>&1; then
+readset_drop_git() { # reads paths on stdin, writes all but `.git` and `.git/**`; awk, so an all-`.git` stream exits 0
+  awk '$0 != ".git" && index($0, ".git/") != 1'
+}
+fi
 readset_both_comparable() {
-  awk '$0 != "" && $0 != ".git" && index($0, ".git/") != 1' | drop_ignored
+  awk '$0 != ""' | readset_drop_git | drop_ignored
 }
 #   $1 the fs_usage set   $2 the sandbox set   $3 output prefix
 # Writes $3.sbmiss (in fs_usage, not in the sandbox -- the verdict's subject) and $3.fsmiss (the
@@ -1679,7 +1687,7 @@ for fx in $LIST; do
   fi
 
   cat "$WORK/$fx.at" "$WORK/$fx.fs" "$WORK/$fx.fsu" | LC_ALL=C sort -u \
-    | grep -v '^\.readset-sentinel$' | grep -v '^\.readset-end$' | readset_drop_pseudo | drop_ignored > "$WORK/$fx.set"
+    | grep -v '^\.readset-sentinel$' | grep -v '^\.readset-end$' | readset_drop_pseudo | readset_drop_git | drop_ignored > "$WORK/$fx.set"
   n="$(grep -c . "$WORK/$fx.set" 2>/dev/null)"; case "$n" in ''|*[!0-9]*) n=0 ;; esac
 
   # FAIL CLOSED. Anything that makes this trace untrustworthy omits the fixture from the map,

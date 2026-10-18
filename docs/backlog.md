@@ -466,7 +466,7 @@ Owed: the deriver drops `.git` and `.git/**` at write time, through the same pre
 
 Related: BL-635 (12214 dead rows for fixtures keyed on `inputs.decl`); together they are the map's dead weight.
 
-verify: manual
+verify: sh d=$(mktemp -d) && D=core/scripts/derive-fixture-readsets.sh && M=.ai-dlc-fixture-readsets.tsv && [ "$(grep -v '^#' $M | awk -F'\t' '$2 ~ /^\.git(\/|$)/' | grep -c .)" = 0 ] && [ "$(grep -v '^#' $M | awk -F'\t' '$2 == ".gitignore"' | grep -c .)" -gt 0 ] && sed -n '/^readset_drop_git() {/,/^}/p' $D > $d/fn.sh && [ -s $d/fn.sh ] && grep -F '> "$WORK/$fx.set"' $D | sed 's/^[[:space:]]*|//; s/readset_drop_pseudo/cat/; s/drop_ignored/cat/' > $d/wl && . $d/fn.sh && WORK=$d && fx=x && printf '%s\n' .git/objects/ab/cd .git/HEAD .git sub/.git/HEAD .gitignore core/x.sh | eval "$(cat $d/wl)" && [ "$(LC_ALL=C sort $d/x.set | tr '\n' ' ')" = ".gitignore core/x.sh sub/.git/HEAD " ]
 
 ## BL-646 — one adversarial-shard-merge mutant scorer costs about 140 CPU-seconds against the 22 its header designs for, so under the gate's pool every scorer, the control included, times out
 

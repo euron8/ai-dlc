@@ -2361,6 +2361,99 @@ else
     bad "MERGE MUTANT keepstale: the stale entry did not survive — arm 2 does not depend on the traced filter"
   fi
 
+  # ------------------------------ the write pipeline drops `.git` through the hook's own predicate ----
+  # THE MAP CARRIED `.git/**` ROWS THE HOOK STRIPS BEFORE KEYING. The deriver's write pipeline now ends in
+  # readset_drop_git, the hook's predicate (READSET_UNIVERSE span), with a fallback inside the deriver's
+  # READSET_BOTH span for a runner whose span carries none. The pipeline is EXTRACTED from the deriver (the one
+  # line that redirects into "$WORK/$fx.set") and run over a seeded stream, so the shipped line is the subject.
+  # The seed carries the nested `sub/.git/HEAD` (an unanchored predicate drops it) and `.gitignore` (the
+  # near-miss a prefix match on `.git` would drop).
+  DG="$WORK/dg"
+  mkdir -p "$DG/r" "$DG/w" || broken "mkdir failed"
+  ( cd "$DG/r" && git init -q . ) >/dev/null 2>&1 || broken "could not seed the .git-drop repo"
+  printf '%s\n' .git/objects/ab/cd .git/HEAD .git sub/.git/HEAD .gitignore core/x.sh > "$DG/seed"
+  printf '%s\n' .gitignore core/x.sh sub/.git/HEAD > "$DG/want"
+  sed -n '/^# READSET_DROP_BEGIN$/,/^# READSET_DROP_END$/p' "$DERIVER" > "$DG/drop.span"
+  sed -n '/^# READSET_PSEUDO_BEGIN$/,/^# READSET_PSEUDO_END$/p' "$DERIVER" > "$DG/pseudo.span"
+  sed -n '/^# READSET_BOTH_BEGIN$/,/^# READSET_BOTH_END$/p' "$DERIVER" > "$DG/both.span"
+  sed -n '/^# READSET_UNIVERSE_BEGIN$/,/^# READSET_UNIVERSE_END$/p' "$HOOK" > "$DG/univ.span"
+  grep -F '> "$WORK/$fx.set"' "$DERIVER" > "$DG/wline"
+  # dg_pipe <deriver-for-the-write-line> <hook-span|-> : prints what the shipped write pipeline leaves of the seed
+  dg_pipe() {
+    local wl="$1" us="$2"
+    {
+      printf '. "%s"\n. "%s"\n' "$DG/drop.span" "$DG/pseudo.span"
+      if [ "$us" = - ]; then :; else printf '. "%s"\n' "$us"; fi
+      printf '. "%s"\n' "$DG/both.span"
+      printf 'cd "%s" || exit 9\n' "$DG/r"
+      printf 'cat "%s" | LC_ALL=C sort -u \\\n' "$DG/seed"
+      cat "$wl"
+    } > "$DG/pipe.sh"
+    rm -f "$DG/w/dgfx.set"
+    ( TREE="$DG/r" WORK="$DG/w" fx=dgfx bash "$DG/pipe.sh" ) >/dev/null 2>&1
+    cat "$DG/w/dgfx.set" 2>/dev/null
+  }
+  dg_verdict() { if [ "$(LC_ALL=C sort "$1" 2>/dev/null | tr '\n' ' ')" = "$(LC_ALL=C sort "$DG/want" | tr '\n' ' ')" ]; then echo exact; else echo wrong; fi; }
+  MERGE_ARMS=$((MERGE_ARMS+1))
+  if [ "$(grep -c . "$DG/wline")" -ne 1 ] || ! grep -q '^readset_drop_git()' "$DG/univ.span" || ! grep -q 'readset_drop_git()' "$DG/both.span"; then
+    bad "(g) extracted no single write line from $DERIVER, no readset_drop_git from the hook's READSET_UNIVERSE span, or no fallback from the deriver's READSET_BOTH span — nothing below ran"
+  else
+    dg_pipe "$DG/wline" "$DG/univ.span" > "$DG/out.hook"
+    dg_pipe "$DG/wline" - > "$DG/out.fallback"
+    if [ "$(dg_verdict "$DG/out.hook")" = exact ]; then
+      ok "(g) the shipped write pipeline over .git/objects/ab/cd, .git/HEAD, a bare .git, sub/.git/HEAD, .gitignore and core/x.sh leaves exactly sub/.git/HEAD, .gitignore and core/x.sh, with the hook's predicate sourced"
+    else
+      bad "(g) the write pipeline left [$(tr '\n' ' ' < "$DG/out.hook")], wanted exactly [$(tr '\n' ' ' < "$DG/want")]"
+    fi
+    MERGE_ARMS=$((MERGE_ARMS+1))
+    if [ "$(dg_verdict "$DG/out.fallback")" = exact ]; then
+      ok "(g) and the same holds with NO hook span sourced: the READSET_BOTH fallback carries the predicate (the deriver run against an older hook)"
+    else
+      bad "(g) with no hook span the write pipeline left [$(tr '\n' ' ' < "$DG/out.fallback")], wanted exactly [$(tr '\n' ' ' < "$DG/want")]"
+    fi
+    # BYTE-COMPARE the executable body of the fallback with the hook's definition: the lines between the
+    # function header and its closing brace, whitespace-trimmed. The header line carries a comment and is not compared.
+    dg_body() { awk '/^[[:space:]]*readset_drop_git\(\)/ { on = 1; next } on && /^}/ { exit } on { sub(/^[[:space:]]+/, ""); print }' "$1"; }
+    dg_body "$DG/univ.span" > "$DG/body.hook"
+    dg_body "$DG/both.span" > "$DG/body.fb"
+    MERGE_ARMS=$((MERGE_ARMS+1))
+    if [ -s "$DG/body.hook" ] && cmp -s "$DG/body.hook" "$DG/body.fb"; then
+      ok "(g) the fallback's executable body is byte-identical to the hook's readset_drop_git"
+    else
+      bad "(g) the fallback body in the READSET_BOTH span differs from the hook's readset_drop_git (or is empty): [$(tr '\n' ' ' < "$DG/body.fb")] vs [$(tr '\n' ' ' < "$DG/body.hook")]"
+    fi
+    sed 's|index(\$0, "\.git/") != 1|index($0, ".git/") != 0|' "$DG/univ.span" > "$DG/univ.drift"
+    dg_body "$DG/univ.drift" > "$DG/body.drift"
+    MERGE_ARMS=$((MERGE_ARMS+1))
+    if cmp -s "$DG/univ.span" "$DG/univ.drift"; then bad "(g) SEEDED MISMATCH did not apply"
+    elif cmp -s "$DG/body.drift" "$DG/body.fb"; then bad "(g) SEEDED MISMATCH: a drifted hook predicate still compared equal to the fallback, so the byte-compare cannot fail"
+    else ok "(g) a seeded drift in the hook's predicate FAILS the fallback byte-compare"
+    fi
+    # MUTANT (a): the anchor is dropped, so the nested sub/.git/HEAD goes too. The edit is the exact predicate line.
+    _o="$(grep -m1 -F "awk '\$0 != \".git\" && index(\$0, \".git/\") != 1'" "$DG/univ.span")"
+    mut_line "$DG/univ.span" "$DG/univ.mutA" "$_o" "  awk '\$0 != \".git\" && index(\$0, \".git/\") == 0'"
+    MERGE_ARMS=$((MERGE_ARMS+1))
+    if [ -z "$_o" ] || cmp -s "$DG/univ.span" "$DG/univ.mutA"; then bad "WRITE-PIPELINE MUTANT unanchored: the edit matched nothing"
+    else
+      dg_pipe "$DG/wline" "$DG/univ.mutA" > "$DG/out.mutA"
+      if [ "$(dg_verdict "$DG/out.mutA")" = wrong ] && ! grep -qx 'sub/.git/HEAD' "$DG/out.mutA"; then
+        ok "WRITE-PIPELINE MUTANT unanchored moves (g): the nested sub/.git/HEAD is dropped"
+      else bad "WRITE-PIPELINE MUTANT unanchored: the pipeline still left [$(tr '\n' ' ' < "$DG/out.mutA")]"
+      fi
+    fi
+    # MUTANT (b): the write line omits the helper, so .git/HEAD survives.
+    sed 's/ | readset_drop_git//' "$DG/wline" > "$DG/wline.mutB"
+    MERGE_ARMS=$((MERGE_ARMS+1))
+    if cmp -s "$DG/wline" "$DG/wline.mutB"; then bad "WRITE-PIPELINE MUTANT no-helper: the edit matched nothing"
+    else
+      dg_pipe "$DG/wline.mutB" "$DG/univ.span" > "$DG/out.mutB"
+      if grep -qx '.git/HEAD' "$DG/out.mutB"; then ok "WRITE-PIPELINE MUTANT no-helper moves (g): .git/HEAD survives"
+      else bad "WRITE-PIPELINE MUTANT no-helper: .git/HEAD did not survive, so (g) does not depend on the helper in the write line"
+      fi
+    fi
+  fi
+
+
   # ------------------------- the --all subject list and the untraced-loss guard ----
   # THE `--all` LIST WAS BUILT NEWLINE-SEPARATED, AND TWO GUARDS SILENTLY NEVER MATCHED A NAME. Every
   # membership test on it is `case " $LIST " in *" $f "*)`, so under `--all` every fixture read as

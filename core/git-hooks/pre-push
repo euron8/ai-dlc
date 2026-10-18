@@ -563,8 +563,11 @@ readset_rows() { # <out> <paths|rows>
 
 # THE UNIVERSE FILTER ON A PATH STREAM: `.git` and `.git/**`, then the content key's excluded tops.
 # The manifest and the committed digest both call it, so the two cannot disagree on which paths count.
+readset_drop_git() { # reads paths on stdin, writes all but `.git` and `.git/**`; awk, so an all-`.git` stream exits 0
+  awk '$0 != ".git" && index($0, ".git/") != 1'
+}
 readset_universe_paths() { # reads paths on stdin, writes the ones in the universe
-  grep -v '^\.git/' | grep -v '^\.git$' | readset_drop_excluded
+  readset_drop_git | readset_drop_excluded
 }
 
 readset_manifest() {
