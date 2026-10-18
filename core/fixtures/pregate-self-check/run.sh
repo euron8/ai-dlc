@@ -38,6 +38,8 @@ SUBJECT="$REPO/scripts/pregate-self-check.sh"
 RECEIPT="core/fixtures/pregate-self-check/receipt-bl643.sh"
 [ -f "$REPO/$RECEIPT" ] || { echo "FIXTURE ERROR: missing $REPO/$RECEIPT" >&2; exit 2; }
 [ -s "$REPO/core/fixtures/procsub-staged-refusal/procsub-spell.awk" ] || { echo "FIXTURE ERROR: missing procsub-spell.awk" >&2; exit 2; }
+# Reached only when the -s test above read the grammar as present and non-empty.
+echo "HERMETIC-CONSUMED core/fixtures/procsub-staged-refusal/procsub-spell.awk"
 echo "HERMETIC-CONSUMED scripts/pregate-self-check.sh"
 echo "HERMETIC-CONSUMED $RECEIPT"
 command -v git >/dev/null 2>&1 || { echo "FIXTURE ERROR: git not on PATH" >&2; exit 2; }
@@ -58,6 +60,9 @@ cd "$REPO" || exit 2
 # --- a1: the unmutated control ----------------------------------------------------------------
 bash "$RECEIPT" "$SUBJECT" > "$WORK/a1.out" 2>&1; a1=$?
 if [ "$a1" -eq 9 ]; then echo "FIXTURE BROKEN: the receipt could not build its worlds" >&2; sed 's/^/     /' "$WORK/a1.out" >&2; exit 2; fi
+# The receipt exits 9 on every path before it has tested (-s, its :17) and copied (cp, its :24) the probe
+# into the SELF tree the self-check reads it from; any other exit is past both, so the probe was consumed.
+echo "HERMETIC-CONSUMED core/fixtures/procsub-staged-refusal/procsub-spell-probe.diff"
 [ "$a1" -eq 0 ] && ok "a1 control: receipt exit 0 on the unmutated self-check" || bad "a1 control: receipt exit $a1, expected 0"
 grep -qxF "$WANT" "$WORK/a1.out" && ok "a1 control: the line '$WANT' is present" || bad "a1 control: the line '$WANT' is absent (got: $(tail -1 "$WORK/a1.out"))"
 
