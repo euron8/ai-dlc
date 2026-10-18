@@ -2173,6 +2173,298 @@ else
   fi
 fi
 
+  # ===========================================================================
+  # THE DIGEST ALLOW (BL-658), THE RENAMED STAGE WRITE (BL-666), THE STALE-STAGE CLEAR (BL-684)
+  #
+  # BL-658, cases (ii) and (iii). The lead issues the snapshot, step and digest Reads in parallel.
+  # The digest call can land at stage `step` (SECOND-call deny) or before the snapshot call wrote
+  # any stage (FIRST-call deny), and both refuse a Read the injected block itself asks for. The
+  # fix allows a FULL Read of the digest path, in both stage arms, WITHOUT advancing anything.
+  #
+  # BL-666. The stage write truncated `$PROGRESS` in place, so a concurrent reader could see an
+  # empty stage, fall to the garbage arm and delete it, resetting the recovery. The fix writes a
+  # sibling temp named with `$$` and renames it over the stage. The hard-link probe forces the
+  # question deterministically: an in-place write rewrites the linked inode, a rename does not.
+  # NO BEHAVIOURAL ARM SEES A CROSS-FILESYSTEM TEMP FILE -- a temp project cannot put the temp on
+  # another device -- so the structural arm checks the temp is spelled from `${PROGRESS}`.
+  #
+  # BL-684. A new recovery cleared the satisfaction breadcrumb and the advisor window but not the
+  # stage, so a stale `step` skipped the next recovery's snapshot mandate.
+  #
+  # SHIP-AHEAD. Each block detects its own fix by a stable spelling and calls `skip` with that key
+  # when it is absent. Each mutant is a whole-hooks-directory copy, asserted APPLIED by `cmp`, and
+  # scored by its exact flip set over its own block's predicates only. The digest-allow mutants
+  # use a block-scoped awk, because the allow's first line appears once per stage arm and
+  # `race_edit` refuses an anchor that is not one unique whole line; the stage-write and clear
+  # mutants go through `race_edit`.
+  # ===========================================================================
+  RC_DIGREL=".claude/skills/ai-dlc/postcompact-digest.md"
+  RC_DIGKEY='"$FABS" = "${PROJECT_DIR}/.claude/skills/ai-dlc/postcompact-digest.md"'
+  RC_DIGKEY2='"$FABS" = "${PROJECT_DIR}/core/skills/ai-dlc/postcompact-digest.md"'
+  RC_SWKEY="printf 'step\\n' >\""
+  RC_RENKEY='mv -f "${PROGRESS}.$$" "$PROGRESS"'
+  RC_CLRRE='^[[:space:]]*rm -f .*\.recover-gate-progress'
+  RC_REAL="$(dirname "$GATE")"
+  RC_RH=ai-dlc-recover.sh
+
+  rc_dec() { case "$1" in ('|'*) echo allow ;; (*'FIRST tool call must be'*) echo first ;; (*'SECOND tool call must be'*) echo second ;; (*) echo other ;; esac; }
+  rc_call() { rc_dec "$(gate_call "$1/$RG" "$2" "$3")"; } # rc_call <hooks-dir> <project> <json> -> allow|first|second|other
+  # rc_proj <hooks-dir> <first|step> -> a project armed by that directory's own producer, at the
+  # named stage, carrying the digest and a same-basename decoy; empty when the world did not form.
+  rc_proj() {
+    _rq="$(newproj architecture.md flat)"
+    mkdir -p "$_rq/.claude/skills/ai-dlc" "$_rq/x"
+    printf 'digest body\n' > "$_rq/$RC_DIGREL"
+    printf 'not the digest\n' > "$_rq/x/postcompact-digest.md"
+    arm_marker "$1/$RC_RH" "$_rq"
+    { [ -e "$_rq/$mk" ] && [ ! -e "$_rq/$pg" ]; } || return 0
+    if [ "$2" = step ]; then
+      gate_call "$1/$RG" "$_rq" "$(jcall Read "$_rq/_bmad-output/pipeline-snapshot.md")" >/dev/null
+      { [ "$(cat "$_rq/$pg" 2>/dev/null)" = step ] && [ -e "$_rq/$mk" ]; } || return 0
+    fi
+    printf '%s\n' "$_rq"
+  }
+  rc_post() { # rc_post <project> <step|none> -> empty when nothing moved, else what did
+    _rm=""
+    [ -e "$1/$mk" ] || _rm="$_rm marker-cleared"
+    if [ "$2" = none ]; then [ -e "$1/$pg" ] && _rm="$_rm stage-written"
+    else [ "$(cat "$1/$pg" 2>/dev/null)" = "$2" ] || _rm="$_rm stage-moved"; fi
+    [ -e "$1/_bmad-output/.recover-satisfied" ] && _rm="$_rm recover-satisfied-written"
+    [ -e "$1/_bmad-output/.recover-advisor-owed" ] && _rm="$_rm recover-advisor-owed-written"
+    printf '%s' "${_rm# }"
+  }
+
+  # --- the predicates, each PASS or FAIL:<what it saw> ------------------------
+  rp_d_step() { # (a) a full digest Read at stage step is allowed and advances nothing
+    _rq="$(rc_proj "$1" step)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-two world formed'; return; }
+    _rv="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/$RC_DIGREL")")"
+    [ "$_rv" = allow ] || { echo "FAIL:a full digest Read at stage step answered '${_rv}'"; return; }
+    _rm="$(rc_post "$_rq" step)"; [ -z "$_rm" ] || { echo "FAIL:the digest allow at stage step moved state: ${_rm}"; return; }
+    echo PASS
+  }
+  rp_d_first() { # (b) case iii: marker present, no stage file, a full digest Read is allowed and advances nothing
+    _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
+    _rv="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/$RC_DIGREL")")"
+    [ "$_rv" = allow ] || { echo "FAIL:a full digest Read with no stage file answered '${_rv}'"; return; }
+    _rm="$(rc_post "$_rq" none)"; [ -z "$_rm" ] || { echo "FAIL:the digest allow with no stage file moved state: ${_rm}"; return; }
+    echo PASS
+  }
+  rp_d_decoy() { # control: any other Read at stage step still gets the SECOND deny
+    _rq="$(rc_proj "$1" step)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-two world formed'; return; }
+    _rv="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/decoy.md")")"
+    [ "$_rv" = second ] || { echo "FAIL:a decoy Read at stage step answered '${_rv}', not the SECOND deny"; return; }
+    echo PASS
+  }
+  rp_d_base() { # control: x/postcompact-digest.md shares the basename and is denied at both stages
+    _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
+    _rv="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/x/postcompact-digest.md")")"
+    [ "$_rv" = first ] || { echo "FAIL:the same-basename decoy at stage one answered '${_rv}'"; return; }
+    _rq="$(rc_proj "$1" step)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-two world formed'; return; }
+    _rv="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/x/postcompact-digest.md")")"
+    [ "$_rv" = second ] || { echo "FAIL:the same-basename decoy at stage step answered '${_rv}'"; return; }
+    echo PASS
+  }
+  rp_d_bounded() { # control: a BOUNDED digest Read (limit=1) is denied at both stages
+    _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
+    _rv="$(rc_call "$1" "$_rq" "$(jbounded "$_rq/$RC_DIGREL" 1 -)")"
+    [ "$_rv" = first ] || { echo "FAIL:a limit=1 digest Read at stage one answered '${_rv}'"; return; }
+    _rq="$(rc_proj "$1" step)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-two world formed'; return; }
+    _rv="$(rc_call "$1" "$_rq" "$(jbounded "$_rq/$RC_DIGREL" 1 -)")"
+    [ "$_rv" = second ] || { echo "FAIL:a limit=1 digest Read at stage step answered '${_rv}'"; return; }
+    echo PASS
+  }
+  rp_s_inode() { # the snapshot Read replaces the stage inode: a hard link to it still reads snapshot
+    _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
+    printf 'snapshot\n' > "$_rq/$pg"
+    ln "$_rq/$pg" "$_rq/rc.link" 2>/dev/null || { echo 'FAIL:SEED — the hard link could not be made'; return; }
+    _rv="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/_bmad-output/pipeline-snapshot.md")")"
+    [ "$_rv" = allow ] || { echo "FAIL:the full snapshot Read answered '${_rv}'"; return; }
+    [ "$(cat "$_rq/$pg" 2>/dev/null)" = step ] || { echo "FAIL:the stage reads '$(cat "$_rq/$pg" 2>/dev/null)', not step"; return; }
+    [ "$_rq/$pg" -ef "$_rq/rc.link" ] && { echo 'FAIL:the stage is still the linked inode, so it was written in place'; return; }
+    [ "$(cat "$_rq/rc.link" 2>/dev/null)" = snapshot ] || { echo "FAIL:the linked old inode reads '$(cat "$_rq/rc.link" 2>/dev/null)', so it was rewritten"; return; }
+    echo PASS
+  }
+  # A write killed by the file-size limit must leave the old stage whole. This arm alone cannot
+  # tell a gate that never reached the write from one that wrote safely; rp_s_inode is the
+  # presence-shaped half, and the unmutated control requires both.
+  rp_s_killed() {
+    _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
+    printf 'snapshot\n' > "$_rq/$pg"
+    _rj="$(jcall Read "$_rq/_bmad-output/pipeline-snapshot.md")"
+    ( ulimit -f 0; gate_call "$1/$RG" "$_rq" "$_rj" >/dev/null ) 2>/dev/null
+    [ "$(cat "$_rq/$pg" 2>/dev/null)" = snapshot ] || { echo "FAIL:a killed stage write left the stage reading '$(cat "$_rq/$pg" 2>/dev/null)'"; return; }
+    echo PASS
+  }
+  rp_s_garbage() { # control: a garbage stage is allowed through and the file removed
+    _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
+    printf 'garbage\n' > "$_rq/$pg"
+    _rv="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/_bmad-output/pipeline-snapshot.md")")"
+    [ "$_rv" = allow ] || { echo "FAIL:a garbage stage answered '${_rv}'"; return; }
+    [ -e "$_rq/$pg" ] && { echo 'FAIL:a garbage stage was not removed'; return; }
+    echo PASS
+  }
+  rp_s_struct() { # the one stage write names a temp spelled from ${PROGRESS} with $$, renamed onto $PROGRESS
+    _rn="$(grep -cF -- "$RC_SWKEY" "$1/$RG")" || _rn=0
+    [ "$_rn" = 1 ] || { echo "FAIL:${_rn} stage-write lines, where one was expected"; return; }
+    _rl="$(grep -F -- "$RC_SWKEY" "$1/$RG")"
+    _rt="${_rl#*"$RC_SWKEY"}"; _rt="${_rt%%\"*}"
+    case "$_rt" in ('${PROGRESS}'?*'$$'*) ;; (*) echo "FAIL:the stage write targets '${_rt}', not a temp spelled from \${PROGRESS} carrying \$\$"; return ;; esac
+    case "$_rl" in (*"mv -f \"${_rt}\" \"\$PROGRESS\""*) ;; (*) echo "FAIL:the temp '${_rt}' is never renamed onto \$PROGRESS on the stage-write line"; return ;; esac
+    echo PASS
+  }
+  rp_r_clear() { # a new recovery clears the previous stage and its temps; a step Read then gets FIRST
+    _rq="$(rc_proj "$1" step)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-two world formed'; return; }
+    : > "$_rq/$pg.4242"
+    arm_marker "$1/$RC_RH" "$_rq"
+    [ -e "$_rq/$mk" ] || { echo 'FAIL:SEED — the new recovery wrote no marker'; return; }
+    [ -e "$_rq/$pg" ] && { echo "FAIL:a new recovery left the previous stage '$(cat "$_rq/$pg" 2>/dev/null)' on disk"; return; }
+    [ -e "$_rq/$pg.4242" ] && { echo 'FAIL:a new recovery left a stage temp file on disk'; return; }
+    _rv="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/architecture.md")")"
+    [ "$_rv" = first ] || { echo "FAIL:a first-call step Read after a new recovery answered '${_rv}', not the FIRST deny"; return; }
+    echo PASS
+  }
+  rp_r_ctl() { # control: on a fresh recovery the same step Read gets FIRST
+    _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
+    _rv="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/architecture.md")")"
+    [ "$_rv" = first ] || { echo "FAIL:a first-call step Read on a fresh recovery answered '${_rv}'"; return; }
+    echo PASS
+  }
+  rc_label() {
+    case "$1" in
+      d_step)    echo "BL-658 (a): a full digest Read at stage step is ALLOWED; marker kept, stage still step, no .recover-satisfied, no .recover-advisor-owed" ;;
+      d_first)   echo "BL-658 (b): a full digest Read with the marker present and no stage file (case iii) is ALLOWED; marker kept, no stage written, no .recover-satisfied, no .recover-advisor-owed" ;;
+      d_decoy)   echo "BL-658 control: a decoy Read at stage step still gets the SECOND deny" ;;
+      d_base)    echo "BL-658 control: a same-basename decoy x/postcompact-digest.md is denied at both stages" ;;
+      d_bounded) echo "BL-658 control: a bounded digest Read (limit=1) is denied at both stages" ;;
+      s_inode)   echo "BL-666: a full snapshot Read replaces the stage inode — the hard link still reads snapshot, the stage reads step" ;;
+      s_killed)  echo "BL-666: a stage write killed by ulimit -f 0 leaves the stage reading snapshot" ;;
+      s_garbage) echo "BL-666 control: a garbage stage is allowed through and the file removed" ;;
+      s_struct)  echo "BL-666 structural: the stage write's temp is spelled from \${PROGRESS}, carries \$\$, and is renamed onto \$PROGRESS" ;;
+      r_clear)   echo "BL-684: a new recovery clears the previous stage and its temp, and a first-call step Read gets the FIRST deny" ;;
+      r_ctl)     echo "BL-684 control: on a fresh recovery the same step Read gets the FIRST deny" ;;
+    esac
+  }
+  rc_arms() { for _ra in $1; do _rr="$("rp_$_ra" "$RC_REAL")"; if [ "$_rr" = PASS ]; then ok "$(rc_label "$_ra")"; else bad "$(rc_label "$_ra") — ${_rr#FAIL:}"; fi; done; }
+  rc_flips() { for _ra in $2; do _rr="$("rp_$_ra" "$1")"; [ "$_rr" = PASS ] || printf '%s ' "$_ra"; done; }
+  rc_control() { # rc_control <preds> <block> -- an unmutated whole-directory copy reproduces every verdict
+    _rd="$(race_dir)"
+    if [ -z "$_rd" ]; then bad "FIXTURE BROKEN: $2 — a whole-directory copy of the hooks did not carry every sibling"; return; fi
+    _rg="$(rc_flips "$_rd" "$1")"
+    if [ -z "${_rg// /}" ]; then ok "control: $2 — an unmutated whole-directory copy passes every arm, so a flip below is its mutation"
+    else bad "CONTROL FAILED: $2 — an unmutated copy already flips {${_rg}}, so no mutant verdict below is evidence"; fi
+  }
+  rc_score() { # rc_score <label> <dir> <file> <preds> <expected flips>
+    if [ -z "$2" ]; then bad "FIXTURE STALE: $1 — the mutation did not apply to its anchor"; return; fi
+    if cmp -s "$RC_REAL/$3" "$2/$3"; then bad "FIXTURE STALE: $1 — the mutant is byte-identical to $3, so it was not applied"; return; fi
+    bash -n "$2/$3" 2>/dev/null || { bad "FIXTURE STALE: $1 — the mutant is not valid shell"; return; }
+    _rg="$(rc_flips "$2" "$4")"
+    if [ "$_rg" = "$5 " ]; then ok "mutant: $1 — applied (cmp differs), killed by exactly {$5}"
+    elif [ -z "${_rg// /}" ]; then bad "MUTANT SURVIVED: $1 — every arm stays green, so {$5} cannot fire"
+    else bad "MUTANT FLIP SET WRONG: $1 — expected {$5}, measured {${_rg}}"; fi
+  }
+
+  # --- BL-658: the digest allow -------------------------------------------------
+  # Detection key: a line carrying RC_DIGKEY, the FABS comparison against the installed digest path.
+  _rk="$(grep -cF -- "$RC_DIGKEY" "$GATE")" || _rk=0
+  if [ "$_rk" -lt 1 ]; then
+    skip "BL-658 digest-allow arms" "the gate carries no full-Read allow comparing FABS to the digest path (key '${RC_DIGKEY}', found 0); this fixture ships one pull ahead of its subject"
+  else
+    RC_P658="d_step d_first d_decoy d_base d_bounded"
+    rc_arms "$RC_P658"
+    rc_control "$RC_P658" "BL-658 digest allow"
+    # The block-scoped edit: a digest block is a stage-arm `if [ "$TOOL" = "Read" ]` block, closed
+    # by its four-space `fi`, whose text names the digest. M picks the edit.
+    RC_DIGAWK='
+function lrep(s, a, b,   i, o) { o = ""; while ((i = index(s, a)) > 0) { o = o substr(s, 1, i - 1) b; s = substr(s, i + length(a)) } return o s }
+function flush(   i, d, ln) {
+  d = (index(buf, "postcompact-digest.md") > 0)
+  if (d) n++
+  if (d && (M == "drop" || (M == "drop1" && n == 1))) { nl = 0; buf = ""; inb = 0; return }
+  if (d && M == "widen" && n == 2) print "    if [ \"$TOOL\" = \"Read\" ]; then exit 0; fi"
+  for (i = 1; i <= nl; i++) {
+    ln = L[i]
+    if (d && M == "base") { ln = lrep(ln, ENVIRON["K1"], ENVIRON["KB"]); ln = lrep(ln, ENVIRON["K2"], ENVIRON["KB"]) }
+    if (d && M == "nofull") ln = lrep(ln, " && is_full_read", "")
+    if (d && M == "adv" && ln == "      exit 0") ln = "      " ENVIRON["X"] "; exit 0"
+    print ln
+  }
+  nl = 0; buf = ""; inb = 0
+}
+BEGIN { M = ENVIRON["M"] }
+inb { L[++nl] = $0; buf = buf $0 "\n"; if ($0 == "    fi") flush(); next }
+/^    if \[ "\$TOOL" = "Read" \]/ { inb = 1; nl = 0; L[++nl] = $0; buf = $0 "\n"; next }
+{ print }
+END { if (inb) flush() }
+'
+    RC_KB='"${FABS##*/}" = "postcompact-digest.md"'
+    rc_dig() { # rc_dig <mode> [X] -> a whole-directory copy with the gate edited, or empty
+      _rd="$(race_dir)"; [ -n "$_rd" ] || return 0
+      M="$1" X="${2:-}" K1="$RC_DIGKEY" K2="$RC_DIGKEY2" KB="$RC_KB" awk "$RC_DIGAWK" "$RC_REAL/$RG" > "$_rd/$RG" || return 0
+      printf '%s\n' "$_rd"
+    }
+    rc_n() { _rc="$(grep -cF -- "$1" "$2")" || _rc=0; printf '%s' "$_rc"; }
+    _rn0="$(rc_n "$RC_DIGKEY" "$RC_REAL/$RG")"
+    _rd="$(rc_dig drop)"; [ -n "$_rd" ] && [ "$(rc_n "$RC_DIGKEY" "$_rd/$RG")" = 0 ] || _rd=""
+    rc_score "M5-drop: the digest allow removed from both stage arms" "$_rd" "$RG" "$RC_P658" "d_step d_first"
+    _rd="$(rc_dig widen)"; [ -n "$_rd" ] && [ "$(rc_n 'if [ "$TOOL" = "Read" ]; then exit 0; fi' "$_rd/$RG")" = 1 ] || _rd=""
+    rc_score "M6-widen: any Read allowed at stage step" "$_rd" "$RG" "$RC_P658" "d_decoy d_base d_bounded"
+    _rd="$(rc_dig adv 'echo step >"$PROGRESS"')"; [ -n "$_rd" ] && [ "$(rc_n 'echo step >"$PROGRESS"; exit 0' "$_rd/$RG")" = "$_rn0" ] || _rd=""
+    rc_score "M7-advance (stage): the digest allow also writes the stage" "$_rd" "$RG" "$RC_P658" "d_first"
+    _rd="$(rc_dig adv 'rm -f "$MARKER"')"; [ -n "$_rd" ] && [ "$(rc_n 'rm -f "$MARKER"; exit 0' "$_rd/$RG")" = "$_rn0" ] || _rd=""
+    rc_score "M7-advance (marker): the digest allow also clears the marker" "$_rd" "$RG" "$RC_P658" "d_step d_first"
+    _rd="$(rc_dig adv ': >"$OWED"')"; [ -n "$_rd" ] && [ "$(rc_n ': >"$OWED"; exit 0' "$_rd/$RG")" = "$_rn0" ] || _rd=""
+    rc_score "M7-advance (advisor-owed): the digest allow also writes .recover-advisor-owed" "$_rd" "$RG" "$RC_P658" "d_step d_first"
+    _rd="$(rc_dig drop1)"; [ -n "$_rd" ] && [ "$(rc_n "$RC_DIGKEY" "$_rd/$RG")" = "$((_rn0 - 1))" ] || _rd=""
+    rc_score "M8-step-only: the digest allow in the step arm only" "$_rd" "$RG" "$RC_P658" "d_first"
+    _rd="$(rc_dig base)"; [ -n "$_rd" ] && [ "$(rc_n "$RC_DIGKEY" "$_rd/$RG")" = 0 ] && [ "$(rc_n "$RC_KB" "$_rd/$RG")" != 0 ] || _rd=""
+    rc_score "M-base: the digest matched on its basename" "$_rd" "$RG" "$RC_P658" "d_base"
+    _rd="$(rc_dig nofull)"; [ -n "$_rd" ] && [ "$(rc_n 'is_full_read' "$_rd/$RG")" = "$(( $(rc_n 'is_full_read' "$RC_REAL/$RG") - _rn0 ))" ] || _rd=""
+    rc_score "M-nofull: the digest allow without is_full_read" "$_rd" "$RG" "$RC_P658" "d_bounded"
+  fi
+
+  # --- BL-666: the renamed stage write -----------------------------------------
+  # Detection key: RC_RENKEY, the rename of the $$ temp onto $PROGRESS.
+  _rk="$(grep -cF -- "$RC_RENKEY" "$GATE")" || _rk=0
+  if [ "$_rk" -lt 1 ]; then
+    skip "BL-666 renamed-stage-write arms" "the gate does not rename a temp onto the stage (key '${RC_RENKEY}', found 0); this fixture ships one pull ahead of its subject"
+  else
+    RC_P666="s_inode s_killed s_garbage s_struct"
+    rc_arms "$RC_P666"
+    rc_control "$RC_P666" "BL-666 stage write"
+    _rsw="$(grep -F -- "$RC_SWKEY" "$RC_REAL/$RG" | head -1)"
+    _rfa='${PROGRESS}.$$'; _rfb='${PROGRESS}.tmp'
+    rc_sw() { # rc_sw <replacement line> -> a whole-directory copy with the stage-write line replaced, or empty
+      _rd="$(race_dir)"; [ -n "$_rd" ] || return 0
+      race_edit "$RC_REAL/$RG" "$_rd/$RG.m" "$RACE_REPL" "$_rsw" "" "$1" && mv "$_rd/$RG.m" "$_rd/$RG" || return 0
+      printf '%s\n' "$_rd"
+    }
+    rc_score "M9-inplace: the stage written in place" \
+      "$(rc_sw $'        printf \'step\\n\' >"$PROGRESS" 2>/dev/null || true')" "$RG" "$RC_P666" "s_inode s_killed s_struct"
+    rc_score "M10-no-rename: the temp written and never moved" \
+      "$(rc_sw $'        printf \'step\\n\' >"${PROGRESS}.$$" 2>/dev/null || true')" "$RG" "$RC_P666" "s_inode s_struct"
+    rc_score "M-unlink: the stage removed, then written in place" \
+      "$(rc_sw $'        rm -f "$PROGRESS" 2>/dev/null; printf \'step\\n\' >"$PROGRESS" 2>/dev/null || true')" "$RG" "$RC_P666" "s_killed s_struct"
+    rc_score "M-fixedname: a fixed temp name with no \$\$" \
+      "$(rc_sw "${_rsw//"$_rfa"/$_rfb}")" "$RG" "$RC_P666" "s_struct"
+  fi
+
+  # --- BL-684: a new recovery clears the stale stage ---------------------------
+  # Detection key: RC_CLRRE, an `rm -f` line in the producer naming .recover-gate-progress.
+  _rk="$(grep -cE -- "$RC_CLRRE" "$RC_REAL/$RC_RH")" || _rk=0
+  if [ "$_rk" -lt 1 ]; then
+    skip "BL-684 stale-stage-clear arms" "ai-dlc-recover.sh has no rm -f line naming .recover-gate-progress (key '${RC_CLRRE}', found 0); this fixture ships one pull ahead of its subject"
+  else
+    RC_P684="r_clear r_ctl"
+    rc_arms "$RC_P684"
+    rc_control "$RC_P684" "BL-684 stale-stage clear"
+    # EVERY clearing line is neutralised, not the first: a clear spelled over two lines (the stage
+    # and its temps) would otherwise leave one layer in place and prove that layer.
+    _rd="$(race_dir)"
+    if [ -n "$_rd" ] && R="$RC_CLRRE" awk '$0 ~ ENVIRON["R"] { print ":"; next } { print }' "$RC_REAL/$RC_RH" > "$_rd/$RC_RH" \
+       && ! grep -qE -- "$RC_CLRRE" "$_rd/$RC_RH"; then :; else _rd=""; fi
+    rc_score "M-684: the new recovery's stage clear removed" "$_rd" "$RC_RH" "$RC_P684" "r_clear"
+  fi
+
 fi  # race subject present
 
 fi  # GATE present
