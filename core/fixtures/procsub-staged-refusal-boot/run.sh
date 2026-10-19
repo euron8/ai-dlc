@@ -1879,6 +1879,18 @@ fi
 if sg ld; then
 # THE HEALTHY PATH IS BYTE-IDENTICAL TO THE PRE-FIX ENGINE, in both modes, on every L world. The two
 # engine files are asserted to DIFFER first, or the comparison reads one program twice.
+# ONE CARVE-OUT, BL-620's: the tip's HARD-LAYER-ADJUDICATION-MISSING row ends in the `read`-evidence
+# instruction layer-drift.sh's adj_read_ask prints, which the pre-fix engine never did. ldh_noread
+# strips that one span (" The record must also carry" through "a verdict without them does not clear.")
+# from HARD rows only, and never from any other row. The markers are a second spelling of
+# adj_read_ask, so a rewording there fails this arm loudly. Before the compare, the span must be
+# absent from the base output, present exactly once per tip HARD row and on no other row, and present
+# at least once on ext classify, so the carve-out can be shown to have fired and to cover nothing else.
+LDH_RA_A=' The record must also carry'; LDH_RA_Z='a verdict without them does not clear.'
+ldh_noread() { "$REAL_AWK" -F'\t' -v a="$LDH_RA_A" -v z="$LDH_RA_Z" '
+  $1 == "HARD-LAYER-ADJUDICATION-MISSING" { i = index($0, a)
+    if (i) { r = substr($0, i); j = index(r, z); if (j) $0 = substr($0, 1, i - 1) substr(r, j + length(z)) } }
+  { print }' "$1"; }
 if cmp -s "$RECON/layer-drift.sh" "$LD_BASE/layer-drift.sh"; then
   bad "L healthy differential: the tip and ${LD_BASE_SHA} layer-drift.sh copies are identical"
 else
@@ -1889,12 +1901,19 @@ else
       "$REAL_BASH" "$RECON/layer-drift.sh" "$@" "$_W/dist" "$(cat "$_W/B")" "$(cat "$_W/T")" "$_W/consumer" > "$WORK/ldh-tip" 2>/dev/null; _ra=$?
       "$REAL_BASH" "$LD_BASE/layer-drift.sh" "$@" "$_W/dist" "$(cat "$_W/B")" "$(cat "$_W/T")" "$_W/consumer" > "$WORK/ldh-base" 2>/dev/null; _rb=$?
       _n="$("$REAL_GREP" -c . "$WORK/ldh-tip")" || _n=0
+      _rb0="$("$REAL_GREP" -cF -- "$LDH_RA_Z" "$WORK/ldh-base")" || _rb0=0
+      _rt="$("$REAL_GREP" -cF -- "$LDH_RA_Z" "$WORK/ldh-tip")" || _rt=0
+      _rh="$("$REAL_AWK" -F'\t' -v a="$LDH_RA_A" -v z="$LDH_RA_Z" '$1 == "HARD-LAYER-ADJUDICATION-MISSING" && index($0, a) && index($0, z) > index($0, a) { n++ } END { print n + 0 }' "$WORK/ldh-tip")"
+      _nh="$("$REAL_AWK" -F'\t' '$1 == "HARD-LAYER-ADJUDICATION-MISSING" { n++ } END { print n + 0 }' "$WORK/ldh-tip")"
+      ldh_noread "$WORK/ldh-tip" > "$WORK/ldh-tip-nr"
+      if [ "$_rb0" -ne 0 ] || [ "$_rt" -ne "$_nh" ] || [ "$_rh" -ne "$_nh" ] || { [ "$_w:$_m" = ext:classify ] && [ "$_nh" -lt 1 ]; }; then
+        bad "L healthy ($_w, $_m): the read-evidence carve-out cannot be scoped -- base carries the span on $_rb0 line(s) (want 0), tip on $_rt line(s) and on $_rh of its $_nh HARD row(s) (want every HARD row and nothing else$([ "$_w:$_m" = ext:classify ] && echo ', at least one'))"
       # ds has no adjudicable row, so its listing is legitimately empty; every other pair must carry rows.
-      if [ "$_ra" -eq 0 ] && [ "$_rb" -eq 0 ] && cmp -s "$WORK/ldh-tip" "$WORK/ldh-base" \
+      elif [ "$_ra" -eq 0 ] && [ "$_rb" -eq 0 ] && cmp -s "$WORK/ldh-tip-nr" "$WORK/ldh-base" \
          && { [ "$_n" -gt 0 ] || [ "$_w:$_m" = "ds:--list-adjudications" ]; }; then
-        ok "L healthy ($_w, $_m): rc 0 both, tip stdout byte-identical to ${LD_BASE_SHA} ($_n row(s))"
+        ok "L healthy ($_w, $_m): rc 0 both, tip stdout byte-identical to ${LD_BASE_SHA} ($_n row(s)) once BL-620's read-evidence span is removed from its $_nh HARD row(s)"
       else
-        bad "L healthy ($_w, $_m): tip rc $_ra, ${LD_BASE_SHA} rc $_rb, $_n tip row(s), outputs $(cmp -s "$WORK/ldh-tip" "$WORK/ldh-base" && echo equal || echo DIFFER)"
+        bad "L healthy ($_w, $_m): tip rc $_ra, ${LD_BASE_SHA} rc $_rb, $_n tip row(s), outputs $(cmp -s "$WORK/ldh-tip-nr" "$WORK/ldh-base" && echo equal || echo DIFFER) after removing the read-evidence span from $_nh HARD row(s)"
       fi
     done
   done
