@@ -56,7 +56,8 @@ WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes'
 cd "$REPO" || exit 2
 
 # --- a1: the unmutated control ----------------------------------------------------------------
-bash "$RECEIPT" "$SUBJECT" > "$WORK/a1.out" 2>&1; a1=$?
+# The literal repo-relative path (not "$RECEIPT") is what lets validate-fixture-git-env.sh resolve the init site.
+bash core/fixtures/pregate-self-check/receipt-bl643.sh "$SUBJECT" > "$WORK/a1.out" 2>&1; a1=$?
 if [ "$a1" -eq 9 ]; then echo "FIXTURE BROKEN: the receipt could not build its worlds" >&2; sed 's/^/     /' "$WORK/a1.out" >&2; exit 2; fi
 # THE THREE SENTINELS BELOW ARE KEYED ON THE RECEIPT'S OUTPUT, NOT ON ITS EXIT CODE. A sentinel attests a
 # read that happened. The receipt prints its `A=...` summary line (its :86) only after it has tested (-s,
