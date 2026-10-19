@@ -9,13 +9,9 @@
 # under <S> and drives each once with the consumer's copy of <reconcile-src>. Every `p_<name> <S>`
 # then reads those worlds (the stale and marker worlds are built inside their own predicate, from
 # the source recorded in <S>/.rec) and answers 0 = holds, 1 = fails, 2 = the world could not be
-# stood up. A predicate never exits, and leaves its reason in WHY. P_ALL is the evaluation ORDER as
-# well as the set: `silent` drives the live world a second time and `diag` drives the gate world a
-# second time, so every predicate reading those worlds' first-run state precedes them.
+# stood up. A predicate never exits, and leaves its reason in WHY.
 set -uo pipefail
 [ -n "${NAME:-}" ] || { echo "FIXTURE ERROR: lib.sh sourced without NAME set" >&2; exit 2; }
-
-P_ALL="sane self row silent litter gsane rowtext diag stale marker"
 
 # TWO LAYOUTS, and the shipped fixture reaches consumers, so it must resolve in both. install.sh
 # splits what shares a parent here: `core/skills/ai-dlc-update/reconcile/` in the distribution

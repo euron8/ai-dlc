@@ -20,6 +20,98 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.862.0] - 2026-10-18
+
+Batch 236, TRAIN A (integrator ai-dlc-ae). Six candidates in one release: PORTABILITY (owner ae), GUARDORDER (owner ae), DIAG (owner cb), a partial BL-553 (owner 48), BL-703 (owner cb) and SHARDS (owner 18), plus one subtraction commit of MUTANTS residue. Closes BL-647, BL-689, BL-698, BL-655, BL-662, BL-664, BL-669, BL-670 and BL-703. Advances BL-616 item 8 and BL-553, which stay open. Files BL-689, BL-698, BL-700 and BL-703. Closes no `PC-` id. Net for this release: 9 closed, 4 filed, so +5.
+
+### Arm S13 refuses the three forms that defeat bash 3.2's scan for the end of a `$( )` (BL-647)
+
+- bash 3.2 finds the end of a `$( )` with a scan of its own before it parses the body, and `bash -n` accepts three shapes that defeat that scan:
+  - (a) a comment holding a lone `'` or `)`, followed by a spaced double-quoted string, inside a double-quoted `$( )`;
+  - (b) a bare `case` pattern in a multi-line or double-quoted `$( )`;
+  - (c) a brace-expansion artifact: a `{` in a brace-expanded word, plus a single-quoted body holding an unclosed double-quoted `$(`, inside a double-quoted `$( )`. Arguments, `local`/`export` arguments, `for` lists, array elements, redirect targets and backtick outers break. `v=`, `case` words, `[[ ]]` operands and here-strings parse.
+- S13 is one awk program over the shell corpus (kind `awk13`). Form (c) models `brace_gobbler` over each brace-expanded word. Scored against the 191 probe files it missed 0, with 1 enumerated over-flag. Against the adversary's 115 seeds it missed 1 (not form (c)) and over-flagged 3, all `set -n` placement artifacts. The tracked corpus has 0 hits, with a seeded control reported.
+- S13's lexer opens ARITHMETIC at a bare `((`, as `$((` does. Read as `(`, the `<<` in `(( m = 1 << k ))` opened a heredoc that swallowed the rest of the file, so a later offender went unreported.
+
+The unopenable-file refusal also fixes the older arm S12:
+
+- BSD awk abandons its file list at an unopenable file (exit 2, no END). A tracked file deleted from the worktree therefore made S12 and S13 both report PASS over a partial corpus, and S12 had always done so. `awk_counted` now counts the files the awk program opened and compares that with the listed count, less files that exist and are empty. On a mismatch or a non-zero status it prints REFUSED naming the arm and the file, and exits 2. It never reports PASS. When awk aborts, the REFUSED message says "open count unknown (awk aborted)".
+
+Tests:
+
+- The fixture's oracle RUNS each seed under `/bin/bash` 3.2 with stubbed commands, because `set -n` hides the nested forms in any placement. Every seed must pass `bash -n`, each form has nested seeds, the control is in-class, and the seed count is derived.
+- Seeds p1 (BREAK) and p2 (ok) hold the arithmetic fix, and fixture arm x25 reverts it.
+- `core/fixtures/shell-portability/receipt-bl647.sh` replaces `verify: manual`. It is 0 on the fix and 0 on a second spelling (the program read by `awk -f`). It is 1 with S13 out of `ARMS` and 1 with form (c) reverted to the prose rule.
+- Arm x26 holds both directions of the refusal: file present gives PASS rc 0, file deleted gives rc 2 naming S12 and S13. Its variant with stderr sent to `/dev/null` and no count PASSES the deleted tree.
+
+### Arm S14 parses the heredoc-in-`$( )` files, and S13 gains form (d) (BL-689)
+
+- bash 3.2 scans a `$( )` body for its closing paren with a quote tracker that does not know a heredoc body is literal. An unbalanced quote or `(` there is a parse error: `v="$(cat <<'X'` / `it's here` / `X` / `)"` dies rc=2. The gate's `syntax_all` parses only `scripts/`, `core/scripts/`, `core/hooks/`, the reconcile engine and the hooks, which is 151 of 603 tracked `.sh` files, so the fixture scripts were parsed by nothing.
+- S14 is a new `parse` kind. It runs `/bin/bash -n`, pinned to the 3.2 floor because bash 4+ parses `$( )` recursively and would accept the form. It parses only the files a prefilter selects. The prefilter is one awk pass running S13's lexer in select mode: a heredoc opener inside a `$(`, or the census regex for a non-here-string opener on a `$(` line. That replaces one fork per corpus file (about 600) with one per selected file (15 today). The selector self-probes in both directions on its own seeds, including the nested and next-line spellings.
+- S13 form (d) covers the half no parse can see. A lone `)` in a heredoc body inside a `$( )` is accepted by `bash -n` and runs with rc=0, but yields the wrong value (`a ) here` reads back as `a  here`, `X`, `)`). S13 reads a heredoc body opened inside a `$( )` with its own quote-and-paren counter and reports a `)` that closes nothing. The rule comes from the bash 3.2 oracle comparing captured values: 71 in-class probes, missed 0, over 0. The tracked corpus has 0 hits. S13's header now counts four forms, (a) to (d), where it said three.
+- S14's selection pass goes through the same `awk_counted` helper as S12 and S13. A file awk cannot open is a refusal (exit 2, naming the arm and the file), never an empty selection read as "nothing to parse". BL-689 depends on BL-647 for `awk_counted` and S13, so the two ship and revert together.
+
+Tests:
+
+- Fixture `core/fixtures/shell-portability` gains m15 (the parse form in a fixture script, killed only by S14), n9 (the balanced pair, a backtick substitution and a function-held heredoc, none reported), and x23 (S14 dropped from `ARMS`, the report vanishes).
+- The oracle-agreement arm gains seeds d1 (lone `)`, BREAK), d2 (balanced `( )`, ok), d3 (nested in `$(echo "$( … )")`, BREAK) and d4 (function-held, ok). Arm x24 disconnects form (d)'s body scan.
+- Seed n4 now uses the heredoc'd python embedding the corpus uses. Arm x26 now requires S12, S13 and S14 each to name the deleted file.
+
+### The handoff guard dispatches in step order and defers the PUSH answer while a backgrounded push runs (BL-698)
+
+- `core/hooks/ai-dlc-continue.sh` Check 0: the COMMIT and PUSH arms no longer require a well-formed resume block (`RESUME_OK`). Dispatch now follows step order: teammates, commit, push, resume line. Before this, an unpushed or uncommitted handoff with no resume block was told to emit a resume prompt for an unpushed branch (3 of the 32 arm states). The four texts that claimed the resume prompt was well-formed before the resume arm ran no longer do. The COMMIT and PUSH texts say to emit no resume prompt until the push has landed, and the PUSH text's environmental branch says to finish steps 4 and 5 in the same turn.
+- A new deferral, `HANDOFF_GUARD_DEFERRED_BY_PUSH`, sits beside the live-beat deferral and replaces the PUSH answer only. Steps 1 and 2 keep their texts while a push runs. It applies when a Bash command's program is `git push`, its tool-result record carries `toolUseResult.backgroundTaskId`, and no later `queue-operation` enqueue names that id (the dispatch guard's own enqueue predicate). An empty id joins nothing.
+- The match is `git push` as the program at a command start: the start of the string, or after `;`, `&`, `|`, `(` or a newline, with optional `env` or `VAR=value` prefixes and an optional `git -C <dir>`. Quoted spans are blanked first, so a watcher such as `until grep -q 'git push' log` is not a push.
+- The deferral lasts at most 3004 s from the tool-result record. That is 3604 s, the longest of 333 recorded graph pushes across 190 sessions, minus the 600 s harness threshold. Past the ceiling the PUSH text says the backgrounded push has overrun its ceiling and carries no wait clause, because a wait would walk the lead into BACKOFF's unpushed allow.
+- `handoff.md` step 3, the `_gate-procedures.md` "Auto-handoff evaluation" step 3 and the PUSH text say: if the push was moved to the background, do not issue another; end the turn and wait for its notification.
+- Fixture `handoff-completion-assertion` gains a dirty-and-unpublished seed tree, step-order arm (t1), deferral arms (pb1) to (pb10), fixture arms m39 to m48, and M3 re-anchored. `receipt-bl698.sh` drives the shipping hook and is the entry's `verify:` line.
+
+### The lossy-window cap goes from 10 to 30, and BL-655 closes as contention (BL-655; BL-616 item 8 noted)
+
+- `core/fixtures/readset-sandbox-root-clause/run.sh`: MAXATT goes from 10 to 30. At the 0.763.0 gate reading the all-lossy odds go from about 2.8% to about 2e-5. The cap stays a count, and an all-lossy run still exits BROKEN. The fixture is `.dist-only`, so the change reaches no consumer.
+- BL-655 closed: the 0.820.0 series added no CPU work at n=1 (1379 to 1398 CPU-s, 203 to 200). The loaded durations halved afterwards with no subject change, and so did the untouched control. The load-sensitive readset-skip-d verdict is carried by BL-616, which stays open.
+
+### BL-553 — part remediators close on a marker and the serial remediator renders SPEC before it closes (PARTIAL)
+
+A part remediator now ends its part with `wait-for-deliverable.sh --mark <part path> <step> remediator <shard> findings=<n>`. Its step and shard come from the part path, and the part join beats in `_gate-procedures.md` pass `--complete`, with one `--dispatch` per agent. Before this, a plain beat delivered on a part's first partial write. A serial remediator whose block appends a `(decision)` now re-renders SPEC.md before its `--mark-repair`, so the render sits inside the dispatch that `--complete-repair --dispatch` already joins, and `join-remediator-shards.sh`'s record_tail refuses a stale SPEC.md. The join needed no change: a marked part leaves the serial block intact, and unmarked parts still join. The resumed-remediator instance is closed by BL-593 and BL-541. Part (b), refusing a beat whose target nothing will write, stays open: at arm time a sentinel and a real done file are the same act (189 lead transcripts, 2,869 beat calls), and its false-positive set is unrun.
+
+What the fix proves: `receipt-bl553.sh` pins every part to close with `--mark` and join under `--complete`, and pins the serial render to come before `--mark-repair`. It fails on 0.842.0 and passes on this release.
+
+### Timing arms in wait-beat-liveness block on events, not sleeps (BL-703, filed and closed)
+
+- Arms S16b, S16c, M18 and M42 in `core/fixtures/wait-beat-liveness/run.sh` ordered a fixture step against a step inside `wait-for-deliverable.sh` with a wall-clock sleep or a poll cadence. Under pool load they failed, and the fixture's own variants of M18, M42 and M36 survived. Run alone they passed, and the subject was not at fault. Each failure was forced on base in a scratch copy.
+- Each arm now blocks on an event the subject writes, through a gated sleep stub local to the fixture. The stub is bounded, and an expired bound reports BROKEN, never a pass. M18 now uses a static file and tests that settle age is compared against SETTLE, not against POLL. M35 and M36 refuse unless their world shows a revision.
+- Separability, forced on this release's tree: with forced `wait-for-deliverable.sh` copies, S16b, S16c, M18 and M42 each fail with the previous `run.sh` and pass with this one, with no BROKEN.
+- C41 in `wait-stale-deliverable`, the same class of defect, is fixed in TOOLING (v0.849.0) at 5efefa0fe.
+- `wait-beat-liveness` ships, so consumers get the fixed fixture. No subject code changes.
+
+### The remediator join refuses an adversarial repair named with a round word (BL-662)
+
+`join-remediator-shards.sh` exits 2 and writes nothing when the artifact ends in `-adversarial`, in files mode and in document mode. Its message names the owed shard dir and record, `<artifact>-repair-p<M>`, which is the only name arm H of `validate-adversarial-convergence.sh` reads. `_gate-procedures.md` states at both record-name sites that the adversarial repair record carries no round word. It names the two wrong shapes seen on the reference consumer: `<artifact>-adversarial-repair-p<M>` (about 28 records) and `<artifact>-adversarial-p<k>-repair-p<M>` (9). Most of those came from the serial remediator, which the join never sees, so the prose is the fix for them. Two process-rule-pins rows hold the prose. Fixture arm EC38 (`p_advname`) is the receipt. It fails on the join without the refusal, fails on each of two regressions (the refusal never matching, and the refusal limited to document mode), and passes with the fix.
+
+### The shard merge strips a trailing ` #` comment from a provenance value (BL-664)
+
+`merge-adversarial-shards.sh` now applies `provenance-block.json`'s `parser.comments` rule, as `validate-provenance-block.sh` already did. It strips the comment from the raw value before trimming, and only when whitespace precedes the `#`. A shard copied verbatim from a region with its inline comments now merges, and `findings_major: 1#x` is still refused. The two shard-writer prose instructions from 0.827.0 stay. On the reference consumer, 0 of 495 shards change outcome. Arm HC1 (`p_hdr_comment`) is the receipt. It fails on the merge before this change and passes with it. CH7 is re-seeded as a comment-only value.
+
+### The shard merge stamps DIVERGENT_HARD_BLOCK from the summed prior-scope count (BL-670)
+
+The merge applies arm C's test to the summed `findings_critical_prior_scope`: above the previous pass's `findings_critical`, the merged verdict is DIVERGENT_HARD_BLOCK, and one body line names the rule that stamped it. The previous pass is found with the validator's own `order_key`, `block_field` and `severity_count`, extracted the way `at_key` already was. So a `-pass<N>` or zero-padded predecessor, a multi-block file (the first block is read) and a block-less file (skipped) are each read exactly as arm C reads them. The restated `--series` exclusion line is bound to the validator byte for byte. Every merge that does not stamp is byte-identical to before. On the reference consumer the change stamps 1 of 41 merged passes, s319 architecture p2, which is the entry's own subject. Arm SD1 and the validator oracle SD2 are the receipt. It fails on the merge before this change and passes with it. Arm SD3 binds the exclusion line. The limit is stated in `content-seal.sh` and the merge: a Bash edit of a prior pass's count can move the stamp.
+
+### The shard merge refuses a shard whose last tool write was the top-level session's (BL-669)
+
+`content-seal.sh --last-tool-row` reports the last `agent` or `session` seal row per file, skipping program rows such as `program:wait-for-deliverable`. The merge refuses a shard whose last such row is the session's, naming the remedy: re-dispatch the adversary and merge with `--rerun`. The content-seal and `--mark` remedy texts now give that remedy for an adversary shard, not "restore with Edit". On the reference consumer, 0 of 30 shard last rows are the session's. Arms CS-S1, CS-L1 and CS-R1 live in the content-seal fixtures. CS-S1 and CS-L1 are the receipt. It fails on the merge and seal before this change and passes with them.
+
+### MUTANTS residue: rosters whose only reader was a retired battery are deleted
+
+- 0.842.0 retired the mutation batteries, which left `P_ALL` predicate rosters in four base-fixture libs with no reader. This release deletes all four by subtraction: `apply-self-overwrite/lib.sh` and `review-shard-merge/lib.sh` in one commit, `remediator-shard-join/lib.sh` with BL-553 and `adversarial-shard-merge/lib.sh` with SHARDS. The comments that described them are reworded. Each deletion was preceded by a reader count of 0, against the live reader in `document-partition/run.sh` as the control. `document-partition` and `subject-partition` keep their rosters, which their own runs read. Closes no BL.
+
+### Filed
+
+- BL-689 (DEFECT): found while measuring BL-647 and closed in this release; see the S14 section above.
+- BL-698 (DEFECT): filed and closed in this release; see the handoff guard section above.
+- BL-700 (DEFECT, stays open): a malformed or absent transcript, or no `jq` on PATH, fails open before the handoff guard runs. A truncated last line, a non-JSON mid-file line, a transcript path naming no file, or a missing `jq` each let a requested handoff on an unpublished branch end with no `HANDOFF_GUARD_*` row. It was found by the GUARDORDER tip adversary and pre-exists on origin/main. The fix rides a later release; `receipt-bl700.sh` is red on this branch and on origin/main by design.
+- BL-703 (DEFECT): filed and closed in this release; see the wait-beat-liveness section above.
+
 ## [0.859.0] - 2026-10-19
 
 Batch 236, BL-685 release (owned and gated by ai-dlc-77 [e29316], lead ai-dlc-c8). Closes BL-693 and BL-704, both

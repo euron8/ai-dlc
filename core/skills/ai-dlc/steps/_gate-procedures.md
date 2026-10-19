@@ -921,6 +921,8 @@ Agent tool, bound to
 standing role-contract Read line). Together the remediators take that pass's WHOLE set: every
 finding of the adversarial pass, or every FAILED check of the gate pass.
 
+**Adversarial repair name.** The adversarial repair record carries no round word: its shard dir is `shards/<artifact>-repair-p<M>/` and its record `<artifact>-repair-p<M>.md`, never `<artifact>-adversarial-repair-p<M>` or `<artifact>-adversarial-p<k>-repair-p<M>`, and the join refuses an artifact ending in `-adversarial`, since arm H of `validate-adversarial-convergence.sh` reads only the first name.
+
 **Shard by file (Rule 28, "Split dispatch": files axis).** Partition the findings by the files
 their `edit:` targets name. A finding touching one file goes to that file's shard, and each
 shard edits its files IN PLACE, never a copy. A finding citing more than one file goes to ONE
@@ -930,7 +932,10 @@ reaches the serial remediator" says, not only for such a finding. A single-file 
 `_bmad-output/planning-artifacts/s<N>/shards/<artifact>-repair-p<M>/<i>.md`. Every `edit:` line
 cites the project-relative path in the ledger's spelling (`_bmad-output/planning-artifacts/s<N>/…`)
 of each file it edits, and a citation must not wrap onto the next line. Beat-join
-every part, then run the join
+every part with
+`scripts/ai-dlc/wait-for-deliverable.sh --complete --since <round epoch> --dispatch <agentId> <part path>...`
+(one `--dispatch` per agent the round joined), which takes a part as delivered only once it ends
+in the `seat-complete:` line its remediator's `--mark` wrote. An UNFINISHED part whose body is complete and carries no `seat-complete:` line was written before parts marked: read it, then `--mark` it or re-dispatch its part. Then run the join
 `scripts/ai-dlc/join-remediator-shards.sh --sprint <N> --artifact <name> --pass <M> --artifact-path _bmad-output/planning-artifacts/s<N> --since <ISO> --until <ISO>`
 over the repair window. `--artifact-path` is the sprint slot `s<N>`, not `s<N>/stories`: a
 stories repair also edits `epics/epics.md` and other slot siblings, and every file a shard edits
@@ -1016,7 +1021,10 @@ document in place. Otherwise, in this order:
    file by its full path. A `derivation:` fence in the part names the DOCUMENT by its
    project-relative path, never the section file, because assembly removes the section file
    before the derivations validator re-runs the fence.
-3. **Join and assemble.** Beat-join every part, then run
+3. **Join and assemble.** Beat-join every part with
+   `scripts/ai-dlc/wait-for-deliverable.sh --complete --since <round epoch> --dispatch <agentId> <part path>...`
+   (one `--dispatch` per agent the round joined), which takes a part as delivered only once it
+   ends in the `seat-complete:` line its remediator's `--mark` wrote. An UNFINISHED part whose body is complete and carries no `seat-complete:` line was written before parts marked: read it, then `--mark` it or re-dispatch its part. Then run
    `scripts/ai-dlc/join-remediator-shards.sh --document <artifact path> <that dir> --since <ISO> --until <ISO>`.
    When one section's remediator was re-run, add `--rerun <part>.md@<S_P>` as "After a join
    refusal" item 1b says.
@@ -1061,7 +1069,10 @@ in this order:
    a change applied with Edit is recorded as `- (event) Hand-edit <pass>`, never as Render. A
    `(decision)` entry after the last such Render line is a stale SPEC, and the join refuses it. Its `edit:` lines cite
    both files by their project-relative paths under `_bmad-output/specs/s<N>/<slug>/`.
-3. **Join and assemble.** Beat-join every part, then run
+3. **Join and assemble.** Beat-join every part with
+   `scripts/ai-dlc/wait-for-deliverable.sh --complete --since <round epoch> --dispatch <agentId> <part path>...`
+   (one `--dispatch` per agent the round joined), which takes a part as delivered only once it
+   ends in the `seat-complete:` line its remediator's `--mark` wrote. An UNFINISHED part whose body is complete and carries no `seat-complete:` line was written before parts marked: read it, then `--mark` it or re-dispatch its part. Then run
    `scripts/ai-dlc/join-remediator-shards.sh --subject <N> --base <base sha> --pass <M> <that dir> --since <ISO> --until <ISO>`.
    When one part's remediator was re-run, add `--rerun <part>.md@<S_P>` as "After a join
    refusal" item 1b says.
@@ -1116,12 +1127,20 @@ Per finding — or per failed check — the disposition, the edit site, and the 
 that derives every factual claim the repair asserts, with its output. The next adversarial pass
 verifies against that record; so does the gate's re-run of the failed checks.
 
+**Repair record name, again.** The adversarial repair record is `<artifact>-repair-p<M>.md` with no round word, never `<artifact>-adversarial-repair-p<M>.md` or `<artifact>-adversarial-p<k>-repair-p<M>.md`, whether a join or a serial remediator writes it; the join refuses the first of those wrong shapes.
+
 **Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh --complete-repair
 --dispatch <agentId> <repair_record_path>`. The serial remediator and the
 unsharded `shard: none (serial-document)` remediator both end their record with
 `wait-for-deliverable.sh --mark-repair <record> <pass>`, which appends `repair-complete: serial
-<pass> sha=<hex>`, the line only `--complete-repair` waits for; the part records a shard join writes are
-written by that join, synchronously, and need no beat.
+<pass> sha=<hex>`, the line only `--complete-repair` waits for. A part remediator closes its part
+with `--mark` instead, and each axis's join step above beat-joins those parts with `--complete`
+before the shard join runs; the joined record the shard join writes is written by that join,
+synchronously, and needs no beat until the serial remediator appends to it. A serial
+remediator whose block appended a `(decision)` entry to a spec's `.memlog.md` re-renders
+`SPEC.md` and appends its `- (event) Render <pass>: re-derived from memlog through <last decision>`
+line before its `--mark-repair`, so the render lies inside the dispatch this beat joins; the lead
+dispatches no separate render agent.
 
 **A completed record is never reopened by `SendMessage`.** Once a remediator's record carries its
 `repair-complete:` line, that remediator is finished, and it may not edit the record again
@@ -1339,7 +1358,7 @@ carry the no-human-present additions:
    a deliverable path: one call per kind of deliverable, each
    `run_in_background: true` — `scripts/ai-dlc/wait-for-deliverable.sh <path>
    [<path> ...]` for a plain deliverable, `scripts/ai-dlc/wait-for-deliverable.sh
-   --complete <path> [<path> ...]` for seat and cross files, and
+   --complete <path> [<path> ...]` for seat, shard, cross and repair-part files, and
    `scripts/ai-dlc/wait-for-deliverable.sh --complete-repair <record>` for a
    serial-remediator row. The flag is per call and a call mixing the two flags
    is refused (exit 64), so a mixed set is up to three calls and a set of one
@@ -1399,6 +1418,8 @@ carry the no-human-present additions:
    redirect-then-read is not needed, a pipe replaces the push's exit
    code with the last command's, and a chained push is denied by the
    steering-budget hook.
+   If the push was moved to the background, do not issue another; end the
+   turn and wait for its notification.
 
    If the push fails (no
    remote configured, offline, or a protected branch), note the reason

@@ -282,6 +282,8 @@ p_specother "$JOIN" && ok "SP9: --escalations, a stale memlog in the world but a
   || bad "SP9: a record that repaired no SPEC was judged against the sprint memlog (rc=$RC): $(cat "$JO")"
 p_specunread "$JOIN" && ok "SP10: --escalations, a cited stale memlog made unreadable -> rc 2, 'the memlog could not be read' (SKIP SP10 (root) when uid 0)" \
   || bad "SP10: an unreadable memlog was not refused (rc=$RC): $(cat "$JO")"
+p_specserial "$JOIN" && ok "SP11: --escalations, a joined record whose terminated serial block alone cites the spec memlog: a decision it appended after the last phrased Render is REFUSED naming the memlog; the Render written after it (before --mark-repair) passes, rendered through" \
+  || bad "SP11: the serial block's stale SPEC was not refused, or its rendered SPEC was (rc=$RC): $(cat "$JO")"
 p_sjspecstale "$JOIN" && ok "SP6: --subject, the SPEC part's memlog holds a decision after its last phrased Render -> rc 2, REFUSED naming the memlog, no record written" \
   || bad "SP6: subject mode did not refuse a stale SPEC memlog (rc=$RC): $(cat "$JO")"
 p_sjspecfresh "$JOIN" && ok "SP7: --subject, the same memlog rendered through its last decision -> JOINED, the record written, SPEC-RENDER: rendered through its last decision" \
@@ -420,7 +422,10 @@ fi
 p_chkserial "$JOIN" && ok "EC33: --escalations over a joined record with two serial blocks -- the second omitting both check lines is REFUSED naming its own terminator, the count still printed; stating both, rc 0" || bad "EC33: the serial blocks were not segmented by their terminators (rc=$RC): $(cat "$JO")"
 p_supchain "$JOIN" && ok "EC34: --escalations, a supersedes: chain counts once under its latest member, the superseded one on its own ESCALATED-SUPERSEDED line; a closes: leaving a member open is FLAGGED after the count; a link to a later escalation is REFUSED as dangling" || bad "EC34: the supersedes chain did not dedupe, flag or refuse as specified (rc=$RC): $(cat "$JO")"
 p_fencenest "$JOIN" && ok "EC36: the record readers close a four-backtick fence only on a run at least as long -- content after its inner three-backtick block is no entry, no check line, no source token and no heading" || bad "EC36: a record reader closed a four-backtick fence on its inner three-backtick line (rc=$RC): $(cat "$JO")"
+p_partmark "$JOIN" && ok "EC37: a part closed by the real --mark joins beside an unmarked one, its seat-complete: line kept in the record; a serial block appended after the LAST marked part is segmented at its own triple -- stating both check lines rc 0, stating neither REFUSED naming its repair-complete: serial line and never a seat-complete: line" || bad "EC37: a marked part broke the joined record or its serial block (rc=$RC): $(cat "$JO")"
 p_gaploc "$JOIN" && ok "EC35:--escalations, a gap-fill edit's location is REPORTED after the count, rc 0 -- a section citing D-5 named, the adjacent section of the same file not, a dead section copy mapped through its manifest span, an unresolvable cite said so" || bad "EC35: the gap-fill location did not resolve as specified (rc=$RC): $(cat "$JO")"
+p_advname "$JOIN" && ok "EC38: an artifact ending in -adversarial is REFUSED in document and files mode, naming <artifact>-repair-p<M> and arm H, nothing written; shards/x-repair-p1/ joins and shards/adversarial-notes-repair-p1/ draws no such refusal" \
+  || bad "EC38: an -adversarial artifact was not refused as specified, or a -repair-p dir drew the refusal (rc=$RC): $(cat "$JO")"
 
 echo
 if [ "$fails" -eq 0 ]; then echo "$NAME: PASS"; exit 0; fi

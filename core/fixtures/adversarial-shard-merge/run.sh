@@ -43,8 +43,7 @@
 # lines (lines 118-119), now carrying the ids lib.sh's hr_ids derives from each shard's dir and name.
 #
 # Every arm that scores a merge calls its predicate as `p_<name> "$MERGE"` at the start of a
-# line; the battery's join J1 reads exactly that shape to prove the shipped arm set and P_ALL
-# are one set.
+# line.
 HERE="$(cd "$(dirname "$0")" && pwd)"
 NAME="adversarial-shard-merge"
 [ -f "$HERE/lib.sh" ] || { echo "FIXTURE BROKEN: $HERE/lib.sh is absent; nothing was asserted" >&2; exit 2; }
@@ -237,8 +236,7 @@ p_rerun_bind "$MERGE" && ok "RB1: --rerun 2.md@1999-01-01T00:00:00Z on a normal 
 
 # ---- BL-577: `### ` under `## Findings` is reserved for a finding (FINDING GRAMMAR). BL-575: one
 # header check, owned by the merge, callable on one file as --check-header. These arms are INLINE,
-# not `p_<name> "$MERGE"` predicates: a predicate joins P_ALL and the retired mutant battery's J1 and XM1
-# sets. RM-A and RM-B below are this
+# not `p_<name> "$MERGE"` predicates. RM-A and RM-B below are this
 # fixture's own mutants, built PM1's way in a copy of the merge's whole sibling set.
 mk_markers() { # <shard dir>: every shard ends in its seat-complete marker, n = its `### M<n>` findings
   local f n
@@ -285,6 +283,19 @@ p_fence_sameset "$MERGE" && ok "FG5: same_set -- a cross finding duplicating its
 p_fence_nested "$MERGE" && ok "FG6: a four-backtick fence holding a three-backtick block hides the finding before its own closer -> declared 0 MERGED major=4, declared 1 REFUSED on the count" || bad "FG6: (rc=$RC) $(cat "$MO")"
 p_fence_nested_set "$MERGE" && ok "FG7: same_set -- the owner's finding after a four-backtick fence holding a three-backtick block is read, so the duplicate is REFUSED" || bad "FG7: (rc=$RC) $(cat "$MO")"
 
+# ---- BL-664: a trailing ` #` comment is stripped from a provenance value (schema parser.comments)
+p_hdr_comment "$MERGE" && ok "HC1: every provenance value carrying a ' # ' comment passes --check-header on both axes, and merges byte-identical to the files-mode golden; 'findings_major: 2#x' (no whitespace) is still refused as non-integer" \
+  || bad "HC1: (rc=$RC) $(cat "$MO")"
+
+# ---- BL-670: the merge stamps DIVERGENT_HARD_BLOCK from the summed prior scope (arm C on the sum)
+p_sum_divergent "$MERGE" && ok "SD1: summed prior_scope 2 over p1's 1 CRITICAL -> DIVERGENT_HARD_BLOCK with the stamp line naming p1; over p1's 2 -> not divergent; pass 1 -> not divergent; p3 with p2 absent compares with p1; a two-block p1 stamps on its FIRST block; a block-less p2 is skipped" \
+  || bad "SD1: (rc=$RC) $(cat "$MO")"
+if p_sum_excl_drift "$MERGE"; then ok "SD3: a validator copy whose --series exclusion line drifted is REFUSED naming the exclusion line, rc 2"
+else bad "SD3: the drifted exclusion line was not refused (rc=${RC:-?}): $(head -3 "$MO")"; fi
+# SD2: the oracle, not spelled as a line-start predicate call.
+if p_sum_divergent_oracle "$MERGE"; then ok "SD2: on five seeded series (a -pass1 and a zero-padded -p02 predecessor, a two-block and a block-less one) the merge stamps exactly where validate-adversarial-convergence.sh --series fires arm C on the unstamped twin"
+else bad "SD2: the merge's stamp (${OR_ST:-?}) disagrees with arm C on the unstamped twin (${OR_C:-?}): $(grep -m2 'FAIL\|pass artifact' "$CO" 2>/dev/null)"; fi
+
 # CH1-CH8: --check-header on one file. The base is a real B3 shard, which passes; each cell varies ONE field.
 ch() { bash "$MERGE" --check-header "$1" --axis "$2" > "$MO" 2>&1; RC=$?; } # <shard file> <axis>
 chv() { sed "$2" "$1" > "$3"; } # <src> <sed script> <dst>
@@ -308,13 +319,15 @@ for cell in "CH3|s/^verdict: .*/verdict: PENDING-LEAD/|declares verdict 'PENDING
             "CH4|/^lead_role:/d|declares no lead_role" \
             "CH5|s/^lead_role: .*/lead_role: <the step file that invoked or dispatched the evaluation>/|an unfilled template placeholder" \
             "CH6|s/^verdict: .*/verdict: <EXIT_CONDITION_MET|EXIT_CONDITION_NOT_MET|DIVERGENT_HARD_BLOCK>/|declares verdict 'EXIT_CONDITION_MET_EXIT_CONDITION_NOT_MET_DIVERGENT_HARD_BLOCK'" \
-            "CH7|s/^verdict: .*/verdict: EXIT_CONDITION_MET # stamped by the adversary/|declares verdict 'EXIT_CONDITION_MET_STAMPED_BY_THE_ADVERSARY'"; do
+            "CH7|s/^verdict: .*/verdict:   # stamped by the adversary/|declares verdict '<none>'"; do
   id="${cell%%|*}"; rest="${cell#*|}"; tok="${rest##*|}"; scr="${rest%|*}"
   chv "$d/1.md" "$scr" "$c/$id.md"; ch "$c/$id.md" convergence
   [ "$RC" -eq 1 ] && has "$MO" "REFUSED: $c/$id.md" && has "$MO" "$tok" \
     && ok "$id: [$scr] -> --check-header exit 1, '$tok'" || bad "$id: [$scr] gave rc=$RC: $(cat "$MO")"
 done
-# CH7 pins the comment decision: a trailing ` #` comment is NOT stripped (the merge never stripped it).
+# CH7: a COMMENT-ONLY verdict. The trailing ` #` comment is stripped from the raw value before the
+# trim (BL-664), so nothing is left and the shard is refused as '<none>'; the commented VALUE that
+# passes is p_hdr_comment's (HC1 below).
 cp "$d/1.md" "$c/m.md"; printf '\nseat-complete: stories adversary 1 findings=3\n' >> "$c/m.md"; ch "$c/m.md" convergence
 [ "$RC" -eq 1 ] && has "$MO" "findings=3' but its ## Findings section heads 2 finding(s)" \
   && ok "CH8: a marker declaring findings=3 over 2 findings -> --check-header exit 1 with the merge's truncation refusal" \

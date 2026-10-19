@@ -1149,7 +1149,6 @@ p_cr_hc_missing() { # G5: a code-review part shard without its declared count ->
   run_merge "$1" "$d"; refused_clean "$QT_HC_MISSING" "$d"; }
 C_ALL="cr_ho_ok cr_ho_block cr_ho_unm cr_ho_runtwice cr_hc_missing"
 Q_ALL="q_worst q_table q_title q_fenced q_part_ac q_part_def q_cross_noac q_cross_twoac q_cross_twodef q_nodef q_rank q_pm q_suffix q_gate q_vset q_secvar q_ho_ok q_ho_unm q_ho_orph q_ho_force q_ho_cross q_ho_prun q_ho_fenced q_ho_shape q_ho_multi q_ho_twoline q_ho_dup q_ho_deco q_ho_nocolon q_ho_prose q_ho_acid q_hc_dash q_hc_hidden q_hc_zero q_hc_missing q_hc_two q_hc_nonint q_hc_cross q_hc_none q_ho_widen"
-P_ALL="part dflt_lo dflt_hi off refuse_val prec dmerge env worst c1 conserve miss_ord miss_cross dup part_cite cross_one sha_dir sha_rev moved a3 rerun anc cross_sha bad_verdict noparts manifest two_sha default_k stray nofind knob fence_nested $Q_ALL $X_ALL $C_ALL"
 
 # Seed controls: the worlds must be able to express what the arms are named for. Both callers run
 # them before any arm or mutant verdict is read.
