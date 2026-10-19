@@ -572,4 +572,6 @@ Cost: the loop forks `dirname` twice per candidate before it checks `.dist-only`
 
 Owed, in order: first, a ship-set-filter probe seed (a shipping walk-up fixture must be reported, a `.dist-only` one must not, in both directions). Second, the `.dist-only`-first reorder with builtin `${f%/*}` in place of `dirname`, verified by that probe and a by-arm fork count. Filed by batch 236 VALIDATORS.
 
-verify: manual
+Built (batch 236): the ship-set filter is now `i33d_ship_hits <fixtures-root>` in `scripts/validate-enforcement-map.sh`. It takes the fixture directory by parameter expansion (`${f#"$root"/}`, `${f%%/*}`) with no `dirname` fork, and checks `.dist-only` before `i33d_scan`. The corpus loop and a new probe call that one function: a mini tree with a shipping `ship-a/sub/x.sh` walk-up (must be reported) and a `.dist-only` `dist-b/sub/x.sh` with the same walk (must not). The receipt mutates a copy so the filter skips every candidate and requires I106 to name the ship-set filter probe. The by-arm fork count is left to the owner.
+
+verify: sh bash core/fixtures/enforcement-map-derivations/receipt-bl696.sh
