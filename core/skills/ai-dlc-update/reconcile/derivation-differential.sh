@@ -88,14 +88,28 @@
 # A LEAKED BASE WORKTREE IS NAMED, NEVER REMOVED, AND ONLY WHEN ITS RUN IS DEAD. A run killed by SIGKILL
 # never reaches its EXIT trap, so its `derivation-differential-root-*` worktree stays registered in
 # the consumer. Each run writes its PID into `<that dir>/pid` before adding the worktree; a registered
-# worktree is reported in a NOTE row only when that PID is recorded and `ps -p` finds no such
-# process. A concurrent LIVE run's worktree looks identical on disk, and naming it with a removal
+# worktree is reported in a NOTE row only when that PID is recorded and pid_live() says the process
+# is GONE. A concurrent LIVE run's worktree looks identical on disk, and naming it with a removal
 # remedy would hand the operator a command that pulls the tree out from under a run in progress. A
 # worktree whose directory records no PID is not named either: it cannot be shown to be abandoned.
-# `ps -p`, NOT `kill -0`: `kill -0` also fails with EPERM on a live process another uid owns, so a
-# concurrent run by a different user read as dead. `ps -p` matches the exact PID across uids.
-# PID REUSE is not handled: a dead run whose PID the kernel has handed to an unrelated process reads
-# as live, and its leaked worktree goes unnamed -- the safe direction, since nothing is removed.
+#
+# LIVENESS IS `kill -0` READ BY ITS ERROR, NEVER `ps -p`. `/bin/ps` is setuid root on macOS, and
+# wherever setuid execs are refused -- a `sandbox-exec` profile, the read-set tracer's among them --
+# `ps -p` exits 126 "Operation not permitted" for EVERY pid, its own included, so every recorded PID
+# read as dead and a LIVE run's worktree was named for removal. `kill -0` is a shell builtin and
+# execs nothing. Bare `kill -0` is not enough either: it fails with EPERM on a live process another
+# uid owns, so a concurrent run by a different user read as dead. So the failure is read by its
+# message: "No such process" (ESRCH) is the only answer that names a worktree; "Operation not
+# permitted" (EPERM) is a live process we may not signal; and ANY OTHER outcome -- an unparsed or
+# empty message -- reads as live. An unreadable answer fails toward silence, never toward a removal
+# remedy. Bash's builtin prefixes the message with the script path and line, so it is matched by
+# suffix. macOS `strerror` is not localized; `LC_ALL=C` holds the text fixed where it would be, and
+# is EXPORTED inside the substitution, because a temporary assignment prefixed to a builtin
+# (`LC_ALL=C kill`) does not reach the builtin's message catalogue alike across bash versions.
+# ACCEPTED RESIDUAL: a dead run whose PID the kernel has handed to an unrelated process reads as
+# live -- under another uid via EPERM, under ours via rc 0 -- and its leaked worktree goes unnamed.
+# That is the safe direction: the row is suppressed, nothing is removed, and a later run whose PID
+# is free again names it.
 #
 # A WORKTREE, NOT `git archive`, because derivations run `git` -- `git log`, `git ls-files`,
 # `git show` against refs -- and an exported tree has no repository under it: every such
@@ -505,13 +519,24 @@ git -C "$CONSUMER" status --porcelain 2>/dev/null \
 # run's own (if any) excluded by its unique mktemp segment, and named only when the PID its run
 # recorded beside it is DEAD. A live PID is a concurrent run; no recorded PID proves nothing.
 _own="${WT_PARENT##*/}"
+# pid_live <pid> -> 0 unless the process is shown GONE (ESRCH). See the header: EPERM is live, and
+# an unreadable answer is live.
+pid_live() {
+  local _e
+  _e="$(export LC_ALL=C; kill -0 "$1" 2>&1)" && return 0
+  case "$_e" in
+    *"No such process") return 1 ;;
+    *"Operation not permitted") return 0 ;;
+  esac
+  return 0
+}
 git -C "$CONSUMER" worktree list --porcelain 2>/dev/null \
   | sed -n 's/^worktree //p' \
   | awk -v own="$_own" 'index($0, "/derivation-differential-root-") && (own == "" || !index($0, "/" own "/"))' \
   | while IFS= read -r _p; do
       _pid="$(head -1 "${_p%/*}/pid" 2>/dev/null | tr -d '[:space:]')"
       case "$_pid" in ''|*[!0-9]*) continue ;; esac
-      ps -p "$_pid" >/dev/null 2>&1 && continue
+      pid_live "$_pid" && continue
       say_row NOTE worktree "$_p is a registered worktree left by an earlier run of this helper (PID $_pid, no longer running) that never reached its cleanup. It is not removed here; \`git worktree remove --force\` on that path clears it."
     done
 

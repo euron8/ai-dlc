@@ -4,3 +4,4 @@
 !scripts/backlog-rotate.sh
 core/skills/ai-dlc-update/reconcile/lib.sh
 VERSION
+core/fixtures/lib/preamble.sh

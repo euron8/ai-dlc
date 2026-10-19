@@ -25,3 +25,6 @@ tr
 mkfifo
 ps
 pgrep
+chmod
+ln
+uname

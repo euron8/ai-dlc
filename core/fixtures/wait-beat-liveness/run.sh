@@ -812,17 +812,34 @@ S13b_complete_progress_per_target() {
 # A writer that rewrites a marked file ABOVE its marker every 0.3s until its SENTINEL exists:
 # the consumer's cross seat that wrote once and then made seven in-place Edits. A counter makes
 # every rewrite distinct bytes. Stopped by `churn_stop`, which touches the sentinel and waits --
-# never killed. A hard cap of 60s keeps a lost sentinel from spinning forever.
+# never killed. A cap of CHURN_CAP seconds keeps a lost sentinel from spinning forever, and it
+# DECIDES NOTHING: a churn that stopped on the cap rather than on its sentinel leaves a static file
+# under arms that assume an edited one, so the writer records `.capped` and churn_stop REFUSES on
+# it (exit 2) -- the number only bounds a leak, the verdict is read only from a churn that was still
+# running when it was told to stop.
+CHURN_CAP=60
 churn() {  # $1 = file
-  CHURN_STOP="$1.stop"; rm -f "$CHURN_STOP"
-  ( i=0; end=$(( $(date +%s) + 60 ))
+  CHURN_STOP="$1.stop"; rm -f "$CHURN_STOP" "$CHURN_STOP.capped"
+  ( i=0; end=$(( $(date +%s) + CHURN_CAP ))
     while [ ! -e "$CHURN_STOP" ] && [ "$(date +%s)" -lt "$end" ]; do
       i=$((i + 1)); printf '%s\n- an in-place edit, revision %d\n%s\n' "$SKELETON" "$i" "$MARKER" > "$1"
       sleep 0.3
-    done ) &
+    done
+    [ -e "$CHURN_STOP" ] || : > "$CHURN_STOP.capped" ) &
   CHURN_PID=$!
 }
-churn_stop() { : > "$CHURN_STOP"; wait "$CHURN_PID" 2>/dev/null; }
+churn_stop() {
+  : > "$CHURN_STOP"; wait "$CHURN_PID" 2>/dev/null
+  [ ! -e "$CHURN_STOP.capped" ] || broken "the churn writer stopped on its ${CHURN_CAP}s cap before its sentinel, so the file it was meant to keep editing was static under the arms that read it"
+}
+# THE CAP'S REFUSAL, PROBED BOTH WAYS: a 0s cap expires before the sentinel and must refuse (exit 2);
+# the default cap, stopped by its sentinel, must not.
+S13h_churn_cap_refuses() {
+  ( W="$(mk_work)"; CHURN_CAP=0; churn "$W/cap.md"; while [ ! -e "$W/cap.md.stop.capped" ] && kill -0 "$CHURN_PID" 2>/dev/null; do sleep 0.1; done; churn_stop ) 2>/dev/null; cp1=$?
+  ( W="$(mk_work)"; churn "$W/cap.md"; sleep 0.4; churn_stop ) 2>/dev/null; cp2=$?
+  if [ "$cp1" = 2 ] && [ "$cp2" = 0 ]; then ok "churn: a writer that stopped on its cap refuses (rc $cp1); one stopped by its sentinel does not (rc $cp2)"
+  else bad "churn cap probe: capped rc=$cp1 (want 2), sentinel-stopped rc=$cp2 (want 0)"; fi
+}
 
 S13c_complete_marker_must_settle() {
   W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
@@ -1797,14 +1814,15 @@ S17c_shard_header_absent_changes_nothing() {
 # Both shards rewritten together every 0.3s until the sentinel exists, each revision distinct
 # bytes outside ## Findings; stopped by churn_stop (shared with section 13c), never killed.
 shard_churn() {  # $1 = workdir
-  CHURN_STOP="$1/churn.stop"; rm -f "$CHURN_STOP"
-  ( i=0; end=$(( $(date +%s) + 60 ))
+  CHURN_STOP="$1/churn.stop"; rm -f "$CHURN_STOP" "$CHURN_STOP.capped"
+  ( i=0; end=$(( $(date +%s) + CHURN_CAP ))
     while [ ! -e "$CHURN_STOP" ] && [ "$(date +%s)" -lt "$end" ]; do
       i=$((i + 1))
       mk_shard "$1/c-bad.md" "$CV" ""                 "" "revision $i"
       mk_shard "$1/c-ok.md"  "$CV" EXIT_CONDITION_MET "" "revision $i"
       sleep 0.3
-    done ) &
+    done
+    [ -e "$CHURN_STOP" ] || : > "$CHURN_STOP.capped" ) &
   CHURN_PID=$!
 }
 
@@ -2190,10 +2208,10 @@ M41_lease_in_state_dir() {
 #     from the same wrapper must then not sleep, and the control must. The trailing `exit $?`
 #     keeps bash from exec-ing the subject, so both beats' $PPID is the wrapper.
 # ===========================================================================
-aged_shell_beat() {  # $1 = subject, $2 = workdir, $3 = same|other
+aged_shell_beat() {  # $1 = subject, $2 = workdir, $3 = same|other, [$4 = a dir put first on PATH for the SECOND beat only]
   ( cd "$2" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_POLL_SECS=1 \
       AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
-      AG_MODE="$3" AI_DLC_PROJECT_ROOT="$2" bash -c '
+      AG_MODE="$3" AG_PATH2="${4:-}" AI_DLC_PROJECT_ROOT="$2" bash -c '
         s="$1"
         AI_DLC_WAIT_BEAT_SECS=2 bash "$s" first.md > /dev/null 2>&1
         m="_bmad-output/.wait-beats/.shell-$$"; [ -f "$m" ] || exit 3
@@ -2201,6 +2219,7 @@ aged_shell_beat() {  # $1 = subject, $2 = workdir, $3 = same|other
         [ "$AG_MODE" = other ] && r="${r%% *} Thu Jan 1 00:00:00 1970"
         printf "%s" "$r" > "$m" || exit 3
         touch -t "$(date -v-300S +%Y%m%d%H%M.%S 2>/dev/null || date -d "-300 seconds" +%Y%m%d%H%M.%S)" "$m" || exit 3
+        case "$AG_PATH2" in "") ;; =*) PATH="${AG_PATH2#=}" ;; *) PATH="$AG_PATH2:$PATH" ;; esac
         AI_DLC_WAIT_BEAT_SECS=60 bash "$s" deliv.md
         exit $?' _ "$1" ) > "$BEATOUT" 2>&1 &
   AG_PID=$!
@@ -2228,6 +2247,123 @@ S22_chained_by_shell_identity() {
   if [ "$RC" -eq 0 ] && ! has "a sibling beat already ran in this same Bash call" && has "DELIVERED deliv.md"; then
     ok "chained: CONTROL — a marker naming another start time (a recycled pid) sleeps"
   else bad "chained: CONTROL FAILED — a different-shell marker was read as chained (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+}
+# ===========================================================================
+# 22b. THE START TIME SURVIVES A `ps` THAT CANNOT RUN (BL-686). `/bin/ps` is setuid root and
+#      `sandbox-exec` refuses to exec it, so under a sandboxed harness the identity test had no
+#      input and every beat fell back to the clock. The FIRST beat writes its marker with the real
+#      `ps`; the SECOND beat runs with a PATH `ps` that exits 1, so its start time can come only from
+#      the perl fallback -- and it must read EQUAL to what `ps` wrote, or the chained call sleeps.
+#      Both beats run under LC_ALL=de_DE.UTF-8, where an unpinned `ps` prints German day names and
+#      perl's localtime prints English, so the arm also holds the pin. CONTROL: `ps` AND `perl` both
+#      stubbed -- no start time at all, the clock test decides, and the 2 x BUDGET-old marker sleeps.
+# ===========================================================================
+nops_stubs() {  # -> $TMPROOT/nops (a `ps` that exits 1) and $TMPROOT/nops/both (that `ps` and a `perl` that exits 1)
+  sb_d_="$TMPROOT/nops"; mkdir -p "$sb_d_/both" || broken "cannot create the ps stub dirs"
+  printf '#!/bin/sh\nexit 1\n' > "$sb_d_/ps" && chmod +x "$sb_d_/ps" && cp "$sb_d_/ps" "$sb_d_/both/ps" && cp "$sb_d_/ps" "$sb_d_/both/perl" \
+    || broken "cannot write the ps/perl stubs"
+  [ "$(PATH="$sb_d_:$PATH" command -v ps)" = "$sb_d_/ps" ] || broken "the ps stub is not first on PATH"
+}
+# PERL IS OPTIONAL (BL-686). S22b, M49 and M50 need the fallback to read what `ps` reads, and need
+# de_DE.UTF-8 to move an unpinned `ps`. Probed ONCE, through the SUBJECT's own shell_start_of; on a
+# miss the three print SKIP by name -- never `broken`, never a false kill. FB_OK caches the answer.
+FB_OK=""
+fb_probe() {
+  [ -n "$FB_OK" ] && return 0
+  nops_stubs
+  fb_f_="$(sed -n '/^shell_start_of() {/,/^}/p' "$SUBJ")"
+  [ -n "$fb_f_" ] || broken "could not extract shell_start_of from $SUBJ"
+  fb_real_="$(eval "$fb_f_"; shell_start_of $$)"
+  fb_stub_="$(eval "$fb_f_"; PATH="$TMPROOT/nops:$PATH"; shell_start_of $$)"
+  fb_de_="$(LC_ALL=de_DE.UTF-8 ps -o lstart= -p $$ 2>/dev/null)"; fb_c_="$(LC_ALL=C ps -o lstart= -p $$ 2>/dev/null)"
+  FB_OK=1; FB_WHY=""
+  [ -n "$fb_real_" ] && [ "$fb_stub_" = "$fb_real_" ] || { FB_OK=0; FB_WHY="with ps stubbed the perl fallback read '$fb_stub_', not '$fb_real_' -- no usable perl here (it is optional)"; }
+  [ -n "$fb_de_" ] && [ "$fb_de_" != "$fb_c_" ] || { FB_OK=0; FB_WHY="${FB_WHY:+$FB_WHY; }de_DE.UTF-8 and C read the same start ('$fb_de_') -- the locale pin cannot be held"; }
+  # ANTI-SKIP: the precondition computed apart from the probe above -- perl on PATH (probed, never
+  # run), a Darwin kernel, and de_DE.UTF-8 moving `ps`. Under it a SKIP is a FAIL, by name.
+  if command -v perl >/dev/null 2>&1 && [ "$(uname -s 2>/dev/null)" = Darwin ] && [ -n "$fb_de_" ] && [ "$fb_de_" != "$fb_c_" ]; then
+    FB_MUST=1
+  else FB_MUST=0; fi
+}
+fb_skip() {  # $1 = case name: 0 (SKIP printed, or FAIL under the anti-SKIP precondition) when the fallback cannot be exercised
+  fb_probe
+  [ "$FB_OK" = 1 ] && return 1
+  if [ "$FB_MUST" = 1 ]; then
+    bad "anti-SKIP: perl is on PATH on Darwin and de_DE.UTF-8 moves ps, yet $1 would be SKIPPED -- the fallback probe is broken: $FB_WHY"
+  else printf '  SKIP  %s: %s\n' "$1" "$FB_WHY"; fi
+  return 0
+}
+S22b_start_time_without_ps() {
+  fb_skip S22b_start_time_without_ps && return
+  nops_stubs
+  W="$(mk_work)"; LC_ALL=de_DE.UTF-8 aged_shell_beat "$SUBJ" "$W" same "$sb_d_"; ag_wait "$W"
+  if [ "$RC" -eq 0 ] && has "a sibling beat already ran in this same Bash call"; then
+    ok "chained: with ps refused (PATH stub, as sandbox-exec refuses the setuid /bin/ps) the perl fallback reads the start ps wrote -- still chained, no second quantum"
+  else bad "chained: with ps refused, a same-shell sibling stamped past BUDGET let the beat sleep (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+  W="$(mk_work)"; LC_ALL=de_DE.UTF-8 aged_shell_beat "$SUBJ" "$W" same "$sb_d_/both"; ag_wait "$W"
+  if [ "$RC" -eq 0 ] && ! has "a sibling beat already ran in this same Bash call" && has "DELIVERED deliv.md"; then
+    ok "chained: CONTROL — with ps AND perl refused there is no start time, the clock decides, and the aged marker sleeps"
+  else bad "chained: CONTROL FAILED — with ps and perl both refused the aged marker still read as chained (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+}
+# 22c. NO PERL AT ALL (BL-686, the lead's ruling: perl is optional). The second beat runs on a PATH
+#      that is ONLY a directory of links to this fixture's declared tools, with perl left out and a
+#      `ps` that prints nothing and exits 0. The beat has no start time, so it must say once, on
+#      stderr, that the guard decides by the clock -- never fall back silently.
+NOPERL_LINE='-- the chained-beat guard decides by the clock alone this beat'
+noperl_path() {  # -> $TMPROOT/noperl: links to every tools.decl tool except perl and ps, plus a ps that prints nothing
+  np_d_="$TMPROOT/noperl"; mkdir -p "$np_d_" || broken "cannot create the no-perl PATH dir"
+  while IFS= read -r np_t_; do
+    case "$np_t_" in ''|'#'*|perl|ps) continue ;; esac
+    np_p_="$(command -v "$np_t_")" || broken "tools.decl names $np_t_, which is not on PATH"
+    ln -sf "$np_p_" "$np_d_/$np_t_" || broken "cannot link $np_t_"
+  done < "$HERE/tools.decl"
+  printf '#!/bin/sh\nexit 0\n' > "$np_d_/ps" && chmod +x "$np_d_/ps" || broken "cannot write the empty ps stub"
+  [ -z "$(PATH="$np_d_" command -v perl)" ] && [ "$(PATH="$np_d_" command -v ps)" = "$np_d_/ps" ] \
+    || broken "the no-perl PATH still finds perl, or not the empty ps"
+}
+np_count() { printf '%s\n' "$OUT" | grep -cF -- "$NOPERL_LINE" || true; }
+S22c_no_perl_states_clock_fallback() {
+  noperl_path
+  W="$(mk_work)"; aged_shell_beat "$SUBJ" "$W" same "=$TMPROOT/noperl"; ag_wait "$W"
+  np_n_="$(np_count)"
+  if [ "$RC" -eq 0 ] && [ "$np_n_" = 1 ] && has "DELIVERED deliv.md"; then
+    ok "no perl: with ps empty and perl absent from PATH the beat states its clock fallback exactly once on stderr"
+  else bad "no perl: the clock-fallback line appeared $np_n_ time(s), want 1 (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+  W="$(mk_work)"; aged_shell_beat "$SUBJ" "$W" same; ag_wait "$W"
+  np_n_="$(np_count)"
+  if [ "$np_n_" = 0 ] && has "a sibling beat already ran in this same Bash call"; then
+    ok "no perl: CONTROL — with ps working the line is absent and identity decides"
+  else bad "no perl: CONTROL FAILED — with ps working the clock-fallback line appeared $np_n_ time(s): $OUT"; fi
+  rm -rf "$W"
+}
+M51_silent_clock_fallback() {
+  noperl_path; mutant silent-clock-fallback -e '/^\[ -n "\$SHELL_START" \] || printf .NOTE: start time of shell/d' || return
+  W="$(mk_work)"; aged_shell_beat "$MUT" "$W" same "=$TMPROOT/noperl"; ag_wait "$W"
+  if [ "$(np_count)" != 1 ]; then
+    ok "MUTANT silent-clock-fallback: a beat with no start time that falls back silently -- section 22c catches it"
+  else bad "MUTANT silent-clock-fallback: section 22c survives the fallback line being removed: $OUT"; fi
+  rm -rf "$W"
+}
+M49_start_time_no_fallback() {
+  fb_skip M49_start_time_no_fallback && return
+  nops_stubs; mutant start-time-no-fallback -e 's@^  \[ -n "\$ss_" \] || ss_="\$(perl -e@  [ -n "$ss_" ] || ss_="$(false -e@' || return
+  W="$(mk_work)"; LC_ALL=de_DE.UTF-8 aged_shell_beat "$MUT" "$W" same "$TMPROOT/nops"; ag_wait "$W"
+  if ! has "a sibling beat already ran in this same Bash call"; then
+    ok "MUTANT start-time-no-fallback: with no perl fallback a refused ps sleeps a same-shell sibling -- section 22b catches it"
+  else bad "MUTANT start-time-no-fallback: section 22b survives the fallback being removed: $OUT"; fi
+  rm -rf "$W"
+}
+M50_start_time_unpinned() {
+  fb_skip M50_start_time_unpinned && return
+  nops_stubs; mutant start-time-unpinned -e 's@^  ss_="\$(LC_ALL=C ps -o lstart=@  ss_="$(ps -o lstart=@' || return
+  W="$(mk_work)"; LC_ALL=de_DE.UTF-8 aged_shell_beat "$MUT" "$W" same "$TMPROOT/nops"; ag_wait "$W"
+  if ! has "a sibling beat already ran in this same Bash call"; then
+    ok "MUTANT start-time-unpinned: an unpinned ps writes a German marker the English fallback cannot match -- section 22b catches it"
+  else bad "MUTANT start-time-unpinned: section 22b survives ps losing its LC_ALL=C pin: $OUT"; fi
   rm -rf "$W"
 }
 M43_chained_by_clock() {

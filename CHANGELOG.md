@@ -20,6 +20,69 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.849.0] - 2026-10-18
+
+Batch 236 (5e's TOOLING). The rotator reads a LANDED sha from its annotation, a receipt line matching no form is
+named, S7 reads only the replacement string, a leaked worktree's liveness and a pid's start time survive a sandbox that
+refuses the setuid `ps`, and fixture verdicts stop turning on elapsed seconds. Closes BL-610, BL-632, BL-673, BL-680,
+BL-681 and BL-686. Files BL-686. Closes no `PC-` id. Net for this release: 6 closed, 1 filed.
+
+### The rotator reads a LANDED sha from the annotation form only (BL-673)
+
+`scripts/backlog-rotate.sh` took the sha with a greedy `sed`, so later prose saying "verified <word>" replaced it and a
+correct LANDED line was refused. The read is now anchored on `**LANDED (v…, verified <hex>` and ends the hex on any
+non-hex character, so `verified b2f55a42.)` parses too: 629 of 629 LANDED lines across the ledger and the archive.
+
+### A `verify:` value matching no receipt form is named by entry id (BL-680)
+
+`scripts/validate-backlog-receipts.sh` counted `manual.`, `manual,` and any value that is neither `sh` nor `manual` as
+nothing, so R2 reported only "ZERO scored receipts". Such a value now FAILs naming its entry id, and R2's message names
+it too. `has` and `lacks` are recognised. A guard refuses (exit 2) if `backlog-reverify.sh`'s `has|lacks)` case arm
+moves, keyed on the arm line so that a comment carrying the text cannot satisfy it.
+
+### S7 reads a backslash-digit only inside the sub/gsub replacement string (BL-681)
+
+`scripts/validate-shell-portability.sh` S7 matched `\<digit>` anywhere after the first comma, flagging an octal
+`"\037"` in a later `print`. The pattern now walks the first argument unit by unit and reads only the first quoted
+replacement string. It scores 8 of 8 on a matrix that includes a comma inside the regex literal and a later `printf`.
+
+### A leaked worktree's liveness no longer needs the setuid `ps` (BL-610)
+
+`/bin/ps` is setuid root and `sandbox-exec` refuses to run it, so `derivation-differential.sh` read every recorded run
+as dead there and named a LIVE run's worktree. Liveness now reads `kill -0`'s answer: success or "Operation not
+permitted" is live, "No such process" is dead, and anything else is live. A recycled pid now owned by another uid reads
+live, so that row is suppressed; it fails toward silence. The fixture tests the refused-`ps` world with a shim pinned to
+the real refusal and execs no setuid binary and no `sandbox-exec`. Under `--tracer sandbox` the fixture can still be
+omitted by stream drop (BL-616's class), a separate cause.
+
+### A pid's start time is read without the setuid `ps` under a sandbox (BL-686)
+
+The pid start-time identity checks now work under `sandbox-exec`. `/bin/ps` is setuid root and the sandbox refuses to
+run it, so the pre-push lock writers recorded an empty start time and `wait-for-deliverable.sh` fell back to its clock
+test, silently. When `ps` is refused or prints nothing, the hooks and the wait script now read the same kernel start
+time with perl, when perl is available. On macOS perl ships with the OS at `/usr/bin/perl`. Without perl nothing is
+recorded empty, and each site takes its safe direction and says so on stderr: the lock writers record a lock with no
+start line, which the reader judges held on pid and age, and the wait beat states once that it decides by the clock
+alone. `wait-for-deliverable.sh` also pins its `ps` to `LC_ALL=C`, so a marker written by either source reads as equal
+through the other. One marker written by an older beat under a non-C locale may cost one extra wait, once, mid-pull.
+No fixture declares perl: the arms that need it print SKIP by name where it is absent, and a guard FAILs any such SKIP on
+a host that has perl.
+
+`wait-stale-deliverable` case C41, which removes the join memo and expects the second of two beats to wait, now holds
+that beat until the first has delivered and deleted `.since`, waiting on a sentinel rather than a sleep. Before this, the
+order depended on timing. Under load, both beats sometimes saw the seal within one poll and both delivered before either
+deletion, so the removed memo went unnoticed. A pre-push run for this release at load 53 caught it, in 1 of 3 runs.
+This is a timing arm in a `wait-for-deliverable` fixture, the same family as BL-703. BL-686's lines do not reach it: the
+start time that BL-686 changed reads identically before and after this release.
+
+### Fixture verdicts stop turning on elapsed seconds (BL-632)
+
+`readset-stage1-verdict`'s orphan check FAILed after a poll count. It now waits while the live pid set shrinks and
+refuses (exit 2) on no progress. The `[MW]` probe-validity check that also read elapsed seconds lived in mutation
+batteries, which 0.842.0 retired, so it needs no conversion. `wait-beat-liveness`'s churn caps now refuse when hit instead of leaving a static
+file under arms that expect an edited one. The rest of the census is accepted as bounds with a named property or was
+already converted.
+
 ## [0.845.0] - 2026-10-18
 
 Batch 236, BL-702 (owner ai-dlc-5e, lead ai-dlc-c8). Closes BL-702, which this release files. Closes no `PC-` id. Net for this release: 1 closed, 1 filed.

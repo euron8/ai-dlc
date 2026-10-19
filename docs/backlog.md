@@ -135,6 +135,8 @@ Scheduled in batch 235 for a later release (scope ruling: the boundary is the re
 
 **Phase 2, v0.842.0.** Every mutation battery is retired: 56 units in 24 batteries, removed because none has a catch on record. A census of every record on `origin/main` that names a battery found only drift reds (re-anchored mutants, re-declared kill sets, scorer timeouts, the battery's own bugs) and one red that was not the battery's: BL-181, a subject locale bug the shipping fixture `gate-remediation-deny` also caught. In the main checkout's loaded-cost record the 56 units were 30380 of 54724 fixture-seconds (56%), and the pole moves from `adversarial-shard-merge-mutants` at 2214 s to `document-partition` at 732 s. The CHANGELOG for 0.842.0 carries the per-battery table. Items (b) and (c) above described those batteries' controls and shards; they no longer exist. Open: the non-mutant poles (`document-partition`, `enforcement-map-sites`, `apply-restamp-worklist-c` and the rest of the top of the record) have not been judged on value, and no per-gate wall clock or dollar figure has been measured.
 
+**Evidence: the read-set fan-out of a runner change.** On a consumer's 0.830.0 to 0.834.0 reconcile push (graph transcript 5d4fbc59), the first push took about 98 minutes and ran 128 of 224 fixtures. 122 of them were woken because the pull changed runner and tooling files: `hermetic-run.sh`, `.githooks/pre-push`, `apply.sh` and `derive-fixture-readsets.sh`. The re-push took about 6 minutes and ran 42 of 224. Load was 77 to 85, so these are loaded figures. No dollar figure was measured. This is BL-583's subject, not BL-694's.
+
 verify: manual
 
 ## BL-584 — two fixtures cannot be traced and have no `inputs.decl`, so they run on every push
@@ -175,19 +177,6 @@ verify: manual
 **DEFECT.** Filed by peer session ai-dlc-a6. `scripts/validate-enforcement-map.sh` FORK_BUDGET was set to 3363 in 0.786.0 as "HIGH reading 3357 plus the usual 6" (paragraph ~:825-831 then). Measured by the filer on 2026-10-16 with `fork-profile.sh --section by-arm --stable`, interleaved base/tip/base/tip in one detached worktree at one path, caller environment inherited: origin/main e3073787 (0.796.0) read 3362 and 3363 (STABLE 2, spread 3360-3362), equal to the budget — 0.792.0 through 0.796.0 spent the full +6 and no arm said so. `validator-fork-budget` fails only when the reading EXCEEDS the budget (its arm A3, "measured <= FORK_BUDGET"), so the window between "headroom gone" and "red" is invisible; at zero headroom the instrument's ±1-2 jitter makes any release adding one fork a ~1-in-4 red that reads as a flake. On 0.797.0 (+1 fork, I126 0 -> 1) the re-verify read 3362 with one rep at 3364 against 3363; 0.797.0 raised the budget to 3370 (+1 for its arm, +5 to restore headroom), which intake confirmed as `FORK_BUDGET=3370` at origin/main 3d5f1e70 (`:841`).
 
 Owed: a headroom arm in `validator-fork-budget` that FAILS when the STABLE reading + 2 > FORK_BUDGET, naming the remedy (re-measure and raise by the HIGH reading plus 6, per the file's own rule), so erosion reports while margin remains. It needs its own mutant (the arm with the +2 dropped must miss a seeded reading at budget - 1) and its FP set measured over the budget history in that file's paragraphs. Scope: a small later release.
-
-verify: manual
-
-## BL-610 — the read-set sandbox tracer omits any fixture that probes process liveness
-
-**NOTE.** Filed by peer session ai-dlc-a6 on lead ai-dlc-9c's instruction. `core/scripts/derive-fixture-readsets.sh --tracer sandbox` runs each fixture under `sandbox-exec` with a profile that grants file and process-exec rights but no process-info rights (intake: `process-info` 0 times in the script, against 16 `sandbox-exec`). Inside it `ps -p` sees no other process, not even its own shell, so a fixture whose premise is process liveness fails its own controls and the deriver omits it ("OMITTED (fixture exited 1) -- will always run", 1 occurrence in the script).
-
-Measured by the filer on 2026-10-16 in a trace of 14 fixtures at a0451c70 (rc 0, 173 s, 13 mapped): `derivation-differential` was omitted (its `run.sh` uses `ps -p` 7 times). Its sandboxed log `/private/tmp/ai-dlc-readset-sandbox-501/w/derivation-differential.log:47-48` carries 4 FAIL verdicts, all in A12: the two liveness controls (:47, :48) and the two near-misses they gate (:51 A12l, :52 A12e). No arm outside A12 failed. Of the 13 lines containing `FAIL`, the other 9 are 8 `ok` lines reporting NEWLY-FAILING and the `4 assertion(s) FAILED` summary (intake confirmed the breakdown). The two controls:
-  `FAIL  A12 control: ps -p does not separate the seeded dead PID (52683) from the live one (46059) -- A12b and A12l are unreadable`
-  `FAIL  A12 control: PID 1 does not separate ps -p from kill -0 here (running as root?) -- A12e is unreadable`
-Outside the sandbox the fixture is green: per the filer, `ok derivation-differential` appears in all three 2026-10-16 gate logs (an impossible token reads 0), with 7 loaded runs that day at 15-31 s each.
-
-Cost: it stays unmapped and runs on every push, about 20 s, not the gate pole. It ran on every push before too (its rows were stale), so this is a permanent read-set gap, not a regression. Two candidate fixes, neither chosen: grant process-info in the profile (broadens what a trace records, to be weighed), or skip the liveness arms under the sandbox (weakens the fixture exactly where the trace looks; not recommended). Not to be fixed now.
 
 verify: manual
 
@@ -306,43 +295,6 @@ Each fixed unit still owes its solo-against-pool receipt, with a load-free contr
 - Population: `docs/backlog.md` holds 0 live `verify: sh` receipts (its one `verify: sh` line is the legend at `:22`), against 55 `verify: manual` as the control, so R6 has nothing to score and the arm reports R2 all-manual.
 - History: no recorded R6 firing. The one instance is pre-ship, `BL-099` flipping once in 33 runs under three-way contention (`CHANGELOG.md`, 0.562.0 entry), where the checkout-incompleteness hypothesis did not reproduce.
 - UNSTABLE is a correct refusal of a racing receipt. Relabelling signal exits as BROKEN was considered and dropped: BROKEN fails the push too (`:1094-1096`), so it would change the label and not the outcome, and nothing in the script raises those signals.
-
-verify: manual
-
-## BL-632 — shipped checks and fixtures pass or fail on an arbitrary number instead of a binary property of their subject
-
-**DEFECT.** Operator, relayed by lead ai-dlc-9c: "really need to stop forcing arbitrary goals that aren't based on binary attributes." Part of ai-dlc-4e [9b62de]'s load series (BL-616). Subject: assertions whose verdict turns on a number with no stated property behind it, such as wall-clock bounds (`$((SECONDS - t0)) -lt N`, timeouts that fail as HANG or FAIL), percentage windows, and repeat or rep counts. Under load such a bound turns a correct subject red, which is BL-616's consequence, and when tuned to pass it asserts nothing about the subject.
-
-**PARTIAL (v0.820.0, verified 4e6670c1) — the fixture nets and verdicts shipped; the product deadlines are filed as BL-639, BL-640 and BL-641 and stay OPEN.** Every hang net in the load series refuses on no progress (exit 2), never FAILs a verdict on elapsed time: the four mutant batteries' scorer watchdogs, fold-architect-ledger-join D6 (`ulimit -t 10`, 30 s no-progress refusal) and its battery's refusal pass-through ([MS]), readset-stage1-verdict's waits, spec-join-integrity's CPU-budget termination arm, and readset-skip's eleven live-trace waits. Each window carries "a margin over one observed step, not a measurement; a refusal costs a re-run, never a verdict". wait-for-deliverable.sh, ai-dlc-continue.sh and derive-fixture-readsets.sh carry comment-only headers naming the property behind each bound.
-
-Instances known today:
-1. `H4` in `adversarial-shard-merge`, on ai-dlc-c9's local branches `b235-ra-g3` and `b235-ra-scratch`: `core/fixtures/adversarial-shard-merge/lib.sh:1139`, `[ "$((SECONDS - t0))" -lt 8 ] && [ "$RC" -eq 2 ] …`, which `run.sh` names "within 8s". It is a timing proxy standing in for "never read stdin". BEING FIXED, NOT OWED: c9's release replaces it with a poison-token file, which is this entry's remedy shape.
-2. 0.804.0's 120 s HANG watchdogs (`b235-load-a2`): `fold-architect-ledger-join` D6 raised from 15 s to 120 s, and `readset-stage1-verdict` `:582`, `:639` and `:660` raised to 120 s. That release raises the number; it does not remove it.
-3. The advisor-gate 10 s re-read ceiling, BL-630 (`core/hooks/ai-dlc-advisor-gate.sh:579`).
-4. The suite-pole wall-clock growth arm, `scripts/validate-suite-pole.sh:947-957` at origin/main `21facb0f`: a run FAILS past `A_MAX + A_MAX * REGIME_BAND / 100`, with `REGIME_BAND=100` at `:248`. Its own header calls that band "uncalibrated" (`:945`).
-
-Owed, per instance: convert it to a binary attribute (did X happen: a poison token read, a sentinel written, a line seen), or name the property the number stands for and justify the number from a measurement of that property. A census of the remaining instances goes with item 1 of BL-616's census.
-
-NOT IN SCOPE, listed for the OPERATOR to decide, not for the owner: budgets the operator set or approved. `FORK_BUDGET=3405` (`scripts/validate-enforcement-map.sh`), the A6 durable-channel ceiling (`DURABLE_MAX`, 69120 on main, 69376 on intake-7, `scripts/validate-claude-rules.sh`), and the backlog size cap (`MAX=104`, `scripts/validate-backlog-size.sh:129`, which `:72` records the operator raised).
-
-Owner: ai-dlc-4e [9b62de] (lead ai-dlc-9c).
-
-**Census (ai-dlc-4e [9b62de], at lead ai-dlc-9c's request; a haiku grep census at origin/main `8f1a9074`, classified by 4e, with the cited lines read in context except the untriaged ones; intake spot-checked every cited line at `8f1a9074`).**
-
-*OWED: fixture assertions judged on elapsed time.*
-- `core/fixtures/wait-stale-deliverable/run.sh:362` (`ELAPSED -ge 2`), `:400` (`-le 1`), `:462` (`-le 10`), `:479` (`-ge 6`), and `receipt.sh:113` (`-le 2`). Each asserts whether a beat slept, a property a sentinel could carry instead.
-- `core/fixtures/spec-join-integrity/run.sh:495`, `run_bounded`, called with 5 at `:1388` and `:1406`. Its HANG mutant is killed at the 5 s bound, so the bound itself is the discriminator.
-- The 0.804.0 120 s nets (item 2) stay for now. Lead's ruling: the hang question is its own release with BL-630, and it starts from what "hung" means as a yes/no property. Measured by 4e: no per-unit ceiling exists in the pre-push pool or in `hermetic-run.sh`, and the hook's 3x/600 s ceiling bounds only the detached read-set trace.
-- About 25 untriaged lines: the `sleep 1; t=$((t + 1))` tick loops in five `*-mutants` fixtures (`adversarial-shard-merge`, `apply-self-overwrite`, `remediator-shard-join`, `review-shard-merge` and `self-update-fixture-log`; intake confirmed the five, against 20 files containing `sleep 1`), `core/scripts/derive-fixture-readsets.sh:1088`, `:1510` and `:1568`, and `readset-skip` `:1307`, `:1316`, `:1369`, `:1386`, `:1453`, `:1457`, `:1458` and `:4104`.
-
-*SEPARATE CLASS: product code with a time ceiling, which ships to consumers.*
-- `core/scripts/wait-for-deliverable.sh`: `IDLE_SECS` at `:938`, `SETTLE` at `:1003`, `BUDGET` at `:1138` and `DEADLINE` at `:1434`.
-- `core/hooks/ai-dlc-recover-gate.sh:201`: a 10 s `SECONDS` re-read loop, the same shape as BL-630.
-- `core/hooks/ai-dlc-continue.sh:363`: `RAPID_WINDOW_SECONDS`.
-
-*CLOSES with 4e's pole release now in preparation:* instance 4, `REGIME_BAND`. That release deletes `scripts/validate-suite-pole.sh` and makes the pole information-only. The file is still present at `8f1a9074`.
-
-**Product-code class, batch 236 (wfd release).** BL-639, BL-640 and BL-641 are done in that release, each with its own receipt: SETTLE no longer decides a seat sealed with `--mark` (it stays only as the fail-open net for a legacy marker with no `sha=`), the chained-beat guard decides by the parent shell's start time rather than BUDGET, and the continue hook's unknown-tool path keys the stall run on the session id rather than RAPID_WINDOW_SECONDS alone. This entry stays PARTIAL: BL-630, the 0.804.0 120 s nets, the suite-pole growth arm and `core/hooks/ai-dlc-recover-gate.sh:201` are untouched by it.
 
 verify: manual
 
@@ -562,25 +514,6 @@ Residual: the root fix is one comment-strip in the merge's own reader, `merge-ad
 
 verify: manual
 
-## BL-673 — the rotator reads a LANDED line's sha with a greedy sed, so later prose saying "verified <word>" replaces the sha
-
-**DEFECT.** Found at 0.829.0's gate, and filed by the lead. `scripts/backlog-rotate.sh:483` reads the sha as
-`sed -n 's/.*verified \([0-9a-f][0-9a-f]*\).*/\1/p'`. The leading `.*` is greedy, so it matches the LAST
-`verified ` followed by a hex digit anywhere on the line, not the one inside the annotation. BL-537's
-LANDED line went on to say the second subject "was verified against the shipping join", and `a` is a hex
-digit, so the rotator read the sha as `a`, reported `the annotation's sha a DOES NOT RESOLVE`, and refused to
-move a correct entry. The entry rotated only after that phrase was reworded.
-
-Two outcomes, depending on the prose: a correct LANDED line is refused (as here), or, when the later word happens
-to be a real short sha, the wrong commit is checked and the check passes on evidence the annotation never named.
-
-Owed: anchor the read on the annotation's own form,
-`s/^\(<br>\)\{0,1\}\*\*LANDED (v[^,]*, verified \([0-9a-f]\{7,\}\)).*/\2/p`, so only the sha inside the bold form
-is taken. Probe: a LANDED line whose prose later says "verified against" parses to its own sha. Control: a LANDED
-line with no later "verified" parses the same as today.
-
-verify: manual
-
 ## BL-674 — I55 arm 3's reach scan recognises four root variables, so a fixture that reads an excluded path through any other root variable is never checked
 
 **DEFECT.** Filed by peer session ai-dlc-c0 (batch 236 READSET), id allocated by lead ai-dlc-c8; found by the BL-606 receipt hand. Tiered DEFECT rather than NOTE because the gap was reproduced in both directions on a probe tree and the arm stays green over a real instance, so a fixture's input can change without the suite re-running.
@@ -682,41 +615,6 @@ first range as one of at least two range tokens. Today it exits 1. It exits 9 wh
 moves nothing, or when the first range is missing or is not a single token.
 
 verify: sh S=scripts/plan-rotate.sh; [ -s "$S" ] || exit 9; T=$(mktemp -d "${TMPDIR:-/tmp}/bl678.XXXXXX") || exit 9; mkdir -p "$T/scripts" "$T/docs/plans" || exit 9; printf '0.0.0-receipt\n' > "$T/VERSION"; cp "$S" "$T/scripts/plan-rotate.sh" || exit 9; P="$T/docs/plans/p.md"; A="$T/docs/plans/archive/p.md"; awk 'BEGIN{print "# Probe plan";print "";print "## Start here";print "";print "1. `## Start here` -- live.";print "2. `## Next` -- live.";print "";print "## Next";print "";print "1. Do the thing.";print "";print "## SPENT A";print "";for(i=1;i<=40;i++)printf "SPENT-A-%02d padding padding padding padding padding padding padding.\n",i}' > "$P"; bash "$T/scripts/plan-rotate.sh" "$P" --ceiling 1500 --apply >/dev/null 2>&1 || exit 9; grep -q 'SPENT-A-01' "$A" 2>/dev/null || exit 9; R1=$(sed -n 's/.*original lines \(.*\)\. It is a RECORD.*/\1/p' "$P"); [ -n "$R1" ] || exit 9; [ "${R1#*,}" = "$R1" ] || exit 9; awk 'BEGIN{print "";print "## SPENT B";print "";for(i=1;i<=20;i++)printf "SPENT-B-%02d padding padding padding padding padding padding padding.\n",i}' >> "$P"; bash "$T/scripts/plan-rotate.sh" "$P" --ceiling 1500 --apply >/dev/null 2>&1 || exit 9; grep -q 'SPENT-B-01' "$A" || exit 9; R=$(sed -n 's/.*original lines \(.*\)\. It is a RECORD.*/\1/p' "$P"); L=$(tr ', ' '\n\n' <<<"$R" | grep .); n=$(grep -c . <<<"$L"); grep -qxF "$R1" <<<"$L" && [ "$n" -ge 2 ]
-
-## BL-680 — a receipt line carrying a reason after `verify: manual` is counted as neither manual nor sh, and R2 names only "ZERO scored receipts"
-
-**NOTE.** At 0.830.0's gate, a new entry's line `verify: manual. No existing receipt shape fits: ...` was counted neither as a manual receipt (the R2_ALLMANUAL count needs the line to be exactly `verify: manual`, `scripts/validate-backlog-receipts.sh:1114`) nor as an sh receipt. The ledger then had 34 entries against 33 manual lines, and R2 failed the push with "produced ZERO scored receipts (entries 34, sh receipts 0, manual 33, ...)". That message does not say that one line matched no receipt form.
-
-Owed: either refuse a `verify:` line that matches no receipt form, naming its entry and line number, or have R2's message name the entries whose verify line was counted as nothing. Probe: a `verify: manual. <reason>` line is named by its entry id. Control: a bare `verify: manual` line is not named.
-
-verify: manual
-
-## BL-681 — shell-portability S7 reads any `\<digit>` after a sub/gsub on the same line as a replacement backreference, including an octal escape in a later print
-
-**NOTE.** Filed by the TRAIN owner. `S7_PAT="g?sub\\(.*,.*\\\\[0-9]"` at `scripts/validate-shell-portability.sh:91`
-matches a backslash followed by a digit ANYWHERE after the first comma following `sub(` or `gsub(` on the line. It
-does not stop at the call's closing parenthesis. So a `\<digit>` outside the replacement string is read as a
-backreference, for example an octal escape such as `"\037"` in a later `print` statement on the same line. Measured
-on `scripts/validate-plan-shape.sh:99` at 7bd139fc, inside `plan_action_windows`' awk program:
-
-    if (inwin) { gsub(/[ \t]+/, " ", win); print head "\037" win }
-
-The gsub replacement there is `" "`. The `\037` is the record separator in the `print`. S7 flagged the line, and
-the commit filing this entry removed the hit by naming the separator once (`BEGIN { US = "\037" }`, then `print head US win`), with
-byte-identical output. The arm itself is unchanged, so the next line shaped like this one is flagged the same way.
-
-Owed: S7 scopes its match to the replacement argument of the sub/gsub call, meaning the second argument up to its
-closing delimiter, so a `\<digit>` later on the line is not read as part of it. Probe: the original line 99 above,
-inside an awk program in a tracked `.sh` file, is not flagged. Control: `gsub(/x/, "\\1", s)` is still flagged.
-
-Receipt: it drives the real validator in a mktemp git tree holding a copy of it, a `VERSION` marker, one `core/`
-text file, one fixture shell file (so no corpus is empty and the scan runs), and two staged seeds:
-`scripts/fp.sh`, an awk program carrying the original line 99, and `scripts/bl.sh`, carrying a real backreference.
-It reads only the hits listed under the `FAIL: S7:` block. Today it exits 1, because S7 flags `fp.sh`. It exits 0
-once S7 stops flagging `fp.sh` while still flagging `bl.sh`. It exits 9 when the validator is missing, the tree
-cannot be built, a corpus reads empty or a self-probe fails, or `bl.sh` is not flagged.
-
-verify: sh unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY; V=scripts/validate-shell-portability.sh; [ -s "$V" ] || exit 9; T=$(mktemp -d "${TMPDIR:-/tmp}/bl681.XXXXXX") || exit 9; mkdir -p "$T/scripts" "$T/core/fixtures/x" || exit 9; printf '0.0.0-receipt\n' > "$T/VERSION" || exit 9; cp "$V" "$T/$V" || exit 9; printf '%s\n' 'probe text' > "$T/core/a.md" || exit 9; printf '%s\n' 'true' > "$T/core/fixtures/x/run.sh" || exit 9; printf '%s\n' "awk '" '      if (inwin) { gsub(/[ \t]+/, " ", win); print head "\037" win }' "' f" > "$T/scripts/fp.sh" || exit 9; printf '%s\n' 'awk '"'"'{ gsub(/x/, "\\1", s) }'"'"' f' > "$T/scripts/bl.sh" || exit 9; git -C "$T" init -q && git -C "$T" add -A || exit 9; O=$(bash "$T/$V" 2>&1); grep -qE 'corpus is empty|own probe did not fire|no VERSION marker' <<<"$O" && exit 9; H=$(awk '/^FAIL: /{s=($2=="S7:")} s' <<<"$O"); grep -qF 'scripts/bl.sh:' <<<"$H" || exit 9; grep -qF 'scripts/fp.sh:' <<<"$H" && exit 1; exit 0
 
 ## BL-685 — BL-679's recorded `--verify` PASS never forms when the dist shares its ref store with active worktrees
 

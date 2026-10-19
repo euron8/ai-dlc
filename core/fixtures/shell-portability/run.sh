@@ -65,6 +65,9 @@
 #   x20     the CORE TEXT empty-corpus condition at n_shell       -> its NAMED refusal must VANISH
 #   n1      `sed -i ''` and `sed -i.bak`                          -> must NOT fail
 #   n2      python `re.sub(r"\1")` in a .sh file                  -> must NOT fail
+#   m7b S7  plain and escaped-quote replacement backrefs          -> must FAIL, 2 counted lines
+#   n8  S7  octal escape past the replacement string (BL-681)     -> must NOT fail
+#   x21 S7  S7_PAT restored to the unscoped form                  -> a report must APPEAR
 #   n3      braced, `HEAD:`-literal, `"${SHA}:` and the braced
 #           ESCAPED-quote rev-paths                             -> must NOT fail
 #   n4  S10 alternations, python, message prose, a bracketed
@@ -1105,6 +1108,36 @@ else
   printf '%s\n' "$out" | sed 's/^/      /' | head -8; rc=1
 fi
 
+# m7b / n8 / x21 -- S7 is scoped to the REPLACEMENT string (BL-681). The old pattern read a
+# backslash-digit ANYWHERE after the first comma, so an octal escape in a later `print` on a
+# gsub line was reported as a backreference. m7b: a real backreference, plain and inside an
+# escaped-quote replacement -> both counted. n8: the original line, whose `\037` is past the
+# closing quote of `" "` -> silent. x21: the old pattern restored -> n8's report must APPEAR.
+seed_shell "$TMP/m7b" <<'M7BEOF'
+awk '{ gsub(/x/, "\\1", s) }' f
+awk '{ gsub(/x/, "a\"\\1", s) }' f
+awk '{ gsub(/a,(b)/, "\\1") }' f
+M7BEOF
+count_check "m7b S7 replacement backreference, plain, escaped-quote and comma-in-regex (A4)" "$TMP/m7b" S7 3
+
+seed_shell "$TMP/n8" <<'N8EOF'
+awk '
+  if (inwin) { gsub(/[ \t]+/, " ", win); print head "\037" win }
+' f
+awk '{ sub(/a/, "x\"", s); print "\037" }' f
+awk '{ sub(/a/, "b", s); printf "x,\037" }' f
+N8EOF
+if out="$(run_v "$TMP/n8")" && grep -q "^validate-shell-portability: PASS" <<<"$out"; then
+  note "ok    n8 -- an octal escape past the gsub replacement's closing quote is NOT a backreference"
+else
+  note "FAIL  n8 -- S7 flagged a backslash-digit outside the replacement string"
+  printf '%s\n' "$out" | sed 's/^/      /' | head -6; rc=1
+fi
+cp -R "$TMP/n8" "$TMP/x21"
+appear_check "x21 S7_PAT replacement scope" "$TMP/x21" \
+  "/^S7_PAT=/s|.*|S7_PAT='g?sub\\\\(.*,.*\\\\\\\\[0-9]'|" S7 \
+  "the replacement-string scope (old pattern read any backslash-digit after the comma)"
+
 # THE MUTANT COUNT IS DERIVED; THE OTHER TWO ARE NOT, AND THE ASYMMETRY IS DELIBERATE.
 # This line read a hardcoded `11/11 ... (24 assertions)` and went stale the moment `m9b` and
 # `m9c` landed -- it still said 11 with twelve corpus mutants live. A total that decays
@@ -1115,7 +1148,7 @@ fi
 # falling, a report appearing, the validator REFUSING under a foreign locale). A
 # `grep -c blind_check` therefore reads 6 where the truth is 13 -- a derivation that is
 # confidently wrong is worse than a literal somebody must update, so this one stays a literal
-# and says why. If you add an `x*`, update the 20.
+# and says why. If you add an `x*`, update the 21.
 # `m11` goes through `count_check` (it asserts a LINE COUNT, not merely a kill), and `m8`/`m10`
 # assert fail-closed rather than a kill, so all three are counted separately from `kill_check`.
 # A count that silently omitted them is what the first derivation of this line did.
@@ -1123,6 +1156,6 @@ _n_kill=$(grep -o 'kill_check "' "$0" | grep -c .)
 _n_count=$(grep -o 'count_check "' "$0" | grep -c .)
 _n_kill=$((_n_kill - 1 + _n_count - 1))   # each counting line names its own helper
 if [ "$rc" -eq 0 ]; then
-  note "PASS  shell-portability -- control green, ${_n_kill}/${_n_kill} corpus mutants killed by their own arm, 20/20 arm-table cells proven load-bearing, 7/7 negatives silent"
+  note "PASS  shell-portability -- control green, ${_n_kill}/${_n_kill} corpus mutants killed by their own arm, 21/21 arm-table cells proven load-bearing, 8/8 negatives silent"
 fi
 exit "$rc"
