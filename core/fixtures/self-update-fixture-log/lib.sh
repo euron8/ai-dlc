@@ -785,8 +785,9 @@ h_consumer() { # <dir> <hook: dispatch|predates> <runner: yes|no>
   printf 'outside every declaration\n' > "$c/data/outside.txt"
   printf 'tracked doc\n' > "$c/docs/slice.md"
   for f in $H_FXS; do mkdir -p "$c/tests/fixtures/$f"; done
-  # h-clean: one REQUIRED input, consumed, and the depth it was started at.
+  # h-clean: one REQUIRED input, consumed, the depth it was started at, and the one tool it forks (cat): the hermetic runner launches a declared fixture with only its declared tools on PATH.
   printf '!data/h-input.txt\n' > "$c/tests/fixtures/h-clean/inputs.decl"
+  printf 'cat\n' > "$c/tests/fixtures/h-clean/tools.decl"
   printf '#!/usr/bin/env bash\ncat data/h-input.txt >/dev/null || exit 1\necho "HERMETIC-CONSUMED data/h-input.txt"\necho "h-depth=${PREPUSH_POOL_DEPTH:-unset}"\nexit 0\n' > "$c/tests/fixtures/h-clean/run.sh"
   # h-absent: declares a file the consumer does not hold; its run.sh passes when run plain.
   printf 'data/never-there.txt\n' > "$c/tests/fixtures/h-absent/inputs.decl"

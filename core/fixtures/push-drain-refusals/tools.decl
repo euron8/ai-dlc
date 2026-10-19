@@ -5,6 +5,7 @@ cmp
 cp
 dirname
 env
+find
 git
 grep
 mkdir
@@ -12,3 +13,6 @@ mktemp
 rm
 sed
 shasum
+sort
+tr
+uniq

@@ -8,6 +8,7 @@ cat
 cmp
 cp
 dirname
+grep
 head
 mkdir
 mktemp

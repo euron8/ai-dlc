@@ -15,6 +15,7 @@ env
 find
 grep
 head
+ln
 mkdir
 mktemp
 mv
@@ -24,3 +25,4 @@ sort
 tail
 tr
 wc
+paste

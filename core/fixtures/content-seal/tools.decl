@@ -4,6 +4,7 @@ awk
 basename
 bash
 cat
+chmod
 cksum
 cmp
 cp
@@ -17,6 +18,7 @@ git
 grep
 head
 jq
+ln
 ls
 md5
 mkdir

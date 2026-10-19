@@ -2,6 +2,7 @@ awk
 basename
 bash
 cat
+cksum
 cmp
 cp
 dirname
@@ -9,6 +10,7 @@ git
 grep
 mkdir
 mktemp
+mv
 rm
 sed
 tr

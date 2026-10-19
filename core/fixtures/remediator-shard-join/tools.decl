@@ -31,3 +31,4 @@ tail
 tr
 uniq
 wc
+chmod

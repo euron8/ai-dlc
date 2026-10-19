@@ -27,3 +27,8 @@ xargs
 basename
 tail
 jq
+cksum
+uniq
+ln
+ls
+rmdir

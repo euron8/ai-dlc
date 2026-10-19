@@ -623,8 +623,19 @@ fi
 # verifier failed, not that no operator said it. The control asserts node is genuinely absent
 # under the stripped PATH before the arm is read.
 restore; fail_on "$X"
+# Under hermetic-run.sh node's dir IS the tool farm and the whole of PATH, so dropping that dir would empty PATH
+# and take bash with it. The dir is replaced by a dir of links to every entry but `node` instead: links, not a
+# cp -R, because outside the sandbox node's dir can hold the node binary itself (nvm), which a copy would duplicate.
 GA_NODE_DIR="$(dirname "$(command -v node 2>/dev/null || echo /nonexistent/node)")"
-GA_P2="$(printf '%s' "$PATH" | tr ':' '\n' | grep -vx "$GA_NODE_DIR" | paste -sd: -)"
+GA_NN="$GA_NODE_DIR"
+if [ -d "$GA_NODE_DIR" ]; then
+  GA_NN="$(mktemp -d "$WORK/nonode.XXXXXX")" || { echo "FIXTURE ERROR: mktemp for the node-less PATH dir failed" >&2; exit 2; }
+  for ga_e in "$GA_NODE_DIR"/*; do
+    [ "${ga_e##*/}" = node ] || [ ! -e "$ga_e" ] || ln -s "$ga_e" "$GA_NN/${ga_e##*/}" \
+      || { echo "FIXTURE ERROR: could not link $ga_e into $GA_NN" >&2; exit 2; }
+  done
+fi
+GA_P2="$(printf '%s' "$PATH" | tr ':' '\n' | GA_D="$GA_NODE_DIR" GA_N="$GA_NN" awk '$0 == ENVIRON["GA_D"] { print ENVIRON["GA_N"]; next } { print }' | paste -sd: -)"
 if [ -n "$(PATH="$GA_P2" command -v node 2>/dev/null)" ]; then
   bad "S23-pre: FIXTURE BROKEN — node is still on PATH after stripping $GA_NODE_DIR, so the verifier-failure arm cannot be built"
 else

@@ -1,5 +1,6 @@
 # Tools run.sh, the subject and lib.sh invoke.
 awk
+basename
 bash
 cat
 cmp

@@ -4,8 +4,10 @@ basename
 bash
 cat
 chmod
+cmp
 cp
 cut
+diff
 dirname
 env
 find

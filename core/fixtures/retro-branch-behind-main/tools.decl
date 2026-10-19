@@ -18,3 +18,5 @@ sed
 sort
 tail
 tr
+cut
+basename

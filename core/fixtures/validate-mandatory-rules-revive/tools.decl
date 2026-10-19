@@ -8,6 +8,7 @@ find
 git
 grep
 head
+mkdir
 mktemp
 mv
 python3

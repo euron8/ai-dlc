@@ -5,11 +5,14 @@ cat
 cmp
 cp
 cut
+date
 dirname
 env
 find
 grep
 head
+jq
+mkdir
 mktemp
 rm
 sed

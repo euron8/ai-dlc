@@ -335,24 +335,6 @@ Owed: widen the root grammar, for example by deriving the roots from assignments
 
 verify: manual
 
-## BL-676 — the hermetic sandbox puts every system tool dir on PATH, so `tools.decl` restricts nothing and a fixture that forks an undeclared tool is neither refused nor re-keyed
-
-**DEFECT.** Filed by peer session ai-dlc-c0 (batch 236 READSET), id allocated by lead ai-dlc-c8; found by the BL-584 hand. This is the root of the defect class the batch's decl-tools fix (d5) addressed: that fix repairs one fixture's declaration, while the sandbox still cannot tell a complete declaration from an incomplete one.
-
-Mechanism. `core/scripts/hermetic-run.sh:157` takes `HR_TOOL_DIRS="$READSET_TOOL_DIRS"`, and `.githooks/pre-push:1432` assigns `READSET_TOOL_DIRS="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"`. `core/scripts/hermetic-run.sh:544` then runs the fixture under `env -i PATH="$HR_TOOL_DIRS:$HR_BIN"`, and the header at `:54-55` states the same ("PATH pinned to the fixed tool dirs plus a symlink farm of the declared tools"). So every tool in those six directories is reachable whether or not `tools.decl` names it. `tools.decl` decides what is KEYED, never what may RUN.
-
-Effect. A fixture that forks an undeclared tool is not refused, so the sandbox run passes, and the tool is not in the key, so a change to that tool does not re-run the fixture. A removed `tools.decl` line fails nothing. This is why the BL-584 receipt cannot cover `tools.decl` (see that entry).
-
-Measured by the BL-584 hand through the real runner (cited, not re-run here): with no `tools.decl`, and again with a comment-only `tools.decl`, a stub fixture still ran `jq`, `awk` and `shasum` (rc 0). The control, a tool found only on the caller's PATH, was unreachable.
-
-Prior art, re-derived in this worktree against `docs/backlog.archive.md`: `grep -n 'tools.decl' docs/backlog.archive.md | grep -c restrict` gives 0, against a control of 30 for `grep -c 'inputs.decl' docs/backlog.archive.md`. No existing entry covers it.
-
-Owed, and it is the operator's to choose because it changes what every fixture may run: (i) restrict the sandbox PATH to the declared tools, after measuring the false-positive set over every declared fixture first; or (ii) a trace-derived check that compares the tools each fixture actually forks against its `tools.decl`.
-
-OPEN OPERATOR QUESTION: restrict the sandbox PATH to the declared tools, (i), or add a trace-derived declared-versus-forked comparison, (ii)? The lead's recommendation is (i), measured first.
-
-verify: manual
-
 ## BL-678 — plan-rotate.sh rebuilds the plan's archive pointer from the current run's ranges alone, so every earlier rotated range drops out of the plan
 
 **NOTE.** Filed by the TRAIN owner on the lead's instruction, and tiered NOTE by the lead's ruling. `scripts/plan-rotate.sh:205-206` spell the
@@ -574,3 +556,99 @@ verify: sh V="${I110_V:-scripts/validate-enforcement-map.sh}"; f=$(sed -n '/^i11
 - **Owed:** stated, not built. Read each row whole and split by parameter expansion, the split BL-711 used: `IFS= read -r line; a="${line%%"$TAB"*}"; rest="${line#*"$TAB"}"; b="${rest%%"$TAB"*}"; c="${rest#*"$TAB"}"`, applied to the three-field line at `:1986`. Seed a fixture arm with a declaration carrying `settings_env_key` and no `since_core_version`, beside the control carrying both.
 
 verify: manual
+
+## BL-707 — prepush-pool-depth's `obs_d0_max` reads a 0.3s in-flight window by ls-counting a flight dir, so a load burst fails it with no hook defect
+
+**DEFECT.** Filed by peer session ai-dlc-c0 (batch 236 POOLHOOKS), id allocated by lead ai-dlc-c8. `core/fixtures/prepush-pool-depth/run.sh:171` drives six depth-0 stubs that each `sleep 0.3` and records the peak of `ls "$PD_FLIGHT" | wc -l` (`:58-:59`, read by `maxflight` at `:83`) as `obs_d0_max`, wanting 6 (`:211`). Six workers are in flight together only if all six start inside one 0.3s window, so a loaded box fails the cell with no hook defect. Measured on 0.871.0's pre-run with 52 units launched at once: the `.githooks` half read 3 against 6, and because every mutant's moved-set includes that cell, one wrong reading surfaced as 11 FAILs; the `git-hooks` half of the same run passed the arm and all its mutants, and I66 holds the two pool blocks byte-identical. A second solo run on 0.871.0 at load 85 read 5 against 6, again in the `.githooks` half only. Three interleaved pairs at load 39-61, main `82b28696c` (which carries none of 0.871.0's change) launched beside 0.871.0: main went red in 1 of 3 (the `not-exported` mutant's run moved `obs_d0_max`, a `.githooks`-half cell, while its baseline read ok), and 0.871.0 was green in 3 of 3. The `git-hooks` half was clean in all six runs.
+
+Owed: the depth-0 width is asserted by a condition that does not depend on scheduling (each stub blocks until all six have entered, under a bounded wait, or the arm reads the dispatched width instead of an observed overlap), with a mutant showing the arm still catches a pool capped below 6.
+
+verify: manual
+
+## BL-708 — ten fixture arms still report ok with a required tool missing, because the call's stderr is discarded or two empty command substitutions compare equal, so PATH restriction cannot catch them
+
+**DEFECT.** Filed by peer session ai-dlc-c0 (batch 236 BL-676), id allocated by lead ai-dlc-37. BL-676's restricted-PATH sweep (each fixture run under the shipped `hermetic-run.sh` with its PATH cut to its `tools.decl` farm) turns a missing tool into a red unit only where the arm reads that tool's output. Measured under that runner at c2991da155cbc2441e22b55373bb841df5785b05, ten arms ran with the tool absent and still reported ok:
+
+- `apply-legacy-script-path`: `run.sh:307` and `:310` run `cksum` (command not found), so `before` and `after` are both empty and the comparison at `:311` of two empty strings cannot fail.
+- `backlog-ledger`: `run.sh:772` has both `tail` substitutions empty, so the last-conserves conjunct passes vacuously.
+- `relocation-preclassify`: `run.sh:243` runs `cmp` (command not found), so the FIXTURE STALE guard can no longer fire.
+- `route-read-required`: `run.sh:130` runs `cp` (command not found), the routed transcript is never made, and the arm still reports ok.
+- `handoff-completion-assertion`: `run.sh:2089` runs `if cmp -s "$HOOKS_DIR/$tgt" "$d/$tgt"`, the FIXTURE STALE "mutation matched nothing" guard; with `cmp` absent the test is false on every mutation, so the guard can never fire. Measured under the BL-676 runner (dcb0aeb8c on b236-bl676): 55 `run.sh: line 2089: cmp: command not found` lines and the run still reports PASS. This release declares `cmp` for that fixture; the arm itself is owed here.
+- `plan-rotate`: `scripts/plan-rotate.sh:689-690` pipes into `md5`. With md5 absent, both digests are empty and equal, so the multiset arm cannot fire, and mutant m3 survives (`did not trip the multiset arm alone (exit 0, arm1-pass=yes)`) under the BL-676 runner. This release declares `md5`; the arm fix is owed here.
+- `budget-summary-verdict`: `core/scripts/validate-artifact-budget.sh:1265` skips on `command -v jq`, so with jq absent the F9 back-dated-row check silently does not run. This release declares `jq`; the arm fix is owed here.
+- `backlog-receipt-binding`: `run.sh:1369` evaluates BL-040's receipt as `bash -c "$RJ_REC"` and reads only its exit; with `wc` absent the receipt's `[ "$(printf '%s\n' "$S" | wc -l)" -lt 200 ] || exit 2` sees `[ "" -lt 200 ]`, returns 2, and the scan at `run.sh:1339-1363` (`rj_scan`) scores every seed OWNED (`SCANNED 10 BLIND 0 OWNED 10`), so the receipt-blind arm cannot fire. This release declares `wc`; the arm fix is owed here.
+- `readset-skip` (all four shards): `run.sh:1847` gates the BL-686 psfail, nofallback and readerself-psfail arms on `command -v perl` and `uname -s` reading Darwin. With both undeclared, uname fails silently, the gate reads "not Darwin" and `:1851` prints ok, so the anti-SKIP assertion is vacuous. This release declares `perl` and `uname` in all four shards; the arm fix is owed here.
+- `hermetic-runner` B4-B6: they do not assert the stub's `rc=0 ` the way B2 does (`run.sh:336`), so on their own they cannot tell a missing `cat` from the near-miss sentinel they test. Not fixed here.
+
+Candidate mechanism, stated not proposed: a runner-side scan of a fixture's captured output for a `: command not found` line, failing the unit. Its false-positive set under today's PATH, measured read-only over the 223 shipped-runner logs of the BL-676 sweep at c2991da155cbc2441e22b55373bb841df5785b05 (both halves), where no tool is missing: 0 logs carry a `: command not found` line and 0 carry an `env: ... No such file or directory` line. Under that PATH the only line the scan could catch is a deliberate absence test, which prints it whatever the runner, so the zero says the scan would fail no fixture that passes today and nothing more. It is not the scan's false-positive set under the restricted runner BL-676 ships, which these logs cannot measure. The 223 restricted-runner logs of the same sweep carry the line in 66 logs, for scale only. Controls in the same invocation: an impossible token read 0 in both sets, and the positive control is `cksum: command not found` in the restricted `apply-legacy-script-path.log` (its `run.sh:307`). The looser pattern `not found` hits 3 shipped logs (`backlog-ledger`, `enforcement-map-sites-b`, `process-rule-pins`), all of them test-name prose on `ok` lines and none a shell diagnostic, so the scan must key on `: command not found` and not on the bare phrase. Two limits: the scan cannot see the ten instances above on their own run, because their tool is present under today's PATH and only the restricted run exposes it; and a fixture that intentionally probes a missing tool (for example `handoff-resume-guard`, which shadows `jq`) would need to keep its miss out of the captured output, which the shipped logs show none does today.
+
+Owed: the fix for those 10 arms, so that each arm fails when its tool is missing (capture and assert the tool's output is non-empty, or check the tool's exit status, instead of discarding stderr or comparing two possibly empty strings).
+
+verify: manual
+
+## BL-709 — a hermetic-run.sh change re-keys only the declared fixtures whose inputs.decl names the runner, so a runner change gates on those and skips every other declared fixture on its old key
+
+**DEFECT.** Filed by peer session ai-dlc-c0 (batch 236 BL-676), id allocated by lead ai-dlc-37. The verdict-store ident hashes the runner's `HR_SANDBOX_BEGIN`..`END` span (`readset_vs_ident`, `.githooks/pre-push:1483-1487`), so a pass recorded under an older runner is not reused from the store. But the per-fixture key decision (`.githooks/pre-push:1882-1892`) returns `skip` for a declared fixture whose recorded key rows are unchanged, before the store is consulted, and `readset_verdicts` only turns `run` into `skip` (`:1738`), never the reverse. The runner is in a declared fixture's key rows only when that fixture's inputs.decl names `core/scripts/hermetic-run.sh`.
+
+Measured at origin/main c2991da155cbc2441e22b55373bb841df5785b05 and re-derived in the b236-bl676 tree (dcb0aeb8c) with `grep -l 'core/scripts/hermetic-run.sh' core/fixtures/*/inputs.decl`: 7 declared fixtures name the runner (census-hermetic-coverage, hermetic-runner, readset-skip, readset-skip-b, readset-skip-c, readset-skip-d, self-update-fixture-log). Control in the same grep: 9 inputs.decl files name `.githooks/pre-push` on a non-comment line (13 files mention it once comment lines are counted), and an impossible token reads 0. The declared population is 223 `inputs.decl` files.
+
+Consequence: BL-676's runner change (dcb0aeb8c) gates on those 7 plus the fixtures whose tools.decl that release edits; every other declared fixture skips on its pre-change key, so the gate does not exercise the new runner on them. That release covers them by a direct pre-run of every declared fixture through the new runner (its acceptance (a)).
+
+Owed, with the choice left to whoever builds it: (B) put the runner's span into every declared fixture's key (a hook change inside the I66-bound span), or (C) carry a runner digest in each declared fixture's key record so a runner change moves every declared key. Cost measurement for either: the number of declared fixtures re-run per runner change, today 7 and under either remedy every declared fixture (223 `inputs.decl` files in the b236-bl676 tree).
+
+verify: manual
+
+## BL-710 — a consumer's long runs show no running progress: the self-update push buffers the hook's output until it exits, and neither the hook's fixture pool nor the self-update covering-fixture run prints a done/total line, so the operator gets no ETA
+
+**NOTE.** Filed by peer session ai-dlc-c0 (batch 236), id allocated by lead ai-dlc-37, from a finding by ai-dlc-5d watching graph, re-derived on the distribution by ai-dlc-37. `core/skills/ai-dlc-update/reconcile/self-update-push.sh:187` runs the hook as `( trap '' PIPE; cd "$ROOT" && exec "$HOOK" "$REMOTE" "$URL" < "$TMP/refline" ) > "$TMP/hook.out" 2>&1`, and `:189` only `cat`s that file to stderr after the hook has exited. The hook's per-unit ok/FAIL rows are written, but into the file, for the whole suite.
+
+Evidence: graph's operator asked "eta?" at 15:22 and again at 15:48 EDT on 2026-10-19, 23 minutes into a self-update push, and the agent answered that it could not give one (graph session transcript 48918adc, line 425, relayed by ai-dlc-5d). Graph's installed copy (`scripts/ai-dlc/…` / `.claude/skills/ai-dlc-update/reconcile/self-update-push.sh`) carries the same lines; that is stated as relayed and was not re-measured by this filing.
+
+The hook path has the same gap, as relayed by ai-dlc-5d and not re-measured by this filing: graph's operator asked "eta?" a third time at 17:33 EDT on 2026-10-19, 35 minutes into a plain `git push` (not `self-update-push.sh`), and the agent could only guess "10 to 25 minutes" by grepping 23 PASS lines (graph session transcript 48918adc, line 2120). So the gap is on the hook path too, not only in the wrapper's buffering.
+
+The self-update covering-fixture run has the same gap, as relayed by ai-dlc-5d and not re-measured by this filing: graph's operator asked "eta?" a fourth time at 18:38 EDT on 2026-10-19, 31 minutes into the self-update covering-fixture run, at 17 of 20 ok (graph session transcript 48918adc, line 2331). This was not during a push. The runner is `core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh`: its fixture loop (`for name in "$@"`, :1154) prints a per-unit `   ok    <name>` row at :1203 (and `   FAIL  <name>` at :1205), alongside `n_ok=$((n_ok + 1))`. Nothing prints "k of N"; the denominator exists only as the positional-argument count `$#`, which is used in the `of $# named` summary lines (:1210, :1215) and the completeness check (:1220), and no variable holds the unit count (`n_run` and `n_ok` are running counters only).
+
+What the hook already prints, as read by lead ai-dlc-37 and re-checked in this tree: the denominator line `read-set keys: N of M fixture(s) run (… changed, … unrecorded, … stale); skipping K`, emitted by the printf at `core/git-hooks/pre-push:1901` and at `.githooks/pre-push:1993`; and a per-unit ok/FAIL row as each unit ends. What it lacks is a running "k of N done" line, so a reader has to join the denominator line to the per-unit rows without being told they belong together.
+
+Dedupe, as derived by the lead: live backlog "self-update-push" 0 hits; archive 6 hits, all about the probe/carry design and none about buffering; "hook.out" in the archive 0 relevant; control BL-583 6 hits.
+
+Owed: stream the hook's output live while still keeping `$TMP/hook.out` for the failure path's FAIL-header extraction and tail (`:195`-`:206`: the `awk '/^── /…/^   FAIL/'` header scan, the last-line fallback, and `tail -n 60` into the record), and keep the hook's own exit status as HOOK_RC. Both the `trap '' PIPE` at :187 and the tool-hazards rule that a pipeline's status is the last stage's bear on the mechanism; the choice is left to the builder. Also owed: the pool emits a progress line naming done/total, optionally with elapsed time against the recorded durations' longest remaining unit; the mechanism is left to the builder. That line lives inside the I66-bound pool span, so it lands in both hooks byte-identically. Also owed: `core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh` prints a done/total line beside its per-unit row at :1203/:1205; the mechanism is left to the builder. So the progress line covers all three paths: the push wrapper (live streaming), the hook's fixture pool (a done/total line inside the I66 pool span), and self-update-fixtures.sh (a done/total line beside its per-unit row). If BL-713 removes the pre-commit covering run and its runner, `self-update-fixtures.sh`'s path, and with it the `:1203` row, disappears from this entry, leaving the push wrapper and the hook pool; the build decides.
+
+Cost: visibility only; no wall clock is saved.
+
+verify: manual
+
+## BL-713 — the self-update's pre-commit covering-fixture run duplicates the push gate at serial cost, so it goes: the commit happens and the push hook is the gate
+
+**DEFECT (performance).** Raised by the operator directly. Id allocated by lead ai-dlc-37; filed by peer session ai-dlc-c0 (batch 236). Builds as its own release, shipping NEXT after BL-676 and ahead of round 7, because the operator hits it on every self-update. Builds together with BL-710 (same file).
+
+The operator's words, as relayed by ai-dlc-5d:
+
+- 18:49 EDT 2026-10-19: "what BS if I have to run the covering fixtures and then turn around and run the full test suite".
+- 19:37 EDT, when the operator stopped graph's 0.883 covering run at 16/20 (graph session transcript 48918adc, lines 2608-2694): "I own the damn pipeline. What I say goes. Stop the serial. Just push it."
+
+Mechanism: `core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh:1154` runs `for name in "$@"`, one fixture at a time; the file has 0 `xargs -P` lines, while `core/git-hooks/pre-push` carries 2 (both counts derived with `grep -c 'xargs -P'` in this tree). `core/skills/ai-dlc-update/SKILL.md:549`-`559` requires that run green BEFORE the commit and the push.
+
+Measured on graph today, relayed by ai-dlc-5d, loaded, and not re-measured by this filing (observations, not timings):
+
+- the 0.849 leg's covering run took 41 minutes for 39 fixtures, followed by a 25-minute push in which 27 of the 39 skipped on passes the covering run had recorded;
+- the 0.882 leg took 41+ minutes for 20.
+
+Direction, ruled by lead ai-dlc-37 after the operator's override: the pre-commit covering run goes. The push hook already dispatches those fixtures in its 12-wide pool, with the verdict-store skip, so the separate run adds only "no red local commit". That is recoverable, because a red push lands nothing, so it is not worth roughly 40 minutes of serial running per leg. The earlier "keep the value, pool it" direction is withdrawn.
+
+Dedupe, as derived by the lead and re-derived here with `grep -c` in `docs/backlog.archive.md`: "self-update-fixtures" 32 hits, none about serial dispatch; "covering fixture" 2, both unrelated; control BL-583 6.
+
+The runner RECORDS passes but never CONSUMES one. Relayed by ai-dlc-5d, re-derived on the distribution by lead ai-dlc-37, and not re-measured by this filing: graph's 0.883 leg re-ran 20 fixtures serially from 19:16 EDT, about 44 minutes, that had passed on an identical tree at 18:51, for a 1-file slice. Re-derived here with `grep -c` (control beside each count): `self-update-fixtures.sh` holds 0 lines naming `AI_DLC_VERDICT_STORE|hr_store|verdicts|readset_vs_|readset_verdicts|READSET_VS` (control `hermetic-run|fixtures` 80); `core/scripts/hermetic-run.sh` holds 2 `hr_store_put` lines, the definition at :604 and the call at :625, and 0 `readset_verdicts` reads (its `readset_vs_store`/`readset_vs_ident`/`readset_vs_input` uses at :610, :616 and :617 are the writer's key helpers, sourced from the hook's READSET_VS span at :601; control `hermetic|fixture` 127); `core/git-hooks/pre-push` holds 2 `readset_verdicts` lines, the reader defined at :1636 and called at :1818 (it calls `readset_vs_store` at :1640 and `readset_vs_input` at :1654; the repo hook `.githooks/pre-push` has them at :1728 and :1910; control `hermetic|fixture` 219).
+
+Context, not owed work: the covering set's derivation base is PINNED to the SKILL text. `core/skills/ai-dlc-update/SKILL.md:286-291` takes the covering fixtures from "every `core/fixtures/<dir>/` whose `*.sh` names one of the machinery paths **this diff actually touched**", and that diff is `base→theirs`, where `base` is the stamp's `commit` (`:394`). The two subtractions at `:275-284` shrink only the WRITE slice; `:541-543` writes only the surviving paths, and `:549-551` runs the derived fixtures, so on a second self-update leg the fixture term still names paths `skill_commit` already carries (graph's 0.883 leg: a 1-path slice, 20 covering fixtures). This finding becomes moot once the step is removed.
+
+Owed:
+- BEFORE deleting anything, inventory every duty of `core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh` and of `core/skills/ai-dlc-update/SKILL.md:545`-`560` plus the uncommitted-red paragraph: the gate-record logic near `:808`, the dispatch log, anything consumed downstream. Mark each duty as MOVES to the push path or DIES.
+- Then SKILL.md stops requiring the covering run.
+- Every surviving duty keeps a home.
+- The runner script goes if nothing survives in it.
+- Every fixture and validator arm that drives or names it changes with it.
+
+The receipt keys on SKILL.md's non-comment lines naming the runner, so a comment cannot close it; it exits 1 while SKILL.md names `self-update-fixtures.sh` and 0 once no non-comment line does. The Owed inventory and the arm changes are what prove the duties were placed.
+
+verify: sh S=core/skills/ai-dlc-update/SKILL.md; [ -f "$S" ] || exit 9; L=$(grep -vE '^[[:space:]]*#' "$S") || exit 9; ! grep -qF 'self-update-fixtures.sh' <<<"$L" || exit 1

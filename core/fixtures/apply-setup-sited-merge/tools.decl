@@ -5,6 +5,7 @@ cat
 chmod
 cksum
 cmp
+comm
 cp
 cut
 diff
@@ -14,6 +15,7 @@ find
 git
 grep
 head
+iconv
 id
 jq
 ln
@@ -21,6 +23,7 @@ ls
 mkdir
 mktemp
 mv
+paste
 python3
 rm
 sed
@@ -29,5 +32,6 @@ sort
 tail
 tee
 tr
+uniq
 wc
 xargs

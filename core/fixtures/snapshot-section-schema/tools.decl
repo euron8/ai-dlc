@@ -19,3 +19,4 @@ mv
 mkdir
 dirname
 basename
+date

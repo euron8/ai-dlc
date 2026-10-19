@@ -4,6 +4,7 @@ basename
 bash
 cat
 chmod
+chown
 cksum
 cmp
 comm
@@ -26,6 +27,7 @@ md5
 mkdir
 mktemp
 mv
+perl
 pgrep
 pkill
 ps
@@ -44,6 +46,8 @@ tail
 tar
 touch
 tr
+true
+uname
 uniq
 wc
 xargs

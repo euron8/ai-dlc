@@ -35,3 +35,4 @@ tr
 uniq
 wc
 jq
+cksum

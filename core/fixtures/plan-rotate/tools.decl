@@ -12,6 +12,7 @@ dirname
 find
 grep
 head
+md5
 mkdir
 mktemp
 rm

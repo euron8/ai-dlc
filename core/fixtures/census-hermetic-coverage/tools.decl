@@ -22,6 +22,7 @@ mktemp
 mv
 readlink
 rm
+rmdir
 sed
 shasum
 sort

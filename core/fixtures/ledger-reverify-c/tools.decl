@@ -19,6 +19,7 @@ mktemp
 mv
 rm
 sed
+sh
 sort
 tail
 touch

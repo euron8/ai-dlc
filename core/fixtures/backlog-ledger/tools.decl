@@ -15,5 +15,6 @@ mktemp
 mv
 rm
 sed
+tail
 tr
 wc

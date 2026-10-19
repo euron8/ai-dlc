@@ -18,3 +18,5 @@ cat
 mv
 chmod
 cmp
+mkdir
+cp

@@ -12,3 +12,6 @@ mv
 rm
 sed
 tr
+chmod
+cp
+mkdir

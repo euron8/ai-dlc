@@ -25,4 +25,5 @@ sleep
 sort
 tail
 tr
+wc
 xargs

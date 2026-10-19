@@ -15,7 +15,9 @@ env
 expr
 grep
 id
+ln
 ls
+md5sum
 mkdir
 mktemp
 mv

@@ -25,3 +25,4 @@ ps
 pgrep
 sort
 chmod
+mv

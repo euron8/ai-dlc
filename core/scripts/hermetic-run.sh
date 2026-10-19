@@ -51,9 +51,9 @@
 # dirs and the unkeyed-tool vocabulary come from the hook's READSET_TOOLS span, so there is no copy of
 # them here to drift.
 #
-# THE SANDBOX. A fresh `mktemp -d`, `env -i`, PATH pinned to the fixed tool dirs plus a symlink farm
-# of the declared tools (keyed and unkeyed), `AI_DLC_PROJECT_ROOT` set to the sandbox root, and the fixture invoked as
-# `bash core/fixtures/<f>/run.sh` from the sandbox ROOT -- the pre-push pool's own invocation, never
+# THE SANDBOX. A fresh `mktemp -d`, `env -i`, PATH set to a symlink farm of the declared tools (keyed and
+# unkeyed) and nothing else, so an undeclared tool is not found, `AI_DLC_PROJECT_ROOT` set to the sandbox root, and the fixture invoked as
+# `<absolute bash> core/fixtures/<f>/run.sh` from the sandbox ROOT -- the pre-push pool's own invocation, never
 # a `cd` into the fixture directory (CLAUDE.md measures that as five fabricated failures).
 # The sandbox is removed on exit unless `AI_DLC_HERMETIC_KEEP=1`. A declared DIRECTORY is copied by
 # its git population (tracked plus untracked-unignored, the key's own), never whole; the fixture's OWN
@@ -156,8 +156,8 @@ grep -q '^READSET_TOOL_DIRS=' "$HR_WORK/tools.sh" && grep -q '^READSET_UNKEYED_T
 . "$HR_WORK/tools.sh" || exit 2
 HR_TOOL_DIRS="$READSET_TOOL_DIRS"
 # A bare name resolves against git's REAL exec-path first and then the fixed dirs, exactly as
-# readset_tools does. The sandbox's own `git` is still the first one on its PATH (the system shim),
-# which forwards to the binary keyed here; the key names the binary that runs behind it.
+# readset_tools does. These dirs RESOLVE declared names and are not on the fixture's PATH, so a declared
+# `git` is the farm's link to the exec-path binary keyed here, and the binary keyed is the one that runs.
 HR_XP="$READSET_TOOL_XP"
 [ -n "$HR_XP" ] || HR_XP="$(readset_git_exec_path)"
 HR_XPD="$HR_XP:$HR_TOOL_DIRS"
@@ -540,10 +540,35 @@ for hr_tl in tools tools.unk; do
   done < "$HR_WORK/$hr_tl"
 done
 
+# THE FIXTURE'S PATH IS THE FARM ALONE, so an undeclared tool is `command not found` rather than silently run.
+# The interpreter that LAUNCHES run.sh is resolved by absolute path in the fixed tool dirs, first hit, the copy a
+# PATH of those dirs ran before; it is not put on the fixture's PATH, so a run.sh forking `bash` must declare it.
+HR_BASH="$( IFS=:; for d in $HR_TOOL_DIRS; do [ -x "$d/bash" ] && { printf '%s' "$d/bash"; break; }; done )"
+[ -n "$HR_BASH" ] || { printf 'hermetic-run: %s: no bash in any of %s to launch the fixture with\n' "$HR_FX" "$HR_TOOL_DIRS" >&2; exit 2; }
+# A DECLARED GIT RUN THROUGH A FARM SYMLINK derives its helper and template dirs from the SYMLINK's path (a
+# RUNTIME_PREFIX build), so `git clone` reported `git-upload-pack: command not found` and `git init` reported
+# `templates not found in <work>/share/git-core/templates`. Both are taken from the REAL binary behind the farm
+# entry: the helper dir is its own `--exec-path`, and the template dir is that prefix's `share/git-core/templates`,
+# the relative path the binary carries, set only when it is a directory. No helper is named; no git, neither is set.
+hr_gxp=""; hr_gtd=""
+if [ -L "$HR_BIN/git" ]; then
+  hr_g="$(readlink "$HR_BIN/git")"
+  while [ -L "$hr_g" ]; do
+    hr_gl="$(readlink "$hr_g")"
+    case "$hr_gl" in /*) hr_g="$hr_gl" ;; *) hr_g="$(dirname "$hr_g")/$hr_gl" ;; esac
+  done
+  hr_g="$(cd "$(dirname "$hr_g")" && pwd -P)/${hr_g##*/}" || exit 2
+  hr_gxp="$(env -u GIT_EXEC_PATH -u DEVELOPER_DIR "$hr_g" --exec-path 2>/dev/null)" || hr_gxp=""
+  [ -n "$hr_gxp" ] && [ -d "$hr_gxp" ] || { printf 'hermetic-run: %s: the declared git %s reports no usable --exec-path\n' "$HR_FX" "$hr_g" >&2; exit 2; }
+  case "$hr_gxp" in */libexec/git-core) [ -d "${hr_gxp%/libexec/git-core}/share/git-core/templates" ] && hr_gtd="${hr_gxp%/libexec/git-core}/share/git-core/templates" ;; esac
+fi
+set --
+[ -z "$hr_gxp" ] || set -- "$@" "GIT_EXEC_PATH=$hr_gxp"
+[ -z "$hr_gtd" ] || set -- "$@" "GIT_TEMPLATE_DIR=$hr_gtd"
 HR_LOG="$HR_WORK/log"
-( cd "$HR_SB" && env -i PATH="$HR_TOOL_DIRS:$HR_BIN" HOME="$HR_WORK/home" TMPDIR="$HR_WORK/tmp" \
-    AI_DLC_PROJECT_ROOT="$HR_SB" PREPUSH_POOL_DEPTH="${PREPUSH_POOL_DEPTH:-}" \
-    bash "$HR_FXROOT/$HR_FX/run.sh" ) > "$HR_LOG" 2>&1
+( cd "$HR_SB" && env -i PATH="$HR_BIN" HOME="$HR_WORK/home" TMPDIR="$HR_WORK/tmp" \
+    AI_DLC_PROJECT_ROOT="$HR_SB" PREPUSH_POOL_DEPTH="${PREPUSH_POOL_DEPTH:-}" ${1+"$@"} \
+    "$HR_BASH" "$HR_FXROOT/$HR_FX/run.sh" ) > "$HR_LOG" 2>&1
 hr_rc=$?
 cat "$HR_LOG"
 

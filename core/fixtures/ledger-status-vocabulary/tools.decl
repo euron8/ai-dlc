@@ -48,3 +48,5 @@ wc
 xargs
 yes
 ?node
+jq
+paste

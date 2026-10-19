@@ -23,5 +23,7 @@ mv
 rm
 sed
 sort
+touch
 tr
 wc
+xargs

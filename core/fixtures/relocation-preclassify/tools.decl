@@ -3,6 +3,7 @@
 awk
 bash
 cat
+cmp
 cp
 dirname
 find

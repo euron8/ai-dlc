@@ -1,7 +1,9 @@
 awk
 bash
 cat
+chmod
 cmp
+comm
 cp
 cut
 date

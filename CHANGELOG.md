@@ -19,6 +19,41 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.884.0] - 2026-10-19
+
+**A consumer fixture that declares inputs (`inputs.decl`) must declare every tool it forks in its `tools.decl`, because the runner now finds only declared tools.** Measured at graph's origin/main d82236cee: graph has 0 such consumer-owned fixtures, because all 160 of its declared fixtures are shipped fixtures this release replaces.
+
+Batch 236 (BL-676, owner ai-dlc-c0, lead ai-dlc-37). This release ships alone because it changes the hermetic runner, `core/scripts/hermetic-run.sh`. It closes BL-676, files BL-707, BL-708, BL-709, BL-710 and BL-713, and closes no `PC-` id. Net for this release: 1 closed, 5 filed.
+
+### The hermetic sandbox PATH is the declared farm only (BL-676)
+
+- Before: the fixture ran under `env -i PATH="$HR_TOOL_DIRS:$HR_BIN"`, so every system tool dir was on PATH and `tools.decl` restricted nothing.
+- Now: `PATH="$HR_BIN"`, the symlink farm of declared tools. The fixture launches with the first `bash` in the tool dirs. A declared `git` is followed to its real binary so that `GIT_EXEC_PATH` (from its `--exec-path`) and `GIT_TEMPLATE_DIR` (`<prefix>/share/git-core/templates`) resolve, because git run through a farm symlink cannot find `git-upload-pack` or its templates.
+- The hooks are unchanged.
+- Measured: a restricted sweep of all 223 declared fixtures at c2991da15, where the shipped side was 223/223 green, produced the false-positive set this release declares. 107 `tools.decl` files gain the tools their fixtures fork. Each tool set was derived with a shim farm that logs every PATH-resolved fork, so each declaration is the complete logged set and not the first missing tool.
+
+### Fixtures written for the old PATH
+
+Four fixtures and one script assumed the old PATH and are corrected.
+
+- `census-hermetic-coverage`: the world-A seeds declare the tools they fork.
+- `hermetic-runner`: the probes always write a baseline `tools.decl` (`cat env find mktemp sort`), and arm K's two count assertions are judged by name.
+- `gate-adjudication` S23: hides `node` by linking every other entry of node's directory, instead of dropping the directory, which under the new runner is the whole PATH.
+- `self-update-fixture-log`: the seeded consumer fixture `h-clean` declares the `cat` it forks.
+- `scripts/census-hermetic-coverage.sh`: the stale `hermetic-run.sh` line cites are corrected.
+
+### Gate coverage
+
+A runner change re-keys only the 7 declared fixtures whose `inputs.decl` names `core/scripts/hermetic-run.sh`, plus the fixtures whose `tools.decl` this release edits. Every other declared fixture skips on its pre-change key (BL-709). The new runner's coverage of all of them is this release's acceptance pre-run: every one of the 223 declared fixtures through the new runner on the shared store; the run's result is in the release's PR body.
+
+### Filed
+
+- BL-707: prepush-pool-depth's obs_d0_max is load-sensitive.
+- BL-708: ten fixture arms report ok with a required tool missing.
+- BL-709: a runner change re-keys only the runner-declaring fixtures.
+- BL-710: a consumer push shows no running progress.
+- BL-713: the self-update's pre-commit covering run duplicates the push gate and goes.
+
 ## [0.883.0] - 2026-10-19
 
 Batch 236, BL-699 release (owned and gated by ai-dlc-69 [9599d6]; lead ai-dlc-37). Advances BL-699, which stays

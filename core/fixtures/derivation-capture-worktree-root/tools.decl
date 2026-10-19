@@ -19,6 +19,7 @@ jq
 ls
 mkdir
 mktemp
+mv
 nl
 rm
 sed

@@ -3,6 +3,7 @@ bash
 cp
 dirname
 grep
+mkdir
 mktemp
 rm
 sed

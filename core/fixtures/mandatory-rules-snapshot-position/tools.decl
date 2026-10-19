@@ -8,10 +8,12 @@ cmp
 cp
 cut
 dirname
+env
 find
 git
 grep
 head
+mkdir
 mktemp
 python3
 rm

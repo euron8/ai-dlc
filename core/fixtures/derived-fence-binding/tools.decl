@@ -20,6 +20,7 @@ ln
 ls
 mkdir
 mktemp
+mv
 paste
 perl
 python3

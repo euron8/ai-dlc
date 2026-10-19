@@ -23,3 +23,11 @@ diff
 python3
 date
 shasum
+comm
+uniq
+basename
+find
+iconv
+paste
+rmdir
+xargs

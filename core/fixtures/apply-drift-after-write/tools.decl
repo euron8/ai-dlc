@@ -24,3 +24,9 @@ find
 mv
 chmod
 ls
+jq
+cksum
+iconv
+paste
+tail
+uniq
