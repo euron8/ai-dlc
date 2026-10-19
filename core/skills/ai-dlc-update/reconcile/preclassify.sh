@@ -282,7 +282,9 @@ pc_fail_listing() {
 file_hash() {
   local f="$CONS/$1" _h
   [ -f "$f" ] || { echo MISSING; return 0; }
-  _h="$(git -C "$DIST" hash-object "$f" 2>/dev/null)" || pc_fail "hash-object $f exited $?"
+  # `--no-filters`: a non-bare dist's work-tree `.gitattributes` would otherwise normalise the
+  # consumer's bytes before hashing (a CRLF file under `* text` hashed as its LF form).
+  _h="$(git -C "$DIST" hash-object --no-filters "$f" 2>/dev/null)" || pc_fail "hash-object $f exited $?"
   [ -n "$_h" ] || pc_fail "hash-object $f exited 0 with no hash"
   printf '%s\n' "$_h"
 }

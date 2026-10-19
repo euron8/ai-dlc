@@ -3068,7 +3068,8 @@ fi # end rer_phase wg
 #
 # HIT vs FRESH is decided by the pinned prefix `emit-report: accepted a recorded PASS (` AND by a PATH
 # shim: a `bash` first on PATH counts every detector the render launches (the key computation launches
-# none), into a file named by PCV_COUNT -- never an AI_DLC_* name, which the runner scrubs, and never a
+# none through PATH: its one subprocess, ledger-reverify.sh --receipt-tokens for R4, runs as "$BASH"),
+# into a file named by PCV_COUNT -- never an AI_DLC_* name, which the runner scrubs, and never a
 # file under the engine directory, which the engine key hashes. A hit is the exact two-line stdout,
 # exit 0 and ZERO launches; a miss is NO hit line, the fresh render's exit code, and at least one.
 #
@@ -3087,7 +3088,18 @@ fi # end rer_phase wg
 if rer_phase pcache; then
 PCV_HITP='emit-report: accepted a recorded PASS ('
 PCV_OKLINE="emit-report: the report's mechanical region is present, current, and complete."
-PCV_IDS="PC-V0 PC-V1 PC-V14 PC-V2 PC-V3 PC-V9 PC-V4 PC-V11 PC-V12 PC-V13 PC-V5 PC-V6 PC-V7 PC-V8 PC-V15 PC-V16 PC-V17 PC-V18 PC-V19 PC-V20 PC-V21 PC-V22 PC-V23 PC-V24 PC-V25 PC-V27 PC-V28 PC-V29 PC-V30 PC-V31 PC-V32 PC-V35 PC-V36 PC-V33 PC-V34 PC-V37 PC-V26 PC-V10"
+PCV_IDS="PC-V0 PC-V1 PC-V14 PC-V2 PC-V3 PC-V9 PC-V4 PC-V11 PC-V12 PC-V13 PC-V5 PC-V6 PC-V7 PC-V8 PC-V15 PC-V16 PC-V17 PC-V18 PC-V19 PC-V20 PC-V21 PC-V22 PC-V23 PC-V24 PC-V25 PC-V27 PC-V28 PC-V29 PC-V30 PC-V31 PC-V35 PC-V36 PC-V33 PC-V34 PC-V37 PC-V26 PC-V10"
+# THE ROUND-6 PARTITION ARMS (R1..R4 refusals, the B2 detector arm, and V32 rewritten to assert the
+# tracked-symlink refusal) need an engine that carries the named refusal line. An engine without it
+# (a consumer whose fixture arrived before its engine) prints SKIP for them and no ok line.
+PCV_R6MARK='emit-report: recorded PASS refused, re-rendering: '
+PCV_R6=0
+if grep -qF "$PCV_R6MARK" "$EMIT"; then
+  PCV_R6=1
+  PCV_IDS="$PCV_IDS PC-V32 PC-V38 PC-V39 PC-V40 PC-V41 PC-V42"
+else
+  printf '  SKIP  PC-V32 PC-V38..PC-V42: %s carries no named recorded-PASS refusal, so the round-6 partition cannot be checked against it\n' "$EMIT"
+fi
 # THE PRE-CACHE ENGINE for V26, extracted from this checkout's history into a scratch dir, every file of
 # reconcile/ at 2875c7ad. The root is found by walking up for `.git` beside the engine; a tree with no
 # such history (a consumer, a hermetic sandbox) leaves PCV_OLD_ENG empty and V26 says which comparison it made.
@@ -3153,10 +3165,15 @@ pcv_back() { cp "$PS_D/rec.keep" "$PC_REC"; }
 pcv_noctl() { pcv_x "$1" "control: the unchanged world did not HIT before the change ($(pcv_why)), so a miss after it would prove nothing"; }
 
 # pcv_lat <tag> -- a fresh layer-adjudication-tier world under <suite dir>/<tag>; sets L_D L_C L_B L_T L_R L_REC.
+# THE DIST IS A BARE MIRROR of the seed's work-tree dist: the cache refuses a non-bare dist (R1), so
+# every hit arm reads $L_D, and L_DW (the seed's own non-bare repo) is kept for the arms that commit
+# in a work tree (V34) or test the non-bare refusal and the detectors' attributes (V42).
 pcv_lat() {
   mkdir -p "$PS_D/$1" || return 1
   L_ROOT="$(TMPDIR="$PS_D/$1" bash "$PCV_LAT_SEED" 2>/dev/null)" && [ -d "$L_ROOT/consumer/.git" ] || return 1
-  L_D="$L_ROOT/dist"; L_C="$L_ROOT/consumer"
+  L_DW="$L_ROOT/dist"; L_D="$L_ROOT/dist-bare.git"; L_C="$L_ROOT/consumer"
+  git clone -q --mirror "$L_DW" "$L_D" >/dev/null 2>&1 || return 1
+  [ "$(git -C "$L_D" rev-parse --is-bare-repository 2>/dev/null)" = true ] || return 1
   L_B="$(git -C "$L_D" rev-parse HEAD~1)" && L_T="$(git -C "$L_D" rev-parse HEAD)" || return 1
   L_R="$L_C/_bmad-output/ai-dlc-update/reconcile-report.md"
   L_REC="$(git -C "$L_C" rev-parse --absolute-git-dir 2>/dev/null)/ai-dlc-verify-pass"
@@ -3369,11 +3386,11 @@ pcv_kworld() {
   # (a miss), and the hardened diff renders what it rendered before, so the fresh exit is 0 and equal
   # to the opt-out's.
   if pcv_kctl PC-V30; then
-    mkdir -p "$L_D/.git/info" && printf '*.md -diff\n' > "$L_D/.git/info/attributes"
+    mkdir -p "$L_D/info" && printf '*.md -diff\n' > "$L_D/info/attributes"
     pcv_kstep k30a; local a_ok=0 a_why
     a_why="$(pcv_why), opt-out $K_NC"
     pcv_is_miss "$K_NC" && [ "$K_NC" -eq 0 ] && a_ok=1
-    mv "$L_D/.git/info/attributes" "$PS_D/k30-attributes-aside"
+    mv "$L_D/info/attributes" "$PS_D/k30-attributes-aside"
     pcv_kback
     PCV_ENVPRE="GIT_EXTERNAL_DIFF=true"; pcv_kstep k30e; PCV_ENVPRE=""
     pcv_kback
@@ -3439,15 +3456,17 @@ pcv_k2near() {
     pcv_x "$1" "near miss ($4) did not HIT: [$(pcv_why)] -- the fix over-refuses"
   fi
 }
-# One world for V32 (F1), V35 (F5) and V36 (F6), all seeded before the one record: a tracked symlink
-# steps/demo.md -> local/demo.md with local/ IGNORED, and an extension bound to `fixtures: myfx` with
-# an EMPTY tests/fixtures/myfx. Each arm is undone before the next.
+# One world for V32 (F1), V35 (F5) and V36 (F6), all seeded before the one record: local/ IGNORED,
+# and an extension bound to `fixtures: myfx` with an EMPTY tests/fixtures/myfx. NO SYMLINK IS SEEDED:
+# the cache refuses any tracked symlink (R2), so a linked seed could never record and every arm here
+# would fail its control. V32 adds its link after the control and removes it before its near miss.
+# Each arm is undone before the next.
 pcv_k2world() {
-  local p ids="PC-V32 PC-V35 PC-V36" stp=".claude/skills/ai-dlc/steps/demo.md" ent
+  local p ids="PC-V35 PC-V36" stp=".claude/skills/ai-dlc/steps/demo.md" ent
+  [ "$PCV_R6" -eq 1 ] && ids="PC-V32 $ids"
   pcv_lat k2 || { for p in $ids; do pcv_x "$p" "FIXTURE BROKEN: layer-adjudication-tier/seed.sh did not build its world"; done; return 0; }
   ent="$L_C/.claude/skills/ai-dlc/extensions/adjudicable.md"
-  mkdir -p "$L_C/local" "$L_C/tests/fixtures/myfx" \
-    && mv "$L_C/$stp" "$L_C/local/demo.md" && ln -s ../../../../local/demo.md "$L_C/$stp" \
+  mkdir -p "$L_C/tests/fixtures/myfx" \
     && printf 'local/\n' >> "$L_C/.gitignore" \
     && awk 'NR==2{print "fixtures: myfx"} {print}' "$ent" > "$PS_D/k2-ent" && cp "$PS_D/k2-ent" "$ent" \
     && { git -C "$L_C" add -A && git -C "$L_C" -c user.email=f@f -c user.name=fixture commit -qm k2seed; } >/dev/null 2>&1 \
@@ -3458,16 +3477,33 @@ pcv_k2world() {
     for p in $ids; do pcv_x "$p" "control: the shared world's first --verify did not render and record ($(pcv_why))"; done; return 0
   fi
 
-  # V32 (F1): the IGNORED target of a tracked symlink is edited; git sees nothing, the detectors read
-  # the target. Near miss: the same link, its target restored byte for byte.
-  if pcv_kctl PC-V32; then
-    cp "$L_C/local/demo.md" "$PS_D/k32-target.keep"
-    printf '\n## Local rule\n\nconsumer-only text\n' >> "$L_C/local/demo.md"
-    if pcv_k2miss PC-V32 k32 "an edit to the IGNORED in-tree target of a tracked symlink"; then
-      cp "$PS_D/k32-target.keep" "$L_C/local/demo.md"; pcv_kback
-      pcv_k2near PC-V32 k32 "an edit to the IGNORED in-tree target of a tracked symlink" "the link to its unchanged ignored target"
+  # V32 (F1, rewritten for the round-6 partition): steps/demo.md becomes a TRACKED symlink to the
+  # IGNORED local/demo.md, staged by path (index only, so no ref moves). Round 5 keyed the target's
+  # bytes and its near miss was "the unchanged link HITS"; round 6 REFUSES every tracked symlink (R2),
+  # because the target's exec bit was still unkeyed. So: the link ALONE renders exit 0 and leaves the
+  # record untouched, naming R2; an edit to the ignored target then misses with the opt-out's exit;
+  # near miss: the same tree with steps/demo.md a regular file again HITS.
+  if [ "$PCV_R6" -eq 1 ] && pcv_kctl PC-V32; then
+    cp "$L_C/$stp" "$PS_D/k32-file.keep"
+    mkdir -p "$L_C/local" && cp "$PS_D/k32-file.keep" "$L_C/local/demo.md" && rm -f "$L_C/$stp" \
+      && ln -s ../../../../local/demo.md "$L_C/$stp" && git -C "$L_C" add -- "$stp" >/dev/null 2>&1
+    k32_ls="$(git -C "$L_C" ls-files -s -- "$stp" 2>/dev/null)" || k32_ls=""
+    if [ ! -L "$L_C/$stp" ] || ! grep -q '^120000 ' <<< "$k32_ls"; then
+      pcv_x PC-V32 "FIXTURE BROKEN: steps/demo.md did not become a tracked symlink (mode 120000)"
+    elif pcv_krefuse PC-V32 k32 "a tracked symlink steps/demo.md -> the ignored local/demo.md"; then
+      if ! grep -qF "${PCV_R6MARK}R2" "$PS_D/k32.only.err"; then
+        pcv_x PC-V32 "the tracked symlink rendered fresh but stderr names no R2 refusal, so the miss is not the partition's"
+      else
+        printf '\n## Local rule\n\nconsumer-only text\n' >> "$L_C/local/demo.md"
+        if pcv_k2miss PC-V32 k32 "an edit to the IGNORED target of a tracked symlink"; then
+          rm -f "$L_C/$stp"; cp "$PS_D/k32-file.keep" "$L_C/$stp"; git -C "$L_C" add -- "$stp" >/dev/null 2>&1
+          rm -f "$L_C/local/demo.md"; rmdir "$L_C/local" 2>/dev/null; pcv_kback
+          pcv_k2near PC-V32 k32 "a tracked symlink (alone: a fresh exit-0 render, record untouched, R2 named) whose ignored target is then edited" "steps/demo.md a regular file again"
+        fi
+      fi
     fi
-    cp "$PS_D/k32-target.keep" "$L_C/local/demo.md"; pcv_kback
+    if [ -L "$L_C/$stp" ]; then rm -f "$L_C/$stp"; cp "$PS_D/k32-file.keep" "$L_C/$stp"; git -C "$L_C" add -- "$stp" >/dev/null 2>&1; fi
+    rm -f "$L_C/local/demo.md"; rmdir "$L_C/local" 2>/dev/null; pcv_kback
   fi
 
   # V35 (F5): the EMPTY directory a bound fixture names is removed; git lists neither state. Near
@@ -3556,11 +3592,12 @@ pcv_k5world() {
 # record. Near miss: an ignored build/x, under no read root.
 pcv_k4world() {
   pcv_lat k4 || { pcv_x PC-V34 "FIXTURE BROKEN: layer-adjudication-tier/seed.sh did not build its world"; return 0; }
-  mkdir -p "$L_D/core/git-hooks" "$L_C/.githooks" \
-    && printf '#!/bin/sh\necho v1\n' > "$L_D/core/git-hooks/pre-push" \
-    && { git -C "$L_D" add -A && git -C "$L_D" -c user.email=f@f -c user.name=fixture commit -qm hookv1; } >/dev/null 2>&1 \
-    && printf '#!/bin/sh\necho v2\n' > "$L_D/core/git-hooks/pre-push" \
-    && { git -C "$L_D" add -A && git -C "$L_D" -c user.email=f@f -c user.name=fixture commit -qm hookv2; } >/dev/null 2>&1 \
+  mkdir -p "$L_DW/core/git-hooks" "$L_C/.githooks" \
+    && printf '#!/bin/sh\necho v1\n' > "$L_DW/core/git-hooks/pre-push" \
+    && { git -C "$L_DW" add -A && git -C "$L_DW" -c user.email=f@f -c user.name=fixture commit -qm hookv1; } >/dev/null 2>&1 \
+    && printf '#!/bin/sh\necho v2\n' > "$L_DW/core/git-hooks/pre-push" \
+    && { git -C "$L_DW" add -A && git -C "$L_DW" -c user.email=f@f -c user.name=fixture commit -qm hookv2; } >/dev/null 2>&1 \
+    && git -C "$L_D" fetch -q "$L_DW" '+refs/heads/*:refs/heads/*' >/dev/null 2>&1 \
     && L_B="$(git -C "$L_D" rev-parse HEAD~1)" && L_T="$(git -C "$L_D" rev-parse HEAD)" \
     && printf '#!/bin/sh\necho v1\n' > "$L_C/.githooks/pre-push" \
     && printf '.githooks/\nbuild/\n' >> "$L_C/.gitignore" \
@@ -3582,6 +3619,126 @@ pcv_k4world() {
   return 0
 }
 
+# ---- V38 (R1) and V39 (R2), in the MAIN world after every other main-world arm ----
+# pcv_r6refuse <tag> <Rn> -- the cached run with the condition in place must be a FRESH exit-0 render
+# (the opt-out's exit, which must be 0 so the record would be rewritten by a key that did not refuse),
+# leave the record byte-identical to the control's copy, and name the refusal on stderr. Sets R6_WHY.
+pcv_r6refuse() {
+  pcm "$1"; R6_WHY="$(pcv_why)"; local rc="$PRC" hit="$PHIT" n="$PN" rec=REWRITTEN nc
+  cmp -s "$PC_REC" "$PS_D/rec.keep" && rec=unchanged
+  pcm "$1.n" nocache; nc="$PRC"; PRC="$rc"; PHIT="$hit"; PN="$n"
+  R6_WHY="$R6_WHY, opt-out $nc, record $rec"
+  pcv_is_miss 0 && [ "$nc" -eq 0 ] && [ "$rec" = unchanged ] && grep -qF "${PCV_R6MARK}$2" "$PS_D/$1.err"
+}
+pcv_r6world() {
+  # V38 R1: the same dist as a NON-BARE work-tree repo (the copy the mirror was cloned from), run
+  # TWICE. A key without R1 records on the first run and HITS on the second; with R1 both render
+  # fresh and the record stays byte-identical. Near miss: the bare mirror HITS (the control).
+  if ! pcv_ctl v38; then pcv_noctl PC-V38; else
+    pcv_run v38a "$PC_C" "$PC_R" "$PC_DW" "$BASE" "$THEIRS"; v38a="$(pcv_why)"; v38a_ok=0
+    pcv_is_miss 0 && cmp -s "$PC_REC" "$PS_D/rec.keep" && grep -qF "${PCV_R6MARK}R1" "$PS_D/v38a.err" && v38a_ok=1
+    pcv_run v38b "$PC_C" "$PC_R" "$PC_DW" "$BASE" "$THEIRS"; v38b="$(pcv_why)"
+    v38_rec=REWRITTEN; cmp -s "$PC_REC" "$PS_D/rec.keep" && v38_rec=unchanged
+    if [ "$v38a_ok" -eq 1 ] && pcv_is_miss 0 && [ "$v38_rec" = unchanged ]; then
+      pcv_v PC-V38 "a NON-BARE dist renders fresh on two runs in a row (exit 0, R1 named, record untouched), and the bare mirror of the same repository HITS"
+    else
+      pcv_x PC-V38 "non-bare dist: first [$v38a], second [$v38b], record $v38_rec (want two fresh exit-0 renders naming R1, record untouched)"
+    fi
+    pcv_back
+  fi
+
+  # V39 R2: four shapes, each a refusal with the link in place and a HIT once it is gone. Every link
+  # is one a key without R2 would have followed silently or keyed by its target's bytes: the two
+  # root links are IGNORED (info/exclude), so `ls-files -o -i -- <root>` lists nothing through them.
+  local ex="$PC_C/.git/info/exclude" fails="" why=""
+  mkdir -p "$PC_C/.git/info" && touch "$ex" && cp "$ex" "$PS_D/exclude.keep"
+  mkdir -p "$PS_D/r6-out/ai-dlc/extensions"
+  # (a) a read root that IS a symlink: skills/ai-dlc/extensions -> an empty outside dir.
+  if ! pcv_ctl v39a; then fails="$fails a:control"; else
+    mkdir -p "$PC_C/skills/ai-dlc" && ln -s "$PS_D/r6-out/ai-dlc/extensions" "$PC_C/skills/ai-dlc/extensions" \
+      && printf '/skills/\n' >> "$ex"
+    pcv_r6refuse v39a R2 || { fails="$fails a"; why="$why a[$R6_WHY]"; }
+    rm -f "$PC_C/skills/ai-dlc/extensions"; rmdir "$PC_C/skills/ai-dlc" "$PC_C/skills"; cp "$PS_D/exclude.keep" "$ex"; pcv_back
+  fi
+  # (b) a symlinked PARENT of a read root: skills -> an outside dir holding ai-dlc/extensions.
+  if ! pcv_ctl v39b; then fails="$fails b:control"; else
+    ln -s "$PS_D/r6-out" "$PC_C/skills" && printf '/skills\n' >> "$ex"
+    pcv_r6refuse v39b R2 || { fails="$fails b"; why="$why b[$R6_WHY]"; }
+    rm -f "$PC_C/skills"; cp "$PS_D/exclude.keep" "$ex"; pcv_back
+  fi
+  # (c) an IGNORED symlink under a read root: .claude/r6-link -> notes/pc-v4.txt.
+  if ! pcv_ctl v39c; then fails="$fails c:control"; else
+    ln -s ../notes/pc-v4.txt "$PC_C/.claude/r6-link" && printf '/.claude/r6-link\n' >> "$ex"
+    pcv_r6refuse v39c R2 || { fails="$fails c"; why="$why c[$R6_WHY]"; }
+    rm -f "$PC_C/.claude/r6-link"; cp "$PS_D/exclude.keep" "$ex"; pcv_back
+  fi
+  # (d) a TRACKED symlink outside every read root: notes/r6-tracked -> pc-v4.txt, staged by path.
+  if ! pcv_ctl v39d; then fails="$fails d:control"; else
+    ln -s pc-v4.txt "$PC_C/notes/r6-tracked" && git -C "$PC_C" add -- notes/r6-tracked >/dev/null 2>&1
+    pcv_r6refuse v39d R2 || { fails="$fails d"; why="$why d[$R6_WHY]"; }
+    git -C "$PC_C" rm -q --cached -- notes/r6-tracked >/dev/null 2>&1; rm -f "$PC_C/notes/r6-tracked"; pcv_back
+  fi
+  # The near miss for (d), and the undo of every shape: the tree without any link HITS.
+  pcm v39h
+  if [ -z "$fails" ] && pcv_is_hit v39h "$PC_REC"; then
+    pcv_v PC-V39 "a symlinked read root, a symlinked parent of one, an ignored symlink under one and a tracked symlink each MISS by refusal (fresh exit-0 render, record untouched, R2 named), and the same tree without the link HITS"
+  else
+    pcv_x PC-V39 "symlink refusals failed [${fails# }]${why}; after every undo [$(pcv_why)] (want four R2 refusals and then a hit)"
+  fi
+}
+
+# ---- V42 (B2): the DETECTORS hash a consumer file with --no-filters, run directly ----
+# A CRLF consumer file, and `* text` in a NON-BARE dist's work-tree .gitattributes. preclassify.sh
+# (file_hash) and layer-drift.sh (adj_digest) hash the consumer file through `git -C "$DIST"`; with
+# --no-filters their output is the same with and without the attribute. The control is a copy of the
+# reconcile directory with --no-filters removed from those two lines (the pre-fix spelling), whose
+# output must DIFFER with the attribute -- proving the input discriminates.
+pcv_b2world() {
+  local b="$PS_D/b2" pe="$PS_D/b2eng" rec ok=1 why="" f
+  mkdir -p "$b" && cp -R "$(dirname "$PS_E")" "$pe" || { pcv_x PC-V42 "FIXTURE BROKEN: could not copy the engine"; return 0; }
+  for f in preclassify.sh:'hash-object --no-filters "$f"':'hash-object "$f"' \
+           layer-drift.sh:'hash-object --no-filters "$CONSUMER/$1"':'hash-object "$CONSUMER/$1"'; do
+    A="${f#*:}"; A="${A%%:*}" B="${f##*:}" awk '{ i = index($0, ENVIRON["A"]); if (i) $0 = substr($0, 1, i - 1) ENVIRON["B"] substr($0, i + length(ENVIRON["A"])); print }' \
+      "$pe/${f%%:*}" > "$b/mut" && cat "$b/mut" > "$pe/${f%%:*}"
+    cmp -s "$pe/${f%%:*}" "$(dirname "$PS_E")/${f%%:*}" && { pcv_x PC-V42 "FIXTURE BROKEN: the pre-fix spelling of ${f%%:*} did not apply"; return 0; }
+  done
+  # preclassify: the main seed's world, a work-tree dist copy, the consumer's moved-ref-probe.sh CRLF.
+  cp -R "$DIST" "$b/dist" && cp -R "$CONSUMER" "$b/cons" || { pcv_x PC-V42 "FIXTURE BROKEN: could not copy the seeded world"; return 0; }
+  f="$b/cons/scripts/ai-dlc/moved-ref-probe.sh"
+  awk '{ printf "%s\r\n", $0 }' "$f" > "$b/crlf" && cat "$b/crlf" > "$f"
+  pcv_b2pc() { "$PCV_BASH" "$1/preclassify.sh" "$b/dist" "$BASE" "$THEIRS" "$b/cons" > "$b/$2" 2>/dev/null; echo "$?" >> "$b/$2"; }
+  pcv_b2pc "$(dirname "$PS_E")" pc-fix-plain; pcv_b2pc "$pe" pc-old-plain
+  printf '* text\n' > "$b/dist/.gitattributes"
+  [ "$(git -C "$b/dist" check-attr text -- scripts/x.sh 2>/dev/null)" = "scripts/x.sh: text: set" ] \
+    || { pcv_x PC-V42 "FIXTURE BROKEN: the dist's work-tree * text attribute does not apply"; return 0; }
+  pcv_b2pc "$(dirname "$PS_E")" pc-fix-attr; pcv_b2pc "$pe" pc-old-attr
+  if ! grep -q 'moved-ref-probe' "$b/pc-fix-plain"; then ok=0; why="$why preclassify printed no moved-ref-probe row (FIXTURE BROKEN);"
+  elif ! cmp -s "$b/pc-fix-plain" "$b/pc-fix-attr"; then ok=0; why="$why preclassify output moved with the dist attribute;"
+  elif cmp -s "$b/pc-old-plain" "$b/pc-old-attr"; then ok=0; why="$why the pre-fix preclassify did not move either, so the input does not discriminate;"
+  fi
+  # layer-drift: an adjudication world, its work-tree dist, the entry's BODY in CRLF (the frontmatter
+  # stays LF: its `---` lines are matched exactly).
+  if ! pcv_lat b2l; then ok=0; why="$why layer-adjudication-tier/seed.sh did not build its world;"
+  else
+    f="$L_C/.claude/skills/ai-dlc/extensions/adjudicable.md"
+    awk 'NR == 1 && $0 == "---" { fm = 1; print; next } fm && $0 == "---" { fm = 0; print; next } fm { print; next } { printf "%s\r\n", $0 }' "$f" > "$b/ent" && cat "$b/ent" > "$f"
+    pcv_b2ld() { "$PCV_BASH" "$1/layer-drift.sh" "$L_DW" "$L_B" "$L_T" "$L_C" > "$b/$2" 2>/dev/null; echo "$?" >> "$b/$2"; }
+    pcv_b2ld "$(dirname "$PS_E")" ld-fix-plain; pcv_b2ld "$pe" ld-old-plain
+    printf '* text\n' > "$L_DW/.gitattributes"
+    pcv_b2ld "$(dirname "$PS_E")" ld-fix-attr; pcv_b2ld "$pe" ld-old-attr
+    if ! grep -q 'subject_digest [0-9a-f]\{40\}' "$b/ld-fix-plain"; then ok=0; why="$why layer-drift printed no subject_digest (FIXTURE BROKEN);"
+    elif ! cmp -s "$b/ld-fix-plain" "$b/ld-fix-attr"; then ok=0; why="$why layer-drift output moved with the dist attribute;"
+    elif cmp -s "$b/ld-old-plain" "$b/ld-old-attr"; then ok=0; why="$why the pre-fix layer-drift did not move either, so the input does not discriminate;"
+    fi
+  fi
+  if [ "$ok" -eq 1 ]; then
+    pcv_v PC-V42 "preclassify.sh and layer-drift.sh print the same output for a CRLF consumer file with and without * text in a non-bare dist's work-tree .gitattributes, and the pre-fix spelling (no --no-filters) prints a different one"
+  else
+    pcv_x PC-V42 "the detectors' --no-filters:${why}"
+  fi
+  return 0
+}
+
 # pcv_suite <emit> <dir> -- every PC-V arm against that engine; one verdict line per id in <dir>/verdicts.
 pcv_suite() {
   PS_E="$1"; PS_D="$2"; PS_SHIM="$2/shim"; PCV_ENG=""
@@ -3590,8 +3747,11 @@ pcv_suite() {
     && chmod +x "$PS_SHIM/bash" || { pcv_x PC-V0 "FIXTURE BROKEN: could not write the PATH shim"; return 1; }
 
   # ---- the main world ----
-  PC_C="$PS_D/consumer"; PC_D="$PS_D/dist"
-  { cp -R "$CONSUMER" "$PC_C" && cp -R "$DIST" "$PC_D"; } || { pcv_x PC-V0 "FIXTURE BROKEN: could not copy the seeded world"; return 1; }
+  # The dist is a BARE MIRROR of a copy of the seeded dist (the cache refuses a non-bare dist, R1);
+  # PC_DW, the non-bare copy it mirrors, is read only by V38, R1's own arm.
+  PC_C="$PS_D/consumer"; PC_DW="$PS_D/dist-work"; PC_D="$PS_D/dist.git"
+  { cp -R "$CONSUMER" "$PC_C" && cp -R "$DIST" "$PC_DW" && git clone -q --mirror "$PC_DW" "$PC_D"; } >/dev/null 2>&1 \
+    || { pcv_x PC-V0 "FIXTURE BROKEN: could not copy the seeded world and mirror its dist"; return 1; }
   mkdir -p "$PC_C/notes" "$PC_C/_bmad-output/ai-dlc-update"
   printf 'v4 original\n' > "$PC_C/notes/pc-v4.txt"
   printf '#!/usr/bin/env bash\necho v11\n' > "$PC_C/notes/pc-v11.sh"; chmod -x "$PC_C/notes/pc-v11.sh"
@@ -3617,8 +3777,11 @@ pcv_suite() {
     pcv_x PC-V0 "FIXTURE BROKEN: V6's second theirs commit is missing, equal to theirs, or carries another core/ tree"; return 1
   elif [ -e "$PC_REC" ] || [ "$(cd "$pc_top" 2>/dev/null && pwd -P)" != "$(cd "$PC_C" && pwd -P)" ]; then
     pcv_x PC-V0 "FIXTURE BROKEN: a record exists before any run, or the consumer is not its own git top level ($pc_top)"; return 1
+  elif [ "$(git -C "$PC_D" rev-parse --is-bare-repository 2>/dev/null)" != true ] \
+       || [ "$(git -C "$PC_DW" rev-parse --is-bare-repository 2>/dev/null)" != false ]; then
+    pcv_x PC-V0 "FIXTURE BROKEN: the mirrored dist is not bare, or its work-tree source is not non-bare, so R1 cannot be told apart"; return 1
   fi
-  pcv_v PC-V0 "the main world is its own git top level, its approval carries the HARD blocker and no _stamp_ line, and no record exists yet"
+  pcv_v PC-V0 "the main world is its own git top level, its dist a bare mirror, its approval carries the HARD blocker and no _stamp_ line, and no record exists yet"
 
   # ---- V1 / V14: the recording run, then the hit ----
   git -C "$PC_C" status --porcelain > "$PS_D/st0" 2>&1
@@ -3770,6 +3933,70 @@ pcv_suite() {
     fi
   fi
 
+  # ---- V40 (R3): an engine carrying a symlink refuses; the same engine copy without it HITS ----
+  # A link inside the engine directory is skipped by the engine field's `find -type f`, so without R3
+  # the linked copy computes the plain copy's key and HITS. The refusal must instead render fresh,
+  # exit as the opt-out does, leave the record byte-identical and name R3.
+  if [ "$PCV_R6" -eq 1 ]; then
+    if ! pcv_ctl v40; then pcv_noctl PC-V40; else
+      if ! cp -R "$(dirname "$PS_E")" "$PS_D/eng40"; then pcv_x PC-V40 "FIXTURE BROKEN: could not copy the engine"
+      else
+        PCV_ENG="$PS_D/eng40/emit-report.sh"; pcm v40c; v40c="$(pcv_why)"; v40c_hit=0
+        pcv_is_hit v40c "$PC_REC" && v40c_hit=1
+        ln -s emit-report.sh "$PS_D/eng40/zz-r6-link.sh"
+        cp "$PC_REC" "$PS_D/rec40.keep"
+        pcm v40.n nocache; v40_nc="$PRC"
+        pcm v40; v40="$(pcv_why)"
+        v40_rec=REWRITTEN; cmp -s "$PC_REC" "$PS_D/rec40.keep" && v40_rec=unchanged
+        if [ ! -L "$PS_D/eng40/zz-r6-link.sh" ]; then pcv_x PC-V40 "FIXTURE BROKEN: the engine symlink was not created"
+        elif [ "$v40c_hit" -eq 1 ] && pcv_is_miss "$v40_nc" && [ "$v40_rec" = unchanged ] \
+             && grep -qF "${PCV_R6MARK}R3" "$PS_D/v40.err"; then
+          pcv_v PC-V40 "an engine copy carrying a symlink MISSES by refusal (fresh render, exit $v40_nc as the opt-out, record untouched, R3 named), and the same copy without the link HITS"
+        else
+          pcv_x PC-V40 "engine symlink: plain copy [$v40c], linked copy [$v40], opt-out $v40_nc, record $v40_rec (want a hit, then a refusal naming R3 that leaves the record untouched)"
+        fi
+        PCV_ENG=""
+      fi
+      pcv_back
+    fi
+  fi
+
+  # ---- V41 (R4): a live sh receipt naming a .git/ path refuses; one naming a non-.git path HITS ----
+  # Each receipt is RE-APPROVED (the region re-rendered into the report) so the condition alone
+  # renders exit 0: the refusal is then a fresh exit-0 render whose record stays byte-identical, where
+  # an engine without R4 would re-record. The near miss records on its first run and HITS its second.
+  if [ "$PCV_R6" -eq 1 ]; then
+    if ! pcv_ctl v41; then pcv_noctl PC-V41; else
+      v41_lg="$PC_C/_bmad-output/ai-dlc-update/push-candidate-ledger.md"
+      cp "$v41_lg" "$PS_D/ledger41.keep"; cp "$PC_R" "$PS_D/report41.keep"
+      pcv_r41() { # <path the receipt names> -- append the entry and re-approve
+        { cat "$PS_D/ledger41.keep"; printf '\n## PC-FIXTURE-R6-RECEIPT — a receipt naming %s\n\nverify: sh false # %s\n' "$1" "$1"; } > "$v41_lg"
+        "$PCV_BASH" "$PS_E" "$PC_D" "$BASE" "$PC_C" "$THEIRS" > "$PS_D/region41.md" 2>/dev/null
+        { echo "# Reconcile report (fixture)"; echo; cat "$PS_D/region41.md"; } > "$PC_R"
+        grep -q 'reconcile-mechanical' "$PS_D/region41.md"
+      }
+      if ! pcv_r41 .git/hooks/pre-push; then pcv_x PC-V41 "FIXTURE BROKEN: the re-approval with the .git receipt rendered no region"
+      else
+        pcm v41; v41="$(pcv_why)"; v41_rc="$PRC" v41_hit="$PHIT" v41_n="$PN"
+        pcm v41.n nocache; v41_nc="$PRC"; PRC="$v41_rc"; PHIT="$v41_hit"; PN="$v41_n"
+        v41_rec=REWRITTEN; cmp -s "$PC_REC" "$PS_D/rec.keep" && v41_rec=unchanged
+        if ! { pcv_is_miss 0 && [ "$v41_nc" -eq 0 ] && [ "$v41_rec" = unchanged ] && grep -qF "${PCV_R6MARK}R4" "$PS_D/v41.err"; }; then
+          pcv_x PC-V41 "a re-approved receipt naming .git/hooks/pre-push: [$v41], opt-out $v41_nc, record $v41_rec (want a fresh exit-0 render naming R4 that leaves the record untouched)"
+        elif ! pcv_r41 docs/r6-nearmiss.md; then pcv_x PC-V41 "FIXTURE BROKEN: the re-approval with the near-miss receipt rendered no region"
+        else
+          pcm v41b; v41b="$(pcv_why)"; v41b_ok=0; pcv_is_miss 0 && ! cmp -s "$PC_REC" "$PS_D/rec.keep" && v41b_ok=1
+          pcm v41h
+          if [ "$v41b_ok" -eq 1 ] && pcv_is_hit v41h "$PC_REC"; then
+            pcv_v PC-V41 "a re-approved receipt naming .git/hooks/pre-push MISSES by refusal (fresh exit-0 render, record untouched, R4 named), and one naming docs/r6-nearmiss.md records and then HITS"
+          else
+            pcv_x PC-V41 "near miss (a receipt naming docs/r6-nearmiss.md): first [$v41b], second [$(pcv_why)] (want a fresh exit-0 render that records, then a hit)"
+          fi
+        fi
+      fi
+      cat "$PS_D/ledger41.keep" > "$v41_lg"; cat "$PS_D/report41.keep" > "$PC_R"; pcv_back
+    fi
+  fi
+
   # ---- V15: a consumer that is NOT its own git top level never records ----
   PO="$PS_D/outer"; mkdir -p "$PO"
   if ! { cp -R "$CONSUMER" "$PO/consumer" && git -C "$PO" init -q && git -C "$PO" add -A \
@@ -3831,6 +4058,12 @@ pcv_suite() {
   pcv_k3world
   pcv_k4world
   pcv_k5world
+
+  # ---- V38, V39, V42: the round-6 partition (R1, R2) and the detectors' --no-filters (B2) ----
+  if [ "$PCV_R6" -eq 1 ]; then
+    pcv_r6world
+    pcv_b2world
+  fi
 
   # ---- V10: a REGISTER ROW resolves HARD-LAYER-ADJUDICATION-MISSING: a miss reaching exit 3 ----
   # The world is layer-adjudication-tier's seed (its own git top level, one adjudicable row). The
@@ -3922,7 +4155,7 @@ pcv_want() { case "$1" in M-region) echo "PC-V3" ;; M-direxcl) echo "PC-V10" ;; 
 PCV_MUTS="M-region M-direxcl M-exit3"
 
 if ! grep -qF "$PCV_HITP" "$EMIT"; then
-  printf '  SKIP  PC-V0..PC-V31: %s carries no recorded-PASS cache, so this engine predates BL-679 and no cache arm can be checked against it\n' "$EMIT"
+  printf '  SKIP  PC-V0..PC-V42: %s carries no recorded-PASS cache, so this engine predates BL-679 and no cache arm can be checked against it\n' "$EMIT"
 else
   mkdir -p "$PCV_ROOT/ship"
   ( pcv_suite "$EMIT" "$PCV_ROOT/ship" ) > "$PCV_ROOT/ship.log" 2>&1 &

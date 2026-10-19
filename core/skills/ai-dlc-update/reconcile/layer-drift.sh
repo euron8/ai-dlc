@@ -937,7 +937,8 @@ adj_is_adjudicated() { adj_active && ld_has_line "$ADJ_CODES" "$1"; }
 adj_digest() { # $1 entry (consumer-relative), $2 core-relative target, [$3 firing status]
   local ef tb dg cl
   cl="$(adj_clause_of "${3:-}")"
-  ef="$(git -C "$DIST" hash-object "$CONSUMER/$1" 2>/dev/null)"
+  # `--no-filters`: the dist's work-tree attributes must not rewrite the consumer's bytes.
+  ef="$(git -C "$DIST" hash-object --no-filters "$CONSUMER/$1" 2>/dev/null)"
   # NOT memo_rev_parse: that helper is `-q --verify`, and this call site is bare
   # `rev-parse <ref>:<path>` deliberately unconverted (CLAUDE.md's own note: bare rev-parse on
   # a missing path ECHOES ITS ARGUMENT and exits 128, `-q --verify` prints nothing — a different

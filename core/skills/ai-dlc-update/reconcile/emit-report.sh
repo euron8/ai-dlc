@@ -91,8 +91,8 @@
 #                and of the global attributes file `git var GIT_ATTR_GLOBAL` names, and the
 #                auto-abbrev length of theirs -- every rendered `%h` comes from <dist>;
 #   consroot     `pwd -P` of <consumer> and <consumer> as typed: the region prints both forms;
-#   consindex    `ls-files -s` (mode, blob, path: the exec bit and tracked-ness), the RAW bytes of
-#                each tracked symlink's in-tree target, and, when a `text`/`eol`/`filter`/`ident`
+#   consindex    `ls-files -s` (mode, blob, path: the exec bit and tracked-ness), and, when a
+#                `text`/`eol`/`filter`/`ident`
 #                attribute, `core.autocrlf` or `core.eol` can normalise content, the RAW bytes of
 #                every tracked file;
 #   conswork     `status --porcelain=v2 --untracked-files=all` plus the bytes of every modified or
@@ -124,11 +124,23 @@
 #     before the record and both sides match;
 #   - a NESTED REPOSITORY, untracked (`dir/` in the listing) or tracked (a gitlink): git lists none of
 #     its files;
-#   - a tracked or listed SYMLINK whose chain does not end at an existing path inside <consumer>, or
-#     ends at a DIRECTORY: the key hashes the link, the detectors read the target;
+#   - an untracked, non-ignored SYMLINK outside every read root whose chain does not end at an
+#     existing file inside <consumer>: the key hashes the link, the detectors read the target;
 #   - a path component named `.git` anywhere below the consumer root (other than its own top-level
 #     `.git` and `.claude/worktrees`): git lists nothing beneath it, repository or not;
-#   - an INHERITED `AI_DLC_RECONCILE_MEMO`: a memo directory another process filled.
+#   - an INHERITED `AI_DLC_RECONCILE_MEMO`: a memo directory another process filled;
+#   - R1 a <dist> that is NOT A BARE REPOSITORY: its work tree's `.gitattributes` and checkout are
+#     read by nothing the key lists, and the update skill's dist (dist-clone.sh) is always bare;
+#   - R2 a SYMLINK IN THE CONSUMER'S INPUT SET: any tracked symlink (mode 120000); a symlink at or
+#     above any read root (`er_read_roots`, the set consignored lists), walked component by
+#     component from the consumer root; or any symlink, tracked, untracked or ignored, under one;
+#   - R3 a SYMLINK INSIDE THIS ENGINE DIRECTORY: the engine field lists regular files only. No walk
+#     above it: every engine read goes through the same logical `$SELF` the field hashes;
+#   - R4 a live ledger `verify: sh` receipt naming a `.git/` path, by ledger-reverify.sh's own
+#     token extraction (`--receipt-tokens`): its absent-subject test reads the git-dir, the key
+#     prunes it.
+# Every refusal names its cause on stderr when the cache is armed (`recorded PASS refused,
+# re-rendering: <cause>`), leaves the record untouched, and renders exactly as an unarmed run.
 # On a hit the preclassify-refusal check is not re-run: it ran on the render the record came from.
 #
 # OFF BY DEFAULT. A recorded PASS is ACCEPTED only when `EMIT_REPORT_VERIFY_CACHE=1` is set (exactly
@@ -163,6 +175,12 @@
 # (5) A dist that shares its ref store with active branches (a developer checkout, or any worktree
 # of one) moves refs between two verifies and never records, which is why the update skill reads
 # `<dist>` from the private main-only clone `dist-clone.sh` builds.
+# (6) A file CHANGED AND RESTORED DURING the render (A to B and back to A between the key taken
+# before it and the key taken after) records a PASS for bytes the detectors read as B: both keys see
+# A. Nothing here can observe a state that existed only between the two key computations.
+# (7) A REPORT FILE PLACED AT A DETECTOR INPUT (the push-candidate ledger, say) is excluded from the
+# work-tree fields as the report, so an edit to it outside the region still hits while the
+# detectors read the edited file. The report belongs at its own path; the opt-out re-renders.
 set -uo pipefail
 
 MODE=print
@@ -1099,7 +1117,6 @@ er_hash_list() {
 }
 _er_nl='
 '
-_er_tab="$(printf '\t')"
 # er_hash_paths <abs-dir> <listfile> -- content hash of each listed path, by ABSOLUTE path. MEASURED:
 # `git hash-object --stdin-paths` resolves a relative path against the repository TOP, not the cwd,
 # so run from the engine directory inside a checkout it failed every file and the key never formed.
@@ -1157,8 +1174,8 @@ er_kf_distrefs() {
 }
 # Resolved AND as typed: the region's `full: diff` lines print <consumer> as the caller spelled it.
 er_kf_consroot()  { printf '%s\0%s\0' "$_er_root" "$CONSUMER"; }
-# A tracked SYMLINK (mode 120000) resolving outside the consumer root, and a tracked GITLINK (160000,
-# a submodule: a nested repository whose files the index does not list), are each a MISS.
+# A tracked GITLINK (160000, a submodule: a nested repository whose files the index does not list)
+# is a MISS. A tracked SYMLINK (120000) never reaches here: er_key's R2 refuses it first.
 er_kf_consindex() {
   local e
   git -C "$CONSUMER" ls-files -s -z > "$_er_tmp/key.idx" || return 1
@@ -1166,7 +1183,6 @@ er_kf_consindex() {
   while IFS= read -r -d '' e; do
     case "$e" in
       160000\ *) return 1 ;;
-      120000\ *) er_link_target "$_er_root/${e#*"$_er_tab"}" || return 1 ;;
     esac
   done < "$_er_tmp/key.idx"
   # Under a NORMALISING attribute or config, `git add` of a CRLF save stores the same LF blob, so the
@@ -1234,17 +1250,23 @@ er_mapped_roots() {
     [ "$n" -ge 2 ] || exit 1
   )
 }
-er_kf_consignored() {
+# er_read_roots -- the consumer read roots, one per line: the hand-listed ones, er_mapped_roots, and
+# every validated `corpus-root:`. ONE derivation, read by consignored and by the R2 symlink refusal.
+er_read_roots() {
   local r
   printf '%s\n' .claude _bmad-output scripts/ai-dlc scripts/ai-dlc-local .github/workflows tests \
-    skills/ai-dlc/extensions CLAUDE.md QUICKSTART.md docs/coding-conventions.md > "$_er_tmp/key.roots" || return 1
-  er_mapped_roots >> "$_er_tmp/key.roots" || return 1
+    skills/ai-dlc/extensions CLAUDE.md QUICKSTART.md docs/coding-conventions.md || return 1
+  er_mapped_roots || return 1
   sed -n 's/^corpus-root:[[:space:]]*//p' "$SELF/predicate-sites.md" > "$_er_tmp/key.croots" || return 1
   while IFS= read -r r; do
     r="${r%"${r##*[![:space:]]}"}"
     case "$r" in ""|/*|*[[:space:]]*|..|../*|*/..|*/../*) return 1 ;; esac
-    printf '%s\n' "$r" >> "$_er_tmp/key.roots" || return 1
+    printf '%s\n' "$r" || return 1
   done < "$_er_tmp/key.croots"
+}
+er_kf_consignored() {
+  local r
+  er_read_roots > "$_er_tmp/key.roots" || return 1
   : > "$_er_tmp/key.ign" || return 1
   while IFS= read -r r; do
     if [ -n "$_er_ex" ]; then
@@ -1373,25 +1395,44 @@ er_kf_env() {
 # records only when the render equalled this region byte for byte, so the recorded value IS the
 # passing render's.
 er_kf_region() { [ -n "$got" ] || return 1; printf '%s\n' "$got"; }
+# er_refuse <cause> -- names why er_key refused, in a file the caller prints. er_key runs inside a
+# command substitution with stderr discarded, so the cause travels through $_er_tmp.
+er_refuse() { printf '%s\n' "$1" > "$_er_tmp/key.refused" 2>/dev/null; return 1; }
 # er_key -- prints the key: sha256 over the eleven `name=value` lines, each value the sha256 of that
 # field's material. Non-zero, and nothing usable, when any field could not be computed.
 er_key() {
-  local f v
+  local f v r p rest
   [ -n "$_er_rec" ] || return 1
+  : > "$_er_tmp/key.refused" || return 1
+  # R1 A NON-BARE DIST IS A MISS. Its work tree carries a `.gitattributes` and a checkout no field
+  # keys, and a detector that hashes a consumer file through `git -C "$DIST"` reads that work
+  # tree's attributes. The update skill's dist is the bare clone dist-clone.sh builds.
+  [ "$(git -C "$DIST" rev-parse --is-bare-repository 2>/dev/null)" = true ] \
+    || { er_refuse "R1 the dist is not a bare repository (git rev-parse --is-bare-repository), so its work-tree attributes and checkout are inputs no field keys"; return 1; }
+  # R3 A SYMLINK INSIDE THE ENGINE DIRECTORY IS A MISS. er_kf_engine lists `find . -type f`, which
+  # skips a link, while every detector is read as "$SELF/<file>" through it (measured: lib.sh as a
+  # link to an outside file, edited after the record, cached 0 where a fresh render gave 1). No walk
+  # ABOVE $SELF: $SELF is the logical `cd "$(dirname "$0")" && pwd`, every engine read goes through
+  # that same path, and er_kf_engine hashes the bytes reached by it, so a link above it cannot make
+  # the key and the run read different files.
+  ( cd "$SELF" && find . -type l ) > "$_er_tmp/key.englinks" 2>/dev/null \
+    || { er_refuse "R3 the engine directory could not be searched for symlinks"; return 1; }
+  [ ! -s "$_er_tmp/key.englinks" ] \
+    || { er_refuse "R3 the engine directory contains a symlink ($(sed -n 1p "$_er_tmp/key.englinks")), whose target the engine field does not hash"; return 1; }
   # AN UNREADABLE DIRECTORY IS A MISS. Git lists nothing under a directory it cannot open, so a
   # chmod 000 hides its whole subtree from every field above while the detectors render it as
   # absent (measured: cached 0, fresh 1). Any such directory refuses both the hit and the record.
   # The prune list (.git, .claude/worktrees) is the set the key does not read.
   _er_unread="$(find "$_er_root" \( -name .git -o -path "$_er_root/.claude/worktrees" \) -prune -o -type d ! -perm -u+rx -print 2>/dev/null)" \
     || return 1
-  [ -z "$_er_unread" ] || return 1
+  [ -z "$_er_unread" ] || { er_refuse "a directory under the consumer is unreadable, so git lists nothing beneath it"; return 1; }
   # A PATH COMPONENT NAMED `.git` BELOW THE ROOT IS A MISS. Every git listing skips it, repository or
   # not, while a detector's `find` reads beneath it (measured: a non-repo overrides/.git/o.md cached 0
   # where a fresh render added HARD-OVERRIDE-BASE-UNRESOLVABLE). The consumer's own top-level `.git`
   # and `.claude/worktrees` are pruned, as above.
   _er_dotgit="$(find "$_er_root" \( -path "$_er_root/.git" -o -path "$_er_root/.claude/worktrees" \) -prune \
     -o -name .git -print 2>/dev/null)" || return 1
-  [ -z "$_er_dotgit" ] || return 1
+  [ -z "$_er_dotgit" ] || { er_refuse "a path component named .git lies below the consumer root, which every git listing skips"; return 1; }
   # AN INDEX THAT HIDES WORK-TREE EDITS IS A MISS. `assume-unchanged` (an `h` tag, or any lower-case
   # one) and `skip-worktree` (`S`, or `s` with both) make status and `ls-files -m` skip a modified
   # tracked file the detectors still read (measured: cached 0, fresh 3), and `core.ignoreStat=true`
@@ -1401,11 +1442,50 @@ er_key() {
   # Staged to a file before the grep: `grep -q` at the end of a pipe under pipefail can report the
   # writer's EPIPE, which would read a flagged index as clean.
   LC_ALL=C tr '\0' '\n' < "$_er_tmp/key.tags" | LC_ALL=C cut -c1 > "$_er_tmp/key.tag1" || return 1
-  LC_ALL=C grep -q '[a-zS]' "$_er_tmp/key.tag1" && return 1
-  case "$(git -C "$CONSUMER" config --bool core.ignoreStat 2>/dev/null)" in true) return 1 ;; esac
+  LC_ALL=C grep -q '[a-zS]' "$_er_tmp/key.tag1" && { er_refuse "an assume-unchanged or skip-worktree flag hides work-tree edits from status"; return 1; }
+  case "$(git -C "$CONSUMER" config --bool core.ignoreStat 2>/dev/null)" in true) er_refuse "core.ignoreStat=true hides work-tree edits from status"; return 1 ;; esac
   # AN INHERITED MEMO IS A MISS: a reconcile memo directory handed in by a caller holds answers no
   # field here can see, and a stale one feeds the render.
-  [ -z "$_er_memo_in" ] || return 1
+  [ -z "$_er_memo_in" ] || { er_refuse "an inherited AI_DLC_RECONCILE_MEMO holds answers another process cached"; return 1; }
+  # R2 A SYMLINK IN THE CONSUMER'S INPUT SET IS A MISS. The key hashes what git lists and the
+  # detectors read through a link: a tracked link (mode 120000) keys its blob and not its target's
+  # exec bit (measured: chmod +x on a tracked link's target cached 0 where a fresh render gave 1);
+  # a link AT OR ABOVE a read root makes `ls-files -o -i -- <root>` list nothing beneath it
+  # (measured: scripts -> an outside dir, an edit there cached 0 where a fresh render gave 1); and
+  # any link UNDER a root, tracked, untracked or ignored, is a read the key follows nowhere. The
+  # roots are er_read_roots, the set consignored lists.
+  git -C "$CONSUMER" ls-files -s -z > "$_er_tmp/key.r2idx" || { er_refuse "R2 the consumer's index could not be listed"; return 1; }
+  LC_ALL=C tr '\0' '\n' < "$_er_tmp/key.r2idx" > "$_er_tmp/key.r2lines" || { er_refuse "R2 the consumer's index could not be listed"; return 1; }
+  if LC_ALL=C grep -q '^120000 ' "$_er_tmp/key.r2lines"; then
+    er_refuse "R2 the consumer tracks a symlink (mode 120000), whose target the key does not follow"; return 1
+  fi
+  er_read_roots > "$_er_tmp/key.r2roots" || { er_refuse "R2 the read roots could not be derived"; return 1; }
+  while IFS= read -r r; do
+    p="$_er_root"; rest="$r"
+    while [ -n "$rest" ]; do
+      p="$p/${rest%%/*}"
+      case "$rest" in */*) rest="${rest#*/}" ;; *) rest="" ;; esac
+      if [ -L "$p" ]; then er_refuse "R2 the read root '$r' is reached through a symlink (${p#"$_er_root"/})"; return 1; fi
+      [ -e "$p" ] || break
+    done
+    [ -d "$_er_root/$r" ] || continue
+    find "$_er_root/$r" -path "$_er_root/.claude/worktrees" -prune -o -type l -print > "$_er_tmp/key.r2links" 2>/dev/null \
+      || { er_refuse "R2 the read root '$r' could not be searched for symlinks"; return 1; }
+    if [ -s "$_er_tmp/key.r2links" ]; then
+      er_refuse "R2 a symlink lies under the read root '$r' ($(sed -n 1p "$_er_tmp/key.r2links"))"; return 1
+    fi
+  done < "$_er_tmp/key.r2roots"
+  # R4 A LIVE RECEIPT NAMING A `.git/` PATH IS A MISS. ledger-reverify.sh tests whether an `sh`
+  # receipt's named paths exist, `.git/` included, and the key prunes the git-dir (measured: a
+  # receipt naming .git/hooks/pre-push, the hook removed after the record, cached 0 where a fresh
+  # render gave 1). The token set is ledger-reverify.sh's OWN extraction, run in its
+  # `--receipt-tokens` mode, so there is no second grammar here. `"$BASH"`, not `bash`: the key
+  # launches no detector through PATH.
+  "$BASH" "$SELF/ledger-reverify.sh" --receipt-tokens "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$_er_tmp/key.r4" 2>/dev/null \
+    || { er_refuse "R4 the ledger's receipt tokens could not be derived (ledger-reverify.sh --receipt-tokens failed)"; return 1; }
+  if LC_ALL=C awk -F'\t' '$1 == "SUBJECT" && index($2, ".git/") == 1 { f = 1 } END { exit !f }' "$_er_tmp/key.r4"; then
+    er_refuse "R4 a live ledger sh receipt names a .git/ path, which the key does not read"; return 1
+  fi
   : > "$_er_tmp/key.block" || return 1
   for f in engine base theirs distrefs consroot consindex conswork consignored consobjects consresolve env region; do
     "er_kf_$f" > "$_er_tmp/key.f.$f" 2>/dev/null || return 1
@@ -1430,6 +1510,12 @@ er_cache_record() {
   return 0
 }
 _er_key0="$(er_key 2>/dev/null)" || _er_key0=""
+# A REFUSAL NAMES ITS CAUSE, on stderr, only when the cache is armed: unarmed, stderr stays what it
+# was before the cache existed. Never a `cause:` line, which apply.sh parses from this stderr.
+if [ -z "$_er_key0" ] && [ -n "$_er_tmp" ] && [ -s "$_er_tmp/key.refused" ] \
+   && [ "${EMIT_REPORT_VERIFY_CACHE:-}" = 1 ] && [ -z "${AI_DLC_VERIFY_NO_CACHE:-}" ]; then
+  echo "emit-report: recorded PASS refused, re-rendering: $(sed -n 1p "$_er_tmp/key.refused")" >&2
+fi
 if [ -n "$_er_key0" ] && [ "${EMIT_REPORT_VERIFY_CACHE:-}" = 1 ] && [ -z "${AI_DLC_VERIFY_NO_CACHE:-}" ] \
    && [ -f "$_er_rec" ]; then
   _er_rk="$(sed -n 's/^key //p' "$_er_rec" 2>/dev/null | head -1)"

@@ -190,6 +190,13 @@ CLOSE_AWK="$(ledger_close_awk)" || exit 2
 # function twice there, which is an awk error.
 ELC_AWK="$(ledger_entry_line_close_awk)" || exit 2
 
+# `--receipt-tokens`: print `SUBJECT<TAB><path>` for every consumer-relative path every OPEN entry's
+# `verify: sh` receipt names, PRESENT OR NOT, by the same split `receipt_absent_subjects` applies,
+# then exit 0. Decides nothing and runs no receipt. emit-report.sh's recorded-PASS key reads it to
+# refuse a receipt naming a `.git/` path (its R4), so that refusal has no grammar of its own.
+LR_TOKENS_MODE=""
+if [ "${1:-}" = "--receipt-tokens" ]; then LR_TOKENS_MODE=1; shift; fi
+
 DIST="${1:?usage: ledger-reverify.sh <dist-repo> <base-sha> <consumer-root> <theirs-ref> [ledger-path]}"
 BASE="${2:?}"
 CONSUMER="${3:?}"
@@ -1410,7 +1417,8 @@ receipt_absent_subjects() {
       *) continue ;;
     esac
     case "$p" in *'*'*|*'?'*|*'$'*) continue ;; esac
-    [ -e "$CONSUMER/$p" ] || case " $out " in *" $p "*) ;; *) out="$out $p" ;; esac
+    # A second argument (`--receipt-tokens` mode) keeps every candidate, present or not.
+    { [ -n "${2:-}" ] || [ ! -e "$CONSUMER/$p" ]; } && case " $out " in *" $p "*) ;; *) out="$out $p" ;; esac
   done < "$LR_STAGE/absent-tokens"
   printf '%s' "$out"
   return 0
@@ -2464,6 +2472,18 @@ while IFS="$(printf '\t')" read -r label ord directive; do
   # directives on the reference consumer are written that way.
   verb_norm="$(printf '%s' "$verb" | sed -E 's/^[^A-Za-z_]+//; s/[^A-Za-z_]+$//')"
   note=""
+  # THE `--receipt-tokens` MODE takes its receipts from THIS loop, after the split above, so it is no
+  # second reader of the staged entries and no second spelling of the verb split. Every `sh`
+  # remainder goes through receipt_absent_subjects with its keep-all argument; nothing is decided
+  # and no receipt runs. A failed split refuses (exit 2), which the caller reads as a refusal.
+  if [ -n "$LR_TOKENS_MODE" ]; then
+    if [ "$verb_norm" = sh ] && [ -n "$rest" ]; then
+      _tok="$(receipt_absent_subjects "$rest" all)" \
+        || lr_refuse "the path tokens of $label's sh receipt could not be split"
+      for _t in $_tok; do printf 'SUBJECT\t%s\n' "$_t"; done
+    fi
+    continue
+  fi
 
   # ASKED FOR EVERY OPEN ENTRY, INDEPENDENT OF THE VERB — including `manual`, which has no
   # other mechanical signal at all. Additional to the receipt's verdict below, never a
@@ -3048,6 +3068,8 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       ;;
   esac
 done < "$LR_STAGE/entries"
+# `--receipt-tokens` ends with the loop: nothing after it is a receipt token.
+[ -z "$LR_TOKENS_MODE" ] || exit 0
 
 # RESET, BECAUSE THE LOOP LEAVES ITS LAST ENTRY'S SUFFIX BEHIND. `RSFX` is set per receipt
 # INSIDE the loop above and read by `emit()` everywhere, so whatever the final iteration left in
