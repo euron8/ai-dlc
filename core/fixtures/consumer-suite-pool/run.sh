@@ -808,15 +808,15 @@ fi
 # one hanging stub; the worker is then SIGKILLed by its recorded pid. The watcher pid the worker recorded
 # (`.pr/<unit>.w`) must be gone within POOL_STALL polls, and so must every pid the stub recorded: a
 # watcher whose only exit was a refusal outlived its worker with ppid 1.
-st_orphan() {                  # st_orphan <hook> <tag> -> prints "<watcher-left> <unit-left>" or BROKEN
-  local h="$1" R="$WORK/orph.$2" WK WP n p ul=0
+st_orphan() {                  # st_orphan <hook> <tag> [<stub-dir> [alive]] -> prints "<watcher-left> <unit-left>" or BROKEN
+  local h="$1" R="$WORK/orph.$2" SB="${3:-}" AL="${4:-}" WK WP n p ul=0
   mkdir -p "$R/t/tests/fixtures/u" "$R/out/.log" "$R/out/.dur" "$R/out/.pr"
   awk '/xargs -P "\$FIXTURE_JOBS" -I\{\} bash -c /{f=1;next} /^  . _ \{\} < "\$out\/.order"$/{f=0} f' "$h" > "$R/body.sh"
   awk '/^POOL_WALK=/{f=1} f{print} f && /^}.$/{exit}' "$h" > "$R/walk.sh"
   POOL_WALK=""; . "$R/walk.sh"
   [ -s "$R/body.sh" ] && [ -n "$POOL_WALK" ] || { echo BROKEN; return; }
   printf 'echo $$ >> "%s/pids"\nsleep 100000 & echo $! >> "%s/pids"; wait $!\n' "$R" "$R" > "$R/t/tests/fixtures/u/run.sh"
-  ( cd "$R/t" && AI_DLC_FX_OUT="$R/out" AI_DLC_FX_TRACE="" AI_DLC_FX_TRACE_LIST="" AI_DLC_FX_DV="" \
+  ( cd "$R/t" && PATH="${SB:+$SB:}$PATH" AI_DLC_FX_OUT="$R/out" AI_DLC_FX_TRACE="" AI_DLC_FX_TRACE_LIST="" AI_DLC_FX_DV="" \
      POOL_STALL=300 POOL_WALK="$POOL_WALK" exec bash -c "$(cat "$R/body.sh")" _ tests/fixtures/u/ ) >/dev/null 2>&1 &
   WK=$!
   n=0; while [ ! -s "$R/out/.pr/u.w" ] && [ "$n" -lt 50 ]; do n=$((n + 1)); sleep 0.1; done
@@ -828,7 +828,17 @@ st_orphan() {                  # st_orphan <hook> <tag> -> prints "<watcher-left
   kill -KILL "$WK" 2>/dev/null; wait "$WK" 2>/dev/null
   n=0; while kill -0 "$WP" 2>/dev/null && [ "$n" -lt "$ST" ]; do n=$((n + 1)); sleep 1; done
   local wl=0; if kill -0 "$WP" 2>/dev/null; then wl=1; kill -KILL -- "-$WP" 2>/dev/null; fi
-  while read -r p; do kill -0 "$p" 2>/dev/null && { ul=$((ul + 1)); kill -KILL "$p" 2>/dev/null; }; done < "$R/pids"
+  # A pid SIGKILLed a moment ago can still answer `kill -0` until it is reaped, so an arm asserting all gone blocks
+  # on the CONDITION (every recorded pid gone) for at most 50 polls before counting. An arm asserting a SURVIVOR
+  # (the `alive` argument: st-e, st-g) skips the poll and counts once, since the condition it waits for never comes.
+  n=0; while [ "$AL" != alive ] && [ "$n" -lt 50 ]; do
+    ul=0; while read -r p; do kill -0 "$p" 2>/dev/null && ul=$((ul + 1)); done < "$R/pids"
+    [ "$ul" -eq 0 ] && break
+    n=$((n + 1)); sleep 0.1
+  done
+  ul=0; while read -r p; do kill -0 "$p" 2>/dev/null && { ul=$((ul + 1)); kill -KILL "$p" 2>/dev/null; }; done < "$R/pids"
+  # A STUBBED drive must prove the stub refused the worker's own `-p` lookup, or `self` was never empty.
+  [ -z "$SB" ] || [ -s "$SB/refused" ] || { echo BROKEN; return; }
   echo "$wl $ul"
 }
 o="$(st_orphan "$HOOK" fix)"
@@ -839,10 +849,34 @@ case "$o" in
 esac
 # st-e: the watcher's worker-liveness check removed, so it outlives the worker.
 if mutx st-e '          if ! kill -0 "$$"; then pool_kill "$pid" "$self" "$kp" "$kg"; exit 0; fi' '          :'; then
-  o="$(st_orphan "$MUT" st-e)"
+  o="$(st_orphan "$MUT" st-e "" alive)"
   case "$o" in
     "1 "*) ok "st-e without the worker-liveness check the watcher outlives its SIGKILLed worker -- the check is what ends it" ;;
     *) bad "st-e the watcher did not outlive its worker with the liveness check removed ($o)" ;;
+  esac
+fi
+# THE EMPTY-SELF PATH KILLS THE UNIT'S GROUP TOO (BL-677). A stub `ps` that FAILS on `-p` (and records that
+# it did) leaves the worker's `self` empty, so the watcher's worker-death `pool_kill` takes its guard path,
+# which kills the recorded pid and its group and walks nothing. The unit leads its own group and its
+# `sleep` child is in it, so the child dies only if the guard signals the group. Every other `ps` call
+# (the walk's `-A`) passes through to the real binary, resolved here before the stub dir is on PATH.
+SP="$WORK/ps-stub"; mkdir -p "$SP"
+PS_REAL="$(command -v ps)" || broken "no ps on PATH to wrap"
+printf '#!/usr/bin/env bash\nfor a in "$@"; do [ "$a" = -p ] && { printf "%%s\\n" "$*" >> "%s/refused"; exit 1; }; done\nexec "%s" "$@"\n' "$SP" "$PS_REAL" > "$SP/ps"
+chmod +x "$SP/ps"
+o="$(st_orphan "$HOOK" eself "$SP")"
+case "$o" in
+  BROKEN) bad "empty-self arm: the stubbed worker recorded no watcher, or the stub never refused a -p lookup -- self was not shown empty" ;;
+  "0 0") ok "with self empty (ps fails on -p) a SIGKILLed worker's watcher still kills the unit's whole group, its child included" ;;
+  *) bad "with self empty a SIGKILLed worker left its watcher or a unit group member alive (watcher-left unit-left: $o)" ;;
+esac
+# st-g: the empty-self guard kills the recorded pid alone, so the unit's child survives the worker's death.
+if mutx st-g '[ -n "$2" ] || { kill -KILL -- "-$1"; kill -KILL "$1"; return 0; }' '[ -n "$2" ] || { kill -KILL "$1"; return 0; }'; then
+  : > "$SP/refused"
+  o="$(st_orphan "$MUT" st-g "$SP" alive)"
+  case "$o" in
+    "0 "[1-9]*) ok "st-g without the group kill on the empty-self path the unit's child outlives the worker -- the group kill is what reaps it" ;;
+    *) bad "st-g the unit's child did not survive with the empty-self guard's group kill removed ($o)" ;;
   esac
 fi
 # THE IN-POOL TRACE SITE WATCHES THE TRACED FIXTURE'S OWN OUTPUT, AND NOT THE STREAM CAPTURE BESIDE IT.
@@ -914,7 +948,7 @@ unset CSP_PIDS CSP_FIFO CSP_STALL
 # emitted from inside a conditional: an assertion that never executed prints nothing,
 # and a short green report reads exactly like a complete one. This is the same
 # property the hook itself now asserts about its own workers, one layer out.
-EXPECTED_ASSERTIONS=48
+EXPECTED_ASSERTIONS=50
 if [ "$asserts" -ne "$EXPECTED_ASSERTIONS" ]; then
   printf '  FAIL  %s assertions ran, %s expected — an arm did not execute, and a short green report reads exactly like a complete one\n' \
     "$asserts" "$EXPECTED_ASSERTIONS"
