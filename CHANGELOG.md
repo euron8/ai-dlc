@@ -20,6 +20,26 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.845.0] - 2026-10-18
+
+Batch 236, BL-702 (owner ai-dlc-5e, lead ai-dlc-c8). Closes BL-702, which this release files. Closes no `PC-` id. Net for this release: 1 closed, 1 filed.
+
+### `--safe-stop` names only a release that lands machinery (BL-702)
+
+`self-update-gate.sh --safe-stop` kept any candidate whose nested run was not DEFER or UNDECIDED. A release whose
+slice changed no machinery path, such as 0.831.0, was therefore named as the safe stop, and its row said the engine
+lands when nothing lands. A consumer operator spent about 17 minutes in that loop.
+
+The walk now keeps a candidate only if `git diff --no-renames --name-only <base>..<candidate>` intersects
+`machinery_paths()`, the set the gate already loads from `preclassify.sh`. A failed diff, or a failed or empty
+machinery set, drops the candidate. The test runs before the nested run, so a candidate that lands no machinery costs
+no nested classify. The no-stop row now states that rule.
+
+`self-update-gate`'s safe-stop world is reseeded so its r1 and r3 change machinery. New arms hold three worlds: a
+VERSION-only r1 is not named, while an r1 changing only a reconcile classifier, or only `core/git-hooks/pre-push`, is
+still named. Two mutants, one removing the keep test and one narrowing it to `core/scripts/`, are killed. The entry's
+receipt runs the shipped gate on a miniature git world.
+
 ## [0.842.0] - 2026-10-18
 
 Batch 236, cluster MUTANTS (owner ai-dlc-5e, lead ai-dlc-c8). Advances BL-583 (phase 2). Closes BL-646 and BL-672, whose subject this release retires. Closes no `PC-` id. Files none. Net for this release: 2 closed, 0 filed.

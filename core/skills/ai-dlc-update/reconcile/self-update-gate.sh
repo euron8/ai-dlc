@@ -143,6 +143,16 @@ set -uo pipefail
 
 SELF_SRC="$0"
 
+# ONE LOADER FOR THE TWO FUNCTIONS THIS GATE BORROWS FROM `preclassify.sh`, because two callers now
+# need them: arm C below, and the `--safe-stop` walk, which runs BEFORE arm C is reached and has to
+# ask the same "which paths are machinery" question per candidate. A second extraction spelled in
+# the walk would be a second grammar for one join, and the two drift with nothing comparing them.
+# The reasoning for the `eval` of the function's own text lives at arm C, where it was first made.
+gate_load_preclassify() { # gate_load_preclassify <preclassify.sh> -> defines machinery_paths, map_consumer
+  eval "$(awk '/^machinery_paths\(\) \{/,/^\}/' "$1" 2>/dev/null)"
+  eval "$(awk '/^map_consumer\(\) \{/,/^\}/' "$1" 2>/dev/null)"
+}
+
 if [ "${1:-}" = "--safe-stop" ]; then
   shift
   SS_DIST="${1:?usage: self-update-gate.sh --safe-stop <dist-repo> <base-sha> <theirs-ref> <consumer-root>}"
@@ -180,8 +190,37 @@ if [ "${1:-}" = "--safe-stop" ]; then
   # inherits it.
   export AI_DLC_GATE_IN_SAFE_STOP=1
   ss_best=""
+  # A CANDIDATE THAT DOES NOT DEFER IS NOT YET A SAFE STOP. The advisory this walk feeds tells the
+  # operator "its slice self-updates cleanly, so the engine lands" -- and a release whose
+  # base..candidate slice changes NO machinery path lands no engine at all. Measured on a consumer:
+  # the walk named a release whose slice carried 0 machinery paths (a control on `core/` read 1),
+  # and the operator spent a full pull loop splitting at a ref that changed nothing step 2 writes.
+  # Not deferring is necessary and not sufficient; the slice must also MOVE machinery.
+  #
+  # THE NESTED VERDICT CANNOT ANSWER THIS, and keying on its text is the trap. Its OK row at the
+  # core/scripts/ arm ("this pull changes no core/scripts/ path") says only that nothing the
+  # pre-push invokes is replaced: a slice that changes a reconcile classifier and no script emits
+  # it too, and that slice is exactly the engine-landing hop the split exists for. So the test is
+  # the slice against the FULL machinery set, from the same `machinery_paths()` arm C reads --
+  # never a core/scripts/ prefix, never a hand list.
+  #
+  # FAIL CLOSED, the same doctrine as the DEFER/UNDECIDED skip: a machinery set that could not be
+  # resolved, or a diff that could not be read, is not evidence the slice lands anything, and
+  # naming the candidate anyway would recommend a split nobody showed to be worth a pull.
+  gate_load_preclassify "$(dirname "$SELF_SRC")/preclassify.sh"
   for ss_c in $ss_cands; do
     [ "$ss_c" = "$SS_THEIRS" ] && continue          # the full pull is what the caller already asked
+    # THE KEEP TEST RUNS FIRST because it is a diff and a set, where the nested verdict is a whole
+    # classify: a candidate that lands no machinery is dropped before it costs one. `--no-renames`,
+    # because a machinery file renamed OUT of the set otherwise lists only its destination, and the
+    # slice that removes it from the engine reads as touching no machinery at all.
+    command -v machinery_paths >/dev/null 2>&1 || continue
+    ss_mrc=0
+    ss_mset="$(DIST="$SS_DIST"; BASE="$SS_BASE"; THEIRS="$ss_c"; machinery_paths)" || ss_mrc=$?
+    [ "$ss_mrc" -eq 0 ] && [ -n "$ss_mset" ] || continue
+    ss_diff="$(git -C "$SS_DIST" -c core.quotePath=false diff --no-renames --name-only "${SS_BASE}..${ss_c}" 2>/dev/null)" || continue
+    [ -n "$ss_diff" ] || continue
+    grep -qxF -f <(printf '%s\n' "$ss_mset") <<<"$ss_diff" || continue   # the slice lands machinery
     ss_out="$(bash "$SELF_SRC" "$SS_DIST" "$SS_BASE" "$ss_c" "$SS_CONSUMER" 2>/dev/null)"
     case "$ss_out" in
       *SELF-UPDATE-DEFER*|*SELF-UPDATE-UNDECIDED*) continue ;;
@@ -801,7 +840,7 @@ advise_safe_stop() {
       emit SELF-UPDATE-SAFE-STOP "$_ss" "pull to ${_sv:-$_ss} FIRST — its slice self-updates cleanly, so the engine lands and step 2 re-invokes on it. Then pull again for the rest. Without the split, step 3 classifies this pull with the engine this pull was going to replace, and any classifier improvement in the range reports nothing. Run: ai-dlc-update ${_ss} apply, then ai-dlc-update apply."
     fi
   else
-    emit SELF-UPDATE-SAFE-STOP "-" "no intermediate release in ${BASE}..${THEIRS} self-updates cleanly, so the split that would land the engine first does not exist here. Fold the slice into the gated apply and expect step 3 to classify on the CURRENT engine."
+    emit SELF-UPDATE-SAFE-STOP "-" "no intermediate release in ${BASE}..${THEIRS} both self-updates cleanly and lands machinery (or its machinery set could not be resolved), so the split that would land the engine first does not exist here. Fold the slice into the gated apply and expect step 3 to classify on the CURRENT engine."
   fi
 }
 
@@ -949,8 +988,7 @@ if [ -z "${AI_DLC_GATE_IN_SAFE_STOP:-}" ]; then
   C_PRE_SRC="$(dirname "$SELF_SRC")/preclassify.sh"
   C_PATHS=""
   if [ -f "$C_PRE_SRC" ]; then
-    eval "$(awk '/^machinery_paths\(\) \{/,/^\}/' "$C_PRE_SRC" 2>/dev/null)"
-    eval "$(awk '/^map_consumer\(\) \{/,/^\}/' "$C_PRE_SRC" 2>/dev/null)"
+    gate_load_preclassify "$C_PRE_SRC"
     if command -v machinery_paths >/dev/null 2>&1; then
       # A PRODUCER THAT FAILED IS NOT A SMALLER SET. `machinery_paths` returns 4 when its manifest
       # or either `ls-files` listing failed, and a listing that failed at ONE ref used to come back

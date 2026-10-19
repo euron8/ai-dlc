@@ -132,18 +132,30 @@ mkdir -p "$SS/cons/.githooks"
 printf '#!/usr/bin/env bash\n# invokes no scripts/ai-dlc/ validator, so the gating set is empty\nexit 0\n' > "$SS/cons/.githooks/pre-push"
 git -C "$SS/dist" init -q
 printf '1.0.0\n' > "$SS/dist/VERSION"; gvv 1 2 > "$SS/dist/core/skills/ai-dlc/steps/gate-validation.md"
-# ONE MACHINERY PATH, NEVER TOUCHED AGAIN, AND IT IS A PRECONDITION RATHER THAN DECORATION. Arm C
-# now resolves its population by `eval`ing `machinery_paths()` out of preclassify.sh, and reports
+# A MACHINERY PATH AT BASE, AND IT IS A PRECONDITION RATHER THAN DECORATION. Arm C resolves its
+# population by `eval`ing `machinery_paths()` out of preclassify.sh, and reports
 # SELF-UPDATE-UNDECIDED when that set comes back EMPTY -- correctly, since a membership test over
 # an empty set rejects every path and its silence is byte-identical to a clean pull. A dist tree
 # holding only VERSION and a rulebook file resolves to nothing, so without this file every arm
-# below runs against an UNDECIDED verdict it never asked for. Unchanged across all five commits,
-# so it enters no base..theirs diff and produces no bucket and no CARRY row of its own.
+# below runs against an UNDECIDED verdict it never asked for.
+#
+# NO CARRY ROW CAN BE BUILT IN THIS WORLD, and every arm reading the carry state relies on that.
+# ss.md is never touched again, so it enters no base..theirs diff. The machinery r1 and r3 DO
+# change (ss-r1.md, ss-r3.md, so the walk has something to keep) is ADDED upstream and absent on
+# the consumer, which preclassify buckets UPSTREAM-ONLY-ADD -- a pure apply carrying no
+# `->CLASSIFY` marker. A CARRY row needs consumer state on a path the range changes, and this
+# consumer holds no copy of any machinery path at all.
 printf 'ss machinery\n' > "$SS/dist/core/rules/ss.md"
 git -C "$SS/dist" add -A >/dev/null 2>&1; git -C "$SS/dist" -c user.email=f@x -c user.name=f commit -qm base >/dev/null 2>&1
 SS_BASE="$(git -C "$SS/dist" rev-parse HEAD)"
-# r1 — a release that moves VERSION and nothing the consumer's rulebook is joined against.
-printf '1.1.0\n' > "$SS/dist/VERSION"
+# r1 — a release that moves VERSION and nothing the consumer's rulebook is joined against, and
+# that LANDS MACHINERY: the walk keeps only a candidate whose slice changes a machinery path, so a
+# VERSION-only r1 is no longer a safe stop (the ss-nomach world below owns that case). The path is
+# NEW upstream and absent on the consumer, so preclassify buckets it UPSTREAM-ONLY-ADD -- a pure
+# apply, no `->CLASSIFY` marker, no CARRY row. Touching ss.md instead would not do: the consumer
+# holds no copy of it, so a modification reads as upstream-modified/consumer-deleted, which IS a
+# CARRY row and would move every arm that reads the carry state.
+printf '1.1.0\n' > "$SS/dist/VERSION"; printf 'ss r1 machinery\n' > "$SS/dist/core/rules/ss-r1.md"
 git -C "$SS/dist" add -A >/dev/null 2>&1; git -C "$SS/dist" -c user.email=f@x -c user.name=f commit -qm r1 >/dev/null 2>&1
 SS_R1="$(git -C "$SS/dist" rev-parse HEAD)"
 # r2 — a release that declares a check anchor the consumer's rulebook does not carry (ARM R1).
@@ -153,7 +165,10 @@ SS_R2="$(git -C "$SS/dist" rev-parse HEAD)"
 # r3 — the coupling is gone again, so base→r3 is a CLEAN single hop even though base→r2 is not.
 # This is the shape that proves the walk evaluates every candidate instead of stopping at the
 # first defer: r3 lands strictly more than r1 and an early-stopping walk can never name it.
+# It adds its own new machinery path for the reason r1 does, so base→r3's machinery is not only
+# r1's.
 printf '1.3.0\n' > "$SS/dist/VERSION"; gvv 1 2 > "$SS/dist/core/skills/ai-dlc/steps/gate-validation.md"
+printf 'ss r3 machinery\n' > "$SS/dist/core/rules/ss-r3.md"
 git -C "$SS/dist" add -A >/dev/null 2>&1; git -C "$SS/dist" -c user.email=f@x -c user.name=f commit -qm r3 >/dev/null 2>&1
 SS_R3="$(git -C "$SS/dist" rev-parse HEAD)"
 # d3 — a NON-release commit after the last clean release, and the only reason it exists.
@@ -692,6 +707,118 @@ ss_assert "ss-partial-mut-C" "$(ss_ack "$SSM/mut/self-update-gate.sh" "$SS_R4")"
 ss_marker off
 ss_stamp -
 
+# --- A SAFE STOP MUST LAND MACHINERY, NOT MERELY FAIL TO DEFER --------------------------------
+# The advisory says "its slice self-updates cleanly, so the engine lands". A release whose
+# base..candidate slice changes no machinery path lands nothing, and the walk named one on a
+# consumer anyway: not deferring was the whole test. Three worlds, each with r1 an intermediate
+# release and r2 (THEIRS) deferring on an unmet check anchor, differing ONLY in what r1 changes:
+#   nomach      VERSION alone                         -> no safe stop exists
+#   classifier  a reconcile/*.sh that is not preclassify.sh -> r1 IS the safe stop. Its nested
+#               verdict is the core/scripts/ OK row ("changes no core/scripts/ path"), so a keep
+#               test keyed on core/scripts/ or on that row's text drops exactly the engine hop.
+#   hook        core/git-hooks/pre-push alone         -> r1 IS the safe stop, and no core/scripts/
+#               path moves, so a test keyed on the changed-scripts set drops it too.
+# Own worlds rather than the SS one, because the SS world's r1 must now land machinery for the arms
+# above to keep their meaning, and a VERSION-only r1 is precisely the case they no longer hold.
+NM="$(dirname "$DIST")/nm"; rm -rf "$NM"
+nm_git() { git -C "$1" -c user.email=f@x -c user.name=f -c commit.gpgsign=false "${@:2}"; }
+nm_world() { # nm_world <kind:nomach|classifier|hook> -> <dir> holding dist cons B R1 R2
+  local w="$NM/$1"
+  mkdir -p "$w/dist/core/skills/ai-dlc/steps" "$w/dist/core/rules" "$w/dist/core/git-hooks" \
+           "$w/cons/.claude/skills/ai-dlc/steps" "$w/cons/.githooks"
+  gvv 1 2 > "$w/cons/.claude/skills/ai-dlc/steps/gate-validation.md"
+  printf '#!/usr/bin/env bash\n# invokes no scripts/ai-dlc/ validator, so the gating set is empty\nexit 0\n' \
+    > "$w/cons/.githooks/pre-push"
+  git -C "$w/dist" init -q
+  printf '1.0.0\n' > "$w/dist/VERSION"; gvv 1 2 > "$w/dist/core/skills/ai-dlc/steps/gate-validation.md"
+  # The never-touched machinery path, for the reason ss.md exists above: an empty machinery set is
+  # UNDECIDED on every nested run, and the walk would then skip r1 for the wrong reason.
+  printf 'nm machinery\n' > "$w/dist/core/rules/nm.md"
+  # The hook at base is byte-identical to the consumer's, so a change to it upstream buckets
+  # UPSTREAM-ONLY (no CARRY row) and the push runs theirs, which still invokes nothing.
+  cp "$w/cons/.githooks/pre-push" "$w/dist/core/git-hooks/pre-push"
+  nm_git "$w/dist" add -A >/dev/null 2>&1; nm_git "$w/dist" commit -qm base >/dev/null 2>&1
+  git -C "$w/dist" rev-parse HEAD > "$w/B"
+  printf '1.1.0\n' > "$w/dist/VERSION"
+  case "$1" in
+    classifier) mkdir -p "$w/dist/core/skills/ai-dlc-update/reconcile"
+                printf '#!/usr/bin/env bash\n# a classifier change\nexit 0\n' \
+                  > "$w/dist/core/skills/ai-dlc-update/reconcile/nm-classify.sh" ;;
+    hook)       printf '# reworded; still invokes nothing\n' >> "$w/dist/core/git-hooks/pre-push" ;;
+  esac
+  nm_git "$w/dist" add -A >/dev/null 2>&1; nm_git "$w/dist" commit -qm r1 >/dev/null 2>&1
+  git -C "$w/dist" rev-parse HEAD > "$w/R1"
+  printf '1.2.0\n' > "$w/dist/VERSION"; gvv 1 2 3 > "$w/dist/core/skills/ai-dlc/steps/gate-validation.md"
+  nm_git "$w/dist" add -A >/dev/null 2>&1; nm_git "$w/dist" commit -qm r2 >/dev/null 2>&1
+  git -C "$w/dist" rev-parse HEAD > "$w/R2"
+  printf '%s\n' "$w"
+}
+nm_cls() { bash "$1" "$2/dist" "$(cat "$2/B")" "$(cat "$2/$3")" "$2/cons" 2>&1; }
+nm_ss() { # nm_ss <gate> <world> -> r1 | none | other:<out>|<rc>
+  local o r
+  o="$(bash "$1" --safe-stop "$2/dist" "$(cat "$2/B")" "$(cat "$2/R2")" "$2/cons" 2>/dev/null)"; r=$?
+  if [ "$o" = "$(cat "$2/R1")" ] && [ "$r" -eq 0 ]; then printf 'r1'
+  elif [ -z "$o" ] && [ "$r" -eq 1 ]; then printf 'none'
+  else printf 'other:%s|%s' "$o" "$r"; fi
+}
+nm_tuple() { printf 'nomach=%s cls=%s hook=%s' "$(nm_ss "$1" "$NM_N")" "$(nm_ss "$1" "$NM_C")" "$(nm_ss "$1" "$NM_H")"; }
+NM_N="$(nm_world nomach)"; NM_C="$(nm_world classifier)"; NM_H="$(nm_world hook)"
+
+# PRECONDITIONS, per world, or the arms below are vacuous: r2 really defers (so there is a walk at
+# all) and r1 is clean from base (so a walk that skips r1 skipped it for the keep test, not for a
+# verdict). The classifier world also proves the trap is live -- its r1 verdict IS the
+# core/scripts/ OK row a text-keyed test would read as "nothing lands".
+for nm_w in "$NM_N" "$NM_C" "$NM_H"; do
+  nm_k="$(basename "$nm_w")"
+  ss_assert "ss-nm-pre-$nm_k" \
+    "$(nm_cls "$GATE" "$nm_w" R2 | awk -F'\t' '$1 ~ /DEFER/ {print "defer"; exit}')|$(nm_cls "$GATE" "$nm_w" R1 | awk -F'\t' '$1 ~ /DEFER|UNDECIDED/ {print "defer"; exit}')" \
+    "defer|" "$nm_k world: r2 defers and r1 is clean from base"
+done
+ss_assert "ss-classifier-only-pre" \
+  "$(nm_cls "$GATE" "$NM_C" R1 | grep -c 'changes no core/scripts/ path')" "1" \
+  "the classifier-only r1's own verdict is the core/scripts/ OK row, so that row's text cannot be the keep test"
+
+nm_out="$(bash "$GATE" --safe-stop "$NM_N/dist" "$(cat "$NM_N/B")" "$(cat "$NM_N/R2")" "$NM_N/cons" 2>/dev/null)"; nm_rc=$?
+ss_assert "ss-nomach" "${nm_out}|${nm_rc}" "|1" \
+  "a VERSION-only r1 lands no machinery, so the walk names nothing and exits 1 though r1 does not defer"
+ss_assert "ss-nomach-row" \
+  "$(nm_cls "$GATE" "$NM_N" R2 | awk -F'\t' '$1=="SELF-UPDATE-SAFE-STOP" {print $2; exit}')" "-" \
+  "and the advisory says no safe stop exists, instead of sending the operator to a ref that lands nothing"
+ss_assert "ss-classifier-only" "$(nm_ss "$GATE" "$NM_C")" "r1" \
+  "an r1 changing only a reconcile classifier IS the safe stop, though it changes no core/scripts/ path"
+ss_assert "ss-hook-only" "$(nm_ss "$GATE" "$NM_H")" "r1" \
+  "an r1 changing only core/git-hooks/pre-push IS the safe stop, though the changed-scripts set is empty"
+
+# --- MUTANTS OF THE KEEP TEST -----------------------------------------------------------------
+# Built by av_mut: a copy of the WHOLE reconcile directory (machinery_paths reads setup-sites.md
+# beside $0), each anchor unique in the gate, the copy differing and still a program. Scored as the
+# three-world tuple, so each mutant shows which cells it moves and which it leaves.
+NM_KEEP='    command -v machinery_paths >/dev/null 2>&1 || continue
+    ss_mrc=0
+    ss_mset="$(DIST="$SS_DIST"; BASE="$SS_BASE"; THEIRS="$ss_c"; machinery_paths)" || ss_mrc=$?
+    [ "$ss_mrc" -eq 0 ] && [ -n "$ss_mset" ] || continue
+    ss_diff="$(git -C "$SS_DIST" -c core.quotePath=false diff --no-renames --name-only "${SS_BASE}..${ss_c}" 2>/dev/null)" || continue
+    [ -n "$ss_diff" ] || continue
+    grep -qxF -f <(printf '"'"'%s\n'"'"' "$ss_mset") <<<"$ss_diff" || continue   # the slice lands machinery
+'
+NM_GREP='grep -qxF -f <(printf '"'"'%s\n'"'"' "$ss_mset") <<<"$ss_diff" || continue   # the slice lands machinery'
+
+# THE UNMUTATED CONTROL, PRESENCE-SHAPED: two of its three cells must NAME r1, which a copy that
+# cannot run never prints.
+NM_CTL="$(av_mut nm-ctl)"
+ss_assert "ss-nm-control" "$(nm_tuple "$NM_CTL")" "nomach=none cls=r1 hook=r1" \
+  "an UNMUTATED copy beside its siblings reproduces all three worlds, so a mutant's shift is the mutation"
+
+# Every layer of the keep test removed: the walk is back to "did not defer".
+NM_M1="$(av_mut nm-revert "$NM_KEEP" '')" || NM_M1=""
+mp_killed "ss-nomach-mut" "$([ -n "$NM_M1" ] && nm_tuple "$NM_M1")" "nomach=r1 cls=r1 hook=r1" \
+  "without the keep test the VERSION-only r1 is named again; only ss-nomach moves"
+
+# The keep test narrowed to core/scripts/ -- the population the :1315 OK row speaks for.
+NM_M2="$(av_mut nm-scripts "$NM_GREP" 'grep -q '"'"'^core/scripts/'"'"' <<<"$ss_diff" || continue')" || NM_M2=""
+mp_killed "ss-classifier-only-mut" "$([ -n "$NM_M2" ] && nm_tuple "$NM_M2")" "nomach=none cls=none hook=none" \
+  "a core/scripts/-only test drops the classifier-only and hook-only engine hops; ss-nomach stays put"
+
 fi
 if sg sc; then
 # --- THE STAMP IS AHEAD BECAUSE A PATH WAS CARRIED, SO THE ACQUITTAL IS WITHHELD -------------
@@ -901,12 +1028,21 @@ for sc_p in "noman=$SC_E_NOMAN" "norow=$SC_E_NOROW" "nopre=$SC_E_NOPRE"; do
 done
 
 # THE THREE OFFENDERS. Same consumer, same range, same advanced stamp -- only arm C's sight differs.
-ss_assert "sc-und-nomanifest" "$(sc_und "$SC_E_NOMAN")" "row=1 acq=0 pf=1 und=1" \
-  "machinery set EMPTY: the acquittal is withheld beside the UNDECIDED row, not printed against it"
+#
+# TWO OF THEM NO LONGER REACH THE ACQUITTAL AT ALL, AND THAT IS THE WALK FAILING CLOSED. The
+# --safe-stop walk runs from the same engine copy and keeps a candidate only when its slice changes
+# a path in `machinery_paths()`. With `machinery:` emptied or preclassify.sh gone, that set cannot
+# be resolved, the walk names nothing, and the advisory is the "no intermediate release" row --
+# never the acquittal. Asserted PRESENCE-shaped: the row's ref is `-`, beside arm C's UNDECIDED.
+# `norows` keeps machinery_paths intact, so it is the world that still reaches the acquittal branch.
+sc_none() { bash "$1" "$SC/dist" "$SC_BASE" "$SC_R2" "$SC/cons" 2>/dev/null |
+              awk -F'\t' '$1=="SELF-UPDATE-SAFE-STOP" {print $2; exit}'; }
+ss_assert "sc-und-nomanifest" "$(sc_und "$SC_E_NOMAN") ref=$(sc_none "$SC_E_NOMAN")" "row=1 acq=0 pf=0 und=1 ref=-" \
+  "machinery set EMPTY: the walk cannot resolve machinery, names no stop, and no acquittal is printed beside the UNDECIDED row"
 ss_assert "sc-und-norows" "$(sc_und "$SC_E_NOROW")" "row=1 acq=0 pf=1 und=1" \
-  "bucket derivation returns no rows over a moving range: withheld for the same reason"
-ss_assert "sc-und-nopre" "$(sc_und "$SC_E_NOPRE")" "row=1 acq=0 pf=1 und=1" \
-  "preclassify.sh absent entirely: withheld -- a partial install must not read as a landed one"
+  "bucket derivation returns no rows over a moving range: the acquittal is withheld beside the UNDECIDED row"
+ss_assert "sc-und-nopre" "$(sc_und "$SC_E_NOPRE") ref=$(sc_none "$SC_E_NOPRE")" "row=1 acq=0 pf=0 und=1 ref=-" \
+  "preclassify.sh absent entirely: no stop is named -- a partial install must not read as a landed one"
 
 # THE CONTROL THAT SITES THE STATE RATHER THAN A BLANKET REFUSAL, and it is the one that would
 # catch `machinery_at_or_past` simply returning 1. Intact engine, CLEAN consumer, same stamp: the
@@ -1053,11 +1189,14 @@ else
   # rather than a second copy of m1's.
   sc_cons carry;  sc_m4_got="$sc_m4_got carried[$(sc_ack "$SCM4/self-update-gate.sh")]"
   sc_cons clean;  sc_m4_got="$sc_m4_got clean[$(sc_ack "$SCM4/self-update-gate.sh")]"
-  sc_m4_want=" noman[row=1 acq=1 pf=0 und=1] norow[row=1 acq=1 pf=0 und=1] nopre[row=1 acq=1 pf=0 und=1]"
+  # noman and nopre do not move under this mutant: their --safe-stop walk fails closed on the
+  # unresolvable machinery set before the acquittal is reachable (see sc-und-nomanifest). `norow`
+  # is the cell that discriminates, acq 0 -> 1.
+  sc_m4_want=" noman[row=1 acq=0 pf=0 und=1] norow[row=1 acq=1 pf=0 und=1] nopre[row=1 acq=0 pf=0 und=1]"
   sc_m4_want="$sc_m4_want carried[row=1 acq=0 pf=1 carry=1] clean[row=1 acq=1 pf=0 carry=0]"
   if [ "$sc_m4_got" = "$sc_m4_want" ]; then
     printf '  ok    %-16s KILLED (%s)\n' "sc-mut-undec" \
-      "with the UNDECIDED terminals recording clean, the acquittal returns on all three -- printed beside the row saying the gate cannot tell"
+      "with the UNDECIDED terminals recording clean, the acquittal returns on norow -- printed beside the row saying the gate cannot tell"
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]\n' "sc-mut-undec" "$sc_m4_got" "$sc_m4_want"
