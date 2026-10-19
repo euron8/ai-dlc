@@ -588,7 +588,12 @@ case "${1:-}" in
         MK_HAVE="$( . "$MK_SEAL" && seal_sha "$MK_SRC" )"
         if [ -z "$MK_WANT" ] || [ "$MK_HAVE" != "$MK_WANT" ]; then
           rm -f "$MK_SRC"
-          mark_refuse "'$MK_FILE' is not the bytes its newest content-seal row records ($MK_WANT; on disk $MK_HAVE), so it changed through Bash after its last Write or Edit. --mark never seals such bytes: restore the file with Edit, then mark."
+          case "$MK_PHYS" in
+            */planning-artifacts/s[0-9]*/shards/*-repair-p*/*.md) MK_RESTORE="restore the file with Edit, then mark." ;;
+            */planning-artifacts/s[0-9]*/shards/*/*.md) MK_RESTORE="re-dispatch the adversary for that shard, then merge with merge-adversarial-shards.sh --rerun <shard>.md@<ISO> (a lead Edit re-seals the bytes but leaves a shard last written by the top-level session, which the merge refuses)." ;;
+            *) MK_RESTORE="restore the file with Edit, then mark." ;;
+          esac
+          mark_refuse "'$MK_FILE' is not the bytes its newest content-seal row records ($MK_WANT; on disk $MK_HAVE), so it changed through Bash after its last Write or Edit. --mark never seals such bytes: $MK_RESTORE"
         fi
       fi
     elif [ -n "$MK_STATE" ] && grep -qE '"actor":[[:space:]]*"(agent|session)"' "$MK_STATE/planning-artifacts/.artifact-writes.jsonl" 2>/dev/null; then

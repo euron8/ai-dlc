@@ -196,6 +196,18 @@ _seal_writer() { # actor agent_id tool -> words naming the writer
 }
 _seal_remedy() { # actor, path relative to the state dir -> the remedy sentence
   case "$2" in
+    planning-artifacts/s[0-9]*/shards/*-repair-p*/*.md) ;;
+    planning-artifacts/s[0-9]*/shards/*/*.md)
+      # A shard --mark sealed keeps the restore-then-mark remedy below.
+      if [ "$1" != program:wait-for-deliverable ]; then
+      # Same shape as the gate part: a lead Write or Edit re-seals the bytes, and the merge then
+      # refuses a shard last written by the top-level session. Remediator parts (-repair-p) go
+      # through the join, which has no session-row refusal, so they keep the generic remedy.
+      printf 're-dispatch the adversary for that shard, then merge with merge-adversarial-shards.sh --rerun <shard>.md@<ISO> (a lead Write or Edit re-seals the bytes but leaves a shard last written by the top-level session, which the merge refuses), and never amend a join input through Bash'
+      return
+      fi ;;
+  esac
+  case "$2" in
     gate-adjudication/*.part-*.jsonl)
       # A lead Edit would re-seal the bytes, and --merge then refuses a part last written by the
       # top-level session, so the only remedy that clears is a fresh adjudicator dispatch.

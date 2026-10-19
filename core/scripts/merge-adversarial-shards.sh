@@ -324,7 +324,7 @@
 #   Both ceilings are READ from validate-adversarial-convergence.sh, never restated here. So are the
 #   pieces of the summed-divergence walk: `order_key` (the `(pass|p)N` key), `block_field` and
 #   `severity_count` (the FIRST provenance block's count, as arm C reads it) are extracted from the
-#   validator as at_key is; only its `--series` exclusions (`*-resolution-p*`, `*-repair-*`) are
+#   validator as at_key is; only its `--series` exclusions (`*-resolution-p*`, `*-repair-p*`, `*-repair-*`, validator :187) are
 #   restated, being a `case` inside its loop. The earlier passes are `<artifact>-adversarial-p*` beside
 #   the output whose key is below <M>, nearest first; one with no readable count is skipped. No earlier
 #   pass, or none readable, stamps nothing and leaves the series to the validator. The walk runs only
@@ -1410,6 +1410,9 @@ if [ "$ELICIT" -eq 0 ] && [ "$ANY_DIVERGENT" -eq 0 ] && [ "$S_PRIOR" -gt 0 ]; th
     [ "$n_fn" = "1" ] || refuse "found ${n_fn} '$_fn() {' definitions in $VALIDATOR (want exactly 1)"
     eval "$(awk -v h="$_fn() {" 'index($0, h) == 1 { on = 1 } on { print } on && /^}/ { exit }' "$VALIDATOR")"
   done
+  _EXCL='      *-resolution-p*|*-repair-p*|*-repair-*) continue ;;'
+  n_ex="$(grep -cF -- "$_EXCL" "$VALIDATOR")" || n_ex=0
+  [ "$n_ex" = "1" ] || refuse "found ${n_ex} copies of the series exclusion line '${_EXCL#      }' in $VALIDATOR (want exactly 1); restated below, so the validator's exclusions have drifted"
   : > "$T/prev" || refuse "cannot stage the earlier passes"
   for _pf in "$SPRINT_DIR/$ARTIFACT-adversarial-p"*; do
     [ -f "$_pf" ] || continue

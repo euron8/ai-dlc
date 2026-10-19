@@ -1358,7 +1358,24 @@ p_sum_divergent() { # (a) summed prior 2 over p1's 1 CRITICAL -> DIVERGENT, the 
   d="$(sd_world 3)" || return 1; sd_prev "$d" stories-adversarial-p1.md 1; sd_stamped "$m" "$d" || return 1
   d="$(sd_world 2)" || return 1; sd_prev "$d" stories-adversarial-p1.md 1/9; sd_stamped "$m" "$d" || return 1
   d="$(sd_world 3)" || return 1; sd_prev "$d" stories-adversarial-p1.md 1; sd_prev "$d" stories-adversarial-p2.md NONE
-  sd_stamped "$m" "$d"
+  sd_stamped "$m" "$d" || return 1
+  # (f) a shard that itself declares DIVERGENT_HARD_BLOCK: the merge prints its shard-declared line
+  d="$(sd_world 1)" || return 1; shard "$d" 3 0 DIVERGENT_HARD_BLOCK 3
+  run_merge "$m" "$d"
+  [ "$RC" -eq 0 ] && grep -qxF 'DIVERGENT_HARD_BLOCK stamped by: shard-declared.' "$(sd_out "$d")"
+}
+# (g) the merge restates the validator's --series exclusion line; a validator copy whose line drifted is REFUSED
+p_sum_excl_drift() {
+  local m="$1" sd d
+  sd="$(mktemp -d "$WORK/excl.XXXXXX")" || return 1
+  cp "$m" "$sd/merge-adversarial-shards.sh"
+  sed 's/\*-repair-p\*|\*-repair-\*) continue/*-repair-*) continue/' "$(dirname "$m")/validate-adversarial-convergence.sh" > "$sd/validate-adversarial-convergence.sh"
+  cp "$(dirname "$m")/validate-steering-budget.sh" "$sd/" 2>/dev/null
+  cp "$(dirname "$m")/partition-document.sh" "$sd/" || return 1
+  cmp -s "$(dirname "$m")/validate-adversarial-convergence.sh" "$sd/validate-adversarial-convergence.sh" && return 2
+  d="$(sd_world 2)" || return 1; sd_prev "$d" stories-adversarial-p1.md 1
+  run_merge "$sd/merge-adversarial-shards.sh" "$d"
+  [ "$RC" -eq 2 ] && has "$MO" "series exclusion line"
 }
 # THE ORACLE, kept out of P_ALL so the battery never runs the validator per mutant: each series is
 # merged, its merged pass's verdict reset to NOT_MET in a scratch copy (the unstamped twin), and

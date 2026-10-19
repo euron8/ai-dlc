@@ -292,6 +292,8 @@ p_hdr_comment "$MERGE" && ok "HC1: every provenance value carrying a ' # ' comme
 # ---- BL-670: the merge stamps DIVERGENT_HARD_BLOCK from the summed prior scope (arm C on the sum)
 p_sum_divergent "$MERGE" && ok "SD1: summed prior_scope 2 over p1's 1 CRITICAL -> DIVERGENT_HARD_BLOCK with the stamp line naming p1; over p1's 2 -> not divergent; pass 1 -> not divergent; p3 with p2 absent compares with p1; a two-block p1 stamps on its FIRST block; a block-less p2 is skipped" \
   || bad "SD1: (rc=$RC) $(cat "$MO")"
+if p_sum_excl_drift "$MERGE"; then ok "SD3: a validator copy whose --series exclusion line drifted is REFUSED naming the exclusion line, rc 2"
+else bad "SD3: the drifted exclusion line was not refused (rc=${RC:-?}): $(head -3 "$MO")"; fi
 # SD2: the oracle, out of P_ALL (the battery never runs the validator per mutant), so not spelled as a
 # line-start predicate call that the battery's J1 join reads.
 if p_sum_divergent_oracle "$MERGE"; then ok "SD2: on five seeded series (a -pass1 and a zero-padded -p02 predecessor, a two-block and a block-less one) the merge stamps exactly where validate-adversarial-convergence.sh --series fires arm C on the unstamped twin"

@@ -393,7 +393,7 @@ if [ "$SUBJMODE" = 0 ]; then
     *-adversarial)
       _owed="${ARTIFACT%-adversarial}-repair-p${PASS}"; _given="--artifact ${ARTIFACT}"
       [ -z "$REPDIR" ] || _given="$REPDIR"
-      die "the artifact '${ARTIFACT}' ends in -adversarial (given as ${_given}):the adversarial repair record carries no round word. Name the shard dir shards/${_owed}/ and the record ${_owed}.md; arm H of validate-adversarial-convergence.sh reads only that name" ;;
+      die "the artifact '${ARTIFACT}' ends in -adversarial (given as ${_given}): the adversarial repair record carries no round word. Name the shard dir shards/${_owed}/ and the record ${_owed}.md; arm H of validate-adversarial-convergence.sh reads only that name" ;;
   esac
 fi
 if [ "$SUBJMODE" = 1 ]; then

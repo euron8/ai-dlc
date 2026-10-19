@@ -256,5 +256,18 @@ if [ "$nb6" -ge 4 ] && grep -qF "$PROW" "$(ledger_of "$dk6")" && [ "$ck6" = 0 ] 
   ok "CS-K6: through a symlinked _bmad-output, --mark re-seals each shard by the spelled name: --check passes, MERGED"
 else bad "CS-K6: through a symlinked state dir --mark left the shards unsealed: rows $nb6, --check rc=$ck6, merge rc=$RC: $(head -2 "$MO")"; fi
 
+# CS-R1: the remedy for an adversary shard is the re-dispatch + --rerun one; a non-shard sealed path and
+# a remediator part keep the generic text.
+RD="re-dispatch the adversary for that shard, then merge with merge-adversarial-shards.sh --rerun"
+r_shard="$( . "$SEAL"; _seal_remedy "" planning-artifacts/s1/shards/stories-p1/2.md )"
+r_part="$( . "$SEAL"; _seal_remedy "" planning-artifacts/s1/shards/stories-repair-p1/1.md )"
+r_other="$( . "$SEAL"; _seal_remedy "" planning-artifacts/s1/stories/a.md )"
+case "$r_shard" in "$RD"*) rs=1 ;; *) rs=0 ;; esac
+case "$r_part$r_other" in *"$RD"*) rg=0 ;; *) rg=1 ;; esac
+case "$r_part" in *"$REMEDY"*) rp=1 ;; *) rp=0 ;; esac
+case "$r_other" in "restore the file with Write or Edit"*"$REMEDY") ro=1 ;; *) ro=0 ;; esac
+if [ "$rs" = 1 ] && [ "$rg" = 1 ] && [ "$rp" = 1 ] && [ "$ro" = 1 ]; then ok "CS-R1: an adversary-shard path gets the re-dispatch and --rerun remedy; a remediator part and a non-shard sealed path keep the generic text"
+else bad "CS-R1: remedy text wrong (shard=$rs generic-clean=$rg part=$rp other=$ro): $r_shard | $r_other"; fi
+
 echo "$NAME: $fails failure(s)"
 [ "$fails" -eq 0 ]
