@@ -24,12 +24,14 @@ if [ -n "$D_ROOT" ] && [ -f "$D_ROOT/core/hooks/ai-dlc-core-guard.sh" ]; then
   HOOK="$D_ROOT/core/hooks/ai-dlc-core-guard.sh"
   SRC_MANIFEST="$D_ROOT/core/skills/ai-dlc/core-manifest.md"
   SRC_SITES="$D_ROOT/core/skills/ai-dlc-update/reconcile/setup-sites.md"
+  SRC_FIXMAN="$D_ROOT/core/skills/ai-dlc-update/fixture-manifest.md"
   SRC_ARCHITECT="$D_ROOT/core/team-roles/architect.md"
   SRC_DEV="$D_ROOT/core/team-roles/dev.md"
 elif [ -n "$C_ROOT" ] && [ -f "$C_ROOT/.claude/hooks/ai-dlc-core-guard.sh" ]; then
   HOOK="$C_ROOT/.claude/hooks/ai-dlc-core-guard.sh"
   SRC_MANIFEST="$C_ROOT/.claude/skills/ai-dlc/core-manifest.md"
   SRC_SITES="$C_ROOT/.claude/skills/ai-dlc-update/reconcile/setup-sites.md"
+  SRC_FIXMAN="$C_ROOT/.claude/skills/ai-dlc-update/fixture-manifest.md"
   SRC_ARCHITECT="$C_ROOT/.claude/team-roles/architect.md"
   SRC_DEV="$C_ROOT/.claude/team-roles/dev.md"
 else
@@ -66,6 +68,10 @@ echo "# extensions" > "$SKILL/extensions/README.md"
 # --- the derivation sources (real, so the hook parses real declarations) -----
 cp "$SRC_MANIFEST" "$SKILL/core-manifest.md"
 cp "$SRC_SITES"    "$CONSUMER/.claude/skills/ai-dlc-update/reconcile/setup-sites.md"
+# The fixture half of the setup-sites.md fallback, at the path the guard reads. Copied only when
+# present: an un-upgraded consumer has no such file yet, and run.sh's fallback arm SKIPs there
+# (hard in the distribution) rather than this seed refusing a tree the pull is about to fix.
+[ -r "$SRC_FIXMAN" ] && cp "$SRC_FIXMAN" "$CONSUMER/.claude/skills/ai-dlc-update/fixture-manifest.md"
 
 # --- core-manifest files ------------------------------------------------------
 # A no-site rulebook step file (any in-place edit must be denied).

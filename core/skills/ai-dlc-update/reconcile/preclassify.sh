@@ -15,7 +15,8 @@
 #                  upstream delta exists). A plain base->theirs diff is empty
 #                  in that case (git diff <sha> <sha> is always empty), so
 #                  this mode enumerates the core-manifest file list from
-#                  reconcile/setup-sites.md instead and buckets by ours vs
+#                  reconcile/setup-sites.md plus the fixture entries in
+#                  ../fixture-manifest.md instead and buckets by ours vs
 #                  base (there is no theirs-side status to branch on), with
 #                  the exec bit read at theirs (== base by this contract):
 #                    UPSTREAM-ONLY-ADD       consumer lacks the file, or holds
@@ -549,10 +550,18 @@ if [ "$MODE" = "--untangle" ]; then
   # with this script) rather than diffing base->theirs, which is always
   # empty when base == theirs.
   MANIFEST="$(dirname "$0")/setup-sites.md"
+  # THE FIXTURE ENTRIES ARE A SECOND BLOCK, IN THE SKILL'S `fixture-manifest.md` BESIDE `reconcile/`.
+  # They moved out of setup-sites.md so a new shipping fixture's one-line append changes no file in
+  # this directory. Read when present and skipped when absent: a reconcile directory copied on its
+  # own (as the preclassify fixtures stage one) has no sibling skill root, and those worlds seed no
+  # `core/fixtures/` path for the entries to match, so the enumeration is the same either way. The
+  # awk ends each file's list at its own dedent (`FNR==1` resets), never at the first file's.
+  FIXMAN="$(dirname "$0")/../fixture-manifest.md"
+  [ -f "$FIXMAN" ] || { echo "preclassify: --untangle found no fixture-manifest.md beside reconcile/ ($FIXMAN); enumerating setup-sites.md alone, so no core/fixtures/ entry is listed" >&2; FIXMAN=""; }
   # `core.quotePath=false`: every path below is mapped by map_consumer() and shown to git again by
   # blob_hash(); a C-quoted non-ASCII name (`"core/rules/caf\303\251.md"`) matches no `core/*` case,
   # maps to itself, and reads MISSING at both ends -- a manifest file reported as one the consumer lacks.
-  awk '/^core_manifest:/{f=1; next} f && /^  - /{sub(/^  - /,""); print; next} f{exit}' "$MANIFEST" |
+  awk 'FNR==1{f=0; d=0} d{next} /^core_manifest:/{f=1; next} f && /^  - /{sub(/^  - /,""); print; next} f{f=0; d=1}' "$MANIFEST" ${FIXMAN:+"$FIXMAN"} |
   while IFS= read -r glob; do
     git -C "$DIST" -c core.quotePath=false ls-files "$glob" || pc_fail "ls-files $glob exited $?"
   done | while IFS= read -r path; do

@@ -260,6 +260,13 @@ while IFS= read -r c; do
 done <<EOF
 $CANDIDATES
 EOF
+# A setup-sites.md copy carries no fixture entries: they sit in the skill-root
+# fixture-manifest.md beside its reconcile/ directory, so that fallback is both blocks.
+case "$USED" in
+  */reconcile/setup-sites.md)
+    RAW_ENTRIES="${RAW_ENTRIES}
+$(parse_manifest "${USED%/reconcile/setup-sites.md}/fixture-manifest.md" 2>/dev/null || true)" ;;
+esac
 
 if [ -z "$RAW_ENTRIES" ]; then
   echo "core-paths: FAIL -- no parseable core_manifest list found. Tried:" >&2

@@ -189,8 +189,9 @@ GV="$REPO_ROOT/core/skills/ai-dlc/steps/gate-validation.md"
 MAP="$REPO_ROOT/core/skills/ai-dlc/enforcement-map.yaml"
 CORE_MANIFEST="$REPO_ROOT/core/skills/ai-dlc/core-manifest.md"
 SETUP_SITES="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/setup-sites.md"
+FIXTURE_MANIFEST="$REPO_ROOT/core/skills/ai-dlc-update/fixture-manifest.md"
 
-for f in "$GV" "$MAP" "$CORE_MANIFEST" "$SETUP_SITES"; do
+for f in "$GV" "$MAP" "$CORE_MANIFEST" "$SETUP_SITES" "$FIXTURE_MANIFEST"; do
   if [ ! -f "$f" ]; then
     echo "tool-fail: required input not found: $f" >&2
     exit 2
@@ -1184,13 +1185,14 @@ EOF
 }
 
 # Defined here rather than at I5 because I8, I26 and I28 need it too, and I5's own use is
-# further down the file. Pure function; its only input is $1.
+# further down the file. Pure function; its only inputs are its file arguments, whose
+# `core_manifest:` blocks it unions (I5 passes setup-sites.md and fixture-manifest.md together).
 norm_core_manifest() {
   awk '
     /^core_manifest:/ {f=1; next}
     f && /^  - / {v=$0; sub(/^  - /,"",v); print v; next}
     f {f=0}
-  ' "$1" | sed -E 's#^core/skills/ai-dlc/##; s#^core/##' | sort -u
+  ' "$@" | sed -E 's#^core/skills/ai-dlc/##; s#^core/##' | sort -u
 }
 
 # --- Catalog anchor set -------------------------------------------------------
@@ -1432,7 +1434,7 @@ ghost_uninstall="$(comm -13 <(printf '%s\n' "$on_disk") <(printf '%s\n' "$in_uni
 # core-manifest.md alone is sufficient: I5 binds the second copy to it.
 cm_fixtures="$(norm_core_manifest "$CORE_MANIFEST" | sed -n 's#^fixtures/\(.*\)/\*\*$#\1#p' | sort -u)"
 miss_entry="$(comm -23 <(printf '%s\n' "$shippable") <(printf '%s\n' "$cm_fixtures"))"
-[ -n "$miss_entry" ] && err "fixture(s) install.sh ships to every consumer with NO core_manifest entry, so the core guard permits an in-place edit to upstream test data and Check 16 audits it as consumer-authored: $(echo $miss_entry). Add 'fixtures/<name>/**' to BOTH manifest copies."
+[ -n "$miss_entry" ] && err "fixture(s) install.sh ships to every consumer with NO core_manifest entry, so the core guard permits an in-place edit to upstream test data and Check 16 audits it as consumer-authored: $(echo $miss_entry). Add 'fixtures/<name>/**' to core-manifest.md and 'core/fixtures/<name>/**' to core/skills/ai-dlc-update/fixture-manifest.md (never to reconcile/setup-sites.md)."
 ghost_entry="$(comm -13 <(printf '%s\n' "$shippable") <(printf '%s\n' "$cm_fixtures"))"
 [ -n "$ghost_entry" ] && err "core_manifest claims fixture(s) that are not shippable — dist-only, or absent from core/fixtures/: $(echo $ghost_entry). The guard would deny edits to a path no consumer has, and a deny that protects nothing reads as protection."
 
@@ -3800,12 +3802,80 @@ STREAM
 
 # --- I5: core_manifest copies in sync (prefix-normalized) --------------------
 # norm_core_manifest() is defined above I8, which needs it too. One definition.
+# The ai-dlc-update copy is TWO blocks: reconcile/setup-sites.md holds every non-fixture entry
+# and the skill-root fixture-manifest.md every `core/fixtures/<name>/**` one, so a new shipping
+# fixture's append changes no reconcile-engine file. The union is compared, and the PARTITION is
+# held too -- without it a fixture line re-added to setup-sites.md (and dropped from the other
+# file) keeps the union equal and passes, re-creating exactly the cost the split removed. Builtin
+# reads only: no fork per line.
 cm="$(norm_core_manifest "$CORE_MANIFEST")"
-ss="$(norm_core_manifest "$SETUP_SITES")"
+ss="$(norm_core_manifest "$SETUP_SITES" "$FIXTURE_MANIFEST")"
 if [ "$cm" != "$ss" ]; then
-  err "core_manifest copies diverge (core-manifest.md vs reconcile/setup-sites.md):"
+  err "core_manifest copies diverge (core-manifest.md vs reconcile/setup-sites.md + fixture-manifest.md):"
   diff <(printf '%s\n' "$cm") <(printf '%s\n' "$ss") >&2 || true
 fi
+# i5_part_scan <sites|fixman> <label>  < a file's text -- appends " <label>:<entry>" to $i5_part
+# for every entry of its `core_manifest:` block that is in the wrong file. Reads stdin so the
+# self-probe below feeds it here-docs and the corpus feeds it the two files, through ONE program.
+# Builtins only: `local`, `read`, `case`, `[`; a here-doc is staged by the shell itself, as at
+# the `done <<EOF` loops above, so neither the probe nor the corpus call forks.
+i5_part_scan() {
+  local i5_in=0 i5_l
+  while IFS= read -r i5_l || [ -n "$i5_l" ]; do
+    case "$i5_l" in
+      core_manifest:*) i5_in=1; continue ;;
+    esac
+    [ "$i5_in" = 1 ] || continue
+    case "$i5_l" in
+      '  - '*) : ;;
+      *) i5_in=0; continue ;;
+    esac
+    case "$1:${i5_l#  - }" in
+      sites:core/fixtures/*) i5_part="${i5_part} $2:${i5_l#  - }" ;;
+      fixman:core/fixtures/*) : ;;
+      fixman:*) i5_part="${i5_part} $2:${i5_l#  - }" ;;
+    esac
+  done
+}
+# SELF-PROBE, before the corpus, both ways and on exact equality: a seeded OVERLAP (a fixture
+# entry in setup-sites' block) and a seeded GAP (a non-fixture entry in fixture-manifest's) must
+# each be reported as exactly that entry, and a clean partition must be quiet -- its setup-sites
+# side carries a fixture line AFTER the block's dedent, so a scan that never ends the block at
+# the dedent reports it. Exact equality makes a scan that never reports and one that reports
+# everything both fail here.
+i5_pbad=""
+i5_part=""
+i5_part_scan sites setup-sites.md <<'EOF'
+core_manifest:
+  - core/rules/probe-a.md
+  - core/fixtures/probe-overlap/**
+EOF
+[ "$i5_part" = " setup-sites.md:core/fixtures/probe-overlap/**" ] || i5_pbad="${i5_pbad} overlap read [${i5_part}];"
+i5_part=""
+i5_part_scan fixman fixture-manifest.md <<'EOF'
+core_manifest:
+  - core/fixtures/probe-x/**
+  - core/rules/probe-gap.md
+EOF
+[ "$i5_part" = " fixture-manifest.md:core/rules/probe-gap.md" ] || i5_pbad="${i5_pbad} gap read [${i5_part}];"
+i5_part=""
+i5_part_scan sites setup-sites.md <<'EOF'
+core_manifest:
+  - core/rules/probe-a.md
+```
+other_list:
+  - core/fixtures/probe-after-dedent/**
+EOF
+i5_part_scan fixman fixture-manifest.md <<'EOF'
+core_manifest:
+  - core/fixtures/probe-x/**
+EOF
+[ -z "$i5_part" ] || i5_pbad="${i5_pbad} clean partition read [${i5_part}];"
+[ -n "$i5_pbad" ] && err "I5 partition self-probe failed:${i5_pbad} want exactly the seeded overlap, exactly the seeded gap, and nothing on the clean pair. The partition scan cannot be trusted to fire, so its silence over setup-sites.md and fixture-manifest.md below means nothing."
+i5_part=""
+i5_part_scan sites setup-sites.md < "$SETUP_SITES"
+i5_part_scan fixman fixture-manifest.md < "$FIXTURE_MANIFEST"
+[ -n "$i5_part" ] && err "I5 the ai-dlc-update manifest partition is broken:${i5_part}. Fixture entries ('core/fixtures/<name>/**') belong in core/skills/ai-dlc-update/fixture-manifest.md and nothing else does; one in reconcile/setup-sites.md makes every new shipping fixture change a reconcile-engine file, which re-runs every fixture declaring that directory on a consumer pull."
 
 # --- I43: the consumer machinery home is ONE string across every surface -------
 # requires-arms: I5

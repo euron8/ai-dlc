@@ -2798,7 +2798,8 @@ This exists because untangle is typically invoked when the consumer's stamp
 already equals upstream HEAD (`base == theirs` — no upstream delta to pull,
 only accumulated in-place divergence to split out). A plain `base`→`theirs`
 diff is empty in that case, so `--untangle` mode enumerates the core-manifest
-file list from `reconcile/setup-sites.md` instead and buckets purely by
+file list from `reconcile/setup-sites.md` and, for the fixture entries,
+`fixture-manifest.md` beside `reconcile/` instead, and buckets purely by
 `ours` vs `base`. `classify-block.md` itself needs no changes: a manifest file
 that lands in `BOTH-CHANGED->CLASSIFY` still gets diffed and classified
 exactly as it is for an ordinary pull, and any block the consumer touched

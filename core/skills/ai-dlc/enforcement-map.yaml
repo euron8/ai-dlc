@@ -924,6 +924,7 @@ checks:
       - core/scripts/core-paths.sh        # --is-core: the core set, derived not restated
       - core/skills/ai-dlc/core-manifest.md
       - core/skills/ai-dlc-update/reconcile/setup-sites.md
+      - core/skills/ai-dlc-update/fixture-manifest.md   # the fixture half of the setup-sites.md fallback
     enforcer:
       - core/scripts/core-paths.sh
     call_sites:

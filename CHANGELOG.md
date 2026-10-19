@@ -20,6 +20,62 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.855.0] - 2026-10-18
+
+Batch 236 (c0's CONSUMERPUSH). A new shipping fixture no longer changes the reconcile engine's directory: the per-fixture
+`core_manifest` entries moved out of `core/skills/ai-dlc-update/reconcile/setup-sites.md` into
+`core/skills/ai-dlc-update/fixture-manifest.md`, so a consumer pull that adds one shipping fixture stops re-running every
+fixture that declares the `reconcile/` directory. Partially closes BL-694 (fix 1 of 3; fixes 2 and 3 stay open). Files
+BL-694. Closes no `PC-` id. Net for this release: 0 closed, 1 filed.
+
+### The 207 fixture entries moved out of the reconcile directory (BL-694)
+
+- `core/skills/ai-dlc-update/fixture-manifest.md` is new and carries the `core_manifest:` block of
+  `  - core/fixtures/<name>/**` lines, 207 entries. It sits inside the skill but outside `reconcile/`.
+- `core/skills/ai-dlc-update/reconcile/setup-sites.md` no longer carries any fixture entry.
+- `core/skills/ai-dlc-update/reconcile/preclassify.sh` `--untangle` reads both files and ends each file's list at its
+  own dedent. The second file is optional, because a reconcile directory staged alone has no sibling skill root. When
+  `fixture-manifest.md` is absent it says so on stderr.
+- `core/hooks/ai-dlc-core-guard.sh` and `core/scripts/core-paths.sh` append the fixture block when they fall back to
+  `setup-sites.md` (that is, when `core/skills/ai-dlc/core-manifest.md` is absent), and only then, so the fail-open
+  behaviour with no manifest is unchanged.
+- `scripts/install.sh` copies and archives the new file. `core/skills/ai-dlc/core-manifest.md`,
+  `core/skills/ai-dlc/steps/gate-validation.md`, `core/skills/ai-dlc-update/SKILL.md`,
+  `core/skills/ai-dlc/enforcement-map.yaml` and `.claude/rules/fixture-ship-decl.md` name both files where they
+  described one.
+
+### The validator binds the split (BL-694)
+
+- `scripts/validate-enforcement-map.sh` I5 compares `core-manifest.md` against the union of both blocks and checks the
+  partition: fixture entries only in `fixture-manifest.md`, nothing else there, none in `setup-sites.md`.
+- The partition scan is a builtins-only function fed on stdin. It runs first, as a self-probe, against three here-doc
+  worlds (an overlap, a gap, and a clean pair with a fixture line past the block's dedent) on exact equality, and only
+  then over the two real files.
+- The I8 remedy text names the new file. The fork count is unchanged at 3462 of 3465.
+
+### Coverage and declarations (BL-694)
+
+- `core/fixtures/core-write-guard/seed.sh` seeds `fixture-manifest.md` at the consumer path, and `run.sh` gains arm
+  11b: with `core-manifest.md` gone, a core fixture edit is denied while `fixture-manifest.md` is present, and allowed
+  once it is removed while a rulebook edit stays denied. It skips (hard in the distribution) when the installed guard
+  or the file predates the split.
+- `core/fixtures/core-write-guard/inputs.decl`, `core/fixtures/preclassify-mode-bucket/inputs.decl` and
+  `core/fixtures/preclassify-rename-row/inputs.decl` declare `fixture-manifest.md`, which their real-reconcile-dir
+  `--untangle` runs now read.
+
+### Measured effect (BL-694)
+
+- On a one-fixture append, the fixtures whose declarations cover the changed manifest file go from 88 to 29. 26 of the
+  29 declare `core/` or `core/skills/`, which the same append to `core-manifest.md` already re-keys; 3 declare
+  `fixture-manifest.md` by exact path.
+- On graph's 0.828 reconcile push, the `setup-sites.md` append was the only changed input for 48 fixtures.
+- Fixes 2 and 3 (narrow the 7 trace-evidenced declarations after a re-trace; trace the 18 undecided first) are not in
+  this release.
+
+### Measured gap in the pre-push anchor rule
+
+The owner's pre-push anchor set selected fixtures whose run.sh EDITS a changed file (sed/awk/perl naming it, directly or through a variable) and fixtures carrying a quoted string from a removed line. Neither rule can see a fixture that only COPIES files into a partial tree from a hand-written list. `validator-arm-selection` builds its I66 trees that way at `core/fixtures/validator-arm-selection/run.sh:430`, so this release's new required input `core/skills/ai-dlc-update/fixture-manifest.md` was missing from them. The first gate went red on it (4 FAIL, all I66), and no pre-push run had selected the fixture. Nothing is filed for this.
+
 ## [0.849.0] - 2026-10-18
 
 Batch 236 (5e's TOOLING). The rotator reads a LANDED sha from its annotation, a receipt line matching no form is

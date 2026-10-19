@@ -4,4 +4,5 @@
 !core/skills/ai-dlc-update/reconcile/preclassify.sh
 !core/skills/ai-dlc-update/reconcile/lib.sh
 core/skills/ai-dlc-update/reconcile/
+core/skills/ai-dlc-update/fixture-manifest.md
 core/fixtures/lib/
