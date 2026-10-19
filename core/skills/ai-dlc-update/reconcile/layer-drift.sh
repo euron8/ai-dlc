@@ -1061,7 +1061,7 @@ adj_show() { # $1 ref, $2 dist path, $3 destination -> 0 read (or absent at that
   return 0
 }
 adj_core_text() { # $1 status, $2 entry (consumer-relative), $3 core-relative target -> text on stdout; 3 = unreadable
-  local cpath f _x _b _fl _an _d _ut _ct
+  local cpath f _x _b _pl _fl _an _d _ut _ct
   cpath="$(dist_path "$3")"; f="$CONSUMER/$2"
   case "$1" in
     # LC-E4 / LC-E6, range-keyed: an added or removed line of the range diff, marker stripped. The
@@ -1072,10 +1072,16 @@ adj_core_text() { # $1 status, $2 entry (consumer-relative), $3 core-relative ta
           "$BASE" "$THEIRS" -- "$cpath" > "$LD_T/adj-diff" 2>/dev/null || return 3
       awk '/^@@/ { h = 1; next } /^diff --git / { h = 0; next } h && /^[-+]/ { print substr($0, 2) }' "$LD_T/adj-diff" || return 3 ;;
     # LC-E14: the span(s) the entry's extends: declares in the target, at BASE or at THEIRS.
+    # EACH PART IS SPLIT BY PARAMETER EXPANSION, NOT BY `IFS=<tab> read _fl _an`. A tab is IFS
+    # WHITESPACE, so read collapses the EMPTY file field shadow_parts emits for an anchor-only part
+    # (`'#Anchor'`, the spelling E11 prescribes): the anchor landed in _fl, _an came back empty, the
+    # part was skipped, and no core_line could clear the row (BL-711). Measured: `#X` read as
+    # _fl=[X] _an=[], while the control `f.md#X` read as _fl=[f.md] _an=[X].
     EXTENSION-ANCHOR-DRIFT)
       _x="$(unquote "$(fm "$f" extends)")"
       shadow_parts "$_x" > "$LD_T/adj-parts" || return 3
-      while IFS="$TAB" read -r _fl _an; do
+      while IFS= read -r _pl; do
+        _fl="${_pl%%"$TAB"*}"; _an="${_pl#*"$TAB"}"
         [ -n "$_an" ] || continue
         [ -n "$_fl" ] || _fl="$3"
         [ "$_fl" = "$3" ] || continue
@@ -1085,10 +1091,13 @@ adj_core_text() { # $1 status, $2 entry (consumer-relative), $3 core-relative ta
         section_of "$_an" < "$LD_T/adj-blob" || return 3
       done < "$LD_T/adj-parts" ;;
     # LC-O15: the section(s) the override's shadows: names in the target, at its base_sha or THEIRS.
+    # Split as LC-E14's arm above is, for the same reason: a tab is IFS whitespace, and read would
+    # collapse an empty file field into the anchor's place.
     OVERRIDE-SUPERSEDED)
       _x="$(fm "$f" shadows)"; _b="$(fm "$f" base_sha)"
       shadow_parts "$_x" > "$LD_T/adj-parts" || return 3
-      while IFS="$TAB" read -r _fl _an; do
+      while IFS= read -r _pl; do
+        _fl="${_pl%%"$TAB"*}"; _an="${_pl#*"$TAB"}"
         [ -n "$_an" ] || continue
         [ -n "$_fl" ] || _fl="$3"
         [ "$_fl" = "$3" ] || continue
@@ -1954,7 +1963,11 @@ while IFS= read -r f; do
   _sp_rc=0; _sp_v="$(shadow_parts "$shadows")" || _sp_rc=$?
   [ "$_sp_rc" -eq 0 ] || ld_refuse_staging "the shadow parts of ${entry}" "$_sp_rc"
   ld_stage "$LD_T/ent-parts" "$_sp_v" "the shadow parts of ${entry}"
-  while IFS="$TAB" read -r p_file p_anchor; do
+  # Each part split by parameter expansion, as adj_core_text's are: a tab is IFS whitespace, and
+  # read would move an anchor-only part's anchor into p_file. Latent here, because an entry whose
+  # first part names no file is OVERRIDE-ANCHOR-UNRESOLVED above and never reaches this loop.
+  while IFS= read -r p_line; do
+    p_file="${p_line%%"$TAB"*}"; p_anchor="${p_line#*"$TAB"}"
     [ -n "$p_file$p_anchor" ] || continue
     ent_keys="${ent_keys}$(norm "$p_file")#$(norm "$p_anchor")${TAB}${p_file}#${p_anchor}
 "
@@ -1975,7 +1988,10 @@ while IFS= read -r f; do
     _sp_rc=0; _sp_v="$(shadow_parts "$s_shadows")" || _sp_rc=$?
     [ "$_sp_rc" -eq 0 ] || ld_refuse_staging "the shadow parts of a supersession declaration" "$_sp_rc"
     ld_stage "$LD_T/sup-parts" "$_sp_v" "the shadow parts of a supersession declaration"
-    while IFS="$TAB" read -r d_file d_anchor; do
+    # Split by parameter expansion for the same reason as the entry's parts above. An anchor-only
+    # declaration keys as `#anchor` and matches no entry key, every one of which names a file.
+    while IFS= read -r d_line; do
+      d_file="${d_line%%"$TAB"*}"; d_anchor="${d_line#*"$TAB"}"
       [ -n "$d_file$d_anchor" ] || continue
       # First match wins and the reader runs to EOF, so its writer cannot EPIPE under pipefail.
       _sp_rc=0

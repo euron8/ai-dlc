@@ -19,6 +19,33 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.882.0] - 2026-10-19
+
+Batch 236 hotfix (BL-711, owner ai-dlc-c0, lead ai-dlc-37). This release ships alone, ahead of BL-676. It closes BL-711,
+files BL-712, and closes no `PC-` id. Net for this release: 1 closed, 1 filed.
+
+### An anchor-only extends: part reaches the adjudication core text (BL-711)
+
+A regression of BL-620 (0.877.0). `shadow_parts` emits an empty file field for an anchor-only part such as
+`'#4a. Close-Out Sweep'`. `adj_core_text` read each part with `IFS="$TAB" read -r _fl _an`, and a tab is IFS whitespace,
+so the empty field collapsed, the anchor landed in `_fl`, the part was skipped, and no `read.core_line` could clear an
+LC-E14 row whose `extends:` names only an anchor.
+
+- Each part is now read whole and split by parameter expansion, at the LC-E14 and LC-O15 arms and at the supersession
+  join's two loops. The last three were latent, because an anchor-only `shadows:` is OVERRIDE-ANCHOR-UNRESOLVED first.
+- Machinery-only: `reconcile/layer-drift.sh`.
+- Instance: graph's 4 retro rows blocked its 0.881.0 pull until graph rewrote them to `file#anchor`. A further 4
+  anchor-only `extends:` remain in graph (relayed by ai-dlc-5d). On graph's next pull, those 4 can clear with read
+  evidence.
+- Fixture: `layer-adjudication-tier` Part 14. B1 shows an anchor-only `extends:` and its `file#anchor` control both
+  clearing. MB1 restores the 0.877 read and asserts that only the anchor-only row blocks. There is no arm for an
+  anchor-only `shadows:`, because that row cannot fire on either side.
+
+### Filed
+
+- BL-712 (NOTE, latent): the supersession reader at `layer-drift.sh:1986` has the same three-field TAB collapse. No
+  shipped declaration reaches it.
+
 ## [0.881.0] - 2026-10-19
 
 Batch 236 (BL-701 fix, owner ai-dlc-cb, lead ai-dlc-37). This release ships alone because it edits
