@@ -20,6 +20,61 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.899.0] - 2026-10-19
+
+Batch 236 (c0's BL-694B). Fix (2)'s premise was wrong for 6 of its 7 fixtures: they copy the whole `reconcile/`
+directory into their sandboxes, so a one-line change to `setup-sites.md` is read by them and the declaration is not
+over-wide. Fix (3)'s 18 were 17, because `self-update-reinvoke-liveness` already declares only `!…/preclassify.sh` and
+`!…/setup-sites.md`. 21 declarations close as cannot-narrow under the current decl grammar, which has no glob:
+`readset_decl_parse` (`.githooks/pre-push:1527`) accepts a file or a directory, with an optional `!` or `+` prefix, and
+nothing between. 3 are narrowed from a sandbox trace. Closes BL-694. Files nothing. Closes no `PC-` id. Net for this
+release: 1 closed, 0 filed.
+
+### Fix (2): 6 of 7 copy the directory
+
+- `apply-self-overwrite`: `lib.sh:58` copies `"$2"/*.sh "$2"/*.md`, and `lib.sh:105` runs `ls-tree` over `reconcile/`.
+- `apply-worklist-rows`: `run.sh:139` runs `cp "$REC"/*.sh "$REC"/*.md`. Its clean local trace reads `setup-sites.md`, so
+  BL-694's "over-wide" was wrong.
+- `layer-absorption-retire`: `run.sh:186` and `:423` copy `$(dirname $DRIFT)/*.sh`.
+- `ledger-reverify`: `run.sh:315` (`rl_dir`) and `:620` copy `*.sh *.md`.
+- `ledger-reverify-dist-only-reach`: `run.sh:199`, `:207` and `:506` copy `"$RECON"/*.sh`.
+- `self-update-gate`: `run.sh:220`, `:258`, `:377`, `:657` and `:981` copy `*.sh *.md`.
+
+### Fix (3): 17, of which 15 copy the directory
+
+For the `-b`, `-c` and `-d` shard drivers the line numbers are in the PARENT fixture's `run.sh`, which the shard execs.
+
+- `apply-drift-refile-b` and `-c`: they exec the parent with `--group`. `b`: unit `t` at `:730` (`mut_copy`, `cp -R` at
+  `:134`). `c`: `:805` and `:646`.
+- `apply-restamp-worklist-b` and `-c`: `b` at `:2152` (`bl_mut` copies `"$REC"/*` at `:2100`); `c` at `:2594`
+  (`build_rec`, `:453`).
+- `apply-setup-sited-merge`: `lib.sh:270` copies `"$REC"/*`.
+- `emit-report-refusal`: `run.sh:143`, `:266`, `:693` and `:739` run `cp -R "$RDIR"`.
+- `ledger-reverify-b`, `-c` and `-d`: `b` at `:1430`, `c` at `:620`, `d` at `:880`.
+- `post-write-gates`: `run.sh:281` symlinks every file in `$RDIR`, and `:65` checks siblings.
+- `reconcile-emit-report-b` and `-c`: `b` at `:1805` (`v_copy`, `cp -R`); `c` at `:1426`, `:1459` and `:2579`.
+- `self-update-gate-b`, `-c` and `-d`: `b` at `:2365` (`vr_mut`, `:258`) and `:2765` (`$MACHD` copied at `:220`); `c` at
+  `:4750` (unit `hu2`, `av_mut` at `:373`); `d` at `:4394`.
+
+### The three narrowings
+
+The trace was a lead-run `derive-fixture-readsets.sh --list "self-update-fixture-log derivation-differential owed-derivations" --tracer sandbox` on 69879ed85, rc 0, all three accepted, at 26, 17 and 15 paths.
+
+- `self-update-fixture-log` — reconcile/ files read: lib.sh, preclassify.sh, self-update-fixtures.sh, self-update-gate.sh, setup-sites.md; declaration: the whole-directory line replaced by those files, `!` lines kept.
+- `derivation-differential` — reconcile/ files read: apply.sh, derivation-differential.sh, preclassify.sh; declaration: the whole-directory line replaced by those files, `!` lines kept.
+- `owed-derivations` — reconcile/ files read: apply.sh, derivation-differential.sh, preclassify.sh; declaration: the whole-directory line replaced by those files, `!` lines kept.
+
+For these three, an edit to any reconcile/ file outside its list no longer re-keys it.
+
+`self-update-fixture-log` (fix 2), `derivation-differential` and `owed-derivations` (fix 3) each declare the whole
+directory beside one REQUIRED file, and are the only three narrowed.
+
+### NOTE
+
+Eight further fixtures declare the same `reconcile/` directory line and are outside graph's 48 and outside this scope
+(`fixture-git-env-seam`, `layer-crosswalk-home`, `layer-extends-grain`, `layer-qualifier-grain`, `path-mapping-render`,
+`procsub-staged-refusal-boot`, `procsub-staged-refusal-boot-b`, `procsub-staged-refusal-boot-c`); nothing is filed for them.
+
 ## [0.862.0] - 2026-10-18
 
 Batch 236, TRAIN A (integrator ai-dlc-ae). Six candidates in one release: PORTABILITY (owner ae), GUARDORDER (owner ae), DIAG (owner cb), a partial BL-553 (owner 48), BL-703 (owner cb) and SHARDS (owner 18), plus one subtraction commit of MUTANTS residue. Closes BL-647, BL-689, BL-698, BL-655, BL-662, BL-664, BL-669, BL-670 and BL-703. Advances BL-616 item 8 and BL-553, which stay open. Files BL-689, BL-698, BL-700 and BL-703. Closes no `PC-` id. Net for this release: 9 closed, 4 filed, so +5.

@@ -583,7 +583,9 @@ verify: sh for f in .githooks/pre-push core/git-hooks/pre-push; do b=$(sed -n '/
 
 ## BL-694 — a consumer reconcile push re-runs every reconcile-engine fixture for a one-line `core_manifest` append in `setup-sites.md`
 
-**PARTIAL (v0.855.0) — fix (1) shipped; fixes (2) and (3) are OPEN.** Still owed: (2) narrow the 7 trace-evidenced declarations after a re-trace, and (3) trace the 18 undecided before narrowing any.
+**LANDED (v0.899.0, verified <VERIFIED-SHA>) — fix (1) shipped in 0.855.0; fixes (2) and (3) close with 21 declarations recorded as cannot-narrow under the current decl grammar (no glob) and 3 narrowed from a sandbox trace.**
+
+Corrections to this entry: `apply-worklist-rows` is not over-wide (it copies `"$REC"/*.sh "$REC"/*.md` at `run.sh:139` and its clean trace reads `setup-sites.md`), so fix (2)'s premise held for only 1 of its 7 (`self-update-fixture-log`), and 6 of 7 copy the directory; the 18 undecided are 17 (`self-update-reinvoke-liveness` already declares only `!…/preclassify.sh` and `!…/setup-sites.md`); and the 58 and 80 above were 53 and 74 at 0.842.0 (b37113afc).
 
 **DEFECT (efficiency).** `core/skills/ai-dlc-update/reconcile/setup-sites.md` carries the `core_manifest:` list (`:56`), which gains one `  - core/fixtures/<name>/**` line for every new shipping fixture (207 such lines today, from `:77`). The same file is read by `apply.sh` (`manifest_dests`, `:2035`, which keeps only `scripts/ai-dlc/` destinations) and by `preclassify.sh` (`:201`, `:221`). Each fixture's `inputs.decl` that declares the whole `core/skills/ai-dlc-update/reconcile/` directory (58 of them, by `grep -lxE '!?core/skills/ai-dlc-update/reconcile/' core/fixtures/*/inputs.decl | wc -l`, a leading `!` marks a line required and it is keyed all the same; 80 `inputs.decl` files name something under `reconcile/`) therefore re-runs when that one line is appended, although no engine code treats a `fixtures/<name>/**` entry differently. Filed by peer session ai-dlc-c0 (batch 236 CONSUMERPUSH), id allocated by lead ai-dlc-c8; diagnosed read-only from graph's committed history and a file:// clone.
 
