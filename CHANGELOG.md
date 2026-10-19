@@ -20,6 +20,34 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.899.0] - 2026-10-19
+
+Batch 236 (c0's POOLHOOKS). The fixture pool's two hooks now kill a unit's whole process group when the watcher's `ps` lookup fails, and the pool root no longer leaks when the hook is interrupted. BL-691 stays open: measured against its owed fix, a pool root made under the caller's TMPDIR nests under hermetic-run to a unit TMPDIR of 90 encoded characters against the 85 that `procsub-staged-refusal-boot` allows, and to 62 without hermetic-run against the hook's own 58, so the fix design is deferred. Closes BL-677, BL-690. Files nothing. Closes no `PC-` id. Net for this release: 2 closed, 0 filed.
+
+### BL-677: the empty-self guard kills the unit's group
+
+- The guard is `[ -n "$2" ] || { kill -KILL -- "-$1"; kill -KILL "$1"; return 0; }` at the top of `pool_kill`, in `.githooks/pre-push:2210` and `core/git-hooks/pre-push:2109`.
+- Scratch probe: a unit leading its own group with a child in it. The old guard left the child alive and the new guard killed it, 5 of 5 in each hook.
+- `consumer-suite-pool` gains an `eself` arm: a stub `ps` that fails on `-p` makes `self` empty, and the arm proves the stub fired. Its `st-g` mutant restores the old guard and expects the child alive. EXPECTED_ASSERTIONS goes from 48 to 50.
+- The arm's survivor count blocks on the condition, polling until every recorded pid is gone for at most 50 polls of 0.1s, then counts and kills what remains. A process SIGKILLed a moment earlier can still answer `kill -0` before it is reaped, so the instant count could read a false survivor in the `fix` and `eself` arms.
+- I66 (`scripts/validate-enforcement-map.sh`) still finds the two pool blocks byte-equal.
+
+### BL-690: the pool root is removed on interrupt
+
+- The entry's suggested trap (`trap 'rm -rf "$out"' EXIT`) removes nothing on bash 3.2, because the EXIT trap fires after `run_fixtures`' locals are gone. The shipped trap bakes the quoted path in with `printf -v out_q '%q'`.
+- INT, TERM and HUP traps exit 130, 143 and 129. The trap is cleared at each of the four straight-line exits.
+- Scratch probe: SIGINT, a `set -u` abort and an early exit each left the root before the change and removed it after, with the same exit status. The entry's own `verify: sh` receipt now passes.
+- The "There is no trap in this hook" comment is reworded in both hooks.
+
+### BL-691: measured, still open
+
+- Under hermetic-run the caller's TMPDIR is already nested (`hermetic-run.sh:141`, `:544`), so the owed root would give `/private/tmp/fx.XXXXXX/.t.XXXXX/hermetic-run.XXXXXX/tmp/fx.XXXXXX/.t.XXXXX`: 90 encoded against the 85 allowed at `procsub-staged-refusal-boot/run.sh:945`. Without hermetic-run it is 62 against the hook's 58.
+- The fix design (shorter names, a changed limit, or the outer watcher following the nested root) is deferred.
+
+### Unrun
+
+No hand ran any fixture. The owner pre-runs `consumer-suite-pool`, `prepush-pool-depth`, `whole-read-pool`, `readset-skip` and the decl-cover set on the stamped commit.
+
 ## [0.864.0] - 2026-10-19
 
 Batch 236 (c0's BL-694B). Fix (2)'s premise was wrong for 6 of its 7 fixtures: they copy the whole `reconcile/`

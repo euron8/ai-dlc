@@ -828,7 +828,15 @@ st_orphan() {                  # st_orphan <hook> <tag> [<stub-dir>] -> prints "
   kill -KILL "$WK" 2>/dev/null; wait "$WK" 2>/dev/null
   n=0; while kill -0 "$WP" 2>/dev/null && [ "$n" -lt "$ST" ]; do n=$((n + 1)); sleep 1; done
   local wl=0; if kill -0 "$WP" 2>/dev/null; then wl=1; kill -KILL -- "-$WP" 2>/dev/null; fi
-  while read -r p; do kill -0 "$p" 2>/dev/null && { ul=$((ul + 1)); kill -KILL "$p" 2>/dev/null; }; done < "$R/pids"
+  # A pid SIGKILLed a moment ago can still answer `kill -0` until it is reaped, so block on the CONDITION (every
+  # recorded pid gone) for at most 50 polls before counting; a real survivor (the st-g mutant's child) outlasts
+  # the bound and still reads as one.
+  n=0; while [ "$n" -lt 50 ]; do
+    ul=0; while read -r p; do kill -0 "$p" 2>/dev/null && ul=$((ul + 1)); done < "$R/pids"
+    [ "$ul" -eq 0 ] && break
+    n=$((n + 1)); sleep 0.1
+  done
+  ul=0; while read -r p; do kill -0 "$p" 2>/dev/null && { ul=$((ul + 1)); kill -KILL "$p" 2>/dev/null; }; done < "$R/pids"
   # A STUBBED drive must prove the stub refused the worker's own `-p` lookup, or `self` was never empty.
   [ -z "$SB" ] || [ -s "$SB/refused" ] || { echo BROKEN; return; }
   echo "$wl $ul"
