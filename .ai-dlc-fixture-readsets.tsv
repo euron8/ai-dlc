@@ -14,7 +14,7 @@
 # path<TAB>sha lines in the runner's universe as traced; the runner clears a stale key record when
 # it recomputes the same value over the tree it is pushing.
 #
-# fixtures mapped: 43    entries: 992
+# fixtures mapped: 38    entries: 671
 architecture-fast-track	core
 architecture-fast-track	core/fixtures
 architecture-fast-track	core/fixtures/architecture-fast-track
@@ -686,6 +686,9 @@ story-fields-derive	core/skills/ai-dlc/layer-contract.yaml
 story-fields-derive	core/skills/ai-dlc/steps
 story-fields-derive	core/skills/ai-dlc/steps/gate-validation.md
 story-fields-derive	core/skills/ai-dlc/steps/implementation.md
+# digest apply-restamp-worklist 0380a85167923bac3319bbbe4c8e60c861f4cddfcaa1b3bb597b7e1db35cf3e2
+# digest apply-restamp-worklist-b cdc6981269db5570e75cbe9fb12924f2c74a8c4c01deb74f164106d96359db25
+# digest apply-restamp-worklist-c 6f2483f066b6ef598bfefdf72467c8f4ebb002174dbbdb6fc8f3bb90358cf3b2
 # digest architecture-fast-track 8347f216bc7fa03eb0ecfc49743a904092ab8a9fecea304b8043cfa804a0f008
 # digest changelog-sprint-slot 70229a198d1b9a3abe5ae61483d7beb926b6908add6aadcdb78147ef01dcee62
 # digest check-22-spawn-ledger 70c842fa5bbe4dd53306fe4b5f7acd2e8bd91119aaf277642390c76df054fbaf
