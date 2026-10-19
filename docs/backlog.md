@@ -560,7 +560,7 @@ Since BL-665 an unstamped divergence resolves exactly as a stamped one does, so 
 
 Owed: decide whether the merge should stamp from the sum. It has the previous pass's CRITICAL count only by reading the prior pass file, which it does not do today. Probe: two shards each declaring prior-scope 1 over a previous pass with 1 CRITICAL; the merged verdict. Control: the same with a previous pass of 2 CRITICAL.
 
-verify: manual
+verify: sh bash -c 'set -uo pipefail; NAME=adversarial-shard-merge; . core/fixtures/adversarial-shard-merge/lib.sh && p_sum_divergent "$MERGE" && p_sum_divergent_oracle "$MERGE"' >/dev/null 2>&1
 
 ## BL-664 — `merge-adversarial-shards.sh --check-header` refuses a provenance region copied verbatim with its inline ` #` comments, while the schema and `validate-provenance-block.sh` strip them
 

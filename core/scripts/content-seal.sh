@@ -57,10 +57,11 @@
 #     the dispatch-binding arm alone; no mode compares its bytes with a seal. --merge still appends
 #     its program row for the verdict, which names the writer and nothing keys on.
 #   - merge-adversarial-shards.sh's PASS FILE (`<artifact>-adversarial-p<M>.md`,
-#     `requirements-elicitation.md`) is RECORD-ONLY and outside the set. None of the three programs
-#     reads it as an input: its reader is Check 24 (`validate-adversarial-convergence.sh`), and the
-#     merge's one look at an existing pass file is a `cmp -s` against what it would write, which
-#     already refuses any byte difference. A seal there would be compared by no one.
+#     `requirements-elicitation.md`) is RECORD-ONLY and outside the set. Its reader is Check 24
+#     (`validate-adversarial-convergence.sh`). The merge looks at an existing pass file twice: a
+#     `cmp -s` against what it would write, which already refuses any byte difference, and an EARLIER
+#     pass's `findings_critical`, read for the summed-divergence stamp. LIMIT: a Bash edit of a prior
+#     pass's count can move that stamp, and no seal comparison guards it; Check 24 reads the same bytes.
 #
 # NO SEAL ROW, NO COMPARISON. A sealed-set file that has never had a Write or Edit -- one created
 # wholly through Bash -- carries no row and passes as it did before seals existed. For an adversary

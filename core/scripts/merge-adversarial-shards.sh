@@ -306,11 +306,25 @@
 #   Sums findings_critical, findings_major, findings_minor, findings_critical_prior_scope and
 #   findings_major_underived with the CONVERGENCE VALIDATOR defaults: prior_scope absent means
 #   ALL of that shard CRITICALs (fail-closed), underived absent means zero. Verdict:
-#     DIVERGENT_HARD_BLOCK   if any shard declared it;
+#     DIVERGENT_HARD_BLOCK   if any shard declared it, or (convergence axis, never --elicitation)
+#                            if the SUMMED prior_scope exceeds PREV_CRIT, the findings_critical of the
+#                            nearest earlier pass in this series that declares one -- arm C's test
+#                            (validate-adversarial-convergence.sh, `prior -gt PREV_CRIT`, with PREV_CRIT
+#                            rolled only over passes whose count reads), applied to the sum no shard saw;
 #     EXIT_CONDITION_MET     iff summed critical <= CRITICAL_EXIT_CEILING and summed blocking
 #                            MAJOR (major - underived) <= MAJOR_EXIT_CEILING;
 #     EXIT_CONDITION_NOT_MET otherwise.
-#   Both ceilings are READ from validate-adversarial-convergence.sh, never restated here.
+#   Both ceilings are READ from validate-adversarial-convergence.sh, never restated here. So are the
+#   pieces of the summed-divergence walk: `order_key` (the `(pass|p)N` key), `block_field` and
+#   `severity_count` (the FIRST provenance block's count, as arm C reads it) are extracted from the
+#   validator as at_key is; only its `--series` exclusions (`*-resolution-p*`, `*-repair-*`) are
+#   restated, being a `case` inside its loop. The earlier passes are `<artifact>-adversarial-p*` beside
+#   the output whose key is below <M>, nearest first; one with no readable count is skipped. No earlier
+#   pass, or none readable, stamps nothing and leaves the series to the validator. The walk runs only
+#   when the summed prior_scope is above 0. A DIVERGENT_HARD_BLOCK merge adds one body line under the
+#   RECOMPUTED sentence naming the rule (`shard-declared`, or the summed count against the file and
+#   its count); every other merge's bytes are unchanged. A stamped pass needs nothing a shard writes:
+#   arms D and F read only its verdict, its own artifact_sha and the NEXT pass's resolves_divergence.
 #   artifact_sha is `<basename-stem>=<sha> ...` in ordinal order (each per-ordinal shard claim,
 #   each checked against the story bytes on disk); tool_use_id is the FIRST cross shard's DERIVED
 #   id (`cross` or `cross-1`); shard_tool_use_ids is `<ordinal>=<id> ... cross-1=<id> ... cross-<G>=<id>`
@@ -1367,6 +1381,40 @@ BLOCKING=$((S_MAJOR - S_UNDER))
 if [ "$ANY_DIVERGENT" -eq 1 ]; then VERDICT="DIVERGENT_HARD_BLOCK"
 elif [ "$S_CRIT" -le "$CRIT_CEIL" ] && [ "$BLOCKING" -le "$MAJOR_CEIL" ]; then VERDICT="EXIT_CONDITION_MET"
 else VERDICT="EXIT_CONDITION_NOT_MET"; fi
+# THE SUMMED DIVERGENCE (BL-670): arm C of the convergence validator, applied by the program that owns
+# the summed prior-scope count, which no shard could see. Convergence axis only. A stamp needs
+# S_PRIOR > PREV_CRIT >= 0, so a merge with S_PRIOR 0 reads no earlier pass and stays byte-identical.
+# The series grammar (glob, exclusions, order_key) and the count reader (severity_count over
+# block_field: the FIRST block's value) are the VALIDATOR's own definitions, extracted as at_key is.
+DIV_LINE=""
+if [ "$ELICIT" -eq 0 ] && [ "$ANY_DIVERGENT" -eq 0 ] && [ "$S_PRIOR" -gt 0 ]; then
+  for _fn in order_key block_field severity_count; do
+    n_fn="$(grep -c "^$_fn() {" "$VALIDATOR")" || n_fn=0
+    [ "$n_fn" = "1" ] || refuse "found ${n_fn} '$_fn() {' definitions in $VALIDATOR (want exactly 1)"
+    eval "$(awk -v h="$_fn() {" 'index($0, h) == 1 { on = 1 } on { print } on && /^}/ { exit }' "$VALIDATOR")"
+  done
+  : > "$T/prev" || refuse "cannot stage the earlier passes"
+  for _pf in "$SPRINT_DIR/$ARTIFACT-adversarial-p"*; do
+    [ -f "$_pf" ] || continue
+    # validate-adversarial-convergence.sh's EXCLUSIONS (its `--series` loop), restated: they are a
+    # `case` inside that loop, not a function this script can extract.
+    case "$(basename "$_pf")" in *-resolution-p*|*-repair-p*|*-repair-*) continue ;; esac
+    _k="$(order_key "$_pf")"
+    [ -n "$_k" ] && [ "$((10#$_k))" -lt "$PASS" ] && printf '%s\t%s\n' "$((10#$_k))" "$_pf" >> "$T/prev"
+  done
+  PREV_CRIT=""; PREV_FILE=""
+  while IFS="$(printf '\t')" read -r _k _pf; do
+    # A pass with no readable CRITICAL count is skipped, as arm C skips it when PREV_CRIT rolls.
+    _c="$(severity_count "$_pf" CRITICAL)"
+    [ -n "$_c" ] && { PREV_CRIT="$((10#$_c))"; PREV_FILE="$_pf"; break; }
+  done < <(sort -t "$(printf '\t')" -k1,1nr -k2,2 "$T/prev")
+  if [ -n "$PREV_CRIT" ] && [ "$S_PRIOR" -gt "$PREV_CRIT" ]; then
+    VERDICT="DIVERGENT_HARD_BLOCK"
+    DIV_LINE="summed findings_critical_prior_scope $S_PRIOR > $(basename "$PREV_FILE") findings_critical $PREV_CRIT"
+  fi
+elif [ "$ANY_DIVERGENT" -eq 1 ]; then
+  DIV_LINE="shard-declared"
+fi
 
 {
   if [ "$ELICIT" -eq 1 ]; then
@@ -1375,6 +1423,7 @@ else VERDICT="EXIT_CONDITION_NOT_MET"; fi
   else
   printf '# %s -- adversarial pass %s (merged from %s shards)\n' "$ARTIFACT" "$PASS" "$(wc -l < "$T/shards" | tr -d ' ')"
   printf '\nVerdict RECOMPUTED by merge-adversarial-shards.sh from the summed residue; shard verdicts are advisory.\n'
+  [ -z "$DIV_LINE" ] || printf 'DIVERGENT_HARD_BLOCK stamped by: %s.\n' "$DIV_LINE"
   fi
   printf '\n## Shard ordinal map\n\n```text\n'
   cat "$T/map"
@@ -1421,9 +1470,10 @@ if [ -e "$OUT" ]; then
   refuse "$OUT already exists and differs from this merge; a pass file is never overwritten"
 fi
 cp "$T/out" "$OUT.merge-tmp.$$" && mv "$OUT.merge-tmp.$$" "$OUT" || refuse "writing $OUT failed"
-# The program's own seal row, RECORD-ONLY: the pass file is outside the sealed set because none of
-# the three join programs reads it as an input -- Check 24 does, and this merge's only look at an
-# existing pass file is the `cmp -s` above, which already refuses any byte difference
+# The program's own seal row, RECORD-ONLY: the pass file is outside the sealed set. This merge reads an
+# existing pass file twice: the `cmp -s` above (which refuses any byte difference), and an EARLIER
+# pass's findings_critical for the summed-divergence stamp. LIMIT: a Bash edit of a prior pass's count
+# can move that stamp, and nothing here compares it with a seal; Check 24 reads the same bytes
 # (content-seal.sh, PROGRAM ROWS). A failed append changes no outcome.
 [ -f "$SEAL" ] && { bash "$SEAL" --record "$REC_STATE" program:merge-adversarial-shards "$OUT" \
   || printf 'NOTE: the program seal row for %s was not appended\n' "$OUT" >&2; }

@@ -289,6 +289,14 @@ p_fence_nested_set "$MERGE" && ok "FG7: same_set -- the owner's finding after a 
 p_hdr_comment "$MERGE" && ok "HC1: every provenance value carrying a ' # ' comment passes --check-header on both axes, and merges byte-identical to the files-mode golden; 'findings_major: 2#x' (no whitespace) is still refused as non-integer" \
   || bad "HC1: (rc=$RC) $(cat "$MO")"
 
+# ---- BL-670: the merge stamps DIVERGENT_HARD_BLOCK from the summed prior scope (arm C on the sum)
+p_sum_divergent "$MERGE" && ok "SD1: summed prior_scope 2 over p1's 1 CRITICAL -> DIVERGENT_HARD_BLOCK with the stamp line naming p1; over p1's 2 -> not divergent; pass 1 -> not divergent; p3 with p2 absent compares with p1; a two-block p1 stamps on its FIRST block; a block-less p2 is skipped" \
+  || bad "SD1: (rc=$RC) $(cat "$MO")"
+# SD2: the oracle, out of P_ALL (the battery never runs the validator per mutant), so not spelled as a
+# line-start predicate call that the battery's J1 join reads.
+if p_sum_divergent_oracle "$MERGE"; then ok "SD2: on five seeded series (a -pass1 and a zero-padded -p02 predecessor, a two-block and a block-less one) the merge stamps exactly where validate-adversarial-convergence.sh --series fires arm C on the unstamped twin"
+else bad "SD2: the merge's stamp (${OR_ST:-?}) disagrees with arm C on the unstamped twin (${OR_C:-?}): $(grep -m2 'FAIL\|pass artifact' "$CO" 2>/dev/null)"; fi
+
 # CH1-CH8: --check-header on one file. The base is a real B3 shard, which passes; each cell varies ONE field.
 ch() { bash "$MERGE" --check-header "$1" --axis "$2" > "$MO" 2>&1; RC=$?; } # <shard file> <axis>
 chv() { sed "$2" "$1" > "$3"; } # <src> <sed script> <dst>

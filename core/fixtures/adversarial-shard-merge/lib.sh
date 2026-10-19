@@ -1309,5 +1309,85 @@ p_hdr_comment() { # (a) --check-header on a convergence shard whose every value 
   [ "$RC" -eq 1 ] && has "$MO" "does not declare integer findings_critical and findings_major"
 }
 
-P_ALL="b3 clean ceiling miss_ord miss_cross dup partition sha ms doc_b3 doc_axis doc_sha doc_path doc_serial files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit subj_b4 b4doc b4doc_nomf b4doc_other xfiles xdoc xelicit xmix xunknown xcomplete stem_series stem_control stem_near stem_files tuid_main tuid_norow tuid_nometa tuid_selfdiff tuid_role tuid_twowriters tuid_oneagent tuid_nospawn tuid_session tuid_pre tuid_basename tuid_probemeta tuid_tworoles rerun_join rerun_other rerun_same rerun_role xdir probe_disagree probe_absent rerun_residual hdr draft dry dry_barrier tree tuid_call rerun_bind fence_prose fence_unclosed fence_tilde fence_four fence_sameset fence_nested fence_nested_set hdr_comment"
+# ------------------------------------------------ BL-670: the merge stamps the SUMMED divergence
+# sd_world <pass> -> the shard dir s1/shards/stories-p<pass>/ of a world whose shards 1 and 2 each hold
+# one CRITICAL in prior scope (prior_scope 1, summed 2), shard 3 and the cross shards clean, every shard
+# stamped NOT_MET -- so no shard declares the divergence. Built through new_world and shard(); the
+# CRITICAL is added after shard() wrote the file (identity is keyed on dir and name, no seal rows here).
+# Earlier pass files are written into s1/ only AFTER the world is built (sd_prev).
+sd_crit() { # <shard file> <ordinal>
+  awk -v o="$2" '{ print } $0 == "## Findings" { print ""; print "### C1 — CRITICAL — summed divergence probe"; print ""; print "stories: " o }' "$1" \
+    | sed 's/^findings_critical: 0$/findings_critical: 1/; s/^findings_critical_prior_scope: 0$/findings_critical_prior_scope: 1/' > "$1.sd" && mv "$1.sd" "$1"
+}
+sd_world() {
+  local p="$1" w d x; w="$(new_world)" || return 1
+  d="$(dirname "$w")/stories-p$p"; mkdir -p "$d" || return 1
+  shard "$d" 1 0 EXIT_CONDITION_NOT_MET 1; sd_crit "$d/1.md" 1
+  shard "$d" 2 0 EXIT_CONDITION_NOT_MET 2; sd_crit "$d/2.md" 2
+  shard "$d" 3 0 EXIT_CONDITION_NOT_MET 3
+  for x in $(xkeys 3); do shard "$d" "$x" 0 EXIT_CONDITION_NOT_MET "1, 3"; done
+  grep -qx 'findings_critical_prior_scope: 1' "$d/2.md" || return 1
+  printf '%s' "$d"
+}
+sd_s1() { printf '%s' "$(dirname "$(dirname "$(dirname "$1")")")/s1"; }    # <shard dir> -> s1/
+sd_out() { printf '%s/stories-adversarial-p%s.md' "$(sd_s1 "$1")" "${1##*-p}"; }
+sd_prev() { # <shard dir> <basename> <findings_critical | NONE | <first>/<second> (two blocks)>
+  local f; f="$(sd_s1 "$1")/$2"
+  blk() { printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\nfindings_critical: %s\nfindings_major: 0\nverdict: EXIT_CONDITION_NOT_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$1"; }
+  { printf '# stories -- adversarial pass (earlier)\n\n'
+    case "$3" in NONE) printf 'No provenance block.\n' ;; */*) blk "${3%/*}"; printf '\n'; blk "${3#*/}" ;; *) blk "$3" ;; esac; } > "$f"
+}
+SD_LINE='DIVERGENT_HARD_BLOCK stamped by: summed findings_critical_prior_scope 2 > stories-adversarial-p1.md findings_critical 1.'
+sd_stamped() { # <merge> <shard dir> -> 0 when merged DIVERGENT naming p1's count 1
+  run_merge "$1" "$2"
+  [ "$RC" -eq 0 ] && has "$MO" "verdict=DIVERGENT_HARD_BLOCK" && grep -qx 'verdict: DIVERGENT_HARD_BLOCK' "$(sd_out "$2")" \
+    && grep -qxF "$SD_LINE" "$(sd_out "$2")"
+}
+sd_plain() { # <merge> <shard dir> -> 0 when merged NOT_MET, unstamped, no stamp line
+  run_merge "$1" "$2"
+  [ "$RC" -eq 0 ] && has "$MO" "verdict=EXIT_CONDITION_NOT_MET" && ! grep -q 'DIVERGENT_HARD_BLOCK' "$(sd_out "$2")"
+}
+p_sum_divergent() { # (a) summed prior 2 over p1's 1 CRITICAL -> DIVERGENT, the line naming p1; (b) over p1's 2 -> NOT
+                    # divergent (kills >=); (c) pass 1, no earlier pass -> not divergent; (d) merging p3 with p2
+                    # absent compares with p1; (e1) a two-block p1 stamps on the FIRST block's 1 (its second says 9);
+                    # (e2) a block-less p2 is skipped and p3 compares with p1
+  local m="$1" d
+  d="$(sd_world 2)" || return 1; sd_prev "$d" stories-adversarial-p1.md 1; sd_stamped "$m" "$d" || return 1
+  d="$(sd_world 2)" || return 1; sd_prev "$d" stories-adversarial-p1.md 2; sd_plain "$m" "$d" || return 1
+  d="$(sd_world 1)" || return 1; sd_plain "$m" "$d" || return 1
+  d="$(sd_world 3)" || return 1; sd_prev "$d" stories-adversarial-p1.md 1; sd_stamped "$m" "$d" || return 1
+  d="$(sd_world 2)" || return 1; sd_prev "$d" stories-adversarial-p1.md 1/9; sd_stamped "$m" "$d" || return 1
+  d="$(sd_world 3)" || return 1; sd_prev "$d" stories-adversarial-p1.md 1; sd_prev "$d" stories-adversarial-p2.md NONE
+  sd_stamped "$m" "$d"
+}
+# THE ORACLE, kept out of P_ALL so the battery never runs the validator per mutant: each series is
+# merged, its merged pass's verdict reset to NOT_MET in a scratch copy (the unstamped twin), and
+# validate-adversarial-convergence.sh --series run over it. Arm C must fire on the twin iff the merge
+# stamped. One `-pass<N>` predecessor and one zero-padded `-p02` exercise the series grammar the merge
+# extracts. Seeds carry no ` #` comments.
+sd_oracle() { # <merge> <pass> <name:crit>... -> 0 when stamp and arm C agree; OR_ST / OR_C set
+  local m="$1" p="$2" d o t n c; shift 2
+  d="$(sd_world "$p")" || return 1
+  for c in "$@"; do sd_prev "$d" "${c%%:*}" "${c#*:}"; done
+  run_merge "$m" "$d"; [ "$RC" -eq 0 ] || return 1
+  o="$(sd_out "$d")"; OR_ST=0; grep -qx 'verdict: DIVERGENT_HARD_BLOCK' "$o" && OR_ST=1
+  t="$(mktemp -d "$WORK/or.XXXXXX")" || return 1
+  cp "$(sd_s1 "$d")"/stories-adversarial-p* "$t/" || return 1
+  sed 's/^verdict: DIVERGENT_HARD_BLOCK$/verdict: EXIT_CONDITION_NOT_MET/' "$o" > "$t/$(basename "$o")"
+  n="$(ls "$t" | grep -c .)" || n=0
+  bash "$(dirname "$m")/validate-adversarial-convergence.sh" --series "$t/stories-adversarial-p" > "$CO" 2>&1
+  has "$CO" "adversarial convergence -- $n pass artifact(s)" || return 1
+  OR_C=0; has "$CO" "FAIL (C -- DIVERGENCE)" && OR_C=1
+  [ "$OR_ST" = "$OR_C" ]
+}
+p_sum_divergent_oracle() {
+  local m="$1"
+  sd_oracle "$m" 2 stories-adversarial-pass1.md:1 && [ "$OR_ST" = 1 ] || return 1
+  sd_oracle "$m" 3 stories-adversarial-p02.md:2 && [ "$OR_ST" = 0 ] || return 1
+  sd_oracle "$m" 3 stories-adversarial-p02.md:1 && [ "$OR_ST" = 1 ] || return 1
+  sd_oracle "$m" 2 stories-adversarial-p1.md:1/9 && [ "$OR_ST" = 1 ] || return 1
+  sd_oracle "$m" 3 stories-adversarial-p1.md:1 stories-adversarial-p2.md:NONE && [ "$OR_ST" = 1 ]
+}
+
+P_ALL="b3 clean ceiling miss_ord miss_cross dup partition sha ms doc_b3 doc_axis doc_sha doc_path doc_serial files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit subj_b4 b4doc b4doc_nomf b4doc_other xfiles xdoc xelicit xmix xunknown xcomplete stem_series stem_control stem_near stem_files tuid_main tuid_norow tuid_nometa tuid_selfdiff tuid_role tuid_twowriters tuid_oneagent tuid_nospawn tuid_session tuid_pre tuid_basename tuid_probemeta tuid_tworoles rerun_join rerun_other rerun_same rerun_role xdir probe_disagree probe_absent rerun_residual hdr draft dry dry_barrier tree tuid_call rerun_bind fence_prose fence_unclosed fence_tilde fence_four fence_sameset fence_nested fence_nested_set hdr_comment sum_divergent"
 
