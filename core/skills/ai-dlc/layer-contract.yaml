@@ -1309,7 +1309,8 @@ clauses:
     level: ERROR
     since: 7
     normative: >-
-      Every row of a clause at `level: ADJUDICATED` has a verdict recorded in
+      Every row of a clause at `level: ADJUDICATED` has a verdict recorded, carrying `read`
+      evidence found in the entry's body and in that clause's core text, in
       `_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl` under the subject digest
       that row fired on. Unrecorded blocks `apply`. The record is keyed by the SUBJECT STATE, so
       a later pull that moves either the entry or the core text it hooks re-fires the duty

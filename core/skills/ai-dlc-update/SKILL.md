@@ -1062,7 +1062,10 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      the judgement and write it down, not to widen anything. Step 7 has the record shape.
      The row carries the `clause` id as well as the `subject_digest`, and BOTH are copied
      from it rather than derived — a wrong clause is well-formed, passes the schema, and
-     lands in an append-only register.
+     lands in an append-only register. A record clears only when it also carries
+     `read.entry_line` and `read.core_line` and both are found; one that does not is named in
+     the row as `[no read evidence]`, `[read.entry_line not in the entry]` or
+     `[read.core_line not in the <clause> core text]`.
    - `HARD-REGISTER-CONTRADICTION` [LC-A2] → that register states two different verdicts under one
      key and the later record declares no `supersedes` plus `reason`. **Blocks `apply`**,
      because a lookup would otherwise answer with whichever record was read last.
@@ -2034,7 +2037,12 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    adjudication*.** `apply.sh` emits one per `EXTENSION-HOOK-DRIFT`: the core file the extension
    hooks changed, and an extension has no section anchor, so nothing can locate what to
    re-merge. Read the entry against the new core text and record a verdict per entry —
-   **still-additive**, **contradicts-core**, or **retire**.
+   **still-additive**, **contradicts-core**, or **retire** — with the evidence of that read:
+   `read.entry_line` and `read.core_line`, each ONE line copied verbatim from what you read (the
+   entry's body, never its frontmatter, and the core text the blocking row names for its clause), at
+   least 20 characters with at least 10 letters or digits, and not
+   a heading. A verdict without them does not clear the row. A grep with no hit gives you nothing
+   to quote, which is the point: the row never prints a line that would pass.
 
    **ORDER: make every edit this pull prescribes for the entry FIRST, then read the digest from a
    fresh run, then record.** Recording before an edit to the same entry spends the record you just
@@ -2052,8 +2060,16 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    value to reuse:
 
    ```json
-   {"clause":"LC-E4","entry":".claude/skills/ai-dlc/extensions/checks/gate-validation-domain.md","subject_digest":"<copied from the row>","verdict":"still-additive","recorded_utc":"2026-07-29T10:00:00Z","reason":"core's change was to the gate-type enum; this entry adds a check row and does not restate it"}
+   {"clause":"LC-E4","entry":".claude/skills/ai-dlc/extensions/checks/gate-validation-domain.md","subject_digest":"<copied from the row>","verdict":"still-additive","recorded_utc":"2026-07-29T10:00:00Z","reason":"core's change was to the gate-type enum; this entry adds a check row and does not restate it","read":{"entry_line":"<one line of the entry, verbatim>","core_line":"<one line of the core text the row names, verbatim>"}}
    ```
+
+   **Where `core_line` comes from depends on the clause**, and the blocking row says which:
+   LC-E4 / LC-E6, an added or removed line of the range diff of the hooked file (marker
+   stripped); LC-E14, a line of the declared `extends:` span at base or theirs; LC-O15, a line of
+   the shadowed section at the entry's `base_sha` or at theirs; LC-E19, a line of the matched core
+   section at theirs. A record that exists and does not clear says so in the row and in
+   `--list-adjudications` (`recorded, not clearing: <which half>`): append a NEW record with
+   `read`, never edit the old one.
 
    **If the verdict leaves work OWED, declare it — do not write it into `reason`.** A
    `still-additive` that is only true because somebody intends to fix something has recorded a
@@ -2066,7 +2082,7 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    tracking that debt."*
 
    ```json
-   {"clause":"LC-E4","entry":"…","subject_digest":"…","verdict":"still-additive","recorded_utc":"…","reason":"…","owed":{"id":"OWED-921-SPLIT","what":"split Check 921 into an overrides/ entry shadowing core Check 20","closes_when":"after this pull's apply"}}
+   {"clause":"LC-E4","entry":"…","subject_digest":"…","verdict":"still-additive","recorded_utc":"…","reason":"…","read":{"entry_line":"…","core_line":"…"},"owed":{"id":"OWED-921-SPLIT","what":"split Check 921 into an overrides/ entry shadowing core Check 20","closes_when":"after this pull's apply"}}
    ```
 
    **Run `scripts/ai-dlc/audit-layer-debt.sh` and put its OPEN, UNDECLARED and

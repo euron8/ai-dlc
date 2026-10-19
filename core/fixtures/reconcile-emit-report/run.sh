@@ -3287,8 +3287,38 @@ pcv_kedit() {
     pcv_x "$1" "$3 did not force a fresh render: [$(pcv_why)], opt-out exits $K_NC -- a recorded PASS answered for a tree it never rendered"
   fi
 }
+# pcv_read_ev <entry> -- the `read` object a register row on the current L world needs to clear that
+# entry's LC-E4 (EXTENSION-HOOK-DRIFT) row: since BL-620 layer-drift.sh's adj_records clears a verdict
+# only when read.entry_line is a line of the entry's BODY and read.core_line an added or removed line
+# of the range diff of the core file its hooks: names, each trimmed, at least 20 characters with 10
+# letters or digits, and not a heading. Both are the FIRST qualifying line of the world's own files,
+# never a literal, so the pair moves with the seed. The diff carries the engine's pinned options.
+# This is a second spelling of that rule, so it proves nothing alone: pcv_read_clears is its check.
+pcv_read_ev() {
+  local hk cpath q
+  q='{ l = $0; gsub(/\t/, " ", l); sub(/^[[:space:]]+/, "", l); sub(/[[:space:]]+$/, "", l)
+       a = l; n = gsub(/[A-Za-z0-9]/, "", a)
+       if (length(l) >= 20 && n >= 10 && l !~ /^#+ /) { print l; exit } }'
+  hk="$(awk 'NR==1 && $0=="---" { f=1; next } f && $0=="---" { exit } f && index($0, "hooks:")==1 { sub(/^hooks:[[:space:]]*/, ""); print; exit }' "$L_C/$1")"
+  [ -n "$hk" ] || return 1
+  case "$hk" in team-roles/*) cpath="core/$hk" ;; *) cpath="core/skills/ai-dlc/$hk" ;; esac
+  awk 'NR==1 && $0=="---" { fm=1; next } fm && $0=="---" { fm=0; next } !fm' "$L_C/$1" > "$PS_D/read-ev.body" || return 1
+  git -C "$L_D" -c diff.algorithm=myers diff --no-ext-diff --no-textconv --no-color -U0 "$L_B" "$L_T" -- "$cpath" > "$PS_D/read-ev.diff" 2>/dev/null || return 1
+  awk '/^@@/ { h = 1; next } /^diff --git / { h = 0; next } h && /^[-+]/ { print substr($0, 2) }' "$PS_D/read-ev.diff" > "$PS_D/read-ev.core" || return 1
+  awk "$q" "$PS_D/read-ev.body" > "$PS_D/read-ev.el" && awk "$q" "$PS_D/read-ev.core" > "$PS_D/read-ev.cl" || return 1
+  [ -s "$PS_D/read-ev.el" ] && [ -s "$PS_D/read-ev.cl" ] || return 1
+  jq -cn --rawfile e "$PS_D/read-ev.el" --rawfile c "$PS_D/read-ev.cl" '{entry_line: ($e | rtrimstr("\n")), core_line: ($c | rtrimstr("\n"))}'
+}
+# pcv_read_clears <out> -- 0 when layer-drift.sh exits 0 on the current L world and prints NO
+# HARD-LAYER-ADJUDICATION-MISSING row. Its control is the plain world's run, whose HARD row is where
+# the caller read the 40-hex digest: a row that fails to resolve then reads FIXTURE BROKEN, not a cache FAIL.
+pcv_read_clears() {
+  local rc=0
+  bash "$(dirname "$PS_E")/layer-drift.sh" "$L_D" "$L_B" "$L_T" "$L_C" > "$1" 2>/dev/null || rc=$?
+  [ "$rc" -eq 0 ] && ! grep -q '^HARD-LAYER-ADJUDICATION-MISSING' "$1"
+}
 pcv_kworld() {
-  local ext reg dig p ent=".claude/skills/ai-dlc/extensions/adjudicable.md"
+  local ext reg dig ev p ent=".claude/skills/ai-dlc/extensions/adjudicable.md"
   pcv_lat k || { for p in PC-V27 PC-V28 PC-V29 PC-V30 PC-V31; do pcv_x "$p" "FIXTURE BROKEN: layer-adjudication-tier/seed.sh did not build its world"; done; return 0; }
   ext="$L_C/.claude/skills/ai-dlc/extensions"
   # V30's subject: a consumer extension line equal to a rulebook line base..theirs DELETES, so
@@ -3368,8 +3398,17 @@ pcv_kworld() {
       ln -s "$PS_D/k31-outside-register.jsonl" "$reg"
       { git -C "$L_C" add -A && git -C "$L_C" -c user.email=f@f -c user.name=fixture commit -qm regsym; } >/dev/null 2>&1
       if pcv_krefuse PC-V31 k31 "a tracked register symlink to a file outside the consumer"; then
-        printf '{"clause":"LC-E4","entry":"%s","subject_digest":"%s","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"seeded"}\n' "$ent" "$dig" > "$PS_D/k31-outside-register.jsonl"
-        pcv_kedit PC-V31 k31 "a tracked register symlink whose outside target gains a resolving row"
+        if ! ev="$(pcv_read_ev "$ent")"; then
+          pcv_x PC-V31 "FIXTURE BROKEN: no read evidence could be derived from the world's entry body and LC-E4 range diff, so no row can resolve (needs jq >= 1.6 for --rawfile)"
+        else
+          jq -cn --arg e "$ent" --arg d "$dig" --argjson r "$ev" \
+            '{clause:"LC-E4",entry:$e,subject_digest:$d,verdict:"still-additive",recorded_utc:"2026-01-01T00:00:00Z",reason:"seeded",read:$r}' > "$PS_D/k31-outside-register.jsonl"
+          if ! pcv_read_clears "$PS_D/ld31r.out"; then
+            pcv_x PC-V31 "FIXTURE BROKEN: layer-drift.sh still prints HARD-LAYER-ADJUDICATION-MISSING (or did not exit 0) with the read-evidence row in the outside target (ld31r.out), where the plain world printed it (ld31.out, the digest's source) -- the row does not resolve, so a cached FAIL below would be the seed's"
+          else
+            pcv_kedit PC-V31 k31 "a tracked register symlink whose outside target gains a resolving row"
+          fi
+        fi
       fi
     fi
   fi
@@ -3646,15 +3685,25 @@ pcv_suite() {
         pcv_x PC-V10 "control: the adjudication world did not record [$v10r] and then hit [$v10c], so its resolution's miss would prove nothing"
       else
         cp "$L_REC" "$PS_D/rec10.keep"
-        printf '{"clause":"LC-E4","entry":".claude/skills/ai-dlc/extensions/adjudicable.md","subject_digest":"%s","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"seeded"}\n' "$L_DIG" >> "$L_REG"
-        pcv_run v10 "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"; v10="$(pcv_why)"; v10_ok=0
-        pcv_is_miss 3 && grep -qF 'cause: BLOCKERS-RESOLVED' "$PS_D/v10.err" && v10_ok=1
-        v10_rec=CHANGED; cmp -s "$L_REC" "$PS_D/rec10.keep" && v10_rec=unchanged
-        pcv_run v10b "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
-        if [ "$v10_ok" -eq 1 ] && [ "$v10_rec" = unchanged ] && pcv_is_miss 3; then
-          pcv_v PC-V10 "a register row resolving HARD-LAYER-ADJUDICATION-MISSING MISSES, exits 3 BLOCKERS-RESOLVED, leaves the record unchanged, and a second run exits 3 again"
+        L_ENT=".claude/skills/ai-dlc/extensions/adjudicable.md"
+        if ! L_EV="$(pcv_read_ev "$L_ENT")"; then
+          pcv_x PC-V10 "FIXTURE BROKEN: no read evidence could be derived from the world's entry body and LC-E4 range diff, so no row can resolve (needs jq >= 1.6 for --rawfile)"
         else
-          pcv_x PC-V10 "register-row resolution: first [$v10], record $v10_rec, second [$(pcv_why)] (want two fresh exit-3 renders and the record untouched)"
+          jq -cn --arg e "$L_ENT" --arg d "$L_DIG" --argjson r "$L_EV" \
+            '{clause:"LC-E4",entry:$e,subject_digest:$d,verdict:"still-additive",recorded_utc:"2026-01-01T00:00:00Z",reason:"seeded",read:$r}' >> "$L_REG"
+          if ! pcv_read_clears "$PS_D/ld10r.out"; then
+            pcv_x PC-V10 "FIXTURE BROKEN: layer-drift.sh still prints HARD-LAYER-ADJUDICATION-MISSING (or did not exit 0) with the read-evidence row appended (ld10r.out), where the plain world printed it (ld10.out, the digest's source) -- the row does not resolve, so a cached FAIL below would be the seed's"
+          else
+            pcv_run v10 "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"; v10="$(pcv_why)"; v10_ok=0
+            pcv_is_miss 3 && grep -qF 'cause: BLOCKERS-RESOLVED' "$PS_D/v10.err" && v10_ok=1
+            v10_rec=CHANGED; cmp -s "$L_REC" "$PS_D/rec10.keep" && v10_rec=unchanged
+            pcv_run v10b "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
+            if [ "$v10_ok" -eq 1 ] && [ "$v10_rec" = unchanged ] && pcv_is_miss 3; then
+              pcv_v PC-V10 "a register row resolving HARD-LAYER-ADJUDICATION-MISSING MISSES, exits 3 BLOCKERS-RESOLVED, leaves the record unchanged, and a second run exits 3 again"
+            else
+              pcv_x PC-V10 "register-row resolution: first [$v10], record $v10_rec, second [$(pcv_why)] (want two fresh exit-3 renders and the record untouched)"
+            fi
+          fi
         fi
       fi
     fi

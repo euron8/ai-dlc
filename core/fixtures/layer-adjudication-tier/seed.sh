@@ -171,6 +171,10 @@ reason: seeded entry whose hooked core file moves across the range
 ### 901. [ext:adjudicable] Consumer entry.
 
 Body.
+
+The consumer check this entry adds below its numbered heading.
+
+|----------|----------|
 EOF
 
 # The consumer is a GIT REPO, committed clean, because one arm's subject is whether an entry has
