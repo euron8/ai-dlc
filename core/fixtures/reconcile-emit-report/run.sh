@@ -3317,13 +3317,18 @@ pcv_kworld() {
     fi
   done
 
-  # V29: an untracked NESTED REPOSITORY under extensions/, whose files git lists nowhere.
+  # V29: an untracked NESTED REPOSITORY under extensions/, whose files git lists nowhere. Step one's
+  # repository holds only a README.txt: layer-drift.sh walks extensions/ with `find -name '*.md'`, so
+  # a .txt is a nested repo the render does not see, and the old key (a new `? …/vendored/` status
+  # line) would MISS and re-record it. Step two adds v.md, an extension whose hooks: names a step the
+  # dist lacks, which the walk renders as EXTENSION-HOOK-MISSING. The old key skipped the bytes under
+  # a `dir/` entry and its status line is unchanged, so it would HIT the stale record.
   if pcv_kctl PC-V29; then
     mkdir -p "$ext/vendored" && git -C "$ext/vendored" init -q
-    printf -- '---\nkind: check\nhooks: steps/other.md\nreason: v\n---\n\n### 905. [ext:v] V.\n\nBody.\n' > "$ext/vendored/v.md"
+    printf 'vendored payload\n' > "$ext/vendored/README.txt"
     if pcv_krefuse PC-V29 k29 "an untracked nested repository under extensions/"; then
-      printf -- '---\nkind: check\nhooks: steps/demo.md\nreason: v\n---\n\n### 905. [ext:v] V.\n\nBody.\n' > "$ext/vendored/v.md"
-      pcv_kedit PC-V29 k29 "a nested repository under extensions/ whose v.md hooks: line is rewritten"
+      printf -- '---\nkind: check\nhooks: steps/other.md\nreason: v\n---\n\n### 905. [ext:v] V.\n\nBody.\n' > "$ext/vendored/v.md"
+      pcv_kedit PC-V29 k29 "a nested repository under extensions/ that gains an extension v.md"
     fi
     mv "$ext/vendored" "$PS_D/k29-vendored-aside"
     pcv_kback

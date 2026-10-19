@@ -422,9 +422,11 @@ SHIMEOF
       *)    bad "MUTANT [BL-308 $1] failed [$got], expected exactly [$3] -- the cells are entangled" ;;
     esac
   }
-  _u_anchor='    git -C "$DIST" -c core.quotePath=false ls-files --with-tree="$THEIRS" -- "$glob" || pc_fail "ls-files $glob exited $?"'
+  _u_anchor='    git -C "$DIST" -c core.quotePath=false ls-files --with-tree="$THEIRS" -- "$glob" || pc_fail_listing "$glob" "$?"'
   # A consumer layout whose preclassify.sh predates the theirs-tree listing carries an older
   # spelling; the mutant below targets whichever one the subject carries.
+  grep -qxF "$_u_anchor" "$RECON/preclassify.sh" \
+    || _u_anchor='    git -C "$DIST" -c core.quotePath=false ls-files --with-tree="$THEIRS" -- "$glob" || pc_fail "ls-files $glob exited $?"'
   grep -qxF "$_u_anchor" "$RECON/preclassify.sh" \
     || _u_anchor='    git -C "$DIST" -c core.quotePath=false ls-files "$glob" || pc_fail "ls-files $glob exited $?"'
   grep -qxF "$_u_anchor" "$RECON/preclassify.sh" \
