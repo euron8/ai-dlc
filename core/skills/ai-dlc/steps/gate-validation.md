@@ -1069,7 +1069,9 @@ the snapshot's shape (referenced by the SKILL.md Handoff Protocol and by
 - **In-Flight Teammates** — one row per teammate the lead may still need
   to reach: `agent name | role | deliverable path | dispatched-at |
   status`, where `status` is `in-flight`, `delivered-reachable` or
-  `stopped`. A row is
+  `stopped`, and `dispatched-at` is the output of
+  `scripts/ai-dlc/wait-for-deliverable.sh --dispatch-ts <agentId>` (the
+  timestamp of the dispatch's spawn-ledger row), never a clock reading. A row is
   added at dispatch as `in-flight`; at join it becomes `delivered-reachable`
   if the teammate is still alive and may be messaged again, and is
   **DELETED** once it will not be (see `_gate-procedures.md` "Sub-step
