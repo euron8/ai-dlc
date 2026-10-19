@@ -576,7 +576,7 @@ Fixed here by prose: both region instructions tell the shard to delete each trai
 
 Residual: the root fix is one comment-strip in the merge's own reader, `merge-adversarial-shards.sh` ~:371-374, after which the two prose sentences are redundant.
 
-verify: manual
+verify: sh bash -c 'set -uo pipefail; NAME=adversarial-shard-merge; . core/fixtures/adversarial-shard-merge/lib.sh && p_hdr_comment "$MERGE"' >/dev/null 2>&1
 
 ## BL-673 — the rotator reads a LANDED line's sha with a greedy sed, so later prose saying "verified <word>" replaces the sha
 

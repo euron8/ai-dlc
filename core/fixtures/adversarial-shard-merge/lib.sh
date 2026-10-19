@@ -1277,5 +1277,37 @@ p_fence_nested_set() { # same_set: the owner cross-1 opens its ## Findings with 
   doc_refused_clean "a finding owned by cross-1" "$d"
 }
 
-P_ALL="b3 clean ceiling miss_ord miss_cross dup partition sha ms doc_b3 doc_axis doc_sha doc_path doc_serial files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit subj_b4 b4doc b4doc_nomf b4doc_other xfiles xdoc xelicit xmix xunknown xcomplete stem_series stem_control stem_near stem_files tuid_main tuid_norow tuid_nometa tuid_selfdiff tuid_role tuid_twowriters tuid_oneagent tuid_nospawn tuid_session tuid_pre tuid_basename tuid_probemeta tuid_tworoles rerun_join rerun_other rerun_same rerun_role xdir probe_disagree probe_absent rerun_residual hdr draft dry dry_barrier tree tuid_call rerun_bind fence_prose fence_unclosed fence_tilde fence_four fence_sameset fence_nested fence_nested_set"
+# ------------------------------------------------ BL-664: a trailing ` #` comment is stripped
+# The schema's parser.comments rule, as validate-provenance-block.sh spells it: whitespace, `#`, the
+# rest of the line. hc_comment <shard file> -- every provenance value of the shard gets a trailing
+# comment, the way a verbatim copy of the adversary template's region carries them. The file is
+# rewritten in place after shard() wrote it; the harness identity is keyed on dir and name, so the
+# write-ledger row still credits it.
+hc_comment() {
+  awk '/SKILL_INVOCATION_PROVENANCE v1/ { b = 1; print; next } /SKILL_INVOCATION_PROVENANCE_END/ { b = 0 }
+       b && /^[a-z_]+:/ { print $0 " # copied with the template comment"; next } { print }' "$1" > "$1.hc" && mv "$1.hc" "$1"
+}
+p_hdr_comment() { # (a) --check-header on a convergence shard whose every value carries a ` #` comment -> exit 0;
+                  # (b) the same on the elicitation axis; (c) a full merge with such a shard is byte-identical to
+                  # the files-mode golden (no comment reaches a merged value); (d) `findings_major: 2#x` -- no
+                  # whitespace before `#` -- is still refused as non-integer
+  local m="$1" d o c
+  d="$(b3_world)" || return 1; o="$(out_of "$d")"; c="$(dirname "$d")/hc"; mkdir -p "$c" || return 1
+  cp "$d/1.md" "$c/conv.md"; hc_comment "$c/conv.md"
+  grep -qx 'findings_major: 2 # copied with the template comment' "$c/conv.md" \
+    && grep -qx 'verdict: EXIT_CONDITION_MET # copied with the template comment' "$c/conv.md" || return 1
+  bash "$m" --check-header "$c/conv.md" --axis convergence > "$MO" 2>&1; RC=$?
+  [ "$RC" -eq 0 ] && [ ! -s "$MO" ] || return 1
+  sed 's/^skill: .*/skill: bmad-advanced-elicitation/;/^verdict:/d' "$d/1.md" > "$c/elic.md"; hc_comment "$c/elic.md"
+  grep -qx 'skill: bmad-advanced-elicitation # copied with the template comment' "$c/elic.md" || return 1
+  bash "$m" --check-header "$c/elic.md" --axis elicitation > "$MO" 2>&1; RC=$?
+  [ "$RC" -eq 0 ] && [ ! -s "$MO" ] || return 1
+  hc_comment "$d/1.md"; run_merge "$m" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && cmp -s "$o" "$SEED_DIR/seed.files-b3-merged.expected" || return 1
+  sed 's/^findings_major: .*/findings_major: 2#x/' "$c/conv.md" > "$c/tight.md"
+  bash "$m" --check-header "$c/tight.md" --axis convergence > "$MO" 2>&1; RC=$?
+  [ "$RC" -eq 1 ] && has "$MO" "does not declare integer findings_critical and findings_major"
+}
+
+P_ALL="b3 clean ceiling miss_ord miss_cross dup partition sha ms doc_b3 doc_axis doc_sha doc_path doc_serial files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit subj_b4 b4doc b4doc_nomf b4doc_other xfiles xdoc xelicit xmix xunknown xcomplete stem_series stem_control stem_near stem_files tuid_main tuid_norow tuid_nometa tuid_selfdiff tuid_role tuid_twowriters tuid_oneagent tuid_nospawn tuid_session tuid_pre tuid_basename tuid_probemeta tuid_tworoles rerun_join rerun_other rerun_same rerun_role xdir probe_disagree probe_absent rerun_residual hdr draft dry dry_barrier tree tuid_call rerun_bind fence_prose fence_unclosed fence_tilde fence_four fence_sameset fence_nested fence_nested_set hdr_comment"
 

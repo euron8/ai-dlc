@@ -285,6 +285,10 @@ p_fence_sameset "$MERGE" && ok "FG5: same_set -- a cross finding duplicating its
 p_fence_nested "$MERGE" && ok "FG6: a four-backtick fence holding a three-backtick block hides the finding before its own closer -> declared 0 MERGED major=4, declared 1 REFUSED on the count" || bad "FG6: (rc=$RC) $(cat "$MO")"
 p_fence_nested_set "$MERGE" && ok "FG7: same_set -- the owner's finding after a four-backtick fence holding a three-backtick block is read, so the duplicate is REFUSED" || bad "FG7: (rc=$RC) $(cat "$MO")"
 
+# ---- BL-664: a trailing ` #` comment is stripped from a provenance value (schema parser.comments)
+p_hdr_comment "$MERGE" && ok "HC1: every provenance value carrying a ' # ' comment passes --check-header on both axes, and merges byte-identical to the files-mode golden; 'findings_major: 2#x' (no whitespace) is still refused as non-integer" \
+  || bad "HC1: (rc=$RC) $(cat "$MO")"
+
 # CH1-CH8: --check-header on one file. The base is a real B3 shard, which passes; each cell varies ONE field.
 ch() { bash "$MERGE" --check-header "$1" --axis "$2" > "$MO" 2>&1; RC=$?; } # <shard file> <axis>
 chv() { sed "$2" "$1" > "$3"; } # <src> <sed script> <dst>
@@ -308,13 +312,15 @@ for cell in "CH3|s/^verdict: .*/verdict: PENDING-LEAD/|declares verdict 'PENDING
             "CH4|/^lead_role:/d|declares no lead_role" \
             "CH5|s/^lead_role: .*/lead_role: <the step file that invoked or dispatched the evaluation>/|an unfilled template placeholder" \
             "CH6|s/^verdict: .*/verdict: <EXIT_CONDITION_MET|EXIT_CONDITION_NOT_MET|DIVERGENT_HARD_BLOCK>/|declares verdict 'EXIT_CONDITION_MET_EXIT_CONDITION_NOT_MET_DIVERGENT_HARD_BLOCK'" \
-            "CH7|s/^verdict: .*/verdict: EXIT_CONDITION_MET # stamped by the adversary/|declares verdict 'EXIT_CONDITION_MET_STAMPED_BY_THE_ADVERSARY'"; do
+            "CH7|s/^verdict: .*/verdict:   # stamped by the adversary/|declares verdict '<none>'"; do
   id="${cell%%|*}"; rest="${cell#*|}"; tok="${rest##*|}"; scr="${rest%|*}"
   chv "$d/1.md" "$scr" "$c/$id.md"; ch "$c/$id.md" convergence
   [ "$RC" -eq 1 ] && has "$MO" "REFUSED: $c/$id.md" && has "$MO" "$tok" \
     && ok "$id: [$scr] -> --check-header exit 1, '$tok'" || bad "$id: [$scr] gave rc=$RC: $(cat "$MO")"
 done
-# CH7 pins the comment decision: a trailing ` #` comment is NOT stripped (the merge never stripped it).
+# CH7: a COMMENT-ONLY verdict. The trailing ` #` comment is stripped from the raw value before the
+# trim (BL-664), so nothing is left and the shard is refused as '<none>'; the commented VALUE that
+# passes is p_hdr_comment's (HC1 below).
 cp "$d/1.md" "$c/m.md"; printf '\nseat-complete: stories adversary 1 findings=3\n' >> "$c/m.md"; ch "$c/m.md" convergence
 [ "$RC" -eq 1 ] && has "$MO" "findings=3' but its ## Findings section heads 2 finding(s)" \
   && ok "CH8: a marker declaring findings=3 over 2 findings -> --check-header exit 1 with the merge's truncation refusal" \

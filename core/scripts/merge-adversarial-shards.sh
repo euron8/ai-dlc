@@ -251,11 +251,14 @@
 #   (they need the harness records), the same skill/mode/lead_role across shards, a unique id per
 #   shard, the mode-dependent artifact/artifact_sha checks (they need the map, the stories or the
 #   document), citations against the ordinal set, and the seat-complete set rule.
-#   COMMENTS ARE NOT STRIPPED. `provenance-block.json` `parser.comments` strips a trailing ` #`
-#   comment from a value; this merge never has, and still does not: `verdict: EXIT_CONDITION_MET # x`
-#   normalises to `EXIT_CONDITION_MET_X` and is refused, and `findings_major: 2 # x` is not an
-#   integer. Kept so that no input changes outcome here; a shard copying the adversary template's
-#   inline comments verbatim is refused by this merge while the schema reader accepts it.
+#   COMMENTS ARE STRIPPED, per `provenance-block.json` `parser.comments`, spelled as
+#   validate-provenance-block.sh spells it (`\s+#.*$`): parse_shard cuts `[ \t]+#.*$` from the RAW
+#   value, before the leading trim, so `findings_major: 2 # x` reads 2, `verdict: EXIT_CONDITION_MET # x`
+#   reads EXIT_CONDITION_MET, and `verdict:   # none` reads empty (refused as `<none>`). Whitespace
+#   before `#` is required: `findings_major: 1#x` is still not an integer and `artifact_sha: abc#def`
+#   is untouched. One site, so every header field goes through it. Downstream: a commented real
+#   `tool_use_id` is now compared with the derived id (as it should be), and the skill, mode,
+#   lead_role and resolves_divergence values the merge writes carry no comment.
 #
 # FINDING GRAMMAR (the partition this script checks; `adversary.md` cites it, not restates it)
 #   A finding is a `### ` heading carrying a severity word inside the shard `## Findings` section (up to the next
@@ -375,6 +378,7 @@ parse_shard() {
     inblk {
       if (match($0, /^[a-z_]+:/)) {
         k = substr($0, 1, RLENGTH - 1); v = substr($0, RLENGTH + 1)
+        sub(/[ \t]+#.*$/, "", v)
         sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v)
         if (!(k in seen)) { seen[k] = 1; printf "F %s %s\n", k, v }
       }
