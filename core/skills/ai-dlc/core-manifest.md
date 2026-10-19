@@ -233,6 +233,7 @@ core_manifest:
   - fixtures/escalation-citation/**
   - fixtures/extension-check-adoption/**
   - fixtures/escalation-status-vocabulary/**
+  - fixtures/enforcement-map-yaml-plain/**
   - fixtures/process-rule-pins/**
   - fixtures/gate-adjudication/**
   - fixtures/gate-adjudication-rotate/**

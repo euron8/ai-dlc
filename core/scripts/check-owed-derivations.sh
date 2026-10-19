@@ -16,7 +16,14 @@
 #   INFO past-sprint <key> <detail>
 #       a row whose file is in a sprint that has since finished. Unrepaired debt that is no longer
 #       enforced. It is NOT closed, and it never counts toward exit 1.
-# Exit:   0 no open row, or no record at all (silent)
+#   UNMEASURED: no owed-derivations record at <rel path>; ...
+#   UNMEASURED: owed-derivations record at <rel path> is present with 0 OWED rows; ...
+#       the two cases in which no OPEN line is NOT a measurement of nothing owed: no record exists, or
+#       the record holds no OWED row (it is empty, or carries only REPOINTED rows). Neither is a failure
+#       and neither changes the exit, so a tree with no reconcile yet is never wedged at its gate. The
+#       two texts differ, so the reader can tell "never recorded" from "recorded, nothing owed".
+# Exit:   0 no open row. Prints an UNMEASURED line when there was no record or it held no OWED row;
+#           a record with OWED rows none of which is OPEN exits 0 silently
 #         1 one or more OPEN rows
 #         2 the record is unreadable or malformed, or the current sprint cannot be resolved. A
 #           REFUSAL, distinct from an absent record: an absent record owes nothing, an unreadable one
@@ -288,9 +295,16 @@ fi
 
 REC="${1:-$ROOT/_bmad-output/ai-dlc-update/owed-derivations.tsv}"
 
-# ---- the record: absent is silent 0, unreadable or malformed is 2 --------------------------
-# `-e` false is the ONLY absence. Anything that exists and cannot be read in full is a refusal.
-[ -e "$REC" ] || [ -L "$REC" ] || exit 0
+# ---- the record: absent is a visible UNMEASURED 0, unreadable or malformed is 2 -------------
+# `-e` false is the ONLY absence. Anything that exists and cannot be read in full is a refusal. An absent
+# record still exits 0 (a tree with no reconcile yet must not be wedged at its gate), but it no longer
+# exits SILENTLY: silence is what a clean record produces too, so Check 37 could not tell "nothing owed"
+# from "nothing ever measured".
+case "$REC" in "$ROOT"/*) REC_REL="${REC#"$ROOT"/}" ;; *) REC_REL="$REC" ;; esac
+if [ ! -e "$REC" ] && [ ! -L "$REC" ]; then
+  printf 'UNMEASURED: no owed-derivations record at %s; no reconcile has recorded what it owes, so no OPEN line is not a measurement of nothing owed.\n' "$REC_REL"
+  exit 0
+fi
 [ -f "$REC" ] && [ -r "$REC" ] \
   || { echo "REFUSED: the owed-derivations record $REC exists and cannot be read as a file, so what it owes is unknown." >&2; exit 2; }
 
@@ -336,8 +350,12 @@ if [ "$arc" -ne 0 ]; then
   exit 2
 fi
 
-# Nothing owed: no scope to resolve and no validator to run.
-[ -s "$TMP/rows" ] || exit 0
+# No OWED row (an empty record, or one holding only REPOINTED rows): no scope to resolve and no validator
+# to run, and no OPEN line below could ever appear, so say that the record measured nothing.
+if [ ! -s "$TMP/rows" ]; then
+  printf 'UNMEASURED: owed-derivations record at %s is present with 0 OWED rows; nothing was recorded as owed, so no OPEN line is not a measurement that a derivation was re-run and reproduced.\n' "$REC_REL"
+  exit 0
+fi
 resolve_sprint
 compute_live_stem
 

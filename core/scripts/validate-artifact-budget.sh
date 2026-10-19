@@ -1209,8 +1209,26 @@ check_malformed_stamps() { # check_malformed_stamps <file> <rel>
 # OR `name` equals the leading word of the row role cell, lowercased (`pm-escalated` is
 # `name` on a `role: pm` row; `dev (sonnet)` is `dev`). Let B be the nearest same-role
 # dispatch at or before stamp+T and A the nearest after it. FIRE when A exists and is
-# nearer than B: the stamp sits before the dispatch it most plausibly records. A row stamped
-# LATE (after its dispatch) stays quiet; this arm is about back-dating only.
+# nearer than B: the stamp sits before the dispatch it most plausibly records.
+#
+# A row stamped LATE (after its dispatch) stays quiet. MEASURED, not chosen. On the reference
+# consumer's 553 committed snapshot revisions, each judged by this loop against the HEAD
+# ledger truncated to rows whose `ts` is at or before that revision's commit time (the ledger
+# is committed 65 times against 553, so the ledger committed in the same revision is usually
+# days stale), LATE (`t - B` over a tolerance) fires on these distinct rows, all statuses /
+# in-flight only: 26/19 at 60 s, 24/17 at 120 s, 17/10 at 300 s and 12/6 at 600 s. The six
+# above 600 s are one burst: six retro seats dispatched 19:33-19:34Z and stamped 20:10Z/20:25Z
+# (2176-3017 s). The 71-591 s band is thirteen exact-name joins, and honest exact-name rows in
+# the same corpus read up to 57 s late with seconds in the stamp, so no line separates the
+# two. Any tolerance is therefore tuned to the corpus, and no LATE arm ships. A binary
+# predicate ("after its OWN dispatch") needs a per-row join key that the role rule lacks. The
+# ledger carries `tool_use_id` and the In-Flight row carries the agent id, which the ledger
+# never records (0 of 4 sampled agent ids; control: a known tool_use_id, 1). An exact-NAME
+# join is no binary substitute: restricted to names with exactly one ledger row, 36 in-flight
+# rows join, 19 sit more than 5 s after their own dispatch, and +7, +21, +28, +45 and +57 s
+# among them are ordinary stamping, so a "later than its own dispatch" arm fires on honest rows. The row that
+# motivated the question (57 s late, status `stopped`) is inside that honest spread and outside
+# the in-flight scope either way.
 #
 # A ROW WHOSE AGENT CELL IS A LEDGER `name` JOINS ON THAT NAME ONLY. The nearest-dispatch rule
 # alone reads an honest LATE row as back-dated when the NEXT same-role dispatch lands closer

@@ -20,6 +20,138 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.863.0] - 2026-10-18
+
+Batch 236 (the VALIDATORS cluster, owned by ai-dlc-77 [ab5b1f]). Closes BL-636, BL-637, BL-651, BL-608, BL-634,
+BL-652, BL-643 and BL-667. Files BL-667 and BL-668. BL-605 is recorded PARTIAL with its measurement. BL-652 is the entry
+split from the Check 37 instance graph watch ai-dlc-f7 recorded under BL-587; BL-587 stays open. Closes no `PC-` id. Net for this release: 8 closed,
+2 filed.
+
+Arm C of `validate-release-version.sh` sees five headings added by this range: this release's own and the four
+historical headings BL-667 restores (0.200.0, 0.768.0, 0.769.0 and 0.770.0). Arm C exempts a restored historical
+heading, so only this release's heading is counted.
+
+### A release can no longer drop the previous heading, and a restore is not a second release (BL-636, BL-637)
+
+- Arm C now fails a range whose tip lacks a release heading present at its base, naming the removed heading. A
+  one-for-one in-place replacement (0.806.0 turning `## [0.805.0]` into `## [0.806.0]`) used to net to one added
+  heading and pass.
+- When two or more headings are added, a heading at or below the base's top heading is set aside iff `git log -1 -S`,
+  searched from the range base and never the tip, finds it in the base's history. Set-aside headings are named on a
+  NOTE line and are not counted. A normal one-release push pays no `-S` call. The semver compare carries a two-way
+  self-probe before the corpus.
+- The `release-version-triple` fixture drives arms R1 (an in-place replacement fails, naming the removed heading),
+  R2 (a normal insertion passes), R3 (a restore plus one new release passes and is NOTEd), R4 (two genuinely new
+  headings above the base top still fail) and R5 (a below-top heading the base's history never carried counts as
+  new), with an unmutated control and four anchor-counted mutants (no-removal, exempt-all, exempt-none,
+  search-tip). W1's `commit()` now prepends, because its single-heading rewrite was itself the in-place shape.
+- The header's census is corrected: of the 5 commits that removed a heading, 4 were never restored; the fifth,
+  `581ca289`'s 0.805.0, was restored by `ed0fa33d`.
+- Receipt: `core/fixtures/release-version-triple/receipt-bl636.sh`.
+
+### Four lost CHANGELOG headings are restored (BL-667)
+
+- `## [0.768.0]`, `## [0.769.0]`, `## [0.770.0]` and `## [0.200.0]` are back, byte-identical to the lines that
+  `60f776c2`, `fc957e40`, `f2e0403f` and `0cc40283` rewrote in place. Each sits directly above its own surviving
+  body. The change is 4 insertions and 0 deletions.
+
+### I84's sprint-slot check reads non-comment lines only (BL-651)
+
+- I84's no-substitution arm narrowed which files READ `stories_dir` to non-comment lines, then looked for the slot
+  with a whole-file grep, so a comment spelling `{sprint}` satisfied it. `i84_names_slot` applies the same narrowing
+  in one awk `index()` pass: a whole-comment line no longer satisfies it, and a trailing comment on a code line still
+  does.
+- Two probe seeds are scored before the corpus (slot in a comment, slot in code), and `enforcement-map-derivations`
+  gains arms A17b and A17c (A17c is the whole-file-grep mutant). The owner's slot measured fork-profile TOTAL
+  unchanged at 3461 on both sides over 5 interleaved reps with spread 0, and the I84 row at 329 on both sides. The
+  consolidation also reads every reader in one awk instead of one per reader, which is -3 forks (commit c295c4a0:
+  I84 328 in a clean detached worktree), and that offsets the +3 BL-643 added (see BL-608 below).
+- Receipt: `core/fixtures/enforcement-map-derivations/receipt-bl651.sh`. It archives only what I84 reads: 1768
+  files / 38,034,467 bytes -> 161 / 7,809,429 (git ls-tree -l). No re-trace is owed, because the read set only
+  shrank.
+
+### The fork budget fails while margin remains (BL-608)
+
+- Arm A3b of `validator-fork-budget` fails with `RED headroom` when the reading + 2 > FORK_BUDGET, between A3 and
+  A4. Mutant m15 drives `judge` at the budget minus the margin plus one, and asserts that the margin stays under 30%
+  of the budget, so A3b cannot meet A4's window.
+- The margin of 2 is policy headroom over a deterministic count, not a noise allowance: fork-profile TOTAL read 3461
+  in 5 of 5 interleaved reps with spread 0, at FORK_BUDGET 3465.
+- The false-positive replay covers 65 states (every paragraph that sets or re-confirms the budget across the
+  validator's history plus `fork-budget.txt`, checked 65 of 65 against an independent grep of the openers). A3b fires
+  on 2, both zero-headroom budgets: v0.436.0 (7195 on 7195) and v0.442.0 (7196 on 7196). Eight committed
+  FORK_BUDGET values have no paragraph and no reading, so they are named with their commits as OUTSIDE the population.
+  A first replay over a 25-paragraph window, with its control from the same window, is superseded.
+- A3b fired on this release's own tip. Before the BL-651 consolidation the branch tip 1b054245 (measure-wt, porcelain
+  0, 315 fixture dirs) read fork-profile TOTAL 3465 against FORK_BUDGET 3465, so A3b read "measured 3465 fork(s) of
+  FORK_BUDGET=3465 leaves 0, under the margin of 2". Main 0e382fc5 (clean detached worktree) reads 3462. `--section
+  by-arm` against main moved two arms: I106 43 -> 45 (+2) and I8 120 -> 121 (+1); I84 was unchanged. Both come from
+  BL-643's `pregate-self-check` fixture. Its `run.sh` is the only file added to I106's candidate set (14 files at
+  main, 15 at the tip), and I106's ship-set loop forks `dirname` twice per candidate before it skips a `.dist-only`
+  one. The fixture's `.dist-only` marker is the I8 fork. The I84 one-awk consolidation (commit c295c4a0, -3) offsets
+  it: at c295c4a0 (clean detached worktree) TOTAL reads 3462 (I84 328, I8 121, I106 45), equal to main. FORK_BUDGET
+  and the margin are unchanged. One reading per tree, counts only. BL-696 files the I106 loop.
+- Receipt: `core/fixtures/validator-fork-budget/receipt-bl608.sh`.
+
+### enforcement-map.yaml loads as YAML again (BL-634)
+
+- Seven multi-line plain scalars carrying a mapping indicator are double-quoted in place, so `yaml.safe_load` and
+  Ruby Psych both load the map (both were build-time oracles, run once; the shipped check assumes no PyYAML). Every
+  line reader of the map gives identical output on the old and new map.
+- The shipping fixture `enforcement-map-yaml-plain` keeps it so: pure awk, it flags a plain value whose key or
+  continuation line carries `: ` or a line-final `:`, tracks block scalars (the narrowing that removed the one false
+  positive, a `why: >-` body), self-probes three offenders and seven near-misses, and fails on the base map with 7
+  FAIL lines. It is DECL-KEYED on its `inputs.decl` and ships via `scripts/uninstall.sh` and both manifests.
+- Receipt: `core/fixtures/enforcement-map-yaml-plain/receipt-bl634.sh`.
+
+### Check 37 tells "nothing owed" from "nothing measured" (BL-652)
+
+- `check-owed-derivations.sh` prints `UNMEASURED: no owed-derivations record at <path> …` for an absent record and
+  a distinct `UNMEASURED: … present with 0 OWED rows …` for an empty or OWED-less one. Both still exit 0, because
+  the original pin was exit-code-only silence kept so that a never-reconciled tree is not wedged at its gate. A
+  record with OWED rows and none OPEN stays silent (the control).
+- Fixtures: B4b is inverted to assert the UNMEASURED line and B4k covers the empty record.
+  B4m's seed is renamed without "owed" so arm Wa does not count it.
+- B4n compares a per-call listing of the work tree instead of a git status the hermetic sandbox cannot run (it
+  could never fire).
+- The `owed-derivations-mutants` battery these arms were scored against was retired in 0.842.0 (BL-583 phase 2); this release ships no mutant changes, and the arms stay in `owed-derivations`.
+- `steps/route.md`, `steps/gate-validation.md` and `steps/retro.md` name the line; retro.md says an UNMEASURED line
+  is not carried and is not debt. The fix writes no record row and edits no consumer file.
+- BL-668 is filed: no shipped program creates the record, so absent is every clean consumer's normal state.
+- Receipt: `core/fixtures/owed-derivations/receipt-bl652.sh`.
+
+### The pregate self-check runs the hook's own above-pool steps (BL-643)
+
+- `scripts/pregate-self-check.sh` cuts `.githooks/pre-push` up to its single `step "fixture suite` line, appends
+  `exit $fail` and runs it, so its step list is the hook's by construction. Guards refuse with exit 2: the marker
+  occurs exactly once, the prefix passes `bash -n`, at least one step is declared, and the verdicts printed equal
+  the steps declared. One rep at load 2-3.6: hook prefix 20 steps in 66 s, against the old hand list's 2 steps in
+  34 s.
+- The self-check's own fix was found to fail clean (exit 0, no step run) on a NUL-bearing hook, found by the awkcut
+  discriminating-seed hunt. It is repaired so that an exit trap refuses any death before the verdict (not a new
+  equality), plus a NUL guard that refuses a hook carrying any NUL byte with exit 2 before either grep runs. There is
+  no number guard on the cut: it is unreachable once NUL is refused, and the trap covers any death.
+- awkcut is an equivalent mutant on every hook the self-check accepts (precondition: NUL hooks refused, cut >= 2).
+- The new `.dist-only` fixture `pregate-self-check` drives the receipt through synthetic hooks (worlds A, B, C, D and
+  the noparse, nostep and noverdict refusals) and mutants m1 and m2. Its assertion count: count corrected 7 -> 5
+  (authoring miscount, enumerated); it is now 10 after world D and m2 were added.
+- pregate-self-check names its REQUIRED procsub inputs as consumed, and its post-a1 sentinels key on the receipt's
+  summary line, not on an exit code.
+- Receipt: `core/fixtures/pregate-self-check/receipt-bl643.sh`.
+
+### Receipts clean up after themselves
+
+- The six new receipts (bl636, bl651, bl608, bl634, bl652, bl643) remove their own mktemp root through a guarded
+  EXIT trap.
+
+### BL-605 is PARTIAL: measured, and no LATE arm ships
+
+- `check_backdated_dispatch`'s "a LATE row stays quiet" sentence is now a measurement in its header: 553 graph
+  snapshot revisions judged by the arm's own join loop against the HEAD spawn ledger truncated to each revision's
+  commit time. LATE fires at every tolerance, the 71-591 s band is exact-name joins that cannot be told from honest
+  stamping, and no per-row join key exists for a binary predicate. Per lead ai-dlc-c8's ruling no arm ships; the
+  row-side defect stays open.
+
 ## [0.862.0] - 2026-10-18
 
 Batch 236, TRAIN A (integrator ai-dlc-ae). Six candidates in one release: PORTABILITY (owner ae), GUARDORDER (owner ae), DIAG (owner cb), a partial BL-553 (owner 48), BL-703 (owner cb) and SHARDS (owner 18), plus one subtraction commit of MUTANTS residue. Closes BL-647, BL-689, BL-698, BL-655, BL-662, BL-664, BL-669, BL-670 and BL-703. Advances BL-616 item 8 and BL-553, which stay open. Files BL-689, BL-698, BL-700 and BL-703. Closes no `PC-` id. Net for this release: 9 closed, 4 filed, so +5.
@@ -3969,6 +4101,7 @@ Batch 221 (graph-ledger-full-drain), third release. Thirty-three `inputs.decl` f
 - BL-465 and BL-496 annotated LANDED and rotated. BL-497 filed: nothing joins a fixture's declaration against its
   read-set trace, and that join, run once, finds 110 of 182 traced declared fixtures reading an undeclared tracked file.
 
+## [0.770.0] - 2026-10-10
 Batch 221 (graph-ledger-full-drain), second release. `hermetic-run.sh` nested a fixture's own directory inside
 itself whenever a declaration had already copied part of it in, on this tree AND on consumers; and
 `validator-fork-budget` is declared.
@@ -4009,6 +4142,7 @@ itself whenever a declaration had already copied part of it in, on this tree AND
   fixed runner it reads 3323, arm for arm equal to the worktree, under `FORK_BUDGET=3335`.
 - BL-481 stays open: `self-update-join-gate` is still reported UNMAPPED beside `hermetic-runner`.
 
+## [0.769.0] - 2026-10-10
 Batch 221 (graph-ledger-full-drain), first release. Since 0.763.0 the reference consumer's pre-push refused every
 push on two shipped fixtures that pass when run directly, and the consumer has pushed with `--no-verify` since.
 
@@ -4040,6 +4174,7 @@ push on two shipped fixtures that pass when run directly, and the consumer has p
 BL-465 is adjudicated CLOSE this batch (a width-6 push compared its pole against its own width's three rows) and is
 annotated at the batch close.
 
+## [0.768.0] - 2026-10-10
 Batch 220 (graph-ledger-full-drain), second release. The detached post-green read-set trace had no lifetime bound:
 on the reference consumer one survived its push by 42 minutes with parent init, holding `diagnosticd` and
 `fseventsd` busy until the operator killed its process group. And two of the fixtures that ran unmapped on every
@@ -40275,6 +40410,7 @@ whole history and cannot land. Core exempts it and says so.
   against. The explicit no-refs branch is what surfaced it; a silent pass there would
   have shipped a check that cannot fire. That branch is now asserted on its wording.
 
+## [0.200.0] — 2026-07-28
 ### Added — core demanded a mutation-RED capture in four rule files and shipped no way to take one
 
 `scripts/ai-dlc/validate-mutation-red.sh <target-file> <line-number> <replacement-line>

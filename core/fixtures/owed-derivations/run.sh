@@ -174,27 +174,66 @@ rd "$R" "$WORK/b3.tsv"
 rc_is "B3a prd.md and party-mode rows both OPEN" 0 "$([ "$(open_keys)" = "$K_PRD,$K_PM" ] && echo 0 || echo 1)"
 
 # ---- B4: absent, unreadable, malformed ------------------------------------------------------------
-rd "$R" "$WORK/no-such-record.tsv"
+# SCOPE PROBE (B4n): the B4 arms only read. Every B4 reader call goes through b4_rd, which lists $WORK
+# (every path, plus the byte size of every regular file, sorted) immediately before and after that ONE
+# call. Only the reader runs between the two listings, so the fixture's own seeding (empty.tsv,
+# repointed-only.tsv, closed-row.tsv, dir.tsv, dangling.tsv, mal1.tsv, mal2.tsv, each written BEFORE its
+# call) is in both and cancels. rd.out and rd.err are pruned: rd's own redirects rewrite them on every
+# call, so they are the harness's writes, not the reader's. The reader's scratch goes to ${TMPDIR:-/tmp}
+# via mktemp, a sibling of $WORK and never under it. A name, a type or a size the reader changes anywhere
+# under $WORK (the record's directory, or a root it judges) is recorded in B4_WROTE.
+b4_tree() {
+  { find "$WORK" \( -path "$WORK/rd.out" -o -path "$WORK/rd.err" \) -prune -o -print
+    find "$WORK" \( -path "$WORK/rd.out" -o -path "$WORK/rd.err" \) -prune -o -type f -exec wc -c {} +
+  } 2>/dev/null | LC_ALL=C sort
+}
+B4_WROTE=""
+b4_rd() { # <root> <record> -> rd, then notes the record if the listing of $WORK moved across the call
+  local t0; t0="$(b4_tree)"
+  rd "$1" "$2"
+  [ "$(b4_tree)" = "$t0" ] || B4_WROTE="$B4_WROTE ${2##*/}"
+}
+b4_rd "$R" "$WORK/no-such-record.tsv"
 rc_is "B4a no record -> exit 0" 0 "$RC"
-rc_is "B4b and it is silent on both streams" 0 "$(printf '%s%s' "$OUT" "$ERR" | wc -c | tr -d ' ')"
+ck "B4b and it says UNMEASURED on stdout, naming the absence" "UNMEASURED: no owed-derivations record at $WORK/no-such-record.tsv" "$OUT"
+B4_ABSENT_OUT="$OUT"
 : > "$WORK/empty.tsv"
-rd "$R" "$WORK/empty.tsv"
+b4_rd "$R" "$WORK/empty.tsv"
 rc_is "B4c control: an EMPTY record exists, owes nothing -> exit 0" 0 "$RC"
+ck "B4k and it says UNMEASURED with 0 OWED rows, a text the absent record does not print" "is present with 0 OWED rows" "$OUT"
+nk "B4k2 and it is not the absent text" "no owed-derivations record at" "$OUT"
+nk "B4k3 and the absent record's text is not the empty text" "present with 0 OWED rows" "$B4_ABSENT_OUT"
+printf 'REPOINTED\t%s\t%s\t$ %s\n' "$K_PRD" "$K_STORY" "$CMD" > "$WORK/repointed-only.tsv"
+b4_rd "$R" "$WORK/repointed-only.tsv"
+rc_is "B4l a record holding only a REPOINTED row -> exit 0" 0 "$RC"
+ck "B4l2 and it says 0 OWED rows" "is present with 0 OWED rows" "$OUT"
+# Named without "owed": arm Wa counts every depth-1 *owed* name under $WORK and requires none.
+row "$K_PRD" "$CMD" > "$WORK/closed-row.tsv"
+b4_rd "$R2" "$WORK/closed-row.tsv"
+rc_is "B4m control: an OWED row whose derivation reproduces -> exit 0" 0 "$RC"
+# An arm asserting EMPTY output fails on any change that makes the subject print anything on its seed,
+# so such an arm must stay specific to this seed: a scope or verdict change that reaches the seed
+# is meant to turn it red.
+rc_is "B4m2 and it prints nothing, so no UNMEASURED line (the record WAS measured)" 0 "$(printf '%s%s' "$OUT" "$ERR" | wc -c | tr -d ' ')"
 mkdir "$WORK/dir.tsv"
-rd "$R" "$WORK/dir.tsv"
+b4_rd "$R" "$WORK/dir.tsv"
 rc_is "B4d a record that exists as a DIRECTORY (unreadable as a file) -> exit 2" 2 "$RC"
 rc_is "B4e the exit is 2 AND the refusal names the record as unreadable" 0 "$([ "$RC" = 2 ] && grep -qF 'cannot be read' <<<"$ERR" && echo 0 || echo 1)"
 ln -s "$WORK/no-such-target.tsv" "$WORK/dangling.tsv"
-rd "$R" "$WORK/dangling.tsv"
+b4_rd "$R" "$WORK/dangling.tsv"
 rc_is "B4f a DANGLING symlink record (present, unreadable as a file, any uid) -> exit 2" 2 "$RC"
 printf 'not a record\n' > "$WORK/mal1.tsv"
-rd "$R" "$WORK/mal1.tsv"
+b4_rd "$R" "$WORK/mal1.tsv"
 rc_is "B4g a malformed row -> exit 2" 2 "$RC"
 ck "B4h and the refusal says malformed" "is malformed" "$ERR"
 { row "$K_PRD" "$CMD"; printf 'OWED\t%s\t%s\n' "$K_STORY" "$CMD"; } > "$WORK/mal2.tsv"
-rd "$R" "$WORK/mal2.tsv"
+b4_rd "$R" "$WORK/mal2.tsv"
 rc_is "B4i one malformed row among valid ones refuses the whole record -> exit 2" 2 "$RC"
 nk "B4j and no OPEN line is printed for the valid row beside it" "OPEN" "$OUT"
+# POSITIVE CONJUNCT: a listing that died (find erroring into 2>/dev/null) is empty on both sides and compares
+# equal, which is the defect this probe replaced. mal1.tsv must appear twice, once per find pass.
+B4_LIST="$(b4_tree)"
+rc_is "B4n scope probe: no B4 reader call changed the listing of \$WORK (wrote under:${B4_WROTE:- none}), the listing saw mal1.tsv in both passes, and the seeded empty record is still empty" 0 "$([ -z "$B4_WROTE" ] && [ "$(grep -cF "$WORK/mal1.tsv" <<<"$B4_LIST")" = 2 ] && [ ! -s "$WORK/empty.tsv" ] && echo 0 || echo 1)"
 
 # ---- B5: MOVED -- the recorded line no longer holds the recorded command -------------------------
 R3="$WORK/rd3"; mkroot "$R3"

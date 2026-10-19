@@ -170,13 +170,14 @@ Owed: the row is stamped from the ledger `ts`, or a write-time arm fires on a ro
 
 **Recurring (reported by ai-dlc-f7, read-only on graph; intake ai-dlc-40).** Graph's s319 lead on 0.818.0 (transcript `74de15ba`, line 965, 2026-10-17T14:36:04Z) had the `--dispatch` guard refuse its architect join: `FAIL: --since is 153 s after the earliest dispatch it joins (2026-10-17T14:35:27Z, tool_use_id toolu_01XfPWCXnLJSZTfkDZqv1SxE)`. The lead then corrected its In-Flight row's `dispatched-at`, which is this entry's row defect. The guard did its job and the lead recovered in one turn. The cost was one refused beat and one extra turn. Intake: the line reads as quoted. The transcript carries the `FAIL: --since is` text on 3 lines, and line 1364 is an attachment echoing line 965's text, so there are 2 distinct refusals. The other refusal (line 2816) has a different cause and is filed as BL-656. Control: a token absent from the transcript matched 0.
 
-verify: manual
+**PARTIAL (batch 236, lead ai-dlc-c8's ruling): measured, and no LATE arm ships.** Measured by ai-dlc-77 [ab5b1f], read-only on graph. Every committed revision of graph's `pipeline-snapshot.md` (553; control on an absent path: 0) was judged with `check_backdated_dispatch`'s own join loop against graph's HEAD spawn ledger, truncated to rows whose `ts` is at or before that revision's commit time. That gave 83 judgements over 39 revisions. The ledger committed in the same revision is usually days stale (65 ledger commits against 553), and pairing on it inflated lateness to as much as 923661 s. Controls in the same run: the 4 rows the BACKDATED arm reports on the revision-paired join are present in the input and still BACKDATED; every exact-name row joins by its own name (party-s301-pm, rem-s300-discovery-p1 and the rest, each printed with its B). LATE fires, `t - B > tol`, distinct rows, all statuses / in-flight only: 60 s 26/19, 90 s 25/18, 120 s 24/17, 180 s 20/13, 300 s 17/10, 600 s 12/6.
+- Above 600 s, the six in-flight fires are one burst: graph's s315 retro seats (architect, dev, sm, tea, qa, analyst), dispatched 19:33:02-19:34:43Z on 2026-09-30 and stamped 20:10:00Z / 20:25:00Z, 2176-3017 s late. Not verified against a transcript.
+- 71-591 s: thirteen exact-name joins. Honest exact-name rows with seconds in the stamp read up to 57 s late in the same corpus (`party-architect-s300-discovery` +57, `party-ux-s300-discovery` +45), so no line separates them.
+- The motivating row (`2026-10-16T05:01:00Z`, 57 s late, revision `3dd8a9fd45`) sits inside that honest spread and has status `stopped`, so no in-flight arm would judge it.
 
-## BL-608 — the validator fork budget's headroom eroded from +6 to 0 across five releases, and nothing warned
+Why no arm. Any tolerance is a number chosen after seeing the corpus, and checks here assert binary attributes. A BINARY predicate ("the row's stamp is after its OWN dispatch") needs a per-row join key. The In-Flight row carries the agent id, and the ledger carries `tool_use_id` and never the agent id: 0 of 4 sampled agent ids found in the HEAD ledger, against a control of 1 for a known `tool_use_id`. Role joins are not unique either: `pm` has 182 ledger rows, `architect` 311. The measurement now sits in the arm's header beside the LATE sentence.
 
-**DEFECT.** Filed by peer session ai-dlc-a6. `scripts/validate-enforcement-map.sh` FORK_BUDGET was set to 3363 in 0.786.0 as "HIGH reading 3357 plus the usual 6" (paragraph ~:825-831 then). Measured by the filer on 2026-10-16 with `fork-profile.sh --section by-arm --stable`, interleaved base/tip/base/tip in one detached worktree at one path, caller environment inherited: origin/main e3073787 (0.796.0) read 3362 and 3363 (STABLE 2, spread 3360-3362), equal to the budget — 0.792.0 through 0.796.0 spent the full +6 and no arm said so. `validator-fork-budget` fails only when the reading EXCEEDS the budget (its arm A3, "measured <= FORK_BUDGET"), so the window between "headroom gone" and "red" is invisible; at zero headroom the instrument's ±1-2 jitter makes any release adding one fork a ~1-in-4 red that reads as a flake. On 0.797.0 (+1 fork, I126 0 -> 1) the re-verify read 3362 with one rep at 3364 against 3363; 0.797.0 raised the budget to 3370 (+1 for its arm, +5 to restore headroom), which intake confirmed as `FORK_BUDGET=3370` at origin/main 3d5f1e70 (`:841`).
-
-Owed: a headroom arm in `validator-fork-budget` that FAILS when the STABLE reading + 2 > FORK_BUDGET, naming the remedy (re-measure and raise by the HIGH reading plus 6, per the file's own rule), so erosion reports while margin remains. It needs its own mutant (the arm with the +2 dropped must miss a seeded reading at budget - 1) and its FP set measured over the budget history in that file's paragraphs. Scope: a small later release.
+Open: the row-side defect (stamp the row from the ledger `ts`). Recommendation, not filed: if the In-Flight row recorded the dispatch's `tool_use_id`, a binary late arm (the stamp differs from its own ledger `ts`) would need no tolerance.
 
 verify: manual
 
@@ -302,18 +303,6 @@ Each fixed unit still owes its solo-against-pool receipt, with a load-free contr
 
 verify: manual
 
-## BL-634 — `enforcement-map.yaml` is not valid YAML: `yaml.safe_load` fails on an unquoted `: ` in a prose value
-
-**NOTE.** Reported by lead ai-dlc-9c; intake reproduced it at origin/main `21facb0f`. PyYAML 6.0.3 `yaml.safe_load` on `core/skills/ai-dlc/enforcement-map.yaml` (1425 lines) raises "mapping values are not allowed here" at line 129, column 66. The offending line is `posture: FAILS the gate (exit 0 required; exit 0 with `OK: EXAMINED NOTHING` — printed`, where the unquoted `: ` inside the prose value starts a second mapping. (9c's reading said line 128; PyYAML reports 129, and line 128 is `- site: gate-validation.md Check 2`.) Control in the same run: a small valid file parses.
-
-Nothing breaks today. No tracked file imports PyYAML (0 matches for `import yaml` in any form across the tree, which has 89 `.py` files; control: `import json` in 75 files and `import sys` in 33). The only two `yaml.safe_load` mentions are prose, in `CHANGELOG.md:33885` and `docs/reviews/`. The repo's readers parse the map with awk and grep (fixtures such as `enforcement-map-sites` and `enforcement-map-derivations`). But the file carries a `.yaml` name and ships: `scripts/install.sh` mentions it 4 times and `core-manifest.md` 6. So any standard YAML tool a consumer points at it fails.
-
-The same failure class was fixed once before for a different writer: 0.237.1's `yaml_scalar()` (`CHANGELOG.md:33885` onward) quotes any value carrying `: `, after a regex reader returned PASS over a file `yaml.safe_load` rejected.
-
-Owed: the map parses under a standard YAML loader (quote the offending values, or rename the file to stop claiming YAML), and a check that keeps it so. Measure the check's false-positive set before shipping it, and note that no PyYAML is assumed on a consumer box. Receipt: `yaml.safe_load` succeeds on the shipped map, and a seeded unquoted `: ` in a prose value makes the check fail.
-
-verify: manual
-
 ## BL-620 — the LC-A1 layer adjudication accepts a verdict with no evidence the entry was read, so nine re-reads were closed by one keyword grep
 
 **DEFECT** (doubtful, so DEFECT under the operator's standing rule). Filed by ai-dlc-68 (listed as ai-dlc-4e [e15800]); intake re-derived it read-only from graph's session `1b4ba596` and its register record. Graph's 0.803.0 → 0.805.0 pull (2:15-2:22 PM EDT) had 9 `HARD-LAYER-ADJUDICATION-MISSING` rows. Between 18:15Z and 18:21Z the session made **0 `Read` calls in total** (41 Bash calls), and its checks of the nine extensions were keyword greps. The last one, at 18:20:30Z, was `grep -n -i -E 'Rule ?(1|3|4|5|6|9)\b|pause point|phase transiti…'`. One `sed -n '535,550p'` read a single override span. At 18:20:45Z it asked the operator "Can I record 'still-additive' for all nine LC-E4 extension re-reads?", and the operator agreed. `_bmad-output/ai-dlc-update/blocker-adjudication-20261016T181629Z.md:13-25` records the nine rows (entry, core file, sha, verdict) and, under "Verification:", a `grep -n -i -E '\bRule [1569]\b|variant' <nine entries>`.
@@ -353,62 +342,13 @@ Correction to the reporter's reading: `apply.sh`'s exit-3 arm (`core/skills/ai-d
 
 verify: manual
 
-## BL-636 — a release's CHANGELOG insertion can REPLACE the previous release's heading, and no gate catches it
+## BL-668 — no shipped program creates the owed-derivations record, so "absent" is every clean consumer's normal state and BL-652's UNMEASURED line prints at every resume
 
-**DEFECT.** Measured by lead ai-dlc-71; intake re-derived it read-only. 0.806.0 (`581ca289`, now origin/main) replaced the line `## [0.805.0] - 2026-10-16` with `## [0.806.0] - 2026-10-16` instead of inserting above it. The `## [` heading count is 893 at both its parent `c07dc9d1` and `581ca289`, and the `[0.805.0]` heading count went from 1 to 0, so a count-based check sees no change. `scripts/validate-release-version.sh` passed: its arm B (`:515-520`) checks only that VERSION and the CHANGELOG's TOP heading name the same release (`:3`), and arm C (`:293`) counts headings added over a range, which a one-for-one replacement nets to one. The heading is restored by `ed0fa33d` ("docs: restore the [0.805.0] CHANGELOG heading that 0.806.0's entry dropped", 1 insertion, riding ai-dlc-08's docs push).
+**NOTE.** Raised by the batch-236 contract adversary, filed by ai-dlc-77 [ab5b1f]. `core/scripts/check-owed-derivations.sh` reads `_bmad-output/ai-dlc-update/owed-derivations.tsv`. Its only writer, `reconcile/derivation-differential.sh --record-owed`, APPENDS NEWLY-FAILING rows and creates the file only when it has a row to write. `core/skills/ai-dlc-update/SKILL.md:1797` describes the record in prose. So a consumer whose reconciles never left a derivation broken has no record at all. Once BL-652 ships, "absent" prints `UNMEASURED` on every resume (`steps/route.md:250`) and every planning gate (Check 37), and the line stops meaning anything because it is always there.
 
-Owed: `validate-release-version.sh` asserts that every release heading present at the merge base survives at the tip. Receipt: a seeded tip that replaces the previous heading fails the arm, and a normal insertion above it passes (control). The 0.806.0 shape (`c07dc9d1` → `581ca289`) is the discriminating input.
+Owed: a reconcile that runs the derivation differential writes the record even when it has nothing to record (a header-only or empty file), so "absent" means "no reconcile has ever measured this tree" and "present with 0 OWED rows" means "measured, nothing owed". Probe: a reconcile with zero NEWLY-FAILING rows leaves a record behind, and `check-owed-derivations.sh` then prints the empty-record line, not the absent one. Control: a tree never reconciled still prints the absent line.
 
-verify: manual
-
-## BL-637 — `validate-release-version.sh` arm C cannot tell a restored historical heading from a second release
-
-**NOTE.** Measured by lead ai-dlc-71. Arm C counts release headings added over a range (`scripts/validate-release-version.sh:293`, "this range adds N release headings to CHANGELOG.md"). ai-dlc-c8's 0.807.0, carrying `ed0fa33d`, failed with `this range adds 2 release headings to CHANGELOG.md: 0.805.0 0.807.0`: the restored `[0.805.0]` reads as a second new release. If BL-636 adds a "base headings survive" arm, arm C could exempt headings present before the range's own parent. The builder judges that.
-
-verify: manual
-
-## BL-643 — `pregate-self-check.sh` hand-copies 2 of the hook's 20 above-pool steps, so a clean self-check still goes red at the gate
-
-**DEFECT.** Measured by lead ai-dlc-71; intake re-derived the step lists at origin/main `9f8e7691`. `.githooks/pre-push` runs 20 `step` lines before `fixture suite`, among them provenance-block, enforcement-map integrity, the invariant, vocabulary, path-mapping and post-compact-digest renders, stray party-mode provenance, no dead doc refs, release version, plan shape, claude-rules joins, backlog depth, backlog receipts, shell portability, re-attach budget, rule-file audit, write-format steering, fixture git-env scrub, agent definitions and shell syntax. `scripts/pregate-self-check.sh` runs two of them (`validate-enforcement-map.sh` and `validate-shell-portability.sh`), plus the fork-budget fixture and the procsub spelling arm, which are both fixtures inside the pool. Its header (`:4-8`) frames the three classes it catches as the ones the hook "finds only after minutes", but the list is hand-written and nothing binds it to the hook.
-
-Measured instance: ai-dlc-c2's 0.808.0 had a self-check rc 0 at `0e413c8e`, then went red at the gate on "fixture git-env scrub" (`scripts/validate-fixture-git-env.sh`): `core/fixtures/self-update-reinvoke-liveness/run.sh` never sources `lib/preamble.sh` (0 mentions at `0e413c8e`). That step sits above the pool, so every fixture was SKIPPED-on-earlier-red and the gate cycle was spent.
-
-Owed: derive the self-check's step list from the hook's above-pool step list rather than a hand copy, either by having the hook export it (the hook already runs these as `step "<name>" <command>`) or by binding the two lists the way I66 binds the two pre-push hooks. Measure the added wall clock: several of these steps are cheap, and the self-check's purpose is seconds, not minutes. Receipt: a validator added to the hook's above-pool steps and absent from the self-check fails a check, and today's list passes it (control).
-
-Related: BL-585 (which introduced the self-check), and the lead's process rule that every gate ask cites a self-check rc 0 at the exact tip, which this entry makes worth trusting.
-
-verify: manual
-
-## BL-651 — I84 accepts a `stories_dir` reader whose only mention of the sprint slot is a comment
-
-**DEFECT.** Measured by ai-dlc-53 in the BL-631 rehearsal at `09c624ae` and filed on lead ai-dlc-71's instruction. Intake reproduced it at `09c624ae` in a clean detached worktree. In `scripts/validate-enforcement-map.sh`, I84's no-substitution arm (`:8289-8293` at `09c624ae`) narrows the READ to non-comment lines (`i84_reads`, `:8254-8256`). The slot check that follows is a whole-file `grep -qF "$i84_slot"` (or `stories_dir_sprint_placeholder`), and a comment satisfies it. 53's run of `enforcement-map-derivations-b` printed "a reader of stories_dir that never names the slot is REPORTED — the validator did NOT report it". The reason was a Check 6 comment in `core/scripts/validate-mandatory-rules.sh` (`:339`, from `2ec660ec`) that spells `` `s{sprint}` ``.
-
-Intake's reproduction, `bash scripts/validate-enforcement-map.sh --arms I84` against `core/scripts/validate-mandatory-rules.sh` at `09c624ae`:
-- Unmodified: rc=0, no I84 line.
-- The placeholder-key reader line (`:320`, the only line naming `stories_dir_sprint_placeholder`) deleted, with the `{sprint}` comment kept: rc=0, no I84 line. This is the defect.
-- Control: that line AND the comment deleted: rc=1, "I84 shipped program(s) read `stories_dir` but never name its sprint slot '{sprint}': core/scripts/validate-mandatory-rules.sh".
-
-BL-631 removes the comment, so this instance is gone in 0.819.0. The check still keys on a mention, so the next comment that spells the slot re-opens it. On origin/main `477352d4` the reader carries no `{sprint}` comment, and the arm's predicate lines are unchanged.
-
-Owed: I84's slot check keys on a non-comment line, with the same narrowing `i84_reads` already applies. Its self-probe gains two seeds. One is a reader that names the slot only in a comment, which the arm must REPORT. The other is a near-miss that names the slot on a code line, which it must NOT report. Receipt: the reproduction above, deleting the key line and keeping a comment that spells the slot, makes I84 fire.
-
-Related: BL-631.
-
-verify: manual
-
-## BL-652 — `check-owed-derivations.sh` reads an absent owed-derivations record as 0 findings, so Check 37 cannot fire on a tree with no record
-
-**DEFECT.** Ruled a separate entry by the operator, relayed by lead ai-dlc-71, on graph watch ai-dlc-f7's evidence (filed as an addendum to BL-587). Intake re-derived it read-only on graph and at origin/main `ddad2ac3`. `core/scripts/check-owed-derivations.sh:291-293` reads "the record: absent is silent 0". Its line `[ -e "$REC" ] || [ -L "$REC" ] || exit 0` makes a tree that has no record exit 0 with no output, which is exactly what a clean record produces. The header says the same at `:19` ("0 no open row, or no record at all (silent)"), and `steps/gate-validation.md` passes Check 37 on exit 0 ("an absent record is exit 0"). An EMPTY record also exits 0 silently, at `:340` (`[ -s "$TMP/rows" ] || exit 0`). So Check 37 cannot tell "nothing owed" from "nothing ever measured".
-
-Instance: graph's s319 [planning] gate at 0.818.0, transcript `74de15ba`. At 14:10:12Z the validator printed "FAIL (STALE): _bmad-output/planning-artifacts/prd.md:1289 … recorded: 1676 … actual: 1955". Check 37 passed, because `_bmad-output/ai-dlc-update/owed-derivations.tsv` does not exist; its directory holds 590 entries. The lead wrote at 14:15:56Z that Check 37 "reads an owed-derivations record that doesn't exist".
-
-The current behaviour is pinned. `core/fixtures/owed-derivations-mutants/run.sh:283-286`, mutant M4 "an absent record is treated as a refusal", is scored as a defect by arms B4a and B4b. The fix inverts that mutant's meaning, and the fixture changes with it.
-
-Owed: an absent record is refused, or reported as unmeasured, and never as 0 findings. The empty record gets the same treatment, or the entry states why an empty record is a measurement. The two must not read alike unless that is argued. Self-probes: a missing record and an empty record each produce the refusal or unmeasured verdict, not a silent 0. A record with no OPEN rows still exits 0 (control). Scope probe: the 8 rows of BL-587's first instance stay untouched. The operator handed them to graph's own session, item 3 stays WITHDRAWN, and nothing is back-filled, so the probe asserts the fix writes no record row and edits no consumer file.
-
-Related: BL-587 (the evidence, and the withdrawn item 3).
-
-Fix shape (lead ai-dlc-71): M4's pin means silence on an absent record was a deliberate choice, most likely so that a tree with no reconcile yet is not wedged at its gate. The builder first reads why M4 pinned silence. The fix then reports the missing and empty cases as a visible UNMEASURED/PENDING line, exits 0, and does not refuse, unless that reason turns out not to hold. If it does not hold, the entry is amended with what was found before a refusal is built.
+Related: BL-652 (the UNMEASURED lines), BL-587.
 
 verify: manual
 
@@ -643,3 +583,13 @@ Owed: a Stop whose transcript cannot be parsed or read, or that runs with no `jq
 
 verify: sh bash core/fixtures/handoff-completion-assertion/receipt-bl700.sh
 
+
+## BL-696 — I106's ship-set filter loop has no probe, and forks two `dirname`s per candidate before it checks `.dist-only`
+
+**DEFECT.** The loop at `scripts/validate-enforcement-map.sh:4942-4948` (the `for _sf in $(grep -rlE "$i33d_pat" ...)` loop that walks each candidate up to its fixture directory, then `continue`s on `[ -f "$_fd/.dist-only" ]`) is exercised by none of I106's three probes (`:4924-4933` drive only `i33d_scan`). A wrong walk could silently skip a shipping fixture, or admit a `.dist-only` one, and still pass: a check that cannot fire.
+
+Cost: the loop forks `dirname` twice per candidate before it checks `.dist-only`. There were 15 candidates at c295c4a0, about 30 forks per run of the pole validator, and every new walk-up fixture adds 2 (BL-643's `pregate-self-check` added the +2 behind BL-608's A3b going red on the batch 236 VALIDATORS tip).
+
+Owed, in order: first, a ship-set-filter probe seed (a shipping walk-up fixture must be reported, a `.dist-only` one must not, in both directions). Second, the `.dist-only`-first reorder with builtin `${f%/*}` in place of `dirname`, verified by that probe and a by-arm fork count. Filed by batch 236 VALIDATORS.
+
+verify: manual
