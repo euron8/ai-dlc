@@ -20,6 +20,85 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.859.0] - 2026-10-19
+
+Batch 236, BL-685 release (owned and gated by ai-dlc-77 [e29316], lead ai-dlc-c8). Closes BL-693 and BL-704, both
+filed and closed here. Advances BL-685: the private distribution clone and the key hardening ship, while the
+recorded-PASS cache stays off by default and turning it on stays open. Files BL-699, which stays open. Closes no
+`PC-` id. Net for this release: 2 closed, 3 filed (BL-693, BL-699, BL-704).
+
+### The update skill reads its distribution from a private main-only clone it owns (BL-685)
+
+- BL-679's recorded `--verify` PASS never formed when the dist shared its ref store with live worktrees, because
+  agent sessions moved those refs between the key taken before the render and the one taken after it. That
+  includes a developer checkout used as the dist.
+- New `reconcile/dist-clone.sh` builds and refreshes a bare, main-only, non-shallow clone at
+  `<consumer git-common-dir>/ai-dlc-dist` from the stamp's `upstream:`. Any other ref a pull names is fetched by
+  explicit refspec, and a full sha found only off main is pinned at `refs/ai-dlc-pin/<sha>`. It prints the clone's
+  path and the resolved full `theirs` sha. Every failure is a STOP with a named cause and remedy, and nothing
+  falls back to a shared checkout.
+- SKILL.md step 1 takes `<dist>` from it. With no `theirs` argument, theirs is the clone's fetched upstream `main`
+  as a full 40-hex sha, never a checkout's HEAD. The step-2 re-invocation carries that full sha, and the stamp's
+  `skill_commit` is passed as a ref, so one the new dist cannot resolve STOPs with a named cause.
+- `preclassify.sh --untangle` lists the core-manifest globs from theirs' tree (`ls-files --with-tree`). A bare dist
+  has an empty index, so the plain listing emitted zero rows.
+- **Upgrade note.** The first pull clones about 33 MiB (26.8k objects) from the stamp's `upstream:`, GitHub by
+  default; a local-path upstream hardlinks and costs near zero. `theirs` now defaults to GitHub `main` rather than
+  a local checkout's HEAD. Setting `upstream:` to a local path is the override. On that first pull the
+  mechanical region re-renders once: retired-fixture history now comes from main only, so a fixture that only
+  ever existed on a side branch no longer shows as an ORPHAN row. ORPHAN rows are never HARD, so this removes a
+  false row rather than hiding a finding, and `apply.sh` catches the one re-render. A theirs or base sha
+  reachable only from a non-main upstream branch that upstream has since deleted now STOPs; it used to resolve
+  from a dev checkout's leftovers.
+- **The recorded-PASS key is hardened, and the cache stays off.** A fourth review found seven ways a cached
+  `--verify` accepted a stale PASS. Each is now keyed or refused as a miss: `assume-unchanged` and
+  `skip-worktree` index flags and `core.ignoreStat`; a nested repository or gitlink; a symlink whose chain leaves
+  the consumer root; diff attributes and `GIT_EXTERNAL_DIFF`; `GIT_*` variables, attributes, grafts and
+  alternates; tool identity (`git --version`, `--exec-path`, and the path and cksum of awk, sed and sort); and an
+  inherited `AI_DLC_RECONCILE_MEMO`. The reconcile's content diffs pass `--text` and ignore textconv and
+  external diff drivers. `reconcile-emit-report` PC-V27..V31 hold these. The default stays OFF
+  (`EMIT_REPORT_VERIFY_CACHE=1` opts in); turning it on needs an adversary round on the hardened key with no
+  BLOCKER and a lead ruling, and that half of BL-685 stays open.
+- New shipping fixture `dist-clone` (DC1-DC20, DC8 end to end through `emit-report --verify`).
+
+### The self-update gate judges theirs, not the dist checkout (BL-693)
+
+- `self-update-gate.sh`'s rulebook-coupled-fixtures arm and its fallback hook, and `self-update-fixtures.sh`'s
+  hook read and `-` row digest, read whatever branch the dist working tree had checked out. A rulebook-coupled
+  fixture that theirs adds and that branch lacks was never scanned, so the gate said OK and step 2 auto-pushed a
+  slice that fixture turns red. A bare dist saw no fixtures at all. Predates BL-685.
+- Fixed: the fixtures are listed with `git ls-tree "${THEIRS}:core/fixtures/"` and read with `git show`, the
+  fallback hook is theirs' blob, and every failed read is UNDECIDED. `self-update-gate` arms theirs-fx-checkout,
+  theirs-fx-bare and theirs-hook-bare.
+
+### The reconcile's change tests ignore a textconv driver (BL-704)
+
+- `git diff --quiet` applies a configured textconv driver, so two different blobs the driver maps to one text
+  read as unchanged, and a real rulebook or hook change went unreported. `--no-textconv` is now on the six
+  change tests: `layer-drift.sh`'s three base-to-theirs tests and its consumer working-tree test,
+  `self-update-gate.sh`'s hook test, and `ledger-reverify.sh`'s VERSION test.
+
+### Filed: reconcile-emit-report's pcache phase is the suite pole on every push that re-keys it (BL-699)
+
+- 0.834.0's phase pcache, with arms PC-V0..V26 and three mutants, took over ten minutes in the owner's run, and was
+  the longest unit in the 0.834.0 dress rehearsal. Direction: make the phase do less. The phase cost is
+  compared like for like against the first suite run on main after 0.834.0 that dispatches the fixture.
+
+### Limits
+- Measured on the release branch, through `hermetic-run.sh` into the shared verdict store:
+  - `reconcile-emit-report` shard a PASS, 98 assertions. PC-V0..V31 each read `ok` by name. M-region, M-direxcl
+    and M-exit3 each fail exactly their declared set.
+  - `preclassify-rename-row` PASS: the BL-374 j-l cells, and the BL-308 and BL-374 mutants at their declared
+    kill sets.
+  - `preclassify-mode-bucket` and `self-update-gate` a-d PASS.
+- BL-679's receipt, which 0.834.0 shipped without scoring it, is scored here. The fix gives 0. Leaving the
+  consumer fields out of the key gives 1, and writing the record on the stale-region exit gives 1. A second
+  correct spelling of the key compare gives 0. The receipt discards the fixture's output, so which arm failed
+  the two regressions is not recorded.
+- Not measured: the wall-clock saving on a real consumer pull, the per-pull fetch bytes after the first clone,
+  and an adversary round on the hardened key. The cache default stays off until that round.
+
+
 ## [0.857.0] - 2026-10-18
 
 Batch 236 (WAVES, BL-695). A party round's waves are sized from the harness cap and refilled on each exit, a seat is

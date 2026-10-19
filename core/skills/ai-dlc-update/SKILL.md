@@ -48,7 +48,8 @@ STOP — you don't; you diff text and classify it.
   `skill_version` as unknown; the next re-stamp/self-update rewrites the stamp in
   the schema above. Never drop `upstream`/`installed_at` when re-stamping.
 - **theirs** = distribution `core/` at the **target ref**, which the operator may
-  name (see *Invocation* below). Default upstream HEAD.
+  name (see *Invocation* below). Default: the private clone's fetched upstream
+  `main`, as a full sha (step 1).
 
   **Every rev-path below writes `"${theirs}:<path>"` BRACED, and the braces are
   load-bearing.** This skill runs in the operator's shell, which is zsh, and there a
@@ -181,9 +182,25 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
 
 1. **Resolve inputs.** Read the stamp: `base` = the `commit` field (rulebook
    merge-base), per the schema above; fall back to legacy single-line parsing if
-   there is no `commit:` field. Resolve `theirs` (arg or upstream HEAD). Confirm
-   the distribution repo is reachable — read the `upstream` field if present;
-   otherwise ask the operator for the distribution checkout path.
+   there is no `commit:` field.
+
+   **`<dist>` is the update skill's private clone, never a checkout.** Run
+   `reconcile/dist-clone.sh [--theirs <ref>] <consumer> <upstream> <base> <skill_commit>`,
+   passing `--theirs` only when the operator named a `<ref>`. `<upstream>` is the
+   stamp's `upstream:` field — the default, a GitHub URL — and a local path written
+   there is the override. With no `upstream:` field, ask the operator for the upstream
+   to clone from (a URL or a local path), and STOP without one. On exit 0 its stdout's
+   first line is `<dist>`, a bare main-only clone in the consumer's git-dir, and its
+   second is `theirs <sha>`. Pass that path everywhere `<dist>` appears below, and
+   never `git -C` the operator's own distribution checkout. A non-zero exit is a STOP:
+   report its `dist-clone: STOP --` line, which names the cause and the remedy, and do
+   not fall back to any other directory as `<dist>`.
+
+   **With no `theirs` argument, theirs is the clone's fetched upstream `main`, resolved to a FULL 40-hex sha, never a checkout's HEAD.**
+   `dist-clone.sh` resolves it as `git --git-dir=<dist> rev-parse refs/heads/main^{commit}`
+   after the fetch and prints it as its `theirs` line; a named `<ref>` resolves to its
+   full sha the same way. That full sha is the `theirs` every later step and the step-2
+   re-invocation receive.
 
    **Git preflight — the consumer branch must be in a reconcilable state.**
    Shell to git in the consumer tree and check the current branch BEFORE the
@@ -521,7 +538,8 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
 
    If NON-EMPTY and the gate says OK:
    - **Run the self-update cycle autonomously:** cut a dedicated branch
-     `ai-dlc-update/self-update-<theirs-version>-<ts>`, write from `theirs` **only the paths
+     `ai-dlc-update/self-update-<theirs-version>-<ts>`, write from `theirs` — each file as
+     `git -C <dist> show "${theirs}:<path>"`, never a read of a working tree — **only the paths
      that diff names AND that survived both subtractions above** — never a path carried by a
      `SELF-UPDATE-CARRY` row — each at the consumer destination `map_consumer()` gives it, and
      `tests/fixtures/<dir>/` for the covering fixtures, each directory WHOLE or not at all
@@ -741,6 +759,15 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      bare run re-invokes bare (fresh dry-run), an `apply` run re-invokes `apply`,
      and **a run that named a `<ref>` re-invokes with that same `<ref>`**. The
      fresh invocation loads the updated logic and runs the reconcile on it.
+
+     **The `<ref>` the re-invocation carries is the resolved FULL 40-hex `theirs` sha
+     from step 1, whether or not the operator named a ref.** The fresh invocation's
+     step 1 runs the NEW step-1 text and may read a different `<dist>` than this one did
+     (on the pull that delivers `dist-clone.sh`, this invocation read the old dist); a
+     branch name or `main` would re-resolve there and could name a different commit,
+     while the full sha names the commit this invocation's gate approved. Its step 1
+     passes the stamp's `skill_commit` to `dist-clone.sh` as a `<ref>`, so a
+     `skill_commit` the new dist cannot resolve STOPs with a named cause.
 
      Dropping the `<ref>` on re-invoke silently retargets the pull at HEAD, which
      is the one thing the operator ruled out by naming a ref — and it would do it

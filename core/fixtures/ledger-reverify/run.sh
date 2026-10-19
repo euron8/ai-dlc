@@ -586,6 +586,32 @@ case "$vrow" in
     printf '  FAIL  %-22s no recognisable version in Entry V row: %s\n' "release-containing" "$vrow" ;;
 esac
 
+# BL-704: release_containing asks `git diff --quiet <c>^ <c> -- VERSION`, which follows a textconv
+# driver. A driver mapping every VERSION blob to one text makes the bump read as no bump, so Entry B
+# (absorbed in the commit that bumped to 0.101.0) walks forward to the NEXT bump and names 0.102.0.
+# The driver is seeded into a COPY of dist; the liveness premise (plain diff says "same",
+# --no-textconv says "differ" on the bumping commit) is measured first so the arm cannot pass on a
+# dead driver.
+ASSERTIONS=$((ASSERTIONS + 1))
+TCD="$(dirname "$DIST")/dist-textconv"; cp -R "$DIST" "$TCD"
+git -C "$TCD" config diff.same.textconv 'sh -c "echo same" --'
+mkdir -p "$TCD/.git/info"; echo 'VERSION diff=same' > "$TCD/.git/info/attributes"
+tc_bump="$(git -C "$TCD" log --reverse --format=%H "$BASE..$THEIRS" -- VERSION 2>/dev/null)"; tc_bump="${tc_bump%%
+*}"
+tc_plain=0; git -C "$TCD" diff --quiet "${tc_bump}^" "$tc_bump" -- VERSION 2>/dev/null || tc_plain=$?
+tc_raw=0;   git -C "$TCD" diff --quiet --no-textconv "${tc_bump}^" "$tc_bump" -- VERSION 2>/dev/null || tc_raw=$?
+tc_out="$(bash "$CLOSER" "$TCD" "$BASE" "$CONS" "$THEIRS" 2>/dev/null)"
+tc_b="$(printf '%s\n' "$tc_out" | awk -F'\t' '$2 ~ /Entry B/ {print $3; exit}')"
+if [ -z "$tc_bump" ] || [ "$tc_plain" -ne 0 ] || [ "$tc_raw" -ne 1 ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the seeded driver is not live (plain diff rc=%s, --no-textconv rc=%s; wanted 0 and 1), so the arm would pass on a driver that does nothing\n' "textconv-version" "$tc_plain" "$tc_raw"
+elif grep -q 'absorbed this at 0\.101\.0' <<<"$tc_b"; then
+  printf '  ok    %-22s a textconv driver mapping every VERSION blob to one text still names 0.101.0 for Entry B (the bump test reads bytes)\n' "textconv-version"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s Entry B row does not name 0.101.0 under the driver -- the bump test followed textconv and read the bumping commit as unchanged: %s\n' "textconv-version" "$(printf '%s' "$tc_b" | cut -c1-120)"
+fi
+
 # A NAMED-UPSTREAM ROW CARRIES NO VERSION, DELIBERATELY. The join is on the commit MESSAGE, and a
 # commit that names an id to record a rejection, a split, a plan or a ledger drain matches
 # exactly like one that landed the fix — so a version read off it is a claim about the wrong

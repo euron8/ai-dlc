@@ -82,8 +82,8 @@ bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
 # a check that cannot fire reading exactly like one that passed, inside a fixture written
 # about that class. Counting what actually ran is what closes it, and the count has to be
 # a literal here rather than derived from the assertions, or it disappears with them.
-# 8 premises (2 span-changed + 6 section-identity) + 9 shipped arms + 1 lint + 1 control + 5 mutants.
-EXPECTED_ASSERTIONS=24
+# 8 premises (2 span-changed + 6 section-identity) + 9 shipped arms + 1 textconv arm + 1 lint + 1 control + 5 mutants.
+EXPECTED_ASSERTIONS=25
 
 echo "layer-extends-grain:"
 
@@ -173,6 +173,25 @@ arm "run1  liveness: an entry declaring no anchor keeps file grain" "$V1" "unanc
   "the narrowing must not reach entries that never asked for it, and without a row in this run every EXTENSION-OK above is satisfied by a classifier that emitted nothing."
 arm "run2  liveness: an entry declaring no anchor keeps file grain" "$V2" "unanchored=EXTENSION-HOOK-DRIFT" \
   "same, for the second span."
+
+# BL-704: the hooked-file change test must read BYTES. A textconv driver that maps both
+# versions of the hooked file to one text makes a plain `git diff --quiet` call the file
+# unchanged, and every entry would then report EXTENSION-OK while the file moved. The
+# driver is seeded into a COPY of dist, and the liveness premise (plain diff says "same",
+# --no-textconv says "differ") is measured first so the arm cannot pass on a dead driver.
+TCD="$ROOT/dist-textconv"; cp -R "$DIST" "$TCD"
+git -C "$TCD" config diff.same.textconv 'sh -c "echo same" --'
+mkdir -p "$TCD/.git/info"; echo '* diff=same' > "$TCD/.git/info/attributes"
+tc_plain=0; git -C "$TCD" diff --quiet "$BASE" "$MID" -- "$CP" 2>/dev/null || tc_plain=$?
+tc_raw=0;   git -C "$TCD" diff --quiet --no-textconv "$BASE" "$MID" -- "$CP" 2>/dev/null || tc_raw=$?
+TCV="$(bash "$DRIFT" "$TCD" "$BASE" "$MID" "$CONS" 2>&1 | awk -F'\t' 'index($2, "/unanchored.md") {print $1}' | grep '^EXTENSION-' | sort -u | paste -sd+ -)"
+if [ "$tc_plain" -ne 0 ] || [ "$tc_raw" -ne 1 ]; then
+  bad "run1  textconv premise: the seeded driver is not live (plain diff rc=$tc_plain, --no-textconv rc=$tc_raw; wanted 0 and 1), so the arm below would pass on a driver that does nothing"
+elif [ "$TCV" = "EXTENSION-HOOK-DRIFT" ]; then
+  ok "run1  textconv: a driver mapping two different hooked-file blobs to one text still reports EXTENSION-HOOK-DRIFT (the change test reads bytes)"
+else
+  bad "run1  textconv: got '${TCV:--}', wanted EXTENSION-HOOK-DRIFT — the change test followed the textconv driver and read two different blobs as unchanged"
+fi
 
 # --- Part 2: the seeded entries are ones a consumer could actually author --------------
 # E11 rejects several `extends:` spellings. If the seed's entries were among them, the

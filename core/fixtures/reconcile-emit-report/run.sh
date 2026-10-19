@@ -3087,7 +3087,7 @@ fi # end rer_phase wg
 if rer_phase pcache; then
 PCV_HITP='emit-report: accepted a recorded PASS ('
 PCV_OKLINE="emit-report: the report's mechanical region is present, current, and complete."
-PCV_IDS="PC-V0 PC-V1 PC-V14 PC-V2 PC-V3 PC-V9 PC-V4 PC-V11 PC-V12 PC-V13 PC-V5 PC-V6 PC-V7 PC-V8 PC-V15 PC-V16 PC-V17 PC-V18 PC-V19 PC-V20 PC-V21 PC-V22 PC-V23 PC-V24 PC-V25 PC-V26 PC-V10"
+PCV_IDS="PC-V0 PC-V1 PC-V14 PC-V2 PC-V3 PC-V9 PC-V4 PC-V11 PC-V12 PC-V13 PC-V5 PC-V6 PC-V7 PC-V8 PC-V15 PC-V16 PC-V17 PC-V18 PC-V19 PC-V20 PC-V21 PC-V22 PC-V23 PC-V24 PC-V25 PC-V27 PC-V28 PC-V29 PC-V30 PC-V31 PC-V26 PC-V10"
 # THE PRE-CACHE ENGINE for V26, extracted from this checkout's history into a scratch dir, every file of
 # reconcile/ at 2875c7ad. The root is found by walking up for `.git` beside the engine; a tree with no
 # such history (a consumer, a hermetic sandbox) leaves PCV_OLD_ENG empty and V26 says which comparison it made.
@@ -3241,6 +3241,137 @@ pcv_latarm() {
     pcv_v "$id" "$3 MISSES: no hit line, and the fresh render exits $n0 exactly as the opt-out render of the same tree"
   else
     pcv_x "$id" "$3 did not force a fresh render: [$(pcv_why)], opt-out render exits $n0 -- a recorded PASS answered for a tree it never rendered"
+  fi
+  return 0
+}
+
+# ---- V27..V31: ONE shared adjudication world, the arms in sequence, each undone before the next ----
+# One seed for five arms (each a seed of its own would multiply this phase's cost). Every arm opens
+# with a HIT control on the restored world, so a failed undo shows as that arm's control failing
+# rather than as a miss it did not earn, and the record is put back after every arm. Each change is
+# one the old key could not see. A refusal arm has two steps. First the refused condition ALONE: a
+# fresh exit-0 render must leave the record BYTE-IDENTICAL, because a key that does not refuse
+# re-records there. Then a render-visible edit, whose cached run must be a fresh render with the
+# opt-out's non-zero exit, because a key that does not refuse would hit it.
+# pcv_kstep <tag> -- the cached run, then the opt-out run on the same tree; sets K_RC K_HIT K_N K_NC.
+pcv_kstep() {
+  pcv_run "$1" "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"; K_RC="$PRC"; K_HIT="$PHIT"; K_N="$PN"
+  pcv_run "$1.n" "$L_C" "$L_R" "$L_D" "$L_B" "$L_T" nocache; K_NC="$PRC"
+  PRC="$K_RC"; PHIT="$K_HIT"; PN="$K_N"
+}
+# pcv_kctl <id> -- the restored world HITS; keeps the record. Non-zero, with the arm's verdict, if not.
+pcv_kctl() {
+  pcv_run "$1.c" "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
+  if pcv_is_hit "$1.c" "$L_REC"; then cp "$L_REC" "$PS_D/krec.keep"; return 0; fi
+  pcv_x "$1" "control: the shared world did not HIT before the change ($(pcv_why)), so a miss after it would prove nothing"
+  return 1
+}
+pcv_kback() { cp "$PS_D/krec.keep" "$L_REC"; }
+# pcv_krefuse <id> <tag> <description> -- step one of a refusal arm, run with the condition in place.
+# 0 when the run is a fresh exit-0 render that left the record byte-identical.
+pcv_krefuse() {
+  pcv_kstep "$2.only"
+  if pcv_is_miss 0 && [ "$K_NC" -eq 0 ] && cmp -s "$L_REC" "$PS_D/krec.keep"; then return 0; fi
+  pcv_x "$1" "$3 alone: [$(pcv_why)], opt-out exits $K_NC, record $(cmp -s "$L_REC" "$PS_D/krec.keep" && echo unchanged || echo REWRITTEN) (want a fresh exit-0 render that records nothing)"
+  return 1
+}
+# pcv_kedit <id> <tag> <description> -- the render-visible step: cached must miss with the opt-out's
+# non-zero exit.
+pcv_kedit() {
+  pcv_kstep "$2"
+  if [ "$K_NC" -eq 0 ]; then
+    pcv_x "$1" "FIXTURE BROKEN: the opt-out render after $3 still exits 0, so the edit is not one the render sees"
+  elif pcv_is_miss "$K_NC"; then
+    pcv_v "$1" "$3 MISSES: the condition alone recorded nothing, and after a render-visible edit the fresh render exits $K_NC exactly as the opt-out render"
+  else
+    pcv_x "$1" "$3 did not force a fresh render: [$(pcv_why)], opt-out exits $K_NC -- a recorded PASS answered for a tree it never rendered"
+  fi
+}
+pcv_kworld() {
+  local ext reg dig p ent=".claude/skills/ai-dlc/extensions/adjudicable.md"
+  pcv_lat k || { for p in PC-V27 PC-V28 PC-V29 PC-V30 PC-V31; do pcv_x "$p" "FIXTURE BROKEN: layer-adjudication-tier/seed.sh did not build its world"; done; return 0; }
+  ext="$L_C/.claude/skills/ai-dlc/extensions"
+  # V30's subject: a consumer extension line equal to a rulebook line base..theirs DELETES, so
+  # retired-layer-passage.sh renders a row only while its content diff prints `-` lines.
+  printf -- '---\nkind: check\nhooks: steps/other.md\nreason: p\n---\n\n### 906. [ext:p] P.\n\nGamma'"'"'s body at BASE.\n' > "$ext/passage.md"
+  { git -C "$L_C" add -A && git -C "$L_C" -c user.email=f@f -c user.name=fixture commit -qm passage; } >/dev/null 2>&1
+  pcv_lat_approve k || { for p in PC-V27 PC-V28 PC-V29 PC-V30 PC-V31; do pcv_x "$p" "FIXTURE BROKEN: the shared world rendered no region"; done; return 0; }
+  pcv_run k.r "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
+  if ! { pcv_is_miss 0 && [ -f "$L_REC" ]; }; then
+    for p in PC-V27 PC-V28 PC-V29 PC-V30 PC-V31; do pcv_x "$p" "control: the shared world's first --verify did not render and record ($(pcv_why))"; done; return 0
+  fi
+
+  # V27 (assume-unchanged) and V28 (skip-worktree): status hides the edit to the flagged file.
+  for p in "PC-V27 k27 --assume-unchanged" "PC-V28 k28 --skip-worktree"; do
+    set -- $p
+    if pcv_kctl "$1"; then
+      git -C "$L_C" update-index "$3" ".claude/skills/ai-dlc/extensions/adjudicable.md"
+      if pcv_krefuse "$1" "$2" "update-index $3"; then
+        sed 's#^hooks: steps/demo.md#hooks: steps/none.md#' "$L_C/.claude/skills/ai-dlc/extensions/adjudicable.md" > "$PS_D/$2.edit" \
+          && cp "$PS_D/$2.edit" "$L_C/.claude/skills/ai-dlc/extensions/adjudicable.md"
+        pcv_kedit "$1" "$2" "update-index $3 on an extension, then its hooks: line rewritten,"
+      fi
+      git -C "$L_C" update-index "--no-${3#--}" ".claude/skills/ai-dlc/extensions/adjudicable.md"
+      git -C "$L_C" show "HEAD:.claude/skills/ai-dlc/extensions/adjudicable.md" > "$L_C/.claude/skills/ai-dlc/extensions/adjudicable.md"
+      pcv_kback
+    fi
+  done
+
+  # V29: an untracked NESTED REPOSITORY under extensions/, whose files git lists nowhere. Step one's
+  # repository holds only a README.txt: layer-drift.sh walks extensions/ with `find -name '*.md'`, so
+  # a .txt is a nested repo the render does not see, and the old key (a new `? …/vendored/` status
+  # line) would MISS and re-record it. Step two adds v.md, an extension whose hooks: names a step the
+  # dist lacks, which the walk renders as EXTENSION-HOOK-MISSING. The old key skipped the bytes under
+  # a `dir/` entry and its status line is unchanged, so it would HIT the stale record.
+  if pcv_kctl PC-V29; then
+    mkdir -p "$ext/vendored" && git -C "$ext/vendored" init -q
+    printf 'vendored payload\n' > "$ext/vendored/README.txt"
+    if pcv_krefuse PC-V29 k29 "an untracked nested repository under extensions/"; then
+      printf -- '---\nkind: check\nhooks: steps/other.md\nreason: v\n---\n\n### 905. [ext:v] V.\n\nBody.\n' > "$ext/vendored/v.md"
+      pcv_kedit PC-V29 k29 "a nested repository under extensions/ that gains an extension v.md"
+    fi
+    mv "$ext/vendored" "$PS_D/k29-vendored-aside"
+    pcv_kback
+  fi
+
+  # V30: a `-diff` attribute in the dist's info/attributes, then GIT_EXTERNAL_DIFF=true. Both used to
+  # empty the content diff retired-layer-passage.sh parses with the key unmoved. Now the key moves
+  # (a miss), and the hardened diff renders what it rendered before, so the fresh exit is 0 and equal
+  # to the opt-out's.
+  if pcv_kctl PC-V30; then
+    mkdir -p "$L_D/.git/info" && printf '*.md -diff\n' > "$L_D/.git/info/attributes"
+    pcv_kstep k30a; local a_ok=0 a_why
+    a_why="$(pcv_why), opt-out $K_NC"
+    pcv_is_miss "$K_NC" && [ "$K_NC" -eq 0 ] && a_ok=1
+    mv "$L_D/.git/info/attributes" "$PS_D/k30-attributes-aside"
+    pcv_kback
+    PCV_ENVPRE="GIT_EXTERNAL_DIFF=true"; pcv_kstep k30e; PCV_ENVPRE=""
+    pcv_kback
+    if [ "$a_ok" -eq 1 ] && pcv_is_miss "$K_NC" && [ "$K_NC" -eq 0 ]; then
+      pcv_v PC-V30 "a -diff attribute in the dist's info/attributes, and GIT_EXTERNAL_DIFF=true, each MISS, and each fresh render exits 0 exactly as the opt-out render (the content diff ignores both)"
+    else
+      pcv_x PC-V30 "diff attributes: info/attributes [$a_why], GIT_EXTERNAL_DIFF [$(pcv_why), opt-out $K_NC] (want two misses whose fresh render exits 0 like the opt-out)"
+    fi
+  fi
+
+  # V31, LAST because it commits: the adjudication register as a TRACKED symlink to a file outside
+  # the consumer. The key hashed the link, the detectors read the target.
+  if ! command -v jq >/dev/null 2>&1; then pcv_x PC-V31 "jq is not on PATH; layer-drift.sh cannot read the register, so no resolution can be seeded"
+  elif pcv_kctl PC-V31; then
+    reg="$L_C/_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl"
+    bash "$(dirname "$PS_E")/layer-drift.sh" "$L_D" "$L_B" "$L_T" "$L_C" > "$PS_D/ld31.out" 2>/dev/null
+    dig="$(awk -F'\t' '$1 == "HARD-LAYER-ADJUDICATION-MISSING"' "$PS_D/ld31.out" | grep -o 'subject_digest [0-9a-f]\{40\}' | awk '{ print $2; exit }')"
+    if [ "${#dig}" -ne 40 ] || [ -e "$reg" ]; then
+      pcv_x PC-V31 "FIXTURE BROKEN: no 40-hex subject_digest to resolve, or the register already exists"
+    else
+      : > "$PS_D/k31-outside-register.jsonl"
+      ln -s "$PS_D/k31-outside-register.jsonl" "$reg"
+      { git -C "$L_C" add -A && git -C "$L_C" -c user.email=f@f -c user.name=fixture commit -qm regsym; } >/dev/null 2>&1
+      if pcv_krefuse PC-V31 k31 "a tracked register symlink to a file outside the consumer"; then
+        printf '{"clause":"LC-E4","entry":"%s","subject_digest":"%s","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"seeded"}\n' "$ent" "$dig" > "$PS_D/k31-outside-register.jsonl"
+        pcv_kedit PC-V31 k31 "a tracked register symlink whose outside target gains a resolving row"
+      fi
+    fi
   fi
   return 0
 }
@@ -3486,6 +3617,9 @@ pcv_suite() {
   pcv_latarm PC-V24 v24 "a verify under LC_ALL=C of a PASS recorded under en_US.UTF-8, where the render's sort order differs,"
   pcv_latarm PC-V25 v25 "chmod 000 on .claude/skills/ai-dlc/extensions, a directory the render reads,"
 
+  # ---- V27..V31: inputs the key REFUSES or keys after a fourth review, in ONE shared world ----
+  pcv_kworld
+
   # ---- V10: a REGISTER ROW resolves HARD-LAYER-ADJUDICATION-MISSING: a miss reaching exit 3 ----
   # The world is layer-adjudication-tier's seed (its own git top level, one adjudicable row). The
   # register lives in _bmad-output/ai-dlc-update/, the directory the report lives in, so a key that
@@ -3566,7 +3700,7 @@ pcv_want() { case "$1" in M-region) echo "PC-V3" ;; M-direxcl) echo "PC-V10" ;; 
 PCV_MUTS="M-region M-direxcl M-exit3"
 
 if ! grep -qF "$PCV_HITP" "$EMIT"; then
-  printf '  SKIP  PC-V0..PC-V26: %s carries no recorded-PASS cache, so this engine predates BL-679 and no cache arm can be checked against it\n' "$EMIT"
+  printf '  SKIP  PC-V0..PC-V31: %s carries no recorded-PASS cache, so this engine predates BL-679 and no cache arm can be checked against it\n' "$EMIT"
 else
   mkdir -p "$PCV_ROOT/ship"
   ( pcv_suite "$EMIT" "$PCV_ROOT/ship" ) > "$PCV_ROOT/ship.log" 2>&1 &

@@ -1042,7 +1042,7 @@ adj_spent_note() { # $1 entry (consumer-relative), $2 the CURRENT digest, $3 the
   command -v jq >/dev/null 2>&1 || return 0
   [ -n "${3:-}" ] || return 0
   git -C "$CONSUMER" rev-parse --git-dir >/dev/null 2>&1 || return 0
-  git -C "$CONSUMER" diff --quiet -- "$1" 2>/dev/null && return 0
+  git -C "$CONSUMER" diff --quiet --no-textconv -- "$1" 2>/dev/null && return 0
   prior="$(jq -r --arg e "$1" --arg d "$2" --arg c "$3" \
     'select(.entry == $e and .subject_digest != $d and .clause == $c)
      | "\(.verdict) (recorded \(.recorded_utc) under \(.subject_digest[0:12]))"' \
@@ -1835,7 +1835,7 @@ while IFS= read -r f; do
   have "$THEIRS" "$cp" || { emit OVERRIDE-ANCHOR-UNRESOLVED "$entry" "$tgt" "target absent at $THEIRS"; continue; }
 
   file_changed=no
-  if ! git -C "$DIST" diff --quiet "$base_sha" "$THEIRS" -- "$cp" 2>/dev/null; then file_changed=yes; fi
+  if ! git -C "$DIST" diff --quiet --no-textconv "$base_sha" "$THEIRS" -- "$cp" 2>/dev/null; then file_changed=yes; fi
 
   # Evaluate every (file, anchor) pair in a possibly multi-anchor `shadows:` value.
   #
@@ -1877,7 +1877,7 @@ while IFS= read -r f; do
       continue
     fi
     a_changed=no
-    git -C "$DIST" diff --quiet "$base_sha" "$THEIRS" -- "$a_cp" 2>/dev/null || a_changed=yes
+    git -C "$DIST" diff --quiet --no-textconv "$base_sha" "$THEIRS" -- "$a_cp" 2>/dev/null || a_changed=yes
 
     # Record the (file, anchor) key for the cross-entry duplicate check below. Normalised on
     # both halves, because `#4a. Close-Out Sweep` and `#4a Close-Out sweep` are one anchor to
@@ -2457,7 +2457,7 @@ while IFS= read -r f; do
     done < "$LD_T/ext-parts"
   fi
 
-  if git -C "$DIST" diff --quiet "$BASE" "$THEIRS" -- "$cp" 2>/dev/null; then
+  if git -C "$DIST" diff --quiet --no-textconv "$BASE" "$THEIRS" -- "$cp" 2>/dev/null; then
     emit EXTENSION-OK "$entry" "$hooks" "hooked core file unchanged"
   elif [ -n "$ext_ancs" ]; then
     ext_missing=""; ext_moved=""; ext_all=""

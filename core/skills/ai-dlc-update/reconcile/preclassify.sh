@@ -270,6 +270,15 @@ blob_hash() {
     *) pc_fail "rev-parse -q --verify $1:$2 exited $_rc" ;;
   esac
 }
+# pc_fail_listing <glob> <status> -- the `--untangle` listing (`ls-files --with-tree=$THEIRS`) failed.
+# It exits 128 both for an unresolvable rev and for a tree it could not read, so before refusing it
+# asks blob_hash about the glob's path at theirs: an unreadable tree or rev refuses there, through the
+# same discriminator and the same words as every other read, and only a tree that reads cleanly falls
+# through to the plain ls-files refusal. Either way the run exits 2.
+pc_fail_listing() {
+  blob_hash "$THEIRS" "$1" > /dev/null
+  pc_fail "ls-files $1 exited $2"
+}
 file_hash() {
   local f="$CONS/$1" _h
   [ -f "$f" ] || { echo MISSING; return 0; }
@@ -561,9 +570,11 @@ if [ "$MODE" = "--untangle" ]; then
   # `core.quotePath=false`: every path below is mapped by map_consumer() and shown to git again by
   # blob_hash(); a C-quoted non-ASCII name (`"core/rules/caf\303\251.md"`) matches no `core/*` case,
   # maps to itself, and reads MISSING at both ends -- a manifest file reported as one the consumer lacks.
+  # `--with-tree="$THEIRS"` (BL-685 D1): the listing is theirs' tree, never the dist's INDEX. A bare
+  # dist has an empty index, so a plain `ls-files` listed NOTHING and untangle reported no rows.
   awk 'FNR==1{f=0; d=0} d{next} /^core_manifest:/{f=1; next} f && /^  - /{sub(/^  - /,""); print; next} f{f=0; d=1}' "$MANIFEST" ${FIXMAN:+"$FIXMAN"} |
   while IFS= read -r glob; do
-    git -C "$DIST" -c core.quotePath=false ls-files "$glob" || pc_fail "ls-files $glob exited $?"
+    git -C "$DIST" -c core.quotePath=false ls-files --with-tree="$THEIRS" -- "$glob" || pc_fail_listing "$glob" "$?"
   done | while IFS= read -r path; do
     cons="$(map_consumer "$path")"
     base_h="$(blob_hash "$BASE" "$path")"
