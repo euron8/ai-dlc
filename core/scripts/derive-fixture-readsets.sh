@@ -150,9 +150,16 @@ for _a in "$@"; do
   fi
   _prev="$_a"
 done
+# A LINKED WORKTREE RUNS ONLY THE POOL'S TWO MODES. `--in-pool` traces the push's own run in a clone whose
+# `.git` readset_git_standalone builds from the common dir and this worktree's private gitdir, and
+# `--merge-pool` only writes the local map the hook names (under `--git-common-dir`, which every worktree
+# reads). Every other mode -- `--all`, `--list`, `--reconcile`, `--local-map`, the detached trace -- runs in
+# the main checkout, detached at the commit to trace, which is the operator's ruling for a read-set trace.
+# Decided AFTER the parse (LW_GATE below), keyed on the parsed IN_POOL / MERGE_POOL: a raw pre-scan for the
+# token admits `--list --in-pool`, where `--in-pool` is a fixture-list VALUE and the run writes the map.
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
-[ -n "$REPO_ROOT" ] && [ -d "$REPO_ROOT/.git" ] || {
-  echo "ERROR: not inside a git work tree, or inside a LINKED worktree (whose .git is a file). The map is a tracked artifact of one repository and the trace copies its .git; there is nothing to derive from here." >&2; exit "$DIE_RC"; }
+[ -n "$REPO_ROOT" ] && { [ -d "$REPO_ROOT/.git" ] || [ -f "$REPO_ROOT/.git" ]; } || {
+  echo "ERROR: not inside a git work tree. A read-set trace runs in the main checkout, detached at the commit to trace; there is nothing to derive from here." >&2; exit "$DIE_RC"; }
 MAP="$REPO_ROOT/.ai-dlc-fixture-readsets.tsv"
 
 # System daemons that walk the filesystem on their own schedule and are never part of a
@@ -186,6 +193,10 @@ while [ $# -gt 0 ]; do
     *)           die "$USAGE" ;;
   esac
 done
+# LW_GATE: a LINKED worktree (whose .git is a file) runs only the pool's two modes, decided on the PARSED
+# arguments, and before --in-pool creates or clears anything.
+[ -d "$REPO_ROOT/.git" ] || [ -n "$IN_POOL" ] || [ -n "$MERGE_POOL" ] || {
+  echo "ERROR: inside a LINKED worktree (whose .git is a file) in a mode other than --in-pool or --merge-pool. A detached, --list, --all, --reconcile or --local-map trace runs in the main checkout, detached at the commit to trace; there is nothing to derive from here." >&2; exit "$DIE_RC"; }
 # `--in-pool <dir>` IS THE PRE-PUSH POOL'S WORKER MODE. The worker runs ONE undeclared, unmapped or stale
 # fixture through it INSTEAD of `bash run.sh`, so the run that produces the push's verdict is the run that is
 # traced, and no second run follows the suite. It is `--local-map` for one fixture with three differences:
@@ -585,9 +596,116 @@ readset_copy_tree() {
       || { echo "readset_copy_tree: tar -x failed" >&2; return 1; }
     rm -f "$scratch/copy.tar"
   fi
-  cp -a "$src/.git" "$dst/.git" || { echo "readset_copy_tree: copying .git failed" >&2; return 1; }
+  if [ -d "$src/.git" ]; then
+    cp -a "$src/.git" "$dst/.git" || { echo "readset_copy_tree: copying .git failed" >&2; return 1; }
+    # `.git/worktrees/` names the REAL linked worktrees in its `gitdir` files, so a `git worktree repair` in
+    # the copy would rewrite a real worktree's gitlink to point here. It is a literal subpath of the copy.
+    rm -rf "$dst/.git/worktrees" || { echo "readset_copy_tree: removing the copy's .git/worktrees failed" >&2; return 1; }
+  else
+    readset_git_standalone "$src" "$dst" || { echo "readset_copy_tree: building a standalone .git from the linked worktree failed" >&2; return 1; }
+  fi
   echo "copied $n path(s) plus .git/"
   [ "$miss" -eq 0 ] || echo "note: $miss listed path(s) absent on disk, not copied:$misslist"
+  return 0
+}
+
+# readset_git_standalone <src linked worktree> <dst> -- the `.git` of a trace tree copied from a LINKED
+# worktree, whose own `.git` is a gitlink FILE naming `<common>/worktrees/<name>`. Copying that file would
+# point the trace tree back at the real worktree's private gitdir, so a fixture's `git commit` there would
+# move the real worktree's HEAD and index; walking it as a directory copies nothing. Instead `dst/.git` is
+# built as a STANDALONE repository answering like the worktree:
+#   * from the common dir, ONLY what git itself shares across worktrees -- an ALLOW-list, because the
+#     common dir is also the MAIN checkout's own gitdir and every file git does not name as shared is
+#     that checkout's per-worktree state (HEAD, index, REBASE_HEAD, a rebase or sequencer dir, ...), which
+#     no deny-list can enumerate. The list is git's `common_list[]` (path.c), read back from git 2.54 by
+#     `git rev-parse --git-path <p>` in a linked worktree: objects, refs, packed-refs, config, hooks, info,
+#     logs, shallow, remotes, branches, lost-found, common, rr-cache, svn -- less refs/bisect|worktree|
+#     rewritten, info/sparse-checkout, logs/HEAD and logs/refs/bisect|worktree|rewritten, which git keeps
+#     per worktree. `worktrees/` is not taken: its `gitdir` files name the REAL worktrees, so `git worktree
+#     repair` run in the copy would rewrite a real worktree's gitlink;
+#   * EVERYTHING ELSE comes from this worktree's private gitdir (its HEAD, index, logs/HEAD, per-worktree
+#     refs, modules/, config.worktree, info/sparse-checkout), less `commondir`, `gitdir` and `locked`, the
+#     three files that tie a private gitdir to a common one;
+#   * no `*.lock` is taken from either side: a lock held at copy time would make every write in the copy
+#     fail as though another git process were running there;
+#   * a SUBMODULE's gitdir is private (`worktrees/<name>/modules/<sub>`), two levels deeper than the copy's
+#     `modules/<sub>`, so its RELATIVE `core.worktree` resolves somewhere else in the copy -- nowhere, or at
+#     another depth back into a real work tree. Each copied module's `core.worktree` is rewritten to name the
+#     same path inside the copy, and the function REFUSES a module whose work tree lies outside the source.
+# It REFUSES before copying when the common config says `core.bare=true` (the copy would be a bare repository
+# and `git status` in it exits 128), and when the common dir uses the REFTABLE ref format -- a `reftable/`
+# dir or `extensions.refStorage=reftable`, both of which git 2.54 writes -- because its shared and
+# per-worktree ref stacks cannot be merged by copying files, and the copy would resolve no refs at all.
+# Every refusal is rc 1: the in-pool caller dies "copy failed", records no verdict, and the hook runs the
+# fixture plainly.
+# Files are APFS clones where the volume allows and plain copies where it does not. Nothing names the
+# source afterwards, and the function REFUSES unless that is so: no `commondir` or `gitdir` file, no
+# `core.worktree`, and `--git-dir` = `--git-common-dir` = `<dst>/.git`.
+readset_git_standalone() {
+  local src="$1" dst="$2" gd cd sd sc
+  gd="$( cd "$src" && cd "$(git rev-parse --git-dir 2>/dev/null)" 2>/dev/null && pwd -P )" || gd=""
+  cd="$( cd "$src" && cd "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null && pwd -P )" || cd=""
+  [ -n "$gd" ] && [ -n "$cd" ] && [ "$gd" != "$cd" ] \
+    || { echo "readset_git_standalone: $src is not a linked worktree (git dir '$gd', common dir '$cd')" >&2; return 1; }
+  [ ! -e "$dst/.git" ] || { echo "readset_git_standalone: $dst/.git already exists" >&2; return 1; }
+  [ "$(git config --file "$cd/config" --type=bool --get core.bare 2>/dev/null)" != true ] \
+    || { echo "readset_git_standalone: common dir $cd is configured core.bare=true; a copy of it would be bare" >&2; return 1; }
+  [ ! -d "$cd/reftable" ] && [ "$(git config --file "$cd/config" --get extensions.refStorage 2>/dev/null)" != reftable ] \
+    || { echo "readset_git_standalone: common dir $cd uses the reftable ref format, whose per-worktree and shared stacks cannot be merged by copying" >&2; return 1; }
+  python3 -I -c '
+import ctypes, os, shutil, subprocess, sys
+common, private, out = sys.argv[1], sys.argv[2], sys.argv[3]
+try:
+    libc = ctypes.CDLL("libc.dylib", use_errno=True)
+    libc.clonefile.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint32]
+except OSError:
+    libc = None
+def put(s, t):
+    if libc is not None and libc.clonefile(s.encode(), t.encode(), 1) == 0:
+        return t
+    return shutil.copy2(s, t, follow_symlinks=False)
+SHARED = ["objects", "refs", "packed-refs", "config", "hooks", "info", "logs", "shallow", "remotes",
+          "branches", "lost-found", "common", "rr-cache", "svn"]
+SKIP_COMMON = {"refs/bisect", "refs/worktree", "refs/rewritten", "info/sparse-checkout", "logs/HEAD",
+               "logs/refs/bisect", "logs/refs/worktree", "logs/refs/rewritten"}
+SKIP_PRIVATE = {"commondir", "gitdir", "locked"}
+def ign_for(root, skip):
+    def ign(d, names):
+        r = os.path.relpath(d, root)
+        return [n for n in names if n.endswith(".lock") or (n if r == "." else r + "/" + n) in skip]
+    return ign
+os.makedirs(out)
+ic = ign_for(common, SKIP_COMMON)
+for n in SHARED:
+    s = os.path.join(common, n)
+    if os.path.isdir(s) and not os.path.islink(s):
+        shutil.copytree(s, os.path.join(out, n), symlinks=True, ignore=ic, copy_function=put)
+    elif os.path.lexists(s):
+        put(s, os.path.join(out, n))
+shutil.copytree(private, out, symlinks=True, ignore=ign_for(private, SKIP_PRIVATE), copy_function=put,
+                dirs_exist_ok=True)
+srcw, dstw = os.path.realpath(sys.argv[4]), os.path.realpath(os.path.dirname(out))
+for root, dirs, files in os.walk(os.path.join(out, "modules")):
+    if "config" not in files:
+        continue
+    cfg = os.path.join(root, "config")
+    v = subprocess.run(["git", "config", "--file", cfg, "--get", "core.worktree"], capture_output=True, text=True).stdout.strip()
+    if not v:
+        continue
+    srcmod = os.path.join(private, os.path.relpath(root, out))
+    wt = os.path.realpath(os.path.join(srcmod, v))
+    if wt != srcw and not wt.startswith(srcw + os.sep):
+        sys.exit("submodule %s: core.worktree %s is outside %s" % (os.path.relpath(root, out), wt, srcw))
+    nv = os.path.relpath(os.path.join(dstw, os.path.relpath(wt, srcw)), os.path.realpath(root))
+    subprocess.run(["git", "config", "--file", cfg, "core.worktree", nv], check=True)
+' "$cd" "$gd" "$dst/.git" "$src" || { echo "readset_git_standalone: copying $cd and $gd failed" >&2; return 1; }
+  [ ! -e "$dst/.git/commondir" ] && [ ! -e "$dst/.git/gitdir" ] && [ -f "$dst/.git/HEAD" ] \
+    && [ -z "$( cd "$dst" && env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY git config --get core.worktree 2>/dev/null )" ] \
+    || { echo "readset_git_standalone: $dst/.git still names a common dir or a work tree, or has no HEAD" >&2; return 1; }
+  sd="$( cd "$dst" && env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY git rev-parse --git-dir 2>/dev/null )"
+  sc="$( cd "$dst" && env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY git rev-parse --git-common-dir 2>/dev/null )"
+  [ "$sd" = .git ] && [ "$sc" = .git ] \
+    || { echo "readset_git_standalone: $dst does not resolve as its own repository (git dir '$sd', common dir '$sc')" >&2; return 1; }
   return 0
 }
 # READSET_COPY_END
@@ -627,13 +745,21 @@ with open(lst, "rb") as f:
     for p in f.read().split(b"\0"):
         if p: one(p.decode())
 g = os.path.join(src, ".git")
-for root, dirs, files in os.walk(g):
-    r = os.path.relpath(root, src)
-    os.makedirs(os.path.join(dst, r), exist_ok=True)
-    for x in files: one(os.path.join(r, x))
+if os.path.isdir(g):
+    for root, dirs, files in os.walk(g):
+        # `.git/worktrees/` names the REAL linked worktrees; a `git worktree repair` in the clone would
+        # rewrite their gitlinks to point here (readset_copy_tree removes it after its `cp -a` too).
+        if root == g and "worktrees" in dirs:
+            dirs.remove("worktrees")
+        r = os.path.relpath(root, src)
+        os.makedirs(os.path.join(dst, r), exist_ok=True)
+        for x in files: one(os.path.join(r, x))
 print("cloned %d path(s) plus .git/" % n)
 if miss: print("note: %d listed path(s) absent on disk, not cloned" % miss)
-' "$src" "$dst" "$scratch/clone.list"
+' "$src" "$dst" "$scratch/clone.list" || return 1
+  # A LINKED WORKTREE's `.git` is a gitlink file, which the walk above skips: its repository is built
+  # standalone from the common dir and this worktree's private gitdir (readset_git_standalone).
+  [ -d "$src/.git" ] || readset_git_standalone "$src" "$dst" || return 1
 }
 
 command -v python3  >/dev/null || die "python3 not found (path normalisation)"
