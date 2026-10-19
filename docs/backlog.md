@@ -100,11 +100,11 @@ verify: manual
 
 ## BL-553 — the lead arms a beat on a sentinel nothing will write, to keep the Stop hook quiet
 
-**DEFECT.** Consequence of BL-541. With no completion signal for the serial remediator, the s319 lead armed beats on files it created for the purpose and that no agent writes. At 00:03:48Z it wrote: "A sleeping beat, `bw7kr8cpi`, is now armed on a sentinel file that nothing will write. Its marker holds a future epoch, so it holds for a full quantum." Session 62eadbbe holds 8 such sentinel beats (corrected: the 00:17Z "fold record" beat was a real beat on requirements-d-answers-fold.md that delivered at 00:35:15Z, not a sentinel). Five are serial-remediator waits (00:03:48, 01:19:11, 01:29:06, 01:39:02, 01:48:57Z), closed once `_gate-procedures.md` prescribes `--complete` on the serial repair record. Three stay open: 00:07:23Z, a serial remediator RESUMED by SendMessage after a refusal (filed separately); 01:15:08Z, a part-04 SPEC render whose part record writes no marker; 01:52:38Z, a render agent's real SPEC.md beat that delivered early on a partial write (BL-541's shape on SPEC.md). That satisfies `ai-dlc-continue.sh`'s lease test while waiting on nothing, which is the "filler tool call" the hook's own text forbids ("Do NOT emit filler tool calls to get past this block"). Owed: BL-541's completion signal removes the need. Until then, a beat whose targets lie outside `_bmad-output/` and every In-Flight row's deliverable is refused, so it does not count as a lease.
+**DEFECT.** Consequence of BL-541. With no completion signal for the serial remediator, the s319 lead armed beats on files it created for the purpose and that no agent writes. At 00:03:48Z it wrote: "A sleeping beat, `bw7kr8cpi`, is now armed on a sentinel file that nothing will write. Its marker holds a future epoch, so it holds for a full quantum." Session 62eadbbe holds 8 such sentinel beats (corrected: the 00:17Z "fold record" beat was a real beat on requirements-d-answers-fold.md that delivered at 00:35:15Z, not a sentinel). Five are serial-remediator waits (00:03:48, 01:19:11, 01:29:06, 01:39:02, 01:48:57Z), closed by `--complete-repair`. The other three are closed too. 00:07:23Z, a serial remediator resumed by SendMessage after a refusal, is closed by reference: BL-593 (LANDED v0.817.0) and BL-541's `--complete-repair --dispatch` cover the resumed block, and nothing was built. 01:15:08Z, a part-04 SPEC render whose part record wrote no marker, is closed in `core/team-roles/remediator.md` (line 78): every part remediator now ends with `wait-for-deliverable.sh --mark <part path> <step> remediator <shard> findings=<n>`, and the part join beat in `core/skills/ai-dlc/steps/_gate-procedures.md` passes `--complete`; `join-remediator-shards.sh` needed no change, because a marked part leaves the serial block intact and unmarked parts still join. 01:52:38Z is closed in the same role file (lines 244-250): a serial remediator whose block appends a `(decision)` re-renders SPEC.md before its `--mark-repair`, so the render sits inside the dispatch that `--complete-repair --dispatch` already joins, and the record_tail refusal at `join-remediator-shards.sh:1477` rejects a serial block with a `(decision)` and a stale SPEC.md. That sentinel beat satisfied `ai-dlc-continue.sh`'s lease test while waiting on nothing, which is the "filler tool call" the hook's own text forbids ("Do NOT emit filler tool calls to get past this block"). The entry stays open only on part (b), below.
 
-**Fourth instance (01:52:38Z).** The lead armed `wait-for-deliverable.sh --reset … $SCRATCH/never-written-sentinel-render`, a path it named itself as never-written; the beat existed only to sleep until the render agent's notification. The notification arrived at 01:53:08Z and the lead TaskStopped the beat.
+**The 01:52:38Z account (graph lead transcript 62eadbbe, read-only).** Two beats are involved, and the earlier wording described them as one. At 01:52:28Z (jsonl lines 9934-9936) a background beat, task bfq5e0eg3, completed and its output read `DELIVERED` for the offramp-config-and-rewards SPEC.md (line 9945), 40 seconds before the render agent returned. At 01:52:38Z (line 9953) the lead armed `wait-for-deliverable.sh --reset --since <now> $S` with `S=.../scratchpad/never-written-sentinel-render`, a path nothing writes, described as "Arm a sleeping beat until the SPEC render agent returns" (task b2id0l4h8), and confirmed its marker was a future epoch at line 9956. The render agent's notification arrived at 01:53:08Z (line 9977), and the lead TaskStopped b2id0l4h8 at 01:53:12Z (line 9980). So the real SPEC.md beat delivered early and the sentinel beat was armed to cover the gap that early delivery left. The control token `never-written-sentinel-render` is present in the transcript (4 lines) and an impossible token returned 0. Whether bfq5e0eg3 delivered on a partial write is not settled by these lines.
 
-**Part (b), the target-containment refusal, is NOT shippable as specified (batch 236, measured by the wfd contract adversary over the reference consumer's lead transcripts, read-only).** 189 transcripts carry 2,869 beat calls over 5,866 targets. The legitimate targets outside the state dir include 803 teammate story-worktree deliverables, 75 background done files, 64 main-tree docs, 57 scratchpad and task outputs and 7 git refs, so "outside `_bmad-output/`" is not a defect signal. The In-Flight table is empty today and no transcript records it at arm time, so "outside every In-Flight row's deliverable" is unobservable. The seat beats that set a custom state dir (`implementation.md:447`, `qa.md:457`, `code-reviewer.md:196`) would fail it outright. At arm time a sentinel and a real done file are the same act; the difference is the lead's intent, which no check can see. Five of the eight recorded instances are serial-remediator waits, which `--complete-repair` now covers. The entry stays open on the other three.
+**Part (b), the target-containment refusal, is NOT shippable as specified (batch 236, measured by the wfd contract adversary over the reference consumer's lead transcripts, read-only).** 189 transcripts carry 2,869 beat calls over 5,866 targets. The legitimate targets outside the state dir include 803 teammate story-worktree deliverables, 75 background done files, 64 main-tree docs, 57 scratchpad and task outputs and 7 git refs, so "outside `_bmad-output/`" is not a defect signal. The In-Flight table is empty today and no transcript records it at arm time, so "outside every In-Flight row's deliverable" is unobservable. The seat beats that set a custom state dir (`implementation.md:447`, `qa.md:457`, `code-reviewer.md:196`) would fail it outright. At arm time a sentinel and a real done file are the same act; the difference is the lead's intent, which no check can see. Detecting a sentinel by its name is refuted: 2 of the 8 sentinel basenames lack `never-written`. The live claim is that a beat with neither `--dispatch` nor a dispatched agent's deliverable as its target still counts as a lease. Its false-positive set over the 2,869 calls is UNRUN. The only observable candidate is the dispatch join, and `wait-for-deliverable.sh` already WARNs on a `--since`-only beat (line 1345).
 
 verify: manual
 
@@ -296,6 +296,10 @@ Each fixed unit still owes its solo-against-pool receipt, with a load-free contr
 - History: no recorded R6 firing. The one instance is pre-ship, `BL-099` flipping once in 33 runs under three-way contention (`CHANGELOG.md`, 0.562.0 entry), where the checkout-incompleteness hypothesis did not reproduce.
 - UNSTABLE is a correct refusal of a racing receipt. Relabelling signal exits as BROKEN was considered and dropped: BROKEN fails the push too (`:1094-1096`), so it would change the label and not the outcome, and nothing in the script raises those signals.
 
+**Item 8 raised (batch 236; the entry stays OPEN, because items 5 and 6 and the unread `readset-skip` polls are still owed).** The lossy-window cap is raised 10 -> 30 in DIAG (`MAXATT`, `core/fixtures/readset-sandbox-root-clause/run.sh:142-162`). It stays a count, and all-lossy still exits BROKEN. At the 0.763.0 gate reading (16 lossy of 23 attempts, p of about 0.70 at load 32-36), the all-lossy odds go from 0.7^10 (about 2.8%) to 0.7^30 (about 2e-5). At 30, an all-lossy run takes about 11 minutes worst case before BROKEN, against about 20 minutes at 60, and 60 bought nothing measurable over 30. Closing observation: read N off the fixture's `stream window judged on attempt N of 30` note in real gate output.
+
+**DEFECT — readset-skip-d reads a false RED under load (batch 236, from graph transcript 5d4fbc59, the push of 8c9563f75, relayed by lead c8; not re-measured here).** At load 77-85, `ck_mut` (`core/fixtures/readset-skip/run.sh:4938-4959`) failed 2 of 56 assertions, rc 1. Mutant `notfail` moved worlds 'f l' rather than l alone, and mutant `nosubtree` moved 'h m' rather than m alone. The same tree passed at load about 8 (18:39-18:45 EDT). Not diagnosed: which part of world f or world h is timing-sensitive. readset-skip-d is now the suite pole, so this is tiered DEFECT under this entry's owed item 2 (the census of load-dependent verdicts).
+
 verify: manual
 
 ## BL-634 — `enforcement-map.yaml` is not valid YAML: `yaml.safe_load` fails on an unquoted `: ` in a prose value
@@ -375,27 +379,6 @@ Related: BL-585 (which introduced the self-check), and the lead's process rule t
 
 verify: manual
 
-## BL-647 — `/bin/bash` 3.2 closes a multi-line `$( … )` early at a bare `case` pattern's `)` or at a lone apostrophe in a comment, and `bash -n` accepts both
-
-**DEFECT.** Found by ai-dlc-6f and filed on lead ai-dlc-71's instruction; intake reproduced both forms under `/bin/bash` 3.2.57(1)-release, standalone, with `set -u`. Tool-hazards class.
-- Found when shard a of `adversarial-shard-merge-mutants` at `66e5de0a` exited 1 with "run.sh: line 630: pst: unbound variable" inside the [MW] probe's `mwr="$( … )"`, printing no [MW] line and no verdict.
-- (a) A comment carrying a single apostrophe inside a multi-line `"$( … )"`: `# the scorer's own subshell (bash -c's PPID) is excluded` gives "bad substitution: no closing `)'", and the assignment never happens (`mwr: unbound variable`). The same text without apostrophes prints `[1 0]`. Intake's narrowing: a comment carrying a balanced PAIR of apostrophes and no `)` prints `[1 0]`, while a comment carrying a lone `)` and no apostrophe fails the same way. So the trigger is an unbalanced quote or paren in comment text, not "any apostrophe". That is consistent with 6f's report that `core/fixtures/wait-stale-deliverable/run.sh` carries apostrophe comments inside substitutions and still passes.
-- (b) `case "$h" in ''|*[!0-9]*) k=x ;; *) k=1 ;; esac` inside a multi-line `"$( … )"` gives "syntax error near unexpected token `newline'" and then `pst: unbound variable`. With the POSIX leading-paren form, `(''|*[!0-9]*)` and `(*)`, it prints `[1 0]`.
-- (c) A `$(` inside a single-quoted string inside `"$( … )"`. Measured by ai-dlc-c2 at `39955c93` (clean detached worktree, hermetic): `core/fixtures/postcompact-rulebook-recovery/run.sh:1642-1643`, `amutant_arm "the stage never arms …" "$(amut noarm 'index($0,"owed_put \"$(printf"){print …; next} 1')" …`, added by `3d5f1e70` (0.797.0). It printed "bad substitution" once, ran 0 of 8 advisor-stage mutant lines, and exited rc=0. Intake reproduced it standalone under `/bin/bash` 3.2.57, at a top-level `if` with a line before and after the site and a line after the `fi`. The site's exact two lines, and the reduced line `amutant_arm a "$(amut n 'x "$(p"){y} 1')" z`, each give "bad substitution". The rest of the `if` block is skipped, the line after `fi` runs, rc=0, and `bash -n` exits 0. Paired passing forms: `'x $(p){y} 1'` (a balanced `$(p)`), the next site line `amut mate '…'` (no `$(`), and `'a "$(printf" b'` (no `)` after the `$(`) all run the block to its end. So the trigger is the `$(` inside the quotes followed later by a `)`, not a quote alone. The outer substitution at this site is ONE line, so form (c) does not need a multi-line `$( )`.
-- `bash -n` exits 0 on all four failing forms of (a) and (b) and on form (c), so the shell-syntax step of the gate cannot see this. The hazard is only visible at run time, as an unbound variable or a missing verdict far from its cause.
-
-Live sites: none on origin/main `33361d56` (0 matches for the case line, control 0 `hkd` anywhere), and fixed for `adversarial-shard-merge-mutants` on `b235-bl536-g1` at `070ca3d0`. ai-dlc-c8's `b235-load-series` `87116aa0` carries the identical bare-pattern line, `case "$hpid" in ''|*[!0-9]*) hkd=x ;; *) kill -0 …`, in 5 batteries: `adversarial-shard-merge-mutants/run.sh:420`, `apply-self-overwrite-mutants/run.sh:327`, `remediator-shard-join-mutants/run.sh:767`, `review-shard-merge-mutants/run.sh:669` and `self-update-fixture-log-mutants/run.sh:1913` (5 of 5 read at that commit; each sits inside a `="$(` opened 14 lines above, by a hand scan, not the parser). FIXED on that branch by c8's `ed286604`, which writes all 5 in the leading-paren form: 0 unparenthesised sites there, against 5 at `87116aa0` (control).
-
-Correction to "Live sites: none": that held for forms (a) and (b) only. A form (c) site was live on main from 0.797.0 (`3d5f1e70`) through 0.817.0: `core/fixtures/postcompact-rulebook-recovery/run.sh:1643` at `39955c93` (1 match for `amut noarm 'index` on origin/main). c2's BL-607 commit `86962cd9` binds that awk program to a variable (`"$(amut noarm "$AP_NOARM")"`), and it lands in 0.818.0.
-
-NOT measured: the false-positive set of a `validate-shell-portability.sh` arm that flags a bare `case` pattern, or an unbalanced quote or paren in a comment, inside a multi-line `$( )`. 71 asks that it be measured across the tree before such an arm is proposed. Per "cross-check a parser against what EXECUTES it", the oracle for any such arm is `/bin/bash` 3.2 running the extracted substitution, not `bash -n` and not a second grammar.
-
-Owed (lead ai-dlc-71): a `validate-shell-portability.sh` arm that flags forms (a) and (b) inside a multi-line `$( )`, and form (c) inside any `$( )`, after its false-positive set is measured across the tree, so the next author cannot write any of them. The known sites are fixed once `86962cd9` lands. Receipt: each failing form above, (c) included, is flagged, and its paired passing form is not.
-
-Owner: unowned (71: filed, not built by 6f).
-
-verify: manual
-
 ## BL-651 — I84 accepts a `stories_dir` reader whose only mention of the sprint slot is a comment
 
 **DEFECT.** Measured by ai-dlc-53 in the BL-631 rehearsal at `09c624ae` and filed on lead ai-dlc-71's instruction. Intake reproduced it at `09c624ae` in a clean detached worktree. In `scripts/validate-enforcement-map.sh`, I84's no-substitution arm (`:8289-8293` at `09c624ae`) narrows the READ to non-comment lines (`i84_reads`, `:8254-8256`). The slot check that follows is a whole-file `grep -qF "$i84_slot"` (or `stories_dir_sprint_placeholder`), and a comment satisfies it. 53's run of `enforcement-map-derivations-b` printed "a reader of stories_dir that never names the slot is REPORTED — the validator did NOT report it". The reason was a Check 6 comment in `core/scripts/validate-mandatory-rules.sh` (`:339`, from `2ec660ec`) that spells `` `s{sprint}` ``.
@@ -426,91 +409,6 @@ Owed: an absent record is refused, or reported as unmeasured, and never as 0 fin
 Related: BL-587 (the evidence, and the withdrawn item 3).
 
 Fix shape (lead ai-dlc-71): M4's pin means silence on an absent record was a deliberate choice, most likely so that a tree with no reconcile yet is not wedged at its gate. The builder first reads why M4 pinned silence. The fix then reports the missing and empty cases as a visible UNMEASURED/PENDING line, exits 0, and does not refuse, unless that reason turns out not to hold. If it does not hold, the entry is amended with what was found before a refusal is built.
-
-verify: manual
-
-## BL-655 — the load series (0.820.0) roughly doubled review-shard-merge-mutants and readset-skip under the hook's pool, and the cause is not established
-
-**DEFECT.** Measured by ai-dlc-4e [9b62de] (c8) in 0.820.0's hooked dress rehearsal at c1078e8e; tiered DEFECT by lead ai-dlc-71 ("a wall clock that grew under the series is a defect until it is justified").
-
-Loaded costs, `.git/ai-dlc-fixture-durations` before and after the rehearsal (both under the hook's pool):
-- review-shard-merge-mutants a/b/c: 654/549/604 s to 1207/1193/1192 s.
-- readset-skip, -b, -d: 478/480/710 s to 984/1038/1261 s (readset-skip-d +551 s).
-- advisor-gate-deny-mutants a-e: 328/339/326/320/321 s to 379/438/396/373/354 s.
-- self-update-fixture-log-mutants: 51 s to 83 s.
-
-Load control, same run: the 27 changed rows of units the series touches have a median ratio of 1.25; the 35 changed rows of units it does not touch, 0.96. One untouched unit (readset-skip-digest-mutants, 407 s to 893 s) also doubled, so contention alone can double a unit and no single row is evidence.
-
-Series commits touching the inputs:
-- review-shard-merge-mutants, self-update-fixture-log-mutants: the no-progress scorer watchdog (9312a79a, 2f758767, 8ad4c2de; slot() now runs a `find -newer` every SCORER_POLL=5 s) and the [MW] arm (0305d8af, 3c6b2ec2, 14eec28c, 05f9d17b; shard a only, about 15 s, so it cannot explain shards b and c).
-- readset-skip shards: 29752f78 (live-trace waits end on events or an AW_STALL no-progress refusal, not a tick count), c12e5d15, e5b49b5a.
-- advisor-gate-deny-mutants: f5876dc4 (two mutants added; the net cell pays its 10 s per scoring that reaches it).
-
-Owed: one base (ddad2ac3) against tip (0.820.0) pair per subject — review-shard-merge-mutants shard b and readset-skip-d — interleaved, in clean worktrees at the same path, read as CPU-seconds, never wall clock. If the tip's CPU-seconds exceed the base's beyond the spread of the reps, the touching commit is found by ablation and the cost is either justified in its header or removed. Slot granted by the lead after 0.820.0 lands, before BL-594's sweep.
-
-Intake (read-only): all 13 cited commits resolve, and an impossible sha does not. The local `.git/ai-dlc-fixture-durations` (309 rows) carries the after-figures above: review-shard-merge-mutants a/b/c 1207/1193/1192, readset-skip/-b/-d 984/1038/1261, readset-skip-digest-mutants 893. Correction: readset-skip-d is not the top row of that record. The top three rows are adversarial-shard-merge-mutants and its -e and -b shards, at 2122/2113/2113 s. The filer's "now the suite pole" was therefore dropped from the figures line. Per the filer, the rehearsal did not dispatch the adversarial-shard-merge shards (0 mentions in its log), and their rows read 2122 and 2113 both before and after it. So 1261 s was the longest unit in that run, never the record's pole. Related, not duplicates: BL-583 (the suite's total cost) and BL-592 (the shard batteries' SCORER_BOUND under the pool).
-
-Measured pair (by ai-dlc-4e [9b62de], c8, in the lead's slot after 0.820.0 landed): base ddad2ac3 (0.819.0) against tip 4e6670c1 (0.820.0), one rep per side, serial, base first, `hermetic-run.sh --root <wt> <unit>` with a private mktemp `AI_DLC_VERDICT_STORE`, in one clean `git worktree` at the same path for all four runs; all four rc 0. CPU-seconds are user+sys from `/usr/bin/time -p`.
-- review-shard-merge-mutants-b: base 1379.42 (user 474.53, sys 904.89, wall 217 s); tip 1398.37 (user 475.88, sys 922.49, wall 219 s); ratio 1.014.
-- readset-skip-d: base 202.93 (user 94.73, sys 108.20, wall 206 s); tip 200.48 (user 93.46, sys 107.02, wall 202 s); ratio 0.988.
-The 1-minute load before each run was 6.25/11.35 (shard b, base/tip) and 10.67/3.51 (readset-skip-d). Run alone, each side took about 3.5 to 4 minutes of wall against the rehearsal's loaded 1193 s and 1261 s, so the doubling is not reproduced as CPU work at n=1. That is consistent with pool contention but does not establish it: each side ran once, base before tip, so the pair has no measured spread and cannot resolve a change of a few percent. A cause needs more reps or a loaded pair. Intake (read-only): both shas resolve and an impossible sha does not; all twelve user, sys and real figures match the filer's `/usr/bin/time -p` outputs, and the per-side sums and both ratios recompute from them.
-
-verify: manual
-
-## BL-662 — the adversarial repair record is the only repair kind with no round word, the join accepts `<artifact>-adversarial-repair-p<M>`, and only gate-time arm H catches it
-
-**NOTE.** Reported by ai-dlc-f7, read-only on graph's s319 lead (0.818.0, transcript `74de15ba`). Intake ai-dlc-40.
-
-Observed:
-- Lines 4089 and 4098: for the sectioned repair of adversarial pass 1, the lead split into `shards/architecture-adversarial-repair-p1/`, and the `--document` join wrote `s319/architecture-adversarial-repair-p1.md` without complaint.
-- Line 4605, after pass 2: `validate-adversarial-convergence.sh --series` printed `FAIL (H -- REPAIR-RECORD)`, naming the owed record `architecture-repair-p1.md` and the existing one as "not this series' prescribed name".
-- Line 4626: the lead ran `mv architecture-adversarial-repair-p1.md architecture-repair-p1.md`.
-
-The cost was about one turn and a rename of a joined gate record after a whole pass had run on top of it. Intake: the transcript reads as quoted, and an impossible-token control matched 0.
-
-Why the wrong name is the natural one. At origin/main `cc3c113f`, `core/skills/ai-dlc/steps/_gate-procedures.md` names party repairs `<artifact>-party-repair-p<M>` (:320-321) and elicitation repairs `<artifact>-elicitation-repair-p<M>` (:471-472). Adversarial repairs are named `<artifact>-repair-p<M>` (:894, :963, :1066), with no round word, and the step prose says so nowhere (0 mentions of `-adversarial-repair`). `core/scripts/join-remediator-shards.sh` takes the record name from the lead's shard dir and never checks it against the series. `validate-adversarial-convergence.sh:3399` (`h_own="$dir/${H_STEM}-repair-p${M}.md"`) is the first reader to enforce the name, and it runs at gate time.
-
-Related, not duplicates:
-- Archived BL-455 (0.733.0) made arm H refuse another series' record, which is why this now fails at the gate rather than passing.
-- Archived BL-535 (0.791.0) fixed the carry-over evaluation's stem, with the same symptom on `coe-adversarial-repair-p1.md`. Its fix was step prose for that step only, so this is the same mis-naming one step over.
-
-Owed: either the join refuses a `-adversarial-repair-p<M>` dir, or any name but `<artifact>-repair-p<M>` beside an `<artifact>-adversarial-p<M>.md`, printing the owed name; or the step prose at :894 states the asymmetry. Probe: a `--document` join into `shards/x-adversarial-repair-p1/` beside `x-adversarial-p1.md` refuses and names `x-repair-p1`. Control: `shards/x-repair-p1/` joins.
-
-verify: manual
-
-## BL-669 — a lead's Edit of an adversary shard is sealed but never refused, and the merge's role check cannot see it
-
-**NOTE.** Found by BL-530's tip adversary (0.824.0, NOTE 6), filed by the lead as BL-669. `merge-adversarial-shards.sh` refuses a shard whose bytes differ from its newest content-seal row, and a Write or Edit by ANY actor re-seals the file. A top-level session's Edit therefore writes a seal row (`actor: "session"`, no `agent_id`) and the shard merges with the lead's bytes in it. The merge's role check ("only an adversary writes an adversary shard") reads `kind: "artifact-write"` rows keyed on a non-empty `agent_id`, so the session's Edit is invisible to it too. Every one of BL-530's six instances is a Bash channel; this one is the sanctioned channel used by the wrong actor, which the seal attests as recorded and never as permitted (`content-seal.sh` LIMITS: "a seal attests the channel of the last write, not who should have made it").
-
-Owed: a shard whose newest seal row is `actor: "session"` refuses at merge, as a gate part already does, naming re-dispatch as the remedy; or the role check reads seal rows as well as artifact-write rows. Probe: an adversary Write then a session Edit on one shard refuses; control: an adversary Write then the same adversary's Edit merges.
-
-Judge the LAST NON-PROGRAM tool row, never the newest row. Once `wait-for-deliverable.sh --mark` seals a shard as `program:wait-for-deliverable`, its newest seal row is that program row. A lead Edit followed by the seat's `--mark` would then hide the session row behind it, and a newest-row test would pass it.
-
-verify: manual
-
-## BL-670 — the shard merge never stamps DIVERGENT_HARD_BLOCK from the summed prior-scope count, so a sharded divergence reaches the validator unstamped
-
-**NOTE.** Found while building BL-665. `merge-adversarial-shards.sh` (`:302` header; `:429` and `:1336` at `e91b4d86`) stamps the merged pass DIVERGENT_HARD_BLOCK only when some shard declared it. It sums `findings_critical_prior_scope` across shards but never applies arm C's test (summed prior-scope above the previous pass's CRITICAL count) to that sum. A divergence that exists only in the sum — no single shard's count rose — is therefore never stamped, and the validator's arm-C path is the only thing that sees it. Measured on graph's s319 architecture p2 (read-only): the shard bodies that state a prior-scope count give 0 or 1, and none calls its finding divergence. The merged pass carries `findings_critical_prior_scope: 2` against p1's `findings_critical: 1`, and its verdict is EXIT_CONDITION_NOT_MET. The per-shard values that summed to 2 are not re-derived here: some shard lines are prose, and the merge defaults an absent field to that shard's whole CRITICAL count.
-
-Since BL-665 an unstamped divergence resolves exactly as a stamped one does, so this no longer deadlocks; the cost left is a mislabelled pass. Its gate error tells the adversary to stamp DIVERGENT_HARD_BLOCK, which no shard was in a position to do.
-
-Owed: decide whether the merge should stamp from the sum. It has the previous pass's CRITICAL count only by reading the prior pass file, which it does not do today. Probe: two shards each declaring prior-scope 1 over a previous pass with 1 CRITICAL; the merged verdict. Control: the same with a previous pass of 2 CRITICAL.
-
-verify: manual
-
-## BL-664 — `merge-adversarial-shards.sh --check-header` refuses a provenance region copied verbatim with its inline ` #` comments, while the schema and `validate-provenance-block.sh` strip them
-
-**PARTIAL (v0.827.0, verified 04adbf68) — the shard-writer instruction shipped; the merge's own reader still refuses a verbatim copy.** Both region instructions, in `_gate-procedures.md` and `adversary.md`, tell the shard to copy the region verbatim and then delete each line's trailing ` #` comment, and each sentence is pinned (`elic-header-strip`, `adv-header-strip`). Open: `merge-adversarial-shards.sh` still does not apply the schema's `parser.comments` rule, so a shard that keeps the comments is still refused. The receipt stays `manual` while the entry is live.
-
-**DEFECT.** Found by batch 236's PROSE tip adversary.
-
-A shard built by copying a `provenance-block` region verbatim, inline ` #` comments kept, is refused by `merge-adversarial-shards.sh --check-header` ("does not declare integer findings_critical and findings_major"); with the comments stripped it passes. Measured on the elicitation axis and on the convergence axis (the adversary-pass region). The merge documents that it does not strip comments (`core/scripts/merge-adversarial-shards.sh` ~:250-254), while the schema's `parser.comments` (`core/schemas/provenance-block.json` ~:516) says a trailing ` #` comment is stripped, and `validate-provenance-block.sh` ~:536 applies that rule. So the merge's parser disagrees with its own schema.
-
-Graph's 988 shards carry 0 commented count lines, so writers strip in practice. The new "copy this region verbatim" sentence made a verbatim copy more likely.
-
-Fixed here by prose: both region instructions tell the shard to delete each trailing ` #` comment, and each sentence has a `process-rule-pins` row (`elic-header-strip`, `adv-header-strip`).
-
-Residual: the root fix is one comment-strip in the merge's own reader, `merge-adversarial-shards.sh` ~:371-374, after which the two prose sentences are redundant.
 
 verify: manual
 
@@ -638,8 +536,6 @@ verify: sh S=scripts/plan-rotate.sh; [ -s "$S" ] || exit 9; T=$(mktemp -d "${TMP
   graph's stamp uses 8-hex shas and its ledger carries 7 `verify: sh` receipts, so a narrowed key would fall back
   on graph every time.
 - **Direction (lead-ruled):** keep the key, and remove the churn: the update skill owns a private, main-only, bare distribution clone under the consumer's git-common-dir, built in a later release with BL-693. The recorded PASS ships OFF by default (`EMIT_REPORT_VERIFY_CACHE=1` opts in) until an adversary round on the key finds no BLOCKER. Flipping the default on also adds an apply-restamp-worklist union-gate mutant A2b, run with EMIT_REPORT_VERIFY_CACHE=1, that guards the cache-hit pass branch (`if [ "$_ug_rc" -eq 0 ] && [ "$_ug_hit" = 1 ]; then`), because A2 now guards only the cache-off `elif` branch.
-- **Also owed in this release (lead-ruled):** BL-679's receipt regression scoring, unrun at 0.834.0 (two regressions and a second correct spelling), is scored here, because this release rewrites that path.
-- **Progress (v0.859.0):** the private main-only dist clone (`reconcile/dist-clone.sh`, SKILL.md step 1) and the fourth-review key hardening shipped, with BL-679's receipt regression scoring. OPEN: turning the cache default on, which needs an adversary round on the hardened key with no BLOCKER and a lead ruling.
 - Owner: ai-dlc-77 [e29316].
 
 verify: manual
@@ -734,4 +630,16 @@ verify: sh D=scripts/audit-party-wave-barrier.sh; R=core/skills/ai-dlc/rule-bodi
 - **Receipt basis:** the phase's own cost row in `.git/ai-dlc-fixture-durations`, compared like for like (loaded on both sides) with the method stated. The "before" side is the first suite run on main after 0.834.0 that dispatches `reconcile-emit-report`; the record still held the pre-pcache rows 124 / 299 / 134 when this was filed.
 
 verify: manual
+
+## BL-700 — a malformed or absent transcript, or no `jq` on PATH, fails OPEN before the handoff guard runs
+
+**DEFECT.** Owner ai-dlc-ae (batch 236). Found by the GUARDORDER tip adversary (tip698) on 02b16ee93; the id was allocated by lead ai-dlc-c8. Pre-existing on origin/main.
+
+`core/hooks/ai-dlc-continue.sh` allows a requested handoff on an unpublished branch with no `HANDOFF_GUARD_*` row in four cases: the transcript's last line is truncated mid-write, a non-JSON line sits mid-file, the transcript path names no file, or `jq` is not on PATH. The continuation log shows `ADVERSARIAL_STATE_UNADJUDICABLE` and then `ALLOWED_BY_PAUSE`; with the pause flag down, only the first row appears. The same seed with a well-formed transcript gets a HANDOFF GUARD block, which is the control. The four cases give the same silent allow under the branch hook and under the origin/main hook (tip698 `probe4.sh` and `probe4b.sh`, origin/main hooks at `scratchpad/tip698/base/core/hooks`). The receipt below reproduces it: exit 1 with all four named, on both hook trees, against a passing control.
+
+Mechanism, from the code and not traced: Check 0's transcript readers (`LAST_USER`/`LAST_ASST`, `jq -rs` over the whole file) read an empty string when `jq` cannot parse the file or is absent. With no request seen, the guard is armed only by an on-disk key. Check 0b then reports the adversarial state as unadjudicable, and Check 1 allows the Stop.
+
+Owed: a Stop whose transcript cannot be parsed or read, or that runs with no `jq`, must not let a requested handoff end with step 3 unsatisfied and no HANDOFF_GUARD record. The fix is not one line, and it rides a later release. The readers must tolerate a partial last line (`-R` with `fromjson?`, as `push_bg_read` and `ai-dlc-dispatch-guard.sh` already do), and a path with no `jq` needs its own decision.
+
+verify: sh bash core/fixtures/handoff-completion-assertion/receipt-bl700.sh
 

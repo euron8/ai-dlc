@@ -153,6 +153,13 @@ attach "$ROOT/proj-untracked" "$ROOT/remote-untracked.git"
 git -C "$ROOT/proj-untracked" push -q --no-verify -u origin HEAD
 echo "teammate output" > "$ROOT/proj-untracked/left-behind.md"
 
+# (f2) DIRTY AND UNPUBLISHED: a remote exists, the branch was never pushed, and a tracked file
+#      is modified. Steps 2 AND 3 both unsatisfied in one tree, which is the only state that
+#      tells "step 2 is answered before step 3" apart from either arm alone (BL-698).
+mkrepo "$ROOT/proj-dirty-unpushed"
+attach "$ROOT/proj-dirty-unpushed" "$ROOT/remote-dirty-unpushed.git"
+echo "uncommitted edit" >> "$ROOT/proj-dirty-unpushed/seed.txt"
+
 # (h) Pushed, 0 ahead, and the pipeline root TRACKED -- the reference consumer tracks its
 #     continuation log. Nothing here dirties it: the hook does, by appending its own block row
 #     to that tracked file, and the fixture drives that write rather than faking it. That

@@ -93,6 +93,14 @@
 #     wait-for-deliverable.sh's and its fixtures'; this row pins the join line the lead copies,
 #     from "Join it with" so a negated imperative cannot keep the command; arch-chain-marker-last
 #     pins that the marker is the architect's final write, after the last file of the chain.
+#   - a repair PART closes with `--mark` and every axis's part join beat passes `--complete`
+#     (_gate-procedures.md files, sections and subject "Join" steps; remediator.md item 1,
+#     **Close your part with `--mark`**; gp-part-*, rem-part-mark), and a serial remediator whose
+#     block appended a `(decision)` writes its SPEC Render line BEFORE `--mark-repair`
+#     (gp-render-before-mark, rem-render-before-mark). The gp-part-complete-* token ends at
+#     `--complete --`, so `--complete --since` and `--complete --dispatch` both pin and a plain
+#     beat or `--complete-repair` does not. The marker predicate is wait-beat-liveness's
+#     section 25; the stale-SPEC refusal is remediator-shard-join's SP11.
 #
 # LEADS ARE NOT ENOUGH. A bold lead left intact over a body rewritten to say the opposite
 # ("need NOT carry", "dropped only through a HARD_BLOCK", "an assertion is a sufficient
@@ -244,6 +252,8 @@ gp-brief-series|S|steps/_gate-procedures.md|## Gate-adjudication dispatch|## Val
 gp-shard-series|S|steps/_gate-procedures.md|## Gate-adjudication dispatch|## Validation cycle|**Shard the worklist|para|the one `gate_series_id` every shard of this dispatch stamps, since `--merge` refuses parts that disagree on it
 gp-story-series|S|steps/_gate-procedures.md|## Gate-adjudication dispatch|## Validation cycle|**Dispatch** ONE `gate-adjudicator`|para|When the gate is dispatched for exactly one story, the brief also carries a `story: <story-index>` line naming it, the only source of the series id's slug; a gate dispatched over several stories, or over none, carries no `story:` line.
 gp-shardstory-series|S|steps/_gate-procedures.md|## Gate-adjudication dispatch|## Validation cycle|**Shard the worklist|para|the gate's `story: <story-index>` line when it has one
+gp-advname-shard|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Adversarial repair name.**|para|never `<artifact>-adversarial-repair-p<M>` or `<artifact>-adversarial-p<k>-repair-p<M>`, and the join refuses an artifact ending in `-adversarial`
+gp-advname-record|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Repair record name, again.**|para|never `<artifact>-adversarial-repair-p<M>.md` or `<artifact>-adversarial-p<k>-repair-p<M>.md`, whether a join or a serial remediator writes it; the join refuses the first of those wrong shapes
 gp-redispatch-series|S|steps/_gate-procedures.md|## Gate-adjudication dispatch|## Validation cycle|**A re-dispatch is a whole new dispatch.**|para|The `gate_series_id` is exempt: the same-series rule decides it at dispatch, never `close`.
 gadj-brief-series|R|gate-adjudicator.md|## Contract|## The verdict|The lead's dispatch gives you|para|(e) the `gate_series_id`
 gadj-copy-series|R|gate-adjudicator.md|## The verdict|## Ownership|Write exactly the shape below.|para|`gate_series_id` is copied byte-for-byte from your brief, never invented
@@ -415,6 +425,18 @@ gp-probe-ledger-rerun|S|steps/_gate-procedures.md|## Adversarial review dispatch
 adv-shard-sentinel|R|adversary.md|## Contract|## Severity|1. **Run the evaluation you were dispatched for, in your own context.**|para|**A shard writes `tool_use_id: NOT_ACCESSIBLE`, never an id it was told or guessed.**
 gp-derive-file|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|Every re-run names a FILE and never the slot directory.|para|`validate-artifact-derivations.sh <the joined repair record>`
 gp-join-serial|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh --complete-repair|para|--complete-repair --dispatch <agentId> <repair_record_path>
+gp-part-complete-files|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Shard by file (Rule 28, "Split dispatch": files axis).**|para|Beat-join every part with `scripts/ai-dlc/wait-for-deliverable.sh --complete --
+gp-part-complete-doc|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|1. **Split.** `scripts/ai-dlc/partition-document.sh --split|para|Beat-join every part with `scripts/ai-dlc/wait-for-deliverable.sh --complete --
+gp-part-complete-subj|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|1. **Split.** `scripts/ai-dlc/partition-subject.sh --split|para|Beat-join every part with `scripts/ai-dlc/wait-for-deliverable.sh --complete --
+gp-part-mark|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh --complete-repair|para|A part remediator closes its part with `--mark` instead, and each axis's join step above beat-joins those parts with `--complete`
+gp-render-before-mark|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh --complete-repair|para|line before its `--mark-repair`, so the render lies inside the dispatch this beat joins
+gp-part-dispatch-one-files|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Shard by file (Rule 28, "Split dispatch": files axis).**|para|<part path>...` (one `--dispatch` per agent the round joined)
+gp-part-dispatch-one-doc|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|1. **Split.** `scripts/ai-dlc/partition-document.sh --split|para|<part path>...` (one `--dispatch` per agent the round joined)
+gp-part-dispatch-one-subj|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|1. **Split.** `scripts/ai-dlc/partition-subject.sh --split|para|<part path>...` (one `--dispatch` per agent the round joined)
+gp-stop-repair-part|S|steps/_gate-procedures.md|## Auto-handoff evaluation (referenced by step files)|## Context reminder threshold check|1. **Stop all in-flight teammates first.**|para|for seat, shard, cross and repair-part files
+ho-stop-repair-part|S|steps/handoff.md|Execute this 5-step procedure in order:|**Resume is snapshot-driven.**|1. **Stop all in-flight teammates first.**|para|for seat, shard, cross and repair-part files
+rem-part-mark|R|remediator.md|## Contract|## The evidence contract|**Close your part with `--mark`.**|para|scripts/ai-dlc/wait-for-deliverable.sh --mark <part path> <step> remediator <shard> findings=<n>
+rem-render-before-mark|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**As the serial remediator, or as the one unsharded remediator**|para|line BEFORE your `--mark-repair`, never after it
 gp-redispatch-fresh|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**A completed record is never reopened by `SendMessage`.**|para|`TaskStop` the resident remediator and send ONE fresh `Agent` dispatch
 gp-redispatch-never|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**A completed record is never reopened by `SendMessage`.**|para|Never resume the finished remediator with `SendMessage`
 r28-no-reopen|S|rule-bodies/rule-28.md||**A dispatched teammate reaches the lead with `SendMessage` `to: "main"`.**|- **Retracted or narrowed scope.**|para|re-dispatches it fresh

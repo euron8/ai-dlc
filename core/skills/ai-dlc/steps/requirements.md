@@ -254,6 +254,9 @@ every repair. `_gate-procedures.md` carries the subject case at each of those si
   `- (event) Render <pass>: re-derived from memlog through <last decision>` line to `.memlog.md`;
   a change applied with Edit is recorded as `- (event) Hand-edit <pass>`, never as Render. A
   `(decision)` entry after the last such Render line is a stale SPEC, and the join refuses it.
+  The serial remediator after the join renders the same way: when its block appends a
+  `(decision)` entry, it re-renders `SPEC.md` and appends its Render line BEFORE its
+  `--mark-repair`, so the lead's beat on the record ends after the render.
 - **The adversarial series is named `s<N>/requirements-adversarial-p<M>`.** A sharded pass is
   written by `merge-adversarial-shards.sh --subject`, never by `--document`; a one-part subject's
   single adversary writes it directly, notarizing the subject manifest. Check 24 arm K3 holds

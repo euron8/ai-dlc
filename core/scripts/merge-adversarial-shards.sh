@@ -82,6 +82,13 @@
 #   THE CONTENT SEAL. A shard whose bytes differ from its newest `kind: "content-seal"` row (taken
 #   by ai-dlc-content-seal.sh after every Write or Edit) is REFUSED, naming that row's writer and the
 #   remedy; a shard with no seal row is not compared. content-seal.sh owns the set and the check.
+#   A shard whose LAST TOOL seal row (actor `agent` or `session`, in file order; program rows such as
+#   `--mark`'s skipped; `content-seal.sh --last-tool-row`, one call over all shards) is the top-level
+#   session's is REFUSED in the same phase, naming its tool and ts and the remedy: re-dispatch the
+#   adversary and merge with `--rerun <shard>.md@<ISO>`. A later agent row clears it. A shard with no
+#   tool row is not judged. An agent-teams teammate writes with no `agent_id` and so reads as `session`
+#   here; such a shard is already refused at the write-ledger join, whose rows need an agent_id, so this
+#   adds no new refusal for it.
 #   LIMITS. A shard written with Bash (a redirect, `sed -i`, a script's open) leaves no row and is
 #   refused: write shards with Write or Edit. A shard AMENDED with Bash after a Write is refused by
 #   the seal. A row is an ATTEMPT recorded at PreToolUse, not proof
@@ -251,11 +258,14 @@
 #   (they need the harness records), the same skill/mode/lead_role across shards, a unique id per
 #   shard, the mode-dependent artifact/artifact_sha checks (they need the map, the stories or the
 #   document), citations against the ordinal set, and the seat-complete set rule.
-#   COMMENTS ARE NOT STRIPPED. `provenance-block.json` `parser.comments` strips a trailing ` #`
-#   comment from a value; this merge never has, and still does not: `verdict: EXIT_CONDITION_MET # x`
-#   normalises to `EXIT_CONDITION_MET_X` and is refused, and `findings_major: 2 # x` is not an
-#   integer. Kept so that no input changes outcome here; a shard copying the adversary template's
-#   inline comments verbatim is refused by this merge while the schema reader accepts it.
+#   COMMENTS ARE STRIPPED, per `provenance-block.json` `parser.comments`, spelled as
+#   validate-provenance-block.sh spells it (`\s+#.*$`): parse_shard cuts `[ \t]+#.*$` from the RAW
+#   value, before the leading trim, so `findings_major: 2 # x` reads 2, `verdict: EXIT_CONDITION_MET # x`
+#   reads EXIT_CONDITION_MET, and `verdict:   # none` reads empty (refused as `<none>`). Whitespace
+#   before `#` is required: `findings_major: 1#x` is still not an integer and `artifact_sha: abc#def`
+#   is untouched. One site, so every header field goes through it. Downstream: a commented real
+#   `tool_use_id` is now compared with the derived id (as it should be), and the skill, mode,
+#   lead_role and resolves_divergence values the merge writes carry no comment.
 #
 # FINDING GRAMMAR (the partition this script checks; `adversary.md` cites it, not restates it)
 #   A finding is a `### ` heading carrying a severity word inside the shard `## Findings` section (up to the next
@@ -303,11 +313,25 @@
 #   Sums findings_critical, findings_major, findings_minor, findings_critical_prior_scope and
 #   findings_major_underived with the CONVERGENCE VALIDATOR defaults: prior_scope absent means
 #   ALL of that shard CRITICALs (fail-closed), underived absent means zero. Verdict:
-#     DIVERGENT_HARD_BLOCK   if any shard declared it;
+#     DIVERGENT_HARD_BLOCK   if any shard declared it, or (convergence axis, never --elicitation)
+#                            if the SUMMED prior_scope exceeds PREV_CRIT, the findings_critical of the
+#                            nearest earlier pass in this series that declares one -- arm C's test
+#                            (validate-adversarial-convergence.sh, `prior -gt PREV_CRIT`, with PREV_CRIT
+#                            rolled only over passes whose count reads), applied to the sum no shard saw;
 #     EXIT_CONDITION_MET     iff summed critical <= CRITICAL_EXIT_CEILING and summed blocking
 #                            MAJOR (major - underived) <= MAJOR_EXIT_CEILING;
 #     EXIT_CONDITION_NOT_MET otherwise.
-#   Both ceilings are READ from validate-adversarial-convergence.sh, never restated here.
+#   Both ceilings are READ from validate-adversarial-convergence.sh, never restated here. So are the
+#   pieces of the summed-divergence walk: `order_key` (the `(pass|p)N` key), `block_field` and
+#   `severity_count` (the FIRST provenance block's count, as arm C reads it) are extracted from the
+#   validator as at_key is; only its `--series` exclusions (`*-resolution-p*`, `*-repair-p*`, `*-repair-*`, validator :187) are
+#   restated, being a `case` inside its loop. The earlier passes are `<artifact>-adversarial-p*` beside
+#   the output whose key is below <M>, nearest first; one with no readable count is skipped. No earlier
+#   pass, or none readable, stamps nothing and leaves the series to the validator. The walk runs only
+#   when the summed prior_scope is above 0. A DIVERGENT_HARD_BLOCK merge adds one body line under the
+#   RECOMPUTED sentence naming the rule (`shard-declared`, or the summed count against the file and
+#   its count); every other merge's bytes are unchanged. A stamped pass needs nothing a shard writes:
+#   arms D and F read only its verdict, its own artifact_sha and the NEXT pass's resolves_divergence.
 #   artifact_sha is `<basename-stem>=<sha> ...` in ordinal order (each per-ordinal shard claim,
 #   each checked against the story bytes on disk); tool_use_id is the FIRST cross shard's DERIVED
 #   id (`cross` or `cross-1`); shard_tool_use_ids is `<ordinal>=<id> ... cross-1=<id> ... cross-<G>=<id>`
@@ -375,6 +399,7 @@ parse_shard() {
     inblk {
       if (match($0, /^[a-z_]+:/)) {
         k = substr($0, 1, RLENGTH - 1); v = substr($0, RLENGTH + 1)
+        sub(/[ \t]+#.*$/, "", v)
         sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v)
         if (!(k in seen)) { seen[k] = 1; printf "F %s %s\n", k, v }
       }
@@ -868,6 +893,16 @@ if [ -f "$SEAL" ]; then
     1) while IFS= read -r _sl; do [ -n "$_sl" ] && collect "$_sl"; done < "$T/seal" ;;
     *) refuse "the content-seal check over $REC_WRITES did not run (exit $SEAL_RC): $(head -1 "$T/seal.err")" ;;
   esac
+  phase_barrier
+  # THE LAST TOOL WRITE (BL-669): a shard whose last agent/session seal row is the top-level session's
+  # carries the lead's bytes, re-sealed. Program rows are skipped by content-seal.sh, so a --mark after
+  # the session's Edit cannot hide it. One call over every shard, as --check.
+  _us="$(printf '\037')"
+  cut -f2 "$T/shards" | bash "$SEAL" --last-tool-row "$REC_STATE" - > "$T/ltr" 2> "$T/ltr.err" \
+    || refuse "the content-seal last-tool-row read over $REC_WRITES did not run: $(head -1 "$T/ltr.err")"
+  while IFS="$_us" read -r _lf _la _laid _lt _lts; do
+    [ "$_la" = session ] && collect "$_lf was last written by the top-level session (${_lt:-tool} at ${_lts:-<no ts>}), which carries no agent_id; only an adversary writes an adversary shard, so the lead's bytes would merge as the adversary's -- re-dispatch the adversary for $(basename "$_lf") and merge with --rerun $(basename "$_lf")@<the re-dispatch's ISO start>"
+  done < "$T/ltr"
   phase_barrier
 elif [ -f "$REC_WRITES" ] && grep -qE '"actor":[[:space:]]*"(agent|session)"' "$REC_WRITES"; then
   refuse "$REC_WRITES carries content-seal rows but $SEAL is absent, so no shard's bytes can be compared with its seal; reinstall ai-dlc"
@@ -1363,6 +1398,43 @@ BLOCKING=$((S_MAJOR - S_UNDER))
 if [ "$ANY_DIVERGENT" -eq 1 ]; then VERDICT="DIVERGENT_HARD_BLOCK"
 elif [ "$S_CRIT" -le "$CRIT_CEIL" ] && [ "$BLOCKING" -le "$MAJOR_CEIL" ]; then VERDICT="EXIT_CONDITION_MET"
 else VERDICT="EXIT_CONDITION_NOT_MET"; fi
+# THE SUMMED DIVERGENCE (BL-670): arm C of the convergence validator, applied by the program that owns
+# the summed prior-scope count, which no shard could see. Convergence axis only. A stamp needs
+# S_PRIOR > PREV_CRIT >= 0, so a merge with S_PRIOR 0 reads no earlier pass and stays byte-identical.
+# The series grammar (glob, exclusions, order_key) and the count reader (severity_count over
+# block_field: the FIRST block's value) are the VALIDATOR's own definitions, extracted as at_key is.
+DIV_LINE=""
+if [ "$ELICIT" -eq 0 ] && [ "$ANY_DIVERGENT" -eq 0 ] && [ "$S_PRIOR" -gt 0 ]; then
+  for _fn in order_key block_field severity_count; do
+    n_fn="$(grep -c "^$_fn() {" "$VALIDATOR")" || n_fn=0
+    [ "$n_fn" = "1" ] || refuse "found ${n_fn} '$_fn() {' definitions in $VALIDATOR (want exactly 1)"
+    eval "$(awk -v h="$_fn() {" 'index($0, h) == 1 { on = 1 } on { print } on && /^}/ { exit }' "$VALIDATOR")"
+  done
+  _EXCL='      *-resolution-p*|*-repair-p*|*-repair-*) continue ;;'
+  n_ex="$(grep -cF -- "$_EXCL" "$VALIDATOR")" || n_ex=0
+  [ "$n_ex" = "1" ] || refuse "found ${n_ex} copies of the series exclusion line '${_EXCL#      }' in $VALIDATOR (want exactly 1); restated below, so the validator's exclusions have drifted"
+  : > "$T/prev" || refuse "cannot stage the earlier passes"
+  for _pf in "$SPRINT_DIR/$ARTIFACT-adversarial-p"*; do
+    [ -f "$_pf" ] || continue
+    # validate-adversarial-convergence.sh's EXCLUSIONS (its `--series` loop), restated: they are a
+    # `case` inside that loop, not a function this script can extract.
+    case "$(basename "$_pf")" in *-resolution-p*|*-repair-p*|*-repair-*) continue ;; esac
+    _k="$(order_key "$_pf")"
+    [ -n "$_k" ] && [ "$((10#$_k))" -lt "$PASS" ] && printf '%s\t%s\n' "$((10#$_k))" "$_pf" >> "$T/prev"
+  done
+  PREV_CRIT=""; PREV_FILE=""
+  while IFS="$(printf '\t')" read -r _k _pf; do
+    # A pass with no readable CRITICAL count is skipped, as arm C skips it when PREV_CRIT rolls.
+    _c="$(severity_count "$_pf" CRITICAL)"
+    [ -n "$_c" ] && { PREV_CRIT="$((10#$_c))"; PREV_FILE="$_pf"; break; }
+  done < <(sort -t "$(printf '\t')" -k1,1nr -k2,2 "$T/prev")
+  if [ -n "$PREV_CRIT" ] && [ "$S_PRIOR" -gt "$PREV_CRIT" ]; then
+    VERDICT="DIVERGENT_HARD_BLOCK"
+    DIV_LINE="summed findings_critical_prior_scope $S_PRIOR > $(basename "$PREV_FILE") findings_critical $PREV_CRIT"
+  fi
+elif [ "$ANY_DIVERGENT" -eq 1 ]; then
+  DIV_LINE="shard-declared"
+fi
 
 {
   if [ "$ELICIT" -eq 1 ]; then
@@ -1371,6 +1443,7 @@ else VERDICT="EXIT_CONDITION_NOT_MET"; fi
   else
   printf '# %s -- adversarial pass %s (merged from %s shards)\n' "$ARTIFACT" "$PASS" "$(wc -l < "$T/shards" | tr -d ' ')"
   printf '\nVerdict RECOMPUTED by merge-adversarial-shards.sh from the summed residue; shard verdicts are advisory.\n'
+  [ -z "$DIV_LINE" ] || printf 'DIVERGENT_HARD_BLOCK stamped by: %s.\n' "$DIV_LINE"
   fi
   printf '\n## Shard ordinal map\n\n```text\n'
   cat "$T/map"
@@ -1417,9 +1490,10 @@ if [ -e "$OUT" ]; then
   refuse "$OUT already exists and differs from this merge; a pass file is never overwritten"
 fi
 cp "$T/out" "$OUT.merge-tmp.$$" && mv "$OUT.merge-tmp.$$" "$OUT" || refuse "writing $OUT failed"
-# The program's own seal row, RECORD-ONLY: the pass file is outside the sealed set because none of
-# the three join programs reads it as an input -- Check 24 does, and this merge's only look at an
-# existing pass file is the `cmp -s` above, which already refuses any byte difference
+# The program's own seal row, RECORD-ONLY: the pass file is outside the sealed set. This merge reads an
+# existing pass file twice: the `cmp -s` above (which refuses any byte difference), and an EARLIER
+# pass's findings_critical for the summed-divergence stamp. LIMIT: a Bash edit of a prior pass's count
+# can move that stamp, and nothing here compares it with a seal; Check 24 reads the same bytes
 # (content-seal.sh, PROGRAM ROWS). A failed append changes no outcome.
 [ -f "$SEAL" ] && { bash "$SEAL" --record "$REC_STATE" program:merge-adversarial-shards "$OUT" \
   || printf 'NOTE: the program seal row for %s was not appended\n' "$OUT" >&2; }

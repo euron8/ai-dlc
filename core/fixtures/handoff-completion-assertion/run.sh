@@ -197,8 +197,8 @@ rdrive() { # rdrive <projdir> <session> [hooksdir] -> additionalContext
   printf '%s' "$out" | jq -r '.hookSpecificOutput.additionalContext // ""' 2>/dev/null
 }
 
-# The three ai-dlc-continue.sh block texts, keyed on a phrase unique to each. The push text
-# quotes "resume prompt is well-formed", so the resume marker has to be the longer phrase or
+# The ai-dlc-continue.sh block texts, keyed on a phrase unique to each. The push and commit
+# texts say "Emit no resume prompt", so the resume marker has to be the longer phrase or
 # assertion k would score the push branch as the resume branch.
 PUSH_MARK="step 3's push has NOT landed"
 TEAM_MARK="still carries a row whose status reads"
@@ -611,6 +611,214 @@ reason_case() { # reason_case <label> <projdir>
 # ahead-test mutant fail TWO arms, which is the entanglement `fixture-mutants.md` warns about:
 # assertion (e) OWNS "1 commit ahead -> BLOCK", so this arm stands down for it.
 reason_case "unpushed branch" "$P_UNPUSHED"
+
+# --- (t1) STEP ORDER WITH NO RESUME BLOCK (BL-698) ----------------------------------------
+# The COMMIT and PUSH arms once also required the resume block, so a handoff whose step 2 or 3
+# had not landed AND whose resume line was not yet emitted got the RESUME text -- told to emit
+# a resume prompt for an unpushed branch. Every case here drives T_REQ_NOBLK and asserts the
+# TEXT, because the verdict (block) is the same under the defect.
+P_DIRTY_UNPUSHED="$ROOT/proj-dirty-unpushed"
+reset_state "$P_DIRTY_UNPUSHED"
+{ [ "$(git -C "$P_DIRTY_UNPUSHED" status --porcelain -- seed.txt 2>/dev/null)" = " M seed.txt" ] \
+  && ! git -C "$P_DIRTY_UNPUSHED" rev-parse --abbrev-ref '@{u}' >/dev/null 2>&1 \
+  && [ -n "$(git -C "$P_DIRTY_UNPUSHED" remote 2>/dev/null)" ]; } || \
+  broken "(t1) premise: proj-dirty-unpushed is not dirty AND unpublished with a remote — the both-bad case would not have both steps unsatisfied"
+ok "probe shape: (t1-both) carries a modified tracked seed.txt, a remote, and no upstream"
+t1_case() { # t1_case <label> <projdir> <want-mark> <failmsg> [extra-mark]
+  local rr
+  reset_state "$2"
+  rr="$(reason "$(drive "$2" "$SESS_A" "$T_REQ_NOBLK")")"
+  if [ -z "$rr" ]; then
+    bad "(t1) $1: the block carried NO reason at all"
+  elif ! has "$rr" "$3"; then
+    bad "(t1) $1: $4. It reads: $(printf '%s' "$rr" | head -c 120)"
+  elif [ "$3" != "$RESUME_MARK" ] && has "$rr" "$RESUME_MARK"; then
+    bad "(t1) $1: the reason carries the RESUME text as well — the dispatch is not exclusive"
+  elif [ -n "${5:-}" ] && ! has "$rr" "$5"; then
+    bad "(t1) $1: the reason lacks '$5'"
+  else
+    ok "(t1) $1"
+  fi
+}
+t1_case "push not landed, NO resume block -> the PUSH text, not RESUME" "$P_UNPUSHED" "$PUSH_MARK" \
+  "an unpublished branch with no resume block was answered with something other than step 3's push — the lead is told to emit a resume prompt for a branch that exists only on this machine"
+t1_case "commit not landed, NO resume block -> the COMMIT text" "$P_DIRTY" "$COMMIT_MARK" \
+  "a dirty tree with no resume block was answered with something other than step 2's commit"
+t1_case "commit AND push not landed, NO resume block -> the COMMIT text (step 2 before step 3)" "$P_DIRTY_UNPUSHED" "$COMMIT_MARK" \
+  "a dirty, unpublished tree with no resume block was not answered with step 2 first"
+t1_case "ahead of upstream, NO resume block -> the PUSH text with the environmental clause (finish steps 4 and 5)" "$P_AHEAD" "$PUSH_MARK" \
+  "a branch 1 commit ahead with no resume block was not answered with step 3's push" \
+  "finish steps 4 and 5 in this same turn"
+t1_case "everything landed, NO resume block -> the RESUME text (control: the resume arm still answers)" "$P_PUSHED" "$RESUME_MARK" \
+  "a pushed, clean tree with no resume block was not answered with the resume text"
+# push not landed WITH the resume block is reason_case (k) above: the PUSH text, unchanged.
+
+# --- (pb) A BACKGROUNDED PUSH STILL RUNNING DEFERS THE GUARD (BL-698) ----------------------
+# The harness moves a foreground push to the background at its 600000 ms timeout and records
+# `toolUseResult.backgroundTaskId` on the tool result; it writes a `queue-operation` enqueue
+# naming that task id when the task exits. Record shapes transcribed from the reference
+# consumer's session (graph a0701ce0, lines 1825, 1826 and 2005). Built here, at drive time,
+# so the in-ceiling timestamp is NOW. The pause flag is up, as it is in a directed handoff, so
+# the deferred Stop falls through to Check 1 and the log must carry BOTH rows.
+PB_DEF="HANDOFF_GUARD_DEFERRED_BY_PUSH"
+pb_tx() { # pb_tx <out> <bg: run|enq> <iso-ts> [bash-command] [agent: yes -> an Agent dispatch first]
+  : > "$1"
+  [ "${5:-}" = yes ] && jq -nc '{type:"assistant",message:{role:"assistant",content:[{type:"tool_use",id:"toolu_PBAGENT1",name:"Agent",input:{subagent_type:"dev"}}]}}' >> "$1"
+  jq -nc '{type:"user",message:{role:"user",content:"hand off the sprint"}}' >> "$1"
+  jq -nc --arg c "${4:-git push -u origin HEAD}" '{type:"assistant",message:{role:"assistant",content:[{type:"tool_use",id:"toolu_PB1",name:"Bash",input:{command:$c,timeout:600000}}]}}' >> "$1"
+  jq -nc --arg ts "$3" '{type:"user",timestamp:$ts,toolUseResult:{stdout:"",stderr:"",interrupted:false,backgroundTaskId:"bPBtask01",timedOutAfterMs:600000},message:{role:"user",content:[{type:"tool_result",tool_use_id:"toolu_PB1",content:"Command running in background with ID: bPBtask01"}]}}' >> "$1"
+  [ "$2" = enq ] && jq -nc '{type:"queue-operation",operation:"enqueue",content:"<task-notification>\n<task-id>bPBtask01</task-id>\n<tool-use-id>toolu_PB1</tool-use-id>\n<status>completed</status>\n</task-notification>"}' >> "$1"
+  jq -nc '{type:"assistant",message:{role:"assistant",content:[{type:"text",text:"The push is still running in the background."}]}}' >> "$1"
+}
+T_PB_RUN="$ROOT/pb-run.jsonl"; T_PB_ENQ="$ROOT/pb-enq.jsonl"; T_PB_OLD="$ROOT/pb-old.jsonl"
+T_PB_MID="$ROOT/pb-mid.jsonl"; T_PB_WATCH="$ROOT/pb-watch.jsonl"; T_PB_AGENT="$ROOT/pb-agent.jsonl"
+_pb_now="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+# 1800 s back: past the old one-sample 729 s ceiling, inside the derived 3004 s one.
+_pb_mid="$(jq -nr 'now - 1800 | strftime("%Y-%m-%dT%H:%M:%S.000Z")')"
+pb_tx "$T_PB_RUN" run "$_pb_now"; pb_tx "$T_PB_ENQ" enq "$_pb_now"; pb_tx "$T_PB_OLD" run "2020-01-01T00:00:00.000Z"
+pb_tx "$T_PB_MID" run "$_pb_mid"
+# A backgrounded WATCHER that carries `git push` as TEXT, never as its program.
+pb_tx "$T_PB_WATCH" run "$_pb_now" "until grep -q 'git push' push.log; do sleep 5; done; echo \"git push finished\""
+pb_tx "$T_PB_AGENT" run "$_pb_now" "git push -u origin HEAD" yes
+_pb_user="$(jq -rs '[.[]|select(.message.role=="user")|.message.content|(if type=="string" then . else (map(select(.type=="text")|.text)|join(" ")) end)]|map(select(length>0))|last // ""' "$T_PB_RUN" 2>/dev/null)"
+{ isreq "$_pb_user" && ! ismech "$_pb_user"; } || \
+  broken "(pb) premise: the background-push transcript's last user text ('$_pb_user') is not a handoff request — the tool-result record displaced it, and no (pb) verdict would mean anything"
+pb_drive() { # pb_drive <transcript> [hooksdir] -> raw stdout; the pause flag is up
+  reset_state "$P_UNPUSHED"; touch "$P_UNPUSHED/_bmad-output/pipeline-paused.flag"
+  drive "$P_UNPUSHED" "$SESS_A" "$1" "${2:-$HOOKS_DIR}"
+}
+pb_log() { printf '%s' "$P_UNPUSHED/_bmad-output/pipeline-continuation-log.md"; }
+
+o="$(pb_drive "$T_PB_RUN")"
+if [ "$(verdict "$o")" != allow ]; then
+  bad "(pb1) a push backgrounded by the harness with NO exit record was BLOCKED — the lead is told to push again in the foreground, a second concurrent pre-push suite. It reads: $(reason "$o" | head -c 120)"
+elif ! grep -qF -- "-- $PB_DEF" "$(pb_log)"; then
+  bad "(pb1) ALLOWED, but the log carries no $PB_DEF row — the allow did not come from the deferral"
+elif ! grep -qF -- "bPBtask01" "$(pb_log)"; then
+  bad "(pb1) the $PB_DEF row does not name the background task id"
+elif ! grep -qF -- "-- ALLOWED_BY_PAUSE" "$(pb_log)"; then
+  bad "(pb1) deferred, but the Stop did not fall through to Check 1 (no ALLOWED_BY_PAUSE row)"
+else
+  ok "(pb1) background push, no exit record -> ALLOW, a $PB_DEF row naming the task, then ALLOWED_BY_PAUSE (the fall-through reaches Check 1)"
+fi
+o="$(pb_drive "$T_PB_ENQ")"
+if ! has "$(reason "$o")" "$PUSH_MARK"; then
+  bad "(pb2) the SAME transcript with the push's exit record (enqueue) was not answered with the PUSH text — the deferral outlives the push. It reads: $(reason "$o" | head -c 120)"
+elif grep -qF -- "-- $PB_DEF" "$(pb_log)"; then
+  bad "(pb2) the PUSH text was emitted but a $PB_DEF row was also written"
+else
+  ok "(pb2) background push WITH its exit record (enqueue) -> the PUSH text, no deferral row"
+fi
+o="$(pb_drive "$T_PB_OLD")"
+if ! has "$(reason "$o")" "$PUSH_MARK"; then
+  bad "(pb3) a background push past the ceiling was not answered with the PUSH text — a lost exit record defers the guard forever. It reads: $(reason "$o" | head -c 120)"
+else
+  ok "(pb3) background push with no exit record, PAST the ceiling -> the PUSH text, never silence"
+fi
+# (pb3b) PAST THE CEILING THE TEXT MUST NOT SAY "WAIT". A lead told to wait there waits; each
+#        wait is a counted block, and BACKOFF then allows the unpushed handoff. Driven three
+#        times WITHOUT clearing the stall state -- the whole BACKOFF window -- and every one must
+#        carry the overrun clause and none the wait clause.
+WAIT_MARK="do not issue another; end the turn and wait"
+OVERRUN_MARK="has overrun its ceiling"
+reset_state "$P_UNPUSHED"; touch "$P_UNPUSHED/_bmad-output/pipeline-paused.flag"
+_pb3b=""
+for _i in 1 2 3; do
+  o="$(jq -nc --arg t "$T_PB_OLD" --arg s "$SESS_A" '{transcript_path:$t,session_id:$s}' \
+       | CLAUDE_PROJECT_DIR="$P_UNPUSHED" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" bash "$HOOKS_DIR/ai-dlc-continue.sh" 2>/dev/null)"
+  rr="$(reason "$o")"
+  if has "$rr" "$OVERRUN_MARK" && ! has "$rr" "$WAIT_MARK"; then _pb3b="${_pb3b}o"; else _pb3b="${_pb3b}x"; fi
+done
+[ "$_pb3b" = ooo ] \
+  && ok "(pb3b) past the ceiling, three Stops in the BACKOFF window -> each the overrun clause, none the wait clause" \
+  || bad "(pb3b) past the ceiling the PUSH text told the lead to wait, or lacked the overrun clause ($_pb3b) — the lead waits into BACKOFF, which allows the unpushed handoff"
+rm -f "$P_UNPUSHED/_bmad-output/handoff-guard-state.txt"
+# (pb3c) and with NO background push the PUSH text carries neither clause.
+o="$(pb_drive "$T_REQ_NOBLK")"; rr="$(reason "$o")"
+{ has "$rr" "$PUSH_MARK" && ! has "$rr" "$OVERRUN_MARK" && ! has "$rr" "$WAIT_MARK"; } \
+  && ok "(pb3c) no background push -> the PUSH text with neither the wait nor the overrun clause" \
+  || bad "(pb3c) with no background push the PUSH text carried a background-push clause"
+
+# (pb10) AN EMPTY ID JOINS NOTHING. A Bash git push whose tool_use carries no `id` and whose
+#        tool_result carries no `tool_use_id`, backgrounded with no enqueue: the two absent ids
+#        must not join as "" == "". The PUSH text, no deferral.
+T_PB_NOID="$ROOT/pb-noid.jsonl"
+{ jq -nc '{type:"user",message:{role:"user",content:"hand off the sprint"}}'
+  jq -nc '{type:"assistant",message:{role:"assistant",content:[{type:"tool_use",name:"Bash",input:{command:"git push -u origin HEAD",timeout:600000}}]}}'
+  jq -nc --arg ts "$_pb_now" '{type:"user",timestamp:$ts,toolUseResult:{backgroundTaskId:"bPBnoid01",timedOutAfterMs:600000},message:{role:"user",content:[{type:"tool_result",content:"Command running in background with ID: bPBnoid01"}]}}'
+  jq -nc '{type:"assistant",message:{role:"assistant",content:[{type:"text",text:"The push is still running in the background."}]}}'
+} > "$T_PB_NOID"
+o="$(pb_drive "$T_PB_NOID")"
+{ has "$(reason "$o")" "$PUSH_MARK" && ! grep -qF -- "-- $PB_DEF" "$(pb_log)"; } \
+  && ok "(pb10) a backgrounded push with NO tool_use id and NO tool_result id -> the PUSH text, no deferral (an empty id joins nothing)" \
+  || bad "(pb10) two ABSENT ids joined as equal and deferred the guard. It reads: $(reason "$o" | head -c 120)"
+o="$(pb_drive "$T_REQ_NOBLK")"
+if ! has "$(reason "$o")" "$PUSH_MARK" || grep -qF -- "-- $PB_DEF" "$(pb_log)"; then
+  bad "(pb4) a transcript with NO background push was not answered with the PUSH text alone (pause flag up)"
+else
+  ok "(pb4) no background push in the transcript, pause flag up -> the PUSH text, no deferral row (the id is required)"
+fi
+
+# (pb5) THE CEILING IS THE LONGEST RECORDED GATE, NOT ONE SAMPLE. A push backgrounded 1800 s ago
+#       is past the motivating push's 729 s and inside the derived 3004 s: it still DEFERS.
+o="$(pb_drive "$T_PB_MID")"
+{ [ "$(verdict "$o")" = allow ] && grep -qF -- "-- $PB_DEF" "$(pb_log)"; } \
+  && ok "(pb5) background push 1800 s old, no exit record -> still DEFERRED (the ceiling covers a gate longer than one sample)" \
+  || bad "(pb5) a push backgrounded 1800 s ago was not deferred — a recorded consumer gate ran 3604 s, so the guard would start a second concurrent suite under it. It reads: $(reason "$o" | head -c 120)"
+
+# (pb6) A WATCHER IS NOT A PUSH. A backgrounded Bash command that carries `git push` only as
+#       TEXT (a grep pattern, an echo) defers nothing: the PUSH text is the answer.
+o="$(pb_drive "$T_PB_WATCH")"
+{ has "$(reason "$o")" "$PUSH_MARK" && ! grep -qF -- "-- $PB_DEF" "$(pb_log)"; } \
+  && ok "(pb6) a backgrounded watcher carrying 'git push' as text, no exit record -> the PUSH text, no deferral (git push must be the program)" \
+  || bad "(pb6) a backgrounded watcher that only MENTIONS git push deferred the guard — a substring match. It reads: $(reason "$o" | head -c 120)"
+
+# (pb7)-(pb9) THE DEFERRAL REPLACES THE PUSH ANSWER ONLY. With a push in flight, each earlier
+#       step keeps its own text, and no deferral row is written. One world per arm, each in a
+#       tree whose only other unsatisfied step is the push.
+pbx_drive() { # pbx_drive <projdir> <transcript> [hooksdir] -> raw stdout; the pause flag is up
+  reset_state "$1"; touch "$1/_bmad-output/pipeline-paused.flag"
+  drive "$1" "$SESS_A" "$2" "${3:-$HOOKS_DIR}"
+}
+pbx_log() { printf '%s' "$1/_bmad-output/pipeline-continuation-log.md"; }
+INFL_MARK="table has NO data rows while"
+# (pb7) INFLIGHT: an Agent dispatch with a ledger row and a meta sidecar, no stop record, and no
+#       snapshot (so the table has no rows). The sidecar dir is the harness's own path,
+#       `${TRANSCRIPT%.jsonl}/subagents/`, the one handoff-resume-guard's worlds use.
+mkdir -p "${T_PB_AGENT%.jsonl}/subagents"
+jq -nc '{toolUseId:"toolu_PBAGENT1",agentType:"dev"}' > "${T_PB_AGENT%.jsonl}/subagents/agent-apbfixture0001.meta.json"
+pb7_world() { # pb7_world <projdir>: the ledger row is written after reset_state, which does not remove it
+  jq -nc '{v:1,ts:"2026-10-18T17:00:00Z",name:"dev",role:"dev",tool_use_id:"toolu_PBAGENT1"}' > "$1/_bmad-output/spawn-ledger.jsonl"
+}
+reset_state "$P_UNPUSHED"; pb7_world "$P_UNPUSHED"; touch "$P_UNPUSHED/_bmad-output/pipeline-paused.flag"
+o="$(drive "$P_UNPUSHED" "$SESS_A" "$T_PB_AGENT")"
+rr="$(reason "$o")"
+if has "$rr" "$INFL_MARK" && ! grep -qF -- "-- $PB_DEF" "$(pbx_log "$P_UNPUSHED")"; then
+  ok "(pb7) push in flight AND an empty In-Flight table with a dispatch outstanding -> the INFLIGHT text, no deferral"
+else
+  bad "(pb7) with a push in flight, an unrecorded teammate was not answered with the INFLIGHT text (or a deferral row was written) — the deferral swallowed step 1. It reads: $(printf '%s' "$rr" | head -c 120)"
+fi
+rm -f "$P_UNPUSHED/_bmad-output/spawn-ledger.jsonl"
+# (pb8) TEAMMATES: a snapshot whose In-Flight table still carries an `in-flight` row.
+reset_state "$P_UNPUSHED"; touch "$P_UNPUSHED/_bmad-output/pipeline-paused.flag"
+printf '# Pipeline Snapshot\n\n## Pipeline Position\ncurrent_step_file: implementation.md\n\n## In-Flight Teammates\n\nagent | role | deliverable | dispatched-at | status\ndev | dev | docs/x.md | 2026-10-18T17:00:00Z | in-flight\n\n## Context Reminders\ncontext_reminders_sent: none\n' \
+  > "$P_UNPUSHED/_bmad-output/pipeline-snapshot.md"
+o="$(drive "$P_UNPUSHED" "$SESS_A" "$T_PB_RUN")"
+rr="$(reason "$o")"
+if has "$rr" "$TEAM_MARK" && ! grep -qF -- "-- $PB_DEF" "$(pbx_log "$P_UNPUSHED")"; then
+  ok "(pb8) push in flight AND an in-flight teammate row -> the TEAMMATES text, no deferral"
+else
+  bad "(pb8) with a push in flight, an in-flight teammate row was not answered with the TEAMMATES text (or a deferral row was written). It reads: $(printf '%s' "$rr" | head -c 120)"
+fi
+reset_state "$P_UNPUSHED"
+# (pb9) COMMIT: the dirty and unpublished tree.
+o="$(pbx_drive "$P_DIRTY_UNPUSHED" "$T_PB_RUN")"
+rr="$(reason "$o")"
+if has "$rr" "$COMMIT_MARK" && ! grep -qF -- "-- $PB_DEF" "$(pbx_log "$P_DIRTY_UNPUSHED")"; then
+  ok "(pb9) push in flight AND uncommitted work -> the COMMIT text, no deferral"
+else
+  bad "(pb9) with a push in flight, an uncommitted tree was not answered with the COMMIT text (or a deferral row was written). It reads: $(printf '%s' "$rr" | head -c 120)"
+fi
 
 # =============================================================================
 # ai-dlc-continue.sh — THE DRIVER-SIGNAL ARM (step 4) AND THE MARKER ARM (step 5)
@@ -1831,8 +2039,10 @@ fi
 # M3 — restore the OLD two-arm dispatch, which inferred the cause from RESUME_OK. The verdict
 #      is unchanged, so only assertion (k) can see this: the lead is blocked and handed the
 #      teammate remedy for a push that did not land.
+#      Anchored on the PUSH arm's opening `if [ "$PUSH_OK" != "1" ]`, the token that separates
+#      it from the COMMIT arm, and on nothing the RESUME_OK removal changed.
 if mkmut m3-old-dispatch "$CONF" \
-     -e 's|^        if \[ "$PUSH_OK" != "1" \] && \[ "$TEAMMATES_OK" = "1" \] && \[ "$INFLIGHT_OK" = "1" \] \\$|        if false \\|' \
+     -e 's|^        if \[ "$PUSH_OK" != "1" \] && \(.*\); then$|        if false \&\& \1; then|' \
      -e 's|^        if \[ "$TEAMMATES_OK" != "1" \]; then$|        if [ "$RESUME_OK" = "1" ]; then|'; then
   reset_state "$P_UNPUSHED"
   _m3="$(reason "$(drive "$P_UNPUSHED" "$SESS_A" "$T_REQ_OK" "$MUT_DIR")")"
@@ -1844,6 +2054,129 @@ if mkmut m3-old-dispatch "$CONF" \
   # This mutant's own control cannot be mut_ctl, which reads the step-3 text it deliberately
   # removes. The teammate text above IS the presence conjunct.
   ok "  control [m3]: the kill is PRESENCE-shaped — it required the teammate text to appear, which a copy emitting nothing cannot do"
+fi
+
+# M39 / M40 — restore the `RESUME_OK` conjunct on the PUSH arm, then on the COMMIT arm (BL-698).
+#       The verdict is unchanged (the RESUME arm still blocks), so only the (t1) TEXT arms see
+#       them. Each is anchored on its own arm's opening test, which the other does not carry.
+t1_kill() { # t1_kill <name> <mutdir> <projdir> <want-mark> <killmsg>
+  local rr
+  reset_state "$3"
+  rr="$(reason "$(drive "$3" "$SESS_A" "$T_REQ_NOBLK" "$2")")"
+  if [ -n "$rr" ] && has "$rr" "$RESUME_MARK" && ! has "$rr" "$4"; then
+    ok "  mutant [$1] KILLED by $5"
+  else
+    bad "MUTANT SURVIVED [$1]: the copy still answered with the expected step text (or nothing) — $5 does not depend on the dropped conjunct"
+  fi
+}
+if mkmut m39-push-needs-resume "$CONF" \
+     -e 's|^        if \[ "$PUSH_OK" != "1" \] && \(.*\); then$|        if [ "$PUSH_OK" != "1" ] \&\& \1 \&\& [ "$RESUME_OK" = "1" ]; then|'; then
+  t1_kill m39 "$MUT_DIR" "$P_UNPUSHED" "$PUSH_MARK" \
+    "assertion (t1) push-not-landed: with the conjunct back, an unpublished branch and no resume block is answered with the RESUME text"
+  # Own control: mut_ctl drives the resume-OK transcript, which this mutation does not touch.
+  mut_ctl m39 "$MUT_DIR"
+fi
+if mkmut m40-commit-needs-resume "$CONF" \
+     -e 's|^        if \[ "$COMMIT_OK" != "1" \] && \(.*\); then$|        if [ "$COMMIT_OK" != "1" ] \&\& \1 \&\& [ "$RESUME_OK" = "1" ]; then|'; then
+  t1_kill m40 "$MUT_DIR" "$P_DIRTY" "$COMMIT_MARK" \
+    "assertion (t1) commit-not-landed: with the conjunct back, a dirty tree and no resume block is answered with the RESUME text"
+  mut_ctl m40 "$MUT_DIR"
+fi
+
+# M41 — the push deferral disabled. Killed by (pb1): the background push with no exit record is
+#       BLOCKED with the PUSH text again. BLOCK-shaped and presence-shaped (it requires the
+#       step-3 text), so a copy that died on load cannot score it.
+if mkmut m41-no-push-deferral "$CONF" \
+     -e 's|^      elif \[ "$PUSH_OK" != "1" \] && \[ "$COMMIT_OK" = "1" \]|      elif false \&\& [ "$COMMIT_OK" = "1" ]|'; then
+  o="$(pb_drive "$T_PB_RUN" "$MUT_DIR")"
+  { has "$(reason "$o")" "$PUSH_MARK" && ! grep -qF -- "-- $PB_DEF" "$(pb_log)"; } \
+    && ok "  mutant [m41] KILLED by assertion (pb1): with the deferral gone, a push still running in the background is answered with the PUSH text" \
+    || bad "MUTANT SURVIVED [m41]: the background push still deferred (or emitted nothing) — (pb1) does not depend on the deferral"
+  mut_ctl m41 "$MUT_DIR"
+fi
+
+# M42 — the id-present check dropped, so the deferral no longer requires a background push in
+#       the transcript. Killed by (pb4): a transcript with NO background push now DEFERS. The kill
+#       is PRESENCE-shaped -- it requires the deferral ROW to appear, which a dead copy cannot
+#       write -- and mut_ctl cannot be its control, because under this mutant every unpushed
+#       Stop defers; the row IS the control.
+if mkmut m42-no-push-id-check "$CONF" \
+     -e 's|push_bg_read && \[ -n "$PUSH_BG_ID" \] &&|push_bg_read \&\& true \&\&|'; then
+  o="$(pb_drive "$T_REQ_NOBLK" "$MUT_DIR")"
+  { [ "$(verdict "$o")" = allow ] && grep -qF -- "-- $PB_DEF" "$(pb_log)"; } \
+    && ok "  mutant [m42] KILLED by assertion (pb4): without the id check, a transcript with no background push DEFERS and writes the $PB_DEF row" \
+    || bad "MUTANT SURVIVED [m42]: the no-background-push transcript was not deferred under the mutant — (pb4) does not depend on the id check"
+  ok "  control [m42]: the kill is PRESENCE-shaped — it required the $PB_DEF row to appear, which a copy emitting nothing cannot write"
+fi
+
+# M44 — the deferral re-widened to every unsatisfied arm while a push runs (the step-1 and
+#       step-2 conjuncts dropped). Killed by (pb7): the unrecorded-teammate world now DEFERS. The
+#       kill is presence-shaped -- it requires the deferral ROW -- and mut_ctl is its control.
+if mkmut m44-deferral-wide-scope "$CONF" \
+     -e 's|^      elif \[ "$PUSH_OK" != "1" \] && \[ "$COMMIT_OK" = "1" \] && \[ "$TEAMMATES_OK" = "1" \] && \[ "$INFLIGHT_OK" = "1" \] && push_bg_read|      elif [ "$PUSH_OK" != "1" ] \&\& push_bg_read|'; then
+  reset_state "$P_UNPUSHED"; pb7_world "$P_UNPUSHED"; touch "$P_UNPUSHED/_bmad-output/pipeline-paused.flag"
+  o="$(drive "$P_UNPUSHED" "$SESS_A" "$T_PB_AGENT" "$MUT_DIR")"
+  { [ "$(verdict "$o")" = allow ] && grep -qF -- "-- $PB_DEF" "$(pbx_log "$P_UNPUSHED")"; } \
+    && ok "  mutant [m44] KILLED by assertion (pb7): re-widened, a push in flight swallows the INFLIGHT text and writes the $PB_DEF row" \
+    || bad "MUTANT SURVIVED [m44]: the unrecorded-teammate world was not deferred under the mutant — (pb7) does not depend on the scope conjuncts"
+  rm -f "$P_UNPUSHED/_bmad-output/spawn-ledger.jsonl"
+  mut_ctl m44 "$MUT_DIR"
+fi
+
+# M45 — the command match reverted to a substring test. Killed by (pb6): the watcher that only
+#       mentions `git push` now DEFERS. Presence-shaped (the row); mut_ctl is its control.
+if mkmut m45-push-substring-match "$CONF" \
+     -e 's@(.input.command // "") | push_cmd@(.input.command // "") | contains("git push")@'; then
+  o="$(pb_drive "$T_PB_WATCH" "$MUT_DIR")"
+  { [ "$(verdict "$o")" = allow ] && grep -qF -- "-- $PB_DEF" "$(pb_log)"; } \
+    && ok "  mutant [m45] KILLED by assertion (pb6): as a substring match, a watcher mentioning git push defers the guard" \
+    || bad "MUTANT SURVIVED [m45]: the watcher was not deferred under the substring mutant — (pb6) does not depend on the program-position match"
+  mut_ctl m45 "$MUT_DIR"
+fi
+
+# M46 — the ceiling put back to the one-sample 729 s. Killed by (pb5): the 1800 s push is no
+#       longer deferred and the PUSH text (a second suite) comes back.
+if mkmut m46-one-sample-ceiling "$CONF" -e 's|^PUSH_BG_CEIL=3004$|PUSH_BG_CEIL=729|'; then
+  o="$(pb_drive "$T_PB_MID" "$MUT_DIR")"
+  { has "$(reason "$o")" "$PUSH_MARK" && ! grep -qF -- "-- $PB_DEF" "$(pb_log)"; } \
+    && ok "  mutant [m46] KILLED by assertion (pb5): at 729 s, a push 1800 s into a recorded-length gate gets the PUSH text" \
+    || bad "MUTANT SURVIVED [m46]: the 1800 s push was still deferred at a 729 s ceiling — (pb5) does not read the ceiling"
+  mut_ctl m46 "$MUT_DIR"
+fi
+
+# M47 — the wait clause made unconditional again (02b16ee93's shape). Killed by (pb3b): past the
+#       ceiling the lead is told to wait, which BACKOFF converts into an unpushed allow.
+if mkmut m47-unconditional-wait "$CONF" \
+     -e 's|^          if \[ -n "$PUSH_BG_ID" \]; then$|          if false; then|' \
+     -e 's|^          H_PUSH_BG=""$|          H_PUSH_BG=" If the push was moved to the background, do not issue another; end the turn and wait for its notification."|'; then
+  reset_state "$P_UNPUSHED"; touch "$P_UNPUSHED/_bmad-output/pipeline-paused.flag"
+  rr="$(reason "$(drive "$P_UNPUSHED" "$SESS_A" "$T_PB_OLD" "$MUT_DIR")")"
+  { has "$rr" "$WAIT_MARK" && ! has "$rr" "$OVERRUN_MARK"; } \
+    && ok "  mutant [m47] KILLED by assertion (pb3b): with the clause unconditional, a push past its ceiling is answered with 'wait'" \
+    || bad "MUTANT SURVIVED [m47]: the past-ceiling text did not carry the wait clause under the mutant — (pb3b) does not read the condition"
+  mut_ctl m47 "$MUT_DIR"
+fi
+
+# M48 — the empty-id rejection removed on BOTH sides of the join (tool_use id and tool_result
+#       id). Killed by (pb10): two absent ids join as "" and defer the guard. Presence-shaped.
+if mkmut m48-empty-id-joins "$CONF" \
+     -e 's|(.; if (($u.id // "") \| type) == "string" and ($u.id // "") != "" then .push\[$u.id\] = true else . end)|(.; .push[($u.id // "")] = true)|' \
+     -e 's/^                   | select(type == "string" and . != "")) as \$t$/                   ) as $t/'; then
+  o="$(pb_drive "$T_PB_NOID" "$MUT_DIR")"
+  { [ "$(verdict "$o")" = allow ] && grep -qF -- "-- $PB_DEF" "$(pb_log)"; } \
+    && ok "  mutant [m48] KILLED by assertion (pb10): without the empty-id rejection, two absent ids join and the guard defers" \
+    || bad "MUTANT SURVIVED [m48]: the no-id push was not deferred under the mutant — (pb10) does not depend on the empty-id rejection"
+  mut_ctl m48 "$MUT_DIR"
+fi
+
+# M43 — the ceiling dropped. Killed by (pb3): a background push past the ceiling DEFERS forever.
+if mkmut m43-no-push-ceiling "$CONF" \
+     -e 's|\[ "${PUSH_BG_AGE:-0}" -le "$PUSH_BG_CEIL" \]; then$|true; then|'; then
+  o="$(pb_drive "$T_PB_OLD" "$MUT_DIR")"
+  { [ "$(verdict "$o")" = allow ] && grep -qF -- "-- $PB_DEF" "$(pb_log)"; } \
+    && ok "  mutant [m43] KILLED by assertion (pb3): without the ceiling, a push backgrounded years ago still defers the guard" \
+    || bad "MUTANT SURVIVED [m43]: the past-ceiling push was not deferred under the mutant — (pb3) does not depend on the ceiling"
+  mut_ctl m43 "$MUT_DIR"
 fi
 
 # --- ai-dlc-handoff-pending.sh: the shared predicate -------------------------------------

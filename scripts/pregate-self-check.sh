@@ -100,7 +100,7 @@ else
 fi
 
 # --- (b) shell portability -------------------------------------------------------------------------
-printf '== b. shell portability (S1-S12)\n'
+printf '== b. shell portability (S1-S12, S13, S14)\n'
 arm_start
 bash scripts/validate-shell-portability.sh --quiet > "$W/b.out" 2>&1
 b_rc=$?
