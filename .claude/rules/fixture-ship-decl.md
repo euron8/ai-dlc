@@ -39,8 +39,9 @@ cannot see that case at all.
 **Three hand-written lists remain and they are deliberate.** `uninstall.sh` bounds a
 DESTRUCTIVE loop and runs on a consumer where `core/fixtures/` does not exist, so it cannot
 derive and must not glob the consumer's `tests/fixtures/` — that would delete fixtures the
-consumer wrote. `core-manifest.md` and `setup-sites.md` are glob declarations read by
-roughly twenty programs. All three are joined to the derived set by **I74**, in both
+consumer wrote. `core-manifest.md` and the ai-dlc-update copy are glob declarations read by
+roughly twenty programs; that copy's fixture entries live in `core/skills/ai-dlc-update/fixture-manifest.md`,
+never in `reconcile/setup-sites.md` (I5 holds the partition). All three are joined to the derived set by **I74**, in both
 directions — so they can be stale for exactly as long as one push.
 
 ---

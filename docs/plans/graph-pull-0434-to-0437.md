@@ -218,7 +218,7 @@ so the consumer's INSTALLED step 2 classifies the very release that repairs it. 
 names it, so the unfixed derivation still reaches this release's own fixture. Mode-only changes in
 the range: **0**, against a control of 2 rows whose modes differ at all, both of them adds.
 `preclassify.sh`, `apply.sh` and `ledger-reverify.sh` are NOT in the range. Everything in it is
-machinery by `core/skills/ai-dlc-update/reconcile/setup-sites.md:225`; no rulebook path is included,
+machinery by `core/skills/ai-dlc-update/reconcile/setup-sites.md:97`; no rulebook path is included,
 which is why the gate does not defer.
 
 ## Discharge

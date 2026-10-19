@@ -149,6 +149,7 @@ archive_tree_file "$PROJECT_ROOT/.claude/skills/ai-dlc/SKILL.md"
 archive_tree_glob "$PROJECT_ROOT/.claude/skills/ai-dlc/steps" "*.md"
 archive_tree_file "$PROJECT_ROOT/.claude/skills/ai-dlc-setup/SKILL.md"
 archive_tree_file "$PROJECT_ROOT/.claude/skills/ai-dlc-update/SKILL.md"
+archive_tree_file "$PROJECT_ROOT/.claude/skills/ai-dlc-update/fixture-manifest.md"
 archive_tree_glob "$PROJECT_ROOT/.claude/skills/ai-dlc-update/reconcile" "*"
 archive_tree_glob "$PROJECT_ROOT/docs/ai-dlc-patterns" "*.md"
 archive_tree_glob "$PROJECT_ROOT/.claude/team-roles" "*.md"
@@ -337,6 +338,7 @@ cp "$SCRIPT_DIR/../core/skills/ai-dlc-setup/SKILL.md" "$PROJECT_ROOT/.claude/ski
 # distribution->consumer pull path (ai-dlc-update) from day one.)
 echo "Installing update skill..."
 cp "$SCRIPT_DIR/../core/skills/ai-dlc-update/SKILL.md" "$PROJECT_ROOT/.claude/skills/ai-dlc-update/"
+cp "$SCRIPT_DIR/../core/skills/ai-dlc-update/fixture-manifest.md" "$PROJECT_ROOT/.claude/skills/ai-dlc-update/"
 cp "$SCRIPT_DIR/../core/skills/ai-dlc-update/reconcile/"* "$PROJECT_ROOT/.claude/skills/ai-dlc-update/reconcile/"
 # chmod the whole glob, not named scripts: `cp` happens to preserve the source
 # mode, so a newly added reconcile script works by luck until it does not.

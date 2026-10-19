@@ -399,4 +399,6 @@ templates_local_home: .claude/skills/ai-dlc/templates-local/
 `reconcile/setup-sites.md` carries its own duplicate of this list by
 design — a HARD CONSTRAINT keeps that skill self-contained and forbids it
 from reading pipeline files. The two lists MUST be kept in sync when the
-core file set changes; they are the only two authoritative copies.
+core file set changes; they are the only two authoritative copies. That copy
+is split: its `fixtures/` entries sit in `ai-dlc-update/fixture-manifest.md`,
+outside `reconcile/`, and I5 compares the union and holds the partition.

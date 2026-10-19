@@ -1318,7 +1318,8 @@ files is not waived — it binds in the DISTRIBUTION repo, against its own
 backlog, where the edit and the item number both exist.
 
 Do not hand-list the exempt set. `core-paths.sh` derives it from
-`core-manifest.md` (fallback `reconcile/setup-sites.md`), the same source
+`core-manifest.md` (fallback `reconcile/setup-sites.md` plus the fixture
+entries in `ai-dlc-update/fixture-manifest.md`), the same source
 the edit-time guard reads; `validate-enforcement-map.sh` I25 asserts the
 two derivations are byte-identical, so a file the guard protects cannot
 be audited here as consumer-authored.
@@ -2515,7 +2516,8 @@ a pass** — the path stays in scope and the gate log records that the resolver 
 not answer.
 
 Do not hand-list the core set here. `core-paths.sh` derives it from
-`core-manifest.md` (fallback `reconcile/setup-sites.md`), the same source the
+`core-manifest.md` (fallback `reconcile/setup-sites.md` plus the fixture entries in
+`ai-dlc-update/fixture-manifest.md`), the same source the
 edit-time guard reads, so this backstop and the primary enforcement cannot
 disagree about what core is. A restated list rots against the manifest silently
 and in the one direction that matters: every entry it omits is a core subtree

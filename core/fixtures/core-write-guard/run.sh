@@ -224,6 +224,29 @@ d="$(decision "$CONSUMER" "$(mkjson Edit "$CORE" "Fixed rulebook prose.")")"
 [ "$d" = deny ] && ok "core-manifest.md absent → derives core set from setup-sites.md, still denies" \
   || bad "with core-manifest.md gone the hook classified '$d', expected deny (setup-sites.md fallback failed)"
 
+# --- Assertion 11b: the fallback's FIXTURE half is fixture-manifest.md -----------
+# setup-sites.md carries no fixture entries; the guard's fallback reads the skill-root
+# fixture-manifest.md beside reconcile/ for them. One arm, three conjuncts, one property apart:
+# a core fixture is DENIED with fixture-manifest.md present; with it removed the same edit is
+# ALLOWED while a rulebook file is STILL denied. The deny alone passes a guard that denies
+# everything; the allow alone passes a guard that ignores the file; and the rulebook deny is what
+# separates "the fixture entries vanished" from "the guard failed open on a missing file".
+FIXMAN_C="$CONSUMER/.claude/skills/ai-dlc-update/fixture-manifest.md"
+if [ ! -f "$FIXMAN_C" ] || ! grep -q '^FIXMAN=' "$HOOK"; then
+  skip "fixture-manifest.md fallback (11b)" \
+    "the installed guard or its fixture-manifest.md predates the split; both land with this same pull"
+else
+  d1="$(decision "$CONSUMER" "$(mkjson Edit "$COREFIX" '# TODO reword this marker')")"
+  rm -f "$FIXMAN_C"
+  d2="$(decision "$CONSUMER" "$(mkjson Edit "$COREFIX" '# TODO reword this marker')")"
+  d3="$(decision "$CONSUMER" "$(mkjson Edit "$CORE" "Fixed rulebook prose.")")"
+  if [ "$d1" = deny ] && [ "$d2" = allow ] && [ "$d3" = deny ]; then
+    ok "core-manifest.md absent → a core fixture is denied from fixture-manifest.md, and allowed once that file is gone while rulebook stays denied"
+  else
+    bad "fixture-manifest.md fallback: fixture edit '$d1' with it present (want deny), '$d2' with it removed (want allow), rulebook '$d3' with it removed (want deny) — the guard's fallback does not read fixture-manifest.md for the fixture entries, or reads every path as core"
+  fi
+fi
+
 # --- Assertion 12: FAIL-OPEN — no manifest source at all → ALLOW ------------
 # Remove the fallback too; with no way to derive the core set the hook must fail open.
 rm -f "$CONSUMER/.claude/skills/ai-dlc-update/reconcile/setup-sites.md"

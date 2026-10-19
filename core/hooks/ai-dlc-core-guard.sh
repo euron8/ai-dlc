@@ -65,6 +65,7 @@ PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 
 MANIFEST="$PROJECT_DIR/.claude/skills/ai-dlc/core-manifest.md"
 SITES="$PROJECT_DIR/.claude/skills/ai-dlc-update/reconcile/setup-sites.md"
+FIXMAN="$PROJECT_DIR/.claude/skills/ai-dlc-update/fixture-manifest.md"
 
 # ---------------------------------------------------------------------------
 # Target path -> project-relative.
@@ -120,7 +121,14 @@ to_consumer_glob() {  # <manifest entry> -> consumer-relative glob
 }
 
 RAW_ENTRIES="$(parse_manifest "$MANIFEST")"
-[ -n "$RAW_ENTRIES" ] || RAW_ENTRIES="$(parse_manifest "$SITES")"
+# The setup-sites.md copy carries no fixture entries: they sit in the sibling skill-root
+# fixture-manifest.md, so the fallback is the two blocks together. Only when setup-sites.md
+# parsed, so a tree with neither still fails open below.
+if [ -z "$RAW_ENTRIES" ]; then
+  RAW_ENTRIES="$(parse_manifest "$SITES")"
+  [ -z "$RAW_ENTRIES" ] || RAW_ENTRIES="${RAW_ENTRIES}
+$(parse_manifest "$FIXMAN" 2>/dev/null)"
+fi
 [ -n "$RAW_ENTRIES" ] || exit 0           # no manifest anywhere — fail-open
 
 CORE_GLOBS=()

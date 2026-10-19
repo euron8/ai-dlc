@@ -429,6 +429,7 @@ RAN="$RAN i66-onehook"
 I66_FILES="scripts/validate-enforcement-map.sh scripts/render-invariant-index.sh
 core/skills/ai-dlc/steps/gate-validation.md core/skills/ai-dlc/enforcement-map.yaml
 core/skills/ai-dlc/core-manifest.md core/skills/ai-dlc-update/reconcile/setup-sites.md
+core/skills/ai-dlc-update/fixture-manifest.md
 .githooks/pre-push core/git-hooks/pre-push core/scripts/hermetic-run.sh"
 for _t in i66c i66m; do
   for _f in $I66_FILES; do

@@ -321,7 +321,7 @@ names it, so the unfixed derivation still reaches this release's own fixture. Mo
 the range: **0**, against a control of 2 rows whose modes differ at all, both adds. `preclassify.sh`,
 `apply.sh` and `ledger-reverify.sh` are NOT in the range. The one rulebook path is
 `core/skills/ai-dlc/steps/route.md`, declared rulebook by
-`core/skills/ai-dlc-update/reconcile/setup-sites.md:225`, and it is the whole reason the gate defers.
+`core/skills/ai-dlc-update/reconcile/setup-sites.md:102`, and it is the whole reason the gate defers.
 
 ## Discharge
 
