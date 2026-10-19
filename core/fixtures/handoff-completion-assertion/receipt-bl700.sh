@@ -39,7 +39,10 @@ printf '%s\n%s\n%s\n' "$U" '{"broken":' "$A" > "$W/garbage.jsonl"
 NJ="$W/nojq"; mkdir -p "$NJ" || exit 9
 for d in /bin /usr/bin; do for t in "$d"/*; do b="${t##*/}"; [ "$b" = jq ] && continue; [ -e "$NJ/$b" ] || ln -s "$t" "$NJ/$b" 2>/dev/null; done; done
 ln -sf "$(command -v git)" "$NJ/git" 2>/dev/null
-[ ! -e "$NJ/jq" ] && [ -n "$(PATH="$NJ" command -v git)" ] && [ -n "$(PATH="$NJ" command -v sed)" ] || exit 9
+# PATH is ASSIGNED in each subshell, never prefixed: a prefix assignment can answer from bash's
+# command hash once this shell has resolved the tool, so its premise could never fail.
+[ ! -e "$NJ/jq" ] && [ -z "$(PATH="$NJ"; command -v jq)" ] && [ -n "$(PATH="$NJ"; command -v git)" ] \
+  && [ -n "$(PATH="$NJ"; command -v sed)" ] || exit 9
 
 reset() {
   local sd="$P/_bmad-output"

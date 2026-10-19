@@ -19,6 +19,23 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.870.0] - 2026-10-19
+
+Batch 236 (BL-700). The handoff guard in `core/hooks/ai-dlc-continue.sh` no longer allows a requested handoff silently
+when the transcript is damaged or absent, or when `jq` cannot run. Closes BL-700. Files nothing.
+
+### BL-700: the handoff guard reads a damaged transcript line-wise, enters on a driver signal with no transcript, and fails closed with no jq
+
+- The two transcript readers (`LAST_USER` and `LAST_ASST`) read line-wise, with `jq -Rrn` over `inputs|fromjson?`. A
+  truncated last line or a non-JSON line no longer empties both readers and allows the requested handoff.
+- A fresh `.driver/handoff` driver signal now enters Check 0 when there is no transcript, so a missing transcript is
+  decided from disk and git.
+- The new Check 0f fails CLOSED when `jq` is absent or cannot run. It emits one constant block and a new
+  `HANDOFF_GUARD_FAIL_CLOSED (n/EFF_MAX)` log row. It is bounded per session by `stall_run` and `EFF_MAX`, writes
+  BACKOFF once at the release, and is deferred by a live wait-beat lease.
+- Fixtures changed: `handoff-completion-assertion` (arms fc0-fc7 and fc3b) and `handoff-resume-guard` (F and G). The
+  receipt is `core/fixtures/handoff-completion-assertion/receipt-bl700.sh`.
+
 
 ## [0.865.0] - 2026-10-19
 

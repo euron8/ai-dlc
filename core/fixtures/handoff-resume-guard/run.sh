@@ -467,10 +467,12 @@ r="$(drive_world "$(cat "$ROOT/.w_namedteam")" 2>/dev/null)"
 [ "$r" = allow ] && ok "E: live NAMED teammate (no tool_use_id, meta has teamName) -> ALLOW (the stated blindness)" \
                  || bad "E: BLOCKED on a named in-process teammate ($r) — that class carries no join key at all, so a block there is keyed on something the arm's header says it does not read"
 
-# (F) FAIL-OPEN WITH NO jq. A PATH stub that exits 127 for every invocation, which is
-#     what a consumer without jq looks like from inside the hook. The whole hook needs
-#     jq to emit a decision at all, so the assertion is that the run produces NO block
-#     text — an arm that convicted here would be reading an absence as a finding.
+# (F) NO ARM CONVICTS WITH NO jq. A PATH stub that exits 127 for every invocation, which is
+#     what a consumer without jq looks like from inside the hook. No arm can read its input,
+#     so no arm's text may appear -- an arm that convicted here would be reading an absence as
+#     a finding. Since BL-700 the world's paused Stop with step 4's driver signal on disk gets
+#     the ONE constant fail-closed block instead of a silent allow, so the assertion is that any
+#     block text is that constant and names no arm.
 JQSTUB="$ROOT/nojq"; mkdir -p "$JQSTUB"
 printf '#!/bin/sh\nexit 127\n' > "$JQSTUB/jq"; chmod +x "$JQSTUB/jq"
 f_out="$(jq -nc --arg t "$W_OFF/lead.jsonl" --arg s "fx" '{transcript_path:$t,session_id:$s}')"
@@ -487,9 +489,12 @@ rm -rf "$f_proj"
 # the writer's EPIPE and reports NOT-FOUND on input that contains the pattern. I54b of
 # validate-enforcement-map.sh fails the push on the piped form.
 if [ -z "$f_res" ] || ! grep -qF 'HANDOFF GUARD' <<<"$f_res"; then
-  ok "F: jq shadowed by a stub exiting 127 -> no block text (fail-open, a handoff is never wedged by bookkeeping)"
+  ok "F: jq shadowed by a stub exiting 127 -> no block text"
+elif grep -qF 'HANDOFF GUARD (fail-closed)' <<<"$f_res" && grep -qF 'jq is not on PATH' <<<"$f_res" \
+     && ! grep -qF 'In-Flight' <<<"$f_res"; then
+  ok "F: jq shadowed by a stub exiting 127 -> only the constant fail-closed block (BL-700), naming no arm"
 else
-  bad "F: the guard emitted block text with jq unavailable — it is convicting on an absence it cannot read, and every consumer without jq wedges at its first handoff"
+  bad "F: the guard emitted an ARM's block text with jq unavailable — it is convicting on an absence it cannot read"
 fi
 # CONTROL for F, and it is what makes the silence above readable: the stub really does
 # shadow jq. Without it "no output" is equally consistent with the stub never being on
@@ -504,9 +509,17 @@ fi
 #     its transcript removed, so every other input still convicts.
 G_W="$(cat "$ROOT/.w_notranscript")"
 rm -f "$G_W/lead.jsonl"
-r="$(drive_world "$G_W" 2>/dev/null)"
-[ "$r" = allow ] && ok "G: transcript path names no file -> ALLOW (fail-open)" \
-                 || bad "G: BLOCKED with no transcript to read ($r) — the arm is producing a verdict from a set it never derived"
+#     The world is paused with step 4's driver signal fresh, so since BL-700 that signal ENTERS
+#     Check 0 with no transcript and the In-Flight arm is reached; every disk arm is satisfied
+#     (no git repo, a status-free table, the touch after the snapshot), so the only arm that
+#     could block is the one under test, and it must not convict on a dispatch set it never read.
+r="$(drive_world "$G_W" 2>"$ROOT/.g_reason")"
+g_reason="$(cat "$ROOT/.g_reason" 2>/dev/null)"
+if [ "$r" = allow ]; then
+  ok "G: transcript path names no file -> ALLOW (the In-Flight arm, reached through the driver-signal entry, does not convict)"
+else
+  bad "G: BLOCKED with no transcript to read ($r): $(printf '%s' "$g_reason" | head -c 100) — the arm is producing a verdict from a set it never derived"
+fi
 
 # (H) NO META DIRECTORY beside the transcript -> fail open. A harness build that writes
 #     no sidecars, or a session predating them. Without the narrowing this world is the
