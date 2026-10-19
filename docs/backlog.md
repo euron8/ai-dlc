@@ -179,7 +179,9 @@ Why no arm. Any tolerance is a number chosen after seeing the corpus, and checks
 
 Open: the row-side defect (stamp the row from the ledger `ts`). Recommendation, not filed: if the In-Flight row recorded the dispatch's `tool_use_id`, a binary late arm (the stamp differs from its own ledger `ts`) would need no tolerance.
 
-verify: manual
+**Built (batch 236): the row-side half is closed; the entry stays PARTIAL.** `core/scripts/wait-for-deliverable.sh --dispatch-ts <agentId|toolu_id>` prints the `ts` of that dispatch's spawn-ledger row verbatim and writes nothing (it takes the `--status` no-write path: no state dir, no lease). It resolves the id through the same `dispatch_epoch_of` the `--dispatch` beat uses, so there is one resolver, and an id with no single ledger row is refused (exit 64) with that function's text. `_gate-procedures.md` step 3 and `route.md`'s In-Flight table text tell the lead to fill `dispatched-at` from it, never from a clock. A row stamped from it equals the ledger `ts`, so `--since <dispatched-at>` passes the `--dispatch` guard's `SINCE > DISPATCH_EPOCH` check on equality. Receipt: a two-row ledger with the subject not first, plus an agentId meta.json. The agentId and toolu_ paths both print 05:00:03Z, which is not the 57 s late 05:01:00Z. The other row prints its own `ts`, and a missing row is refused by name. Run against the shipping script: exit 0. Run against b75ea5439's script: exit 1, through the receipt's own `FAIL: no stamp printed` arm, because that script refuses the flag (`unknown arg`). Not built: no arm judges an existing row. The row still carries no join key, which is the recommendation above.
+
+verify: sh bash core/fixtures/wait-beat-liveness/receipt-bl605.sh
 
 ## BL-587 — a reconcile that records derivations "owed to the sprint's derivation-validator step" has no channel to the sprint lead, so the debt is silently dropped
 
