@@ -1069,6 +1069,38 @@ p_partmark() {
     && has "$JO" "no derivations: line (the block closed at line $ln by 'repair-complete: serial 1')" && ! has "$JO" "seat-complete"
 }
 
+# ---- THE ADVERSARIAL REPAIR NAME (BL-662): the record carries no round word, so an artifact ending in
+# -adversarial is refused in files and document mode, naming <artifact minus -adversarial>-repair-p<M>.
+advname_world() { # <shard dir name> -> a world with the series' x-adversarial-p1.md and that (empty) shard dir
+  local w; w="$(new_world)" || return 1
+  mkdir -p "$w/$SLOT/shards/$1" && printf '# x adversarial pass 1\n' > "$w/$SLOT/x-adversarial-p1.md" || return 1
+  printf '%s' "$w"
+}
+p_advname() { # (a) --document into shards/x-adversarial-repair-p1/ -> rc 2, no record, names x-repair-p1 and arm H;
+  # (b) files mode --artifact x-adversarial -> the same; (c) control: shards/x-repair-p1/ in the document world
+  # joins; (d) near-miss: shards/adversarial-notes-repair-p1/ in document form prints NOT this rule's text
+  local w; w="$(advname_world x-adversarial-repair-p1)" || return 1
+  stamp "$w"
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --document "$DOCREL" "$w/$SLOT/shards/x-adversarial-repair-p1" \
+    --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1; RC=$?
+  [ "$RC" -eq 2 ] && has "$JO" "ends in -adversarial" && has "$JO" "shards/x-repair-p1/" && has "$JO" "x-repair-p1.md" \
+    && has "$JO" "arm H of validate-adversarial-convergence.sh" \
+    && [ ! -e "$w/$SLOT/x-repair-p1.md" ] && [ ! -e "$w/$SLOT/x-adversarial-repair-p1.md" ] || return 1
+  w="$(advname_world x-repair-p1)" || return 1
+  run_join "$1" "$w" --artifact x-adversarial
+  [ "$RC" -eq 2 ] && has "$JO" "ends in -adversarial" && has "$JO" "x-repair-p1.md" \
+    && [ ! -e "$w/$SLOT/x-repair-p1.md" ] || return 1
+  w="$(doc_world)" || return 1
+  sec_edit "$w" 1 "$AG1"; sec_edit "$w" 2 "$AG2"; sec_edit "$w" 3 "$AG3"
+  docpart "$w" 1; docpart "$w" 2; docpart "$w" 3
+  run_docjoin "$1" "$w"
+  [ "$RC" -eq 0 ] && ! has "$JO" "ends in -adversarial" && [ -f "$(doc_out "$w")" ] || return 1
+  w="$(advname_world adversarial-notes-repair-p1)" || return 1
+  stamp "$w"
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --document "$DOCREL" "$w/$SLOT/shards/adversarial-notes-repair-p1" \
+    --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1; RC=$?
+  [ -s "$JO" ] && ! has "$JO" "ends in -adversarial"
+}
 # ---- RE-RUN OF ONE PART (--rerun <part>.md@<ISO>) AND THE ALIAS RULE. Every row is still the REAL
 # hook's; only its clock is pinned, by the `date` shim drive() puts on PATH when it is handed a ts.
 # Rows are driven in chronological order, because the record lists superseded ids in ledger order.

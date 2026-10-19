@@ -540,7 +540,7 @@ Related, not duplicates:
 
 Owed: either the join refuses a `-adversarial-repair-p<M>` dir, or any name but `<artifact>-repair-p<M>` beside an `<artifact>-adversarial-p<M>.md`, printing the owed name; or the step prose at :894 states the asymmetry. Probe: a `--document` join into `shards/x-adversarial-repair-p1/` beside `x-adversarial-p1.md` refuses and names `x-repair-p1`. Control: `shards/x-repair-p1/` joins.
 
-verify: manual
+verify: sh [ -f core/fixtures/remediator-shard-join/lib.sh ] || exit 9; ( NAME=bl662-receipt; . core/fixtures/remediator-shard-join/lib.sh > /dev/null; p_advname "$JOIN" )
 
 ## BL-669 — a lead's Edit of an adversary shard is sealed but never refused, and the merge's role check cannot see it
 

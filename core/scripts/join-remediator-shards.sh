@@ -50,6 +50,11 @@
 # EXIT  0 joined; 2 REFUSED (one `REFUSED:` line on stderr per reason, nothing written).
 #
 # WHAT IT REFUSES, AND THE ORDER IS NOT SIGNIFICANT -- every reason is reported:
+#   - an ARTIFACT that ends in `-adversarial`, in files mode and document mode (the dir or
+#     --artifact): the adversarial repair record carries no round word, so its owed name is
+#     `<artifact minus -adversarial>-repair-p<M>` for the shard dir and the record, and arm H of
+#     validate-adversarial-convergence.sh reads only that name. --subject names are fixed by the
+#     script and are untouched;
 #   - an empty shard directory (a glob that matched nothing is not a join of zero parts);
 #   - no ledger, or no ledger row under the artifact in the window (disjointness unproven);
 #     a row under `s<N>/shards/` is a shard's OWN record (a remediator writing its part, or an
@@ -383,6 +388,14 @@ if [ "$SRCMODE" != 0 ]; then
 else
 [ "$SUBJMODE" = 1 ] || case "$PASS" in ''|*[!0-9]*) die "--pass must be a pass number (got '${PASS}')" ;; esac
 case "$ARTIFACT" in ''|*/*) die "--artifact must be a bare artifact name (got '${ARTIFACT}')" ;; esac
+if [ "$SUBJMODE" = 0 ]; then
+  case "$ARTIFACT" in
+    *-adversarial)
+      _owed="${ARTIFACT%-adversarial}-repair-p${PASS}"; _given="--artifact ${ARTIFACT}"
+      [ -z "$REPDIR" ] || _given="$REPDIR"
+      die "the artifact '${ARTIFACT}' ends in -adversarial (given as ${_given}):the adversarial repair record carries no round word. Name the shard dir shards/${_owed}/ and the record ${_owed}.md; arm H of validate-adversarial-convergence.sh reads only that name" ;;
+  esac
+fi
 if [ "$SUBJMODE" = 1 ]; then
   :
 elif [ "$DOCMODE" = 1 ]; then

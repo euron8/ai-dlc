@@ -915,6 +915,8 @@ Agent tool, bound to
 standing role-contract Read line). Together the remediators take that pass's WHOLE set: every
 finding of the adversarial pass, or every FAILED check of the gate pass.
 
+**Adversarial repair name.** The adversarial repair record carries no round word: its shard dir is `shards/<artifact>-repair-p<M>/` and its record `<artifact>-repair-p<M>.md`, never `<artifact>-adversarial-repair-p<M>` or `<artifact>-adversarial-p<k>-repair-p<M>`, and the join refuses an artifact ending in `-adversarial`, since arm H of `validate-adversarial-convergence.sh` reads only the first name.
+
 **Shard by file (Rule 28, "Split dispatch": files axis).** Partition the findings by the files
 their `edit:` targets name. A finding touching one file goes to that file's shard, and each
 shard edits its files IN PLACE, never a copy. A finding citing more than one file goes to ONE
@@ -1118,6 +1120,8 @@ its before equal to the join's after, so Check 24 arm J2 chains the join and the
 Per finding — or per failed check — the disposition, the edit site, and the command
 that derives every factual claim the repair asserts, with its output. The next adversarial pass
 verifies against that record; so does the gate's re-run of the failed checks.
+
+**Repair record name, again.** The adversarial repair record is `<artifact>-repair-p<M>.md` with no round word, never `<artifact>-adversarial-repair-p<M>.md` or `<artifact>-adversarial-p<k>-repair-p<M>.md`, whether a join or a serial remediator writes it; the join refuses the first of those wrong shapes.
 
 **Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh --complete-repair
 --dispatch <agentId> <repair_record_path>`. The serial remediator and the
