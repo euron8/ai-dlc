@@ -1200,6 +1200,8 @@ readset_trace_ceiling() { # <space-separated fixture names>
 # fixture untraced and takes THAT verdict. Any failure to trace leaves the fixture to a plain run and to the
 # detached trace, exactly as before. readset_pool_trace_prep sets PT_ROOT, PT_LIST and PT_DV for the
 # worker; readset_pool_trace_merge is the ONE writer of the local map afterwards, under the live trace's lock.
+# A LINKED WORKTREE TRACES TOO: the deriver builds the clone's `.git` standalone from the common dir and the
+# worktree's private gitdir, and the local map sits under `--git-common-dir`, the one file every worktree reads.
 readset_pool_trace_prep() { # <out>
   local out="$1" b why=""
   PT_ROOT=""; PT_LIST=""; PT_DV=""
@@ -1215,8 +1217,6 @@ readset_pool_trace_prep() { # <out>
   command -v sandbox-exec >/dev/null 2>&1 || why="${why:+$why; }no sandbox-exec"
   [ -x /usr/bin/log ] || why="${why:+$why; }no /usr/bin/log"
   command -v python3 >/dev/null 2>&1 || why="${why:+$why; }no python3"
-  [ "$(git rev-parse --git-dir 2>/dev/null)" = "$(git rev-parse --git-common-dir 2>/dev/null)" ] \
-    || why="${why:+$why; }a linked worktree (the trace clones .git, which is a file there)"
   if [ -n "$why" ]; then
     printf '   ..    read-set in-pool trace: skipped (%s); %s run plainly: %s\n' "$why" "$(printf '%s\n' $PT_LIST | grep -c .)" "$PT_LIST"
     PT_LIST=""; PT_DV=""

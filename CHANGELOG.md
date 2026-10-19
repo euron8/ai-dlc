@@ -19,6 +19,50 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.881.0] - 2026-10-19
+
+Batch 236 (BL-701 fix, owner ai-dlc-cb, lead ai-dlc-37). This release ships alone because it edits
+`.githooks/pre-push`. It closes nothing by itself in this commit: the map refresh that clears the stale digests lands in
+the same release, and BL-701's receipt is scored then, so BL-701 stays open in the backlog. Net for this release: 0
+closed, 0 filed.
+
+### What changed (BL-701)
+
+- Both pre-push hooks, `.githooks/pre-push` and `core/git-hooks/pre-push` (bound to one program by I66), no longer
+  refuse the in-pool read-set trace in a linked worktree. `core/scripts/derive-fixture-readsets.sh` takes `--in-pool`
+  and `--merge-pool` there and builds a standalone git dir through `readset_git_standalone`.
+
+### Adversary fixes
+
+- D1: `readset_git_standalone` copies only git's SHARED paths from the common dir (objects, refs minus
+  bisect/worktree/rewritten, packed-refs, config, hooks, info minus sparse-checkout, logs minus logs/HEAD and the
+  per-worktree refs logs, shallow, remotes, branches, lost-found, common, rr-cache, svn) and the rest from the private
+  gitdir minus commondir, gitdir and locked, skipping `*.lock`. It no longer copies non-git root files such as
+  `.git/ai-dlc-*` into the linked copy.
+- D2: the readset-skip copy-seed arm commits in the worktree and asserts HEAD is `refs/heads/lwcopy`.
+- D3: a submodule's `core.worktree` is rewritten inside the copy.
+- D4 (pre-existing, not introduced by this release): the main-checkout copy and the clone walk exclude `.git/worktrees`.
+- N1: the deriver's linked-worktree gate keys on the parsed `--in-pool` and `--merge-pool` arguments.
+
+### Refusals
+
+- `readset_git_standalone` refuses, returning rc 1 so the trace falls back to a plain run, when the common config has
+  `core.bare=true`, or when the common dir has `reftable/` or `extensions.refStorage=reftable`.
+
+### Known limit (worktrees/)
+
+- The copy omits the common dir's `worktrees/` deliberately, because a `git worktree repair` in the copy would rewrite a
+  real worktree's gitlink. In the copy `git worktree list` shows 1 line. Measured: 0 of the 37 traced undeclared
+  fixtures read worktree state, against a repo-wide control of 3 fixture files that do.
+
+### Map refresh and first-push cost
+
+This release re-traces the 37 undeclared fixtures whose committed digest was not `match` (16 differs, 21 nodigest) and
+commits the refreshed `.ai-dlc-fixture-readsets.tsv`.
+
+Any of the 37 whose re-trace does not reach a `match` digest is named in the release commit message, with the in-pool
+trace cost it adds to the first push after landing.
+
 ## [0.880.0] - 2026-10-19
 
 Batch 236, BL-685 round-6 key-fix release (owned and gated by ai-dlc-69 [9599d6]; lead ai-dlc-37). Advances BL-685,

@@ -1295,10 +1295,13 @@ else
     "|") ok "(pt0) AI_DLC_READSET_LIVE_TRACE=0: the in-pool prep prints nothing and PT_LIST is empty" ;;
     *) bad "(pt0) the knob at 0 did not silence the in-pool prep: '$R'" ;;
   esac
+  # BL-701: the in-pool prep TRACES from a linked worktree (the deriver builds the clone's .git standalone),
+  # where the detached launcher in (e) above still starts nothing. Same world as (e), opposite answer.
   R="$(pt_drive "$POOL" "$LW_T.wt" ':')"; lt_arm
   case "$R" in
-    *"read-set in-pool trace: skipped ("*"a linked worktree"*"|") ok "(ptw) from a LINKED worktree the in-pool prep skips in one line naming the worktree and leaves PT_LIST empty" ;;
-    *) bad "(ptw) a linked worktree was not skipped by the in-pool prep: '$R'" ;;
+    *"a linked worktree"*|*"skipped ("*) bad "(ptw) the in-pool prep still skips a LINKED worktree: '$R'" ;;
+    *"read-set in-pool trace: 1 fixture(s) traced in the pool: gamma"*"|gamma") ok "(ptw) from a LINKED worktree the in-pool prep announces gamma and lists it, as in the main checkout" ;;
+    *) bad "(ptw) from a linked worktree the in-pool prep did not list gamma: '$R'" ;;
   esac
   R="$(pt_drive "$POOL" "$(lt_fresh ptm)" ':')"; lt_arm
   case "$R" in
@@ -1977,8 +1980,9 @@ if [ "$LT_CAN" = 1 ]; then
   pm_copy locknone 1 '  local lk="$1" p="" e="" now' '  return 1' && pm_l locknone lk2 "$LK_DEAD" '*"started detached"*"|invoked"'
   PM_FN=readset_live_trace pm_copy linked 1 '  [ "$(git rev-parse --git-dir 2>/dev/null)" = "$(git rev-parse --git-common-dir 2>/dev/null)" ] \' '  true \' \
     && pm_l linked e ':' '*"a linked worktree"*"|not"' "$LW_T.wt"
-  # The in-pool prep carries the same two lines as readset_live_trace; PM_FN confines each mutant to the
-  # prep, and each is scored by its own arm alone (pt0 for the knob, ptw for the linked check).
+  # The in-pool prep carries the knob line readset_live_trace carries; PM_FN confines the mutant to the
+  # prep, and it is scored by pt0 alone. The prep has no linked-worktree check since BL-701; ptlinked2
+  # puts the old one back and ptw alone must kill it.
   pt_kill() { # <name> <arm that must fail> <setup> <world> -- every arm is scored, only <arm> may move
     local m="$1" want="$2" r0 r1 rw flips="" w
     r0="$(pt_drive "$PM" "$(lt_fresh pm.$m.0)" 'export AI_DLC_READSET_LIVE_TRACE=0')"
@@ -1986,7 +1990,7 @@ if [ "$LT_CAN" = 1 ]; then
     rw="$(pt_drive "$PM" "$LW_T.wt" ':')"; lt_arm
     case "$r0" in "|") ;; *) flips="$flips pt0" ;; esac
     case "$r1" in *"traced in the pool: gamma"*"|gamma") ;; *) flips="$flips pt1/ptw-main" ;; esac
-    case "$rw" in *"read-set in-pool trace: skipped ("*"a linked worktree"*"|") ;; *) flips="$flips ptw" ;; esac
+    case "$rw" in *"skipped ("*) flips="$flips ptw" ;; *"traced in the pool: gamma"*"|gamma") ;; *) flips="$flips ptw" ;; esac
     PT_MATRIX="${PT_MATRIX}${m} -> ${flips:- none}\n"
     case "$want" in pt0) w=" pt0" ;; ptw) w=" ptw" ;; esac
     if [ "$flips" = "$w" ]; then ok "BL-452 MUTANT $m (in-pool prep) is KILLED by $want alone: knob0 '$r0' main '$r1' linked '$rw'"
@@ -1994,8 +1998,8 @@ if [ "$LT_CAN" = 1 ]; then
   }
   PT_MATRIX=""
   PM_FN=readset_pool_trace_prep pm_copy ptknob 1 '  [ "${AI_DLC_READSET_LIVE_TRACE:-1}" = 0 ] && return 0' '  :' && pt_kill ptknob pt0
-  PM_FN=readset_pool_trace_prep pm_copy ptlinked 1 '  [ "$(git rev-parse --git-dir 2>/dev/null)" = "$(git rev-parse --git-common-dir 2>/dev/null)" ] \' '  true \' \
-    && pt_kill ptlinked ptw
+  PM_FN=readset_pool_trace_prep pm_copy ptlinked2 1 '  command -v python3 >/dev/null 2>&1 || why="${why:+$why; }no python3"' '  command -v python3 >/dev/null 2>&1 || why="${why:+$why; }no python3"; [ "$(git rev-parse --git-dir 2>/dev/null)" = "$(git rev-parse --git-common-dir 2>/dev/null)" ] || why="${why:+$why; }a linked worktree"' \
+    && pt_kill ptlinked2 ptw
   printf 'in-pool prep kill matrix (mutant -> arms that failed):\n%b' "$PT_MATRIX"
   pm_rf() { # <name> <arm> <setup> <correct result glob>
     local r; lt_arm
@@ -3247,6 +3251,34 @@ EOF
       bad "  the gitlink is not an empty directory, or the deleted-unstaged path was not named: $(tr '\n' ' ' < "$CSEED/shipped.out")"
     fi
 
+    # BL-701: FROM A LINKED WORKTREE the copy builds `.git` STANDALONE (readset_git_standalone, in the same
+    # span), because the worktree's own `.git` is a gitlink file naming the real private gitdir. The copy must
+    # answer HEAD like the worktree, resolve as its own repository, and a commit in it must leave the
+    # worktree's HEAD untouched. The near-miss is the main-checkout copy above, which keeps `.git` whole.
+    # THE WORKTREE COMMITS ONCE BEFORE THE COPY, so its HEAD differs from the main checkout's in both the branch
+    # and the commit: a copy that kept the main checkout's HEAD and index and never laid the private gitdir over
+    # them answers a DIFFERENT commit on a different branch, where a worktree still on main's commit cannot tell.
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    ( cd "$CSEED/src" && git worktree add -q -b lwcopy "$CSEED/lw" && cd "$CSEED/lw" && echo c >> exec.sh \
+        && git -c user.email=f@f -c user.name=f commit -qam in-worktree && echo w >> tracked.txt ) >/dev/null 2>&1 \
+      || broken "could not add a linked worktree to the copy seed"
+    [ "$(cd "$CSEED/lw" && git rev-parse HEAD 2>/dev/null)" != "$(cd "$CSEED/src" && git rev-parse HEAD 2>/dev/null)" ] \
+      || broken "the linked worktree's HEAD is the main checkout's — the arm below could not tell an overlaid copy from one that kept main's HEAD"
+    mkdir -p "$CSEED/dst.lw" "$CSEED/scr.lw"
+    ( . "$CP"; readset_copy_tree "$CSEED/lw" "$CSEED/dst.lw" "$CSEED/scr.lw" ) > "$CSEED/lw.out" 2>&1
+    LW_SRC_HEAD="$(cd "$CSEED/lw" && git rev-parse HEAD 2>/dev/null)"
+    LW_PRIV_HEAD="$(cat "$CSEED/src/.git/worktrees/lw/HEAD" 2>/dev/null)"
+    LW_DST="$(cd "$CSEED/dst.lw" && git symbolic-ref HEAD 2>/dev/null)|$(cd "$CSEED/dst.lw" && git rev-parse HEAD 2>/dev/null)|$(cd "$CSEED/dst.lw" && git rev-parse --git-dir 2>/dev/null)|$(cd "$CSEED/dst.lw" && git status --porcelain 2>/dev/null | tr '\n' ' ')"
+    ( cd "$CSEED/dst.lw" && git add -A && git -c user.email=f@f -c user.name=f commit -qm in-copy ) >/dev/null 2>&1
+    if [ -d "$CSEED/dst.lw/.git" ] && [ ! -e "$CSEED/dst.lw/.git/commondir" ] && [ -n "$LW_SRC_HEAD" ] \
+       && [ "$LW_DST" = "refs/heads/lwcopy|$LW_SRC_HEAD|.git| M tracked.txt " ] \
+       && [ "$(cat "$CSEED/src/.git/worktrees/lw/HEAD" 2>/dev/null)" = "$LW_PRIV_HEAD" ] \
+       && [ "$(cd "$CSEED/lw" && git rev-parse HEAD 2>/dev/null)" = "$LW_SRC_HEAD" ]; then
+      ok "  from a LINKED worktree the copy carries a standalone .git that answers HEAD and status like the worktree, and a commit in the copy leaves the worktree's HEAD unmoved"
+    else
+      bad "  the linked-worktree copy is not a standalone repository answering like its source (dst '$LW_DST', src HEAD '$LW_SRC_HEAD'): $(tr '\n' ' ' < "$CSEED/lw.out")"
+    fi
+
     # The three wrong copies, each written as a whole replacement of the function.
     cat > "$CSEED/m.cprm.sh" <<'MUT'
 readset_copy_tree() {
@@ -3712,8 +3744,8 @@ MUT
       "1|ERROR: must run as root"*"--tracer fs_usage"*"|2|ERROR: must run as root"*"--tracer both"*) ok "  a repeated --tracer refuses at the LAST value's code: 'both then fs_usage' at 1, 'fs_usage then both' at 2" ;;
       *) bad "a repeated --tracer did not refuse at the last value's exit code: both,fs_usage $V5 / fs_usage,both $V6" ;;
     esac
-    # A LINKED WORKTREE dies before the arguments are parsed, so it is the case the raw pre-scan
-    # exists for: 2 under both, still 1 otherwise.
+    # A LINKED WORKTREE dies at the gate just after the parse, before any tracer check, so its exit
+    # code is the raw pre-scan's: 2 under both, still 1 otherwise.
     ( cd "$BR" && git worktree add -q "$WORK/bothwt" -b bothwt ) >/dev/null 2>&1 || broken "could not add a linked worktree to the --tracer both repo"
     W1="$(drive_in "$WORK/bothwt" --all --tracer both)"
     W2="$(drive_in "$WORK/bothwt" --all --tracer fs_usage)"
@@ -4337,9 +4369,22 @@ STUB
     TRACE_ARMS=$((TRACE_ARMS+1))
     LW_R="$( ( cd "$WORK/lmwt" && env PATH="$SL:$PATH" bash core/scripts/derive-fixture-readsets.sh --list fxl --tracer sandbox --local-map "$WORK/lmwt.local" ) 2>&1 )"; LW_RC=$?
     if [ "$LW_RC" -eq 1 ] && grep -q 'LINKED worktree' <<< "$LW_R" && [ ! -e "$WORK/lmwt.local" ]; then
-      ok "LOCAL: from a LINKED worktree --local-map refuses before parsing and writes no local map"
+      ok "LOCAL: from a LINKED worktree --local-map refuses at the worktree gate and writes no local map"
     else
       bad "LOCAL: a linked worktree did not refuse --local-map at 1 with no file written (rc $LW_RC): $(printf '%s' "$LW_R" | head -2 | tr '\n' ' ')"
+    fi
+    # BL-701: the pool's two modes are ADMITTED from the same linked worktree. `--merge-pool` on an empty pool
+    # exits 0 having parsed; `--in-pool` with a two-name list reaches its own parse refusal, which it can only
+    # print once the linked-worktree gate above has let it through. The --local-map refusal is the control.
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    mkdir -p "$WORK/lmwt.mp" || broken "mkdir failed"
+    LW_M="$( ( cd "$WORK/lmwt" && env PATH="$SL:$PATH" bash core/scripts/derive-fixture-readsets.sh --merge-pool "$WORK/lmwt.mp" --local-map "$WORK/lmwt.mpl" ) 2>&1 )"; LW_MRC=$?
+    LW_I="$( ( cd "$WORK/lmwt" && env PATH="$SL:$PATH" bash core/scripts/derive-fixture-readsets.sh --list "fxl fxa" --tracer sandbox --in-pool "$WORK/lmwt.ip" ) 2>&1 )"; LW_IRC=$?
+    if [ "$LW_MRC" -eq 0 ] && grep -q 'no in-pool trace to merge' <<< "$LW_M" && ! grep -q 'LINKED worktree' <<< "$LW_M$LW_I" \
+       && [ "$LW_IRC" -eq 1 ] && grep -q 'needs --list with exactly ONE fixture' <<< "$LW_I"; then
+      ok "LOCAL: from a LINKED worktree --merge-pool and --in-pool pass the worktree gate that still refuses --local-map"
+    else
+      bad "LOCAL: a linked worktree refused a pool mode (merge rc $LW_MRC, in-pool rc $LW_IRC): $(printf '%s %s' "$LW_M" "$LW_I" | head -3 | tr '\n' ' ')"
     fi
     # Six mutant derivers, each a cmp -s guarded copy, each scored on the arm it must break.
     sed '/^    \[ "\$trip" -eq 0 \] || why=/d' "$SL/deriver.sh" > "$SL/d.notrip.sh"

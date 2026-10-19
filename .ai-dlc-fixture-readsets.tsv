@@ -14,7 +14,7 @@
 # path<TAB>sha lines in the runner's universe as traced; the runner clears a stale key record when
 # it recomputes the same value over the tree it is pushing.
 #
-# fixtures mapped: 38    entries: 671
+# fixtures mapped: 38    entries: 706
 architecture-fast-track	core
 architecture-fast-track	core/fixtures
 architecture-fast-track	core/fixtures/architecture-fast-track
@@ -54,8 +54,6 @@ changelog-sprint-slot	core/skills/ai-dlc/steps/sprint-review-next.md
 changelog-sprint-slot	core/skills/ai-dlc/steps/sprint-review.md
 changelog-sprint-slot	core/skills/ai-dlc/steps/stories-test-strategy.md
 changelog-sprint-slot	core/skills/ai-dlc/steps/ui-direction.md
-check-17-bypass	.claude/skills/ai-dlc/extensions/known-skills.json
-check-17-bypass	.gitignore
 check-17-bypass	core
 check-17-bypass	core/.claude
 check-17-bypass	core/.git
@@ -76,8 +74,6 @@ check-17-bypass	core/scripts/validate-provenance-block.sh
 check-17-bypass	core/scripts/validate-retro-evidence.sh
 check-17-bypass	core/skills/ai-dlc/extensions/known-skills.json
 check-17-bypass	skills/ai-dlc/extensions/known-skills.json
-check-17-counts	.claude/skills/ai-dlc/extensions/known-skills.json
-check-17-counts	.gitignore
 check-17-counts	core
 check-17-counts	core/.claude
 check-17-counts	core/.git
@@ -95,7 +91,6 @@ check-17-counts	core/scripts/validate-provenance-block.sh
 check-17-counts	core/skills/ai-dlc/extensions/known-skills.json
 check-17-counts	core/skills/ai-dlc/steps/retro.md
 check-17-counts	skills/ai-dlc/extensions/known-skills.json
-check-1c-bypass	.gitignore
 check-1c-bypass	core
 check-1c-bypass	core/fixtures
 check-1c-bypass	core/fixtures/check-1c-bypass
@@ -130,14 +125,12 @@ check-22-spawn-ledger	core/team-roles/remediator.md
 check-22-spawn-ledger	core/team-roles/sm.md
 check-22-spawn-ledger	core/team-roles/tea.md
 check-22-spawn-ledger	core/team-roles/ux.md
-check-23-draft-stamps	.gitignore
 check-23-draft-stamps	core
 check-23-draft-stamps	core/fixtures
 check-23-draft-stamps	core/fixtures/check-23-draft-stamps
 check-23-draft-stamps	core/fixtures/check-23-draft-stamps/run.sh
 check-23-draft-stamps	core/fixtures/check-23-draft-stamps/seed.sh
 check-23-draft-stamps	core/scripts/validate-draft-stamps.sh
-check-31-ac-falsifiability	.gitignore
 check-31-ac-falsifiability	core
 check-31-ac-falsifiability	core/.claude
 check-31-ac-falsifiability	core/.git
@@ -192,20 +185,17 @@ check5-anchor-base	core/fixtures/lib/preamble.sh
 check5-anchor-base	core/schemas/audit-anchors.json
 check5-anchor-base	core/scripts/validate-audit-anchors.sh
 check5-anchor-base	core/scripts/validate-mandatory-rules.sh
-ci-gates-resolution	.gitignore
 ci-gates-resolution	core
 ci-gates-resolution	core/fixtures
 ci-gates-resolution	core/fixtures/ci-gates-resolution
 ci-gates-resolution	core/fixtures/ci-gates-resolution/run.sh
 ci-gates-resolution	core/scripts
 ci-gates-resolution	core/scripts/validate-ci-gates.sh
-consolidation-residue	.gitignore
 consolidation-residue	core
 consolidation-residue	core/fixtures
 consolidation-residue	core/fixtures/consolidation-residue
 consolidation-residue	core/fixtures/consolidation-residue/run.sh
 consolidation-residue	core/skills/ai-dlc/steps/artifact-consolidation.md
-context-mode-protect	.gitignore
 context-mode-protect	core
 context-mode-protect	core/fixtures
 context-mode-protect	core/fixtures/context-mode-protect
@@ -241,6 +231,7 @@ context-sensor	core/hooks/ai-dlc-acknowledge.sh
 context-sensor	core/hooks/ai-dlc-advisor-gate.sh
 context-sensor	core/hooks/ai-dlc-answer-capture.sh
 context-sensor	core/hooks/ai-dlc-artifact-path-guard.sh
+context-sensor	core/hooks/ai-dlc-content-seal.sh
 context-sensor	core/hooks/ai-dlc-context-provenance.sh
 context-sensor	core/hooks/ai-dlc-context-sensor.sh
 context-sensor	core/hooks/ai-dlc-continue.sh
@@ -253,6 +244,7 @@ context-sensor	core/hooks/ai-dlc-foreground-budget.sh
 context-sensor	core/hooks/ai-dlc-gate-remediation-guard.sh
 context-sensor	core/hooks/ai-dlc-handoff-entry.sh
 context-sensor	core/hooks/ai-dlc-handoff-pending.sh
+context-sensor	core/hooks/ai-dlc-hookwake.sh
 context-sensor	core/hooks/ai-dlc-pause.sh
 context-sensor	core/hooks/ai-dlc-postcompact.sh
 context-sensor	core/hooks/ai-dlc-precompact.sh
@@ -263,14 +255,12 @@ context-sensor	core/hooks/ai-dlc-rules-floor.sh
 context-sensor	core/hooks/ai-dlc-subagent-probe.sh
 context-sensor	core/hooks/ai-dlc-usage-tokens.sh
 context-sensor	core/hooks/ai-dlc-window.sh
-core-script-boundary	.gitignore
 core-script-boundary	core
 core-script-boundary	core/fixtures
 core-script-boundary	core/fixtures/core-script-boundary
 core-script-boundary	core/fixtures/core-script-boundary/run.sh
 core-script-boundary	core/hooks/ai-dlc-context-provenance.sh
 core-script-boundary	core/hooks/ai-dlc-core-guard.sh
-cycle-commits-enforce	.gitignore
 cycle-commits-enforce	core
 cycle-commits-enforce	core/fixtures
 cycle-commits-enforce	core/fixtures/cycle-commits-enforce
@@ -309,6 +299,7 @@ dispatch-model-guard	core/hooks/ai-dlc-acknowledge.sh
 dispatch-model-guard	core/hooks/ai-dlc-advisor-gate.sh
 dispatch-model-guard	core/hooks/ai-dlc-answer-capture.sh
 dispatch-model-guard	core/hooks/ai-dlc-artifact-path-guard.sh
+dispatch-model-guard	core/hooks/ai-dlc-content-seal.sh
 dispatch-model-guard	core/hooks/ai-dlc-context-provenance.sh
 dispatch-model-guard	core/hooks/ai-dlc-context-sensor.sh
 dispatch-model-guard	core/hooks/ai-dlc-continue.sh
@@ -321,6 +312,7 @@ dispatch-model-guard	core/hooks/ai-dlc-foreground-budget.sh
 dispatch-model-guard	core/hooks/ai-dlc-gate-remediation-guard.sh
 dispatch-model-guard	core/hooks/ai-dlc-handoff-entry.sh
 dispatch-model-guard	core/hooks/ai-dlc-handoff-pending.sh
+dispatch-model-guard	core/hooks/ai-dlc-hookwake.sh
 dispatch-model-guard	core/hooks/ai-dlc-pause.sh
 dispatch-model-guard	core/hooks/ai-dlc-postcompact.sh
 dispatch-model-guard	core/hooks/ai-dlc-precompact.sh
@@ -329,6 +321,7 @@ dispatch-model-guard	core/hooks/ai-dlc-recover-gate.sh
 dispatch-model-guard	core/hooks/ai-dlc-recover.sh
 dispatch-model-guard	core/hooks/ai-dlc-rules-floor.sh
 dispatch-model-guard	core/hooks/ai-dlc-subagent-probe.sh
+dispatch-model-guard	core/hooks/ai-dlc-usage-tokens.sh
 dispatch-model-guard	core/hooks/ai-dlc-window.sh
 dispatch-model-guard	core/team-roles/gate-adjudicator.md
 divergence-hard-block	brief-resolution-p2.md
@@ -343,6 +336,7 @@ divergence-hard-block	core/hooks/ai-dlc-acknowledge.sh
 divergence-hard-block	core/hooks/ai-dlc-advisor-gate.sh
 divergence-hard-block	core/hooks/ai-dlc-answer-capture.sh
 divergence-hard-block	core/hooks/ai-dlc-artifact-path-guard.sh
+divergence-hard-block	core/hooks/ai-dlc-content-seal.sh
 divergence-hard-block	core/hooks/ai-dlc-context-provenance.sh
 divergence-hard-block	core/hooks/ai-dlc-context-sensor.sh
 divergence-hard-block	core/hooks/ai-dlc-continue.sh
@@ -355,6 +349,7 @@ divergence-hard-block	core/hooks/ai-dlc-foreground-budget.sh
 divergence-hard-block	core/hooks/ai-dlc-gate-remediation-guard.sh
 divergence-hard-block	core/hooks/ai-dlc-handoff-entry.sh
 divergence-hard-block	core/hooks/ai-dlc-handoff-pending.sh
+divergence-hard-block	core/hooks/ai-dlc-hookwake.sh
 divergence-hard-block	core/hooks/ai-dlc-pause.sh
 divergence-hard-block	core/hooks/ai-dlc-postcompact.sh
 divergence-hard-block	core/hooks/ai-dlc-precompact.sh
@@ -363,6 +358,7 @@ divergence-hard-block	core/hooks/ai-dlc-recover-gate.sh
 divergence-hard-block	core/hooks/ai-dlc-recover.sh
 divergence-hard-block	core/hooks/ai-dlc-rules-floor.sh
 divergence-hard-block	core/hooks/ai-dlc-subagent-probe.sh
+divergence-hard-block	core/hooks/ai-dlc-usage-tokens.sh
 divergence-hard-block	core/hooks/ai-dlc-window.sh
 divergence-hard-block	core/schemas/pause-routing.json
 divergence-hard-block	core/schemas/sprint-status.json
@@ -381,7 +377,6 @@ document-partition	core/fixtures/scripts/ai-dlc/partition-document.sh
 document-partition	core/scripts
 document-partition	core/scripts/ai-dlc/partition-document.sh
 document-partition	core/scripts/partition-document.sh
-early-exit-reader	.gitignore
 early-exit-reader	core/fixtures/early-exit-reader/run.sh
 extension-check-adoption	core
 extension-check-adoption	core/.claude
@@ -421,7 +416,6 @@ gate-resume	core/skills/ai-dlc
 gate-resume	core/skills/ai-dlc/extensions
 gate-resume	core/skills/ai-dlc/overrides
 gate-resume	core/skills/ai-dlc/steps/gate-validation.md
-gate-verdict-grep-shape	.gitignore
 gate-verdict-grep-shape	core
 gate-verdict-grep-shape	core/fixtures
 gate-verdict-grep-shape	core/fixtures/gate-verdict-grep-shape
@@ -440,6 +434,7 @@ hook-registration-join	core/hooks/ai-dlc-acknowledge.sh
 hook-registration-join	core/hooks/ai-dlc-advisor-gate.sh
 hook-registration-join	core/hooks/ai-dlc-answer-capture.sh
 hook-registration-join	core/hooks/ai-dlc-artifact-path-guard.sh
+hook-registration-join	core/hooks/ai-dlc-content-seal.sh
 hook-registration-join	core/hooks/ai-dlc-context-provenance.sh
 hook-registration-join	core/hooks/ai-dlc-context-sensor.sh
 hook-registration-join	core/hooks/ai-dlc-continue.sh
@@ -452,6 +447,7 @@ hook-registration-join	core/hooks/ai-dlc-foreground-budget.sh
 hook-registration-join	core/hooks/ai-dlc-gate-remediation-guard.sh
 hook-registration-join	core/hooks/ai-dlc-handoff-entry.sh
 hook-registration-join	core/hooks/ai-dlc-handoff-pending.sh
+hook-registration-join	core/hooks/ai-dlc-hookwake.sh
 hook-registration-join	core/hooks/ai-dlc-pause.sh
 hook-registration-join	core/hooks/ai-dlc-postcompact.sh
 hook-registration-join	core/hooks/ai-dlc-precompact.sh
@@ -460,6 +456,7 @@ hook-registration-join	core/hooks/ai-dlc-recover-gate.sh
 hook-registration-join	core/hooks/ai-dlc-recover.sh
 hook-registration-join	core/hooks/ai-dlc-rules-floor.sh
 hook-registration-join	core/hooks/ai-dlc-subagent-probe.sh
+hook-registration-join	core/hooks/ai-dlc-usage-tokens.sh
 hook-registration-join	core/hooks/ai-dlc-window.sh
 hook-registration-join	core/scripts
 hook-registration-join	core/scripts/.claude
@@ -468,7 +465,9 @@ hook-registration-join	core/scripts/core/skills/ai-dlc
 hook-registration-join	core/scripts/validate-hook-registration.sh
 hook-registration-join	core/skills/ai-dlc-update/reconcile/settings-merge.sh
 hook-registration-join	templates/settings.json.template
-layer-title-join	.gitignore
+layer-title-join	.mailmap
+layer-title-join	HEAD:core/schemas/layer-adjudication-register.json
+layer-title-join	HEAD:core/skills/ai-dlc/layer-contract.yaml
 layer-title-join	core
 layer-title-join	core/fixtures
 layer-title-join	core/fixtures/layer-title-join
@@ -479,8 +478,43 @@ layer-title-join	core/schemas/layer-adjudication-register.json
 layer-title-join	core/skills
 layer-title-join	core/skills/ai-dlc-update
 layer-title-join	core/skills/ai-dlc-update/reconcile
+layer-title-join	core/skills/ai-dlc-update/reconcile/adopt-extension-checks.sh
+layer-title-join	core/skills/ai-dlc-update/reconcile/apply.sh
+layer-title-join	core/skills/ai-dlc-update/reconcile/classify-block.md
+layer-title-join	core/skills/ai-dlc-update/reconcile/derivation-differential.sh
+layer-title-join	core/skills/ai-dlc-update/reconcile/dist-clone.sh
+layer-title-join	core/skills/ai-dlc-update/reconcile/emit-report.sh
+layer-title-join	core/skills/ai-dlc-update/reconcile/hard-blockers.sh
 layer-title-join	core/skills/ai-dlc-update/reconcile/layer-drift.sh
+layer-title-join	core/skills/ai-dlc-update/reconcile/ledger-reverify.sh
+layer-title-join	core/skills/ai-dlc-update/reconcile/ledger-rotate.sh
 layer-title-join	core/skills/ai-dlc-update/reconcile/lib.sh
+layer-title-join	core/skills/ai-dlc-update/reconcile/post-write-gates.sh
+layer-title-join	core/skills/ai-dlc-update/reconcile/preclassify.sh
+layer-title-join	core/skills/ai-dlc-update/reconcile/predicate-differential.sh
+layer-title-join	core/skills/ai-dlc-update/reconcile/predicate-sites.md
+layer-title-join	core/skills/ai-dlc-update/reconcile/push-drain.sh
+layer-title-join	core/skills/ai-dlc-update/reconcile/push-refusals.tsv
+layer-title-join	core/skills/ai-dlc-update/reconcile/readopt-override.sh
+layer-title-join	core/skills/ai-dlc-update/reconcile/register-drift.sh
+layer-title-join	core/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh
+layer-title-join	core/skills/ai-dlc-update/reconcile/retired-fixtures.sh
+layer-title-join	core/skills/ai-dlc-update/reconcile/retired-layer-contract.sh
+layer-title-join	core/skills/ai-dlc-update/reconcile/retired-layer-passage.sh
+layer-title-join	core/skills/ai-dlc-update/reconcile/retired-layer-token.sh
+layer-title-join	core/skills/ai-dlc-update/reconcile/retired-tokens.sh
+layer-title-join	core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh
+layer-title-join	core/skills/ai-dlc-update/reconcile/self-update-gate.sh
+layer-title-join	core/skills/ai-dlc-update/reconcile/self-update-push.sh
+layer-title-join	core/skills/ai-dlc-update/reconcile/settings-merge.sh
+layer-title-join	core/skills/ai-dlc-update/reconcile/setup-site-drift.sh
+layer-title-join	core/skills/ai-dlc-update/reconcile/setup-sites.md
+layer-title-join	core/skills/ai-dlc-update/reconcile/template-sites.md
+layer-title-join	core/skills/ai-dlc-update/reconcile/unregistered-drift.sh
+layer-title-join	core/skills/ai-dlc-update/reconcile/warn-shadowed-local-validators.sh
+layer-title-join	nowhere
+layer-title-join	steps
+layer-title-join	team-roles
 notify-hook-channel	.gitignore
 notify-hook-channel	core
 notify-hook-channel	core/fixtures
@@ -541,7 +575,6 @@ resume-whole-read	core/fixtures/resume-whole-read/run.sh
 resume-whole-read	core/skills/ai-dlc/enforcement-map.yaml
 resume-whole-read	core/skills/ai-dlc/steps/handoff.md
 resume-whole-read	core/skills/ai-dlc/steps/route.md
-retro-compliance-workflow	.gitignore
 retro-compliance-workflow	core
 retro-compliance-workflow	core/ci-templates/validate-retro-compliance.yml
 retro-compliance-workflow	core/fixtures
@@ -560,7 +593,6 @@ review-carry-over-clauses	core/fixtures/review-carry-over-clauses
 review-carry-over-clauses	core/fixtures/review-carry-over-clauses/run.sh
 review-carry-over-clauses	core/skills/ai-dlc/steps/sprint-review.md
 review-carry-over-clauses	core/team-roles/dev.md
-route-defect-classification	.gitignore
 route-defect-classification	core
 route-defect-classification	core/fixtures
 route-defect-classification	core/fixtures/route-defect-classification
@@ -598,6 +630,8 @@ story-evidence-scaffold	core/scripts/artifact-path-config.sh
 story-evidence-scaffold	core/scripts/audit-layer-debt.sh
 story-evidence-scaffold	core/scripts/audit-rule-files.sh
 story-evidence-scaffold	core/scripts/audit-upstream-routing.sh
+story-evidence-scaffold	core/scripts/check-owed-derivations.sh
+story-evidence-scaffold	core/scripts/content-seal.sh
 story-evidence-scaffold	core/scripts/core-paths.sh
 story-evidence-scaffold	core/scripts/core/skills/ai-dlc
 story-evidence-scaffold	core/scripts/derive-fixture-readsets.sh
@@ -617,6 +651,7 @@ story-evidence-scaffold	core/scripts/render-agent-definitions.sh
 story-evidence-scaffold	core/scripts/report-propagation-fanout.sh
 story-evidence-scaffold	core/scripts/rotate-gate-adjudication.sh
 story-evidence-scaffold	core/scripts/rotate-snapshot-archive.sh
+story-evidence-scaffold	core/scripts/serial-remediation-worklist.sh
 story-evidence-scaffold	core/scripts/sprint-status.sh
 story-evidence-scaffold	core/scripts/stamp-story-provenance.sh
 story-evidence-scaffold	core/scripts/sync-taught-schema.sh
@@ -661,6 +696,7 @@ story-evidence-scaffold	core/scripts/validate-trunk-audit-gate.sh
 story-evidence-scaffold	core/scripts/validate-write-format-steering.sh
 story-evidence-scaffold	core/scripts/verdict.sh
 story-evidence-scaffold	core/scripts/wait-for-deliverable.sh
+story-evidence-scaffold	core/scripts/wfd-start-of.sh
 story-evidence-scaffold	core/skills/ai-dlc/steps/gate-validation.md
 story-evidence-scaffold	core/skills/ai-dlc/steps/implementation.md
 story-evidence-scaffold	core/skills/ai-dlc/steps/sprint-review.md
@@ -668,7 +704,6 @@ story-evidence-scaffold	core/skills/ai-dlc/steps/stories-test-strategy.md
 story-evidence-scaffold	core/team-roles/code-reviewer.md
 story-evidence-scaffold	core/team-roles/dev.md
 story-evidence-scaffold	core/team-roles/qa.md
-story-fields-derive	.gitignore
 story-fields-derive	core
 story-fields-derive	core/.claude
 story-fields-derive	core/.git
@@ -686,22 +721,40 @@ story-fields-derive	core/skills/ai-dlc/layer-contract.yaml
 story-fields-derive	core/skills/ai-dlc/steps
 story-fields-derive	core/skills/ai-dlc/steps/gate-validation.md
 story-fields-derive	core/skills/ai-dlc/steps/implementation.md
-# digest apply-restamp-worklist 0380a85167923bac3319bbbe4c8e60c861f4cddfcaa1b3bb597b7e1db35cf3e2
-# digest apply-restamp-worklist-b cdc6981269db5570e75cbe9fb12924f2c74a8c4c01deb74f164106d96359db25
-# digest apply-restamp-worklist-c 6f2483f066b6ef598bfefdf72467c8f4ebb002174dbbdb6fc8f3bb90358cf3b2
-# digest architecture-fast-track 8347f216bc7fa03eb0ecfc49743a904092ab8a9fecea304b8043cfa804a0f008
-# digest changelog-sprint-slot 70229a198d1b9a3abe5ae61483d7beb926b6908add6aadcdb78147ef01dcee62
-# digest check-22-spawn-ledger 70c842fa5bbe4dd53306fe4b5f7acd2e8bd91119aaf277642390c76df054fbaf
-# digest context-provenance c49f2f85b5142b7776dc7a936326a3b9a462a57df4550fd36e5a86bdb33c9db2
-# digest context-sensor 7b4447d3e710d2229001ffd5e021649fd3e78f86804b383260074052265b034a
-# digest derivation-capture 0a8155feef61a90cf7225ffbb5f38a852e557958f2acc595e06521c8d1d28504
-# digest dispatch-model-guard 79f59ceffc7d8197c36180477e0ca061734520ecfe964c63f9f21222d2b13f28
-# digest divergence-hard-block a7bd70baa65f4911cd26584e28525ee5cc2928d79146c813e2590644eff571c0
-# digest extension-check-adoption f861b0af9251cbbcae0f1e3cfdae4e34195fe398c67dca2c4300eeb8f704c6a0
-# digest gate-resume 2c88db5c6a84a8a263601432ff9773f98a70dc4ffff76349ac5ba1c502691ae8
-# digest hook-registration-join f64e606ca937dc96a1ccf5a936e88aece45cc864079f60224dbdaf83fb09932a
-# digest requirements-step 2289822877479bc1e9540a38027a86e1a34bc3913ee88ab7a5397f82ae979ef9
-# digest resume-whole-read c6dc1f11575252a427e27bf3d1393f48bde571c39a7dba9f660308e9b08c857c
-# digest review-carry-over-clauses 0ae517d79ff27678be324e55489651ee3a462ef354aead4909cdd0ea14534c45
-# digest self-update-join-gate d3cc1f78c208b20362ed4896860d181bded017fb037dbf351c86f7c4d75e206b
-# digest story-evidence-scaffold 642a6a684902fc5a1e2c467621ba57ac446a1f504d7b3c254ff59fce65ebe1bb
+# digest architecture-fast-track a3da52c26ffbbe2f9b2f42d7521899c6c72889235a1e3e42161938d70a4f53fb
+# digest changelog-sprint-slot 201fb5af1c23d571ee1d28e0398105ed8759c171fec21b440a51ec964158136e
+# digest check-17-bypass 585bf08a1b92ead81e70a64109abce6e99f195def2b47e4036e416d7df260178
+# digest check-17-counts e685b3bf2327ede7b60831fb130e7e92013b81cd809d8d2213fdc292763d576b
+# digest check-1c-bypass c717d236a1186ee75c963b30a3d54c1f71918c052492ef57646b6347ab947cae
+# digest check-22-spawn-ledger f0b769675f1288350bb3d7ae0e50fcdd128dfd222503492031d2d7d1bcb4fac1
+# digest check-23-draft-stamps 9626c9b111d6dde08a93c418cb9774ebef249aede56d1e8da9843b57c5f37c99
+# digest check-31-ac-falsifiability 41864a966ad4b332c7fa158ecd6df95b2146a2ac12f221468ec140ce7d26e08f
+# digest check-3b-locked-anchor 58f658d2982a14b57255e36f599cb1228daa130ca57f22ec39b9cfa68255e611
+# digest check5-anchor-base 5e575f984a45d5d18ea2d3f093ddf34131c853eda471a952458d13701ad7ea80
+# digest ci-gates-resolution 98c3a70fbd0fb64b8ebd62b54734bfb3d00dc93fa7246cb7fb91b6f6f09b48f0
+# digest consolidation-residue 56e6804ff7dbe285570c3b406dd1b7b2440d2ab136d780f2191fa5764a747a6e
+# digest context-mode-protect 8e952581d82ee161cc425992812c82bca516ef59f3c35a7e1a63a2c986b5b010
+# digest context-provenance 851c43aa04b3f1175068389ab68d909525603761d7d4bf34718016a45d8ecd67
+# digest context-sensor 35cb8563da7c573e516b6d4875bf646acff170cc19f066feaac6ae1e8f9a260d
+# digest core-script-boundary 9cd37304786c43be396520ea10e0de4a3d043ac2f1cdcb724c1a3c13e74ba550
+# digest cycle-commits-enforce 322563196d40feffef3f75728df50f4ce94f3b3d87c25e6a703d3d9c01ad4bc3
+# digest deploy-validate-smoke-classification 0ba5a25c21d37b73dbb880baf6349efed2f751a19939d36076b940b9747f8991
+# digest derivation-capture e825d0afc0b072d1eddae50a4292f865b1163bf86e7615372963fc889dc2066f
+# digest dispatch-model-guard 85ba86733d0e206e10a01524917154b4ab56fea1eab96bcb581192781055e646
+# digest divergence-hard-block fb604c5b7cc9d74820340996ee868950b5263cb15759203ae1f59909f7ceb3e1
+# digest document-partition 4bcb8a2aa7fa9f0d175649dbe62b55943aebe794fcdd7b777c229c9cbb489779
+# digest early-exit-reader 7f0e29638aaac96eb5d872dd79c1ea747001afd0d832aa88905cae583348a386
+# digest extension-check-adoption bfa0f3275d535f62991c14e7f95a88f0506130168c8d437efe926d1847118d55
+# digest gate-resume 8ad739b4d940e644ee79f7d262ff99519025d7f970d7c503bd8d1d2c45913e33
+# digest gate-verdict-grep-shape 529e98601a18b3e6ef8de593ac7ecdc2813f7b7746164fa18d3045ff85a00025
+# digest hook-registration-join eaaf886f8bd31bacece916de88656bf08f6e9ba8a32382903656287fe5bf4c86
+# digest layer-title-join eb45614162c3908b51c22abe72dde061c8cbe34f78c17b2bd6d4c001cd1b11f3
+# digest prepush-ssh-keepalive cdbfac795323a19ab3ec6551436b2a1f0f6976c7bece5b18658be870988e126d
+# digest requirements-step d0daabce71d166100caddd6211ea30961442658792504e0ec46765dcd5340be0
+# digest resume-whole-read 8f3f54ee0e057daee29672a775ed050809647da0722d7e1e2c875e42b9d55a13
+# digest retro-compliance-workflow 6d82820d36017eccd938696707cbeff1230a5ecd003681d0b8b3a81e63114221
+# digest review-carry-over-clauses ad6b44cc575761b1cce2eaaad6a6450dcae618d39f280b43800f7fc2eb04f8ca
+# digest route-defect-classification a55e73c1efe5d211a230e4b04fb6f382a61501eaf825574e512f8c0b3408c78d
+# digest self-update-join-gate 5b6e85c36de04d0ce801b6626c434a18101ce5f50047e8b95363d23eeeebacbd
+# digest story-evidence-scaffold ca7e5a101c01c11db4be2e6c1c3239084a781be3a5a200cf2ecfd20f1b4b4ff4
+# digest story-fields-derive 63ea79403651828e92cbacba363f66aa39a665045bc8392529cd58c18e371954
