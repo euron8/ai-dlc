@@ -1556,8 +1556,17 @@ fi
 # below): its age no longer decides anything, and pruning it would let a chained call delayed
 # past the prune age sleep a second quantum. Identity is the pid in the name plus the start time
 # stored in the marker; a recycled pid has a different start time and is pruned on age as before.
+# THE START TIME HAS A SECOND SOURCE (BL-686). `/bin/ps` is setuid root and `sandbox-exec` refuses
+# to exec it, so under a sandboxed harness every marker was one field and every beat fell back to
+# the clock test the identity check replaced. When `ps` prints nothing, the stock perl reads the
+# same kernel field (kinfo_proc p_starttime, via sysctl KERN_PROC_PID) and prints it with
+# localtime -- `ps -o lstart=` word for word under LC_ALL=C in the same zone, which is why `ps` is
+# pinned to LC_ALL=C here: a marker written by one source must read equal through the other.
+# macOS only ($^O); elsewhere, or for a dead pid, it prints nothing and the clock test decides.
 shell_start_of() {  # $1 = pid -> its start time, whitespace-normalised; empty when it cannot be read
-  ps -o lstart= -p "$1" 2>/dev/null | tr -s ' \t' ' ' | sed 's/^ //; s/ $//'
+  ss_="$(LC_ALL=C ps -o lstart= -p "$1" 2>/dev/null)" || ss_=""
+  [ -n "$ss_" ] || ss_="$(perl -e 'exit 1 unless $^O eq "darwin" && $ARGV[0] =~ /^[1-9][0-9]*$/; my $m = pack("i4", 1, 14, 1, $ARGV[0]); my $b = "\0" x 1024; my $l = pack("Q", 1024); syscall(202, $m, 4, $b, $l, 0, 0) == 0 or exit 1; my ($s) = unpack("q", $b); exit 1 unless unpack("Q", $l) > 0 && $s > 0; print scalar localtime $s' "$1" 2>/dev/null)" || ss_=""
+  printf '%s' "$ss_" | tr -s ' \t' ' ' | sed 's/^ //; s/ $//'
 }
 SH_PRUNE_SECS=$(( ( (BUDGET / 60) + 1 ) * 60 ))
 for sh_f_ in "$COUNTER_DIR"/.shell-*; do
@@ -1596,6 +1605,9 @@ done
 # persistent shell would make every beat after the first read as chained; none does today.
 SIBLING="${COUNTER_DIR}/.shell-${PPID}"
 SHELL_START="$(shell_start_of "$PPID")"
+# NEITHER SOURCE COULD READ IT (BL-686): `ps` refused or empty, and no perl. Said once per beat, on
+# stderr, because the guard below then decides by the clock alone and a reader must know that.
+[ -n "$SHELL_START" ] || printf 'NOTE: start time of shell %s unreadable (ps refused or printed nothing, and no perl fallback) -- the chained-beat guard decides by the clock alone this beat\n' "$PPID" >&2
 MAY_SLEEP=1
 if [ -f "$SIBLING" ]; then
   LAST_REC="$(cat "$SIBLING" 2>/dev/null || echo 0)"

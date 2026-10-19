@@ -480,7 +480,9 @@ EVID_TABLE=""; EVID_REFUSE=""; OLDIFS="$IFS"
 while IFS="$(printf '\t')" read -r ST LB DT; do
   [ -n "$LB" ] || continue
   ANN="$(awk -F'\t' -v l="$LB" '$1==l{print $2; exit}' <<<"$MOVED_ANN")"
-  SHA="$(printf '%s\n' "$ANN" | sed -n 's/.*verified \([0-9a-f][0-9a-f]*\).*/\1/p')"
+  # ANN is the WHOLE annotation line (an optional `<br>` prefix, then the bold form, then any prose).
+  # Anchored on the form so a later "verified <word>" in the prose cannot replace the sha.
+  SHA="$(printf '%s\n' "$ANN" | sed -n 's/^\(<br>\)\{0,1\}\*\*LANDED (v[^,]*, verified \([0-9a-f]\{7,\}\)[^0-9a-f].*/\2/p')"
   if   [ "$R1_SKIP" = true ]; then SHAV="sha SKIPPED (ledger is not in a git repository)"
   elif [ -z "$SHA" ];          then SHAV="sha ABSENT"
   elif git -C "$(dirname "$LEDGER")" cat-file -e "${SHA}^{commit}" 2>/dev/null; then SHAV="sha $SHA resolves"

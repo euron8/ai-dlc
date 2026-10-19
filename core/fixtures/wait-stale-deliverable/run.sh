@@ -1508,29 +1508,62 @@ rm -rf "$W"
 }
 
 # --- two beats, one path --------------------------------------------------------------------
-# Both armed over a seat file before it exists, from two shells 1.5s apart -- half a POLL out
-# of phase, so the first to deliver has deleted the shared `.since` well before the other's
-# next poll; in phase, both could pass the predicate before either deletes it and the memo
-# would go untested. The second beat then must still deliver from its memoised epoch.
+# Both armed over a seat file before it exists, each from its own shell. The memo matters only
+# when the second beat's NEXT `.since` read comes AFTER the first beat delivered and deleted it;
+# if both see the seal inside one poll, both deliver before either deletes it and a beat with no
+# memo delivers too.
+# A SLEEP COULD NOT ORDER THAT. The beats used to start 1.5s apart -- half a POLL out of phase --
+# but a poll's wake-up is the scheduler's, not the clock's: under load the two beats' checks drift
+# into one window, both delivered, and no-join-memo survived on a loaded run while the subject was
+# unchanged.
+# THE SENTINEL ORDERS IT. The second beat is frozen (SIGSTOP on its whole tree) while a `sleep`
+# runs under it -- its poll sleep, a foreground child, so the beat is between two checks and not
+# holding an epoch it read before the seal existed. The seal is then written, the first beat runs
+# to its exit, and only once its output says DELIVERED and `.since` is gone is the second beat
+# continued. Its next check is therefore after the deletion, every run, whatever the load; it must
+# still deliver from its memoised epoch. TB_ORDERED records that the order was imposed, so a
+# forcing that silently failed cannot read as a kill.
 run_two_beats() { # <subject> -> TB_* ; leaves W
   W="$( bash "$SEED" two-beats-one-path )"
-  local p1 p2
+  local p1 p2 mt frozen=0 tries=0
   bg_beat "$1" "$W" "$W/1.out" 12 1 --complete x.md; p1=$BG
-  sleep 1.5
   bg_beat "$1" "$W" "$W/2.out" 12 1 --complete x.md; p2=$BG
   # Both past the sweep: each sleeping beat charges the one shared counter.
   until_true 100 counter_is "$W" x.md 2 || true
+  # Freeze beat 2 inside its poll sleep. A sleep still present AFTER the stop proves the beat
+  # was parked in it, not mid-check; otherwise continue it and try again at its next sleep.
+  while [ "$frozen" -eq 0 ] && [ "$tries" -lt 10 ]; do
+    tries=$((tries + 1))
+    until_true 30 tree_has_sleep "$p2" || continue
+    tree_signal "$p2" STOP
+    if tree_has_sleep "$p2"; then frozen=1; else tree_signal "$p2" CONT; fi
+  done
   printf 'a finding\nseat-complete: s 1 findings=1\n' > "$W/x.md"
   wait "$p1" 2>/dev/null || true
+  # `is_delivered` compares whole seconds with `>=`, so a memo-less beat continued inside the
+  # seal's own second would re-arm at that second and accept the file on that alone. Continue
+  # only once the clock has left it, and make that part of the control.
+  mt="$(fx_mtime "$W/x.md")"
+  until_true 30 now_at_least "$(( mt + 1 ))" || true
+  TB_ORDERED=0
+  [ "$frozen" -eq 1 ] && grep -q '^DELIVERED x.md' "$W/1.out" \
+    && [ ! -e "$W/_bmad-output/.wait-beats/$(fx_key x.md).since" ] \
+    && now_at_least "$(( mt + 1 ))" && TB_ORDERED=1
+  tree_signal "$p2" CONT
   wait "$p2" 2>/dev/null || true
   TB_N=0
   grep -q '^DELIVERED x.md' "$W/1.out" && TB_N=$((TB_N + 1))
   grep -q '^DELIVERED x.md' "$W/2.out" && TB_N=$((TB_N + 1))
   separate_shells "$W" 2 "$W/1.out" "$W/2.out"
 }
+say_ordered() { # <label>
+  if [ "$TB_ORDERED" -eq 1 ]; then ok "$1: CONTROL — beat 2 was frozen in its poll sleep until beat 1 delivered, .since was gone and the seal's second had passed"
+  else bad "$1: the order was not imposed (beat 2 never frozen in a sleep, beat 1 did not deliver, .since survived, or the clock never left the seal's second) — this case did not test the memo"; fi
+}
 C40_two_beats_one_path() {
 run_two_beats "$SUBJ"
 say_shells "two-beats-one-path"
+say_ordered "two-beats-one-path"
 if [ "$TB_N" -eq 2 ]; then ok "two-beats-one-path: both beats deliver one sealed file"
 else bad "two-beats-one-path: $TB_N of 2 beats delivered — the second re-armed after the first deleted the shared .since"; fi
 rm -rf "$W"
@@ -1539,6 +1572,7 @@ C41_mut_no_join_memo() {
 mutant no-join-memo
 run_two_beats "$MUT"
 say_shells "MUTANT no-join-memo"
+say_ordered "MUTANT no-join-memo"
 if [ "$TB_N" -eq 1 ]; then ok "MUTANT no-join-memo: without the memo one beat reports a sealed file WAITING"
 else bad "MUTANT no-join-memo: $TB_N of 2 delivered with the memo removed; the memo is not what carries the second beat"; fi
 rm -rf "$W"
