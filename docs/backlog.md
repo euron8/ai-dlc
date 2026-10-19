@@ -534,19 +534,6 @@ verify: sh D=scripts/audit-party-wave-barrier.sh; R=core/skills/ai-dlc/rule-bodi
 
 verify: manual
 
-## BL-700 — a malformed or absent transcript, or no `jq` on PATH, fails OPEN before the handoff guard runs
-
-**DEFECT.** Owner ai-dlc-ae (batch 236). Found by the GUARDORDER tip adversary (tip698) on 02b16ee93; the id was allocated by lead ai-dlc-c8. Pre-existing on origin/main.
-
-`core/hooks/ai-dlc-continue.sh` allows a requested handoff on an unpublished branch with no `HANDOFF_GUARD_*` row in four cases: the transcript's last line is truncated mid-write, a non-JSON line sits mid-file, the transcript path names no file, or `jq` is not on PATH. The continuation log shows `ADVERSARIAL_STATE_UNADJUDICABLE` and then `ALLOWED_BY_PAUSE`; with the pause flag down, only the first row appears. The same seed with a well-formed transcript gets a HANDOFF GUARD block, which is the control. The four cases give the same silent allow under the branch hook and under the origin/main hook (tip698 `probe4.sh` and `probe4b.sh`, origin/main hooks at `scratchpad/tip698/base/core/hooks`). The receipt below reproduces it: exit 1 with all four named, on both hook trees, against a passing control.
-
-Mechanism, from the code and not traced: Check 0's transcript readers (`LAST_USER`/`LAST_ASST`, `jq -rs` over the whole file) read an empty string when `jq` cannot parse the file or is absent. With no request seen, the guard is armed only by an on-disk key. Check 0b then reports the adversarial state as unadjudicable, and Check 1 allows the Stop.
-
-Owed: a Stop whose transcript cannot be parsed or read, or that runs with no `jq`, must not let a requested handoff end with step 3 unsatisfied and no HANDOFF_GUARD record. The fix is not one line, and it rides a later release. The readers must tolerate a partial last line (`-R` with `fromjson?`, as `push_bg_read` and `ai-dlc-dispatch-guard.sh` already do), and a path with no `jq` needs its own decision.
-
-verify: sh bash core/fixtures/handoff-completion-assertion/receipt-bl700.sh
-
-
 ## BL-696 — I106's ship-set filter loop has no probe, and forks two `dirname`s per candidate before it checks `.dist-only`
 
 **DEFECT.** The loop at `scripts/validate-enforcement-map.sh:4942-4948` (the `for _sf in $(grep -rlE "$i33d_pat" ...)` loop that walks each candidate up to its fixture directory, then `continue`s on `[ -f "$_fd/.dist-only" ]`) is exercised by none of I106's three probes (`:4924-4933` drive only `i33d_scan`). A wrong walk could silently skip a shipping fixture, or admit a `.dist-only` one, and still pass: a check that cannot fire.

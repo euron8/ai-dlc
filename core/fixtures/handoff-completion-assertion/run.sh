@@ -1259,6 +1259,158 @@ has "$rr" "$RESUME_MARK" && ok "  then a Stop WITH a transcript lacking the resu
 dsetup
 
 # =============================================================================
+# ai-dlc-continue.sh — A DAMAGED OR UNREADABLE TRANSCRIPT, AND NO jq (BL-700)
+# =============================================================================
+# THE SUBJECT. A requested handoff on an unpublished branch was ALLOWED with no HANDOFF_GUARD row
+# in four cases: the transcript's last line truncated mid-write, a non-JSON line mid-file, a
+# transcript path naming no file, and no jq on PATH. Three answers, keyed by what is recoverable:
+# a damaged transcript is READ line-wise and gets the NORMAL guard text (fc1, fc2); with no
+# transcript the fresh driver signal ENTERS Check 0, which decides from disk and git (fc3, and its
+# completed-handoff control fc3b); with no jq the guard FAILS CLOSED with one constant block and a
+# HANDOFF_GUARD_FAIL_CLOSED row (fc4). The seed is the receipt's: the unpublished tree, the pause flag up, and step 4's
+# driver signal the only handoff signal on disk. Two controls bound the fail-closed path: no
+# signal on disk ALLOWS (fc5), and a READABLE transcript keeps the existing decision (fc6). (fc7)
+# is the bound that keeps a stale signal on a no-jq box from wedging a session.
+FC_ROW="HANDOFF_GUARD_FAIL_CLOSED"
+FC_MARK="HANDOFF GUARD (fail-closed)"
+FC_U='{"type":"user","message":{"role":"user","content":"hand off the sprint"}}'
+FC_A='{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Snapshot finalized."}]}}'
+T_FC_OK="$ROOT/fc-ok.jsonl"; T_FC_TRUNC="$ROOT/fc-trunc.jsonl"; T_FC_GARB="$ROOT/fc-garbage.jsonl"
+T_FC_QUIET="$ROOT/fc-quiet.jsonl"; T_FC_NONE="$ROOT/fc-no-such-transcript.jsonl"
+printf '%s\n%s\n' "$FC_U" "$FC_A" > "$T_FC_OK"
+printf '%s\n%s\n' "$FC_U" "${FC_A:0:40}" > "$T_FC_TRUNC"
+printf '%s\n%s\n%s\n' "$FC_U" '{"broken":' "$FC_A" > "$T_FC_GARB"
+printf '%s\n%s\n' '{"type":"user","message":{"role":"user","content":"did the full handoff steps run"}}' "$FC_A" > "$T_FC_QUIET"
+# A PATH with every /bin and /usr/bin tool EXCEPT jq, plus git -- the receipt's construction, and
+# its assertion that the shim really lacks jq and really carries the tools the hook calls.
+FC_NJ="$ROOT/fc-nojq"; mkdir -p "$FC_NJ"
+for _d in /bin /usr/bin; do for _t in "$_d"/*; do _b="${_t##*/}"; [ "$_b" = jq ] && continue; [ -e "$FC_NJ/$_b" ] || ln -s "$_t" "$FC_NJ/$_b" 2>/dev/null; done; done
+ln -sf "$(command -v git)" "$FC_NJ/git" 2>/dev/null
+_fc0=""
+[ ! -e "$FC_NJ/jq" ]                          || _fc0="$_fc0 shim-has-jq-file"
+[ -z "$(PATH="$FC_NJ"; command -v jq)" ]      || _fc0="$_fc0 shim-resolves-jq"
+[ -n "$(PATH="$FC_NJ"; command -v git)" ]     || _fc0="$_fc0 shim-lacks-git"
+[ -n "$(PATH="$FC_NJ"; command -v sed)" ]     || _fc0="$_fc0 shim-lacks-sed"
+[ ! -e "$T_FC_NONE" ]                         || _fc0="$_fc0 absent-transcript-exists"
+[ -f "$T_FC_OK" ]                             || _fc0="$_fc0 ok-transcript-missing"
+[ -z "$_fc0" ] \
+  || broken "(fc0) premise failed:${_fc0} — no (fc) verdict would be about its label"
+ok "(fc0) premise: the no-jq PATH has no jq and has git and sed; the absent transcript names nothing"
+fc_drive() { # fc_drive <transcript> [PATH] [hooksdir] -> raw stdout; P_UNPUSHED, pause flag up, driver signal on disk
+  reset_state "$P_UNPUSHED"; touch "$P_UNPUSHED/_bmad-output/pipeline-paused.flag"
+  jq -nc --arg t "$1" --arg s "$SESS_A" '{transcript_path:$t,session_id:$s}' \
+  | PATH="${2:-$PATH}" CLAUDE_PROJECT_DIR="$P_UNPUSHED" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" \
+    /bin/bash "${3:-$HOOKS_DIR}/ai-dlc-continue.sh" 2>/dev/null
+}
+fc_log() { printf '%s' "$P_UNPUSHED/_bmad-output/pipeline-continuation-log.md"; }
+fc_isblock() { grep -q '"decision" *: *"block"' <<<"$1" && grep -qF 'HANDOFF GUARD' <<<"$1"; }
+# CONTROL for (fc1)-(fc4): the well-formed transcript blocks on the PUSH text, so the seed is live.
+o="$(fc_drive "$T_FC_OK")"
+{ has "$(reason "$o")" "$PUSH_MARK" && ! has "$o" "$FC_MARK"; } \
+  || broken "(fc) premise: the well-formed transcript on the unpublished tree did not block on the PUSH text — none of the four cases below is readable"
+ok "  control: the well-formed transcript blocks on step 3's PUSH text"
+
+# (fc1)/(fc2) READABLE AFTER ALL: the damaged line is dropped, the request is read, and the Stop
+# gets the NORMAL guard text -- never the fail-closed one, which would mean the read was given up.
+for _fc in "fc1|$T_FC_TRUNC|the last line truncated mid-write" "fc2|$T_FC_GARB|a non-JSON line mid-file"; do
+  _id="${_fc%%|*}"; _r="${_fc#*|}"; _t="${_r%%|*}"; _l="${_r#*|}"
+  o="$(fc_drive "$_t")"
+  if has "$(reason "$o")" "$PUSH_MARK" && ! has "$o" "$FC_MARK" && ! grep -qF -- "-- $FC_ROW" "$(fc_log)"; then
+    ok "($_id) $_l -> the request is still read: BLOCK on the normal step-3 PUSH text, no fail-closed row"
+  else
+    bad "($_id) $_l was not answered with the normal PUSH text ($(fc_isblock "$o" && echo "a different block" || echo "ALLOWED")) — the reader gives up on a damaged transcript"
+  fi
+done
+
+# (fc3) NO TRANSCRIPT, jq PRESENT: the fresh driver signal ENTERS Check 0, whose disk and git arms
+#       decide. The unpublished branch is answered with the NORMAL step-3 PUSH text and a
+#       HANDOFF_GUARD_BLOCK row naming the driver-signal arming -- never the fail-closed block.
+o="$(fc_drive "$T_FC_NONE")"
+if has "$(reason "$o")" "$PUSH_MARK" && ! has "$o" "$FC_MARK" && ! grep -qF -- "-- $FC_ROW" "$(fc_log)" \
+   && grep -qF -- "-- HANDOFF_GUARD_BLOCK (1/" "$(fc_log)" && grep -qF -- "armed by step 4's driver signal with no transcript" "$(fc_log)"; then
+  ok "(fc3) the transcript path names no file -> Check 0 decides from disk and git: the normal PUSH text and a HANDOFF_GUARD_BLOCK row naming the driver-signal arming"
+else
+  bad "(fc3) with no transcript and a fresh driver signal the unpublished branch was not answered by Check 0's PUSH text with its row ($(fc_isblock "$o" && echo "a different block" || echo "ALLOWED")) — the driver signal does not enter the guard"
+fi
+# (fc3b) THE FALSE POSITIVE THAT ENTRY MUST NOT CREATE: the same Stop on a COMPLETED handoff (the
+#        pushed, clean tree, driver signal fresh, no transcript) ALLOWS with no block row. With no
+#        transcript the resume arm reads unknown and the In-Flight arm has no dispatch set, so only
+#        the disk and git arms convict, and all of them are satisfied here.
+reset_state "$P_PUSHED"; touch "$P_PUSHED/_bmad-output/pipeline-paused.flag"
+o="$(jq -nc --arg t "$T_FC_NONE" --arg s "$SESS_A" '{transcript_path:$t,session_id:$s}' \
+     | CLAUDE_PROJECT_DIR="$P_PUSHED" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" /bin/bash "$HOOKS_DIR/ai-dlc-continue.sh" 2>/dev/null)"
+if ! fc_isblock "$o" && ! grep -qF -- "-- HANDOFF_GUARD" "$P_PUSHED/_bmad-output/pipeline-continuation-log.md" 2>/dev/null; then
+  ok "(fc3b) a COMPLETED handoff, no transcript, driver signal fresh -> ALLOW with no HANDOFF_GUARD row (the entry costs a finished handoff nothing)"
+else
+  bad "(fc3b) a completed handoff with no transcript was BLOCKED or logged a guard row — the driver-signal entry convicts a finished handoff"
+fi
+reset_state "$P_PUSHED"
+
+# (fc4) NO jq: nothing can be read, so one constant block that parses, and a FAIL_CLOSED row.
+for _fc in "fc4|$T_FC_OK|$FC_NJ|no jq on PATH|jq is not on PATH"; do
+  _id="${_fc%%|*}"; _r="${_fc#*|}"; _t="${_r%%|*}"; _r="${_r#*|}"; _p="${_r%%|*}"; _r="${_r#*|}"; _l="${_r%%|*}"; _w="${_r#*|}"
+  o="$(fc_drive "$_t" "${_p:-$PATH}")"
+  if ! fc_isblock "$o"; then
+    bad "($_id) $_l, a handoff pending on disk -> ALLOWED silently — the guard fails open where it can read nothing"
+  elif ! jq -e . >/dev/null 2>&1 <<<"$o"; then
+    bad "($_id) $_l: the fail-closed block is not valid JSON — the harness would read no decision"
+  elif ! has "$o" "$FC_MARK" || ! has "$o" "$_w"; then
+    bad "($_id) $_l: blocked, but not with the fail-closed text naming the cause ('$_w')"
+  elif ! grep -qF -- "-- $FC_ROW (1/" "$(fc_log)"; then
+    bad "($_id) $_l: blocked, but the log carries no $FC_ROW row — a requested handoff ends with no HANDOFF_GUARD record"
+  else
+    ok "($_id) $_l -> the constant fail-closed block (valid JSON, names the cause) and a $FC_ROW row"
+  fi
+done
+
+# (fc5) CONTROL 1: NO handoff signal on disk -> ALLOW, with no transcript and with no jq. The
+#       driver signal is removed, nothing else is pending, and the pause flag is still up.
+_fc5=""
+for _p in "$PATH" "$FC_NJ"; do
+  reset_state "$P_UNPUSHED"; touch "$P_UNPUSHED/_bmad-output/pipeline-paused.flag"; rm -f "$P_UNPUSHED/_bmad-output/.driver/handoff"
+  o="$(jq -nc --arg t "$T_FC_NONE" --arg s "$SESS_A" '{transcript_path:$t,session_id:$s}' \
+       | PATH="$_p" CLAUDE_PROJECT_DIR="$P_UNPUSHED" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" /bin/bash "$HOOKS_DIR/ai-dlc-continue.sh" 2>/dev/null)"
+  if ! fc_isblock "$o" && ! grep -qF -- "-- $FC_ROW" "$(fc_log)"; then _fc5="${_fc5}a"; else _fc5="${_fc5}b"; fi
+done
+[ "$_fc5" = aa ] && ok "(fc5) no handoff signal on disk, transcript absent / no jq -> ALLOW both ways, no fail-closed row (an unreadable Stop with nothing pending is not convicted)" \
+                 || bad "(fc5) with NO handoff signal on disk the fail-closed guard fired ($_fc5: absent-transcript, no-jq) — it blocks every paused Stop it cannot read"
+
+# (fc6) CONTROL 2: the driver signal on disk and a READABLE transcript with no request -> the
+#       existing decision (Check 0 does not arm on the driver signal; Check 1 allows by pause),
+#       never the fail-closed block. Fail-closed must not override a real read.
+o="$(fc_drive "$T_FC_QUIET")"
+if ! fc_isblock "$o" && ! grep -qF -- "-- $FC_ROW" "$(fc_log)" && grep -qF -- "-- ALLOWED_BY_PAUSE" "$(fc_log)"; then
+  ok "(fc6) driver signal on disk, readable transcript with no request -> ALLOWED_BY_PAUSE as before, no fail-closed row"
+else
+  bad "(fc6) a READABLE transcript with no handoff request got $(fc_isblock "$o" && echo "a HANDOFF GUARD block" || echo "no ALLOWED_BY_PAUSE row") — the fail-closed path overrides a real read"
+fi
+
+# (fc7) THE BOUND. A stale driver signal on a no-jq box: five Stops of ONE session. Between Stops
+#       the state's epoch is pushed 4000 s back, so the 30 s time test can never continue the run:
+#       only the session id -- recovered without jq -- can. At most EFF_MAX (3) blocks, then every
+#       later Stop passes through, with ONE BACKOFF row and Check 1's ALLOWED_BY_PAUSE row each time.
+fc7_age() { # fc7_age <state-file>: line 1 (the last-block epoch) moved 4000 s into the past
+  local f="$1" e
+  [ -f "$f" ] || return 0
+  e="$(sed -n '1p' "$f")"; case "$e" in ''|*[!0-9]*) return 0 ;; esac
+  awk -v e="$((e - 4000))" 'NR == 1 { print e; next } { print }' "$f" > "$f.age" && mv "$f.age" "$f"
+}
+reset_state "$P_UNPUSHED"; touch "$P_UNPUSHED/_bmad-output/pipeline-paused.flag"
+_fc7=""
+for _i in 1 2 3 4 5; do
+  fc7_age "$P_UNPUSHED/_bmad-output/handoff-guard-state.txt"
+  o="$(jq -nc --arg t "$T_FC_OK" --arg s "$SESS_A" '{transcript_path:$t,session_id:$s}' \
+       | PATH="$FC_NJ" CLAUDE_PROJECT_DIR="$P_UNPUSHED" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" /bin/bash "$HOOKS_DIR/ai-dlc-continue.sh" 2>/dev/null)"
+  if fc_isblock "$o"; then _fc7="${_fc7}b"; else _fc7="${_fc7}a"; fi
+done
+_fc7bo="$(grep -c -- '-- BACKOFF$' "$(fc_log)" 2>/dev/null)" || _fc7bo=0
+_fc7ap="$(grep -c -- '-- ALLOWED_BY_PAUSE$' "$(fc_log)" 2>/dev/null)" || _fc7ap=0
+{ [ "$_fc7" = bbbaa ] && [ "$_fc7bo" = 1 ] && [ "$_fc7ap" = 2 ]; } \
+  && ok "(fc7) no jq, a stale driver signal, five Stops of one session spaced past the 30 s window -> bbbaa, one BACKOFF row, and ALLOWED_BY_PAUSE on both releases (bounded by session, and the release falls through to Check 1)" \
+  || bad "(fc7) the fail-closed guard read $_fc7 with $_fc7bo BACKOFF and $_fc7ap ALLOWED_BY_PAUSE row(s), not bbbaa / 1 / 2 — the bound does not hold per session, or the release skips Check 1"
+reset_state "$P_UNPUSHED"
+
+# =============================================================================
 # KEY 2's LIFECYCLE — the completion stamp, at both ends
 # =============================================================================
 # THE SUBJECT. Key 2 reads a LINE in the snapshot, and the snapshot's writers only APPEND.
@@ -2498,7 +2650,9 @@ if mkmut m31-transcript-gate "$CONF" \
   r="$(ntdisk "$MUT_DIR")"
   [ "$r" = allow ] && ok "  mutant [m31] KILLED by assertion (nt1): with the transcript gate back, key 3 with no transcript ends the session" \
                    || bad "MUTANT SURVIVED [m31]: expected allow, got $r — (nt1) does not depend on the entry test"
-  dsetup "" yes
+  # The driver signal is removed: with it fresh and no transcript, Check 0f's fail-closed block
+  # (BL-700) would answer this Stop whatever Check 0's entry test says.
+  dsetup "" yes; rm -f "$P_DISK/_bmad-output/.driver/handoff"
   r="$(ntdisk "$MUT_DIR")"
   [ "$r" = allow ] && ok "  mutant [m31] KILLED by assertion (nt2): key 1 with no transcript is skipped too" \
                    || bad "MUTANT SURVIVED [m31]: expected allow, got $r — (nt2) does not depend on the entry test"

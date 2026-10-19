@@ -36428,3 +36428,16 @@ Correction to the reporter's reading: `apply.sh`'s exit-3 arm (`core/skills/ai-d
 
 verify: manual
 
+## BL-700 — a malformed or absent transcript, or no `jq` on PATH, fails OPEN before the handoff guard runs
+
+**LANDED (v0.870.0, verified 069bac3fc).** **DEFECT.** Owner ai-dlc-ae (batch 236). Found by the GUARDORDER tip adversary (tip698) on 02b16ee93; the id was allocated by lead ai-dlc-c8. Pre-existing on origin/main.
+
+`core/hooks/ai-dlc-continue.sh` allows a requested handoff on an unpublished branch with no `HANDOFF_GUARD_*` row in four cases: the transcript's last line is truncated mid-write, a non-JSON line sits mid-file, the transcript path names no file, or `jq` is not on PATH. The continuation log shows `ADVERSARIAL_STATE_UNADJUDICABLE` and then `ALLOWED_BY_PAUSE`; with the pause flag down, only the first row appears. The same seed with a well-formed transcript gets a HANDOFF GUARD block, which is the control. The four cases give the same silent allow under the branch hook and under the origin/main hook (tip698 `probe4.sh` and `probe4b.sh`, origin/main hooks at `scratchpad/tip698/base/core/hooks`). The receipt below reproduces it: exit 1 with all four named, on both hook trees, against a passing control.
+
+Mechanism, from the code: Check 0's transcript readers (`LAST_USER`/`LAST_ASST`, `jq -rs` over the whole file) read an empty string when `jq` cannot parse the file, so a truncated or garbage line hides the request. With no transcript file, Check 0 is entered only by an on-disk key, and step 4's driver signal is not one. With no `jq`, Check 0 is skipped outright: `HANDOFF_VOCAB_OK` is 0 because the vocabulary is read from the schema with `jq`, and the session id and transcript path are empty. Check 0b then reports the adversarial state as unadjudicable, and Check 1 allows the Stop. (Corrected by the BL-700 builder: the first text attributed the no-`jq` case to the readers.)
+
+Owed: a Stop whose transcript cannot be parsed or read, or that runs with no `jq`, must not let a requested handoff end with step 3 unsatisfied and no HANDOFF_GUARD record. The fix is not one line, and it rides a later release. The readers must tolerate a partial last line (`-R` with `fromjson?`, as `push_bg_read` and `ai-dlc-dispatch-guard.sh` already do), and a path with no `jq` needs its own decision.
+
+verify: sh bash core/fixtures/handoff-completion-assertion/receipt-bl700.sh
+
+
