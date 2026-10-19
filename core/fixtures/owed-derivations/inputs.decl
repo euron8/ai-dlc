@@ -1,9 +1,10 @@
 # owed-derivations reads: the reader it asserts, the writer (reconcile/derivation-differential.sh, which lifts
-# functions out of apply.sh and preclassify.sh beside itself, so the whole reconcile directory is declared), the
-# real validator both run, and the shared preamble. The caller-prose arms live in the dist-only battery.
+# functions out of apply.sh and preclassify.sh beside itself; the reconcile files declared are those the sandbox
+# trace read), the real validator both run, and the shared preamble. The caller-prose arms live in the dist-only battery.
 # run.sh prints a HERMETIC-CONSUMED line for each required input where it uses it.
 !core/scripts/check-owed-derivations.sh
 !core/skills/ai-dlc-update/reconcile/derivation-differential.sh
-core/skills/ai-dlc-update/reconcile/
+core/skills/ai-dlc-update/reconcile/apply.sh
+core/skills/ai-dlc-update/reconcile/preclassify.sh
 !core/scripts/validate-artifact-derivations.sh
 core/fixtures/lib/
