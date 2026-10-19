@@ -4,7 +4,6 @@
 #
 # The caller sets NAME and sources this file; nothing else. This file sets the shell options,
 # scrubs AI_DLC_*, owns WORK and the ONE EXIT trap that removes it -- no caller sets a second.
-# P_ALL, at the end of the predicates, is the set the battery scores every mutant against.
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
@@ -1580,8 +1579,6 @@ p_agentwrites() {
   AI_DLC_PROJECT_ROOT="$w" bash "$1" --agent-writes "$AG4" > "$JO" 2>&1; RC=$?
   [ "$RC" -eq 2 ] && has "$JO" "REFUSED:"
 }
-
-P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4 sibtotal sibok sibmissing setaside handoff srcsetaside srcpending srcera srcclosed setasideshard setasidenr srchalf srccross sibdoc sibforms sibprose sibnever sibstale escpath escopen escclosed rrgraph rrout rrlate rrlatein rrsame rrspan rrprlate rrprout rrprforeign rrprnone rrreuse rrargs rrfiles rrsubj alias alnokeys alresult alown alsecond alother alsess altwo altool nested rronly dispkey dispvocab dispruling srcparts gapfill chkpart chkrec rulingedit rulingtab chkjoined partsilent specstale specfresh spechand specnone spectwo sjspecstale sjspecfresh sjspecnone specother specunread agentwrites chkserial supchain gaploc fencenest partmark specserial"
 
 # ---- A PART'S DERIVATION SURVIVES THE JOIN. The part's ```derived fence is copied into the joined
 # record, and the gate re-runs `validate-artifact-derivations.sh` over the sprint dir AFTER the
