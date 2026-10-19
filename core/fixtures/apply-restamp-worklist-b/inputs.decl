@@ -10,6 +10,8 @@ core/git-hooks/pre-push
 !core/scripts/sprint-status.sh
 !core/schemas/sprint-status.json
 core/scripts/validate-hook-registration.sh
+# The recorded re-approval arms in units u and mut (shards c and a) drive the real answer-capture hook to write records. Shard b runs neither unit; it only reaches the hoisted lookup that tests whether the hook exists, so here the hook is declared optional rather than required.
+core/hooks/ai-dlc-answer-capture.sh
 # The shard drivers exec the parent run.sh, and the parent's coverage join reads every driver. A fixture's OWN
 # run.sh is not declared by itself, but the siblings' are, so each shard sandbox holds all three.
 core/fixtures/apply-restamp-worklist/run.sh

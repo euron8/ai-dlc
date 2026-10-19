@@ -20,6 +20,20 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.865.0] - 2026-10-19
+
+**What changes for the operator.** When resolving the blockers only removes rows, apply now proceeds without asking you again. When it leaves a finding row your approval never showed, apply stops and asks for a recorded re-approval. Re-rendering the report by hand removes that question, so the skill no longer tells the session to re-render, and a session that does it anyway is not caught. That last gap is filed as BL-692.
+
+Batch 236, cluster BL-621 (owner ai-dlc-48, lead ai-dlc-c8). Closes BL-621. Files BL-692. Closes no `PC-` id. Net for this release: 1 closed, 1 filed.
+
+### A resolved blocker that leaves an unseen finding row needs a recorded re-approval before apply writes (BL-621)
+
+`emit-report.sh --verify`, on its exit-3 (blockers resolved) path only, prints a `re-approval:` line carrying the fresh region's digest, the count of finding rows the approved region never showed, and the option label to ask with. `apply.sh` reads that line. With no unseen rows it proceeds and records a `blockers-resolved` NOTE row. With unseen rows it proceeds only when `_bmad-output/operator-answers-history.md` holds an AskUserQuestion record, written by the answer-capture hook, whose question quotes the full digest and whose answer's first line is exactly the label. Otherwise it refuses, writes nothing, and prints the rows, the digest and the exact question to ask. An unseen set it cannot count fails closed. Step 7 of the `ai-dlc-update` SKILL.md now runs apply against the approved report rather than re-rendering it, and the exit-3 remedy text no longer says re-render. `--verify` exit 0 and exit 1 output is unchanged.
+
+`apply-restamp-worklist` drives the real hook with synthetic AskUserQuestion payloads: no unseen rows proceeds, unseen rows with no record refuses with the tree unwritten, and a right digest with the label proceeds, while a wrong digest, a non-label answer or a non-AskUserQuestion record refuses. Shards a and c declare the hook as a required input and print its consume line where they run it, shard b declares it optional, and each of the three carries a `# digest` line in `.ai-dlc-fixture-readsets.tsv`.
+
+Limits: a session that writes the answers history by Bash is not caught. After an apply has written the tree, `--verify` exits 1 (STAMP-MOVED), not 3, and the re-render that path's remedy prescribes carries a re-approval nothing records. Whether graph has ever produced an unseen row is unmeasured, because `--verify` output is not persisted.
+
 ## [0.864.0] - 2026-10-19
 
 Batch 236 (c0's BL-694B). Fix (2)'s premise was wrong for 6 of its 7 fixtures: they copy the whole `reconcile/`

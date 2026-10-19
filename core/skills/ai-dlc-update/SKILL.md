@@ -1756,28 +1756,41 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    so no list was checked. Clear the cause it names (usually a full `$TMPDIR`) and re-run. This is the gap that shipped a
    data-loss drift past two reports: the detector caught it, the narrated report did not.
 
-   **Resolving a blocker rewrites the region clause (1) verifies, so clause (1) is re-run AFTER
-   the last resolution, on a re-rendered region.** `--stamp readopt` turns a
+   **Resolving a blocker rewrites the region clause (1) verifies, and `apply.sh` decides that
+   case itself, against the report the operator APPROVED. Do not re-render it.** `--stamp readopt` turns a
    `HARD-OVERRIDE-DRIFT-SECTION` row into `OVERRIDE-OK`; a register row removes a
    `HARD-LAYER-ADJUDICATION-MISSING` [LC-A1] row. The blocking-layer gate above requires those resolutions
    BEFORE any write, so on every pull that had a blocker the approved report lists findings that no
    longer exist, and `--verify` fails on a region whose only fault is that its blockers were fixed.
    `--verify` says which direction it failed in: it exits **3** with `cause: BLOCKERS-RESOLVED`
    when the refs are unchanged and the approved region lists `HARD-*` rows the detectors no longer
-   render and none they newly do, and `apply.sh` refuses naming that cause; exit **1** is the other
+   render and none they newly do, and only then prints a `re-approval:` line (the fresh region's
+   digest, the count of `unseen:` rows, and the option label); exit **1** is the other
    direction — upstream moved, the consumer's stamp moved, a detector did not run (for
    preclassify, `cause: PRECLASSIFY-REFUSED`), or a finding the approval never saw — and is the
    stop the gate exists for. `apply.sh` also runs preclassify itself before phase 1, and stops
    before writing anything when that run exits non-zero, or returns no rows while `base..theirs`
    changes `core/`, or when that range cannot be read. Its refusal says nothing was written. Run
    `reconcile/preclassify.sh` with the same four arguments, fix what it reports, and re-run apply
-   with the same arguments. So: resolve every blocker, then re-render the region
-   (`reconcile/emit-report.sh <dist> <base> <consumer> <theirs>`) into the report, run `--verify`
-   to exit 0 (a recorded PASS is accepted only when `EMIT_REPORT_VERIFY_CACHE=1` is set (off by default), `--verify` then prints `accepted a recorded PASS`, and resolving a blocker changes the consumer tree so it re-renders; `AI_DLC_VERIFY_NO_CACHE=1` forces a re-render), have the operator re-approve it, and only then run `apply.sh`. An `apply.sh` that
-   refuses with `BLOCKERS-RESOLVED` is telling you the report predates your own work, not that
-   upstream moved. The re-approval is not a formality: a resolution can leave rows the first
-   approval never saw (the refusal lists them as `unseen:`), and the re-rendered region is the
-   only place they get read.
+   with the same arguments. So: resolve every blocker, then run `apply.sh` against the APPROVED
+   report, unchanged. Do NOT re-render the region into it: the report is one fixed file, a
+   re-render overwrites the region the operator approved, and `--verify` then exits 0 exactly as
+   on a first apply, so nothing can tell that a re-approval was owed. A resolved blocker always
+   re-renders on `--verify`, whether or not `EMIT_REPORT_VERIFY_CACHE=1` is set: resolving it
+   changes the consumer tree, which moves the recorded-PASS key, and the recorded-PASS cache never
+   serves exit 3 (`AI_DLC_VERIFY_NO_CACHE=1` forces a re-render in any case). On exit 3 `apply.sh` reads
+   the `re-approval:` line. With `unseen=0` it proceeds and records a `NOTE blockers-resolved` row:
+   the approval saw a superset of what renders now. With `unseen>0` it proceeds only when
+   `_bmad-output/operator-answers-history.md` holds an AskUserQuestion record whose question
+   carries that full digest and whose answer is exactly that label; otherwise it refuses, writes
+   nothing, and prints the question, the option label and the `unseen:` rows. Ask that question
+   with AskUserQuestion, offering that label as an option, then re-run `apply.sh` with the same
+   four arguments. A typed operator message is not that ask, and an approval of something else
+   (a PR merge, say) is not this re-approval. `emit-report.sh --verify` is the label's one source,
+   so copy it from the refusal; never compose it. The re-approval is not a formality: a resolution
+   can leave rows the first approval never saw, and this question is the only place they get read.
+   The check has a limit: the question line is lead-authored, so a session that writes the
+   answers history by hand instead of asking is not caught.
 
    **THE ADJUDICATION LOOP — YOU do the work; the operator APPROVES it.**
 
@@ -2425,8 +2438,11 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      **`restamp-withheld` has two forms, and one of them does NOT name `--finish`.** When an
      outstanding row's remedy is a step only a fresh ordinary run performs — the known_skills
      refile whose diff did not run, an exec-bit finding, a staging refusal after the writes — the
-     row says to re-render the report with `emit-report.sh`, re-approve it, and re-run apply with
-     the same four arguments, and that `--finish` is not the next step. Follow that: the finisher
+     row says to re-render the report with `emit-report.sh`, have the operator re-approve it, and
+     re-run apply with the same four arguments, and that `--finish` is not the next step. Follow
+     that, asking the re-approval with AskUserQuestion and waiting for the answer: this is the one
+     path where a re-render is still the remedy, because this run already wrote the tree, and on
+     it nothing records or checks the re-approval. The finisher
      re-checks those rows and withholds while they are undone, and a bare re-run is refused by the
      union gate because this run already moved the tree the approved report describes.
 
