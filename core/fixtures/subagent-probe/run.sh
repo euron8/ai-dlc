@@ -74,6 +74,7 @@ fire() {
   fi
   jq -nc --arg t "$_f_lead" --arg a "$_f_aid" \
     '{transcript_path:$t, agent_id:$a, hook_event_name:"SubagentStop"}' \
+    | jq -c --arg m "${FIRE_MSG:-}" "${FIRE_EXTRA:-.}" \
     | CLAUDE_PROJECT_DIR="$_f_proj" bash "$HOOK" 2>/dev/null
 }
 last() { tail -1 "$OUT" 2>/dev/null | jq -r "$1 // empty" 2>/dev/null; }
@@ -395,6 +396,144 @@ fire "$PROJ" polluted.jsonl aqa-s299-unrelated-ffee >/dev/null
 chk "8d unmatched agent_id falls back to the prose read, not to another row" \
   "$(last .role)" "adversary"
 rm -f "$LEDGER"
+
+# --- 9. THE FINAL-MESSAGE SIBLING FILE (SubagentStop last_assistant_message) -----------------
+# One file per agent_id under <state>/.subagent-final/, never a field of the jsonl row. fire()
+# applies the jq filter FIRE_EXTRA to its payload ($m is FIRE_MSG), which is how these arms add
+# the new fields without a second payload builder.
+FDIR="$PROJ/_bmad-output/.subagent-final"
+MARK='[ai-dlc-subagent-probe: final message truncated at the byte cap]'
+MSGF='. + {last_assistant_message:$m}'
+ffire() { # <proj> <agent_id> <jq filter> [message] -> FIRE_OUT, FIRE_RC
+  FIRE_EXTRA="$3"; FIRE_MSG="${4:-}"
+  FIRE_OUT="$(fire "$1" calm.jsonl "$2")"; FIRE_RC=$?
+  FIRE_EXTRA=; FIRE_MSG=
+}
+absent() { [ -e "$1" ] && echo present || echo absent; }
+
+# 9a. written, exact bytes: 2-, 3- and 4-byte sequences, no trailing newline added.
+MB='h'$'\xc3\xa9''llo '$'\xe2\x82\xac'' '$'\xf0\x9f\x98\x80'' end'
+printf '%s' "$MB" > "$WORKDIR/final-expect.txt"
+ffire "$PROJ" fin-a "$MSGF" "$MB"
+chk "9a the seed message is multibyte (else the arm is vacuous)" \
+  "$(LC_ALL=C grep -q "$(printf '[\200-\377]')" "$WORKDIR/final-expect.txt" && echo multibyte || echo ascii)" "multibyte"
+chk "9a final message written byte-for-byte (multibyte, no trailing newline added)" \
+  "$(cmp -s "$WORKDIR/final-expect.txt" "$FDIR/fin-a.txt" && echo same || echo differs)" "same"
+chk "9a  hook stdout empty and exit 0" "${FIRE_OUT:-<empty>}/$FIRE_RC" "<empty>/0"
+ffire "$PROJ" fin-a "$MSGF" "second"
+chk "9a2 a later stop of the same agent overwrites its file" "$(cat "$FDIR/fin-a.txt")" "second"
+
+# 9b. over the cap (small cap by env): longest valid-UTF-8 codepoint prefix <= cap, LF, marker, LF.
+# 2 + 3*3 + 2 = 13 bytes; a cap of 7 falls INSIDE the third euro sign, so a byte cut would split it.
+CAPMSG='aa'$'\xe2\x82\xac\xe2\x82\xac\xe2\x82\xac''bb'
+printf 'aa\xe2\x82\xac\n%s\n' "$MARK" > "$WORKDIR/final-cap-expect.txt"
+AI_DLC_PROBE_FINAL_CAP_BYTES=7 ffire "$PROJ" fin-b "$MSGF" "$CAPMSG"
+chk "9b over cap: body is the 5-byte codepoint prefix (cap 7 cuts mid-sequence), LF, marker, LF" \
+  "$(cmp -s "$WORKDIR/final-cap-expect.txt" "$FDIR/fin-b.txt" && echo same || echo differs)" "same"
+chk "9b  the file is valid UTF-8" "$(iconv -f UTF-8 -t UTF-8 < "$FDIR/fin-b.txt" >/dev/null 2>&1 && echo valid || echo invalid)" "valid"
+chk "9b  the last line equals the marker" "$(tail -1 "$FDIR/fin-b.txt")" "$MARK"
+chk "9b  the body line is within the cap" "$([ "$(head -1 "$FDIR/fin-b.txt" | wc -c | tr -d ' ')" -le 8 ] && echo within || echo over)" "within"
+# CONTROL: the same message with no override is written whole, so the cut above came from the cap.
+ffire "$PROJ" fin-b0 "$MSGF" "$CAPMSG"
+chk "9b  CONTROL: the same message without the override is written whole" \
+  "$(printf '%s' "$CAPMSG" | cmp -s - "$FDIR/fin-b0.txt" && echo same || echo differs)" "same"
+AI_DLC_PROBE_FINAL_CAP_BYTES=13 ffire "$PROJ" fin-b2 "$MSGF" "$CAPMSG"
+chk "9b2 a message exactly at the cap is written whole, no marker" \
+  "$(printf '%s' "$CAPMSG" | cmp -s - "$FDIR/fin-b2.txt" && echo same || echo differs)" "same"
+AI_DLC_PROBE_FINAL_CAP_BYTES=12 ffire "$PROJ" fin-b4 "$MSGF" "$CAPMSG"
+chk "9b2 one byte over the cap is truncated (body aa + 3 euro + b = 12 bytes + LF)" \
+  "$(tail -1 "$FDIR/fin-b4.txt")/$(head -1 "$FDIR/fin-b4.txt" | wc -c | tr -d ' ')" "$MARK/13"
+AI_DLC_PROBE_FINAL_CAP_BYTES=abc ffire "$PROJ" fin-b3 "$MSGF" "$CAPMSG"
+chk "9b3 a non-numeric cap falls back to the default (13 bytes written whole)" \
+  "$(printf '%s' "$CAPMSG" | cmp -s - "$FDIR/fin-b3.txt" && echo same || echo differs)" "same"
+AI_DLC_PROBE_FINAL_CAP_BYTES=007 ffire "$PROJ" fin-b5 "$MSGF" "$CAPMSG"
+chk "9b3 a leading-zero cap (007) is read as 7, not rejected: cut like cap 7, not unwritten" \
+  "$(cmp -s "$WORKDIR/final-cap-expect.txt" "$FDIR/fin-b5.txt" && echo same || echo differs)" "same"
+AI_DLC_PROBE_FINAL_CAP_BYTES=000 ffire "$PROJ" fin-b6 "$MSGF" "$CAPMSG"
+chk "9b3 an all-zero cap falls back to the default (13 bytes written whole)" \
+  "$(printf '%s' "$CAPMSG" | cmp -s - "$FDIR/fin-b6.txt" && echo same || echo differs)" "same"
+# 9b4. the DEFAULT cap value is 65536: 65536 bytes whole, 65537 cut to 65536 + LF + marker + LF.
+BIG="$(printf 'x%.0s' $(seq 1 65536))"
+ffire "$PROJ" fin-c1 "$MSGF" "$BIG"
+chk "9b4 default cap: a 65536-byte message is written whole" "$(wc -c < "$FDIR/fin-c1.txt" | tr -d ' ')" "65536"
+ffire "$PROJ" fin-c2 "$MSGF" "${BIG}y"
+chk "9b4 default cap: a 65537-byte message is cut to 65536 body bytes + LF + marker + LF" \
+  "$(wc -c < "$FDIR/fin-c2.txt" | tr -d ' ')" "$((65536 + 1 + ${#MARK} + 1))"
+chk "9b4  and ends with the marker" "$(tail -1 "$FDIR/fin-c2.txt")" "$MARK"
+
+# 9c. NOT written. CONTROL first: the same shape with a valid message DOES write, so the
+# absences below are not a dead hook.
+rm -rf "$FDIR"
+ffire "$PROJ" fin-ok "$MSGF" "ok"
+chk "9c CONTROL: a valid SubagentStop payload writes" "$(cat "$FDIR/fin-ok.txt" 2>/dev/null)" "ok"
+ffire "$PROJ" fin-n1 '. + {hook_event_name:"SubagentStart", last_assistant_message:$m}' "x"
+chk "9c SubagentStart writes no final file" "$(absent "$FDIR/fin-n1.txt")" "absent"
+ffire "$PROJ" fin-n2 "."
+chk "9c message absent writes no final file" "$(absent "$FDIR/fin-n2.txt")" "absent"
+ffire "$PROJ" fin-n3 "$MSGF" ""
+chk "9c empty message writes no final file" "$(absent "$FDIR/fin-n3.txt")" "absent"
+ffire "$PROJ" fin-n4 '. + {last_assistant_message:null}'
+chk "9c null message writes no final file" "$(absent "$FDIR/fin-n4.txt")" "absent"
+ffire "$PROJ" fin-n5 '. + {last_assistant_message:["x"]}'
+chk "9c non-string message writes no final file" "$(absent "$FDIR/fin-n5.txt")" "absent"
+# Unsafe agent_ids: nothing at all appears under or beside the project.
+EV="$WORKDIR/evilproj"; mkdir -p "$EV/_bmad-output"
+cp "$PROJ/_bmad-output/pipeline-snapshot.md" "$EV/_bmad-output/"
+_ev_state_before="$(/usr/bin/find "$EV" | sort | tr '\n' ' ')"
+for _bad in '../evil' '.hidden' 'a/b' 'sp ace'; do
+  ffire "$EV" evil-fire '. + {agent_id:$m, last_assistant_message:"pwn"}' "$_bad"
+done
+chk "9c unsafe agent_ids (../evil, .hidden, a/b, 'sp ace') create nothing under the project" \
+  "$(/usr/bin/find "$EV" | sort | tr '\n' ' ')" "$_ev_state_before"
+chk "9c  and nothing escaped: no evil*.txt beside the state dir or in the work dir" \
+  "$(/usr/bin/find "$EV" "$WORKDIR" -maxdepth 3 \( -name 'evil.txt' -o -name '.hidden.txt' -o -name 'b.txt' \) | wc -l | tr -d ' ')" "0"
+NS="$WORKDIR/nostate"; mkdir -p "$NS"
+ffire "$NS" fin-ns "$MSGF" "x"
+chk "9c no state dir: the hook creates nothing in the project" "$(/usr/bin/find "$NS" -mindepth 1 | wc -l | tr -d ' ')" "0"
+
+# 9c2. THE FINAL-MESSAGE BLOCK RUNS BEFORE THE HOOK'S EARLY EXITS. Every arm above has a snapshot and a
+# readable seeded transcript, so a hook that moved the block below the snapshot gate or the transcript
+# gate would pass them all. These two reach exactly those exits. CONTROL: the same payload against
+# $PROJ (snapshot and transcript present) writes, so the files below are absent only if the block is skipped.
+NSNAP="$WORKDIR/nosnapproj"; mkdir -p "$NSNAP/_bmad-output"
+ffire "$NSNAP" fin-nosnap "$MSGF" "kept without a snapshot"
+chk "9c2 (i) state dir but NO pipeline-snapshot.md: the final message is still written, exact bytes" \
+  "$(printf '%s' "kept without a snapshot" | cmp -s - "$NSNAP/_bmad-output/.subagent-final/fin-nosnap.txt" && echo same || echo differs)" "same"
+chk "9c2 (i)  and the gate that skips the row still holds: no subagent-context.jsonl" \
+  "$(absent "$NSNAP/_bmad-output/subagent-context.jsonl")" "absent"
+ffire "$PROJ" fin-notr '. + {transcript_path:"/nonexistent/lead.jsonl", last_assistant_message:$m}' "kept without a transcript"
+chk "9c2 (ii) unreadable transcript_path: the final message is still written, exact bytes" \
+  "$(printf '%s' "kept without a transcript" | cmp -s - "$FDIR/fin-notr.txt" && echo same || echo differs)" "same"
+ffire "$PROJ" fin-notr2 'del(.transcript_path) | . + {last_assistant_message:$m}' "kept with no transcript_path"
+chk "9c2 (ii) transcript_path missing from the payload: the final message is still written, exact bytes" \
+  "$(printf '%s' "kept with no transcript_path" | cmp -s - "$FDIR/fin-notr2.txt" && echo same || echo differs)" "same"
+
+# 9d. the jsonl row is UNCHANGED by the new fields: the control that no field was added to it.
+reset; ffire "$PROJ" fin-row "."
+ROW_WITHOUT="$(tail -1 "$OUT" | jq -cS 'del(.ts)')"
+reset; ffire "$PROJ" fin-row "$MSGF" "the final words"
+ROW_WITH="$(tail -1 "$OUT" | jq -cS 'del(.ts)')"
+chk "9d CONTROL: the row exists and carries peak_tokens (else two empty rows would match)" "$(printf '%s' "$ROW_WITH" | jq -r .peak_tokens 2>/dev/null)" "60000"
+chk "9d the row written with last_assistant_message equals the row written without it (ts excluded)" "$ROW_WITH" "$ROW_WITHOUT"
+chk "9d  and nothing in the row holds the message" "$(printf '%s' "$ROW_WITH" | grep -c 'the final words')" "0"
+
+# 9e. fail-open: .subagent-final unwritable -> exit 0, empty stdout, the row still written.
+RO="$WORKDIR/roproj"; mkdir -p "$RO/_bmad-output/.subagent-final"
+cp "$PROJ/_bmad-output/pipeline-snapshot.md" "$RO/_bmad-output/"
+chmod 555 "$RO/_bmad-output/.subagent-final"
+ffire "$RO" fin-ro "$MSGF" "cannot land"
+_ro_files="$(/usr/bin/find "$RO/_bmad-output/.subagent-final" -type f | wc -l | tr -d ' ')"
+chmod 755 "$RO/_bmad-output/.subagent-final"
+chk "9e unwritable .subagent-final: exit 0 and empty stdout" "${FIRE_OUT:-<empty>}/$FIRE_RC" "<empty>/0"
+chk "9e  the row is still written" "$(tail -1 "$RO/_bmad-output/subagent-context.jsonl" 2>/dev/null | jq -r .peak_tokens 2>/dev/null)" "60000"
+chk "9e  and the write really was blocked (no file, no temp left)" "$_ro_files" "0"
+ffire "$RO" fin-ro "$MSGF" "can land"
+chk "9e CONTROL: with the directory writable again the same fire writes" "$(cat "$RO/_bmad-output/.subagent-final/fin-ro.txt" 2>/dev/null)" "can land"
+
+# 9f. no .tmp.* left behind after the successful writes above (hidden files included).
+chk "9f CONTROL: the directory holds final files (else the count below is vacuous)" \
+  "$([ "$(/usr/bin/find "$FDIR" -name '*.txt' | wc -l | tr -d ' ')" -gt 0 ] && echo some || echo none)" "some"
+chk "9f no .tmp.* file remains in .subagent-final after successful writes" "$(/usr/bin/find "$FDIR" "$RO/_bmad-output/.subagent-final" -name '.tmp.*' | wc -l | tr -d ' ')" "0"
 
 echo
 if [ "$fails" -eq 0 ]; then echo "subagent-probe: PASS"; exit 0; fi

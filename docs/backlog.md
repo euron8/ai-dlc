@@ -96,6 +96,8 @@ Owed: a stated lead response to a notification for an agent whose deliverable an
 
 **Sharper reading (f7 measured; transcript-only, not re-derived here).** In graph's s319 lead session `c61a91eb`, on 0.828.0, one 25-agent SM seat ran under a single armed join (task `brrt6rqjh`). Between 14:40:41Z and 14:48:20Z (transcript lines 2702-2838) the lead took 14 consecutive wakes whose entire output was "Covered by the armed join; no action." Each was a full turn over a context of about 318k tokens or more, past the RED threshold. By f7's heuristic, the same method as the paragraph above, idle wakes went from 20 of 37 to 37 of 54: 17 in about 8 minutes on one round. The round plans 4 seats of about 25 agents each, so about 70 such turns are expected per round; that figure is f7's projection, not a count. Reading: the 0.794.0 prose half shortened each turn's output but cannot remove the turns; only the hook half can.
 
+**Evidence (HANDOFF, 0.876.0).** The precondition for the hook half is in: the architect, analyst and ux deliverables now carry every item their return carried (`## Architect handoff`, `## Gaps`, `## Design decisions`), and SubagentStop keeps each final message in `_bmad-output/.subagent-final/<agent_id>.txt`. No hook is installed and this entry stays open.
+
 verify: manual
 
 ## BL-553 — the lead arms a beat on a sentinel nothing will write, to keep the Stop hook quiet
@@ -506,3 +508,11 @@ verify: manual
 Owed: decide whether every pull runs the differential (two validator passes per pull) so the record always exists, measuring that cost on a reference consumer before deciding. No owner this batch.
 
 verify: manual
+
+## BL-697 — I110 reads any backticked lowercase token within six lines after a line containing `In-Flight` as a taught In-Flight status, so prose that teaches no status fails the pregate
+
+**NOTE.** `i110_tokens` (`scripts/validate-enforcement-map.sh`, header of I110 near `:11269`, function near `:11345`) greps every line containing `In-Flight` with `-A6` and collects each backticked lowercase token in that window as a TAUGHT status. The window keys on a mention of the word, not on the status column, so a sentence that merely names the row opens a six-line window in which any backticked token is read as a status. Measured at 0.876.0: `core/skills/ai-dlc/steps/ui-direction.md:28` was reworded to "An absent artifact at the path in the brief (the same value as the In-Flight row and the join) is", a backticked `ux` sat within six lines below it, and I110 reported `ux` as taught-but-unwhitelisted. That failed the pregate and, downstream, validator-fork-budget, whose traced run exited 1. The release worked around it by rewording the sentence; the grammar still fires for the next author who mentions the row near any backticked token.
+
+Owed: stated, not built. Either anchor the teach on the status COLUMN context (the table schema or a `status` mention) rather than on any `In-Flight` mention, or exclude role and agent names derived from the role vocabulary. Before either ships, measure the false-positive set: every token the current grammar collects over `core/skills/ai-dlc` and `core/hooks`, split into real statuses and non-statuses, and show the chosen anchor keeps the first group and drops the second.
+
+verify: sh V="${I110_V:-scripts/validate-enforcement-map.sh}"; f=$(sed -n '/^i110_tokens() {/,/^}/p' "$V"); [ -n "$f" ] || exit 9; T=$(mktemp -d "${TMPDIR:-/tmp}/bl697.XXXXXX") || exit 9; printf 'the same value as the In-Flight row and the join\n\nplain line\n\nplain line\n`ux` is a role name\n' > "$T/a.md"; printf 'In-Flight status\n`stopped` is a taught status\n' > "$T/b.md"; o=$(eval "$f"; i110_tokens "$T") || exit 9; grep -qxF stopped <<<"$o" || exit 9; grep -qxF ux <<<"$o" && exit 1; exit 0

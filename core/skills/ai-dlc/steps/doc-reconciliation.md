@@ -19,7 +19,7 @@ Spawn an `analyst` subagent (Agent tool, bound to the analyst role file `.claude
 sections 1–5 — it inventories docs, scans the codebase, reconciles
 claims against reality, and writes the reconciliation report + gap
 analysis to `_bmad-output/planning-artifacts/doc-reconciliation.md`,
-returning only `{artifact_path, summary, gaps}`. Then resume at section
+returning only `{artifact_path, summary, gaps}` (gaps travel in the `## Gaps` section of the artifact; the return may still carry them). Then resume at section
 6 (Gate Validation and Proceed). If `planning_offload: off`, run all
 sections inline. Per SKILL.md Rule 24 (Rule 28, "Split dispatch": surfaces axis; a
 single-surface scope stays one analyst).

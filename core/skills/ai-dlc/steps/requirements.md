@@ -26,7 +26,7 @@ Rule 19 — both bindings: `model` and the standing role-contract Read line) sco
 — it reads the input artifacts and any codebase context the brief needs and writes a context
 digest to `_bmad-output/planning-artifacts/s<N>/requirements-context.md` (Rule 24 sprint
 stamp: `<N>` is `sprint_id` from the pipeline snapshot's Sprint Context, resolved at
-`route.md` Step 6), returning only `{artifact_path, summary, gaps}`. Then resume at
+`route.md` Step 6), returning only `{artifact_path, summary, gaps}` (gaps travel in the `## Gaps` section of the artifact; the return may still carry them). Then resume at
 section 1.
 **Join it with the bounded-join beat** (`_gate-procedures.md`, "Bounded-join beat"):
 `scripts/ai-dlc/wait-for-deliverable.sh <artifact_path>`, `run_in_background: true`. A

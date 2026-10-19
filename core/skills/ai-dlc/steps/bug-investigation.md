@@ -21,7 +21,7 @@ root cause, then writes its findings (root cause, repro, affected
 files/call-sites, and any relief the operator can apply without a
 deploy — or `operator relief: none found`) to
 `_bmad-output/planning-artifacts/bug-analysis.md`,
-returning only `{artifact_path, summary, gaps}`. Then resume at section
+returning only `{artifact_path, summary, gaps}` (gaps travel in the `## Gaps` section of the artifact; the return may still carry them). Then resume at section
 2b (Operator Relief) using the analysis — NOT at section 3. The lead authors the fix
 story, validates, and owns it. If `planning_offload: off`, run all
 sections inline. Per SKILL.md Rule 24.

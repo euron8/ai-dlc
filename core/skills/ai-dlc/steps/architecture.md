@@ -25,7 +25,8 @@ current architecture doc and writes a context digest to
 `_bmad-output/planning-artifacts/s<N>/architecture-context.md` (Rule 24
 sprint stamp: `<N>` is `sprint_id` from the pipeline snapshot's Sprint
 Context, resolved at `route.md` Step 6), returning only
-`{artifact_path, summary, gaps}`. Then resume at section 1. **Section 1
+`{artifact_path, summary, gaps}`, with every gap also
+in the `## Gaps` section of the artifact. Then resume at section 1. **Section 1
 stays inline in the lead; sections 2 and 3 are ONE dispatched `architect`
 chain** (section 2's opening paragraph), and the lead orchestrates the Rule 8
 validation cycle of section 4. Rule 24's "authoring + validation stay inline"
@@ -46,14 +47,17 @@ dispatch", serial exception 3, the ordered authoring chain). Dispatch one
 names sections 2 through 3 of this file as its spec, run in order, starting at
 the `/bmad-architecture` paragraph (this paragraph and the next address the
 lead, and the architect dispatches and joins nothing), and names
-its result file and completion signal: the chain record
+its result file, its `## Architect handoff` section and its completion signal:
+the chain record
 `_bmad-output/planning-artifacts/s<N>/architecture-chain.md`. The architect
 writes that record FIRST, with its header; appends one line naming each file
 of the chain when it STARTS writing that file, and another when it finishes
 it; and only after the LAST file of the chain is written makes one final
 write, the line
 `seat-complete: architecture architect none findings=0`, after which it edits
-no file of the chain. The record is appended to, never rewritten. Join it with
+no file of the chain. It appends the `## Architect handoff` section BEFORE that
+line, so the `seat-complete:` line stays the last non-blank line and the final
+write. The record is appended to, never rewritten. Join it with
 `scripts/ai-dlc/wait-for-deliverable.sh --complete --dispatch <agentId> _bmad-output/planning-artifacts/s<N>/architecture-chain.md`,
 `run_in_background: true`, `<agentId>` being the one its Agent result
 returned. Never join on `ARCHITECTURE-SPINE.md`, and never on
@@ -70,13 +74,13 @@ and you take Rule 29 "The bounded file-wait beat" exhaustion path, not another
 `--reset`.
 
 **The chain drafts; the lead adopts.** The architect runs `lint_spine.py` as
-below and lists its `<lint json>` in the record. It records its section 2
-assessment (NO CHANGES NEEDED, or the change set) in the record and returns
-it, with section 3's readiness findings, every operator-owned value it did
-not pick, and every change a notarized file would need. Once the join reports the record
-`DELIVERED` AND the architect's completion notification has carried its
-return, the lead reads the record and the return, routes each operator-owned
-value and finding, and only then starts section 4. The lead
+below and lists its `<lint json>` in the record. Its `## Architect handoff`
+section carries its section 2 assessment (NO CHANGES NEEDED, or the change
+set), section 3's readiness findings, every operator-owned value it did not
+pick, and every change a notarized file would need. Once the join reports the
+record `DELIVERED`, the lead reads the record's `## Architect handoff` section
+and the record's `<lint json>` list, routes each operator-owned value and
+finding, and only then starts section 4. The lead
 passes the record's `<lint json>` to Check 30.
 
 **Invoke `/bmad-architecture` for EVERY variant that reaches this step**, not

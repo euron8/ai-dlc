@@ -74,7 +74,7 @@ requirement (for PRD), every section heading, or every backlog item ID
 (for the backlog) present in the current file. For `architecture.md`: every
 section heading AND every ADR (by title/ID) — both the current-state design and
 every dated addendum. The manifest is the no-loss checklist. The analyst
-returns `{artifact_path, summary, gaps}`.
+returns `{artifact_path, summary, gaps}`, and its `gaps` are also in the `## Gaps` section of the artifact.
 
 ### 2. Draft the consolidated split
 
@@ -97,7 +97,9 @@ Every manifest entry MUST appear in exactly one of the two drafts
 (current → live, historical → history). The analyst returns the two
 draft paths + a coverage report at
 `_bmad-output/planning-artifacts/s<N>/consolidation-coverage-<artifact>.md`
-mapping each manifest entry to its destination, plus any `gaps`.
+mapping each manifest entry to its destination, plus any `gaps`. The coverage report is
+the carrier: any gaps go in the `## Gaps` section of the artifact, which is the coverage report
+(the section reads `none` when there are none), and neither draft ever carries a `## Gaps` section.
 
 ### 3. No-loss verification (lead, inline — do NOT offload)
 

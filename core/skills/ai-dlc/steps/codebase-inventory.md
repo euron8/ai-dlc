@@ -19,7 +19,7 @@ Spawn an `analyst` subagent (Agent tool, bound to the analyst role file `.claude
 sections 1–3 — it performs the codebase scan, artifact audit, and gap
 analysis and writes the inventory + gap report to
 `_bmad-output/planning-artifacts/brownfield-inventory.md`, returning
-only `{artifact_path, summary, gaps}`. Then resume at section 4 (Gate
+only `{artifact_path, summary, gaps}` (gaps travel in the `## Gaps` section of the artifact; the return may still carry them). Then resume at section 4 (Gate
 Validation). If `planning_offload: off`, run all sections inline. Per
 SKILL.md Rule 24 (Rule 28, "Split dispatch": surfaces axis; a single-surface scope stays one
 analyst).

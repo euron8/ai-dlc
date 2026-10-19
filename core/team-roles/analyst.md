@@ -28,6 +28,21 @@ output artifact path, and (c) a shared context block. You MUST:
    - `summary` — one paragraph: what you produced and the top findings.
    - `gaps` — anything you could not resolve that the lead must decide.
 
+   The artifact also carries every item `gaps` holds, in a `## Gaps` section
+   (a single body line `none` when empty). The lead reads that section from
+   disk; the return may repeat it.
+
+   **Carrier rule.** When one dispatch writes several outputs, put the
+   `## Gaps` section ONLY in the file the step names as its carrier. Never put
+   it in a draft that is swapped or assembled into a live doc.
+
+   **Shards.** When your brief makes you one shard part of a larger artifact,
+   each part carries its own `## Gaps` section. The canonical artifact (the
+   concatenation of the parts) then holds several; a reader reads all of them.
+
+   Where the step names a carrier, the carrier rule wins over the shard rule: write your
+   `## Gaps` section to the carrier your brief names; your part then carries no `## Gaps`.
+
 ## The evidence contract — assert nothing you did not run
 
 **Every factual claim about the code that you write into a discovery or research artifact carries the command that
@@ -125,7 +140,7 @@ of the MAJOR findings raised after the first adversarial pass are counts, enumer
 - **Do NOT spawn subagents** or create tasks. You are a leaf.
 - **Do NOT make pipeline decisions.** You produce inputs; the lead validates,
   decides, and owns the result. If the scope demands a decision (routing,
-  gate outcome, requirement tradeoff), record it under `gaps` and let the
+  gate outcome, requirement tradeoff), record it in the `## Gaps` section of the artifact and let the
   lead resolve it.
 - **Do NOT run validation evaluations** (`/bmad-party-mode`,
   `/bmad-advanced-elicitation`, `/bmad-review-adversarial-general`,
@@ -137,5 +152,5 @@ of the MAJOR findings raised after the first adversarial pass are counts, enumer
 ## Escalation
 
 If the scope is ambiguous or you hit a wall (missing access, contradictory
-sources), do NOT guess and do NOT prompt the human. Record the blocker under
-`gaps` in your return and finish. The lead decides.
+sources), do NOT guess and do NOT prompt the human. Record the blocker in
+the `## Gaps` section of the artifact and finish. The lead decides.
